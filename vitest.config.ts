@@ -17,6 +17,8 @@ export default defineConfig({
       '**/{karma,rollup,webpack,vite,vitest,jest,ava,babel,nyc,cypress,tsup,build,eslint,prettier}.config.*',
       // Exclude Deno edge function tests (run with `npm run test:edge` instead)
       '**/supabase/functions/**/*.test.ts',
+      // Exclude integration tests that require running Supabase
+      '**/test/edge-functions/**/*.test.ts',
     ],
   },
   resolve: {
