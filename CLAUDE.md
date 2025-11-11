@@ -109,7 +109,7 @@ When working with Supabase databases, **ALWAYS** use migrations for ANY schema c
     # Right ✅
     supabase migration new add_views_to_posts
     # Then write SQL in the generated file
-    # Then: supabase db reset && npm run db:types
+    # Then: supabase db reset && pnpm run db:types
     ```
 6. **Include in EVERY migration**:
     
@@ -619,13 +619,13 @@ export const env = envSchema.parse(process.env)
 
 ```bash
 # Development
-npm run dev --turbo          # Fast refresh with Turbopack
+pnpm run dev --turbo          # Fast refresh with Turbopack
 supabase start              # Local Supabase
 
 # Testing
-npm run test                # Run tests in watch mode
-npm run test:ui            # Open Vitest UI
-npm run test:coverage      # Generate coverage report
+pnpm run test                # Run tests in watch mode
+pnpm run test:ui            # Open Vitest UI
+pnpm run test:coverage      # Generate coverage report
 
 # Database
 supabase db reset           # Reset + migrate
@@ -635,7 +635,7 @@ supabase gen types --local > types/supabase.ts
 npx shadcn@latest add       # Add components
 
 # Production
-npm run build              # Type-safe build
+pnpm run build              # Type-safe build
 supabase db push          # Deploy migrations
 ```
 
