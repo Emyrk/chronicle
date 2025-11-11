@@ -7,17 +7,38 @@ import "jsr:@supabase/functions-js/edge-runtime.d.ts"
 
 console.log("Hello from Functions!")
 
-Deno.serve(async (req) => {
-  const { name } = await req.json()
-  const data = {
-    message: `Hello ${name}!`,
-  }
+/**
+ * Handler function for the hello-world Edge Function
+ * Exported for testing purposes
+ */
+export const handler = async (req: Request): Promise<Response> => {
+  try {
+    const { name } = await req.json()
+    
+    if (!name) {
+      return new Response(
+        JSON.stringify({ error: "Name is required" }),
+        { status: 400, headers: { "Content-Type": "application/json" } }
+      )
+    }
 
-  return new Response(
-    JSON.stringify(data),
-    { headers: { "Content-Type": "application/json" } },
-  )
-})
+    const data = {
+      message: `Hello ${name}!`,
+    }
+
+    return new Response(
+      JSON.stringify(data),
+      { headers: { "Content-Type": "application/json" } }
+    )
+  } catch (error) {
+    return new Response(
+      JSON.stringify({ error: "Invalid JSON body" }),
+      { status: 400, headers: { "Content-Type": "application/json" } }
+    )
+  }
+}
+
+Deno.serve(handler)
 
 /* To invoke locally:
 
