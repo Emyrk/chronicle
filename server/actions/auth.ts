@@ -58,7 +58,9 @@ export async function signOut() {
   const { error } = await supabase.auth.signOut()
 
   if (error) {
-    return { error: error.message }
+    console.error('Sign out error:', error.message)
+    // For form actions, we should redirect even on error
+    // or throw an error. Returning an object breaks type safety.
   }
 
   revalidatePath('/', 'layout')
