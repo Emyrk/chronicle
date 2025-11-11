@@ -4,6 +4,7 @@
   "private": true,
   "scripts": {
     "dev": "next dev --turbo",
+    "functions": "supabase functions serve",
     "build": "next build",
     "start": "next start",
     "lint": "next lint",

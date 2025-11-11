@@ -50,10 +50,16 @@ SUPABASE_SERVICE_ROLE_KEY=your-service-role-key
 ### 3. Run Development Server
 
 ```bash
-npm run dev
+pnpm run dev
 ```
 
 Open [http://localhost:3000](http://localhost:3000) to see your app.
+
+### 4. Run supabase functions
+
+```bash
+pnpm run functions
+```
 
 ## 📁 Project Structure
 
