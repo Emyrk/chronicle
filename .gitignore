@@ -48,3 +48,6 @@ supabase-local-credentials.txt
 # editor
 .vscode/
 .idea/
+
+*storybook.log
+storybook-static

@@ -68,7 +68,7 @@ export function BattleLogUploader({ onUploadComplete }: BattleLogUploaderProps) 
     })
 
     // Handle successful upload
-    uppy.on('upload-success', async (file, response) => {
+    uppy.on('upload-success', async (file, _response) => {
       if (!file) return
 
       try {

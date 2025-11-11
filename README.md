@@ -11,6 +11,7 @@ A modern, production-ready starter template for building full-stack applications
 - **shadcn/ui** component library
 - **Authentication** - Complete auth flow with sign up, sign in, and protected routes
 - **Database Migrations** - Migration-first development with type generation
+- **Storybook** - Isolated component development and testing
 - **Vitest** for testing
 - **Zod** for schema validation
 - Pre-configured development tools (ESLint, Prettier)
@@ -108,6 +109,10 @@ pnpm run db:push         # Push migrations to remote
 # Testing
 pnpm run test            # Run tests in watch mode
 pnpm run test:ui         # Open Vitest UI
+
+# Storybook
+pnpm run storybook       # Start Storybook dev server
+pnpm run build-storybook # Build static Storybook
 ```
 
 ## 🏗️ Development Workflow
@@ -130,6 +135,13 @@ pnpm run db:types
 ```bash
 npx shadcn@latest add button card dialog
 ```
+
+### Developing Components with Storybook
+
+1. Start Storybook: `pnpm run storybook`
+2. Create a story file next to your component: `my-component.stories.tsx`
+3. Test the component in isolation
+4. See [docs/STORYBOOK.md](./docs/STORYBOOK.md) for detailed guide
 
 ### Creating Features
 
@@ -207,10 +219,18 @@ NEXT_PUBLIC_SUPABASE_ANON_KEY=
 SUPABASE_SERVICE_ROLE_KEY=
 ```
 
+## 📖 Documentation
+
+- [CLAUDE.md](./docs/CLAUDE.md) - AI assistant guidelines and best practices
+- [STORYBOOK.md](./docs/STORYBOOK.md) - Component development with Storybook
+- [TEST_STRATEGY.md](./docs/TEST_STRATEGY.md) - Testing approach and guidelines
+- [EDGE_FUNCTIONS_TESTING.md](./docs/EDGE_FUNCTIONS_TESTING.md) - Testing Supabase Edge Functions
+- [UPLOAD_FEATURE.md](./docs/UPLOAD_FEATURE.md) - File upload implementation guide
+
 ## 🤝 Contributing
 
 1. Create feature branch
-2. Make changes following the patterns in CLAUDE.md
+2. Make changes following the patterns in [docs/CLAUDE.md](./docs/CLAUDE.md)
 3. Write/update tests
 4. Submit PR
 

@@ -19,7 +19,9 @@
     "db:reset": "supabase db reset",
     "db:types": "supabase gen types --local > types/supabase.ts",
     "db:push": "supabase db push",
-    "prepare": "husky"
+    "prepare": "husky",
+    "storybook": "storybook dev -p 6006",
+    "build-storybook": "storybook build"
   },
   "dependencies": {
     "@hookform/resolvers": "^5.0.1",
@@ -67,6 +69,14 @@
     "prettier": "^3.5.3",
     "tailwindcss": "^4",
     "typescript": "^5",
-    "vitest": "^3.1.4"
+    "vitest": "^3.1.4",
+    "storybook": "^10.0.7",
+    "@storybook/nextjs": "^10.0.7",
+    "@chromatic-com/storybook": "^4.1.2",
+    "@storybook/addon-docs": "^10.0.7",
+    "@storybook/addon-onboarding": "^10.0.7",
+    "eslint-plugin-storybook": "^10.0.7",
+    "@storybook/addon-a11y": "^10.0.7",
+    "@storybook/addon-vitest": "^10.0.7"
   }
 }
