@@ -1,0 +1,1 @@
+See example here: https://github.com/supabase/supabase/tree/master/examples/edge-functions/supabase/functions

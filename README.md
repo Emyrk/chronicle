@@ -28,7 +28,7 @@ A modern, production-ready starter template for building full-stack applications
 ```bash
 git clone <your-repo-url>
 cd my-app
-npm install
+pnpm install
 ```
 
 ### 2. Set Up Supabase
@@ -36,7 +36,7 @@ npm install
 Start local Supabase development stack:
 
 ```bash
-npm run db:start
+pnpm run db:start
 ```
 
 This will output your local Supabase credentials. Update `.env.local`:
@@ -87,21 +87,21 @@ Open [http://localhost:3000](http://localhost:3000) to see your app.
 
 ```bash
 # Development
-npm run dev              # Start dev server with Turbopack
-npm run build           # Build for production
-npm run start           # Start production server
-npm run lint            # Run ESLint
+pnpm run dev             # Start dev server with Turbopack
+pnpm run build           # Build for production
+pnpm run start           # Start production server
+pnpm run lint            # Run ESLint
 
 # Database
-npm run db:start        # Start local Supabase
-npm run db:stop         # Stop local Supabase
-npm run db:reset        # Reset database
-npm run db:types        # Generate TypeScript types
-npm run db:push         # Push migrations to remote
+pnpm run db:start        # Start local Supabase
+pnpm run db:stop         # Stop local Supabase
+pnpm run db:reset        # Reset database
+pnpm run db:types        # Generate TypeScript types
+pnpm run db:push         # Push migrations to remote
 
 # Testing
-npm run test            # Run tests in watch mode
-npm run test:ui         # Open Vitest UI
+pnpm run test            # Run tests in watch mode
+pnpm run test:ui         # Open Vitest UI
 ```
 
 ## 🏗️ Development Workflow
@@ -115,8 +115,8 @@ supabase migration new create_posts_table
 
 2. Apply locally and regenerate types:
 ```bash
-npm run db:reset
-npm run db:types
+pnpm run db:reset
+pnpm run db:types
 ```
 
 ### Adding UI Components
@@ -141,7 +141,7 @@ Write tests for:
 - Error states and edge cases
 
 ```bash
-npm run test
+pnpm run test
 ```
 
 ## 📚 Key Concepts
