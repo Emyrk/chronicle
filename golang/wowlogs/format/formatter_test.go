@@ -1,0 +1,66 @@
+package format_test
+
+import (
+	"bufio"
+	"os"
+	"path/filepath"
+	"slices"
+	"strings"
+	"testing"
+
+	"github.com/chronicle/golangformat/golang/wowlogs/format"
+	"github.com/stretchr/testify/require"
+)
+
+func TestAgainstGoldenFiles(t *testing.T) {
+	t.Parallel()
+
+	// Open all directory files in testdata/
+	entries, err := os.ReadDir("testdata")
+	require.NoError(t, err)
+
+	for _, ent := range entries {
+		if !ent.IsDir() {
+			continue
+		}
+
+		dirPath := filepath.Join("testdata", ent.Name())
+		files, err := os.ReadDir(dirPath)
+		require.NoError(t, err)
+
+		isTest := slices.ContainsFunc(files, func(e os.DirEntry) bool {
+			return e.Name() == "WoWCombatLog.txt"
+		})
+		if !isTest {
+			continue
+		}
+
+		t.Run(ent.Name(), func(t *testing.T) {
+			inputPath := filepath.Join(dirPath, "WoWCombatLog.txt")
+			expectedPath := filepath.Join(dirPath, "WoWCombatLog.formatted.txt")
+
+			expectedData, err := os.ReadFile(expectedPath)
+			require.NoError(t, err)
+
+			inputFile, err := os.OpenFile(inputPath, os.O_RDONLY, 0644)
+			require.NoError(t, err)
+			got := []string{}
+
+			formatter := format.NewFormatter("Testplayer")
+			scanner := bufio.NewScanner(inputFile)
+			for scanner.Scan() {
+				line := scanner.Text()
+				got = append(got, formatter.FormatLine(line))
+			}
+
+			_ = inputFile.Close()
+			gotText := strings.Join(got, "\n")
+
+			writeTo := filepath.Join(dirPath, "WoWCombatLog.formatted.txt.actual")
+			_ = os.WriteFile(filepath.Join(dirPath, "WoWCombatLog.formatted.txt.actual"), []byte(gotText), 0644)
+
+			t.Log("code --diff " + expectedPath + " " + writeTo)
+			require.Equal(t, string(expectedData), gotText)
+		})
+	}
+}
