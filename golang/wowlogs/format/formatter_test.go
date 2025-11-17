@@ -2,6 +2,7 @@ package format_test
 
 import (
 	"bufio"
+	"fmt"
 	"os"
 	"path/filepath"
 	"slices"
@@ -11,6 +12,14 @@ import (
 	"github.com/chronicle/golangformat/golang/wowlogs/format"
 	"github.com/stretchr/testify/require"
 )
+
+func TestRemoveFailures(t *testing.T) {
+	t.Parallel()
+
+	formatter := format.NewFormatter("Testplayer")
+	output := formatter.FormatLine("11/17 16:37:17.241  You fail to cast Shadow Bolt: Interrupted.")
+	fmt.Println(output)
+}
 
 func TestAgainstGoldenFiles(t *testing.T) {
 	t.Parallel()

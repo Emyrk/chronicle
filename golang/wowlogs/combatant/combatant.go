@@ -26,6 +26,13 @@ type Combatant struct {
 func ParseCombatantInfo(content string) (Combatant, error) {
 	var empty Combatant
 
+	nilToEmpty := func(s string) string {
+		if s == "nil" {
+			return ""
+		}
+		return s
+	}
+
 	if !strings.HasPrefix(content, "COMBATANT_INFO:") {
 		return empty, fmt.Errorf("not a COMBATANT_INFO message")
 	}
@@ -46,7 +53,7 @@ func ParseCombatantInfo(content string) (Combatant, error) {
 		HeroClass:  info.heroClassLocal(),
 		Gender:     info.genderLocal(),
 		Race:       info.raceLocal(),
-		PetName:    info.petName(),
+		PetName:    nilToEmpty(info.petName()),
 		Guild:      nil,
 		GearSetups: nil,
 		Talents:    nil,
