@@ -1,0 +1,234 @@
+11/11 08:56:38.810  COMBATANT_INFO: 11.11.25 08:56:38&Doyd&ROGUE&Scourge&2&nil&nil&nil&nil&8176:0:0:0&61422:0:0:0&9647:0:0:0&60058:0:0:0&83401:18:0:0&14598:0:0:0&8193:18:0:0&9633:18:0:0&7378:0:0:0&4107:17:0:0&9533:0:0:0&60835:0:0:0&60587:0:0:0&58073:0:0:0&6432:0:0:0&9684:0:0:0&61330:0:0:0&55474:0:0:0&5976:0:0:0&nil
+11/11 08:56:39.221  ZONE_INFO: 11.11.25 08:56:39&&0
+11/11 08:56:39.221  ZONE_INFO: 11.11.25 08:56:39&hillsbrad foothills&0
+11/11 08:57:58.884  Your Throw hits Forest Boar for 77.
+11/11 08:57:58.905  Forest Boar gains Rushing Charge (1).
+11/11 08:57:59.727  Forest Boar hits you for 70.
+11/11 08:57:59.817  Rushing Charge fades from Forest Boar.
+11/11 08:58:01.941  Forest Boar attacks. You parry.
+11/11 08:58:04.161  Forest Boar attacks. You dodge.
+11/11 08:58:04.305  Your Riposte hits Forest Boar for 233.
+11/11 08:58:04.305  You hit Forest Boar for 115.
+11/11 08:58:04.307  Forest Boar is afflicted by Riposte (1).
+11/11 08:58:04.341  You hit Forest Boar for 58.
+11/11 08:58:06.085  You hit Forest Boar for 75.
+11/11 08:58:06.310  Forest Boar hits you for 17.
+11/11 08:58:06.566  You hit Forest Boar for 145.
+11/11 08:58:07.767  You hit Forest Boar for 77.
+11/11 08:58:07.850  Your Sinister Strike hits Forest Boar for 196.
+11/11 08:58:07.850  You have slain Forest Boar!
+11/11 08:58:07.850  Forest Boar dies.
+11/11 08:58:09.039  COMBATANT_INFO: 11.11.25 08:58:09&Doyd&ROGUE&Scourge&2&nil&Exalted with Doordash&Friendly&4&8176:0:0:0&61422:0:0:0&9647:0:0:0&60058:0:0:0&83401:18:0:0&14598:0:0:0&8193:18:0:0&9633:18:0:0&7378:0:0:0&4107:17:0:0&9533:0:0:0&60835:0:0:0&60587:0:0:0&58073:0:0:0&6432:0:0:0&9684:0:0:0&61330:0:0:0&55474:0:0:0&5976:0:0:0&005103000000000000}055051000050122231}00000000000000000000
+11/11 08:58:09.049  LOOT: 11.11.25 08:58:09&You receive loot: |cff9d9d9d|Hitem:771:0:0:0|h[Chipped Boar Tusk]|h|r.
+11/11 08:58:09.063  LOOT: 11.11.25 08:58:09&You receive loot: |cffffffff|Hitem:769:0:0:0|h[Chunk of Boar Meat]|h|rx2.
+11/11 09:15:45.735  COMBATANT_INFO: 11.11.25 09:15:45&Doyd&ROGUE&Scourge&2&nil&Exalted with Doordash&Friendly&4&8176:0:0:0&61422:0:0:0&9647:0:0:0&60058:0:0:0&83401:18:0:0&14598:0:0:0&8193:18:0:0&9633:18:0:0&7378:0:0:0&4107:17:0:0&9533:0:0:0&60835:0:0:0&60587:0:0:0&58073:0:0:0&6432:0:0:0&9684:0:0:0&61330:0:0:0&55474:0:0:0&5976:0:0:0&005103000000000000}055051000050122231}00000000000000000000
+11/11 09:15:45.961  ZONE_INFO: 11.11.25 09:15:45&&0
+11/11 09:15:46.063  ZONE_INFO: 11.11.25 09:15:46&hillsbrad foothills&0
+11/11 09:16:02.363  Aszka uses Mighty Trolls Blood Potion.
+11/11 09:16:10.803  COMBATANT_INFO: 11.11.25 09:16:10&Shamum&SHAMAN&Tauren&3&nil&Exalted with Doordash&Uber Eats&5&nil&nil&5404:0:0:0&154:0:0:0&15304:0:112:0&14373:0:0:0&14119:0:757:0&14129:0:232:0&80711:0:0:0&2984:0:0:0&60916:0:0:0&81030:0:0:0&nil&nil&70224:0:0:0&6505:0:0:0&nil&nil&5976:0:0:0&nil
+11/11 09:17:07.571  COMBATANT_INFO: 11.11.25 09:17:07&Doyd&ROGUE&Scourge&2&nil&Exalted with Doordash&Friendly&4&8176:0:0:0&61422:0:0:0&9647:0:0:0&60058:0:0:0&83401:18:0:0&14598:0:0:0&8193:18:0:0&9633:18:0:0&7378:0:0:0&4107:17:0:0&9533:0:0:0&60835:0:0:0&60587:0:0:0&58073:0:0:0&6432:0:0:0&9684:0:0:0&61330:0:0:0&55474:0:0:0&5976:0:0:0&005103000000000000}055051000050122231}00000000000000000000
+11/11 09:17:07.583  LOOT: 11.11.25 09:17:07&You receive loot: |cff9d9d9d|Hitem:2940:0:0:0|h[Bloody Bear Paw]|h|r.
+11/11 09:17:46.398  COMBATANT_INFO: 11.11.25 09:17:46&Maldrissa&WARLOCK&Orc&3&nil&Exalted with Doordash&Uber Eats&5&nil&nil&nil&nil&6266:0:96:0&nil&6568:0:237:0&4915:0:0:0&nil&nil&nil&nil&nil&nil&4695:0:0:0&4925:0:0:0&nil&11287:0:0:0&5976:0:0:0&nil
+11/11 09:18:38.359  COMBATANT_INFO: 11.11.25 09:18:38&Maldrissa&WARLOCK&Orc&3&Chotuk&Exalted with Doordash&Uber Eats&5&nil&nil&nil&nil&6266:0:96:0&nil&6568:0:237:0&4915:0:0:0&nil&nil&nil&nil&nil&nil&4695:0:0:0&4925:0:0:0&nil&11287:0:0:0&5976:0:0:0&nil
+11/11 09:19:32.485  Vicious Gray Bear is afflicted by Drain Soul (1).
+11/11 09:19:33.526  Vicious Gray Bear suffers 19 Shadow damage from Maldrissa's Drain Soul.
+11/11 09:19:34.374  You fail to perform Sinister Strike: Out of range.
+11/11 09:19:34.422  Vicious Gray Bear suffers 19 Shadow damage from Maldrissa's Drain Soul.
+11/11 09:19:34.519  You fail to perform Sinister Strike: Out of range.
+11/11 09:19:34.647  You fail to perform Sinister Strike: Out of range.
+11/11 09:19:34.759  You fail to perform Sinister Strike: Out of range.
+11/11 09:19:34.887  You fail to perform Sinister Strike: Out of range.
+11/11 09:19:34.966  You hit Vicious Gray Bear for 130.
+11/11 09:19:35.003  You crit Vicious Gray Bear for 144.
+11/11 09:19:35.164  Your Sinister Strike crits Vicious Gray Bear for 462.
+11/11 09:19:35.164  Vicious Gray Bear attacks. You parry.
+11/11 09:19:35.453  Vicious Gray Bear suffers 19 Shadow damage from Maldrissa's Drain Soul.
+11/11 09:19:36.043  Vicious Gray Bear is slain by Maldrissa!
+11/11 09:19:36.043  Vicious Gray Bear dies.
+11/11 09:19:36.064  You crit Vicious Gray Bear for 170.
+11/11 09:19:36.160  You fail to perform Eviscerate: That ability requires combo points.
+11/11 09:19:36.289  You fail to perform Eviscerate: That ability requires combo points.
+11/11 09:19:39.561  LOOT: 11.11.25 09:19:39&You receive loot: |cff9d9d9d|Hitem:11406:0:0:0|h[Rotting Bear Carcass]|h|r.
+11/11 09:19:39.576  LOOT: 11.11.25 09:19:39&You receive loot: |cffffffff|Hitem:3730:0:0:0|h[Big Bear Meat]|h|r.
+11/11 09:19:39.612  Your Throw crits Cave Yeti for 151.
+11/11 09:19:42.328  Cave Yeti attacks. You dodge.
+11/11 09:19:42.360  You crit Cave Yeti for 214.
+11/11 09:19:42.398  You hit Cave Yeti for 74.
+11/11 09:19:42.556  Your Sinister Strike crits Cave Yeti for 332.
+11/11 09:19:44.217  You hit Cave Yeti for 76.
+11/11 09:19:44.278  You reflect 5 Fire damage to Cave Yeti.
+11/11 09:19:44.278  Cave Yeti hits you for 38.
+11/11 09:19:44.360  Your Sinister Strike hits Cave Yeti for 168.
+11/11 09:19:44.470  You reflect 5 Fire damage to Cave Yeti.
+11/11 09:19:44.470  Cave Yeti hits you for 38.
+11/11 09:19:44.615  You hit Cave Yeti for 106.
+11/11 09:19:46.425  Cave Yeti attacks. You dodge.
+11/11 09:19:46.654  Cave Yeti attacks. You dodge.
+11/11 09:19:47.479  Shamum casts Searing Totem.
+11/11 09:19:48.469  You reflect 5 Fire damage to Cave Yeti.
+11/11 09:19:48.469  Cave Yeti hits you for 42.
+11/11 09:19:48.667  You reflect 5 Fire damage to Cave Yeti.
+11/11 09:19:48.667  Cave Yeti hits you for 44.
+11/11 09:19:49.723  Maldrissa misses Cave Yeti.
+11/11 09:19:50.184  Searing Totem II (Shamum)'s Searing Bolt hits Cave Yeti for 13 Fire damage.
+11/11 09:19:50.680  Cave Yeti attacks. You dodge.
+11/11 09:19:50.680  Cave Yeti attacks. You dodge.
+11/11 09:19:50.680  Phase Shift fades from Chotuk (Maldrissa).
+11/11 09:19:51.571  Maldrissa hits Cave Yeti for 0. (glancing)
+11/11 09:19:52.267  Searing Totem II (Shamum)'s Searing Bolt was resisted by Cave Yeti.
+11/11 09:19:52.726  Shamum misses Cave Yeti.
+11/11 09:19:52.825  Cave Yeti attacks. You parry.
+11/11 09:19:52.825  Cave Yeti attacks. You dodge.
+11/11 09:19:53.419  Maldrissa hits Cave Yeti for 4.
+11/11 09:19:53.950  Chotuk (Maldrissa)'s Firebolt was resisted by Cave Yeti.
+11/11 09:19:54.611  Searing Totem II (Shamum)'s Searing Bolt was resisted by Cave Yeti.
+11/11 09:19:54.837  Cave Yeti attacks. You parry.
+11/11 09:19:54.837  You reflect 5 Fire damage to Cave Yeti.
+11/11 09:19:54.837  Cave Yeti hits you for 38.
+11/11 09:19:55.134  Maldrissa hits Cave Yeti for 4.
+11/11 09:19:55.662  Shamum attacks. Cave Yeti dodges.
+11/11 09:19:56.327  Chotuk (Maldrissa)'s Firebolt was resisted by Cave Yeti.
+11/11 09:19:56.883  Maldrissa hits Cave Yeti for 0. (glancing)
+11/11 09:19:56.883  Cave Yeti misses you.
+11/11 09:19:56.883  Cave Yeti attacks. You dodge.
+11/11 09:19:56.987  Searing Totem II (Shamum)'s Searing Bolt was resisted by Cave Yeti.
+11/11 09:19:58.566  Shamum hits Cave Yeti for 12. (glancing)
+11/11 09:19:58.566  Maldrissa hits Cave Yeti for 3.
+11/11 09:19:58.801  Chotuk (Maldrissa)'s Firebolt was resisted by Cave Yeti.
+11/11 09:19:58.864  You reflect 5 Fire damage to Cave Yeti.
+11/11 09:19:58.864  Cave Yeti hits you for 44.
+11/11 09:19:58.864  Cave Yeti misses you.
+11/11 09:19:59.230  Searing Totem II (Shamum)'s Searing Bolt was resisted by Cave Yeti.
+11/11 09:20:00.282  Maldrissa misses Cave Yeti.
+11/11 09:20:01.009  Cave Yeti attacks. You dodge.
+11/11 09:20:01.009  Cave Yeti misses you.
+11/11 09:20:01.309  Chotuk (Maldrissa)'s Firebolt was resisted by Cave Yeti.
+11/11 09:20:01.504  Shamum misses Cave Yeti.
+11/11 09:20:01.541  Searing Totem II (Shamum)'s Searing Bolt was resisted by Cave Yeti.
+11/11 09:20:01.998  Maldrissa misses Cave Yeti.
+11/11 09:20:03.021  You reflect 5 Fire damage to Cave Yeti.
+11/11 09:20:03.021  Cave Yeti hits you for 38.
+11/11 09:20:03.021  You reflect 5 Fire damage to Cave Yeti.
+11/11 09:20:03.021  Cave Yeti hits you for 41.
+11/11 09:20:03.586  Chotuk (Maldrissa)'s Firebolt was resisted by Cave Yeti.
+11/11 09:20:03.714  Maldrissa hits Cave Yeti for 3.
+11/11 09:20:03.784  Searing Totem II (Shamum)'s Searing Bolt was resisted by Cave Yeti.
+11/11 09:20:04.474  Shamum hits Cave Yeti for 63.
+11/11 09:20:05.134  Cave Yeti attacks. You parry.
+11/11 09:20:05.134  Cave Yeti attacks. You dodge.
+11/11 09:20:05.431  Maldrissa hits Cave Yeti for 4.
+11/11 09:20:05.665  Chotuk (Maldrissa)'s Firebolt was resisted by Cave Yeti.
+11/11 09:20:06.063  Searing Totem II (Shamum)'s Searing Bolt was resisted by Cave Yeti.
+11/11 09:20:07.179  Maldrissa hits Cave Yeti for 0. (glancing)
+11/11 09:20:07.179  Cave Yeti attacks. You dodge.
+11/11 09:20:07.179  Cave Yeti attacks. You dodge.
+11/11 09:20:07.444  Shamum hits Cave Yeti for 52.
+11/11 09:20:08.009  Chotuk (Maldrissa)'s Firebolt was resisted by Cave Yeti.
+11/11 09:20:08.533  Searing Totem II (Shamum)'s Searing Bolt hits Cave Yeti for 12 Fire damage. (4 resisted)
+11/11 09:20:08.929  Maldrissa hits Cave Yeti for 0. (glancing)
+11/11 09:20:09.391  Cave Yeti attacks. You dodge.
+11/11 09:20:09.391  You reflect 5 Fire damage to Cave Yeti.
+11/11 09:20:09.391  Cave Yeti hits you for 43.
+11/11 09:20:10.314  Shamum hits Cave Yeti for 12. (glancing)
+11/11 09:20:10.517  Chotuk (Maldrissa)'s Firebolt was resisted by Cave Yeti.
+11/11 09:20:10.645  Maldrissa attacks. Cave Yeti dodges.
+11/11 09:20:10.680  Searing Totem II (Shamum)'s Searing Bolt was resisted by Cave Yeti.
+11/11 09:20:11.403  Cave Yeti attacks. You parry.
+11/11 09:20:11.403  Cave Yeti attacks. You dodge.
+11/11 09:20:11.898  Shamum casts Fire Nova Totem.
+11/11 09:20:12.394  Maldrissa attacks. Cave Yeti dodges.
+11/11 09:20:12.859  Chotuk (Maldrissa)'s Firebolt was resisted by Cave Yeti.
+11/11 09:20:13.219  Shamum casts Earthbind Totem.
+11/11 09:20:13.219  Earthbind Totem (Shamum)'s Earthbind was resisted by Cave Yeti.
+11/11 09:20:13.285  Shamum attacks. Cave Yeti dodges.
+11/11 09:20:13.285  Cave Yeti is afflicted by Earthbind (1).
+11/11 09:20:13.581  Cave Yeti attacks. You dodge.
+11/11 09:20:13.581  Cave Yeti misses you.
+11/11 09:20:14.109  Maldrissa misses Cave Yeti.
+11/11 09:20:15.004  Chotuk (Maldrissa)'s Firebolt was resisted by Cave Yeti.
+11/11 09:20:15.628  Cave Yeti attacks. You dodge.
+11/11 09:20:15.628  Cave Yeti attacks. You dodge.
+11/11 09:20:15.859  Maldrissa hits Cave Yeti for 0. (glancing)
+11/11 09:20:15.958  Fire Nova Totem (Shamum)'s Fire Nova hits Cave Yeti for 58 Fire damage.
+11/11 09:20:15.958  Fire Nova Totem (Shamum)'s Fire Nova hits Cave Yeti for 59 Fire damage.
+11/11 09:20:16.189  Shamum attacks. Cave Yeti dodges.
+11/11 09:20:16.255  Earthbind Totem (Shamum)'s Earthbind was resisted by Cave Yeti.
+11/11 09:20:16.255  Earthbind Totem (Shamum)'s Earthbind was resisted by Cave Yeti.
+11/11 09:20:17.382  Chotuk (Maldrissa)'s Firebolt was resisted by Cave Yeti.
+11/11 09:20:17.574  Maldrissa attacks. Cave Yeti dodges.
+11/11 09:20:17.871  You reflect 5 Fire damage to Cave Yeti.
+11/11 09:20:17.871  Cave Yeti hits you for 36.
+11/11 09:20:17.871  You reflect 5 Fire damage to Cave Yeti.
+11/11 09:20:17.871  Cave Yeti hits you for 43.
+11/11 09:20:18.301  Earthbind fades from Cave Yeti.
+11/11 09:20:19.160  Shamum attacks. Cave Yeti dodges.
+11/11 09:20:19.257  Earthbind Totem (Shamum)'s Earthbind was resisted by Cave Yeti.
+11/11 09:20:19.257  Earthbind Totem (Shamum)'s Earthbind was resisted by Cave Yeti.
+11/11 09:20:19.291  Maldrissa misses Cave Yeti.
+11/11 09:20:19.324  Chotuk (Maldrissa)'s Firebolt hits Cave Yeti for 29 Fire damage. (9 resisted)
+11/11 09:20:19.885  Cave Yeti attacks. You dodge.
+11/11 09:20:19.885  You reflect 5 Fire damage to Cave Yeti.
+11/11 09:20:19.885  Cave Yeti hits you for 36.
+11/11 09:20:21.040  Maldrissa hits Cave Yeti for 3.
+11/11 09:20:22.043  Shamum hits Cave Yeti for 13. (glancing)
+11/11 09:20:22.043  Cave Yeti attacks. You dodge.
+11/11 09:20:22.043  Cave Yeti attacks. You dodge.
+11/11 09:20:22.267  Earthbind Totem (Shamum)'s Earthbind was resisted by Cave Yeti.
+11/11 09:20:22.267  Earthbind Totem (Shamum)'s Earthbind was resisted by Cave Yeti.
+11/11 09:20:22.745  Maldrissa hits Cave Yeti for 3.
+11/11 09:20:24.073  You reflect 5 Fire damage to Cave Yeti.
+11/11 09:20:24.073  Cave Yeti hits you for 36.
+11/11 09:20:24.073  You reflect 5 Fire damage to Cave Yeti.
+11/11 09:20:24.073  Cave Yeti hits you for 37.
+11/11 09:20:24.473  Maldrissa hits Cave Yeti for 4.
+11/11 09:20:25.001  Shamum hits Cave Yeti for 56.
+11/11 09:20:25.257  Earthbind Totem (Shamum)'s Earthbind was resisted by Cave Yeti.
+11/11 09:20:25.290  Cave Yeti is afflicted by Earthbind (1).
+11/11 09:20:26.105  You reflect 5 Fire damage to Cave Yeti.
+11/11 09:20:26.105  Cave Yeti hits you for 41.
+11/11 09:20:26.105  You reflect 5 Fire damage to Cave Yeti.
+11/11 09:20:26.105  Cave Yeti hits you for 38.
+11/11 09:20:26.218  Maldrissa hits Cave Yeti for 0. (glancing)
+11/11 09:20:26.634  Cave Yeti is afflicted by Drain Soul (1).
+11/11 09:20:27.592  Cave Yeti suffers 15 Shadow damage from Maldrissa's Drain Soul. (4 resisted)
+11/11 09:20:27.805  Chotuk (Maldrissa)'s Firebolt was resisted by Cave Yeti.
+11/11 09:20:28.259  Cave Yeti attacks. You parry.
+11/11 09:20:28.259  Earthbind Totem (Shamum)'s Earthbind was resisted by Cave Yeti.
+11/11 09:20:28.259  Earthbind Totem (Shamum)'s Earthbind was resisted by Cave Yeti.
+11/11 09:20:28.259  You reflect 6 Fire damage to Cave Yeti.
+11/11 09:20:28.259  Cave Yeti hits you for 41.
+11/11 09:20:28.375  Your Sinister Strike hits Cave Yeti for 177.
+11/11 09:20:28.375  You hit Cave Yeti for 130.
+11/11 09:20:28.425  You hit Cave Yeti for 70.
+11/11 09:20:28.553  Cave Yeti suffers 19 Shadow damage from Maldrissa's Drain Soul.
+11/11 09:20:29.256  Your Riposte hits Cave Yeti for 185.
+11/11 09:20:29.256  You have slain Cave Yeti!
+11/11 09:20:29.256  Cave Yeti dies.
+11/11 09:20:29.411  Chotuk (Maldrissa) gains Phase Shift (1).
+11/11 09:20:30.259  Earthbind fades from Cave Yeti.
+11/11 09:20:30.403  Cave Yeti attacks. You parry.
+11/11 09:20:31.332  Cave Yeti is afflicted by Earthbind (1).
+11/11 09:20:32.412  Cave Yeti attacks. You dodge.
+11/11 09:20:32.925  Maldrissa's Drain Soul was resisted by Cave Yeti.
+11/11 09:20:33.858  Your Sinister Strike crits Cave Yeti for 334.
+11/11 09:20:33.858  You have slain Cave Yeti!
+11/11 09:20:33.858  Cave Yeti dies.
+11/11 09:20:33.858  You hit Cave Yeti for 120.
+11/11 09:20:35.741  Power Word: Fortitude fades from Shamum.
+11/11 09:20:36.449  COMBATANT_INFO: 11.11.25 09:20:36&Tengreshin&WARRIOR&Orc&2&nil&nil&nil&nil&nil&nil&5404:0:0:0&6125:0:0:0&6627:0:0:0&6460:0:0:0&13010:0:0:0&14722:0:0:0&3211:0:0:0&55369:0:0:0&6321:0:0:0&55318:0:0:0&70033:0:0:0&55340:0:0:0&6449:0:0:0&6318:0:0:0&nil&6469:0:0:0&nil&nil
+11/11 09:20:47.201  Vicious Gray Bear is afflicted by Drain Soul (1).
+11/11 09:20:48.197  Vicious Gray Bear suffers 19 Shadow damage from Maldrissa's Drain Soul.
+11/11 09:20:49.094  You fail to perform Sinister Strike: Out of range.
+11/11 09:20:49.204  Vicious Gray Bear suffers 19 Shadow damage from Maldrissa's Drain Soul.
+11/11 09:20:49.238  You fail to perform Sinister Strike: Out of range.
+11/11 09:20:49.428  You hit Vicious Gray Bear for 157.
+11/11 09:20:49.478  You hit Vicious Gray Bear for 83.
+11/11 09:20:49.545  Your Sinister Strike hits Vicious Gray Bear for 209.
+11/11 09:20:49.572  You reflect 5 Fire damage to Vicious Gray Bear.
+11/11 09:20:49.572  Vicious Gray Bear hits you for 30.
+11/11 09:20:50.229  Vicious Gray Bear suffers 19 Shadow damage from Maldrissa's Drain Soul.
+11/11 09:20:50.587  Your Eviscerate crits Vicious Gray Bear for 386.
+11/11 09:20:50.587  Vicious Gray Bear is slain by Maldrissa!
+11/11 09:20:50.587  Vicious Gray Bear dies.
+11/11 09:20:51.859  LOOT: 11.11.25 09:20:51&You receive loot: |cff9d9d9d|Hitem:11406:0:0:0|h[Rotting Bear Carcass]|h|r.
+11/11 09:21:01.129  Blink fades from Myglanc.
