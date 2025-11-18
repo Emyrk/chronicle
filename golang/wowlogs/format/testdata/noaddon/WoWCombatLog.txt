@@ -1,0 +1,35 @@
+11/17 20:23:41.775  You gain 70 Mana from Life Tap.
+11/17 20:23:43.446  You gain Demon Armor.
+11/17 20:24:02.544  You fail to cast Shadow Bolt: Interrupted.
+11/17 20:24:02.973  You attack. Forest Moss Creeper parries.
+11/17 20:24:02.982  Forest Moss Creeper hits you for 34.
+11/17 20:24:02.982  Phase Shift fades from Chotuk (Maldrissa).
+11/17 20:24:03.313  You gain Fire Shield.
+11/17 20:24:04.979  You reflect 5 Fire damage to Forest Moss Creeper.
+11/17 20:24:05.011  Forest Moss Creeper hits you for 34.
+11/17 20:24:06.323  Forest Moss Creeper begins to cast Corrosive Poison.
+11/17 20:24:06.531  Forest Moss Creeper is afflicted by Corruption.
+11/17 20:24:07.362  Chotuk (Maldrissa)'s Firebolt hits Forest Moss Creeper for 41 Fire damage.
+11/17 20:24:08.083  You are afflicted by Corrosive Poison.
+11/17 20:24:08.661  Your Immolate hits Forest Moss Creeper for 46 Fire damage.
+11/17 20:24:08.661  Forest Moss Creeper is afflicted by Immolate.
+11/17 20:24:09.363  Tarren Mill Deathguard hits Forest Moss Creeper for 187. (crushing)
+11/17 20:24:09.474  Forest Moss Creeper suffers 18 Shadow damage from your Corruption.
+11/17 20:24:09.762  Forest Moss Creeper attacks. Tarren Mill Deathguard dodges.
+11/17 20:24:09.762  Chotuk (Maldrissa)'s Firebolt hits Forest Moss Creeper for 40 Fire damage.
+11/17 20:24:11.459  Tarren Mill Deathguard hits Forest Moss Creeper for 192. (crushing)
+11/17 20:24:11.602  Forest Moss Creeper suffers 18 Fire damage from your Immolate.
+11/17 20:24:11.939  Forest Moss Creeper misses Tarren Mill Deathguard.
+11/17 20:24:12.370  Chotuk (Maldrissa)'s Firebolt hits Forest Moss Creeper for 42 Fire damage.
+11/17 20:24:12.483  Forest Moss Creeper suffers 18 Shadow damage from your Corruption.
+11/17 20:24:12.546  Your Shadow Bolt crits Forest Moss Creeper for 141 Shadow damage.
+11/17 20:24:12.546  You have slain Forest Moss Creeper!
+11/17 20:24:12.546  Forest Moss Creeper dies, you gain 148 experience. (+74 exp Rested bonus)
+11/17 20:24:13.026  You suffer 10 Nature damage from Forest Moss Creeper's Corrosive Poison.
+11/17 20:24:13.074  Chotuk (Maldrissa) gains Phase Shift.
+11/17 20:24:18.039  You suffer 10 Nature damage from Forest Moss Creeper's Corrosive Poison.
+11/17 20:24:23.018  You suffer 10 Nature damage from Forest Moss Creeper's Corrosive Poison.
+11/17 20:24:28.146  You suffer 10 Nature damage from Forest Moss Creeper's Corrosive Poison.
+11/17 20:24:33.247  You suffer 10 Nature damage from Forest Moss Creeper's Corrosive Poison.
+11/17 20:24:38.079  You suffer 10 Nature damage from Forest Moss Creeper's Corrosive Poison.
+11/17 20:24:38.079  Corrosive Poison fades from you.

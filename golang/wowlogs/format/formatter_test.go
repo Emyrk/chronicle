@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"regexp"
 	"slices"
 	"strings"
 	"testing"
@@ -16,9 +17,14 @@ import (
 func TestRemoveFailures(t *testing.T) {
 	t.Parallel()
 
+	line := "11/17 16:37:17.241  You fail to cast Shadow Bolt: Interrupted."
+	re := regexp.MustCompile(`.*You fail to cast.*\n`)
+	is := re.MatchString(line)
+	fmt.Println(is)
+
 	formatter := format.NewFormatter("Testplayer")
 	output := formatter.FormatLine("11/17 16:37:17.241  You fail to cast Shadow Bolt: Interrupted.")
-	fmt.Println(output)
+	require.Empty(t, output, "Expected failure line to be removed")
 }
 
 func TestAgainstGoldenFiles(t *testing.T) {

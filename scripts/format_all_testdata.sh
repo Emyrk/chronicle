@@ -3,7 +3,7 @@
 # Determine paths relative to this script
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PROJECT_ROOT="$(dirname "$SCRIPT_DIR")"
-TESTDATA_DIR="$PROJECT_ROOT/golang/logformat/testdata"
+TESTDATA_DIR="$PROJECT_ROOT/golang/wowlogs/format/testdata"
 FORMATTER_SCRIPT="$SCRIPT_DIR/format_log_for_upload.py"
 
 # Default player name for test data
