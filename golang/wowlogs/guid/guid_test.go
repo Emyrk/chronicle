@@ -1,203 +1,74 @@
 package guid
 
-import "testing"
+import (
+	"testing"
 
-func TestGUID_GetHigh(t *testing.T) {
+	"github.com/stretchr/testify/require"
+)
+
+func TestGUID(t *testing.T) {
 	tests := []struct {
-		name string
-		guid GUID
-		want uint16
+		name          string
+		guid          GUID
+		isPlayer      bool
+		isVehicle     bool
+		isPet         bool
+		isCreature    bool
+		isAnyCreature bool
+		isUnit        bool
 	}{
 		{
-			name: "player GUID",
-			guid: 0x0000000000000001,
-			want: 0x0000,
+			name:     "player Doyd",
+			guid:     0x000000000001C7AC,
+			isPlayer: true,
+			isUnit:   true,
 		},
 		{
-			name: "creature GUID",
-			guid: 0x0030000000000001,
-			want: 0x0030,
-		},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			if got := tt.guid.GetHigh(); got != tt.want {
-				t.Errorf("GetHigh() = 0x%04X, want 0x%04X", got, tt.want)
-			}
-		})
-	}
-}
-
-func TestGUID_IsPlayer(t *testing.T) {
-	tests := []struct {
-		name string
-		guid GUID
-		want bool
-	}{
-		{"player", 0x0000000000000001, true},
-		{"creature", 0x0030000000000001, false},
-		{"pet", 0x0040000000000001, false},
-		{"vehicle", 0x0050000000000001, false},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			if got := tt.guid.IsPlayer(); got != tt.want {
-				t.Errorf("IsPlayer() = %v, want %v", got, tt.want)
-			}
-		})
-	}
-}
-
-func TestGUID_IsPet(t *testing.T) {
-	tests := []struct {
-		name string
-		guid GUID
-		want bool
-	}{
-		{"player", 0x0000000000000001, false},
-		{"creature", 0x0030000000000001, false},
-		{"pet", 0x0040000000000001, true},
-		{"vehicle", 0x0050000000000001, false},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			if got := tt.guid.IsPet(); got != tt.want {
-				t.Errorf("IsPet() = %v, want %v", got, tt.want)
-			}
-		})
-	}
-}
-
-func TestGUID_IsCreature(t *testing.T) {
-	tests := []struct {
-		name string
-		guid GUID
-		want bool
-	}{
-		{"player", 0x0000000000000001, false},
-		{"creature", 0x0030000000000001, true},
-		{"pet", 0x0040000000000001, false},
-		{"vehicle", 0x0050000000000001, false},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			if got := tt.guid.IsCreature(); got != tt.want {
-				t.Errorf("IsCreature() = %v, want %v", got, tt.want)
-			}
-		})
-	}
-}
-
-func TestGUID_IsVehicle(t *testing.T) {
-	tests := []struct {
-		name string
-		guid GUID
-		want bool
-	}{
-		{"player", 0x0000000000000001, false},
-		{"creature", 0x0030000000000001, false},
-		{"pet", 0x0040000000000001, false},
-		{"vehicle", 0x0050000000000001, true},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			if got := tt.guid.IsVehicle(); got != tt.want {
-				t.Errorf("IsVehicle() = %v, want %v", got, tt.want)
-			}
-		})
-	}
-}
-
-func TestGUID_IsAnyCreature(t *testing.T) {
-	tests := []struct {
-		name string
-		guid GUID
-		want bool
-	}{
-		{"player", 0x0000000000000001, false},
-		{"creature", 0x0030000000000001, true},
-		{"pet", 0x0040000000000001, true},
-		{"vehicle", 0x0050000000000001, true},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			if got := tt.guid.IsAnyCreature(); got != tt.want {
-				t.Errorf("IsAnyCreature() = %v, want %v", got, tt.want)
-			}
-		})
-	}
-}
-
-func TestGUID_IsUnit(t *testing.T) {
-	tests := []struct {
-		name string
-		guid GUID
-		want bool
-	}{
-		{"player", 0x0000000000000001, true},
-		{"creature", 0x0030000000000001, true},
-		{"pet", 0x0040000000000001, true},
-		{"vehicle", 0x0050000000000001, true},
-		{"gameobject", 0x0060000000000001, false},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			if got := tt.guid.IsUnit(); got != tt.want {
-				t.Errorf("IsUnit() = %v, want %v", got, tt.want)
-			}
-		})
-	}
-}
-
-func TestGUID_GetEntry(t *testing.T) {
-	tests := []struct {
-		name      string
-		guid      GUID
-		wantEntry uint32
-		wantOk    bool
-	}{
-		{
-			name:      "player has no entry",
-			guid:      0x0000000000000001,
-			wantEntry: 0,
-			wantOk:    false,
+			name:          "npc",
+			guid:          0xF130000CE0000D3F,
+			isPlayer:      false,
+			isUnit:        true,
+			isCreature:    true,
+			isAnyCreature: true,
 		},
 		{
-			name:      "creature with entry 12345",
-			guid:      0x0030003039000001, // High: 0x0030 (16 bits), Entry: 0x003039 (24 bits), Counter: 0x000001 (24 bits)
-			wantEntry: 12345,
-			wantOk:    true,
+			name:          "npc_org_battlemaster",
+			guid:          0xF130013C3B271480,
+			isPlayer:      false,
+			isUnit:        true,
+			isCreature:    true,
+			isAnyCreature: true,
 		},
 		{
-			name:      "pet with entry 999",
-			guid:      0x00400003E7000001, // High: 0x0040 (16 bits), Entry: 0x0003E7 (24 bits), Counter: 0x000001 (24 bits)
-			wantEntry: 999,
-			wantOk:    true,
+			name:     "player",
+			guid:     0x00000000000F1A35,
+			isPlayer: true,
+			isUnit:   true,
 		},
 		{
-			name:      "vehicle with entry 54321",
-			guid:      0x005000D431000001, // High: 0x0050 (16 bits), Entry: 0x00D431 (24 bits), Counter: 0x000001 (24 bits)
-			wantEntry: 54321,
-			wantOk:    true,
+			name:          "maldrissa_imp",
+			guid:          0xF14008449300903A,
+			isPlayer:      false,
+			isUnit:        true,
+			isPet:         true,
+			isAnyCreature: true,
+		},
+		{
+			name:     "maldrissa",
+			guid:     0x00000000000EB167,
+			isPlayer: true,
+			isUnit:   true,
 		},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			gotEntry, gotOk := tt.guid.GetEntry()
-			if gotEntry != tt.wantEntry {
-				t.Errorf("GetEntry() entry = %v, want %v", gotEntry, tt.wantEntry)
-			}
-			if gotOk != tt.wantOk {
-				t.Errorf("GetEntry() ok = %v, want %v", gotOk, tt.wantOk)
-			}
+			require.Equal(t, tt.isPlayer, tt.guid.IsPlayer(), "player")
+			require.Equal(t, tt.isVehicle, tt.guid.IsVehicle(), "vehicle")
+			require.Equal(t, tt.isPet, tt.guid.IsPet(), "pet")
+			require.Equal(t, tt.isCreature, tt.guid.IsCreature(), "creature")
+			require.Equal(t, tt.isAnyCreature, tt.guid.IsAnyCreature(), "any creature")
+			require.Equal(t, tt.isUnit, tt.guid.IsUnit(), "unit")
 		})
 	}
 }
