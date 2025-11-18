@@ -3,7 +3,6 @@ package format
 import (
 	"regexp"
 	"strings"
-	"time"
 
 	"github.com/chronicle/golangformat/golang/wowlogs/combatant"
 	"github.com/chronicle/golangformat/golang/wowlogs/lines"
@@ -20,7 +19,7 @@ type Formatter struct {
 	replace    *replacer
 	combatants map[string]combatant.Combatant
 
-	l lines.Liner
+	l *lines.Liner
 }
 
 func NewFormatter(playerName string) *Formatter {
@@ -28,7 +27,7 @@ func NewFormatter(playerName string) *Formatter {
 		playerName: playerName,
 		pets:       newPets(),
 		replace:    newReplacer(playerName),
-		l:          lines.NewLiner(time.Now().Year()),
+		l:          lines.NewLiner(),
 	}
 }
 

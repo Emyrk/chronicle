@@ -15,13 +15,13 @@ type parseLine = func(ts time.Time, content string) (Message, error)
 
 type Parser struct {
 	logger *slog.Logger
-	liner  lines.Liner
+	liner  *lines.Liner
 }
 
 func NewParser(logger *slog.Logger) *Parser {
 	return &Parser{
 		logger: logger,
-		liner:  lines.NewLiner(time.Now().Year()),
+		liner:  lines.NewLiner(),
 	}
 }
 

@@ -1,10 +1,11 @@
 module github.com/chronicle/golangformat
 
-go 1.21
+go 1.23.9
 
 require github.com/stretchr/testify v1.11.1
 
 require (
+	github.com/coder/quartz v0.3.0 // indirect
 	github.com/davecgh/go-spew v1.1.1 // indirect
 	github.com/mattn/go-colorable v0.1.13 // indirect
 	github.com/mattn/go-isatty v0.0.19 // indirect
