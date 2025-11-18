@@ -3,85 +3,85 @@
 11/17 20:26:08.140  ZONE_INFO: 17.11.25 20:26:08&hillsbrad foothills&0
 11/17 20:26:17.045  COMBATANT_INFO: 17.11.25 20:26:17&Beastlord&HUNTER&Orc&2&nil&I Lions Pride I&3 - Loyal&6&81006:0:0:0&nil&7415:0:167:0&127:0:0:0&6603:0:171:0&5355:0:0:0&7373:17:0:0&58115:0:0:0&9829:0:591:0&4254:0:0:0&1076:0:0:0&1076:0:0:0&70033:0:0:0&55340:0:0:0&14571:0:0:0&3201:0:516:0&nil&3042:0:0:0&5976:0:0:0&nil
 11/17 20:26:19.158  Fizie uses Green Garden Tea.
-11/17 20:26:44.827  Testplayer 's Shoot hits Gray Bear for 15 Arcane damage.
+11/17 20:26:44.827  Maldrissa 's Shoot hits Gray Bear for 15 Arcane damage.
 11/17 20:26:46.603  Gray Bear is afflicted by Corruption (1).
-11/17 20:26:49.594  Gray Bear suffers 18 Shadow damage from Testplayer 's Corruption.
+11/17 20:26:49.594  Gray Bear suffers 18 Shadow damage from Maldrissa 's Corruption.
 11/17 20:26:52.427  COMBATANT_INFO: 17.11.25 20:26:52&Pgp&WARLOCK&Scourge&2&nil&Run It Twice&Maggot&8&7048:0:0:0&nil&1785:0:0:0&6833:0:0:0&9798:0:186:0&60380:0:0:0&14183:0:770:0&13099:0:0:0&7355:0:850:0&2984:0:0:0&3235:0:0:0&11994:0:1187:0&nil&nil&14376:0:0:0&4571:0:2028:0&3451:0:0:0&11289:0:0:0&nil&nil
-11/17 20:26:52.587  Gray Bear suffers 18 Shadow damage from Testplayer 's Corruption.
-11/17 20:26:53.236  Testplayer reflects 5 Fire damage to Gray Bear.
-11/17 20:26:53.236  Gray Bear hits Testplayer for 32.
+11/17 20:26:52.587  Gray Bear suffers 18 Shadow damage from Maldrissa 's Corruption.
+11/17 20:26:53.236  Maldrissa reflects 5 Fire damage to Gray Bear.
+11/17 20:26:53.236  Gray Bear hits Maldrissa for 32.
 11/17 20:26:53.236  Phase Shift fades from Chotuk (Maldrissa).
-11/17 20:26:54.721  Testplayer 's Immolate was resisted by Gray Bear.
-11/17 20:26:55.408  Testplayer reflects 5 Fire damage to Gray Bear.
-11/17 20:26:55.408  Gray Bear hits Testplayer for 37.
-11/17 20:26:55.553  Gray Bear suffers 18 Shadow damage from Testplayer 's Corruption.
+11/17 20:26:54.721  Maldrissa 's Immolate was resisted by Gray Bear.
+11/17 20:26:55.408  Maldrissa reflects 5 Fire damage to Gray Bear.
+11/17 20:26:55.408  Gray Bear hits Maldrissa for 37.
+11/17 20:26:55.553  Gray Bear suffers 18 Shadow damage from Maldrissa 's Corruption.
 11/17 20:26:55.984  Maldrissa 's Firebolt hits Gray Bear for 39 Fire damage.
-11/17 20:26:57.505  Testplayer reflects 5 Fire damage to Gray Bear.
-11/17 20:26:57.505  Gray Bear crits Testplayer for 72.
-11/17 20:26:58.560  Gray Bear suffers 18 Shadow damage from Testplayer 's Corruption.
-11/17 20:26:59.552  Testplayer reflects 5 Fire damage to Gray Bear.
-11/17 20:26:59.552  Gray Bear hits Testplayer for 36.
+11/17 20:26:57.505  Maldrissa reflects 5 Fire damage to Gray Bear.
+11/17 20:26:57.505  Gray Bear crits Maldrissa for 72.
+11/17 20:26:58.560  Gray Bear suffers 18 Shadow damage from Maldrissa 's Corruption.
+11/17 20:26:59.552  Maldrissa reflects 5 Fire damage to Gray Bear.
+11/17 20:26:59.552  Gray Bear hits Maldrissa for 36.
 11/17 20:27:00.274  Maldrissa 's Firebolt was resisted by Gray Bear.
 11/17 20:27:01.078  Gray Bear is afflicted by Corruption (1).
 11/17 20:27:01.463  Maldrissa 's Firebolt hits Gray Bear for 39 Fire damage.
-11/17 20:27:01.558  Gray Bear suffers 18 Shadow damage from Testplayer 's Corruption.
-11/17 20:27:01.558  Testplayer reflects 5 Fire damage to Gray Bear.
-11/17 20:27:01.558  Gray Bear hits Testplayer for 32.
+11/17 20:27:01.558  Gray Bear suffers 18 Shadow damage from Maldrissa 's Corruption.
+11/17 20:27:01.558  Maldrissa reflects 5 Fire damage to Gray Bear.
+11/17 20:27:01.558  Gray Bear hits Maldrissa for 32.
 11/17 20:27:01.558  Corruption fades from Gray Bear.
-11/17 20:27:03.607  Testplayer reflects 5 Fire damage to Gray Bear.
-11/17 20:27:03.607  Gray Bear hits Testplayer for 32.
+11/17 20:27:03.607  Maldrissa reflects 5 Fire damage to Gray Bear.
+11/17 20:27:03.607  Gray Bear hits Maldrissa for 32.
 11/17 20:27:03.799  Maldrissa 's Firebolt hits Gray Bear for 40 Fire damage.
-11/17 20:27:04.054  Gray Bear suffers 18 Shadow damage from Testplayer 's Corruption.
-11/17 20:27:04.312  Testplayer reflects 5 Fire damage to Gray Bear.
-11/17 20:27:04.312  Gray Bear hits Testplayer for 30.
-11/17 20:27:05.655  Testplayer reflects 5 Fire damage to Gray Bear.
-11/17 20:27:05.655  Gray Bear hits Testplayer for 36.
+11/17 20:27:04.054  Gray Bear suffers 18 Shadow damage from Maldrissa 's Corruption.
+11/17 20:27:04.312  Maldrissa reflects 5 Fire damage to Gray Bear.
+11/17 20:27:04.312  Gray Bear hits Maldrissa for 30.
+11/17 20:27:05.655  Maldrissa reflects 5 Fire damage to Gray Bear.
+11/17 20:27:05.655  Gray Bear hits Maldrissa for 36.
 11/17 20:27:05.846  Maldrissa 's Firebolt crits Gray Bear for 46 Fire damage. (15 resisted)
-11/17 20:27:06.358  Testplayer reflects 5 Fire damage to Gray Bear.
-11/17 20:27:06.358  Gray Bear hits Testplayer for 32.
+11/17 20:27:06.358  Maldrissa reflects 5 Fire damage to Gray Bear.
+11/17 20:27:06.358  Gray Bear hits Maldrissa for 32.
 11/17 20:27:06.792  Gray Bear is afflicted by Fear (1).
-11/17 20:27:07.047  Gray Bear suffers 18 Shadow damage from Testplayer 's Corruption.
+11/17 20:27:07.047  Gray Bear suffers 18 Shadow damage from Maldrissa 's Corruption.
 11/17 20:27:08.470  Maldrissa 's Firebolt hits Gray Bear for 40 Fire damage.
-11/17 20:27:08.470  Gray Bear misses Testplayer.
-11/17 20:27:09.783  Blood Pact fades from Testplayer.
-11/17 20:27:10.007  Gray Bear suffers 18 Shadow damage from Testplayer 's Corruption.
+11/17 20:27:08.470  Gray Bear misses Maldrissa.
+11/17 20:27:09.783  Blood Pact fades from Maldrissa.
+11/17 20:27:10.007  Gray Bear suffers 18 Shadow damage from Maldrissa 's Corruption.
 11/17 20:27:10.520  Maldrissa 's Firebolt hits Gray Bear for 41 Fire damage.
-11/17 20:27:10.583  Testplayer reflects 5 Fire damage to Gray Bear.
-11/17 20:27:10.583  Gray Bear hits Testplayer for 32.
+11/17 20:27:10.583  Maldrissa reflects 5 Fire damage to Gray Bear.
+11/17 20:27:10.583  Gray Bear hits Maldrissa for 32.
 11/17 20:27:12.218  Maldrissa 's Firebolt hits Gray Bear for 40 Fire damage.
 11/17 20:27:12.411  Tarren Mill Deathguard hits Gray Bear for 210. (crushing)
 11/17 20:27:12.730  Gray Bear attacks. Tarren Mill Deathguard dodges.
-11/17 20:27:13.018  Gray Bear suffers 18 Shadow damage from Testplayer 's Corruption.
+11/17 20:27:13.018  Gray Bear suffers 18 Shadow damage from Maldrissa 's Corruption.
 11/17 20:27:14.411  Tarren Mill Deathguard hits Gray Bear for 214. (crushing)
 11/17 20:27:14.672  COMBATANT_INFO: 17.11.25 20:27:14&Lulush&PRIEST&Scourge&3&nil&Squirt Squad&Member&4&4368:0:0:0&nil&10657:0:0:0&53:0:0:0&51792:0:0:0&6477:0:0:0&15449:0:0:0&9792:0:154:0&3377:0:0:0&10919:0:0:0&5313:0:0:0&3739:0:0:0&70033:0:0:0&55340:0:0:0&nil&6505:0:0:0&nil&5250:0:0:0&nil&nil
 11/17 20:27:14.813  Gray Bear attacks. Tarren Mill Deathguard dodges.
-11/17 20:27:16.046  Gray Bear suffers 18 Shadow damage from Testplayer 's Corruption.
+11/17 20:27:16.046  Gray Bear suffers 18 Shadow damage from Maldrissa 's Corruption.
 11/17 20:27:16.046  Corruption fades from Gray Bear.
 11/17 20:27:16.476  Tarren Mill Deathguard hits Gray Bear for 201. (crushing)
 11/17 20:27:16.780  Tarren Mill Deathguard 's Revenge hits Gray Bear for 48.
-11/17 20:27:16.877  Testplayer 's Shadow Bolt hits Gray Bear for 93 Shadow damage.
-11/17 20:27:16.877  Gray Bear is slain by Testplayer.
+11/17 20:27:16.877  Maldrissa 's Shadow Bolt hits Gray Bear for 93 Shadow damage.
+11/17 20:27:16.877  Gray Bear is slain by Maldrissa.
 11/17 20:27:16.877  Gray Bear dies.
 11/17 20:27:18.660  Gray Bear misses Chotuk (Maldrissa).
 11/17 20:27:21.027  Gray Bear hits Chotuk (Maldrissa) for 40.
 11/17 20:27:23.126  Gray Bear hits Chotuk (Maldrissa) for 40.
 11/17 20:27:25.163  Gray Bear hits Chotuk (Maldrissa) for 33.
-11/17 20:27:25.755  Testplayer gains Blood Pact (1).
-11/17 20:27:26.588  Testplayer 's Immolate hits Gray Bear for 46 Fire damage.
+11/17 20:27:25.755  Maldrissa gains Blood Pact (1).
+11/17 20:27:26.588  Maldrissa 's Immolate hits Gray Bear for 46 Fire damage.
 11/17 20:27:26.589  Gray Bear is afflicted by Immolate (1).
 11/17 20:27:27.466  Gray Bear misses Chotuk (Maldrissa).
-11/17 20:27:29.561  Gray Bear suffers 18 Fire damage from Testplayer 's Immolate.
+11/17 20:27:29.561  Gray Bear suffers 18 Fire damage from Maldrissa 's Immolate.
 11/17 20:27:29.561  Gray Bear hits Chotuk (Maldrissa) for 32.
 11/17 20:27:30.539  Maldrissa 's Firebolt hits Gray Bear for 40 Fire damage.
 11/17 20:27:30.684  Gray Bear is afflicted by Drain Soul (1).
-11/17 20:27:31.676  Gray Bear suffers 19 Shadow damage from Testplayer 's Drain Soul.
+11/17 20:27:31.676  Gray Bear suffers 19 Shadow damage from Maldrissa 's Drain Soul.
 11/17 20:27:31.676  Gray Bear hits Chotuk (Maldrissa) for 34.
 11/17 20:27:32.507  Tarren Mill Deathguard hits Gray Bear for 231. (crushing)
-11/17 20:27:32.570  Gray Bear suffers 18 Fire damage from Testplayer 's Immolate.
-11/17 20:27:32.683  Gray Bear suffers 19 Shadow damage from Testplayer 's Drain Soul.
+11/17 20:27:32.570  Gray Bear suffers 18 Fire damage from Maldrissa 's Immolate.
+11/17 20:27:32.683  Gray Bear suffers 19 Shadow damage from Maldrissa 's Drain Soul.
 11/17 20:27:32.907  Maldrissa 's Firebolt crits Gray Bear for 63 Fire damage.
-11/17 20:27:32.907  Gray Bear is slain by Testplayer.
-11/17 20:27:32.907  Gray Bear dies, Testplayer gains 232 experience. (+116 exp Rested bonus)
+11/17 20:27:32.907  Gray Bear is slain by Maldrissa.
+11/17 20:27:32.907  Gray Bear dies, Maldrissa gains 232 experience. (+116 exp Rested bonus)
 11/17 20:27:32.907  COMBATANT_INFO: 17.11.25 20:27:32&Maldrissa&WARLOCK&Orc&3&Chotuk&Exalted with Doordash&Uber Eats&5&nil&nil&nil&nil&6266:0:96:0&nil&6568:0:237:0&4915:0:0:0&nil&nil&nil&nil&nil&nil&4695:0:0:0&4925:0:0:0&nil&11287:0:0:0&5976:0:0:0&0000000000000000000}000000000000000000}0505001100000000
 11/17 20:27:32.907  LOOT: 17.11.25 20:27:32&You create: |cffffffff|Hitem:6265:0:0:0|h[Soul Shard]|h|rx1.
 11/17 20:27:33.060  Chotuk (Maldrissa) gains Phase Shift (1).

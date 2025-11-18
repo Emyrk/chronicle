@@ -1,0 +1,78 @@
+11/17 20:26:44.827  Maldrissa 's Shoot hits 0xF13000092F00408E for 15 Arcane damage.
+11/17 20:26:46.603  0xF13000092F00408E is afflicted by Corruption (1).
+11/17 20:26:49.594  0xF13000092F00408E suffers 18 Shadow damage from Maldrissa 's Corruption.
+11/17 20:26:52.587  0xF13000092F00408E suffers 18 Shadow damage from Maldrissa 's Corruption.
+11/17 20:26:53.236  Maldrissa reflects 5 Fire damage to 0xF13000092F00408E.
+11/17 20:26:53.236  0xF13000092F00408E hits Maldrissa for 32.
+11/17 20:26:53.236  Phase Shift fades from 0xF140084493008944.
+11/17 20:26:54.721  Maldrissa 's Immolate was resisted by 0xF13000092F00408E.
+11/17 20:26:55.408  Maldrissa reflects 5 Fire damage to 0xF13000092F00408E.
+11/17 20:26:55.408  0xF13000092F00408E hits Maldrissa for 37.
+11/17 20:26:55.553  0xF13000092F00408E suffers 18 Shadow damage from Maldrissa 's Corruption.
+11/17 20:26:55.984  0xF140084493008944's Firebolt hits 0xF13000092F00408E for 39 Fire damage.
+11/17 20:26:57.505  Maldrissa reflects 5 Fire damage to 0xF13000092F00408E.
+11/17 20:26:57.505  0xF13000092F00408E crits Maldrissa for 72.
+11/17 20:26:58.560  0xF13000092F00408E suffers 18 Shadow damage from Maldrissa 's Corruption.
+11/17 20:26:59.552  Maldrissa reflects 5 Fire damage to 0xF13000092F00408E.
+11/17 20:26:59.552  0xF13000092F00408E hits Maldrissa for 36.
+11/17 20:27:00.274  0xF140084493008944's Firebolt was resisted by 0xF13000092F00408E.
+11/17 20:27:01.078  0xF13000092F003EDD is afflicted by Corruption (1).
+11/17 20:27:01.463  0xF140084493008944's Firebolt hits 0xF13000092F00408E for 39 Fire damage.
+11/17 20:27:01.558  0xF13000092F00408E suffers 18 Shadow damage from Maldrissa 's Corruption.
+11/17 20:27:01.558  Maldrissa reflects 5 Fire damage to 0xF13000092F00408E.
+11/17 20:27:01.558  0xF13000092F00408E hits Maldrissa for 32.
+11/17 20:27:01.558  Corruption fades from 0xF13000092F00408E.
+11/17 20:27:03.607  Maldrissa reflects 5 Fire damage to 0xF13000092F00408E.
+11/17 20:27:03.607  0xF13000092F00408E hits Maldrissa for 32.
+11/17 20:27:03.799  0xF140084493008944's Firebolt hits 0xF13000092F00408E for 40 Fire damage.
+11/17 20:27:04.054  0xF13000092F003EDD suffers 18 Shadow damage from Maldrissa 's Corruption.
+11/17 20:27:04.312  Maldrissa reflects 5 Fire damage to 0xF13000092F003EDD.
+11/17 20:27:04.312  0xF13000092F003EDD hits Maldrissa for 30.
+11/17 20:27:05.655  Maldrissa reflects 5 Fire damage to 0xF13000092F00408E.
+11/17 20:27:05.655  0xF13000092F00408E hits Maldrissa for 36.
+11/17 20:27:05.846  0xF140084493008944's Firebolt crits 0xF13000092F00408E for 46 Fire damage. (15 resisted)
+11/17 20:27:06.358  Maldrissa reflects 5 Fire damage to 0xF13000092F003EDD.
+11/17 20:27:06.358  0xF13000092F003EDD hits Maldrissa for 32.
+11/17 20:27:06.792  0xF13000092F00408E is afflicted by Fear (1).
+11/17 20:27:07.047  0xF13000092F003EDD suffers 18 Shadow damage from Maldrissa 's Corruption.
+11/17 20:27:08.470  0xF140084493008944's Firebolt hits 0xF13000092F00408E for 40 Fire damage.
+11/17 20:27:08.470  0xF13000092F003EDD misses Maldrissa.
+11/17 20:27:09.783  Blood Pact fades from Maldrissa.
+11/17 20:27:10.007  0xF13000092F003EDD suffers 18 Shadow damage from Maldrissa 's Corruption.
+11/17 20:27:10.520  0xF140084493008944's Firebolt hits 0xF13000092F00408E for 41 Fire damage.
+11/17 20:27:10.583  Maldrissa reflects 5 Fire damage to 0xF13000092F003EDD.
+11/17 20:27:10.583  0xF13000092F003EDD hits Maldrissa for 32.
+11/17 20:27:12.218  0xF140084493008944's Firebolt hits 0xF13000092F00408E for 40 Fire damage.
+11/17 20:27:12.411  0xF130000965003BB2 hits 0xF13000092F003EDD for 210. (crushing)
+11/17 20:27:12.730  0xF13000092F003EDD attacks. 0xF130000965003BB2 dodges.
+11/17 20:27:13.018  0xF13000092F003EDD suffers 18 Shadow damage from Maldrissa 's Corruption.
+11/17 20:27:14.411  0xF130000965003BB2 hits 0xF13000092F003EDD for 214. (crushing)
+11/17 20:27:14.813  0xF13000092F003EDD attacks. 0xF130000965003BB2 dodges.
+11/17 20:27:16.046  0xF13000092F003EDD suffers 18 Shadow damage from Maldrissa 's Corruption.
+11/17 20:27:16.046  Corruption fades from 0xF13000092F003EDD.
+11/17 20:27:16.476  0xF130000965003BB2 hits 0xF13000092F003EDD for 201. (crushing)
+11/17 20:27:16.780  0xF130000965003BB2's Revenge hits 0xF13000092F003EDD for 48.
+11/17 20:27:16.877  Maldrissa 's Shadow Bolt hits 0xF13000092F003EDD for 93 Shadow damage.
+11/17 20:27:16.877  0xF13000092F003EDD is slain by Maldrissa.
+11/17 20:27:16.877  0xF13000092F003EDD dies.
+11/17 20:27:18.660  0xF13000092F00408E misses 0xF140084493008944.
+11/17 20:27:21.027  0xF13000092F00408E hits 0xF140084493008944 for 40.
+11/17 20:27:23.126  0xF13000092F00408E hits 0xF140084493008944 for 40.
+11/17 20:27:25.163  0xF13000092F00408E hits 0xF140084493008944 for 33.
+11/17 20:27:25.755  Maldrissa gains Blood Pact (1).
+11/17 20:27:26.588  Maldrissa 's Immolate hits 0xF13000092F00408E for 46 Fire damage.
+11/17 20:27:26.589  0xF13000092F00408E is afflicted by Immolate (1).
+11/17 20:27:27.466  0xF13000092F00408E misses 0xF140084493008944.
+11/17 20:27:29.561  0xF13000092F00408E suffers 18 Fire damage from Maldrissa 's Immolate.
+11/17 20:27:29.561  0xF13000092F00408E hits 0xF140084493008944 for 32.
+11/17 20:27:30.539  0xF140084493008944's Firebolt hits 0xF13000092F00408E for 40 Fire damage.
+11/17 20:27:30.684  0xF13000092F00408E is afflicted by Drain Soul (1).
+11/17 20:27:31.676  0xF13000092F00408E suffers 19 Shadow damage from Maldrissa 's Drain Soul.
+11/17 20:27:31.676  0xF13000092F00408E hits 0xF140084493008944 for 34.
+11/17 20:27:32.507  0xF130000965003BB2 hits 0xF13000092F00408E for 231. (crushing)
+11/17 20:27:32.570  0xF13000092F00408E suffers 18 Fire damage from Maldrissa 's Immolate.
+11/17 20:27:32.683  0xF13000092F00408E suffers 19 Shadow damage from Maldrissa 's Drain Soul.
+11/17 20:27:32.907  0xF140084493008944's Firebolt crits 0xF13000092F00408E for 63 Fire damage.
+11/17 20:27:32.907  0xF13000092F00408E is slain by Maldrissa.
+11/17 20:27:32.907  Gray Bear dies, Maldrissa gains 232 experience. (+116 exp Rested bonus)
+11/17 20:27:33.060  0xF140084493008944 gains Phase Shift (1).
