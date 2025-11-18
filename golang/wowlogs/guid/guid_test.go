@@ -75,3 +75,15 @@ func TestGUID(t *testing.T) {
 		})
 	}
 }
+
+func TestFromString(t *testing.T) {
+	t.Parallel()
+
+	guidStr := "0xF130000CE0000D3F"
+	expectedGUID := GUID(0xF130000CE0000D3F)
+
+	guid, err := FromString(guidStr)
+	require.NoError(t, err)
+	require.Equal(t, expectedGUID, guid)
+	require.Equal(t, expectedGUID.String(), guidStr)
+}

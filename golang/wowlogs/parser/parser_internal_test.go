@@ -69,7 +69,8 @@ func TestParseRealLogs(t *testing.T) {
 		msg, err := p.LogLine(line)
 		require.NoError(t, err)
 
-		if _, ok := msg.(SkippedMessage); ok {
+		if sm, ok := msg.(SkippedMessage); ok {
+			var _ = sm
 			continue
 		}
 		fmt.Printf("%s: %s\n", reflect.TypeOf(msg).String(), msg.String())

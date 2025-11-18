@@ -8,6 +8,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/chronicle/golangformat/golang/wowlogs/combatant"
 	"github.com/chronicle/golangformat/golang/wowlogs/lines"
 )
 
@@ -33,6 +34,8 @@ func (p *Parser) LogLine(line string) (Message, error) {
 	content = strings.TrimSpace(content)
 
 	for _, parser := range []parseLine{
+		p.combatantGUID,
+		p.combatantInfo,
 		p.bugDamageSpellHitOrCrit,
 		p.spellCastAttempt,
 		p.gain,
@@ -57,6 +60,42 @@ func (p *Parser) LogLine(line string) (Message, error) {
 	return SkippedMessage{
 		MessageBase: Base(ts),
 		Reason:      "unhandled log line",
+	}, nil
+}
+
+func (p *Parser) combatantInfo(ts time.Time, content string) (Message, error) {
+	if !strings.HasPrefix(content, "COMBATANT_INFO:") {
+		return notHandled()
+	}
+
+	cbt, err := combatant.ParseCombatantInfo(content)
+	if err != nil {
+		return nil, fmt.Errorf("failed to parse combatant info: %v", err)
+	}
+
+	var _ = cbt // TODO: use combatant info
+
+	return SkippedMessage{
+		MessageBase: Base(ts),
+		Reason:      "combatant info",
+	}, nil
+}
+
+func (p *Parser) combatantGUID(ts time.Time, content string) (Message, error) {
+	if !strings.HasPrefix(content, "COMBATANT_GUID:") {
+		return notHandled()
+	}
+
+	cbt, err := combatant.ParseCombatantGUID(content)
+	if err != nil {
+		return nil, fmt.Errorf("failed to parse combatant guid: %v", err)
+	}
+
+	var _ = cbt // TODO: use combatant guid
+
+	return SkippedMessage{
+		MessageBase: Base(ts),
+		Reason:      "combatant guid",
 	}, nil
 }
 

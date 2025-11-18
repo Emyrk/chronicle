@@ -7,6 +7,10 @@ import (
 	"time"
 )
 
+const (
+	dateFormat = "02.01.06 15:04:05"
+)
+
 // Combatant is the raw parsing. Additional logic should be build ontop
 // to handle things like enums.
 type Combatant struct {
@@ -42,7 +46,7 @@ func ParseCombatantInfo(content string) (Combatant, error) {
 		return empty, fmt.Errorf("insufficient arguments in COMBATANT_INFO message, got %d, want at least 27", len(info))
 	}
 
-	ts, err := time.Parse("02.01.06 15:04:05", info.timestamp())
+	ts, err := time.Parse(dateFormat, info.timestamp())
 	if err != nil {
 		return empty, fmt.Errorf("invalid timestamp format in COMBATANT_INFO message: %v", err)
 	}
