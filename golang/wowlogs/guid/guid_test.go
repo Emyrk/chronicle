@@ -7,6 +7,8 @@ import (
 )
 
 func TestGUID(t *testing.T) {
+	t.Parallel()
+
 	tests := []struct {
 		name          string
 		guid          GUID
@@ -16,6 +18,7 @@ func TestGUID(t *testing.T) {
 		isCreature    bool
 		isAnyCreature bool
 		isUnit        bool
+		// TODO: Entry
 	}{
 		{
 			name:     "player Doyd",
