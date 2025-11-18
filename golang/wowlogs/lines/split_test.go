@@ -1,6 +1,7 @@
 package lines_test
 
 import (
+	"strings"
 	"testing"
 	"time"
 
@@ -65,4 +66,43 @@ func TestGuessYear(t *testing.T) {
 		l := newLiner()
 		require.Equal(t, 2026, l.GetYear())
 	})
+}
+
+func TestLinerRoundTrip(t *testing.T) {
+	t.Parallel()
+
+	cases := `11/18 07:20:46.282  CAST: 0x00000000000E8AB6(Mooshuggah) casts Flame Shock(8052)(Rank 2) on 0xF13000092F00408E(Gray Bear).
+11/18 07:20:49.561  CAST: 0x00000000000E8AB6(Mooshuggah) casts Lightning Strike(51387)(Rank 1) on 0xF13000092F00408E(Gray Bear).
+11/18 07:20:49.561  CAST: 0x00000000000E8AB6(Mooshuggah) casts Flurry(16257)(Rank 1) on 0x00000000000E8AB6(Mooshuggah).
+10/29 22:31:59.617  Cigan casts Strength of Earth Totem.
+10/29 22:31:59.617  Strength of Earth Totem V casts Strength of Earth on Strength of Earth Totem V.
+10/29 22:31:59.617  Cigan casts Strength of Earth Totem.
+10/29 22:31:59.617  Firesworn hits Corta for 696.
+10/29 22:31:59.706  Corta casts Flametongue Attack on Firesworn.
+10/29 22:31:59.706  Corta 's Flametongue Attack hits Firesworn for 13 Fire damage.
+10/29 22:31:59.706  Corta casts Clearcasting on Corta.
+10/29 22:31:59.706  Corta hits Firesworn for 311.
+10/29 22:31:59.706  Firesworn hits Blackwingz for 705.
+10/29 22:31:59.716  Corta gains Windfury Totem (1).
+10/29 22:31:59.716  Corta gains Clearcasting (1).
+10/29 22:31:59.782  Cigan casts Flametongue Totem.
+10/29 22:31:59.782  Cigan casts Flametongue Totem.
+10/29 22:31:59.922  Riczaocrl begins to cast Arcane Rupture.
+10/29 22:31:59.922  Bling gains 8 Mana from Bling 's Water Shield.
+10/29 22:31:59.922  Lonsell casts Repentance on Garr.
+10/29 22:31:59.922  Lonsell 's Repentance fails. Garr is immune.
+10/29 22:31:59.922  Lonsell casts Repent on Garr.
+10/29 22:31:59.922  Firesworn hits Blackwingz for 584.
+10/29 22:31:59.922  Garr is afflicted by Repent (1).
+10/29 22:32:00.013  Lhian begins to cast Flash of Light.
+10/29 22:32:00.013  Corta casts Challenging Roar.`
+
+	lns := strings.Split(cases, "\n")
+	liner := lines.NewLiner()
+	for _, line := range lns {
+		ts, content, err := liner.Line(line)
+		require.NoError(t, err, content)
+		serialized := liner.FmtLine(ts, content)
+		require.Equal(t, line, serialized, content)
+	}
 }

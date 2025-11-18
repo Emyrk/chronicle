@@ -8,6 +8,10 @@ import (
 	"github.com/coder/quartz"
 )
 
+const (
+	LogDateFormat = "01/02 15:04:05.000"
+)
+
 type Liner struct {
 	Year  int
 	clock quartz.Clock
@@ -95,6 +99,10 @@ func (l *Liner) Line(line string) (time.Time, string, error) {
 
 func (l *Liner) parse(year int, line string) (time.Time, string, error) {
 	parts := strings.SplitN(line, " ", 3)
-	ts, err := time.Parse("2006 01/02 15:04:05.000", strconv.Itoa(year)+" "+parts[0]+" "+parts[1])
-	return ts, parts[2], err
+	ts, err := time.Parse("2006 "+LogDateFormat, strconv.Itoa(year)+" "+parts[0]+" "+parts[1])
+	return ts, strings.TrimPrefix(parts[2], " "), err
+}
+
+func (l *Liner) FmtLine(ts time.Time, content string) string {
+	return ts.Format(LogDateFormat) + "  " + content
 }
