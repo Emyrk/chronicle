@@ -7,11 +7,43 @@ import (
 	"strings"
 	"time"
 
-	"github.com/Emyrk/chronicle/golang/wowlogs/combatant"
+	"github.com/Emyrk/chronicle/golang/wowlogs/metatypes/combatant"
+	"github.com/Emyrk/chronicle/golang/wowlogs/metatypes/loot"
+	"github.com/Emyrk/chronicle/golang/wowlogs/metatypes/zone"
 )
 
+func (p *Parser) fLoot(ts time.Time, content string) ([]Message, error) {
+	if !strings.HasPrefix(content, loot.PrefixLoot) {
+		return notHandled()
+	}
+
+	li, err := loot.ParseLootInfo(content)
+	if err != nil {
+		return nil, fmt.Errorf("failed to parse zone info: %v", err)
+	}
+
+	var _ = li // TODO: use loot info
+
+	return Skip(ts, "loot info"), nil
+}
+
+func (p *Parser) fZoneInfo(ts time.Time, content string) ([]Message, error) {
+	if !strings.HasPrefix(content, zone.PrefixZone) {
+		return notHandled()
+	}
+
+	zi, err := zone.ParseZoneInfo(content)
+	if err != nil {
+		return nil, fmt.Errorf("failed to parse zone info: %v", err)
+	}
+
+	var _ = zi // TODO: use zone info
+
+	return Skip(ts, "zone info"), nil
+}
+
 func (p *Parser) fCombatantInfo(ts time.Time, content string) ([]Message, error) {
-	if !strings.HasPrefix(content, "COMBATANT_INFO:") {
+	if !strings.HasPrefix(content, combatant.PrefixCombatant) {
 		return notHandled()
 	}
 
@@ -76,19 +108,20 @@ func (p *Parser) fGain(ts time.Time, content string) ([]Message, error) {
 		return notHandled()
 	}
 
-	target, amountStr, resource, caster, spell := matches[1], matches[2], matches[3], matches[4], matches[5]
+	target, direction, amountStr, resource, caster, spell := matches[1], matches[2], matches[3], matches[4], matches[5], matches[6]
 	amount, err := strconv.ParseUint(amountStr, 10, 64)
 	if err != nil {
 		return nil, fmt.Errorf("resource gain amount %q is not valid: %v", amountStr, err)
 	}
 
-	return set(ResourceGain{
+	return set(ResourceChange{
 		MessageBase: Base(ts),
 		Target:      Unit{Name: target},
 		Amount:      uint32(amount),
 		Resource:    resource,
 		Caster:      Unit{Name: caster},
 		Spell:       spell,
+		Direction:   direction,
 	}), nil
 }
 
@@ -448,4 +481,59 @@ func (p *Parser) fAuraInterrupt(ts time.Time, content string) ([]Message, error)
 
 	//unAuraCaster, target, interruptedSpellID := matches[1], matches[2], matches[3]
 	return Skip(ts, "AuraInterrupt not implemented"), nil
+}
+
+/**
+ * Misc
+ */
+
+func (p *Parser) fCreates(ts time.Time, content string) ([]Message, error) {
+	matches := reCreates.FindStringSubmatch(content)
+	if matches == nil {
+		return notHandled()
+	}
+
+	//creator, created := matches[1], matches[2]
+	return Skip(ts, "Creates not implemented"), nil
+}
+
+func (p *Parser) fGainsAttack(ts time.Time, content string) ([]Message, error) {
+	matches := reGainsAttack.FindStringSubmatch(content)
+	if matches == nil {
+		return notHandled()
+	}
+
+	return Skip(ts, "GainsAttack not implemented"), nil
+}
+
+func (p *Parser) fFallDamage(ts time.Time, content string) ([]Message, error) {
+	matches := reFallDamage.FindStringSubmatch(content)
+	if matches == nil {
+		return notHandled()
+	}
+
+	return Skip(ts, "FallDamage not implemented"), nil
+}
+
+func (p *Parser) fGainNoSource(ts time.Time, content string) ([]Message, error) {
+	matches := reGainNoSource.FindStringSubmatch(content)
+	if matches == nil {
+		return notHandled()
+	}
+
+	target, direction, amountStr, resource := matches[1], matches[2], matches[3], matches[4]
+	amount, err := strconv.ParseUint(amountStr, 10, 64)
+	if err != nil {
+		return nil, fmt.Errorf("resource gain amount %q is not valid: %v", amountStr, err)
+	}
+
+	return set(ResourceChange{
+		MessageBase: Base(ts),
+		Target:      Unit{Name: target},
+		Amount:      uint32(amount),
+		Resource:    resource,
+		//Caster:      Unit{Name: caster},
+		//Spell:       spell,
+		Direction: direction,
+	}), nil
 }

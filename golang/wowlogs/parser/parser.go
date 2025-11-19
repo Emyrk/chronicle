@@ -34,6 +34,8 @@ func (p *Parser) LogLine(line string) ([]Message, error) {
 	for _, parser := range []parseLine{
 		p.fCombatantGUID,
 		p.fCombatantInfo,
+		p.fZoneInfo,
+		p.fLoot,
 		p.fBugDamageSpellHitOrCrit,
 		p.fSpellCastAttempt,
 		p.fGain,
@@ -66,6 +68,10 @@ func (p *Parser) LogLine(line string) ([]Message, error) {
 		p.fUnitSlay,
 		p.fAuraDispel,
 		p.fAuraInterrupt,
+		p.fCreates,
+		p.fGainsAttack,
+		p.fFallDamage,
+		p.fGainNoSource,
 	} {
 		m, err := parser(ts, content)
 		if err != nil {

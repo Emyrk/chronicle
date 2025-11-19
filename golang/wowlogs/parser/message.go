@@ -54,16 +54,17 @@ func (m SpellCastAttempt) String() string {
 	return fmt.Sprintf("%s begins to cast %s", m.Caster.Name, m.SpellName)
 }
 
-type ResourceGain struct {
+type ResourceChange struct {
 	MessageBase
-	Target   Unit
-	Amount   uint32
-	Resource string
-	Caster   Unit
-	Spell    string
+	Target    Unit
+	Amount    uint32
+	Resource  string
+	Caster    Unit
+	Spell     string
+	Direction string // "gains" or "loses"
 }
 
-func (m ResourceGain) String() string {
+func (m ResourceChange) String() string {
 	return fmt.Sprintf("%s gains %d %s from %s's %s", m.Target.Name, m.Amount, m.Resource, m.Caster.Name, m.Spell)
 }
 

@@ -4,7 +4,7 @@ import (
 	"regexp"
 )
 
-// Compiled regexes - initialized once using sync.Once
+// From LegacyPlayer
 var (
 	reDamageHitOrCrit                   = regexp.MustCompile(`(.+[^\s]) (cr|h)its (.+[^\s]) for (\d+)\.\s?(.*)`)
 	reDamageHitOrCritSchool             = regexp.MustCompile(`(.+[^\s]) (cr|h)its (.+[^\s]) for (\d+) ([a-zA-Z]+) damage\.\s?(.*)`)
@@ -24,13 +24,13 @@ var (
 	reDamageReflect                                = regexp.MustCompile(`(.+[^\s])\s's (.+[^\s]) is reflected back by (.+[^\s])\.`)
 	reDamageProcResist                             = regexp.MustCompile(`(.+[^\s]) resists (.+[^\s])\s's (.+[^\s])\.`)
 	reDamageSpellImmune                            = regexp.MustCompile(`(.+[^\s])\s's (.+[^\s]) fails\. (.+[^\s]) is immune\.`)
-	reSpellCastAttempt                             = regexp.MustCompile(`(.+[^\s]) begins to cast (.+[^\s])\.`)
+	reSpellCastAttempt                             = regexp.MustCompile(`(.+[^\s]) begins to (cast|perform) (.+[^\s])\.`)
 
 	reDamageShield = regexp.MustCompile(`(.+[^\s]) reflects (\d+) ([a-zA-Z]+) damage to (.+[^\s])\.`)
 
 	reHealHit  = regexp.MustCompile(`(.+[^\s])\s's (.+[^\s]) heals (.+[^\s]) for (\d+)\.`)
 	reHealCrit = regexp.MustCompile(`(.+[^\s])\s's (.+[^\s]) critically heals (.+[^\s]) for (\d+)\.`)
-	reGain     = regexp.MustCompile(`(.+[^\s]) gains (\d+) (Health|health|Mana|Rage|Energy|Happiness|Focus) from (.+[^\s])\s's (.+[^\s])\.`)
+	reGain     = regexp.MustCompile(`(.+[^\s]) (gains|loses) (\d+) (Health|health|Mana|Rage|Energy|Happiness|happiness|Focus) from (.+[^\s])\s's (.+[^\s])\.`)
 
 	reAuraGainHarmfulHelpful = regexp.MustCompile(`(.+[^\s]) (is afflicted by|gains) (.+[^\s]) \((\d+)\)\.`)
 	reAuraFade               = regexp.MustCompile(`(.+[^\s]) fades from (.+[^\s])\.`)
@@ -50,6 +50,14 @@ var (
 
 	// Bug pattern
 	reBugDamageSpellHitOrCrit = regexp.MustCompile(`(.+[^\s])\s's (cr|h)its (.+[^\s]) for (\d+)\.\s?(.*)`)
+)
+
+// From myself
+var (
+	reCreates      = regexp.MustCompile(`(.+[^\s]) (creates) (.+[^\s])\.`)
+	reGainsAttack  = regexp.MustCompile(`(.+[^\s]) gains (\d+) extra attack through (.+[^\s])\.`)
+	reFallDamage   = regexp.MustCompile(`(.+[^\s]) falls and loses (\d+) health\.`)
+	reGainNoSource = regexp.MustCompile(`(.+[^\s]) (gains|loses) (\d+) (Health|health|Mana|Rage|Energy|Happiness|happiness|Focus)\.`)
 )
 
 // ???
