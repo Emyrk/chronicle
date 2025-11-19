@@ -1,0 +1,150 @@
+11/18 07:20:42.699  COMBATANT_GUID: 18.11.25 07:20:42&Maldrissa&0x00000000000EB167
+11/18 07:20:42.699  COMBATANT_INFO: 18.11.25 07:20:42&Maldrissa&WARLOCK&Orc&3&Chotuk&Exalted with Doordash&Uber Eats&5&nil&nil&nil&nil&6266:0:96:0&nil&6568:0:237:0&4915:0:0:0&nil&nil&nil&nil&nil&nil&4695:0:0:0&4925:0:0:0&nil&11287:0:0:0&5976:0:0:0&0000000000000000000}000000000000000000}0505001100000000
+11/18 07:20:42.731  CAST: Unknown casts LOGINEFFECT(836) on Unknown.
+11/18 07:20:42.747  ZONE_INFO: 18.11.25 07:20:42&hillsbrad foothills&0
+11/18 07:20:42.920  CAST: Unknown casts Blood Pact(7804)(Rank 2) on Unknown.
+11/18 07:20:42.926  ZONE_INFO: 18.11.25 07:20:42&hillsbrad foothills&0
+11/18 07:20:43.703  CAST: Mooshuggah casts Skinning(8618) on Gray Bear.
+11/18 07:20:46.282  CAST: Mooshuggah casts Flame Shock(8052)(Rank 2) on Gray Bear.
+11/18 07:20:49.561  CAST: Mooshuggah casts Lightning Strike(51387)(Rank 1) on Gray Bear.
+11/18 07:20:49.561  CAST: Mooshuggah casts Flurry(16257)(Rank 1) on Mooshuggah.
+11/18 07:20:51.658  CAST: Mooshuggah casts Flurry(16257)(Rank 1) on Mooshuggah.
+11/18 07:20:56.842  CAST: Mooshuggah begins to cast Skinning(8618) on Gray Bear.
+11/18 07:20:59.162  CAST: Irontooth begins to cast Hearthstone(8690).
+11/18 07:20:59.674  CAST: Mooshuggah casts Skinning(8618) on Gray Bear.
+11/18 07:21:00.810  CAST: Mooshuggah begins to cast Lesser Healing Wave(8004)(Rank 1) on Mooshuggah.
+11/18 07:21:02.156  CAST: Mooshuggah casts Lesser Healing Wave(8004)(Rank 1) on Mooshuggah.
+11/18 07:21:02.874  Mooshuggah uses Fizzy Faire Drink.
+11/18 07:21:02.874  CAST: Mooshuggah casts Drink(432).
+11/18 07:21:03.021  CAST: Maldrissa casts Demon Armor(706)(Rank 3).
+11/18 07:21:04.188  CAST: Hideinshadow casts Black Mageweave Headband(12072).
+11/18 07:21:04.604  CAST: Hideinshadow begins to cast Black Mageweave Headband(12072).
+11/18 07:21:09.153  CAST: Irontooth casts Hearthstone(8690).
+11/18 07:21:09.601  CAST: Kriselda begins to cast Basic Campfire(818).
+11/18 07:21:11.905  CAST: Imahmeshu begins to cast Water Sample(9583).
+11/18 07:21:14.895  CAST: Imahmeshu casts Water Sample(9583).
+11/18 07:21:19.586  CAST: Kriselda casts Basic Campfire(818).
+11/18 07:21:21.653  CAST: Maldrissa begins to cast Corruption(6222)(Rank 2) on Starving Mountain Lion.
+11/18 07:21:23.126  CAST: Maldrissa casts Corruption(6222)(Rank 2) on Starving Mountain Lion.
+11/18 07:21:25.213  CAST: Kriselda begins to cast Goblin Deviled Clams(6500).
+11/18 07:21:25.310  CAST: Maldrissa begins to cast Immolate(1094)(Rank 3) on Starving Mountain Lion.
+11/18 07:21:26.077  Starving Mountain Lion suffers 18 Shadow damage from your Corruption.
+11/18 07:21:26.254  CAST: Maldrissa fails casting Immolate(1094)(Rank 3).
+11/18 07:21:26.254  You fail to cast Immolate: Interrupted.
+11/18 07:21:27.828  You reflect 5 Fire damage to Starving Mountain Lion.
+11/18 07:21:27.828  Starving Mountain Lion hits you for 23.
+11/18 07:21:27.856  Phase Shift fades from Chotuk (Maldrissa).
+11/18 07:21:28.000  CAST: Kriselda casts Goblin Deviled Clams(6500).
+11/18 07:21:28.159  CAST: Kriselda begins to cast Goblin Deviled Clams(6500).
+11/18 07:21:28.257  CAST: Chotuk begins to cast Firebolt(7800)(Rank 3) on Starving Mountain Lion.
+11/18 07:21:29.057  Starving Mountain Lion suffers 18 Shadow damage from your Corruption.
+11/18 07:21:29.138  You reflect 5 Fire damage to Starving Mountain Lion.
+11/18 07:21:29.138  Starving Mountain Lion hits you for 22.
+11/18 07:21:29.458  CAST: Mooshuggah casts Flame Shock(8052)(Rank 2) on Forest Moss Creeper.
+11/18 07:21:29.688  CAST: Maldrissa casts Curse of Weakness(702) on Starving Mountain Lion.
+11/18 07:21:29.688  Starving Mountain Lion is afflicted by Curse of Weakness (1).
+11/18 07:21:30.264  CAST: Chotuk casts Firebolt(7800)(Rank 3) on Starving Mountain Lion.
+11/18 07:21:30.487  You reflect 5 Fire damage to Starving Mountain Lion.
+11/18 07:21:30.488  Starving Mountain Lion hits you for 20.
+11/18 07:21:30.645  Chotuk (Maldrissa)'s Firebolt hits Starving Mountain Lion for 40 Fire damage.
+11/18 07:21:30.708  CAST: Chotuk begins to cast Firebolt(7800)(Rank 3) on Starving Mountain Lion.
+11/18 07:21:31.076  CAST: Kriselda casts Goblin Deviled Clams(6500).
+11/18 07:21:31.268  CAST: Kriselda begins to cast Goblin Deviled Clams(6500).
+11/18 07:21:31.427  CAST: Mooshuggah casts Lightning Strike(51387)(Rank 1) on Forest Moss Creeper.
+11/18 07:21:32.069  Starving Mountain Lion suffers 18 Shadow damage from your Corruption.
+11/18 07:21:32.069  You reflect 5 Fire damage to Starving Mountain Lion.
+11/18 07:21:32.069  Starving Mountain Lion hits you for 24.
+11/18 07:21:32.660  Blood Pact fades from you.
+11/18 07:21:32.724  CAST: Chotuk casts Firebolt(7800)(Rank 3) on Starving Mountain Lion.
+11/18 07:21:32.756  CAST: Forest Moss Creeper begins to cast Corrosive Poison(3396) on Mooshuggah.
+11/18 07:21:33.255  CAST: Mooshuggah casts Lightning Shield(905)(Rank 3).
+11/18 07:21:33.672  You reflect 5 Fire damage to Starving Mountain Lion.
+11/18 07:21:33.672  Starving Mountain Lion hits you for 22.
+11/18 07:21:33.703  CAST: Maldrissa begins to cast Fear(5782)(Rank 1) on Starving Mountain Lion.
+11/18 07:21:33.703  Chotuk (Maldrissa)'s Firebolt hits Starving Mountain Lion for 42 Fire damage.
+11/18 07:21:33.896  CAST: Chotuk begins to cast Firebolt(7800)(Rank 3) on Starving Mountain Lion.
+11/18 07:21:34.152  CAST: Kriselda casts Goblin Deviled Clams(6500).
+11/18 07:21:34.248  CAST: Kriselda begins to cast Goblin Deviled Clams(6500).
+11/18 07:21:34.328  CAST: Forest Moss Creeper casts Corrosive Poison(3396) on Mooshuggah.
+11/18 07:21:35.064  Starving Mountain Lion suffers 18 Shadow damage from your Corruption.
+11/18 07:21:35.144  You reflect 5 Fire damage to Starving Mountain Lion.
+11/18 07:21:35.144  Starving Mountain Lion hits you for 21.
+11/18 07:21:35.945  CAST: Chotuk casts Firebolt(7800)(Rank 3) on Starving Mountain Lion.
+11/18 07:21:36.201  CAST: Maldrissa casts Fear(5782)(Rank 1) on Starving Mountain Lion.
+11/18 07:21:36.201  Your Fear was resisted by Starving Mountain Lion.
+11/18 07:21:36.201  CAST: Chotuk begins to cast Firebolt(7800)(Rank 3) on Starving Mountain Lion.
+11/18 07:21:36.695  You reflect 5 Fire damage to Starving Mountain Lion.
+11/18 07:21:36.695  Starving Mountain Lion hits you for 22.
+11/18 07:21:37.191  CAST: Kriselda casts Goblin Deviled Clams(6500).
+11/18 07:21:37.303  CAST: Kriselda begins to cast Goblin Deviled Clams(6500).
+11/18 07:21:37.960  Chotuk (Maldrissa)'s Firebolt hits Starving Mountain Lion for 40 Fire damage.
+11/18 07:21:38.024  CAST: Maldrissa begins to cast Fear(5782)(Rank 1) on Starving Mountain Lion.
+11/18 07:21:38.103  Starving Mountain Lion suffers 18 Shadow damage from your Corruption.
+11/18 07:21:38.103  Corruption fades from Starving Mountain Lion.
+11/18 07:21:38.184  You reflect 5 Fire damage to Starving Mountain Lion.
+11/18 07:21:38.184  Starving Mountain Lion hits you for 24.
+11/18 07:21:38.248  CAST: Chotuk fails casting Firebolt(7800)(Rank 3).
+11/18 07:21:39.465  CAST: Chotuk begins to cast Firebolt(7800)(Rank 3) on Starving Mountain Lion.
+11/18 07:21:39.705  CAST: Maldrissa casts Fear(5782)(Rank 1) on Starving Mountain Lion.
+11/18 07:21:39.705  Starving Mountain Lion is afflicted by Fear (1).
+11/18 07:21:40.152  CAST: Mooshuggah casts Cure Poison(526) on Mooshuggah.
+11/18 07:21:40.295  CAST: Kriselda casts Goblin Deviled Clams(6500).
+11/18 07:21:40.440  CAST: Kriselda begins to cast Goblin Deviled Clams(6500).
+11/18 07:21:41.353  COMBATANT_GUID: 18.11.25 07:21:41&Gxss&0x00000000000DA902
+11/18 07:21:41.353  COMBATANT_INFO: 18.11.25 07:21:41&Gxss&WARLOCK&Orc&3&nil&nil&nil&nil&4323:0:0:0&70003:0:0:0&17695:0:0:0&5107:0:0:0&6900:17:0:0&58131:0:0:0&14207:17:1888:0&58178:16:0:0&14177:0:1879:0&58134:0:0:0&15467:0:0:0&60916:0:0:0&55211:0:0:0&55340:0:0:0&60929:0:0:0&15106:0:0:0&nil&81290:0:0:0&nil&nil
+11/18 07:21:41.464  CAST: Chotuk casts Firebolt(7800)(Rank 3) on Starving Mountain Lion.
+11/18 07:21:41.544  CAST: Hideinshadow casts Black Mageweave Headband(12072).
+11/18 07:21:41.609  CAST: Maldrissa channels Drain Life(689)(Rank 1) on Starving Mountain Lion.
+11/18 07:21:41.609  Starving Mountain Lion is afflicted by Drain Life (1).
+11/18 07:21:41.960  CAST: Hideinshadow begins to cast Black Mageweave Headband(12072).
+11/18 07:21:42.080  CAST: Chotuk begins to cast Firebolt(7800)(Rank 3) on Starving Mountain Lion.
+11/18 07:21:42.378  Chotuk (Maldrissa)'s Firebolt was resisted by Starving Mountain Lion.
+11/18 07:21:42.552  Starving Mountain Lion suffers 10 Shadow damage from your Drain Life.
+11/18 07:21:42.552  Your Drain Life heals you for 10.
+11/18 07:21:43.432  CAST: Kriselda casts Goblin Deviled Clams(6500).
+11/18 07:21:43.529  CAST: Kriselda begins to cast Goblin Deviled Clams(6500).
+11/18 07:21:43.576  Starving Mountain Lion suffers 10 Shadow damage from your Drain Life.
+11/18 07:21:43.576  Your Drain Life heals you for 10.
+11/18 07:21:43.576  Fear fades from Starving Mountain Lion.
+11/18 07:21:44.056  CAST: Chotuk casts Firebolt(7800)(Rank 3) on Starving Mountain Lion.
+11/18 07:21:44.424  CAST: Maldrissa fails casting Drain Life(689)(Rank 1).
+11/18 07:21:44.424  Drain Life fades from Starving Mountain Lion.
+11/18 07:21:44.569  CAST: Chotuk begins to cast Firebolt(7800)(Rank 3) on Starving Mountain Lion.
+11/18 07:21:44.824  CAST: Maldrissa begins to cast Shadow Bolt(1088)(Rank 4) on Starving Mountain Lion.
+11/18 07:21:45.192  Chotuk (Maldrissa)'s Firebolt hits Starving Mountain Lion for 38 Fire damage.
+11/18 07:21:45.656  You reflect 5 Fire damage to Starving Mountain Lion.
+11/18 07:21:45.656  Starving Mountain Lion hits you for 24.
+11/18 07:21:46.296  CAST: Maldrissa fails casting Shadow Bolt(1088)(Rank 4).
+11/18 07:21:46.296  You fail to cast Shadow Bolt: Interrupted.
+11/18 07:21:46.488  CAST: Kriselda casts Goblin Deviled Clams(6500).
+11/18 07:21:46.617  CAST: Kriselda begins to cast Goblin Deviled Clams(6500).
+11/18 07:21:46.617  CAST: Chotuk casts Firebolt(7800)(Rank 3) on Starving Mountain Lion.
+11/18 07:21:47.001  CAST: Chotuk begins to cast Firebolt(7800)(Rank 3) on Starving Mountain Lion.
+11/18 07:21:47.275  You reflect 5 Fire damage to Starving Mountain Lion.
+11/18 07:21:47.275  Starving Mountain Lion hits you for 21.
+11/18 07:21:47.929  Chotuk (Maldrissa)'s Firebolt hits Starving Mountain Lion for 42 Fire damage.
+11/18 07:21:49.033  CAST: Chotuk fails casting Firebolt(7800)(Rank 3).
+11/18 07:21:49.065  CAST: Mooshuggah casts Totemic Recall(45513).
+11/18 07:21:49.146  You reflect 5 Fire damage to Starving Mountain Lion.
+11/18 07:21:49.146  Starving Mountain Lion hits you for 22.
+11/18 07:21:49.580  CAST: Kriselda casts Goblin Deviled Clams(6500).
+11/18 07:21:49.690  CAST: Kriselda begins to cast Goblin Deviled Clams(6500).
+11/18 07:21:49.882  CAST: Maldrissa casts Curse of Weakness(702) on Starving Mountain Lion.
+11/18 07:21:49.996  Tarren Mill Deathguard hits Starving Mountain Lion for 195. (crushing)
+11/18 07:21:50.537  Starving Mountain Lion attacks. Tarren Mill Deathguard parries.
+11/18 07:21:51.289  You have slain Starving Mountain Lion!
+11/18 07:21:51.289  Starving Mountain Lion dies, you gain 160 experience. (+80 exp Rested bonus)
+11/18 07:21:51.289  Tarren Mill Deathguard hits Starving Mountain Lion for 198. (crushing)
+11/18 07:21:51.303  You fail to cast Drain Soul: No target.
+11/18 07:21:51.450  CAST: Chotuk casts Phase Shift(4511) on Chotuk.
+11/18 07:21:51.450  Chotuk (Maldrissa) gains Phase Shift (1).
+11/18 07:21:52.253  COMBATANT_GUID: 18.11.25 07:21:52&Maldrissa&0x00000000000EB167
+11/18 07:21:52.253  COMBATANT_INFO: 18.11.25 07:21:52&Maldrissa&WARLOCK&Orc&3&Chotuk&Exalted with Doordash&Uber Eats&5&nil&nil&nil&nil&6266:0:96:0&nil&6568:0:237:0&4915:0:0:0&nil&nil&nil&nil&nil&nil&4695:0:0:0&4925:0:0:0&nil&11287:0:0:0&5976:0:0:0&0000000000000000000}000000000000000000}0505001100000000
+11/18 07:21:52.259  LOOT: 18.11.25 07:21:52&You receive loot: |cffffffff|Hitem:3731:0:0:0|h[Lion Meat]|h|r.
+11/18 07:21:52.647  CAST: Kriselda casts Goblin Deviled Clams(6500).
+11/18 07:21:52.647  You gain Blood Pact (1).
+11/18 07:21:52.746  CAST: Kriselda begins to cast Goblin Deviled Clams(6500).
+11/18 07:21:55.716  CAST: Kriselda casts Goblin Deviled Clams(6500).
+11/18 07:21:55.829  CAST: Kriselda begins to cast Goblin Deviled Clams(6500).
+11/18 07:21:58.812  CAST: Kriselda casts Goblin Deviled Clams(6500).
+11/18 07:22:18.931  CAST: Hideinshadow casts Black Mageweave Headband(12072).
