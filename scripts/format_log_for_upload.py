@@ -1,5 +1,6 @@
 #!/usr/bin/python3
 
+import argparse
 import os
 import re
 import shutil
@@ -129,7 +130,7 @@ def build_replacement_dicts(player_name):
     return you_replacements
 
 
-def replace_instances(player_entries, filename):
+def replace_instances(player_entries, filename, output_filename):
     # Build replacement dictionaries for each unique player name
     unique_player_names = set(name for _, name in player_entries)
     player_replacement_dicts = {}
@@ -212,11 +213,7 @@ def replace_instances(player_entries, filename):
         r"\|h\|r\.$": "|h|rx1.",
     }
 
-    # create backup of original file
-    backup_filename = filename.replace(".txt", "") + f".original.{int(time.time())}.txt"
-    shutil.copyfile(filename, backup_filename)
-
-    # Read the contents of the file
+    # Read the contents of the file (we'll write to output_filename, not modifying input)
     with open(filename, 'r', encoding='utf-8', errors='replace') as file:
         lines = file.readlines()
 
@@ -329,8 +326,8 @@ def replace_instances(player_entries, filename):
                 lines[i] = handle_replacements(lines[i], {pattern: replacement})
                 break
 
-    # Write the modified text back to the file
-    with open(filename, 'w', encoding='utf-8') as file:
+    # Write the modified text to the output file
+    with open(output_filename, 'w', encoding='utf-8') as file:
         file.writelines(lines)
 
 
@@ -340,17 +337,53 @@ def create_zip_file(source_file, zip_filename):
                                                                                                  source_file))
 
 if __name__ == "__main__":
-    filename = input("Enter filename (defaults to WoWCombatLog.txt if left empty): ")
-    if not filename.strip():
-        filename = 'WoWCombatLog.txt'
-
-    create_zip = input("Create zip file (default y): ")
-
-    rename_file = input("Rename input file to TurtLog-{timestamp}.txt (default y): ")
-
+    parser = argparse.ArgumentParser(
+        description='Format WoW combat log for upload by replacing You/Your with player names'
+    )
+    
+    parser.add_argument(
+        '--filename',
+        default='WoWCombatLog.txt',
+        help='File to read from (default: WoWCombatLog.txt)'
+    )
+    
+    parser.add_argument(
+        '--zip',
+        action='store_true',
+        default=False,
+        help='Create zip file of the output (default: False)'
+    )
+    
+    parser.add_argument(
+        '--rename',
+        action='store_true',
+        default=False,
+        help='Rename output to TurtLog-{timestamp}.txt (default: False)'
+    )
+    
+    parser.add_argument(
+        '--output',
+        help='Output file path (default: input filename + .formatted.txt)'
+    )
+    
+    args = parser.parse_args()
+    
+    input_filename = args.filename
+    
+    # Determine output filename
+    if args.output:
+        output_filename = args.output
+    else:
+        # Default: add .formatted.txt to the input filename
+        # If input ends with .txt, replace it with .formatted.txt
+        if input_filename.lower().endswith('.txt'):
+            output_filename = input_filename[:-4] + ".formatted.txt"
+        else:
+            output_filename = input_filename + ".formatted.txt"
+    
     # Read file to detect player names from COMBATANT_INFO
     print("Detecting player name(s) from COMBATANT_INFO...")
-    with open(filename, 'r', encoding='utf-8', errors='replace') as file:
+    with open(input_filename, 'r', encoding='utf-8', errors='replace') as file:
         lines = file.readlines()
 
     player_entries = detect_player_names(lines)
@@ -361,52 +394,27 @@ if __name__ == "__main__":
     else:
         print("No player detected from COMBATANT_INFO with full talent information.  This is needed to determine which player 'You' refers to at different timestamps in the log.")
 
-    replace_instances(player_entries, filename)
-
-    if not rename_file.strip() or rename_file.lower().startswith('y'):
-        # rename output file to TurtLog-YY-MM-DDTHH-MM.txt
+    # Process and write to output file
+    replace_instances(player_entries, input_filename, output_filename)
+    
+    # If rename is requested, rename the output file to TurtLog-{timestamp}.txt
+    if args.rename:
         timestamp = time.strftime("%Y-%m-%dT%H-%M")
         new_filename = f"TurtLog-{timestamp}.txt"
-        os.rename(filename, new_filename)
-        filename = new_filename
+        os.rename(output_filename, new_filename)
+        output_filename = new_filename
+        print(f"Renamed output to: {new_filename}")
 
-    if not create_zip.strip() or create_zip.lower().startswith('y'):
-        create_zip_file(filename, filename + ".zip")
+    # If zip is requested, create zip file
+    if args.zip:
+        zip_filename = output_filename + ".zip"
+        create_zip_file(output_filename, zip_filename)
+        print(f"Created zip file: {zip_filename}")
 
     if player_entries:
         unique_players = list(set(name for _, name in player_entries))
         player_names_str = ', '.join(unique_players)
-        print(
-            f"Messages with You/Your have been converted to {player_names_str}.  A backup of the original file has also been created.")
+        print(f"Messages with You/Your have been converted to {player_names_str}.")
+        print(f"Output written to: {output_filename}")
     else:
-        print("File processing complete. A backup of the original file has also been created.")
-
-#     parser.add_argument(
-#       '-p', '--player-name',
-#       required=True,
-#       help='Player name to replace "You/Your" references'
-#     )
-#
-#     parser.add_argument(
-#       '-f', '--filename',
-#       default='WoWCombatLog.txt',
-#       help='Input log filename (default: WoWCombatLog.txt)'
-#     )
-#
-#     parser.add_argument(
-#       '--zip',
-#       action='store_true',
-#       help='Create zip file of the output'
-#     )
-#
-#     parser.add_argument(
-#       '-o', '--output',
-#       help='Output file path (default: input filename + .formatted.txt)'
-#     )
-#
-#     parser.add_argument(
-#       '--rename',
-#       action='store_true',
-#       help='Rename output to TurtLog-{timestamp}.txt'
-#     )
-#
+        print(f"File processing complete. Output written to: {output_filename}")
