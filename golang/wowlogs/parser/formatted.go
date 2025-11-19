@@ -10,7 +10,7 @@ import (
 	"github.com/Emyrk/chronicle/golang/wowlogs/combatant"
 )
 
-func (p *Parser) fCombatantInfo(ts time.Time, content string) (Message, error) {
+func (p *Parser) fCombatantInfo(ts time.Time, content string) ([]Message, error) {
 	if !strings.HasPrefix(content, "COMBATANT_INFO:") {
 		return notHandled()
 	}
@@ -22,13 +22,10 @@ func (p *Parser) fCombatantInfo(ts time.Time, content string) (Message, error) {
 
 	var _ = cbt // TODO: use combatant info
 
-	return SkippedMessage{
-		MessageBase: Base(ts),
-		Reason:      "combatant info",
-	}, nil
+	return Skip(ts, "combatant info"), nil
 }
 
-func (p *Parser) fCombatantGUID(ts time.Time, content string) (Message, error) {
+func (p *Parser) fCombatantGUID(ts time.Time, content string) ([]Message, error) {
 	if !strings.HasPrefix(content, "COMBATANT_GUID:") {
 		return notHandled()
 	}
@@ -40,13 +37,10 @@ func (p *Parser) fCombatantGUID(ts time.Time, content string) (Message, error) {
 
 	var _ = cbt // TODO: use combatant guid
 
-	return SkippedMessage{
-		MessageBase: Base(ts),
-		Reason:      "combatant guid",
-	}, nil
+	return Skip(ts, "combatant guid"), nil
 }
 
-func (p *Parser) fBugDamageSpellHitOrCrit(ts time.Time, content string) (Message, error) {
+func (p *Parser) fBugDamageSpellHitOrCrit(ts time.Time, content string) ([]Message, error) {
 	if !reBugDamageSpellHitOrCrit.MatchString(content) {
 		return notHandled()
 	}
@@ -54,32 +48,29 @@ func (p *Parser) fBugDamageSpellHitOrCrit(ts time.Time, content string) (Message
 	p.logger.Error("bugged line in logs, skipping",
 		slog.String("content", content),
 	)
-	return &SkippedMessage{
-		MessageBase: Base(ts),
-		Reason:      "bugged line in logs",
-	}, nil
+	return Skip(ts, "bugged line in logs"), nil
 }
 
 // 10/29 22:09:40.825  Randgriz begins to cast Flash Heal.
 // 10/29 22:09:42.175  Randgriz casts Flash Heal on Katrix.
 // 10/29 22:09:42.175  Randgriz 's Flash Heal critically heals Katrix for 2534.
-func (p *Parser) fSpellCastAttempt(ts time.Time, content string) (Message, error) {
+func (p *Parser) fSpellCastAttempt(ts time.Time, content string) ([]Message, error) {
 	matches := reSpellCastAttempt.FindStringSubmatch(content)
 	if matches == nil {
 		return notHandled()
 	}
 
 	unit, spell := matches[1], matches[2]
-	return SpellCastAttempt{
+	return set(SpellCastAttempt{
 		MessageBase: Base(ts),
 		Caster: Unit{
 			Name: unit,
 		},
 		SpellName: spell,
-	}, nil
+	}), nil
 }
 
-func (p *Parser) fGain(ts time.Time, content string) (Message, error) {
+func (p *Parser) fGain(ts time.Time, content string) ([]Message, error) {
 	matches := reGain.FindStringSubmatch(content)
 	if matches == nil {
 		return notHandled()
@@ -91,12 +82,94 @@ func (p *Parser) fGain(ts time.Time, content string) (Message, error) {
 		return nil, fmt.Errorf("resource gain amount %q is not valid: %v", amountStr, err)
 	}
 
-	return ResourceGain{
+	return set(ResourceGain{
 		MessageBase: Base(ts),
 		Target:      Unit{Name: target},
 		Amount:      uint32(amount),
 		Resource:    resource,
 		Caster:      Unit{Name: caster},
 		Spell:       spell,
-	}, nil
+	}), nil
 }
+
+/**
+ * Spell Damage
+ */
+func (p *Parser) fDamageSpellHitOrCrit(ts time.Time, content string) ([]Message, error) {
+	matches := reDamageSpellHitOrCrit.FindStringSubmatch(content)
+	if matches == nil {
+		return notHandled()
+	}
+
+	// attacker, spellID, hitMask, victim, damage, tailer := matches[1], matches[2], matches[3], matches[4], matches[5], matches[6]
+	// Return spell cast & SpellDamage Message
+
+	return Skip(ts, "DamageSpellHitOrCrit not implemented"), nil
+}
+
+func (p *Parser) fDamageSpellHitOrCritSchool(ts time.Time, content string) ([]Message, error) {
+	matches := reDamageSpellHitOrCritSchool.FindStringSubmatch(content)
+	if matches == nil {
+		return notHandled()
+	}
+
+	//attacker, spellID, hitMask, victom, damage, school, trailer := matches[1], matches[2], matches[3], matches[4], matches[5], matches[6], matches[7]
+	// Return spell cast & spell damage message
+	return Skip(ts, "DamageSpellHitOrCritSchool not implemented"), nil
+}
+
+func (p *Parser) fDamagePeriodic(ts time.Time, content string) ([]Message, error) {
+	matches := reDamagePeriodic.FindStringSubmatch(content)
+	if matches == nil {
+		return notHandled()
+	}
+
+	//victim, damage, school, attacker, spellID, trailer := matches[1], matches[2], matches[3], matches[4], matches[5], matches[6]
+	// return spell cast and spell damage message
+	return Skip(ts, "DamagePeriodic not implemented"), nil
+}
+
+func (p *Parser) fDamageShield(ts time.Time, content string) ([]Message, error) {
+	matches := reDamageShield.FindStringSubmatch(content)
+	if matches == nil {
+		return notHandled()
+	}
+
+	//attacker, damage, school, victom := matches[1], matches[2], matches[3], matches[4]
+	//spellID := 2 // reflection spell ID?
+
+	// Return spell cast & spell damage message
+	return Skip(ts, "DamageShield not implemented"), nil
+}
+
+/**
+ * Melee Damage
+ */
+
+func (p *Parser) fDamageHitOrCrit(ts time.Time, content string) ([]Message, error) {
+	matches := reDamageHitOrCrit.FindStringSubmatch(content)
+	if matches == nil {
+		return notHandled()
+	}
+
+	//attacker, hitMask, victim, damage, trailer := matches[1], matches[2], matches[3], matches[4], matches[5]
+
+	// Return melee damage message
+	return Skip(ts, "DamageHitOrCrit not implemented"), nil
+}
+
+func (p *Parser) fDamageHitOrCritSchool(ts time.Time, content string) ([]Message, error) {
+	matches := reDamageHitOrCritSchool.FindStringSubmatch(content)
+	if matches == nil {
+		return notHandled()
+	}
+
+	//attacker, hitMask, victim, damage, school, trailer := matches[1], matches[2], matches[3], matches[4], matches[5], matches[6]
+
+	// Return melee damage message
+	return Skip(ts, "DamageHitOrCritSchool not implemented"), nil
+}
+
+/**
+ * Heal
+ */

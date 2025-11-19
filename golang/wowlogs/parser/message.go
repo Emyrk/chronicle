@@ -31,6 +31,13 @@ type SkippedMessage struct {
 	Reason string
 }
 
+func Skip(ts time.Time, reason string) []Message {
+	return set(&SkippedMessage{
+		MessageBase: Base(ts),
+		Reason:      reason,
+	})
+}
+
 func (m SkippedMessage) String() string {
 	return "SkippedMessage: " + m.Reason
 }

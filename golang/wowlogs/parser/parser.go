@@ -10,7 +10,7 @@ import (
 	"github.com/Emyrk/chronicle/golang/wowlogs/lines"
 )
 
-type parseLine = func(ts time.Time, content string) (Message, error)
+type parseLine = func(ts time.Time, content string) ([]Message, error)
 
 type Parser struct {
 	logger *slog.Logger
@@ -24,7 +24,7 @@ func NewParser(logger *slog.Logger) *Parser {
 	}
 }
 
-func (p *Parser) LogLine(line string) (Message, error) {
+func (p *Parser) LogLine(line string) ([]Message, error) {
 	ts, content, err := p.liner.Line(line)
 	if err != nil {
 		return nil, fmt.Errorf("failed to parse log line: %v", err)
@@ -37,30 +37,34 @@ func (p *Parser) LogLine(line string) (Message, error) {
 		p.fBugDamageSpellHitOrCrit,
 		p.fSpellCastAttempt,
 		p.fGain,
+		p.fDamageSpellHitOrCrit,
 	} {
 		m, err := parser(ts, content)
 		if err != nil {
 			return nil, fmt.Errorf("parse line failed: %v", err)
 		}
 
-		if m == nil {
+		if len(m) == 0 {
 			continue
 		}
 
-		if m.Timestamp().IsZero() {
-			return nil, fmt.Errorf("timestamp is zero for message type: %s", reflect.TypeOf(m).String())
+		for _, msg := range m {
+			if msg.Timestamp().IsZero() {
+				return nil, fmt.Errorf("timestamp is zero for message type: %s", reflect.TypeOf(m).String())
+			}
 		}
 
 		return m, nil
 	}
 
 	// TODO: Handle all this
-	return SkippedMessage{
-		MessageBase: Base(ts),
-		Reason:      "unhandled log line",
-	}, nil
+	return Skip(ts, "unhandled log line"), nil
 }
 
-func notHandled() (Message, error) {
+func notHandled() ([]Message, error) {
 	return nil, nil
+}
+
+func set(m ...Message) []Message {
+	return m
 }
