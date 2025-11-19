@@ -50,6 +50,22 @@ func (p *Parser) LogLine(line string) ([]Message, error) {
 		p.fDamageSpellSplit,
 		p.fDamageSpellMiss,
 		p.fDamageSpellBlockParryEvadeDodgeResistDeflect,
+		p.fDamageSpellAbsorb,
+		p.fDamageSpellAbsorbSelf,
+		p.fDamageReflect,
+		p.fDamageProcResist,
+		p.fDamageSpellImmune,
+		p.fDamageMiss,
+		p.fDamageBlockParryEvadeDodgeDeflect,
+		p.fDamageAbsorbResist,
+		p.fDamageImmune,
+		p.fSpellCastPerformDurability,
+		p.fSpellCastPerform,
+		p.fSpellCastPerformUnknown,
+		p.fUnitDieDestroyed,
+		p.fUnitSlay,
+		p.fAuraDispel,
+		p.fAuraInterrupt,
 	} {
 		m, err := parser(ts, content)
 		if err != nil {
@@ -69,8 +85,7 @@ func (p *Parser) LogLine(line string) ([]Message, error) {
 		return m, nil
 	}
 
-	// TODO: Handle all this
-	return Skip(ts, "unhandled log line"), nil
+	return nil, fmt.Errorf("failed to parse line: %s", content)
 }
 
 func notHandled() ([]Message, error) {

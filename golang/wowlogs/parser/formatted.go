@@ -260,3 +260,192 @@ func (p *Parser) fDamageSpellBlockParryEvadeDodgeResistDeflect(ts time.Time, con
 	//attacker, spellID, hitType, vuctim := matches[1], matches[2], matches[3], matches[4]
 	return Skip(ts, "DamageSpellBlockParryEvadeDodgeResistDeflect not implemented"), nil
 }
+
+func (p *Parser) fDamageSpellAbsorb(ts time.Time, content string) ([]Message, error) {
+	matches := reDamageSpellAbsorb.FindStringSubmatch(content)
+	if matches == nil {
+		return notHandled()
+	}
+
+	//attacker, spellID, victim := matches[1], matches[2], matches[3]
+	return Skip(ts, "DamageSpellAbsorb not implemented"), nil
+}
+
+func (p *Parser) fDamageSpellAbsorbSelf(ts time.Time, content string) ([]Message, error) {
+	matches := reDamageSpellAbsorbSelf.FindStringSubmatch(content)
+	if matches == nil {
+		return notHandled()
+	}
+
+	//victim, attacker, spellID := matches[1], matches[2], matches[3]
+	return Skip(ts, "DamageSpellAbsorbSelf not implemented"), nil
+}
+
+func (p *Parser) fDamageReflect(ts time.Time, content string) ([]Message, error) {
+	matches := reDamageReflect.FindStringSubmatch(content)
+	if matches == nil {
+		return notHandled()
+	}
+
+	//attacker, spellID, victim := matches[1], matches[2], matches[3]
+	return Skip(ts, "DamageReflect not implemented"), nil
+}
+
+func (p *Parser) fDamageProcResist(ts time.Time, content string) ([]Message, error) {
+	matches := reDamageProcResist.FindStringSubmatch(content)
+	if matches == nil {
+		return notHandled()
+	}
+
+	//victim, attacker, spellID := matches[1], matches[2], matches[3]
+	return Skip(ts, "DamageProcResist not implemented"), nil
+}
+
+func (p *Parser) fDamageSpellImmune(ts time.Time, content string) ([]Message, error) {
+	matches := reDamageSpellImmune.FindStringSubmatch(content)
+	if matches == nil {
+		return notHandled()
+	}
+
+	//attacker, spellID, victim := matches[1], matches[2], matches[3]
+	return Skip(ts, "DamageSpellImmune not implemented"), nil
+}
+
+/**
+ * Melee Damage cont
+ */
+
+func (p *Parser) fDamageMiss(ts time.Time, content string) ([]Message, error) {
+	matches := reDamageMiss.FindStringSubmatch(content)
+	if matches == nil {
+		return notHandled()
+	}
+
+	//attacker, victim := matches[1], matches[2]
+	return Skip(ts, "DamageMiss not implemented"), nil
+}
+
+func (p *Parser) fDamageBlockParryEvadeDodgeDeflect(ts time.Time, content string) ([]Message, error) {
+	matches := reDamageBlockParryEvadeDodgeDeflect.FindStringSubmatch(content)
+	if matches == nil {
+		return notHandled()
+	}
+
+	//attacker, victim, hitType := matches[1], matches[2], matches[3]
+	return Skip(ts, "DamageBlockParryEvadeDodgeResistDeflect not implemented"), nil
+}
+
+func (p *Parser) fDamageAbsorbResist(ts time.Time, content string) ([]Message, error) {
+	matches := reDamageAbsorbResist.FindStringSubmatch(content)
+	if matches == nil {
+		return notHandled()
+	}
+
+	//attacker, victim, hitType := matches[1], matches[2], matches[3]
+
+	return Skip(ts, "DamageAbsorbResist not implemented"), nil
+}
+
+func (p *Parser) fDamageImmune(ts time.Time, content string) ([]Message, error) {
+	matches := reDamageImmune.FindStringSubmatch(content)
+	if matches == nil {
+		return notHandled()
+	}
+
+	//attacker, victom := matches[1], matches[2]
+	return Skip(ts, "DamageImmune not implemented"), nil
+}
+
+/**
+ * Spell Casts
+ */
+
+func (p *Parser) fSpellCastPerformDurability(ts time.Time, content string) ([]Message, error) {
+	matches := reSpellCastPerformDurability.FindStringSubmatch(content)
+	if matches == nil {
+		return notHandled()
+	}
+
+	//caster, spellID, target := matches[1], matches[3], matches[4]
+	return Skip(ts, "SpellCastPerformDurability not implemented"), nil
+}
+
+func (p *Parser) fSpellCastPerform(ts time.Time, content string) ([]Message, error) {
+	matches := reSpellCastPerform.FindStringSubmatch(content)
+	if matches == nil {
+		return notHandled()
+	}
+
+	//caster, spellID, target := matches[1], matches[3], matches[4]
+	return Skip(ts, "SpellCastPerform not implemented"), nil
+}
+
+func (p *Parser) fSpellCastPerformUnknown(ts time.Time, content string) ([]Message, error) {
+	matches := reSpellCastPerformUnknown.FindStringSubmatch(content)
+	if matches == nil {
+		return notHandled()
+	}
+
+	//caster, spellID := matches[1], matches[3]
+	return Skip(ts, "SpellCastPerformUnknown not implemented"), nil
+}
+
+/**
+ * Unit Death
+ */
+
+func (p *Parser) fUnitDieDestroyed(ts time.Time, content string) ([]Message, error) {
+	matches := reUnitDieDestroyed.FindStringSubmatch(content)
+	if matches == nil {
+		return notHandled()
+	}
+
+	//unit := matches[1]
+	return Skip(ts, "UnitDieDestroyed not implemented"), nil
+}
+
+func (p *Parser) fUnitSlay(ts time.Time, content string) ([]Message, error) {
+	matches := reUnitSlay.FindStringSubmatch(content)
+	if matches == nil {
+		return notHandled()
+	}
+
+	//victim, cause := matches[1], matches[2]
+	return Skip(ts, "UnitSlay not implemented"), nil
+}
+
+/**
+ * Misc
+ */
+
+// TODO: CONSOLIDATED:
+// TODO: PET:
+// TODO:
+
+/**
+ * Dispel, Steal and Interrupt
+ */
+
+func (p *Parser) fAuraDispel(ts time.Time, content string) ([]Message, error) {
+	matches := reAuraDispel.FindStringSubmatch(content)
+	if matches == nil {
+		return notHandled()
+	}
+
+	// What the heck is this?
+	//let un_aura_caster = Unit { is_player: true, unit_id: 0 };
+	//let un_aura_spell_id = 42;
+	//target, targetSpellID := matches[1], matches[2]
+
+	return Skip(ts, "AuraDispel not implemented"), nil
+}
+
+func (p *Parser) fAuraInterrupt(ts time.Time, content string) ([]Message, error) {
+	matches := reAuraInterrupt.FindStringSubmatch(content)
+	if matches == nil {
+		return notHandled()
+	}
+
+	//unAuraCaster, target, interruptedSpellID := matches[1], matches[2], matches[3]
+	return Skip(ts, "AuraInterrupt not implemented"), nil
+}
