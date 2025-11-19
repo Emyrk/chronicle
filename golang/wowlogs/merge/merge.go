@@ -11,15 +11,22 @@ import (
 	"github.com/Emyrk/chronicle/golang/wowlogs/lines"
 )
 
+type Option func(m *Merger)
+
 // Merger merges 2 log files
 type Merger struct {
 	logger *slog.Logger
 }
 
-func NewMerger(logger *slog.Logger) *Merger {
-	return &Merger{
+func NewMerger(logger *slog.Logger, opts ...Option) *Merger {
+	m := &Merger{
 		logger: logger,
 	}
+
+	for _, opt := range opts {
+		opt(m)
+	}
+	return m
 }
 
 func (m *Merger) MergeLogs(formatted io.Reader, raw io.Reader, writer io.Writer) error {
@@ -80,12 +87,13 @@ func newInOrderMerger(l *lines.Liner, a, b *bufio.Scanner) (*inOrderMerger, erro
 		},
 	}
 
-	_, _, err := i.advance(0)
+	var err error
+	i.Sets[0].lastTS, i.Sets[0].lastLine, err = i.advance(0)
 	if err != nil {
 		return nil, fmt.Errorf("advance a: %w", err)
 	}
 
-	_, _, err = i.advance(1)
+	i.Sets[1].lastTS, i.Sets[1].lastLine, err = i.advance(1)
 	if err != nil {
 		return nil, fmt.Errorf("advance b: %w", err)
 	}
@@ -115,6 +123,7 @@ func (i *inOrderMerger) next() (time.Time, string, error) {
 
 func (i *inOrderMerger) advance(index int) (time.Time, string, error) {
 	set := i.Sets[index]
+	ts, cnt := set.lastTS, set.lastLine
 	if set.done {
 		return time.Time{}, "", io.EOF
 	}
@@ -134,8 +143,34 @@ func (i *inOrderMerger) advance(index int) (time.Time, string, error) {
 	}
 	set.lastTS = nTs
 	set.lastLine = nl
+	i.Sets[index] = set
 
-	return nTs, fmt.Sprintf("%d %s", index, nl), nil
+	return ts, cnt, nil
+}
+func (i *inOrderMerger) advance2(index int) (time.Time, string, error) {
+	set := i.Sets[index]
+	if set.done {
+		return time.Time{}, "", io.EOF
+	}
+
+	line, err := set.Scanner.NextLine()
+	if err != nil {
+		if errors.Is(err, io.EOF) {
+			set.done = true
+			return time.Time{}, "", io.EOF
+		}
+		return time.Time{}, "", fmt.Errorf("formatted read: %w", err)
+	}
+
+	nTs, nl, err := i.liner.Line(line)
+	if err != nil {
+		return time.Time{}, "", fmt.Errorf("liner parse: %w", err)
+	}
+	set.lastTS = nTs
+	set.lastLine = nl
+	i.Sets[index] = set
+
+	return nTs, nl, nil
 }
 
 type repeatFirstLineScanner struct {

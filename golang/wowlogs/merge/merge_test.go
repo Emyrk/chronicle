@@ -1,11 +1,14 @@
 package merge_test
 
 import (
+	"bufio"
 	"bytes"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/Emyrk/chronicle/golang/internal/testutil"
+	"github.com/Emyrk/chronicle/golang/wowlogs/lines"
 	"github.com/Emyrk/chronicle/golang/wowlogs/merge"
 	"github.com/stretchr/testify/require"
 )
@@ -24,6 +27,30 @@ func TestMerge(t *testing.T) {
 		&out,
 	)
 	require.NoError(t, err)
+
+	lc := 0
+	liner := lines.NewLiner()
+	scanner := bufio.NewScanner(&out)
+	lastTs := time.Time{}
+	for scanner.Scan() {
+		lc++
+		line := scanner.Text()
+		ts, _, err := liner.Line(line)
+		require.NoError(t, err)
+
+		eq := ts.Equal(lastTs)
+		if !eq {
+			require.True(t, ts.After(lastTs), "out of order timestamps: %v before %v", ts, lastTs)
+		}
+
+		lastTs = ts
+	}
+
+	fl := strings.Split(formattedLog, "\n")
+	rl := strings.Split(rawLog, "\n")
+
+	// Expect the merged log to have the same number of lines as the sum of the inputs
+	require.Equal(t, len(fl)+len(rl), lc)
 }
 
 const (
