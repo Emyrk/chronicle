@@ -24,6 +24,7 @@ func NewParser(logger *slog.Logger) *Parser {
 	}
 }
 
+// Lines can look like any of these: https://github.com/YamaYAML/LegacyPlayersV4/blob/master/Addons/AdvancedVanillaCombatLog/core.lua#L329-L729
 func (p *Parser) LogLine(line string) ([]Message, error) {
 	ts, content, err := p.liner.Line(line)
 	if err != nil {
