@@ -38,6 +38,18 @@ func (p *Parser) LogLine(line string) ([]Message, error) {
 		p.fSpellCastAttempt,
 		p.fGain,
 		p.fDamageSpellHitOrCrit,
+		p.fDamageSpellHitOrCritSchool,
+		p.fDamagePeriodic,
+		p.fDamageShield,
+		p.fDamageHitOrCrit,
+		p.fDamageHitOrCritSchool,
+		p.fHealCrit,
+		p.fHealHit,
+		p.fAuraGainHarmfulHelpful,
+		p.fAuraFade,
+		p.fDamageSpellSplit,
+		p.fDamageSpellMiss,
+		p.fDamageSpellBlockParryEvadeDodgeResistDeflect,
 	} {
 		m, err := parser(ts, content)
 		if err != nil {
