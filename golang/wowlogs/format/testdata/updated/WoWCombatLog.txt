@@ -1,0 +1,118 @@
+11/18 18:58:25.123  COMBATANT_INFO: 18.11.25 18:58:25&Maldrissa&WARLOCK&Orc&3&Chotuk&Exalted with Doordash&Uber Eats&5&nil&nil&nil&nil&6266:0:96:0&nil&6568:0:237:0&4915:0:0:0&nil&nil&nil&nil&nil&nil&4695:0:0:0&4925:0:0:0&nil&11287:0:0:0&5976:0:0:0&0000000000000000000}000000000000000000}0505001100000000&0x00000000000EB167
+11/18 18:58:25.153  CAST: Unknown casts LOGINEFFECT(836) on Unknown.
+11/18 18:58:25.450  CAST: Unknown casts Blood Pact(7804)(Rank 2) on Unknown.
+11/18 18:58:25.450  ZONE_INFO: 18.11.25 18:58:25&&0
+11/18 18:58:25.548  ZONE_INFO: 18.11.25 18:58:25&hillsbrad foothills&0
+11/18 18:58:33.765  CAST: Maldrissa casts Demon Armor(706)(Rank 3).
+11/18 18:58:41.987  CAST: Shamott casts Plainsrunning(12566).
+11/18 18:58:45.941  CAST: Tuwarlock begins to cast Riding Turtle(30174).
+11/18 18:58:46.996  CAST: Shamott casts Plainsrunning(12568) on Shamott.
+11/18 18:58:48.916  CAST: Tuwarlock casts Riding Turtle(30174).
+11/18 18:58:49.860  CAST: Shamott casts Plainsrunning(12568) on Shamott.
+11/18 18:58:52.965  CAST: Shamott casts Plainsrunning(12568) on Shamott.
+11/18 18:59:01.115  CAST: Gretti casts Arcane Intellect(1461)(Rank 3) on Gretti.
+11/18 18:59:03.213  CAST: Gretti casts Mage Armor(6117)(Rank 1).
+11/18 18:59:06.643  CAST: Maldrissa begins to cast Corruption(6222)(Rank 2) on Forest Moss Creeper.
+11/18 18:59:08.147  CAST: Maldrissa casts Corruption(6222)(Rank 2) on Forest Moss Creeper.
+11/18 18:59:08.147  Forest Moss Creeper is afflicted by Corruption (1).
+11/18 18:59:08.387  CAST: Maldrissa begins to cast Immolate(1094)(Rank 3) on Forest Moss Creeper.
+11/18 18:59:08.532  CAST: Chotuk casts Fire Shield(2947)(Rank 1) on Maldrissa.
+11/18 18:59:08.579  You gain Fire Shield (1).
+11/18 18:59:09.860  CAST: Maldrissa casts Immolate(1094)(Rank 3) on Forest Moss Creeper.
+11/18 18:59:09.860  Your Immolate hits Forest Moss Creeper for 46 Fire damage.
+11/18 18:59:09.893  Forest Moss Creeper is afflicted by Immolate (1).
+11/18 18:59:10.180  CAST: Maldrissa begins to cast Fear(5782)(Rank 1) on Forest Moss Creeper.
+11/18 18:59:11.125  CAST: Gretti begins to cast Teleport: Undercity(3563).
+11/18 18:59:11.125  Forest Moss Creeper suffers 18 Shadow damage from your Corruption.
+11/18 18:59:11.389  You reflect 5 Fire damage to Forest Moss Creeper.
+11/18 18:59:11.389  Forest Moss Creeper hits you for 35.
+11/18 18:59:11.389  Phase Shift fades from Chotuk (Maldrissa).
+11/18 18:59:11.705  CAST: Chotuk begins to cast Firebolt(7800)(Rank 3) on Forest Moss Creeper.
+11/18 18:59:12.650  CAST: Maldrissa casts Fear(5782)(Rank 1) on Forest Moss Creeper.
+11/18 18:59:12.650  Forest Moss Creeper is afflicted by Fear (1).
+11/18 18:59:12.826  Forest Moss Creeper suffers 18 Fire damage from your Immolate.
+11/18 18:59:13.674  CAST: Chotuk casts Firebolt(7800)(Rank 3) on Forest Moss Creeper.
+11/18 18:59:13.865  CAST: Maldrissa begins to cast Shadow Bolt(1088)(Rank 4) on Forest Moss Creeper.
+11/18 18:59:14.058  Chotuk (Maldrissa)'s Firebolt hits Forest Moss Creeper for 39 Fire damage.
+11/18 18:59:14.089  Forest Moss Creeper suffers 18 Shadow damage from your Corruption.
+11/18 18:59:14.122  Tarren Mill Deathguard hits Forest Moss Creeper for 190. (crushing)
+11/18 18:59:14.122  CAST: Chotuk begins to cast Firebolt(7800)(Rank 3) on Forest Moss Creeper.
+11/18 18:59:14.889  CAST: Maldrissa fails casting Shadow Bolt(1088)(Rank 4).
+11/18 18:59:14.889  You fail to cast Shadow Bolt: Interrupted.
+11/18 18:59:15.290  CAST: Maldrissa begins to cast Shadow Bolt(1088)(Rank 4) on Forest Moss Creeper.
+11/18 18:59:15.833  Forest Moss Creeper suffers 18 Fire damage from your Immolate.
+11/18 18:59:16.154  CAST: Chotuk casts Firebolt(7800)(Rank 3) on Forest Moss Creeper.
+11/18 18:59:16.330  CAST: Maldrissa fails casting Shadow Bolt(1088)(Rank 4).
+11/18 18:59:16.334  You fail to cast Shadow Bolt: Interrupted.
+11/18 18:59:16.666  CAST: Maldrissa channels Drain Soul(1120)(Rank 1) on Forest Moss Creeper.
+11/18 18:59:16.666  CAST: Chotuk begins to cast Firebolt(7800)(Rank 3) on Forest Moss Creeper.
+11/18 18:59:16.666  Forest Moss Creeper is afflicted by Drain Soul (1).
+11/18 18:59:16.922  Tarren Mill Deathguard hits Forest Moss Creeper for 178. (crushing)
+11/18 18:59:16.922  Forest Moss Creeper attacks. Tarren Mill Deathguard parries.
+11/18 18:59:16.922  Fear fades from Forest Moss Creeper.
+11/18 18:59:17.065  Chotuk (Maldrissa)'s Firebolt hits Forest Moss Creeper for 38 Fire damage.
+11/18 18:59:17.145  Forest Moss Creeper suffers 18 Shadow damage from your Corruption.
+11/18 18:59:17.577  Forest Moss Creeper begins to cast Corrosive Poison.
+11/18 18:59:17.577  CAST: Forest Moss Creeper begins to cast Corrosive Poison(3396) on Tarren Mill Deathguard.
+11/18 18:59:17.641  Forest Moss Creeper suffers 19 Shadow damage from your Drain Soul.
+11/18 18:59:18.089  CAST: Forest Moss Creeper fails casting Corrosive Poison(3396).
+11/18 18:59:18.089  CAST: Maldrissa fails casting Drain Soul(1120)(Rank 1).
+11/18 18:59:18.089  Forest Moss Creeper dies.
+11/18 18:59:18.089  CAST: Chotuk fails casting Firebolt(7800)(Rank 3).
+11/18 18:59:18.089  Tarren Mill Deathguard hits Forest Moss Creeper for 186. (crushing)
+11/18 18:59:20.506  CAST: Gretti casts Teleport: Undercity(3563).
+11/18 18:59:21.770  CAST: Chotuk casts Phase Shift(4511) on Chotuk.
+11/18 18:59:21.770  Chotuk (Maldrissa) gains Phase Shift (1).
+11/18 18:59:22.826  CAST: Maldrissa begins to cast Corruption(6222)(Rank 2) on Gray Bear.
+11/18 18:59:24.274  CAST: Maldrissa casts Corruption(6222)(Rank 2) on Gray Bear.
+11/18 18:59:24.274  Gray Bear is afflicted by Corruption (1).
+11/18 18:59:25.542  CAST: Maldrissa begins to cast Immolate(1094)(Rank 3) on Gray Bear.
+11/18 18:59:27.031  CAST: Maldrissa casts Immolate(1094)(Rank 3) on Gray Bear.
+11/18 18:59:27.035  Your Immolate hits Gray Bear for 46 Fire damage.
+11/18 18:59:27.035  Gray Bear is afflicted by Immolate (1).
+11/18 18:59:27.290  Gray Bear suffers 18 Shadow damage from your Corruption.
+11/18 18:59:28.811  CAST: Maldrissa channels Drain Life(689)(Rank 1) on Gray Bear.
+11/18 18:59:28.842  Gray Bear is afflicted by Drain Life (1).
+11/18 18:59:29.024  You reflect 5 Fire damage to Gray Bear.
+11/18 18:59:29.024  Gray Bear hits you for 33.
+11/18 18:59:29.024  Phase Shift fades from Chotuk (Maldrissa).
+11/18 18:59:29.276  CAST: Chotuk begins to cast Firebolt(7800)(Rank 3) on Gray Bear.
+11/18 18:59:29.709  CAST: Bullonie casts Cat Form(768).
+11/18 18:59:29.788  Gray Bear suffers 10 Shadow damage from your Drain Life.
+11/18 18:59:29.788  Your Drain Life heals you for 10.
+11/18 18:59:29.964  Gray Bear suffers 18 Fire damage from your Immolate.
+11/18 18:59:30.252  Gray Bear suffers 18 Shadow damage from your Corruption.
+11/18 18:59:30.588  Tarren Mill Deathguard hits Gray Bear for 208. (crushing)
+11/18 18:59:30.763  Gray Bear suffers 10 Shadow damage from your Drain Life.
+11/18 18:59:30.763  Your Drain Life heals you for 10.
+11/18 18:59:31.132  Gray Bear attacks. Tarren Mill Deathguard parries.
+11/18 18:59:31.275  CAST: Chotuk casts Firebolt(7800)(Rank 3) on Gray Bear.
+11/18 18:59:31.756  Gray Bear suffers 5 Shadow damage from your Drain Life. (5 resisted)
+11/18 18:59:31.756  Your Drain Life heals you for 5.
+11/18 18:59:31.869  CAST: Chotuk begins to cast Firebolt(7800)(Rank 3) on Gray Bear.
+11/18 18:59:31.933  Tarren Mill Deathguard crits Gray Bear for 290.
+11/18 18:59:32.044  CAST: Maldrissa fails casting Drain Life(689)(Rank 1).
+11/18 18:59:32.044  You attack. Gray Bear parries.
+11/18 18:59:32.062  Chotuk (Maldrissa)'s Firebolt was resisted by Gray Bear.
+11/18 18:59:32.092  Drain Life fades from Gray Bear.
+11/18 18:59:32.316  CAST: Maldrissa begins to cast Shadow Bolt(1088)(Rank 4) on Gray Bear.
+11/18 18:59:32.571  Gray Bear attacks. Tarren Mill Deathguard parries.
+11/18 18:59:32.715  CAST: Maldrissa fails casting Shadow Bolt(1088)(Rank 4).
+11/18 18:59:32.715  You fail to cast Shadow Bolt: Interrupted.
+11/18 18:59:32.971  Gray Bear suffers 18 Fire damage from your Immolate.
+11/18 18:59:33.228  CAST: Maldrissa channels Drain Soul(1120)(Rank 1) on Gray Bear.
+11/18 18:59:33.228  Gray Bear is afflicted by Drain Soul (1).
+11/18 18:59:33.293  CAST: Maldrissa fails casting Drain Soul(1120)(Rank 1).
+11/18 18:59:33.293  Gray Bear dies.
+11/18 18:59:33.293  CAST: Chotuk fails casting Firebolt(7800)(Rank 3).
+11/18 18:59:33.293  Tarren Mill Deathguard hits Gray Bear for 228. (crushing)
+11/18 18:59:39.325  CAST: Chotuk casts Phase Shift(4511) on Chotuk.
+11/18 18:59:39.325  Chotuk (Maldrissa) gains Phase Shift (1).
+11/18 18:59:48.518  COMBATANT_INFO: 18.11.25 18:59:48&Maldrissa&WARLOCK&Orc&3&Chotuk&Exalted with Doordash&Uber Eats&5&nil&nil&nil&nil&6266:0:96:0&nil&6568:0:237:0&4915:0:0:0&nil&nil&nil&nil&nil&nil&4695:0:0:0&4925:0:0:0&nil&11287:0:0:0&5976:0:0:0&0000000000000000000}000000000000000000}0505001100000000&0x00000000000EB167
+11/18 18:59:48.645  CAST: Unknown begins to cast Ghost Wolf(2645).
+11/18 18:59:48.645  CAST: Unknown casts Ghost Wolf(2645).
+11/18 18:59:48.645  CAST: Saboo begins to cast Water Sample(9583).
+11/18 18:59:48.645  ZONE_INFO: 18.11.25 18:59:48&hillsbrad foothills&0
+11/18 18:59:50.583  CAST: Saboo casts Water Sample(9583).
+11/18 19:00:02.331  CAST: Koshirou casts Feed Pet(6991).
+11/18 19:00:02.331  CAST: Koshirou casts Feed Pet Effect(1539) on Koshirou.

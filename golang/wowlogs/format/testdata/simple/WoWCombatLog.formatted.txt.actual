@@ -73,7 +73,7 @@
 11/11 09:19:50.184  Shamum 's Searing Bolt hits Cave Yeti for 13 Fire damage.
 11/11 09:19:50.680  Cave Yeti attacks. Testplayer dodges.
 11/11 09:19:50.680  Cave Yeti attacks. Testplayer dodges.
-11/11 09:19:50.680  Phase Shift fades from Chotuk (Maldrissa).
+11/11 09:19:50.680  Phase Shift fades from ChotukPet (Maldrissa).
 11/11 09:19:51.571  Maldrissa hits Cave Yeti for 0. (glancing)
 11/11 09:19:52.267  Shamum 's Searing Bolt was resisted by Cave Yeti.
 11/11 09:19:52.726  Shamum misses Cave Yeti.
@@ -204,7 +204,7 @@
 11/11 09:20:29.256  Testplayer 's Riposte hits Cave Yeti for 185.
 11/11 09:20:29.256  Cave Yeti is slain by Testplayer.
 11/11 09:20:29.256  Cave Yeti dies.
-11/11 09:20:29.411  Chotuk (Maldrissa) gains Phase Shift (1).
+11/11 09:20:29.411  ChotukPet (Maldrissa) gains Phase Shift (1).
 11/11 09:20:30.259  Earthbind fades from Cave Yeti.
 11/11 09:20:30.403  Cave Yeti attacks. Testplayer parries.
 11/11 09:20:31.332  Cave Yeti is afflicted by Earthbind (1).
