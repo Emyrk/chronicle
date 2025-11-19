@@ -5,7 +5,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/chronicle/golangformat/golang/wowlogs/guid"
+	"github.com/Emyrk/chronicle/golang/wowlogs/guid"
 )
 
 type GUID struct {

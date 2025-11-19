@@ -8,8 +8,8 @@ import (
 	"strings"
 	"time"
 
-	"github.com/chronicle/golangformat/golang/wowlogs/combatant"
-	"github.com/chronicle/golangformat/golang/wowlogs/lines"
+	"github.com/Emyrk/chronicle/golang/wowlogs/combatant"
+	"github.com/Emyrk/chronicle/golang/wowlogs/lines"
 )
 
 type parseLine = func(ts time.Time, content string) (Message, error)

@@ -10,7 +10,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/chronicle/golangformat/golang/wowlogs/format"
+	"github.com/Emyrk/chronicle/golang/wowlogs/format"
 	"github.com/stretchr/testify/require"
 )
 

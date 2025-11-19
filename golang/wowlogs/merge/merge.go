@@ -8,7 +8,7 @@ import (
 	"log/slog"
 	"time"
 
-	"github.com/chronicle/golangformat/golang/wowlogs/lines"
+	"github.com/Emyrk/chronicle/golang/wowlogs/lines"
 )
 
 // Merger merges 2 log files
@@ -135,7 +135,7 @@ func (i *inOrderMerger) advance(index int) (time.Time, string, error) {
 	set.lastTS = nTs
 	set.lastLine = nl
 
-	return nTs, nl, nil
+	return nTs, fmt.Sprintf("%d %s", index, nl), nil
 }
 
 type repeatFirstLineScanner struct {

@@ -5,7 +5,7 @@ import (
 	"fmt"
 	"os"
 
-	"github.com/chronicle/golangformat/golang/logformat"
+	"github.com/Emyrk/chronicle/golang/logformat"
 )
 
 func main() {

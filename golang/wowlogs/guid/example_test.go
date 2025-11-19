@@ -3,7 +3,7 @@ package guid_test
 import (
 	"fmt"
 
-	"github.com/chronicle/golangformat/golang/wowlogs/guid"
+	"github.com/Emyrk/chronicle/golang/wowlogs/guid"
 )
 
 func ExampleGUID() {

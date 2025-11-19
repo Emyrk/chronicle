@@ -5,7 +5,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/chronicle/golangformat/golang/wowlogs/lines"
+	"github.com/Emyrk/chronicle/golang/wowlogs/lines"
 	"github.com/stretchr/testify/require"
 
 	"github.com/coder/quartz"
