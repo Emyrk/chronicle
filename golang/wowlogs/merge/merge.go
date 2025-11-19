@@ -13,7 +13,10 @@ import (
 
 type Option func(m *Merger)
 
-// Merger merges 2 log files
+// Merger merges 2 log files and sorts by the timestamps.
+// TODO: Add a parser in the middle to get rid of lines we do not want.
+// Also add a parser in the middle to capture some state and log additional lines at the start
+// for things like combatant info.
 type Merger struct {
 	logger *slog.Logger
 }
@@ -62,7 +65,7 @@ func (m *Merger) MergeLogs(formatted io.Reader, raw io.Reader, writer io.Writer)
 }
 
 type logFile struct {
-	Scanner  *repeatFirstLineScanner
+	Scanner  *bufio.Scanner
 	lastTS   time.Time
 	lastLine string
 	done     bool
@@ -82,18 +85,18 @@ func newInOrderMerger(l *lines.Liner, a, b *bufio.Scanner) (*inOrderMerger, erro
 	i := &inOrderMerger{
 		liner: l,
 		Sets: [2]logFile{
-			{Scanner: newRepeatFirstLineScanner(a)},
-			{Scanner: newRepeatFirstLineScanner(b)},
+			{Scanner: a},
+			{Scanner: b},
 		},
 	}
 
 	var err error
-	i.Sets[0].lastTS, i.Sets[0].lastLine, err = i.advance(0)
+	_, _, err = i.advance(0)
 	if err != nil {
 		return nil, fmt.Errorf("advance a: %w", err)
 	}
 
-	i.Sets[1].lastTS, i.Sets[1].lastLine, err = i.advance(1)
+	_, _, err = i.advance(1)
 	if err != nil {
 		return nil, fmt.Errorf("advance b: %w", err)
 	}
@@ -128,15 +131,15 @@ func (i *inOrderMerger) advance(index int) (time.Time, string, error) {
 		return time.Time{}, "", io.EOF
 	}
 
-	line, err := set.Scanner.NextLine()
-	if err != nil {
-		if errors.Is(err, io.EOF) {
-			set.done = true
-			return time.Time{}, "", io.EOF
-		}
-		return time.Time{}, "", fmt.Errorf("formatted read: %w", err)
+	if !set.Scanner.Scan() {
+		set.done = true
+		set.lastTS = time.Time{}
+		set.lastLine = ""
+		i.Sets[index] = set
+		return ts, set.lastLine, nil
 	}
 
+	line := set.Scanner.Text()
 	nTs, nl, err := i.liner.Line(line)
 	if err != nil {
 		return time.Time{}, "", fmt.Errorf("liner parse: %w", err)
@@ -146,65 +149,4 @@ func (i *inOrderMerger) advance(index int) (time.Time, string, error) {
 	i.Sets[index] = set
 
 	return ts, cnt, nil
-}
-func (i *inOrderMerger) advance2(index int) (time.Time, string, error) {
-	set := i.Sets[index]
-	if set.done {
-		return time.Time{}, "", io.EOF
-	}
-
-	line, err := set.Scanner.NextLine()
-	if err != nil {
-		if errors.Is(err, io.EOF) {
-			set.done = true
-			return time.Time{}, "", io.EOF
-		}
-		return time.Time{}, "", fmt.Errorf("formatted read: %w", err)
-	}
-
-	nTs, nl, err := i.liner.Line(line)
-	if err != nil {
-		return time.Time{}, "", fmt.Errorf("liner parse: %w", err)
-	}
-	set.lastTS = nTs
-	set.lastLine = nl
-	i.Sets[index] = set
-
-	return nTs, nl, nil
-}
-
-type repeatFirstLineScanner struct {
-	scanner   *bufio.Scanner
-	firstLine string
-	state     uint8
-}
-
-func newRepeatFirstLineScanner(scanner *bufio.Scanner) *repeatFirstLineScanner {
-	return &repeatFirstLineScanner{
-		scanner: scanner,
-	}
-}
-
-func (r *repeatFirstLineScanner) NextLine() (string, error) {
-	if r.state < 3 {
-		r.state++
-	}
-
-	// Second pass, repeat the first
-	if r.state == 2 {
-		return r.firstLine, nil
-	}
-
-	if !r.scanner.Scan() {
-		return "", io.EOF
-	}
-	// Cache the first line
-	if r.state == 1 {
-		txt := r.scanner.Text()
-		r.firstLine = txt
-		return txt, nil
-	}
-
-	// Continue as normal
-	return r.scanner.Text(), nil
 }

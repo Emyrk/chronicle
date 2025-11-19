@@ -34,12 +34,12 @@ func MergeCmd() *serpent.Command {
 			a, b := i.Args[0], i.Args[1]
 			first, err := os.OpenFile(a, os.O_RDONLY, 0644)
 			if err != nil {
-				return fmt.Errorf("opening file %s: %w", a, err)
+				return fmt.Errorf("opening file: %w", err)
 			}
 
 			second, err := os.OpenFile(b, os.O_RDONLY, 0644)
 			if err != nil {
-				return fmt.Errorf("opening file %s: %w", b, err)
+				return fmt.Errorf("opening file: %w", err)
 			}
 
 			wr := i.Stdout
