@@ -17,7 +17,8 @@ func IsCast(content string) (string, bool) {
 }
 
 type Cast struct {
-	metatypes.Unit
+	Caster metatypes.Unit
+	Target *metatypes.Unit
 }
 
 func ParseCast(content string) (Cast, error) {
@@ -39,17 +40,30 @@ func ParseCast(content string) (Cast, error) {
 	return Cast{}, errors.New("regexes did not match for cast")
 }
 
-func parseCastWithTarget(matched regexs.Matched) (Cast, error) {
-	caster := matched.String()
+func parseCastWithTarget(matched *regexs.Matched) (Cast, error) {
+	caster := matched.Unit()
 	phrase := matched.String()
 	spell := matched.String()
-	target := matched.String()
+	target := matched.Unit()
 
-	return Cast{}, nil
+	var _, _ = phrase, spell
+
+	return Cast{
+		Caster: caster,
+		Target: &target,
+	}, nil
 }
 
-func parseCastSimple(matched regexs.Matched) (Cast, error) {
-	return Cast{}, nil
+func parseCastSimple(matched *regexs.Matched) (Cast, error) {
+	caster := matched.Unit()
+	phrase := matched.String()
+	spell := matched.String()
+
+	var _, _ = phrase, spell
+
+	return Cast{
+		Caster: caster,
+	}, nil
 }
 
 // Cast v2 formats -- Raw has GUID(name)

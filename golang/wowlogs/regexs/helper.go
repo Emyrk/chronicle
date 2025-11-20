@@ -4,6 +4,8 @@ import (
 	"errors"
 	"regexp"
 	"strconv"
+
+	"github.com/Emyrk/chronicle/golang/wowlogs/metatypes"
 )
 
 type Pattern regexp.Regexp
@@ -32,6 +34,15 @@ type Matched struct {
 	Values []string
 	Index  int
 	errs   []error
+}
+
+func (m *Matched) Unit() metatypes.Unit {
+	val := m.pop()
+	unit, err := metatypes.ParseUnit(val)
+	if err != nil {
+		m.errs = append(m.errs, err)
+	}
+	return unit
 }
 
 func (m *Matched) String() string {
