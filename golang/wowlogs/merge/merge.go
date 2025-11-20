@@ -11,6 +11,9 @@ import (
 	"github.com/Emyrk/chronicle/golang/wowlogs/lines"
 )
 
+type Scan func() (time.Time, string, error)
+
+type MiddleWare func(ts time.Time, content string) bool
 type Option func(m *Merger)
 
 // Merger merges 2 log files and sorts by the timestamps.
@@ -19,6 +22,7 @@ type Option func(m *Merger)
 // for things like combatant info.
 type Merger struct {
 	logger *slog.Logger
+	mw     []MiddleWare
 }
 
 func NewMerger(logger *slog.Logger, opts ...Option) *Merger {
@@ -32,25 +36,55 @@ func NewMerger(logger *slog.Logger, opts ...Option) *Merger {
 	return m
 }
 
-func (m *Merger) MergeLogs(formatted io.Reader, raw io.Reader, writer io.Writer) error {
+func WithMiddleWare(mw MiddleWare) Option {
+	return func(m *Merger) {
+		m.mw = append(m.mw, mw)
+	}
+}
+
+func (m *Merger) LineScanner(formatted io.Reader, raw io.Reader) (*lines.Liner, Scan, error) {
 	f := bufio.NewScanner(formatted)
 	r := bufio.NewScanner(raw)
 	l := lines.NewLiner()
 
 	merger, err := newInOrderMerger(l, f, r)
 	if err != nil {
-		return fmt.Errorf("create merger: %w", err)
+		return l, nil, fmt.Errorf("create merger: %w", err)
+	}
+
+	return l, func() (time.Time, string, error) {
+	LineLoop:
+		for {
+			ts, content, err := merger.next()
+			if err != nil {
+				return time.Time{}, "", err
+			}
+
+			for _, mw := range m.mw {
+				if !mw(ts, content) {
+					continue LineLoop
+				}
+			}
+
+			return ts, content, err
+		}
+	}, nil
+}
+
+func (m *Merger) MergeLogs(formatted io.Reader, raw io.Reader, writer io.Writer) error {
+	l, scan, err := m.LineScanner(formatted, raw)
+	if err != nil {
+		return fmt.Errorf("create line scanner: %w", err)
 	}
 
 	for {
-		ts, content, err := merger.next()
+		ts, content, err := scan()
 		if err != nil {
 			if errors.Is(err, io.EOF) {
 				break
 			}
+			return err
 		}
-
-		// TODO: Omit lines that are in the Raw that are not needed in the formatted.
 
 		serialized := l.FmtLine(ts, content) + "\n"
 		n, err := writer.Write([]byte(serialized))
@@ -61,6 +95,7 @@ func (m *Merger) MergeLogs(formatted io.Reader, raw io.Reader, writer io.Writer)
 			return fmt.Errorf("short write merged line: wrote %d, expected %d", n, len(serialized))
 		}
 	}
+
 	return nil
 }
 

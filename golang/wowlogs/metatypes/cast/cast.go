@@ -66,6 +66,10 @@ func parseCastSimple(matched *regexs.Matched) (Cast, error) {
 	}, matched.Error()
 }
 
+func (c Cast) HasGUIDs() bool {
+	return !c.Caster.Gid.IsZero() && (c.Target == nil || !c.Target.Gid.IsZero())
+}
+
 // Cast v2 formats -- Raw has GUID(name)
 //                                   unit casts
 //local fmt_with_rank_target = "CAST: %s %s %s(%s)(%s) on %s."
