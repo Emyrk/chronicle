@@ -10,6 +10,7 @@ import (
 	"github.com/Emyrk/chronicle/golang/wowlogs/metatypes/combatant"
 	"github.com/Emyrk/chronicle/golang/wowlogs/metatypes/loot"
 	"github.com/Emyrk/chronicle/golang/wowlogs/metatypes/zone"
+	"github.com/Emyrk/chronicle/golang/wowlogs/regexs"
 )
 
 func (p *Parser) fLoot(ts time.Time, content string) ([]Message, error) {
@@ -73,7 +74,7 @@ func (p *Parser) fCombatantGUID(ts time.Time, content string) ([]Message, error)
 }
 
 func (p *Parser) fBugDamageSpellHitOrCrit(ts time.Time, content string) ([]Message, error) {
-	if !reBugDamageSpellHitOrCrit.MatchString(content) {
+	if !regexs.ReBugDamageSpellHitOrCrit.MatchString(content) {
 		return notHandled()
 	}
 
@@ -87,7 +88,7 @@ func (p *Parser) fBugDamageSpellHitOrCrit(ts time.Time, content string) ([]Messa
 // 10/29 22:09:42.175  Randgriz casts Flash Heal on Katrix.
 // 10/29 22:09:42.175  Randgriz 's Flash Heal critically heals Katrix for 2534.
 func (p *Parser) fSpellCastAttempt(ts time.Time, content string) ([]Message, error) {
-	matches := reSpellCastAttempt.FindStringSubmatch(content)
+	matches := regexs.ReSpellCastAttempt.FindStringSubmatch(content)
 	if matches == nil {
 		return notHandled()
 	}
@@ -103,7 +104,7 @@ func (p *Parser) fSpellCastAttempt(ts time.Time, content string) ([]Message, err
 }
 
 func (p *Parser) fGain(ts time.Time, content string) ([]Message, error) {
-	matches := reGain.FindStringSubmatch(content)
+	matches := regexs.ReGain.FindStringSubmatch(content)
 	if matches == nil {
 		return notHandled()
 	}
@@ -129,7 +130,7 @@ func (p *Parser) fGain(ts time.Time, content string) ([]Message, error) {
  * Spell Damage
  */
 func (p *Parser) fDamageSpellHitOrCrit(ts time.Time, content string) ([]Message, error) {
-	matches := reDamageSpellHitOrCrit.FindStringSubmatch(content)
+	matches := regexs.ReDamageSpellHitOrCrit.FindStringSubmatch(content)
 	if matches == nil {
 		return notHandled()
 	}
@@ -141,7 +142,7 @@ func (p *Parser) fDamageSpellHitOrCrit(ts time.Time, content string) ([]Message,
 }
 
 func (p *Parser) fDamageSpellHitOrCritSchool(ts time.Time, content string) ([]Message, error) {
-	matches := reDamageSpellHitOrCritSchool.FindStringSubmatch(content)
+	matches := regexs.ReDamageSpellHitOrCritSchool.FindStringSubmatch(content)
 	if matches == nil {
 		return notHandled()
 	}
@@ -152,7 +153,7 @@ func (p *Parser) fDamageSpellHitOrCritSchool(ts time.Time, content string) ([]Me
 }
 
 func (p *Parser) fDamagePeriodic(ts time.Time, content string) ([]Message, error) {
-	matches := reDamagePeriodic.FindStringSubmatch(content)
+	matches := regexs.ReDamagePeriodic.FindStringSubmatch(content)
 	if matches == nil {
 		return notHandled()
 	}
@@ -163,7 +164,7 @@ func (p *Parser) fDamagePeriodic(ts time.Time, content string) ([]Message, error
 }
 
 func (p *Parser) fDamageShield(ts time.Time, content string) ([]Message, error) {
-	matches := reDamageShield.FindStringSubmatch(content)
+	matches := regexs.ReDamageShield.FindStringSubmatch(content)
 	if matches == nil {
 		return notHandled()
 	}
@@ -180,7 +181,7 @@ func (p *Parser) fDamageShield(ts time.Time, content string) ([]Message, error) 
  */
 
 func (p *Parser) fDamageHitOrCrit(ts time.Time, content string) ([]Message, error) {
-	matches := reDamageHitOrCrit.FindStringSubmatch(content)
+	matches := regexs.ReDamageHitOrCrit.FindStringSubmatch(content)
 	if matches == nil {
 		return notHandled()
 	}
@@ -192,7 +193,7 @@ func (p *Parser) fDamageHitOrCrit(ts time.Time, content string) ([]Message, erro
 }
 
 func (p *Parser) fDamageHitOrCritSchool(ts time.Time, content string) ([]Message, error) {
-	matches := reDamageHitOrCritSchool.FindStringSubmatch(content)
+	matches := regexs.ReDamageHitOrCritSchool.FindStringSubmatch(content)
 	if matches == nil {
 		return notHandled()
 	}
@@ -208,7 +209,7 @@ func (p *Parser) fDamageHitOrCritSchool(ts time.Time, content string) ([]Message
  */
 
 func (p *Parser) fHealCrit(ts time.Time, content string) ([]Message, error) {
-	matches := reHealCrit.FindStringSubmatch(content)
+	matches := regexs.ReHealCrit.FindStringSubmatch(content)
 	if matches == nil {
 		return notHandled()
 	}
@@ -220,7 +221,7 @@ func (p *Parser) fHealCrit(ts time.Time, content string) ([]Message, error) {
 }
 
 func (p *Parser) fHealHit(ts time.Time, content string) ([]Message, error) {
-	matches := reHealHit.FindStringSubmatch(content)
+	matches := regexs.ReHealHit.FindStringSubmatch(content)
 	if matches == nil {
 		return notHandled()
 	}
@@ -236,7 +237,7 @@ func (p *Parser) fHealHit(ts time.Time, content string) ([]Message, error) {
  */
 
 func (p *Parser) fAuraGainHarmfulHelpful(ts time.Time, content string) ([]Message, error) {
-	matches := reAuraGainHarmfulHelpful.FindStringSubmatch(content)
+	matches := regexs.ReAuraGainHarmfulHelpful.FindStringSubmatch(content)
 	if matches == nil {
 		return notHandled()
 	}
@@ -248,7 +249,7 @@ func (p *Parser) fAuraGainHarmfulHelpful(ts time.Time, content string) ([]Messag
 }
 
 func (p *Parser) fAuraFade(ts time.Time, content string) ([]Message, error) {
-	matches := reAuraFade.FindStringSubmatch(content)
+	matches := regexs.ReAuraFade.FindStringSubmatch(content)
 	if matches == nil {
 		return notHandled()
 	}
@@ -263,7 +264,7 @@ func (p *Parser) fAuraFade(ts time.Time, content string) ([]Message, error) {
  * Spell Damage cont
  */
 func (p *Parser) fDamageSpellSplit(ts time.Time, content string) ([]Message, error) {
-	matches := reDamageSpellSplit.FindStringSubmatch(content)
+	matches := regexs.ReDamageSpellSplit.FindStringSubmatch(content)
 	if matches == nil {
 		return notHandled()
 	}
@@ -275,7 +276,7 @@ func (p *Parser) fDamageSpellSplit(ts time.Time, content string) ([]Message, err
 }
 
 func (p *Parser) fDamageSpellMiss(ts time.Time, content string) ([]Message, error) {
-	matches := reDamageSpellMiss.FindStringSubmatch(content)
+	matches := regexs.ReDamageSpellMiss.FindStringSubmatch(content)
 	if matches == nil {
 		return notHandled()
 	}
@@ -285,7 +286,7 @@ func (p *Parser) fDamageSpellMiss(ts time.Time, content string) ([]Message, erro
 }
 
 func (p *Parser) fDamageSpellBlockParryEvadeDodgeResistDeflect(ts time.Time, content string) ([]Message, error) {
-	matches := reDamageSpellBlockParryEvadeDodgeResistDeflect.FindStringSubmatch(content)
+	matches := regexs.ReDamageSpellBlockParryEvadeDodgeResistDeflect.FindStringSubmatch(content)
 	if matches == nil {
 		return notHandled()
 	}
@@ -295,7 +296,7 @@ func (p *Parser) fDamageSpellBlockParryEvadeDodgeResistDeflect(ts time.Time, con
 }
 
 func (p *Parser) fDamageSpellAbsorb(ts time.Time, content string) ([]Message, error) {
-	matches := reDamageSpellAbsorb.FindStringSubmatch(content)
+	matches := regexs.ReDamageSpellAbsorb.FindStringSubmatch(content)
 	if matches == nil {
 		return notHandled()
 	}
@@ -305,7 +306,7 @@ func (p *Parser) fDamageSpellAbsorb(ts time.Time, content string) ([]Message, er
 }
 
 func (p *Parser) fDamageSpellAbsorbSelf(ts time.Time, content string) ([]Message, error) {
-	matches := reDamageSpellAbsorbSelf.FindStringSubmatch(content)
+	matches := regexs.ReDamageSpellAbsorbSelf.FindStringSubmatch(content)
 	if matches == nil {
 		return notHandled()
 	}
@@ -315,7 +316,7 @@ func (p *Parser) fDamageSpellAbsorbSelf(ts time.Time, content string) ([]Message
 }
 
 func (p *Parser) fDamageReflect(ts time.Time, content string) ([]Message, error) {
-	matches := reDamageReflect.FindStringSubmatch(content)
+	matches := regexs.ReDamageReflect.FindStringSubmatch(content)
 	if matches == nil {
 		return notHandled()
 	}
@@ -325,7 +326,7 @@ func (p *Parser) fDamageReflect(ts time.Time, content string) ([]Message, error)
 }
 
 func (p *Parser) fDamageProcResist(ts time.Time, content string) ([]Message, error) {
-	matches := reDamageProcResist.FindStringSubmatch(content)
+	matches := regexs.ReDamageProcResist.FindStringSubmatch(content)
 	if matches == nil {
 		return notHandled()
 	}
@@ -335,7 +336,7 @@ func (p *Parser) fDamageProcResist(ts time.Time, content string) ([]Message, err
 }
 
 func (p *Parser) fDamageSpellImmune(ts time.Time, content string) ([]Message, error) {
-	matches := reDamageSpellImmune.FindStringSubmatch(content)
+	matches := regexs.ReDamageSpellImmune.FindStringSubmatch(content)
 	if matches == nil {
 		return notHandled()
 	}
@@ -349,7 +350,7 @@ func (p *Parser) fDamageSpellImmune(ts time.Time, content string) ([]Message, er
  */
 
 func (p *Parser) fDamageMiss(ts time.Time, content string) ([]Message, error) {
-	matches := reDamageMiss.FindStringSubmatch(content)
+	matches := regexs.ReDamageMiss.FindStringSubmatch(content)
 	if matches == nil {
 		return notHandled()
 	}
@@ -359,7 +360,7 @@ func (p *Parser) fDamageMiss(ts time.Time, content string) ([]Message, error) {
 }
 
 func (p *Parser) fDamageBlockParryEvadeDodgeDeflect(ts time.Time, content string) ([]Message, error) {
-	matches := reDamageBlockParryEvadeDodgeDeflect.FindStringSubmatch(content)
+	matches := regexs.ReDamageBlockParryEvadeDodgeDeflect.FindStringSubmatch(content)
 	if matches == nil {
 		return notHandled()
 	}
@@ -369,7 +370,7 @@ func (p *Parser) fDamageBlockParryEvadeDodgeDeflect(ts time.Time, content string
 }
 
 func (p *Parser) fDamageAbsorbResist(ts time.Time, content string) ([]Message, error) {
-	matches := reDamageAbsorbResist.FindStringSubmatch(content)
+	matches := regexs.ReDamageAbsorbResist.FindStringSubmatch(content)
 	if matches == nil {
 		return notHandled()
 	}
@@ -380,7 +381,7 @@ func (p *Parser) fDamageAbsorbResist(ts time.Time, content string) ([]Message, e
 }
 
 func (p *Parser) fDamageImmune(ts time.Time, content string) ([]Message, error) {
-	matches := reDamageImmune.FindStringSubmatch(content)
+	matches := regexs.ReDamageImmune.FindStringSubmatch(content)
 	if matches == nil {
 		return notHandled()
 	}
@@ -394,7 +395,7 @@ func (p *Parser) fDamageImmune(ts time.Time, content string) ([]Message, error) 
  */
 
 func (p *Parser) fSpellCastPerformDurability(ts time.Time, content string) ([]Message, error) {
-	matches := reSpellCastPerformDurability.FindStringSubmatch(content)
+	matches := regexs.ReSpellCastPerformDurability.FindStringSubmatch(content)
 	if matches == nil {
 		return notHandled()
 	}
@@ -404,7 +405,7 @@ func (p *Parser) fSpellCastPerformDurability(ts time.Time, content string) ([]Me
 }
 
 func (p *Parser) fSpellCastPerform(ts time.Time, content string) ([]Message, error) {
-	matches := reSpellCastPerform.FindStringSubmatch(content)
+	matches := regexs.ReSpellCastPerform.FindStringSubmatch(content)
 	if matches == nil {
 		return notHandled()
 	}
@@ -414,7 +415,7 @@ func (p *Parser) fSpellCastPerform(ts time.Time, content string) ([]Message, err
 }
 
 func (p *Parser) fSpellCastPerformUnknown(ts time.Time, content string) ([]Message, error) {
-	matches := reSpellCastPerformUnknown.FindStringSubmatch(content)
+	matches := regexs.ReSpellCastPerformUnknown.FindStringSubmatch(content)
 	if matches == nil {
 		return notHandled()
 	}
@@ -428,7 +429,7 @@ func (p *Parser) fSpellCastPerformUnknown(ts time.Time, content string) ([]Messa
  */
 
 func (p *Parser) fUnitDieDestroyed(ts time.Time, content string) ([]Message, error) {
-	matches := reUnitDieDestroyed.FindStringSubmatch(content)
+	matches := regexs.ReUnitDieDestroyed.FindStringSubmatch(content)
 	if matches == nil {
 		return notHandled()
 	}
@@ -438,7 +439,7 @@ func (p *Parser) fUnitDieDestroyed(ts time.Time, content string) ([]Message, err
 }
 
 func (p *Parser) fUnitSlay(ts time.Time, content string) ([]Message, error) {
-	matches := reUnitSlay.FindStringSubmatch(content)
+	matches := regexs.ReUnitSlay.FindStringSubmatch(content)
 	if matches == nil {
 		return notHandled()
 	}
@@ -460,7 +461,7 @@ func (p *Parser) fUnitSlay(ts time.Time, content string) ([]Message, error) {
  */
 
 func (p *Parser) fAuraDispel(ts time.Time, content string) ([]Message, error) {
-	matches := reAuraDispel.FindStringSubmatch(content)
+	matches := regexs.ReAuraDispel.FindStringSubmatch(content)
 	if matches == nil {
 		return notHandled()
 	}
@@ -474,7 +475,7 @@ func (p *Parser) fAuraDispel(ts time.Time, content string) ([]Message, error) {
 }
 
 func (p *Parser) fAuraInterrupt(ts time.Time, content string) ([]Message, error) {
-	matches := reAuraInterrupt.FindStringSubmatch(content)
+	matches := regexs.ReAuraInterrupt.FindStringSubmatch(content)
 	if matches == nil {
 		return notHandled()
 	}
@@ -488,7 +489,7 @@ func (p *Parser) fAuraInterrupt(ts time.Time, content string) ([]Message, error)
  */
 
 func (p *Parser) fCreates(ts time.Time, content string) ([]Message, error) {
-	matches := reCreates.FindStringSubmatch(content)
+	matches := regexs.ReCreates.FindStringSubmatch(content)
 	if matches == nil {
 		return notHandled()
 	}
@@ -498,7 +499,7 @@ func (p *Parser) fCreates(ts time.Time, content string) ([]Message, error) {
 }
 
 func (p *Parser) fGainsAttack(ts time.Time, content string) ([]Message, error) {
-	matches := reGainsAttack.FindStringSubmatch(content)
+	matches := regexs.ReGainsAttack.FindStringSubmatch(content)
 	if matches == nil {
 		return notHandled()
 	}
@@ -507,7 +508,7 @@ func (p *Parser) fGainsAttack(ts time.Time, content string) ([]Message, error) {
 }
 
 func (p *Parser) fFallDamage(ts time.Time, content string) ([]Message, error) {
-	matches := reFallDamage.FindStringSubmatch(content)
+	matches := regexs.ReFallDamage.FindStringSubmatch(content)
 	if matches == nil {
 		return notHandled()
 	}
@@ -516,7 +517,7 @@ func (p *Parser) fFallDamage(ts time.Time, content string) ([]Message, error) {
 }
 
 func (p *Parser) fGainNoSource(ts time.Time, content string) ([]Message, error) {
-	matches := reGainNoSource.FindStringSubmatch(content)
+	matches := regexs.ReGainNoSource.FindStringSubmatch(content)
 	if matches == nil {
 		return notHandled()
 	}

@@ -4,8 +4,8 @@ import "strings"
 
 type combatantInfo []string
 
-func splitInfo(content string) combatantInfo {
-	return strings.Split(strings.TrimPrefix(content, PrefixCombatant+" "), "&")
+func splitInfo(trimmed string) combatantInfo {
+	return strings.Split(trimmed, "&")
 }
 
 func (i combatantInfo) timestamp() string {

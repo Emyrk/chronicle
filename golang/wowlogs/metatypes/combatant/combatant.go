@@ -13,6 +13,10 @@ const (
 	PrefixCombatant = `COMBATANT_INFO:`
 )
 
+func IsCombatant(content string) (string, bool) {
+	return metatypes.Is(PrefixCombatant, content)
+}
+
 // Combatant is the raw parsing. Additional logic should be build ontop
 // to handle things like enums.
 type Combatant struct {
@@ -39,11 +43,12 @@ func ParseCombatantInfo(content string) (Combatant, error) {
 		return s
 	}
 
-	if !strings.HasPrefix(content, PrefixCombatant) {
+	trimmed, ok := IsCombatant(content)
+	if !ok {
 		return empty, fmt.Errorf("not a COMBATANT_INFO message")
 	}
 
-	info := splitInfo(content)
+	info := splitInfo(trimmed)
 	if len(info) <= 27 {
 		return empty, fmt.Errorf("insufficient arguments in COMBATANT_INFO message, got %d, want at least 27", len(info))
 	}

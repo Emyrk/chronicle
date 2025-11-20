@@ -12,17 +12,21 @@ const (
 	PrefixLoot = "LOOT:"
 )
 
+func IsLoot(content string) (string, bool) {
+	return metatypes.Is(PrefixLoot, content)
+}
+
 type Loot struct {
 	Seen time.Time
 	// TODO: Parse the rest
 }
 
 func ParseLootInfo(content string) (Loot, error) {
-	if !strings.HasPrefix(content, PrefixLoot) {
-		return Loot{}, nil
+	trimmed, ok := IsLoot(content)
+	if !ok {
+		return Loot{}, fmt.Errorf("not a LOOT message")
 	}
 
-	trimmed := strings.TrimPrefix(content, PrefixLoot+" ")
 	parts := strings.Split(trimmed, "&")
 
 	if len(parts) < 2 {

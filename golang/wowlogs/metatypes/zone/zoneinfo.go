@@ -13,6 +13,10 @@ const (
 	PrefixZone = "ZONE_INFO:"
 )
 
+func IsZoneInfo(content string) (string, bool) {
+	return metatypes.Is(PrefixZone, content)
+}
+
 type Zone struct {
 	Seen       time.Time
 	Name       string
@@ -20,11 +24,11 @@ type Zone struct {
 }
 
 func ParseZoneInfo(content string) (Zone, error) {
-	if !strings.HasPrefix(content, PrefixZone) {
-		return Zone{}, nil
+	trimmed, ok := IsZoneInfo(content)
+	if !ok {
+		return Zone{}, fmt.Errorf("not a ZONE_INFO message")
 	}
 
-	trimmed := strings.TrimPrefix(content, PrefixZone+" ")
 	parts := strings.Split(trimmed, "&")
 
 	if len(parts) < 3 {
