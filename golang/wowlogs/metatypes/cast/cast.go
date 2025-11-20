@@ -27,7 +27,7 @@ func ParseCast(content string) (Cast, error) {
 		return Cast{}, fmt.Errorf("not a CAST message")
 	}
 
-	matched, ok := regexs.FromRegex(regexs.ReV2CastsRankTarget).Match(content)
+	matched, ok := regexs.FromRegex(regexs.ReV2CastsRankTarget).Match(trimmed)
 	if ok {
 		return parseCastWithTarget(matched)
 	}
@@ -51,7 +51,7 @@ func parseCastWithTarget(matched *regexs.Matched) (Cast, error) {
 	return Cast{
 		Caster: caster,
 		Target: &target,
-	}, nil
+	}, matched.Error()
 }
 
 func parseCastSimple(matched *regexs.Matched) (Cast, error) {
@@ -63,7 +63,7 @@ func parseCastSimple(matched *regexs.Matched) (Cast, error) {
 
 	return Cast{
 		Caster: caster,
-	}, nil
+	}, matched.Error()
 }
 
 // Cast v2 formats -- Raw has GUID(name)

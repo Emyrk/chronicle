@@ -61,8 +61,8 @@ var (
 
 	// 11/18 18:59:29.276  CAST: 0xF140084493000090(Chotuk) begins to cast Firebolt(7800)(Rank 3) on 0xF13000092F003EDD(Gray Bear).
 	// 11/18 18:59:08.532  CAST: Chotuk casts Fire Shield(2947)(Rank 1) on Maldrissa.
-	ReV2CastsRankTarget = regexp.MustCompile(`(.+[^\s]) (casts|begins to cast) (.+[^\s]) on (.+[^\s])\.`)
-	ReV2Cast            = regexp.MustCompile(`(.+[^\s]) (fails casting|casts) (.+[^\s])\.`)
+	ReV2CastsRankTarget = regexp.MustCompile(`(.+[^\s]) (channels|casts|begins to cast) (.+[^\s]) on (.+[^\s])\.`)
+	ReV2Cast            = regexp.MustCompile(`(.+[^\s]) (channels|fails casting|casts) (.+[^\s])\.`)
 )
 
 // ???

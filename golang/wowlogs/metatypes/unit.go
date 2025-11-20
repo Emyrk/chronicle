@@ -31,7 +31,7 @@ func ParseUnit(name string) (Unit, error) {
 			return Unit{}, errors.New("invalid unit name, not long enough after guid")
 		}
 
-		if name[19] != '(' || name[len(name)-1] != ')' {
+		if name[18] != '(' || name[len(name)-1] != ')' {
 			return Unit{}, errors.New("invalid unit name, missing parentheses")
 		}
 
