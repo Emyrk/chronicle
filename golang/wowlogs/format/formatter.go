@@ -4,8 +4,8 @@ import (
 	"regexp"
 	"strings"
 
-	"github.com/Emyrk/chronicle/golang/wowlogs/combatant"
 	"github.com/Emyrk/chronicle/golang/wowlogs/lines"
+	"github.com/Emyrk/chronicle/golang/wowlogs/metatypes/combatant"
 )
 
 const (
