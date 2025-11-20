@@ -27,6 +27,10 @@ func FromString(gid string) (GUID, error) {
 	return GUID(u64), nil
 }
 
+func (g GUID) IsZero() bool {
+	return g == 0
+}
+
 func (g GUID) String() string {
 	return fmt.Sprintf("0x%016X", uint64(g))
 }
