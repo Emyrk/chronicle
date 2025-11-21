@@ -3,6 +3,7 @@ package castv2_test
 import (
 	"testing"
 
+	"github.com/Emyrk/chronicle/golang/internal/ptr"
 	"github.com/Emyrk/chronicle/golang/wowlogs/types"
 	"github.com/Emyrk/chronicle/golang/wowlogs/types/castv2"
 	"github.com/stretchr/testify/require"
@@ -26,6 +27,11 @@ func TestParseCast(t *testing.T) {
 				},
 				Action: types.CastActionsFailsCasting,
 				Target: nil,
+				Spell: types.Spell{
+					Name: "Firebolt",
+					ID:   7800,
+					Rank: ptr.Ref(3),
+				},
 			},
 		},
 		{
@@ -36,6 +42,10 @@ func TestParseCast(t *testing.T) {
 					Name: "Gretti",
 				},
 				Action: types.CastActionsCasts,
+				Spell: types.Spell{
+					Name: "Teleport: Undercity",
+					ID:   3563,
+				},
 			},
 		},
 		{
@@ -49,6 +59,11 @@ func TestParseCast(t *testing.T) {
 					Name: "Gray Bear",
 				},
 				Action: types.CastActionsBeginsToCast,
+				Spell: types.Spell{
+					Name: "Immolate",
+					ID:   1094,
+					Rank: ptr.Ref(3),
+				},
 			},
 		},
 		{
@@ -62,6 +77,11 @@ func TestParseCast(t *testing.T) {
 					Name: "Gray Bear",
 				},
 				Action: types.CastActionsCasts,
+				Spell: types.Spell{
+					Name: "Immolate",
+					ID:   1094,
+					Rank: ptr.Ref(3),
+				},
 			},
 		},
 		{
@@ -75,6 +95,11 @@ func TestParseCast(t *testing.T) {
 					Name: "Gray Bear",
 				},
 				Action: types.CastActionsChannel,
+				Spell: types.Spell{
+					Name: "Drain Life",
+					ID:   689,
+					Rank: ptr.Ref(1),
+				},
 			},
 		},
 		{
@@ -90,6 +115,11 @@ func TestParseCast(t *testing.T) {
 					Gid:  0xF13000092F003EDD,
 				},
 				Action: types.CastActionsBeginsToCast,
+				Spell: types.Spell{
+					Name: "Firebolt",
+					ID:   7800,
+					Rank: ptr.Ref(3),
+				},
 			},
 		},
 	}

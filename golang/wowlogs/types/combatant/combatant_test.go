@@ -4,7 +4,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/Emyrk/chronicle/golang/wowlogs/combatant"
+	"github.com/Emyrk/chronicle/golang/wowlogs/types/combatant"
 	"github.com/stretchr/testify/require"
 )
 

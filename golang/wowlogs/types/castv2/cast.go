@@ -32,6 +32,7 @@ type CastV2 struct {
 	Caster types.Unit
 	Action types.CastActions
 	Target *types.Unit
+	Spell  types.Spell
 }
 
 func ParseCast(content string) (CastV2, error) {
@@ -53,35 +54,38 @@ func ParseCast(content string) (CastV2, error) {
 	return CastV2{}, errors.New("regexes did not match for cast")
 }
 
+// parseCastWithTarget is just the simple + target match
+// The rest is the same order
 func parseCastWithTarget(matched *types.Matched) (CastV2, error) {
-	caster := matched.Unit()
-	action := matched.String()
-	spell := matched.String()
-	target := matched.Unit()
-
-	c, err := types.ParseCastActions(action)
+	c, err := parseCastSimple(matched)
 	if err != nil {
-		return CastV2{}, fmt.Errorf("parse: %v", err)
+		return CastV2{}, err
 	}
-
-	var _ = spell
-
-	return CastV2{
-		Caster: caster,
-		Action: c,
-		Target: &target,
-	}, matched.Error()
+	target := matched.Unit()
+	c.Target = &target
+	return c, matched.Error()
 }
 
 func parseCastSimple(matched *types.Matched) (CastV2, error) {
 	caster := matched.Unit()
-	phrase := matched.String()
+	action := matched.String()
 	spell := matched.String()
 
-	var _, _ = phrase, spell
+	act, err := types.ParseCastActions(action)
+	if err != nil {
+		return CastV2{}, fmt.Errorf("action: %v", err)
+	}
+
+	sp, err := types.ParseSpell(spell)
+	if err != nil {
+		return CastV2{}, fmt.Errorf("spell: %v", err)
+	}
 
 	return CastV2{
 		Caster: caster,
+		Action: act,
+		Target: nil,
+		Spell:  sp,
 	}, matched.Error()
 }
 

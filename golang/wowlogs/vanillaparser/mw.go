@@ -1,20 +1,21 @@
 package vanillaparser
 
 import (
-  "time"
+	"time"
 
-  "github.com/Emyrk/chronicle/golang/wowlogs/types/cast"
+	"github.com/Emyrk/chronicle/golang/wowlogs/types/castv2"
 )
 
 func OnlyKeepRawV2Casts(ts time.Time, content string) bool {
-  _, ok := castv2.IsCast(content)
-  if !ok {
-    return true // Not a cast, ignore this
-  }
+	_, ok := castv2.IsCast(content)
+	if !ok {
+		return true // Not a cast, ignore this
+	}
 
-  c, err := castv2.ParseCast(content)
-  if err != nil {
-    return false
-  }
+	c, err := castv2.ParseCast(content)
+	if err != nil {
+		return false
+	}
 
-  return c.
+	return !c.Caster.Gid.IsZero()
+}
