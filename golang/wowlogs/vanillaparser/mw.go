@@ -7,12 +7,12 @@ import (
 )
 
 func OnlyKeepRawV2Casts(ts time.Time, content string) bool {
-  _, ok := cast.IsCast(content)
+  _, ok := castv2.IsCast(content)
   if !ok {
     return true // Not a cast, ignore this
   }
 
-  c, err := cast.ParseCast(content)
+  c, err := castv2.ParseCast(content)
   if err != nil {
     return false
   }
