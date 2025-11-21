@@ -62,6 +62,7 @@ func TestParseRealLogs(t *testing.T) {
 
 	logFile, err := os.OpenFile("testdata/reallogs/MoltenCore.txt", os.O_RDONLY, 0644)
 	require.NoError(t, err)
+	// nolint:errcheck
 	defer logFile.Close()
 
 	zerologLogger := zerolog.New(zerolog.ConsoleWriter{Out: os.Stderr})
