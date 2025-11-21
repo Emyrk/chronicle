@@ -40,12 +40,12 @@ func ParseCast(content string) (CastV2, error) {
 		return CastV2{}, fmt.Errorf("not a CAST message")
 	}
 
-	matched, ok := regexs.FromRegex(regexs.ReV2CastsRankTarget).Match(trimmed)
+	matched, ok := types.FromRegex(regexs.ReV2CastsRankTarget).Match(trimmed)
 	if ok {
 		return parseCastWithTarget(matched)
 	}
 
-	matched, ok = regexs.FromRegex(regexs.ReV2Cast).Match(trimmed)
+	matched, ok = types.FromRegex(regexs.ReV2Cast).Match(trimmed)
 	if ok {
 		return parseCastSimple(matched)
 	}
@@ -53,7 +53,7 @@ func ParseCast(content string) (CastV2, error) {
 	return CastV2{}, errors.New("regexes did not match for cast")
 }
 
-func parseCastWithTarget(matched *regexs.Matched) (CastV2, error) {
+func parseCastWithTarget(matched *types.Matched) (CastV2, error) {
 	caster := matched.Unit()
 	action := matched.String()
 	spell := matched.String()
@@ -73,7 +73,7 @@ func parseCastWithTarget(matched *regexs.Matched) (CastV2, error) {
 	}, matched.Error()
 }
 
-func parseCastSimple(matched *regexs.Matched) (CastV2, error) {
+func parseCastSimple(matched *types.Matched) (CastV2, error) {
 	caster := matched.Unit()
 	phrase := matched.String()
 	spell := matched.String()

@@ -1,11 +1,9 @@
-package regexs
+package types
 
 import (
   "errors"
   "regexp"
   "strconv"
-
-  "github.com/Emyrk/chronicle/golang/wowlogs/types"
 )
 
 type Pattern regexp.Regexp
@@ -36,13 +34,22 @@ type Matched struct {
   errs   []error
 }
 
-func (m *Matched) Unit() types.Unit {
+func (m *Matched) Unit() Unit {
   val := m.pop()
-  unit, err := types.ParseUnit(val)
+  unit, err := ParseUnit(val)
   if err != nil {
     m.errs = append(m.errs, err)
   }
   return unit
+}
+
+func (m *Matched) Spell() Spell {
+  val := m.pop()
+  spell, err := ParseSpell(val)
+  if err != nil {
+    m.errs = append(m.errs, err)
+  }
+  return spell
 }
 
 func (m *Matched) String() string {
