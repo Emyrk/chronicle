@@ -3,7 +3,7 @@ package vanillaparser
 import (
   "time"
 
-  "github.com/Emyrk/chronicle/golang/wowlogs/metatypes/cast"
+  "github.com/Emyrk/chronicle/golang/wowlogs/types/cast"
 )
 
 func OnlyKeepRawV2Casts(ts time.Time, content string) bool {

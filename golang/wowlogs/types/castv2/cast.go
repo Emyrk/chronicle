@@ -4,8 +4,8 @@ import (
 	"errors"
 	"fmt"
 
-	"github.com/Emyrk/chronicle/golang/wowlogs/metatypes"
 	"github.com/Emyrk/chronicle/golang/wowlogs/regexs"
+	"github.com/Emyrk/chronicle/golang/wowlogs/types"
 )
 
 const (
@@ -13,12 +13,12 @@ const (
 )
 
 func IsCast(content string) (string, bool) {
-	return metatypes.Is(PrefixCast, content)
+	return types.Is(PrefixCast, content)
 }
 
 type CastV2 struct {
-	Caster metatypes.Unit
-	Target *metatypes.Unit
+	Caster types.Unit
+	Target *types.Unit
 }
 
 func ParseCast(content string) (CastV2, error) {

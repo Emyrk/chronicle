@@ -3,8 +3,8 @@ package castv2_test
 import (
   "testing"
 
-  "github.com/Emyrk/chronicle/golang/wowlogs/metatypes"
-  "github.com/Emyrk/chronicle/golang/wowlogs/metatypes/cast"
+  "github.com/Emyrk/chronicle/golang/wowlogs/types"
+  "github.com/Emyrk/chronicle/golang/wowlogs/types/cast"
   "github.com/stretchr/testify/require"
 )
 
@@ -21,7 +21,7 @@ func TestParseCast(t *testing.T) {
       name:  "Fails",
       input: "CAST: Chotuk fails casting Firebolt(7800)(Rank 3).",
       exp: castv2.Cast{
-        Caster: metatypes.Unit{
+        Caster: types.Unit{
           Name: "Chotuk",
         },
         Target: nil,
@@ -31,7 +31,7 @@ func TestParseCast(t *testing.T) {
       name:  "Teleport",
       input: "CAST: Gretti casts Teleport: Undercity(3563).",
       exp: castv2.Cast{
-        Caster: metatypes.Unit{
+        Caster: types.Unit{
           Name: "Gretti",
         },
       },
@@ -40,10 +40,10 @@ func TestParseCast(t *testing.T) {
       name:  "BeginsTarget",
       input: "CAST: Maldrissa begins to cast Immolate(1094)(Rank 3) on Gray Bear.",
       exp: castv2.Cast{
-        Caster: metatypes.Unit{
+        Caster: types.Unit{
           Name: "Maldrissa",
         },
-        Target: &metatypes.Unit{
+        Target: &types.Unit{
           Name: "Gray Bear",
         },
       },
@@ -52,10 +52,10 @@ func TestParseCast(t *testing.T) {
       name:  "CastsTarget",
       input: "CAST: Maldrissa casts Immolate(1094)(Rank 3) on Gray Bear.",
       exp: castv2.Cast{
-        Caster: metatypes.Unit{
+        Caster: types.Unit{
           Name: "Maldrissa",
         },
-        Target: &metatypes.Unit{
+        Target: &types.Unit{
           Name: "Gray Bear",
         },
       },
@@ -64,10 +64,10 @@ func TestParseCast(t *testing.T) {
       name:  "ChannelsTarget",
       input: "CAST: Maldrissa channels Drain Life(689)(Rank 1) on Gray Bear.",
       exp: castv2.Cast{
-        Caster: metatypes.Unit{
+        Caster: types.Unit{
           Name: "Maldrissa",
         },
-        Target: &metatypes.Unit{
+        Target: &types.Unit{
           Name: "Gray Bear",
         },
       },
@@ -76,11 +76,11 @@ func TestParseCast(t *testing.T) {
       name:  "RawCastsTarget",
       input: "CAST: 0xF140084493000090(Chotuk) begins to cast Firebolt(7800)(Rank 3) on 0xF13000092F003EDD(Gray Bear).",
       exp: castv2.Cast{
-        Caster: metatypes.Unit{
+        Caster: types.Unit{
           Name: "Chotuk",
           Gid:  0xF140084493000090,
         },
-        Target: &metatypes.Unit{
+        Target: &types.Unit{
           Name: "Gray Bear",
           Gid:  0xF13000092F003EDD,
         },
