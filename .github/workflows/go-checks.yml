@@ -30,22 +30,19 @@ jobs:
   golangci-lint:
     name: Lint (golangci-lint)
     runs-on: ubuntu-latest
-    defaults:
-      run:
-        working-directory: ./golang
     
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
+
+      - name: Go to golang directory
+        run: cd ./golang
 
       - name: Setup Go
         uses: actions/setup-go@v5
         with:
           go-version-file: 'go.mod'
           cache: true
-
-      - name: Go to golang directory
-        run: cd ./golang
 
       - name: Run golangci-lint
         uses: golangci/golangci-lint-action@v9
@@ -58,22 +55,19 @@ jobs:
   test:
     name: Test (gotestsum)
     runs-on: ubuntu-latest
-    defaults:
-      run:
-        working-directory: ./golang
     
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
+
+      - name: Go to golang directory
+        run: cd ./golang
 
       - name: Setup Go
         uses: actions/setup-go@v5
         with:
           go-version-file: 'go.mod'
           cache: true
-
-      - name: Go to golang directory
-        run: cd ./golang
 
       - name: Install gotestsum
         run: go install gotest.tools/gotestsum@latest
