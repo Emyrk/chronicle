@@ -69,33 +69,7 @@ jobs:
 
       - name: Run tests with gotestsum
         run: |
-          gotestsum --format testname --junitfile junit.xml -- -race -coverprofile=coverage.out -covermode=atomic ./golang/...
-
-      - name: Upload test results
-        if: always()
-        uses: actions/upload-artifact@v4
-        with:
-          name: test-results
-          path: junit.xml
-          if-no-files-found: ignore
-
-      - name: Upload coverage report
-        if: always()
-        uses: actions/upload-artifact@v4
-        with:
-          name: coverage-report
-          path: coverage.out
-          if-no-files-found: ignore
-
-      - name: Generate coverage summary
-        if: always()
-        run: |
-          if [ -f coverage.out ]; then
-            echo "## Test Coverage" >> $GITHUB_STEP_SUMMARY
-            echo '```' >> $GITHUB_STEP_SUMMARY
-            go tool cover -func=coverage.out | tail -1 >> $GITHUB_STEP_SUMMARY
-            echo '```' >> $GITHUB_STEP_SUMMARY
-          fi
+          cd golang && gotestsum --format testname -- -race ./golang/...
 
   # Summary job that all branch protection rules should target
   go-checks-summary:
