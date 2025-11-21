@@ -31,7 +31,7 @@ func ParseCombatantGUID(content string) (GUID, error) {
 
   timestamp, name, isSelf, gidStr := info[0], info[1], info[2], info[3]
 
-  ts, err := time.Parse(types.DateFormat, timestamp)
+  ts, err := time.Parse(types.AddonDateFormat, timestamp)
   if err != nil {
     return empty, fmt.Errorf("invalid timestamp format in COMBATANT_INFO message: %v", err)
   }

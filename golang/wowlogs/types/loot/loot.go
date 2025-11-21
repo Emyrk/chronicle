@@ -34,7 +34,7 @@ func ParseLootInfo(content string) (Loot, error) {
   }
 
   ts, _ := parts[0], parts[1]
-  seen, err := time.Parse(types.DateFormat, ts)
+  seen, err := time.Parse(types.AddonDateFormat, ts)
   if err != nil {
     return Loot{}, fmt.Errorf("invalid date format %q: %w", ts, err)
   }

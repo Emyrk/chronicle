@@ -53,7 +53,7 @@ func ParseCombatantInfo(content string) (Combatant, error) {
     return empty, fmt.Errorf("insufficient arguments in COMBATANT_INFO message, got %d, want at least 27", len(info))
   }
 
-  ts, err := time.Parse(types.DateFormat, info.timestamp())
+  ts, err := time.Parse(types.AddonDateFormat, info.timestamp())
   if err != nil {
     return empty, fmt.Errorf("invalid timestamp format in COMBATANT_INFO message: %v", err)
   }
