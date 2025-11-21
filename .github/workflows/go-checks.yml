@@ -69,7 +69,7 @@ jobs:
 
       - name: Run tests with gotestsum
         run: |
-          cd golang && gotestsum --format testname -- -race ./golang/...
+          cd golang && gotestsum --format testname -- -race ./...
 
   # Summary job that all branch protection rules should target
   go-checks-summary:
