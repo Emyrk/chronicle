@@ -94,7 +94,7 @@ func TestParseCast(t *testing.T) {
 				Target: &types.Unit{
 					Name: "Gray Bear",
 				},
-				Action: types.CastActionsChannel,
+				Action: types.CastActionsChannels,
 				Spell: types.Spell{
 					Name: "Drain Life",
 					ID:   689,
