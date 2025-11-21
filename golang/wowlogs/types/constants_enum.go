@@ -15,8 +15,8 @@ const (
 	CastActionsCasts CastActions = "casts"
 	// CastActionsBeginsToCast is a CastActions of type begins to cast.
 	CastActionsBeginsToCast CastActions = "begins to cast"
-	// CastActionsChannel is a CastActions of type channel.
-	CastActionsChannel CastActions = "channel"
+	// CastActionsChannels is a CastActions of type channels.
+	CastActionsChannels CastActions = "channels"
 	// CastActionsFailsCasting is a CastActions of type fails casting.
 	CastActionsFailsCasting CastActions = "fails casting"
 )
@@ -38,7 +38,7 @@ func (x CastActions) IsValid() bool {
 var _CastActionsValue = map[string]CastActions{
 	"casts":          CastActionsCasts,
 	"begins to cast": CastActionsBeginsToCast,
-	"channel":        CastActionsChannel,
+	"channels":       CastActionsChannels,
 	"fails casting":  CastActionsFailsCasting,
 }
 

@@ -1,0 +1,91 @@
+name: Go Checks
+
+on:
+  pull_request:
+    branches:
+      - main
+      - develop
+    paths:
+      - '**.go'
+      - 'go.mod'
+      - 'go.sum'
+      - '.github/workflows/go-checks.yml'
+  push:
+    branches:
+      - main
+      - develop
+    paths:
+      - '**.go'
+      - 'go.mod'
+      - 'go.sum'
+      - '.github/workflows/go-checks.yml'
+  workflow_dispatch:
+
+# Cancel in-progress runs when a new workflow with the same SHA is triggered
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  golangci-lint:
+    name: Lint (golangci-lint)
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Go
+        uses: actions/setup-go@v5
+        with:
+          go-version-file: 'golang/go.mod'
+          cache: true
+
+      - name: Run golangci-lint
+        uses: golangci/golangci-lint-action@v9
+        with:
+          version: latest
+          args: --timeout=10m --verbose
+          # Optional: show only new issues if it's a pull request
+          only-new-issues: ${{ github.event_name == 'pull_request' }}
+          working-directory: 'golang'
+
+  test:
+    name: Test (gotestsum)
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Go
+        uses: actions/setup-go@v5
+        with:
+          go-version-file: 'golang/go.mod'
+          cache: true
+
+      - name: Install gotestsum
+        run: go install gotest.tools/gotestsum@latest
+
+      - name: Run tests with gotestsum
+        run: |
+          cd golang && gotestsum --format testname -- -race ./...
+
+  # Summary job that all branch protection rules should target
+  go-checks-summary:
+    name: Go Checks Summary
+    runs-on: ubuntu-latest
+    needs: [golangci-lint, test]
+    if: always()
+    
+    steps:
+      - name: Check all jobs status
+        run: |
+          if [[ "${{ needs.golangci-lint.result }}" != "success" ]] || \
+             [[ "${{ needs.test.result }}" != "success" ]]; then
+            echo "One or more checks failed:"
+            echo "  Lint (golangci-lint): ${{ needs.golangci-lint.result }}"
+            echo "  Test (gotestsum): ${{ needs.test.result }}"
+            exit 1
+          fi
+          echo "All Go checks passed! ✅"

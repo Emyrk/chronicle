@@ -27,7 +27,7 @@ func TestParseCombatant(t *testing.T) {
 				HeroClass: "ROGUE",
 				Gender:    "2",
 				Race:      "Scourge",
-				PetName:   "nil",
+				PetName:   "",
 				Guild: &combatant.Guild{
 					Name:      "Exalted with Doordash",
 					RankName:  "Friendly",
