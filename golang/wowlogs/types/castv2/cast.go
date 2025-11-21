@@ -16,6 +16,18 @@ func IsCast(content string) (string, bool) {
 	return types.Is(PrefixCast, content)
 }
 
+// CastV2 is the v2 format of a cast log line.
+//
+// Examples:
+// No target:
+// 11/18 19:07:21.055  CAST: 0x000000000007D436(Unknown) casts Heavy Silk Bandage(7929).
+// 11/18 19:07:21.969  CAST: 0x00000000000E5A2D(Zuggings) begins to cast Heavy Silk Bandage(7929).
+// 11/18 19:07:30.945  CAST: 0x0000000000036F89(Xiaoyu) casts Conjure Water(10140)(Rank 7).
+// 11/18 07:21:26.254  CAST: Maldrissa fails casting Immolate(1094)(Rank 3).
+//
+// Target:
+// 11/18 19:08:30.447  CAST: 0x000000000001C7AC(Doyd) begins to cast Throw(2764) on 0xF130016738272AB6(Junglepaw Panther).
+// 11/18 19:09:00.402  CAST: 0x000000000001C7AC(Doyd) channels First Aid(7927)(Rank 6) on 0x000000000001C7AC(Doyd).
 type CastV2 struct {
 	Caster types.Unit
 	Action types.CastActions
