@@ -18,6 +18,7 @@ func IsCast(content string) (string, bool) {
 
 type CastV2 struct {
 	Caster types.Unit
+	Action types.CastActions
 	Target *types.Unit
 }
 
@@ -42,14 +43,20 @@ func ParseCast(content string) (CastV2, error) {
 
 func parseCastWithTarget(matched *regexs.Matched) (CastV2, error) {
 	caster := matched.Unit()
-	phrase := matched.String()
+	action := matched.String()
 	spell := matched.String()
 	target := matched.Unit()
 
-	var _, _ = phrase, spell
+	c, err := types.ParseCastActions(action)
+	if err != nil {
+		return CastV2{}, fmt.Errorf("parse: %v", err)
+	}
+
+	var _ = spell
 
 	return CastV2{
 		Caster: caster,
+		Action: c,
 		Target: &target,
 	}, matched.Error()
 }
