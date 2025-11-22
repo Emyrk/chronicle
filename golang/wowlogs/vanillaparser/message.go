@@ -106,6 +106,7 @@ type SpellDamage struct {
 	Amount    int32
 	Trailer   types.Trailer
 	School    types.School
+	// TODO: This is just damage with spell name
 }
 
 type PeriodicDamage struct {
@@ -116,6 +117,7 @@ type PeriodicDamage struct {
 	School    types.School
 	SpellName string
 	Trailer   types.Trailer
+	// TODO: this is just Damage without a hit type
 }
 
 type Damage struct {
@@ -126,6 +128,13 @@ type Damage struct {
 	Amount  int32
 	School  types.School
 	Trailer types.Trailer
+}
+
+type FallDamage struct {
+	// TODO: Can this just be damage if we add HitTypeFall?
+	MessageBase
+	Target guid.GUID
+	Amount int32
 }
 
 type Heal struct {

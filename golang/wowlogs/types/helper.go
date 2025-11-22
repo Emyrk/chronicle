@@ -53,6 +53,7 @@ func (m *Matched) UnitOrGUID() (string, guid.GUID) {
 	return val, guid.GUID(0)
 }
 
+func (m *Matched) Skip()                 { m.pop() }
 func (m *Matched) GUID() guid.GUID       { return parse(m, guid.FromString) }
 func (m *Matched) Spell() Spell          { return parse(m, ParseSpell) }
 func (m *Matched) Resource() Resource    { return parse(m, ParseResource) }

@@ -95,6 +95,20 @@ func (p *Parser) Advance() ([]Message, error) {
 		return Skip(ts, "empty line"), nil
 	}
 
+	msgs, err := p.parseContent(ts, content)
+	if err != nil {
+		return nil, err
+	}
+
+	for _, msg := range msgs {
+		if msg.Date().IsZero() {
+			return nil, fmt.Errorf("timestamp is zero for message type: %s", reflect.TypeOf(msg).String())
+		}
+	}
+	return msgs, err
+}
+
+func (p *Parser) parseContent(ts time.Time, content string) ([]Message, error) {
 	for _, parser := range []parseLine{
 		p.fCombatantGUID,
 		p.fCombatantInfo,                // ✓
@@ -107,34 +121,34 @@ func (p *Parser) Advance() ([]Message, error) {
 		p.fDamageSpellHitOrCritNoSchool, // ✓
 		p.fDamageSpellHitOrCritSchool,   // ✓
 		p.fDamagePeriodic,               // ✓
-		p.fDamageShield,
-		p.fDamageHitOrCritNoSchool, // ✓
-		p.fDamageHitOrCritSchool,   // ✓
-		p.fHeal,                    // ✓
+		p.fDamageShield,                 // ✓
+		p.fDamageHitOrCritNoSchool,      // ✓
+		p.fDamageHitOrCritSchool,        // ✓
+		p.fHeal,                         // ✓
 		p.fAuraGainHarmfulHelpful,
 		p.fAuraFade,
 		p.fDamageSpellSplit,
-		p.fDamageSpellMiss,
+		p.fDamageSpellMiss, // ✓
 		p.fDamageSpellBlockParryEvadeDodgeResistDeflect,
 		p.fDamageSpellAbsorb,
 		p.fDamageSpellAbsorbSelf,
 		p.fDamageReflect,
 		p.fDamageProcResist,
-		p.fDamageSpellImmune,
-		p.fDamageMiss,
+		p.fDamageSpellImmune, // ✓
+		p.fDamageMiss,        // ✓
 		p.fDamageBlockParryEvadeDodgeDeflect,
 		p.fDamageAbsorbResist,
-		p.fDamageImmune,
+		p.fDamageImmune, // ✓
 		p.fSpellCastPerformDurability,
 		p.fSpellCastPerform,
 		p.fSpellCastPerformUnknown,
-		p.fUnitDieDestroyed,
-		p.fUnitSlay,
+		p.fUnitDieDestroyed, // ✓
+		p.fUnitSlay,         // ✓
 		p.fAuraDispel,
 		p.fAuraInterrupt,
 		p.fCreates,
 		p.fGainsAttack,
-		p.fFallDamage,
+		p.fFallDamage, // ✓
 		p.fGainNoSource,
 	} {
 		m, err := parser(ts, content)
@@ -144,12 +158,6 @@ func (p *Parser) Advance() ([]Message, error) {
 
 		if len(m) == 0 {
 			continue
-		}
-
-		for _, msg := range m {
-			if msg.Date().IsZero() {
-				return nil, fmt.Errorf("timestamp is zero for message type: %s", reflect.TypeOf(m).String())
-			}
 		}
 
 		return m, nil

@@ -1,72 +1,72 @@
 package regexs
 
 import (
-	"regexp"
+  "regexp"
 )
 
 // From LegacyPlayer
 var (
-	ReDamageHitOrCrit                   = regexp.MustCompile(`(.+[^\s]) (cr|h)its (.+[^\s]) for (\d+)\.\s?(.*)`)
-	ReDamageHitOrCritSchool             = regexp.MustCompile(`(.+[^\s]) (cr|h)its (.+[^\s]) for (\d+) ([a-zA-Z]+) damage\.\s?(.*)`)
-	ReDamageMiss                        = regexp.MustCompile(`(.+[^\s]) misses (.+[^\s])\.`)
-	ReDamageBlockParryEvadeDodgeDeflect = regexp.MustCompile(`(.+[^\s]) attacks\. (.+[^\s]) (blocks|parries|evades|dodges|deflects)\.`)
-	ReDamageAbsorbResist                = regexp.MustCompile(`(.+[^\s]) attacks\. (.+[^\s]) (absorbs|resists) all the damage\.`)
-	ReDamageImmune                      = regexp.MustCompile(`(.+[^\s]) attacks but (.+[^\s]) is immune\.`)
+  ReDamageHitOrCrit                   = regexp.MustCompile(`(.+[^\s]) (cr|h)its (.+[^\s]) for (\d+)\.\s?(.*)`)
+  ReDamageHitOrCritSchool             = regexp.MustCompile(`(.+[^\s]) (cr|h)its (.+[^\s]) for (\d+) ([a-zA-Z]+) damage\.\s?(.*)`)
+  ReDamageMiss                        = regexp.MustCompile(`(.+[^\s]) misses (.+[^\s])\.`)
+  ReDamageBlockParryEvadeDodgeDeflect = regexp.MustCompile(`(.+[^\s]) attacks\. (.+[^\s]) (blocks|parries|evades|dodges|deflects)\.`)
+  ReDamageAbsorbResist                = regexp.MustCompile(`(.+[^\s]) attacks\. (.+[^\s]) (absorbs|resists) all the damage\.`)
+  ReDamageImmune                      = regexp.MustCompile(`(.+[^\s]) attacks but (.+[^\s]) is immune\.`)
 
-	ReDamageSpellHitOrCrit                         = regexp.MustCompile(`(.+[^\s])'s (.+[^\s]) (cr|h)its (.+[^\s]) for (\d+)\.\s?(.*)`)
-	ReDamageSpellHitOrCritSchool                   = regexp.MustCompile(`(.+[^\s])'s (.+[^\s]) (cr|h)its (.+[^\s]) for (\d+) ([a-zA-Z]+) damage\.\s?(.*)`)
-	ReDamagePeriodic                               = regexp.MustCompile(`(.+[^\s]) suffers (\d+) ([a-zA-Z]+) damage from (.+[^\s])'s (.+[^\s])\.\s?(.*)`)
-	ReDamageSpellSplit                             = regexp.MustCompile(`(.+[^\s])\s's (.+[^\s]) causes (.+[^\s]) (\d+) damage\.\s?(.*)`)
-	ReDamageSpellMiss                              = regexp.MustCompile(`(.+[^\s])\s's (.+[^\s]) misse(s|d) (.+[^\s])\.`)
-	ReDamageSpellBlockParryEvadeDodgeResistDeflect = regexp.MustCompile(`(.+[^\s])\s's (.+[^\s]) was (blocked|parried|evaded|dodged|resisted|deflected) by (.+[^\s])\.`)
-	ReDamageSpellAbsorb                            = regexp.MustCompile(`(.+[^\s])\s's (.+[^\s]) is absorbed by (.+[^\s])\.`)
-	ReDamageSpellAbsorbSelf                        = regexp.MustCompile(`(.+[^\s]) absorbs (.+[^\s])\s's (.+[^\s])\.`)
-	ReDamageReflect                                = regexp.MustCompile(`(.+[^\s])\s's (.+[^\s]) is reflected back by (.+[^\s])\.`)
-	ReDamageProcResist                             = regexp.MustCompile(`(.+[^\s]) resists (.+[^\s])\s's (.+[^\s])\.`)
-	ReDamageSpellImmune                            = regexp.MustCompile(`(.+[^\s])\s's (.+[^\s]) fails\. (.+[^\s]) is immune\.`)
-	ReSpellCastAttempt                             = regexp.MustCompile(`(.+[^\s]) begins to (cast|perform) (.+[^\s])\.`)
+  ReDamageSpellHitOrCrit                         = regexp.MustCompile(`(.+[^\s])'s (.+[^\s]) (cr|h)its (.+[^\s]) for (\d+)\.\s?(.*)`)
+  ReDamageSpellHitOrCritSchool                   = regexp.MustCompile(`(.+[^\s])'s (.+[^\s]) (cr|h)its (.+[^\s]) for (\d+) ([a-zA-Z]+) damage\.\s?(.*)`)
+  ReDamagePeriodic                               = regexp.MustCompile(`(.+[^\s]) suffers (\d+) ([a-zA-Z]+) damage from (.+[^\s])'s (.+[^\s])\.\s?(.*)`)
+  ReDamageSpellSplit                             = regexp.MustCompile(`(.+[^\s])\s's (.+[^\s]) causes (.+[^\s]) (\d+) damage\.\s?(.*)`)
+  ReDamageSpellMiss                              = regexp.MustCompile(`(.+[^\s])'s (.+[^\s]) misse(s|d) (.+[^\s])\.`)
+  ReDamageSpellBlockParryEvadeDodgeResistDeflect = regexp.MustCompile(`(.+[^\s])\s's (.+[^\s]) was (blocked|parried|evaded|dodged|resisted|deflected) by (.+[^\s])\.`)
+  ReDamageSpellAbsorb                            = regexp.MustCompile(`(.+[^\s])'s (.+[^\s]) is absorbed by (.+[^\s])\.`)
+  ReDamageSpellAbsorbSelf                        = regexp.MustCompile(`(.+[^\s]) absorbs (.+[^\s])\s's (.+[^\s])\.`)
+  ReDamageReflect                                = regexp.MustCompile(`(.+[^\s])\s's (.+[^\s]) is reflected back by (.+[^\s])\.`)
+  ReDamageProcResist                             = regexp.MustCompile(`(.+[^\s]) resists (.+[^\s])\s's (.+[^\s])\.`)
+  ReDamageSpellImmune                            = regexp.MustCompile(`(.+[^\s])'s (.+[^\s]) fails\. (.+[^\s]) is immune\.`)
+  ReSpellCastAttempt                             = regexp.MustCompile(`(.+[^\s]) begins to (cast|perform) (.+[^\s])\.`)
 
-	ReDamageShield = regexp.MustCompile(`(.+[^\s]) reflects (\d+) ([a-zA-Z]+) damage to (.+[^\s])\.`)
+  ReDamageShield = regexp.MustCompile(`(.+[^\s]) reflects (\d+) ([a-zA-Z]+) damage to (.+[^\s])\.`)
 
-	// (\S+)'s (.+?) (critically )?heals (\S+) for (\d+)\.$
-	// (.+[^\s])'s (.+[^\s]) critically heals (.+[^\s]) for (\d+)\.`)
+  // (\S+)'s (.+?) (critically )?heals (\S+) for (\d+)\.$
+  // (.+[^\s])'s (.+[^\s]) critically heals (.+[^\s]) for (\d+)\.`)
 
-	ReHealHit      = regexp.MustCompile(`(.+[^\s])'s (.+[^\s]) heals (.+[^\s]) for (\d+)\.`)
-	ReHealCrit     = regexp.MustCompile(`(.+[^\s])'s (.+[^\s]) critically heals (.+[^\s]) for (\d+)\.`)
-	ReHeal         = regexp.MustCompile(`(.+[^\s])'s (.+?) (critically )?heals (.+[^\s]) for (\d+)\.`)
-	ReGain         = regexp.MustCompile(`(.+[^\s]) (gains|loses) (\d+) (Health|health|Mana|Rage|Energy|Happiness|happiness|Focus) from (.+[^\s])'s (.+[^\s])\.`)
-	ReGainNoSource = regexp.MustCompile(`(.+[^\s]) (gains|loses) (\d+) (Health|health|Mana|Rage|Energy|Happiness|happiness|Focus)\.`)
+  ReHealHit      = regexp.MustCompile(`(.+[^\s])'s (.+[^\s]) heals (.+[^\s]) for (\d+)\.`)
+  ReHealCrit     = regexp.MustCompile(`(.+[^\s])'s (.+[^\s]) critically heals (.+[^\s]) for (\d+)\.`)
+  ReHeal         = regexp.MustCompile(`(.+[^\s])'s (.+?) (critically )?heals (.+[^\s]) for (\d+)\.`)
+  ReGain         = regexp.MustCompile(`(.+[^\s]) (gains|loses) (\d+) (Health|health|Mana|Rage|Energy|Happiness|happiness|Focus) from (.+[^\s])'s (.+[^\s])\.`)
+  ReGainNoSource = regexp.MustCompile(`(.+[^\s]) (gains|loses) (\d+) (Health|health|Mana|Rage|Energy|Happiness|happiness|Focus)\.`)
 
-	ReAuraGainHarmfulHelpful = regexp.MustCompile(`(.+[^\s]) (is afflicted by|gains) (.+[^\s]) \((\d+)\)\.`)
-	ReAuraFade               = regexp.MustCompile(`(.+[^\s]) fades from (.+[^\s])\.`)
+  ReAuraGainHarmfulHelpful = regexp.MustCompile(`(.+[^\s]) (is afflicted by|gains) (.+[^\s]) \((\d+)\)\.`)
+  ReAuraFade               = regexp.MustCompile(`(.+[^\s]) fades from (.+[^\s])\.`)
 
-	ReAuraDispel    = regexp.MustCompile(`(.+[^\s])\s's (.+[^\s]) is removed\.`)
-	ReAuraInterrupt = regexp.MustCompile(`(.+[^\s]) interrupts (.+[^\s])\s's (.+[^\s])\.`)
+  ReAuraDispel    = regexp.MustCompile(`(.+[^\s])\s's (.+[^\s]) is removed\.`)
+  ReAuraInterrupt = regexp.MustCompile(`(.+[^\s]) interrupts (.+[^\s])\s's (.+[^\s])\.`)
 
-	ReSpellCastPerformDurability = regexp.MustCompile(`(.+[^\s]) (casts|performs) (.+[^\s]) on (.+[^\s]): (.+)\.`)
-	ReSpellCastPerform           = regexp.MustCompile(`(.+[^\s]) (casts|performs) (.+[^\s]) on (.+[^\s])\.`)
-	ReSpellCastPerformUnknown    = regexp.MustCompile(`(.+[^\s]) (casts|performs) (.+[^\s])\.`)
+  ReSpellCastPerformDurability = regexp.MustCompile(`(.+[^\s]) (casts|performs) (.+[^\s]) on (.+[^\s]): (.+)\.`)
+  ReSpellCastPerform           = regexp.MustCompile(`(.+[^\s]) (casts|performs) (.+[^\s]) on (.+[^\s])\.`)
+  ReSpellCastPerformUnknown    = regexp.MustCompile(`(.+[^\s]) (casts|performs) (.+[^\s])\.`)
 
-	ReUnitDieDestroyed = regexp.MustCompile(`(.+[^\s]) (dies|is destroyed)\.`)
-	ReUnitSlay         = regexp.MustCompile(`(.+[^\s]) is slain by (.+[^\s])(!|\.)`)
+  ReUnitDieDestroyed = regexp.MustCompile(`(.+[^\s]) (dies|is destroyed)\.`)
+  ReUnitSlay         = regexp.MustCompile(`(.+[^\s]) is slain by (.+[^\s])(!|\.)`)
 
-	ReZoneInfo = regexp.MustCompile(`ZONE_INFO: ([^&]+)&(.+[^\s])\&(\d+)`)
-	ReLoot     = regexp.MustCompile(`LOOT: ([^&]+)&(.+[^\s]) receives loot: \|c([a-zA-Z0-9]+)\|Hitem:(\d+):(\d+):(\d+):(\d+)\|h\[([a-zA-Z0-9\s']+)\]\|h\|rx(\d+)\.`)
+  ReZoneInfo = regexp.MustCompile(`ZONE_INFO: ([^&]+)&(.+[^\s])\&(\d+)`)
+  ReLoot     = regexp.MustCompile(`LOOT: ([^&]+)&(.+[^\s]) receives loot: \|c([a-zA-Z0-9]+)\|Hitem:(\d+):(\d+):(\d+):(\d+)\|h\[([a-zA-Z0-9\s']+)\]\|h\|rx(\d+)\.`)
 
-	// Bug pattern
-	ReBugDamageSpellHitOrCrit = regexp.MustCompile(`(.+[^\s])\s's (cr|h)its (.+[^\s]) for (\d+)\.\s?(.*)`)
+  // Bug pattern
+  ReBugDamageSpellHitOrCrit = regexp.MustCompile(`(.+[^\s])\s's (cr|h)its (.+[^\s]) for (\d+)\.\s?(.*)`)
 )
 
 // From myself
 var (
-	ReCreates     = regexp.MustCompile(`(.+[^\s]) (creates) (.+[^\s])\.`)
-	ReGainsAttack = regexp.MustCompile(`(.+[^\s]) gains (\d+) extra attack through (.+[^\s])\.`)
-	ReFallDamage  = regexp.MustCompile(`(.+[^\s]) falls and loses (\d+) health\.`)
+  ReCreates     = regexp.MustCompile(`(.+[^\s]) (creates) (.+[^\s])\.`)
+  ReGainsAttack = regexp.MustCompile(`(.+[^\s]) gains (\d+) extra attack through (.+[^\s])\.`)
+  ReFallDamage  = regexp.MustCompile(`(.+[^\s]) falls and loses (\d+) health\.`)
 
-	// 11/18 18:59:29.276  CAST: 0xF140084493000090(Chotuk) begins to cast Firebolt(7800)(Rank 3) on 0xF13000092F003EDD(Gray Bear).
-	// 11/18 18:59:08.532  CAST: Chotuk casts Fire Shield(2947)(Rank 1) on Maldrissa.
-	ReV2CastsRankTarget = regexp.MustCompile(`(.+[^\s]) (channels|casts|begins to cast) (.+[^\s]) on (.+[^\s])\.`)
-	ReV2Cast            = regexp.MustCompile(`(.+[^\s]) (channels|fails casting|casts) (.+[^\s])\.`)
+  // 11/18 18:59:29.276  CAST: 0xF140084493000090(Chotuk) begins to cast Firebolt(7800)(Rank 3) on 0xF13000092F003EDD(Gray Bear).
+  // 11/18 18:59:08.532  CAST: Chotuk casts Fire Shield(2947)(Rank 1) on Maldrissa.
+  ReV2CastsRankTarget = regexp.MustCompile(`(.+[^\s]) (channels|casts|begins to cast) (.+[^\s]) on (.+[^\s])\.`)
+  ReV2Cast            = regexp.MustCompile(`(.+[^\s]) (channels|fails casting|casts) (.+[^\s])\.`)
 )
 
 // ???
