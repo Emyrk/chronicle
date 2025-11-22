@@ -37,9 +37,8 @@ jobs:
           go-version-file: 'golang/go.mod'
           cache-dependency-path: golang/go.sum
       - name: Build WASM
-        working-directory: golang
         run: |
-          GOOS=js GOARCH=wasm go build -o ../site/parser.wasm ./cmd/wasm/
+          make wasm
       - name: Copy Go WASM runtime
         run: |
           cp "$(go env GOROOT)/misc/wasm/wasm_exec.js" site/ || \

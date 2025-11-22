@@ -68,13 +68,6 @@ cd site
 python3 -m http.server 8000
 ```
 
-### Option 3: Using Other Servers
-
-Any static file server will work:
-- `npx http-server`
-- `php -S localhost:8000`
-- nginx, caddy, etc.
-
 ## Usage
 
 1. Open the web page in a modern browser
@@ -90,55 +83,5 @@ All processing happens locally in the browser - no data is uploaded to any serve
 To rebuild the WASM binary after code changes:
 
 ```bash
-cd golang
-GOOS=js GOARCH=wasm go build -o ../site/parser.wasm ./cmd/wasm/
+make wasm
 ```
-
-## Testing with Sample Data
-
-If you have sample log files at the path mentioned in your example:
-
-```bash
-# The parser expects these two files to be uploaded via the web UI:
-# - ignoredlogs/hateforge_av/WoWCombatLog.txt
-# - ignoredlogs/hateforge_av/WoWRawCombatLog.txt
-```
-
-## Features
-
-- ✅ Client-side parsing (no server required)
-- ✅ Drag & drop file upload
-- ✅ Real-time status updates
-- ✅ JSON output display
-- ✅ File size display
-- ✅ Error handling
-- ✅ Responsive design
-
-## Browser Compatibility
-
-The page requires:
-- WebAssembly support (all modern browsers)
-- File API support
-- ES6+ JavaScript
-
-Tested in:
-- Chrome/Edge (Chromium)
-- Firefox
-- Safari
-
-## Performance
-
-- WASM binary size: ~4.2MB (uncompressed)
-- Parse time: Depends on log file size
-- Memory usage: Depends on log file size
-- All processing is synchronous (may block UI for large files)
-
-## Future Improvements
-
-Potential enhancements:
-- [ ] Compress WASM binary with gzip/brotli
-- [ ] Add Web Worker support for async parsing
-- [ ] Add progress indicators for large files
-- [ ] Add more detailed statistics visualization
-- [ ] Export parsed data in different formats
-- [ ] Add syntax highlighting for JSON output
