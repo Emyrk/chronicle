@@ -2,28 +2,28 @@ package vanillaparser
 
 import (
 	"time"
+
+	"github.com/Emyrk/chronicle/golang/wowlogs/types/castv2"
 )
 
 type Message interface {
 	isMessage()
-	Timestamp() time.Time
-	String() string
 }
 
 type MessageBase struct {
-	timestamp time.Time
+	Timestamp time.Time `json:"timestamp"`
 }
 
 func Base(ts time.Time) MessageBase {
 	return MessageBase{
-		timestamp: ts,
+    Timestamp: ts,
 	}
 }
 
-func (MessageBase) isMessage() {}
-func (m MessageBase) Timestamp() time.Time {
-	return m.timestamp
+func (m MessageBase) String(content string) string {
+  return m.Timestamp.Format("02/01 15:04:05.000") + "  " + content)
 }
+func (MessageBase) isMessage() {}
 
 type SkippedMessage struct {
 	MessageBase
@@ -47,4 +47,9 @@ func notHandled() ([]Message, error) {
 
 func set(m ...Message) []Message {
 	return m
+}
+
+type Cast struct {
+	castv2.CastV2
+	MessageBase
 }

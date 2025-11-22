@@ -3,15 +3,31 @@ package vanillaparser
 import (
 	"fmt"
 	"log/slog"
-	"strconv"
 	"strings"
 	"time"
 
 	"github.com/Emyrk/chronicle/golang/wowlogs/regexs"
+	"github.com/Emyrk/chronicle/golang/wowlogs/types/castv2"
 	"github.com/Emyrk/chronicle/golang/wowlogs/types/combatant"
 	"github.com/Emyrk/chronicle/golang/wowlogs/types/loot"
 	"github.com/Emyrk/chronicle/golang/wowlogs/types/zone"
 )
+
+func (p *Parser) fV2Casts(ts time.Time, content string) ([]Message, error) {
+	if _, ok := castv2.IsCast(content); !ok {
+		return notHandled()
+	}
+
+	c, err := castv2.ParseCast(content)
+	if err != nil {
+		return nil, fmt.Errorf("castv2: %w", err)
+	}
+
+	return set(Cast{
+		CastV2:      c,
+		MessageBase: Base(ts),
+	}), nil
+}
 
 func (p *Parser) fLoot(ts time.Time, content string) ([]Message, error) {
 	if !strings.HasPrefix(content, loot.PrefixLoot) {
@@ -93,14 +109,15 @@ func (p *Parser) fSpellCastAttempt(ts time.Time, content string) ([]Message, err
 		return notHandled()
 	}
 
-	unit, spell := matches[1], matches[2]
-	return set(SpellCastAttempt{
-		MessageBase: Base(ts),
-		Caster: Unit{
-			Name: unit,
-		},
-		SpellName: spell,
-	}), nil
+	//unit, spell := matches[1], matches[2]
+	return Skip(ts, "spell cast attempt"), nil
+	//return set(SpellCastAttempt{
+	//	MessageBase: Base(ts),
+	//	Caster: Unit{
+	//		Name: unit,
+	//	},
+	//	SpellName: spell,
+	//}), nil
 }
 
 func (p *Parser) fGain(ts time.Time, content string) ([]Message, error) {
@@ -109,21 +126,22 @@ func (p *Parser) fGain(ts time.Time, content string) ([]Message, error) {
 		return notHandled()
 	}
 
-	target, direction, amountStr, resource, caster, spell := matches[1], matches[2], matches[3], matches[4], matches[5], matches[6]
-	amount, err := strconv.ParseUint(amountStr, 10, 64)
-	if err != nil {
-		return nil, fmt.Errorf("resource gain amount %q is not valid: %v", amountStr, err)
-	}
+	//target, direction, amountStr, resource, caster, spell := matches[1], matches[2], matches[3], matches[4], matches[5], matches[6]
+	//amount, err := strconv.ParseUint(amountStr, 10, 64)
+	//if err != nil {
+	//	return nil, fmt.Errorf("resource gain amount %q is not valid: %v", amountStr, err)
+	//}
 
-	return set(ResourceChange{
-		MessageBase: Base(ts),
-		Target:      Unit{Name: target},
-		Amount:      uint32(amount),
-		Resource:    resource,
-		Caster:      Unit{Name: caster},
-		Spell:       spell,
-		Direction:   direction,
-	}), nil
+	return Skip(ts, "resource gain"), nil
+	//return set(ResourceChange{
+	//	MessageBase: Base(ts),
+	//	Target:      Unit{Name: target},
+	//	Amount:      uint32(amount),
+	//	Resource:    resource,
+	//	Caster:      Unit{Name: caster},
+	//	Spell:       spell,
+	//	Direction:   direction,
+	//}), nil
 }
 
 /**
@@ -521,20 +539,21 @@ func (p *Parser) fGainNoSource(ts time.Time, content string) ([]Message, error) 
 	if matches == nil {
 		return notHandled()
 	}
+	//
+	//target, direction, amountStr, resource := matches[1], matches[2], matches[3], matches[4]
+	//amount, err := strconv.ParseUint(amountStr, 10, 64)
+	//if err != nil {
+	//	return nil, fmt.Errorf("resource gain amount %q is not valid: %v", amountStr, err)
+	//}
 
-	target, direction, amountStr, resource := matches[1], matches[2], matches[3], matches[4]
-	amount, err := strconv.ParseUint(amountStr, 10, 64)
-	if err != nil {
-		return nil, fmt.Errorf("resource gain amount %q is not valid: %v", amountStr, err)
-	}
-
-	return set(ResourceChange{
-		MessageBase: Base(ts),
-		Target:      Unit{Name: target},
-		Amount:      uint32(amount),
-		Resource:    resource,
-		//Caster:      Unit{Name: caster},
-		//Spell:       spell,
-		Direction: direction,
-	}), nil
+	return Skip(ts, "GainNoSource not implemented"), nil
+	//return set(ResourceChange{
+	//	MessageBase: Base(ts),
+	//	Target:      Unit{Name: target},
+	//	Amount:      uint32(amount),
+	//	Resource:    resource,
+	//	//Caster:      Unit{Name: caster},
+	//	//Spell:       spell,
+	//	Direction: direction,
+	//}), nil
 }
