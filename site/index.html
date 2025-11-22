@@ -157,6 +157,193 @@
             white-space: pre;
         }
 
+        /* Player Cards Styling */
+        .players-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(350px, 1fr));
+            gap: 20px;
+            margin-top: 20px;
+        }
+
+        .player-card {
+            background: linear-gradient(135deg, #ffffff 0%, #f8f9fa 100%);
+            border-radius: 12px;
+            padding: 20px;
+            box-shadow: 0 4px 15px rgba(0, 0, 0, 0.1);
+            transition: transform 0.2s ease, box-shadow 0.2s ease;
+            border-left: 5px solid;
+        }
+
+        .player-card:hover {
+            transform: translateY(-5px);
+            box-shadow: 0 8px 25px rgba(0, 0, 0, 0.15);
+        }
+
+        .player-card.warrior { border-left-color: #C79C6E; }
+        .player-card.paladin { border-left-color: #F58CBA; }
+        .player-card.hunter { border-left-color: #ABD473; }
+        .player-card.rogue { border-left-color: #FFF569; }
+        .player-card.priest { border-left-color: #FFFFFF; }
+        .player-card.shaman { border-left-color: #0070DE; }
+        .player-card.mage { border-left-color: #69CCF0; }
+        .player-card.warlock { border-left-color: #9482C9; }
+        .player-card.druid { border-left-color: #FF7D0A; }
+        .player-card.unknown { border-left-color: #999999; }
+
+        .player-header {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            margin-bottom: 15px;
+            padding-bottom: 15px;
+            border-bottom: 2px solid #e9ecef;
+        }
+
+        .player-info h3 {
+            color: #333;
+            font-size: 1.4em;
+            margin: 0 0 5px 0;
+        }
+
+        .player-class {
+            display: inline-block;
+            padding: 4px 12px;
+            border-radius: 20px;
+            font-size: 0.85em;
+            font-weight: 600;
+            text-transform: uppercase;
+            color: white;
+        }
+
+        .player-class.warrior { background-color: #C79C6E; }
+        .player-class.paladin { background-color: #F58CBA; }
+        .player-class.hunter { background-color: #ABD473; color: #333; }
+        .player-class.rogue { background-color: #FFF569; color: #333; }
+        .player-class.priest { background-color: #FFFFFF; color: #333; border: 1px solid #ddd; }
+        .player-class.shaman { background-color: #0070DE; }
+        .player-class.mage { background-color: #69CCF0; color: #333; }
+        .player-class.warlock { background-color: #9482C9; }
+        .player-class.druid { background-color: #FF7D0A; }
+        .player-class.unknown { background-color: #999999; }
+
+        .spell-count {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            padding: 8px 16px;
+            border-radius: 20px;
+            font-size: 0.9em;
+            font-weight: 600;
+        }
+
+        .spells-list {
+            max-height: 300px;
+            overflow-y: auto;
+        }
+
+        .spells-list h4 {
+            color: #666;
+            font-size: 0.9em;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+            margin-bottom: 10px;
+        }
+
+        .spell-item {
+            background: white;
+            padding: 10px 15px;
+            margin-bottom: 8px;
+            border-radius: 6px;
+            border-left: 3px solid #667eea;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            transition: background 0.2s ease;
+        }
+
+        .spell-item:hover {
+            background: #f0f4ff;
+        }
+
+        .spell-name {
+            font-weight: 500;
+            color: #333;
+            font-size: 0.95em;
+        }
+
+        .spell-id {
+            font-size: 0.8em;
+            color: #999;
+            font-family: 'Courier New', monospace;
+        }
+
+        .no-spells {
+            text-align: center;
+            color: #999;
+            padding: 20px;
+            font-style: italic;
+        }
+
+        .summary-stats {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            padding: 20px;
+            border-radius: 8px;
+            margin-bottom: 20px;
+            display: flex;
+            justify-content: space-around;
+            text-align: center;
+        }
+
+        .stat-item h3 {
+            font-size: 2em;
+            margin: 0;
+        }
+
+        .stat-item p {
+            margin: 5px 0 0 0;
+            opacity: 0.9;
+        }
+
+        /* Custom scrollbar for spell lists */
+        .spells-list::-webkit-scrollbar {
+            width: 8px;
+        }
+
+        .spells-list::-webkit-scrollbar-track {
+            background: #f1f1f1;
+            border-radius: 10px;
+        }
+
+        .spells-list::-webkit-scrollbar-thumb {
+            background: #667eea;
+            border-radius: 10px;
+        }
+
+        .spells-list::-webkit-scrollbar-thumb:hover {
+            background: #764ba2;
+        }
+
+        .toggle-json {
+            background: #6c757d;
+            color: white;
+            border: none;
+            padding: 10px 20px;
+            font-size: 0.9em;
+            border-radius: 6px;
+            cursor: pointer;
+            margin-top: 10px;
+            transition: background 0.2s ease;
+        }
+
+        .toggle-json:hover {
+            background: #5a6268;
+        }
+
+        #jsonOutput {
+            display: none;
+            margin-top: 20px;
+        }
+
         .spinner {
             display: inline-block;
             width: 20px;
@@ -230,8 +417,18 @@
         <div class="status" id="status"></div>
 
         <div class="results" id="resultsSection" style="display: none;">
-            <h2>📊 Parser State (JSON)</h2>
-            <div id="output"></div>
+            <h2>⚔️ Combat Participants & Spells</h2>
+            
+            <div class="summary-stats" id="summaryStats"></div>
+            
+            <div class="players-grid" id="playersGrid"></div>
+            
+            <button class="toggle-json" id="toggleJsonBtn">📋 Show Raw JSON</button>
+            
+            <div id="jsonOutput">
+                <h2>📊 Parser State (JSON)</h2>
+                <div id="output"></div>
+            </div>
         </div>
     </div>
 
