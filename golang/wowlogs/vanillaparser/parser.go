@@ -1,28 +1,114 @@
 package vanillaparser
 
 import (
-	"io"
-	"log/slog"
+  "fmt"
+  "io"
+  "log/slog"
+  "reflect"
+  "strings"
+  "time"
 
-	"github.com/Emyrk/chronicle/golang/wowlogs/lines"
-	"github.com/Emyrk/chronicle/golang/wowlogs/merge"
+  "github.com/Emyrk/chronicle/golang/wowlogs/lines"
+  "github.com/Emyrk/chronicle/golang/wowlogs/merge"
 )
 
-type Parser struct {
-	logger *slog.Logger
-	liner  *lines.Liner
+type parseLine = func(ts time.Time, content string) ([]Message, error)
 
-	a, b io.Reader
-	m    *merge.Merger
+type Parser struct {
+  logger  *slog.Logger
+  scanner merge.Scan
+  liner   *lines.Liner
 }
 
-func New(logger *slog.Logger, a, b io.Reader) *Parser {
-	m := merge.NewMerger(logger,
-		merge.WithMiddleWare(OnlyKeepRawV2Casts),
-	)
+func New(logger *slog.Logger, r io.Reader) (*Parser, error) {
+  return &Parser{
+    logger:  logger,
+    scanner: merge.FromIOReader(lines.NewLiner(), r),
+    liner:   lines.NewLiner(),
+  }, nil
+}
 
-	return &Parser{
-		m:      m,
-		logger: logger,
-	}
+func NewFromScanner(logger *slog.Logger, liner *lines.Liner, scan merge.Scan) *Parser {
+  return &Parser{
+    logger:  logger,
+    scanner: scan,
+    liner:   liner,
+  }
+}
+
+// Merger returns a configured merger for this parser.
+func Merger(logger *slog.Logger) *merge.Merger {
+  return merge.NewMerger(logger,
+    merge.WithMiddleWare(OnlyKeepRawV2Casts),
+  )
+}
+
+func (p *Parser) Advance() ([]Message, error) {
+  ts, content, err := p.scanner()
+  if err != nil {
+    return nil, err
+  }
+  content = strings.TrimSpace(content)
+
+  for _, parser := range []parseLine{
+    p.fCombatantGUID,
+    p.fCombatantInfo,
+    p.fZoneInfo,
+    p.fLoot,
+    p.fBugDamageSpellHitOrCrit,
+    p.fSpellCastAttempt,
+    p.fGain,
+    p.fDamageSpellHitOrCrit,
+    p.fDamageSpellHitOrCritSchool,
+    p.fDamagePeriodic,
+    p.fDamageShield,
+    p.fDamageHitOrCrit,
+    p.fDamageHitOrCritSchool,
+    p.fHealCrit,
+    p.fHealHit,
+    p.fAuraGainHarmfulHelpful,
+    p.fAuraFade,
+    p.fDamageSpellSplit,
+    p.fDamageSpellMiss,
+    p.fDamageSpellBlockParryEvadeDodgeResistDeflect,
+    p.fDamageSpellAbsorb,
+    p.fDamageSpellAbsorbSelf,
+    p.fDamageReflect,
+    p.fDamageProcResist,
+    p.fDamageSpellImmune,
+    p.fDamageMiss,
+    p.fDamageBlockParryEvadeDodgeDeflect,
+    p.fDamageAbsorbResist,
+    p.fDamageImmune,
+    p.fSpellCastPerformDurability,
+    p.fSpellCastPerform,
+    p.fSpellCastPerformUnknown,
+    p.fUnitDieDestroyed,
+    p.fUnitSlay,
+    p.fAuraDispel,
+    p.fAuraInterrupt,
+    p.fCreates,
+    p.fGainsAttack,
+    p.fFallDamage,
+    p.fGainNoSource,
+  } {
+    m, err := parser(ts, content)
+    if err != nil {
+      return nil, fmt.Errorf("parse line failed: %v", err)
+    }
+
+    if len(m) == 0 {
+      continue
+    }
+
+    for _, msg := range m {
+      if msg.Timestamp().IsZero() {
+        return nil, fmt.Errorf("timestamp is zero for message type: %s", reflect.TypeOf(m).String())
+      }
+    }
+
+    return m, nil
+  }
+
+  return nil, nil
 }

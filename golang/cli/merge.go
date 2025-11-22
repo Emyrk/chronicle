@@ -12,7 +12,6 @@ import (
 func MergeCmd() *serpent.Command {
 	var (
 		outputPath string
-		noFilter   bool
 	)
 
 	cmd := &serpent.Command{
@@ -27,27 +26,18 @@ func MergeCmd() *serpent.Command {
 				Required:      false,
 				Value:         serpent.StringOf(&outputPath),
 			},
-			{
-				Name:          "No Filter",
-				Flag:          "no-filter",
-				FlagShorthand: "n",
-			},
 		},
 		Handler: func(i *serpent.Invocation) error {
 			ctx := i.Context()
 			logger := getLogger(i)
 			m := merge.NewMerger(logger)
 
-			a, b := i.Args[0], i.Args[1]
-			first, err := os.OpenFile(a, os.O_RDONLY, 0644)
+			files, err := openFileReaders(i.Args[0], i.Args[1])
 			if err != nil {
-				return fmt.Errorf("opening file: %w", err)
+				return err
 			}
-
-			second, err := os.OpenFile(b, os.O_RDONLY, 0644)
-			if err != nil {
-				return fmt.Errorf("opening file: %w", err)
-			}
+			defer func() { closeFiles(files...) }()
+			first, second := files[0], files[1]
 
 			wr := i.Stdout
 			if outputPath != "" {
@@ -61,4 +51,24 @@ func MergeCmd() *serpent.Command {
 		},
 	}
 	return cmd
+}
+
+func closeFiles(files ...*os.File) {
+	for _, f := range files {
+		_ = f.Close()
+	}
+}
+
+func openFileReaders(paths ...string) ([]*os.File, error) {
+	var readers []*os.File
+	for _, path := range paths {
+		first, err := os.OpenFile(path, os.O_RDONLY, 0644)
+		if err != nil {
+			closeFiles(readers...)
+			return nil, fmt.Errorf("opening file: %w", err)
+		}
+		readers = append(readers, first)
+	}
+
+	return readers, nil
 }
