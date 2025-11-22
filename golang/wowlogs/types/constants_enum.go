@@ -8,6 +8,7 @@ package types
 import (
 	"errors"
 	"fmt"
+	"strings"
 )
 
 const (
@@ -45,6 +46,10 @@ var _CastActionsValue = map[string]CastActions{
 // ParseCastActions attempts to convert a string to a CastActions.
 func ParseCastActions(name string) (CastActions, error) {
 	if x, ok := _CastActionsValue[name]; ok {
+		return x, nil
+	}
+	// Case insensitive parse, do a separate lookup to prevent unnecessary cost of lowercasing a string if we don't need to.
+	if x, ok := _CastActionsValue[strings.ToLower(name)]; ok {
 		return x, nil
 	}
 	return CastActions(""), fmt.Errorf("%s is %w", name, ErrInvalidCastActions)
@@ -87,19 +92,32 @@ func (x HeroClasses) IsValid() bool {
 
 var _HeroClassesValue = map[string]HeroClasses{
 	"DRUID":   HeroClassesDRUID,
+	"druid":   HeroClassesDRUID,
 	"HUNTER":  HeroClassesHUNTER,
+	"hunter":  HeroClassesHUNTER,
 	"MAGE":    HeroClassesMAGE,
+	"mage":    HeroClassesMAGE,
 	"PALADIN": HeroClassesPALADIN,
+	"paladin": HeroClassesPALADIN,
 	"PRIEST":  HeroClassesPRIEST,
+	"priest":  HeroClassesPRIEST,
 	"ROGUE":   HeroClassesROGUE,
+	"rogue":   HeroClassesROGUE,
 	"SHAMAN":  HeroClassesSHAMAN,
+	"shaman":  HeroClassesSHAMAN,
 	"WARLOCK": HeroClassesWARLOCK,
+	"warlock": HeroClassesWARLOCK,
 	"WARRIOR": HeroClassesWARRIOR,
+	"warrior": HeroClassesWARRIOR,
 }
 
 // ParseHeroClasses attempts to convert a string to a HeroClasses.
 func ParseHeroClasses(name string) (HeroClasses, error) {
 	if x, ok := _HeroClassesValue[name]; ok {
+		return x, nil
+	}
+	// Case insensitive parse, do a separate lookup to prevent unnecessary cost of lowercasing a string if we don't need to.
+	if x, ok := _HeroClassesValue[strings.ToLower(name)]; ok {
 		return x, nil
 	}
 	return HeroClasses(""), fmt.Errorf("%s is %w", name, ErrInvalidHeroClasses)
@@ -146,16 +164,25 @@ func (x HeroGender) IsValid() bool {
 }
 
 var _HeroGenderValue = map[string]HeroGender{
-	_HeroGenderName[0:6]:   HeroGenderNotSet,
-	_HeroGenderName[6:13]:  HeroGenderUnknown,
-	_HeroGenderName[13:18]: HeroGenderEMPTY,
-	_HeroGenderName[18:22]: HeroGenderMale,
-	_HeroGenderName[22:28]: HeroGenderFemale,
+	_HeroGenderName[0:6]:                    HeroGenderNotSet,
+	strings.ToLower(_HeroGenderName[0:6]):   HeroGenderNotSet,
+	_HeroGenderName[6:13]:                   HeroGenderUnknown,
+	strings.ToLower(_HeroGenderName[6:13]):  HeroGenderUnknown,
+	_HeroGenderName[13:18]:                  HeroGenderEMPTY,
+	strings.ToLower(_HeroGenderName[13:18]): HeroGenderEMPTY,
+	_HeroGenderName[18:22]:                  HeroGenderMale,
+	strings.ToLower(_HeroGenderName[18:22]): HeroGenderMale,
+	_HeroGenderName[22:28]:                  HeroGenderFemale,
+	strings.ToLower(_HeroGenderName[22:28]): HeroGenderFemale,
 }
 
 // ParseHeroGender attempts to convert a string to a HeroGender.
 func ParseHeroGender(name string) (HeroGender, error) {
 	if x, ok := _HeroGenderValue[name]; ok {
+		return x, nil
+	}
+	// Case insensitive parse, do a separate lookup to prevent unnecessary cost of lowercasing a string if we don't need to.
+	if x, ok := _HeroGenderValue[strings.ToLower(name)]; ok {
 		return x, nil
 	}
 	return HeroGender(0), fmt.Errorf("%s is %w", name, ErrInvalidHeroGender)
@@ -200,15 +227,25 @@ func (x HeroRaces) IsValid() bool {
 
 var _HeroRacesValue = map[string]HeroRaces{
 	"Scourge":  HeroRacesScourge,
+	"scourge":  HeroRacesScourge,
 	"Orc":      HeroRacesOrc,
+	"orc":      HeroRacesOrc,
 	"Troll":    HeroRacesTroll,
+	"troll":    HeroRacesTroll,
 	"Tauren":   HeroRacesTauren,
+	"tauren":   HeroRacesTauren,
 	"Goblin":   HeroRacesGoblin,
+	"goblin":   HeroRacesGoblin,
 	"Human":    HeroRacesHuman,
+	"human":    HeroRacesHuman,
 	"Gnome":    HeroRacesGnome,
+	"gnome":    HeroRacesGnome,
 	"Dwarf":    HeroRacesDwarf,
+	"dwarf":    HeroRacesDwarf,
 	"NightElf": HeroRacesNightElf,
+	"nightelf": HeroRacesNightElf,
 	"BloodElf": HeroRacesBloodElf,
+	"bloodelf": HeroRacesBloodElf,
 }
 
 // ParseHeroRaces attempts to convert a string to a HeroRaces.
@@ -216,5 +253,65 @@ func ParseHeroRaces(name string) (HeroRaces, error) {
 	if x, ok := _HeroRacesValue[name]; ok {
 		return x, nil
 	}
+	// Case insensitive parse, do a separate lookup to prevent unnecessary cost of lowercasing a string if we don't need to.
+	if x, ok := _HeroRacesValue[strings.ToLower(name)]; ok {
+		return x, nil
+	}
 	return HeroRaces(""), fmt.Errorf("%s is %w", name, ErrInvalidHeroRaces)
+}
+
+const (
+	// ResourceHealth is a Resource of type Health.
+	ResourceHealth Resource = "Health"
+	// ResourceMana is a Resource of type Mana.
+	ResourceMana Resource = "Mana"
+	// ResourceRage is a Resource of type Rage.
+	ResourceRage Resource = "Rage"
+	// ResourceHappiness is a Resource of type Happiness.
+	ResourceHappiness Resource = "Happiness"
+	// ResourceEnergy is a Resource of type Energy.
+	ResourceEnergy Resource = "Energy"
+	// ResourceFocus is a Resource of type Focus.
+	ResourceFocus Resource = "Focus"
+)
+
+var ErrInvalidResource = errors.New("not a valid Resource")
+
+// String implements the Stringer interface.
+func (x Resource) String() string {
+	return string(x)
+}
+
+// IsValid provides a quick way to determine if the typed value is
+// part of the allowed enumerated values
+func (x Resource) IsValid() bool {
+	_, err := ParseResource(string(x))
+	return err == nil
+}
+
+var _ResourceValue = map[string]Resource{
+	"Health":    ResourceHealth,
+	"health":    ResourceHealth,
+	"Mana":      ResourceMana,
+	"mana":      ResourceMana,
+	"Rage":      ResourceRage,
+	"rage":      ResourceRage,
+	"Happiness": ResourceHappiness,
+	"happiness": ResourceHappiness,
+	"Energy":    ResourceEnergy,
+	"energy":    ResourceEnergy,
+	"Focus":     ResourceFocus,
+	"focus":     ResourceFocus,
+}
+
+// ParseResource attempts to convert a string to a Resource.
+func ParseResource(name string) (Resource, error) {
+	if x, ok := _ResourceValue[name]; ok {
+		return x, nil
+	}
+	// Case insensitive parse, do a separate lookup to prevent unnecessary cost of lowercasing a string if we don't need to.
+	if x, ok := _ResourceValue[strings.ToLower(name)]; ok {
+		return x, nil
+	}
+	return Resource(""), fmt.Errorf("%s is %w", name, ErrInvalidResource)
 }

@@ -1,5 +1,7 @@
-//go:generate go tool go-enum -f constants.go
+//go:generate go tool go-enum -f constants.go --nocase
 package types
+
+import "errors"
 
 // ENUM(casts, begins to cast, channels, fails casting)
 type CastActions string
@@ -12,3 +14,47 @@ type HeroRaces string
 
 // ENUM(NotSet,Unknown,EMPTY,Male,Female)
 type HeroGender int
+
+// ENUM(Health,Mana,Rage,Happiness,Energy,Focus)
+type Resource string
+
+// HitType represents different types of hits in combat
+// HitTypes can be more than 1.
+// Example: A critical hit that was partially resisted
+type HitType uint32
+
+const (
+	HitTypeNone          HitType = 0x00000000
+	HitTypeOffHand       HitType = 0x00000001
+	HitTypeHit           HitType = 0x00000002
+	HitTypeCrit          HitType = 0x00000004
+	HitTypePartialResist HitType = 0x00000008
+	HitTypeFullResist    HitType = 0x00000010
+	HitTypeMiss          HitType = 0x00000020
+	HitTypePartialAbsorb HitType = 0x00000040
+	HitTypeFullAbsorb    HitType = 0x00000080
+	HitTypeGlancing      HitType = 0x00000100
+	HitTypeCrushing      HitType = 0x00000200
+	HitTypeEvade         HitType = 0x00000400
+	HitTypeDodge         HitType = 0x00000800
+	HitTypeParry         HitType = 0x00001000
+	HitTypeImmune        HitType = 0x00002000
+	HitTypeEnvironment   HitType = 0x00004000
+	HitTypeDeflect       HitType = 0x00008000
+	HitTypeInterrupt     HitType = 0x00010000
+	HitTypePartialBlock  HitType = 0x00020000
+	HitTypeFullBlock     HitType = 0x00040000
+	HitTypeSplit         HitType = 0x00080000
+	HitTypeReflect       HitType = 0x00100000
+)
+
+func ParseHitMask(s string) (HitType, error) {
+	switch s {
+	case "hit", "hits":
+		return HitTypeHit, nil
+	case "crit", "crits":
+		return HitTypeCrit, nil
+	default:
+		return HitTypeNone, errors.New("invalid hit mask")
+	}
+}

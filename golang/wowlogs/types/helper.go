@@ -4,6 +4,9 @@ import (
   "errors"
   "regexp"
   "strconv"
+
+  "github.com/Emyrk/chronicle/golang/wowlogs/guid"
+  "github.com/Emyrk/chronicle/golang/wowlogs/types/trailer"
 )
 
 type Pattern regexp.Regexp
@@ -34,35 +37,46 @@ type Matched struct {
   errs   []error
 }
 
-func (m *Matched) Unit() Unit {
+func (m *Matched) UnitOrGUID() (string, guid.GUID) {
   val := m.pop()
-  unit, err := ParseUnit(val)
-  if err != nil {
-    m.errs = append(m.errs, err)
+  if len(val) >= 18 && val[:2] == "0x" {
+    gid, err := guid.FromString(val[:18])
+    if err != nil {
+      m.errs = append(m.errs, err)
+      return "", 0
+    }
+    return "", gid
   }
-  return unit
+  return val, guid.GUID(0)
 }
 
-func (m *Matched) Spell() Spell {
-  val := m.pop()
-  spell, err := ParseSpell(val)
-  if err != nil {
-    m.errs = append(m.errs, err)
-  }
-  return spell
-}
+func (m *Matched) GUID() guid.GUID          { return parse(m, guid.FromString) }
+func (m *Matched) Spell() Spell             { return parse(m, ParseSpell) }
+func (m *Matched) Resource() Resource       { return parse(m, ParseResource) }
+func (m *Matched) HitType() HitType         { return parse(m, ParseHitMask) }
+func (m *Matched) Unit() Unit               { return parse(m, ParseUnit) }
+func (m *Matched) Trailer() trailer.Trailer { return parse(m, trailer.ParseTrailer) }
 
 func (m *Matched) String() string {
   return m.pop()
 }
 
-func (m *Matched) Uint32() uint64 {
+func (m *Matched) Int32() int32 {
+  val := m.pop()
+  v, err := strconv.ParseInt(val, 10, 32)
+  if err != nil {
+    m.errs = append(m.errs, err)
+  }
+  return int32(v)
+}
+
+func (m *Matched) Uint32() uint32 {
   val := m.pop()
   v, err := strconv.ParseUint(val, 10, 32)
   if err != nil {
     m.errs = append(m.errs, err)
   }
-  return v
+  return uint32(v)
 }
 
 func (m *Matched) Error() error {
@@ -70,6 +84,14 @@ func (m *Matched) Error() error {
     return nil
   }
   return errors.Join(m.errs...)
+}
+
+func (m *Matched) peek() string {
+  if m.Index-1 >= len(m.Values) {
+    m.errs = append(m.errs, errors.New("index out of range"))
+    return ""
+  }
+  return m.Values[m.Index-1]
 }
 
 func (m *Matched) pop() string {
@@ -80,4 +102,13 @@ func (m *Matched) pop() string {
   val := m.Values[m.Index-1]
   m.Index++
   return val
+}
+
+func parse[T any](m *Matched, parser func(string) (T, error)) T {
+  val := m.pop()
+  parsed, err := parser(val)
+  if err != nil {
+    m.errs = append(m.errs, err)
+  }
+  return parsed
 }

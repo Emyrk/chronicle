@@ -1,66 +1,91 @@
 package vanillaparser
 
 import (
-	"time"
+  "time"
 
-	"github.com/Emyrk/chronicle/golang/wowlogs/types/castv2"
-	"github.com/Emyrk/chronicle/golang/wowlogs/types/combatant"
+  "github.com/Emyrk/chronicle/golang/wowlogs/guid"
+  "github.com/Emyrk/chronicle/golang/wowlogs/types"
+  "github.com/Emyrk/chronicle/golang/wowlogs/types/castv2"
+  "github.com/Emyrk/chronicle/golang/wowlogs/types/combatant"
+  "github.com/Emyrk/chronicle/golang/wowlogs/types/trailer"
 )
 
 type Message interface {
-	isMessage()
-	Date() time.Time
+  isMessage()
+  Date() time.Time
 }
 
 type MessageBase struct {
-	Timestamp time.Time `json:"timestamp"`
+  Timestamp time.Time `json:"timestamp"`
 }
 
 func Base(ts time.Time) MessageBase {
-	return MessageBase{
-		Timestamp: ts,
-	}
+  return MessageBase{
+    Timestamp: ts,
+  }
 }
 
 func (m MessageBase) String(content string) string {
-	return m.Timestamp.Format("02/01 15:04:05.000") + "  " + content
+  return m.Timestamp.Format("02/01 15:04:05.000") + "  " + content
 }
 func (MessageBase) isMessage() {}
 
 func (m MessageBase) Date() time.Time {
-	return m.Timestamp
+  return m.Timestamp
 }
 
 type SkippedMessage struct {
-	MessageBase
-	Reason string
+  MessageBase
+  Reason string
 }
 
 func Skip(ts time.Time, reason string) []Message {
-	return set(&SkippedMessage{
-		MessageBase: Base(ts),
-		Reason:      reason,
-	})
+  return set(&SkippedMessage{
+    MessageBase: Base(ts),
+    Reason:      reason,
+  })
 }
 
 func (m SkippedMessage) String() string {
-	return "SkippedMessage: " + m.Reason
+  return "SkippedMessage: " + m.Reason
 }
 
 func notHandled() ([]Message, error) {
-	return nil, nil
+  return nil, nil
 }
 
 func set(m ...Message) []Message {
-	return m
+  return m
 }
 
 type Cast struct {
-	castv2.CastV2
-	MessageBase
+  castv2.CastV2
+  MessageBase
 }
 
 type Combatant struct {
-	combatant.Combatant
-	MessageBase
+  combatant.Combatant
+  MessageBase
+}
+
+type ResourceChange struct {
+  MessageBase
+  Target    guid.GUID
+  Amount    int32
+  Resource  types.Resource
+  Caster    guid.GUID
+  SpellName string
+  // 10/29 22:12:55.926  Naga (Kryaa) gains 35 Happiness from Kryaa 's Feed Pet Effect.
+  // 10/17 21:36:12.823  Sfantu 's Nosferatu loses 52 happiness.
+  Direction string // "gains" or "loses"
+}
+
+type SpellDamage struct {
+  MessageBase
+  Caster    guid.GUID
+  SpellName string
+  HitType   types.HitType
+  Target    guid.GUID
+  Amount    int32
+  Trailer   trailer.Trailer
 }

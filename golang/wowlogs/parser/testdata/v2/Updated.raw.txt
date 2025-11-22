@@ -129,7 +129,7 @@
 11/18 07:21:51.289  Starving Mountain Lion dies, you gain 160 experience. (+80 exp Rested bonus)
 11/18 07:21:51.289  0xF130000965003CB5 hits 0xF130000950003FB5 for 198. (crushing)
 11/18 07:21:51.303  You fail to cast Drain Soul: No target.
-11/18 07:21:51.450  CAST: 0xF1400844930090A2(Chotuk) casts Phase Shift(4511) on 0xF1400844930090A2(Chotuk).
+11/18 07:21:51.450  CAST: 0xF1400844930090A2(Chotuk) casts Phase Shift(4511) on 0xF1400844930090A2(Chotuk).fen
 11/18 07:21:51.450  0xF1400844930090A2 gains Phase Shift (1).
 11/18 07:21:52.647  CAST: 0x00000000000F1A35(Kriselda) casts Goblin Deviled Clams(6500).
 11/18 07:21:52.647  You gain Blood Pact (1).
