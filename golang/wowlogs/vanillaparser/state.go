@@ -3,6 +3,7 @@ package vanillaparser
 import (
 	"fmt"
 	"log/slog"
+	"slices"
 	"strings"
 
 	"github.com/Emyrk/chronicle/golang/wowlogs/guid"
@@ -20,6 +21,7 @@ type State struct {
 	Me                types.Unit
 
 	CurrentZone zone.Zone
+	Zones       []zone.Zone
 }
 
 func NewState(logger *slog.Logger, me types.Unit) *State {
@@ -44,6 +46,12 @@ func (s *State) Zone(z zone.Zone) {
 
 	if s.CurrentZone.Equal(z) {
 		return
+	}
+
+	if !slices.ContainsFunc(s.Zones, func(zz zone.Zone) bool {
+		return zz.Equal(z)
+	}) {
+		s.Zones = append(s.Zones, z)
 	}
 
 	s.logger.Info(fmt.Sprintf("Zone changed to %q (instance %d)", z.Name, z.InstanceID),
