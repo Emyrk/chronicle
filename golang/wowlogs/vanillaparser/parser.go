@@ -65,7 +65,7 @@ func (p *Parser) Advance() ([]Message, error) {
 		p.fLoot,
 		p.fBugDamageSpellHitOrCrit,
 		p.fSpellCastAttempt,
-		p.fGain,
+		p.fGainSource,
 		p.fDamageSpellHitOrCritNoSchool,
 		p.fDamageSpellHitOrCritSchool,
 		p.fDamagePeriodic,

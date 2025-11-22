@@ -36,7 +36,7 @@ func TestParserMessages(t *testing.T) {
 
 		require.Equal(t, SpellDamage{
 			Caster:    0x0000000000062A1B,
-			SpellName: "Hamstring",
+			SpellName: types.Spell{Name: "Hamstring"},
 			HitType:   types.HitTypeHit,
 			Target:    0xF1300033F000CFD0,
 			Amount:    27,
@@ -50,7 +50,7 @@ func TestParserMessages(t *testing.T) {
 
 		require.Equal(t, SpellDamage{
 			Caster:    0x0000000000016541,
-			SpellName: "Fire Strike",
+			SpellName: types.Spell{Name: "Fire Strike"},
 			HitType:   types.HitTypeHit,
 			Target:    0x000000000001B1F2,
 			Amount:    2,
@@ -60,7 +60,7 @@ func TestParserMessages(t *testing.T) {
 	})
 
 	t.Run("Resource Gain", func(t *testing.T) {
-		rg, err := exp[ResourceChange](p.fGain(time.Time{}, "0x000000000005B81F gains 20 Energy from 0x000000000005B81F's Relentless Strikes."))
+		rg, err := exp[ResourceChange](p.fGainSource(time.Time{}, "0x000000000005B81F gains 20 Energy from 0x000000000005B81F's Relentless Strikes."))
 		require.NoError(t, err)
 
 		require.Equal(t, ResourceChange{
@@ -68,7 +68,7 @@ func TestParserMessages(t *testing.T) {
 			Amount:    20,
 			Resource:  types.ResourceEnergy,
 			Caster:    0x000000000005B81F,
-			SpellName: "Relentless Strikes",
+			SpellName: types.Spell{Name: "Relentless Strikes"},
 			Direction: "gains",
 		}, rg)
 

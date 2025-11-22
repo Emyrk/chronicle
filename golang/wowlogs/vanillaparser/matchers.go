@@ -6,6 +6,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/Emyrk/chronicle/golang/wowlogs/guid"
 	"github.com/Emyrk/chronicle/golang/wowlogs/regexs"
 	"github.com/Emyrk/chronicle/golang/wowlogs/types"
 	"github.com/Emyrk/chronicle/golang/wowlogs/types/castv2"
@@ -117,8 +118,20 @@ func (p *Parser) fSpellCastAttempt(ts time.Time, content string) ([]Message, err
 	return Skip(ts, "handled castsv2"), nil
 }
 
-func (p *Parser) fGain(ts time.Time, content string) ([]Message, error) {
-	matched, ok := types.FromRegex(regexs.ReGain).Match(content)
+func (p *Parser) fGainSource(ts time.Time, content string) ([]Message, error) {
+	return p.fGain(true, ts, content)
+}
+
+func (p *Parser) fGainNoSource(ts time.Time, content string) ([]Message, error) {
+	return p.fGain(false, ts, content)
+}
+
+func (p *Parser) fGain(hasSource bool, ts time.Time, content string) ([]Message, error) {
+	re := regexs.ReGainNoSource
+	if hasSource {
+		re = regexs.ReGain
+	}
+	matched, ok := types.FromRegex(re).Match(content)
 	if !ok {
 		return notHandled()
 	}
@@ -127,14 +140,19 @@ func (p *Parser) fGain(ts time.Time, content string) ([]Message, error) {
 	direction := matched.String()
 	amount := matched.Int32()
 	resource := matched.Resource()
-	_, casterGUID := matched.UnitOrGUID()
-	spellName := matched.String()
+
+	var casterGUID guid.GUID
+	var spellName string
+	if hasSource {
+		_, casterGUID = matched.UnitOrGUID()
+		spellName = matched.String()
+	}
 
 	if err := matched.Error(); err != nil {
 		return nil, fmt.Errorf("gain: %w", err)
 	}
 
-	if targetGUID.IsZero() || casterGUID.IsZero() {
+	if targetGUID.IsZero() {
 		return Skip(ts, "gain: not using guids"), nil
 	}
 
@@ -144,7 +162,7 @@ func (p *Parser) fGain(ts time.Time, content string) ([]Message, error) {
 		Amount:      amount,
 		Resource:    resource,
 		Caster:      casterGUID,
-		SpellName:   spellName,
+		SpellName:   p.state.LastCastedSpell(casterGUID, spellName),
 		Direction:   direction,
 	}), nil
 }
@@ -200,7 +218,7 @@ func (p *Parser) fDamageSpellHitOrCrit(hasSchool bool, ts time.Time, content str
 	sp := SpellDamage{
 		MessageBase: Base(ts),
 		Caster:      caster,
-		SpellName:   spellName,
+		SpellName:   p.state.LastCastedSpell(caster, spellName),
 		HitType:     hitType,
 		Target:      target,
 		Amount:      amount,
@@ -573,28 +591,4 @@ func (p *Parser) fFallDamage(ts time.Time, content string) ([]Message, error) {
 	}
 
 	return Skip(ts, "FallDamage not implemented"), nil
-}
-
-func (p *Parser) fGainNoSource(ts time.Time, content string) ([]Message, error) {
-	matches := regexs.ReGainNoSource.FindStringSubmatch(content)
-	if matches == nil {
-		return notHandled()
-	}
-	//
-	//target, direction, amountStr, resource := matches[1], matches[2], matches[3], matches[4]
-	//amount, err := strconv.ParseUint(amountStr, 10, 64)
-	//if err != nil {
-	//	return nil, fmt.Errorf("resource gain amount %q is not valid: %v", amountStr, err)
-	//}
-
-	return Skip(ts, "GainNoSource not implemented"), nil
-	//return set(ResourceChange{
-	//	MessageBase: Base(ts),
-	//	Target:      Unit{Name: target},
-	//	Amount:      uint32(amount),
-	//	Resource:    resource,
-	//	//Caster:      Unit{Name: caster},
-	//	//Spell:       spell,
-	//	Direction: direction,
-	//}), nil
 }

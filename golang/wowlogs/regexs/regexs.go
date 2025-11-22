@@ -28,9 +28,10 @@ var (
 
 	ReDamageShield = regexp.MustCompile(`(.+[^\s]) reflects (\d+) ([a-zA-Z]+) damage to (.+[^\s])\.`)
 
-	ReHealHit  = regexp.MustCompile(`(.+[^\s])\s's (.+[^\s]) heals (.+[^\s]) for (\d+)\.`)
-	ReHealCrit = regexp.MustCompile(`(.+[^\s])\s's (.+[^\s]) critically heals (.+[^\s]) for (\d+)\.`)
-	ReGain     = regexp.MustCompile(`(.+[^\s]) (gains|loses) (\d+) (Health|health|Mana|Rage|Energy|Happiness|happiness|Focus) from (.+[^\s])'s (.+[^\s])\.`)
+	ReHealHit      = regexp.MustCompile(`(.+[^\s])\s's (.+[^\s]) heals (.+[^\s]) for (\d+)\.`)
+	ReHealCrit     = regexp.MustCompile(`(.+[^\s])\s's (.+[^\s]) critically heals (.+[^\s]) for (\d+)\.`)
+	ReGain         = regexp.MustCompile(`(.+[^\s]) (gains|loses) (\d+) (Health|health|Mana|Rage|Energy|Happiness|happiness|Focus) from (.+[^\s])'s (.+[^\s])\.`)
+	ReGainNoSource = regexp.MustCompile(`(.+[^\s]) (gains|loses) (\d+) (Health|health|Mana|Rage|Energy|Happiness|happiness|Focus)\.`)
 
 	ReAuraGainHarmfulHelpful = regexp.MustCompile(`(.+[^\s]) (is afflicted by|gains) (.+[^\s]) \((\d+)\)\.`)
 	ReAuraFade               = regexp.MustCompile(`(.+[^\s]) fades from (.+[^\s])\.`)
@@ -54,10 +55,9 @@ var (
 
 // From myself
 var (
-	ReCreates      = regexp.MustCompile(`(.+[^\s]) (creates) (.+[^\s])\.`)
-	ReGainsAttack  = regexp.MustCompile(`(.+[^\s]) gains (\d+) extra attack through (.+[^\s])\.`)
-	ReFallDamage   = regexp.MustCompile(`(.+[^\s]) falls and loses (\d+) health\.`)
-	ReGainNoSource = regexp.MustCompile(`(.+[^\s]) (gains|loses) (\d+) (Health|health|Mana|Rage|Energy|Happiness|happiness|Focus)\.`)
+	ReCreates     = regexp.MustCompile(`(.+[^\s]) (creates) (.+[^\s])\.`)
+	ReGainsAttack = regexp.MustCompile(`(.+[^\s]) gains (\d+) extra attack through (.+[^\s])\.`)
+	ReFallDamage  = regexp.MustCompile(`(.+[^\s]) falls and loses (\d+) health\.`)
 
 	// 11/18 18:59:29.276  CAST: 0xF140084493000090(Chotuk) begins to cast Firebolt(7800)(Rank 3) on 0xF13000092F003EDD(Gray Bear).
 	// 11/18 18:59:08.532  CAST: Chotuk casts Fire Shield(2947)(Rank 1) on Maldrissa.
