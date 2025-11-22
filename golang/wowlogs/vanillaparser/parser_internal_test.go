@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/Emyrk/chronicle/golang/internal/ptr"
+	"github.com/Emyrk/chronicle/golang/wowlogs/guid"
 	"github.com/Emyrk/chronicle/golang/wowlogs/types"
 	"github.com/rs/zerolog"
 	slogzerolog "github.com/samber/slog-zerolog/v2"
@@ -68,8 +69,8 @@ func TestParserMessages(t *testing.T) {
 			Target:    0x000000000005B81F,
 			Amount:    20,
 			Resource:  types.ResourceEnergy,
-			Caster:    0x000000000005B81F,
-			SpellName: "Relentless Strikes",
+			Caster:    ptr.Ref[guid.GUID](0x000000000005B81F),
+			SpellName: ptr.Ref("Relentless Strikes"),
 			Direction: "gains",
 		}, rg)
 
@@ -126,6 +127,21 @@ func TestParserMessages(t *testing.T) {
 			Amount:    1048,
 			HitType:   types.HitTypeCrit,
 		}, hc)
+	})
+
+	t.Run("Slain", func(t *testing.T) {
+		sl, err := exp[Slain](p.fUnitSlay(time.Time{}, "0xF130002D53024BA6 is slain by 0x000000000001C7AC!"))
+		require.NoError(t, err)
+		require.Equal(t, Slain{
+			Victim: 0xF130002D53024BA6,
+			Killer: ptr.Ref[guid.GUID](0x000000000001C7AC),
+		}, sl)
+
+		death, err := exp[Slain](p.fUnitDieDestroyed(time.Time{}, "0xF130001EA527931D is destroyed."))
+		require.NoError(t, err)
+		require.Equal(t, Slain{
+			Victim: 0xF130001EA527931D,
+		}, death)
 	})
 
 	//t.Run("Gains Attack", func(t *testing.T) {

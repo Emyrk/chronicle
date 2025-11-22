@@ -72,8 +72,8 @@ type ResourceChange struct {
 	Target    guid.GUID
 	Amount    int32
 	Resource  types.Resource
-	Caster    guid.GUID
-	SpellName string
+	Caster    *guid.GUID
+	SpellName *string
 	// 10/29 22:12:55.926  Naga (Kryaa) gains 35 Happiness from Kryaa 's Feed Pet Effect.
 	// 10/17 21:36:12.823  Sfantu 's Nosferatu loses 52 happiness.
 	Direction string // "gains" or "loses"
@@ -117,4 +117,10 @@ type Heal struct {
 	SpellName string
 	Amount    int32
 	HitType   types.HitType
+}
+
+type Slain struct {
+	MessageBase
+	Victim guid.GUID
+	Killer *guid.GUID
 }

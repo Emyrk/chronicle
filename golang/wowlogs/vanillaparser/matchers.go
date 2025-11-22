@@ -6,6 +6,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/Emyrk/chronicle/golang/internal/ptr"
 	"github.com/Emyrk/chronicle/golang/wowlogs/guid"
 	"github.com/Emyrk/chronicle/golang/wowlogs/regexs"
 	"github.com/Emyrk/chronicle/golang/wowlogs/types"
@@ -140,11 +141,12 @@ func (p *Parser) fGain(hasSource bool, ts time.Time, content string) ([]Message,
 	amount := matched.Int32()
 	resource := matched.Resource()
 
-	var casterGUID guid.GUID
-	var spellName string
+	var casterGUID *guid.GUID
+	var spellName *string
 	if hasSource {
-		_, casterGUID = matched.UnitOrGUID()
-		spellName = matched.String()
+		_, gid := matched.UnitOrGUID()
+		casterGUID = &gid
+		spellName = ptr.Ref(matched.String())
 	}
 
 	if err := matched.Error(); err != nil {
@@ -349,6 +351,10 @@ func (p *Parser) fHeal(ts time.Time, content string) ([]Message, error) {
 	hit := types.HitTypeHit
 	if crit {
 		hit = types.HitTypeCrit
+	}
+
+	if caster.IsZero() || target.IsZero() {
+		return Skip(ts, "Heal: not using guids"), nil
 	}
 
 	return set(Heal{
@@ -558,23 +564,50 @@ func (p *Parser) fSpellCastPerformUnknown(ts time.Time, content string) ([]Messa
  */
 
 func (p *Parser) fUnitDieDestroyed(ts time.Time, content string) ([]Message, error) {
-	matches := regexs.ReUnitDieDestroyed.FindStringSubmatch(content)
-	if matches == nil {
+	matches, ok := types.FromRegex(regexs.ReUnitDieDestroyed).Match(content)
+	if !ok {
 		return notHandled()
 	}
 
-	//unit := matches[1]
-	return Skip(ts, "UnitDieDestroyed not implemented"), nil
+	_, victim := matches.UnitOrGUID()
+
+	if err := matches.Error(); err != nil {
+		return nil, fmt.Errorf("UnitSlay: %w", err)
+	}
+
+	if victim.IsZero() {
+		return Skip(ts, "UnitDieDestroyed: not using guids"), nil
+	}
+
+	return set(Slain{
+		MessageBase: Base(ts),
+		Victim:      victim,
+		Killer:      nil,
+	}), nil
 }
 
 func (p *Parser) fUnitSlay(ts time.Time, content string) ([]Message, error) {
-	matches := regexs.ReUnitSlay.FindStringSubmatch(content)
-	if matches == nil {
+	matches, ok := types.FromRegex(regexs.ReUnitSlay).Match(content)
+	if !ok {
 		return notHandled()
 	}
 
-	//victim, cause := matches[1], matches[2]
-	return Skip(ts, "UnitSlay not implemented"), nil
+	_, victim := matches.UnitOrGUID()
+	_, killer := matches.UnitOrGUID()
+
+	if err := matches.Error(); err != nil {
+		return nil, fmt.Errorf("UnitSlay: %w", err)
+	}
+
+	if victim.IsZero() {
+		return Skip(ts, "UnitSlay: not using guids"), nil
+	}
+
+	return set(Slain{
+		MessageBase: Base(ts),
+		Victim:      victim,
+		Killer:      ptr.Ref(killer),
+	}), nil
 }
 
 /**
