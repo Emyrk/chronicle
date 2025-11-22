@@ -62,6 +62,12 @@ func (m *Matched) Unit() Unit            { return parse(m, ParseUnit) }
 func (m *Matched) Trailer() Trailer      { return parse(m, ParseTrailer) }
 func (m *Matched) School() School        { return parse(m, ParseSchool) }
 
+func (m *Matched) Rest() []string {
+	rest := m.Values[m.Index-1:]
+	m.Index = len(m.Values) + 1
+	return rest
+}
+
 func (m *Matched) String() string {
 	return m.pop()
 }

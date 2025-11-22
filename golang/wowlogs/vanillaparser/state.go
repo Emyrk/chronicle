@@ -9,7 +9,6 @@ import (
 	"github.com/Emyrk/chronicle/golang/wowlogs/types"
 	"github.com/Emyrk/chronicle/golang/wowlogs/types/castv2"
 	"github.com/Emyrk/chronicle/golang/wowlogs/types/combatant"
-	"github.com/Emyrk/chronicle/golang/wowlogs/vanillaparser/whoami"
 )
 
 type State struct {
@@ -17,16 +16,16 @@ type State struct {
 	Participants      map[guid.GUID][]combatant.Combatant
 	ParticipantDamage map[guid.GUID]int64
 	ParticipantCasts  map[guid.GUID]map[int]types.Spell
-	Me                *whoami.Me
+	Me                types.Unit
 }
 
-func NewState(logger *slog.Logger) *State {
+func NewState(logger *slog.Logger, me types.Unit) *State {
 	return &State{
 		logger:            logger,
 		Participants:      make(map[guid.GUID][]combatant.Combatant),
 		ParticipantCasts:  make(map[guid.GUID]map[int]types.Spell),
 		ParticipantDamage: make(map[guid.GUID]int64),
-		Me:                whoami.NewMe(),
+		Me:                me,
 	}
 }
 
@@ -73,20 +72,6 @@ func (s *State) Combatant(cmbt combatant.Combatant) {
 	if !cmbt.Guid.IsPlayer() {
 		// Only track players for now
 		return
-	}
-
-	if cmbt.IsMe() {
-		err := s.Me.SetUnit(types.Unit{
-			Name: cmbt.Name,
-			Gid:  cmbt.Guid,
-		})
-		if err != nil {
-			s.logger.Error("failed to set Me unit",
-				slog.String("name", cmbt.Name),
-				slog.String("guid", cmbt.Guid.String()),
-				slog.String("error", err.Error()),
-			)
-		}
 	}
 
 	if s.ParticipantCasts[cmbt.Guid] == nil {

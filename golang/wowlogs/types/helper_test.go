@@ -21,4 +21,8 @@ func TestMatchStack(t *testing.T) {
 	require.Equal(t, "world", matched.String())
 	require.Equal(t, "1234", matched.String())
 	require.Nil(t, matched.Error())
+
+	matched, ok = p.Match(content)
+	require.True(t, ok)
+	require.Equal(t, []string{"hello", "world", "1234"}, matched.Rest())
 }

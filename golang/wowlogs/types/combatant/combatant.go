@@ -35,7 +35,7 @@ type Combatant struct {
 }
 
 func (c *Combatant) IsMe() bool {
-	return c.Talents != nil
+	return c.Talents != nil && c.Guid.IsPlayer()
 }
 
 func ParseCombatantInfo(content string) (Combatant, error) {

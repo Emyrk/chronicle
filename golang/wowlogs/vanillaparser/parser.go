@@ -6,10 +6,12 @@ import (
 	"log/slog"
 	"reflect"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/Emyrk/chronicle/golang/wowlogs/lines"
 	"github.com/Emyrk/chronicle/golang/wowlogs/merge"
+	"github.com/Emyrk/chronicle/golang/wowlogs/vanillaparser/whoami"
 )
 
 type parseLine = func(ts time.Time, content string) ([]Message, error)
@@ -19,6 +21,8 @@ type Parser struct {
 	scanner merge.Scan
 	liner   *lines.Liner
 	state   *State
+
+	setup sync.Once
 }
 
 func New(logger *slog.Logger, r io.Reader) (*Parser, error) {
@@ -26,7 +30,6 @@ func New(logger *slog.Logger, r io.Reader) (*Parser, error) {
 		logger:  logger,
 		scanner: merge.FromIOReader(lines.NewLiner(), r),
 		liner:   lines.NewLiner(),
-		state:   NewState(logger),
 	}, nil
 }
 
@@ -35,7 +38,6 @@ func NewFromScanner(logger *slog.Logger, liner *lines.Liner, scan merge.Scan) *P
 		logger:  logger,
 		scanner: scan,
 		liner:   liner,
-		state:   NewState(logger),
 	}
 }
 
@@ -50,10 +52,40 @@ func Merger(logger *slog.Logger) *merge.Merger {
 	)
 }
 
+func (p *Parser) init() error {
+	var initErr error
+	p.setup.Do(func() {
+		scan, me, lc, err := whoami.FindMe(p.liner, p.scanner)
+		if err != nil {
+			initErr = fmt.Errorf("find me: %w", err)
+			return
+		}
+
+		p.logger.Info("Identified 'me' in logs",
+			slog.String("name", me.Name),
+			slog.String("guid", me.Gid.String()),
+			slog.Int("lines_read", lc),
+		)
+		p.state = NewState(p.logger, me)
+		p.scanner = scan
+	})
+	return initErr
+}
+
 func (p *Parser) Advance() ([]Message, error) {
+	err := p.init()
+	if err != nil {
+		return nil, fmt.Errorf("init: %w", err)
+	}
+
 	ts, content, err := p.scanner()
 	if err != nil {
 		return nil, err
+	}
+
+	content, err = p.state.Preprocess(content)
+	if err != nil {
+		return nil, fmt.Errorf("preprocess line failed: %v", err)
 	}
 	content = strings.TrimSpace(content)
 
