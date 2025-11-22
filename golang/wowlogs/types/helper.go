@@ -60,6 +60,7 @@ func (m *Matched) HitType() HitType      { return parse(m, ParseHitMask) }
 func (m *Matched) ShortHitType() HitType { return parse(m, ParseHitOrCritShort) }
 func (m *Matched) Unit() Unit            { return parse(m, ParseUnit) }
 func (m *Matched) Trailer() Trailer      { return parse(m, ParseTrailer) }
+func (m *Matched) School() School        { return parse(m, ParseSchool) }
 
 func (m *Matched) String() string {
 	return m.pop()

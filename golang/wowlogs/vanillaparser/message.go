@@ -87,4 +87,5 @@ type SpellDamage struct {
 	Target    guid.GUID
 	Amount    int32
 	Trailer   types.Trailer
+	School    types.School
 }

@@ -149,12 +149,25 @@ func (p *Parser) fGain(ts time.Time, content string) ([]Message, error) {
 	}), nil
 }
 
+func (p *Parser) fDamageSpellHitOrCritSchool(ts time.Time, content string) ([]Message, error) {
+	return p.fDamageSpellHitOrCrit(true, ts, content)
+}
+
+func (p *Parser) fDamageSpellHitOrCritNoSchool(ts time.Time, content string) ([]Message, error) {
+	return p.fDamageSpellHitOrCrit(false, ts, content)
+}
+
 /**
  * Spell Damage
  */
 // 11/18 07:21:45.192  0xF1400844930090A2's Firebolt hits 0xF130000950003FB5 for 38 Fire damage.
-func (p *Parser) fDamageSpellHitOrCrit(ts time.Time, content string) ([]Message, error) {
-	matches, ok := types.FromRegex(regexs.ReDamageSpellHitOrCrit).Match(content)
+func (p *Parser) fDamageSpellHitOrCrit(hasSchool bool, ts time.Time, content string) ([]Message, error) {
+	re := regexs.ReDamageSpellHitOrCrit
+	if hasSchool {
+		re = regexs.ReDamageSpellHitOrCritSchool
+	}
+
+	matches, ok := types.FromRegex(re).Match(content)
 	if !ok {
 		return notHandled()
 	}
@@ -165,6 +178,11 @@ func (p *Parser) fDamageSpellHitOrCrit(ts time.Time, content string) ([]Message,
 	_, target := matches.UnitOrGUID()
 	amount := matches.Int32()
 	trailer := matches.Trailer()
+
+	var school types.School
+	if hasSchool {
+		school = matches.School()
+	}
 
 	if err := matches.Error(); err != nil {
 		return nil, fmt.Errorf("DamageSpellHitOrCrit: %w", err)
@@ -187,20 +205,10 @@ func (p *Parser) fDamageSpellHitOrCrit(ts time.Time, content string) ([]Message,
 		Target:      target,
 		Amount:      amount,
 		Trailer:     trailer,
+		School:      school,
 	}
 	p.state.SpellDamage(sp)
 	return set(sp), nil
-}
-
-func (p *Parser) fDamageSpellHitOrCritSchool(ts time.Time, content string) ([]Message, error) {
-	matches := regexs.ReDamageSpellHitOrCritSchool.FindStringSubmatch(content)
-	if matches == nil {
-		return notHandled()
-	}
-
-	//attacker, spellID, hitMask, victom, damage, school, trailer := matches[1], matches[2], matches[3], matches[4], matches[5], matches[6], matches[7]
-	// Return spell cast & spell damage message
-	return Skip(ts, "DamageSpellHitOrCritSchool not implemented"), nil
 }
 
 func (p *Parser) fDamagePeriodic(ts time.Time, content string) ([]Message, error) {

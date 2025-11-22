@@ -1,7 +1,10 @@
 //go:generate go tool go-enum -f constants.go --nocase
 package types
 
-import "errors"
+import (
+	"errors"
+	"strings"
+)
 
 // ENUM(casts, begins to cast, channels, fails casting)
 type CastActions string
@@ -67,5 +70,39 @@ func ParseHitOrCritShort(s string) (HitType, error) {
 		return HitTypeCrit, nil
 	default:
 		return HitTypeNone, errors.New("invalid hit or crit short")
+	}
+}
+
+type School uint16
+
+const (
+	None           School = 0x00
+	PhysicalSchool School = 0x01
+	HolySchool     School = 0x02
+	FireSchool     School = 0x04
+	NatureSchool   School = 0x08
+	FrostSchool    School = 0x10
+	ShadowSchool   School = 0x20
+	ArcaneSchool   School = 0x40
+)
+
+func ParseSchool(s string) (School, error) {
+	switch strings.ToLower(s) {
+	case "physical":
+		return PhysicalSchool, nil
+	case "holy":
+		return HolySchool, nil
+	case "fire":
+		return FireSchool, nil
+	case "nature":
+		return NatureSchool, nil
+	case "frost":
+		return FrostSchool, nil
+	case "shadow":
+		return ShadowSchool, nil
+	case "arcane":
+		return ArcaneSchool, nil
+	default:
+		return None, errors.New("invalid school")
 	}
 }

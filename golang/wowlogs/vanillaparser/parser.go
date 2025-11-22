@@ -66,7 +66,7 @@ func (p *Parser) Advance() ([]Message, error) {
 		p.fBugDamageSpellHitOrCrit,
 		p.fSpellCastAttempt,
 		p.fGain,
-		p.fDamageSpellHitOrCrit,
+		p.fDamageSpellHitOrCritNoSchool,
 		p.fDamageSpellHitOrCritSchool,
 		p.fDamagePeriodic,
 		p.fDamageShield,

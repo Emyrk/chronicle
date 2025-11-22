@@ -44,6 +44,13 @@ func TestParserMessages(t *testing.T) {
 		}, sh)
 	})
 
+	t.Run("SpellAndSchool", func(t *testing.T) {
+		ss, err := exp[SpellDamage](p.fDamageSpellHitOrCritSchool(time.Time{}, "0x0000000000016541's Fire Strike hits 0x000000000001B1F2 for 2 Fire damage."))
+		require.NoError(t, err)
+
+		require.Equal(t, SpellDamage{}, ss)
+	})
+
 	t.Run("Resource Gain", func(t *testing.T) {
 		rg, err := exp[ResourceChange](p.fGain(time.Time{}, "11/20 15:12:59.228  0x000000000005B81F gains 20 Energy from 0x000000000005B81F's Relentless Strikes."))
 		require.NoError(t, err)
