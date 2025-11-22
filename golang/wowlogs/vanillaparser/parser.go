@@ -26,7 +26,7 @@ func New(logger *slog.Logger, r io.Reader) (*Parser, error) {
 		logger:  logger,
 		scanner: merge.FromIOReader(lines.NewLiner(), r),
 		liner:   lines.NewLiner(),
-		state:   NewState(),
+		state:   NewState(logger),
 	}, nil
 }
 
@@ -35,7 +35,7 @@ func NewFromScanner(logger *slog.Logger, liner *lines.Liner, scan merge.Scan) *P
 		logger:  logger,
 		scanner: scan,
 		liner:   liner,
-		state:   NewState(),
+		state:   NewState(logger),
 	}
 }
 
@@ -61,6 +61,7 @@ func (p *Parser) Advance() ([]Message, error) {
 		p.fCombatantGUID,
 		p.fCombatantInfo,
 		p.fZoneInfo,
+		p.fV2Casts,
 		p.fLoot,
 		p.fBugDamageSpellHitOrCrit,
 		p.fSpellCastAttempt,

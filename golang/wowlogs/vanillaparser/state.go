@@ -2,20 +2,54 @@ package vanillaparser
 
 import (
 	"fmt"
+	"log/slog"
 	"strings"
 
 	"github.com/Emyrk/chronicle/golang/wowlogs/guid"
+	"github.com/Emyrk/chronicle/golang/wowlogs/types"
+	"github.com/Emyrk/chronicle/golang/wowlogs/types/castv2"
 	"github.com/Emyrk/chronicle/golang/wowlogs/types/combatant"
 )
 
 type State struct {
-	Participants map[guid.GUID][]combatant.Combatant
+	logger           *slog.Logger
+	Participants     map[guid.GUID][]combatant.Combatant
+	ParticipantCasts map[guid.GUID]map[int]types.Spell
 }
 
-func NewState() *State {
+func NewState(logger *slog.Logger) *State {
 	return &State{
-		Participants: make(map[guid.GUID][]combatant.Combatant),
+		logger:           logger,
+		Participants:     make(map[guid.GUID][]combatant.Combatant),
+		ParticipantCasts: make(map[guid.GUID]map[int]types.Spell),
 	}
+}
+
+func (s *State) CastV2(cst castv2.CastV2) {
+	if !cst.Caster.HasGuid() {
+		return
+	}
+
+	if !cst.Caster.Gid.IsPlayer() {
+		// Only track players for now
+		return
+	}
+
+	if s.ParticipantCasts[cst.Caster.Gid] == nil {
+		s.ParticipantCasts[cst.Caster.Gid] = make(map[int]types.Spell)
+	}
+
+	if _, ok := s.ParticipantCasts[cst.Caster.Gid][cst.Spell.ID]; ok {
+		return
+	}
+
+	s.ParticipantCasts[cst.Caster.Gid][cst.Spell.ID] = cst.Spell
+	s.logger.Debug("new spell cast",
+		slog.String("caster_name", cst.Caster.Name),
+		slog.String("caster_guid", cst.Caster.Gid.String()),
+		slog.String("spell_name", cst.Spell.Name),
+		slog.Int("spell_id", int(cst.Spell.ID)),
+	)
 }
 
 func (s *State) Combatant(cmbt combatant.Combatant) {
@@ -23,11 +57,24 @@ func (s *State) Combatant(cmbt combatant.Combatant) {
 		return
 	}
 
-	if s.Participants[cmbt.Guid] == nil {
-		s.Participants[cmbt.Guid] = []combatant.Combatant{}
+	if !cmbt.Guid.IsPlayer() {
+		// Only track players for now
+		return
 	}
 
-	s.Participants[cmbt.Guid] = append(s.Participants[cmbt.Guid], cmbt)
+	if s.ParticipantCasts[cmbt.Guid] == nil {
+		s.ParticipantCasts[cmbt.Guid] = make(map[int]types.Spell)
+	}
+	newPlayer := insert(s.Participants, cmbt.Guid, cmbt)
+
+	if newPlayer {
+		s.logger.Debug("new combatant",
+			slog.String("name", cmbt.Name),
+			slog.String("guid", cmbt.Guid.String()),
+			slog.String("class", cmbt.HeroClass.String()),
+			slog.String("race", cmbt.Race.String()),
+		)
+	}
 }
 
 func (s *State) String() string {
@@ -35,8 +82,25 @@ func (s *State) String() string {
 	str.WriteString(fmt.Sprintf("State with %d participants:\n", len(s.Participants)))
 	for gid, cmbts := range s.Participants {
 		cmbt := cmbts[0]
-		str.WriteString(fmt.Sprintf(" - %s: %s\n", gid.String(), cmbt.Name))
+		str.WriteString(fmt.Sprintf(" - %s: %s the %s had %d unique spells\n",
+			gid.String(), cmbt.Name, cmbt.HeroClass.String(),
+			len(s.ParticipantCasts[gid]),
+		))
 	}
 
 	return str.String()
+}
+
+func insert[K comparable, V any](m map[K][]V, key K, value V) bool {
+	b := ensure(m, key)
+	m[key] = append(m[key], value)
+	return b
+}
+
+func ensure[K comparable, V any](m map[K][]V, key K) bool {
+	if m[key] == nil {
+		m[key] = []V{}
+		return true
+	}
+	return false
 }
