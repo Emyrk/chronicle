@@ -89,6 +89,12 @@ func (p *Parser) Advance() ([]Message, error) {
 	}
 	content = strings.TrimSpace(content)
 
+	if content == "" {
+		// Maybe the preprocessing removed all content, it does not matter.
+		// Empty lines are not interesting.
+		return Skip(ts, "empty line"), nil
+	}
+
 	for _, parser := range []parseLine{
 		p.fCombatantGUID,
 		p.fCombatantInfo,

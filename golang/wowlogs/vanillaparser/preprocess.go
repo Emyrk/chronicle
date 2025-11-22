@@ -59,11 +59,6 @@ var (
 )
 
 func (s *State) Preprocess(content string) (string, error) {
-	if content[0] != ' ' {
-		// This is important
-		return content, fmt.Errorf("expected content to start with a space")
-	}
-
 	fixed, ok, err := s.youReplace(content)
 	if err != nil {
 		return "", err
@@ -82,18 +77,36 @@ func (s *State) Preprocess(content string) (string, error) {
 }
 
 func (s *State) youReplace(content string) (string, bool, error) {
+	if len(content) == 0 {
+		return content, false, nil
+	}
+
+	trim := false
+	if content[0] != ' ' {
+		content = " " + content
+		trim = true
+	}
+
+	// Is prepending this space costly? It simplifies the regex...
+	fix := func(s string) string {
+		if trim && len(s) > 0 {
+			return s[1:]
+		}
+		return s
+	}
+
 	for _, rpl := range youReplacements {
 		re, replace := rpl.re, rpl.replacement
 		replaced, ok, err := s.replacer(re, content, replace)
 		if err != nil {
-			return content, ok, err
+			return fix(content), ok, err
 		}
 
 		if ok {
-			return replaced, ok, nil
+			return fix(replaced), ok, nil
 		}
 	}
-	return content, false, nil
+	return fix(content), false, nil
 }
 
 func (s *State) replacer(re *regexp.Regexp, content string, replacement string) (string, bool, error) {

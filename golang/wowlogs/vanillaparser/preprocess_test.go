@@ -1,7 +1,6 @@
 package vanillaparser_test
 
 import (
-	"strings"
 	"testing"
 
 	"github.com/Emyrk/chronicle/golang/internal/testutil"
@@ -51,9 +50,9 @@ func TestYouReplacements(t *testing.T) {
 	for input, expected := range exps {
 		t.Run(input, func(t *testing.T) {
 			// content starts with a space. Handle it here for easier reading in the map.
-			output, err := state.Preprocess(" " + input)
+			output, err := state.Preprocess(input)
 			require.NoError(t, err)
-			assert.Equal(t, expected, strings.TrimPrefix(output, " "))
+			assert.Equal(t, expected, output)
 		})
 	}
 }
