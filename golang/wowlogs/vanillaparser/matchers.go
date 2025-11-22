@@ -161,7 +161,7 @@ func (p *Parser) fDamageSpellHitOrCrit(ts time.Time, content string) ([]Message,
 
 	_, caster := matches.UnitOrGUID()
 	spellName := matches.String()
-	hitType := matches.HitType()
+	hitType := matches.ShortHitType()
 	_, target := matches.UnitOrGUID()
 	amount := matches.Int32()
 	trailer := matches.Trailer()
@@ -179,7 +179,7 @@ func (p *Parser) fDamageSpellHitOrCrit(ts time.Time, content string) ([]Message,
 		trailer[i].HitType = trailer[i].HitType | hitType
 	}
 
-	return set(SpellDamage{
+	sp := SpellDamage{
 		MessageBase: Base(ts),
 		Caster:      caster,
 		SpellName:   spellName,
@@ -187,7 +187,9 @@ func (p *Parser) fDamageSpellHitOrCrit(ts time.Time, content string) ([]Message,
 		Target:      target,
 		Amount:      amount,
 		Trailer:     trailer,
-	}), nil
+	}
+	p.state.SpellDamage(sp)
+	return set(sp), nil
 }
 
 func (p *Parser) fDamageSpellHitOrCritSchool(ts time.Time, content string) ([]Message, error) {

@@ -1,11 +1,9 @@
-package trailer
+package types
 
 import (
 	"fmt"
 	"strconv"
 	"strings"
-
-	"github.com/Emyrk/chronicle/golang/wowlogs/types"
 )
 
 type Trailer []TrailerEntry
@@ -13,7 +11,7 @@ type Trailer []TrailerEntry
 // TrailerEntry represents a single entry in the combat trailer
 type TrailerEntry struct {
 	Amount  *uint32
-	HitType types.HitType
+	HitType HitType
 }
 
 // ParseTrailer parses a combat trailer string and returns a slice of trailer entries
@@ -25,9 +23,9 @@ func ParseTrailer(trailer string) (Trailer, error) {
 		indTrailer = strings.ReplaceAll(indTrailer, ")", "")
 
 		if indTrailer == "glancing" {
-			result = append(result, TrailerEntry{Amount: nil, HitType: types.HitTypeGlancing})
+			result = append(result, TrailerEntry{Amount: nil, HitType: HitTypeGlancing})
 		} else if indTrailer == "crushing" {
-			result = append(result, TrailerEntry{Amount: nil, HitType: types.HitTypeCrushing})
+			result = append(result, TrailerEntry{Amount: nil, HitType: HitTypeCrushing})
 		} else if indTrailer != "" {
 			parts := strings.Split(indTrailer, " ")
 
@@ -40,15 +38,15 @@ func ParseTrailer(trailer string) (Trailer, error) {
 			if len(parts) > 1 {
 				if amount, err := strconv.ParseUint(parts[0], 10, 32); err == nil {
 					amount32 := uint32(amount)
-					var hitType types.HitType
+					var hitType HitType
 
 					switch parts[1] {
 					case "resisted":
-						hitType = types.HitTypePartialResist
+						hitType = HitTypePartialResist
 					case "blocked":
-						hitType = types.HitTypePartialBlock
+						hitType = HitTypePartialBlock
 					case "absorbed":
-						hitType = types.HitTypePartialAbsorb
+						hitType = HitTypePartialAbsorb
 					default:
 						return nil, fmt.Errorf("unexpected hit type: %s", parts[1])
 					}

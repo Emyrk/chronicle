@@ -12,17 +12,27 @@ import (
 )
 
 type State struct {
-	logger           *slog.Logger
-	Participants     map[guid.GUID][]combatant.Combatant
-	ParticipantCasts map[guid.GUID]map[int]types.Spell
+	logger            *slog.Logger
+	Participants      map[guid.GUID][]combatant.Combatant
+	ParticipantDamage map[guid.GUID]int64
+	ParticipantCasts  map[guid.GUID]map[int]types.Spell
 }
 
 func NewState(logger *slog.Logger) *State {
 	return &State{
-		logger:           logger,
-		Participants:     make(map[guid.GUID][]combatant.Combatant),
-		ParticipantCasts: make(map[guid.GUID]map[int]types.Spell),
+		logger:            logger,
+		Participants:      make(map[guid.GUID][]combatant.Combatant),
+		ParticipantCasts:  make(map[guid.GUID]map[int]types.Spell),
+		ParticipantDamage: make(map[guid.GUID]int64),
 	}
+}
+
+func (s *State) SpellDamage(damage SpellDamage) {
+	if !damage.Caster.IsPlayer() {
+		// Only track players for now
+		return
+	}
+	s.ParticipantDamage[damage.Caster] += int64(damage.Amount)
 }
 
 func (s *State) CastV2(cst castv2.CastV2) {
@@ -82,9 +92,10 @@ func (s *State) String() string {
 	str.WriteString(fmt.Sprintf("State with %d participants:\n", len(s.Participants)))
 	for gid, cmbts := range s.Participants {
 		cmbt := cmbts[0]
-		str.WriteString(fmt.Sprintf(" - %s: %s the %s had %d unique spells\n",
+		str.WriteString(fmt.Sprintf(" - %s: %s the %s had %d unique spells and did %d damage\n",
 			gid.String(), cmbt.Name, cmbt.HeroClass.String(),
 			len(s.ParticipantCasts[gid]),
+			s.ParticipantDamage[gid],
 		))
 	}
 

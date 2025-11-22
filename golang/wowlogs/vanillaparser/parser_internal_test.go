@@ -8,6 +8,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/Emyrk/chronicle/golang/wowlogs/types"
 	"github.com/rs/zerolog"
 	slogzerolog "github.com/samber/slog-zerolog/v2"
 	"github.com/stretchr/testify/require"
@@ -15,8 +16,6 @@ import (
 
 func TestParserMessages(t *testing.T) {
 	t.Parallel()
-
-	t.Skip("Skipping internal parser tests temporarily")
 
 	zerologLogger := zerolog.New(zerolog.ConsoleWriter{Out: os.Stderr})
 	logger := slog.New(slogzerolog.Option{Level: slog.LevelDebug, Logger: &zerologLogger}.NewZerologHandler())
@@ -30,11 +29,19 @@ func TestParserMessages(t *testing.T) {
 	//	require.Equal(t, "Flash Heal", att.SpellName)
 	//})
 
+	// With school: 0xF1400844930090A2's Firebolt hits 0xF130000950003FB5 for 38 Fire damage
 	t.Run("SpellHit", func(t *testing.T) {
-		sh, err := exp[Message](p.fDamageSpellHitOrCrit(time.Time{}, "11/18 07:21:45.192  0xF1400844930090A2's Firebolt hits 0xF130000950003FB5 for 38 Fire damage"))
+		sh, err := exp[SpellDamage](p.fDamageSpellHitOrCrit(time.Time{}, "0x0000000000062A1B's Hamstring hits 0xF1300033F000CFD0 for 27."))
 		require.NoError(t, err)
 
-		var _ = sh
+		require.Equal(t, SpellDamage{
+			Caster:    0x0000000000062A1B,
+			SpellName: "Hamstring",
+			HitType:   types.HitTypeHit,
+			Target:    0xF1300033F000CFD0,
+			Amount:    27,
+			Trailer:   nil,
+		}, sh)
 	})
 
 	t.Run("Resource Gain", func(t *testing.T) {

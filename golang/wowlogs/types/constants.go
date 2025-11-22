@@ -58,3 +58,14 @@ func ParseHitMask(s string) (HitType, error) {
 		return HitTypeNone, errors.New("invalid hit mask")
 	}
 }
+
+func ParseHitOrCritShort(s string) (HitType, error) {
+	switch s {
+	case "h":
+		return HitTypeHit, nil
+	case "cr":
+		return HitTypeCrit, nil
+	default:
+		return HitTypeNone, errors.New("invalid hit or crit short")
+	}
+}
