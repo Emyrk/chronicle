@@ -181,11 +181,13 @@ func (i *inOrderMerger) advance(index int) (time.Time, string, error) {
 		}
 
 		if !set.Scanner.Scan() {
+			lastTS, lastLine := set.lastTS, set.lastLine
+
 			set.done = true
 			set.lastTS = time.Time{}
 			set.lastLine = ""
 			i.Sets[index] = set
-			return ts, set.lastLine, nil
+			return lastTS, lastLine, nil
 		}
 
 		line := set.Scanner.Text()
