@@ -586,6 +586,7 @@ func (p *Parser) fUnitDieDestroyed(ts time.Time, content string) ([]Message, err
 	}), nil
 }
 
+// What about 'You have slain 0xF130002AE6024CA7!'?
 func (p *Parser) fUnitSlay(ts time.Time, content string) ([]Message, error) {
 	matches, ok := types.FromRegex(regexs.ReUnitSlay).Match(content)
 	if !ok {

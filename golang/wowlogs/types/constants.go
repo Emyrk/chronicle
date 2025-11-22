@@ -15,7 +15,7 @@ type HeroClasses string
 // ENUM(Scourge,Orc,Troll,Tauren,Goblin,Human,Gnome,Dwarf,NightElf,BloodElf)
 type HeroRaces string
 
-// ENUM(NotSet,Unknown,EMPTY,Male,Female)
+// ENUM(NotSet,Unknown,Male,Female)
 type HeroGender int
 
 // ENUM(Health,Mana,Rage,Happiness,Energy,Focus)

@@ -57,22 +57,30 @@ func TestParseCombatant(t *testing.T) {
 		},
 		{
 			name:    "MeDoyd",
-			content: `COMBATANT_INFO: 20.11.25 19:33:23&Doyd&ROGUE&Scourge&2&nil&Exalted with Doordash&Friendly&4&8176:0:0:0&60300:0:0:0&9647:0:0:0&60058:0:0:0&83401:18:0:0&13118:0:0:0&60268:1843:0:0&9948:1843:612:0&16710:0:0:0&4107:17:0:0&9533:0:0:0&60835:0:0:0&60587:0:0:0&58073:0:0:0&6432:0:0:0&9684:0:0:0&61330:0:0:0&55474:0:0:0&5976:0:0:0&nil&0x000000000001C7AC`,
+			content: `COMBATANT_INFO: 20.11.25 20:10:44&Doyd&ROGUE&Scourge&2&nil&Exalted with Doordash&Friendly&4&20643:0:0:0&12046:0:608:0&9647:0:0:0&60058:0:0:0&83401:18:0:0&13118:0:0:0&60268:1843:0:0&9948:1843:612:0&16710:0:0:0&4107:17:0:0&9533:0:0:0&60835:0:0:0&60587:0:0:0&58073:0:0:0&6432:0:0:0&51046:0:0:0&61330:0:0:0&19107:0:0:0&5976:0:0:0&215303100000000000}055051000050122231}00000000000000000000&0x000000000001C7AC`,
 			exp: combatant.Combatant{
 				Name:      "Doyd",
 				Guid:      guid.GUID(0x000000000001C7AC),
-				Seen:      time.Date(2025, 11, 12, 19, 33, 23, 0, time.UTC),
+				Seen:      time.Date(2025, 11, 20, 20, 10, 44, 0, time.UTC),
 				HeroClass: types.HeroClassesROGUE,
 				Gender:    types.HeroGenderMale,
 				Race:      types.HeroRacesScourge,
 				PetName:   "",
 				Guild: &combatant.Guild{
 					Name:      "Exalted with Doordash",
-					RankName:  "",
-					RankIndex: "",
+					RankName:  "Friendly",
+					RankIndex: "4",
 				},
 				GearSetups: nil,
-				Talents:    nil,
+				Talents: &combatant.Talents{
+					// 215303100000000000}055051000050122231}00000000000000000000
+					Summary: [3]uint8{15, 32, 0},
+					Trees: [3][]uint8{
+						{2, 1, 5, 3, 0, 3, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0},
+						{0, 5, 5, 0, 5, 1, 0, 0, 0, 0, 5, 0, 1, 2, 2, 2, 3, 1},
+						{0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0},
+					},
+				},
 			},
 		},
 	}
@@ -88,10 +96,6 @@ func TestParseCombatant(t *testing.T) {
 			// Ignore some comparisons if unset
 			if c.exp.GearSetups == nil {
 				player.GearSetups = nil
-			}
-
-			if c.exp.Talents == nil {
-				player.Talents = nil
 			}
 
 			c.exp.Seen = c.exp.Seen.Truncate(time.Second)

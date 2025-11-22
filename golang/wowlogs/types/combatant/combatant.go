@@ -31,7 +31,11 @@ type Combatant struct {
 
 	Guild      *Guild
 	GearSetups []GearItem
-	Talents    *string
+	Talents    *Talents
+}
+
+func (c *Combatant) IsMe() bool {
+	return c.Talents != nil
 }
 
 func ParseCombatantInfo(content string) (Combatant, error) {
@@ -141,6 +145,12 @@ func ParseCombatantInfo(content string) (Combatant, error) {
 	//	participant.Talents = &talents
 	//}
 
+	tls, err := ParseTalents(info.talents())
+	if err != nil {
+		return empty, fmt.Errorf("invalid talents format in COMBATANT_INFO message: %v", err)
+	}
+	player.Talents = tls
+
 	guidStr := info.guid()
 	player.Guid, err = guid.FromString(guidStr)
 	if err != nil {
@@ -167,4 +177,44 @@ type GearItem struct {
 	ItemID    int
 	EnchantID *int
 	// TODO: slot source?
+}
+
+type Talents struct {
+	// Summary is the total number of points spent in each tree
+	Summary [3]uint8
+	// Trees contains the points spent in each talent per tree. Talents are numbered,
+	// and each class has a different number of talents per tree.
+	Trees [3][]uint8
+}
+
+// ParseTalents parses the talent string into a Talents struct
+// 215303100000000000}055051000050122231}00000000000000000000
+func ParseTalents(input string) (*Talents, error) {
+	if input == "nil" {
+		return nil, nil
+	}
+
+	trees := strings.Split(input, "}")
+	if len(trees) != 3 {
+		return nil, fmt.Errorf("invalid talents format: %s", input)
+	}
+
+	tls := &Talents{
+		Summary: [3]uint8{},
+		Trees:   [3][]uint8{},
+	}
+
+	for i, tree := range trees {
+		tls.Trees[i] = make([]uint8, len(tree))
+		for j, char := range tree {
+			val, err := strconv.ParseUint(string(char), 10, 8)
+			if err != nil {
+				return nil, fmt.Errorf("invalid talent character '%c' in talents: %v", char, err)
+			}
+			tls.Trees[i][j] = uint8(val)
+			tls.Summary[i] += uint8(val)
+		}
+	}
+
+	return tls, nil
 }

@@ -128,8 +128,6 @@ const (
 	HeroGenderNotSet HeroGender = iota
 	// HeroGenderUnknown is a HeroGender of type Unknown.
 	HeroGenderUnknown
-	// HeroGenderEMPTY is a HeroGender of type EMPTY.
-	HeroGenderEMPTY
 	// HeroGenderMale is a HeroGender of type Male.
 	HeroGenderMale
 	// HeroGenderFemale is a HeroGender of type Female.
@@ -138,14 +136,13 @@ const (
 
 var ErrInvalidHeroGender = errors.New("not a valid HeroGender")
 
-const _HeroGenderName = "NotSetUnknownEMPTYMaleFemale"
+const _HeroGenderName = "NotSetUnknownMaleFemale"
 
 var _HeroGenderMap = map[HeroGender]string{
 	HeroGenderNotSet:  _HeroGenderName[0:6],
 	HeroGenderUnknown: _HeroGenderName[6:13],
-	HeroGenderEMPTY:   _HeroGenderName[13:18],
-	HeroGenderMale:    _HeroGenderName[18:22],
-	HeroGenderFemale:  _HeroGenderName[22:28],
+	HeroGenderMale:    _HeroGenderName[13:17],
+	HeroGenderFemale:  _HeroGenderName[17:23],
 }
 
 // String implements the Stringer interface.
@@ -168,12 +165,10 @@ var _HeroGenderValue = map[string]HeroGender{
 	strings.ToLower(_HeroGenderName[0:6]):   HeroGenderNotSet,
 	_HeroGenderName[6:13]:                   HeroGenderUnknown,
 	strings.ToLower(_HeroGenderName[6:13]):  HeroGenderUnknown,
-	_HeroGenderName[13:18]:                  HeroGenderEMPTY,
-	strings.ToLower(_HeroGenderName[13:18]): HeroGenderEMPTY,
-	_HeroGenderName[18:22]:                  HeroGenderMale,
-	strings.ToLower(_HeroGenderName[18:22]): HeroGenderMale,
-	_HeroGenderName[22:28]:                  HeroGenderFemale,
-	strings.ToLower(_HeroGenderName[22:28]): HeroGenderFemale,
+	_HeroGenderName[13:17]:                  HeroGenderMale,
+	strings.ToLower(_HeroGenderName[13:17]): HeroGenderMale,
+	_HeroGenderName[17:23]:                  HeroGenderFemale,
+	strings.ToLower(_HeroGenderName[17:23]): HeroGenderFemale,
 }
 
 // ParseHeroGender attempts to convert a string to a HeroGender.
