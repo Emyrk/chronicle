@@ -114,11 +114,10 @@ func (p *Parser) fSpellCastAttempt(ts time.Time, content string) ([]Message, err
 		return notHandled()
 	}
 
-	//unit, spell := matches[1], matches[2]
-	return Skip(ts, "handled castsv2"), nil
+	return Skip(ts, "SpellCastAttempt not implemented"), nil
 }
 
-func (p *Parser) fGainSource(ts time.Time, content string) ([]Message, error) {
+func (p *Parser) fGainWithSource(ts time.Time, content string) ([]Message, error) {
 	return p.fGain(true, ts, content)
 }
 
@@ -278,56 +277,88 @@ func (p *Parser) fDamageShield(ts time.Time, content string) ([]Message, error) 
  * Melee Damage
  */
 
-func (p *Parser) fDamageHitOrCrit(ts time.Time, content string) ([]Message, error) {
-	matches := regexs.ReDamageHitOrCrit.FindStringSubmatch(content)
-	if matches == nil {
-		return notHandled()
-	}
-
-	//attacker, hitMask, victim, damage, trailer := matches[1], matches[2], matches[3], matches[4], matches[5]
-
-	// Return melee damage message
-	return Skip(ts, "DamageHitOrCrit not implemented"), nil
+func (p *Parser) fDamageHitOrCritNoSchool(ts time.Time, content string) ([]Message, error) {
+	return p.fDamageHitOrCrit(false, ts, content)
 }
 
 func (p *Parser) fDamageHitOrCritSchool(ts time.Time, content string) ([]Message, error) {
-	matches := regexs.ReDamageHitOrCritSchool.FindStringSubmatch(content)
-	if matches == nil {
+	return p.fDamageHitOrCrit(true, ts, content)
+}
+
+func (p *Parser) fDamageHitOrCrit(hasScool bool, ts time.Time, content string) ([]Message, error) {
+	re := regexs.ReDamageHitOrCrit
+	if hasScool {
+		re = regexs.ReDamageHitOrCritSchool
+	}
+
+	matches, ok := types.FromRegex(re).Match(content)
+	if !ok {
 		return notHandled()
 	}
 
-	//attacker, hitMask, victim, damage, school, trailer := matches[1], matches[2], matches[3], matches[4], matches[5], matches[6]
+	_, caster := matches.UnitOrGUID()
+	hitType := matches.ShortHitType()
+	_, target := matches.UnitOrGUID()
+	amount := matches.Int32()
 
-	// Return melee damage message
-	return Skip(ts, "DamageHitOrCritSchool not implemented"), nil
+	var school types.School
+	if hasScool {
+		school = matches.School()
+	}
+	trailer := matches.Trailer()
+
+	if err := matches.Error(); err != nil {
+		return nil, fmt.Errorf("DamageHitOrCritSchool: %w", err)
+	}
+
+	if caster.IsZero() || target.IsZero() {
+		return Skip(ts, "DamageHitOrCritSchool: not using guids"), nil
+	}
+
+	return set(Damage{
+		MessageBase: Base(ts),
+		Caster:      caster,
+		HitType:     hitType,
+		Target:      target,
+		Amount:      amount,
+		School:      school,
+		Trailer:     trailer,
+	}), nil
 }
 
 /**
  * Heal
  */
 
-func (p *Parser) fHealCrit(ts time.Time, content string) ([]Message, error) {
-	matches := regexs.ReHealCrit.FindStringSubmatch(content)
-	if matches == nil {
+func (p *Parser) fHeal(ts time.Time, content string) ([]Message, error) {
+	matches, ok := types.FromRegex(regexs.ReHeal).Match(content)
+	if !ok {
 		return notHandled()
 	}
 
-	//caster, spellID, target, amount := matches[1], matches[2], matches[4]
+	_, caster := matches.UnitOrGUID()
+	spellName := matches.String()
+	crit := matches.String() == "critically "
+	_, target := matches.UnitOrGUID()
+	amount := matches.Int32()
 
-	// return spell cast & heal message
-	return Skip(ts, "HealCrit not implemented"), nil
-}
-
-func (p *Parser) fHealHit(ts time.Time, content string) ([]Message, error) {
-	matches := regexs.ReHealHit.FindStringSubmatch(content)
-	if matches == nil {
-		return notHandled()
+	if err := matches.Error(); err != nil {
+		return nil, fmt.Errorf("HealHit: %w", err)
 	}
 
-	// caster, spellID, target, amount := matches[1], matches[2], matches[3], matches[4]
+	hit := types.HitTypeHit
+	if crit {
+		hit = types.HitTypeCrit
+	}
 
-	// return spell cast & heal message
-	return Skip(ts, "HealHit not implemented"), nil
+	return set(Heal{
+		MessageBase: Base(ts),
+		Caster:      caster,
+		Target:      target,
+		SpellName:   spellName,
+		Amount:      amount,
+		HitType:     hit,
+	}), nil
 }
 
 /**

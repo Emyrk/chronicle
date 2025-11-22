@@ -99,3 +99,22 @@ type PeriodicDamage struct {
 	SpellName string
 	Trailer   types.Trailer
 }
+
+type Damage struct {
+	MessageBase
+	Caster  guid.GUID
+	Target  guid.GUID
+	HitType types.HitType
+	Amount  int32
+	School  types.School
+	Trailer types.Trailer
+}
+
+type Heal struct {
+	MessageBase
+	Caster    guid.GUID
+	Target    guid.GUID
+	SpellName string
+	Amount    int32
+	HitType   types.HitType
+}

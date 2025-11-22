@@ -61,7 +61,7 @@ func TestParserMessages(t *testing.T) {
 	})
 
 	t.Run("Resource Gain", func(t *testing.T) {
-		rg, err := exp[ResourceChange](p.fGainSource(time.Time{}, "0x000000000005B81F gains 20 Energy from 0x000000000005B81F's Relentless Strikes."))
+		rg, err := exp[ResourceChange](p.fGainWithSource(time.Time{}, "0x000000000005B81F gains 20 Energy from 0x000000000005B81F's Relentless Strikes."))
 		require.NoError(t, err)
 
 		require.Equal(t, ResourceChange{
@@ -104,6 +104,28 @@ func TestParserMessages(t *testing.T) {
 				},
 			},
 		}, sh)
+	})
+
+	t.Run("Heal", func(t *testing.T) {
+		h, err := exp[Heal](p.fHeal(time.Time{}, "0x00000000000DF543's Lesser Healing Wave heals 0x0000000000024225 for 393."))
+		require.NoError(t, err)
+		require.Equal(t, Heal{
+			Caster:    0x00000000000DF543,
+			Target:    0x0000000000024225,
+			SpellName: "Lesser Healing Wave",
+			Amount:    393,
+			HitType:   types.HitTypeHit,
+		}, h)
+
+		hc, err := exp[Heal](p.fHeal(time.Time{}, "0x000000000001C80A's Flash Heal critically heals 0x0000000000024225 for 1048."))
+		require.NoError(t, err)
+		require.Equal(t, Heal{
+			Caster:    0x000000000001C80A,
+			Target:    0x0000000000024225,
+			SpellName: "Flash Heal",
+			Amount:    1048,
+			HitType:   types.HitTypeCrit,
+		}, hc)
 	})
 
 	//t.Run("Gains Attack", func(t *testing.T) {

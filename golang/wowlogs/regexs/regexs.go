@@ -28,8 +28,12 @@ var (
 
 	ReDamageShield = regexp.MustCompile(`(.+[^\s]) reflects (\d+) ([a-zA-Z]+) damage to (.+[^\s])\.`)
 
-	ReHealHit      = regexp.MustCompile(`(.+[^\s])\s's (.+[^\s]) heals (.+[^\s]) for (\d+)\.`)
-	ReHealCrit     = regexp.MustCompile(`(.+[^\s])\s's (.+[^\s]) critically heals (.+[^\s]) for (\d+)\.`)
+	// (\S+)'s (.+?) (critically )?heals (\S+) for (\d+)\.$
+	// (.+[^\s])'s (.+[^\s]) critically heals (.+[^\s]) for (\d+)\.`)
+
+	ReHealHit      = regexp.MustCompile(`(.+[^\s])'s (.+[^\s]) heals (.+[^\s]) for (\d+)\.`)
+	ReHealCrit     = regexp.MustCompile(`(.+[^\s])'s (.+[^\s]) critically heals (.+[^\s]) for (\d+)\.`)
+	ReHeal         = regexp.MustCompile(`(.+[^\s])'s (.+?) (critically )?heals (.+[^\s]) for (\d+)\.`)
 	ReGain         = regexp.MustCompile(`(.+[^\s]) (gains|loses) (\d+) (Health|health|Mana|Rage|Energy|Happiness|happiness|Focus) from (.+[^\s])'s (.+[^\s])\.`)
 	ReGainNoSource = regexp.MustCompile(`(.+[^\s]) (gains|loses) (\d+) (Health|health|Mana|Rage|Energy|Happiness|happiness|Focus)\.`)
 
