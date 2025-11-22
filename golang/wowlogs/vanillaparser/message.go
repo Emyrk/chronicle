@@ -9,6 +9,7 @@ import (
 
 type Message interface {
 	isMessage()
+	Date() time.Time
 }
 
 type MessageBase struct {

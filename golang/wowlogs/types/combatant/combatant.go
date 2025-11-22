@@ -69,9 +69,9 @@ func ParseCombatantInfo(content string) (Combatant, error) {
 		return empty, fmt.Errorf("invalid race: %w", err)
 	}
 
-	genderInt, err := strconv.ParseInt(info.heroClassLocal(), 10, 64)
+	genderInt, err := strconv.ParseInt(info.genderLocal(), 10, 64)
 	if err != nil {
-		return empty, fmt.Errorf("invalid gender: %w", err)
+		return empty, fmt.Errorf("invalid class: %w", err)
 	}
 	gender := types.HeroGender(genderInt)
 	if !gender.IsValid() {
@@ -140,6 +140,12 @@ func ParseCombatantInfo(content string) (Combatant, error) {
 	//	talents := p.stripTalentSpecialization(messageArgs[28])
 	//	participant.Talents = &talents
 	//}
+
+	guidStr := info.guid()
+	player.Guid, err = guid.FromString(guidStr)
+	if err != nil {
+		return empty, fmt.Errorf("invalid GUID format in COMBATANT_INFO message: %v", err)
+	}
 
 	return player, nil
 }

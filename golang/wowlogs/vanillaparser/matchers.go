@@ -69,7 +69,13 @@ func (p *Parser) fCombatantInfo(ts time.Time, content string) ([]Message, error)
 		return nil, fmt.Errorf("failed to parse combatant info: %v", err)
 	}
 
-	var _ = cbt // TODO: use combatant info
+	p.logger.Debug("combatant",
+		slog.String("name", cbt.Name),
+		slog.String("guid", cbt.Guid.String()),
+		slog.String("class", cbt.HeroClass.String()),
+		slog.String("race", cbt.Race.String()),
+	)
+	p.state.Combatant(cbt)
 
 	return set(Combatant{
 		Combatant:   cbt,
@@ -82,12 +88,10 @@ func (p *Parser) fCombatantGUID(ts time.Time, content string) ([]Message, error)
 		return notHandled()
 	}
 
-	cbt, err := combatant.ParseCombatantGUID(content)
+	_, err := combatant.ParseCombatantGUID(content)
 	if err != nil {
 		return nil, fmt.Errorf("failed to parse combatant guid: %v", err)
 	}
-
-	var _ = cbt // TODO: use combatant guid
 
 	return Skip(ts, "combatant guid"), nil
 }

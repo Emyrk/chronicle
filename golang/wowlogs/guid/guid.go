@@ -10,6 +10,9 @@ import (
 type GUID uint64
 
 func FromString(gid string) (GUID, error) {
+	if len(gid) != 18 || gid[0:2] != "0x" {
+		return 0, fmt.Errorf("invalid guid: %s", gid)
+	}
 	data, err := hex.DecodeString(gid[2:])
 	if err != nil {
 		return 0, err

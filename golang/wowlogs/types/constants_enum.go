@@ -106,8 +106,12 @@ func ParseHeroClasses(name string) (HeroClasses, error) {
 }
 
 const (
+	// HeroGenderNotSet is a HeroGender of type NotSet.
+	HeroGenderNotSet HeroGender = iota
 	// HeroGenderUnknown is a HeroGender of type Unknown.
-	HeroGenderUnknown HeroGender = iota
+	HeroGenderUnknown
+	// HeroGenderEMPTY is a HeroGender of type EMPTY.
+	HeroGenderEMPTY
 	// HeroGenderMale is a HeroGender of type Male.
 	HeroGenderMale
 	// HeroGenderFemale is a HeroGender of type Female.
@@ -116,12 +120,14 @@ const (
 
 var ErrInvalidHeroGender = errors.New("not a valid HeroGender")
 
-const _HeroGenderName = "UnknownMaleFemale"
+const _HeroGenderName = "NotSetUnknownEMPTYMaleFemale"
 
 var _HeroGenderMap = map[HeroGender]string{
-	HeroGenderUnknown: _HeroGenderName[0:7],
-	HeroGenderMale:    _HeroGenderName[7:11],
-	HeroGenderFemale:  _HeroGenderName[11:17],
+	HeroGenderNotSet:  _HeroGenderName[0:6],
+	HeroGenderUnknown: _HeroGenderName[6:13],
+	HeroGenderEMPTY:   _HeroGenderName[13:18],
+	HeroGenderMale:    _HeroGenderName[18:22],
+	HeroGenderFemale:  _HeroGenderName[22:28],
 }
 
 // String implements the Stringer interface.
@@ -140,9 +146,11 @@ func (x HeroGender) IsValid() bool {
 }
 
 var _HeroGenderValue = map[string]HeroGender{
-	_HeroGenderName[0:7]:   HeroGenderUnknown,
-	_HeroGenderName[7:11]:  HeroGenderMale,
-	_HeroGenderName[11:17]: HeroGenderFemale,
+	_HeroGenderName[0:6]:   HeroGenderNotSet,
+	_HeroGenderName[6:13]:  HeroGenderUnknown,
+	_HeroGenderName[13:18]: HeroGenderEMPTY,
+	_HeroGenderName[18:22]: HeroGenderMale,
+	_HeroGenderName[22:28]: HeroGenderFemale,
 }
 
 // ParseHeroGender attempts to convert a string to a HeroGender.
@@ -162,6 +170,8 @@ const (
 	HeroRacesTroll HeroRaces = "Troll"
 	// HeroRacesTauren is a HeroRaces of type Tauren.
 	HeroRacesTauren HeroRaces = "Tauren"
+	// HeroRacesGoblin is a HeroRaces of type Goblin.
+	HeroRacesGoblin HeroRaces = "Goblin"
 	// HeroRacesHuman is a HeroRaces of type Human.
 	HeroRacesHuman HeroRaces = "Human"
 	// HeroRacesGnome is a HeroRaces of type Gnome.
@@ -193,6 +203,7 @@ var _HeroRacesValue = map[string]HeroRaces{
 	"Orc":      HeroRacesOrc,
 	"Troll":    HeroRacesTroll,
 	"Tauren":   HeroRacesTauren,
+	"Goblin":   HeroRacesGoblin,
 	"Human":    HeroRacesHuman,
 	"Gnome":    HeroRacesGnome,
 	"Dwarf":    HeroRacesDwarf,

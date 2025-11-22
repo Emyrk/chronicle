@@ -18,6 +18,7 @@ type Parser struct {
 	logger  *slog.Logger
 	scanner merge.Scan
 	liner   *lines.Liner
+	state   *State
 }
 
 func New(logger *slog.Logger, r io.Reader) (*Parser, error) {
@@ -25,6 +26,7 @@ func New(logger *slog.Logger, r io.Reader) (*Parser, error) {
 		logger:  logger,
 		scanner: merge.FromIOReader(lines.NewLiner(), r),
 		liner:   lines.NewLiner(),
+		state:   NewState(),
 	}, nil
 }
 
@@ -33,7 +35,12 @@ func NewFromScanner(logger *slog.Logger, liner *lines.Liner, scan merge.Scan) *P
 		logger:  logger,
 		scanner: scan,
 		liner:   liner,
+		state:   NewState(),
 	}
+}
+
+func (p *Parser) State() *State {
+	return p.state
 }
 
 // Merger returns a configured merger for this parser.

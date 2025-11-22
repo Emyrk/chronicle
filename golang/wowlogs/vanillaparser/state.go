@@ -1,33 +1,42 @@
 package vanillaparser
 
 import (
+	"fmt"
+	"strings"
+
 	"github.com/Emyrk/chronicle/golang/wowlogs/guid"
 	"github.com/Emyrk/chronicle/golang/wowlogs/types/combatant"
 )
 
 type State struct {
-	Participants map[guid.GUID][]*combatant.Combatant
+	Participants map[guid.GUID][]combatant.Combatant
 }
 
 func NewState() *State {
 	return &State{
-		Participants: make(map[guid.GUID][]*combatant.Combatant),
+		Participants: make(map[guid.GUID][]combatant.Combatant),
 	}
 }
 
-func (s *State) Process(msgs ...Message) error {
-	for _, msg := range msgs {
-		if err := s.process(msg); err != nil {
-			return err
-		}
+func (s *State) Combatant(cmbt combatant.Combatant) {
+	if cmbt.Guid.IsZero() {
+		return
 	}
-	return nil
+
+	if s.Participants[cmbt.Guid] == nil {
+		s.Participants[cmbt.Guid] = []combatant.Combatant{}
+	}
+
+	s.Participants[cmbt.Guid] = append(s.Participants[cmbt.Guid], cmbt)
 }
 
-func (s *State) process(raw Message) error {
-	switch msg := raw.(type) {
-	case Combatant:
-		//s.Participants[msg.Name] = &msg.Combatant
+func (s *State) String() string {
+	var str strings.Builder
+	str.WriteString(fmt.Sprintf("State with %d participants:\n", len(s.Participants)))
+	for gid, cmbts := range s.Participants {
+		cmbt := cmbts[0]
+		str.WriteString(fmt.Sprintf(" - %s: %s\n", gid.String(), cmbt.Name))
 	}
-	return nil
+
+	return str.String()
 }

@@ -1,6 +1,8 @@
 package combatant
 
-import "strings"
+import (
+	"strings"
+)
 
 type combatantInfo []string
 
@@ -53,6 +55,14 @@ func (i combatantInfo) gear() ([]string, bool) {
 		slots = append(slots, arg)
 	}
 	return slots, hasGear
+}
+
+func (i combatantInfo) talents() string {
+	return i.getArg(28)
+}
+
+func (i combatantInfo) guid() string {
+	return i.getArg(29)
 }
 
 func (i combatantInfo) getArg(index int) string {
