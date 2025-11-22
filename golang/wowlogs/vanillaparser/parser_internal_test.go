@@ -31,7 +31,7 @@ func TestParserMessages(t *testing.T) {
 
 	// With school: 0xF1400844930090A2's Firebolt hits 0xF130000950003FB5 for 38 Fire damage
 	t.Run("SpellHit", func(t *testing.T) {
-		sh, err := exp[SpellDamage](p.fDamageSpellHitOrCrit(time.Time{}, "0x0000000000062A1B's Hamstring hits 0xF1300033F000CFD0 for 27."))
+		sh, err := exp[SpellDamage](p.fDamageSpellHitOrCritNoSchool(time.Time{}, "0x0000000000062A1B's Hamstring hits 0xF1300033F000CFD0 for 27."))
 		require.NoError(t, err)
 
 		require.Equal(t, SpellDamage{
@@ -48,7 +48,15 @@ func TestParserMessages(t *testing.T) {
 		ss, err := exp[SpellDamage](p.fDamageSpellHitOrCritSchool(time.Time{}, "0x0000000000016541's Fire Strike hits 0x000000000001B1F2 for 2 Fire damage."))
 		require.NoError(t, err)
 
-		require.Equal(t, SpellDamage{}, ss)
+		require.Equal(t, SpellDamage{
+			Caster:    0x0000000000016541,
+			SpellName: "Fire Strike",
+			HitType:   types.HitTypeHit,
+			Target:    0x000000000001B1F2,
+			Amount:    2,
+			Trailer:   nil,
+			School:    types.FireSchool,
+		}, ss)
 	})
 
 	t.Run("Resource Gain", func(t *testing.T) {

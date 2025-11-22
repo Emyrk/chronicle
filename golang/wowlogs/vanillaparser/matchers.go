@@ -177,12 +177,12 @@ func (p *Parser) fDamageSpellHitOrCrit(hasSchool bool, ts time.Time, content str
 	hitType := matches.ShortHitType()
 	_, target := matches.UnitOrGUID()
 	amount := matches.Int32()
-	trailer := matches.Trailer()
 
 	var school types.School
 	if hasSchool {
 		school = matches.School()
 	}
+	trailer := matches.Trailer()
 
 	if err := matches.Error(); err != nil {
 		return nil, fmt.Errorf("DamageSpellHitOrCrit: %w", err)
