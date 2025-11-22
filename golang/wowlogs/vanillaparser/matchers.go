@@ -114,7 +114,7 @@ func (p *Parser) fSpellCastAttempt(ts time.Time, content string) ([]Message, err
 		return notHandled()
 	}
 
-	return Skip(ts, "SpellCastAttempt not implemented"), nil
+	return Skip(ts, "handled castsv2"), nil
 }
 
 func (p *Parser) fGainWithSource(ts time.Time, content string) ([]Message, error) {
