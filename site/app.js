@@ -137,7 +137,13 @@ function displayResults(stateJson) {
     try {
         // Parse and re-stringify for pretty printing
         const state = JSON.parse(stateJson);
+        
+        // Display raw JSON
         outputDiv.textContent = JSON.stringify(state, null, 2);
+        
+        // Create graphical display
+        createPlayerCards(state);
+        
         resultsSection.style.display = 'block';
         
         // Scroll to results
@@ -148,6 +154,115 @@ function displayResults(stateJson) {
         resultsSection.style.display = 'block';
     }
 }
+
+function createPlayerCards(state) {
+    const playersGrid = document.getElementById('playersGrid');
+    const summaryStats = document.getElementById('summaryStats');
+    
+    if (!state.Participants || !state.ParticipantCasts) {
+        playersGrid.innerHTML = '<div class="no-spells">No player data found</div>';
+        return;
+    }
+    
+    // Calculate summary statistics
+    const playerCount = Object.keys(state.Participants).length;
+    let totalSpells = 0;
+    let totalUniqueSpells = 0;
+    
+    for (const guid in state.ParticipantCasts) {
+        const spells = state.ParticipantCasts[guid];
+        if (spells) {
+            totalUniqueSpells += Object.keys(spells).length;
+            totalSpells += Object.keys(spells).length;
+        }
+    }
+    
+    // Display summary stats
+    summaryStats.innerHTML = `
+        <div class="stat-item">
+            <h3>${playerCount}</h3>
+            <p>Players</p>
+        </div>
+        <div class="stat-item">
+            <h3>${totalUniqueSpells}</h3>
+            <p>Unique Spells</p>
+        </div>
+        <div class="stat-item">
+            <h3>${Math.round(totalSpells / playerCount)}</h3>
+            <p>Avg Spells/Player</p>
+        </div>
+    `;
+    
+    // Create player cards
+    playersGrid.innerHTML = '';
+    
+    for (const guid in state.Participants) {
+        const participants = state.Participants[guid];
+        if (!participants || participants.length === 0) continue;
+        
+        const player = participants[0]; // Get first instance
+        const spells = state.ParticipantCasts[guid] || {};
+        const spellCount = Object.keys(spells).length;
+        
+        const playerClass = (player.HeroClass || 'Unknown').toLowerCase();
+        
+        const card = document.createElement('div');
+        card.className = `player-card ${playerClass}`;
+        
+        // Create spell items HTML
+        let spellsHTML = '';
+        if (spellCount > 0) {
+            const sortedSpells = Object.values(spells).sort((a, b) => 
+                a.Name.localeCompare(b.Name)
+            );
+            
+            spellsHTML = sortedSpells.map(spell => `
+                <div class="spell-item">
+                    <span class="spell-name">${escapeHtml(spell.Name)}</span>
+                    <span class="spell-id">#${spell.ID}</span>
+                </div>
+            `).join('');
+        } else {
+            spellsHTML = '<div class="no-spells">No spells recorded</div>';
+        }
+        
+        card.innerHTML = `
+            <div class="player-header">
+                <div class="player-info">
+                    <h3>${escapeHtml(player.Name)}</h3>
+                    <span class="player-class ${playerClass}">${player.HeroClass}</span>
+                </div>
+                <div class="spell-count">
+                    ${spellCount} ${spellCount === 1 ? 'Spell' : 'Spells'}
+                </div>
+            </div>
+            <div class="spells-list">
+                <h4>Spells Cast</h4>
+                ${spellsHTML}
+            </div>
+        `;
+        
+        playersGrid.appendChild(card);
+    }
+}
+
+function escapeHtml(text) {
+    const div = document.createElement('div');
+    div.textContent = text;
+    return div.innerHTML;
+}
+
+// Toggle JSON view
+document.getElementById('toggleJsonBtn').addEventListener('click', function() {
+    const jsonOutput = document.getElementById('jsonOutput');
+    if (jsonOutput.style.display === 'none' || !jsonOutput.style.display) {
+        jsonOutput.style.display = 'block';
+        this.textContent = '📋 Hide Raw JSON';
+    } else {
+        jsonOutput.style.display = 'none';
+        this.textContent = '📋 Show Raw JSON';
+    }
+});
 
 function formatFileSize(bytes) {
     if (bytes === 0) return '0 Bytes';
