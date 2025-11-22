@@ -50,6 +50,18 @@ func (m SkippedMessage) String() string {
 	return "SkippedMessage: " + m.Reason
 }
 
+type UnparsedLine struct {
+	MessageBase
+	Content string
+}
+
+func Unparsed(ts time.Time, content string) []Message {
+	return set(&UnparsedLine{
+		MessageBase: Base(ts),
+		Content:     content,
+	})
+}
+
 func notHandled() ([]Message, error) {
 	return nil, nil
 }

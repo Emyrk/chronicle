@@ -95,7 +95,7 @@ func (p *Parser) fCombatantGUID(ts time.Time, content string) ([]Message, error)
 		return nil, fmt.Errorf("failed to parse combatant guid: %v", err)
 	}
 
-	return Skip(ts, "combatant guid"), nil
+	return Unparsed(ts, "combatant guid"), nil
 }
 
 func (p *Parser) fBugDamageSpellHitOrCrit(ts time.Time, content string) ([]Message, error) {
@@ -275,7 +275,7 @@ func (p *Parser) fDamageShield(ts time.Time, content string) ([]Message, error) 
 	//spellID := 2 // reflection spell ID?
 
 	// Return spell cast & spell damage message
-	return Skip(ts, "DamageShield not implemented"), nil
+	return Unparsed(ts, "DamageShield not implemented"), nil
 }
 
 /**
@@ -383,7 +383,7 @@ func (p *Parser) fAuraGainHarmfulHelpful(ts time.Time, content string) ([]Messag
 	//target, spellID, stackAmount := matches[1], matches[3], matches[4]
 
 	// return aura application message
-	return Skip(ts, "AuraGainHarmfulHelpful not implemented"), nil
+	return Unparsed(ts, "AuraGainHarmfulHelpful not implemented"), nil
 }
 
 func (p *Parser) fAuraFade(ts time.Time, content string) ([]Message, error) {
@@ -395,7 +395,7 @@ func (p *Parser) fAuraFade(ts time.Time, content string) ([]Message, error) {
 	//target, spellID := matches[2], matches[1]
 
 	// return aura application message
-	return Skip(ts, "AuraFade not implemented"), nil
+	return Unparsed(ts, "AuraFade not implemented"), nil
 }
 
 /**
@@ -410,7 +410,7 @@ func (p *Parser) fDamageSpellSplit(ts time.Time, content string) ([]Message, err
 	//attacker, spellID, victim, amount, trailer := matches[1], matches[2], matches[3], matches[4], matches[5]
 
 	// Return spell cast & SpellDamage Message
-	return Skip(ts, "DamageSpellSplit not implemented"), nil
+	return Unparsed(ts, "DamageSpellSplit not implemented"), nil
 }
 
 func (p *Parser) fDamageSpellMiss(ts time.Time, content string) ([]Message, error) {
@@ -420,7 +420,7 @@ func (p *Parser) fDamageSpellMiss(ts time.Time, content string) ([]Message, erro
 	}
 
 	//attacker, spellID, victim := matches[1], matches[2], matches[4]
-	return Skip(ts, "DamageSpellMiss not implemented"), nil
+	return Unparsed(ts, "DamageSpellMiss not implemented"), nil
 }
 
 func (p *Parser) fDamageSpellBlockParryEvadeDodgeResistDeflect(ts time.Time, content string) ([]Message, error) {
@@ -430,7 +430,7 @@ func (p *Parser) fDamageSpellBlockParryEvadeDodgeResistDeflect(ts time.Time, con
 	}
 
 	//attacker, spellID, hitType, vuctim := matches[1], matches[2], matches[3], matches[4]
-	return Skip(ts, "DamageSpellBlockParryEvadeDodgeResistDeflect not implemented"), nil
+	return Unparsed(ts, "DamageSpellBlockParryEvadeDodgeResistDeflect not implemented"), nil
 }
 
 func (p *Parser) fDamageSpellAbsorb(ts time.Time, content string) ([]Message, error) {
@@ -440,7 +440,7 @@ func (p *Parser) fDamageSpellAbsorb(ts time.Time, content string) ([]Message, er
 	}
 
 	//attacker, spellID, victim := matches[1], matches[2], matches[3]
-	return Skip(ts, "DamageSpellAbsorb not implemented"), nil
+	return Unparsed(ts, "DamageSpellAbsorb not implemented"), nil
 }
 
 func (p *Parser) fDamageSpellAbsorbSelf(ts time.Time, content string) ([]Message, error) {
@@ -450,7 +450,7 @@ func (p *Parser) fDamageSpellAbsorbSelf(ts time.Time, content string) ([]Message
 	}
 
 	//victim, attacker, spellID := matches[1], matches[2], matches[3]
-	return Skip(ts, "DamageSpellAbsorbSelf not implemented"), nil
+	return Unparsed(ts, "DamageSpellAbsorbSelf not implemented"), nil
 }
 
 func (p *Parser) fDamageReflect(ts time.Time, content string) ([]Message, error) {
@@ -460,7 +460,7 @@ func (p *Parser) fDamageReflect(ts time.Time, content string) ([]Message, error)
 	}
 
 	//attacker, spellID, victim := matches[1], matches[2], matches[3]
-	return Skip(ts, "DamageReflect not implemented"), nil
+	return Unparsed(ts, "DamageReflect not implemented"), nil
 }
 
 func (p *Parser) fDamageProcResist(ts time.Time, content string) ([]Message, error) {
@@ -470,7 +470,7 @@ func (p *Parser) fDamageProcResist(ts time.Time, content string) ([]Message, err
 	}
 
 	//victim, attacker, spellID := matches[1], matches[2], matches[3]
-	return Skip(ts, "DamageProcResist not implemented"), nil
+	return Unparsed(ts, "DamageProcResist not implemented"), nil
 }
 
 func (p *Parser) fDamageSpellImmune(ts time.Time, content string) ([]Message, error) {
@@ -480,7 +480,7 @@ func (p *Parser) fDamageSpellImmune(ts time.Time, content string) ([]Message, er
 	}
 
 	//attacker, spellID, victim := matches[1], matches[2], matches[3]
-	return Skip(ts, "DamageSpellImmune not implemented"), nil
+	return Unparsed(ts, "DamageSpellImmune not implemented"), nil
 }
 
 /**
@@ -494,7 +494,7 @@ func (p *Parser) fDamageMiss(ts time.Time, content string) ([]Message, error) {
 	}
 
 	//attacker, victim := matches[1], matches[2]
-	return Skip(ts, "DamageMiss not implemented"), nil
+	return Unparsed(ts, "DamageMiss not implemented"), nil
 }
 
 func (p *Parser) fDamageBlockParryEvadeDodgeDeflect(ts time.Time, content string) ([]Message, error) {
@@ -504,7 +504,7 @@ func (p *Parser) fDamageBlockParryEvadeDodgeDeflect(ts time.Time, content string
 	}
 
 	//attacker, victim, hitType := matches[1], matches[2], matches[3]
-	return Skip(ts, "DamageBlockParryEvadeDodgeResistDeflect not implemented"), nil
+	return Unparsed(ts, "DamageBlockParryEvadeDodgeResistDeflect not implemented"), nil
 }
 
 func (p *Parser) fDamageAbsorbResist(ts time.Time, content string) ([]Message, error) {
@@ -515,7 +515,7 @@ func (p *Parser) fDamageAbsorbResist(ts time.Time, content string) ([]Message, e
 
 	//attacker, victim, hitType := matches[1], matches[2], matches[3]
 
-	return Skip(ts, "DamageAbsorbResist not implemented"), nil
+	return Unparsed(ts, "DamageAbsorbResist not implemented"), nil
 }
 
 func (p *Parser) fDamageImmune(ts time.Time, content string) ([]Message, error) {
@@ -525,7 +525,7 @@ func (p *Parser) fDamageImmune(ts time.Time, content string) ([]Message, error) 
 	}
 
 	//attacker, victom := matches[1], matches[2]
-	return Skip(ts, "DamageImmune not implemented"), nil
+	return Unparsed(ts, "DamageImmune not implemented"), nil
 }
 
 /**
@@ -539,7 +539,7 @@ func (p *Parser) fSpellCastPerformDurability(ts time.Time, content string) ([]Me
 	}
 
 	//caster, spellID, target := matches[1], matches[3], matches[4]
-	return Skip(ts, "SpellCastPerformDurability not implemented"), nil
+	return Unparsed(ts, "SpellCastPerformDurability not implemented"), nil
 }
 
 func (p *Parser) fSpellCastPerform(ts time.Time, content string) ([]Message, error) {
@@ -549,7 +549,7 @@ func (p *Parser) fSpellCastPerform(ts time.Time, content string) ([]Message, err
 	}
 
 	//caster, spellID, target := matches[1], matches[3], matches[4]
-	return Skip(ts, "SpellCastPerform not implemented"), nil
+	return Unparsed(ts, "SpellCastPerform not implemented"), nil
 }
 
 func (p *Parser) fSpellCastPerformUnknown(ts time.Time, content string) ([]Message, error) {
@@ -559,7 +559,7 @@ func (p *Parser) fSpellCastPerformUnknown(ts time.Time, content string) ([]Messa
 	}
 
 	//caster, spellID := matches[1], matches[3]
-	return Skip(ts, "SpellCastPerformUnknown not implemented"), nil
+	return Unparsed(ts, "SpellCastPerformUnknown not implemented"), nil
 }
 
 /**
@@ -579,7 +579,7 @@ func (p *Parser) fUnitDieDestroyed(ts time.Time, content string) ([]Message, err
 	}
 
 	if victim.IsZero() {
-		return Skip(ts, "UnitDieDestroyed: not using guids"), nil
+		return Unparsed(ts, "UnitDieDestroyed: not using guids"), nil
 	}
 
 	return set(Slain{
@@ -604,7 +604,7 @@ func (p *Parser) fUnitSlay(ts time.Time, content string) ([]Message, error) {
 	}
 
 	if victim.IsZero() {
-		return Skip(ts, "UnitSlay: not using guids"), nil
+		return Unparsed(ts, "UnitSlay: not using guids"), nil
 	}
 
 	return set(Slain{
@@ -637,7 +637,7 @@ func (p *Parser) fAuraDispel(ts time.Time, content string) ([]Message, error) {
 	//let un_aura_spell_id = 42;
 	//target, targetSpellID := matches[1], matches[2]
 
-	return Skip(ts, "AuraDispel not implemented"), nil
+	return Unparsed(ts, "AuraDispel not implemented"), nil
 }
 
 func (p *Parser) fAuraInterrupt(ts time.Time, content string) ([]Message, error) {
@@ -647,7 +647,7 @@ func (p *Parser) fAuraInterrupt(ts time.Time, content string) ([]Message, error)
 	}
 
 	//unAuraCaster, target, interruptedSpellID := matches[1], matches[2], matches[3]
-	return Skip(ts, "AuraInterrupt not implemented"), nil
+	return Unparsed(ts, "AuraInterrupt not implemented"), nil
 }
 
 /**
@@ -661,7 +661,7 @@ func (p *Parser) fCreates(ts time.Time, content string) ([]Message, error) {
 	}
 
 	//creator, created := matches[1], matches[2]
-	return Skip(ts, "Creates not implemented"), nil
+	return Unparsed(ts, "Creates not implemented"), nil
 }
 
 func (p *Parser) fGainsAttack(ts time.Time, content string) ([]Message, error) {
@@ -670,7 +670,7 @@ func (p *Parser) fGainsAttack(ts time.Time, content string) ([]Message, error) {
 		return notHandled()
 	}
 
-	return Skip(ts, "GainsAttack not implemented"), nil
+	return Unparsed(ts, "GainsAttack not implemented"), nil
 }
 
 func (p *Parser) fFallDamage(ts time.Time, content string) ([]Message, error) {
@@ -679,5 +679,5 @@ func (p *Parser) fFallDamage(ts time.Time, content string) ([]Message, error) {
 		return notHandled()
 	}
 
-	return Skip(ts, "FallDamage not implemented"), nil
+	return Unparsed(ts, "FallDamage not implemented"), nil
 }
