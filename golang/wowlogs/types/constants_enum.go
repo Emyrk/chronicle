@@ -49,3 +49,161 @@ func ParseCastActions(name string) (CastActions, error) {
 	}
 	return CastActions(""), fmt.Errorf("%s is %w", name, ErrInvalidCastActions)
 }
+
+const (
+	// HeroClassesDRUID is a HeroClasses of type DRUID.
+	HeroClassesDRUID HeroClasses = "DRUID"
+	// HeroClassesHUNTER is a HeroClasses of type HUNTER.
+	HeroClassesHUNTER HeroClasses = "HUNTER"
+	// HeroClassesMAGE is a HeroClasses of type MAGE.
+	HeroClassesMAGE HeroClasses = "MAGE"
+	// HeroClassesPALADIN is a HeroClasses of type PALADIN.
+	HeroClassesPALADIN HeroClasses = "PALADIN"
+	// HeroClassesPRIEST is a HeroClasses of type PRIEST.
+	HeroClassesPRIEST HeroClasses = "PRIEST"
+	// HeroClassesROGUE is a HeroClasses of type ROGUE.
+	HeroClassesROGUE HeroClasses = "ROGUE"
+	// HeroClassesSHAMAN is a HeroClasses of type SHAMAN.
+	HeroClassesSHAMAN HeroClasses = "SHAMAN"
+	// HeroClassesWARLOCK is a HeroClasses of type WARLOCK.
+	HeroClassesWARLOCK HeroClasses = "WARLOCK"
+	// HeroClassesWARRIOR is a HeroClasses of type WARRIOR.
+	HeroClassesWARRIOR HeroClasses = "WARRIOR"
+)
+
+var ErrInvalidHeroClasses = errors.New("not a valid HeroClasses")
+
+// String implements the Stringer interface.
+func (x HeroClasses) String() string {
+	return string(x)
+}
+
+// IsValid provides a quick way to determine if the typed value is
+// part of the allowed enumerated values
+func (x HeroClasses) IsValid() bool {
+	_, err := ParseHeroClasses(string(x))
+	return err == nil
+}
+
+var _HeroClassesValue = map[string]HeroClasses{
+	"DRUID":   HeroClassesDRUID,
+	"HUNTER":  HeroClassesHUNTER,
+	"MAGE":    HeroClassesMAGE,
+	"PALADIN": HeroClassesPALADIN,
+	"PRIEST":  HeroClassesPRIEST,
+	"ROGUE":   HeroClassesROGUE,
+	"SHAMAN":  HeroClassesSHAMAN,
+	"WARLOCK": HeroClassesWARLOCK,
+	"WARRIOR": HeroClassesWARRIOR,
+}
+
+// ParseHeroClasses attempts to convert a string to a HeroClasses.
+func ParseHeroClasses(name string) (HeroClasses, error) {
+	if x, ok := _HeroClassesValue[name]; ok {
+		return x, nil
+	}
+	return HeroClasses(""), fmt.Errorf("%s is %w", name, ErrInvalidHeroClasses)
+}
+
+const (
+	// HeroGenderUnknown is a HeroGender of type Unknown.
+	HeroGenderUnknown HeroGender = iota
+	// HeroGenderMale is a HeroGender of type Male.
+	HeroGenderMale
+	// HeroGenderFemale is a HeroGender of type Female.
+	HeroGenderFemale
+)
+
+var ErrInvalidHeroGender = errors.New("not a valid HeroGender")
+
+const _HeroGenderName = "UnknownMaleFemale"
+
+var _HeroGenderMap = map[HeroGender]string{
+	HeroGenderUnknown: _HeroGenderName[0:7],
+	HeroGenderMale:    _HeroGenderName[7:11],
+	HeroGenderFemale:  _HeroGenderName[11:17],
+}
+
+// String implements the Stringer interface.
+func (x HeroGender) String() string {
+	if str, ok := _HeroGenderMap[x]; ok {
+		return str
+	}
+	return fmt.Sprintf("HeroGender(%d)", x)
+}
+
+// IsValid provides a quick way to determine if the typed value is
+// part of the allowed enumerated values
+func (x HeroGender) IsValid() bool {
+	_, ok := _HeroGenderMap[x]
+	return ok
+}
+
+var _HeroGenderValue = map[string]HeroGender{
+	_HeroGenderName[0:7]:   HeroGenderUnknown,
+	_HeroGenderName[7:11]:  HeroGenderMale,
+	_HeroGenderName[11:17]: HeroGenderFemale,
+}
+
+// ParseHeroGender attempts to convert a string to a HeroGender.
+func ParseHeroGender(name string) (HeroGender, error) {
+	if x, ok := _HeroGenderValue[name]; ok {
+		return x, nil
+	}
+	return HeroGender(0), fmt.Errorf("%s is %w", name, ErrInvalidHeroGender)
+}
+
+const (
+	// HeroRacesScourge is a HeroRaces of type Scourge.
+	HeroRacesScourge HeroRaces = "Scourge"
+	// HeroRacesOrc is a HeroRaces of type Orc.
+	HeroRacesOrc HeroRaces = "Orc"
+	// HeroRacesTroll is a HeroRaces of type Troll.
+	HeroRacesTroll HeroRaces = "Troll"
+	// HeroRacesTauren is a HeroRaces of type Tauren.
+	HeroRacesTauren HeroRaces = "Tauren"
+	// HeroRacesHuman is a HeroRaces of type Human.
+	HeroRacesHuman HeroRaces = "Human"
+	// HeroRacesGnome is a HeroRaces of type Gnome.
+	HeroRacesGnome HeroRaces = "Gnome"
+	// HeroRacesDwarf is a HeroRaces of type Dwarf.
+	HeroRacesDwarf HeroRaces = "Dwarf"
+	// HeroRacesNightElf is a HeroRaces of type NightElf.
+	HeroRacesNightElf HeroRaces = "NightElf"
+	// HeroRacesBloodElf is a HeroRaces of type BloodElf.
+	HeroRacesBloodElf HeroRaces = "BloodElf"
+)
+
+var ErrInvalidHeroRaces = errors.New("not a valid HeroRaces")
+
+// String implements the Stringer interface.
+func (x HeroRaces) String() string {
+	return string(x)
+}
+
+// IsValid provides a quick way to determine if the typed value is
+// part of the allowed enumerated values
+func (x HeroRaces) IsValid() bool {
+	_, err := ParseHeroRaces(string(x))
+	return err == nil
+}
+
+var _HeroRacesValue = map[string]HeroRaces{
+	"Scourge":  HeroRacesScourge,
+	"Orc":      HeroRacesOrc,
+	"Troll":    HeroRacesTroll,
+	"Tauren":   HeroRacesTauren,
+	"Human":    HeroRacesHuman,
+	"Gnome":    HeroRacesGnome,
+	"Dwarf":    HeroRacesDwarf,
+	"NightElf": HeroRacesNightElf,
+	"BloodElf": HeroRacesBloodElf,
+}
+
+// ParseHeroRaces attempts to convert a string to a HeroRaces.
+func ParseHeroRaces(name string) (HeroRaces, error) {
+	if x, ok := _HeroRacesValue[name]; ok {
+		return x, nil
+	}
+	return HeroRaces(""), fmt.Errorf("%s is %w", name, ErrInvalidHeroRaces)
+}

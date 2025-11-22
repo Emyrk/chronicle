@@ -71,7 +71,10 @@ func (p *Parser) fCombatantInfo(ts time.Time, content string) ([]Message, error)
 
 	var _ = cbt // TODO: use combatant info
 
-	return Skip(ts, "combatant info"), nil
+	return set(Combatant{
+		Combatant:   cbt,
+		MessageBase: Base(ts),
+	}), nil
 }
 
 func (p *Parser) fCombatantGUID(ts time.Time, content string) ([]Message, error) {

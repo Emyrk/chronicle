@@ -4,6 +4,7 @@ import (
 	"time"
 
 	"github.com/Emyrk/chronicle/golang/wowlogs/types/castv2"
+	"github.com/Emyrk/chronicle/golang/wowlogs/types/combatant"
 )
 
 type Message interface {
@@ -16,14 +17,18 @@ type MessageBase struct {
 
 func Base(ts time.Time) MessageBase {
 	return MessageBase{
-    Timestamp: ts,
+		Timestamp: ts,
 	}
 }
 
 func (m MessageBase) String(content string) string {
-  return m.Timestamp.Format("02/01 15:04:05.000") + "  " + content)
+	return m.Timestamp.Format("02/01 15:04:05.000") + "  " + content
 }
 func (MessageBase) isMessage() {}
+
+func (m MessageBase) Date() time.Time {
+	return m.Timestamp
+}
 
 type SkippedMessage struct {
 	MessageBase
@@ -51,5 +56,10 @@ func set(m ...Message) []Message {
 
 type Cast struct {
 	castv2.CastV2
+	MessageBase
+}
+
+type Combatant struct {
+	combatant.Combatant
 	MessageBase
 }
