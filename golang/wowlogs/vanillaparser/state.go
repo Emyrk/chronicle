@@ -9,6 +9,7 @@ import (
 	"github.com/Emyrk/chronicle/golang/wowlogs/types"
 	"github.com/Emyrk/chronicle/golang/wowlogs/types/castv2"
 	"github.com/Emyrk/chronicle/golang/wowlogs/types/combatant"
+	"github.com/Emyrk/chronicle/golang/wowlogs/types/zone"
 )
 
 type State struct {
@@ -17,6 +18,8 @@ type State struct {
 	ParticipantDamage map[guid.GUID]int64
 	ParticipantCasts  map[guid.GUID]map[int]types.Spell
 	Me                types.Unit
+
+	CurrentZone zone.Zone
 }
 
 func NewState(logger *slog.Logger, me types.Unit) *State {
@@ -27,6 +30,29 @@ func NewState(logger *slog.Logger, me types.Unit) *State {
 		ParticipantDamage: make(map[guid.GUID]int64),
 		Me:                me,
 	}
+}
+
+func (s *State) Zone(z zone.Zone) {
+	if z.Name == "" {
+		// Ignore empty zones
+		return
+	}
+	defer func() {
+		// Always set the current zone at the end
+		s.CurrentZone = z
+	}()
+
+	if s.CurrentZone.Equal(z) {
+		return
+	}
+
+	s.logger.Info(fmt.Sprintf("Zone changed to %q (instance %d)", z.Name, z.InstanceID),
+		slog.String("zone_name", z.Name),
+		slog.Uint64("instance_id", uint64(z.InstanceID)),
+		slog.String("exited_from", s.CurrentZone.Name),
+		slog.Uint64("exited_instance_id", uint64(s.CurrentZone.InstanceID)),
+		slog.Time("seen", z.Seen),
+	)
 }
 
 func (s *State) SpellDamage(damage SpellDamage) {
@@ -81,12 +107,12 @@ func (s *State) Combatant(cmbt combatant.Combatant) {
 	newPlayer := insert(s.Participants, cmbt.Guid, cmbt)
 
 	if newPlayer {
-		s.logger.Debug("new combatant",
-			slog.String("name", cmbt.Name),
-			slog.String("guid", cmbt.Guid.String()),
-			slog.String("class", cmbt.HeroClass.String()),
-			slog.String("race", cmbt.Race.String()),
-		)
+		//s.logger.Debug("new combatant",
+		//	slog.String("name", cmbt.Name),
+		//	slog.String("guid", cmbt.Guid.String()),
+		//	slog.String("class", cmbt.HeroClass.String()),
+		//	slog.String("race", cmbt.Race.String()),
+		//)
 	}
 }
 

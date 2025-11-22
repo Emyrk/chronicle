@@ -44,7 +44,7 @@ func (p *Parser) fLoot(ts time.Time, content string) ([]Message, error) {
 		return nil, fmt.Errorf("failed to parse zone info: %v", err)
 	}
 
-	var _ = li // TODO: use loot info
+	var _ = li
 
 	return Skip(ts, "loot info"), nil
 }
@@ -59,9 +59,12 @@ func (p *Parser) fZoneInfo(ts time.Time, content string) ([]Message, error) {
 		return nil, fmt.Errorf("failed to parse zone info: %v", err)
 	}
 
-	var _ = zi // TODO: use zone info
+	p.state.Zone(zi)
 
-	return Skip(ts, "zone info"), nil
+	return set(Zone{
+		MessageBase: Base(ts),
+		Zone:        zi,
+	}), nil
 }
 
 func (p *Parser) fCombatantInfo(ts time.Time, content string) ([]Message, error) {

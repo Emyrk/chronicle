@@ -52,3 +52,7 @@ func ParseZoneInfo(content string) (Zone, error) {
     InstanceID: uint32(instanceID),
   }, nil
 }
+
+func (z Zone) Equal(b Zone) bool {
+  return z.InstanceID == b.InstanceID && z.Name == b.Name
+}

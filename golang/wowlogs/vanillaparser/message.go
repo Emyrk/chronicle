@@ -7,6 +7,7 @@ import (
 	"github.com/Emyrk/chronicle/golang/wowlogs/types"
 	"github.com/Emyrk/chronicle/golang/wowlogs/types/castv2"
 	"github.com/Emyrk/chronicle/golang/wowlogs/types/combatant"
+	"github.com/Emyrk/chronicle/golang/wowlogs/types/zone"
 )
 
 type Message interface {
@@ -65,6 +66,11 @@ type Cast struct {
 type Combatant struct {
 	combatant.Combatant
 	MessageBase
+}
+
+type Zone struct {
+	MessageBase
+	zone.Zone
 }
 
 type ResourceChange struct {
