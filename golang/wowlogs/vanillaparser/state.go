@@ -34,6 +34,7 @@ func (s *State) SpellDamage(damage SpellDamage) {
 		// Only track players for now
 		return
 	}
+
 	s.ParticipantDamage[damage.Caster] += int64(damage.Amount)
 }
 

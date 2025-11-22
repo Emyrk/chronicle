@@ -23,6 +23,7 @@ func TestParserMessages(t *testing.T) {
 	logger := slog.New(slogzerolog.Option{Level: slog.LevelDebug, Logger: &zerologLogger}.NewZerologHandler())
 	p, err := New(logger, strings.NewReader(""))
 	require.NoError(t, err)
+	p.state = NewState(logger, types.Unit{})
 
 	//t.Run("Spell Cast Attempt", func(t *testing.T) {
 	//	att, err := exp[SpellCastAttempt](p.fSpellCastAttempt(time.Time{}, "Randgriz begins to cast Flash Heal."))

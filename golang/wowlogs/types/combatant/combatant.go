@@ -94,7 +94,7 @@ func ParseCombatantInfo(content string) (Combatant, error) {
 		Talents:    nil,
 	}
 
-	if info.guildName() != "" {
+	if info.guildName() != "nil" {
 		player.Guild = &Guild{
 			Name:      info.guildName(),
 			RankName:  info.guildRankName(),
