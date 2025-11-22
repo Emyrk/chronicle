@@ -60,7 +60,7 @@ var (
 
 // From myself
 var (
-  ReCreates     = regexp.MustCompile(`(.+[^\s]) (creates) (.+[^\s])\.`)
+  ReCreates     = regexp.MustCompile(`(.+[^\s]) creates (.+[^\s])\.`)
   ReGainsAttack = regexp.MustCompile(`(.+[^\s]) gains (\d+) extra attack through (.+[^\s])\.`)
   ReFallDamage  = regexp.MustCompile(`(.+[^\s]) falls and loses (\d+) health\.`)
 

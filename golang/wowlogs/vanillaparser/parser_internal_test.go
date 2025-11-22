@@ -314,6 +314,16 @@ func TestParserMessages(t *testing.T) {
 		}, itr)
 	})
 
+	t.Run("Creates", func(t *testing.T) {
+		crt, err := exp[Create](p.parseContent(time.Time{}, "0x0000000000024225 creates Runecloth Bandage."))
+		require.NoError(t, err)
+
+		require.Equal(t, Create{
+			Caster:  0x0000000000024225,
+			Created: "Runecloth Bandage",
+		}, crt)
+	})
+
 	//t.Run("Gains Attack", func(t *testing.T) {
 	//	rg, err := exp[SkippedMessage](p.fGainsAttack(time.Time{}, "Lonsell gains 1 extra attack through Windfury Totem."))
 	//	require.NoError(t, err)

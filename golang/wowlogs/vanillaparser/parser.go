@@ -110,7 +110,6 @@ func (p *Parser) Advance() ([]Message, error) {
 
 func (p *Parser) parseContent(ts time.Time, content string) ([]Message, error) {
 	for _, parser := range []parseLine{
-		p.fCombatantGUID,
 		p.fCombatantInfo,                // ✓
 		p.fZoneInfo,                     // ✓
 		p.fV2Casts,                      // ✓

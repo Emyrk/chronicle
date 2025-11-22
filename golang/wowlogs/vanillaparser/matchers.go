@@ -85,19 +85,6 @@ func (p *Parser) fCombatantInfo(ts time.Time, content string) ([]Message, error)
 	}), nil
 }
 
-func (p *Parser) fCombatantGUID(ts time.Time, content string) ([]Message, error) {
-	if !strings.HasPrefix(content, "COMBATANT_GUID:") {
-		return notHandled()
-	}
-
-	_, err := combatant.ParseCombatantGUID(content)
-	if err != nil {
-		return nil, fmt.Errorf("failed to parse combatant guid: %v", err)
-	}
-
-	return Unparsed(ts, "combatant guid"), nil
-}
-
 func (p *Parser) fBugDamageSpellHitOrCrit(ts time.Time, content string) ([]Message, error) {
 	if !regexs.ReBugDamageSpellHitOrCrit.MatchString(content) {
 		return notHandled()
@@ -922,13 +909,26 @@ func (p *Parser) fAuraInterrupt(ts time.Time, content string) ([]Message, error)
  */
 
 func (p *Parser) fCreates(ts time.Time, content string) ([]Message, error) {
-	matches := regexs.ReCreates.FindStringSubmatch(content)
-	if matches == nil {
+	matches, ok := types.FromRegex(regexs.ReCreates).Match(content)
+	if !ok {
 		return notHandled()
 	}
 
-	//creator, created := matches[1], matches[2]
-	return Unparsed(ts, "Creates not implemented"), nil
+	_, caster := matches.UnitOrGUID()
+	created := matches.String()
+	if err := matches.Error(); err != nil {
+		return nil, fmt.Errorf("Creates: %w", err)
+	}
+
+	if caster.IsZero() {
+		return Skip(ts, "Creates: not using guids"), nil
+	}
+
+	return set(Create{
+		MessageBase: Base(ts),
+		Caster:      caster,
+		Created:     created,
+	}), nil
 }
 
 func (p *Parser) fGainsAttack(ts time.Time, content string) ([]Message, error) {
