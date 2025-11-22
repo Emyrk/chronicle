@@ -12,6 +12,7 @@ import (
 func MergeCmd() *serpent.Command {
 	var (
 		outputPath string
+		noFilter   bool
 	)
 
 	cmd := &serpent.Command{
@@ -26,8 +27,14 @@ func MergeCmd() *serpent.Command {
 				Required:      false,
 				Value:         serpent.StringOf(&outputPath),
 			},
+			{
+				Name:          "No Filter",
+				Flag:          "no-filter",
+				FlagShorthand: "n",
+			},
 		},
 		Handler: func(i *serpent.Invocation) error {
+			ctx := i.Context()
 			logger := getLogger(i)
 			m := merge.NewMerger(logger)
 
@@ -50,7 +57,7 @@ func MergeCmd() *serpent.Command {
 				}
 			}
 
-			return m.MergeLogs(first, second, wr)
+			return m.MergeLogs(ctx, first, second, wr)
 		},
 	}
 	return cmd

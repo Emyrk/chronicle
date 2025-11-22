@@ -1,6 +1,7 @@
 package lines
 
 import (
+	"errors"
 	"strconv"
 	"strings"
 	"time"
@@ -99,6 +100,9 @@ func (l *Liner) Line(line string) (time.Time, string, error) {
 
 func (l *Liner) parse(year int, line string) (time.Time, string, error) {
 	parts := strings.SplitN(line, " ", 3)
+	if len(parts) != 3 {
+		return time.Time{}, "", errors.New("invalid line format")
+	}
 	ts, err := time.Parse("2006 "+LogDateFormat, strconv.Itoa(year)+" "+parts[0]+" "+parts[1])
 	return ts, strings.TrimPrefix(parts[2], " "), err
 }

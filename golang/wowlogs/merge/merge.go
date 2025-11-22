@@ -2,6 +2,7 @@ package merge
 
 import (
 	"bufio"
+	"context"
 	"errors"
 	"fmt"
 	"io"
@@ -42,12 +43,12 @@ func WithMiddleWare(mw MiddleWare) Option {
 	}
 }
 
-func (m *Merger) LineScanner(formatted io.Reader, raw io.Reader) (*lines.Liner, Scan, error) {
+func (m *Merger) LineScanner(ctx context.Context, formatted io.Reader, raw io.Reader) (*lines.Liner, Scan, error) {
 	f := bufio.NewScanner(formatted)
 	r := bufio.NewScanner(raw)
 	l := lines.NewLiner()
 
-	merger, err := newInOrderMerger(l, f, r)
+	merger, err := newInOrderMerger(ctx, l, f, r)
 	if err != nil {
 		return l, nil, fmt.Errorf("create merger: %w", err)
 	}
@@ -71,8 +72,8 @@ func (m *Merger) LineScanner(formatted io.Reader, raw io.Reader) (*lines.Liner, 
 	}, nil
 }
 
-func (m *Merger) MergeLogs(formatted io.Reader, raw io.Reader, writer io.Writer) error {
-	l, scan, err := m.LineScanner(formatted, raw)
+func (m *Merger) MergeLogs(ctx context.Context, formatted io.Reader, raw io.Reader, writer io.Writer) error {
+	l, scan, err := m.LineScanner(ctx, formatted, raw)
 	if err != nil {
 		return fmt.Errorf("create line scanner: %w", err)
 	}
@@ -112,12 +113,16 @@ type logLine struct {
 }
 
 type inOrderMerger struct {
+	ctx   context.Context
 	liner *lines.Liner
 	Sets  [2]logFile
+
+	failedLines []string
 }
 
-func newInOrderMerger(l *lines.Liner, a, b *bufio.Scanner) (*inOrderMerger, error) {
+func newInOrderMerger(ctx context.Context, l *lines.Liner, a, b *bufio.Scanner) (*inOrderMerger, error) {
 	i := &inOrderMerger{
+		ctx:   ctx,
 		liner: l,
 		Sets: [2]logFile{
 			{Scanner: a},
@@ -166,18 +171,33 @@ func (i *inOrderMerger) advance(index int) (time.Time, string, error) {
 		return time.Time{}, "", io.EOF
 	}
 
-	if !set.Scanner.Scan() {
-		set.done = true
-		set.lastTS = time.Time{}
-		set.lastLine = ""
-		i.Sets[index] = set
-		return ts, set.lastLine, nil
-	}
+	var nTs time.Time
+	var nl string
+	var err error
 
-	line := set.Scanner.Text()
-	nTs, nl, err := i.liner.Line(line)
-	if err != nil {
-		return time.Time{}, "", fmt.Errorf("liner parse: %w", err)
+	for {
+		if i.ctx.Err() != nil {
+			return time.Time{}, "", i.ctx.Err()
+		}
+
+		if !set.Scanner.Scan() {
+			set.done = true
+			set.lastTS = time.Time{}
+			set.lastLine = ""
+			i.Sets[index] = set
+			return ts, set.lastLine, nil
+		}
+
+		line := set.Scanner.Text()
+		nTs, nl, err = i.liner.Line(line)
+		if err != nil {
+			if errors.Is(err, io.EOF) {
+				return time.Time{}, "", io.EOF
+			}
+			i.failedLines = append(i.failedLines, line)
+			continue
+		}
+		break
 	}
 	set.lastTS = nTs
 	set.lastLine = nl
