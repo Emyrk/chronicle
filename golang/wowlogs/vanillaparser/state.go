@@ -57,12 +57,12 @@ func (s *State) CastV2(cst castv2.CastV2) {
 	}
 
 	s.ParticipantCasts[cst.Caster.Gid][cst.Spell.ID] = cst.Spell
-	s.logger.Debug("new spell cast",
-		slog.String("caster_name", cst.Caster.Name),
-		slog.String("caster_guid", cst.Caster.Gid.String()),
-		slog.String("spell_name", cst.Spell.Name),
-		slog.Int("spell_id", int(cst.Spell.ID)),
-	)
+	//s.logger.Debug("new spell cast",
+	//	slog.String("caster_name", cst.Caster.Name),
+	//	slog.String("caster_guid", cst.Caster.Gid.String()),
+	//	slog.String("spell_name", cst.Spell.Name),
+	//	slog.Int("spell_id", int(cst.Spell.ID)),
+	//)
 }
 
 func (s *State) Combatant(cmbt combatant.Combatant) {
