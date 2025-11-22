@@ -14,8 +14,8 @@ type replacement struct {
 
 var (
 	youReplacements = []replacement{
-		{regexp.MustCompile(`.*You fail to cast.*\n`), ""},
-		{regexp.MustCompile(`.*You fail to perform.*\n`), ""},
+		{regexp.MustCompile(`.*You fail to cast.*.`), ""},
+		{regexp.MustCompile(`.*You fail to perform.*.`), ""},
 		{regexp.MustCompile(` You suffer (.*?) from your`), ` %[1]s suffers %[2]s from %[1]s (self damage)'s`},
 		{regexp.MustCompile(` Your (.*?) hits you for`), ` %[1]s (self damage)'s %[2]s hits %[1]s for`},
 		{regexp.MustCompile(` Your (.*?) is parried by`), ` %[1]s's %[2]s was parried by`},
