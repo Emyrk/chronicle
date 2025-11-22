@@ -51,12 +51,25 @@ const (
 	HitTypeReflect       HitType = 0x00100000
 )
 
+// ParseHitMask assumes "full" blocks/resists/absorbs
 func ParseHitMask(s string) (HitType, error) {
 	switch s {
 	case "hit", "hits":
 		return HitTypeHit, nil
 	case "crit", "crits":
 		return HitTypeCrit, nil
+	case "blocks", "blocked":
+		return HitTypeFullBlock, nil
+	case "dodges", "dodged":
+		return HitTypeDodge, nil
+	case "parries", "parried":
+		return HitTypeParry, nil
+	case "deflects", "deflected":
+		return HitTypeDeflect, nil
+	case "evades", "evaded":
+		return HitTypeEvade, nil
+	case "resisted":
+		return HitTypeFullResist, nil
 	default:
 		return HitTypeNone, errors.New("invalid hit mask")
 	}
@@ -106,3 +119,6 @@ func ParseSchool(s string) (School, error) {
 		return None, errors.New("invalid school")
 	}
 }
+
+// ENUM(Unknown,Gains,Fades,Removed)
+type AuraApplication string

@@ -125,27 +125,28 @@ func (p *Parser) parseContent(ts time.Time, content string) ([]Message, error) {
 		p.fDamageHitOrCritNoSchool,      // ✓
 		p.fDamageHitOrCritSchool,        // ✓
 		p.fHeal,                         // ✓
-		p.fAuraGainHarmfulHelpful,
-		p.fAuraFade,
-		p.fDamageSpellSplit,
-		p.fDamageSpellMiss, // ✓
-		p.fDamageSpellBlockParryEvadeDodgeResistDeflect,
-		p.fDamageSpellAbsorb,
-		p.fDamageSpellAbsorbSelf,
-		p.fDamageReflect,
-		p.fDamageProcResist,
-		p.fDamageSpellImmune, // ✓
-		p.fDamageMiss,        // ✓
-		p.fDamageBlockParryEvadeDodgeDeflect,
-		p.fDamageAbsorbResist,
-		p.fDamageImmune, // ✓
-		p.fSpellCastPerformDurability,
-		p.fSpellCastPerform,
-		p.fSpellCastPerformUnknown,
-		p.fUnitDieDestroyed, // ✓
-		p.fUnitSlay,         // ✓
-		p.fAuraDispel,
-		p.fAuraInterrupt,
+		p.fAuraGainHarmfulHelpful,       // ✓
+		p.fAuraFade,                     // ✓
+		p.fDamageSpellSplit,             // x TODO: need an example
+		p.fDamageSpellMiss,              // ✓
+		p.fDamageSpellBlockParryEvadeDodgeResistDeflect, // ✓
+		p.fDamageSpellAbsorb,                            // ✓
+		p.fDamageSpellAbsorbSelf,                        // x TODO: need an example
+		p.fDamageReflect,                                // ✓
+		p.fDamageProcResist,                             // x TODO: need an example
+		p.fDamageSpellImmune,                            // ✓
+		p.fDamageMiss,                                   // ✓
+		p.fDamageBlockParryEvadeDodgeDeflect,            // ✓
+		p.fDamageAbsorbResist,                           // ✓
+		p.fDamageImmune,                                 // ✓
+		p.fSpellCastPerformDurability,                   // x TODO: need an example
+		p.fSpellCastPerform,                             // ✓
+		p.fSpellCastPerformUnknown,                      // ✓
+		p.fHonorableKill,                                // ✓ (TODO: add currency gain for honor)
+		p.fUnitDieDestroyed,                             // ✓
+		p.fUnitSlay,                                     // ✓
+		p.fAuraDispel,                                   // ✓
+		p.fAuraInterrupt,                                // ✓
 		p.fCreates,
 		p.fGainsAttack,
 		p.fFallDamage, // ✓

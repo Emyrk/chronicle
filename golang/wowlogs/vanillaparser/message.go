@@ -151,3 +151,19 @@ type Slain struct {
 	Victim guid.GUID
 	Killer *guid.GUID
 }
+
+type Aura struct {
+	MessageBase
+	Target      guid.GUID
+	SpellName   string
+	Amount      int32
+	Application types.AuraApplication
+}
+
+type Interrupt struct {
+	MessageBase
+	Caster guid.GUID
+	// SpellName is the spell that was interrupted
+	SpellName string
+	Target    guid.GUID
+}

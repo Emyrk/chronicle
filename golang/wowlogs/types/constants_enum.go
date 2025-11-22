@@ -12,6 +12,54 @@ import (
 )
 
 const (
+	// AuraApplicationUnknown is a AuraApplication of type Unknown.
+	AuraApplicationUnknown AuraApplication = "Unknown"
+	// AuraApplicationGains is a AuraApplication of type Gains.
+	AuraApplicationGains AuraApplication = "Gains"
+	// AuraApplicationFades is a AuraApplication of type Fades.
+	AuraApplicationFades AuraApplication = "Fades"
+	// AuraApplicationRemoved is a AuraApplication of type Removed.
+	AuraApplicationRemoved AuraApplication = "Removed"
+)
+
+var ErrInvalidAuraApplication = errors.New("not a valid AuraApplication")
+
+// String implements the Stringer interface.
+func (x AuraApplication) String() string {
+	return string(x)
+}
+
+// IsValid provides a quick way to determine if the typed value is
+// part of the allowed enumerated values
+func (x AuraApplication) IsValid() bool {
+	_, err := ParseAuraApplication(string(x))
+	return err == nil
+}
+
+var _AuraApplicationValue = map[string]AuraApplication{
+	"Unknown": AuraApplicationUnknown,
+	"unknown": AuraApplicationUnknown,
+	"Gains":   AuraApplicationGains,
+	"gains":   AuraApplicationGains,
+	"Fades":   AuraApplicationFades,
+	"fades":   AuraApplicationFades,
+	"Removed": AuraApplicationRemoved,
+	"removed": AuraApplicationRemoved,
+}
+
+// ParseAuraApplication attempts to convert a string to a AuraApplication.
+func ParseAuraApplication(name string) (AuraApplication, error) {
+	if x, ok := _AuraApplicationValue[name]; ok {
+		return x, nil
+	}
+	// Case insensitive parse, do a separate lookup to prevent unnecessary cost of lowercasing a string if we don't need to.
+	if x, ok := _AuraApplicationValue[strings.ToLower(name)]; ok {
+		return x, nil
+	}
+	return AuraApplication(""), fmt.Errorf("%s is %w", name, ErrInvalidAuraApplication)
+}
+
+const (
 	// CastActionsCasts is a CastActions of type casts.
 	CastActionsCasts CastActions = "casts"
 	// CastActionsBeginsToCast is a CastActions of type begins to cast.

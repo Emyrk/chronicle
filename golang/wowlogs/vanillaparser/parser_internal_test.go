@@ -160,6 +160,14 @@ func TestParserMessages(t *testing.T) {
 		require.Equal(t, Slain{
 			Victim: 0xF130001EA527931D,
 		}, death)
+
+		pvp, err := exp[Slain](p.parseContent(time.Time{}, "0x000000000001C80A dies, honorable kill Rank: Knight-Champion  (Estimated Honor Points: 17)"))
+		require.NoError(t, err)
+
+		require.Equal(t, Slain{
+			Victim: 0x000000000001C80A,
+			Killer: nil,
+		}, pvp)
 	})
 
 	t.Run("DamageReflect", func(t *testing.T) {
@@ -240,6 +248,70 @@ func TestParserMessages(t *testing.T) {
 			Target:      0x000000000001C7AC,
 			Amount:      333,
 		}, fall)
+	})
+
+	t.Run("Dodge", func(t *testing.T) {
+		dod, err := exp[Damage](p.parseContent(time.Time{}, "0xF13000335300CF60 attacks. 0x00000000000E16AC dodges"))
+		require.NoError(t, err)
+
+		require.Equal(t, Damage{
+			Caster:  0xF13000335300CF60,
+			Target:  0x00000000000E16AC,
+			HitType: types.HitTypeDodge,
+			Amount:  0,
+			School:  0,
+			Trailer: nil,
+		}, dod)
+	})
+
+	t.Run("SpellResist", func(t *testing.T) {
+		dod, err := exp[SpellDamage](p.parseContent(time.Time{}, "0x00000000000E16AC's Frost Shock was resisted by 0xF13000335300CF60"))
+		require.NoError(t, err)
+
+		require.Equal(t, SpellDamage{
+			Caster:    0x00000000000E16AC,
+			Target:    0xF13000335300CF60,
+			SpellName: "Frost Shock",
+			HitType:   types.HitTypeFullResist,
+			Amount:    0,
+			School:    0,
+			Trailer:   nil,
+		}, dod)
+	})
+
+	t.Run("AuraGain", func(t *testing.T) {
+		dod, err := exp[Aura](p.parseContent(time.Time{}, "0xF1400158E8000023 gains Strike Together (1)."))
+		require.NoError(t, err)
+
+		require.Equal(t, Aura{
+			Target:      0xF1400158E8000023,
+			SpellName:   "Strike Together",
+			Amount:      1,
+			Application: types.AuraApplicationGains,
+		}, dod)
+	})
+
+	t.Run("AuraRemoved", func(t *testing.T) {
+		dod, err := exp[Aura](p.parseContent(time.Time{}, "0x00000000000CB034's Frost Shock is removed."))
+		require.NoError(t, err)
+
+		require.Equal(t, Aura{
+			Target:      0x00000000000CB034,
+			SpellName:   "Frost Shock",
+			Amount:      0,
+			Application: types.AuraApplicationRemoved,
+		}, dod)
+	})
+
+	t.Run("Interrupt", func(t *testing.T) {
+		itr, err := exp[Aura](p.parseContent(time.Time{}, "0x00000000000F16FF interrupts 0x00000000000AA257's Flash Heal."))
+		require.NoError(t, err)
+
+		require.Equal(t, Interrupt{
+			Caster:    0x00000000000F16FF,
+			Target:    0x00000000000AA257,
+			SpellName: "Flash Heal",
+		}, itr)
 	})
 
 	//t.Run("Gains Attack", func(t *testing.T) {
