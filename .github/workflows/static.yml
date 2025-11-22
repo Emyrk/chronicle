@@ -31,6 +31,19 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+      - name: Setup Go
+        uses: actions/setup-go@v5
+        with:
+          go-version-file: 'golang/go.mod'
+          cache-dependency-path: golang/go.sum
+      - name: Build WASM
+        working-directory: golang
+        run: |
+          GOOS=js GOARCH=wasm go build -o ../site/parser.wasm ./cmd/wasm/
+      - name: Copy Go WASM runtime
+        run: |
+          cp "$(go env GOROOT)/misc/wasm/wasm_exec.js" site/ || \
+          find "$(go env GOROOT)" -name "wasm_exec.js" -exec cp {} site/ \;
       - name: Setup Pages
         uses: actions/configure-pages@v5
       - name: Upload artifact
