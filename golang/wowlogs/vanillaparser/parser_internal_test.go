@@ -60,13 +60,17 @@ func TestParserMessages(t *testing.T) {
 	})
 
 	t.Run("Resource Gain", func(t *testing.T) {
-		rg, err := exp[ResourceChange](p.fGain(time.Time{}, "11/20 15:12:59.228  0x000000000005B81F gains 20 Energy from 0x000000000005B81F's Relentless Strikes."))
+		rg, err := exp[ResourceChange](p.fGain(time.Time{}, "0x000000000005B81F gains 20 Energy from 0x000000000005B81F's Relentless Strikes."))
 		require.NoError(t, err)
-		require.Equal(t, "0x000000000005B81F", rg.Target.String())
-		require.Equal(t, uint32(20), rg.Amount)
-		require.Equal(t, "health", rg.Resource)
-		require.Equal(t, "0x000000000005B81F", rg.Caster.String())
-		require.Equal(t, "Relentless Strikes", rg.SpellName)
+
+		require.Equal(t, ResourceChange{
+			Target:    0x000000000005B81F,
+			Amount:    20,
+			Resource:  types.ResourceEnergy,
+			Caster:    0x000000000005B81F,
+			SpellName: "Relentless Strikes",
+			Direction: "gains",
+		}, rg)
 
 		//msg, err := p.fGain(time.Time{}, "Testplayer gains Blood Pact (1).")
 		//require.NoError(t, err)
