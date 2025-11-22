@@ -15,7 +15,7 @@ var (
 
 	ReDamageSpellHitOrCrit                         = regexp.MustCompile(`(.+[^\s])'s (.+[^\s]) (cr|h)its (.+[^\s]) for (\d+)\.\s?(.*)`)
 	ReDamageSpellHitOrCritSchool                   = regexp.MustCompile(`(.+[^\s])'s (.+[^\s]) (cr|h)its (.+[^\s]) for (\d+) ([a-zA-Z]+) damage\.\s?(.*)`)
-	ReDamagePeriodic                               = regexp.MustCompile(`(.+[^\s]) suffers (\d+) ([a-zA-Z]+) damage from (.+[^\s])\s's (.+[^\s])\.\s?(.*)`)
+	ReDamagePeriodic                               = regexp.MustCompile(`(.+[^\s]) suffers (\d+) ([a-zA-Z]+) damage from (.+[^\s])'s (.+[^\s])\.\s?(.*)`)
 	ReDamageSpellSplit                             = regexp.MustCompile(`(.+[^\s])\s's (.+[^\s]) causes (.+[^\s]) (\d+) damage\.\s?(.*)`)
 	ReDamageSpellMiss                              = regexp.MustCompile(`(.+[^\s])\s's (.+[^\s]) misse(s|d) (.+[^\s])\.`)
 	ReDamageSpellBlockParryEvadeDodgeResistDeflect = regexp.MustCompile(`(.+[^\s])\s's (.+[^\s]) was (blocked|parried|evaded|dodged|resisted|deflected) by (.+[^\s])\.`)

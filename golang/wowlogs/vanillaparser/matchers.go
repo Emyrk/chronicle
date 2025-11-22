@@ -162,7 +162,7 @@ func (p *Parser) fGain(hasSource bool, ts time.Time, content string) ([]Message,
 		Amount:      amount,
 		Resource:    resource,
 		Caster:      casterGUID,
-		SpellName:   p.state.LastCastedSpell(casterGUID, spellName),
+		SpellName:   spellName,
 		Direction:   direction,
 	}), nil
 }
@@ -218,7 +218,7 @@ func (p *Parser) fDamageSpellHitOrCrit(hasSchool bool, ts time.Time, content str
 	sp := SpellDamage{
 		MessageBase: Base(ts),
 		Caster:      caster,
-		SpellName:   p.state.LastCastedSpell(caster, spellName),
+		SpellName:   spellName,
 		HitType:     hitType,
 		Target:      target,
 		Amount:      amount,
@@ -230,14 +230,35 @@ func (p *Parser) fDamageSpellHitOrCrit(hasSchool bool, ts time.Time, content str
 }
 
 func (p *Parser) fDamagePeriodic(ts time.Time, content string) ([]Message, error) {
-	matches := regexs.ReDamagePeriodic.FindStringSubmatch(content)
-	if matches == nil {
+	matches, ok := types.FromRegex(regexs.ReDamagePeriodic).Match(content)
+	if !ok {
 		return notHandled()
 	}
 
-	//victim, damage, school, attacker, spellID, trailer := matches[1], matches[2], matches[3], matches[4], matches[5], matches[6]
-	// return spell cast and spell damage message
-	return Skip(ts, "DamagePeriodic not implemented"), nil
+	_, target := matches.UnitOrGUID()
+	amount := matches.Int32()
+	school := matches.School()
+	_, caster := matches.UnitOrGUID()
+	spellName := matches.String()
+	trailer := matches.Trailer()
+
+	if err := matches.Error(); err != nil {
+		return nil, fmt.Errorf("DamagePeriodic: %w", err)
+	}
+
+	if target.IsZero() || caster.IsZero() {
+		return Skip(ts, "DamagePeriodic: not using guids"), nil
+	}
+
+	return set(PeriodicDamage{
+		MessageBase: Base(ts),
+		Caster:      caster,
+		Target:      target,
+		Amount:      amount,
+		School:      school,
+		SpellName:   spellName,
+		Trailer:     trailer,
+	}), nil
 }
 
 func (p *Parser) fDamageShield(ts time.Time, content string) ([]Message, error) {

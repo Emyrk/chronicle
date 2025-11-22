@@ -16,10 +16,6 @@ type State struct {
 	Participants      map[guid.GUID][]combatant.Combatant
 	ParticipantDamage map[guid.GUID]int64
 	ParticipantCasts  map[guid.GUID]map[int]types.Spell
-
-	// LastCast is the last spell cast by each participant, keyed by GUID and spell name.
-	// This allows us to map the spell id to the spell name for easier lookup.
-	LastCast map[guid.GUID]map[string]types.Spell
 }
 
 func NewState(logger *slog.Logger) *State {
@@ -44,8 +40,6 @@ func (s *State) CastV2(cst castv2.CastV2) {
 		return
 	}
 
-	s.castedSpell(cst)
-
 	if !cst.Caster.Gid.IsPlayer() {
 		// Only track players for now
 		return
@@ -66,32 +60,6 @@ func (s *State) CastV2(cst castv2.CastV2) {
 		slog.String("spell_name", cst.Spell.Name),
 		slog.Int("spell_id", int(cst.Spell.ID)),
 	)
-}
-
-func (s *State) castedSpell(cst castv2.CastV2) {
-	if !cst.Caster.HasGuid() || cst.Spell.Name == "" {
-		return
-	}
-	caster := cst.Caster.Gid
-	if s.LastCast[caster] == nil {
-		s.LastCast[caster] = make(map[string]types.Spell)
-	}
-	s.LastCast[caster][cst.Spell.Name] = cst.Spell
-}
-
-func (s *State) LastCastedSpell(caster guid.GUID, spellName string) types.Spell {
-	if s.LastCast[caster] == nil {
-		return types.Spell{
-			Name: spellName,
-		}
-	}
-	spell, ok := s.LastCast[caster][spellName]
-	if !ok {
-		spell = types.Spell{
-			Name: spellName,
-		}
-	}
-	return spell
 }
 
 func (s *State) Combatant(cmbt combatant.Combatant) {

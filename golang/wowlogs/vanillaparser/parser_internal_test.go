@@ -8,6 +8,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/Emyrk/chronicle/golang/internal/ptr"
 	"github.com/Emyrk/chronicle/golang/wowlogs/types"
 	"github.com/rs/zerolog"
 	slogzerolog "github.com/samber/slog-zerolog/v2"
@@ -36,7 +37,7 @@ func TestParserMessages(t *testing.T) {
 
 		require.Equal(t, SpellDamage{
 			Caster:    0x0000000000062A1B,
-			SpellName: types.Spell{Name: "Hamstring"},
+			SpellName: "Hamstring",
 			HitType:   types.HitTypeHit,
 			Target:    0xF1300033F000CFD0,
 			Amount:    27,
@@ -50,7 +51,7 @@ func TestParserMessages(t *testing.T) {
 
 		require.Equal(t, SpellDamage{
 			Caster:    0x0000000000016541,
-			SpellName: types.Spell{Name: "Fire Strike"},
+			SpellName: "Fire Strike",
 			HitType:   types.HitTypeHit,
 			Target:    0x000000000001B1F2,
 			Amount:    2,
@@ -68,7 +69,7 @@ func TestParserMessages(t *testing.T) {
 			Amount:    20,
 			Resource:  types.ResourceEnergy,
 			Caster:    0x000000000005B81F,
-			SpellName: types.Spell{Name: "Relentless Strikes"},
+			SpellName: "Relentless Strikes",
 			Direction: "gains",
 		}, rg)
 
@@ -84,6 +85,25 @@ func TestParserMessages(t *testing.T) {
 		//require.Equal(t, "Happiness", rg.Resource)
 		//require.Equal(t, "Kryaa", rg.Caster.Name)
 		//require.Equal(t, "Feed Pet Effect", rg.Spell)
+	})
+
+	t.Run("PeriodicDamage", func(t *testing.T) {
+		sh, err := exp[PeriodicDamage](p.fDamagePeriodic(time.Time{}, "0xF130002F7F00CB61 suffers 13 Nature damage from 0x00000000000F5027's Insect Swarm. (4 resisted)"))
+		require.NoError(t, err)
+
+		require.Equal(t, PeriodicDamage{
+			Caster:    0x00000000000F5027,
+			Target:    0xF130002F7F00CB61,
+			Amount:    13,
+			School:    types.NatureSchool,
+			SpellName: "Insect Swarm",
+			Trailer: []types.TrailerEntry{
+				{
+					Amount:  ptr.Ref(uint32(4)),
+					HitType: types.HitTypePartialResist,
+				},
+			},
+		}, sh)
 	})
 
 	//t.Run("Gains Attack", func(t *testing.T) {
