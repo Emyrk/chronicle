@@ -108,20 +108,8 @@ func (p *Parser) fSpellCastAttempt(ts time.Time, content string) ([]Message, err
 	return Skip(ts, "handled castsv2"), nil
 }
 
-func (p *Parser) fGainWithSource(ts time.Time, content string) ([]Message, error) {
-	return p.fGain(true, ts, content)
-}
-
-func (p *Parser) fGainNoSource(ts time.Time, content string) ([]Message, error) {
-	return p.fGain(false, ts, content)
-}
-
-func (p *Parser) fGain(hasSource bool, ts time.Time, content string) ([]Message, error) {
-	re := regexs.ReGainNoSource
-	if hasSource {
-		re = regexs.ReGain
-	}
-	matched, ok := types.FromRegex(re).Match(content)
+func (p *Parser) fGain(ts time.Time, content string) ([]Message, error) {
+	matched, ok := types.FromRegex(regexs.ReGain).Match(content)
 	if !ok {
 		return notHandled()
 	}

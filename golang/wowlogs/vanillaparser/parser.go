@@ -116,7 +116,7 @@ func (p *Parser) parseContent(ts time.Time, content string) ([]Message, error) {
 		p.fLoot,                         // ✓
 		p.fBugDamageSpellHitOrCrit,      // ✓
 		p.fSpellCastAttempt,             // ✓
-		p.fGainWithSource,               // ✓
+		p.fGain,                         // ✓
 		p.fDamageSpellHitOrCritNoSchool, // ✓
 		p.fDamageSpellHitOrCritSchool,   // ✓
 		p.fDamagePeriodic,               // ✓
@@ -146,10 +146,9 @@ func (p *Parser) parseContent(ts time.Time, content string) ([]Message, error) {
 		p.fUnitSlay,                                     // ✓
 		p.fAuraDispel,                                   // ✓
 		p.fAuraInterrupt,                                // ✓
-		p.fCreates,
+		p.fCreates,                                      // ✓
 		p.fGainsAttack,
 		p.fFallDamage, // ✓
-		p.fGainNoSource,
 	} {
 		m, err := parser(ts, content)
 		if err != nil {
