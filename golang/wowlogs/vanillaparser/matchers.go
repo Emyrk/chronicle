@@ -7,7 +7,6 @@ import (
 	"time"
 
 	"github.com/Emyrk/chronicle/golang/internal/ptr"
-	"github.com/Emyrk/chronicle/golang/wowlogs/guid"
 	"github.com/Emyrk/chronicle/golang/wowlogs/regexs"
 	"github.com/Emyrk/chronicle/golang/wowlogs/types"
 	"github.com/Emyrk/chronicle/golang/wowlogs/types/castv2"
@@ -118,14 +117,8 @@ func (p *Parser) fGain(ts time.Time, content string) ([]Message, error) {
 	direction := matched.String()
 	amount := matched.Int32()
 	resource := matched.Resource()
-
-	var casterGUID *guid.GUID
-	var spellName *string
-	if hasSource {
-		_, gid := matched.UnitOrGUID()
-		casterGUID = &gid
-		spellName = ptr.Ref(matched.String())
-	}
+	_, casterGUID := matched.UnitOrGUID()
+	spellName := ptr.Ref(matched.String())
 
 	if err := matched.Error(); err != nil {
 		return nil, fmt.Errorf("gain: %w", err)
@@ -140,7 +133,7 @@ func (p *Parser) fGain(ts time.Time, content string) ([]Message, error) {
 		Target:      targetGUID,
 		Amount:      amount,
 		Resource:    resource,
-		Caster:      casterGUID,
+		Caster:      ptr.Ref(casterGUID),
 		SpellName:   spellName,
 		Direction:   direction,
 	}), nil

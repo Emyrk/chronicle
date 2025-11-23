@@ -240,13 +240,12 @@ func TestParserMessages(t *testing.T) {
 	})
 
 	t.Run("FallDamage", func(t *testing.T) {
-		fall, err := exp[Damage](p.parseContent(time.Time{}, "0x000000000001C7AC falls and loses 333 health."))
+		fall, err := exp[FallDamage](p.parseContent(time.Time{}, "0x000000000001C7AC falls and loses 333 health."))
 		require.NoError(t, err)
 
 		require.Equal(t, FallDamage{
-			MessageBase: MessageBase{},
-			Target:      0x000000000001C7AC,
-			Amount:      333,
+			Target: 0x000000000001C7AC,
+			Amount: 333,
 		}, fall)
 	})
 
