@@ -94,10 +94,19 @@ function rotateRight64(value, bits) {
 // Extract entry ID from a creature GUID (matches Go's guid.GetEntry())
 function getEntryFromGUID(guidString) {
     // Parse hex manually for browser compatibility
-    const hexStr = guidString.replace(/^0x/i, '');
+    const hexStr = guidString.toString().replace(/^0x/i, '').replace(/[^0-9a-fA-F]/g, '');
+    if (!hexStr || hexStr.length === 0) {
+        console.warn('Invalid GUID in getEntryFromGUID:', guidString);
+        return 0;
+    }
     let guidInt = 0n;
     for (let i = 0; i < hexStr.length; i++) {
-        guidInt = guidInt * 16n + BigInt(parseInt(hexStr[i], 16));
+        const digit = parseInt(hexStr[i], 16);
+        if (isNaN(digit)) {
+            console.warn('Invalid hex digit:', hexStr[i], 'in', guidString);
+            return 0;
+        }
+        guidInt = guidInt * 16n + BigInt(digit);
     }
     
     // Rotate right by 24 bits (same as Go's RotateLeft with -24)
@@ -387,10 +396,19 @@ function createFightsDisplay(state) {
         allGuids.forEach(guid => {
             // Convert hex string to BigInt (guid is like "0x000000000001C7AC")
             // Parse hex manually for browser compatibility
-            const hexStr = guid.replace(/^0x/i, '');
+            const hexStr = guid.toString().replace(/^0x/i, '').replace(/[^0-9a-fA-F]/g, '');
+            if (!hexStr || hexStr.length === 0) {
+                console.warn('Invalid GUID:', guid);
+                return;
+            }
             let guidInt = 0n;
             for (let i = 0; i < hexStr.length; i++) {
-                guidInt = guidInt * 16n + BigInt(parseInt(hexStr[i], 16));
+                const digit = parseInt(hexStr[i], 16);
+                if (isNaN(digit)) {
+                    console.warn('Invalid hex digit in GUID:', hexStr[i], 'in', guid);
+                    return;
+                }
+                guidInt = guidInt * 16n + BigInt(digit);
             }
             
             // Check if player or pet (high bits & 0x00F0)
