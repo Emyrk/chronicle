@@ -89,11 +89,6 @@ func (s *State) Zone(z Zone) {
 }
 
 func (s *State) Damage(damage Damage) {
-	if !damage.Caster.IsPlayer() {
-		// Only track players for now
-		return
-	}
-
 	if s.CurrentFight == nil {
 		s.CurrentFight = NewFight(damage.Date(), s.CurrentZone)
 		s.Fights = append(s.Fights, s.CurrentFight)
@@ -115,23 +110,11 @@ func (s *State) Slain(slain Slain) {
 }
 
 func (s *State) CastV2(cst Cast) {
-	if !cst.Caster.HasGuid() {
-		return
-	}
 
-	if !cst.Caster.Gid.IsPlayer() {
-		// Only track players for now
-		return
-	}
 }
 
 func (s *State) Combatant(cmbt Combatant) {
 	if cmbt.Guid.IsZero() {
-		return
-	}
-
-	if !cmbt.Guid.IsPlayer() {
-		// Only track players for now
 		return
 	}
 
