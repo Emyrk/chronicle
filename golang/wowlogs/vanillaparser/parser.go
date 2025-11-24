@@ -105,19 +105,9 @@ func (p *Parser) Advance() ([]Message, error) {
 			return nil, fmt.Errorf("timestamp is zero for message type: %s", reflect.TypeOf(msg).String())
 		}
 
-		switch typed := msg.(type) {
-		case Combatant:
-			p.state.Combatant(typed.Combatant)
-		case Cast:
-			p.state.CastV2(typed.CastV2)
-		case Zone:
-			p.state.Zone(typed.Zone)
-		case Damage:
-			p.state.Damage(typed)
-		}
-		err = p.state.Fights.Process(msg)
+		err = p.state.Process(msg)
 		if err != nil {
-			return nil, fmt.Errorf("fight process: %v", err)
+			return nil, fmt.Errorf("state process failed: %v", err)
 		}
 	}
 	return msgs, err

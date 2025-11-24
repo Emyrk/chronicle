@@ -1,135 +1,102 @@
 package vanillaparser
 
 import (
-	"fmt"
 	"time"
 
 	"github.com/Emyrk/chronicle/golang/wowlogs/guid"
 	"github.com/Emyrk/chronicle/golang/wowlogs/types/zone"
 )
 
-type Fights struct {
-	CurrentFight *Fight
-	Fights       []*Fight
-}
+var (
+	ParticipantTimeout = 5 * time.Minute
+)
 
-func NewFights() *Fights {
-	return &Fights{
-		Fights: []*Fight{},
-	}
-}
-
-func (f *Fights) Process(msg Message) error {
-	switch typed := msg.(type) {
-	case Damage:
-		if f.CurrentFight == nil && typed.Caster.IsPlayer() && !typed.Target.IsPlayer() {
-			f.StartFight()
-		}
-	}
-
-	if f.CurrentFight == nil {
-		return nil
-	}
-
-	err := f.CurrentFight.Process(msg)
-	if err != nil {
-		return fmt.Errorf("fight process: %w", err)
-	}
-
-	if !f.CurrentFight.ended.IsZero() {
-		f.EndFight()
-	}
-
-	return nil
-}
-
-func (f *Fights) EndFight() {
-	f.CurrentFight = nil
-}
-
-func (f *Fights) StartFight() {
-	ft := NewFight()
-	f.CurrentFight = ft
-	f.Fights = append(f.Fights, ft)
-}
-
-// Fight represents a start & end of combat.
+// Fight identifies a start and end of combat.
 type Fight struct {
-	Zone *zone.Zone
-	// Players is a map of the players and their last message of activity
-	Players map[guid.GUID]Message
+	// Participants is a map of all participants in the fight.
+	// Both player and non-player. The time.Time is their last seen time.
+	Participants map[guid.GUID]time.Time
 
-	// Enemies is a map of the enemies and their last message of activity
-	Enemies map[guid.GUID]Message
-	// Who is alive
-	PlayersAlive map[guid.GUID]struct{}
+	FriendlyAlive map[guid.GUID]struct{}
+	EnemiesAlive  map[guid.GUID]struct{}
 
-	EnemiesAlive map[guid.GUID]struct{}
-	DamageDone   map[guid.GUID]int64
-
+	DamageDone  map[guid.GUID]int64
 	DamageTaken map[guid.GUID]int64
-	started     time.Time
-	ended       time.Time
+
+	Zone zone.Zone
+
+	Started      time.Time
+	Ended        time.Time
+	LastActivity time.Time
 }
 
-func NewFight() *Fight {
-	return &Fight{
-		Players:      make(map[guid.GUID]Message),
-		Enemies:      make(map[guid.GUID]Message),
-		PlayersAlive: make(map[guid.GUID]struct{}),
-		EnemiesAlive: make(map[guid.GUID]struct{}),
-		DamageDone:   make(map[guid.GUID]int64),
-		DamageTaken:  make(map[guid.GUID]int64),
+func NewFight(ts time.Time, zone zone.Zone) *Fight {
+	f := &Fight{
+		Participants:  make(map[guid.GUID]time.Time),
+		FriendlyAlive: make(map[guid.GUID]struct{}),
+		EnemiesAlive:  make(map[guid.GUID]struct{}),
+		DamageDone:    make(map[guid.GUID]int64),
+		DamageTaken:   make(map[guid.GUID]int64),
+		Zone:          zone,
+		Started:       ts,
+		Ended:         time.Time{},
 	}
+	return f
 }
 
-func (f *Fight) Process(msg Message) error {
-	switch m := msg.(type) {
-	case Damage:
-		f.Damage(m)
-	case Slain:
-		f.Slain(m)
-	case Zone:
-		if f.Zone == nil {
-			f.Zone = &m.Zone
+func (f *Fight) SeenParticipants(ts time.Time, gs ...guid.GUID) {
+	f.bump(ts)
+	for _, id := range gs {
+		// TODO: What about summoned things? Allied NPCs?
+		if id.IsPlayer() && id.IsPet() {
+			f.FriendlyAlive[id] = struct{}{}
 		} else {
-			if !f.Zone.Equal(m.Zone) {
-				// End the fight if the zone changes
-			}
+			f.EnemiesAlive[id] = struct{}{}
 		}
-	}
-
-	if f.started.IsZero() && len(f.PlayersAlive) > 0 && len(f.EnemiesAlive) > 0 {
-		f.started = msg.Date()
-	}
-
-	if !f.started.IsZero() && len(f.EnemiesAlive) == 0 {
-		f.ended = msg.Date()
-	}
-
-	return nil
-}
-
-func (f *Fight) Damage(dmg Damage) {
-	f.seen(dmg.Caster, dmg)
-	f.DamageDone[dmg.Caster] += int64(dmg.Amount)
-	f.DamageTaken[dmg.Target] += int64(dmg.Amount)
-}
-
-func (f *Fight) Slain(slain Slain) {
-	if slain.Victim.IsPlayer() {
-		delete(f.PlayersAlive, slain.Victim)
-	} else {
-		delete(f.EnemiesAlive, slain.Victim)
+		f.Participants[id] = ts
 	}
 }
 
-func (f *Fight) seen(guid guid.GUID, msg Message) {
-	if !guid.IsPlayer() {
-		f.EnemiesAlive[guid] = struct{}{}
-		f.Enemies[guid] = msg
+// TODO: Track the ts
+func (f *Fight) Slain(ts time.Time, gs ...guid.GUID) {
+	f.bump(ts)
+	for _, id := range gs {
+		delete(f.FriendlyAlive, id)
+		delete(f.EnemiesAlive, id)
+	}
+
+	if len(f.EnemiesAlive) == 0 {
+		f.FinishFight(ts)
+	}
+}
+
+func (f *Fight) bump(ts time.Time) {
+	f.LastActivity = ts
+}
+
+func (f *Fight) FinishFight(ts time.Time) {
+	if f.IsDone() {
 		return
 	}
-	f.PlayersAlive[guid] = struct{}{}
-	f.Players[guid] = msg
+	f.Ended = ts
+}
+
+func (f *Fight) IsDone() bool {
+	return !f.Ended.IsZero()
+}
+
+func (f *Fight) Timeout(now time.Time) {
+	for id, ts := range f.Participants {
+		if now.Sub(ts) > ParticipantTimeout {
+			// Treat them as slain I guess?
+			f.Slain(ts, id)
+		}
+	}
+}
+
+func (f *Fight) CheckDone(now time.Time) {
+	f.Timeout(now)
+	if len(f.EnemiesAlive) == 0 || now.Sub(f.LastActivity) > ParticipantTimeout {
+		f.FinishFight(now)
+	}
 }
