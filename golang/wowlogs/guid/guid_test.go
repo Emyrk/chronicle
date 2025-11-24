@@ -87,6 +87,16 @@ func TestGUID(t *testing.T) {
 			isPlayer: true,
 			isUnit:   true,
 		},
+		{
+			name:          "Magma totem",
+			guid:          0xF130001D29279306,
+			isPlayer:      false,
+			isVehicle:     false,
+			isPet:         false,
+			isCreature:    true,
+			isAnyCreature: true,
+			isUnit:        true,
+		},
 	}
 
 	for _, tt := range tests {
