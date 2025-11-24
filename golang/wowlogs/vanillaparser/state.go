@@ -63,14 +63,14 @@ func (s *State) Zone(z zone.Zone) {
 	)
 }
 
-func (s *State) SpellDamage(damage SpellDamage) {
-	if !damage.Caster.IsPlayer() {
-		// Only track players for now
-		return
-	}
-
-	s.ParticipantDamage[damage.Caster] += int64(damage.Amount)
-}
+//func (s *State) SpellDamage(damage SpellDamage) {
+//	if !damage.Caster.IsPlayer() {
+//		// Only track players for now
+//		return
+//	}
+//
+//	s.ParticipantDamage[damage.Caster] += int64(damage.Amount)
+//}
 
 func (s *State) CastV2(cst castv2.CastV2) {
 	if !cst.Caster.HasGuid() {

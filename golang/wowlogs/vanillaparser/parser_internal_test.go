@@ -34,23 +34,23 @@ func TestParserMessages(t *testing.T) {
 
 	// With school: 0xF1400844930090A2's Firebolt hits 0xF130000950003FB5 for 38 Fire damage
 	t.Run("SpellHit", func(t *testing.T) {
-		sh, err := exp[SpellDamage](p.parseContent(time.Time{}, "0x0000000000062A1B's Hamstring hits 0xF1300033F000CFD0 for 27."))
+		sh, err := exp[Damage](p.parseContent(time.Time{}, "0x0000000000062A1B's Hamstring hits 0xF1300033F000CFD0 for 27."))
 		require.NoError(t, err)
 
-		require.Equal(t, SpellDamage{
+		require.Equal(t, Damage{
 			Caster:    0x0000000000062A1B,
-			SpellName: "Hamstring",
+			SpellName: ptr.Ref("Hamstring"),
 			HitType:   types.HitTypeHit,
 			Target:    0xF1300033F000CFD0,
 			Amount:    27,
 			Trailer:   nil,
 		}, sh)
 
-		pa, err := exp[SpellDamage](p.parseContent(time.Time{}, "0xF13000342E024B85's Shoot hits 0x0000000000024225 for 0. (183 absorbed)"))
+		pa, err := exp[Damage](p.parseContent(time.Time{}, "0xF13000342E024B85's Shoot hits 0x0000000000024225 for 0. (183 absorbed)"))
 		require.NoError(t, err)
-		require.Equal(t, SpellDamage{
+		require.Equal(t, Damage{
 			Caster:    0xF13000342E024B85,
-			SpellName: "Shoot",
+			SpellName: ptr.Ref("Shoot"),
 			HitType:   types.HitTypeHit,
 			Target:    0x0000000000024225,
 			Amount:    0,
@@ -65,12 +65,12 @@ func TestParserMessages(t *testing.T) {
 	})
 
 	t.Run("SpellAndSchool", func(t *testing.T) {
-		ss, err := exp[SpellDamage](p.parseContent(time.Time{}, "0x0000000000016541's Fire Strike hits 0x000000000001B1F2 for 2 Fire damage."))
+		ss, err := exp[Damage](p.parseContent(time.Time{}, "0x0000000000016541's Fire Strike hits 0x000000000001B1F2 for 2 Fire damage."))
 		require.NoError(t, err)
 
-		require.Equal(t, SpellDamage{
+		require.Equal(t, Damage{
 			Caster:    0x0000000000016541,
-			SpellName: "Fire Strike",
+			SpellName: ptr.Ref("Fire Strike"),
 			HitType:   types.HitTypeHit,
 			Target:    0x000000000001B1F2,
 			Amount:    2,
@@ -185,12 +185,12 @@ func TestParserMessages(t *testing.T) {
 	})
 
 	t.Run("SpellMiss", func(t *testing.T) {
-		mis, err := exp[SpellDamage](p.parseContent(time.Time{}, "0x00000000000AB2A9's Arcane Shot missed 0x000000000000D995."))
+		mis, err := exp[Damage](p.parseContent(time.Time{}, "0x00000000000AB2A9's Arcane Shot missed 0x000000000000D995."))
 		require.NoError(t, err)
 
-		require.Equal(t, SpellDamage{
+		require.Equal(t, Damage{
 			Caster:    0x00000000000AB2A9,
-			SpellName: "Arcane Shot",
+			SpellName: ptr.Ref("Arcane Shot"),
 			HitType:   types.HitTypeMiss,
 			Target:    0x000000000000D995,
 			Amount:    0,
@@ -199,12 +199,12 @@ func TestParserMessages(t *testing.T) {
 	})
 
 	t.Run("SpellImmune", func(t *testing.T) {
-		mis, err := exp[SpellDamage](p.parseContent(time.Time{}, "0xF130000A4627936B's Earthbind fails. 0x00000000000AE8FE is immune."))
+		mis, err := exp[Damage](p.parseContent(time.Time{}, "0xF130000A4627936B's Earthbind fails. 0x00000000000AE8FE is immune."))
 		require.NoError(t, err)
 
-		require.Equal(t, SpellDamage{
+		require.Equal(t, Damage{
 			Caster:    0xF130000A4627936B,
-			SpellName: "Earthbind",
+			SpellName: ptr.Ref("Earthbind"),
 			HitType:   types.HitTypeImmune,
 			Target:    0x00000000000AE8FE,
 			Amount:    0,
@@ -226,12 +226,12 @@ func TestParserMessages(t *testing.T) {
 	})
 
 	t.Run("SpellAbsorb", func(t *testing.T) {
-		mis, err := exp[SpellDamage](p.parseContent(time.Time{}, "0xF13000342E024B85's Shoot is absorbed by 0x0000000000024225."))
+		mis, err := exp[Damage](p.parseContent(time.Time{}, "0xF13000342E024B85's Shoot is absorbed by 0x0000000000024225."))
 		require.NoError(t, err)
 
-		require.Equal(t, SpellDamage{
+		require.Equal(t, Damage{
 			Caster:    0xF13000342E024B85,
-			SpellName: "Shoot",
+			SpellName: ptr.Ref("Shoot"),
 			HitType:   types.HitTypeFullAbsorb,
 			Target:    0x0000000000024225,
 			Amount:    0,
@@ -264,13 +264,13 @@ func TestParserMessages(t *testing.T) {
 	})
 
 	t.Run("SpellResist", func(t *testing.T) {
-		dod, err := exp[SpellDamage](p.parseContent(time.Time{}, "0x00000000000E16AC's Frost Shock was resisted by 0xF13000335300CF60"))
+		dod, err := exp[Damage](p.parseContent(time.Time{}, "0x00000000000E16AC's Frost Shock was resisted by 0xF13000335300CF60"))
 		require.NoError(t, err)
 
-		require.Equal(t, SpellDamage{
+		require.Equal(t, Damage{
 			Caster:    0x00000000000E16AC,
 			Target:    0xF13000335300CF60,
-			SpellName: "Frost Shock",
+			SpellName: ptr.Ref("Frost Shock"),
 			HitType:   types.HitTypeFullResist,
 			Amount:    0,
 			School:    0,

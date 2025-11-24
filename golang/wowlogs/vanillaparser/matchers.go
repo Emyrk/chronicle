@@ -25,8 +25,6 @@ func (p *Parser) fV2Casts(ts time.Time, content string) ([]Message, error) {
 		return nil, fmt.Errorf("castv2: %w", err)
 	}
 
-	p.state.CastV2(c)
-
 	return set(Cast{
 		CastV2:      c,
 		MessageBase: Base(ts),
@@ -58,8 +56,6 @@ func (p *Parser) fZoneInfo(ts time.Time, content string) ([]Message, error) {
 		return nil, fmt.Errorf("failed to parse zone info: %v", err)
 	}
 
-	p.state.Zone(zi)
-
 	return set(Zone{
 		MessageBase: Base(ts),
 		Zone:        zi,
@@ -75,8 +71,6 @@ func (p *Parser) fCombatantInfo(ts time.Time, content string) ([]Message, error)
 	if err != nil {
 		return nil, fmt.Errorf("failed to parse combatant info: %v", err)
 	}
-
-	p.state.Combatant(cbt)
 
 	return set(Combatant{
 		Combatant:   cbt,
@@ -187,17 +181,16 @@ func (p *Parser) fDamageSpellHitOrCrit(hasSchool bool, ts time.Time, content str
 		trailer[i].HitType = trailer[i].HitType | hitType
 	}
 
-	sp := SpellDamage{
+	sp := Damage{
 		MessageBase: Base(ts),
 		Caster:      caster,
-		SpellName:   spellName,
+		SpellName:   ptr.Ref(spellName),
 		HitType:     hitType,
 		Target:      target,
 		Amount:      amount,
 		Trailer:     trailer,
 		School:      school,
 	}
-	p.state.SpellDamage(sp)
 	return set(sp), nil
 }
 
@@ -449,10 +442,10 @@ func (p *Parser) fDamageSpellMiss(ts time.Time, content string) ([]Message, erro
 	}
 
 	//attacker, spellID, victim := matches[1], matches[2], matches[4]
-	return set(SpellDamage{
+	return set(Damage{
 		MessageBase: Base(ts),
 		Caster:      caster,
-		SpellName:   spellName,
+		SpellName:   ptr.Ref(spellName),
 		HitType:     types.HitTypeMiss,
 		Target:      target,
 		Amount:      0,
@@ -479,10 +472,10 @@ func (p *Parser) fDamageSpellBlockParryEvadeDodgeResistDeflect(ts time.Time, con
 		return Skip(ts, "DamageSpellBlockParryEvadeDodgeDeflect: not using guids"), nil
 	}
 
-	return set(SpellDamage{
+	return set(Damage{
 		MessageBase: Base(ts),
 		Caster:      caster,
-		SpellName:   spellName,
+		SpellName:   ptr.Ref(spellName),
 		HitType:     hitType,
 		Target:      target,
 		Amount:      0,
@@ -510,10 +503,10 @@ func (p *Parser) fDamageSpellAbsorb(ts time.Time, content string) ([]Message, er
 		return Skip(ts, "DamageSpellAbsorb: not using guids"), nil
 	}
 
-	return set(SpellDamage{
+	return set(Damage{
 		MessageBase: Base(ts),
 		Caster:      caster,
-		SpellName:   spellName,
+		SpellName:   ptr.Ref(spellName),
 		HitType:     types.HitTypeFullAbsorb,
 		Target:      target,
 		Amount:      0,
@@ -550,10 +543,10 @@ func (p *Parser) fDamageReflect(ts time.Time, content string) ([]Message, error)
 		return Skip(ts, "DamageReflect: not using guids"), nil
 	}
 
-	return set(SpellDamage{
+	return set(Damage{
 		MessageBase: Base(ts),
 		Caster:      caster,
-		SpellName:   spellName,
+		SpellName:   ptr.Ref(spellName),
 		HitType:     types.HitTypeReflect,
 		Target:      target,
 		Amount:      0,
@@ -588,10 +581,10 @@ func (p *Parser) fDamageSpellImmune(ts time.Time, content string) ([]Message, er
 	if caster.IsZero() || target.IsZero() {
 		return Skip(ts, "DamageSpellImmune: not using guids"), nil
 	}
-	return set(SpellDamage{
+	return set(Damage{
 		MessageBase: Base(ts),
 		Caster:      caster,
-		SpellName:   spellName,
+		SpellName:   ptr.Ref(spellName),
 		HitType:     types.HitTypeImmune,
 		Target:      target,
 		Amount:      0,
