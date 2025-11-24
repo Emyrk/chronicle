@@ -15,7 +15,8 @@ var (
 type Fight struct {
 	// Participants is a map of all participants in the fight.
 	// Both player and non-player. The time.Time is their last seen time.
-	Participants map[guid.GUID]time.Time
+	Participants         map[guid.GUID]time.Time
+	ParticipantFirstSeen map[guid.GUID]time.Time
 
 	FriendlyAlive map[guid.GUID]struct{}
 	EnemiesAlive  map[guid.GUID]struct{}
@@ -32,14 +33,15 @@ type Fight struct {
 
 func NewFight(ts time.Time, zone zone.Zone) *Fight {
 	f := &Fight{
-		Participants:  make(map[guid.GUID]time.Time),
-		FriendlyAlive: make(map[guid.GUID]struct{}),
-		EnemiesAlive:  make(map[guid.GUID]struct{}),
-		DamageDone:    make(map[guid.GUID]int64),
-		DamageTaken:   make(map[guid.GUID]int64),
-		Zone:          zone,
-		Started:       ts,
-		Ended:         time.Time{},
+		Participants:         make(map[guid.GUID]time.Time),
+		ParticipantFirstSeen: make(map[guid.GUID]time.Time),
+		FriendlyAlive:        make(map[guid.GUID]struct{}),
+		EnemiesAlive:         make(map[guid.GUID]struct{}),
+		DamageDone:           make(map[guid.GUID]int64),
+		DamageTaken:          make(map[guid.GUID]int64),
+		Zone:                 zone,
+		Started:              ts,
+		Ended:                time.Time{},
 	}
 	return f
 }
@@ -54,6 +56,9 @@ func (f *Fight) SeenParticipants(ts time.Time, gs ...guid.GUID) {
 			f.EnemiesAlive[id] = struct{}{}
 		}
 		f.Participants[id] = ts
+		if _, ok := f.ParticipantFirstSeen[id]; !ok {
+			f.ParticipantFirstSeen[id] = ts
+		}
 	}
 }
 
