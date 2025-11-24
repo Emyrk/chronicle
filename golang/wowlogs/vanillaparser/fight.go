@@ -34,7 +34,7 @@ func (f *Fights) Process(msg Message) error {
 		return fmt.Errorf("fight process: %w", err)
 	}
 
-	if len(f.CurrentFight.EnemiesAlive) == 0 {
+	if f.CurrentFight.ended {
 		f.EndFight()
 	}
 
@@ -61,6 +61,9 @@ type Fight struct {
 	// Who is alive
 	PlayersAlive map[guid.GUID]struct{}
 	EnemiesAlive map[guid.GUID]struct{}
+
+	started bool
+	ended   bool
 }
 
 func NewFight() *Fight {
@@ -78,6 +81,14 @@ func (f *Fight) Process(msg Message) error {
 		f.Damage(m)
 	case Slain:
 		f.Slain(m)
+	}
+
+	if !f.started && len(f.PlayersAlive) > 0 && len(f.EnemiesAlive) > 0 {
+		f.started = true
+	}
+
+	if f.started && len(f.EnemiesAlive) == 0 {
+		f.ended = true
 	}
 
 	return nil

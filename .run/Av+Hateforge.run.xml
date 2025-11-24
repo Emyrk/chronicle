@@ -1,0 +1,12 @@
+<component name="ProjectRunConfigurationManager">
+  <configuration default="false" name="Av+Hateforge" type="GoApplicationRunConfiguration" factoryName="Go Application">
+    <module name="chronicle" />
+    <working_directory value="$PROJECT_DIR$/golang" />
+    <parameters value="parse ../ignoredlogs/hateforge_av/WoWCombatLog.txt ../ignoredlogs/hateforge_av/WoWRawCombatLog.txt" />
+    <kind value="PACKAGE" />
+    <package value="github.com/Emyrk/chronicle/golang/cmd/chronicle" />
+    <directory value="$PROJECT_DIR$" />
+    <filePath value="$PROJECT_DIR$/golang/cmd/chronicle/main.go" />
+    <method v="2" />
+  </configuration>
+</component>

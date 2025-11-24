@@ -130,6 +130,7 @@ func (s *State) Combatant(cmbt combatant.Combatant) {
 func (s *State) String() string {
 	var str strings.Builder
 	str.WriteString(fmt.Sprintf("State with %d participants:\n", len(s.Participants)))
+	str.WriteString(fmt.Sprintf("Had %d fights\n", len(s.Fights.Fights)))
 	for gid, cmbts := range s.Participants {
 		cmbt := cmbts[0]
 		str.WriteString(fmt.Sprintf(" - %s: %s the %s had %d unique spells and did %d damage\n",
