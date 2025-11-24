@@ -2,6 +2,8 @@
 let combatLogFile = null;
 let rawCombatLogFile = null;
 let wasmReady = false;
+let currentState = null;
+let selectedZones = new Set();
 
 // NPC Database - maps NPC ID to name
 // This is hardcoded for now, will be replaced with API lookup later
@@ -215,9 +217,13 @@ function displayResults(stateJson) {
     try {
         // Parse and re-stringify for pretty printing
         const state = JSON.parse(stateJson);
+        currentState = state;
         
         // Display raw JSON
         outputDiv.textContent = JSON.stringify(state, null, 2);
+        
+        // Setup zone filters first
+        setupZoneFilters(state);
         
         // Create graphical displays
         createFightsDisplay(state);
@@ -234,6 +240,80 @@ function displayResults(stateJson) {
     }
 }
 
+function setupZoneFilters(state) {
+    const filterSection = document.getElementById('filterSection');
+    const zoneFilters = document.getElementById('zoneFilters');
+    
+    if (!state.Fights || state.Fights.length === 0) {
+        filterSection.style.display = 'none';
+        return;
+    }
+    
+    // Extract unique zones with counts
+    const zoneCounts = {};
+    state.Fights.forEach(fight => {
+        const zoneName = fight.Zone?.Name || 'Unknown Zone';
+        const instanceId = fight.Zone?.InstanceID || 0;
+        const zoneKey = `${zoneName}|${instanceId}`;
+        zoneCounts[zoneKey] = (zoneCounts[zoneKey] || 0) + 1;
+    });
+    
+    // Initialize all zones as selected
+    selectedZones.clear();
+    Object.keys(zoneCounts).forEach(zoneKey => selectedZones.add(zoneKey));
+    
+    // Create filter checkboxes
+    zoneFilters.innerHTML = '';
+    Object.entries(zoneCounts).forEach(([zoneKey, count]) => {
+        const [zoneName, instanceId] = zoneKey.split('|');
+        const filterId = `zone-${zoneKey.replace(/[^a-zA-Z0-9]/g, '-')}`;
+        
+        const option = document.createElement('div');
+        option.className = 'filter-option';
+        option.innerHTML = `
+            <input type="checkbox" id="${filterId}" value="${zoneKey}" checked>
+            <label for="${filterId}">${escapeHtml(zoneName)}${instanceId !== '0' ? ` (${instanceId})` : ''}</label>
+            <span class="filter-count">${count}</span>
+        `;
+        
+        const checkbox = option.querySelector('input');
+        checkbox.addEventListener('change', () => {
+            if (checkbox.checked) {
+                selectedZones.add(zoneKey);
+            } else {
+                selectedZones.delete(zoneKey);
+            }
+            createFightsDisplay(currentState);
+        });
+        
+        // Make the whole option clickable
+        option.addEventListener('click', (e) => {
+            if (e.target !== checkbox) {
+                checkbox.checked = !checkbox.checked;
+                checkbox.dispatchEvent(new Event('change'));
+            }
+        });
+        
+        zoneFilters.appendChild(option);
+    });
+    
+    // Setup select/deselect all buttons
+    document.getElementById('selectAllZones').onclick = () => {
+        selectedZones.clear();
+        Object.keys(zoneCounts).forEach(zoneKey => selectedZones.add(zoneKey));
+        document.querySelectorAll('#zoneFilters input[type="checkbox"]').forEach(cb => cb.checked = true);
+        createFightsDisplay(currentState);
+    };
+    
+    document.getElementById('deselectAllZones').onclick = () => {
+        selectedZones.clear();
+        document.querySelectorAll('#zoneFilters input[type="checkbox"]').forEach(cb => cb.checked = false);
+        createFightsDisplay(currentState);
+    };
+    
+    filterSection.style.display = 'block';
+}
+
 function createFightsDisplay(state) {
     const fightsContainer = document.getElementById('fightsContainer');
     
@@ -242,11 +322,22 @@ function createFightsDisplay(state) {
         return;
     }
     
-    const fights = state.Fights;
+    // Filter fights by selected zones
+    const fights = state.Fights.filter(fight => {
+        const zoneName = fight.Zone?.Name || 'Unknown Zone';
+        const instanceId = fight.Zone?.InstanceID || 0;
+        const zoneKey = `${zoneName}|${instanceId}`;
+        return selectedZones.has(zoneKey);
+    });
+    
+    if (fights.length === 0) {
+        fightsContainer.innerHTML = '<div class="no-fights">No fights match the selected filters</div>';
+        return;
+    }
     
     fightsContainer.innerHTML = `
         <div class="fights-summary">
-            <h3>🗡️ ${fights.length} Fight${fights.length !== 1 ? 's' : ''} Recorded</h3>
+            <h3>🗡️ ${fights.length} Fight${fights.length !== 1 ? 's' : ''} ${fights.length !== state.Fights.length ? `(of ${state.Fights.length} total)` : 'Recorded'}</h3>
         </div>
     `;
     

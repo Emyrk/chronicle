@@ -387,6 +387,94 @@
             margin-bottom: 30px;
         }
 
+        /* Filter Section Styling */
+        .filter-section {
+            background: white;
+            border-radius: 8px;
+            padding: 20px;
+            margin-bottom: 20px;
+            box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+        }
+
+        .filter-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 15px;
+            padding-bottom: 10px;
+            border-bottom: 2px solid #e9ecef;
+        }
+
+        .filter-header h3 {
+            margin: 0;
+            color: #333;
+            font-size: 1.2em;
+        }
+
+        .filter-controls {
+            display: flex;
+            gap: 10px;
+        }
+
+        .filter-control-btn {
+            background: #667eea;
+            color: white;
+            border: none;
+            padding: 8px 16px;
+            font-size: 0.85em;
+            font-weight: 600;
+            border-radius: 6px;
+            cursor: pointer;
+            transition: background 0.2s ease;
+        }
+
+        .filter-control-btn:hover {
+            background: #5568d3;
+        }
+
+        .filter-options {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(250px, 1fr));
+            gap: 10px;
+        }
+
+        .filter-option {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            padding: 8px 12px;
+            background: #f8f9fa;
+            border-radius: 6px;
+            cursor: pointer;
+            transition: background 0.2s ease;
+        }
+
+        .filter-option:hover {
+            background: #e9ecef;
+        }
+
+        .filter-option input[type="checkbox"] {
+            cursor: pointer;
+            width: 18px;
+            height: 18px;
+        }
+
+        .filter-option label {
+            cursor: pointer;
+            flex-grow: 1;
+            font-size: 0.95em;
+            color: #333;
+        }
+
+        .filter-count {
+            font-size: 0.85em;
+            color: #666;
+            background: white;
+            padding: 2px 8px;
+            border-radius: 12px;
+            font-weight: 600;
+        }
+
         .fights-summary {
             background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
             color: white;
@@ -639,6 +727,17 @@
 
         <div class="results" id="resultsSection" style="display: none;">
             <h2>⚔️ Fights</h2>
+            
+            <div class="filter-section" id="filterSection" style="display: none;">
+                <div class="filter-header">
+                    <h3>📍 Filter by Zone</h3>
+                    <div class="filter-controls">
+                        <button class="filter-control-btn" id="selectAllZones">Select All</button>
+                        <button class="filter-control-btn" id="deselectAllZones">Deselect All</button>
+                    </div>
+                </div>
+                <div class="filter-options" id="zoneFilters"></div>
+            </div>
             
             <div id="fightsContainer"></div>
             
