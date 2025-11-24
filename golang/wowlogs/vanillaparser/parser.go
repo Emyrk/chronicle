@@ -75,7 +75,7 @@ func (p *Parser) init() error {
 func (p *Parser) Advance() ([]Message, error) {
 	err := p.init()
 	if err != nil {
-		return nil, fmt.Errorf("init: %w", err)
+		return nil, AsFatalError(fmt.Errorf("init: %w", err))
 	}
 
 	ts, content, err := p.scanner()

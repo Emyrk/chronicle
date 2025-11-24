@@ -41,7 +41,9 @@ func ParseCmd() *serpent.Command {
 					if errors.Is(err, io.EOF) {
 						break
 					}
-					// Just continue
+					if vanillaparser.IsFatalError(err) {
+						return fmt.Errorf("fatal parser error: %w", err)
+					}
 					logger.Error("Error advancing parser", slog.String("error", err.Error()))
 				}
 			}
