@@ -70,6 +70,11 @@ func (s *State) Zone(z Zone) {
 		s.CurrentZone = z.Zone
 	}()
 
+	if s.CurrentFight != nil && !s.CurrentZone.Equal(z.Zone) {
+		// Change in zone should end the current fight
+		s.CurrentFight.FinishFight(z.Date())
+	}
+
 	if s.CurrentZone.Equal(z.Zone) {
 		return
 	}
