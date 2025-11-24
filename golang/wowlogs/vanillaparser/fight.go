@@ -5,6 +5,7 @@ import (
 	"time"
 
 	"github.com/Emyrk/chronicle/golang/wowlogs/guid"
+	"github.com/Emyrk/chronicle/golang/wowlogs/types/zone"
 )
 
 type Fights struct {
@@ -54,20 +55,21 @@ func (f *Fights) StartFight() {
 
 // Fight represents a start & end of combat.
 type Fight struct {
+	Zone *zone.Zone
 	// Players is a map of the players and their last message of activity
 	Players map[guid.GUID]Message
+
 	// Enemies is a map of the enemies and their last message of activity
 	Enemies map[guid.GUID]Message
-
 	// Who is alive
 	PlayersAlive map[guid.GUID]struct{}
+
 	EnemiesAlive map[guid.GUID]struct{}
+	DamageDone   map[guid.GUID]int64
 
-	DamageDone  map[guid.GUID]int64
 	DamageTaken map[guid.GUID]int64
-
-	started time.Time
-	ended   time.Time
+	started     time.Time
+	ended       time.Time
 }
 
 func NewFight() *Fight {
@@ -87,6 +89,14 @@ func (f *Fight) Process(msg Message) error {
 		f.Damage(m)
 	case Slain:
 		f.Slain(m)
+	case Zone:
+		if f.Zone == nil {
+			f.Zone = &m.Zone
+		} else {
+			if !f.Zone.Equal(m.Zone) {
+				// End the fight if the zone changes
+			}
+		}
 	}
 
 	if f.started.IsZero() && len(f.PlayersAlive) > 0 && len(f.EnemiesAlive) > 0 {
