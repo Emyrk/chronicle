@@ -22,6 +22,8 @@ type State struct {
 
 	CurrentZone zone.Zone
 	Zones       []zone.Zone
+
+	Fights *Fights
 }
 
 func NewState(logger *slog.Logger, me types.Unit) *State {
@@ -31,6 +33,7 @@ func NewState(logger *slog.Logger, me types.Unit) *State {
 		ParticipantCasts:  make(map[guid.GUID]map[int]types.Spell),
 		ParticipantDamage: make(map[guid.GUID]int64),
 		Me:                me,
+		Fights:            NewFights(),
 	}
 }
 
@@ -63,14 +66,14 @@ func (s *State) Zone(z zone.Zone) {
 	)
 }
 
-//func (s *State) SpellDamage(damage SpellDamage) {
-//	if !damage.Caster.IsPlayer() {
-//		// Only track players for now
-//		return
-//	}
-//
-//	s.ParticipantDamage[damage.Caster] += int64(damage.Amount)
-//}
+func (s *State) Damage(damage Damage) {
+	if !damage.Caster.IsPlayer() {
+		// Only track players for now
+		return
+	}
+
+	s.ParticipantDamage[damage.Caster] += int64(damage.Amount)
+}
 
 func (s *State) CastV2(cst castv2.CastV2) {
 	if !cst.Caster.HasGuid() {

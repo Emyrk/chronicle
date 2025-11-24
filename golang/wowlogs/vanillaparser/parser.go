@@ -112,6 +112,12 @@ func (p *Parser) Advance() ([]Message, error) {
 			p.state.CastV2(typed.CastV2)
 		case Zone:
 			p.state.Zone(typed.Zone)
+		case Damage:
+			p.state.Damage(typed)
+		}
+		err = p.state.Fights.Process(msg)
+		if err != nil {
+			return nil, fmt.Errorf("fight process: %v", err)
 		}
 	}
 	return msgs, err
