@@ -97,17 +97,6 @@ type ResourceChange struct {
 	Direction string // "gains" or "loses"
 }
 
-type PeriodicDamage struct {
-	MessageBase
-	Caster    guid.GUID
-	Target    guid.GUID
-	Amount    int32
-	School    types.School
-	SpellName string
-	Trailer   types.Trailer
-	// TODO: this is just Damage without a hit type
-}
-
 type Damage struct {
 	MessageBase
 	// SpellName is nil for things like environmental and melee damage

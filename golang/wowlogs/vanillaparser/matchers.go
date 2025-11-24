@@ -215,13 +215,14 @@ func (p *Parser) fDamagePeriodic(ts time.Time, content string) ([]Message, error
 		return Skip(ts, "DamagePeriodic: not using guids"), nil
 	}
 
-	return set(PeriodicDamage{
+	return set(Damage{
 		MessageBase: Base(ts),
 		Caster:      caster,
 		Target:      target,
 		Amount:      amount,
 		School:      school,
-		SpellName:   spellName,
+		HitType:     types.HitTypePeriodic,
+		SpellName:   ptr.Ref(spellName),
 		Trailer:     trailer,
 	}), nil
 }

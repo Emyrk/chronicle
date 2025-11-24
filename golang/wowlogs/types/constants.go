@@ -49,6 +49,7 @@ const (
 	HitTypeFullBlock     HitType = 0x00040000
 	HitTypeSplit         HitType = 0x00080000
 	HitTypeReflect       HitType = 0x00100000
+	HitTypePeriodic      HitType = 0x00200000
 )
 
 // ParseHitMask assumes "full" blocks/resists/absorbs
