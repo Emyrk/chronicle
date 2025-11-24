@@ -1,17 +1,42 @@
-package guid
+package guid_test
 
 import (
 	"testing"
 
+	"github.com/Emyrk/chronicle/golang/wowlogs/guid"
 	"github.com/stretchr/testify/require"
 )
+
+func TestGUIDMarshalJSON(t *testing.T) {
+	t.Parallel()
+
+	for _, tc := range []string{
+		`"0x00000000000F1A35"`,
+		`"0xF13000ED2E2738EF"`,
+		`"0xF14008449300903A"`,
+	} {
+		t.Run(tc, func(t *testing.T) {
+			t.Parallel()
+
+			var id guid.GUID
+			err := id.UnmarshalJSON([]byte(tc))
+			require.NoError(t, err)
+
+			data, err := id.MarshalJSON()
+			require.NoError(t, err)
+
+			// Check that the marshaled data matches the original string
+			require.Equal(t, tc, string(data))
+		})
+	}
+}
 
 func TestGUID(t *testing.T) {
 	t.Parallel()
 
 	tests := []struct {
 		name          string
-		guid          GUID
+		guid          guid.GUID
 		isPlayer      bool
 		isVehicle     bool
 		isPet         bool
@@ -80,9 +105,9 @@ func TestFromString(t *testing.T) {
 	t.Parallel()
 
 	guidStr := "0xF130000CE0000D3F"
-	expectedGUID := GUID(0xF130000CE0000D3F)
+	expectedGUID := guid.GUID(0xF130000CE0000D3F)
 
-	guid, err := FromString(guidStr)
+	guid, err := guid.FromString(guidStr)
 	require.NoError(t, err)
 	require.Equal(t, expectedGUID, guid)
 	require.Equal(t, expectedGUID.String(), guidStr)

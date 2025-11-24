@@ -41,11 +41,11 @@ func (g *GUID) UnmarshalJSON(data []byte) error {
 	if err := json.Unmarshal(data, &gidStr); err != nil {
 		return err
 	}
-	return g.UnmarshalText(data)
+	return g.UnmarshalText([]byte(gidStr))
 }
 
 func (g GUID) MarshalText() ([]byte, error) {
-	return []byte(g.String()), nil
+	return json.Marshal(g.String())
 }
 
 func (g *GUID) UnmarshalText(data []byte) error {
