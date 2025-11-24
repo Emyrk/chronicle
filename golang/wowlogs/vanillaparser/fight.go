@@ -2,6 +2,7 @@ package vanillaparser
 
 import (
 	"fmt"
+	"time"
 
 	"github.com/Emyrk/chronicle/golang/wowlogs/guid"
 )
@@ -34,7 +35,7 @@ func (f *Fights) Process(msg Message) error {
 		return fmt.Errorf("fight process: %w", err)
 	}
 
-	if f.CurrentFight.ended {
+	if !f.CurrentFight.ended.IsZero() {
 		f.EndFight()
 	}
 
@@ -62,8 +63,11 @@ type Fight struct {
 	PlayersAlive map[guid.GUID]struct{}
 	EnemiesAlive map[guid.GUID]struct{}
 
-	started bool
-	ended   bool
+	DamageDone  map[guid.GUID]int64
+	DamageTaken map[guid.GUID]int64
+
+	started time.Time
+	ended   time.Time
 }
 
 func NewFight() *Fight {
@@ -72,6 +76,8 @@ func NewFight() *Fight {
 		Enemies:      make(map[guid.GUID]Message),
 		PlayersAlive: make(map[guid.GUID]struct{}),
 		EnemiesAlive: make(map[guid.GUID]struct{}),
+		DamageDone:   make(map[guid.GUID]int64),
+		DamageTaken:  make(map[guid.GUID]int64),
 	}
 }
 
@@ -83,12 +89,12 @@ func (f *Fight) Process(msg Message) error {
 		f.Slain(m)
 	}
 
-	if !f.started && len(f.PlayersAlive) > 0 && len(f.EnemiesAlive) > 0 {
-		f.started = true
+	if f.started.IsZero() && len(f.PlayersAlive) > 0 && len(f.EnemiesAlive) > 0 {
+		f.started = msg.Date()
 	}
 
-	if f.started && len(f.EnemiesAlive) == 0 {
-		f.ended = true
+	if !f.started.IsZero() && len(f.EnemiesAlive) == 0 {
+		f.ended = msg.Date()
 	}
 
 	return nil
@@ -96,6 +102,8 @@ func (f *Fight) Process(msg Message) error {
 
 func (f *Fight) Damage(dmg Damage) {
 	f.seen(dmg.Caster, dmg)
+	f.DamageDone[dmg.Caster] += int64(dmg.Amount)
+	f.DamageTaken[dmg.Target] += int64(dmg.Amount)
 }
 
 func (f *Fight) Slain(slain Slain) {
