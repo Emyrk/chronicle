@@ -83,6 +83,28 @@ function getNPCName(npcId) {
     return NPC_DATABASE[npcId] || `NPC ${npcId}`;
 }
 
+// Rotate a 64-bit BigInt right by the specified number of bits
+function rotateRight64(value, bits) {
+    const rightMask = (1n << BigInt(bits)) - 1n;
+    const rightPart = value & rightMask;
+    const leftPart = value >> BigInt(bits);
+    return (rightPart << (64n - BigInt(bits))) | leftPart;
+}
+
+// Extract entry ID from a creature GUID (matches Go's guid.GetEntry())
+function getEntryFromGUID(guidString) {
+    const guidHex = guidString.replace('0x', '');
+    const guidInt = BigInt('0x' + guidHex);
+    
+    // Rotate right by 24 bits (same as Go's RotateLeft with -24)
+    const rotated = rotateRight64(guidInt, 24);
+    
+    // Mask to get lower 24 bits
+    const entryId = Number(rotated & 0xFFFFFFn);
+    
+    return entryId;
+}
+
 // DOM elements
 const combatLogInput = document.getElementById('combatLog');
 const rawCombatLogInput = document.getElementById('rawCombatLog');
@@ -359,8 +381,7 @@ function createFightsDisplay(state) {
         const enemyGuids = [];
         
         allGuids.forEach(guid => {
-            const guidHex = guid.replace('0x', '');
-            const guidInt = BigInt('0x' + guidHex);
+            const guidInt = BigInt(guid);
             
             // Check if player or pet (high bits & 0x00F0)
             const high16 = Number((guidInt >> 48n) & 0xFFFFn);
@@ -399,9 +420,7 @@ function createFightsDisplay(state) {
                 `;
             } else {
                 // Pet or unknown - extract entry ID
-                const guidHex = guid.replace('0x', '');
-                const guidInt = BigInt('0x' + guidHex);
-                const entryId = Number((guidInt >> 24n) & 0xFFFFFFn);
+                const entryId = getEntryFromGUID(guid);
                 const name = getNPCName(entryId);
                 
                 friendlyHTML += `
@@ -421,9 +440,7 @@ function createFightsDisplay(state) {
         // Build enemy participants list
         let enemiesHTML = '';
         enemyGuids.forEach(guid => {
-            const guidHex = guid.replace('0x', '');
-            const guidInt = BigInt('0x' + guidHex);
-            const entryId = Number((guidInt >> 24n) & 0xFFFFFFn);
+            const entryId = getEntryFromGUID(guid);
             const npcName = getNPCName(entryId);
             const damageDone = fight.DamageDone[guid] || 0;
             const damageTaken = fight.DamageTaken[guid] || 0;
