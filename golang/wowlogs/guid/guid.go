@@ -2,6 +2,7 @@ package guid
 
 import (
 	"encoding/hex"
+	"encoding/json"
 	"fmt"
 	"math/bits"
 )
@@ -28,6 +29,32 @@ func FromString(gid string) (GUID, error) {
 	}
 
 	return GUID(u64), nil
+}
+
+func (g GUID) MarshalJSON() ([]byte, error) {
+	return g.MarshalText()
+
+}
+
+func (g *GUID) UnmarshalJSON(data []byte) error {
+	var gidStr string
+	if err := json.Unmarshal(data, &gidStr); err != nil {
+		return err
+	}
+	return g.UnmarshalText(data)
+}
+
+func (g GUID) MarshalText() ([]byte, error) {
+	return []byte(g.String()), nil
+}
+
+func (g *GUID) UnmarshalText(data []byte) error {
+	id, err := FromString(string(data))
+	if err != nil {
+		return err
+	}
+	*g = id
+	return nil
 }
 
 func (g GUID) IsZero() bool {
