@@ -457,13 +457,25 @@ function createFightsDisplay(state) {
             const damageTaken = fight.DamageTaken[guid] || 0;
             const dps = durationSec > 0 ? Math.round(damageDone / durationSec) : 0;
             
+            // Check if this participant died
+            const deathTime = fight.Deaths ? fight.Deaths[guid] : null;
+            const firstSeen = fight.ParticipantFirstSeen ? fight.ParticipantFirstSeen[guid] : fight.Started;
+            let deathInfo = '';
+            if (deathTime) {
+                const deathTimestamp = new Date(deathTime);
+                const firstSeenTimestamp = new Date(firstSeen);
+                const survivedMs = deathTimestamp - firstSeenTimestamp;
+                const survivedSec = survivedMs / 1000;
+                deathInfo = ` <span class="death-marker" title="Died after ${formatDuration(survivedSec)}">💀 ${formatDuration(survivedSec)}</span>`;
+            }
+            
             if (combatant) {
                 // Player with combatant info
                 const playerClass = (combatant.HeroClass || 'Unknown').toLowerCase();
                 friendlyHTML += `
                     <div class="participant-item player-participant">
                         <span class="participant-class-badge ${playerClass}" title="${combatant.HeroClass}"></span>
-                        <span class="participant-name">${escapeHtml(combatant.Name)}</span>
+                        <span class="participant-name">${escapeHtml(combatant.Name)}${deathInfo}</span>
                         <div class="participant-stats">
                             <span class="stat-dps" title="Damage Per Second">⚡ ${formatNumber(dps)}/s</span>
                             <span class="stat-damage-done" title="Total Damage Done">⚔️ ${formatNumber(damageDone)}</span>
@@ -485,7 +497,7 @@ function createFightsDisplay(state) {
                 friendlyHTML += `
                     <div class="participant-item player-participant">
                         <span class="participant-icon">${isPet ? '🐾' : '❓'}</span>
-                        <span class="participant-name">${escapeHtml(name)}</span>
+                        <span class="participant-name">${escapeHtml(name)}${deathInfo}</span>
                         <div class="participant-stats">
                             <span class="stat-dps" title="Damage Per Second">⚡ ${formatNumber(dps)}/s</span>
                             <span class="stat-damage-done" title="Total Damage Done">⚔️ ${formatNumber(damageDone)}</span>
@@ -505,11 +517,23 @@ function createFightsDisplay(state) {
             const damageTaken = fight.DamageTaken[guid] || 0;
             const dps = durationSec > 0 ? Math.round(damageDone / durationSec) : 0;
             
+            // Check if this enemy died
+            const deathTime = fight.Deaths ? fight.Deaths[guid] : null;
+            const firstSeen = fight.ParticipantFirstSeen ? fight.ParticipantFirstSeen[guid] : fight.Started;
+            let deathInfo = '';
+            if (deathTime) {
+                const deathTimestamp = new Date(deathTime);
+                const firstSeenTimestamp = new Date(firstSeen);
+                const survivedMs = deathTimestamp - firstSeenTimestamp;
+                const survivedSec = survivedMs / 1000;
+                deathInfo = ` <span class="death-marker" title="Died after ${formatDuration(survivedSec)}">💀 ${formatDuration(survivedSec)}</span>`;
+            }
+            
             enemiesHTML += `
                 <div class="participant-item enemy-participant">
                     <span class="participant-icon">🔥</span>
                     <div class="participant-info">
-                        <span class="participant-name">${escapeHtml(npcName)}</span>
+                        <span class="participant-name">${escapeHtml(npcName)}${deathInfo}</span>
                         <span class="participant-id">(${entryId})</span>
                     </div>
                     <div class="participant-stats">
