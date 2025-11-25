@@ -75,6 +75,27 @@ const NPC_DATABASE = {
     10363: "General Drakkisath",
     10429: "Warchief Rend Blackhand",
     
+    // Hateforge
+    60721: "Hateforge Miner",
+    60717: "Hateforge Chemist",
+    60718: "Hateforge Cleric",
+    60719: "Hateforge Craftsman",
+    60720: "Hateforge Engineer",
+    60830: "Hateforge Excavator",
+    60831: "Hateforge Geologist",
+    60722: "Hateforge Overseer",
+    60723: "Hateforge Taskmaster",
+    60724: "Hateforge Warden",
+    60829: "Corrosis",
+    60725: "Twilight Fireblade",
+    60734: "Hatereaver Annihilator",
+    60738: "Faceless Terror",
+
+    // Extra
+    7465: "Magma Totem III",
+    7400: "Searing Totem V",
+
+
     // Default fallback
     0: "Unknown NPC"
 };
