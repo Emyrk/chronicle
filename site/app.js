@@ -2,6 +2,146 @@
 let combatLogFile = null;
 let rawCombatLogFile = null;
 let wasmReady = false;
+let currentState = null;
+let selectedZones = new Set();
+
+// NPC Database - maps NPC ID to name
+// This is hardcoded for now, will be replaced with API lookup later
+const NPC_DATABASE = {
+    // Common Vanilla WoW NPCs
+    // Molten Core
+    11502: "Ragnaros",
+    12118: "Lucifron",
+    11982: "Magmadar",
+    12259: "Gehennas",
+    12057: "Garr",
+    12264: "Shazzrah",
+    12056: "Baron Geddon",
+    12098: "Sulfuron Harbinger",
+    11988: "Golemagg the Incinerator",
+    12018: "Majordomo Executus",
+    
+    // Blackwing Lair
+    12435: "Razorgore the Untamed",
+    13020: "Vaelastrasz the Corrupt",
+    12017: "Broodlord Lashlayer",
+    11983: "Firemaw",
+    14020: "Chromaggus",
+    11981: "Nefarian",
+    
+    // Zul'Gurub
+    14517: "High Priestess Jeklik",
+    14509: "High Priest Venoxis",
+    14510: "High Priestess Mar'li",
+    14834: "Hakkar",
+    
+    // AQ40
+    15263: "The Prophet Skeram",
+    15510: "Fankriss the Unyielding",
+    15516: "Battleguard Sartura",
+    15509: "Princess Huhuran",
+    15276: "Emperor Vek'lor",
+    15275: "Emperor Vek'nilash",
+    15727: "C'Thun",
+    
+    // Naxxramas
+    15956: "Anub'Rekhan",
+    15953: "Grand Widow Faerlina",
+    15952: "Maexxna",
+    16061: "Instructor Razuvious",
+    16060: "Gothik the Harvester",
+    16063: "The Four Horsemen",
+    15954: "Noth the Plaguebringer",
+    15936: "Heigan the Unclean",
+    16011: "Loatheb",
+    16028: "Patchwerk",
+    15931: "Grobbulus",
+    15932: "Gluth",
+    15928: "Thaddius",
+    15989: "Sapphiron",
+    15990: "Kel'Thuzad",
+    
+    // World Bosses
+    6109: "Azuregos",
+    14887: "Ysondre",
+    14888: "Lethon",
+    14889: "Emeriss",
+    14890: "Taerar",
+    12397: "Lord Kazzak",
+    
+    // Common dungeon bosses
+    9017: "Lord Incendius",
+    9041: "Warder Stilgiss",
+    10363: "General Drakkisath",
+    10429: "Warchief Rend Blackhand",
+    
+    // Hateforge
+    60721: "Hateforge Miner",
+    60717: "Hateforge Chemist",
+    60718: "Hateforge Cleric",
+    60719: "Hateforge Craftsman",
+    60720: "Hateforge Engineer",
+    60830: "Hateforge Excavator",
+    60831: "Hateforge Geologist",
+    60722: "Hateforge Overseer",
+    60723: "Hateforge Taskmaster",
+    60724: "Hateforge Warden",
+    60829: "Corrosis",
+    60725: "Twilight Fireblade",
+    60734: "Hatereaver Annihilator",
+    60738: "Faceless Terror",
+
+    // Extra
+    7465: "Magma Totem III",
+    7400: "Searing Totem V",
+
+
+    // Default fallback
+    0: "Unknown NPC"
+};
+
+function getNPCName(npcId, guidString) {
+    if (NPC_DATABASE[npcId]) {
+        return NPC_DATABASE[npcId];
+    }
+    // If not in database, show full GUID with entry ID
+    return guidString ? `${guidString}[${npcId}]` : `NPC ${npcId}`;
+}
+
+// Rotate a 64-bit BigInt right by the specified number of bits
+function rotateRight64(value, bits) {
+    const rightMask = (1n << BigInt(bits)) - 1n;
+    const rightPart = value & rightMask;
+    const leftPart = value >> BigInt(bits);
+    return (rightPart << (64n - BigInt(bits))) | leftPart;
+}
+
+// Extract entry ID from a creature GUID (matches Go's guid.GetEntry())
+function getEntryFromGUID(guidString) {
+    // Parse hex manually for browser compatibility
+    const hexStr = guidString.toString().replace(/^0x/i, '').replace(/[^0-9a-fA-F]/g, '');
+    if (!hexStr || hexStr.length === 0) {
+        console.warn('Invalid GUID in getEntryFromGUID:', guidString);
+        return 0;
+    }
+    let guidInt = 0n;
+    for (let i = 0; i < hexStr.length; i++) {
+        const digit = parseInt(hexStr[i], 16);
+        if (isNaN(digit)) {
+            console.warn('Invalid hex digit:', hexStr[i], 'in', guidString);
+            return 0;
+        }
+        guidInt = guidInt * 16n + BigInt(digit);
+    }
+    
+    // Rotate right by 24 bits (same as Go's RotateLeft with -24)
+    const rotated = rotateRight64(guidInt, 24);
+    
+    // Mask to get lower 24 bits
+    const entryId = Number(rotated & 0xFFFFFFn);
+    
+    return entryId;
+}
 
 // DOM elements
 const combatLogInput = document.getElementById('combatLog');
@@ -137,11 +277,16 @@ function displayResults(stateJson) {
     try {
         // Parse and re-stringify for pretty printing
         const state = JSON.parse(stateJson);
+        currentState = state;
         
         // Display raw JSON
         outputDiv.textContent = JSON.stringify(state, null, 2);
         
-        // Create graphical display
+        // Setup zone filters first
+        setupZoneFilters(state);
+        
+        // Create graphical displays
+        createFightsDisplay(state);
         createPlayerCards(state);
         
         resultsSection.style.display = 'block';
@@ -153,6 +298,299 @@ function displayResults(stateJson) {
         outputDiv.textContent = stateJson; // Display as-is if JSON parsing fails
         resultsSection.style.display = 'block';
     }
+}
+
+function setupZoneFilters(state) {
+    const filterSection = document.getElementById('filterSection');
+    const zoneFilters = document.getElementById('zoneFilters');
+    
+    if (!state.Fights || state.Fights.length === 0) {
+        filterSection.style.display = 'none';
+        return;
+    }
+    
+    // Extract unique zones with counts
+    const zoneCounts = {};
+    state.Fights.forEach(fight => {
+        const zoneName = fight.Zone?.Name || 'Unknown Zone';
+        const instanceId = fight.Zone?.InstanceID || 0;
+        const zoneKey = `${zoneName}|${instanceId}`;
+        zoneCounts[zoneKey] = (zoneCounts[zoneKey] || 0) + 1;
+    });
+    
+    // Initialize all zones as selected
+    selectedZones.clear();
+    Object.keys(zoneCounts).forEach(zoneKey => selectedZones.add(zoneKey));
+    
+    // Create filter checkboxes
+    zoneFilters.innerHTML = '';
+    Object.entries(zoneCounts).forEach(([zoneKey, count]) => {
+        const [zoneName, instanceId] = zoneKey.split('|');
+        const filterId = `zone-${zoneKey.replace(/[^a-zA-Z0-9]/g, '-')}`;
+        
+        const option = document.createElement('div');
+        option.className = 'filter-option';
+        option.innerHTML = `
+            <input type="checkbox" id="${filterId}" value="${zoneKey}" checked>
+            <label for="${filterId}">${escapeHtml(zoneName)}${instanceId !== '0' ? ` (${instanceId})` : ''}</label>
+            <span class="filter-count">${count}</span>
+        `;
+        
+        const checkbox = option.querySelector('input');
+        checkbox.addEventListener('change', () => {
+            if (checkbox.checked) {
+                selectedZones.add(zoneKey);
+            } else {
+                selectedZones.delete(zoneKey);
+            }
+            createFightsDisplay(currentState);
+        });
+        
+        // Make the whole option clickable
+        option.addEventListener('click', (e) => {
+            if (e.target !== checkbox) {
+                checkbox.checked = !checkbox.checked;
+                checkbox.dispatchEvent(new Event('change'));
+            }
+        });
+        
+        zoneFilters.appendChild(option);
+    });
+    
+    // Setup select/deselect all buttons
+    document.getElementById('selectAllZones').onclick = () => {
+        selectedZones.clear();
+        Object.keys(zoneCounts).forEach(zoneKey => selectedZones.add(zoneKey));
+        document.querySelectorAll('#zoneFilters input[type="checkbox"]').forEach(cb => cb.checked = true);
+        createFightsDisplay(currentState);
+    };
+    
+    document.getElementById('deselectAllZones').onclick = () => {
+        selectedZones.clear();
+        document.querySelectorAll('#zoneFilters input[type="checkbox"]').forEach(cb => cb.checked = false);
+        createFightsDisplay(currentState);
+    };
+    
+    filterSection.style.display = 'block';
+}
+
+function createFightsDisplay(state) {
+    const fightsContainer = document.getElementById('fightsContainer');
+    
+    if (!state.Fights || state.Fights.length === 0) {
+        fightsContainer.innerHTML = '<div class="no-fights">No fights recorded in this log</div>';
+        return;
+    }
+    
+    // Filter fights by selected zones
+    const fights = state.Fights.filter(fight => {
+        const zoneName = fight.Zone?.Name || 'Unknown Zone';
+        const instanceId = fight.Zone?.InstanceID || 0;
+        const zoneKey = `${zoneName}|${instanceId}`;
+        return selectedZones.has(zoneKey);
+    });
+    
+    if (fights.length === 0) {
+        fightsContainer.innerHTML = '<div class="no-fights">No fights match the selected filters</div>';
+        return;
+    }
+    
+    fightsContainer.innerHTML = `
+        <div class="fights-summary">
+            <h3>🗡️ ${fights.length} Fight${fights.length !== 1 ? 's' : ''} ${fights.length !== state.Fights.length ? `(of ${state.Fights.length} total)` : 'Recorded'}</h3>
+        </div>
+    `;
+    
+    fights.forEach((fight, index) => {
+        const fightCard = document.createElement('div');
+        fightCard.className = 'fight-card';
+        
+        // Calculate fight duration
+        const startTime = new Date(fight.Started);
+        const endTime = new Date(fight.Ended);
+        const durationMs = endTime - startTime;
+        const durationSec = durationMs / 1000;
+        
+        // Get all participant GUIDs
+        const allGuids = Object.keys(fight.Participants || {});
+        
+        // Categorize participants based on GUID type
+        const friendlyGuids = [];
+        const enemyGuids = [];
+        
+        allGuids.forEach(guid => {
+            // Convert hex string to BigInt (guid is like "0x000000000001C7AC")
+            // Parse hex manually for browser compatibility
+            const hexStr = guid.toString().replace(/^0x/i, '').replace(/[^0-9a-fA-F]/g, '');
+            if (!hexStr || hexStr.length === 0) {
+                console.warn('Invalid GUID:', guid);
+                return;
+            }
+            let guidInt = 0n;
+            for (let i = 0; i < hexStr.length; i++) {
+                const digit = parseInt(hexStr[i], 16);
+                if (isNaN(digit)) {
+                    console.warn('Invalid hex digit in GUID:', hexStr[i], 'in', guid);
+                    return;
+                }
+                guidInt = guidInt * 16n + BigInt(digit);
+            }
+            
+            // Check if player or pet (high bits & 0x00F0)
+            const high16 = Number((guidInt >> 48n) & 0xFFFFn);
+            const typeBits = high16 & 0x00F0;
+            const isPlayer = typeBits === 0x0000;
+            const isPet = typeBits === 0x0040;
+            
+            if (isPlayer || isPet) {
+                friendlyGuids.push(guid);
+            } else {
+                enemyGuids.push(guid);
+            }
+        });
+        
+        // Build friendly participants list
+        let friendlyHTML = '';
+        friendlyGuids.forEach(guid => {
+            const combatant = state.Participants[guid];
+            const damageDone = fight.DamageDone[guid] || 0;
+            const damageTaken = fight.DamageTaken[guid] || 0;
+            const dps = durationSec > 0 ? Math.round(damageDone / durationSec) : 0;
+            
+            // Check if this participant died
+            const deathTime = fight.Deaths ? fight.Deaths[guid] : null;
+            const firstSeen = fight.ParticipantFirstSeen ? fight.ParticipantFirstSeen[guid] : fight.Started;
+            let deathInfo = '';
+            if (deathTime) {
+                const deathTimestamp = new Date(deathTime);
+                const firstSeenTimestamp = new Date(firstSeen);
+                const survivedMs = deathTimestamp - firstSeenTimestamp;
+                const survivedSec = survivedMs / 1000;
+                deathInfo = ` <span class="death-marker" title="Died after ${formatDuration(survivedSec)}">💀 ${formatDuration(survivedSec)}</span>`;
+            }
+            
+            if (combatant) {
+                // Player with combatant info
+                const playerClass = (combatant.HeroClass || 'Unknown').toLowerCase();
+                friendlyHTML += `
+                    <div class="participant-item player-participant">
+                        <span class="participant-class-badge ${playerClass}" title="${combatant.HeroClass}"></span>
+                        <span class="participant-name">${escapeHtml(combatant.Name)}${deathInfo}</span>
+                        <div class="participant-stats">
+                            <span class="stat-dps" title="Damage Per Second">⚡ ${formatNumber(dps)}/s</span>
+                            <span class="stat-damage-done" title="Total Damage Done">⚔️ ${formatNumber(damageDone)}</span>
+                            <span class="stat-damage-taken" title="Total Damage Taken">🛡️ ${formatNumber(damageTaken)}</span>
+                        </div>
+                    </div>
+                `;
+            } else {
+                // Pet or unknown - check if it's a pet
+                let name;
+                if (isPet) {
+                    name = "A Pet";
+                } else {
+                    // Extract entry ID for creatures
+                    const entryId = getEntryFromGUID(guid);
+                    name = getNPCName(entryId, guid);
+                }
+                
+                friendlyHTML += `
+                    <div class="participant-item player-participant">
+                        <span class="participant-icon">${isPet ? '🐾' : '❓'}</span>
+                        <span class="participant-name">${escapeHtml(name)}${deathInfo}</span>
+                        <div class="participant-stats">
+                            <span class="stat-dps" title="Damage Per Second">⚡ ${formatNumber(dps)}/s</span>
+                            <span class="stat-damage-done" title="Total Damage Done">⚔️ ${formatNumber(damageDone)}</span>
+                            <span class="stat-damage-taken" title="Total Damage Taken">🛡️ ${formatNumber(damageTaken)}</span>
+                        </div>
+                    </div>
+                `;
+            }
+        });
+        
+        // Build enemy participants list
+        let enemiesHTML = '';
+        enemyGuids.forEach(guid => {
+            const entryId = getEntryFromGUID(guid);
+            const npcName = getNPCName(entryId, guid);
+            const damageDone = fight.DamageDone[guid] || 0;
+            const damageTaken = fight.DamageTaken[guid] || 0;
+            const dps = durationSec > 0 ? Math.round(damageDone / durationSec) : 0;
+            
+            // Check if this enemy died
+            const deathTime = fight.Deaths ? fight.Deaths[guid] : null;
+            const firstSeen = fight.ParticipantFirstSeen ? fight.ParticipantFirstSeen[guid] : fight.Started;
+            let deathInfo = '';
+            if (deathTime) {
+                const deathTimestamp = new Date(deathTime);
+                const firstSeenTimestamp = new Date(firstSeen);
+                const survivedMs = deathTimestamp - firstSeenTimestamp;
+                const survivedSec = survivedMs / 1000;
+                deathInfo = ` <span class="death-marker" title="Died after ${formatDuration(survivedSec)}">💀 ${formatDuration(survivedSec)}</span>`;
+            }
+            
+            enemiesHTML += `
+                <div class="participant-item enemy-participant">
+                    <span class="participant-icon">🔥</span>
+                    <div class="participant-info">
+                        <span class="participant-name">${escapeHtml(npcName)}${deathInfo}</span>
+                        <span class="participant-id">(${entryId})</span>
+                    </div>
+                    <div class="participant-stats">
+                        <span class="stat-dps" title="Damage Per Second">⚡ ${formatNumber(dps)}/s</span>
+                        <span class="stat-damage-done" title="Total Damage Done">⚔️ ${formatNumber(damageDone)}</span>
+                        <span class="stat-damage-taken" title="Total Damage Taken">🛡️ ${formatNumber(damageTaken)}</span>
+                    </div>
+                </div>
+            `;
+        });
+        
+        if (friendlyHTML === '') {
+            friendlyHTML = '<div class="no-participants">No friendly participants recorded</div>';
+        }
+        if (enemiesHTML === '') {
+            enemiesHTML = '<div class="no-participants">No enemies recorded</div>';
+        }
+        
+        // Format duration
+        const durationStr = formatDuration(durationSec);
+        
+        // Zone info
+        const zoneName = fight.Zone?.Name || 'Unknown Zone';
+        const instanceId = fight.Zone?.InstanceID || 0;
+        
+        fightCard.innerHTML = `
+            <div class="fight-header">
+                <div class="fight-title">
+                    <h3>Fight ${index + 1}</h3>
+                    <div class="fight-meta">
+                        <span class="fight-zone" title="Zone">📍 ${escapeHtml(zoneName)}${instanceId ? ` (${instanceId})` : ''}</span>
+                        <span class="fight-duration" title="Duration">⏱️ ${durationStr}</span>
+                    </div>
+                </div>
+                <div class="fight-stats">
+                    <span class="fight-stat">👥 ${friendlyGuids.length} friendl${friendlyGuids.length !== 1 ? 'ies' : 'y'}</span>
+                    <span class="fight-stat">⚔️ ${enemyGuids.length} enem${enemyGuids.length !== 1 ? 'ies' : 'y'}</span>
+                </div>
+            </div>
+            <div class="fight-content">
+                <div class="participants-section">
+                    <h4>Friendly</h4>
+                    <div class="participants-list">
+                        ${friendlyHTML}
+                    </div>
+                </div>
+                <div class="participants-section">
+                    <h4>Enemies</h4>
+                    <div class="participants-list">
+                        ${enemiesHTML}
+                    </div>
+                </div>
+            </div>
+        `;
+        
+        fightsContainer.appendChild(fightCard);
+    });
 }
 
 function createPlayerCards(state) {
@@ -270,6 +708,19 @@ function formatFileSize(bytes) {
     const sizes = ['Bytes', 'KB', 'MB', 'GB'];
     const i = Math.floor(Math.log(bytes) / Math.log(k));
     return Math.round(bytes / Math.pow(k, i) * 100) / 100 + ' ' + sizes[i];
+}
+
+function formatNumber(num) {
+    return num.toString().replace(/\B(?=(\d{3})+(?!\d))/g, ",");
+}
+
+function formatDuration(seconds) {
+    if (seconds < 60) {
+        return `${Math.round(seconds)}s`;
+    }
+    const minutes = Math.floor(seconds / 60);
+    const secs = Math.round(seconds % 60);
+    return `${minutes}m ${secs}s`;
 }
 
 // Initialize WASM on page load

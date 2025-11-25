@@ -381,6 +381,327 @@
         .instructions li {
             margin: 5px 0;
         }
+
+        /* Fights Display Styling */
+        #fightsContainer {
+            margin-bottom: 30px;
+        }
+
+        /* Filter Section Styling */
+        .filter-section {
+            background: white;
+            border-radius: 8px;
+            padding: 20px;
+            margin-bottom: 20px;
+            box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+        }
+
+        .filter-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 15px;
+            padding-bottom: 10px;
+            border-bottom: 2px solid #e9ecef;
+        }
+
+        .filter-header h3 {
+            margin: 0;
+            color: #333;
+            font-size: 1.2em;
+        }
+
+        .filter-controls {
+            display: flex;
+            gap: 10px;
+        }
+
+        .filter-control-btn {
+            background: #667eea;
+            color: white;
+            border: none;
+            padding: 8px 16px;
+            font-size: 0.85em;
+            font-weight: 600;
+            border-radius: 6px;
+            cursor: pointer;
+            transition: background 0.2s ease;
+        }
+
+        .filter-control-btn:hover {
+            background: #5568d3;
+        }
+
+        .filter-options {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(250px, 1fr));
+            gap: 10px;
+        }
+
+        .filter-option {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            padding: 8px 12px;
+            background: #f8f9fa;
+            border-radius: 6px;
+            cursor: pointer;
+            transition: background 0.2s ease;
+        }
+
+        .filter-option:hover {
+            background: #e9ecef;
+        }
+
+        .filter-option input[type="checkbox"] {
+            cursor: pointer;
+            width: 18px;
+            height: 18px;
+        }
+
+        .filter-option label {
+            cursor: pointer;
+            flex-grow: 1;
+            font-size: 0.95em;
+            color: #333;
+        }
+
+        .filter-count {
+            font-size: 0.85em;
+            color: #666;
+            background: white;
+            padding: 2px 8px;
+            border-radius: 12px;
+            font-weight: 600;
+        }
+
+        .fights-summary {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            padding: 20px;
+            border-radius: 8px;
+            margin-bottom: 20px;
+            text-align: center;
+        }
+
+        .fights-summary h3 {
+            margin: 0;
+            font-size: 1.8em;
+        }
+
+        .fight-card {
+            background: linear-gradient(135deg, #ffffff 0%, #f8f9fa 100%);
+            border-radius: 12px;
+            padding: 25px;
+            margin-bottom: 20px;
+            box-shadow: 0 4px 15px rgba(0, 0, 0, 0.1);
+            border-left: 5px solid #667eea;
+            transition: transform 0.2s ease, box-shadow 0.2s ease;
+        }
+
+        .fight-card:hover {
+            transform: translateY(-3px);
+            box-shadow: 0 8px 25px rgba(0, 0, 0, 0.15);
+        }
+
+        .fight-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: flex-start;
+            margin-bottom: 20px;
+            padding-bottom: 15px;
+            border-bottom: 2px solid #e9ecef;
+            gap: 20px;
+        }
+
+        .fight-title {
+            flex-grow: 1;
+        }
+
+        .fight-title h3 {
+            margin: 0 0 8px 0;
+            color: #333;
+            font-size: 1.6em;
+        }
+
+        .fight-meta {
+            display: flex;
+            gap: 15px;
+            flex-wrap: wrap;
+        }
+
+        .fight-zone,
+        .fight-duration {
+            font-size: 0.9em;
+            color: #666;
+            font-weight: 500;
+        }
+
+        .fight-stats {
+            display: flex;
+            gap: 15px;
+        }
+
+        .fight-stat {
+            background: white;
+            padding: 8px 15px;
+            border-radius: 20px;
+            font-size: 0.9em;
+            font-weight: 600;
+            color: #667eea;
+            border: 2px solid #667eea;
+        }
+
+        .fight-content {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 30px;
+        }
+
+        .participants-section h4 {
+            color: #666;
+            font-size: 1.1em;
+            margin-bottom: 15px;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+        }
+
+        .participants-list {
+            display: flex;
+            flex-direction: column;
+            gap: 10px;
+        }
+
+        .participant-item {
+            background: white;
+            padding: 12px 15px;
+            border-radius: 8px;
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            transition: background 0.2s ease, transform 0.2s ease;
+        }
+
+        .participant-item:hover {
+            background: #f0f4ff;
+            transform: translateX(5px);
+        }
+
+        .player-participant {
+            border-left: 3px solid #667eea;
+        }
+
+        .enemy-participant {
+            border-left: 3px solid #f44336;
+        }
+
+        .participant-class-badge {
+            width: 12px;
+            height: 12px;
+            border-radius: 50%;
+            display: inline-block;
+            flex-shrink: 0;
+        }
+
+        .participant-class-badge.warrior { background-color: #C79C6E; }
+        .participant-class-badge.paladin { background-color: #F58CBA; }
+        .participant-class-badge.hunter { background-color: #ABD473; }
+        .participant-class-badge.rogue { background-color: #FFF569; }
+        .participant-class-badge.priest { background-color: #FFFFFF; border: 2px solid #ddd; }
+        .participant-class-badge.shaman { background-color: #0070DE; }
+        .participant-class-badge.mage { background-color: #69CCF0; }
+        .participant-class-badge.warlock { background-color: #9482C9; }
+        .participant-class-badge.druid { background-color: #FF7D0A; }
+        .participant-class-badge.unknown { background-color: #999999; }
+
+        .participant-info {
+            display: flex;
+            flex-direction: column;
+            gap: 2px;
+            flex-grow: 1;
+        }
+
+        .participant-name {
+            font-weight: 500;
+            color: #333;
+        }
+
+        .participant-icon {
+            font-size: 1.2em;
+            flex-shrink: 0;
+        }
+
+        .participant-id {
+            font-size: 0.75em;
+            color: #999;
+            font-family: 'Courier New', monospace;
+        }
+
+        .participant-stats {
+            display: flex;
+            flex-direction: column;
+            gap: 4px;
+            align-items: flex-end;
+            margin-left: auto;
+        }
+
+        .stat-dps,
+        .stat-damage-done,
+        .stat-damage-taken {
+            font-size: 0.8em;
+            font-weight: 600;
+            font-family: 'Courier New', monospace;
+            padding: 3px 8px;
+            border-radius: 4px;
+            white-space: nowrap;
+        }
+
+        .stat-dps {
+            color: #7b1fa2;
+            background: #f3e5f5;
+        }
+
+        .stat-damage-done {
+            color: #d32f2f;
+            background: #ffebee;
+        }
+
+        .stat-damage-taken {
+            color: #1976d2;
+            background: #e3f2fd;
+        }
+
+        .death-marker {
+            display: inline-block;
+            margin-left: 8px;
+            font-size: 0.85em;
+            color: #d32f2f;
+            font-weight: 600;
+            padding: 2px 6px;
+            background: #ffebee;
+            border-radius: 4px;
+            border: 1px solid #ef5350;
+        }
+
+        .no-fights,
+        .no-participants {
+            text-align: center;
+            color: #999;
+            padding: 20px;
+            font-style: italic;
+        }
+
+        /* Responsive design for fights */
+        @media (max-width: 768px) {
+            .fight-content {
+                grid-template-columns: 1fr;
+            }
+            
+            .fight-stats {
+                flex-direction: column;
+                gap: 8px;
+            }
+        }
     </style>
 </head>
 <body>
@@ -417,7 +738,22 @@
         <div class="status" id="status"></div>
 
         <div class="results" id="resultsSection" style="display: none;">
-            <h2>⚔️ Combat Participants & Spells</h2>
+            <h2>⚔️ Fights</h2>
+            
+            <div class="filter-section" id="filterSection" style="display: none;">
+                <div class="filter-header">
+                    <h3>📍 Filter by Zone</h3>
+                    <div class="filter-controls">
+                        <button class="filter-control-btn" id="selectAllZones">Select All</button>
+                        <button class="filter-control-btn" id="deselectAllZones">Deselect All</button>
+                    </div>
+                </div>
+                <div class="filter-options" id="zoneFilters"></div>
+            </div>
+            
+            <div id="fightsContainer"></div>
+            
+            <h2 style="margin-top: 40px;">👥 Combat Participants & Spells</h2>
             
             <div class="summary-stats" id="summaryStats"></div>
             
