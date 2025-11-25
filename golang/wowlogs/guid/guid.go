@@ -67,6 +67,7 @@ func (g GUID) String() string {
 
 // GetHigh returns the high 16 bits of the GUID
 func (g GUID) GetHigh() uint16 {
+	// 0x0000000000024225 --> 0x0000
 	return uint16(bits.RotateLeft64(uint64(g), -48))
 }
 

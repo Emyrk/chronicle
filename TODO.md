@@ -1,0 +1,1 @@
+- Show relationship to the totem/summoned in the logs. So add a log emit when a totem/summoned enters combat because its owner did.
