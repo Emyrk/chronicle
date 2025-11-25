@@ -100,6 +100,34 @@ const NPC_DATABASE = {
     0: "Unknown NPC"
 };
 
+function isPet(guid) {
+  // Convert hex string to BigInt (guid is like "0x000000000001C7AC")
+  // Parse hex manually for browser compatibility
+  const hexStr = guid.toString().replace(/^0x/i, '').replace(/[^0-9a-fA-F]/g, '');
+  if (!hexStr || hexStr.length === 0) {
+      console.warn('Invalid GUID:', guid);
+      return;
+  }
+  let guidInt = 0n;
+  for (let i = 0; i < hexStr.length; i++) {
+      const digit = parseInt(hexStr[i], 16);
+      if (isNaN(digit)) {
+          console.warn('Invalid hex digit in GUID:', hexStr[i], 'in', guid);
+          return;
+      }
+      guidInt = guidInt * 16n + BigInt(digit);
+  }
+  
+  // Check if player or pet (high bits & 0x00F0)
+  const high16 = Number((guidInt >> 48n) & 0xFFFFn);
+  const typeBits = high16 & 0x00F0;
+  const isPlayer = typeBits === 0x0000;
+  const isPet = typeBits === 0x0040;
+  
+  return isPet;
+}
+
+
 function getNPCName(npcId, guidString) {
     if (NPC_DATABASE[npcId]) {
         return NPC_DATABASE[npcId];
@@ -484,19 +512,14 @@ function createFightsDisplay(state) {
                     </div>
                 `;
             } else {
-                // Pet or unknown - check if it's a pet
-                let name;
-                if (isPet) {
-                    name = "A Pet (" + guid + ")";
-                } else {
-                    // Extract entry ID for creatures
-                    const entryId = getEntryFromGUID(guid);
-                    name = getNPCName(entryId, guid);
-                }
+                 // Extract entry ID for creatures
+                const entryId = getEntryFromGUID(guid);
+                let name = getNPCName(entryId, guid);
+
                 
                 friendlyHTML += `
                     <div class="participant-item player-participant">
-                        <span class="participant-icon">${isPet ? '🐾' : '❓'}</span>
+                        <span class="participant-icon">${isPet(guid) ? '🐾' : '❓'}</span>
                         <span class="participant-name">${escapeHtml(name)}${deathInfo}</span>
                         <div class="participant-stats">
                             <span class="stat-dps" title="Damage Per Second">⚡ ${formatNumber(dps)}/s</span>
