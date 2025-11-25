@@ -19,6 +19,7 @@ type Fight struct {
 	Participants         map[guid.GUID]time.Time
 	ParticipantFirstSeen map[guid.GUID]time.Time
 
+	Deaths        map[guid.GUID]time.Time
 	FriendlyAlive map[guid.GUID]struct{}
 	EnemiesAlive  map[guid.GUID]struct{}
 
@@ -40,6 +41,7 @@ func NewFight(ts time.Time, zone zone.Zone) *Fight {
 		EnemiesAlive:         make(map[guid.GUID]struct{}),
 		DamageDone:           make(map[guid.GUID]int64),
 		DamageTaken:          make(map[guid.GUID]int64),
+		Deaths:               make(map[guid.GUID]time.Time),
 		Zone:                 zone,
 		Started:              ts,
 		Ended:                time.Time{},
@@ -70,6 +72,7 @@ func (f *Fight) SeenParticipants(ts time.Time, gs ...guid.GUID) {
 func (f *Fight) Slain(ts time.Time, gs ...guid.GUID) {
 	f.bump(ts)
 	for _, id := range gs {
+		f.Deaths[id] = ts
 		delete(f.FriendlyAlive, id)
 		delete(f.EnemiesAlive, id)
 	}

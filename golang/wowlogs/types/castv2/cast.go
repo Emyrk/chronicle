@@ -1,7 +1,6 @@
 package castv2
 
 import (
-	"errors"
 	"fmt"
 
 	"github.com/Emyrk/chronicle/golang/wowlogs/regexs"
@@ -51,7 +50,7 @@ func ParseCast(content string) (CastV2, error) {
 		return parseCastSimple(matched)
 	}
 
-	return CastV2{}, errors.New("regexes did not match for cast")
+	return CastV2{}, fmt.Errorf("CAST failed: %s", content)
 }
 
 // parseCastWithTarget is just the simple + target match
