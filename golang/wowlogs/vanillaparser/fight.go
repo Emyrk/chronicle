@@ -5,6 +5,7 @@ import (
 
 	"github.com/Emyrk/chronicle/golang/wowlogs/guid"
 	"github.com/Emyrk/chronicle/golang/wowlogs/types/zone"
+	"github.com/Emyrk/chronicle/golang/wowlogs/vanillaparser/totems"
 )
 
 var (
@@ -49,6 +50,9 @@ func NewFight(ts time.Time, zone zone.Zone) *Fight {
 func (f *Fight) SeenParticipants(ts time.Time, gs ...guid.GUID) {
 	f.bump(ts)
 	for _, id := range gs {
+		if totems.IsTotem(id) {
+			continue // Ignore totems for now
+		}
 		// TODO: What about summoned things? Allied NPCs?
 		if id.IsPlayer() && id.IsPet() {
 			f.FriendlyAlive[id] = struct{}{}

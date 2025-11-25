@@ -47,9 +47,8 @@ func (p *Parser) State() *State {
 
 // Merger returns a configured merger for this parser.
 func Merger(logger *slog.Logger) *merge.Merger {
-	return merge.NewMerger(logger,
-		merge.WithMiddleWare(OnlyKeepRawV2Casts),
-	)
+	return merge.NewMerger(logger) //merge.WithMiddleWare(OnlyKeepRawV2Casts),
+
 }
 
 func (p *Parser) init() error {
