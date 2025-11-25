@@ -100,8 +100,12 @@ const NPC_DATABASE = {
     0: "Unknown NPC"
 };
 
-function getNPCName(npcId) {
-    return NPC_DATABASE[npcId] || `NPC ${npcId}`;
+function getNPCName(npcId, guidString) {
+    if (NPC_DATABASE[npcId]) {
+        return NPC_DATABASE[npcId];
+    }
+    // If not in database, show full GUID with entry ID
+    return guidString ? `${guidString}[${npcId}]` : `NPC ${npcId}`;
 }
 
 // Rotate a 64-bit BigInt right by the specified number of bits
@@ -470,7 +474,7 @@ function createFightsDisplay(state) {
             } else {
                 // Pet or unknown - extract entry ID
                 const entryId = getEntryFromGUID(guid);
-                const name = getNPCName(entryId);
+                const name = getNPCName(entryId, guid);
                 
                 friendlyHTML += `
                     <div class="participant-item player-participant">
@@ -490,7 +494,7 @@ function createFightsDisplay(state) {
         let enemiesHTML = '';
         enemyGuids.forEach(guid => {
             const entryId = getEntryFromGUID(guid);
-            const npcName = getNPCName(entryId);
+            const npcName = getNPCName(entryId, guid);
             const damageDone = fight.DamageDone[guid] || 0;
             const damageTaken = fight.DamageTaken[guid] || 0;
             const dps = durationSec > 0 ? Math.round(damageDone / durationSec) : 0;
