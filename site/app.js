@@ -487,7 +487,7 @@ function createFightsDisplay(state) {
                 // Pet or unknown - check if it's a pet
                 let name;
                 if (isPet) {
-                    name = "A Pet";
+                    name = "A Pet (" + guid + ")";
                 } else {
                     // Extract entry ID for creatures
                     const entryId = getEntryFromGUID(guid);
