@@ -12,12 +12,14 @@ import (
 	"github.com/Emyrk/chronicle/golang/wowlogs/types/castv2"
 	"github.com/Emyrk/chronicle/golang/wowlogs/types/combatant"
 	"github.com/Emyrk/chronicle/golang/wowlogs/types/loot"
+	"github.com/Emyrk/chronicle/golang/wowlogs/types/unitinfo"
 	"github.com/Emyrk/chronicle/golang/wowlogs/types/zone"
+	"github.com/Emyrk/chronicle/golang/wowlogs/vanillaparser/messages"
 )
 
-func (p *Parser) fV2Casts(ts time.Time, content string) ([]Message, error) {
+func (p *Parser) fV2Casts(ts time.Time, content string) ([]messages.Message, error) {
 	if _, ok := castv2.IsCast(content); !ok {
-		return notHandled()
+		return messages.NotHandled()
 	}
 
 	c, err := castv2.ParseCast(content)
@@ -26,18 +28,18 @@ func (p *Parser) fV2Casts(ts time.Time, content string) ([]Message, error) {
 	}
 
 	if !c.Caster.HasGuid() || (c.Target != nil && !c.Target.HasGuid()) {
-		return Skip(ts, "castv2: not using guids"), nil
+		return messages.Skip(ts, "castv2: not using guids"), nil
 	}
 
-	return set(Cast{
+	return set(messages.Cast{
 		CastV2:      c,
-		MessageBase: Base(ts),
+		MessageBase: messages.Base(ts),
 	}), nil
 }
 
-func (p *Parser) fLoot(ts time.Time, content string) ([]Message, error) {
+func (p *Parser) fLoot(ts time.Time, content string) ([]messages.Message, error) {
 	if !strings.HasPrefix(content, loot.PrefixLoot) {
-		return notHandled()
+		return messages.NotHandled()
 	}
 
 	li, err := loot.ParseLootInfo(content)
@@ -47,12 +49,12 @@ func (p *Parser) fLoot(ts time.Time, content string) ([]Message, error) {
 
 	var _ = li
 
-	return Skip(ts, "loot info"), nil
+	return messages.Skip(ts, "loot info"), nil
 }
 
-func (p *Parser) fZoneInfo(ts time.Time, content string) ([]Message, error) {
+func (p *Parser) fZoneInfo(ts time.Time, content string) ([]messages.Message, error) {
 	if !strings.HasPrefix(content, zone.PrefixZone) {
-		return notHandled()
+		return messages.NotHandled()
 	}
 
 	zi, err := zone.ParseZoneInfo(content)
@@ -60,15 +62,31 @@ func (p *Parser) fZoneInfo(ts time.Time, content string) ([]Message, error) {
 		return nil, fmt.Errorf("failed to parse zone info: %v", err)
 	}
 
-	return set(Zone{
-		MessageBase: Base(ts),
+	return set(messages.Zone{
+		MessageBase: messages.Base(ts),
 		Zone:        zi,
 	}), nil
 }
 
-func (p *Parser) fCombatantInfo(ts time.Time, content string) ([]Message, error) {
+func (p *Parser) fUnitInfo(ts time.Time, content string) ([]messages.Message, error) {
+	if !strings.HasPrefix(content, unitinfo.PrefixUnitInfo) {
+		return messages.NotHandled()
+	}
+
+	ut, err := unitinfo.ParseUnitInfo(content)
+	if err != nil {
+		return nil, fmt.Errorf("failed to parse combatant info: %v", err)
+	}
+
+	return set(messages.Unit{
+		MessageBase: messages.Base(ts),
+		Info:        ut,
+	}), nil
+}
+
+func (p *Parser) fCombatantInfo(ts time.Time, content string) ([]messages.Message, error) {
 	if !strings.HasPrefix(content, combatant.PrefixCombatant) {
-		return notHandled()
+		return messages.NotHandled()
 	}
 
 	cbt, err := combatant.ParseCombatantInfo(content)
@@ -76,39 +94,39 @@ func (p *Parser) fCombatantInfo(ts time.Time, content string) ([]Message, error)
 		return nil, fmt.Errorf("failed to parse combatant info: %v", err)
 	}
 
-	return set(Combatant{
+	return set(messages.Combatant{
 		Combatant:   cbt,
-		MessageBase: Base(ts),
+		MessageBase: messages.Base(ts),
 	}), nil
 }
 
-func (p *Parser) fBugDamageSpellHitOrCrit(ts time.Time, content string) ([]Message, error) {
+func (p *Parser) fBugDamageSpellHitOrCrit(ts time.Time, content string) ([]messages.Message, error) {
 	if !regexs.ReBugDamageSpellHitOrCrit.MatchString(content) {
-		return notHandled()
+		return messages.NotHandled()
 	}
 
 	p.logger.Error("bugged line in logs, skipping",
 		slog.String("content", content),
 	)
-	return Skip(ts, "bugged line in logs"), nil
+	return messages.Skip(ts, "bugged line in logs"), nil
 }
 
 // 10/29 22:09:40.825  Randgriz begins to cast Flash Heal.
 // 10/29 22:09:42.175  Randgriz casts Flash Heal on Katrix.
 // 10/29 22:09:42.175  Randgriz 's Flash Heal critically heals Katrix for 2534.
-func (p *Parser) fSpellCastAttempt(ts time.Time, content string) ([]Message, error) {
+func (p *Parser) fSpellCastAttempt(ts time.Time, content string) ([]messages.Message, error) {
 	matches := regexs.ReSpellCastAttempt.FindStringSubmatch(content)
 	if matches == nil {
-		return notHandled()
+		return messages.NotHandled()
 	}
 
-	return Skip(ts, "handled castsv2"), nil
+	return messages.Skip(ts, "handled castsv2"), nil
 }
 
-func (p *Parser) fGain(ts time.Time, content string) ([]Message, error) {
+func (p *Parser) fGain(ts time.Time, content string) ([]messages.Message, error) {
 	matched, ok := types.FromRegex(regexs.ReGain).Match(content)
 	if !ok {
-		return notHandled()
+		return messages.NotHandled()
 	}
 
 	_, targetGUID := matched.UnitOrGUID()
@@ -123,11 +141,11 @@ func (p *Parser) fGain(ts time.Time, content string) ([]Message, error) {
 	}
 
 	if targetGUID.IsZero() {
-		return Skip(ts, "gain: not using guids"), nil
+		return messages.Skip(ts, "gain: not using guids"), nil
 	}
 
-	return set(ResourceChange{
-		MessageBase: Base(ts),
+	return set(messages.ResourceChange{
+		MessageBase: messages.Base(ts),
 		Target:      targetGUID,
 		Amount:      amount,
 		Resource:    resource,
@@ -137,11 +155,11 @@ func (p *Parser) fGain(ts time.Time, content string) ([]Message, error) {
 	}), nil
 }
 
-func (p *Parser) fDamageSpellHitOrCritSchool(ts time.Time, content string) ([]Message, error) {
+func (p *Parser) fDamageSpellHitOrCritSchool(ts time.Time, content string) ([]messages.Message, error) {
 	return p.fDamageSpellHitOrCrit(true, ts, content)
 }
 
-func (p *Parser) fDamageSpellHitOrCritNoSchool(ts time.Time, content string) ([]Message, error) {
+func (p *Parser) fDamageSpellHitOrCritNoSchool(ts time.Time, content string) ([]messages.Message, error) {
 	return p.fDamageSpellHitOrCrit(false, ts, content)
 }
 
@@ -149,7 +167,7 @@ func (p *Parser) fDamageSpellHitOrCritNoSchool(ts time.Time, content string) ([]
  * Spell Damage
  */
 // 11/18 07:21:45.192  0xF1400844930090A2's Firebolt hits 0xF130000950003FB5 for 38 Fire damage.
-func (p *Parser) fDamageSpellHitOrCrit(hasSchool bool, ts time.Time, content string) ([]Message, error) {
+func (p *Parser) fDamageSpellHitOrCrit(hasSchool bool, ts time.Time, content string) ([]messages.Message, error) {
 	re := regexs.ReDamageSpellHitOrCrit
 	if hasSchool {
 		re = regexs.ReDamageSpellHitOrCritSchool
@@ -157,7 +175,7 @@ func (p *Parser) fDamageSpellHitOrCrit(hasSchool bool, ts time.Time, content str
 
 	matches, ok := types.FromRegex(re).Match(content)
 	if !ok {
-		return notHandled()
+		return messages.NotHandled()
 	}
 
 	_, caster := matches.UnitOrGUID()
@@ -177,7 +195,7 @@ func (p *Parser) fDamageSpellHitOrCrit(hasSchool bool, ts time.Time, content str
 	}
 
 	if caster.IsZero() || target.IsZero() {
-		return Skip(ts, "DamageSpellHitOrCrit: not using guids"), nil
+		return messages.Skip(ts, "DamageSpellHitOrCrit: not using guids"), nil
 	}
 
 	// Add the hitmask from the main line to the trailer entries
@@ -185,8 +203,8 @@ func (p *Parser) fDamageSpellHitOrCrit(hasSchool bool, ts time.Time, content str
 		trailer[i].HitType = trailer[i].HitType | hitType
 	}
 
-	sp := Damage{
-		MessageBase: Base(ts),
+	sp := messages.Damage{
+		MessageBase: messages.Base(ts),
 		Caster:      caster,
 		SpellName:   ptr.Ref(spellName),
 		HitType:     hitType,
@@ -198,10 +216,10 @@ func (p *Parser) fDamageSpellHitOrCrit(hasSchool bool, ts time.Time, content str
 	return set(sp), nil
 }
 
-func (p *Parser) fDamagePeriodic(ts time.Time, content string) ([]Message, error) {
+func (p *Parser) fDamagePeriodic(ts time.Time, content string) ([]messages.Message, error) {
 	matches, ok := types.FromRegex(regexs.ReDamagePeriodic).Match(content)
 	if !ok {
-		return notHandled()
+		return messages.NotHandled()
 	}
 
 	_, target := matches.UnitOrGUID()
@@ -216,11 +234,11 @@ func (p *Parser) fDamagePeriodic(ts time.Time, content string) ([]Message, error
 	}
 
 	if target.IsZero() || caster.IsZero() {
-		return Skip(ts, "DamagePeriodic: not using guids"), nil
+		return messages.Skip(ts, "DamagePeriodic: not using guids"), nil
 	}
 
-	return set(Damage{
-		MessageBase: Base(ts),
+	return set(messages.Damage{
+		MessageBase: messages.Base(ts),
 		Caster:      caster,
 		Target:      target,
 		Amount:      amount,
@@ -231,10 +249,10 @@ func (p *Parser) fDamagePeriodic(ts time.Time, content string) ([]Message, error
 	}), nil
 }
 
-func (p *Parser) fDamageShield(ts time.Time, content string) ([]Message, error) {
+func (p *Parser) fDamageShield(ts time.Time, content string) ([]messages.Message, error) {
 	matches, ok := types.FromRegex(regexs.ReDamageShield).Match(content)
 	if !ok {
-		return notHandled()
+		return messages.NotHandled()
 	}
 
 	_, caster := matches.UnitOrGUID()
@@ -247,11 +265,11 @@ func (p *Parser) fDamageShield(ts time.Time, content string) ([]Message, error) 
 	}
 
 	if caster.IsZero() || target.IsZero() {
-		return Skip(ts, "DamageShield: not using guids"), nil
+		return messages.Skip(ts, "DamageShield: not using guids"), nil
 	}
 
-	return set(Damage{
-		MessageBase: Base(ts),
+	return set(messages.Damage{
+		MessageBase: messages.Base(ts),
 		Caster:      caster,
 		Target:      target,
 		// Reflected damage from something like thorns?
@@ -267,15 +285,15 @@ func (p *Parser) fDamageShield(ts time.Time, content string) ([]Message, error) 
  * Melee Damage
  */
 
-func (p *Parser) fDamageHitOrCritNoSchool(ts time.Time, content string) ([]Message, error) {
+func (p *Parser) fDamageHitOrCritNoSchool(ts time.Time, content string) ([]messages.Message, error) {
 	return p.fDamageHitOrCrit(false, ts, content)
 }
 
-func (p *Parser) fDamageHitOrCritSchool(ts time.Time, content string) ([]Message, error) {
+func (p *Parser) fDamageHitOrCritSchool(ts time.Time, content string) ([]messages.Message, error) {
 	return p.fDamageHitOrCrit(true, ts, content)
 }
 
-func (p *Parser) fDamageHitOrCrit(hasScool bool, ts time.Time, content string) ([]Message, error) {
+func (p *Parser) fDamageHitOrCrit(hasScool bool, ts time.Time, content string) ([]messages.Message, error) {
 	re := regexs.ReDamageHitOrCrit
 	if hasScool {
 		re = regexs.ReDamageHitOrCritSchool
@@ -283,7 +301,7 @@ func (p *Parser) fDamageHitOrCrit(hasScool bool, ts time.Time, content string) (
 
 	matches, ok := types.FromRegex(re).Match(content)
 	if !ok {
-		return notHandled()
+		return messages.NotHandled()
 	}
 
 	_, caster := matches.UnitOrGUID()
@@ -302,11 +320,11 @@ func (p *Parser) fDamageHitOrCrit(hasScool bool, ts time.Time, content string) (
 	}
 
 	if caster.IsZero() || target.IsZero() {
-		return Skip(ts, "DamageHitOrCritSchool: not using guids"), nil
+		return messages.Skip(ts, "DamageHitOrCritSchool: not using guids"), nil
 	}
 
-	return set(Damage{
-		MessageBase: Base(ts),
+	return set(messages.Damage{
+		MessageBase: messages.Base(ts),
 		Caster:      caster,
 		HitType:     hitType,
 		Target:      target,
@@ -320,10 +338,10 @@ func (p *Parser) fDamageHitOrCrit(hasScool bool, ts time.Time, content string) (
  * Heal
  */
 
-func (p *Parser) fHeal(ts time.Time, content string) ([]Message, error) {
+func (p *Parser) fHeal(ts time.Time, content string) ([]messages.Message, error) {
 	matches, ok := types.FromRegex(regexs.ReHeal).Match(content)
 	if !ok {
-		return notHandled()
+		return messages.NotHandled()
 	}
 
 	_, caster := matches.UnitOrGUID()
@@ -342,11 +360,11 @@ func (p *Parser) fHeal(ts time.Time, content string) ([]Message, error) {
 	}
 
 	if caster.IsZero() || target.IsZero() {
-		return Skip(ts, "Heal: not using guids"), nil
+		return messages.Skip(ts, "Heal: not using guids"), nil
 	}
 
-	return set(Heal{
-		MessageBase: Base(ts),
+	return set(messages.Heal{
+		MessageBase: messages.Base(ts),
 		Caster:      caster,
 		Target:      target,
 		SpellName:   spellName,
@@ -359,10 +377,10 @@ func (p *Parser) fHeal(ts time.Time, content string) ([]Message, error) {
  * Aura Application
  */
 
-func (p *Parser) fAuraGainHarmfulHelpful(ts time.Time, content string) ([]Message, error) {
+func (p *Parser) fAuraGainHarmfulHelpful(ts time.Time, content string) ([]messages.Message, error) {
 	matches, ok := types.FromRegex(regexs.ReAuraGainHarmfulHelpful).Match(content)
 	if !ok {
-		return notHandled()
+		return messages.NotHandled()
 	}
 
 	_, target := matches.UnitOrGUID()
@@ -374,11 +392,11 @@ func (p *Parser) fAuraGainHarmfulHelpful(ts time.Time, content string) ([]Messag
 	}
 
 	if target.IsZero() {
-		return Skip(ts, "AuraGainHarmfulHelpful: not using guids"), nil
+		return messages.Skip(ts, "AuraGainHarmfulHelpful: not using guids"), nil
 	}
 
-	return set(Aura{
-		MessageBase: Base(ts),
+	return set(messages.Aura{
+		MessageBase: messages.Base(ts),
 		Target:      target,
 		SpellName:   spellName,
 		Amount:      amount,
@@ -386,10 +404,10 @@ func (p *Parser) fAuraGainHarmfulHelpful(ts time.Time, content string) ([]Messag
 	}), nil
 }
 
-func (p *Parser) fAuraFade(ts time.Time, content string) ([]Message, error) {
+func (p *Parser) fAuraFade(ts time.Time, content string) ([]messages.Message, error) {
 	matches, ok := types.FromRegex(regexs.ReAuraFade).Match(content)
 	if !ok {
-		return notHandled()
+		return messages.NotHandled()
 	}
 
 	spellName := matches.String()
@@ -399,11 +417,11 @@ func (p *Parser) fAuraFade(ts time.Time, content string) ([]Message, error) {
 	}
 
 	if target.IsZero() {
-		return Skip(ts, "AuraFade: not using guids"), nil
+		return messages.Skip(ts, "AuraFade: not using guids"), nil
 	}
 
-	return set(Aura{
-		MessageBase: Base(ts),
+	return set(messages.Aura{
+		MessageBase: messages.Base(ts),
 		Target:      target,
 		SpellName:   spellName,
 		Amount:      0,
@@ -414,23 +432,23 @@ func (p *Parser) fAuraFade(ts time.Time, content string) ([]Message, error) {
 /**
  * Spell Damage cont
  */
-func (p *Parser) fDamageSpellSplit(ts time.Time, content string) ([]Message, error) {
+func (p *Parser) fDamageSpellSplit(ts time.Time, content string) ([]messages.Message, error) {
 	// TODO: What is this? Warlock soul link? Disc priest capstone talent?
 	matches := regexs.ReDamageSpellSplit.FindStringSubmatch(content)
 	if matches == nil {
-		return notHandled()
+		return messages.NotHandled()
 	}
 
 	//attacker, spellID, victim, amount, trailer := matches[1], matches[2], matches[3], matches[4], matches[5]
 
 	// Return spell cast & SpellDamage Message
-	return Unparsed(ts, "DamageSpellSplit not implemented"), nil
+	return messages.Unparsed(ts, "DamageSpellSplit not implemented"), nil
 }
 
-func (p *Parser) fDamageSpellMiss(ts time.Time, content string) ([]Message, error) {
+func (p *Parser) fDamageSpellMiss(ts time.Time, content string) ([]messages.Message, error) {
 	matches, ok := types.FromRegex(regexs.ReDamageSpellMiss).Match(content)
 	if !ok {
-		return notHandled()
+		return messages.NotHandled()
 	}
 
 	_, caster := matches.UnitOrGUID()
@@ -443,12 +461,12 @@ func (p *Parser) fDamageSpellMiss(ts time.Time, content string) ([]Message, erro
 	}
 
 	if caster.IsZero() || target.IsZero() {
-		return Skip(ts, "DamageSpellMiss: not using guids"), nil
+		return messages.Skip(ts, "DamageSpellMiss: not using guids"), nil
 	}
 
 	//attacker, spellID, victim := matches[1], matches[2], matches[4]
-	return set(Damage{
-		MessageBase: Base(ts),
+	return set(messages.Damage{
+		MessageBase: messages.Base(ts),
 		Caster:      caster,
 		SpellName:   ptr.Ref(spellName),
 		HitType:     types.HitTypeMiss,
@@ -459,10 +477,10 @@ func (p *Parser) fDamageSpellMiss(ts time.Time, content string) ([]Message, erro
 	}), nil
 }
 
-func (p *Parser) fDamageSpellBlockParryEvadeDodgeResistDeflect(ts time.Time, content string) ([]Message, error) {
+func (p *Parser) fDamageSpellBlockParryEvadeDodgeResistDeflect(ts time.Time, content string) ([]messages.Message, error) {
 	matches, ok := types.FromRegex(regexs.ReDamageSpellBlockParryEvadeDodgeResistDeflect).Match(content)
 	if !ok {
-		return notHandled()
+		return messages.NotHandled()
 	}
 
 	_, caster := matches.UnitOrGUID()
@@ -474,11 +492,11 @@ func (p *Parser) fDamageSpellBlockParryEvadeDodgeResistDeflect(ts time.Time, con
 	}
 
 	if caster.IsZero() || target.IsZero() {
-		return Skip(ts, "DamageSpellBlockParryEvadeDodgeDeflect: not using guids"), nil
+		return messages.Skip(ts, "DamageSpellBlockParryEvadeDodgeDeflect: not using guids"), nil
 	}
 
-	return set(Damage{
-		MessageBase: Base(ts),
+	return set(messages.Damage{
+		MessageBase: messages.Base(ts),
 		Caster:      caster,
 		SpellName:   ptr.Ref(spellName),
 		HitType:     hitType,
@@ -490,10 +508,10 @@ func (p *Parser) fDamageSpellBlockParryEvadeDodgeResistDeflect(ts time.Time, con
 }
 
 // fDamageSpellAbsorb is a full absorb
-func (p *Parser) fDamageSpellAbsorb(ts time.Time, content string) ([]Message, error) {
+func (p *Parser) fDamageSpellAbsorb(ts time.Time, content string) ([]messages.Message, error) {
 	matches, ok := types.FromRegex(regexs.ReDamageSpellAbsorb).Match(content)
 	if !ok {
-		return notHandled()
+		return messages.NotHandled()
 	}
 
 	_, caster := matches.UnitOrGUID()
@@ -505,11 +523,11 @@ func (p *Parser) fDamageSpellAbsorb(ts time.Time, content string) ([]Message, er
 	}
 
 	if caster.IsZero() || target.IsZero() {
-		return Skip(ts, "DamageSpellAbsorb: not using guids"), nil
+		return messages.Skip(ts, "DamageSpellAbsorb: not using guids"), nil
 	}
 
-	return set(Damage{
-		MessageBase: Base(ts),
+	return set(messages.Damage{
+		MessageBase: messages.Base(ts),
 		Caster:      caster,
 		SpellName:   ptr.Ref(spellName),
 		HitType:     types.HitTypeFullAbsorb,
@@ -520,20 +538,20 @@ func (p *Parser) fDamageSpellAbsorb(ts time.Time, content string) ([]Message, er
 	}), nil
 }
 
-func (p *Parser) fDamageSpellAbsorbSelf(ts time.Time, content string) ([]Message, error) {
+func (p *Parser) fDamageSpellAbsorbSelf(ts time.Time, content string) ([]messages.Message, error) {
 	matches := regexs.ReDamageSpellAbsorbSelf.FindStringSubmatch(content)
 	if matches == nil {
-		return notHandled()
+		return messages.NotHandled()
 	}
 
 	//victim, attacker, spellID := matches[1], matches[2], matches[3]
-	return Unparsed(ts, "DamageSpellAbsorbSelf not implemented"), nil
+	return messages.Unparsed(ts, "DamageSpellAbsorbSelf not implemented"), nil
 }
 
-func (p *Parser) fDamageReflect(ts time.Time, content string) ([]Message, error) {
+func (p *Parser) fDamageReflect(ts time.Time, content string) ([]messages.Message, error) {
 	matches, ok := types.FromRegex(regexs.ReDamageReflect).Match(content)
 	if !ok {
-		return notHandled()
+		return messages.NotHandled()
 	}
 
 	_, caster := matches.UnitOrGUID()
@@ -545,11 +563,11 @@ func (p *Parser) fDamageReflect(ts time.Time, content string) ([]Message, error)
 	}
 
 	if caster.IsZero() || target.IsZero() {
-		return Skip(ts, "DamageReflect: not using guids"), nil
+		return messages.Skip(ts, "DamageReflect: not using guids"), nil
 	}
 
-	return set(Damage{
-		MessageBase: Base(ts),
+	return set(messages.Damage{
+		MessageBase: messages.Base(ts),
 		Caster:      caster,
 		SpellName:   ptr.Ref(spellName),
 		HitType:     types.HitTypeReflect,
@@ -560,20 +578,20 @@ func (p *Parser) fDamageReflect(ts time.Time, content string) ([]Message, error)
 	}), nil
 }
 
-func (p *Parser) fDamageProcResist(ts time.Time, content string) ([]Message, error) {
+func (p *Parser) fDamageProcResist(ts time.Time, content string) ([]messages.Message, error) {
 	matches := regexs.ReDamageProcResist.FindStringSubmatch(content)
 	if matches == nil {
-		return notHandled()
+		return messages.NotHandled()
 	}
 
 	//victim, attacker, spellID := matches[1], matches[2], matches[3]
-	return Unparsed(ts, "DamageProcResist not implemented"), nil
+	return messages.Unparsed(ts, "DamageProcResist not implemented"), nil
 }
 
-func (p *Parser) fDamageSpellImmune(ts time.Time, content string) ([]Message, error) {
+func (p *Parser) fDamageSpellImmune(ts time.Time, content string) ([]messages.Message, error) {
 	matches, ok := types.FromRegex(regexs.ReDamageSpellImmune).Match(content)
 	if !ok {
-		return notHandled()
+		return messages.NotHandled()
 	}
 
 	_, caster := matches.UnitOrGUID()
@@ -584,10 +602,10 @@ func (p *Parser) fDamageSpellImmune(ts time.Time, content string) ([]Message, er
 		return nil, fmt.Errorf("DamageSpellImmune: %w", err)
 	}
 	if caster.IsZero() || target.IsZero() {
-		return Skip(ts, "DamageSpellImmune: not using guids"), nil
+		return messages.Skip(ts, "DamageSpellImmune: not using guids"), nil
 	}
-	return set(Damage{
-		MessageBase: Base(ts),
+	return set(messages.Damage{
+		MessageBase: messages.Base(ts),
 		Caster:      caster,
 		SpellName:   ptr.Ref(spellName),
 		HitType:     types.HitTypeImmune,
@@ -602,10 +620,10 @@ func (p *Parser) fDamageSpellImmune(ts time.Time, content string) ([]Message, er
  * Melee Damage cont
  */
 
-func (p *Parser) fDamageMiss(ts time.Time, content string) ([]Message, error) {
+func (p *Parser) fDamageMiss(ts time.Time, content string) ([]messages.Message, error) {
 	matches, ok := types.FromRegex(regexs.ReDamageMiss).Match(content)
 	if !ok {
-		return notHandled()
+		return messages.NotHandled()
 	}
 
 	_, caster := matches.UnitOrGUID()
@@ -615,11 +633,11 @@ func (p *Parser) fDamageMiss(ts time.Time, content string) ([]Message, error) {
 	}
 
 	if caster.IsZero() || target.IsZero() {
-		return Skip(ts, "DamageMiss: not using guids"), nil
+		return messages.Skip(ts, "DamageMiss: not using guids"), nil
 	}
 
-	return set(Damage{
-		MessageBase: Base(ts),
+	return set(messages.Damage{
+		MessageBase: messages.Base(ts),
 		Caster:      caster,
 		Target:      target,
 		HitType:     types.HitTypeMiss,
@@ -629,10 +647,10 @@ func (p *Parser) fDamageMiss(ts time.Time, content string) ([]Message, error) {
 	}), nil
 }
 
-func (p *Parser) fDamageBlockParryEvadeDodgeDeflect(ts time.Time, content string) ([]Message, error) {
+func (p *Parser) fDamageBlockParryEvadeDodgeDeflect(ts time.Time, content string) ([]messages.Message, error) {
 	matches, ok := types.FromRegex(regexs.ReDamageBlockParryEvadeDodgeDeflect).Match(content)
 	if !ok {
-		return notHandled()
+		return messages.NotHandled()
 	}
 
 	_, caster := matches.UnitOrGUID()
@@ -643,25 +661,22 @@ func (p *Parser) fDamageBlockParryEvadeDodgeDeflect(ts time.Time, content string
 	}
 
 	if caster.IsZero() || target.IsZero() {
-		return Skip(ts, "DamageBlockParryEvadeDodgeDeflect: not using guids"), nil
+		return messages.Skip(ts, "DamageBlockParryEvadeDodgeDeflect: not using guids"), nil
 	}
 
-	return set(Damage{
-		MessageBase: Base(ts),
+	return set(messages.Damage{
+		MessageBase: messages.Base(ts),
 		Caster:      caster,
 		Target:      target,
 		HitType:     hitType,
 	}), nil
-
-	//attacker, victim, hitType := matches[1], matches[2], matches[3]
-	return Unparsed(ts, "DamageBlockParryEvadeDodgeResistDeflect not implemented"), nil
 }
 
 // TODO: No examples found yet
-func (p *Parser) fDamageAbsorbResist(ts time.Time, content string) ([]Message, error) {
+func (p *Parser) fDamageAbsorbResist(ts time.Time, content string) ([]messages.Message, error) {
 	matches, ok := types.FromRegex(regexs.ReDamageAbsorbResist).Match(content)
 	if !ok {
-		return notHandled()
+		return messages.NotHandled()
 	}
 
 	_, caster := matches.UnitOrGUID()
@@ -672,21 +687,21 @@ func (p *Parser) fDamageAbsorbResist(ts time.Time, content string) ([]Message, e
 	}
 
 	if caster.IsZero() || target.IsZero() {
-		return Skip(ts, "DamageAbsorbResist: not using guids"), nil
+		return messages.Skip(ts, "DamageAbsorbResist: not using guids"), nil
 	}
 
-	return set(Damage{
-		MessageBase: Base(ts),
+	return set(messages.Damage{
+		MessageBase: messages.Base(ts),
 		Caster:      caster,
 		Target:      target,
 		HitType:     hitType,
 	}), nil
 }
 
-func (p *Parser) fDamageImmune(ts time.Time, content string) ([]Message, error) {
+func (p *Parser) fDamageImmune(ts time.Time, content string) ([]messages.Message, error) {
 	matches, ok := types.FromRegex(regexs.ReDamageImmune).Match(content)
 	if !ok {
-		return notHandled()
+		return messages.NotHandled()
 	}
 
 	_, caster := matches.UnitOrGUID()
@@ -695,11 +710,11 @@ func (p *Parser) fDamageImmune(ts time.Time, content string) ([]Message, error) 
 		return nil, fmt.Errorf("DamageImmune: %w", err)
 	}
 	if caster.IsZero() || target.IsZero() {
-		return Skip(ts, "DamageImmune: not using guids"), nil
+		return messages.Skip(ts, "DamageImmune: not using guids"), nil
 	}
 
-	return set(Damage{
-		MessageBase: Base(ts),
+	return set(messages.Damage{
+		MessageBase: messages.Base(ts),
 		Caster:      caster,
 		Target:      target,
 		HitType:     types.HitTypeImmune,
@@ -715,44 +730,44 @@ func (p *Parser) fDamageImmune(ts time.Time, content string) ([]Message, error) 
 
 // fSpellCastPerformDurability is when items are damaged from spell casts.
 // Maybe try resurrecting at a spirit healer to get this log?
-func (p *Parser) fSpellCastPerformDurability(ts time.Time, content string) ([]Message, error) {
+func (p *Parser) fSpellCastPerformDurability(ts time.Time, content string) ([]messages.Message, error) {
 	matches := regexs.ReSpellCastPerformDurability.FindStringSubmatch(content)
 	if matches == nil {
-		return notHandled()
+		return messages.NotHandled()
 	}
 
 	//caster, spellID, target := matches[1], matches[3], matches[4]
-	return Unparsed(ts, "SpellCastPerformDurability not implemented"), nil
+	return messages.Unparsed(ts, "SpellCastPerformDurability not implemented"), nil
 }
 
-func (p *Parser) fSpellCastPerform(ts time.Time, content string) ([]Message, error) {
+func (p *Parser) fSpellCastPerform(ts time.Time, content string) ([]messages.Message, error) {
 	matches := regexs.ReSpellCastPerform.FindStringSubmatch(content)
 	if matches == nil {
-		return notHandled()
+		return messages.NotHandled()
 	}
 
 	//caster, spellID, target := matches[1], matches[3], matches[4]
-	return Skip(ts, "'SpellCastPerform' handled by castsv2"), nil
+	return messages.Skip(ts, "'SpellCastPerform' handled by castsv2"), nil
 }
 
-func (p *Parser) fSpellCastPerformUnknown(ts time.Time, content string) ([]Message, error) {
+func (p *Parser) fSpellCastPerformUnknown(ts time.Time, content string) ([]messages.Message, error) {
 	matches := regexs.ReSpellCastPerformUnknown.FindStringSubmatch(content)
 	if matches == nil {
-		return notHandled()
+		return messages.NotHandled()
 	}
 
 	//caster, spellID := matches[1], matches[3]
-	return Skip(ts, "'SpellCastPerformUnknown' handled by castsv2"), nil
+	return messages.Skip(ts, "'SpellCastPerformUnknown' handled by castsv2"), nil
 }
 
 /**
  * Unit Death
  */
 
-func (p *Parser) fHonorableKill(ts time.Time, content string) ([]Message, error) {
+func (p *Parser) fHonorableKill(ts time.Time, content string) ([]messages.Message, error) {
 	matches, ok := types.FromRegex(regexs.ReHonorableKill).Match(content)
 	if !ok {
-		return notHandled()
+		return messages.NotHandled()
 	}
 
 	_, victim := matches.UnitOrGUID()
@@ -764,23 +779,23 @@ func (p *Parser) fHonorableKill(ts time.Time, content string) ([]Message, error)
 	}
 
 	if victim.IsZero() {
-		return Unparsed(ts, "UnitDieDestroyed: not using guids"), nil
+		return messages.Skip(ts, "UnitDieDestroyed: not using guids"), nil
 	}
 
 	// TODO: Add "ResourceGain" message for honor gained?
 	var _, _ = rank, honor
 
-	return set(Slain{
-		MessageBase: Base(ts),
+	return set(messages.Slain{
+		MessageBase: messages.Base(ts),
 		Victim:      victim,
 		Killer:      nil,
 	}), nil
 }
 
-func (p *Parser) fUnitDieDestroyed(ts time.Time, content string) ([]Message, error) {
+func (p *Parser) fUnitDieDestroyed(ts time.Time, content string) ([]messages.Message, error) {
 	matches, ok := types.FromRegex(regexs.ReUnitDieDestroyed).Match(content)
 	if !ok {
-		return notHandled()
+		return messages.NotHandled()
 	}
 
 	_, victim := matches.UnitOrGUID()
@@ -790,21 +805,21 @@ func (p *Parser) fUnitDieDestroyed(ts time.Time, content string) ([]Message, err
 	}
 
 	if victim.IsZero() {
-		return Unparsed(ts, "UnitDieDestroyed: not using guids"), nil
+		return messages.Skip(ts, "UnitDieDestroyed: not using guids"), nil
 	}
 
-	return set(Slain{
-		MessageBase: Base(ts),
+	return set(messages.Slain{
+		MessageBase: messages.Base(ts),
 		Victim:      victim,
 		Killer:      nil,
 	}), nil
 }
 
 // What about 'You have slain 0xF130002AE6024CA7!'?
-func (p *Parser) fUnitSlay(ts time.Time, content string) ([]Message, error) {
+func (p *Parser) fUnitSlay(ts time.Time, content string) ([]messages.Message, error) {
 	matches, ok := types.FromRegex(regexs.ReUnitSlay).Match(content)
 	if !ok {
-		return notHandled()
+		return messages.NotHandled()
 	}
 
 	_, victim := matches.UnitOrGUID()
@@ -815,11 +830,11 @@ func (p *Parser) fUnitSlay(ts time.Time, content string) ([]Message, error) {
 	}
 
 	if victim.IsZero() {
-		return Unparsed(ts, "UnitSlay: not using guids"), nil
+		return messages.Skip(ts, "UnitSlay: not using guids"), nil
 	}
 
-	return set(Slain{
-		MessageBase: Base(ts),
+	return set(messages.Slain{
+		MessageBase: messages.Base(ts),
 		Victim:      victim,
 		Killer:      ptr.Ref(killer),
 	}), nil
@@ -837,10 +852,10 @@ func (p *Parser) fUnitSlay(ts time.Time, content string) ([]Message, error) {
  * Dispel, Steal and Interrupt
  */
 
-func (p *Parser) fAuraDispel(ts time.Time, content string) ([]Message, error) {
+func (p *Parser) fAuraDispel(ts time.Time, content string) ([]messages.Message, error) {
 	matches, ok := types.FromRegex(regexs.ReAuraDispel).Match(content)
 	if !ok {
-		return notHandled()
+		return messages.NotHandled()
 	}
 
 	_, target := matches.UnitOrGUID()
@@ -849,8 +864,8 @@ func (p *Parser) fAuraDispel(ts time.Time, content string) ([]Message, error) {
 		return nil, fmt.Errorf("AuraDispel: %w", err)
 	}
 
-	return set(Aura{
-		MessageBase: Base(ts),
+	return set(messages.Aura{
+		MessageBase: messages.Base(ts),
 		Target:      target,
 		SpellName:   spellName,
 		Amount:      0,
@@ -858,10 +873,10 @@ func (p *Parser) fAuraDispel(ts time.Time, content string) ([]Message, error) {
 	}), nil
 }
 
-func (p *Parser) fAuraInterrupt(ts time.Time, content string) ([]Message, error) {
+func (p *Parser) fAuraInterrupt(ts time.Time, content string) ([]messages.Message, error) {
 	matches, ok := types.FromRegex(regexs.ReAuraInterrupt).Match(content)
 	if !ok {
-		return notHandled()
+		return messages.NotHandled()
 	}
 
 	_, caster := matches.UnitOrGUID()
@@ -872,11 +887,11 @@ func (p *Parser) fAuraInterrupt(ts time.Time, content string) ([]Message, error)
 	}
 
 	if caster.IsZero() || target.IsZero() {
-		return Skip(ts, "AuraInterrupt: not using guids"), nil
+		return messages.Skip(ts, "AuraInterrupt: not using guids"), nil
 	}
 
-	return set(Interrupt{
-		MessageBase: Base(ts),
+	return set(messages.Interrupt{
+		MessageBase: messages.Base(ts),
 		Caster:      caster,
 		SpellName:   spellName,
 		Target:      target,
@@ -887,10 +902,10 @@ func (p *Parser) fAuraInterrupt(ts time.Time, content string) ([]Message, error)
  * Misc
  */
 
-func (p *Parser) fCreates(ts time.Time, content string) ([]Message, error) {
+func (p *Parser) fCreates(ts time.Time, content string) ([]messages.Message, error) {
 	matches, ok := types.FromRegex(regexs.ReCreates).Match(content)
 	if !ok {
-		return notHandled()
+		return messages.NotHandled()
 	}
 
 	_, caster := matches.UnitOrGUID()
@@ -900,29 +915,29 @@ func (p *Parser) fCreates(ts time.Time, content string) ([]Message, error) {
 	}
 
 	if caster.IsZero() {
-		return Skip(ts, "Creates: not using guids"), nil
+		return messages.Skip(ts, "Creates: not using guids"), nil
 	}
 
-	return set(Create{
-		MessageBase: Base(ts),
+	return set(messages.Create{
+		MessageBase: messages.Base(ts),
 		Caster:      caster,
 		Created:     created,
 	}), nil
 }
 
-func (p *Parser) fGainsAttack(ts time.Time, content string) ([]Message, error) {
+func (p *Parser) fGainsAttack(ts time.Time, content string) ([]messages.Message, error) {
 	matches := regexs.ReGainsAttack.FindStringSubmatch(content)
 	if matches == nil {
-		return notHandled()
+		return messages.NotHandled()
 	}
 
-	return Unparsed(ts, "GainsAttack not implemented"), nil
+	return messages.Unparsed(ts, "GainsAttack not implemented"), nil
 }
 
-func (p *Parser) fFallDamage(ts time.Time, content string) ([]Message, error) {
+func (p *Parser) fFallDamage(ts time.Time, content string) ([]messages.Message, error) {
 	matches, ok := types.FromRegex(regexs.ReFallDamage).Match(content)
 	if !ok {
-		return notHandled()
+		return messages.NotHandled()
 	}
 
 	_, target := matches.UnitOrGUID()
@@ -933,11 +948,11 @@ func (p *Parser) fFallDamage(ts time.Time, content string) ([]Message, error) {
 	}
 
 	if target.IsZero() {
-		return Skip(ts, "FallDamage: not using guids"), nil
+		return messages.Skip(ts, "FallDamage: not using guids"), nil
 	}
 
-	return set(FallDamage{
-		MessageBase: Base(ts),
+	return set(messages.FallDamage{
+		MessageBase: messages.Base(ts),
 		Target:      target,
 		Amount:      amount,
 	}), nil

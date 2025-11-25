@@ -11,16 +11,19 @@ import (
 
 	"github.com/Emyrk/chronicle/golang/wowlogs/lines"
 	"github.com/Emyrk/chronicle/golang/wowlogs/merge"
+	"github.com/Emyrk/chronicle/golang/wowlogs/vanillaparser/messages"
+	"github.com/Emyrk/chronicle/golang/wowlogs/vanillaparser/state"
 	"github.com/Emyrk/chronicle/golang/wowlogs/vanillaparser/whoami"
 )
 
-type parseLine = func(ts time.Time, content string) ([]Message, error)
+type parseLine = func(ts time.Time, content string) ([]messages.Message, error)
 
 type Parser struct {
 	logger  *slog.Logger
 	scanner merge.Scan
 	liner   *lines.Liner
-	state   *State
+	state   *state.State
+	you     *youReplacer
 
 	setup sync.Once
 }
@@ -41,7 +44,7 @@ func NewFromScanner(logger *slog.Logger, liner *lines.Liner, scan merge.Scan) *P
 	}
 }
 
-func (p *Parser) State() *State {
+func (p *Parser) State() *state.State {
 	return p.state
 }
 
@@ -65,13 +68,14 @@ func (p *Parser) init() error {
 			slog.String("guid", me.Gid.String()),
 			slog.Int("lines_read", lc),
 		)
-		p.state = NewState(p.logger, me)
+		p.state = state.NewState(p.logger, me)
 		p.scanner = scan
+		p.you = &youReplacer{Me: me}
 	})
 	return initErr
 }
 
-func (p *Parser) Advance() ([]Message, error) {
+func (p *Parser) Advance() ([]messages.Message, error) {
 	err := p.init()
 	if err != nil {
 		return nil, AsFatalError(fmt.Errorf("init: %w", err))
@@ -82,7 +86,7 @@ func (p *Parser) Advance() ([]Message, error) {
 		return nil, err
 	}
 
-	content, err = p.state.Preprocess(content)
+	content, err = p.you.Preprocess(content)
 	if err != nil {
 		return nil, fmt.Errorf("preprocess line failed: %v", err)
 	}
@@ -91,7 +95,7 @@ func (p *Parser) Advance() ([]Message, error) {
 	if content == "" {
 		// Maybe the preprocessing removed all content, it does not matter.
 		// Empty lines are not interesting.
-		return Skip(ts, "empty line"), nil
+		return messages.Skip(ts, "empty line"), nil
 	}
 
 	msgs, err := p.parseContent(ts, content)
@@ -112,7 +116,7 @@ func (p *Parser) Advance() ([]Message, error) {
 	return msgs, err
 }
 
-func (p *Parser) parseContent(ts time.Time, content string) ([]Message, error) {
+func (p *Parser) parseContent(ts time.Time, content string) ([]messages.Message, error) {
 	for _, parser := range []parseLine{
 		p.fCombatantInfo,                // ✓
 		p.fZoneInfo,                     // ✓
@@ -166,8 +170,12 @@ func (p *Parser) parseContent(ts time.Time, content string) ([]Message, error) {
 		return m, nil
 	}
 
-	return set(UnparsedLine{
-		MessageBase: Base(ts),
+	return set(messages.UnparsedLine{
+		MessageBase: messages.Base(ts),
 		Content:     content,
 	}), nil
+}
+
+func set(m ...messages.Message) []messages.Message {
+	return m
 }

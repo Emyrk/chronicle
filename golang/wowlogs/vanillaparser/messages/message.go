@@ -1,4 +1,4 @@
-package vanillaparser
+package messages
 
 import (
 	"time"
@@ -7,6 +7,7 @@ import (
 	"github.com/Emyrk/chronicle/golang/wowlogs/types"
 	"github.com/Emyrk/chronicle/golang/wowlogs/types/castv2"
 	"github.com/Emyrk/chronicle/golang/wowlogs/types/combatant"
+	"github.com/Emyrk/chronicle/golang/wowlogs/types/unitinfo"
 	"github.com/Emyrk/chronicle/golang/wowlogs/types/zone"
 )
 
@@ -62,7 +63,7 @@ func Unparsed(ts time.Time, content string) []Message {
 	})
 }
 
-func notHandled() ([]Message, error) {
+func NotHandled() ([]Message, error) {
 	return nil, nil
 }
 
@@ -75,9 +76,14 @@ type Cast struct {
 	MessageBase
 }
 
-type Combatant struct {
-	combatant.Combatant
+type Unit struct {
 	MessageBase
+	unitinfo.Info
+}
+
+type Combatant struct {
+	MessageBase
+	combatant.Combatant
 }
 
 type Zone struct {

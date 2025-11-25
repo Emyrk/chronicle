@@ -1,4 +1,4 @@
-package unitrelations
+package unitinfo
 
 import (
 	"fmt"
@@ -6,53 +6,77 @@ import (
 	"strings"
 	"time"
 
+	"github.com/Emyrk/chronicle/golang/wowlogs/guid"
 	"github.com/Emyrk/chronicle/golang/wowlogs/types"
 )
 
 const (
-	PrefixZone = "UNIT_DETECTED:"
+	PrefixUnitInfo = "UNIT_INFO:"
 )
 
-func IsZoneInfo(content string) (string, bool) {
-	return types.Is(PrefixZone, content)
+func IsUnitInfo(content string) (string, bool) {
+	return types.Is(PrefixUnitInfo, content)
 }
 
-type Zone struct {
-	Seen       time.Time
-	Name       string
-	InstanceID uint32
+type Info struct {
+	Seen         time.Time
+	Guid         guid.GUID
+	Name         string
+	CanCooperate bool
+	Owner        *guid.GUID
 }
 
-func ParseZoneInfo(content string) (Zone, error) {
-	trimmed, ok := IsZoneInfo(content)
+// TODO:
+// - UnitIsTapped? (tagged)
+// - UnitIsPlusMob? (elite)
+func ParseUnitInfo(content string) (Info, error) {
+	trimmed, ok := IsUnitInfo(content)
 	if !ok {
-		return Zone{}, fmt.Errorf("not a ZONE_INFO message")
+		return Info{}, fmt.Errorf("not a UNIT_INFO message")
 	}
 
+	// UnitPlayerOrPetInParty?
+	// UnitPlayerOrPetInRaid?
+
+	// <seen>&<guid>&<name>&<can_cooperator>&<owner>
 	parts := strings.Split(trimmed, "&")
 
-	if len(parts) < 3 {
-		return Zone{}, fmt.Errorf("insufficient arguments in ZONE_INFO message, got %d, want at least 3", len(parts))
+	if len(parts) < 5 {
+		return Info{}, fmt.Errorf("insufficient arguments in UNIT_INFO message, got %d, want at least 5", len(parts))
 	}
 
-	ts, name, id := parts[0], parts[1], parts[2]
+	ts, guidStr, name, coop, owner := parts[0], parts[1], parts[2], parts[3], parts[4]
 	seen, err := time.Parse(types.AddonDateFormat, ts)
 	if err != nil {
-		return Zone{}, fmt.Errorf("invalid date format %q: %w", ts, err)
+		return Info{}, fmt.Errorf("invalid date format %q: %w", ts, err)
 	}
 
-	instanceID, err := strconv.ParseUint(id, 10, 32)
+	gid, err := guid.FromString(guidStr)
 	if err != nil {
-		return Zone{}, fmt.Errorf("invalid instance ID %q: %w", id, err)
+		return Info{}, fmt.Errorf("invalid guid format %q: %w", guidStr, err)
 	}
 
-	return Zone{
-		Seen:       seen,
-		Name:       name,
-		InstanceID: uint32(instanceID),
-	}, nil
-}
+	// UnitIsFriend?
+	// UnitIsEnemy?
+	canCoop, err := strconv.ParseBool(coop)
+	if err != nil {
+		return Info{}, fmt.Errorf("invalid coop flag %q: %w", coop, err)
+	}
 
-func (z Zone) Equal(b Zone) bool {
-	return z.InstanceID == b.InstanceID && z.Name == b.Name
+	var ownerID *guid.GUID
+	if owner != "nil" {
+		id, err := guid.FromString(owner)
+		if err != nil {
+			return Info{}, fmt.Errorf("invalid owner guid format %q: %w", owner, err)
+		}
+		ownerID = &id
+	}
+
+	return Info{
+		Seen:         seen,
+		Guid:         gid,
+		Name:         name,
+		CanCooperate: canCoop,
+		Owner:        ownerID,
+	}, nil
 }
