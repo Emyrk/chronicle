@@ -472,13 +472,19 @@ function createFightsDisplay(state) {
                     </div>
                 `;
             } else {
-                // Pet or unknown - extract entry ID
-                const entryId = getEntryFromGUID(guid);
-                const name = getNPCName(entryId, guid);
+                // Pet or unknown - check if it's a pet
+                let name;
+                if (isPet) {
+                    name = "A Pet";
+                } else {
+                    // Extract entry ID for creatures
+                    const entryId = getEntryFromGUID(guid);
+                    name = getNPCName(entryId, guid);
+                }
                 
                 friendlyHTML += `
                     <div class="participant-item player-participant">
-                        <span class="participant-icon">🐾</span>
+                        <span class="participant-icon">${isPet ? '🐾' : '❓'}</span>
                         <span class="participant-name">${escapeHtml(name)}</span>
                         <div class="participant-stats">
                             <span class="stat-dps" title="Damage Per Second">⚡ ${formatNumber(dps)}/s</span>
