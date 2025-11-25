@@ -18,7 +18,7 @@ type Spell struct {
 }
 
 var (
-	spellRegex = regexp.MustCompile(`^([^(]+)\((\d+)\)(\(.+\))?$`)
+	spellRegex = regexp.MustCompile(`^(.+\S)\((\d+)\)(\(.+\))?$`)
 )
 
 func ParseSpell(spellStr string) (Spell, error) {

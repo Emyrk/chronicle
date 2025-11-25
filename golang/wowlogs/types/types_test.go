@@ -48,6 +48,24 @@ func TestParseSpell(t *testing.T) {
 			input:     "Heavy Silk Bandage(7929)(Rank 3",
 			expectErr: true,
 		},
+		{
+			name:  "Feral Barkskin",
+			input: "Barkskin (Feral)(51451)(Rank 2)",
+			expected: types.Spell{
+				Name: "Barkskin (Feral)",
+				ID:   51451,
+				Rank: ptr.Ref(2),
+			},
+		},
+		{
+			name:  "Alterac Valley Mark of Honor",
+			input: "Alterac Valley Mark of Honor (Loser)(24954)",
+			expected: types.Spell{
+				Name: "Alterac Valley Mark of Honor (Loser)",
+				ID:   24954,
+				Rank: nil,
+			},
+		},
 	}
 
 	for _, tc := range cases {
