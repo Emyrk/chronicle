@@ -90,7 +90,7 @@ func (s *State) Zone(z Zone) {
 
 func (s *State) Damage(damage Damage) {
 	if s.CurrentFight == nil {
-		s.CurrentFight = NewFight(damage.Date(), s.CurrentZone)
+		s.CurrentFight = NewFight(s.logger, damage.Date(), s.CurrentZone)
 		s.Fights = append(s.Fights, s.CurrentFight)
 	}
 

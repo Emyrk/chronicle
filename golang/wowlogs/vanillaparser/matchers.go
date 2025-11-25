@@ -25,6 +25,10 @@ func (p *Parser) fV2Casts(ts time.Time, content string) ([]Message, error) {
 		return nil, fmt.Errorf("castv2: %w", err)
 	}
 
+	if !c.Caster.HasGuid() || (c.Target != nil && !c.Target.HasGuid()) {
+		return Skip(ts, "castv2: not using guids"), nil
+	}
+
 	return set(Cast{
 		CastV2:      c,
 		MessageBase: Base(ts),

@@ -337,6 +337,11 @@ func TestParserMessages(t *testing.T) {
 		}, crt)
 	})
 
+	t.Run("SkipNamedCast", func(f *testing.T) {
+		_, err := exp[SkippedMessage](p.parseContent(time.Time{}, "CAST: Aeowar begins to cast Swift Red Rocket Car(45050)."))
+		require.NoError(t, err)
+	})
+
 	//t.Run("Gains Attack", func(t *testing.T) {
 	//	rg, err := exp[SkippedMessage](p.fGainsAttack(time.Time{}, "Lonsell gains 1 extra attack through Windfury Totem."))
 	//	require.NoError(t, err)

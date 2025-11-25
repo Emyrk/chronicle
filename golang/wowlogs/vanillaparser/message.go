@@ -40,7 +40,7 @@ type SkippedMessage struct {
 }
 
 func Skip(ts time.Time, reason string) []Message {
-	return set(&SkippedMessage{
+	return set(SkippedMessage{
 		MessageBase: Base(ts),
 		Reason:      reason,
 	})
