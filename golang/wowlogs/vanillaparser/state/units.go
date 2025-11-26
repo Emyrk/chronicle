@@ -7,6 +7,10 @@ import (
 	"github.com/Emyrk/chronicle/golang/wowlogs/types/unitinfo"
 )
 
+var (
+	UnitTimeout = 5 * time.Minute
+)
+
 type Units struct {
 	Parent *Units
 	// Units is a lookup table for unit information.
@@ -21,6 +25,9 @@ type Units struct {
 	FriendlyActive map[guid.GUID]time.Time
 	EnemiesActive  map[guid.GUID]time.Time
 	UnknownActive  map[guid.GUID]time.Time
+
+	// HadActivity is anyone with damage or healing done.
+	HadActivity map[guid.GUID]bool
 }
 
 func NewUnits(parent *Units) *Units {
@@ -61,8 +68,10 @@ func (u *Units) Seen(ts time.Time, ids ...guid.GUID) {
 
 		if info.CanCooperate {
 			u.FriendlyActive[id] = ts
+			delete(u.EnemiesActive, id)
 		} else {
 			u.EnemiesActive[id] = ts
+			delete(u.FriendlyActive, id)
 		}
 	}
 
@@ -135,4 +144,29 @@ func (u *Units) Slain(ts time.Time, gs ...guid.GUID) {
 
 func (u *Units) OnlyFriendlyActive() bool {
 	return len(u.EnemiesActive) == 0 && len(u.UnknownActive) == 0
+}
+
+func (u *Units) Timeout(now time.Time) {
+	if u == nil {
+		return
+	}
+	for id, lastSeen := range u.FriendlyActive {
+		if now.Sub(lastSeen) > UnitTimeout {
+			u.Slain(now, id)
+		}
+	}
+
+	for id, lastSeen := range u.EnemiesActive {
+		if now.Sub(lastSeen) > UnitTimeout {
+			u.Slain(now, id)
+		}
+	}
+
+	for id, lastSeen := range u.UnknownActive {
+		if now.Sub(lastSeen) > UnitTimeout {
+			u.Slain(now, id)
+		}
+	}
+
+	u.Parent.Timeout(now)
 }

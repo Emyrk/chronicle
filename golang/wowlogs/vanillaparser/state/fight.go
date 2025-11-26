@@ -9,10 +9,6 @@ import (
 	"github.com/Emyrk/chronicle/golang/wowlogs/vanillaparser/messages"
 )
 
-var (
-	ParticipantTimeout = 5 * time.Minute
-)
-
 type Fights struct {
 	Logger *slog.Logger
 	s      *State
@@ -57,8 +53,10 @@ type Fight struct {
 	Participants *Combatants
 	Units        *Units
 
-	DamageDone  map[guid.GUID]int64
-	DamageTaken map[guid.GUID]int64
+	DamageDone   map[guid.GUID]int64
+	DamageTaken  map[guid.GUID]int64
+	HealingDone  map[guid.GUID]int64
+	HealingTaken map[guid.GUID]int64
 
 	CurrentZone zone.Zone
 
@@ -73,6 +71,8 @@ func NewFight(logger *slog.Logger, s *State) *Fight {
 		Units:        NewUnits(s.Units),
 		DamageDone:   make(map[guid.GUID]int64),
 		DamageTaken:  make(map[guid.GUID]int64),
+		HealingDone:  make(map[guid.GUID]int64),
+		HealingTaken: make(map[guid.GUID]int64),
 		CurrentZone:  s.CurrentZone,
 	}
 }
@@ -83,8 +83,12 @@ func (f *Fight) Process(m messages.Message) error {
 		f.Zone(typed)
 	case messages.Damage:
 		f.Damage(typed)
+	case messages.FallDamage:
+		f.FallDamage(typed)
 	case messages.Cast:
-		//s.CastV2(typed)
+	//s.CastV2(typed)
+	case messages.Heal:
+		f.Heal(typed)
 	case messages.Combatant:
 		f.Combatant(typed)
 	case messages.Unit:
@@ -114,12 +118,24 @@ func (f *Fight) Combatant(c messages.Combatant) {
 }
 
 func (f *Fight) Damage(d messages.Damage) {
-	// Mark units as seen
 	f.Units.Seen(d.Date(), d.Caster, d.Target)
 
 	f.DamageDone[d.Caster] += int64(d.Amount)
 	f.DamageTaken[d.Target] += int64(d.Amount)
 	f.StartFight(d)
+}
+
+func (f *Fight) FallDamage(d messages.FallDamage) {
+	f.Units.Seen(d.Date(), d.Target)
+
+	f.DamageTaken[d.Target] += int64(d.Amount)
+}
+
+func (f *Fight) Heal(d messages.Heal) {
+	f.Units.Seen(d.Date(), d.Caster, d.Target)
+
+	f.HealingDone[d.Caster] += int64(d.Amount)
+	f.HealingTaken[d.Target] += int64(d.Amount)
 }
 
 func (f *Fight) Unit(u messages.Unit) {
@@ -169,4 +185,8 @@ func (f *Fight) Slain(slain messages.Slain) {
 	if f.Started() && f.Units.OnlyFriendlyActive() {
 		f.EndFight(slain)
 	}
+}
+
+func (f *Fight) cleanup() {
+
 }
