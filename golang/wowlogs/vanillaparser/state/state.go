@@ -77,3 +77,7 @@ func (s *State) Zone(z messages.Zone) {
 		slog.Time("seen", z.Seen),
 	)
 }
+
+func (s *State) String() string {
+	return s.Fights.String()
+}

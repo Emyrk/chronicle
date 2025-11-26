@@ -1,7 +1,10 @@
 package state
 
 import (
+	"fmt"
 	"log/slog"
+	"sort"
+	"strings"
 	"time"
 
 	"github.com/Emyrk/chronicle/golang/wowlogs/guid"
@@ -49,6 +52,7 @@ func (fs *Fights) Process(m messages.Message) error {
 
 type Fight struct {
 	Logger *slog.Logger
+	s      *State // reference to parent state for accessing Me
 
 	Participants *Combatants
 	Units        *Units
@@ -67,6 +71,7 @@ type Fight struct {
 func NewFight(logger *slog.Logger, s *State) *Fight {
 	return &Fight{
 		Logger:       logger,
+		s:            s,
 		Participants: NewCombatants(s.Participants),
 		Units:        NewUnits(s.Units),
 		DamageDone:   make(map[guid.GUID]int64),
@@ -189,4 +194,134 @@ func (f *Fight) Slain(slain messages.Slain) {
 
 func (f *Fight) cleanup() {
 
+}
+
+// getUnitName returns the name of a unit by its GUID, checking multiple sources
+func (f *Fight) getUnitName(g guid.GUID) string {
+	// Check if it's the player
+	if f.s != nil && f.s.Me.Gid == g {
+		return f.s.Me.Name
+	}
+	
+	// Check units
+	if info, ok := f.Units.Info(g); ok {
+		return info.Name
+	}
+	
+	// Check combatants
+	if combatant, ok := f.Participants.Participants[g]; ok {
+		return combatant.Name
+	}
+	
+	// Fall back to GUID string
+	return g.String()
+}
+
+// String returns a summary of the fights
+func (fs *Fights) String() string {
+	var b strings.Builder
+	
+	completedFights := 0
+	for _, fight := range fs.Fights {
+		if fight.Started() && fight.IsDone() {
+			completedFights++
+		}
+	}
+	
+	b.WriteString(fmt.Sprintf("=== Fight Summary (%d total, %d completed) ===\n", len(fs.Fights), completedFights))
+	
+	for i, fight := range fs.Fights {
+		if fight.Started() && fight.IsDone() {
+			b.WriteString(fmt.Sprintf("\n--- Fight #%d ---\n", i+1))
+			b.WriteString(fight.String())
+		}
+	}
+	
+	return b.String()
+}
+
+// String returns a summary of a single fight
+func (f *Fight) String() string {
+	var b strings.Builder
+	
+	// Zone and duration
+	if f.CurrentZone.Name != "" {
+		b.WriteString(fmt.Sprintf("Zone: %s", f.CurrentZone.Name))
+		if f.CurrentZone.InstanceID > 0 {
+			b.WriteString(fmt.Sprintf(" (Instance %d)", f.CurrentZone.InstanceID))
+		}
+		b.WriteString("\n")
+	}
+	
+	if f.Started() && f.IsDone() {
+		duration := f.End.Date().Sub(f.Start.Date())
+		b.WriteString(fmt.Sprintf("Duration: %s\n", duration.Round(time.Second)))
+		b.WriteString(fmt.Sprintf("Start: %s\n", f.Start.Date().Format("15:04:05")))
+		b.WriteString(fmt.Sprintf("End: %s\n", f.End.Date().Format("15:04:05")))
+	} else if f.Started() {
+		b.WriteString("Status: In Progress\n")
+	} else {
+		b.WriteString("Status: Not Started\n")
+	}
+	
+	// Participants summary
+	if len(f.Participants.Participants) > 0 {
+		b.WriteString(fmt.Sprintf("\nParticipants: %d\n", len(f.Participants.Participants)))
+		for guid, combatant := range f.Participants.Participants {
+			b.WriteString(fmt.Sprintf("  - %s (%s)\n", combatant.Name, guid))
+		}
+	}
+	
+	// Damage summary
+	if len(f.DamageDone) > 0 {
+		b.WriteString("\nDamage Done:\n")
+		type damagePair struct {
+			guid   guid.GUID
+			amount int64
+		}
+		var pairs []damagePair
+		for g, amt := range f.DamageDone {
+			pairs = append(pairs, damagePair{guid: g, amount: amt})
+		}
+		sort.Slice(pairs, func(i, j int) bool {
+			return pairs[i].amount > pairs[j].amount
+		})
+		
+		for _, pair := range pairs {
+			name := f.getUnitName(pair.guid)
+			b.WriteString(fmt.Sprintf("  - %-20s: %10d\n", name, pair.amount))
+		}
+	}
+	
+	// Healing summary
+	if len(f.HealingDone) > 0 {
+		b.WriteString("\nHealing Done:\n")
+		type healingPair struct {
+			guid   guid.GUID
+			amount int64
+		}
+		var pairs []healingPair
+		for g, amt := range f.HealingDone {
+			pairs = append(pairs, healingPair{guid: g, amount: amt})
+		}
+		sort.Slice(pairs, func(i, j int) bool {
+			return pairs[i].amount > pairs[j].amount
+		})
+		
+		for _, pair := range pairs {
+			name := f.getUnitName(pair.guid)
+			b.WriteString(fmt.Sprintf("  - %-20s: %10d\n", name, pair.amount))
+		}
+	}
+	
+	// Units summary
+	totalUnits := len(f.Units.Units)
+	friendlyCount := len(f.Units.FriendlyActive)
+	enemyCount := len(f.Units.EnemiesActive)
+	deathCount := len(f.Units.Deaths)
+	
+	b.WriteString(fmt.Sprintf("\nUnits: %d total, %d friendly, %d enemies, %d deaths\n",
+		totalUnits, friendlyCount, enemyCount, deathCount))
+	
+	return b.String()
 }
