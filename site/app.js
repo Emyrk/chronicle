@@ -329,17 +329,18 @@ function displayResults(stateJson) {
 }
 
 function setupZoneFilters(state) {
+  console.log(state)
     const filterSection = document.getElementById('filterSection');
     const zoneFilters = document.getElementById('zoneFilters');
     
-    if (!state.Fights || state.Fights.length === 0) {
+    if (!state.Fights || state.Fights.Fights.length === 0) {
         filterSection.style.display = 'none';
         return;
     }
     
     // Extract unique zones with counts
     const zoneCounts = {};
-    state.Fights.forEach(fight => {
+    state.Fights.Fights.forEach(fight => {
         const zoneName = fight.Zone?.Name || 'Unknown Zone';
         const instanceId = fight.Zone?.InstanceID || 0;
         const zoneKey = `${zoneName}|${instanceId}`;
@@ -405,13 +406,13 @@ function setupZoneFilters(state) {
 function createFightsDisplay(state) {
     const fightsContainer = document.getElementById('fightsContainer');
     
-    if (!state.Fights || state.Fights.length === 0) {
+    if (!state.Fights || state.Fights.Fights.length === 0) {
         fightsContainer.innerHTML = '<div class="no-fights">No fights recorded in this log</div>';
         return;
     }
     
     // Filter fights by selected zones
-    const fights = state.Fights.filter(fight => {
+    const fights = state.Fights.Fights.filter(fight => {
         const zoneName = fight.Zone?.Name || 'Unknown Zone';
         const instanceId = fight.Zone?.InstanceID || 0;
         const zoneKey = `${zoneName}|${instanceId}`;
@@ -425,7 +426,7 @@ function createFightsDisplay(state) {
     
     fightsContainer.innerHTML = `
         <div class="fights-summary">
-            <h3>🗡️ ${fights.length} Fight${fights.length !== 1 ? 's' : ''} ${fights.length !== state.Fights.length ? `(of ${state.Fights.length} total)` : 'Recorded'}</h3>
+            <h3>🗡️ ${fights.length} Fight${fights.length !== 1 ? 's' : ''} ${fights.length !== state.Fights.Fights.length ? `(of ${state.Fights.Fights.length} total)` : 'Recorded'}</h3>
         </div>
     `;
     
