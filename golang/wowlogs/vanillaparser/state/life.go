@@ -45,6 +45,13 @@ func (l *Lives) StartLife(m messages.Message) error {
 	return nil
 }
 
+func (l *Lives) LastInactiveMessage() messages.Message {
+	if len(l.Alive) == 0 {
+		return nil
+	}
+	return l.Alive[len(l.Alive)-1].End
+}
+
 // IsActive returns if the unit is currently known to be alive.
 func (l Lives) IsActive() bool {
 	if len(l.Alive) == 0 {

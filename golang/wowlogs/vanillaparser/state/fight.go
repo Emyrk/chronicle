@@ -45,7 +45,9 @@ func (fs *Fights) Process(m messages.Message) error {
 	// Always have a fight started. The start time will start on the first
 	// damage. But start collecting participants & units right away.
 	if fs.CurrentFight.IsDone() {
+		last := fs.CurrentFight
 		fs.CurrentFight = NewFight(fs.s)
+		fs.CurrentFight.PreviousFight = last
 		fs.Fights = append(fs.Fights, fs.CurrentFight)
 	}
 
@@ -53,22 +55,14 @@ func (fs *Fights) Process(m messages.Message) error {
 }
 
 type Fight struct {
-	Logger *slog.Logger
-	s      *State // Reference to parent state
+	Logger        *slog.Logger
+	s             *State // Reference to parent state
+	PreviousFight *Fight
 
 	// Lives keeps track of the life spans of units during the fight.
 	// A unit can be revived during a fight, so multiple lives are possible.
-	Lives map[guid.GUID]Lives
-
-	// Active refers to units that is still "fighting". A unit can be considered
-	// inactive by death or timeout.
 	// TODO: portals too maybe? Like hearth
-	//FriendlyActive map[guid.GUID]time.Time
-	//EnemiesActive  map[guid.GUID]time.Time
-	//UnknownActive  map[guid.GUID]time.Time
-
-	// Deaths are units that have died during the fight.
-	//Deaths map[guid.GUID]time.Time
+	Lives map[guid.GUID]Lives
 
 	CurrentZone zone.Zone
 
@@ -182,6 +176,14 @@ func (f *Fight) Slain(slain messages.Slain) error {
 
 	if f.IsStarted() {
 		remaining := f.RemainingUnits()
+		f.Logger.Info("slain unit",
+			slog.Int("friendly_active", remaining.FriendlyActive),
+			slog.Int("hostile_active", remaining.HostileActive),
+			slog.Int("friendly_inactive", remaining.FriendlyInactive),
+			slog.Int("hostile_inactive", remaining.HostileInactive),
+			slog.Int("unknown_active", remaining.UnknownActive),
+			slog.Int("unknown_inactive", remaining.UnknownInactive),
+		)
 		if remaining.HostileActive == 0 && remaining.FriendlyActive != 0 {
 			f.EndFight(slain)
 		}
@@ -210,11 +212,48 @@ func (f *Fight) CastV2(c messages.Cast) error {
 	return nil
 }
 
-func (f *Fight) Damage(d messages.Damage) {
+func (f *Fight) Damage(d messages.Damage) error {
 	f.BumpUnit(d.Caster, d)
 	f.BumpUnit(d.Target, d)
 
-	f.StartFight(d)
+	if d.HitType.Has(types.HitTypeHit) || d.HitType.Has(types.HitTypeCrit) {
+		_, err := f.UnitLives(d.Caster, d)
+		if err != nil {
+			return fmt.Errorf("damage: %w", err)
+		}
+	}
+
+	if !d.HitType.Has(types.HitTypePeriodic) {
+		// Start fight on direct damage, not DoTs
+		if f.PreviousFight == nil {
+			f.StartFight(d)
+		} else {
+			recentlyInactive := func(id guid.GUID) bool {
+				exists, ok := f.PreviousFight.Lives[d.Caster]
+				if !ok {
+					return false
+				}
+
+				if exists.IsActive() {
+					return false
+				}
+
+				lastActivity := exists.LastInactiveMessage()
+				if lastActivity == nil {
+					return false
+				}
+				if d.Date().Sub(lastActivity.Date()) < time.Second {
+					return true
+				}
+				return false
+			}
+
+			if !recentlyInactive(d.Target) || !recentlyInactive(d.Caster) {
+				f.StartFight(d)
+			}
+		}
+	}
+	return nil
 }
 
 func (f *Fight) getUnit(gid guid.GUID) (unitinfo.Info, bool) {
@@ -284,6 +323,7 @@ func (f *Fight) RemainingUnits() RemainingUnits {
 
 		info, haveInfo := f.s.Units.Get(gid)
 		if !haveInfo {
+			f.Logger.Warn("unknown unit", slog.String("gid", gid.String()))
 			if lives.IsActive() {
 				summary.UnknownActive++
 			} else {
