@@ -26,6 +26,10 @@ type Resource string
 // Example: A critical hit that was partially resisted
 type HitType uint32
 
+func (h HitType) Has(flag HitType) bool {
+	return h&flag != 0
+}
+
 const (
 	HitTypeNone          HitType = 0x00000000
 	HitTypeOffHand       HitType = 0x00000001

@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/Emyrk/chronicle/golang/wowlogs/guid"
+	"github.com/Emyrk/chronicle/golang/wowlogs/types"
 	"github.com/Emyrk/chronicle/golang/wowlogs/types/unitinfo"
 	"github.com/Emyrk/chronicle/golang/wowlogs/types/zone"
 	"github.com/Emyrk/chronicle/golang/wowlogs/vanillaparser/messages"
@@ -55,18 +56,19 @@ type Fight struct {
 	Logger *slog.Logger
 	s      *State // Reference to parent state
 
-	// Units are all units seen in the fight.
-	Units map[guid.GUID]unitinfo.Info
+	// Lives keeps track of the life spans of units during the fight.
+	// A unit can be revived during a fight, so multiple lives are possible.
+	Lives map[guid.GUID]Lives
 
 	// Active refers to units that is still "fighting". A unit can be considered
 	// inactive by death or timeout.
 	// TODO: portals too maybe? Like hearth
-	FriendlyActive map[guid.GUID]time.Time
-	EnemiesActive  map[guid.GUID]time.Time
-	UnknownActive  map[guid.GUID]time.Time
+	//FriendlyActive map[guid.GUID]time.Time
+	//EnemiesActive  map[guid.GUID]time.Time
+	//UnknownActive  map[guid.GUID]time.Time
 
 	// Deaths are units that have died during the fight.
-	Deaths map[guid.GUID]time.Time
+	//Deaths map[guid.GUID]time.Time
 
 	CurrentZone zone.Zone
 
@@ -77,14 +79,10 @@ type Fight struct {
 
 func NewFight(s *State) *Fight {
 	return &Fight{
-		Logger:         s.logger,
-		s:              s,
-		Units:          make(map[guid.GUID]unitinfo.Info),
-		FriendlyActive: make(map[guid.GUID]time.Time),
-		EnemiesActive:  make(map[guid.GUID]time.Time),
-		UnknownActive:  make(map[guid.GUID]time.Time),
-		Deaths:         make(map[guid.GUID]time.Time),
-		CurrentZone:    s.CurrentZone,
+		Logger:      s.logger,
+		s:           s,
+		Lives:       make(map[guid.GUID]Lives),
+		CurrentZone: s.CurrentZone,
 	}
 }
 
@@ -92,6 +90,8 @@ func (f *Fight) Process(m messages.Message) error {
 	if f.IsDone() {
 		return errors.New("fight is already done")
 	}
+
+	var err error
 	switch typed := m.(type) {
 	case messages.Zone:
 		f.Zone(typed)
@@ -100,7 +100,7 @@ func (f *Fight) Process(m messages.Message) error {
 	case messages.FallDamage:
 		//f.FallDamage(typed)
 	case messages.Cast:
-	//s.CastV2(typed)
+		err = f.CastV2(typed)
 	case messages.Heal:
 		f.Heal(typed)
 	case messages.Combatant:
@@ -108,7 +108,10 @@ func (f *Fight) Process(m messages.Message) error {
 	case messages.Unit:
 		//f.Unit(typed)
 	case messages.Slain:
-		f.Slain(typed)
+		err = f.Slain(typed)
+	}
+	if err != nil {
+		return err
 	}
 
 	return nil
@@ -167,60 +170,51 @@ func (f *Fight) Zone(m messages.Zone) {
 	f.EndFight(m)
 }
 
-func (f *Fight) Slain(slain messages.Slain) {
+func (f *Fight) Slain(slain messages.Slain) error {
 	if slain.Killer != nil {
-		f.bump(*slain.Killer, slain.Date())
+		f.BumpUnit(*slain.Killer, slain)
 	}
 
-	delete(f.FriendlyActive, slain.Victim)
-	delete(f.EnemiesActive, slain.Victim)
-	delete(f.UnknownActive, slain.Victim)
-	f.Deaths[slain.Victim] = slain.Date()
-
-	if f.IsStarted() && len(f.EnemiesActive) == 0 && len(f.FriendlyActive) != 0 {
-		f.EndFight(slain)
+	_, err := f.UnitLives(slain.Victim, slain)
+	if err != nil {
+		return fmt.Errorf("slain: %w", err)
 	}
+
+	if f.IsStarted() {
+		remaining := f.RemainingUnits()
+		if remaining.HostileActive == 0 && remaining.FriendlyActive != 0 {
+			f.EndFight(slain)
+		}
+	}
+
+	return nil
 }
 
 func (f *Fight) Heal(d messages.Heal) {
-	f.bump(d.Target, d.Date())
-	f.bump(d.Caster, d.Date())
+
+}
+
+func (f *Fight) CastV2(c messages.Cast) error {
+	if c.Action != types.CastActionsFailsCasting {
+		// Caster is alive if they start casting something
+		_, err := f.UnitLives(c.Caster.Gid, c)
+		if err != nil {
+			return fmt.Errorf("castv2: %w", err)
+		}
+	}
+
+	f.BumpUnit(c.Caster.Gid, c)
+	if c.Target != nil {
+		f.BumpUnit(c.Target.Gid, c)
+	}
+	return nil
 }
 
 func (f *Fight) Damage(d messages.Damage) {
-	f.bump(d.Caster, d.Date())
-	f.bump(d.Target, d.Date())
+	f.BumpUnit(d.Caster, d)
+	f.BumpUnit(d.Target, d)
 
 	f.StartFight(d)
-}
-
-func (f *Fight) bump(id guid.GUID, ts time.Time) {
-	if _, ok := f.Deaths[id]; ok {
-		// Don't allow this atm...
-		f.Logger.Error("bumping a dead unit", slog.String("guid", id.String()))
-		return
-	}
-
-	ui, ok := f.getUnit(id)
-	if !ok {
-		f.Logger.Debug("unknown unit in fight, marking as unknown", slog.String("guid", id.String()))
-		f.UnknownActive[id] = ts
-		return
-	}
-
-	// always update what units where in the fight
-	f.Units[id] = ui
-
-	if _, isUnknown := f.UnknownActive[id]; isUnknown {
-		delete(f.UnknownActive, id)
-	}
-
-	if ui.CanCooperate {
-		f.FriendlyActive[id] = ts
-		return
-	}
-
-	f.EnemiesActive[id] = ts
 }
 
 func (f *Fight) getUnit(gid guid.GUID) (unitinfo.Info, bool) {
@@ -250,6 +244,72 @@ func (fs *Fights) String() string {
 	return b.String()
 }
 
+func (f *Fight) BumpUnit(id guid.GUID, msg messages.Message) Lives {
+	if life, ok := f.Lives[id]; ok {
+		life.Bump(msg)
+		return life
+	}
+
+	life := NewLives(msg)
+	f.Lives[id] = life
+	return life
+}
+
+func (f *Fight) UnitLives(id guid.GUID, msg messages.Message) (Lives, error) {
+	lives := f.BumpUnit(id, msg)
+	if !lives.IsActive() {
+		err := lives.StartLife(msg)
+		if err != nil {
+			return lives, fmt.Errorf("start life: %w", err)
+		}
+	}
+
+	return lives, nil
+}
+
+type RemainingUnits struct {
+	FriendlyActive int
+	HostileActive  int
+	UnknownActive  int
+
+	FriendlyInactive int
+	HostileInactive  int
+	UnknownInactive  int
+}
+
+func (f *Fight) RemainingUnits() RemainingUnits {
+	summary := RemainingUnits{}
+
+	for gid, lives := range f.Lives {
+
+		info, haveInfo := f.s.Units.Get(gid)
+		if !haveInfo {
+			if lives.IsActive() {
+				summary.UnknownActive++
+			} else {
+				summary.UnknownInactive++
+			}
+			continue
+		}
+
+		if info.CanCooperate {
+			if lives.IsActive() {
+				summary.FriendlyActive++
+			} else {
+				summary.FriendlyInactive++
+			}
+			continue
+		}
+
+		if lives.IsActive() {
+			summary.HostileActive++
+		} else {
+			summary.HostileInactive++
+		}
+	}
+	return summary
+}
+
 // String returns a summary of a single fight
 func (f *Fight) String() string {
 	var b strings.Builder
@@ -275,9 +335,14 @@ func (f *Fight) String() string {
 	}
 
 	// Participants summary
-	if len(f.Units) > 0 {
-		b.WriteString(fmt.Sprintf("\nParticipants: %d\n", len(f.Units)))
-		for guid, info := range f.Units {
+	if len(f.Lives) > 0 {
+		b.WriteString(fmt.Sprintf("\nParticipants: %d\n", len(f.Lives)))
+		for guid, _ := range f.Lives {
+			info, ok := f.s.Units.Get(guid)
+			if !ok {
+				b.WriteString(fmt.Sprintf("  - Unknown (%s)\n", guid))
+				continue
+			}
 			b.WriteString(fmt.Sprintf("  - %s (%s)\n", info.Name, guid))
 		}
 	}

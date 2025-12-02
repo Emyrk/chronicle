@@ -26,6 +26,7 @@ func RootCmd() *serpent.Command {
 		MergeCmd(),
 		ParseCmd(),
 		GuidCmd(),
+		SortCmd(),
 	)
 
 	return cmd

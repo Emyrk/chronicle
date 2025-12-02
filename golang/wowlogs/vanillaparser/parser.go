@@ -25,7 +25,8 @@ type Parser struct {
 	state   *state.State
 	you     *youReplacer
 
-	setup sync.Once
+	setup       sync.Once
+	lastLogDate time.Time
 }
 
 func New(logger *slog.Logger, r io.Reader) (*Parser, error) {
@@ -51,7 +52,6 @@ func (p *Parser) State() *state.State {
 // Merger returns a configured merger for this parser.
 func Merger(logger *slog.Logger) *merge.Merger {
 	return merge.NewMerger(logger) //merge.WithMiddleWare(OnlyKeepRawV2Casts),
-
 }
 
 func (p *Parser) init() error {
@@ -84,6 +84,14 @@ func (p *Parser) Advance() ([]messages.Message, error) {
 	ts, content, err := p.scanner()
 	if err != nil {
 		return nil, err
+	}
+
+	if p.lastLogDate.IsZero() {
+		p.lastLogDate = ts
+	}
+
+	if ts.Before(p.lastLogDate.Add(-time.Second)) {
+		return nil, AsFatalError(fmt.Errorf("log dates went backwards: last %v, current %v", p.lastLogDate, ts))
 	}
 
 	content, err = p.you.Preprocess(content)
