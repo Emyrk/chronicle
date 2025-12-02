@@ -38,11 +38,11 @@ func ParseCmd() *serpent.Command {
 				}
 				_, err = p.Advance()
 				if err != nil {
-					if errors.Is(err, io.EOF) {
-						break
-					}
 					if vanillaparser.IsFatalError(err) {
 						return fmt.Errorf("fatal parser error: %w", err)
+					}
+					if errors.Is(err, io.EOF) {
+						break
 					}
 					logger.Error("Error advancing parser", slog.String("error", err.Error()))
 				}

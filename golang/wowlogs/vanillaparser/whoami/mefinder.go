@@ -1,7 +1,9 @@
 package whoami
 
 import (
+	"errors"
 	"fmt"
+	"io"
 	"time"
 
 	"github.com/Emyrk/chronicle/golang/wowlogs/lines"
@@ -35,6 +37,9 @@ func FindMe(liner *lines.Liner, scan merge.Scan) (merge.Scan, types.Unit, int, e
 	for {
 		ts, content, err := scan()
 		if err != nil {
+			if errors.Is(err, io.EOF) {
+				return nil, types.Unit{}, lineCount, fmt.Errorf("reached end of log without finding me within %d lines", lineCount)
+			}
 			return nil, types.Unit{}, lineCount, err
 		}
 

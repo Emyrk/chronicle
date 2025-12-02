@@ -10,7 +10,7 @@ import (
 )
 
 const (
-	LogDateFormat = "01/02 15:04:05.000"
+	LogDateFormat = "01/2 15:04:05.000"
 )
 
 type Liner struct {
