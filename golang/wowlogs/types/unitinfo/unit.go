@@ -70,7 +70,7 @@ func ParseUnitInfo(content string) (Info, error) {
 	}
 
 	var ownerID *guid.GUID
-	if owner != "nil" {
+	if owner != "nil" && owner != "" {
 		id, err := guid.FromString(owner)
 		if err != nil {
 			return Info{}, fmt.Errorf("invalid owner guid format %q: %w", owner, err)

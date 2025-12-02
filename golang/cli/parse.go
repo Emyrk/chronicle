@@ -7,6 +7,7 @@ import (
 	"log/slog"
 
 	"github.com/Emyrk/chronicle/golang/wowlogs/vanillaparser"
+	"github.com/Emyrk/chronicle/golang/wowlogs/vanillaparser/messages"
 
 	"github.com/coder/serpent"
 )
@@ -36,7 +37,7 @@ func ParseCmd() *serpent.Command {
 				if i.Context().Err() != nil {
 					return i.Context().Err()
 				}
-				_, err = p.Advance()
+				msgs, err := p.Advance()
 				if err != nil {
 					if vanillaparser.IsFatalError(err) {
 						return fmt.Errorf("fatal parser error: %w", err)
@@ -45,6 +46,11 @@ func ParseCmd() *serpent.Command {
 						break
 					}
 					logger.Error("Error advancing parser", slog.String("error", err.Error()))
+				}
+				for _, msg := range msgs {
+					if up, ok := msg.(messages.UnparsedLine); ok {
+						logger.Warn("Unparsed line", slog.String("line", up.Content))
+					}
 				}
 			}
 

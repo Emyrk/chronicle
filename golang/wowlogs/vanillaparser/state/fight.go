@@ -1,13 +1,14 @@
 package state
 
 import (
+	"errors"
 	"fmt"
 	"log/slog"
-	"sort"
 	"strings"
 	"time"
 
 	"github.com/Emyrk/chronicle/golang/wowlogs/guid"
+	"github.com/Emyrk/chronicle/golang/wowlogs/types/unitinfo"
 	"github.com/Emyrk/chronicle/golang/wowlogs/types/zone"
 	"github.com/Emyrk/chronicle/golang/wowlogs/vanillaparser/messages"
 )
@@ -21,7 +22,7 @@ type Fights struct {
 }
 
 func NewFights(s *State) *Fights {
-	current := NewFight(s.logger, s)
+	current := NewFight(s)
 	return &Fights{
 		Logger:       s.logger,
 		s:            s,
@@ -43,7 +44,7 @@ func (fs *Fights) Process(m messages.Message) error {
 	// Always have a fight started. The start time will start on the first
 	// damage. But start collecting participants & units right away.
 	if fs.CurrentFight.IsDone() {
-		fs.CurrentFight = NewFight(fs.Logger, fs.s)
+		fs.CurrentFight = NewFight(fs.s)
 		fs.Fights = append(fs.Fights, fs.CurrentFight)
 	}
 
@@ -52,108 +53,65 @@ func (fs *Fights) Process(m messages.Message) error {
 
 type Fight struct {
 	Logger *slog.Logger
-	s      *State // reference to parent state for accessing Me
+	s      *State // Reference to parent state
 
-	Participants *Combatants
-	Units        *Units
+	// Units are all units seen in the fight.
+	Units map[guid.GUID]unitinfo.Info
 
-	DamageDone   map[guid.GUID]int64
-	DamageTaken  map[guid.GUID]int64
-	HealingDone  map[guid.GUID]int64
-	HealingTaken map[guid.GUID]int64
+	// Active refers to units that is still "fighting". A unit can be considered
+	// inactive by death or timeout.
+	// TODO: portals too maybe? Like hearth
+	FriendlyActive map[guid.GUID]time.Time
+	EnemiesActive  map[guid.GUID]time.Time
+	UnknownActive  map[guid.GUID]time.Time
+
+	// Deaths are units that have died during the fight.
+	Deaths map[guid.GUID]time.Time
 
 	CurrentZone zone.Zone
 
+	// Start & End of the fight
 	Start messages.Message
 	End   messages.Message
 }
 
-func NewFight(logger *slog.Logger, s *State) *Fight {
+func NewFight(s *State) *Fight {
 	return &Fight{
-		Logger:       logger,
-		s:            s,
-		Participants: NewCombatants(s.Participants),
-		Units:        NewUnits(s.Units),
-		DamageDone:   make(map[guid.GUID]int64),
-		DamageTaken:  make(map[guid.GUID]int64),
-		HealingDone:  make(map[guid.GUID]int64),
-		HealingTaken: make(map[guid.GUID]int64),
-		CurrentZone:  s.CurrentZone,
+		Logger:         s.logger,
+		s:              s,
+		Units:          make(map[guid.GUID]unitinfo.Info),
+		FriendlyActive: make(map[guid.GUID]time.Time),
+		EnemiesActive:  make(map[guid.GUID]time.Time),
+		UnknownActive:  make(map[guid.GUID]time.Time),
+		Deaths:         make(map[guid.GUID]time.Time),
+		CurrentZone:    s.CurrentZone,
 	}
 }
 
 func (f *Fight) Process(m messages.Message) error {
+	if f.IsDone() {
+		return errors.New("fight is already done")
+	}
 	switch typed := m.(type) {
 	case messages.Zone:
 		f.Zone(typed)
 	case messages.Damage:
 		f.Damage(typed)
 	case messages.FallDamage:
-		f.FallDamage(typed)
+		//f.FallDamage(typed)
 	case messages.Cast:
 	//s.CastV2(typed)
 	case messages.Heal:
 		f.Heal(typed)
 	case messages.Combatant:
-		f.Combatant(typed)
+		//f.Combatant(typed)
 	case messages.Unit:
-		f.Unit(typed)
+		//f.Unit(typed)
 	case messages.Slain:
 		f.Slain(typed)
 	}
-	//if s.CurrentFight != nil {
-	//  s.CurrentFight.CheckDone(m.Date())
-	//  if s.CurrentFight.IsDone() {
-	//    s.CurrentFight = nil
-	//  }
-	//}
+
 	return nil
-}
-
-func (f *Fight) Started() bool {
-	return f.Start != nil
-}
-
-func (f *Fight) IsDone() bool {
-	return f.End != nil
-}
-
-func (f *Fight) Combatant(c messages.Combatant) {
-	f.Participants.Seen(c.Combatant)
-}
-
-func (f *Fight) Damage(d messages.Damage) {
-	f.Units.Seen(d.Date(), d.Caster, d.Target)
-
-	f.DamageDone[d.Caster] += int64(d.Amount)
-	f.DamageTaken[d.Target] += int64(d.Amount)
-	f.StartFight(d)
-}
-
-func (f *Fight) FallDamage(d messages.FallDamage) {
-	f.Units.Seen(d.Date(), d.Target)
-
-	f.DamageTaken[d.Target] += int64(d.Amount)
-}
-
-func (f *Fight) Heal(d messages.Heal) {
-	f.Units.Seen(d.Date(), d.Caster, d.Target)
-
-	f.HealingDone[d.Caster] += int64(d.Amount)
-	f.HealingTaken[d.Target] += int64(d.Amount)
-}
-
-func (f *Fight) Unit(u messages.Unit) {
-	f.Units.NewInfo(u.Info)
-}
-
-func (f *Fight) Zone(z messages.Zone) {
-	if f.CurrentZone.Equal(z.Zone) {
-		return
-	}
-
-	// Zone changes end the fight
-	f.EndFight(z)
 }
 
 func (f *Fight) StartFight(msg messages.Message) {
@@ -168,15 +126,20 @@ func (f *Fight) StartFight(msg messages.Message) {
 }
 
 func (f *Fight) EndFight(msg messages.Message) {
+	if f.Start == nil {
+		f.Logger.Warn("attempted to end fight that hasn't started")
+		return
+	}
 	if f.End != nil {
-		return // Fight is already over
+		f.Logger.Error("attempted to end fight that has already ended")
 	}
 
+	f.End = msg
 	var dur time.Duration
-	if f.Started() {
+	if f.IsStarted() {
 		dur = msg.Date().Sub(f.Start.Date())
 	}
-	f.End = msg
+
 	f.Logger.Info("fight ended",
 		slog.Duration("duration", dur),
 		slog.Time("date", msg.Date()),
@@ -184,66 +147,113 @@ func (f *Fight) EndFight(msg messages.Message) {
 	)
 }
 
-func (f *Fight) Slain(slain messages.Slain) {
-	f.Units.Slain(slain.Date(), slain.Victim)
+func (f *Fight) IsDone() bool {
+	return f.End != nil && f.Start != nil
+}
 
-	if f.Started() && f.Units.OnlyFriendlyActive() {
+func (f *Fight) IsStarted() bool {
+	return f.Start != nil
+}
+
+func (f *Fight) Zone(m messages.Zone) {
+	if m.Zone.Equal(f.CurrentZone) {
+		return
+	}
+
+	if !f.IsStarted() {
+		f.StartFight(m)
+	}
+
+	f.EndFight(m)
+}
+
+func (f *Fight) Slain(slain messages.Slain) {
+	if slain.Killer != nil {
+		f.bump(*slain.Killer, slain.Date())
+	}
+
+	delete(f.FriendlyActive, slain.Victim)
+	delete(f.EnemiesActive, slain.Victim)
+	delete(f.UnknownActive, slain.Victim)
+	f.Deaths[slain.Victim] = slain.Date()
+
+	if f.IsStarted() && len(f.EnemiesActive) == 0 && len(f.FriendlyActive) != 0 {
 		f.EndFight(slain)
 	}
 }
 
-func (f *Fight) cleanup() {
-
+func (f *Fight) Heal(d messages.Heal) {
+	f.bump(d.Target, d.Date())
+	f.bump(d.Caster, d.Date())
 }
 
-// getUnitName returns the name of a unit by its GUID, checking multiple sources
-func (f *Fight) getUnitName(g guid.GUID) string {
-	// Check if it's the player
-	if f.s != nil && f.s.Me.Gid == g {
-		return f.s.Me.Name
+func (f *Fight) Damage(d messages.Damage) {
+	f.bump(d.Caster, d.Date())
+	f.bump(d.Target, d.Date())
+
+	f.StartFight(d)
+}
+
+func (f *Fight) bump(id guid.GUID, ts time.Time) {
+	if _, ok := f.Deaths[id]; ok {
+		// Don't allow this atm...
+		f.Logger.Error("bumping a dead unit", slog.String("guid", id.String()))
+		return
 	}
-	
-	// Check units
-	if info, ok := f.Units.Info(g); ok {
-		return info.Name
+
+	ui, ok := f.getUnit(id)
+	if !ok {
+		f.Logger.Debug("unknown unit in fight, marking as unknown", slog.String("guid", id.String()))
+		f.UnknownActive[id] = ts
+		return
 	}
-	
-	// Check combatants
-	if combatant, ok := f.Participants.Participants[g]; ok {
-		return combatant.Name
+
+	// always update what units where in the fight
+	f.Units[id] = ui
+
+	if _, isUnknown := f.UnknownActive[id]; isUnknown {
+		delete(f.UnknownActive, id)
 	}
-	
-	// Fall back to GUID string
-	return g.String()
+
+	if ui.CanCooperate {
+		f.FriendlyActive[id] = ts
+		return
+	}
+
+	f.EnemiesActive[id] = ts
+}
+
+func (f *Fight) getUnit(gid guid.GUID) (unitinfo.Info, bool) {
+	return f.s.Units.Get(gid)
 }
 
 // String returns a summary of the fights
 func (fs *Fights) String() string {
 	var b strings.Builder
-	
+
 	completedFights := 0
 	for _, fight := range fs.Fights {
-		if fight.Started() && fight.IsDone() {
+		if fight.IsStarted() && fight.IsDone() {
 			completedFights++
 		}
 	}
-	
+
 	b.WriteString(fmt.Sprintf("=== Fight Summary (%d total, %d completed) ===\n", len(fs.Fights), completedFights))
-	
+
 	for i, fight := range fs.Fights {
-		if fight.Started() && fight.IsDone() {
+		if fight.IsStarted() && fight.IsDone() {
 			b.WriteString(fmt.Sprintf("\n--- Fight #%d ---\n", i+1))
 			b.WriteString(fight.String())
 		}
 	}
-	
+
 	return b.String()
 }
 
 // String returns a summary of a single fight
 func (f *Fight) String() string {
 	var b strings.Builder
-	
+
 	// Zone and duration
 	if f.CurrentZone.Name != "" {
 		b.WriteString(fmt.Sprintf("Zone: %s", f.CurrentZone.Name))
@@ -252,76 +262,76 @@ func (f *Fight) String() string {
 		}
 		b.WriteString("\n")
 	}
-	
-	if f.Started() && f.IsDone() {
+
+	if f.IsStarted() && f.IsDone() {
 		duration := f.End.Date().Sub(f.Start.Date())
 		b.WriteString(fmt.Sprintf("Duration: %s\n", duration.Round(time.Second)))
 		b.WriteString(fmt.Sprintf("Start: %s\n", f.Start.Date().Format("15:04:05")))
 		b.WriteString(fmt.Sprintf("End: %s\n", f.End.Date().Format("15:04:05")))
-	} else if f.Started() {
+	} else if f.IsStarted() {
 		b.WriteString("Status: In Progress\n")
 	} else {
 		b.WriteString("Status: Not Started\n")
 	}
-	
+
 	// Participants summary
-	if len(f.Participants.Participants) > 0 {
-		b.WriteString(fmt.Sprintf("\nParticipants: %d\n", len(f.Participants.Participants)))
-		for guid, combatant := range f.Participants.Participants {
-			b.WriteString(fmt.Sprintf("  - %s (%s)\n", combatant.Name, guid))
+	if len(f.Units) > 0 {
+		b.WriteString(fmt.Sprintf("\nParticipants: %d\n", len(f.Units)))
+		for guid, info := range f.Units {
+			b.WriteString(fmt.Sprintf("  - %s (%s)\n", info.Name, guid))
 		}
 	}
-	
-	// Damage summary
-	if len(f.DamageDone) > 0 {
-		b.WriteString("\nDamage Done:\n")
-		type damagePair struct {
-			guid   guid.GUID
-			amount int64
-		}
-		var pairs []damagePair
-		for g, amt := range f.DamageDone {
-			pairs = append(pairs, damagePair{guid: g, amount: amt})
-		}
-		sort.Slice(pairs, func(i, j int) bool {
-			return pairs[i].amount > pairs[j].amount
-		})
-		
-		for _, pair := range pairs {
-			name := f.getUnitName(pair.guid)
-			b.WriteString(fmt.Sprintf("  - %-20s: %10d\n", name, pair.amount))
-		}
-	}
-	
-	// Healing summary
-	if len(f.HealingDone) > 0 {
-		b.WriteString("\nHealing Done:\n")
-		type healingPair struct {
-			guid   guid.GUID
-			amount int64
-		}
-		var pairs []healingPair
-		for g, amt := range f.HealingDone {
-			pairs = append(pairs, healingPair{guid: g, amount: amt})
-		}
-		sort.Slice(pairs, func(i, j int) bool {
-			return pairs[i].amount > pairs[j].amount
-		})
-		
-		for _, pair := range pairs {
-			name := f.getUnitName(pair.guid)
-			b.WriteString(fmt.Sprintf("  - %-20s: %10d\n", name, pair.amount))
-		}
-	}
-	
+
+	//// Damage summary
+	//if len(f.DamageDone) > 0 {
+	//	b.WriteString("\nDamage Done:\n")
+	//	type damagePair struct {
+	//		guid   guid.GUID
+	//		amount int64
+	//	}
+	//	var pairs []damagePair
+	//	for g, amt := range f.DamageDone {
+	//		pairs = append(pairs, damagePair{guid: g, amount: amt})
+	//	}
+	//	sort.Slice(pairs, func(i, j int) bool {
+	//		return pairs[i].amount > pairs[j].amount
+	//	})
+	//
+	//	for _, pair := range pairs {
+	//		name := f.getUnitName(pair.guid)
+	//		b.WriteString(fmt.Sprintf("  - %-20s: %10d\n", name, pair.amount))
+	//	}
+	//}
+	//
+	//// Healing summary
+	//if len(f.HealingDone) > 0 {
+	//	b.WriteString("\nHealing Done:\n")
+	//	type healingPair struct {
+	//		guid   guid.GUID
+	//		amount int64
+	//	}
+	//	var pairs []healingPair
+	//	for g, amt := range f.HealingDone {
+	//		pairs = append(pairs, healingPair{guid: g, amount: amt})
+	//	}
+	//	sort.Slice(pairs, func(i, j int) bool {
+	//		return pairs[i].amount > pairs[j].amount
+	//	})
+	//
+	//	for _, pair := range pairs {
+	//		name := f.getUnitName(pair.guid)
+	//		b.WriteString(fmt.Sprintf("  - %-20s: %10d\n", name, pair.amount))
+	//	}
+	//}
+
 	// Units summary
-	totalUnits := len(f.Units.Units)
-	friendlyCount := len(f.Units.FriendlyActive)
-	enemyCount := len(f.Units.EnemiesActive)
-	deathCount := len(f.Units.Deaths)
-	
-	b.WriteString(fmt.Sprintf("\nUnits: %d total, %d friendly, %d enemies, %d deaths\n",
-		totalUnits, friendlyCount, enemyCount, deathCount))
-	
+	//totalUnits := len(f.Units.Units)
+	//friendlyCount := len(f.Units.FriendlyActive)
+	//enemyCount := len(f.Units.EnemiesActive)
+	//deathCount := len(f.Units.Deaths)
+	//
+	//b.WriteString(fmt.Sprintf("\nUnits: %d total, %d friendly, %d enemies, %d deaths\n",
+	//	totalUnits, friendlyCount, enemyCount, deathCount))
+
 	return b.String()
 }

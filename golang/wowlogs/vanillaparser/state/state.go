@@ -13,24 +13,21 @@ type State struct {
 	logger *slog.Logger
 	Me     types.Unit
 
+	// CurrentZone is the zone the player is currently in.
+	CurrentZone zone.Zone
 	// Units holds information about all units seen so far.
 	// Friendly/Foe/Relationships, etc.
 	Units *Units
-	// Participants is a map of player combatants we've seen.
-	Participants *Combatants
 
-	// CurrentZone is the zone the player is currently in.
-	CurrentZone zone.Zone
-	Fights      *Fights
+	Fights *Fights
 }
 
 func NewState(logger *slog.Logger, me types.Unit) *State {
 	s := &State{
-		logger:       logger,
-		Me:           me,
-		Participants: NewCombatants(nil),
-		Units:        NewUnits(nil),
-		CurrentZone:  zone.Zone{},
+		logger:      logger,
+		Me:          me,
+		Units:       NewUnits(),
+		CurrentZone: zone.Zone{},
 	}
 	s.Fights = NewFights(s)
 	return s
@@ -45,14 +42,22 @@ func (s *State) Process(m messages.Message) error {
 	case messages.Cast:
 		//s.CastV2(typed)
 	case messages.Combatant:
-		//s.Combatant(typed)
+		s.Combatant(typed)
 	case messages.Unit:
-		//s.Unit(typed)
+		s.Unit(typed)
 	case messages.Slain:
 		//s.Slain(typed)
 	}
 
 	return s.Fights.Process(m)
+}
+
+func (s *State) Combatant(c messages.Combatant) {
+	s.Units.UpdatePlayer(c.Combatant)
+}
+
+func (s *State) Unit(u messages.Unit) {
+	s.Units.Update(u.Info)
 }
 
 func (s *State) Zone(z messages.Zone) {
@@ -76,8 +81,4 @@ func (s *State) Zone(z messages.Zone) {
 		slog.Uint64("exited_instance_id", uint64(s.CurrentZone.InstanceID)),
 		slog.Time("seen", z.Seen),
 	)
-}
-
-func (s *State) String() string {
-	return s.Fights.String()
 }
