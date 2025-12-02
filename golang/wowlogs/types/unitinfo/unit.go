@@ -21,6 +21,7 @@ func IsUnitInfo(content string) (string, bool) {
 type Info struct {
 	Seen         time.Time
 	Guid         guid.GUID
+	IsPlayer     bool
 	Name         string
 	CanCooperate bool
 	Owner        *guid.GUID
@@ -45,10 +46,15 @@ func ParseUnitInfo(content string) (Info, error) {
 		return Info{}, fmt.Errorf("insufficient arguments in UNIT_INFO message, got %d, want at least 5", len(parts))
 	}
 
-	ts, guidStr, name, coop, owner := parts[0], parts[1], parts[2], parts[3], parts[4]
+	ts, guidStr, isPlayerStr, name, coop, owner := parts[0], parts[1], parts[2], parts[3], parts[4], parts[5]
 	seen, err := time.Parse(types.AddonDateFormat, ts)
 	if err != nil {
 		return Info{}, fmt.Errorf("invalid date format %q: %w", ts, err)
+	}
+
+	isPlayer, err := strconv.ParseBool(isPlayerStr)
+	if err != nil {
+		return Info{}, fmt.Errorf("invalid isPlayer flag %q: %w", isPlayerStr, err)
 	}
 
 	gid, err := guid.FromString(guidStr)
@@ -75,8 +81,13 @@ func ParseUnitInfo(content string) (Info, error) {
 	return Info{
 		Seen:         seen,
 		Guid:         gid,
+		IsPlayer:     isPlayer,
 		Name:         name,
 		CanCooperate: canCoop,
 		Owner:        ownerID,
 	}, nil
+}
+
+func (u *Info) IsMe() bool {
+	return u.IsPlayer
 }

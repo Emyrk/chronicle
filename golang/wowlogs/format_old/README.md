@@ -1,1 +1,0 @@
-This formatter is currently broken and needs to be rewritten.

@@ -8,6 +8,7 @@ import (
 	"github.com/Emyrk/chronicle/golang/wowlogs/merge"
 	"github.com/Emyrk/chronicle/golang/wowlogs/types"
 	"github.com/Emyrk/chronicle/golang/wowlogs/types/combatant"
+	"github.com/Emyrk/chronicle/golang/wowlogs/types/unitinfo"
 )
 
 const (
@@ -58,6 +59,20 @@ func FindMe(liner *lines.Liner, scan merge.Scan) (merge.Scan, types.Unit, int, e
 					Name: cmbt.Name,
 					Gid:  cmbt.Guid,
 				}, lineCount, nil
+			}
+		}
+
+		if _, ok := unitinfo.IsUnitInfo(content); ok {
+			ui, err := unitinfo.ParseUnitInfo(content)
+			if err != nil {
+				return nil, types.Unit{}, lineCount, err
+			}
+
+			if ui.IsMe() {
+				return finder.scan, types.Unit{
+					Name: ui.Name,
+					Gid:  ui.Guid,
+				}, lineLimit, nil
 			}
 		}
 	}
