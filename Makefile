@@ -1,9 +1,15 @@
-PHONY: install
+.PHONY: install
 install:
 	go install ./cmd/chronicle
 
+.PHONY: wasm
 wasm:
-	(cd ./combatlog && GOOS=js GOARCH=wasm go build -o ../site/parser.wasm ./cmd/wasm/)
+	GOOS=js GOARCH=wasm go build -o ./site/parser.wasm ./cmd/wasm/
+
+.PHONY: serve
+serve: wasm
+	@echo "Starting development server at http://localhost:8080"
+	@cd site && python3 -m http.server 8080
 
 .PHONY: gen
 gen: database/dump.sql database/querier.go wasm

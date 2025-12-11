@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>WoW Combat Log Parser</title>
+    <title>Character Timeline Viewer</title>
     <style>
         * {
             margin: 0;
@@ -13,13 +13,13 @@
 
         body {
             font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
-            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            background: linear-gradient(135deg, #1e3a8a 0%, #7c3aed 100%);
             min-height: 100vh;
             padding: 20px;
         }
 
         .container {
-            max-width: 1400px;
+            max-width: 1800px;
             margin: 0 auto;
             background: white;
             border-radius: 12px;
@@ -28,7 +28,7 @@
         }
 
         h1 {
-            color: #333;
+            color: #1e3a8a;
             margin-bottom: 10px;
             font-size: 2.5em;
             text-align: center;
@@ -81,7 +81,7 @@
         }
 
         .parse-button {
-            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            background: linear-gradient(135deg, #1e3a8a 0%, #7c3aed 100%);
             color: white;
             border: none;
             padding: 15px 40px;
@@ -96,7 +96,7 @@
 
         .parse-button:hover:not(:disabled) {
             transform: translateY(-2px);
-            box-shadow: 0 5px 15px rgba(102, 126, 234, 0.4);
+            box-shadow: 0 5px 15px rgba(30, 58, 138, 0.4);
         }
 
         .parse-button:disabled {
@@ -317,6 +317,193 @@
             overflow-y: auto;
         }
 
+        /* Timeline specific styles */
+        .timeline-section {
+            margin-top: 40px;
+            display: none;
+        }
+
+        .instance-card {
+            background: white;
+            border: 2px solid #e5e7eb;
+            border-radius: 12px;
+            margin-bottom: 30px;
+            overflow: hidden;
+        }
+
+        .instance-header {
+            background: linear-gradient(135deg, #1e3a8a 0%, #7c3aed 100%);
+            color: white;
+            padding: 20px 30px;
+            font-size: 1.5em;
+            font-weight: 600;
+        }
+
+        .timeline-container {
+            padding: 30px;
+            background: #f9fafb;
+            overflow-x: auto;
+        }
+
+        .timeline {
+            min-width: 1400px;
+            position: relative;
+        }
+
+        .timeline-header {
+            display: flex;
+            align-items: center;
+            margin-bottom: 20px;
+            padding-bottom: 10px;
+            border-bottom: 2px solid #d1d5db;
+        }
+
+        .character-name-column {
+            width: 200px;
+            flex-shrink: 0;
+            font-weight: 600;
+            color: #1e3a8a;
+        }
+
+        .timeline-grid {
+            flex: 1;
+            position: relative;
+            height: 30px;
+        }
+
+        .time-labels {
+            display: flex;
+            justify-content: space-between;
+            font-size: 0.75em;
+            color: #6b7280;
+            margin-top: 5px;
+        }
+
+        .character-row {
+            display: flex;
+            align-items: center;
+            margin-bottom: 15px;
+            padding: 8px 0;
+            border-radius: 6px;
+            transition: background 0.2s;
+        }
+
+        .character-row:hover {
+            background: rgba(30, 58, 138, 0.05);
+        }
+
+        .character-name {
+            width: 200px;
+            flex-shrink: 0;
+            font-weight: 500;
+            color: #374151;
+            padding-right: 20px;
+        }
+
+        .activity-track {
+            flex: 1;
+            height: 30px;
+            background: #e5e7eb;
+            border-radius: 4px;
+            position: relative;
+        }
+
+        .activity-period {
+            position: absolute;
+            height: 100%;
+            background: linear-gradient(135deg, #10b981 0%, #059669 100%);
+            border-radius: 4px;
+            border: 2px solid #047857;
+            cursor: pointer;
+            transition: all 0.2s;
+        }
+
+        .activity-period:hover {
+            transform: scaleY(1.2);
+            z-index: 10;
+            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+        }
+
+        .activity-period.ended {
+            background: linear-gradient(135deg, #ef4444 0%, #dc2626 100%);
+            border-color: #b91c1c;
+        }
+
+        .activity-period .tooltip {
+            position: absolute;
+            bottom: 100%;
+            left: 50%;
+            transform: translateX(-50%);
+            background: rgba(0, 0, 0, 0.9);
+            color: white;
+            padding: 8px 12px;
+            border-radius: 6px;
+            font-size: 0.85em;
+            white-space: nowrap;
+            pointer-events: none;
+            opacity: 0;
+            transition: opacity 0.2s;
+            margin-bottom: 8px;
+            z-index: 1000;
+        }
+
+        .activity-period:hover .tooltip {
+            opacity: 1;
+        }
+
+        .tooltip::after {
+            content: '';
+            position: absolute;
+            top: 100%;
+            left: 50%;
+            transform: translateX(-50%);
+            border: 6px solid transparent;
+            border-top-color: rgba(0, 0, 0, 0.9);
+        }
+
+        .no-instances {
+            text-align: center;
+            padding: 60px 20px;
+            color: #9ca3af;
+            font-size: 1.2em;
+        }
+
+        .legend {
+            display: flex;
+            gap: 30px;
+            justify-content: center;
+            margin-top: 20px;
+            padding: 15px;
+            background: white;
+            border-radius: 8px;
+            border: 2px solid #e5e7eb;
+        }
+
+        .legend-item {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            font-size: 0.9em;
+            color: #374151;
+        }
+
+        .legend-color {
+            width: 30px;
+            height: 18px;
+            border-radius: 3px;
+            border: 2px solid;
+        }
+
+        .legend-color.active {
+            background: linear-gradient(135deg, #10b981 0%, #059669 100%);
+            border-color: #047857;
+        }
+
+        .legend-color.ended {
+            background: linear-gradient(135deg, #ef4444 0%, #dc2626 100%);
+            border-color: #b91c1c;
+        }
+
         @media (max-width: 768px) {
             .container {
                 padding: 20px;
@@ -335,13 +522,22 @@
             .fight-body {
                 grid-template-columns: 1fr;
             }
+
+            .character-name-column,
+            .character-name {
+                width: 150px;
+            }
+
+            .timeline {
+                min-width: 1000px;
+            }
         }
     </style>
 </head>
 <body>
     <div class="container">
-        <h1>⚔️ WoW Combat Log Parser</h1>
-        <p class="subtitle">Analyze your World of Warcraft combat logs</p>
+        <h1>📅 Character Timeline Viewer</h1>
+        <p class="subtitle">Visualize character activity across instances</p>
 
         <div class="upload-section">
             <div class="file-input-group">
@@ -357,24 +553,27 @@
             </div>
 
             <button class="parse-button" id="parseButton" disabled>
-                Parse Logs
+                🔍 Parse & Visualize
             </button>
         </div>
 
         <div id="status" class="status"></div>
 
-        <div id="resultsSection">
-            <div class="section-header">
-                <h2>📊 Fight Analysis</h2>
-                <button class="toggle-btn" id="toggleJsonBtn">📋 Show Raw JSON</button>
+        <div id="timelineSection" class="timeline-section">
+            <h2 style="margin-bottom: 20px; color: #1e3a8a;">📊 Character Timelines</h2>
+            
+            <div class="legend">
+                <div class="legend-item">
+                    <div class="legend-color active"></div>
+                    <span>Active Period</span>
+                </div>
+                <div class="legend-item">
+                    <div class="legend-color ended"></div>
+                    <span>Ended (slain/timeout)</span>
+                </div>
             </div>
 
-            <div id="fightsContainer"></div>
-
-            <div id="jsonOutput">
-                <h3>Raw JSON Output</h3>
-                <div id="output"></div>
-            </div>
+            <div id="instancesContainer"></div>
         </div>
     </div>
 

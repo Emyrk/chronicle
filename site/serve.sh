@@ -1,19 +1,19 @@
 #!/usr/bin/env bash
-# Simple script to serve the static site
+# Simple HTTP server for testing the WASM application
+# Usage: ./serve.sh [port]
 
-PORT=${1:-8000}
+PORT=${1:-8080}
 
-echo "Starting static server on http://localhost:$PORT"
+echo "Starting HTTP server on http://localhost:$PORT"
 echo "Press Ctrl+C to stop"
-echo ""
 
+# Check if Python 3 is available
 if command -v python3 &> /dev/null; then
-    cd "$(dirname "$0")"
     python3 -m http.server $PORT
+# Check if Python 2 is available
 elif command -v python &> /dev/null; then
-    cd "$(dirname "$0")"
     python -m SimpleHTTPServer $PORT
 else
-    echo "Error: Python not found. Please install Python or use another web server."
+    echo "Error: Python not found. Please install Python to run the server."
     exit 1
 fi

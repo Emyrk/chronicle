@@ -2,15 +2,15 @@
 let combatLogFile = null;
 let rawCombatLogFile = null;
 let wasmReady = false;
-let currentState = null;
+let currentTimeline = null;
 
 // DOM elements
 const combatLogInput = document.getElementById('combatLog');
 const rawCombatLogInput = document.getElementById('rawCombatLog');
 const parseButton = document.getElementById('parseButton');
 const statusDiv = document.getElementById('status');
-const outputDiv = document.getElementById('output');
-const resultsSection = document.getElementById('resultsSection');
+const timelineSection = document.getElementById('timelineSection');
+const instancesContainer = document.getElementById('instancesContainer');
 const combatLogInfo = document.getElementById('combatLogInfo');
 const rawCombatLogInfo = document.getElementById('rawCombatLogInfo');
 
@@ -71,7 +71,7 @@ parseButton.addEventListener('click', async () => {
 
     parseButton.disabled = true;
     showStatus('loading', '⏳ Parsing combat logs...');
-    resultsSection.style.display = 'none';
+    timelineSection.style.display = 'none';
 
     try {
         // Read both files as ArrayBuffer
@@ -98,8 +98,8 @@ parseButton.addEventListener('click', async () => {
         }
 
         if (result.success) {
-            showStatus('success', '✓ Parsing completed successfully!');
-            displayResults(result.state);
+            showStatus('success', '✓ Timeline created successfully!');
+            displayTimeline(result.timeline);
             setTimeout(() => hideStatus(), 2000);
         }
     } catch (error) {
@@ -135,149 +135,193 @@ function hideStatus() {
     statusDiv.style.display = 'none';
 }
 
-function displayResults(stateJson) {
+function displayTimeline(timelineJson) {
     try {
-        const state = JSON.parse(stateJson);
-        currentState = state;
+        const timeline = JSON.parse(timelineJson);
+        currentTimeline = timeline;
         
-        // Display raw JSON
-        outputDiv.textContent = JSON.stringify(state, null, 2);
+        console.log('Timeline data:', timeline);
         
-        // Create fight displays
-        createFightsDisplay(state);
+        // Create timeline visualization
+        createTimelineDisplay(timeline);
         
-        resultsSection.style.display = 'block';
-        resultsSection.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+        timelineSection.style.display = 'block';
+        timelineSection.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
     } catch (error) {
-        console.error('Error displaying results:', error);
-        outputDiv.textContent = stateJson;
-        resultsSection.style.display = 'block';
+        console.error('Error displaying timeline:', error);
+        showStatus('error', `Failed to display timeline: ${error.message}`);
     }
 }
 
-function createFightsDisplay(state) {
-    const fightsContainer = document.getElementById('fightsContainer');
-    
-    if (!state.Fights || !state.Fights.Fights || state.Fights.Fights.length === 0) {
-        fightsContainer.innerHTML = '<div class="no-fights">No fights recorded in this log</div>';
+function createTimelineDisplay(timeline) {
+    if (!timeline.instances || timeline.instances.length === 0) {
+        instancesContainer.innerHTML = '<div class="no-instances">No instances found in the combat log</div>';
         return;
     }
     
-    // Filter completed fights only
-    const fights = state.Fights.Fights.filter(fight => fight.Start && fight.End);
+    instancesContainer.innerHTML = '';
     
-    if (fights.length === 0) {
-        fightsContainer.innerHTML = '<div class="no-fights">No completed fights found</div>';
-        return;
-    }
-    
-    fightsContainer.innerHTML = '';
-    
-    // Summary header
-    const summary = document.createElement('div');
-    summary.className = 'fights-summary';
-    summary.innerHTML = `<h3>🗡️ ${fights.length} Fight${fights.length !== 1 ? 's' : ''} Found</h3>`;
-    fightsContainer.appendChild(summary);
-    
-    // Create fight cards
-    fights.forEach((fight, index) => {
-        const fightCard = createFightCard(fight, index + 1, state.Units);
-        fightsContainer.appendChild(fightCard);
+    // Create a card for each instance
+    timeline.instances.forEach((instance, index) => {
+        const instanceCard = createInstanceCard(instance, index);
+        instancesContainer.appendChild(instanceCard);
     });
 }
 
-function createFightCard(fight, fightNum, unitsDb) {
+function createInstanceCard(instance, index) {
     const card = document.createElement('div');
-    card.className = 'fight-card';
+    card.className = 'instance-card';
     
-    // Calculate duration
-    const startTime = new Date(fight.Start.Date);
-    const endTime = new Date(fight.End.Date);
-    const durationMs = endTime - startTime;
-    const duration = formatDuration(durationMs / 1000);
-    
-    // Get zone info
-    const zoneName = fight.CurrentZone?.Name || 'Unknown Zone';
-    const instanceId = fight.CurrentZone?.InstanceID || 0;
-    
-    // Categorize units
-    const friendlyUnits = [];
-    const enemyUnits = [];
-    const unknownUnits = [];
-    
-    // Process units in the fight
-    for (const [guid, unitInfo] of Object.entries(fight.Units || {})) {
-        if (fight.FriendlyActive && fight.FriendlyActive[guid] !== undefined) {
-            friendlyUnits.push(unitInfo);
-        } else if (fight.EnemiesActive && fight.EnemiesActive[guid] !== undefined) {
-            enemyUnits.push(unitInfo);
-        }
+    if (!instance.characters || instance.characters.length === 0) {
+        card.innerHTML = `
+            <div class="instance-header">
+                ${escapeHtml(instance.name)}
+            </div>
+            <div class="timeline-container">
+                <div class="no-instances">No character activity recorded</div>
+            </div>
+        `;
+        return card;
     }
     
-    // Process unknown/remaining units
-    for (const guid of Object.keys(fight.UnknownActive || {})) {
-        unknownUnits.push({ Name: guid, Guid: guid });
+    // Find the time range for this instance
+    const timeRange = getInstanceTimeRange(instance);
+    
+    if (!timeRange) {
+        card.innerHTML = `
+            <div class="instance-header">
+                ${escapeHtml(instance.name)}
+            </div>
+            <div class="timeline-container">
+                <div class="no-instances">No valid activity periods found</div>
+            </div>
+        `;
+        return card;
     }
     
-    // Get deaths
-    const deaths = [];
-    for (const [guid, deathTime] of Object.entries(fight.Deaths || {})) {
-        const unitInfo = fight.Units[guid] || unitsDb?.Info?.[guid];
-        const name = unitInfo?.Name || guid;
-        deaths.push({ name, time: new Date(deathTime) });
-    }
+    const header = document.createElement('div');
+    header.className = 'instance-header';
+    header.textContent = `${instance.name} (${instance.characters.length} characters)`;
     
-    card.innerHTML = `
-        <div class="fight-header">
-            <div class="fight-title">
-                <h3>Fight #${fightNum}</h3>
-                <span class="zone-badge">${escapeHtml(zoneName)}${instanceId > 0 ? ` (${instanceId})` : ''}</span>
-            </div>
-            <div class="fight-duration">
-                ⏱️ ${duration}
-            </div>
-        </div>
-        
-        <div class="fight-body">
-            <div class="units-section">
-                <h4>👥 Friendly Units (${friendlyUnits.length})</h4>
-                <div class="units-list friendly">
-                    ${friendlyUnits.length > 0 
-                        ? friendlyUnits.map(u => `<div class="unit-item">${escapeHtml(u.Name)}</div>`).join('')
-                        : '<div class="no-units">None</div>'}
-                </div>
-            </div>
-            
-            <div class="units-section">
-                <h4>⚔️ Hostile Units (${enemyUnits.length})</h4>
-                <div class="units-list hostile">
-                    ${enemyUnits.length > 0 
-                        ? enemyUnits.map(u => `<div class="unit-item">${escapeHtml(u.Name)}</div>`).join('')
-                        : '<div class="no-units">None</div>'}
-                </div>
-            </div>
-            
-            ${unknownUnits.length > 0 ? `
-                <div class="units-section">
-                    <h4>❓ Unknown Units (${unknownUnits.length})</h4>
-                    <div class="units-list unknown">
-                        ${unknownUnits.map(u => `<div class="unit-item">${escapeHtml(u.Name)}</div>`).join('')}
-                    </div>
-                </div>
-            ` : ''}
-            
-            ${deaths.length > 0 ? `
-                <div class="units-section">
-                    <h4>💀 Deaths (${deaths.length})</h4>
-                    <div class="units-list deaths">
-                        ${deaths.map(d => `<div class="unit-item">${escapeHtml(d.name)}</div>`).join('')}
-                    </div>
-                </div>
-            ` : ''}
-        </div>
-    `;
+    const timelineContainer = document.createElement('div');
+    timelineContainer.className = 'timeline-container';
+    
+    const timeline = createTimeline(instance.characters, timeRange);
+    timelineContainer.appendChild(timeline);
+    
+    card.appendChild(header);
+    card.appendChild(timelineContainer);
     
     return card;
+}
+
+function getInstanceTimeRange(instance) {
+    let minTime = null;
+    let maxTime = null;
+    
+    instance.characters.forEach(char => {
+        char.periods.forEach(period => {
+            const start = new Date(period.start);
+            const end = period.end ? new Date(period.end) : new Date();
+            
+            if (!minTime || start < minTime) minTime = start;
+            if (!maxTime || end > maxTime) maxTime = end;
+        });
+    });
+    
+    return minTime && maxTime ? { start: minTime, end: maxTime } : null;
+}
+
+function createTimeline(characters, timeRange) {
+    const timeline = document.createElement('div');
+    timeline.className = 'timeline';
+    
+    const duration = timeRange.end - timeRange.start;
+    
+    // Create header with time labels
+    const header = document.createElement('div');
+    header.className = 'timeline-header';
+    header.innerHTML = `
+        <div class="character-name-column">Character</div>
+        <div class="timeline-grid">
+            <div class="time-labels">
+                <span>${formatTime(timeRange.start)}</span>
+                <span>${formatTime(new Date(timeRange.start.getTime() + duration / 2))}</span>
+                <span>${formatTime(timeRange.end)}</span>
+            </div>
+        </div>
+    `;
+    timeline.appendChild(header);
+    
+    // Sort characters by name
+    const sortedCharacters = [...characters].sort((a, b) => 
+        a.characterName.localeCompare(b.characterName)
+    );
+    
+    // Create a row for each character
+    sortedCharacters.forEach(character => {
+        const row = createCharacterRow(character, timeRange, duration);
+        timeline.appendChild(row);
+    });
+    
+    return timeline;
+}
+
+function createCharacterRow(character, timeRange, duration) {
+    const row = document.createElement('div');
+    row.className = 'character-row';
+    
+    const nameDiv = document.createElement('div');
+    nameDiv.className = 'character-name';
+    nameDiv.textContent = character.characterName;
+    
+    const track = document.createElement('div');
+    track.className = 'activity-track';
+    
+    // Add activity periods
+    character.periods.forEach(period => {
+        const periodDiv = createActivityPeriod(period, timeRange, duration);
+        track.appendChild(periodDiv);
+    });
+    
+    row.appendChild(nameDiv);
+    row.appendChild(track);
+    
+    return row;
+}
+
+function createActivityPeriod(period, timeRange, duration) {
+    const periodDiv = document.createElement('div');
+    periodDiv.className = 'activity-period';
+    
+    const start = new Date(period.start);
+    const end = period.end ? new Date(period.end) : new Date();
+    
+    // Calculate position and width as percentage
+    const startOffset = ((start - timeRange.start) / duration) * 100;
+    const periodDuration = ((end - start) / duration) * 100;
+    
+    periodDiv.style.left = `${Math.max(0, startOffset)}%`;
+    periodDiv.style.width = `${Math.max(0.5, periodDuration)}%`;
+    
+    // Add class if period ended
+    if (period.end) {
+        periodDiv.classList.add('ended');
+    }
+    
+    // Create tooltip
+    const tooltip = document.createElement('div');
+    tooltip.className = 'tooltip';
+    tooltip.innerHTML = `
+        <strong>Start:</strong> ${formatTime(start)}<br>
+        ${period.end ? `<strong>End:</strong> ${formatTime(end)}<br>` : '<strong>Status:</strong> Still active<br>'}
+        <strong>Duration:</strong> ${formatDuration((end - start) / 1000)}<br>
+        ${period.startReason ? `<strong>Reason:</strong> ${escapeHtml(period.startReason)}` : ''}
+        ${period.endReason ? `<br><strong>End reason:</strong> ${escapeHtml(period.endReason)}` : ''}
+    `;
+    periodDiv.appendChild(tooltip);
+    
+    return periodDiv;
 }
 
 function formatDuration(seconds) {
@@ -290,6 +334,15 @@ function formatDuration(seconds) {
     const minutes = Math.floor(seconds / 60);
     const secs = Math.round(seconds % 60);
     return `${minutes}m ${secs}s`;
+}
+
+function formatTime(date) {
+    return date.toLocaleTimeString('en-US', {
+        hour: '2-digit',
+        minute: '2-digit',
+        second: '2-digit',
+        hour12: false
+    });
 }
 
 function formatFileSize(bytes) {
@@ -305,18 +358,6 @@ function escapeHtml(text) {
     div.textContent = text;
     return div.innerHTML;
 }
-
-// Toggle JSON view
-document.getElementById('toggleJsonBtn').addEventListener('click', function() {
-    const jsonOutput = document.getElementById('jsonOutput');
-    if (jsonOutput.style.display === 'none' || !jsonOutput.style.display) {
-        jsonOutput.style.display = 'block';
-        this.textContent = '📋 Hide Raw JSON';
-    } else {
-        jsonOutput.style.display = 'none';
-        this.textContent = '📋 Show Raw JSON';
-    }
-});
 
 // Initialize on load
 window.addEventListener('load', () => {
