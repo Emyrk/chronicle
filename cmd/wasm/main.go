@@ -24,18 +24,18 @@ func main() {
 
 // CharacterTimeline represents a character's activity in an instance
 type CharacterTimeline struct {
-	CharacterID   string            `json:"characterId"`
-	CharacterName string            `json:"characterName"`
-	IsPlayer      bool              `json:"isPlayer"`
-	Periods       []ActivityPeriod  `json:"periods"`
+	CharacterID   string           `json:"characterId"`
+	CharacterName string           `json:"characterName"`
+	IsPlayer      bool             `json:"isPlayer"`
+	Periods       []ActivityPeriod `json:"periods"`
 }
 
 // ActivityPeriod represents a time period when a character was active
 type ActivityPeriod struct {
-	Start       time.Time `json:"start"`
+	Start       time.Time  `json:"start"`
 	End         *time.Time `json:"end"` // nil if still active
-	StartReason string    `json:"startReason"`
-	EndReason   string    `json:"endReason,omitempty"`
+	StartReason string     `json:"startReason"`
+	EndReason   string     `json:"endReason,omitempty"`
 }
 
 // InstanceTimeline represents all character activity in an instance

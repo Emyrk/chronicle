@@ -232,6 +232,76 @@ function getInstanceTimeRange(instance) {
     return minTime && maxTime ? { start: minTime, end: maxTime } : null;
 }
 
+// Detect if any periods overlap in time
+function detectOverlappingPeriods(periods) {
+    if (periods.length <= 1) return false;
+    
+    for (let i = 0; i < periods.length; i++) {
+        const period1 = periods[i];
+        const start1 = new Date(period1.start);
+        const end1 = period1.end ? new Date(period1.end) : new Date();
+        
+        for (let j = i + 1; j < periods.length; j++) {
+            const period2 = periods[j];
+            const start2 = new Date(period2.start);
+            const end2 = period2.end ? new Date(period2.end) : new Date();
+            
+            // Check if periods overlap
+            if (start1 < end2 && start2 < end1) {
+                return true;
+            }
+        }
+    }
+    
+    return false;
+}
+
+// Assign overlapping periods to separate layers (rows)
+function assignPeriodsToLayers(periods) {
+    // Sort periods by start time
+    const sortedPeriods = [...periods].sort((a, b) => {
+        return new Date(a.start) - new Date(b.start);
+    });
+    
+    const layers = [];
+    
+    sortedPeriods.forEach(period => {
+        const start = new Date(period.start);
+        const end = period.end ? new Date(period.end) : new Date();
+        
+        // Find the first layer where this period doesn't overlap
+        let placed = false;
+        for (let i = 0; i < layers.length; i++) {
+            const layer = layers[i];
+            let canPlace = true;
+            
+            // Check if this period overlaps with any period in this layer
+            for (const existingPeriod of layer) {
+                const existingStart = new Date(existingPeriod.start);
+                const existingEnd = existingPeriod.end ? new Date(existingPeriod.end) : new Date();
+                
+                if (start < existingEnd && existingStart < end) {
+                    canPlace = false;
+                    break;
+                }
+            }
+            
+            if (canPlace) {
+                layer.push(period);
+                placed = true;
+                break;
+            }
+        }
+        
+        // If we couldn't place it in any existing layer, create a new one
+        if (!placed) {
+            layers.push([period]);
+        }
+    });
+    
+    return layers;
+}
+
 function createTimeline(characters, timeRange) {
     const timeline = document.createElement('div');
     timeline.className = 'timeline';
@@ -278,16 +348,54 @@ function createCharacterRow(character, timeRange, duration) {
     
     const nameDiv = document.createElement('div');
     nameDiv.className = 'character-name';
-    nameDiv.textContent = character.characterName;
+    
+    // Check for overlapping periods
+    const hasOverlaps = detectOverlappingPeriods(character.periods);
+    
+    // Add warning icon if there are overlaps
+    if (hasOverlaps) {
+        const warningIcon = document.createElement('span');
+        warningIcon.className = 'overlap-warning';
+        warningIcon.title = 'This character has overlapping activity periods!';
+        warningIcon.textContent = '⚠️';
+        nameDiv.appendChild(warningIcon);
+        nameDiv.appendChild(document.createTextNode(' '));
+    }
+    
+    nameDiv.appendChild(document.createTextNode(character.characterName));
     
     const track = document.createElement('div');
     track.className = 'activity-track';
     
-    // Add activity periods
-    character.periods.forEach(period => {
-        const periodDiv = createActivityPeriod(period, timeRange, duration);
-        track.appendChild(periodDiv);
-    });
+    // If there are overlaps, use multi-row layout
+    if (hasOverlaps) {
+        track.classList.add('has-overlaps');
+        const layers = assignPeriodsToLayers(character.periods);
+        
+        // Create a sub-track for each layer
+        layers.forEach((layerPeriods, layerIndex) => {
+            const subTrack = document.createElement('div');
+            subTrack.className = 'activity-subtrack';
+            subTrack.style.top = `${layerIndex * 35}px`;
+            
+            layerPeriods.forEach(period => {
+                const periodDiv = createActivityPeriod(period, timeRange, duration);
+                periodDiv.classList.add('overlapping');
+                subTrack.appendChild(periodDiv);
+            });
+            
+            track.appendChild(subTrack);
+        });
+        
+        // Adjust track height to accommodate all layers
+        track.style.height = `${layers.length * 35}px`;
+    } else {
+        // Normal single-row layout
+        character.periods.forEach(period => {
+            const periodDiv = createActivityPeriod(period, timeRange, duration);
+            track.appendChild(periodDiv);
+        });
+    }
     
     row.appendChild(nameDiv);
     row.appendChild(track);

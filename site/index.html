@@ -479,6 +479,65 @@
         }
 
         .legend {
+        /* Overlapping activity styles */
+        .overlap-warning {
+            display: inline-block;
+            font-size: 1.2em;
+            cursor: help;
+            animation: pulse 2s ease-in-out infinite;
+        }
+
+        @keyframes pulse {
+            0%, 100% {
+                opacity: 1;
+                transform: scale(1);
+            }
+            50% {
+                opacity: 0.7;
+                transform: scale(1.1);
+            }
+        }
+
+        .activity-track.has-overlaps {
+            position: relative;
+            border: 2px dashed #f59e0b;
+            background: repeating-linear-gradient(
+                45deg,
+                #fef3c7,
+                #fef3c7 10px,
+                #fde68a 10px,
+                #fde68a 20px
+            );
+        }
+
+        .activity-subtrack {
+            position: absolute;
+            left: 0;
+            right: 0;
+            height: 30px;
+            background: rgba(255, 255, 255, 0.8);
+            border-radius: 4px;
+            border-bottom: 1px solid rgba(0, 0, 0, 0.1);
+        }
+
+        .activity-period.overlapping {
+            border-width: 3px;
+            box-shadow: 0 2px 8px rgba(0, 0, 0, 0.15);
+        }
+
+        .activity-period.overlapping::before {
+            content: '';
+            position: absolute;
+            top: -3px;
+            left: -3px;
+            right: -3px;
+            bottom: -3px;
+            border-radius: 4px;
+            border: 2px solid rgba(245, 158, 11, 0.5);
+            pointer-events: none;
+        }
+
+
             display: flex;
             gap: 30px;
             justify-content: center;
@@ -580,6 +639,10 @@
                 <div class="legend-item">
                     <div class="legend-color ended"></div>
                     <span>Ended (slain/timeout)</span>
+                </div>
+                <div class="legend-item">
+                    <span style="font-size: 1.2em;">⚠️</span>
+                    <span>Overlapping Activities (stacked view)</span>
                 </div>
             </div>
 
