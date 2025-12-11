@@ -253,10 +253,15 @@ function createTimeline(characters, timeRange) {
     `;
     timeline.appendChild(header);
     
-    // Sort characters by name
-    const sortedCharacters = [...characters].sort((a, b) => 
-        a.characterName.localeCompare(b.characterName)
-    );
+    // Sort characters - players first, then by name
+    const sortedCharacters = [...characters].sort((a, b) => {
+        // Players come before non-players
+        if (a.isPlayer !== b.isPlayer) {
+            return b.isPlayer ? 1 : -1;
+        }
+        // Within the same category, sort alphabetically by name
+        return a.characterName.localeCompare(b.characterName);
+    });
     
     // Create a row for each character
     sortedCharacters.forEach(character => {
@@ -304,9 +309,16 @@ function createActivityPeriod(period, timeRange, duration) {
     periodDiv.style.left = `${Math.max(0, startOffset)}%`;
     periodDiv.style.width = `${Math.max(0.5, periodDuration)}%`;
     
-    // Add class if period ended
+    // Add class based on end reason
     if (period.end) {
-        periodDiv.classList.add('ended');
+        if (period.endReason === 'slain') {
+            periodDiv.classList.add('slain');
+        } else if (period.endReason === 'timeout') {
+            periodDiv.classList.add('timeout');
+        } else {
+            // Default ended class for other reasons
+            periodDiv.classList.add('ended');
+        }
     }
     
     // Create tooltip

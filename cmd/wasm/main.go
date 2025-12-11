@@ -26,6 +26,7 @@ func main() {
 type CharacterTimeline struct {
 	CharacterID   string            `json:"characterId"`
 	CharacterName string            `json:"characterName"`
+	IsPlayer      bool              `json:"isPlayer"`
 	Periods       []ActivityPeriod  `json:"periods"`
 }
 
@@ -134,6 +135,7 @@ func convertStateToTimeline(s *state.State) TimelineOutput {
 func convertCharacterToTimeline(gid guid.GUID, char *encounters.Character, s *state.State) CharacterTimeline {
 	timeline := CharacterTimeline{
 		CharacterID: gid.String(),
+		IsPlayer:    gid.IsPlayer(),
 		Periods:     make([]ActivityPeriod, 0),
 	}
 
