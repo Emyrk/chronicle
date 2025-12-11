@@ -323,14 +323,38 @@ function createTimeline(characters, timeRange) {
     `;
     timeline.appendChild(header);
     
-    // Sort characters - players first, then by name
-    const sortedCharacters = [...characters].sort((a, b) => {
-        // Players come before non-players
-        if (a.isPlayer !== b.isPlayer) {
-            return b.isPlayer ? 1 : -1;
+    // Helper function to get the earliest activity start time for a character
+    const getFirstActivityTime = (character) => {
+        if (!character.periods || character.periods.length === 0) {
+            return null;
         }
-        // Within the same category, sort alphabetically by name
-        return a.characterName.localeCompare(b.characterName);
+        
+        // Find the earliest start time across all periods
+        let earliest = null;
+        for (const period of character.periods) {
+            const startTime = new Date(period.start);
+            if (!earliest || startTime < earliest) {
+                earliest = startTime;
+            }
+        }
+        return earliest;
+    };
+    
+    // Sort characters by their first activity time
+    // Characters with earlier first activity appear first
+    const sortedCharacters = [...characters].sort((a, b) => {
+        const aFirstActivity = getFirstActivityTime(a);
+        const bFirstActivity = getFirstActivityTime(b);
+        
+        // If either character has no activity, push them to the end
+        if (!aFirstActivity && !bFirstActivity) {
+            return a.characterName.localeCompare(b.characterName);
+        }
+        if (!aFirstActivity) return 1;
+        if (!bFirstActivity) return -1;
+        
+        // Sort by first activity time (earliest first)
+        return aFirstActivity - bFirstActivity;
     });
     
     // Create a row for each character
