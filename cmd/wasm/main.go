@@ -13,7 +13,7 @@ import (
 	"github.com/Emyrk/chronicle/combatlog/parser/guid"
 	"github.com/Emyrk/chronicle/combatlog/parser/vanilla"
 	"github.com/Emyrk/chronicle/combatlog/parser/vanilla/state"
-	"github.com/Emyrk/chronicle/combatlog/parser/vanilla/state/encounters"
+	"github.com/Emyrk/chronicle/combatlog/parser/vanilla/state/encounters/character"
 	"github.com/Emyrk/chronicle/combatlog/parser/vanilla/state/encounters/fight"
 )
 
@@ -169,7 +169,7 @@ func convertStateToTimeline(s *state.State) TimelineOutput {
 	return output
 }
 
-func convertCharacterToTimeline(gid guid.GUID, char *encounters.Character, s *state.State) CharacterTimeline {
+func convertCharacterToTimeline(gid guid.GUID, char character.Character, s *state.State) CharacterTimeline {
 	timeline := CharacterTimeline{
 		CharacterID: gid.String(),
 		IsPlayer:    gid.IsPlayer(),
@@ -185,24 +185,23 @@ func convertCharacterToTimeline(gid guid.GUID, char *encounters.Character, s *st
 		timeline.CharacterName = gid.String()
 	}
 
-	// Convert activity periods
-	if char.Activity != nil {
-		for _, period := range char.Activity.Periods {
-			activityPeriod := ActivityPeriod{}
+	// Convert activity periods using the Character interface
+	periods := char.Periods()
+	for _, period := range periods {
+		activityPeriod := ActivityPeriod{}
 
-			if period.Start != nil {
-				activityPeriod.Start = period.Start.Timestamp.Date()
-				activityPeriod.StartReason = period.Start.Explanation
-			}
-
-			if period.End != nil {
-				endTime := period.End.Timestamp.Date()
-				activityPeriod.End = &endTime
-				activityPeriod.EndReason = period.End.Explanation
-			}
-
-			timeline.Periods = append(timeline.Periods, activityPeriod)
+		if period.Start != nil {
+			activityPeriod.Start = period.Start.Timestamp.Date()
+			activityPeriod.StartReason = period.Start.Explanation
 		}
+
+		if period.End != nil {
+			endTime := period.End.Timestamp.Date()
+			activityPeriod.End = &endTime
+			activityPeriod.EndReason = period.End.Explanation
+		}
+
+		timeline.Periods = append(timeline.Periods, activityPeriod)
 	}
 
 	return timeline

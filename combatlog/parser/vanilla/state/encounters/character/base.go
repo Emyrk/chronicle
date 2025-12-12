@@ -53,7 +53,7 @@ func (c *Base[_]) NamedString(name string) string {
 		return "<nil Character>"
 	}
 
-	id := fmt.Sprintf("ID: %s", c.ID)
+	id := fmt.Sprintf("ID: %s", c.ID())
 	if name != "" {
 		id = fmt.Sprintf("Name: %s, ID: %s", name, id)
 	}
