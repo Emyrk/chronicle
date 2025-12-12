@@ -9,10 +9,40 @@ const combatLogInput = document.getElementById('combatLog');
 const rawCombatLogInput = document.getElementById('rawCombatLog');
 const parseButton = document.getElementById('parseButton');
 const statusDiv = document.getElementById('status');
-const timelineSection = document.getElementById('timelineSection');
+const resultsSection = document.getElementById('resultsSection');
 const instancesContainer = document.getElementById('instancesContainer');
+const fightsContainer = document.getElementById('fightsContainer');
 const combatLogInfo = document.getElementById('combatLogInfo');
 const rawCombatLogInfo = document.getElementById('rawCombatLogInfo');
+
+// Tab management
+document.querySelectorAll('.tab').forEach(tab => {
+    tab.addEventListener('click', () => {
+        const tabName = tab.getAttribute('data-tab');
+        switchTab(tabName);
+    });
+});
+
+function switchTab(tabName) {
+    // Update tab buttons
+    document.querySelectorAll('.tab').forEach(t => {
+        t.classList.remove('active');
+        if (t.getAttribute('data-tab') === tabName) {
+            t.classList.add('active');
+        }
+    });
+
+    // Update tab content
+    document.querySelectorAll('.tab-content').forEach(content => {
+        content.classList.remove('active');
+    });
+    
+    if (tabName === 'characters') {
+        document.getElementById('charactersTab').classList.add('active');
+    } else if (tabName === 'fights') {
+        document.getElementById('fightsTab').classList.add('active');
+    }
+}
 
 // Initialize WASM
 async function initWasm() {
@@ -71,7 +101,7 @@ parseButton.addEventListener('click', async () => {
 
     parseButton.disabled = true;
     showStatus('loading', '⏳ Parsing combat logs...');
-    timelineSection.style.display = 'none';
+    resultsSection.style.display = 'none';
 
     try {
         // Read both files as ArrayBuffer
@@ -145,8 +175,11 @@ function displayTimeline(timelineJson) {
         // Create timeline visualization
         createTimelineDisplay(timeline);
         
-        timelineSection.style.display = 'block';
-        timelineSection.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+        // Create fights display
+        createFightsDisplay(timeline);
+        
+        resultsSection.style.display = 'block';
+        resultsSection.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
     } catch (error) {
         console.error('Error displaying timeline:', error);
         showStatus('error', `Failed to display timeline: ${error.message}`);
@@ -463,6 +496,222 @@ function formatTime(date) {
         second: '2-digit',
         hour12: false
     });
+}
+
+function createFightsDisplay(timeline) {
+    if (!timeline.fights || timeline.fights.length === 0) {
+        fightsContainer.innerHTML = '<div class="no-instances">No fights found in the combat log</div>';
+        return;
+    }
+    
+    fightsContainer.innerHTML = '';
+    
+    // Create a card for each instance's fights
+    timeline.fights.forEach((instanceFights, index) => {
+        if (!instanceFights.fights || instanceFights.fights.length === 0) {
+            return; // Skip instances with no fights
+        }
+        
+        const instanceCard = createInstanceFightsCard(instanceFights);
+        fightsContainer.appendChild(instanceCard);
+    });
+}
+
+function createInstanceFightsCard(instanceFights) {
+    const card = document.createElement('div');
+    card.className = 'instance-card';
+    
+    const header = document.createElement('div');
+    header.className = 'instance-header';
+    header.style.display = 'flex';
+    header.style.justifyContent = 'space-between';
+    header.style.alignItems = 'center';
+    
+    const title = document.createElement('h3');
+    title.textContent = instanceFights.instanceName;
+    title.style.margin = '0';
+    
+    const fightCount = document.createElement('span');
+    fightCount.className = 'zone-badge';
+    fightCount.textContent = `${instanceFights.fights.length} Fight${instanceFights.fights.length !== 1 ? 's' : ''}`;
+    
+    header.appendChild(title);
+    header.appendChild(fightCount);
+    card.appendChild(header);
+    
+    const body = document.createElement('div');
+    body.style.padding = '20px';
+    
+    // Add each fight
+    instanceFights.fights.forEach((fight, index) => {
+        const fightCard = createFightCard(fight, index + 1);
+        body.appendChild(fightCard);
+    });
+    
+    card.appendChild(body);
+    return card;
+}
+
+function createFightCard(fight, fightNumber) {
+    const card = document.createElement('div');
+    card.className = 'fight-card';
+    
+    // Fight header
+    const header = document.createElement('div');
+    header.className = 'fight-header';
+    
+    const titleDiv = document.createElement('div');
+    titleDiv.className = 'fight-title';
+    
+    const title = document.createElement('h3');
+    title.textContent = `Fight ${fightNumber}`;
+    
+    const hostileCount = document.createElement('span');
+    hostileCount.className = 'zone-badge';
+    hostileCount.textContent = `${fight.hostiles.length} Hostile${fight.hostiles.length !== 1 ? 's' : ''}`;
+    
+    titleDiv.appendChild(title);
+    titleDiv.appendChild(hostileCount);
+    
+    const duration = document.createElement('div');
+    duration.className = 'fight-duration';
+    duration.textContent = formatDuration(fight.duration);
+    
+    header.appendChild(titleDiv);
+    header.appendChild(duration);
+    card.appendChild(header);
+    
+    // Fight body
+    const body = document.createElement('div');
+    body.style.padding = '20px';
+    body.style.background = '#f8f9fa';
+    
+    // Time info
+    const timeInfo = document.createElement('div');
+    timeInfo.style.marginBottom = '20px';
+    timeInfo.style.padding = '15px';
+    timeInfo.style.background = 'white';
+    timeInfo.style.borderRadius = '8px';
+    timeInfo.style.border = '1px solid #e0e0e0';
+    
+    const startTime = new Date(fight.start);
+    const endTime = new Date(fight.end);
+    
+    timeInfo.innerHTML = `
+        <div style="display: flex; gap: 30px; font-size: 0.95em;">
+            <div>
+                <strong style="color: #667eea;">⏱️ Start:</strong> 
+                <span>${startTime.toLocaleTimeString()}.${startTime.getMilliseconds().toString().padStart(3, '0')}</span>
+            </div>
+            <div>
+                <strong style="color: #667eea;">⏱️ End:</strong> 
+                <span>${endTime.toLocaleTimeString()}.${endTime.getMilliseconds().toString().padStart(3, '0')}</span>
+            </div>
+            <div>
+                <strong style="color: #667eea;">⏱️ Duration:</strong> 
+                <span>${formatDuration(fight.duration)}</span>
+            </div>
+        </div>
+    `;
+    body.appendChild(timeInfo);
+    
+    // Hostiles section
+    const hostilesTitle = document.createElement('h4');
+    hostilesTitle.textContent = '⚔️ Hostile Characters';
+    hostilesTitle.style.margin = '20px 0 15px 0';
+    hostilesTitle.style.color = '#333';
+    body.appendChild(hostilesTitle);
+    
+    const hostilesGrid = document.createElement('div');
+    hostilesGrid.style.display = 'grid';
+    hostilesGrid.style.gridTemplateColumns = 'repeat(auto-fill, minmax(300px, 1fr))';
+    hostilesGrid.style.gap = '15px';
+    
+    fight.hostiles.forEach(hostile => {
+        const hostileCard = createHostileCard(hostile);
+        hostilesGrid.appendChild(hostileCard);
+    });
+    
+    body.appendChild(hostilesGrid);
+    card.appendChild(body);
+    
+    return card;
+}
+
+function createHostileCard(hostile) {
+    const card = document.createElement('div');
+    card.style.background = 'white';
+    card.style.padding = '15px';
+    card.style.borderRadius = '8px';
+    card.style.border = '2px solid #e0e0e0';
+    card.style.transition = 'all 0.2s ease';
+    
+    card.addEventListener('mouseenter', () => {
+        card.style.borderColor = '#667eea';
+        card.style.transform = 'translateY(-2px)';
+        card.style.boxShadow = '0 4px 12px rgba(0, 0, 0, 0.1)';
+    });
+    
+    card.addEventListener('mouseleave', () => {
+        card.style.borderColor = '#e0e0e0';
+        card.style.transform = 'translateY(0)';
+        card.style.boxShadow = 'none';
+    });
+    
+    const name = document.createElement('div');
+    name.style.fontWeight = '600';
+    name.style.fontSize = '1.05em';
+    name.style.color = '#333';
+    name.style.marginBottom = '10px';
+    name.textContent = hostile.characterName;
+    card.appendChild(name);
+    
+    const id = document.createElement('div');
+    id.style.fontSize = '0.85em';
+    id.style.color = '#666';
+    id.style.marginBottom = '12px';
+    id.style.fontFamily = 'monospace';
+    id.textContent = `ID: ${hostile.characterId}`;
+    card.appendChild(id);
+    
+    // Activity periods
+    if (hostile.periods && hostile.periods.length > 0) {
+        const periodsTitle = document.createElement('div');
+        periodsTitle.style.fontSize = '0.9em';
+        periodsTitle.style.fontWeight = '600';
+        periodsTitle.style.color = '#667eea';
+        periodsTitle.style.marginBottom = '8px';
+        periodsTitle.textContent = `Activity Periods (${hostile.periods.length})`;
+        card.appendChild(periodsTitle);
+        
+        hostile.periods.forEach((period, idx) => {
+            const periodDiv = document.createElement('div');
+            periodDiv.style.fontSize = '0.85em';
+            periodDiv.style.padding = '8px';
+            periodDiv.style.background = '#f8f9fa';
+            periodDiv.style.borderRadius = '4px';
+            periodDiv.style.marginBottom = '6px';
+            periodDiv.style.borderLeft = '3px solid #667eea';
+            
+            const start = new Date(period.start);
+            const end = new Date(period.end);
+            const duration = (end - start) / 1000;
+            
+            periodDiv.innerHTML = `
+                <div style="margin-bottom: 4px;">
+                    <strong>Period ${idx + 1}:</strong> ${formatDuration(duration)}
+                </div>
+                <div style="color: #666; font-size: 0.9em;">
+                    <div>Start: ${period.startReason}</div>
+                    <div>End: ${period.endReason}</div>
+                </div>
+            `;
+            
+            card.appendChild(periodDiv);
+        });
+    }
+    
+    return card;
 }
 
 function formatFileSize(bytes) {

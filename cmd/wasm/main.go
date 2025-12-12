@@ -14,6 +14,7 @@ import (
 	"github.com/Emyrk/chronicle/combatlog/parser/vanilla"
 	"github.com/Emyrk/chronicle/combatlog/parser/vanilla/state"
 	"github.com/Emyrk/chronicle/combatlog/parser/vanilla/state/encounters"
+	"github.com/Emyrk/chronicle/combatlog/parser/vanilla/state/encounters/fight"
 )
 
 func main() {
@@ -48,6 +49,36 @@ type InstanceTimeline struct {
 // TimelineOutput is the final output structure
 type TimelineOutput struct {
 	Instances []InstanceTimeline `json:"instances"`
+	Fights    []InstanceFights   `json:"fights"`
+}
+
+// InstanceFights represents all fights in an instance
+type InstanceFights struct {
+	InstanceName string       `json:"instanceName"`
+	Fights       []FightData  `json:"fights"`
+}
+
+// FightData represents a single fight with hostiles
+type FightData struct {
+	Start    time.Time              `json:"start"`
+	End      time.Time              `json:"end"`
+	Duration float64                `json:"duration"` // in seconds
+	Hostiles []FightCharacterData   `json:"hostiles"`
+}
+
+// FightCharacterData represents a character in a fight
+type FightCharacterData struct {
+	CharacterID   string           `json:"characterId"`
+	CharacterName string           `json:"characterName"`
+	Periods       []FightPeriod    `json:"periods"`
+}
+
+// FightPeriod represents an activity period within a fight
+type FightPeriod struct {
+	Start       time.Time  `json:"start"`
+	End         time.Time  `json:"end"`
+	StartReason string     `json:"startReason"`
+	EndReason   string     `json:"endReason"`
 }
 
 func parseLogsFunc(this js.Value, args []js.Value) interface{} {
@@ -111,6 +142,7 @@ func parseLogsFunc(this js.Value, args []js.Value) interface{} {
 func convertStateToTimeline(s *state.State) TimelineOutput {
 	var output TimelineOutput
 	output.Instances = make([]InstanceTimeline, 0, len(s.Instances))
+	output.Fights = make([]InstanceFights, 0, len(s.Instances))
 
 	for _, inst := range s.Instances {
 		timeline := InstanceTimeline{
@@ -127,6 +159,11 @@ func convertStateToTimeline(s *state.State) TimelineOutput {
 		}
 
 		output.Instances = append(output.Instances, timeline)
+
+		// Aggregate fights for this instance
+		fights, _ := fight.AggregateFights(inst)
+		instanceFights := convertFightsToData(inst.Name(), fights, s)
+		output.Fights = append(output.Fights, instanceFights)
 	}
 
 	return output
@@ -169,4 +206,54 @@ func convertCharacterToTimeline(gid guid.GUID, char *encounters.Character, s *st
 	}
 
 	return timeline
+}
+
+func convertFightsToData(instanceName string, fights []fight.Fight, s *state.State) InstanceFights {
+	instanceFights := InstanceFights{
+		InstanceName: instanceName,
+		Fights:       make([]FightData, 0, len(fights)),
+	}
+
+	for _, f := range fights {
+		duration := f.End.Sub(f.Start).Seconds()
+		
+		fightData := FightData{
+			Start:    f.Start,
+			End:      f.End,
+			Duration: duration,
+			Hostiles: make([]FightCharacterData, 0, len(f.Hostiles)),
+		}
+
+		// Convert each hostile character
+		for charID, charFight := range f.Hostiles {
+			charName := charID.String()
+			// Try to get character name from unitdb
+			if unitInfo, ok := s.Units.Get(charID); ok {
+				charName = unitInfo.Name
+			}
+
+			charData := FightCharacterData{
+				CharacterID:   charID.String(),
+				CharacterName: charName,
+				Periods:       make([]FightPeriod, 0, len(charFight.Activity)),
+			}
+
+			// Convert activity periods
+			for _, activity := range charFight.Activity {
+				period := FightPeriod{
+					Start:       activity.Start.Timestamp.Date(),
+					End:         activity.End.Timestamp.Date(),
+					StartReason: activity.Start.Explanation,
+					EndReason:   activity.End.Explanation,
+				}
+				charData.Periods = append(charData.Periods, period)
+			}
+
+			fightData.Hostiles = append(fightData.Hostiles, charData)
+		}
+
+		instanceFights.Fights = append(instanceFights.Fights, fightData)
+	}
+
+	return instanceFights
 }
