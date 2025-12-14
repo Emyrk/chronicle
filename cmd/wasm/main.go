@@ -192,13 +192,13 @@ func convertCharacterToTimeline(gid guid.GUID, char character.Character, s *stat
 
 		if period.Start != nil {
 			activityPeriod.Start = period.Start.Timestamp.Date()
-			activityPeriod.StartReason = period.Start.Explanation
+			activityPeriod.StartReason = period.Start.Reason
 		}
 
 		if period.End != nil {
 			endTime := period.End.Timestamp.Date()
 			activityPeriod.End = &endTime
-			activityPeriod.EndReason = period.End.Explanation
+			activityPeriod.EndReason = period.End.Reason
 		}
 
 		timeline.Periods = append(timeline.Periods, activityPeriod)
@@ -242,8 +242,8 @@ func convertFightsToData(instanceName string, fights []fight.Fight, s *state.Sta
 				period := FightPeriod{
 					Start:       activity.Start.Timestamp.Date(),
 					End:         activity.End.Timestamp.Date(),
-					StartReason: activity.Start.Explanation,
-					EndReason:   activity.End.Explanation,
+					StartReason: activity.Start.Reason,
+					EndReason:   activity.End.Reason,
 				}
 				charData.Periods = append(charData.Periods, period)
 			}
