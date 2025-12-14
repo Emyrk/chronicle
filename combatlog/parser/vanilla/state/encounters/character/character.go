@@ -19,16 +19,18 @@ const (
 	ReasonOwnerSlain = "owner_slain"
 )
 
+// TODO: Slim the interface for external use
 type Character interface {
 	ID() guid.GUID
 	String() string
 	Process(m messages.Message) error
 	Periods() []period.Period
 	RecentlySlain(m messages.Message) bool
+	IsActive() bool
 }
 
 type Base[M period.IsPeriod] struct {
-	Lookup *Characters
+	lookup *Characters
 	id     guid.GUID
 
 	// Activity is the append-only history of activity periods for this character.
@@ -39,7 +41,7 @@ type Base[M period.IsPeriod] struct {
 }
 
 func NewBaseCharacter[M period.IsPeriod](me guid.GUID, lookup *Characters) *Base[M] {
-	return &Base[M]{Lookup: lookup, id: me}
+	return &Base[M]{lookup: lookup, id: me}
 }
 
 func (c *Base[_]) ID() guid.GUID { return c.id }
@@ -60,6 +62,10 @@ func (c *Base[_]) ContainsMe(ids ...guid.GUID) bool {
 	return false
 }
 
+func (c *Base[_]) IsActive() bool {
+	return c.Activity.IsActive()
+}
+
 func (c *Base[_]) Periods() []period.Period {
 	periods := make([]period.Period, len(c.Activity.History))
 	for i, p := range c.Activity.History {
@@ -73,8 +79,16 @@ func (c *Base[_]) Died(reason string, m messages.Message) {
 	c.LastSlain = m
 }
 
+func (c *Base[_]) Bump(reason string, m messages.Message) {
+	cur, ok := c.Activity.Current()
+	if !ok {
+		return
+	}
+	cur.Bump(reason, m)
+}
+
 func (c *Base[_]) Info() (unitinfo.Info, bool) {
-	return c.Lookup.db.Get(c.ID())
+	return c.lookup.db.Get(c.ID())
 }
 
 func (c *Base[_]) Owner() (guid.GUID, bool) {
@@ -86,6 +100,10 @@ func (c *Base[_]) Owner() (guid.GUID, bool) {
 		return 0, false
 	}
 	return *myInfo.Owner, true
+}
+
+func (c *Base[M]) Lookup() *Characters {
+	return c.lookup
 }
 
 func (c *Base[_]) String() string {

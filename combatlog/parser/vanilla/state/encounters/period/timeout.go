@@ -60,6 +60,6 @@ func (p *InactivityPeriod) HandleTimeout(now time.Time) {
 	}
 
 	if now.After(p.Meta.NextTimeout) {
-		p.Timeout("inactivity", now)
+		p.Timeout("inactivity", p.Meta.NextTimeout)
 	}
 }

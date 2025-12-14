@@ -15,6 +15,7 @@ import (
 	"github.com/Emyrk/chronicle/combatlog/parser/vanilla/state"
 	"github.com/Emyrk/chronicle/combatlog/parser/vanilla/state/encounters/character"
 	"github.com/Emyrk/chronicle/combatlog/parser/vanilla/state/encounters/fight"
+	"github.com/Emyrk/chronicle/combatlog/parser/vanilla/state/encounters/period"
 )
 
 func main() {
@@ -25,10 +26,10 @@ func main() {
 
 // CharacterTimeline represents a character's activity in an instance
 type CharacterTimeline struct {
-	CharacterID   string           `json:"characterId"`
-	CharacterName string           `json:"characterName"`
-	IsPlayer      bool             `json:"isPlayer"`
-	Periods       []ActivityPeriod `json:"periods"`
+	CharacterID   string          `json:"characterId"`
+	CharacterName string          `json:"characterName"`
+	IsPlayer      bool            `json:"isPlayer"`
+	Periods       []period.Period `json:"periods"`
 }
 
 // ActivityPeriod represents a time period when a character was active
@@ -68,9 +69,9 @@ type FightData struct {
 
 // FightCharacterData represents a character in a fight
 type FightCharacterData struct {
-	CharacterID   string        `json:"characterId"`
-	CharacterName string        `json:"characterName"`
-	Periods       []FightPeriod `json:"periods"`
+	CharacterID   string          `json:"characterId"`
+	CharacterName string          `json:"characterName"`
+	Periods       []period.Period `json:"periods"`
 }
 
 // FightPeriod represents an activity period within a fight
@@ -173,7 +174,7 @@ func convertCharacterToTimeline(gid guid.GUID, char character.Character, s *stat
 	timeline := CharacterTimeline{
 		CharacterID: gid.String(),
 		IsPlayer:    gid.IsPlayer(),
-		Periods:     make([]ActivityPeriod, 0),
+		Periods:     make([]period.Period, 0),
 	}
 
 	// Try to get character name from unitdb
@@ -186,23 +187,7 @@ func convertCharacterToTimeline(gid guid.GUID, char character.Character, s *stat
 	}
 
 	// Convert activity periods using the Character interface
-	periods := char.Periods()
-	for _, period := range periods {
-		activityPeriod := ActivityPeriod{}
-
-		if period.Start != nil {
-			activityPeriod.Start = period.Start.Timestamp.Date()
-			activityPeriod.StartReason = period.Start.Explanation
-		}
-
-		if period.End != nil {
-			endTime := period.End.Timestamp.Date()
-			activityPeriod.End = &endTime
-			activityPeriod.EndReason = period.End.Explanation
-		}
-
-		timeline.Periods = append(timeline.Periods, activityPeriod)
-	}
+	timeline.Periods = char.Periods()
 
 	return timeline
 }

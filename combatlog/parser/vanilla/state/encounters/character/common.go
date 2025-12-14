@@ -24,18 +24,35 @@ func NewCommonCharacter(id guid.GUID, all *Characters) *Common {
 }
 
 func (c *Common) Process(m messages.Message) error {
-	defer func() {
-		// Timeouts should be checked on every timestamp
-		cur, ok := c.Activity.Current()
-		if !ok {
-			return
-		}
+	// Timeouts should be checked on every timestamp
+	cur, ok := c.Activity.Current()
+	if ok {
 		cur.HandleTimeout(m.Date())
-	}()
+	}
 
+	return processCommonActivity(c, m)
+}
+
+func (c *Common) Start(reason string, m messages.Message) {
+	c.Activity.Start(period.NewInactivityPeriod(InactivityTimeout), reason, m)
+}
+
+type characterBase interface {
+	Character
+
+	Died(reason string, m messages.Message)
+	Bump(reason string, m messages.Message)
+	Start(reason string, m messages.Message)
+
+	Owner() (guid.GUID, bool)
+	Lookup() *Characters
+}
+
+// processCommonActivity handles the basics of activity processing for a character.
+func processCommonActivity(c characterBase, m messages.Message) error {
 	switch data := m.(type) {
 	case messages.Slain:
-		if c.id == data.Victim {
+		if c.ID() == data.Victim {
 			c.Died(ReasonSlain, m)
 			return nil
 		}
@@ -47,7 +64,7 @@ func (c *Common) Process(m messages.Message) error {
 			return nil
 		}
 
-		if data.Killer != nil && c.id == *data.Killer {
+		if data.Killer != nil && c.ID() == *data.Killer {
 			// Being the killer does not indicate activity.
 			// Could be killed from a dot for example.
 		}
@@ -57,7 +74,7 @@ func (c *Common) Process(m messages.Message) error {
 			return nil
 		}
 
-		target, ok := c.Lookup.Get(data.Target)
+		target, ok := c.Lookup().Get(data.Target)
 		if ok && target.RecentlySlain(m) {
 			// Damaging a recently killed target is not activity
 			return nil
@@ -71,11 +88,11 @@ func (c *Common) Process(m messages.Message) error {
 			// The caster is either my owner or me.
 			if data.HitType.Has(types.HitTypePeriodic) {
 				// Cannot start an activity, but will bump.
-				c.Activity.Bump("my periodic damage", data)
+				c.Bump("periodic damage", data)
 				return nil
 			}
 
-			c.Activity.Start(period.NewInactivityPeriod(InactivityTimeout), "my periodic damage", data)
+			c.Start("direct damage", data)
 			return nil
 		}
 	}
