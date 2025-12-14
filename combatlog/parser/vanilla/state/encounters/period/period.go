@@ -7,6 +7,16 @@ import (
 	"github.com/Emyrk/chronicle/combatlog/parser/vanilla/messages"
 )
 
+type IsPeriod interface {
+	Begin(reason string, ts messages.Message)
+	Close(reason string, ts messages.Message)
+	Timeout(reason string, date time.Time)
+	Bump(reason string, ts messages.Message)
+	IsActive() bool
+	Get() Period
+	String() string
+}
+
 // Period represents a contiguous span of time within an encounter during which
 // some meaningful activity is considered to be occurring.
 //
@@ -47,6 +57,10 @@ func New[M PeriodMeta](meta *M) *WorkingPeriod[M] {
 		Period: &Period{},
 		Meta:   meta,
 	}
+}
+
+func (p *WorkingPeriod[M]) Get() Period {
+	return *p.Period
 }
 
 func (p *WorkingPeriod[M]) Begin(reason string, ts messages.Message) {
@@ -105,5 +119,21 @@ func (p *WorkingPeriod[M]) Bump(reason string, ts messages.Message) {
 }
 
 func (p *WorkingPeriod[M]) IsActive() bool {
-	return p.Start != nil && p.End != nil
+	return p.Start != nil && p.End == nil
+}
+
+func (p *WorkingPeriod[M]) String() string {
+	if p.Start == nil && p.End == nil {
+		return "Inactive(Start:<nil>, End:<nil>)"
+	}
+
+	if p.End == nil {
+		return fmt.Sprintf("Active(Start: %s, End: <nil>)", p.Start)
+	}
+
+	return fmt.Sprintf("Inactive(Start: %s, End: %s)", p.Start, p.End)
+}
+
+func (m Moment) String() string {
+	return fmt.Sprintf("%s (Reason: %s)", messages.ToString(m.Timestamp), m.Reason)
 }

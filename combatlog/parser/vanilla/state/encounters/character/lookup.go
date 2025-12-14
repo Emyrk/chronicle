@@ -4,6 +4,7 @@ import (
 	"fmt"
 
 	"github.com/Emyrk/chronicle/combatlog/parser/guid"
+	"github.com/Emyrk/chronicle/combatlog/parser/types/unitinfo"
 	"github.com/Emyrk/chronicle/combatlog/parser/vanilla/messages"
 	"github.com/Emyrk/chronicle/combatlog/parser/vanilla/state/unitdb"
 )
@@ -11,23 +12,8 @@ import (
 type characterFactory func(id guid.GUID, chars *Characters) (Character, bool)
 
 var characterFactories = []characterFactory{
-	NewTotemCharacter,
+	//NewTotemCharacter,
 }
-
-type Character interface {
-	ID() guid.GUID
-	String() string
-	// TODO: Remove named string?
-	NamedString(name string) string
-	Process(m messages.Message) error
-	Periods() []Active
-}
-
-const (
-	ReasonTimeout    = "timeout"
-	ReasonSlain      = "slain"
-	ReasonOwnerSlain = "owner_slain"
-)
 
 type Characters struct {
 	All map[guid.GUID]Character
@@ -45,6 +31,15 @@ func (c Characters) AddAll(ids ...guid.GUID) {
 	for _, id := range ids {
 		c.Add(id)
 	}
+}
+
+func (c Characters) Get(id guid.GUID) (Character, bool) {
+	char, exists := c.All[id]
+	return char, exists
+}
+
+func (c Characters) GetInfo(id guid.GUID) (unitinfo.Info, bool) {
+	return c.db.Get(id)
 }
 
 func (c Characters) Add(id guid.GUID) Character {

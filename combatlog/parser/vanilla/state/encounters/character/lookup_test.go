@@ -1,4 +1,4 @@
-package character
+package character_test
 
 import (
 	"errors"
@@ -9,6 +9,7 @@ import (
 	"github.com/Emyrk/chronicle/combatlog/parser/guid"
 	"github.com/Emyrk/chronicle/combatlog/parser/vanilla"
 	"github.com/Emyrk/chronicle/combatlog/parser/vanilla/messages"
+	"github.com/Emyrk/chronicle/combatlog/parser/vanilla/state/encounters/character"
 	"github.com/Emyrk/chronicle/combatlog/parser/vanilla/state/unitdb"
 	"github.com/Emyrk/chronicle/internal/testutil"
 	"github.com/stretchr/testify/require"
@@ -18,7 +19,7 @@ func TestCharacters(t *testing.T) {
 	t.Parallel()
 
 	t.Run("BasicActivity", func(t *testing.T) {
-		cars := NewCharacters(unitdb.New())
+		cars := character.NewCharacters(unitdb.New())
 
 		// 0xF1300010C7009C09(Scarlet Myrmidon)
 		// 0x000000000001C7AC(Doyd)
@@ -130,44 +131,46 @@ func TestCharacters(t *testing.T) {
 
 		doydChar, ok := cars.All[0x000000000001C7AC] // Doyd
 		require.True(t, ok, "expected to find Doyd in characters")
-		doyd, ok := doydChar.(*Common)
+		doyd, ok := doydChar.(*character.Common)
 		require.True(t, ok, "expected Doyd to be a Common character")
 
 		myrmChar, ok := cars.All[0xF1300010C7009C09] // Scarlet Myrmidon
 		require.True(t, ok, "expected to find Scarlet Myrmidon in characters")
-		myrm, ok := myrmChar.(*Common)
+		myrm, ok := myrmChar.(*character.Common)
 		require.True(t, ok, "expected Scarlet Myrmidon to be a Common character")
 
 		shamumChar, ok := cars.All[0x000000000008CD28] // Shamum
 		require.True(t, ok, "expected to find Shamum in characters")
-		shamum, ok := shamumChar.(*Common)
+		shamum, ok := shamumChar.(*character.Common)
 		require.True(t, ok, "expected Shamum to be a Common character")
 
 		require.Len(t, cars.All, 3, "expected to find 3 characters in total")
 
-		// Shamum
+		// Shamum :: Times out
 		require.False(t, shamum.Activity.IsActive(), "shamum should not be active")
-		require.Len(t, shamum.Activity.Periods, 1, "shamum has timed out period")
+		require.Len(t, shamum.Activity.History, 1, "shamum has timed out period")
 		require.Nil(t, shamum.LastSlain, "shamum should have no last slain message")
-		reason, _ := shamum.Activity.LastInactive()
-		require.Equal(t, ReasonTimeout, reason)
+		cur, _ := shamum.Activity.Current()
+		require.IsType(t, messages.Timeout{}, cur.End.Timestamp, "shamum should have timed out")
+		require.NotEqual(t, cur.End.Timestamp, cur.LastActive, "timeout is not activity")
 
-		// The scarlet mob died
+		// Myrmidon :: Timed out, then slain
 		require.False(t, myrm.Activity.IsActive(), "scarlet myrmidon should not be active")
-		require.Len(t, myrm.Activity.Periods, 2, "scarlet myrmidon should have 2 activity period, first was a timeout")
+		require.Len(t, myrm.Activity.History, 2, "scarlet myrmidon should have 2 activity period, first was a timeout")
 		require.NotNil(t, myrm.LastSlain, "scarlet myrmidon should have a last slain message")
-		_, msg := myrm.Activity.LastInactive()
-		slain, _ := msg.(messages.Slain)
+		cur, _ = myrm.Activity.Current()
+
+		slain, _ := cur.End.Timestamp.(messages.Slain)
 		require.Equal(t, guid.GUID(0xF1300010C7009C09), slain.Victim)
 
 		// Check the first period too
-		require.Equal(t, ReasonTimeout, myrm.Activity.Periods[0].End.Explanation)
+		require.IsType(t, messages.Timeout{}, myrm.Activity.History[0].End.Timestamp, "timed out first")
 
 		// Doyd is still active.
 		// TODO: Should we mark him inactive if he kills who he is attacking?
 		//  Unsure, because we can use the mob inactivity to mark fight end.
 		require.True(t, doyd.Activity.IsActive(), "doyd should be active")
-		require.Len(t, doyd.Activity.Periods, 1, "doyd should have 1 activity period")
+		require.Len(t, doyd.Activity.History, 1, "doyd should have 1 activity period")
 		require.Nil(t, doyd.LastSlain, "doyd should have no last slain message")
 	})
 }

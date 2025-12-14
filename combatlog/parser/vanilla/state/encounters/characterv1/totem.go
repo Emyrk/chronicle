@@ -1,4 +1,4 @@
-package character
+package characterv1
 
 import (
 	"time"

@@ -51,10 +51,10 @@ func (p *InactivityPeriod) Bump(reason string, m messages.Message) {
 	p.WorkingPeriod.Bump(reason, m)
 }
 
-// CheckTimeout closes the period if the inactivity deadline has passed. When a
+// HandleTimeout closes the period if the inactivity deadline has passed. When a
 // timeout occurs, the period is ended due to inactivity and LastActive is left
 // unchanged.
-func (p *InactivityPeriod) CheckTimeout(now time.Time) {
+func (p *InactivityPeriod) HandleTimeout(now time.Time) {
 	if !p.IsActive() {
 		return
 	}
