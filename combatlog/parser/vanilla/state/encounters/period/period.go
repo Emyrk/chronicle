@@ -35,6 +35,10 @@ type Period struct {
 	LastActive *Moment
 }
 
+func (p Period) IsActive() bool {
+	return p.Start != nil && p.End == nil
+}
+
 type Moment struct {
 	Timestamp messages.Message
 	// Reason is a human-readable string describing why this moment was recorded.
@@ -118,11 +122,7 @@ func (p *WorkingPeriod[M]) Bump(reason string, ts messages.Message) {
 	}
 }
 
-func (p *WorkingPeriod[M]) IsActive() bool {
-	return p.Start != nil && p.End == nil
-}
-
-func (p *WorkingPeriod[M]) String() string {
+func (p Period) String() string {
 	if p.Start == nil && p.End == nil {
 		return "Inactive(Start:<nil>, End:<nil>)"
 	}

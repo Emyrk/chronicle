@@ -9,7 +9,7 @@ import (
 	"github.com/Emyrk/chronicle/combatlog/parser/diagnostic"
 	"github.com/Emyrk/chronicle/combatlog/parser/guid"
 	"github.com/Emyrk/chronicle/combatlog/parser/vanilla/state/encounters"
-	"github.com/Emyrk/chronicle/combatlog/parser/vanilla/state/encounters/character"
+	"github.com/Emyrk/chronicle/combatlog/parser/vanilla/state/encounters/period"
 	"github.com/Emyrk/chronicle/combatlog/parser/vanilla/state/unitdb"
 )
 
@@ -57,7 +57,7 @@ func (f Fight) NamedString(db *unitdb.Units) string {
 // that belong to the same fight.
 type CharacterFight struct {
 	ID       guid.GUID // TODO: This ID is redundant since it's also the map key in Fight.Hostiles
-	Activity []characterv1.Active
+	Activity []period.Period
 }
 
 // AggregateFights takes a map of characters and aggregates them into separate
@@ -79,7 +79,7 @@ func AggregateFights(inst encounters.Instance) ([]Fight, diagnostic.Diagnostics)
 	// Step 1: Filter to only hostile characters and collect their activity periods
 	type activityWithChar struct {
 		charID   guid.GUID
-		activity characterv1.Active
+		activity period.Period
 	}
 
 	var allActivities []activityWithChar
@@ -91,10 +91,10 @@ func AggregateFights(inst encounters.Instance) ([]Fight, diagnostic.Diagnostics)
 		}
 
 		// Collect all completed activity periods for this character
-		for _, period := range char.Periods() {
+		for _, prd := range char.Periods() {
 			// Only include periods that have ended
 			// If a period has no end... what do we do?
-			if period.End == nil {
+			if prd.IsActive() {
 				diags.Append(&diagnostic.Diagnostic{
 					Severity: diagnostic.DiagWarning,
 					Summary:  "Skipping active period with no end time",
@@ -105,7 +105,7 @@ func AggregateFights(inst encounters.Instance) ([]Fight, diagnostic.Diagnostics)
 
 			allActivities = append(allActivities, activityWithChar{
 				charID:   id,
-				activity: period,
+				activity: prd,
 			})
 		}
 	}
@@ -130,8 +130,8 @@ func AggregateFights(inst encounters.Instance) ([]Fight, diagnostic.Diagnostics)
 		Hostiles: make(map[guid.GUID]CharacterFight),
 	}
 
-	currentFightActivities := make(map[guid.GUID][]characterv1.Active)
-	currentFightActivities[allActivities[0].charID] = []characterv1.Active{allActivities[0].activity}
+	currentFightActivities := make(map[guid.GUID][]period.Period)
+	currentFightActivities[allActivities[0].charID] = []period.Period{allActivities[0].activity}
 
 	// Process remaining activities
 	for i := 1; i < len(allActivities); i++ {
@@ -170,8 +170,8 @@ func AggregateFights(inst encounters.Instance) ([]Fight, diagnostic.Diagnostics)
 				End:      activityEnd,
 				Hostiles: make(map[guid.GUID]CharacterFight),
 			}
-			currentFightActivities = make(map[guid.GUID][]characterv1.Active)
-			currentFightActivities[activity.charID] = []characterv1.Active{activity.activity}
+			currentFightActivities = make(map[guid.GUID][]period.Period)
+			currentFightActivities[activity.charID] = []period.Period{activity.activity}
 		}
 	}
 
@@ -183,7 +183,7 @@ func AggregateFights(inst encounters.Instance) ([]Fight, diagnostic.Diagnostics)
 }
 
 // finalizeFight converts the activity map into the Hostiles slice for a fight.
-func finalizeFight(fight *Fight, activities map[guid.GUID][]characterv1.Active) {
+func finalizeFight(fight *Fight, activities map[guid.GUID][]period.Period) {
 	// TODO: Trim back timeouts to last activity?
 	fight.Hostiles = make(map[guid.GUID]CharacterFight, len(activities))
 	for charID, periods := range activities {
