@@ -86,9 +86,13 @@ func (p *WorkingPeriod[M]) Begin(reason string, ts messages.Message) {
 	p.Start = m
 }
 
-func (p *WorkingPeriod[M]) Killed(reason string, ts messages.Message) {
+func (p *WorkingPeriod[M]) Slain(reason string, ts messages.Message) {
 	p.Close(reason, ts)
-	p.Slain = true
+	p.Period.Slain = true
+}
+
+func (p *WorkingPeriod[M]) Killed(reason string, ts messages.Message) {
+	p.Slain(reason, ts)
 }
 
 func (p *WorkingPeriod[M]) Close(reason string, ts messages.Message) {

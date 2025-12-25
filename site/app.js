@@ -499,25 +499,25 @@ function formatTime(date) {
 }
 
 function createFightsDisplay(timeline) {
-    if (!timeline.fights || timeline.fights.length === 0) {
-        fightsContainer.innerHTML = '<div class="no-instances">No fights found in the combat log</div>';
+    if (!timeline.instances || timeline.instances.length === 0) {
+        fightsContainer.innerHTML = '<div class="no-instances">No instances found in the combat log</div>';
         return;
     }
     
     fightsContainer.innerHTML = '';
     
-    // Create a card for each instance's fights
-    timeline.fights.forEach((instanceFights, index) => {
-        if (!instanceFights.fights || instanceFights.fights.length === 0) {
-            return; // Skip instances with no fights
+    // Create a card for each instance's encounters
+    timeline.instances.forEach((instance, index) => {
+        if (!instance.encounters || instance.encounters.length === 0) {
+            return; // Skip instances with no encounters
         }
         
-        const instanceCard = createInstanceFightsCard(instanceFights);
+        const instanceCard = createInstanceEncountersCard(instance);
         fightsContainer.appendChild(instanceCard);
     });
 }
 
-function createInstanceFightsCard(instanceFights) {
+function createInstanceEncountersCard(instance) {
     const card = document.createElement('div');
     card.className = 'instance-card';
     
@@ -528,35 +528,35 @@ function createInstanceFightsCard(instanceFights) {
     header.style.alignItems = 'center';
     
     const title = document.createElement('h3');
-    title.textContent = instanceFights.instanceName;
+    title.textContent = instance.name || instance.zoneId;
     title.style.margin = '0';
     
-    const fightCount = document.createElement('span');
-    fightCount.className = 'zone-badge';
-    fightCount.textContent = `${instanceFights.fights.length} Fight${instanceFights.fights.length !== 1 ? 's' : ''}`;
+    const encounterCount = document.createElement('span');
+    encounterCount.className = 'zone-badge';
+    encounterCount.textContent = `${instance.encounters.length} Encounter${instance.encounters.length !== 1 ? 's' : ''}`;
     
     header.appendChild(title);
-    header.appendChild(fightCount);
+    header.appendChild(encounterCount);
     card.appendChild(header);
     
     const body = document.createElement('div');
     body.style.padding = '20px';
     
-    // Add each fight
-    instanceFights.fights.forEach((fight, index) => {
-        const fightCard = createFightCard(fight, index + 1);
-        body.appendChild(fightCard);
+    // Add each encounter
+    instance.encounters.forEach((encounter, index) => {
+        const encounterCard = createEncounterCard(encounter, index + 1);
+        body.appendChild(encounterCard);
     });
     
     card.appendChild(body);
     return card;
 }
 
-function createFightCard(fight, fightNumber) {
+function createEncounterCard(encounter, encounterNumber) {
     const card = document.createElement('div');
     card.className = 'fight-card';
     
-    // Fight header
+    // Encounter header
     const header = document.createElement('div');
     header.className = 'fight-header';
     
@@ -564,24 +564,37 @@ function createFightCard(fight, fightNumber) {
     titleDiv.className = 'fight-title';
     
     const title = document.createElement('h3');
-    title.textContent = `Fight ${fightNumber}`;
+    const encounterName = encounter.name || `Encounter ${encounterNumber}`;
+    const killStatus = encounter.isKill ? '✅ Kill' : '❌ Wipe';
+    title.textContent = `${encounterName} - ${killStatus}`;
+    
+    const typeAndHostiles = document.createElement('div');
+    typeAndHostiles.style.display = 'flex';
+    typeAndHostiles.style.gap = '8px';
+    
+    const typeBadge = document.createElement('span');
+    typeBadge.className = 'zone-badge';
+    typeBadge.style.background = encounter.type === 'BOSS' ? '#dc3545' : '#6c757d';
+    typeBadge.textContent = encounter.type;
     
     const hostileCount = document.createElement('span');
     hostileCount.className = 'zone-badge';
-    hostileCount.textContent = `${fight.hostiles.length} Hostile${fight.hostiles.length !== 1 ? 's' : ''}`;
+    hostileCount.textContent = `${encounter.hostiles.length} Hostile${encounter.hostiles.length !== 1 ? 's' : ''}`;
     
+    typeAndHostiles.appendChild(typeBadge);
+    typeAndHostiles.appendChild(hostileCount);
     titleDiv.appendChild(title);
-    titleDiv.appendChild(hostileCount);
+    titleDiv.appendChild(typeAndHostiles);
     
     const duration = document.createElement('div');
     duration.className = 'fight-duration';
-    duration.textContent = formatDuration(fight.duration);
+    duration.textContent = formatDuration(encounter.duration);
     
     header.appendChild(titleDiv);
     header.appendChild(duration);
     card.appendChild(header);
     
-    // Fight body
+    // Encounter body
     const body = document.createElement('div');
     body.style.padding = '20px';
     body.style.background = '#f8f9fa';
@@ -594,8 +607,8 @@ function createFightCard(fight, fightNumber) {
     timeInfo.style.borderRadius = '8px';
     timeInfo.style.border = '1px solid #e0e0e0';
     
-    const startTime = new Date(fight.start);
-    const endTime = new Date(fight.end);
+    const startTime = new Date(encounter.start);
+    const endTime = new Date(encounter.end);
     
     timeInfo.innerHTML = `
         <div style="display: flex; gap: 30px; font-size: 0.95em;">
@@ -609,11 +622,17 @@ function createFightCard(fight, fightNumber) {
             </div>
             <div>
                 <strong style="color: #667eea;">⏱️ Duration:</strong> 
-                <span>${formatDuration(fight.duration)}</span>
+                <span>${formatDuration(encounter.duration)}</span>
             </div>
         </div>
     `;
     body.appendChild(timeInfo);
+    
+    // Damage tracking section
+    if (encounter.damage && encounter.damage.totalDealt && Object.keys(encounter.damage.totalDealt).length > 0) {
+        const damageSection = createDamageTrackingSection(encounter.damage);
+        body.appendChild(damageSection);
+    }
     
     // Hostiles section
     const hostilesTitle = document.createElement('h4');
@@ -627,7 +646,7 @@ function createFightCard(fight, fightNumber) {
     hostilesGrid.style.gridTemplateColumns = 'repeat(auto-fill, minmax(300px, 1fr))';
     hostilesGrid.style.gap = '15px';
     
-    fight.hostiles.forEach(hostile => {
+    encounter.hostiles.forEach(hostile => {
         const hostileCard = createHostileCard(hostile);
         hostilesGrid.appendChild(hostileCard);
     });
@@ -712,6 +731,313 @@ function createHostileCard(hostile) {
     }
     
     return card;
+}
+
+function createDamageTrackingSection(damageData) {
+    const section = document.createElement('div');
+    section.style.marginBottom = '20px';
+    
+    const title = document.createElement('h4');
+    title.textContent = '💥 Damage Tracking';
+    title.style.margin = '20px 0 15px 0';
+    title.style.color = '#333';
+    section.appendChild(title);
+    
+    const container = document.createElement('div');
+    container.style.background = 'white';
+    container.style.padding = '15px';
+    container.style.borderRadius = '8px';
+    container.style.border = '1px solid #e0e0e0';
+    
+    // Convert damage object to array, filter to only players, and sort by total damage
+    const damageArray = Object.values(damageData.totalDealt)
+        .filter(unit => unit.isPlayer)
+        .sort((a, b) => b.total - a.total);
+    
+    if (damageArray.length === 0) {
+        container.innerHTML = '<div style="color: #666; text-align: center;">No player damage data available</div>';
+        section.appendChild(container);
+        return section;
+    }
+    
+    // Create damage table
+    const table = document.createElement('table');
+    table.style.width = '100%';
+    table.style.borderCollapse = 'collapse';
+    
+    // Table header
+    const thead = document.createElement('thead');
+    thead.innerHTML = `
+        <tr style="background: #f8f9fa; border-bottom: 2px solid #dee2e6;">
+            <th style="padding: 12px; text-align: left; font-weight: 600;">#</th>
+            <th style="padding: 12px; text-align: left; font-weight: 600;">Name</th>
+            <th style="padding: 12px; text-align: left; font-weight: 600;">Class</th>
+            <th style="padding: 12px; text-align: right; font-weight: 600;">Total Damage</th>
+            <th style="padding: 12px; text-align: right; font-weight: 600;">DPS</th>
+            <th style="padding: 12px; text-align: center; font-weight: 600;">Actions</th>
+        </tr>
+    `;
+    table.appendChild(thead);
+    
+    // Table body
+    const tbody = document.createElement('tbody');
+    
+    damageArray.forEach((unitDamage, index) => {
+        const row = document.createElement('tr');
+        row.style.borderBottom = '1px solid #e9ecef';
+        row.style.transition = 'background 0.2s ease';
+        
+        row.addEventListener('mouseenter', () => {
+            row.style.background = '#f8f9fa';
+        });
+        
+        row.addEventListener('mouseleave', () => {
+            row.style.background = '';
+        });
+        
+        const classColor = getClassColor(unitDamage.class);
+        
+        row.innerHTML = `
+            <td style="padding: 10px; color: #666;">${index + 1}</td>
+            <td style="padding: 10px;">
+                <div style="display: flex; align-items: center; gap: 8px;">
+                    <span style="font-weight: 500;">${escapeHtml(unitDamage.unitName)}</span>
+                </div>
+            </td>
+            <td style="padding: 10px;">
+                <span style="background: ${classColor}; color: white; padding: 4px 8px; border-radius: 4px; font-size: 0.85em; font-weight: 500;">
+                    ${unitDamage.class || 'Unknown'}
+                </span>
+            </td>
+            <td style="padding: 10px; text-align: right; font-weight: 600; color: #dc3545;">
+                ${formatNumber(unitDamage.total)}
+            </td>
+            <td style="padding: 10px; text-align: right; font-weight: 500; color: #667eea;">
+                ${formatNumber(Math.round(unitDamage.dps))}/s
+            </td>
+            <td style="padding: 10px; text-align: center;">
+                <button class="damage-details-btn" data-unit-id="${unitDamage.unitId}" style="
+                    background: #667eea;
+                    color: white;
+                    border: none;
+                    padding: 6px 12px;
+                    border-radius: 4px;
+                    cursor: pointer;
+                    font-size: 0.85em;
+                    transition: background 0.2s ease;
+                ">
+                    📊 Details
+                </button>
+            </td>
+        `;
+        
+        tbody.appendChild(row);
+        
+        // Add event listener for details button
+        const detailsBtn = row.querySelector('.damage-details-btn');
+        detailsBtn.addEventListener('click', () => {
+            showDamageSourcesModal(unitDamage);
+        });
+        
+        detailsBtn.addEventListener('mouseenter', () => {
+            detailsBtn.style.background = '#5568d3';
+        });
+        
+        detailsBtn.addEventListener('mouseleave', () => {
+            detailsBtn.style.background = '#667eea';
+        });
+    });
+    
+    table.appendChild(tbody);
+    container.appendChild(table);
+    section.appendChild(container);
+    
+    return section;
+}
+
+function getClassColor(className) {
+    const classColors = {
+        'Warrior': '#C79C6E',
+        'Paladin': '#F58CBA',
+        'Hunter': '#ABD473',
+        'Rogue': '#FFF569',
+        'Priest': '#FFFFFF',
+        'Shaman': '#0070DE',
+        'Mage': '#69CCF0',
+        'Warlock': '#9482C9',
+        'Druid': '#FF7D0A',
+        'Death Knight': '#C41F3B',
+    };
+    return classColors[className] || '#6c757d';
+}
+
+function showDamageSourcesModal(unitDamage) {
+    // Create modal overlay
+    const overlay = document.createElement('div');
+    overlay.style.position = 'fixed';
+    overlay.style.top = '0';
+    overlay.style.left = '0';
+    overlay.style.width = '100%';
+    overlay.style.height = '100%';
+    overlay.style.background = 'rgba(0, 0, 0, 0.7)';
+    overlay.style.display = 'flex';
+    overlay.style.justifyContent = 'center';
+    overlay.style.alignItems = 'center';
+    overlay.style.zIndex = '1000';
+    overlay.style.animation = 'fadeIn 0.2s ease';
+    
+    // Create modal
+    const modal = document.createElement('div');
+    modal.style.background = 'white';
+    modal.style.padding = '30px';
+    modal.style.borderRadius = '12px';
+    modal.style.maxWidth = '600px';
+    modal.style.maxHeight = '80vh';
+    modal.style.overflow = 'auto';
+    modal.style.position = 'relative';
+    modal.style.boxShadow = '0 20px 60px rgba(0, 0, 0, 0.3)';
+    
+    // Modal header
+    const header = document.createElement('div');
+    header.style.display = 'flex';
+    header.style.justifyContent = 'space-between';
+    header.style.alignItems = 'center';
+    header.style.marginBottom = '20px';
+    header.style.paddingBottom = '15px';
+    header.style.borderBottom = '2px solid #e9ecef';
+    
+    const title = document.createElement('h2');
+    title.style.margin = '0';
+    title.style.color = '#333';
+    title.textContent = `${unitDamage.unitName} - Damage Sources`;
+    
+    const closeBtn = document.createElement('button');
+    closeBtn.textContent = '✕';
+    closeBtn.style.background = 'none';
+    closeBtn.style.border = 'none';
+    closeBtn.style.fontSize = '24px';
+    closeBtn.style.cursor = 'pointer';
+    closeBtn.style.color = '#666';
+    closeBtn.style.padding = '0';
+    closeBtn.style.width = '30px';
+    closeBtn.style.height = '30px';
+    closeBtn.style.display = 'flex';
+    closeBtn.style.alignItems = 'center';
+    closeBtn.style.justifyContent = 'center';
+    closeBtn.style.borderRadius = '50%';
+    closeBtn.style.transition = 'all 0.2s ease';
+    
+    closeBtn.addEventListener('mouseenter', () => {
+        closeBtn.style.background = '#f8f9fa';
+        closeBtn.style.color = '#333';
+    });
+    
+    closeBtn.addEventListener('mouseleave', () => {
+        closeBtn.style.background = 'none';
+        closeBtn.style.color = '#666';
+    });
+    
+    closeBtn.addEventListener('click', () => {
+        document.body.removeChild(overlay);
+    });
+    
+    header.appendChild(title);
+    header.appendChild(closeBtn);
+    modal.appendChild(header);
+    
+    // Summary stats
+    const summary = document.createElement('div');
+    summary.style.display = 'grid';
+    summary.style.gridTemplateColumns = 'repeat(2, 1fr)';
+    summary.style.gap = '15px';
+    summary.style.marginBottom = '20px';
+    
+    const totalBox = document.createElement('div');
+    totalBox.style.padding = '15px';
+    totalBox.style.background = '#f8f9fa';
+    totalBox.style.borderRadius = '8px';
+    totalBox.style.textAlign = 'center';
+    totalBox.innerHTML = `
+        <div style="color: #666; font-size: 0.9em; margin-bottom: 5px;">Total Damage</div>
+        <div style="color: #dc3545; font-size: 1.5em; font-weight: 600;">${formatNumber(unitDamage.total)}</div>
+    `;
+    
+    const dpsBox = document.createElement('div');
+    dpsBox.style.padding = '15px';
+    dpsBox.style.background = '#f8f9fa';
+    dpsBox.style.borderRadius = '8px';
+    dpsBox.style.textAlign = 'center';
+    dpsBox.innerHTML = `
+        <div style="color: #666; font-size: 0.9em; margin-bottom: 5px;">DPS</div>
+        <div style="color: #667eea; font-size: 1.5em; font-weight: 600;">${formatNumber(Math.round(unitDamage.dps))}/s</div>
+    `;
+    
+    summary.appendChild(totalBox);
+    summary.appendChild(dpsBox);
+    modal.appendChild(summary);
+    
+    // Sources list
+    const sourcesTitle = document.createElement('h3');
+    sourcesTitle.textContent = 'Damage by Source';
+    sourcesTitle.style.marginTop = '20px';
+    sourcesTitle.style.marginBottom = '15px';
+    sourcesTitle.style.color = '#333';
+    modal.appendChild(sourcesTitle);
+    
+    // Sort sources by damage
+    const sortedSources = Object.entries(unitDamage.sources).sort((a, b) => b[1] - a[1]);
+    
+    sortedSources.forEach(([source, damage]) => {
+        const percentage = (damage / unitDamage.total * 100).toFixed(1);
+        
+        const sourceDiv = document.createElement('div');
+        sourceDiv.style.marginBottom = '12px';
+        sourceDiv.style.padding = '12px';
+        sourceDiv.style.background = '#f8f9fa';
+        sourceDiv.style.borderRadius = '6px';
+        sourceDiv.style.transition = 'all 0.2s ease';
+        
+        sourceDiv.addEventListener('mouseenter', () => {
+            sourceDiv.style.background = '#e9ecef';
+            sourceDiv.style.transform = 'translateX(5px)';
+        });
+        
+        sourceDiv.addEventListener('mouseleave', () => {
+            sourceDiv.style.background = '#f8f9fa';
+            sourceDiv.style.transform = 'translateX(0)';
+        });
+        
+        sourceDiv.innerHTML = `
+            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;">
+                <span style="font-weight: 500; color: #333;">${escapeHtml(source)}</span>
+                <div style="display: flex; gap: 15px; align-items: center;">
+                    <span style="color: #dc3545; font-weight: 600;">${formatNumber(damage)}</span>
+                    <span style="background: #667eea; color: white; padding: 3px 8px; border-radius: 4px; font-size: 0.85em;">
+                        ${percentage}%
+                    </span>
+                </div>
+            </div>
+            <div style="background: #dee2e6; height: 6px; border-radius: 3px; overflow: hidden;">
+                <div style="background: linear-gradient(90deg, #667eea, #764ba2); height: 100%; width: ${percentage}%; transition: width 0.3s ease;"></div>
+            </div>
+        `;
+        
+        modal.appendChild(sourceDiv);
+    });
+    
+    overlay.appendChild(modal);
+    document.body.appendChild(overlay);
+    
+    // Close on overlay click
+    overlay.addEventListener('click', (e) => {
+        if (e.target === overlay) {
+            document.body.removeChild(overlay);
+        }
+    });
+}
+
+function formatNumber(num) {
+    return num.toString().replace(/\B(?=(\d{3})+(?!\d))/g, ',');
 }
 
 function formatFileSize(bytes) {

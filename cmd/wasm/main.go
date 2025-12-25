@@ -13,12 +13,11 @@ import (
 	"syscall/js"
 	"time"
 
-	"github.com/Emyrk/chronicle/combatlog/consumers"
+	"github.com/Emyrk/chronicle/combatlog"
 	"github.com/Emyrk/chronicle/combatlog/parser/guid"
-	"github.com/Emyrk/chronicle/combatlog/parser/vanilla"
-	"github.com/Emyrk/chronicle/combatlog/parser/vanilla/state/encounters"
-	"github.com/Emyrk/chronicle/combatlog/parser/vanilla/state/encounters/character"
-	"github.com/Emyrk/chronicle/combatlog/parser/vanilla/state/encounters/fight"
+	"github.com/Emyrk/chronicle/combatlog/parser/vanilla/state/damagemetric"
+	"github.com/Emyrk/chronicle/combatlog/parser/vanilla/state/encounters/instances"
+	"github.com/Emyrk/chronicle/combatlog/parser/vanilla/state/unitdb"
 )
 
 func main() {
@@ -27,11 +26,26 @@ func main() {
 	<-make(chan bool) // Keep the program running
 }
 
-// CharacterTimeline represents a character's activity in an instance
-type CharacterTimeline struct {
+// TimelineOutput is the final output structure
+type TimelineOutput struct {
+	Instances []InstanceData `json:"instances"`
+}
+
+// InstanceData represents all data for a single instance
+type InstanceData struct {
+	Name       string          `json:"name"`
+	ZoneID     string          `json:"zoneId"`
+	ZoneName   string          `json:"zoneName"`
+	Characters []CharacterData `json:"characters"`
+	Encounters []EncounterData `json:"encounters"`
+}
+
+// CharacterData represents a character in an instance
+type CharacterData struct {
 	CharacterID   string           `json:"characterId"`
 	CharacterName string           `json:"characterName"`
 	IsPlayer      bool             `json:"isPlayer"`
+	Class         string           `json:"class,omitempty"`
 	Periods       []ActivityPeriod `json:"periods"`
 }
 
@@ -43,35 +57,20 @@ type ActivityPeriod struct {
 	EndReason   string     `json:"endReason,omitempty"`
 }
 
-// InstanceTimeline represents all character activity in an instance
-type InstanceTimeline struct {
-	Name       string              `json:"name"`
-	ZoneName   string              `json:"zoneName"`
-	Characters []CharacterTimeline `json:"characters"`
+// EncounterData represents a fight/encounter with damage tracking
+type EncounterData struct {
+	Name     string        `json:"name"`
+	Type     string        `json:"type"`
+	Start    time.Time     `json:"start"`
+	End      time.Time     `json:"end"`
+	Duration float64       `json:"duration"` // in seconds
+	IsKill   bool          `json:"isKill"`
+	Hostiles []HostileData `json:"hostiles"`
+	Damage   DamageData    `json:"damage"`
 }
 
-// TimelineOutput is the final output structure
-type TimelineOutput struct {
-	Instances []InstanceTimeline `json:"instances"`
-	Fights    []InstanceFights   `json:"fights"`
-}
-
-// InstanceFights represents all fights in an instance
-type InstanceFights struct {
-	InstanceName string      `json:"instanceName"`
-	Fights       []FightData `json:"fights"`
-}
-
-// FightData represents a single fight with hostiles
-type FightData struct {
-	Start    time.Time            `json:"start"`
-	End      time.Time            `json:"end"`
-	Duration float64              `json:"duration"` // in seconds
-	Hostiles []FightCharacterData `json:"hostiles"`
-}
-
-// FightCharacterData represents a character in a fight
-type FightCharacterData struct {
+// HostileData represents a hostile character in an encounter
+type HostileData struct {
 	CharacterID   string        `json:"characterId"`
 	CharacterName string        `json:"characterName"`
 	Periods       []FightPeriod `json:"periods"`
@@ -83,6 +82,23 @@ type FightPeriod struct {
 	End         time.Time `json:"end"`
 	StartReason string    `json:"startReason"`
 	EndReason   string    `json:"endReason"`
+	Slain       bool      `json:"slain"`
+}
+
+// DamageData represents damage tracking for an encounter
+type DamageData struct {
+	TotalDealt map[string]UnitDamage `json:"totalDealt"` // keyed by GUID
+}
+
+// UnitDamage represents damage from a single unit
+type UnitDamage struct {
+	UnitID   string           `json:"unitId"`
+	UnitName string           `json:"unitName"`
+	Class    string           `json:"class,omitempty"`
+	IsPlayer bool             `json:"isPlayer"`
+	Total    int64            `json:"total"`
+	DPS      float64          `json:"dps"`
+	Sources  map[string]int64 `json:"sources"` // spell/ability name -> damage
 }
 
 func parseLogsFunc(this js.Value, args []js.Value) interface{} {
@@ -108,27 +124,16 @@ func parseLogsFunc(this js.Value, args []js.Value) interface{} {
 		Level: slog.LevelError, // Only show errors in WASM
 	}))
 
-	// Create the merger and parser
-	m := vanilla.Merger(logger)
-	liner, scan, err := m.LineScanner(context.Background(), combatLogReader, rawCombatLogReader)
+	// Use the new CombatLogs function
+	output, err := combatlog.CombatLogs(context.Background(), logger, combatLogReader, rawCombatLogReader)
 	if err != nil {
 		return map[string]interface{}{
-			"error": fmt.Sprintf("Failed to create line scanner: %v", err),
+			"error": fmt.Sprintf("Failed to parse combat logs: %v", err),
 		}
 	}
 
-	p := vanilla.NewFromScanner(logger, liner, scan)
-	output := encounters.New(logger)
-	c := consumers.New(logger, output)
-	err = c.ConsumeAll(context.Background(), p)
-	if err != nil {
-		return map[string]interface{}{
-			"error": fmt.Sprintf("Failed to consume parser: %v", err),
-		}
-	}
-
-	// Convert state to timeline format
-	timeline := convertStateToTimeline(output)
+	// Convert output to timeline format
+	timeline := convertOutputToTimeline(output)
 
 	// Convert to JSON
 	timelineJSON, err := json.MarshalIndent(timeline, "", "  ")
@@ -144,121 +149,177 @@ func parseLogsFunc(this js.Value, args []js.Value) interface{} {
 	}
 }
 
-func convertStateToTimeline(s *encounters.State) TimelineOutput {
-	var output TimelineOutput
-	output.Instances = make([]InstanceTimeline, 0, len(s.Instances))
-	output.Fights = make([]InstanceFights, 0, len(s.Instances))
+func convertOutputToTimeline(output *combatlog.Output) TimelineOutput {
+	var timeline TimelineOutput
+	timeline.Instances = make([]InstanceData, 0, len(output.Instances))
 
-	for _, inst := range s.Instances {
-		timeline := InstanceTimeline{
-			Name:       inst.Name(),
-			ZoneName:   "", // We'll need to store this if needed
-			Characters: make([]CharacterTimeline, 0),
+	for zoneID, instOutput := range output.Instances {
+		// Get zone info from first encounter if available
+		zoneName := ""
+		instanceName := ""
+
+		if len(instOutput.Encounters) > 0 {
+			// We need to find the instance to get the zone info
+			// For now, we'll use the zone ID
+			zoneName = zoneID
+			instanceName = zoneID
 		}
 
-		// Get characters from the instance
-		characters := inst.CharactersList()
-		for gid, character := range characters {
-			charTimeline := convertCharacterToTimeline(gid, character, s)
-			timeline.Characters = append(timeline.Characters, charTimeline)
+		instData := InstanceData{
+			Name:       instanceName,
+			ZoneID:     zoneID,
+			ZoneName:   zoneName,
+			Characters: make([]CharacterData, 0),
+			Encounters: make([]EncounterData, 0, len(instOutput.Encounters)),
 		}
 
-		output.Instances = append(output.Instances, timeline)
-
-		// Aggregate fights for this instance
-		fights, _ := fight.AggregateFights(inst)
-		instanceFights := convertFightsToData(inst.Name(), fights, s)
-		output.Fights = append(output.Fights, instanceFights)
-	}
-
-	return output
-}
-
-func convertCharacterToTimeline(gid guid.GUID, char character.Character, s *encounters.State) CharacterTimeline {
-	timeline := CharacterTimeline{
-		CharacterID: gid.String(),
-		IsPlayer:    gid.IsPlayer(),
-		Periods:     make([]ActivityPeriod, 0),
-	}
-
-	// Try to get character name from unitdb
-	if unitInfo, ok := s.Units.Get(gid); ok {
-		timeline.CharacterName = unitInfo.Name
-	} else if player, ok := s.Units.Players[gid]; ok {
-		timeline.CharacterName = player.Name
-	} else {
-		timeline.CharacterName = gid.String()
-	}
-
-	// Convert activity periods using the Character interface
-	// Convert activity periods using the Character interface
-	periods := char.Periods()
-	for _, period := range periods {
-		activityPeriod := ActivityPeriod{}
-
-		if period.Start != nil {
-			activityPeriod.Start = period.Start.Timestamp.Date()
-			activityPeriod.StartReason = period.Start.Reason
+		// Convert encounters (fights)
+		for _, encounter := range instOutput.Encounters {
+			encounterData := convertEncounterToData(encounter, instOutput.DamageTracking, output.Units)
+			instData.Encounters = append(instData.Encounters, encounterData)
 		}
 
-		if period.End != nil {
-			endTime := period.End.Timestamp.Date()
-			activityPeriod.End = &endTime
-			activityPeriod.EndReason = period.End.Reason
+		// Collect all unique characters from encounters
+		characterMap := make(map[string]CharacterData)
+		for _, encounter := range instOutput.Encounters {
+			for charID, charFight := range encounter.Combat.Hostiles {
+				if _, exists := characterMap[charID.String()]; !exists {
+					charData := convertCharacterData(charID, output.Units)
+
+					// Add periods from this encounter
+					for _, period := range charFight.Activity {
+						activityPeriod := ActivityPeriod{
+							Start:       period.Start.Timestamp.Date(),
+							StartReason: period.Start.Reason,
+						}
+						if period.End != nil {
+							endTime := period.End.Timestamp.Date()
+							activityPeriod.End = &endTime
+							activityPeriod.EndReason = period.End.Reason
+						}
+						charData.Periods = append(charData.Periods, activityPeriod)
+					}
+
+					characterMap[charID.String()] = charData
+				}
+			}
 		}
 
-		timeline.Periods = append(timeline.Periods, activityPeriod)
+		// Convert map to slice
+		for _, char := range characterMap {
+			instData.Characters = append(instData.Characters, char)
+		}
+
+		timeline.Instances = append(timeline.Instances, instData)
 	}
 
 	return timeline
 }
 
-func convertFightsToData(instanceName string, fights []fight.Fight, s *encounters.State) InstanceFights {
-	instanceFights := InstanceFights{
-		InstanceName: instanceName,
-		Fights:       make([]FightData, 0, len(fights)),
+func convertCharacterData(gid guid.GUID, units *unitdb.Units) CharacterData {
+	char := CharacterData{
+		CharacterID: gid.String(),
+		IsPlayer:    gid.IsPlayer(),
+		Periods:     make([]ActivityPeriod, 0),
 	}
 
-	for _, f := range fights {
-		duration := f.End.Sub(f.Start).Seconds()
+	// Try to get character info from unitdb
+	if unitInfo, ok := units.Get(gid); ok {
+		char.CharacterName = unitInfo.Name
+	} else if player, ok := units.Players[gid]; ok {
+		char.CharacterName = player.Name
+		char.Class = player.HeroClass.String()
+	} else {
+		char.CharacterName = gid.String()
+	}
 
-		fightData := FightData{
-			Start:    f.Start,
-			End:      f.End,
-			Duration: duration,
-			Hostiles: make([]FightCharacterData, 0, len(f.Hostiles)),
+	return char
+}
+
+func convertEncounterToData(encounter instances.Encounter, dmgTracking *damagemetric.Damage, units *unitdb.Units) EncounterData {
+	duration := encounter.Combat.End.Sub(encounter.Combat.Start).Seconds()
+
+	encounterData := EncounterData{
+		Name:     encounter.Name,
+		Type:     encounter.Type.String(),
+		Start:    encounter.Combat.Start,
+		End:      encounter.Combat.End,
+		Duration: duration,
+		IsKill:   encounter.IsKill,
+		Hostiles: make([]HostileData, 0, len(encounter.Combat.Hostiles)),
+		Damage:   DamageData{TotalDealt: make(map[string]UnitDamage)},
+	}
+
+	// Convert hostile characters
+	for charID, charFight := range encounter.Combat.Hostiles {
+		charName := charID.String()
+		if unitInfo, ok := units.Get(charID); ok {
+			charName = unitInfo.Name
 		}
 
-		// Convert each hostile character
-		for charID, charFight := range f.Hostiles {
-			charName := charID.String()
-			// Try to get character name from unitdb
-			if unitInfo, ok := s.Units.Get(charID); ok {
-				charName = unitInfo.Name
-			}
+		hostileData := HostileData{
+			CharacterID:   charID.String(),
+			CharacterName: charName,
+			Periods:       make([]FightPeriod, 0, len(charFight.Activity)),
+		}
 
-			charData := FightCharacterData{
-				CharacterID:   charID.String(),
-				CharacterName: charName,
-				Periods:       make([]FightPeriod, 0, len(charFight.Activity)),
+		for _, activity := range charFight.Activity {
+			period := FightPeriod{
+				Start:       activity.Start.Timestamp.Date(),
+				End:         activity.End.Timestamp.Date(),
+				StartReason: activity.Start.Reason,
+				EndReason:   activity.End.Reason,
+				Slain:       activity.Slain,
 			}
+			hostileData.Periods = append(hostileData.Periods, period)
+		}
 
-			// Convert activity periods
-			for _, activity := range charFight.Activity {
-				period := FightPeriod{
-					Start:       activity.Start.Timestamp.Date(),
-					End:         activity.End.Timestamp.Date(),
-					StartReason: activity.Start.Reason,
-					EndReason:   activity.End.Reason,
+		encounterData.Hostiles = append(encounterData.Hostiles, hostileData)
+	}
+
+	// Get damage summary for this encounter
+	if dmgTracking != nil {
+		summary, err := dmgTracking.Summary(encounter.Combat.Start, encounter.Combat.End)
+		if err == nil {
+			for unitGUID, sources := range summary.TotalDealt {
+				var total int64
+				for _, amount := range sources {
+					total += int64(amount)
 				}
-				charData.Periods = append(charData.Periods, period)
+
+				// Convert sources from int32 to int64
+				sourcesInt64 := make(map[string]int64)
+				for source, amount := range sources {
+					sourcesInt64[source] = int64(amount)
+				}
+
+				dps := 0.0
+				if duration > 0 {
+					dps = float64(total) / duration
+				}
+
+				unitDamage := UnitDamage{
+					UnitID:   unitGUID.String(),
+					IsPlayer: unitGUID.IsPlayer(),
+					Total:    total,
+					DPS:      dps,
+					Sources:  sourcesInt64,
+				}
+
+				// Get unit info
+				if unitInfo, ok := units.Get(unitGUID); ok {
+					unitDamage.UnitName = unitInfo.Name
+				} else if player, ok := units.Players[unitGUID]; ok {
+					unitDamage.UnitName = player.Name
+					unitDamage.Class = player.HeroClass.String()
+				} else {
+					unitDamage.UnitName = unitGUID.String()
+				}
+
+				encounterData.Damage.TotalDealt[unitGUID.String()] = unitDamage
 			}
-
-			fightData.Hostiles = append(fightData.Hostiles, charData)
 		}
-
-		instanceFights.Fights = append(instanceFights.Fights, fightData)
 	}
 
-	return instanceFights
+	return encounterData
 }
