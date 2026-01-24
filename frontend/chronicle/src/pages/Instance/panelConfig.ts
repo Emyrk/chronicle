@@ -104,10 +104,10 @@ function mergeAbilities(targetFilter: Set<string>, target: RawAbilities, source:
       const existing = target[targetGuid][abilityName];
       if (existing) {
         target[targetGuid][abilityName] = mergeAbility(existing, ability);
-        total += ability.total;
       } else {
         target[targetGuid][abilityName] = { ...ability };
       }
+      total += ability.total;
     }
   }
   return total

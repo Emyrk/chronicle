@@ -143,6 +143,8 @@ export function PlayerMetricChart({
             isPinned={pinnedPlayerIds.has(player.playerID)}
             onTogglePin={() => handleTogglePin(player.playerID)}
             panelTitle={panelTitle}
+            perSecond={perSecond}
+            durationMillis={duration_millis}
           />
         })}
       </div>
@@ -161,6 +163,8 @@ export interface PlayerMetricRowProps {
   isPinned?: boolean
   onTogglePin?: () => void
   panelTitle?: string
+  perSecond?: boolean
+  durationMillis?: number
 }
 
 // Format number compactly
@@ -176,10 +180,12 @@ function formatCompactNumber(value: number): string {
 
 // Ability breakdown table component
 // invertedColors: when true, uses bg-foreground/text-background (for tooltips with dark bg)
-function AbilityBreakdownTable({ abilities, totalValue, invertedColors = false }: { 
+function AbilityBreakdownTable({ abilities, totalValue, invertedColors = false, perSecond = false, durationMillis }: { 
   abilities: AbilityBreakdown[], 
   totalValue: number,
-  invertedColors?: boolean 
+  invertedColors?: boolean,
+  perSecond?: boolean,
+  durationMillis?: number,
 }) {
   if (!abilities || abilities.length === 0) {
     const emptyClass = invertedColors ? "text-background/60" : "text-muted-foreground"
@@ -202,7 +208,7 @@ function AbilityBreakdownTable({ abilities, totalValue, invertedColors = false }
         <thead className={cn("sticky top-0", headerBgClass)}>
           <tr className={cn("border-b", borderClass)}>
             <th className="text-left py-1.5 px-2 font-medium">Ability</th>
-            <th className="text-right py-1.5 px-2 font-medium">Damage</th>
+            <th className="text-right py-1.5 px-2 font-medium">{perSecond ? 'DPS' : 'Damage'}</th>
             <th className="text-right py-1.5 px-2 font-medium">%</th>
             <th className="text-right py-1.5 px-2 font-medium">Count</th>
             <th className="text-right py-1.5 px-2 font-medium">Crit%</th>
@@ -212,7 +218,8 @@ function AbilityBreakdownTable({ abilities, totalValue, invertedColors = false }
           {sorted.map((ability) => {
             const totalHits = ability.hitCount + ability.critCount
             const critPercent = totalHits > 0 ? (ability.critCount / totalHits) * 100 : 0
-            const damagePercent = totalValue > 0 ? (ability.totalDamage / totalValue) * 100 : 0
+            const displayDamage = perSecond && durationMillis ? (ability.totalDamage / durationMillis) * 1000 : ability.totalDamage
+            const damagePercent = totalValue > 0 ? (displayDamage / totalValue) * 100 : 0
             
             return (
               <tr key={ability.name} className={cn("border-b", borderClass.replace("20", "10"), hoverClass)}>
@@ -220,7 +227,7 @@ function AbilityBreakdownTable({ abilities, totalValue, invertedColors = false }
                   {ability.name}
                 </td>
                 <td className="text-right py-1 px-2 tabular-nums">
-                  {formatCompactNumber(ability.totalDamage)}
+                  {formatCompactNumber(displayDamage)}
                 </td>
                 <td className={cn("text-right py-1 px-2 tabular-nums", mutedClass)}>
                   {damagePercent.toFixed(1)}%
@@ -246,9 +253,11 @@ interface DraggablePinnedTooltipProps {
   initialPosition: { x: number; y: number }
   onClose: () => void
   panelTitle?: string
+  perSecond?: boolean
+  durationMillis?: number
 }
 
-function DraggablePinnedTooltip({ player, initialPosition, onClose, panelTitle }: DraggablePinnedTooltipProps) {
+function DraggablePinnedTooltip({ player, initialPosition, onClose, panelTitle, perSecond, durationMillis }: DraggablePinnedTooltipProps) {
   const [position, setPosition] = useState(initialPosition)
   const [isDragging, setIsDragging] = useState(false)
   const dragStartRef = useRef<{ x: number; y: number; posX: number; posY: number } | null>(null)
@@ -339,6 +348,8 @@ function DraggablePinnedTooltip({ player, initialPosition, onClose, panelTitle }
         abilities={player.abilityBreakdown ?? []} 
         totalValue={player.value}
         invertedColors
+        perSecond={perSecond}
+        durationMillis={durationMillis}
       />
     </div>
   )
@@ -355,6 +366,8 @@ export function PlayerMetricRow({
   isPinned = false,
   onTogglePin,
   panelTitle,
+  perSecond,
+  durationMillis,
 }: PlayerMetricRowProps) {
   const { ref, x, y } = useMouse<HTMLDivElement>();
   const rowRef = useRef<HTMLDivElement>(null)
@@ -547,6 +560,8 @@ export function PlayerMetricRow({
             abilities={player.abilityBreakdown ?? []} 
             totalValue={player.value}
             invertedColors
+            perSecond={perSecond}
+            durationMillis={durationMillis}
           />
         </TooltipContent>
       </Tooltip>
@@ -559,6 +574,8 @@ export function PlayerMetricRow({
         initialPosition={pinnedPosition}
         onClose={handleClose}
         panelTitle={panelTitle}
+        perSecond={perSecond}
+        durationMillis={durationMillis}
       />
     )}
   </>
