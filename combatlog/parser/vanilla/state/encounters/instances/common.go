@@ -1,8 +1,13 @@
 package instances
 
 import (
+	"bytes"
+	"compress/gzip"
 	"context"
+	"encoding/binary"
+	"errors"
 	"fmt"
+	"io"
 	"log/slog"
 	"strings"
 
@@ -58,9 +63,13 @@ func (c *Common) Finalize(ctx context.Context) (*FinalizedInstance, error) {
 		}
 	}
 
+	zipOut := bytes.NewBuffer(nil)
+	ziper := gzip.NewWriter(zipOut)
 	encounters := make([]Encounter, 0, len(c.completedFights))
 	totalSize := int64(0)
 	totalMessages := int64(0)
+	totalCustomSize := int64(0)
+	last := 0
 	for _, fight := range c.completedFights {
 		encounterName := ""
 		encounterType := types.EncounterTypeTRASH
@@ -91,13 +100,30 @@ func (c *Common) Finalize(ctx context.Context) (*FinalizedInstance, error) {
 				}
 			}
 		}
+		cdata, err := CustomMarshal(fight.damage)
+		if err != nil {
+			return nil, fmt.Errorf("marshalling damage: %w", err)
+		}
+		totalCustomSize += int64(len(cdata))
 
 		data, _ := proto.Marshal(&chronicleproto.DamageReport{
 			Damages: fight.damage,
 		})
 		totalSize += int64(len(data))
 		totalMessages += int64(len(fight.damage))
-		c.logger.Info("fight size", slog.Int("data_size", len(data)), slog.String("fight_name", encounterName), slog.Int("message_count", len(fight.damage)))
+		_, err = ziper.Write(data)
+		if err != nil {
+			return nil, fmt.Errorf("writing to gzip: %w", err)
+		}
+		err = ziper.Flush()
+		if err != nil {
+			return nil, fmt.Errorf("flushing gzip: %w", err)
+		}
+
+		zdiff := zipOut.Len() - last
+		last = zipOut.Len()
+
+		c.logger.Info("fight size", slog.Int("zip_data", zdiff), slog.Int("cdata_size", len(cdata)), slog.Int("data_size", len(data)), slog.String("fight_name", encounterName), slog.Int("message_count", len(fight.damage)))
 
 		summary, err := c.combatValues.DamageSummary(ctx, fight.Start, fight.End)
 		if err != nil {
@@ -116,7 +142,25 @@ func (c *Common) Finalize(ctx context.Context) (*FinalizedInstance, error) {
 		})
 	}
 
-	c.logger.Info("total size", slog.Int64("message_count", totalMessages), slog.String("instance", c.name), slog.Int64("data_size", totalSize))
+	ziper.Flush()
+	gzL := zipOut.Len()
+	r, err := gzip.NewReader(zipOut)
+	if err != nil {
+		return nil, fmt.Errorf("creating gzip reader: %w", err)
+	}
+
+	zall, err := io.ReadAll(r)
+	if err != nil {
+		if !strings.Contains(err.Error(), "EOF") && !errors.Is(err, io.EOF) {
+			return nil, fmt.Errorf("reading gzip: %w", err)
+		}
+	}
+
+	if len(zall) != int(totalSize) {
+		return nil, fmt.Errorf("zip size mismatch: %d != %d", len(zall), totalSize)
+	}
+
+	c.logger.Info("total size", slog.Int("zip_data", gzL), slog.Int64("custom_data_size", totalCustomSize), slog.Int64("message_count", totalMessages), slog.String("instance", c.name), slog.Int64("data_size", totalSize))
 	return &FinalizedInstance{
 		Encounters: encounters,
 	}, nil
@@ -316,5 +360,95 @@ func (c *Common) finalizeFight() error {
 	c.currentFight = nil
 	// End the fight
 	c.completedFights = append(c.completedFights, fight)
+	return nil
+}
+
+func CustomMarshal(dmgs []*chronicleproto.Damage) ([]byte, error) {
+	var buf bytes.Buffer
+	for _, d := range dmgs {
+		err := CustomMarshalSingle(d, &buf)
+		if err != nil {
+			return nil, err
+		}
+	}
+
+	return buf.Bytes(), nil
+}
+
+func CustomMarshalSingle(dmg *chronicleproto.Damage, buf *bytes.Buffer) error {
+	endian := binary.LittleEndian
+
+	err := binary.Write(buf, endian, dmg.OffsetMilli)
+	if err != nil {
+		return err
+	}
+
+	err = binary.Write(buf, endian, dmg.Caster != nil)
+	if err != nil {
+		return err
+	}
+
+	if dmg.Caster != nil {
+		_, err = buf.WriteString(*dmg.Caster)
+		if err != nil {
+			return err
+		}
+	}
+
+	err = binary.Write(buf, endian, dmg.SpellName != nil)
+	if err != nil {
+		return err
+	}
+	if dmg.SpellName != nil {
+		_, err = buf.WriteString(*dmg.SpellName)
+		if err != nil {
+			return err
+		}
+	}
+
+	_, err = buf.WriteString(dmg.Target)
+	if err != nil {
+		return err
+	}
+
+	err = binary.Write(buf, endian, uint32(dmg.HitType))
+	if err != nil {
+		return err
+	}
+
+	err = binary.Write(buf, endian, dmg.Amount)
+	if err != nil {
+		return err
+	}
+
+	err = binary.Write(buf, endian, uint32(dmg.School))
+	if err != nil {
+		return err
+	}
+
+	err = binary.Write(buf, endian, uint32(len(dmg.Tailers)))
+	if err != nil {
+		return err
+	}
+
+	for _, t := range dmg.Tailers {
+		err = binary.Write(buf, endian, t.Amount != nil)
+		if err != nil {
+			return err
+		}
+
+		if t.Amount != nil {
+			err = binary.Write(buf, endian, *t.Amount)
+			if err != nil {
+				return err
+			}
+		}
+
+		err = binary.Write(buf, endian, uint32(t.HitType))
+		if err != nil {
+			return err
+		}
+	}
+
 	return nil
 }
