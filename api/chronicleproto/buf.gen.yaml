@@ -1,0 +1,10 @@
+version: v2
+plugins:
+  # Go generation
+  - remote: buf.build/protocolbuffers/go
+    out: .
+    opt:
+      - paths=source_relative
+  # TypeScript generation
+  - remote: buf.build/bufbuild/es
+    out: ../../frontend/chronicle/src/api/proto

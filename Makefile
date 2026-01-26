@@ -109,6 +109,10 @@ database/dump.sql: $(wildcard database/migrations/*.sql)
 gen/db: $(DB_GEN_FILES)
 .PHONY: gen/db
 
+gen/proto:
+	go generate ./api/chronicleproto/...
+.PHONY: gen/proto
+
 .PHONY: gen
-gen: gen/db wasm database/unique_constraint.go frontend/chronicle/src/api/typesGenerated.ts
+gen: gen/db gen/proto wasm database/unique_constraint.go frontend/chronicle/src/api/typesGenerated.ts
 	go generate ./...

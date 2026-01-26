@@ -1,0 +1,10 @@
+syntax = "proto3";
+
+package chronicleproto;
+
+option go_package = "github.com/Emyrk/chronicle/api/chronicleproto";
+
+// Hello world placeholder message
+message HelloWorld {
+  string message = 1;
+}
