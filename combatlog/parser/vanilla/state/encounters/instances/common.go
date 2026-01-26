@@ -6,15 +6,19 @@ import (
 	"log/slog"
 	"strings"
 
+	"github.com/Emyrk/chronicle/api/chronicleproto"
 	"github.com/Emyrk/chronicle/combatlog/parser/guid"
 	"github.com/Emyrk/chronicle/combatlog/parser/types"
 	"github.com/Emyrk/chronicle/combatlog/parser/types/unitinfo"
 	"github.com/Emyrk/chronicle/combatlog/parser/types/zone"
 	"github.com/Emyrk/chronicle/combatlog/parser/vanilla/messages"
 	"github.com/Emyrk/chronicle/combatlog/parser/vanilla/state/combatmetrics"
+	"github.com/Emyrk/chronicle/combatlog/parser/vanilla/state/combatproto"
 	"github.com/Emyrk/chronicle/combatlog/parser/vanilla/state/encounters/character"
 	"github.com/Emyrk/chronicle/combatlog/parser/vanilla/state/encounters/period"
 	"github.com/Emyrk/chronicle/combatlog/parser/vanilla/state/unitdb"
+	"github.com/Emyrk/chronicle/internal/ptr"
+	"github.com/gogo/protobuf/proto"
 )
 
 var _ Instance = (*Common)(nil)
@@ -36,6 +40,7 @@ type Common struct {
 	currentFight    *OngoingFight
 	completedFights []Fight
 	combatValues    *combatmetrics.Metrics
+	combatProto     *combatproto.CombatProto
 }
 
 type FinalizedInstance struct {
@@ -54,6 +59,8 @@ func (c *Common) Finalize(ctx context.Context) (*FinalizedInstance, error) {
 	}
 
 	encounters := make([]Encounter, 0, len(c.completedFights))
+	totalSize := int64(0)
+	totalMessages := int64(0)
 	for _, fight := range c.completedFights {
 		encounterName := ""
 		encounterType := types.EncounterTypeTRASH
@@ -85,6 +92,13 @@ func (c *Common) Finalize(ctx context.Context) (*FinalizedInstance, error) {
 			}
 		}
 
+		data, _ := proto.Marshal(&chronicleproto.DamageReport{
+			Damages: fight.damage,
+		})
+		totalSize += int64(len(data))
+		totalMessages += int64(len(fight.damage))
+		c.logger.Info("fight size", slog.Int("data_size", len(data)), slog.String("fight_name", encounterName), slog.Int("message_count", len(fight.damage)))
+
 		summary, err := c.combatValues.DamageSummary(ctx, fight.Start, fight.End)
 		if err != nil {
 			return nil, fmt.Errorf("computing damage summary: %w", err)
@@ -102,6 +116,7 @@ func (c *Common) Finalize(ctx context.Context) (*FinalizedInstance, error) {
 		})
 	}
 
+	c.logger.Info("total size", slog.Int64("message_count", totalMessages), slog.String("instance", c.name), slog.Int64("data_size", totalSize))
 	return &FinalizedInstance{
 		Encounters: encounters,
 	}, nil
@@ -158,6 +173,36 @@ func (c *Common) Process(m messages.Message) error {
 		}
 	}
 
+	if c.currentFight != nil {
+		switch tm := m.(type) {
+		case messages.Damage:
+			var caster *string
+			if tm.Caster != nil {
+				caster = ptr.Ref(tm.Caster.String())
+			}
+
+			trailers := make([]*chronicleproto.Tailer, 0)
+			for _, t := range tm.Trailer {
+				trailers = append(trailers, &chronicleproto.Tailer{
+					Amount:  t.Amount,
+					HitType: uint32(t.HitType),
+				})
+			}
+
+			c.currentFight.damage = append(c.currentFight.damage, &chronicleproto.Damage{
+				OffsetMilli: 55000, // TODO: Correct offset
+				Caster:      caster,
+				SpellName:   tm.SpellName,
+				Target:      tm.Target.String(),
+				HitType:     uint32(tm.HitType),
+				Amount:      tm.Amount,
+				// TODO:
+				School:  chronicleproto.School_None,
+				Tailers: trailers,
+			})
+		}
+	}
+
 	err = c.combatValues.Process(m)
 	if err != nil {
 		return fmt.Errorf("processing combat metrics: %w", err)
@@ -179,6 +224,7 @@ func (c *Common) CharacterActivityChange() error {
 	if c.currentFight == nil {
 		c.currentFight = &OngoingFight{
 			ActiveHostiles: make(map[guid.GUID]struct{}),
+			damage:         make([]*chronicleproto.Damage, 0),
 			Start:          nil,
 			End:            nil,
 		}
@@ -247,6 +293,7 @@ func (c *Common) finalizeFight() error {
 		Hostiles: map[guid.GUID]CharacterFight{},
 		Start:    c.currentFight.Start.Timestamp.Date(),
 		End:      c.currentFight.End.Timestamp.Date(),
+		damage:   c.currentFight.damage,
 	}
 
 	for id := range c.currentFight.ActiveHostiles {

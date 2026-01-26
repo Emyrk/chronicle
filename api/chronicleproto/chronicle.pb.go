@@ -21,6 +21,70 @@ const (
 	_ = protoimpl.EnforceVersion(protoimpl.MaxVersion - 20)
 )
 
+type School int32
+
+const (
+	School_None     School = 0
+	School_Physical School = 1
+	School_Holy     School = 2
+	School_Fire     School = 3
+	School_Nature   School = 4
+	School_Frost    School = 5
+	School_Shadow   School = 6
+	School_Arcane   School = 7
+)
+
+// Enum value maps for School.
+var (
+	School_name = map[int32]string{
+		0: "None",
+		1: "Physical",
+		2: "Holy",
+		3: "Fire",
+		4: "Nature",
+		5: "Frost",
+		6: "Shadow",
+		7: "Arcane",
+	}
+	School_value = map[string]int32{
+		"None":     0,
+		"Physical": 1,
+		"Holy":     2,
+		"Fire":     3,
+		"Nature":   4,
+		"Frost":    5,
+		"Shadow":   6,
+		"Arcane":   7,
+	}
+)
+
+func (x School) Enum() *School {
+	p := new(School)
+	*p = x
+	return p
+}
+
+func (x School) String() string {
+	return protoimpl.X.EnumStringOf(x.Descriptor(), protoreflect.EnumNumber(x))
+}
+
+func (School) Descriptor() protoreflect.EnumDescriptor {
+	return file_chronicle_proto_enumTypes[0].Descriptor()
+}
+
+func (School) Type() protoreflect.EnumType {
+	return &file_chronicle_proto_enumTypes[0]
+}
+
+func (x School) Number() protoreflect.EnumNumber {
+	return protoreflect.EnumNumber(x)
+}
+
+// Deprecated: Use School.Descriptor instead.
+func (School) EnumDescriptor() ([]byte, []int) {
+	return file_chronicle_proto_rawDescGZIP(), []int{0}
+}
+
 // Hello world placeholder message
 type HelloWorld struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
@@ -66,6 +130,203 @@ func (x *HelloWorld) GetMessage() string {
 	return ""
 }
 
+type Tailer struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Amount        *uint32                `protobuf:"varint,1,opt,name=amount,proto3,oneof" json:"amount,omitempty"`
+	HitType       uint32                 `protobuf:"varint,2,opt,name=hitType,proto3" json:"hitType,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *Tailer) Reset() {
+	*x = Tailer{}
+	mi := &file_chronicle_proto_msgTypes[1]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *Tailer) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*Tailer) ProtoMessage() {}
+
+func (x *Tailer) ProtoReflect() protoreflect.Message {
+	mi := &file_chronicle_proto_msgTypes[1]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use Tailer.ProtoReflect.Descriptor instead.
+func (*Tailer) Descriptor() ([]byte, []int) {
+	return file_chronicle_proto_rawDescGZIP(), []int{1}
+}
+
+func (x *Tailer) GetAmount() uint32 {
+	if x != nil && x.Amount != nil {
+		return *x.Amount
+	}
+	return 0
+}
+
+func (x *Tailer) GetHitType() uint32 {
+	if x != nil {
+		return x.HitType
+	}
+	return 0
+}
+
+type DamageReport struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Damages       []*Damage              `protobuf:"bytes,1,rep,name=damages,proto3" json:"damages,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *DamageReport) Reset() {
+	*x = DamageReport{}
+	mi := &file_chronicle_proto_msgTypes[2]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *DamageReport) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*DamageReport) ProtoMessage() {}
+
+func (x *DamageReport) ProtoReflect() protoreflect.Message {
+	mi := &file_chronicle_proto_msgTypes[2]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use DamageReport.ProtoReflect.Descriptor instead.
+func (*DamageReport) Descriptor() ([]byte, []int) {
+	return file_chronicle_proto_rawDescGZIP(), []int{2}
+}
+
+func (x *DamageReport) GetDamages() []*Damage {
+	if x != nil {
+		return x.Damages
+	}
+	return nil
+}
+
+type Damage struct {
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// Offset from the last message
+	OffsetMilli   int32     `protobuf:"varint,1,opt,name=offsetMilli,proto3" json:"offsetMilli,omitempty"`
+	Caster        *string   `protobuf:"bytes,2,opt,name=caster,proto3,oneof" json:"caster,omitempty"`
+	SpellName     *string   `protobuf:"bytes,3,opt,name=spellName,proto3,oneof" json:"spellName,omitempty"`
+	Target        string    `protobuf:"bytes,4,opt,name=target,proto3" json:"target,omitempty"`
+	HitType       uint32    `protobuf:"varint,5,opt,name=hitType,proto3" json:"hitType,omitempty"`
+	Amount        int32     `protobuf:"varint,6,opt,name=amount,proto3" json:"amount,omitempty"`
+	School        School    `protobuf:"varint,7,opt,name=school,proto3,enum=chronicleproto.School" json:"school,omitempty"`
+	Tailers       []*Tailer `protobuf:"bytes,8,rep,name=tailers,proto3" json:"tailers,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *Damage) Reset() {
+	*x = Damage{}
+	mi := &file_chronicle_proto_msgTypes[3]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *Damage) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*Damage) ProtoMessage() {}
+
+func (x *Damage) ProtoReflect() protoreflect.Message {
+	mi := &file_chronicle_proto_msgTypes[3]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use Damage.ProtoReflect.Descriptor instead.
+func (*Damage) Descriptor() ([]byte, []int) {
+	return file_chronicle_proto_rawDescGZIP(), []int{3}
+}
+
+func (x *Damage) GetOffsetMilli() int32 {
+	if x != nil {
+		return x.OffsetMilli
+	}
+	return 0
+}
+
+func (x *Damage) GetCaster() string {
+	if x != nil && x.Caster != nil {
+		return *x.Caster
+	}
+	return ""
+}
+
+func (x *Damage) GetSpellName() string {
+	if x != nil && x.SpellName != nil {
+		return *x.SpellName
+	}
+	return ""
+}
+
+func (x *Damage) GetTarget() string {
+	if x != nil {
+		return x.Target
+	}
+	return ""
+}
+
+func (x *Damage) GetHitType() uint32 {
+	if x != nil {
+		return x.HitType
+	}
+	return 0
+}
+
+func (x *Damage) GetAmount() int32 {
+	if x != nil {
+		return x.Amount
+	}
+	return 0
+}
+
+func (x *Damage) GetSchool() School {
+	if x != nil {
+		return x.School
+	}
+	return School_None
+}
+
+func (x *Damage) GetTailers() []*Tailer {
+	if x != nil {
+		return x.Tailers
+	}
+	return nil
+}
+
 var File_chronicle_proto protoreflect.FileDescriptor
 
 const file_chronicle_proto_rawDesc = "" +
@@ -73,7 +334,37 @@ const file_chronicle_proto_rawDesc = "" +
 	"\x0fchronicle.proto\x12\x0echronicleproto\"&\n" +
 	"\n" +
 	"HelloWorld\x12\x18\n" +
-	"\amessage\x18\x01 \x01(\tR\amessageB/Z-github.com/Emyrk/chronicle/api/chronicleprotob\x06proto3"
+	"\amessage\x18\x01 \x01(\tR\amessage\"J\n" +
+	"\x06Tailer\x12\x1b\n" +
+	"\x06amount\x18\x01 \x01(\rH\x00R\x06amount\x88\x01\x01\x12\x18\n" +
+	"\ahitType\x18\x02 \x01(\rR\ahitTypeB\t\n" +
+	"\a_amount\"@\n" +
+	"\fDamageReport\x120\n" +
+	"\adamages\x18\x01 \x03(\v2\x16.chronicleproto.DamageR\adamages\"\xaf\x02\n" +
+	"\x06Damage\x12 \n" +
+	"\voffsetMilli\x18\x01 \x01(\x05R\voffsetMilli\x12\x1b\n" +
+	"\x06caster\x18\x02 \x01(\tH\x00R\x06caster\x88\x01\x01\x12!\n" +
+	"\tspellName\x18\x03 \x01(\tH\x01R\tspellName\x88\x01\x01\x12\x16\n" +
+	"\x06target\x18\x04 \x01(\tR\x06target\x12\x18\n" +
+	"\ahitType\x18\x05 \x01(\rR\ahitType\x12\x16\n" +
+	"\x06amount\x18\x06 \x01(\x05R\x06amount\x12.\n" +
+	"\x06school\x18\a \x01(\x0e2\x16.chronicleproto.SchoolR\x06school\x120\n" +
+	"\atailers\x18\b \x03(\v2\x16.chronicleproto.TailerR\atailersB\t\n" +
+	"\a_casterB\f\n" +
+	"\n" +
+	"_spellName*c\n" +
+	"\x06School\x12\b\n" +
+	"\x04None\x10\x00\x12\f\n" +
+	"\bPhysical\x10\x01\x12\b\n" +
+	"\x04Holy\x10\x02\x12\b\n" +
+	"\x04Fire\x10\x03\x12\n" +
+	"\n" +
+	"\x06Nature\x10\x04\x12\t\n" +
+	"\x05Frost\x10\x05\x12\n" +
+	"\n" +
+	"\x06Shadow\x10\x06\x12\n" +
+	"\n" +
+	"\x06Arcane\x10\aB/Z-github.com/Emyrk/chronicle/api/chronicleprotob\x06proto3"
 
 var (
 	file_chronicle_proto_rawDescOnce sync.Once
@@ -87,16 +378,24 @@ func file_chronicle_proto_rawDescGZIP() []byte {
 	return file_chronicle_proto_rawDescData
 }
 
-var file_chronicle_proto_msgTypes = make([]protoimpl.MessageInfo, 1)
+var file_chronicle_proto_enumTypes = make([]protoimpl.EnumInfo, 1)
+var file_chronicle_proto_msgTypes = make([]protoimpl.MessageInfo, 4)
 var file_chronicle_proto_goTypes = []any{
-	(*HelloWorld)(nil), // 0: chronicleproto.HelloWorld
+	(School)(0),          // 0: chronicleproto.School
+	(*HelloWorld)(nil),   // 1: chronicleproto.HelloWorld
+	(*Tailer)(nil),       // 2: chronicleproto.Tailer
+	(*DamageReport)(nil), // 3: chronicleproto.DamageReport
+	(*Damage)(nil),       // 4: chronicleproto.Damage
 }
 var file_chronicle_proto_depIdxs = []int32{
-	0, // [0:0] is the sub-list for method output_type
-	0, // [0:0] is the sub-list for method input_type
-	0, // [0:0] is the sub-list for extension type_name
-	0, // [0:0] is the sub-list for extension extendee
-	0, // [0:0] is the sub-list for field type_name
+	4, // 0: chronicleproto.DamageReport.damages:type_name -> chronicleproto.Damage
+	0, // 1: chronicleproto.Damage.school:type_name -> chronicleproto.School
+	2, // 2: chronicleproto.Damage.tailers:type_name -> chronicleproto.Tailer
+	3, // [3:3] is the sub-list for method output_type
+	3, // [3:3] is the sub-list for method input_type
+	3, // [3:3] is the sub-list for extension type_name
+	3, // [3:3] is the sub-list for extension extendee
+	0, // [0:3] is the sub-list for field type_name
 }
 
 func init() { file_chronicle_proto_init() }
@@ -104,18 +403,21 @@ func file_chronicle_proto_init() {
 	if File_chronicle_proto != nil {
 		return
 	}
+	file_chronicle_proto_msgTypes[1].OneofWrappers = []any{}
+	file_chronicle_proto_msgTypes[3].OneofWrappers = []any{}
 	type x struct{}
 	out := protoimpl.TypeBuilder{
 		File: protoimpl.DescBuilder{
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_chronicle_proto_rawDesc), len(file_chronicle_proto_rawDesc)),
-			NumEnums:      0,
-			NumMessages:   1,
+			NumEnums:      1,
+			NumMessages:   4,
 			NumExtensions: 0,
 			NumServices:   0,
 		},
 		GoTypes:           file_chronicle_proto_goTypes,
 		DependencyIndexes: file_chronicle_proto_depIdxs,
+		EnumInfos:         file_chronicle_proto_enumTypes,
 		MessageInfos:      file_chronicle_proto_msgTypes,
 	}.Build()
 	File_chronicle_proto = out.File

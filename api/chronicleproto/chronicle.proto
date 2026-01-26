@@ -8,3 +8,35 @@ option go_package = "github.com/Emyrk/chronicle/api/chronicleproto";
 message HelloWorld {
   string message = 1;
 }
+
+enum School {
+  None = 0;
+  Physical = 1;
+  Holy = 2;
+  Fire = 3;
+  Nature = 4;
+  Frost = 5;
+  Shadow = 6;
+  Arcane = 7;
+}
+
+message Tailer {
+  optional uint32 amount = 1;
+  uint32 hitType = 2;
+}
+
+message DamageReport {
+  repeated Damage damages = 1;
+}
+
+message Damage {
+  // Offset from the last message
+  int32 offsetMilli = 1;
+  optional string caster = 2;
+  optional string spellName = 3;
+  string target = 4;
+  uint32 hitType = 5;
+  int32 amount = 6;
+  School school = 7;
+  repeated Tailer tailers = 8;
+}

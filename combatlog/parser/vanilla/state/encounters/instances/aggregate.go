@@ -5,6 +5,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/Emyrk/chronicle/api/chronicleproto"
 	"github.com/Emyrk/chronicle/combatlog/parser/guid"
 	"github.com/Emyrk/chronicle/combatlog/parser/types"
 	"github.com/Emyrk/chronicle/combatlog/parser/vanilla/state/combatmetrics"
@@ -14,6 +15,7 @@ import (
 
 type OngoingFight struct {
 	ActiveHostiles map[guid.GUID]struct{}
+	damage         []*chronicleproto.Damage
 
 	Start *period.Moment
 	End   *period.Moment
@@ -67,6 +69,7 @@ type Fight struct {
 	// Each CharacterFight contains all activity periods from that character
 	// that belong to this fight.
 	Hostiles map[guid.GUID]CharacterFight
+	damage   []*chronicleproto.Damage
 
 	// Start is the earliest start time across all hostile activity periods.
 	Start time.Time

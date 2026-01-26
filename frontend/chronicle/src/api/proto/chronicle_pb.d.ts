@@ -2,7 +2,7 @@
 // @generated from file chronicle.proto (package chronicleproto, syntax proto3)
 /* eslint-disable */
 
-import type { GenFile, GenMessage } from "@bufbuild/protobuf/codegenv2";
+import type { GenEnum, GenFile, GenMessage } from "@bufbuild/protobuf/codegenv2";
 import type { Message } from "@bufbuild/protobuf";
 
 /**
@@ -27,4 +27,144 @@ export declare type HelloWorld = Message<"chronicleproto.HelloWorld"> & {
  * Use `create(HelloWorldSchema)` to create a new message.
  */
 export declare const HelloWorldSchema: GenMessage<HelloWorld>;
+
+/**
+ * @generated from message chronicleproto.Tailer
+ */
+export declare type Tailer = Message<"chronicleproto.Tailer"> & {
+  /**
+   * @generated from field: optional uint32 amount = 1;
+   */
+  amount?: number;
+
+  /**
+   * @generated from field: uint32 hitType = 2;
+   */
+  hitType: number;
+};
+
+/**
+ * Describes the message chronicleproto.Tailer.
+ * Use `create(TailerSchema)` to create a new message.
+ */
+export declare const TailerSchema: GenMessage<Tailer>;
+
+/**
+ * @generated from message chronicleproto.DamageReport
+ */
+export declare type DamageReport = Message<"chronicleproto.DamageReport"> & {
+  /**
+   * @generated from field: repeated chronicleproto.Damage damages = 1;
+   */
+  damages: Damage[];
+};
+
+/**
+ * Describes the message chronicleproto.DamageReport.
+ * Use `create(DamageReportSchema)` to create a new message.
+ */
+export declare const DamageReportSchema: GenMessage<DamageReport>;
+
+/**
+ * @generated from message chronicleproto.Damage
+ */
+export declare type Damage = Message<"chronicleproto.Damage"> & {
+  /**
+   * Offset from the last message
+   *
+   * @generated from field: int32 offsetMilli = 1;
+   */
+  offsetMilli: number;
+
+  /**
+   * @generated from field: optional string caster = 2;
+   */
+  caster?: string;
+
+  /**
+   * @generated from field: optional string spellName = 3;
+   */
+  spellName?: string;
+
+  /**
+   * @generated from field: string target = 4;
+   */
+  target: string;
+
+  /**
+   * @generated from field: uint32 hitType = 5;
+   */
+  hitType: number;
+
+  /**
+   * @generated from field: int32 amount = 6;
+   */
+  amount: number;
+
+  /**
+   * @generated from field: chronicleproto.School school = 7;
+   */
+  school: School;
+
+  /**
+   * @generated from field: repeated chronicleproto.Tailer tailers = 8;
+   */
+  tailers: Tailer[];
+};
+
+/**
+ * Describes the message chronicleproto.Damage.
+ * Use `create(DamageSchema)` to create a new message.
+ */
+export declare const DamageSchema: GenMessage<Damage>;
+
+/**
+ * @generated from enum chronicleproto.School
+ */
+export enum School {
+  /**
+   * @generated from enum value: None = 0;
+   */
+  None = 0,
+
+  /**
+   * @generated from enum value: Physical = 1;
+   */
+  Physical = 1,
+
+  /**
+   * @generated from enum value: Holy = 2;
+   */
+  Holy = 2,
+
+  /**
+   * @generated from enum value: Fire = 3;
+   */
+  Fire = 3,
+
+  /**
+   * @generated from enum value: Nature = 4;
+   */
+  Nature = 4,
+
+  /**
+   * @generated from enum value: Frost = 5;
+   */
+  Frost = 5,
+
+  /**
+   * @generated from enum value: Shadow = 6;
+   */
+  Shadow = 6,
+
+  /**
+   * @generated from enum value: Arcane = 7;
+   */
+  Arcane = 7,
+}
+
+/**
+ * Describes the enum chronicleproto.School.
+ */
+export declare const SchoolSchema: GenEnum<School>;
 

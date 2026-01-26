@@ -2,13 +2,13 @@
 // @generated from file chronicle.proto (package chronicleproto, syntax proto3)
 /* eslint-disable */
 
-import { fileDesc, messageDesc } from "@bufbuild/protobuf/codegenv2";
+import { enumDesc, fileDesc, messageDesc, tsEnum } from "@bufbuild/protobuf/codegenv2";
 
 /**
  * Describes the file chronicle.proto.
  */
 export const file_chronicle = /*@__PURE__*/
-  fileDesc("Cg9jaHJvbmljbGUucHJvdG8SDmNocm9uaWNsZXByb3RvIh0KCkhlbGxvV29ybGQSDwoHbWVzc2FnZRgBIAEoCUIvWi1naXRodWIuY29tL0VteXJrL2Nocm9uaWNsZS9hcGkvY2hyb25pY2xlcHJvdG9iBnByb3RvMw");
+  fileDesc("Cg9jaHJvbmljbGUucHJvdG8SDmNocm9uaWNsZXByb3RvIh0KCkhlbGxvV29ybGQSDwoHbWVzc2FnZRgBIAEoCSI5CgZUYWlsZXISEwoGYW1vdW50GAEgASgNSACIAQESDwoHaGl0VHlwZRgCIAEoDUIJCgdfYW1vdW50IjcKDERhbWFnZVJlcG9ydBInCgdkYW1hZ2VzGAEgAygLMhYuY2hyb25pY2xlcHJvdG8uRGFtYWdlIuUBCgZEYW1hZ2USEwoLb2Zmc2V0TWlsbGkYASABKAUSEwoGY2FzdGVyGAIgASgJSACIAQESFgoJc3BlbGxOYW1lGAMgASgJSAGIAQESDgoGdGFyZ2V0GAQgASgJEg8KB2hpdFR5cGUYBSABKA0SDgoGYW1vdW50GAYgASgFEiYKBnNjaG9vbBgHIAEoDjIWLmNocm9uaWNsZXByb3RvLlNjaG9vbBInCgd0YWlsZXJzGAggAygLMhYuY2hyb25pY2xlcHJvdG8uVGFpbGVyQgkKB19jYXN0ZXJCDAoKX3NwZWxsTmFtZSpjCgZTY2hvb2wSCAoETm9uZRAAEgwKCFBoeXNpY2FsEAESCAoESG9seRACEggKBEZpcmUQAxIKCgZOYXR1cmUQBBIJCgVGcm9zdBAFEgoKBlNoYWRvdxAGEgoKBkFyY2FuZRAHQi9aLWdpdGh1Yi5jb20vRW15cmsvY2hyb25pY2xlL2FwaS9jaHJvbmljbGVwcm90b2IGcHJvdG8z");
 
 /**
  * Describes the message chronicleproto.HelloWorld.
@@ -16,4 +16,37 @@ export const file_chronicle = /*@__PURE__*/
  */
 export const HelloWorldSchema = /*@__PURE__*/
   messageDesc(file_chronicle, 0);
+
+/**
+ * Describes the message chronicleproto.Tailer.
+ * Use `create(TailerSchema)` to create a new message.
+ */
+export const TailerSchema = /*@__PURE__*/
+  messageDesc(file_chronicle, 1);
+
+/**
+ * Describes the message chronicleproto.DamageReport.
+ * Use `create(DamageReportSchema)` to create a new message.
+ */
+export const DamageReportSchema = /*@__PURE__*/
+  messageDesc(file_chronicle, 2);
+
+/**
+ * Describes the message chronicleproto.Damage.
+ * Use `create(DamageSchema)` to create a new message.
+ */
+export const DamageSchema = /*@__PURE__*/
+  messageDesc(file_chronicle, 3);
+
+/**
+ * Describes the enum chronicleproto.School.
+ */
+export const SchoolSchema = /*@__PURE__*/
+  enumDesc(file_chronicle, 0);
+
+/**
+ * @generated from enum chronicleproto.School
+ */
+export const School = /*@__PURE__*/
+  tsEnum(SchoolSchema);
 
