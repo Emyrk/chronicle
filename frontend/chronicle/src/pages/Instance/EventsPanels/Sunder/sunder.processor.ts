@@ -252,11 +252,11 @@ function processAuraEvent(
     return;
   }
   
-  // Find the most recent cast within the window
+  // Find the OLDEST cast within the window (first warrior to cast gets credit)
   let matchedCast: PendingSunder | null = null;
   let matchedIndex = -1;
   
-  for (let i = pendingCasts.length - 1; i >= 0; i--) {
+  for (let i = 0; i < pendingCasts.length; i++) {
     const pending = pendingCasts[i];
     const timeDiff = timestampMs - pending.timestampMs;
     

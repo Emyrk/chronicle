@@ -25,7 +25,7 @@ import { createRolesPanel } from "./Roles/Roles";
 import { createEmptyPanel } from "./Empty/Empty";
 import { createResourceRegenPanel } from "./ResourceRegen/ResourceRegen";
 import { createInnervatePanel } from "./Innervate/Innervate";
-import { createSunderPanel } from "./Warrior/Sunder";
+import { createSunderPanel } from "./Sunder/Sunder";
 // TODO: Avoidance panel requires spell school data which isn't available yet
 // import { createAvoidancePanel } from "./Avoidance/Avoidance";
 
