@@ -627,6 +627,8 @@ const PANEL_CODES: Record<PanelType, string> = {
   empty: 'e',
   // Class: Druid
   innervate: 'inn',
+  // Class: Warrior
+  sunder: 'sun',
 };
 
 const CODE_TO_PANEL: Record<string, PanelType> = Object.fromEntries(

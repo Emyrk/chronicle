@@ -14,6 +14,7 @@ import { avoidanceProcessor } from "./avoidance.processor";
 import { emptyProcessor } from "../Empty/empty.processor";
 import { resourceRegenProcessor } from "../ResourceRegen/resourceRegen.processor";
 import { innervateProcessor } from "../Innervate/innervate.processor";
+import { sunderProcessor } from "../Warrior/sunder.processor";
 
 // Export individual processors
 export { damageDoneProcessor, enemyDamageDoneProcessor, petDamageDoneProcessor, friendlyFireProcessor } from "../DamageDone/damageDone.processor";
@@ -27,6 +28,7 @@ export { avoidanceProcessor } from "./avoidance.processor";
 export { emptyProcessor } from "../Empty/empty.processor";
 export { resourceRegenProcessor } from "../ResourceRegen/resourceRegen.processor";
 export { innervateProcessor } from "../Innervate/innervate.processor";
+export { sunderProcessor } from "../Warrior/sunder.processor";
 
 // Export state types
 export type { DamageDoneResult as DamageDoneState, DamageDoneData, DamageSourceType } from "../DamageDone/damageDone.processor";
@@ -40,6 +42,7 @@ export type { AvoidanceResult, AvoidanceData, EncounterAvoidance } from "./avoid
 export type { EmptyResult } from "../Empty/empty.processor";
 export type { ResourceRegenResult, PlayerResourceData, ResourceAbilityData } from "../ResourceRegen/resourceRegen.processor";
 export type { InnervateResult, InnervateCast } from "../Innervate/innervate.processor";
+export type { SunderResult, WarriorSunderStats, TargetSunderStats, ConfirmedSunder } from "../Warrior/sunder.processor";
 // Note: ResourceType is exported from allActivityDebug.processor above
 export type { PlayerRoleData, InferredRole, RoleSummary, RoleDetectionDebug, InferRolesResult } from "../Roles/roles.processor";
 export { inferRoles, getRoleSummary } from "../Roles/roles.processor";
@@ -74,4 +77,6 @@ export const processorRegistry: Record<string, PanelProcessor<any, any>> = {
   // Note: roles panel doesn't have its own processor - it reuses damage_taken and healing_done
   // Class: Druid
   innervate: innervateProcessor,
+  // Class: Warrior
+  sunder: sunderProcessor,
 };
