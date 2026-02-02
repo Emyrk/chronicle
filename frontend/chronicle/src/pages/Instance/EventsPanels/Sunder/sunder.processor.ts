@@ -170,10 +170,12 @@ function processCastEvent(
     return;
   }
   
-  // Get player names
+  // Only track player casters
   const casterPlayer = context.players[event.caster];
+  if (!casterPlayer) return;
+  
   const targetUnit = context.units?.[event.target];
-  const casterName = casterPlayer?.name ?? event.caster;
+  const casterName = casterPlayer.name;
   const targetName = targetUnit?.name ?? event.target;
   
   // Calculate offset from encounter start for debug

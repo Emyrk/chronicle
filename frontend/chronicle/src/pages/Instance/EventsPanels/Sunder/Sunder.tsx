@@ -87,17 +87,6 @@ function SunderContent(props: PanelRenderProps<SunderResult>) {
   
   const hasData = warriors.length > 0;
   
-  // Calculate totals
-  const totals = useMemo(() => {
-    let effective = 0;
-    let ineffective = 0;
-    for (const w of warriors) {
-      effective += w.effectiveSunders;
-      ineffective += w.ineffectiveSunders;
-    }
-    return { effective, ineffective, total: effective + ineffective };
-  }, [warriors]);
-  
   return (
     <GenericPanel {...props}>
       {!hasData ? (
@@ -109,7 +98,7 @@ function SunderContent(props: PanelRenderProps<SunderResult>) {
         <TargetsView targets={targets} />
       ) : (
         /* Summary view - shows warrior effectiveness */
-        <WarriorsView warriors={warriors} totals={totals} />
+        <WarriorsView warriors={warriors} />
       )}
     </GenericPanel>
   );
@@ -117,44 +106,25 @@ function SunderContent(props: PanelRenderProps<SunderResult>) {
 
 interface WarriorsViewProps {
   warriors: WarriorSunderStats[];
-  totals: { effective: number; ineffective: number; total: number };
 }
 
-function WarriorsView({ warriors, totals }: WarriorsViewProps) {
-  const effectivenessPercent = totals.total > 0 
-    ? Math.round((totals.effective / totals.total) * 100) 
-    : 0;
-  
+function WarriorsView({ warriors }: WarriorsViewProps) {
   return (
     <div className="space-y-2">
-      <div className="text-xs text-muted-foreground mb-2">
-        Total: <span className="font-medium text-foreground">{totals.total}</span>
-        {" • "}
-        Effective: <span className="font-medium text-green-400">{totals.effective}</span>
-        {" • "}
-        Wasted: <span className="font-medium text-red-400">{totals.ineffective}</span>
-        {" • "}
-        <span className="font-medium text-foreground">{effectivenessPercent}%</span> effective
-      </div>
-      
       <div className="max-h-[300px] overflow-y-auto">
         <table className="w-full text-xs">
           <thead className="sticky top-0 bg-card">
             <tr className="border-b border-border text-muted-foreground">
               <th className="text-left py-1.5 px-2 font-medium">Warrior</th>
-              <th className="text-right py-1.5 px-2 font-medium">Effective</th>
-              <th className="text-right py-1.5 px-2 font-medium">Wasted</th>
               <th className="text-right py-1.5 px-2 font-medium">Total</th>
-              <th className="text-right py-1.5 px-2 font-medium">%</th>
+              <th className="text-right py-1.5 px-2 font-medium">
+                <span className="cursor-help" title="Counted towards the first 5 stacks on a target">Effective</span>
+              </th>
             </tr>
           </thead>
           <tbody>
             {warriors.map((warrior) => {
               const total = warrior.effectiveSunders + warrior.ineffectiveSunders;
-              const percent = total > 0 
-                ? Math.round((warrior.effectiveSunders / total) * 100) 
-                : 0;
-              
               return (
                 <tr
                   key={warrior.guid}
@@ -165,21 +135,11 @@ function WarriorsView({ warriors, totals }: WarriorsViewProps) {
                       {warrior.name}
                     </span>
                   </td>
-                  <td className="py-1 px-2 text-right tabular-nums text-green-400">
-                    {warrior.effectiveSunders}
-                  </td>
-                  <td className="py-1 px-2 text-right tabular-nums text-red-400">
-                    {warrior.ineffectiveSunders}
-                  </td>
                   <td className="py-1 px-2 text-right tabular-nums">
                     {total}
                   </td>
-                  <td className={cn(
-                    "py-1 px-2 text-right tabular-nums",
-                    percent >= 90 ? "text-green-400" : 
-                    percent >= 70 ? "text-yellow-400" : "text-red-400"
-                  )}>
-                    {percent}%
+                  <td className="py-1 px-2 text-right tabular-nums text-green-400">
+                    {warrior.effectiveSunders}
                   </td>
                 </tr>
               );
