@@ -135,10 +135,34 @@ export interface CastProcessorEvent extends EventMeta {
 }
 
 /**
+ * Aura application constants matching AuraApplication proto
+ */
+export const AuraApplication = {
+  Unknown: 0,
+  Gains: 1,
+  Fades: 2,
+  Removed: 3,
+} as const;
+
+export type AuraApplication = typeof AuraApplication[keyof typeof AuraApplication];
+
+/**
+ * Aura event from the "aura" stream.
+ * Tracks buff/debuff gains, fades, and removals.
+ */
+export interface AuraProcessorEvent extends EventMeta {
+  type: "aura";
+  target: string;  // The unit affected by the aura
+  spellName: string;  // Name of the aura/buff/debuff
+  amount: number;  // Stack count or duration
+  application: AuraApplication;  // Gains, Fades, or Removed
+}
+
+/**
  * Discriminated union of all event types.
  * Use event.type to narrow to a specific type.
  */
-export type ProcessorEvent = DamageProcessorEvent | HealProcessorEvent | ResourceChangeProcessorEvent | ExtraAttackProcessorEvent | SlainProcessorEvent | CastProcessorEvent;
+export type ProcessorEvent = DamageProcessorEvent | HealProcessorEvent | ResourceChangeProcessorEvent | ExtraAttackProcessorEvent | SlainProcessorEvent | CastProcessorEvent | AuraProcessorEvent;
 
 /**
  * Selection state for filtering entities (serializable for worker transport).

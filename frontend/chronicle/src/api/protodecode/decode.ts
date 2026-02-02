@@ -1573,6 +1573,236 @@ export class FastCastCursor {
   }
 }
 
+// ============================================================================
+// Aura Events - Zero-allocation decoding
+// ============================================================================
+
+/**
+ * Aura application types from proto enum
+ */
+export const AuraApplication = {
+  Unknown: 0,
+  Gains: 1,
+  Fades: 2,
+  Removed: 3,
+} as const;
+
+export type AuraApplication = typeof AuraApplication[keyof typeof AuraApplication];
+
+/**
+ * Reusable Aura message object
+ */
+export interface ReusableAura {
+  type: "aura";
+  index: number;
+  offsetMilli: number;
+  target: string;
+  spellName: string;
+  amount: number;
+  application: AuraApplication;
+}
+
+/**
+ * Zero-allocation Aura decoder.
+ * 
+ * Aura proto field numbers:
+ *   1: meta (EventMeta)
+ *   2: target (string)
+ *   3: spellName (string)
+ *   4: amount (int32)
+ *   5: application (AuraApplication enum)
+ */
+export class AuraDecoder {
+  // Use shared TextDecoder for better memory efficiency
+  private readonly textDecoder = sharedTextDecoder;
+  
+  /** Reusable message - mutated on each decode */
+  readonly message: ReusableAura = {
+    type: "aura",
+    index: 0,
+    offsetMilli: 0,
+    target: "",
+    spellName: "",
+    amount: 0,
+    application: AuraApplication.Unknown,
+  };
+  
+  /**
+   * Decode an Aura message into the reusable object.
+   * Returns the same `this.message` reference, mutated.
+   */
+  decode(data: Uint8Array, offset: number, length: number): ReusableAura {
+    const end = offset + length;
+    const msg = this.message;
+    
+    // Reset fields
+    msg.index = 0;
+    msg.offsetMilli = 0;
+    msg.target = "";
+    msg.spellName = "";
+    msg.amount = 0;
+    msg.application = AuraApplication.Unknown;
+    
+    while (offset < end) {
+      const tag = data[offset++];
+      const fieldNumber = tag >> 3;
+      const wireType = tag & 0x7;
+      
+      if (wireType === 0) {
+        // Varint
+        const { value, bytesRead } = readVarintFast(data, offset);
+        offset += bytesRead;
+        
+        if (fieldNumber === 4) msg.amount = value;
+        else if (fieldNumber === 5) msg.application = value as AuraApplication;
+      } else if (wireType === 2) {
+        // Length-delimited
+        const { value: len, bytesRead } = readVarintFast(data, offset);
+        offset += bytesRead;
+        
+        if (fieldNumber === 1) {
+          // EventMeta - decode nested
+          const metaEnd = offset + len;
+          while (offset < metaEnd) {
+            const metaTag = data[offset++];
+            const metaField = metaTag >> 3;
+            const metaWire = metaTag & 0x7;
+            
+            if (metaWire === 0) {
+              const { value, bytesRead } = readVarintFast(data, offset);
+              offset += bytesRead;
+              if (metaField === 1) msg.index = value;
+              else if (metaField === 2) msg.offsetMilli = value;
+            }
+          }
+        } else if (fieldNumber === 2) {
+          msg.target = this.textDecoder.decode(data.subarray(offset, offset + len));
+          offset += len;
+        } else if (fieldNumber === 3) {
+          msg.spellName = this.textDecoder.decode(data.subarray(offset, offset + len));
+          offset += len;
+        } else {
+          offset += len;
+        }
+      }
+    }
+    
+    return msg;
+  }
+}
+
+/**
+ * Fast cursor for Aura events with zero-allocation decoding.
+ */
+export class FastAuraCursor {
+  private readonly data: Uint8Array;
+  private readonly decoder = new AuraDecoder();
+  private offset: number = 0;
+  
+  private _currentHeader: PayloadHeader | null = null;
+  private _messagesReadInEncounter: number = 0;
+  private _bytesProcessed: number = 0;
+  
+  constructor(data: Uint8Array) {
+    this.data = data;
+    this._loadNextEncounterHeader();
+  }
+  
+  get currentHeader(): PayloadHeader | null {
+    return this._currentHeader;
+  }
+  
+  get hasMoreInEncounter(): boolean {
+    if (!this._currentHeader) return false;
+    return this._messagesReadInEncounter < this._currentHeader.count;
+  }
+  
+  get bytesProcessed(): number {
+    return this._bytesProcessed;
+  }
+  
+  get bytesTotal(): number {
+    return this.data.length;
+  }
+  
+  /**
+   * Read the next message, returning the reusable message object.
+   * Returns null if no more messages in current encounter.
+   * WARNING: The returned object is reused - copy data if needed!
+   */
+  next(): ReusableAura | null {
+    if (!this.hasMoreInEncounter) return null;
+    
+    // Read length prefix
+    const { value: length, bytesRead } = readVarint(this.data, this.offset);
+    const msgStart = this.offset + bytesRead;
+    
+    // Decode into reusable message
+    const msg = this.decoder.decode(this.data, msgStart, length);
+    
+    // Advance
+    this.offset = msgStart + length;
+    this._bytesProcessed += bytesRead + length;
+    this._messagesReadInEncounter++;
+    
+    return msg;
+  }
+  
+  /**
+   * Move to the next encounter.
+   */
+  nextEncounter(): boolean {
+    // Skip remaining messages in current encounter
+    while (this.hasMoreInEncounter) {
+      this.next();
+    }
+    return this._loadNextEncounterHeader();
+  }
+  
+  private _loadNextEncounterHeader(): boolean {
+    if (this.offset >= this.data.length) {
+      this._currentHeader = null;
+      return false;
+    }
+    
+    const startOffset = this.offset;
+    
+    // Read encounterID
+    const { value: strLen, bytesRead: strLenBytes } = readVarint(this.data, this.offset);
+    this.offset += strLenBytes;
+    const encounterID = sharedTextDecoder.decode(this.data.subarray(this.offset, this.offset + strLen));
+    this.offset += strLen;
+    
+    // Read timestamp
+    const { value: timestampMs, bytesRead: tsBytes } = readVarint64(this.data, this.offset);
+    this.offset += tsBytes;
+    const tsNumber = Number(timestampMs);
+    const firstTimestamp = tsNumber >= 0 && tsNumber < Number.MAX_SAFE_INTEGER 
+      ? new Date(tsNumber) 
+      : new Date(NaN);
+    
+    // Read count
+    const { value: count, bytesRead: countBytes } = readVarint(this.data, this.offset);
+    this.offset += countBytes;
+    
+    // Read dataLength
+    const { value: dataLength, bytesRead: dataLenBytes } = readVarint(this.data, this.offset);
+    this.offset += dataLenBytes;
+    
+    this._currentHeader = {
+      encounterID,
+      firstTimestamp,
+      count,
+      dataLength,
+    };
+    
+    this._messagesReadInEncounter = 0;
+    this._bytesProcessed += (this.offset - startOffset);
+    
+    return true;
+  }
+}
+
 /**
  * Fast varint reader - inline for speed, no object allocation for result
  */

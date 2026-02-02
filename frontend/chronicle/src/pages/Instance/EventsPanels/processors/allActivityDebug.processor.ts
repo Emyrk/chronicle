@@ -2,7 +2,7 @@
  * All Activity Debug processor - stores raw events for debugging stream interleaving
  */
 
-import type { DamageProcessorEvent, HealProcessorEvent, PanelProcessor, ProcessorContext, ResourceChangeProcessorEvent, CastProcessorEvent, CastAction } from "../processorTypes";
+import type { DamageProcessorEvent, HealProcessorEvent, PanelProcessor, ProcessorContext, ResourceChangeProcessorEvent, CastProcessorEvent, CastAction, AuraProcessorEvent, AuraApplication } from "../processorTypes";
 import type { StreamType } from "@/hooks/instanceEvents";
 
 /**
@@ -29,6 +29,8 @@ export interface RawDebugEvent {
   castAction?: CastAction;
   spellId?: number;
   spellRank?: number | null;
+  // Aura-specific fields
+  auraApplication?: AuraApplication;
 }
 
 /**
@@ -56,15 +58,15 @@ export interface AllActivityDebugState {
   eventsCaptured: number;
 }
 
-// This processor handles damage, heal, resource_change, and cast events
-type AllActivityEvent = DamageProcessorEvent | HealProcessorEvent | ResourceChangeProcessorEvent | CastProcessorEvent;
+// This processor handles damage, heal, resource_change, cast, and aura events
+type AllActivityEvent = DamageProcessorEvent | HealProcessorEvent | ResourceChangeProcessorEvent | CastProcessorEvent | AuraProcessorEvent;
 
 // Default page size if no pagination specified
 const DEFAULT_PAGE_SIZE = 100;
 
 export const allActivityProcessor: PanelProcessor<AllActivityDebugState, AllActivityEvent> = {
   id: "all_activity",
-  streams: ["damage", "heal", "resource_change", "cast"],
+  streams: ["damage", "heal", "resource_change", "cast", "aura"],
   
   createState: () => ({
     counts: new Map<string, number>(),
@@ -75,6 +77,7 @@ export const allActivityProcessor: PanelProcessor<AllActivityDebugState, AllActi
       extra_attack: [],
       slain: [],
       cast: [],
+      aura: [],
     },
     streamCounts: {
       damage: 0,
@@ -83,6 +86,7 @@ export const allActivityProcessor: PanelProcessor<AllActivityDebugState, AllActi
       extra_attack: 0,
       slain: 0,
       cast: 0,
+      aura: 0,
     },
     encounters: new Map<string, EncounterMeta>(),
     totalProcessed: 0,
@@ -111,8 +115,8 @@ export const allActivityProcessor: PanelProcessor<AllActivityDebugState, AllActi
     
     // Filter by selected players if any are selected
     const { entitySelection } = context;
-    // Cast events have caster but may not have target
-    const eventCaster = event.caster;
+    // Aura events only have target, cast events have caster but may not have target
+    const eventCaster = "caster" in event ? event.caster : "";
     const eventTarget = "target" in event ? event.target : "";
     if (entitySelection.playerIds.size > 0) {
       if(!(entitySelection.playerIds.has(eventCaster) || (eventTarget && entitySelection.playerIds.has(eventTarget)))) {
@@ -123,8 +127,8 @@ export const allActivityProcessor: PanelProcessor<AllActivityDebugState, AllActi
     // Count events per stream (always count for display in stream toggles)
     state.streamCounts[streamType]++;
     
-    // Count events by caster (always count)
-    const key = eventCaster || "Unknown";
+    // Count events by caster (or target for aura events)
+    const key = eventCaster || eventTarget || "Unknown";
     state.counts.set(key, (state.counts.get(key) || 0) + 1);
     
     // Check if this stream is enabled for pagination
@@ -164,13 +168,17 @@ export const allActivityProcessor: PanelProcessor<AllActivityDebugState, AllActi
          eventTarget)
       : "";
     
-    // Get sourceName - cast events use spell.name instead
+    // Get sourceName - cast events use spell.name, aura events use spellName
     let sourceName = "";
     let amount = 0;
     if (streamType === "cast") {
       const castEvent = event as CastProcessorEvent;
       sourceName = castEvent.spell.name;
       amount = 0; // Casts don't have an amount
+    } else if (streamType === "aura") {
+      const auraEvent = event as AuraProcessorEvent;
+      sourceName = auraEvent.spellName;
+      amount = auraEvent.amount;
     } else {
       const regularEvent = event as DamageProcessorEvent | HealProcessorEvent | ResourceChangeProcessorEvent;
       sourceName = regularEvent.sourceName;
@@ -205,6 +213,12 @@ export const allActivityProcessor: PanelProcessor<AllActivityDebugState, AllActi
       // Show cast action in extra field
       const actionNames = ["Unknown", "Casts", "Begins", "Channels", "Fails"];
       rawEvent.extra = actionNames[castEvent.action] || "Unknown";
+    } else if (streamType === "aura") {
+      const auraEvent = event as AuraProcessorEvent;
+      rawEvent.auraApplication = auraEvent.application;
+      // Show aura application in extra field
+      const applicationNames = ["Unknown", "Gains", "Fades", "Removed"];
+      rawEvent.extra = applicationNames[auraEvent.application] || "Unknown";
     }
     
     // Store in appropriate stream bucket

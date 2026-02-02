@@ -3,7 +3,7 @@
  */
 
 import { useState, useMemo, useCallback } from "react";
-import { Activity, Swords, Heart, Zap, Wand2, ChevronLeft, ChevronRight, ChevronsLeft, ChevronsRight } from "lucide-react";
+import { Activity, Swords, Heart, Zap, Wand2, Sparkles, ChevronLeft, ChevronRight, ChevronsLeft, ChevronsRight } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { formatNumber } from "@/lib/format";
 import { ScrollArea, ScrollBar } from "@/components/ui/ScrollArea/ScrollArea";
@@ -31,6 +31,7 @@ const STREAM_CONFIG: Record<StreamType, { icon: React.ElementType; color: string
   extra_attack: { icon: Swords, color: "text-orange-500", label: "Extra Attack" },
   slain: { icon: Activity, color: "text-gray-500", label: "Slain" },
   cast: { icon: Wand2, color: "text-purple-500", label: "Cast" },
+  aura: { icon: Sparkles, color: "text-cyan-500", label: "Aura" },
 };
 
 interface StreamToggleProps {
@@ -235,12 +236,12 @@ function AllActivityContent({
   onToggleStream,
 }: AllActivityContentProps) {
   // Default state during loading
-  const emptyByStream = { damage: [], heal: [], resource_change: [], extra_attack: [], slain: [], cast: [] };
+  const emptyByStream = { damage: [], heal: [], resource_change: [], extra_attack: [], slain: [], cast: [], aura: [] };
   const emptyEncounters = new Map<string, EncounterMeta>();
   const safeResult = result ?? {
     counts: new Map<string, number>(),
     rawEventsByStream: emptyByStream,
-    streamCounts: { damage: 0, heal: 0, resource_change: 0, extra_attack: 0, slain: 0, cast: 0 },
+    streamCounts: { damage: 0, heal: 0, resource_change: 0, extra_attack: 0, slain: 0, cast: 0, aura: 0 },
     encounters: emptyEncounters,
     totalProcessed: 0,
     eventsSkipped: 0,
@@ -259,6 +260,7 @@ function AllActivityContent({
     ...rawEventsByStream.heal,
     ...rawEventsByStream.resource_change,
     ...rawEventsByStream.cast,
+    ...rawEventsByStream.aura,
   ];
   
   // Sort by encounter first, then by index within encounter to reconstruct true event order
@@ -278,7 +280,7 @@ function AllActivityContent({
       {/* Stream toggles */}
       <div className="flex items-center gap-2 mb-2 flex-wrap">
         <span className="text-xs text-muted-foreground">Streams:</span>
-        {(["damage", "heal", "resource_change", "cast"] as StreamType[]).map((stream) => (
+        {(["damage", "heal", "resource_change", "cast", "aura"] as StreamType[]).map((stream) => (
           <StreamToggle
             key={stream}
             streamType={stream}
