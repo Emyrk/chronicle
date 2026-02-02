@@ -42,7 +42,7 @@ export type { AvoidanceResult, AvoidanceData, EncounterAvoidance } from "./avoid
 export type { EmptyResult } from "../Empty/empty.processor";
 export type { ResourceRegenResult, PlayerResourceData, ResourceAbilityData } from "../ResourceRegen/resourceRegen.processor";
 export type { InnervateResult, InnervateCast } from "../Innervate/innervate.processor";
-export type { SunderResult, WarriorSunderStats, TargetSunderStats, ConfirmedSunder } from "../Warrior/sunder.processor";
+export type { SunderResult, WarriorSunderStats, TargetSunderStats, ConfirmedSunder, SunderDebugEvent } from "../Warrior/sunder.processor";
 // Note: ResourceType is exported from allActivityDebug.processor above
 export type { PlayerRoleData, InferredRole, RoleSummary, RoleDetectionDebug, InferRolesResult } from "../Roles/roles.processor";
 export { inferRoles, getRoleSummary } from "../Roles/roles.processor";

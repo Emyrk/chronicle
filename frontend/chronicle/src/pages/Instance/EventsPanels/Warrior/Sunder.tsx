@@ -5,7 +5,7 @@
  * Log view: Shows detailed breakdown of targets and time-to-5-stacks
  */
 
-import { useMemo } from "react";
+import { useMemo, useState } from "react";
 import { Sword } from "lucide-react";
 import type { PanelDefinition, PanelRenderProps } from "../types";
 import { sunderProcessor, type SunderResult, type WarriorSunderStats, type TargetSunderStats } from "./sunder.processor";
@@ -196,70 +196,178 @@ interface TargetsViewProps {
 }
 
 function TargetsView({ targets }: TargetsViewProps) {
+  const [selectedTargetGuid, setSelectedTargetGuid] = useState<string | null>(null);
+  
   // Filter to only targets that reached 5 stacks
   const targetsWithFive = targets.filter(t => t.timeToFiveStacksMs !== null);
   const targetsWithoutFive = targets.filter(t => t.timeToFiveStacksMs === null);
+  
+  const selectedTarget = selectedTargetGuid 
+    ? targets.find(t => t.guid === selectedTargetGuid) 
+    : null;
   
   return (
     <div className="space-y-2">
       <div className="text-xs text-muted-foreground">
         <span className="font-medium text-foreground">{targetsWithFive.length}</span> targets reached 5 stacks
+        {selectedTarget && (
+          <button 
+            type="button"
+            onClick={() => setSelectedTargetGuid(null)}
+            className="ml-2 text-blue-400 hover:text-blue-300 cursor-pointer"
+          >
+            [clear selection]
+          </button>
+        )}
       </div>
       
-      <div className="max-h-[300px] overflow-y-auto">
-        <table className="w-full text-xs">
+      {selectedTarget ? (
+        <DebugBreakout target={selectedTarget} onClose={() => setSelectedTargetGuid(null)} />
+      ) : (
+        <>
+          <div className="max-h-[300px] overflow-y-auto">
+            <table className="w-full text-xs">
+              <thead className="sticky top-0 bg-card">
+                <tr className="border-b border-border text-muted-foreground">
+                  <th className="text-left py-1.5 px-2 font-medium">Target</th>
+                  <th className="text-right py-1.5 px-2 font-medium whitespace-nowrap">Time to 5</th>
+                  <th className="text-left py-1.5 px-2 font-medium">Contributors</th>
+                </tr>
+              </thead>
+              <tbody>
+                {targetsWithFive.map((target) => (
+                  <tr
+                    key={target.guid}
+                    className="border-b border-border/10 hover:bg-muted/50 cursor-pointer"
+                    onClick={() => setSelectedTargetGuid(target.guid)}
+                  >
+                    <td className="py-1 px-2 font-medium text-orange-400 whitespace-nowrap">
+                      {target.name}
+                    </td>
+                    <td className="py-1 px-2 text-right tabular-nums font-mono text-2xs whitespace-nowrap">
+                      {target.timeToFiveStacksMs !== null 
+                        ? formatTimeMs(target.timeToFiveStacksMs)
+                        : "—"}
+                    </td>
+                    <td className="py-1 px-2">
+                      <ContributorsList contributors={target.first5Contributors} />
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+          
+          {targetsWithoutFive.length > 0 && (
+            <details className="text-xs">
+              <summary className="text-muted-foreground cursor-pointer hover:text-foreground">
+                {targetsWithoutFive.length} targets never reached 5 stacks
+              </summary>
+              <div className="mt-2 pl-2 border-l border-border/50 max-h-[100px] overflow-y-auto">
+                {targetsWithoutFive.slice(0, 10).map((target) => (
+                  <div key={target.guid} className="py-0.5">
+                    <button
+                      type="button"
+                      onClick={() => setSelectedTargetGuid(target.guid)}
+                      className="text-orange-400/70 hover:text-orange-400 cursor-pointer"
+                    >
+                      {target.name}
+                    </button>
+                    <span className="text-muted-foreground ml-2">
+                      ({target.totalSunders} sunders, {target.first5Contributors.length} stacks)
+                    </span>
+                  </div>
+                ))}
+                {targetsWithoutFive.length > 10 && (
+                  <div className="text-muted-foreground py-0.5">
+                    ...and {targetsWithoutFive.length - 10} more
+                  </div>
+                )}
+              </div>
+            </details>
+          )}
+        </>
+      )}
+    </div>
+  );
+}
+
+interface DebugBreakoutProps {
+  target: TargetSunderStats;
+  onClose: () => void;
+}
+
+function DebugBreakout({ target, onClose }: DebugBreakoutProps) {
+  // Sort events by offset
+  const sortedEvents = useMemo(() => {
+    return [...target.debugEvents].sort((a, b) => a.offsetMs - b.offsetMs);
+  }, [target.debugEvents]);
+  
+  return (
+    <div className="space-y-2">
+      <div className="flex items-center justify-between">
+        <span className="text-xs font-medium text-orange-400">{target.name}</span>
+        <button 
+          type="button"
+          onClick={onClose}
+          className="text-xs text-muted-foreground hover:text-foreground cursor-pointer"
+        >
+          ✕ close
+        </button>
+      </div>
+      
+      <div className="text-2xs text-muted-foreground">
+        Time to 5: <span className="font-medium text-foreground">
+          {target.timeToFiveStacksMs !== null ? formatTimeMs(target.timeToFiveStacksMs) : "never"}
+        </span>
+        {" • "}
+        Total events: <span className="font-medium text-foreground">{sortedEvents.length}</span>
+      </div>
+      
+      <div className="max-h-[250px] overflow-y-auto">
+        <table className="w-full text-2xs font-mono">
           <thead className="sticky top-0 bg-card">
             <tr className="border-b border-border text-muted-foreground">
-              <th className="text-left py-1.5 px-2 font-medium">Target</th>
-              <th className="text-right py-1.5 px-2 font-medium whitespace-nowrap">Time to 5</th>
-              <th className="text-left py-1.5 px-2 font-medium">Contributors</th>
+              <th className="text-right py-1 px-2 font-medium">Offset</th>
+              <th className="text-left py-1 px-2 font-medium">Type</th>
+              <th className="text-left py-1 px-2 font-medium">Details</th>
+              <th className="text-center py-1 px-2 font-medium">Matched</th>
             </tr>
           </thead>
           <tbody>
-            {targetsWithFive.map((target) => (
+            {sortedEvents.map((event, index) => (
               <tr
-                key={target.guid}
-                className="border-b border-border/10 hover:bg-muted/50"
+                key={index}
+                className={cn(
+                  "border-b border-border/10",
+                  event.type === "cast" ? "bg-blue-500/5" : "bg-green-500/5",
+                  !event.matched && "opacity-50"
+                )}
               >
-                <td className="py-1 px-2 font-medium text-orange-400 whitespace-nowrap">
-                  {target.name}
+                <td className="py-0.5 px-2 text-right tabular-nums">
+                  {formatTimeMs(event.offsetMs)}
                 </td>
-                <td className="py-1 px-2 text-right tabular-nums font-mono text-2xs whitespace-nowrap">
-                  {target.timeToFiveStacksMs !== null 
-                    ? formatTimeMs(target.timeToFiveStacksMs)
-                    : "—"}
+                <td className={cn(
+                  "py-0.5 px-2",
+                  event.type === "cast" ? "text-blue-400" : "text-green-400"
+                )}>
+                  {event.type}
                 </td>
-                <td className="py-1 px-2">
-                  <ContributorsList contributors={target.first5Contributors} />
+                <td className="py-0.5 px-2">
+                  {event.type === "cast" ? (
+                    <span className="text-[var(--class-warrior)]">{event.casterName}</span>
+                  ) : (
+                    <span>stack {event.stackCount}</span>
+                  )}
+                </td>
+                <td className="py-0.5 px-2 text-center">
+                  {event.matched ? "✓" : "✗"}
                 </td>
               </tr>
             ))}
           </tbody>
         </table>
       </div>
-      
-      {targetsWithoutFive.length > 0 && (
-        <details className="text-xs">
-          <summary className="text-muted-foreground cursor-pointer hover:text-foreground">
-            {targetsWithoutFive.length} targets never reached 5 stacks
-          </summary>
-          <div className="mt-2 pl-2 border-l border-border/50 max-h-[100px] overflow-y-auto">
-            {targetsWithoutFive.slice(0, 10).map((target) => (
-              <div key={target.guid} className="py-0.5">
-                <span className="text-orange-400/70">{target.name}</span>
-                <span className="text-muted-foreground ml-2">
-                  ({target.totalSunders} sunders, {target.first5Contributors.length} stacks)
-                </span>
-              </div>
-            ))}
-            {targetsWithoutFive.length > 10 && (
-              <div className="text-muted-foreground py-0.5">
-                ...and {targetsWithoutFive.length - 10} more
-              </div>
-            )}
-          </div>
-        </details>
-      )}
     </div>
   );
 }

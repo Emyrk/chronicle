@@ -53,6 +53,20 @@ export interface WarriorSunderStats {
   contributionsToFirst5: Record<string, number>;
 }
 
+/** Debug event for tracking sunder timeline */
+export interface SunderDebugEvent {
+  /** Offset from encounter start in ms */
+  offsetMs: number;
+  /** Type of event */
+  type: "cast" | "affliction";
+  /** Caster name (for cast events) */
+  casterName?: string;
+  /** Stack count (for affliction events) */
+  stackCount?: number;
+  /** Whether this was matched (cast matched to affliction) */
+  matched?: boolean;
+}
+
 /** Stats for a single target */
 export interface TargetSunderStats {
   guid: string;
@@ -64,6 +78,8 @@ export interface TargetSunderStats {
   first5Contributors: { guid: string; name: string; stackNumber: number }[];
   /** Total sunders received */
   totalSunders: number;
+  /** Debug: timeline of all sunder events on this target */
+  debugEvents: SunderDebugEvent[];
 }
 
 /** Result type for the Sunder processor */
@@ -130,7 +146,7 @@ export const sunderProcessor: PanelProcessor<SunderResult, SunderEvent> = {
     if (streamType === "cast" && event.type === "cast") {
       processCastEvent(state, event, timestampMs, encounterID, context);
     } else if (streamType === "aura" && event.type === "aura") {
-      processAuraEvent(state, event, timestampMs);
+      processAuraEvent(state, event, timestampMs, encounterStartMs);
     }
   },
 };
@@ -157,13 +173,40 @@ function processCastEvent(
   // Get player names
   const casterPlayer = context.players[event.caster];
   const targetUnit = context.units?.[event.target];
+  const casterName = casterPlayer?.name ?? event.caster;
+  const targetName = targetUnit?.name ?? event.target;
+  
+  // Calculate offset from encounter start for debug
+  const encounterStartMs = state._encounterStarts[encounterId] ?? timestampMs;
+  const offsetMs = timestampMs - encounterStartMs;
+  
+  // Ensure target exists for debug logging
+  if (!(event.target in state.targets)) {
+    state.targets[event.target] = {
+      guid: event.target,
+      name: targetName,
+      encounterId,
+      timeToFiveStacksMs: null,
+      first5Contributors: [],
+      totalSunders: 0,
+      debugEvents: [],
+    };
+  }
+  
+  // Log cast event for debug
+  state.targets[event.target].debugEvents.push({
+    offsetMs,
+    type: "cast",
+    casterName,
+    matched: false, // Will be updated if matched
+  });
   
   const pending: PendingSunder = {
     timestampMs,
     casterGuid: event.caster,
-    casterName: casterPlayer?.name ?? event.caster,
+    casterName,
     targetGuid: event.target,
-    targetName: targetUnit?.name ?? event.target,
+    targetName,
     encounterId,
   };
   
@@ -179,6 +222,7 @@ function processAuraEvent(
   state: SunderResult,
   event: AuraProcessorEvent,
   timestampMs: number,
+  encounterStartMs: number,
 ): void {
   // Only process "Gains" (afflicted by)
   if (event.application !== AURA_GAINS) return;
@@ -189,6 +233,17 @@ function processAuraEvent(
   const stackCount = event.amount;
   const targetGuid = event.target;
   const key = pendingKey(targetGuid);
+  const offsetMs = timestampMs - encounterStartMs;
+  
+  // Log affliction event for debug (if target exists)
+  if (targetGuid in state.targets) {
+    state.targets[targetGuid].debugEvents.push({
+      offsetMs,
+      type: "affliction",
+      stackCount,
+      matched: false, // Will be updated if matched
+    });
+  }
   
   // Find matching pending cast within 500ms window
   const pendingCasts = state._pendingCasts[key];
@@ -215,6 +270,26 @@ function processAuraEvent(
   if (!matchedCast) {
     // No matching cast within window
     return;
+  }
+  
+  // Mark the matched cast and affliction as matched in debug events
+  if (targetGuid in state.targets) {
+    const debugEvents = state.targets[targetGuid].debugEvents;
+    // Mark last affliction as matched
+    if (debugEvents.length > 0 && debugEvents[debugEvents.length - 1].type === "affliction") {
+      debugEvents[debugEvents.length - 1].matched = true;
+    }
+    // Find and mark the matching cast event
+    const castOffsetMs = matchedCast.timestampMs - encounterStartMs;
+    for (let i = debugEvents.length - 1; i >= 0; i--) {
+      if (debugEvents[i].type === "cast" && 
+          debugEvents[i].offsetMs === castOffsetMs &&
+          debugEvents[i].casterName === matchedCast.casterName &&
+          !debugEvents[i].matched) {
+        debugEvents[i].matched = true;
+        break;
+      }
+    }
   }
   
   // Remove the matched cast from pending
@@ -275,6 +350,7 @@ function recordEffectiveSunder(
       timeToFiveStacksMs: null,
       first5Contributors: [],
       totalSunders: 0,
+      debugEvents: [],
     };
     state.targets[cast.targetGuid] = target;
   }
