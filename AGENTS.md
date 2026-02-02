@@ -206,16 +206,161 @@ ctx := testutil.Context(t, testutil.WaitLong)    // 25s
 
 ### Adding EventsPanels
 
-When adding a new panel to the Instance page EventsPanels system:
+> **Full documentation:** See `frontend/chronicle/src/pages/Instance/EventsPanels/DESIGN.md` for architecture details.
 
-1. **Create the processor** in `frontend/chronicle/src/pages/Instance/EventsPanels/processors/`
-2. **Register the processor** in `processors/index.ts` → `processorRegistry`
-3. **Create the panel component** that combines processor with React rendering
-4. **Add to PANELS registry** in `EventsPanel.tsx` - this defines `EventsPanelType`
-5. **Add to PANEL_CODES** in `hooks/useUrlState.ts` - TypeScript enforces this via `Record<PanelType, string>` where `PanelType = EventsPanelType`
-6. **Add to PANEL_CATEGORIES** in `PanelSelector.tsx` - so it appears in the dropdown menu
+EventsPanels process combat log event streams and aggregate them into displayable metrics. Processing runs in a Web Worker to keep UI responsive.
 
-Steps 4 and 5 are type-enforced: if you add a panel to `PANELS` but forget `PANEL_CODES`, TypeScript will error because `PANEL_CODES` must have all keys from `EventsPanelType`.
+#### Architecture Overview
+
+```
+Processor (worker-safe)     +     Panel (React wrapper)
+─────────────────────────         ────────────────────────
+processors/foo.processor.ts       FooPanel/Foo.tsx
+- id, streams, createState        - label, icon
+- processEvent()                  - render()
+                                  - spreads processor props
+```
+
+**Data Flow:**
+1. `usePanelAggregation` fetches required streams from `InstanceEventsContext` (cached)
+2. Streams + context are sent to Web Worker via `postMessage`
+3. Worker iterates events, calls `processor.processEvent()`
+4. Worker returns serialized result (Maps become arrays with markers)
+5. Hook deserializes result and triggers re-render
+
+#### Checklist for Adding a New Panel
+
+1. **Create the processor** (`processors/myPanel.processor.ts` or `MyPanel/myPanel.processor.ts`)
+   - Export a `PanelProcessor<TResult, TEvent>` object
+   - Must be pure TypeScript (NO React, NO JSX) - runs in Web Worker
+   - Define `id`, `streams`, `createState()`, `processEvent()`
+
+2. **Register the processor** in `processors/index.ts`
+   - Add to imports and exports
+   - Add to `processorRegistry` object
+
+3. **Create the panel component** (`MyPanel/MyPanel.tsx`)
+   - Import and spread processor properties
+   - Add `label`, `icon`, optional `supportsPerSecond`
+   - Implement `render()` function
+
+4. **Add to PANELS registry** in `EventsPanel.tsx`
+   - This defines `EventsPanelType` - TypeScript enforces steps 5 and 6
+
+5. **Add to PANEL_CODES** in `frontend/chronicle/src/hooks/useUrlState.ts`
+   - TypeScript will error if missing (enforced via `Record<PanelType, string>`)
+
+6. **Add to PANEL_CATEGORIES** in `PanelSelector.tsx`
+   - Add to existing category or create new one
+
+#### Key Types
+
+```typescript
+// Processor (worker-safe, no React)
+interface PanelProcessor<TResult, TEvent = ProcessorEvent> {
+  id: string;
+  streams: StreamType[];  // "damage" | "heal" | "resource_change" | "slain" | "cast" | "aura" | "extra_attack"
+  createState: () => TResult;
+  processEvent: (state: TResult, event: TEvent, encounterID: string, 
+                 firstTimestamp: Date, streamType: StreamType, context: ProcessorContext) => void;
+}
+
+// Panel (React wrapper)
+interface PanelDefinition<TResult> extends PanelProcessor<TResult> {
+  label: string;
+  icon: React.ReactNode;
+  supportsPerSecond?: boolean;
+  checkboxLabel?: string;
+  selfManagesAggregation?: boolean;  // For custom pagination/loading
+  render: (props: PanelRenderProps<TResult>) => React.ReactNode;
+}
+```
+
+#### Caching Behavior
+
+| What | Cached Where | Lifetime |
+|------|--------------|----------|
+| Raw stream data (`Uint8Array`) | `InstanceEventsContext` | Until instance changes |
+| Decoded events | Never cached | Re-decoded per worker request |
+| Aggregated results | React state | Until context/panel changes |
+
+**Stream caching:** Multiple panels requesting the same stream type share cached data. Fetch happens once per stream per instance.
+
+**Result caching:** Each panel's aggregated result is stored in React state. When context changes (encounters, entity selection), the worker re-processes all events. The `onContextChange` callback (if defined) can return `'rerender'` to skip reprocessing for display-only changes.
+
+#### Simple Example: Empty Panel
+
+```typescript
+// empty.processor.ts
+export const emptyProcessor: PanelProcessor<EmptyResult> = {
+  id: "empty",
+  streams: [],  // No streams needed
+  createState: () => ({}),
+  processEvent: () => {},  // No-op
+};
+
+// Empty.tsx
+export function createEmptyPanel(): PanelDefinition<EmptyResult> {
+  return {
+    ...emptyProcessor,
+    label: "Empty",
+    icon: <Square className="h-4 w-4" />,
+    render: () => <div>Select a panel type</div>,
+  };
+}
+```
+
+#### Complex Example: Damage Done
+
+```typescript
+// damageDone.processor.ts
+export const damageDoneProcessor: PanelProcessor<DamageDoneResult, DamageProcessorEvent> = {
+  id: "damage_done",
+  streams: ["damage"],
+  createState: () => ({
+    EncounterDamage: new Map(),
+    ByAbility: new Map(),
+    ByTarget: new Map(),
+    GuidCache: createGuidCache(),
+  }),
+  processEvent: (state, event, encounterID, _, _streamType, context) => {
+    // Filter by player GUIDs, accumulate damage...
+    // Use context.entitySelection for filtering
+    // Use context.players for name lookups
+  },
+};
+
+// DamageDone.tsx
+export function createDamageDonePanel(sourceType: DamageSourceType): PanelDefinition<DamageDoneResult> {
+  return {
+    ...damageDoneProcessor,
+    label: "Damage Done",
+    icon: <Swords className="h-4 w-4" />,
+    supportsPerSecond: true,
+    render: (props) => <DamageDoneContent {...props} sourceType={sourceType} />,
+  };
+}
+```
+
+#### Event Types (ProcessorEvent)
+
+```typescript
+type ProcessorEvent = 
+  | DamageProcessorEvent    // damage stream
+  | HealProcessorEvent      // heal stream
+  | ResourceChangeProcessorEvent  // resource_change stream
+  | ExtraAttackProcessorEvent     // extra_attack stream
+  | SlainProcessorEvent     // slain stream (deaths)
+  | CastProcessorEvent      // cast stream
+  | AuraProcessorEvent;     // aura stream (buffs/debuffs)
+```
+
+#### Performance Tips
+
+- **Don't store event references** - the `event` object is reused; copy values if needed
+- **Use `GuidCache`** for repeated GUID parsing (see `processors/guidCache.ts`)
+- **Filter early** - check `context.entitySelection` and `context.selectedEncounterIds` before expensive work
+- **Breakout data is optional** - only compute ability/target breakouts when entity is selected
 
 ## Anti-Patterns
 
