@@ -7,6 +7,7 @@ import (
 	"github.com/Emyrk/chronicle/api/chroniclesdk"
 	"github.com/Emyrk/chronicle/api/httpapi"
 	"github.com/Emyrk/chronicle/api/httpmw"
+	"github.com/Emyrk/chronicle/database/spice/policy"
 	"github.com/google/uuid"
 )
 
@@ -15,6 +16,13 @@ const MaxLogFileSize = 50 * 1024 * 1024 // 50 MB
 func (api *API) WoWLogReparse(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 	logID := httpmw.LogID(ctx)
+	err := api.Opts.Authz.Check(policy.New().Raid_log(logID).CanReparse(ctx))
+	if err != nil {
+		httpapi.Write(ctx, w, http.StatusForbidden, chroniclesdk.Response{
+			Message: "You do not have permission to upload logs.",
+		})
+		return
+	}
 
 	res, err := api.Chronicle.EnqueueReParseLog(ctx, logID)
 	if err != nil {
@@ -34,6 +42,14 @@ func (api *API) WoWLogReparse(w http.ResponseWriter, r *http.Request) {
 
 func (api *API) WoWLogUpload(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
+
+	err := api.Opts.Authz.Check(policy.New().GlobalChronicle().CanUpload_log(ctx))
+	if err != nil {
+		httpapi.Write(ctx, w, http.StatusForbidden, chroniclesdk.Response{
+			Message: "You do not have permission to upload logs.",
+		})
+		return
+	}
 
 	//uc := chronauth.MustAuthenticatedClaims(ctx)
 

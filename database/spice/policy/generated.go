@@ -106,6 +106,10 @@ func (obj *ObjChronicle) RelationLog_capable() string {
 	return "log_capable"
 }
 
+func (obj *ObjChronicle) RelationTechnical_admin() string {
+	return "technical_admin"
+}
+
 // Admin schema.zed:11
 // Relationship: chronicle:<id>#admin@user:<id>
 func (obj *ObjChronicle) Admin(subs ...*ObjUser) *ObjChronicle {
@@ -124,7 +128,25 @@ func (obj *ObjChronicle) Admin(subs ...*ObjUser) *ObjChronicle {
 	return obj
 }
 
-// Log_capable schema.zed:12
+// Technical_admin schema.zed:12
+// Relationship: chronicle:<id>#technical_admin@user:<id>
+func (obj *ObjChronicle) Technical_admin(subs ...*ObjUser) *ObjChronicle {
+	for i := range subs {
+		sub := subs[i]
+		obj.Builder.AddRelationship(v1.Relationship{
+			Resource: obj.Obj,
+			Relation: obj.RelationTechnical_admin(),
+			Subject: &v1.SubjectReference{
+				Object:           sub.Obj,
+				OptionalRelation: "",
+			},
+			OptionalCaveat: nil,
+		})
+	}
+	return obj
+}
+
+// Log_capable schema.zed:16
 // Relationship: chronicle:<id>#log_capable@user:<id>
 func (obj *ObjChronicle) Log_capable(subs ...*ObjUser) *ObjChronicle {
 	for i := range subs {
@@ -142,23 +164,42 @@ func (obj *ObjChronicle) Log_capable(subs ...*ObjUser) *ObjChronicle {
 	return obj
 }
 
-// CanCreate_user schema.zed:14
+// CanView_queue schema.zed:19
+// Object: chronicle:<id>
+func (obj *ObjChronicle) CanView_queue(ctx context.Context) (context.Context, string, *v1.ObjectReference) {
+	return ctx, "view_queue", obj.Object()
+}
+
+// CanUpload_youtube schema.zed:21
+// Object: chronicle:<id>
+func (obj *ObjChronicle) CanUpload_youtube(ctx context.Context) (context.Context, string, *v1.ObjectReference) {
+	return ctx, "upload_youtube", obj.Object()
+}
+
+// CanUpload_log schema.zed:23
+// Object: chronicle:<id>
+// Schema: permission upload_log = log_capable
+func (obj *ObjChronicle) CanUpload_log(ctx context.Context) (context.Context, string, *v1.ObjectReference) {
+	return ctx, "upload_log", obj.Object()
+}
+
+// CanCreate_user schema.zed:24
 // Object: chronicle:<id>
 // Schema: permission create_user = admin
 func (obj *ObjChronicle) CanCreate_user(ctx context.Context) (context.Context, string, *v1.ObjectReference) {
 	return ctx, "create_user", obj.Object()
 }
 
-type ObjInstance struct {
+type ObjLog_instance struct {
 	Obj              *v1.ObjectReference
 	OptionalRelation string
 	Builder          *Builder
 }
 
-func (b *Builder) Instance(id fmt.Stringer) *ObjInstance {
-	o := &ObjInstance{
+func (b *Builder) Log_instance(id fmt.Stringer) *ObjLog_instance {
+	o := &ObjLog_instance{
 		Obj: &v1.ObjectReference{
-			ObjectType: "instance",
+			ObjectType: "log_instance",
 			ObjectId:   id.String(),
 		},
 		Builder: b,
@@ -166,28 +207,28 @@ func (b *Builder) Instance(id fmt.Stringer) *ObjInstance {
 	return o
 }
 
-func (obj *ObjInstance) Object() *v1.ObjectReference {
+func (obj *ObjLog_instance) Object() *v1.ObjectReference {
 	return obj.Obj
 }
 
-func (obj *ObjInstance) AsSubject() *v1.SubjectReference {
+func (obj *ObjLog_instance) AsSubject() *v1.SubjectReference {
 	return &v1.SubjectReference{
 		Object:           obj.Object(),
 		OptionalRelation: obj.OptionalRelation,
 	}
 }
 
-func (obj *ObjInstance) RelationRaid_log() string {
+func (obj *ObjLog_instance) RelationRaid_log() string {
 	return "raid_log"
 }
 
-func (obj *ObjInstance) RelationTagged_by() string {
+func (obj *ObjLog_instance) RelationTagged_by() string {
 	return "tagged_by"
 }
 
-// Raid_log schema.zed:41
-// Relationship: instance:<id>#raid_log@raid_log:<id>
-func (obj *ObjInstance) Raid_log(subs ...*ObjRaid_log) *ObjInstance {
+// Raid_log schema.zed:50
+// Relationship: log_instance:<id>#raid_log@raid_log:<id>
+func (obj *ObjLog_instance) Raid_log(subs ...*ObjRaid_log) *ObjLog_instance {
 	for i := range subs {
 		sub := subs[i]
 		obj.Builder.AddRelationship(v1.Relationship{
@@ -203,9 +244,9 @@ func (obj *ObjInstance) Raid_log(subs ...*ObjRaid_log) *ObjInstance {
 	return obj
 }
 
-// Tagged_by schema.zed:42
-// Relationship: instance:<id>#tagged_by@user:<id>
-func (obj *ObjInstance) Tagged_by(subs ...*ObjUser) *ObjInstance {
+// Tagged_by schema.zed:51
+// Relationship: log_instance:<id>#tagged_by@user:<id>
+func (obj *ObjLog_instance) Tagged_by(subs ...*ObjUser) *ObjLog_instance {
 	for i := range subs {
 		sub := subs[i]
 		obj.Builder.AddRelationship(v1.Relationship{
@@ -221,23 +262,23 @@ func (obj *ObjInstance) Tagged_by(subs ...*ObjUser) *ObjInstance {
 	return obj
 }
 
-// CanView schema.zed:45
-// Object: instance:<id>
-func (obj *ObjInstance) CanView(ctx context.Context) (context.Context, string, *v1.ObjectReference) {
+// CanView schema.zed:54
+// Object: log_instance:<id>
+func (obj *ObjLog_instance) CanView(ctx context.Context) (context.Context, string, *v1.ObjectReference) {
 	return ctx, "view", obj.Object()
 }
 
-// CanEdit schema.zed:46
-// Object: instance:<id>
+// CanEdit schema.zed:55
+// Object: log_instance:<id>
 // Schema: permission edit = raid_log->edit
-func (obj *ObjInstance) CanEdit(ctx context.Context) (context.Context, string, *v1.ObjectReference) {
+func (obj *ObjLog_instance) CanEdit(ctx context.Context) (context.Context, string, *v1.ObjectReference) {
 	return ctx, "edit", obj.Object()
 }
 
-// CanTag schema.zed:47
-// Object: instance:<id>
+// CanTag schema.zed:56
+// Object: log_instance:<id>
 // Schema: permission tag = raid_log->edit + tagged_by
-func (obj *ObjInstance) CanTag(ctx context.Context) (context.Context, string, *v1.ObjectReference) {
+func (obj *ObjLog_instance) CanTag(ctx context.Context) (context.Context, string, *v1.ObjectReference) {
 	return ctx, "tag", obj.Object()
 }
 
@@ -273,15 +314,15 @@ func (obj *ObjRaid_log) RelationChronicle() string {
 	return "chronicle"
 }
 
+func (obj *ObjRaid_log) RelationOwner() string {
+	return "owner"
+}
+
 func (obj *ObjRaid_log) RelationPublic() string {
 	return "public"
 }
 
-func (obj *ObjRaid_log) RelationUploader() string {
-	return "uploader"
-}
-
-// Chronicle schema.zed:24
+// Chronicle schema.zed:34
 // Relationship: raid_log:<id>#chronicle@chronicle:<id>
 func (obj *ObjRaid_log) Chronicle(subs ...*ObjChronicle) *ObjRaid_log {
 	for i := range subs {
@@ -299,14 +340,14 @@ func (obj *ObjRaid_log) Chronicle(subs ...*ObjChronicle) *ObjRaid_log {
 	return obj
 }
 
-// Uploader schema.zed:25
-// Relationship: raid_log:<id>#uploader@user:<id>
-func (obj *ObjRaid_log) Uploader(subs ...*ObjUser) *ObjRaid_log {
+// Owner schema.zed:35
+// Relationship: raid_log:<id>#owner@user:<id>
+func (obj *ObjRaid_log) Owner(subs ...*ObjUser) *ObjRaid_log {
 	for i := range subs {
 		sub := subs[i]
 		obj.Builder.AddRelationship(v1.Relationship{
 			Resource: obj.Obj,
-			Relation: obj.RelationUploader(),
+			Relation: obj.RelationOwner(),
 			Subject: &v1.SubjectReference{
 				Object:           sub.Obj,
 				OptionalRelation: "",
@@ -317,7 +358,7 @@ func (obj *ObjRaid_log) Uploader(subs ...*ObjUser) *ObjRaid_log {
 	return obj
 }
 
-// PublicWildcard schema.zed:28
+// PublicWildcard schema.zed:38
 // Relationship: raid_log:<id>#public@user:*
 func (obj *ObjRaid_log) PublicWildcard() *ObjRaid_log {
 	obj.Builder.AddRelationship(v1.Relationship{
@@ -335,27 +376,20 @@ func (obj *ObjRaid_log) PublicWildcard() *ObjRaid_log {
 	return obj
 }
 
-// CanView schema.zed:31
+// CanView schema.zed:41
 // Object: raid_log:<id>
 func (obj *ObjRaid_log) CanView(ctx context.Context) (context.Context, string, *v1.ObjectReference) {
 	return ctx, "view", obj.Object()
 }
 
-// CanInsert schema.zed:32
-// Object: raid_log:<id>
-// Schema: permission insert = chronicle->log_capable
-func (obj *ObjRaid_log) CanInsert(ctx context.Context) (context.Context, string, *v1.ObjectReference) {
-	return ctx, "insert", obj.Object()
-}
-
-// CanReparse schema.zed:34
+// CanReparse schema.zed:43
 // Object: raid_log:<id>
 // Schema: permission reparse = chronicle->admin
 func (obj *ObjRaid_log) CanReparse(ctx context.Context) (context.Context, string, *v1.ObjectReference) {
 	return ctx, "reparse", obj.Object()
 }
 
-// CanDelete schema.zed:37
+// CanDelete schema.zed:46
 // Object: raid_log:<id>
 func (obj *ObjRaid_log) CanDelete(ctx context.Context) (context.Context, string, *v1.ObjectReference) {
 	return ctx, "delete", obj.Object()
@@ -393,7 +427,7 @@ func (obj *ObjRiver_queue) RelationChronicle() string {
 	return "chronicle"
 }
 
-// Chronicle schema.zed:18
+// Chronicle schema.zed:28
 // Relationship: river_queue:<id>#chronicle@chronicle:<id>
 func (obj *ObjRiver_queue) Chronicle(subs ...*ObjChronicle) *ObjRiver_queue {
 	for i := range subs {
@@ -411,7 +445,7 @@ func (obj *ObjRiver_queue) Chronicle(subs ...*ObjChronicle) *ObjRiver_queue {
 	return obj
 }
 
-// CanAccess schema.zed:20
+// CanAccess schema.zed:30
 // Object: river_queue:<id>
 // Schema: permission access = chronicle->admin
 func (obj *ObjRiver_queue) CanAccess(ctx context.Context) (context.Context, string, *v1.ObjectReference) {

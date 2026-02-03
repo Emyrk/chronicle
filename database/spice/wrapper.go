@@ -67,7 +67,10 @@ func (sdb *Spice) InsertEncounterCharacterFights(ctx context.Context, arg []data
 }
 
 func (sdb *Spice) InsertInstance(ctx context.Context, arg database.InsertInstanceParams) (database.LogInstance, error) {
-	return sdb.db.InsertInstance(ctx, arg)
+	builder := policy.New()
+	builder.Log_instance(arg.ID).Raid_log(builder.Raid_log(arg.LogGroupID))
+
+	return WithRelations(ctx, sdb, builder.Relationships, sdb.db.InsertInstance, arg)
 }
 
 func (sdb *Spice) InsertInstancePlayers(ctx context.Context, arg []database.InsertInstancePlayersParams) *database.InsertInstancePlayersBatchResults {
@@ -118,7 +121,13 @@ func (sdb *Spice) InsertUserAuthSession(ctx context.Context, arg database.Insert
 }
 
 func (sdb *Spice) InsertWoWLogGroup(ctx context.Context, arg database.InsertWoWLogGroupParams) (database.WoWLogGroup, error) {
-	return sdb.db.InsertWoWLogGroup(ctx, arg)
+	builder := policy.New()
+	rl := builder.Raid_log(arg.ID)
+
+	rl.Chronicle(builder.GlobalChronicle())
+	rl.Owner(builder.User(arg.Owner))
+
+	return WithRelations(ctx, sdb, builder.Relationships, sdb.db.InsertWoWLogGroup, arg)
 }
 
 func (sdb *Spice) Instance(ctx context.Context, id uuid.UUID) (database.LogInstance, error) {

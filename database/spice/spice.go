@@ -23,6 +23,10 @@ import (
 	"tailscale.com/syncs"
 )
 
+type Authorizer interface {
+	Check(ctx context.Context, permission string, resource *v1.ObjectReference) error
+}
+
 var _ database.Store = (*Spice)(nil)
 
 type Spice struct {
@@ -218,6 +222,10 @@ func (s *Spice) WriteRelationships(ctx context.Context, rels ...v1.Relationship)
 }
 
 func (s *Spice) Check(ctx context.Context, permission string, resource *v1.ObjectReference) error {
+	if s == nil {
+		return nil // TODO: Enforce?
+	}
+
 	actor, ok := ActorFromContext(ctx)
 	if !ok {
 		return NoActorError
@@ -241,8 +249,13 @@ func (s *Spice) Check(ctx context.Context, permission string, resource *v1.Objec
 	// And parsed with:
 	//	tup := tuple.Parse(perm)
 	//	r := tuple.ToRelationship(tup)
+	zedToken := s.zedToken.Load()
+	var consitency *v1.Consistency
+	if zedToken != nil {
+		consitency = &v1.Consistency{Requirement: &v1.Consistency_AtLeastAsFresh{zedToken}}
+	}
 	resp, err := s.client.CheckPermission(ctx, &v1.CheckPermissionRequest{
-		Consistency: &v1.Consistency{Requirement: &v1.Consistency_AtLeastAsFresh{s.zedToken.Load()}},
+		Consistency: consitency,
 		Resource:    resource,
 		Permission:  permission,
 		Subject:     actor,
@@ -309,12 +322,6 @@ func debugSpiceDBRPC(ctx context.Context, logger *slog.Logger) (debugCtx context
 	}
 
 	return ctx, grpc.Trailer(&trailerMD), debugString
-}
-
-type NoopAuthorization struct{}
-
-func (NoopAuthorization) Check(ctx context.Context, permission string, resource *v1.ObjectReference) error {
-	return nil
 }
 
 func noop() {}
