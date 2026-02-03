@@ -34,6 +34,7 @@ func (api *API) WoWLogReparse(w http.ResponseWriter, r *http.Request) {
 
 func (api *API) WoWLogUpload(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
+
 	//uc := chronauth.MustAuthenticatedClaims(ctx)
 
 	first, header, err := r.FormFile("combat_log_1")

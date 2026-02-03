@@ -96,7 +96,10 @@ func (sdb *Spice) InsertStampedYoutubeVideo(ctx context.Context, arg database.In
 
 func (sdb *Spice) InsertUser(ctx context.Context, arg database.InsertUserParams) (database.User, error) {
 	builder := policy.New()
-	builder.User(arg.ID)
+	user := builder.User(arg.ID)
+
+	// All users start out as log capable.
+	builder.GlobalChronicle().Log_capable(user)
 
 	err := sdb.Check(builder.GlobalChronicle().CanCreate_user(ctx))
 	if err != nil {

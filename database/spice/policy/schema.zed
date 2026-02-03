@@ -9,6 +9,10 @@ definition user {}
 // Top level site definition for site-wide overrides (administration)
 definition chronicle {
   relation admin: user
+  // log_capable is the role we grant to all users who can create raid logs.
+  // Mainly present to allow disabling an account's ability to create logs without
+  // deleting them entirely.
+  relation log_capable: user
 
   permission create_user = admin
 }
@@ -28,6 +32,7 @@ definition raid_log {
   
   // View: uploader, guild members (if guild-linked), or public
   permission view = public 
+  permission insert = chronicle->log_capable
 
   permission reparse = chronicle->admin
   

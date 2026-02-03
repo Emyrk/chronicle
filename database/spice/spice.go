@@ -311,4 +311,10 @@ func debugSpiceDBRPC(ctx context.Context, logger *slog.Logger) (debugCtx context
 	return ctx, grpc.Trailer(&trailerMD), debugString
 }
 
+type NoopAuthorization struct{}
+
+func (NoopAuthorization) Check(ctx context.Context, permission string, resource *v1.ObjectReference) error {
+	return nil
+}
+
 func noop() {}
