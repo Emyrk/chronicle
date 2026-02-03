@@ -49,9 +49,14 @@ type Spice struct {
 type Options struct {
 	GRPCURL string
 	Logger  *slog.Logger
+	Store   database.Store
+	Debug   bool
 }
 
 func New(ctx context.Context, opts *Options) (*Spice, error) {
+	if opts.Store == nil {
+		return nil, xerrors.Errorf("store is required")
+	}
 	cli, err := authzed.NewClient(
 		opts.GRPCURL,
 		grpcutil.WithInsecureBearerToken("chronicle-dev-key"),
@@ -72,6 +77,8 @@ func New(ctx context.Context, opts *Options) (*Spice, error) {
 	return &Spice{
 		client: cli,
 		logger: opts.Logger,
+		db:     opts.Store,
+		debug:  opts.Debug,
 	}, nil
 }
 

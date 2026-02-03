@@ -240,11 +240,13 @@ func ServerCmd() *serpent.Command {
 				sdb, err = spice.New(ctx, &spice.Options{
 					GRPCURL: spiceDBURL,
 					Logger:  logger,
+					Store:   db,
+					Debug:   true,
 				})
 				if err != nil {
 					return fmt.Errorf("connect to spicedb: %w", err)
 				}
-				var _ = sdb
+				db = sdb
 			}
 
 			serverLn, err := ProvisionListener(logger, httpAddress)
