@@ -14,6 +14,7 @@ import (
 	v1 "github.com/authzed/authzed-go/proto/authzed/api/v1"
 	"github.com/authzed/authzed-go/v1"
 	"github.com/authzed/grpcutil"
+	"github.com/authzed/spicedb/pkg/tuple"
 	"golang.org/x/xerrors"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials/insecure"
@@ -188,13 +189,13 @@ func (s *Spice) WriteRelationships(ctx context.Context, rels ...v1.Relationship)
 			// Log out all the relationships that might have failed.
 			rels := make([]string, 0, len(updates))
 			for _, up := range updates {
-				str, _ := tuple.StringRelationship(up.Relationship)
+				str, _ := tuple.V1StringRelationship(up.Relationship)
 				rels = append(rels, str)
 			}
-			s.logger.Error(ctx, "revert relationships",
-				slog.Error(err),
-				slog.F("quantity", len(updates)),
-				slog.F("relationships", rels),
+			s.logger.Error("revert relationships",
+				slog.String("error", err.Error()),
+				slog.Int("quantity", len(updates)),
+				slog.Any("relationships", rels),
 			)
 		}
 	}
@@ -233,7 +234,7 @@ func (s *Spice) Check(ctx context.Context, permission string, resource *v1.Objec
 	// And parsed with:
 	//	tup := tuple.Parse(perm)
 	//	r := tuple.ToRelationship(tup)
-	resp, err := s.permCli.CheckPermission(ctx, &v1.CheckPermissionRequest{
+	resp, err := s.client.CheckPermission(ctx, &v1.CheckPermissionRequest{
 		Consistency: &v1.Consistency{Requirement: &v1.Consistency_AtLeastAsFresh{s.zedToken.Load()}},
 		Resource:    resource,
 		Permission:  permission,
@@ -302,3 +303,5 @@ func debugSpiceDBRPC(ctx context.Context, logger *slog.Logger) (debugCtx context
 
 	return ctx, grpc.Trailer(&trailerMD), debugString
 }
+
+func noop() {}

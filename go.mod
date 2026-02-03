@@ -7,6 +7,7 @@ require (
 	github.com/Gophercraft/log v0.0.0-20240214234900-fcacaad0d20e
 	github.com/KromDaniel/regengo v0.5.3
 	github.com/authzed/authzed-go v1.7.0
+	github.com/authzed/grpcutil v0.0.0-20240123194739-2ea1e3d2d98b
 	github.com/authzed/spicedb v1.48.0
 	github.com/cenkalti/backoff v2.2.1+incompatible
 	github.com/cenkalti/backoff/v4 v4.3.0
@@ -49,6 +50,7 @@ require (
 	google.golang.org/protobuf v1.36.11
 	gopkg.in/yaml.v3 v3.0.1
 	riverqueue.com/riverui v0.14.0
+	tailscale.com v1.94.1
 )
 
 require (
@@ -102,7 +104,6 @@ require (
 	github.com/authzed/cel-go v0.20.2 // indirect
 	github.com/authzed/consistent v0.2.0 // indirect
 	github.com/authzed/ctxkey v0.0.0-20250226155515-d49f99185584 // indirect
-	github.com/authzed/grpcutil v0.0.0-20240123194739-2ea1e3d2d98b // indirect
 	github.com/aws/aws-sdk-go-v2 v1.41.0 // indirect
 	github.com/aws/aws-sdk-go-v2/config v1.32.5 // indirect
 	github.com/aws/aws-sdk-go-v2/credentials v1.19.5 // indirect
@@ -419,7 +420,6 @@ require (
 	sigs.k8s.io/randfill v1.0.0 // indirect
 	sigs.k8s.io/structured-merge-diff/v6 v6.3.0 // indirect
 	sigs.k8s.io/yaml v1.6.0 // indirect
-	tailscale.com v1.94.1 // indirect
 )
 
 tool (
