@@ -95,15 +95,15 @@ func (sdb *Spice) InsertStampedYoutubeVideo(ctx context.Context, arg database.In
 }
 
 func (sdb *Spice) InsertUser(ctx context.Context, arg database.InsertUserParams) (database.User, error) {
-	builder := policy.New().
-		User(arg.ID)
+	builder := policy.New()
+	builder.User(arg.ID)
 
-	sdb.client.WriteRelationships(ctx, builder.AsSubject())
-
-	usr, err := sdb.db.InsertUser(ctx, arg)
+	err := sdb.Check(builder.GlobalChronicle().CanCreate_user(ctx))
 	if err != nil {
 		return database.User{}, err
 	}
+
+	return WithRelations(ctx, sdb, builder.Relationships, sdb.InsertUser, arg)
 }
 
 func (sdb *Spice) InsertUserAuth(ctx context.Context, arg database.InsertUserAuthParams) (database.UserAuthLink, error) {
