@@ -353,6 +353,8 @@ function TargetsView({ targets, unitActiveTimeMap, jolBenefit, jolOverheal }: Ta
         <>
           <div className="text-xs text-muted-foreground">
             <span className="font-medium text-foreground">{targets.length}</span> targets with judgements
+            <span className="mx-1">·</span>
+            <span>% uptime</span>
           </div>
 
           <div className="max-h-[300px] overflow-y-auto">
