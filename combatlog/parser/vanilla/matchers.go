@@ -7,7 +7,6 @@ import (
 	"time"
 
 	"github.com/Emyrk/chronicle/combatlog/parser/playerposition"
-	"github.com/Emyrk/chronicle/combatlog/parser/regexs"
 	"github.com/Emyrk/chronicle/combatlog/parser/regexs/compiled"
 	"github.com/Emyrk/chronicle/combatlog/parser/regexs/compiled/matchers"
 	"github.com/Emyrk/chronicle/combatlog/parser/types"
@@ -185,7 +184,6 @@ func (p *Parser) fBugDamageSpellHitOrCrit(ts time.Time, content string) ([]messa
 // 10/29 22:09:42.175  Randgriz casts Flash Heal on Katrix.
 // 10/29 22:09:42.175  Randgriz 's Flash Heal critically heals Katrix for 2534.
 func (p *Parser) fSpellCastAttempt(ts time.Time, content string) ([]messages.Message, error) {
-	//matched := regexs.CompiledCompiledReSpellCastAttempt.MatchString(content)
 	matched := compiled.CompiledReSpellCastAttempt.MatchString(content)
 	if !matched {
 		return messages.NotHandled()
@@ -239,12 +237,12 @@ func (p *Parser) fDamageSpellHitOrCritNoSchool(ts time.Time, content string) ([]
  */
 // 11/18 07:21:45.192  0xF1400844930090A2's Firebolt hits 0xF130000950003FB5 for 38 Fire damage.
 func (p *Parser) fDamageSpellHitOrCrit(hasSchool bool, ts time.Time, content string) ([]messages.Message, error) {
-	re := regexs.ReDamageSpellHitOrCrit
+	pattern := matchers.ReDamageSpellHitOrCrit()
 	if hasSchool {
-		re = regexs.ReDamageSpellHitOrCritSchool
+		pattern = matchers.ReDamageSpellHitOrCritSchool()
 	}
 
-	matches, ok := types.FromRegex(re).Match(content)
+	matches, ok := pattern.Match(content)
 	if !ok {
 		return messages.NotHandled()
 	}
@@ -288,7 +286,7 @@ func (p *Parser) fDamageSpellHitOrCrit(hasSchool bool, ts time.Time, content str
 }
 
 func (p *Parser) fDamagePeriodic(ts time.Time, content string) ([]messages.Message, error) {
-	matches, ok := types.FromRegex(regexs.ReDamagePeriodic).Match(content)
+	matches, ok := matchers.ReDamagePeriodic().Match(content)
 	if !ok {
 		return messages.NotHandled()
 	}
@@ -321,7 +319,7 @@ func (p *Parser) fDamagePeriodic(ts time.Time, content string) ([]messages.Messa
 }
 
 func (p *Parser) fDamageShield(ts time.Time, content string) ([]messages.Message, error) {
-	matches, ok := types.FromRegex(regexs.ReDamageShield).Match(content)
+	matches, ok := matchers.ReDamageShield().Match(content)
 	if !ok {
 		return messages.NotHandled()
 	}
@@ -365,12 +363,12 @@ func (p *Parser) fDamageHitOrCritSchool(ts time.Time, content string) ([]message
 }
 
 func (p *Parser) fDamageHitOrCrit(hasScool bool, ts time.Time, content string) ([]messages.Message, error) {
-	re := regexs.ReDamageHitOrCrit
+	pattern := matchers.ReDamageHitOrCrit()
 	if hasScool {
-		re = regexs.ReDamageHitOrCritSchool
+		pattern = matchers.ReDamageHitOrCritSchool()
 	}
 
-	matches, ok := types.FromRegex(re).Match(content)
+	matches, ok := pattern.Match(content)
 	if !ok {
 		return messages.NotHandled()
 	}
@@ -412,7 +410,7 @@ func (p *Parser) fDamageHitOrCrit(hasScool bool, ts time.Time, content string) (
  */
 
 func (p *Parser) fHeal(ts time.Time, content string) ([]messages.Message, error) {
-	matches, ok := types.FromRegex(regexs.ReHeal).Match(content)
+	matches, ok := matchers.ReHeal().Match(content)
 	if !ok {
 		return messages.NotHandled()
 	}
@@ -451,7 +449,7 @@ func (p *Parser) fHeal(ts time.Time, content string) ([]messages.Message, error)
  */
 
 func (p *Parser) fAuraGainHarmfulHelpful(ts time.Time, content string) ([]messages.Message, error) {
-	matches, ok := types.FromRegex(regexs.ReAuraGainHarmfulHelpful).Match(content)
+	matches, ok := matchers.ReAuraGainHarmfulHelpful().Match(content)
 	if !ok {
 		return messages.NotHandled()
 	}
@@ -478,7 +476,7 @@ func (p *Parser) fAuraGainHarmfulHelpful(ts time.Time, content string) ([]messag
 }
 
 func (p *Parser) fAuraFade(ts time.Time, content string) ([]messages.Message, error) {
-	matches, ok := types.FromRegex(regexs.ReAuraFade).Match(content)
+	matches, ok := matchers.ReAuraFade().Match(content)
 	if !ok {
 		return messages.NotHandled()
 	}
@@ -507,7 +505,7 @@ func (p *Parser) fAuraFade(ts time.Time, content string) ([]messages.Message, er
  */
 func (p *Parser) fDamageSpellSplit(ts time.Time, content string) ([]messages.Message, error) {
 	// 0x00000000000D8985's Soul Link causes 0xF1400A5C5100000F 62 damage.
-	matches, ok := types.FromRegex(regexs.ReDamageSpellSplit).Match(content)
+	matches, ok := matchers.ReDamageSpellSplit().Match(content)
 	if !ok {
 		return messages.NotHandled()
 	}
@@ -541,7 +539,7 @@ func (p *Parser) fDamageSpellSplit(ts time.Time, content string) ([]messages.Mes
 }
 
 func (p *Parser) fDamageSpellMiss(ts time.Time, content string) ([]messages.Message, error) {
-	matches, ok := types.FromRegex(regexs.ReDamageSpellMiss).Match(content)
+	matches, ok := matchers.ReDamageSpellMiss().Match(content)
 	if !ok {
 		return messages.NotHandled()
 	}
@@ -573,7 +571,7 @@ func (p *Parser) fDamageSpellMiss(ts time.Time, content string) ([]messages.Mess
 }
 
 func (p *Parser) fDamageSpellBlockParryEvadeDodgeResistDeflect(ts time.Time, content string) ([]messages.Message, error) {
-	matches, ok := types.FromRegex(regexs.ReDamageSpellBlockParryEvadeDodgeResistDeflect).Match(content)
+	matches, ok := matchers.ReDamageSpellBlockParryEvadeDodgeResistDeflect().Match(content)
 	if !ok {
 		return messages.NotHandled()
 	}
@@ -609,7 +607,7 @@ func (p *Parser) fDamageSpellBlockParryEvadeDodgeResistDeflect(ts time.Time, con
 
 // fDamageSpellAbsorb is a full absorb
 func (p *Parser) fDamageSpellAbsorb(ts time.Time, content string) ([]messages.Message, error) {
-	matches, ok := types.FromRegex(regexs.ReDamageSpellAbsorb).Match(content)
+	matches, ok := matchers.ReDamageSpellAbsorb().Match(content)
 	if !ok {
 		return messages.NotHandled()
 	}
@@ -639,8 +637,8 @@ func (p *Parser) fDamageSpellAbsorb(ts time.Time, content string) ([]messages.Me
 }
 
 func (p *Parser) fDamageSpellAbsorbSelf(ts time.Time, content string) ([]messages.Message, error) {
-	matches := regexs.ReDamageSpellAbsorbSelf.FindStringSubmatch(content)
-	if matches == nil {
+	_, ok := matchers.ReDamageSpellAbsorbSelf().Match(content)
+	if !ok {
 		return messages.NotHandled()
 	}
 
@@ -649,7 +647,7 @@ func (p *Parser) fDamageSpellAbsorbSelf(ts time.Time, content string) ([]message
 }
 
 func (p *Parser) fDamageReflect(ts time.Time, content string) ([]messages.Message, error) {
-	matches, ok := types.FromRegex(regexs.ReDamageReflect).Match(content)
+	matches, ok := matchers.ReDamageReflect().Match(content)
 	if !ok {
 		return messages.NotHandled()
 	}
@@ -679,8 +677,8 @@ func (p *Parser) fDamageReflect(ts time.Time, content string) ([]messages.Messag
 }
 
 func (p *Parser) fDamageProcResist(ts time.Time, content string) ([]messages.Message, error) {
-	matches := regexs.ReDamageProcResist.FindStringSubmatch(content)
-	if matches == nil {
+	_, ok := matchers.ReDamageProcResist().Match(content)
+	if !ok {
 		return messages.NotHandled()
 	}
 
@@ -689,7 +687,7 @@ func (p *Parser) fDamageProcResist(ts time.Time, content string) ([]messages.Mes
 }
 
 func (p *Parser) fDamageSpellImmune(ts time.Time, content string) ([]messages.Message, error) {
-	matches, ok := types.FromRegex(regexs.ReDamageSpellImmune).Match(content)
+	matches, ok := matchers.ReDamageSpellImmune().Match(content)
 	if !ok {
 		return messages.NotHandled()
 	}
@@ -721,7 +719,7 @@ func (p *Parser) fDamageSpellImmune(ts time.Time, content string) ([]messages.Me
  */
 
 func (p *Parser) fDamageMiss(ts time.Time, content string) ([]messages.Message, error) {
-	matches, ok := types.FromRegex(regexs.ReDamageMiss).Match(content)
+	matches, ok := matchers.ReDamageMiss().Match(content)
 	if !ok {
 		return messages.NotHandled()
 	}
@@ -748,7 +746,7 @@ func (p *Parser) fDamageMiss(ts time.Time, content string) ([]messages.Message, 
 }
 
 func (p *Parser) fDamageBlockParryEvadeDodgeDeflect(ts time.Time, content string) ([]messages.Message, error) {
-	matches, ok := types.FromRegex(regexs.ReDamageBlockParryEvadeDodgeDeflect).Match(content)
+	matches, ok := matchers.ReDamageBlockParryEvadeDodgeDeflect().Match(content)
 	if !ok {
 		return messages.NotHandled()
 	}
@@ -780,7 +778,7 @@ func (p *Parser) fDamageBlockParryEvadeDodgeDeflect(ts time.Time, content string
 
 // TODO: No examples found yet
 func (p *Parser) fDamageAbsorbResist(ts time.Time, content string) ([]messages.Message, error) {
-	matches, ok := types.FromRegex(regexs.ReDamageAbsorbResist).Match(content)
+	matches, ok := matchers.ReDamageAbsorbResist().Match(content)
 	if !ok {
 		return messages.NotHandled()
 	}
@@ -805,7 +803,7 @@ func (p *Parser) fDamageAbsorbResist(ts time.Time, content string) ([]messages.M
 }
 
 func (p *Parser) fDamageImmune(ts time.Time, content string) ([]messages.Message, error) {
-	matches, ok := types.FromRegex(regexs.ReDamageImmune).Match(content)
+	matches, ok := matchers.ReDamageImmune().Match(content)
 	if !ok {
 		return messages.NotHandled()
 	}
@@ -837,8 +835,8 @@ func (p *Parser) fDamageImmune(ts time.Time, content string) ([]messages.Message
 // fSpellCastPerformDurability is when items are damaged from spell casts.
 // Maybe try resurrecting at a spirit healer to get this log?
 func (p *Parser) fSpellCastPerformDurability(ts time.Time, content string) ([]messages.Message, error) {
-	matches := regexs.ReSpellCastPerformDurability.FindStringSubmatch(content)
-	if matches == nil {
+	_, ok := matchers.ReSpellCastPerformDurability().Match(content)
+	if !ok {
 		return messages.NotHandled()
 	}
 
@@ -847,8 +845,8 @@ func (p *Parser) fSpellCastPerformDurability(ts time.Time, content string) ([]me
 }
 
 func (p *Parser) fSpellCastPerform(ts time.Time, content string) ([]messages.Message, error) {
-	matches := regexs.ReSpellCastPerform.FindStringSubmatch(content)
-	if matches == nil {
+	_, ok := matchers.ReSpellCastPerform().Match(content)
+	if !ok {
 		return messages.NotHandled()
 	}
 
@@ -857,8 +855,8 @@ func (p *Parser) fSpellCastPerform(ts time.Time, content string) ([]messages.Mes
 }
 
 func (p *Parser) fSpellCastPerformUnknown(ts time.Time, content string) ([]messages.Message, error) {
-	matches := regexs.ReSpellCastPerformUnknown.FindStringSubmatch(content)
-	if matches == nil {
+	_, ok := matchers.ReSpellCastPerformUnknown().Match(content)
+	if !ok {
 		return messages.NotHandled()
 	}
 
@@ -871,7 +869,7 @@ func (p *Parser) fSpellCastPerformUnknown(ts time.Time, content string) ([]messa
  */
 
 func (p *Parser) fHonorableKill(ts time.Time, content string) ([]messages.Message, error) {
-	matches, ok := types.FromRegex(regexs.ReHonorableKill).Match(content)
+	matches, ok := matchers.ReHonorableKill().Match(content)
 	if !ok {
 		return messages.NotHandled()
 	}
@@ -899,7 +897,7 @@ func (p *Parser) fHonorableKill(ts time.Time, content string) ([]messages.Messag
 }
 
 func (p *Parser) fUnitDieDestroyedExperience(ts time.Time, content string) ([]messages.Message, error) {
-	matches, ok := types.FromRegex(regexs.ReUnitDieDestroyedExp).Match(content)
+	matches, ok := matchers.ReUnitDieDestroyedExp().Match(content)
 	if !ok {
 		return messages.NotHandled()
 	}
@@ -923,7 +921,7 @@ func (p *Parser) fUnitDieDestroyedExperience(ts time.Time, content string) ([]me
 }
 
 func (p *Parser) fUnitDieDestroyed(ts time.Time, content string) ([]messages.Message, error) {
-	matches, ok := types.FromRegex(regexs.ReUnitDieDestroyed).Match(content)
+	matches, ok := matchers.ReUnitDieDestroyed().Match(content)
 	if !ok {
 		return messages.NotHandled()
 	}
@@ -947,7 +945,7 @@ func (p *Parser) fUnitDieDestroyed(ts time.Time, content string) ([]messages.Mes
 
 // What about 'You have slain 0xF130002AE6024CA7!'?
 func (p *Parser) fUnitSlay(ts time.Time, content string) ([]messages.Message, error) {
-	matches, ok := types.FromRegex(regexs.ReUnitSlay).Match(content)
+	matches, ok := matchers.ReUnitSlay().Match(content)
 	if !ok {
 		return messages.NotHandled()
 	}
@@ -971,7 +969,7 @@ func (p *Parser) fUnitSlay(ts time.Time, content string) ([]messages.Message, er
 }
 
 func (p *Parser) fPetDismissed(ts time.Time, content string) ([]messages.Message, error) {
-	matches, ok := types.FromRegex(regexs.RePetDismissed).Match(content)
+	matches, ok := matchers.RePetDismissed().Match(content)
 	if !ok {
 		return messages.NotHandled()
 	}
@@ -1007,7 +1005,7 @@ func (p *Parser) fPetDismissed(ts time.Time, content string) ([]messages.Message
  */
 
 func (p *Parser) fAuraDispel(ts time.Time, content string) ([]messages.Message, error) {
-	matches, ok := types.FromRegex(regexs.ReAuraDispel).Match(content)
+	matches, ok := matchers.ReAuraDispel().Match(content)
 	if !ok {
 		return messages.NotHandled()
 	}
@@ -1032,7 +1030,7 @@ func (p *Parser) fAuraDispel(ts time.Time, content string) ([]messages.Message, 
 }
 
 func (p *Parser) fAuraInterrupt(ts time.Time, content string) ([]messages.Message, error) {
-	matches, ok := types.FromRegex(regexs.ReAuraInterrupt).Match(content)
+	matches, ok := matchers.ReAuraInterrupt().Match(content)
 	if !ok {
 		return messages.NotHandled()
 	}
@@ -1061,7 +1059,7 @@ func (p *Parser) fAuraInterrupt(ts time.Time, content string) ([]messages.Messag
  */
 
 func (p *Parser) fCreates(ts time.Time, content string) ([]messages.Message, error) {
-	matches, ok := types.FromRegex(regexs.ReCreates).Match(content)
+	matches, ok := matchers.ReCreates().Match(content)
 	if !ok {
 		return messages.NotHandled()
 	}
@@ -1084,7 +1082,7 @@ func (p *Parser) fCreates(ts time.Time, content string) ([]messages.Message, err
 }
 
 func (p *Parser) fGainsAttack(ts time.Time, content string) ([]messages.Message, error) {
-	matches, ok := types.FromRegex(regexs.ReGainsAttack).Match(content)
+	matches, ok := matchers.ReGainsAttack().Match(content)
 	if !ok {
 		return messages.NotHandled()
 	}
@@ -1109,7 +1107,7 @@ func (p *Parser) fGainsAttack(ts time.Time, content string) ([]messages.Message,
 }
 
 func (p *Parser) fFallDamage(ts time.Time, content string) ([]messages.Message, error) {
-	matches, ok := types.FromRegex(regexs.ReFallDamage).Match(content)
+	matches, ok := matchers.ReFallDamage().Match(content)
 	if !ok {
 		return messages.NotHandled()
 	}
@@ -1135,7 +1133,7 @@ func (p *Parser) fFallDamage(ts time.Time, content string) ([]messages.Message, 
 }
 
 func (p *Parser) fLavaSwimming(ts time.Time, content string) ([]messages.Message, error) {
-	matches, ok := types.FromRegex(regexs.ReLavaSwimming).Match(content)
+	matches, ok := matchers.ReLavaSwimming().Match(content)
 	if !ok {
 		return messages.NotHandled()
 	}
@@ -1163,7 +1161,7 @@ func (p *Parser) fLavaSwimming(ts time.Time, content string) ([]messages.Message
 }
 
 func (p *Parser) fDurabilityLoss(ts time.Time, content string) ([]messages.Message, error) {
-	matches, ok := types.FromRegex(regexs.ReDurabilityLoss).Match(content)
+	matches, ok := matchers.ReDurabilityLoss().Match(content)
 	if !ok {
 		return messages.NotHandled()
 	}
@@ -1184,7 +1182,7 @@ func (p *Parser) fDurabilityLoss(ts time.Time, content string) ([]messages.Messa
 }
 
 func (p *Parser) fUsesConsumable(ts time.Time, content string) ([]messages.Message, error) {
-	_, ok := types.FromRegex(regexs.ReUsesConsumable).Match(content)
+	_, ok := matchers.ReUsesConsumable().Match(content)
 	if !ok {
 		return messages.NotHandled()
 	}
@@ -1193,7 +1191,7 @@ func (p *Parser) fUsesConsumable(ts time.Time, content string) ([]messages.Messa
 }
 
 func (p *Parser) fResourceDrain(ts time.Time, content string) ([]messages.Message, error) {
-	matches, ok := types.FromRegex(regexs.ReResourceDrain).Match(content)
+	matches, ok := matchers.ReResourceDrain().Match(content)
 	if !ok {
 		return messages.NotHandled()
 	}
@@ -1224,7 +1222,7 @@ func (p *Parser) fResourceDrain(ts time.Time, content string) ([]messages.Messag
 }
 
 func (p *Parser) fReputationChange(ts time.Time, content string) ([]messages.Message, error) {
-	_, ok := types.FromRegex(regexs.ReReputationChange).Match(content)
+	_, ok := matchers.ReReputationChange().Match(content)
 	if !ok {
 		return messages.NotHandled()
 	}
@@ -1233,7 +1231,7 @@ func (p *Parser) fReputationChange(ts time.Time, content string) ([]messages.Mes
 }
 
 func (p *Parser) fPetEats(ts time.Time, content string) ([]messages.Message, error) {
-	_, ok := types.FromRegex(regexs.RePetEats).Match(content)
+	_, ok := matchers.RePetEats().Match(content)
 	if !ok {
 		return messages.NotHandled()
 	}
@@ -1242,7 +1240,7 @@ func (p *Parser) fPetEats(ts time.Time, content string) ([]messages.Message, err
 }
 
 func (p *Parser) fKilledBy(ts time.Time, content string) ([]messages.Message, error) {
-	matches, ok := types.FromRegex(regexs.ReKilledBy).Match(content)
+	matches, ok := matchers.ReKilledBy().Match(content)
 	if !ok {
 		return messages.NotHandled()
 	}
@@ -1267,7 +1265,7 @@ func (p *Parser) fKilledBy(ts time.Time, content string) ([]messages.Message, er
 }
 
 func (p *Parser) fFullResist(ts time.Time, content string) ([]messages.Message, error) {
-	_, ok := types.FromRegex(regexs.ReFullResist).Match(content)
+	_, ok := matchers.ReFullResist().Match(content)
 	if !ok {
 		return messages.NotHandled()
 	}
@@ -1276,7 +1274,7 @@ func (p *Parser) fFullResist(ts time.Time, content string) ([]messages.Message, 
 }
 
 func (p *Parser) fPetHappiness(ts time.Time, content string) ([]messages.Message, error) {
-	_, ok := types.FromRegex(regexs.ReHappiness).Match(content)
+	_, ok := matchers.ReHappiness().Match(content)
 	if !ok {
 		return messages.NotHandled()
 	}
@@ -1285,7 +1283,7 @@ func (p *Parser) fPetHappiness(ts time.Time, content string) ([]messages.Message
 }
 
 func (p *Parser) fFullImmune(ts time.Time, content string) ([]messages.Message, error) {
-	matches, ok := types.FromRegex(regexs.ReFullImmune).Match(content)
+	matches, ok := matchers.ReFullImmune().Match(content)
 	if !ok {
 		return messages.NotHandled()
 	}
