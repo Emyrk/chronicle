@@ -235,9 +235,9 @@ func ServerCmd() *serpent.Command {
 			//nolint:errcheck
 			defer db.Close()
 
-			var sdb *spice.Spice
+			var authz *spice.Spice
 			if spiceDBEnabled {
-				sdb, err = spice.New(ctx, &spice.Options{
+				sdb, err := spice.New(ctx, &spice.Options{
 					GRPCURL: spiceDBURL,
 					Logger:  logger,
 					Store:   db,
@@ -247,6 +247,9 @@ func ServerCmd() *serpent.Command {
 					return fmt.Errorf("connect to spicedb: %w", err)
 				}
 				db = sdb
+				authz = sdb
+			} else {
+				authz = nil
 			}
 
 			serverLn, err := ProvisionListener(logger, httpAddress)
@@ -314,6 +317,7 @@ func ServerCmd() *serpent.Command {
 				SecretPEM:       decodedSecret,
 				RiverQueue:      riverOpts,
 				DisallowSignups: disableSignups,
+				Authz:           authz,
 			})
 			if err != nil {
 				return err
