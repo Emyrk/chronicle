@@ -5,6 +5,7 @@ import (
 	"time"
 
 	"github.com/Emyrk/chronicle/database"
+	"github.com/Emyrk/chronicle/database/spice/policy"
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgtype"
 )
@@ -94,7 +95,15 @@ func (sdb *Spice) InsertStampedYoutubeVideo(ctx context.Context, arg database.In
 }
 
 func (sdb *Spice) InsertUser(ctx context.Context, arg database.InsertUserParams) (database.User, error) {
-	return sdb.db.InsertUser(ctx, arg)
+	builder := policy.New().
+		User(arg.ID)
+
+	sdb.client.WriteRelationships(ctx, builder.AsSubject())
+
+	usr, err := sdb.db.InsertUser(ctx, arg)
+	if err != nil {
+		return database.User{}, err
+	}
 }
 
 func (sdb *Spice) InsertUserAuth(ctx context.Context, arg database.InsertUserAuthParams) (database.UserAuthLink, error) {
