@@ -56,6 +56,7 @@ func New(ctx context.Context, opts Options) (*API, error) {
 		AccessURL:  opts.AccessURL,
 		DevServer:  opts.DevOAuth,
 		Database:   opts.DB,
+		Authz:      opts.Authz,
 		Discord:    opts.Discord,
 		DiscordBot: opts.DiscordBot,
 		Sessions: chronauth.SessionOptions{

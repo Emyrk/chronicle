@@ -222,10 +222,6 @@ func (obj *ObjLog_instance) RelationRaid_log() string {
 	return "raid_log"
 }
 
-func (obj *ObjLog_instance) RelationTagged_by() string {
-	return "tagged_by"
-}
-
 // Raid_log schema.zed:50
 // Relationship: log_instance:<id>#raid_log@raid_log:<id>
 func (obj *ObjLog_instance) Raid_log(subs ...*ObjRaid_log) *ObjLog_instance {
@@ -244,42 +240,10 @@ func (obj *ObjLog_instance) Raid_log(subs ...*ObjRaid_log) *ObjLog_instance {
 	return obj
 }
 
-// Tagged_by schema.zed:51
-// Relationship: log_instance:<id>#tagged_by@user:<id>
-func (obj *ObjLog_instance) Tagged_by(subs ...*ObjUser) *ObjLog_instance {
-	for i := range subs {
-		sub := subs[i]
-		obj.Builder.AddRelationship(v1.Relationship{
-			Resource: obj.Obj,
-			Relation: obj.RelationTagged_by(),
-			Subject: &v1.SubjectReference{
-				Object:           sub.Obj,
-				OptionalRelation: "",
-			},
-			OptionalCaveat: nil,
-		})
-	}
-	return obj
-}
-
-// CanView schema.zed:54
+// CanView schema.zed:53
 // Object: log_instance:<id>
 func (obj *ObjLog_instance) CanView(ctx context.Context) (context.Context, string, *v1.ObjectReference) {
 	return ctx, "view", obj.Object()
-}
-
-// CanEdit schema.zed:55
-// Object: log_instance:<id>
-// Schema: permission edit = raid_log->edit
-func (obj *ObjLog_instance) CanEdit(ctx context.Context) (context.Context, string, *v1.ObjectReference) {
-	return ctx, "edit", obj.Object()
-}
-
-// CanTag schema.zed:56
-// Object: log_instance:<id>
-// Schema: permission tag = raid_log->edit + tagged_by
-func (obj *ObjLog_instance) CanTag(ctx context.Context) (context.Context, string, *v1.ObjectReference) {
-	return ctx, "tag", obj.Object()
 }
 
 type ObjRaid_log struct {

@@ -30,6 +30,8 @@ type Bot struct {
 
 	mu       sync.RWMutex
 	handlers []func()
+
+	roles []*discordgo.Role
 }
 
 // New creates a new Discord bot instance.
@@ -41,7 +43,7 @@ func New(logger *slog.Logger, config Config) (*Bot, error) {
 
 	session, err := discordgo.New("Bot " + config.Token)
 	if err != nil {
-		return nil, nil
+		return nil, err
 	}
 
 	bot := &Bot{
@@ -53,6 +55,11 @@ func New(logger *slog.Logger, config Config) (*Bot, error) {
 	// Register default handlers
 	session.AddHandler(bot.onReady)
 	session.AddHandler(bot.onGuildMemberAdd)
+
+	bot.roles, err = bot.GetGuildRoles(bot.ChronicleGuildID())
+	if err != nil {
+		return nil, fmt.Errorf("fetch guild roles: %w", err)
+	}
 
 	return bot, nil
 }
@@ -187,5 +194,17 @@ func (b *Bot) GetGuildRoles(guildID string) ([]*discordgo.Role, error) {
 	if err != nil {
 		return nil, fmt.Errorf("get guild roles: %w", err)
 	}
+
+	if guildID == b.ChronicleGuildID() {
+		b.mu.Lock()
+		b.roles = roles
+		b.mu.Unlock()
+	}
 	return roles, nil
+}
+
+func (b *Bot) Roles() []*discordgo.Role {
+	b.mu.RLock()
+	defer b.mu.RUnlock()
+	return b.roles
 }

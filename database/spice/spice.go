@@ -15,6 +15,7 @@ import (
 	"github.com/authzed/authzed-go/v1"
 	"github.com/authzed/grpcutil"
 	"github.com/authzed/spicedb/pkg/tuple"
+	"github.com/google/uuid"
 	"golang.org/x/xerrors"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials/insecure"
@@ -141,6 +142,24 @@ func (s *Spice) WithRelations(ctx context.Context, relations []v1.Relationship, 
 
 	ctx = context.WithValue(ctx, "revert", revert)
 	return ctx, nil
+}
+
+func (s *Spice) DeleteUserRoles(ctx context.Context, userID uuid.UUID) error {
+	resp, err := s.client.DeleteRelationships(ctx, &v1.DeleteRelationshipsRequest{
+		RelationshipFilter: &v1.RelationshipFilter{
+			ResourceType: "chronicle", // Where roles live
+			OptionalSubjectFilter: &v1.SubjectFilter{
+				SubjectType:       "user",
+				OptionalSubjectId: userID.String(),
+			},
+		},
+	})
+	if err != nil {
+		return xerrors.Errorf("delete user roles: %w", err)
+	}
+
+	s.zedToken.Store(resp.DeletedAt)
+	return nil
 }
 
 // WriteRelationships returns a revert function that will delete all the relationships that

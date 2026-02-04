@@ -276,7 +276,7 @@ func ServerCmd() *serpent.Command {
 				Token:   discordBot.Token,
 				GuildID: discordBot.GuildID,
 				DB:      db,
-				Authz:   sdb,
+				Authz:   authz,
 			})
 			if err != nil {
 				return fmt.Errorf("create chronicle bot: %w", err)

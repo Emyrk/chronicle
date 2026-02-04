@@ -43,7 +43,7 @@ definition raid_log {
   permission reparse = chronicle->admin
   
   // Delete: uploader or guild admin
-  permission delete = uploader + chronicle->admin
+  permission delete = owner + chronicle->admin
 }
 
 definition log_instance {
