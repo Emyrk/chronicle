@@ -1,4 +1,4 @@
-package dbservice
+package pgxpoolservice
 
 import (
 	"context"
@@ -26,7 +26,6 @@ type Service struct {
 	pgURL string
 
 	pool *pgxpool.Pool
-	db   database.Store
 }
 
 func New(logger *slog.Logger, reg *prometheus.Registry) *Service {
@@ -38,6 +37,9 @@ func New(logger *slog.Logger, reg *prometheus.Registry) *Service {
 
 func (s *Service) Name() string {
 	return ServiceName
+}
+func (s *Service) DependsOn() []string {
+	return []string{}
 }
 
 func (s *Service) Start(ctx context.Context) error {
@@ -52,21 +54,17 @@ func (s *Service) Start(ctx context.Context) error {
 	}
 
 	s.pool = pool
-	s.db = database.New(pool)
 
 	return nil
 }
 
-func (s *Service) DB() database.Store {
-	return s.db
-}
-
-func (s *Service) Pool() *pgxpool.Pool {
+func (s *Service) Service() *pgxpool.Pool {
 	return s.pool
 }
 
 func (s *Service) Close() error {
-	return s.db.Close()
+	s.pool.Close()
+	return nil
 }
 
 func (s *Service) Options() serpent.OptionSet {

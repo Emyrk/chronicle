@@ -2,15 +2,12 @@ package riverservice
 
 import (
 	"context"
-	"fmt"
 	"log/slog"
 	"net/url"
 	"regexp"
 	"strings"
 
-	"github.com/Emyrk/chronicle/database"
 	"github.com/Emyrk/chronicle/internal/services"
-	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/prometheus/client_golang/prometheus"
 	"golang.org/x/xerrors"
 
@@ -31,40 +28,19 @@ func New(logger *slog.Logger, reg *prometheus.Registry) *Service {
 	}
 }
 
-func (s *DBService) Name() string {
+func (s *Service) Name() string {
 	return ServiceName
 }
 
-func (s *DBService) Start(ctx context.Context) error {
-	dbURL, err := escapePostgresURLUserInfo(s.pgURL)
-	if err != nil {
-		return err
-	}
-
-	pool, err := database.NewPostgresDB(ctx, s.logger, dbURL)
-	if err != nil {
-		return fmt.Errorf("connect to postgres db: %w", err)
-	}
-
-	s.pool = pool
-	s.db = database.New(pool)
-
+func (s *Service) Start(ctx context.Context) error {
 	return nil
 }
 
-func (s *DBService) DB() database.Store {
-	return s.db
-}
-
-func (s *DBService) Pool() *pgxpool.Pool {
-	return s.pool
-}
-
-func (s *DBService) Close() error {
+func (s *Service) Close() error {
 	return s.db.Close()
 }
 
-func (s *DBService) Options() serpent.OptionSet {
+func (s *Service) Options() serpent.OptionSet {
 	return serpent.OptionSet{
 		{
 			Name:        "Postgres URL",
