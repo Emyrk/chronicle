@@ -1,16 +1,16 @@
 package chronauth
 
 import (
-	"database/sql"
-	"errors"
-	"fmt"
-	"log/slog"
-	"net/http"
-	"time"
+  "database/sql"
+  "errors"
+  "fmt"
+  "log/slog"
+  "net/http"
+  "time"
 
-	"github.com/Emyrk/chronicle/database"
-	"github.com/google/uuid"
-	"github.com/markbates/goth"
+  "github.com/Emyrk/chronicle/database"
+  "github.com/google/uuid"
+  "github.com/markbates/goth"
 )
 
 func (s *Service) Signup(w http.ResponseWriter, r *http.Request, user goth.User) (database.UserAuthSession, bool) {
@@ -29,13 +29,6 @@ func (s *Service) Signup(w http.ResponseWriter, r *http.Request, user goth.User)
 		})
 		if err != nil && !errors.Is(err, sql.ErrNoRows) {
 			return err
-		}
-
-		if user.Provider == "discord" {
-			err = s.HandleDiscordUser(ctx, tx, linked.ID == uuid.Nil, user)
-			if err != nil {
-				return fmt.Errorf("handling discord user: %w", err)
-			}
 		}
 
 		if linked.ID == uuid.Nil {
@@ -98,6 +91,13 @@ func (s *Service) Signup(w http.ResponseWriter, r *http.Request, user goth.User)
 		if err != nil {
 			return err
 		}
+
+    if user.Provider == "discord" {
+      err = s.SyncDiscordUser(ctx, tx, linked.ID == uuid.Nil, user.UserID, linked.UserID)
+      if err != nil {
+        return fmt.Errorf("handling discord user: %w", err)
+      }
+    }
 
 		return nil
 	}, nil)

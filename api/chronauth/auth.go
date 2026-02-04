@@ -17,6 +17,7 @@ import (
 	"github.com/Emyrk/chronicle/api/httpapi"
 	"github.com/Emyrk/chronicle/chroniclebot"
 	"github.com/Emyrk/chronicle/database"
+	"github.com/Emyrk/chronicle/database/spice"
 	"github.com/go-chi/chi/v5"
 	"github.com/gorilla/sessions"
 	"github.com/markbates/goth"
@@ -38,6 +39,7 @@ type Options struct {
 	Database     database.Store
 	Discord      DiscordOAuth
 	DiscordBot   *chroniclebot.Bot
+	Authz        *spice.Spice
 	BlockSignups bool
 
 	Sessions SessionOptions
@@ -50,6 +52,7 @@ type Service struct {
 	Database        database.Store
 	logger          *slog.Logger
 	disallowSignups bool
+	Authz           *spice.Spice
 
 	sessions *Sessions
 }
@@ -98,6 +101,7 @@ func New(ctx context.Context, logger *slog.Logger, opts Options) (*Service, erro
 	}
 
 	return &Service{
+		Authz:           opts.Authz,
 		Bot:             opts.DiscordBot,
 		Providers:       providers,
 		Store:           store,
