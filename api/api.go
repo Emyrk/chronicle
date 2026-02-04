@@ -14,6 +14,7 @@ import (
 	"github.com/Emyrk/chronicle/chronicle"
 	"github.com/Emyrk/chronicle/chroniclebot"
 	"github.com/Emyrk/chronicle/database"
+	"github.com/Emyrk/chronicle/database/spice"
 	"github.com/Emyrk/chronicle/database/storage"
 	"github.com/Emyrk/chronicle/frontend"
 	"github.com/go-chi/chi/v5"
@@ -34,18 +35,22 @@ type Options struct {
 	SecretPEM       []byte // Used for JWTs
 	RiverQueue      chronicle.RiverQueueOptions
 	DisallowSignups bool
+	Authz           *spice.Spice
 }
 
 type API struct {
-	AppContext context.Context
-	Opts       *Options
-	Auth       *chronauth.Service
-	Chronicle  *chronicle.Chronicle
+	AppContext     context.Context
+	Opts           *Options
+	Authentication *chronauth.Service
+	Chronicle      *chronicle.Chronicle
 }
 
 func New(ctx context.Context, opts Options) (*API, error) {
 	if opts.Registry == nil {
 		opts.Registry = prometheus.NewRegistry()
+	}
+	if opts.Authz == nil {
+		return nil, errors.New("no authz provided")
 	}
 	service, err := chronauth.New(ctx, opts.Logger, chronauth.Options{
 		AccessURL:  opts.AccessURL,
@@ -73,10 +78,10 @@ func New(ctx context.Context, opts Options) (*API, error) {
 	}
 
 	return &API{
-		Opts:       &opts,
-		AppContext: ctx,
-		Auth:       service,
-		Chronicle:  chr,
+		Opts:           &opts,
+		AppContext:     ctx,
+		Authentication: service,
+		Chronicle:      chr,
 	}, nil
 }
 
@@ -93,12 +98,12 @@ func (api *API) Routes() chi.Router {
 
 	r.Route("/api/v1", func(r chi.Router) {
 		r.Use(
-			api.Auth.AuthenticationMiddleware,
+			api.Authentication.AuthenticationMiddleware,
 		//authMW.Trace,
 		)
 
 		r.Group(func(r chi.Router) {
-			r.Use(api.Auth.Authenticated(false))
+			r.Use(api.Authentication.Authenticated(false))
 			r.Get("/whoami", api.WhoAmI)
 		})
 
@@ -106,7 +111,7 @@ func (api *API) Routes() chi.Router {
 		r.Group(func(r chi.Router) {
 			r.Route("/raidlogs", func(r chi.Router) {
 				r.Route("/logs", func(r chi.Router) {
-					r.Use(api.Auth.Authenticated(false))
+					r.Use(api.Authentication.Authenticated(false))
 					r.Post("/upload", api.WoWLogUpload)
 					r.Get("/", api.WoWLogGroups)
 					r.Route("/{logID}", func(r chi.Router) {
@@ -126,7 +131,7 @@ func (api *API) Routes() chi.Router {
 
 							r.Get("/youtube", api.GetInstanceYoutube)
 							r.Group(func(r chi.Router) {
-								r.Use(api.Auth.Authenticated(false))
+								r.Use(api.Authentication.Authenticated(false))
 								r.Post("/youtube", api.PostInstanceYoutube)
 							})
 						})
@@ -138,13 +143,14 @@ func (api *API) Routes() chi.Router {
 	})
 
 	// Auth routes
-	r.Mount("/auth", api.Auth.Handler())
+	r.Mount("/auth", api.Authentication.Handler())
 
 	// River UI
 	r.Group(func(r chi.Router) {
 		r.Use(
-			api.Auth.AuthenticationMiddleware,
-			api.Auth.Authenticated(false),
+			api.Authentication.AuthenticationMiddleware,
+			api.Authentication.Authenticated(false),
+			httpmw.ViewRiverQueue(api.Opts.Authz),
 		)
 		r.Mount("/river", api.Chronicle.RiverUI())
 	})

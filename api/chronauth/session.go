@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/Emyrk/chronicle/api/chronauth/claims"
+	"github.com/Emyrk/chronicle/database/spice"
 )
 
 type authContextKey struct{}
@@ -91,6 +92,7 @@ func (s *Service) AuthenticationMiddleware(next http.Handler) http.Handler {
 			}
 		}
 
+		r = r.WithContext(spice.AsUser(r.Context(), c.Subject))
 		next.ServeHTTP(w, withState(r, AuthenticationContext{
 			Claims: &c,
 			Error:  nil,

@@ -280,6 +280,7 @@ func (s *Service) Handler() http.Handler {
 		)
 
 		mux.Get("/{provider}", func(w http.ResponseWriter, r *http.Request) {
+			r = r.WithContext(spice.AsGod(r.Context()))
 			cl, ok := AuthenticatedClaims(r.Context())
 			if ok && cl != nil {
 				return // Already authenticated
@@ -289,7 +290,10 @@ func (s *Service) Handler() http.Handler {
 		})
 
 		mux.Get("/{provider}/callback", func(w http.ResponseWriter, r *http.Request) {
-			cl, ok := AuthenticatedClaims(r.Context())
+			r = r.WithContext(spice.AsGod(r.Context()))
+			ctx := r.Context()
+
+			cl, ok := AuthenticatedClaims(ctx)
 			if !ok || cl == nil {
 				// If authenticated, skip all this
 				_, ok = s.provider(w, r)

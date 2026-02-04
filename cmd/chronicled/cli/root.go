@@ -25,6 +25,7 @@ func RootCmd() *serpent.Command {
 		versionCmd(),
 		ServerCmd(),
 		GenerateSecretKey(),
+		SetAdmin(),
 	)
 
 	return cmd

@@ -9,6 +9,7 @@ import (
 	"github.com/Emyrk/chronicle/api/httpapi"
 	"github.com/Emyrk/chronicle/api/httpmw"
 	"github.com/Emyrk/chronicle/database"
+	"github.com/Emyrk/chronicle/database/spice/policy"
 	"github.com/Emyrk/chronicle/internal/slice"
 	"github.com/go-chi/chi/v5"
 )
@@ -101,12 +102,18 @@ func (api *API) PostInstanceYoutube(w http.ResponseWriter, r *http.Request) {
 	inst := httpmw.Instance(ctx)
 	db := api.Opts.DB
 
+	err := api.Opts.Authz.Check(policy.New().GlobalChronicle().CanUpload_youtube(ctx))
+	if err != nil {
+		http.Error(w, "Forbidden", http.StatusForbidden)
+		return
+	}
+
 	var req chroniclesdk.Video
 	if !httpapi.Read(ctx, w, r, &req) {
 		return
 	}
 
-	err := db.InsertStampedYoutubeVideo(ctx, database.InsertStampedYoutubeVideoParams{
+	err = db.InsertStampedYoutubeVideo(ctx, database.InsertStampedYoutubeVideoParams{
 		LogInstanceID: inst.ID,
 		CreatedAt:     database.Timestamptz(time.Now()),
 		ExportedAt:    database.Timestamptz(req.ExportedAt),

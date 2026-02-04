@@ -7,7 +7,9 @@ require (
 	github.com/Gophercraft/log v0.0.0-20240214234900-fcacaad0d20e
 	github.com/KromDaniel/regengo v0.5.3
 	github.com/authzed/authzed-go v1.7.0
+	github.com/authzed/grpcutil v0.0.0-20240123194739-2ea1e3d2d98b
 	github.com/authzed/spicedb v1.48.0
+	github.com/bwmarrin/discordgo v0.29.0
 	github.com/cenkalti/backoff v2.2.1+incompatible
 	github.com/cenkalti/backoff/v4 v4.3.0
 	github.com/coder/guts v1.6.3-0.20260119194949-fc5c1a15676f
@@ -45,10 +47,11 @@ require (
 	golang.org/x/text v0.33.0
 	golang.org/x/tools v0.40.0
 	golang.org/x/xerrors v0.0.0-20240903120638-7835f813f4da
-	google.golang.org/grpc v1.77.0
+	google.golang.org/grpc v1.78.0
 	google.golang.org/protobuf v1.36.11
 	gopkg.in/yaml.v3 v3.0.1
 	riverqueue.com/riverui v0.14.0
+	tailscale.com v1.94.1
 )
 
 require (
@@ -102,7 +105,6 @@ require (
 	github.com/authzed/cel-go v0.20.2 // indirect
 	github.com/authzed/consistent v0.2.0 // indirect
 	github.com/authzed/ctxkey v0.0.0-20250226155515-d49f99185584 // indirect
-	github.com/authzed/grpcutil v0.0.0-20240123194739-2ea1e3d2d98b // indirect
 	github.com/aws/aws-sdk-go-v2 v1.41.0 // indirect
 	github.com/aws/aws-sdk-go-v2/config v1.32.5 // indirect
 	github.com/aws/aws-sdk-go-v2/credentials v1.19.5 // indirect
@@ -127,7 +129,6 @@ require (
 	github.com/bits-and-blooms/bitset v1.24.2 // indirect
 	github.com/bits-and-blooms/bloom/v3 v3.7.1 // indirect
 	github.com/blang/semver v3.5.1+incompatible // indirect
-	github.com/bwmarrin/discordgo v0.29.0 // indirect
 	github.com/caio/go-tdigest/v4 v4.1.0 // indirect
 	github.com/ccoveille/go-safecast/v2 v2.0.0 // indirect
 	github.com/cenkalti/backoff/v5 v5.0.3 // indirect
@@ -232,7 +233,7 @@ require (
 	github.com/googleapis/enterprise-certificate-proxy v0.3.7 // indirect
 	github.com/googleapis/gax-go/v2 v2.15.0 // indirect
 	github.com/gorilla/mux v1.8.1 // indirect
-	github.com/gorilla/securecookie v1.1.1 // indirect
+	github.com/gorilla/securecookie v1.1.2 // indirect
 	github.com/gorilla/websocket v1.5.4-0.20250319132907-e064f32e3674 // indirect
 	github.com/grpc-ecosystem/go-grpc-middleware v1.4.0 // indirect
 	github.com/grpc-ecosystem/go-grpc-middleware/providers/prometheus v1.1.0 // indirect
@@ -395,7 +396,7 @@ require (
 	golang.org/x/net v0.48.0 // indirect
 	golang.org/x/oauth2 v0.34.0 // indirect
 	golang.org/x/sync v0.19.0 // indirect
-	golang.org/x/sys v0.39.0 // indirect
+	golang.org/x/sys v0.40.0 // indirect
 	golang.org/x/telemetry v0.0.0-20251203150158-8fff8a5912fc // indirect
 	golang.org/x/term v0.38.0 // indirect
 	golang.org/x/time v0.14.0 // indirect
@@ -403,7 +404,7 @@ require (
 	google.golang.org/api v0.257.0 // indirect
 	google.golang.org/genproto v0.0.0-20250908214217-97024824d090 // indirect
 	google.golang.org/genproto/googleapis/api v0.0.0-20251213004720-97cd9d5aeac2 // indirect
-	google.golang.org/genproto/googleapis/rpc v0.0.0-20251213004720-97cd9d5aeac2 // indirect
+	google.golang.org/genproto/googleapis/rpc v0.0.0-20251222181119-0a764e51fe1b // indirect
 	gopkg.in/evanphx/json-patch.v4 v4.12.0 // indirect
 	gopkg.in/inf.v0 v0.9.1 // indirect
 	gopkg.in/yaml.v2 v2.4.0 // indirect

@@ -5,6 +5,7 @@ import (
 	"time"
 
 	"github.com/Emyrk/chronicle/database"
+	"github.com/Emyrk/chronicle/database/spice/policy"
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgtype"
 )
@@ -66,7 +67,10 @@ func (sdb *Spice) InsertEncounterCharacterFights(ctx context.Context, arg []data
 }
 
 func (sdb *Spice) InsertInstance(ctx context.Context, arg database.InsertInstanceParams) (database.LogInstance, error) {
-	return sdb.db.InsertInstance(ctx, arg)
+	builder := policy.New()
+	builder.Log_instance(arg.ID).Raid_log(builder.Raid_log(arg.LogGroupID))
+
+	return WithRelations(ctx, sdb, builder.Relationships, sdb.db.InsertInstance, arg)
 }
 
 func (sdb *Spice) InsertInstancePlayers(ctx context.Context, arg []database.InsertInstancePlayersParams) *database.InsertInstancePlayersBatchResults {
@@ -94,7 +98,18 @@ func (sdb *Spice) InsertStampedYoutubeVideo(ctx context.Context, arg database.In
 }
 
 func (sdb *Spice) InsertUser(ctx context.Context, arg database.InsertUserParams) (database.User, error) {
-	return sdb.db.InsertUser(ctx, arg)
+	builder := policy.New()
+	user := builder.User(arg.ID)
+
+	// All users start out as log capable.
+	builder.GlobalChronicle().Log_capable(user)
+
+	err := sdb.Check(builder.GlobalChronicle().CanCreate_user(ctx))
+	if err != nil {
+		return database.User{}, err
+	}
+
+	return WithRelations(ctx, sdb, builder.Relationships, sdb.InsertUser, arg)
 }
 
 func (sdb *Spice) InsertUserAuth(ctx context.Context, arg database.InsertUserAuthParams) (database.UserAuthLink, error) {
@@ -106,7 +121,13 @@ func (sdb *Spice) InsertUserAuthSession(ctx context.Context, arg database.Insert
 }
 
 func (sdb *Spice) InsertWoWLogGroup(ctx context.Context, arg database.InsertWoWLogGroupParams) (database.WoWLogGroup, error) {
-	return sdb.db.InsertWoWLogGroup(ctx, arg)
+	builder := policy.New()
+	rl := builder.Raid_log(arg.ID)
+
+	rl.Chronicle(builder.GlobalChronicle())
+	rl.Owner(builder.User(arg.Owner))
+
+	return WithRelations(ctx, sdb, builder.Relationships, sdb.db.InsertWoWLogGroup, arg)
 }
 
 func (sdb *Spice) Instance(ctx context.Context, id uuid.UUID) (database.LogInstance, error) {
