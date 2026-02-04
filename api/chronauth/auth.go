@@ -15,6 +15,7 @@ import (
 
 	"github.com/Emyrk/chronicle/api/chronauth/fakeoidc"
 	"github.com/Emyrk/chronicle/api/httpapi"
+	"github.com/Emyrk/chronicle/chroniclebot"
 	"github.com/Emyrk/chronicle/database"
 	"github.com/go-chi/chi/v5"
 	"github.com/gorilla/sessions"
@@ -36,6 +37,7 @@ type Options struct {
 	DevServer    bool
 	Database     database.Store
 	Discord      DiscordOAuth
+	DiscordBot   *chroniclebot.Bot
 	BlockSignups bool
 
 	Sessions SessionOptions
@@ -44,6 +46,7 @@ type Options struct {
 type Service struct {
 	Providers       goth.Providers
 	Store           *sessions.CookieStore
+	Bot             *chroniclebot.Bot
 	Database        database.Store
 	logger          *slog.Logger
 	disallowSignups bool
@@ -95,6 +98,7 @@ func New(ctx context.Context, logger *slog.Logger, opts Options) (*Service, erro
 	}
 
 	return &Service{
+		Bot:             opts.DiscordBot,
 		Providers:       providers,
 		Store:           store,
 		Database:        opts.Database,
@@ -321,7 +325,6 @@ func (s *Service) Handler() http.Handler {
 				_ = redirect.Save(r, w)
 			}
 			http.Redirect(w, r, redirectTo, http.StatusTemporaryRedirect)
-			//httpapi.Write(r.Context(), w, http.StatusOK, session)
 		})
 
 		mux.Get("/logout", func(w http.ResponseWriter, r *http.Request) {

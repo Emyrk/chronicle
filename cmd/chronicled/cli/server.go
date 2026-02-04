@@ -18,6 +18,7 @@ import (
 	"github.com/Emyrk/chronicle/api/chronauth"
 	"github.com/Emyrk/chronicle/api/chronauth/authkeys"
 	"github.com/Emyrk/chronicle/chronicle"
+	"github.com/Emyrk/chronicle/chroniclebot"
 	"github.com/Emyrk/chronicle/database"
 	"github.com/Emyrk/chronicle/database/spice"
 	"github.com/Emyrk/chronicle/database/storage"
@@ -64,7 +65,8 @@ func ServerCmd() *serpent.Command {
 		postgresURL       string
 		spiceDBURL        string
 		spiceDBEnabled    bool
-		discord           chronauth.DiscordOAuth
+		discordOauth      chronauth.DiscordOAuth
+		discordBot        chroniclebot.Config
 		secretPem         string
 		storageFlag       string
 		riverOpts         chronicle.RiverQueueOptions
@@ -77,6 +79,24 @@ func ServerCmd() *serpent.Command {
 	cmd := &serpent.Command{
 		Use: "server",
 		Options: []serpent.Option{
+			{
+				Name:        "Discord bot token",
+				Description: "Address to serve the api on.",
+				Required:    true,
+				Flag:        "discord-token",
+				Env:         "CHRONICLE_DISCORD_BOT_TOKEN",
+				Default:     "",
+				Value:       serpent.StringOf(&discordBot.Token),
+			},
+			{
+				Name:        "Discord Chronicle GuildID",
+				Description: "Address to serve the api on.",
+				Required:    false,
+				Flag:        "discord-guild-id",
+				Env:         "CHRONICLE_DISCORD_GUILD_ID",
+				Default:     "1466099237669306380",
+				Value:       serpent.StringOf(&discordBot.GuildID),
+			},
 			{
 				Name:        "http-address",
 				Description: "Address to serve the api on.",
@@ -137,7 +157,7 @@ func ServerCmd() *serpent.Command {
 				Flag:        "discord-client-id",
 				Env:         "CHRONICLE_DISCORD_CLIENT_ID",
 				Default:     "",
-				Value:       serpent.StringOf(&discord.ClientID),
+				Value:       serpent.StringOf(&discordOauth.ClientID),
 			},
 			{
 				Name:        "Discord OAuth Client Secret",
@@ -146,7 +166,7 @@ func ServerCmd() *serpent.Command {
 				Flag:        "discord-client-secret",
 				Env:         "CHRONICLE_DISCORD_CLIENT_SECRET",
 				Default:     "",
-				Value:       serpent.StringOf(&discord.ClientSecret),
+				Value:       serpent.StringOf(&discordOauth.ClientSecret),
 			},
 			{
 				Name:        "JWT Secret PEM",
@@ -247,6 +267,16 @@ func ServerCmd() *serpent.Command {
 				var _ = sdb
 			}
 
+			bot, err := chroniclebot.New(logger, chroniclebot.Config{
+				Token:   discordBot.Token,
+				GuildID: discordBot.GuildID,
+				DB:      db,
+				Authz:   sdb,
+			})
+			if err != nil {
+				return fmt.Errorf("create chronicle bot: %w", err)
+			}
+
 			serverLn, err := ProvisionListener(logger, httpAddress)
 			if err != nil {
 				return err
@@ -308,7 +338,8 @@ func ServerCmd() *serpent.Command {
 				Registry:        reg,
 				AccessURL:       au,
 				DevOAuth:        devAuth,
-				Discord:         discord,
+				Discord:         discordOauth,
+				DiscordBot:      bot,
 				SecretPEM:       decodedSecret,
 				RiverQueue:      riverOpts,
 				DisallowSignups: disableSignups,

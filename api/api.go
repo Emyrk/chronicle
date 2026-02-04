@@ -12,6 +12,7 @@ import (
 	"github.com/Emyrk/chronicle/api/httpapi"
 	"github.com/Emyrk/chronicle/api/httpmw"
 	"github.com/Emyrk/chronicle/chronicle"
+	"github.com/Emyrk/chronicle/chroniclebot"
 	"github.com/Emyrk/chronicle/database"
 	"github.com/Emyrk/chronicle/database/storage"
 	"github.com/Emyrk/chronicle/frontend"
@@ -29,6 +30,7 @@ type Options struct {
 	AccessURL       *url.URL
 	DevOAuth        bool
 	Discord         chronauth.DiscordOAuth
+	DiscordBot      *chroniclebot.Bot
 	SecretPEM       []byte // Used for JWTs
 	RiverQueue      chronicle.RiverQueueOptions
 	DisallowSignups bool
@@ -46,10 +48,11 @@ func New(ctx context.Context, opts Options) (*API, error) {
 		opts.Registry = prometheus.NewRegistry()
 	}
 	service, err := chronauth.New(ctx, opts.Logger, chronauth.Options{
-		AccessURL: opts.AccessURL,
-		DevServer: opts.DevOAuth,
-		Database:  opts.DB,
-		Discord:   opts.Discord,
+		AccessURL:  opts.AccessURL,
+		DevServer:  opts.DevOAuth,
+		Database:   opts.DB,
+		Discord:    opts.Discord,
+		DiscordBot: opts.DiscordBot,
 		Sessions: chronauth.SessionOptions{
 			SecretPEM: opts.SecretPEM,
 			Registry:  opts.Registry,
