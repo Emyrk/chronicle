@@ -8,12 +8,14 @@ import (
 	"github.com/coder/serpent"
 )
 
+type Ready chan<- chan struct{}
+
 type Servicer interface {
 	Name() string
 
 	DependsOn() []string
 	Options() serpent.OptionSet
-	Start(ctx context.Context) error
+	Start(ctx context.Context) (Ready, error)
 	Close() error
 }
 
@@ -42,6 +44,11 @@ func (s *Services) Register(srv Servicer) error {
 }
 
 func (s *Services) Start() error {
-	// Find the depends-on order and start services accordingly
+	// First build the dependency graph. Each service has a `dependsOn` method that returns
+	// the strings it depends on. Anything without a dependency can be started first.
+	//
+	// When starting a service, it is ready when the returned Ready channel is closed.
+	// If the context is cancelled before the Ready channel is closed, let the service
+	// handle it, and still wait on Ready.
 	return nil
 }
