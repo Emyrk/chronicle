@@ -1,4 +1,4 @@
-package dbstoreservice
+package servicedbstore
 
 import (
 	"context"

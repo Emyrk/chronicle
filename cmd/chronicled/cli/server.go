@@ -17,7 +17,6 @@ import (
 	"github.com/Emyrk/chronicle/api"
 	"github.com/Emyrk/chronicle/api/chronauth"
 	"github.com/Emyrk/chronicle/api/chronauth/authkeys"
-	"github.com/Emyrk/chronicle/chronicle"
 	"github.com/Emyrk/chronicle/chroniclebot"
 	"github.com/Emyrk/chronicle/database"
 	"github.com/Emyrk/chronicle/database/storage"
@@ -28,71 +27,19 @@ import (
 	"github.com/coder/serpent"
 )
 
-const testPem = `-----BEGIN RSA PRIVATE KEY-----
-MIIEpQIBAAKCAQEAxx8Vf4l9lV6rXNMQ+DzoI3Wnw/39rbLuFLO0saoZU44WW2JA
-I798w18tzWBljOhAsKkJQBtTbPFOySD4hzI4o2EML6lw46IwWRc/2dO2mQvN+mRN
-B8qHAHmL0C4t6bwttdL8/jI91QtBxyto0C/t/KUs1BGwmGi+P+NfvK63ndC97Yvf
-Dt3/UIlCA1tRe+jmNF/g3wAI0OSJU4EoO36xPeN8YQFx46w/S8V1M5+7bkkGNR+R
-qwJv7bWJgMEtZYK4Tld/3MuPfs0qXZhRS/xkKlCnfxi/ONma+qXbEJDc3CdiGyIl
-WcWZMfekaaFHy3+3O7zz564R7Kcc57lkNpqZnQIDAQABAoIBAACaIBLSpSN8BJAC
-DnE7jK5J19u0xTNHZzhD4ZpxwxCcYRAAv700i++3mLllA66DO2nq3diZ7cfgZCK+
-7ijTGlsy3+t7IEnK/FzmIqKsH/iY9DtnbU9GQmmfL4lXwclR5xtTK64xsU9mDjzb
-7VtbLDRsRoGAGvYf7qSPHeYQdN2rcBPFIw+nU5NUnVMDEut+CvCpQDXJTrl4+AuF
-yksIigkT+6eTF83N8G1/hcQTnH5gPTk3NDpOKhssPQQRdrw3y023QSFld1XWL4D0
-lUCc4qmkFRooSYojFOLV+joPZnHf/TY+EC5Gn+3IXoi06Uc/fmeKA3Cmdh5AaINU
-O6gO2gECgYEA6AY3qhqEd+Z6WlrvP9Zfy/bpiMtkm3UrOeTDiOAUrzAP1fZqvXMI
-x/P5KjLd1kedHVmk/xbCEWomSGvN1InwK/LOub0pvuz5SQOLzfjbqroAHNvuyVLc
-SfYnNHi+vLchZDmdN0yd21CUalW/N+2JSQMtmisjgEGolYBIn++80CkCgYEA27J7
-FVMNzetnGjoxhfu+zgBlUV7DthbzxaeZfObcTeCvUxy0IP6vSlsK29GpTrU6VxPF
-baXU5+qq1ibQuBOI1L3+VsYEP5UH0C0EfjO+rdO5hPYKJz0JtX80iFVSRKii/17g
-zjWnrQ5RuXuOZ4Mga37HIQcz6WSM2HBqIIWdHFUCgYEA3VJg8p+M0JpHB71KDki8
-5GBIb7Yj564iZ3zxj7S/xkRANsZxFvmN3L26ZShUNzvkgMSsAK+Cuv3YOqiqlBxn
-vmREESSBl5+QQrdhOj4xu27lAKJB6kRh4SMuTn0G5BiDf4j9kGxC/5qjl7LnTcAF
-fmHLtA2GNadr2f+eRwF1x9ECgYEAj5E8A7xpmfZKQwZiVIclsiLqEtmVlYm8NZ8H
-m2qV7sJ0cCCiyakFTdbe6rVBKbEedcbyzmt/DSr6BsYIwTHqyfN6oKP4JMC0AWNZ
-u0r/QULJykyqZ+foT1XYM3tmLn3xPmZ3C+peL6Xa3BYVAinbZsPLRxcY4l0V+V7E
-y4nlGJ0CgYEAlYY6JPRvXeUvPhLVYqjH0AOQBY6agvJEWMg3QF8/BmsuurnRc2gs
-bQ2Blnt2E4cZoxYQ009O2geNZWWr5Zssw7p5ZyBnXNE7/HhNdjMpy74tmpawhpXy
-N3BZeV4tW5UPWN4Px3cyMnv4afIuY1ehS5RI6Y5dA6lTqPs0Qa6dfnw=
------END RSA PRIVATE KEY-----`
 
 func ServerCmd() *serpent.Command {
 	var (
-		httpAddress       string
-		accessURL         string
 		devAuth           bool
 		postgresURL       string
 		discordOauth      chronauth.DiscordOAuth
-		discordBot        chroniclebot.Config
-		secretPem         string
 		storageFlag       string
-		riverOpts         chronicle.RiverQueueOptions
-		prometheusEnabled bool
-		promtheusAddress  string
 		pprofEnabled      bool
 		pprofAddress      string
 	)
 	cmd := &serpent.Command{
 		Use: "server",
 		Options: []serpent.Option{
-			{
-				Name:        "http-address",
-				Description: "Address to serve the api on.",
-				Required:    false,
-				Flag:        "http-address",
-				Env:         "CHRONICLE_HTTP_ADDRESS",
-				Default:     "0.0.0.0:4000",
-				Value:       serpent.StringOf(&httpAddress),
-			},
-			{
-				Name:        "access-url",
-				Description: "Access url to access the server from outside the cluster.",
-				Required:    false,
-				Flag:        "access-url",
-				Env:         "CHRONICLE_ACCESS_URL",
-				Default:     "",
-				Value:       serpent.StringOf(&accessURL),
-			},
 			{
 				Name:        "dev-auth",
 				Description: "Enable dev oauth auth.",
@@ -109,24 +56,6 @@ func ServerCmd() *serpent.Command {
 				Env:         "CHRONICLE_POSTGRES_URL",
 				Default:     "postgresql://postgres:postgres@localhost:5433/chronicle?sslmode=disable",
 				Value:       serpent.StringOf(&postgresURL),
-			},
-			{
-				Name:        "Discord bot token",
-				Description: "Address to serve the api on.",
-				Required:    true,
-				Flag:        "discord-token",
-				Env:         "CHRONICLE_DISCORD_BOT_TOKEN",
-				Default:     "",
-				Value:       serpent.StringOf(&discordBot.Token),
-			},
-			{
-				Name:        "Discord Chronicle GuildID",
-				Description: "Address to serve the api on.",
-				Required:    false,
-				Flag:        "discord-guild-id",
-				Env:         "CHRONICLE_DISCORD_GUILD_ID",
-				Default:     "1466099237669306380",
-				Value:       serpent.StringOf(&discordBot.GuildID),
 			},
 			{
 				Name:        "Discord OAuth Client ID",
@@ -147,15 +76,6 @@ func ServerCmd() *serpent.Command {
 				Value:       serpent.StringOf(&discordOauth.ClientSecret),
 			},
 			{
-				Name:        "JWT Secret PEM",
-				Description: "PEM encoded private key to use for signing JWTs.",
-				Required:    false,
-				Flag:        "jwt-secret-pem",
-				Env:         "CHRONICLE_JWT_SECRET_PEM",
-				Default:     "",
-				Value:       serpent.StringOf(&secretPem),
-			},
-			{
 				Name:        "Storage",
 				Description: "What storage to use for file storage.",
 				Required:    false,
@@ -165,51 +85,6 @@ func ServerCmd() *serpent.Command {
 				Default: "local",
 				Value:   serpent.StringOf(&storageFlag),
 			},
-			{
-				Name:        "Log Parsing Worker Count",
-				Description: "Number of workers to use for parsing raid log files.",
-				Required:    false,
-				Flag:        "log-parse-worker-count",
-				Env:         "CHRONICLE_LOG_PARSING_WORKERS",
-				Default:     "1",
-				Value:       serpent.Int64Of(&riverOpts.LogParsingWorkers),
-			},
-			{
-				Name:        "Prometheus Enabled",
-				Description: "Enable Prometheus metrics server.",
-				Required:    false,
-				Flag:        "prometheus-enabled",
-				Env:         "CHRONICLE_PROMETHEUS_ENABLED",
-				Default:     "false",
-				Value:       serpent.BoolOf(&prometheusEnabled),
-			},
-			{
-				Name:        "Prometheus Address",
-				Description: "Address for Prometheus metrics server to listen on.",
-				Required:    false,
-				Flag:        "prometheus-address",
-				Env:         "CHRONICLE_PROMETHEUS_ADDRESS",
-				Default:     "0.0.0.0:9091",
-				Value:       serpent.StringOf(&promtheusAddress),
-			},
-			{
-				Name:        "Pprof Enabled",
-				Description: "Enable pprof server.",
-				Required:    false,
-				Flag:        "pprof-enabled",
-				Env:         "CHRONICLE_PPROF_ENABLED",
-				Default:     "false",
-				Value:       serpent.BoolOf(&pprofEnabled),
-			},
-			{
-				Name:        "Pprof Address",
-				Description: "Address for pprof server to listen on.",
-				Required:    false,
-				Flag:        "pprof-address",
-				Env:         "CHRONICLE_PPROF_ADDRESS",
-				Default:     "0.0.0.0:6060",
-				Value:       serpent.StringOf(&pprofAddress),
-			},
 		},
 		Handler: func(i *serpent.Invocation) error {
 			ctx, cancelApp := context.WithCancel(context.Background())
@@ -217,93 +92,8 @@ func ServerCmd() *serpent.Command {
 			logger := getLogger(i)
 			reg := prometheus.NewRegistry()
 
-			db, err := Database(ctx, logger, postgresURL)
-			if err != nil {
-				return err
-			}
-			//nolint:errcheck
-			defer db.Close()
 
-			bot, err := chroniclebot.New(ctx, logger, chroniclebot.Config{
-				Token:   discordBot.Token,
-				GuildID: discordBot.GuildID,
-				DB:      db,
-			})
-			if err != nil {
-				return fmt.Errorf("create chronicle bot: %w", err)
-			}
-			//nolint:errcheck
-			defer bot.Close()
 
-			serverLn, err := ProvisionListener(logger, httpAddress)
-			if err != nil {
-				return err
-			}
-
-			if accessURL == "" {
-				addr := serverLn.Addr().(*net.TCPAddr)
-				if addr.IP.IsUnspecified() {
-					accessURL = fmt.Sprintf("http://localhost:%d", addr.Port)
-				} else {
-					accessURL = fmt.Sprintf("http://%s", serverLn.Addr().String())
-				}
-				logger.Info("access url not specified, using server address", slog.String("url", accessURL))
-			}
-
-			au, err := url.Parse(accessURL)
-			if err != nil {
-				return fmt.Errorf("invalid access url: %w", err)
-			}
-
-			switch secretPem {
-			case "dev":
-				secretPem = base64.StdEncoding.EncodeToString([]byte(testPem))
-			case "":
-				sec, err := authkeys.GenerateKey()
-				if err != nil {
-					return fmt.Errorf("generate jwt secret: %w", err)
-				}
-				secretPem = base64.StdEncoding.EncodeToString(authkeys.MarshalPrivateKey(sec))
-				logger.Warn("using ephemeral JWT secret; this is not recommended for production environments")
-			}
-
-			var files storage.ObjectStorage
-			if storageFlag == "local" {
-				files, err = storage.NewLocalStorage()
-				if err != nil {
-					return fmt.Errorf("provision local storage: %w", err)
-				}
-			} else {
-				parts := strings.Split(storageFlag, ":")
-				if len(parts) != 2 {
-					return fmt.Errorf("invalid storage flag format; expected 'supabaseProject:supabaseKey'")
-				}
-				files, err = storage.Supabase(parts[0], parts[1])
-				if err != nil {
-					return fmt.Errorf("provision supabase storage: %w", err)
-				}
-			}
-
-			decodedSecret, err := base64.StdEncoding.DecodeString(secretPem)
-			if err != nil {
-				return fmt.Errorf("decode jwt secret pem: %w", err)
-			}
-			riverOpts.DBURL = postgresURL
-			handler, err := api.New(ctx, api.Options{
-				Logger:     logger,
-				Storage:    files,
-				DB:         db,
-				Registry:   reg,
-				AccessURL:  au,
-				DevOAuth:   devAuth,
-				Discord:    discordOauth,
-				Bot:        bot,
-				SecretPEM:  decodedSecret,
-				RiverQueue: riverOpts,
-			})
-			if err != nil {
-				return err
-			}
 
 			if prometheusEnabled {
 				launchPrometheus(ctx, logger, promtheusAddress, reg)
@@ -363,38 +153,8 @@ func Database(ctx context.Context, logger *slog.Logger, dbURL string) (database.
 	return database.New(pool), nil
 }
 
-func ProvisionListener(logger *slog.Logger, addr string) (net.Listener, error) {
-	ln, err := net.Listen("tcp", addr)
-	if err != nil {
-		logger.Error("http server listen", slog.String("addr", addr), slog.String("error", err.Error()))
-		return nil, err
-	}
-	return ln, nil
-}
 
-func ServeHandler(ctx context.Context, logger *slog.Logger, handler http.Handler, ln net.Listener, name string) func() {
-	// ReadHeaderTimeout is purposefully not enabled. It caused some issues with
-	// websockets over the dev tunnel.
-	// See: https://github.com/coder/coder/pull/3730
-	//nolint:gosec
-	srv := &http.Server{
-		Handler:     handler,
-		BaseContext: func(_ net.Listener) context.Context { return ctx },
-	}
 
-	go func() {
-		//nolint:errcheck
-		defer ln.Close()
-		logger.Info("http server listening", slog.String("addr", ln.Addr().String()), slog.String("name", name))
-		if err := srv.Serve(ln); err != nil && !errors.Is(err, http.ErrServerClosed) {
-			logger.Error("http server serve", slog.String("addr", ln.Addr().String()), slog.String("name", name), slog.String("error", err.Error()))
-		}
-	}()
-
-	return func() {
-		_ = srv.Close()
-	}
-}
 
 var reInvalidPortAfterHost = regexp.MustCompile(`invalid port ".+" after host`)
 
@@ -440,43 +200,3 @@ func escapePostgresURLUserInfo(v string) (string, error) {
 	return v, nil
 }
 
-func launchPrometheus(ctx context.Context, logger *slog.Logger, address string, registry *prometheus.Registry) {
-	srv := http.Server{
-		Addr:    address,
-		Handler: promhttp.HandlerFor(registry, promhttp.HandlerOpts{}),
-		BaseContext: func(listener net.Listener) context.Context {
-			return ctx
-		},
-	}
-	go func() {
-		logger.Info("Starting prometheus server", slog.String("address", address))
-		err := srv.ListenAndServe()
-		if err != nil {
-			logger.Error("prometheus server", slog.String("service", "prometheus"), slog.String("error", err.Error()))
-		}
-	}()
-}
-
-func launchPprof(ctx context.Context, logger *slog.Logger, address string) {
-	mux := http.NewServeMux()
-	mux.Handle("/debug/pprof/", http.HandlerFunc(pprof.Index))
-	mux.Handle("/debug/pprof/cmdline", http.HandlerFunc(pprof.Cmdline))
-	mux.Handle("/debug/pprof/profile", http.HandlerFunc(pprof.Profile))
-	mux.Handle("/debug/pprof/symbol", http.HandlerFunc(pprof.Symbol))
-	mux.Handle("/debug/pprof/trace", http.HandlerFunc(pprof.Trace))
-
-	srv := http.Server{
-		Addr:    address,
-		Handler: mux,
-		BaseContext: func(listener net.Listener) context.Context {
-			return ctx
-		},
-	}
-	go func() {
-		logger.Info("Starting pprof server", slog.String("address", address))
-		err := srv.ListenAndServe()
-		if err != nil {
-			logger.Error("pprof server", slog.String("service", "pprof"), slog.String("error", err.Error()))
-		}
-	}()
-}
