@@ -23,9 +23,11 @@ type Servicer interface {
 	Name() string
 
 	DependsOn() []string
+	Configures() []string
+
 	Options() serpent.OptionSet
-	Start(ctx context.Context) (Ready, error)
-	Close() error
+	Start(ctx context.Context) error
+	Close(ctx context.Context) error
 }
 
 func MustGet[T Servicer](broker *Services) T {
@@ -53,6 +55,7 @@ func Get[T Servicer](broker *Services) (T, error) {
 
 type Services struct {
 	services map[string]Servicer
+	logger   *slog.Logger
 }
 
 func New() *Services {
@@ -109,28 +112,18 @@ func (s *Services) OptionSet() serpent.OptionSet {
 // handle it, and still wait on Ready.
 func (s *Services) Start(ctx context.Context, logger *slog.Logger) error {
 	var r dag.Runner
+	s.logger = logger
 
 	for name, srv := range s.services {
 		srv := srv // capture for closure
 		r.AddVertex(name, func() error {
-			logger.Info("starting service", slog.String("name", name))
-			readyCh, err := srv.Start(ctx)
+			now := time.Now()
+			err := srv.Start(ctx)
 			if err != nil {
 				return fmt.Errorf("start service %q: %w", srv.Name(), err)
 			}
 
-			select {
-			case <-readyCh:
-			case <-ctx.Done():
-				deadline, cancel := context.WithTimeout(context.Background(), time.Second*3)
-				defer cancel()
-				select {
-				case <-readyCh:
-				case <-deadline.Done():
-					return fmt.Errorf("service %q did not become ready before context was done: %w", srv.Name(), ctx.Err())
-				}
-			}
-
+			logger.Info("service started", slog.String("name", name), slog.String("duration", time.Since(now).String()))
 			return nil
 		})
 	}
@@ -139,8 +132,54 @@ func (s *Services) Start(ctx context.Context, logger *slog.Logger) error {
 		for _, dep := range srv.DependsOn() {
 			r.AddEdge(dep, name) // dep must complete before name
 		}
+		for _, cfg := range srv.Configures() {
+			r.AddEdge(name, cfg) // name must complete before cfg
+		}
 	}
 
 	logger.Info("starting services")
 	return r.Run()
+}
+
+// Close shuts down all services in reverse dependency order.
+// Services that depend on others are closed first, before their dependencies.
+// All services are closed even if some fail; errors are collected and merged.
+//
+// The context should be used to signal a forced shutdown. A graceful
+// shutdown should be handled if the close finished before the context is done.
+func (s *Services) Close(ctx context.Context) error {
+	var r dag.Runner
+
+	errs := make(chan error, len(s.services))
+
+	for name, srv := range s.services {
+		srv := srv // capture for closure
+		r.AddVertex(name, func() error {
+			if err := srv.Close(ctx); err != nil {
+				s.logger.Error("failed to close service", slog.String("name", name), slog.String("error", err.Error()))
+				errs <- fmt.Errorf("close service %q: %w", srv.Name(), err)
+			} else {
+				s.logger.Info("closed service", slog.String("name", name))
+			}
+
+			return nil // always return nil to continue closing other services
+		})
+	}
+
+	// Reverse the edges: if A depends on B, close A before B.
+	for name, srv := range s.services {
+		for _, dep := range srv.DependsOn() {
+			r.AddEdge(name, dep) // name must close before dep
+		}
+	}
+
+	_ = r.Run() // ignore dag error, we collect errors ourselves
+	close(errs)
+
+	var collected []error
+	for err := range errs {
+		collected = append(collected, err)
+	}
+
+	return errors.Join(collected...)
 }

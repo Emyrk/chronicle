@@ -12,17 +12,6 @@ import (
 	"github.com/riverqueue/river/rivertype"
 )
 
-const (
-	QueueLogParsing = "log-parsing"
-)
-
-const (
-	PriorityHighest = 1
-	PriorityHigh    = 2
-	PriorityDefault = 3
-	PriorityLow     = 4
-)
-
 type RiverQueueOptions struct {
 	DBURL             string
 	InsertOnly        bool
@@ -58,6 +47,8 @@ func (c *Chronicle) StartQueues(ctx context.Context, opts Options) error {
 		RescueStuckJobsAfter:        time.Minute * 60,
 		JobTimeout:                  time.Minute * 30,
 	})
+
+
 	if err != nil {
 		return fmt.Errorf("new river client: %w", err)
 	}
@@ -89,10 +80,10 @@ func (c *Chronicle) workers(opts RiverQueueOptions) *river.Workers {
 	}
 
 	river.AddWorker(workers, &WorkerLogParse{
-		parent: c,
+		Parent: c,
 	})
 	river.AddWorker(workers, &WorkerLogReparse{
-		parent: c,
+		Parent: c,
 	})
 
 	return workers

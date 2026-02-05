@@ -36,14 +36,14 @@ func (ArgsLogReparse) InsertOpts() river.InsertOpts {
 func (a ArgsLogReparse) Kind() string { return KindLogReparse }
 
 type WorkerLogReparse struct {
-	parent *Chronicle
+	Parent *Chronicle
 
 	river.WorkerDefaults[ArgsLogReparse]
 }
 
 func (w *WorkerLogReparse) Work(ctx context.Context, job *river.Job[ArgsLogReparse]) error {
 	// Clear the parsed data for the log group and re-initiate parsing
-	db := w.parent.DB
+	db := w.Parent.DB
 
 	logGroup, err := db.GetWoWLogGroupByID(ctx, job.Args.LogID)
 	if err != nil {
@@ -55,7 +55,7 @@ func (w *WorkerLogReparse) Work(ctx context.Context, job *river.Job[ArgsLogRepar
 		return fmt.Errorf("delete parsed logs for group: %w", err)
 	}
 
-	list, err := w.parent.ListLogGroupJobs(ctx, job.Args.LogID)
+	list, err := w.Parent.ListLogGroupJobs(ctx, job.Args.LogID)
 	if err != nil {
 		return fmt.Errorf("list existing log group jobs: %w", err)
 	}
@@ -71,14 +71,14 @@ func (w *WorkerLogReparse) Work(ctx context.Context, job *river.Job[ArgsLogRepar
 			job.State == rivertype.JobStateScheduled ||
 			job.State == rivertype.JobStateRetryable {
 			// Cancel existing jobs that are not the current one
-			_, err = w.parent.queue.JobCancel(ctx, existingJob.ID)
+			_, err = w.Parent.queue.JobCancel(ctx, existingJob.ID)
 			if err != nil {
 				return fmt.Errorf("cancel existing job %d: %w", existingJob.ID, err)
 			}
 		}
 	}
 
-	res, err := w.parent.EnqueueParseLog(ctx, logGroup.WoWLogGroup)
+	res, err := w.Parent.EnqueueParseLog(ctx, logGroup.WoWLogGroup)
 	if err != nil {
 		return fmt.Errorf("enqueue log parse job: %w", err)
 	}

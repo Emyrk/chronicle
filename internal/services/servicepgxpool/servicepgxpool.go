@@ -18,6 +18,15 @@ import (
 
 var _ services.Servicer = (*Service)(nil)
 
+func PGXPool(broker *services.Services) *pgxpool.Pool {
+	srv := services.MustGet[*Service](broker)
+	return srv.pool
+}
+
+func OnPGXPool() string {
+	return (&Service{}).Name()
+}
+
 type Service struct {
 	broker *services.Services
 
@@ -34,36 +43,36 @@ func New(broker *services.Services) *Service {
 func (s *Service) Name() string {
 	return services.ServicePGXPool
 }
+
+func (s *Service) Configures() []string { return []string{} }
 func (s *Service) DependsOn() []string {
 	return []string{
 		servicelogger.OnLogger(),
 	}
 }
 
-func (s *Service) Start(ctx context.Context) (services.Ready, error) {
+func (s *Service) Start(ctx context.Context) error {
 	logger := servicelogger.Logger(s.broker)
-	c := services.MakeReady()
-	close(c)
 	dbURL, err := escapePostgresURLUserInfo(s.pgURL)
 	if err != nil {
-		return c, err
+		return err
 	}
 
 	pool, err := database.NewPostgresDB(ctx, logger, dbURL)
 	if err != nil {
-		return c, fmt.Errorf("connect to postgres db: %w", err)
+		return fmt.Errorf("connect to postgres db: %w", err)
 	}
 
 	s.pool = pool
 
-	return c, nil
+	return nil
 }
 
 func (s *Service) Service() *pgxpool.Pool {
 	return s.pool
 }
 
-func (s *Service) Close() error {
+func (s *Service) Close(_ context.Context) error {
 	s.pool.Close()
 	return nil
 }

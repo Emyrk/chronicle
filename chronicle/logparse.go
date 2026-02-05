@@ -65,16 +65,16 @@ func (ArgsLogParse) InsertOpts() river.InsertOpts {
 func (a ArgsLogParse) Kind() string { return KindLogParse }
 
 type WorkerLogParse struct {
-	parent *Chronicle
+	Parent *Chronicle
 
 	river.WorkerDefaults[ArgsLogParse]
 }
 
 func (w *WorkerLogParse) loadAndSortFile(ctx context.Context, fileID uuid.UUID) (io.Reader, *realmclock.Info, error) {
-	storage := w.parent.Storage
-	logger := leveledlog.New(w.parent.logger, slog.LevelInfo)
+	storage := w.Parent.Storage
+	logger := leveledlog.New(w.Parent.logger, slog.LevelInfo)
 
-	fd, err := storage.DownloadFile(BucketRaidLogs, w.parent.logPath(fileID))
+	fd, err := storage.DownloadFile(BucketRaidLogs, w.Parent.logPath(fileID))
 	if err != nil {
 		err = fmt.Errorf("download log file %s: %w", fileID, err)
 		if errors.Is(err, os.ErrNotExist) {
@@ -97,12 +97,12 @@ func (w *WorkerLogParse) loadAndSortFile(ctx context.Context, fileID uuid.UUID) 
 }
 
 func (w *WorkerLogParse) Work(ctx context.Context, job *river.Job[ArgsLogParse]) error {
-	db := w.parent.DB
+	db := w.Parent.DB
 
 	files, err := db.GetWoWLogFilesByGroupID(ctx, job.Args.LogID)
 	if err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
-			w.parent.logger.Warn("log parse job for non-existent log group", "log_id", job.Args.LogID)
+			w.Parent.logger.Warn("log parse job for non-existent log group", "log_id", job.Args.LogID)
 
 			return nil
 		}
@@ -115,7 +115,7 @@ func (w *WorkerLogParse) Work(ctx context.Context, job *river.Job[ArgsLogParse])
 	}
 
 	var ri *realmclock.Info
-	logger := leveledlog.New(w.parent.logger, slog.LevelInfo)
+	logger := leveledlog.New(w.Parent.logger, slog.LevelInfo)
 	rdrs := make([]io.Reader, len(files))
 	for i, file := range files {
 		var fri *realmclock.Info

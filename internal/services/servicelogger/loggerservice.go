@@ -41,14 +41,10 @@ func New(broker *services.Services) *Service {
 func (s *Service) Name() string {
 	return services.ServiceLogger
 }
-func (s *Service) DependsOn() []string {
-	return []string{}
-}
+func (s *Service) Configures() []string { return []string{} }
+func (s *Service) DependsOn() []string  { return []string{} }
 
-func (s *Service) Start(ctx context.Context) (services.Ready, error) {
-	c := services.MakeReady()
-	close(c)
-
+func (s *Service) Start(ctx context.Context) error {
 	var out io.Writer = zerolog.ConsoleWriter{Out: os.Stderr}
 	if ok, _ := strconv.ParseBool(os.Getenv("CHRONICLE_JSON_LOGS")); ok {
 		out = os.Stderr
@@ -57,14 +53,10 @@ func (s *Service) Start(ctx context.Context) (services.Ready, error) {
 	zl := zerolog.New(out)
 	logger := slog.New(slogzerolog.Option{Level: slog.LevelDebug, Logger: &zl}.NewZerologHandler())
 	s.logger = logger.With(slog.String("deployment_id", uuid.NewString()))
-	return c, nil
+	return nil
 }
 
-func (s *Service) Service() *slog.Logger {
-	return s.logger
-}
-
-func (s *Service) Close() error {
+func (s *Service) Close(_ context.Context) error {
 	return nil
 }
 
