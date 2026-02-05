@@ -1,61 +1,62 @@
-package pgxpoolservice
+package servicepgxpool
 
 import (
 	"context"
 	"fmt"
-	"log/slog"
 	"net/url"
 	"regexp"
 	"strings"
 
 	"github.com/Emyrk/chronicle/database"
 	"github.com/Emyrk/chronicle/internal/services"
+	"github.com/Emyrk/chronicle/internal/services/servicelogger"
 	"github.com/jackc/pgx/v5/pgxpool"
-	"github.com/prometheus/client_golang/prometheus"
 	"golang.org/x/xerrors"
 
 	"github.com/coder/serpent"
 )
 
-const ServiceName = "database"
+var _ services.Servicer = (*Service)(nil)
 
 type Service struct {
-	logger *slog.Logger
-	reg    *prometheus.Registry
+	broker *services.Services
 
 	pgURL string
-
-	pool *pgxpool.Pool
+	pool  *pgxpool.Pool
 }
 
-func New(logger *slog.Logger, reg *prometheus.Registry) *Service {
+func New(broker *services.Services) *Service {
 	return &Service{
-		logger: services.NamedLogger(logger, ServiceName),
-		reg:    reg,
+		broker: broker,
 	}
 }
 
 func (s *Service) Name() string {
-	return ServiceName
+	return services.ServicePGXPool
 }
 func (s *Service) DependsOn() []string {
-	return []string{}
+	return []string{
+		servicelogger.OnLogger(),
+	}
 }
 
-func (s *Service) Start(ctx context.Context) error {
+func (s *Service) Start(ctx context.Context) (services.Ready, error) {
+	logger := servicelogger.Logger(s.broker)
+	c := services.MakeReady()
+	close(c)
 	dbURL, err := escapePostgresURLUserInfo(s.pgURL)
 	if err != nil {
-		return err
+		return c, err
 	}
 
-	pool, err := database.NewPostgresDB(ctx, s.logger, dbURL)
+	pool, err := database.NewPostgresDB(ctx, logger, dbURL)
 	if err != nil {
-		return fmt.Errorf("connect to postgres db: %w", err)
+		return c, fmt.Errorf("connect to postgres db: %w", err)
 	}
 
 	s.pool = pool
 
-	return nil
+	return c, nil
 }
 
 func (s *Service) Service() *pgxpool.Pool {
