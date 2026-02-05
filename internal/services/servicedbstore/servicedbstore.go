@@ -2,7 +2,6 @@ package servicedbstore
 
 import (
 	"context"
-	"log/slog"
 
 	"github.com/Emyrk/chronicle/database"
 	"github.com/Emyrk/chronicle/internal/services"
@@ -23,14 +22,13 @@ func OnDatabaseStore() string {
 }
 
 type Service struct {
-	logger *slog.Logger
 	broker *services.Services
-	db     database.Store
+
+	db database.Store
 }
 
 func New(broker *services.Services) *Service {
 	return &Service{
-		logger: nil,
 		broker: broker,
 	}
 }

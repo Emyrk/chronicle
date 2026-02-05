@@ -2,8 +2,6 @@ package api
 
 import (
 	"context"
-	"errors"
-	"fmt"
 	"log/slog"
 	"net/http"
 	"net/url"
@@ -12,6 +10,7 @@ import (
 	"github.com/Emyrk/chronicle/api/httpapi"
 	"github.com/Emyrk/chronicle/api/httpmw"
 	"github.com/Emyrk/chronicle/chronicle"
+	"github.com/Emyrk/chronicle/chronicle/riverqueue"
 	"github.com/Emyrk/chronicle/chroniclebot"
 	"github.com/Emyrk/chronicle/database"
 	"github.com/Emyrk/chronicle/database/storage"
@@ -26,13 +25,15 @@ type Options struct {
 	Logger     *slog.Logger
 	Storage    storage.ObjectStorage
 	DB         database.Store
-	Registry   *prometheus.Registry
-	AccessURL  *url.URL
-	DevOAuth   bool
-	Discord    chronauth.DiscordOAuth
+	Chronicle  *chronicle.Chronicle
+	RiverQueue *riverqueue.Queues
 	Bot        *chroniclebot.Bot
-	SecretPEM  []byte // Used for JWTs
-	RiverQueue chronicle.RiverQueueOptions
+
+	Registry  *prometheus.Registry
+	AccessURL *url.URL
+	DevOAuth  bool
+	Discord   chronauth.DiscordOAuth
+	SecretPEM []byte // Used for JWTs
 }
 
 type API struct {
@@ -40,6 +41,7 @@ type API struct {
 	Opts       *Options
 	Auth       *chronauth.Service
 	Chronicle  *chronicle.Chronicle
+	Queues     *riverqueue.Queues
 }
 
 func New(ctx context.Context, opts Options) (*API, error) {
@@ -61,20 +63,12 @@ func New(ctx context.Context, opts Options) (*API, error) {
 		return nil, err
 	}
 
-	chr, err := chronicle.New(ctx, opts.Logger, chronicle.Options{
-		Storage: opts.Storage,
-		DB:      opts.DB,
-		Queue:   opts.RiverQueue,
-	})
-	if err != nil {
-		return nil, fmt.Errorf("chronicle: %w", err)
-	}
-
 	return &API{
 		Opts:       &opts,
 		AppContext: ctx,
 		Auth:       service,
-		Chronicle:  chr,
+		Chronicle:  opts.Chronicle,
+		Queues:     opts.RiverQueue,
 	}, nil
 }
 
@@ -174,7 +168,7 @@ func (api *API) Routes() chi.Router {
 			api.Auth.Authenticated(false),
 			api.Auth.MustRoles(database.UserRolesTechnicalAdmin),
 		)
-		r.Mount("/river", api.Chronicle.RiverUI())
+		r.Mount("/river", api.Queues.UI)
 	})
 
 	r.NotFound(frontend.Handler(frontend.FS()).ServeHTTP)
@@ -183,6 +177,5 @@ func (api *API) Routes() chi.Router {
 }
 
 func (api *API) Close() error {
-	cerr := api.Chronicle.Close()
-	return errors.Join(cerr)
+	return nil
 }

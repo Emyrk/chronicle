@@ -2,21 +2,23 @@ package serviceriver
 
 import (
 	"context"
+	"fmt"
 
 	"github.com/Emyrk/chronicle/chronicle/riverqueue"
 	"github.com/Emyrk/chronicle/internal/services"
 	"github.com/Emyrk/chronicle/internal/services/servicechronicle"
 	"github.com/Emyrk/chronicle/internal/services/servicelogger"
 	"github.com/Emyrk/chronicle/internal/services/servicepgxpool"
+	"github.com/riverqueue/river"
 
 	"github.com/coder/serpent"
 )
 
 var _ services.Servicer = (*Service)(nil)
 
-func RiverQueue(broker *services.Services) *Service {
+func RiverQueue(broker *services.Services) *riverqueue.Queues {
 	srv := services.MustGet[*Service](broker)
-	return srv
+	return srv.Queues
 }
 
 func OnRiverQueue() string {
@@ -40,6 +42,14 @@ func (s *Service) Name() string {
 	return services.ServiceRiverQueue
 }
 
+func (s *Service) DependsOn() []string {
+	return []string{
+		servicelogger.OnLogger(),
+		servicepgxpool.OnPGXPool(),
+		servicechronicle.OnChronicle(),
+	}
+}
+
 func (s *Service) Start(ctx context.Context) error {
 	logger := servicelogger.Logger(s.broker)
 	pool := servicepgxpool.PGXPool(s.broker)
@@ -47,15 +57,28 @@ func (s *Service) Start(ctx context.Context) error {
 
 	q, err := riverqueue.New(ctx, riverqueue.Options{
 		Logger:            logger,
-		Chronicle:         chron,
 		Pool:              pool,
 		LogParsingWorkers: int(s.logParsingWorkers),
 		InsertOnly:        false,
 	})
-	s.Queues = q
 	if err != nil {
-		return err
+		return fmt.Errorf("creating river queues: %w", err)
 	}
+
+	q.AddQueue(riverqueue.QueueLogParsing, river.QueueConfig{
+		MaxWorkers: 1,
+	})
+
+	riverqueue.AddWorker(q, chron.NewWorkerLogParse())
+	riverqueue.AddWorker(q, chron.NewWorkerReLogParse())
+
+	err = q.Start(ctx)
+	if err != nil {
+		return fmt.Errorf("starting river queues: %w", err)
+	}
+
+	s.Queues = q
+	chron.SetQueue(s.Queues)
 	return nil
 }
 
@@ -74,14 +97,6 @@ func (s *Service) Options() serpent.OptionSet {
 			Default:     "1",
 			Value:       serpent.Int64Of(&s.logParsingWorkers),
 		},
-	}
-}
-
-func (s *Service) DependsOn() []string {
-	return []string{
-		servicelogger.OnLogger(),
-		servicepgxpool.OnPGXPool(),
-		servicechronicle.OnChronicle(),
 	}
 }
 

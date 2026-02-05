@@ -1,10 +1,14 @@
 package services
 
 const (
-	ServiceDatabase   = "database"
-	ServicePGXPool    = "pgxpool"
-	ServiceLogger     = "logger"
-	ServiceRiverQueue = "riverqueue"
-	ServiceChronicle  = "chronicle"
-	ServiceStorage    = "storage"
+  ServiceLogger     = "logger"
+  ServicePrometheus = "prometheus"
+  ServicePProf      = "pprof"
+  ServiceStorage    = "storage"
+  ServicePGXPool    = "pgxpool"
+  ServiceDatabase   = "database"
+  ServiceRiverQueue = "riverqueue"
+  ServiceChronicle  = "chronicle"
+  ServiceDiscordBot = "discordbot"
+  ServiceAPI        = "api"
 )

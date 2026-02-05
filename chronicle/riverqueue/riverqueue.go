@@ -8,7 +8,6 @@ import (
 	"time"
 
 	"github.com/Emyrk/chronicle/api/chronauth"
-	"github.com/Emyrk/chronicle/chronicle"
 	"github.com/Emyrk/chronicle/internal/leveledlog"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
@@ -30,41 +29,54 @@ const (
 )
 
 type Options struct {
-	Logger    *slog.Logger
-	Chronicle *chronicle.Chronicle
-	Pool      *pgxpool.Pool
+	Logger *slog.Logger
+	Pool   *pgxpool.Pool
 
 	LogParsingWorkers int
 	InsertOnly        bool
 }
 type Queues struct {
-	Client *river.Client[pgx.Tx]
-	UI     http.Handler
+	*river.Client[pgx.Tx]
+	UI http.Handler
+
+	opts    Options
+	workers *river.Workers
+	queues  map[string]river.QueueConfig
 }
 
-func New(ctx context.Context, opts Options) (*Queues, error) {
-	driver := riverpgxv5.New(opts.Pool)
-	queues := map[string]river.QueueConfig{
-		river.QueueDefault: {MaxWorkers: 5},
-		QueueLogParsing:    {MaxWorkers: opts.LogParsingWorkers},
-	}
-	if opts.InsertOnly {
+func New(_ context.Context, opts Options) (*Queues, error) {
+	return &Queues{
+		UI:      nil,
+		opts:    opts,
+		workers: river.NewWorkers(),
+		queues: map[string]river.QueueConfig{
+			river.QueueDefault: {MaxWorkers: 5},
+		},
+	}, nil
+}
+
+func AddWorker[T rivertype.JobArgs](q *Queues, worker river.Worker[T]) *Queues {
+	river.AddWorker(q.workers, worker)
+	return q
+}
+
+func (q *Queues) AddQueue(name string, config river.QueueConfig) *Queues {
+	q.queues[name] = config
+	return q
+}
+
+func (q *Queues) Start(ctx context.Context) error {
+	driver := riverpgxv5.New(q.opts.Pool)
+	queues := q.queues
+	if q.opts.InsertOnly {
 		queues = map[string]river.QueueConfig{}
 	}
 
-	workers := river.NewWorkers()
-	river.AddWorker(workers, &chronicle.WorkerLogParse{
-		Parent: opts.Chronicle,
-	})
-	river.AddWorker(workers, &chronicle.WorkerLogReparse{
-		Parent: opts.Chronicle,
-	})
-
 	riverClient, err := river.NewClient(driver, &river.Config{
 		Queues:  queues,
-		Workers: workers,
+		Workers: q.workers,
 		Middleware: []rivertype.Middleware{
-			NewWorkerPanicMW(opts.Logger),
+			NewWorkerPanicMW(q.opts.Logger),
 		},
 		// Retain all jobs
 		// TODO: Create our own reaper to clean up old jobs after a certain period
@@ -73,23 +85,22 @@ func New(ctx context.Context, opts Options) (*Queues, error) {
 		JobTimeout:                  time.Minute * 30,
 	})
 	if err != nil {
-		return nil, err
+		return err
 	}
 
 	err = riverClient.Start(ctx)
 	if err != nil {
-		return nil, err
+		return err
 	}
 
-	riverUI, err := webUI(ctx, opts.Logger, riverClient)
+	riverUI, err := webUI(ctx, q.opts.Logger, riverClient)
 	if err != nil {
-		return nil, err
+		return err
 	}
+	q.UI = riverUI
+	q.Client = riverClient
 
-	return &Queues{
-		Client: riverClient,
-		UI:     riverUI,
-	}, nil
+	return nil
 }
 
 func webUI(ctx context.Context, parentLogger *slog.Logger, client *river.Client[pgx.Tx]) (http.Handler, error) {

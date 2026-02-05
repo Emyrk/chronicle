@@ -15,6 +15,7 @@ import (
 
 	"github.com/Emyrk/chronicle/api/chroniclesdk"
 	"github.com/Emyrk/chronicle/api/db2sdk"
+	"github.com/Emyrk/chronicle/chronicle/riverqueue"
 	"github.com/Emyrk/chronicle/combatlog/consumers"
 	"github.com/Emyrk/chronicle/combatlog/parser/guid"
 	"github.com/Emyrk/chronicle/combatlog/parser/sorter"
@@ -46,8 +47,8 @@ type ArgsLogParse struct {
 
 func (ArgsLogParse) InsertOpts() river.InsertOpts {
 	return river.InsertOpts{
-		Queue:       QueueLogParsing,
-		Priority:    PriorityDefault,
+		Queue:       riverqueue.QueueLogParsing,
+		Priority:    riverqueue.PriorityDefault,
 		MaxAttempts: 5,
 		UniqueOpts: river.UniqueOpts{
 			ByArgs: true,
@@ -65,16 +66,22 @@ func (ArgsLogParse) InsertOpts() river.InsertOpts {
 func (a ArgsLogParse) Kind() string { return KindLogParse }
 
 type WorkerLogParse struct {
-	Parent *Chronicle
+	parent *Chronicle
 
 	river.WorkerDefaults[ArgsLogParse]
 }
 
-func (w *WorkerLogParse) loadAndSortFile(ctx context.Context, fileID uuid.UUID) (io.Reader, *realmclock.Info, error) {
-	storage := w.Parent.Storage
-	logger := leveledlog.New(w.Parent.logger, slog.LevelInfo)
+func (c *Chronicle) NewWorkerLogParse() river.Worker[ArgsLogParse] {
+  return &WorkerLogParse{
+    parent: c,
+  }
+}
 
-	fd, err := storage.DownloadFile(BucketRaidLogs, w.Parent.logPath(fileID))
+func (w *WorkerLogParse) loadAndSortFile(ctx context.Context, fileID uuid.UUID) (io.Reader, *realmclock.Info, error) {
+	storage := w.parent.Storage
+	logger := leveledlog.New(w.parent.logger, slog.LevelInfo)
+
+	fd, err := storage.DownloadFile(BucketRaidLogs, w.parent.logPath(fileID))
 	if err != nil {
 		err = fmt.Errorf("download log file %s: %w", fileID, err)
 		if errors.Is(err, os.ErrNotExist) {
@@ -97,12 +104,12 @@ func (w *WorkerLogParse) loadAndSortFile(ctx context.Context, fileID uuid.UUID) 
 }
 
 func (w *WorkerLogParse) Work(ctx context.Context, job *river.Job[ArgsLogParse]) error {
-	db := w.Parent.DB
+	db := w.parent.DB
 
 	files, err := db.GetWoWLogFilesByGroupID(ctx, job.Args.LogID)
 	if err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
-			w.Parent.logger.Warn("log parse job for non-existent log group", "log_id", job.Args.LogID)
+			w.parent.logger.Warn("log parse job for non-existent log group", "log_id", job.Args.LogID)
 
 			return nil
 		}
@@ -115,7 +122,7 @@ func (w *WorkerLogParse) Work(ctx context.Context, job *river.Job[ArgsLogParse])
 	}
 
 	var ri *realmclock.Info
-	logger := leveledlog.New(w.Parent.logger, slog.LevelInfo)
+	logger := leveledlog.New(w.parent.logger, slog.LevelInfo)
 	rdrs := make([]io.Reader, len(files))
 	for i, file := range files {
 		var fri *realmclock.Info

@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 
+	"github.com/Emyrk/chronicle/chronicle/riverqueue"
 	"github.com/google/uuid"
 	"github.com/riverqueue/river"
 	"github.com/riverqueue/river/rivertype"
@@ -17,8 +18,8 @@ type ArgsLogReparse struct {
 
 func (ArgsLogReparse) InsertOpts() river.InsertOpts {
 	return river.InsertOpts{
-		Queue:       QueueLogParsing,
-		Priority:    PriorityDefault,
+		Queue:       riverqueue.QueueLogParsing,
+		Priority:    riverqueue.PriorityDefault,
 		MaxAttempts: 5,
 		UniqueOpts: river.UniqueOpts{
 			ByArgs: true,
@@ -36,14 +37,20 @@ func (ArgsLogReparse) InsertOpts() river.InsertOpts {
 func (a ArgsLogReparse) Kind() string { return KindLogReparse }
 
 type WorkerLogReparse struct {
-	Parent *Chronicle
+	parent *Chronicle
 
 	river.WorkerDefaults[ArgsLogReparse]
 }
 
+func (c *Chronicle) NewWorkerReLogParse() river.Worker[ArgsLogReparse] {
+	return &WorkerLogReparse{
+		parent: c,
+	}
+}
+
 func (w *WorkerLogReparse) Work(ctx context.Context, job *river.Job[ArgsLogReparse]) error {
 	// Clear the parsed data for the log group and re-initiate parsing
-	db := w.Parent.DB
+	db := w.parent.DB
 
 	logGroup, err := db.GetWoWLogGroupByID(ctx, job.Args.LogID)
 	if err != nil {
@@ -55,7 +62,7 @@ func (w *WorkerLogReparse) Work(ctx context.Context, job *river.Job[ArgsLogRepar
 		return fmt.Errorf("delete parsed logs for group: %w", err)
 	}
 
-	list, err := w.Parent.ListLogGroupJobs(ctx, job.Args.LogID)
+	list, err := w.parent.ListLogGroupJobs(ctx, job.Args.LogID)
 	if err != nil {
 		return fmt.Errorf("list existing log group jobs: %w", err)
 	}
@@ -71,14 +78,14 @@ func (w *WorkerLogReparse) Work(ctx context.Context, job *river.Job[ArgsLogRepar
 			job.State == rivertype.JobStateScheduled ||
 			job.State == rivertype.JobStateRetryable {
 			// Cancel existing jobs that are not the current one
-			_, err = w.Parent.queue.JobCancel(ctx, existingJob.ID)
+			_, err = w.parent.queue.JobCancel(ctx, existingJob.ID)
 			if err != nil {
 				return fmt.Errorf("cancel existing job %d: %w", existingJob.ID, err)
 			}
 		}
 	}
 
-	res, err := w.Parent.EnqueueParseLog(ctx, logGroup.WoWLogGroup)
+	res, err := w.parent.EnqueueParseLog(ctx, logGroup.WoWLogGroup)
 	if err != nil {
 		return fmt.Errorf("enqueue log parse job: %w", err)
 	}
@@ -103,7 +110,7 @@ func (c *Chronicle) ListLogGroupJobs(ctx context.Context, groupID uuid.UUID) (*r
 	opts := river.NewJobListParams().Where(`args->>'log_group_id' = @group_id`, map[string]any{
 		"group_id": groupID.String(),
 	}).
-		Queues(QueueLogParsing).
+		Queues(riverqueue.QueueLogParsing).
 		Kinds(KindLogParse, KindLogReparse).
 		OrderBy(river.JobListOrderByScheduledAt, river.SortOrderDesc)
 

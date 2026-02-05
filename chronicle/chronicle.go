@@ -17,6 +17,7 @@ import (
 	"github.com/Emyrk/chronicle/api/chroniclesdk"
 	"github.com/Emyrk/chronicle/api/db2sdk"
 	"github.com/Emyrk/chronicle/api/httpapi"
+	"github.com/Emyrk/chronicle/chronicle/riverqueue"
 	"github.com/Emyrk/chronicle/database"
 	"github.com/Emyrk/chronicle/database/storage"
 	"github.com/Emyrk/chronicle/internal/cleanup"
@@ -35,6 +36,7 @@ type Chronicle struct {
 	DB                 database.Store
 	logger             *slog.Logger
 	TemporaryDirectory string
+	queue              *riverqueue.Queues
 
 	mu sync.Mutex
 }
@@ -60,6 +62,10 @@ func New(ctx context.Context, logger *slog.Logger, opts Options) (*Chronicle, er
 
 	_ = c.clearTemporaryFiles()
 	return c, nil
+}
+
+func (c *Chronicle) SetQueue(queue *riverqueue.Queues) {
+	c.queue = queue
 }
 
 func (c *Chronicle) logPath(fileID uuid.UUID) string {

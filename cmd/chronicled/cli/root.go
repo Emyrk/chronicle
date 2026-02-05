@@ -24,7 +24,6 @@ func RootCmd() *serpent.Command {
 	cmd.AddSubcommands(
 		versionCmd(),
 		ServerCmd(),
-		ServeCmd(),
 		GenerateSecretKey(),
 	)
 
