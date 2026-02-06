@@ -6,6 +6,7 @@ import { cn } from "@/lib/utils";
 import { useIsMobile } from "@/hooks/useIsMobile";
 import type { VideoTimestamp } from "@/api/typesGenerated";
 import type { YTPlayer } from "@/types/youtube";
+import { useSyncModeContextOptional } from "./SyncModeContext";
 
 interface YouTubeOverlayProps {
   videoUrl: string;
@@ -124,8 +125,79 @@ function formatDuration(seconds: number): string {
   return `${m}:${s.toString().padStart(2, "0")}`;
 }
 
+/**
+ * Convert video time (seconds) to combat log time (UTC Date).
+ * Inverse of calculateVideoTime - uses timestamp sync points to interpolate.
+ * 
+ * @param videoSeconds - Current position in video (seconds)
+ * @param timestamps - Sync points mapping video time to server time
+ * @param referenceDate - A reference Date from the encounter (for reconstructing full Date)
+ */
+function videoTimeToCombatLogTime(
+  videoSeconds: number,
+  timestamps: readonly VideoTimestamp[],
+  referenceDate: Date
+): Date | null {
+  if (timestamps.length === 0) return null;
+
+  // Convert all timestamps to (videoSeconds, serverSeconds) pairs
+  const points = timestamps
+    .map((ts) => ({
+      serverSeconds: parseTimeToSeconds(ts.utc_time ?? ts.server_time),
+      videoSeconds: ts.video_time_seconds,
+    }))
+    .filter((p): p is { serverSeconds: number; videoSeconds: number } => 
+      p.serverSeconds !== null
+    )
+    .sort((a, b) => a.videoSeconds - b.videoSeconds);
+
+  if (points.length === 0) return null;
+
+  const first = points[0];
+  const last = points[points.length - 1];
+
+  let serverSeconds: number;
+
+  if (videoSeconds <= first.videoSeconds) {
+    // Extrapolate backwards
+    const diff = first.videoSeconds - videoSeconds;
+    serverSeconds = first.serverSeconds - diff;
+  } else if (videoSeconds >= last.videoSeconds) {
+    // Extrapolate forwards
+    const diff = videoSeconds - last.videoSeconds;
+    serverSeconds = last.serverSeconds + diff;
+  } else {
+    // Find surrounding points and interpolate
+    serverSeconds = first.serverSeconds; // fallback
+    for (let i = 0; i < points.length - 1; i++) {
+      const p1 = points[i];
+      const p2 = points[i + 1];
+      if (videoSeconds >= p1.videoSeconds && videoSeconds <= p2.videoSeconds) {
+        const videoRange = p2.videoSeconds - p1.videoSeconds;
+        const serverRange = p2.serverSeconds - p1.serverSeconds;
+        const t = (videoSeconds - p1.videoSeconds) / videoRange;
+        serverSeconds = p1.serverSeconds + t * serverRange;
+        break;
+      }
+    }
+  }
+
+  // Handle day wraparound (serverSeconds can be negative or > 86400)
+  while (serverSeconds < 0) serverSeconds += 86400;
+  while (serverSeconds >= 86400) serverSeconds -= 86400;
+
+  // Reconstruct full Date using reference date
+  const result = new Date(referenceDate);
+  result.setUTCHours(0, 0, 0, 0);
+  result.setUTCSeconds(Math.floor(serverSeconds));
+  result.setUTCMilliseconds(Math.round((serverSeconds % 1) * 1000));
+
+  return result;
+}
+
 export function YouTubeOverlay({ videoUrl, timestamps, targetTime, pauseTime, onClose }: YouTubeOverlayProps) {
   const isMobile = useIsMobile();
+  const syncMode = useSyncModeContextOptional();
   const [position, setPosition] = useState({ x: 20, y: 80 });
   const [size, setSize] = useState({ width: 480, height: 270 });
   const [isMinimized, setIsMinimized] = useState(false);
@@ -142,6 +214,12 @@ export function YouTubeOverlay({ videoUrl, timestamps, targetTime, pauseTime, on
   const pauseVideoTimeRef = useRef<number | null>(null);
 
   const videoId = parseYouTubeVideoId(videoUrl);
+  
+  // Compute a reference date for combat log time reconstruction
+  const referenceDate = useMemo(() => {
+    if (targetTime) return new Date(targetTime);
+    return new Date();
+  }, [targetTime]);
 
   // Calculate encounter video times
   const encounterVideoTimes = useMemo(() => {
@@ -253,14 +331,26 @@ export function YouTubeOverlay({ videoUrl, timestamps, targetTime, pauseTime, on
   }, [targetTime, pauseTime, timestamps, playerReady]);
 
   // Monitor video time, update current time state, and auto-pause at encounter end
+  // When sync mode is enabled, poll faster (100ms) and report time to sync context
   useEffect(() => {
     if (!playerReady || !playerRef.current) return;
+
+    const isSyncEnabled = syncMode?.enabled ?? false;
+    const pollInterval = isSyncEnabled ? 100 : 500;
 
     const checkTime = () => {
       if (!playerRef.current) return;
       
       const currentTime = playerRef.current.getCurrentTime();
       setCurrentVideoTime(currentTime);
+      
+      // Report video time to sync mode if enabled
+      if (isSyncEnabled && timestamps?.length && syncMode) {
+        const combatLogTime = videoTimeToCombatLogTime(currentTime, timestamps, referenceDate);
+        if (combatLogTime) {
+          syncMode.setTimestamp(combatLogTime);
+        }
+      }
       
       if (pauseVideoTimeRef.current !== null && currentTime >= pauseVideoTimeRef.current) {
         playerRef.current.pauseVideo();
@@ -269,9 +359,9 @@ export function YouTubeOverlay({ videoUrl, timestamps, targetTime, pauseTime, on
       }
     };
 
-    const interval = setInterval(checkTime, 500);
+    const interval = setInterval(checkTime, pollInterval);
     return () => clearInterval(interval);
-  }, [playerReady]);
+  }, [playerReady, syncMode, timestamps, referenceDate]);
 
   // Drag handlers
   const handleDragStart = useCallback((e: React.MouseEvent) => {

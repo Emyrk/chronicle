@@ -1,8 +1,11 @@
 import { useRef } from "react";
+import { useSyncModeContextOptional } from "@/pages/Instance/SyncModeContext";
 
 /**
  * Hook to cache a value once it becomes valid.
  * Cache is invalidated when dependencies change.
+ * 
+ * When sync mode is enabled, caching is bypassed to allow live updates.
  * 
  * @param value - The current value to potentially cache
  * @param isValid - Function to determine if the value should be cached
@@ -27,9 +30,18 @@ export function useCachedValue<T>(
   isValid: (value: T) => boolean,
   deps: unknown[] = []
 ): { cachedValue: T; hasCache: boolean } {
+  const syncMode = useSyncModeContextOptional();
   const cacheRef = useRef<{ value: T; deps: unknown[] } | null>(null);
   // Track the stale value when deps change - we shouldn't cache this
   const staleValueRef = useRef<T | null>(null);
+  
+  // In sync mode, bypass caching entirely to show live data
+  if (syncMode?.enabled) {
+    // Clear cache when entering sync mode so we don't return stale data when exiting
+    cacheRef.current = null;
+    staleValueRef.current = null;
+    return { cachedValue: value, hasCache: isValid(value) };
+  }
   
   // Check if deps match the cached deps
   const depsMatch = cacheRef.current !== null &&

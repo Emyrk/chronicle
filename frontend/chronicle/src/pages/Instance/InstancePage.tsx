@@ -1,6 +1,6 @@
-import { useMemo, useState } from "react";
+import { useMemo, useState, useEffect } from "react";
 import { useParams, Link } from "react-router-dom";
-import { ArrowLeft, Loader2, Youtube } from "lucide-react";
+import { ArrowLeft, Loader2, Youtube, Timer } from "lucide-react";
 import { useInstance, useInstanceYoutube } from "@/api/queries";
 import { InstanceEventsProvider } from "@/hooks/instanceEvents";
 import type { ActivityPeriod, InstancePlayer, InstanceUnit, WoWEncounterWithHostiles } from "@/api/typesGenerated";
@@ -8,6 +8,8 @@ import { Card } from "@/components/ui/Card/Card";
 import { Button } from "@/components/ui/button";
 import { InstancePageView } from "./InstancePageView";
 import { YouTubeOverlay } from "./YouTubeOverlay";
+import { SyncModeProvider, useSyncModeContext } from "./SyncModeContext";
+import { SyncControlOverlay } from "./SyncControlOverlay";
 
 // Types for the Instance page
 export interface EnemyUnit {
@@ -112,10 +114,97 @@ function transformToInstance(
   };
 }
 
+/**
+ * Inner component that has access to SyncModeContext.
+ * Must be rendered inside SyncModeProvider.
+ */
+function InstancePageInner({ 
+  instance, 
+  backUrl, 
+  selectedEncounterIds,
+  onSelectEncounters,
+  youtubeData,
+  selectedEncounterTimes,
+}: {
+  instance: Instance;
+  backUrl: string;
+  selectedEncounterIds: string[];
+  onSelectEncounters: (ids: string[] | null) => void;
+  youtubeData: { url: string; results: readonly import("@/api/typesGenerated").VideoTimestamp[] } | null | undefined;
+  selectedEncounterTimes: { start: string | undefined; end: string | undefined };
+}) {
+  const [showYoutube, setShowYoutube] = useState(false);
+  const [showSyncPanel, setShowSyncPanel] = useState(false);
+  const { setEncounterBounds, enabled: syncEnabled } = useSyncModeContext();
+  
+  // Update sync mode encounter bounds when selection changes
+  useEffect(() => {
+    if (selectedEncounterTimes.start && selectedEncounterTimes.end) {
+      setEncounterBounds({
+        start: new Date(selectedEncounterTimes.start),
+        end: new Date(selectedEncounterTimes.end),
+      });
+    } else {
+      setEncounterBounds(null);
+    }
+  }, [selectedEncounterTimes.start, selectedEncounterTimes.end, setEncounterBounds]);
+  
+  return (
+    <>
+      <InstancePageView
+        instance={instance}
+        backUrl={backUrl}
+        selectedEncounterIds={selectedEncounterIds}
+        onSelectEncounters={onSelectEncounters}
+        youtubeButton={
+          <div className="flex gap-1.5">
+            {/* Sync button - always show */}
+            <Button
+              variant={syncEnabled ? "default" : "outline"}
+              size="sm"
+              className="gap-1.5"
+              onClick={() => setShowSyncPanel(true)}
+            >
+              <Timer className="h-4 w-4" />
+              Sync
+            </Button>
+            {/* YouTube button - only if video available */}
+            {youtubeData?.url && (
+              <Button
+                variant="outline"
+                size="sm"
+                className="gap-1.5"
+                onClick={() => setShowYoutube(true)}
+              >
+                <Youtube className="h-4 w-4 text-red-500" />
+                Video
+              </Button>
+            )}
+          </div>
+        }
+      />
+      {showSyncPanel && (
+        <SyncControlOverlay 
+          onClose={() => setShowSyncPanel(false)}
+          initialTimestamp={selectedEncounterTimes.start ? new Date(selectedEncounterTimes.start) : undefined}
+        />
+      )}
+      {showYoutube && youtubeData?.url && (
+        <YouTubeOverlay
+          videoUrl={youtubeData.url}
+          timestamps={youtubeData.results}
+          targetTime={selectedEncounterTimes.start}
+          pauseTime={selectedEncounterTimes.end}
+          onClose={() => setShowYoutube(false)}
+        />
+      )}
+    </>
+  );
+}
+
 // Connected component that fetches data
 export function InstancePage() {
   const { instanceId } = useParams<{ instanceId: string }>();
-  const [showYoutube, setShowYoutube] = useState(false);
   // Track user selection; null means use default
   const [userSelectedEncounterIds, setUserSelectedEncounterIds] = useState<string[] | null>(null);
 
@@ -201,35 +290,17 @@ export function InstancePage() {
   const backUrl = apiInstance?.log_group_id ? `/logs/${apiInstance.log_group_id}` : "/logs";
 
   return (
-    <InstanceEventsProvider instanceId={instance.id}>
-      <InstancePageView
-        instance={instance}
-        backUrl={backUrl}
-        selectedEncounterIds={selectedEncounterIds}
-        onSelectEncounters={setUserSelectedEncounterIds}
-        youtubeButton={
-          youtubeData?.url ? (
-            <Button
-              variant="outline"
-              size="sm"
-              className="gap-1.5"
-              onClick={() => setShowYoutube(true)}
-            >
-              <Youtube className="h-4 w-4 text-red-500" />
-              Video
-            </Button>
-          ) : null
-        }
-      />
-      {showYoutube && youtubeData?.url && (
-        <YouTubeOverlay
-          videoUrl={youtubeData.url}
-          timestamps={youtubeData.results}
-          targetTime={selectedEncounterTimes.start}
-          pauseTime={selectedEncounterTimes.end}
-          onClose={() => setShowYoutube(false)}
+    <SyncModeProvider>
+      <InstanceEventsProvider instanceId={instance.id}>
+        <InstancePageInner
+          instance={instance}
+          backUrl={backUrl}
+          selectedEncounterIds={selectedEncounterIds}
+          onSelectEncounters={setUserSelectedEncounterIds}
+          youtubeData={youtubeData}
+          selectedEncounterTimes={selectedEncounterTimes}
         />
-      )}
-    </InstanceEventsProvider>
+      </InstanceEventsProvider>
+    </SyncModeProvider>
   );
 }
