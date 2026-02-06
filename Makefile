@@ -1,6 +1,7 @@
-GIT_TAG := $(shell git describe --tags --abbrev=0)
-GIT_COMMIT := $(shell git describe --always)
-BUILD_TIME := $(shell TZ='America/Chicago' date +"%m-%d-%y_%H:%M")
+# Version info: can be overridden via environment variables (for Docker builds)
+GIT_TAG ?= $(shell git describe --tags --abbrev=0 2>/dev/null || echo "unknown")
+GIT_COMMIT ?= $(shell git describe --always 2>/dev/null || echo "unknown")
+BUILD_TIME ?= $(shell TZ='America/Chicago' date +"%m-%d-%y_%H:%M")
 LD_BUILD_FLAGS=-ldflags=-X=github.com/Emyrk/chronicle/internal/version.GitTag=$(GIT_TAG)\ -X=github.com/Emyrk/chronicle/internal/version.GitCommit=$(GIT_COMMIT)\ -X=github.com/Emyrk/chronicle/internal/version.BuildTime=$(BUILD_TIME)
 
 .PHONY: install

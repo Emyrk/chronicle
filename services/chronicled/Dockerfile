@@ -13,6 +13,11 @@ RUN pnpm build
 # Stage 2: Build Go binary
 FROM golang:1.25.5-alpine3.22 AS backend
 
+# Build args for version info (passed from CI/CD or computed at build time)
+ARG GIT_TAG=unknown
+ARG GIT_COMMIT=unknown
+ARG BUILD_TIME=unknown
+
 RUN apk --no-cache add make git
 
 WORKDIR /chronicle
@@ -22,7 +27,8 @@ RUN go mod download
 COPY . .
 COPY --from=frontend /chronicle/frontend/chronicle/dist ./frontend/chronicle/dist
 
-RUN make build-backend
+# Pass version info to the Go build via ldflags
+RUN GIT_TAG=${GIT_TAG} GIT_COMMIT=${GIT_COMMIT} BUILD_TIME=${BUILD_TIME} make build-backend
 
 # Stage 3: Final minimal image
 FROM alpine:latest

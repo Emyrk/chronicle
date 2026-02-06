@@ -139,5 +139,5 @@ func webUI(ctx context.Context, parentLogger *slog.Logger, client *river.Client[
 }
 
 func (q *Queues) Close(ctx context.Context) error {
-	return q.Client.StopAndCancel(ctx)
+	return q.StopAndCancel(ctx)
 }

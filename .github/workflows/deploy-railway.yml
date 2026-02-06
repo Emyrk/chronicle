@@ -28,6 +28,15 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+        with:
+          fetch-depth: 0  # Full history for git describe
+
+      - name: Get version info
+        id: version
+        run: |
+          echo "GIT_TAG=$(git describe --tags --abbrev=0 2>/dev/null || echo 'unknown')" >> $GITHUB_OUTPUT
+          echo "GIT_COMMIT=$(git describe --always)" >> $GITHUB_OUTPUT
+          echo "BUILD_TIME=$(TZ='America/Chicago' date +'%m-%d-%y_%H:%M')" >> $GITHUB_OUTPUT
 
       - name: Install Railway CLI
         run: npm install -g @railway/cli
@@ -37,3 +46,5 @@ jobs:
         env:
           RAILWAY_TOKEN: ${{ secrets.RAILWAY_TOKEN }}
           RAILWAY_CONFIG_FILE: services/chronicled/railway.toml
+          # Pass version info as Docker build args via Railway
+          RAILWAY_DOCKERFILE_BUILD_ARGS: GIT_TAG=${{ steps.version.outputs.GIT_TAG }},GIT_COMMIT=${{ steps.version.outputs.GIT_COMMIT }},BUILD_TIME=${{ steps.version.outputs.BUILD_TIME }}
