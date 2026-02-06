@@ -128,6 +128,7 @@ func (s *S3Storage) DownloadFile(ctx context.Context, bucketId string, filePath 
 	if err != nil {
 		return nil, fmt.Errorf("get object: %w", err)
 	}
+	//nolint:errcheck
 	defer output.Body.Close()
 
 	data, err := io.ReadAll(output.Body)
