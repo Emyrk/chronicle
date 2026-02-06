@@ -130,7 +130,15 @@ export function SyncModeProvider({ children }: SyncModeProviderProps) {
 
   const step = useCallback((deltaMs: number) => {
     setCurrentTimestamp(prev => {
-      if (!prev) return prev;
+      // If no timestamp yet, initialize from encounter bounds
+      if (!prev) {
+        if (encounterBounds) {
+          // Start from beginning if stepping forward, end if stepping backward
+          return deltaMs >= 0 ? encounterBounds.start : encounterBounds.end;
+        }
+        return prev; // Can't step without a reference point
+      }
+      
       const newTime = new Date(prev.getTime() + deltaMs);
       
       // Clamp to encounter bounds if set
@@ -151,48 +159,52 @@ export function SyncModeProvider({ children }: SyncModeProviderProps) {
     }));
   }, []);
 
-  // Playback loop - advance timestamp when playing
+  // Track playback speed and bounds in refs so tick doesn't need effect restarts
+  const playbackSpeedRef = useRef(playbackSpeed);
+  const encounterBoundsRef = useRef(encounterBounds);
   useEffect(() => {
-    if (!isPlaying || !enabled || !currentTimestamp) {
+    playbackSpeedRef.current = playbackSpeed;
+  }, [playbackSpeed]);
+  useEffect(() => {
+    encounterBoundsRef.current = encounterBounds;
+  }, [encounterBounds]);
+
+  // Playback loop - advance timestamp when playing
+  // Uses setInterval at 100ms to match the processing throttle rate in usePanelAggregation.
+  // Using requestAnimationFrame (~16ms) would update faster than processing can keep up.
+  useEffect(() => {
+    if (!isPlaying || !enabled) {
       lastFrameTimeRef.current = null;
       return;
     }
 
-    const tick = (frameTime: number) => {
-      if (!lastFrameTimeRef.current) {
-        lastFrameTimeRef.current = frameTime;
-        animationFrameRef.current = requestAnimationFrame(tick);
-        return;
-      }
+    const TICK_INTERVAL_MS = 100; // Match throttle rate in usePanelAggregation
+    lastFrameTimeRef.current = performance.now();
 
-      const deltaMs = (frameTime - lastFrameTimeRef.current) * playbackSpeed;
-      lastFrameTimeRef.current = frameTime;
+    const intervalId = setInterval(() => {
+      const now = performance.now();
+      const deltaMs = (now - (lastFrameTimeRef.current ?? now)) * playbackSpeedRef.current;
+      lastFrameTimeRef.current = now;
 
       setCurrentTimestamp(prev => {
         if (!prev) return prev;
         const newTime = new Date(prev.getTime() + deltaMs);
         
         // Stop at encounter end
-        if (encounterBounds && newTime >= encounterBounds.end) {
+        const bounds = encounterBoundsRef.current;
+        if (bounds && newTime >= bounds.end) {
           setIsPlaying(false);
-          return encounterBounds.end;
+          return bounds.end;
         }
         
         return newTime;
       });
-
-      animationFrameRef.current = requestAnimationFrame(tick);
-    };
-
-    animationFrameRef.current = requestAnimationFrame(tick);
+    }, TICK_INTERVAL_MS);
 
     return () => {
-      if (animationFrameRef.current) {
-        cancelAnimationFrame(animationFrameRef.current);
-        animationFrameRef.current = null;
-      }
+      clearInterval(intervalId);
     };
-  }, [isPlaying, enabled, currentTimestamp, playbackSpeed, encounterBounds]);
+  }, [isPlaying, enabled]);
 
   const value: SyncModeContextValue = useMemo(() => ({
     enabled,

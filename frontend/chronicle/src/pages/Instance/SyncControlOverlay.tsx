@@ -87,10 +87,10 @@ export function SyncControlOverlay({ onClose, initialTimestamp }: SyncControlOve
   const handleEnableChange = (checked: boolean) => {
     if (checked) {
       sync.enable();
-      // Set initial timestamp if provided and no current timestamp
-      if (initialTimestamp && !sync.currentTimestamp) {
+      // Always set initial timestamp when enabling (disable clears it)
+      if (initialTimestamp) {
         sync.setTimestamp(initialTimestamp);
-      } else if (sync.encounterBounds && !sync.currentTimestamp) {
+      } else if (sync.encounterBounds) {
         sync.setTimestamp(sync.encounterBounds.start);
       }
     } else {

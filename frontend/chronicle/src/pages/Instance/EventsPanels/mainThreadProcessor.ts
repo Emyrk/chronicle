@@ -179,6 +179,17 @@ function yieldToUI(): Promise<void> {
 }
 
 /**
+ * Shallow clone an object to create a new reference for React.
+ * This preserves Map/Set instances but creates a new top-level object.
+ */
+function shallowClone<T>(obj: T): T {
+  if (obj === null || typeof obj !== 'object') {
+    return obj;
+  }
+  return { ...obj } as T;
+}
+
+/**
  * Check if timestamp moved backward (requires reprocessing from start).
  */
 export function timestampMovedBackward(
@@ -239,21 +250,25 @@ export async function processIncrementally<TResult>(
   let state: TResult;
   let processedCount: number;
   let lastTimestamp: Date | null;
+  let skipCount: number;
 
   if (mustRestart || !previousState) {
     state = processor.createState();
     processedCount = 0;
     lastTimestamp = null;
+    skipCount = 0; // Process all events
   } else {
-    // Resume from previous state
+    // Resume from previous state - keep result and skip already processed events
     state = previousState.result;
     processedCount = previousState.processedCount;
     lastTimestamp = previousState.lastTimestamp;
+    skipCount = previousState.processedCount; // Skip this many events
     
     // If we already finished, just return the previous state
+    // (clone to ensure new reference for React)
     if (previousState.isDone) {
       return {
-        result: state,
+        result: shallowClone(state),
         processedCount,
         processingTimeMs: 0,
         lastTimestamp,
@@ -270,17 +285,9 @@ export async function processIncrementally<TResult>(
       cursors.push(createCursor(streamType, cachedStream.data));
     }
   }
-
-  // If resuming, we need to skip already processed events
-  // For now, we'll reprocess from start but stop at the same timestamp
-  // TODO: Implement true resume by tracking cursor positions
-  if (previousState && !mustRestart) {
-    // When resuming, we need to skip to where we left off
-    // For simplicity, we'll just reprocess but the timestamp cutoff
-    // will make us stop at the same place if timestamp hasn't advanced
-    state = processor.createState();
-    processedCount = 0;
-  }
+  
+  // Counter for skipping already-processed events
+  let skipped = 0;
 
   let localCount = 0;
 
@@ -320,14 +327,22 @@ export async function processIncrementally<TResult>(
       // No more events from this encounter - move to next encounter
       if (!minCursor || !minPeeked) break;
       
+      // Skip events we've already processed (for resume)
+      if (skipped < skipCount) {
+        consumePeeked(minCursor);
+        skipped++;
+        continue;
+      }
+      
       // Check timestamp cutoff BEFORE processing
       if (stopAtTimestamp) {
         const eventTime = minPeeked.firstTimestamp.getTime() + minPeeked.event.offsetMilli;
         if (eventTime > stopAtTimestamp.getTime()) {
           // Stop here - return state that can be resumed
+          // Clone to ensure new reference for React
           const processingTimeMs = performance.now() - startTime;
           return {
-            result: state,
+            result: shallowClone(state),
             processedCount,
             processingTimeMs,
             lastTimestamp,
@@ -362,8 +377,9 @@ export async function processIncrementally<TResult>(
 
   const processingTimeMs = performance.now() - startTime;
   
+  // Clone to ensure new reference for React
   return {
-    result: state,
+    result: shallowClone(state),
     processedCount,
     processingTimeMs,
     lastTimestamp,
