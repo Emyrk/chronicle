@@ -194,6 +194,7 @@ export function usePanelAggregation<TResult>(
   
   useEffect(() => {
     if (!isSyncMode || !syncTimestamp) {
+      console.log('Throttle effect: clearing timestamp', { isSyncMode, syncTimestamp });
       // eslint-disable-next-line react-hooks/set-state-in-effect -- throttling requires setState
       setThrottledSyncTimestamp(null);
       lastProcessedTimestampRef.current = null;
@@ -251,6 +252,7 @@ export function usePanelAggregation<TResult>(
       );
       
       // Check if request was superseded while fetching
+      console.log('processWithWorker: streams fetched', { requestId, currentRequestId: requestIdRef.current, abort: abortRef.current });
       if (requestId !== requestIdRef.current || abortRef.current) return;
       
       setLoading(false);
@@ -267,6 +269,7 @@ export function usePanelAggregation<TResult>(
       const response = await executeRequest(workerRequest);
       
       // Ignore stale responses
+      console.log('processWithWorker: got response', { requestId, currentRequestId: requestIdRef.current, abort: abortRef.current });
       if (requestId !== requestIdRef.current || abortRef.current) {
         return;
       }
@@ -369,33 +372,73 @@ export function usePanelAggregation<TResult>(
     }
   }, [eventsContext.fetchStream, panel, panelContext]);
   
-  // Main effect - runs in either mode
+  // Track previous sync mode to detect transitions
+  const prevSyncModeRef = useRef(isSyncMode);
+  // Track current requestId owned by worker - sync cleanup should not abort this
+  const workerRequestIdRef = useRef<number | null>(null);
+  
+  // Effect for worker mode (normal processing)
+  // This effect ONLY runs when not in sync mode
   useEffect(() => {
-    if (!enabled) return;
+    console.log('Worker effect running', { enabled, isSyncMode });
+    // Skip if in sync mode or disabled
+    if (!enabled || isSyncMode) {
+      workerRequestIdRef.current = null;
+      return;
+    }
+    
+    const requestId = ++requestIdRef.current;
+    workerRequestIdRef.current = requestId;  // Mark this request as worker-owned
+    abortRef.current = false;
+    
+    // Reset incremental state when entering worker mode (leaving sync mode)
+    if (prevSyncModeRef.current) {
+      incrementalStateRef.current = null;
+      prevTimestampRef.current = null;
+      lastProcessedTimestampRef.current = null;
+    }
+    prevSyncModeRef.current = false;
+    
+    console.log('Worker effect calling processWithWorker', { requestId, abort: abortRef.current });
+    processWithWorker(requestId);
+    
+    return () => {
+      console.log('Worker effect cleanup');
+      // Abort any in-flight worker request
+      workerRequestIdRef.current = null;
+      requestIdRef.current++;
+      abortRef.current = true;
+    };
+  }, [eventsContext.fetchStream, panel, streamsKey, enabled, panelContextKey, isSyncMode, processWithWorker]);
+  
+  // Effect for sync mode (incremental processing)
+  // This effect ONLY runs when in sync mode with a valid timestamp
+  useEffect(() => {
+    console.log('Sync effect running', { enabled, isSyncMode, throttledSyncTimestamp });
+    // Skip if not in sync mode or no timestamp
+    if (!enabled || !isSyncMode || !throttledSyncTimestamp) {
+      return;
+    }
+    
+    prevSyncModeRef.current = true;
     
     const requestId = ++requestIdRef.current;
     abortRef.current = false;
     
-    if (isSyncMode) {
-      // Sync mode: use main thread incremental processing
-      // Only process if we have a timestamp set (use throttled value)
-      if (throttledSyncTimestamp) {
-        processMainThread(requestId, throttledSyncTimestamp);
-      }
-    } else {
-      // Normal mode: use worker
-      // Reset incremental state when leaving sync mode
-      incrementalStateRef.current = null;
-      prevTimestampRef.current = null;
-      processWithWorker(requestId);
-    }
+    processMainThread(requestId, throttledSyncTimestamp);
     
-    // Cleanup: mark request as stale
     return () => {
-      requestIdRef.current++;
-      abortRef.current = true;
+      // Only abort if there's no active worker request
+      // When sync mode is disabled, the worker effect starts a new request,
+      // and we shouldn't abort that request when this cleanup runs later
+      // (due to throttledSyncTimestamp changing)
+      console.log('Sync effect cleanup', { workerRequestId: workerRequestIdRef.current });
+      if (workerRequestIdRef.current === null) {
+        requestIdRef.current++;
+        abortRef.current = true;
+      }
     };
-  }, [eventsContext.fetchStream, panel, streamsKey, enabled, panelContextKey, isSyncMode, throttledSyncTimestamp, processWithWorker, processMainThread]);
+  }, [enabled, isSyncMode, throttledSyncTimestamp, processMainThread]);
   
   return {
     loading,
