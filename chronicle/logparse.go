@@ -81,7 +81,7 @@ func (w *WorkerLogParse) loadAndSortFile(ctx context.Context, fileID uuid.UUID) 
 	storage := w.parent.Storage
 	logger := leveledlog.New(w.parent.logger, slog.LevelInfo)
 
-	fd, err := storage.DownloadFile(BucketRaidLogs, w.parent.logPath(fileID))
+	fd, err := storage.DownloadFile(ctx, BucketRaidLogs, w.parent.logPath(fileID))
 	if err != nil {
 		err = fmt.Errorf("download log file %s: %w", fileID, err)
 		if errors.Is(err, os.ErrNotExist) {

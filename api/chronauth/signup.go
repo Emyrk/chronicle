@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/Emyrk/chronicle/database"
+	"github.com/Emyrk/chronicle/internal/slice"
 	"github.com/google/uuid"
 	"github.com/markbates/goth"
 )
@@ -93,6 +94,15 @@ func (s *Service) Signup(w http.ResponseWriter, r *http.Request, user goth.User)
 			err = s.Bot.SyncDiscordUser(ctx, tx, user.UserID, linked.UserID)
 			if err != nil {
 				return fmt.Errorf("handling discord user: %w", err)
+			}
+		} else if user.Provider == "dev-oidc" {
+			_, err = tx.UpdateUserRoles(ctx, database.UpdateUserRolesParams{
+				ID:        linked.UserID,
+				Roles:     slice.ToStrings([]database.UserRoles{database.UserRolesAdmin, database.UserRolesTechnicalAdmin, database.UserRolesAlphaTester}),
+				UpdatedAt: database.Timestamptz(time.Now()),
+			})
+			if err != nil {
+				return fmt.Errorf("assigning default roles: %w", err)
 			}
 		}
 

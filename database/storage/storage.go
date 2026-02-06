@@ -1,39 +1,62 @@
 package storage
 
 import (
-	"fmt"
+	"context"
 	"io"
-
-	storage_go "github.com/supabase-community/storage-go"
 )
 
-type FileOptions = storage_go.FileOptions
-type UrlOptions = storage_go.UrlOptions
-type BucketOptions = storage_go.BucketOptions
-type FileUploadResponse = storage_go.FileUploadResponse
-type Bucket = storage_go.Bucket
-type MessageResponse = storage_go.MessageResponse
-
-var _ ObjectStorage = (*storage_go.Client)(nil)
-
-type ObjectStorage interface {
-	UploadFile(bucketId string, relativePath string, data io.Reader, fileOptions ...FileOptions) (FileUploadResponse, error)
-	DownloadFile(bucketId string, filePath string, urlOptions ...UrlOptions) ([]byte, error)
-	RemoveFile(bucketId string, paths []string) ([]FileUploadResponse, error)
-	CreateBucket(id string, options BucketOptions) (Bucket, error)
-	DeleteBucket(id string) (MessageResponse, error)
-	EmptyBucket(id string) (MessageResponse, error)
-	MoveFile(bucketId string, sourceKey string, destinationKey string) (FileUploadResponse, error)
-	ListBuckets() ([]Bucket, error)
+// FileOptions configures file upload behavior.
+type FileOptions struct {
+	ContentType *string
+	CacheControl *string
 }
 
-func Supabase(projectID, projectAPIKey string) (ObjectStorage, error) {
-	storageClient := storage_go.NewClient(fmt.Sprintf("https://%s.supabase.co/storage/v1", projectID), projectAPIKey, nil)
+// UrlOptions configures file download/URL behavior.
+type UrlOptions struct {
+	Transform *TransformOptions
+}
 
-	_, err := storageClient.ListBuckets()
-	if err != nil {
-		return nil, fmt.Errorf("test connection to storage service: %w", err)
-	}
+// TransformOptions for image transformations (not used by S3, kept for interface compatibility).
+type TransformOptions struct {
+	Width   int
+	Height  int
+	Quality int
+}
 
-	return storageClient, nil
+// BucketOptions configures bucket creation.
+type BucketOptions struct {
+	Public           bool
+	AllowedMimeTypes []string
+	FileSizeLimit    *int
+}
+
+// FileUploadResponse is returned after file operations.
+type FileUploadResponse struct {
+	Key     string
+	Message string
+}
+
+// Bucket represents a storage bucket.
+type Bucket struct {
+	Id        string
+	Name      string
+	Public    bool
+	CreatedAt string
+	UpdatedAt string
+}
+
+// MessageResponse is a simple message response.
+type MessageResponse struct {
+	Message string
+}
+
+type ObjectStorage interface {
+	UploadFile(ctx context.Context, bucketId string, relativePath string, data io.Reader, fileOptions ...FileOptions) (FileUploadResponse, error)
+	DownloadFile(ctx context.Context, bucketId string, filePath string, urlOptions ...UrlOptions) ([]byte, error)
+	RemoveFile(ctx context.Context, bucketId string, paths []string) ([]FileUploadResponse, error)
+	CreateBucket(ctx context.Context, id string, options BucketOptions) (Bucket, error)
+	DeleteBucket(ctx context.Context, id string) (MessageResponse, error)
+	EmptyBucket(ctx context.Context, id string) (MessageResponse, error)
+	MoveFile(ctx context.Context, bucketId string, sourceKey string, destinationKey string) (FileUploadResponse, error)
+	ListBuckets(ctx context.Context) ([]Bucket, error)
 }

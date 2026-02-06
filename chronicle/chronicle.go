@@ -55,7 +55,7 @@ func New(ctx context.Context, logger *slog.Logger, opts Options) (*Chronicle, er
 		TemporaryDirectory: filepath.Join(os.TempDir(), "chronicle_uploads"),
 	}
 
-	err := c.initStorage()
+	err := c.initStorage(ctx)
 	if err != nil {
 		return nil, fmt.Errorf("init storage: %w", err)
 	}
@@ -72,21 +72,18 @@ func (c *Chronicle) logPath(fileID uuid.UUID) string {
 	return filepath.Join("logs", fileID.String())
 }
 
-func (c *Chronicle) initStorage() error {
-	const raidLogLimit = "100mb"
+func (c *Chronicle) initStorage(ctx context.Context) error {
 	raidLogMimes := []string{"text/plain", "text/plain;charset=UTF-8"}
-	_, err := c.Storage.CreateBucket(BucketRaidLogs, storage.BucketOptions{
+	_, err := c.Storage.CreateBucket(ctx, BucketRaidLogs, storage.BucketOptions{
 		Public:           false,
-		FileSizeLimit:    raidLogLimit,
 		AllowedMimeTypes: raidLogMimes,
 	})
 	if err != nil && err.Error() != "The resource already exists" {
 		return err
 	}
 
-	_, err = c.Storage.CreateBucket(BucketTemporary, storage.BucketOptions{
+	_, err = c.Storage.CreateBucket(ctx, BucketTemporary, storage.BucketOptions{
 		Public:           false,
-		FileSizeLimit:    raidLogLimit,
 		AllowedMimeTypes: raidLogMimes,
 	})
 	if err != nil && err.Error() != "The resource already exists" {
@@ -208,13 +205,13 @@ func (c *Chronicle) UploadLogs(ctx context.Context, one, two io.Reader) (*databa
 
 	// Now store the logs in object storage
 	for i := range tmpIDs {
-		storageObject, err := c.Storage.UploadFile(BucketRaidLogs, c.logPath(tmpIDs[i]), tmpFiles[i], storage.FileOptions{
+		storageObject, err := c.Storage.UploadFile(ctx, BucketRaidLogs, c.logPath(tmpIDs[i]), tmpFiles[i], storage.FileOptions{
 			ContentType: ptr.Ref("text/plain;charset=UTF-8"),
 		})
 		if err != nil {
 			return nil, nil, fmt.Errorf("upload log file to object storage: %w", err)
 		}
-		clean.Add(func() { _, _ = c.Storage.RemoveFile(BucketRaidLogs, []string{storageObject.Key}) })
+		clean.Add(func() { _, _ = c.Storage.RemoveFile(ctx, BucketRaidLogs, []string{storageObject.Key}) })
 	}
 
 	res, err := c.EnqueueParseLog(ctx, group)
@@ -259,7 +256,7 @@ func (c *Chronicle) DeleteWoWLogGroup(ctx context.Context, logID uuid.UUID) erro
 	}
 
 	for _, file := range files {
-		_, err := c.Storage.RemoveFile(BucketRaidLogs, []string{file.ID.String()})
+		_, err := c.Storage.RemoveFile(ctx, BucketRaidLogs, []string{c.logPath(file.ID)})
 		if err != nil {
 			return fmt.Errorf("remove file: %w", err)
 		}
