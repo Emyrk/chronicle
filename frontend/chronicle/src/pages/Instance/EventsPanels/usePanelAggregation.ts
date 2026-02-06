@@ -194,7 +194,6 @@ export function usePanelAggregation<TResult>(
   
   useEffect(() => {
     if (!isSyncMode || !syncTimestamp) {
-      console.log('Throttle effect: clearing timestamp', { isSyncMode, syncTimestamp });
       // eslint-disable-next-line react-hooks/set-state-in-effect -- throttling requires setState
       setThrottledSyncTimestamp(null);
       lastProcessedTimestampRef.current = null;
@@ -252,7 +251,6 @@ export function usePanelAggregation<TResult>(
       );
       
       // Check if request was superseded while fetching
-      console.log('processWithWorker: streams fetched', { requestId, currentRequestId: requestIdRef.current, abort: abortRef.current });
       if (requestId !== requestIdRef.current || abortRef.current) return;
       
       setLoading(false);
@@ -269,7 +267,6 @@ export function usePanelAggregation<TResult>(
       const response = await executeRequest(workerRequest);
       
       // Ignore stale responses
-      console.log('processWithWorker: got response', { requestId, currentRequestId: requestIdRef.current, abort: abortRef.current });
       if (requestId !== requestIdRef.current || abortRef.current) {
         return;
       }
@@ -380,7 +377,6 @@ export function usePanelAggregation<TResult>(
   // Effect for worker mode (normal processing)
   // This effect ONLY runs when not in sync mode
   useEffect(() => {
-    console.log('Worker effect running', { enabled, isSyncMode });
     // Skip if in sync mode or disabled
     if (!enabled || isSyncMode) {
       workerRequestIdRef.current = null;
@@ -399,11 +395,9 @@ export function usePanelAggregation<TResult>(
     }
     prevSyncModeRef.current = false;
     
-    console.log('Worker effect calling processWithWorker', { requestId, abort: abortRef.current });
     processWithWorker(requestId);
     
     return () => {
-      console.log('Worker effect cleanup');
       // Abort any in-flight worker request
       workerRequestIdRef.current = null;
       requestIdRef.current++;
@@ -414,7 +408,6 @@ export function usePanelAggregation<TResult>(
   // Effect for sync mode (incremental processing)
   // This effect ONLY runs when in sync mode with a valid timestamp
   useEffect(() => {
-    console.log('Sync effect running', { enabled, isSyncMode, throttledSyncTimestamp });
     // Skip if not in sync mode or no timestamp
     if (!enabled || !isSyncMode || !throttledSyncTimestamp) {
       return;
@@ -432,7 +425,6 @@ export function usePanelAggregation<TResult>(
       // When sync mode is disabled, the worker effect starts a new request,
       // and we shouldn't abort that request when this cleanup runs later
       // (due to throttledSyncTimestamp changing)
-      console.log('Sync effect cleanup', { workerRequestId: workerRequestIdRef.current });
       if (workerRequestIdRef.current === null) {
         requestIdRef.current++;
         abortRef.current = true;
