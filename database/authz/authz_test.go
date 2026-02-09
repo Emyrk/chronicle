@@ -10,16 +10,17 @@ import (
 
 func TestAuthz(t *testing.T) {
 	t.Parallel()
+	ctx := testutil.Context(t, testutil.WaitShort)
 
 	logger := testutil.Logger(t)
 	opts := authz.Options{
-		GRPCURL:      "http://localhost:8443",
+		GRPCURL:      "localhost:50051",
 		PreSharedKey: "chronicle-dev-key",
 		Logger:       logger,
 	}
 
-	az, err := authz.New(t.Context(), opts)
+	az, err := authz.New(ctx, opts)
 	require.NoError(t, err)
 
-	az.Foo()
+	az.Foo(ctx)
 }
