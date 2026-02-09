@@ -109,6 +109,7 @@ require (
 	github.com/authzed/cel-go v0.20.2 // indirect
 	github.com/authzed/consistent v0.2.0 // indirect
 	github.com/authzed/ctxkey v0.0.0-20250226155515-d49f99185584 // indirect
+	github.com/authzed/gochugaru v0.0.0-20250806201116-319cc7551988 // indirect
 	github.com/aws/aws-sdk-go-v2/aws/protocol/eventstream v1.7.4 // indirect
 	github.com/aws/aws-sdk-go-v2/feature/ec2/imds v1.18.17 // indirect
 	github.com/aws/aws-sdk-go-v2/feature/rds/auth v1.6.15 // indirect
@@ -265,6 +266,7 @@ require (
 	github.com/joho/godotenv v1.5.1 // indirect
 	github.com/json-iterator/go v1.1.12 // indirect
 	github.com/jzelinskie/cobrautil/v2 v2.0.0-20240819150235-f7fe73942d0f // indirect
+	github.com/jzelinskie/itz v0.0.0-20250707195004-e1ccf25b59ff // indirect
 	github.com/jzelinskie/stringz v0.0.3 // indirect
 	github.com/klauspost/compress v1.18.2 // indirect
 	github.com/klauspost/cpuid/v2 v2.2.5 // indirect

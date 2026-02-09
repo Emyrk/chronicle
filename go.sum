@@ -750,6 +750,8 @@ github.com/authzed/consistent v0.2.0 h1:qBUkRycc89rcTu4uX4WrHcLV7OMZunYpChKmLwo+
 github.com/authzed/consistent v0.2.0/go.mod h1:8F1E3S1tFaxNa1fynw56DW+ZIxdDPjGFok/uKTJuByw=
 github.com/authzed/ctxkey v0.0.0-20250226155515-d49f99185584 h1:mP7EpcUL90EKcf/F+gYiU2pz3cGFEuKPHPfe7MntEXk=
 github.com/authzed/ctxkey v0.0.0-20250226155515-d49f99185584/go.mod h1:wnimjr5RPPouIhZQ3ztDBLMUKKuUroj3U9Jy0PxeaEE=
+github.com/authzed/gochugaru v0.0.0-20250806201116-319cc7551988 h1:VLYqumUGyJEcwrxL9+peNLSZqmbbeUsBJemkTJ4cCRc=
+github.com/authzed/gochugaru v0.0.0-20250806201116-319cc7551988/go.mod h1:SLL9aWEodwrNF0yUEgcEATiHEWQWSy8hNBl0fXxeCEE=
 github.com/authzed/grpcutil v0.0.0-20240123194739-2ea1e3d2d98b h1:wbh8IK+aMLTCey9sZasO7b6BWLAJnHHvb79fvWCXwxw=
 github.com/authzed/grpcutil v0.0.0-20240123194739-2ea1e3d2d98b/go.mod h1:s3qC7V7XIbiNWERv7Lfljy/Lx25/V1Qlexb0WJuA8uQ=
 github.com/authzed/spicedb v1.48.0 h1:rBEhOsyCEouRDShZ6ltT31gHsbiKOzv+SHwBAzx8KLA=
@@ -1409,6 +1411,8 @@ github.com/jung-kurt/gofpdf v1.0.0/go.mod h1:7Id9E/uU8ce6rXgefFLlgrJj/GYY22cpxn+
 github.com/jung-kurt/gofpdf v1.0.3-0.20190309125859-24315acbbda5/go.mod h1:7Id9E/uU8ce6rXgefFLlgrJj/GYY22cpxn+r32jIOes=
 github.com/jzelinskie/cobrautil/v2 v2.0.0-20240819150235-f7fe73942d0f h1:+WgAZQQXj+X8lcJdwcrQpD89Zd9ekdauOK3hWl3FkPU=
 github.com/jzelinskie/cobrautil/v2 v2.0.0-20240819150235-f7fe73942d0f/go.mod h1:jsl6cEF6BT3UeQoSLreA7G0sZXemoI5XNqyxzWCohbE=
+github.com/jzelinskie/itz v0.0.0-20250707195004-e1ccf25b59ff h1:KvETDvX0OIRWycogAXLskttQFtKRFnffiWR5QWF1MkE=
+github.com/jzelinskie/itz v0.0.0-20250707195004-e1ccf25b59ff/go.mod h1:LdwoYNs1xTpeXUF6frx9Dzc0L84J+MxPqE5M0xPzrkU=
 github.com/jzelinskie/stringz v0.0.3 h1:0GhG3lVMYrYtIvRbxvQI6zqRTT1P1xyQlpa0FhfUXas=
 github.com/jzelinskie/stringz v0.0.3/go.mod h1:hHYbgxJuNLRw91CmpuFsYEOyQqpDVFg8pvEh23vy4P0=
 github.com/kballard/go-shellquote v0.0.0-20180428030007-95032a82bc51/go.mod h1:CzGEWj7cYgsdH8dAjBGEr58BoE7ScuLd+fwFZ44+/x8=
