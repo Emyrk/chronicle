@@ -9,6 +9,7 @@ definition user {}
 // Top level site definition for site-wide overrides (administration)
 definition chronicle {
 	relation admin: user
+  relation moderator: user
 }
 
 definition river_queue {

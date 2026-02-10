@@ -6,11 +6,26 @@ import (
 	"time"
 
 	"github.com/Emyrk/chronicle/database"
+	"github.com/Emyrk/chronicle/database/authz/policy"
 	"github.com/Emyrk/chronicle/internal/slice"
+	"github.com/authzed/gochugaru/rel"
 	"github.com/google/uuid"
 )
 
 func (bot *Bot) SyncDiscordUser(ctx context.Context, tx database.Store, discordID string, userID uuid.UUID) (retErr error) {
+	b := policy.New()
+	c := b.GlobalChronicle()
+	usr := b.User(userID)
+
+	// Create a filter to remove all their existing roles from the global namespace
+	f := rel.NewFilter(c.Object().ObjectType, c.Object().ObjectId, "")
+	f.WithSubjectFilter(usr.Object().ObjectType, usr.Object().ObjectId, "")
+	z.spice.Delete(rel.NewPreconditionedFilter(f))
+
+	// Add back roles based on their current discord roles
+	var txn rel.Txn
+	var _ rel.Txn
+
 	member, err := bot.GetGuildMember(bot.ChronicleGuildID(), discordID)
 	if err != nil {
 		return err
