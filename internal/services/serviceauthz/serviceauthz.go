@@ -39,7 +39,7 @@ func New(broker *services.Services) *Service {
 }
 
 func (s *Service) Name() string {
-	return services.ServiceDatabase
+	return services.ServiceAuthz
 }
 
 func (s *Service) Configures() []string { return []string{} }

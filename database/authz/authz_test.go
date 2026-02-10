@@ -3,24 +3,19 @@ package authz_test
 import (
 	"testing"
 
-	"github.com/Emyrk/chronicle/database/authz"
+	"github.com/Emyrk/chronicle/internal/services/serviceauthz"
+	"github.com/Emyrk/chronicle/internal/services/servicelogger"
+	"github.com/Emyrk/chronicle/internal/services/testservices"
 	"github.com/Emyrk/chronicle/internal/testutil"
-	"github.com/stretchr/testify/require"
 )
 
 func TestAuthz(t *testing.T) {
 	t.Parallel()
-	ctx := testutil.Context(t, testutil.WaitShort)
 
-	logger := testutil.Logger(t)
-	opts := authz.Options{
-		GRPCURL:      "localhost:50051",
-		PreSharedKey: "chronicle-dev-key",
-		Logger:       logger,
-	}
+	broker := testservices.Authz(t)
+	ctx := testutil.Context(t, testutil.WaitLong)
+	logger, authz := servicelogger.Logger(broker), serviceauthz.Authz(broker)
 
-	az, err := authz.New(ctx, opts)
-	require.NoError(t, err)
+	var _, _, _ = logger, authz, ctx
 
-	az.Foo(ctx)
 }

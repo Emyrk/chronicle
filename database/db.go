@@ -17,6 +17,10 @@ import (
 	"golang.org/x/xerrors"
 )
 
+type StoreQueries interface {
+	sqlcQuerier
+}
+
 // Store contains all queryable database functions.
 // It extends the generated interface to add transaction support.
 type Store interface {

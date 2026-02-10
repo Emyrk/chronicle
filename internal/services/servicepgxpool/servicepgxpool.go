@@ -73,7 +73,9 @@ func (s *Service) Service() *pgxpool.Pool {
 }
 
 func (s *Service) Close(_ context.Context) error {
-	s.pool.Close()
+	if s.pool != nil {
+		s.pool.Close()
+	}
 	return nil
 }
 

@@ -5,14 +5,17 @@ import (
 	"fmt"
 	"log/slog"
 	"strings"
+	"time"
 
 	"github.com/Emyrk/chronicle/database"
 	"github.com/Emyrk/chronicle/database/authz/policy"
+	v1 "github.com/authzed/authzed-go/proto/authzed/api/v1"
 	"github.com/authzed/gochugaru/client"
 	"github.com/authzed/gochugaru/rel"
+	"github.com/jackc/pgx/v5"
 )
 
-const globalNamespace = "chronicle"
+var _ database.StoreQueries = (*Authz)(nil)
 
 type Options struct {
 	GRPCURL      string
@@ -25,6 +28,8 @@ type Authz struct {
 	spice  *client.Client
 	logger *slog.Logger
 	db     database.Store
+
+	*interceptor
 }
 
 func New(ctx context.Context, opts Options) (*Authz, error) {
@@ -39,29 +44,92 @@ func New(ctx context.Context, opts Options) (*Authz, error) {
 		return nil, fmt.Errorf("init authz client: %w", err)
 	}
 
-	rev, err := spice.WriteSchema(ctx, policy.Schema)
+	_, err = spice.WriteSchema(ctx, policy.Schema)
 	if err != nil {
 		return nil, fmt.Errorf("write schema: %w", err)
 	}
-	fmt.Println(rev)
 
-	return &Authz{
+	z := &Authz{
 		spice:  spice,
 		logger: opts.Logger,
 		db:     opts.DB,
-	}, nil
+	}
+
+	// By default, writes do not happen in a transaction.
+	z.interceptor = &interceptor{
+		writer: z,
+		store:  z.db,
+	}
+
+	return z, nil
 }
 
-func (a *Authz) Close(ctx context.Context) error {
+func (z *Authz) Close() error {
 	return nil
 }
 
-func (a *Authz) Foo(ctx context.Context) {
-	var txn rel.Txn
-	//txn.Touch(rel.FromTuple())
+func (z *Authz) Ping(ctx context.Context) (time.Duration, error) {
+	return z.db.Ping(ctx)
+}
 
-	//a.spice.Write()
-	var _ = txn
-	//txn.Touch()
-	//rel.FromObjects()
+type AuthzTX struct {
+	parent    *Authz
+	tx        database.Store
+	relations rel.Txn
+
+	*interceptor
+}
+
+func (z *Authz) wrap(tx database.Store) *AuthzTX {
+	spiceTx := &AuthzTX{
+		parent:    z,
+		tx:        tx,
+		relations: rel.Txn{},
+	}
+
+	spiceTx.interceptor = &interceptor{
+		writer: spiceTx,
+		store:  spiceTx,
+	}
+
+	return spiceTx
+}
+
+func (z *Authz) InTx(f func(database.Store) error, opts *pgx.TxOptions) error {
+	return z.db.InTx(func(nestedTX database.Store) error {
+		wrapped := z.wrap(nestedTX)
+		err := f(wrapped)
+		if err != nil {
+			reverts := rel.Txn{}
+			for _, update := range wrapped.relations.V1Updates {
+				switch update.GetOperation() {
+				case v1.RelationshipUpdate_OPERATION_TOUCH:
+					reverts.Delete(*rel.FromV1Proto(update.Relationship))
+				case v1.RelationshipUpdate_OPERATION_DELETE:
+					reverts.Create(*rel.FromV1Proto(update.Relationship))
+				case v1.RelationshipUpdate_OPERATION_CREATE:
+					reverts.Delete(*rel.FromV1Proto(update.Relationship))
+				}
+			}
+			_, revertErr := z.spice.Write(context.Background(), reverts)
+			if revertErr != nil {
+				z.logger.Error("failed to revert authz transaction after error", "revertErr", revertErr, "originalErr", err)
+			}
+			return err
+		}
+		return nil
+	}, opts)
+}
+
+func (z *AuthzTX) Ping(ctx context.Context) (time.Duration, error) {
+	return z.parent.Ping(ctx)
+}
+
+func (z *AuthzTX) Close() error {
+	return z.parent.Close()
+}
+
+func (z *AuthzTX) InTx(f func(database.Store) error, _ *pgx.TxOptions) error {
+	// Already in a transaction
+	return f(z)
 }
