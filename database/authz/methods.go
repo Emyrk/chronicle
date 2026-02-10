@@ -30,6 +30,10 @@ func (z *AuthzTX) Write(ctx context.Context, txn rel.Txn) (writtenAtRevision str
 	return zed, nil
 }
 
+func (z *Authz) Delete(ctx context.Context, filter *rel.PreconditionedFilter) error {
+	return z.spice.Delete(ctx, filter)
+}
+
 type interceptor struct {
 	writer
 	store database.Store

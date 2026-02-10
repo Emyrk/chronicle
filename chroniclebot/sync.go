@@ -3,28 +3,31 @@ package chroniclebot
 import (
 	"context"
 	"errors"
+	"fmt"
 	"time"
 
 	"github.com/Emyrk/chronicle/database"
+	"github.com/Emyrk/chronicle/database/authz"
 	"github.com/Emyrk/chronicle/database/authz/policy"
 	"github.com/Emyrk/chronicle/internal/slice"
 	"github.com/authzed/gochugaru/rel"
 	"github.com/google/uuid"
 )
 
-func (bot *Bot) SyncDiscordUser(ctx context.Context, tx database.Store, discordID string, userID uuid.UUID) (retErr error) {
+func (bot *Bot) SyncDiscordUser(ctx context.Context, zed *authz.Authz, discordID string, userID uuid.UUID) (retErr error) {
 	b := policy.New()
-	c := b.GlobalChronicle()
+	gChron := b.GlobalChronicle()
 	usr := b.User(userID)
 
 	// Create a filter to remove all their existing roles from the global namespace
-	f := rel.NewFilter(c.Object().ObjectType, c.Object().ObjectId, "")
+	f := rel.NewFilter(gChron.Object().ObjectType, gChron.Object().ObjectId, "")
 	f.WithSubjectFilter(usr.Object().ObjectType, usr.Object().ObjectId, "")
-	z.spice.Delete(rel.NewPreconditionedFilter(f))
+	err := zed.Delete(ctx, rel.NewPreconditionedFilter(f))
+	if err != nil {
+		return fmt.Errorf("zed.Delete: %w", err)
+	}
 
 	// Add back roles based on their current discord roles
-	var txn rel.Txn
-	var _ rel.Txn
 
 	member, err := bot.GetGuildMember(bot.ChronicleGuildID(), discordID)
 	if err != nil {
@@ -33,7 +36,8 @@ func (bot *Bot) SyncDiscordUser(ctx context.Context, tx database.Store, discordI
 
 	roles := make([]string, 0)
 	defer func() {
-		_, retErr = tx.UpdateUserRoles(ctx, database.UpdateUserRolesParams{
+		// TODO: DELETE THIS
+		_, retErr = zed.UpdateUserRoles(ctx, database.UpdateUserRolesParams{
 			ID:        userID,
 			Roles:     roles,
 			UpdatedAt: database.Timestamptz(time.Now()),
@@ -45,18 +49,26 @@ func (bot *Bot) SyncDiscordUser(ctx context.Context, tx database.Store, discordI
 		return errors.New("must be in the discord server to use chronicle")
 	}
 
+	var txn rel.Txn
 	for _, roleID := range member.Roles {
 		switch roleID {
 		case "1468405974506410110": // Alpha tester
 			roles = append(roles, string(database.UserRolesAlphaTester))
+			gChron.Upload_capable(usr)
 		case "1467892674743898297": // Owner
 			roles = append(roles, string(database.UserRolesTechnicalAdmin), string(database.UserRolesAlphaTester))
-		case "1467890007854551120":
+			gChron.Admin(usr)
+		case "1467890007854551120": // Admin
 			roles = append(roles, string(database.UserRolesAdmin), string(database.UserRolesAlphaTester))
+			gChron.Moderator(usr)
 		}
 	}
 
 	roles = slice.Unique(roles)
+	_, err = zed.Write(ctx, txn)
+	if err != nil {
+		return fmt.Errorf("zed.Write: %w", err)
+	}
 
 	return nil
 }

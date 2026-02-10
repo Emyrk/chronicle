@@ -6,6 +6,7 @@ import (
 
 	"github.com/Emyrk/chronicle/chroniclebot"
 	"github.com/Emyrk/chronicle/internal/services"
+	"github.com/Emyrk/chronicle/internal/services/serviceauthz"
 	"github.com/Emyrk/chronicle/internal/services/servicedbstore"
 	"github.com/Emyrk/chronicle/internal/services/servicelogger"
 
@@ -45,6 +46,7 @@ func (s *Service) DependsOn() []string {
 	return []string{
 		servicelogger.OnLogger(),
 		servicedbstore.OnDatabaseStore(),
+		serviceauthz.OnAuthz(),
 	}
 }
 

@@ -8,7 +8,7 @@ import (
 	"sync"
 
 	"github.com/Emyrk/chronicle/database"
-	"github.com/Emyrk/chronicle/database/spice"
+	"github.com/Emyrk/chronicle/database/authz"
 	"github.com/bwmarrin/discordgo"
 )
 
@@ -17,9 +17,9 @@ type Config struct {
 	// Token is the bot token from Discord Developer Portal.
 	Token string
 	// GuildID is your Discord server ID. If empty, commands are registered globally.
-	GuildID string
-	DB      database.Store
-	Authz   *spice.Spice
+	GuildID    string
+	DB         database.Store
+	Authorizer *authz.Authz
 }
 
 // Bot represents a Discord bot instance.
@@ -63,10 +63,10 @@ func New(ctx context.Context, logger *slog.Logger, config Config) (*Bot, error) 
 		return nil, fmt.Errorf("fetch guild roles: %w", err)
 	}
 
-  err = bot.Open(ctx)
-  if err != nil {
-    return nil, fmt.Errorf("open bot session: %w", err)
-  }
+	err = bot.Open(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("open bot session: %w", err)
+	}
 
 	return bot, nil
 }

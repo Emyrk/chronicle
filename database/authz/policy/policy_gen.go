@@ -51,6 +51,14 @@ func (obj *ObjChronicle) RelationAdmin() string {
 	return "admin"
 }
 
+func (obj *ObjChronicle) RelationModerator() string {
+	return "moderator"
+}
+
+func (obj *ObjChronicle) RelationUpload_capable() string {
+	return "upload_capable"
+}
+
 type ChronicleRelates struct {
 	obj *ObjChronicle
 	rel Relationship
@@ -82,6 +90,42 @@ func (obj *ObjChronicle) Admin(subs ...*ObjUser) *ObjChronicle {
 func (r *ChronicleRelates) Admin(subs ...*ObjUser) *ChronicleRelates {
 	for _, sub := range subs {
 		r.rel.Add("admin", sub.src.Obj, "")
+	}
+	return r
+}
+
+// Moderator schema.zed:12
+// Relationship: chronicle:<id>#moderator@user:<id>
+// Uses Touch operation implicitly. For Delete/Create, use obj.Delete().Moderator() etc.
+func (obj *ObjChronicle) Moderator(subs ...*ObjUser) *ObjChronicle {
+	for _, sub := range subs {
+		obj.src.Touch().Add("moderator", sub.src.Obj, "")
+	}
+	return obj
+}
+
+// Moderator on Relates uses the specified operation (Touch/Create/Delete)
+func (r *ChronicleRelates) Moderator(subs ...*ObjUser) *ChronicleRelates {
+	for _, sub := range subs {
+		r.rel.Add("moderator", sub.src.Obj, "")
+	}
+	return r
+}
+
+// Upload_capable schema.zed:13
+// Relationship: chronicle:<id>#upload_capable@user:<id>
+// Uses Touch operation implicitly. For Delete/Create, use obj.Delete().Upload_capable() etc.
+func (obj *ObjChronicle) Upload_capable(subs ...*ObjUser) *ObjChronicle {
+	for _, sub := range subs {
+		obj.src.Touch().Add("upload_capable", sub.src.Obj, "")
+	}
+	return obj
+}
+
+// Upload_capable on Relates uses the specified operation (Touch/Create/Delete)
+func (r *ChronicleRelates) Upload_capable(subs ...*ObjUser) *ChronicleRelates {
+	for _, sub := range subs {
+		r.rel.Add("upload_capable", sub.src.Obj, "")
 	}
 	return r
 }
@@ -149,7 +193,7 @@ func (obj *ObjInstance) Create() *InstanceRelates {
 	return &InstanceRelates{obj: obj, rel: obj.src.Create()}
 }
 
-// Raid_log schema.zed:37
+// Raid_log schema.zed:38
 // Relationship: instance:<id>#raid_log@raid_log:<id>
 // Uses Touch operation implicitly. For Delete/Create, use obj.Delete().Raid_log() etc.
 func (obj *ObjInstance) Raid_log(subs ...*ObjRaid_log) *ObjInstance {
@@ -167,7 +211,7 @@ func (r *InstanceRelates) Raid_log(subs ...*ObjRaid_log) *InstanceRelates {
 	return r
 }
 
-// Tagged_by schema.zed:38
+// Tagged_by schema.zed:39
 // Relationship: instance:<id>#tagged_by@user:<id>
 // Uses Touch operation implicitly. For Delete/Create, use obj.Delete().Tagged_by() etc.
 func (obj *ObjInstance) Tagged_by(subs ...*ObjUser) *ObjInstance {
@@ -334,7 +378,7 @@ func (obj *ObjRaid_log) Create() *Raid_logRelates {
 	return &Raid_logRelates{obj: obj, rel: obj.src.Create()}
 }
 
-// Chronicle schema.zed:21
+// Chronicle schema.zed:23
 // Relationship: raid_log:<id>#chronicle@chronicle:<id>
 // Uses Touch operation implicitly. For Delete/Create, use obj.Delete().Chronicle() etc.
 func (obj *ObjRaid_log) Chronicle(subs ...*ObjChronicle) *ObjRaid_log {
@@ -352,7 +396,7 @@ func (r *Raid_logRelates) Chronicle(subs ...*ObjChronicle) *Raid_logRelates {
 	return r
 }
 
-// Uploader schema.zed:22
+// Uploader schema.zed:24
 // Relationship: raid_log:<id>#uploader@user:<id>
 // Uses Touch operation implicitly. For Delete/Create, use obj.Delete().Uploader() etc.
 func (obj *ObjRaid_log) Uploader(subs ...*ObjUser) *ObjRaid_log {
@@ -370,7 +414,7 @@ func (r *Raid_logRelates) Uploader(subs ...*ObjUser) *Raid_logRelates {
 	return r
 }
 
-// PublicWildcard schema.zed:25
+// PublicWildcard schema.zed:27
 // Relationship: raid_log:<id>#public@user:*
 func (obj *ObjRaid_log) PublicWildcard() *ObjRaid_log {
 	obj.src.Touch().Add("public", &v1.ObjectReference{
@@ -520,7 +564,7 @@ func (obj *ObjRiver_queue) Create() *River_queueRelates {
 	return &River_queueRelates{obj: obj, rel: obj.src.Create()}
 }
 
-// Chronicle schema.zed:15
+// Chronicle schema.zed:17
 // Relationship: river_queue:<id>#chronicle@chronicle:<id>
 // Uses Touch operation implicitly. For Delete/Create, use obj.Delete().Chronicle() etc.
 func (obj *ObjRiver_queue) Chronicle(subs ...*ObjChronicle) *ObjRiver_queue {

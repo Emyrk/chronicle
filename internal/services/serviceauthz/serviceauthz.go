@@ -68,8 +68,8 @@ func (s *Service) Start(ctx context.Context) error {
 	return nil
 }
 
-func (s *Service) Close(ctx context.Context) error {
-	return s.z.Close(ctx)
+func (s *Service) Close(_ context.Context) error {
+	return s.z.Close()
 }
 
 func (s *Service) Options() serpent.OptionSet {
