@@ -1,6 +1,6 @@
 module github.com/Emyrk/chronicle
 
-go 1.25.5
+go 1.25.7
 
 require (
 	github.com/Gophercraft/core v0.5.2-0.20240410205646-00865bbdb78a
@@ -8,7 +8,7 @@ require (
 	github.com/KromDaniel/regengo v0.5.3
 	github.com/authzed/authzed-go v1.7.0
 	github.com/authzed/grpcutil v0.0.0-20240123194739-2ea1e3d2d98b
-	github.com/authzed/spicedb v1.48.0
+	github.com/authzed/spicedb v1.49.1
 	github.com/aws/aws-sdk-go-v2 v1.41.1
 	github.com/aws/aws-sdk-go-v2/config v1.32.7
 	github.com/aws/aws-sdk-go-v2/credentials v1.19.7
@@ -89,6 +89,7 @@ require (
 	github.com/Azure/go-autorest/logger v0.2.2 // indirect
 	github.com/Azure/go-autorest/tracing v0.6.1 // indirect
 	github.com/BurntSushi/toml v1.5.0 // indirect
+	github.com/Emyrk/zedgen v0.0.0-20260210133753-1207e523c117 // indirect
 	github.com/GoogleCloudPlatform/grpc-gcp-go/grpcgcp v1.5.3 // indirect
 	github.com/GoogleCloudPlatform/opentelemetry-operations-go/detectors/gcp v1.30.0 // indirect
 	github.com/IBM/pgxpoolprometheus v1.1.2 // indirect
@@ -172,7 +173,7 @@ require (
 	github.com/dop251/goja v0.0.0-20241024094426-79f3a7efcdbd // indirect
 	github.com/dprotaso/go-yit v0.0.0-20250513223454-5ece0c5aa76c // indirect
 	github.com/dustin/go-humanize v1.0.1 // indirect
-	github.com/ecordell/optgen v0.1.1 // indirect
+	github.com/ecordell/optgen v0.2.3 // indirect
 	github.com/emicklei/go-restful/v3 v3.12.2 // indirect
 	github.com/emirpasic/gods v1.18.1 // indirect
 	github.com/envoyproxy/go-control-plane/envoy v1.35.0 // indirect
@@ -433,6 +434,7 @@ require (
 
 tool (
 	connectrpc.com/connect/cmd/protoc-gen-connect-go
+	github.com/Emyrk/zedgen/cmd/zedgen
 	github.com/abice/go-enum
 	github.com/google/ko
 	go.uber.org/mock/mockgen

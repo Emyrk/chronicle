@@ -146,13 +146,7 @@ func (z *interceptor) InsertStampedYoutubeVideo(ctx context.Context, arg databas
 }
 
 func (z *interceptor) InsertUser(ctx context.Context, arg database.InsertUserParams) (database.User, error) {
-	z.writer.Write(ctx, rel.FromObjects())
-
-	user, err := z.store.InsertUser(ctx, arg)
-	if err != nil {
-		return database.User{}, err
-	}
-	return user, nil
+	return z.store.InsertUser(ctx, arg)
 }
 
 func (z *interceptor) InsertUserAuth(ctx context.Context, arg database.InsertUserAuthParams) (database.UserAuthLink, error) {

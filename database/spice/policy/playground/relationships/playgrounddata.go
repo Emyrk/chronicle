@@ -9,7 +9,6 @@ func GenerateRelationships() {
 		// Using the global playground relationships, so we can export to yaml later.
 		platform = Playground.GlobalChronicle()
 
-
 		root = Playground.User(policy.String("root"))
 		// This is an incomplete list. Using real names to use intuitive groupings.
 		//ammar     = Playground.User(policy.String("ammar"))

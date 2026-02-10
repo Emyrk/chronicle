@@ -1,7 +1,0 @@
-definition user {}
-
-definition group {
-	relation member: user | group#member | user:*
-
-	permission membership = member
-}
