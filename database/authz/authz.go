@@ -52,6 +52,10 @@ func New(ctx context.Context, opts Options) (*Authz, error) {
 	}, nil
 }
 
+func (a *Authz) Close(ctx context.Context) error {
+	return nil
+}
+
 func (a *Authz) Foo(ctx context.Context) {
 	var txn rel.Txn
 	//txn.Touch(rel.FromTuple())
