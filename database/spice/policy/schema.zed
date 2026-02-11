@@ -8,37 +8,41 @@ definition user {}
 
 // Top level site definition for site-wide overrides (administration)
 definition chronicle {
-	relation admin: user
+  relation admin: user
+  relation moderator: user
+  relation upload_capable: user
+
+  permission admin_queues = admin
+  permission upload_log = upload_capable
 }
 
 definition river_queue {
-	relation chronicle: chronicle
+  relation chronicle: chronicle
 
-	permission access = chronicle->admin
+  permission access = chronicle->admin_queues
 }
 
 definition raid_log {
-	relation chronicle: chronicle
-    relation uploader: user
-    
-    // Visibility settings (only one should be set)
-    relation public: user:*  
-    
-    // View: uploader, guild members (if guild-linked), or public
-    permission view = public 
+  relation chronicle: chronicle
+  relation uploader: user
 
-	permission reparse = chronicle->admin
+  // Visibility settings (only one should be set)
+  relation public: user:*
+
+  // View: uploader, guild members (if guild-linked), or public
+  permission view = public
+  permission reparse = chronicle->admin
     
-    // Delete: uploader or guild admin
-    permission delete = uploader 
+  // Delete: uploader or guild admin
+  permission delete = uploader 
 }
 
 definition instance {
-    relation raid_log: raid_log
-    relation tagged_by: user
-    
-    // Inherit permissions from parent raid log
-    permission view = raid_log->view
-    permission edit = raid_log->edit
-    permission tag = raid_log->edit + tagged_by
+  relation raid_log: raid_log
+  relation tagged_by: user
+  
+  // Inherit permissions from parent raid log
+  permission view = raid_log->view
+  permission edit = raid_log->edit
+  permission tag = raid_log->edit + tagged_by
 }

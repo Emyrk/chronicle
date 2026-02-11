@@ -4,6 +4,7 @@ import (
 	"context"
 
 	"github.com/Emyrk/chronicle/database"
+	"github.com/authzed/gochugaru/consistency"
 	"github.com/authzed/gochugaru/rel"
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgtype"
@@ -38,6 +39,13 @@ func (z *AuthzTX) Write(ctx context.Context, txn rel.Txn) (writtenAtRevision str
 
 func (z *Authz) Delete(ctx context.Context, filter *rel.PreconditionedFilter) error {
 	return z.spice.Delete(ctx, filter)
+}
+
+func (z *Authz) Check(ctx context.Context, cs *consistency.Strategy, rs ...rel.Interface) ([]bool, error) {
+	if cs == nil {
+		cs = consistency.MinLatency()
+	}
+	return z.spice.Check(ctx, cs, rs...)
 }
 
 type interceptor struct {

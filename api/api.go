@@ -44,6 +44,7 @@ type API struct {
 	Auth       *chronauth.Service
 	Chronicle  *chronicle.Chronicle
 	Queues     *riverqueue.Queues
+	Zed        *authz.Authz
 }
 
 func New(ctx context.Context, opts Options) (*API, error) {
@@ -72,6 +73,7 @@ func New(ctx context.Context, opts Options) (*API, error) {
 		Auth:       service,
 		Chronicle:  opts.Chronicle,
 		Queues:     opts.RiverQueue,
+		Zed:        opts.Zed,
 	}, nil
 }
 
@@ -98,6 +100,7 @@ func (api *API) Routes() chi.Router {
 				api.Auth.MustRoles(),
 			)
 			r.Get("/whoami", api.WhoAmI)
+			r.Get("/authcheck", api.checkAuthorization)
 		})
 
 		// Admin routes - require admin or technical_admin role
