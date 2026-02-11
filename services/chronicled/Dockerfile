@@ -11,7 +11,7 @@ COPY frontend/chronicle/ ./
 RUN pnpm build
 
 # Stage 2: Build Go binary
-FROM golang:1.25.5-alpine3.22 AS backend
+FROM golang:1.25.7-alpine3.22 AS backend
 
 # Build args for version info (passed from CI/CD or computed at build time)
 ARG GIT_TAG=unknown
