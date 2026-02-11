@@ -91,7 +91,7 @@ func (z *Authz) wrap(tx database.Store) *AuthzTX {
 
 	spiceTx.interceptor = &interceptor{
 		Authorizer: spiceTx,
-		store:      spiceTx,
+		store:      tx,
 	}
 
 	return spiceTx
