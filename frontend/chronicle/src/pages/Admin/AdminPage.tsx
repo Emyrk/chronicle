@@ -56,7 +56,7 @@ function UserRow({ user, onResync, isSyncing }: { user: User; onResync: () => vo
             <span className="text-xs text-muted-foreground truncate">{user.email}</span>
           </div>
           <div className="flex items-center gap-2 mt-1">
-            {user.roles.length === 0 ? (
+            {!user.roles || user.roles.length === 0 ? (
               <span className="text-xs text-muted-foreground italic">No roles</span>
             ) : (
               user.roles.map((role) => <RoleBadge key={role} role={role} />)

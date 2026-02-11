@@ -1,13 +1,15 @@
 package authz
 
 import (
-  "context"
+	"context"
+	"fmt"
 
-  "github.com/Emyrk/chronicle/database"
-  "github.com/google/uuid"
-  "github.com/jackc/pgx/v5/pgtype"
+	"github.com/Emyrk/chronicle/database"
+	"github.com/Emyrk/chronicle/database/authz/policy"
+	"github.com/authzed/gochugaru/rel"
+	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5/pgtype"
 )
-
 
 type interceptor struct {
 	Authorizer
@@ -23,6 +25,12 @@ func (z *interceptor) DeleteThisQuery(ctx context.Context) error {
 }
 
 func (z *interceptor) DeleteWoWLogGroup(ctx context.Context, id uuid.UUID) error {
+	b := policy.New().Raid_log(id).Object()
+	f := rel.NewFilter(b.Typ, b.ID, "")
+	err := z.Delete(ctx, rel.NewPreconditionedFilter(f))
+	if err != nil {
+		return fmt.Errorf("delete authz relations: %w", err)
+	}
 	return z.store.DeleteWoWLogGroup(ctx, id)
 }
 
@@ -75,6 +83,15 @@ func (z *interceptor) InsertEncounterCharacterFights(ctx context.Context, arg []
 }
 
 func (z *interceptor) InsertInstance(ctx context.Context, arg database.InsertInstanceParams) (database.LogInstance, error) {
+	b := policy.New()
+	b.Instance(arg.ID).
+		PublicWildcard().
+		Raid_log(b.Raid_log(arg.LogGroupID))
+
+	_, err := z.Write(ctx, *b.Txn())
+	if err != nil {
+		return database.LogInstance{}, err
+	}
 	return z.store.InsertInstance(ctx, arg)
 }
 
@@ -115,6 +132,15 @@ func (z *interceptor) InsertUserAuthSession(ctx context.Context, arg database.In
 }
 
 func (z *interceptor) InsertWoWLogGroup(ctx context.Context, arg database.InsertWoWLogGroupParams) (database.WoWLogGroup, error) {
+	b := policy.New()
+	b.Raid_log(arg.ID).
+		Uploader(b.User(arg.Owner)).
+		Chronicle(b.GlobalChronicle())
+
+	_, err := z.Write(ctx, *b.Txn())
+	if err != nil {
+		return database.WoWLogGroup{}, err
+	}
 	return z.store.InsertWoWLogGroup(ctx, arg)
 }
 

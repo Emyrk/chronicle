@@ -17,7 +17,7 @@ func Forbidden(rw http.ResponseWriter, err error) {
 	}
 
 	Write(context.Background(), rw, http.StatusForbidden, chroniclesdk.Response{
-		Message: "An internal server error occurred.",
+		Message: "Forbidden: you don't have permission to access this resource.",
 		Detail:  details,
 	})
 }

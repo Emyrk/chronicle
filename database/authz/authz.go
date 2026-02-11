@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"log/slog"
 	"strings"
+	"sync/atomic"
 	"time"
 
 	"github.com/Emyrk/chronicle/database"
@@ -29,6 +30,7 @@ type Authz struct {
 	logger *slog.Logger
 	db     database.Store
 
+	zedToken atomic.Pointer[string]
 	*interceptor
 }
 

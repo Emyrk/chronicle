@@ -4,23 +4,20 @@ import (
 	"fmt"
 	"net/http"
 
-	"github.com/Emyrk/chronicle/api/chronauth"
 	"github.com/Emyrk/chronicle/api/chroniclesdk"
 	"github.com/Emyrk/chronicle/api/httpapi"
-	"github.com/Emyrk/chronicle/database/authz/policy"
+	"github.com/Emyrk/chronicle/database/authz"
 	"github.com/authzed/gochugaru/rel"
 )
 
 func (api *API) checkAuthorization(rw http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
-	claims := chronauth.MustAuthenticatedClaims(ctx)
+	actor, _ := authz.ActorFromContext(ctx)
 
 	var params chroniclesdk.AuthorizationRequest
 	if !httpapi.Read(ctx, rw, r, &params) {
 		return
 	}
-
-	usr := policy.New().User(claims.Subject)
 
 	// Prevent abuse from this endpoint.
 	const maxChecks = 25
@@ -76,8 +73,8 @@ func (api *API) checkAuthorization(rw http.ResponseWriter, r *http.Request) {
 				ResourceType:     objectType,
 				ResourceID:       objectID,
 				ResourceRelation: permission,
-				SubjectType:      usr.Object().Typ,
-				SubjectID:        usr.Object().ID,
+				SubjectType:      actor.Object().Typ,
+				SubjectID:        actor.Object().ID,
 			},
 		})
 	}

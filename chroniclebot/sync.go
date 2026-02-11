@@ -49,7 +49,6 @@ func (bot *Bot) SyncDiscordUser(ctx context.Context, zed authz.DatabaseAuthorize
 		return errors.New("must be in the discord server to use chronicle")
 	}
 
-	var txn rel.Txn
 	for _, roleID := range member.Roles {
 		switch roleID {
 		case "1468405974506410110": // Alpha tester
@@ -65,7 +64,8 @@ func (bot *Bot) SyncDiscordUser(ctx context.Context, zed authz.DatabaseAuthorize
 	}
 
 	roles = slice.Unique(roles)
-	_, err = zed.Write(ctx, txn)
+
+	_, err = zed.Write(ctx, *b.Txn())
 	if err != nil {
 		return fmt.Errorf("zed.Write: %w", err)
 	}

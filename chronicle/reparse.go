@@ -50,7 +50,7 @@ func (c *Chronicle) NewWorkerReLogParse() river.Worker[ArgsLogReparse] {
 
 func (w *WorkerLogReparse) Work(ctx context.Context, job *river.Job[ArgsLogReparse]) error {
 	// Clear the parsed data for the log group and re-initiate parsing
-	db := w.parent.DB
+	db := w.parent.Zed
 
 	logGroup, err := db.GetWoWLogGroupByID(ctx, job.Args.LogID)
 	if err != nil {

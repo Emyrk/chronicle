@@ -1,7 +1,9 @@
+import { useMemo } from "react";
 import { Link, useLocation } from "react-router-dom";
-import { Settings, Upload, LogOut, FileText } from "lucide-react";
+import { Settings, Upload, LogOut, FileText, Shield } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
 import { useAuth } from "@/hooks/useAuth";
+import { useAuthorizationCheck } from "@/api/queries";
 import { Button } from "../ui/button";
 import {
   NavigationMenu,
@@ -21,9 +23,19 @@ export function NavBar() {
   const location = useLocation();
   const { isAuthenticated, isLoading, logout } = useAuth();
 
+  // Check admin permission via SpiceDB
+  const authzChecks = useMemo(() => ({
+    admin: "chronicle:chronicle#admin_users",
+  }), []);
+  const { data: authz } = useAuthorizationCheck(authzChecks, {
+    enabled: isAuthenticated,
+  });
+  const isAdmin = authz?.admin ?? false;
+
   const accountMenuItems: NavItem[] = [
     { title: "My Logs", href: "/logs", icon: FileText },
     { title: "Upload", href: "/upload", icon: Upload },
+    ...(isAdmin ? [{ title: "Admin", href: "/admin", icon: Shield } as NavItem] : []),
     { title: "Settings", href: "/account/settings", icon: Settings },
     { title: "Sign Out", onClick: logout, icon: LogOut },
   ];

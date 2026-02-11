@@ -19,6 +19,7 @@ import (
 	"github.com/Emyrk/chronicle/api/httpapi"
 	"github.com/Emyrk/chronicle/chronicle/riverqueue"
 	"github.com/Emyrk/chronicle/database"
+	"github.com/Emyrk/chronicle/database/authz"
 	"github.com/Emyrk/chronicle/database/storage"
 	"github.com/Emyrk/chronicle/internal/cleanup"
 	"github.com/Emyrk/chronicle/internal/ptr"
@@ -33,24 +34,24 @@ const (
 type Chronicle struct {
 	AppContext         context.Context
 	Storage            storage.ObjectStorage
-	DB                 database.Store
 	logger             *slog.Logger
 	TemporaryDirectory string
 	queue              *riverqueue.Queues
+	Zed                *authz.Authz
 
 	mu sync.Mutex
 }
 
 type Options struct {
 	Storage storage.ObjectStorage
-	DB      database.Store
+	Zed     *authz.Authz
 }
 
 func New(ctx context.Context, logger *slog.Logger, opts Options) (*Chronicle, error) {
 	c := &Chronicle{
 		AppContext:         ctx,
 		Storage:            opts.Storage,
-		DB:                 opts.DB,
+		Zed:                opts.Zed,
 		logger:             logger,
 		TemporaryDirectory: filepath.Join(os.TempDir(), "chronicle_uploads"),
 	}
@@ -153,7 +154,7 @@ func (c *Chronicle) UploadLogs(ctx context.Context, one, two io.Reader) (*databa
 
 	var group database.WoWLogGroup
 	// tmpFiles and hashes are the files that were uploaded now on local disk.
-	err := c.DB.InTx(func(tx database.Store) error {
+	err := c.Zed.InTx(func(tx *authz.AuthzTX) error {
 		// Insert the log grouo
 		var err error
 		group, err = tx.InsertWoWLogGroup(ctx, database.InsertWoWLogGroupParams{
@@ -201,7 +202,7 @@ func (c *Chronicle) UploadLogs(ctx context.Context, one, two io.Reader) (*databa
 		return nil, nil, err
 	}
 
-	clean.Add(func() { _ = c.DB.DeleteWoWLogGroup(ctx, group.ID) })
+	clean.Add(func() { _ = c.Zed.DeleteWoWLogGroup(ctx, group.ID) })
 
 	// Now store the logs in object storage
 	for i := range tmpIDs {
@@ -228,7 +229,7 @@ func (c *Chronicle) UploadLogs(ctx context.Context, one, two io.Reader) (*databa
 }
 
 func (c *Chronicle) WoWLogGroup(ctx context.Context, groupID uuid.UUID) (*chroniclesdk.WoWLogGroupState, error) {
-	group, err := c.DB.GetWoWLogGroupByID(ctx, groupID)
+	group, err := c.Zed.GetWoWLogGroupByID(ctx, groupID)
 	if err != nil {
 		return nil, fmt.Errorf("fetch log group: %w", err)
 	}
@@ -250,7 +251,7 @@ func (c *Chronicle) WoWLogGroup(ctx context.Context, groupID uuid.UUID) (*chroni
 }
 
 func (c *Chronicle) DeleteWoWLogGroup(ctx context.Context, logID uuid.UUID) error {
-	files, err := c.DB.GetWoWLogFilesByGroupID(ctx, logID)
+	files, err := c.Zed.GetWoWLogFilesByGroupID(ctx, logID)
 	if err != nil {
 		return fmt.Errorf("fetch log files: %w", err)
 	}
@@ -262,7 +263,7 @@ func (c *Chronicle) DeleteWoWLogGroup(ctx context.Context, logID uuid.UUID) erro
 		}
 	}
 
-	err = c.DB.DeleteWoWLogGroup(ctx, logID)
+	err = c.Zed.DeleteWoWLogGroup(ctx, logID)
 	if err != nil {
 		return fmt.Errorf("delete log group: %w", err)
 	}

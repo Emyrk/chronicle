@@ -16,7 +16,6 @@ import type {
   User as UserGenerated,
   AdminLog as AdminLogGenerated,
   Session as SessionGenerated,
-  UserRole as UserRoleGenerated,
   AuthorizationRequest as AuthorizationRequestGenerated,
   AuthorizationResponse as AuthorizationResponseGenerated,
 } from "./typesGenerated";
@@ -38,7 +37,6 @@ export type AdminLogsResponse = AdminLogsResponseGenerated;
 export type User = UserGenerated;
 export type AdminLog = AdminLogGenerated;
 export type Session = SessionGenerated;
-export type UserRole = UserRoleGenerated;
 export type AuthorizationRequest = AuthorizationRequestGenerated;
 export type AuthorizationResponse = AuthorizationResponseGenerated;
 

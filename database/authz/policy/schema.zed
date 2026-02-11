@@ -30,12 +30,9 @@ definition raid_log {
   relation chronicle: chronicle
   relation uploader: user
 
-  // Visibility settings (only one should be set)
-  relation public: user:*
-
   // View: uploader, guild members (if guild-linked), or public
-  permission view = public
-  permission reparse = chronicle->administer
+  permission view = uploader + chronicle->admin_logs
+  permission reparse = chronicle->admin_logs
     
   // Delete: uploader or guild admin
   permission delete = uploader + chronicle->admin_logs
@@ -43,10 +40,8 @@ definition raid_log {
 
 definition instance {
   relation raid_log: raid_log
-  relation tagged_by: user
+  relation public: user:*
   
   // Inherit permissions from parent raid log
-  permission view = raid_log->view
-  permission edit = raid_log->edit
-  permission tag = raid_log->edit + tagged_by
+  permission view = raid_log->view + public
 }

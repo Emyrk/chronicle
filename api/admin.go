@@ -44,7 +44,7 @@ func (a *API) AdminListUsers(w http.ResponseWriter, r *http.Request) {
 	httpapi.Write(r.Context(), w, http.StatusOK, resp)
 }
 
-// AdminResyncUserRoles re-syncs a user's roles from Discord.
+// AdminResyncUserRoles re-syncs a user's primary roles from Discord.
 // @Summary Resync user roles from Discord
 // @Tags Admin
 // @Param userID path string true "User ID"

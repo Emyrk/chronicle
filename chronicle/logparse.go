@@ -26,6 +26,7 @@ import (
 	"github.com/Emyrk/chronicle/combatlog/parser/vanilla/state/encounters/period"
 	"github.com/Emyrk/chronicle/combatlog/parser/vanilla/state/unitdb"
 	"github.com/Emyrk/chronicle/database"
+	"github.com/Emyrk/chronicle/database/authz"
 	"github.com/Emyrk/chronicle/database/dbstatic"
 	"github.com/Emyrk/chronicle/internal/leveledlog"
 	"github.com/Emyrk/chronicle/internal/slice"
@@ -72,9 +73,9 @@ type WorkerLogParse struct {
 }
 
 func (c *Chronicle) NewWorkerLogParse() river.Worker[ArgsLogParse] {
-  return &WorkerLogParse{
-    parent: c,
-  }
+	return &WorkerLogParse{
+		parent: c,
+	}
 }
 
 func (w *WorkerLogParse) loadAndSortFile(ctx context.Context, fileID uuid.UUID) (io.Reader, *realmclock.Info, error) {
@@ -104,7 +105,7 @@ func (w *WorkerLogParse) loadAndSortFile(ctx context.Context, fileID uuid.UUID) 
 }
 
 func (w *WorkerLogParse) Work(ctx context.Context, job *river.Job[ArgsLogParse]) error {
-	db := w.parent.DB
+	db := w.parent.Zed
 
 	files, err := db.GetWoWLogFilesByGroupID(ctx, job.Args.LogID)
 	if err != nil {
@@ -183,7 +184,7 @@ func (w *WorkerLogParse) Work(ctx context.Context, job *river.Job[ArgsLogParse])
 			}
 		}
 
-		err = db.InTx(func(tx database.Store) error {
+		err = db.InTx(func(tx *authz.AuthzTX) error {
 			insertInstanceParams := database.InsertInstanceParams{
 				ID:         instanceID,
 				RealmID:    realmID,

@@ -271,6 +271,10 @@ func (obj *ObjInstance) AsSubject() *v1.SubjectReference {
 	}
 }
 
+func (obj *ObjInstance) RelationPublic() string {
+	return "public"
+}
+
 func (obj *ObjInstance) RelationRaid_log() string {
 	return "raid_log"
 }
@@ -308,7 +312,7 @@ func (obj *ObjInstance) Create() *InstanceRelates {
 	return &InstanceRelates{obj: obj, rel: obj.src.Create()}
 }
 
-// Raid_log schema.zed:45
+// Raid_log schema.zed:42
 // Relationship: instance:<id>#raid_log@raid_log:<id>
 // Uses Touch operation implicitly. For Delete/Create, use obj.Delete().Raid_log() etc.
 func (obj *ObjInstance) Raid_log(subs ...*ObjRaid_log) *ObjInstance {
@@ -326,7 +330,7 @@ func (r *InstanceRelates) Raid_log(subs ...*ObjRaid_log) *InstanceRelates {
 	return r
 }
 
-// Tagged_by schema.zed:46
+// Tagged_by schema.zed:43
 // Relationship: instance:<id>#tagged_by@user:<id>
 // Uses Touch operation implicitly. For Delete/Create, use obj.Delete().Tagged_by() etc.
 func (obj *ObjInstance) Tagged_by(subs ...*ObjUser) *ObjInstance {
@@ -341,6 +345,25 @@ func (r *InstanceRelates) Tagged_by(subs ...*ObjUser) *InstanceRelates {
 	for _, sub := range subs {
 		r.rel.Add("tagged_by", sub.src.Obj, "")
 	}
+	return r
+}
+
+// PublicWildcard schema.zed:44
+// Relationship: instance:<id>#public@user:*
+func (obj *ObjInstance) PublicWildcard() *ObjInstance {
+	obj.src.Touch().Add("public", &v1.ObjectReference{
+		ObjectType: "user",
+		ObjectId:   "*",
+	}, "")
+	return obj
+}
+
+// PublicWildcard on Relates uses the specified operation
+func (r *InstanceRelates) PublicWildcard() *InstanceRelates {
+	r.rel.Add("public", &v1.ObjectReference{
+		ObjectType: "user",
+		ObjectId:   "*",
+	}, "")
 	return r
 }
 
@@ -462,10 +485,6 @@ func (obj *ObjRaid_log) RelationChronicle() string {
 	return "chronicle"
 }
 
-func (obj *ObjRaid_log) RelationPublic() string {
-	return "public"
-}
-
 func (obj *ObjRaid_log) RelationUploader() string {
 	return "uploader"
 }
@@ -535,25 +554,6 @@ func (r *Raid_logRelates) Uploader(subs ...*ObjUser) *Raid_logRelates {
 	return r
 }
 
-// PublicWildcard schema.zed:34
-// Relationship: raid_log:<id>#public@user:*
-func (obj *ObjRaid_log) PublicWildcard() *ObjRaid_log {
-	obj.src.Touch().Add("public", &v1.ObjectReference{
-		ObjectType: "user",
-		ObjectId:   "*",
-	}, "")
-	return obj
-}
-
-// PublicWildcard on Relates uses the specified operation
-func (r *Raid_logRelates) PublicWildcard() *Raid_logRelates {
-	r.rel.Add("public", &v1.ObjectReference{
-		ObjectType: "user",
-		ObjectId:   "*",
-	}, "")
-	return r
-}
-
 // CanView_Chronicle checks if the subject has view permission
 // // Object: raid_log:<id>
 func (obj *ObjRaid_log) CanView_Chronicle(sub *ObjChronicle) rel.Relationship {
@@ -584,7 +584,7 @@ func (obj *ObjRaid_log) CanView_User(sub *ObjUser) rel.Relationship {
 
 // CanReparse_Chronicle checks if the subject has reparse permission
 // // Object: raid_log:<id>
-// Schema: permission reparse = chronicle->administer
+// Schema: permission reparse = chronicle->admin_logs
 func (obj *ObjRaid_log) CanReparse_Chronicle(sub *ObjChronicle) rel.Relationship {
 	r, s := obj.src.Obj, sub.src
 	return rel.Relationship{
@@ -599,7 +599,7 @@ func (obj *ObjRaid_log) CanReparse_Chronicle(sub *ObjChronicle) rel.Relationship
 
 // CanReparse_User checks if the subject has reparse permission
 // // Object: raid_log:<id>
-// Schema: permission reparse = chronicle->administer
+// Schema: permission reparse = chronicle->admin_logs
 func (obj *ObjRaid_log) CanReparse_User(sub *ObjUser) rel.Relationship {
 	r, s := obj.src.Obj, sub.src
 	return rel.Relationship{

@@ -20,8 +20,22 @@ type DatabaseAuthorizer interface {
 	database.StoreQueries
 }
 
+func (z *Authz) DefaultConsistencyStrategy() *consistency.Strategy {
+	if token := z.zedToken.Load(); token != nil {
+		return consistency.AtLeast(*token)
+	}
+	return consistency.Full()
+}
+
 func (z *Authz) Write(ctx context.Context, txn rel.Txn) (writtenAtRevision string, err error) {
-	return z.spice.Write(ctx, txn)
+	token, err := z.spice.Write(ctx, txn)
+	if err != nil {
+		return "", err
+	}
+
+	z.zedToken.Store(&token)
+
+	return token, nil
 }
 
 func (z *AuthzTX) Write(ctx context.Context, txn rel.Txn) (writtenAtRevision string, err error) {
@@ -47,14 +61,14 @@ func (z *AuthzTX) Delete(ctx context.Context, filter *rel.PreconditionedFilter) 
 
 func (z *Authz) CheckOne(ctx context.Context, cs *consistency.Strategy, rs rel.Interface) (bool, error) {
 	if cs == nil {
-		cs = consistency.MinLatency()
+		cs = z.DefaultConsistencyStrategy()
 	}
 	return z.spice.CheckOne(ctx, cs, rs)
 }
 
 func (z *Authz) Check(ctx context.Context, cs *consistency.Strategy, rs ...rel.Interface) ([]bool, error) {
 	if cs == nil {
-		cs = consistency.MinLatency()
+		cs = z.DefaultConsistencyStrategy()
 	}
 	return z.spice.Check(ctx, cs, rs...)
 }
@@ -69,7 +83,7 @@ func (z *Authz) UserChronicleRoles(ctx context.Context, user uuid.UUID) ([]strin
 	f.WithSubjectFilter(usr.Object().Typ, usr.Object().ID, "")
 
 	var roles []string
-	for r, err := range z.spice.ReadRelationships(ctx, consistency.MinLatency(), f) {
+	for r, err := range z.spice.ReadRelationships(ctx, z.DefaultConsistencyStrategy(), f) {
 		if err != nil {
 			return nil, err
 		}

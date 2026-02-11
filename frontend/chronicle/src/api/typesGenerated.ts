@@ -170,6 +170,7 @@ export type RiverJobState = string;
 export interface Session {
     readonly user_id: string;
     readonly session_id: string;
+    readonly roles: readonly string[];
 }
 
 // From chroniclesdk/user.go

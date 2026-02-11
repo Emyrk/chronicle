@@ -5,7 +5,7 @@ import (
 
 	"github.com/Emyrk/chronicle/chronicle"
 	"github.com/Emyrk/chronicle/internal/services"
-	"github.com/Emyrk/chronicle/internal/services/servicedbstore"
+	"github.com/Emyrk/chronicle/internal/services/serviceauthz"
 	"github.com/Emyrk/chronicle/internal/services/servicelogger"
 	"github.com/Emyrk/chronicle/internal/services/servicestorage"
 
@@ -42,19 +42,19 @@ func (s *Service) Name() string {
 func (s *Service) DependsOn() []string {
 	return []string{
 		servicelogger.OnLogger(),
-		servicedbstore.OnDatabaseStore(),
+		serviceauthz.OnAuthz(),
 		servicestorage.OnStorage(),
 	}
 }
 
 func (s *Service) Start(ctx context.Context) error {
 	logger := servicelogger.Logger(s.broker)
-	db := servicedbstore.DatabaseStore(s.broker)
 	st := servicestorage.Storage(s.broker)
+	zed := serviceauthz.Authz(s.broker)
 
 	c, err := chronicle.New(ctx, logger, chronicle.Options{
 		Storage: st,
-		DB:      db,
+		Zed:     zed,
 	})
 	if err != nil {
 		return err
