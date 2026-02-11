@@ -2,14 +2,14 @@ package api
 
 import (
 	"net/http"
-	"slices"
 
 	"github.com/Emyrk/chronicle/api/chronauth"
 	"github.com/Emyrk/chronicle/api/chroniclesdk"
 	"github.com/Emyrk/chronicle/api/db2sdk"
 	"github.com/Emyrk/chronicle/api/httpapi"
 	"github.com/Emyrk/chronicle/api/httpmw"
-	"github.com/Emyrk/chronicle/database"
+	"github.com/Emyrk/chronicle/database/authz"
+	"github.com/Emyrk/chronicle/database/authz/policy"
 	"github.com/Emyrk/chronicle/internal/slice"
 )
 
@@ -36,7 +36,12 @@ func (api *API) WoWLogGroups(w http.ResponseWriter, r *http.Request) {
 func (api *API) WoWLogGroup(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 	logID := httpmw.LogID(ctx)
-	user, _ := chronauth.AuthenticatedUser(r.Context())
+	actor, _ := authz.ActorFromContext(ctx)
+	ok, err := api.Zed.CheckOne(ctx, nil, policy.New().Raid_log(logID).CanView_User(actor))
+	if !ok || err != nil {
+		httpapi.Forbidden(w, err)
+		return
+	}
 
 	resp, err := api.Chronicle.WoWLogGroup(ctx, logID)
 	if err != nil {
@@ -51,51 +56,21 @@ func (api *API) WoWLogGroup(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	canView := slices.Contains(user.Roles, database.UserRolesAdmin) ||
-		slices.Contains(user.Roles, database.UserRolesTechnicalAdmin) ||
-		resp.Owner == user.ID
-	if !canView {
-		httpapi.Write(ctx, w, http.StatusForbidden, chroniclesdk.Response{
-			Message: "You do not have permission to view this log group",
-		})
-		return
-	}
-
 	httpapi.Write(ctx, w, http.StatusOK, resp)
 }
 
 func (api *API) WoWLogDeleteGroup(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 	logID := httpmw.LogID(ctx)
-	user, ok := chronauth.AuthenticatedUser(ctx)
-	if !ok {
-		http.Error(w, "unauthorized", http.StatusUnauthorized)
+	actor, _ := authz.ActorFromContext(ctx)
+
+	ok, err := api.Zed.CheckOne(ctx, nil, policy.New().Raid_log(logID).CanDelete_User(actor))
+	if err != nil || !ok {
+		httpapi.Forbidden(w, err)
 		return
 	}
 
-	canDelete := slice.Contains(user.Roles, database.UserRolesAdmin) ||
-		slice.Contains(user.Roles, database.UserRolesTechnicalAdmin)
-
-	if !canDelete {
-		group, err := api.Chronicle.WoWLogGroup(ctx, logID)
-		if err != nil {
-			httpapi.HandleResponseError(ctx, w, err, httpapi.APIError{
-				Response: chroniclesdk.Response{
-					Message: "Failed to fetch log group",
-					Detail:  err.Error(),
-				},
-			})
-			return
-		}
-		if group.Owner != user.ID {
-			httpapi.Write(ctx, w, http.StatusForbidden, chroniclesdk.Response{
-				Message: "You do not have permission to delete this log group",
-			})
-			return
-		}
-	}
-
-	err := api.Chronicle.DeleteWoWLogGroup(ctx, logID)
+	err = api.Chronicle.DeleteWoWLogGroup(ctx, logID)
 	if err != nil {
 		httpapi.HandleResponseError(ctx, w, err, httpapi.APIError{
 			Response: chroniclesdk.Response{

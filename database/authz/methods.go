@@ -1,52 +1,13 @@
 package authz
 
 import (
-	"context"
+  "context"
 
-	"github.com/Emyrk/chronicle/database"
-	"github.com/authzed/gochugaru/consistency"
-	"github.com/authzed/gochugaru/rel"
-	"github.com/google/uuid"
-	"github.com/jackc/pgx/v5/pgtype"
+  "github.com/Emyrk/chronicle/database"
+  "github.com/google/uuid"
+  "github.com/jackc/pgx/v5/pgtype"
 )
 
-type Authorizer interface {
-	Write(ctx context.Context, txn rel.Txn) (writtenAtRevision string, err error)
-	Delete(ctx context.Context, filter *rel.PreconditionedFilter) error
-}
-
-type DatabaseAuthorizer interface {
-	Authorizer
-	database.StoreQueries
-}
-
-func (z *Authz) Write(ctx context.Context, txn rel.Txn) (writtenAtRevision string, err error) {
-	return z.spice.Write(ctx, txn)
-}
-
-func (z *AuthzTX) Write(ctx context.Context, txn rel.Txn) (writtenAtRevision string, err error) {
-	zed, err := z.parent.Write(ctx, txn)
-	if err != nil {
-		return zed, err
-	}
-
-	// Merge the transaction's relations into the AuthzTX's relations
-	// These will be undone on a "revert"
-	z.relations.V1Updates = append(z.relations.V1Updates, txn.V1Updates...)
-
-	return zed, nil
-}
-
-func (z *Authz) Delete(ctx context.Context, filter *rel.PreconditionedFilter) error {
-	return z.spice.Delete(ctx, filter)
-}
-
-func (z *Authz) Check(ctx context.Context, cs *consistency.Strategy, rs ...rel.Interface) ([]bool, error) {
-	if cs == nil {
-		cs = consistency.MinLatency()
-	}
-	return z.spice.Check(ctx, cs, rs...)
-}
 
 type interceptor struct {
 	Authorizer

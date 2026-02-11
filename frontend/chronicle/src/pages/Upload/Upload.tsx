@@ -1,11 +1,11 @@
-import { useState } from "react";
+import { useState, useMemo } from "react";
 import { Link } from "react-router-dom";
 import { Upload as UploadIcon, FileText, Info, LogIn, AlertCircle, CheckCircle, FolderOpen, AlertTriangle } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/Card/Card";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/Alert/Alert";
 import { useAuth } from "@/hooks/useAuth";
-import { useSession } from "@/api/queries";
+import { useAuthorizationCheck } from "@/api/queries";
 
 export interface UploadViewProps {
   isAuthenticated: boolean;
@@ -69,8 +69,10 @@ export function UploadView({
         <AlertTriangle className="h-4 w-4" />
         <AlertTitle className="text-orange-200">Backup Your Log Files</AlertTitle>
         <AlertDescription className="text-orange-200/80">
-          Chronicle is in early development and uploaded logs <strong>will be deleted</strong> at some point.
-          Always keep a backup of your original log files somewhere safe.
+          <p>
+            Chronicle is in early development and uploaded logs <b>will be deleted</b> at some point.
+            Always keep a backup of your original log files somewhere safe.
+          </p>
         </AlertDescription>
       </Alert>
 
@@ -311,10 +313,15 @@ export function UploadView({
 
 export function Upload() {
   const { isAuthenticated, isLoading: authLoading } = useAuth();
-  const { data: session } = useSession();
-  const hasUploadPermission = session?.roles.some(r => 
-    r === "alpha_tester" || r === "admin" || r === "technical_admin"
-  ) ?? false;
+  
+  // Check upload permission via SpiceDB
+  const authzChecks = useMemo(() => ({ 
+    upload: "chronicle:chronicle#upload_log" 
+  }), []);
+  const { data: authz } = useAuthorizationCheck(authzChecks, {
+    enabled: isAuthenticated,
+  });
+  const hasUploadPermission = authz?.upload ?? false;
   const [combatLog, setCombatLog] = useState<File | null>(null);
   const [rawCombatLog, setRawCombatLog] = useState<File | null>(null);
   const [uploading, setUploading] = useState(false);

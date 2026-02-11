@@ -20,8 +20,8 @@ func (bot *Bot) SyncDiscordUser(ctx context.Context, zed authz.DatabaseAuthorize
 	usr := b.User(userID)
 
 	// Create a filter to remove all their existing roles from the global namespace
-	f := rel.NewFilter(gChron.Object().ObjectType, gChron.Object().ObjectId, "")
-	f.WithSubjectFilter(usr.Object().ObjectType, usr.Object().ObjectId, "")
+	f := rel.NewFilter(gChron.Object().Typ, gChron.Object().ID, "")
+	f.WithSubjectFilter(usr.Object().Typ, usr.Object().ID, "")
 	err := zed.Delete(ctx, rel.NewPreconditionedFilter(f))
 	if err != nil {
 		return fmt.Errorf("zed.Delete: %w", err)
@@ -57,10 +57,10 @@ func (bot *Bot) SyncDiscordUser(ctx context.Context, zed authz.DatabaseAuthorize
 			gChron.Upload_capable(usr)
 		case "1467892674743898297": // Owner
 			roles = append(roles, string(database.UserRolesTechnicalAdmin), string(database.UserRolesAlphaTester))
-			gChron.Admin(usr)
+			gChron.Technical_admin(usr)
 		case "1467890007854551120": // Admin
 			roles = append(roles, string(database.UserRolesAdmin), string(database.UserRolesAlphaTester))
-			gChron.Moderator(usr)
+			gChron.Admin(usr)
 		}
 	}
 

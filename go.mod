@@ -89,7 +89,7 @@ require (
 	github.com/Azure/go-autorest/logger v0.2.2 // indirect
 	github.com/Azure/go-autorest/tracing v0.6.1 // indirect
 	github.com/BurntSushi/toml v1.5.0 // indirect
-	github.com/Emyrk/zedgen v0.0.0-20260210133753-1207e523c117 // indirect
+	github.com/Emyrk/zedgen v0.0.0-20260211032723-8160c64966e6 // indirect
 	github.com/GoogleCloudPlatform/grpc-gcp-go/grpcgcp v1.5.3 // indirect
 	github.com/GoogleCloudPlatform/opentelemetry-operations-go/detectors/gcp v1.30.0 // indirect
 	github.com/IBM/pgxpoolprometheus v1.1.2 // indirect

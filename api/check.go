@@ -76,8 +76,8 @@ func (api *API) checkAuthorization(rw http.ResponseWriter, r *http.Request) {
 				ResourceType:     objectType,
 				ResourceID:       objectID,
 				ResourceRelation: permission,
-				SubjectType:      usr.Object().ObjectType,
-				SubjectID:        usr.Object().ObjectId,
+				SubjectType:      usr.Object().Typ,
+				SubjectID:        usr.Object().ID,
 			},
 		})
 	}

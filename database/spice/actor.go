@@ -16,8 +16,8 @@ func ActorFromContext(ctx context.Context) (*v1.SubjectReference, bool) {
 	return a, ok
 }
 
-//func AsUser(ctx context.Context, userID uuid.UUID) context.Context {
-//	return context.WithValue(ctx, spiceActorKey{}, &v1.SubjectReference{
-//		Object: policy.New().User(userID).Object(),
-//	})
-//}
+func AsUser(ctx context.Context, userID uuid.UUID) context.Context {
+	return context.WithValue(ctx, spiceActorKey{}, &v1.SubjectReference{
+		Object: policy.New().User(userID).Object(),
+	})
+}

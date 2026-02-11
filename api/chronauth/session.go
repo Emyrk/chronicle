@@ -9,24 +9,14 @@ import (
 	"time"
 
 	"github.com/Emyrk/chronicle/api/chronauth/claims"
-	"github.com/Emyrk/chronicle/database"
-	"github.com/Emyrk/chronicle/internal/slice"
+	"github.com/Emyrk/chronicle/database/authz"
 )
 
 type authContextKey struct{}
 
 type AuthenticationContext struct {
 	Claims *claims.Claims
-	User   *database.User
 	Error  error
-}
-
-func AuthenticatedUser(ctx context.Context) (*database.User, bool) {
-	state := AuthenticationStateCtx(ctx)
-	if state.Error != nil || state.Claims == nil || state.User == nil {
-		return nil, false
-	}
-	return state.User, true
 }
 
 func AuthenticatedClaims(ctx context.Context) (*claims.Claims, bool) {
@@ -148,48 +138,8 @@ func (s *Service) Authenticated(optional bool) func(next http.Handler) http.Hand
 				return
 			}
 
+			r = r.WithContext(authz.AsUser(r.Context(), state.Claims.Subject))
 			next.ServeHTTP(w, r)
-		})
-	}
-}
-
-func (s *Service) MustRoles(requiredRoles ...database.UserRoles) func(next http.Handler) http.Handler {
-	return func(next http.Handler) http.Handler {
-		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-			ctx := r.Context()
-			cl, ok := AuthenticatedClaims(ctx)
-			if !ok || cl == nil {
-				http.Error(w, "Unauthorized", http.StatusUnauthorized)
-				return
-			}
-
-			var user *database.User
-			state := AuthenticationState(r)
-			if state.User == nil {
-				dbUser, err := s.Database.GetUserByID(ctx, cl.Subject)
-				if err != nil {
-					http.Error(w, "Internal Server Error", http.StatusInternalServerError)
-					return
-				}
-				state.User = &dbUser
-				user = state.User
-			} else {
-				user = state.User
-			}
-
-			if len(requiredRoles) == 0 {
-				next.ServeHTTP(w, r)
-				return
-			}
-
-			for _, requiredRole := range requiredRoles {
-				if slice.Contains(user.Roles, requiredRole) {
-					next.ServeHTTP(w, r)
-					return
-				}
-			}
-
-			http.Error(w, "Forbidden", http.StatusForbidden)
 		})
 	}
 }

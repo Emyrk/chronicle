@@ -30,6 +30,29 @@ export interface AdminUsersResponse {
     readonly users: readonly User[];
 }
 
+// From chroniclesdk/authz.go
+/**
+ * AuthorizationRequest is a request to check multiple authorizations at once.
+ */
+export interface AuthorizationRequest {
+    /**
+     * Checks is a map of check names to SpiceDB-style object strings.
+     * Keys are arbitrary identifiers returned in the response.
+     * Values are in the format "type:id#permission", e.g.:
+     *   - "raid_log:550e8400-e29b-41d4-a716-446655440000#view"
+     *   - "instance:550e8400-e29b-41d4-a716-446655440000#edit"
+     */
+    readonly checks: Record<string, string>;
+}
+
+// From chroniclesdk/authz.go
+/**
+ * AuthorizationResponse is the response to an authorization request.
+ * Keys correspond to the keys in the AuthorizationRequest.Checks map.
+ * Values are true if the authorization check passed, false otherwise.
+ */
+export type AuthorizationResponse = Record<string, boolean>;
+
 // From chroniclesdk/events.go
 export interface ChronicleEncounterEvents {
     readonly encounter_id: string;
@@ -147,7 +170,6 @@ export type RiverJobState = string;
 export interface Session {
     readonly user_id: string;
     readonly session_id: string;
-    readonly roles: readonly UserRole[];
 }
 
 // From chroniclesdk/user.go
@@ -155,15 +177,10 @@ export interface User {
     readonly id: string;
     readonly username: string;
     readonly email: string;
-    readonly roles: readonly UserRole[];
+    readonly roles: readonly string[];
     readonly created_at: string;
     readonly updated_at: string;
 }
-
-// From chroniclesdk/user.go
-export type UserRole = "admin" | "alpha_tester" | "technical_admin";
-
-export const UserRoles: UserRole[] = ["admin", "alpha_tester", "technical_admin"];
 
 // From chroniclesdk/youtube.go
 export interface Video {

@@ -6,6 +6,7 @@ import (
 
 	. "github.com/Emyrk/zedgen/relbuilder"
 	v1 "github.com/authzed/authzed-go/proto/authzed/api/v1"
+	"github.com/authzed/gochugaru/rel"
 )
 
 // SchemaBuilder is the entry point for building relationships and permission checks.
@@ -35,8 +36,8 @@ func (b *SchemaBuilder) Chronicle(id fmt.Stringer) *ObjChronicle {
 }
 
 // Object returns the underlying ObjectReference for use in SpiceDB API calls.
-func (obj *ObjChronicle) Object() *v1.ObjectReference {
-	return obj.src.Obj
+func (obj *ObjChronicle) Object() rel.Object {
+	return obj.src.Object()
 }
 
 // AsSubject returns this object as a SubjectReference for use in checks.
@@ -51,12 +52,36 @@ func (obj *ObjChronicle) RelationAdmin() string {
 	return "admin"
 }
 
-func (obj *ObjChronicle) RelationModerator() string {
-	return "moderator"
+func (obj *ObjChronicle) RelationTechnical_admin() string {
+	return "technical_admin"
 }
 
 func (obj *ObjChronicle) RelationUpload_capable() string {
 	return "upload_capable"
+}
+
+func (obj *ObjChronicle) PermissionAdminister() string {
+	return "administer"
+}
+
+func (obj *ObjChronicle) PermissionAdmin_logs() string {
+	return "admin_logs"
+}
+
+func (obj *ObjChronicle) PermissionAdmin_users() string {
+	return "admin_users"
+}
+
+func (obj *ObjChronicle) PermissionAdmin_queues() string {
+	return "admin_queues"
+}
+
+func (obj *ObjChronicle) PermissionUpload_youtube() string {
+	return "upload_youtube"
+}
+
+func (obj *ObjChronicle) PermissionUpload_log() string {
+	return "upload_log"
 }
 
 type ChronicleRelates struct {
@@ -76,7 +101,25 @@ func (obj *ObjChronicle) Create() *ChronicleRelates {
 	return &ChronicleRelates{obj: obj, rel: obj.src.Create()}
 }
 
-// Admin schema.zed:11
+// Technical_admin schema.zed:11
+// Relationship: chronicle:<id>#technical_admin@user:<id>
+// Uses Touch operation implicitly. For Delete/Create, use obj.Delete().Technical_admin() etc.
+func (obj *ObjChronicle) Technical_admin(subs ...*ObjUser) *ObjChronicle {
+	for _, sub := range subs {
+		obj.src.Touch().Add("technical_admin", sub.src.Obj, "")
+	}
+	return obj
+}
+
+// Technical_admin on Relates uses the specified operation (Touch/Create/Delete)
+func (r *ChronicleRelates) Technical_admin(subs ...*ObjUser) *ChronicleRelates {
+	for _, sub := range subs {
+		r.rel.Add("technical_admin", sub.src.Obj, "")
+	}
+	return r
+}
+
+// Admin schema.zed:12
 // Relationship: chronicle:<id>#admin@user:<id>
 // Uses Touch operation implicitly. For Delete/Create, use obj.Delete().Admin() etc.
 func (obj *ObjChronicle) Admin(subs ...*ObjUser) *ObjChronicle {
@@ -90,24 +133,6 @@ func (obj *ObjChronicle) Admin(subs ...*ObjUser) *ObjChronicle {
 func (r *ChronicleRelates) Admin(subs ...*ObjUser) *ChronicleRelates {
 	for _, sub := range subs {
 		r.rel.Add("admin", sub.src.Obj, "")
-	}
-	return r
-}
-
-// Moderator schema.zed:12
-// Relationship: chronicle:<id>#moderator@user:<id>
-// Uses Touch operation implicitly. For Delete/Create, use obj.Delete().Moderator() etc.
-func (obj *ObjChronicle) Moderator(subs ...*ObjUser) *ObjChronicle {
-	for _, sub := range subs {
-		obj.src.Touch().Add("moderator", sub.src.Obj, "")
-	}
-	return obj
-}
-
-// Moderator on Relates uses the specified operation (Touch/Create/Delete)
-func (r *ChronicleRelates) Moderator(subs ...*ObjUser) *ChronicleRelates {
-	for _, sub := range subs {
-		r.rel.Add("moderator", sub.src.Obj, "")
 	}
 	return r
 }
@@ -130,6 +155,96 @@ func (r *ChronicleRelates) Upload_capable(subs ...*ObjUser) *ChronicleRelates {
 	return r
 }
 
+// CanAdminister_User checks if the subject has administer permission
+// // Object: chronicle:<id>
+// Schema: permission administer = admin + technical_admin
+func (obj *ObjChronicle) CanAdminister_User(sub *ObjUser) rel.Relationship {
+	r, s := obj.src.Obj, sub.src
+	return rel.Relationship{
+		ResourceType:     r.ObjectType,
+		ResourceID:       r.ObjectId,
+		ResourceRelation: "administer",
+		SubjectType:      s.Obj.ObjectType,
+		SubjectID:        s.Obj.ObjectId,
+		SubjectRelation:  s.OptionalRelation,
+	}
+}
+
+// CanAdmin_logs_User checks if the subject has admin_logs permission
+// // Object: chronicle:<id>
+// Schema: permission admin_logs = administer
+func (obj *ObjChronicle) CanAdmin_logs_User(sub *ObjUser) rel.Relationship {
+	r, s := obj.src.Obj, sub.src
+	return rel.Relationship{
+		ResourceType:     r.ObjectType,
+		ResourceID:       r.ObjectId,
+		ResourceRelation: "admin_logs",
+		SubjectType:      s.Obj.ObjectType,
+		SubjectID:        s.Obj.ObjectId,
+		SubjectRelation:  s.OptionalRelation,
+	}
+}
+
+// CanAdmin_users_User checks if the subject has admin_users permission
+// // Object: chronicle:<id>
+// Schema: permission admin_users = administer
+func (obj *ObjChronicle) CanAdmin_users_User(sub *ObjUser) rel.Relationship {
+	r, s := obj.src.Obj, sub.src
+	return rel.Relationship{
+		ResourceType:     r.ObjectType,
+		ResourceID:       r.ObjectId,
+		ResourceRelation: "admin_users",
+		SubjectType:      s.Obj.ObjectType,
+		SubjectID:        s.Obj.ObjectId,
+		SubjectRelation:  s.OptionalRelation,
+	}
+}
+
+// CanAdmin_queues_User checks if the subject has admin_queues permission
+// // Object: chronicle:<id>
+// Schema: permission admin_queues = technical_admin
+func (obj *ObjChronicle) CanAdmin_queues_User(sub *ObjUser) rel.Relationship {
+	r, s := obj.src.Obj, sub.src
+	return rel.Relationship{
+		ResourceType:     r.ObjectType,
+		ResourceID:       r.ObjectId,
+		ResourceRelation: "admin_queues",
+		SubjectType:      s.Obj.ObjectType,
+		SubjectID:        s.Obj.ObjectId,
+		SubjectRelation:  s.OptionalRelation,
+	}
+}
+
+// CanUpload_youtube_User checks if the subject has upload_youtube permission
+// // Object: chronicle:<id>
+// Schema: permission upload_youtube = administer
+func (obj *ObjChronicle) CanUpload_youtube_User(sub *ObjUser) rel.Relationship {
+	r, s := obj.src.Obj, sub.src
+	return rel.Relationship{
+		ResourceType:     r.ObjectType,
+		ResourceID:       r.ObjectId,
+		ResourceRelation: "upload_youtube",
+		SubjectType:      s.Obj.ObjectType,
+		SubjectID:        s.Obj.ObjectId,
+		SubjectRelation:  s.OptionalRelation,
+	}
+}
+
+// CanUpload_log_User checks if the subject has upload_log permission
+// // Object: chronicle:<id>
+// Schema: permission upload_log = upload_capable + administer
+func (obj *ObjChronicle) CanUpload_log_User(sub *ObjUser) rel.Relationship {
+	r, s := obj.src.Obj, sub.src
+	return rel.Relationship{
+		ResourceType:     r.ObjectType,
+		ResourceID:       r.ObjectId,
+		ResourceRelation: "upload_log",
+		SubjectType:      s.Obj.ObjectType,
+		SubjectID:        s.Obj.ObjectId,
+		SubjectRelation:  s.OptionalRelation,
+	}
+}
+
 type ObjInstance struct {
 	src Object
 }
@@ -144,8 +259,8 @@ func (b *SchemaBuilder) Instance(id fmt.Stringer) *ObjInstance {
 }
 
 // Object returns the underlying ObjectReference for use in SpiceDB API calls.
-func (obj *ObjInstance) Object() *v1.ObjectReference {
-	return obj.src.Obj
+func (obj *ObjInstance) Object() rel.Object {
+	return obj.src.Object()
 }
 
 // AsSubject returns this object as a SubjectReference for use in checks.
@@ -193,7 +308,7 @@ func (obj *ObjInstance) Create() *InstanceRelates {
 	return &InstanceRelates{obj: obj, rel: obj.src.Create()}
 }
 
-// Raid_log schema.zed:38
+// Raid_log schema.zed:45
 // Relationship: instance:<id>#raid_log@raid_log:<id>
 // Uses Touch operation implicitly. For Delete/Create, use obj.Delete().Raid_log() etc.
 func (obj *ObjInstance) Raid_log(subs ...*ObjRaid_log) *ObjInstance {
@@ -211,7 +326,7 @@ func (r *InstanceRelates) Raid_log(subs ...*ObjRaid_log) *InstanceRelates {
 	return r
 }
 
-// Tagged_by schema.zed:39
+// Tagged_by schema.zed:46
 // Relationship: instance:<id>#tagged_by@user:<id>
 // Uses Touch operation implicitly. For Delete/Create, use obj.Delete().Tagged_by() etc.
 func (obj *ObjInstance) Tagged_by(subs ...*ObjUser) *ObjInstance {
@@ -231,83 +346,89 @@ func (r *InstanceRelates) Tagged_by(subs ...*ObjUser) *InstanceRelates {
 
 // CanView_Raid_log checks if the subject has view permission
 // // Object: instance:<id>
-func (obj *ObjInstance) CanView_Raid_log(sub *ObjRaid_log) *v1.CheckPermissionRequest {
-	return &v1.CheckPermissionRequest{
-		Resource:   obj.src.Obj,
-		Permission: "view",
-		Subject: &v1.SubjectReference{
-			Object:           sub.src.Obj,
-			OptionalRelation: "",
-		},
+func (obj *ObjInstance) CanView_Raid_log(sub *ObjRaid_log) rel.Relationship {
+	r, s := obj.src.Obj, sub.src
+	return rel.Relationship{
+		ResourceType:     r.ObjectType,
+		ResourceID:       r.ObjectId,
+		ResourceRelation: "view",
+		SubjectType:      s.Obj.ObjectType,
+		SubjectID:        s.Obj.ObjectId,
+		SubjectRelation:  s.OptionalRelation,
 	}
 }
 
 // CanView_User checks if the subject has view permission
 // // Object: instance:<id>
-func (obj *ObjInstance) CanView_User(sub *ObjUser) *v1.CheckPermissionRequest {
-	return &v1.CheckPermissionRequest{
-		Resource:   obj.src.Obj,
-		Permission: "view",
-		Subject: &v1.SubjectReference{
-			Object:           sub.src.Obj,
-			OptionalRelation: "",
-		},
+func (obj *ObjInstance) CanView_User(sub *ObjUser) rel.Relationship {
+	r, s := obj.src.Obj, sub.src
+	return rel.Relationship{
+		ResourceType:     r.ObjectType,
+		ResourceID:       r.ObjectId,
+		ResourceRelation: "view",
+		SubjectType:      s.Obj.ObjectType,
+		SubjectID:        s.Obj.ObjectId,
+		SubjectRelation:  s.OptionalRelation,
 	}
 }
 
 // CanEdit_Raid_log checks if the subject has edit permission
 // // Object: instance:<id>
 // Schema: permission edit = raid_log->edit
-func (obj *ObjInstance) CanEdit_Raid_log(sub *ObjRaid_log) *v1.CheckPermissionRequest {
-	return &v1.CheckPermissionRequest{
-		Resource:   obj.src.Obj,
-		Permission: "edit",
-		Subject: &v1.SubjectReference{
-			Object:           sub.src.Obj,
-			OptionalRelation: "",
-		},
+func (obj *ObjInstance) CanEdit_Raid_log(sub *ObjRaid_log) rel.Relationship {
+	r, s := obj.src.Obj, sub.src
+	return rel.Relationship{
+		ResourceType:     r.ObjectType,
+		ResourceID:       r.ObjectId,
+		ResourceRelation: "edit",
+		SubjectType:      s.Obj.ObjectType,
+		SubjectID:        s.Obj.ObjectId,
+		SubjectRelation:  s.OptionalRelation,
 	}
 }
 
 // CanEdit_User checks if the subject has edit permission
 // // Object: instance:<id>
 // Schema: permission edit = raid_log->edit
-func (obj *ObjInstance) CanEdit_User(sub *ObjUser) *v1.CheckPermissionRequest {
-	return &v1.CheckPermissionRequest{
-		Resource:   obj.src.Obj,
-		Permission: "edit",
-		Subject: &v1.SubjectReference{
-			Object:           sub.src.Obj,
-			OptionalRelation: "",
-		},
+func (obj *ObjInstance) CanEdit_User(sub *ObjUser) rel.Relationship {
+	r, s := obj.src.Obj, sub.src
+	return rel.Relationship{
+		ResourceType:     r.ObjectType,
+		ResourceID:       r.ObjectId,
+		ResourceRelation: "edit",
+		SubjectType:      s.Obj.ObjectType,
+		SubjectID:        s.Obj.ObjectId,
+		SubjectRelation:  s.OptionalRelation,
 	}
 }
 
 // CanTag_Raid_log checks if the subject has tag permission
 // // Object: instance:<id>
 // Schema: permission tag = raid_log->edit + tagged_by
-func (obj *ObjInstance) CanTag_Raid_log(sub *ObjRaid_log) *v1.CheckPermissionRequest {
-	return &v1.CheckPermissionRequest{
-		Resource:   obj.src.Obj,
-		Permission: "tag",
-		Subject: &v1.SubjectReference{
-			Object:           sub.src.Obj,
-			OptionalRelation: "",
-		},
+func (obj *ObjInstance) CanTag_Raid_log(sub *ObjRaid_log) rel.Relationship {
+	r, s := obj.src.Obj, sub.src
+	return rel.Relationship{
+		ResourceType:     r.ObjectType,
+		ResourceID:       r.ObjectId,
+		ResourceRelation: "tag",
+		SubjectType:      s.Obj.ObjectType,
+		SubjectID:        s.Obj.ObjectId,
+		SubjectRelation:  s.OptionalRelation,
 	}
 }
 
 // CanTag_User checks if the subject has tag permission
 // // Object: instance:<id>
 // Schema: permission tag = raid_log->edit + tagged_by
-func (obj *ObjInstance) CanTag_User(sub *ObjUser) *v1.CheckPermissionRequest {
-	return &v1.CheckPermissionRequest{
-		Resource:   obj.src.Obj,
-		Permission: "tag",
-		Subject: &v1.SubjectReference{
-			Object:           sub.src.Obj,
-			OptionalRelation: "",
-		},
+func (obj *ObjInstance) CanTag_User(sub *ObjUser) rel.Relationship {
+	r, s := obj.src.Obj, sub.src
+	return rel.Relationship{
+		ResourceType:     r.ObjectType,
+		ResourceID:       r.ObjectId,
+		ResourceRelation: "tag",
+		SubjectType:      s.Obj.ObjectType,
+		SubjectID:        s.Obj.ObjectId,
+		SubjectRelation:  s.OptionalRelation,
 	}
 }
 
@@ -325,8 +446,8 @@ func (b *SchemaBuilder) Raid_log(id fmt.Stringer) *ObjRaid_log {
 }
 
 // Object returns the underlying ObjectReference for use in SpiceDB API calls.
-func (obj *ObjRaid_log) Object() *v1.ObjectReference {
-	return obj.src.Obj
+func (obj *ObjRaid_log) Object() rel.Object {
+	return obj.src.Object()
 }
 
 // AsSubject returns this object as a SubjectReference for use in checks.
@@ -378,7 +499,7 @@ func (obj *ObjRaid_log) Create() *Raid_logRelates {
 	return &Raid_logRelates{obj: obj, rel: obj.src.Create()}
 }
 
-// Chronicle schema.zed:23
+// Chronicle schema.zed:30
 // Relationship: raid_log:<id>#chronicle@chronicle:<id>
 // Uses Touch operation implicitly. For Delete/Create, use obj.Delete().Chronicle() etc.
 func (obj *ObjRaid_log) Chronicle(subs ...*ObjChronicle) *ObjRaid_log {
@@ -396,7 +517,7 @@ func (r *Raid_logRelates) Chronicle(subs ...*ObjChronicle) *Raid_logRelates {
 	return r
 }
 
-// Uploader schema.zed:24
+// Uploader schema.zed:31
 // Relationship: raid_log:<id>#uploader@user:<id>
 // Uses Touch operation implicitly. For Delete/Create, use obj.Delete().Uploader() etc.
 func (obj *ObjRaid_log) Uploader(subs ...*ObjUser) *ObjRaid_log {
@@ -414,7 +535,7 @@ func (r *Raid_logRelates) Uploader(subs ...*ObjUser) *Raid_logRelates {
 	return r
 }
 
-// PublicWildcard schema.zed:27
+// PublicWildcard schema.zed:34
 // Relationship: raid_log:<id>#public@user:*
 func (obj *ObjRaid_log) PublicWildcard() *ObjRaid_log {
 	obj.src.Touch().Add("public", &v1.ObjectReference{
@@ -435,81 +556,87 @@ func (r *Raid_logRelates) PublicWildcard() *Raid_logRelates {
 
 // CanView_Chronicle checks if the subject has view permission
 // // Object: raid_log:<id>
-func (obj *ObjRaid_log) CanView_Chronicle(sub *ObjChronicle) *v1.CheckPermissionRequest {
-	return &v1.CheckPermissionRequest{
-		Resource:   obj.src.Obj,
-		Permission: "view",
-		Subject: &v1.SubjectReference{
-			Object:           sub.src.Obj,
-			OptionalRelation: "",
-		},
+func (obj *ObjRaid_log) CanView_Chronicle(sub *ObjChronicle) rel.Relationship {
+	r, s := obj.src.Obj, sub.src
+	return rel.Relationship{
+		ResourceType:     r.ObjectType,
+		ResourceID:       r.ObjectId,
+		ResourceRelation: "view",
+		SubjectType:      s.Obj.ObjectType,
+		SubjectID:        s.Obj.ObjectId,
+		SubjectRelation:  s.OptionalRelation,
 	}
 }
 
 // CanView_User checks if the subject has view permission
 // // Object: raid_log:<id>
-func (obj *ObjRaid_log) CanView_User(sub *ObjUser) *v1.CheckPermissionRequest {
-	return &v1.CheckPermissionRequest{
-		Resource:   obj.src.Obj,
-		Permission: "view",
-		Subject: &v1.SubjectReference{
-			Object:           sub.src.Obj,
-			OptionalRelation: "",
-		},
+func (obj *ObjRaid_log) CanView_User(sub *ObjUser) rel.Relationship {
+	r, s := obj.src.Obj, sub.src
+	return rel.Relationship{
+		ResourceType:     r.ObjectType,
+		ResourceID:       r.ObjectId,
+		ResourceRelation: "view",
+		SubjectType:      s.Obj.ObjectType,
+		SubjectID:        s.Obj.ObjectId,
+		SubjectRelation:  s.OptionalRelation,
 	}
 }
 
 // CanReparse_Chronicle checks if the subject has reparse permission
 // // Object: raid_log:<id>
-// Schema: permission reparse = chronicle->admin
-func (obj *ObjRaid_log) CanReparse_Chronicle(sub *ObjChronicle) *v1.CheckPermissionRequest {
-	return &v1.CheckPermissionRequest{
-		Resource:   obj.src.Obj,
-		Permission: "reparse",
-		Subject: &v1.SubjectReference{
-			Object:           sub.src.Obj,
-			OptionalRelation: "",
-		},
+// Schema: permission reparse = chronicle->administer
+func (obj *ObjRaid_log) CanReparse_Chronicle(sub *ObjChronicle) rel.Relationship {
+	r, s := obj.src.Obj, sub.src
+	return rel.Relationship{
+		ResourceType:     r.ObjectType,
+		ResourceID:       r.ObjectId,
+		ResourceRelation: "reparse",
+		SubjectType:      s.Obj.ObjectType,
+		SubjectID:        s.Obj.ObjectId,
+		SubjectRelation:  s.OptionalRelation,
 	}
 }
 
 // CanReparse_User checks if the subject has reparse permission
 // // Object: raid_log:<id>
-// Schema: permission reparse = chronicle->admin
-func (obj *ObjRaid_log) CanReparse_User(sub *ObjUser) *v1.CheckPermissionRequest {
-	return &v1.CheckPermissionRequest{
-		Resource:   obj.src.Obj,
-		Permission: "reparse",
-		Subject: &v1.SubjectReference{
-			Object:           sub.src.Obj,
-			OptionalRelation: "",
-		},
+// Schema: permission reparse = chronicle->administer
+func (obj *ObjRaid_log) CanReparse_User(sub *ObjUser) rel.Relationship {
+	r, s := obj.src.Obj, sub.src
+	return rel.Relationship{
+		ResourceType:     r.ObjectType,
+		ResourceID:       r.ObjectId,
+		ResourceRelation: "reparse",
+		SubjectType:      s.Obj.ObjectType,
+		SubjectID:        s.Obj.ObjectId,
+		SubjectRelation:  s.OptionalRelation,
 	}
 }
 
 // CanDelete_Chronicle checks if the subject has delete permission
 // // Object: raid_log:<id>
-func (obj *ObjRaid_log) CanDelete_Chronicle(sub *ObjChronicle) *v1.CheckPermissionRequest {
-	return &v1.CheckPermissionRequest{
-		Resource:   obj.src.Obj,
-		Permission: "delete",
-		Subject: &v1.SubjectReference{
-			Object:           sub.src.Obj,
-			OptionalRelation: "",
-		},
+func (obj *ObjRaid_log) CanDelete_Chronicle(sub *ObjChronicle) rel.Relationship {
+	r, s := obj.src.Obj, sub.src
+	return rel.Relationship{
+		ResourceType:     r.ObjectType,
+		ResourceID:       r.ObjectId,
+		ResourceRelation: "delete",
+		SubjectType:      s.Obj.ObjectType,
+		SubjectID:        s.Obj.ObjectId,
+		SubjectRelation:  s.OptionalRelation,
 	}
 }
 
 // CanDelete_User checks if the subject has delete permission
 // // Object: raid_log:<id>
-func (obj *ObjRaid_log) CanDelete_User(sub *ObjUser) *v1.CheckPermissionRequest {
-	return &v1.CheckPermissionRequest{
-		Resource:   obj.src.Obj,
-		Permission: "delete",
-		Subject: &v1.SubjectReference{
-			Object:           sub.src.Obj,
-			OptionalRelation: "",
-		},
+func (obj *ObjRaid_log) CanDelete_User(sub *ObjUser) rel.Relationship {
+	r, s := obj.src.Obj, sub.src
+	return rel.Relationship{
+		ResourceType:     r.ObjectType,
+		ResourceID:       r.ObjectId,
+		ResourceRelation: "delete",
+		SubjectType:      s.Obj.ObjectType,
+		SubjectID:        s.Obj.ObjectId,
+		SubjectRelation:  s.OptionalRelation,
 	}
 }
 
@@ -527,8 +654,8 @@ func (b *SchemaBuilder) River_queue(id fmt.Stringer) *ObjRiver_queue {
 }
 
 // Object returns the underlying ObjectReference for use in SpiceDB API calls.
-func (obj *ObjRiver_queue) Object() *v1.ObjectReference {
-	return obj.src.Obj
+func (obj *ObjRiver_queue) Object() rel.Object {
+	return obj.src.Object()
 }
 
 // AsSubject returns this object as a SubjectReference for use in checks.
@@ -564,7 +691,7 @@ func (obj *ObjRiver_queue) Create() *River_queueRelates {
 	return &River_queueRelates{obj: obj, rel: obj.src.Create()}
 }
 
-// Chronicle schema.zed:17
+// Chronicle schema.zed:24
 // Relationship: river_queue:<id>#chronicle@chronicle:<id>
 // Uses Touch operation implicitly. For Delete/Create, use obj.Delete().Chronicle() etc.
 func (obj *ObjRiver_queue) Chronicle(subs ...*ObjChronicle) *ObjRiver_queue {
@@ -584,15 +711,16 @@ func (r *River_queueRelates) Chronicle(subs ...*ObjChronicle) *River_queueRelate
 
 // CanAccess_Chronicle checks if the subject has access permission
 // // Object: river_queue:<id>
-// Schema: permission access = chronicle->admin
-func (obj *ObjRiver_queue) CanAccess_Chronicle(sub *ObjChronicle) *v1.CheckPermissionRequest {
-	return &v1.CheckPermissionRequest{
-		Resource:   obj.src.Obj,
-		Permission: "access",
-		Subject: &v1.SubjectReference{
-			Object:           sub.src.Obj,
-			OptionalRelation: "",
-		},
+// Schema: permission access = chronicle->admin_queues
+func (obj *ObjRiver_queue) CanAccess_Chronicle(sub *ObjChronicle) rel.Relationship {
+	r, s := obj.src.Obj, sub.src
+	return rel.Relationship{
+		ResourceType:     r.ObjectType,
+		ResourceID:       r.ObjectId,
+		ResourceRelation: "access",
+		SubjectType:      s.Obj.ObjectType,
+		SubjectID:        s.Obj.ObjectId,
+		SubjectRelation:  s.OptionalRelation,
 	}
 }
 
@@ -610,8 +738,8 @@ func (b *SchemaBuilder) User(id fmt.Stringer) *ObjUser {
 }
 
 // Object returns the underlying ObjectReference for use in SpiceDB API calls.
-func (obj *ObjUser) Object() *v1.ObjectReference {
-	return obj.src.Obj
+func (obj *ObjUser) Object() rel.Object {
+	return obj.src.Object()
 }
 
 // AsSubject returns this object as a SubjectReference for use in checks.

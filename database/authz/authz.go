@@ -90,7 +90,7 @@ func (z *Authz) wrap(tx database.Store) *AuthzTX {
 	}
 
 	spiceTx.interceptor = &interceptor{
-		Authorizer: spiceTx,
+		Authorizer: z,
 		store:      tx,
 	}
 
@@ -116,6 +116,7 @@ func (z *Authz) InTx(f func(tx *AuthzTX) error, opts *pgx.TxOptions) error {
 				reverts.Delete(*rel.FromV1Proto(update.Relationship))
 			}
 		}
+
 		_, revertErr := z.spice.Write(context.Background(), reverts)
 		if revertErr != nil {
 			z.logger.Error("failed to revert authz transaction after error", "revertErr", revertErr, "originalErr", txErr)
@@ -126,9 +127,7 @@ func (z *Authz) InTx(f func(tx *AuthzTX) error, opts *pgx.TxOptions) error {
 	return nil
 }
 
-func (z *AuthzTX) Ping(ctx context.Context) (time.Duration, error) {
-	return z.parent.Ping(ctx)
-}
+func (z *AuthzTX) Ping(ctx context.Context) (time.Duration, error) { return z.parent.Ping(ctx) }
 
 func (z *AuthzTX) Close() error {
 	return z.parent.Close()

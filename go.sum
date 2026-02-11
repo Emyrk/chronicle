@@ -685,6 +685,10 @@ github.com/BurntSushi/toml v1.5.0/go.mod h1:ukJfTF/6rtPPRCnwkur4qwRxa8vTRFBF0uk2
 github.com/BurntSushi/xgb v0.0.0-20160522181843-27f122750802/go.mod h1:IVnqGOEym/WlBOVXweHU+Q+/VP0lqqI8lqeDx9IjBqo=
 github.com/Emyrk/zedgen v0.0.0-20260210133753-1207e523c117 h1:GqbQSD8TvWvEBnjk+bdJuYQuHvKvsc3WZpqAcYiSJhw=
 github.com/Emyrk/zedgen v0.0.0-20260210133753-1207e523c117/go.mod h1:QTx3b7aEUyukkswuvRo2cuN8+qFtaLcnC1AvqGKPWOo=
+github.com/Emyrk/zedgen v0.0.0-20260211032032-43a18013934c h1:KCP3bAS9jVV7VL9q628FzSThiHONWwEWjIG3sQQ4gRw=
+github.com/Emyrk/zedgen v0.0.0-20260211032032-43a18013934c/go.mod h1:QTx3b7aEUyukkswuvRo2cuN8+qFtaLcnC1AvqGKPWOo=
+github.com/Emyrk/zedgen v0.0.0-20260211032723-8160c64966e6 h1:Yk+sk7qTJGYFqJZvTMLEpLJ8u8hRD6iuRaCP2aqOB1I=
+github.com/Emyrk/zedgen v0.0.0-20260211032723-8160c64966e6/go.mod h1:QTx3b7aEUyukkswuvRo2cuN8+qFtaLcnC1AvqGKPWOo=
 github.com/GoogleCloudPlatform/grpc-gcp-go/grpcgcp v1.5.3 h1:2afWGsMzkIcN8Qm4mgPJKZWyroE5QBszMiDMYEBrnfw=
 github.com/GoogleCloudPlatform/grpc-gcp-go/grpcgcp v1.5.3/go.mod h1:dppbR7CwXD4pgtV9t3wD1812RaLDcBjtblcDF5f1vI0=
 github.com/GoogleCloudPlatform/opentelemetry-operations-go/detectors/gcp v1.30.0 h1:sBEjpZlNHzK1voKq9695PJSX2o5NEXl7/OL3coiIY0c=

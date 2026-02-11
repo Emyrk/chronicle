@@ -9,7 +9,7 @@ import (
 //go:embed schema.zed
 var Schema string
 
-//go:generate rm policy_gen.go
+//go:generate rm -f policy_gen.go
 //go:generate go tool zedgen -schema schema.zed -package policy -out policy_gen.go
 
 func GlobalChronicle() *ObjChronicle {

@@ -25,11 +25,17 @@ func (a *API) AdminListUsers(w http.ResponseWriter, r *http.Request) {
 		Users: make([]chroniclesdk.User, len(users)),
 	}
 	for i, u := range users {
+		roles, err := a.Opts.Zed.UserChronicleRoles(r.Context(), u.ID)
+		if err != nil {
+			httpapi.InternalServerError(w, err)
+			return
+		}
+
 		resp.Users[i] = chroniclesdk.User{
 			ID:        u.ID,
 			Username:  u.Username,
 			Email:     u.Email,
-			Roles:     dbRolesToSDK(u.Roles),
+			Roles:     roles,
 			CreatedAt: u.CreatedAt.Time.Format("2006-01-02T15:04:05Z"),
 			UpdatedAt: u.UpdatedAt.Time.Format("2006-01-02T15:04:05Z"),
 		}
@@ -93,11 +99,17 @@ func (a *API) AdminResyncUserRoles(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	roles, err := a.Opts.Zed.UserChronicleRoles(r.Context(), userID)
+	if err != nil {
+		httpapi.InternalServerError(w, err)
+		return
+	}
+
 	httpapi.Write(r.Context(), w, http.StatusOK, chroniclesdk.User{
 		ID:        user.ID,
 		Username:  user.Username,
 		Email:     user.Email,
-		Roles:     dbRolesToSDK(user.Roles),
+		Roles:     roles,
 		CreatedAt: user.CreatedAt.Time.Format("2006-01-02T15:04:05Z"),
 		UpdatedAt: user.UpdatedAt.Time.Format("2006-01-02T15:04:05Z"),
 	})

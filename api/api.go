@@ -14,6 +14,7 @@ import (
 	"github.com/Emyrk/chronicle/chroniclebot"
 	"github.com/Emyrk/chronicle/database"
 	"github.com/Emyrk/chronicle/database/authz"
+	"github.com/Emyrk/chronicle/database/authz/policy"
 	"github.com/Emyrk/chronicle/database/storage"
 	"github.com/Emyrk/chronicle/frontend"
 	"github.com/go-chi/chi/v5"
@@ -97,17 +98,16 @@ func (api *API) Routes() chi.Router {
 		r.Group(func(r chi.Router) {
 			r.Use(
 				api.Auth.Authenticated(false),
-				api.Auth.MustRoles(),
 			)
 			r.Get("/whoami", api.WhoAmI)
-			r.Get("/authcheck", api.checkAuthorization)
+			r.Post("/authcheck", api.checkAuthorization)
 		})
 
 		// Admin routes - require admin or technical_admin role
 		r.Route("/admin", func(r chi.Router) {
 			r.Use(
 				api.Auth.Authenticated(false),
-				api.Auth.MustRoles(database.UserRolesAdmin, database.UserRolesTechnicalAdmin),
+				httpmw.Can(api.Zed, policy.New().GlobalChronicle().CanAdmin_users_User),
 			)
 			r.Get("/users", api.AdminListUsers)
 			r.Post("/users/{userID}/resync", api.AdminResyncUserRoles)
@@ -120,22 +120,19 @@ func (api *API) Routes() chi.Router {
 				r.Route("/logs", func(r chi.Router) {
 					r.Use(
 						api.Auth.Authenticated(false),
-						api.Auth.MustRoles(),
 					)
 					r.Group(func(r chi.Router) {
-						r.Use(api.Auth.MustRoles(database.UserRolesAlphaTester))
+						r.Use(httpmw.Can(api.Zed, policy.New().GlobalChronicle().CanUpload_log_User))
 						r.Post("/upload", api.WoWLogUpload)
 					})
 					r.Get("/", api.WoWLogGroups)
 					r.Route("/{logID}", func(r chi.Router) {
 						r.Use(httpmw.LogIDMiddleware)
 						r.Group(func(r chi.Router) {
-							r.Use(api.Auth.MustRoles(database.UserRolesAdmin))
 							r.Post("/reparse", api.WoWLogReparse)
 						})
 						r.Get("/", api.WoWLogGroup)
 						r.Group(func(r chi.Router) {
-							r.Use(api.Auth.MustRoles(database.UserRolesAlphaTester))
 							r.Delete("/", api.WoWLogDeleteGroup)
 						})
 					})
@@ -152,7 +149,7 @@ func (api *API) Routes() chi.Router {
 							r.Group(func(r chi.Router) {
 								r.Use(
 									api.Auth.Authenticated(false),
-									api.Auth.MustRoles(database.UserRolesAdmin),
+									httpmw.Can(api.Zed, policy.New().GlobalChronicle().CanUpload_youtube_User),
 								)
 								r.Post("/youtube", api.PostInstanceYoutube)
 							})
@@ -172,7 +169,7 @@ func (api *API) Routes() chi.Router {
 		r.Use(
 			api.Auth.AuthenticationMiddleware,
 			api.Auth.Authenticated(false),
-			api.Auth.MustRoles(database.UserRolesTechnicalAdmin),
+			httpmw.Can(api.Zed, policy.New().GlobalChronicle().CanAdmin_queues_User),
 		)
 		r.Mount("/river", api.Queues.UI)
 	})

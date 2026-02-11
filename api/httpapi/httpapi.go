@@ -10,6 +10,18 @@ import (
 	"github.com/Emyrk/chronicle/api/chroniclesdk"
 )
 
+func Forbidden(rw http.ResponseWriter, err error) {
+	var details string
+	if err != nil {
+		details = err.Error()
+	}
+
+	Write(context.Background(), rw, http.StatusForbidden, chroniclesdk.Response{
+		Message: "An internal server error occurred.",
+		Detail:  details,
+	})
+}
+
 func InternalServerError(rw http.ResponseWriter, err error) {
 	var details string
 	if err != nil {

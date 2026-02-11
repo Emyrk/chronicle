@@ -17,6 +17,8 @@ import type {
   AdminLog as AdminLogGenerated,
   Session as SessionGenerated,
   UserRole as UserRoleGenerated,
+  AuthorizationRequest as AuthorizationRequestGenerated,
+  AuthorizationResponse as AuthorizationResponseGenerated,
 } from "./typesGenerated";
 
 // Re-export types for convenience
@@ -37,6 +39,8 @@ export type User = UserGenerated;
 export type AdminLog = AdminLogGenerated;
 export type Session = SessionGenerated;
 export type UserRole = UserRoleGenerated;
+export type AuthorizationRequest = AuthorizationRequestGenerated;
+export type AuthorizationResponse = AuthorizationResponseGenerated;
 
 export function useWhoami(options?: Omit<UseQueryOptions<boolean>, "queryKey" | "queryFn">) {
   return useQuery({
@@ -44,6 +48,34 @@ export function useWhoami(options?: Omit<UseQueryOptions<boolean>, "queryKey" | 
     queryFn: async () => {
       const response = await fetch("/api/v1/whoami");
       return response.ok;
+    },
+    retry: false,
+    ...options,
+  });
+}
+
+/**
+ * Check authorization for one or more SpiceDB permission checks.
+ * @param checks - Map of check names to SpiceDB-style object strings (e.g., "raid_log:uuid#view")
+ * @param options - Additional query options
+ * @returns Query result with authorization results keyed by check name
+ */
+export function useAuthorizationCheck(
+  checks: Record<string, string>,
+  options?: Omit<UseQueryOptions<AuthorizationResponse>, "queryKey" | "queryFn">
+) {
+  return useQuery({
+    queryKey: ["authorizationCheck", checks],
+    queryFn: async () => {
+      const response = await fetch("/api/v1/authcheck", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ checks } satisfies AuthorizationRequest),
+      });
+      if (!response.ok) {
+        throw new Error("Authorization check failed");
+      }
+      return response.json() as Promise<AuthorizationResponse>;
     },
     retry: false,
     ...options,

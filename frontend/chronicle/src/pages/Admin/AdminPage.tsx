@@ -1,13 +1,14 @@
-import { useState } from "react";
+import { useState, useMemo } from "react";
 import { Link } from "react-router-dom";
 import { 
-  useSession, 
   useAdminUsers, 
   useAdminLogs, 
   useResyncUserRoles,
+  useAuthorizationCheck,
   type User,
   type AdminLog,
 } from "@/api/queries";
+import { useAuth } from "@/hooks/useAuth";
 import { RefreshCw, Users, FileText, Shield, ShieldCheck, TestTube, Loader2, ChevronRight } from "lucide-react";
 import { Card } from "@/components/ui/Card/Card";
 import { Button } from "@/components/ui/button";
@@ -148,14 +149,23 @@ function LogsSection({ logs }: { logs: readonly AdminLog[] }) {
 }
 
 export function AdminPage() {
-  const { data: session, isLoading: sessionLoading } = useSession();
+  const { isAuthenticated, isLoading: authLoading } = useAuth();
+  
+  // Check admin permission via SpiceDB
+  const authzChecks = useMemo(() => ({
+    admin: "chronicle:chronicle#admin_users",
+  }), []);
+  const { data: authz, isLoading: authzLoading } = useAuthorizationCheck(authzChecks, {
+    enabled: isAuthenticated,
+  });
+  const isAdmin = authz?.admin ?? false;
+  
   const { data: usersData, isLoading: usersLoading, error: usersError } = useAdminUsers();
   const { data: logsData, isLoading: logsLoading, error: logsError } = useAdminLogs();
   
   const [activeTab, setActiveTab] = useState<"users" | "logs">("users");
 
-  // Check if user has admin access
-  const isAdmin = session?.roles.some(r => r === "admin" || r === "technical_admin");
+  const sessionLoading = authLoading || authzLoading;
 
   if (sessionLoading) {
     return (

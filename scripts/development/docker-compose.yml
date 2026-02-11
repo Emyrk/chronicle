@@ -49,6 +49,7 @@ services:
       # Pre-shared key for API authentication (change in production!)
       SPICEDB_GRPC_PRESHARED_KEY: chronicle-dev-key
       SPICEDB_HTTP_ENABLED: "true"
+      SPICEDB_MAX_READ_RELATIONSHIPS_LIMIT: "50000"
     depends_on:
       spicedb-migrate:
         condition: service_completed_successfully

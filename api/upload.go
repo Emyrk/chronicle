@@ -7,6 +7,8 @@ import (
 	"github.com/Emyrk/chronicle/api/chroniclesdk"
 	"github.com/Emyrk/chronicle/api/httpapi"
 	"github.com/Emyrk/chronicle/api/httpmw"
+	"github.com/Emyrk/chronicle/database/authz"
+	"github.com/Emyrk/chronicle/database/authz/policy"
 	"github.com/google/uuid"
 )
 
@@ -15,6 +17,13 @@ const MaxLogFileSize = 50 * 1024 * 1024 // 50 MB
 func (api *API) WoWLogReparse(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 	logID := httpmw.LogID(ctx)
+	actor, _ := authz.ActorFromContext(ctx)
+
+	ok, err := api.Zed.CheckOne(ctx, nil, policy.New().Raid_log(logID).CanReparse_User(actor))
+	if err != nil || !ok {
+		httpapi.Forbidden(w, err)
+		return
+	}
 
 	res, err := api.Chronicle.EnqueueReParseLog(ctx, logID)
 	if err != nil {
