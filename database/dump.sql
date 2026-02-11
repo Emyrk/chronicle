@@ -41,12 +41,6 @@ CREATE TYPE spell_school AS ENUM (
     'nature'
 );
 
-CREATE TYPE user_roles AS ENUM (
-    'technical_admin',
-    'admin',
-    'alpha_tester'
-);
-
 CREATE DOMAIN wow_guid AS text
 	CONSTRAINT wow_guid_check CHECK ((VALUE ~ '^0x[0-9A-Fa-f]{16}$'::text));
 
@@ -339,8 +333,7 @@ CREATE TABLE users (
     username text NOT NULL,
     email text NOT NULL,
     created_at timestamp with time zone,
-    updated_at timestamp with time zone,
-    roles user_roles[] DEFAULT ARRAY[]::user_roles[]
+    updated_at timestamp with time zone
 );
 
 CREATE TABLE wow_log_groups (

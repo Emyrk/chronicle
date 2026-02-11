@@ -1,0 +1,6 @@
+BEGIN;
+
+ALTER TABLE users DROP COLUMN roles;
+DROP TYPE user_roles;
+
+COMMIT;

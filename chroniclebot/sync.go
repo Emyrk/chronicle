@@ -4,9 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"time"
 
-	"github.com/Emyrk/chronicle/database"
 	"github.com/Emyrk/chronicle/database/authz"
 	"github.com/Emyrk/chronicle/database/authz/policy"
 	"github.com/Emyrk/chronicle/internal/slice"
@@ -35,14 +33,6 @@ func (bot *Bot) SyncDiscordUser(ctx context.Context, zed authz.DatabaseAuthorize
 	}
 
 	roles := make([]string, 0)
-	defer func() {
-		// TODO: DELETE THIS
-		_, retErr = zed.UpdateUserRoles(ctx, database.UpdateUserRolesParams{
-			ID:        userID,
-			Roles:     roles,
-			UpdatedAt: database.Timestamptz(time.Now()),
-		})
-	}()
 
 	if member == nil {
 		// DELETE ALL PERMS
@@ -52,13 +42,12 @@ func (bot *Bot) SyncDiscordUser(ctx context.Context, zed authz.DatabaseAuthorize
 	for _, roleID := range member.Roles {
 		switch roleID {
 		case "1468405974506410110": // Alpha tester
-			roles = append(roles, string(database.UserRolesAlphaTester))
+
 			gChron.Upload_capable(usr)
 		case "1467892674743898297": // Owner
-			roles = append(roles, string(database.UserRolesTechnicalAdmin), string(database.UserRolesAlphaTester))
+
 			gChron.Technical_admin(usr)
 		case "1467890007854551120": // Admin
-			roles = append(roles, string(database.UserRolesAdmin), string(database.UserRolesAlphaTester))
 			gChron.Admin(usr)
 		}
 	}

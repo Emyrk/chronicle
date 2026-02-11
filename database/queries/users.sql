@@ -84,14 +84,3 @@ WHERE
   user_id = $1
 LIMIT 1
 ;
-
--- name: UpdateUserRoles :one
-UPDATE
-  users
-SET
-  roles = sqlc.arg('roles')::text[]::user_roles[],
-  updated_at = $2
-WHERE
-  id = $1
-RETURNING *
-;

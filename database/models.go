@@ -299,67 +299,6 @@ func AllSpellSchoolValues() []SpellSchool {
 	}
 }
 
-type UserRoles string
-
-const (
-	UserRolesTechnicalAdmin UserRoles = "technical_admin"
-	UserRolesAdmin          UserRoles = "admin"
-	UserRolesAlphaTester    UserRoles = "alpha_tester"
-)
-
-func (e *UserRoles) Scan(src interface{}) error {
-	switch s := src.(type) {
-	case []byte:
-		*e = UserRoles(s)
-	case string:
-		*e = UserRoles(s)
-	default:
-		return fmt.Errorf("unsupported scan type for UserRoles: %T", src)
-	}
-	return nil
-}
-
-type NullUserRoles struct {
-	UserRoles UserRoles `json:"user_roles"`
-	Valid     bool      `json:"valid"` // Valid is true if UserRoles is not NULL
-}
-
-// Scan implements the Scanner interface.
-func (ns *NullUserRoles) Scan(value interface{}) error {
-	if value == nil {
-		ns.UserRoles, ns.Valid = "", false
-		return nil
-	}
-	ns.Valid = true
-	return ns.UserRoles.Scan(value)
-}
-
-// Value implements the driver Valuer interface.
-func (ns NullUserRoles) Value() (driver.Value, error) {
-	if !ns.Valid {
-		return nil, nil
-	}
-	return string(ns.UserRoles), nil
-}
-
-func (e UserRoles) Valid() bool {
-	switch e {
-	case UserRolesTechnicalAdmin,
-		UserRolesAdmin,
-		UserRolesAlphaTester:
-		return true
-	}
-	return false
-}
-
-func AllUserRolesValues() []UserRoles {
-	return []UserRoles{
-		UserRolesTechnicalAdmin,
-		UserRolesAdmin,
-		UserRolesAlphaTester,
-	}
-}
-
 type WowPlayableClass string
 
 const (
@@ -728,7 +667,6 @@ type User struct {
 	Email     string             `db:"email" json:"email"`
 	CreatedAt pgtype.Timestamptz `db:"created_at" json:"created_at"`
 	UpdatedAt pgtype.Timestamptz `db:"updated_at" json:"updated_at"`
-	Roles     []UserRoles        `db:"roles" json:"roles"`
 }
 
 type UserAuthLink struct {

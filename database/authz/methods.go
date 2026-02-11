@@ -175,7 +175,3 @@ func (z *interceptor) ListAllWoWLogGroupsWithOwner(ctx context.Context) ([]datab
 func (z *interceptor) UpdateUserAuthSessionTokens(ctx context.Context, arg database.UpdateUserAuthSessionTokensParams) (database.UserAuthSession, error) {
 	return z.store.UpdateUserAuthSessionTokens(ctx, arg)
 }
-
-func (z *interceptor) UpdateUserRoles(ctx context.Context, arg database.UpdateUserRolesParams) (database.User, error) {
-	return z.store.UpdateUserRoles(ctx, arg)
-}

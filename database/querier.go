@@ -46,7 +46,6 @@ type sqlcQuerier interface {
 	ListAllUsers(ctx context.Context) ([]User, error)
 	ListAllWoWLogGroupsWithOwner(ctx context.Context) ([]ListAllWoWLogGroupsWithOwnerRow, error)
 	UpdateUserAuthSessionTokens(ctx context.Context, arg UpdateUserAuthSessionTokensParams) (UserAuthSession, error)
-	UpdateUserRoles(ctx context.Context, arg UpdateUserRolesParams) (User, error)
 }
 
 var _ sqlcQuerier = (*sqlQuerier)(nil)

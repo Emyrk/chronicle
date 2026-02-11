@@ -770,7 +770,7 @@ func (q *sqlQuerier) GetUserAuthSessionByID(ctx context.Context, id uuid.UUID) (
 
 const getUserByID = `-- name: GetUserByID :one
 SELECT
-  id, username, email, created_at, updated_at, roles
+  id, username, email, created_at, updated_at
 FROM
   users
 WHERE
@@ -786,7 +786,6 @@ func (q *sqlQuerier) GetUserByID(ctx context.Context, id uuid.UUID) (User, error
 		&i.Email,
 		&i.CreatedAt,
 		&i.UpdatedAt,
-		&i.Roles,
 	)
 	return i, err
 }
@@ -796,7 +795,7 @@ INSERT INTO
   users(id, username, email, created_at, updated_at)
 VALUES
   ($1, $2, $3, $4, $5)
-RETURNING id, username, email, created_at, updated_at, roles
+RETURNING id, username, email, created_at, updated_at
 `
 
 type InsertUserParams struct {
@@ -822,7 +821,6 @@ func (q *sqlQuerier) InsertUser(ctx context.Context, arg InsertUserParams) (User
 		&i.Email,
 		&i.CreatedAt,
 		&i.UpdatedAt,
-		&i.Roles,
 	)
 	return i, err
 }
@@ -917,7 +915,7 @@ func (q *sqlQuerier) InsertUserAuthSession(ctx context.Context, arg InsertUserAu
 
 const listAllUsers = `-- name: ListAllUsers :many
 SELECT
-  id, username, email, created_at, updated_at, roles
+  id, username, email, created_at, updated_at
 FROM
   users
 ORDER BY
@@ -939,7 +937,6 @@ func (q *sqlQuerier) ListAllUsers(ctx context.Context) ([]User, error) {
 			&i.Email,
 			&i.CreatedAt,
 			&i.UpdatedAt,
-			&i.Roles,
 		); err != nil {
 			return nil, err
 		}
@@ -998,37 +995,6 @@ func (q *sqlQuerier) UpdateUserAuthSessionTokens(ctx context.Context, arg Update
 		&i.CreatedAt,
 		&i.UpdatedAt,
 		&i.JwtID,
-	)
-	return i, err
-}
-
-const updateUserRoles = `-- name: UpdateUserRoles :one
-UPDATE
-  users
-SET
-  roles = $3::text[]::user_roles[],
-  updated_at = $2
-WHERE
-  id = $1
-RETURNING id, username, email, created_at, updated_at, roles
-`
-
-type UpdateUserRolesParams struct {
-	ID        uuid.UUID          `db:"id" json:"id"`
-	UpdatedAt pgtype.Timestamptz `db:"updated_at" json:"updated_at"`
-	Roles     []string           `db:"roles" json:"roles"`
-}
-
-func (q *sqlQuerier) UpdateUserRoles(ctx context.Context, arg UpdateUserRolesParams) (User, error) {
-	row := q.db.QueryRow(ctx, updateUserRoles, arg.ID, arg.UpdatedAt, arg.Roles)
-	var i User
-	err := row.Scan(
-		&i.ID,
-		&i.Username,
-		&i.Email,
-		&i.CreatedAt,
-		&i.UpdatedAt,
-		&i.Roles,
 	)
 	return i, err
 }
