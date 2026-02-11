@@ -76,7 +76,7 @@ func (s *Service) Options() serpent.OptionSet {
 	return serpent.OptionSet{
 		{
 			Name:        "SpiceDB GRPC URL",
-			Description: "SpceDB GRPC URL, e.g. localhost:50051",
+			Description: "SpceDB GRPC URL, e.g. localhost:50051.",
 			Required:    false,
 			Flag:        "spicedb-grpc-url",
 			Env:         "CHRONICLE_SPICEDB_GRPC_URL",

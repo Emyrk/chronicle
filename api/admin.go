@@ -3,8 +3,8 @@ package api
 import (
 	"net/http"
 
-	"github.com/Emyrk/chronicle/api/httpapi"
 	"github.com/Emyrk/chronicle/api/chroniclesdk"
+	"github.com/Emyrk/chronicle/api/httpapi"
 	"github.com/go-chi/chi/v5"
 	"github.com/google/uuid"
 )
@@ -78,7 +78,7 @@ func (a *API) AdminResyncUserRoles(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	err = a.Opts.Bot.SyncDiscordUser(r.Context(), a.Opts.DB, link.LinkedID, userID)
+	err = a.Opts.Bot.SyncDiscordUser(r.Context(), a.Opts.Zed, link.LinkedID, userID)
 	if err != nil {
 		httpapi.Write(r.Context(), w, http.StatusInternalServerError, map[string]string{
 			"message": "Failed to sync user roles: " + err.Error(),

@@ -14,6 +14,7 @@ import (
 	"github.com/Emyrk/chronicle/api/chronauth"
 	"github.com/Emyrk/chronicle/api/chronauth/authkeys"
 	"github.com/Emyrk/chronicle/internal/services"
+	"github.com/Emyrk/chronicle/internal/services/serviceauthz"
 	"github.com/Emyrk/chronicle/internal/services/servicebot"
 	"github.com/Emyrk/chronicle/internal/services/servicechronicle"
 	"github.com/Emyrk/chronicle/internal/services/servicedbstore"
@@ -69,6 +70,7 @@ func (s *Service) DependsOn() []string {
 		serviceriver.OnRiverQueue(),
 		servicechronicle.OnChronicle(),
 		serviceprometheus.OnPrometheus(),
+		serviceauthz.OnAuthz(),
 	}
 }
 
@@ -80,6 +82,7 @@ func (s *Service) Start(ctx context.Context) error {
 	que := serviceriver.RiverQueue(s.broker)
 	chron := servicechronicle.Chronicle(s.broker)
 	reg := serviceprometheus.Registry(s.broker)
+	zed := serviceauthz.Authz(s.broker)
 
 	serverLn, err := ProvisionListener(logger, s.httpAddress)
 	if err != nil {
@@ -128,6 +131,7 @@ func (s *Service) Start(ctx context.Context) error {
 		RiverQueue: que,
 		Bot:        bot,
 		Registry:   reg,
+		Zed:        zed,
 
 		AccessURL: au,
 		DevOAuth:  s.devAuth,

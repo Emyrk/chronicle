@@ -57,8 +57,8 @@ func New(ctx context.Context, opts Options) (*Authz, error) {
 
 	// By default, writes do not happen in a transaction.
 	z.interceptor = &interceptor{
-		writer: z,
-		store:  z.db,
+		Authorizer: z,
+		store:      z.db,
 	}
 
 	return z, nil
@@ -71,6 +71,8 @@ func (z *Authz) Close() error {
 func (z *Authz) Ping(ctx context.Context) (time.Duration, error) {
 	return z.db.Ping(ctx)
 }
+
+var _ Authorizer = (*AuthzTX)(nil)
 
 type AuthzTX struct {
 	parent    *Authz
@@ -88,37 +90,40 @@ func (z *Authz) wrap(tx database.Store) *AuthzTX {
 	}
 
 	spiceTx.interceptor = &interceptor{
-		writer: spiceTx,
-		store:  spiceTx,
+		Authorizer: spiceTx,
+		store:      spiceTx,
 	}
 
 	return spiceTx
 }
 
-func (z *Authz) InTx(f func(database.Store) error, opts *pgx.TxOptions) error {
-	return z.db.InTx(func(nestedTX database.Store) error {
-		wrapped := z.wrap(nestedTX)
-		err := f(wrapped)
-		if err != nil {
-			reverts := rel.Txn{}
-			for _, update := range wrapped.relations.V1Updates {
-				switch update.GetOperation() {
-				case v1.RelationshipUpdate_OPERATION_TOUCH:
-					reverts.Delete(*rel.FromV1Proto(update.Relationship))
-				case v1.RelationshipUpdate_OPERATION_DELETE:
-					reverts.Create(*rel.FromV1Proto(update.Relationship))
-				case v1.RelationshipUpdate_OPERATION_CREATE:
-					reverts.Delete(*rel.FromV1Proto(update.Relationship))
-				}
-			}
-			_, revertErr := z.spice.Write(context.Background(), reverts)
-			if revertErr != nil {
-				z.logger.Error("failed to revert authz transaction after error", "revertErr", revertErr, "originalErr", err)
-			}
-			return err
-		}
-		return nil
+func (z *Authz) InTx(f func(tx *AuthzTX) error, opts *pgx.TxOptions) error {
+	var wrapped *AuthzTX
+	txErr := z.db.InTx(func(nestedTX database.Store) error {
+		wrapped = z.wrap(nestedTX)
+		return f(wrapped)
 	}, opts)
+
+	if txErr != nil {
+		reverts := rel.Txn{}
+		for _, update := range wrapped.relations.V1Updates {
+			switch update.GetOperation() {
+			case v1.RelationshipUpdate_OPERATION_TOUCH:
+				reverts.Delete(*rel.FromV1Proto(update.Relationship))
+			case v1.RelationshipUpdate_OPERATION_DELETE:
+				reverts.Create(*rel.FromV1Proto(update.Relationship))
+			case v1.RelationshipUpdate_OPERATION_CREATE:
+				reverts.Delete(*rel.FromV1Proto(update.Relationship))
+			}
+		}
+		_, revertErr := z.spice.Write(context.Background(), reverts)
+		if revertErr != nil {
+			z.logger.Error("failed to revert authz transaction after error", "revertErr", revertErr, "originalErr", txErr)
+		}
+		return txErr
+	}
+
+	return nil
 }
 
 func (z *AuthzTX) Ping(ctx context.Context) (time.Duration, error) {

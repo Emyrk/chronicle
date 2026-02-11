@@ -17,9 +17,9 @@ type Config struct {
 	// Token is the bot token from Discord Developer Portal.
 	Token string
 	// GuildID is your Discord server ID. If empty, commands are registered globally.
-	GuildID    string
-	DB         database.Store
-	Authorizer *authz.Authz
+	GuildID string
+	DB      database.Store
+	Zed     *authz.Authz
 }
 
 // Bot represents a Discord bot instance.
@@ -169,7 +169,7 @@ func (b *Bot) onGuildMemberUpdate(s *discordgo.Session, m *discordgo.GuildMember
 	}
 
 	// Sync their roles
-	err = b.SyncDiscordUser(context.Background(), b.config.DB, m.User.ID, link.UserID)
+	err = b.SyncDiscordUser(context.Background(), b.config.Zed, m.User.ID, link.UserID)
 	if err != nil {
 		b.logger.Error("failed to sync user roles",
 			slog.String("user_id", link.UserID.String()),
@@ -200,7 +200,7 @@ func (b *Bot) onGuildMemberRemove(s *discordgo.Session, m *discordgo.GuildMember
 	}
 
 	// SyncDiscordUser will clear roles when member is nil (not in guild)
-	err = b.SyncDiscordUser(context.Background(), b.config.DB, m.User.ID, link.UserID)
+	err = b.SyncDiscordUser(context.Background(), b.config.Zed, m.User.ID, link.UserID)
 	if err != nil {
 		b.logger.Error("failed to revoke roles on member leave",
 			slog.String("user_id", link.UserID.String()),

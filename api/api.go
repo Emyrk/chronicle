@@ -13,6 +13,7 @@ import (
 	"github.com/Emyrk/chronicle/chronicle/riverqueue"
 	"github.com/Emyrk/chronicle/chroniclebot"
 	"github.com/Emyrk/chronicle/database"
+	"github.com/Emyrk/chronicle/database/authz"
 	"github.com/Emyrk/chronicle/database/storage"
 	"github.com/Emyrk/chronicle/frontend"
 	"github.com/go-chi/chi/v5"
@@ -24,6 +25,7 @@ import (
 type Options struct {
 	Logger     *slog.Logger
 	Storage    storage.ObjectStorage
+	Zed        *authz.Authz
 	DB         database.Store
 	Chronicle  *chronicle.Chronicle
 	RiverQueue *riverqueue.Queues
@@ -54,6 +56,7 @@ func New(ctx context.Context, opts Options) (*API, error) {
 		Database:  opts.DB,
 		Discord:   opts.Discord,
 		Bot:       opts.Bot,
+		Zed:       opts.Zed,
 		Sessions: chronauth.SessionOptions{
 			SecretPEM: opts.SecretPEM,
 			Registry:  opts.Registry,

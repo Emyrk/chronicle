@@ -53,11 +53,13 @@ func (s *Service) DependsOn() []string {
 func (s *Service) Start(ctx context.Context) error {
 	logger := servicelogger.Logger(s.broker)
 	db := servicedbstore.DatabaseStore(s.broker)
+	zed := serviceauthz.Authz(s.broker)
 
 	bot, err := chroniclebot.New(ctx, logger, chroniclebot.Config{
 		Token:   s.cfg.Token,
 		GuildID: s.cfg.GuildID,
 		DB:      db,
+		Zed:     zed,
 	})
 	if err != nil {
 		return fmt.Errorf("create chronicle bot: %w", err)

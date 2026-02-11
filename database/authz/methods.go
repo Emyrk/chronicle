@@ -9,8 +9,14 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 )
 
-type writer interface {
+type Authorizer interface {
 	Write(ctx context.Context, txn rel.Txn) (writtenAtRevision string, err error)
+	Delete(ctx context.Context, filter *rel.PreconditionedFilter) error
+}
+
+type DatabaseAuthorizer interface {
+	Authorizer
+	database.StoreQueries
 }
 
 func (z *Authz) Write(ctx context.Context, txn rel.Txn) (writtenAtRevision string, err error) {
@@ -35,7 +41,7 @@ func (z *Authz) Delete(ctx context.Context, filter *rel.PreconditionedFilter) er
 }
 
 type interceptor struct {
-	writer
+	Authorizer
 	store database.Store
 }
 
@@ -209,6 +215,5 @@ func (z *interceptor) UpdateUserAuthSessionTokens(ctx context.Context, arg datab
 }
 
 func (z *interceptor) UpdateUserRoles(ctx context.Context, arg database.UpdateUserRolesParams) (database.User, error) {
-	//TODO implement me
-	panic("implement me")
+	return z.UpdateUserRoles(ctx, arg)
 }

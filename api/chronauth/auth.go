@@ -17,6 +17,7 @@ import (
 	"github.com/Emyrk/chronicle/api/httpapi"
 	"github.com/Emyrk/chronicle/chroniclebot"
 	"github.com/Emyrk/chronicle/database"
+	"github.com/Emyrk/chronicle/database/authz"
 	"github.com/go-chi/chi/v5"
 	"github.com/gorilla/sessions"
 	"github.com/markbates/goth"
@@ -36,6 +37,7 @@ type Options struct {
 	AccessURL *url.URL
 	DevServer bool
 	Database  database.Store
+	Zed       *authz.Authz
 	Discord   DiscordOAuth
 	Bot       *chroniclebot.Bot
 
@@ -46,6 +48,7 @@ type Service struct {
 	Providers goth.Providers
 	Store     *sessions.CookieStore
 	Database  database.Store
+	Zed       *authz.Authz
 	Bot       *chroniclebot.Bot
 	logger    *slog.Logger
 
@@ -102,6 +105,7 @@ func New(ctx context.Context, logger *slog.Logger, opts Options) (*Service, erro
 		logger:    logger.With(slog.String("service", "auth")),
 		sessions:  sess,
 		Bot:       opts.Bot,
+		Zed:       opts.Zed,
 	}, nil
 }
 

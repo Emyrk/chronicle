@@ -9,7 +9,8 @@ import (
 	"time"
 
 	"github.com/Emyrk/chronicle/database"
-	"github.com/Emyrk/chronicle/internal/slice"
+  "github.com/Emyrk/chronicle/database/authz"
+  "github.com/Emyrk/chronicle/internal/slice"
 	"github.com/google/uuid"
 	"github.com/markbates/goth"
 )
@@ -23,7 +24,7 @@ func (s *Service) Signup(w http.ResponseWriter, r *http.Request, user goth.User)
 		return session, false
 	}
 
-	err := s.Database.InTx(func(tx database.Store) error {
+	err := s.Zed.InTx(func(tx *authz.AuthzTX) error {
 		linked, err := tx.GetUserAuthByLinkedID(ctx, database.GetUserAuthByLinkedIDParams{
 			LinkedID: user.UserID,
 			Provider: provider.Name(),

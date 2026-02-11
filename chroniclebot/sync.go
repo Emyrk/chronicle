@@ -14,7 +14,7 @@ import (
 	"github.com/google/uuid"
 )
 
-func (bot *Bot) SyncDiscordUser(ctx context.Context, zed *authz.Authz, discordID string, userID uuid.UUID) (retErr error) {
+func (bot *Bot) SyncDiscordUser(ctx context.Context, zed authz.DatabaseAuthorizer, discordID string, userID uuid.UUID) (retErr error) {
 	b := policy.New()
 	gChron := b.GlobalChronicle()
 	usr := b.User(userID)
