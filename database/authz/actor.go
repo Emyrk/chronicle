@@ -10,7 +10,7 @@ import (
 
 type authzActorKey struct{}
 
-var NoActorError = errors.New("no authorization actor in context")
+var ErrNoActor = errors.New("no authorization actor in context")
 
 func ActorFromContext(ctx context.Context) (*policy.ObjUser, bool) {
 	a, ok := ctx.Value(authzActorKey{}).(*policy.ObjUser)

@@ -11,7 +11,6 @@ import (
 
 type TestAuthz struct {
 	*Service
-	t *testing.T
 }
 
 func NewTestAuthz(t *testing.T, broker *services.Services) *Service {

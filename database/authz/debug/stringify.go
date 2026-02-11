@@ -7,6 +7,7 @@ import (
 
 func RelationshipsToStrings(rels []v1.Relationship) []string {
 	allStrings := make([]string, 0)
+	//nolint:gocritic,govet
 	for _, r := range rels {
 		rStr, err := tuple.V1StringRelationship(&r)
 		if err != nil {

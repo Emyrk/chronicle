@@ -4,6 +4,7 @@ package policy
 import (
 	"fmt"
 
+	//nolint:staticcheck
 	. "github.com/Emyrk/zedgen/relbuilder"
 	v1 "github.com/authzed/authzed-go/proto/authzed/api/v1"
 	"github.com/authzed/gochugaru/rel"
