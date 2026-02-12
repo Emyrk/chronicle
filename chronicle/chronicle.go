@@ -203,7 +203,7 @@ func (c *Chronicle) UploadLogs(ctx context.Context, one, two io.Reader) (*databa
 						fmt.Errorf("file with same hash already exists"), // Hide the sql error
 						"A log file with the same contents has already been uploaded by you",
 						http.StatusBadRequest).
-						CTA("Log files cannot be uploaded multiple times, delete the conflicting file or choose another one.").
+						CTA("Log files cannot be uploaded multiple times, delete the conflicting log upload or choose another one.").
 						Link("Conflicting Log file", "/logs/file/"+hashes[i])
 				}
 				return err
