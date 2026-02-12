@@ -60,7 +60,7 @@ func New(ctx context.Context, opts Options) (*Authz, error) {
 	// By default, writes do not happen in a transaction.
 	z.interceptor = &interceptor{
 		Authorizer: z,
-		store:      z.db,
+		Store:      z.db,
 	}
 
 	err = RunSchemaMigrations(ctx, z)
@@ -98,7 +98,7 @@ func (z *Authz) wrap(tx database.Store) *AuthzTX {
 
 	spiceTx.interceptor = &interceptor{
 		Authorizer: z,
-		store:      tx,
+		Store:      tx,
 	}
 
 	return spiceTx

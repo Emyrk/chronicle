@@ -34,6 +34,7 @@ definition raid_log {
   // View: uploader, guild members (if guild-linked), or public
   permission view = uploader + chronicle->admin_logs
   permission reparse = chronicle->admin_logs
+  permission delete_files = uploader + chronicle->admin_logs
     
   // Delete: uploader or guild admin
   permission delete = uploader + chronicle->admin_logs

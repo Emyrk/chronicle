@@ -49,9 +49,54 @@ func (q *sqlQuerier) DeleteWoWLogGroup(ctx context.Context, id uuid.UUID) error 
 	return err
 }
 
+const deleteWoWLogGroupFiles = `-- name: DeleteWoWLogGroupFiles :many
+UPDATE
+  log_file
+SET
+  storage_deleted_at = $1
+WHERE
+  wow_log_id = $2
+RETURNING id, owner, wow_log_id, hash, size_bytes, mime_type, created_at, updated_at, storage_deleted_at
+`
+
+type DeleteWoWLogGroupFilesParams struct {
+	StorageDeletedAt pgtype.Timestamptz `db:"storage_deleted_at" json:"storage_deleted_at"`
+	WowLogID         uuid.UUID          `db:"wow_log_id" json:"wow_log_id"`
+}
+
+func (q *sqlQuerier) DeleteWoWLogGroupFiles(ctx context.Context, arg DeleteWoWLogGroupFilesParams) ([]LogFile, error) {
+	rows, err := q.db.Query(ctx, deleteWoWLogGroupFiles, arg.StorageDeletedAt, arg.WowLogID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []LogFile
+	for rows.Next() {
+		var i LogFile
+		if err := rows.Scan(
+			&i.ID,
+			&i.Owner,
+			&i.WowLogID,
+			&i.Hash,
+			&i.SizeBytes,
+			&i.MimeType,
+			&i.CreatedAt,
+			&i.UpdatedAt,
+			&i.StorageDeletedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const getWoWLogFilesByGroupID = `-- name: GetWoWLogFilesByGroupID :many
 SELECT
-  id, owner, wow_log_id, hash, size_bytes, mime_type, created_at, updated_at
+  id, owner, wow_log_id, hash, size_bytes, mime_type, created_at, updated_at, storage_deleted_at
 FROM
   log_file
 WHERE
@@ -78,6 +123,7 @@ func (q *sqlQuerier) GetWoWLogFilesByGroupID(ctx context.Context, wowLogID uuid.
 			&i.MimeType,
 			&i.CreatedAt,
 			&i.UpdatedAt,
+			&i.StorageDeletedAt,
 		); err != nil {
 			return nil, err
 		}
@@ -102,7 +148,8 @@ SELECT
         'size_bytes', json_file.size_bytes,
         'mime_type', json_file.mime_type,
         'created_at', json_file.created_at,
-        'updated_at', json_file.updated_at
+        'updated_at', json_file.updated_at,
+        'storage_deleted_at', json_file.storage_deleted_at
       )
       ORDER BY json_file.created_at
                ) FILTER (WHERE json_file.id IS NOT NULL),
@@ -154,7 +201,8 @@ FROM
         'size_bytes', lf.size_bytes,
         'mime_type', lf.mime_type,
         'created_at', lf.created_at,
-        'updated_at', lf.updated_at
+        'updated_at', lf.updated_at,
+        'storage_deleted_at', lf.storage_deleted_at
       )
       ORDER BY lf.created_at) FILTER (WHERE lf.id IS NOT NULL),
       '[]'::jsonb
@@ -232,7 +280,7 @@ VALUES
     $7,
     $8
    )
-RETURNING id, owner, wow_log_id, hash, size_bytes, mime_type, created_at, updated_at
+RETURNING id, owner, wow_log_id, hash, size_bytes, mime_type, created_at, updated_at, storage_deleted_at
 `
 
 type InsertLogFileParams struct {
@@ -267,6 +315,7 @@ func (q *sqlQuerier) InsertLogFile(ctx context.Context, arg InsertLogFileParams)
 		&i.MimeType,
 		&i.CreatedAt,
 		&i.UpdatedAt,
+		&i.StorageDeletedAt,
 	)
 	return i, err
 }

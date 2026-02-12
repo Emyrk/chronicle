@@ -25,6 +25,33 @@ func (api *API) WoWLogReparse(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	files, err := api.Zed.GetWoWLogFilesByGroupID(ctx, logID)
+	if err != nil {
+		httpapi.HandleResponseError(ctx, w, err, httpapi.APIError{
+			Response: chroniclesdk.Response{
+				Message: "Failed to locate log files for re-parse",
+				Detail:  err.Error(),
+			},
+			Status: http.StatusInternalServerError,
+		})
+
+		return
+	}
+
+	for _, f := range files {
+		if f.StorageDeletedAt.Valid {
+			httpapi.HandleResponseError(ctx, w, err, httpapi.APIError{
+				Response: chroniclesdk.Response{
+					Message: fmt.Sprintf("Log files were deleted at %s, cannot re-parse", f.StorageDeletedAt.Time),
+					Detail:  "re-parse requires the log files to be present in storage",
+				},
+				Status: http.StatusBadRequest,
+			})
+
+			return
+		}
+	}
+
 	res, err := api.Chronicle.EnqueueReParseLog(ctx, logID)
 	if err != nil {
 		httpapi.HandleResponseError(ctx, w, err, httpapi.APIError{
@@ -39,6 +66,34 @@ func (api *API) WoWLogReparse(w http.ResponseWriter, r *http.Request) {
 	}
 
 	httpapi.Write(ctx, w, http.StatusAccepted, res.Job.ID)
+}
+
+func (api *API) DeleteWoWLogFiles(w http.ResponseWriter, r *http.Request) {
+	ctx := r.Context()
+	logID := httpmw.LogID(ctx)
+	actor, _ := authz.ActorFromContext(ctx)
+
+	ok, err := api.Zed.CheckOne(ctx, nil, policy.New().Raid_log(logID).CanDelete_files_User(actor))
+	if err != nil || !ok {
+		httpapi.Forbidden(w, err)
+		return
+	}
+
+	err = api.Chronicle.DeleteWoWLogGroupFiles(ctx, logID)
+	if err != nil {
+		httpapi.HandleResponseError(ctx, w, err, httpapi.APIError{
+			Response: chroniclesdk.Response{
+				Message: "Failed to delete log files",
+				Detail:  err.Error(),
+			},
+			Status: http.StatusInternalServerError,
+		})
+		return
+	}
+
+	httpapi.Write(ctx, w, http.StatusOK, chroniclesdk.Response{
+		Message: "Log files deleted successfully",
+	})
 }
 
 func (api *API) WoWLogUpload(w http.ResponseWriter, r *http.Request) {

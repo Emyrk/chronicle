@@ -35,14 +35,15 @@ type WoWLogGroup struct {
 }
 
 type WoWLogFile struct {
-	ID        uuid.UUID          `json:"id"`
-	Owner     uuid.UUID          `json:"owner"`
-	WowLogID  uuid.UUID          `json:"wow_log_id"`
-	Hash      string             `json:"hash"`
-	SizeBytes int64              `json:"size_bytes"`
-	MimeType  string             `json:"mime_type"`
-	CreatedAt pgtype.Timestamptz `json:"created_at"`
-	UpdatedAt pgtype.Timestamptz `json:"updated_at"`
+	ID               uuid.UUID          `json:"id"`
+	Owner            uuid.UUID          `json:"owner"`
+	WowLogID         uuid.UUID          `json:"wow_log_id"`
+	Hash             string             `json:"hash"`
+	SizeBytes        int64              `json:"size_bytes"`
+	MimeType         string             `json:"mime_type"`
+	CreatedAt        pgtype.Timestamptz `json:"created_at"`
+	UpdatedAt        pgtype.Timestamptz `json:"updated_at"`
+	StorageDeletedAt pgtype.Timestamptz `json:"storage_deleted_at,omitempty"`
 }
 
 type WoWInstance struct {

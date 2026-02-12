@@ -37,14 +37,15 @@ func WoWLogGroupRow[T database.GetWoWLogGroupsByOwnerRow | database.GetWoWLogGro
 
 func WoWLogFile(file database.LogFile) chroniclesdk.WoWLogFile {
 	return chroniclesdk.WoWLogFile{
-		ID:        file.ID,
-		Owner:     file.Owner,
-		WowLogID:  file.WowLogID,
-		Hash:      file.Hash,
-		SizeBytes: file.SizeBytes,
-		MimeType:  file.MimeType,
-		CreatedAt: file.CreatedAt,
-		UpdatedAt: file.UpdatedAt,
+		ID:               file.ID,
+		Owner:            file.Owner,
+		WowLogID:         file.WowLogID,
+		Hash:             file.Hash,
+		SizeBytes:        file.SizeBytes,
+		MimeType:         file.MimeType,
+		CreatedAt:        file.CreatedAt,
+		UpdatedAt:        file.UpdatedAt,
+		StorageDeletedAt: file.StorageDeletedAt,
 	}
 }
 

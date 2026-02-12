@@ -251,6 +251,37 @@ func (c *Chronicle) WoWLogGroup(ctx context.Context, groupID uuid.UUID) (*chroni
 }
 
 func (c *Chronicle) DeleteWoWLogGroup(ctx context.Context, logID uuid.UUID) error {
+	err := c.RemoveWoWLogFilesFromStorage(ctx, logID)
+	if err != nil {
+		return fmt.Errorf("remove log files from storage: %w", err)
+	}
+
+	err = c.Zed.DeleteWoWLogGroup(ctx, logID)
+	if err != nil {
+		return fmt.Errorf("delete log group: %w", err)
+	}
+
+	return nil
+}
+
+func (c *Chronicle) DeleteWoWLogGroupFiles(ctx context.Context, logID uuid.UUID) error {
+	err := c.RemoveWoWLogFilesFromStorage(ctx, logID)
+	if err != nil {
+		return fmt.Errorf("remove log files from storage: %w", err)
+	}
+
+	_, err = c.Zed.DeleteWoWLogGroupFiles(ctx, database.DeleteWoWLogGroupFilesParams{
+		StorageDeletedAt: database.Timestamptz(time.Now()),
+		WowLogID:         logID,
+	})
+	if err != nil {
+		return fmt.Errorf("delete log group files: %w", err)
+	}
+
+	return nil
+}
+
+func (c *Chronicle) RemoveWoWLogFilesFromStorage(ctx context.Context, logID uuid.UUID) error {
 	files, err := c.Zed.GetWoWLogFilesByGroupID(ctx, logID)
 	if err != nil {
 		return fmt.Errorf("fetch log files: %w", err)
@@ -262,12 +293,6 @@ func (c *Chronicle) DeleteWoWLogGroup(ctx context.Context, logID uuid.UUID) erro
 			return fmt.Errorf("remove file: %w", err)
 		}
 	}
-
-	err = c.Zed.DeleteWoWLogGroup(ctx, logID)
-	if err != nil {
-		return fmt.Errorf("delete log group: %w", err)
-	}
-
 	return nil
 }
 

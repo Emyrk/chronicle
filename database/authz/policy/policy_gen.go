@@ -4,7 +4,6 @@ package policy
 import (
 	"fmt"
 
-	//nolint:staticcheck
 	. "github.com/Emyrk/zedgen/relbuilder"
 	v1 "github.com/authzed/authzed-go/proto/authzed/api/v1"
 	"github.com/authzed/gochugaru/rel"
@@ -320,7 +319,7 @@ func (obj *ObjInstance) Create() *InstanceRelates {
 	return &InstanceRelates{obj: obj, rel: obj.src.Create()}
 }
 
-// Raid_log schema.zed:43
+// Raid_log schema.zed:44
 // Relationship: instance:<id>#raid_log@raid_log:<id>
 // Uses Touch operation implicitly. For Delete/Create, use obj.Delete().Raid_log() etc.
 func (obj *ObjInstance) Raid_log(subs ...*ObjRaid_log) *ObjInstance {
@@ -338,7 +337,7 @@ func (r *InstanceRelates) Raid_log(subs ...*ObjRaid_log) *InstanceRelates {
 	return r
 }
 
-// PublicWildcard schema.zed:44
+// PublicWildcard schema.zed:45
 // Relationship: instance:<id>#public@user:*
 func (obj *ObjInstance) PublicWildcard() *ObjInstance {
 	obj.src.Touch().Add("public", &v1.ObjectReference{
@@ -411,6 +410,10 @@ func (obj *ObjRaid_log) PermissionView() string {
 
 func (obj *ObjRaid_log) PermissionReparse() string {
 	return "reparse"
+}
+
+func (obj *ObjRaid_log) PermissionDelete_files() string {
+	return "delete_files"
 }
 
 func (obj *ObjRaid_log) PermissionDelete() string {
@@ -522,6 +525,36 @@ func (obj *ObjRaid_log) CanReparse_User(sub *ObjUser) rel.Relationship {
 		ResourceType:     r.ObjectType,
 		ResourceID:       r.ObjectId,
 		ResourceRelation: "reparse",
+		SubjectType:      s.Obj.ObjectType,
+		SubjectID:        s.Obj.ObjectId,
+		SubjectRelation:  s.OptionalRelation,
+	}
+}
+
+// CanDelete_files_Chronicle checks if the subject has delete_files permission
+// // Object: raid_log:<id>
+// Schema: permission delete_files = uploader + chronicle->admin_logs
+func (obj *ObjRaid_log) CanDelete_files_Chronicle(sub *ObjChronicle) rel.Relationship {
+	r, s := obj.src.Obj, sub.src
+	return rel.Relationship{
+		ResourceType:     r.ObjectType,
+		ResourceID:       r.ObjectId,
+		ResourceRelation: "delete_files",
+		SubjectType:      s.Obj.ObjectType,
+		SubjectID:        s.Obj.ObjectId,
+		SubjectRelation:  s.OptionalRelation,
+	}
+}
+
+// CanDelete_files_User checks if the subject has delete_files permission
+// // Object: raid_log:<id>
+// Schema: permission delete_files = uploader + chronicle->admin_logs
+func (obj *ObjRaid_log) CanDelete_files_User(sub *ObjUser) rel.Relationship {
+	r, s := obj.src.Obj, sub.src
+	return rel.Relationship{
+		ResourceType:     r.ObjectType,
+		ResourceID:       r.ObjectId,
+		ResourceRelation: "delete_files",
 		SubjectType:      s.Obj.ObjectType,
 		SubjectID:        s.Obj.ObjectId,
 		SubjectRelation:  s.OptionalRelation,

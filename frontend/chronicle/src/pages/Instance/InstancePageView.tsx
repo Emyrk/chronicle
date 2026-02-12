@@ -842,8 +842,6 @@ export interface InstancePageViewProps {
   instance: Instance;
   selectedEncounterIds?: string[];
   onSelectEncounters?: (encounterIds: string[]) => void;
-  /** URL to navigate to when clicking the back button */
-  backUrl?: string;
   /** Optional button to show YouTube video overlay */
   youtubeButton?: React.ReactNode;
 }
@@ -852,7 +850,6 @@ export function InstancePageView({
   instance,
   selectedEncounterIds: _selectedEncounterIds,
   onSelectEncounters,
-  backUrl,
   youtubeButton,
 }: InstancePageViewProps) {
 
@@ -1002,14 +999,6 @@ export function InstancePageView({
       {/* Header */}
       <div className="mb-6">
         <div className="flex items-center gap-4 mb-2">
-          {backUrl && (
-            <Link to={backUrl}>
-              <Button variant="ghost" size="sm">
-                <ArrowLeft className="h-4 w-4 mr-1" />
-                Back
-              </Button>
-            </Link>
-          )}
           <div className="flex-1">
             <h1 className="text-2xl font-bold">{instance.name}</h1>
             <p className="text-muted-foreground text-sm">

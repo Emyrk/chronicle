@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useMemo } from "react";
 import { Link, useParams, useNavigate } from "react-router-dom";
 import { toast } from "sonner";
 import { 
@@ -29,7 +29,9 @@ import { useAuth } from "@/hooks/useAuth";
 import { 
   useLogGroup, 
   useDeleteLogGroup, 
-  useReparseLogGroup, 
+  useReparseLogGroup,
+  useDeleteLogFiles,
+  useAuthorizationCheck,
   type WoWLogGroupState, 
   type WoWLogFile, 
   type RiverJobState,
@@ -343,6 +345,10 @@ export interface LogDetailViewProps {
   setShowDeleteConfirm: (show: boolean) => void;
   onReparse: () => void;
   isReparsing: boolean;
+  canReparse: boolean;
+  onDeleteFiles: () => void;
+  isDeletingFiles: boolean;
+  canDeleteFiles: boolean;
   onRefresh: () => void;
   isRefreshing: boolean;
 }
@@ -359,6 +365,10 @@ export function LogDetailView({
   setShowDeleteConfirm,
   onReparse,
   isReparsing,
+  canReparse,
+  onDeleteFiles,
+  isDeletingFiles,
+  canDeleteFiles,
   onRefresh,
   isRefreshing,
 }: LogDetailViewProps) {
@@ -458,23 +468,25 @@ export function LogDetailView({
               <RefreshCw className={`h-4 w-4 mr-2 ${isRefreshing ? "animate-spin" : ""}`} />
               Refresh
             </Button>
-            <Button 
-              variant="outline" 
-              onClick={onReparse}
-              disabled={isReparsing || !isJobComplete(log.status.state)}
-            >
-              {isReparsing ? (
-                <>
-                  <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-                  Reparsing...
-                </>
-              ) : (
-                <>
-                  <Play className="h-4 w-4 mr-2" />
-                  Reparse
-                </>
-              )}
-            </Button>
+{canReparse && (
+              <Button 
+                variant="outline" 
+                onClick={onReparse}
+                disabled={isReparsing || !isJobComplete(log.status.state)}
+              >
+                {isReparsing ? (
+                  <>
+                    <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                    Reparsing...
+                  </>
+                ) : (
+                  <>
+                    <Play className="h-4 w-4 mr-2" />
+                    Reparse
+                  </>
+                )}
+              </Button>
+            )}
           </div>
 
           {/* Processing Status Card */}
@@ -617,16 +629,39 @@ export function LogDetailView({
 
           {/* Files Card */}
           <Card className="p-6">
-            <h2 className="font-semibold text-lg mb-4 flex items-center gap-2">
-              <HardDrive className="h-5 w-5 text-muted-foreground" />
-              Uploaded Files
-            </h2>
+            <div className="flex items-center justify-between mb-4">
+              <h2 className="font-semibold text-lg flex items-center gap-2">
+                <HardDrive className="h-5 w-5 text-muted-foreground" />
+                Uploaded Files
+              </h2>
+              {canDeleteFiles && log.files && log.files.length > 0 && !log.files.some(f => f.storage_deleted_at) && (
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={onDeleteFiles}
+                  disabled={isDeletingFiles}
+                  className="text-destructive hover:text-destructive"
+                >
+                  {isDeletingFiles ? (
+                    <>
+                      <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                      Deleting...
+                    </>
+                  ) : (
+                    <>
+                      <Trash2 className="h-4 w-4 mr-2" />
+                      Delete Files
+                    </>
+                  )}
+                </Button>
+              )}
+            </div>
             <div className="space-y-2">
               {log.files && log.files.length > 0 ? (
                 log.files.map((file: WoWLogFile) => (
                   <div 
                     key={file.id} 
-                    className="flex items-center justify-between p-3 rounded-lg border"
+                    className={`flex items-center justify-between p-3 rounded-lg border ${file.storage_deleted_at ? "opacity-60" : ""}`}
                   >
                     <div className="flex items-center gap-3">
                       <FileText className="h-5 w-5 text-muted-foreground" />
@@ -640,6 +675,11 @@ export function LogDetailView({
                     <div className="text-right text-sm text-muted-foreground">
                       <p>{formatBytes(file.size_bytes)}</p>
                       <p className="text-xs">{formatDate(file.created_at)}</p>
+                      {file.storage_deleted_at && (
+                        <p className="text-xs text-destructive">
+                          Deleted: {formatDate(file.storage_deleted_at)}
+                        </p>
+                      )}
                     </div>
                   </div>
                 ))
@@ -759,6 +799,18 @@ export function LogDetail() {
 
   const deleteLogGroup = useDeleteLogGroup();
   const reparseLogGroup = useReparseLogGroup();
+  const deleteLogFiles = useDeleteLogFiles();
+
+  // Check permissions
+  const authzChecks = useMemo(() => ({
+    reparse: `raid_log:${logId}#reparse`,
+    deleteFiles: `raid_log:${logId}#delete_files`,
+  }), [logId]);
+  const { data: authz } = useAuthorizationCheck(authzChecks, {
+    enabled: isAuthenticated && !!logId,
+  });
+  const canReparse = authz?.reparse ?? false;
+  const canDeleteFiles = authz?.deleteFiles ?? false;
 
   const handleDelete = () => {
     if (!logId) return;
@@ -792,6 +844,23 @@ export function LogDetail() {
     });
   };
 
+  const handleDeleteFiles = () => {
+    if (!logId) return;
+    deleteLogFiles.mutate(logId, {
+      onSuccess: () => {
+        toast.success("Files deleted", {
+          description: "The uploaded files have been removed from storage.",
+        });
+        refetch();
+      },
+      onError: (error) => {
+        toast.error("Failed to delete files", {
+          description: error.message,
+        });
+      },
+    });
+  };
+
   const handleRefresh = () => {
     refetch();
   };
@@ -809,6 +878,10 @@ export function LogDetail() {
       setShowDeleteConfirm={setShowDeleteConfirm}
       onReparse={handleReparse}
       isReparsing={reparseLogGroup.isPending}
+      canReparse={canReparse}
+      onDeleteFiles={handleDeleteFiles}
+      isDeletingFiles={deleteLogFiles.isPending}
+      canDeleteFiles={canDeleteFiles}
       onRefresh={handleRefresh}
       isRefreshing={isRefetching}
     />

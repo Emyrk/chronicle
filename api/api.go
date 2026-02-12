@@ -132,6 +132,7 @@ func (api *API) Routes() chi.Router {
 						r.Use(httpmw.LogIDMiddleware)
 						r.Group(func(r chi.Router) {
 							r.Post("/reparse", api.WoWLogReparse)
+							r.Delete("/delete-files", api.DeleteWoWLogFiles)
 						})
 						r.Get("/", api.WoWLogGroup)
 						r.Group(func(r chi.Router) {

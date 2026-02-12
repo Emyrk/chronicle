@@ -13,15 +13,15 @@ import (
 
 type interceptor struct {
 	Authorizer
-	store database.Store
+	database.Store
 }
 
 func (z *interceptor) DeleteAllParsedLogsByGroupID(ctx context.Context, id uuid.UUID) error {
-	return z.store.DeleteAllParsedLogsByGroupID(ctx, id)
+	return z.Store.DeleteAllParsedLogsByGroupID(ctx, id)
 }
 
 func (z *interceptor) DeleteThisQuery(ctx context.Context) error {
-	return z.store.DeleteThisQuery(ctx)
+	return z.Store.DeleteThisQuery(ctx)
 }
 
 func (z *interceptor) DeleteWoWLogGroup(ctx context.Context, id uuid.UUID) error {
@@ -31,55 +31,55 @@ func (z *interceptor) DeleteWoWLogGroup(ctx context.Context, id uuid.UUID) error
 	if err != nil {
 		return fmt.Errorf("delete authz relations: %w", err)
 	}
-	return z.store.DeleteWoWLogGroup(ctx, id)
+	return z.Store.DeleteWoWLogGroup(ctx, id)
 }
 
 func (z *interceptor) EncountersByInstanceID(ctx context.Context, instanceID uuid.UUID) ([]database.LogInstanceEncounter, error) {
-	return z.store.EncountersByInstanceID(ctx, instanceID)
+	return z.Store.EncountersByInstanceID(ctx, instanceID)
 }
 
 func (z *interceptor) GetInstanceEncounterCharacterFights(ctx context.Context, instanceID uuid.UUID) ([]database.LogInstanceEncounterHostile, error) {
-	return z.store.GetInstanceEncounterCharacterFights(ctx, instanceID)
+	return z.Store.GetInstanceEncounterCharacterFights(ctx, instanceID)
 }
 
 func (z *interceptor) GetInstanceYoutubeData(ctx context.Context, logInstanceID uuid.UUID) (database.LogInstanceYoutubeTimestamped, error) {
-	return z.store.GetInstanceYoutubeData(ctx, logInstanceID)
+	return z.Store.GetInstanceYoutubeData(ctx, logInstanceID)
 }
 
 func (z *interceptor) GetUserAuthByLinkedID(ctx context.Context, arg database.GetUserAuthByLinkedIDParams) (database.UserAuthLink, error) {
-	return z.store.GetUserAuthByLinkedID(ctx, arg)
+	return z.Store.GetUserAuthByLinkedID(ctx, arg)
 }
 
 func (z *interceptor) GetUserAuthLinkByUserID(ctx context.Context, userID uuid.UUID) (database.UserAuthLink, error) {
-	return z.store.GetUserAuthLinkByUserID(ctx, userID)
+	return z.Store.GetUserAuthLinkByUserID(ctx, userID)
 }
 
 func (z *interceptor) GetUserAuthSessionByID(ctx context.Context, id uuid.UUID) (database.UserAuthSession, error) {
-	return z.store.GetUserAuthSessionByID(ctx, id)
+	return z.Store.GetUserAuthSessionByID(ctx, id)
 }
 
 func (z *interceptor) GetUserByID(ctx context.Context, id uuid.UUID) (database.User, error) {
-	return z.store.GetUserByID(ctx, id)
+	return z.Store.GetUserByID(ctx, id)
 }
 
 func (z *interceptor) GetWoWLogFilesByGroupID(ctx context.Context, wowLogID uuid.UUID) ([]database.LogFile, error) {
-	return z.store.GetWoWLogFilesByGroupID(ctx, wowLogID)
+	return z.Store.GetWoWLogFilesByGroupID(ctx, wowLogID)
 }
 
 func (z *interceptor) GetWoWLogGroupByID(ctx context.Context, id uuid.UUID) (database.GetWoWLogGroupByIDRow, error) {
-	return z.store.GetWoWLogGroupByID(ctx, id)
+	return z.Store.GetWoWLogGroupByID(ctx, id)
 }
 
 func (z *interceptor) GetWoWLogGroupsByOwner(ctx context.Context, owner uuid.UUID) ([]database.GetWoWLogGroupsByOwnerRow, error) {
-	return z.store.GetWoWLogGroupsByOwner(ctx, owner)
+	return z.Store.GetWoWLogGroupsByOwner(ctx, owner)
 }
 
 func (z *interceptor) InsertEncounter(ctx context.Context, arg database.InsertEncounterParams) (database.LogInstanceEncounter, error) {
-	return z.store.InsertEncounter(ctx, arg)
+	return z.Store.InsertEncounter(ctx, arg)
 }
 
 func (z *interceptor) InsertEncounterCharacterFights(ctx context.Context, arg []database.InsertEncounterCharacterFightsParams) *database.InsertEncounterCharacterFightsBatchResults {
-	return z.store.InsertEncounterCharacterFights(ctx, arg)
+	return z.Store.InsertEncounterCharacterFights(ctx, arg)
 }
 
 func (z *interceptor) InsertInstance(ctx context.Context, arg database.InsertInstanceParams) (database.LogInstance, error) {
@@ -92,43 +92,43 @@ func (z *interceptor) InsertInstance(ctx context.Context, arg database.InsertIns
 	if err != nil {
 		return database.LogInstance{}, err
 	}
-	return z.store.InsertInstance(ctx, arg)
+	return z.Store.InsertInstance(ctx, arg)
 }
 
 func (z *interceptor) InsertInstancePlayers(ctx context.Context, arg []database.InsertInstancePlayersParams) *database.InsertInstancePlayersBatchResults {
-	return z.store.InsertInstancePlayers(ctx, arg)
+	return z.Store.InsertInstancePlayers(ctx, arg)
 }
 
 func (z *interceptor) InsertInstanceUnits(ctx context.Context, arg []database.InsertInstanceUnitsParams) *database.InsertInstanceUnitsBatchResults {
-	return z.store.InsertInstanceUnits(ctx, arg)
+	return z.Store.InsertInstanceUnits(ctx, arg)
 }
 
 func (z *interceptor) InsertLogFile(ctx context.Context, arg database.InsertLogFileParams) (database.LogFile, error) {
-	return z.store.InsertLogFile(ctx, arg)
+	return z.Store.InsertLogFile(ctx, arg)
 }
 
 func (z *interceptor) InsertLogInstanceEvents(ctx context.Context, arg []database.InsertLogInstanceEventsParams) *database.InsertLogInstanceEventsBatchResults {
-	return z.store.InsertLogInstanceEvents(ctx, arg)
+	return z.Store.InsertLogInstanceEvents(ctx, arg)
 }
 
 func (z *interceptor) InsertParsedLogGroup(ctx context.Context, id uuid.UUID) error {
-	return z.store.InsertParsedLogGroup(ctx, id)
+	return z.Store.InsertParsedLogGroup(ctx, id)
 }
 
 func (z *interceptor) InsertStampedYoutubeVideo(ctx context.Context, arg database.InsertStampedYoutubeVideoParams) error {
-	return z.store.InsertStampedYoutubeVideo(ctx, arg)
+	return z.Store.InsertStampedYoutubeVideo(ctx, arg)
 }
 
 func (z *interceptor) InsertUser(ctx context.Context, arg database.InsertUserParams) (database.User, error) {
-	return z.store.InsertUser(ctx, arg)
+	return z.Store.InsertUser(ctx, arg)
 }
 
 func (z *interceptor) InsertUserAuth(ctx context.Context, arg database.InsertUserAuthParams) (database.UserAuthLink, error) {
-	return z.store.InsertUserAuth(ctx, arg)
+	return z.Store.InsertUserAuth(ctx, arg)
 }
 
 func (z *interceptor) InsertUserAuthSession(ctx context.Context, arg database.InsertUserAuthSessionParams) (database.UserAuthSession, error) {
-	return z.store.InsertUserAuthSession(ctx, arg)
+	return z.Store.InsertUserAuthSession(ctx, arg)
 }
 
 func (z *interceptor) InsertWoWLogGroup(ctx context.Context, arg database.InsertWoWLogGroupParams) (database.WoWLogGroup, error) {
@@ -141,37 +141,37 @@ func (z *interceptor) InsertWoWLogGroup(ctx context.Context, arg database.Insert
 	if err != nil {
 		return database.WoWLogGroup{}, err
 	}
-	return z.store.InsertWoWLogGroup(ctx, arg)
+	return z.Store.InsertWoWLogGroup(ctx, arg)
 }
 
 func (z *interceptor) Instance(ctx context.Context, id uuid.UUID) (database.LogInstance, error) {
-	return z.store.Instance(ctx, id)
+	return z.Store.Instance(ctx, id)
 }
 
 func (z *interceptor) InstanceBySlug(ctx context.Context, hashedSlug pgtype.Text) (database.LogInstance, error) {
-	return z.store.InstanceBySlug(ctx, hashedSlug)
+	return z.Store.InstanceBySlug(ctx, hashedSlug)
 }
 
 func (z *interceptor) InstanceEvent(ctx context.Context, arg database.InstanceEventParams) (database.LogInstanceEvent, error) {
-	return z.store.InstanceEvent(ctx, arg)
+	return z.Store.InstanceEvent(ctx, arg)
 }
 
 func (z *interceptor) InstancePlayersByInstanceID(ctx context.Context, instanceID uuid.UUID) ([]database.LogInstancePlayer, error) {
-	return z.store.InstancePlayersByInstanceID(ctx, instanceID)
+	return z.Store.InstancePlayersByInstanceID(ctx, instanceID)
 }
 
 func (z *interceptor) InstanceUnitsByInstanceID(ctx context.Context, instanceID uuid.UUID) ([]database.LogInstanceUnit, error) {
-	return z.store.InstanceUnitsByInstanceID(ctx, instanceID)
+	return z.Store.InstanceUnitsByInstanceID(ctx, instanceID)
 }
 
 func (z *interceptor) ListAllUsers(ctx context.Context) ([]database.User, error) {
-	return z.store.ListAllUsers(ctx)
+	return z.Store.ListAllUsers(ctx)
 }
 
 func (z *interceptor) ListAllWoWLogGroupsWithOwner(ctx context.Context) ([]database.ListAllWoWLogGroupsWithOwnerRow, error) {
-	return z.store.ListAllWoWLogGroupsWithOwner(ctx)
+	return z.Store.ListAllWoWLogGroupsWithOwner(ctx)
 }
 
 func (z *interceptor) UpdateUserAuthSessionTokens(ctx context.Context, arg database.UpdateUserAuthSessionTokensParams) (database.UserAuthSession, error) {
-	return z.store.UpdateUserAuthSessionTokens(ctx, arg)
+	return z.Store.UpdateUserAuthSessionTokens(ctx, arg)
 }

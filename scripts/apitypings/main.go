@@ -131,6 +131,7 @@ func TypeMappings(gen *guts.GoParser) error {
 		"github.com/coder/serpent.HostPort":                      "string",
 		"encoding/json.RawMessage":                               "map[string]string",
 		"github.com/Emyrk/chronicle/api/chroniclesdk.GUIDString": "string",
+		"github.com/jackc/pgx/v5/pgtype.Timestamptz":             "string",
 	})
 	if err != nil {
 		return xerrors.Errorf("include custom: %w", err)

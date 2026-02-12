@@ -162,6 +162,27 @@ export function useReparseLogGroup() {
   });
 }
 
+export function useDeleteLogFiles() {
+  const queryClient = useQueryClient();
+  
+  return useMutation({
+    mutationFn: async (logId: string) => {
+      const response = await fetch(`/api/v1/raidlogs/logs/${logId}/delete-files`, {
+        method: "DELETE",
+      });
+      if (!response.ok) {
+        const error = await response.json().catch(() => ({ message: "Failed to delete files" }));
+        throw new Error(error.message || "Failed to delete files");
+      }
+      return logId;
+    },
+    onSuccess: (logId) => {
+      // Invalidate to refetch with updated file status
+      queryClient.invalidateQueries({ queryKey: ["logGroup", logId] });
+    },
+  });
+}
+
 export function useInstance(instanceId: string, options?: Omit<UseQueryOptions<WoWParsedInstance>, "queryKey" | "queryFn">) {
   return useQuery({
     queryKey: ["instance", instanceId],

@@ -103,6 +103,10 @@ const defaultProps = {
   setShowDeleteConfirm: () => {},
   onReparse: () => console.log("Reparse clicked"),
   isReparsing: false,
+  canReparse: true,
+  onDeleteFiles: () => console.log("Delete files clicked"),
+  isDeletingFiles: false,
+  canDeleteFiles: true,
   onRefresh: () => console.log("Refresh clicked"),
   isRefreshing: false,
 };

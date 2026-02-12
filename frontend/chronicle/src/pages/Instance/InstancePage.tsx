@@ -120,14 +120,12 @@ function transformToInstance(
  */
 function InstancePageInner({ 
   instance, 
-  backUrl, 
   selectedEncounterIds,
   onSelectEncounters,
   youtubeData,
   selectedEncounterTimes,
 }: {
   instance: Instance;
-  backUrl: string;
   selectedEncounterIds: string[];
   onSelectEncounters: (ids: string[] | null) => void;
   youtubeData: { url: string; results: readonly import("@/api/typesGenerated").VideoTimestamp[] } | null | undefined;
@@ -155,7 +153,6 @@ function InstancePageInner({
     <>
       <InstancePageView
         instance={instance}
-        backUrl={backUrl}
         selectedEncounterIds={selectedEncounterIds}
         onSelectEncounters={onSelectEncounters}
         youtubeButton={
@@ -290,15 +287,14 @@ export function InstancePage() {
     );
   }
 
-  // Use log_group_id from the API response to construct back URL
-  const backUrl = apiInstance?.log_group_id ? `/logs/${apiInstance.log_group_id}` : "/logs";
+  // // Use log_group_id from the API response to construct back URL
+  // const backUrl = apiInstance?.log_group_id ? `/logs/${apiInstance.log_group_id}` : "/logs";
 
   return (
     <SyncModeProvider>
       <InstanceEventsProvider instanceId={instance.id}>
         <InstancePageInner
           instance={instance}
-          backUrl={backUrl}
           selectedEncounterIds={selectedEncounterIds}
           onSelectEncounters={setUserSelectedEncounterIds}
           youtubeData={youtubeData}

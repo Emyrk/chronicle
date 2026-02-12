@@ -475,6 +475,12 @@ func AllWowPlayableRaceValues() []WowPlayableRace {
 	}
 }
 
+type DataLimit struct {
+	UserID          uuid.UUID          `db:"user_id" json:"user_id"`
+	MaxStorageBytes int64              `db:"max_storage_bytes" json:"max_storage_bytes"`
+	UpdatedAt       pgtype.Timestamptz `db:"updated_at" json:"updated_at"`
+}
+
 type ItemEffect struct {
 	ID          uuid.UUID      `db:"id" json:"id"`
 	ItemID      int32          `db:"item_id" json:"item_id"`
@@ -513,6 +519,8 @@ type LogFile struct {
 	MimeType  string             `db:"mime_type" json:"mime_type"`
 	CreatedAt pgtype.Timestamptz `db:"created_at" json:"created_at"`
 	UpdatedAt pgtype.Timestamptz `db:"updated_at" json:"updated_at"`
+	// The timestamp when the file was deleted from storage. This allows us to keep track of files that have been removed from storage, even if the log_file record still exists in the database.
+	StorageDeletedAt pgtype.Timestamptz `db:"storage_deleted_at" json:"storage_deleted_at"`
 }
 
 type LogInstance struct {

@@ -60,6 +60,16 @@ WHERE
   id = $1
 ;
 
+-- name: DeleteWoWLogGroupFiles :many
+UPDATE
+  log_file
+SET
+  storage_deleted_at = $1
+WHERE
+  wow_log_id = $2
+RETURNING *
+;
+
 -- name: ListAllWoWLogGroupsWithOwner :many
 SELECT
   sqlc.embed(wow_log_groups),
@@ -118,7 +128,8 @@ FROM
         'size_bytes', lf.size_bytes,
         'mime_type', lf.mime_type,
         'created_at', lf.created_at,
-        'updated_at', lf.updated_at
+        'updated_at', lf.updated_at,
+        'storage_deleted_at', lf.storage_deleted_at
       )
       ORDER BY lf.created_at) FILTER (WHERE lf.id IS NOT NULL),
       '[]'::jsonb
@@ -153,7 +164,8 @@ SELECT
         'size_bytes', json_file.size_bytes,
         'mime_type', json_file.mime_type,
         'created_at', json_file.created_at,
-        'updated_at', json_file.updated_at
+        'updated_at', json_file.updated_at,
+        'storage_deleted_at', json_file.storage_deleted_at
       )
       ORDER BY json_file.created_at
                ) FILTER (WHERE json_file.id IS NOT NULL),

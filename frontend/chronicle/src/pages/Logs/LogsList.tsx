@@ -75,6 +75,7 @@ interface LogRowProps {
 
 function LogRow({ log, instances, failedCount }: LogRowProps) {
   const totalBytes = log.files?.reduce((acc, f) => acc + f.size_bytes, 0) ?? 0;
+  const filesDeleted = log.files?.some((f) => f.storage_deleted_at) ?? false;
   
   // Check if all instances share the same realm
   const realmIds = new Set(instances.map((inst) => inst.realm_id));
@@ -95,7 +96,11 @@ function LogRow({ log, instances, failedCount }: LogRowProps) {
           )}
         </span>
         <span className="text-xs text-muted-foreground">
-          {formatBytes(totalBytes)}
+          {filesDeleted ? (
+            <span className="italic">files removed from storage</span>
+          ) : (
+            formatBytes(totalBytes)
+          )}
         </span>
         <ChevronRight className="h-4 w-4 text-muted-foreground" />
       </Link>
