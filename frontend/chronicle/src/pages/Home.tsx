@@ -17,7 +17,7 @@ export function Home() {
           <h1 className="text-4xl md:text-5xl lg:text-6xl font-bold tracking-tight mb-6">
             Every raid tells a story.
             <br />
-            <span className="text-primary">Chronicle helps you read it.</span>
+            <span className="text-sky-400">Chronicle helps you read it.</span>
           </h1>
           
           <p className="text-xl text-muted-foreground mb-8 max-w-2xl mx-auto">
