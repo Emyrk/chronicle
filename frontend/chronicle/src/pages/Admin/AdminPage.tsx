@@ -4,14 +4,120 @@ import {
   useAdminUsers, 
   useAdminLogs, 
   useResyncUserRoles,
+  useSetUserDataLimit,
   useAuthorizationCheck,
   type User,
   type AdminLog,
 } from "@/api/queries";
 import { useAuth } from "@/hooks/useAuth";
-import { RefreshCw, Users, FileText, Shield, ShieldCheck, TestTube, Loader2, ChevronRight } from "lucide-react";
+import { RefreshCw, Users, FileText, Shield, ShieldCheck, TestTube, Loader2, ChevronRight, HardDrive, Check, Pencil } from "lucide-react";
 import { Card } from "@/components/ui/Card/Card";
 import { Button } from "@/components/ui/button";
+
+function formatBytes(bytes: number): string {
+  if (bytes === 0) return "0 B";
+  const k = 1024;
+  const sizes = ["B", "KB", "MB", "GB"];
+  const i = Math.floor(Math.log(bytes) / Math.log(k));
+  return `${parseFloat((bytes / Math.pow(k, i)).toFixed(1))} ${sizes[i]}`;
+}
+
+function bytesToMB(bytes: number): number {
+  return Math.round(bytes / (1024 * 1024));
+}
+
+function mbToBytes(mb: number): number {
+  return mb * 1024 * 1024;
+}
+
+interface StorageBarProps {
+  consumed: number;
+  max: number;
+  onEditLimit?: (newMaxBytes: number) => void;
+  isSaving?: boolean;
+}
+
+function StorageBar({ consumed, max, onEditLimit, isSaving }: StorageBarProps) {
+  const [editing, setEditing] = useState(false);
+  const [inputValue, setInputValue] = useState(bytesToMB(max).toString());
+  const percentage = max > 0 ? Math.min((consumed / max) * 100, 100) : 0;
+  const isNearLimit = percentage >= 80;
+  const isAtLimit = percentage >= 100;
+
+  const handleSave = () => {
+    const mbValue = parseInt(inputValue, 10);
+    if (!isNaN(mbValue) && mbValue >= 0 && onEditLimit) {
+      onEditLimit(mbToBytes(mbValue));
+    }
+    setEditing(false);
+  };
+
+  const handleKeyDown = (e: React.KeyboardEvent) => {
+    if (e.key === "Enter") {
+      handleSave();
+    } else if (e.key === "Escape") {
+      setEditing(false);
+      setInputValue(bytesToMB(max).toString());
+    }
+  };
+  
+  return (
+    <div className="flex items-center gap-2 min-w-[180px]">
+      <HardDrive className="h-3.5 w-3.5 text-muted-foreground flex-shrink-0" />
+      <div className="flex-1">
+        <div className="h-2 bg-secondary rounded-full overflow-hidden">
+          <div 
+            className={`h-full transition-all ${
+              isAtLimit 
+                ? "bg-destructive" 
+                : isNearLimit 
+                  ? "bg-yellow-500" 
+                  : "bg-primary"
+            }`}
+            style={{ width: `${percentage}%` }}
+          />
+        </div>
+        <div className="flex justify-between items-center text-[10px] text-muted-foreground mt-0.5">
+          <span>{formatBytes(consumed)}</span>
+          {editing ? (
+            <div className="flex items-center gap-1">
+              <input
+                type="number"
+                value={inputValue}
+                onChange={(e) => setInputValue(e.target.value)}
+                onKeyDown={handleKeyDown}
+                onBlur={handleSave}
+                className="w-16 px-1 py-0.5 text-[10px] bg-secondary rounded border-0 text-right"
+                autoFocus
+                min={0}
+              />
+              <span>MB</span>
+              {isSaving ? (
+                <Loader2 className="h-3 w-3 animate-spin" />
+              ) : (
+                <button onClick={handleSave} className="hover:text-foreground">
+                  <Check className="h-3 w-3" />
+                </button>
+              )}
+            </div>
+          ) : (
+            <button 
+              onClick={() => {
+                setInputValue(bytesToMB(max).toString());
+                setEditing(true);
+              }}
+              className="flex items-center gap-1 hover:text-foreground"
+              title="Click to edit limit"
+            >
+              <span>{formatBytes(max)}</span>
+              {onEditLimit && <Pencil className="h-2.5 w-2.5" />}
+            </button>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}
 
 function RoleBadge({ role }: { role: string }) {
   const badges: Record<string, { icon: React.ReactNode; label: string; className: string }> = {
@@ -46,7 +152,15 @@ function RoleBadge({ role }: { role: string }) {
   );
 }
 
-function UserRow({ user, onResync, isSyncing }: { user: User; onResync: () => void; isSyncing: boolean }) {
+interface UserRowProps {
+  user: User;
+  onResync: () => void;
+  isSyncing: boolean;
+  onEditLimit: (newMaxBytes: number) => void;
+  isSavingLimit: boolean;
+}
+
+function UserRow({ user, onResync, isSyncing, onEditLimit, isSavingLimit }: UserRowProps) {
   return (
     <div className="group py-3 px-4 hover:bg-accent/50 transition-colors">
       <div className="flex items-center gap-4">
@@ -63,7 +177,13 @@ function UserRow({ user, onResync, isSyncing }: { user: User; onResync: () => vo
             )}
           </div>
         </div>
-        <span className="text-xs text-muted-foreground">
+        <StorageBar 
+          consumed={user.consumed_storage_bytes} 
+          max={user.max_storage_bytes}
+          onEditLimit={onEditLimit}
+          isSaving={isSavingLimit}
+        />
+        <span className="text-xs text-muted-foreground whitespace-nowrap">
           {new Date(user.created_at).toLocaleDateString(undefined, { month: "short", day: "numeric", year: "numeric" })}
         </span>
         <Button
@@ -83,7 +203,9 @@ function UserRow({ user, onResync, isSyncing }: { user: User; onResync: () => vo
 
 function UsersSection({ users }: { users: readonly User[] }) {
   const resyncMutation = useResyncUserRoles();
+  const dataLimitMutation = useSetUserDataLimit();
   const [syncingId, setSyncingId] = useState<string | null>(null);
+  const [savingLimitId, setSavingLimitId] = useState<string | null>(null);
 
   const handleResync = async (userId: string) => {
     setSyncingId(userId);
@@ -91,6 +213,15 @@ function UsersSection({ users }: { users: readonly User[] }) {
       await resyncMutation.mutateAsync(userId);
     } finally {
       setSyncingId(null);
+    }
+  };
+
+  const handleEditLimit = async (userId: string, newMaxBytes: number) => {
+    setSavingLimitId(userId);
+    try {
+      await dataLimitMutation.mutateAsync({ userId, maxStorageBytes: newMaxBytes });
+    } finally {
+      setSavingLimitId(null);
     }
   };
 
@@ -102,6 +233,8 @@ function UsersSection({ users }: { users: readonly User[] }) {
           user={user}
           onResync={() => handleResync(user.id)}
           isSyncing={syncingId === user.id}
+          onEditLimit={(newMaxBytes) => handleEditLimit(user.id, newMaxBytes)}
+          isSavingLimit={savingLimitId === user.id}
         />
       ))}
     </Card>

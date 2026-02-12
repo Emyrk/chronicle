@@ -103,6 +103,17 @@ func (c *Chronicle) UploadLogs(ctx context.Context, one, two io.Reader) (*databa
 		return nil, nil, fmt.Errorf("upload file, no authenticated user")
 	}
 
+	user, err := c.Zed.GetUserByID(ctx, cl.Subject)
+	if err != nil {
+		return nil, nil, fmt.Errorf("fetch user: %w", err)
+	}
+	if user.ConsumedStorageBytes > user.MaxStorageBytes.Int64 {
+		return nil, nil, httpapi.NewAPIError(
+			fmt.Errorf("storage limit exceeded"),
+			fmt.Sprintf("Reached storage limit of %d bytes, delete log files to free up space", user.MaxStorageBytes.Int64),
+			http.StatusBadRequest)
+	}
+
 	// Save the files locally to disk first, then upload them to object storage.
 	// This allows us to hash them and store in the database first, and keep them tracked.
 	tmpIDs := []uuid.UUID{uuid.New(), uuid.New()}
@@ -154,7 +165,7 @@ func (c *Chronicle) UploadLogs(ctx context.Context, one, two io.Reader) (*databa
 
 	var group database.WoWLogGroup
 	// tmpFiles and hashes are the files that were uploaded now on local disk.
-	err := c.Zed.InTx(func(tx *authz.AuthzTX) error {
+	err = c.Zed.InTx(func(tx *authz.AuthzTX) error {
 		// Insert the log grouo
 		var err error
 		group, err = tx.InsertWoWLogGroup(ctx, database.InsertWoWLogGroupParams{

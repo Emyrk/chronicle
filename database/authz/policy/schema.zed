@@ -19,6 +19,7 @@ definition chronicle {
   permission admin_queues = technical_admin
   permission upload_youtube = administer
   permission upload_log = upload_capable + administer
+  permission set_user_data_limit = technical_admin
 }
 
 definition river_queue {

@@ -2,11 +2,17 @@ package api
 
 import (
 	"net/http"
+	"time"
 
 	"github.com/Emyrk/chronicle/api/chroniclesdk"
+	"github.com/Emyrk/chronicle/api/db2sdk"
 	"github.com/Emyrk/chronicle/api/httpapi"
+	"github.com/Emyrk/chronicle/database"
+	"github.com/Emyrk/chronicle/database/authz"
+	"github.com/Emyrk/chronicle/database/authz/policy"
 	"github.com/go-chi/chi/v5"
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5/pgtype"
 )
 
 // AdminListUsers returns all users in the system.
@@ -31,20 +37,70 @@ func (a *API) AdminListUsers(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 
-		resp.Users[i] = chroniclesdk.User{
-			ID:                     u.ID,
-			Username:               u.Username,
-			Email:                  u.Email,
-			Roles:                  roles,
-			CreatedAt:              u.CreatedAt.Time.Format("2006-01-02T15:04:05Z"),
-			UpdatedAt:              u.UpdatedAt.Time.Format("2006-01-02T15:04:05Z"),
-			MaxStorageBytes:        u.MaxStorageBytes.Int64,
-			MaxStorageBytesUpdated: u.DataLimitUpdatedAt,
-			ConsumedStorageBytes:   u.ConsumedStorageBytes,
-		}
+		resp.Users[i] = db2sdk.User(u, roles)
 	}
 
 	httpapi.Write(r.Context(), w, http.StatusOK, resp)
+}
+
+// SetUserDataLimit updates a user's storage limit.
+// @Summary Set user data limit
+// @Tags Admin
+// @Param userID path string true "User ID"
+// @Param request body chroniclesdk.SetUserDataLimitRequest true "New storage limit"
+// @Success 200 {object} chroniclesdk.User
+// @Router /api/v1/admin/users/{userID}/data-limit [put]
+func (a *API) SetUserDataLimit(w http.ResponseWriter, r *http.Request) {
+	ctx := r.Context()
+	userIDStr := chi.URLParam(r, "userID")
+
+	userID, err := uuid.Parse(userIDStr)
+	if err != nil {
+		httpapi.Write(ctx, w, http.StatusBadRequest, chroniclesdk.Response{
+			Message: "Invalid user ID",
+			Detail:  err.Error(),
+		})
+		return
+	}
+
+	actor, _ := authz.ActorFromContext(ctx)
+	b := policy.New()
+
+	ok, err := a.Zed.CheckOne(ctx, nil, b.GlobalChronicle().CanSet_user_data_limit_User(actor))
+	if err != nil || !ok {
+		httpapi.Forbidden(w, err)
+		return
+	}
+
+	var req chroniclesdk.SetUserDataLimitRequest
+	if !httpapi.Read(ctx, w, r, &req) {
+		return
+	}
+
+	_, err = a.Opts.DB.SetUserStorageLimit(ctx, database.SetUserStorageLimitParams{
+		UserID:          userID,
+		MaxStorageBytes: req.MaxStorageBytes,
+		UpdatedAt:       pgtype.Timestamptz{Time: time.Now(), Valid: true},
+	})
+	if err != nil {
+		httpapi.InternalServerError(w, err)
+		return
+	}
+
+	// Fetch updated user to return
+	user, err := a.Opts.DB.GetUserByID(ctx, userID)
+	if err != nil {
+		httpapi.InternalServerError(w, err)
+		return
+	}
+
+	roles, err := a.Opts.Zed.UserChronicleRoles(ctx, userID)
+	if err != nil {
+		httpapi.InternalServerError(w, err)
+		return
+	}
+
+	httpapi.Write(ctx, w, http.StatusOK, db2sdk.User(user, roles))
 }
 
 // AdminResyncUserRoles re-syncs a user's primary roles from Discord.
@@ -108,17 +164,7 @@ func (a *API) AdminResyncUserRoles(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	httpapi.Write(r.Context(), w, http.StatusOK, chroniclesdk.User{
-		ID:                     user.ID,
-		Username:               user.Username,
-		Email:                  user.Email,
-		Roles:                  roles,
-		CreatedAt:              user.CreatedAt.Time.Format("2006-01-02T15:04:05Z"),
-		UpdatedAt:              user.UpdatedAt.Time.Format("2006-01-02T15:04:05Z"),
-		MaxStorageBytes:        user.MaxStorageBytes.Int64,
-		MaxStorageBytesUpdated: user.DataLimitUpdatedAt,
-		ConsumedStorageBytes:   user.ConsumedStorageBytes,
-	})
+	httpapi.Write(r.Context(), w, http.StatusOK, db2sdk.User(user, roles))
 }
 
 // AdminListLogs returns all logs in the system.

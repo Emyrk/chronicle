@@ -151,6 +151,8 @@ const defaultProps = {
   logs: mockLogs,
   logsLoading: false,
   logsError: null,
+  maxStorageBytes: 500 * 1024 * 1024, // 500MB
+  consumedStorageBytes: 150 * 1024 * 1024, // 150MB used
 };
 
 const meta: Meta<typeof LogsListView> = {

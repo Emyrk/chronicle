@@ -113,6 +113,7 @@ func (api *API) Routes() chi.Router {
 			)
 			r.Get("/users", api.AdminListUsers)
 			r.Post("/users/{userID}/resync", api.AdminResyncUserRoles)
+			r.Put("/users/{userID}/data-limit", api.SetUserDataLimit)
 			r.Get("/logs", api.AdminListLogs)
 		})
 

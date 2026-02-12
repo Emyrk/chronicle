@@ -10,6 +10,20 @@ import (
 	"github.com/riverqueue/river/rivertype"
 )
 
+func User(user database.ChronicleUser, roles []string) chroniclesdk.User {
+	return chroniclesdk.User{
+		ID:                     user.ID,
+		Username:               user.Username,
+		Email:                  user.Email,
+		Roles:                  roles,
+		CreatedAt:              user.CreatedAt.Time,
+		UpdatedAt:              user.UpdatedAt.Time,
+		MaxStorageBytes:        user.MaxStorageBytes.Int64,
+		MaxStorageBytesUpdated: user.DataLimitUpdatedAt.Time,
+		ConsumedStorageBytes:   user.ConsumedStorageBytes,
+	}
+}
+
 func WoWLogGroupRow[T database.GetWoWLogGroupsByOwnerRow | database.GetWoWLogGroupByIDRow](group T) chroniclesdk.WoWLogGroup {
 	// Use type switch to handle both types
 	switch g := any(group).(type) {

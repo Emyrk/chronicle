@@ -1,10 +1,10 @@
 import { useMemo } from "react";
 import { Link, useSearchParams } from "react-router-dom";
-import { FileText, LogIn, Loader2, Upload as UploadIcon, Castle, AlertCircle, ChevronRight, Filter, X } from "lucide-react";
+import { FileText, LogIn, Loader2, Upload as UploadIcon, Castle, AlertCircle, ChevronRight, Filter, X, HardDrive } from "lucide-react";
 import { Card } from "@/components/ui/Card/Card";
 import { Button } from "@/components/ui/button";
 import { useAuth } from "@/hooks/useAuth";
-import { useLogGroups, type WoWLogGroup, type WoWParsedLogJobOutput } from "@/api/queries";
+import { useLogGroups, useSession, type WoWLogGroup, type WoWParsedLogJobOutput } from "@/api/queries";
 import type { WoWSimpleParsedInstance } from "@/api/typesGenerated";
 
 function formatShortDate(timestamp: unknown): string {
@@ -65,6 +65,48 @@ function getUniqueInstanceNames(logs: WoWLogGroup[]): string[] {
     }
   }
   return Array.from(names).sort();
+}
+
+function StorageUsageCard({ consumed, max }: { consumed: number; max: number }) {
+  const percentage = max > 0 ? Math.min((consumed / max) * 100, 100) : 0;
+  const isNearLimit = percentage >= 80;
+  const isAtLimit = percentage >= 95;
+  
+  return (
+    <Card className="p-4">
+      <div className="flex items-start gap-3">
+        <HardDrive className="h-5 w-5 text-muted-foreground flex-shrink-0 mt-0.5" />
+        <div className="flex-1 min-w-0">
+          <div className="flex items-center justify-between mb-2">
+            <span className="text-sm font-medium">Storage Usage</span>
+            <span className="text-sm text-muted-foreground">
+              {formatBytes(consumed)} / {formatBytes(max)}
+            </span>
+          </div>
+          <div className="h-2 bg-secondary rounded-full overflow-hidden">
+            <div 
+              className={`h-full transition-all ${
+                isAtLimit 
+                  ? "bg-destructive" 
+                  : isNearLimit 
+                    ? "bg-yellow-500" 
+                    : "bg-primary"
+              }`}
+              style={{ width: `${percentage}%` }}
+            />
+          </div>
+          <p className={`text-xs mt-2 ${isNearLimit ? "text-foreground" : "text-muted-foreground"}`}>
+            {isAtLimit 
+              ? "You've reached your storage limit. Delete stored log files from your logs to free up space."
+              : isNearLimit
+                ? "You're approaching your storage limit. Consider deleting stored log files to free up space."
+                : "To help control server costs, you can delete stored log files from your logs after they've been parsed. Your parsed data will be preserved."
+            }
+          </p>
+        </div>
+      </div>
+    </Card>
+  );
 }
 
 interface LogRowProps {
@@ -151,6 +193,8 @@ export interface LogsListViewProps {
   logs: WoWLogGroup[] | undefined;
   logsLoading: boolean;
   logsError: Error | null;
+  maxStorageBytes: number;
+  consumedStorageBytes: number;
 }
 
 export function LogsListView({
@@ -159,6 +203,8 @@ export function LogsListView({
   logs,
   logsLoading,
   logsError,
+  maxStorageBytes,
+  consumedStorageBytes,
 }: LogsListViewProps) {
   const [searchParams, setSearchParams] = useSearchParams();
   const instanceFilter = searchParams.get("instance");
@@ -258,6 +304,11 @@ export function LogsListView({
         </Card>
       ) : (
         <>
+          {/* Storage usage */}
+          {maxStorageBytes > 0 && (
+            <StorageUsageCard consumed={consumedStorageBytes} max={maxStorageBytes} />
+          )}
+
           {/* Instance filter */}
           {uniqueInstances.length > 1 && (
             <div className="flex items-center gap-2 flex-wrap">
@@ -329,6 +380,9 @@ export function LogsList() {
   const { data: logs, isLoading: logsLoading, error: logsError } = useLogGroups({
     enabled: isAuthenticated,
   });
+  const { data: session } = useSession({
+    enabled: isAuthenticated,
+  });
 
   return (
     <LogsListView
@@ -337,6 +391,8 @@ export function LogsList() {
       logs={logs}
       logsLoading={logsLoading}
       logsError={logsError}
+      maxStorageBytes={session?.max_storage_bytes ?? 0}
+      consumedStorageBytes={session?.consumed_storage_bytes ?? 0}
     />
   );
 }

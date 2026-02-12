@@ -17,9 +17,18 @@ func (a *API) WhoAmI(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// Fetch user storage info
+	user, err := a.Opts.DB.GetUserByID(ctx, state.Claims.Subject)
+	if err != nil {
+		httpapi.InternalServerError(w, err)
+		return
+	}
+
 	httpapi.Write(r.Context(), w, http.StatusOK, chroniclesdk.Session{
-		UserID:    state.Claims.Subject,
-		SessionID: state.Claims.SessionID,
-		Roles:     roles,
+		UserID:               state.Claims.Subject,
+		SessionID:            state.Claims.SessionID,
+		Roles:                roles,
+		MaxStorageBytes:      user.MaxStorageBytes.Int64,
+		ConsumedStorageBytes: user.ConsumedStorageBytes,
 	})
 }

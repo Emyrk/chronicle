@@ -52,6 +52,19 @@ export function useWhoami(options?: Omit<UseQueryOptions<boolean>, "queryKey" | 
   });
 }
 
+export function useSession(options?: Omit<UseQueryOptions<Session | null>, "queryKey" | "queryFn">) {
+  return useQuery({
+    queryKey: ["session"],
+    queryFn: async () => {
+      const response = await fetch("/api/v1/whoami");
+      if (!response.ok) return null;
+      return response.json() as Promise<Session>;
+    },
+    retry: false,
+    ...options,
+  });
+}
+
 /**
  * Check authorization for one or more SpiceDB permission checks.
  * @param checks - Map of check names to SpiceDB-style object strings (e.g., "raid_log:uuid#view")
@@ -212,19 +225,6 @@ export function useInstanceYoutube(instanceId: string, options?: Omit<UseQueryOp
 
 // Admin queries
 
-export function useSession(options?: Omit<UseQueryOptions<Session | null>, "queryKey" | "queryFn">) {
-  return useQuery({
-    queryKey: ["session"],
-    queryFn: async () => {
-      const response = await fetch("/api/v1/whoami");
-      if (!response.ok) return null;
-      return response.json() as Promise<Session>;
-    },
-    retry: false,
-    ...options,
-  });
-}
-
 export function useAdminUsers(options?: Omit<UseQueryOptions<AdminUsersResponse>, "queryKey" | "queryFn">) {
   return useQuery({
     queryKey: ["admin", "users"],
@@ -262,6 +262,28 @@ export function useResyncUserRoles() {
       if (!response.ok) {
         const error = await response.json().catch(() => ({ message: "Failed to resync roles" }));
         throw new Error(error.message || "Failed to resync roles");
+      }
+      return response.json() as Promise<User>;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["admin", "users"] });
+    },
+  });
+}
+
+export function useSetUserDataLimit() {
+  const queryClient = useQueryClient();
+  
+  return useMutation({
+    mutationFn: async ({ userId, maxStorageBytes }: { userId: string; maxStorageBytes: number }) => {
+      const response = await fetch(`/api/v1/admin/users/${userId}/data-limit`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ max_storage_bytes: maxStorageBytes }),
+      });
+      if (!response.ok) {
+        const error = await response.json().catch(() => ({ message: "Failed to set data limit" }));
+        throw new Error(error.message || "Failed to set data limit");
       }
       return response.json() as Promise<User>;
     },

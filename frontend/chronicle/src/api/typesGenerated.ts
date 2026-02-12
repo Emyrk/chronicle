@@ -171,6 +171,13 @@ export interface Session {
     readonly user_id: string;
     readonly session_id: string;
     readonly roles: readonly string[];
+    readonly max_storage_bytes: number;
+    readonly consumed_storage_bytes: number;
+}
+
+// From chroniclesdk/user.go
+export interface SetUserDataLimitRequest {
+    readonly max_storage_bytes: number;
 }
 
 // From chroniclesdk/user.go

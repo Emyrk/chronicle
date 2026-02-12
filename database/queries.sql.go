@@ -1003,6 +1003,30 @@ func (q *sqlQuerier) ListAllUsers(ctx context.Context) ([]ChronicleUser, error) 
 	return items, nil
 }
 
+const setUserStorageLimit = `-- name: SetUserStorageLimit :one
+UPDATE
+  data_limit
+SET
+  max_storage_bytes = $2,
+  updated_at = $3
+WHERE
+  user_id = $1
+RETURNING user_id, max_storage_bytes, updated_at
+`
+
+type SetUserStorageLimitParams struct {
+	UserID          uuid.UUID          `db:"user_id" json:"user_id"`
+	MaxStorageBytes int64              `db:"max_storage_bytes" json:"max_storage_bytes"`
+	UpdatedAt       pgtype.Timestamptz `db:"updated_at" json:"updated_at"`
+}
+
+func (q *sqlQuerier) SetUserStorageLimit(ctx context.Context, arg SetUserStorageLimitParams) (DataLimit, error) {
+	row := q.db.QueryRow(ctx, setUserStorageLimit, arg.UserID, arg.MaxStorageBytes, arg.UpdatedAt)
+	var i DataLimit
+	err := row.Scan(&i.UserID, &i.MaxStorageBytes, &i.UpdatedAt)
+	return i, err
+}
+
 const updateUserAuthSessionTokens = `-- name: UpdateUserAuthSessionTokens :one
 UPDATE
   user_auth_session
