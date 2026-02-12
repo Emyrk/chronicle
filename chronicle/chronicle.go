@@ -23,6 +23,7 @@ import (
 	"github.com/Emyrk/chronicle/database/storage"
 	"github.com/Emyrk/chronicle/internal/cleanup"
 	"github.com/Emyrk/chronicle/internal/ptr"
+	"github.com/dustin/go-humanize"
 	"github.com/google/uuid"
 )
 
@@ -110,7 +111,7 @@ func (c *Chronicle) UploadLogs(ctx context.Context, one, two io.Reader) (*databa
 	if user.ConsumedStorageBytes > user.MaxStorageBytes.Int64 {
 		return nil, nil, httpapi.NewAPIError(
 			fmt.Errorf("storage limit exceeded"),
-			fmt.Sprintf("Reached storage limit of %d bytes, delete log files to free up space", user.MaxStorageBytes.Int64),
+			fmt.Sprintf("Reached storage limit of %s bytes, delete log files to free up space", humanize.Bytes(uint64(user.MaxStorageBytes.Int64))),
 			http.StatusBadRequest)
 	}
 
