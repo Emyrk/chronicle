@@ -83,6 +83,7 @@ type WoWLogGroupState struct {
 }
 
 type WoWParsedLogJobOutput struct {
+	Complete         *time.Time                `json:"complete"`
 	InstanceFailures map[string]string         `json:"instance_failures"`
 	Instances        []WoWSimpleParsedInstance `json:"instances"`
 }

@@ -113,9 +113,10 @@ interface LogRowProps {
   log: WoWLogGroup;
   instances: WoWSimpleParsedInstance[];
   failedCount: number;
+  complete: boolean;
 }
 
-function LogRow({ log, instances, failedCount }: LogRowProps) {
+function LogRow({ log, instances, failedCount, complete }: LogRowProps) {
   const totalBytes = log.files?.reduce((acc, f) => acc + f.size_bytes, 0) ?? 0;
   const filesDeleted = log.files?.some((f) => f.storage_deleted_at) ?? false;
   
@@ -180,7 +181,9 @@ function LogRow({ log, instances, failedCount }: LogRowProps) {
       )}
       {instances.length === 0 && failedCount === 0 && (
         <div className="px-4 pt-1 pl-12">
-          <span className="text-sm text-muted-foreground italic">Processing...</span>
+          <span className="text-sm text-muted-foreground italic">
+            {complete ? "No instances found" : "Processing..."}
+          </span>
         </div>
       )}
     </div>
@@ -353,6 +356,7 @@ export function LogsListView({
               const parsedOutput = parseParsedOutput(log.processing_output);
               const instances = parsedOutput?.instances ?? [];
               const failedCount = Object.keys(parsedOutput?.instance_failures ?? {}).length;
+              const complete = !!parsedOutput?.complete;
               
               return (
                 <LogRow
@@ -360,6 +364,7 @@ export function LogsListView({
                   log={log}
                   instances={instances as WoWSimpleParsedInstance[]}
                   failedCount={failedCount}
+                  complete={complete}
                 />
               );
             })}

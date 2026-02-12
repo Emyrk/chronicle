@@ -294,7 +294,7 @@ function ParsedInstancesSection({ log }: { log: WoWLogGroupState }) {
     return null;
   }
   
-  const { instances, instance_failures: instanceFailures } = parsedOutput;
+  const { instances, instance_failures: instanceFailures, complete } = parsedOutput;
   const hasFailures = Object.keys(instanceFailures || {}).length > 0;
   
   return (
@@ -305,9 +305,15 @@ function ParsedInstancesSection({ log }: { log: WoWLogGroupState }) {
       </h2>
       
       {instances.length === 0 && !hasFailures ? (
-        <p className="text-muted-foreground text-sm">
-          No instances were found in this log.
-        </p>
+        complete ? (
+          <p className="text-muted-foreground text-sm">
+            No instances were found in this log.
+          </p>
+        ) : (
+          <p className="text-muted-foreground text-sm">
+            Processing log...
+          </p>
+        )
       ) : (
         <div className="space-y-4">
           {instances.map((instance) => (

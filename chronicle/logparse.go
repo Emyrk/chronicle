@@ -29,6 +29,7 @@ import (
 	"github.com/Emyrk/chronicle/database/authz"
 	"github.com/Emyrk/chronicle/database/dbstatic"
 	"github.com/Emyrk/chronicle/internal/leveledlog"
+	"github.com/Emyrk/chronicle/internal/ptr"
 	"github.com/Emyrk/chronicle/internal/slice"
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgtype"
@@ -296,6 +297,8 @@ func (w *WorkerLogParse) Work(ctx context.Context, job *river.Job[ArgsLogParse])
 		}
 		return int(a.Encounters[0].StartTime.Unix() - b.Encounters[0].StartTime.Unix())
 	})
+
+	jobOut.Complete = ptr.Ref(time.Now())
 	_ = river.RecordOutput(ctx, jobOut)
 
 	return nil

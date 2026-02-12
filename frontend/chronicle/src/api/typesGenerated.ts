@@ -348,6 +348,7 @@ export interface WoWParsedInstance extends WoWInstance {
 
 // From chroniclesdk/log.go
 export interface WoWParsedLogJobOutput {
+    readonly complete: string | null;
     readonly instance_failures: Record<string, string>;
     readonly instances: readonly WoWSimpleParsedInstance[];
 }
