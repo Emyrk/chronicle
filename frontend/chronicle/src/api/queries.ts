@@ -131,6 +131,19 @@ export function useLogGroup(logId: string, options?: Omit<UseQueryOptions<WoWLog
   });
 }
 
+export function useLogGroupByFileHash(fileHash: string, options?: Omit<UseQueryOptions<WoWLogGroupState>, "queryKey" | "queryFn">) {
+  return useQuery({
+    queryKey: ["logGroupByFile", fileHash],
+    retry: false,
+    queryFn: async () => {
+      const response = await fetch(`/api/v1/raidlogs/logs/by-file-hash/${fileHash}`);
+      if (!response.ok) throw new Error("Failed to fetch log details");
+      return response.json() as Promise<WoWLogGroupState>;
+    },
+    ...options,
+  });
+}
+
 export function useDeleteLogGroup() {
   const queryClient = useQueryClient();
   

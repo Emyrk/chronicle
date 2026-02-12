@@ -124,6 +124,11 @@ export interface Response {
      */
     readonly call_to_action?: string;
     /**
+     * Link if provided is a URL that the user can click on to take the suggested action in CallToAction.
+     */
+    readonly link?: string;
+    readonly link_text?: string;
+    /**
      * Detail is a debug message that provides further insight into why the
      * action failed. This information can be technical and a regular golang
      * err.Error() text.

@@ -4,7 +4,7 @@ import { Home } from "./pages/Home"
 import { Empty } from "./pages/Empty"
 import { Upload } from "./pages/Upload/Upload"
 import { LogsList } from "./pages/Logs/LogsList"
-import { LogDetail } from "./pages/Logs/LogDetail"
+import { LogDetail, LogDetailByHash } from "./pages/Logs/LogDetail"
 import { InstancePage } from "./pages/Instance/InstancePage"
 import { ProtoDecode } from "./pages/Debug/ProtoDecode"
 import { YouTubeSyncPage } from "./pages/YouTubeSync/YouTubeSyncPage"
@@ -45,6 +45,7 @@ function App() {
         <Route path="/upload" element={<Upload />} />
         <Route path="/logs" element={<LogsList />} />
         <Route path="/logs/:logId" element={<LogDetail />} />
+        <Route path="/logs/file/:fileHash" element={<LogDetailByHash />} />
         <Route path="/instances/:instanceId" element={<InstancePage />} />
         <Route path="/debug/proto" element={<ProtoDecode />} />
         <Route path="/admin" element={<AdminPage />} />

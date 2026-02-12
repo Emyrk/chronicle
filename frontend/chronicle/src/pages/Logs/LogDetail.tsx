@@ -27,7 +27,8 @@ import { Card } from "@/components/ui/Card/Card";
 import { Button } from "@/components/ui/button";
 import { useAuth } from "@/hooks/useAuth";
 import { 
-  useLogGroup, 
+  useLogGroup,
+  useLogGroupByFileHash,
   useDeleteLogGroup, 
   useReparseLogGroup,
   useDeleteLogFiles,
@@ -802,6 +803,115 @@ export function LogDetail() {
   const deleteLogFiles = useDeleteLogFiles();
 
   // Check permissions
+  const authzChecks = useMemo(() => ({
+    reparse: `raid_log:${logId}#reparse`,
+    deleteFiles: `raid_log:${logId}#delete_files`,
+  }), [logId]);
+  const { data: authz } = useAuthorizationCheck(authzChecks, {
+    enabled: isAuthenticated && !!logId,
+  });
+  const canReparse = authz?.reparse ?? false;
+  const canDeleteFiles = authz?.deleteFiles ?? false;
+
+  const handleDelete = () => {
+    if (!logId) return;
+    deleteLogGroup.mutate(logId, {
+      onSuccess: () => {
+        toast.success("Log deleted");
+        navigate("/logs");
+      },
+      onError: (error) => {
+        toast.error("Failed to delete log", {
+          description: error.message,
+        });
+      },
+    });
+  };
+
+  const handleReparse = () => {
+    if (!logId) return;
+    reparseLogGroup.mutate(logId, {
+      onSuccess: () => {
+        toast.success("Reparse started", {
+          description: "Your log is being reprocessed.",
+        });
+        refetch();
+      },
+      onError: (error) => {
+        toast.error("Failed to reparse", {
+          description: error.message,
+        });
+      },
+    });
+  };
+
+  const handleDeleteFiles = () => {
+    if (!logId) return;
+    deleteLogFiles.mutate(logId, {
+      onSuccess: () => {
+        toast.success("Files deleted", {
+          description: "The uploaded files have been removed from storage.",
+        });
+        refetch();
+      },
+      onError: (error) => {
+        toast.error("Failed to delete files", {
+          description: error.message,
+        });
+      },
+    });
+  };
+
+  const handleRefresh = () => {
+    refetch();
+  };
+
+  return (
+    <LogDetailView
+      isAuthenticated={isAuthenticated}
+      authLoading={authLoading}
+      log={log}
+      logLoading={logLoading}
+      logError={logError}
+      onDelete={handleDelete}
+      isDeleting={deleteLogGroup.isPending}
+      showDeleteConfirm={showDeleteConfirm}
+      setShowDeleteConfirm={setShowDeleteConfirm}
+      onReparse={handleReparse}
+      isReparsing={reparseLogGroup.isPending}
+      canReparse={canReparse}
+      onDeleteFiles={handleDeleteFiles}
+      isDeletingFiles={deleteLogFiles.isPending}
+      canDeleteFiles={canDeleteFiles}
+      onRefresh={handleRefresh}
+      isRefreshing={isRefetching}
+    />
+  );
+}
+
+export function LogDetailByHash() {
+  const { fileHash } = useParams<{ fileHash: string }>();
+  const navigate = useNavigate();
+  const { isAuthenticated, isLoading: authLoading } = useAuth();
+  const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
+
+  const { 
+    data: log, 
+    isLoading: logLoading, 
+    error: logError,
+    refetch,
+    isRefetching,
+  } = useLogGroupByFileHash(fileHash || "", {
+    enabled: isAuthenticated && !!fileHash,
+  });
+
+  const logId = log?.id;
+
+  const deleteLogGroup = useDeleteLogGroup();
+  const reparseLogGroup = useReparseLogGroup();
+  const deleteLogFiles = useDeleteLogFiles();
+
+  // Check permissions (only when we have the logId)
   const authzChecks = useMemo(() => ({
     reparse: `raid_log:${logId}#reparse`,
     deleteFiles: `raid_log:${logId}#delete_files`,

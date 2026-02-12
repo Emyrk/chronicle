@@ -199,9 +199,12 @@ func (c *Chronicle) UploadLogs(ctx context.Context, one, two io.Reader) (*databa
 			})
 			if err != nil {
 				if database.IsUniqueViolation(err, database.UniqueFilesUniqueOwnerHash) {
-					return httpapi.NewAPIError(err,
+					return httpapi.NewAPIError(
+						fmt.Errorf("file with same hash already exists"), // Hide the sql error
 						"A log file with the same contents has already been uploaded by you",
-						http.StatusBadRequest).CTA("Log files cannot be uploaded multiple times, delete the conflicting file or choose another one.")
+						http.StatusBadRequest).
+						CTA("Log files cannot be uploaded multiple times, delete the conflicting file or choose another one.").
+						Link("Conflicting Log file", "/logs/file/"+hashes[i])
 				}
 				return err
 			}

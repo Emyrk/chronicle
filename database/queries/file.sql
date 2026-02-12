@@ -151,6 +151,10 @@ ORDER BY
   wow_log_groups.created_at DESC
 ;
 
+-- name: GetFileByHash :one
+SELECT * FROM log_file WHERE hash = $1;
+;
+
 -- name: GetWoWLogGroupByID :one
 SELECT
   sqlc.embed(wow_log_groups),

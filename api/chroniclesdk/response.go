@@ -13,6 +13,9 @@ type Response struct {
 	// CallToAction is an optional field that suggests next steps to the user
 	// based on the Message. This field is intended to guide users on what to do
 	CallToAction string `json:"call_to_action,omitempty"`
+	// Link if provided is a URL that the user can click on to take the suggested action in CallToAction.
+	Link     string `json:"link,omitempty"`
+	LinkText string `json:"link_text,omitempty"`
 	// Detail is a debug message that provides further insight into why the
 	// action failed. This information can be technical and a regular golang
 	// err.Error() text.

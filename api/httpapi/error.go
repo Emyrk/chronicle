@@ -33,6 +33,12 @@ func (e *APIError) CTA(v string) *APIError {
 	return e
 }
 
+func (e *APIError) Link(text, u string) *APIError {
+	e.Response.Link = u
+	e.Response.LinkText = text
+	return e
+}
+
 func NewAPIError(err error, message string, status int) *APIError {
 	return &APIError{
 		Response: chroniclesdk.Response{

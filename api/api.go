@@ -129,6 +129,7 @@ func (api *API) Routes() chi.Router {
 						r.Post("/upload", api.WoWLogUpload)
 					})
 					r.Get("/", api.WoWLogGroups)
+					r.Get("/by-file-hash/{file-hash}", api.WoWLogGroupByFile)
 					r.Route("/{logID}", func(r chi.Router) {
 						r.Use(httpmw.LogIDMiddleware)
 						r.Group(func(r chi.Router) {

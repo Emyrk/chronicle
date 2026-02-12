@@ -1,6 +1,6 @@
 import { useState, useMemo } from "react";
 import { Link } from "react-router-dom";
-import { Upload as UploadIcon, FileText, Info, LogIn, AlertCircle, CheckCircle, FolderOpen, AlertTriangle } from "lucide-react";
+import { Upload as UploadIcon, FileText, Info, LogIn, AlertCircle, CheckCircle, FolderOpen, AlertTriangle, ArrowRight } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/Card/Card";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/Alert/Alert";
@@ -15,7 +15,7 @@ export interface UploadViewProps {
   rawCombatLog: File | null;
   uploading: boolean;
   uploadProgress: number;
-  error: { message: string; call_to_action?: string; detail?: string } | null;
+  error: { message: string; call_to_action?: string; detail?: string; link?: string; link_text?: string } | null;
   success: { message: string; logId: string } | null;
   onFileSelect: (e: React.ChangeEvent<HTMLInputElement>, type: "combat" | "raw") => void;
   onUpload: () => void;
@@ -119,6 +119,14 @@ export function UploadView({
                 {error.message}
                 {error.call_to_action && (
                   <p className="mt-2 text-sm">{error.call_to_action}</p>
+                )}
+                {error.link && (
+                  <Link to={error.link} className="mt-3 inline-block">
+                    <Button variant="outline" size="sm" className="bg-background/10 border-current hover:bg-background/20">
+                      {error.link_text || "View Details"}
+                      <ArrowRight className="h-4 w-4 ml-2" />
+                    </Button>
+                  </Link>
                 )}
                 {error.detail && (
                   <pre className="mt-2 font-mono text-xs bg-destructive/10 p-2 rounded whitespace-pre-wrap break-words">
@@ -320,7 +328,7 @@ export function Upload() {
   const [rawCombatLog, setRawCombatLog] = useState<File | null>(null);
   const [uploading, setUploading] = useState(false);
   const [uploadProgress, setUploadProgress] = useState(0);
-  const [error, setError] = useState<{ message: string; call_to_action?: string; detail?: string } | null>(null);
+  const [error, setError] = useState<{ message: string; call_to_action?: string; detail?: string; link?: string; link_text?: string } | null>(null);
   const [success, setSuccess] = useState<{ message: string; logId: string } | null>(null);
 
   const handleFileSelect = (
@@ -380,7 +388,9 @@ export function Upload() {
             setError({ 
               message: data.message || "Upload failed",
               call_to_action: data.call_to_action,
-              detail: data.detail 
+              detail: data.detail,
+              link: data.link,
+              link_text: data.link_text,
             });
           }
         } catch {

@@ -94,6 +94,27 @@ func (q *sqlQuerier) DeleteWoWLogGroupFiles(ctx context.Context, arg DeleteWoWLo
 	return items, nil
 }
 
+const getFileByHash = `-- name: GetFileByHash :one
+SELECT id, owner, wow_log_id, hash, size_bytes, mime_type, created_at, updated_at, storage_deleted_at FROM log_file WHERE hash = $1
+`
+
+func (q *sqlQuerier) GetFileByHash(ctx context.Context, hash string) (LogFile, error) {
+	row := q.db.QueryRow(ctx, getFileByHash, hash)
+	var i LogFile
+	err := row.Scan(
+		&i.ID,
+		&i.Owner,
+		&i.WowLogID,
+		&i.Hash,
+		&i.SizeBytes,
+		&i.MimeType,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+		&i.StorageDeletedAt,
+	)
+	return i, err
+}
+
 const getWoWLogFilesByGroupID = `-- name: GetWoWLogFilesByGroupID :many
 SELECT
   id, owner, wow_log_id, hash, size_bytes, mime_type, created_at, updated_at, storage_deleted_at
