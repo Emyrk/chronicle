@@ -134,7 +134,6 @@ function InstancePageInner({
   const [showYoutube, setShowYoutube] = useState(false);
   const [showSyncPanel, setShowSyncPanel] = useState(false);
   const [searchParams] = useSearchParams();
-  const experimentalEnabled = searchParams.get("exp") === "1";
   const { setEncounterBounds, enabled: syncEnabled } = useSyncModeContext();
   
   // Update sync mode encounter bounds when selection changes
@@ -157,18 +156,16 @@ function InstancePageInner({
         onSelectEncounters={onSelectEncounters}
         youtubeButton={
           <div className="flex gap-1.5">
-            {/* Sync button - only show with ?exp=1 */}
-            {experimentalEnabled && (
-              <Button
-                variant={syncEnabled ? "default" : "outline"}
-                size="sm"
-                className="gap-1.5"
-                onClick={() => setShowSyncPanel(true)}
-              >
-                <Timer className="h-4 w-4" />
-                Sync
-              </Button>
-            )}
+            {/* Sync button */}
+            <Button
+              variant={syncEnabled ? "default" : "outline"}
+              size="sm"
+              className="gap-1.5"
+              onClick={() => setShowSyncPanel(true)}
+            >
+              <Timer className="h-4 w-4" />
+              Sync
+            </Button>
             {/* YouTube button - only if video available */}
             {youtubeData?.url && (
               <Button
