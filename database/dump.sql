@@ -98,6 +98,45 @@ CREATE TABLE data_limit (
     updated_at timestamp with time zone DEFAULT now() NOT NULL
 );
 
+CREATE TABLE log_file (
+    id uuid NOT NULL,
+    owner uuid NOT NULL,
+    wow_log_id uuid,
+    hash text NOT NULL,
+    size_bytes bigint NOT NULL,
+    mime_type text NOT NULL,
+    created_at timestamp with time zone,
+    updated_at timestamp with time zone,
+    storage_deleted_at timestamp with time zone
+);
+
+COMMENT ON COLUMN log_file.storage_deleted_at IS 'The timestamp when the file was deleted from storage. This allows us to keep track of files that have been removed from storage, even if the log_file record still exists in the database.';
+
+CREATE TABLE users (
+    id uuid NOT NULL,
+    username text NOT NULL,
+    email text NOT NULL,
+    created_at timestamp with time zone,
+    updated_at timestamp with time zone
+);
+
+CREATE VIEW chronicle_users AS
+ SELECT u.id,
+    u.username,
+    u.email,
+    u.created_at,
+    u.updated_at,
+    dl.max_storage_bytes,
+    dl.updated_at AS data_limit_updated_at,
+    COALESCE(lf.total_size_bytes, (0)::numeric) AS consumed_storage_bytes
+   FROM ((public.users u
+     LEFT JOIN data_limit dl ON ((dl.user_id = u.id)))
+     LEFT JOIN ( SELECT log_file.owner,
+            sum(log_file.size_bytes) AS total_size_bytes
+           FROM log_file
+          WHERE (log_file.storage_deleted_at IS NULL)
+          GROUP BY log_file.owner) lf ON ((lf.owner = u.id)));
+
 CREATE TABLE item_effects (
     id uuid NOT NULL,
     item_id integer NOT NULL,
@@ -129,20 +168,6 @@ COMMENT ON TABLE item_templates IS 'Items without data such as enchants.';
 COMMENT ON COLUMN item_templates.id IS 'Matches the item id in WoW.';
 
 COMMENT ON COLUMN item_templates.quality IS '0 grey, 1 white, 2 green, 3 blue, 4 purple, 5 legendary, 6 artifact';
-
-CREATE TABLE log_file (
-    id uuid NOT NULL,
-    owner uuid NOT NULL,
-    wow_log_id uuid,
-    hash text NOT NULL,
-    size_bytes bigint NOT NULL,
-    mime_type text NOT NULL,
-    created_at timestamp with time zone,
-    updated_at timestamp with time zone,
-    storage_deleted_at timestamp with time zone
-);
-
-COMMENT ON COLUMN log_file.storage_deleted_at IS 'The timestamp when the file was deleted from storage. This allows us to keep track of files that have been removed from storage, even if the log_file record still exists in the database.';
 
 CREATE TABLE log_instance_encounter_damage_unit_summary (
     encounter_id uuid NOT NULL,
@@ -335,14 +360,6 @@ CREATE TABLE user_auth_session (
     created_at timestamp with time zone,
     updated_at timestamp with time zone,
     jwt_id uuid DEFAULT gen_random_uuid() NOT NULL
-);
-
-CREATE TABLE users (
-    id uuid NOT NULL,
-    username text NOT NULL,
-    email text NOT NULL,
-    created_at timestamp with time zone,
-    updated_at timestamp with time zone
 );
 
 CREATE TABLE wow_log_groups (

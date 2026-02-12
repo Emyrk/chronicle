@@ -14,4 +14,20 @@ INSERT INTO data_limit (user_id, updated_at, max_storage_bytes)
 SELECT id, NOW(), 500000000 -- 500mb default limit
 FROM users;
 
+CREATE VIEW chronicle_users AS
+  SELECT
+    u.*,
+    dl.max_storage_bytes,
+    dl.updated_at AS data_limit_updated_at,
+    COALESCE(lf.total_size_bytes, 0) AS consumed_storage_bytes
+  FROM users u
+    LEFT JOIN data_limit dl ON dl.user_id = u.id
+    LEFT JOIN (
+      SELECT owner, SUM(size_bytes) AS total_size_bytes
+      FROM log_file
+      WHERE storage_deleted_at IS NULL
+      GROUP BY owner
+    ) lf ON lf.owner = u.id
+;
+
 END;

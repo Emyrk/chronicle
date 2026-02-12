@@ -819,22 +819,25 @@ func (q *sqlQuerier) GetUserAuthSessionByID(ctx context.Context, id uuid.UUID) (
 
 const getUserByID = `-- name: GetUserByID :one
 SELECT
-  id, username, email, created_at, updated_at
+  id, username, email, created_at, updated_at, max_storage_bytes, data_limit_updated_at, consumed_storage_bytes
 FROM
-  users
+  chronicle_users
 WHERE
   id = $1
 `
 
-func (q *sqlQuerier) GetUserByID(ctx context.Context, id uuid.UUID) (User, error) {
+func (q *sqlQuerier) GetUserByID(ctx context.Context, id uuid.UUID) (ChronicleUser, error) {
 	row := q.db.QueryRow(ctx, getUserByID, id)
-	var i User
+	var i ChronicleUser
 	err := row.Scan(
 		&i.ID,
 		&i.Username,
 		&i.Email,
 		&i.CreatedAt,
 		&i.UpdatedAt,
+		&i.MaxStorageBytes,
+		&i.DataLimitUpdatedAt,
+		&i.ConsumedStorageBytes,
 	)
 	return i, err
 }
@@ -964,28 +967,31 @@ func (q *sqlQuerier) InsertUserAuthSession(ctx context.Context, arg InsertUserAu
 
 const listAllUsers = `-- name: ListAllUsers :many
 SELECT
-  id, username, email, created_at, updated_at
+  id, username, email, created_at, updated_at, max_storage_bytes, data_limit_updated_at, consumed_storage_bytes
 FROM
-  users
+  chronicle_users
 ORDER BY
   created_at DESC
 `
 
-func (q *sqlQuerier) ListAllUsers(ctx context.Context) ([]User, error) {
+func (q *sqlQuerier) ListAllUsers(ctx context.Context) ([]ChronicleUser, error) {
 	rows, err := q.db.Query(ctx, listAllUsers)
 	if err != nil {
 		return nil, err
 	}
 	defer rows.Close()
-	var items []User
+	var items []ChronicleUser
 	for rows.Next() {
-		var i User
+		var i ChronicleUser
 		if err := rows.Scan(
 			&i.ID,
 			&i.Username,
 			&i.Email,
 			&i.CreatedAt,
 			&i.UpdatedAt,
+			&i.MaxStorageBytes,
+			&i.DataLimitUpdatedAt,
+			&i.ConsumedStorageBytes,
 		); err != nil {
 			return nil, err
 		}

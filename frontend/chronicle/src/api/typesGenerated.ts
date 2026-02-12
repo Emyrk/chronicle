@@ -181,6 +181,9 @@ export interface User {
     readonly roles: readonly string[];
     readonly created_at: string;
     readonly updated_at: string;
+    readonly max_storage_bytes: number;
+    readonly max_storage_bytes_updated: string;
+    readonly consumed_storage_bytes: number;
 }
 
 // From chroniclesdk/youtube.go

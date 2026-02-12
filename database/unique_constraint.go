@@ -6,6 +6,7 @@ type UniqueConstraint string
 
 // UniqueConstraint enums.
 const (
+	UniqueDataLimitPkey                             UniqueConstraint = "data_limit_pkey"                                 // ALTER TABLE ONLY data_limit ADD CONSTRAINT data_limit_pkey PRIMARY KEY (user_id);
 	UniqueItemEffectsPkey                           UniqueConstraint = "item_effects_pkey"                               // ALTER TABLE ONLY item_effects ADD CONSTRAINT item_effects_pkey PRIMARY KEY (id);
 	UniqueItemTemplatesPkey                         UniqueConstraint = "item_templates_pkey"                             // ALTER TABLE ONLY item_templates ADD CONSTRAINT item_templates_pkey PRIMARY KEY (id);
 	UniqueLogFilePkey                               UniqueConstraint = "log_file_pkey"                                   // ALTER TABLE ONLY log_file ADD CONSTRAINT log_file_pkey PRIMARY KEY (id);

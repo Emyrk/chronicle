@@ -61,7 +61,7 @@ RETURNING *
 SELECT
   *
 FROM
-  users
+  chronicle_users
 WHERE
   id = $1
 ;
@@ -70,7 +70,7 @@ WHERE
 SELECT
   *
 FROM
-  users
+  chronicle_users
 ORDER BY
   created_at DESC
 ;

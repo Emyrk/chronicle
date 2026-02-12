@@ -32,12 +32,15 @@ func (a *API) AdminListUsers(w http.ResponseWriter, r *http.Request) {
 		}
 
 		resp.Users[i] = chroniclesdk.User{
-			ID:        u.ID,
-			Username:  u.Username,
-			Email:     u.Email,
-			Roles:     roles,
-			CreatedAt: u.CreatedAt.Time.Format("2006-01-02T15:04:05Z"),
-			UpdatedAt: u.UpdatedAt.Time.Format("2006-01-02T15:04:05Z"),
+			ID:                     u.ID,
+			Username:               u.Username,
+			Email:                  u.Email,
+			Roles:                  roles,
+			CreatedAt:              u.CreatedAt.Time.Format("2006-01-02T15:04:05Z"),
+			UpdatedAt:              u.UpdatedAt.Time.Format("2006-01-02T15:04:05Z"),
+			MaxStorageBytes:        u.MaxStorageBytes.Int64,
+			MaxStorageBytesUpdated: u.DataLimitUpdatedAt,
+			ConsumedStorageBytes:   u.ConsumedStorageBytes,
 		}
 	}
 
@@ -106,12 +109,15 @@ func (a *API) AdminResyncUserRoles(w http.ResponseWriter, r *http.Request) {
 	}
 
 	httpapi.Write(r.Context(), w, http.StatusOK, chroniclesdk.User{
-		ID:        user.ID,
-		Username:  user.Username,
-		Email:     user.Email,
-		Roles:     roles,
-		CreatedAt: user.CreatedAt.Time.Format("2006-01-02T15:04:05Z"),
-		UpdatedAt: user.UpdatedAt.Time.Format("2006-01-02T15:04:05Z"),
+		ID:                     user.ID,
+		Username:               user.Username,
+		Email:                  user.Email,
+		Roles:                  roles,
+		CreatedAt:              user.CreatedAt.Time.Format("2006-01-02T15:04:05Z"),
+		UpdatedAt:              user.UpdatedAt.Time.Format("2006-01-02T15:04:05Z"),
+		MaxStorageBytes:        user.MaxStorageBytes.Int64,
+		MaxStorageBytesUpdated: user.DataLimitUpdatedAt,
+		ConsumedStorageBytes:   user.ConsumedStorageBytes,
 	})
 }
 

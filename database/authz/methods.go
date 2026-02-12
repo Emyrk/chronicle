@@ -58,10 +58,6 @@ func (z *interceptor) GetUserAuthSessionByID(ctx context.Context, id uuid.UUID) 
 	return z.Store.GetUserAuthSessionByID(ctx, id)
 }
 
-func (z *interceptor) GetUserByID(ctx context.Context, id uuid.UUID) (database.User, error) {
-	return z.Store.GetUserByID(ctx, id)
-}
-
 func (z *interceptor) GetWoWLogFilesByGroupID(ctx context.Context, wowLogID uuid.UUID) ([]database.LogFile, error) {
 	return z.Store.GetWoWLogFilesByGroupID(ctx, wowLogID)
 }
@@ -162,10 +158,6 @@ func (z *interceptor) InstancePlayersByInstanceID(ctx context.Context, instanceI
 
 func (z *interceptor) InstanceUnitsByInstanceID(ctx context.Context, instanceID uuid.UUID) ([]database.LogInstanceUnit, error) {
 	return z.Store.InstanceUnitsByInstanceID(ctx, instanceID)
-}
-
-func (z *interceptor) ListAllUsers(ctx context.Context) ([]database.User, error) {
-	return z.Store.ListAllUsers(ctx)
 }
 
 func (z *interceptor) ListAllWoWLogGroupsWithOwner(ctx context.Context) ([]database.ListAllWoWLogGroupsWithOwnerRow, error) {

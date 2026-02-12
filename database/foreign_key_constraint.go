@@ -6,6 +6,7 @@ type ForeignKeyConstraint string
 
 // ForeignKeyConstraint enums.
 const (
+	ForeignKeyDataLimitUserID                                  ForeignKeyConstraint = "data_limit_user_id_fkey"                                      // ALTER TABLE ONLY data_limit ADD CONSTRAINT data_limit_user_id_fkey FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE;
 	ForeignKeyItemEffectsItemID                                ForeignKeyConstraint = "item_effects_item_id_fkey"                                    // ALTER TABLE ONLY item_effects ADD CONSTRAINT item_effects_item_id_fkey FOREIGN KEY (item_id) REFERENCES item_templates(id);
 	ForeignKeyItemEffectsSpellID                               ForeignKeyConstraint = "item_effects_spell_id_fkey"                                   // ALTER TABLE ONLY item_effects ADD CONSTRAINT item_effects_spell_id_fkey FOREIGN KEY (spell_id) REFERENCES spell_templates(id);
 	ForeignKeyLogFileOwner                                     ForeignKeyConstraint = "log_file_owner_fkey"                                          // ALTER TABLE ONLY log_file ADD CONSTRAINT log_file_owner_fkey FOREIGN KEY (owner) REFERENCES users(id);

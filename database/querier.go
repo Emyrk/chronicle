@@ -22,7 +22,7 @@ type sqlcQuerier interface {
 	GetUserAuthByLinkedID(ctx context.Context, arg GetUserAuthByLinkedIDParams) (UserAuthLink, error)
 	GetUserAuthLinkByUserID(ctx context.Context, userID uuid.UUID) (UserAuthLink, error)
 	GetUserAuthSessionByID(ctx context.Context, id uuid.UUID) (UserAuthSession, error)
-	GetUserByID(ctx context.Context, id uuid.UUID) (User, error)
+	GetUserByID(ctx context.Context, id uuid.UUID) (ChronicleUser, error)
 	GetWoWLogFilesByGroupID(ctx context.Context, wowLogID uuid.UUID) ([]LogFile, error)
 	GetWoWLogGroupByID(ctx context.Context, id uuid.UUID) (GetWoWLogGroupByIDRow, error)
 	GetWoWLogGroupsByOwner(ctx context.Context, owner uuid.UUID) ([]GetWoWLogGroupsByOwnerRow, error)
@@ -44,7 +44,7 @@ type sqlcQuerier interface {
 	InstanceEvent(ctx context.Context, arg InstanceEventParams) (LogInstanceEvent, error)
 	InstancePlayersByInstanceID(ctx context.Context, instanceID uuid.UUID) ([]LogInstancePlayer, error)
 	InstanceUnitsByInstanceID(ctx context.Context, instanceID uuid.UUID) ([]LogInstanceUnit, error)
-	ListAllUsers(ctx context.Context) ([]User, error)
+	ListAllUsers(ctx context.Context) ([]ChronicleUser, error)
 	ListAllWoWLogGroupsWithOwner(ctx context.Context) ([]ListAllWoWLogGroupsWithOwnerRow, error)
 	UpdateUserAuthSessionTokens(ctx context.Context, arg UpdateUserAuthSessionTokensParams) (UserAuthSession, error)
 }
