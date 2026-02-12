@@ -10,6 +10,7 @@ import (
 	"github.com/Emyrk/chronicle/combatlog/parser/types"
 	"github.com/Emyrk/chronicle/combatlog/parser/vanilla"
 	"github.com/Emyrk/chronicle/combatlog/parser/vanilla/messages"
+	"github.com/Emyrk/chronicle/combatlog/parser/vanilla/state/consumeeach"
 	"github.com/Emyrk/chronicle/combatlog/parser/vanilla/state/creatures"
 	"github.com/Emyrk/chronicle/combatlog/parser/vanilla/state/encounters"
 
@@ -135,6 +136,53 @@ func CreaturesCmd() *serpent.Command {
 						fmt.Printf("  %d: %d\n", entryID, count)
 					}
 				}
+			}
+
+			return nil
+		},
+	}
+
+	return cmd
+}
+
+func RegrowthBug() *serpent.Command {
+	cmd := &serpent.Command{
+		Use:        "regrowth <file> <file>",
+		Middleware: serpent.RequireNArgs(2),
+		Handler: func(i *serpent.Invocation) error {
+			ctx := i.Context()
+			logger := getLogger(i)
+
+			files, err := openFileReaders(i.Args[0], i.Args[1])
+			if err != nil {
+				return err
+			}
+			defer func() { closeFiles(files...) }()
+
+			m := vanilla.Merger(logger)
+			liner, scan, err := m.LineScanner(ctx, nil, files[0], files[1])
+			if err != nil {
+				return err
+			}
+
+			each := consumeeach.New(func(m messages.Message) error {
+				switch ty := m.(type) {
+				case messages.ResourceChange:
+					if ty.SpellName != nil && *ty.SpellName == "Regrowth" {
+						if ty.Amount > 5000 {
+							fmt.Printf("%s Regrowth heal: %d\n", ty.Timestamp.String(), ty.Amount)
+						}
+					}
+				case messages.Heal:
+
+				}
+				return nil
+			})
+
+			p := vanilla.NewFromScanner(logger, liner, scan)
+			err = consumers.New(logger, each).ConsumeAll(ctx, p)
+			if err != nil {
+				return err
 			}
 
 			return nil

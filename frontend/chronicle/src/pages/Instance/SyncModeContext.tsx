@@ -28,6 +28,8 @@ export interface SyncModeMetrics {
   lastUpdateMs: number;
 }
 
+export type SyncExternalDriver = 'none' | 'youtube';
+
 export interface SyncModeContextValue extends SyncModeState {
   /** Enable sync mode */
   enable: () => void;
@@ -51,6 +53,10 @@ export interface SyncModeContextValue extends SyncModeState {
   encounterBounds: { start: Date; end: Date } | null;
   /** Set encounter bounds */
   setEncounterBounds: (bounds: { start: Date; end: Date } | null) => void;
+  /** External driver controlling timestamp (e.g., YouTube). When set, manual controls should be disabled. */
+  externalDriver: SyncExternalDriver;
+  /** Set the external driver */
+  setExternalDriver: (driver: SyncExternalDriver) => void;
 }
 
 const defaultMetrics: SyncModeMetrics = {
@@ -90,6 +96,7 @@ export function SyncModeProvider({ children }: SyncModeProviderProps) {
   const [playbackSpeed, setPlaybackSpeed] = useState(1.0);
   const [metrics, setMetrics] = useState<SyncModeMetrics>(defaultMetrics);
   const [encounterBounds, setEncounterBounds] = useState<{ start: Date; end: Date } | null>(null);
+  const [externalDriver, setExternalDriver] = useState<SyncExternalDriver>('none');
   
   // Track last frame time for playback
   const lastFrameTimeRef = useRef<number | null>(null);
@@ -110,7 +117,15 @@ export function SyncModeProvider({ children }: SyncModeProviderProps) {
     }
   }, []);
 
+  // Track previous timestamp to detect backward seeks
+  const prevTimestampRef = useRef<Date | null>(null);
+  
   const setTimestamp = useCallback((ts: Date | null) => {
+    // Reset metrics when seeking backward (new timestamp is before previous)
+    if (ts && prevTimestampRef.current && ts.getTime() < prevTimestampRef.current.getTime()) {
+      setMetrics(defaultMetrics);
+    }
+    prevTimestampRef.current = ts;
     setCurrentTimestamp(ts);
   }, []);
 
@@ -169,6 +184,18 @@ export function SyncModeProvider({ children }: SyncModeProviderProps) {
     encounterBoundsRef.current = encounterBounds;
   }, [encounterBounds]);
 
+  // Jump to encounter start if currentTimestamp is outside bounds
+  // This is safe from infinite loops: the new value (encounterBounds.start) is within bounds,
+  // so the next render won't trigger another update.
+  // useEffect(() => {
+  //   if (enabled && encounterBounds && currentTimestamp) {
+  //     if (currentTimestamp < encounterBounds.start || currentTimestamp > encounterBounds.end) {
+  //       // eslint-disable-next-line react-compiler/react-compiler
+  //       setCurrentTimestamp(encounterBounds.start);
+  //     }
+  //   }
+  // }, [enabled, encounterBounds, currentTimestamp]);
+
   // Playback loop - advance timestamp when playing
   // Uses setInterval at 100ms to match the processing throttle rate in usePanelAggregation.
   // Using requestAnimationFrame (~16ms) would update faster than processing can keep up.
@@ -222,6 +249,8 @@ export function SyncModeProvider({ children }: SyncModeProviderProps) {
     updateMetrics,
     encounterBounds,
     setEncounterBounds,
+    externalDriver,
+    setExternalDriver,
   }), [
     enabled,
     currentTimestamp,
@@ -238,6 +267,7 @@ export function SyncModeProvider({ children }: SyncModeProviderProps) {
     updateMetrics,
     encounterBounds,
     setEncounterBounds,
+    externalDriver,
   ]);
 
   return (

@@ -277,17 +277,28 @@ export async function processIncrementally<TResult>(
     // And skip this many events AT that timestamp
     skipCountAtTimestamp = previousState.eventsAtLastTimestamp;
     
-    // If we already finished, just return the previous state
-    // (clone to ensure new reference for React)
+    // If we already finished processing all events, we can return early ONLY if
+    // the new stopAt is the same or later than what we processed. If it's earlier,
+    // we need to reprocess (which is handled by timestampMovedBackward in the caller).
+    // If it's later, we continue processing below to find any additional events.
     if (previousState.isDone) {
-      return {
-        result: shallowClone(state),
-        processedCount,
-        processingTimeMs: 0,
-        lastTimestamp,
-        eventsAtLastTimestamp,
-        isDone: true,
-      };
+      const stopAtMs = stopAtTimestamp?.getTime() ?? Infinity;
+      const lastProcessedMs = previousState.lastTimestamp?.getTime() ?? 0;
+      
+      // Only return early if stopAt is exactly what we already processed
+      // (same timestamp = same result). For forward seeks, continue processing.
+      // Note: backward seeks are handled by the caller clearing previousState.
+      if (stopAtMs === lastProcessedMs) {
+        return {
+          result: shallowClone(state),
+          processedCount,
+          processingTimeMs: 0,
+          lastTimestamp,
+          eventsAtLastTimestamp,
+          isDone: true,
+        };
+      }
+      // Seeking forward past what we processed - continue processing below
     }
   }
   
@@ -301,22 +312,39 @@ export async function processIncrementally<TResult>(
     if (cachedStream) {
       const cursor = createCursor(streamType, cachedStream.data);
       
-      // Skip entire encounters that end before our resume timestamp.
-      // This avoids decoding events we know we'll skip - skipEncounter() 
-      // uses dataLength to jump directly by byte offset (no decoding needed).
-      if (skipUntilTimestamp !== null) {
-        while (cursor.cursor.currentHeader) {
-          const header = cursor.cursor.currentHeader;
-          // We don't know exact encounter end time, only start time.
-          // Use conservative heuristic: skip if start is 60+ seconds before resume time.
-          // This ensures we don't skip encounters that might contain events we need.
+      // Skip entire encounters that are either:
+      // 1. Not in the selected encounter list (user hasn't selected them)
+      // 2. Start way before our resume timestamp (can't contain relevant events)
+      //
+      // skipEncounter() uses dataLength to jump by byte offset - no decoding needed.
+      // This is much faster than iterating through individual events.
+      //
+      // For timestamp-based skipping, we must be conservative because we only know
+      // encounter START times, not end times. An encounter starting at 00:00:20 
+      // could contain events until 00:05:00. We use 10 minutes as a safe threshold.
+      const selectedEncounterIds = context.selectedEncounterIds;
+      const SAFE_SKIP_THRESHOLD_MS = 10 * 60 * 1000; // 10 minutes
+      
+      while (cursor.cursor.currentHeader) {
+        const header = cursor.cursor.currentHeader;
+        
+        // Skip unselected encounters entirely (fast - no event decoding)
+        if (!selectedEncounterIds.has(header.encounterID)) {
+          cursor.cursor.skipEncounter();
+          continue;
+        }
+        
+        // Skip encounters that definitely ended before our resume point
+        if (skipUntilTimestamp !== null) {
           const encounterStart = header.firstTimestamp.getTime();
-          if (encounterStart < skipUntilTimestamp - 60000) {
+          if (encounterStart < skipUntilTimestamp - SAFE_SKIP_THRESHOLD_MS) {
             cursor.cursor.skipEncounter();
-          } else {
-            break;
+            continue;
           }
         }
+        
+        // This encounter is selected and might have relevant events - keep it
+        break;
       }
       
       cursors.push(cursor);
@@ -341,6 +369,20 @@ export async function processIncrementally<TResult>(
     
     // No more events in any stream
     if (!currentEncounterID || !currentEncounterTimestamp) break;
+    
+    // Skip unselected encounters by consuming all their events without processing
+    // This handles encounters that weren't skipped during initial cursor setup
+    // (e.g., encounters that appear after we start processing)
+    if (!context.selectedEncounterIds.has(currentEncounterID)) {
+      for (const pc of cursors) {
+        while (true) {
+          const peeked = peekCursor(pc);
+          if (!peeked || peeked.encounterID !== currentEncounterID) break;
+          consumePeeked(pc);
+        }
+      }
+      continue; // Move to next encounter
+    }
     
     // Process all events from this encounter across all streams, interleaved by index
     while (true) {
@@ -386,12 +428,22 @@ export async function processIncrementally<TResult>(
           // Stop here - return state that can be resumed
           // Clone to ensure new reference for React
           const processingTimeMs = performance.now() - startTime;
+          
+          // If we haven't processed any new events this call, advance lastTimestamp
+          // to stopAtTimestamp so we don't get stuck on resume when there's a gap in events
+          const effectiveLastTimestamp = localCount === 0 
+            ? stopAtTimestamp 
+            : lastTimestamp;
+          const effectiveEventsAtTimestamp = localCount === 0 
+            ? 0 
+            : eventsAtLastTimestamp;
+          
           return {
             result: shallowClone(state),
             processedCount,
             processingTimeMs,
-            lastTimestamp,
-            eventsAtLastTimestamp,
+            lastTimestamp: effectiveLastTimestamp,
+            eventsAtLastTimestamp: effectiveEventsAtTimestamp,
             isDone: false,
           };
         }

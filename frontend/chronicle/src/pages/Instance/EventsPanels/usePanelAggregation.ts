@@ -133,11 +133,13 @@ export function usePanelAggregation<TResult>(
   const { panel, context: panelContext, enabled = true } = options;
   const eventsContext = useInstanceEventsContext();
   const syncMode = useSyncModeContextOptional();
-  // Extract stable function refs to avoid re-triggering effects
-  const updateMetricsRef = useRef(syncMode?.updateMetrics);
+  // Extract stable function ref to avoid re-triggering effects
+  // Use the function directly since useState setters are stable
+  const updateMetrics = syncMode?.updateMetrics;
+  const updateMetricsRef = useRef(updateMetrics);
   useEffect(() => {
-    updateMetricsRef.current = syncMode?.updateMetrics;
-  }, [syncMode?.updateMetrics]);
+    updateMetricsRef.current = updateMetrics;
+  }, [updateMetrics]);
   
   const [loading, setLoading] = useState(false);
   const [processing, setProcessing] = useState(false);
@@ -331,8 +333,26 @@ export function usePanelAggregation<TResult>(
         yieldEveryN: 10000,
       });
       
-      // Ignore stale responses
-      if (requestId !== requestIdRef.current || abortRef.current) {
+      // Check if this response is stale (newer request started)
+      const isStale = requestId !== requestIdRef.current || abortRef.current;
+      
+      // Always update metrics so the UI doesn't freeze, even for stale responses
+      updateMetricsRef.current?.(response.processedCount, response.processingTimeMs);
+      
+      // Always update lastTimestamp even for stale responses to prevent getting stuck
+      // when there are gaps in events. The lastTimestamp advances to stopAt when no
+      // events were processed, ensuring we don't re-skip the same range forever.
+      if (incrementalStateRef.current && response.lastTimestamp) {
+        const currentLastTs = incrementalStateRef.current.lastTimestamp?.getTime() ?? 0;
+        const responseLastTs = response.lastTimestamp.getTime();
+        if (responseLastTs > currentLastTs) {
+          incrementalStateRef.current.lastTimestamp = response.lastTimestamp;
+          incrementalStateRef.current.eventsAtLastTimestamp = response.eventsAtLastTimestamp;
+        }
+      }
+      
+      // But don't update result state for stale responses
+      if (isStale) {
         return;
       }
       
@@ -358,9 +378,6 @@ export function usePanelAggregation<TResult>(
       setTotalEvents(response.processedCount);
       setProcessingTimeMs(response.processingTimeMs);
       setProcessing(false);
-      
-      // Update sync mode metrics
-      updateMetricsRef.current?.(response.processedCount, response.processingTimeMs);
       
     } catch (err) {
       if (requestId !== requestIdRef.current || abortRef.current) return;

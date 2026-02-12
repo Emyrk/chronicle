@@ -61,6 +61,10 @@ export function SyncControlOverlay({ onClose, initialTimestamp }: SyncControlOve
   const sync = useSyncModeContext();
   const [showDebug, setShowDebug] = useState(false);
   
+  // Disable time controls when YouTube is driving the timestamp
+  const youtubeActive = sync.externalDriver === 'youtube';
+  const controlsDisabled = !sync.enabled || youtubeActive;
+  
   // Calculate progress within encounter bounds
   const progress = useMemo(() => {
     if (!sync.encounterBounds || !sync.currentTimestamp) return 0;
@@ -157,6 +161,14 @@ export function SyncControlOverlay({ onClose, initialTimestamp }: SyncControlOve
           />
         </div>
         
+        {/* YouTube Driver Indicator */}
+        {youtubeActive && (
+          <div className="flex items-center gap-2 text-xs text-muted-foreground bg-muted/50 rounded px-2 py-1">
+            <span className="text-red-500">●</span>
+            <span>YouTube is controlling playback</span>
+          </div>
+        )}
+        
         {/* Timestamp Display */}
         <div className="space-y-1">
           <div className="text-xs text-muted-foreground">Current Time (UTC)</div>
@@ -179,7 +191,7 @@ export function SyncControlOverlay({ onClose, initialTimestamp }: SyncControlOve
               max={100}
               step={0.1}
               onChange={(e) => handleSliderChange([parseFloat(e.target.value)])}
-              disabled={!sync.enabled}
+              disabled={controlsDisabled}
               className="w-full cursor-pointer accent-primary"
             />
           </div>
@@ -193,7 +205,7 @@ export function SyncControlOverlay({ onClose, initialTimestamp }: SyncControlOve
             size="icon"
             className="h-8 w-8"
             onClick={handleJumpToStart}
-            disabled={!sync.enabled}
+            disabled={controlsDisabled}
             title="Jump to start"
           >
             <SkipBack className="h-4 w-4" />
@@ -205,7 +217,7 @@ export function SyncControlOverlay({ onClose, initialTimestamp }: SyncControlOve
             size="sm"
             className="h-8 px-2 text-xs"
             onClick={() => sync.step(-1000)}
-            disabled={!sync.enabled}
+            disabled={controlsDisabled}
             title="Step back 1 second"
           >
             -1s
@@ -217,7 +229,7 @@ export function SyncControlOverlay({ onClose, initialTimestamp }: SyncControlOve
             size="sm"
             className="h-8 px-2 text-xs"
             onClick={() => sync.step(-100)}
-            disabled={!sync.enabled}
+            disabled={controlsDisabled}
             title="Step back 100ms"
           >
             -100ms
@@ -229,7 +241,7 @@ export function SyncControlOverlay({ onClose, initialTimestamp }: SyncControlOve
             size="icon"
             className="h-8 w-8"
             onClick={() => sync.isPlaying ? sync.pause() : sync.play()}
-            disabled={!sync.enabled}
+            disabled={controlsDisabled}
             title={sync.isPlaying ? "Pause" : "Play"}
           >
             {sync.isPlaying ? <Pause className="h-4 w-4" /> : <Play className="h-4 w-4" />}
@@ -241,7 +253,7 @@ export function SyncControlOverlay({ onClose, initialTimestamp }: SyncControlOve
             size="sm"
             className="h-8 px-2 text-xs"
             onClick={() => sync.step(100)}
-            disabled={!sync.enabled}
+            disabled={controlsDisabled}
             title="Step forward 100ms"
           >
             +100ms
@@ -253,7 +265,7 @@ export function SyncControlOverlay({ onClose, initialTimestamp }: SyncControlOve
             size="sm"
             className="h-8 px-2 text-xs"
             onClick={() => sync.step(1000)}
-            disabled={!sync.enabled}
+            disabled={controlsDisabled}
             title="Step forward 1 second"
           >
             +1s
@@ -265,7 +277,7 @@ export function SyncControlOverlay({ onClose, initialTimestamp }: SyncControlOve
             size="icon"
             className="h-8 w-8"
             onClick={handleJumpToEnd}
-            disabled={!sync.enabled}
+            disabled={controlsDisabled}
             title="Jump to end"
           >
             <SkipForward className="h-4 w-4" />
@@ -284,7 +296,7 @@ export function SyncControlOverlay({ onClose, initialTimestamp }: SyncControlOve
                 size="sm"
                 className="h-6 px-2 text-xs"
                 onClick={() => sync.setPlaybackSpeed(speed)}
-                disabled={!sync.enabled}
+                disabled={controlsDisabled}
               >
                 {speed}x
               </Button>

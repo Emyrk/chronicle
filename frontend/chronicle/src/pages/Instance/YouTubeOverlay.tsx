@@ -198,6 +198,18 @@ function videoTimeToCombatLogTime(
 export function YouTubeOverlay({ videoUrl, timestamps, targetTime, pauseTime, onClose }: YouTubeOverlayProps) {
   const isMobile = useIsMobile();
   const syncMode = useSyncModeContextOptional();
+  
+  // Register YouTube as external driver when mounted, clear on unmount
+  // Use setExternalDriver directly as dependency (stable from useCallback) rather than
+  // syncMode object which changes on every timestamp update
+  const setExternalDriver = syncMode?.setExternalDriver;
+  useEffect(() => {
+    if (setExternalDriver) {
+      setExternalDriver('youtube');
+      return () => setExternalDriver('none');
+    }
+  }, [setExternalDriver]);
+  
   const [position, setPosition] = useState({ x: 20, y: 80 });
   const [size, setSize] = useState({ width: 480, height: 270 });
   const [isMinimized, setIsMinimized] = useState(false);
