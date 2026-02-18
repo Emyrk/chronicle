@@ -39,7 +39,7 @@ func NewDiseasedGhoul(id guid.GUID, all *Characters) (Character, bool) {
 
 func (c *DiseasedGhoul) Process(m messages.Message) error {
 	switch data := m.(type) {
-	case messages.Damage:
+	case *messages.Damage:
 		// We could check for them to be dead, and only ignore the disease cloud
 		// in that case.... but this is easier.
 		if data.SpellName != nil && *data.SpellName == "Cloud of Disease" {

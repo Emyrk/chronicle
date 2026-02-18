@@ -260,7 +260,7 @@ func (p *Parser) ParseContent(lctx *logfile.Context, ts time.Time, content strin
 		}
 
 		for msgIndex, msg := range m {
-			if dmg, ok := msg.(messages.Damage); ok {
+			if dmg, ok := msg.(*messages.Damage); ok {
 				dmg.Trailer = slices.DeleteFunc(dmg.Trailer, func(entry types.TrailerEntry) bool {
 					// Adjust HitType to remove Hit flag if Glancing or Crushing is present
 					if entry.HitType.Has(types.HitTypeGlancing) {
@@ -273,7 +273,6 @@ func (p *Parser) ParseContent(lctx *logfile.Context, ts time.Time, content strin
 					}
 					return false
 				})
-				m[msgIndex] = dmg
 			}
 		}
 
@@ -287,7 +286,7 @@ func (p *Parser) ParseContent(lctx *logfile.Context, ts time.Time, content strin
 		return m, nil
 	}
 
-	return set(messages.UnparsedLine{
+	return set(&messages.UnparsedLine{
 		MessageBase: messages.Base(ts),
 		Content:     content,
 	}), nil

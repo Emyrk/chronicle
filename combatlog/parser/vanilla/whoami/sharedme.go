@@ -20,14 +20,14 @@ func (s *SharedMe) Unit() types.Unit {
 
 func (s *SharedMe) Process(msg messages.Message) error {
 	switch ty := msg.(type) {
-	case messages.Unit:
+	case *messages.Unit:
 		if ty.IsMe() {
 			s.SetMe(types.Unit{
 				Name: ty.Name,
 				Gid:  ty.Guid,
 			})
 		}
-	case messages.Combatant:
+	case *messages.Combatant:
 		if ty.IsMe() {
 			s.SetMe(types.Unit{
 				Name: ty.Name,

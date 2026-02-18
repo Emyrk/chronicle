@@ -69,7 +69,7 @@ func (c *MajordomoParty) Process(m messages.Message) error {
 
 	// If someone was slain, or this unit just became inactive, then tell
 	// Majordomo to do an activity check.
-	_, isSlain := m.(messages.Slain)
+	_, isSlain := m.(*messages.Slain)
 	if isSlain || (wasActive && !c.IsActive()) {
 		c.processAddCheck(m)
 	}

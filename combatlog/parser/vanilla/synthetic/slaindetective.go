@@ -8,30 +8,32 @@ import (
 
 type slainDetective struct {
 	currentZone *zoner.Location
-	lastDamage  map[guid.GUID]messages.Damage
+	lastDamage  map[guid.GUID]*messages.Damage
 }
 
 func newSlainDetective() *slainDetective {
 	return &slainDetective{
 		currentZone: zoner.NewLocation(),
-		lastDamage:  make(map[guid.GUID]messages.Damage),
+		lastDamage:  make(map[guid.GUID]*messages.Damage),
 	}
 }
 
 func (s *slainDetective) ProcessMessage(msg messages.Message) messages.Message{
 	switch m := msg.(type) {
-	case messages.Zone:
-		changed := s.currentZone.Process(m)
+	case *messages.Zone:
+		changed := s.currentZone.Process(*m)
 		if changed {
 			// Clear last damage on zone change
-			s.lastDamage = make(map[guid.GUID]messages.Damage)
+			s.lastDamage = make(map[guid.GUID]*messages.Damage)
 		}
-	case messages.Damage:
+	case *messages.Damage:
 		s.lastDamage[m.Target] = m
-	case messages.Slain:
+	case *messages.Slain:
 		if m.Killer == nil {
 			m.Attribution = s.lastDamage[m.Victim]
-			m.Killer = s.lastDamage[m.Victim].Caster
+			if lastDamage := s.lastDamage[m.Victim]; lastDamage != nil {
+				m.Killer = lastDamage.Caster
+			}
 		} else if lastDamage, ok := s.lastDamage[m.Victim]; ok {
 			if lastDamage.Caster != nil && *m.Killer == *lastDamage.Caster {
 				m.Attribution = lastDamage

@@ -187,13 +187,13 @@ func RegrowthBug() *serpent.Command {
 
 			each := consumeeach.New(func(m messages.Message) error {
 				switch ty := m.(type) {
-				case messages.ResourceChange:
+				case *messages.ResourceChange:
 					if ty.SpellName != nil && *ty.SpellName == "Regrowth" {
 						if ty.Amount > 5000 {
 							fmt.Printf("%s Regrowth heal: %d\n", ty.Timestamp.String(), ty.Amount)
 						}
 					}
-				case messages.Heal:
+				case *messages.Heal:
 
 				}
 				return nil
@@ -270,13 +270,13 @@ func (h *hitTypeConsumer) Process(m messages.Message) error {
 		h.SpellSchool = make(map[string]map[types.School]int)
 	}
 	switch msg := m.(type) {
-	case messages.Heal:
+	case *messages.Heal:
 		if _, ok := h.SpellName[msg.SpellName]; !ok {
 			h.SpellName[msg.SpellName] = make(map[types.HitType]int)
 			h.SpellSchool[msg.SpellName] = make(map[types.School]int)
 		}
 		h.SpellName[msg.SpellName][msg.HitType]++
-	case messages.Damage:
+	case *messages.Damage:
 		if msg.SpellName == nil {
 			return nil
 		}

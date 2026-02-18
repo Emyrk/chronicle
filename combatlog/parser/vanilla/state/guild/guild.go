@@ -19,15 +19,15 @@ func New() *Tracker {
 
 func (g *Tracker) Process(msg messages.Message) error {
 	switch ty := msg.(type) {
-	case messages.Damage:
+	case *messages.Damage:
 		if ty.Caster != nil && (*ty.Caster).IsPlayer() {
 			g.Participant[*ty.Caster] = struct{}{}
 		}
-	case messages.Heal:
+	case *messages.Heal:
 		if ty.Caster.IsPlayer() {
 			g.Participant[ty.Caster] = struct{}{}
 		}
-	case messages.Combatant:
+	case *messages.Combatant:
 		if ty.Guild == nil {
 			return nil
 		}

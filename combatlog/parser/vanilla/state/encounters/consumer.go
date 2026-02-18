@@ -39,17 +39,17 @@ func New(logger *slog.Logger) *State {
 
 func (s *State) Process(m messages.Message) error {
 	switch typed := m.(type) {
-	case messages.Zone:
-		s.Zone(typed)
-	case messages.Damage:
+	case *messages.Zone:
+		s.Zone(*typed)
+	case *messages.Damage:
 		//s.Damage(typed)
-	case messages.Cast:
+	case *messages.Cast:
 		//s.CastV2(typed)
-	case messages.Combatant:
-		s.Combatant(typed)
-	case messages.Unit:
-		s.Unit(typed)
-	case messages.Slain:
+	case *messages.Combatant:
+		s.Combatant(*typed)
+	case *messages.Unit:
+		s.Unit(*typed)
+	case *messages.Slain:
 		//s.Slain(typed)
 	}
 

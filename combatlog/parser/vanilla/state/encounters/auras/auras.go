@@ -41,10 +41,10 @@ func (t *Tracking) GetAll(unit guid.GUID) map[string]*AuraState {
 }
 func (t *Tracking) Process(m messages.Message) error {
 	switch msg := m.(type) {
-	case messages.Aura:
-		t.processAura(msg)
-	case messages.Slain:
-		t.processSlain(msg)
+	case *messages.Aura:
+		t.processAura(*msg)
+	case *messages.Slain:
+		t.processSlain(*msg)
 	}
 	return nil
 }

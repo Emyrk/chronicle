@@ -110,7 +110,7 @@ func (c *Totem) Process(m messages.Message) error {
 	}
 
 	switch data := m.(type) {
-	case messages.ResourceChange:
+	case *messages.ResourceChange:
 		// Mana and health spring totems helping an active target
 		if data.Caster != nil && *data.Caster == c.ID() {
 			targetChar, ok := c.Lookup().Get(data.Target)

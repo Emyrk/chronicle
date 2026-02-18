@@ -178,14 +178,14 @@ func (c *Common) MatchesZone(z zone.Zone) bool {
 
 func (c *Common) Process(m messages.Message) error {
 	switch msg := m.(type) {
-	case messages.Realm:
+	case *messages.Realm:
 		if c.realm != nil {
 			if c.realm.RealmName != msg.RealmName {
 				return vanilla.AsFatalError(fmt.Errorf("realm name changed from %q to %q during instance", c.realm.RealmName, msg.RealmName))
 			}
 		}
 		c.realm = &msg.Info
-	case messages.Combatant:
+	case *messages.Combatant:
 		// Combatants do not count as "seen", since the addon tracks them async
 	default:
 		for _, id := range m.Affects() {

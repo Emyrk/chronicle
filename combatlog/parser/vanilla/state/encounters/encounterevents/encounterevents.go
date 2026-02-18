@@ -86,37 +86,37 @@ func (e *EncounterEventsInProgress) Finalize(merge *Events, encounterID uuid.UUI
 func (e *EncounterEventsInProgress) Process(m messages.Message) error {
 	e.setFirsts(m.Date())
 	switch ty := m.(type) {
-	case messages.Damage:
+	case *messages.Damage:
 		err := AddToBuilder(e.Damage, ty, e.nextIndex(), types2proto.Damage)
 		if err != nil {
 			return fmt.Errorf("damage proto: %w", err)
 		}
-	case messages.Heal:
+	case *messages.Heal:
 		err := AddToBuilder(e.Heal, ty, e.nextIndex(), types2proto.Heal)
 		if err != nil {
 			return fmt.Errorf("heal proto: %w", err)
 		}
-	case messages.ResourceChange:
+	case *messages.ResourceChange:
 		err := AddToBuilder(e.ResourceChange, ty, e.nextIndex(), types2proto.ResourceChange)
 		if err != nil {
 			return fmt.Errorf("resource change proto: %w", err)
 		}
-	case messages.ExtraAttack:
+	case *messages.ExtraAttack:
 		err := AddToBuilder(e.ExtraAttack, ty, e.nextIndex(), types2proto.ExtraAttack)
 		if err != nil {
 			return fmt.Errorf("extra attack proto: %w", err)
 		}
-	case messages.Slain:
+	case *messages.Slain:
 		err := AddToBuilder(e.Slain, ty, e.nextIndex(), types2proto.Slain)
 		if err != nil {
 			return fmt.Errorf("slain proto: %w", err)
 		}
-	case messages.Cast:
+	case *messages.Cast:
 		err := AddToBuilder(e.Casts, ty, e.nextIndex(), types2proto.Cast)
 		if err != nil {
 			return fmt.Errorf("cast proto: %w", err)
 		}
-	case messages.Aura:
+	case *messages.Aura:
 		err := AddToBuilder(e.Aura, ty, e.nextIndex(), types2proto.Aura)
 		if err != nil {
 			return fmt.Errorf("aura proto: %w", err)

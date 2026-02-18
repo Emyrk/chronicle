@@ -60,7 +60,7 @@ func (s *Creatures) Consume(ctx context.Context, p *vanilla.Parser) error {
 			s.logger.Error("Error advancing parser", slog.String("error", err.Error()))
 		}
 		for _, msg := range msgs {
-			if up, ok := msg.(messages.UnparsedLine); ok {
+			if up, ok := msg.(*messages.UnparsedLine); ok {
 				s.logger.Warn("Unparsed line", slog.String("line", up.Content))
 			}
 			err = s.Process(msg)
@@ -73,14 +73,14 @@ func (s *Creatures) Consume(ctx context.Context, p *vanilla.Parser) error {
 
 func (s *Creatures) Process(m messages.Message) error {
 	switch typed := m.(type) {
-	case messages.Zone:
-		s.Zone(typed)
-	case messages.Combatant:
-		s.Combatant(typed)
-	case messages.Unit:
-		s.Unit(typed)
-	case messages.UnitDied:
-		s.UnitDied(typed)
+	case *messages.Zone:
+		s.Zone(*typed)
+	case *messages.Combatant:
+		s.Combatant(*typed)
+	case *messages.Unit:
+		s.Unit(*typed)
+	case *messages.UnitDied:
+		s.UnitDied(*typed)
 
 	}
 

@@ -53,7 +53,7 @@ type characterBase interface {
 // processCommonActivity handles the basics of activity processing for a character.
 func processCommonActivity(c characterBase, m messages.Message) error {
 	switch data := m.(type) {
-	case messages.Aura:
+	case *messages.Aura:
 		if c.ID() != data.Target {
 			return nil
 		}
@@ -66,7 +66,7 @@ func processCommonActivity(c characterBase, m messages.Message) error {
 			}
 		}
 
-	case messages.Slain:
+	case *messages.Slain:
 		if c.ID() == data.Victim {
 			c.Died(ReasonSlain, m)
 			return nil
@@ -81,7 +81,7 @@ func processCommonActivity(c characterBase, m messages.Message) error {
 
 		// Being the killer does not indicate activity.
 		// Could be killed from a dot for example.
-	case messages.Damage:
+	case *messages.Damage:
 		// Damage can tick after death, so ignore if recently slain.
 		if c.RecentlySlain(m) {
 			return nil

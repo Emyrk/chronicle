@@ -72,8 +72,8 @@ func Slain(from time.Time, idx int32, ea messages.Slain) *chronicleproto.Slain {
 	var att *chronicleproto.Damage
 	if ea.Attribution != nil {
 		switch typed := ea.Attribution.(type) {
-		case messages.Damage:
-			att = Damage(ea.Attribution.Date(), -1, typed)
+		case *messages.Damage:
+			att = Damage(ea.Attribution.Date(), -1, *typed)
 		default:
 			// unexpected type
 		}

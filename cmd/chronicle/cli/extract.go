@@ -67,7 +67,7 @@ func ExtractByUtility() *serpent.Command {
 				}
 
 				if len(msgs) == 1 {
-					_, ok := msgs[0].(messages.SkippedMessage)
+					_, ok := msgs[0].(*messages.SkippedMessage)
 					if ok {
 						continue
 					}
