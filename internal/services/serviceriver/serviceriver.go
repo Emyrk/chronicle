@@ -66,7 +66,7 @@ func (s *Service) Start(ctx context.Context) error {
 	}
 
 	q.AddQueue(riverqueue.QueueLogParsing, river.QueueConfig{
-		MaxWorkers: 1,
+		MaxWorkers: int(s.logParsingWorkers),
 	})
 
 	riverqueue.AddWorker(q, chron.NewWorkerLogParse())

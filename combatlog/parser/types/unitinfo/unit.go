@@ -109,11 +109,16 @@ func ParseUnitInfo(ri *realmclock.Info, content string) (Info, error) {
 	if len(parts) >= 7 {
 		info.Buffs, err = ParseBuffs(parts[6])
 		if err != nil {
-			// So jank, but there is a bugged version of the addon that puts the unit level
-			// plus "na" in this part.
-			r, err := strconv.ParseUint(strings.TrimSuffix(parts[6], "na"), 10, 64)
-			if err != nil || r < 40 {
-				return Info{}, fmt.Errorf("parsing buffs: %w", err)
+			trimmedBuffs := strings.TrimSuffix(parts[6], "na")
+			if trimmedBuffs == "-1" {
+				err = nil
+			} else {
+				// So jank, but there is a bugged version of the addon that puts the unit level
+				// plus "na" in this part.
+				r, err := strconv.ParseUint(strings.TrimSuffix(parts[6], "na"), 10, 64)
+				if err != nil || r < 40 {
+					return Info{}, fmt.Errorf("parsing buffs (%s): %w", content, err)
+				}
 			}
 		}
 	}

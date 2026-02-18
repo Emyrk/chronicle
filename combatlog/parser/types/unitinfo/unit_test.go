@@ -18,6 +18,20 @@ func TestParseUnitInfo(t *testing.T) {
 		exp   unitinfo.Info
 	}{
 		{
+			input: "UNIT_INFO: 17.01.26 20:34:44&0xF130002FE800DD20&0&Shazzrah&0&&-1na",
+			exp: unitinfo.Info{
+				Seen:         time.Date(2026, 1, 17, 20, 34, 44, 0, time.UTC),
+				Guid:         0xF130002FE800DD20,
+				IsPlayer:     false,
+				Name:         "Shazzrah",
+				CanCooperate: false,
+				Owner:        nil,
+				Level:        0,
+				Buffs:        nil,
+				Challenges:   nil,
+			},
+		},
+		{
 			input: "UNIT_INFO: 17.01.26 19:54:19&0xF130002D9401648A&0&Firelord&0&&62na",
 			exp: unitinfo.Info{
 				Seen:         time.Date(2026, 1, 17, 19, 54, 19, 0, time.UTC),
