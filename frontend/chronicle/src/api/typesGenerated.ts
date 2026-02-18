@@ -10,6 +10,11 @@ export interface ActivityPeriod {
     readonly end_state?: EndState;
 }
 
+// From chroniclesdk/guild_page.go
+export interface AddGuildMemberRequest {
+    readonly user_id: string;
+}
+
 // From chroniclesdk/user.go
 export interface AdminLog {
     readonly id: string;
@@ -65,6 +70,17 @@ export interface ChronicleEncounterEvents {
     readonly start_time: string;
 }
 
+// From chroniclesdk/guild_page.go
+export interface CreateTabRequest {
+    readonly label: string;
+    readonly slug: string;
+}
+
+// From chroniclesdk/guild_page.go
+export type DeviceVisibility = "all" | "desktop" | "mobile";
+
+export const DeviceVisibilitys: DeviceVisibility[] = ["all", "desktop", "mobile"];
+
 // From chroniclesdk/log.go
 export type EndState = "reset" | "slain" | "timeout";
 
@@ -78,6 +94,68 @@ export interface Guild {
     readonly id: string;
     readonly name: string;
     readonly created_at: string;
+}
+
+// From chroniclesdk/guild_page.go
+export interface GuildInfo {
+    readonly id: string;
+    readonly name: string;
+    readonly realm_id: string;
+    readonly realm_name: string;
+    readonly has_page: boolean;
+    readonly can_edit: boolean;
+}
+
+// From chroniclesdk/guild_page.go
+export interface GuildMember {
+    readonly id: string;
+    readonly user_id: string;
+    readonly username: string;
+    readonly joined_at: string;
+}
+
+// From chroniclesdk/guild_page.go
+export interface GuildPageConfig {
+    readonly id: string;
+    readonly guild_id: string;
+    readonly guild: GuildInfo;
+    readonly theme: GuildPageTheme;
+    readonly tabs: readonly GuildPageTab[];
+}
+
+// From chroniclesdk/guild_page.go
+export interface GuildPagePanel {
+    readonly id: string;
+    readonly panel_type: string;
+    // empty interface{} type, falling back to unknown
+    readonly config: Record<string, unknown>;
+    readonly position: GuildPanelPosition;
+    readonly visibility: DeviceVisibility; // "all", "desktop", or "mobile"
+}
+
+// From chroniclesdk/guild_page.go
+export interface GuildPageTab {
+    readonly id: string;
+    readonly label: string;
+    readonly slug: string;
+    readonly sort_order: number;
+    readonly visibility: DeviceVisibility; // "all", "desktop", or "mobile"
+    readonly panels: readonly GuildPagePanel[];
+}
+
+// From chroniclesdk/guild_page.go
+export interface GuildPageTheme {
+    readonly primary_color?: string;
+    readonly banner_url?: string;
+    readonly background_url?: string;
+}
+
+// From chroniclesdk/guild_page.go
+export interface GuildPanelPosition {
+    readonly x: number;
+    readonly y: number;
+    readonly w: number;
+    readonly h: number;
 }
 
 // From chroniclesdk/log.go
@@ -113,6 +191,12 @@ export interface JobStatus {
 export type KillType = "clean" | "partial" | "wipe";
 
 export const KillTypes: KillType[] = ["clean", "partial", "wipe"];
+
+// From chroniclesdk/guild_page.go
+export interface ListGuildsResponse {
+    readonly guilds: readonly GuildInfo[];
+    readonly total: number;
+}
 
 // From chroniclesdk/response.go
 export interface LogUploadResponse {
@@ -173,6 +257,11 @@ export interface RecentInstancesResponse {
     readonly instances: readonly RecentInstance[];
     readonly next_cursor?: string;
     readonly has_more: boolean;
+}
+
+// From chroniclesdk/guild_page.go
+export interface ReorderTabsRequest {
+    readonly tab_ids: readonly string[];
 }
 
 // From chroniclesdk/response.go
@@ -254,6 +343,17 @@ export interface Session {
 // From chroniclesdk/user.go
 export interface SetUserDataLimitRequest {
     readonly max_storage_bytes: number;
+}
+
+// From chroniclesdk/guild_page.go
+export interface UpdateGuildPageRequest {
+    readonly theme: GuildPageTheme;
+}
+
+// From chroniclesdk/guild_page.go
+export interface UpdateTabRequest {
+    readonly label: string;
+    readonly panels: readonly GuildPagePanel[];
 }
 
 // From chroniclesdk/user.go

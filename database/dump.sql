@@ -154,6 +154,40 @@ CREATE VIEW chronicle_users AS
           WHERE (log_file.storage_deleted_at IS NULL)
           GROUP BY log_file.owner) lf ON ((lf.owner = u.id)));
 
+CREATE TABLE guild_members (
+    id uuid DEFAULT gen_random_uuid() NOT NULL,
+    guild_id uuid NOT NULL,
+    user_id uuid NOT NULL,
+    joined_at timestamp with time zone DEFAULT now() NOT NULL
+);
+
+CREATE TABLE guild_page_panels (
+    id uuid DEFAULT gen_random_uuid() NOT NULL,
+    tab_id uuid NOT NULL,
+    panel_type text NOT NULL,
+    config jsonb DEFAULT '{}'::jsonb NOT NULL,
+    "position" jsonb DEFAULT '{"h": 2, "w": 6, "x": 0, "y": 0}'::jsonb NOT NULL,
+    created_at timestamp with time zone DEFAULT now() NOT NULL,
+    updated_at timestamp with time zone DEFAULT now() NOT NULL
+);
+
+CREATE TABLE guild_page_tabs (
+    id uuid DEFAULT gen_random_uuid() NOT NULL,
+    page_id uuid NOT NULL,
+    label text NOT NULL,
+    slug text NOT NULL,
+    sort_order integer DEFAULT 0 NOT NULL,
+    created_at timestamp with time zone DEFAULT now() NOT NULL
+);
+
+CREATE TABLE guild_pages (
+    id uuid DEFAULT gen_random_uuid() NOT NULL,
+    guild_id uuid NOT NULL,
+    theme jsonb DEFAULT '{}'::jsonb NOT NULL,
+    created_at timestamp with time zone DEFAULT now() NOT NULL,
+    updated_at timestamp with time zone DEFAULT now() NOT NULL
+);
+
 CREATE TABLE guilds (
     id uuid DEFAULT gen_random_uuid() NOT NULL,
     realm_id uuid NOT NULL,
@@ -385,6 +419,27 @@ ALTER TABLE ONLY river_job ALTER COLUMN id SET DEFAULT nextval('river_job_id_seq
 ALTER TABLE ONLY data_limit
     ADD CONSTRAINT data_limit_pkey PRIMARY KEY (user_id);
 
+ALTER TABLE ONLY guild_members
+    ADD CONSTRAINT guild_members_guild_id_user_id_key UNIQUE (guild_id, user_id);
+
+ALTER TABLE ONLY guild_members
+    ADD CONSTRAINT guild_members_pkey PRIMARY KEY (id);
+
+ALTER TABLE ONLY guild_page_panels
+    ADD CONSTRAINT guild_page_panels_pkey PRIMARY KEY (id);
+
+ALTER TABLE ONLY guild_page_tabs
+    ADD CONSTRAINT guild_page_tabs_page_id_slug_key UNIQUE (page_id, slug);
+
+ALTER TABLE ONLY guild_page_tabs
+    ADD CONSTRAINT guild_page_tabs_pkey PRIMARY KEY (id);
+
+ALTER TABLE ONLY guild_pages
+    ADD CONSTRAINT guild_pages_guild_id_key UNIQUE (guild_id);
+
+ALTER TABLE ONLY guild_pages
+    ADD CONSTRAINT guild_pages_pkey PRIMARY KEY (id);
+
 ALTER TABLE ONLY guilds
     ADD CONSTRAINT guilds_pkey PRIMARY KEY (id);
 
@@ -453,6 +508,14 @@ ALTER TABLE ONLY wow_servers
 
 CREATE UNIQUE INDEX files_unique_owner_hash ON log_file USING btree (owner, hash);
 
+CREATE INDEX idx_guild_members_guild ON guild_members USING btree (guild_id);
+
+CREATE INDEX idx_guild_members_user ON guild_members USING btree (user_id);
+
+CREATE INDEX idx_guild_page_panels_tab ON guild_page_panels USING btree (tab_id);
+
+CREATE INDEX idx_guild_page_tabs_page ON guild_page_tabs USING btree (page_id);
+
 CREATE UNIQUE INDEX log_instances_hashed_slug_idx ON log_instances USING btree (hashed_slug) WHERE (hashed_slug IS NOT NULL);
 
 CREATE INDEX river_job_args_index ON river_job USING gin (args);
@@ -473,6 +536,21 @@ CREATE TRIGGER trigger_insert_default_data_limit AFTER INSERT ON users FOR EACH 
 
 ALTER TABLE ONLY data_limit
     ADD CONSTRAINT data_limit_user_id_fkey FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE;
+
+ALTER TABLE ONLY guild_members
+    ADD CONSTRAINT guild_members_guild_id_fkey FOREIGN KEY (guild_id) REFERENCES guilds(id) ON DELETE CASCADE;
+
+ALTER TABLE ONLY guild_members
+    ADD CONSTRAINT guild_members_user_id_fkey FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE;
+
+ALTER TABLE ONLY guild_page_panels
+    ADD CONSTRAINT guild_page_panels_tab_id_fkey FOREIGN KEY (tab_id) REFERENCES guild_page_tabs(id) ON DELETE CASCADE;
+
+ALTER TABLE ONLY guild_page_tabs
+    ADD CONSTRAINT guild_page_tabs_page_id_fkey FOREIGN KEY (page_id) REFERENCES guild_pages(id) ON DELETE CASCADE;
+
+ALTER TABLE ONLY guild_pages
+    ADD CONSTRAINT guild_pages_guild_id_fkey FOREIGN KEY (guild_id) REFERENCES guilds(id) ON DELETE CASCADE;
 
 ALTER TABLE ONLY guilds
     ADD CONSTRAINT guilds_realm_id_fkey FOREIGN KEY (realm_id) REFERENCES wow_server_realms(id);

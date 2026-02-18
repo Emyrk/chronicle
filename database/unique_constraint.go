@@ -7,6 +7,13 @@ type UniqueConstraint string
 // UniqueConstraint enums.
 const (
 	UniqueDataLimitPkey                             UniqueConstraint = "data_limit_pkey"                                 // ALTER TABLE ONLY data_limit ADD CONSTRAINT data_limit_pkey PRIMARY KEY (user_id);
+	UniqueGuildMembersGuildIDUserIDKey              UniqueConstraint = "guild_members_guild_id_user_id_key"              // ALTER TABLE ONLY guild_members ADD CONSTRAINT guild_members_guild_id_user_id_key UNIQUE (guild_id, user_id);
+	UniqueGuildMembersPkey                          UniqueConstraint = "guild_members_pkey"                              // ALTER TABLE ONLY guild_members ADD CONSTRAINT guild_members_pkey PRIMARY KEY (id);
+	UniqueGuildPagePanelsPkey                       UniqueConstraint = "guild_page_panels_pkey"                          // ALTER TABLE ONLY guild_page_panels ADD CONSTRAINT guild_page_panels_pkey PRIMARY KEY (id);
+	UniqueGuildPageTabsPageIDSlugKey                UniqueConstraint = "guild_page_tabs_page_id_slug_key"                // ALTER TABLE ONLY guild_page_tabs ADD CONSTRAINT guild_page_tabs_page_id_slug_key UNIQUE (page_id, slug);
+	UniqueGuildPageTabsPkey                         UniqueConstraint = "guild_page_tabs_pkey"                            // ALTER TABLE ONLY guild_page_tabs ADD CONSTRAINT guild_page_tabs_pkey PRIMARY KEY (id);
+	UniqueGuildPagesGuildIDKey                      UniqueConstraint = "guild_pages_guild_id_key"                        // ALTER TABLE ONLY guild_pages ADD CONSTRAINT guild_pages_guild_id_key UNIQUE (guild_id);
+	UniqueGuildPagesPkey                            UniqueConstraint = "guild_pages_pkey"                                // ALTER TABLE ONLY guild_pages ADD CONSTRAINT guild_pages_pkey PRIMARY KEY (id);
 	UniqueGuildsPkey                                UniqueConstraint = "guilds_pkey"                                     // ALTER TABLE ONLY guilds ADD CONSTRAINT guilds_pkey PRIMARY KEY (id);
 	UniqueGuildsRealmIDNameKey                      UniqueConstraint = "guilds_realm_id_name_key"                        // ALTER TABLE ONLY guilds ADD CONSTRAINT guilds_realm_id_name_key UNIQUE (realm_id, name);
 	UniqueLogFilePkey                               UniqueConstraint = "log_file_pkey"                                   // ALTER TABLE ONLY log_file ADD CONSTRAINT log_file_pkey PRIMARY KEY (id);

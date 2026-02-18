@@ -12,13 +12,30 @@ import (
 )
 
 type sqlcQuerier interface {
+	BulkUpsertGuildPagePanels(ctx context.Context, dollar_1 []byte) error
 	CountAllWoWLogGroups(ctx context.Context, arg CountAllWoWLogGroupsParams) (int32, error)
 	DeleteAllParsedLogsByGroupID(ctx context.Context, id uuid.UUID) error
+	DeleteGuildMember(ctx context.Context, arg DeleteGuildMemberParams) error
+	DeleteGuildPage(ctx context.Context, guildID uuid.UUID) error
+	DeleteGuildPagePanel(ctx context.Context, id uuid.UUID) error
+	DeleteGuildPagePanelsByTab(ctx context.Context, tabID uuid.UUID) error
+	DeleteGuildPageTab(ctx context.Context, id uuid.UUID) error
+	DeleteGuildPageTabsByPage(ctx context.Context, pageID uuid.UUID) error
 	DeleteWoWLogGroup(ctx context.Context, id uuid.UUID) error
 	DeleteWoWLogGroupFiles(ctx context.Context, arg DeleteWoWLogGroupFilesParams) ([]LogFile, error)
 	EncountersByInstanceID(ctx context.Context, instanceID uuid.UUID) ([]LogInstanceEncounter, error)
 	GetEncounterSummariesByInstanceID(ctx context.Context, instanceID uuid.UUID) ([]GetEncounterSummariesByInstanceIDRow, error)
 	GetFileByHash(ctx context.Context, hash string) (LogFile, error)
+	// Full page fetch with all tabs and panels
+	GetFullGuildPage(ctx context.Context, guildID uuid.UUID) (GetFullGuildPageRow, error)
+	GetGuildByID(ctx context.Context, id uuid.UUID) (GetGuildByIDRow, error)
+	// Guild Members
+	GetGuildMember(ctx context.Context, arg GetGuildMemberParams) (GuildMember, error)
+	// Guild Pages
+	GetGuildPage(ctx context.Context, guildID uuid.UUID) (GuildPage, error)
+	GetGuildPageByID(ctx context.Context, id uuid.UUID) (GuildPage, error)
+	GetGuildPagePanel(ctx context.Context, id uuid.UUID) (GuildPagePanel, error)
+	GetGuildPageTab(ctx context.Context, id uuid.UUID) (GuildPageTab, error)
 	GetInstanceEncounterCharacterFights(ctx context.Context, instanceID uuid.UUID) ([]LogInstanceEncounterHostile, error)
 	GetInstanceYoutubeData(ctx context.Context, logInstanceID uuid.UUID) (LogInstanceYoutubeTimestamped, error)
 	GetLogFile(ctx context.Context, id uuid.UUID) (LogFile, error)
@@ -31,6 +48,9 @@ type sqlcQuerier interface {
 	GetWoWLogGroupsByOwner(ctx context.Context, owner uuid.UUID) ([]GetWoWLogGroupsByOwnerRow, error)
 	InsertEncounter(ctx context.Context, arg InsertEncounterParams) (LogInstanceEncounter, error)
 	InsertEncounterCharacterFights(ctx context.Context, arg []InsertEncounterCharacterFightsParams) *InsertEncounterCharacterFightsBatchResults
+	InsertGuildMember(ctx context.Context, arg InsertGuildMemberParams) (GuildMember, error)
+	InsertGuildPagePanel(ctx context.Context, arg InsertGuildPagePanelParams) (GuildPagePanel, error)
+	InsertGuildPageTab(ctx context.Context, arg InsertGuildPageTabParams) (GuildPageTab, error)
 	InsertInstance(ctx context.Context, arg InsertInstanceParams) (LogInstance, error)
 	InsertInstancePlayers(ctx context.Context, arg []InsertInstancePlayersParams) *InsertInstancePlayersBatchResults
 	InsertInstanceUnits(ctx context.Context, arg []InsertInstanceUnitsParams) *InsertInstanceUnitsBatchResults
@@ -51,11 +71,21 @@ type sqlcQuerier interface {
 	ListAllWoWLogGroupsWithOwner(ctx context.Context) ([]ListAllWoWLogGroupsWithOwnerRow, error)
 	ListAllWoWLogGroupsWithOwnerPaginated(ctx context.Context, arg ListAllWoWLogGroupsWithOwnerPaginatedParams) ([]ListAllWoWLogGroupsWithOwnerPaginatedRow, error)
 	ListDistinctInstanceNames(ctx context.Context) ([]string, error)
+	ListGuildMembers(ctx context.Context, guildID uuid.UUID) ([]ListGuildMembersRow, error)
+	// Guild Page Panels
+	ListGuildPagePanels(ctx context.Context, tabID uuid.UUID) ([]GuildPagePanel, error)
+	// Guild Page Tabs
+	ListGuildPageTabs(ctx context.Context, pageID uuid.UUID) ([]GuildPageTab, error)
+	ListGuildsForUser(ctx context.Context, userID uuid.UUID) ([]Guild, error)
+	ListGuildsWithPages(ctx context.Context, arg ListGuildsWithPagesParams) ([]ListGuildsWithPagesRow, error)
 	ListRecentInstances(ctx context.Context, arg ListRecentInstancesParams) ([]ListRecentInstancesRow, error)
 	ListRecentInstancesByPlayer(ctx context.Context, arg ListRecentInstancesByPlayerParams) ([]ListRecentInstancesByPlayerRow, error)
 	SetUserStorageLimit(ctx context.Context, arg SetUserStorageLimitParams) (DataLimit, error)
+	UpdateGuildPagePanel(ctx context.Context, arg UpdateGuildPagePanelParams) (GuildPagePanel, error)
+	UpdateGuildPageTab(ctx context.Context, arg UpdateGuildPageTabParams) (GuildPageTab, error)
 	UpdateUserAuthSessionTokens(ctx context.Context, arg UpdateUserAuthSessionTokensParams) (UserAuthSession, error)
 	UpsertGuild(ctx context.Context, arg UpsertGuildParams) (Guild, error)
+	UpsertGuildPage(ctx context.Context, arg UpsertGuildPageParams) (GuildPage, error)
 }
 
 var _ sqlcQuerier = (*sqlQuerier)(nil)

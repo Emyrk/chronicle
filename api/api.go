@@ -116,12 +116,38 @@ func (api *API) Routes() chi.Router {
 			r.Put("/users/{userID}/data-limit", api.SetUserDataLimit)
 			r.Get("/logs", api.AdminListLogs)
 			r.Get("/instance-names", api.AdminListInstanceNames)
+
+			// Guild member management (admin only)
+			r.Post("/guilds/{guildID}/members", api.AdminAddGuildMember)
+			r.Delete("/guilds/{guildID}/members/{userID}", api.AdminRemoveGuildMember)
 		})
 
 		r.Get("/healthz", func(w http.ResponseWriter, r *http.Request) { httpapi.Write(r.Context(), w, http.StatusOK, "OK") })
 		if api.Opts.WoWDB != nil {
 			r.Mount("/wowdb", api.Opts.WoWDB)
 		}
+		// Guild routes
+		r.Route("/guilds", func(r chi.Router) {
+			r.Get("/", api.ListGuilds)
+			r.Route("/{guildID}", func(r chi.Router) {
+				r.Get("/", api.GetGuild)
+				r.Get("/page", api.GetGuildPage)
+
+				// Protected guild page editing routes
+				r.Group(func(r chi.Router) {
+					r.Use(api.Auth.Authenticated(false))
+					r.Put("/page", api.UpsertGuildPage)
+					r.Post("/page/tabs", api.CreateGuildPageTab)
+					r.Put("/page/tabs/reorder", api.ReorderGuildPageTabs)
+					r.Put("/page/tabs/{tabID}", api.UpdateGuildPageTab)
+					r.Delete("/page/tabs/{tabID}", api.DeleteGuildPageTab)
+				})
+			})
+		})
+
+		// Public guild page route
+		r.Get("/g/{guildID}", api.GetPublicGuildPage)
+
 		r.Group(func(r chi.Router) {
 			r.Route("/raidlogs", func(r chi.Router) {
 				r.Get("/supported", api.SupportedInstances)

@@ -563,6 +563,40 @@ type Guild struct {
 	CreatedAt pgtype.Timestamptz `db:"created_at" json:"created_at"`
 }
 
+type GuildMember struct {
+	ID       uuid.UUID          `db:"id" json:"id"`
+	GuildID  uuid.UUID          `db:"guild_id" json:"guild_id"`
+	UserID   uuid.UUID          `db:"user_id" json:"user_id"`
+	JoinedAt pgtype.Timestamptz `db:"joined_at" json:"joined_at"`
+}
+
+type GuildPage struct {
+	ID        uuid.UUID          `db:"id" json:"id"`
+	GuildID   uuid.UUID          `db:"guild_id" json:"guild_id"`
+	Theme     []byte             `db:"theme" json:"theme"`
+	CreatedAt pgtype.Timestamptz `db:"created_at" json:"created_at"`
+	UpdatedAt pgtype.Timestamptz `db:"updated_at" json:"updated_at"`
+}
+
+type GuildPagePanel struct {
+	ID        uuid.UUID          `db:"id" json:"id"`
+	TabID     uuid.UUID          `db:"tab_id" json:"tab_id"`
+	PanelType string             `db:"panel_type" json:"panel_type"`
+	Config    []byte             `db:"config" json:"config"`
+	Position  []byte             `db:"position" json:"position"`
+	CreatedAt pgtype.Timestamptz `db:"created_at" json:"created_at"`
+	UpdatedAt pgtype.Timestamptz `db:"updated_at" json:"updated_at"`
+}
+
+type GuildPageTab struct {
+	ID        uuid.UUID          `db:"id" json:"id"`
+	PageID    uuid.UUID          `db:"page_id" json:"page_id"`
+	Label     string             `db:"label" json:"label"`
+	Slug      string             `db:"slug" json:"slug"`
+	SortOrder int32              `db:"sort_order" json:"sort_order"`
+	CreatedAt pgtype.Timestamptz `db:"created_at" json:"created_at"`
+}
+
 type LogFile struct {
 	ID        uuid.UUID          `db:"id" json:"id"`
 	Owner     uuid.UUID          `db:"owner" json:"owner"`

@@ -23,6 +23,7 @@ import {
   PrivacySettings, 
   AppearanceSettings 
 } from "./pages/Settings"
+import { GuildPage, GuildPageEditor } from "./pages/GuildPage"
 import { Layout } from "./components/Layout/Layout"
 
 // Backend-handled paths that should bypass React Router
@@ -64,6 +65,9 @@ function App() {
         <Route path="/disclaimer" element={<Disclaimer />} />
         <Route path="/supported" element={<SupportedInstances />} />
         <Route path="/terms" element={<Terms />} />
+        <Route path="/g/:guildId" element={<GuildPage />} />
+        <Route path="/g/:guildId/:tabSlug" element={<GuildPage />} />
+        <Route path="/guilds/:guildId/edit" element={<GuildPageEditor />} />
         <Route path="/account" element={<AccountLayout />}>
           <Route index element={<Navigate to="/account/settings" replace />} />
           <Route path="settings" element={<ProfileSettings />} />

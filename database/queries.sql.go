@@ -666,6 +666,634 @@ func (q *sqlQuerier) ListDistinctInstanceNames(ctx context.Context) ([]string, e
 	return items, nil
 }
 
+const bulkUpsertGuildPagePanels = `-- name: BulkUpsertGuildPagePanels :exec
+INSERT INTO guild_page_panels (id, tab_id, panel_type, config, position)
+SELECT 
+    COALESCE(d.id, gen_random_uuid()),
+    d.tab_id,
+    d.panel_type,
+    d.config,
+    d.position
+FROM json_populate_recordset(null::guild_page_panels, $1::json) AS d
+ON CONFLICT (id) DO UPDATE SET
+    panel_type = EXCLUDED.panel_type,
+    config = EXCLUDED.config,
+    position = EXCLUDED.position,
+    updated_at = NOW()
+`
+
+func (q *sqlQuerier) BulkUpsertGuildPagePanels(ctx context.Context, dollar_1 []byte) error {
+	_, err := q.db.Exec(ctx, bulkUpsertGuildPagePanels, dollar_1)
+	return err
+}
+
+const deleteGuildMember = `-- name: DeleteGuildMember :exec
+DELETE FROM guild_members WHERE guild_id = $1 AND user_id = $2
+`
+
+type DeleteGuildMemberParams struct {
+	GuildID uuid.UUID `db:"guild_id" json:"guild_id"`
+	UserID  uuid.UUID `db:"user_id" json:"user_id"`
+}
+
+func (q *sqlQuerier) DeleteGuildMember(ctx context.Context, arg DeleteGuildMemberParams) error {
+	_, err := q.db.Exec(ctx, deleteGuildMember, arg.GuildID, arg.UserID)
+	return err
+}
+
+const deleteGuildPage = `-- name: DeleteGuildPage :exec
+DELETE FROM guild_pages WHERE guild_id = $1
+`
+
+func (q *sqlQuerier) DeleteGuildPage(ctx context.Context, guildID uuid.UUID) error {
+	_, err := q.db.Exec(ctx, deleteGuildPage, guildID)
+	return err
+}
+
+const deleteGuildPagePanel = `-- name: DeleteGuildPagePanel :exec
+DELETE FROM guild_page_panels WHERE id = $1
+`
+
+func (q *sqlQuerier) DeleteGuildPagePanel(ctx context.Context, id uuid.UUID) error {
+	_, err := q.db.Exec(ctx, deleteGuildPagePanel, id)
+	return err
+}
+
+const deleteGuildPagePanelsByTab = `-- name: DeleteGuildPagePanelsByTab :exec
+DELETE FROM guild_page_panels WHERE tab_id = $1
+`
+
+func (q *sqlQuerier) DeleteGuildPagePanelsByTab(ctx context.Context, tabID uuid.UUID) error {
+	_, err := q.db.Exec(ctx, deleteGuildPagePanelsByTab, tabID)
+	return err
+}
+
+const deleteGuildPageTab = `-- name: DeleteGuildPageTab :exec
+DELETE FROM guild_page_tabs WHERE id = $1
+`
+
+func (q *sqlQuerier) DeleteGuildPageTab(ctx context.Context, id uuid.UUID) error {
+	_, err := q.db.Exec(ctx, deleteGuildPageTab, id)
+	return err
+}
+
+const deleteGuildPageTabsByPage = `-- name: DeleteGuildPageTabsByPage :exec
+DELETE FROM guild_page_tabs WHERE page_id = $1
+`
+
+func (q *sqlQuerier) DeleteGuildPageTabsByPage(ctx context.Context, pageID uuid.UUID) error {
+	_, err := q.db.Exec(ctx, deleteGuildPageTabsByPage, pageID)
+	return err
+}
+
+const getFullGuildPage = `-- name: GetFullGuildPage :one
+
+SELECT 
+    gp.id, gp.guild_id, gp.theme, gp.created_at, gp.updated_at,
+    g.name as guild_name,
+    g.realm_id,
+    r.name as realm_name
+FROM guild_pages gp
+JOIN guilds g ON g.id = gp.guild_id
+JOIN wow_server_realms r ON r.id = g.realm_id
+WHERE gp.guild_id = $1
+`
+
+type GetFullGuildPageRow struct {
+	ID        uuid.UUID          `db:"id" json:"id"`
+	GuildID   uuid.UUID          `db:"guild_id" json:"guild_id"`
+	Theme     []byte             `db:"theme" json:"theme"`
+	CreatedAt pgtype.Timestamptz `db:"created_at" json:"created_at"`
+	UpdatedAt pgtype.Timestamptz `db:"updated_at" json:"updated_at"`
+	GuildName string             `db:"guild_name" json:"guild_name"`
+	RealmID   uuid.UUID          `db:"realm_id" json:"realm_id"`
+	RealmName string             `db:"realm_name" json:"realm_name"`
+}
+
+// Full page fetch with all tabs and panels
+func (q *sqlQuerier) GetFullGuildPage(ctx context.Context, guildID uuid.UUID) (GetFullGuildPageRow, error) {
+	row := q.db.QueryRow(ctx, getFullGuildPage, guildID)
+	var i GetFullGuildPageRow
+	err := row.Scan(
+		&i.ID,
+		&i.GuildID,
+		&i.Theme,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+		&i.GuildName,
+		&i.RealmID,
+		&i.RealmName,
+	)
+	return i, err
+}
+
+const getGuildByID = `-- name: GetGuildByID :one
+SELECT g.id, g.realm_id, g.name, g.created_at, r.name as realm_name
+FROM guilds g
+JOIN wow_server_realms r ON r.id = g.realm_id
+WHERE g.id = $1
+`
+
+type GetGuildByIDRow struct {
+	ID        uuid.UUID          `db:"id" json:"id"`
+	RealmID   uuid.UUID          `db:"realm_id" json:"realm_id"`
+	Name      string             `db:"name" json:"name"`
+	CreatedAt pgtype.Timestamptz `db:"created_at" json:"created_at"`
+	RealmName string             `db:"realm_name" json:"realm_name"`
+}
+
+func (q *sqlQuerier) GetGuildByID(ctx context.Context, id uuid.UUID) (GetGuildByIDRow, error) {
+	row := q.db.QueryRow(ctx, getGuildByID, id)
+	var i GetGuildByIDRow
+	err := row.Scan(
+		&i.ID,
+		&i.RealmID,
+		&i.Name,
+		&i.CreatedAt,
+		&i.RealmName,
+	)
+	return i, err
+}
+
+const getGuildMember = `-- name: GetGuildMember :one
+
+SELECT id, guild_id, user_id, joined_at FROM guild_members WHERE guild_id = $1 AND user_id = $2
+`
+
+type GetGuildMemberParams struct {
+	GuildID uuid.UUID `db:"guild_id" json:"guild_id"`
+	UserID  uuid.UUID `db:"user_id" json:"user_id"`
+}
+
+// Guild Members
+func (q *sqlQuerier) GetGuildMember(ctx context.Context, arg GetGuildMemberParams) (GuildMember, error) {
+	row := q.db.QueryRow(ctx, getGuildMember, arg.GuildID, arg.UserID)
+	var i GuildMember
+	err := row.Scan(
+		&i.ID,
+		&i.GuildID,
+		&i.UserID,
+		&i.JoinedAt,
+	)
+	return i, err
+}
+
+const getGuildPage = `-- name: GetGuildPage :one
+
+SELECT id, guild_id, theme, created_at, updated_at FROM guild_pages WHERE guild_id = $1
+`
+
+// Guild Pages
+func (q *sqlQuerier) GetGuildPage(ctx context.Context, guildID uuid.UUID) (GuildPage, error) {
+	row := q.db.QueryRow(ctx, getGuildPage, guildID)
+	var i GuildPage
+	err := row.Scan(
+		&i.ID,
+		&i.GuildID,
+		&i.Theme,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+	)
+	return i, err
+}
+
+const getGuildPageByID = `-- name: GetGuildPageByID :one
+SELECT id, guild_id, theme, created_at, updated_at FROM guild_pages WHERE id = $1
+`
+
+func (q *sqlQuerier) GetGuildPageByID(ctx context.Context, id uuid.UUID) (GuildPage, error) {
+	row := q.db.QueryRow(ctx, getGuildPageByID, id)
+	var i GuildPage
+	err := row.Scan(
+		&i.ID,
+		&i.GuildID,
+		&i.Theme,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+	)
+	return i, err
+}
+
+const getGuildPagePanel = `-- name: GetGuildPagePanel :one
+SELECT id, tab_id, panel_type, config, position, created_at, updated_at FROM guild_page_panels WHERE id = $1
+`
+
+func (q *sqlQuerier) GetGuildPagePanel(ctx context.Context, id uuid.UUID) (GuildPagePanel, error) {
+	row := q.db.QueryRow(ctx, getGuildPagePanel, id)
+	var i GuildPagePanel
+	err := row.Scan(
+		&i.ID,
+		&i.TabID,
+		&i.PanelType,
+		&i.Config,
+		&i.Position,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+	)
+	return i, err
+}
+
+const getGuildPageTab = `-- name: GetGuildPageTab :one
+SELECT id, page_id, label, slug, sort_order, created_at FROM guild_page_tabs WHERE id = $1
+`
+
+func (q *sqlQuerier) GetGuildPageTab(ctx context.Context, id uuid.UUID) (GuildPageTab, error) {
+	row := q.db.QueryRow(ctx, getGuildPageTab, id)
+	var i GuildPageTab
+	err := row.Scan(
+		&i.ID,
+		&i.PageID,
+		&i.Label,
+		&i.Slug,
+		&i.SortOrder,
+		&i.CreatedAt,
+	)
+	return i, err
+}
+
+const insertGuildMember = `-- name: InsertGuildMember :one
+INSERT INTO guild_members (guild_id, user_id)
+VALUES ($1, $2)
+RETURNING id, guild_id, user_id, joined_at
+`
+
+type InsertGuildMemberParams struct {
+	GuildID uuid.UUID `db:"guild_id" json:"guild_id"`
+	UserID  uuid.UUID `db:"user_id" json:"user_id"`
+}
+
+func (q *sqlQuerier) InsertGuildMember(ctx context.Context, arg InsertGuildMemberParams) (GuildMember, error) {
+	row := q.db.QueryRow(ctx, insertGuildMember, arg.GuildID, arg.UserID)
+	var i GuildMember
+	err := row.Scan(
+		&i.ID,
+		&i.GuildID,
+		&i.UserID,
+		&i.JoinedAt,
+	)
+	return i, err
+}
+
+const insertGuildPagePanel = `-- name: InsertGuildPagePanel :one
+INSERT INTO guild_page_panels (tab_id, panel_type, config, position)
+VALUES ($1, $2, $3, $4)
+RETURNING id, tab_id, panel_type, config, position, created_at, updated_at
+`
+
+type InsertGuildPagePanelParams struct {
+	TabID     uuid.UUID `db:"tab_id" json:"tab_id"`
+	PanelType string    `db:"panel_type" json:"panel_type"`
+	Config    []byte    `db:"config" json:"config"`
+	Position  []byte    `db:"position" json:"position"`
+}
+
+func (q *sqlQuerier) InsertGuildPagePanel(ctx context.Context, arg InsertGuildPagePanelParams) (GuildPagePanel, error) {
+	row := q.db.QueryRow(ctx, insertGuildPagePanel,
+		arg.TabID,
+		arg.PanelType,
+		arg.Config,
+		arg.Position,
+	)
+	var i GuildPagePanel
+	err := row.Scan(
+		&i.ID,
+		&i.TabID,
+		&i.PanelType,
+		&i.Config,
+		&i.Position,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+	)
+	return i, err
+}
+
+const insertGuildPageTab = `-- name: InsertGuildPageTab :one
+INSERT INTO guild_page_tabs (page_id, label, slug, sort_order)
+VALUES ($1, $2, $3, $4)
+RETURNING id, page_id, label, slug, sort_order, created_at
+`
+
+type InsertGuildPageTabParams struct {
+	PageID    uuid.UUID `db:"page_id" json:"page_id"`
+	Label     string    `db:"label" json:"label"`
+	Slug      string    `db:"slug" json:"slug"`
+	SortOrder int32     `db:"sort_order" json:"sort_order"`
+}
+
+func (q *sqlQuerier) InsertGuildPageTab(ctx context.Context, arg InsertGuildPageTabParams) (GuildPageTab, error) {
+	row := q.db.QueryRow(ctx, insertGuildPageTab,
+		arg.PageID,
+		arg.Label,
+		arg.Slug,
+		arg.SortOrder,
+	)
+	var i GuildPageTab
+	err := row.Scan(
+		&i.ID,
+		&i.PageID,
+		&i.Label,
+		&i.Slug,
+		&i.SortOrder,
+		&i.CreatedAt,
+	)
+	return i, err
+}
+
+const listGuildMembers = `-- name: ListGuildMembers :many
+SELECT gm.id, gm.guild_id, gm.user_id, gm.joined_at, u.username
+FROM guild_members gm
+JOIN users u ON u.id = gm.user_id
+WHERE gm.guild_id = $1
+ORDER BY gm.joined_at
+`
+
+type ListGuildMembersRow struct {
+	ID       uuid.UUID          `db:"id" json:"id"`
+	GuildID  uuid.UUID          `db:"guild_id" json:"guild_id"`
+	UserID   uuid.UUID          `db:"user_id" json:"user_id"`
+	JoinedAt pgtype.Timestamptz `db:"joined_at" json:"joined_at"`
+	Username string             `db:"username" json:"username"`
+}
+
+func (q *sqlQuerier) ListGuildMembers(ctx context.Context, guildID uuid.UUID) ([]ListGuildMembersRow, error) {
+	rows, err := q.db.Query(ctx, listGuildMembers, guildID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListGuildMembersRow
+	for rows.Next() {
+		var i ListGuildMembersRow
+		if err := rows.Scan(
+			&i.ID,
+			&i.GuildID,
+			&i.UserID,
+			&i.JoinedAt,
+			&i.Username,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listGuildPagePanels = `-- name: ListGuildPagePanels :many
+
+SELECT id, tab_id, panel_type, config, position, created_at, updated_at FROM guild_page_panels
+WHERE tab_id = $1
+ORDER BY (position->>'y')::int, (position->>'x')::int
+`
+
+// Guild Page Panels
+func (q *sqlQuerier) ListGuildPagePanels(ctx context.Context, tabID uuid.UUID) ([]GuildPagePanel, error) {
+	rows, err := q.db.Query(ctx, listGuildPagePanels, tabID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []GuildPagePanel
+	for rows.Next() {
+		var i GuildPagePanel
+		if err := rows.Scan(
+			&i.ID,
+			&i.TabID,
+			&i.PanelType,
+			&i.Config,
+			&i.Position,
+			&i.CreatedAt,
+			&i.UpdatedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listGuildPageTabs = `-- name: ListGuildPageTabs :many
+
+SELECT id, page_id, label, slug, sort_order, created_at FROM guild_page_tabs
+WHERE page_id = $1
+ORDER BY sort_order, created_at
+`
+
+// Guild Page Tabs
+func (q *sqlQuerier) ListGuildPageTabs(ctx context.Context, pageID uuid.UUID) ([]GuildPageTab, error) {
+	rows, err := q.db.Query(ctx, listGuildPageTabs, pageID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []GuildPageTab
+	for rows.Next() {
+		var i GuildPageTab
+		if err := rows.Scan(
+			&i.ID,
+			&i.PageID,
+			&i.Label,
+			&i.Slug,
+			&i.SortOrder,
+			&i.CreatedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listGuildsForUser = `-- name: ListGuildsForUser :many
+SELECT g.id, g.realm_id, g.name, g.created_at
+FROM guilds g
+JOIN guild_members gm ON gm.guild_id = g.id
+WHERE gm.user_id = $1
+ORDER BY g.name
+`
+
+func (q *sqlQuerier) ListGuildsForUser(ctx context.Context, userID uuid.UUID) ([]Guild, error) {
+	rows, err := q.db.Query(ctx, listGuildsForUser, userID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []Guild
+	for rows.Next() {
+		var i Guild
+		if err := rows.Scan(
+			&i.ID,
+			&i.RealmID,
+			&i.Name,
+			&i.CreatedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listGuildsWithPages = `-- name: ListGuildsWithPages :many
+SELECT 
+    g.id, g.realm_id, g.name, g.created_at,
+    gp.id as page_id,
+    r.name as realm_name
+FROM guilds g
+LEFT JOIN guild_pages gp ON gp.guild_id = g.id
+JOIN wow_server_realms r ON r.id = g.realm_id
+WHERE ($1::text = '' OR g.name ILIKE '%' || $1 || '%')
+ORDER BY g.name
+LIMIT $2 OFFSET $3
+`
+
+type ListGuildsWithPagesParams struct {
+	Column1 string `db:"column_1" json:"column_1"`
+	Limit   int32  `db:"limit" json:"limit"`
+	Offset  int32  `db:"offset" json:"offset"`
+}
+
+type ListGuildsWithPagesRow struct {
+	ID        uuid.UUID          `db:"id" json:"id"`
+	RealmID   uuid.UUID          `db:"realm_id" json:"realm_id"`
+	Name      string             `db:"name" json:"name"`
+	CreatedAt pgtype.Timestamptz `db:"created_at" json:"created_at"`
+	PageID    uuid.NullUUID      `db:"page_id" json:"page_id"`
+	RealmName string             `db:"realm_name" json:"realm_name"`
+}
+
+func (q *sqlQuerier) ListGuildsWithPages(ctx context.Context, arg ListGuildsWithPagesParams) ([]ListGuildsWithPagesRow, error) {
+	rows, err := q.db.Query(ctx, listGuildsWithPages, arg.Column1, arg.Limit, arg.Offset)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListGuildsWithPagesRow
+	for rows.Next() {
+		var i ListGuildsWithPagesRow
+		if err := rows.Scan(
+			&i.ID,
+			&i.RealmID,
+			&i.Name,
+			&i.CreatedAt,
+			&i.PageID,
+			&i.RealmName,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const updateGuildPagePanel = `-- name: UpdateGuildPagePanel :one
+UPDATE guild_page_panels
+SET panel_type = $2, config = $3, position = $4, updated_at = NOW()
+WHERE id = $1
+RETURNING id, tab_id, panel_type, config, position, created_at, updated_at
+`
+
+type UpdateGuildPagePanelParams struct {
+	ID        uuid.UUID `db:"id" json:"id"`
+	PanelType string    `db:"panel_type" json:"panel_type"`
+	Config    []byte    `db:"config" json:"config"`
+	Position  []byte    `db:"position" json:"position"`
+}
+
+func (q *sqlQuerier) UpdateGuildPagePanel(ctx context.Context, arg UpdateGuildPagePanelParams) (GuildPagePanel, error) {
+	row := q.db.QueryRow(ctx, updateGuildPagePanel,
+		arg.ID,
+		arg.PanelType,
+		arg.Config,
+		arg.Position,
+	)
+	var i GuildPagePanel
+	err := row.Scan(
+		&i.ID,
+		&i.TabID,
+		&i.PanelType,
+		&i.Config,
+		&i.Position,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+	)
+	return i, err
+}
+
+const updateGuildPageTab = `-- name: UpdateGuildPageTab :one
+UPDATE guild_page_tabs
+SET label = $2, slug = $3, sort_order = $4
+WHERE id = $1
+RETURNING id, page_id, label, slug, sort_order, created_at
+`
+
+type UpdateGuildPageTabParams struct {
+	ID        uuid.UUID `db:"id" json:"id"`
+	Label     string    `db:"label" json:"label"`
+	Slug      string    `db:"slug" json:"slug"`
+	SortOrder int32     `db:"sort_order" json:"sort_order"`
+}
+
+func (q *sqlQuerier) UpdateGuildPageTab(ctx context.Context, arg UpdateGuildPageTabParams) (GuildPageTab, error) {
+	row := q.db.QueryRow(ctx, updateGuildPageTab,
+		arg.ID,
+		arg.Label,
+		arg.Slug,
+		arg.SortOrder,
+	)
+	var i GuildPageTab
+	err := row.Scan(
+		&i.ID,
+		&i.PageID,
+		&i.Label,
+		&i.Slug,
+		&i.SortOrder,
+		&i.CreatedAt,
+	)
+	return i, err
+}
+
+const upsertGuildPage = `-- name: UpsertGuildPage :one
+INSERT INTO guild_pages (guild_id, theme)
+VALUES ($1, $2)
+ON CONFLICT (guild_id) DO UPDATE SET
+    theme = EXCLUDED.theme,
+    updated_at = NOW()
+RETURNING id, guild_id, theme, created_at, updated_at
+`
+
+type UpsertGuildPageParams struct {
+	GuildID uuid.UUID `db:"guild_id" json:"guild_id"`
+	Theme   []byte    `db:"theme" json:"theme"`
+}
+
+func (q *sqlQuerier) UpsertGuildPage(ctx context.Context, arg UpsertGuildPageParams) (GuildPage, error) {
+	row := q.db.QueryRow(ctx, upsertGuildPage, arg.GuildID, arg.Theme)
+	var i GuildPage
+	err := row.Scan(
+		&i.ID,
+		&i.GuildID,
+		&i.Theme,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+	)
+	return i, err
+}
+
 const upsertGuild = `-- name: UpsertGuild :one
 INSERT INTO
   guilds (realm_id, name, created_at)
