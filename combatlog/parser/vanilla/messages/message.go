@@ -59,7 +59,6 @@ func (m MessageBase) IsSynthetic() bool {
 func (m MessageBase) Serialize(content string) string {
 	return m.Timestamp.Format("02/01 15:04:05.000") + "  " + content
 }
-func (MessageBase) isMessage() {}
 
 func (m MessageBase) Date() time.Time {
 	return m.Timestamp
@@ -71,9 +70,10 @@ type SkippedMessage struct {
 }
 
 func (SkippedMessage) Affects() []guid.GUID { return nil }
+func (*SkippedMessage) isMessage()          {}
 
 func Skip(ts time.Time, reason string) []Message {
-	return set(SkippedMessage{
+	return set(&SkippedMessage{
 		MessageBase: Base(ts),
 		Reason:      reason,
 	})
@@ -89,6 +89,7 @@ type UnparsedLine struct {
 }
 
 func (UnparsedLine) Affects() []guid.GUID { return nil }
+func (*UnparsedLine) isMessage()           {}
 
 func Unparsed(ts time.Time, content string) []Message {
 	return set(&UnparsedLine{
@@ -121,6 +122,7 @@ func (c LegacyCast) Affects() []guid.GUID {
 	}
 	return []guid.GUID{c.Caster, *c.Target}
 }
+func (*LegacyCast) isMessage() {}
 
 type Cast struct {
 	castv2.CastV2
@@ -133,6 +135,7 @@ func (c Cast) Affects() []guid.GUID {
 	}
 	return []guid.GUID{c.Caster.Gid, c.Target.Gid}
 }
+func (*Cast) isMessage() {}
 
 type Unit struct {
 	MessageBase
@@ -140,6 +143,7 @@ type Unit struct {
 }
 
 func (u Unit) Affects() []guid.GUID { return []guid.GUID{u.Guid} }
+func (*Unit) isMessage()            {}
 
 type Combatant struct {
 	MessageBase
@@ -147,6 +151,7 @@ type Combatant struct {
 }
 
 func (c Combatant) Affects() []guid.GUID { return []guid.GUID{c.Guid} }
+func (*Combatant) isMessage()             {}
 
 type Realm struct {
 	MessageBase
@@ -154,6 +159,7 @@ type Realm struct {
 }
 
 func (u Realm) Affects() []guid.GUID { return []guid.GUID{} }
+func (*Realm) isMessage()            {}
 
 type UnitDied struct {
 	MessageBase
@@ -161,6 +167,7 @@ type UnitDied struct {
 }
 
 func (u UnitDied) Affects() []guid.GUID { return []guid.GUID{u.ID} }
+func (*UnitDied) isMessage()             {}
 
 type PlayerPosition struct {
 	MessageBase
@@ -168,6 +175,7 @@ type PlayerPosition struct {
 }
 
 func (u PlayerPosition) Affects() []guid.GUID { return []guid.GUID{} }
+func (*PlayerPosition) isMessage()             {}
 
 type Zone struct {
 	MessageBase
@@ -175,6 +183,7 @@ type Zone struct {
 }
 
 func (z Zone) Affects() []guid.GUID { return nil }
+func (*Zone) isMessage()            {}
 
 type CombatCount struct {
 	MessageBase
@@ -182,6 +191,7 @@ type CombatCount struct {
 }
 
 func (c CombatCount) Affects() []guid.GUID { return []guid.GUID{} }
+func (*CombatCount) isMessage()             {}
 
 type Clock struct {
 	MessageBase
@@ -189,6 +199,7 @@ type Clock struct {
 }
 
 func (c Clock) Affects() []guid.GUID { return []guid.GUID{} }
+func (*Clock) isMessage()            {}
 
 type ResourceChange struct {
 	MessageBase
@@ -209,6 +220,7 @@ func (r ResourceChange) Affects() []guid.GUID {
 	}
 	return ids
 }
+func (*ResourceChange) isMessage() {}
 
 type Damage struct {
 	MessageBase
@@ -244,6 +256,7 @@ func (d Damage) Affects() []guid.GUID {
 	}
 	return ids
 }
+func (*Damage) isMessage() {}
 
 type Heal struct {
 	MessageBase
@@ -255,6 +268,7 @@ type Heal struct {
 }
 
 func (h Heal) Affects() []guid.GUID { return []guid.GUID{h.Caster, h.Target} }
+func (*Heal) isMessage()            {}
 
 type Slain struct {
 	MessageBase
@@ -273,6 +287,7 @@ func (s Slain) Affects() []guid.GUID {
 	}
 	return ids
 }
+func (*Slain) isMessage() {}
 
 type Aura struct {
 	MessageBase
@@ -283,6 +298,7 @@ type Aura struct {
 }
 
 func (a Aura) Affects() []guid.GUID { return []guid.GUID{a.Target} }
+func (*Aura) isMessage()            {}
 
 type Interrupt struct {
 	MessageBase
@@ -293,6 +309,7 @@ type Interrupt struct {
 }
 
 func (i Interrupt) Affects() []guid.GUID { return []guid.GUID{i.Caster, i.Target} }
+func (*Interrupt) isMessage()             {}
 
 type Create struct {
 	MessageBase
@@ -301,6 +318,7 @@ type Create struct {
 }
 
 func (c Create) Affects() []guid.GUID { return []guid.GUID{c.Caster} }
+func (*Create) isMessage()            {}
 
 // ExtraAttack is a bit strange, but it's a unique message that triggers when extra
 // white attacks are granted via some proc.
@@ -312,15 +330,17 @@ type ExtraAttack struct {
 }
 
 func (e ExtraAttack) Affects() []guid.GUID { return []guid.GUID{e.Caster} }
+func (*ExtraAttack) isMessage()             {}
 
 type Timeout struct {
 	MessageBase
 }
 
 func TimedOut(ts time.Time) Message {
-	return Timeout{
+	return &Timeout{
 		MessageBase: Base(ts, WithSynthetic()),
 	}
 }
 
 func (t Timeout) Affects() []guid.GUID { return []guid.GUID{} }
+func (*Timeout) isMessage()            {}
