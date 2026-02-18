@@ -14,25 +14,25 @@ type EncounterEventsInProgress EncounterEvents
 
 type EncounterEvents struct {
 	first          time.Time
-	Damage         *Builder[messages.Damage, *chronicleproto.Damage]
-	Heal           *Builder[messages.Heal, *chronicleproto.Heal]
-	ResourceChange *Builder[messages.ResourceChange, *chronicleproto.ResourceChange]
-	ExtraAttack    *Builder[messages.ExtraAttack, *chronicleproto.ExtraAttack]
-	Slain          *Builder[messages.Slain, *chronicleproto.Slain]
-	Casts          *Builder[messages.Cast, *chronicleproto.Cast]
-	Aura           *Builder[messages.Aura, *chronicleproto.Aura]
+	Damage         *Builder[*messages.Damage, *chronicleproto.Damage]
+	Heal           *Builder[*messages.Heal, *chronicleproto.Heal]
+	ResourceChange *Builder[*messages.ResourceChange, *chronicleproto.ResourceChange]
+	ExtraAttack    *Builder[*messages.ExtraAttack, *chronicleproto.ExtraAttack]
+	Slain          *Builder[*messages.Slain, *chronicleproto.Slain]
+	Casts          *Builder[*messages.Cast, *chronicleproto.Cast]
+	Aura           *Builder[*messages.Aura, *chronicleproto.Aura]
 	cnter          int32
 }
 
 func New() *EncounterEventsInProgress {
 	return &EncounterEventsInProgress{
-		Damage:         NewBuilder[messages.Damage, *chronicleproto.Damage](),
-		Heal:           NewBuilder[messages.Heal, *chronicleproto.Heal](),
-		ResourceChange: NewBuilder[messages.ResourceChange, *chronicleproto.ResourceChange](),
-		ExtraAttack:    NewBuilder[messages.ExtraAttack, *chronicleproto.ExtraAttack](),
-		Slain:          NewBuilder[messages.Slain, *chronicleproto.Slain](),
-		Casts:          NewBuilder[messages.Cast, *chronicleproto.Cast](),
-		Aura:           NewBuilder[messages.Aura, *chronicleproto.Aura](),
+		Damage:         NewBuilder[*messages.Damage, *chronicleproto.Damage](),
+		Heal:           NewBuilder[*messages.Heal, *chronicleproto.Heal](),
+		ResourceChange: NewBuilder[*messages.ResourceChange, *chronicleproto.ResourceChange](),
+		ExtraAttack:    NewBuilder[*messages.ExtraAttack, *chronicleproto.ExtraAttack](),
+		Slain:          NewBuilder[*messages.Slain, *chronicleproto.Slain](),
+		Casts:          NewBuilder[*messages.Cast, *chronicleproto.Cast](),
+		Aura:           NewBuilder[*messages.Aura, *chronicleproto.Aura](),
 	}
 }
 

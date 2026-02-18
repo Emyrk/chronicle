@@ -11,7 +11,7 @@ import (
 	"github.com/Emyrk/chronicle/internal/slice"
 )
 
-func Damage(from time.Time, idx int32, dmg messages.Damage) *chronicleproto.Damage {
+func Damage(from time.Time, idx int32, dmg *messages.Damage) *chronicleproto.Damage {
 	return &chronicleproto.Damage{
 		Meta: &chronicleproto.EventMeta{
 			Index:       idx,
@@ -27,7 +27,7 @@ func Damage(from time.Time, idx int32, dmg messages.Damage) *chronicleproto.Dama
 	}
 }
 
-func Heal(from time.Time, idx int32, heal messages.Heal) *chronicleproto.Heal {
+func Heal(from time.Time, idx int32, heal *messages.Heal) *chronicleproto.Heal {
 	return &chronicleproto.Heal{
 		Meta: &chronicleproto.EventMeta{
 			Index:       idx,
@@ -41,7 +41,7 @@ func Heal(from time.Time, idx int32, heal messages.Heal) *chronicleproto.Heal {
 	}
 }
 
-func ResourceChange(from time.Time, idx int32, rc messages.ResourceChange) *chronicleproto.ResourceChange {
+func ResourceChange(from time.Time, idx int32, rc *messages.ResourceChange) *chronicleproto.ResourceChange {
 	return &chronicleproto.ResourceChange{
 		Meta: &chronicleproto.EventMeta{
 			Index:       idx,
@@ -56,7 +56,7 @@ func ResourceChange(from time.Time, idx int32, rc messages.ResourceChange) *chro
 	}
 }
 
-func ExtraAttack(from time.Time, idx int32, ea messages.ExtraAttack) *chronicleproto.ExtraAttack {
+func ExtraAttack(from time.Time, idx int32, ea *messages.ExtraAttack) *chronicleproto.ExtraAttack {
 	return &chronicleproto.ExtraAttack{
 		Meta: &chronicleproto.EventMeta{
 			Index:       idx,
@@ -68,12 +68,12 @@ func ExtraAttack(from time.Time, idx int32, ea messages.ExtraAttack) *chroniclep
 	}
 }
 
-func Slain(from time.Time, idx int32, ea messages.Slain) *chronicleproto.Slain {
+func Slain(from time.Time, idx int32, ea *messages.Slain) *chronicleproto.Slain {
 	var att *chronicleproto.Damage
 	if ea.Attribution != nil {
 		switch typed := ea.Attribution.(type) {
 		case *messages.Damage:
-			att = Damage(ea.Attribution.Date(), -1, *typed)
+			att = Damage(ea.Attribution.Date(), -1, typed)
 		default:
 			// unexpected type
 		}
@@ -89,7 +89,7 @@ func Slain(from time.Time, idx int32, ea messages.Slain) *chronicleproto.Slain {
 	}
 }
 
-func Cast(from time.Time, idx int32, ca messages.Cast) *chronicleproto.Cast {
+func Cast(from time.Time, idx int32, ca *messages.Cast) *chronicleproto.Cast {
 	var target *string
 	if ca.Target != nil {
 		target = ptr.Ref(ca.Target.Gid.String())
@@ -106,7 +106,7 @@ func Cast(from time.Time, idx int32, ca messages.Cast) *chronicleproto.Cast {
 	}
 }
 
-func Aura(from time.Time, idx int32, a messages.Aura) *chronicleproto.Aura {
+func Aura(from time.Time, idx int32, a *messages.Aura) *chronicleproto.Aura {
 	{
 		return &chronicleproto.Aura{
 			Meta: &chronicleproto.EventMeta{

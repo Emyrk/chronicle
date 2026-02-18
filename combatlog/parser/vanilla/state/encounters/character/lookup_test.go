@@ -151,7 +151,7 @@ func TestCharacters(t *testing.T) {
 		require.Len(t, shamum.Activity.History, 1, "shamum has timed out period")
 		require.Nil(t, shamum.LastSlain, "shamum should have no last slain message")
 		cur, _ := shamum.Activity.Current()
-		require.IsType(t, messages.Timeout{}, cur.End.Timestamp, "shamum should have timed out")
+		require.IsType(t, &messages.Timeout{}, cur.End.Timestamp, "shamum should have timed out")
 		require.NotEqual(t, cur.End.Timestamp, cur.LastActive, "timeout is not activity")
 
 		// Myrmidon :: Timed out, then slain
@@ -160,11 +160,11 @@ func TestCharacters(t *testing.T) {
 		require.NotNil(t, myrm.LastSlain, "scarlet myrmidon should have a last slain message")
 		cur, _ = myrm.Activity.Current()
 
-		slain, _ := cur.End.Timestamp.(messages.Slain)
+		slain, _ := cur.End.Timestamp.(*messages.Slain)
 		require.Equal(t, guid.GUID(0xF1300010C7009C09), slain.Victim)
 
 		// Check the first period too
-		require.IsType(t, messages.Timeout{}, myrm.Activity.History[0].End.Timestamp, "timed out first")
+		require.IsType(t, &messages.Timeout{}, myrm.Activity.History[0].End.Timestamp, "timed out first")
 
 		// Doyd is still active.
 		// TODO: Should we mark him inactive if he kills who he is attacking?
