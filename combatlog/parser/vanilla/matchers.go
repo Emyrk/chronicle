@@ -39,7 +39,7 @@ func (p *Parser) fV2Casts(ts time.Time, content string) ([]messages.Message, err
 		return messages.Skip(ts, "castv2: not using guids"), nil
 	}
 
-	return set(messages.Cast{
+	return set(&messages.Cast{
 		CastV2:      c,
 		MessageBase: messages.Base(ts),
 	}), nil
@@ -70,7 +70,7 @@ func (p *Parser) fZoneInfo(ts time.Time, content string) ([]messages.Message, er
 		return nil, fmt.Errorf("failed to parse zone info: %v", err)
 	}
 
-	return set(messages.Zone{
+	return set(&messages.Zone{
 		MessageBase: messages.Base(ts),
 		Zone:        zi,
 	}), nil
@@ -86,7 +86,7 @@ func (p *Parser) fUnitInfo(ts time.Time, content string) ([]messages.Message, er
 		return nil, fmt.Errorf("failed to parse unit info: %v", err)
 	}
 
-	return set(messages.Unit{
+	return set(&messages.Unit{
 		MessageBase: messages.Base(ts),
 		Info:        ut,
 	}), nil
@@ -102,7 +102,7 @@ func (p *Parser) fCombatantInfo(ts time.Time, content string) ([]messages.Messag
 		return nil, fmt.Errorf("failed to parse combatant info: %v", err)
 	}
 
-	return set(messages.Combatant{
+	return set(&messages.Combatant{
 		Combatant:   cbt,
 		MessageBase: messages.Base(ts),
 	}), nil
@@ -118,7 +118,7 @@ func (p *Parser) fCombatCount(ts time.Time, content string) ([]messages.Message,
 		return nil, fmt.Errorf("failed to parse combatant info: %v", err)
 	}
 
-	return set(messages.CombatCount{
+	return set(&messages.CombatCount{
 		Count:       cbt,
 		MessageBase: messages.Base(ts),
 	}), nil
@@ -134,7 +134,7 @@ func (p *Parser) fRealm(ts time.Time, content string) ([]messages.Message, error
 		return nil, fmt.Errorf("failed to parse combatant info: %v", err)
 	}
 
-	return set(messages.Realm{
+	return set(&messages.Realm{
 		MessageBase: messages.Base(ts),
 		Info:        ut,
 	}), nil
@@ -150,7 +150,7 @@ func (p *Parser) fUnitDied(ts time.Time, content string) ([]messages.Message, er
 		return nil, fmt.Errorf("failed to parse unit died info: %v", err)
 	}
 
-	return set(messages.UnitDied{
+	return set(&messages.UnitDied{
 		MessageBase: messages.Base(ts),
 		Info:        d,
 	}), nil
@@ -166,7 +166,7 @@ func (p *Parser) fPlayerPosition(ts time.Time, content string) ([]messages.Messa
 		return nil, fmt.Errorf("failed to parse combatant info: %v", err)
 	}
 
-	return set(messages.PlayerPosition{
+	return set(&messages.PlayerPosition{
 		MessageBase:    messages.Base(ts),
 		PlayerPosition: ut,
 	}), nil
@@ -182,7 +182,7 @@ func (p *Parser) fClockInfo(ts time.Time, content string) ([]messages.Message, e
 		return nil, fmt.Errorf("failed to parse unit info: %v", err)
 	}
 
-	return set(messages.Clock{
+	return set(&messages.Clock{
 		MessageBase: messages.Base(ts),
 		Info:        ci,
 	}), nil
@@ -233,7 +233,7 @@ func (p *Parser) fGain(ts time.Time, content string) ([]messages.Message, error)
 		return messages.Skip(ts, "gain: not using guids"), nil
 	}
 
-	return set(messages.ResourceChange{
+	return set(&messages.ResourceChange{
 		MessageBase: messages.Base(ts),
 		Target:      targetGUID,
 		Amount:      amount,
@@ -264,7 +264,7 @@ func (p *Parser) fGainNoSource(ts time.Time, content string) ([]messages.Message
 		return messages.Skip(ts, "gain: not using guids"), nil
 	}
 
-	return set(messages.ResourceChange{
+	return set(&messages.ResourceChange{
 		MessageBase: messages.Base(ts),
 		Target:      targetGUID,
 		Amount:      amount,
@@ -322,7 +322,7 @@ func (p *Parser) fDamageSpellHitOrCrit(hasSchool bool, ts time.Time, content str
 		trailer[i].HitType = trailer[i].HitType | hitType
 	}
 
-	sp := messages.Damage{
+	sp := &messages.Damage{
 		MessageBase: messages.Base(ts),
 		Caster:      ptr.Ref(caster),
 		SpellName:   ptr.Ref(spellName),
@@ -356,7 +356,7 @@ func (p *Parser) fDamagePeriodic(ts time.Time, content string) ([]messages.Messa
 		return messages.Skip(ts, "DamagePeriodic: not using guids"), nil
 	}
 
-	return set(messages.Damage{
+	return set(&messages.Damage{
 		MessageBase: messages.Base(ts),
 		Caster:      ptr.Ref(caster),
 		Target:      target,
@@ -387,7 +387,7 @@ func (p *Parser) fDamageShield(ts time.Time, content string) ([]messages.Message
 		return messages.Skip(ts, "DamageShield: not using guids"), nil
 	}
 
-	return set(messages.Damage{
+	return set(&messages.Damage{
 		MessageBase: messages.Base(ts),
 		Caster:      ptr.Ref(caster),
 		Target:      target,
@@ -444,7 +444,7 @@ func (p *Parser) fDamageHitOrCrit(hasScool bool, ts time.Time, content string) (
 		return messages.Skip(ts, "DamageHitOrCritSchool: not using guids"), nil
 	}
 
-	return set(messages.Damage{
+	return set(&messages.Damage{
 		MessageBase: messages.Base(ts),
 		Caster:      ptr.Ref(caster),
 		HitType:     hitType,
@@ -484,7 +484,7 @@ func (p *Parser) fHeal(ts time.Time, content string) ([]messages.Message, error)
 		return messages.Skip(ts, "Heal: not using guids"), nil
 	}
 
-	return set(messages.Heal{
+	return set(&messages.Heal{
 		MessageBase: messages.Base(ts),
 		Caster:      caster,
 		Target:      target,
@@ -516,7 +516,7 @@ func (p *Parser) fAuraGainHarmfulHelpful(ts time.Time, content string) ([]messag
 		return messages.Skip(ts, "AuraGainHarmfulHelpful: not using guids"), nil
 	}
 
-	return set(messages.Aura{
+	return set(&messages.Aura{
 		MessageBase: messages.Base(ts),
 		Target:      target,
 		SpellName:   spellName,
@@ -541,7 +541,7 @@ func (p *Parser) fAuraFade(ts time.Time, content string) ([]messages.Message, er
 		return messages.Skip(ts, "AuraFade: not using guids"), nil
 	}
 
-	return set(messages.Aura{
+	return set(&messages.Aura{
 		MessageBase: messages.Base(ts),
 		Target:      target,
 		SpellName:   spellName,
@@ -576,7 +576,7 @@ func (p *Parser) fDamageSpellSplit(ts time.Time, content string) ([]messages.Mes
 	//attacker, spellID, victim, amount, trailer := matches[1], matches[2], matches[3], matches[4], matches[5]
 
 	// Return spell cast & SpellDamage Message
-	return set(messages.Damage{
+	return set(&messages.Damage{
 		MessageBase: messages.Base(ts),
 		Caster:      ptr.Ref(caster),
 		SpellName:   ptr.Ref(spellName),
@@ -608,7 +608,7 @@ func (p *Parser) fDamageSpellMiss(ts time.Time, content string) ([]messages.Mess
 	}
 
 	//attacker, spellID, victim := matches[1], matches[2], matches[4]
-	return set(messages.Damage{
+	return set(&messages.Damage{
 		MessageBase: messages.Base(ts),
 		Caster:      ptr.Ref(caster),
 		SpellName:   ptr.Ref(spellName),
@@ -643,7 +643,7 @@ func (p *Parser) fDamageSpellBlockParryEvadeDodgeResistDeflect(ts time.Time, con
 		school = types.PhysicalSchool
 	}
 
-	return set(messages.Damage{
+	return set(&messages.Damage{
 		MessageBase: messages.Base(ts),
 		Caster:      ptr.Ref(caster),
 		SpellName:   ptr.Ref(spellName),
@@ -674,7 +674,7 @@ func (p *Parser) fDamageSpellAbsorb(ts time.Time, content string) ([]messages.Me
 		return messages.Skip(ts, "DamageSpellAbsorb: not using guids"), nil
 	}
 
-	return set(messages.Damage{
+	return set(&messages.Damage{
 		MessageBase: messages.Base(ts),
 		Caster:      ptr.Ref(caster),
 		SpellName:   ptr.Ref(spellName),
@@ -714,7 +714,7 @@ func (p *Parser) fDamageReflect(ts time.Time, content string) ([]messages.Messag
 		return messages.Skip(ts, "DamageReflect: not using guids"), nil
 	}
 
-	return set(messages.Damage{
+	return set(&messages.Damage{
 		MessageBase: messages.Base(ts),
 		Caster:      ptr.Ref(caster),
 		SpellName:   ptr.Ref(spellName),
@@ -752,7 +752,7 @@ func (p *Parser) fDamageSpellImmune(ts time.Time, content string) ([]messages.Me
 	if caster.IsZero() || target.IsZero() {
 		return messages.Skip(ts, "DamageSpellImmune: not using guids"), nil
 	}
-	return set(messages.Damage{
+	return set(&messages.Damage{
 		MessageBase: messages.Base(ts),
 		Caster:      ptr.Ref(caster),
 		SpellName:   ptr.Ref(spellName),
@@ -784,7 +784,7 @@ func (p *Parser) fDamageMiss(ts time.Time, content string) ([]messages.Message, 
 		return messages.Skip(ts, "DamageMiss: not using guids"), nil
 	}
 
-	return set(messages.Damage{
+	return set(&messages.Damage{
 		MessageBase: messages.Base(ts),
 		Caster:      ptr.Ref(caster),
 		Target:      target,
@@ -817,7 +817,7 @@ func (p *Parser) fDamageBlockParryEvadeDodgeDeflect(ts time.Time, content string
 		school = types.PhysicalSchool
 	}
 
-	return set(messages.Damage{
+	return set(&messages.Damage{
 		MessageBase: messages.Base(ts),
 		Caster:      ptr.Ref(caster),
 		Target:      target,
@@ -844,7 +844,7 @@ func (p *Parser) fDamageAbsorbResist(ts time.Time, content string) ([]messages.M
 		return messages.Skip(ts, "DamageAbsorbResist: not using guids"), nil
 	}
 
-	return set(messages.Damage{
+	return set(&messages.Damage{
 		MessageBase: messages.Base(ts),
 		Caster:      ptr.Ref(caster),
 		Target:      target,
@@ -867,7 +867,7 @@ func (p *Parser) fDamageImmune(ts time.Time, content string) ([]messages.Message
 		return messages.Skip(ts, "DamageImmune: not using guids"), nil
 	}
 
-	return set(messages.Damage{
+	return set(&messages.Damage{
 		MessageBase: messages.Base(ts),
 		Caster:      ptr.Ref(caster),
 		Target:      target,
@@ -913,7 +913,7 @@ func (p *Parser) fSpellCastPerform(ts time.Time, content string) ([]messages.Mes
 		return messages.Skip(ts, "SpellCastPerform: not using guids"), nil
 	}
 
-	return set(messages.LegacyCast{
+	return set(&messages.LegacyCast{
 		MessageBase: messages.Base(ts),
 		Caster:      caster,
 		Target:      &target,
@@ -939,7 +939,7 @@ func (p *Parser) fSpellCastPerformUnknown(ts time.Time, content string) ([]messa
 		return messages.Skip(ts, "SpellCastPerformUnknown: not using guids"), nil
 	}
 
-	return set(messages.LegacyCast{
+	return set(&messages.LegacyCast{
 		MessageBase: messages.Base(ts),
 		Caster:      caster,
 		Target:      nil,
@@ -972,7 +972,7 @@ func (p *Parser) fHonorableKill(ts time.Time, content string) ([]messages.Messag
 	// TODO: Add "ResourceGain" message for honor gained?
 	var _, _ = rank, honor
 
-	return set(messages.Slain{
+	return set(&messages.Slain{
 		MessageBase: messages.Base(ts),
 		Victim:      victim,
 		Killer:      nil,
@@ -996,7 +996,7 @@ func (p *Parser) fUnitDieDestroyedExperience(ts time.Time, content string) ([]me
 		return messages.Skip(ts, "UnitDieDestroyed: not using guids"), nil
 	}
 
-	return set(messages.Slain{
+	return set(&messages.Slain{
 		MessageBase: messages.Base(ts),
 		Victim:      victim,
 		Killer:      nil,
@@ -1019,7 +1019,7 @@ func (p *Parser) fUnitDieDestroyed(ts time.Time, content string) ([]messages.Mes
 		return messages.Skip(ts, "UnitDieDestroyed: not using guids"), nil
 	}
 
-	return set(messages.Slain{
+	return set(&messages.Slain{
 		MessageBase: messages.Base(ts),
 		Victim:      victim,
 		Killer:      nil,
@@ -1044,7 +1044,7 @@ func (p *Parser) fUnitSlay(ts time.Time, content string) ([]messages.Message, er
 		return messages.Skip(ts, "UnitSlay: not using guids"), nil
 	}
 
-	return set(messages.Slain{
+	return set(&messages.Slain{
 		MessageBase: messages.Base(ts),
 		Victim:      victim,
 		Killer:      ptr.Ref(killer),
@@ -1068,7 +1068,7 @@ func (p *Parser) fPetDismissed(ts time.Time, content string) ([]messages.Message
 		return messages.Skip(ts, "PetDismissed: not using guids"), nil
 	}
 
-	return set(messages.Slain{
+	return set(&messages.Slain{
 		MessageBase: messages.Base(ts),
 		Victim:      target,
 		Killer:      ptr.Ref(owner),
@@ -1103,7 +1103,7 @@ func (p *Parser) fAuraDispel(ts time.Time, content string) ([]messages.Message, 
 		return messages.Skip(ts, "AuraDispel: not using guids"), nil
 	}
 
-	return set(messages.Aura{
+	return set(&messages.Aura{
 		MessageBase: messages.Base(ts),
 		Target:      target,
 		SpellName:   spellName,
@@ -1129,7 +1129,7 @@ func (p *Parser) fAuraInterrupt(ts time.Time, content string) ([]messages.Messag
 		return messages.Skip(ts, "AuraInterrupt: not using guids"), nil
 	}
 
-	return set(messages.Interrupt{
+	return set(&messages.Interrupt{
 		MessageBase: messages.Base(ts),
 		Caster:      caster,
 		SpellName:   spellName,
@@ -1157,7 +1157,7 @@ func (p *Parser) fCreates(ts time.Time, content string) ([]messages.Message, err
 		return messages.Skip(ts, "Creates: not using guids"), nil
 	}
 
-	return set(messages.Create{
+	return set(&messages.Create{
 		MessageBase: messages.Base(ts),
 		Caster:      caster,
 		Created:     created,
@@ -1181,7 +1181,7 @@ func (p *Parser) fGainsAttack(ts time.Time, content string) ([]messages.Message,
 		return messages.Skip(ts, "GainsAttack: not using guids"), nil
 	}
 
-	return set(messages.ExtraAttack{
+	return set(&messages.ExtraAttack{
 		MessageBase:   messages.Base(ts),
 		Caster:        caster,
 		Amount:        amount,
@@ -1206,7 +1206,7 @@ func (p *Parser) fFallDamage(ts time.Time, content string) ([]messages.Message, 
 		return messages.Skip(ts, "FallDamage: not using guids"), nil
 	}
 
-	return set(messages.Damage{
+	return set(&messages.Damage{
 		MessageBase:     messages.Base(ts),
 		Target:          target,
 		HitType:         types.HitTypeEnvironment,
@@ -1233,7 +1233,7 @@ func (p *Parser) fLavaSwimming(ts time.Time, content string) ([]messages.Message
 		return messages.Skip(ts, "FallDamage: not using guids"), nil
 	}
 
-	return set(messages.Damage{
+	return set(&messages.Damage{
 		MessageBase:     messages.Base(ts),
 		Target:          target,
 		HitType:         types.HitTypeEnvironment,
@@ -1293,7 +1293,7 @@ func (p *Parser) fResourceDrain(ts time.Time, content string) ([]messages.Messag
 		return messages.Skip(ts, "ResourceDrain: not using guids"), nil
 	}
 
-	return set(messages.ResourceChange{
+	return set(&messages.ResourceChange{
 		MessageBase: messages.Base(ts),
 		Target:      target,
 		Amount:      amount,
@@ -1340,7 +1340,7 @@ func (p *Parser) fKilledBy(ts time.Time, content string) ([]messages.Message, er
 		return messages.Skip(ts, "KilledBy: not using guids"), nil
 	}
 
-	return set(messages.Slain{
+	return set(&messages.Slain{
 		MessageBase: messages.Base(ts),
 		Victim:      victim,
 		Killer:      nil,
@@ -1383,7 +1383,7 @@ func (p *Parser) fFullImmune(ts time.Time, content string) ([]messages.Message, 
 		return messages.Skip(ts, "FullImmune: not using guids"), nil
 	}
 
-	return set(messages.Damage{
+	return set(&messages.Damage{
 		MessageBase:     messages.Base(ts),
 		SpellName:       ptr.Ref(spellName),
 		Caster:          ptr.Ref(caster),
