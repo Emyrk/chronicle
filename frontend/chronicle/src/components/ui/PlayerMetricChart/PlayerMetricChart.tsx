@@ -62,6 +62,8 @@ interface PlayerMetricChartProps extends React.ComponentProps<"div"> {
    * If not provided, no tooltip is shown.
    */
   breakout?: BreakoutFn
+  /** Label for the stacked secondary metric (defaults to "Overheal") */
+  stackedLabel?: string
 }
 
 export function PlayerMetricChart({
@@ -74,6 +76,7 @@ export function PlayerMetricChart({
   perSecond,
   duration_millis,
   breakout,
+  stackedLabel = 'Overheal',
   // Exclude dir from divProps to avoid type conflict with ScrollArea
   dir: _dir,
   ...divProps
@@ -156,6 +159,7 @@ export function PlayerMetricChart({
             onTogglePin={() => handleTogglePin(player.playerID)}
             panelTitle={panelTitle}
             breakout={breakout}
+            stackedLabel={stackedLabel}
             isFirstRow={index === 0}
           />
         })}
@@ -177,6 +181,7 @@ export interface PlayerMetricRowProps {
   onTogglePin?: () => void
   panelTitle?: string
   breakout?: BreakoutFn
+  stackedLabel?: string
   /** Whether this is the first row (used for tutorial highlight) */
   isFirstRow?: boolean
 }
@@ -352,6 +357,7 @@ export function PlayerMetricRow({
   onTogglePin,
   panelTitle,
   breakout,
+  stackedLabel = 'Overheal',
   isFirstRow = false,
 }: PlayerMetricRowProps) {
   const { ref, x, y } = useMouse<HTMLDivElement>();
@@ -423,7 +429,7 @@ export function PlayerMetricRow({
         }}
       />
       
-      {/* Stacked value (overheal) - fills remaining space, stripes at end when overflow */}
+      {/* Stacked secondary value - fills remaining space, stripes at end when overflow */}
       {player.stackedValue && player.stackedValue > 0 && (() => {
         const mainBarEnd = (player.value / maximumValue) * 100;
         const stackedWidth = (player.stackedValue / maximumValue) * 100;
@@ -447,7 +453,7 @@ export function PlayerMetricRow({
                 opacity: 0.35,
                 transition: 'width 0.3s ease',
               }}
-              title={isOverflowing ? `Overheal extends beyond chart` : undefined}
+              title={isOverflowing ? `${stackedLabel} extends beyond chart` : undefined}
             />
             {/* Striped end cap to indicate overflow */}
             {isOverflowing && (
@@ -467,7 +473,7 @@ export function PlayerMetricRow({
                   )`,
                   opacity: 0.5,
                 }}
-                title="Overheal extends beyond chart"
+                title={`${stackedLabel} extends beyond chart`}
               />
             )}
           </>
@@ -557,10 +563,10 @@ export function PlayerMetricRow({
           {((player.value/summedValue)*100).toFixed(2)}%
         </span>
         
-        {/* Overheal percentage - shown when stackedValue exists */}
+        {/* Stacked percentage - shown when stackedValue exists */}
         {player.stackedValue !== undefined && player.stackedValue > 0 && (() => {
-          const totalHealing = player.value + player.stackedValue;
-          const overhealPct = totalHealing > 0 ? (player.stackedValue / totalHealing) * 100 : 0;
+          const totalWithStacked = player.value + player.stackedValue;
+          const stackedPct = totalWithStacked > 0 ? (player.stackedValue / totalWithStacked) * 100 : 0;
           return (
             <span
               className='text-2xs'
@@ -572,9 +578,9 @@ export function PlayerMetricRow({
                 opacity: 0.7,
                 fontFamily: 'var(--font-mono)',
               }}
-              title={`${overhealPct.toFixed(1)}% overhealing`}
+              title={`${stackedPct.toFixed(1)}% ${stackedLabel.toLowerCase()}`}
             >
-              ({overhealPct.toFixed(0)}%)
+              ({stackedPct.toFixed(0)}%)
             </span>
           );
         })()}

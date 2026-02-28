@@ -3,7 +3,7 @@
  */
 
 import type { PanelProcessor } from "../processorTypes";
-import { damageDoneProcessor, enemyDamageDoneProcessor, petDamageDoneProcessor, friendlyFireProcessor } from "../DamageDone/damageDone.processor";
+import { damageDoneProcessor, vulnerabilityEffectProcessor, enemyDamageDoneProcessor, petDamageDoneProcessor, friendlyFireProcessor } from "../DamageDone/damageDone.processor";
 import { damageTakenProcessor, enemyDamageTakenProcessor } from "../DamageTaken/damageTaken.processor";
 import { extraAttacksProcessor } from "../ExtraAttacks/extraAttacks.processor";
 import { deathsProcessor } from "../Deaths/deaths.processor";
@@ -19,7 +19,7 @@ import { judgementProcessor } from "../Judgement/judgement.processor";
 import { auraUptimeProcessor } from "../AuraUptime/auraUptime.processor";
 
 // Export individual processors
-export { damageDoneProcessor, enemyDamageDoneProcessor, petDamageDoneProcessor, friendlyFireProcessor } from "../DamageDone/damageDone.processor";
+export { damageDoneProcessor, vulnerabilityEffectProcessor, enemyDamageDoneProcessor, petDamageDoneProcessor, friendlyFireProcessor } from "../DamageDone/damageDone.processor";
 export { damageTakenProcessor, enemyDamageTakenProcessor } from "../DamageTaken/damageTaken.processor";
 export { extraAttacksProcessor } from "../ExtraAttacks/extraAttacks.processor";
 export { deathsProcessor } from "../Deaths/deaths.processor";
@@ -65,6 +65,7 @@ export { isResourceChangeEvent, isHealingEvent, isDamageEvent } from "./events";
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 export const processorRegistry: Record<string, PanelProcessor<any, any>> = {
   damage_done: damageDoneProcessor,
+  vulnerability_effect: vulnerabilityEffectProcessor,
   damage_done_enemies: enemyDamageDoneProcessor,
   damage_done_pets: petDamageDoneProcessor,
   damage_done_friendly_fire: friendlyFireProcessor,

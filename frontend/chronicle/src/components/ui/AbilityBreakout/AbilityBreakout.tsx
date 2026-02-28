@@ -284,8 +284,10 @@ export interface AbilityTableProps {
   valueLabel?: string
   /** Whether to show the Hits column (damage can miss, heals cannot) */
   showHits?: boolean
-  /** Whether to show the overheal column (only for healing in effective mode) */
+  /** Whether to show the stacked secondary column */
   showOverheal?: boolean
+  /** Label for the stacked secondary column */
+  stackedLabel?: string
 }
 
 /**
@@ -297,6 +299,7 @@ export function AbilityTable({
   valueLabel = 'Value',
   showHits = true,
   showOverheal = false,
+  stackedLabel = 'Overheal',
 }: AbilityTableProps) {
   const { hover, setHover, clearHover, selectedAbilities, toggleAbilitySelection, clearSelection } = useBreakoutHover()
   const [isExpanded, setIsExpanded] = useState(false)
@@ -308,7 +311,7 @@ export function AbilityTable({
 
   // Filter out zero-damage abilities and sort by value descending
   const sorted = [...abilities]
-    .filter(a => a.Total > 0)
+    .filter(a => a.Total > 0 || (showOverheal && (a.overheal ?? 0) > 0))
     .sort((a, b) => b.value - a.value)
   
   // Check if any ability has overheal data
@@ -409,7 +412,7 @@ export function AbilityTable({
             <tr className="border-b border-border">
               <th className={cn("text-left py-1.5 px-2 font-medium", hover.columnId === COL.ABILITY && "bg-primary/20")}>Ability</th>
               {hasOverhealData && (
-                <th className={cn("text-right py-1.5 px-2 font-medium text-yellow-500/80", hover.columnId === COL.OVERHEAL && "bg-primary/20")}>Overheal</th>
+                <th className={cn("text-right py-1.5 px-2 font-medium text-yellow-500/80", hover.columnId === COL.OVERHEAL && "bg-primary/20")}>{stackedLabel}</th>
               )}
               <th className={cn("text-right py-1.5 px-2 font-medium", hover.columnId === COL.VALUE && "bg-primary/20")}>{valueLabel}</th>
               <th className={cn("text-right py-1.5 px-2 font-medium", hover.columnId === COL.PERCENT && "bg-primary/20")}>%</th>
@@ -690,8 +693,10 @@ export interface TargetTableProps {
   totalValue: number
   /** Label for the value column (e.g., "Damage", "Healing") */
   valueLabel?: string
-  /** Whether to show the overheal column (only for healing in effective mode) */
+  /** Whether to show the stacked secondary column */
   showOverheal?: boolean
+  /** Label for the stacked secondary column */
+  stackedLabel?: string
 }
 
 /**
@@ -702,6 +707,7 @@ export function TargetTable({
   totalValue, 
   valueLabel = 'Value',
   showOverheal = false,
+  stackedLabel = 'Overheal',
 }: TargetTableProps) {
   const { hover, setHover, clearHover } = useBreakoutHover()
   
@@ -731,7 +737,7 @@ export function TargetTable({
             <th className={cn("text-left py-1.5 px-2 font-medium", hover.columnId === COL.TARGET && "bg-primary/20")}>Target</th>
             <th className={cn("text-right py-1.5 px-2 font-medium", hover.columnId === COL.VALUE && "bg-primary/20")}>{valueLabel}</th>
             {hasOverhealData && (
-              <th className={cn("text-right py-1.5 px-2 font-medium text-yellow-500/70", hover.columnId === COL.OVERHEAL && "bg-primary/20")}>Overheal</th>
+              <th className={cn("text-right py-1.5 px-2 font-medium text-yellow-500/70", hover.columnId === COL.OVERHEAL && "bg-primary/20")}>{stackedLabel}</th>
             )}
             <th className={cn("text-right py-1.5 px-2 font-medium", hover.columnId === COL.PERCENT && "bg-primary/20")}>%</th>
           </tr>
@@ -827,8 +833,10 @@ export interface AbilityBreakoutProps {
   targetTabLabel?: string
   /** Whether to show the Hits column (damage can miss, heals cannot) */
   showHits?: boolean
-  /** Whether to show the overheal column (only for healing in effective mode) */
+  /** Whether to show the stacked secondary column */
   showOverheal?: boolean
+  /** Label for the stacked secondary column */
+  stackedLabel?: string
 }
 
 function formatValue(value: number): string {
@@ -856,6 +864,7 @@ export function AbilityBreakout({
   targetTabLabel = 'By Target',
   showHits = true,
   showOverheal = false,
+  stackedLabel = 'Overheal',
 }: AbilityBreakoutProps) {
   const [internalTab, setInternalTab] = useState<BreakoutTab>('ability')
   
@@ -889,6 +898,7 @@ export function AbilityBreakout({
           valueLabel={valueLabel}
           showHits={showHits}
           showOverheal={showOverheal}
+          stackedLabel={stackedLabel}
         />
       </div>
     )
@@ -918,6 +928,7 @@ export function AbilityBreakout({
           valueLabel={valueLabel}
           showHits={showHits}
           showOverheal={showOverheal}
+          stackedLabel={stackedLabel}
         />
       ) : (
         <TargetTable
@@ -925,6 +936,7 @@ export function AbilityBreakout({
           totalValue={totalValue}
           valueLabel={valueLabel}
           showOverheal={showOverheal}
+          stackedLabel={stackedLabel}
         />
       )}
     </div>

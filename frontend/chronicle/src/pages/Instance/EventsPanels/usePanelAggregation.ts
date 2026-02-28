@@ -21,6 +21,7 @@ export interface UsePanelAggregationOptions<TResult> {
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   panel: PanelDefinition<TResult, any>;
   context: PanelContext;
+  panelOption?: string | null;
   enabled?: boolean;
 }
 
@@ -37,7 +38,7 @@ export interface UsePanelAggregationResult<TResult> {
  * Convert PanelContext to serializable ProcessorContext for the worker.
  * Arrays are used for Sets since they can't be serialized through postMessage.
  */
-function toSerializableContext(ctx: PanelContext): SerializableProcessorContext {
+function toSerializableContext(ctx: PanelContext, panelOption: string | null): SerializableProcessorContext {
   // Extract only the fields needed by processors
   const players: SerializableProcessorContext["players"] = {};
   if (ctx.instance.players) {
@@ -70,6 +71,7 @@ function toSerializableContext(ctx: PanelContext): SerializableProcessorContext 
       playerIds: Array.from(ctx.entitySelection.playerIds),
     },
     pagination: ctx.pagination,
+    panelOption,
   };
 }
 
@@ -130,7 +132,7 @@ function deserializeResult<TResult>(result: unknown): TResult {
 export function usePanelAggregation<TResult>(
   options: UsePanelAggregationOptions<TResult>
 ): UsePanelAggregationResult<TResult> {
-  const { panel, context: panelContext, enabled = true } = options;
+  const { panel, context: panelContext, panelOption = null, enabled = true } = options;
   const eventsContext = useInstanceEventsContext();
   const syncMode = useSyncModeContextOptional();
   // Extract stable function ref to avoid re-triggering effects
@@ -179,8 +181,8 @@ export function usePanelAggregation<TResult>(
     const encounterIds = panelContext.selectedEncounterIds.slice().sort().join(",");
     const playerIds = Array.from(panelContext.entitySelection.playerIds).sort().join(",");
     const enemyIds = Array.from(panelContext.entitySelection.enemyIds).sort().join(",");
-    return `${panelContext.instance.id}|${encounterIds}|${playerIds}|${enemyIds}`;
-  }, [panelContext.instance.id, panelContext.selectedEncounterIds, panelContext.entitySelection.playerIds, panelContext.entitySelection.enemyIds]);
+    return `${panelContext.instance.id}|${encounterIds}|${playerIds}|${enemyIds}|${panelOption ?? ""}`;
+  }, [panelContext.instance.id, panelContext.selectedEncounterIds, panelContext.entitySelection.playerIds, panelContext.entitySelection.enemyIds, panelOption]);
   
   // Check if we're in sync mode
   const isSyncMode = syncMode?.enabled ?? false;
@@ -262,7 +264,7 @@ export function usePanelAggregation<TResult>(
       const workerRequest: WorkerRequest = {
         requestId,
         panelId: panel.id,
-        context: toSerializableContext(panelContext),
+        context: toSerializableContext(panelContext, panelOption),
         streams: fetchedStreams,
       };
       
@@ -291,7 +293,7 @@ export function usePanelAggregation<TResult>(
       setLoading(false);
       setProcessing(false);
     }
-  }, [eventsContext.fetchStream, panel, panelContext]);
+  }, [eventsContext.fetchStream, panel, panelContext, panelOption]);
   
   // Main thread incremental processing (sync mode)
   // eslint-disable-next-line react-hooks/preserve-manual-memoization
@@ -323,7 +325,7 @@ export function usePanelAggregation<TResult>(
       const response = await processIncrementally<TResult>({
         panelId: panel.id,
         streams,
-        context: toSerializableContext(panelContext),
+        context: toSerializableContext(panelContext, panelOption),
         stopAtTimestamp: stopAt,
         previousState: incrementalStateRef.current,
         onProgress: (_state, count) => {
@@ -385,7 +387,7 @@ export function usePanelAggregation<TResult>(
       setLoading(false);
       setProcessing(false);
     }
-  }, [eventsContext.fetchStream, panel, panelContext]);
+  }, [eventsContext.fetchStream, panel, panelContext, panelOption]);
   
   // Track previous sync mode to detect transitions
   const prevSyncModeRef = useRef(isSyncMode);

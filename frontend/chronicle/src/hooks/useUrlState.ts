@@ -609,6 +609,7 @@ export type PanelType = EventsPanelType;
 
 const PANEL_CODES: Record<PanelType, string> = {
   damage_done: 'dd',
+  vulnerability_effect: 've',
   enemy_damage_done: 'edd',
   pet_damage_done: 'pdd',
   damage_done_friendly_fire: 'ff',

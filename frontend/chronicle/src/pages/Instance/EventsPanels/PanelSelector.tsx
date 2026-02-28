@@ -28,7 +28,7 @@ interface PanelCategory {
 const PANEL_CATEGORIES: PanelCategory[] = [
   {
     label: "Damage",
-    items: ["damage_done", "enemy_damage_done", "pet_damage_done", "damage_done_friendly_fire"],
+    items: ["damage_done", "vulnerability_effect", "enemy_damage_done", "pet_damage_done", "damage_done_friendly_fire"],
   },
   {
     label: "Healing",

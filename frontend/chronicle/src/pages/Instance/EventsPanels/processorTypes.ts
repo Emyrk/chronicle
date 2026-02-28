@@ -302,6 +302,9 @@ export interface SerializableProcessorContext {
   
   /** Optional pagination for processors that support paging (e.g., all_activity) */
   pagination?: ProcessorPagination;
+
+  /** Panel-specific option (e.g., selected vulnerability spell ID) */
+  panelOption?: string | null;
 }
 
 /**
@@ -322,6 +325,9 @@ export interface ProcessorContext {
   
   /** Optional pagination for processors that support paging */
   pagination?: ProcessorPagination;
+
+  /** Panel-specific option (e.g., selected vulnerability spell ID) */
+  panelOption?: string | null;
 }
 
 /**

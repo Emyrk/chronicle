@@ -19,6 +19,7 @@ import { hasExplainer } from "./explainers";
 
 // Import panel definitions
 import { createDamageDonePanel } from "./DamageDone/DamageDone";
+import { createVulnerabilityEffectPanel } from "./VulnerabilityEffect/VulnerabilityEffect";
 import { createDamageTakenPanel } from "./DamageTaken/DamageTaken";
 import { createHealingDonePanel } from "./HealingDone/HealingDone";
 import { createExtraAttacksPanel } from "./ExtraAttacks/ExtraAttacks";
@@ -44,6 +45,7 @@ import { PeriodsPanel } from "./PeriodsPanel/PeriodsPanel";
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 export const PANELS: Record<string, PanelDefinition<any, any>> = {
   damage_done: createDamageDonePanel("players"),
+  vulnerability_effect: createVulnerabilityEffectPanel(),
   enemy_damage_done: createDamageDonePanel("enemies"),
   pet_damage_done: createDamageDonePanel("pets"),
   damage_done_friendly_fire: createDamageDonePanel("friendly_fire"),
@@ -138,6 +140,7 @@ export function EventsPanel({
   } = usePanelAggregation({
     panel,
     context,
+    panelOption,
     enabled: !panel.selfManagesAggregation,
   });
   

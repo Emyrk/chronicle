@@ -1,5 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import { createDamageDoneProcessor } from '../DamageDone/damageDone.processor';
+import { VulnerabilitySpells } from '@/constants/dbmem/VulnerabilitySpells';
 import { AuraApplication, AuraState, type AuraProcessorEvent, type DamageProcessorEvent, type ProcessorContext, type SlainProcessorEvent } from '../processorTypes';
 
 describe('damageDoneProcessor', () => {
@@ -166,7 +167,7 @@ describe('damageDoneProcessor', () => {
 
     expect(state.EncounterDamage.size).toBe(0);
   });
-  it('tracks aura state inline and keeps aggregation behavior unchanged', () => {
+  it('skips aura tracking when no vulnerability is selected', () => {
     const state = processor.createState();
     const context = createContext();
 
@@ -176,7 +177,8 @@ describe('damageDoneProcessor', () => {
     const encDamage = state.EncounterDamage.get('enc1')!;
     const playerData = encDamage.get('0x0000000000001234')!;
     expect(playerData.target.get('0xF130000CE0000001')).toBe(777);
-    expect(state._damageEventsWithSunderArmor).toBe(1);
+    expect(state._damageEventsWithSunderArmor).toBe(0);
+    expect(state.AuraState.activeByEncounter.size).toBe(0);
   });
 
   it('clears tracked target auras on slain events', () => {
@@ -190,6 +192,216 @@ describe('damageDoneProcessor', () => {
     expect(state._damageEventsWithSunderArmor).toBe(0);
   });
 
+});
+
+describe('vulnerabilityEffectProcessor', () => {
+  const processor = createDamageDoneProcessor('players', {
+    id: 'vulnerability_effect',
+    vulnerabilityMode: true,
+  });
+
+  const spellVulnerabilityId = 23605;
+  const curseOfElementsRank1Id = 1490;
+  const curseOfElementsRank3Id = 11722;
+  const curseOfShadowRank1Id = 17862;
+  const curseOfShadowRank2Id = 17937;
+
+  function createContext(overrides: Partial<ProcessorContext> = {}): ProcessorContext {
+    return {
+      players: {
+        '0x0000000000001234': { name: 'TestPlayer', class: 'MAGE' },
+      },
+      units: {
+        '0xF130000CE0000001': { name: 'Boss', owner: null, entry: 12345 },
+      },
+      selectedEncounterIds: new Set(['enc1']),
+      entitySelection: {
+        enemyIds: new Set(),
+        playerIds: new Set(),
+      },
+      panelOption: spellVulnerabilityId.toString(),
+      ...overrides,
+    };
+  }
+
+  function createDamageEvent(overrides: Partial<DamageProcessorEvent> = {}): DamageProcessorEvent {
+    return {
+      type: 'damage',
+      index: 0,
+      offsetMilli: 0,
+      caster: '0x0000000000001234',
+      sourceName: 'Fireball',
+      target: '0xF130000CE0000001',
+      hitType: 0,
+      amount: 1100,
+      school: 4,
+      tailers: [],
+      tailerCount: 0,
+      activity: [],
+      activityCount: 0,
+      spellId: 133,
+      ...overrides,
+    };
+  }
+
+  function createSpellVulnerabilityAuraEvent(overrides: Partial<AuraProcessorEvent> = {}): AuraProcessorEvent {
+    return {
+      type: 'aura',
+      index: 0,
+      offsetMilli: 0,
+      target: '0xF130000CE0000001',
+      spellName: 'Spell Vulnerability',
+      spellId: spellVulnerabilityId,
+      amount: 1,
+      application: AuraApplication.Gains,
+      state: AuraState.Added,
+      activity: [],
+      activityCount: 0,
+      ...overrides,
+    };
+  }
+
+
+  function createVulnerabilityAuraEvent(spellId: number, overrides: Partial<AuraProcessorEvent> = {}): AuraProcessorEvent {
+    return createSpellVulnerabilityAuraEvent({
+      spellId,
+      spellName: VulnerabilitySpells[spellId]?.name ?? "Vulnerability",
+      ...overrides,
+    });
+  }
+  it('uses VulnerabilitySpells percentAffect for base/bonus split', () => {
+    const state = processor.createState();
+    const context = createContext();
+
+    processor.processEvent(state, createSpellVulnerabilityAuraEvent(), 'enc1', new Date(), 'aura', context);
+    processor.processEvent(state, createDamageEvent({ amount: 1100, school: 4 }), 'enc1', new Date(), 'damage', context);
+
+    const percentAffect = VulnerabilitySpells[spellVulnerabilityId].percentAffect;
+    const expectedBase = 1100 / (1 + percentAffect / 100);
+    const expectedBonus = 1100 - expectedBase;
+
+    const bonus = state.EncounterVulnerabilityBonus.get('enc1')?.get('0x0000000000001234')?.get('0xF130000CE0000001') ?? 0;
+    const base = state.EncounterVulnerabilityBase.get('enc1')?.get('0x0000000000001234')?.get('0xF130000CE0000001') ?? 0;
+
+    expect(base).toBeCloseTo(expectedBase);
+    expect(bonus).toBeCloseTo(expectedBonus);
+  });
+
+  it('uses rank 1 Curse of Elements modifier when rank 1 aura is active', () => {
+    const state = processor.createState();
+    const context = createContext({ panelOption: curseOfElementsRank3Id.toString() });
+
+    processor.processEvent(state, createVulnerabilityAuraEvent(curseOfElementsRank1Id), 'enc1', new Date(), 'aura', context);
+    // Fire school in chronicleproto.School enum = 4.
+    processor.processEvent(state, createDamageEvent({ amount: 1060, school: 4 }), 'enc1', new Date(), 'damage', context);
+
+    const percentAffect = VulnerabilitySpells[curseOfElementsRank1Id].percentAffect;
+    const expectedBase = 1060 / (1 + percentAffect / 100);
+    const expectedBonus = 1060 - expectedBase;
+
+    const bonus = state.EncounterVulnerabilityBonus.get('enc1')?.get('0x0000000000001234')?.get('0xF130000CE0000001') ?? 0;
+    const base = state.EncounterVulnerabilityBase.get('enc1')?.get('0x0000000000001234')?.get('0xF130000CE0000001') ?? 0;
+
+    expect(base).toBeCloseTo(expectedBase);
+    expect(bonus).toBeCloseTo(expectedBonus);
+  });
+
+  it('uses rank 3 Curse of Elements modifier when rank 3 aura is active', () => {
+    const state = processor.createState();
+    const context = createContext({ panelOption: curseOfElementsRank3Id.toString() });
+
+    processor.processEvent(state, createVulnerabilityAuraEvent(curseOfElementsRank3Id), 'enc1', new Date(), 'aura', context);
+    processor.processEvent(state, createDamageEvent({ amount: 1100, school: 4 }), 'enc1', new Date(), 'damage', context);
+
+    const percentAffect = VulnerabilitySpells[curseOfElementsRank3Id].percentAffect;
+    const expectedBase = 1100 / (1 + percentAffect / 100);
+    const expectedBonus = 1100 - expectedBase;
+
+    const bonus = state.EncounterVulnerabilityBonus.get('enc1')?.get('0x0000000000001234')?.get('0xF130000CE0000001') ?? 0;
+    const base = state.EncounterVulnerabilityBase.get('enc1')?.get('0x0000000000001234')?.get('0xF130000CE0000001') ?? 0;
+
+    expect(base).toBeCloseTo(expectedBase);
+    expect(bonus).toBeCloseTo(expectedBonus);
+  });
+
+  it('uses rank 1 Curse of Shadow modifier when rank 1 aura is active', () => {
+    const state = processor.createState();
+    const context = createContext({ panelOption: curseOfShadowRank2Id.toString() });
+
+    processor.processEvent(state, createVulnerabilityAuraEvent(curseOfShadowRank1Id), 'enc1', new Date(), 'aura', context);
+    // Shadow school in chronicleproto.School enum = 7.
+    processor.processEvent(state, createDamageEvent({ amount: 1080, school: 7 }), 'enc1', new Date(), 'damage', context);
+
+    const percentAffect = VulnerabilitySpells[curseOfShadowRank1Id].percentAffect;
+    const expectedBase = 1080 / (1 + percentAffect / 100);
+    const expectedBonus = 1080 - expectedBase;
+
+    const bonus = state.EncounterVulnerabilityBonus.get('enc1')?.get('0x0000000000001234')?.get('0xF130000CE0000001') ?? 0;
+    const base = state.EncounterVulnerabilityBase.get('enc1')?.get('0x0000000000001234')?.get('0xF130000CE0000001') ?? 0;
+
+    expect(base).toBeCloseTo(expectedBase);
+    expect(bonus).toBeCloseTo(expectedBonus);
+  });
+
+  it('uses rank 2 Curse of Shadow modifier when rank 2 aura is active', () => {
+    const state = processor.createState();
+    const context = createContext({ panelOption: curseOfShadowRank2Id.toString() });
+
+    processor.processEvent(state, createVulnerabilityAuraEvent(curseOfShadowRank2Id), 'enc1', new Date(), 'aura', context);
+    processor.processEvent(state, createDamageEvent({ amount: 1100, school: 7 }), 'enc1', new Date(), 'damage', context);
+
+    const percentAffect = VulnerabilitySpells[curseOfShadowRank2Id].percentAffect;
+    const expectedBase = 1100 / (1 + percentAffect / 100);
+    const expectedBonus = 1100 - expectedBase;
+
+    const bonus = state.EncounterVulnerabilityBonus.get('enc1')?.get('0x0000000000001234')?.get('0xF130000CE0000001') ?? 0;
+    const base = state.EncounterVulnerabilityBase.get('enc1')?.get('0x0000000000001234')?.get('0xF130000CE0000001') ?? 0;
+
+    expect(base).toBeCloseTo(expectedBase);
+    expect(bonus).toBeCloseTo(expectedBonus);
+  });
+  it('does not track aura state or bonus when vulnerability is not selected', () => {
+    const state = processor.createState();
+    const context = createContext({ panelOption: null });
+
+    processor.processEvent(state, createSpellVulnerabilityAuraEvent(), 'enc1', new Date(), 'aura', context);
+    processor.processEvent(state, createDamageEvent({ amount: 900, school: 4 }), 'enc1', new Date(), 'damage', context);
+
+    const bonus = state.EncounterVulnerabilityBonus.get('enc1')?.get('0x0000000000001234')?.get('0xF130000CE0000001') ?? 0;
+    const base = state.EncounterVulnerabilityBase.get('enc1')?.get('0x0000000000001234')?.get('0xF130000CE0000001') ?? 0;
+
+    expect(state.AuraState.activeByEncounter.size).toBe(0);
+    expect(bonus).toBe(0);
+    expect(base).toBe(900);
+  });
+
+  it('does not apply bonus for physical school', () => {
+    const state = processor.createState();
+    const context = createContext();
+
+    processor.processEvent(state, createSpellVulnerabilityAuraEvent(), 'enc1', new Date(), 'aura', context);
+    // Damage stream school is chronicleproto.School enum; Physical = 2.
+    processor.processEvent(state, createDamageEvent({ amount: 1000, school: 2 }), 'enc1', new Date(), 'damage', context);
+
+    const bonus = state.EncounterVulnerabilityBonus.get('enc1')?.get('0x0000000000001234')?.get('0xF130000CE0000001') ?? 0;
+    const base = state.EncounterVulnerabilityBase.get('enc1')?.get('0x0000000000001234')?.get('0xF130000CE0000001') ?? 0;
+
+    expect(bonus).toBe(0);
+    expect(base).toBe(1000);
+  });
+
+  it('does not apply bonus when aura is not active', () => {
+    const state = processor.createState();
+    const context = createContext();
+
+    processor.processEvent(state, createDamageEvent({ amount: 1000, school: 4 }), 'enc1', new Date(), 'damage', context);
+
+    const bonus = state.EncounterVulnerabilityBonus.get('enc1')?.get('0x0000000000001234')?.get('0xF130000CE0000001') ?? 0;
+    const base = state.EncounterVulnerabilityBase.get('enc1')?.get('0x0000000000001234')?.get('0xF130000CE0000001') ?? 0;
+
+    expect(bonus).toBe(0);
+    expect(base).toBe(1000);
+  });
 });
 
 describe('enemyDamageDoneProcessor', () => {

@@ -6,7 +6,8 @@ import type { AuraProcessorEvent, DamageProcessorEvent, PanelProcessor, Processo
 import { hasHitType, HitTypePeriodic } from "@/lib/hittype/hittype";
 import { accumulateAbilityBreakout, accumulateAbilityBreakoutBySpellId, type DamageAbilityBreakout, type SpellIdAbilityBreakout } from "../processors/abilityBreakout";
 import { createGuidCache, getCachedGuid, isPlayerGuidFast, type GuidCache } from "../processors/guidCache";
-import { createAuraProcessorState, type AuraProcessorState } from "../processors/auraProcessor";
+import { applyAuraEvent, createAuraProcessorState, hasAura, type AuraProcessorState } from "../processors/auraProcessor";
+import { resolveSelectedVulnerability } from "../VulnerabilityEffect/vulnerabilityConfig";
 
 // Re-export the shared type for backwards compatibility
 export type { DamageAbilityBreakout, HitTypeStats } from "../processors/abilityBreakout";
@@ -31,6 +32,8 @@ export interface DamageDoneData {
 // UnitDamage is unit guid -> DamageDoneData
 export type UnitDamage = Map<string, DamageDoneData>;
 
+export type EncounterUnitTargetValue = Map<string, Map<string, number>>;
+
 export type DamageDoneResult = {
   EncounterDamage: Map<string, UnitDamage>;
   // Value is unitID -> abilityID -> DamageAbilityBreakout
@@ -38,6 +41,17 @@ export type DamageDoneResult = {
   // Value is unitID -> spellId -> SpellIdAbilityBreakout (for "Show ranks" mode)
   ByAbilityBySpellId: Map<string, Map<number, SpellIdAbilityBreakout>>;
   ByTarget: Map<string, Map<string, number>>;
+
+  // Vulnerability effect tracking
+  EncounterVulnerabilityBonus: Map<string, EncounterUnitTargetValue>;
+  EncounterVulnerabilityBase: Map<string, EncounterUnitTargetValue>;
+  VulnerabilityByAbilityBonus: Map<string, Map<string, DamageAbilityBreakout>>;
+  VulnerabilityByAbilityBase: Map<string, Map<string, DamageAbilityBreakout>>;
+  VulnerabilityByAbilityBySpellIdBonus: Map<string, Map<number, SpellIdAbilityBreakout>>;
+  VulnerabilityByAbilityBySpellIdBase: Map<string, Map<number, SpellIdAbilityBreakout>>;
+  VulnerabilityByTargetBonus: Map<string, Map<string, number>>;
+  VulnerabilityByTargetBase: Map<string, Map<string, number>>;
+
   // GUID cache for performance (avoids repeated parsing)
   GuidCache: GuidCache;
   // Aura state used for inline aura-aware decisions
@@ -46,14 +60,99 @@ export type DamageDoneResult = {
   _damageEventsWithSunderArmor: number;
 }
 
+interface DamageDoneProcessorOptions {
+  id?: string;
+  vulnerabilityMode?: boolean;
+}
+
+function accumulateEncounterTargetValue(
+  store: Map<string, EncounterUnitTargetValue>,
+  encounterID: string,
+  ownerID: string,
+  targetID: string,
+  amount: number,
+): void {
+  const encounterMap = store.get(encounterID) ?? new Map<string, Map<string, number>>();
+  const ownerMap = encounterMap.get(ownerID) ?? new Map<string, number>();
+  ownerMap.set(targetID, (ownerMap.get(targetID) || 0) + amount);
+  encounterMap.set(ownerID, ownerMap);
+  store.set(encounterID, encounterMap);
+}
+
+function accumulateOwnerTargetValue(
+  store: Map<string, Map<string, number>>,
+  ownerID: string,
+  targetID: string,
+  amount: number,
+): void {
+  const ownerMap = store.get(ownerID) ?? new Map<string, number>();
+  ownerMap.set(targetID, (ownerMap.get(targetID) || 0) + amount);
+  store.set(ownerID, ownerMap);
+}
+
+function normalizeDamageSchoolToBitmask(school: number): number {
+  // Damage stream currently uses chronicleproto.School enum values:
+  // Unknown=0, None=1, Physical=2, Holy=3, Fire=4, Nature=5, Frost=6, Shadow=7, Arcane=8.
+  // Convert to WoW school bitmask values used by VulnerabilitySpells.
+  switch (school) {
+    case 0: // Unknown
+    case 1: // None
+      return 0;
+    case 2: // Physical
+      return 0x01;
+    case 3: // Holy
+      return 0x02;
+    case 4: // Fire
+      return 0x04;
+    case 5: // Nature
+      return 0x08;
+    case 6: // Frost
+      return 0x10;
+    case 7: // Shadow
+      return 0x20;
+    case 8: // Arcane
+      return 0x40;
+    default:
+      // Fallback for unexpected values (or future bitmask-style data)
+      return school;
+  }
+}
+
+function getActiveVulnerabilityMultiplier(
+  auraState: AuraProcessorState,
+  encounterID: string,
+  targetID: string,
+  auraSpellIds: number[],
+  multiplierBySpellId: Record<number, number>,
+): number | null {
+  let bestMultiplier: number | null = null;
+
+  for (const auraSpellId of auraSpellIds) {
+    if (!hasAura(auraState, encounterID, targetID, { spellId: auraSpellId })) {
+      continue;
+    }
+
+    const multiplier = multiplierBySpellId[auraSpellId];
+    if (multiplier == null || multiplier <= 0) continue;
+
+    if (bestMultiplier == null || multiplier > bestMultiplier) {
+      bestMultiplier = multiplier;
+    }
+  }
+
+  return bestMultiplier;
+}
+
 /**
  * Create a damage done processor for a specific entity source type.
  */
 export function createDamageDoneProcessor(
-  sourceType: DamageSourceType
+  sourceType: DamageSourceType,
+  options: DamageDoneProcessorOptions = {},
 ): PanelProcessor<DamageDoneResult, DamageProcessorEvent | AuraProcessorEvent | SlainProcessorEvent> {
-  const id = sourceType === "players" ? "damage_done" : `damage_done_${sourceType}`;
-  
+  const id = options.id ?? (sourceType === "players" ? "damage_done" : `damage_done_${sourceType}`);
+  const vulnerabilityMode = options.vulnerabilityMode ?? false;
+
   return {
     id,
     streams: ["damage", "aura", "slain"],
@@ -63,6 +162,14 @@ export function createDamageDoneProcessor(
       ByAbility: new Map<string, Map<string, DamageAbilityBreakout>>(),
       ByAbilityBySpellId: new Map<string, Map<number, SpellIdAbilityBreakout>>(),
       ByTarget: new Map<string, Map<string, number>>(),
+      EncounterVulnerabilityBonus: new Map<string, EncounterUnitTargetValue>(),
+      EncounterVulnerabilityBase: new Map<string, EncounterUnitTargetValue>(),
+      VulnerabilityByAbilityBonus: new Map<string, Map<string, DamageAbilityBreakout>>(),
+      VulnerabilityByAbilityBase: new Map<string, Map<string, DamageAbilityBreakout>>(),
+      VulnerabilityByAbilityBySpellIdBonus: new Map<string, Map<number, SpellIdAbilityBreakout>>(),
+      VulnerabilityByAbilityBySpellIdBase: new Map<string, Map<number, SpellIdAbilityBreakout>>(),
+      VulnerabilityByTargetBonus: new Map<string, Map<string, number>>(),
+      VulnerabilityByTargetBase: new Map<string, Map<string, number>>(),
       GuidCache: createGuidCache(),
       AuraState: createAuraProcessorState(),
       _damageEventsWithSunderArmor: 0,
@@ -74,9 +181,16 @@ export function createDamageDoneProcessor(
       encounterID: string,
       _: Date,
       _streamType: string,
-      context: ProcessorContext
+      context: ProcessorContext,
     ) => {
-      // applyAuraEvent(state.AuraState, encounterID, event);
+      const selectedVulnerability = vulnerabilityMode
+        ? resolveSelectedVulnerability(context.panelOption)
+        : null;
+
+      // Keep aura bookkeeping disabled unless vulnerability tracking is explicitly selected.
+      if (selectedVulnerability) {
+        applyAuraEvent(state.AuraState, encounterID, event);
+      }
 
       // Only damage events reach here
       if (event.type !== "damage") return;
@@ -88,12 +202,12 @@ export function createDamageDoneProcessor(
       // }
 
       const guidCache = state.GuidCache;
-      
+
       // Use fast player check first, fall back to cached GUID parsing
       const isPlayer = isPlayerGuidFast(event.caster) || getCachedGuid(guidCache, event.caster).isPlayer();
       const casterInfo = context.units?.[event.caster];
       // For pet check: owner must exist and be a player
-      const isPet = !isPlayer && casterInfo?.owner && 
+      const isPet = !isPlayer && casterInfo?.owner &&
         (isPlayerGuidFast(casterInfo.owner) || getCachedGuid(guidCache, casterInfo.owner).isPlayer());
       const isEnemy = !isPlayer && !isPet;
 
@@ -110,7 +224,7 @@ export function createDamageDoneProcessor(
       if (sourceType === "pets" && !isPet) return;
       if (sourceType === "enemies" && !isEnemy) return;
       if (sourceType === "friendly_fire" && (!isPlayer && !isPet)) return;
-      
+
       // For players/pets source, exclude friendly fire (damage to players/pets)
       // For friendly_fire source, only include friendly fire
       if (sourceType === "players" && isFriendlyFire) return;
@@ -121,7 +235,7 @@ export function createDamageDoneProcessor(
       let damageOwner = event.caster;
       if ((sourceType === "players" || sourceType === "pets" || sourceType === "friendly_fire") && isPet) {
         damageOwner = casterInfo!.owner!;
-      } 
+      }
 
       // By default, use the raw GUID as name
       let ownerName = damageOwner;
@@ -141,6 +255,27 @@ export function createDamageDoneProcessor(
         ownerClass = "ENEMY";
       }
 
+      // Vulnerability decomposition (bonus + base). Defaults to no bonus.
+      let baseAmount = event.amount;
+      let bonusAmount = 0;
+      if (selectedVulnerability && selectedVulnerability.percentAffect > 0) {
+        const schoolBitmask = normalizeDamageSchoolToBitmask(event.school);
+        const schoolMatches = (schoolBitmask & selectedVulnerability.schoolBitmask) !== 0;
+        if (schoolMatches) {
+          const activeMultiplier = getActiveVulnerabilityMultiplier(
+            state.AuraState,
+            encounterID,
+            event.target,
+            selectedVulnerability.auraSpellIds,
+            selectedVulnerability.multiplierBySpellId,
+          );
+          if (activeMultiplier != null) {
+            baseAmount = event.amount / activeMultiplier;
+            bonusAmount = event.amount - baseAmount;
+          }
+        }
+      }
+
       if (!state.EncounterDamage.has(encounterID)) {
         state.EncounterDamage.set(encounterID, new Map<string, DamageDoneData>());
       }
@@ -158,7 +293,11 @@ export function createDamageDoneProcessor(
       existing.target.set(event.target, (existing.target.get(event.target) || 0) + event.amount);
       encounterDamage.set(damageOwner, existing);
       state.EncounterDamage.set(encounterID, encounterDamage);
-      
+
+      // Vulnerability encounter totals (used by Vulnerability Effect panel)
+      accumulateEncounterTargetValue(state.EncounterVulnerabilityBonus, encounterID, damageOwner, event.target, bonusAmount);
+      accumulateEncounterTargetValue(state.EncounterVulnerabilityBase, encounterID, damageOwner, event.target, baseAmount);
+
       // Breakouts
       if (context.selectedEncounterIds.has(encounterID) &&
         (
@@ -183,9 +322,33 @@ export function createDamageDoneProcessor(
           accumulateAbilityBreakoutBySpellId(state.ByAbilityBySpellId, damageOwner, event.spellId, abilityName, event.amount, event.hitType);
         }
 
-        const existingTargetBreakout = state.ByTarget.get(damageOwner) || new Map<string, number>();
-        existingTargetBreakout.set(event.target, (existingTargetBreakout.get(event.target) || 0) + event.amount);
-        state.ByTarget.set(damageOwner, existingTargetBreakout);
+        accumulateOwnerTargetValue(state.ByTarget, damageOwner, event.target, event.amount);
+
+        // Vulnerability breakouts
+        accumulateAbilityBreakout(state.VulnerabilityByAbilityBonus, damageOwner, abilityName, bonusAmount, event.hitType);
+        accumulateAbilityBreakout(state.VulnerabilityByAbilityBase, damageOwner, abilityName, baseAmount, event.hitType);
+
+        if (event.spellId != null) {
+          accumulateAbilityBreakoutBySpellId(
+            state.VulnerabilityByAbilityBySpellIdBonus,
+            damageOwner,
+            event.spellId,
+            abilityName,
+            bonusAmount,
+            event.hitType,
+          );
+          accumulateAbilityBreakoutBySpellId(
+            state.VulnerabilityByAbilityBySpellIdBase,
+            damageOwner,
+            event.spellId,
+            abilityName,
+            baseAmount,
+            event.hitType,
+          );
+        }
+
+        accumulateOwnerTargetValue(state.VulnerabilityByTargetBonus, damageOwner, event.target, bonusAmount);
+        accumulateOwnerTargetValue(state.VulnerabilityByTargetBase, damageOwner, event.target, baseAmount);
       }
     },
   };
@@ -193,6 +356,10 @@ export function createDamageDoneProcessor(
 
 // Pre-created processors for registry
 export const damageDoneProcessor = createDamageDoneProcessor("players");
+export const vulnerabilityEffectProcessor = createDamageDoneProcessor("players", {
+  id: "vulnerability_effect",
+  vulnerabilityMode: true,
+});
 export const enemyDamageDoneProcessor = createDamageDoneProcessor("enemies");
 export const petDamageDoneProcessor = createDamageDoneProcessor("pets");
 export const friendlyFireProcessor = createDamageDoneProcessor("friendly_fire");

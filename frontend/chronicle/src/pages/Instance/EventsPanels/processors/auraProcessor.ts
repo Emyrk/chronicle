@@ -109,11 +109,13 @@ function removeMatchingAuras(
   targetAuras: Map<string, ActiveAura>,
   auraRef: AuraRef,
 ): void {
-  if (auraRef.spellId != null) {
-    targetAuras.delete(spellIdKey(auraRef.spellId));
+  const spellId = "spellId" in auraRef ? auraRef.spellId : undefined;
+  if (spellId != null) {
+    targetAuras.delete(spellIdKey(spellId));
   }
 
-  const normalizedSpellName = normalizeSpellName(auraRef.spellName);
+  const spellName = "spellName" in auraRef ? auraRef.spellName : undefined;
+  const normalizedSpellName = normalizeSpellName(spellName);
   if (normalizedSpellName) {
     targetAuras.delete(spellNameKey(normalizedSpellName));
 
@@ -224,11 +226,13 @@ export function getAuraStacks(
 
   let maxStacks = 0;
 
-  if (auraRef.spellId != null) {
-    maxStacks = Math.max(maxStacks, targetAuras.get(spellIdKey(auraRef.spellId))?.stacks ?? 0);
+  const spellId = "spellId" in auraRef ? auraRef.spellId : undefined;
+  if (spellId != null) {
+    maxStacks = Math.max(maxStacks, targetAuras.get(spellIdKey(spellId))?.stacks ?? 0);
   }
 
-  const normalizedSpellName = normalizeSpellName(auraRef.spellName);
+  const spellName = "spellName" in auraRef ? auraRef.spellName : undefined;
+  const normalizedSpellName = normalizeSpellName(spellName);
   if (normalizedSpellName) {
     maxStacks = Math.max(maxStacks, targetAuras.get(spellNameKey(normalizedSpellName))?.stacks ?? 0);
 
