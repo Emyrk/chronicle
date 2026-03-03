@@ -356,7 +356,7 @@ function AllActivityContent({
   const totalPages = Math.ceil(totalProcessed / PAGE_SIZE);
 
   return (
-    <div>
+    <div className="h-full min-h-0 flex flex-col">
       {/* Stream toggles and ability filter */}
       <div className="flex items-center gap-2 mb-2 flex-wrap">
         <span className="text-xs text-muted-foreground">Streams:</span>
@@ -473,7 +473,7 @@ function AllActivityContent({
       )}
       
       {/* Raw events list */}
-      <ScrollArea className="h-80 border rounded">
+      <ScrollArea className="flex-1 min-h-0 border rounded">
         <div className="p-1 min-w-max">
           {/* Header */}
           <div className="flex items-center gap-2 text-[10px] font-medium text-muted-foreground py-1 border-b sticky top-0 bg-background">

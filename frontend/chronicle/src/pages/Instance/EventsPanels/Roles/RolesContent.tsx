@@ -21,6 +21,7 @@ import {
 import { usePanelAggregation } from "../usePanelAggregation";
 import { PANELS } from "../EventsPanel";
 import { formatNumber } from "@/lib/format";
+import { ScrollArea } from "@/components/ui/ScrollArea/ScrollArea";
 
 // WoW class colors (same as PlayerMetricChart)
 const CLASS_COLORS: Record<string, string> = {
@@ -400,7 +401,8 @@ export const RolesContent = ({ context }: RolesContentProps) => {
   }
 
   return (
-    <div className="pr-3">
+    <div className="h-full min-h-0">
+      <ScrollArea className="h-full pr-3">
       {/* Summary line */}
       <div className="text-xs text-muted-foreground mb-3" data-roles-summary>
         <span className="font-medium text-foreground">{totalPlayers}</span> players detected:{" "}
@@ -441,7 +443,7 @@ export const RolesContent = ({ context }: RolesContentProps) => {
       />
 
       {/* Detection info with debug thresholds */}
-      <div className="text-xs text-muted-foreground mt-4 pt-2 border-t border-border/30" data-roles-debug>
+      <div className="text-xs text-muted-foreground mt-4 pt-2 border-t border-border/30 pb-2" data-roles-debug>
         <details>
           <summary className="cursor-pointer hover:text-foreground" data-roles-debug-toggle>
             Detection thresholds
@@ -502,6 +504,7 @@ export const RolesContent = ({ context }: RolesContentProps) => {
           </div>
         </details>
       </div>
+      </ScrollArea>
     </div>
   );
 };
