@@ -50,7 +50,7 @@ const meta: Meta<typeof EventsPanel> = {
         <TooltipProvider>
           <MockInstanceEventsProvider>
             <PanelTimingProvider panelCount={1}>
-              <div className="w-[600px] p-4 bg-background">
+              <div className="w-[600px] h-[560px] p-4 bg-background">
                 <Story />
               </div>
             </PanelTimingProvider>
