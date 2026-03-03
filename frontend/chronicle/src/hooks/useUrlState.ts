@@ -686,8 +686,8 @@ function serializePanelCode(code: string, option: string | null): string {
   return option ? `${code}[${option}]` : code;
 }
 
-/** Panel option tuple type (6 panels) */
-export type PanelOptions = [string | null, string | null, string | null, string | null, string | null, string | null];
+/** Panel option list (aligned with panel list order) */
+export type PanelOptions = (string | null)[];
 
 /**
  * View state structure for the Instance page
@@ -699,8 +699,8 @@ export interface InstanceViewState {
   enemies: Set<string>;
   /** Selected player IDs */
   players: Set<string>;
-  /** Panel types for panels 1-6 (5th and 6th are full-width in alternate layout) */
-  panels: [PanelType, PanelType, PanelType, PanelType, PanelType, PanelType];
+  /** Panel types encoded in layout panel index order */
+  panels: PanelType[];
   /** Panel-specific options (e.g., selected aura name) */
   panelOptions: PanelOptions;
   /** Layout type: standard (2×2+1) or alternate (1+1 + 2×1 + 2×1) */
@@ -717,7 +717,7 @@ export interface InstanceViewStateConfig {
   /** Default values */
   defaults: {
     encounterIds: string[];
-    panels: [PanelType, PanelType, PanelType, PanelType, PanelType, PanelType];
+    panels: PanelType[];
   };
 }
 
@@ -751,8 +751,9 @@ export function useInstanceViewState(config: InstanceViewStateConfig): {
   setEncounters: (ids: string[] | ((prev: string[]) => string[])) => void;
   setEnemies: (ids: Set<string> | ((prev: Set<string>) => Set<string>)) => void;
   setPlayers: (ids: Set<string> | ((prev: Set<string>) => Set<string>)) => void;
-  setPanelType: (index: 0 | 1 | 2 | 3 | 4 | 5, type: PanelType) => void;
-  setPanelOption: (index: 0 | 1 | 2 | 3 | 4 | 5, option: string | null) => void;
+  setPanelType: (index: number, type: PanelType) => void;
+  setPanelOption: (index: number, option: string | null) => void;
+  setPanels: (panels: PanelType[], panelOptions?: PanelOptions) => void;
   setLayout: (layout: LayoutType) => void;
   clearEntitySelection: () => void;
 } {
@@ -811,15 +812,15 @@ export function useInstanceViewState(config: InstanceViewStateConfig): {
         enemies: new Set(),
         players: new Set(),
         panels: config.defaults.panels,
-        panelOptions: [null, null, null, null, null, null],
+        panelOptions: config.defaults.panels.map(() => null),
         layout,
       };
     }
-    
+
     try {
       // Format: encounters.enemies.players.panels (dot-separated sections, dash-separated items)
       const [encPart, enPart, plPart, panelPart] = raw.split('.');
-      
+
       // Parse encounters
       let encounters: string[];
       if (encPart === 'all') {
@@ -830,56 +831,48 @@ export function useInstanceViewState(config: InstanceViewStateConfig): {
         encounters = Array.from(encounterMaps.trashIds);
       } else if (encPart) {
         encounters = encPart.split('-')
-          .map(s => parseInt(s, 10))
-          .filter(n => !isNaN(n))
-          .map(idx => encounterMaps.indexToId.get(idx))
+          .map((s) => parseInt(s, 10))
+          .filter((n) => !isNaN(n))
+          .map((idx) => encounterMaps.indexToId.get(idx))
           .filter((id): id is string => id !== undefined);
       } else {
         encounters = config.defaults.encounterIds;
       }
       if (encounters.length === 0) encounters = config.defaults.encounterIds;
-      
+
       // Parse enemies
       const enemies = new Set(
-        (enPart || '').split('-')
-          .map(s => parseInt(s, 10))
-          .filter(n => !isNaN(n))
-          .map(idx => enemyMaps.indexToId.get(idx))
+        (enPart || '')
+          .split('-')
+          .map((s) => parseInt(s, 10))
+          .filter((n) => !isNaN(n))
+          .map((idx) => enemyMaps.indexToId.get(idx))
           .filter((id): id is string => id !== undefined)
       );
-      
+
       // Parse players
       const players = new Set(
-        (plPart || '').split('-')
-          .map(s => parseInt(s, 10))
-          .filter(n => !isNaN(n))
-          .map(idx => playerMaps.indexToId.get(idx))
+        (plPart || '')
+          .split('-')
+          .map((s) => parseInt(s, 10))
+          .filter((n) => !isNaN(n))
+          .map((idx) => playerMaps.indexToId.get(idx))
           .filter((id): id is string => id !== undefined)
       );
-      
-      // Parse panels (backward compatible - missing 5th/6th defaults to config default)
-      // Format: code or code[option] separated by dashes
-      const panelParts = (panelPart || '').split('-');
+
+      // Parse panels (variable length, backward compatible with old fixed tuples)
+      const panelParts = (panelPart || '').split('-').filter(Boolean);
       const parsedPanels = panelParts.map(parsePanelCode);
-      
-      const panels: [PanelType, PanelType, PanelType, PanelType, PanelType, PanelType] = [
-        CODE_TO_PANEL[parsedPanels[0]?.code] ?? config.defaults.panels[0],
-        CODE_TO_PANEL[parsedPanels[1]?.code] ?? config.defaults.panels[1],
-        CODE_TO_PANEL[parsedPanels[2]?.code] ?? config.defaults.panels[2],
-        CODE_TO_PANEL[parsedPanels[3]?.code] ?? config.defaults.panels[3],
-        CODE_TO_PANEL[parsedPanels[4]?.code] ?? config.defaults.panels[4],
-        CODE_TO_PANEL[parsedPanels[5]?.code] ?? config.defaults.panels[5],
-      ];
-      
-      const panelOptions: PanelOptions = [
-        parsedPanels[0]?.option ?? null,
-        parsedPanels[1]?.option ?? null,
-        parsedPanels[2]?.option ?? null,
-        parsedPanels[3]?.option ?? null,
-        parsedPanels[4]?.option ?? null,
-        parsedPanels[5]?.option ?? null,
-      ];
-      
+
+      const fallbackPanels = config.defaults.panels;
+      const minCount = Math.max(parsedPanels.length, fallbackPanels.length);
+      const panels: PanelType[] = Array.from({ length: minCount }, (_, i) => {
+        const parsedCode = parsedPanels[i]?.code;
+        return (parsedCode && CODE_TO_PANEL[parsedCode]) ?? fallbackPanels[i] ?? 'empty';
+      });
+
+      const panelOptions: PanelOptions = Array.from({ length: panels.length }, (_, i) => parsedPanels[i]?.option ?? null);
+
       return { encounters, enemies, players, panels, panelOptions, layout };
     } catch {
       return {
@@ -887,7 +880,7 @@ export function useInstanceViewState(config: InstanceViewStateConfig): {
         enemies: new Set(),
         players: new Set(),
         panels: config.defaults.panels,
-        panelOptions: [null, null, null, null, null, null],
+        panelOptions: config.defaults.panels.map(() => null),
         layout,
       };
     }
@@ -937,11 +930,13 @@ export function useInstanceViewState(config: InstanceViewStateConfig): {
   const isDefaultState = useCallback((s: InstanceViewState): boolean => {
     const defaultEncs = new Set(config.defaults.encounterIds);
     const selectedEncs = new Set(s.encounters);
+    const defaultPanels = config.defaults.panels;
     return setsEqual(selectedEncs, defaultEncs) &&
       s.enemies.size === 0 &&
       s.players.size === 0 &&
-      s.panels.every((p, i) => p === config.defaults.panels[i]) &&
-      s.panelOptions.every(opt => opt === null);
+      s.panels.length === defaultPanels.length &&
+      s.panels.every((p, i) => p === defaultPanels[i]) &&
+      s.panelOptions.every((opt) => opt === null);
   }, [config.defaults, setsEqual]);
 
   // Update URL with new state
@@ -979,19 +974,32 @@ export function useInstanceViewState(config: InstanceViewStateConfig): {
     updateUrl({ ...state, players: newPlayers });
   }, [state, updateUrl]);
 
-  const setPanelType = useCallback((index: 0 | 1 | 2 | 3 | 4 | 5, type: PanelType) => {
-    const newPanels = [...state.panels] as [PanelType, PanelType, PanelType, PanelType, PanelType, PanelType];
+  const setPanelType = useCallback((index: number, type: PanelType) => {
+    const newPanels = [...state.panels];
+    const newOptions = [...state.panelOptions];
+    while (newPanels.length <= index) {
+      newPanels.push('empty');
+      newOptions.push(null);
+    }
     newPanels[index] = type;
-    // Clear the option when changing panel type
-    const newOptions = [...state.panelOptions] as PanelOptions;
     newOptions[index] = null;
     updateUrl({ ...state, panels: newPanels, panelOptions: newOptions });
   }, [state, updateUrl]);
 
-  const setPanelOption = useCallback((index: 0 | 1 | 2 | 3 | 4 | 5, option: string | null) => {
-    const newOptions = [...state.panelOptions] as PanelOptions;
+  const setPanelOption = useCallback((index: number, option: string | null) => {
+    const newOptions = [...state.panelOptions];
+    while (newOptions.length <= index) {
+      newOptions.push(null);
+    }
     newOptions[index] = option;
     updateUrl({ ...state, panelOptions: newOptions });
+  }, [state, updateUrl]);
+
+  const setPanels = useCallback((panels: PanelType[], panelOptions?: PanelOptions) => {
+    const nextOptions = panelOptions
+      ? [...panelOptions, ...Array(Math.max(0, panels.length - panelOptions.length)).fill(null)]
+      : panels.map(() => null);
+    updateUrl({ ...state, panels: [...panels], panelOptions: nextOptions.slice(0, panels.length) });
   }, [state, updateUrl]);
 
   const setLayout = useCallback((layout: LayoutType) => {
@@ -1002,5 +1010,5 @@ export function useInstanceViewState(config: InstanceViewStateConfig): {
     updateUrl({ ...state, enemies: new Set(), players: new Set() });
   }, [state, updateUrl]);
 
-  return { state, setEncounters, setEnemies, setPlayers, setPanelType, setPanelOption, setLayout, clearEntitySelection };
+  return { state, setEncounters, setEnemies, setPlayers, setPanelType, setPanelOption, setPanels, setLayout, clearEntitySelection };
 }

@@ -1,4 +1,4 @@
-import { Menu, LayoutGrid, Rows3, FileText, Copy } from "lucide-react";
+import { Menu, LayoutGrid, Rows3, FileText, Copy, Upload } from "lucide-react";
 import { toast } from "sonner";
 import { Link } from "react-router-dom";
 import { Button } from "@/components/ui/button";
@@ -17,11 +17,12 @@ import type { LayoutType } from "@/hooks/useUrlState";
 interface InstanceMenuProps {
   layout: LayoutType;
   onLayoutChange: (layout: LayoutType) => void;
+  onImportLayout?: () => void;
   instanceId: string;
   logDetailUrl?: string;
 }
 
-export function InstanceMenu({ layout, onLayoutChange, instanceId, logDetailUrl }: InstanceMenuProps) {
+export function InstanceMenu({ layout, onLayoutChange, onImportLayout, instanceId, logDetailUrl }: InstanceMenuProps) {
   const handleCopyInstanceId = async () => {
     try {
       await navigator.clipboard.writeText(instanceId);
@@ -52,6 +53,13 @@ export function InstanceMenu({ layout, onLayoutChange, instanceId, logDetailUrl 
             Alternate (1+1 + 2×1)
           </DropdownMenuRadioItem>
         </DropdownMenuRadioGroup>
+
+        {onImportLayout && (
+          <DropdownMenuItem onClick={onImportLayout}>
+            <Upload className="h-4 w-4 mr-2" />
+            Import Layout
+          </DropdownMenuItem>
+        )}
 
         <DropdownMenuSeparator />
         <DropdownMenuItem onClick={handleCopyInstanceId}>
