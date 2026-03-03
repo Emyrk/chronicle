@@ -2,7 +2,7 @@
  * EventsPanel - Container component for event aggregation panels
  */
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useState, type CSSProperties } from "react";
 import { useLocalStorage } from "@/hooks/useLocalStorage";
 import { HelpCircle, Construction } from "lucide-react";
 import { Card } from "@/components/ui/Card/Card";
@@ -117,6 +117,7 @@ export function EventsPanel({
 }: EventsPanelProps) {
   const isMobile = useIsMobile();
   const panel = PANELS[panelType];
+  const isLayoutLab = context.renderMode === "layout_lab";
   
   // Determine checkbox label first (needed for storage key)
   const checkboxLabel = panel.checkboxLabel || "Per second";
@@ -173,7 +174,21 @@ export function EventsPanel({
 
   return (
     <BreakoutHoverProvider>
-      <Card className={cn("p-4 gap-2 mb-3", panel.underConstruction && "border-yellow-500/50")}>
+      <Card
+        className={cn(
+          "p-4 gap-2",
+          isLayoutLab ? "h-full mb-0 flex flex-col" : "mb-3",
+          panel.underConstruction && "border-yellow-500/50",
+        )}
+        style={
+          isLayoutLab
+            ? ({
+                "--max-height-panel": "100%",
+                "--min-height-panel": "100%",
+              } as CSSProperties)
+            : undefined
+        }
+      >
         <div className="flex items-center justify-between mb-1">
           <h3 className="text-sm font-medium flex items-center gap-2">
             <PanelSelector value={panelType} onChange={onPanelTypeChange} />
@@ -228,22 +243,24 @@ export function EventsPanel({
         </div>
 
         {/* Render the panel content */}
-        {panel.render({
-          result,
-          totalEvents,
-          processingTimeMs,
-          durationMs: effectiveDurationMs,
-          perSecond: checkboxChecked,
-          checkboxChecked,
-          loading,
-          processing,
-          error,
-          context,
-          panelOption,
-          setPanelOption: onPanelOptionChange,
-          panelContext,
-          setPanelContext,
-        })}
+        <div className={cn(isLayoutLab && "flex-1 min-h-0")}>
+          {panel.render({
+            result,
+            totalEvents,
+            processingTimeMs,
+            durationMs: effectiveDurationMs,
+            perSecond: checkboxChecked,
+            checkboxChecked,
+            loading,
+            processing,
+            error,
+            context,
+            panelOption,
+            setPanelOption: onPanelOptionChange,
+            panelContext,
+            setPanelContext,
+          })}
+        </div>
       </Card>
     </BreakoutHoverProvider>
   );

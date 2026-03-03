@@ -20,6 +20,9 @@ export interface EntitySelection {
  * Context available to panels for processing and rendering.
  */
 export interface PanelContext {
+  /** Optional render mode hint for panel presentation contexts (e.g., Layout Lab). */
+  renderMode?: "default" | "layout_lab";
+
   /** The full instance data (players, encounters, metadata) */
   instance: Instance;
   

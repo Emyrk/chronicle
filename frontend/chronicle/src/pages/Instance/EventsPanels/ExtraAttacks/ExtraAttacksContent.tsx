@@ -96,6 +96,7 @@ export const ExtraAttacksContent = (props: ExtraAttacksContentProps) => {
         duration_millis={props.durationMs}
         perSecond={props.perSecond}
         breakout={breakout}
+        disableInteractions={props.context.renderMode === "layout_lab"}
       />
     </GenericPanel>
   );

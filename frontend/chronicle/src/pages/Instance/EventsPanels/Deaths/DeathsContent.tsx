@@ -85,6 +85,7 @@ export const DeathsContent = (props: DeathsContentProps) => {
         duration_millis={props.durationMs}
         perSecond={false} // Deaths per second doesn't make sense
         breakout={breakout}
+        disableInteractions={props.context.renderMode === "layout_lab"}
       />
     </GenericPanel>
   );

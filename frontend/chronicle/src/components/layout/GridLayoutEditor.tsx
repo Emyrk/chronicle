@@ -73,7 +73,7 @@ export function GridLayoutEditor({
         minW: item.minW ?? 4,
         minH: item.minH ?? 1,
         maxW: item.maxW ?? cols,
-        maxH: item.maxH ?? 12,
+        maxH: item.maxH ?? 20,
       })),
     [items, cols]
   );

@@ -12,15 +12,17 @@ import { useIsMobile } from '@/hooks/useIsMobile';
 import { cn } from '@/lib/utils';
 import { X, GripHorizontal } from 'lucide-react';
 
+/* eslint-disable react-refresh/only-export-components */
 // Re-export types from BreakdownContent for backwards compatibility
-export { 
-  type AbilityBreakdown, 
+export {
+  type AbilityBreakdown,
   type RawAbilities,
   computeAbilityBreakdown,
   TabbedBreakdownTable,
   AbilityBreakdownTable,
   TargetBreakdownTable,
 } from './BreakdownContent';
+/* eslint-enable react-refresh/only-export-components */
 
 export type ChartType = 'damage' | 'healing' | 'taken' | 'mitigation'
 
@@ -64,6 +66,8 @@ interface PlayerMetricChartProps extends React.ComponentProps<"div"> {
   breakout?: BreakoutFn
   /** Label for the stacked secondary metric (defaults to "Overheal") */
   stackedLabel?: string
+  /** Disable hover/click breakout interactions (used by layout editor previews) */
+  disableInteractions?: boolean
 }
 
 export function PlayerMetricChart({
@@ -77,10 +81,12 @@ export function PlayerMetricChart({
   duration_millis,
   breakout,
   stackedLabel = 'Overheal',
+  disableInteractions = false,
   // Exclude dir from divProps to avoid type conflict with ScrollArea
   dir: _dir,
   ...divProps
 }: PlayerMetricChartProps) {
+  void _dir;
   // Track which rows have pinned tooltips (multiple allowed)
   const [pinnedPlayerIds, setPinnedPlayerIds] = useState<Set<string>>(new Set())
 
@@ -140,7 +146,7 @@ export function PlayerMetricChart({
   return (
     <ScrollArea
       style={style}
-      className={cn("max-h-panel", className)}
+      className={cn("h-full min-h-0", className)}
       {...divProps}
     >
       <div style={{ display: 'flex', flexDirection: 'column', gap: '2px', padding: '4px' }}>
@@ -158,7 +164,7 @@ export function PlayerMetricChart({
             isPinned={pinnedPlayerIds.has(player.playerID)}
             onTogglePin={() => handleTogglePin(player.playerID)}
             panelTitle={panelTitle}
-            breakout={breakout}
+            breakout={disableInteractions ? undefined : breakout}
             stackedLabel={stackedLabel}
             isFirstRow={index === 0}
           />

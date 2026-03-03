@@ -1,6 +1,7 @@
 import { useMemo, useState } from "react";
 import { Link, Outlet, useLocation } from "react-router-dom";
-import { User, Bell, Shield, Palette, HardDrive, Clock, LayoutTemplate, Download, Upload } from "lucide-react";
+import { toast } from "sonner";
+import { User, Bell, Shield, Palette, HardDrive, Clock, LayoutTemplate, Download, Upload, Plus, Trash2 } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
 import { useInstance, useMyStorage } from "@/api/queries";
 import type { DataGrant, InstancePlayer, InstanceUnit, WoWEncounterWithHostiles } from "@/api/typesGenerated";
@@ -13,6 +14,7 @@ import { PANELS } from "@/pages/Instance/EventsPanels/EventsPanel";
 import type { PanelContext } from "@/pages/Instance/EventsPanels/types";
 import type { Instance } from "@/pages/Instance/InstancePage";
 import { PanelTimingProvider } from "@/pages/Instance/EventsPanels/PanelTimingContext";
+import { DEFAULT_INSTANCE_LAYOUT_ITEMS, DEFAULT_INSTANCE_PANEL_TYPES } from "@/pages/Instance/viewDefaults";
 
 function formatBytes(bytes: number): string {
   if (bytes === 0) return "0 B";
@@ -122,22 +124,6 @@ export function AppearanceSettings() {
     </div>
   );
 }
-
-const DEFAULT_LAB_ITEMS: GridEditorItem[] = [
-  { id: "panel-1", title: "Damage Done", x: 0, y: 0, w: 6, h: 4, minW: 4 },
-  { id: "panel-2", title: "Healing Done", x: 6, y: 0, w: 6, h: 4, minW: 4 },
-  { id: "panel-3", title: "Damage Taken", x: 0, y: 4, w: 6, h: 4, minW: 4 },
-  { id: "panel-4", title: "Enemy Damage", x: 6, y: 4, w: 6, h: 4, minW: 4 },
-  { id: "panel-5", title: "All Activity", x: 0, y: 8, w: 12, h: 4, minW: 4 },
-];
-
-const DEFAULT_PANEL_TYPES: Record<string, EventsPanelType> = {
-  "panel-1": "damage_done",
-  "panel-2": "healing_done",
-  "panel-3": "damage_taken",
-  "panel-4": "enemy_damage_done",
-  "panel-5": "all_activity",
-};
 
 interface LayoutLabExportV1 {
   version: 1;
@@ -279,8 +265,8 @@ function LivePanelTile({
 }
 
 export function LayoutLabSettings() {
-  const [items, setItems] = useState<GridEditorItem[]>(DEFAULT_LAB_ITEMS);
-  const [panelTypesById, setPanelTypesById] = useState<Record<string, EventsPanelType>>(DEFAULT_PANEL_TYPES);
+  const [items, setItems] = useState<GridEditorItem[]>(DEFAULT_INSTANCE_LAYOUT_ITEMS);
+  const [panelTypesById, setPanelTypesById] = useState<Record<string, EventsPanelType>>(DEFAULT_INSTANCE_PANEL_TYPES);
   const [instanceReferenceInput, setInstanceReferenceInput] = useState("");
   const [instanceReference, setInstanceReference] = useState("");
   const [importText, setImportText] = useState("");
@@ -322,6 +308,7 @@ export function LayoutLabSettings() {
   const context = useMemo<PanelContext | null>(() => {
     if (!instance) return null;
     return {
+      renderMode: "layout_lab",
       instance,
       selectedEncounterIds,
       entitySelection: {
@@ -345,9 +332,45 @@ export function LayoutLabSettings() {
     );
   };
 
+  const handleRemovePanel = (itemId: string) => {
+    setItems((prev) => prev.filter((item) => item.id !== itemId));
+    setPanelTypesById((prev) => {
+      const next = { ...prev };
+      delete next[itemId];
+      return next;
+    });
+  };
+
+  const handleAddPanel = () => {
+    const nextIndex = items.reduce((max, item) => {
+      const match = item.id.match(/^panel-(\d+)$/);
+      const n = match ? Number(match[1]) : 0;
+      return Math.max(max, n);
+    }, 0) + 1;
+
+    const maxY = items.reduce((max, item) => Math.max(max, item.y + item.h), 0);
+    const newId = `panel-${nextIndex}`;
+    const newType: EventsPanelType = "damage_done";
+
+    setItems((prev) => [
+      ...prev,
+      {
+        id: newId,
+        title: PANELS[newType].label,
+        x: 0,
+        y: maxY,
+        w: 6,
+        h: 4,
+        minW: 4,
+      },
+    ]);
+    setPanelTypesById((prev) => ({ ...prev, [newId]: newType }));
+  };
+
   const handleExport = async () => {
     const serialized = serializeLayoutLab(items, panelTypesById);
     await navigator.clipboard.writeText(serialized);
+    toast.success("Layout copied to clipboard");
   };
 
   const handleImport = () => {
@@ -390,7 +413,18 @@ export function LayoutLabSettings() {
           >
             Apply reference
           </Button>
-          <Button type="button" variant="outline" onClick={() => setItems(DEFAULT_LAB_ITEMS)}>
+          <Button type="button" variant="outline" onClick={handleAddPanel} className="gap-1.5">
+            <Plus className="h-4 w-4" />
+            Add panel
+          </Button>
+          <Button
+            type="button"
+            variant="outline"
+            onClick={() => {
+              setItems(DEFAULT_INSTANCE_LAYOUT_ITEMS);
+              setPanelTypesById(DEFAULT_INSTANCE_PANEL_TYPES);
+            }}
+          >
             Reset layout
           </Button>
           <Button type="button" variant="outline" onClick={handleExport} className="gap-1.5">
@@ -444,13 +478,32 @@ export function LayoutLabSettings() {
                 renderItem={(item) => {
                   const panelType = panelTypesById[item.id] ?? "damage_done";
                   return (
-                    <LivePanelTile
-                      item={item}
-                      panelType={panelType}
-                      context={context}
-                      durationMs={durationMs}
-                      onPanelTypeChange={(next) => handlePanelTypeChange(item.id, next)}
-                    />
+                    <div className="group relative h-full">
+                      <LivePanelTile
+                        item={item}
+                        panelType={panelType}
+                        context={context}
+                        durationMs={durationMs}
+                        onPanelTypeChange={(next) => handlePanelTypeChange(item.id, next)}
+                      />
+
+                      <div className="pointer-events-none absolute inset-0 z-20 rounded-md bg-background/35 opacity-0 transition-opacity group-hover:opacity-100" />
+                      <div className="pointer-events-none absolute right-2 top-2 z-30 flex items-center gap-2 opacity-0 transition-opacity group-hover:opacity-100">
+                        <Button
+                          type="button"
+                          variant="destructive"
+                          size="sm"
+                          className="pointer-events-auto h-8 px-2"
+                          onClick={(event) => {
+                            event.preventDefault();
+                            event.stopPropagation();
+                            handleRemovePanel(item.id);
+                          }}
+                        >
+                          <Trash2 className="h-4 w-4" />
+                        </Button>
+                      </div>
+                    </div>
                   );
                 }}
               />
