@@ -27,6 +27,7 @@ import { RandomTip } from "@/components/RandomTip";
 import { InstanceHelpSheet } from "@/components/HelpSheet";
 import { ENCOUNTER_TIPS, ENTITY_TIPS, CLASS_TOGGLE_TIPS } from "@/constants/tips";
 import { InstanceMenu } from "./InstanceMenu";
+import { DEFAULT_INSTANCE_LAYOUT_ITEMS } from "./viewDefaults";
 
 // ============================================================================
 // Encounter selector localStorage helpers (7-day expiry)
@@ -625,6 +626,18 @@ function EncounterSidebar({
   );
 }
 
+const PANEL_ROW_HEIGHT_PX = 96;
+
+const DEFAULT_PANEL_ROWS_BY_ID = DEFAULT_INSTANCE_LAYOUT_ITEMS.reduce<Record<string, number>>((acc, item) => {
+  acc[item.id] = item.h;
+  return acc;
+}, {});
+
+function panelHeightForSlot(slotId: string): number {
+  const rows = DEFAULT_PANEL_ROWS_BY_ID[slotId] ?? 4;
+  return Math.max(rows, 4) * PANEL_ROW_HEIGHT_PX;
+}
+
 // ============================================================================
 // EncounterDetail component
 // ============================================================================
@@ -692,6 +705,16 @@ function EncounterDetail({
   const setPanelOption5 = (opt: string | null) => onPanelOptionChange(4, opt);
   const setPanelOption6 = (opt: string | null) => onPanelOptionChange(5, opt);
   
+  const renderSizedPanel = (
+    slotId: string,
+    panel: React.ReactNode,
+    className?: string,
+  ) => (
+    <div className={cn("min-h-0", className)} style={{ height: `${panelHeightForSlot(slotId)}px` }}>
+      {panel}
+    </div>
+  );
+
   // Active tab and collapsible state
   const [activeTab, setActiveTab] = useState<'enemies' | 'players'>('enemies');
   const [isEntityPanelOpen, setIsEntityPanelOpen] = useState(false);
@@ -1029,52 +1052,65 @@ function EncounterDetail({
         {layout === "standard" ? (
           /* Standard layout: 2×2 grid + 1 full-width panel */
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-3">
-            <EventsPanel
-              panelType={eventsPanel1Type}
-              onPanelTypeChange={setEventsPanel1Type}
-              durationMs={totalDurationMs}
-              context={panelContext}
-              panelIndex={0}
-              onExplainerClick={onExplainerClick}
-              showHints={showHints}
-              panelOption={panelOption1}
-              onPanelOptionChange={setPanelOption1}
-            />
-            <EventsPanel
-              panelType={eventsPanel2Type}
-              onPanelTypeChange={setEventsPanel2Type}
-              durationMs={totalDurationMs}
-              context={panelContext}
-              panelIndex={1}
-              onExplainerClick={onExplainerClick}
-              showHints={showHints}
-              panelOption={panelOption2}
-              onPanelOptionChange={setPanelOption2}
-            />
-            <EventsPanel
-              panelType={eventsPanel3Type}
-              onPanelTypeChange={setEventsPanel3Type}
-              durationMs={totalDurationMs}
-              context={panelContext}
-              panelIndex={2}
-              onExplainerClick={onExplainerClick}
-              showHints={showHints}
-              panelOption={panelOption3}
-              onPanelOptionChange={setPanelOption3}
-            />
-            <EventsPanel
-              panelType={eventsPanel4Type}
-              onPanelTypeChange={setEventsPanel4Type}
-              durationMs={totalDurationMs}
-              context={panelContext}
-              panelIndex={3}
-              onExplainerClick={onExplainerClick}
-              showHints={showHints}
-              panelOption={panelOption4}
-              onPanelOptionChange={setPanelOption4}
-            />
+            {renderSizedPanel(
+              "panel-1",
+              <EventsPanel
+                panelType={eventsPanel1Type}
+                onPanelTypeChange={setEventsPanel1Type}
+                durationMs={totalDurationMs}
+                context={panelContext}
+                panelIndex={0}
+                onExplainerClick={onExplainerClick}
+                showHints={showHints}
+                panelOption={panelOption1}
+                onPanelOptionChange={setPanelOption1}
+              />,
+            )}
+            {renderSizedPanel(
+              "panel-2",
+              <EventsPanel
+                panelType={eventsPanel2Type}
+                onPanelTypeChange={setEventsPanel2Type}
+                durationMs={totalDurationMs}
+                context={panelContext}
+                panelIndex={1}
+                onExplainerClick={onExplainerClick}
+                showHints={showHints}
+                panelOption={panelOption2}
+                onPanelOptionChange={setPanelOption2}
+              />,
+            )}
+            {renderSizedPanel(
+              "panel-3",
+              <EventsPanel
+                panelType={eventsPanel3Type}
+                onPanelTypeChange={setEventsPanel3Type}
+                durationMs={totalDurationMs}
+                context={panelContext}
+                panelIndex={2}
+                onExplainerClick={onExplainerClick}
+                showHints={showHints}
+                panelOption={panelOption3}
+                onPanelOptionChange={setPanelOption3}
+              />,
+            )}
+            {renderSizedPanel(
+              "panel-4",
+              <EventsPanel
+                panelType={eventsPanel4Type}
+                onPanelTypeChange={setEventsPanel4Type}
+                durationMs={totalDurationMs}
+                context={panelContext}
+                panelIndex={3}
+                onExplainerClick={onExplainerClick}
+                showHints={showHints}
+                panelOption={panelOption4}
+                onPanelOptionChange={setPanelOption4}
+              />,
+            )}
             {/* 5th panel spans full width */}
-            <div className="lg:col-span-2">
+            {renderSizedPanel(
+              "panel-5",
               <EventsPanel
                 panelType={eventsPanel5Type}
                 onPanelTypeChange={setEventsPanel5Type}
@@ -1085,37 +1121,45 @@ function EncounterDetail({
                 showHints={showHints}
                 panelOption={panelOption5}
                 onPanelOptionChange={setPanelOption5}
-              />
-            </div>
+              />,
+              "lg:col-span-2",
+            )}
           </div>
         ) : (
           /* Alternate layout: 1+1 (top) + 2 full-width panels */
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-3">
             {/* Top row: 2 small panels */}
-            <EventsPanel
-              panelType={eventsPanel1Type}
-              onPanelTypeChange={setEventsPanel1Type}
-              durationMs={totalDurationMs}
-              context={panelContext}
-              panelIndex={0}
-              onExplainerClick={onExplainerClick}
-              showHints={showHints}
-              panelOption={panelOption1}
-              onPanelOptionChange={setPanelOption1}
-            />
-            <EventsPanel
-              panelType={eventsPanel2Type}
-              onPanelTypeChange={setEventsPanel2Type}
-              durationMs={totalDurationMs}
-              context={panelContext}
-              panelIndex={1}
-              onExplainerClick={onExplainerClick}
-              showHints={showHints}
-              panelOption={panelOption2}
-              onPanelOptionChange={setPanelOption2}
-            />
+            {renderSizedPanel(
+              "panel-1",
+              <EventsPanel
+                panelType={eventsPanel1Type}
+                onPanelTypeChange={setEventsPanel1Type}
+                durationMs={totalDurationMs}
+                context={panelContext}
+                panelIndex={0}
+                onExplainerClick={onExplainerClick}
+                showHints={showHints}
+                panelOption={panelOption1}
+                onPanelOptionChange={setPanelOption1}
+              />,
+            )}
+            {renderSizedPanel(
+              "panel-2",
+              <EventsPanel
+                panelType={eventsPanel2Type}
+                onPanelTypeChange={setEventsPanel2Type}
+                durationMs={totalDurationMs}
+                context={panelContext}
+                panelIndex={1}
+                onExplainerClick={onExplainerClick}
+                showHints={showHints}
+                panelOption={panelOption2}
+                onPanelOptionChange={setPanelOption2}
+              />,
+            )}
             {/* Middle row: full-width panel (typically AllActivity) */}
-            <div className="lg:col-span-2">
+            {renderSizedPanel(
+              "panel-5",
               <EventsPanel
                 panelType={eventsPanel5Type}
                 onPanelTypeChange={setEventsPanel5Type}
@@ -1126,10 +1170,12 @@ function EncounterDetail({
                 showHints={showHints}
                 panelOption={panelOption5}
                 onPanelOptionChange={setPanelOption5}
-              />
-            </div>
+              />,
+              "lg:col-span-2",
+            )}
             {/* Bottom row: full-width panel (Periods) */}
-            <div className="lg:col-span-2">
+            {renderSizedPanel(
+              "panel-6",
               <EventsPanel
                 panelType={eventsPanel6Type}
                 onPanelTypeChange={setEventsPanel6Type}
@@ -1140,8 +1186,9 @@ function EncounterDetail({
                 showHints={showHints}
                 panelOption={panelOption6}
                 onPanelOptionChange={setPanelOption6}
-              />
-            </div>
+              />,
+              "lg:col-span-2",
+            )}
           </div>
         )}
         

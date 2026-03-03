@@ -146,7 +146,7 @@ export function PlayerMetricChart({
   return (
     <ScrollArea
       style={style}
-      className={cn("h-full min-h-0", className)}
+      className={cn("h-full min-h-0 flex-1", className)}
       {...divProps}
     >
       <div style={{ display: 'flex', flexDirection: 'column', gap: '2px', padding: '4px' }}>

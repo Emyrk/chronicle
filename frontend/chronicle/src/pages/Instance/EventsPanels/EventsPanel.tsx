@@ -2,7 +2,7 @@
  * EventsPanel - Container component for event aggregation panels
  */
 
-import { useEffect, useMemo, useState, type CSSProperties } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useLocalStorage } from "@/hooks/useLocalStorage";
 import { HelpCircle, Construction } from "lucide-react";
 import { Card } from "@/components/ui/Card/Card";
@@ -117,8 +117,7 @@ export function EventsPanel({
 }: EventsPanelProps) {
   const isMobile = useIsMobile();
   const panel = PANELS[panelType];
-  const isLayoutLab = context.renderMode === "layout_lab";
-  
+
   // Determine checkbox label first (needed for storage key)
   const checkboxLabel = panel.checkboxLabel || "Per second";
   const showCheckbox = panel.supportsPerSecond || panel.checkboxLabel;
@@ -176,18 +175,9 @@ export function EventsPanel({
     <BreakoutHoverProvider>
       <Card
         className={cn(
-          "p-4 gap-2",
-          isLayoutLab ? "h-full mb-0 flex flex-col" : "mb-3",
+          "p-4 gap-2 h-full mb-0 flex flex-col",
           panel.underConstruction && "border-yellow-500/50",
         )}
-        style={
-          isLayoutLab
-            ? ({
-                "--max-height-panel": "100%",
-                "--min-height-panel": "100%",
-              } as CSSProperties)
-            : undefined
-        }
       >
         <div className="flex items-center justify-between mb-1">
           <h3 className="text-sm font-medium flex items-center gap-2">
@@ -243,7 +233,7 @@ export function EventsPanel({
         </div>
 
         {/* Render the panel content */}
-        <div className={cn(isLayoutLab && "flex-1 min-h-0")}>
+        <div className="flex-1 min-h-0">
           {panel.render({
             result,
             totalEvents,
