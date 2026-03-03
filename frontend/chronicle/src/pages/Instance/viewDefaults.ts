@@ -9,10 +9,18 @@ export const DEFAULT_INSTANCE_LAYOUT_ITEMS: GridEditorItem[] = [
   { id: "panel-5", title: "All Activity", x: 0, y: 8, w: 12, h: 5, minW: 4 },
 ];
 
+
+export const ALTERNATE_INSTANCE_LAYOUT_ITEMS: GridEditorItem[] = [
+  { id: "panel-1", title: "Damage Done", x: 0, y: 0, w: 6, h: 5, minW: 4 },
+  { id: "panel-2", title: "Healing Done", x: 6, y: 0, w: 6, h: 5, minW: 4 },
+  { id: "panel-5", title: "All Activity", x: 0, y: 5, w: 12, h: 5, minW: 4 },
+  { id: "panel-6", title: "Periods", x: 0, y: 10, w: 12, h: 5, minW: 4 },
+];
 export const DEFAULT_INSTANCE_PANEL_TYPES: Record<string, EventsPanelType> = {
   "panel-1": "damage_done",
   "panel-2": "healing_done",
   "panel-3": "damage_taken",
   "panel-4": "enemy_damage_done",
   "panel-5": "all_activity",
+  "panel-6": "periods",
 };

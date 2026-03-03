@@ -29,7 +29,11 @@ import { RandomTip } from "@/components/RandomTip";
 import { InstanceHelpSheet } from "@/components/HelpSheet";
 import { ENCOUNTER_TIPS, ENTITY_TIPS, CLASS_TOGGLE_TIPS } from "@/constants/tips";
 import { InstanceMenu } from "./InstanceMenu";
-import { DEFAULT_INSTANCE_LAYOUT_ITEMS, DEFAULT_INSTANCE_PANEL_TYPES } from "./viewDefaults";
+import {
+  DEFAULT_INSTANCE_LAYOUT_ITEMS,
+  ALTERNATE_INSTANCE_LAYOUT_ITEMS,
+  DEFAULT_INSTANCE_PANEL_TYPES,
+} from "./viewDefaults";
 
 // ============================================================================
 // Encounter selector localStorage helpers (7-day expiry)
@@ -1181,25 +1185,25 @@ export function InstancePageView({
     [instance.encounters]
   );
   
-  const defaultOrderedLayoutItems = useMemo(
+  const standardOrderedLayoutItems = useMemo(
     () => orderLayoutItems(normalizeLayoutItems(DEFAULT_INSTANCE_LAYOUT_ITEMS)),
+    [],
+  );
+
+  const alternateOrderedLayoutItems = useMemo(
+    () => orderLayoutItems(normalizeLayoutItems(ALTERNATE_INSTANCE_LAYOUT_ITEMS)),
     [],
   );
 
   const defaultOrderedPanels = useMemo<PanelType[]>(
     () =>
-      defaultOrderedLayoutItems.map(
+      standardOrderedLayoutItems.map(
         (item) => (DEFAULT_INSTANCE_PANEL_TYPES[item.id] ?? "empty") as PanelType,
       ),
-    [defaultOrderedLayoutItems],
+    [standardOrderedLayoutItems],
   );
 
   const [importedLayoutItems, setImportedLayoutItems] = useState<GridEditorItem[] | null>(null);
-
-  const activeLayoutItems = useMemo(
-    () => importedLayoutItems ?? defaultOrderedLayoutItems,
-    [importedLayoutItems, defaultOrderedLayoutItems],
-  );
 
   // URL-persisted view state (base64 encoded single param)
   const {
@@ -1221,6 +1225,15 @@ export function InstancePageView({
       panels: defaultOrderedPanels,
     },
   });
+
+  const baseOrderedLayoutItems = viewState.layout === "alternate"
+    ? alternateOrderedLayoutItems
+    : standardOrderedLayoutItems;
+
+  const activeLayoutItems = useMemo(
+    () => importedLayoutItems ?? baseOrderedLayoutItems,
+    [importedLayoutItems, baseOrderedLayoutItems],
+  );
 
   const panelTypesByID = useMemo<Record<string, EventsPanelType>>(() => {
     const next: Record<string, EventsPanelType> = {};
