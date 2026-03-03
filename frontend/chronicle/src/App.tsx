@@ -25,13 +25,14 @@ import {
   ExtraAttackSpellsPage,
   VulnerabilitySpellsPage,
 } from "./pages/Technical"
-import { 
-  AccountLayout, 
-  ProfileSettings, 
+import {
+  AccountLayout,
+  ProfileSettings,
   StorageSettings,
-  NotificationSettings, 
-  PrivacySettings, 
-  AppearanceSettings 
+  NotificationSettings,
+  PrivacySettings,
+  AppearanceSettings,
+  LayoutLabSettings,
 } from "./pages/Settings"
 import { GuildPage, GuildPageEditor } from "./pages/GuildPage"
 import { Layout } from "./components/Layout/Layout"
@@ -93,6 +94,7 @@ function App() {
           <Route path="notifications" element={<NotificationSettings />} />
           <Route path="privacy" element={<PrivacySettings />} />
           <Route path="appearance" element={<AppearanceSettings />} />
+          <Route path="layout-lab" element={<LayoutLabSettings />} />
         </Route>
       </Route>
       <Route path="*" element={<CatchAllRoute />} />

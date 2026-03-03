@@ -1,8 +1,18 @@
+import { useMemo, useState } from "react";
 import { Link, Outlet, useLocation } from "react-router-dom";
-import { User, Bell, Shield, Palette, HardDrive, Clock } from "lucide-react";
+import { User, Bell, Shield, Palette, HardDrive, Clock, LayoutTemplate, Download, Upload } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
-import { useMyStorage } from "@/api/queries";
-import type { DataGrant } from "@/api/typesGenerated";
+import { useInstance, useMyStorage } from "@/api/queries";
+import type { DataGrant, InstancePlayer, InstanceUnit, WoWEncounterWithHostiles } from "@/api/typesGenerated";
+import { GridLayoutEditor, type GridEditorItem } from "@/components/layout/GridLayoutEditor";
+import { Input } from "@/components/ui/input";
+import { Button } from "@/components/ui/button";
+import { InstanceEventsProvider } from "@/hooks/instanceEvents";
+import { EventsPanel, type EventsPanelType } from "@/pages/Instance/EventsPanels";
+import { PANELS } from "@/pages/Instance/EventsPanels/EventsPanel";
+import type { PanelContext } from "@/pages/Instance/EventsPanels/types";
+import type { Instance } from "@/pages/Instance/InstancePage";
+import { PanelTimingProvider } from "@/pages/Instance/EventsPanels/PanelTimingContext";
 
 function formatBytes(bytes: number): string {
   if (bytes === 0) return "0 B";
@@ -39,6 +49,7 @@ const tabs: Tab[] = [
   { path: "/account/notifications", label: "Notifications", icon: Bell },
   { path: "/account/privacy", label: "Privacy", icon: Shield },
   { path: "/account/appearance", label: "Appearance", icon: Palette },
+  { path: "/account/layout-lab", label: "Layout Lab", icon: LayoutTemplate },
 ];
 
 export function AccountLayout() {
@@ -108,6 +119,345 @@ export function AppearanceSettings() {
     <div className="space-y-4">
       <h2 className="text-xl font-semibold">Appearance</h2>
       <p className="text-muted-foreground">Customize the look and feel.</p>
+    </div>
+  );
+}
+
+const DEFAULT_LAB_ITEMS: GridEditorItem[] = [
+  { id: "panel-1", title: "Damage Done", x: 0, y: 0, w: 6, h: 4, minW: 4 },
+  { id: "panel-2", title: "Healing Done", x: 6, y: 0, w: 6, h: 4, minW: 4 },
+  { id: "panel-3", title: "Damage Taken", x: 0, y: 4, w: 6, h: 4, minW: 4 },
+  { id: "panel-4", title: "Enemy Damage", x: 6, y: 4, w: 6, h: 4, minW: 4 },
+  { id: "panel-5", title: "All Activity", x: 0, y: 8, w: 12, h: 4, minW: 4 },
+];
+
+const DEFAULT_PANEL_TYPES: Record<string, EventsPanelType> = {
+  "panel-1": "damage_done",
+  "panel-2": "healing_done",
+  "panel-3": "damage_taken",
+  "panel-4": "enemy_damage_done",
+  "panel-5": "all_activity",
+};
+
+interface LayoutLabExportV1 {
+  version: 1;
+  items: GridEditorItem[];
+  panelTypesById: Record<string, EventsPanelType>;
+}
+
+function serializeLayoutLab(items: GridEditorItem[], panelTypesById: Record<string, EventsPanelType>): string {
+  const payload: LayoutLabExportV1 = {
+    version: 1,
+    items,
+    panelTypesById,
+  };
+  return JSON.stringify(payload, null, 2);
+}
+
+function parseLayoutLab(raw: string): LayoutLabExportV1 {
+  const parsed = JSON.parse(raw) as Partial<LayoutLabExportV1>;
+  if (parsed.version !== 1) {
+    throw new Error("Unsupported layout version");
+  }
+  if (!Array.isArray(parsed.items) || !parsed.panelTypesById || typeof parsed.panelTypesById !== "object") {
+    throw new Error("Invalid layout payload");
+  }
+  return {
+    version: 1,
+    items: parsed.items,
+    panelTypesById: parsed.panelTypesById as Record<string, EventsPanelType>,
+  };
+}
+
+function normalizeInstanceReference(value: string): string {
+  const trimmed = value.trim();
+  if (!trimmed) return "";
+
+  if (trimmed.startsWith("http://") || trimmed.startsWith("https://")) {
+    return trimmed;
+  }
+
+  if (trimmed.startsWith("/instances/")) {
+    return `${window.location.origin}${trimmed}`;
+  }
+
+  const instanceIdMatch = trimmed.match(/^[a-zA-Z0-9_-]+$/);
+  if (instanceIdMatch) {
+    return `${window.location.origin}/instances/${trimmed}`;
+  }
+
+  return "";
+}
+
+function extractInstanceId(reference: string): string | null {
+  try {
+    const parsed = new URL(reference);
+    const match = parsed.pathname.match(/^\/instances\/([^/?#]+)/);
+    return match?.[1] ?? null;
+  } catch {
+    return null;
+  }
+}
+
+function getUnitName(guidStr: string, units: Record<string, InstanceUnit>): string {
+  const unit = units[guidStr];
+  if (unit) return unit.name;
+  return `Enemy ${guidStr}`;
+}
+
+function transformToInstance(
+  apiInstance: {
+    id: string;
+    name: string;
+    realm_name?: string;
+    guild?: { name: string };
+    encounters: readonly WoWEncounterWithHostiles[];
+    players: Record<string, InstancePlayer>;
+    units: Record<string, InstanceUnit>;
+  },
+): Instance {
+  const { players, units } = apiInstance;
+
+  const encounters = apiInstance.encounters.map((enc) => ({
+    id: enc.id,
+    name: enc.name,
+    boss: enc.boss,
+    kill_type: enc.kill_type,
+    start_time: enc.start_time,
+    end_time: enc.end_time,
+    enemies: enc.hostiles.map((hostile) => ({
+      id: String(hostile.id),
+      name: getUnitName(String(hostile.id), units),
+      boss: hostile.boss,
+      damageTaken: 0,
+      damageDone: 0,
+      periods: hostile.periods,
+    })),
+    remaining: enc.remaining as string[] | undefined,
+  }));
+
+  const sortedEncounters = [...apiInstance.encounters].sort(
+    (a, b) => new Date(a.start_time).getTime() - new Date(b.start_time).getTime(),
+  );
+
+  return {
+    id: apiInstance.id,
+    name: apiInstance.name,
+    realm: apiInstance.realm_name,
+    guild: apiInstance.guild,
+    startTime: sortedEncounters[0]?.start_time || new Date().toISOString(),
+    endTime: sortedEncounters[sortedEncounters.length - 1]?.end_time,
+    encounters,
+    players,
+    units,
+  };
+}
+
+function LivePanelTile({
+  item,
+  panelType,
+  context,
+  durationMs,
+  onPanelTypeChange,
+}: {
+  item: GridEditorItem;
+  panelType: EventsPanelType;
+  context: PanelContext;
+  durationMs: number;
+  onPanelTypeChange: (next: EventsPanelType) => void;
+}) {
+  return (
+    <EventsPanel
+      panelType={panelType}
+      onPanelTypeChange={onPanelTypeChange}
+      durationMs={durationMs}
+      context={context}
+      panelIndex={Number(item.id.replace("panel-", "")) - 1}
+      showHints={false}
+    />
+  );
+}
+
+export function LayoutLabSettings() {
+  const [items, setItems] = useState<GridEditorItem[]>(DEFAULT_LAB_ITEMS);
+  const [panelTypesById, setPanelTypesById] = useState<Record<string, EventsPanelType>>(DEFAULT_PANEL_TYPES);
+  const [instanceReferenceInput, setInstanceReferenceInput] = useState("");
+  const [instanceReference, setInstanceReference] = useState("");
+  const [importText, setImportText] = useState("");
+  const [importError, setImportError] = useState<string | null>(null);
+
+  const normalizedReference = useMemo(
+    () => normalizeInstanceReference(instanceReferenceInput),
+    [instanceReferenceInput],
+  );
+
+  const instanceId = useMemo(() => extractInstanceId(instanceReference), [instanceReference]);
+
+  const { data: apiInstance, isLoading, error } = useInstance(instanceId ?? "", {
+    enabled: !!instanceId,
+  });
+
+  const instance = useMemo(() => {
+    if (!apiInstance) return null;
+    return transformToInstance(apiInstance);
+  }, [apiInstance]);
+
+  const selectedEncounterIds = useMemo(() => {
+    if (!instance) return [];
+    return instance.encounters.map((encounter) => encounter.id);
+  }, [instance]);
+
+  const durationMs = useMemo(() => {
+    if (!instance) return 1;
+    return Math.max(
+      1,
+      instance.encounters.reduce((total, encounter) => {
+        const start = new Date(encounter.start_time).getTime();
+        const end = new Date(encounter.end_time).getTime();
+        return total + Math.max(0, end - start);
+      }, 0),
+    );
+  }, [instance]);
+
+  const context = useMemo<PanelContext | null>(() => {
+    if (!instance) return null;
+    return {
+      instance,
+      selectedEncounterIds,
+      entitySelection: {
+        enemyIds: new Set(),
+        playerIds: new Set(),
+      },
+    };
+  }, [instance, selectedEncounterIds]);
+
+  const handlePanelTypeChange = (itemId: string, nextType: EventsPanelType) => {
+    setPanelTypesById((prev) => ({ ...prev, [itemId]: nextType }));
+    setItems((prev) =>
+      prev.map((item) =>
+        item.id === itemId
+          ? {
+              ...item,
+              title: PANELS[nextType]?.label ?? item.title,
+            }
+          : item,
+      ),
+    );
+  };
+
+  const handleExport = async () => {
+    const serialized = serializeLayoutLab(items, panelTypesById);
+    await navigator.clipboard.writeText(serialized);
+  };
+
+  const handleImport = () => {
+    try {
+      const parsed = parseLayoutLab(importText);
+      setItems(parsed.items);
+      setPanelTypesById(parsed.panelTypesById);
+      setImportError(null);
+    } catch (error) {
+      setImportError(error instanceof Error ? error.message : "Invalid layout JSON");
+    }
+  };
+
+  return (
+    <div className="space-y-6">
+      <div>
+        <h2 className="text-xl font-semibold">Layout Lab</h2>
+        <p className="text-muted-foreground">
+          Prototype custom panel layouts with a 12-column grid (minimum panel width: 4 columns) and render
+          live EventsPanels directly in each tile.
+        </p>
+      </div>
+
+      <div className="rounded-lg border p-4 space-y-3">
+        <label htmlFor="instance-reference" className="text-sm font-medium">
+          Reference instance URL or ID
+        </label>
+        <div className="flex flex-wrap items-center gap-2">
+          <Input
+            id="instance-reference"
+            className="min-w-[280px] flex-1"
+            placeholder="https://chronicleclassic.com/instances/abc123 or abc123"
+            value={instanceReferenceInput}
+            onChange={(event) => setInstanceReferenceInput(event.target.value)}
+          />
+          <Button
+            type="button"
+            onClick={() => setInstanceReference(normalizedReference)}
+            disabled={!normalizedReference}
+          >
+            Apply reference
+          </Button>
+          <Button type="button" variant="outline" onClick={() => setItems(DEFAULT_LAB_ITEMS)}>
+            Reset layout
+          </Button>
+          <Button type="button" variant="outline" onClick={handleExport} className="gap-1.5">
+            <Download className="h-4 w-4" />
+            Export
+          </Button>
+        </div>
+
+        <details className="rounded-md border border-border/70 bg-muted/20">
+          <summary className="cursor-pointer list-none px-3 py-2 text-sm font-medium hover:bg-muted/40">
+            <span className="inline-flex items-center gap-1.5">
+              <Upload className="h-4 w-4" />
+              Import layout JSON
+            </span>
+          </summary>
+          <div className="space-y-2 border-t border-border/70 p-3">
+            <textarea
+              id="layout-import"
+              className="min-h-[120px] w-full rounded-md border border-input bg-background px-3 py-2 font-mono text-xs"
+              placeholder='{"version":1,"items":[],"panelTypesById":{}}'
+              value={importText}
+              onChange={(event) => setImportText(event.target.value)}
+            />
+            <div className="flex items-center gap-2">
+              <Button type="button" onClick={handleImport} className="gap-1.5">
+                <Upload className="h-4 w-4" />
+                Import
+              </Button>
+              {importError && <span className="text-sm text-destructive">{importError}</span>}
+            </div>
+          </div>
+        </details>
+      </div>
+
+      <div className="rounded-lg border p-3">
+        {!instanceId ? (
+          <div className="p-6 text-sm text-muted-foreground">Add an instance URL above to load live panel data.</div>
+        ) : isLoading ? (
+          <div className="p-6 text-sm text-muted-foreground">Loading instance data…</div>
+        ) : error || !instance || !context ? (
+          <div className="p-6 text-sm text-destructive">Failed to load the referenced instance.</div>
+        ) : (
+          <InstanceEventsProvider instanceId={instance.id}>
+            <PanelTimingProvider panelCount={items.length}>
+              <GridLayoutEditor
+                cols={12}
+                rowHeight={96}
+                items={items}
+                onItemsChange={setItems}
+                showItemHeader={false}
+                renderItem={(item) => {
+                  const panelType = panelTypesById[item.id] ?? "damage_done";
+                  return (
+                    <LivePanelTile
+                      item={item}
+                      panelType={panelType}
+                      context={context}
+                      durationMs={durationMs}
+                      onPanelTypeChange={(next) => handlePanelTypeChange(item.id, next)}
+                    />
+                  );
+                }}
+              />
+            </PanelTimingProvider>
+          </InstanceEventsProvider>
+        )}
+      </div>
     </div>
   );
 }
