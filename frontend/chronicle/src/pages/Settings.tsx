@@ -362,6 +362,7 @@ export function LayoutLabSettings() {
         w: 6,
         h: 4,
         minW: 4,
+        minH: 4,
       },
     ]);
     setPanelTypesById((prev) => ({ ...prev, [newId]: newType }));
