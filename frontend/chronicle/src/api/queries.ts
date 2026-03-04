@@ -22,6 +22,9 @@ import type {
   UserStorageInfo as UserStorageInfoGenerated,
   DataGrant as DataGrantGenerated,
   UpsertDataGrantRequest as UpsertDataGrantRequestGenerated,
+  ListUserPanelLayoutsResponse as ListUserPanelLayoutsResponseGenerated,
+  UpsertUserPanelLayoutRequest as UpsertUserPanelLayoutRequestGenerated,
+  UserPanelLayout as UserPanelLayoutGenerated,
 } from "./typesGenerated";
 
 // Re-export types for convenience
@@ -46,6 +49,9 @@ export type AuthorizationResponse = AuthorizationResponseGenerated;
 export type UserStorageInfo = UserStorageInfoGenerated;
 export type DataGrant = DataGrantGenerated;
 export type UpsertDataGrantRequest = UpsertDataGrantRequestGenerated;
+export type ListUserPanelLayoutsResponse = ListUserPanelLayoutsResponseGenerated;
+export type UpsertUserPanelLayoutRequest = UpsertUserPanelLayoutRequestGenerated;
+export type UserPanelLayout = UserPanelLayoutGenerated;
 
 export function useWhoami(options?: Omit<UseQueryOptions<boolean>, "queryKey" | "queryFn">) {
   return useQuery({
@@ -69,6 +75,123 @@ export function useSession(options?: Omit<UseQueryOptions<Session | null>, "quer
     },
     retry: false,
     ...options,
+  });
+}
+
+interface APIErrorResponse {
+  message?: string;
+  detail?: string;
+}
+
+export interface RequestError extends Error {
+  detail?: string;
+}
+
+function buildAPIError(defaultMessage: string, error: unknown): RequestError {
+  if (error && typeof error === "object") {
+    const apiError = error as APIErrorResponse;
+    const message = typeof apiError.message === "string" ? apiError.message : defaultMessage;
+    const detail = typeof apiError.detail === "string" ? apiError.detail : undefined;
+    const requestError = new Error(message) as RequestError;
+    requestError.detail = detail;
+    return requestError;
+  }
+
+  return new Error(defaultMessage) as RequestError;
+}
+
+export function useUserPanelLayouts(
+  userID: string,
+  options?: Omit<UseQueryOptions<ListUserPanelLayoutsResponse>, "queryKey" | "queryFn">
+) {
+  return useQuery({
+    queryKey: ["user-panel-layouts", userID],
+    queryFn: async () => {
+      const response = await fetch(`/api/v1/panel-layout/${encodeURIComponent(userID)}/`);
+      if (!response.ok) {
+        throw new Error("Failed to fetch user panel layouts");
+      }
+      return response.json() as Promise<ListUserPanelLayoutsResponse>;
+    },
+    enabled: !!userID,
+    ...options,
+  });
+}
+
+export function useCreatePanelLayout() {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: async (request: UpsertUserPanelLayoutRequest) => {
+      const response = await fetch("/api/v1/panel-layout/", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(request),
+        credentials: "include",
+      });
+
+      if (!response.ok) {
+        const error = await response.json().catch(() => null);
+        throw buildAPIError("Failed to create layout", error);
+      }
+
+      return response.json() as Promise<UserPanelLayout>;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["user-panel-layouts"] });
+    },
+  });
+}
+
+export interface UpdatePanelLayoutRequest extends Partial<UpsertUserPanelLayoutRequest> {
+  layoutID: string;
+}
+
+export function useUpdatePanelLayout() {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: async ({ layoutID, ...request }: UpdatePanelLayoutRequest) => {
+      const response = await fetch(`/api/v1/panel-layout/${encodeURIComponent(layoutID)}`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(request),
+        credentials: "include",
+      });
+
+      if (!response.ok) {
+        const error = await response.json().catch(() => null);
+        throw buildAPIError("Failed to update layout", error);
+      }
+
+      return response.json() as Promise<UserPanelLayout>;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["user-panel-layouts"] });
+    },
+  });
+}
+
+export function useDeletePanelLayout() {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: async (layoutID: string) => {
+      const response = await fetch(`/api/v1/panel-layout/${encodeURIComponent(layoutID)}`, {
+        method: "DELETE",
+        credentials: "include",
+      });
+
+      if (!response.ok) {
+        const error = await response.json().catch(() => null);
+        throw buildAPIError("Failed to delete layout", error);
+      }
+
+      return layoutID;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["user-panel-layouts"] });
+    },
   });
 }
 

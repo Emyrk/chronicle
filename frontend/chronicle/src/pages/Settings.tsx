@@ -1,10 +1,20 @@
 import { useEffect, useMemo, useState } from "react";
 import { Link, Outlet, useLocation, useNavigate, useSearchParams } from "react-router-dom";
 import { toast } from "sonner";
-import { User, Bell, Shield, Palette, HardDrive, Clock, LayoutTemplate, Download, Upload, Plus, Trash2, BookOpenText, Save, Pencil, Trash, Share2, ChevronLeft, ChevronRight } from "lucide-react";
+import { User, Bell, Shield, Palette, HardDrive, Clock, LayoutTemplate, Download, Upload, Plus, Trash2, BookOpenText, Save, Pencil, Trash, Share2, ChevronLeft, ChevronRight, Copy } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
-import { useInstance, useMyStorage } from "@/api/queries";
-import type { DataGrant, InstancePlayer, InstanceUnit, WoWEncounterWithHostiles } from "@/api/typesGenerated";
+import {
+  useInstance,
+  useMyStorage,
+  useSession,
+  useUserPanelLayouts,
+  useCreatePanelLayout,
+  useDeletePanelLayout,
+  useUpdatePanelLayout,
+  type UserPanelLayout,
+  type RequestError,
+} from "@/api/queries";
+import type { DataGrant, InstancePlayer, InstanceUnit, UpsertUserPanelLayoutRequest, WoWEncounterWithHostiles } from "@/api/typesGenerated";
 import { GridLayoutEditor, type GridEditorItem } from "@/components/layout/GridLayoutEditor";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
@@ -23,9 +33,22 @@ import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/Tooltip
 import { getSpellIconUrl } from "@/api/wowdb";
 import type { WoWSpell } from "@/api/wowdb";
 import { SpellTooltip } from "@/pages/WoWDB/SpellTooltip";
-import { useLayoutBookStore } from "@/features/layoutBook/layoutBookStore";
 
 const ICON_PAGE_SIZE = 24;
+
+function showRequestErrorToast(fallbackMessage: string, error: unknown) {
+  const requestError = error as RequestError;
+  const message = requestError?.message || fallbackMessage;
+  const detail = requestError?.detail;
+
+  toast.error(message, {
+    description: detail ? (
+      <span className="mt-1 block font-mono text-xs whitespace-pre-wrap break-all">
+        {detail}
+      </span>
+    ) : undefined,
+  });
+}
 
 function formatBytes(bytes: number): string {
   if (bytes === 0) return "0 B";
@@ -141,7 +164,6 @@ function buildLayoutSpellTooltip(layout: {
   title: string;
   description: string;
   icon: string;
-  layout: "standard" | "alternate";
   items: { id: string }[];
   updatedAt: string;
 }): WoWSpell {
@@ -150,7 +172,7 @@ function buildLayoutSpellTooltip(layout: {
     name: { "0": layout.title },
     subtext: { "0": "Layout Spell" },
     description: {
-      "0": `${layout.description || "No description"}\n\n${layout.layout} layout\n${layout.items.length} panels\nUpdated ${new Date(layout.updatedAt).toLocaleString()}`,
+      "0": `${layout.description || "No description"}\n\n${layout.items.length} panels\nUpdated ${new Date(layout.updatedAt).toLocaleString()}`,
     },
     aura_description: { "0": "" },
     spell_icon: { ID: 1, TextureFilename: layout.icon || "INV_Misc_Book_09" },
@@ -234,11 +256,16 @@ function buildLayoutSpellTooltip(layout: {
 
 export function LayoutBookSettings() {
   const navigate = useNavigate();
-  const { layouts, createLayout, deleteLayout } = useLayoutBookStore();
+  const { data: session } = useSession();
+  const { data: layoutsResponse } = useUserPanelLayouts(session?.user_id ?? "");
+  const createLayout = useCreatePanelLayout();
+  const deleteLayout = useDeletePanelLayout();
+
+  const layouts = layoutsResponse?.layouts ?? [];
   const [name, setName] = useState("");
   const [layoutType, setLayoutType] = useState<"standard" | "alternate">("standard");
 
-  const handleCreate = () => {
+  const handleCreate = async () => {
     const trimmed = name.trim();
     if (!trimmed) {
       toast.error("Layout name required");
@@ -247,29 +274,41 @@ export function LayoutBookSettings() {
 
     const items = layoutType === "alternate" ? ALTERNATE_INSTANCE_LAYOUT_ITEMS : DEFAULT_INSTANCE_LAYOUT_ITEMS;
     const orderedItems = [...items].sort((a, b) => (a.y - b.y) || (a.x - b.x) || a.id.localeCompare(b.id));
-    const panels = orderedItems.map((item) => DEFAULT_INSTANCE_PANEL_TYPES[item.id] ?? "empty");
+    const panelTypesById = buildPanelTypesById(orderedItems, orderedItems.map((item) => DEFAULT_INSTANCE_PANEL_TYPES[item.id] ?? "empty"));
 
-    createLayout({
-      name: trimmed,
-      title: trimmed,
-      description: "",
-      icon: "INV_Misc_Book_09",
-      layout: layoutType,
-      items: orderedItems,
-      panels,
-    });
+    try {
+      await createLayout.mutateAsync({
+        title: trimmed,
+        icon: "INV_Misc_Book_09",
+        description: "",
+        payload: JSON.parse(serializeLayoutLab(orderedItems, panelTypesById)),
+      } as UpsertUserPanelLayoutRequest);
+      setName("");
+      toast.success("Layout created", { description: trimmed });
+    } catch (error) {
+      showRequestErrorToast("Failed to create layout", error);
+    }
+  };
 
-    setName("");
-    toast.success("Layout created", { description: trimmed });
+  const handleClone = async (layout: UserPanelLayout) => {
+    try {
+      await createLayout.mutateAsync({
+        title: `Copy of ${layout.title}`,
+        icon: layout.icon || "INV_Misc_Book_09",
+        description: layout.description || "",
+        payload: layout.payload,
+      } as UpsertUserPanelLayoutRequest);
+      toast.success("Layout cloned", { description: layout.title });
+    } catch (error) {
+      showRequestErrorToast("Failed to clone layout", error);
+    }
   };
 
   return (
     <div className="space-y-6">
       <div>
         <h2 className="text-xl font-semibold">Layout Book</h2>
-        <p className="text-muted-foreground">
-          Manage your saved layouts here. This currently uses a frontend stub datastore while Postgres APIs are being wired.
-        </p>
+        <p className="text-muted-foreground">Manage and edit your saved layouts.</p>
       </div>
 
       <div className="rounded-lg border p-4 space-y-3">
@@ -289,7 +328,7 @@ export function LayoutBookSettings() {
             <option value="standard">Standard</option>
             <option value="alternate">Alternate</option>
           </select>
-          <Button onClick={handleCreate}>Create</Button>
+          <Button onClick={() => void handleCreate()} disabled={createLayout.isPending}>Create</Button>
         </div>
       </div>
 
@@ -301,73 +340,98 @@ export function LayoutBookSettings() {
           {layouts.length === 0 ? (
             <div className="p-4 text-sm text-muted-foreground">No saved layouts yet.</div>
           ) : (
-            layouts.map((layout) => (
-              <div key={layout.id} className="p-3 sm:p-4">
-                <div className="group inline-flex items-start gap-3 text-left rounded-md px-1.5 py-1 hover:bg-muted/30 transition-colors">
-                  <Tooltip>
-                    <TooltipTrigger asChild>
-                      <button type="button" className="shrink-0">
-                        <div className="h-12 w-12 rounded-sm border-2 border-amber-900/70 bg-amber-950/40 shadow-inner overflow-hidden">
-                          <img
-                            src={getSpellIconUrl(buildLayoutSpellTooltip(layout).spell_icon)}
-                            alt=""
-                            className="h-full w-full object-cover"
-                            loading="lazy"
-                          />
-                        </div>
-                      </button>
-                    </TooltipTrigger>
-                    <TooltipContent side="top" className="p-0 bg-transparent border-0" hideArrow>
-                      <SpellTooltip spell={buildLayoutSpellTooltip(layout)} />
-                    </TooltipContent>
-                  </Tooltip>
+            layouts.map((layout) => {
+              const parsed = parsePanelLayout(layout);
+              const tooltipLayout = {
+                title: layout.title,
+                description: layout.description,
+                icon: layout.icon,
+                items: parsed.items,
+                updatedAt: layout.updated_at,
+              };
 
-                  <div className="min-w-0">
-                    <div className="text-lg leading-none font-medium text-amber-100 tracking-tight [text-shadow:0_1px_0_rgba(0,0,0,0.65)]">
-                      {layout.title || layout.name}
-                    </div>
-                    <div className="mt-2 flex items-center gap-1.5">
-                      <Button
-                        variant="destructive"
-                        size="icon"
-                        className="h-7 w-7"
-                        title="Delete layout"
-                        onClick={() => {
-                          const confirmed = window.confirm(`Delete layout "${layout.name}"? This cannot be undone.`);
-                          if (!confirmed) return;
-                          deleteLayout(layout.id);
-                          toast.success("Layout deleted", { description: layout.title || layout.name });
-                        }}
-                      >
-                        <Trash className="h-3.5 w-3.5" />
-                      </Button>
-                      <Button
-                        variant="outline"
-                        size="icon"
-                        className="h-7 w-7"
-                        title="Share layout"
-                        onClick={() => {
-                          toast.message("Share coming soon", { description: layout.title || layout.name });
-                        }}
-                      >
-                        <Share2 className="h-3.5 w-3.5" />
-                      </Button>
-                      <Button
-                        variant="outline"
-                        size="icon"
-                        className="h-7 w-7"
-                        title="Edit layout"
-                        onClick={() => {
-                          navigate(`/account/layout-lab?layoutId=${layout.id}`);
-                        }}
-                      >
-                        <Pencil className="h-3.5 w-3.5" />
-                      </Button>
+              return (
+                <div key={layout.id} className="p-3 sm:p-4">
+                  <div className="group inline-flex items-start gap-3 text-left rounded-md px-1.5 py-1 hover:bg-muted/30 transition-colors">
+                    <Tooltip>
+                      <TooltipTrigger asChild>
+                        <button type="button" className="shrink-0">
+                          <div className="h-12 w-12 rounded-sm border-2 border-amber-900/70 bg-amber-950/40 shadow-inner overflow-hidden">
+                            <img
+                              src={getSpellIconUrl(buildLayoutSpellTooltip(tooltipLayout).spell_icon)}
+                              alt=""
+                              className="h-full w-full object-cover"
+                              loading="lazy"
+                            />
+                          </div>
+                        </button>
+                      </TooltipTrigger>
+                      <TooltipContent side="top" className="p-0 bg-transparent border-0" hideArrow>
+                        <SpellTooltip spell={buildLayoutSpellTooltip(tooltipLayout)} />
+                      </TooltipContent>
+                    </Tooltip>
+
+                    <div className="min-w-0">
+                      <div className="text-lg leading-none font-medium text-amber-100 tracking-tight [text-shadow:0_1px_0_rgba(0,0,0,0.65)]">
+                        {layout.title}
+                      </div>
+                      <div className="mt-2 flex items-center gap-1.5">
+                        <Button
+                          variant="destructive"
+                          size="icon"
+                          className="h-7 w-7"
+                          title="Delete layout"
+                          onClick={async () => {
+                            const confirmed = window.confirm(`Delete layout "${layout.title}"? This cannot be undone.`);
+                            if (!confirmed) return;
+                            try {
+                              await deleteLayout.mutateAsync(layout.id);
+                              toast.success("Layout deleted", { description: layout.title });
+                            } catch (error) {
+                              showRequestErrorToast("Failed to delete layout", error);
+                            }
+                          }}
+                        >
+                          <Trash className="h-3.5 w-3.5" />
+                        </Button>
+                        <Button
+                          variant="outline"
+                          size="icon"
+                          className="h-7 w-7"
+                          title="Clone layout"
+                          onClick={() => void handleClone(layout)}
+                          disabled={createLayout.isPending}
+                        >
+                          <Copy className="h-3.5 w-3.5" />
+                        </Button>
+                        <Button
+                          variant="outline"
+                          size="icon"
+                          className="h-7 w-7"
+                          title="Share layout"
+                          onClick={() => {
+                            toast.message("Share coming soon", { description: layout.title });
+                          }}
+                        >
+                          <Share2 className="h-3.5 w-3.5" />
+                        </Button>
+                        <Button
+                          variant="outline"
+                          size="icon"
+                          className="h-7 w-7"
+                          title="Edit layout"
+                          onClick={() => {
+                            navigate(`/account/layout-lab?layoutId=${layout.id}`);
+                          }}
+                        >
+                          <Pencil className="h-3.5 w-3.5" />
+                        </Button>
+                      </div>
                     </div>
                   </div>
                 </div>
-              </div>
-            ))
+              );
+            })
           )}
         </div>
       </div>
@@ -403,6 +467,22 @@ function parseLayoutLab(raw: string): LayoutLabExportV1 {
     items: parsed.items,
     panelTypesById: parsed.panelTypesById as Record<string, EventsPanelType>,
   };
+}
+
+function parsePanelLayout(layout: UserPanelLayout): LayoutLabExportV1 {
+  const fallbackItems = DEFAULT_INSTANCE_LAYOUT_ITEMS;
+  const fallbackPanelTypes = DEFAULT_INSTANCE_PANEL_TYPES;
+
+  try {
+    const parsed = parseLayoutLab(JSON.stringify(layout.payload ?? {}));
+    return parsed;
+  } catch {
+    return {
+      version: 1,
+      items: fallbackItems,
+      panelTypesById: fallbackPanelTypes,
+    };
+  }
 }
 
 function normalizeInstanceReference(value: string): string {
@@ -526,10 +606,13 @@ function buildPanelTypesById(items: GridEditorItem[], panels: EventsPanelType[])
 export function LayoutLabSettings() {
   const [searchParams] = useSearchParams();
   const editingLayoutID = searchParams.get("layoutId");
-  const { layouts, updateLayout } = useLayoutBookStore();
+  const { data: session } = useSession();
+  const { data: layoutsResponse } = useUserPanelLayouts(session?.user_id ?? "");
+  const updateLayout = useUpdatePanelLayout();
+
   const editingLayout = useMemo(
-    () => layouts.find((layout) => layout.id === editingLayoutID) ?? null,
-    [layouts, editingLayoutID],
+    () => layoutsResponse?.layouts.find((layout) => layout.id === editingLayoutID) ?? null,
+    [layoutsResponse?.layouts, editingLayoutID],
   );
 
   const [metaTitle, setMetaTitle] = useState("Layout");
@@ -555,10 +638,12 @@ export function LayoutLabSettings() {
 
   const iconPageCount = Math.max(1, Math.ceil(filteredIcons.length / ICON_PAGE_SIZE));
 
+  const currentIconPage = Math.min(iconPage, iconPageCount - 1);
+
   const pagedIcons = useMemo(() => {
-    const start = iconPage * ICON_PAGE_SIZE;
+    const start = currentIconPage * ICON_PAGE_SIZE;
     return filteredIcons.slice(start, start + ICON_PAGE_SIZE);
-  }, [filteredIcons, iconPage]);
+  }, [filteredIcons, currentIconPage]);
 
   const normalizedReference = useMemo(
     () => normalizeInstanceReference(instanceReferenceInput),
@@ -628,39 +713,36 @@ export function LayoutLabSettings() {
 
   useEffect(() => {
     if (!editingLayout) return;
-    setItems(editingLayout.items);
-    setPanelTypesById(buildPanelTypesById(editingLayout.items, editingLayout.panels));
-    setMetaTitle(editingLayout.title || editingLayout.name);
-    setMetaDescription(editingLayout.description ?? "");
-    setMetaIcon(editingLayout.icon || "INV_Misc_Book_09");
+    const parsed = parsePanelLayout(editingLayout);
+    queueMicrotask(() => {
+      setItems(parsed.items);
+      setPanelTypesById(parsed.panelTypesById);
+      setMetaTitle(editingLayout.title);
+      setMetaDescription(editingLayout.description ?? "");
+      setMetaIcon(editingLayout.icon || "INV_Misc_Book_09");
+    });
   }, [editingLayout]);
 
-  const handleSaveMetadata = () => {
+  const handleSave = async () => {
     if (!editingLayout) {
-      toast.error("Open a layout from Layout Book to edit metadata.");
+      toast.error("Open a layout from Layout Book to edit.");
       return;
     }
 
-    updateLayout(editingLayout.id, {
-      name: metaTitle.trim() || editingLayout.name,
-      title: metaTitle.trim() || editingLayout.title,
-      description: metaDescription,
-      icon: metaIcon,
-      items,
-      panels: items.map((item) => panelTypesById[item.id] ?? "empty"),
-    });
-    toast.success("Layout updated", { description: metaTitle.trim() || editingLayout.title });
+    try {
+      await updateLayout.mutateAsync({
+        layoutID: editingLayout.id,
+        title: metaTitle.trim() || editingLayout.title,
+        description: metaDescription,
+        icon: metaIcon,
+        payload: JSON.parse(serializeLayoutLab(items, panelTypesById)),
+      });
+      toast.success("Layout saved", { description: metaTitle.trim() || editingLayout.title });
+    } catch (error) {
+      showRequestErrorToast("Failed to save layout", error);
+    }
   };
 
-  useEffect(() => {
-    setIconPage(0);
-  }, [iconSearch]);
-
-  useEffect(() => {
-    if (iconPage > iconPageCount - 1) {
-      setIconPage(Math.max(0, iconPageCount - 1));
-    }
-  }, [iconPage, iconPageCount]);
 
   const handlePanelTypeChange = (itemId: string, nextType: EventsPanelType) => {
     setPanelTypesById((prev) => ({ ...prev, [itemId]: nextType }));
@@ -729,6 +811,28 @@ export function LayoutLabSettings() {
     }
   };
 
+  if (!editingLayoutID) {
+    return (
+      <div className="space-y-4">
+        <h2 className="text-xl font-semibold">Layout Lab</h2>
+        <p className="text-muted-foreground">
+          Select a layout from your <Link to="/account/layout-book" className="text-primary underline">Layout Book</Link> to begin editing.
+        </p>
+      </div>
+    );
+  }
+
+  if (!editingLayout) {
+    return (
+      <div className="space-y-4">
+        <h2 className="text-xl font-semibold">Layout Lab</h2>
+        <p className="text-muted-foreground">
+          Layout not found. Go to <Link to="/account/layout-book" className="text-primary underline">Layout Book</Link> and select a layout.
+        </p>
+      </div>
+    );
+  }
+
   return (
     <div className="space-y-6">
       <div>
@@ -764,15 +868,11 @@ export function LayoutLabSettings() {
             />
 
             <div className="flex items-center gap-2 pt-1">
-              <Button type="button" onClick={handleSaveMetadata} className="gap-1.5">
+              <Button type="button" onClick={() => void handleSave()} className="gap-1.5" disabled={updateLayout.isPending}>
                 <Save className="h-4 w-4" />
-                Save Metadata
+                Save
               </Button>
-              {editingLayout ? (
-                <span className="text-xs text-muted-foreground">Editing: {editingLayout.title || editingLayout.name}</span>
-              ) : (
-                <span className="text-xs text-muted-foreground">Open from Layout Book → Edit to modify a saved layout.</span>
-              )}
+              <span className="text-xs text-muted-foreground">Editing: {editingLayout.title}</span>
             </div>
           </div>
 
@@ -782,12 +882,15 @@ export function LayoutLabSettings() {
               <div className="flex flex-wrap items-center gap-2">
                 <Input
                   value={iconSearch}
-                  onChange={(e) => setIconSearch(e.target.value)}
+                  onChange={(e) => {
+                    setIconSearch(e.target.value);
+                    setIconPage(0);
+                  }}
                   placeholder="Search icons (e.g. INV_Misc_Book_09)"
                   className="min-w-[260px] flex-1"
                 />
                 <div className="text-xs text-muted-foreground">
-                  {filteredIcons.length} icons • Page {iconPage + 1}/{iconPageCount}
+                  {filteredIcons.length} icons • Page {currentIconPage + 1}/{iconPageCount}
                 </div>
               </div>
 
@@ -810,8 +913,8 @@ export function LayoutLabSettings() {
                   type="button"
                   variant="outline"
                   size="sm"
-                  onClick={() => setIconPage((p) => Math.max(0, p - 1))}
-                  disabled={iconPage === 0}
+                  onClick={() => setIconPage(Math.max(0, currentIconPage - 1))}
+                  disabled={currentIconPage === 0}
                   className="gap-1"
                 >
                   <ChevronLeft className="h-3.5 w-3.5" /> Prev
@@ -821,8 +924,8 @@ export function LayoutLabSettings() {
                   type="button"
                   variant="outline"
                   size="sm"
-                  onClick={() => setIconPage((p) => Math.min(iconPageCount - 1, p + 1))}
-                  disabled={iconPage >= iconPageCount - 1}
+                  onClick={() => setIconPage(Math.min(iconPageCount - 1, currentIconPage + 1))}
+                  disabled={currentIconPage >= iconPageCount - 1}
                   className="gap-1"
                 >
                   Next <ChevronRight className="h-3.5 w-3.5" />

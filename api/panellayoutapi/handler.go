@@ -1,6 +1,7 @@
 package panellayoutapi
 
 import (
+	"context"
 	"database/sql"
 	"encoding/json"
 	"errors"
@@ -74,6 +75,17 @@ func panelLayoutToSDK(row database.UserPanelLayout) chroniclesdk.UserPanelLayout
 	}
 }
 
+func writeDuplicateLayoutTitleError(ctx context.Context, w http.ResponseWriter) {
+	err := httpapi.NewAPIError(
+		errors.New("layout with that title already exists for this user"),
+		"A layout with this title already exists in your Layout Book.",
+		http.StatusBadRequest,
+	).
+		CTA("Rename the layout before saving or cloning.")
+
+	httpapi.Write(ctx, w, err.Status, err.Response)
+}
+
 func (h *Handler) ListUserPanelLayouts(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 	targetUser := httpmw.User(ctx)
@@ -133,6 +145,10 @@ func (h *Handler) CreateUserPanelLayout(w http.ResponseWriter, r *http.Request) 
 		Payload:     payload,
 	})
 	if err != nil {
+		if database.IsUniqueViolation(err, database.UniqueUserPanelLayoutsUserTitleCiUidx) {
+			writeDuplicateLayoutTitleError(ctx, w)
+			return
+		}
 		httpapi.InternalServerError(w, err)
 		return
 	}
@@ -206,6 +222,10 @@ func (h *Handler) UpdateUserPanelLayoutByID(w http.ResponseWriter, r *http.Reque
 		Payload:     updatePayload,
 	})
 	if err != nil {
+		if database.IsUniqueViolation(err, database.UniqueUserPanelLayoutsUserTitleCiUidx) {
+			writeDuplicateLayoutTitleError(ctx, w)
+			return
+		}
 		if errors.Is(err, sql.ErrNoRows) {
 			httpapi.Write(ctx, w, http.StatusNotFound, chroniclesdk.Response{Message: "layout not found"})
 			return
