@@ -225,6 +225,11 @@ export interface ListGuildsResponse {
     readonly total: number;
 }
 
+// From chroniclesdk/panel_layout.go
+export interface ListUserPanelLayoutsResponse {
+    readonly layouts: readonly UserPanelLayout[];
+}
+
 // From chroniclesdk/log.go
 /**
  * LogParseReport contains detailed timing breakdown for a log parse job.
@@ -412,6 +417,14 @@ export interface UpsertDataGrantRequest {
     readonly expires_at?: string;
 }
 
+// From chroniclesdk/panel_layout.go
+export interface UpsertUserPanelLayoutRequest {
+    readonly title: string;
+    readonly icon: string;
+    readonly description: string;
+    readonly payload: Record<string, string>;
+}
+
 // From chroniclesdk/user.go
 export interface User {
     readonly id: string;
@@ -423,6 +436,17 @@ export interface User {
     readonly max_storage_bytes: number;
     readonly max_storage_bytes_updated: string;
     readonly consumed_storage_bytes: number;
+}
+
+// From chroniclesdk/panel_layout.go
+export interface UserPanelLayout {
+    readonly id: string;
+    readonly title: string;
+    readonly icon: string;
+    readonly description: string;
+    readonly payload: Record<string, string>;
+    readonly created_at: string;
+    readonly updated_at: string;
 }
 
 // From chroniclesdk/user.go

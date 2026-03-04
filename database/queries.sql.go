@@ -2120,6 +2120,141 @@ func (q *sqlQuerier) PruneParsedInstanceFromLogOutput(ctx context.Context, arg P
 	return err
 }
 
+const deleteUserPanelLayoutByID = `-- name: DeleteUserPanelLayoutByID :execrows
+DELETE FROM user_panel_layouts
+WHERE user_id = $1
+  AND id = $2
+`
+
+type DeleteUserPanelLayoutByIDParams struct {
+	UserID uuid.UUID `db:"user_id" json:"user_id"`
+	ID     uuid.UUID `db:"id" json:"id"`
+}
+
+func (q *sqlQuerier) DeleteUserPanelLayoutByID(ctx context.Context, arg DeleteUserPanelLayoutByIDParams) (int64, error) {
+	result, err := q.db.Exec(ctx, deleteUserPanelLayoutByID, arg.UserID, arg.ID)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
+}
+
+const getUserPanelLayoutByTitle = `-- name: GetUserPanelLayoutByTitle :one
+SELECT id, user_id, title, title_normalized, icon, description, payload, created_at, updated_at
+FROM user_panel_layouts
+WHERE user_id = $1
+  AND title_normalized = lower($2)
+`
+
+type GetUserPanelLayoutByTitleParams struct {
+	UserID uuid.UUID `db:"user_id" json:"user_id"`
+	Lower  string    `db:"lower" json:"lower"`
+}
+
+func (q *sqlQuerier) GetUserPanelLayoutByTitle(ctx context.Context, arg GetUserPanelLayoutByTitleParams) (UserPanelLayout, error) {
+	row := q.db.QueryRow(ctx, getUserPanelLayoutByTitle, arg.UserID, arg.Lower)
+	var i UserPanelLayout
+	err := row.Scan(
+		&i.ID,
+		&i.UserID,
+		&i.Title,
+		&i.TitleNormalized,
+		&i.Icon,
+		&i.Description,
+		&i.Payload,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+	)
+	return i, err
+}
+
+const listUserPanelLayouts = `-- name: ListUserPanelLayouts :many
+SELECT id, user_id, title, title_normalized, icon, description, payload, created_at, updated_at
+FROM user_panel_layouts
+WHERE user_id = $1
+ORDER BY created_at DESC
+`
+
+func (q *sqlQuerier) ListUserPanelLayouts(ctx context.Context, userID uuid.UUID) ([]UserPanelLayout, error) {
+	rows, err := q.db.Query(ctx, listUserPanelLayouts, userID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []UserPanelLayout
+	for rows.Next() {
+		var i UserPanelLayout
+		if err := rows.Scan(
+			&i.ID,
+			&i.UserID,
+			&i.Title,
+			&i.TitleNormalized,
+			&i.Icon,
+			&i.Description,
+			&i.Payload,
+			&i.CreatedAt,
+			&i.UpdatedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const upsertUserPanelLayoutByTitle = `-- name: UpsertUserPanelLayoutByTitle :one
+INSERT INTO user_panel_layouts (
+  user_id,
+  title,
+  icon,
+  description,
+  payload
+)
+VALUES ($1, $2, $3, $4, $5)
+ON CONFLICT (user_id, title_normalized)
+DO UPDATE SET
+  title = EXCLUDED.title,
+  icon = EXCLUDED.icon,
+  description = EXCLUDED.description,
+  payload = EXCLUDED.payload,
+  updated_at = now()
+RETURNING id, user_id, title, title_normalized, icon, description, payload, created_at, updated_at
+`
+
+type UpsertUserPanelLayoutByTitleParams struct {
+	UserID      uuid.UUID `db:"user_id" json:"user_id"`
+	Title       string    `db:"title" json:"title"`
+	Icon        string    `db:"icon" json:"icon"`
+	Description string    `db:"description" json:"description"`
+	Payload     []byte    `db:"payload" json:"payload"`
+}
+
+func (q *sqlQuerier) UpsertUserPanelLayoutByTitle(ctx context.Context, arg UpsertUserPanelLayoutByTitleParams) (UserPanelLayout, error) {
+	row := q.db.QueryRow(ctx, upsertUserPanelLayoutByTitle,
+		arg.UserID,
+		arg.Title,
+		arg.Icon,
+		arg.Description,
+		arg.Payload,
+	)
+	var i UserPanelLayout
+	err := row.Scan(
+		&i.ID,
+		&i.UserID,
+		&i.Title,
+		&i.TitleNormalized,
+		&i.Icon,
+		&i.Description,
+		&i.Payload,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+	)
+	return i, err
+}
+
 const getUserAuthByLinkedID = `-- name: GetUserAuthByLinkedID :one
 SELECT
   id, linked_id, user_id, provider, created_at, updated_at

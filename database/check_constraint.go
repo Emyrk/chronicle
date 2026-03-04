@@ -6,11 +6,13 @@ type CheckConstraint string
 
 // CheckConstraint enums.
 const (
-	CheckFinalizedOrFinalizedAtNull CheckConstraint = "finalized_or_finalized_at_null" // river_job
-	CheckKindLength                 CheckConstraint = "kind_length"                    // river_job
-	CheckMaxAttemptsIsPositive      CheckConstraint = "max_attempts_is_positive"       // river_job
-	CheckPriorityInRange            CheckConstraint = "priority_in_range"              // river_job
-	CheckQueueLength                CheckConstraint = "queue_length"                   // river_job
-	CheckLineLength                 CheckConstraint = "line_length"                    // river_migration
-	CheckVersionGte1                CheckConstraint = "version_gte_1"                  // river_migration
+	CheckFinalizedOrFinalizedAtNull     CheckConstraint = "finalized_or_finalized_at_null"      // river_job
+	CheckKindLength                     CheckConstraint = "kind_length"                         // river_job
+	CheckMaxAttemptsIsPositive          CheckConstraint = "max_attempts_is_positive"            // river_job
+	CheckPriorityInRange                CheckConstraint = "priority_in_range"                   // river_job
+	CheckQueueLength                    CheckConstraint = "queue_length"                        // river_job
+	CheckLineLength                     CheckConstraint = "line_length"                         // river_migration
+	CheckVersionGte1                    CheckConstraint = "version_gte_1"                       // river_migration
+	CheckUserPanelLayoutsPayloadSizeChk CheckConstraint = "user_panel_layouts_payload_size_chk" // user_panel_layouts
+	CheckUserPanelLayoutsTitleFormatChk CheckConstraint = "user_panel_layouts_title_format_chk" // user_panel_layouts
 )

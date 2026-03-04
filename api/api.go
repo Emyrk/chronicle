@@ -104,6 +104,13 @@ func (api *API) Routes() chi.Router {
 			r.Get("/whoami", api.WhoAmI)
 			r.Post("/authcheck", api.checkAuthorization)
 			r.Get("/me/storage", api.GetMyStorage)
+			r.Route("/{userID}/panel-layouts", func(r chi.Router) {
+				r.Use(httpmw.UserIDMiddleware(api.Opts.Zed))
+				r.Get("/", api.ListUserPanelLayouts)
+				r.Put("/", api.UpsertUserPanelLayout)
+				r.Get("/{title}", api.GetUserPanelLayoutByTitle)
+				r.Delete("/{layoutID}", api.DeleteUserPanelLayoutByID)
+			})
 		})
 
 		// Admin routes - require admin or technical_admin role

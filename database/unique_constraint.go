@@ -33,6 +33,7 @@ const (
 	UniqueRiverQueuePkey                            UniqueConstraint = "river_queue_pkey"                                // ALTER TABLE ONLY river_queue ADD CONSTRAINT river_queue_pkey PRIMARY KEY (name);
 	UniqueUserAuthLinksPkey                         UniqueConstraint = "user_auth_links_pkey"                            // ALTER TABLE ONLY user_auth_links ADD CONSTRAINT user_auth_links_pkey PRIMARY KEY (id);
 	UniqueUserAuthSessionPkey                       UniqueConstraint = "user_auth_session_pkey"                          // ALTER TABLE ONLY user_auth_session ADD CONSTRAINT user_auth_session_pkey PRIMARY KEY (id);
+	UniqueUserPanelLayoutsPkey                      UniqueConstraint = "user_panel_layouts_pkey"                         // ALTER TABLE ONLY user_panel_layouts ADD CONSTRAINT user_panel_layouts_pkey PRIMARY KEY (id);
 	UniqueUsersPkey                                 UniqueConstraint = "users_pkey"                                      // ALTER TABLE ONLY users ADD CONSTRAINT users_pkey PRIMARY KEY (id);
 	UniqueWowLogGroupsPkey                          UniqueConstraint = "wow_log_groups_pkey"                             // ALTER TABLE ONLY wow_log_groups ADD CONSTRAINT wow_log_groups_pkey PRIMARY KEY (id);
 	UniqueWowServerRealmsPkey                       UniqueConstraint = "wow_server_realms_pkey"                          // ALTER TABLE ONLY wow_server_realms ADD CONSTRAINT wow_server_realms_pkey PRIMARY KEY (id);
@@ -41,4 +42,5 @@ const (
 	UniqueLogInstancesHashedSlugIndex               UniqueConstraint = "log_instances_hashed_slug_idx"                   // CREATE UNIQUE INDEX log_instances_hashed_slug_idx ON log_instances USING btree (hashed_slug) WHERE (hashed_slug IS NOT NULL);
 	UniqueRiverJobUniqueIndex                       UniqueConstraint = "river_job_unique_idx"                            // CREATE UNIQUE INDEX river_job_unique_idx ON river_job USING btree (unique_key) WHERE ((unique_key IS NOT NULL) AND (unique_states IS NOT NULL) AND river_job_state_in_bitmask(unique_states, state));
 	UniqueUserAuthsUniqueLinkedID                   UniqueConstraint = "user_auths_unique_linked_id"                     // CREATE UNIQUE INDEX user_auths_unique_linked_id ON user_auth_links USING btree (linked_id, provider);
+	UniqueUserPanelLayoutsUserTitleCiUidx           UniqueConstraint = "user_panel_layouts_user_title_ci_uidx"           // CREATE UNIQUE INDEX user_panel_layouts_user_title_ci_uidx ON user_panel_layouts USING btree (user_id, title_normalized);
 )

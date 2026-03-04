@@ -431,6 +431,20 @@ CREATE TABLE user_auth_session (
     jwt_id uuid DEFAULT gen_random_uuid() NOT NULL
 );
 
+CREATE TABLE user_panel_layouts (
+    id uuid DEFAULT gen_random_uuid() NOT NULL,
+    user_id uuid NOT NULL,
+    title text NOT NULL,
+    title_normalized text GENERATED ALWAYS AS (lower(title)) STORED,
+    icon text DEFAULT 'INV_Misc_Book_09'::text NOT NULL,
+    description text DEFAULT ''::text NOT NULL,
+    payload jsonb DEFAULT '{}'::jsonb NOT NULL,
+    created_at timestamp with time zone DEFAULT now() NOT NULL,
+    updated_at timestamp with time zone DEFAULT now() NOT NULL,
+    CONSTRAINT user_panel_layouts_payload_size_chk CHECK ((octet_length((payload)::text) <= 10240)),
+    CONSTRAINT user_panel_layouts_title_format_chk CHECK ((title ~ '^[A-Za-z1-9_\-\s]+$'::text))
+);
+
 CREATE TABLE wow_log_groups (
     id uuid NOT NULL,
     owner uuid NOT NULL,
@@ -527,6 +541,9 @@ ALTER TABLE ONLY user_auth_links
 ALTER TABLE ONLY user_auth_session
     ADD CONSTRAINT user_auth_session_pkey PRIMARY KEY (id);
 
+ALTER TABLE ONLY user_panel_layouts
+    ADD CONSTRAINT user_panel_layouts_pkey PRIMARY KEY (id);
+
 ALTER TABLE ONLY users
     ADD CONSTRAINT users_pkey PRIMARY KEY (id);
 
@@ -566,6 +583,8 @@ CREATE INDEX river_job_state_and_finalized_at_index ON river_job USING btree (st
 CREATE UNIQUE INDEX river_job_unique_idx ON river_job USING btree (unique_key) WHERE ((unique_key IS NOT NULL) AND (unique_states IS NOT NULL) AND river_job_state_in_bitmask(unique_states, state));
 
 CREATE UNIQUE INDEX user_auths_unique_linked_id ON user_auth_links USING btree (linked_id, provider);
+
+CREATE UNIQUE INDEX user_panel_layouts_user_title_ci_uidx ON user_panel_layouts USING btree (user_id, title_normalized);
 
 CREATE TRIGGER trigger_insert_default_data_grant AFTER INSERT ON users FOR EACH ROW EXECUTE FUNCTION insert_default_data_grant();
 
@@ -643,6 +662,9 @@ ALTER TABLE ONLY user_auth_session
 
 ALTER TABLE ONLY user_auth_session
     ADD CONSTRAINT user_auth_session_user_id_fkey FOREIGN KEY (user_id) REFERENCES users(id);
+
+ALTER TABLE ONLY user_panel_layouts
+    ADD CONSTRAINT user_panel_layouts_user_id_fkey FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE;
 
 ALTER TABLE ONLY wow_log_groups
     ADD CONSTRAINT wow_log_groups_owner_fkey FOREIGN KEY (owner) REFERENCES users(id);

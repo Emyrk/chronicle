@@ -18,13 +18,25 @@ definition chronicle {
   permission can_reparse  = technical_user
   permission administer   = admin + technical_admin
   permission administer_authz = technical_admin
-  permission admin_logs   = administer
+  permission admin_logs    = administer
+  permission admin_layouts = administer
   permission admin_guilds = administer
   permission admin_users  = administer
   permission admin_queues = technical_admin
   permission upload_youtube = administer + technical_user + supporter
-  permission upload_log = upload_capable + administer + supporter + chronicle_guild_member
   permission set_user_data_limit = technical_admin
+
+
+  permission upload_log = upload_capable + administer + supporter + chronicle_guild_member
+  permission create_layout = chronicle_guild_member
+}
+
+definition layout {
+  relation chronicle: chronicle
+  relation owner: user
+
+  permission delete = owner + chronicle->admin_layouts
+  permission edit = owner + chronicle->admin_layouts
 }
 
 definition river_queue {

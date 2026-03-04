@@ -866,6 +866,18 @@ type UserAuthSession struct {
 	JwtID             uuid.UUID          `db:"jwt_id" json:"jwt_id"`
 }
 
+type UserPanelLayout struct {
+	ID              uuid.UUID          `db:"id" json:"id"`
+	UserID          uuid.UUID          `db:"user_id" json:"user_id"`
+	Title           string             `db:"title" json:"title"`
+	TitleNormalized pgtype.Text        `db:"title_normalized" json:"title_normalized"`
+	Icon            string             `db:"icon" json:"icon"`
+	Description     string             `db:"description" json:"description"`
+	Payload         []byte             `db:"payload" json:"payload"`
+	CreatedAt       pgtype.Timestamptz `db:"created_at" json:"created_at"`
+	UpdatedAt       pgtype.Timestamptz `db:"updated_at" json:"updated_at"`
+}
+
 type UserStorageLimit struct {
 	UserID          uuid.UUID   `db:"user_id" json:"user_id"`
 	MaxStorageBytes int64       `db:"max_storage_bytes" json:"max_storage_bytes"`
