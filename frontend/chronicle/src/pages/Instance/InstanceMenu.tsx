@@ -1,4 +1,4 @@
-import { Menu, LayoutGrid, Rows3, FileText, Copy, Upload, SquareTerminal } from "lucide-react";
+import { Menu, LayoutGrid, Rows3, FileText, Copy, Upload } from "lucide-react";
 import { toast } from "sonner";
 import { Link } from "react-router-dom";
 import { Button } from "@/components/ui/button";
@@ -18,7 +18,6 @@ interface InstanceMenuProps {
   layout: LayoutType;
   onLayoutChange: (layout: LayoutType) => void;
   onImportLayout?: () => void;
-  onOpenLayoutActionBar?: () => void;
   instanceId: string;
   logDetailUrl?: string;
 }
@@ -27,7 +26,6 @@ export function InstanceMenu({
   layout,
   onLayoutChange,
   onImportLayout,
-  onOpenLayoutActionBar,
   instanceId,
   logDetailUrl,
 }: InstanceMenuProps) {
@@ -66,13 +64,6 @@ export function InstanceMenu({
           <DropdownMenuItem onClick={onImportLayout}>
             <Upload className="h-4 w-4 mr-2" />
             Import Layout
-          </DropdownMenuItem>
-        )}
-
-        {onOpenLayoutActionBar && (
-          <DropdownMenuItem onClick={onOpenLayoutActionBar}>
-            <SquareTerminal className="h-4 w-4 mr-2" />
-            Open Layout Action Bar
           </DropdownMenuItem>
         )}
 

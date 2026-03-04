@@ -401,8 +401,11 @@ export function LayoutBookSettings() {
                       {layout.description ? (
                         <div className="mt-1 text-sm text-zinc-100/90">{layout.description.slice(0, 120)}{layout.description.length > 120 ? "…" : ""}</div>
                       ) : null}
-                      {!layout.is_tracked && layout.tracker_count > 0 ? (
-                        <div className="mt-1 text-xs text-muted-foreground">Tracked by {layout.tracker_count} other users</div>
+                      {!layout.is_tracked ? (
+                        <div className="mt-1 text-xs text-muted-foreground">
+                          <div>Created by You</div>
+                          {layout.tracker_count > 0 ? <div>Tracked by {layout.tracker_count} other users</div> : null}
+                        </div>
                       ) : null}
                       {layout.is_tracked ? (
                         <div className="mt-1 text-xs text-muted-foreground">

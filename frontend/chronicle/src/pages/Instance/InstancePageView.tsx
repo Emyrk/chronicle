@@ -1,7 +1,7 @@
 import { useState, useMemo, useEffect, useCallback } from "react";
 import { createPortal } from "react-dom";
 import { useSearchParams } from "react-router-dom";
-import { Skull, CheckCircle, AlertTriangle, ChevronDown, ChevronRight, Clock, PanelLeftClose, PanelLeft, Users, Crown, List, FolderTree, X, HelpCircle, Copy, SquareTerminal } from "lucide-react";
+import { Skull, CheckCircle, AlertTriangle, ChevronDown, ChevronRight, Clock, PanelLeftClose, PanelLeft, Users, Crown, List, FolderTree, X, HelpCircle, Copy } from "lucide-react";
 import { toast } from "sonner";
 import { useIsMobile } from "@/hooks/useIsMobile";
 import { useHelpfulHints } from "@/hooks/useHelpfulHints";
@@ -19,13 +19,6 @@ import {
 } from "@/components/ui/Collapsible/Collapsible";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { Tooltip, TooltipTrigger, TooltipContent, HintTooltip } from "@/components/ui/Tooltip/tooltip";
-import {
-  Sheet,
-  SheetContent,
-  SheetDescription,
-  SheetHeader,
-  SheetTitle,
-} from "@/components/ui/sheet";
 import { cn } from "@/lib/utils";
 import type { Instance, Encounter, EnemyUnit } from "./InstancePage";
 import { EventsPanel, type EventsPanelType, type PanelContext, type EntitySelection } from "./EventsPanels";
@@ -36,12 +29,6 @@ import { RandomTip } from "@/components/RandomTip";
 import { InstanceHelpSheet } from "@/components/HelpSheet";
 import { ENCOUNTER_TIPS, ENTITY_TIPS, CLASS_TOGGLE_TIPS } from "@/constants/tips";
 import { InstanceMenu } from "./InstanceMenu";
-import {
-  LAYOUT_ACTION_BAR_KEYS,
-  useLayoutBookStore,
-  type LayoutActionBarKey,
-  type SavedLayout,
-} from "@/features/layoutBook/layoutBookStore";
 import {
   DEFAULT_INSTANCE_LAYOUT_ITEMS,
   ALTERNATE_INSTANCE_LAYOUT_ITEMS,
@@ -1128,17 +1115,6 @@ function EncounterDetail({
   );
 }
 
-function isTextInputTarget(target: EventTarget | null): boolean {
-  const element = target as HTMLElement | null;
-  if (!element) return false;
-  const tag = element.tagName.toLowerCase();
-  return tag === "input" || tag === "textarea" || element.isContentEditable;
-}
-
-function sanitizeLayoutPanels(layout: SavedLayout): PanelType[] {
-  return layout.panels.map((panel) => (panel in PANELS ? panel : "empty")) as PanelType[];
-}
-
 // ============================================================================
 // InstancePageView component (main export)
 // ============================================================================
@@ -1228,9 +1204,6 @@ export function InstancePageView({
     [standardOrderedLayoutItems],
   );
 
-  const [actionBarOpen, setActionBarOpen] = useState(false);
-  const { layouts, actionBar, assignActionBarSlot } = useLayoutBookStore();
-  const layoutByID = useMemo(() => new Map(layouts.map((layout) => [layout.id, layout])), [layouts]);
   const [importedLayoutItems, setImportedLayoutItems] = useState<GridEditorItem[] | null>(null);
 
   // URL-persisted view state (base64 encoded single param)
@@ -1253,15 +1226,6 @@ export function InstancePageView({
       panels: defaultOrderedPanels,
     },
   });
-
-  const applySavedLayout = useCallback((layout: SavedLayout) => {
-    const orderedItems = orderLayoutItems(normalizeLayoutItems(layout.items));
-    const orderedPanels = sanitizeLayoutPanels(layout);
-    setLayout(layout.layout);
-    setPanels(orderedPanels, orderedPanels.map(() => null));
-    setImportedLayoutItems(orderedItems);
-    toast.success("Applied layout", { description: layout.name });
-  }, [setLayout, setPanels]);
 
   const baseOrderedLayoutItems = viewState.layout === "alternate"
     ? alternateOrderedLayoutItems
@@ -1475,34 +1439,6 @@ export function InstancePageView({
     }
   }, [setPanels]);
 
-  useEffect(() => {
-    for (const key of LAYOUT_ACTION_BAR_KEYS) {
-      const mappedLayoutID = actionBar[key];
-      if (mappedLayoutID && !layoutByID.has(mappedLayoutID)) {
-        assignActionBarSlot(key, null);
-      }
-    }
-  }, [actionBar, layoutByID, assignActionBarSlot]);
-
-  useEffect(() => {
-    const handler = (event: KeyboardEvent) => {
-      if (isTextInputTarget(event.target)) return;
-      const key = event.key;
-      if (!LAYOUT_ACTION_BAR_KEYS.includes(key as LayoutActionBarKey)) return;
-
-      const layoutID = actionBar[key as LayoutActionBarKey];
-      if (!layoutID) return;
-      const layout = layoutByID.get(layoutID);
-      if (!layout) return;
-
-      event.preventDefault();
-      applySavedLayout(layout);
-    };
-
-    window.addEventListener("keydown", handler);
-    return () => window.removeEventListener("keydown", handler);
-  }, [actionBar, layoutByID, applySavedLayout]);
-
   const selectedEncounters = instance.encounters.filter((e) => selectedIds.includes(e.id));
   const trashGroups = groupTrashEncounters(instance.encounters);
 
@@ -1594,20 +1530,10 @@ export function InstancePageView({
               </>
             )}
             {/* Hamburger menu with layout options + view log */}
-            <Button
-              variant="outline"
-              size="sm"
-              className="gap-1.5"
-              onClick={() => setActionBarOpen(true)}
-            >
-              <SquareTerminal className="h-4 w-4" />
-              <span className="hidden sm:inline">Layout Bar</span>
-            </Button>
             <InstanceMenu
               layout={viewState.layout}
               onLayoutChange={setLayout}
               onImportLayout={handleImportLayout}
-              onOpenLayoutActionBar={() => setActionBarOpen(true)}
               instanceId={instance.id}
               logDetailUrl={logDetailUrl}
             />
@@ -1680,54 +1606,6 @@ export function InstancePageView({
           </div>
         )}
       </div>
-
-      <Sheet open={actionBarOpen} onOpenChange={setActionBarOpen}>
-        <SheetContent side="right" className="sm:max-w-lg">
-          <SheetHeader>
-            <SheetTitle>Layout Action Bar</SheetTitle>
-            <SheetDescription>
-              Assign saved layouts to keys 1-9 and 0. Press a key to quickly apply the mapped layout.
-            </SheetDescription>
-          </SheetHeader>
-          <div className="px-4 pb-4 space-y-3 overflow-y-auto">
-            {LAYOUT_ACTION_BAR_KEYS.map((key) => {
-              const layoutID = actionBar[key];
-              const selectedLayout = layoutID ? layoutByID.get(layoutID) : undefined;
-
-              return (
-                <div key={key} className="rounded-md border p-3 space-y-2">
-                  <div className="flex items-center justify-between">
-                    <div className="text-sm font-medium">Key {key}</div>
-                    {selectedLayout && (
-                      <Button variant="ghost" size="sm" onClick={() => applySavedLayout(selectedLayout)}>
-                        Apply
-                      </Button>
-                    )}
-                  </div>
-                  <select
-                    className="h-9 w-full rounded-md border border-input bg-background px-3 text-sm"
-                    value={layoutID ?? ""}
-                    onChange={(event) => {
-                      const value = event.target.value || null;
-                      assignActionBarSlot(key, value);
-                    }}
-                  >
-                    <option value="">Unassigned</option>
-                    {layouts.map((layout) => (
-                      <option key={layout.id} value={layout.id}>
-                        {layout.name} ({layout.layout})
-                      </option>
-                    ))}
-                  </select>
-                  <div className="text-xs text-muted-foreground">
-                    {selectedLayout ? `Mapped to ${selectedLayout.name}` : "No layout assigned"}
-                  </div>
-                </div>
-              );
-            })}
-          </div>
-        </SheetContent>
-      </Sheet>
 
       {/* Mobile: FAB toggle button - portaled to body to avoid fixed positioning issues */}
       {isMobile && createPortal(
