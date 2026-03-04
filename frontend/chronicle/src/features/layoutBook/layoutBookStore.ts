@@ -97,7 +97,7 @@ export function useLayoutBookStore() {
       const nextLayout: SavedLayout = {
         ...input,
         title,
-        description: input.description ?? "",
+        description: (input.description ?? "").slice(0, 500),
         icon: input.icon ?? "INV_Misc_Book_09",
         id: crypto.randomUUID(),
         createdAt: now,
@@ -129,9 +129,11 @@ export function useLayoutBookStore() {
           if (layout.id !== layoutID) return layout;
           const nextTitle = update.title?.trim() || update.name?.trim() || layout.title || layout.name;
           const nextName = update.name?.trim() || nextTitle;
+          const nextDescription = update.description === undefined ? layout.description : update.description.slice(0, 500);
           return {
             ...layout,
             ...update,
+            description: nextDescription,
             title: nextTitle,
             name: nextName,
             updatedAt: new Date().toISOString(),

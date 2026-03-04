@@ -1052,7 +1052,9 @@ export function LayoutLabSettings() {
               onChange={(e) => setMetaDescription(e.target.value)}
               placeholder="Describe what this layout is for"
               disabled={readOnly}
+              maxLength={500}
             />
+            {!readOnly ? <div className="text-right text-xs text-muted-foreground">{metaDescription.length}/500</div> : null}
 
             {readOnly && !isActiveLayoutOwnedByCurrentUser ? (
               <div className="text-xs text-muted-foreground">
