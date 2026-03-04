@@ -100,7 +100,9 @@ func (s *Service) Signup(w http.ResponseWriter, r *http.Request, user goth.User)
 		case "dev-oidc":
 			b := policy.New()
 			usr := b.User(session.UserID)
-			b.GlobalChronicle().Upload_capable(usr).Technical_admin(usr).Admin(usr)
+			b.GlobalChronicle().
+				Chronicle_guild_member(usr).
+				Upload_capable(usr).Technical_admin(usr).Admin(usr)
 			_, err = s.Zed.Write(ctx, *b.Txn())
 			if err != nil {
 				return fmt.Errorf("giving dev-oidc user all perms: %w", err)

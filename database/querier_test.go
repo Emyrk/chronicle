@@ -96,6 +96,43 @@ func TestDatabaseWorks(t *testing.T) {
 		require.Equal(t, int64(600), user.ConsumedStorageBytes)
 	})
 
+	t.Run("CountUserPanelLayoutsTotal includes owned and tracked", func(t *testing.T) {
+		t.Parallel()
+		ctx := testutil.Context(t, testutil.WaitShort)
+
+		ownerID := uuid.New()
+		trackerID := uuid.New()
+		_, err := db.InsertUser(ctx, database.InsertUserParams{ID: ownerID, Username: "layout-owner"})
+		require.NoError(t, err)
+		_, err = db.InsertUser(ctx, database.InsertUserParams{ID: trackerID, Username: "layout-tracker"})
+		require.NoError(t, err)
+
+		layoutID := uuid.New()
+		_, err = db.CreateUserPanelLayout(ctx, database.CreateUserPanelLayoutParams{
+			ID:          layoutID,
+			UserID:      uuid.NullUUID{UUID: ownerID, Valid: true},
+			Title:       "Owner Layout",
+			Icon:        "INV_Misc_Book_09",
+			Description: "owned",
+			Payload:     []byte(`{"items":[]}`),
+		})
+		require.NoError(t, err)
+
+		_, err = db.TrackUserPanelLayout(ctx, database.TrackUserPanelLayoutParams{
+			UserID:   trackerID,
+			LayoutID: layoutID,
+		})
+		require.NoError(t, err)
+
+		ownerTotal, err := db.CountUserPanelLayoutsTotal(ctx, uuid.NullUUID{UUID: ownerID, Valid: true})
+		require.NoError(t, err)
+		require.Equal(t, int32(1), ownerTotal)
+
+		trackerTotal, err := db.CountUserPanelLayoutsTotal(ctx, uuid.NullUUID{UUID: trackerID, Valid: true})
+		require.NoError(t, err)
+		require.Equal(t, int32(1), trackerTotal)
+	})
+
 	t.Run("Basic pubsub", func(t *testing.T) {
 		t.Parallel()
 		ctx := testutil.Context(t, testutil.WaitShort)

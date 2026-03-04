@@ -76,6 +76,14 @@ export interface CreateTabRequest {
     readonly slug: string;
 }
 
+// From chroniclesdk/panel_layout.go
+export interface CreateUserPanelLayoutRequest {
+    readonly title: string;
+    readonly icon: string;
+    readonly description: string;
+    readonly payload: Record<string, string>;
+}
+
 // From chroniclesdk/user.go
 /**
  * DataGrant represents a storage grant given to a user from various sources
@@ -395,6 +403,14 @@ export interface Session {
     readonly preferences: Preferences;
 }
 
+// From chroniclesdk/panel_layout.go
+/**
+ * TrackLayoutRequest identifies a layout to track.
+ */
+export interface TrackLayoutRequest {
+    readonly layout_id: string;
+}
+
 // From chroniclesdk/guild_page.go
 export interface UpdateGuildPageRequest {
     readonly theme: GuildPageTheme;
@@ -406,6 +422,14 @@ export interface UpdateTabRequest {
     readonly panels: readonly GuildPagePanel[];
 }
 
+// From chroniclesdk/panel_layout.go
+export interface UpdateUserPanelLayoutRequest {
+    readonly title?: string;
+    readonly icon?: string;
+    readonly description?: string;
+    readonly payload?: (Record<string, string>);
+}
+
 // From chroniclesdk/user.go
 /**
  * UpsertDataGrantRequest is used to create or update a storage grant
@@ -415,14 +439,6 @@ export interface UpsertDataGrantRequest {
     readonly storage_bytes: number;
     readonly description?: string;
     readonly expires_at?: string;
-}
-
-// From chroniclesdk/panel_layout.go
-export interface UpsertUserPanelLayoutRequest {
-    readonly title: string;
-    readonly icon: string;
-    readonly description: string;
-    readonly payload: Record<string, string>;
 }
 
 // From chroniclesdk/user.go
@@ -445,6 +461,11 @@ export interface UserPanelLayout {
     readonly icon: string;
     readonly description: string;
     readonly payload: Record<string, string>;
+    readonly version: number;
+    readonly owner_id: string | null;
+    readonly owner_username: string | null;
+    readonly is_tracked: boolean;
+    readonly tracker_count: number;
     readonly created_at: string;
     readonly updated_at: string;
 }

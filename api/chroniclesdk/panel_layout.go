@@ -8,13 +8,23 @@ import (
 )
 
 type UserPanelLayout struct {
-	ID          uuid.UUID       `json:"id"`
-	Title       string          `json:"title"`
-	Icon        string          `json:"icon"`
-	Description string          `json:"description"`
-	Payload     json.RawMessage `json:"payload"`
-	CreatedAt   time.Time       `json:"created_at"`
-	UpdatedAt   time.Time       `json:"updated_at"`
+	ID            uuid.UUID       `json:"id"`
+	Title         string          `json:"title"`
+	Icon          string          `json:"icon"`
+	Description   string          `json:"description"`
+	Payload       json.RawMessage `json:"payload"`
+	Version       int32           `json:"version"`
+	OwnerID       *uuid.UUID      `json:"owner_id"`
+	OwnerUsername *string         `json:"owner_username"`
+	IsTracked     bool            `json:"is_tracked"`
+	TrackerCount  int64           `json:"tracker_count"`
+	CreatedAt     time.Time       `json:"created_at"`
+	UpdatedAt     time.Time       `json:"updated_at"`
+}
+
+// TrackLayoutRequest identifies a layout to track.
+type TrackLayoutRequest struct {
+	LayoutID uuid.UUID `json:"layout_id"`
 }
 
 type CreateUserPanelLayoutRequest struct {

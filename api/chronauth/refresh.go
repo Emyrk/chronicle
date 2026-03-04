@@ -57,7 +57,7 @@ func (s *Service) RefreshSession(ctx context.Context, w http.ResponseWriter, r *
 
 		newToken, err := provider.RefreshToken(session.RefreshToken)
 		if err != nil {
-			_, err := s.Zed.UpdateUserAuthSessionTokens(ctx, database.UpdateUserAuthSessionTokensParams{
+			_, _ = s.Zed.UpdateUserAuthSessionTokens(ctx, database.UpdateUserAuthSessionTokensParams{
 				ID:                session.ID,
 				AccessToken:       session.AccessToken,
 				AccessTokenSecret: session.AccessTokenSecret,

@@ -2120,6 +2120,20 @@ func (q *sqlQuerier) PruneParsedInstanceFromLogOutput(ctx context.Context, arg P
 	return err
 }
 
+const countUserPanelLayoutsTotal = `-- name: CountUserPanelLayoutsTotal :one
+SELECT
+  (SELECT COUNT(*) FROM user_panel_layouts upl WHERE upl.user_id = $1) +
+  (SELECT COUNT(*) FROM user_tracked_layouts utl WHERE utl.user_id = $1)
+AS total
+`
+
+func (q *sqlQuerier) CountUserPanelLayoutsTotal(ctx context.Context, userID uuid.NullUUID) (int32, error) {
+	row := q.db.QueryRow(ctx, countUserPanelLayoutsTotal, userID)
+	var total int32
+	err := row.Scan(&total)
+	return total, err
+}
+
 const createUserPanelLayout = `-- name: CreateUserPanelLayout :one
 INSERT INTO user_panel_layouts (
   id,
@@ -2130,16 +2144,16 @@ INSERT INTO user_panel_layouts (
   payload
 )
 VALUES ($1, $2, $3, $4, $5, $6)
-RETURNING id, user_id, title, title_normalized, icon, description, payload, created_at, updated_at
+RETURNING id, user_id, title, title_normalized, icon, description, payload, created_at, updated_at, version
 `
 
 type CreateUserPanelLayoutParams struct {
-	ID          uuid.UUID `db:"id" json:"id"`
-	UserID      uuid.UUID `db:"user_id" json:"user_id"`
-	Title       string    `db:"title" json:"title"`
-	Icon        string    `db:"icon" json:"icon"`
-	Description string    `db:"description" json:"description"`
-	Payload     []byte    `db:"payload" json:"payload"`
+	ID          uuid.UUID     `db:"id" json:"id"`
+	UserID      uuid.NullUUID `db:"user_id" json:"user_id"`
+	Title       string        `db:"title" json:"title"`
+	Icon        string        `db:"icon" json:"icon"`
+	Description string        `db:"description" json:"description"`
+	Payload     []byte        `db:"payload" json:"payload"`
 }
 
 func (q *sqlQuerier) CreateUserPanelLayout(ctx context.Context, arg CreateUserPanelLayoutParams) (UserPanelLayout, error) {
@@ -2162,13 +2176,15 @@ func (q *sqlQuerier) CreateUserPanelLayout(ctx context.Context, arg CreateUserPa
 		&i.Payload,
 		&i.CreatedAt,
 		&i.UpdatedAt,
+		&i.Version,
 	)
 	return i, err
 }
 
 const deleteUserPanelLayoutByID = `-- name: DeleteUserPanelLayoutByID :execrows
-DELETE FROM user_panel_layouts
-WHERE id = $1
+UPDATE user_panel_layouts
+SET user_id = NULL
+WHERE id = $1 AND user_id IS NOT NULL
 `
 
 func (q *sqlQuerier) DeleteUserPanelLayoutByID(ctx context.Context, id uuid.UUID) (int64, error) {
@@ -2179,22 +2195,160 @@ func (q *sqlQuerier) DeleteUserPanelLayoutByID(ctx context.Context, id uuid.UUID
 	return result.RowsAffected(), nil
 }
 
-const listUserPanelLayouts = `-- name: ListUserPanelLayouts :many
-SELECT id, user_id, title, title_normalized, icon, description, payload, created_at, updated_at
-FROM user_panel_layouts
-WHERE user_id = $1
-ORDER BY created_at DESC
+const getPanelLayoutByID = `-- name: GetPanelLayoutByID :one
+SELECT
+  upl.id,
+  upl.user_id,
+  upl.title,
+  upl.title_normalized,
+  upl.icon,
+  upl.description,
+  upl.payload,
+  upl.version,
+  upl.created_at,
+  upl.updated_at,
+  owner.username AS owner_username,
+  COALESCE(tc.cnt, 0)::bigint AS tracker_count
+FROM user_panel_layouts upl
+LEFT JOIN users owner ON owner.id = upl.user_id
+LEFT JOIN (
+  SELECT layout_id, COUNT(*) AS cnt
+  FROM user_tracked_layouts
+  GROUP BY layout_id
+) tc ON tc.layout_id = upl.id
+WHERE upl.id = $1
 `
 
-func (q *sqlQuerier) ListUserPanelLayouts(ctx context.Context, userID uuid.UUID) ([]UserPanelLayout, error) {
+type GetPanelLayoutByIDRow struct {
+	ID              uuid.UUID          `db:"id" json:"id"`
+	UserID          uuid.NullUUID      `db:"user_id" json:"user_id"`
+	Title           string             `db:"title" json:"title"`
+	TitleNormalized pgtype.Text        `db:"title_normalized" json:"title_normalized"`
+	Icon            string             `db:"icon" json:"icon"`
+	Description     string             `db:"description" json:"description"`
+	Payload         []byte             `db:"payload" json:"payload"`
+	Version         int32              `db:"version" json:"version"`
+	CreatedAt       pgtype.Timestamptz `db:"created_at" json:"created_at"`
+	UpdatedAt       pgtype.Timestamptz `db:"updated_at" json:"updated_at"`
+	OwnerUsername   pgtype.Text        `db:"owner_username" json:"owner_username"`
+	TrackerCount    int64              `db:"tracker_count" json:"tracker_count"`
+}
+
+func (q *sqlQuerier) GetPanelLayoutByID(ctx context.Context, id uuid.UUID) (GetPanelLayoutByIDRow, error) {
+	row := q.db.QueryRow(ctx, getPanelLayoutByID, id)
+	var i GetPanelLayoutByIDRow
+	err := row.Scan(
+		&i.ID,
+		&i.UserID,
+		&i.Title,
+		&i.TitleNormalized,
+		&i.Icon,
+		&i.Description,
+		&i.Payload,
+		&i.Version,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+		&i.OwnerUsername,
+		&i.TrackerCount,
+	)
+	return i, err
+}
+
+const isLayoutTrackedByUser = `-- name: IsLayoutTrackedByUser :one
+SELECT EXISTS (
+  SELECT 1 FROM user_tracked_layouts WHERE user_id = $1 AND layout_id = $2
+)
+`
+
+type IsLayoutTrackedByUserParams struct {
+	UserID   uuid.UUID `db:"user_id" json:"user_id"`
+	LayoutID uuid.UUID `db:"layout_id" json:"layout_id"`
+}
+
+func (q *sqlQuerier) IsLayoutTrackedByUser(ctx context.Context, arg IsLayoutTrackedByUserParams) (bool, error) {
+	row := q.db.QueryRow(ctx, isLayoutTrackedByUser, arg.UserID, arg.LayoutID)
+	var exists bool
+	err := row.Scan(&exists)
+	return exists, err
+}
+
+const listUserPanelLayouts = `-- name: ListUserPanelLayouts :many
+SELECT
+  upl.id,
+  upl.user_id,
+  upl.title,
+  upl.title_normalized,
+  upl.icon,
+  upl.description,
+  upl.payload,
+  upl.version,
+  upl.created_at,
+  upl.updated_at,
+  owner.username AS owner_username,
+  false::boolean AS is_tracked,
+  COALESCE(tc.cnt, 0)::bigint AS tracker_count
+FROM user_panel_layouts upl
+LEFT JOIN users owner ON owner.id = upl.user_id
+LEFT JOIN (
+  SELECT layout_id, COUNT(*) AS cnt
+  FROM user_tracked_layouts
+  GROUP BY layout_id
+) tc ON tc.layout_id = upl.id
+WHERE upl.user_id = $1
+
+UNION ALL
+
+SELECT
+  upl.id,
+  upl.user_id,
+  upl.title,
+  upl.title_normalized,
+  upl.icon,
+  upl.description,
+  upl.payload,
+  upl.version,
+  upl.created_at,
+  upl.updated_at,
+  owner.username AS owner_username,
+  true::boolean AS is_tracked,
+  COALESCE(tc.cnt, 0)::bigint AS tracker_count
+FROM user_tracked_layouts utl
+JOIN user_panel_layouts upl ON upl.id = utl.layout_id
+LEFT JOIN users owner ON owner.id = upl.user_id
+LEFT JOIN (
+  SELECT layout_id, COUNT(*) AS cnt
+  FROM user_tracked_layouts
+  GROUP BY layout_id
+) tc ON tc.layout_id = upl.id
+WHERE utl.user_id = $1
+ORDER BY is_tracked, created_at DESC
+`
+
+type ListUserPanelLayoutsRow struct {
+	ID              uuid.UUID          `db:"id" json:"id"`
+	UserID          uuid.NullUUID      `db:"user_id" json:"user_id"`
+	Title           string             `db:"title" json:"title"`
+	TitleNormalized pgtype.Text        `db:"title_normalized" json:"title_normalized"`
+	Icon            string             `db:"icon" json:"icon"`
+	Description     string             `db:"description" json:"description"`
+	Payload         []byte             `db:"payload" json:"payload"`
+	Version         int32              `db:"version" json:"version"`
+	CreatedAt       pgtype.Timestamptz `db:"created_at" json:"created_at"`
+	UpdatedAt       pgtype.Timestamptz `db:"updated_at" json:"updated_at"`
+	OwnerUsername   pgtype.Text        `db:"owner_username" json:"owner_username"`
+	IsTracked       bool               `db:"is_tracked" json:"is_tracked"`
+	TrackerCount    int64              `db:"tracker_count" json:"tracker_count"`
+}
+
+func (q *sqlQuerier) ListUserPanelLayouts(ctx context.Context, userID uuid.NullUUID) ([]ListUserPanelLayoutsRow, error) {
 	rows, err := q.db.Query(ctx, listUserPanelLayouts, userID)
 	if err != nil {
 		return nil, err
 	}
 	defer rows.Close()
-	var items []UserPanelLayout
+	var items []ListUserPanelLayoutsRow
 	for rows.Next() {
-		var i UserPanelLayout
+		var i ListUserPanelLayoutsRow
 		if err := rows.Scan(
 			&i.ID,
 			&i.UserID,
@@ -2203,8 +2357,12 @@ func (q *sqlQuerier) ListUserPanelLayouts(ctx context.Context, userID uuid.UUID)
 			&i.Icon,
 			&i.Description,
 			&i.Payload,
+			&i.Version,
 			&i.CreatedAt,
 			&i.UpdatedAt,
+			&i.OwnerUsername,
+			&i.IsTracked,
+			&i.TrackerCount,
 		); err != nil {
 			return nil, err
 		}
@@ -2216,6 +2374,48 @@ func (q *sqlQuerier) ListUserPanelLayouts(ctx context.Context, userID uuid.UUID)
 	return items, nil
 }
 
+const trackUserPanelLayout = `-- name: TrackUserPanelLayout :one
+INSERT INTO user_tracked_layouts (user_id, layout_id)
+VALUES ($1, $2)
+ON CONFLICT (user_id, layout_id) DO UPDATE SET layout_id = EXCLUDED.layout_id
+RETURNING id, user_id, layout_id, created_at
+`
+
+type TrackUserPanelLayoutParams struct {
+	UserID   uuid.UUID `db:"user_id" json:"user_id"`
+	LayoutID uuid.UUID `db:"layout_id" json:"layout_id"`
+}
+
+func (q *sqlQuerier) TrackUserPanelLayout(ctx context.Context, arg TrackUserPanelLayoutParams) (UserTrackedLayout, error) {
+	row := q.db.QueryRow(ctx, trackUserPanelLayout, arg.UserID, arg.LayoutID)
+	var i UserTrackedLayout
+	err := row.Scan(
+		&i.ID,
+		&i.UserID,
+		&i.LayoutID,
+		&i.CreatedAt,
+	)
+	return i, err
+}
+
+const untrackUserPanelLayout = `-- name: UntrackUserPanelLayout :execrows
+DELETE FROM user_tracked_layouts
+WHERE user_id = $1 AND layout_id = $2
+`
+
+type UntrackUserPanelLayoutParams struct {
+	UserID   uuid.UUID `db:"user_id" json:"user_id"`
+	LayoutID uuid.UUID `db:"layout_id" json:"layout_id"`
+}
+
+func (q *sqlQuerier) UntrackUserPanelLayout(ctx context.Context, arg UntrackUserPanelLayoutParams) (int64, error) {
+	result, err := q.db.Exec(ctx, untrackUserPanelLayout, arg.UserID, arg.LayoutID)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
+}
+
 const updateUserPanelLayoutByID = `-- name: UpdateUserPanelLayoutByID :one
 UPDATE user_panel_layouts
 SET
@@ -2223,9 +2423,10 @@ SET
   icon = COALESCE($2, icon),
   description = COALESCE($3, description),
   payload = COALESCE($4, payload),
+  version = version + 1,
   updated_at = now()
 WHERE id = $5
-RETURNING id, user_id, title, title_normalized, icon, description, payload, created_at, updated_at
+RETURNING id, user_id, title, title_normalized, icon, description, payload, created_at, updated_at, version
 `
 
 type UpdateUserPanelLayoutByIDParams struct {
@@ -2255,6 +2456,7 @@ func (q *sqlQuerier) UpdateUserPanelLayoutByID(ctx context.Context, arg UpdateUs
 		&i.Payload,
 		&i.CreatedAt,
 		&i.UpdatedAt,
+		&i.Version,
 	)
 	return i, err
 }

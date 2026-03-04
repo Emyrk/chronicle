@@ -74,9 +74,13 @@ func (z *interceptor) CreateUserPanelLayout(ctx context.Context, arg database.Cr
 		arg.ID = uuid.New()
 	}
 
+	if !arg.UserID.Valid {
+		return database.UserPanelLayout{}, fmt.Errorf("create layout missing user id")
+	}
+
 	b := policy.New()
 	b.Layout(arg.ID).
-		Owner(b.User(arg.UserID)).
+		Owner(b.User(arg.UserID.UUID)).
 		Chronicle(b.GlobalChronicle())
 
 	_, err := z.Write(ctx, *b.Txn())

@@ -23,7 +23,8 @@ import type {
   DataGrant as DataGrantGenerated,
   UpsertDataGrantRequest as UpsertDataGrantRequestGenerated,
   ListUserPanelLayoutsResponse as ListUserPanelLayoutsResponseGenerated,
-  UpsertUserPanelLayoutRequest as UpsertUserPanelLayoutRequestGenerated,
+  CreateUserPanelLayoutRequest as CreateUserPanelLayoutRequestGenerated,
+  UpdateUserPanelLayoutRequest as UpdateUserPanelLayoutRequestGenerated,
   UserPanelLayout as UserPanelLayoutGenerated,
 } from "./typesGenerated";
 
@@ -50,7 +51,8 @@ export type UserStorageInfo = UserStorageInfoGenerated;
 export type DataGrant = DataGrantGenerated;
 export type UpsertDataGrantRequest = UpsertDataGrantRequestGenerated;
 export type ListUserPanelLayoutsResponse = ListUserPanelLayoutsResponseGenerated;
-export type UpsertUserPanelLayoutRequest = UpsertUserPanelLayoutRequestGenerated;
+export type CreateUserPanelLayoutRequest = CreateUserPanelLayoutRequestGenerated;
+export type UpdateUserPanelLayoutRequest = UpdateUserPanelLayoutRequestGenerated;
 export type UserPanelLayout = UserPanelLayoutGenerated;
 
 export function useWhoami(options?: Omit<UseQueryOptions<boolean>, "queryKey" | "queryFn">) {
@@ -118,11 +120,79 @@ export function useUserPanelLayouts(
   });
 }
 
+export function useSharedLayout(
+  layoutID: string,
+  options?: Omit<UseQueryOptions<UserPanelLayout>, "queryKey" | "queryFn">
+) {
+  return useQuery({
+    queryKey: ["shared-panel-layout", layoutID],
+    queryFn: async () => {
+      const response = await fetch(`/api/v1/panel-layout/shared/${encodeURIComponent(layoutID)}`);
+      if (!response.ok) {
+        throw new Error("Failed to fetch shared layout");
+      }
+      return response.json() as Promise<UserPanelLayout>;
+    },
+    enabled: !!layoutID,
+    ...options,
+  });
+}
+
+export function useTrackLayout() {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: async (layoutID: string) => {
+      const response = await fetch("/api/v1/panel-layout/track", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ layout_id: layoutID }),
+        credentials: "include",
+      });
+
+      if (!response.ok) {
+        const error = await response.json().catch(() => null);
+        throw buildAPIError("Failed to track layout", error);
+      }
+
+      return layoutID;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["user-panel-layouts"] });
+      queryClient.invalidateQueries({ queryKey: ["shared-panel-layout"] });
+    },
+  });
+}
+
+export function useUntrackLayout() {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: async (layoutID: string) => {
+      const response = await fetch(`/api/v1/panel-layout/track/${encodeURIComponent(layoutID)}`, {
+        method: "DELETE",
+        credentials: "include",
+      });
+
+      if (!response.ok) {
+        const error = await response.json().catch(() => null);
+        throw buildAPIError("Failed to untrack layout", error);
+      }
+
+      return layoutID;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["user-panel-layouts"] });
+      queryClient.invalidateQueries({ queryKey: ["shared-panel-layout"] });
+    },
+  });
+}
+
 export function useCreatePanelLayout() {
   const queryClient = useQueryClient();
 
   return useMutation({
-    mutationFn: async (request: UpsertUserPanelLayoutRequest) => {
+    mutationFn: async (request: CreateUserPanelLayoutRequest) => {
       const response = await fetch("/api/v1/panel-layout/", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -143,7 +213,7 @@ export function useCreatePanelLayout() {
   });
 }
 
-export interface UpdatePanelLayoutRequest extends Partial<UpsertUserPanelLayoutRequest> {
+export interface UpdatePanelLayoutRequest extends UpdateUserPanelLayoutRequest {
   layoutID: string;
 }
 

@@ -90,6 +90,31 @@ CREATE TYPE wow_playable_race AS ENUM (
     'Unknown'
 );
 
+CREATE FUNCTION cleanup_orphaned_layout() RETURNS trigger
+    LANGUAGE plpgsql
+    AS $$
+DECLARE
+  check_layout_id uuid;
+BEGIN
+  IF TG_TABLE_NAME = 'user_tracked_layouts' THEN
+    check_layout_id := OLD.layout_id;
+  ELSE
+    check_layout_id := NEW.id;
+  END IF;
+
+  DELETE FROM user_panel_layouts
+  WHERE id = check_layout_id
+    AND user_id IS NULL
+    AND NOT EXISTS (
+      SELECT 1
+      FROM user_tracked_layouts
+      WHERE layout_id = check_layout_id
+    );
+
+  RETURN COALESCE(NEW, OLD);
+END;
+$$;
+
 CREATE FUNCTION insert_default_data_grant() RETURNS trigger
     LANGUAGE plpgsql
     AS $$
@@ -433,7 +458,7 @@ CREATE TABLE user_auth_session (
 
 CREATE TABLE user_panel_layouts (
     id uuid DEFAULT gen_random_uuid() NOT NULL,
-    user_id uuid NOT NULL,
+    user_id uuid,
     title text NOT NULL,
     title_normalized text GENERATED ALWAYS AS (lower(title)) STORED,
     icon text DEFAULT 'INV_Misc_Book_09'::text NOT NULL,
@@ -441,8 +466,16 @@ CREATE TABLE user_panel_layouts (
     payload jsonb DEFAULT '{}'::jsonb NOT NULL,
     created_at timestamp with time zone DEFAULT now() NOT NULL,
     updated_at timestamp with time zone DEFAULT now() NOT NULL,
+    version integer DEFAULT 1 NOT NULL,
     CONSTRAINT user_panel_layouts_payload_size_chk CHECK ((octet_length((payload)::text) <= 10240)),
-    CONSTRAINT user_panel_layouts_title_format_chk CHECK ((title ~ '^[A-Za-z1-9_\-\s]+$'::text))
+    CONSTRAINT user_panel_layouts_title_format_chk CHECK ((title ~ '^[A-Za-z0-9_\-\s]+$'::text))
+);
+
+CREATE TABLE user_tracked_layouts (
+    id uuid DEFAULT gen_random_uuid() NOT NULL,
+    user_id uuid NOT NULL,
+    layout_id uuid NOT NULL,
+    created_at timestamp with time zone DEFAULT now() NOT NULL
 );
 
 CREATE TABLE wow_log_groups (
@@ -544,6 +577,12 @@ ALTER TABLE ONLY user_auth_session
 ALTER TABLE ONLY user_panel_layouts
     ADD CONSTRAINT user_panel_layouts_pkey PRIMARY KEY (id);
 
+ALTER TABLE ONLY user_tracked_layouts
+    ADD CONSTRAINT user_tracked_layouts_pkey PRIMARY KEY (id);
+
+ALTER TABLE ONLY user_tracked_layouts
+    ADD CONSTRAINT user_tracked_layouts_unique UNIQUE (user_id, layout_id);
+
 ALTER TABLE ONLY users
     ADD CONSTRAINT users_pkey PRIMARY KEY (id);
 
@@ -584,7 +623,11 @@ CREATE UNIQUE INDEX river_job_unique_idx ON river_job USING btree (unique_key) W
 
 CREATE UNIQUE INDEX user_auths_unique_linked_id ON user_auth_links USING btree (linked_id, provider);
 
-CREATE UNIQUE INDEX user_panel_layouts_user_title_ci_uidx ON user_panel_layouts USING btree (user_id, title_normalized);
+CREATE UNIQUE INDEX user_panel_layouts_user_title_ci_uidx ON user_panel_layouts USING btree (user_id, title_normalized) WHERE (user_id IS NOT NULL);
+
+CREATE TRIGGER trg_cleanup_after_soft_delete AFTER UPDATE OF user_id ON user_panel_layouts FOR EACH ROW WHEN ((new.user_id IS NULL)) EXECUTE FUNCTION cleanup_orphaned_layout();
+
+CREATE TRIGGER trg_cleanup_after_untrack AFTER DELETE ON user_tracked_layouts FOR EACH ROW EXECUTE FUNCTION cleanup_orphaned_layout();
 
 CREATE TRIGGER trigger_insert_default_data_grant AFTER INSERT ON users FOR EACH ROW EXECUTE FUNCTION insert_default_data_grant();
 
@@ -665,6 +708,12 @@ ALTER TABLE ONLY user_auth_session
 
 ALTER TABLE ONLY user_panel_layouts
     ADD CONSTRAINT user_panel_layouts_user_id_fkey FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE;
+
+ALTER TABLE ONLY user_tracked_layouts
+    ADD CONSTRAINT user_tracked_layouts_layout_id_fkey FOREIGN KEY (layout_id) REFERENCES user_panel_layouts(id) ON DELETE CASCADE;
+
+ALTER TABLE ONLY user_tracked_layouts
+    ADD CONSTRAINT user_tracked_layouts_user_id_fkey FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE;
 
 ALTER TABLE ONLY wow_log_groups
     ADD CONSTRAINT wow_log_groups_owner_fkey FOREIGN KEY (owner) REFERENCES users(id);

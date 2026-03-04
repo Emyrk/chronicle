@@ -868,7 +868,7 @@ type UserAuthSession struct {
 
 type UserPanelLayout struct {
 	ID              uuid.UUID          `db:"id" json:"id"`
-	UserID          uuid.UUID          `db:"user_id" json:"user_id"`
+	UserID          uuid.NullUUID      `db:"user_id" json:"user_id"`
 	Title           string             `db:"title" json:"title"`
 	TitleNormalized pgtype.Text        `db:"title_normalized" json:"title_normalized"`
 	Icon            string             `db:"icon" json:"icon"`
@@ -876,12 +876,20 @@ type UserPanelLayout struct {
 	Payload         []byte             `db:"payload" json:"payload"`
 	CreatedAt       pgtype.Timestamptz `db:"created_at" json:"created_at"`
 	UpdatedAt       pgtype.Timestamptz `db:"updated_at" json:"updated_at"`
+	Version         int32              `db:"version" json:"version"`
 }
 
 type UserStorageLimit struct {
 	UserID          uuid.UUID   `db:"user_id" json:"user_id"`
 	MaxStorageBytes int64       `db:"max_storage_bytes" json:"max_storage_bytes"`
 	UpdatedAt       interface{} `db:"updated_at" json:"updated_at"`
+}
+
+type UserTrackedLayout struct {
+	ID        uuid.UUID          `db:"id" json:"id"`
+	UserID    uuid.UUID          `db:"user_id" json:"user_id"`
+	LayoutID  uuid.UUID          `db:"layout_id" json:"layout_id"`
+	CreatedAt pgtype.Timestamptz `db:"created_at" json:"created_at"`
 }
 
 type WoWLogGroup struct {
