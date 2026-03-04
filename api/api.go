@@ -11,6 +11,7 @@ import (
 	"github.com/Emyrk/chronicle/api/guildapi"
 	"github.com/Emyrk/chronicle/api/httpapi"
 	"github.com/Emyrk/chronicle/api/httpmw"
+	"github.com/Emyrk/chronicle/api/panellayoutapi"
 	"github.com/Emyrk/chronicle/chronicle"
 	"github.com/Emyrk/chronicle/chronicle/riverqueue"
 	"github.com/Emyrk/chronicle/chroniclebot"
@@ -104,13 +105,7 @@ func (api *API) Routes() chi.Router {
 			r.Get("/whoami", api.WhoAmI)
 			r.Post("/authcheck", api.checkAuthorization)
 			r.Get("/me/storage", api.GetMyStorage)
-			r.Route("/{userID}/panel-layouts", func(r chi.Router) {
-				r.Use(httpmw.UserIDMiddleware(api.Opts.Zed))
-				r.Get("/", api.ListUserPanelLayouts)
-				r.Post("/", api.CreateUserPanelLayout)
-				r.Get("/{title}", api.GetUserPanelLayoutByTitle)
-				r.Delete("/{layoutID}", api.DeleteUserPanelLayoutByID)
-			})
+			r.Mount("/panel-layout", panellayoutapi.New(api.Opts.Zed).Routes())
 		})
 
 		// Admin routes - require admin or technical_admin role

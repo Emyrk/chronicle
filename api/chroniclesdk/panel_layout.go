@@ -25,10 +25,10 @@ type CreateUserPanelLayoutRequest struct {
 }
 
 type UpdateUserPanelLayoutRequest struct {
-	Title       string          `json:"title"`
-	Icon        string          `json:"icon"`
-	Description string          `json:"description"`
-	Payload     json.RawMessage `json:"payload"`
+	Title       *string          `json:"title,omitempty"`
+	Icon        *string          `json:"icon,omitempty"`
+	Description *string          `json:"description,omitempty"`
+	Payload     *json.RawMessage `json:"payload,omitempty"`
 }
 
 type ListUserPanelLayoutsResponse struct {

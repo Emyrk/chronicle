@@ -2122,17 +2122,19 @@ func (q *sqlQuerier) PruneParsedInstanceFromLogOutput(ctx context.Context, arg P
 
 const createUserPanelLayout = `-- name: CreateUserPanelLayout :one
 INSERT INTO user_panel_layouts (
+  id,
   user_id,
   title,
   icon,
   description,
   payload
 )
-VALUES ($1, $2, $3, $4, $5)
+VALUES ($1, $2, $3, $4, $5, $6)
 RETURNING id, user_id, title, title_normalized, icon, description, payload, created_at, updated_at
 `
 
 type CreateUserPanelLayoutParams struct {
+	ID          uuid.UUID `db:"id" json:"id"`
 	UserID      uuid.UUID `db:"user_id" json:"user_id"`
 	Title       string    `db:"title" json:"title"`
 	Icon        string    `db:"icon" json:"icon"`
@@ -2142,6 +2144,7 @@ type CreateUserPanelLayoutParams struct {
 
 func (q *sqlQuerier) CreateUserPanelLayout(ctx context.Context, arg CreateUserPanelLayoutParams) (UserPanelLayout, error) {
 	row := q.db.QueryRow(ctx, createUserPanelLayout,
+		arg.ID,
 		arg.UserID,
 		arg.Title,
 		arg.Icon,
@@ -2165,50 +2168,15 @@ func (q *sqlQuerier) CreateUserPanelLayout(ctx context.Context, arg CreateUserPa
 
 const deleteUserPanelLayoutByID = `-- name: DeleteUserPanelLayoutByID :execrows
 DELETE FROM user_panel_layouts
-WHERE user_id = $1
-  AND id = $2
+WHERE id = $1
 `
 
-type DeleteUserPanelLayoutByIDParams struct {
-	UserID uuid.UUID `db:"user_id" json:"user_id"`
-	ID     uuid.UUID `db:"id" json:"id"`
-}
-
-func (q *sqlQuerier) DeleteUserPanelLayoutByID(ctx context.Context, arg DeleteUserPanelLayoutByIDParams) (int64, error) {
-	result, err := q.db.Exec(ctx, deleteUserPanelLayoutByID, arg.UserID, arg.ID)
+func (q *sqlQuerier) DeleteUserPanelLayoutByID(ctx context.Context, id uuid.UUID) (int64, error) {
+	result, err := q.db.Exec(ctx, deleteUserPanelLayoutByID, id)
 	if err != nil {
 		return 0, err
 	}
 	return result.RowsAffected(), nil
-}
-
-const getUserPanelLayoutByTitle = `-- name: GetUserPanelLayoutByTitle :one
-SELECT id, user_id, title, title_normalized, icon, description, payload, created_at, updated_at
-FROM user_panel_layouts
-WHERE user_id = $1
-  AND title_normalized = lower($2)
-`
-
-type GetUserPanelLayoutByTitleParams struct {
-	UserID uuid.UUID `db:"user_id" json:"user_id"`
-	Lower  string    `db:"lower" json:"lower"`
-}
-
-func (q *sqlQuerier) GetUserPanelLayoutByTitle(ctx context.Context, arg GetUserPanelLayoutByTitleParams) (UserPanelLayout, error) {
-	row := q.db.QueryRow(ctx, getUserPanelLayoutByTitle, arg.UserID, arg.Lower)
-	var i UserPanelLayout
-	err := row.Scan(
-		&i.ID,
-		&i.UserID,
-		&i.Title,
-		&i.TitleNormalized,
-		&i.Icon,
-		&i.Description,
-		&i.Payload,
-		&i.CreatedAt,
-		&i.UpdatedAt,
-	)
-	return i, err
 }
 
 const listUserPanelLayouts = `-- name: ListUserPanelLayouts :many
@@ -2251,33 +2219,30 @@ func (q *sqlQuerier) ListUserPanelLayouts(ctx context.Context, userID uuid.UUID)
 const updateUserPanelLayoutByID = `-- name: UpdateUserPanelLayoutByID :one
 UPDATE user_panel_layouts
 SET
-  title = $3,
-  icon = $4,
-  description = $5,
-  payload = $6,
+  title = COALESCE($1, title),
+  icon = COALESCE($2, icon),
+  description = COALESCE($3, description),
+  payload = COALESCE($4, payload),
   updated_at = now()
-WHERE id = $1
-  AND user_id = $2
+WHERE id = $5
 RETURNING id, user_id, title, title_normalized, icon, description, payload, created_at, updated_at
 `
 
 type UpdateUserPanelLayoutByIDParams struct {
-	ID          uuid.UUID `db:"id" json:"id"`
-	UserID      uuid.UUID `db:"user_id" json:"user_id"`
-	Title       string    `db:"title" json:"title"`
-	Icon        string    `db:"icon" json:"icon"`
-	Description string    `db:"description" json:"description"`
-	Payload     []byte    `db:"payload" json:"payload"`
+	Title       pgtype.Text `db:"title" json:"title"`
+	Icon        pgtype.Text `db:"icon" json:"icon"`
+	Description pgtype.Text `db:"description" json:"description"`
+	Payload     []byte      `db:"payload" json:"payload"`
+	ID          uuid.UUID   `db:"id" json:"id"`
 }
 
 func (q *sqlQuerier) UpdateUserPanelLayoutByID(ctx context.Context, arg UpdateUserPanelLayoutByIDParams) (UserPanelLayout, error) {
 	row := q.db.QueryRow(ctx, updateUserPanelLayoutByID,
-		arg.ID,
-		arg.UserID,
 		arg.Title,
 		arg.Icon,
 		arg.Description,
 		arg.Payload,
+		arg.ID,
 	)
 	var i UserPanelLayout
 	err := row.Scan(

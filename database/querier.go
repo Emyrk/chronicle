@@ -24,7 +24,7 @@ type sqlcQuerier interface {
 	DeleteGuildPageTab(ctx context.Context, id uuid.UUID) error
 	DeleteGuildPageTabsByPage(ctx context.Context, pageID uuid.UUID) error
 	DeleteLogInstanceByIDAndGroup(ctx context.Context, arg DeleteLogInstanceByIDAndGroupParams) (uuid.UUID, error)
-	DeleteUserPanelLayoutByID(ctx context.Context, arg DeleteUserPanelLayoutByIDParams) (int64, error)
+	DeleteUserPanelLayoutByID(ctx context.Context, id uuid.UUID) (int64, error)
 	DeleteWoWLogGroup(ctx context.Context, id uuid.UUID) error
 	DeleteWoWLogGroupFiles(ctx context.Context, arg DeleteWoWLogGroupFilesParams) ([]LogFile, error)
 	EncountersByInstanceID(ctx context.Context, instanceID uuid.UUID) ([]LogInstanceEncounter, error)
@@ -48,7 +48,6 @@ type sqlcQuerier interface {
 	GetUserAuthSessionByID(ctx context.Context, id uuid.UUID) (UserAuthSession, error)
 	GetUserByID(ctx context.Context, id uuid.UUID) (ChronicleUser, error)
 	GetUserDataGrants(ctx context.Context, userID uuid.UUID) ([]DataGrant, error)
-	GetUserPanelLayoutByTitle(ctx context.Context, arg GetUserPanelLayoutByTitleParams) (UserPanelLayout, error)
 	GetWoWLogFilesByGroupID(ctx context.Context, wowLogID uuid.UUID) ([]LogFile, error)
 	GetWoWLogGroupByID(ctx context.Context, id uuid.UUID) (GetWoWLogGroupByIDRow, error)
 	GetWoWLogGroupsByOwner(ctx context.Context, owner uuid.UUID) ([]GetWoWLogGroupsByOwnerRow, error)
