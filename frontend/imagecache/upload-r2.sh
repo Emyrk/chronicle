@@ -28,7 +28,7 @@ echo "Uploading $total WebP files to ${R2_REMOTE}:${R2_BUCKET}/${R2_PATH}/"
 # - Cache-Control: immutable, max-age=31536000 (1 year, effectively forever)
 # - Content-Type: image/webp
 # - Parallel transfers for speed
-rclone copy "$ICONS_DIR" "${R2_REMOTE}:${R2_BUCKET}/${R2_PATH}/" \
+rclone --config /home/steven/.config/rclone/rclone.conf copy "$ICONS_DIR" "${R2_REMOTE}:${R2_BUCKET}/${R2_PATH}/" \
   --header-upload "Cache-Control: public, max-age=31536000, immutable" \
   --header-upload "Content-Type: image/webp" \
   --transfers 32 \
