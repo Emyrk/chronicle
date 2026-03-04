@@ -107,7 +107,7 @@ func (api *API) Routes() chi.Router {
 			r.Route("/{userID}/panel-layouts", func(r chi.Router) {
 				r.Use(httpmw.UserIDMiddleware(api.Opts.Zed))
 				r.Get("/", api.ListUserPanelLayouts)
-				r.Put("/", api.UpsertUserPanelLayout)
+				r.Post("/", api.CreateUserPanelLayout)
 				r.Get("/{title}", api.GetUserPanelLayoutByTitle)
 				r.Delete("/{layoutID}", api.DeleteUserPanelLayoutByID)
 			})

@@ -2120,6 +2120,49 @@ func (q *sqlQuerier) PruneParsedInstanceFromLogOutput(ctx context.Context, arg P
 	return err
 }
 
+const createUserPanelLayout = `-- name: CreateUserPanelLayout :one
+INSERT INTO user_panel_layouts (
+  user_id,
+  title,
+  icon,
+  description,
+  payload
+)
+VALUES ($1, $2, $3, $4, $5)
+RETURNING id, user_id, title, title_normalized, icon, description, payload, created_at, updated_at
+`
+
+type CreateUserPanelLayoutParams struct {
+	UserID      uuid.UUID `db:"user_id" json:"user_id"`
+	Title       string    `db:"title" json:"title"`
+	Icon        string    `db:"icon" json:"icon"`
+	Description string    `db:"description" json:"description"`
+	Payload     []byte    `db:"payload" json:"payload"`
+}
+
+func (q *sqlQuerier) CreateUserPanelLayout(ctx context.Context, arg CreateUserPanelLayoutParams) (UserPanelLayout, error) {
+	row := q.db.QueryRow(ctx, createUserPanelLayout,
+		arg.UserID,
+		arg.Title,
+		arg.Icon,
+		arg.Description,
+		arg.Payload,
+	)
+	var i UserPanelLayout
+	err := row.Scan(
+		&i.ID,
+		&i.UserID,
+		&i.Title,
+		&i.TitleNormalized,
+		&i.Icon,
+		&i.Description,
+		&i.Payload,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+	)
+	return i, err
+}
+
 const deleteUserPanelLayoutByID = `-- name: DeleteUserPanelLayoutByID :execrows
 DELETE FROM user_panel_layouts
 WHERE user_id = $1
@@ -2205,26 +2248,21 @@ func (q *sqlQuerier) ListUserPanelLayouts(ctx context.Context, userID uuid.UUID)
 	return items, nil
 }
 
-const upsertUserPanelLayoutByTitle = `-- name: UpsertUserPanelLayoutByTitle :one
-INSERT INTO user_panel_layouts (
-  user_id,
-  title,
-  icon,
-  description,
-  payload
-)
-VALUES ($1, $2, $3, $4, $5)
-ON CONFLICT (user_id, title_normalized)
-DO UPDATE SET
-  title = EXCLUDED.title,
-  icon = EXCLUDED.icon,
-  description = EXCLUDED.description,
-  payload = EXCLUDED.payload,
+const updateUserPanelLayoutByID = `-- name: UpdateUserPanelLayoutByID :one
+UPDATE user_panel_layouts
+SET
+  title = $3,
+  icon = $4,
+  description = $5,
+  payload = $6,
   updated_at = now()
+WHERE id = $1
+  AND user_id = $2
 RETURNING id, user_id, title, title_normalized, icon, description, payload, created_at, updated_at
 `
 
-type UpsertUserPanelLayoutByTitleParams struct {
+type UpdateUserPanelLayoutByIDParams struct {
+	ID          uuid.UUID `db:"id" json:"id"`
 	UserID      uuid.UUID `db:"user_id" json:"user_id"`
 	Title       string    `db:"title" json:"title"`
 	Icon        string    `db:"icon" json:"icon"`
@@ -2232,8 +2270,9 @@ type UpsertUserPanelLayoutByTitleParams struct {
 	Payload     []byte    `db:"payload" json:"payload"`
 }
 
-func (q *sqlQuerier) UpsertUserPanelLayoutByTitle(ctx context.Context, arg UpsertUserPanelLayoutByTitleParams) (UserPanelLayout, error) {
-	row := q.db.QueryRow(ctx, upsertUserPanelLayoutByTitle,
+func (q *sqlQuerier) UpdateUserPanelLayoutByID(ctx context.Context, arg UpdateUserPanelLayoutByIDParams) (UserPanelLayout, error) {
+	row := q.db.QueryRow(ctx, updateUserPanelLayoutByID,
+		arg.ID,
 		arg.UserID,
 		arg.Title,
 		arg.Icon,

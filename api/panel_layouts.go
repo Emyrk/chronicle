@@ -21,21 +21,20 @@ var panelLayoutTitleRegex = regexp.MustCompile(`^[A-Za-z1-9_\-\s]+$`)
 
 const maxPanelLayoutPayloadBytes = 10 * 1024
 
-func validatePanelLayoutRequest(req chroniclesdk.UpsertUserPanelLayoutRequest) (string, bool) {
-	title := req.Title
+func validatePanelLayoutRequest(title string, payload json.RawMessage) (string, bool) {
 	if title == "" {
 		return "title is required", false
 	}
 	if !panelLayoutTitleRegex.MatchString(title) {
 		return "title must match [A-Z, a-z, 1-9, _, -, space]", false
 	}
-	if len(req.Payload) > maxPanelLayoutPayloadBytes {
+	if len(payload) > maxPanelLayoutPayloadBytes {
 		return "payload exceeds 10KB limit", false
 	}
-	if len(req.Payload) == 0 {
-		req.Payload = json.RawMessage(`{}`)
+	if len(payload) == 0 {
+		payload = json.RawMessage(`{}`)
 	}
-	if !json.Valid(req.Payload) {
+	if !json.Valid(payload) {
 		return "payload must be valid JSON", false
 	}
 	return "", true
@@ -92,28 +91,27 @@ func (a *API) GetUserPanelLayoutByTitle(w http.ResponseWriter, r *http.Request) 
 	httpapi.Write(ctx, w, http.StatusOK, panelLayoutToSDK(layout))
 }
 
-func (a *API) UpsertUserPanelLayout(w http.ResponseWriter, r *http.Request) {
+func (a *API) CreateUserPanelLayout(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 	targetUser := httpmw.User(ctx)
 
-	var req chroniclesdk.UpsertUserPanelLayoutRequest
-	if !httpapi.Read(ctx, w, r, &req) {
-		return
-	}
-
-	if errMsg, ok := validatePanelLayoutRequest(req); !ok {
-		httpapi.Write(ctx, w, http.StatusBadRequest, chroniclesdk.Response{Message: errMsg})
-		return
-	}
-
-	act, ok := authz.ActorFromContext(ctx)
+	actor, ok := authz.ActorFromContext(ctx)
 	if !ok {
 		httpapi.Forbidden(w, nil)
 		return
 	}
-
-	if act.Object().ID != targetUser.ID.String() {
+	if ok, err := a.Opts.Zed.CheckOne(ctx, nil, policy.New().GlobalChronicle().CanCreate_layout_User(actor)); !ok || err != nil {
 		httpapi.Forbidden(w, nil)
+		return
+	}
+
+	var req chroniclesdk.CreateUserPanelLayoutRequest
+	if !httpapi.Read(ctx, w, r, &req) {
+		return
+	}
+
+	if errMsg, ok := validatePanelLayoutRequest(req.Title, req.Payload); !ok {
+		httpapi.Write(ctx, w, http.StatusBadRequest, chroniclesdk.Response{Message: errMsg})
 		return
 	}
 
@@ -126,31 +124,7 @@ func (a *API) UpsertUserPanelLayout(w http.ResponseWriter, r *http.Request) {
 		icon = "INV_Misc_Book_09"
 	}
 
-	existing, err := a.Opts.Zed.GetUserPanelLayoutByTitle(ctx, database.GetUserPanelLayoutByTitleParams{
-		UserID: targetUser.ID,
-		Lower:  req.Title,
-	})
-	if err != nil && !errors.Is(err, sql.ErrNoRows) {
-		httpapi.InternalServerError(w, err)
-		return
-	}
-
-	if existing.ID != uuid.Nil {
-		ok, err := a.Opts.Zed.CheckOne(ctx, nil, policy.New().Layout(existing.ID).CanEdit_User(act))
-		if !ok || err != nil {
-			httpapi.Forbidden(w, nil)
-			return
-		}
-	} else {
-		// Check if you can create a new layout
-		ok, err := a.Opts.Zed.CheckOne(ctx, nil, policy.New().GlobalChronicle().CanCreate_layout_User(act))
-		if !ok || err != nil {
-			httpapi.Forbidden(w, nil)
-			return
-		}
-	}
-
-	layout, err := a.Opts.Zed.UpsertUserPanelLayoutByTitle(ctx, database.UpsertUserPanelLayoutByTitleParams{
+	layout, err := a.Opts.Zed.CreateUserPanelLayout(ctx, database.CreateUserPanelLayoutParams{
 		UserID:      targetUser.ID,
 		Title:       req.Title,
 		Icon:        icon,
@@ -158,6 +132,65 @@ func (a *API) UpsertUserPanelLayout(w http.ResponseWriter, r *http.Request) {
 		Payload:     payload,
 	})
 	if err != nil {
+		httpapi.InternalServerError(w, err)
+		return
+	}
+
+	httpapi.Write(ctx, w, http.StatusCreated, panelLayoutToSDK(layout))
+}
+
+func (a *API) UpdateUserPanelLayoutByID(w http.ResponseWriter, r *http.Request) {
+	ctx := r.Context()
+	targetUser := httpmw.User(ctx)
+	layoutIDRaw := chi.URLParam(r, "layoutID")
+	layoutID, err := uuid.Parse(layoutIDRaw)
+	if err != nil {
+		httpapi.Write(ctx, w, http.StatusBadRequest, chroniclesdk.Response{Message: "invalid layout id"})
+		return
+	}
+
+	actor, ok := authz.ActorFromContext(ctx)
+	if !ok {
+		httpapi.Forbidden(w, nil)
+		return
+	}
+	if ok, err := a.Opts.Zed.CheckOne(ctx, nil, policy.New().Layout(layoutID).CanEdit_User(actor)); !ok || err != nil {
+		httpapi.Forbidden(w, nil)
+		return
+	}
+
+	var req chroniclesdk.UpdateUserPanelLayoutRequest
+	if !httpapi.Read(ctx, w, r, &req) {
+		return
+	}
+
+	if errMsg, ok := validatePanelLayoutRequest(req.Title, req.Payload); !ok {
+		httpapi.Write(ctx, w, http.StatusBadRequest, chroniclesdk.Response{Message: errMsg})
+		return
+	}
+
+	payload := req.Payload
+	if len(payload) == 0 {
+		payload = json.RawMessage(`{}`)
+	}
+	icon := req.Icon
+	if icon == "" {
+		icon = "INV_Misc_Book_09"
+	}
+
+	layout, err := a.Opts.Zed.UpdateUserPanelLayoutByID(ctx, database.UpdateUserPanelLayoutByIDParams{
+		ID:          layoutID,
+		UserID:      targetUser.ID,
+		Title:       req.Title,
+		Icon:        icon,
+		Description: req.Description,
+		Payload:     payload,
+	})
+	if err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			httpapi.Write(ctx, w, http.StatusNotFound, chroniclesdk.Response{Message: "layout not found"})
+			return
+		}
 		httpapi.InternalServerError(w, err)
 		return
 	}
@@ -172,6 +205,16 @@ func (a *API) DeleteUserPanelLayoutByID(w http.ResponseWriter, r *http.Request) 
 	layoutID, err := uuid.Parse(layoutIDRaw)
 	if err != nil {
 		httpapi.Write(ctx, w, http.StatusBadRequest, chroniclesdk.Response{Message: "invalid layout id"})
+		return
+	}
+
+	actor, ok := authz.ActorFromContext(ctx)
+	if !ok {
+		httpapi.Forbidden(w, nil)
+		return
+	}
+	if ok, err := a.Opts.Zed.CheckOne(ctx, nil, policy.New().Layout(layoutID).CanDelete_User(actor)); !ok || err != nil {
+		httpapi.Forbidden(w, nil)
 		return
 	}
 

@@ -14,6 +14,7 @@ import (
 type sqlcQuerier interface {
 	BulkUpsertGuildPagePanels(ctx context.Context, dollar_1 []byte) error
 	CountAllWoWLogGroups(ctx context.Context, arg CountAllWoWLogGroupsParams) (int32, error)
+	CreateUserPanelLayout(ctx context.Context, arg CreateUserPanelLayoutParams) (UserPanelLayout, error)
 	DeleteAllParsedLogsByGroupID(ctx context.Context, id uuid.UUID) error
 	DeleteDataGrant(ctx context.Context, arg DeleteDataGrantParams) error
 	DeleteGuildMember(ctx context.Context, arg DeleteGuildMemberParams) error
@@ -90,10 +91,10 @@ type sqlcQuerier interface {
 	UpdateGuildPagePanel(ctx context.Context, arg UpdateGuildPagePanelParams) (GuildPagePanel, error)
 	UpdateGuildPageTab(ctx context.Context, arg UpdateGuildPageTabParams) (GuildPageTab, error)
 	UpdateUserAuthSessionTokens(ctx context.Context, arg UpdateUserAuthSessionTokensParams) (UserAuthSession, error)
+	UpdateUserPanelLayoutByID(ctx context.Context, arg UpdateUserPanelLayoutByIDParams) (UserPanelLayout, error)
 	UpsertDataGrant(ctx context.Context, arg UpsertDataGrantParams) (DataGrant, error)
 	UpsertGuild(ctx context.Context, arg UpsertGuildParams) (Guild, error)
 	UpsertGuildPage(ctx context.Context, arg UpsertGuildPageParams) (GuildPage, error)
-	UpsertUserPanelLayoutByTitle(ctx context.Context, arg UpsertUserPanelLayoutByTitleParams) (UserPanelLayout, error)
 }
 
 var _ sqlcQuerier = (*sqlQuerier)(nil)

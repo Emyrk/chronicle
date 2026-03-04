@@ -17,7 +17,14 @@ type UserPanelLayout struct {
 	UpdatedAt   time.Time       `json:"updated_at"`
 }
 
-type UpsertUserPanelLayoutRequest struct {
+type CreateUserPanelLayoutRequest struct {
+	Title       string          `json:"title"`
+	Icon        string          `json:"icon"`
+	Description string          `json:"description"`
+	Payload     json.RawMessage `json:"payload"`
+}
+
+type UpdateUserPanelLayoutRequest struct {
 	Title       string          `json:"title"`
 	Icon        string          `json:"icon"`
 	Description string          `json:"description"`
