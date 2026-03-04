@@ -181,7 +181,7 @@ export function createDamageDoneProcessor(
 
   return {
     id,
-    streams: ["damage", "aura", "slain"],
+    streams: vulnerabilityMode ? ["damage", "aura", "slain"] : ["damage"],
 
     createState: () => ({
       EncounterDamage: new Map<string, UnitDamage>(),

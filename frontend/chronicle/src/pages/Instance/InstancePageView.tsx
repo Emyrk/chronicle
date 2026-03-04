@@ -1218,6 +1218,19 @@ export function InstancePageView({
 
   const [importedLayoutItems, setImportedLayoutItems] = useState<GridEditorItem[] | null>(null);
 
+  const defaultEncounterIDs = useMemo(
+    () => instance.encounters.map((e) => e.id),
+    [instance.encounters],
+  );
+
+  const viewStateDefaults = useMemo(
+    () => ({
+      encounterIds: defaultEncounterIDs,
+      panels: defaultOrderedPanels,
+    }),
+    [defaultEncounterIDs, defaultOrderedPanels],
+  );
+
   // URL-persisted view state (base64 encoded single param)
   const {
     state: viewState,
@@ -1233,10 +1246,7 @@ export function InstancePageView({
     encounters: instance.encounters,
     enemies: allMergedEnemies,
     players: instance.players ?? {},
-    defaults: {
-      encounterIds: instance.encounters.map((e) => e.id),
-      panels: defaultOrderedPanels,
-    },
+    defaults: viewStateDefaults,
   });
 
   const baseOrderedLayoutItems = viewState.layout === "alternate"

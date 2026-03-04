@@ -23,6 +23,7 @@ export interface UsePanelAggregationOptions<TResult> {
   context: PanelContext;
   panelOption?: string | null;
   panelContext?: Record<string, unknown> | null;
+  panelContextKey?: string | number | null;
   enabled?: boolean;
 }
 
@@ -33,34 +34,6 @@ export interface UsePanelAggregationResult<TResult> {
   result: TResult;
   totalEvents: number;
   processingTimeMs: number | null;
-}
-
-function stableSerializeContextValue(value: unknown): string {
-  if (value === null || value === undefined) {
-    return "null";
-  }
-
-  if (typeof value !== "object") {
-    return JSON.stringify(value);
-  }
-
-  if (Array.isArray(value)) {
-    return `[${value.map((entry) => stableSerializeContextValue(entry)).join(",")}]`;
-  }
-
-  const entries = Object.entries(value as Record<string, unknown>).sort(([left], [right]) =>
-    left.localeCompare(right),
-  );
-
-  return `{${entries.map(([key, entry]) => `${JSON.stringify(key)}:${stableSerializeContextValue(entry)}`).join(",")}}`;
-}
-
-function serializePanelContextForKey(panelContext: Record<string, unknown> | null): string {
-  if (!panelContext) {
-    return "";
-  }
-
-  return stableSerializeContextValue(panelContext);
 }
 
 /**
@@ -184,6 +157,7 @@ export function usePanelAggregation<TResult>(
     context: panelContext,
     panelOption = null,
     panelContext: panelContextData = null,
+    panelContextKey: panelContextKeyData = null,
     enabled = true,
   } = options;
   const eventsContext = useInstanceEventsContext();
@@ -237,15 +211,14 @@ export function usePanelAggregation<TResult>(
     const encounterIds = panelContext.selectedEncounterIds.slice().sort().join(",");
     const playerIds = Array.from(panelContext.entitySelection.playerIds).sort().join(",");
     const enemyIds = Array.from(panelContext.entitySelection.enemyIds).sort().join(",");
-    const panelContextSerialized = serializePanelContextForKey(panelContextData);
-    return `${panelContext.instance.id}|${encounterIds}|${playerIds}|${enemyIds}|${panelOption ?? ""}|${panelContextSerialized}`;
+    return `${panelContext.instance.id}|${encounterIds}|${playerIds}|${enemyIds}|${panelOption ?? ""}|${panelContextKeyData ?? ""}`;
   }, [
     panelContext.instance.id,
     panelContext.selectedEncounterIds,
     panelContext.entitySelection.playerIds,
     panelContext.entitySelection.enemyIds,
     panelOption,
-    panelContextData,
+    panelContextKeyData,
   ]);
   
   // Check if we're in sync mode

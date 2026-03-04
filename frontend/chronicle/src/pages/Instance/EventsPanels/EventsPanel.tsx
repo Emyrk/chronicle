@@ -2,7 +2,7 @@
  * EventsPanel - Container component for event aggregation panels
  */
 
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { useLocalStorage } from "@/hooks/useLocalStorage";
 import { HelpCircle, Construction } from "lucide-react";
 import { Card } from "@/components/ui/Card/Card";
@@ -130,10 +130,17 @@ export function EventsPanel({
   
   // Panel-scoped context for processor/render options (e.g., vulnerability school mask).
   const [panelContext, setPanelContext] = useState<Record<string, unknown> | null>(null);
+  const [panelContextVersion, setPanelContextVersion] = useState(0);
+
+  const setPanelContextWithKey = useCallback((nextContext: Record<string, unknown> | null) => {
+    setPanelContext(nextContext);
+    setPanelContextVersion((version) => version + 1);
+  }, []);
 
   // Reset panel context when panel type changes to avoid leaking options across panel types.
   useEffect(() => {
     setPanelContext(null);
+    setPanelContextVersion((version) => version + 1);
   }, [panelType]);
 
   // Only show explainer button on desktop, if hints are enabled, and if panel has an explainer
@@ -152,6 +159,7 @@ export function EventsPanel({
     context,
     panelOption,
     panelContext,
+    panelContextKey: panelContextVersion,
     enabled: !panel.selfManagesAggregation,
   });
   
@@ -248,7 +256,7 @@ export function EventsPanel({
             panelOption,
             setPanelOption: onPanelOptionChange,
             panelContext,
-            setPanelContext,
+            setPanelContext: setPanelContextWithKey,
           })}
         </div>
       </Card>
