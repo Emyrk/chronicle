@@ -6,6 +6,7 @@ import (
 	"net/http"
 	"net/http/httputil"
 	"net/url"
+	"time"
 
 	"github.com/Emyrk/chronicle/api/chronauth"
 	"github.com/Emyrk/chronicle/api/guildapi"
@@ -44,12 +45,13 @@ type Options struct {
 }
 
 type API struct {
-	AppContext context.Context
-	Opts       *Options
-	Auth       *chronauth.Service
-	Chronicle  *chronicle.Chronicle
-	Queues     *riverqueue.Queues
-	Zed        *authz.Authz
+	AppContext  context.Context
+	Opts        *Options
+	Auth        *chronauth.Service
+	Chronicle   *chronicle.Chronicle
+	Queues      *riverqueue.Queues
+	Zed         *authz.Authz
+	recentCache *recentRaidsCache
 }
 
 func New(ctx context.Context, opts Options) (*API, error) {
@@ -72,12 +74,13 @@ func New(ctx context.Context, opts Options) (*API, error) {
 	}
 
 	return &API{
-		Opts:       &opts,
-		AppContext: ctx,
-		Auth:       service,
-		Chronicle:  opts.Chronicle,
-		Queues:     opts.RiverQueue,
-		Zed:        opts.Zed,
+		Opts:        &opts,
+		AppContext:  ctx,
+		Auth:        service,
+		Chronicle:   opts.Chronicle,
+		Queues:      opts.RiverQueue,
+		Zed:         opts.Zed,
+		recentCache: newRecentRaidsCache(5 * time.Minute),
 	}, nil
 }
 

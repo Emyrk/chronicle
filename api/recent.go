@@ -62,6 +62,14 @@ func decodeCursor(s string) (time.Time, uuid.UUID, error) {
 func (api *API) RecentInstances(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 
+	cacheKey := r.URL.RawQuery
+	if api.recentCache != nil {
+		if cached, ok := api.recentCache.Get(cacheKey); ok {
+			httpapi.Write(ctx, w, http.StatusOK, cached)
+			return
+		}
+	}
+
 	// Parse query parameters
 	q := r.URL.Query()
 
@@ -209,9 +217,14 @@ func (api *API) RecentInstances(w http.ResponseWriter, r *http.Request) {
 		nextCursor = encodeCursor(lastRow.FirstEncounterTime.Time, lastRow.ID)
 	}
 
-	httpapi.Write(ctx, w, http.StatusOK, chroniclesdk.RecentInstancesResponse{
+	response := chroniclesdk.RecentInstancesResponse{
 		Instances:  instances,
 		NextCursor: nextCursor,
 		HasMore:    hasMore,
-	})
+	}
+	if api.recentCache != nil {
+		api.recentCache.Set(cacheKey, response)
+	}
+
+	httpapi.Write(ctx, w, http.StatusOK, response)
 }
