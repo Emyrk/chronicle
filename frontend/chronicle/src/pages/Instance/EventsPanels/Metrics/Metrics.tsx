@@ -6,7 +6,7 @@
 import { useMemo } from "react";
 import { Activity } from "lucide-react";
 import { usePanelTimingContext } from "../PanelTimingContext";
-import type { PanelDefinition, PanelRenderProps } from "../types";
+import type { PanelDefinition } from "../types";
 import { metricsProcessor, type MetricsResult } from "./metrics.processor";
 
 function formatMs(value: number): string {
@@ -137,6 +137,6 @@ export function createMetricsPanel(): PanelDefinition<MetricsResult, any> {
     label: "Metrics",
     icon: <Activity className="h-4 w-4" />,
     selfManagesAggregation: true,
-    render: (props: PanelRenderProps<MetricsResult>) => <MetricsContent {...props} />,
+    render: () => <MetricsContent />,
   };
 }
