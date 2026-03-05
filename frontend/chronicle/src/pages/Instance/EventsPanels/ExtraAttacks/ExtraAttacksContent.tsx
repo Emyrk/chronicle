@@ -57,7 +57,7 @@ export const ExtraAttacksContent = (props: ExtraAttacksContentProps) => {
   const { cachedValue: cachedResult, hasCache: hasData } = useCachedValue(
     result,
     (r) => !!r && r.EncounterExtraAttacks instanceof Map && r.EncounterExtraAttacks.size > 0,
-    []
+    [props.panelContextVersion]
   );
 
   const extraAttacksData = useMemo(() => {

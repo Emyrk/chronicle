@@ -47,7 +47,7 @@ export const DeathsContent = (props: DeathsContentProps) => {
   const { cachedValue: cachedResult, hasCache: hasData } = useCachedValue(
     result,
     (r) => !!r && r.EncounterDeaths instanceof Map && r.EncounterDeaths.size > 0,
-    []
+    [props.panelContextVersion]
   );
 
   const deathsData = useMemo(() => {

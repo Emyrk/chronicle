@@ -6,6 +6,7 @@
  */
 
 import type { StreamType } from "@/hooks/instanceEvents";
+import type { PanelFilter } from "./processors/filters";
 
 /**
  * Activity entry from encounter period tracking.
@@ -308,6 +309,9 @@ export interface SerializableProcessorContext {
 
   /** Optional panel-specific context payload for processor configuration. */
   panelContext?: Record<string, unknown> | null;
+
+  /** Optional event filters evaluated before processor.processEvent. */
+  filters?: PanelFilter[];
 }
 
 /**
@@ -334,6 +338,9 @@ export interface ProcessorContext {
 
   /** Optional panel-specific context payload for processor configuration. */
   panelContext?: Record<string, unknown> | null;
+
+  /** Optional event filters evaluated before processor.processEvent. */
+  filters?: PanelFilter[];
 }
 
 /**

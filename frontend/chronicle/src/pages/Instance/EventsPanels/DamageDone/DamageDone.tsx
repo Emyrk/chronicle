@@ -1,17 +1,18 @@
 /**
  * Damage Done panel - React component wrapper for damage aggregation
- * 
+ *
  * Configurable to show damage from Players, Enemies, or Pets.
  */
 
 import { Swords, Skull, PawPrint, Flame } from "lucide-react";
 import type { PanelDefinition, PanelRenderProps } from "../types";
-import { 
-  damageDoneProcessor, 
-  enemyDamageDoneProcessor, 
+import type { PanelFilter } from "../processors/filters";
+import {
+  damageDoneProcessor,
+  enemyDamageDoneProcessor,
   petDamageDoneProcessor,
   friendlyFireProcessor,
-  type DamageDoneState 
+  type DamageDoneState,
 } from "../processors";
 import { DamageDoneContent } from "./DamageDoneContent";
 import type { DamageSourceType } from "./damageDone.processor";
@@ -52,17 +53,22 @@ const DAMAGE_SOURCE_CONFIGS: Record<DamageSourceType, DamageSourceConfig> = {
  * Create a DamageDonePanel configured for a specific entity source type.
  */
 export function createDamageDonePanel(
-  sourceType: DamageSourceType
+  sourceType: DamageSourceType,
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
 ): PanelDefinition<DamageDoneState, any> {
   const config = DAMAGE_SOURCE_CONFIGS[sourceType];
-  
+  const defaultFilters: PanelFilter[] = sourceType === "enemies"
+    ? [{ type: "source_type", mode: "include", value: "enemy" }]
+    : sourceType === "pets"
+      ? [{ type: "source_type", mode: "include", value: "pet" }]
+      : [{ type: "source_type", mode: "include", value: "player" }];
+
   return {
     ...config.processor,
     label: config.label,
     icon: config.icon,
     supportsPerSecond: true,
-    
+    defaultFilters,
     render: (props: PanelRenderProps<DamageDoneState>) => {
       return <DamageDoneContent {...props} sourceType={sourceType} />;
     },

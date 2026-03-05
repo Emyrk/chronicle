@@ -87,7 +87,7 @@ export const AvoidanceContent = (props: AvoidanceContentProps) => {
   const { cachedValue: cachedResult, hasCache: hasData } = useCachedValue(
     result,
     (r) => !!r && r.EncounterAvoidance instanceof Map && r.EncounterAvoidance.size > 0,
-    []
+    [props.panelContextVersion]
   );
 
   const aggregatedData = useMemo(() => {

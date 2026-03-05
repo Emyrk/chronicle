@@ -2,16 +2,17 @@
  * EventsPanel - Container component for event aggregation panels
  */
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState, type MouseEvent } from "react";
 import { useLocalStorage } from "@/hooks/useLocalStorage";
-import { HelpCircle, Construction } from "lucide-react";
-import { Card } from "@/components/ui/Card/Card";
+import { HelpCircle, Construction, Filter } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { BreakoutHoverProvider } from "@/components/ui/AbilityBreakout";
 import { Switch } from "@/components/ui/Switch/Switch";
 import { HintTooltip, TooltipTrigger, TooltipContent } from "@/components/ui/Tooltip/tooltip";
 import { useIsMobile } from "@/hooks/useIsMobile";
-import { cn } from "@/lib/utils";
+import { PanelCard } from "./PanelCard";
+import { PanelFilterEditor } from "./PanelFilterEditor";
+import type { PanelFilter } from "./processors/filters";
 import { usePanelAggregation } from "./usePanelAggregation";
 import { usePanelTiming } from "./PanelTimingContext";
 import { useSyncModeContextOptional } from "../SyncModeContext";
@@ -173,16 +174,50 @@ export function EventsPanel({
   // Panel-scoped context for processor/render options (e.g., vulnerability school mask).
   const [panelContext, setPanelContext] = useState<Record<string, unknown> | null>(null);
   const [panelContextVersion, setPanelContextVersion] = useState(0);
+  const [flipped, setFlipped] = useState(false);
+
+  const customFilters = useMemo(() => (panelContext?.filters as PanelFilter[] | undefined) ?? null, [panelContext]);
+  const activeFilters = customFilters ?? panel.defaultFilters ?? [];
+  const hasCustomFilters = customFilters !== null;
 
   const setPanelContextWithKey = useCallback((nextContext: Record<string, unknown> | null) => {
     setPanelContext(nextContext);
     setPanelContextVersion((version) => version + 1);
   }, []);
 
+  const setFilters = useCallback((filters: PanelFilter[]) => {
+    setPanelContext((previous) => {
+      const base = previous ?? {};
+      if (filters.length === 0) {
+        const { filters: _filters, ...rest } = base;
+        return Object.keys(rest).length > 0 ? rest : null;
+      }
+      return { ...base, filters };
+    });
+    setPanelContextVersion((version) => version + 1);
+  }, []);
+
+  const resetFilters = useCallback(() => {
+    setPanelContext((previous) => {
+      if (!previous) return null;
+      const { filters: _filters, ...rest } = previous;
+      return Object.keys(rest).length > 0 ? rest : null;
+    });
+    setPanelContextVersion((version) => version + 1);
+  }, []);
+
+  const onPanelMouseDown = useCallback((event: MouseEvent<HTMLDivElement>) => {
+    if (event.shiftKey && event.button === 1) {
+      event.preventDefault();
+      setFlipped((value) => !value);
+    }
+  }, []);
+
   // Reset panel context when panel type changes to avoid leaking options across panel types.
   useEffect(() => {
     setPanelContext(null);
     setPanelContextVersion((version) => version + 1);
+    setFlipped(false);
   }, [panelType]);
 
   // Only show explainer button on desktop, if hints are enabled, and if panel has an explainer
@@ -224,86 +259,95 @@ export function EventsPanel({
 
   return (
     <BreakoutHoverProvider>
-      <Card
-        className={cn(
-          "p-4 gap-2 h-full mb-0 flex flex-col",
-          panel.underConstruction && "border-yellow-500/50",
-        )}
-      >
-        <div className="flex items-center justify-between mb-1">
-          <h3 className="text-sm font-medium flex items-center gap-2">
-            <PanelSelector value={panelType} onChange={onPanelTypeChange} />
-            {showExplainerButton && (
-              <HintTooltip>
-                <TooltipTrigger asChild>
-                  <Button
-                    variant="ghost"
+      <PanelCard
+        flipped={flipped}
+        onMouseDown={onPanelMouseDown}
+        underConstruction={panel.underConstruction}
+        front={(
+          <>
+            <div className="flex items-center justify-between mb-1">
+              <h3 className="text-sm font-medium flex items-center gap-2">
+                <PanelSelector value={panelType} onChange={onPanelTypeChange} />
+                {hasCustomFilters && <Filter className="h-3.5 w-3.5 text-emerald-500" />}
+                {showExplainerButton && (
+                  <HintTooltip>
+                    <TooltipTrigger asChild>
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        className="h-6 w-6 p-0 text-muted-foreground hover:text-foreground"
+                        onClick={() => onExplainerClick(panelType)}
+                        data-help-panel-explainer
+                      >
+                        <HelpCircle className="h-3.5 w-3.5" />
+                        <span className="sr-only">Learn about this panel</span>
+                      </Button>
+                    </TooltipTrigger>
+                    <TooltipContent side="top">Learn about this panel</TooltipContent>
+                  </HintTooltip>
+                )}
+                {panel.underConstruction && (
+                  <HintTooltip>
+                    <TooltipTrigger asChild>
+                      <span className="text-yellow-500 cursor-help">
+                        <Construction className="h-3.5 w-3.5" />
+                      </span>
+                    </TooltipTrigger>
+                    <TooltipContent side="top" className="max-w-[250px]">
+                      <p className="text-xs">
+                        This panel is under construction. Accuracy is not guaranteed and it may look different in the future. Ask in Discord for limitations.
+                      </p>
+                    </TooltipContent>
+                  </HintTooltip>
+                )}
+              </h3>
+              {showCheckbox && (
+                <label
+                  className="flex items-center gap-1.5 cursor-pointer text-xs text-muted-foreground hover:text-foreground pr-2"
+                  data-per-second-toggle
+                  data-help-per-second-toggle
+                >
+                  {checkboxLabel}
+                  <Switch
                     size="sm"
-                    className="h-6 w-6 p-0 text-muted-foreground hover:text-foreground"
-                    onClick={() => onExplainerClick(panelType)}
-                    data-help-panel-explainer
-                  >
-                    <HelpCircle className="h-3.5 w-3.5" />
-                    <span className="sr-only">Learn about this panel</span>
-                  </Button>
-                </TooltipTrigger>
-                <TooltipContent side="top">
-                  Learn about this panel
-                </TooltipContent>
-              </HintTooltip>
-            )}
-            {panel.underConstruction && (
-              <HintTooltip>
-                <TooltipTrigger asChild>
-                  <span className="text-yellow-500 cursor-help">
-                    <Construction className="h-3.5 w-3.5" />
-                  </span>
-                </TooltipTrigger>
-                <TooltipContent side="top" className="max-w-[250px]">
-                  <p className="text-xs">
-                    This panel is under construction. Accuracy is not guaranteed and it may look different in the future. Ask in Discord for limitations.
-                  </p>
-                </TooltipContent>
-              </HintTooltip>
-            )}
-          </h3>
-          {showCheckbox && (
-            <label
-              className="flex items-center gap-1.5 cursor-pointer text-xs text-muted-foreground hover:text-foreground pr-2"
-              data-per-second-toggle
-              data-help-per-second-toggle
-            >
-              {checkboxLabel}
-              <Switch
-                size="sm"
-                checked={checkboxChecked}
-                onCheckedChange={setCheckboxChecked}
-              />
-            </label>
-          )}
-        </div>
+                    checked={checkboxChecked}
+                    onCheckedChange={setCheckboxChecked}
+                  />
+                </label>
+              )}
+            </div>
 
-        {/* Render the panel content */}
-        <div className="flex-1 min-h-0">
-          {panel.render({
-            result,
-            totalEvents,
-            processingTimeMs,
-            durationMs: effectiveDurationMs,
-            perSecond: checkboxChecked,
-            checkboxChecked,
-            loading,
-            processing,
-            error,
-            context,
-            panelOption,
-            setPanelOption: onPanelOptionChange,
-            panelContext,
-            setPanelContext: setPanelContextWithKey,
-            panelIndex,
-          })}
-        </div>
-      </Card>
+            <div className="flex-1 min-h-0">
+              {panel.render({
+                result,
+                totalEvents,
+                processingTimeMs,
+                durationMs: effectiveDurationMs,
+                perSecond: checkboxChecked,
+                checkboxChecked,
+                loading,
+                processing,
+                error,
+                context,
+                panelOption,
+                setPanelOption: onPanelOptionChange,
+                panelContext,
+                panelContextVersion,
+                setPanelContext: setPanelContextWithKey,
+                panelIndex,
+              })}
+            </div>
+          </>
+        )}
+        back={(
+          <PanelFilterEditor
+            filters={activeFilters}
+            onChange={setFilters}
+            onReset={resetFilters}
+            onClose={() => setFlipped(false)}
+          />
+        )}
+      />
     </BreakoutHoverProvider>
   );
 }

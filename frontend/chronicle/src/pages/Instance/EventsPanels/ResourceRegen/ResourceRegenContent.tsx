@@ -358,7 +358,7 @@ export const ResourceRegenContent = (props: ResourceRegenContentProps) => {
   const { cachedValue: cachedResult, hasCache: hasData } = useCachedValue(
     result,
     (r) => !!r && r.encounterData instanceof Map && r.encounterData.size > 0,
-    []
+    [props.panelContextVersion]
   );
 
   // Get available resource types

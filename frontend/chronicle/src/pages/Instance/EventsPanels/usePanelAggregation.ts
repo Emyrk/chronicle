@@ -17,6 +17,7 @@ import { executeRequest } from "./workerPool";
 import { useSyncModeContextOptional } from "../SyncModeContext";
 import { processIncrementally, timestampMovedBackward, type IncrementalProcessorState } from "./mainThreadProcessor";
 import { usePanelTimingContext } from "./PanelTimingContext";
+import type { PanelFilter } from "./processors/filters";
 
 export interface UsePanelAggregationOptions<TResult> {
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -315,10 +316,14 @@ export function usePanelAggregation<TResult>(
       setProcessing(true);
 
       // Send work to pooled worker
+      const resolvedFilters = (panelContextData?.filters as PanelFilter[] | undefined) ?? panel.defaultFilters;
       const workerRequest: WorkerRequest = {
         requestId,
         panelId: panel.id,
-        context: toSerializableContext(panelContext, panelOption, panelContextData),
+        context: {
+          ...toSerializableContext(panelContext, panelOption, panelContextData),
+          filters: resolvedFilters,
+        },
         streams: fetchedStreams,
       };
 

@@ -124,7 +124,7 @@ export const DamageDoneContent = (props: DamageDoneContentProps) => {
   const { cachedValue: cachedResult, hasCache: hasData } = useCachedValue(
     result,
     (r) => !!r && r.EncounterDamage instanceof Map && r.EncounterDamage.size > 0,
-    [sourceType, petGrouping, enemyGrouping]
+    [sourceType, petGrouping, enemyGrouping, props.panelContextVersion]
   );
 
   const damageData = useMemo(() => {

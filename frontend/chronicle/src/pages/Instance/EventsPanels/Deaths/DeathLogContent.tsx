@@ -101,7 +101,7 @@ export const DeathLogContent = (props: DeathLogContentProps) => {
   const { cachedValue: cachedResult, hasCache: hasData } = useCachedValue(
     result,
     (r) => r.DeathEvents.length > 0 || r.EnemyDeathEvents.length > 0,
-    []
+    [props.panelContextVersion]
   );
 
   const sortedDeaths = useMemo(() => {

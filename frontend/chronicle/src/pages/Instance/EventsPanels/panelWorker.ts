@@ -8,6 +8,7 @@
 import { FastDamageCursor, FastHealCursor, FastResourceChangeCursor, FastExtraAttackCursor, FastSlainCursor, FastCastCursor, FastAuraCursor, FastSpellGoCursor, FastAuraCastCursor, type ReusableDamage, type ReusableHeal, type ReusableResourceChange, type ReusableExtraAttack, type ReusableSlain, type ReusableCast, type ReusableAura, type ReusableSpellGo, type ReusableAuraCast } from "@/api/protodecode/decode";
 import { processorRegistry } from "./processors";
 import type { WorkerRequest, WorkerResponse, PanelProcessor, ProcessorContext, SerializableProcessorContext } from "./processorTypes";
+import { evaluateFilters } from "./processors/filters";
 import type { StreamType } from "@/hooks/instanceEvents";
 
 /**
@@ -25,6 +26,7 @@ function deserializeContext(ctx: SerializableProcessorContext): ProcessorContext
     pagination: ctx.pagination,
     panelOption: ctx.panelOption,
     panelContext: ctx.panelContext,
+    filters: ctx.filters,
   };
 }
 
@@ -164,6 +166,10 @@ function processStreams<TResult>(
       
       // Process the event with the lowest index
       totalEvents++;
+      if (context.filters && context.filters.length > 0 && !evaluateFilters(context.filters, minPeeked.event, context)) {
+        consumePeeked(minCursor);
+        continue;
+      }
       processor.processEvent(
         state, 
         minPeeked.event, 

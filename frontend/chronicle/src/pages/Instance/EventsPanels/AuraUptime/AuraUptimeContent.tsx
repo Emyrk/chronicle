@@ -63,9 +63,10 @@ export function AuraUptimeContent(props: PanelRenderProps<AuraUptimeResult>) {
     result,
     (r) => r.auraNames.length > 0,
     [
-      props.context.selectedEncounterIds, 
-      props.context.entitySelection.enemyIds, 
+      props.context.selectedEncounterIds,
+      props.context.entitySelection.enemyIds,
       props.context.entitySelection.playerIds,
+      props.panelContextVersion,
     ]
   );
   
