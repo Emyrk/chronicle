@@ -16,6 +16,7 @@ import type { WorkerRequest, SerializableProcessorContext } from "./processorTyp
 import { executeRequest } from "./workerPool";
 import { useSyncModeContextOptional } from "../SyncModeContext";
 import { processIncrementally, timestampMovedBackward, type IncrementalProcessorState } from "./mainThreadProcessor";
+import { usePanelTimingContext } from "./PanelTimingContext";
 
 export interface UsePanelAggregationOptions<TResult> {
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -24,6 +25,8 @@ export interface UsePanelAggregationOptions<TResult> {
   panelOption?: string | null;
   panelContext?: Record<string, unknown> | null;
   panelContextKey?: string | number | null;
+  /** Optional panel slot index for diagnostics (0-based). */
+  panelIndex?: number;
   enabled?: boolean;
 }
 
@@ -158,14 +161,21 @@ export function usePanelAggregation<TResult>(
     panelOption = null,
     panelContext: panelContextData = null,
     panelContextKey: panelContextKeyData = null,
+    panelIndex,
     enabled = true,
   } = options;
   const eventsContext = useInstanceEventsContext();
   const syncMode = useSyncModeContextOptional();
+  const timingContext = usePanelTimingContext();
   // Extract stable function ref to avoid re-triggering effects
   // Use the function directly since useState setters are stable
+  const reportPanelMetrics = timingContext?.reportPanelMetrics;
+  const reportPanelMetricsRef = useRef(reportPanelMetrics);
   const updateMetrics = syncMode?.updateMetrics;
   const updateMetricsRef = useRef(updateMetrics);
+  useEffect(() => {
+    reportPanelMetricsRef.current = reportPanelMetrics;
+  }, [reportPanelMetrics]);
   useEffect(() => {
     updateMetricsRef.current = updateMetrics;
   }, [updateMetrics]);
@@ -283,6 +293,7 @@ export function usePanelAggregation<TResult>(
     setProcessingTimeMs(null);
     
     try {
+      const fetchStartMs = performance.now();
       // Fetch all required streams (these are cached at the eventsContext level)
       const fetchedStreams = await Promise.all(
         panel.streams.map(async (type) => {
@@ -290,13 +301,19 @@ export function usePanelAggregation<TResult>(
           return { type, data: stream.data };
         })
       );
-      
+      const fetchTimeMs = performance.now() - fetchStartMs;
+
+      const streamBytes = Object.fromEntries(
+        fetchedStreams.map(({ type, data }) => [type, data.byteLength]),
+      );
+      const totalStreamBytes = fetchedStreams.reduce((sum, stream) => sum + stream.data.byteLength, 0);
+
       // Check if request was superseded while fetching
       if (requestId !== requestIdRef.current || abortRef.current) return;
-      
+
       setLoading(false);
       setProcessing(true);
-      
+
       // Send work to pooled worker
       const workerRequest: WorkerRequest = {
         requestId,
@@ -304,35 +321,64 @@ export function usePanelAggregation<TResult>(
         context: toSerializableContext(panelContext, panelOption, panelContextData),
         streams: fetchedStreams,
       };
-      
+
+      const workerStartMs = performance.now();
       const response = await executeRequest(workerRequest);
-      
+      const workerRoundTripMs = performance.now() - workerStartMs;
+
       // Ignore stale responses
       if (requestId !== requestIdRef.current || abortRef.current) {
         return;
       }
-      
+
       if (response.error) {
         setError(new Error(response.error));
         setProcessing(false);
         return;
       }
-      
+
+      const deserializeStartMs = performance.now();
       const deserializedResult = deserializeResult<TResult>(response.result);
+      const deserializationTimeMs = performance.now() - deserializeStartMs;
+
+      const wallTimeMs = fetchTimeMs + workerRoundTripMs + deserializationTimeMs;
+      const queueWaitMs = response.queueWaitMs;
+
+      if (panelIndex !== undefined && panelIndex >= 0) {
+        reportPanelMetricsRef.current?.({
+          panelKey: `panel-${panelIndex}`,
+          panelId: panel.id,
+          panelLabel: panel.label,
+          panelIndex,
+          streams: panel.streams,
+          streamBytes,
+          totalStreamBytes,
+          totalEvents: response.totalEvents,
+          processingTimeMs: response.processingTimeMs,
+          streamProcessingTimeMs: response.streamProcessingTimeMs,
+          serializationTimeMs: response.serializationTimeMs,
+          deserializationTimeMs,
+          wallTimeMs,
+          queueWaitMs,
+          fetchTimeMs,
+          updatedAtMs: performance.now(),
+        });
+      }
+
       setAggregationState((prev) =>
         prev.panelId === panel.id ? { ...prev, result: deserializedResult } : prev,
       );
       setTotalEvents(response.totalEvents);
       setProcessingTimeMs(response.processingTimeMs);
       setProcessing(false);
-      
+
     } catch (err) {
       if (requestId !== requestIdRef.current || abortRef.current) return;
       setError(err instanceof Error ? err : new Error(String(err)));
       setLoading(false);
       setProcessing(false);
     }
-  }, [eventsContext.fetchStream, panel, panelContext, panelOption, panelContextData]);
+  }, [eventsContext.fetchStream, panel, panelContext, panelOption, panelContextData, panelIndex]);
   
   // Main thread incremental processing (sync mode)
   // eslint-disable-next-line react-hooks/preserve-manual-memoization

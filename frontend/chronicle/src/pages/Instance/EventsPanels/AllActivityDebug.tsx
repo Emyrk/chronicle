@@ -550,12 +550,13 @@ function AllActivityContent({
  */
 interface AllActivityWrapperProps {
   context: PanelContext;
+  panelIndex?: number;
   useRelativeTime?: boolean;
 }
 
 const DEFAULT_ENABLED_STREAMS = new Set<StreamType>(["damage", "heal", "resource_change", "spell_go"]);
 
-function AllActivityWrapper({ context, useRelativeTime = false }: AllActivityWrapperProps) {
+function AllActivityWrapper({ context, panelIndex, useRelativeTime = false }: AllActivityWrapperProps) {
   const [currentPage, setCurrentPage] = useState(1);
   const [enabledStreams, setEnabledStreams] = useState<Set<StreamType>>(DEFAULT_ENABLED_STREAMS);
   const [abilityFilter, setAbilityFilter] = useState("");
@@ -596,6 +597,7 @@ function AllActivityWrapper({ context, useRelativeTime = false }: AllActivityWra
   } = usePanelAggregation({
     panel: allActivityProcessor as PanelDefinition<AllActivityState>,
     context: paginatedContext,
+    panelIndex,
   });
   
   const handlePageChange = useCallback((page: number) => {
@@ -663,7 +665,13 @@ function AllActivityWrapper({ context, useRelativeTime = false }: AllActivityWra
  */
 function AllActivityRender(props: PanelRenderProps<AllActivityState>) {
   // The wrapper manages its own aggregation with pagination
-  return <AllActivityWrapper context={props.context} useRelativeTime={props.checkboxChecked} />;
+  return (
+    <AllActivityWrapper
+      context={props.context}
+      panelIndex={props.panelIndex}
+      useRelativeTime={props.checkboxChecked}
+    />
+  );
 }
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any

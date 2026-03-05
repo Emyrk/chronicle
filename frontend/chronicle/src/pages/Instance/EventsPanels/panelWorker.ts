@@ -225,6 +225,9 @@ self.onmessage = (e: MessageEvent<WorkerRequest>) => {
       result: null,
       totalEvents: 0,
       processingTimeMs: 0,
+      streamProcessingTimeMs: 0,
+      serializationTimeMs: 0,
+      queueWaitMs: 0,
       error: `Unknown panel: ${panelId}`,
     };
     self.postMessage(response);
@@ -232,27 +235,36 @@ self.onmessage = (e: MessageEvent<WorkerRequest>) => {
   }
   
   try {
-    const startTime = performance.now();
-    
+    const streamProcessingStart = performance.now();
     const { result, totalEvents } = processStreams(processor, streams, context);
-    
-    const processingTimeMs = performance.now() - startTime;
-    
+    const streamProcessingTimeMs = performance.now() - streamProcessingStart;
+
+    const serializationStart = performance.now();
+    const serializedResult = serializeResult(result);
+    const serializationTimeMs = performance.now() - serializationStart;
+
+    const processingTimeMs = streamProcessingTimeMs + serializationTimeMs;
+
     const response: WorkerResponse = {
       requestId,
-      result: serializeResult(result),
+      result: serializedResult,
       totalEvents,
       processingTimeMs,
+      streamProcessingTimeMs,
+      serializationTimeMs,
+      queueWaitMs: 0,
     };
-    
+
     self.postMessage(response);
-    
   } catch (err) {
     const response: WorkerResponse = {
       requestId,
       result: null,
       totalEvents: 0,
       processingTimeMs: 0,
+      streamProcessingTimeMs: 0,
+      serializationTimeMs: 0,
+      queueWaitMs: 0,
       error: err instanceof Error ? err.message : String(err),
     };
     self.postMessage(response);

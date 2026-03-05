@@ -16,6 +16,7 @@ import { resourceRegenProcessor } from "../ResourceRegen/resourceRegen.processor
 import { innervateProcessor } from "../Innervate/innervate.processor";
 import { sunderProcessor } from "../Sunder/sunder.processor";
 import { judgementProcessor } from "../Judgement/judgement.processor";
+import { metricsProcessor } from "../Metrics/metrics.processor";
 import { auraUptimeProcessor } from "../AuraUptime/auraUptime.processor";
 
 // Export individual processors
@@ -32,6 +33,7 @@ export { resourceRegenProcessor } from "../ResourceRegen/resourceRegen.processor
 export { innervateProcessor } from "../Innervate/innervate.processor";
 export { sunderProcessor } from "../Sunder/sunder.processor";
 export { judgementProcessor } from "../Judgement/judgement.processor";
+export { metricsProcessor } from "../Metrics/metrics.processor";
 export { auraUptimeProcessor } from "../AuraUptime/auraUptime.processor";
 
 // Export state types
@@ -44,6 +46,7 @@ export type { AllActivityDebugState as AllActivityState, RawDebugEvent, Encounte
 export type { MitigationResult, MitigationData, EncounterMitigation } from "./mitigation.processor";
 export type { AvoidanceResult, AvoidanceData, EncounterAvoidance } from "./avoidance.processor";
 export type { EmptyResult } from "../Empty/empty.processor";
+export type { MetricsResult } from "../Metrics/metrics.processor";
 export type { ResourceRegenResult, PlayerResourceData, ResourceAbilityData } from "../ResourceRegen/resourceRegen.processor";
 export type { InnervateResult, InnervateCast } from "../Innervate/innervate.processor";
 export type { SunderResult, WarriorSunderStats, TargetSunderStats, ConfirmedSunder, SunderDebugEvent } from "../Sunder/sunder.processor";
@@ -91,4 +94,6 @@ export const processorRegistry: Record<string, PanelProcessor<any, any>> = {
   judgement: judgementProcessor,
   // Aura tracking
   aura_uptime: auraUptimeProcessor,
+  // Debug/analysis
+  metrics: metricsProcessor,
 };

@@ -635,6 +635,7 @@ const PANEL_CODES: Record<PanelType, string> = {
   // Aura tracking
   aura_uptime: 'au',
   // Debug/Analysis
+  metrics: 'met',
   periods: 'per',
 };
 

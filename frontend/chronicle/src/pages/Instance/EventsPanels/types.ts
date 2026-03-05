@@ -163,6 +163,9 @@ export interface PanelRenderProps<TResult> {
   /** Optional panel-specific context payload for processor configuration. */
   panelContext?: Record<string, unknown> | null;
 
+
+  /** Stable panel slot index in the current layout (0-based). */
+  panelIndex?: number;
   /** Callback to update panel-specific context payload. */
   setPanelContext?: (context: Record<string, unknown> | null) => void;
 }

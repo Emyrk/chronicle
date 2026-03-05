@@ -388,6 +388,13 @@ export interface WorkerResponse {
   requestId: number;
   result: unknown;
   totalEvents: number;
+  /** Total worker-side processing time (stream processing + result serialization). */
   processingTimeMs: number;
+  /** Time spent iterating streams and running processor logic. */
+  streamProcessingTimeMs: number;
+  /** Time spent serializing the result payload for postMessage. */
+  serializationTimeMs: number;
+  /** Time spent waiting for an available worker slot before processing started. */
+  queueWaitMs: number;
   error?: string;
 }

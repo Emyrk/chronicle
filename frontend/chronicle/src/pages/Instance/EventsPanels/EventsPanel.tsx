@@ -37,6 +37,7 @@ import { createInnervatePanel } from "./Innervate/Innervate";
 import { createSunderPanel } from "./Sunder/Sunder";
 import { createJudgementPanel } from "./Judgement/Judgement";
 import { createAuraUptimePanel } from "./AuraUptime/AuraUptime";
+import { createMetricsPanel } from "./Metrics/Metrics";
 import { PeriodsPanel } from "./PeriodsPanel/PeriodsPanel";
 // TODO: Avoidance panel requires spell school data which isn't available yet
 // import { createAvoidancePanel } from "./Avoidance/Avoidance";
@@ -74,6 +75,7 @@ export const PANELS: Record<string, PanelDefinition<any, any>> = {
   // Aura tracking
   aura_uptime: createAuraUptimePanel(),
   // Debug/Analysis
+  metrics: createMetricsPanel(),
   periods: PeriodsPanel,
 };
 
@@ -160,6 +162,7 @@ export function EventsPanel({
     panelOption,
     panelContext,
     panelContextKey: panelContextVersion,
+    panelIndex,
     enabled: !panel.selfManagesAggregation,
   });
   
@@ -257,6 +260,7 @@ export function EventsPanel({
             setPanelOption: onPanelOptionChange,
             panelContext,
             setPanelContext: setPanelContextWithKey,
+            panelIndex,
           })}
         </div>
       </Card>

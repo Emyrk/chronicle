@@ -6,7 +6,7 @@ import { toast } from "sonner";
 import { useIsMobile } from "@/hooks/useIsMobile";
 import { useHelpfulHints } from "@/hooks/useHelpfulHints";
 import { useLocalStorage } from "@/hooks/useLocalStorage";
-import { useInstanceViewState, type PanelType } from "@/hooks/useUrlState";
+import { useInstanceViewState, type LayoutType, type PanelType } from "@/hooks/useUrlState";
 import type { GridEditorItem } from "@/components/layout/GridLayoutEditor";
 import type { ActivityPeriod, InstancePlayer } from "@/api/typesGenerated";
 import { PeriodMomentDisplay } from "@/components/PeriodMomentDisplay";
@@ -1420,6 +1420,20 @@ export function InstancePageView({
     setPanelOption(idx, option);
   }, [activeLayoutItems, setPanelOption]);
 
+  const handleLayoutChange = useCallback((layout: LayoutType) => {
+    setLayout(layout);
+
+    if (importedLayoutItems) {
+      return;
+    }
+
+    const targetItems = layout === "alternate" ? alternateOrderedLayoutItems : standardOrderedLayoutItems;
+    const baselinePanels = targetItems.map(
+      (item) => (DEFAULT_INSTANCE_PANEL_TYPES[item.id] ?? "empty") as PanelType,
+    );
+    setPanels(baselinePanels, baselinePanels.map(() => null));
+  }, [alternateOrderedLayoutItems, importedLayoutItems, setLayout, setPanels, standardOrderedLayoutItems]);
+
   const handleImportLayout = useCallback(() => {
     const raw = window.prompt("Paste exported layout JSON");
     if (!raw) return;
@@ -1554,7 +1568,7 @@ export function InstancePageView({
             {/* Hamburger menu with layout options + view log */}
             <InstanceMenu
               layout={viewState.layout}
-              onLayoutChange={setLayout}
+              onLayoutChange={handleLayoutChange}
               onImportLayout={handleImportLayout}
               instanceId={instance.id}
               logDetailUrl={logDetailUrl}

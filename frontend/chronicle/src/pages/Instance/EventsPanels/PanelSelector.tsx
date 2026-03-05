@@ -51,11 +51,6 @@ const PANEL_CATEGORIES: PanelCategory[] = [
     items: ["aura_uptime"],
   },
   {
-    label: "Utility",
-    items: ["roles", "all_activity", "periods", "empty"],
-    icon: <Toolbox className="h-4 w-4" />,
-  },
-  {
     label: "Class",
     // TODO: Make class icons in this style
     icon: <User className="h-4 w-4" />,
@@ -76,6 +71,11 @@ const PANEL_CATEGORIES: PanelCategory[] = [
         icon: <Scale className="h-4 w-4" />,
       },
     ],
+  },
+    {
+    label: "Utility",
+    items: ["roles", "all_activity", "metrics", "periods", "empty"],
+    icon: <Toolbox className="h-4 w-4" />,
   },
 ];
 
