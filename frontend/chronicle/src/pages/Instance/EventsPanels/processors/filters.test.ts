@@ -87,13 +87,13 @@ describe("evaluateFilters", () => {
     expect(evaluateFilters(filters, createDamageEvent(), createContext())).toBe(true);
   });
 
-  it("matches ability_school using bitmask from multi-select values", () => {
+  it("matches ability_school using normalized enum school values", () => {
     const filters: PanelFilter[] = [
       { type: "ability_school", mode: "include", value: ["shadow", "fire"] },
     ];
 
-    expect(evaluateFilters(filters, createDamageEvent({ school: 4 }), createContext())).toBe(true);
-    expect(evaluateFilters(filters, createDamageEvent({ school: 32 }), createContext())).toBe(true);
-    expect(evaluateFilters(filters, createDamageEvent({ school: 8 }), createContext())).toBe(false);
+    expect(evaluateFilters(filters, createDamageEvent({ school: 4 }), createContext())).toBe(true); // Fire enum
+    expect(evaluateFilters(filters, createDamageEvent({ school: 7 }), createContext())).toBe(true); // Shadow enum
+    expect(evaluateFilters(filters, createDamageEvent({ school: 5 }), createContext())).toBe(false); // Nature enum
   });
 });

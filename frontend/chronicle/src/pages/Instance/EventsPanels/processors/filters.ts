@@ -45,6 +45,34 @@ function getEventSchool(event: ProcessorEvent): number | null {
   return null;
 }
 
+function normalizeDamageSchoolToBitmask(school: number): number {
+  // Damage events currently carry chronicleproto.School enum values:
+  // Unknown=0, None=1, Physical=2, Holy=3, Fire=4, Nature=5, Frost=6, Shadow=7, Arcane=8.
+  // Convert to WoW-style school bitmask values.
+  switch (school) {
+    case 0:
+    case 1:
+      return 0;
+    case 2:
+      return 0x01;
+    case 3:
+      return 0x02;
+    case 4:
+      return 0x04;
+    case 5:
+      return 0x08;
+    case 6:
+      return 0x10;
+    case 7:
+      return 0x20;
+    case 8:
+      return 0x40;
+    default:
+      // If upstream ever sends bitmask-style values directly, preserve them.
+      return school;
+  }
+}
+
 function getEventGuids(event: ProcessorEvent): string[] {
   const ids: string[] = [];
   if ("caster" in event && typeof event.caster === "string" && event.caster) ids.push(event.caster);
@@ -100,6 +128,7 @@ function matchesFilter(filter: PanelFilter, event: ProcessorEvent, context: Proc
     case "ability_school": {
       const school = getEventSchool(event);
       if (school === null) return false;
+      const schoolBitmask = normalizeDamageSchoolToBitmask(school);
       const schoolMaskMap: Record<string, number> = {
         physical: 1,
         holy: 2,
@@ -118,7 +147,7 @@ function matchesFilter(filter: PanelFilter, event: ProcessorEvent, context: Proc
         return Number.isFinite(parsed) ? (mask | parsed) : mask;
       }, 0);
       if (selectedMask === 0) return false;
-      return (school & selectedMask) !== 0;
+      return (schoolBitmask & selectedMask) !== 0;
     }
     case "source_type": {
       if (!("caster" in event) || typeof event.caster !== "string" || !event.caster) return false;
