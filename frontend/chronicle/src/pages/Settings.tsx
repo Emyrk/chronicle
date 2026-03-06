@@ -32,6 +32,7 @@ import { useInstanceDefaultsCache } from "@/hooks/useInstanceDefaultsCache";
 import { EventsPanel, type EventsPanelType } from "@/pages/Instance/EventsPanels";
 import { PANELS } from "@/pages/Instance/EventsPanels/EventsPanel";
 import type { PanelContext } from "@/pages/Instance/EventsPanels/types";
+import type { PanelFilter } from "@/pages/Instance/EventsPanels/processors/filters";
 import type { Instance } from "@/pages/Instance/InstancePage";
 import { PanelTimingProvider } from "@/pages/Instance/EventsPanels/PanelTimingContext";
 import {
@@ -748,6 +749,9 @@ function LivePanelTile({
   durationMs,
   onPanelTypeChange,
   onPanelOptionChange,
+  seedFilters,
+  seedFiltersVersion,
+  onFiltersChange,
 }: {
   item: GridEditorItem;
   panelType: EventsPanelType;
@@ -756,6 +760,9 @@ function LivePanelTile({
   durationMs: number;
   onPanelTypeChange: (next: EventsPanelType) => void;
   onPanelOptionChange: (option: string | null) => void;
+  seedFilters?: PanelFilter[];
+  seedFiltersVersion?: number;
+  onFiltersChange?: (filters: PanelFilter[]) => void;
 }) {
   return (
     <EventsPanel
@@ -767,6 +774,9 @@ function LivePanelTile({
       onPanelOptionChange={onPanelOptionChange}
       panelIndex={Number(item.id.replace("panel-", "")) - 1}
       showHints={false}
+      seedFilters={seedFilters}
+      seedFiltersVersion={seedFiltersVersion}
+      onFiltersChange={onFiltersChange}
     />
   );
 }
@@ -826,6 +836,10 @@ export function LayoutLabSettings() {
   const [items, setItems] = useState<GridEditorItem[]>(DEFAULT_INSTANCE_LAYOUT_ITEMS);
   const [panelTypesById, setPanelTypesById] = useState<Record<string, EventsPanelType>>(DEFAULT_INSTANCE_PANEL_TYPES);
   const [panelOptionsById, setPanelOptionsById] = useState<Record<string, string | null>>({});
+  const [panelFiltersById, setPanelFiltersById] = useState<Record<string, PanelFilter[]>>({});
+  // Separate seed state: only set on load/import, not from live editing feedback.
+  const [seedFiltersById, setSeedFiltersById] = useState<Record<string, PanelFilter[]>>({});
+  const [seedFiltersVersion, setSeedFiltersVersion] = useState(0);
   const [instanceReferenceInput, setInstanceReferenceInput] = useState<string>(() => getStoredLayoutLabInstanceReference());
   const [instanceReference, setInstanceReference] = useState<string>(() => normalizeInstanceReference(getStoredLayoutLabInstanceReference()));
   const [hasDismissedResizeHint, setHasDismissedResizeHint] = useState<boolean>(() => getStoredLayoutLabResizeHintDismissed());
@@ -961,6 +975,9 @@ export function LayoutLabSettings() {
       setPanelOptionsById(Object.fromEntries(
         Object.entries(parsed.panelOptionsById ?? {}).map(([itemId, value]) => [itemId, value ?? null]),
       ));
+      setPanelFiltersById(parsed.panelFiltersById ?? {});
+      setSeedFiltersById(parsed.panelFiltersById ?? {});
+      setSeedFiltersVersion((v) => v + 1);
       setMetaTitle(activeLayout.title);
       setMetaDescription(activeLayout.description ?? "");
       setMetaIcon(activeLayout.icon || "INV_Misc_Book_09");
@@ -985,7 +1002,7 @@ export function LayoutLabSettings() {
         title: trimmedTitle || editingLayout.title,
         description: metaDescription,
         icon: metaIcon,
-        payload: JSON.parse(serializeLayoutLab(items, panelTypesById, panelOptionsById)),
+        payload: JSON.parse(serializeLayoutLab(items, panelTypesById, panelOptionsById, panelFiltersById)),
       } as never);
       toast.success("Layout saved", { description: trimmedTitle || editingLayout.title });
     } catch (error) {
@@ -1030,6 +1047,7 @@ export function LayoutLabSettings() {
     if (readOnly) return;
     setPanelTypesById((prev) => ({ ...prev, [itemId]: nextType }));
     setPanelOptionsById((prev) => ({ ...prev, [itemId]: null }));
+    setPanelFiltersById((prev) => { const { [itemId]: _, ...rest } = prev; return rest; });
     setItems((prev) =>
       prev.map((item) =>
         item.id === itemId
@@ -1050,6 +1068,7 @@ export function LayoutLabSettings() {
       delete next[itemId];
       return next;
     });
+    setPanelFiltersById((prev) => { const { [itemId]: _, ...rest } = prev; return rest; });
     setPanelOptionsById((prev) => {
       const next = { ...prev };
       delete next[itemId];
@@ -1099,7 +1118,7 @@ export function LayoutLabSettings() {
   };
 
   const handleExport = async () => {
-    const serialized = serializeLayoutLab(items, panelTypesById, panelOptionsById);
+    const serialized = serializeLayoutLab(items, panelTypesById, panelOptionsById, panelFiltersById);
     await navigator.clipboard.writeText(serialized);
     toast.success("Layout copied to clipboard");
   };
@@ -1113,6 +1132,9 @@ export function LayoutLabSettings() {
       setPanelOptionsById(Object.fromEntries(
         Object.entries(parsed.panelOptionsById ?? {}).map(([itemId, value]) => [itemId, value ?? null]),
       ));
+      setPanelFiltersById(parsed.panelFiltersById ?? {});
+      setSeedFiltersById(parsed.panelFiltersById ?? {});
+      setSeedFiltersVersion((v) => v + 1);
       setImportError(null);
     } catch (error) {
       setImportError(error instanceof Error ? error.message : "Invalid layout JSON");
@@ -1413,6 +1435,9 @@ export function LayoutLabSettings() {
                     setPanelOptionsById(Object.fromEntries(
                       Object.entries(parsed.panelOptionsById ?? {}).map(([itemId, value]) => [itemId, value ?? null]),
                     ));
+                    setPanelFiltersById(parsed.panelFiltersById ?? {});
+                    setSeedFiltersById(parsed.panelFiltersById ?? {});
+                    setSeedFiltersVersion((v) => v + 1);
                   }}
                 >
                   Reset layout
@@ -1503,6 +1528,18 @@ export function LayoutLabSettings() {
                         durationMs={durationMs}
                         onPanelTypeChange={(next) => handlePanelTypeChange(item.id, next)}
                         onPanelOptionChange={(option) => handlePanelOptionChange(item.id, option)}
+                        seedFilters={seedFiltersById[item.id]}
+                        seedFiltersVersion={seedFiltersVersion}
+                        onFiltersChange={(filters) => {
+                          setPanelFiltersById((prev) => {
+                            if (filters.length === 0) {
+                              const next = { ...prev };
+                              delete next[item.id];
+                              return next;
+                            }
+                            return { ...prev, [item.id]: filters };
+                          });
+                        }}
                       />
 
                       {!readOnly ? (

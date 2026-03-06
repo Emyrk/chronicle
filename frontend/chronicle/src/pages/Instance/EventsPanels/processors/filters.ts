@@ -313,17 +313,25 @@ function compileSingleFilter(filter: PanelFilter, context: ProcessorContext): Fi
   return pred;
 }
 
+/** True when a filter's value is effectively empty (no user input). */
+function isEmptyFilterValue(value: string | string[]): boolean {
+  if (Array.isArray(value)) return value.length === 0;
+  return value.trim() === "";
+}
+
 export function compileFilters(filters: PanelFilter[], context: ProcessorContext): FilterPredicate {
-  if (filters.length === 0) return () => true;
+  // Strip filters with empty values — they compile to pass-all and just add overhead.
+  const effective = filters.filter((f) => !isEmptyFilterValue(f.value));
+  if (effective.length === 0) return () => true;
 
   // Compile each filter into a predicate
-  const compiled = filters.map((f) => compileSingleFilter(f, context));
+  const compiled = effective.map((f) => compileSingleFilter(f, context));
 
   // Group by combinator: "or" continues current group, "and"/undefined starts new
   const groups: FilterPredicate[][] = [];
   let current: FilterPredicate[] = [compiled[0]];
-  for (let i = 1; i < filters.length; i++) {
-    if (filters[i].combinator === "or") {
+  for (let i = 1; i < effective.length; i++) {
+    if (effective[i].combinator === "or") {
       current.push(compiled[i]);
     } else {
       groups.push(current);

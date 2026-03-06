@@ -2,7 +2,7 @@
  * EventsPanel - Container component for event aggregation panels
  */
 
-import { useCallback, useEffect, useMemo, useState, type MouseEvent } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, type MouseEvent } from "react";
 import { useLocalStorage } from "@/hooks/useLocalStorage";
 import { HelpCircle, Construction, Filter } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -120,6 +120,12 @@ export interface EventsPanelProps {
   panelOption?: string | null;
   /** Callback to update panel option */
   onPanelOptionChange?: (option: string | null) => void;
+  /** Filters to seed when a shared layout is imported. Bumping the version re-applies. */
+  seedFilters?: PanelFilter[];
+  /** Incremented each time seedFilters should be (re-)applied. */
+  seedFiltersVersion?: number;
+  /** Called when user-defined filters change (for persistence in shared layouts) */
+  onFiltersChange?: (filters: PanelFilter[]) => void;
 }
 
 export function EventsPanel({
@@ -132,6 +138,9 @@ export function EventsPanel({
   showHints = true,
   panelOption,
   onPanelOptionChange,
+  seedFilters,
+  seedFiltersVersion,
+  onFiltersChange,
 }: EventsPanelProps) {
   const isMobile = useIsMobile();
   const panel = PANELS[panelType];
@@ -198,7 +207,8 @@ export function EventsPanel({
       return { ...base, filters };
     });
     setPanelContextVersion((version) => version + 1);
-  }, []);
+    onFiltersChange?.(filters);
+  }, [onFiltersChange]);
 
   const resetFilters = useCallback(() => {
     setPanelContext((previous) => {
@@ -207,7 +217,8 @@ export function EventsPanel({
       return Object.keys(rest).length > 0 ? rest : null;
     });
     setPanelContextVersion((version) => version + 1);
-  }, []);
+    onFiltersChange?.([]);
+  }, [onFiltersChange]);
 
   const onPanelMouseDown = useCallback((event: MouseEvent<HTMLDivElement>) => {
     if (event.shiftKey && event.button === 0) {
@@ -221,7 +232,21 @@ export function EventsPanel({
     setPanelContext(null);
     setPanelContextVersion((version) => version + 1);
     setFlipped(false);
+    onFiltersChange?.([]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- only reset on panelType change
   }, [panelType]);
+
+  // Seed filters from shared layout / layout book. Only re-applies when the
+  // parent bumps seedFiltersVersion (import / cast), NOT on every reference change.
+  const appliedSeedVersion = useRef(-1);
+  useEffect(() => {
+    if (seedFiltersVersion == null || seedFiltersVersion === appliedSeedVersion.current) return;
+    appliedSeedVersion.current = seedFiltersVersion;
+    if (seedFilters && seedFilters.length > 0) {
+      setPanelContext((prev) => ({ ...(prev ?? {}), filters: seedFilters }));
+      setPanelContextVersion((v) => v + 1);
+    }
+  }, [seedFiltersVersion, seedFilters]);
 
   // Only show explainer button on desktop, if hints are enabled, and if panel has an explainer
   const showExplainerButton = showHints && !isMobile && hasExplainer(panelType) && onExplainerClick;

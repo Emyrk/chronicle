@@ -137,6 +137,53 @@ function CustomBadge({ label, onRemove }: { label: string; onRemove: () => void 
   );
 }
 
+/** Chip input for ability names — type a name and press Enter or comma to add. */
+function AbilityNameEditor({ filter, onChange }: { filter: PanelFilter; onChange: (next: PanelFilter) => void }) {
+  const arrayValues = toArrayValue(filter.value);
+  const [input, setInput] = useState("");
+
+  const addEntry = useCallback((raw: string) => {
+    const entry = raw.trim();
+    if (!entry || arrayValues.includes(entry)) return;
+    onChange({ ...filter, value: [...arrayValues, entry] });
+    setInput("");
+  }, [arrayValues, filter, onChange]);
+
+  const removeEntry = useCallback((entry: string) => {
+    onChange({ ...filter, value: arrayValues.filter((v) => v !== entry) });
+  }, [arrayValues, filter, onChange]);
+
+  const handleKeyDown = useCallback((e: KeyboardEvent<HTMLInputElement>) => {
+    if (e.key === "Enter" || e.key === ",") {
+      e.preventDefault();
+      addEntry(input);
+    }
+    if (e.key === "Backspace" && input === "" && arrayValues.length > 0) {
+      removeEntry(arrayValues[arrayValues.length - 1]);
+    }
+  }, [input, arrayValues, addEntry, removeEntry]);
+
+  const handleBlur = useCallback(() => {
+    if (input.trim()) addEntry(input);
+  }, [input, addEntry]);
+
+  return (
+    <div className="flex flex-wrap items-center gap-1 px-1 py-0.5 rounded border border-input bg-background/60 min-h-[28px] flex-1 min-w-[100px]">
+      {arrayValues.map((entry) => (
+        <CustomBadge key={entry} label={entry} onRemove={() => removeEntry(entry)} />
+      ))}
+      <input
+        className="flex-1 min-w-[60px] bg-transparent text-xs outline-none placeholder:text-muted-foreground py-0.5"
+        value={input}
+        onChange={(e) => setInput(e.target.value)}
+        onKeyDown={handleKeyDown}
+        onBlur={handleBlur}
+        placeholder={arrayValues.length === 0 ? "ability name, press Enter" : "add more…"}
+      />
+    </div>
+  );
+}
+
 /** Combined toggle + custom text input for source_type / target_type */
 function EntityTypeEditor({ filter, onChange }: { filter: PanelFilter; onChange: (next: PanelFilter) => void }) {
   const arrayValues = toArrayValue(filter.value);
@@ -234,14 +281,7 @@ function ValueEditor({ filter, onChange }: { filter: PanelFilter; onChange: (nex
     case "ability_id":
       return <AbilityIdEditor filter={filter} onChange={onChange} />;
     case "ability_name":
-      return (
-        <Input
-          className="h-7 text-xs flex-1 min-w-[100px]"
-          value={toInputValue(filter.value)}
-          onChange={(e) => onChange({ ...filter, value: e.target.value })}
-          placeholder="ability name"
-        />
-      );
+      return <AbilityNameEditor filter={filter} onChange={onChange} />;
     default:
       return (
         <Input

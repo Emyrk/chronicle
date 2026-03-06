@@ -1,6 +1,7 @@
 import type { UserPanelLayout } from "@/api/queries";
 import type { GridEditorItem } from "@/components/layout/GridLayoutEditor";
 import type { EventsPanelType } from "@/pages/Instance/EventsPanels";
+import type { PanelFilter } from "@/pages/Instance/EventsPanels/processors/filters";
 import {
   DEFAULT_INSTANCE_LAYOUT_ITEMS,
   DEFAULT_INSTANCE_PANEL_TYPES,
@@ -11,15 +12,21 @@ export interface LayoutLabExportV1 {
   items: GridEditorItem[];
   panelTypesById: Record<string, EventsPanelType>;
   panelOptionsById?: Record<string, string>;
+  panelFiltersById?: Record<string, PanelFilter[]>;
 }
 
 export function serializeLayoutLab(
   items: GridEditorItem[],
   panelTypesById: Record<string, EventsPanelType>,
   panelOptionsById?: Record<string, string | null>,
+  panelFiltersById?: Record<string, PanelFilter[]>,
 ): string {
   const filteredPanelOptions = panelOptionsById
     ? Object.fromEntries(Object.entries(panelOptionsById).filter(([, value]) => value !== null)) as Record<string, string>
+    : undefined;
+
+  const filteredPanelFilters = panelFiltersById
+    ? Object.fromEntries(Object.entries(panelFiltersById).filter(([, v]) => v.length > 0)) as Record<string, PanelFilter[]>
     : undefined;
 
   const payload: LayoutLabExportV1 = {
@@ -28,6 +35,9 @@ export function serializeLayoutLab(
     panelTypesById,
     ...(filteredPanelOptions && Object.keys(filteredPanelOptions).length > 0
       ? { panelOptionsById: filteredPanelOptions }
+      : {}),
+    ...(filteredPanelFilters && Object.keys(filteredPanelFilters).length > 0
+      ? { panelFiltersById: filteredPanelFilters }
       : {}),
   };
   return JSON.stringify(payload, null, 2);
@@ -48,6 +58,9 @@ export function parseLayoutLab(raw: string): LayoutLabExportV1 {
     panelTypesById: parsed.panelTypesById as Record<string, EventsPanelType>,
     panelOptionsById: parsed.panelOptionsById && typeof parsed.panelOptionsById === "object"
       ? parsed.panelOptionsById as Record<string, string>
+      : undefined,
+    panelFiltersById: parsed.panelFiltersById && typeof parsed.panelFiltersById === "object"
+      ? parsed.panelFiltersById as Record<string, PanelFilter[]>
       : undefined,
   };
 }

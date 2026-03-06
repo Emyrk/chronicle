@@ -18,8 +18,8 @@ export interface PanelFilterEditorProps {
 }
 
 const DEFAULT_FILTER: PanelFilter = {
-  type: "players",
-  value: "selected",
+  type: "ability_name",
+  value: "",
 };
 
 /** A group of filters connected by OR. Groups are AND'd together. */

@@ -30,6 +30,7 @@ import {
 import { cn } from "@/lib/utils";
 import type { Instance, Encounter, EnemyUnit } from "./InstancePage";
 import { EventsPanel, type EventsPanelType, type PanelContext, type EntitySelection } from "./EventsPanels";
+import type { PanelFilter } from "./EventsPanels/processors/filters";
 import { PANELS } from "./EventsPanels/EventsPanel";
 import { PanelTimingProvider, PanelTimingDisplay, PanelTimingResetter } from "./EventsPanels/PanelTimingContext";
 import { PanelExplainerView } from "./PanelExplainer";
@@ -716,6 +717,7 @@ interface SharedViewPayload {
     enemies?: number[];
     players?: number[];
     panelOptions?: Record<string, unknown>;
+    panelFilters?: Record<string, PanelFilter[]>;
   };
 }
 
@@ -789,8 +791,11 @@ interface EncounterDetailProps {
   layoutItems: GridEditorItem[];
   panelTypesById: Record<string, EventsPanelType>;
   panelOptionsById: Record<string, string | null>;
+  seedFiltersByID: Record<string, PanelFilter[]>;
+  seedFiltersVersion: number;
   onPanelTypeChange: (itemID: string, type: EventsPanelType) => void;
   onPanelOptionChange: (itemID: string, option: string | null) => void;
+  onPanelFiltersChange: (itemID: string, filters: PanelFilter[]) => void;
   onToggleEnemy: (enemyId: string) => void;
   onSelectEnemies: (enemyIds: string[]) => void;
   onTogglePlayer: (playerId: string) => void;
@@ -812,8 +817,11 @@ function EncounterDetail({
   layoutItems,
   panelTypesById,
   panelOptionsById,
+  seedFiltersByID,
+  seedFiltersVersion,
   onPanelTypeChange,
   onPanelOptionChange,
+  onPanelFiltersChange,
   onToggleEnemy,
   onSelectEnemies,
   onTogglePlayer,
@@ -1200,6 +1208,9 @@ function EncounterDetail({
                   showHints={showHints}
                   panelOption={panelOptionsById[item.id] ?? null}
                   onPanelOptionChange={(nextOption) => onPanelOptionChange(item.id, nextOption)}
+                  seedFilters={seedFiltersByID[item.id]}
+                  seedFiltersVersion={seedFiltersVersion}
+                  onFiltersChange={(filters) => onPanelFiltersChange(item.id, filters)}
                 />
               </div>
             );
@@ -1539,7 +1550,26 @@ export function InstancePageView({
     });
     return next;
   }, [activeLayoutItems, viewState.panelOptions]);
-  
+
+  // Per-panel filters: collected from EventsPanel children for persistence in shared layouts.
+  const [panelFiltersByID, setPanelFiltersByID] = useState<Record<string, PanelFilter[]>>({});
+  // Filters seeded from an imported shared view / layout book (consumed once by EventsPanel).
+  const [seedFiltersByID, setSeedFiltersByID] = useState<Record<string, PanelFilter[]>>({});
+  // Bumped on each import/cast to tell EventsPanel to re-apply seedFilters.
+  const [seedFiltersVersion, setSeedFiltersVersion] = useState(0);
+
+  const handlePanelFiltersChange = useCallback((itemID: string, filters: PanelFilter[]) => {
+    setPanelFiltersByID((prev) => {
+      if (filters.length === 0) {
+        if (!(itemID in prev)) return prev;
+        const next = { ...prev };
+        delete next[itemID];
+        return next;
+      }
+      return { ...prev, [itemID]: filters };
+    });
+  }, []);
+
   // Use URL state if present, otherwise default to all encounters
   const internalSelectedIds = useMemo(() => {
     if (viewState.encounters.length > 0) {
@@ -1765,6 +1795,19 @@ export function InstancePageView({
     }));
     setActiveLayoutId(typeof payload.layoutId === "string" ? payload.layoutId : null);
     setImportedLayoutItems(orderedItems);
+
+    // Restore per-panel filters if present in the payload.
+    const importedFilters: Record<string, PanelFilter[]> = {};
+    if (payload.view?.panelFilters) {
+      for (const [id, filters] of Object.entries(payload.view.panelFilters)) {
+        if (Array.isArray(filters) && filters.length > 0) {
+          importedFilters[id] = filters;
+        }
+      }
+    }
+    setSeedFiltersByID(importedFilters);
+    setPanelFiltersByID(importedFilters);
+    setSeedFiltersVersion((v) => v + 1);
   }, [allMergedEnemies, instance.encounters, instance.id, instance.players, setViewState]);
 
   const handleImportLayout = useCallback(() => {
@@ -1777,6 +1820,7 @@ export function InstancePageView({
         items?: GridEditorItem[];
         panelTypesById?: Record<string, EventsPanelType>;
         panelOptionsById?: Record<string, string>;
+        panelFiltersById?: Record<string, PanelFilter[]>;
       };
 
       if (parsed.version !== 1) {
@@ -1806,6 +1850,19 @@ export function InstancePageView({
 
       setActiveLayoutId(null);
       setImportedLayoutItems(orderedItems);
+
+      // Restore per-panel filters from imported layout.
+      const importedFilters: Record<string, PanelFilter[]> = {};
+      if (parsed.panelFiltersById) {
+        for (const [id, filters] of Object.entries(parsed.panelFiltersById)) {
+          if (Array.isArray(filters) && filters.length > 0) {
+            importedFilters[id] = filters;
+          }
+        }
+      }
+      setSeedFiltersByID(importedFilters);
+      setPanelFiltersByID(importedFilters);
+      setSeedFiltersVersion((v) => v + 1);
 
       toast.success("Imported layout", { description: `Applied ${orderedItems.length} panel${orderedItems.length === 1 ? "" : "s"}` });
     } catch (error) {
@@ -1838,8 +1895,9 @@ export function InstancePageView({
         panelOptions: Object.fromEntries(
           Object.entries(panelOptionsByID).filter(([, value]) => value !== null),
         ),
+        ...(Object.keys(panelFiltersByID).length > 0 ? { panelFilters: panelFiltersByID } : {}),
       },
-    }), [activeLayoutId, activeLayoutItems, allMergedEnemies, instance.encounters, instance.id, instance.players, panelOptionsByID, panelTypesByID, viewState.encounters, viewState.enemies, viewState.players]);
+    }), [activeLayoutId, activeLayoutItems, allMergedEnemies, instance.encounters, instance.id, instance.players, panelFiltersByID, panelOptionsByID, panelTypesByID, viewState.encounters, viewState.enemies, viewState.players]);
 
   const copyStateToClipboard = useCallback(async () => {
     try {
@@ -1936,6 +1994,20 @@ export function InstancePageView({
       setPanels(orderedPanels, orderedOptions);
       setActiveLayoutId(layout.id);
       setImportedLayoutItems(orderedItems);
+
+      // Restore per-panel filters from the layout.
+      const importedFilters: Record<string, PanelFilter[]> = {};
+      if (parsed.panelFiltersById) {
+        for (const [id, filters] of Object.entries(parsed.panelFiltersById)) {
+          if (Array.isArray(filters) && filters.length > 0) {
+            importedFilters[id] = filters;
+          }
+        }
+      }
+      setSeedFiltersByID(importedFilters);
+      setPanelFiltersByID(importedFilters);
+      setSeedFiltersVersion((v) => v + 1);
+
       toast.success("Cast layout", { description: layout.title });
     } catch {
       toast.error("Failed to cast layout", { description: "Layout payload is invalid." });
@@ -2267,8 +2339,11 @@ export function InstancePageView({
             layoutItems={activeLayoutItems}
             panelTypesById={panelTypesByID}
             panelOptionsById={panelOptionsByID}
+            seedFiltersByID={seedFiltersByID}
+            seedFiltersVersion={seedFiltersVersion}
             onPanelTypeChange={handlePanelTypeChangeByID}
             onPanelOptionChange={handlePanelOptionChangeByID}
+            onPanelFiltersChange={handlePanelFiltersChange}
             onToggleEnemy={toggleEnemySelection}
             onSelectEnemies={selectEnemies}
             onTogglePlayer={togglePlayerSelection}
