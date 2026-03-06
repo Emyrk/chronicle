@@ -175,7 +175,7 @@ export interface PanelRenderProps<TResult> {
   panelContext?: Record<string, unknown> | null;
 
   /** Bumps whenever panelContext changes; useful for local cache invalidation. */
-  panelContextVersion?: number;
+  panelContextVersion?: string | number;
 
   /** Stable panel slot index in the current layout (0-based). */
   panelIndex?: number;

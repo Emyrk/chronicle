@@ -54,7 +54,6 @@ export function createDamageTakenPanel(
       ]
     : [
         { type: "target_type" as const, value: ["player", "pet"], applyTo: dmg },
-        { type: "source_type" as const, value: ["player", "pet"], negate: true, applyTo: dmg },
       ];
 
   // Default source filters — pre-populated, removable by user.

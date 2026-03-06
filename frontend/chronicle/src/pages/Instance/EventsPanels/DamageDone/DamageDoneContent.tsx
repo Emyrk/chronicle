@@ -26,15 +26,12 @@ function aggregateForEncounters(
 ): PlayerMetricChartData[] {
   const aggregated = new Map<string, PlayerMetricChartData>();
   
-  let targets = selected.enemyIds;
+  // Determine which entity set controls the "dimmed" highlight.
+  // Target filtering is handled by panel defaultFilters at the processor level.
   let subjects = selected.playerIds;
-  if(sourceType === "enemies") {
-    targets = selected.playerIds;
+  if (sourceType === "enemies") {
     subjects = selected.enemyIds;
   }
-
-
-  const filterByTarget = targets.size > 0;
   const hasSubjectSelection = !disableSubjectSelection && subjects.size > 0;
   
   for (const encounterId of selectedEncounterIds) {
@@ -42,20 +39,10 @@ function aggregateForEncounters(
     if (!encounterDamage) continue;
     
     for (const [playerId, data] of encounterDamage) {
-      // Calculate damage - either filtered by target or total
+      // Sum all damage (target filtering handled by panel filters)
       let damageValue = 0;
-      if (filterByTarget) {
-        // Sum only damage to selected enemies
-        for (const [targetId, amount] of data.target) {
-          if (targets.has(targetId)) {
-            damageValue += amount;
-          }
-        }
-      } else {
-        // Sum all damage (no enemy filter)
-        for (const amount of data.target.values()) {
-          damageValue += amount;
-        }
+      for (const amount of data.target.values()) {
+        damageValue += amount;
       }
       
       // Skip players with zero damage after filtering

@@ -476,6 +476,7 @@ export function EventsPanel({
     result,
     totalEvents,
     processingTimeMs,
+    panelContextKey: aggregationContextKey,
   } = usePanelAggregation({
     panel,
     context,
@@ -611,7 +612,7 @@ export function EventsPanel({
                 panelOption,
                 setPanelOption: onPanelOptionChange,
                 panelContext,
-                panelContextVersion,
+                panelContextVersion: `${panelContextVersion}|${aggregationContextKey}`,
                 setPanelContext: setPanelContextWithKey,
                 panelIndex,
               })}

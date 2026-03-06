@@ -573,5 +573,6 @@ export function usePanelAggregation<TResult>(
     result,
     totalEvents,
     processingTimeMs,
+    panelContextKey,
   };
 }
