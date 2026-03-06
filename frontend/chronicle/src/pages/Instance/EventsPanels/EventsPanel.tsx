@@ -186,7 +186,9 @@ export function EventsPanel({
   const [flipped, setFlipped] = useState(false);
 
   const customFilters = useMemo(() => (panelContext?.filters as PanelFilter[] | undefined) ?? null, [panelContext]);
-  const filteringSupported = panel.supportsFiltering === true;
+  const syncMode = useSyncModeContextOptional();
+  const isSyncActive = syncMode?.enabled === true;
+  const filteringSupported = panel.supportsFiltering === true && !isSyncActive;
   const fixedFilters = panel.fixedFilters ?? [];
   const userFilters = customFilters ?? [];
   const activeFilters = useMemo(() => [...fixedFilters, ...userFilters], [fixedFilters, userFilters]);
@@ -221,11 +223,11 @@ export function EventsPanel({
   }, [onFiltersChange]);
 
   const onPanelMouseDown = useCallback((event: MouseEvent<HTMLDivElement>) => {
-    if (event.shiftKey && event.button === 0) {
+    if (event.shiftKey && event.button === 0 && !isSyncActive) {
       event.preventDefault();
       setFlipped((value) => !value);
     }
-  }, []);
+  }, [isSyncActive]);
 
   // Reset panel context when panel type changes to avoid leaking options across panel types.
   useEffect(() => {
@@ -274,7 +276,6 @@ export function EventsPanel({
   const isDone = panel.selfManagesAggregation || processingTimeMs !== null;
   usePanelTiming(`panel-${panelIndex}`, isDone);
 
-  const syncMode = useSyncModeContextOptional();
   const effectiveDurationMs = useMemo(() => {
     if (syncMode?.enabled && syncMode.currentTimestamp && syncMode.encounterBounds) {
       const elapsedMs =

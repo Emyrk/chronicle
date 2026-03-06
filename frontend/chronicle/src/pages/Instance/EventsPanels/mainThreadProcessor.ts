@@ -27,13 +27,25 @@ import {
   type ReusableAuraCast,
 } from "@/api/protodecode/decode";
 import { processorRegistry } from "./processors";
-import { compileFilters } from "./processors/filters";
+import { compileFilters, type FilterPredicate, type PanelFilter } from "./processors/filters";
 import type { 
   PanelProcessor, 
   ProcessorContext, 
   SerializableProcessorContext,
 } from "./processorTypes";
 import type { StreamType, CachedStream } from "@/hooks/instanceEvents";
+
+// Cache compiled filter predicates per panel across sync mode ticks. Reference
+// equality on the filters array (stable via useMemo) + contextKey (stable string)
+// means zero allocation overhead per tick during normal playback.
+const _filterCache = new Map<string, {
+  filtersRef: PanelFilter[] | undefined;
+  contextKey: string | undefined;
+  predicate: FilterPredicate;
+  // Also cache the deserialized context to avoid recreating Sets every tick
+  serializableRef: SerializableProcessorContext | undefined;
+  deserializedContext: ProcessorContext | undefined;
+}>();
 
 /**
  * Union of all reusable event types
@@ -83,6 +95,10 @@ export interface ProcessIncrementallyOptions<TResult> {
   onProgress?: (state: TResult, count: number) => void;
   /** How often to yield to UI (default 1000) */
   yieldEveryN?: number;
+  /** Stable cache key for filter compilation (e.g. panelContextKey). When both
+   *  this and the filters array reference are unchanged, compiled predicates are
+   *  reused — avoiding expensive recompilation during sync mode ticks. */
+  contextKey?: string;
 }
 
 /**
@@ -263,9 +279,35 @@ export async function processIncrementally<TResult>(
     };
   }
 
-  // Convert context
-  const context = deserializeContext(serializableContext);
-  const filterPredicate = compileFilters(context.filters ?? [], context);
+  // Cache deserialized context and compiled filter predicate per-panel.
+  // During sync mode ticks, only the timestamp changes — the serializable context
+  // (memoized in the hook) and filters are stable references, so we skip all the
+  // Set construction and filter compilation.
+  const rawFilters = serializableContext.filters;
+  const contextKey = options.contextKey;
+  const cached = _filterCache.get(panelId);
+
+  let context: ProcessorContext;
+  if (cached && cached.serializableRef === serializableContext) {
+    context = cached.deserializedContext!;
+  } else {
+    context = deserializeContext(serializableContext);
+  }
+
+  let filterPredicate: FilterPredicate;
+  if (cached && rawFilters === cached.filtersRef && contextKey === cached.contextKey) {
+    filterPredicate = cached.predicate;
+  } else {
+    filterPredicate = compileFilters(context.filters ?? [], context);
+  }
+
+  _filterCache.set(panelId, {
+    filtersRef: rawFilters,
+    contextKey,
+    predicate: filterPredicate,
+    serializableRef: serializableContext,
+    deserializedContext: context,
+  });
 
   // Check for backward seek - must reprocess from start
   const mustRestart = timestampMovedBackward(stopAtTimestamp, previousState);

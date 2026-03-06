@@ -232,6 +232,28 @@ export function usePanelAggregation<TResult>(
     panelContextKeyData,
   ]);
   
+  // Stable merged filter array — reference equality lets mainThreadProcessor skip recompilation
+  // during sync mode ticks where only the timestamp changes.
+  const mergedFilters = useMemo(
+    () => [
+      ...(panel.fixedFilters ?? []),
+      ...((panelContextData?.filters as PanelFilter[] | undefined) ?? []),
+    ],
+    [panel.fixedFilters, panelContextData?.filters],
+  );
+
+  // Stable serializable context — avoids rebuilding players/units objects and
+  // Array.from(Sets) on every sync tick. Only changes when panelContextKey changes.
+  const memoizedContext = useMemo<SerializableProcessorContext>(
+    () => ({
+      ...toSerializableContext(panelContext, panelOption, panelContextData),
+      filters: mergedFilters,
+    }),
+    // panelContextKey is a stable string derived from all context inputs
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [panelContextKey, mergedFilters],
+  );
+
   // Check if we're in sync mode
   const isSyncMode = syncMode?.enabled ?? false;
   const syncTimestamp = syncMode?.currentTimestamp ?? null;
@@ -316,14 +338,12 @@ export function usePanelAggregation<TResult>(
       setProcessing(true);
 
       // Send work to pooled worker
-      const userFilters = (panelContextData?.filters as PanelFilter[] | undefined) ?? [];
-      const resolvedFilters = [...(panel.fixedFilters ?? []), ...userFilters];
       const workerRequest: WorkerRequest = {
         requestId,
         panelId: panel.id,
         context: {
           ...toSerializableContext(panelContext, panelOption, panelContextData),
-          filters: resolvedFilters,
+          filters: mergedFilters,
         },
         streams: fetchedStreams,
       };
@@ -384,7 +404,7 @@ export function usePanelAggregation<TResult>(
       setLoading(false);
       setProcessing(false);
     }
-  }, [eventsContext.fetchStream, panel, panelContext, panelOption, panelContextData, panelIndex]);
+  }, [eventsContext.fetchStream, panel, panelContext, panelOption, panelContextData, mergedFilters, panelIndex]);
   
   // Main thread incremental processing (sync mode)
   // eslint-disable-next-line react-hooks/preserve-manual-memoization
@@ -416,13 +436,8 @@ export function usePanelAggregation<TResult>(
       const response = await processIncrementally<TResult>({
         panelId: panel.id,
         streams,
-        context: {
-          ...toSerializableContext(panelContext, panelOption, panelContextData),
-          filters: [
-            ...(panel.fixedFilters ?? []),
-            ...((panelContextData?.filters as PanelFilter[] | undefined) ?? []),
-          ],
-        },
+        context: memoizedContext,
+        contextKey: panelContextKey,
         stopAtTimestamp: stopAt,
         previousState: incrementalStateRef.current,
         onProgress: (_state, count) => {
@@ -486,7 +501,7 @@ export function usePanelAggregation<TResult>(
       setLoading(false);
       setProcessing(false);
     }
-  }, [eventsContext.fetchStream, panel, panelContext, panelOption, panelContextData]);
+  }, [eventsContext.fetchStream, panel, panelContext, panelOption, panelContextData, mergedFilters, panelContextKey]);
   
   // Track previous sync mode to detect transitions
   const prevSyncModeRef = useRef(isSyncMode);
