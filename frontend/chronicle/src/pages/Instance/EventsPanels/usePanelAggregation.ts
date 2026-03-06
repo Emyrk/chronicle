@@ -32,6 +32,7 @@ export interface UsePanelAggregationOptions<TResult> {
 }
 
 export interface UsePanelAggregationResult<TResult> {
+  panelContextKey: string;
   loading: boolean;
   processing: boolean;
   error: Error | null;
