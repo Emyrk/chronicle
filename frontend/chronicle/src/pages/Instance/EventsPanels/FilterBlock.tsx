@@ -1,15 +1,16 @@
+import { useState, useCallback, type KeyboardEvent } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { useSpell } from "@/api/queries";
+import { SpellIconWithTooltip } from "@/components/ui/SpellIconWithTooltip";
 import type { PanelFilter, PanelFilterType } from "./processors/filters";
 
 const FILTER_TYPES: { value: PanelFilterType; label: string }[] = [
-  { value: "players", label: "Players" },
-  { value: "enemies", label: "Enemies" },
   { value: "ability_name", label: "Ability Name" },
   { value: "ability_id", label: "Ability ID" },
   { value: "ability_school", label: "Ability School" },
-  { value: "source_type", label: "Source Type" },
-  { value: "target_type", label: "Target Type" },
+  { value: "source_type", label: "Source" },
+  { value: "target_type", label: "Target" },
 ];
 
 const SCHOOL_OPTIONS = [
@@ -22,13 +23,24 @@ const SCHOOL_OPTIONS = [
   { label: "Arcane", value: "arcane", color: "bg-pink-500" },
 ] as const;
 
-const SOURCE_TYPE_OPTIONS = [
+const SOURCE_TYPE_IDENTITY_OPTIONS = [
+  { label: "Selected Players", value: "selected_players" },
+  { label: "Selected Enemies", value: "selected_enemies" },
+  { label: "Custom", value: "custom" },
+] as const;
+
+const SOURCE_TYPE_TYPE_OPTIONS = [
   { label: "Player", value: "player" },
   { label: "Pet", value: "pet" },
   { label: "Enemy Pet", value: "enemy_pet" },
   { label: "Enemy", value: "enemy" },
   { label: "Object", value: "object" },
 ] as const;
+
+const SOURCE_TYPE_ALL_OPTIONS = [...SOURCE_TYPE_IDENTITY_OPTIONS, ...SOURCE_TYPE_TYPE_OPTIONS];
+
+/** Known toggle option keys — anything else in the value array is a custom entry */
+const SOURCE_TYPE_KEYS = new Set(SOURCE_TYPE_ALL_OPTIONS.map((o) => o.value));
 
 const APPLY_TO_OPTIONS = [
   { label: "Damage", value: "damage" },
@@ -93,6 +105,116 @@ function SegmentedToggle({ options, values, onToggle }: {
   );
 }
 
+function AbilityIdEditor({ filter, onChange }: { filter: PanelFilter; onChange: (next: PanelFilter) => void }) {
+  const raw = toInputValue(filter.value).trim();
+  const spellId = raw ? parseInt(raw, 10) : NaN;
+  const { data: spell } = useSpell(
+    isNaN(spellId) ? "" : spellId.toString(),
+    { enabled: !isNaN(spellId) && spellId > 0 },
+  );
+
+  return (
+    <div className="flex items-center gap-1.5">
+      {spell && <SpellIconWithTooltip spell={spell} size={20} />}
+      <Input
+        className="h-7 text-xs w-24"
+        type="number"
+        value={toInputValue(filter.value)}
+        onChange={(e) => onChange({ ...filter, value: e.target.value })}
+        placeholder="Spell ID"
+      />
+    </div>
+  );
+}
+
+/** Chip/badge for a custom entry (name or GUID) */
+function CustomBadge({ label, onRemove }: { label: string; onRemove: () => void }) {
+  return (
+    <span className="inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded bg-primary/20 text-primary text-xs font-medium">
+      {label}
+      <button type="button" onClick={onRemove} className="hover:text-red-400 ml-0.5 leading-none">×</button>
+    </span>
+  );
+}
+
+/** Combined toggle + custom text input for source_type / target_type */
+function EntityTypeEditor({ filter, onChange }: { filter: PanelFilter; onChange: (next: PanelFilter) => void }) {
+  const arrayValues = toArrayValue(filter.value);
+  const [customInput, setCustomInput] = useState("");
+
+  const toggleValues = arrayValues.filter((v) => SOURCE_TYPE_KEYS.has(v));
+  const customValues = arrayValues.filter((v) => !SOURCE_TYPE_KEYS.has(v));
+  const showCustomInput = toggleValues.includes("custom");
+
+  const toggleValue = useCallback((val: string) => {
+    if (toggleValues.includes(val)) {
+      // Deselect: keep only custom entries
+      onChange({ ...filter, value: customValues });
+    } else {
+      // Select: replace previous toggle with this one, keep custom entries
+      const next = val === "custom"
+        ? [val, ...customValues]
+        : [val];
+      onChange({ ...filter, value: next });
+    }
+  }, [toggleValues, customValues, filter, onChange]);
+
+  const addCustomEntry = useCallback((raw: string) => {
+    const entry = raw.trim();
+    if (!entry || arrayValues.includes(entry)) return;
+    onChange({ ...filter, value: [...arrayValues, entry] });
+    setCustomInput("");
+  }, [arrayValues, filter, onChange]);
+
+  const removeCustomEntry = useCallback((entry: string) => {
+    onChange({ ...filter, value: arrayValues.filter((v) => v !== entry) });
+  }, [arrayValues, filter, onChange]);
+
+  const handleKeyDown = useCallback((e: KeyboardEvent<HTMLInputElement>) => {
+    if (e.key === "Enter" || e.key === ",") {
+      e.preventDefault();
+      addCustomEntry(customInput);
+    }
+    if (e.key === "Backspace" && customInput === "" && customValues.length > 0) {
+      removeCustomEntry(customValues[customValues.length - 1]);
+    }
+  }, [customInput, customValues, addCustomEntry, removeCustomEntry]);
+
+  const handleBlur = useCallback(() => {
+    if (customInput.trim()) addCustomEntry(customInput);
+  }, [customInput, addCustomEntry]);
+
+  return (
+    <div className="flex flex-col gap-1.5 w-full">
+      <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
+        <div className="flex items-center gap-1">
+          <span className="text-[9px] uppercase tracking-wider text-muted-foreground mr-0.5">Identity</span>
+          <SegmentedToggle options={SOURCE_TYPE_IDENTITY_OPTIONS} values={toggleValues} onToggle={toggleValue} />
+        </div>
+        <div className="flex items-center gap-1">
+          <span className="text-[9px] uppercase tracking-wider text-muted-foreground mr-0.5">Type</span>
+          <SegmentedToggle options={SOURCE_TYPE_TYPE_OPTIONS} values={toggleValues} onToggle={toggleValue} />
+        </div>
+      </div>
+      {showCustomInput && (
+        <div className="flex flex-wrap items-center gap-1 px-1 py-0.5 rounded border border-input bg-background/60 min-h-[28px]">
+          {customValues.map((entry) => (
+            <CustomBadge key={entry} label={entry} onRemove={() => removeCustomEntry(entry)} />
+          ))}
+          <input
+            className="flex-1 min-w-[80px] bg-transparent text-xs outline-none placeholder:text-muted-foreground py-0.5"
+            value={customInput}
+            onChange={(e) => setCustomInput(e.target.value)}
+            onKeyDown={handleKeyDown}
+            onBlur={handleBlur}
+            placeholder="name or GUID, press Enter"
+          />
+        </div>
+      )}
+    </div>
+  );
+}
+
 function ValueEditor({ filter, onChange }: { filter: PanelFilter; onChange: (next: PanelFilter) => void }) {
   const arrayValues = toArrayValue(filter.value);
 
@@ -108,28 +230,9 @@ function ValueEditor({ filter, onChange }: { filter: PanelFilter; onChange: (nex
       return <SegmentedToggle options={SCHOOL_OPTIONS} values={arrayValues} onToggle={toggleValue} />;
     case "source_type":
     case "target_type":
-      return <SegmentedToggle options={SOURCE_TYPE_OPTIONS} values={arrayValues} onToggle={toggleValue} />;
-
-    case "players":
-    case "enemies":
-      return (
-        <Input
-          className="h-7 text-xs flex-1 min-w-[100px]"
-          value={toInputValue(filter.value)}
-          onChange={(e) => onChange({ ...filter, value: e.target.value })}
-          placeholder="selected"
-        />
-      );
+      return <EntityTypeEditor filter={filter} onChange={onChange} />;
     case "ability_id":
-      return (
-        <Input
-          className="h-7 text-xs w-24"
-          type="number"
-          value={toInputValue(filter.value)}
-          onChange={(e) => onChange({ ...filter, value: e.target.value })}
-          placeholder="Spell ID"
-        />
-      );
+      return <AbilityIdEditor filter={filter} onChange={onChange} />;
     case "ability_name":
       return (
         <Input

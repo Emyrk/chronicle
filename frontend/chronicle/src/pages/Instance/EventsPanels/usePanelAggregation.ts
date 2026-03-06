@@ -416,7 +416,13 @@ export function usePanelAggregation<TResult>(
       const response = await processIncrementally<TResult>({
         panelId: panel.id,
         streams,
-        context: toSerializableContext(panelContext, panelOption, panelContextData),
+        context: {
+          ...toSerializableContext(panelContext, panelOption, panelContextData),
+          filters: [
+            ...(panel.fixedFilters ?? []),
+            ...((panelContextData?.filters as PanelFilter[] | undefined) ?? []),
+          ],
+        },
         stopAtTimestamp: stopAt,
         previousState: incrementalStateRef.current,
         onProgress: (_state, count) => {

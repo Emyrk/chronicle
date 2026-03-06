@@ -83,7 +83,7 @@ export function SpellIconWithTooltip({
           side="right"
           align="start"
           sideOffset={8}
-          className="p-0 bg-transparent border-0"
+          className="p-0 bg-transparent border-0 z-[10000]"
           hideArrow
         >
           <SpellTooltip spell={spell} locale={locale} detailed={detailed} />

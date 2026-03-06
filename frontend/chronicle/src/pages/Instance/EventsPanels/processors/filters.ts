@@ -137,10 +137,18 @@ function compileEntityFilter(
   };
 }
 
+/** Known toggle option keys for source_type / target_type filters */
+const ENTITY_TYPE_OPTION_KEYS = new Set([
+  "selected_players", "selected_enemies", "custom",
+  "player", "pet", "enemy_pet", "enemy", "object",
+]);
+
 /**
  * Shared compiler for source_type and target_type filters.
  * Classifies a GUID from the given event field as player / pet / enemy_pet / enemy
  * using context.units for owner-based pet detection.
+ * Also supports "selected_players", "selected_enemies" (entity selection) and
+ * "custom" entries (name or GUID match).
  */
 function compileEntityTypeFilter(
   value: string | string[],
@@ -149,20 +157,63 @@ function compileEntityTypeFilter(
 ): FilterPredicate {
   const rawValues = new Set(toValues(value));
   if (rawValues.size === 0) return () => true;
+
+  // Entity type classification flags
   const wantPlayer = rawValues.has("player");
   const wantPet = rawValues.has("pet");           // friendly pet (player-owned)
   const wantEnemyPet = rawValues.has("enemy_pet"); // enemy pet (non-player-owned)
   const wantEnemy = rawValues.has("enemy");
   const wantObject = rawValues.has("object");
 
+  // Entity selection flags
+  const wantSelectedPlayers = rawValues.has("selected_players");
+  const wantSelectedEnemies = rawValues.has("selected_enemies");
+  const playerIds = context.entitySelection.playerIds;
+  const enemyIds = context.entitySelection.enemyIds;
+
+  // Custom name/GUID entries (anything not a known option key)
+  const customEntries = [...rawValues].filter((v) => !ENTITY_TYPE_OPTION_KEYS.has(v));
+  const customGuids = new Set(customEntries.filter((v) => v.startsWith("0x")));
+  const customNames = customEntries.filter((v) => !v.startsWith("0x")).map((n) => n.toLowerCase());
+
   const guidCache = createGuidCache();
   const units = context.units ?? {};
+  const players = context.players ?? {};
+
+  // Build a name lookup: GUID → lowercase name
+  const getGuidName = (guid: string): string | null => {
+    const player = players[guid];
+    if (player) return player.name.toLowerCase();
+    const unit = units[guid];
+    if (unit) return unit.name.toLowerCase();
+    return null;
+  };
 
   return (event) => {
     if (!(field in event)) return false;
     const guid = (event as Record<string, unknown>)[field];
     if (typeof guid !== "string" || !guid) return false;
 
+    // Selected players: match if guid is in playerIds (pass all if none selected)
+    if (wantSelectedPlayers) {
+      if (playerIds.size === 0 || playerIds.has(guid)) return true;
+    }
+
+    // Selected enemies: match if guid is in enemyIds (pass all if none selected)
+    if (wantSelectedEnemies) {
+      if (enemyIds.size === 0 || enemyIds.has(guid)) return true;
+    }
+
+    // Custom GUID match
+    if (customGuids.size > 0 && customGuids.has(guid)) return true;
+
+    // Custom name match (case-insensitive)
+    if (customNames.length > 0) {
+      const name = getGuidName(guid);
+      if (name && customNames.some((n) => name.includes(n))) return true;
+    }
+
+    // Entity type classification
     const guidIsPlayer = isPlayerGuid(guid) || getCachedGuid(guidCache, guid).isPlayer();
     if (wantPlayer && guidIsPlayer) return true;
 
@@ -246,11 +297,17 @@ function compileSingleFilter(filter: PanelFilter, context: ProcessorContext): Fi
     pred = (event) => !inner(event);
   }
 
-  // Scope to specific event types — events outside applyTo pass through
-  if (filter.applyTo && filter.applyTo.length > 0) {
-    const applyToSet = new Set(filter.applyTo);
+  // Scope to specific event types — events outside applyTo pass through.
+  // "*" means all events (no wrapping needed). Single-item uses === for speed.
+  if (filter.applyTo && filter.applyTo.length > 0 && !(filter.applyTo.length === 1 && filter.applyTo[0] === "*")) {
     const inner = pred;
-    pred = (event) => !applyToSet.has(event.type) ? true : inner(event);
+    if (filter.applyTo.length === 1) {
+      const single = filter.applyTo[0];
+      pred = (event) => event.type !== single ? true : inner(event);
+    } else {
+      const applyToSet = new Set(filter.applyTo);
+      pred = (event) => !applyToSet.has(event.type) ? true : inner(event);
+    }
   }
 
   return pred;

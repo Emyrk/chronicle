@@ -1,9 +1,13 @@
-import { useMemo } from "react";
+import { useMemo, type ReactNode } from "react";
 import { Button } from "@/components/ui/button";
 import { FilterBlock } from "./FilterBlock";
 import type { PanelFilter } from "./processors/filters";
 
 export interface PanelFilterEditorProps {
+  /** Panel label shown as the heading on the back side. */
+  panelLabel?: string;
+  /** Panel icon rendered next to the label. */
+  panelIcon?: ReactNode;
   /** Locked filters defined by the panel — always active, not editable. */
   fixedFilters?: PanelFilter[];
   /** User-editable filters. */
@@ -39,7 +43,7 @@ function buildGroups(filters: PanelFilter[]): FilterGroup[] {
   return groups;
 }
 
-export function PanelFilterEditor({ fixedFilters = [], filters, onChange, onClose, onReset }: PanelFilterEditorProps) {
+export function PanelFilterEditor({ panelLabel, panelIcon, fixedFilters = [], filters, onChange, onClose, onReset }: PanelFilterEditorProps) {
   const groups = useMemo(() => buildGroups(filters), [filters]);
 
   const toggleCombinator = (filterIndex: number) => {
@@ -69,7 +73,10 @@ export function PanelFilterEditor({ fixedFilters = [], filters, onChange, onClos
   return (
     <div className="h-full flex flex-col gap-3">
       <div className="flex items-center justify-between">
-        <h4 className="text-sm font-semibold">Panel Filters</h4>
+        <h4 className="text-sm font-semibold flex items-center gap-1.5">
+          {panelIcon}
+          {panelLabel ?? "Panel Filters"}
+        </h4>
         <div className="flex items-center gap-2">
           <Button size="sm" variant="ghost" onClick={onReset}>Reset</Button>
           <Button size="sm" variant="ghost" onClick={onClose}>Back</Button>

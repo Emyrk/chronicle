@@ -27,6 +27,7 @@ import {
   type ReusableAuraCast,
 } from "@/api/protodecode/decode";
 import { processorRegistry } from "./processors";
+import { compileFilters } from "./processors/filters";
 import type { 
   PanelProcessor, 
   ProcessorContext, 
@@ -119,6 +120,7 @@ function deserializeContext(ctx: SerializableProcessorContext): ProcessorContext
     pagination: ctx.pagination,
     panelOption: ctx.panelOption,
     panelContext: ctx.panelContext,
+    filters: ctx.filters,
   };
 }
 
@@ -263,6 +265,7 @@ export async function processIncrementally<TResult>(
 
   // Convert context
   const context = deserializeContext(serializableContext);
+  const filterPredicate = compileFilters(context.filters ?? [], context);
 
   // Check for backward seek - must reprocess from start
   const mustRestart = timestampMovedBackward(stopAtTimestamp, previousState);
@@ -473,6 +476,12 @@ export async function processIncrementally<TResult>(
         }
       }
       
+      // Apply filters (mirrors panelWorker.ts)
+      if (!filterPredicate(minPeeked.event)) {
+        consumePeeked(minCursor);
+        continue;
+      }
+
       // Process the event
       processor.processEvent(
         state, 

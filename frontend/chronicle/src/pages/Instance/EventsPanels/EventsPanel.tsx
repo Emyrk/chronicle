@@ -210,7 +210,7 @@ export function EventsPanel({
   }, []);
 
   const onPanelMouseDown = useCallback((event: MouseEvent<HTMLDivElement>) => {
-    if (event.shiftKey && event.button === 1) {
+    if (event.shiftKey && event.button === 0) {
       event.preventDefault();
       setFlipped((value) => !value);
     }
@@ -344,6 +344,8 @@ export function EventsPanel({
         )}
         back={filteringSupported ? (
           <PanelFilterEditor
+            panelLabel={panel.label}
+            panelIcon={panel.icon}
             fixedFilters={fixedFilters}
             filters={userFilters}
             onChange={setFilters}
