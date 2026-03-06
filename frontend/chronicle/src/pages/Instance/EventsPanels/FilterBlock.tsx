@@ -40,7 +40,7 @@ const SOURCE_TYPE_TYPE_OPTIONS = [
 const SOURCE_TYPE_ALL_OPTIONS = [...SOURCE_TYPE_IDENTITY_OPTIONS, ...SOURCE_TYPE_TYPE_OPTIONS];
 
 /** Known toggle option keys — anything else in the value array is a custom entry */
-const SOURCE_TYPE_KEYS = new Set(SOURCE_TYPE_ALL_OPTIONS.map((o) => o.value));
+const SOURCE_TYPE_KEYS: Set<string> = new Set(SOURCE_TYPE_ALL_OPTIONS.map((o) => o.value));
 
 const APPLY_TO_OPTIONS = [
   { label: "Damage", value: "damage" },

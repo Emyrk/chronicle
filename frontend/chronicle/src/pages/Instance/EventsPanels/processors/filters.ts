@@ -191,7 +191,7 @@ function compileEntityTypeFilter(
 
   return (event) => {
     if (!(field in event)) return false;
-    const guid = (event as Record<string, unknown>)[field];
+    const guid = (event as unknown as Record<string, unknown>)[field];
     if (typeof guid !== "string" || !guid) return false;
 
     // Selected players: match if guid is in playerIds (pass all if none selected)

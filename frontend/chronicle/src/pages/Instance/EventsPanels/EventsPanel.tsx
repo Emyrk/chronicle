@@ -191,7 +191,7 @@ export function EventsPanel({
   const filteringSupported = panel.supportsFiltering === true && !isSyncActive;
   const fixedFilters = panel.fixedFilters ?? [];
   const userFilters = customFilters ?? [];
-  const activeFilters = useMemo(() => [...fixedFilters, ...userFilters], [fixedFilters, userFilters]);
+
   const hasCustomFilters = filteringSupported && customFilters !== null;
 
   const setPanelContextWithKey = useCallback((nextContext: Record<string, unknown> | null) => {
