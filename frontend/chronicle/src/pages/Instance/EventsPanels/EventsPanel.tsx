@@ -3,6 +3,7 @@
  */
 
 import { useCallback, useEffect, useMemo, useRef, useState, type MouseEvent } from "react";
+import ReactDOM from "react-dom";
 import { useLocalStorage } from "@/hooks/useLocalStorage";
 import { HelpCircle, Construction, Filter } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -120,20 +121,123 @@ const FILTER_TYPE_LABELS: Record<PanelFilterType, string> = {
   enemies: "Enemies",
 };
 
-function summarizeFilters(filters: PanelFilter[]): string {
-  const parts = filters
-    .filter((f) => {
-      const v = f.value;
-      return Array.isArray(v) ? v.length > 0 : String(v).trim() !== "";
-    })
-    .map((f, i) => {
-      const prefix = i > 0 ? ` ${(f.combinator ?? "and").toUpperCase()} ` : "";
-      const val = Array.isArray(f.value) ? f.value.join(", ") : f.value;
-      const neg = f.negate ? "NOT " : "";
-      return `${prefix}${neg}${FILTER_TYPE_LABELS[f.type] ?? f.type}: ${val}`;
-    })
-    .join("");
-  return parts || "Custom filters active";
+function buildFilterGroups(filters: PanelFilter[]): PanelFilter[][] {
+  const groups: PanelFilter[][] = [];
+  let current: PanelFilter[] = [];
+  for (let i = 0; i < filters.length; i++) {
+    if (i > 0 && filters[i].combinator === "or") {
+      current.push(filters[i]);
+    } else {
+      if (current.length) groups.push(current);
+      current = [filters[i]];
+    }
+  }
+  if (current.length) groups.push(current);
+  return groups;
+}
+
+function FilterRow({ filter }: { filter: PanelFilter }) {
+  const val = Array.isArray(filter.value) ? filter.value.join(", ") : filter.value;
+  if (!val || (Array.isArray(filter.value) && filter.value.length === 0)) return null;
+  return (
+    <div className="flex items-center gap-1.5 text-xs">
+      {filter.negate && (
+        <span className="text-red-400 font-semibold text-[10px]">NOT</span>
+      )}
+      <span className="text-muted-foreground">
+        {FILTER_TYPE_LABELS[filter.type] ?? filter.type}:
+      </span>
+      <span className="font-medium truncate">{val}</span>
+    </div>
+  );
+}
+
+function FilterSummaryCard({ filters }: { filters: PanelFilter[] }) {
+  const active = filters.filter((f) => {
+    const v = f.value;
+    return Array.isArray(v) ? v.length > 0 : String(v).trim() !== "";
+  });
+
+  if (active.length === 0) {
+    return <span className="text-muted-foreground text-xs">Custom filters active</span>;
+  }
+
+  const groups = buildFilterGroups(active);
+
+  return (
+    <div className="space-y-1.5 max-w-xs">
+      <div className="font-medium text-xs border-b border-border pb-1">
+        Active Filters ({active.length})
+      </div>
+      {groups.map((group, gi) => (
+        <div key={gi}>
+          {gi > 0 && (
+            <div className="text-[10px] text-muted-foreground uppercase my-1">and</div>
+          )}
+          {group.length === 1 ? (
+            <FilterRow filter={group[0]} />
+          ) : (
+            <div className="border-l-2 border-emerald-500/40 pl-2 space-y-0.5">
+              {group.map((f, fi) => (
+                <div key={fi}>
+                  {fi > 0 && (
+                    <span className="text-[10px] text-emerald-400 uppercase">or</span>
+                  )}
+                  <FilterRow filter={f} />
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      ))}
+      <p className="text-[10px] text-muted-foreground pt-1 border-t border-border">
+        Click for menu actions
+      </p>
+    </div>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Filter context menu (right-click)
+// ---------------------------------------------------------------------------
+
+function FilterContextMenu({
+  position,
+  onReset,
+  onClose,
+}: {
+  position: { x: number; y: number };
+  onReset: () => void;
+  onClose: () => void;
+}) {
+  useEffect(() => {
+    const handler = () => onClose();
+    // Defer so the opening contextmenu event doesn't immediately close the menu
+    const frame = requestAnimationFrame(() => {
+      document.addEventListener("click", handler);
+      document.addEventListener("contextmenu", handler);
+    });
+    return () => {
+      cancelAnimationFrame(frame);
+      document.removeEventListener("click", handler);
+      document.removeEventListener("contextmenu", handler);
+    };
+  }, [onClose]);
+
+  return ReactDOM.createPortal(
+    <div
+      className="fixed z-50 min-w-[160px] rounded-md border bg-popover p-1 text-popover-foreground shadow-md animate-in fade-in-0 zoom-in-95"
+      style={{ left: position.x, top: position.y }}
+    >
+      <button
+        className="relative flex w-full cursor-pointer select-none items-center rounded-sm px-2 py-1.5 text-sm outline-none hover:bg-accent hover:text-accent-foreground"
+        onClick={onReset}
+      >
+        Reset filters
+      </button>
+    </div>,
+    document.body,
+  );
 }
 
 // ---------------------------------------------------------------------------
@@ -240,6 +344,7 @@ export function EventsPanel({
   const [panelContext, setPanelContext] = useState<Record<string, unknown> | null>(null);
   const [panelContextVersion, setPanelContextVersion] = useState(0);
   const [flipped, setFlipped] = useState(false);
+  const [filterContextMenu, setFilterContextMenu] = useState<{ x: number; y: number } | null>(null);
 
   const customFilters = useMemo(() => (panelContext?.filters as PanelFilter[] | undefined) ?? null, [panelContext]);
   const syncMode = useSyncModeContextOptional();
@@ -391,16 +496,30 @@ export function EventsPanel({
                   <PanelSelector value={panelType} onChange={onPanelTypeChange} />
                 )}
                 {hasCustomFilters && (
-                  <HintTooltip>
-                    <TooltipTrigger asChild>
-                      <span className="text-emerald-500 cursor-help">
-                        <Filter className="h-3.5 w-3.5" />
-                      </span>
-                    </TooltipTrigger>
-                    <TooltipContent side="top" className="max-w-[300px]">
-                      <p className="text-xs">{summarizeFilters(customFilters ?? [])}</p>
-                    </TooltipContent>
-                  </HintTooltip>
+                  <>
+                    <HintTooltip>
+                      <TooltipTrigger asChild>
+                        <span
+                          className="text-emerald-500 cursor-pointer"
+                          onClick={(e) => {
+                            setFilterContextMenu({ x: e.clientX, y: e.clientY });
+                          }}
+                        >
+                          <Filter className="h-3.5 w-3.5" />
+                        </span>
+                      </TooltipTrigger>
+                      <TooltipContent side="top" hideArrow className="p-3 bg-card text-card-foreground border border-border">
+                        <FilterSummaryCard filters={customFilters ?? []} />
+                      </TooltipContent>
+                    </HintTooltip>
+                    {filterContextMenu && (
+                      <FilterContextMenu
+                        position={filterContextMenu}
+                        onReset={() => { resetFilters(); setFilterContextMenu(null); }}
+                        onClose={() => setFilterContextMenu(null)}
+                      />
+                    )}
+                  </>
                 )}
                 {showExplainerButton && (
                   <HintTooltip>
