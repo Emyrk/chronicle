@@ -1,5 +1,5 @@
 import { useState, useMemo, useCallback } from "react";
-import { Link } from "react-router-dom";
+import { Link, useSearchParams } from "react-router-dom";
 import { Upload as UploadIcon, FileText, Info, LogIn, AlertCircle, CheckCircle, FolderOpen, AlertTriangle, ArrowRight } from "lucide-react";
 import { compressFile } from "@/api/compress";
 import { Button } from "@/components/ui/button";
@@ -24,6 +24,7 @@ export interface UploadViewProps {
   onUpload: () => void;
   useV2Upload: boolean;
   onToggleV2Upload: (checked: boolean) => void;
+  showLegacy: boolean;
 }
 
 export function UploadView({
@@ -40,6 +41,7 @@ export function UploadView({
   onUpload,
   useV2Upload,
   onToggleV2Upload,
+  showLegacy,
 }: UploadViewProps) {
   return (
     <div className="max-w-4xl mx-auto p-8 space-y-8">
@@ -145,17 +147,19 @@ export function UploadView({
             </Alert>
           )}
 
-          {/* V2 Upload Toggle */}
-          <div className="flex items-center gap-3">
-            <Switch
-              id="upload-version"
-              checked={!useV2Upload}
-              onCheckedChange={(checked: boolean) => onToggleV2Upload(!checked)}
-            />
-            <Label htmlFor="upload-version" className="cursor-pointer">
-              Use legacy upload (two files)
-            </Label>
-          </div>
+          {/* V2 Upload Toggle - only visible with ?debug=true */}
+          {showLegacy && (
+            <div className="flex items-center gap-3">
+              <Switch
+                id="upload-version"
+                checked={!useV2Upload}
+                onCheckedChange={(checked: boolean) => onToggleV2Upload(!checked)}
+              />
+              <Label htmlFor="upload-version" className="cursor-pointer">
+                Use legacy upload (two files)
+              </Label>
+            </div>
+          )}
 
           {/* File Selection */}
           {useV2Upload ? (
@@ -477,6 +481,8 @@ export function Upload() {
   const [uploadProgress, setUploadProgress] = useState(0);
   const [error, setError] = useState<{ message: string; call_to_action?: string; detail?: string; link?: string; link_text?: string } | null>(null);
   const [success, setSuccess] = useState<{ message: string; logId: string } | null>(null);
+  const [searchParams] = useSearchParams();
+  const showLegacy = searchParams.get("debug") === "true";
   const [useV2Upload, setUseV2Upload] = useState(true);
 
   const handleToggleV2Upload = useCallback((checked: boolean) => {
@@ -626,6 +632,7 @@ export function Upload() {
       onUpload={handleUpload}
       useV2Upload={useV2Upload}
       onToggleV2Upload={handleToggleV2Upload}
+      showLegacy={showLegacy}
     />
   );
 }

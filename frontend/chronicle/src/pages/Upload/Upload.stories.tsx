@@ -19,6 +19,10 @@ const defaultProps = {
   success: null,
   onFileSelect: () => {},
   onUpload: () => {},
+  useV2Upload: true,
+  onToggleV2Upload: () => {},
+  showLegacy: false,
+  hasUploadPermission: true,
 };
 
 const meta: Meta<typeof UploadView> = {
