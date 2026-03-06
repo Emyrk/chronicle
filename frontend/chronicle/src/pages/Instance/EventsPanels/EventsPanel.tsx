@@ -395,7 +395,10 @@ export function EventsPanel({
   const setFilters = useCallback((filters: PanelFilter[]) => {
     // Buffer edits while the filter editor is open; applied on flip-back.
     setPendingFilters(filters);
-  }, []);
+    // Eagerly notify parent so layout save always has the latest filters,
+    // even while the card is still flipped.
+    onFiltersChange?.(filters);
+  }, [onFiltersChange]);
 
   const resetFilters = useCallback(() => {
     const defaults = panel.defaultFilters ?? [];
