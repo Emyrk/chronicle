@@ -83,6 +83,21 @@ export function createDamageDonePanel(
     }
   })();
 
+  // Default target filters — pre-populated in the filter editor, removable by the user.
+  // Matches the hardcoded entity selection logic in the processor (which gates breakouts).
+  const defaultFilters: PanelFilter[] = (() => {
+    const dmg = ["damage"] as string[];
+    switch (sourceType) {
+      case "enemies":
+        return [{ type: "target_type" as const, value: "selected_players", applyTo: dmg }];
+      case "players":
+      case "pets":
+        return [{ type: "target_type" as const, value: "selected_enemies", applyTo: dmg }];
+      case "friendly_fire":
+        return [{ type: "target_type" as const, value: "selected_players", applyTo: dmg }];
+    }
+  })();
+
   return {
     ...config.processor,
     label: config.label,
@@ -90,6 +105,7 @@ export function createDamageDonePanel(
     supportsPerSecond: true,
     supportsFiltering: true,
     fixedFilters,
+    defaultFilters,
     render: (props: PanelRenderProps<DamageDoneState>) => {
       return <DamageDoneContent {...props} sourceType={sourceType} />;
     },

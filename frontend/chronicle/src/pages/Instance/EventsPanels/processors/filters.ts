@@ -11,6 +11,7 @@ export type PanelFilterType =
   | "ability_name"
   | "ability_id"
   | "ability_school"
+  | "ability_hittype"
   | "source_type"
   | "target_type";
 
@@ -94,6 +95,36 @@ const SCHOOL_MASK_MAP: Record<string, number> = {
   shadow: 32,
   arcane: 64,
 };
+
+const HITTYPE_MASK_MAP: Record<string, number> = {
+  offhand: 0x00000001,
+  hit: 0x00000002,
+  crit: 0x00000004,
+  partial_resist: 0x00000008,
+  full_resist: 0x00000010,
+  miss: 0x00000020,
+  partial_absorb: 0x00000040,
+  full_absorb: 0x00000080,
+  glancing: 0x00000100,
+  crushing: 0x00000200,
+  evade: 0x00000400,
+  dodge: 0x00000800,
+  parry: 0x00001000,
+  immune: 0x00002000,
+  deflect: 0x00008000,
+  interrupt: 0x00010000,
+  partial_block: 0x00020000,
+  full_block: 0x00040000,
+  split: 0x00080000,
+  reflect: 0x00100000,
+  periodic: 0x00200000,
+};
+
+function getEventHitType(event: ProcessorEvent): number | null {
+  if ("hitType" in event && typeof event.hitType === "number")
+    return event.hitType;
+  return null;
+}
 
 function getEventGuids(event: ProcessorEvent): [string | null, string | null] {
   const caster = "caster" in event && typeof event.caster === "string" && event.caster ? event.caster : null;
@@ -271,6 +302,22 @@ const FILTER_COMPILERS: Record<PanelFilterType, FilterCompiler> = {
       const school = getEventSchool(event);
       if (school === null) return false;
       return (normalizeDamageSchoolToBitmask(school) & mask) !== 0;
+    };
+  },
+
+  ability_hittype: (value) => {
+    const rawValues = toValues(value);
+    const mask = rawValues.reduce((m, v) => {
+      const normalized = v.toLowerCase();
+      if (HITTYPE_MASK_MAP[normalized] !== undefined) return m | HITTYPE_MASK_MAP[normalized];
+      const parsed = Number.parseInt(v, 10);
+      return Number.isFinite(parsed) ? m | parsed : m;
+    }, 0);
+    if (mask === 0) return () => false;
+    return (event) => {
+      const hitType = getEventHitType(event);
+      if (hitType === null) return false;
+      return (hitType & mask) !== 0;
     };
   },
 

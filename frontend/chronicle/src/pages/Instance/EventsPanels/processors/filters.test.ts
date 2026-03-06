@@ -187,6 +187,45 @@ describe("evaluateFilters", () => {
       expect(evaluateFilters(filters, createDamageEvent({ caster: ENEMY_PET_GUID }), ctxWithUnits())).toBe(false);
     });
   });
+
+  it("matches ability_hittype using bitmask", () => {
+    const filters: PanelFilter[] = [
+      { type: "ability_hittype", value: ["crit", "glancing"] },
+    ];
+    const ctx = createContext();
+    // crit = 0x0004
+    expect(evaluateFilters(filters, createDamageEvent({ hitType: 0x0004 }), ctx)).toBe(true);
+    // glancing = 0x0100
+    expect(evaluateFilters(filters, createDamageEvent({ hitType: 0x0100 }), ctx)).toBe(true);
+    // hit = 0x0002 (not in filter)
+    expect(evaluateFilters(filters, createDamageEvent({ hitType: 0x0002 }), ctx)).toBe(false);
+  });
+
+  it("matches ability_hittype with multi-flag event", () => {
+    const filters: PanelFilter[] = [
+      { type: "ability_hittype", value: ["crit"] },
+    ];
+    // Event has crit + offhand (0x0004 | 0x0001 = 0x0005)
+    expect(evaluateFilters(filters, createDamageEvent({ hitType: 0x0005 }), createContext())).toBe(true);
+  });
+
+  it("ability_hittype returns false for event without hitType", () => {
+    const filters: PanelFilter[] = [
+      { type: "ability_hittype", value: ["crit"] },
+    ];
+    const event = { type: "cast" as const, index: 0, offsetMilli: 0, activity: [], activityCount: 0 } as any;
+    expect(evaluateFilters(filters, event, createContext())).toBe(false);
+  });
+
+  it("ability_hittype supports negate", () => {
+    const filters: PanelFilter[] = [
+      { type: "ability_hittype", value: ["crit"], negate: true },
+    ];
+    // crit event should be rejected
+    expect(evaluateFilters(filters, createDamageEvent({ hitType: 0x0004 }), createContext())).toBe(false);
+    // non-crit event should pass
+    expect(evaluateFilters(filters, createDamageEvent({ hitType: 0x0002 }), createContext())).toBe(true);
+  });
 });
 
 describe("compileFilters", () => {

@@ -377,15 +377,8 @@ export function createDamageDoneProcessor(
         accumulateEncounterTargetValue(state.EncounterVulnerabilityBase, encounterID, damageOwner, event.target, baseAmount);
       }
 
-      // Breakouts
-      if (context.selectedEncounterIds.has(encounterID) &&
-        (
-          (sourceType === "enemies" && (context.entitySelection.playerIds.size == 0 || context.entitySelection.playerIds.has(event.target))) ||
-          ((sourceType === "players" || sourceType === "pets") && (context.entitySelection.enemyIds.size == 0 || context.entitySelection.enemyIds.has(event.target))) ||
-          // Friendly fire: filter by player selection (target is always a player/pet)
-          (sourceType === "friendly_fire" && (context.entitySelection.playerIds.size == 0 || context.entitySelection.playerIds.has(event.target)))
-        )
-      ) {
+      // Breakouts (target entity filtering now handled by defaultFilters)
+      if (context.selectedEncounterIds.has(encounterID)) {
         let abilityName = event.sourceName || "Auto Attack";
         if ((sourceType === "players" || sourceType === "friendly_fire") && isPet) {
           const petName = context.units?.[event.caster]?.name || event.caster.toString();

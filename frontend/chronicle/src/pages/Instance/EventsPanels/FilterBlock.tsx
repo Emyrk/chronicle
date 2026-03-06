@@ -9,6 +9,7 @@ const FILTER_TYPES: { value: PanelFilterType; label: string }[] = [
   { value: "ability_name", label: "Ability Name" },
   { value: "ability_id", label: "Ability ID" },
   { value: "ability_school", label: "Ability School" },
+  { value: "ability_hittype", label: "Hit Type" },
   { value: "source_type", label: "Source" },
   { value: "target_type", label: "Target" },
 ];
@@ -21,6 +22,30 @@ const SCHOOL_OPTIONS = [
   { label: "Frost", value: "frost", color: "bg-cyan-500" },
   { label: "Shadow", value: "shadow", color: "bg-purple-600" },
   { label: "Arcane", value: "arcane", color: "bg-pink-500" },
+] as const;
+
+const HITTYPE_OPTIONS = [
+  { label: "Hit", value: "hit" },
+  { label: "Crit", value: "crit" },
+  { label: "Miss", value: "miss" },
+  { label: "Dodge", value: "dodge" },
+  { label: "Parry", value: "parry" },
+  { label: "Glancing", value: "glancing" },
+  { label: "Crushing", value: "crushing" },
+  { label: "Partial Resist", value: "partial_resist" },
+  { label: "Full Resist", value: "full_resist" },
+  { label: "Partial Absorb", value: "partial_absorb" },
+  { label: "Full Absorb", value: "full_absorb" },
+  { label: "Partial Block", value: "partial_block" },
+  { label: "Full Block", value: "full_block" },
+  { label: "Evade", value: "evade" },
+  { label: "Immune", value: "immune" },
+  { label: "Deflect", value: "deflect" },
+  { label: "Interrupt", value: "interrupt" },
+  { label: "Reflect", value: "reflect" },
+  { label: "Periodic", value: "periodic" },
+  { label: "Off-hand", value: "offhand" },
+  { label: "Split", value: "split" },
 ] as const;
 
 const SOURCE_TYPE_IDENTITY_OPTIONS = [
@@ -275,6 +300,8 @@ function ValueEditor({ filter, onChange }: { filter: PanelFilter; onChange: (nex
   switch (filter.type) {
     case "ability_school":
       return <SegmentedToggle options={SCHOOL_OPTIONS} values={arrayValues} onToggle={toggleValue} />;
+    case "ability_hittype":
+      return <SegmentedToggle options={HITTYPE_OPTIONS} values={arrayValues} onToggle={toggleValue} />;
     case "source_type":
     case "target_type":
       return <EntityTypeEditor filter={filter} onChange={onChange} />;

@@ -192,7 +192,8 @@ export function EventsPanel({
   const fixedFilters = panel.fixedFilters ?? [];
   const userFilters = customFilters ?? [];
 
-  const hasCustomFilters = filteringSupported && customFilters !== null;
+  const hasCustomFilters = filteringSupported && customFilters !== null &&
+    JSON.stringify(customFilters) !== JSON.stringify(panel.defaultFilters ?? []);
 
   const setPanelContextWithKey = useCallback((nextContext: Record<string, unknown> | null) => {
     setPanelContext(nextContext);
@@ -213,14 +214,18 @@ export function EventsPanel({
   }, [onFiltersChange]);
 
   const resetFilters = useCallback(() => {
+    const defaults = panel.defaultFilters ?? [];
     setPanelContext((previous) => {
-      if (!previous) return null;
-      const { filters: _filters, ...rest } = previous;
-      return Object.keys(rest).length > 0 ? rest : null;
+      if (defaults.length === 0) {
+        if (!previous) return null;
+        const { filters: _filters, ...rest } = previous;
+        return Object.keys(rest).length > 0 ? rest : null;
+      }
+      return { ...(previous ?? {}), filters: defaults };
     });
     setPanelContextVersion((version) => version + 1);
-    onFiltersChange?.([]);
-  }, [onFiltersChange]);
+    onFiltersChange?.(defaults);
+  }, [onFiltersChange, panel.defaultFilters]);
 
   const onPanelMouseDown = useCallback((event: MouseEvent<HTMLDivElement>) => {
     if (event.shiftKey && event.button === 0 && !isSyncActive) {
@@ -230,11 +235,17 @@ export function EventsPanel({
   }, [isSyncActive]);
 
   // Reset panel context when panel type changes to avoid leaking options across panel types.
+  // Seed default filters if the panel defines them.
   useEffect(() => {
-    setPanelContext(null);
+    const defaults = panel.defaultFilters;
+    if (defaults && defaults.length > 0) {
+      setPanelContext({ filters: defaults });
+    } else {
+      setPanelContext(null);
+    }
     setPanelContextVersion((version) => version + 1);
     setFlipped(false);
-    onFiltersChange?.([]);
+    onFiltersChange?.(defaults ?? []);
     // eslint-disable-next-line react-hooks/exhaustive-deps -- only reset on panelType change
   }, [panelType]);
 

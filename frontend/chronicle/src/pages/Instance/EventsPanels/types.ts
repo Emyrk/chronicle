@@ -100,6 +100,10 @@ export interface PanelDefinition<TResult, TEvent extends ProcessorEvent = Proces
 
   /** Fixed filters that are always active and cannot be edited by the user. */
   fixedFilters?: PanelFilter[];
+
+  /** Default filters pre-populated in the user filter list. Editable and removable.
+   *  Reset restores these instead of clearing to empty. */
+  defaultFilters?: PanelFilter[];
   
   /**
    * Create the initial state for aggregation
