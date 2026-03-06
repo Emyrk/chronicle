@@ -1544,7 +1544,7 @@ export function LayoutLabSettings() {
 
                       {!readOnly ? (
                         <>
-                          <div className="pointer-events-none absolute inset-0 z-20 rounded-md bg-background/35 opacity-0 transition-opacity group-hover:opacity-100" />
+                          <div className="pointer-events-none absolute inset-0 z-20 rounded-md bg-background/20 opacity-0 transition-opacity group-hover:opacity-100" />
                           <div className="pointer-events-none absolute right-2 top-2 z-30 flex items-center gap-2 opacity-0 transition-opacity group-hover:opacity-100">
                             <Button
                               type="button"

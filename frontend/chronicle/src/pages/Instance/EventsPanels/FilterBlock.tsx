@@ -78,7 +78,10 @@ const APPLY_TO_OPTIONS = [
 ] as const;
 
 /** Filter types that show the "applies to" event type selector */
-const TYPES_WITH_APPLY_TO = new Set<PanelFilterType>(["source_type", "target_type"]);
+const TYPES_WITH_APPLY_TO = new Set<PanelFilterType>([
+  "source_type", "target_type",
+  "ability_name", "ability_id", "ability_school", "ability_hittype",
+]);
 
 export interface FilterBlockProps {
   filter: PanelFilter;

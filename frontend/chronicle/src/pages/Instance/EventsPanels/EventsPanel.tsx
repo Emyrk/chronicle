@@ -345,6 +345,8 @@ export function EventsPanel({
   const [panelContextVersion, setPanelContextVersion] = useState(0);
   const [flipped, setFlipped] = useState(false);
   const [filterContextMenu, setFilterContextMenu] = useState<{ x: number; y: number } | null>(null);
+  // Buffer filter edits while the card is flipped; apply on flip-back.
+  const [pendingFilters, setPendingFilters] = useState<PanelFilter[] | null>(null);
 
   const customFilters = useMemo(() => (panelContext?.filters as PanelFilter[] | undefined) ?? null, [panelContext]);
   const syncMode = useSyncModeContextOptional();
@@ -377,7 +379,7 @@ export function EventsPanel({
     setPanelContextVersion((version) => version + 1);
   }, []);
 
-  const setFilters = useCallback((filters: PanelFilter[]) => {
+  const applyFilters = useCallback((filters: PanelFilter[]) => {
     setPanelContext((previous) => {
       const base = previous ?? {};
       if (filters.length === 0) {
@@ -390,26 +392,47 @@ export function EventsPanel({
     onFiltersChange?.(filters);
   }, [onFiltersChange]);
 
+  const setFilters = useCallback((filters: PanelFilter[]) => {
+    // Buffer edits while the filter editor is open; applied on flip-back.
+    setPendingFilters(filters);
+  }, []);
+
   const resetFilters = useCallback(() => {
     const defaults = panel.defaultFilters ?? [];
-    setPanelContext((previous) => {
-      if (defaults.length === 0) {
-        if (!previous) return null;
-        const { filters: _filters, ...rest } = previous;
-        return Object.keys(rest).length > 0 ? rest : null;
+    applyFilters(defaults);
+    setPendingFilters(null);
+  }, [applyFilters, panel.defaultFilters]);
+
+  const flipCard = useCallback(() => {
+    setFlipped((prev) => {
+      if (prev) {
+        // Flipping back — apply buffered filters
+        if (pendingFilters !== null) {
+          applyFilters(pendingFilters);
+          setPendingFilters(null);
+        }
+      } else {
+        // Flipping open — seed buffer with current filters
+        setPendingFilters(userFilters);
       }
-      return { ...(previous ?? {}), filters: defaults };
+      return !prev;
     });
-    setPanelContextVersion((version) => version + 1);
-    onFiltersChange?.(defaults);
-  }, [onFiltersChange, panel.defaultFilters]);
+  }, [pendingFilters, applyFilters, userFilters]);
+
+  const closeFilterEditor = useCallback(() => {
+    if (pendingFilters !== null) {
+      applyFilters(pendingFilters);
+      setPendingFilters(null);
+    }
+    setFlipped(false);
+  }, [pendingFilters, applyFilters]);
 
   const onPanelMouseDown = useCallback((event: MouseEvent<HTMLDivElement>) => {
     if (event.shiftKey && event.button === 0 && !isSyncActive) {
       event.preventDefault();
-      setFlipped((value) => !value);
+      flipCard();
     }
-  }, [isSyncActive]);
+  }, [isSyncActive, flipCard]);
 
   // Reset panel context when panel type changes to avoid leaking options across panel types.
   // Seed default filters if the panel defines them.
@@ -422,6 +445,7 @@ export function EventsPanel({
     }
     setPanelContextVersion((version) => version + 1);
     setFlipped(false);
+    setPendingFilters(null);
     onFiltersChange?.(defaults ?? []);
     // eslint-disable-next-line react-hooks/exhaustive-deps -- only reset on panelType change
   }, [panelType]);
@@ -596,10 +620,10 @@ export function EventsPanel({
             panelLabel={panel.label}
             panelIcon={panel.icon}
             fixedFilters={fixedFilters}
-            filters={userFilters}
+            filters={pendingFilters ?? userFilters}
             onChange={setFilters}
             onReset={resetFilters}
-            onClose={() => setFlipped(false)}
+            onClose={closeFilterEditor}
             filteringSupported={filteringSupported}
             borderColor={borderColor}
             onBorderColorChange={onPanelOptionChange ? setBorderColor : undefined}

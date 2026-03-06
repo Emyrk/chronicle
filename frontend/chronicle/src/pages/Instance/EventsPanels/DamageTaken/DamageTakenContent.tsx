@@ -22,40 +22,24 @@ function aggregateForEncounters(
   disableUnitSelection = false,
 ): PlayerMetricChartData[] {
   const aggregated = new Map<string, PlayerMetricChartData>();
-  
-  const filterBySource = targetType === "players" 
-    ? selected.enemyIds.size > 0 
-    : selected.playerIds.size > 0;
-  
+
   const hasUnitSelection = !disableUnitSelection && (targetType === "players"
     ? selected.playerIds.size > 0
     : selected.enemyIds.size > 0);
-  
+
   for (const encounterId of selectedEncounterIds) {
     const encounterDamage = result.EncounterDamage.get(encounterId);
     if (!encounterDamage) continue;
-    
+
     for (const [unitId, data] of encounterDamage) {
-      // Calculate damage - either filtered by source or total
+      // Sum all damage from all sources (source filtering is handled by panel filters)
       let damageValue = 0;
-      if (filterBySource) {
-        // Sum only damage from selected sources
-        const sourceFilter = targetType === "players" ? selected.enemyIds : selected.playerIds;
-        for (const [sourceId, amount] of data.source) {
-          if (sourceFilter.has(sourceId)) {
-            damageValue += amount;
-          }
-        }
-      } else {
-        // Sum all damage (no source filter)
-        for (const amount of data.source.values()) {
-          damageValue += amount;
-        }
+      for (const amount of data.source.values()) {
+        damageValue += amount;
       }
-      
-      // Skip units with zero damage after filtering
+
       if (damageValue === 0) continue;
-      
+
       const existing = aggregated.get(unitId);
       if (existing) {
         existing.value += damageValue;
@@ -72,7 +56,7 @@ function aggregateForEncounters(
       }
     }
   }
-  
+
   return Array.from(aggregated.values());
 }
 
