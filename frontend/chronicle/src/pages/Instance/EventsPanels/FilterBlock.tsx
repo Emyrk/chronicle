@@ -15,13 +15,13 @@ const FILTER_TYPES: { value: PanelFilterType; label: string }[] = [
 ];
 
 const SCHOOL_OPTIONS = [
-  { label: "Physical", value: "physical", color: "bg-amber-700" },
-  { label: "Holy", value: "holy", color: "bg-yellow-500" },
-  { label: "Fire", value: "fire", color: "bg-orange-600" },
-  { label: "Nature", value: "nature", color: "bg-green-600" },
-  { label: "Frost", value: "frost", color: "bg-cyan-500" },
-  { label: "Shadow", value: "shadow", color: "bg-purple-600" },
-  { label: "Arcane", value: "arcane", color: "bg-pink-500" },
+  { label: "Physical", value: "physical", color: "bg-[var(--color-school-physical)]" },
+  { label: "Holy", value: "holy", color: "bg-[var(--color-school-holy)]" },
+  { label: "Fire", value: "fire", color: "bg-[var(--color-school-fire)]" },
+  { label: "Nature", value: "nature", color: "bg-[var(--color-school-nature)]" },
+  { label: "Frost", value: "frost", color: "bg-[var(--color-school-frost)]" },
+  { label: "Shadow", value: "shadow", color: "bg-[var(--color-school-shadow)]" },
+  { label: "Arcane", value: "arcane", color: "bg-[var(--color-school-arcane)]" },
 ] as const;
 
 const HITTYPE_OPTIONS = [

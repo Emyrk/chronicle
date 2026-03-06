@@ -6,11 +6,13 @@ interface PanelCardProps {
   flipped: boolean;
   onMouseDown?: MouseEventHandler<HTMLDivElement>;
   underConstruction?: boolean;
+  /** Optional user-chosen border color applied to the front card. */
+  borderColor?: string | null;
   front: ReactNode;
   back: ReactNode;
 }
 
-export function PanelCard({ flipped, onMouseDown, underConstruction, front, back }: PanelCardProps) {
+export function PanelCard({ flipped, onMouseDown, underConstruction, borderColor, front, back }: PanelCardProps) {
   return (
     <div className="h-full [perspective:1400px]" onMouseDown={onMouseDown}>
       <div
@@ -25,6 +27,7 @@ export function PanelCard({ flipped, onMouseDown, underConstruction, front, back
             underConstruction && "border-yellow-500/50",
             flipped && "pointer-events-none",
           )}
+          style={borderColor ? { borderColor } : undefined}
         >
           {front}
         </Card>

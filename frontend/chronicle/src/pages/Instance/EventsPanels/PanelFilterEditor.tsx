@@ -1,7 +1,22 @@
 import { useMemo, type ReactNode } from "react";
 import { Button } from "@/components/ui/button";
+import { cn } from "@/lib/utils";
+import { X } from "lucide-react";
 import { FilterBlock } from "./FilterBlock";
 import type { PanelFilter } from "./processors/filters";
+
+/** Preset border colors available in the color picker. `null` = no border / default. */
+const PRESET_COLORS: Array<string | null> = [
+  null,
+  "#ef4444", // red
+  "#f97316", // orange
+  "#eab308", // yellow
+  "#22c55e", // green
+  "#3b82f6", // blue
+  "#8b5cf6", // violet
+  "#ec4899", // pink
+  "#06b6d4", // cyan
+];
 
 export interface PanelFilterEditorProps {
   /** Panel label shown as the heading on the back side. */
@@ -15,6 +30,16 @@ export interface PanelFilterEditorProps {
   onChange: (filters: PanelFilter[]) => void;
   onClose: () => void;
   onReset: () => void;
+  /** Whether this panel supports user-editable filters. */
+  filteringSupported?: boolean;
+  /** Current user-chosen border color. */
+  borderColor?: string | null;
+  /** Callback when border color changes. */
+  onBorderColorChange?: (color: string | null) => void;
+  /** Current custom title override. */
+  customTitle?: string | null;
+  /** Callback when custom title changes. */
+  onCustomTitleChange?: (title: string | null) => void;
 }
 
 const DEFAULT_FILTER: PanelFilter = {
@@ -43,7 +68,20 @@ function buildGroups(filters: PanelFilter[]): FilterGroup[] {
   return groups;
 }
 
-export function PanelFilterEditor({ panelLabel, panelIcon, fixedFilters = [], filters, onChange, onClose, onReset }: PanelFilterEditorProps) {
+export function PanelFilterEditor({
+  panelLabel,
+  panelIcon,
+  fixedFilters = [],
+  filters,
+  onChange,
+  onClose,
+  onReset,
+  filteringSupported = true,
+  borderColor,
+  onBorderColorChange,
+  customTitle,
+  onCustomTitleChange,
+}: PanelFilterEditorProps) {
   const groups = useMemo(() => buildGroups(filters), [filters]);
 
   const toggleCombinator = (filterIndex: number) => {
@@ -82,6 +120,48 @@ export function PanelFilterEditor({ panelLabel, panelIcon, fixedFilters = [], fi
           <Button size="sm" variant="ghost" onClick={onClose}>Back</Button>
         </div>
       </div>
+      {/* Custom title */}
+      {onCustomTitleChange && (
+        <div className="flex items-center gap-2">
+          <span className="text-xs text-muted-foreground shrink-0">Title:</span>
+          <input
+            className="flex-1 bg-transparent border-b border-zinc-700 text-sm px-1 py-0.5 focus:outline-none focus:border-zinc-500"
+            placeholder={panelLabel ?? "Panel title"}
+            value={customTitle ?? ""}
+            onChange={(e) => onCustomTitleChange(e.target.value || null)}
+          />
+        </div>
+      )}
+
+      {/* Border color picker */}
+      {onBorderColorChange && (
+        <div className="flex items-center gap-2">
+          <span className="text-xs text-muted-foreground shrink-0">Border:</span>
+          <div className="flex items-center gap-1.5">
+            {PRESET_COLORS.map((color) => (
+              <button
+                key={color ?? "none"}
+                type="button"
+                className={cn(
+                  "h-5 w-5 rounded-full border-2 transition-all",
+                  color === borderColor
+                    ? "ring-2 ring-white/50 ring-offset-1 ring-offset-zinc-900"
+                    : "border-zinc-600 hover:border-zinc-400",
+                )}
+                style={color ? { backgroundColor: color, borderColor: color } : undefined}
+                onClick={() => onBorderColorChange(color)}
+                title={color ?? "Default (none)"}
+              >
+                {color === null && (
+                  <X className="h-3 w-3 mx-auto text-zinc-500" />
+                )}
+              </button>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {filteringSupported && <>
       <p className="text-xs text-muted-foreground">
         Filters in the same group are OR'd. Groups are AND'd together. Click the connector to toggle.
       </p>
@@ -187,6 +267,13 @@ export function PanelFilterEditor({ panelLabel, panelIcon, fixedFilters = [], fi
       >
         + Add Filter
       </Button>
+      </>}
+
+      {!filteringSupported && (
+        <div className="flex-1 flex items-center justify-center text-sm text-muted-foreground text-center px-6">
+          Filtering is not currently supported on this panel.
+        </div>
+      )}
     </div>
   );
 }

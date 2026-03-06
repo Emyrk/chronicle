@@ -12,7 +12,7 @@ import { HintTooltip, TooltipTrigger, TooltipContent } from "@/components/ui/Too
 import { useIsMobile } from "@/hooks/useIsMobile";
 import { PanelCard } from "./PanelCard";
 import { PanelFilterEditor } from "./PanelFilterEditor";
-import type { PanelFilter } from "./processors/filters";
+import type { PanelFilter, PanelFilterType } from "./processors/filters";
 import { usePanelAggregation } from "./usePanelAggregation";
 import { usePanelTiming } from "./PanelTimingContext";
 import { useSyncModeContextOptional } from "../SyncModeContext";
@@ -105,6 +105,62 @@ function buildPanelOptionFromTokens(tokens: string[]): string | null {
   return tokens.join(",");
 }
 
+// ---------------------------------------------------------------------------
+// Filter summary for tooltip
+// ---------------------------------------------------------------------------
+
+const FILTER_TYPE_LABELS: Record<PanelFilterType, string> = {
+  ability_name: "Ability Name",
+  ability_id: "Ability ID",
+  ability_school: "School",
+  ability_hittype: "Hit Type",
+  source_type: "Source",
+  target_type: "Target",
+  players: "Players",
+  enemies: "Enemies",
+};
+
+function summarizeFilters(filters: PanelFilter[]): string {
+  const parts = filters
+    .filter((f) => {
+      const v = f.value;
+      return Array.isArray(v) ? v.length > 0 : String(v).trim() !== "";
+    })
+    .map((f, i) => {
+      const prefix = i > 0 ? ` ${(f.combinator ?? "and").toUpperCase()} ` : "";
+      const val = Array.isArray(f.value) ? f.value.join(", ") : f.value;
+      const neg = f.negate ? "NOT " : "";
+      return `${prefix}${neg}${FILTER_TYPE_LABELS[f.type] ?? f.type}: ${val}`;
+    })
+    .join("");
+  return parts || "Custom filters active";
+}
+
+// ---------------------------------------------------------------------------
+// Panel option token helpers for borderColor / customTitle
+// ---------------------------------------------------------------------------
+
+function extractBorderColorFromTokens(tokens: string[]): string | null {
+  const token = tokens.find((t) => t.startsWith("bc:"));
+  return token ? token.slice(3) : null;
+}
+
+function extractCustomTitleFromTokens(tokens: string[]): string | null {
+  const token = tokens.find((t) => t.startsWith("t:"));
+  return token ? token.slice(2) : null;
+}
+
+function buildTokensWithMeta(
+  baseTokens: string[],
+  borderColor: string | null,
+  customTitle: string | null,
+): string[] {
+  const filtered = baseTokens.filter((t) => !t.startsWith("bc:") && !t.startsWith("t:"));
+  if (borderColor) filtered.push(`bc:${borderColor}`);
+  if (customTitle) filtered.push(`t:${customTitle}`);
+  return filtered;
+}
+
 export interface EventsPanelProps {
   panelType: EventsPanelType;
   onPanelTypeChange: (type: EventsPanelType) => void;
@@ -194,6 +250,22 @@ export function EventsPanel({
 
   const hasCustomFilters = filteringSupported && customFilters !== null &&
     JSON.stringify(customFilters) !== JSON.stringify(panel.defaultFilters ?? []);
+
+  // Border color and custom title derived from panelOption tokens
+  const borderColor = useMemo(() => extractBorderColorFromTokens(customToggleTokens), [customToggleTokens]);
+  const customTitle = useMemo(() => extractCustomTitleFromTokens(customToggleTokens), [customToggleTokens]);
+
+  const setBorderColor = useCallback((color: string | null) => {
+    if (!onPanelOptionChange) return;
+    const tokens = buildTokensWithMeta(customToggleTokens, color, customTitle);
+    onPanelOptionChange(buildPanelOptionFromTokens(tokens));
+  }, [customToggleTokens, customTitle, onPanelOptionChange]);
+
+  const setCustomTitle = useCallback((title: string | null) => {
+    if (!onPanelOptionChange) return;
+    const tokens = buildTokensWithMeta(customToggleTokens, borderColor, title);
+    onPanelOptionChange(buildPanelOptionFromTokens(tokens));
+  }, [customToggleTokens, borderColor, onPanelOptionChange]);
 
   const setPanelContextWithKey = useCallback((nextContext: Record<string, unknown> | null) => {
     setPanelContext(nextContext);
@@ -303,12 +375,33 @@ export function EventsPanel({
         flipped={flipped}
         onMouseDown={onPanelMouseDown}
         underConstruction={panel.underConstruction}
+        borderColor={borderColor}
         front={(
           <>
             <div className="flex items-center justify-between mb-1">
               <h3 className="text-sm font-medium flex items-center gap-2">
-                <PanelSelector value={panelType} onChange={onPanelTypeChange} />
-                {hasCustomFilters && <Filter className="h-3.5 w-3.5 text-emerald-500" />}
+                {customTitle ? (
+                  <>
+                    <span className="truncate max-w-[160px]">{customTitle}</span>
+                    <span className="text-xs text-muted-foreground shrink-0">
+                      <PanelSelector value={panelType} onChange={onPanelTypeChange} />
+                    </span>
+                  </>
+                ) : (
+                  <PanelSelector value={panelType} onChange={onPanelTypeChange} />
+                )}
+                {hasCustomFilters && (
+                  <HintTooltip>
+                    <TooltipTrigger asChild>
+                      <span className="text-emerald-500 cursor-help">
+                        <Filter className="h-3.5 w-3.5" />
+                      </span>
+                    </TooltipTrigger>
+                    <TooltipContent side="top" className="max-w-[300px]">
+                      <p className="text-xs">{summarizeFilters(customFilters ?? [])}</p>
+                    </TooltipContent>
+                  </HintTooltip>
+                )}
                 {showExplainerButton && (
                   <HintTooltip>
                     <TooltipTrigger asChild>
@@ -379,7 +472,7 @@ export function EventsPanel({
             </div>
           </>
         )}
-        back={filteringSupported ? (
+        back={(
           <PanelFilterEditor
             panelLabel={panel.label}
             panelIcon={panel.icon}
@@ -388,11 +481,12 @@ export function EventsPanel({
             onChange={setFilters}
             onReset={resetFilters}
             onClose={() => setFlipped(false)}
+            filteringSupported={filteringSupported}
+            borderColor={borderColor}
+            onBorderColorChange={onPanelOptionChange ? setBorderColor : undefined}
+            customTitle={customTitle}
+            onCustomTitleChange={onPanelOptionChange ? setCustomTitle : undefined}
           />
-        ) : (
-          <div className="h-full flex items-center justify-center text-sm text-muted-foreground text-center px-6">
-            Filtering is not currently supported on this panel.
-          </div>
         )}
       />
     </BreakoutHoverProvider>
