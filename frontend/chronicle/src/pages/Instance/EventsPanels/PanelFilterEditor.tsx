@@ -94,6 +94,11 @@ export function PanelFilterEditor({ fixedFilters = [], filters, onChange, onClos
                 <span className="text-xs text-zinc-300 font-medium">
                   {Array.isArray(filter.value) ? filter.value.join(", ") : filter.value}
                 </span>
+                {filter.applyTo && filter.applyTo.length > 0 && (
+                  <span className="text-[9px] text-zinc-500 ml-auto">
+                    on {filter.applyTo.join(", ")}
+                  </span>
+                )}
               </div>
             ))}
             {/* AND separator between fixed and user filters */}

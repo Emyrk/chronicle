@@ -58,26 +58,27 @@ export function createDamageDonePanel(
 ): PanelDefinition<DamageDoneState, any> {
   const config = DAMAGE_SOURCE_CONFIGS[sourceType];
   const fixedFilters: PanelFilter[] = (() => {
+    const dmg = ["damage"] as string[];
     switch (sourceType) {
       case "enemies":
         return [
-          { type: "source_type" as const, value: ["enemy", "enemy_pet"] },
+          { type: "source_type" as const, value: ["enemy", "enemy_pet"], applyTo: dmg },
         ];
       case "pets":
         return [
-          { type: "source_type" as const, value: "pet" },
-          { type: "target_type" as const, value: ["player", "pet"], negate: true },
+          { type: "source_type" as const, value: "pet", applyTo: dmg },
+          { type: "target_type" as const, value: ["player", "pet"], negate: true, applyTo: dmg },
         ];
       case "friendly_fire":
         return [
-          { type: "source_type" as const, value: ["player", "pet"] },
-          { type: "target_type" as const, value: ["player", "pet"] },
+          { type: "source_type" as const, value: ["player", "pet"], applyTo: dmg },
+          { type: "target_type" as const, value: ["player", "pet"], applyTo: dmg },
         ];
       case "players":
       default:
         return [
-          { type: "source_type" as const, value: ["player", "pet"] },
-          { type: "target_type" as const, value: ["player", "pet"], negate: true },
+          { type: "source_type" as const, value: ["player", "pet"], applyTo: dmg },
+          { type: "target_type" as const, value: ["player", "pet"], negate: true, applyTo: dmg },
         ];
     }
   })();

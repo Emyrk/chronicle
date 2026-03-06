@@ -57,3 +57,13 @@ export function isPetGuidFast(guidStr: string): boolean {
 export function isPlayerOrPetGuidFast(guidStr: string): boolean {
   return isPlayerGuidFast(guidStr) || isPetGuidFast(guidStr);
 }
+
+/**
+ * Quick check if a GUID string represents a game object without full parsing.
+ * Object GUIDs: high 16 bits have form 0x00X0 where X & 0xF0 == 0x10
+ * e.g., "0xF110..." for explosive traps.
+ */
+export function isObjectGuidFast(guidStr: string): boolean {
+  return guidStr.length >= 6 && guidStr[4] === '1' && guidStr[5] === '1';
+}
+

@@ -12,8 +12,7 @@ export type PanelFilterType =
   | "ability_id"
   | "ability_school"
   | "source_type"
-  | "target_type"
-  | "event_type";
+  | "target_type";
 
 export interface PanelFilter {
   type: PanelFilterType;
@@ -22,6 +21,8 @@ export interface PanelFilter {
   negate?: boolean;
   /** Logical connector to the PREVIOUS filter. First filter's combinator is ignored. */
   combinator?: "and" | "or";
+  /** Event types this filter applies to. Events of other types pass through unfiltered. Undefined = all events. */
+  applyTo?: string[];
 }
 
 export interface PanelFiltersContextValue {
@@ -152,6 +153,7 @@ function compileEntityTypeFilter(
   const wantPet = rawValues.has("pet");           // friendly pet (player-owned)
   const wantEnemyPet = rawValues.has("enemy_pet"); // enemy pet (non-player-owned)
   const wantEnemy = rawValues.has("enemy");
+  const wantObject = rawValues.has("object");
 
   const guidCache = createGuidCache();
   const units = context.units ?? {};
@@ -175,6 +177,7 @@ function compileEntityTypeFilter(
       if (wantEnemyPet && hasOwner && !ownerIsPlayer) return true;
       if (wantEnemy && !hasOwner) return true;
     }
+    if (wantObject && getCachedGuid(guidCache, guid).isObject()) return true;
     return false;
   };
 }
@@ -225,12 +228,6 @@ const FILTER_COMPILERS: Record<PanelFilterType, FilterCompiler> = {
 
   target_type: (value, context) =>
     compileEntityTypeFilter(value, context, "target"),
-
-  event_type: (value) => {
-    const types = new Set(toValues(value));
-    if (types.size === 0) return () => true;
-    return (event) => types.has(event.type);
-  },
 };
 
 // ---------------------------------------------------------------------------
@@ -239,8 +236,24 @@ const FILTER_COMPILERS: Record<PanelFilterType, FilterCompiler> = {
 // ---------------------------------------------------------------------------
 
 function compileSingleFilter(filter: PanelFilter, context: ProcessorContext): FilterPredicate {
-  const pred = FILTER_COMPILERS[filter.type](filter.value, context);
-  return filter.negate ? (event) => !pred(event) : pred;
+  let pred = FILTER_COMPILERS[filter.type](filter.value, context);
+
+  // Apply negate BEFORE applyTo so that the applyTo pass-through is never inverted.
+  // Without this ordering, a negated filter with applyTo would reject events outside
+  // its applyTo set (e.g. aura events would be dropped by a damage-only negated filter).
+  if (filter.negate) {
+    const inner = pred;
+    pred = (event) => !inner(event);
+  }
+
+  // Scope to specific event types — events outside applyTo pass through
+  if (filter.applyTo && filter.applyTo.length > 0) {
+    const applyToSet = new Set(filter.applyTo);
+    const inner = pred;
+    pred = (event) => !applyToSet.has(event.type) ? true : inner(event);
+  }
+
+  return pred;
 }
 
 export function compileFilters(filters: PanelFilter[], context: ProcessorContext): FilterPredicate {

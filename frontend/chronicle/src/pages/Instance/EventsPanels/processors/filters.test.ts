@@ -79,9 +79,9 @@ describe("evaluateFilters", () => {
     const filters: PanelFilter[] = [
       { type: "ability_name", value: "shadow" },
       { type: "ability_name", value: "fire", combinator: "or" },
-      { type: "event_type", value: "damage" }, // AND (new group)
+      { type: "ability_id", value: "133" }, // AND (new group)
     ];
-    // Group 1: (shadow OR fire) → true. Group 2: (damage) → true
+    // Group 1: (shadow OR fire) → true. Group 2: (spell 133) → true
     expect(evaluateFilters(filters, createDamageEvent(), createContext())).toBe(true);
   });
 
@@ -89,7 +89,7 @@ describe("evaluateFilters", () => {
     const filters: PanelFilter[] = [
       { type: "ability_name", value: "shadow" },
       { type: "ability_name", value: "fire", combinator: "or" },
-      { type: "event_type", value: "heal" }, // AND — this group fails
+      { type: "ability_id", value: "999" }, // AND — this group fails (no spell 999)
     ];
     expect(evaluateFilters(filters, createDamageEvent(), createContext())).toBe(false);
   });
@@ -112,7 +112,7 @@ describe("evaluateFilters", () => {
 
   it("negate works with any filter type", () => {
     const filters: PanelFilter[] = [
-      { type: "event_type", value: "damage", negate: true },
+      { type: "ability_id", value: "133", negate: true },
     ];
     expect(evaluateFilters(filters, createDamageEvent(), createContext())).toBe(false);
   });

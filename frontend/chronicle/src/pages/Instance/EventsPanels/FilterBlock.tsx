@@ -10,7 +10,6 @@ const FILTER_TYPES: { value: PanelFilterType; label: string }[] = [
   { value: "ability_school", label: "Ability School" },
   { value: "source_type", label: "Source Type" },
   { value: "target_type", label: "Target Type" },
-  { value: "event_type", label: "Event Type" },
 ];
 
 const SCHOOL_OPTIONS = [
@@ -28,9 +27,10 @@ const SOURCE_TYPE_OPTIONS = [
   { label: "Pet", value: "pet" },
   { label: "Enemy Pet", value: "enemy_pet" },
   { label: "Enemy", value: "enemy" },
+  { label: "Object", value: "object" },
 ] as const;
 
-const EVENT_TYPE_OPTIONS = [
+const APPLY_TO_OPTIONS = [
   { label: "Damage", value: "damage" },
   { label: "Heal", value: "heal" },
   { label: "Cast", value: "cast" },
@@ -39,6 +39,9 @@ const EVENT_TYPE_OPTIONS = [
   { label: "Resource", value: "resource_change" },
   { label: "Extra Attack", value: "extra_attack" },
 ] as const;
+
+/** Filter types that show the "applies to" event type selector */
+const TYPES_WITH_APPLY_TO = new Set<PanelFilterType>(["source_type", "target_type"]);
 
 export interface FilterBlockProps {
   filter: PanelFilter;
@@ -106,8 +109,7 @@ function ValueEditor({ filter, onChange }: { filter: PanelFilter; onChange: (nex
     case "source_type":
     case "target_type":
       return <SegmentedToggle options={SOURCE_TYPE_OPTIONS} values={arrayValues} onToggle={toggleValue} />;
-    case "event_type":
-      return <SegmentedToggle options={EVENT_TYPE_OPTIONS} values={arrayValues} onToggle={toggleValue} />;
+
     case "players":
     case "enemies":
       return (
@@ -147,6 +149,42 @@ function ValueEditor({ filter, onChange }: { filter: PanelFilter; onChange: (nex
         />
       );
   }
+}
+
+function ApplyToSelector({ filter, onChange }: { filter: PanelFilter; onChange: (next: PanelFilter) => void }) {
+  const current = filter.applyTo ?? [];
+  const toggleApplyTo = (val: string) => {
+    const next = current.includes(val)
+      ? current.filter((v) => v !== val)
+      : [...current, val];
+    onChange({ ...filter, applyTo: next.length > 0 ? next : undefined });
+  };
+
+  return (
+    <div className="shrink-0 flex flex-col gap-0.5">
+      <span className="text-[9px] uppercase tracking-wider text-muted-foreground text-center">on</span>
+      <div className="flex flex-wrap gap-0.5">
+        {APPLY_TO_OPTIONS.map((opt) => {
+          const active = current.length === 0 || current.includes(opt.value);
+          return (
+            <button
+              key={opt.value}
+              type="button"
+              onClick={() => toggleApplyTo(opt.value)}
+              className={`px-1.5 py-px rounded text-[9px] font-medium transition-colors ${
+                active
+                  ? "bg-zinc-600/50 text-zinc-200"
+                  : "bg-zinc-800/30 text-zinc-600 hover:text-zinc-400"
+              }`}
+              title={`${active ? "Disable" : "Enable"} for ${opt.label} events`}
+            >
+              {opt.label}
+            </button>
+          );
+        })}
+      </div>
+    </div>
+  );
 }
 
 export function FilterBlock({ filter, onChange, onRemove, onMoveUp, onMoveDown }: FilterBlockProps) {
@@ -201,6 +239,11 @@ export function FilterBlock({ filter, onChange, onRemove, onMoveUp, onMoveDown }
       <div className="flex-1 flex items-center">
         <ValueEditor filter={filter} onChange={onChange} />
       </div>
+
+      {/* "Applies to" event type selector */}
+      {TYPES_WITH_APPLY_TO.has(filter.type) && (
+        <ApplyToSelector filter={filter} onChange={onChange} />
+      )}
 
       {/* Remove */}
       <Button className="shrink-0 h-7 w-7 p-0" variant="ghost" size="sm" onClick={onRemove}>✕</Button>
