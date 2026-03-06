@@ -88,6 +88,9 @@
 }
 
 @custom-variant dark (&:is(.dark *));
+/* Container-query breakpoint for filter panel wide ↔ narrow layout. Tweak this one number. */
+@custom-variant filter-wide (@container (min-width: 900px));
+
 
 @theme inline {
   /* Panel content height - standardized across all EventsPanels */

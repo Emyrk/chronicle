@@ -255,7 +255,7 @@ function SegmentedToggle({ options, values, onToggle, multiSelect = true }: {
   return (
     <>
       {/* Wide: button row */}
-      <div className="hidden @md:flex flex-wrap items-center gap-1">
+      <div className="hidden filter-wide:flex flex-wrap items-center gap-1">
         {options.map((opt) => {
           const selected = values.includes(opt.value);
           return (
@@ -275,7 +275,7 @@ function SegmentedToggle({ options, values, onToggle, multiSelect = true }: {
         })}
       </div>
       {/* Narrow: compact dropdown */}
-      <div className="@md:hidden">
+      <div className="filter-wide:hidden">
         <CompactDropdownToggle options={options} values={values} onToggle={onToggle} multiSelect={multiSelect} />
       </div>
     </>
@@ -411,7 +411,7 @@ function EntityTypeEditor({ filter, onChange }: { filter: PanelFilter; onChange:
   return (
     <div className="flex flex-col gap-1.5 w-full">
       {/* Wide: two labeled toggle rows */}
-      <div className="hidden @md:flex @md:flex-row @md:flex-wrap @md:items-center gap-1 @md:gap-x-3 @md:gap-y-1">
+      <div className="hidden filter-wide:flex filter-wide:flex-row filter-wide:flex-wrap filter-wide:items-center gap-1 filter-wide:gap-x-3 filter-wide:gap-y-1">
         <div className="flex items-center gap-1">
           <span className="text-[9px] uppercase tracking-wider text-muted-foreground mr-0.5">Identity</span>
           <SegmentedToggle options={SOURCE_TYPE_IDENTITY_OPTIONS} values={toggleValues} onToggle={toggleValue} multiSelect={false} />
@@ -422,7 +422,7 @@ function EntityTypeEditor({ filter, onChange }: { filter: PanelFilter; onChange:
         </div>
       </div>
       {/* Narrow: single combined dropdown with grouped sections */}
-      <div className="@md:hidden">
+      <div className="filter-wide:hidden">
         <CompactGroupedDropdown
           groups={[
             { label: "Identity", options: SOURCE_TYPE_IDENTITY_OPTIONS },
@@ -572,28 +572,28 @@ export function FilterBlock({ filter, onChange, onRemove, onMoveUp, onMoveDown }
         </select>
 
         {/* Wide layout: value editor inline */}
-        <div className="hidden @md:flex flex-1 items-center">
+        <div className="hidden filter-wide:flex flex-1 items-center">
           <ValueEditor filter={filter} onChange={onChange} />
         </div>
 
         {/* Wide layout: applyTo + remove inline */}
         {TYPES_WITH_APPLY_TO.has(filter.type) && (
-          <div className="hidden @md:flex">
+          <div className="hidden filter-wide:flex">
             <ApplyToSelector filter={filter} onChange={onChange} />
           </div>
         )}
-        <Button className="shrink-0 h-7 w-7 p-0 hidden @md:flex" variant="ghost" size="sm" onClick={onRemove}>✕</Button>
+        <Button className="shrink-0 h-7 w-7 p-0 hidden filter-wide:flex" variant="ghost" size="sm" onClick={onRemove}>✕</Button>
 
         {/* Narrow layout: value editor inline + spacer + remove */}
-        <div className="flex-1 flex items-center @md:hidden">
+        <div className="flex-1 flex items-center filter-wide:hidden">
           <ValueEditor filter={filter} onChange={onChange} />
         </div>
-        <Button className="shrink-0 h-7 w-7 p-0 @md:hidden" variant="ghost" size="sm" onClick={onRemove}>✕</Button>
+        <Button className="shrink-0 h-7 w-7 p-0 filter-wide:hidden" variant="ghost" size="sm" onClick={onRemove}>✕</Button>
       </div>
 
       {/* Row 3: ApplyTo (narrow only) */}
       {TYPES_WITH_APPLY_TO.has(filter.type) && (
-        <div className="@md:hidden">
+        <div className="filter-wide:hidden">
           <ApplyToSelector filter={filter} onChange={onChange} />
         </div>
       )}
