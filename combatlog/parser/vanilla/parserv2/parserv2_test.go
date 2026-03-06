@@ -121,9 +121,10 @@ func TestParserMessages(t *testing.T) {
 				Target:         ptr.Ref(guid.GUID(0xF130003E76015AED)),
 				Effect:         chrondbc.EffectApplyAura,
 				Amplitude:      0,
-				EffectAuraName: 1,
+				EffectAuraName: 87,
 				DurationMS:     15000,
 				AuraCapStatus:  2,
+				EffectMiscValue: 1,
 			},
 			testSpellDB(t),
 		)
