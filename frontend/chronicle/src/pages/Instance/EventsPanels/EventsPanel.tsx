@@ -177,8 +177,11 @@ export function EventsPanel({
   const [flipped, setFlipped] = useState(false);
 
   const customFilters = useMemo(() => (panelContext?.filters as PanelFilter[] | undefined) ?? null, [panelContext]);
-  const activeFilters = customFilters ?? panel.defaultFilters ?? [];
-  const hasCustomFilters = customFilters !== null;
+  const filteringSupported = panel.supportsFiltering === true;
+  const fixedFilters = panel.fixedFilters ?? [];
+  const userFilters = customFilters ?? [];
+  const activeFilters = useMemo(() => [...fixedFilters, ...userFilters], [fixedFilters, userFilters]);
+  const hasCustomFilters = filteringSupported && customFilters !== null;
 
   const setPanelContextWithKey = useCallback((nextContext: Record<string, unknown> | null) => {
     setPanelContext(nextContext);
@@ -339,13 +342,18 @@ export function EventsPanel({
             </div>
           </>
         )}
-        back={(
+        back={filteringSupported ? (
           <PanelFilterEditor
-            filters={activeFilters}
+            fixedFilters={fixedFilters}
+            filters={userFilters}
             onChange={setFilters}
             onReset={resetFilters}
             onClose={() => setFlipped(false)}
           />
+        ) : (
+          <div className="h-full flex items-center justify-center text-sm text-muted-foreground text-center px-6">
+            Filtering is not currently supported on this panel.
+          </div>
         )}
       />
     </BreakoutHoverProvider>

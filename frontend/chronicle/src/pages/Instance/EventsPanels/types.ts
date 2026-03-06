@@ -95,8 +95,11 @@ export interface PanelDefinition<TResult, TEvent extends ProcessorEvent = Proces
   /** If true, shows a warning indicator that this panel is experimental */
   underConstruction?: boolean;
 
-  /** Default pre-processing filters used when the panel has not been customized. */
-  defaultFilters?: PanelFilter[];
+  /** Whether this panel supports the filter-builder UI on the card back. */
+  supportsFiltering?: boolean;
+
+  /** Fixed filters that are always active and cannot be edited by the user. */
+  fixedFilters?: PanelFilter[];
   
   /**
    * Create the initial state for aggregation

@@ -57,18 +57,38 @@ export function createDamageDonePanel(
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
 ): PanelDefinition<DamageDoneState, any> {
   const config = DAMAGE_SOURCE_CONFIGS[sourceType];
-  const defaultFilters: PanelFilter[] = sourceType === "enemies"
-    ? [{ type: "source_type", mode: "include", value: "enemy" }]
-    : sourceType === "pets"
-      ? [{ type: "source_type", mode: "include", value: "pet" }]
-      : [{ type: "source_type", mode: "include", value: "player" }];
+  const fixedFilters: PanelFilter[] = (() => {
+    switch (sourceType) {
+      case "enemies":
+        return [
+          { type: "source_type" as const, value: ["enemy", "enemy_pet"] },
+        ];
+      case "pets":
+        return [
+          { type: "source_type" as const, value: "pet" },
+          { type: "target_type" as const, value: ["player", "pet"], negate: true },
+        ];
+      case "friendly_fire":
+        return [
+          { type: "source_type" as const, value: ["player", "pet"] },
+          { type: "target_type" as const, value: ["player", "pet"] },
+        ];
+      case "players":
+      default:
+        return [
+          { type: "source_type" as const, value: ["player", "pet"] },
+          { type: "target_type" as const, value: ["player", "pet"], negate: true },
+        ];
+    }
+  })();
 
   return {
     ...config.processor,
     label: config.label,
     icon: config.icon,
     supportsPerSecond: true,
-    defaultFilters,
+    supportsFiltering: true,
+    fixedFilters,
     render: (props: PanelRenderProps<DamageDoneState>) => {
       return <DamageDoneContent {...props} sourceType={sourceType} />;
     },

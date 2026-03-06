@@ -254,12 +254,12 @@ function DraggablePinnedTooltip({ player, initialPosition, onClose, panelTitle, 
       <>
         {/* Backdrop */}
         <div 
-          className="fixed inset-0 z-50 bg-black/50"
+          className="fixed inset-0 z-[200] bg-black/50"
           onClick={onClose}
         />
         {/* Modal - centered */}
         <div
-          className="fixed inset-x-2 top-1/2 -translate-y-1/2 z-50 flex flex-col bg-background rounded-lg max-h-[85vh] shadow-xl"
+          className="fixed inset-x-2 top-1/2 -translate-y-1/2 z-[200] flex flex-col bg-background rounded-lg max-h-[85vh] shadow-xl"
           style={{ border: `2px solid color-mix(in oklch, ${player.color} 50%, transparent)` }}
         >
           {/* Header */}
@@ -299,12 +299,12 @@ function DraggablePinnedTooltip({ player, initialPosition, onClose, panelTitle, 
     )
   }
 
-  // Desktop: draggable tooltip
-  return (
+  // Desktop: draggable tooltip (portaled to body to escape panel stacking contexts)
+  return createPortal(
     <div
       ref={tooltipRef}
       data-breakout-panel
-      className="bg-popover text-foreground border-3 border-solid fixed z-50 min-w-[340px] max-w-[90vw] rounded-md shadow-md"
+      className="bg-popover text-foreground border-3 border-solid fixed z-[200] min-w-[340px] max-w-[90vw] rounded-md shadow-md"
       style={{
         left: position.x,
         top: position.y,
@@ -346,7 +346,8 @@ function DraggablePinnedTooltip({ player, initialPosition, onClose, panelTitle, 
       <div>
         {breakout?.(player.playerID, true)}
       </div>
-    </div>
+    </div>,
+    document.body
   )
 }
 

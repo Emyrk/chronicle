@@ -45,16 +45,17 @@ export function createDamageTakenPanel(
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
 ): PanelDefinition<DamageTakenResult, any> {
   const config = DAMAGE_TARGET_CONFIGS[targetType];
-  const defaultFilters: PanelFilter[] = targetType === "enemies"
-    ? [{ type: "enemies", mode: "include", value: "selected" }]
-    : [{ type: "players", mode: "include", value: "selected" }];
+  const fixedFilters: PanelFilter[] = targetType === "enemies"
+    ? [{ type: "enemies", value: "selected" }]
+    : [{ type: "players", value: "selected" }];
 
   return {
     ...config.processor,
     label: config.label,
     icon: config.icon,
     supportsPerSecond: true,
-    defaultFilters,
+    supportsFiltering: true,
+    fixedFilters,
     render: (props: PanelRenderProps<DamageTakenResult>) => {
       return <DamageTakenContent {...props} targetType={targetType} />;
     },

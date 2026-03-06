@@ -316,7 +316,8 @@ export function usePanelAggregation<TResult>(
       setProcessing(true);
 
       // Send work to pooled worker
-      const resolvedFilters = (panelContextData?.filters as PanelFilter[] | undefined) ?? panel.defaultFilters;
+      const userFilters = (panelContextData?.filters as PanelFilter[] | undefined) ?? [];
+      const resolvedFilters = [...(panel.fixedFilters ?? []), ...userFilters];
       const workerRequest: WorkerRequest = {
         requestId,
         panelId: panel.id,
