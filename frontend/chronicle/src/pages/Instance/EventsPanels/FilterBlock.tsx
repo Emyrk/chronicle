@@ -101,32 +101,181 @@ function toArrayValue(value: string | string[]): string[] {
       .filter(Boolean);
 }
 
-/** Segmented toggle for a set of string options */
-function SegmentedToggle({ options, values, onToggle }: {
-  options: readonly { label: string; value: string; color?: string }[];
+/** Combined dropdown for entity type editors — shows Identity + Type groups with section headers in one dropdown. */
+function CompactGroupedDropdown({ groups, values, onToggle }: {
+  groups: { label: string; options: readonly { label: string; value: string }[] }[];
   values: string[];
   onToggle: (value: string) => void;
 }) {
+  const [open, setOpen] = useState(false);
+  const allOptions = groups.flatMap((g) => g.options);
+  const selectedLabels = allOptions.filter((o) => values.includes(o.value)).map((o) => o.label);
+  const summary = selectedLabels.length === 0
+    ? "Select…"
+    : selectedLabels.length <= 2
+      ? selectedLabels.join(", ")
+      : `${selectedLabels.length} selected`;
+
   return (
-    <div className="flex flex-wrap items-center gap-1">
-      {options.map((opt) => {
-        const selected = values.includes(opt.value);
-        return (
-          <button
-            key={opt.value}
-            type="button"
-            className={`px-2 py-0.5 rounded text-xs font-medium transition-colors ${
-              selected
-                ? `${opt.color ?? "bg-primary"} text-white`
-                : "bg-muted text-muted-foreground hover:text-foreground"
-            }`}
-            onClick={() => onToggle(opt.value)}
-          >
-            {opt.label}
-          </button>
-        );
-      })}
+    <div className="relative">
+      <button
+        type="button"
+        className="h-7 rounded-md border border-input bg-background text-foreground px-1.5 text-xs flex items-center gap-1 min-w-0"
+        onClick={() => setOpen((v) => !v)}
+        onBlur={() => setTimeout(() => setOpen(false), 150)}
+      >
+        <span className="truncate max-w-[160px]">{summary}</span>
+        <span className="text-[8px]">▼</span>
+      </button>
+      {open && (
+        <div className="absolute z-50 top-full mt-0.5 left-0 min-w-[160px] rounded-md border border-input bg-background shadow-lg py-1 max-h-[200px] overflow-auto styled-scrollbar">
+          {groups.map((group) => (
+            <div key={group.label}>
+              <div className="px-2 pt-1.5 pb-0.5 text-[9px] uppercase tracking-wider text-muted-foreground font-semibold">
+                {group.label}
+              </div>
+              {group.options.map((opt) => {
+                const selected = values.includes(opt.value);
+                return (
+                  <button
+                    key={opt.value}
+                    type="button"
+                    className={`w-full text-left px-2 py-1 text-xs flex items-center gap-1.5 hover:bg-muted/60 ${
+                      selected ? "text-foreground" : "text-muted-foreground"
+                    }`}
+                    onMouseDown={(e) => {
+                      e.preventDefault();
+                      onToggle(opt.value);
+                    }}
+                  >
+                    <span className={`w-3.5 h-3.5 rounded-sm border flex items-center justify-center text-[10px] ${
+                      selected ? "bg-primary border-primary text-white" : "border-input"
+                    }`}>
+                      {selected && "✓"}
+                    </span>
+                    {opt.label}
+                  </button>
+                );
+              })}
+            </div>
+          ))}
+        </div>
+      )}
     </div>
+  );
+}
+
+/** Compact dropdown for narrow containers — multi-select via checkboxes in a native select isn't great,
+ *  so we use a small dropdown that shows selected count + toggles on click. */
+function CompactDropdownToggle({ options, values, onToggle, multiSelect = true }: {
+  options: readonly { label: string; value: string; color?: string }[];
+  values: string[];
+  onToggle: (value: string) => void;
+  multiSelect?: boolean;
+}) {
+  const [open, setOpen] = useState(false);
+  const selectedLabels = options.filter((o) => values.includes(o.value)).map((o) => o.label);
+  const summary = selectedLabels.length === 0
+    ? "None"
+    : selectedLabels.length <= 2
+      ? selectedLabels.join(", ")
+      : `${selectedLabels.length} selected`;
+
+  if (!multiSelect) {
+    return (
+      <select
+        className="h-7 rounded-md border border-input bg-background text-foreground px-1.5 text-xs min-w-0"
+        value={values[0] ?? ""}
+        onChange={(e) => {
+          const val = e.target.value;
+          if (val) onToggle(val);
+        }}
+      >
+        <option value="">None</option>
+        {options.map((opt) => (
+          <option key={opt.value} value={opt.value}>{opt.label}</option>
+        ))}
+      </select>
+    );
+  }
+
+  return (
+    <div className="relative">
+      <button
+        type="button"
+        className="h-7 rounded-md border border-input bg-background text-foreground px-1.5 text-xs flex items-center gap-1 min-w-0"
+        onClick={() => setOpen((v) => !v)}
+        onBlur={() => setTimeout(() => setOpen(false), 150)}
+      >
+        <span className="truncate max-w-[120px]">{summary}</span>
+        <span className="text-[8px]">▼</span>
+      </button>
+      {open && (
+        <div className="absolute z-50 top-full mt-0.5 left-0 min-w-[140px] rounded-md border border-input bg-background shadow-lg py-1 max-h-[200px] overflow-auto styled-scrollbar">
+          {options.map((opt) => {
+            const selected = values.includes(opt.value);
+            return (
+              <button
+                key={opt.value}
+                type="button"
+                className={`w-full text-left px-2 py-1 text-xs flex items-center gap-1.5 hover:bg-muted/60 ${
+                  selected ? "text-foreground" : "text-muted-foreground"
+                }`}
+                onMouseDown={(e) => {
+                  e.preventDefault();
+                  onToggle(opt.value);
+                }}
+              >
+                <span className={`w-3.5 h-3.5 rounded-sm border flex items-center justify-center text-[10px] ${
+                  selected ? "bg-primary border-primary text-white" : "border-input"
+                }`}>
+                  {selected && "✓"}
+                </span>
+                {opt.label}
+              </button>
+            );
+          })}
+        </div>
+      )}
+    </div>
+  );
+}
+
+/** Segmented toggle for a set of string options — shows buttons on wide panels, dropdown on narrow */
+function SegmentedToggle({ options, values, onToggle, multiSelect = true }: {
+  options: readonly { label: string; value: string; color?: string }[];
+  values: string[];
+  onToggle: (value: string) => void;
+  /** When false, renders a single-select dropdown in narrow mode. Default true (multi-select). */
+  multiSelect?: boolean;
+}) {
+  return (
+    <>
+      {/* Wide: button row */}
+      <div className="hidden @md:flex flex-wrap items-center gap-1">
+        {options.map((opt) => {
+          const selected = values.includes(opt.value);
+          return (
+            <button
+              key={opt.value}
+              type="button"
+              className={`px-2 py-0.5 rounded text-xs font-medium transition-colors ${
+                selected
+                  ? `${opt.color ?? "bg-primary"} text-white`
+                  : "bg-muted text-muted-foreground hover:text-foreground"
+              }`}
+              onClick={() => onToggle(opt.value)}
+            >
+              {opt.label}
+            </button>
+          );
+        })}
+      </div>
+      {/* Narrow: compact dropdown */}
+      <div className="@md:hidden">
+        <CompactDropdownToggle options={options} values={values} onToggle={onToggle} multiSelect={multiSelect} />
+      </div>
+    </>
   );
 }
 
@@ -258,15 +407,27 @@ function EntityTypeEditor({ filter, onChange }: { filter: PanelFilter; onChange:
 
   return (
     <div className="flex flex-col gap-1.5 w-full">
-      <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
+      {/* Wide: two labeled toggle rows */}
+      <div className="hidden @md:flex @md:flex-row @md:flex-wrap @md:items-center gap-1 @md:gap-x-3 @md:gap-y-1">
         <div className="flex items-center gap-1">
           <span className="text-[9px] uppercase tracking-wider text-muted-foreground mr-0.5">Identity</span>
-          <SegmentedToggle options={SOURCE_TYPE_IDENTITY_OPTIONS} values={toggleValues} onToggle={toggleValue} />
+          <SegmentedToggle options={SOURCE_TYPE_IDENTITY_OPTIONS} values={toggleValues} onToggle={toggleValue} multiSelect={false} />
         </div>
         <div className="flex items-center gap-1">
           <span className="text-[9px] uppercase tracking-wider text-muted-foreground mr-0.5">Type</span>
           <SegmentedToggle options={SOURCE_TYPE_TYPE_OPTIONS} values={toggleValues} onToggle={toggleValue} />
         </div>
+      </div>
+      {/* Narrow: single combined dropdown with grouped sections */}
+      <div className="@md:hidden">
+        <CompactGroupedDropdown
+          groups={[
+            { label: "Identity", options: SOURCE_TYPE_IDENTITY_OPTIONS },
+            { label: "Type", options: SOURCE_TYPE_TYPE_OPTIONS },
+          ]}
+          values={toggleValues}
+          onToggle={toggleValue}
+        />
       </div>
       {showCustomInput && (
         <div className="flex flex-wrap items-center gap-1 px-1 py-0.5 rounded border border-input bg-background/60 min-h-[28px]">
@@ -331,8 +492,8 @@ function ApplyToSelector({ filter, onChange }: { filter: PanelFilter; onChange: 
   };
 
   return (
-    <div className="shrink-0 flex flex-col gap-0.5">
-      <span className="text-[9px] uppercase tracking-wider text-muted-foreground text-center">on</span>
+    <div className="flex items-center gap-1 flex-wrap">
+      <span className="text-[9px] uppercase tracking-wider text-muted-foreground">on:</span>
       <div className="flex flex-wrap gap-0.5">
         {APPLY_TO_OPTIONS.map((opt) => {
           const active = current.length === 0 || current.includes(opt.value);
@@ -359,64 +520,80 @@ function ApplyToSelector({ filter, onChange }: { filter: PanelFilter; onChange: 
 
 export function FilterBlock({ filter, onChange, onRemove, onMoveUp, onMoveDown }: FilterBlockProps) {
   return (
-    <div className="flex items-center gap-2 p-2 rounded border border-border/60 bg-background/40">
-      {/* Reorder buttons */}
-      <div className="shrink-0 flex flex-col -my-1">
+    <div className="@container flex flex-col gap-1.5 p-2 rounded border border-border/60 bg-background/40">
+      {/* Row 1: Toolbar — controls cluster */}
+      <div className="flex items-center gap-2">
+        {/* Reorder buttons */}
+        <div className="shrink-0 flex flex-col -my-1">
+          <button
+            type="button"
+            disabled={!onMoveUp}
+            onClick={onMoveUp}
+            className="text-[10px] leading-none text-muted-foreground hover:text-foreground disabled:opacity-20 disabled:cursor-default p-0.5"
+          >
+            ▲
+          </button>
+          <button
+            type="button"
+            disabled={!onMoveDown}
+            onClick={onMoveDown}
+            className="text-[10px] leading-none text-muted-foreground hover:text-foreground disabled:opacity-20 disabled:cursor-default p-0.5"
+          >
+            ▼
+          </button>
+        </div>
+
+        {/* Negate toggle */}
         <button
           type="button"
-          disabled={!onMoveUp}
-          onClick={onMoveUp}
-          className="text-[10px] leading-none text-muted-foreground hover:text-foreground disabled:opacity-20 disabled:cursor-default p-0.5"
+          onClick={() => onChange({ ...filter, negate: !filter.negate })}
+          className={`shrink-0 px-1.5 py-0.5 rounded text-[10px] font-bold uppercase tracking-wider transition-colors ${
+            filter.negate
+              ? "bg-red-500/20 text-red-400 hover:bg-red-500/30"
+              : "bg-zinc-700/30 text-zinc-500 hover:bg-zinc-700/50 hover:text-zinc-300"
+          }`}
+          title={filter.negate ? "Click to remove NOT" : "Click to negate"}
         >
-          ▲
+          {filter.negate ? "NOT" : "IS"}
         </button>
-        <button
-          type="button"
-          disabled={!onMoveDown}
-          onClick={onMoveDown}
-          className="text-[10px] leading-none text-muted-foreground hover:text-foreground disabled:opacity-20 disabled:cursor-default p-0.5"
+
+        {/* Type selector */}
+        <select
+          className="h-7 shrink-0 rounded-md border border-input bg-background text-foreground px-1.5 text-xs"
+          value={filter.type}
+          onChange={(e) => onChange({ ...filter, type: e.target.value as PanelFilterType })}
         >
-          ▼
-        </button>
+          {FILTER_TYPES.map((opt) => (
+            <option className="bg-background text-foreground" key={opt.value} value={opt.value}>{opt.label}</option>
+          ))}
+        </select>
+
+        {/* Wide layout: value editor inline */}
+        <div className="hidden @md:flex flex-1 items-center">
+          <ValueEditor filter={filter} onChange={onChange} />
+        </div>
+
+        {/* Wide layout: applyTo + remove inline */}
+        {TYPES_WITH_APPLY_TO.has(filter.type) && (
+          <div className="hidden @md:flex">
+            <ApplyToSelector filter={filter} onChange={onChange} />
+          </div>
+        )}
+        <Button className="shrink-0 h-7 w-7 p-0 hidden @md:flex" variant="ghost" size="sm" onClick={onRemove}>✕</Button>
+
+        {/* Narrow layout: value editor inline + spacer + remove */}
+        <div className="flex-1 flex items-center @md:hidden">
+          <ValueEditor filter={filter} onChange={onChange} />
+        </div>
+        <Button className="shrink-0 h-7 w-7 p-0 @md:hidden" variant="ghost" size="sm" onClick={onRemove}>✕</Button>
       </div>
 
-      {/* Negate toggle */}
-      <button
-        type="button"
-        onClick={() => onChange({ ...filter, negate: !filter.negate })}
-        className={`shrink-0 px-1.5 py-0.5 rounded text-[10px] font-bold uppercase tracking-wider transition-colors ${
-          filter.negate
-            ? "bg-red-500/20 text-red-400 hover:bg-red-500/30"
-            : "bg-zinc-700/30 text-zinc-500 hover:bg-zinc-700/50 hover:text-zinc-300"
-        }`}
-        title={filter.negate ? "Click to remove NOT" : "Click to negate"}
-      >
-        {filter.negate ? "NOT" : "IS"}
-      </button>
-
-      {/* Type selector */}
-      <select
-        className="h-7 shrink-0 rounded-md border border-input bg-background text-foreground px-1.5 text-xs"
-        value={filter.type}
-        onChange={(e) => onChange({ ...filter, type: e.target.value as PanelFilterType })}
-      >
-        {FILTER_TYPES.map((opt) => (
-          <option className="bg-background text-foreground" key={opt.value} value={opt.value}>{opt.label}</option>
-        ))}
-      </select>
-
-      {/* Value editor (type-specific) */}
-      <div className="flex-1 flex items-center">
-        <ValueEditor filter={filter} onChange={onChange} />
-      </div>
-
-      {/* "Applies to" event type selector */}
+      {/* Row 3: ApplyTo (narrow only) */}
       {TYPES_WITH_APPLY_TO.has(filter.type) && (
-        <ApplyToSelector filter={filter} onChange={onChange} />
+        <div className="@md:hidden">
+          <ApplyToSelector filter={filter} onChange={onChange} />
+        </div>
       )}
-
-      {/* Remove */}
-      <Button className="shrink-0 h-7 w-7 p-0" variant="ghost" size="sm" onClick={onRemove}>✕</Button>
     </div>
   );
 }

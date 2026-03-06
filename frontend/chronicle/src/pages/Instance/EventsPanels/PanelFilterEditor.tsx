@@ -165,7 +165,7 @@ export function PanelFilterEditor({
       <p className="text-xs text-muted-foreground">
         Filters in the same group are OR'd. Groups are AND'd together. Click the connector to toggle.
       </p>
-      <div className="flex-1 min-h-0 overflow-auto space-y-2">
+      <div className="flex-1 min-h-0 overflow-auto styled-scrollbar space-y-2">
         {/* Fixed/locked filters */}
         {fixedFilters.length > 0 && (
           <div className="space-y-1">
