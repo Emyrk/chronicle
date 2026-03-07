@@ -45,6 +45,7 @@ export interface ComparisonSource {
 
 export interface ComparisonChartProps {
   sources: ComparisonSource[];
+  showPercentages?: boolean;
 }
 
 interface PlayerRow {
@@ -57,7 +58,7 @@ interface PlayerRow {
   total: number;
 }
 
-export function ComparisonChart({ sources }: ComparisonChartProps) {
+export function ComparisonChart({ sources, showPercentages = false }: ComparisonChartProps) {
   const [pinnedIds, setPinnedIds] = useState<Set<string>>(new Set());
   const handleTogglePin = useCallback((id: string) => {
     setPinnedIds((prev) => {
@@ -149,6 +150,7 @@ export function ComparisonChart({ sources }: ComparisonChartProps) {
           sources={sources}
           isPinned={pinnedIds.has("__total__")}
           onTogglePin={() => handleTogglePin("__total__")}
+          showPercentages={showPercentages}
         />
 
         {/* Divider */}
@@ -159,11 +161,11 @@ export function ComparisonChart({ sources }: ComparisonChartProps) {
           <ComparisonRow
             key={row.playerID}
             row={row}
-            grandTotal={grandTotal}
             sourceColors={sourceColors}
             sources={sources}
             isPinned={pinnedIds.has(row.playerID)}
             onTogglePin={() => handleTogglePin(row.playerID)}
+            showPercentages={showPercentages}
           />
         ))}
       </div>
@@ -484,6 +486,7 @@ function TotalRow({
   sources,
   isPinned,
   onTogglePin,
+  showPercentages,
 }: {
   sourceColors: string[];
   sourceTotals: number[];
@@ -491,6 +494,7 @@ function TotalRow({
   sources: ComparisonSource[];
   isPinned: boolean;
   onTogglePin: () => void;
+  showPercentages: boolean;
 }) {
   const rowRef = useRef<HTMLDivElement>(null);
   const [pinnedPosition, setPinnedPosition] = useState<{ x: number; y: number } | null>(null);
@@ -540,11 +544,35 @@ function TotalRow({
         <span style={{ flex: 1, fontSize: "13px", fontWeight: 600 }}>
           Total
         </span>
+
+        {/* Per-source split */}
+        <div style={{ display: "flex", gap: 6, alignItems: "center" }}>
+          {sourceTotals.map((val, i) => {
+            if (val === 0) return null;
+            const pct = grandTotal > 0 ? (val / grandTotal) * 100 : 0;
+            return (
+              <span
+                key={i}
+                style={{
+                  fontSize: "12px",
+                  fontWeight: 600,
+                  fontFamily: "var(--font-mono)",
+                  color: sourceColors[i],
+                }}
+              >
+                {showPercentages ? `${pct.toFixed(0)}%` : formatNumber(val)}
+              </span>
+            );
+          })}
+        </div>
+
+        {/* Grand total */}
         <span
           style={{
             fontSize: "13px",
             fontWeight: 600,
             fontFamily: "var(--font-mono)",
+            marginLeft: 8,
           }}
         >
           {formatNumber(grandTotal)}
@@ -606,18 +634,18 @@ function TotalRow({
 
 function ComparisonRow({
   row,
-  grandTotal,
   sourceColors,
   sources,
   isPinned,
   onTogglePin,
+  showPercentages,
 }: {
   row: PlayerRow;
-  grandTotal: number;
   sourceColors: string[];
   sources: ComparisonSource[];
   isPinned: boolean;
   onTogglePin: () => void;
+  showPercentages: boolean;
 }) {
   const rowRef = useRef<HTMLDivElement>(null);
   const [pinnedPosition, setPinnedPosition] = useState<{ x: number; y: number } | null>(null);
@@ -702,29 +730,37 @@ function ComparisonRow({
           {row.playerName}
         </span>
 
+        {/* Per-source split */}
+        <div style={{ display: "flex", gap: 6, alignItems: "center" }}>
+          {row.values.map((val, i) => {
+            if (val === 0) return null;
+            const pct = row.total > 0 ? (val / row.total) * 100 : 0;
+            return (
+              <span
+                key={i}
+                style={{
+                  fontSize: "12px",
+                  fontWeight: 500,
+                  fontFamily: "var(--font-mono)",
+                  color: sourceColors[i],
+                }}
+              >
+                {showPercentages ? `${pct.toFixed(0)}%` : formatNumber(val)}
+              </span>
+            );
+          })}
+        </div>
+
         {/* Total value */}
         <span
           style={{
             fontSize: "13px",
             fontWeight: 500,
             fontFamily: "var(--font-mono)",
+            marginLeft: 8,
           }}
         >
           {formatNumber(row.total)}
-        </span>
-
-        {/* Percentage of grand total */}
-        <span
-          style={{
-            width: 50,
-            textAlign: "right",
-            fontSize: "12px",
-            fontWeight: 500,
-            color: "var(--class-muted-foreground)",
-            fontFamily: "var(--font-mono)",
-          }}
-        >
-          {((row.total / grandTotal) * 100).toFixed(1)}%
         </span>
       </div>
     </div>
