@@ -280,7 +280,8 @@ function BreakoutTable({
             if (val === 0) return null;
             const pct = total > 0 ? (val / total) * 100 : 0;
             const isBaseline = i === baselineIdx;
-            const diff = baselineVal > 0 ? ((val - baselineVal) / baselineVal) * 100 : 0;
+            const absDiff = val - baselineVal;
+            const relDiff = baselineVal > 0 ? ((val - baselineVal) / baselineVal) * 100 : 0;
             return (
               <tr
                 key={i}
@@ -313,8 +314,13 @@ function BreakoutTable({
                   {pct.toFixed(1)}%
                 </td>
                 {showDiff && (
-                  <td style={diffStyle(isBaseline ? 0 : diff)}>
-                    {isBaseline ? "—" : `${diff >= 0 ? "+" : ""}${diff.toFixed(1)}%`}
+                  <td style={diffStyle(isBaseline ? 0 : absDiff)}>
+                    {isBaseline ? "—" : `${absDiff >= 0 ? "+" : ""}${formatNumber(absDiff)}`}
+                  </td>
+                )}
+                {showDiff && (
+                  <td style={diffStyle(isBaseline ? 0 : relDiff)}>
+                    {isBaseline ? "—" : `${relDiff >= 0 ? "+" : ""}${relDiff.toFixed(1)}%`}
                   </td>
                 )}
               </tr>
@@ -328,6 +334,7 @@ function BreakoutTable({
               {formatNumber(total)}
             </td>
             <td />
+            {showDiff && <td />}
             {showDiff && <td />}
           </tr>
         </tfoot>
