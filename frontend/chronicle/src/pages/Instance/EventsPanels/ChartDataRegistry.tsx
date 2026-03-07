@@ -60,11 +60,14 @@ export function ChartDataRegistryProvider({ children }: { children: ReactNode })
   );
 }
 
+/** No-op fallback when used outside a provider (Layout Lab, Storybook, etc.). */
+const NOOP_REGISTRY: ChartDataRegistryContextType = {
+  entries: new Map(),
+  register: () => {},
+  unregister: () => {},
+};
+
 // eslint-disable-next-line react-refresh/only-export-components
 export function useChartDataRegistry(): ChartDataRegistryContextType {
-  const ctx = useContext(ChartDataRegistryContext);
-  if (!ctx) {
-    throw new Error("useChartDataRegistry must be used within a ChartDataRegistryProvider");
-  }
-  return ctx;
+  return useContext(ChartDataRegistryContext) ?? NOOP_REGISTRY;
 }
