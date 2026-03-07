@@ -1,8 +1,11 @@
 /**
  * ChartDataRegistry - Shared context for panels to publish their PlayerMetricChartData[].
  *
- * Panels that produce PlayerMetricChartData[] register their computed data here.
- * The Comparison panel reads from this registry to cross-reference data.
+ * Split into two contexts to avoid cascading re-renders:
+ *  - ActionsContext (register/unregister): stable, never triggers re-renders.
+ *    Consumed by every EventsPanel to publish chart data.
+ *  - EntriesContext (entries map): changes when data is registered/unregistered.
+ *    Only consumed by ComparisonContent to read other panels' data.
  */
 
 import { createContext, useCallback, useContext, useState, type ReactNode } from "react";
@@ -17,16 +20,15 @@ export interface ChartDataEntry {
   data: PlayerMetricChartData[];
 }
 
-interface ChartDataRegistryContextType {
-  /** Current entries keyed by panelIndex. */
-  entries: Map<number, ChartDataEntry>;
-  /** Register (or update) chart data for a panel slot. */
+interface ChartDataActions {
   register: (entry: ChartDataEntry) => void;
-  /** Remove chart data when a panel unmounts or changes type. */
   unregister: (panelIndex: number) => void;
 }
 
-const ChartDataRegistryContext = createContext<ChartDataRegistryContextType | null>(null);
+// Write context — stable value, consumed by every panel.
+const ChartDataActionsContext = createContext<ChartDataActions | null>(null);
+// Read context — changes when entries change, only consumed by ComparisonContent.
+const ChartDataEntriesContext = createContext<Map<number, ChartDataEntry>>(new Map());
 
 export function ChartDataRegistryProvider({ children }: { children: ReactNode }) {
   const [entries, setEntries] = useState<Map<number, ChartDataEntry>>(() => new Map());
@@ -34,7 +36,6 @@ export function ChartDataRegistryProvider({ children }: { children: ReactNode })
   const register = useCallback((entry: ChartDataEntry) => {
     setEntries((prev) => {
       const existing = prev.get(entry.panelIndex);
-      // Skip update if data reference hasn't changed (avoids infinite loops).
       if (existing && existing.data === entry.data && existing.borderColor === entry.borderColor && existing.label === entry.label) {
         return prev;
       }
@@ -53,21 +54,38 @@ export function ChartDataRegistryProvider({ children }: { children: ReactNode })
     });
   }, []);
 
+  // actions object is stable because register/unregister are stable useCallbacks.
+  const [actions] = useState<ChartDataActions>(() => ({ register, unregister }));
+
   return (
-    <ChartDataRegistryContext.Provider value={{ entries, register, unregister }}>
-      {children}
-    </ChartDataRegistryContext.Provider>
+    <ChartDataActionsContext.Provider value={actions}>
+      <ChartDataEntriesContext.Provider value={entries}>
+        {children}
+      </ChartDataEntriesContext.Provider>
+    </ChartDataActionsContext.Provider>
   );
 }
 
 /** No-op fallback when used outside a provider (Layout Lab, Storybook, etc.). */
-const NOOP_REGISTRY: ChartDataRegistryContextType = {
-  entries: new Map(),
+const NOOP_ACTIONS: ChartDataActions = {
   register: () => {},
   unregister: () => {},
 };
 
+/**
+ * Get register/unregister actions. Stable reference — will NOT cause
+ * re-renders when other panels register data.
+ */
 // eslint-disable-next-line react-refresh/only-export-components
-export function useChartDataRegistry(): ChartDataRegistryContextType {
-  return useContext(ChartDataRegistryContext) ?? NOOP_REGISTRY;
+export function useChartDataActions(): ChartDataActions {
+  return useContext(ChartDataActionsContext) ?? NOOP_ACTIONS;
+}
+
+/**
+ * Read the entries map. Triggers re-renders when any panel registers data.
+ * Only use this in components that need to read other panels' data (ComparisonContent).
+ */
+// eslint-disable-next-line react-refresh/only-export-components
+export function useChartDataEntries(): Map<number, ChartDataEntry> {
+  return useContext(ChartDataEntriesContext);
 }

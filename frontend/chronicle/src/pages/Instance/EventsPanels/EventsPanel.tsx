@@ -21,7 +21,7 @@ import type { PanelDefinition, PanelContext } from "./types";
 import { PanelSelector } from "./PanelSelector";
 import { hasExplainer } from "./explainers";
 import type { PlayerMetricChartData } from "@/components/ui/PlayerMetricChart/PlayerMetricChart";
-import { useChartDataRegistry } from "./ChartDataRegistry";
+import { useChartDataActions } from "./ChartDataRegistry";
 
 // Import panel definitions
 import { createDamageDonePanel } from "./DamageDone/DamageDone";
@@ -380,11 +380,11 @@ export function EventsPanel({
   }, [customToggleTokens, borderColor, onPanelOptionChange]);
 
   // -- ChartDataRegistry: register/unregister for cross-panel comparison ------
-  const chartRegistry = useChartDataRegistry();
+  const { register: chartRegister, unregister: chartUnregister } = useChartDataActions();
 
   const registerChartData = useCallback(
     (data: PlayerMetricChartData[]) => {
-      chartRegistry.register({
+      chartRegister({
         panelIndex,
         panelType: panelType as EventsPanelType,
         label: customTitle || panel.label,
@@ -392,15 +392,15 @@ export function EventsPanel({
         data,
       });
     },
-    [chartRegistry, panelIndex, panelType, customTitle, panel.label, borderColor],
+    [chartRegister, panelIndex, panelType, customTitle, panel.label, borderColor],
   );
 
   // Unregister when panel unmounts or panel type changes
   useEffect(() => {
     return () => {
-      chartRegistry.unregister(panelIndex);
+      chartUnregister(panelIndex);
     };
-  }, [chartRegistry, panelIndex, panelType]);
+  }, [chartUnregister, panelIndex, panelType]);
 
   const setPanelContextWithKey = useCallback((nextContext: Record<string, unknown> | null) => {
     setPanelContext(nextContext);

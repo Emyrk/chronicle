@@ -10,7 +10,7 @@ import { BarChart3, X, Plus } from "lucide-react";
 import { cn } from "@/lib/utils";
 import type { PanelRenderProps } from "../types";
 import type { ComparisonResult } from "./comparison.processor";
-import { useChartDataRegistry, type ChartDataEntry } from "../ChartDataRegistry";
+import { useChartDataEntries, type ChartDataEntry } from "../ChartDataRegistry";
 import { ComparisonChart, type ComparisonSource } from "./ComparisonChart";
 
 type ComparisonContentProps = PanelRenderProps<ComparisonResult>;
@@ -30,7 +30,7 @@ function serializeIndices(indices: number[]): string | null {
 
 export function ComparisonContent(props: ComparisonContentProps) {
   const { panelOption, setPanelOption, panelIndex } = props;
-  const { entries } = useChartDataRegistry();
+  const entries = useChartDataEntries();
 
   const selectedIndices = useMemo(
     () => parseSelectedIndices(panelOption),
