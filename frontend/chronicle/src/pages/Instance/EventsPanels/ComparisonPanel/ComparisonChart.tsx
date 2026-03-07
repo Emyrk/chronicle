@@ -159,6 +159,7 @@ export function ComparisonChart({ sources }: ComparisonChartProps) {
           <ComparisonRow
             key={row.playerID}
             row={row}
+            grandTotal={grandTotal}
             sourceColors={sourceColors}
             sources={sources}
             isPinned={pinnedIds.has(row.playerID)}
@@ -605,12 +606,14 @@ function TotalRow({
 
 function ComparisonRow({
   row,
+  grandTotal,
   sourceColors,
   sources,
   isPinned,
   onTogglePin,
 }: {
   row: PlayerRow;
+  grandTotal: number;
   sourceColors: string[];
   sources: ComparisonSource[];
   isPinned: boolean;
@@ -708,6 +711,20 @@ function ComparisonRow({
           }}
         >
           {formatNumber(row.total)}
+        </span>
+
+        {/* Percentage of grand total */}
+        <span
+          style={{
+            width: 50,
+            textAlign: "right",
+            fontSize: "12px",
+            fontWeight: 500,
+            color: "var(--class-muted-foreground)",
+            fontFamily: "var(--font-mono)",
+          }}
+        >
+          {((row.total / grandTotal) * 100).toFixed(1)}%
         </span>
       </div>
     </div>
