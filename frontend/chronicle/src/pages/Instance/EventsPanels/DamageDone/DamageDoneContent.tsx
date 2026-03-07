@@ -12,6 +12,37 @@ import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/comp
 import { ChevronLeft, Layers } from "lucide-react";
 import { cn } from "@/lib/utils";
 
+// ── Panel option encoding ──
+// panelOption is a comma-separated string of tokens stored in the URL.
+// Tokens: pet grouping ("pet" | "pet_name") and focus ("f:<playerId>").
+// Examples: null, "pet", "f:0xABC123", "pet_name,f:0xABC123"
+
+const FOCUS_PREFIX = "f:";
+
+function parseFocusFromOption(option: string | null | undefined): string | null {
+  if (!option) return null;
+  const token = option.split(",").find(t => t.startsWith(FOCUS_PREFIX));
+  return token ? token.slice(FOCUS_PREFIX.length) : null;
+}
+
+function parsePetGroupingFromOption(option: string | null | undefined): PetDamageGrouping {
+  if (!option) return "owner";
+  const tokens = option.split(",");
+  if (tokens.includes("pet_name")) return "pet_name";
+  if (tokens.includes("pet")) return "pet";
+  return "owner";
+}
+
+function serializePanelOption(
+  petGrouping: PetDamageGrouping | null,
+  focusId: string | null,
+): string | null {
+  const tokens: string[] = [];
+  if (petGrouping && petGrouping !== "owner") tokens.push(petGrouping);
+  if (focusId) tokens.push(`${FOCUS_PREFIX}${focusId}`);
+  return tokens.length > 0 ? tokens.join(",") : null;
+}
+
 /**
  * Aggregate damage data across selected encounters.
  * Merges per-encounter data into a single map by player.
@@ -85,13 +116,21 @@ export const DamageDoneContent = (props: DamageDoneContentProps) => {
   const { result, context, panelContext, setPanelContext, panelOption, setPanelOption } = props;
   const [showRanks, setShowRanks] = useState(false);
 
-  const petGrouping: PetDamageGrouping = sourceType === "pets" && panelOption
-    ? (panelOption === "pet" || panelOption === "pet_name" ? panelOption : "owner")
+  // Derive focus and pet grouping from the URL-persisted panelOption
+  const focusedPlayerId = useMemo(() => parseFocusFromOption(panelOption), [panelOption]);
+  const petGrouping: PetDamageGrouping = sourceType === "pets"
+    ? parsePetGroupingFromOption(panelOption)
     : "owner";
+
+  const setFocusedPlayerId = useCallback((id: string | null) => {
+    if (!setPanelOption) return;
+    const pet = sourceType === "pets" ? petGrouping : null;
+    setPanelOption(serializePanelOption(pet, id));
+  }, [setPanelOption, sourceType, petGrouping]);
 
   const setPetGrouping = (grouping: PetDamageGrouping) => {
     if (!setPanelOption) return;
-    setPanelOption(grouping === "owner" ? null : grouping);
+    setPanelOption(serializePanelOption(grouping, focusedPlayerId));
   };
 
   const enemyPanelContext = sourceType === "enemies"
@@ -142,7 +181,6 @@ export const DamageDoneContent = (props: DamageDoneContentProps) => {
 
   // ── Focus feature: right-click a player row to show per-ability view ──
 
-  const [focusedPlayerId, setFocusedPlayerId] = useState<string | null>(null);
   const [contextMenu, setContextMenu] = useState<{
     x: number; y: number; playerId: string; playerName: string
   } | null>(null);
@@ -161,7 +199,7 @@ export const DamageDoneContent = (props: DamageDoneContentProps) => {
     };
     document.addEventListener("keydown", handler);
     return () => document.removeEventListener("keydown", handler);
-  }, [focusedPlayerId]);
+  }, [focusedPlayerId, setFocusedPlayerId]);
 
   // Build per-ability data for the focused player
   const focusedPlayer = focusedPlayerId
