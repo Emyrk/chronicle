@@ -164,6 +164,7 @@ export function ComparisonChart({ sources, matchedOnly, perSecond, durationMs }:
           sources={sources}
           isPinned={pinnedIds.has("__total__")}
           onTogglePin={() => handleTogglePin("__total__")}
+          showMidLine={sources.length === 2}
         />
 
         {/* Divider */}
@@ -179,6 +180,7 @@ export function ComparisonChart({ sources, matchedOnly, perSecond, durationMs }:
             sources={sources}
             isPinned={pinnedIds.has(row.playerID)}
             onTogglePin={() => handleTogglePin(row.playerID)}
+            showMidLine={sources.length === 2}
           />
         ))}
       </div>
@@ -251,6 +253,24 @@ function StackedBarSegments({
         />
       ))}
     </>
+  );
+}
+
+/** Thin vertical line at 50% — only shown when comparing exactly 2 sources. */
+function MidLine() {
+  return (
+    <div
+      style={{
+        position: "absolute",
+        left: "50%",
+        top: 0,
+        bottom: 0,
+        width: 1,
+        background: "oklch(1 0 0 / 0.25)",
+        zIndex: 1,
+        pointerEvents: "none",
+      }}
+    />
   );
 }
 
@@ -546,6 +566,7 @@ function TotalRow({
   sources,
   isPinned,
   onTogglePin,
+  showMidLine,
 }: {
   sourceColors: string[];
   sourceTotals: number[];
@@ -553,6 +574,7 @@ function TotalRow({
   sources: ComparisonSource[];
   isPinned: boolean;
   onTogglePin: () => void;
+  showMidLine: boolean;
 }) {
   const rowRef = useRef<HTMLDivElement>(null);
   const [pinnedPosition, setPinnedPosition] = useState<{ x: number; y: number } | null>(null);
@@ -588,6 +610,7 @@ function TotalRow({
       }}
     >
       <StackedBarSegments values={sourceTotals} total={grandTotal} sourceColors={sourceColors} />
+      {showMidLine && <MidLine />}
 
       <div
         style={{
@@ -673,6 +696,7 @@ function ComparisonRow({
   sources,
   isPinned,
   onTogglePin,
+  showMidLine,
 }: {
   row: PlayerRow;
   grandTotal: number;
@@ -680,6 +704,7 @@ function ComparisonRow({
   sources: ComparisonSource[];
   isPinned: boolean;
   onTogglePin: () => void;
+  showMidLine: boolean;
 }) {
   const rowRef = useRef<HTMLDivElement>(null);
   const [pinnedPosition, setPinnedPosition] = useState<{ x: number; y: number } | null>(null);
@@ -714,6 +739,7 @@ function ComparisonRow({
     >
       {/* Full-width stacked segments (proportional to player's own total) */}
       <StackedBarSegments values={row.values} total={row.total} sourceColors={sourceColors} />
+      {showMidLine && <MidLine />}
 
       {/* Content overlay */}
       <div
