@@ -45,6 +45,7 @@ export interface ComparisonSource {
 
 export interface ComparisonChartProps {
   sources: ComparisonSource[];
+  matchedOnly?: boolean;
 }
 
 interface PlayerRow {
@@ -57,7 +58,7 @@ interface PlayerRow {
   total: number;
 }
 
-export function ComparisonChart({ sources }: ComparisonChartProps) {
+export function ComparisonChart({ sources, matchedOnly }: ComparisonChartProps) {
   const [pinnedIds, setPinnedIds] = useState<Set<string>>(new Set());
   const handleTogglePin = useCallback((id: string) => {
     setPinnedIds((prev) => {
@@ -99,6 +100,7 @@ export function ComparisonChart({ sources }: ComparisonChartProps) {
     for (const [playerID, entry] of playerMap) {
       const total = entry.values.reduce((a, b) => a + b, 0);
       if (total === 0) continue;
+      if (matchedOnly && entry.values.some((v) => v === 0)) continue;
       built.push({ playerID, playerName: entry.playerName, className: entry.className, specialization: entry.specialization, values: entry.values, total });
     }
     built.sort((a, b) => b.total - a.total);
@@ -109,7 +111,7 @@ export function ComparisonChart({ sources }: ComparisonChartProps) {
     const gTotal = sTotals.reduce((a, b) => a + b, 0);
 
     return { rows: built, sourceTotals: sTotals, grandTotal: gTotal, sourceColors: colors };
-  }, [sources]);
+  }, [sources, matchedOnly]);
 
   if (rows.length === 0) {
     return (

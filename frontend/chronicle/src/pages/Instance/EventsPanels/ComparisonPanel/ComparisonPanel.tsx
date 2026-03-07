@@ -12,6 +12,7 @@ export function createComparisonPanel(): PanelDefinition<ComparisonResult> {
     ...comparisonProcessor,
     label: "Comparison",
     icon: <BarChart3 className="h-4 w-4" />,
+    checkboxLabel: "Matched rows only",
     render: (props) => <ComparisonContent {...props} />,
   };
 }

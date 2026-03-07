@@ -29,7 +29,7 @@ function serializeIndices(indices: number[]): string | null {
 }
 
 export function ComparisonContent(props: ComparisonContentProps) {
-  const { panelOption, setPanelOption, panelIndex } = props;
+  const { panelOption, setPanelOption, panelIndex, checkboxChecked } = props;
   const entries = useChartDataEntries();
 
   const selectedIndices = useMemo(
@@ -135,7 +135,7 @@ export function ComparisonContent(props: ComparisonContentProps) {
 
       {/* Chart */}
       <div className="flex-1 min-h-0">
-        <ComparisonChart sources={sources} />
+        <ComparisonChart sources={sources} matchedOnly={checkboxChecked} />
       </div>
     </div>
   );
