@@ -35,6 +35,7 @@ import type { PanelContext } from "@/pages/Instance/EventsPanels/types";
 import type { PanelFilter } from "@/pages/Instance/EventsPanels/processors/filters";
 import type { Instance } from "@/pages/Instance/InstancePage";
 import { PanelTimingProvider } from "@/pages/Instance/EventsPanels/PanelTimingContext";
+import { ChartDataRegistryProvider } from "@/pages/Instance/EventsPanels/ChartDataRegistry";
 import {
   DEFAULT_INSTANCE_LAYOUT_ITEMS,
   ALTERNATE_INSTANCE_LAYOUT_ITEMS,
@@ -1507,6 +1508,7 @@ export function LayoutLabSettings() {
         ) : (
           <InstanceEventsProvider instanceId={instance.id}>
             <PanelTimingProvider panelCount={items.length}>
+            <ChartDataRegistryProvider>
               <GridLayoutEditor
                 cols={12}
                 rowHeight={96}
@@ -1566,6 +1568,7 @@ export function LayoutLabSettings() {
                   );
                 }}
               />
+            </ChartDataRegistryProvider>
             </PanelTimingProvider>
           </InstanceEventsProvider>
         )}
