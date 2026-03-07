@@ -8,7 +8,7 @@
  * Visual styling matches PlayerMetricChart (gradient, radius, font, icons).
  */
 
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties } from "react";
 import { createPortal } from "react-dom";
 import { GripHorizontal, X } from "lucide-react";
 import type { PlayerMetricChartData } from "@/components/ui/PlayerMetricChart/PlayerMetricChart";
@@ -254,6 +254,24 @@ function BreakoutTable({
   sourceColors: string[];
   sources: ComparisonSource[];
 }) {
+  // Default baseline is the first non-zero source; hover changes it.
+  const firstNonZeroIdx = values.findIndex((v) => v > 0);
+  const [hoveredIdx, setHoveredIdx] = useState<number | null>(null);
+  const baselineIdx = hoveredIdx ?? firstNonZeroIdx;
+  const baselineVal = baselineIdx >= 0 ? values[baselineIdx] : 0;
+
+  // Show diff column only when 2+ sources have data
+  const nonZeroCount = values.filter((v) => v > 0).length;
+  const showDiff = nonZeroCount >= 2;
+
+  const diffStyle = (diff: number): CSSProperties => ({
+    textAlign: "right",
+    fontFamily: "var(--font-mono)",
+    fontSize: "11px",
+    paddingLeft: 8,
+    color: diff > 0 ? "oklch(0.65 0.15 145)" : diff < 0 ? "oklch(0.65 0.15 25)" : "var(--class-muted-foreground)",
+  });
+
   return (
     <div style={{ padding: "8px 12px", minWidth: 220 }}>
       <table style={{ width: "100%", borderCollapse: "collapse", fontSize: "12px" }}>
@@ -261,8 +279,19 @@ function BreakoutTable({
           {values.map((val, i) => {
             if (val === 0) return null;
             const pct = total > 0 ? (val / total) * 100 : 0;
+            const isBaseline = i === baselineIdx;
+            const diff = baselineVal > 0 ? ((val - baselineVal) / baselineVal) * 100 : 0;
             return (
-              <tr key={i}>
+              <tr
+                key={i}
+                onMouseEnter={() => setHoveredIdx(i)}
+                onMouseLeave={() => setHoveredIdx(null)}
+                style={{
+                  cursor: showDiff ? "default" : undefined,
+                  background: isBaseline && showDiff ? "oklch(0.5 0 0 / 0.06)" : undefined,
+                  borderRadius: 2,
+                }}
+              >
                 <td style={{ paddingRight: 8, paddingTop: 3, paddingBottom: 3 }}>
                   <span
                     style={{
@@ -283,6 +312,11 @@ function BreakoutTable({
                 <td style={{ textAlign: "right", fontFamily: "var(--font-mono)", color: "var(--class-muted-foreground)" }}>
                   {pct.toFixed(1)}%
                 </td>
+                {showDiff && (
+                  <td style={diffStyle(isBaseline ? 0 : diff)}>
+                    {isBaseline ? "—" : `${diff >= 0 ? "+" : ""}${diff.toFixed(1)}%`}
+                  </td>
+                )}
               </tr>
             );
           })}
@@ -294,6 +328,7 @@ function BreakoutTable({
               {formatNumber(total)}
             </td>
             <td />
+            {showDiff && <td />}
           </tr>
         </tfoot>
       </table>
