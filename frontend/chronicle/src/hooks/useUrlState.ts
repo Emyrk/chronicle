@@ -637,6 +637,8 @@ const PANEL_CODES: Record<PanelType, string> = {
   // Debug/Analysis
   metrics: 'met',
   periods: 'per',
+  // Cross-panel comparison
+  comparison: 'cmp',
 };
 
 // ============================================================================

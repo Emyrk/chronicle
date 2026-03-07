@@ -1,4 +1,4 @@
-import { useMemo } from "react";
+import { useEffect, useMemo } from "react";
 import { PlayerMetricChart, type PlayerMetricChartData } from "@/components/ui/PlayerMetricChart/PlayerMetricChart";
 import { GenericPanel } from "../GenericPanel";
 import type { PanelRenderProps } from "../types";
@@ -54,6 +54,12 @@ export const DeathsContent = (props: DeathsContentProps) => {
     if (!cachedResult) return [];
     return aggregateForEncounters(cachedResult.EncounterDeaths, context.selectedEncounterIds);
   }, [cachedResult, context.selectedEncounterIds]);
+
+  // Register chart data for cross-panel comparison
+  const { registerChartData } = props;
+  useEffect(() => {
+    registerChartData?.(deathsData);
+  }, [registerChartData, deathsData]);
 
   // Once we have cached data, never show loading/processing states
   const effectiveProps = {

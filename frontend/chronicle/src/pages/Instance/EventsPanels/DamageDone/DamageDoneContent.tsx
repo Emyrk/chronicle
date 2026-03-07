@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { PlayerMetricChart, type PlayerMetricChartData } from "@/components/ui/PlayerMetricChart/PlayerMetricChart";
 import { GenericPanel } from "../GenericPanel";
 import type { EntitySelection, PanelRenderProps } from "../types";
@@ -125,6 +125,12 @@ export const DamageDoneContent = (props: DamageDoneContentProps) => {
       disableSubjectSelection,
     );
   }, [sourceType, cachedResult, context.selectedEncounterIds, context.entitySelection, enemyGrouping]);
+
+  // Register chart data for cross-panel comparison
+  const { registerChartData } = props;
+  useEffect(() => {
+    registerChartData?.(damageData);
+  }, [registerChartData, damageData]);
 
   // Create breakout function for tooltips
   const breakout = useDamageDoneBreakout({

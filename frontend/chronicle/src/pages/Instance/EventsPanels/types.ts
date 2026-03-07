@@ -181,6 +181,9 @@ export interface PanelRenderProps<TResult> {
   panelIndex?: number;
   /** Callback to update panel-specific context payload. */
   setPanelContext?: (context: Record<string, unknown> | null) => void;
+
+  /** Register this panel's PlayerMetricChartData[] in the shared ChartDataRegistry. */
+  registerChartData?: (data: PlayerMetricChartData[]) => void;
 }
 
 /**

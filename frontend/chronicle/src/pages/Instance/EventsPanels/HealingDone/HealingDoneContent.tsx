@@ -1,4 +1,4 @@
-import { useMemo } from "react";
+import { useEffect, useMemo } from "react";
 import { Layers } from "lucide-react";
 import { PlayerMetricChart, type PlayerMetricChartData } from "@/components/ui/PlayerMetricChart/PlayerMetricChart";
 import { GenericPanel } from "../GenericPanel";
@@ -149,6 +149,12 @@ export const HealingDoneContent = (props: HealingDoneContentProps) => {
     return aggregateForEncounters(cachedResult, context.selectedEncounterIds, context.entitySelection, viewMode);
   }, [cachedResult, context.selectedEncounterIds, context.entitySelection, viewMode]);
 
+
+  // Register chart data for cross-panel comparison
+  const { registerChartData } = props;
+  useEffect(() => {
+    registerChartData?.(healingData);
+  }, [registerChartData, healingData]);
 
   // Create breakout function for tooltips
   const breakout = useHealingDoneBreakout({

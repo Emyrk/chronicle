@@ -1,4 +1,4 @@
-import { useMemo, useState, useCallback } from "react";
+import { useEffect, useMemo, useState, useCallback } from "react";
 import { PlayerMetricChart, type PlayerMetricChartData } from "@/components/ui/PlayerMetricChart/PlayerMetricChart";
 import { GenericPanel } from "../GenericPanel";
 import type { PanelRenderProps } from "../types";
@@ -393,6 +393,12 @@ export const ResourceRegenContent = (props: ResourceRegenContentProps) => {
       effectiveResourceType
     );
   }, [cachedResult, context.selectedEncounterIds, context.entitySelection.playerIds, effectiveResourceType]);
+
+  // Register chart data for cross-panel comparison
+  const { registerChartData } = props;
+  useEffect(() => {
+    registerChartData?.(resourceData);
+  }, [registerChartData, resourceData]);
 
   // Create breakout function for tooltips
   const breakout = useCallback(

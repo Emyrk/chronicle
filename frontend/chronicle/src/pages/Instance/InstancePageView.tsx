@@ -33,6 +33,7 @@ import { EventsPanel, type EventsPanelType, type PanelContext, type EntitySelect
 import type { PanelFilter } from "./EventsPanels/processors/filters";
 import { PANELS } from "./EventsPanels/EventsPanel";
 import { PanelTimingProvider, PanelTimingDisplay, PanelTimingResetter } from "./EventsPanels/PanelTimingContext";
+import { ChartDataRegistryProvider } from "./EventsPanels/ChartDataRegistry";
 import { PanelExplainerView } from "./PanelExplainer";
 import { RandomTip } from "@/components/RandomTip";
 import { InstanceActionBar } from "@/components/InstanceActionBar/InstanceActionBar";
@@ -1181,6 +1182,7 @@ function EncounterDetail({
       <PanelTimingProvider panelCount={layoutItems.length}>
         <PanelTimingResetter encounters={encounters} />
 
+        <ChartDataRegistryProvider>
         <div
           className="grid gap-3 grid-cols-1 sm:grid-cols-12"
           style={{
@@ -1216,6 +1218,7 @@ function EncounterDetail({
             );
           })}
         </div>
+        </ChartDataRegistryProvider>
 
         <div className="mt-4 flex justify-end">
           <PanelTimingDisplay />

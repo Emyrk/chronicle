@@ -20,6 +20,8 @@ import { useSyncModeContextOptional } from "../SyncModeContext";
 import type { PanelDefinition, PanelContext } from "./types";
 import { PanelSelector } from "./PanelSelector";
 import { hasExplainer } from "./explainers";
+import type { PlayerMetricChartData } from "@/components/ui/PlayerMetricChart/PlayerMetricChart";
+import { useChartDataRegistry } from "./ChartDataRegistry";
 
 // Import panel definitions
 import { createDamageDonePanel } from "./DamageDone/DamageDone";
@@ -41,6 +43,7 @@ import { createJudgementPanel } from "./Judgement/Judgement";
 import { createAuraUptimePanel } from "./AuraUptime/AuraUptime";
 import { createMetricsPanel } from "./Metrics/Metrics";
 import { PeriodsPanel } from "./PeriodsPanel/PeriodsPanel";
+import { createComparisonPanel } from "./ComparisonPanel/ComparisonPanel";
 // TODO: Avoidance panel requires spell school data which isn't available yet
 // import { createAvoidancePanel } from "./Avoidance/Avoidance";
 
@@ -79,6 +82,8 @@ export const PANELS: Record<string, PanelDefinition<any, any>> = {
   // Debug/Analysis
   metrics: createMetricsPanel(),
   periods: PeriodsPanel,
+  // Cross-panel comparison
+  comparison: createComparisonPanel(),
 };
 
 export type EventsPanelType = keyof typeof PANELS;
@@ -374,6 +379,29 @@ export function EventsPanel({
     onPanelOptionChange(buildPanelOptionFromTokens(tokens));
   }, [customToggleTokens, borderColor, onPanelOptionChange]);
 
+  // -- ChartDataRegistry: register/unregister for cross-panel comparison ------
+  const chartRegistry = useChartDataRegistry();
+
+  const registerChartData = useCallback(
+    (data: PlayerMetricChartData[]) => {
+      chartRegistry.register({
+        panelIndex,
+        panelType: panelType as EventsPanelType,
+        label: customTitle || panel.label,
+        borderColor,
+        data,
+      });
+    },
+    [chartRegistry, panelIndex, panelType, customTitle, panel.label, borderColor],
+  );
+
+  // Unregister when panel unmounts or panel type changes
+  useEffect(() => {
+    return () => {
+      chartRegistry.unregister(panelIndex);
+    };
+  }, [chartRegistry, panelIndex, panelType]);
+
   const setPanelContextWithKey = useCallback((nextContext: Record<string, unknown> | null) => {
     setPanelContext(nextContext);
     setPanelContextVersion((version) => version + 1);
@@ -615,6 +643,7 @@ export function EventsPanel({
                 panelContextVersion: `${panelContextVersion}|${aggregationContextKey}`,
                 setPanelContext: setPanelContextWithKey,
                 panelIndex,
+                registerChartData,
               })}
             </div>
           </>

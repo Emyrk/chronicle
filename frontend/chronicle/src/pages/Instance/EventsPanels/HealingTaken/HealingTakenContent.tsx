@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { PlayerMetricChart, type PlayerMetricChartData } from "@/components/ui/PlayerMetricChart/PlayerMetricChart";
 import { GenericPanel } from "../GenericPanel";
 import type { EntitySelection, PanelRenderProps } from "../types";
@@ -113,6 +113,12 @@ export const HealingTakenContent = (props: HealingTakenContentProps) => {
     if (!cachedResult) return [];
     return aggregateForEncounters(cachedResult, context.selectedEncounterIds, context.entitySelection, viewMode);
   }, [cachedResult, context.selectedEncounterIds, context.entitySelection, viewMode]);
+
+  // Register chart data for cross-panel comparison
+  const { registerChartData } = props;
+  useEffect(() => {
+    registerChartData?.(healingData);
+  }, [registerChartData, healingData]);
 
   // Create breakout function for tooltips
   const breakout = useHealingTakenBreakout({

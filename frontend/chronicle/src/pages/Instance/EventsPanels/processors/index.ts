@@ -18,6 +18,7 @@ import { sunderProcessor } from "../Sunder/sunder.processor";
 import { judgementProcessor } from "../Judgement/judgement.processor";
 import { metricsProcessor } from "../Metrics/metrics.processor";
 import { auraUptimeProcessor } from "../AuraUptime/auraUptime.processor";
+import { comparisonProcessor } from "../ComparisonPanel/comparison.processor";
 
 // Export individual processors
 export { damageDoneProcessor, vulnerabilityEffectProcessor, enemyDamageDoneProcessor, petDamageDoneProcessor, friendlyFireProcessor } from "../DamageDone/damageDone.processor";
@@ -35,6 +36,7 @@ export { sunderProcessor } from "../Sunder/sunder.processor";
 export { judgementProcessor } from "../Judgement/judgement.processor";
 export { metricsProcessor } from "../Metrics/metrics.processor";
 export { auraUptimeProcessor } from "../AuraUptime/auraUptime.processor";
+export { comparisonProcessor } from "../ComparisonPanel/comparison.processor";
 
 // Export state types
 export type { DamageDoneResult as DamageDoneState, DamageDoneData, DamageSourceType, EnemyDamageGrouping } from "../DamageDone/damageDone.processor";
@@ -96,4 +98,6 @@ export const processorRegistry: Record<string, PanelProcessor<any, any>> = {
   aura_uptime: auraUptimeProcessor,
   // Debug/analysis
   metrics: metricsProcessor,
+  // Cross-panel comparison
+  comparison: comparisonProcessor,
 };
