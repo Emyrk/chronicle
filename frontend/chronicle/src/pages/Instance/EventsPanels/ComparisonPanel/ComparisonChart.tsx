@@ -2,14 +2,20 @@
  * ComparisonChart – Full-width stacked horizontal bars comparing values from
  * multiple source panels per player.
  *
- * Visual styling matches PlayerMetricChart rows (same gradient, radius,
- * font sizes, spec icon, percentage column, etc.).
+ * Each row fills the full width; stacked segments show proportional split.
+ * Hovering a row reveals a breakout with per-source value + percentage.
+ * Visual styling matches PlayerMetricChart (gradient, radius, font, icons).
  */
 
 import { useMemo } from "react";
 import type { PlayerMetricChartData } from "@/components/ui/PlayerMetricChart/PlayerMetricChart";
 import { ScrollArea } from "@/components/ui/ScrollArea/ScrollArea";
-import { HintTooltip, TooltipTrigger, TooltipContent } from "@/components/ui/Tooltip/tooltip";
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger,
+} from "@/components/ui/Tooltip/tooltip";
 import { formatNumber } from "@/lib/format";
 
 /** Default palette when a source panel has no border color. */
@@ -48,7 +54,7 @@ interface PlayerRow {
 }
 
 export function ComparisonChart({ sources }: ComparisonChartProps) {
-  const { rows, sourceTotals, grandTotal, sourceColors, summedTotal } = useMemo(() => {
+  const { rows, sourceTotals, grandTotal, sourceColors } = useMemo(() => {
     const colors = sources.map(
       (s, i) => s.borderColor || FALLBACK_COLORS[i % FALLBACK_COLORS.length],
     );
@@ -88,11 +94,7 @@ export function ComparisonChart({ sources }: ComparisonChartProps) {
     );
     const gTotal = sTotals.reduce((a, b) => a + b, 0);
 
-    // Scale so the max row fills ~75% of width (matching PlayerMetricChart)
-    const maxRow = built[0]?.total ?? 1;
-    const scaled = maxRow ? maxRow / 0.75 : 1;
-
-    return { rows: built, sourceTotals: sTotals, grandTotal: gTotal, sourceColors: colors, summedTotal: scaled };
+    return { rows: built, sourceTotals: sTotals, grandTotal: gTotal, sourceColors: colors };
   }, [sources]);
 
   if (rows.length === 0) {
@@ -141,7 +143,6 @@ export function ComparisonChart({ sources }: ComparisonChartProps) {
           <ComparisonRow
             key={row.playerID}
             row={row}
-            maximumValue={summedTotal}
             grandTotal={grandTotal}
             sourceColors={sourceColors}
             sources={sources}
@@ -153,7 +154,7 @@ export function ComparisonChart({ sources }: ComparisonChartProps) {
 }
 
 // ---------------------------------------------------------------------------
-// Stacked bar segments (shared between total and player rows)
+// Stacked bar segments (full-width — values sum to total which fills 100%)
 // ---------------------------------------------------------------------------
 
 interface SegmentLayout {
@@ -164,19 +165,20 @@ interface SegmentLayout {
   sharePct: number;
 }
 
-function computeSegmentLayouts(values: number[], total: number, maximumValue: number): SegmentLayout[] {
+function computeSegmentLayouts(values: number[], total: number): SegmentLayout[] {
+  if (total === 0) return [];
   const segments: SegmentLayout[] = [];
   let offset = 0;
   for (let i = 0; i < values.length; i++) {
     const val = values[i];
-    const widthPct = (val / maximumValue) * 100;
+    const widthPct = (val / total) * 100;
     if (val > 0) {
       segments.push({
         index: i,
         leftPct: offset,
         widthPct,
         value: val,
-        sharePct: total > 0 ? (val / total) * 100 : 0,
+        sharePct: (val / total) * 100,
       });
     }
     offset += widthPct;
@@ -187,45 +189,97 @@ function computeSegmentLayouts(values: number[], total: number, maximumValue: nu
 function StackedBarSegments({
   values,
   total,
-  maximumValue,
   sourceColors,
-  sources,
 }: {
   values: number[];
   total: number;
-  maximumValue: number;
   sourceColors: string[];
-  sources: ComparisonSource[];
 }) {
   const segments = useMemo(
-    () => computeSegmentLayouts(values, total, maximumValue),
-    [values, total, maximumValue],
+    () => computeSegmentLayouts(values, total),
+    [values, total],
   );
 
   return (
     <>
       {segments.map((seg) => (
-        <HintTooltip key={seg.index}>
-          <TooltipTrigger asChild>
-            <div
-              style={{
-                position: "absolute",
-                left: `${seg.leftPct}%`,
-                top: 0,
-                bottom: 0,
-                width: `${seg.widthPct}%`,
-                background: `linear-gradient(to right, oklch(0 0 0 / 0.3), oklch(0 0 0 / 0.15)), ${sourceColors[seg.index]}`,
-                opacity: 0.85,
-                transition: "width 0.3s ease, left 0.3s ease",
-              }}
-            />
-          </TooltipTrigger>
-          <TooltipContent side="top" className="text-xs">
-            {sources[seg.index].label}: {formatNumber(seg.value)} ({seg.sharePct.toFixed(1)}%)
-          </TooltipContent>
-        </HintTooltip>
+        <div
+          key={seg.index}
+          style={{
+            position: "absolute",
+            left: `${seg.leftPct}%`,
+            top: 0,
+            bottom: 0,
+            width: `${seg.widthPct}%`,
+            background: `linear-gradient(to right, oklch(0 0 0 / 0.3), oklch(0 0 0 / 0.15)), ${sourceColors[seg.index]}`,
+            opacity: 0.85,
+            transition: "width 0.3s ease, left 0.3s ease",
+          }}
+        />
       ))}
     </>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Breakout content (shown on hover)
+// ---------------------------------------------------------------------------
+
+function BreakoutTable({
+  values,
+  total,
+  sourceColors,
+  sources,
+}: {
+  values: number[];
+  total: number;
+  sourceColors: string[];
+  sources: ComparisonSource[];
+}) {
+  return (
+    <div style={{ padding: "8px 12px", minWidth: 220 }}>
+      <table style={{ width: "100%", borderCollapse: "collapse", fontSize: "12px" }}>
+        <tbody>
+          {values.map((val, i) => {
+            if (val === 0) return null;
+            const pct = total > 0 ? (val / total) * 100 : 0;
+            return (
+              <tr key={i}>
+                <td style={{ paddingRight: 8, paddingTop: 3, paddingBottom: 3 }}>
+                  <span
+                    style={{
+                      display: "inline-block",
+                      width: 8,
+                      height: 8,
+                      borderRadius: 2,
+                      background: sourceColors[i],
+                      marginRight: 6,
+                      verticalAlign: "middle",
+                    }}
+                  />
+                  {sources[i].label}
+                </td>
+                <td style={{ textAlign: "right", fontFamily: "var(--font-mono)", paddingRight: 8 }}>
+                  {formatNumber(val)}
+                </td>
+                <td style={{ textAlign: "right", fontFamily: "var(--font-mono)", color: "var(--class-muted-foreground)" }}>
+                  {pct.toFixed(1)}%
+                </td>
+              </tr>
+            );
+          })}
+        </tbody>
+        <tfoot>
+          <tr style={{ borderTop: "1px solid oklch(0.5 0 0 / 0.15)" }}>
+            <td style={{ paddingTop: 4, fontWeight: 600 }}>Total</td>
+            <td style={{ textAlign: "right", fontFamily: "var(--font-mono)", fontWeight: 600, paddingTop: 4, paddingRight: 8 }}>
+              {formatNumber(total)}
+            </td>
+            <td />
+          </tr>
+        </tfoot>
+      </table>
+    </div>
   );
 }
 
@@ -246,7 +300,7 @@ function TotalRow({
 }) {
   if (grandTotal === 0) return null;
 
-  return (
+  const rowContent = (
     <div
       style={{
         display: "flex",
@@ -256,18 +310,11 @@ function TotalRow({
         borderRadius: "var(--radius)",
         overflow: "hidden",
         color: "var(--class-foreground)",
+        cursor: "default",
       }}
     >
-      {/* Stacked bar segments */}
-      <StackedBarSegments
-        values={sourceTotals}
-        total={grandTotal}
-        maximumValue={grandTotal}
-        sourceColors={sourceColors}
-        sources={sources}
-      />
+      <StackedBarSegments values={sourceTotals} total={grandTotal} sourceColors={sourceColors} />
 
-      {/* Content overlay */}
       <div
         style={{
           position: "relative",
@@ -281,7 +328,6 @@ function TotalRow({
         <span style={{ flex: 1, fontSize: "13px", fontWeight: 600 }}>
           Total
         </span>
-
         <span
           style={{
             fontSize: "13px",
@@ -294,6 +340,28 @@ function TotalRow({
       </div>
     </div>
   );
+
+  return (
+    <TooltipProvider>
+      <Tooltip delayDuration={0} disableHoverableContent>
+        <TooltipTrigger asChild>
+          {rowContent}
+        </TooltipTrigger>
+        <TooltipContent
+          align="start"
+          hideArrow
+          className="p-0 bg-popover text-foreground border"
+        >
+          <BreakoutTable
+            values={sourceTotals}
+            total={grandTotal}
+            sourceColors={sourceColors}
+            sources={sources}
+          />
+        </TooltipContent>
+      </Tooltip>
+    </TooltipProvider>
+  );
 }
 
 // ---------------------------------------------------------------------------
@@ -302,18 +370,16 @@ function TotalRow({
 
 function ComparisonRow({
   row,
-  maximumValue,
   grandTotal,
   sourceColors,
   sources,
 }: {
   row: PlayerRow;
-  maximumValue: number;
   grandTotal: number;
   sourceColors: string[];
   sources: ComparisonSource[];
 }) {
-  return (
+  const rowContent = (
     <div
       style={{
         display: "flex",
@@ -323,18 +389,13 @@ function ComparisonRow({
         borderRadius: "var(--radius)",
         overflow: "hidden",
         color: "var(--class-foreground)",
+        cursor: "default",
       }}
     >
-      {/* Stacked bar segments */}
-      <StackedBarSegments
-        values={row.values}
-        total={row.total}
-        maximumValue={maximumValue}
-        sourceColors={sourceColors}
-        sources={sources}
-      />
+      {/* Full-width stacked segments (proportional to player's own total) */}
+      <StackedBarSegments values={row.values} total={row.total} sourceColors={sourceColors} />
 
-      {/* Content overlay (matches PlayerMetricRow layout) */}
+      {/* Content overlay */}
       <div
         style={{
           position: "relative",
@@ -409,5 +470,45 @@ function ComparisonRow({
         </span>
       </div>
     </div>
+  );
+
+  return (
+    <TooltipProvider>
+      <Tooltip delayDuration={0} disableHoverableContent>
+        <TooltipTrigger asChild>
+          {rowContent}
+        </TooltipTrigger>
+        <TooltipContent
+          align="start"
+          hideArrow
+          className="p-0 bg-popover text-foreground border"
+        >
+          {/* Header */}
+          <div style={{ padding: "8px 12px", borderBottom: "1px solid var(--border)" }}>
+            <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+              <img
+                src={`/icons/spec_${row.className.toLowerCase()}_${row.specialization.toLowerCase().replace(/\s+/g, "")}.png`}
+                alt={row.specialization}
+                style={{ width: 16, height: 16, borderRadius: 2 }}
+                onError={(e) => {
+                  const target = e.currentTarget;
+                  target.src = `/icons/class_${row.className.toLowerCase()}.png`;
+                }}
+              />
+              <span style={{ fontWeight: 500, fontSize: "13px" }}>{row.playerName}</span>
+              <span style={{ marginLeft: "auto", fontSize: "12px", color: "var(--muted-foreground)" }}>
+                {row.className}
+              </span>
+            </div>
+          </div>
+          <BreakoutTable
+            values={row.values}
+            total={row.total}
+            sourceColors={sourceColors}
+            sources={sources}
+          />
+        </TooltipContent>
+      </Tooltip>
+    </TooltipProvider>
   );
 }
