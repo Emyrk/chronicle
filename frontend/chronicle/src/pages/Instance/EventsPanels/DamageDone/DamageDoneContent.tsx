@@ -1,5 +1,7 @@
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { PlayerMetricChart, type PlayerMetricChartData } from "@/components/ui/PlayerMetricChart/PlayerMetricChart";
+import { RowContextMenu } from "@/components/ui/PlayerMetricChart/RowContextMenu";
+import { AbilityBreakout, type AbilityData } from "@/components/ui/AbilityBreakout";
 import { GenericPanel } from "../GenericPanel";
 import type { EntitySelection, PanelRenderProps } from "../types";
 import type { DamageDoneResult, DamageSourceType, EnemyDamageGrouping } from "./damageDone.processor";
@@ -7,7 +9,7 @@ import { useCachedValue } from "@/hooks/useCachedValue";
 import { useDamageDoneBreakout } from "./DamageDoneBreakout";
 import { formatNumber } from "@/lib/format";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/Tooltip/tooltip";
-import { Layers } from "lucide-react";
+import { ChevronLeft, Layers } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 /**
@@ -126,12 +128,6 @@ export const DamageDoneContent = (props: DamageDoneContentProps) => {
     );
   }, [sourceType, cachedResult, context.selectedEncounterIds, context.entitySelection, enemyGrouping]);
 
-  // Register chart data for cross-panel comparison
-  const { registerChartData } = props;
-  useEffect(() => {
-    registerChartData?.(damageData);
-  }, [registerChartData, damageData]);
-
   // Create breakout function for tooltips
   const breakout = useDamageDoneBreakout({
     result: result,
@@ -143,6 +139,90 @@ export const DamageDoneContent = (props: DamageDoneContentProps) => {
     processing: props.processing,
     showRanks,
   });
+
+  // ── Focus feature: right-click a player row to show per-ability view ──
+
+  const [focusedPlayerId, setFocusedPlayerId] = useState<string | null>(null);
+  const [contextMenu, setContextMenu] = useState<{
+    x: number; y: number; playerId: string; playerName: string
+  } | null>(null);
+
+  // Handler for right-click on player rows
+  const handleRowContextMenu = useCallback((playerId: string, event: React.MouseEvent) => {
+    const playerName = damageData.find(d => d.playerID === playerId)?.playerName ?? playerId;
+    setContextMenu({ x: event.clientX, y: event.clientY, playerId, playerName });
+  }, [damageData]);
+
+  // ESC key to unfocus
+  useEffect(() => {
+    if (!focusedPlayerId) return;
+    const handler = (e: KeyboardEvent) => {
+      if (e.key === "Escape") setFocusedPlayerId(null);
+    };
+    document.addEventListener("keydown", handler);
+    return () => document.removeEventListener("keydown", handler);
+  }, [focusedPlayerId]);
+
+  // Build per-ability data for the focused player
+  const focusedPlayer = focusedPlayerId
+    ? damageData.find(d => d.playerID === focusedPlayerId)
+    : null;
+
+  const focusedAbilityData = useMemo(() => {
+    if (!focusedPlayerId || !cachedResult) return null;
+    const abilities = cachedResult.ByAbility.get(focusedPlayerId);
+    if (!abilities) return null;
+
+    const barClassName = focusedPlayer?.className ?? "foreground";
+    const data: PlayerMetricChartData[] = [];
+    for (const [abilityName, stats] of abilities) {
+      data.push({
+        playerID: abilityName,
+        playerName: abilityName,
+        className: barClassName,
+        specialization: "",
+        value: stats.Total,
+      });
+    }
+    return data.sort((a, b) => b.value - a.value);
+  }, [focusedPlayerId, cachedResult, focusedPlayer?.className]);
+
+  // Breakout for focused view: clicking an ability bar shows its hit-type detail
+  const focusedBreakout = useCallback(
+    (abilityName: string, pinned: boolean) => {
+      if (!focusedPlayerId || !cachedResult) return null;
+      const abilities = cachedResult.ByAbility.get(focusedPlayerId);
+      if (!abilities) return null;
+      const abilityData = abilities.get(abilityName);
+      if (!abilityData) return null;
+
+      const singleAbility: AbilityData[] = [{
+        ...abilityData,
+        name: abilityName,
+        value: abilityData.Total,
+      }];
+
+      return (
+        <AbilityBreakout
+          abilities={singleAbility}
+          targets={[]}
+          totalValue={abilityData.Total}
+          valueLabel={props.perSecond ? "DPS" : "Damage"}
+          debugGuid={focusedPlayerId}
+          pinned={pinned}
+          activeTab="ability"
+          onTabChange={() => {}}
+        />
+      );
+    },
+    [focusedPlayerId, cachedResult, props.perSecond],
+  );
+
+  // Register chart data for cross-panel comparison (registers active view's data)
+  const { registerChartData } = props;
+  useEffect(() => {
+    registerChartData?.(focusedAbilityData ?? damageData);
+  }, [registerChartData, focusedAbilityData, damageData]);
 
   // Once we have cached data, never show loading/processing states
   const effectiveProps = {
@@ -260,15 +340,55 @@ export const DamageDoneContent = (props: DamageDoneContentProps) => {
           )}
         </div>
       </div>
-      <PlayerMetricChart 
-        data={damageData} 
-        type={"damage"} 
-        panelTitle="Damage Done"
-        duration_millis={props.durationMs}
-        perSecond={props.perSecond}
-        breakout={breakout}
-        disableInteractions={props.context.renderMode === "layout_lab"}
-      />
+      {/* Focus header with back button */}
+      {focusedPlayerId && focusedAbilityData && (
+        <div className="flex items-center gap-1.5 mb-1">
+          <button
+            className="text-xs text-muted-foreground hover:text-foreground flex items-center gap-1 cursor-pointer"
+            onClick={() => setFocusedPlayerId(null)}
+          >
+            <ChevronLeft className="h-3.5 w-3.5" />
+            Back
+          </button>
+          <span className="text-xs font-medium">
+            {focusedPlayer?.playerName}
+          </span>
+        </div>
+      )}
+
+      {/* Conditionally render focused ability view or normal player view */}
+      {focusedPlayerId && focusedAbilityData ? (
+        <PlayerMetricChart
+          data={focusedAbilityData}
+          type="damage"
+          panelTitle="Ability Breakdown"
+          duration_millis={props.durationMs}
+          perSecond={props.perSecond}
+          breakout={focusedBreakout}
+          disableInteractions={props.context.renderMode === "layout_lab"}
+        />
+      ) : (
+        <PlayerMetricChart
+          data={damageData}
+          type="damage"
+          panelTitle="Damage Done"
+          duration_millis={props.durationMs}
+          perSecond={props.perSecond}
+          breakout={breakout}
+          onRowContextMenu={handleRowContextMenu}
+          disableInteractions={props.context.renderMode === "layout_lab"}
+        />
+      )}
+
+      {/* Right-click context menu */}
+      {contextMenu && (
+        <RowContextMenu
+          position={{ x: contextMenu.x, y: contextMenu.y }}
+          playerName={contextMenu.playerName}
+          onFocus={() => setFocusedPlayerId(contextMenu.playerId)}
+          onClose={() => setContextMenu(null)}
+        />
+      )}
     </GenericPanel>
   );
 }
