@@ -121,7 +121,7 @@ export function ComparisonChart({ sources }: ComparisonChartProps) {
 
   return (
     <ScrollArea className="h-full min-h-0 flex-1">
-      <div style={{ display: "flex", flexDirection: "column", gap: "2px", padding: "4px" }}>
+      <div style={{ display: "flex", flexDirection: "column", gap: "2px", padding: "4px 10px 4px 4px" }}>
         {/* Legend */}
         <div style={{ display: "flex", flexWrap: "wrap", gap: "12px", padding: "0 12px 4px" }}>
           {sources.map((s, i) => (
