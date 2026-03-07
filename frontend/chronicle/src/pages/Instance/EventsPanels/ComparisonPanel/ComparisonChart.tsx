@@ -264,17 +264,22 @@ function BreakoutTable({
   const nonZeroCount = values.filter((v) => v > 0).length;
   const showDiff = nonZeroCount >= 2;
 
-  const diffStyle = (diff: number): CSSProperties => ({
+  // Fixed-width column styles to prevent layout shift on hover-rebase.
+  // Sized for: value up to -999.9M, share up to 100.0%, abs diff up to -999.9M, rel diff up to -9999.9%
+  const COL_VALUE: CSSProperties = { textAlign: "right", fontFamily: "var(--font-mono)", paddingRight: 8, minWidth: 58 };
+  const COL_SHARE: CSSProperties = { textAlign: "right", fontFamily: "var(--font-mono)", color: "var(--class-muted-foreground)", minWidth: 52 };
+  const diffCol = (diff: number): CSSProperties => ({
     textAlign: "right",
     fontFamily: "var(--font-mono)",
     fontSize: "11px",
     paddingLeft: 8,
+    minWidth: 62,
     color: diff > 0 ? "oklch(0.65 0.15 145)" : diff < 0 ? "oklch(0.65 0.15 25)" : "var(--class-muted-foreground)",
   });
 
   return (
     <div style={{ padding: "8px 12px", minWidth: 220 }}>
-      <table style={{ width: "100%", borderCollapse: "collapse", fontSize: "12px" }}>
+      <table style={{ borderCollapse: "collapse", fontSize: "12px", tableLayout: "auto" }}>
         <tbody>
           {values.map((val, i) => {
             if (val === 0) return null;
@@ -307,19 +312,19 @@ function BreakoutTable({
                   />
                   {sources[i].label}
                 </td>
-                <td style={{ textAlign: "right", fontFamily: "var(--font-mono)", paddingRight: 8 }}>
+                <td style={COL_VALUE}>
                   {formatNumber(val)}
                 </td>
-                <td style={{ textAlign: "right", fontFamily: "var(--font-mono)", color: "var(--class-muted-foreground)" }}>
+                <td style={COL_SHARE}>
                   {pct.toFixed(1)}%
                 </td>
                 {showDiff && (
-                  <td style={diffStyle(isBaseline ? 0 : absDiff)}>
+                  <td style={diffCol(isBaseline ? 0 : absDiff)}>
                     {isBaseline ? "—" : `${absDiff >= 0 ? "+" : ""}${formatNumber(absDiff)}`}
                   </td>
                 )}
                 {showDiff && (
-                  <td style={diffStyle(isBaseline ? 0 : relDiff)}>
+                  <td style={diffCol(isBaseline ? 0 : relDiff)}>
                     {isBaseline ? "—" : `${relDiff >= 0 ? "+" : ""}${relDiff.toFixed(1)}%`}
                   </td>
                 )}
@@ -330,7 +335,7 @@ function BreakoutTable({
         <tfoot>
           <tr style={{ borderTop: "1px solid oklch(0.5 0 0 / 0.15)" }}>
             <td style={{ paddingTop: 4, fontWeight: 600 }}>Total</td>
-            <td style={{ textAlign: "right", fontFamily: "var(--font-mono)", fontWeight: 600, paddingTop: 4, paddingRight: 8 }}>
+            <td style={{ ...COL_VALUE, fontWeight: 600, paddingTop: 4 }}>
               {formatNumber(total)}
             </td>
             <td />
