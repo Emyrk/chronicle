@@ -30,7 +30,6 @@ function serializeIndices(indices: number[]): string | null {
 
 export function ComparisonContent(props: ComparisonContentProps) {
   const { panelOption, setPanelOption, panelIndex } = props;
-  const [showPercentages, setShowPercentages] = useState(false);
   const entries = useChartDataEntries();
 
   const selectedIndices = useMemo(
@@ -132,35 +131,11 @@ export function ComparisonContent(props: ComparisonContentProps) {
           onToggle={togglePanel}
           compact
         />
-
-        {/* # / % toggle */}
-        <div className="flex items-center gap-0.5 ml-auto border-l border-border pl-2">
-          <button
-            type="button"
-            className={cn(
-              "text-xs px-1.5 py-0.5 rounded cursor-pointer",
-              !showPercentages ? "bg-accent text-accent-foreground" : "text-muted-foreground hover:text-foreground",
-            )}
-            onClick={() => setShowPercentages(false)}
-          >
-            #
-          </button>
-          <button
-            type="button"
-            className={cn(
-              "text-xs px-1.5 py-0.5 rounded cursor-pointer",
-              showPercentages ? "bg-accent text-accent-foreground" : "text-muted-foreground hover:text-foreground",
-            )}
-            onClick={() => setShowPercentages(true)}
-          >
-            %
-          </button>
-        </div>
       </div>
 
       {/* Chart */}
       <div className="flex-1 min-h-0">
-        <ComparisonChart sources={sources} showPercentages={showPercentages} />
+        <ComparisonChart sources={sources} />
       </div>
     </div>
   );
