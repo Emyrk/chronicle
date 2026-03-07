@@ -1,5 +1,8 @@
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
+import { ChevronLeft } from "lucide-react";
 import { PlayerMetricChart, type PlayerMetricChartData } from "@/components/ui/PlayerMetricChart/PlayerMetricChart";
+import { RowContextMenu } from "@/components/ui/PlayerMetricChart/RowContextMenu";
+import { AbilityBreakout, type AbilityData } from "@/components/ui/AbilityBreakout";
 import { GenericPanel } from "../GenericPanel";
 import type { EntitySelection, PanelRenderProps } from "../types";
 import type { UnifiedHealingResult } from "../processors";
@@ -96,8 +99,19 @@ interface HealingTakenContentProps extends PanelRenderProps<UnifiedHealingResult
 
 export const HealingTakenContent = (props: HealingTakenContentProps) => {
   const { targetType = "players" } = props;
-  const { result, context } = props;
+  const { result, context, panelOption, setPanelOption } = props;
   const [viewMode, setViewMode] = useState<HealingViewMode>("effective");
+
+  // Derive focus from URL-persisted panelOption
+  const focusedPlayerId = useMemo(() => {
+    if (!panelOption) return null;
+    const token = panelOption.split(",").find(t => t.startsWith("f:"));
+    return token ? token.slice(2) : null;
+  }, [panelOption]);
+
+  const setFocusedPlayerId = useCallback((id: string | null) => {
+    setPanelOption?.(id ? `f:${id}` : null);
+  }, [setPanelOption]);
   
   const { cachedValue: cachedResult, hasCache: hasData } = useCachedValue(
     result,
@@ -109,12 +123,6 @@ export const HealingTakenContent = (props: HealingTakenContentProps) => {
     if (!cachedResult) return [];
     return aggregateForEncounters(cachedResult, context.selectedEncounterIds, context.entitySelection, viewMode);
   }, [cachedResult, context.selectedEncounterIds, context.entitySelection, viewMode]);
-
-  // Register chart data for cross-panel comparison
-  const { registerChartData } = props;
-  useEffect(() => {
-    registerChartData?.(healingData);
-  }, [registerChartData, healingData]);
 
   // Create breakout function for tooltips
   const breakout = useHealingTakenBreakout({
@@ -128,6 +136,95 @@ export const HealingTakenContent = (props: HealingTakenContentProps) => {
     viewMode,
   });
 
+  // ── Focus feature: right-click a player row to show per-ability view ──
+
+  const [contextMenu, setContextMenu] = useState<{
+    x: number; y: number; playerId: string; playerName: string
+  } | null>(null);
+
+  const handleRowContextMenu = useCallback((playerId: string, event: React.MouseEvent) => {
+    const playerName = healingData.find(d => d.playerID === playerId)?.playerName ?? playerId;
+    setContextMenu({ x: event.clientX, y: event.clientY, playerId, playerName });
+  }, [healingData]);
+
+  useEffect(() => {
+    if (!focusedPlayerId) return;
+    const handler = (e: KeyboardEvent) => {
+      if (e.key === "Escape") setFocusedPlayerId(null);
+    };
+    document.addEventListener("keydown", handler);
+    return () => document.removeEventListener("keydown", handler);
+  }, [focusedPlayerId, setFocusedPlayerId]);
+
+  const focusedPlayer = focusedPlayerId
+    ? healingData.find(d => d.playerID === focusedPlayerId)
+    : null;
+
+  const focusedAbilityData = useMemo(() => {
+    if (!focusedPlayerId || !cachedResult) return null;
+    const abilityMap = viewMode === "effective"
+      ? cachedResult.TargetByAbility
+      : viewMode === "overheal"
+        ? cachedResult.TargetByAbilityOverheal
+        : cachedResult.TargetByAbilityTotal;
+    const abilities = abilityMap.get(focusedPlayerId);
+    if (!abilities) return null;
+
+    const barClassName = focusedPlayer?.className ?? "foreground";
+    const data: PlayerMetricChartData[] = [];
+    for (const [abilityName, stats] of abilities) {
+      data.push({
+        playerID: abilityName,
+        playerName: abilityName,
+        className: barClassName,
+        specialization: "",
+        value: stats.Total,
+      });
+    }
+    return data.sort((a, b) => b.value - a.value);
+  }, [focusedPlayerId, cachedResult, focusedPlayer?.className, viewMode]);
+
+  const focusedBreakout = useCallback(
+    (abilityName: string, pinned: boolean) => {
+      if (!focusedPlayerId || !cachedResult) return null;
+      const abilityMap = viewMode === "effective"
+        ? cachedResult.TargetByAbility
+        : viewMode === "overheal"
+          ? cachedResult.TargetByAbilityOverheal
+          : cachedResult.TargetByAbilityTotal;
+      const abilities = abilityMap.get(focusedPlayerId);
+      if (!abilities) return null;
+      const abilityData = abilities.get(abilityName);
+      if (!abilityData) return null;
+
+      const singleAbility: AbilityData[] = [{
+        ...abilityData,
+        name: abilityName,
+        value: abilityData.Total,
+      }];
+
+      return (
+        <AbilityBreakout
+          abilities={singleAbility}
+          targets={[]}
+          totalValue={abilityData.Total}
+          valueLabel={props.perSecond ? "HPS" : viewMode === "overheal" ? "Overheal" : "Healing"}
+          debugGuid={focusedPlayerId}
+          pinned={pinned}
+          activeTab="ability"
+          onTabChange={() => {}}
+        />
+      );
+    },
+    [focusedPlayerId, cachedResult, viewMode, props.perSecond],
+  );
+
+  // Register chart data for cross-panel comparison (registers active view's data)
+  const { registerChartData } = props;
+  useEffect(() => {
+    registerChartData?.(focusedAbilityData ?? healingData);
+  }, [registerChartData, focusedAbilityData, healingData]);
+
   // Once we have cached data, never show loading/processing states
   const effectiveProps = {
     ...props,
@@ -135,9 +232,10 @@ export const HealingTakenContent = (props: HealingTakenContentProps) => {
     processing: hasData ? false : props.processing,
   };
 
-  // Compute display total
-  const total = healingData.reduce((sum, d) => sum + d.value, 0);
-  const stackedTotal = healingData.reduce((sum, d) => sum + (d.stackedValue || 0), 0);
+  // Compute display total — use focused data when in focus mode
+  const activeData = focusedAbilityData ?? healingData;
+  const total = activeData.reduce((sum, d) => sum + d.value, 0);
+  const stackedTotal = activeData.reduce((sum, d) => sum + (d.stackedValue || 0), 0);
   const displayTotal = props.perSecond && props.durationMs
     ? formatNumber(total / (props.durationMs / 1000), 1)
     : formatNumber(total, 0);
@@ -185,15 +283,55 @@ export const HealingTakenContent = (props: HealingTakenContentProps) => {
         </div>
       </div>
       
-      <PlayerMetricChart 
-        data={healingData} 
-        type={"healing"} 
-        panelTitle={viewMode === "overheal" ? "Overhealing Received" : "Healing Taken"}
-        duration_millis={props.durationMs}
-        perSecond={props.perSecond}
-        breakout={breakout}
-        disableInteractions={props.context.renderMode === "layout_lab"}
-      />
+      {/* Focus header with back button */}
+      {focusedPlayerId && focusedAbilityData && (
+        <div className="flex items-center gap-1.5 mb-1">
+          <button
+            className="text-xs text-muted-foreground hover:text-foreground flex items-center gap-1 cursor-pointer"
+            onClick={() => setFocusedPlayerId(null)}
+          >
+            <ChevronLeft className="h-3.5 w-3.5" />
+            Back
+          </button>
+          <span className="text-xs font-medium">
+            {focusedPlayer?.playerName}
+          </span>
+        </div>
+      )}
+
+      {/* Conditionally render focused ability view or normal player view */}
+      {focusedPlayerId && focusedAbilityData ? (
+        <PlayerMetricChart
+          data={focusedAbilityData}
+          type="healing"
+          panelTitle="Ability Breakdown"
+          duration_millis={props.durationMs}
+          perSecond={props.perSecond}
+          breakout={focusedBreakout}
+          disableInteractions={props.context.renderMode === "layout_lab"}
+        />
+      ) : (
+        <PlayerMetricChart
+          data={healingData}
+          type="healing"
+          panelTitle={viewMode === "overheal" ? "Overhealing Received" : "Healing Taken"}
+          duration_millis={props.durationMs}
+          perSecond={props.perSecond}
+          breakout={breakout}
+          onRowContextMenu={handleRowContextMenu}
+          disableInteractions={props.context.renderMode === "layout_lab"}
+        />
+      )}
+
+      {/* Right-click context menu */}
+      {contextMenu && (
+        <RowContextMenu
+          position={{ x: contextMenu.x, y: contextMenu.y }}
+          playerName={contextMenu.playerName}
+          onFocus={() => setFocusedPlayerId(contextMenu.playerId)}
+          onClose={() => setContextMenu(null)}
+        />
+      )}
     </GenericPanel>
   );
 }
