@@ -269,8 +269,9 @@ export const DamageDoneContent = (props: DamageDoneContentProps) => {
     processing: hasData ? false : props.processing,
   };
 
-  // Compute display total
-  const total = damageData.reduce((sum, d) => sum + d.value, 0);
+  // Compute display total — use focused data when in focus mode
+  const activeData = focusedAbilityData ?? damageData;
+  const total = activeData.reduce((sum, d) => sum + d.value, 0);
   const displayTotal = props.perSecond && props.durationMs
     ? formatNumber(total / (props.durationMs / 1000), 1)
     : formatNumber(total, 0);
