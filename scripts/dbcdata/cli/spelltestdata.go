@@ -42,6 +42,8 @@ var testSpellIDs = []int{
 	52550, // Dark Harvest
 	11712, // Curse of Agony
 	46269, // Fire Breath — ${expr} inline arithmetic
+	16454, // Flamestrike — $d1 indexed duration
+	51839, // Arcane Missiles — $t unindexed tick interval
 }
 
 // crossSpellRef matches patterns like $3137s1 (spell 3137, variable s1).

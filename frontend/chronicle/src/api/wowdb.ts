@@ -368,7 +368,7 @@ function resolveVariable(spell: WoWSpell, variable: string): string {
 
       case "t": // Tick interval in seconds
         const period = spell.effect_aura_period[index] ?? 0;
-        return period > 0 ? String(period / 1000) : "0";
+        return period > 0 ? String(Math.round(period / 1000)) : "0";
 
       case "a": // AOE radius
         const radius = spell.effect_radius[index];
@@ -382,6 +382,9 @@ function resolveVariable(spell: WoWSpell, variable: string): string {
 
       case "b": // Points per combo point
         return String(spell.effect_points_per_combo[index] ?? 0);
+
+      case "d": // Duration (spell-level, index ignored)
+        return formatDurationMs(spell.duration.Duration);
 
       case "f": // Max stacks (not always per-effect, but sometimes used)
         return String(spell.cumulative_aura || 0);
@@ -404,6 +407,11 @@ function resolveVariable(spell: WoWSpell, variable: string): string {
 
     case "$v": // Max target level
       return String(spell.max_target_level || 0);
+
+    case "$t": { // Tick interval without index defaults to effect 1
+      const period = spell.effect_aura_period[0] ?? 0;
+      return period > 0 ? String(Math.round(period / 1000)) : "0";
+    }
 
     case "$z": // Home location (runtime, not available)
       return "[Home]";
@@ -465,8 +473,8 @@ function evaluateArithmetic(expr: string): number | null {
  * Supported variables:
  * - $s1, $s2, $s3: Effect value (base_points + die_sides)
  * - $o1, $o2, $o3: Total periodic value over duration
- * - $d: Spell duration
- * - $t1, $t2, $t3: Tick interval in seconds
+ * - $d, $d1: Spell duration (index ignored)
+ * - $t, $t1, $t2, $t3: Tick interval in seconds ($t defaults to effect 1)
  * - $a1, $a2, $a3: AOE radius
  * - $r: Spell range
  * - $n: Proc charges
