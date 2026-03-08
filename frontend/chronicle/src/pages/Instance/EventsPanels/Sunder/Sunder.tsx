@@ -302,10 +302,12 @@ interface DebugBreakoutProps {
 }
 
 function DebugBreakout({ target, onClose }: DebugBreakoutProps) {
-  // Sort events by offset
-  const sortedEvents = useMemo<SunderDebugEvent[]>(() => {
-    return [...target.debugEvents].sort((a, b) => a.offsetMs - b.offsetMs);
-  }, [target.debugEvents]);
+  // Sort events by offset — no useMemo: the array is mutated in-place during
+  // sync-mode incremental processing so the reference never changes, which
+  // would cause a stale cache hit.  The array is small (~5-50 items).
+  const sortedEvents = [...target.debugEvents].sort(
+    (a, b) => a.offsetMs - b.offsetMs,
+  );
   
   return (
     <div className="space-y-2">
