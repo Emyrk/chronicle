@@ -41,6 +41,7 @@ var testSpellIDs = []int{
 	709,   // Drain life -- $*5;s1
 	52550, // Dark Harvest
 	11712, // Curse of Agony
+	46269, // Fire Breath — ${expr} inline arithmetic
 }
 
 // crossSpellRef matches patterns like $3137s1 (spell 3137, variable s1).

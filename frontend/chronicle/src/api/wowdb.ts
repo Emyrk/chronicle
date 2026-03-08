@@ -442,6 +442,24 @@ export function extractReferencedSpellIds(template: string): number[] {
 }
 
 /**
+ * Safely evaluate a simple arithmetic expression containing only
+ * numbers, +, -, *, /, parentheses, and whitespace.
+ * Returns null if the expression is invalid or contains anything unexpected.
+ */
+function evaluateArithmetic(expr: string): number | null {
+  // Only allow digits, arithmetic operators, parens, dots, whitespace
+  if (!/^[\d+\-*/().\s]+$/.test(expr)) return null;
+  try {
+    // Safe because we've validated the character set above
+    const result = new Function(`return (${expr})`)() as unknown;
+    if (typeof result !== "number" || !isFinite(result)) return null;
+    return Math.round(result);
+  } catch {
+    return null;
+  }
+}
+
+/**
  * Resolve all template variables in a spell description string.
  *
  * Supported variables:
@@ -458,6 +476,7 @@ export function extractReferencedSpellIds(template: string): number[] {
  * - $NNNNsX: Cross-spell reference (e.g., $3137s1 = spell 3137's s1 value)
  * - $*N;VAR: Multiply variable by N (e.g., $*8;s1 = s1 value * 8)
  * - $/N;VAR: Divide variable by N (e.g., $/10;s1 = s1 value / 10)
+ * - ${expr}: Inline arithmetic (e.g., ${3*3} = 9)
  * - $lsingular:plural;: Pluralization (uses preceding number, 1 = singular)
  * 
  * @param spell The spell being described
@@ -526,7 +545,14 @@ export function resolveSpellDescription(
     return resolved;
   });
 
-  // Third pass: pluralization — $lsingular:plural;
+  // Third pass: inline arithmetic — ${expr} (e.g., ${3*3} → 9)
+  // Runs after variable resolution so inner variables like $m1 are already numbers.
+  result = result.replace(/\$\{([^}]+)\}/g, (_match, expr: string) => {
+    const evaluated = evaluateArithmetic(expr);
+    return evaluated !== null ? String(evaluated) : _match;
+  });
+
+  // Fourth pass: pluralization — $lsingular:plural;
   // WoW's $l uses the most recent resolved number to pick singular vs plural.
   // E.g., "1 extra $lattack:attacks;" → "1 extra attack"
   result = result.replace(/\$l([^:]+):([^;]+);/g, (_match, singular, plural, offset) => {
