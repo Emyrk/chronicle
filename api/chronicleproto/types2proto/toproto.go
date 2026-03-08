@@ -32,8 +32,9 @@ func SpellData(spell *chrondbc.Spell) *chronicleproto.SpellData {
 		return nil
 	}
 	return &chronicleproto.SpellData{
-		Id:   int32(spell.ID),
-		Name: spell.Name(),
+		Id:            int32(spell.ID),
+		Name:          spell.Name(),
+		AttackOutcome: uint32(spell.AttackOutcome()),
 	}
 }
 

@@ -64,3 +64,5 @@ References
 # Custom panels
 
 A step to custom panels is to add the ability to write any filter to a given panel. Ability name, targets, school, etc. It would flip the panel to see the back, where you can tweak these things.
+
+Rotation panel -> https://www.archon.gg/classic-fresh/builds/feral/druid/raid/rotation/normal/high-king-maulgar

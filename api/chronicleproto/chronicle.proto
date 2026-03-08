@@ -41,6 +41,7 @@ enum AuraState {
 message SpellData {
   int32 id = 1;
   string name = 2;
+  uint32 attack_outcome = 3;  // AttackOutcome bitmask of possible hit table results
 }
 
 message Tailer {

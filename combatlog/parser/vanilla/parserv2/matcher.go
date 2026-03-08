@@ -337,7 +337,7 @@ func (p *Parser) swing(ctx context.Context, ts time.Time, m *Matched) ([]message
 		return nil, err
 	}
 
-	auto, err := p.wowDB.Spell(6603)
+	auto, err := p.wowDB.Spell(chrondbc.SpellIDAutoAttack)
 	if err != nil {
 		return nil, fmt.Errorf("fetching auto attack spell: %w", err)
 	}

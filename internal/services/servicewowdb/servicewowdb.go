@@ -85,7 +85,8 @@ func (s *Service) setupRoutes() {
 
 type SpellResponse struct {
 	*chrondbc.Spell
-	DamageType chrondbc.SpellDamageType `json:"damage_type"`
+	DamageType    chrondbc.SpellDamageType `json:"damage_type"`
+	AttackOutcome chrondbc.AttackOutcome   `json:"attack_outcome"`
 }
 
 func (s *Service) handleGetSpell(w http.ResponseWriter, r *http.Request) {
@@ -106,8 +107,9 @@ func (s *Service) handleGetSpell(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Cache-Control", "public, max-age=86400")
 	w.Header().Set("Content-Type", "application/json")
 	_ = json.NewEncoder(w).Encode(SpellResponse{
-		Spell:      spell,
-		DamageType: spell.SpellDamageType(),
+		Spell:         spell,
+		DamageType:    spell.SpellDamageType(),
+		AttackOutcome: spell.AttackOutcome(),
 	})
 }
 

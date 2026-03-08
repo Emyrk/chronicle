@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os"
 
+	"github.com/Emyrk/chronicle/database/gamedb/chrondbc"
 	"github.com/Emyrk/chronicle/database/gamedb/dbcdb"
 	"github.com/Emyrk/chronicle/scripts/dbcdata/cli"
 	"github.com/Gophercraft/core/format/dbc/dbdefs"
@@ -101,6 +102,14 @@ func demo() *serpent.Command {
 			if err != nil {
 				return fmt.Errorf("read spells: %w", err)
 			}
+
+			spdb.Range(func(cursor *dbdefs.Ent_Spell) bool {
+				sp := chrondbc.SpellFromDB(cursor)
+				if sp.Attrs.Has(chrondbc.AttrEx3_BlockableSpell) && !sp.AttackOutcome().Has(chrondbc.AttackOutcomeBlock) {
+					fmt.Println(sp.Name_lang.String(), sp.ID, "is blockable")
+				}
+				return true
+			})
 
 			//_ = spdb.Range(func(cursor *dbdefs.Ent_SpellAuraNames) bool {
 			//	fmt.Println(cursor.EnumID, cursor.Name_lang.String())

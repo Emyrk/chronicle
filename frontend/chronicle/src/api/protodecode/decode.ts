@@ -253,6 +253,7 @@ export interface ReusableDamage {
   activity: ReusableActivityEntry[];
   activityCount: number;  // Actual number of activity entries
   spellId: number | null; // From SpellData field 10
+  spellAttackOutcome: number | null; // From SpellData field 3 (AttackOutcome bitmask)
 }
 
 /**
@@ -279,6 +280,7 @@ export class DamageDecoder {
     activity: [],
     activityCount: 0,
     spellId: null,
+    spellAttackOutcome: null,
   };
   
   /**
@@ -301,6 +303,7 @@ export class DamageDecoder {
     msg.tailerCount = 0;
     msg.activityCount = 0;
     msg.spellId = null;
+    msg.spellAttackOutcome = null;
     
     while (offset < end) {
       const tag = data[offset++];
@@ -404,11 +407,12 @@ export class DamageDecoder {
             const spellField = spellTag >> 3;
             const spellWire = spellTag & 0x7;
             
-            if (spellWire === 0 && spellField === 1) {
-              // id field (varint)
+            if (spellWire === 0) {
+              // varint fields
               const { value, bytesRead } = readVarintFast(data, offset);
               offset += bytesRead;
-              msg.spellId = value;
+              if (spellField === 1) msg.spellId = value;
+              else if (spellField === 3) msg.spellAttackOutcome = value;
             } else if (spellWire === 2) {
               // string field (name) - skip it
               const { value: sLen, bytesRead: sLenBytes } = readVarintFast(data, offset);
@@ -441,6 +445,7 @@ export interface ReusableHeal {
   activity: ReusableActivityEntry[];
   activityCount: number;
   spellId: number | null; // From SpellData field 8
+  spellAttackOutcome: number | null; // From SpellData field 3 (AttackOutcome bitmask)
 }
 
 /**
@@ -474,6 +479,7 @@ export class HealDecoder {
     activity: [],
     activityCount: 0,
     spellId: null,
+    spellAttackOutcome: null,
   };
   
   /**
@@ -495,6 +501,7 @@ export class HealDecoder {
     msg.school = 0;
     msg.activityCount = 0;
     msg.spellId = null;
+    msg.spellAttackOutcome = null;
     
     while (offset < end) {
       const tag = data[offset++];
@@ -574,10 +581,11 @@ export class HealDecoder {
             const spellTag = data[offset++];
             const spellField = spellTag >> 3;
             const spellWire = spellTag & 0x7;
-            if (spellWire === 0 && spellField === 1) {
+            if (spellWire === 0) {
               const { value, bytesRead } = readVarintFast(data, offset);
               offset += bytesRead;
-              msg.spellId = value;
+              if (spellField === 1) msg.spellId = value;
+              else if (spellField === 3) msg.spellAttackOutcome = value;
             } else if (spellWire === 2) {
               // Skip name field (we use sourceName)
               const { value: sLen, bytesRead } = readVarintFast(data, offset);
@@ -1938,6 +1946,7 @@ export interface ReusableAura {
   target: string;
   spellName: string;
   spellId: number | null;
+  spellAttackOutcome: number | null;
   amount: number;
   application: AuraApplication;
   state: AuraState;
@@ -1967,6 +1976,7 @@ export class AuraDecoder {
     target: "",
     spellName: "",
     spellId: null,
+    spellAttackOutcome: null,
     amount: 0,
     application: AuraApplication.Unknown,
     state: AuraState.Unknown,
@@ -1988,6 +1998,7 @@ export class AuraDecoder {
     msg.target = "";
     msg.spellName = "";
     msg.spellId = null;
+    msg.spellAttackOutcome = null;
     msg.amount = 0;
     msg.application = AuraApplication.Unknown;
     msg.state = AuraState.Unknown;
@@ -2067,11 +2078,11 @@ export class AuraDecoder {
             const spellField = spellTag >> 3;
             const spellWire = spellTag & 0x7;
             
-            if (spellWire === 0 && spellField === 1) {
-              // Spell ID (varint)
+            if (spellWire === 0) {
               const { value, bytesRead } = readVarintFast(data, offset);
               offset += bytesRead;
-              msg.spellId = value;
+              if (spellField === 1) msg.spellId = value;
+              else if (spellField === 3) msg.spellAttackOutcome = value;
             } else if (spellWire === 2) {
               // Spell name string - skip, we already have spellName from field 3
               const { value: spellLen, bytesRead } = readVarintFast(data, offset);
@@ -2231,6 +2242,7 @@ export class FastAuraCursor {
 export interface ReusableAuraCastSpell {
   id: number;
   name: string;
+  attackOutcome: number | null;
 }
 
 /**
@@ -2275,6 +2287,7 @@ export class AuraCastDecoder {
   private readonly reusableSpell: ReusableAuraCastSpell = {
     id: 0,
     name: "",
+    attackOutcome: null,
   };
   
   /** Reusable message - mutated on each decode */
@@ -2311,6 +2324,7 @@ export class AuraCastDecoder {
     msg.target = null;
     spell.id = 0;
     spell.name = "";
+    spell.attackOutcome = null;
     msg.effect = 0;
     msg.amplitude = 0;
     msg.effectMiscValue = 0;
@@ -2383,6 +2397,7 @@ export class AuraCastDecoder {
               const { value, bytesRead } = readVarintFast(data, offset);
               offset += bytesRead;
               if (spellField === 1) spell.id = value;
+              else if (spellField === 3) spell.attackOutcome = value;
             } else if (spellWire === 2) {
               const { value: spellLen, bytesRead } = readVarintFast(data, offset);
               offset += bytesRead;
@@ -2556,6 +2571,7 @@ export class FastAuraCastCursor {
 export interface ReusableSpellGoSpell {
   id: number;
   name: string;
+  attackOutcome: number | null;
 }
 
 /**
@@ -2596,6 +2612,7 @@ export class SpellGoDecoder {
   private readonly reusableSpell: ReusableSpellGoSpell = {
     id: 0,
     name: "",
+    attackOutcome: null,
   };
   
   /** Reusable message - mutated on each decode */
@@ -2630,6 +2647,7 @@ export class SpellGoDecoder {
     msg.target = "";
     spell.id = 0;
     spell.name = "";
+    spell.attackOutcome = null;
     msg.numHits = 0;
     msg.numMisses = 0;
     msg.itemId = null;
@@ -2689,7 +2707,7 @@ export class SpellGoDecoder {
             }
           }
         } else if (fieldNumber === 3) {
-          // SpellData - decode nested (1=id, 2=name)
+          // SpellData - decode nested (1=id, 2=name, 3=attack_outcome)
           const spellEnd = offset + len;
           while (offset < spellEnd) {
             const spellTag = data[offset++];
@@ -2700,6 +2718,7 @@ export class SpellGoDecoder {
               const { value, bytesRead } = readVarintFast(data, offset);
               offset += bytesRead;
               if (spellField === 1) spell.id = value;
+              else if (spellField === 3) spell.attackOutcome = value;
             } else if (spellWire === 2) {
               const { value: spellLen, bytesRead } = readVarintFast(data, offset);
               offset += bytesRead;

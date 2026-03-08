@@ -53,6 +53,8 @@ export interface DamageProcessorEvent extends EventMeta {
   tailerCount: number;
   /** Spell ID from SpellData (if available) */
   spellId: number | null;
+  /** AttackOutcome bitmask of possible hit table results (from SpellData) */
+  spellAttackOutcome: number | null;
 }
 
 /**
@@ -67,6 +69,8 @@ export interface HealProcessorEvent extends EventMeta {
   amount: number;
   school: number;
   spellId: number | null;
+  /** AttackOutcome bitmask of possible hit table results (from SpellData) */
+  spellAttackOutcome: number | null;
 }
 
 /**
@@ -183,6 +187,8 @@ export interface AuraProcessorEvent extends EventMeta {
   target: string;  // The unit affected by the aura
   spellName: string;  // Name of the aura/buff/debuff
   spellId: number | null;  // Spell ID from SpellData (if available)
+  /** AttackOutcome bitmask of possible hit table results (from SpellData) */
+  spellAttackOutcome: number | null;
   amount: number;  // Stack count (for Modified events, 0 means ended)
   application: AuraApplication;  // Deprecated: use state instead
   state: AuraState;  // Added, Removed, or Modified

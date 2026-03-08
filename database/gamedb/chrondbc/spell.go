@@ -7,6 +7,10 @@ import (
 	"github.com/Gophercraft/core/i18n"
 )
 
+const (
+	SpellIDAutoAttack SpellID = 6603
+)
+
 // SpellRef is a minimal reference to a spell for JSON APIs
 type SpellRef struct {
 	ID   int32  `json:"id"`
@@ -243,4 +247,67 @@ func (s Spell) SpellDamageType() SpellDamageType {
 	}
 
 	return base
+}
+
+// AttackOutcome is a bitmask of hit table results possible for a spell.
+type AttackOutcome bitmask.Bitmask32
+
+func (a AttackOutcome) Has(b AttackOutcome) bool {
+	return bitmask.Bitmask32(a).Has(bitmask.Bitmask32(b))
+}
+
+const (
+	AttackOutcomeNone     AttackOutcome = 0x00
+	AttackOutcomeMiss     AttackOutcome = 0x01
+	AttackOutcomeDodge    AttackOutcome = 0x02
+	AttackOutcomeParry    AttackOutcome = 0x04
+	AttackOutcomeBlock    AttackOutcome = 0x08
+	AttackOutcomeResist   AttackOutcome = 0x10 // Full resist
+	AttackOutcomeHit      AttackOutcome = 0x20
+	AttackOutcomeCrit     AttackOutcome = 0x40
+	AttackOutcomeGlancing AttackOutcome = 0x80
+	AttackOutcomeCrushing AttackOutcome = 0x100
+)
+
+// AttackOutcome returns a bitmask of hit table outcomes possible for this spell.
+func (s Spell) AttackOutcome() AttackOutcome {
+	if s.ID == SpellIDAutoAttack {
+		return AttackOutcomeMiss | AttackOutcomeDodge | AttackOutcomeParry |
+			AttackOutcomeHit |
+			AttackOutcomeBlock |
+			AttackOutcomeGlancing | AttackOutcomeCrushing | AttackOutcomeCrit
+	}
+
+	result := AttackOutcomeMiss | AttackOutcomeHit
+
+	switch s.DefenseType {
+	case DefenseTypeMelee:
+		result |= AttackOutcomeMiss | AttackOutcomeHit
+		if !s.Attrs.Has(Attr_NoActiveDefense) {
+			result |= AttackOutcomeDodge | AttackOutcomeParry | AttackOutcomeBlock
+		}
+		if !s.Attrs.Has(AttrEx2_CantCrit) {
+			result |= AttackOutcomeCrit
+		}
+
+	case DefenseTypeRanged:
+		result |= AttackOutcomeMiss | AttackOutcomeHit
+		if !s.Attrs.Has(Attr_NoActiveDefense) {
+			result |= AttackOutcomeDodge
+		}
+		if !s.Attrs.Has(AttrEx2_CantCrit) {
+			result |= AttackOutcomeCrit
+		}
+
+	case DefenseTypeMagic:
+		result |= AttackOutcomeHit
+		if !s.Attrs.Has(AttrEx4_IgnoreResistances) {
+			result |= AttackOutcomeResist
+		}
+		if !s.Attrs.Has(AttrEx2_CantCrit) {
+			result |= AttackOutcomeCrit
+		}
+	}
+
+	return result
 }

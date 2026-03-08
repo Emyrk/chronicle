@@ -251,6 +251,7 @@ type SpellData struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	Id            int32                  `protobuf:"varint,1,opt,name=id,proto3" json:"id,omitempty"`
 	Name          string                 `protobuf:"bytes,2,opt,name=name,proto3" json:"name,omitempty"`
+	AttackOutcome uint32                 `protobuf:"varint,3,opt,name=attack_outcome,json=attackOutcome,proto3" json:"attack_outcome,omitempty"` // AttackOutcome bitmask of possible hit table results
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -297,6 +298,13 @@ func (x *SpellData) GetName() string {
 		return x.Name
 	}
 	return ""
+}
+
+func (x *SpellData) GetAttackOutcome() uint32 {
+	if x != nil {
+		return x.AttackOutcome
+	}
+	return 0
 }
 
 type Tailer struct {
@@ -1372,10 +1380,11 @@ var File_chronicle_proto protoreflect.FileDescriptor
 
 const file_chronicle_proto_rawDesc = "" +
 	"\n" +
-	"\x0fchronicle.proto\x12\x0echronicleproto\"/\n" +
+	"\x0fchronicle.proto\x12\x0echronicleproto\"V\n" +
 	"\tSpellData\x12\x0e\n" +
 	"\x02id\x18\x01 \x01(\x05R\x02id\x12\x12\n" +
-	"\x04name\x18\x02 \x01(\tR\x04name\"J\n" +
+	"\x04name\x18\x02 \x01(\tR\x04name\x12%\n" +
+	"\x0eattack_outcome\x18\x03 \x01(\rR\rattackOutcome\"J\n" +
 	"\x06Tailer\x12\x1b\n" +
 	"\x06amount\x18\x01 \x01(\rH\x00R\x06amount\x88\x01\x01\x12\x18\n" +
 	"\ahitType\x18\x02 \x01(\rR\ahitTypeB\t\n" +

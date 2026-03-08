@@ -5,7 +5,7 @@ import { useSpell } from "@/api/queries";
 import { SpellTooltip } from "./SpellTooltip";
 import { LocaleSelector } from "./LocaleSelector";
 import type { LocaleIndex } from "@/api/wowdb";
-import { getDamageTypeLabels, SpellDamageType } from "@/api/wowdb";
+import { getDamageTypeLabels, getAttackOutcomeLabels, AttackOutcome, SpellDamageType } from "@/api/wowdb";
 
 export function SpellPage() {
   const { spellId } = useParams<{ spellId: string }>();
@@ -130,6 +130,29 @@ export function SpellPage() {
                       : label === "Direct"
                       ? "bg-amber-500/20 text-amber-400"
                       : "bg-blue-500/20 text-blue-400"
+                  }`}
+                >
+                  {label}
+                </span>
+              ))}
+            </div>
+          )}
+
+          {/* Attack Outcome Badges */}
+          {spell.attack_outcome !== AttackOutcome.None && (
+            <div className="flex items-center gap-2 flex-wrap">
+              <span className="text-xs text-muted-foreground">Attack Outcome:</span>
+              {getAttackOutcomeLabels(spell.attack_outcome).map((label) => (
+                <span
+                  key={label}
+                  className={`text-xs px-2 py-0.5 rounded font-medium ${
+                    label === "Miss" || label === "Dodge" || label === "Parry" || label === "Block" || label === "Resist"
+                      ? "bg-red-500/20 text-red-400"
+                      : label === "Crit" || label === "Crushing"
+                      ? "bg-orange-500/20 text-orange-400"
+                      : label === "Glancing"
+                      ? "bg-slate-500/20 text-slate-400"
+                      : "bg-green-500/20 text-green-400"
                   }`}
                 >
                   {label}
