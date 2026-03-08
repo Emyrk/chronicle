@@ -19,6 +19,7 @@ export function createResourceRegenPanel(): PanelDefinition<ResourceRegenResult,
     label: "Resource Gains",
     icon: <Droplets className="h-4 w-4" />,
     supportsPerSecond: true,
+    supportsFiltering: true,
     
     render: (props: PanelRenderProps<ResourceRegenResult>) => {
       return <ResourceRegenContent {...props} />;

@@ -19,6 +19,7 @@ export function createExtraAttacksPanel(): PanelDefinition<ExtraAttacksResult, a
     label: "Extra Attacks",
     icon: <Zap className="h-4 w-4" />,
     supportsPerSecond: true,
+    supportsFiltering: true,
     
     render: (props: PanelRenderProps<ExtraAttacksResult>) => {
       return <ExtraAttacksContent {...props} />;
