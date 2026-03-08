@@ -68,8 +68,8 @@ interface PlayerMetricChartProps extends React.ComponentProps<"div"> {
   stackedLabel?: string
   /** Disable hover/click breakout interactions (used by layout editor previews) */
   disableInteractions?: boolean
-  /** Called when a row is right-clicked. Parent can use this to show a context menu. */
-  onRowContextMenu?: (playerId: string, event: React.MouseEvent) => void
+  /** Called when a row is Ctrl+clicked (or Cmd+clicked on Mac). Parent can use this to show a context menu. */
+  onRowCtrlClick?: (playerId: string, event: React.MouseEvent) => void
 }
 
 export function PlayerMetricChart({
@@ -84,7 +84,7 @@ export function PlayerMetricChart({
   breakout,
   stackedLabel = 'Overheal',
   disableInteractions = false,
-  onRowContextMenu,
+  onRowCtrlClick,
   // Exclude dir from divProps to avoid type conflict with ScrollArea
   dir: _dir,
   ...divProps
@@ -170,7 +170,7 @@ export function PlayerMetricChart({
             breakout={disableInteractions ? undefined : breakout}
             stackedLabel={stackedLabel}
             isFirstRow={index === 0}
-            onContextMenu={onRowContextMenu ? (e) => onRowContextMenu(player.playerID, e) : undefined}
+            onCtrlClick={onRowCtrlClick ? (e) => onRowCtrlClick(player.playerID, e) : undefined}
           />
         })}
       </div>
@@ -194,8 +194,8 @@ export interface PlayerMetricRowProps {
   stackedLabel?: string
   /** Whether this is the first row (used for tutorial highlight) */
   isFirstRow?: boolean
-  /** Called when the row is right-clicked */
-  onContextMenu?: (event: React.MouseEvent) => void
+  /** Called when the row is Ctrl+clicked (or Cmd+clicked on Mac) */
+  onCtrlClick?: (event: React.MouseEvent) => void
 }
 
 // Draggable pinned tooltip component
@@ -372,7 +372,7 @@ export function PlayerMetricRow({
   breakout,
   stackedLabel = 'Overheal',
   isFirstRow = false,
-  onContextMenu: onContextMenuProp,
+  onCtrlClick: onCtrlClickProp,
 }: PlayerMetricRowProps) {
   const { ref, x, y } = useMouse<HTMLDivElement>();
   const rowRef = useRef<HTMLDivElement>(null)
@@ -382,6 +382,11 @@ export function PlayerMetricRow({
   
   const handleClick = useCallback((e: React.MouseEvent) => {
     e.preventDefault()
+    // Ctrl+click (or Cmd+click on Mac) opens the focus menu
+    if ((e.ctrlKey || e.metaKey) && onCtrlClickProp) {
+      onCtrlClickProp(e)
+      return
+    }
     if (!breakout) return // No action if no breakout function
     if (!isPinned && rowRef.current) {
       // Calculate initial position for the pinned tooltip
@@ -392,7 +397,7 @@ export function PlayerMetricRow({
       })
     }
     onTogglePin?.()
-  }, [isPinned, onTogglePin, x, rowHeight, breakout])
+  }, [isPinned, onTogglePin, x, rowHeight, breakout, onCtrlClickProp])
 
   const handleClose = useCallback(() => {
     onTogglePin?.()
@@ -414,7 +419,6 @@ export function PlayerMetricRow({
     <div
       ref={setRefs}
       onClick={handleClick}
-      onContextMenu={onContextMenuProp ? (e) => { e.preventDefault(); onContextMenuProp(e) } : undefined}
       data-panel-row={isFirstRow ? true : undefined}
       style={{
         display: 'flex',

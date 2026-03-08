@@ -179,14 +179,14 @@ export const DamageDoneContent = (props: DamageDoneContentProps) => {
     showRanks,
   });
 
-  // ── Focus feature: right-click a player row to show per-ability view ──
+  // ── Focus feature: Ctrl+click a player row to show per-ability view ──
 
   const [contextMenu, setContextMenu] = useState<{
     x: number; y: number; playerId: string; playerName: string
   } | null>(null);
 
-  // Handler for right-click on player rows
-  const handleRowContextMenu = useCallback((playerId: string, event: React.MouseEvent) => {
+  // Handler for Ctrl+click on player rows
+  const handleRowCtrlClick = useCallback((playerId: string, event: React.MouseEvent) => {
     const playerName = damageData.find(d => d.playerID === playerId)?.playerName ?? playerId;
     setContextMenu({ x: event.clientX, y: event.clientY, playerId, playerName });
   }, [damageData]);
@@ -418,12 +418,12 @@ export const DamageDoneContent = (props: DamageDoneContentProps) => {
           duration_millis={props.durationMs}
           perSecond={props.perSecond}
           breakout={breakout}
-          onRowContextMenu={handleRowContextMenu}
+          onRowCtrlClick={handleRowCtrlClick}
           disableInteractions={props.context.renderMode === "layout_lab"}
         />
       )}
 
-      {/* Right-click context menu */}
+      {/* Ctrl+click context menu */}
       {contextMenu && (
         <RowContextMenu
           position={{ x: contextMenu.x, y: contextMenu.y }}

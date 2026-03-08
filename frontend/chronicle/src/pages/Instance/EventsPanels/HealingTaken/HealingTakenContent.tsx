@@ -142,7 +142,8 @@ export const HealingTakenContent = (props: HealingTakenContentProps) => {
     x: number; y: number; playerId: string; playerName: string
   } | null>(null);
 
-  const handleRowContextMenu = useCallback((playerId: string, event: React.MouseEvent) => {
+  // Handler for Ctrl+click on player rows
+  const handleRowCtrlClick = useCallback((playerId: string, event: React.MouseEvent) => {
     const playerName = healingData.find(d => d.playerID === playerId)?.playerName ?? playerId;
     setContextMenu({ x: event.clientX, y: event.clientY, playerId, playerName });
   }, [healingData]);
@@ -322,12 +323,12 @@ export const HealingTakenContent = (props: HealingTakenContentProps) => {
           duration_millis={props.durationMs}
           perSecond={props.perSecond}
           breakout={breakout}
-          onRowContextMenu={handleRowContextMenu}
+          onRowCtrlClick={handleRowCtrlClick}
           disableInteractions={props.context.renderMode === "layout_lab"}
         />
       )}
 
-      {/* Right-click context menu */}
+      {/* Ctrl+click context menu */}
       {contextMenu && (
         <RowContextMenu
           position={{ x: contextMenu.x, y: contextMenu.y }}

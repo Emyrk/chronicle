@@ -12,15 +12,13 @@ export interface RowContextMenuProps {
 export function RowContextMenu({ position, playerName, onFocus, onClose }: RowContextMenuProps) {
   useEffect(() => {
     const handler = () => onClose()
-    // Defer listener setup so the triggering contextmenu event doesn't immediately close the menu
+    // Defer listener setup so the triggering click event doesn't immediately close the menu
     const frame = requestAnimationFrame(() => {
       document.addEventListener("click", handler)
-      document.addEventListener("contextmenu", handler)
     })
     return () => {
       cancelAnimationFrame(frame)
       document.removeEventListener("click", handler)
-      document.removeEventListener("contextmenu", handler)
     }
   }, [onClose])
 
