@@ -2,7 +2,7 @@
  * All Activity Debug panel - Shows raw events with stream type toggles
  */
 
-import { useState, useMemo, useCallback } from "react";
+import { useState, useMemo, useCallback, useRef, useEffect } from "react";
 import { Skull, Swords, Heart, Zap, Wand2, Sparkles, ChevronLeft, ChevronRight, ChevronsLeft, ChevronsRight, Search, X, Crosshair, Timer } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { formatNumber } from "@/lib/format";
@@ -35,6 +35,81 @@ const STREAM_CONFIG: Record<StreamType, { icon: React.ElementType; color: string
   spell_go: { icon: Crosshair, color: "text-amber-500", label: "Spell Go" },
   aura_cast: { icon: Timer, color: "text-teal-500", label: "Aura Cast" },
 };
+// --- Panel option encode/decode helpers for state persistence ---
+
+const DEFAULT_ENABLED_STREAMS = new Set<StreamType>(["damage", "heal", "resource_change", "spell_go"]);
+
+const STREAM_CODES: Record<StreamType, string> = {
+  damage: "d", heal: "h", resource_change: "r", cast: "c",
+  aura: "a", slain: "x", spell_go: "g", aura_cast: "u",
+  extra_attack: "e",
+};
+const CODE_TO_STREAM = Object.fromEntries(
+  Object.entries(STREAM_CODES).map(([k, v]) => [v, k as StreamType]),
+) as Record<string, StreamType>;
+const DEFAULT_STREAM_CODE = "dhrg"; // sorted code for DEFAULT_ENABLED_STREAMS
+
+function encodeStreams(streams: Set<StreamType>): string {
+  return [...streams].map((s) => STREAM_CODES[s]).sort().join("");
+}
+function decodeStreams(code: string): Set<StreamType> {
+  const set = new Set<StreamType>();
+  for (const ch of code) {
+    const s = CODE_TO_STREAM[ch];
+    if (s) set.add(s);
+  }
+  return set.size > 0 ? set : new Set(DEFAULT_ENABLED_STREAMS);
+}
+
+// Commas are the token separator, so escape them in filter values
+function encodeFilterValue(v: string): string {
+  return v.replace(/%/g, "%25").replace(/,/g, "%2C");
+}
+function decodeFilterValue(v: string): string {
+  return v.replace(/%2C/gi, ",").replace(/%25/g, "%");
+}
+
+function parseAllActivityTokens(option: string | null | undefined) {
+  const tokens = (option ?? "").split(",").map((t) => t.trim()).filter(Boolean);
+  let streams: Set<StreamType> | null = null;
+  let abilityFilter = "";
+  let sourceFilter = "";
+  let targetFilter = "";
+  for (const t of tokens) {
+    if (t.startsWith("s:"))       streams = decodeStreams(t.slice(2));
+    else if (t.startsWith("af:")) abilityFilter = decodeFilterValue(t.slice(3));
+    else if (t.startsWith("sf:")) sourceFilter = decodeFilterValue(t.slice(3));
+    else if (t.startsWith("tf:")) targetFilter = decodeFilterValue(t.slice(3));
+    // other tokens (cb, bc:, t:) are ignored — managed by EventsPanel
+  }
+  return {
+    streams: streams ?? new Set(DEFAULT_ENABLED_STREAMS),
+    abilityFilter,
+    sourceFilter,
+    targetFilter,
+  };
+}
+
+function buildAllActivityTokens(
+  existing: string | null | undefined,
+  streams: Set<StreamType>,
+  abilityFilter: string,
+  sourceFilter: string,
+  targetFilter: string,
+): string | null {
+  // Preserve tokens we don't own (cb, bc:, t:, etc.)
+  const preserved = (existing ?? "").split(",").map((t) => t.trim())
+    .filter((t) => t && !t.startsWith("s:") && !t.startsWith("af:")
+                     && !t.startsWith("sf:") && !t.startsWith("tf:"));
+  const streamCode = encodeStreams(streams);
+  if (streamCode !== DEFAULT_STREAM_CODE) preserved.push(`s:${streamCode}`);
+  if (abilityFilter.trim()) preserved.push(`af:${encodeFilterValue(abilityFilter.trim())}`);
+  if (sourceFilter.trim())  preserved.push(`sf:${encodeFilterValue(sourceFilter.trim())}`);
+  if (targetFilter.trim())  preserved.push(`tf:${encodeFilterValue(targetFilter.trim())}`);
+  return preserved.length > 0 ? preserved.join(",") : null;
+}
+
+
 
 interface StreamToggleProps {
   streamType: StreamType;
@@ -552,16 +627,38 @@ interface AllActivityWrapperProps {
   context: PanelContext;
   panelIndex?: number;
   useRelativeTime?: boolean;
+  panelOption?: string | null;
+  setPanelOption?: (option: string | null) => void;
 }
 
-const DEFAULT_ENABLED_STREAMS = new Set<StreamType>(["damage", "heal", "resource_change", "spell_go"]);
+function AllActivityWrapper({ context, panelIndex, useRelativeTime = false, panelOption, setPanelOption }: AllActivityWrapperProps) {
+  // Parse initial state from saved panelOption (mount-only)
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  const initial = useMemo(() => parseAllActivityTokens(panelOption), []);
 
-function AllActivityWrapper({ context, panelIndex, useRelativeTime = false }: AllActivityWrapperProps) {
   const [currentPage, setCurrentPage] = useState(1);
-  const [enabledStreams, setEnabledStreams] = useState<Set<StreamType>>(DEFAULT_ENABLED_STREAMS);
-  const [abilityFilter, setAbilityFilter] = useState("");
-  const [sourceFilter, setSourceFilter] = useState("");
-  const [targetFilter, setTargetFilter] = useState("");
+  const [enabledStreams, setEnabledStreams] = useState<Set<StreamType>>(initial.streams);
+  const [abilityFilter, setAbilityFilter] = useState(initial.abilityFilter);
+  const [sourceFilter, setSourceFilter] = useState(initial.sourceFilter);
+  const [targetFilter, setTargetFilter] = useState(initial.targetFilter);
+
+  // Sync state changes back to panelOption for persistence in shared layouts/links.
+  // Uses a ref for panelOption to avoid feedback loops (state change → setPanelOption →
+  // parent re-render → new panelOption → effect re-fires).
+  const panelOptionRef = useRef(panelOption);
+  panelOptionRef.current = panelOption;
+  const setPanelOptionRef = useRef(setPanelOption);
+  setPanelOptionRef.current = setPanelOption;
+  const syncRef = useRef(false); // skip initial mount sync
+  useEffect(() => {
+    if (!syncRef.current) { syncRef.current = true; return; }
+    const timer = setTimeout(() => {
+      setPanelOptionRef.current?.(buildAllActivityTokens(
+        panelOptionRef.current, enabledStreams, abilityFilter, sourceFilter, targetFilter,
+      ));
+    }, 300);
+    return () => clearTimeout(timer);
+  }, [enabledStreams, abilityFilter, sourceFilter, targetFilter]);
   
   // Track previous encounter key to reset page when encounters change
   // Using the React-approved pattern for "adjusting state when a prop changes"
@@ -670,6 +767,8 @@ function AllActivityRender(props: PanelRenderProps<AllActivityState>) {
       context={props.context}
       panelIndex={props.panelIndex}
       useRelativeTime={props.checkboxChecked}
+      panelOption={props.panelOption}
+      setPanelOption={props.setPanelOption}
     />
   );
 }
