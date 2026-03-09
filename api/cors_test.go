@@ -26,10 +26,11 @@ func TestCors(t *testing.T) {
 		method      string
 		wantAllowed bool
 	}{
-		{"production origin POST allowed", "https://chronicleclassic.com", "POST", true},
+		{"production origin OPTIONS allowed", "https://chronicleclassic.com", "OPTIONS", true},
 		{"production origin GET disallowed", "https://chronicleclassic.com", "GET", false},
-		{"random origin rejected", "https://evil.com", "POST", false},
-		{"no origin", "", "POST", false},
+		{"production origin POST disallowed", "https://chronicleclassic.com", "POST", false},
+		{"random origin rejected", "https://evil.com", "OPTIONS", false},
+		{"no origin", "", "OPTIONS", false},
 	}
 
 	for _, tc := range tests {
