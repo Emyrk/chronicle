@@ -38,6 +38,7 @@ type Options struct {
 	OCRURL     *url.URL
 	WoWDB      http.Handler
 	Assets     http.Handler
+	GameData   http.Handler
 
 	Registry  *prometheus.Registry
 	AccessURL *url.URL
@@ -234,6 +235,10 @@ func (api *API) Routes() chi.Router {
 
 	// Auth routes
 	r.Mount("/auth", api.Auth.Handler())
+
+	if api.Opts.GameData != nil {
+		r.Mount("/api/internal/gamedata", api.Opts.GameData)
+	}
 
 	// River UI
 	r.Group(func(r chi.Router) {

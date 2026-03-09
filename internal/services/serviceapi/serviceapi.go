@@ -23,6 +23,7 @@ import (
 	"github.com/Emyrk/chronicle/internal/services/serviceprometheus"
 	"github.com/Emyrk/chronicle/internal/services/serviceriver"
 	"github.com/Emyrk/chronicle/internal/services/servicestorage"
+	"github.com/Emyrk/chronicle/internal/services/servicegamedata"
 	"github.com/Emyrk/chronicle/internal/services/servicewowdb"
 
 	"github.com/coder/serpent"
@@ -79,6 +80,7 @@ func (s *Service) DependsOn() []string {
 		serviceauthz.OnAuthz(),
 		servicewowdb.OnWoWDB(),
 		serviceassets.OnAssets(),
+		servicegamedata.OnGameData(),
 	}
 }
 
@@ -140,6 +142,7 @@ func (s *Service) Start(ctx context.Context) error {
 	}
 	wowdb := servicewowdb.WoWDB(s.broker)
 	assets := serviceassets.Assets(s.broker)
+	gamedata := servicegamedata.GameData(s.broker)
 	handler, err := api.New(ctx, api.Options{
 		Logger:     logger,
 		Storage:    st,
@@ -152,6 +155,7 @@ func (s *Service) Start(ctx context.Context) error {
 		OCRURL:     ocrURL,
 		WoWDB:      wowdb,
 		Assets:     assets,
+		GameData:   gamedata,
 
 		AccessURL: au,
 		DevOAuth:  s.devAuth,
