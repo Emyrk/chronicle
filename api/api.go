@@ -89,8 +89,9 @@ func (api *API) Routes() chi.Router {
 	r.Use(
 		httpmw.Recover(api.Opts.Logger),
 		context2.ClearHandler,
-		// TODO: Finish cors options
 		Cors(api.Opts.AccessURL),
+		httpmw.SecurityHeaders(),
+		httpmw.ContentSecurityPolicy(),
 		httpmw.NoWWW(),
 		httpmw.PrometheusMW(api.Opts.Registry),
 		api.shortLinkRedirectMiddleware,
@@ -98,6 +99,7 @@ func (api *API) Routes() chi.Router {
 
 	r.Route("/api/v1", func(r chi.Router) {
 		r.Use(
+			httpmw.BrowserOnly(api.Opts.AccessURL),
 			api.Auth.AuthenticationMiddleware,
 		//authMW.Trace,
 		)
