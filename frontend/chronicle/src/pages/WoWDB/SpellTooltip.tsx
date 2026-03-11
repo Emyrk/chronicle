@@ -10,8 +10,8 @@ import {
   formatDuration,
   resolveSpellDescription,
   extractReferencedSpellIds,
-  SCHOOL_COLORS,
 } from "@/api/wowdb";
+import { SpellSchoolText } from "@/components/SpellSchoolBadge";
 
 interface SpellTooltipProps {
   spell: WoWSpell;
@@ -27,7 +27,7 @@ export function SpellTooltip({ spell, locale = "0", detailed = false }: SpellToo
   const auraDescTemplate = getLocalizedText(spell.aura_description, locale);
   const iconUrl = getSpellIconUrl(spell.spell_icon);
   const cooldown = formatCooldown(spell.recovery_time);
-  const schoolColor = SCHOOL_COLORS[spell.school.string] || "text-white";
+  // schoolColor handled by SpellSchoolText component
 
   // Extract referenced spell IDs from templates
   const referencedIds = useMemo(() => {
@@ -101,7 +101,7 @@ export function SpellTooltip({ spell, locale = "0", detailed = false }: SpellToo
               {rank && (
                 <span className="text-gray-400 text-sm">{rank}</span>
               )}
-              <span className={`text-xs ${schoolColor}`}>{spell.school.string}</span>
+              <SpellSchoolText school={spell.school.string} className="text-xs" />
             </div>
           </div>
         </div>

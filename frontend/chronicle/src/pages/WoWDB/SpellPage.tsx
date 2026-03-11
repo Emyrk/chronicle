@@ -6,6 +6,7 @@ import { SpellTooltip } from "./SpellTooltip";
 import { LocaleSelector } from "./LocaleSelector";
 import type { LocaleIndex } from "@/api/wowdb";
 import { getDamageTypeLabels, getAttackOutcomeLabels, AttackOutcome, SpellDamageType } from "@/api/wowdb";
+import { DamageTypeBadge } from "@/components/SpellSchoolBadge";
 
 export function SpellPage() {
   const { spellId } = useParams<{ spellId: string }>();
@@ -122,22 +123,7 @@ export function SpellPage() {
             <div className="flex items-center gap-2">
               <span className="text-xs text-muted-foreground">Damage Type:</span>
               {getDamageTypeLabels(spell.damage_type).map((label) => (
-                <span
-                  key={label}
-                  className={`text-xs px-2 py-0.5 rounded font-medium ${
-                    label === "Periodic"
-                      ? "bg-purple-500/20 text-purple-400"
-                      : label === "Direct"
-                      ? "bg-amber-500/20 text-amber-400"
-                      : label === "Active Debuff"
-                      ? "bg-red-500/20 text-red-400"
-                      : label === "No Engage Combat"
-                      ? "bg-gray-500/20 text-gray-400"
-                      : "bg-blue-500/20 text-blue-400"
-                  }`}
-                >
-                  {label}
-                </span>
+                <DamageTypeBadge key={label} label={label} />
               ))}
             </div>
           )}

@@ -14,15 +14,13 @@ const FILTER_TYPES: { value: PanelFilterType; label: string }[] = [
   { value: "target_type", label: "Target" },
 ];
 
-const SCHOOL_OPTIONS = [
-  { label: "Physical", value: "physical", color: "bg-[var(--color-school-physical)]" },
-  { label: "Holy", value: "holy", color: "bg-[var(--color-school-holy)]" },
-  { label: "Fire", value: "fire", color: "bg-[var(--color-school-fire)]" },
-  { label: "Nature", value: "nature", color: "bg-[var(--color-school-nature)]" },
-  { label: "Frost", value: "frost", color: "bg-[var(--color-school-frost)]" },
-  { label: "Shadow", value: "shadow", color: "bg-[var(--color-school-shadow)]" },
-  { label: "Arcane", value: "arcane", color: "bg-[var(--color-school-arcane)]" },
-] as const;
+import { SPELL_SCHOOLS, SCHOOL_BG_COLORS } from "@/components/SpellSchoolBadge";
+
+const SCHOOL_OPTIONS = SPELL_SCHOOLS.map((s) => ({
+  label: s,
+  value: s.toLowerCase(),
+  color: SCHOOL_BG_COLORS[s],
+}));
 
 const HITTYPE_OPTIONS = [
   { label: "Hit", value: "hit" },

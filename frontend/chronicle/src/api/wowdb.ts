@@ -305,18 +305,8 @@ export function formatCooldown(recoveryTimeNs: number): string | null {
   return `${secs} sec cooldown`;
 }
 
-// School colors for styling (by school name)
-// Uses CSS variables defined in index.css under @theme inline
-// Keyed by school string name since API numeric values vary
-export const SCHOOL_COLORS: Record<string, string> = {
-  Physical: "text-school-physical",
-  Holy: "text-school-holy",
-  Fire: "text-school-fire",
-  Nature: "text-school-nature",
-  Frost: "text-school-frost",
-  Shadow: "text-school-shadow",
-  Arcane: "text-school-arcane",
-};
+// School colors for styling - re-exported from central SpellSchoolBadge component
+export { SCHOOL_TEXT_COLORS as SCHOOL_COLORS } from "@/components/SpellSchoolBadge";
 
 // === Spell Description Template Resolver ===
 // WoW spell descriptions contain template variables like $s1, $o1, $d, $t1

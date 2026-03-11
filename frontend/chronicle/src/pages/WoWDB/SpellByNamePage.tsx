@@ -5,7 +5,8 @@ import { useSpellsByName } from "@/api/queries";
 import { SpellTooltip } from "./SpellTooltip";
 import { LocaleSelector } from "./LocaleSelector";
 import type { WoWSpell, LocaleIndex } from "@/api/wowdb";
-import { getLocalizedText, SCHOOL_COLORS } from "@/api/wowdb";
+import { getLocalizedText } from "@/api/wowdb";
+import { SpellSchoolText } from "@/components/SpellSchoolBadge";
 import { SpellIconWithTooltip } from "@/components/ui/SpellIconWithTooltip";
 
 export function SpellByNamePage() {
@@ -198,8 +199,7 @@ function ComparisonTable({ spells, locale }: ComparisonTableProps) {
         </thead>
         <tbody>
           {spells.map((spell) => {
-            const schoolColor =
-              SCHOOL_COLORS[spell.school.value] || "text-white";
+            // school color handled by SpellSchoolText component
 
             return (
               <tr
@@ -225,7 +225,7 @@ function ComparisonTable({ spells, locale }: ComparisonTableProps) {
                 </td>
                 <td className="p-3">{spell.defense_type.string}</td>
                 <td className="p-3">
-                  <span className={schoolColor}>{spell.school.string}</span>
+                  <SpellSchoolText school={spell.school.string} />
                 </td>
                 <td className="p-3">
                   <AuraEffectsList effects={spell.effect_aura} />
