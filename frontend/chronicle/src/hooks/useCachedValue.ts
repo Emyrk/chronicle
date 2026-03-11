@@ -1,5 +1,6 @@
 import { useRef } from "react";
 import { useSyncModeContextOptional } from "@/pages/Instance/SyncModeContext";
+import { useTimeRangeContextOptional } from "@/pages/Instance/TimeRangeContext";
 
 /**
  * Hook to cache a value once it becomes valid.
@@ -32,7 +33,12 @@ export function useCachedValue<T>(
 ): { cachedValue: T; hasCache: boolean } {
   const syncMode = useSyncModeContextOptional();
   const isSyncEnabled = syncMode?.enabled ?? false;
-  const cacheRef = useRef<{ value: T; deps: unknown[] } | null>(null);
+  const timeRange = useTimeRangeContextOptional();
+  // Build a stable key from time range state so cache invalidates when range changes
+  const timeRangeKey = timeRange?.enabled
+    ? `${timeRange.startOffsetMs ?? ""},${timeRange.endOffsetMs ?? ""}`
+    : "";
+  const cacheRef = useRef<{ value: T; deps: unknown[]; timeRangeKey: string } | null>(null);
   // Track the stale value when deps/mode change - we shouldn't cache this
   const staleValueRef = useRef<T | null>(null);
   // Track sync mode to detect transitions (updated synchronously during render)
@@ -68,6 +74,7 @@ export function useCachedValue<T>(
   // Check if deps match the cached deps
   const cached = cacheRef.current;
   const depsMatch = cached !== null &&
+    cached.timeRangeKey === timeRangeKey &&
     deps.length === cached.deps.length &&
     deps.every((dep, i) => dep === cached.deps[i]);
   
@@ -81,7 +88,7 @@ export function useCachedValue<T>(
   // Try to cache if we don't have one and value is valid
   // But NOT if value is the same stale value from before deps/mode changed
   if (cacheRef.current === null && isValid(value) && value !== staleValueRef.current) {
-    cacheRef.current = { value, deps };
+    cacheRef.current = { value, deps, timeRangeKey };
     staleValueRef.current = null;
   }
   
