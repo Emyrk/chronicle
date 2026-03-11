@@ -14,11 +14,11 @@ import (
 
 var _ services.Servicer = (*Service)(nil)
 
-func OnGameData() string {
+func OnInternalGameData() string {
 	return (&Service{}).Name()
 }
 
-func GameData(broker *services.Services) *Service {
+func InternalGameData(broker *services.Services) *Service {
 	return services.MustGet[*Service](broker)
 }
 
@@ -47,7 +47,7 @@ func (s *Service) Start(_ context.Context) error {
 	logger := servicelogger.Logger(s.broker)
 	s.router = chi.NewRouter()
 	s.setupRoutes()
-	logger.Info("GameData service started")
+	logger.Info("InternalGameData service started")
 	return nil
 }
 

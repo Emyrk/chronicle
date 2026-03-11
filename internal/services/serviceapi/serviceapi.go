@@ -80,7 +80,7 @@ func (s *Service) DependsOn() []string {
 		serviceauthz.OnAuthz(),
 		servicewowdb.OnWoWDB(),
 		serviceassets.OnAssets(),
-		servicegamedata.OnGameData(),
+		servicegamedata.OnInternalGameData(),
 	}
 }
 
@@ -142,20 +142,20 @@ func (s *Service) Start(ctx context.Context) error {
 	}
 	wowdb := servicewowdb.WoWDB(s.broker)
 	assets := serviceassets.Assets(s.broker)
-	gamedata := servicegamedata.GameData(s.broker)
+	gamedata := servicegamedata.InternalGameData(s.broker)
 	handler, err := api.New(ctx, api.Options{
 		Logger:     logger,
-		Storage:    st,
-		Chronicle:  chron,
-		RiverQueue: que,
-		Bot:        bot,
-		Registry:   reg,
-		Zed:        zed,
-		SaffronURL: saffronURL,
-		OCRURL:     ocrURL,
-		WoWDB:      wowdb,
-		Assets:     assets,
-		GameData:   gamedata,
+		Storage:          st,
+		Chronicle:        chron,
+		RiverQueue:       que,
+		Bot:              bot,
+		Registry:         reg,
+		Zed:              zed,
+		SaffronURL:       saffronURL,
+		OCRURL:           ocrURL,
+		WoWDB:            wowdb,
+		Assets:           assets,
+		InternalGameData: gamedata,
 
 		AccessURL: au,
 		DevOAuth:  s.devAuth,

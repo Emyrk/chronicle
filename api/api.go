@@ -28,17 +28,17 @@ import (
 )
 
 type Options struct {
-	Logger     *slog.Logger
-	Storage    storage.ObjectStorage
-	Zed        *authz.Authz
-	Chronicle  *chronicle.Chronicle
-	RiverQueue *riverqueue.Queues
-	Bot        *chroniclebot.Bot
-	SaffronURL *url.URL
-	OCRURL     *url.URL
-	WoWDB      http.Handler
-	Assets     http.Handler
-	GameData   http.Handler
+	Logger           *slog.Logger
+	Storage          storage.ObjectStorage
+	Zed              *authz.Authz
+	Chronicle        *chronicle.Chronicle
+	RiverQueue       *riverqueue.Queues
+	Bot              *chroniclebot.Bot
+	SaffronURL       *url.URL
+	OCRURL           *url.URL
+	WoWDB            http.Handler
+	Assets           http.Handler
+	InternalGameData http.Handler
 
 	Registry  *prometheus.Registry
 	AccessURL *url.URL
@@ -236,8 +236,8 @@ func (api *API) Routes() chi.Router {
 	// Auth routes
 	r.Mount("/auth", api.Auth.Handler())
 
-	if api.Opts.GameData != nil {
-		r.Mount("/api/internal/gamedata", api.Opts.GameData)
+	if api.Opts.InternalGameData != nil {
+		r.Mount("/api/internal/gamedata", api.Opts.InternalGameData)
 	}
 
 	// River UI
