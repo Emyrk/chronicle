@@ -244,6 +244,95 @@ export interface InstanceUnit {
     readonly entry: number;
 }
 
+// From chroniclesdk/tooltip.go
+export interface ItemDamage {
+    readonly min: number;
+    readonly max: number;
+    readonly school: number;
+}
+
+// From chroniclesdk/tooltip.go
+export interface ItemResistance {
+    readonly school: number;
+    readonly value: number;
+}
+
+// From chroniclesdk/tooltip.go
+export interface ItemSetBonus {
+    readonly threshold: number; // pieces needed
+    readonly spell_id: number;
+}
+
+// From chroniclesdk/tooltip.go
+export interface ItemSetInfo {
+    readonly id: number;
+    readonly name: string;
+    readonly items: readonly ItemSetPiece[];
+    readonly bonuses: readonly ItemSetBonus[];
+}
+
+// From chroniclesdk/tooltip.go
+export interface ItemSetPiece {
+    readonly entry: number;
+    readonly name: string;
+    readonly inventory_type: number;
+}
+
+// From chroniclesdk/tooltip.go
+export interface ItemSpell {
+    readonly spell_id: number;
+    readonly trigger: number;
+    readonly charges?: number;
+}
+
+// From chroniclesdk/tooltip.go
+export interface ItemStat {
+    readonly type: number;
+    readonly value: number;
+}
+
+// From chroniclesdk/tooltip.go
+export interface ItemTooltip {
+    readonly entry: number;
+    readonly name: string;
+    readonly quality: number;
+    readonly item_level: number;
+    readonly icon: string;
+    readonly bonding: number;
+    readonly inventory_type: number;
+    readonly item_class: number;
+    readonly item_subclass: number;
+    readonly stats?: readonly ItemStat[];
+    readonly armor?: number;
+    readonly block?: number;
+    readonly damage_ranges?: readonly ItemDamage[];
+    readonly delay?: number;
+    readonly resistances?: readonly ItemResistance[];
+    readonly spells?: readonly ItemSpell[];
+    /**
+     * Item set info (if item belongs to a set).
+     */
+    readonly set?: ItemSetInfo;
+    /**
+     * Enchantment display name (if ?enchant= provided), shown as green text.
+     */
+    readonly enchantment?: string;
+    /**
+     * Random suffix name (if ?random_property= provided), e.g. "of the Owl".
+     */
+    readonly suffix_name?: string;
+    /**
+     * Random enchantment effect lines (e.g. "+3 Intellect", "+4 Spirit").
+     */
+    readonly random_enchantments?: readonly string[];
+    /**
+     * True if item has a random_property but no ?random_property param was given.
+     */
+    readonly has_random_property?: boolean;
+    readonly required_level?: number;
+    readonly description?: string;
+}
+
 // From chroniclesdk/job.go
 export interface JobStatus {
     readonly id: number;

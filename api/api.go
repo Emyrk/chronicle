@@ -230,15 +230,22 @@ func (api *API) Routes() chi.Router {
 				})
 			})
 		})
+
+		if api.Opts.InternalGameData != nil {
+			r.Group(func(r chi.Router) {
+				r.Use(
+					api.Auth.Authenticated(false),
+					httpmw.Can(api.Zed, policy.New().GlobalChronicle().CanInternal_game_data_User),
+				)
+				r.Mount("/internal/gamedata", api.Opts.InternalGameData)
+			})
+		}
+
 		r.NotFound(http.NotFound)
 	})
 
 	// Auth routes
 	r.Mount("/auth", api.Auth.Handler())
-
-	if api.Opts.InternalGameData != nil {
-		r.Mount("/api/internal/gamedata", api.Opts.InternalGameData)
-	}
 
 	// River UI
 	r.Group(func(r chi.Router) {

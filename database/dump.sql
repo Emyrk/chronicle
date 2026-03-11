@@ -198,6 +198,81 @@ CREATE VIEW chronicle_users AS
           WHERE (log_file.storage_deleted_at IS NULL)
           GROUP BY log_file.owner) lf ON ((lf.owner = u.id)));
 
+CREATE TABLE dbc_item_display_info (
+    id integer NOT NULL,
+    model_name jsonb DEFAULT '[]'::jsonb NOT NULL,
+    model_texture jsonb DEFAULT '[]'::jsonb NOT NULL,
+    geoset_group jsonb DEFAULT '[]'::jsonb NOT NULL,
+    flags integer DEFAULT 0 NOT NULL,
+    spell_visual_id integer DEFAULT 0 NOT NULL,
+    helmet_geoset_vis jsonb DEFAULT '[]'::jsonb NOT NULL,
+    texture jsonb DEFAULT '[]'::jsonb NOT NULL,
+    item_visual integer DEFAULT 0 NOT NULL,
+    particle_color_id integer DEFAULT 0 NOT NULL,
+    attachment_geoset_group jsonb DEFAULT '[]'::jsonb NOT NULL,
+    item_ranged_display_info_id integer DEFAULT 0 NOT NULL,
+    model_material_resources_id jsonb DEFAULT '[]'::jsonb NOT NULL,
+    model_resources_id jsonb DEFAULT '[]'::jsonb NOT NULL,
+    model_type_1 integer DEFAULT 0 NOT NULL,
+    override_swoosh_sound_kit_id integer DEFAULT 0 NOT NULL,
+    sheathe_transform_matrix_id integer DEFAULT 0 NOT NULL,
+    sheathed_spell_visual_kit_id integer DEFAULT 0 NOT NULL,
+    state_spell_visual_kit_id integer DEFAULT 0 NOT NULL,
+    unsheathed_spell_visual_kit_id integer DEFAULT 0 NOT NULL,
+    inventory_icon jsonb DEFAULT '[]'::jsonb NOT NULL,
+    group_sound_index integer DEFAULT 0 NOT NULL,
+    ground_model text DEFAULT ''::text NOT NULL,
+    item_size integer DEFAULT 0 NOT NULL,
+    helmet_geoset_vis_id jsonb DEFAULT '[]'::jsonb NOT NULL
+);
+
+CREATE TABLE dbc_item_random_properties (
+    id integer NOT NULL,
+    name text DEFAULT ''::text NOT NULL,
+    name_lang text DEFAULT ''::text NOT NULL,
+    enchantment_1 integer DEFAULT 0 NOT NULL,
+    enchantment_2 integer DEFAULT 0 NOT NULL,
+    enchantment_3 integer DEFAULT 0 NOT NULL,
+    enchantment_4 integer DEFAULT 0 NOT NULL,
+    enchantment_5 integer DEFAULT 0 NOT NULL
+);
+
+CREATE TABLE dbc_item_set (
+    id integer NOT NULL,
+    name_lang text DEFAULT ''::text NOT NULL,
+    required_skill integer DEFAULT 0 NOT NULL,
+    required_skill_rank integer DEFAULT 0 NOT NULL
+);
+
+CREATE TABLE dbc_item_set_bonus (
+    set_id integer NOT NULL,
+    threshold integer NOT NULL,
+    spell_id integer NOT NULL
+);
+
+CREATE TABLE dbc_spell_item_enchantment (
+    id integer NOT NULL,
+    charges integer DEFAULT 0 NOT NULL,
+    effect_1 integer DEFAULT 0 NOT NULL,
+    effect_2 integer DEFAULT 0 NOT NULL,
+    effect_3 integer DEFAULT 0 NOT NULL,
+    effect_points_min_1 integer DEFAULT 0 NOT NULL,
+    effect_points_min_2 integer DEFAULT 0 NOT NULL,
+    effect_points_min_3 integer DEFAULT 0 NOT NULL,
+    effect_arg_1 integer DEFAULT 0 NOT NULL,
+    effect_arg_2 integer DEFAULT 0 NOT NULL,
+    effect_arg_3 integer DEFAULT 0 NOT NULL,
+    name_lang text DEFAULT ''::text NOT NULL,
+    item_visual integer DEFAULT 0 NOT NULL,
+    flags integer DEFAULT 0 NOT NULL,
+    src_item_id integer DEFAULT 0 NOT NULL,
+    condition_id integer DEFAULT 0 NOT NULL,
+    required_skill_id integer DEFAULT 0 NOT NULL,
+    required_skill_rank integer DEFAULT 0 NOT NULL,
+    min_level integer DEFAULT 0 NOT NULL,
+    max_level integer DEFAULT 0 NOT NULL
+);
+
 CREATE TABLE guild_members (
     id uuid DEFAULT gen_random_uuid() NOT NULL,
     guild_id uuid NOT NULL,
@@ -685,7 +760,7 @@ CREATE TABLE world_item_template (
     extra_flags integer DEFAULT 0 NOT NULL,
     other_team_entry integer DEFAULT 0 NOT NULL,
     script_name text,
-    patch integer
+    patch text
 );
 
 CREATE TABLE world_spell_area (
@@ -741,6 +816,21 @@ ALTER TABLE ONLY data_grants
 
 ALTER TABLE ONLY data_grants
     ADD CONSTRAINT data_grants_user_id_source_key UNIQUE (user_id, source);
+
+ALTER TABLE ONLY dbc_item_display_info
+    ADD CONSTRAINT dbc_item_display_info_pkey PRIMARY KEY (id);
+
+ALTER TABLE ONLY dbc_item_random_properties
+    ADD CONSTRAINT dbc_item_random_properties_pkey PRIMARY KEY (id);
+
+ALTER TABLE ONLY dbc_item_set_bonus
+    ADD CONSTRAINT dbc_item_set_bonus_pkey PRIMARY KEY (set_id, threshold, spell_id);
+
+ALTER TABLE ONLY dbc_item_set
+    ADD CONSTRAINT dbc_item_set_pkey PRIMARY KEY (id);
+
+ALTER TABLE ONLY dbc_spell_item_enchantment
+    ADD CONSTRAINT dbc_spell_item_enchantment_pkey PRIMARY KEY (id);
 
 ALTER TABLE ONLY guild_members
     ADD CONSTRAINT guild_members_guild_id_user_id_key UNIQUE (guild_id, user_id);

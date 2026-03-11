@@ -20,6 +20,7 @@ import { AdminStoragePage } from "./pages/Admin/AdminStoragePage"
 import { AdminUsersPage } from "./pages/Admin/AdminUsersPage"
 import { SpellPage } from "./pages/WoWDB/SpellPage"
 import { SpellByNamePage } from "./pages/WoWDB/SpellByNamePage"
+import { ItemPage } from "./pages/WoWDB/ItemPage"
 import {
   TechnicalDetailsPage,
   PeriodicSpellsPage,
@@ -80,6 +81,7 @@ function App() {
         <Route path="/wowdb/spell/:spellId" element={<SpellPage />} />
         <Route path="/wowdb/spell-by-name" element={<SpellByNamePage />} />
         <Route path="/wowdb/spell-by-name/:name" element={<SpellByNamePage />} />
+        <Route path="/wowdb/item" element={<ItemPage />} />
         <Route path="/technical" element={<TechnicalDetailsPage />} />
         <Route path="/technical/extra-attack-spells" element={<ExtraAttackSpellsPage />} />
         <Route path="/technical/vulnerability-spells" element={<VulnerabilitySpellsPage />} />

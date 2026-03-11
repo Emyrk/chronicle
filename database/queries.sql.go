@@ -3254,3 +3254,316 @@ func (q *sqlQuerier) InsertStampedYoutubeVideo(ctx context.Context, arg InsertSt
 	)
 	return err
 }
+
+const getDBCItemDisplayInfoByID = `-- name: GetDBCItemDisplayInfoByID :one
+SELECT id, model_name, model_texture, geoset_group, flags, spell_visual_id, helmet_geoset_vis, texture, item_visual, particle_color_id, attachment_geoset_group, item_ranged_display_info_id, model_material_resources_id, model_resources_id, model_type_1, override_swoosh_sound_kit_id, sheathe_transform_matrix_id, sheathed_spell_visual_kit_id, state_spell_visual_kit_id, unsheathed_spell_visual_kit_id, inventory_icon, group_sound_index, ground_model, item_size, helmet_geoset_vis_id FROM dbc_item_display_info WHERE id = $1
+`
+
+func (q *sqlQuerier) GetDBCItemDisplayInfoByID(ctx context.Context, id int32) (DbcItemDisplayInfo, error) {
+	row := q.db.QueryRow(ctx, getDBCItemDisplayInfoByID, id)
+	var i DbcItemDisplayInfo
+	err := row.Scan(
+		&i.ID,
+		&i.ModelName,
+		&i.ModelTexture,
+		&i.GeosetGroup,
+		&i.Flags,
+		&i.SpellVisualID,
+		&i.HelmetGeosetVis,
+		&i.Texture,
+		&i.ItemVisual,
+		&i.ParticleColorID,
+		&i.AttachmentGeosetGroup,
+		&i.ItemRangedDisplayInfoID,
+		&i.ModelMaterialResourcesID,
+		&i.ModelResourcesID,
+		&i.ModelType1,
+		&i.OverrideSwooshSoundKitID,
+		&i.SheatheTransformMatrixID,
+		&i.SheathedSpellVisualKitID,
+		&i.StateSpellVisualKitID,
+		&i.UnsheathedSpellVisualKitID,
+		&i.InventoryIcon,
+		&i.GroupSoundIndex,
+		&i.GroundModel,
+		&i.ItemSize,
+		&i.HelmetGeosetVisID,
+	)
+	return i, err
+}
+
+const getDisplayInfoByID = `-- name: GetDisplayInfoByID :one
+SELECT id, icon FROM world_display_info WHERE id = $1
+`
+
+func (q *sqlQuerier) GetDisplayInfoByID(ctx context.Context, id int32) (WorldDisplayInfo, error) {
+	row := q.db.QueryRow(ctx, getDisplayInfoByID, id)
+	var i WorldDisplayInfo
+	err := row.Scan(&i.ID, &i.Icon)
+	return i, err
+}
+
+const getItemRandomPropertiesByID = `-- name: GetItemRandomPropertiesByID :one
+SELECT id, name, name_lang, enchantment_1, enchantment_2, enchantment_3, enchantment_4, enchantment_5 FROM dbc_item_random_properties WHERE id = $1
+`
+
+func (q *sqlQuerier) GetItemRandomPropertiesByID(ctx context.Context, id int32) (DbcItemRandomProperty, error) {
+	row := q.db.QueryRow(ctx, getItemRandomPropertiesByID, id)
+	var i DbcItemRandomProperty
+	err := row.Scan(
+		&i.ID,
+		&i.Name,
+		&i.NameLang,
+		&i.Enchantment1,
+		&i.Enchantment2,
+		&i.Enchantment3,
+		&i.Enchantment4,
+		&i.Enchantment5,
+	)
+	return i, err
+}
+
+const getItemSetBonuses = `-- name: GetItemSetBonuses :many
+SELECT set_id, threshold, spell_id FROM dbc_item_set_bonus WHERE set_id = $1 ORDER BY threshold
+`
+
+func (q *sqlQuerier) GetItemSetBonuses(ctx context.Context, setID int32) ([]DbcItemSetBonu, error) {
+	rows, err := q.db.Query(ctx, getItemSetBonuses, setID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []DbcItemSetBonu
+	for rows.Next() {
+		var i DbcItemSetBonu
+		if err := rows.Scan(&i.SetID, &i.Threshold, &i.SpellID); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const getItemSetByID = `-- name: GetItemSetByID :one
+SELECT id, name_lang, required_skill, required_skill_rank FROM dbc_item_set WHERE id = $1
+`
+
+func (q *sqlQuerier) GetItemSetByID(ctx context.Context, id int32) (DbcItemSet, error) {
+	row := q.db.QueryRow(ctx, getItemSetByID, id)
+	var i DbcItemSet
+	err := row.Scan(
+		&i.ID,
+		&i.NameLang,
+		&i.RequiredSkill,
+		&i.RequiredSkillRank,
+	)
+	return i, err
+}
+
+const getItemTemplateByEntry = `-- name: GetItemTemplateByEntry :one
+SELECT entry, class, subclass, name, description, display_id, quality, flags, buy_count, buy_price, sell_price, inventory_type, allowable_class, allowable_race, item_level, required_level, required_skill, required_skill_rank, required_spell, required_honor_rank, required_city_rank, required_reputation_faction, required_reputation_rank, max_count, stackable, container_slots, stat_type1, stat_value1, stat_type2, stat_value2, stat_type3, stat_value3, stat_type4, stat_value4, stat_type5, stat_value5, stat_type6, stat_value6, stat_type7, stat_value7, stat_type8, stat_value8, stat_type9, stat_value9, stat_type10, stat_value10, delay, range_mod, ammo_type, dmg_min1, dmg_max1, dmg_type1, dmg_min2, dmg_max2, dmg_type2, dmg_min3, dmg_max3, dmg_type3, dmg_min4, dmg_max4, dmg_type4, dmg_min5, dmg_max5, dmg_type5, block, armor, holy_res, fire_res, nature_res, frost_res, shadow_res, arcane_res, spellid_1, spelltrigger_1, spellcharges_1, spellppmrate_1, spellcooldown_1, spellcategory_1, spellcategorycooldown_1, spellid_2, spelltrigger_2, spellcharges_2, spellppmrate_2, spellcooldown_2, spellcategory_2, spellcategorycooldown_2, spellid_3, spelltrigger_3, spellcharges_3, spellppmrate_3, spellcooldown_3, spellcategory_3, spellcategorycooldown_3, spellid_4, spelltrigger_4, spellcharges_4, spellppmrate_4, spellcooldown_4, spellcategory_4, spellcategorycooldown_4, spellid_5, spelltrigger_5, spellcharges_5, spellppmrate_5, spellcooldown_5, spellcategory_5, spellcategorycooldown_5, bonding, page_text, page_language, page_material, start_quest, lock_id, material, sheath, random_property, set_id, max_durability, area_bound, map_bound, duration, bag_family, disenchant_id, food_type, min_money_loot, max_money_loot, wrapped_gift, extra_flags, other_team_entry, script_name, patch FROM world_item_template WHERE entry = $1
+`
+
+func (q *sqlQuerier) GetItemTemplateByEntry(ctx context.Context, entry int32) (WorldItemTemplate, error) {
+	row := q.db.QueryRow(ctx, getItemTemplateByEntry, entry)
+	var i WorldItemTemplate
+	err := row.Scan(
+		&i.Entry,
+		&i.Class,
+		&i.Subclass,
+		&i.Name,
+		&i.Description,
+		&i.DisplayID,
+		&i.Quality,
+		&i.Flags,
+		&i.BuyCount,
+		&i.BuyPrice,
+		&i.SellPrice,
+		&i.InventoryType,
+		&i.AllowableClass,
+		&i.AllowableRace,
+		&i.ItemLevel,
+		&i.RequiredLevel,
+		&i.RequiredSkill,
+		&i.RequiredSkillRank,
+		&i.RequiredSpell,
+		&i.RequiredHonorRank,
+		&i.RequiredCityRank,
+		&i.RequiredReputationFaction,
+		&i.RequiredReputationRank,
+		&i.MaxCount,
+		&i.Stackable,
+		&i.ContainerSlots,
+		&i.StatType1,
+		&i.StatValue1,
+		&i.StatType2,
+		&i.StatValue2,
+		&i.StatType3,
+		&i.StatValue3,
+		&i.StatType4,
+		&i.StatValue4,
+		&i.StatType5,
+		&i.StatValue5,
+		&i.StatType6,
+		&i.StatValue6,
+		&i.StatType7,
+		&i.StatValue7,
+		&i.StatType8,
+		&i.StatValue8,
+		&i.StatType9,
+		&i.StatValue9,
+		&i.StatType10,
+		&i.StatValue10,
+		&i.Delay,
+		&i.RangeMod,
+		&i.AmmoType,
+		&i.DmgMin1,
+		&i.DmgMax1,
+		&i.DmgType1,
+		&i.DmgMin2,
+		&i.DmgMax2,
+		&i.DmgType2,
+		&i.DmgMin3,
+		&i.DmgMax3,
+		&i.DmgType3,
+		&i.DmgMin4,
+		&i.DmgMax4,
+		&i.DmgType4,
+		&i.DmgMin5,
+		&i.DmgMax5,
+		&i.DmgType5,
+		&i.Block,
+		&i.Armor,
+		&i.HolyRes,
+		&i.FireRes,
+		&i.NatureRes,
+		&i.FrostRes,
+		&i.ShadowRes,
+		&i.ArcaneRes,
+		&i.Spellid1,
+		&i.Spelltrigger1,
+		&i.Spellcharges1,
+		&i.Spellppmrate1,
+		&i.Spellcooldown1,
+		&i.Spellcategory1,
+		&i.Spellcategorycooldown1,
+		&i.Spellid2,
+		&i.Spelltrigger2,
+		&i.Spellcharges2,
+		&i.Spellppmrate2,
+		&i.Spellcooldown2,
+		&i.Spellcategory2,
+		&i.Spellcategorycooldown2,
+		&i.Spellid3,
+		&i.Spelltrigger3,
+		&i.Spellcharges3,
+		&i.Spellppmrate3,
+		&i.Spellcooldown3,
+		&i.Spellcategory3,
+		&i.Spellcategorycooldown3,
+		&i.Spellid4,
+		&i.Spelltrigger4,
+		&i.Spellcharges4,
+		&i.Spellppmrate4,
+		&i.Spellcooldown4,
+		&i.Spellcategory4,
+		&i.Spellcategorycooldown4,
+		&i.Spellid5,
+		&i.Spelltrigger5,
+		&i.Spellcharges5,
+		&i.Spellppmrate5,
+		&i.Spellcooldown5,
+		&i.Spellcategory5,
+		&i.Spellcategorycooldown5,
+		&i.Bonding,
+		&i.PageText,
+		&i.PageLanguage,
+		&i.PageMaterial,
+		&i.StartQuest,
+		&i.LockID,
+		&i.Material,
+		&i.Sheath,
+		&i.RandomProperty,
+		&i.SetID,
+		&i.MaxDurability,
+		&i.AreaBound,
+		&i.MapBound,
+		&i.Duration,
+		&i.BagFamily,
+		&i.DisenchantID,
+		&i.FoodType,
+		&i.MinMoneyLoot,
+		&i.MaxMoneyLoot,
+		&i.WrappedGift,
+		&i.ExtraFlags,
+		&i.OtherTeamEntry,
+		&i.ScriptName,
+		&i.Patch,
+	)
+	return i, err
+}
+
+const getItemTemplatesBySetID = `-- name: GetItemTemplatesBySetID :many
+SELECT entry, name, inventory_type FROM world_item_template WHERE set_id = $1 ORDER BY inventory_type
+`
+
+type GetItemTemplatesBySetIDRow struct {
+	Entry         int32  `db:"entry" json:"entry"`
+	Name          string `db:"name" json:"name"`
+	InventoryType int32  `db:"inventory_type" json:"inventory_type"`
+}
+
+func (q *sqlQuerier) GetItemTemplatesBySetID(ctx context.Context, setID int32) ([]GetItemTemplatesBySetIDRow, error) {
+	rows, err := q.db.Query(ctx, getItemTemplatesBySetID, setID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []GetItemTemplatesBySetIDRow
+	for rows.Next() {
+		var i GetItemTemplatesBySetIDRow
+		if err := rows.Scan(&i.Entry, &i.Name, &i.InventoryType); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const getSpellItemEnchantmentByID = `-- name: GetSpellItemEnchantmentByID :one
+SELECT id, charges, effect_1, effect_2, effect_3, effect_points_min_1, effect_points_min_2, effect_points_min_3, effect_arg_1, effect_arg_2, effect_arg_3, name_lang, item_visual, flags, src_item_id, condition_id, required_skill_id, required_skill_rank, min_level, max_level FROM dbc_spell_item_enchantment WHERE id = $1
+`
+
+func (q *sqlQuerier) GetSpellItemEnchantmentByID(ctx context.Context, id int32) (DbcSpellItemEnchantment, error) {
+	row := q.db.QueryRow(ctx, getSpellItemEnchantmentByID, id)
+	var i DbcSpellItemEnchantment
+	err := row.Scan(
+		&i.ID,
+		&i.Charges,
+		&i.Effect1,
+		&i.Effect2,
+		&i.Effect3,
+		&i.EffectPointsMin1,
+		&i.EffectPointsMin2,
+		&i.EffectPointsMin3,
+		&i.EffectArg1,
+		&i.EffectArg2,
+		&i.EffectArg3,
+		&i.NameLang,
+		&i.ItemVisual,
+		&i.Flags,
+		&i.SrcItemID,
+		&i.ConditionID,
+		&i.RequiredSkillID,
+		&i.RequiredSkillRank,
+		&i.MinLevel,
+		&i.MaxLevel,
+	)
+	return i, err
+}

@@ -7,6 +7,7 @@ import (
 	"github.com/go-chi/chi/v5"
 
 	"github.com/Emyrk/chronicle/internal/services"
+	"github.com/Emyrk/chronicle/internal/services/servicedbstore"
 	"github.com/Emyrk/chronicle/internal/services/servicelogger"
 
 	"github.com/coder/serpent"
@@ -40,6 +41,7 @@ func (s *Service) Name() string {
 func (s *Service) DependsOn() []string {
 	return []string{
 		servicelogger.OnLogger(),
+		servicedbstore.OnDatabaseStore(),
 	}
 }
 
@@ -52,7 +54,7 @@ func (s *Service) Start(_ context.Context) error {
 }
 
 func (s *Service) setupRoutes() {
-	// TODO: Add game data endpoints (items, etc.)
+	s.router.Get("/tooltip/item/{item_id}", s.handleItemTooltip)
 }
 
 func (s *Service) ServeHTTP(w http.ResponseWriter, r *http.Request) {

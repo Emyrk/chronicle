@@ -22,6 +22,36 @@ func New(path string) (*WoWClient, error) {
 	return &WoWClient{Volume: vol}, nil
 }
 
+func (w *WoWClient) SpellItemEnchantment() (Table[dbdefs.Ent_SpellItemEnchantment], error) {
+	data, err := w.ReadFile("DBFilesClient\\SpellItemEnchantment.dbc")
+	if err != nil {
+		return nil, err
+	}
+
+	db := dbc.NewDB(w.Build())
+	table, err := db.Open("SpellItemEnchantment", bytes.NewReader(data))
+	if err != nil {
+		return nil, err
+	}
+
+	return WrapTable[dbdefs.Ent_SpellItemEnchantment](table), nil
+}
+
+func (w *WoWClient) ItemRandomProperties() (Table[dbdefs.Ent_ItemRandomProperties], error) {
+	data, err := w.ReadFile("DBFilesClient\\ItemRandomProperties.dbc")
+	if err != nil {
+		return nil, err
+	}
+
+	db := dbc.NewDB(w.Build())
+	table, err := db.Open("ItemRandomProperties", bytes.NewReader(data))
+	if err != nil {
+		return nil, err
+	}
+
+	return WrapTable[dbdefs.Ent_ItemRandomProperties](table), nil
+}
+
 func (w *WoWClient) Spells() (Table[dbdefs.Ent_Spell], error) {
 	data, err := w.ReadFile("DBFilesClient\\Spell.dbc")
 	if err != nil {
@@ -367,3 +397,18 @@ func (w *WoWClient) ItemSubClass() (Table[dbdefs.Ent_ItemSubClass], error) {
 
 	return WrapTable[dbdefs.Ent_ItemSubClass](table), nil
 }
+func (w *WoWClient) ItemSet() (Table[dbdefs.Ent_ItemSet], error) {
+	data, err := w.ReadFile("DBFilesClient\\ItemSet.dbc")
+	if err != nil {
+		return nil, err
+	}
+
+	db := dbc.NewDB(w.Build())
+	table, err := db.Open("ItemSet", bytes.NewReader(data))
+	if err != nil {
+		return nil, err
+	}
+
+	return WrapTable[dbdefs.Ent_ItemSet](table), nil
+}
+

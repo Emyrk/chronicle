@@ -8,6 +8,10 @@ type UniqueConstraint string
 const (
 	UniqueDataGrantsPkey                            UniqueConstraint = "data_grants_pkey"                                // ALTER TABLE ONLY data_grants ADD CONSTRAINT data_grants_pkey PRIMARY KEY (id);
 	UniqueDataGrantsUserIDSourceKey                 UniqueConstraint = "data_grants_user_id_source_key"                  // ALTER TABLE ONLY data_grants ADD CONSTRAINT data_grants_user_id_source_key UNIQUE (user_id, source);
+	UniqueDbcItemRandomPropertiesPkey               UniqueConstraint = "dbc_item_random_properties_pkey"                 // ALTER TABLE ONLY dbc_item_random_properties ADD CONSTRAINT dbc_item_random_properties_pkey PRIMARY KEY (id);
+	UniqueDbcItemSetBonusPkey                       UniqueConstraint = "dbc_item_set_bonus_pkey"                         // ALTER TABLE ONLY dbc_item_set_bonus ADD CONSTRAINT dbc_item_set_bonus_pkey PRIMARY KEY (set_id, threshold, spell_id);
+	UniqueDbcItemSetPkey                            UniqueConstraint = "dbc_item_set_pkey"                               // ALTER TABLE ONLY dbc_item_set ADD CONSTRAINT dbc_item_set_pkey PRIMARY KEY (id);
+	UniqueDbcSpellItemEnchantmentPkey               UniqueConstraint = "dbc_spell_item_enchantment_pkey"                 // ALTER TABLE ONLY dbc_spell_item_enchantment ADD CONSTRAINT dbc_spell_item_enchantment_pkey PRIMARY KEY (id);
 	UniqueGuildMembersGuildIDUserIDKey              UniqueConstraint = "guild_members_guild_id_user_id_key"              // ALTER TABLE ONLY guild_members ADD CONSTRAINT guild_members_guild_id_user_id_key UNIQUE (guild_id, user_id);
 	UniqueGuildMembersPkey                          UniqueConstraint = "guild_members_pkey"                              // ALTER TABLE ONLY guild_members ADD CONSTRAINT guild_members_pkey PRIMARY KEY (id);
 	UniqueGuildPagePanelsPkey                       UniqueConstraint = "guild_page_panels_pkey"                          // ALTER TABLE ONLY guild_page_panels ADD CONSTRAINT guild_page_panels_pkey PRIMARY KEY (id);

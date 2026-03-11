@@ -8,6 +8,7 @@ import (
 	"path/filepath"
 	"strings"
 
+	"github.com/Emyrk/chronicle/database/gamedb/dbcdb"
 	"github.com/Emyrk/chronicle/database/migrations"
 	"github.com/coder/serpent"
 	"github.com/jackc/pgx/v5"
@@ -35,9 +36,9 @@ var tableDetectors = []tableDetector{
 // tableColumnMap defines the ordered columns and primary key for each table.
 // JSON keys are mapped to DB column names here.
 type tableSchema struct {
-	Columns    []string            // DB column names in order
-	PKColumns  []string            // primary key columns for ON CONFLICT
-	JSONToDB   map[string]string   // JSON key -> DB column name (only non-trivial mappings)
+	Columns   []string          // DB column names in order
+	PKColumns []string          // primary key columns for ON CONFLICT
+	JSONToDB  map[string]string // JSON key -> DB column name (only non-trivial mappings)
 }
 
 // jsonKeyToDBCol returns the DB column name for a JSON key.
@@ -52,7 +53,7 @@ var tableSchemas = map[string]*tableSchema{
 	"world_display_info": {
 		Columns:   []string{"id", "icon"},
 		PKColumns: []string{"id"},
-		JSONToDB:   map[string]string{"ID": "id"},
+		JSONToDB:  map[string]string{"ID": "id"},
 	},
 	"world_creature_spawn": {
 		Columns:   []string{"guid", "id", "id2", "id3", "id4", "map"},
@@ -131,7 +132,7 @@ var tableSchemas = map[string]*tableSchema{
 	"world_spell_threat": {
 		Columns:   []string{"entry", "threat", "multiplier", "ap_bonus"},
 		PKColumns: []string{"entry"},
-		JSONToDB:   map[string]string{"Threat": "threat"},
+		JSONToDB:  map[string]string{"Threat": "threat"},
 	},
 }
 
@@ -144,7 +145,7 @@ func ImportWorldCmd() *serpent.Command {
 		},
 	}
 
-	var dbURL, dataDir string
+	var dbURL, dataDir, wowDir string
 	cmd.Options = serpent.OptionSet{
 		{
 			Name:        "db-url",
@@ -160,6 +161,14 @@ func ImportWorldCmd() *serpent.Command {
 			Flag:        "data-dir",
 			Default:     "./importdata/world",
 			Value:       serpent.StringOf(&dataDir),
+		},
+		{
+			Name:        "wow-dir",
+			Description: "Path to WoW client directory for DBC extraction (optional).",
+			Flag:        "wow-dir",
+			Env:         "WOW_DIR",
+			Default:     "/home/steven/Games/turtlewow/drive_c/Program Files (x86)/TurtleWoW",
+			Value:       serpent.StringOf(&wowDir),
 		},
 	}
 
@@ -196,6 +205,13 @@ func ImportWorldCmd() *serpent.Command {
 				return fmt.Errorf("importing %s: %w", table, err)
 			}
 			_, _ = fmt.Fprintf(inv.Stderr, "imported %s: %d rows\n", table, n)
+		}
+
+		if wowDir != "" {
+			_, _ = fmt.Fprintf(inv.Stderr, "importing DBC data from %s\n", wowDir)
+			if err := importDBCData(ctx, pool, wowDir, inv); err != nil {
+				return fmt.Errorf("importing DBC data: %w", err)
+			}
 		}
 
 		_, _ = fmt.Fprintf(inv.Stderr, "import complete\n")
@@ -403,6 +419,270 @@ func importTable(ctx context.Context, pool *pgxpool.Pool, table, filePath string
 	}
 
 	return total, nil
+}
+
+// importDBCData extracts ItemRandomProperties and SpellItemEnchantment from the WoW client
+// and upserts them into PostgreSQL.
+func importDBCData(ctx context.Context, pool *pgxpool.Pool, wowDir string, inv *serpent.Invocation) error {
+	wc, err := dbcdb.New(wowDir)
+	if err != nil {
+		return fmt.Errorf("opening WoW client at %s: %w", wowDir, err)
+	}
+
+	return importDBCTables(ctx, pool, wc, inv)
+}
+
+func importDBCTables(ctx context.Context, pool *pgxpool.Pool, wc *dbcdb.WoWClient, inv *serpent.Invocation) error {
+	// --- ItemRandomProperties ---
+	irpTable, err := wc.ItemRandomProperties()
+	if err != nil {
+		return fmt.Errorf("reading ItemRandomProperties.dbc: %w", err)
+	}
+
+	const irpSQL = `INSERT INTO dbc_item_random_properties (id, name, name_lang, enchantment_1, enchantment_2, enchantment_3, enchantment_4, enchantment_5)
+		VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+		ON CONFLICT (id) DO UPDATE SET name=EXCLUDED.name, name_lang=EXCLUDED.name_lang,
+			enchantment_1=EXCLUDED.enchantment_1, enchantment_2=EXCLUDED.enchantment_2,
+			enchantment_3=EXCLUDED.enchantment_3, enchantment_4=EXCLUDED.enchantment_4,
+			enchantment_5=EXCLUDED.enchantment_5`
+
+	irpCount := 0
+	const batchSize = 500
+	batch := &pgx.Batch{}
+	for i := 0; i < irpTable.Len(); i++ {
+		row, err := irpTable.Index(i)
+		if err != nil {
+			return fmt.Errorf("reading ItemRandomProperties row %d: %w", i, err)
+		}
+		enchs := make([]int32, 5)
+		for j := 0; j < len(row.Enchantment) && j < 5; j++ {
+			enchs[j] = row.Enchantment[j]
+		}
+		batch.Queue(irpSQL, row.ID, row.Name, row.Name_lang.String(), enchs[0], enchs[1], enchs[2], enchs[3], enchs[4])
+		irpCount++
+
+		if batch.Len() >= batchSize {
+			if err := flushBatch(ctx, pool, batch); err != nil {
+				return fmt.Errorf("flushing ItemRandomProperties batch: %w", err)
+			}
+			batch = &pgx.Batch{}
+		}
+	}
+	if batch.Len() > 0 {
+		if err := flushBatch(ctx, pool, batch); err != nil {
+			return fmt.Errorf("flushing final ItemRandomProperties batch: %w", err)
+		}
+	}
+	_, _ = fmt.Fprintf(inv.Stderr, "imported dbc_item_random_properties: %d rows\n", irpCount)
+
+	// --- SpellItemEnchantment ---
+	sieTable, err := wc.SpellItemEnchantment()
+	if err != nil {
+		return fmt.Errorf("reading SpellItemEnchantment.dbc: %w", err)
+	}
+
+	const sieSQL = `INSERT INTO dbc_spell_item_enchantment
+		(id, charges, effect_1, effect_2, effect_3,
+		 effect_points_min_1, effect_points_min_2, effect_points_min_3,
+		 effect_arg_1, effect_arg_2, effect_arg_3,
+		 name_lang, item_visual, flags, src_item_id, condition_id,
+		 required_skill_id, required_skill_rank, min_level, max_level)
+		VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20)
+		ON CONFLICT (id) DO UPDATE SET
+			charges=EXCLUDED.charges, effect_1=EXCLUDED.effect_1, effect_2=EXCLUDED.effect_2, effect_3=EXCLUDED.effect_3,
+			effect_points_min_1=EXCLUDED.effect_points_min_1, effect_points_min_2=EXCLUDED.effect_points_min_2, effect_points_min_3=EXCLUDED.effect_points_min_3,
+			effect_arg_1=EXCLUDED.effect_arg_1, effect_arg_2=EXCLUDED.effect_arg_2, effect_arg_3=EXCLUDED.effect_arg_3,
+			name_lang=EXCLUDED.name_lang, item_visual=EXCLUDED.item_visual, flags=EXCLUDED.flags,
+			src_item_id=EXCLUDED.src_item_id, condition_id=EXCLUDED.condition_id,
+			required_skill_id=EXCLUDED.required_skill_id, required_skill_rank=EXCLUDED.required_skill_rank,
+			min_level=EXCLUDED.min_level, max_level=EXCLUDED.max_level`
+
+	sieCount := 0
+	batch = &pgx.Batch{}
+	for i := 0; i < sieTable.Len(); i++ {
+		row, err := sieTable.Index(i)
+		if err != nil {
+			return fmt.Errorf("reading SpellItemEnchantment row %d: %w", i, err)
+		}
+		effects := padSlice(row.Effect, 3)
+		pointsMin := padSlice(row.EffectPointsMin, 3)
+		args := padSlice(row.EffectArg, 3)
+
+		batch.Queue(sieSQL,
+			row.ID, row.Charges,
+			effects[0], effects[1], effects[2],
+			pointsMin[0], pointsMin[1], pointsMin[2],
+			args[0], args[1], args[2],
+			row.Name_lang.String(), row.ItemVisual, row.Flags,
+			row.Src_itemID, row.Condition_ID,
+			row.RequiredSkillID, row.RequiredSkillRank,
+			row.MinLevel, row.MaxLevel,
+		)
+		sieCount++
+
+		if batch.Len() >= batchSize {
+			if err := flushBatch(ctx, pool, batch); err != nil {
+				return fmt.Errorf("flushing SpellItemEnchantment batch: %w", err)
+			}
+			batch = &pgx.Batch{}
+		}
+	}
+	if batch.Len() > 0 {
+		if err := flushBatch(ctx, pool, batch); err != nil {
+			return fmt.Errorf("flushing final SpellItemEnchantment batch: %w", err)
+		}
+	}
+	_, _ = fmt.Fprintf(inv.Stderr, "imported dbc_spell_item_enchantment: %d rows\n", sieCount)
+
+	// --- ItemSet ---
+	isTable, err := wc.ItemSet()
+	if err != nil {
+		return fmt.Errorf("reading ItemSet.dbc: %w", err)
+	}
+
+	const isSQL = `INSERT INTO dbc_item_set (id, name_lang, required_skill, required_skill_rank)
+		VALUES ($1, $2, $3, $4)
+		ON CONFLICT (id) DO UPDATE SET name_lang=EXCLUDED.name_lang,
+			required_skill=EXCLUDED.required_skill, required_skill_rank=EXCLUDED.required_skill_rank`
+
+	const isBonusSQL = `INSERT INTO dbc_item_set_bonus (set_id, threshold, spell_id)
+		VALUES ($1, $2, $3)
+		ON CONFLICT (set_id, threshold, spell_id) DO NOTHING`
+
+	isCount := 0
+	isBonusCount := 0
+	batch = &pgx.Batch{}
+	for i := 0; i < isTable.Len(); i++ {
+		row, err := isTable.Index(i)
+		if err != nil {
+			return fmt.Errorf("reading ItemSet row %d: %w", i, err)
+		}
+		batch.Queue(isSQL, row.ID, row.Name_lang.String(), row.RequiredSkill, row.RequiredSkillRank)
+		isCount++
+
+		// Insert set bonuses (spell + threshold pairs)
+		for j := 0; j < len(row.SetSpellID) && j < len(row.SetThreshold); j++ {
+			if row.SetSpellID[j] != 0 && row.SetThreshold[j] != 0 {
+				batch.Queue(isBonusSQL, row.ID, row.SetThreshold[j], row.SetSpellID[j])
+				isBonusCount++
+			}
+		}
+
+		if batch.Len() >= batchSize {
+			if err := flushBatch(ctx, pool, batch); err != nil {
+				return fmt.Errorf("flushing ItemSet batch: %w", err)
+			}
+			batch = &pgx.Batch{}
+		}
+	}
+	if batch.Len() > 0 {
+		if err := flushBatch(ctx, pool, batch); err != nil {
+			return fmt.Errorf("flushing final ItemSet batch: %w", err)
+		}
+	}
+	_, _ = fmt.Fprintf(inv.Stderr, "imported dbc_item_set: %d sets, %d bonuses\n", isCount, isBonusCount)
+
+	// --- ItemDisplayInfo ---
+	idiTable, err := wc.ItemDisplayInfo()
+	if err != nil {
+		return fmt.Errorf("reading ItemDisplayInfo.dbc: %w", err)
+	}
+
+	const idiSQL = `INSERT INTO dbc_item_display_info (
+			id, model_name, model_texture, geoset_group, flags, spell_visual_id,
+			helmet_geoset_vis, texture, item_visual, particle_color_id,
+			attachment_geoset_group, item_ranged_display_info_id,
+			model_material_resources_id, model_resources_id, model_type_1,
+			override_swoosh_sound_kit_id, sheathe_transform_matrix_id,
+			sheathed_spell_visual_kit_id, state_spell_visual_kit_id,
+			unsheathed_spell_visual_kit_id, inventory_icon, group_sound_index,
+			ground_model, item_size, helmet_geoset_vis_id
+		) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,$22,$23,$24,$25)
+		ON CONFLICT (id) DO UPDATE SET
+			model_name=EXCLUDED.model_name, model_texture=EXCLUDED.model_texture,
+			geoset_group=EXCLUDED.geoset_group, flags=EXCLUDED.flags,
+			spell_visual_id=EXCLUDED.spell_visual_id, helmet_geoset_vis=EXCLUDED.helmet_geoset_vis,
+			texture=EXCLUDED.texture, item_visual=EXCLUDED.item_visual,
+			particle_color_id=EXCLUDED.particle_color_id,
+			attachment_geoset_group=EXCLUDED.attachment_geoset_group,
+			item_ranged_display_info_id=EXCLUDED.item_ranged_display_info_id,
+			model_material_resources_id=EXCLUDED.model_material_resources_id,
+			model_resources_id=EXCLUDED.model_resources_id, model_type_1=EXCLUDED.model_type_1,
+			override_swoosh_sound_kit_id=EXCLUDED.override_swoosh_sound_kit_id,
+			sheathe_transform_matrix_id=EXCLUDED.sheathe_transform_matrix_id,
+			sheathed_spell_visual_kit_id=EXCLUDED.sheathed_spell_visual_kit_id,
+			state_spell_visual_kit_id=EXCLUDED.state_spell_visual_kit_id,
+			unsheathed_spell_visual_kit_id=EXCLUDED.unsheathed_spell_visual_kit_id,
+			inventory_icon=EXCLUDED.inventory_icon, group_sound_index=EXCLUDED.group_sound_index,
+			ground_model=EXCLUDED.ground_model, item_size=EXCLUDED.item_size,
+			helmet_geoset_vis_id=EXCLUDED.helmet_geoset_vis_id`
+
+	idiCount := 0
+	batch = &pgx.Batch{}
+	for i := 0; i < idiTable.Len(); i++ {
+		row, err := idiTable.Index(i)
+		if err != nil {
+			return fmt.Errorf("reading ItemDisplayInfo row %d: %w", i, err)
+		}
+		batch.Queue(idiSQL,
+			row.ID,
+			jsonSlice(row.ModelName), jsonSlice(row.ModelTexture),
+			jsonSlice(row.GeosetGroup), row.Flags, row.SpellVisualID,
+			jsonSlice(row.HelmetGeosetVis), jsonSlice(row.Texture),
+			row.ItemVisual, row.ParticleColorID,
+			jsonSlice(row.AttachmentGeosetGroup), row.ItemRangedDisplayInfoID,
+			jsonSlice(row.ModelMaterialResourcesID), jsonSlice(row.ModelResourcesID),
+			row.ModelType1, row.OverrideSwooshSoundKitID,
+			row.SheatheTransformMatrixID, row.SheathedSpellVisualKitID,
+			row.StateSpellVisualKitID, row.UnsheathedSpellVisualKitID,
+			jsonSlice(row.InventoryIcon), row.GroupSoundIndex,
+			row.GroundModel, row.ItemSize, jsonSlice(row.HelmetGeosetVisID),
+		)
+		idiCount++
+
+		if batch.Len() >= batchSize {
+			if err := flushBatch(ctx, pool, batch); err != nil {
+				return fmt.Errorf("flushing ItemDisplayInfo batch: %w", err)
+			}
+			batch = &pgx.Batch{}
+		}
+	}
+	if batch.Len() > 0 {
+		if err := flushBatch(ctx, pool, batch); err != nil {
+			return fmt.Errorf("flushing final ItemDisplayInfo batch: %w", err)
+		}
+	}
+	_, _ = fmt.Fprintf(inv.Stderr, "imported dbc_item_display_info: %d rows\n", idiCount)
+
+	return nil
+}
+
+func flushBatch(ctx context.Context, pool *pgxpool.Pool, batch *pgx.Batch) error {
+	br := pool.SendBatch(ctx, batch)
+	for i := 0; i < batch.Len(); i++ {
+		if _, err := br.Exec(); err != nil {
+			br.Close()
+			return err
+		}
+	}
+	return br.Close()
+}
+
+// jsonSlice marshals any slice to JSON for JSONB columns.
+func jsonSlice(v any) []byte {
+	b, err := json.Marshal(v)
+	if err != nil {
+		return []byte("[]")
+	}
+	return b
+}
+
+func padSlice(s []int32, n int) []int32 {
+	result := make([]int32, n)
+	for i := 0; i < len(s) && i < n; i++ {
+		result[i] = s[i]
+	}
+	return result
 }
 
 // buildUpsertSQL generates: INSERT INTO table (cols...) VALUES ($1, $2, ...) ON CONFLICT (pk) DO UPDATE SET col=EXCLUDED.col, ...

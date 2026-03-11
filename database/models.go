@@ -551,6 +551,81 @@ type DataGrant struct {
 	ExpiresAt    pgtype.Timestamptz `db:"expires_at" json:"expires_at"`
 }
 
+type DbcItemDisplayInfo struct {
+	ID                         int32  `db:"id" json:"id"`
+	ModelName                  []byte `db:"model_name" json:"model_name"`
+	ModelTexture               []byte `db:"model_texture" json:"model_texture"`
+	GeosetGroup                []byte `db:"geoset_group" json:"geoset_group"`
+	Flags                      int32  `db:"flags" json:"flags"`
+	SpellVisualID              int32  `db:"spell_visual_id" json:"spell_visual_id"`
+	HelmetGeosetVis            []byte `db:"helmet_geoset_vis" json:"helmet_geoset_vis"`
+	Texture                    []byte `db:"texture" json:"texture"`
+	ItemVisual                 int32  `db:"item_visual" json:"item_visual"`
+	ParticleColorID            int32  `db:"particle_color_id" json:"particle_color_id"`
+	AttachmentGeosetGroup      []byte `db:"attachment_geoset_group" json:"attachment_geoset_group"`
+	ItemRangedDisplayInfoID    int32  `db:"item_ranged_display_info_id" json:"item_ranged_display_info_id"`
+	ModelMaterialResourcesID   []byte `db:"model_material_resources_id" json:"model_material_resources_id"`
+	ModelResourcesID           []byte `db:"model_resources_id" json:"model_resources_id"`
+	ModelType1                 int32  `db:"model_type_1" json:"model_type_1"`
+	OverrideSwooshSoundKitID   int32  `db:"override_swoosh_sound_kit_id" json:"override_swoosh_sound_kit_id"`
+	SheatheTransformMatrixID   int32  `db:"sheathe_transform_matrix_id" json:"sheathe_transform_matrix_id"`
+	SheathedSpellVisualKitID   int32  `db:"sheathed_spell_visual_kit_id" json:"sheathed_spell_visual_kit_id"`
+	StateSpellVisualKitID      int32  `db:"state_spell_visual_kit_id" json:"state_spell_visual_kit_id"`
+	UnsheathedSpellVisualKitID int32  `db:"unsheathed_spell_visual_kit_id" json:"unsheathed_spell_visual_kit_id"`
+	InventoryIcon              []byte `db:"inventory_icon" json:"inventory_icon"`
+	GroupSoundIndex            int32  `db:"group_sound_index" json:"group_sound_index"`
+	GroundModel                string `db:"ground_model" json:"ground_model"`
+	ItemSize                   int32  `db:"item_size" json:"item_size"`
+	HelmetGeosetVisID          []byte `db:"helmet_geoset_vis_id" json:"helmet_geoset_vis_id"`
+}
+
+type DbcItemRandomProperty struct {
+	ID           int32  `db:"id" json:"id"`
+	Name         string `db:"name" json:"name"`
+	NameLang     string `db:"name_lang" json:"name_lang"`
+	Enchantment1 int32  `db:"enchantment_1" json:"enchantment_1"`
+	Enchantment2 int32  `db:"enchantment_2" json:"enchantment_2"`
+	Enchantment3 int32  `db:"enchantment_3" json:"enchantment_3"`
+	Enchantment4 int32  `db:"enchantment_4" json:"enchantment_4"`
+	Enchantment5 int32  `db:"enchantment_5" json:"enchantment_5"`
+}
+
+type DbcItemSet struct {
+	ID                int32  `db:"id" json:"id"`
+	NameLang          string `db:"name_lang" json:"name_lang"`
+	RequiredSkill     int32  `db:"required_skill" json:"required_skill"`
+	RequiredSkillRank int32  `db:"required_skill_rank" json:"required_skill_rank"`
+}
+
+type DbcItemSetBonu struct {
+	SetID     int32 `db:"set_id" json:"set_id"`
+	Threshold int32 `db:"threshold" json:"threshold"`
+	SpellID   int32 `db:"spell_id" json:"spell_id"`
+}
+
+type DbcSpellItemEnchantment struct {
+	ID                int32  `db:"id" json:"id"`
+	Charges           int32  `db:"charges" json:"charges"`
+	Effect1           int32  `db:"effect_1" json:"effect_1"`
+	Effect2           int32  `db:"effect_2" json:"effect_2"`
+	Effect3           int32  `db:"effect_3" json:"effect_3"`
+	EffectPointsMin1  int32  `db:"effect_points_min_1" json:"effect_points_min_1"`
+	EffectPointsMin2  int32  `db:"effect_points_min_2" json:"effect_points_min_2"`
+	EffectPointsMin3  int32  `db:"effect_points_min_3" json:"effect_points_min_3"`
+	EffectArg1        int32  `db:"effect_arg_1" json:"effect_arg_1"`
+	EffectArg2        int32  `db:"effect_arg_2" json:"effect_arg_2"`
+	EffectArg3        int32  `db:"effect_arg_3" json:"effect_arg_3"`
+	NameLang          string `db:"name_lang" json:"name_lang"`
+	ItemVisual        int32  `db:"item_visual" json:"item_visual"`
+	Flags             int32  `db:"flags" json:"flags"`
+	SrcItemID         int32  `db:"src_item_id" json:"src_item_id"`
+	ConditionID       int32  `db:"condition_id" json:"condition_id"`
+	RequiredSkillID   int32  `db:"required_skill_id" json:"required_skill_id"`
+	RequiredSkillRank int32  `db:"required_skill_rank" json:"required_skill_rank"`
+	MinLevel          int32  `db:"min_level" json:"min_level"`
+	MaxLevel          int32  `db:"max_level" json:"max_level"`
+}
+
 type Guild struct {
 	ID        uuid.UUID          `db:"id" json:"id"`
 	RealmID   uuid.UUID          `db:"realm_id" json:"realm_id"`
@@ -1043,7 +1118,7 @@ type WorldItemTemplate struct {
 	ExtraFlags                int32       `db:"extra_flags" json:"extra_flags"`
 	OtherTeamEntry            int32       `db:"other_team_entry" json:"other_team_entry"`
 	ScriptName                pgtype.Text `db:"script_name" json:"script_name"`
-	Patch                     pgtype.Int4 `db:"patch" json:"patch"`
+	Patch                     pgtype.Text `db:"patch" json:"patch"`
 }
 
 type WorldSpellArea struct {

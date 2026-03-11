@@ -25,6 +25,7 @@ definition chronicle {
   permission admin_queues = technical_admin
   permission set_user_data_limit = technical_admin
   permission shorter_urls = supporter + admin
+  permission internal_game_data = technical_admin
 
   permission upload_log = upload_capable + administer + supporter + chronicle_guild_member
   permission create_layout = chronicle_guild_member
