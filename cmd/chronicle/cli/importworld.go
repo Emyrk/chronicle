@@ -41,14 +41,6 @@ type tableSchema struct {
 	JSONToDB  map[string]string // JSON key -> DB column name (only non-trivial mappings)
 }
 
-// jsonKeyToDBCol returns the DB column name for a JSON key.
-func (ts *tableSchema) jsonKeyToDBCol(jsonKey string) string {
-	if mapped, ok := ts.JSONToDB[jsonKey]; ok {
-		return mapped
-	}
-	return strings.ToLower(jsonKey)
-}
-
 var tableSchemas = map[string]*tableSchema{
 	"world_display_info": {
 		Columns:   []string{"id", "icon"},
@@ -307,6 +299,7 @@ func detectTable(path string) (string, error) {
 	if err != nil {
 		return "", err
 	}
+	//nolint:errcheck
 	defer f.Close()
 
 	dec := json.NewDecoder(f)
@@ -362,6 +355,7 @@ func importTable(ctx context.Context, pool *pgxpool.Pool, table, filePath string
 	if err != nil {
 		return 0, err
 	}
+	//nolint:errcheck
 	defer f.Close()
 
 	var rows []map[string]interface{}
@@ -408,7 +402,7 @@ func importTable(ctx context.Context, pool *pgxpool.Pool, table, filePath string
 		br := pool.SendBatch(ctx, batch)
 		for range chunk {
 			if _, err := br.Exec(); err != nil {
-				br.Close()
+				_ = br.Close()
 				return total, fmt.Errorf("executing batch at row %d: %w", total, err)
 			}
 		}
@@ -661,7 +655,7 @@ func flushBatch(ctx context.Context, pool *pgxpool.Pool, batch *pgx.Batch) error
 	br := pool.SendBatch(ctx, batch)
 	for i := 0; i < batch.Len(); i++ {
 		if _, err := br.Exec(); err != nil {
-			br.Close()
+			_ = br.Close()
 			return err
 		}
 	}
