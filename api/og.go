@@ -15,14 +15,24 @@ import (
 )
 
 // InstanceOGResolver returns Open Graph metadata for an instance page.
-// It attempts to parse the identifier as a UUID first, falling back to slug lookup.
-func (api *API) InstanceOGResolver(instanceIDOrSlug string) *frontend.OGData {
+// The key is either an instance ID/slug, or "share:<code>" for shared view links.
+func (api *API) InstanceOGResolver(key string) *frontend.OGData {
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 
 	db := api.Opts.Zed
 
-	inst, err := resolveInstance(ctx, db, instanceIDOrSlug)
+	var inst database.LogInstancesGuild
+	var err error
+	if code, ok := strings.CutPrefix(key, "share:"); ok {
+		shared, sErr := db.GetSharedViewByCode(ctx, code)
+		if sErr != nil {
+			return nil
+		}
+		inst, err = db.Instance(ctx, shared.InstanceID)
+	} else {
+		inst, err = resolveInstance(ctx, db, key)
+	}
 	if err != nil {
 		return nil
 	}
@@ -75,7 +85,7 @@ func (api *API) InstanceOGResolver(instanceIDOrSlug string) *frontend.OGData {
 	return &frontend.OGData{
 		Title:       title.String(),
 		Description: desc.String(),
-		URL:         fmt.Sprintf("https://chronicleclassic.com/instances/%s", instanceIDOrSlug),
+		URL:         fmt.Sprintf("https://chronicleclassic.com/instances/%s", inst.ID.String()),
 	}
 }
 
