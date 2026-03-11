@@ -575,9 +575,18 @@ function TimeRangeEditor({ filter, onChange }: { filter: PanelFilter; onChange: 
           <p className="text-xs text-muted-foreground">Select encounters to use time range.</p>
         ) : (
           <div className="flex flex-col gap-0.5">
-            {/* Time labels */}
-            <div className="text-center text-xs text-foreground font-medium">
-              {formatMs(startMs)} – {formatMs(endMs)}
+            {/* Time labels + reset */}
+            <div className="flex items-center justify-between">
+              <span className="text-xs text-foreground font-medium">
+                {formatMs(startMs)} – {formatMs(endMs)}
+              </span>
+              <button
+                type="button"
+                className="text-[10px] text-muted-foreground hover:text-foreground"
+                onClick={() => onChange({ ...filter, value: "," })}
+              >
+                Reset
+              </button>
             </div>
 
             {/* Dual-handle slider track */}
