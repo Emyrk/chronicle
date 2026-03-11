@@ -22,16 +22,16 @@ import { testSpells, spells } from "./testdata/spellTestVectors.generated";
 // When adding a new spell, run the test first — the failure message will show you
 // the resolved output so you can verify it's correct and paste it here.
 const expectedDescriptions: Record<string, string> = {
-  // Fireball rank 1: $s1=22, $o2=2 (periodic total), $d=4 sec
-  "133": "Hurls a fiery ball that causes 22 Fire damage and an additional 2 Fire damage over 4 sec.",
+  // Fireball rank 1: $s1=14-22 (die roll range), $o2=2 (periodic total), $d=4 sec
+  "133": "Hurls a fiery ball that causes 14 to 22 Fire damage and an additional 2 Fire damage over 4 sec.",
   "133_aura": "1 Fire damage every 2 seconds.",
 
   // Renew rank 1: $o1=45 (periodic total), $d=15 sec
   "139": "Heals the target of 45 damage over 15 sec.",
   "139_aura": "Healing 9 damage every 3 seconds.",
 
-  // Holy Nova: $s1=30, $a1=10 (radius), cross-refs spell 23455 for $23455a1 and $23455s1
-  "15237": "Causes an explosion of holy light around the caster, causing 30 Holy damage to all enemy targets within 10 yards and healing all party members within 10 yards for 60. Using this spell while in Shadowform damages you instead of healing you. These effects cause reduced threat.",
+  // Holy Nova: $s1=26-30 (die roll range), $a1=10 (radius), cross-refs spell 23455 for $23455a1 and $23455s1=52-60
+  "15237": "Causes an explosion of holy light around the caster, causing 26 to 30 Holy damage to all enemy targets within 10 yards and healing all party members within 10 yards for 52 to 60. Using this spell while in Shadowform damages you instead of healing you. These effects cause reduced threat.",
 
   // Double Attack: $s1=1, $l pluralization (1 = singular "attack")
   "18941": "Gives the caster 1 extra attack.",
@@ -66,8 +66,8 @@ const expectedDescriptions: Record<string, string> = {
   "16454": "Blasts a target for 60 Fire damage and increases damage done to target by Fire damage by 10 for 30 sec.",
 
   // Aftershock: $t unindexed tick interval
-  "51839": "Deals 225 damage after 4.",
-  "51839_aura": "225 Nature damage periodically.",
+  "51839": "Deals 175 to 225 damage after 4.",
+  "51839_aura": "175 to 225 Nature damage periodically.",
 };
 
 /**

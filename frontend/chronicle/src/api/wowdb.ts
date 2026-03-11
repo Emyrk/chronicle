@@ -339,35 +339,88 @@ function formatDurationMs(ms: number): string {
 }
 
 /**
- * Get the effect value for a given effect slot.
- * $s1, $s2, $s3 = effect_base_points[N] + effect_die_sides[N]
+ * Compute the effective caster level for scaling calculations.
+ * lvl = min(maxLevel, forLevel) - max(baseLevel, spellLevel)
+ * Clamped to ≥ 0.
  */
-function getEffectValue(spell: WoWSpell, index: number): number {
-  if (index < 0 || index >= 3) return 0;
-  const basePoints = spell.effect_base_points[index] ?? 0;
-  const dieSides = spell.effect_die_sides[index] ?? 0;
-  // The actual value is base_points + 1 (when die_sides = 1) or base_points + die_sides
-  return basePoints + Math.max(dieSides, 1);
+function getEffectiveLevel(spell: WoWSpell, forLevel: number): number {
+  const maxLvl = spell.max_level || forLevel;
+  return Math.max(0, Math.min(maxLvl, forLevel) - Math.max(spell.base_level, spell.spell_level));
 }
 
 /**
- * Get the total periodic value over the spell's duration.
- * $o1, $o2, $o3 = effect_value * (duration / period)
+ * Get the scaled effect value(s) for a given effect slot.
+ * Returns [value] for fixed values, or [min, max] for die roll ranges.
+ * Follows the WoW Spell DBC die roll formula:
+ *   minDieRoll = baseDice + dicePerLevel * lvl
+ *   maxDieRoll = dieSides * (baseDice + dicePerLevel * lvl)
+ *   effectValue = basePoints + dieRoll + realPointsPerLevel * lvl
  */
-function getTotalPeriodicValue(spell: WoWSpell, index: number): number {
-  if (index < 0 || index >= 3) return 0;
-  const effectValue = getEffectValue(spell, index);
-  const period = spell.effect_aura_period[index] ?? 0;
+function getScaledValue(
+  spell: WoWSpell,
+  index: number,
+  forLevel: number,
+  op?: (n: number) => number
+): number[] {
+  if (index < 0 || index >= 3) return [0];
+  const base = spell.effect_base_points[index] ?? 0;
+  const baseDice = spell.effect_base_dice[index] ?? 0;
+  const dieSides = spell.effect_die_sides[index] ?? 0;
+  const dicePerLevel = spell.effect_dice_per_level[index] ?? 0;
+  const realPPL = spell.effect_real_points_per_level[index] ?? 0;
+
+  const lvl = getEffectiveLevel(spell, forLevel);
+  const diceCount = baseDice + dicePerLevel * lvl;
+  const min = diceCount;
+  const max = dieSides * diceCount;
+  const scaling = realPPL * lvl;
+
+  const applyOp = (n: number) => {
+    const abs = Math.abs(n);
+    return op ? op(abs) : abs;
+  };
+
+  return max > min
+    ? [applyOp(base + min + scaling), applyOp(base + max + scaling)]
+    : [applyOp(base + min + scaling)];
+}
+
+/**
+ * Get the total periodic value(s) over the spell's duration.
+ * Returns [value] or [min, max] scaled by tick count.
+ */
+function getPeriodicTotal(
+  spell: WoWSpell,
+  index: number,
+  forLevel: number,
+  op?: (n: number) => number
+): number[] {
+  if (index < 0 || index >= 3) return [0];
+  const values = getScaledValue(spell, index, forLevel, op);
+  const amplitude = spell.effect_aura_period[index] ?? 0;
   const duration = spell.duration.Duration ?? 0;
-  if (period <= 0 || duration <= 0) return effectValue;
-  const ticks = Math.floor(duration / period);
-  return effectValue * ticks;
+  if (amplitude <= 0 || duration <= 0) return values;
+  const ticks = duration / amplitude;
+  return values.map((v) => v * ticks);
+}
+
+/**
+ * Format a scaled value array as a string.
+ * Single values: "100". Ranges: "14 to 22".
+ */
+function formatValue(values: number[], floating?: boolean): string {
+  const fmt = (n: number) =>
+    floating ? n.toFixed(1).replace(/\.0$/, "") : String(Math.floor(n));
+  return values.map(fmt).join(" to ");
 }
 
 /**
  * Resolve a single template variable.
+ * @param forLevel Caster level for scaling calculations (defaults to spell level)
  */
-function resolveVariable(spell: WoWSpell, variable: string): string {
+function resolveVariable(spell: WoWSpell, variable: string, forLevel?: number): string {
+  const lvl = forLevel ?? spell.spell_level;
+  
   // Match patterns like $s1, $o1, $d, $t1, $a1, $e1, $m1, $x1, $n, $h, etc.
   
   // Duration: $d
@@ -382,20 +435,22 @@ function resolveVariable(spell: WoWSpell, variable: string): string {
     const index = parseInt(indexedMatch[2], 10) - 1; // Convert 1-indexed to 0-indexed
 
     switch (type) {
-      case "s": // Effect value (base + die)
+      case "s": // Effect value (base + die range)
       case "m": // Modified effect value (same as $s for our purposes)
-        return String(Math.abs(getEffectValue(spell, index)));
+        return formatValue(getScaledValue(spell, index, lvl));
 
       case "o": // Total over duration
-        return String(Math.abs(getTotalPeriodicValue(spell, index)));
+        return formatValue(getPeriodicTotal(spell, index, lvl));
 
-      case "t": // Tick interval in seconds
+      case "t": { // Tick interval in seconds
         const period = spell.effect_aura_period[index] ?? 0;
         return period > 0 ? String(Math.round(period / 1000)) : "0";
+      }
 
-      case "a": // AOE radius
+      case "a": { // AOE radius
         const radius = spell.effect_radius[index];
         return radius ? String(radius.Radius) : "0";
+      }
 
       case "e": // Effect amplitude/proc value
         return String(spell.effect_amplitude[index] ?? 0);
@@ -514,33 +569,55 @@ function evaluateArithmetic(expr: string): number | null {
  * @param spell The spell being described
  * @param template The template string with variables
  * @param referencedSpells Optional map of spell ID -> WoWSpell for cross-spell references
+ * @param forLevel Optional caster level for scaling calculations (defaults to spell level)
  */
 export function resolveSpellDescription(
   spell: WoWSpell,
   template: string,
-  referencedSpells?: Map<number, WoWSpell>
+  referencedSpells?: Map<number, WoWSpell>,
+  forLevel?: number
 ): string {
   if (!template) return "";
 
+  const lvl = forLevel ?? spell.spell_level;
   let result = template;
 
   // Pre-pass: arithmetic — $*N;VAR (multiply) and $/N;VAR (divide)
-  // Must run before variable resolution so the inner variable gets resolved
+  // For $s/$m/$o variables, apply operations inside the range calculation.
+  // For other variables, fall back to string-based resolution.
   result = result.replace(/\$\*(\d+);([a-zA-Z])(\d)?/g, (_match, multiplier, type, index) => {
+    const mult = parseInt(multiplier);
+    const t = type.toLowerCase();
+    const idx = index ? parseInt(index) - 1 : 0;
+    if (t === "s" || t === "m") {
+      return formatValue(getScaledValue(spell, idx, lvl, (n) => n * mult));
+    }
+    if (t === "o") {
+      return formatValue(getPeriodicTotal(spell, idx, lvl, (n) => n * mult));
+    }
     const variable = `$${type}${index || ""}`;
-    const resolved = resolveVariable(spell, variable);
+    const resolved = resolveVariable(spell, variable, lvl);
     const num = Number(resolved);
     if (!isNaN(num)) {
-      return String(Math.round(num * parseInt(multiplier)));
+      return String(Math.round(num * mult));
     }
     return _match;
   });
   result = result.replace(/\$\/(\d+);([a-zA-Z])(\d)?/g, (_match, divisor, type, index) => {
-    const variable = `$${type}${index || ""}`;
-    const resolved = resolveVariable(spell, variable);
-    const num = Number(resolved);
     const div = parseInt(divisor);
-    if (!isNaN(num) && div !== 0) {
+    if (div === 0) return _match;
+    const t = type.toLowerCase();
+    const idx = index ? parseInt(index) - 1 : 0;
+    if (t === "s" || t === "m") {
+      return formatValue(getScaledValue(spell, idx, lvl, (n) => n / div));
+    }
+    if (t === "o") {
+      return formatValue(getPeriodicTotal(spell, idx, lvl, (n) => n / div));
+    }
+    const variable = `$${type}${index || ""}`;
+    const resolved = resolveVariable(spell, variable, lvl);
+    const num = Number(resolved);
+    if (!isNaN(num)) {
       return String(Math.round(num / div));
     }
     return _match;
@@ -555,7 +632,7 @@ export function resolveSpellDescription(
     }
     
     const variable = `$${type}${index || ""}`;
-    const resolved = resolveVariable(refSpell, variable);
+    const resolved = resolveVariable(refSpell, variable, lvl);
     
     if (negative === "-" && !isNaN(Number(resolved))) {
       return String(-Math.abs(Number(resolved)));
@@ -567,7 +644,7 @@ export function resolveSpellDescription(
   // Second pass: resolve local variables like $s1, $d
   result = result.replace(/(-?)\$([a-zA-Z])(\d)?/g, (_match, negative, type, index) => {
     const variable = `$${type}${index || ""}`;
-    const resolved = resolveVariable(spell, variable);
+    const resolved = resolveVariable(spell, variable, lvl);
     
     // If the original had a negative sign and we resolved to a number, apply it
     if (negative === "-" && !isNaN(Number(resolved))) {
@@ -609,17 +686,19 @@ export function resolveSpellDescription(
 
 /**
  * Get the resolved English description for a spell.
+ * @param forLevel Optional caster level for scaling calculations (defaults to spell level)
  */
-export function getResolvedDescription(spell: WoWSpell): string {
+export function getResolvedDescription(spell: WoWSpell, forLevel?: number): string {
   const template = getEnglishText(spell.description);
-  return resolveSpellDescription(spell, template);
+  return resolveSpellDescription(spell, template, undefined, forLevel);
 }
 
 /**
  * Get the resolved English aura description for a spell.
+ * @param forLevel Optional caster level for scaling calculations (defaults to spell level)
  */
-export function getResolvedAuraDescription(spell: WoWSpell): string {
+export function getResolvedAuraDescription(spell: WoWSpell, forLevel?: number): string {
   const template = getEnglishText(spell.aura_description);
-  return resolveSpellDescription(spell, template);
+  return resolveSpellDescription(spell, template, undefined, forLevel);
 }
 
