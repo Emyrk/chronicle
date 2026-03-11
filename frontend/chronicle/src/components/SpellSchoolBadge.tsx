@@ -51,8 +51,9 @@ export function SpellSchoolBadge({ school, className }: { school: string; classN
 // --- Damage Type Badges (uses CSS vars from index.css) ---
 
 const DAMAGE_TYPE_STYLES: Record<string, string> = {
-  Periodic: "bg-[var(--color-dmgtype-periodic)]/20 text-[var(--color-dmgtype-periodic)]",
   Direct: "bg-[var(--color-dmgtype-direct)]/20 text-[var(--color-dmgtype-direct)]",
+  Periodic: "bg-[var(--color-dmgtype-periodic)]/20 text-[var(--color-dmgtype-periodic)]",
+  "Periodic Trigger": "bg-[var(--color-dmgtype-periodic-trigger)]/20 text-[var(--color-dmgtype-periodic-trigger)]",
   "Active Debuff": "bg-[var(--color-dmgtype-debuff)]/20 text-[var(--color-dmgtype-debuff)]",
   "No Engage Combat": "bg-[var(--color-dmgtype-noengage)]/20 text-[var(--color-dmgtype-noengage)]",
 };

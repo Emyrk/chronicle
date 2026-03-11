@@ -107,11 +107,12 @@
   --color-school-arcane: #f472b6;    /* pink-400 */
 
   /* WoW Spell Damage Type Colors */
-  --color-dmgtype-periodic: #a855f7;  /* purple-500 */
-  --color-dmgtype-direct: #f59e0b;    /* amber-500 */
-  --color-dmgtype-debuff: #ef4444;    /* red-500 */
-  --color-dmgtype-noengage: #6b7280;  /* gray-500 */
-  --color-dmgtype-default: #3b82f6;   /* blue-500 */
+  --color-dmgtype-periodic: #a855f7;         /* purple-500 */
+  --color-dmgtype-direct: #f59e0b;           /* amber-500 */
+  --color-dmgtype-periodic-trigger: #06b6d4; /* cyan-500 */
+  --color-dmgtype-debuff: #ef4444;           /* red-500 */
+  --color-dmgtype-noengage: #6b7280;         /* gray-500 */
+  --color-dmgtype-default: #3b82f6;          /* blue-500 */
 
   /* Custom font sizes */
   --text-2xs: 0.625rem;   /* 10px */
