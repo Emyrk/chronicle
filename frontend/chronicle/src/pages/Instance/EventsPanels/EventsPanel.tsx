@@ -348,7 +348,7 @@ export function EventsPanel({
     if (existing.some((f) => f.type === "time_range")) return rawPanel;
     return {
       ...rawPanel,
-      defaultFilters: [...existing, { type: "time_range" as const, value: "controller" }],
+      defaultFilters: [{ type: "time_range" as const, value: "controller" }, ...existing],
     };
   }, [rawPanel]);
 
