@@ -98,6 +98,7 @@ __debug_bin*
 PLAN.md
 ignoredlogs
 ignoredlogsv2
+importdata
 *.pprof
 
 research/.other
