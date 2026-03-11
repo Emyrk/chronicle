@@ -281,7 +281,7 @@ func (api *API) Routes() chi.Router {
 		}
 	})
 
-	r.NotFound(frontend.Handler(frontend.FS()).ServeHTTP)
+	r.NotFound(frontend.Handler(frontend.FS(), api.InstanceOGResolver).ServeHTTP)
 
 	return r
 }

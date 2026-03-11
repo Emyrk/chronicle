@@ -20,9 +20,10 @@
     <meta name="description" content="Chronicle transforms Classic World of Warcraft raid logs into clear, actionable insights for raid leaders." />
     
     <!-- Open Graph / Social -->
-    <meta property="og:title" content="Chronicle - WoW Raid Log Analysis" />
-    <meta property="og:description" content="Transform Classic World of Warcraft raid logs into clear, actionable insights for raid leaders." />
+    {{ if .OGTitle }}<meta property="og:title" content="{{ .OGTitle }}" />{{ else }}<meta property="og:title" content="Chronicle - WoW Raid Log Analysis" />{{ end }}
+    {{ if .OGDescription }}<meta property="og:description" content="{{ .OGDescription }}" />{{ else }}<meta property="og:description" content="Transform Classic World of Warcraft raid logs into clear, actionable insights for raid leaders." />{{ end }}
     <meta property="og:type" content="website" />
+    {{ if .OGURL }}<meta property="og:url" content="{{ .OGURL }}" />{{ end }}
     
     <meta property="GitCommit" content="{{ .GitCommit }}" />
     <meta property="GitTag" content="{{ .GitTag }}" />

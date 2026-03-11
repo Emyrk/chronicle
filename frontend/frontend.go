@@ -8,6 +8,7 @@ import (
 	"net/http"
 	"path"
 	"path/filepath"
+	"regexp"
 	"strings"
 	"text/template" // html/template escapes some nonces
 	"time"
@@ -16,13 +17,25 @@ import (
 	"golang.org/x/xerrors"
 )
 
+// OGData holds Open Graph metadata for dynamic page previews (e.g. Discord embeds).
+type OGData struct {
+	Title       string
+	Description string
+	URL         string
+}
+
+// OGResolver resolves Open Graph metadata for a given instance ID or slug.
+// Returns nil if the instance is not found or on error.
+type OGResolver func(instanceIDOrSlug string) *OGData
+
 type handler struct {
 	fs            fs.FS
 	mux           *http.ServeMux
 	htmlTemplates *template.Template
+	ogResolver    OGResolver
 }
 
-func Handler(siteFS fs.FS) http.Handler {
+func Handler(siteFS fs.FS, ogResolver OGResolver) http.Handler {
 	mux := http.NewServeMux()
 	mux.Handle("/", etagMiddleware(http.FileServer(http.FS(siteFS))))
 
@@ -35,8 +48,12 @@ func Handler(siteFS fs.FS) http.Handler {
 		fs:            siteFS,
 		mux:           mux,
 		htmlTemplates: tmpls,
+		ogResolver:    ogResolver,
 	}
 }
+
+// instancePathRe matches /instances/<id-or-slug> with optional trailing slash.
+var instancePathRe = regexp.MustCompile(`^/instances/([^/]+)/?$`)
 
 func (h *handler) ServeHTTP(resp http.ResponseWriter, req *http.Request) {
 	// reqFile is the static file requested
@@ -46,6 +63,17 @@ func (h *handler) ServeHTTP(resp http.ResponseWriter, req *http.Request) {
 		GitCommit: version.GitCommit,
 		GitTag:    version.GitTag,
 		BuildTime: version.BuildTime,
+	}
+
+	// Enrich OG meta tags for instance pages.
+	if h.ogResolver != nil {
+		if m := instancePathRe.FindStringSubmatch(req.URL.Path); m != nil {
+			if og := h.ogResolver(m[1]); og != nil {
+				state.OGTitle = og.Title
+				state.OGDescription = og.Description
+				state.OGURL = og.URL
+			}
+		}
 	}
 
 	if h.serveHTML(resp, req, reqFile, state) {
@@ -93,6 +121,11 @@ type htmlState struct {
 	GitCommit string
 	GitTag    string
 	BuildTime string
+
+	// OG meta tags (empty = use defaults from index.html).
+	OGTitle       string
+	OGDescription string
+	OGURL         string
 }
 
 func (h *handler) serveHTML(resp http.ResponseWriter, request *http.Request, reqPath string, state htmlState) bool {
