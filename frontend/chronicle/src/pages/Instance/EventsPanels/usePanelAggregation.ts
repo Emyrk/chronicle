@@ -18,6 +18,7 @@ import { useSyncModeContextOptional } from "../SyncModeContext";
 import { processIncrementally, timestampMovedBackward, type IncrementalProcessorState } from "./mainThreadProcessor";
 import { usePanelTimingContext } from "./PanelTimingContext";
 import type { PanelFilter } from "./processors/filters";
+import { useTimeRangeContextOptional } from "../TimeRangeContext";
 
 export interface UsePanelAggregationOptions<TResult> {
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -235,13 +236,27 @@ export function usePanelAggregation<TResult>(
   
   // Stable merged filter array — reference equality lets mainThreadProcessor skip recompilation
   // during sync mode ticks where only the timestamp changes.
-  const mergedFilters = useMemo(
+  const rawMergedFilters = useMemo(
     () => [
       ...(panel.fixedFilters ?? []),
       ...((panelContextData?.filters as PanelFilter[] | undefined) ?? []),
     ],
     [panel.fixedFilters, panelContextData?.filters],
   );
+
+  // Resolve time_range filters with value "controller" using the TimeRangeContext.
+  const timeRange = useTimeRangeContextOptional();
+  const mergedFilters = useMemo(() => {
+    return rawMergedFilters.map((f) => {
+      if (f.type === "time_range" && f.value === "controller") {
+        if (!timeRange?.enabled || (timeRange.startOffsetMs == null && timeRange.endOffsetMs == null)) {
+          return { ...f, value: "" }; // pass-through when controller inactive
+        }
+        return { ...f, value: `${timeRange.startOffsetMs ?? ""},${timeRange.endOffsetMs ?? ""}` };
+      }
+      return f;
+    });
+  }, [rawMergedFilters, timeRange?.enabled, timeRange?.startOffsetMs, timeRange?.endOffsetMs]);
 
   // Stable serializable context — avoids rebuilding players/units objects and
   // Array.from(Sets) on every sync tick. Only changes when panelContextKey changes.

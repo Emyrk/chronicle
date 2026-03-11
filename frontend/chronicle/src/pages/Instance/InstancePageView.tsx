@@ -1241,6 +1241,8 @@ export interface InstancePageViewProps {
   youtubeButton?: React.ReactNode;
   /** URL to log detail page (shown only if user can manage the log, desktop only) */
   logDetailUrl?: string;
+  /** Callback to open the time range controller overlay */
+  onOpenTimeRange?: () => void;
 }
 
 export function InstancePageView({
@@ -1249,6 +1251,7 @@ export function InstancePageView({
   onSelectEncounters,
   youtubeButton,
   logDetailUrl,
+  onOpenTimeRange,
 }: InstancePageViewProps) {
   // URL state for explainer mode (simple ?explain=panel_type)
   const [searchParams, setSearchParams] = useSearchParams();
@@ -2265,6 +2268,7 @@ export function InstancePageView({
             <InstanceMenu
               onImportLayout={handleImportLayout}
               onResetView={resetView}
+              onOpenTimeRange={onOpenTimeRange}
               instanceId={instance.id}
               logDetailUrl={logDetailUrl}
               layoutLabUrl={activeLayoutId ? `/account/layout-lab?layoutId=${activeLayoutId}` : undefined}

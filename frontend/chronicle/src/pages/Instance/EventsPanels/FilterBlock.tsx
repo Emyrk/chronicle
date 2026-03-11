@@ -12,6 +12,7 @@ const FILTER_TYPES: { value: PanelFilterType; label: string }[] = [
   { value: "ability_hittype", label: "Hit Type" },
   { value: "source_type", label: "Source" },
   { value: "target_type", label: "Target" },
+  { value: "time_range", label: "Time Range" },
 ];
 
 const SCHOOL_OPTIONS = [
@@ -493,6 +494,70 @@ function EntityTypeEditor({ filter, onChange }: { filter: PanelFilter; onChange:
   );
 }
 
+/** Time range editor: "By Controller" toggle or manual start/end seconds */
+function TimeRangeEditor({ filter, onChange }: { filter: PanelFilter; onChange: (next: PanelFilter) => void }) {
+  const raw = typeof filter.value === "string" ? filter.value : (filter.value[0] ?? "");
+  const isController = raw === "controller";
+
+  const parseMs = (s: string) => {
+    const n = Number(s);
+    return Number.isFinite(n) ? n : null;
+  };
+
+  const [startStr, endStr] = isController ? ["", ""] : raw.split(",");
+  const startSec = startStr ? (parseMs(startStr)! / 1000).toString() : "";
+  const endSec = endStr ? (parseMs(endStr)! / 1000).toString() : "";
+
+  const handleManual = (start: string, end: string) => {
+    const startMs = start ? Math.round(Number(start) * 1000) : "";
+    const endMs = end ? Math.round(Number(end) * 1000) : "";
+    onChange({ ...filter, value: `${startMs},${endMs}` });
+  };
+
+  return (
+    <div className="flex flex-col gap-1.5 w-full">
+      <label className="flex items-center gap-1.5 text-xs cursor-pointer">
+        <input
+          type="checkbox"
+          checked={isController}
+          onChange={(e) => {
+            if (e.target.checked) {
+              onChange({ ...filter, value: "controller" });
+            } else {
+              onChange({ ...filter, value: "," });
+            }
+          }}
+          className="rounded"
+        />
+        By Controller
+      </label>
+      {!isController && (
+        <div className="flex items-center gap-1.5">
+          <Input
+            className="h-7 text-xs w-20"
+            type="number"
+            step="0.1"
+            min="0"
+            placeholder="Start (s)"
+            value={startSec}
+            onChange={(e) => handleManual(e.target.value, endSec)}
+          />
+          <span className="text-xs text-muted-foreground">—</span>
+          <Input
+            className="h-7 text-xs w-20"
+            type="number"
+            step="0.1"
+            min="0"
+            placeholder="End (s)"
+            value={endSec}
+            onChange={(e) => handleManual(startSec, e.target.value)}
+          />
+        </div>
+      )}
+    </div>
+  );
+}
+
 function ValueEditor({ filter, onChange }: { filter: PanelFilter; onChange: (next: PanelFilter) => void }) {
   const arrayValues = toArrayValue(filter.value);
 
@@ -515,6 +580,8 @@ function ValueEditor({ filter, onChange }: { filter: PanelFilter; onChange: (nex
       return <AbilityIdEditor filter={filter} onChange={onChange} />;
     case "ability_name":
       return <AbilityNameEditor filter={filter} onChange={onChange} />;
+    case "time_range":
+      return <TimeRangeEditor filter={filter} onChange={onChange} />;
     default:
       return (
         <Input

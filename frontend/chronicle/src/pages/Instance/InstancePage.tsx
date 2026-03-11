@@ -11,6 +11,8 @@ import { InstancePageView } from "./InstancePageView";
 import { YouTubeOverlay } from "./YouTubeOverlay";
 import { SyncModeProvider, useSyncModeContext } from "./SyncModeContext";
 import { SyncControlOverlay } from "./SyncControlOverlay";
+import { TimeRangeProvider } from "./TimeRangeContext";
+import { TimeRangeController } from "./TimeRangeController";
 
 // Types for the Instance page
 export interface EnemyUnit {
@@ -143,6 +145,7 @@ function InstancePageInner({
 }) {
   const [showYoutube, setShowYoutube] = useState(false);
   const [showSyncPanel, setShowSyncPanel] = useState(false);
+  const [showTimeRange, setShowTimeRange] = useState(false);
   const { setEncounterBounds, enabled: syncEnabled } = useSyncModeContext();
   
   // Update sync mode encounter bounds when selection changes
@@ -164,6 +167,7 @@ function InstancePageInner({
         selectedEncounterIds={selectedEncounterIds}
         onSelectEncounters={onSelectEncounters}
         logDetailUrl={logDetailUrl}
+        onOpenTimeRange={() => setShowTimeRange(true)}
         youtubeButton={
           <div className="flex gap-1.5">
             {/* Sync button */}
@@ -196,6 +200,9 @@ function InstancePageInner({
           onClose={() => setShowSyncPanel(false)}
           initialTimestamp={selectedEncounterTimes.start ? new Date(selectedEncounterTimes.start) : undefined}
         />
+      )}
+      {showTimeRange && (
+        <TimeRangeController onClose={() => setShowTimeRange(false)} />
       )}
       {showYoutube && youtubeData?.url && (
         <YouTubeOverlay
@@ -274,6 +281,11 @@ export function InstancePage() {
     return { start: first.start_time, end: last.end_time };
   }, [instance, selectedEncounterIds]);
 
+  const totalEncounterDurationMs = useMemo(() => {
+    if (!selectedEncounterTimes.start || !selectedEncounterTimes.end) return 0;
+    return new Date(selectedEncounterTimes.end).getTime() - new Date(selectedEncounterTimes.start).getTime();
+  }, [selectedEncounterTimes.start, selectedEncounterTimes.end]);
+
   const isLoading = instanceLoading;
 
   if (isLoading) {
@@ -310,17 +322,19 @@ export function InstancePage() {
 
   return (
     <SyncModeProvider>
-      <InstanceEventsProvider instanceId={instance.id}>
-        <InstancePageInner
-          instance={instance}
-          selectedEncounterIds={userSelectedEncounterIds ?? undefined}
-          onSelectEncounters={setUserSelectedEncounterIds}
-          youtubeData={youtubeData}
-          selectedEncounterTimes={selectedEncounterTimes}
-          logDetailUrl={logDetailUrl}
-          rawEncounters={apiInstance?.encounters}
-        />
-      </InstanceEventsProvider>
+      <TimeRangeProvider totalDurationMs={totalEncounterDurationMs}>
+        <InstanceEventsProvider instanceId={instance.id}>
+          <InstancePageInner
+            instance={instance}
+            selectedEncounterIds={userSelectedEncounterIds ?? undefined}
+            onSelectEncounters={setUserSelectedEncounterIds}
+            youtubeData={youtubeData}
+            selectedEncounterTimes={selectedEncounterTimes}
+            logDetailUrl={logDetailUrl}
+            rawEncounters={apiInstance?.encounters}
+          />
+        </InstanceEventsProvider>
+      </TimeRangeProvider>
     </SyncModeProvider>
   );
 }

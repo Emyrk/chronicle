@@ -244,3 +244,39 @@ describe("compileFilters", () => {
     expect(predicate(createDamageEvent())).toBe(true);
   });
 });
+describe("time_range filter", () => {
+  it("passes all events when value is empty", () => {
+    const filters: PanelFilter[] = [{ type: "time_range", value: "" }];
+    expect(evaluateFilters(filters, createDamageEvent({ offsetMilli: 5000 }), createContext())).toBe(true);
+  });
+
+  it("filters by start bound only", () => {
+    const filters: PanelFilter[] = [{ type: "time_range", value: "3000," }];
+    expect(evaluateFilters(filters, createDamageEvent({ offsetMilli: 2000 }), createContext())).toBe(false);
+    expect(evaluateFilters(filters, createDamageEvent({ offsetMilli: 3000 }), createContext())).toBe(true);
+    expect(evaluateFilters(filters, createDamageEvent({ offsetMilli: 5000 }), createContext())).toBe(true);
+  });
+
+  it("filters by end bound only", () => {
+    const filters: PanelFilter[] = [{ type: "time_range", value: ",10000" }];
+    expect(evaluateFilters(filters, createDamageEvent({ offsetMilli: 5000 }), createContext())).toBe(true);
+    expect(evaluateFilters(filters, createDamageEvent({ offsetMilli: 10000 }), createContext())).toBe(true);
+    expect(evaluateFilters(filters, createDamageEvent({ offsetMilli: 15000 }), createContext())).toBe(false);
+  });
+
+  it("filters by both bounds", () => {
+    const filters: PanelFilter[] = [{ type: "time_range", value: "2000,8000" }];
+    expect(evaluateFilters(filters, createDamageEvent({ offsetMilli: 1000 }), createContext())).toBe(false);
+    expect(evaluateFilters(filters, createDamageEvent({ offsetMilli: 2000 }), createContext())).toBe(true);
+    expect(evaluateFilters(filters, createDamageEvent({ offsetMilli: 5000 }), createContext())).toBe(true);
+    expect(evaluateFilters(filters, createDamageEvent({ offsetMilli: 8000 }), createContext())).toBe(true);
+    expect(evaluateFilters(filters, createDamageEvent({ offsetMilli: 9000 }), createContext())).toBe(false);
+  });
+
+  it("supports negation", () => {
+    const filters: PanelFilter[] = [{ type: "time_range", value: "2000,8000", negate: true }];
+    expect(evaluateFilters(filters, createDamageEvent({ offsetMilli: 5000 }), createContext())).toBe(false);
+    expect(evaluateFilters(filters, createDamageEvent({ offsetMilli: 1000 }), createContext())).toBe(true);
+  });
+});
+

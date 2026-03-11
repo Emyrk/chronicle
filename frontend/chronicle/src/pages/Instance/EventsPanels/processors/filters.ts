@@ -13,7 +13,8 @@ export type PanelFilterType =
   | "ability_school"
   | "ability_hittype"
   | "source_type"
-  | "target_type";
+  | "target_type"
+  | "time_range";
 
 export interface PanelFilter {
   type: PanelFilterType;
@@ -341,6 +342,22 @@ const FILTER_COMPILERS: Record<PanelFilterType, FilterCompiler> = {
 
   target_type: (value, context) =>
     compileEntityTypeFilter(value, context, "target"),
+
+  time_range: (value) => {
+    const raw = typeof value === "string" ? value : (value[0] ?? "");
+    const [startStr, endStr] = raw.split(",");
+    const startMs = startStr ? Number(startStr) : null;
+    const endMs = endStr ? Number(endStr) : null;
+    if ((startMs == null || Number.isNaN(startMs)) && (endMs == null || Number.isNaN(endMs)))
+      return () => true;
+    const hasStart = startMs != null && Number.isFinite(startMs);
+    const hasEnd = endMs != null && Number.isFinite(endMs);
+    if (hasStart && hasEnd)
+      return (event) => event.offsetMilli >= startMs && event.offsetMilli <= endMs;
+    if (hasStart)
+      return (event) => event.offsetMilli >= startMs;
+    return (event) => event.offsetMilli <= endMs!;
+  },
 };
 
 // ---------------------------------------------------------------------------

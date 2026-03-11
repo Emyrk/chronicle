@@ -124,6 +124,7 @@ const FILTER_TYPE_LABELS: Record<PanelFilterType, string> = {
   target_type: "Target",
   players: "Players",
   enemies: "Enemies",
+  time_range: "Time Range",
 };
 
 function buildFilterGroups(filters: PanelFilter[]): PanelFilter[][] {
@@ -337,7 +338,19 @@ export function EventsPanel({
   onFiltersChange,
 }: EventsPanelProps) {
   const isMobile = useIsMobile();
-  const panel = PANELS[panelType];
+  const rawPanel = PANELS[panelType];
+
+  // Inject a default time_range controller filter for all panels that support filtering,
+  // unless the panel already defines its own time_range default.
+  const panel = useMemo(() => {
+    if (!rawPanel.supportsFiltering) return rawPanel;
+    const existing = rawPanel.defaultFilters ?? [];
+    if (existing.some((f) => f.type === "time_range")) return rawPanel;
+    return {
+      ...rawPanel,
+      defaultFilters: [...existing, { type: "time_range" as const, value: "controller" }],
+    };
+  }, [rawPanel]);
 
   // Determine checkbox label first (needed for storage key)
   const checkboxLabel = panel.checkboxLabel || "Per second";

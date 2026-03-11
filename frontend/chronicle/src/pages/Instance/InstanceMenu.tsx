@@ -1,4 +1,4 @@
-import { Menu, FileText, Copy, Upload, RotateCcw, LayoutGrid } from "lucide-react";
+import { Menu, FileText, Copy, Upload, RotateCcw, LayoutGrid, Clock } from "lucide-react";
 import { toast } from "sonner";
 import { Link } from "react-router-dom";
 import { Button } from "@/components/ui/button";
@@ -13,6 +13,7 @@ import {
 interface InstanceMenuProps {
   onImportLayout?: () => void;
   onResetView?: () => void;
+  onOpenTimeRange?: () => void;
   instanceId: string;
   logDetailUrl?: string;
   layoutLabUrl?: string;
@@ -21,6 +22,7 @@ interface InstanceMenuProps {
 export function InstanceMenu({
   onImportLayout,
   onResetView,
+  onOpenTimeRange,
   instanceId,
   logDetailUrl,
   layoutLabUrl,
@@ -51,6 +53,13 @@ export function InstanceMenu({
             </DropdownMenuItem>
             <DropdownMenuSeparator />
           </>
+        )}
+
+        {onOpenTimeRange && (
+          <DropdownMenuItem onClick={onOpenTimeRange}>
+            <Clock className="h-4 w-4 mr-2" />
+            Time Range
+          </DropdownMenuItem>
         )}
 
         {/* Layout section */}
