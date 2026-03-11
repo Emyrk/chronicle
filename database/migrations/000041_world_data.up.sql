@@ -207,7 +207,7 @@ CREATE TABLE world_item_template (
     extra_flags INTEGER NOT NULL DEFAULT 0,
     other_team_entry INTEGER NOT NULL DEFAULT 0,
     script_name TEXT,
-    patch INTEGER
+    patch TEXT
 );
 
 -- Zone-based automatic spell/aura application. Defines spells that are auto-applied or
