@@ -157,8 +157,12 @@ function processStreams<TResult>(
 
     // Set base timestamp from the very first encounter
     const encounterStartMs = currentEncounterTimestamp.getTime();
-    if (baseTimestamp === null) baseTimestamp = encounterStartMs;
-    const encounterBaseOffset = encounterStartMs - baseTimestamp;
+    // Only use SELECTED encounters for the base timestamp so that
+    // globalOffsetMilli aligns with the slider's [0, totalDurationMs] range.
+    if (baseTimestamp === null && context.selectedEncounterIds.has(currentEncounterID)) {
+      baseTimestamp = encounterStartMs;
+    }
+    const encounterBaseOffset = baseTimestamp !== null ? encounterStartMs - baseTimestamp : 0;
     
     // Process all events from this encounter across all streams, interleaved by index
     while (true) {
