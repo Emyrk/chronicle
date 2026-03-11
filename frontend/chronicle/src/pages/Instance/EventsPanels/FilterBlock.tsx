@@ -1,9 +1,10 @@
-import { useState, useCallback, type KeyboardEvent } from "react";
+import { useState, useCallback, useRef, type KeyboardEvent } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { useSpell } from "@/api/queries";
 import { SpellIconWithTooltip } from "@/components/ui/SpellIconWithTooltip";
 import type { PanelFilter, PanelFilterType } from "./processors/filters";
+import { useTimeRangeContextOptional } from "../TimeRangeContext";
 
 const FILTER_TYPES: { value: PanelFilterType; label: string }[] = [
   { value: "ability_name", label: "Ability Name" },
@@ -493,24 +494,64 @@ function EntityTypeEditor({ filter, onChange }: { filter: PanelFilter; onChange:
 }
 
 /** Time range editor: "By Controller" toggle or manual start/end seconds */
+function formatMs(ms: number): string {
+  const totalSec = Math.floor(ms / 1000);
+  const min = Math.floor(totalSec / 60);
+  const sec = totalSec % 60;
+  return `${min}:${sec.toString().padStart(2, "0")}`;
+}
+
 function TimeRangeEditor({ filter, onChange }: { filter: PanelFilter; onChange: (next: PanelFilter) => void }) {
   const raw = typeof filter.value === "string" ? filter.value : (filter.value[0] ?? "");
   const isController = raw === "controller";
+  const timeRange = useTimeRangeContextOptional();
+  const totalDurationMs = timeRange?.totalDurationMs ?? 0;
 
-  const parseMs = (s: string) => {
-    const n = Number(s);
-    return Number.isFinite(n) ? n : null;
-  };
+  const trackRef = useRef<HTMLDivElement>(null);
+  const [dragging, setDragging] = useState<"start" | "end" | null>(null);
 
-  const [startStr, endStr] = isController ? ["", ""] : raw.split(",");
-  const startSec = startStr ? (parseMs(startStr)! / 1000).toString() : "";
-  const endSec = endStr ? (parseMs(endStr)! / 1000).toString() : "";
+  // Parse current start/end ms from filter value
+  const [startMsStr, endMsStr] = isController ? ["", ""] : raw.split(",");
+  const startMs = startMsStr ? Number(startMsStr) : 0;
+  const endMs = endMsStr ? Number(endMsStr) : totalDurationMs;
 
-  const handleManual = (start: string, end: string) => {
-    const startMs = start ? Math.round(Number(start) * 1000) : "";
-    const endMs = end ? Math.round(Number(end) * 1000) : "";
-    onChange({ ...filter, value: `${startMs},${endMs}` });
-  };
+  const startPct = totalDurationMs > 0 ? (startMs / totalDurationMs) * 100 : 0;
+  const endPct = totalDurationMs > 0 ? (endMs / totalDurationMs) * 100 : 100;
+
+  const getPositionPct = useCallback((clientX: number) => {
+    const track = trackRef.current;
+    if (!track) return 0;
+    const rect = track.getBoundingClientRect();
+    const pct = ((clientX - rect.left) / rect.width) * 100;
+    return Math.max(0, Math.min(100, pct));
+  }, []);
+
+  const pctToMs = useCallback((pct: number) => {
+    return Math.round((pct / 100) * totalDurationMs);
+  }, [totalDurationMs]);
+
+  const handlePointerDown = useCallback((handle: "start" | "end") => (e: React.PointerEvent) => {
+    e.preventDefault();
+    (e.target as HTMLElement).setPointerCapture(e.pointerId);
+    setDragging(handle);
+  }, []);
+
+  const handlePointerMove = useCallback((e: React.PointerEvent) => {
+    if (!dragging) return;
+    const pct = getPositionPct(e.clientX);
+    const ms = pctToMs(pct);
+    if (dragging === "start") {
+      const clamped = Math.min(ms, endMs);
+      onChange({ ...filter, value: `${clamped},${endMs}` });
+    } else {
+      const clamped = Math.max(ms, startMs);
+      onChange({ ...filter, value: `${startMs},${clamped}` });
+    }
+  }, [dragging, getPositionPct, pctToMs, startMs, endMs, onChange, filter]);
+
+  const handlePointerUp = useCallback(() => {
+    setDragging(null);
+  }, []);
 
   return (
     <div className="flex flex-col gap-1.5 w-full">
@@ -530,27 +571,53 @@ function TimeRangeEditor({ filter, onChange }: { filter: PanelFilter; onChange: 
         By Controller
       </label>
       {!isController && (
-        <div className="flex items-center gap-1.5">
-          <Input
-            className="h-7 text-xs w-20"
-            type="number"
-            step="0.1"
-            min="0"
-            placeholder="Start (s)"
-            value={startSec}
-            onChange={(e) => handleManual(e.target.value, endSec)}
-          />
-          <span className="text-xs text-muted-foreground">—</span>
-          <Input
-            className="h-7 text-xs w-20"
-            type="number"
-            step="0.1"
-            min="0"
-            placeholder="End (s)"
-            value={endSec}
-            onChange={(e) => handleManual(startSec, e.target.value)}
-          />
-        </div>
+        totalDurationMs <= 0 ? (
+          <p className="text-xs text-muted-foreground">Select encounters to use time range.</p>
+        ) : (
+          <div className="flex flex-col gap-0.5">
+            {/* Time labels */}
+            <div className="text-center text-xs text-foreground font-medium">
+              {formatMs(startMs)} – {formatMs(endMs)}
+            </div>
+
+            {/* Dual-handle slider track */}
+            <div
+              ref={trackRef}
+              className="relative h-5 cursor-pointer select-none touch-none"
+              onPointerMove={handlePointerMove}
+              onPointerUp={handlePointerUp}
+            >
+              {/* Track background */}
+              <div className="absolute top-2 left-0 right-0 h-1 bg-muted rounded-full" />
+
+              {/* Active range highlight */}
+              <div
+                className="absolute top-2 h-1 bg-primary rounded-full"
+                style={{ left: `${startPct}%`, right: `${100 - endPct}%` }}
+              />
+
+              {/* Start handle */}
+              <div
+                className="absolute top-0.5 w-3 h-3 bg-primary rounded-full border-2 border-background shadow cursor-grab active:cursor-grabbing"
+                style={{ left: `${startPct}%`, transform: "translateX(-50%)" }}
+                onPointerDown={handlePointerDown("start")}
+              />
+
+              {/* End handle */}
+              <div
+                className="absolute top-0.5 w-3 h-3 bg-primary rounded-full border-2 border-background shadow cursor-grab active:cursor-grabbing"
+                style={{ left: `${endPct}%`, transform: "translateX(-50%)" }}
+                onPointerDown={handlePointerDown("end")}
+              />
+            </div>
+
+            {/* Total duration labels */}
+            <div className="flex justify-between text-[10px] text-muted-foreground">
+              <span>0:00</span>
+              <span>{formatMs(totalDurationMs)}</span>
+            </div>
+          </div>
+        )
       )}
     </div>
   );
