@@ -23,6 +23,13 @@ export interface ActivityEntry {
 interface EventMeta {
   index: number;
   offsetMilli: number;
+  /**
+   * Global offset in ms from the start of the first selected encounter.
+   * Computed in the worker loop: (encounterStart - firstEncounterStart) + offsetMilli.
+   * Used by the time_range filter to support cross-encounter time ranges.
+   * Optional — only set by the worker loop; defaults to offsetMilli when absent.
+   */
+  globalOffsetMilli?: number;
   /** Activity tracking entries from encounter period detection */
   activity: ActivityEntry[];
   activityCount: number;

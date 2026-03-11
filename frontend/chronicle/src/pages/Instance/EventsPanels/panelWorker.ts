@@ -133,6 +133,10 @@ function processStreams<TResult>(
   // Create peekable cursors for all streams
   const cursors = streams.map(createCursor);
   
+  // Track the base timestamp for computing globalOffsetMilli across encounters.
+  // This is the firstTimestamp of the earliest encounter seen.
+  let baseTimestamp: number | null = null;
+  
   // Process one encounter at a time to avoid interleaving events from different encounters
   // (since each encounter resets indices to 0)
   while (true) {
@@ -149,7 +153,12 @@ function processStreams<TResult>(
     }
     
     // No more events in any stream
-    if (!currentEncounterID) break;
+    if (!currentEncounterID || !currentEncounterTimestamp) break;
+
+    // Set base timestamp from the very first encounter
+    const encounterStartMs = currentEncounterTimestamp.getTime();
+    if (baseTimestamp === null) baseTimestamp = encounterStartMs;
+    const encounterBaseOffset = encounterStartMs - baseTimestamp;
     
     // Process all events from this encounter across all streams, interleaved by index
     while (true) {
@@ -170,6 +179,10 @@ function processStreams<TResult>(
       // No more events from this encounter - move to next encounter
       if (!minCursor || !minPeeked) break;
       
+      // Stamp globalOffsetMilli before filtering so time_range filter works across encounters
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      (minPeeked.event as any).globalOffsetMilli = encounterBaseOffset + minPeeked.event.offsetMilli;
+
       // Process the event with the lowest index
       totalEvents++;
       if (!processor.processAllEvents && !filterPredicate(minPeeked.event)) {

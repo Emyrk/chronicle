@@ -352,11 +352,13 @@ const FILTER_COMPILERS: Record<PanelFilterType, FilterCompiler> = {
       return () => true;
     const hasStart = startMs != null && Number.isFinite(startMs);
     const hasEnd = endMs != null && Number.isFinite(endMs);
+    // Use globalOffsetMilli (set by worker) so time ranges work across multiple encounters.
+    // Falls back to offsetMilli for contexts where globalOffsetMilli hasn't been stamped.
     if (hasStart && hasEnd)
-      return (event) => event.offsetMilli >= startMs && event.offsetMilli <= endMs;
+      return (event) => { const t = event.globalOffsetMilli ?? event.offsetMilli; return t >= startMs && t <= endMs; };
     if (hasStart)
-      return (event) => event.offsetMilli >= startMs;
-    return (event) => event.offsetMilli <= endMs!;
+      return (event) => (event.globalOffsetMilli ?? event.offsetMilli) >= startMs;
+    return (event) => (event.globalOffsetMilli ?? event.offsetMilli) <= endMs!;
   },
 };
 
