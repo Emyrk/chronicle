@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"path/filepath"
 	"regexp"
+	"slices"
 	"strconv"
 	"text/template"
 
@@ -226,6 +227,10 @@ func collectSpellTestData(wc *dbcdb.WoWClient) (*spellTestData, error) {
 			IsTarget: isTarget[id],
 		})
 	}
+
+	slices.SortFunc(entries, func(a, b spellTestEntry) int {
+		return a.ID - b.ID
+	})
 
 	return &spellTestData{
 		TestSpellIDs: testSpellIDs,

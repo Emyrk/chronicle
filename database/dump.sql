@@ -45,16 +45,6 @@ CREATE TYPE river_job_state AS ENUM (
     'scheduled'
 );
 
-CREATE TYPE spell_school AS ENUM (
-    'physical',
-    'fire',
-    'frost',
-    'shadow',
-    'arcane',
-    'holy',
-    'nature'
-);
-
 CREATE DOMAIN wow_guid AS text
 	CONSTRAINT wow_guid_check CHECK ((VALUE ~ '^0x[0-9A-Fa-f]{16}$'::text));
 
@@ -506,6 +496,231 @@ CREATE TABLE user_tracked_layouts (
     created_at timestamp with time zone DEFAULT now() NOT NULL
 );
 
+CREATE TABLE world_creature_spawn (
+    guid integer NOT NULL,
+    id integer DEFAULT 0 NOT NULL,
+    id2 integer DEFAULT 0 NOT NULL,
+    id3 integer DEFAULT 0 NOT NULL,
+    id4 integer DEFAULT 0 NOT NULL,
+    map integer DEFAULT 0 NOT NULL
+);
+
+CREATE TABLE world_creature_template (
+    entry integer NOT NULL,
+    display_id1 integer DEFAULT 0 NOT NULL,
+    display_id2 integer DEFAULT 0 NOT NULL,
+    display_id3 integer DEFAULT 0 NOT NULL,
+    display_id4 integer DEFAULT 0 NOT NULL,
+    mount_display_id integer DEFAULT 0 NOT NULL,
+    name text DEFAULT ''::text NOT NULL,
+    subname text,
+    level_min integer DEFAULT 0 NOT NULL,
+    level_max integer DEFAULT 0 NOT NULL,
+    health_min integer DEFAULT 0 NOT NULL,
+    health_max integer DEFAULT 0 NOT NULL,
+    mana_min integer DEFAULT 0 NOT NULL,
+    mana_max integer DEFAULT 0 NOT NULL,
+    armor integer DEFAULT 0 NOT NULL,
+    dmg_min integer DEFAULT 0 NOT NULL,
+    dmg_max integer DEFAULT 0 NOT NULL,
+    dmg_school integer DEFAULT 0 NOT NULL,
+    attack_power integer DEFAULT 0 NOT NULL,
+    dmg_multiplier double precision DEFAULT 1 NOT NULL,
+    base_attack_time integer DEFAULT 0 NOT NULL,
+    ranged_attack_time integer DEFAULT 0 NOT NULL,
+    unit_class integer DEFAULT 0 NOT NULL,
+    unit_flags integer DEFAULT 0 NOT NULL,
+    ranged_dmg_min double precision DEFAULT 0 NOT NULL,
+    ranged_dmg_max double precision DEFAULT 0 NOT NULL,
+    holy_res integer DEFAULT 0 NOT NULL,
+    fire_res integer DEFAULT 0 NOT NULL,
+    nature_res integer DEFAULT 0 NOT NULL,
+    frost_res integer DEFAULT 0 NOT NULL,
+    shadow_res integer DEFAULT 0 NOT NULL,
+    arcane_res integer DEFAULT 0 NOT NULL,
+    mechanic_immune_mask bigint DEFAULT 0 NOT NULL,
+    school_immune_mask integer DEFAULT 0 NOT NULL,
+    immunity_flags integer DEFAULT 0 NOT NULL
+);
+
+CREATE TABLE world_display_info (
+    id integer NOT NULL,
+    icon text DEFAULT ''::text NOT NULL
+);
+
+CREATE TABLE world_item_enchantment (
+    entry integer NOT NULL,
+    ench integer NOT NULL,
+    chance double precision DEFAULT 0 NOT NULL
+);
+
+CREATE TABLE world_item_template (
+    entry integer NOT NULL,
+    class integer DEFAULT 0 NOT NULL,
+    subclass integer DEFAULT 0 NOT NULL,
+    name text DEFAULT ''::text NOT NULL,
+    description text DEFAULT ''::text NOT NULL,
+    display_id integer DEFAULT 0 NOT NULL,
+    quality integer DEFAULT 0 NOT NULL,
+    flags integer DEFAULT 0 NOT NULL,
+    buy_count integer DEFAULT 0 NOT NULL,
+    buy_price integer DEFAULT 0 NOT NULL,
+    sell_price integer DEFAULT 0 NOT NULL,
+    inventory_type integer DEFAULT 0 NOT NULL,
+    allowable_class integer DEFAULT '-1'::integer NOT NULL,
+    allowable_race integer DEFAULT '-1'::integer NOT NULL,
+    item_level integer DEFAULT 0 NOT NULL,
+    required_level integer DEFAULT 0 NOT NULL,
+    required_skill integer DEFAULT 0 NOT NULL,
+    required_skill_rank integer DEFAULT 0 NOT NULL,
+    required_spell integer DEFAULT 0 NOT NULL,
+    required_honor_rank integer DEFAULT 0 NOT NULL,
+    required_city_rank integer DEFAULT 0 NOT NULL,
+    required_reputation_faction integer DEFAULT 0 NOT NULL,
+    required_reputation_rank integer DEFAULT 0 NOT NULL,
+    max_count integer DEFAULT 0 NOT NULL,
+    stackable integer DEFAULT 1 NOT NULL,
+    container_slots integer DEFAULT 0 NOT NULL,
+    stat_type1 integer DEFAULT 0 NOT NULL,
+    stat_value1 integer DEFAULT 0 NOT NULL,
+    stat_type2 integer DEFAULT 0 NOT NULL,
+    stat_value2 integer DEFAULT 0 NOT NULL,
+    stat_type3 integer DEFAULT 0 NOT NULL,
+    stat_value3 integer DEFAULT 0 NOT NULL,
+    stat_type4 integer DEFAULT 0 NOT NULL,
+    stat_value4 integer DEFAULT 0 NOT NULL,
+    stat_type5 integer DEFAULT 0 NOT NULL,
+    stat_value5 integer DEFAULT 0 NOT NULL,
+    stat_type6 integer DEFAULT 0 NOT NULL,
+    stat_value6 integer DEFAULT 0 NOT NULL,
+    stat_type7 integer DEFAULT 0 NOT NULL,
+    stat_value7 integer DEFAULT 0 NOT NULL,
+    stat_type8 integer DEFAULT 0 NOT NULL,
+    stat_value8 integer DEFAULT 0 NOT NULL,
+    stat_type9 integer DEFAULT 0 NOT NULL,
+    stat_value9 integer DEFAULT 0 NOT NULL,
+    stat_type10 integer DEFAULT 0 NOT NULL,
+    stat_value10 integer DEFAULT 0 NOT NULL,
+    delay integer DEFAULT 0 NOT NULL,
+    range_mod double precision DEFAULT 0 NOT NULL,
+    ammo_type integer DEFAULT 0 NOT NULL,
+    dmg_min1 double precision DEFAULT 0 NOT NULL,
+    dmg_max1 double precision DEFAULT 0 NOT NULL,
+    dmg_type1 integer DEFAULT 0 NOT NULL,
+    dmg_min2 double precision DEFAULT 0 NOT NULL,
+    dmg_max2 double precision DEFAULT 0 NOT NULL,
+    dmg_type2 integer DEFAULT 0 NOT NULL,
+    dmg_min3 double precision DEFAULT 0 NOT NULL,
+    dmg_max3 double precision DEFAULT 0 NOT NULL,
+    dmg_type3 integer DEFAULT 0 NOT NULL,
+    dmg_min4 double precision DEFAULT 0 NOT NULL,
+    dmg_max4 double precision DEFAULT 0 NOT NULL,
+    dmg_type4 integer DEFAULT 0 NOT NULL,
+    dmg_min5 double precision DEFAULT 0 NOT NULL,
+    dmg_max5 double precision DEFAULT 0 NOT NULL,
+    dmg_type5 integer DEFAULT 0 NOT NULL,
+    block integer DEFAULT 0 NOT NULL,
+    armor integer DEFAULT 0 NOT NULL,
+    holy_res integer DEFAULT 0 NOT NULL,
+    fire_res integer DEFAULT 0 NOT NULL,
+    nature_res integer DEFAULT 0 NOT NULL,
+    frost_res integer DEFAULT 0 NOT NULL,
+    shadow_res integer DEFAULT 0 NOT NULL,
+    arcane_res integer DEFAULT 0 NOT NULL,
+    spellid_1 integer DEFAULT 0 NOT NULL,
+    spelltrigger_1 integer DEFAULT 0 NOT NULL,
+    spellcharges_1 integer DEFAULT 0 NOT NULL,
+    spellppmrate_1 double precision DEFAULT 0 NOT NULL,
+    spellcooldown_1 integer DEFAULT '-1'::integer NOT NULL,
+    spellcategory_1 integer DEFAULT 0 NOT NULL,
+    spellcategorycooldown_1 integer DEFAULT '-1'::integer NOT NULL,
+    spellid_2 integer DEFAULT 0 NOT NULL,
+    spelltrigger_2 integer DEFAULT 0 NOT NULL,
+    spellcharges_2 integer DEFAULT 0 NOT NULL,
+    spellppmrate_2 double precision DEFAULT 0 NOT NULL,
+    spellcooldown_2 integer DEFAULT '-1'::integer NOT NULL,
+    spellcategory_2 integer DEFAULT 0 NOT NULL,
+    spellcategorycooldown_2 integer DEFAULT '-1'::integer NOT NULL,
+    spellid_3 integer DEFAULT 0 NOT NULL,
+    spelltrigger_3 integer DEFAULT 0 NOT NULL,
+    spellcharges_3 integer DEFAULT 0 NOT NULL,
+    spellppmrate_3 double precision DEFAULT 0 NOT NULL,
+    spellcooldown_3 integer DEFAULT '-1'::integer NOT NULL,
+    spellcategory_3 integer DEFAULT 0 NOT NULL,
+    spellcategorycooldown_3 integer DEFAULT '-1'::integer NOT NULL,
+    spellid_4 integer DEFAULT 0 NOT NULL,
+    spelltrigger_4 integer DEFAULT 0 NOT NULL,
+    spellcharges_4 integer DEFAULT 0 NOT NULL,
+    spellppmrate_4 double precision DEFAULT 0 NOT NULL,
+    spellcooldown_4 integer DEFAULT '-1'::integer NOT NULL,
+    spellcategory_4 integer DEFAULT 0 NOT NULL,
+    spellcategorycooldown_4 integer DEFAULT '-1'::integer NOT NULL,
+    spellid_5 integer DEFAULT 0 NOT NULL,
+    spelltrigger_5 integer DEFAULT 0 NOT NULL,
+    spellcharges_5 integer DEFAULT 0 NOT NULL,
+    spellppmrate_5 double precision DEFAULT 0 NOT NULL,
+    spellcooldown_5 integer DEFAULT 0 NOT NULL,
+    spellcategory_5 integer DEFAULT 0 NOT NULL,
+    spellcategorycooldown_5 integer DEFAULT 0 NOT NULL,
+    bonding integer DEFAULT 0 NOT NULL,
+    page_text integer DEFAULT 0 NOT NULL,
+    page_language integer DEFAULT 0 NOT NULL,
+    page_material integer DEFAULT 0 NOT NULL,
+    start_quest integer DEFAULT 0 NOT NULL,
+    lock_id integer DEFAULT 0 NOT NULL,
+    material integer DEFAULT 0 NOT NULL,
+    sheath integer DEFAULT 0 NOT NULL,
+    random_property integer DEFAULT 0 NOT NULL,
+    set_id integer DEFAULT 0 NOT NULL,
+    max_durability integer DEFAULT 0 NOT NULL,
+    area_bound integer DEFAULT 0 NOT NULL,
+    map_bound integer DEFAULT 0 NOT NULL,
+    duration integer DEFAULT 0 NOT NULL,
+    bag_family integer DEFAULT 0 NOT NULL,
+    disenchant_id integer DEFAULT 0 NOT NULL,
+    food_type integer DEFAULT 0 NOT NULL,
+    min_money_loot integer DEFAULT 0 NOT NULL,
+    max_money_loot integer DEFAULT 0 NOT NULL,
+    wrapped_gift integer DEFAULT 0 NOT NULL,
+    extra_flags integer DEFAULT 0 NOT NULL,
+    other_team_entry integer DEFAULT 0 NOT NULL,
+    script_name text,
+    patch integer
+);
+
+CREATE TABLE world_spell_area (
+    spell integer NOT NULL,
+    area integer NOT NULL,
+    quest_start integer DEFAULT 0 NOT NULL,
+    quest_start_active integer DEFAULT 0 NOT NULL,
+    quest_end integer DEFAULT 0 NOT NULL,
+    aura_spell integer DEFAULT 0 NOT NULL,
+    racemask integer DEFAULT 0 NOT NULL,
+    gender integer DEFAULT 2 NOT NULL,
+    autocast integer DEFAULT 0 NOT NULL
+);
+
+CREATE TABLE world_spell_chain (
+    spell_id integer NOT NULL,
+    prev_spell integer DEFAULT 0 NOT NULL,
+    first_spell integer DEFAULT 0 NOT NULL,
+    rank integer DEFAULT 0 NOT NULL,
+    req_spell integer DEFAULT 0 NOT NULL
+);
+
+CREATE TABLE world_spell_group (
+    group_id integer NOT NULL,
+    group_spell_id integer DEFAULT 0 NOT NULL,
+    spell_id integer NOT NULL
+);
+
+CREATE TABLE world_spell_threat (
+    entry integer NOT NULL,
+    threat integer DEFAULT 0 NOT NULL,
+    multiplier double precision DEFAULT 1 NOT NULL,
+    ap_bonus double precision DEFAULT 0 NOT NULL
+);
+
 CREATE TABLE wow_log_groups (
     id uuid NOT NULL,
     owner uuid NOT NULL,
@@ -629,6 +844,33 @@ ALTER TABLE ONLY user_tracked_layouts
 ALTER TABLE ONLY users
     ADD CONSTRAINT users_pkey PRIMARY KEY (id);
 
+ALTER TABLE ONLY world_creature_spawn
+    ADD CONSTRAINT world_creature_spawn_pkey PRIMARY KEY (guid);
+
+ALTER TABLE ONLY world_creature_template
+    ADD CONSTRAINT world_creature_template_pkey PRIMARY KEY (entry);
+
+ALTER TABLE ONLY world_display_info
+    ADD CONSTRAINT world_display_info_pkey PRIMARY KEY (id);
+
+ALTER TABLE ONLY world_item_enchantment
+    ADD CONSTRAINT world_item_enchantment_pkey PRIMARY KEY (entry, ench);
+
+ALTER TABLE ONLY world_item_template
+    ADD CONSTRAINT world_item_template_pkey PRIMARY KEY (entry);
+
+ALTER TABLE ONLY world_spell_area
+    ADD CONSTRAINT world_spell_area_pkey PRIMARY KEY (spell, area);
+
+ALTER TABLE ONLY world_spell_chain
+    ADD CONSTRAINT world_spell_chain_pkey PRIMARY KEY (spell_id);
+
+ALTER TABLE ONLY world_spell_group
+    ADD CONSTRAINT world_spell_group_pkey PRIMARY KEY (group_id, spell_id);
+
+ALTER TABLE ONLY world_spell_threat
+    ADD CONSTRAINT world_spell_threat_pkey PRIMARY KEY (entry);
+
 ALTER TABLE ONLY wow_log_groups
     ADD CONSTRAINT wow_log_groups_pkey PRIMARY KEY (id);
 
@@ -663,6 +905,12 @@ CREATE INDEX idx_shared_views_code ON shared_views USING btree (code);
 CREATE INDEX idx_shared_views_instance_hash ON shared_views USING btree (instance_id, hash);
 
 CREATE INDEX idx_user_panel_layouts_code ON user_panel_layouts USING btree (code);
+
+CREATE INDEX idx_world_creature_spawn_id ON world_creature_spawn USING btree (id);
+
+CREATE INDEX idx_world_creature_template_name ON world_creature_template USING btree (name);
+
+CREATE INDEX idx_world_item_template_name ON world_item_template USING btree (name);
 
 CREATE UNIQUE INDEX log_instances_hashed_slug_idx ON log_instances USING btree (hashed_slug) WHERE (hashed_slug IS NOT NULL);
 

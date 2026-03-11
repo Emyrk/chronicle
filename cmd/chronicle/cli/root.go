@@ -39,6 +39,7 @@ func RootCmd() *serpent.Command {
 		SchoolType(),
 		SpellInfo(),
 		Stringify(),
+		ImportWorldCmd(),
 	)
 
 	return cmd
