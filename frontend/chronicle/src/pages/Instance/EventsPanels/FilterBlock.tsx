@@ -1,4 +1,5 @@
 import { useState, useCallback, useRef, type KeyboardEvent } from "react";
+import { createPortal } from "react-dom";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { useSpell } from "@/api/queries";
@@ -165,7 +166,9 @@ function CompactDropdownToggle({ options, values, onToggle, multiSelect = true }
     );
   }
 
-  // Multi-select: native <select> that toggles the picked value
+  // Multi-select: custom checkbox dropdown rendered via portal to escape overflow clipping
+  const [open, setOpen] = useState(false);
+  const buttonRef = useRef<HTMLButtonElement>(null);
   const selectedLabels = options.filter((o) => values.includes(o.value)).map((o) => o.label);
   const summary = selectedLabels.length === 0
     ? "None"
@@ -173,25 +176,52 @@ function CompactDropdownToggle({ options, values, onToggle, multiSelect = true }
       ? selectedLabels.join(", ")
       : `${selectedLabels.length} selected`;
 
+  const rect = open && buttonRef.current ? buttonRef.current.getBoundingClientRect() : null;
+
   return (
-    <select
-      className="h-7 rounded-md border border-input bg-background text-foreground px-1.5 text-xs min-w-0"
-      value=""
-      onChange={(e) => {
-        const val = e.target.value;
-        if (val) onToggle(val);
-      }}
-    >
-      <option value="" disabled>{summary}</option>
-      {options.map((opt) => {
-        const selected = values.includes(opt.value);
-        return (
-          <option key={opt.value} value={opt.value}>
-            {selected ? "✓ " : "  "}{opt.label}
-          </option>
-        );
-      })}
-    </select>
+    <div className="relative">
+      <button
+        ref={buttonRef}
+        type="button"
+        className="h-7 rounded-md border border-input bg-background text-foreground px-1.5 text-xs flex items-center gap-1 min-w-0"
+        onClick={() => setOpen((v) => !v)}
+        onBlur={() => setTimeout(() => setOpen(false), 150)}
+      >
+        <span className="truncate max-w-[120px]">{summary}</span>
+        <span className="text-[8px]">▼</span>
+      </button>
+      {open && rect && createPortal(
+        <div
+          className="fixed z-[9999] min-w-[140px] rounded-md border border-input bg-background shadow-lg py-1 max-h-[200px] overflow-auto styled-scrollbar"
+          style={{ top: rect.bottom + 2, left: rect.left }}
+        >
+          {options.map((opt) => {
+            const selected = values.includes(opt.value);
+            return (
+              <button
+                key={opt.value}
+                type="button"
+                className={`w-full text-left px-2 py-1 text-xs flex items-center gap-1.5 hover:bg-muted/60 ${
+                  selected ? "text-foreground" : "text-muted-foreground"
+                }`}
+                onMouseDown={(e) => {
+                  e.preventDefault();
+                  onToggle(opt.value);
+                }}
+              >
+                <span className={`w-3.5 h-3.5 rounded-sm border flex items-center justify-center text-[10px] ${
+                  selected ? "bg-primary border-primary text-white" : "border-input"
+                }`}>
+                  {selected && "✓"}
+                </span>
+                {opt.label}
+              </button>
+            );
+          })}
+        </div>,
+        document.body,
+      )}
+    </div>
   );
 }
 
