@@ -51,9 +51,9 @@ export function GearDisplay({ gear }: GearDisplayProps) {
 
       {/* Bottom row: weapons + ranged */}
       <div className="flex gap-4">
-        {bottomItems.map((entry, i) => (
-          <GearSlot key={`b-${i}`} slotDef={entry.slot} item={entry.item} side="bottom" />
-        ))}
+        <GearSlot slotDef={bottomItems[0].slot} item={bottomItems[0].item} side="left" />
+        <GearSlot slotDef={bottomItems[1].slot} item={bottomItems[1].item} side="right" />
+        <GearSlot slotDef={bottomItems[2].slot} item={bottomItems[2].item} side="right" />
       </div>
     </div>
   );
