@@ -51,7 +51,7 @@ export function ArmoryPage() {
   }
 
   return (
-    <div className="mx-auto max-w-xl py-8 px-4">
+    <div className="mx-auto max-w-3xl py-8 px-4">
       <CharacterHeader player={player} realmName={realmName!} />
 
       <div className="mt-6">

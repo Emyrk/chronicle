@@ -56,14 +56,20 @@ export function getClassColorVar(cls: string): string {
 
 /** Maps item quality number to a Tailwind border-quality-* utility */
 export function getQualityBorderClass(quality: number): string {
-  const names: Record<number, string> = {
-    0: "border-quality-poor",
-    1: "border-quality-common",
-    2: "border-quality-uncommon",
-    3: "border-quality-rare",
-    4: "border-quality-epic",
-    5: "border-quality-legendary",
-    6: "border-quality-artifact",
-  };
-  return names[quality] ?? "border-quality-common";
+  return QUALITY_CLASS_MAP[quality]?.[0] ?? "border-quality-common";
 }
+
+/** Maps item quality number to a Tailwind text-quality-* utility */
+export function getQualityTextClass(quality: number): string {
+  return QUALITY_CLASS_MAP[quality]?.[1] ?? "text-quality-common";
+}
+
+const QUALITY_CLASS_MAP: Record<number, [border: string, text: string]> = {
+  0: ["border-quality-poor", "text-quality-poor"],
+  1: ["border-quality-common", "text-quality-common"],
+  2: ["border-quality-uncommon", "text-quality-uncommon"],
+  3: ["border-quality-rare", "text-quality-rare"],
+  4: ["border-quality-epic", "text-quality-epic"],
+  5: ["border-quality-legendary", "text-quality-legendary"],
+  6: ["border-quality-artifact", "text-quality-artifact"],
+};

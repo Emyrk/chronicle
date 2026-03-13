@@ -29,10 +29,10 @@ export function GearDisplay({ gear }: GearDisplayProps) {
   return (
     <div className="flex flex-col items-center gap-3">
       <div className="flex gap-32">
-        {/* Left column */}
+        {/* Left column — names on the left (outside) */}
         <div className="flex flex-col gap-1.5">
           {leftItems.map((entry, i) => (
-            <GearSlot key={`l-${i}`} slotDef={entry.slot} item={entry.item} />
+            <GearSlot key={`l-${i}`} slotDef={entry.slot} item={entry.item} side="left" />
           ))}
         </div>
 
@@ -41,18 +41,18 @@ export function GearDisplay({ gear }: GearDisplayProps) {
           <p className="text-xs text-zinc-600 italic">Content coming soon</p>
         </div>
 
-        {/* Right column */}
+        {/* Right column — names on the right (outside) */}
         <div className="flex flex-col gap-1.5">
           {rightItems.map((entry, i) => (
-            <GearSlot key={`r-${i}`} slotDef={entry.slot} item={entry.item} />
+            <GearSlot key={`r-${i}`} slotDef={entry.slot} item={entry.item} side="right" />
           ))}
         </div>
       </div>
 
       {/* Bottom row: weapons + ranged */}
-      <div className="flex gap-1.5">
+      <div className="flex gap-4">
         {bottomItems.map((entry, i) => (
-          <GearSlot key={`b-${i}`} slotDef={entry.slot} item={entry.item} />
+          <GearSlot key={`b-${i}`} slotDef={entry.slot} item={entry.item} side="bottom" />
         ))}
       </div>
     </div>
