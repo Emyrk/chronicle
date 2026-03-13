@@ -599,7 +599,8 @@ export function resolveSpellDescription(
     const resolved = resolveVariable(spell, variable, lvl);
     const num = Number(resolved);
     if (!isNaN(num)) {
-      return String(Math.round(num * mult));
+      const multiplied = num * mult;
+      return Number.isInteger(multiplied) ? String(multiplied) : multiplied.toFixed(1).replace(/\.0$/, "");
     }
     return _match;
   });
@@ -609,16 +610,17 @@ export function resolveSpellDescription(
     const t = type.toLowerCase();
     const idx = index ? parseInt(index) - 1 : 0;
     if (t === "s" || t === "m") {
-      return formatValue(getScaledValue(spell, idx, lvl, (n) => n / div));
+      return formatValue(getScaledValue(spell, idx, lvl, (n) => n / div), true);
     }
     if (t === "o") {
-      return formatValue(getPeriodicTotal(spell, idx, lvl, (n) => n / div));
+      return formatValue(getPeriodicTotal(spell, idx, lvl, (n) => n / div), true);
     }
     const variable = `$${type}${index || ""}`;
     const resolved = resolveVariable(spell, variable, lvl);
     const num = Number(resolved);
     if (!isNaN(num)) {
-      return String(Math.round(num / div));
+      const divided = num / div;
+      return Number.isInteger(divided) ? String(divided) : divided.toFixed(1).replace(/\.0$/, "");
     }
     return _match;
   });
