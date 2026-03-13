@@ -114,6 +114,28 @@
   --color-dmgtype-noengage: #6b7280;         /* gray-500 */
   --color-dmgtype-default: #3b82f6;          /* blue-500 */
 
+  /* WoW Class Colors */
+  --color-class-warrior: #C79C6E;
+  --color-class-paladin: #F58CBA;
+  --color-class-hunter: #ABD473;
+  --color-class-rogue: #FFF569;
+  --color-class-priest: #FFFFFF;
+  --color-class-shaman: #0070DE;
+  --color-class-mage: #69CCF0;
+  --color-class-warlock: #9482C9;
+  --color-class-druid: #FF7D0A;
+  --color-class-unknown: #808080;
+
+  /* WoW Item Quality Colors */
+  --color-quality-poor: #9d9d9d;
+  --color-quality-common: #ffffff;
+  --color-quality-uncommon: #1eff00;
+  --color-quality-rare: #0070dd;
+  --color-quality-epic: #a335ee;
+  --color-quality-legendary: #ff8000;
+  --color-quality-artifact: #e6cc80;
+
+
   /* Custom font sizes */
   --text-2xs: 0.625rem;   /* 10px */
   --text-2xs--line-height: 1rem;

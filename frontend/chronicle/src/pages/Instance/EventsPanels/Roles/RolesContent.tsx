@@ -25,16 +25,16 @@ import { ScrollArea } from "@/components/ui/ScrollArea/ScrollArea";
 
 // WoW class colors (same as PlayerMetricChart)
 const CLASS_COLORS: Record<string, string> = {
-  WARRIOR: '#C79C6E',
-  PALADIN: '#F58CBA',
-  HUNTER: '#ABD473',
-  ROGUE: '#FFF569',
-  PRIEST: '#FFFFFF',
-  SHAMAN: '#0070DE',
-  MAGE: '#69CCF0',
-  WARLOCK: '#9482C9',
-  DRUID: '#FF7D0A',
-  UNKNOWN: '#808080',
+  WARRIOR: 'var(--color-class-warrior)',
+  PALADIN: 'var(--color-class-paladin)',
+  HUNTER: 'var(--color-class-hunter)',
+  ROGUE: 'var(--color-class-rogue)',
+  PRIEST: 'var(--color-class-priest)',
+  SHAMAN: 'var(--color-class-shaman)',
+  MAGE: 'var(--color-class-mage)',
+  WARLOCK: 'var(--color-class-warlock)',
+  DRUID: 'var(--color-class-druid)',
+  UNKNOWN: 'var(--color-class-unknown)',
   ENEMY: '#FF4444',
 };
 

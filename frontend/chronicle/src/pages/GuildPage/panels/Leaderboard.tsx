@@ -32,15 +32,15 @@ const FAKE_LEADERBOARD = {
 };
 
 const CLASS_COLORS: Record<string, string> = {
-  Warrior: "text-amber-500",
-  Priest: "text-gray-200",
-  Rogue: "text-yellow-400",
-  Mage: "text-cyan-400",
-  Druid: "text-orange-400",
-  Hunter: "text-green-500",
-  Warlock: "text-purple-400",
-  Paladin: "text-pink-400",
-  Shaman: "text-blue-400",
+  Warrior: "text-class-warrior",
+  Priest: "text-class-priest",
+  Rogue: "text-class-rogue",
+  Mage: "text-class-mage",
+  Druid: "text-class-druid",
+  Hunter: "text-class-hunter",
+  Warlock: "text-class-warlock",
+  Paladin: "text-class-paladin",
+  Shaman: "text-class-shaman",
 };
 
 const RANK_STYLES = {
