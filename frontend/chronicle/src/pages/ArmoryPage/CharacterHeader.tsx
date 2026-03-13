@@ -4,7 +4,6 @@ import { getClassColorVar } from "./types";
 
 interface CharacterHeaderProps {
   player: ArmoryPlayer;
-  realmName: string;
 }
 
 function getRaceIconUrl(race: string, gender: string): string {
@@ -17,7 +16,7 @@ function getClassIconUrl(cls: string): string {
   return `/c/icons/class_${cls.toLowerCase()}.png`;
 }
 
-export function CharacterHeader({ player, realmName }: CharacterHeaderProps) {
+export function CharacterHeader({ player }: CharacterHeaderProps) {
   const classColor = getClassColorVar(player.class);
   const updatedDate = new Date(player.updated_at).toLocaleDateString(undefined, {
     year: "numeric",
@@ -66,7 +65,7 @@ export function CharacterHeader({ player, realmName }: CharacterHeaderProps) {
 
       {/* Race, class, realm */}
       <p className="text-xs text-zinc-500">
-        {raceLabel} {classLabel} · {realmName}
+        {raceLabel} {classLabel} · {player.realm_name}
       </p>
 
       {/* Last updated */}

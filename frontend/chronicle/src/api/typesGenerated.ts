@@ -56,6 +56,7 @@ export interface AdminUsersResponse {
 // From chroniclesdk/armory.go
 export interface ArmoryPlayer {
     readonly id: string;
+    readonly realm_name: string;
     readonly realm_id: string;
     readonly name: string;
     readonly class: string;
