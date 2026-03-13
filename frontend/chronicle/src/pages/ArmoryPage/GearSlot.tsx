@@ -1,8 +1,9 @@
 import { useState } from "react";
 import { useItemTooltip } from "@/api/gamedata";
+import type { PlayerGear } from "@/api/typesGenerated";
 import { ItemTooltip } from "@/components/ui/ItemTooltip/ItemTooltip";
 import { cn } from "@/lib/utils";
-import type { ArmoryGearItem, GearSlotDef } from "./types";
+import type { GearSlotDef } from "./types";
 import { getQualityBorderClass } from "./types";
 
 function getItemIconUrl(icon: string): string {
@@ -12,21 +13,21 @@ function getItemIconUrl(icon: string): string {
 
 interface GearSlotProps {
   slotDef: GearSlotDef;
-  item?: ArmoryGearItem;
+  item: PlayerGear;
 }
 
 export function GearSlot({ slotDef, item }: GearSlotProps) {
   const [hovered, setHovered] = useState(false);
   const tooltipData = useItemTooltip(
-    item && item.item_id > 0
+    item.item_id > 0
       ? { itemId: item.item_id, enchant: item.enchant_id }
       : null,
   );
 
-  const isEmpty = !item || item.item_id === 0;
+  const isEmpty = item.item_id === 0;
   const borderClass = isEmpty
     ? "border-zinc-700"
-    : getQualityBorderClass(item.quality);
+    : getQualityBorderClass(item.item_quality ?? 0);
 
   return (
     <div
@@ -41,10 +42,10 @@ export function GearSlot({ slotDef, item }: GearSlotProps) {
           !isEmpty && "hover:brightness-125 cursor-pointer",
         )}
       >
-        {!isEmpty ? (
+        {!isEmpty && item.item_icon ? (
           <img
-            src={getItemIconUrl(item.icon)}
-            alt={item.name}
+            src={getItemIconUrl(item.item_icon)}
+            alt={item.item_name ?? ""}
             className="w-full h-full object-cover"
             loading="lazy"
           />

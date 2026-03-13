@@ -1,89 +1,57 @@
-import type { WoWHeroClasses, WoWHeroRaces, WoWHeroGender } from "@/api/typesGenerated";
+import type { ArmoryPlayer } from "@/api/typesGenerated";
 
-export interface ArmoryPlayer {
-  guid: string;
-  realm_name: string;
-  name: string;
-  class: WoWHeroClasses;
-  race: WoWHeroRaces;
-  gender: WoWHeroGender;
-  guild_name?: string;
-  gear: ArmoryGearItem[];
-  updated_at: string;
-}
-
-export interface ArmoryGearItem {
-  item_id: number;
-  enchant_id?: number;
-  /** WoW inventory_type: 1=Head, 2=Neck, 3=Shoulder, etc. */
-  slot: number;
-  name: string;
-  quality: number;
-  icon: string;
-}
+export type { ArmoryPlayer };
 
 /**
- * Gear slot definitions for the paper-doll layout.
- * Each slot has a WoW inventory_type and display label.
+ * Gear slot definition for the paper-doll layout.
+ * `outfitIndex` is the index into the PlayerOutfit[19] array.
  */
 export interface GearSlotDef {
-  inventoryType: number;
+  outfitIndex: number;
   label: string;
 }
 
+/**
+ * PlayerOutfit slot order (indices 0–18):
+ *  0=Head, 1=Neck, 2=Shoulder, 3=Shirt, 4=Chest, 5=Waist, 6=Legs,
+ *  7=Feet, 8=Wrist, 9=Hands, 10=Finger1, 11=Finger2, 12=Trinket1,
+ *  13=Trinket2, 14=Back, 15=MainHand, 16=OffHand, 17=Ranged, 18=Tabard
+ */
+
 /** Left column slots (top to bottom) */
 export const LEFT_SLOTS: GearSlotDef[] = [
-  { inventoryType: 1, label: "Head" },
-  { inventoryType: 2, label: "Neck" },
-  { inventoryType: 3, label: "Shoulder" },
-  { inventoryType: 16, label: "Back" },
-  { inventoryType: 5, label: "Chest" },
-  { inventoryType: 4, label: "Shirt" },
-  { inventoryType: 19, label: "Tabard" },
-  { inventoryType: 9, label: "Wrist" },
+  { outfitIndex: 0, label: "Head" },
+  { outfitIndex: 1, label: "Neck" },
+  { outfitIndex: 2, label: "Shoulder" },
+  { outfitIndex: 14, label: "Back" },
+  { outfitIndex: 4, label: "Chest" },
+  { outfitIndex: 3, label: "Shirt" },
+  { outfitIndex: 18, label: "Tabard" },
+  { outfitIndex: 8, label: "Wrist" },
 ];
 
 /** Right column slots (top to bottom) */
 export const RIGHT_SLOTS: GearSlotDef[] = [
-  { inventoryType: 10, label: "Hands" },
-  { inventoryType: 6, label: "Waist" },
-  { inventoryType: 7, label: "Legs" },
-  { inventoryType: 8, label: "Feet" },
-  { inventoryType: 11, label: "Finger" },
-  { inventoryType: 11, label: "Finger" },
-  { inventoryType: 12, label: "Trinket" },
-  { inventoryType: 12, label: "Trinket" },
+  { outfitIndex: 9, label: "Hands" },
+  { outfitIndex: 5, label: "Waist" },
+  { outfitIndex: 6, label: "Legs" },
+  { outfitIndex: 7, label: "Feet" },
+  { outfitIndex: 10, label: "Finger" },
+  { outfitIndex: 11, label: "Finger" },
+  { outfitIndex: 12, label: "Trinket" },
+  { outfitIndex: 13, label: "Trinket" },
 ];
 
 /** Bottom row slots */
 export const BOTTOM_SLOTS: GearSlotDef[] = [
-  { inventoryType: 21, label: "Main Hand" },
-  { inventoryType: 22, label: "Off Hand" },
-  { inventoryType: 15, label: "Ranged" },
+  { outfitIndex: 15, label: "Main Hand" },
+  { outfitIndex: 16, label: "Off Hand" },
+  { outfitIndex: 17, label: "Ranged" },
 ];
 
-/** Maps WoWHeroClasses to the CSS variable suffix */
-export function getClassColorVar(cls: WoWHeroClasses): string {
+/** Maps a class name to the CSS variable */
+export function getClassColorVar(cls: string): string {
   return `var(--color-class-${cls.toLowerCase()})`;
-}
-
-/** Maps WoWHeroClasses to a Tailwind text-class-* utility */
-export function getClassColorClass(cls: WoWHeroClasses): string {
-  return `text-class-${cls.toLowerCase()}`;
-}
-
-/** Maps item quality number to the CSS variable */
-export function getQualityColorVar(quality: number): string {
-  const names: Record<number, string> = {
-    0: "poor",
-    1: "common",
-    2: "uncommon",
-    3: "rare",
-    4: "epic",
-    5: "legendary",
-    6: "artifact",
-  };
-  return `var(--color-quality-${names[quality] ?? "common"})`;
 }
 
 /** Maps item quality number to a Tailwind border-quality-* utility */

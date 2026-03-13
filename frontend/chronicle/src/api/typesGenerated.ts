@@ -53,6 +53,20 @@ export interface AdminUsersResponse {
     readonly users: readonly User[];
 }
 
+// From chroniclesdk/armory.go
+export interface ArmoryPlayer {
+    readonly id: string;
+    readonly realm_id: string;
+    readonly name: string;
+    readonly class: string;
+    readonly race: string;
+    readonly gender: string;
+    readonly guild_id?: string;
+    readonly guild_name?: string;
+    readonly gear: PlayerOutfit;
+    readonly updated_at: string;
+}
+
 // From chroniclesdk/authz.go
 /**
  * AuthorizationRequest is a request to check multiple authorizations at once.
@@ -437,6 +451,41 @@ export interface PeriodMoment {
     readonly message_type?: string;
     readonly message?: Record<string, string>;
 }
+
+// From chroniclesdk/armory.go
+export interface PlayerGear {
+    readonly item_id: number;
+    readonly enchant_id?: number;
+    readonly item_name?: string;
+    readonly item_quality?: number;
+    readonly item_icon?: string;
+}
+
+// From chroniclesdk/armory.go
+/**
+ * PlayerOutfit mirrors database.PlayerOutfit for the SDK layer.
+ */
+export type PlayerOutfit = [
+    PlayerGear,
+    PlayerGear,
+    PlayerGear,
+    PlayerGear,
+    PlayerGear,
+    PlayerGear,
+    PlayerGear,
+    PlayerGear,
+    PlayerGear,
+    PlayerGear,
+    PlayerGear,
+    PlayerGear,
+    PlayerGear,
+    PlayerGear,
+    PlayerGear,
+    PlayerGear,
+    PlayerGear,
+    PlayerGear,
+    PlayerGear
+];
 
 // From chroniclesdk/user.go
 export interface Preferences {
