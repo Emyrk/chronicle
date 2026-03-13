@@ -7,7 +7,7 @@ interface CharacterHeaderProps {
 }
 
 function getRaceIconUrl(race: string): string {
-  const name = race.toLowerCase().replace(" ", "");
+  const name = race === "Scourge" ? "forsaken" : race.toLowerCase().replace(" ", "");
   return `https://icons.chronicleclassic.com/race_${name}.webp`;
 }
 
