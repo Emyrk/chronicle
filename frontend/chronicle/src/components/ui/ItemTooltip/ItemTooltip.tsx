@@ -122,7 +122,7 @@ export function ItemTooltip({ item, className, includeReferenceLinks = false, sh
 
   return (
     <div className={cn(
-      "bg-[#1a1a2e] border-2 border-[#4a4a6a] rounded-lg p-3 max-w-xs shadow-lg text-xs leading-snug font-sans",
+      "bg-[#1a1a2e] border-2 border-[#4a4a6a] rounded-lg p-3 min-w-56 max-w-xs shadow-lg text-xs leading-snug font-sans",
       className
     )}>
       {/* Header: icon + name */}
