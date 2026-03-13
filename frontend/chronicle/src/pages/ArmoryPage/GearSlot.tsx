@@ -49,16 +49,28 @@ export function GearSlot({ slotDef, item, side = "right" }: GearSlotProps) {
     }
   }, [isMobile, isEmpty]);
 
+  const enchantText = tooltipData.data?.enchantment;
+
   const nameLabel = (
-    <span
-      className={cn(
-        "text-2xs leading-tight truncate max-w-28",
-        nameClass,
-        isEmpty && "italic",
+    <div className={cn(
+      "flex flex-col min-w-0",
+      side === "left" && "items-end",
+    )}>
+      <span
+        className={cn(
+          "text-2xs leading-tight truncate max-w-28",
+          nameClass,
+          isEmpty && "italic",
+        )}
+      >
+        {displayName}
+      </span>
+      {enchantText && (
+        <span className="text-2xs leading-tight truncate max-w-28 text-quality-uncommon">
+          {enchantText}
+        </span>
       )}
-    >
-      {displayName}
-    </span>
+    </div>
   );
 
   return (
