@@ -65,6 +65,7 @@ export interface ArmoryPlayer {
     readonly guild_name?: string;
     readonly gear: PlayerOutfit;
     readonly updated_at: string;
+    readonly updated_from_instance?: string;
 }
 
 // From chroniclesdk/authz.go

@@ -1,3 +1,4 @@
+import { Link } from "react-router-dom";
 import type { ArmoryPlayer } from "@/api/typesGenerated";
 import { getClassColorVar } from "./types";
 
@@ -69,9 +70,18 @@ export function CharacterHeader({ player, realmName }: CharacterHeaderProps) {
       </p>
 
       {/* Last updated */}
-      <p className="text-2xs text-zinc-600">
-        Last seen {updatedDate}
-      </p>
+      {player.updated_from_instance ? (
+        <Link
+          to={`/instances/${player.updated_from_instance}`}
+          className="text-2xs text-zinc-600 hover:text-zinc-400 transition-colors"
+        >
+          Last seen {updatedDate} ↗
+        </Link>
+      ) : (
+        <p className="text-2xs text-zinc-600">
+          Last seen {updatedDate}
+        </p>
+      )}
     </div>
   );
 }

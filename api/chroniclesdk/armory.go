@@ -16,8 +16,9 @@ type ArmoryPlayer struct {
 	Gender    string       `json:"gender"`
 	GuildID   *uuid.UUID   `json:"guild_id,omitempty"`
 	GuildName string       `json:"guild_name,omitempty"`
-	Gear      PlayerOutfit `json:"gear"`
-	UpdatedAt time.Time    `json:"updated_at"`
+	Gear               PlayerOutfit `json:"gear"`
+	UpdatedAt          time.Time    `json:"updated_at"`
+	UpdatedFromInstance *uuid.UUID  `json:"updated_from_instance,omitempty"`
 }
 
 // PlayerOutfit mirrors database.PlayerOutfit for the SDK layer.

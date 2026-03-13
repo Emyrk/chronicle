@@ -347,9 +347,12 @@ func DataGrants(gs []database.DataGrant) []chroniclesdk.DataGrant {
 	return slice.List(gs, DataGrant)
 }
 func ArmoryPlayer(row database.GetGamePlayerByGUIDRow) chroniclesdk.ArmoryPlayer {
-	var guildID *uuid.UUID
+	var guildID, instanceID *uuid.UUID
 	if row.GuildID.Valid {
 		guildID = &row.GuildID.UUID
+	}
+	if row.UpdatedFromInstance.Valid {
+		instanceID = &row.UpdatedFromInstance.UUID
 	}
 
 	var gear chroniclesdk.PlayerOutfit
@@ -373,7 +376,8 @@ func ArmoryPlayer(row database.GetGamePlayerByGUIDRow) chroniclesdk.ArmoryPlayer
 		Gender:    HeroGender(row.Gender).String(),
 		GuildID:   guildID,
 		GuildName: row.GuildName.String,
-		Gear:      gear,
-		UpdatedAt: row.UpdatedAt.Time,
+		Gear:               gear,
+		UpdatedAt:          row.UpdatedAt.Time,
+		UpdatedFromInstance: instanceID,
 	}
 }
