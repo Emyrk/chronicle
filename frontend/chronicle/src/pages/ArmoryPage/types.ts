@@ -25,6 +25,7 @@ export const LEFT_SLOTS: GearSlotDef[] = [
   { outfitIndex: 2, label: "Shoulder" },
   { outfitIndex: 14, label: "Back" },
   { outfitIndex: 4, label: "Chest" },
+  { outfitIndex: 3, label: "Shirt" },
   { outfitIndex: 18, label: "Tabard" },
   { outfitIndex: 8, label: "Wrist" },
 ];
