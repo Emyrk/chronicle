@@ -45,6 +45,7 @@ var testSpellIDs = []int{
 	46269, // Fire Breath — ${expr} inline arithmetic
 	16454, // Flamestrike — $d1 indexed duration
 	51839, // Arcane Missiles — $t unindexed tick interval
+	21973, // Priest T2 set bonus — $/1000;S1 fractional division
 }
 
 // crossSpellRef matches patterns like $3137s1 (spell 3137, variable s1).

@@ -68,6 +68,9 @@ const expectedDescriptions: Record<string, string> = {
   // Aftershock: $t unindexed tick interval
   "51839": "Deals 175 to 225 damage after 4.",
   "51839_aura": "175 to 225 Nature damage periodically.",
+
+  // Prophecy Flash Heal Bonus: $/1000;S1 fractional division (base_points=-101, value=100ms → 0.1 sec)
+  "21973": "-0.1 sec to the casting time of your Flash Heal spell.",
 };
 
 /**
