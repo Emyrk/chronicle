@@ -6,9 +6,10 @@ interface CharacterHeaderProps {
   realmName: string;
 }
 
-function getRaceIconUrl(race: string): string {
+function getRaceIconUrl(race: string, gender: string): string {
   const name = race === "Scourge" ? "forsaken" : race.toLowerCase().replace(" ", "");
-  return `https://icons.chronicleclassic.com/race_${name}.webp`;
+  const suffix = gender === "Female" ? "_02" : "";
+  return `https://icons.chronicleclassic.com/race_${name}${suffix}.webp`;
 }
 
 function getClassIconUrl(cls: string): string {
@@ -37,7 +38,7 @@ export function CharacterHeader({ player, realmName }: CharacterHeaderProps) {
       {/* Race icon — Name — Class icon */}
       <div className="flex items-center gap-3">
         <img
-          src={getRaceIconUrl(player.race)}
+          src={getRaceIconUrl(player.race, player.gender)}
           alt={raceLabel}
           className="w-8 h-8 rounded"
           onError={(e) => { e.currentTarget.style.display = "none"; }}
