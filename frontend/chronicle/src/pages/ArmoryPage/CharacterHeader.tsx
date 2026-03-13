@@ -6,10 +6,8 @@ interface CharacterHeaderProps {
 }
 
 function getRaceIconUrl(race: string): string {
-  // Race icons follow the same pattern as class icons.
-  // TODO: Add race icon PNGs to public/c/icons/race_*.png
   const name = race.toLowerCase().replace(" ", "");
-  return `/c/icons/race_${name}.png`;
+  return `https://icons.chronicleclassic.com/race_${name}.webp`;
 }
 
 function getClassIconUrl(cls: string): string {
