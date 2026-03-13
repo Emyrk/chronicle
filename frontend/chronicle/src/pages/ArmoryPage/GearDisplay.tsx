@@ -51,12 +51,17 @@ export function GearDisplay({ gear }: GearDisplayProps) {
 
   return (
     <div className="flex flex-col items-center gap-3">
-      <div className="flex gap-16">
+      <div className="flex gap-32">
         {/* Left column */}
         <div className="flex flex-col gap-1.5">
           {leftItems.map((entry, i) => (
             <GearSlot key={`l-${i}`} slotDef={entry.slot} item={entry.item} />
           ))}
+        </div>
+
+        {/* Center content */}
+        <div className="flex items-center justify-center">
+          <p className="text-xs text-zinc-600 italic">Content coming soon</p>
         </div>
 
         {/* Right column */}
