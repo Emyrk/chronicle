@@ -25,7 +25,7 @@ export function CharacterHeader({ player }: CharacterHeaderProps) {
   });
 
   const classLabel = player.class.charAt(0) + player.class.slice(1).toLowerCase();
-  const raceLabel = player.race === "NightElf" ? "Night Elf" : player.race === "BloodElf" ? "Blood Elf" : player.race;
+  const raceLabel = player.race === "NightElf" ? "Night Elf" : player.race === "BloodElf" ? "Blood Elf" : player.race === "Scourge" ? "Undead" : player.race;
 
   return (
     <div className="flex flex-col items-center gap-1">
