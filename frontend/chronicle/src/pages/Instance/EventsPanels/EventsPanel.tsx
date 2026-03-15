@@ -658,7 +658,7 @@ export function EventsPanel({
                 ) : (
                   <PanelSelector value={panelType} onChange={onPanelTypeChange} />
                 )}
-                <DropdownMenu>
+                <DropdownMenu modal={false}>
                   <DropdownMenuTrigger asChild>
                     <span className="text-muted-foreground hover:text-foreground cursor-pointer">
                       <EllipsisVertical className="h-3.5 w-3.5" />
