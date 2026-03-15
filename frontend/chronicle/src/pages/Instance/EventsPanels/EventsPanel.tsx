@@ -5,7 +5,13 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type MouseEvent } from "react";
 import ReactDOM from "react-dom";
 import { useLocalStorage } from "@/hooks/useLocalStorage";
-import { HelpCircle, Construction, Filter } from "lucide-react";
+import { HelpCircle, Construction, Filter, EllipsisVertical, Copy, ClipboardPaste } from "lucide-react";
+import {
+  DropdownMenu,
+  DropdownMenuTrigger,
+  DropdownMenuContent,
+  DropdownMenuItem,
+} from "@/components/ui/DropdownMenu/DropdownMenu";
 import { Button } from "@/components/ui/button";
 import { BreakoutHoverProvider } from "@/components/ui/AbilityBreakout";
 import { Switch } from "@/components/ui/Switch/Switch";
@@ -114,6 +120,8 @@ function buildPanelOptionFromTokens(tokens: string[]): string | null {
 // ---------------------------------------------------------------------------
 // Filter summary for tooltip
 // ---------------------------------------------------------------------------
+
+const PANEL_CLIPBOARD_KEY = "panel-clipboard";
 
 const FILTER_TYPE_LABELS: Record<PanelFilterType, string> = {
   ability_name: "Ability Name",
@@ -497,6 +505,39 @@ export function EventsPanel({
     setCustomTitle(null);
   }, [applyFilters, panel.defaultFilters, setBorderColor, setCustomTitle]);
 
+  // Panel copy/paste via sessionStorage
+
+  const handleCopyPanel = useCallback(() => {
+    const clipboard = {
+      panelType,
+      panelOption: panelOption ?? null,
+      filters: userFilters,
+    };
+    sessionStorage.setItem(PANEL_CLIPBOARD_KEY, JSON.stringify(clipboard));
+  }, [panelType, panelOption, userFilters]);
+
+  const handlePastePanel = useCallback(() => {
+    const raw = sessionStorage.getItem(PANEL_CLIPBOARD_KEY);
+    if (!raw) return;
+    try {
+      const clipboard = JSON.parse(raw) as {
+        panelType: EventsPanelType;
+        panelOption: string | null;
+        filters: PanelFilter[];
+      };
+      onPanelTypeChange(clipboard.panelType);
+      onPanelOptionChange?.(clipboard.panelOption);
+      if (clipboard.filters && clipboard.filters.length > 0) {
+        applyFilters(clipboard.filters);
+      } else {
+        applyFilters(PANELS[clipboard.panelType].defaultFilters ?? []);
+      }
+      setPendingFilters(null);
+    } catch {
+      // Ignore malformed clipboard data
+    }
+  }, [onPanelTypeChange, onPanelOptionChange, applyFilters]);
+
   const flipCard = useCallback(() => {
     setFlipped((prev) => {
       if (prev) {
@@ -617,6 +658,23 @@ export function EventsPanel({
                 ) : (
                   <PanelSelector value={panelType} onChange={onPanelTypeChange} />
                 )}
+                <DropdownMenu>
+                  <DropdownMenuTrigger asChild>
+                    <span className="text-muted-foreground hover:text-foreground cursor-pointer">
+                      <EllipsisVertical className="h-3.5 w-3.5" />
+                    </span>
+                  </DropdownMenuTrigger>
+                  <DropdownMenuContent align="start" className="min-w-[120px]">
+                    <DropdownMenuItem onClick={handleCopyPanel}>
+                      <Copy className="h-3.5 w-3.5 mr-2" />
+                      Copy
+                    </DropdownMenuItem>
+                    <DropdownMenuItem onClick={handlePastePanel}>
+                      <ClipboardPaste className="h-3.5 w-3.5 mr-2" />
+                      Paste
+                    </DropdownMenuItem>
+                  </DropdownMenuContent>
+                </DropdownMenu>
                 <HintTooltip>
                   <TooltipTrigger asChild>
                     <span
