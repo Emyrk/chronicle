@@ -228,7 +228,7 @@ function compileEntityTypeFilter(
     const guid = (event as unknown as Record<string, unknown>)[field];
     if (typeof guid !== "string" || !guid) return false;
 
-    // Selected players: match if guid is in playerIds (or a pet owned by one), or any player if none selected
+    // Selected players: match if guid is in playerIds (or a pet owned by one), or any player/player-pet if none selected
     if (wantSelectedPlayers) {
       if (playerIds.size > 0) {
         if (playerIds.has(guid)) return true;
@@ -238,6 +238,12 @@ function compileEntityTypeFilter(
       } else {
         const isPlayer = isPlayerGuid(guid) || getCachedGuid(guidCache, guid).isPlayer();
         if (isPlayer) return true;
+        // Also match any player-owned pet when no specific players selected
+        const unit = units[guid];
+        if (unit?.owner) {
+          const ownerIsPlayer = isPlayerGuid(unit.owner) || getCachedGuid(guidCache, unit.owner).isPlayer();
+          if (ownerIsPlayer) return true;
+        }
       }
     }
 
