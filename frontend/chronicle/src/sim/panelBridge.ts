@@ -17,6 +17,7 @@ import {
   HitTypeCrushing,
   HitTypePartialResist,
   HitTypePeriodic,
+  HitTypeOffHand,
 } from "../lib/hittype/hittype";
 import type { StepResult } from "./engine";
 import { EventType } from "./engine";
@@ -120,6 +121,7 @@ export function stepResultToEvents(
 
     let hitType = outcomeToHitType(step.outcome, step.resisted);
     if (isDot) hitType |= HitTypePeriodic;
+    if (isOffHand) hitType |= HitTypeOffHand;
 
     const dmgEvent = {
       ...meta(step.timeMs),

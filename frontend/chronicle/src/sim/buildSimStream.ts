@@ -40,6 +40,7 @@ import {
   HitTypeCrushing,
   HitTypePartialResist,
   HitTypePeriodic,
+  HitTypeOffHand,
 } from "../lib/hittype/hittype";
 import { SIM_ENCOUNTER_ID } from "./panelBridge";
 
@@ -144,6 +145,7 @@ export function buildSimDamageStream(
 
     let hitType = outcomeToHitType(step.outcome, step.resisted);
     if (isDot) hitType |= HitTypePeriodic;
+    if (isOffHand) hitType |= HitTypeOffHand;
 
     const meta = create(EventMetaSchema, {
       index: eventIndex++,
