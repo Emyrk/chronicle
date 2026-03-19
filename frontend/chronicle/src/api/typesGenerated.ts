@@ -650,6 +650,60 @@ export interface SharedViewResponse {
     readonly payload: Record<string, string>;
 }
 
+// From chroniclesdk/sim.go
+/**
+ * SimItem contains the simulation-relevant fields from world_item_template.
+ * This is a purpose-built type for the DPS sim — unlike ItemTooltip which
+ * serves display/rendering needs.
+ */
+export interface SimItem {
+    readonly entry: number;
+    readonly name: string;
+    readonly class: number;
+    readonly subclass: number;
+    readonly item_level: number;
+    readonly inventory_type: number;
+    readonly delay: number;
+    readonly armor: number;
+    readonly block: number;
+    readonly set_id?: number;
+    readonly stats?: readonly ItemStat[];
+    readonly damage?: readonly SimItemDamage[];
+    readonly resistances: [
+        number,
+        number,
+        number,
+        number,
+        number,
+        number
+    ]; // [holy,fire,nature,frost,shadow,arcane]
+    readonly spells?: readonly SimItemSpell[];
+}
+
+// From chroniclesdk/sim.go
+/**
+ * SimItemDamage is a weapon damage range with school info.
+ */
+export interface SimItemDamage {
+    readonly min: number;
+    readonly max: number;
+    readonly damage_type: number;
+}
+
+// From chroniclesdk/sim.go
+/**
+ * SimItemSpell includes proc fields (PPMRate, cooldowns) that the tooltip
+ * endpoint omits because they're not needed for display.
+ */
+export interface SimItemSpell {
+    readonly spell_id: number;
+    readonly trigger: number;
+    readonly charges?: number;
+    readonly ppm_rate?: number;
+    readonly cooldown_ms?: number;
+    readonly category_cooldown_ms?: number;
+}
+
 // From chroniclesdk/panel_layout.go
 /**
  * TrackLayoutRequest identifies a layout to track.
