@@ -1,11 +1,12 @@
-import { useState, useEffect, useCallback } from "react";
-import { Swords, Play, Loader2 } from "lucide-react";
+import { useState, useEffect, useCallback, useRef } from "react";
+import { Swords, Play, Loader2, UserSearch } from "lucide-react";
 import type { CreatureData } from "../../sim/types";
 import type { CharacterConfig } from "../../sim/character";
+import type { SimItem, ArmoryPlayer } from "../../api/typesGenerated";
+import { ApiDataProvider } from "../../sim/dataProvider";
 import { useSimRunner } from "./useSimRunner";
 import { SimResultsPanel } from "./SimResultsPanel";
 
-// Race/class constants
 const RACES: Record<number, { name: string; classes: number[] }> = {
   1: { name: "Human", classes: [1, 2, 4, 5, 8, 9] },
   2: { name: "Orc", classes: [1, 3, 4, 7, 9] },
@@ -29,19 +30,39 @@ const CLASSES: Record<number, string> = {
   11: "Druid",
 };
 
+const CLASS_NAME_TO_ID: Record<string, number> = Object.fromEntries(
+  Object.entries(CLASSES).map(([id, name]) => [name, Number(id)]),
+);
+
+const RACE_NAME_TO_ID: Record<string, number> = Object.fromEntries(
+  Object.entries(RACES).map(([id, r]) => [r.name, Number(id)]),
+);
+
+// WoW equipment slot names for display
+const SLOT_NAMES: Record<number, string> = {
+  0: "Head", 1: "Neck", 2: "Shoulder", 3: "Shirt", 4: "Chest",
+  5: "Waist", 6: "Legs", 7: "Feet", 8: "Wrist", 9: "Hands",
+  10: "Ring 1", 11: "Ring 2", 12: "Trinket 1", 13: "Trinket 2",
+  14: "Back", 15: "Main Hand", 16: "Off Hand", 17: "Ranged", 18: "Tabard",
+};
+
 export function SimPage() {
-  // Config state
   const [raceId, setRaceId] = useState(1);
   const [classId, setClassId] = useState(1);
   const [durationSec, setDurationSec] = useState(300);
   const [targetKey, setTargetKey] = useState("target_dummy");
-  const [bossPresets, setBossPresets] = useState<Record<string, CreatureData>>(
-    {},
-  );
+  const [bossPresets, setBossPresets] = useState<Record<string, CreatureData>>({});
+
+  // Armory import
+  const [armoryInput, setArmoryInput] = useState("");
+  const [armoryLoading, setArmoryLoading] = useState(false);
+  const [armoryError, setArmoryError] = useState<string | null>(null);
+  const [armoryPlayer, setArmoryPlayer] = useState<ArmoryPlayer | null>(null);
+  const [gear, setGear] = useState<Map<number, SimItem>>(new Map());
+  const providerRef = useRef(new ApiDataProvider());
 
   const { run, isRunning, error, result } = useSimRunner();
 
-  // Load boss presets
   useEffect(() => {
     fetch("/api/v1/assets/boss-presets.json")
       .then((r) => r.json())
@@ -49,13 +70,67 @@ export function SimPage() {
       .catch(() => {});
   }, []);
 
-  // Ensure selected race supports selected class
   useEffect(() => {
     const race = RACES[raceId];
     if (race && !race.classes.includes(classId)) {
       setClassId(race.classes[0]);
     }
   }, [raceId, classId]);
+
+  const handleLoadArmory = useCallback(async () => {
+    const input = armoryInput.trim();
+    if (!input) return;
+
+    setArmoryLoading(true);
+    setArmoryError(null);
+
+    try {
+      // Support formats: "PlayerName", "realm/PlayerName", or full URL
+      let realm = "turtle-wow";
+      let name = input;
+
+      if (input.includes("/")) {
+        // Could be "realm/name" or a full URL like "/armory/turtle-wow/PlayerName"
+        const parts = input.replace(/^.*\/armory\//, "").split("/").filter(Boolean);
+        if (parts.length >= 2) {
+          realm = parts[0];
+          name = parts[1];
+        } else if (parts.length === 1) {
+          name = parts[0];
+        }
+      }
+
+      const res = await fetch(
+        `/api/v1/armory/${encodeURIComponent(realm)}/${encodeURIComponent(name)}`,
+      );
+      if (!res.ok) {
+        throw new Error(res.status === 404 ? `Player "${name}" not found` : `Failed to load (${res.status})`);
+      }
+      const player: ArmoryPlayer = await res.json();
+      setArmoryPlayer(player);
+
+      // Set race/class from armory
+      const rid = RACE_NAME_TO_ID[player.race];
+      if (rid) setRaceId(rid);
+      const cid = CLASS_NAME_TO_ID[player.class];
+      if (cid) setClassId(cid);
+
+      // Load SimItem for each equipped slot
+      const provider = providerRef.current;
+      const loadedGear = new Map<number, SimItem>();
+      const promises = player.gear.map(async (slot, idx) => {
+        if (!slot.item_id || slot.item_id === 0) return;
+        const item = await provider.getItem(slot.item_id);
+        if (item) loadedGear.set(idx, item);
+      });
+      await Promise.all(promises);
+      setGear(loadedGear);
+    } catch (e) {
+      setArmoryError(e instanceof Error ? e.message : String(e));
+    } finally {
+      setArmoryLoading(false);
+    }
+  }, [armoryInput]);
 
   const handleRun = useCallback(() => {
     const target = bossPresets[targetKey];
@@ -65,7 +140,7 @@ export function SimPage() {
       race: raceId,
       classId,
       level: 60,
-      gear: new Map(),
+      gear,
       talents: new Map(),
       buffs: [],
     };
@@ -78,9 +153,10 @@ export function SimPage() {
       iterations: 1,
       spellIds: [],
     });
-  }, [raceId, classId, durationSec, targetKey, bossPresets, run]);
+  }, [raceId, classId, durationSec, targetKey, bossPresets, gear, run]);
 
   const availableClasses = RACES[raceId]?.classes ?? [];
+  const gearCount = gear.size;
 
   return (
     <div className="mx-auto max-w-5xl px-4 py-8">
@@ -95,6 +171,45 @@ export function SimPage() {
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
         {/* Config panel */}
         <div className="lg:col-span-1 space-y-6">
+          {/* Armory Import */}
+          <div className="rounded-lg border border-zinc-800 bg-zinc-900/50 p-4 space-y-3">
+            <h2 className="text-sm font-semibold text-zinc-300 uppercase tracking-wider">
+              Load from Armory
+            </h2>
+            <div className="flex gap-2">
+              <input
+                type="text"
+                placeholder="Character name"
+                value={armoryInput}
+                onChange={(e) => setArmoryInput(e.target.value)}
+                onKeyDown={(e) => e.key === "Enter" && handleLoadArmory()}
+                className="flex-1 rounded border border-zinc-700 bg-zinc-800 px-3 py-1.5 text-sm text-zinc-300 placeholder:text-zinc-600"
+              />
+              <button
+                onClick={handleLoadArmory}
+                disabled={armoryLoading || !armoryInput.trim()}
+                className="rounded border border-zinc-700 bg-zinc-800 hover:bg-zinc-700 disabled:opacity-50 px-3 py-1.5 text-sm text-zinc-300"
+              >
+                {armoryLoading ? (
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                ) : (
+                  <UserSearch className="h-4 w-4" />
+                )}
+              </button>
+            </div>
+            {armoryError && (
+              <p className="text-xs text-red-400">{armoryError}</p>
+            )}
+            {armoryPlayer && (
+              <div className="text-xs text-zinc-400">
+                Loaded <span className="text-zinc-200 font-medium">{armoryPlayer.name}</span>
+                {" · "}Lvl {armoryPlayer.level} {armoryPlayer.race} {armoryPlayer.class}
+                {" · "}{gearCount} items
+              </div>
+            )}
+          </div>
+
+          {/* Configuration */}
           <div className="rounded-lg border border-zinc-800 bg-zinc-900/50 p-4 space-y-4">
             <h2 className="text-sm font-semibold text-zinc-300 uppercase tracking-wider">
               Configuration
@@ -134,9 +249,7 @@ export function SimPage() {
 
             {/* Target */}
             <div>
-              <label className="text-xs text-zinc-500 block mb-1">
-                Target
-              </label>
+              <label className="text-xs text-zinc-500 block mb-1">Target</label>
               <select
                 className="w-full rounded border border-zinc-700 bg-zinc-800 px-3 py-1.5 text-sm text-zinc-300"
                 value={targetKey}
@@ -166,6 +279,25 @@ export function SimPage() {
               />
             </div>
           </div>
+
+          {/* Gear summary */}
+          {gearCount > 0 && (
+            <div className="rounded-lg border border-zinc-800 bg-zinc-900/50 p-4">
+              <h2 className="text-sm font-semibold text-zinc-300 uppercase tracking-wider mb-2">
+                Gear ({gearCount} items)
+              </h2>
+              <div className="space-y-0.5 text-xs">
+                {[...gear.entries()]
+                  .sort(([a], [b]) => a - b)
+                  .map(([slot, item]) => (
+                    <div key={slot} className="flex justify-between text-zinc-400">
+                      <span className="text-zinc-500">{SLOT_NAMES[slot] ?? `Slot ${slot}`}</span>
+                      <span className="text-zinc-300 truncate ml-2">{item.name}</span>
+                    </div>
+                  ))}
+              </div>
+            </div>
+          )}
 
           {/* Run button */}
           <button
@@ -200,7 +332,7 @@ export function SimPage() {
           ) : (
             <div className="rounded-lg border border-zinc-800 bg-zinc-900/50 p-12 text-center text-zinc-500">
               <Swords className="h-12 w-12 mx-auto mb-3 opacity-30" />
-              <p>Select race, class, and target, then run the simulation.</p>
+              <p>Load a character from the armory or configure manually, then run.</p>
             </div>
           )}
         </div>
