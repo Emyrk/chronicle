@@ -13,7 +13,7 @@ import type { Instance, Encounter } from "@/pages/Instance/InstancePage";
 import type { WoWHeroClasses, WoWHeroRaces, ActionBarSlotsResponse } from "@/api/typesGenerated";
 import type { UserPanelLayout } from "@/api/queries";
 import type { GridEditorItem } from "@/components/layout/GridLayoutEditor";
-import { Button } from "@/components/ui/Button/button";
+import { Button } from "@/components/ui/button";
 import { InstanceActionBar } from "@/components/InstanceActionBar/InstanceActionBar";
 import { SIM_ENCOUNTER_ID, SIM_PLAYER_GUID, SIM_TARGET_GUID } from "@/sim/panelBridge";
 import { useSession } from "@/api/queries";
