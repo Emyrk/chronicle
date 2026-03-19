@@ -1,13 +1,15 @@
-import { useState, useEffect, useCallback, useRef } from "react";
+import { useState, useEffect, useCallback, useRef, useMemo } from "react";
 import { Swords, Play, Loader2, UserSearch } from "lucide-react";
 import type { CreatureData } from "../../sim/types";
 import type { CharacterConfig } from "../../sim/character";
-import type { SimItem, ArmoryPlayer } from "../../api/typesGenerated";
+import type { SimItem, ArmoryPlayer, WoWHeroClasses, WoWHeroRaces } from "../../api/typesGenerated";
 import { ApiDataProvider } from "../../sim/dataProvider";
 import { useSimRunner } from "./useSimRunner";
 import { SimResultsPanel } from "./SimResultsPanel";
 import { SimEventsProvider } from "./SimEventsProvider";
-import { SimPanelGrid } from "./SimPanelGrid";
+import { InstancePageView } from "../Instance/InstancePageView";
+import type { Instance } from "../Instance/InstancePage";
+import { SIM_ENCOUNTER_ID, SIM_PLAYER_GUID, SIM_TARGET_GUID } from "../../sim/panelBridge";
 
 const RACES: Record<number, { name: string; classes: number[] }> = {
   1: { name: "Human", classes: [1, 2, 4, 5, 8, 9] },
@@ -47,6 +49,16 @@ const SLOT_NAMES: Record<number, string> = {
   5: "Waist", 6: "Legs", 7: "Feet", 8: "Wrist", 9: "Hands",
   10: "Ring 1", 11: "Ring 2", 12: "Trinket 1", 13: "Trinket 2",
   14: "Back", 15: "Main Hand", 16: "Off Hand", 17: "Ranged", 18: "Tabard",
+};
+
+const CLASS_ID_TO_WOW: Record<number, WoWHeroClasses> = {
+  1: "WARRIOR", 2: "PALADIN", 3: "HUNTER", 4: "ROGUE",
+  5: "PRIEST", 7: "SHAMAN", 8: "MAGE", 9: "WARLOCK", 11: "DRUID",
+};
+
+const RACE_ID_TO_WOW: Record<number, WoWHeroRaces> = {
+  1: "Human", 2: "Orc", 3: "Dwarf", 4: "NightElf",
+  5: "Scourge", 6: "Tauren", 7: "Gnome", 8: "Troll",
 };
 
 type Tab = "config" | "results";
@@ -151,6 +163,41 @@ export function SimPage() {
   const availableClasses = RACES[raceId]?.classes ?? [];
   const gearCount = gear.size;
   const targetName = bossPresets[targetKey]?.name ?? "Target Dummy";
+  const playerName = armoryPlayer?.name ?? "Simulated Player";
+
+  // Build a mock Instance for InstancePageView when results are available
+  const simInstance: Instance | null = useMemo(() => {
+    if (!result) return null;
+    const startTimestamp = result.startTimestamp;
+    return {
+      id: "sim-1",
+      name: "DPS Simulation",
+      startTime: startTimestamp.toISOString(),
+      endTime: new Date(startTimestamp.getTime() + result.durationMs).toISOString(),
+      encounters: [{
+        id: SIM_ENCOUNTER_ID,
+        name: "Simulation",
+        boss: false,
+        kill_type: "clean" as const,
+        start_time: startTimestamp.toISOString(),
+        end_time: new Date(startTimestamp.getTime() + result.durationMs).toISOString(),
+      }],
+      players: {
+        [SIM_PLAYER_GUID]: {
+          name: playerName,
+          class: CLASS_ID_TO_WOW[classId] ?? "WARRIOR",
+          race: RACE_ID_TO_WOW[raceId] ?? "Human",
+        },
+      },
+      units: {
+        [SIM_TARGET_GUID]: {
+          name: targetName,
+          owner: null,
+          entry: 0,
+        },
+      },
+    };
+  }, [result, playerName, classId, raceId, targetName]);
 
   return (
     <div className="px-4 py-6 w-full">
@@ -356,15 +403,11 @@ export function SimPage() {
       )}
 
       {/* Results Tab */}
-      {tab === "results" && result && (
+      {tab === "results" && result && simInstance && (
         <SimEventsProvider streams={result.streams}>
-          <SimPanelGrid
-            playerName={armoryPlayer?.name ?? "Simulated Player"}
-            classId={classId}
-            raceId={raceId}
-            targetName={targetName}
-            durationMs={result.durationMs}
-            startTimestamp={result.startTimestamp}
+          <InstancePageView
+            instance={simInstance}
+            selectedEncounterIds={[SIM_ENCOUNTER_ID]}
           />
         </SimEventsProvider>
       )}
