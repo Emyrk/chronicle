@@ -7,6 +7,19 @@ interface ClassSpell {
   spellDamageType: number;
 }
 
+// class-spells.json uses class names as keys, not numeric IDs
+const CLASS_ID_TO_NAME: Record<number, string> = {
+  1: "Warrior",
+  2: "Paladin",
+  3: "Hunter",
+  4: "Rogue",
+  5: "Priest",
+  7: "Shaman",
+  8: "Mage",
+  9: "Warlock",
+  11: "Druid",
+};
+
 interface RotationBuilderProps {
   classId: number;
   entries: RotationEntry[];
@@ -24,11 +37,16 @@ export function RotationBuilder({
   useEffect(() => {
     if (!classId) return;
     setLoading(true);
+    const className = CLASS_ID_TO_NAME[classId];
+    if (!className) {
+      setClassSpells([]);
+      setLoading(false);
+      return;
+    }
     fetch("/api/v1/assets/class-spells.json")
       .then((r) => r.json())
       .then((data: Record<string, ClassSpell[]>) => {
-        const spells = data[String(classId)] ?? [];
-        // Sort alphabetically, filter to damage spells (spellDamageType > 0 or all)
+        const spells = data[className] ?? [];
         setClassSpells(spells.sort((a, b) => a.name.localeCompare(b.name)));
       })
       .catch(() => setClassSpells([]))
