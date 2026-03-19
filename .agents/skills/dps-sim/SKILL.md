@@ -1,158 +1,186 @@
 ---
 name: dps-sim
 description: >
-  DPS simulation engine for Vanilla WoW (Turtle WoW). WASM-compatible, interface-driven.
-  Covers combat formulas, spell/melee resolution, aura tracking, event-driven engine,
-  and the DataProvider pattern. Use when: adding spells/rotations, modifying combat
-  formulas, debugging sim output, adding new data providers, or building frontend integration.
+  DPS simulation engine for Vanilla WoW (Turtle WoW) in TypeScript. Runs entirely
+  in the browser. Covers combat formulas, spell/melee resolution, aura tracking,
+  event-driven engine, the ApiDataProvider pattern, and EventsPanels integration.
+  Use when: adding spells/rotations, modifying combat formulas, debugging sim output,
+  building the sim UI page, or working with the panel bridge.
 advertise: true
 ---
 
-# DPS Simulation Engine
+# DPS Simulation Engine (TypeScript)
 
-WASM-compatible DPS simulation engine for Vanilla WoW (Turtle WoW). Uses interfaces
-for game data access so it runs in both native Go and browser WASM.
+Browser-based DPS simulation engine for Vanilla WoW (Turtle WoW). Fetches game data
+from Chronicle's existing APIs. Produces events that feed directly into EventsPanels
+processors for results display.
 
 ## Quick Reference
 
 ```bash
-# Build
-go build ./simulation/...
+# Typecheck
+cd frontend/chronicle && pnpm exec tsc --noEmit
 
-# Test
-go test ./simulation/... -v
-
-# WASM build (verify compatibility)
-GOOS=js GOARCH=wasm go build ./simulation/...
+# The sim has no separate build step — it's part of the frontend bundle
 ```
 
 ## Architecture
 
 ```
-simulation/
-├── gamedata/
-│   ├── types.go              # SpellData, ItemData, CreatureData, DataProvider interface
-│   └── jsonprovider/         # WASM-safe JSON-backed DataProvider
-├── combat/
-│   ├── types.go              # CombatUnit, Outcome, DamageResult, AttackType
-│   ├── formulas.go           # Vanilla combat formulas (armor, hit, resist, glancing)
-│   ├── resolve.go            # Spell/melee damage resolution pipeline
-│   ├── aura.go               # Aura tracking, DoT/HoT ticks, stat modifiers
-│   └── formulas_test.go      # Formula tests
-├── engine.go                 # Event-driven sim loop (Step, Run, CastSpell, AdvanceTo)
-├── eventqueue.go             # Min-heap priority queue for SimEvents
-├── character.go              # CharacterConfig → CombatUnit stat aggregation
-├── spellmod.go               # Talent/aura spell modifier system (SpellModOp)
-├── results.go                # SimResults, SpellBreakdown
-└── engine_test.go            # Engine integration tests
+frontend/chronicle/src/sim/
+├── types.ts          # Constants (schools, power types, aura types), interfaces
+│                     # (SpellData, CreatureData, CombatUnit, DamageResult)
+├── formulas.ts       # Pure math: armor, spell hit, resist, glancing, melee outcome
+├── resolve.ts        # resolveSpellDamage, resolveMeleeDamage pipelines
+├── aura.ts           # AuraTracker: addAura, removeAura, tickAuras, getModifier
+├── spellmod.ts       # SpellMod system (flat + pct, filtered by SpellFamilyFlags)
+├── character.ts      # CharacterConfig interface, buildCombatUnit (stats from gear)
+├── dataProvider.ts   # ApiDataProvider class (fetches spells, items, bosses, base stats)
+├── engine.ts         # Engine class: event queue (min-heap), step/run/cast/autoattack
+├── results.ts        # SimResults, SpellBreakdown, recordDamage
+├── panelBridge.ts    # Converts StepResults → ProcessorEvents for EventsPanels
+└── index.ts          # Barrel exports
+
+frontend/chronicle/src/pages/Sim/
+├── SimPage.tsx           # Main page: race/class/target/duration config + results
+├── SimResultsPanel.tsx   # DPS summary cards + spell breakdown table
+├── RotationBuilder.tsx   # Spell priority list editor (add/remove/reorder)
+├── PriorityRotation.ts   # Implements Rotation interface from priority list
+├── useSimRunner.ts       # React hook: loads data, creates Engine, runs sim
+└── index.ts
 ```
 
-## Key Design: DataProvider Interface
+## Key Interfaces
 
-The engine never imports `dbcmem`, `chrondbc`, or `database`. All game data comes through:
+### Engine
 
-```go
-type DataProvider interface {
-    GetSpell(id int32) (SpellData, bool)
-    GetItem(id int32) (ItemData, bool)
-    GetCreature(entryID uint32) (CreatureData, bool)
-    GetSetBonuses(setID int32) ([]SetBonusData, bool)
-    GetSpellsForClass(classID int32) ([]int32, error)
-    GetPlayerBaseStats(race, class, level int32) (PlayerBaseStats, bool)
+```typescript
+class Engine {
+  constructor(config: CharacterConfig, target: CreatureData,
+              baseStats: PlayerBaseStats | null, spells: Map<number, SpellData>)
+  reset(): void
+  setRotation(r: Rotation | null): void
+  setSeed(seed: number): void
+  step(): { result: StepResult; ok: boolean }
+  run(durationMs: number): SimResults
+  castSpell(spellID: number): string | null
+  startAutoAttack(): void
+  isSpellReady(spellID: number): { ready: boolean; remainingMs: number }
+  getState(): SimState
+  getResults(): SimResults
 }
 ```
 
-**Implementations:**
-- `jsonprovider.Provider` — loads from JSON arrays, WASM-safe
-- Future: `dbcprovider` (server-only, reads chrondbc + dbcmem)
+### CharacterConfig
 
-## Execution Modes
-
-### Batch (automated rotation)
-```go
-engine := simulation.NewEngine(config, boss, provider)
-engine.SetRotation(myRotation)
-results := engine.Run(300_000) // 5 min fight
+```typescript
+interface CharacterConfig {
+  race: number;       // 1=Human, 2=Orc, ..., 8=Troll
+  classId: number;    // 1=Warrior, 2=Paladin, ..., 11=Druid
+  level: number;
+  gear: Map<number, SimItem>;      // slot → item
+  talents: Map<number, number>;    // talentSpellID → points
+  buffs: number[];                 // buff spell IDs
+}
 ```
 
-### Step-through (debugging)
-```go
-engine.Reset()
-for { result, ok := engine.Step(); if !ok { break } }
+### Rotation
+
+```typescript
+interface Rotation {
+  nextAction(state: SimState): { type: "cast"; spellID: number } | null;
+}
 ```
 
-### Interactive (manual casting)
-```go
-engine.Reset()
-engine.StartAutoAttack()
-engine.CastSpell(25304) // Frostbolt
-results := engine.AdvanceTo(5000) // advance 5 seconds
+### ApiDataProvider
+
+```typescript
+class ApiDataProvider {
+  async getSpell(id: number): Promise<SpellData | null>
+  async getItem(id: number): Promise<SimItem | null>
+  async getBossPresets(): Promise<Record<string, CreatureData>>
+  async getPlayerBaseStats(race: number, classId: number): Promise<PlayerBaseStats | null>
+}
 ```
+
+## Data Sources (Backend APIs)
+
+| Data | Endpoint | Format |
+|------|----------|--------|
+| Spells | `GET /api/v1/wowdb/spell/{id}` | WoWSpell (180+ fields) |
+| Items (sim) | `GET /api/v1/internal/gamedata/sim/item/{id}` | SimItem with PPM, cooldowns |
+| Boss presets | `GET /api/v1/assets/boss-presets.json` | Static JSON |
+| Player base stats | `GET /api/v1/assets/player-base-stats.json` | Key: `{raceId}_{classId}` |
+| Class spells | `GET /api/v1/assets/class-spells.json` | Key: classId → spell list |
+
+## EventsPanels Bridge
+
+The sim produces `StepResult` objects. `panelBridge.ts` converts these to
+`ProcessorEvent` objects (DamageProcessorEvent, CastProcessorEvent, AuraProcessorEvent)
+with proper school/hittype mapping, then feeds them into any processor in-memory:
+
+```typescript
+import { collectSimSteps, runSimWithProcessor } from "../../sim/panelBridge";
+import { damageDoneProcessor } from "../Instance/EventsPanels/processors";
+
+const steps = collectSimSteps(engine);
+const result = runSimWithProcessor(engine, steps, spells, damageDoneProcessor, "Mage", "mage");
+```
+
+Key conversions:
+- WoW school bitmask (Physical=1, Fire=4) → chronicleproto.School enum (Physical=2, Fire=4)
+- Sim `Outcome` → HitType bitmask (HitTypeCrit, HitTypeMiss, HitTypeGlancing, etc.)
+- Fake GUIDs: player=`0x0000000000000001`, target=`0xF130000000000001`
 
 ## Combat Formulas (Turtle WoW)
 
-All formulas in `combat/formulas.go`, ported from vmangos with Turtle WoW modifications.
+All in `formulas.ts`, ported from vmangos with Turtle WoW modifications.
 
 ### Armor Mitigation
 `0.1 * armor / (8.5 * attackerLevel + 40)`, capped at 75%.
 
 ### Spell Hit
-Base 96% same level, -1% per level diff (first 2), then -11% per level PvE / -7% PvP.
+Base 96% same level, -1% per level diff (first 2), then -11% per level PvE.
 
 ### Melee Hit Table (two-roll cumulative)
 Order: miss → dodge → parry → glancing → block → crit → crushing → hit.
 
-### Turtle WoW Glancing Blows (NEW SYSTEM)
-**Different from vanilla vmangos.** Linear scaling:
+### Turtle WoW Glancing Blows (differs from vanilla)
+Linear scaling:
 - Damage: `0.65 + 0.02 * (weaponSkill - 300)`, capped [0.65, 0.95]
 - Miss: `8.0 - 0.2 * (weaponSkill - 300)`, capped [5.0, 8.0]
-- Glancing chance vs +3 boss: 40% (same as vanilla)
 
 ### Spell Power Coefficient
-Uses `EffectBonusCoefficient` from DBC if set, otherwise `castTimeMs / 3500`.
+`EffectBonusCoefficient` from DBC if set, otherwise `castTimeMs / 3500`.
 Level penalty: `1 - (20 - spellLevel) * 0.0375` for spells below level 20.
 
 ## Adding a New Rotation
 
-```go
-// simulation/rotations/fire_mage.go
-type FireMage struct{}
-
-func (r *FireMage) NextAction(state *simulation.SimState) *simulation.Action {
-    // Priority: Combustion > Fireblast (if CD ready) > Fireball
-    if state.TimeMs >= state.Cooldowns[COMBUSTION_ID] {
-        return &simulation.Action{Type: simulation.ActionCastSpell, SpellID: COMBUSTION_ID}
-    }
-    return &simulation.Action{Type: simulation.ActionCastSpell, SpellID: FIREBALL_ID}
+```typescript
+class MyRotation implements Rotation {
+  nextAction(state: SimState): { type: "cast"; spellID: number } | null {
+    // Check cooldowns via state.cooldowns.get(spellId)
+    // Check GCD via state.gcdReadyMs
+    return { type: "cast", spellID: FIREBALL_ID };
+  }
 }
 ```
 
 ## Adding a New Spell Effect Type
 
-1. Add constant in `gamedata/types.go` (e.g., `SpellEffectLeech = 9`)
-2. Handle in `engine.go` → `processCastComplete()` switch statement
-3. Add resolution logic in `combat/resolve.go` if needed
-
-## Adding a New Data Provider
-
-Implement `gamedata.DataProvider`. For server-only providers, use build tags:
-```go
-//go:build !js
-package dbcprovider
-```
+1. Add constant in `types.ts` (e.g., `export const SpellEffectLeech = 9`)
+2. Handle in `engine.ts` → `processCastComplete()` switch
+3. Add resolution logic in `resolve.ts` if needed
 
 ## Reference: vmangos Source Files
 
-| System | vmangos File | Go File |
+| System | vmangos File | TS File |
 |--------|-------------|---------|
-| Spell damage pipeline | SpellCaster.cpp:966-1509 | combat/resolve.go |
-| Armor mitigation | SpellCaster.cpp:858-882 | combat/formulas.go |
-| Melee hit table | Unit.cpp:2234-2427 | combat/formulas.go |
-| Spell hit/resist | SpellCaster.cpp:498-651 | combat/formulas.go |
-| Aura/DoT system | SpellAuras.cpp:4265-4395 | combat/aura.go |
-| Spell modifiers | SpellModifier.h:28-49 | spellmod.go |
-| SpellEntry struct | SpellEntry.h:588-730 | gamedata/types.go |
-| ItemPrototype | ItemPrototype.h:436-541 | gamedata/types.go |
-| CreatureInfo | CreatureDefines.h:234-465 | gamedata/types.go |
+| Spell damage pipeline | SpellCaster.cpp:966-1509 | resolve.ts |
+| Armor mitigation | SpellCaster.cpp:858-882 | formulas.ts |
+| Melee hit table | Unit.cpp:2234-2427 | formulas.ts |
+| Spell hit/resist | SpellCaster.cpp:498-651 | formulas.ts |
+| Aura/DoT system | SpellAuras.cpp:4265-4395 | aura.ts |
+| Spell modifiers | SpellModifier.h:28-49 | spellmod.ts |
 
 vmangos source: `/home/steven/go/src/github.com/Emyrk/chronicle/research/core/src/game/`
