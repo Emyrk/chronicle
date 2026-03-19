@@ -8,6 +8,8 @@ import type { CharacterConfig } from "../../sim/character";
 import type { Rotation } from "../../sim/engine";
 import { collectSimSteps } from "../../sim/panelBridge";
 import type { StepResult } from "../../sim/engine";
+import { buildSimStreams } from "../../sim/buildSimStream";
+import type { CachedStream, StreamType } from "../../hooks/instanceEvents/types";
 
 export interface SimRunConfig {
   character: CharacterConfig;
@@ -23,6 +25,8 @@ export interface SimRunResult {
   steps: StepResult[];
   spells: Map<number, SpellData>;
   durationMs: number;
+  streams: Map<StreamType, CachedStream>;
+  startTimestamp: Date;
 }
 
 export function useSimRunner() {
@@ -64,16 +68,22 @@ export function useSimRunner() {
 
       // Single pass: collect steps, then finalize results
       engine.reset();
+      const startTimestamp = new Date();
       const steps = collectSimSteps(engine, config.durationMs);
       const engineResults = engine.getResults();
       engineResults.durationMs = config.durationMs;
       finalizeResults(engineResults);
+
+      // Build protobuf streams for EventsPanels
+      const streams = buildSimStreams(steps, spells, startTimestamp);
 
       setResult({
         results: engineResults,
         steps,
         spells,
         durationMs: config.durationMs,
+        streams,
+        startTimestamp,
       });
     } catch (e) {
       setError(e instanceof Error ? e.message : String(e));

@@ -33,8 +33,8 @@ import {
 import type { SpellData } from "./types";
 
 // Fake GUIDs that pass isPlayerGuidFast / creature checks
-const SIM_PLAYER_GUID = "0x0000000000000001";
-const SIM_TARGET_GUID = "0xF130000000000001";
+export const SIM_PLAYER_GUID = "0x0000000000000001";
+export const SIM_TARGET_GUID = "0xF130000000000001";
 
 /** Convert WoW school bitmask to chronicleproto.School enum value. */
 function schoolMaskToProto(mask: number): number {
