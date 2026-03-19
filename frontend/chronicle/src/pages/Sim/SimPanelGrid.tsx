@@ -1,12 +1,20 @@
 /**
- * Panel grid for sim results — reuses EventsPanel with a mock Instance.
+ * Panel grid for sim results — reuses EventsPanel with the user's saved layout.
  */
 
 import { useState, useMemo, useCallback } from "react";
 import { EventsPanel, type EventsPanelType, type PanelContext, type EntitySelection } from "@/pages/Instance/EventsPanels";
 import type { Instance, Encounter } from "@/pages/Instance/InstancePage";
 import type { WoWHeroClasses, WoWHeroRaces } from "@/api/typesGenerated";
+import type { GridEditorItem } from "@/components/layout/GridLayoutEditor";
 import { SIM_ENCOUNTER_ID, SIM_PLAYER_GUID, SIM_TARGET_GUID } from "@/sim/panelBridge";
+import { useSession } from "@/api/queries";
+import { useInstanceDefaultsCache } from "@/hooks/useInstanceDefaultsCache";
+import { parsePanelLayout } from "@/features/layoutBook/parseLayout";
+import {
+  DEFAULT_INSTANCE_LAYOUT_ITEMS,
+  DEFAULT_INSTANCE_PANEL_TYPES,
+} from "@/pages/Instance/viewDefaults";
 
 // Class ID → WoWHeroClasses enum string
 const CLASS_ID_TO_WOW: Record<number, WoWHeroClasses> = {
@@ -29,21 +37,6 @@ interface SimPanelGridProps {
   startTimestamp: Date;
 }
 
-interface PanelState {
-  id: string;
-  type: EventsPanelType;
-  x: number;
-  y: number;
-  w: number;
-  h: number;
-}
-
-const DEFAULT_PANELS: PanelState[] = [
-  { id: "panel-0", type: "damage_done", x: 0, y: 0, w: 6, h: 4 },
-  { id: "panel-1", type: "damage_taken", x: 6, y: 0, w: 6, h: 4 },
-  { id: "panel-2", type: "timeline", x: 0, y: 4, w: 12, h: 4 },
-];
-
 export function SimPanelGrid({
   playerName,
   classId,
@@ -52,7 +45,29 @@ export function SimPanelGrid({
   durationMs,
   startTimestamp,
 }: SimPanelGridProps) {
-  const [panels, setPanels] = useState<PanelState[]>(DEFAULT_PANELS);
+  // Load user's saved layout (same as Instance page)
+  const { data: session } = useSession();
+  const isLoggedIn = !!session?.user;
+  const instanceDefaults = useInstanceDefaultsCache(isLoggedIn);
+
+  const savedLayout = useMemo(() => {
+    const layout = instanceDefaults?.default_desktop_layout;
+    if (!layout) return null;
+    return parsePanelLayout(layout);
+  }, [instanceDefaults?.default_desktop_layout]);
+
+  const layoutItems: GridEditorItem[] = useMemo(
+    () => savedLayout?.items ?? DEFAULT_INSTANCE_LAYOUT_ITEMS,
+    [savedLayout],
+  );
+
+  const defaultPanelTypes: Record<string, EventsPanelType> = useMemo(
+    () => savedLayout?.panelTypesById ?? DEFAULT_INSTANCE_PANEL_TYPES,
+    [savedLayout],
+  );
+
+  // Panel types can be changed per-panel (starts from saved/default)
+  const [panelTypeOverrides, setPanelTypeOverrides] = useState<Record<string, EventsPanelType>>({});
 
   const encounter: Encounter = useMemo(() => ({
     id: SIM_ENCOUNTER_ID,
@@ -97,9 +112,7 @@ export function SimPanelGrid({
   }), [instance, entitySelection]);
 
   const handlePanelTypeChange = useCallback((panelId: string, type: EventsPanelType) => {
-    setPanels((prev) =>
-      prev.map((p) => (p.id === panelId ? { ...p, type } : p)),
-    );
+    setPanelTypeOverrides((prev) => ({ ...prev, [panelId]: type }));
   }, []);
 
   return (
@@ -110,25 +123,28 @@ export function SimPanelGrid({
         gridAutoRows: "minmax(80px, auto)",
       }}
     >
-      {panels.map((panel, index) => (
-        <div
-          key={panel.id}
-          className="min-h-0"
-          style={{
-            gridColumn: `${panel.x + 1} / span ${panel.w}`,
-            gridRow: `${panel.y + 1} / span ${panel.h}`,
-          }}
-        >
-          <EventsPanel
-            panelType={panel.type}
-            onPanelTypeChange={(type) => handlePanelTypeChange(panel.id, type)}
-            durationMs={durationMs}
-            context={panelContext}
-            panelIndex={index}
-            panelId={panel.id}
-          />
-        </div>
-      ))}
+      {layoutItems.map((item, index) => {
+        const panelType = panelTypeOverrides[item.id] ?? defaultPanelTypes[item.id] ?? "empty";
+        return (
+          <div
+            key={item.id}
+            className="min-h-0"
+            style={{
+              gridColumn: `${item.x + 1} / span ${item.w}`,
+              gridRow: `${item.y + 1} / span ${item.h}`,
+            }}
+          >
+            <EventsPanel
+              panelType={panelType}
+              onPanelTypeChange={(type) => handlePanelTypeChange(item.id, type)}
+              durationMs={durationMs}
+              context={panelContext}
+              panelIndex={index}
+              panelId={item.id}
+            />
+          </div>
+        );
+      })}
     </div>
   );
 }
