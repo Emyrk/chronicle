@@ -227,19 +227,91 @@ export function SimPanelGrid({
     },
   }), [playerName, classId, raceId, targetName, startTimestamp, durationMs, encounter]);
 
+  // Entity selection state — toggleable
+  const [selectedPlayerIds, setSelectedPlayerIds] = useState<Set<string>>(
+    () => new Set([SIM_PLAYER_GUID]),
+  );
+  const [selectedEnemyIds, setSelectedEnemyIds] = useState<Set<string>>(
+    () => new Set([SIM_TARGET_GUID]),
+  );
+
   const entitySelection: EntitySelection = useMemo(() => ({
-    playerIds: new Set([SIM_PLAYER_GUID]),
-    enemyIds: new Set([SIM_TARGET_GUID]),
-  }), []);
+    playerIds: selectedPlayerIds,
+    enemyIds: selectedEnemyIds,
+  }), [selectedPlayerIds, selectedEnemyIds]);
+
+  const togglePlayer = useCallback((id: string) => {
+    setSelectedPlayerIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  }, []);
+
+  const togglePlayers = useCallback((ids: string[]) => {
+    setSelectedPlayerIds((prev) => {
+      const allSelected = ids.every((id) => prev.has(id));
+      const next = new Set(prev);
+      if (allSelected) {
+        ids.forEach((id) => next.delete(id));
+      } else {
+        ids.forEach((id) => next.add(id));
+      }
+      return next;
+    });
+  }, []);
+
+  const toggleEnemy = useCallback((id: string) => {
+    setSelectedEnemyIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  }, []);
 
   const panelContext: PanelContext = useMemo(() => ({
     instance,
     selectedEncounterIds: [SIM_ENCOUNTER_ID],
     entitySelection,
-  }), [instance, entitySelection]);
+    onTogglePlayer: togglePlayer,
+    onTogglePlayers: togglePlayers,
+  }), [instance, entitySelection, togglePlayer, togglePlayers]);
 
   return (
     <>
+      {/* Entity selector bar */}
+      <div className="flex items-center gap-4 mb-4">
+        <div className="flex items-center gap-2">
+          <span className="text-xs text-zinc-500 uppercase tracking-wider">Players</span>
+          <button
+            onClick={() => togglePlayer(SIM_PLAYER_GUID)}
+            className={`inline-flex items-center gap-1.5 rounded-md border px-2.5 py-1 text-xs font-medium transition-colors ${
+              selectedPlayerIds.has(SIM_PLAYER_GUID)
+                ? "border-indigo-500/50 bg-indigo-500/20 text-indigo-300"
+                : "border-zinc-700 bg-zinc-800/50 text-zinc-500"
+            }`}
+          >
+            {playerName}
+          </button>
+        </div>
+        <div className="h-4 w-px bg-zinc-700" />
+        <div className="flex items-center gap-2">
+          <span className="text-xs text-zinc-500 uppercase tracking-wider">Enemies</span>
+          <button
+            onClick={() => toggleEnemy(SIM_TARGET_GUID)}
+            className={`inline-flex items-center gap-1.5 rounded-md border px-2.5 py-1 text-xs font-medium transition-colors ${
+              selectedEnemyIds.has(SIM_TARGET_GUID)
+                ? "border-red-500/50 bg-red-500/20 text-red-300"
+                : "border-zinc-700 bg-zinc-800/50 text-zinc-500"
+            }`}
+          >
+            {targetName}
+          </button>
+        </div>
+      </div>
+
       <div
         className="grid gap-4"
         style={{
