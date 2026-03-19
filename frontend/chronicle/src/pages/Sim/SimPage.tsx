@@ -39,6 +39,8 @@ const CLASS_NAME_TO_ID: Record<string, number> = Object.fromEntries(
 const RACE_NAME_TO_ID: Record<string, number> = Object.fromEntries(
   Object.entries(RACES).map(([id, r]) => [r.name, Number(id)]),
 );
+// Armory returns "Scourge" for Undead
+RACE_NAME_TO_ID["Scourge"] = 5;
 
 const SLOT_NAMES: Record<number, string> = {
   0: "Head", 1: "Neck", 2: "Shoulder", 3: "Shirt", 4: "Chest",
