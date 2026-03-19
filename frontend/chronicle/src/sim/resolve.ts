@@ -93,7 +93,7 @@ export function resolveSpellDamage(
   let totalDmg = baseDmg + bonus;
 
   // 3. Crit check
-  let outcome = Outcome.Hit;
+  let outcome: Outcome = Outcome.Hit;
   if (rng() * 100.0 < caster.spellCrit) {
     totalDmg *= 1.5;
     outcome = Outcome.Crit;

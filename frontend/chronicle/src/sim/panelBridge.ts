@@ -108,7 +108,7 @@ export interface SimProcessorEvent {
 export function stepResultToEvents(
   step: StepResult,
   spells: Map<number, SpellData>,
-  playerName: string,
+  _playerName: string,
 ): SimProcessorEvent[] {
   const events: SimProcessorEvent[] = [];
 
@@ -127,7 +127,7 @@ export function stepResultToEvents(
       ...meta(step.timeMs),
       type: "damage" as const,
       caster: SIM_PLAYER_GUID,
-      sourceName: isAutoAttack ? (isOffHand ? "Auto Attack (OH)" : "Auto Attack") : (spell?.name ?? `Spell ${step.spellID}`),
+      sourceName: isAutoAttack ? (isOffHand ? "Auto Attack" : "Auto Attack") : (spell?.name ?? `Spell ${step.spellID}`),
       target: SIM_TARGET_GUID,
       hitType,
       amount: step.amount,
@@ -254,7 +254,7 @@ export function createSimProcessorContext(
  * ```
  */
 export function runSimWithProcessor<TResult>(
-  engine: { run: (durationMs: number) => unknown; getState: () => { timeMs: number } },
+  _engine: { run: (durationMs: number) => unknown; getState: () => { timeMs: number } },
   steps: StepResult[],
   spells: Map<number, SpellData>,
   processor: {

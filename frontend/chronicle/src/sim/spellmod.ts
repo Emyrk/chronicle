@@ -4,25 +4,26 @@
 
 import type { SpellData } from "./types";
 
-export enum SpellModOp {
-  Damage = 0,
-  Duration = 1,
-  Threat = 2,
-  AttackPower = 3,
-  Charges = 4,
-  Range = 5,
-  Radius = 6,
-  CriticalChance = 7,
-  AllEffects = 8,
-  CastingTime = 10,
-  Cooldown = 11,
-  Cost = 14,
-  CritDamageBonus = 15,
-  HitChance = 16,
-  Dot = 22,
-  Haste = 23,
-  SpellBonusDamage = 24,
-}
+export const SpellModOp = {
+  Damage: 0,
+  Duration: 1,
+  Threat: 2,
+  AttackPower: 3,
+  Charges: 4,
+  Range: 5,
+  Radius: 6,
+  CriticalChance: 7,
+  AllEffects: 8,
+  CastingTime: 10,
+  Cooldown: 11,
+  Cost: 14,
+  CritDamageBonus: 15,
+  HitChance: 16,
+  Dot: 22,
+  Haste: 23,
+  SpellBonusDamage: 24,
+} as const;
+export type SpellModOp = (typeof SpellModOp)[keyof typeof SpellModOp];
 
 export const SpellModFlat = 107;
 export const SpellModPct = 108;

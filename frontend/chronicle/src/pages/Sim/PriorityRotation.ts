@@ -10,7 +10,10 @@ export interface RotationEntry {
  * casts the first spell that is ready (off cooldown, GCD ready, has resources).
  */
 export class PriorityRotation implements Rotation {
-  constructor(private entries: RotationEntry[]) {}
+  private entries: RotationEntry[];
+  constructor(entries: RotationEntry[]) {
+    this.entries = entries;
+  }
 
   nextAction(state: SimState): { type: "cast"; spellID: number } | null {
     if (state.timeMs < state.gcdReadyMs) return null;

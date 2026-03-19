@@ -183,23 +183,25 @@ export interface PlayerBaseStats {
 
 // --- Combat runtime types ---
 
-export enum Outcome {
-  Hit,
-  Crit,
-  Miss,
-  Dodge,
-  Parry,
-  Glancing,
-  Block,
-  Crushing,
-  Resist,
-}
+export const Outcome = {
+  Hit: 0,
+  Crit: 1,
+  Miss: 2,
+  Dodge: 3,
+  Parry: 4,
+  Glancing: 5,
+  Block: 6,
+  Crushing: 7,
+  Resist: 8,
+} as const;
+export type Outcome = (typeof Outcome)[keyof typeof Outcome];
 
-export enum AttackType {
-  MainHand,
-  OffHand,
-  Ranged,
-}
+export const AttackType = {
+  MainHand: 0,
+  OffHand: 1,
+  Ranged: 2,
+} as const;
+export type AttackType = (typeof AttackType)[keyof typeof AttackType];
 
 export interface CombatUnit {
   level: number;

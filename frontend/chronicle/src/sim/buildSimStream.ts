@@ -156,7 +156,7 @@ export function buildSimDamageStream(
       meta,
       caster: SIM_PLAYER_GUID,
       sourceName: isAutoAttack
-        ? (isOffHand ? "Auto Attack (OH)" : "Auto Attack")
+        ? (isOffHand ? "Auto Attack" : "Auto Attack")
         : (spell?.name ?? `Spell ${step.spellID}`),
       target: SIM_TARGET_GUID,
       hitType,

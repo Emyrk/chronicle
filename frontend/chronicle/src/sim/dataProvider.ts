@@ -32,7 +32,7 @@ export function wowSpellToSpellData(ws: WoWSpell): SpellData {
     baseLevel: ws.base_level ?? 0,
     maxLevel: ws.max_level ?? 0,
     effects,
-    procFlags: ws.proc_type_mask?.value ?? 0,
+    procFlags: ws.proc_type_mask?.mask ?? 0,
     procChance: ws.proc_chance ?? 0,
     procCharges: ws.proc_charges ?? 0,
     speed: ws.speed ?? 0,
@@ -41,9 +41,9 @@ export function wowSpellToSpellData(ws: WoWSpell): SpellData {
     spellFamilyName: ws.spell_class_set?.value ?? 0,
     spellFamilyFlags: ws.spell_class_mask ?? 0,
     maxTargetLevel: ws.max_target_level ?? 0,
-    maxAffectedTargets: ws.max_affected_targets ?? 0,
-    equippedItemClass: ws.equipped_item_class ?? -1,
-    equippedItemSubclass: ws.equipped_item_subclass_mask ?? 0,
+    maxAffectedTargets: ws.max_targets ?? 0,
+    equippedItemClass: ws.equipped_item_class?.value ?? -1,
+    equippedItemSubclass: ws.equipped_item_subclass ?? 0,
   };
 }
 
@@ -55,7 +55,7 @@ function makeEffect(ws: WoWSpell, idx: number): SpellEffect {
     baseDice: ws.effect_base_dice?.[idx] ?? 0,
     pointsPerLevel: ws.effect_real_points_per_level?.[idx] ?? 0,
     dicePerLevel: ws.effect_dice_per_level?.[idx] ?? 0,
-    bonusCoefficient: ws.effect_bonus_coefficient?.[idx] ?? -1,
+    bonusCoefficient: -1, // not available in WoWSpell API
     auraType: ws.effect_aura?.[idx]?.value ?? 0,
     auraPeriodMs: ws.effect_aura_period?.[idx] ?? 0,
     amplitude: ws.effect_amplitude?.[idx] ?? 0,

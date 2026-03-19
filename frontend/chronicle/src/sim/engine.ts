@@ -12,7 +12,6 @@ import {
   AttackType,
   PowerMana,
   PowerEnergy,
-  SchoolMaskPhysical,
   AuraPeriodicDamage,
   SpellEffectNone,
   SpellEffectSchoolDamage,
@@ -28,19 +27,20 @@ import { type CharacterConfig, buildCombatUnit, buildTargetUnit } from "./charac
 
 // --- Event types ---
 
-export enum EventType {
-  AutoAttack,
-  OffHandAttack,
-  CastStart,
-  CastComplete,
-  DotTick,
-  HotTick,
-  AuraExpire,
-  GCDReady,
-  CooldownReady,
-  ResourceTick,
-  Proc,
-}
+export const EventType = {
+  AutoAttack: 0,
+  OffHandAttack: 1,
+  CastStart: 2,
+  CastComplete: 3,
+  DotTick: 4,
+  HotTick: 5,
+  AuraExpire: 6,
+  GCDReady: 7,
+  CooldownReady: 8,
+  ResourceTick: 9,
+  Proc: 10,
+} as const;
+export type EventType = (typeof EventType)[keyof typeof EventType];
 
 interface SimEvent {
   timeMs: number;
@@ -443,9 +443,9 @@ export class Engine {
 
     if (dmgResult.outcome !== Outcome.Miss && dmgResult.outcome !== Outcome.Dodge && dmgResult.outcome !== Outcome.Parry) {
       this.state.totalDamage += dmgResult.damage;
-      recordDamage(this.results, 0, "Auto Attack (OH)", dmgResult.damage, dmgResult.outcome === Outcome.Crit, false, false);
+      recordDamage(this.results, 0, "Auto Attack", dmgResult.damage, dmgResult.outcome === Outcome.Crit, false, false);
     } else {
-      recordDamage(this.results, 0, "Auto Attack (OH)", 0, false, true, false);
+      recordDamage(this.results, 0, "Auto Attack", 0, false, true, false);
     }
 
     const speedMs = this.state.caster.ohSpeedMs || 2000;
