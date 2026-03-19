@@ -84,10 +84,7 @@ export function SimPage() {
     }
   }, [raceId, classId]);
 
-  // Auto-switch to results tab after sim completes
-  useEffect(() => {
-    if (result) setTab("results");
-  }, [result]);
+
 
   const handleLoadArmory = useCallback(async () => {
     const input = armoryInput.trim();
