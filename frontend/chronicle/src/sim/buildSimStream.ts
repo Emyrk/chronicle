@@ -10,6 +10,7 @@
 import { create, toBinary } from "@bufbuild/protobuf";
 import {
   DamageSchema,
+  SpellGoSchema,
   EventMetaSchema,
   SpellDataSchema,
   School,
@@ -159,14 +160,26 @@ export function buildSimDamageStream(
       amount: step.amount,
       school: schoolMaskToProto(step.school || SchoolMaskPhysical),
       tailers: [],
-      spellData: !isAutoAttack && step.spellID
-        ? create(SpellDataSchema, { id: step.spellID, name: spell?.name ?? `Spell ${step.spellID}` })
-        : undefined,
+      // Auto attacks use spellId 6603 so the rotations processor can detect them
+      spellData: isAutoAttack
+        ? create(SpellDataSchema, { id: 6603, name: "Auto Attack" })
+        : step.spellID
+          ? create(SpellDataSchema, { id: step.spellID, name: spell?.name ?? `Spell ${step.spellID}` })
+          : undefined,
     });
 
     encodedMessages.push(toBinary(DamageSchema, dmg));
   }
 
+  return buildEncounterPayload(encodedMessages, encounterID, startTimestamp);
+}
+
+/** Wrap encoded protobuf messages into the encounter-header binary format. */
+function buildEncounterPayload(
+  encodedMessages: Uint8Array[],
+  encounterID: string,
+  startTimestamp: Date,
+): CachedStream {
   // Build the data section: [varint(len) + bytes]...
   const dataParts: Uint8Array[] = [];
   let dataLength = 0;
@@ -206,6 +219,47 @@ export function buildSimDamageStream(
   return { data, headers: [header] };
 }
 
+/**
+ * Build a spell_go stream from sim steps.
+ * Encodes CastComplete events as SpellGo protobuf messages.
+ */
+export function buildSimSpellGoStream(
+  steps: StepResult[],
+  spells: Map<number, SpellData>,
+  encounterID: string,
+  startTimestamp: Date,
+): CachedStream {
+  const encodedMessages: Uint8Array[] = [];
+  let eventIndex = 0;
+
+  for (const step of steps) {
+    // Only CastComplete events with a spell ID become spell_go
+    if (step.event !== EventType.CastComplete || !step.spellID) continue;
+
+    const spell = spells.get(step.spellID);
+
+    const meta = create(EventMetaSchema, {
+      index: eventIndex++,
+      offsetMilli: BigInt(step.timeMs),
+    });
+
+    const msg = create(SpellGoSchema, {
+      meta,
+      caster: SIM_PLAYER_GUID,
+      target: SIM_TARGET_GUID,
+      spellData: create(SpellDataSchema, {
+        id: step.spellID,
+        name: spell?.name ?? `Spell ${step.spellID}`,
+      }),
+      numHits: step.amount > 0 ? 1 : 0,
+    });
+
+    encodedMessages.push(toBinary(SpellGoSchema, msg));
+  }
+
+  return buildEncounterPayload(encodedMessages, encounterID, startTimestamp);
+}
+
 /** Build an empty CachedStream for stream types the sim doesn't produce. */
 export function emptyStream(): CachedStream {
   return { data: new Uint8Array(0), headers: [] };
@@ -222,6 +276,9 @@ export function buildSimStreams(
     "damage",
     buildSimDamageStream(steps, spells, SIM_ENCOUNTER_ID, startTimestamp),
   );
-  // Other stream types return empty for now
+  streams.set(
+    "spell_go",
+    buildSimSpellGoStream(steps, spells, SIM_ENCOUNTER_ID, startTimestamp),
+  );
   return streams;
 }
