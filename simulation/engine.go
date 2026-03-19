@@ -105,6 +105,7 @@ type Engine struct {
 	events     *eventQueue
 	rotation   Rotation
 	results    SimResults
+	combatLog  *CombatLog // nil = no combat log recording
 	durationMs int32
 	rng        *rand.Rand
 	seqCounter int64
@@ -124,6 +125,15 @@ func NewEngine(config CharacterConfig, target gamedata.CreatureData, data gameda
 func (e *Engine) SetRotation(r Rotation) {
 	e.rotation = r
 }
+
+// EnableCombatLog starts recording protobuf combat log events that are
+// compatible with Chronicle's EventsPanels frontend. Call before Reset().
+func (e *Engine) EnableCombatLog(playerName string, playerID uint64) {
+	e.combatLog = NewCombatLog(playerName, playerID, e.targetData.Name, e.targetData.EntryID)
+}
+
+// CombatLog returns the recorded combat log, or nil if not enabled.
+func (e *Engine) GetCombatLog() *CombatLog { return e.combatLog }
 
 // SetSeed sets the RNG seed for deterministic simulations.
 func (e *Engine) SetSeed(seed int64) {
@@ -193,8 +203,22 @@ func (e *Engine) Step() (StepResult, bool) {
 		// Expire auras
 		expired := e.state.TargetAuras.ExpireAuras(deltaMs)
 		result.AurasRemoved = append(result.AurasRemoved, expired...)
+		if e.combatLog != nil {
+			for _, sid := range expired {
+				if spell, ok := e.data.GetSpell(sid); ok {
+					e.combatLog.RecordAuraRemoved(e.state.TimeMs, spell.Name, sid, true)
+				}
+			}
+		}
 		expired = e.state.Auras.ExpireAuras(deltaMs)
 		result.AurasRemoved = append(result.AurasRemoved, expired...)
+		if e.combatLog != nil {
+			for _, sid := range expired {
+				if spell, ok := e.data.GetSpell(sid); ok {
+					e.combatLog.RecordAuraRemoved(e.state.TimeMs, spell.Name, sid, false)
+				}
+			}
+		}
 	}
 
 	// Process event
@@ -212,7 +236,11 @@ func (e *Engine) Step() (StepResult, bool) {
 
 	case EventCastStart:
 		result.SpellID = ev.SpellID
-		// Cast is in progress — nothing to do until CastComplete
+		if e.combatLog != nil {
+			if spell, ok := e.data.GetSpell(ev.SpellID); ok {
+				e.combatLog.RecordCastStart(ev.TimeMs, &spell)
+			}
+		}
 
 	case EventCastComplete:
 		result.SpellID = ev.SpellID
@@ -249,6 +277,10 @@ func (e *Engine) processCastComplete(spellID int32, result *StepResult) {
 		return
 	}
 
+	if e.combatLog != nil {
+		e.combatLog.RecordCastComplete(e.state.TimeMs, &spell)
+	}
+
 	for i := range spell.Effects {
 		eff := &spell.Effects[i]
 		if eff.Type == gamedata.SpellEffectNone {
@@ -271,14 +303,19 @@ func (e *Engine) processCastComplete(spellID int32, result *StepResult) {
 			} else {
 				e.results.recordDamage(spellID, spell.Name, 0, false, true, false)
 			}
+			if e.combatLog != nil {
+				e.combatLog.RecordDamage(e.state.TimeMs, &spell, dmgResult, true)
+			}
 
 		case gamedata.SpellEffectApplyAura:
 			if eff.AuraType == gamedata.AuraPeriodicDamage {
-				// Apply DoT to target
 				spellPower := e.state.Caster.SpellPower[0]
 				aura := combat.CreateAuraFromSpell(&spell, e.state.Caster.Level, spellPower)
 				e.state.TargetAuras.AddAura(aura)
 				result.AurasApplied = append(result.AurasApplied, spellID)
+				if e.combatLog != nil {
+					e.combatLog.RecordAuraApplied(e.state.TimeMs, &spell, true)
+				}
 			}
 
 		case gamedata.SpellEffectWeaponDamage, gamedata.SpellEffectNormalizedWeaponDmg:
@@ -286,7 +323,6 @@ func (e *Engine) processCastComplete(spellID int32, result *StepResult) {
 				e.state.Caster, e.state.Target,
 				combat.AttackMainHand, e.state.Caster.WeaponSkill, e.rng,
 			)
-			// Add spell bonus damage from effect
 			if dmgResult.Outcome != combat.OutcomeMiss && dmgResult.Outcome != combat.OutcomeDodge && dmgResult.Outcome != combat.OutcomeParry {
 				dmgResult.Damage += eff.BasePoints + 1
 			}
@@ -301,6 +337,9 @@ func (e *Engine) processCastComplete(spellID int32, result *StepResult) {
 					dmgResult.Outcome == combat.OutcomeCrit, false, false)
 			} else {
 				e.results.recordDamage(spellID, spell.Name, 0, false, true, false)
+			}
+			if e.combatLog != nil {
+				e.combatLog.RecordDamage(e.state.TimeMs, &spell, dmgResult, true)
 			}
 		}
 	}
@@ -343,6 +382,9 @@ func (e *Engine) processAutoAttack(result *StepResult) {
 			dmgResult.Outcome == combat.OutcomeCrit, false, false)
 	} else {
 		e.results.recordDamage(0, "Auto Attack", 0, false, true, false)
+	}
+	if e.combatLog != nil {
+		e.combatLog.RecordDamage(e.state.TimeMs, nil, dmgResult, true)
 	}
 
 	// Schedule next auto attack
