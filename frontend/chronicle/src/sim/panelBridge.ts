@@ -293,14 +293,18 @@ export function runSimWithProcessor<TResult>(
 
 /**
  * Collect all StepResults from a sim run (for feeding to processors).
+ * MUST pass durationMs to prevent infinite loops (ResourceTick reschedules forever).
  */
 export function collectSimSteps(
   engine: { step: () => { result: StepResult; ok: boolean } },
+  durationMs: number,
 ): StepResult[] {
   const steps: StepResult[] = [];
-  while (true) {
+  const maxSteps = 1_000_000; // safety limit
+  while (steps.length < maxSteps) {
     const { result, ok } = engine.step();
     if (!ok) break;
+    if (result.timeMs > durationMs) break;
     steps.push(result);
   }
   return steps;

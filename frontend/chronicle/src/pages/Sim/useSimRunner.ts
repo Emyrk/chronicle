@@ -1,5 +1,6 @@
 import { useState, useCallback, useRef } from "react";
 import { Engine } from "../../sim/engine";
+import { finalizeResults } from "../../sim/results";
 import type { SimResults } from "../../sim/results";
 import type { SpellData, CreatureData, PlayerBaseStats } from "../../sim/types";
 import { ApiDataProvider } from "../../sim/dataProvider";
@@ -61,15 +62,12 @@ export function useSimRunner() {
       engine.setRotation(config.rotation);
       engine.setSeed(Date.now());
 
-      // For now, single iteration — collect steps for panel bridge
+      // Single pass: collect steps, then finalize results
       engine.reset();
-      // Schedule events by running to completion
-      const engineResults = engine.run(config.durationMs);
-      
-      // Also collect step-by-step for panel bridge
-      engine.reset();
-      engine.setSeed(Date.now());
-      const steps = collectSimSteps(engine);
+      const steps = collectSimSteps(engine, config.durationMs);
+      const engineResults = engine.getResults();
+      engineResults.durationMs = config.durationMs;
+      finalizeResults(engineResults);
 
       setResult({
         results: engineResults,
