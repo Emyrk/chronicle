@@ -40,8 +40,8 @@ interface PanelState {
 
 const DEFAULT_PANELS: PanelState[] = [
   { id: "panel-0", type: "damage_done", x: 0, y: 0, w: 6, h: 4 },
-  { id: "panel-1", type: "damage_done_by_target", x: 6, y: 0, w: 6, h: 4 },
-  { id: "panel-2", type: "damage_done_timeline", x: 0, y: 4, w: 12, h: 4 },
+  { id: "panel-1", type: "damage_taken", x: 6, y: 0, w: 6, h: 4 },
+  { id: "panel-2", type: "timeline", x: 0, y: 4, w: 12, h: 4 },
 ];
 
 export function SimPanelGrid({
