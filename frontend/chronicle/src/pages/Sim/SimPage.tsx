@@ -33,14 +33,14 @@ const CLASSES: Record<number, string> = {
 };
 
 const CLASS_NAME_TO_ID: Record<string, number> = Object.fromEntries(
-  Object.entries(CLASSES).map(([id, name]) => [name, Number(id)]),
+  Object.entries(CLASSES).map(([id, name]) => [name.toLowerCase(), Number(id)]),
 );
 
 const RACE_NAME_TO_ID: Record<string, number> = Object.fromEntries(
-  Object.entries(RACES).map(([id, r]) => [r.name, Number(id)]),
+  Object.entries(RACES).map(([id, r]) => [r.name.toLowerCase(), Number(id)]),
 );
 // Armory returns "Scourge" for Undead
-RACE_NAME_TO_ID["Scourge"] = 5;
+RACE_NAME_TO_ID["scourge"] = 5;
 
 const SLOT_NAMES: Record<number, string> = {
   0: "Head", 1: "Neck", 2: "Shoulder", 3: "Shirt", 4: "Chest",
@@ -107,9 +107,9 @@ export function SimPage() {
       const player: ArmoryPlayer = await res.json();
       setArmoryPlayer(player);
 
-      const rid = RACE_NAME_TO_ID[player.race];
+      const rid = RACE_NAME_TO_ID[player.race.toLowerCase()];
       if (rid) setRaceId(rid);
-      const cid = CLASS_NAME_TO_ID[player.class];
+      const cid = CLASS_NAME_TO_ID[player.class.toLowerCase()];
       if (cid) setClassId(cid);
 
       const provider = providerRef.current;
