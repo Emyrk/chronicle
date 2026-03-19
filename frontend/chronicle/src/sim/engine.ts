@@ -226,6 +226,8 @@ export class Engine {
 
     this.scheduleEvent({ timeMs: 0, type: EventType.GCDReady, spellID: 0, effectIdx: 0, seqNo: 0 });
     this.scheduleEvent({ timeMs: 2000, type: EventType.ResourceTick, spellID: 0, effectIdx: 0, seqNo: 0 });
+    // Auto-start melee attacks
+    this.startAutoAttack();
   }
 
   private scheduleEvent(ev: SimEvent): void {
@@ -282,7 +284,15 @@ export class Engine {
           const action = this.rotation.nextAction(this.state);
           if (action && action.type === "cast") {
             const err = this.castSpell(action.spellID);
-            if (!err) result.spellID = action.spellID;
+            if (err) {
+              // Cast failed — retry next GCD tick (100ms poll)
+              this.scheduleEvent({ timeMs: this.state.timeMs + 100, type: EventType.GCDReady, spellID: 0, effectIdx: 0, seqNo: 0 });
+            } else {
+              result.spellID = action.spellID;
+            }
+          } else {
+            // Rotation returned nothing — poll again shortly
+            this.scheduleEvent({ timeMs: this.state.timeMs + 100, type: EventType.GCDReady, spellID: 0, effectIdx: 0, seqNo: 0 });
           }
         }
         break;
