@@ -138,7 +138,8 @@ export function buildSimDamageStream(
     if (!hasDamage) continue;
 
     const spell = step.spellID ? spells.get(step.spellID) : undefined;
-    const isAutoAttack = step.event === EventType.AutoAttack;
+    const isAutoAttack = step.event === EventType.AutoAttack || step.event === EventType.OffHandAttack;
+    const isOffHand = step.event === EventType.OffHandAttack;
     const isDot = step.event === EventType.DotTick;
 
     let hitType = outcomeToHitType(step.outcome, step.resisted);
@@ -153,7 +154,7 @@ export function buildSimDamageStream(
       meta,
       caster: SIM_PLAYER_GUID,
       sourceName: isAutoAttack
-        ? "Auto Attack"
+        ? (isOffHand ? "Auto Attack (OH)" : "Auto Attack")
         : (spell?.name ?? `Spell ${step.spellID}`),
       target: SIM_TARGET_GUID,
       hitType,
