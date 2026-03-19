@@ -54,6 +54,7 @@ export function SimPage() {
   const [bossPresets, setBossPresets] = useState<Record<string, CreatureData>>({});
 
   // Armory import
+  const [armoryRealm, setArmoryRealm] = useState("Ambershire");
   const [armoryInput, setArmoryInput] = useState("");
   const [armoryLoading, setArmoryLoading] = useState(false);
   const [armoryError, setArmoryError] = useState<string | null>(null);
@@ -85,23 +86,9 @@ export function SimPage() {
     setArmoryError(null);
 
     try {
-      // Support formats: "PlayerName", "realm/PlayerName", or full URL
-      let realm = "turtle-wow";
-      let name = input;
-
-      if (input.includes("/")) {
-        // Could be "realm/name" or a full URL like "/armory/turtle-wow/PlayerName"
-        const parts = input.replace(/^.*\/armory\//, "").split("/").filter(Boolean);
-        if (parts.length >= 2) {
-          realm = parts[0];
-          name = parts[1];
-        } else if (parts.length === 1) {
-          name = parts[0];
-        }
-      }
-
+      const name = input;
       const res = await fetch(
-        `/api/v1/armory/${encodeURIComponent(realm)}/${encodeURIComponent(name)}`,
+        `/api/v1/armory/${encodeURIComponent(armoryRealm)}/${encodeURIComponent(name)}`,
       );
       if (!res.ok) {
         throw new Error(res.status === 404 ? `Player "${name}" not found` : `Failed to load (${res.status})`);
@@ -130,7 +117,7 @@ export function SimPage() {
     } finally {
       setArmoryLoading(false);
     }
-  }, [armoryInput]);
+  }, [armoryInput, armoryRealm]);
 
   const handleRun = useCallback(() => {
     const target = bossPresets[targetKey];
@@ -176,6 +163,15 @@ export function SimPage() {
             <h2 className="text-sm font-semibold text-zinc-300 uppercase tracking-wider">
               Load from Armory
             </h2>
+            <select
+              className="w-full rounded border border-zinc-700 bg-zinc-800 px-3 py-1.5 text-sm text-zinc-300"
+              value={armoryRealm}
+              onChange={(e) => setArmoryRealm(e.target.value)}
+            >
+              {["Ambershire", "Tel'Abim", "Nordanaar", "South Seas", "Gehennas", "Ravenstorm", "Karazhan", "Blood Ring"].map((r) => (
+                <option key={r} value={r}>{r}</option>
+              ))}
+            </select>
             <div className="flex gap-2">
               <input
                 type="text"
