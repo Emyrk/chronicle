@@ -12,7 +12,7 @@ import type { StepResult } from "../../sim/engine";
 export interface SimRunConfig {
   character: CharacterConfig;
   target: CreatureData;
-  rotation: Rotation;
+  rotation: Rotation | null;
   durationMs: number;
   iterations: number;
   spellIds: number[]; // spells to preload
@@ -59,7 +59,7 @@ export function useSimRunner() {
         baseStats,
         spells,
       );
-      engine.setRotation(config.rotation);
+      if (config.rotation) engine.setRotation(config.rotation);
       engine.setSeed(Date.now());
 
       // Single pass: collect steps, then finalize results

@@ -3,8 +3,6 @@ import { Swords, Play, Loader2 } from "lucide-react";
 import type { CreatureData } from "../../sim/types";
 import type { CharacterConfig } from "../../sim/character";
 import { useSimRunner } from "./useSimRunner";
-import { PriorityRotation, type RotationEntry } from "./PriorityRotation";
-import { RotationBuilder } from "./RotationBuilder";
 import { SimResultsPanel } from "./SimResultsPanel";
 
 // Race/class constants
@@ -40,7 +38,6 @@ export function SimPage() {
   const [bossPresets, setBossPresets] = useState<Record<string, CreatureData>>(
     {},
   );
-  const [rotationEntries, setRotationEntries] = useState<RotationEntry[]>([]);
 
   const { run, isRunning, error, result } = useSimRunner();
 
@@ -52,16 +49,10 @@ export function SimPage() {
       .catch(() => {});
   }, []);
 
-  // Reset rotation when class changes
-  useEffect(() => {
-    setRotationEntries([]);
-  }, [classId]);
-
   // Ensure selected race supports selected class
   useEffect(() => {
     const race = RACES[raceId];
     if (race && !race.classes.includes(classId)) {
-      // Pick first class this race supports
       setClassId(race.classes[0]);
     }
   }, [raceId, classId]);
@@ -69,7 +60,6 @@ export function SimPage() {
   const handleRun = useCallback(() => {
     const target = bossPresets[targetKey];
     if (!target) return;
-    if (rotationEntries.length === 0) return;
 
     const config: CharacterConfig = {
       race: raceId,
@@ -83,12 +73,12 @@ export function SimPage() {
     run({
       character: config,
       target,
-      rotation: new PriorityRotation(rotationEntries),
+      rotation: null,
       durationMs: durationSec * 1000,
       iterations: 1,
-      spellIds: rotationEntries.map((e) => e.spellId),
+      spellIds: [],
     });
-  }, [raceId, classId, durationSec, targetKey, bossPresets, rotationEntries, run]);
+  }, [raceId, classId, durationSec, targetKey, bossPresets, run]);
 
   const availableClasses = RACES[raceId]?.classes ?? [];
 
@@ -177,22 +167,10 @@ export function SimPage() {
             </div>
           </div>
 
-          {/* Rotation */}
-          <div className="rounded-lg border border-zinc-800 bg-zinc-900/50 p-4">
-            <h2 className="text-sm font-semibold text-zinc-300 uppercase tracking-wider mb-3">
-              Rotation
-            </h2>
-            <RotationBuilder
-              classId={classId}
-              entries={rotationEntries}
-              onChange={setRotationEntries}
-            />
-          </div>
-
           {/* Run button */}
           <button
             onClick={handleRun}
-            disabled={isRunning || rotationEntries.length === 0}
+            disabled={isRunning}
             className="w-full flex items-center justify-center gap-2 rounded-lg bg-indigo-600 hover:bg-indigo-500 disabled:bg-zinc-700 disabled:text-zinc-500 px-4 py-2.5 text-sm font-medium text-white transition-colors"
           >
             {isRunning ? (
@@ -222,7 +200,7 @@ export function SimPage() {
           ) : (
             <div className="rounded-lg border border-zinc-800 bg-zinc-900/50 p-12 text-center text-zinc-500">
               <Swords className="h-12 w-12 mx-auto mb-3 opacity-30" />
-              <p>Configure your character and rotation, then run the simulation.</p>
+              <p>Select race, class, and target, then run the simulation.</p>
             </div>
           )}
         </div>
