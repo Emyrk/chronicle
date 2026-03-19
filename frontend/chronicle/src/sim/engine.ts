@@ -30,6 +30,7 @@ import { type CharacterConfig, buildCombatUnit, buildTargetUnit } from "./charac
 
 export enum EventType {
   AutoAttack,
+  OffHandAttack,
   CastStart,
   CastComplete,
   DotTick,
@@ -311,6 +312,10 @@ export class Engine {
         this.processAutoAttack(result);
         break;
 
+      case EventType.OffHandAttack:
+        this.processOffHandAttack(result);
+        break;
+
       case EventType.ResourceTick:
         this.processResourceTick(result);
         this.scheduleEvent({ timeMs: this.state.timeMs + 2000, type: EventType.ResourceTick, spellID: 0, effectIdx: 0, seqNo: 0 });
@@ -424,6 +429,29 @@ export class Engine {
     this.scheduleEvent({ timeMs: this.state.timeMs + speedMs, type: EventType.AutoAttack, spellID: 0, effectIdx: 0, seqNo: 0 });
   }
 
+  private processOffHandAttack(result: StepResult): void {
+    if (!this.state.autoAttacking) return;
+
+    const dmgResult = resolveMeleeDamage(
+      this.state.caster, this.state.target,
+      AttackType.OffHand, this.state.caster.weaponSkill, this.rng,
+    );
+    result.amount = dmgResult.damage;
+    result.outcome = dmgResult.outcome;
+    result.school = dmgResult.school;
+    result.isCrit = dmgResult.outcome === Outcome.Crit;
+
+    if (dmgResult.outcome !== Outcome.Miss && dmgResult.outcome !== Outcome.Dodge && dmgResult.outcome !== Outcome.Parry) {
+      this.state.totalDamage += dmgResult.damage;
+      recordDamage(this.results, 0, "Auto Attack (OH)", dmgResult.damage, dmgResult.outcome === Outcome.Crit, false, false);
+    } else {
+      recordDamage(this.results, 0, "Auto Attack (OH)", 0, false, true, false);
+    }
+
+    const speedMs = this.state.caster.ohSpeedMs || 2000;
+    this.scheduleEvent({ timeMs: this.state.timeMs + speedMs, type: EventType.OffHandAttack, spellID: 0, effectIdx: 0, seqNo: 0 });
+  }
+
   private processResourceTick(result: StepResult): void {
     const c = this.state.caster;
     switch (c.powerType) {
@@ -488,11 +516,16 @@ export class Engine {
     if (this.state.autoAttacking) return;
     this.state.autoAttacking = true;
     this.scheduleEvent({ timeMs: this.state.timeMs, type: EventType.AutoAttack, spellID: 0, effectIdx: 0, seqNo: 0 });
+    // Start offhand swings half a swing behind mainhand (vanilla behavior)
+    if (this.state.caster.ohSpeedMs > 0) {
+      const ohDelay = Math.floor(this.state.caster.ohSpeedMs / 2);
+      this.scheduleEvent({ timeMs: this.state.timeMs + ohDelay, type: EventType.OffHandAttack, spellID: 0, effectIdx: 0, seqNo: 0 });
+    }
   }
 
   stopAutoAttack(): void {
     this.state.autoAttacking = false;
-    this.events.remove((ev) => ev.type === EventType.AutoAttack);
+    this.events.remove((ev) => ev.type === EventType.AutoAttack || ev.type === EventType.OffHandAttack);
   }
 
   run(durationMs: number): SimResults {

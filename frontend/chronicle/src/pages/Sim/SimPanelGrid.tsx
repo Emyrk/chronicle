@@ -9,6 +9,7 @@ import { BookOpen, X } from "lucide-react";
 import { toast } from "sonner";
 import { EventsPanel, type EventsPanelType, type PanelContext, type EntitySelection } from "@/pages/Instance/EventsPanels";
 import { PANELS } from "@/pages/Instance/EventsPanels/EventsPanel";
+import type { PanelFilter } from "@/pages/Instance/EventsPanels/processors/filters";
 import type { Instance, Encounter } from "@/pages/Instance/InstancePage";
 import type { WoWHeroClasses, WoWHeroRaces, ActionBarSlotsResponse } from "@/api/typesGenerated";
 import type { UserPanelLayout } from "@/api/queries";
@@ -122,6 +123,9 @@ export function SimPanelGrid({
   // Layout state (items + panel types) — can be overridden by casting
   const [layoutItems, setLayoutItems] = useState<GridEditorItem[] | null>(null);
   const [panelTypesById, setPanelTypesById] = useState<Record<string, EventsPanelType> | null>(null);
+  const [panelOptionsById, setPanelOptionsById] = useState<Record<string, string | null>>({});
+  const [seedFiltersByID, setSeedFiltersByID] = useState<Record<string, PanelFilter[]>>({});
+  const [seedFiltersVersion, setSeedFiltersVersion] = useState(0);
 
   const effectiveItems: GridEditorItem[] = useMemo(
     () => layoutItems ?? savedLayout?.items ?? DEFAULT_INSTANCE_LAYOUT_ITEMS,
@@ -132,6 +136,30 @@ export function SimPanelGrid({
     () => panelTypesById ?? savedLayout?.panelTypesById ?? DEFAULT_INSTANCE_PANEL_TYPES,
     [panelTypesById, savedLayout],
   );
+
+  // Seed filters/options from saved layout on first load
+  const [initialSeeded, setInitialSeeded] = useState(false);
+  useEffect(() => {
+    if (initialSeeded || !savedLayout) return;
+    setInitialSeeded(true);
+    if (savedLayout.panelFiltersById) {
+      const filters: Record<string, PanelFilter[]> = {};
+      for (const [id, f] of Object.entries(savedLayout.panelFiltersById)) {
+        if (Array.isArray(f) && f.length > 0) filters[id] = f;
+      }
+      if (Object.keys(filters).length > 0) {
+        setSeedFiltersByID(filters);
+        setSeedFiltersVersion((v) => v + 1);
+      }
+    }
+    if (savedLayout.panelOptionsById) {
+      const opts: Record<string, string | null> = {};
+      for (const [id, opt] of Object.entries(savedLayout.panelOptionsById)) {
+        if (typeof opt === "string") opts[id] = opt;
+      }
+      setPanelOptionsById(opts);
+    }
+  }, [savedLayout, initialSeeded]);
 
   // Action bar
   const [actionBarOpen, setActionBarOpen] = useState(false);
@@ -151,13 +179,30 @@ export function SimPanelGrid({
       const parsed = parsePanelLayout(layout);
       const normalizedItems = normalizeLayoutItems(parsed.items);
       const castTypes: Record<string, EventsPanelType> = {};
+      const castOptions: Record<string, string | null> = {};
       normalizedItems.forEach((item) => {
         const candidate = parsed.panelTypesById?.[item.id] ?? "empty";
         castTypes[item.id] = candidate in PANELS ? candidate : "empty";
+        const option = parsed.panelOptionsById?.[item.id];
+        castOptions[item.id] = typeof option === "string" ? option : null;
       });
       const orderedItems = orderLayoutItems(normalizedItems);
       setLayoutItems(orderedItems);
       setPanelTypesById(castTypes);
+      setPanelOptionsById(castOptions);
+
+      // Restore per-panel filters from the layout
+      const importedFilters: Record<string, PanelFilter[]> = {};
+      if (parsed.panelFiltersById) {
+        for (const [id, filters] of Object.entries(parsed.panelFiltersById)) {
+          if (Array.isArray(filters) && filters.length > 0) {
+            importedFilters[id] = filters;
+          }
+        }
+      }
+      setSeedFiltersByID(importedFilters);
+      setSeedFiltersVersion((v) => v + 1);
+
       toast.success("Cast layout", { description: layout.title });
     } catch {
       toast.error("Failed to cast layout", { description: "Layout payload is invalid." });
@@ -167,6 +212,9 @@ export function SimPanelGrid({
   const castResetToDefault = useCallback(() => {
     setLayoutItems(null);
     setPanelTypesById(null);
+    setPanelOptionsById({});
+    setSeedFiltersByID({});
+    setSeedFiltersVersion((v) => v + 1);
     toast.success("Reset to default layout");
   }, []);
 
@@ -337,6 +385,10 @@ export function SimPanelGrid({
                 context={panelContext}
                 panelIndex={index}
                 panelId={item.id}
+                panelOption={panelOptionsById[item.id] ?? null}
+                onPanelOptionChange={(opt) => setPanelOptionsById((prev) => ({ ...prev, [item.id]: opt }))}
+                seedFilters={seedFiltersByID[item.id]}
+                seedFiltersVersion={seedFiltersVersion}
               />
             </div>
           );
