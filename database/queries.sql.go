@@ -2227,6 +2227,8 @@ JOIN users u ON u.id = wlg.owner
 JOIN wow_server_realms wsr ON wsr.id = li.realm_id
 LEFT JOIN guilds g ON g.id = li.guild_id
 WHERE true
+    -- Don't list these in the recent raids page
+    AND li.name != 'TrainingDummy'
     -- Filter by instance names
     AND CASE
         WHEN cardinality($1 :: text[]) > 0 THEN

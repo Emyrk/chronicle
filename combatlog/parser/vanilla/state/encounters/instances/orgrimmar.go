@@ -54,11 +54,11 @@ func newTrainingDummyFilter() func(m messages.Message) bool {
 	}
 }
 
-// Orgrimmar creates an Orgrimmar instance that filters messages to only
+// TrainingDummy creates an TrainingDummy instance that filters messages to only
 // include training dummy interactions and units engaged with them.
-func Orgrimmar(ctx context.Context, logger *slog.Logger, db *unitdb.Units, z zone.Zone) *Hookable {
+func TrainingDummy(ctx context.Context, logger *slog.Logger, db *unitdb.Units, z zone.Zone) *Hookable {
 	factory := &CommonFactory{
-		Name:     "Orgrimmar",
+		Name:     "TrainingDummy",
 		ZoneName: ZoneNameMatcher("orgrimmar"),
 		Hostiles: FromMap(OrgrimmarHostiles()),
 	}
