@@ -46,6 +46,10 @@ type Hookable struct {
 	realm   *realm.Info         // mostly static
 	hooks   []instancehook.Hook // TODO: unroll?
 
+	// messageFilter, if set, is called before processing each message.
+	// Return false to drop the message entirely.
+	messageFilter func(m messages.Message) bool
+
 	// Live tracking data
 	Characters      *character.Characters
 	currentFight    *ongoingFight
@@ -120,6 +124,10 @@ func (h *Hookable) SetRealm(r *realm.Info) { h.realm = r }
 func (h *Hookable) MatchesZone(z zone.Zone) bool { return h.zoneNameMatch(z.Name) }
 
 func (h *Hookable) Process(m messages.Message) (finalError error) {
+	if h.messageFilter != nil && !h.messageFilter(m) {
+		return nil
+	}
+
 	err := h.units.ProcessMessage(m)
 	if err != nil {
 		return fmt.Errorf("processing unit message: %w", err)
