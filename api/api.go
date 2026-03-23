@@ -236,6 +236,7 @@ func (api *API) Routes() chi.Router {
 
 		if api.Opts.InternalGameData != nil {
 			r.Group(func(r chi.Router) {
+				r.Use(api.Auth.Authenticated(true))
 				r.Mount("/internal/gamedata", api.Opts.InternalGameData)
 			})
 		}
