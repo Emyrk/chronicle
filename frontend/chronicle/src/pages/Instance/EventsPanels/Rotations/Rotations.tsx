@@ -41,6 +41,11 @@ function formatTime(ms: number): string {
   return `${String(min).padStart(2, "0")}:${String(sec).padStart(2, "0")}`;
 }
 
+function formatTimeMs(ms: number): string {
+  const milli = ms % 1000;
+  return `${formatTime(ms)}.${String(milli).padStart(3, "0")}`;
+}
+
 /** Compute nice tick interval in ms for the time axis. */
 function getTickInterval(pps: number): number {
   // Target ~80-150px between ticks
@@ -80,7 +85,7 @@ function CastIcon({
 
   const castHeader = (
     <div className="rounded-t bg-zinc-900/95 border border-zinc-700 px-2.5 py-1.5 text-xs">
-      <span className="text-zinc-300 font-mono">{formatTime(offsetMilli)}</span>
+      <span className="text-zinc-300 font-mono">{formatTimeMs(offsetMilli)}</span>
       {targetName && (
         <span className="text-zinc-400 ml-2">→ <span className="text-zinc-200">{targetName}</span></span>
       )}
