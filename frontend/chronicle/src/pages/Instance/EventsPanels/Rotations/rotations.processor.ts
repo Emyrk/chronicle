@@ -34,6 +34,8 @@ export interface CastEntry {
   castTimeMilli?: number;
   /** Channel time in ms (spell_start only) */
   channelTimeMilli?: number;
+  /** True when this auto attack is an off-hand swing */
+  isOffHand?: boolean;
 }
 
 export interface AuraSegment {
@@ -200,12 +202,14 @@ export const rotationsProcessor: PanelProcessor<RotationsResult, RotationsEvent>
         state.spellNames.set(AUTO_ATTACK_SPELL_ID, "Auto Attack");
       }
 
+      const isOffHand = (event.hitType & 0x1) !== 0;
       const entry: CastEntry = {
         offsetMilli: event.offsetMilli,
         spellId: AUTO_ATTACK_SPELL_ID,
-        spellName: "Auto Attack",
+        spellName: isOffHand ? "Auto Attack (OH)" : "Auto Attack",
         target: event.target || "",
         eventType: "auto_attack",
+        isOffHand,
       };
 
       let list = state.castsByEntity.get(casterGuid);

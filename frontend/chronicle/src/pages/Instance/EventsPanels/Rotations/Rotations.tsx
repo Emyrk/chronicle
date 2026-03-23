@@ -69,6 +69,7 @@ function CastIcon({
   onHide,
   offsetMilli,
   targetName,
+  isOffHand,
 }: {
   spellId: number;
   spellName: string;
@@ -77,6 +78,7 @@ function CastIcon({
   onHide?: (spellId: number) => void;
   offsetMilli: number;
   targetName?: string;
+  isOffHand?: boolean;
 }) {
   const isAutoAttack = spellId === AUTO_ATTACK_SPELL_ID;
   const { data: spell } = useSpell(String(spellId), {
@@ -119,10 +121,11 @@ function CastIcon({
             <TooltipTrigger asChild>
               <img
                 src="https://icons.chronicleclassic.com/inv_sword_04.webp"
-                alt="Auto Attack"
+                alt={isOffHand ? "Auto Attack - Offhand" : "Auto Attack"}
                 width={ICON_SIZE}
                 height={ICON_SIZE}
                 className="rounded-sm border border-zinc-600/40 cursor-pointer"
+                style={isOffHand ? { transform: "scaleX(-1)" } : undefined}
               />
             </TooltipTrigger>
             <TooltipContent
@@ -134,7 +137,7 @@ function CastIcon({
             >
               {castHeader}
               <div className="rounded-b bg-[#1a1a2e] border border-t-0 border-zinc-700 px-3 py-2 text-sm text-amber-200 font-medium">
-                Auto Attack
+                {isOffHand ? "Auto Attack - Offhand" : "Auto Attack"}
               </div>
             </TooltipContent>
           </Tooltip>
@@ -679,6 +682,7 @@ function RotationsContent({
                         onHide={hideSpell}
                         offsetMilli={cast.offsetMilli}
                         targetName={tn}
+                        isOffHand={cast.isOffHand}
                         style={{
                           left,
                           top: (ROW_HEIGHT - ICON_SIZE) / 2,
