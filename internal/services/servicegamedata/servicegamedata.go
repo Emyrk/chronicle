@@ -4,6 +4,10 @@ import (
 	"context"
 	"net/http"
 
+	"github.com/Emyrk/chronicle/api/httpmw"
+	"github.com/Emyrk/chronicle/database/authz"
+	"github.com/Emyrk/chronicle/database/authz/policy"
+	"github.com/Emyrk/chronicle/internal/services/serviceauthz"
 	"github.com/go-chi/chi/v5"
 
 	"github.com/Emyrk/chronicle/internal/services"
@@ -42,21 +46,25 @@ func (s *Service) DependsOn() []string {
 	return []string{
 		servicelogger.OnLogger(),
 		servicedbstore.OnDatabaseStore(),
+		serviceauthz.OnAuthz(),
 	}
 }
 
 func (s *Service) Start(_ context.Context) error {
 	logger := servicelogger.Logger(s.broker)
+	zed := serviceauthz.Authz(s.broker)
 	s.router = chi.NewRouter()
-	s.setupRoutes()
+	s.setupRoutes(zed)
 	logger.Info("InternalGameData service started")
 	return nil
 }
 
-func (s *Service) setupRoutes() {
+func (s *Service) setupRoutes(zed *authz.Authz) {
 	s.router.Get("/tooltip/item/{item_id}", s.handleItemTooltip)
 	s.router.Get("/display/item/{item_id}", s.handleItemDisplay)
-	s.router.Get("/sim/item/{item_id}", s.handleItemSim)
+
+	mw := httpmw.Can(zed, policy.New().GlobalChronicle().CanInternal_game_data_User)
+	s.router.Get("/sim/item/{item_id}", mw(http.HandlerFunc(s.handleItemSim)).ServeHTTP)
 }
 
 func (s *Service) ServeHTTP(w http.ResponseWriter, r *http.Request) {
