@@ -23,6 +23,8 @@ interface SpellIconWithTooltipProps {
   detailed?: boolean;
   /** Optional children to render alongside the icon (e.g., spell name). Both will trigger the tooltip. */
   children?: ReactNode;
+  /** Optional header rendered above the spell tooltip inside the tooltip popover. */
+  tooltipHeader?: ReactNode;
 }
 
 /**
@@ -40,6 +42,7 @@ export function SpellIconWithTooltip({
   showTooltip = true,
   detailed = false,
   children,
+  tooltipHeader,
 }: SpellIconWithTooltipProps) {
   const iconUrl = getSpellIconUrl(spell.spell_icon);
 
@@ -86,6 +89,7 @@ export function SpellIconWithTooltip({
           className="p-0 bg-transparent border-0 z-[10000]"
           hideArrow
         >
+          {tooltipHeader}
           <SpellTooltip spell={spell} locale={locale} detailed={detailed} />
         </TooltipContent>
       </Tooltip>

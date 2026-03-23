@@ -12,6 +12,12 @@ import type { PanelDefinition, PanelRenderProps } from "../types";
 import type { PanelFilter } from "../processors/filters";
 import { useSpell } from "@/api/queries";
 import { SpellIconWithTooltip } from "@/components/ui/SpellIconWithTooltip";
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger,
+} from "@/components/ui/Tooltip/tooltip";
 import { rotationsProcessor, type RotationsResult, type RotationsEvent, type CastEntry, type AuraSegment, AUTO_ATTACK_SPELL_ID } from "./rotations.processor";
 
 // ── Constants ─────────────────────────────────────────────────
@@ -56,17 +62,30 @@ function CastIcon({
   isFailed,
   style,
   onHide,
+  offsetMilli,
+  targetName,
 }: {
   spellId: number;
   spellName: string;
   isFailed?: boolean;
   style: React.CSSProperties;
   onHide?: (spellId: number) => void;
+  offsetMilli: number;
+  targetName?: string;
 }) {
   const isAutoAttack = spellId === AUTO_ATTACK_SPELL_ID;
   const { data: spell } = useSpell(String(spellId), {
     enabled: spellId > 0 && !isAutoAttack,
   });
+
+  const castHeader = (
+    <div className="rounded-t bg-zinc-900/95 border border-zinc-700 px-2.5 py-1.5 text-xs">
+      <span className="text-zinc-300 font-mono">{formatTime(offsetMilli)}</span>
+      {targetName && (
+        <span className="text-zinc-400 ml-2">→ <span className="text-zinc-200">{targetName}</span></span>
+      )}
+    </div>
+  );
 
   const handleMouseDown = useCallback(
     (e: React.MouseEvent) => {
@@ -90,19 +109,37 @@ function CastIcon({
       onMouseDown={handleMouseDown}
     >
       {isAutoAttack ? (
-        <img
-          src="https://icons.chronicleclassic.com/inv_sword_04.webp"
-          alt="Auto Attack"
-          title="Auto Attack"
-          width={ICON_SIZE}
-          height={ICON_SIZE}
-          className="rounded-sm border border-zinc-600/40"
-        />
+        <TooltipProvider>
+          <Tooltip delayDuration={150}>
+            <TooltipTrigger asChild>
+              <img
+                src="https://icons.chronicleclassic.com/inv_sword_04.webp"
+                alt="Auto Attack"
+                width={ICON_SIZE}
+                height={ICON_SIZE}
+                className="rounded-sm border border-zinc-600/40 cursor-pointer"
+              />
+            </TooltipTrigger>
+            <TooltipContent
+              side="right"
+              align="start"
+              sideOffset={8}
+              className="p-0 bg-transparent border-0 z-[10000]"
+              hideArrow
+            >
+              {castHeader}
+              <div className="rounded-b bg-[#1a1a2e] border border-t-0 border-zinc-700 px-3 py-2 text-sm text-amber-200 font-medium">
+                Auto Attack
+              </div>
+            </TooltipContent>
+          </Tooltip>
+        </TooltipProvider>
       ) : spell ? (
         <SpellIconWithTooltip
           spell={spell}
           size={ICON_SIZE}
           className={isFailed ? "opacity-40" : undefined}
+          tooltipHeader={castHeader}
         />
       ) : (
         <div
@@ -625,6 +662,9 @@ function RotationsContent({
                   {/* Cast icons */}
                   {row.casts.map((cast, i) => {
                     const left = (cast.offsetMilli / 1000) * pixelsPerSecond;
+                    const tp = cast.target ? context.instance.players?.[cast.target] : undefined;
+                    const tu = cast.target ? context.instance.units?.[cast.target] : undefined;
+                    const tn = tp?.name || tu?.name || undefined;
                     return (
                       <CastIcon
                         key={i}
@@ -632,6 +672,8 @@ function RotationsContent({
                         spellName={cast.spellName}
                         isFailed={cast.eventType === "spell_fail"}
                         onHide={hideSpell}
+                        offsetMilli={cast.offsetMilli}
+                        targetName={tn}
                         style={{
                           left,
                           top: (ROW_HEIGHT - ICON_SIZE) / 2,
