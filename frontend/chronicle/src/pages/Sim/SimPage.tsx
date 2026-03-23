@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback, useRef, useMemo } from "react";
-import { Swords, Play, Loader2, UserSearch } from "lucide-react";
+import { Swords, Play, Loader2, UserSearch, X } from "lucide-react";
 import type { CreatureData } from "../../sim/types";
 import type { CharacterConfig } from "../../sim/character";
 import type { SimItem, ArmoryPlayer, WoWHeroClasses, WoWHeroRaces } from "../../api/typesGenerated";
@@ -199,8 +199,19 @@ export function SimPage() {
     };
   }, [result, playerName, classId, raceId, targetName]);
 
+  const [bannerDismissed, setBannerDismissed] = useState(false);
+
   return (
     <div className="px-4 py-6 w-full">
+      {/* Warning banner */}
+      {!bannerDismissed && (
+        <div className="mb-4 flex items-center justify-between rounded border border-red-700/50 bg-red-950/40 px-4 py-2.5 text-sm text-red-300">
+          <span>⚠️ You should not be here, this tool is incomplete, inaccurate, and not meant for general use.</span>
+          <button onClick={() => setBannerDismissed(true)} className="ml-4 text-red-400 hover:text-red-200">
+            <X className="h-4 w-4" />
+          </button>
+        </div>
+      )}
       {/* Header */}
       <div className="flex items-center gap-3 mb-4">
         <Swords className="h-6 w-6 text-zinc-400" />
