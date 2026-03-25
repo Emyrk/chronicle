@@ -582,13 +582,13 @@ WHERE
   AND (
     $2::timestamptz IS NULL
     OR $3::timestamptz IS NULL
-    OR wow_log_groups.created_at >= $2 AND wow_log_groups.created_at < $3
+    OR (wow_log_groups.created_at >= $2 AND wow_log_groups.created_at < $3)
     OR EXISTS (
       SELECT 1
-      FROM jsonb_array_elements(latest_job.output->'instances') inst,
-           jsonb_array_elements(inst->'encounters') enc
-      WHERE (enc->>'start_time')::timestamptz >= $2
-        AND (enc->>'start_time')::timestamptz < $3
+      FROM log_instances li
+      WHERE li.log_group_id = wow_log_groups.id
+        AND li.start_time < $3
+        AND li.end_time >= $2
     )
   )
 ORDER BY
@@ -1863,19 +1863,21 @@ func (q *sqlQuerier) InsertEncounter(ctx context.Context, arg InsertEncounterPar
 
 const insertInstance = `-- name: InsertInstance :one
 INSERT INTO
-  log_instances (id, realm_id, log_group_id, name, hashed_slug, guild_id)
+  log_instances (id, realm_id, log_group_id, name, hashed_slug, guild_id, start_time, end_time)
 VALUES
-  ($1, $2, $3, $4, $5, $6)
-RETURNING id, realm_id, log_group_id, name, hashed_slug, guild_id
+  ($1, $2, $3, $4, $5, $6, $7, $8)
+RETURNING id, realm_id, log_group_id, name, hashed_slug, guild_id, start_time, end_time
 `
 
 type InsertInstanceParams struct {
-	ID         uuid.UUID     `db:"id" json:"id"`
-	RealmID    uuid.UUID     `db:"realm_id" json:"realm_id"`
-	LogGroupID uuid.UUID     `db:"log_group_id" json:"log_group_id"`
-	Name       string        `db:"name" json:"name"`
-	HashedSlug pgtype.Text   `db:"hashed_slug" json:"hashed_slug"`
-	GuildID    uuid.NullUUID `db:"guild_id" json:"guild_id"`
+	ID         uuid.UUID          `db:"id" json:"id"`
+	RealmID    uuid.UUID          `db:"realm_id" json:"realm_id"`
+	LogGroupID uuid.UUID          `db:"log_group_id" json:"log_group_id"`
+	Name       string             `db:"name" json:"name"`
+	HashedSlug pgtype.Text        `db:"hashed_slug" json:"hashed_slug"`
+	GuildID    uuid.NullUUID      `db:"guild_id" json:"guild_id"`
+	StartTime  pgtype.Timestamptz `db:"start_time" json:"start_time"`
+	EndTime    pgtype.Timestamptz `db:"end_time" json:"end_time"`
 }
 
 func (q *sqlQuerier) InsertInstance(ctx context.Context, arg InsertInstanceParams) (LogInstance, error) {
@@ -1886,6 +1888,8 @@ func (q *sqlQuerier) InsertInstance(ctx context.Context, arg InsertInstanceParam
 		arg.Name,
 		arg.HashedSlug,
 		arg.GuildID,
+		arg.StartTime,
+		arg.EndTime,
 	)
 	var i LogInstance
 	err := row.Scan(
@@ -1895,6 +1899,8 @@ func (q *sqlQuerier) InsertInstance(ctx context.Context, arg InsertInstanceParam
 		&i.Name,
 		&i.HashedSlug,
 		&i.GuildID,
+		&i.StartTime,
+		&i.EndTime,
 	)
 	return i, err
 }

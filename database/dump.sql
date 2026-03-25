@@ -410,7 +410,9 @@ CREATE TABLE log_instances (
     log_group_id uuid NOT NULL,
     name text NOT NULL,
     hashed_slug text,
-    guild_id uuid
+    guild_id uuid,
+    start_time timestamp with time zone,
+    end_time timestamp with time zone
 );
 
 COMMENT ON COLUMN log_instances.guild_id IS 'If set, that means it was a guild run.';

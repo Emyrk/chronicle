@@ -356,6 +356,19 @@ func (w *WorkerLogParse) Work(ctx context.Context, job *river.Job[ArgsLogParse])
 				guildID = guild.ID
 			}
 
+			// Compute instance time range from encounters
+			var instanceStart, instanceEnd pgtype.Timestamptz
+			for _, enc := range finalized.Encounters {
+				encStart := database.Timestamptz(enc.Combat.Start)
+				encEnd := database.Timestamptz(enc.Combat.End)
+				if !instanceStart.Valid || encStart.Time.Before(instanceStart.Time) {
+					instanceStart = encStart
+				}
+				if !instanceEnd.Valid || encEnd.Time.After(instanceEnd.Time) {
+					instanceEnd = encEnd
+				}
+			}
+
 			insertInstanceParams := database.InsertInstanceParams{
 				ID:         instanceID,
 				RealmID:    realmID,
@@ -369,6 +382,8 @@ func (w *WorkerLogParse) Work(ctx context.Context, job *river.Job[ArgsLogParse])
 					UUID:  guildID,
 					Valid: guildID != uuid.Nil,
 				},
+				StartTime: instanceStart,
+				EndTime:   instanceEnd,
 			}
 
 			// Handling colliding slugs

@@ -258,13 +258,13 @@ WHERE
   AND (
     sqlc.narg('created_after')::timestamptz IS NULL
     OR sqlc.narg('created_before')::timestamptz IS NULL
-    OR wow_log_groups.created_at >= sqlc.narg('created_after') AND wow_log_groups.created_at < sqlc.narg('created_before')
+    OR (wow_log_groups.created_at >= sqlc.narg('created_after') AND wow_log_groups.created_at < sqlc.narg('created_before'))
     OR EXISTS (
       SELECT 1
-      FROM jsonb_array_elements(latest_job.output->'instances') inst,
-           jsonb_array_elements(inst->'encounters') enc
-      WHERE (enc->>'start_time')::timestamptz >= sqlc.narg('created_after')
-        AND (enc->>'start_time')::timestamptz < sqlc.narg('created_before')
+      FROM log_instances li
+      WHERE li.log_group_id = wow_log_groups.id
+        AND li.start_time < sqlc.narg('created_before')
+        AND li.end_time >= sqlc.narg('created_after')
     )
   )
 ORDER BY

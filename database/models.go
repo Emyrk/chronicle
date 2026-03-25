@@ -777,7 +777,9 @@ type LogInstance struct {
 	Name       string      `db:"name" json:"name"`
 	HashedSlug pgtype.Text `db:"hashed_slug" json:"hashed_slug"`
 	// If set, that means it was a guild run.
-	GuildID uuid.NullUUID `db:"guild_id" json:"guild_id"`
+	GuildID   uuid.NullUUID      `db:"guild_id" json:"guild_id"`
+	StartTime pgtype.Timestamptz `db:"start_time" json:"start_time"`
+	EndTime   pgtype.Timestamptz `db:"end_time" json:"end_time"`
 }
 
 type LogInstanceEncounter struct {
