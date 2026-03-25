@@ -579,8 +579,18 @@ FROM
     ) latest_job ON true
 WHERE
   wow_log_groups.owner = $1
-  AND ($2::timestamptz IS NULL OR wow_log_groups.created_at >= $2)
-  AND ($3::timestamptz IS NULL OR wow_log_groups.created_at < $3)
+  AND (
+    $2::timestamptz IS NULL
+    OR $3::timestamptz IS NULL
+    OR wow_log_groups.created_at >= $2 AND wow_log_groups.created_at < $3
+    OR EXISTS (
+      SELECT 1
+      FROM jsonb_array_elements(latest_job.output->'instances') inst,
+           jsonb_array_elements(inst->'encounters') enc
+      WHERE (enc->>'start_time')::timestamptz >= $2
+        AND (enc->>'start_time')::timestamptz < $3
+    )
+  )
 ORDER BY
   wow_log_groups.created_at DESC
 `
