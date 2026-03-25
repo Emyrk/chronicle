@@ -2,7 +2,7 @@ import { useMemo, useState } from "react";
 import { startOfWeek, endOfWeek, startOfMonth, endOfMonth } from "date-fns";
 import { useLocalStorage } from "@/hooks/useLocalStorage";
 import { Link, useSearchParams } from "react-router-dom";
-import { LogIn, Loader2, HardDrive, HelpCircle } from "lucide-react";
+import { LogIn, Loader2, Upload as UploadIcon, HardDrive, HelpCircle } from "lucide-react";
 import { Card } from "@/components/ui/Card/Card";
 import { Button } from "@/components/ui/button";
 import { useAuth } from "@/hooks/useAuth";
