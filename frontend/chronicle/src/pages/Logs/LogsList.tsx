@@ -177,14 +177,14 @@ export function LogsListView({
             </Link>
           </div>
         </Card>
-      ) : logsLoading ? (
+      ) : logsLoading && !logs ? (
         <Card className="p-6">
           <div className="flex flex-col items-center gap-4 text-center">
             <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
             <p className="text-muted-foreground">Loading your logs...</p>
           </div>
         </Card>
-      ) : logsError ? (
+      ) : logsError && !logs ? (
         <Card className="p-6">
           <div className="flex flex-col items-center gap-4 text-center">
             <div>
