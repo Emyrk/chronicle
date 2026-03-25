@@ -1,4 +1,4 @@
-import { useQuery, useMutation, useQueryClient, type UseQueryOptions } from "@tanstack/react-query";
+import { useQuery, useMutation, useQueryClient, keepPreviousData, type UseQueryOptions } from "@tanstack/react-query";
 import type { WoWSpell } from "./wowdb";
 import type { 
   WoWLogGroup as WoWLogGroupGenerated, 
@@ -500,6 +500,7 @@ export function useLogGroups(options?: Omit<UseQueryOptions<WoWLogGroup[]>, "que
   return useQuery({
     queryKey: ["logGroups", start, end],
     retry: false,
+    placeholderData: keepPreviousData,
     queryFn: async () => {
       const response = await fetch(`/api/v1/raidlogs/logs/${qs ? `?${qs}` : ""}`);
       if (!response.ok) throw new Error("Failed to fetch logs");
