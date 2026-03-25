@@ -579,9 +579,17 @@ FROM
     ) latest_job ON true
 WHERE
   wow_log_groups.owner = $1
+  AND ($2::timestamptz IS NULL OR wow_log_groups.created_at >= $2)
+  AND ($3::timestamptz IS NULL OR wow_log_groups.created_at < $3)
 ORDER BY
   wow_log_groups.created_at DESC
 `
+
+type GetWoWLogGroupsByOwnerParams struct {
+	Owner         uuid.UUID          `db:"owner" json:"owner"`
+	CreatedAfter  pgtype.Timestamptz `db:"created_after" json:"created_after"`
+	CreatedBefore pgtype.Timestamptz `db:"created_before" json:"created_before"`
+}
 
 type GetWoWLogGroupsByOwnerRow struct {
 	WoWLogGroup      WoWLogGroup `db:"wo_wlog_group" json:"wo_wlog_group"`
@@ -589,8 +597,8 @@ type GetWoWLogGroupsByOwnerRow struct {
 	ProcessingOutput interface{} `db:"processing_output" json:"processing_output"`
 }
 
-func (q *sqlQuerier) GetWoWLogGroupsByOwner(ctx context.Context, owner uuid.UUID) ([]GetWoWLogGroupsByOwnerRow, error) {
-	rows, err := q.db.Query(ctx, getWoWLogGroupsByOwner, owner)
+func (q *sqlQuerier) GetWoWLogGroupsByOwner(ctx context.Context, arg GetWoWLogGroupsByOwnerParams) ([]GetWoWLogGroupsByOwnerRow, error) {
+	rows, err := q.db.Query(ctx, getWoWLogGroupsByOwner, arg.Owner, arg.CreatedAfter, arg.CreatedBefore)
 	if err != nil {
 		return nil, err
 	}

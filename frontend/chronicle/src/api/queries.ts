@@ -488,16 +488,24 @@ export function useSupportedInstances(options?: Omit<UseQueryOptions<SupportedIn
   });
 }
 
-export function useLogGroups(options?: Omit<UseQueryOptions<WoWLogGroup[]>, "queryKey" | "queryFn">) {
+export function useLogGroups(options?: Omit<UseQueryOptions<WoWLogGroup[]>, "queryKey" | "queryFn"> & {
+  start?: string;
+  end?: string;
+}) {
+  const { start, end, ...queryOptions } = options ?? {};
+  const params = new URLSearchParams();
+  if (start) params.set("start", start);
+  if (end) params.set("end", end);
+  const qs = params.toString();
   return useQuery({
-    queryKey: ["logGroups"],
+    queryKey: ["logGroups", start, end],
     retry: false,
     queryFn: async () => {
-      const response = await fetch("/api/v1/raidlogs/logs/");
+      const response = await fetch(`/api/v1/raidlogs/logs/${qs ? `?${qs}` : ""}`);
       if (!response.ok) throw new Error("Failed to fetch logs");
       return response.json() as Promise<WoWLogGroup[]>;
     },
-    ...options,
+    ...queryOptions,
   });
 }
 

@@ -5,6 +5,7 @@ import (
 	"net/http"
 	"path/filepath"
 	"strconv"
+	"time"
 
 	"github.com/Emyrk/chronicle/api/chronauth"
 	"github.com/Emyrk/chronicle/api/chroniclesdk"
@@ -12,18 +13,46 @@ import (
 	"github.com/Emyrk/chronicle/api/httpapi"
 	"github.com/Emyrk/chronicle/api/httpmw"
 	"github.com/Emyrk/chronicle/chronicle"
+	"github.com/Emyrk/chronicle/database"
 	"github.com/Emyrk/chronicle/database/authz"
 	"github.com/Emyrk/chronicle/database/authz/policy"
 	"github.com/Emyrk/chronicle/internal/slice"
 	"github.com/go-chi/chi/v5"
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5/pgtype"
 )
 
 func (api *API) WoWLogGroups(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 	uc := chronauth.MustAuthenticatedClaims(ctx)
 
-	groups, err := api.Opts.Zed.GetWoWLogGroupsByOwner(ctx, uc.Subject)
+	var createdAfter, createdBefore pgtype.Timestamptz
+	if v := r.URL.Query().Get("start"); v != "" {
+		t, err := time.Parse(time.RFC3339, v)
+		if err != nil {
+			httpapi.Write(ctx, w, http.StatusBadRequest, chroniclesdk.Response{
+				Message: "Invalid start parameter, expected RFC3339 timestamp",
+			})
+			return
+		}
+		createdAfter = pgtype.Timestamptz{Time: t, Valid: true}
+	}
+	if v := r.URL.Query().Get("end"); v != "" {
+		t, err := time.Parse(time.RFC3339, v)
+		if err != nil {
+			httpapi.Write(ctx, w, http.StatusBadRequest, chroniclesdk.Response{
+				Message: "Invalid end parameter, expected RFC3339 timestamp",
+			})
+			return
+		}
+		createdBefore = pgtype.Timestamptz{Time: t, Valid: true}
+	}
+
+	groups, err := api.Opts.Zed.GetWoWLogGroupsByOwner(ctx, database.GetWoWLogGroupsByOwnerParams{
+		Owner:         uc.Subject,
+		CreatedAfter:  createdAfter,
+		CreatedBefore: createdBefore,
+	})
 	if err != nil {
 		httpapi.HandleResponseError(ctx, w, err, httpapi.APIError{
 			Response: chroniclesdk.Response{

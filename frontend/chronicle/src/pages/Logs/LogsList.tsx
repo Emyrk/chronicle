@@ -1,4 +1,5 @@
 import { useMemo, useState } from "react";
+import { startOfWeek, endOfWeek, startOfMonth, endOfMonth } from "date-fns";
 import { useLocalStorage } from "@/hooks/useLocalStorage";
 import { Link, useSearchParams } from "react-router-dom";
 import { FileText, LogIn, Loader2, Upload as UploadIcon, HardDrive, HelpCircle } from "lucide-react";
@@ -79,6 +80,8 @@ export interface LogsListViewProps {
   logsError: Error | null;
   maxStorageBytes: number;
   consumedStorageBytes: number;
+  currentMonth: Date;
+  onMonthChange: (month: Date) => void;
 }
 
 export function LogsListView({
@@ -89,12 +92,11 @@ export function LogsListView({
   logsError,
   maxStorageBytes,
   consumedStorageBytes,
+  currentMonth,
+  onMonthChange,
 }: LogsListViewProps) {
   const [searchParams, setSearchParams] = useSearchParams();
   const instanceFilter = searchParams.get("instance");
-  
-  // Calendar state
-  const [currentMonth, setCurrentMonth] = useState(new Date());
   const [showUploadDates, setShowUploadDates] = useLocalStorage("logs-show-uploads", false);
   
   // Table sort state
@@ -222,7 +224,7 @@ export function LogsListView({
           <Card className="p-4">
             <LogsCalendar
               month={currentMonth}
-              onMonthChange={setCurrentMonth}
+              onMonthChange={onMonthChange}
               dayContent={renderDayContent}
               headerRight={
                 <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:gap-4">
@@ -276,8 +278,16 @@ export function LogsListView({
 
 export function LogsList() {
   const { isAuthenticated, isLoading: authLoading } = useAuth();
+  const [currentMonth, setCurrentMonth] = useState(new Date());
+
+  // Compute the visible calendar date range (full weeks covering the month)
+  const calendarStart = startOfWeek(startOfMonth(currentMonth), { weekStartsOn: 0 });
+  const calendarEnd = endOfWeek(endOfMonth(currentMonth), { weekStartsOn: 0 });
+
   const { data: logs, isLoading: logsLoading, error: logsError } = useLogGroups({
     enabled: isAuthenticated,
+    start: calendarStart.toISOString(),
+    end: calendarEnd.toISOString(),
   });
   const { data: session } = useSession({
     enabled: isAuthenticated,
@@ -292,6 +302,8 @@ export function LogsList() {
       logsError={logsError}
       maxStorageBytes={session?.max_storage_bytes ?? 0}
       consumedStorageBytes={session?.consumed_storage_bytes ?? 0}
+      currentMonth={currentMonth}
+      onMonthChange={setCurrentMonth}
     />
   );
 }

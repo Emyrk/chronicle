@@ -72,7 +72,7 @@ type sqlcQuerier interface {
 	GetUserPanelLayoutDefaults(ctx context.Context, id uuid.UUID) (GetUserPanelLayoutDefaultsRow, error)
 	GetWoWLogFilesByGroupID(ctx context.Context, wowLogID uuid.UUID) ([]LogFile, error)
 	GetWoWLogGroupByID(ctx context.Context, id uuid.UUID) (GetWoWLogGroupByIDRow, error)
-	GetWoWLogGroupsByOwner(ctx context.Context, owner uuid.UUID) ([]GetWoWLogGroupsByOwnerRow, error)
+	GetWoWLogGroupsByOwner(ctx context.Context, arg GetWoWLogGroupsByOwnerParams) ([]GetWoWLogGroupsByOwnerRow, error)
 	InsertEncounter(ctx context.Context, arg InsertEncounterParams) (LogInstanceEncounter, error)
 	InsertEncounterCharacterFights(ctx context.Context, arg []InsertEncounterCharacterFightsParams) *InsertEncounterCharacterFightsBatchResults
 	InsertGuildMember(ctx context.Context, arg InsertGuildMemberParams) (GuildMember, error)
