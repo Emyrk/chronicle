@@ -2,7 +2,7 @@ import { useMemo, useState } from "react";
 import { startOfWeek, endOfWeek, startOfMonth, endOfMonth } from "date-fns";
 import { useLocalStorage } from "@/hooks/useLocalStorage";
 import { Link, useSearchParams } from "react-router-dom";
-import { FileText, LogIn, Loader2, Upload as UploadIcon, HardDrive, HelpCircle } from "lucide-react";
+import { LogIn, Loader2, HardDrive, HelpCircle } from "lucide-react";
 import { Card } from "@/components/ui/Card/Card";
 import { Button } from "@/components/ui/button";
 import { useAuth } from "@/hooks/useAuth";
@@ -193,24 +193,6 @@ export function LogsListView({
                 {logsError.message}
               </p>
             </div>
-          </div>
-        </Card>
-      ) : logs && logs.length === 0 ? (
-        <Card className="p-6">
-          <div className="flex flex-col items-center gap-4 text-center">
-            <FileText className="h-12 w-12 text-muted-foreground" />
-            <div>
-              <h2 className="font-semibold text-lg">No Logs Found</h2>
-              <p className="text-muted-foreground mt-1">
-                You haven't uploaded any logs yet.
-              </p>
-            </div>
-            <Link to="/upload">
-              <Button>
-                <UploadIcon className="h-4 w-4 mr-2" />
-                Upload Your First Log
-              </Button>
-            </Link>
           </div>
         </Card>
       ) : (
