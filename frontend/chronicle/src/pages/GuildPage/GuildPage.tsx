@@ -3,15 +3,9 @@ import { useParams, Link } from "react-router-dom";
 import type { DeviceVisibility } from "@/api/typesGenerated";
 import { useGuildPage, useGuildSettings, useMyJoinRequest, useCreateJoinRequest } from "@/api/queries";
 import { useAuth } from "@/hooks/useAuth";
-import { GuildPageCanvas, TabBar, GuildPageHeader } from "./components";
-import { Shield, Pencil, PanelLeft, MoreVertical, Users, Settings, UserPlus, Clock } from "lucide-react";
+import { GuildPageCanvas, TabBar, GuildPageHeader, GuildActionsMenu } from "./components";
+import { Shield, PanelLeft, UserPlus, Clock } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import {
-  DropdownMenu,
-  DropdownMenuTrigger,
-  DropdownMenuContent,
-  DropdownMenuItem,
-} from "@/components/ui/DropdownMenu/DropdownMenu";
 import { useIsMobile } from "@/hooks/useIsMobile";
 
 // Helper to check if an item should be visible on current device
@@ -75,46 +69,11 @@ export function GuildPage() {
 
   return (
     <div className="relative w-full px-4">
-      {/* Guild actions menu pinned top-right */}
-      {(pageConfig.guild.can_edit || pageConfig.guild.can_view_roster) && (
-        <DropdownMenu>
-          <DropdownMenuTrigger asChild>
-            <Button
-              variant="outline"
-              size="icon"
-              className="absolute top-2 right-4 z-10 hidden md:flex h-8 w-8"
-            >
-              <MoreVertical className="h-4 w-4" />
-            </Button>
-          </DropdownMenuTrigger>
-          <DropdownMenuContent align="end">
-            {pageConfig.guild.can_edit && (
-              <DropdownMenuItem asChild>
-                <Link to={`/guilds/${guildId}/edit`}>
-                  <Pencil className="h-4 w-4 mr-2" />
-                  Edit Page
-                </Link>
-              </DropdownMenuItem>
-            )}
-            {pageConfig.guild.can_view_roster && (
-              <DropdownMenuItem asChild>
-                <Link to={`/guilds/${guildId}/roster`}>
-                  <Users className="h-4 w-4 mr-2" />
-                  View Members
-                </Link>
-              </DropdownMenuItem>
-            )}
-            {pageConfig.guild.can_edit && (
-              <DropdownMenuItem asChild>
-                <Link to={`/guilds/${guildId}/settings`}>
-                  <Settings className="h-4 w-4 mr-2" />
-                  Settings
-                </Link>
-              </DropdownMenuItem>
-            )}
-          </DropdownMenuContent>
-        </DropdownMenu>
-      )}
+      <GuildActionsMenu
+        guildId={guildId!}
+        canEdit={pageConfig.guild.can_edit}
+        canViewRoster={pageConfig.guild.can_view_roster}
+      />
 
       {/* Join Guild button */}
       {settings?.allow_join_requests_until && new Date(settings.allow_join_requests_until) > new Date() && isAuthenticated && !pageConfig.guild.can_view_roster && (

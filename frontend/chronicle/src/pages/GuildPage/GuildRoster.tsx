@@ -2,7 +2,7 @@ import { useParams, Link } from "react-router-dom";
 import { useGuildRoster, useGuildPage, useGuildJoinRequests, useAcceptJoinRequest, useDenyJoinRequest } from "@/api/queries";
 import type { GuildJoinRequest } from "@/api/queries";
 import { ArrowLeft, Shield, Crown, Users, UserPlus, Check, X } from "lucide-react";
-import { GuildPageHeader } from "./components";
+import { GuildPageHeader, GuildActionsMenu } from "./components";
 import { Button } from "@/components/ui/button";
 
 export function GuildRoster() {
@@ -44,9 +44,16 @@ export function GuildRoster() {
   });
 
   return (
-    <div className="w-full px-4 md:px-12">
+    <div className="relative w-full px-4 md:px-12">
       {pageConfig && (
-        <GuildPageHeader guild={pageConfig.guild} theme={pageConfig.theme} />
+        <>
+          <GuildActionsMenu
+            guildId={guildId!}
+            canEdit={pageConfig.guild.can_edit}
+            canViewRoster={pageConfig.guild.can_view_roster}
+          />
+          <GuildPageHeader guild={pageConfig.guild} theme={pageConfig.theme} />
+        </>
       )}
       <div className="flex items-center gap-3 mb-6">
         <Link
