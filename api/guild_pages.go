@@ -203,21 +203,27 @@ func (api *API) GetGuildPage(w http.ResponseWriter, r *http.Request) {
 	guild := httpmw.Guild(ctx)
 
 	canEdit := false
+	canViewRoster := false
 	// Check if user can edit
 	// TODO: This should be an auth check call
 	actor, ok := authz.ActorFromContext(ctx)
 	if ok {
-		check, err := api.Zed.CheckOne(ctx, nil, policy.New().Guild(guild.ID).CanAdmin_guild_User(actor))
-		canEdit = err == nil && check
+		zg := policy.New().Guild(guild.ID)
+		results, err := api.Zed.Check(ctx, nil, zg.CanAdmin_guild_User(actor), zg.CanView_chronicle_roster_User(actor))
+		if err == nil && len(results) == 2 {
+			canEdit = results[0]
+			canViewRoster = results[1]
+		}
 	}
 
 	guildInfo := chroniclesdk.GuildInfo{
-		ID:        guild.ID,
-		Name:      guild.Name,
-		RealmID:   guild.RealmID,
-		RealmName: guild.RealmName,
-		HasPage:   true,
-		CanEdit:   canEdit,
+		ID:            guild.ID,
+		Name:          guild.Name,
+		RealmID:       guild.RealmID,
+		RealmName:     guild.RealmName,
+		HasPage:       true,
+		CanEdit:       canEdit,
+		CanViewRoster: canViewRoster,
 	}
 
 	page, err := api.Opts.Zed.GetFullGuildPage(ctx, guild.ID)
@@ -573,3 +579,49 @@ func (api *API) AdminRemoveGuildMember(w http.ResponseWriter, r *http.Request) {
 		Message: "Member removed",
 	})
 }
+// GuildRoster returns the list of Chronicle users with SpiceDB roles on this guild.
+func (api *API) GuildRoster(w http.ResponseWriter, r *http.Request) {
+	ctx := r.Context()
+	guild := httpmw.Guild(ctx)
+
+	rosterMembers, err := api.Zed.GuildRosterMembers(ctx, guild.ID)
+	if err != nil {
+		httpapi.InternalServerError(w, err)
+		return
+	}
+
+	if len(rosterMembers) == 0 {
+		httpapi.Write(ctx, w, http.StatusOK, []chroniclesdk.GuildRosterMember{})
+		return
+	}
+
+	// Batch-fetch usernames from DB
+	userIDs := make([]uuid.UUID, len(rosterMembers))
+	for i, m := range rosterMembers {
+		userIDs[i] = m.UserID
+	}
+	users, err := api.Opts.Zed.GetUsersByIDs(ctx, userIDs)
+	if err != nil {
+		httpapi.InternalServerError(w, err)
+		return
+	}
+	userMap := make(map[uuid.UUID]database.ChronicleUser, len(users))
+	for _, u := range users {
+		userMap[u.ID] = u
+	}
+
+	result := make([]chroniclesdk.GuildRosterMember, 0, len(rosterMembers))
+	for _, m := range rosterMembers {
+		u, ok := userMap[m.UserID]
+		if !ok {
+			continue // user deleted from DB but relation remains
+		}
+		result = append(result, chroniclesdk.GuildRosterMember{
+			UserID:   m.UserID,
+			Username: u.Username,
+			Roles:    m.Roles,
+		})
+	}
+	httpapi.Write(ctx, w, http.StatusOK, result)
+}
+

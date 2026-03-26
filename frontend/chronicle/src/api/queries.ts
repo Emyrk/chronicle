@@ -39,6 +39,7 @@ import type {
   UpdateTabRequest as UpdateTabRequestGenerated,
   CreateTabRequest as CreateTabRequestGenerated,
   UpdateGuildPageRequest as UpdateGuildPageRequestGenerated,
+  GuildRosterMember as GuildRosterMemberGenerated,
 } from "./typesGenerated";
 
 // Re-export types for convenience
@@ -80,6 +81,7 @@ export type UpdateTabRequest = UpdateTabRequestGenerated;
 export type CreateTabRequest = CreateTabRequestGenerated;
 export type UpdateGuildPageRequest = UpdateGuildPageRequestGenerated;
 export type GuildPageTheme = GuildPageThemeGenerated;
+export type GuildRosterMember = GuildRosterMemberGenerated;
 
 export function useWhoami(options?: Omit<UseQueryOptions<boolean>, "queryKey" | "queryFn">) {
   return useQuery({
@@ -925,6 +927,23 @@ export function useGuildPage(guildId: string | undefined) {
         throw buildAPIError("Failed to fetch guild page", error);
       }
       return response.json() as Promise<GuildPageConfig>;
+    },
+    enabled: !!guildId,
+  });
+}
+
+export function useGuildRoster(guildId: string | undefined) {
+  return useQuery({
+    queryKey: ["guild-roster", guildId],
+    queryFn: async () => {
+      const response = await fetch(`/api/v1/guilds/${guildId}/roster`, {
+        credentials: "include",
+      });
+      if (!response.ok) {
+        const error = await response.json().catch(() => null);
+        throw buildAPIError("Failed to fetch guild roster", error);
+      }
+      return response.json() as Promise<GuildRosterMember[]>;
     },
     enabled: !!guildId,
   });

@@ -19,7 +19,7 @@ export default defineConfig({
   }), tailwindcss(), {
     name: 'react-scan-dev',
     transformIndexHtml(_html, ctx) {
-      if (ctx.server) {
+      if (ctx.server && false) {
         return [{
           tag: 'script',
           attrs: { src: 'https://unpkg.com/react-scan/dist/auto.global.js' },

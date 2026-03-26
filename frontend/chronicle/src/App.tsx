@@ -39,7 +39,7 @@ import {
   LayoutBookSettings,
   LayoutLabSettings,
 } from "./pages/Settings"
-import { GuildPage, GuildPageEditor } from "./pages/GuildPage"
+import { GuildPage, GuildPageEditor, GuildRoster } from "./pages/GuildPage"
 import { ArmoryPage } from "./pages/ArmoryPage"
 import { ArmorySearchPage } from "./pages/ArmorySearch"
 import { SimPage } from "./pages/Sim"
@@ -102,6 +102,7 @@ function App() {
         <Route path="/g/:guildId" element={<GuildPage />} />
         <Route path="/g/:guildId/:tabSlug" element={<GuildPage />} />
         <Route path="/guilds/:guildId/edit" element={<GuildPageEditor />} />
+        <Route path="/guilds/:guildId/roster" element={<GuildRoster />} />
         <Route path="/account" element={<AccountLayout />}>
           <Route index element={<Navigate to="/account/settings" replace />} />
           <Route path="settings" element={<ProfileSettings />} />

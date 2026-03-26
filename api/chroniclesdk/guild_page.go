@@ -19,7 +19,8 @@ type GuildInfo struct {
 	RealmID   uuid.UUID `json:"realm_id"`
 	RealmName string    `json:"realm_name"`
 	HasPage   bool      `json:"has_page"`
-	CanEdit   bool      `json:"can_edit"`
+	CanEdit       bool `json:"can_edit"`
+	CanViewRoster bool `json:"can_view_roster"`
 }
 
 type GuildPageConfig struct {
@@ -116,6 +117,12 @@ type ListGuildsResponse struct {
 type AddGuildMemberRequest struct {
 	UserID uuid.UUID `json:"user_id"`
 }
+type GuildRosterMember struct {
+	UserID   uuid.UUID `json:"user_id"`
+	Username string    `json:"username"`
+	Roles    []string  `json:"roles"` // "member", "leader", etc.
+}
+
 
 type GuildPageOptionsResponse struct {
 	AllowedTags     []GuildTag       `json:"allowed_tags"`

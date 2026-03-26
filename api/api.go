@@ -179,6 +179,17 @@ func (api *API) Routes() chi.Router {
 					r.Put("/page/tabs/{tabID}", api.UpdateGuildPageTab)
 					r.Delete("/page/tabs/{tabID}", api.DeleteGuildPageTab)
 				})
+
+				// Guild roster route (viewable by members, leaders, and admins)
+				r.Group(func(r chi.Router) {
+					r.Use(
+						api.Auth.Authenticated(false),
+						guildapi.Can(api.Zed, func(on *policy.ObjGuild) func(sub *policy.ObjUser) rel.Relationship {
+							return on.CanView_chronicle_roster_User
+						}),
+					)
+					r.Get("/roster", api.GuildRoster)
+				})
 			})
 		})
 

@@ -195,6 +195,7 @@ export interface GuildInfo {
     readonly realm_name: string;
     readonly has_page: boolean;
     readonly can_edit: boolean;
+    readonly can_view_roster: boolean;
 }
 
 // From chroniclesdk/guild_page.go
@@ -257,6 +258,13 @@ export interface GuildPanelPosition {
     readonly y: number;
     readonly w: number;
     readonly h: number;
+}
+
+// From chroniclesdk/guild_page.go
+export interface GuildRosterMember {
+    readonly user_id: string;
+    readonly username: string;
+    readonly roles: readonly string[]; // "member", "leader", etc.
 }
 
 // From chroniclesdk/constants.go

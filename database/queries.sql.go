@@ -3330,6 +3330,44 @@ func (q *sqlQuerier) GetUserByID(ctx context.Context, id uuid.UUID) (ChronicleUs
 	return i, err
 }
 
+const getUsersByIDs = `-- name: GetUsersByIDs :many
+SELECT
+  id, username, email, created_at, updated_at, max_storage_bytes, data_limit_updated_at, consumed_storage_bytes
+FROM
+  chronicle_users
+WHERE
+  id = ANY($1::uuid[])
+`
+
+func (q *sqlQuerier) GetUsersByIDs(ctx context.Context, ids []uuid.UUID) ([]ChronicleUser, error) {
+	rows, err := q.db.Query(ctx, getUsersByIDs, ids)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ChronicleUser
+	for rows.Next() {
+		var i ChronicleUser
+		if err := rows.Scan(
+			&i.ID,
+			&i.Username,
+			&i.Email,
+			&i.CreatedAt,
+			&i.UpdatedAt,
+			&i.MaxStorageBytes,
+			&i.DataLimitUpdatedAt,
+			&i.ConsumedStorageBytes,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const insertUser = `-- name: InsertUser :one
 INSERT INTO
   users(id, username, email, created_at, updated_at)

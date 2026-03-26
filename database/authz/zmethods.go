@@ -94,3 +94,40 @@ func (z *Authz) UserChronicleRoles(ctx context.Context, user uuid.UUID) ([]strin
 
 	return roles, nil
 }
+// GuildRosterMember represents a user's roles in a guild from SpiceDB.
+type GuildRosterMember struct {
+	UserID uuid.UUID
+	Roles  []string // "member", "leader", etc.
+}
+
+// GuildRosterMembers returns all users with member or leader relations to a guild.
+func (z *Authz) GuildRosterMembers(ctx context.Context, guildID uuid.UUID) ([]GuildRosterMember, error) {
+	f := rel.NewFilter("guild", guildID.String(), "")
+	f.WithSubjectFilter("user", "", "")
+
+	// Collect roles per user
+	byUser := make(map[uuid.UUID][]string)
+	for r, err := range z.spice.ReadRelationships(ctx, z.DefaultConsistencyStrategy(), f) {
+		if err != nil {
+			return nil, err
+		}
+		if r.ResourceRelation != "member" && r.ResourceRelation != "leader" {
+			continue
+		}
+		id, err := uuid.Parse(r.SubjectID)
+		if err != nil {
+			continue
+		}
+		byUser[id] = append(byUser[id], r.ResourceRelation)
+	}
+
+	members := make([]GuildRosterMember, 0, len(byUser))
+	for userID, roles := range byUser {
+		members = append(members, GuildRosterMember{
+			UserID: userID,
+			Roles:  roles,
+		})
+	}
+	return members, nil
+}
+

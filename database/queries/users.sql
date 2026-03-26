@@ -84,3 +84,10 @@ WHERE
   user_id = $1
 LIMIT 1
 ;
+-- name: GetUsersByIDs :many
+SELECT
+  *
+FROM
+  chronicle_users
+WHERE
+  id = ANY(@ids::uuid[]);

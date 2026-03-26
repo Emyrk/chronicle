@@ -3,8 +3,14 @@ import { useParams, Link } from "react-router-dom";
 import type { DeviceVisibility } from "@/api/typesGenerated";
 import { useGuildPage } from "@/api/queries";
 import { GuildPageCanvas, TabBar, GuildPageHeader } from "./components";
-import { Shield, Pencil, PanelLeft } from "lucide-react";
+import { Shield, Pencil, PanelLeft, MoreVertical, Users } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import {
+  DropdownMenu,
+  DropdownMenuTrigger,
+  DropdownMenuContent,
+  DropdownMenuItem,
+} from "@/components/ui/DropdownMenu/DropdownMenu";
 import { useIsMobile } from "@/hooks/useIsMobile";
 
 // Helper to check if an item should be visible on current device
@@ -62,15 +68,37 @@ export function GuildPage() {
 
   return (
     <div className="relative w-full px-4">
-      {/* Edit button pinned top-right */}
-      {pageConfig.guild.can_edit && (
-        <Link
-          to={`/guilds/${guildId}/edit`}
-          className="absolute top-2 right-4 hidden md:flex items-center gap-2 px-3 py-1.5 text-sm bg-primary text-primary-foreground rounded-lg hover:bg-primary/90 transition-colors z-10"
-        >
-          <Pencil className="h-3.5 w-3.5" />
-          Edit Page
-        </Link>
+      {/* Guild actions menu pinned top-right */}
+      {(pageConfig.guild.can_edit || pageConfig.guild.can_view_roster) && (
+        <DropdownMenu>
+          <DropdownMenuTrigger asChild>
+            <Button
+              variant="outline"
+              size="icon"
+              className="absolute top-2 right-4 z-10 hidden md:flex h-8 w-8"
+            >
+              <MoreVertical className="h-4 w-4" />
+            </Button>
+          </DropdownMenuTrigger>
+          <DropdownMenuContent align="end">
+            {pageConfig.guild.can_edit && (
+              <DropdownMenuItem asChild>
+                <Link to={`/guilds/${guildId}/edit`}>
+                  <Pencil className="h-4 w-4 mr-2" />
+                  Edit Page
+                </Link>
+              </DropdownMenuItem>
+            )}
+            {pageConfig.guild.can_view_roster && (
+              <DropdownMenuItem asChild>
+                <Link to={`/guilds/${guildId}/roster`}>
+                  <Users className="h-4 w-4 mr-2" />
+                  View Members
+                </Link>
+              </DropdownMenuItem>
+            )}
+          </DropdownMenuContent>
+        </DropdownMenu>
       )}
       <GuildPageHeader guild={pageConfig.guild} theme={pageConfig.theme} />
 

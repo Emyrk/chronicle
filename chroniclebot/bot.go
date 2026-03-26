@@ -203,51 +203,6 @@ func (b *Bot) GetGuildMember(guildID, userID string) (*discordgo.Member, error) 
 	return member, nil
 }
 
-// GetGuildMemberRoles fetches a member's roles in a guild.
-// Returns the role IDs the member has.
-func (b *Bot) GetGuildMemberRoles(guildID, userID string) ([]string, error) {
-	member, err := b.GetGuildMember(guildID, userID)
-	if err != nil {
-		return nil, err
-	}
-	if member == nil {
-		return nil, nil
-	}
-	return member.Roles, nil
-}
-
-// HasRole checks if a user has a specific role in a guild.
-func (b *Bot) HasRole(guildID, userID, roleID string) (bool, error) {
-	roles, err := b.GetGuildMemberRoles(guildID, userID)
-	if err != nil {
-		return false, err
-	}
-	for _, r := range roles {
-		if r == roleID {
-			return true, nil
-		}
-	}
-	return false, nil
-}
-
-// HasAnyRole checks if a user has any of the specified roles in a guild.
-func (b *Bot) HasAnyRole(guildID, userID string, roleIDs ...string) (bool, error) {
-	roles, err := b.GetGuildMemberRoles(guildID, userID)
-	if err != nil {
-		return false, err
-	}
-	roleSet := make(map[string]struct{}, len(roleIDs))
-	for _, id := range roleIDs {
-		roleSet[id] = struct{}{}
-	}
-	for _, r := range roles {
-		if _, ok := roleSet[r]; ok {
-			return true, nil
-		}
-	}
-	return false, nil
-}
-
 // GetGuildRoles fetches all roles in a guild.
 // Useful for mapping role IDs to names.
 func (b *Bot) GetGuildRoles(guildID string) ([]*discordgo.Role, error) {
