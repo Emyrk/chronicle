@@ -181,11 +181,9 @@ func (api *API) Routes() chi.Router {
 						r.Delete("/{userID}", api.AdminRemoveGuildMember)
 					})
 					r.Put("/settings", api.UpdateGuildSettings)
-					r.Route("/join-requests", func(r chi.Router) {
-						r.Get("/", api.ListJoinRequests)
-						r.Post("/{requestID}/accept", api.AcceptJoinRequest)
-						r.Delete("/{requestID}", api.DenyJoinRequest)
-					})
+					r.Get("/join-requests", api.ListJoinRequests)
+					r.Post("/join-requests/{requestID}/accept", api.AcceptJoinRequest)
+					r.Delete("/join-requests/{requestID}", api.DenyJoinRequest)
 
 					r.Put("/page", api.UpsertGuildPage)
 					r.Post("/page/tabs", api.CreateGuildPageTab)
