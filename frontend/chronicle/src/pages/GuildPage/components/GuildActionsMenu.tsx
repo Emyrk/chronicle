@@ -18,7 +18,7 @@ export function GuildActionsMenu({ guildId, canEdit, canViewRoster }: GuildActio
   if (!canEdit && !canViewRoster) return null;
 
   return (
-    <DropdownMenu>
+    <DropdownMenu modal={false}>
       <DropdownMenuTrigger asChild>
         <Button
           variant="outline"
@@ -31,7 +31,7 @@ export function GuildActionsMenu({ guildId, canEdit, canViewRoster }: GuildActio
       <DropdownMenuContent align="end">
         {canEdit && (
           <DropdownMenuItem asChild>
-            <Link to={`/guilds/${guildId}/edit`}>
+            <Link to={`/g/${guildId}/edit`}>
               <Pencil className="h-4 w-4 mr-2" />
               Edit Page
             </Link>
@@ -39,7 +39,7 @@ export function GuildActionsMenu({ guildId, canEdit, canViewRoster }: GuildActio
         )}
         {canViewRoster && (
           <DropdownMenuItem asChild>
-            <Link to={`/guilds/${guildId}/roster`}>
+            <Link to={`/g/${guildId}/roster`}>
               <Users className="h-4 w-4 mr-2" />
               View Members
             </Link>
@@ -47,7 +47,7 @@ export function GuildActionsMenu({ guildId, canEdit, canViewRoster }: GuildActio
         )}
         {canEdit && (
           <DropdownMenuItem asChild>
-            <Link to={`/guilds/${guildId}/settings`}>
+            <Link to={`/g/${guildId}/settings`}>
               <Settings className="h-4 w-4 mr-2" />
               Settings
             </Link>

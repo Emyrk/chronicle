@@ -177,20 +177,20 @@ type DeviceVisibility = "all" | "desktop" | "mobile";
 ## API Routes
 
 ```
-GET    /api/v1/guilds                      - List guilds (with page status)
-GET    /api/v1/guilds/{guildID}            - Get guild info
-GET    /api/v1/guilds/{guildID}/page       - Get full page config
-PUT    /api/v1/guilds/{guildID}/page       - Upsert page (auth required)
-POST   /api/v1/guilds/{guildID}/page/tabs  - Create tab
-PUT    /api/v1/guilds/{guildID}/page/tabs/{tabID}     - Update tab + panels
-DELETE /api/v1/guilds/{guildID}/page/tabs/{tabID}     - Delete tab
-PUT    /api/v1/guilds/{guildID}/page/tabs/reorder     - Reorder tabs
+GET    /api/v1/g                      - List guilds (with page status)
+GET    /api/v1/g/{guildID}            - Get guild info
+GET    /api/v1/g/{guildID}/page       - Get full page config
+PUT    /api/v1/g/{guildID}/page       - Upsert page (auth required)
+POST   /api/v1/g/{guildID}/page/tabs  - Create tab
+PUT    /api/v1/g/{guildID}/page/tabs/{tabID}     - Update tab + panels
+DELETE /api/v1/g/{guildID}/page/tabs/{tabID}     - Delete tab
+PUT    /api/v1/g/{guildID}/page/tabs/reorder     - Reorder tabs
 
 GET    /api/v1/g/{guildID}                 - Public page endpoint
 
 # Admin only
-POST   /api/v1/admin/guilds/{guildID}/members          - Add member
-DELETE /api/v1/admin/guilds/{guildID}/members/{userID} - Remove member
+POST   /api/v1/admin/g/{guildID}/members          - Add member
+DELETE /api/v1/admin/g/{guildID}/members/{userID} - Remove member
 ```
 
 ## Current State (MVP)

@@ -101,9 +101,9 @@ function App() {
         <Route path="/terms" element={<Terms />} />
         <Route path="/g/:guildId" element={<GuildPage />} />
         <Route path="/g/:guildId/:tabSlug" element={<GuildPage />} />
-        <Route path="/guilds/:guildId/edit" element={<GuildPageEditor />} />
-        <Route path="/guilds/:guildId/roster" element={<GuildRoster />} />
-        <Route path="/guilds/:guildId/settings" element={<GuildSettings />} />
+        <Route path="/g/:guildId/edit" element={<GuildPageEditor />} />
+        <Route path="/g/:guildId/roster" element={<GuildRoster />} />
+        <Route path="/g/:guildId/settings" element={<GuildSettings />} />
         <Route path="/account" element={<AccountLayout />}>
           <Route index element={<Navigate to="/account/settings" replace />} />
           <Route path="settings" element={<ProfileSettings />} />

@@ -226,11 +226,11 @@ COMMENT ON COLUMN guilds.slug IS 'URL-friendly identifier, auto-generated from n
 
 ```
 # Public Guild Pages (read-only)
-GET /api/v1/guilds                    # List all guilds (with basic stats)
-GET /api/v1/guilds/:slug              # Guild page data (or by ID if no slug)
-GET /api/v1/guilds/:slug/raids        # Paginated raid history
-GET /api/v1/guilds/:slug/progression  # Boss kill progression
-GET /api/v1/guilds/:slug/roster       # Active raiders (from logs)
+GET /api/v1/g                    # List all guilds (with basic stats)
+GET /api/v1/g/:slug              # Guild page data (or by ID if no slug)
+GET /api/v1/g/:slug/raids        # Paginated raid history
+GET /api/v1/g/:slug/progression  # Boss kill progression
+GET /api/v1/g/:slug/roster       # Active raiders (from logs)
 ```
 
 ### 1.3 SDK Types (MVP)
@@ -413,7 +413,7 @@ export function GuildPage() {
 ```tsx
 // App.tsx
 <Route path="/guilds" element={<GuildList />} />
-<Route path="/guilds/:slug" element={<GuildPage />} />
+<Route path="/g/:slug" element={<GuildPage />} />
 ```
 
 ---
