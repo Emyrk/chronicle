@@ -178,6 +178,7 @@ func (api *API) Routes() chi.Router {
 					r.Route("/members", func(r chi.Router) {
 						// Guild member management (admin only)
 						r.Post("/", api.AdminAddGuildMember)
+						r.Put("/{userID}/role", api.AdminUpdateGuildMemberRole)
 						r.Delete("/{userID}", api.AdminRemoveGuildMember)
 					})
 					r.Put("/settings", api.UpdateGuildSettings)

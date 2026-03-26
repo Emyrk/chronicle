@@ -2,6 +2,7 @@ package authz
 
 import (
 	"context"
+	"fmt"
 
 	"github.com/Emyrk/chronicle/database"
 	"github.com/Emyrk/chronicle/database/authz/policy"
@@ -148,6 +149,31 @@ func (z *Authz) RemoveGuildMember(ctx context.Context, guildID, userID uuid.UUID
 	f := rel.NewFilter(g.Typ, g.ID, "")
 	f.WithSubjectFilter(u.Typ, u.ID, "")
 	return z.Delete(ctx, rel.NewPreconditionedFilter(f))
+}
+
+// SetGuildMemberRole replaces all guild relations for a user with the given role.
+// Valid roles: "member", "leader".
+func (z *Authz) SetGuildMemberRole(ctx context.Context, guildID, userID uuid.UUID, role string) error {
+	// First remove all existing relations for this user in the guild
+	if err := z.RemoveGuildMember(ctx, guildID, userID); err != nil {
+		return err
+	}
+
+	// Then add the new role
+	b := policy.New()
+	g := b.Guild(guildID)
+	g.Chronicle(b.GlobalChronicle())
+	u := b.User(userID)
+	switch role {
+	case "leader":
+		g.Leader(u)
+	case "member":
+		g.Member(u)
+	default:
+		return fmt.Errorf("invalid role: %s", role)
+	}
+	_, err := z.Write(ctx, *b.Txn())
+	return err
 }
 
 // IsGuildMember checks if a user has any relation (member/leader) to a guild.

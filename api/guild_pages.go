@@ -540,6 +540,40 @@ func (api *API) AdminAddGuildMember(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
+// AdminUpdateGuildMemberRole changes a guild member's role (admin only)
+func (api *API) AdminUpdateGuildMemberRole(w http.ResponseWriter, r *http.Request) {
+	ctx := r.Context()
+	guild := httpmw.Guild(ctx)
+	userID, err := uuid.Parse(chi.URLParam(r, "userID"))
+	if err != nil {
+		httpapi.Write(ctx, w, http.StatusBadRequest, chroniclesdk.Response{
+			Message: "Invalid user ID",
+		})
+		return
+	}
+
+	var req chroniclesdk.UpdateGuildMemberRoleRequest
+	if !httpapi.Read(ctx, w, r, &req) {
+		return
+	}
+
+	if req.Role != "member" && req.Role != "leader" {
+		httpapi.Write(ctx, w, http.StatusBadRequest, chroniclesdk.Response{
+			Message: "Role must be 'member' or 'leader'",
+		})
+		return
+	}
+
+	if err := api.Zed.SetGuildMemberRole(ctx, guild.ID, userID, req.Role); err != nil {
+		httpapi.InternalServerError(w, err)
+		return
+	}
+
+	httpapi.Write(ctx, w, http.StatusOK, chroniclesdk.Response{
+		Message: "Role updated",
+	})
+}
+
 // AdminRemoveGuildMember removes a member from a guild (admin only)
 func (api *API) AdminRemoveGuildMember(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()

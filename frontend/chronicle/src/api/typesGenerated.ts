@@ -775,6 +775,11 @@ export interface UpdateActionBarSlotsRequest {
 }
 
 // From chroniclesdk/guild_page.go
+export interface UpdateGuildMemberRoleRequest {
+    readonly role: string; // "member" or "leader"
+}
+
+// From chroniclesdk/guild_page.go
 export interface UpdateGuildPageRequest {
     readonly theme: GuildPageTheme;
 }

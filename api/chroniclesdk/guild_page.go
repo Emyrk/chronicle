@@ -110,6 +110,10 @@ type ListGuildsResponse struct {
 type AddGuildMemberRequest struct {
 	UserID uuid.UUID `json:"user_id"`
 }
+
+type UpdateGuildMemberRoleRequest struct {
+	Role string `json:"role"` // "member" or "leader"
+}
 type GuildRosterMember struct {
 	UserID   uuid.UUID `json:"user_id"`
 	Username string    `json:"username"`

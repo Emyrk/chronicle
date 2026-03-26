@@ -1,9 +1,19 @@
 import { useParams, Link } from "react-router-dom";
-import { useGuildRoster, useGuildPage, useGuildJoinRequests, useAcceptJoinRequest, useDenyJoinRequest } from "@/api/queries";
-import type { GuildJoinRequest } from "@/api/queries";
-import { ArrowLeft, Shield, Crown, Users, UserPlus, Check, X } from "lucide-react";
+import {
+  useGuildRoster, useGuildPage, useGuildJoinRequests,
+  useAcceptJoinRequest, useDenyJoinRequest,
+  useUpdateGuildMemberRole, useRemoveGuildMember,
+} from "@/api/queries";
+import type { GuildJoinRequest, GuildRosterMember } from "@/api/queries";
+import { ArrowLeft, Shield, Crown, Users, UserPlus, Check, X, Trash2, ChevronDown } from "lucide-react";
 import { GuildPageHeader, GuildActionsMenu } from "./components";
 import { Button } from "@/components/ui/button";
+import {
+  DropdownMenu,
+  DropdownMenuTrigger,
+  DropdownMenuContent,
+  DropdownMenuItem,
+} from "@/components/ui/DropdownMenu/DropdownMenu";
 
 export function GuildRoster() {
   const { guildId } = useParams<{ guildId: string }>();
@@ -44,7 +54,7 @@ export function GuildRoster() {
   });
 
   return (
-    <div className="relative w-full px-4 md:px-12">
+    <div className="relative w-full px-4 md:px-12 pb-10">
       {pageConfig && (
         <>
           <GuildActionsMenu
@@ -96,20 +106,62 @@ export function GuildRoster() {
       ) : (
         <div className="border border-border rounded-lg divide-y divide-border">
           {sorted.map((member) => (
-            <div
+            <MemberRow
               key={member.user_id}
-              className="flex items-center justify-between px-4 py-3"
-            >
-              <span className="font-medium">{member.username}</span>
-              <div className="flex gap-1.5">
-                {member.roles.map((role) => (
-                  <RoleBadge key={role} role={role} />
-                ))}
-              </div>
-            </div>
+              guildId={guildId!}
+              member={member}
+              canAdmin={canAdmin}
+            />
           ))}
         </div>
       )}
+    </div>
+  );
+}
+
+function MemberRow({ guildId, member, canAdmin }: { guildId: string; member: GuildRosterMember; canAdmin: boolean }) {
+  const updateRole = useUpdateGuildMemberRole(guildId);
+  const removeMember = useRemoveGuildMember(guildId);
+  const isPending = updateRole.isPending || removeMember.isPending;
+  const isLeader = member.roles.includes("leader");
+
+  return (
+    <div className="flex items-center justify-between px-4 py-3">
+      <span className="font-medium">{member.username}</span>
+      <div className="flex items-center gap-1.5">
+        {member.roles.map((role) => (
+          <RoleBadge key={role} role={role} />
+        ))}
+        {canAdmin && (
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <Button variant="ghost" size="icon" className="h-7 w-7 ml-1" disabled={isPending}>
+                <ChevronDown className="h-4 w-4" />
+              </Button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="end">
+              <DropdownMenuItem
+                onClick={() =>
+                  updateRole.mutate({
+                    userId: member.user_id,
+                    role: isLeader ? "member" : "leader",
+                  })
+                }
+              >
+                <Crown className="h-4 w-4 mr-2" />
+                {isLeader ? "Demote to Member" : "Promote to Leader"}
+              </DropdownMenuItem>
+              <DropdownMenuItem
+                className="text-red-600 focus:text-red-600"
+                onClick={() => removeMember.mutate(member.user_id)}
+              >
+                <Trash2 className="h-4 w-4 mr-2" />
+                Remove from Guild
+              </DropdownMenuItem>
+            </DropdownMenuContent>
+          </DropdownMenu>
+        )}
+      </div>
     </div>
   );
 }
