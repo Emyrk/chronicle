@@ -1,6 +1,6 @@
 CREATE TABLE guild_settings (
     guild_id UUID PRIMARY KEY REFERENCES guilds(id) ON DELETE CASCADE,
-    allow_join_requests BOOLEAN NOT NULL DEFAULT false,
+    allow_join_requests_until TIMESTAMPTZ,
     updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 

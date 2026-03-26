@@ -117,7 +117,7 @@ export function GuildPage() {
       )}
 
       {/* Join Guild button */}
-      {settings?.allow_join_requests && isAuthenticated && !pageConfig.guild.can_view_roster && (
+      {settings?.allow_join_requests_until && new Date(settings.allow_join_requests_until) > new Date() && isAuthenticated && !pageConfig.guild.can_view_roster && (
         <div className="absolute top-2 right-16 z-10 hidden md:flex">
           {myRequest ? (
             <Button variant="outline" size="sm" disabled>

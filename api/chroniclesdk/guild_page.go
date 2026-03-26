@@ -132,12 +132,12 @@ type GuildPageOptionsResponse struct {
 // Guild Settings
 
 type GuildSettings struct {
-	GuildID           uuid.UUID `json:"guild_id"`
-	AllowJoinRequests bool      `json:"allow_join_requests"`
+	GuildID                uuid.UUID  `json:"guild_id"`
+	AllowJoinRequestsUntil *time.Time `json:"allow_join_requests_until"`
 }
 
 type UpdateGuildSettingsRequest struct {
-	AllowJoinRequests bool `json:"allow_join_requests"`
+	AllowJoinRequestsUntil *time.Time `json:"allow_join_requests_until"`
 }
 
 // Guild Join Requests

@@ -3,6 +3,7 @@ package api
 import (
 	"errors"
 	"net/http"
+	"time"
 
 	"github.com/Emyrk/chronicle/api/chronauth"
 	"github.com/Emyrk/chronicle/api/chroniclesdk"
@@ -12,7 +13,21 @@ import (
 	"github.com/go-chi/chi/v5"
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgtype"
 )
+
+func settingsToSDK(s database.GuildSetting) chroniclesdk.GuildSettings {
+	out := chroniclesdk.GuildSettings{GuildID: s.GuildID}
+	if s.AllowJoinRequestsUntil.Valid {
+		t := s.AllowJoinRequestsUntil.Time
+		out.AllowJoinRequestsUntil = &t
+	}
+	return out
+}
+
+func joinRequestsOpen(s database.GuildSetting) bool {
+	return s.AllowJoinRequestsUntil.Valid && s.AllowJoinRequestsUntil.Time.After(time.Now())
+}
 
 // GetGuildSettings returns the guild settings (public, used by join button).
 func (api *API) GetGuildSettings(w http.ResponseWriter, r *http.Request) {
@@ -22,21 +37,14 @@ func (api *API) GetGuildSettings(w http.ResponseWriter, r *http.Request) {
 	settings, err := api.Zed.GetGuildSettings(ctx, guild.ID)
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
-			// No settings row yet, return defaults
-			httpapi.Write(ctx, w, http.StatusOK, chroniclesdk.GuildSettings{
-				GuildID:           guild.ID,
-				AllowJoinRequests: false,
-			})
+			httpapi.Write(ctx, w, http.StatusOK, chroniclesdk.GuildSettings{GuildID: guild.ID})
 			return
 		}
 		httpapi.InternalServerError(w, err)
 		return
 	}
 
-	httpapi.Write(ctx, w, http.StatusOK, chroniclesdk.GuildSettings{
-		GuildID:           settings.GuildID,
-		AllowJoinRequests: settings.AllowJoinRequests,
-	})
+	httpapi.Write(ctx, w, http.StatusOK, settingsToSDK(settings))
 }
 
 // UpdateGuildSettings updates the guild settings (admin only).
@@ -49,19 +57,21 @@ func (api *API) UpdateGuildSettings(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	var until pgtype.Timestamptz
+	if req.AllowJoinRequestsUntil != nil {
+		until = pgtype.Timestamptz{Time: *req.AllowJoinRequestsUntil, Valid: true}
+	}
+
 	settings, err := api.Zed.UpsertGuildSettings(ctx, database.UpsertGuildSettingsParams{
-		GuildID:           guild.ID,
-		AllowJoinRequests: req.AllowJoinRequests,
+		GuildID:                guild.ID,
+		AllowJoinRequestsUntil: until,
 	})
 	if err != nil {
 		httpapi.InternalServerError(w, err)
 		return
 	}
 
-	httpapi.Write(ctx, w, http.StatusOK, chroniclesdk.GuildSettings{
-		GuildID:           settings.GuildID,
-		AllowJoinRequests: settings.AllowJoinRequests,
-	})
+	httpapi.Write(ctx, w, http.StatusOK, settingsToSDK(settings))
 }
 
 // CreateJoinRequest submits a join request for the authenticated user.
@@ -82,7 +92,7 @@ func (api *API) CreateJoinRequest(w http.ResponseWriter, r *http.Request) {
 		httpapi.InternalServerError(w, err)
 		return
 	}
-	if errors.Is(err, pgx.ErrNoRows) || !settings.AllowJoinRequests {
+	if errors.Is(err, pgx.ErrNoRows) || !joinRequestsOpen(settings) {
 		httpapi.Write(ctx, w, http.StatusBadRequest, chroniclesdk.Response{
 			Message: "This guild is not accepting join requests.",
 		})

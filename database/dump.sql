@@ -341,7 +341,7 @@ CREATE TABLE guild_pages (
 
 CREATE TABLE guild_settings (
     guild_id uuid NOT NULL,
-    allow_join_requests boolean DEFAULT false NOT NULL,
+    allow_join_requests_until timestamp with time zone,
     updated_at timestamp with time zone DEFAULT now() NOT NULL
 );
 

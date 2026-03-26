@@ -1687,14 +1687,14 @@ func (q *sqlQuerier) GetGuildJoinRequestByUser(ctx context.Context, arg GetGuild
 
 const getGuildSettings = `-- name: GetGuildSettings :one
 
-SELECT guild_id, allow_join_requests, updated_at FROM guild_settings WHERE guild_id = $1
+SELECT guild_id, allow_join_requests_until, updated_at FROM guild_settings WHERE guild_id = $1
 `
 
 // Guild Settings
 func (q *sqlQuerier) GetGuildSettings(ctx context.Context, guildID uuid.UUID) (GuildSetting, error) {
 	row := q.db.QueryRow(ctx, getGuildSettings, guildID)
 	var i GuildSetting
-	err := row.Scan(&i.GuildID, &i.AllowJoinRequests, &i.UpdatedAt)
+	err := row.Scan(&i.GuildID, &i.AllowJoinRequestsUntil, &i.UpdatedAt)
 	return i, err
 }
 
@@ -1743,22 +1743,22 @@ func (q *sqlQuerier) ListGuildJoinRequests(ctx context.Context, guildID uuid.UUI
 }
 
 const upsertGuildSettings = `-- name: UpsertGuildSettings :one
-INSERT INTO guild_settings (guild_id, allow_join_requests, updated_at)
+INSERT INTO guild_settings (guild_id, allow_join_requests_until, updated_at)
 VALUES ($1, $2, NOW())
 ON CONFLICT (guild_id) DO UPDATE SET
-    allow_join_requests = $2, updated_at = NOW()
-RETURNING guild_id, allow_join_requests, updated_at
+    allow_join_requests_until = $2, updated_at = NOW()
+RETURNING guild_id, allow_join_requests_until, updated_at
 `
 
 type UpsertGuildSettingsParams struct {
-	GuildID           uuid.UUID `db:"guild_id" json:"guild_id"`
-	AllowJoinRequests bool      `db:"allow_join_requests" json:"allow_join_requests"`
+	GuildID                uuid.UUID          `db:"guild_id" json:"guild_id"`
+	AllowJoinRequestsUntil pgtype.Timestamptz `db:"allow_join_requests_until" json:"allow_join_requests_until"`
 }
 
 func (q *sqlQuerier) UpsertGuildSettings(ctx context.Context, arg UpsertGuildSettingsParams) (GuildSetting, error) {
-	row := q.db.QueryRow(ctx, upsertGuildSettings, arg.GuildID, arg.AllowJoinRequests)
+	row := q.db.QueryRow(ctx, upsertGuildSettings, arg.GuildID, arg.AllowJoinRequestsUntil)
 	var i GuildSetting
-	err := row.Scan(&i.GuildID, &i.AllowJoinRequests, &i.UpdatedAt)
+	err := row.Scan(&i.GuildID, &i.AllowJoinRequestsUntil, &i.UpdatedAt)
 	return i, err
 }
 

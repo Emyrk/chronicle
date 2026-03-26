@@ -761,9 +761,9 @@ type GuildPageTab struct {
 }
 
 type GuildSetting struct {
-	GuildID           uuid.UUID          `db:"guild_id" json:"guild_id"`
-	AllowJoinRequests bool               `db:"allow_join_requests" json:"allow_join_requests"`
-	UpdatedAt         pgtype.Timestamptz `db:"updated_at" json:"updated_at"`
+	GuildID                uuid.UUID          `db:"guild_id" json:"guild_id"`
+	AllowJoinRequestsUntil pgtype.Timestamptz `db:"allow_join_requests_until" json:"allow_join_requests_until"`
+	UpdatedAt              pgtype.Timestamptz `db:"updated_at" json:"updated_at"`
 }
 
 type LogFile struct {

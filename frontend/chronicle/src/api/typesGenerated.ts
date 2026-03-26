@@ -285,7 +285,7 @@ export interface GuildRosterMember {
 // From chroniclesdk/guild_page.go
 export interface GuildSettings {
     readonly guild_id: string;
-    readonly allow_join_requests: boolean;
+    readonly allow_join_requests_until: string | null;
 }
 
 // From chroniclesdk/constants.go
@@ -788,7 +788,7 @@ export interface UpdateGuildPageRequest {
 
 // From chroniclesdk/guild_page.go
 export interface UpdateGuildSettingsRequest {
-    readonly allow_join_requests: boolean;
+    readonly allow_join_requests_until: string | null;
 }
 
 // From chroniclesdk/panel_layout.go

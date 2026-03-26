@@ -4,10 +4,10 @@
 SELECT * FROM guild_settings WHERE guild_id = $1;
 
 -- name: UpsertGuildSettings :one
-INSERT INTO guild_settings (guild_id, allow_join_requests, updated_at)
+INSERT INTO guild_settings (guild_id, allow_join_requests_until, updated_at)
 VALUES ($1, $2, NOW())
 ON CONFLICT (guild_id) DO UPDATE SET
-    allow_join_requests = $2, updated_at = NOW()
+    allow_join_requests_until = $2, updated_at = NOW()
 RETURNING *;
 
 -- Guild Join Requests

@@ -4,11 +4,25 @@ import { ArrowLeft, Settings } from "lucide-react";
 import { GuildPageHeader } from "./components";
 import { Button } from "@/components/ui/button";
 
+function isOpen(until: string | null | undefined): boolean {
+  if (!until) return false;
+  return new Date(until) > new Date();
+}
+
+const DURATION_OPTIONS = [
+  { label: "1 hour", hours: 1 },
+  { label: "24 hours", hours: 24 },
+  { label: "7 days", hours: 24 * 7 },
+  { label: "30 days", hours: 24 * 30 },
+] as const;
+
 export function GuildSettings() {
   const { guildId } = useParams<{ guildId: string }>();
   const { data: pageConfig } = useGuildPage(guildId);
   const { data: settings, isLoading } = useGuildSettings(guildId);
   const updateSettings = useUpdateGuildSettings(guildId);
+
+  const open = isOpen(settings?.allow_join_requests_until);
 
   if (isLoading) {
     return (
@@ -37,26 +51,52 @@ export function GuildSettings() {
       </div>
 
       <div className="border border-border rounded-lg p-6 max-w-xl">
-        <div className="flex items-center justify-between">
-          <div>
-            <h3 className="font-medium">Allow Join Requests</h3>
-            <p className="text-sm text-muted-foreground mt-1">
-              When enabled, users can request to join your guild from the guild page.
-              Requests must be approved by a guild leader.
+        <div>
+          <h3 className="font-medium">Allow Join Requests</h3>
+          <p className="text-sm text-muted-foreground mt-1">
+            Open join requests for a set duration. Users can request to join your
+            guild from the guild page. Requests must be approved by a guild leader.
+          </p>
+
+          {open && settings?.allow_join_requests_until && (
+            <p className="text-sm text-green-600 mt-2">
+              Open until{" "}
+              {new Date(settings.allow_join_requests_until).toLocaleString()}
             </p>
+          )}
+
+          <div className="flex flex-wrap gap-2 mt-4">
+            {DURATION_OPTIONS.map((opt) => (
+              <Button
+                key={opt.hours}
+                variant="outline"
+                size="sm"
+                disabled={updateSettings.isPending}
+                onClick={() => {
+                  const until = new Date(
+                    Date.now() + opt.hours * 60 * 60 * 1000,
+                  ).toISOString();
+                  updateSettings.mutate({
+                    allow_join_requests_until: until,
+                  });
+                }}
+              >
+                {opt.label}
+              </Button>
+            ))}
+            {open && (
+              <Button
+                variant="destructive"
+                size="sm"
+                disabled={updateSettings.isPending}
+                onClick={() =>
+                  updateSettings.mutate({ allow_join_requests_until: null })
+                }
+              >
+                Close Now
+              </Button>
+            )}
           </div>
-          <Button
-            variant={settings?.allow_join_requests ? "default" : "outline"}
-            size="sm"
-            disabled={updateSettings.isPending}
-            onClick={() =>
-              updateSettings.mutate({
-                allow_join_requests: !settings?.allow_join_requests,
-              })
-            }
-          >
-            {settings?.allow_join_requests ? "Enabled" : "Disabled"}
-          </Button>
         </div>
       </div>
     </div>
