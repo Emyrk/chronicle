@@ -66,6 +66,12 @@ export function GuildPage() {
 
   const currentTab = visibleTabs.find((t) => t.slug === activeTab) || visibleTabs[0];
   const showSidebar = visibleTabs.length > 1;
+  const joinButtonVisible = !!(
+    settings?.allow_join_requests_until &&
+    new Date(settings.allow_join_requests_until) > new Date() &&
+    isAuthenticated &&
+    !settings.is_member
+  );
 
   return (
     <div className="relative w-full px-4">
@@ -75,10 +81,11 @@ export function GuildPage() {
         canViewRoster={pageConfig.guild.can_view_roster}
       />
 
-      {/* Join Guild button — visible to any authenticated non-member when invites are open */}
-      {settings?.allow_join_requests_until && new Date(settings.allow_join_requests_until) > new Date() && isAuthenticated && !settings.is_member && (
-        <div className="flex justify-end mb-2">
-          {myRequest ? (
+      <GuildPageHeader
+        guild={pageConfig.guild}
+        theme={pageConfig.theme}
+        leading={joinButtonVisible ? (
+          myRequest ? (
             <Button variant="outline" size="sm" disabled>
               <Clock className="h-4 w-4 mr-2" />
               Request Pending
@@ -116,14 +123,17 @@ export function GuildPage() {
               </Button>
             </div>
           ) : (
-            <Button variant="outline" size="sm" onClick={() => setShowJoinDialog(true)}>
+            <Button
+              className="bg-blue-600 hover:bg-blue-700 text-white"
+              size="sm"
+              onClick={() => setShowJoinDialog(true)}
+            >
               <UserPlus className="h-4 w-4 mr-2" />
               Join Guild
             </Button>
-          )}
-        </div>
-      )}
-      <GuildPageHeader guild={pageConfig.guild} theme={pageConfig.theme} />
+          )
+        ) : undefined}
+      />
 
       {/* Sidebar + Content */}
       <div className="flex gap-6 relative">

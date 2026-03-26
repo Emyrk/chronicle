@@ -12,6 +12,7 @@ import (
 	"github.com/Emyrk/chronicle/database"
 	"github.com/Emyrk/chronicle/database/authz"
 	"github.com/Emyrk/chronicle/database/authz/policy"
+	"github.com/authzed/gochugaru/rel"
 	"github.com/google/uuid"
 	"github.com/markbates/goth"
 )
@@ -100,10 +101,19 @@ func (s *Service) Signup(w http.ResponseWriter, r *http.Request, user goth.User)
 			}
 		case "dev-oidc":
 			b := policy.New()
+			gChron := b.GlobalChronicle()
 			usr := b.User(session.UserID)
+
+			// Create a filter to remove all their existing roles from the global namespace
+			f := rel.NewFilter(gChron.Object().Typ, gChron.Object().ID, "")
+			f.WithSubjectFilter(usr.Object().Typ, usr.Object().ID, "")
+			err := s.Zed.Delete(ctx, rel.NewPreconditionedFilter(f))
+			if err != nil {
+				return fmt.Errorf("zed.Delete: %w", err)
+			}
+
 			b.GlobalChronicle().
-				Chronicle_guild_member(usr).
-				Upload_capable(usr).Technical_admin(usr).Admin(usr)
+				Chronicle_guild_member(usr)
 			_, err = s.Zed.Write(ctx, *b.Txn())
 			if err != nil {
 				return fmt.Errorf("giving dev-oidc user all perms: %w", err)

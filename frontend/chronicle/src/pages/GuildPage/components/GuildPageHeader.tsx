@@ -39,9 +39,11 @@ export { GuildTags as AVAILABLE_TAGS, SocialPlatforms as AVAILABLE_SOCIAL_PLATFO
 interface GuildPageHeaderProps {
   guild: GuildInfo;
   theme: GuildPageTheme;
+  /** Rendered to the left of the logo (e.g. Join Guild button) */
+  leading?: React.ReactNode;
 }
 
-export function GuildPageHeader({ guild, theme }: GuildPageHeaderProps) {
+export function GuildPageHeader({ guild, theme, leading }: GuildPageHeaderProps) {
   const tags = theme.tags ?? [];
   const socials = theme.socials ?? {};
   const hasSocials = Object.values(socials).some((url) => url);
@@ -91,6 +93,7 @@ export function GuildPageHeader({ guild, theme }: GuildPageHeaderProps) {
 
         {/* Logo + Name + Realm — center */}
         <div className="order-1 md:order-1 flex items-center gap-3">
+          {leading}
           {theme.logo_url ? (
             <img
               src={theme.logo_url}
