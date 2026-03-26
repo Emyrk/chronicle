@@ -1,12 +1,16 @@
 import { useParams, Link } from "react-router-dom";
-import { useGuildRoster, useGuildPage } from "@/api/queries";
-import { ArrowLeft, Shield, Crown, Users } from "lucide-react";
+import { useGuildRoster, useGuildPage, useGuildJoinRequests, useAcceptJoinRequest, useDenyJoinRequest } from "@/api/queries";
+import type { GuildJoinRequest } from "@/api/queries";
+import { ArrowLeft, Shield, Crown, Users, UserPlus, Check, X } from "lucide-react";
 import { GuildPageHeader } from "./components";
+import { Button } from "@/components/ui/button";
 
 export function GuildRoster() {
   const { guildId } = useParams<{ guildId: string }>();
   const { data: pageConfig } = useGuildPage(guildId);
   const { data: members, isLoading, error } = useGuildRoster(guildId);
+  const canAdmin = pageConfig?.guild.can_edit ?? false;
+  const { data: joinRequests } = useGuildJoinRequests(canAdmin ? guildId : undefined);
 
   if (isLoading) {
     return (
@@ -60,6 +64,24 @@ export function GuildRoster() {
         </span>
       </div>
 
+      {/* Pending Join Requests (admin only) */}
+      {canAdmin && joinRequests && joinRequests.length > 0 && (
+        <div className="mb-6">
+          <h2 className="text-lg font-semibold flex items-center gap-2 mb-3">
+            <UserPlus className="h-5 w-5" />
+            Pending Join Requests
+            <span className="text-sm text-muted-foreground font-normal">
+              ({joinRequests.length})
+            </span>
+          </h2>
+          <div className="border border-border rounded-lg divide-y divide-border">
+            {joinRequests.map((req) => (
+              <JoinRequestRow key={req.id} guildId={guildId!} request={req} />
+            ))}
+          </div>
+        </div>
+      )}
+
       {sorted.length === 0 ? (
         <p className="text-muted-foreground text-center py-12">
           No members found.
@@ -81,6 +103,50 @@ export function GuildRoster() {
           ))}
         </div>
       )}
+    </div>
+  );
+}
+
+function JoinRequestRow({ guildId, request }: { guildId: string; request: GuildJoinRequest }) {
+  const acceptMutation = useAcceptJoinRequest(guildId);
+  const denyMutation = useDenyJoinRequest(guildId);
+  const isPending = acceptMutation.isPending || denyMutation.isPending;
+
+  return (
+    <div className="flex items-center justify-between px-4 py-3">
+      <div className="flex-1 min-w-0">
+        <span className="font-medium">{request.username}</span>
+        {request.message && (
+          <p className="text-sm text-muted-foreground mt-0.5 truncate">
+            {request.message}
+          </p>
+        )}
+        <p className="text-xs text-muted-foreground">
+          {new Date(request.created_at).toLocaleDateString()}
+        </p>
+      </div>
+      <div className="flex items-center gap-2 ml-4">
+        <Button
+          variant="outline"
+          size="sm"
+          disabled={isPending}
+          onClick={() => acceptMutation.mutate(request.id)}
+          className="text-green-600 hover:text-green-700 hover:bg-green-500/10"
+        >
+          <Check className="h-4 w-4 mr-1" />
+          Accept
+        </Button>
+        <Button
+          variant="outline"
+          size="sm"
+          disabled={isPending}
+          onClick={() => denyMutation.mutate(request.id)}
+          className="text-red-600 hover:text-red-700 hover:bg-red-500/10"
+        >
+          <X className="h-4 w-4 mr-1" />
+          Deny
+        </Button>
+      </div>
     </div>
   );
 }
