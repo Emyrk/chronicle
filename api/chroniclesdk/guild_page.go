@@ -128,3 +128,29 @@ type GuildPageOptionsResponse struct {
 	AllowedTags     []GuildTag       `json:"allowed_tags"`
 	SocialPlatforms []SocialPlatform `json:"social_platforms"`
 }
+
+// Guild Settings
+
+type GuildSettings struct {
+	GuildID           uuid.UUID `json:"guild_id"`
+	AllowJoinRequests bool      `json:"allow_join_requests"`
+}
+
+type UpdateGuildSettingsRequest struct {
+	AllowJoinRequests bool `json:"allow_join_requests"`
+}
+
+// Guild Join Requests
+
+type GuildJoinRequest struct {
+	ID        uuid.UUID `json:"id"`
+	GuildID   uuid.UUID `json:"guild_id"`
+	UserID    uuid.UUID `json:"user_id"`
+	Username  string    `json:"username"`
+	Message   string    `json:"message"`
+	CreatedAt time.Time `json:"created_at"`
+}
+
+type CreateJoinRequestBody struct {
+	Message string `json:"message"`
+}

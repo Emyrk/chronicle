@@ -157,6 +157,14 @@ func (api *API) Routes() chi.Router {
 				)
 				r.Get("/", api.GetGuild)
 				r.Get("/page", api.GetGuildPage)
+				r.Get("/settings", api.GetGuildSettings)
+
+				// Authenticated routes (non-admin)
+				r.Group(func(r chi.Router) {
+					r.Use(api.Auth.Authenticated(false))
+					r.Post("/join-requests", api.CreateJoinRequest)
+					r.Get("/join-requests/me", api.MyJoinRequest)
+				})
 
 				// Protected guild page editing routes
 				r.Group(func(r chi.Router) {
@@ -171,6 +179,12 @@ func (api *API) Routes() chi.Router {
 						// Guild member management (admin only)
 						r.Post("/", api.AdminAddGuildMember)
 						r.Delete("/{userID}", api.AdminRemoveGuildMember)
+					})
+					r.Put("/settings", api.UpdateGuildSettings)
+					r.Route("/join-requests", func(r chi.Router) {
+						r.Get("/", api.ListJoinRequests)
+						r.Post("/{requestID}/accept", api.AcceptJoinRequest)
+						r.Delete("/{requestID}", api.DenyJoinRequest)
 					})
 
 					r.Put("/page", api.UpsertGuildPage)
