@@ -52,7 +52,12 @@ func (z *AuthzTX) Write(ctx context.Context, txn rel.Txn) (writtenAtRevision str
 }
 
 func (z *Authz) Delete(ctx context.Context, filter *rel.PreconditionedFilter) error {
-	return z.spice.Delete(ctx, filter)
+	token, err := z.spice.DeleteAtomic(ctx, filter)
+	if err != nil {
+		return err
+	}
+	z.zedToken.Store(&token)
+	return nil
 }
 
 func (z *AuthzTX) Delete(ctx context.Context, filter *rel.PreconditionedFilter) error {
