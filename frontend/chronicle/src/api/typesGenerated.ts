@@ -278,6 +278,7 @@ export interface GuildRosterMember {
 export interface GuildSettings {
     readonly guild_id: string;
     readonly allow_join_requests_until: string | null;
+    readonly is_member: boolean;
 }
 
 // From chroniclesdk/constants.go

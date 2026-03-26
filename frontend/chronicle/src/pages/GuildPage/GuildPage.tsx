@@ -75,9 +75,9 @@ export function GuildPage() {
         canViewRoster={pageConfig.guild.can_view_roster}
       />
 
-      {/* Join Guild button */}
-      {settings?.allow_join_requests_until && new Date(settings.allow_join_requests_until) > new Date() && isAuthenticated && !pageConfig.guild.can_view_roster && (
-        <div className="absolute top-2 right-16 z-10 hidden md:flex">
+      {/* Join Guild button — visible to any authenticated non-member when invites are open */}
+      {settings?.allow_join_requests_until && new Date(settings.allow_join_requests_until) > new Date() && isAuthenticated && !settings.is_member && (
+        <div className="flex justify-end mb-2">
           {myRequest ? (
             <Button variant="outline" size="sm" disabled>
               <Clock className="h-4 w-4 mr-2" />

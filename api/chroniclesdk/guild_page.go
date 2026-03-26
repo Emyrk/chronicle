@@ -127,6 +127,7 @@ type GuildPageOptionsResponse struct {
 type GuildSettings struct {
 	GuildID                uuid.UUID  `json:"guild_id"`
 	AllowJoinRequestsUntil *time.Time `json:"allow_join_requests_until"`
+	IsMember               bool       `json:"is_member"`
 }
 
 type UpdateGuildSettingsRequest struct {

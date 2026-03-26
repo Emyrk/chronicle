@@ -34,17 +34,28 @@ func (api *API) GetGuildSettings(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 	guild := httpmw.Guild(ctx)
 
+	// Check if the caller is a member (optional auth, so may not be logged in)
+	isMember := false
+	if claims, ok := chronauth.AuthenticatedClaims(ctx); ok {
+		isMember, _ = api.Zed.IsGuildMember(ctx, guild.ID, claims.Subject)
+	}
+
 	settings, err := api.Zed.GetGuildSettings(ctx, guild.ID)
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
-			httpapi.Write(ctx, w, http.StatusOK, chroniclesdk.GuildSettings{GuildID: guild.ID})
+			httpapi.Write(ctx, w, http.StatusOK, chroniclesdk.GuildSettings{
+				GuildID:  guild.ID,
+				IsMember: isMember,
+			})
 			return
 		}
 		httpapi.InternalServerError(w, err)
 		return
 	}
 
-	httpapi.Write(ctx, w, http.StatusOK, settingsToSDK(settings))
+	resp := settingsToSDK(settings)
+	resp.IsMember = isMember
+	httpapi.Write(ctx, w, http.StatusOK, resp)
 }
 
 // UpdateGuildSettings updates the guild settings (admin only).
