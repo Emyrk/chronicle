@@ -6,13 +6,6 @@ import (
 	"github.com/google/uuid"
 )
 
-type GuildMember struct {
-	ID       uuid.UUID `json:"id"`
-	UserID   uuid.UUID `json:"user_id"`
-	Username string    `json:"username"`
-	JoinedAt time.Time `json:"joined_at"`
-}
-
 type GuildInfo struct {
 	ID        uuid.UUID `json:"id"`
 	Name      string    `json:"name"`

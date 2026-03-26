@@ -138,11 +138,7 @@ func (api *API) ListGuilds(w http.ResponseWriter, r *http.Request) {
 	for _, g := range guilds {
 		canEdit := false
 		if userID != uuid.Nil {
-			_, err := api.Opts.Zed.GetGuildMember(ctx, database.GetGuildMemberParams{
-				GuildID: g.ID,
-				UserID:  userID,
-			})
-			canEdit = err == nil
+			canEdit, _ = api.Zed.IsGuildMember(ctx, g.ID, userID)
 		}
 
 		result = append(result, chroniclesdk.GuildInfo{
@@ -180,11 +176,7 @@ func (api *API) GetGuild(w http.ResponseWriter, r *http.Request) {
 	// Check if user can edit
 	canEdit := false
 	if claims, ok := chronauth.AuthenticatedClaims(ctx); ok {
-		_, err := api.Opts.Zed.GetGuildMember(ctx, database.GetGuildMemberParams{
-			GuildID: guildID,
-			UserID:  claims.Subject,
-		})
-		canEdit = err == nil
+		canEdit, _ = api.Zed.IsGuildMember(ctx, guildID, claims.Subject)
 	}
 
 	httpapi.Write(ctx, w, http.StatusOK, chroniclesdk.GuildInfo{
@@ -538,19 +530,13 @@ func (api *API) AdminAddGuildMember(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	member, err := api.Opts.Zed.InsertGuildMember(ctx, database.InsertGuildMemberParams{
-		GuildID: guild.ID,
-		UserID:  req.UserID,
-	})
-	if err != nil {
+	if err := api.Zed.AddGuildMember(ctx, guild.ID, req.UserID); err != nil {
 		httpapi.InternalServerError(w, err)
 		return
 	}
 
-	httpapi.Write(ctx, w, http.StatusCreated, chroniclesdk.GuildMember{
-		ID:       member.ID,
-		UserID:   member.UserID,
-		JoinedAt: member.JoinedAt.Time,
+	httpapi.Write(ctx, w, http.StatusCreated, chroniclesdk.Response{
+		Message: "Member added",
 	})
 }
 
@@ -567,10 +553,7 @@ func (api *API) AdminRemoveGuildMember(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// TODO: Cannot remove members that are also admins - need to check if the user is an admin before allowing removal
-	if err := api.Opts.Zed.DeleteGuildMember(ctx, database.DeleteGuildMemberParams{
-		GuildID: guild.ID,
-		UserID:  userID,
-	}); err != nil {
+	if err := api.Zed.RemoveGuildMember(ctx, guild.ID, userID); err != nil {
 		httpapi.InternalServerError(w, err)
 		return
 	}

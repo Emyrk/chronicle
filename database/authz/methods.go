@@ -101,32 +101,6 @@ func (z *interceptor) DeleteUserPanelLayoutByID(ctx context.Context, id uuid.UUI
 	return z.Store.DeleteUserPanelLayoutByID(ctx, id)
 }
 
-func (z *interceptor) DeleteGuildMember(ctx context.Context, arg database.DeleteGuildMemberParams) error {
-	// Delete all authz relations for the user in the guild, then delete the guild member
-	g := policy.New().Guild(arg.GuildID).Object()
-	u := policy.New().User(arg.UserID).Object()
-	f := rel.NewFilter(g.Typ, g.ID, "")
-	f.WithSubjectFilter(u.Typ, u.ID, "")
-	err := z.Delete(ctx, rel.NewPreconditionedFilter(f))
-	if err != nil {
-		return fmt.Errorf("delete authz relations: %w", err)
-	}
-	return z.Store.DeleteGuildMember(ctx, arg)
-}
-
-func (z *interceptor) InsertGuildMember(ctx context.Context, arg database.InsertGuildMemberParams) (database.GuildMember, error) {
-	b := policy.New()
-	g := b.Guild(arg.GuildID)
-	g.Chronicle(b.GlobalChronicle())
-	g.Member(b.User(arg.UserID))
-
-	_, err := z.Write(ctx, *b.Txn())
-	if err != nil {
-		return database.GuildMember{}, err
-	}
-	return z.Store.InsertGuildMember(ctx, arg)
-}
-
 func (z *interceptor) UpsertGuild(ctx context.Context, arg database.UpsertGuildParams) (database.Guild, error) {
 	g, err := z.Store.UpsertGuild(ctx, arg)
 	if err != nil {

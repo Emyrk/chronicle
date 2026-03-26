@@ -22,7 +22,6 @@ type sqlcQuerier interface {
 	DeleteAllParsedLogsByGroupID(ctx context.Context, id uuid.UUID) error
 	DeleteDataGrant(ctx context.Context, arg DeleteDataGrantParams) error
 	DeleteGuildJoinRequest(ctx context.Context, arg DeleteGuildJoinRequestParams) error
-	DeleteGuildMember(ctx context.Context, arg DeleteGuildMemberParams) error
 	DeleteGuildPage(ctx context.Context, guildID uuid.UUID) error
 	DeleteGuildPagePanel(ctx context.Context, id uuid.UUID) error
 	DeleteGuildPagePanelsByTab(ctx context.Context, tabID uuid.UUID) error
@@ -43,8 +42,6 @@ type sqlcQuerier interface {
 	GetGamePlayerByGUID(ctx context.Context, arg GetGamePlayerByGUIDParams) (GetGamePlayerByGUIDRow, error)
 	GetGuildByID(ctx context.Context, id uuid.UUID) (GetGuildByIDRow, error)
 	GetGuildJoinRequestByUser(ctx context.Context, arg GetGuildJoinRequestByUserParams) (GuildJoinRequest, error)
-	// Guild Members
-	GetGuildMember(ctx context.Context, arg GetGuildMemberParams) (GuildMember, error)
 	// Guild Pages
 	GetGuildPage(ctx context.Context, guildID uuid.UUID) (GuildPage, error)
 	GetGuildPageByID(ctx context.Context, id uuid.UUID) (GuildPage, error)
@@ -82,7 +79,6 @@ type sqlcQuerier interface {
 	GetWoWLogGroupsByOwner(ctx context.Context, arg GetWoWLogGroupsByOwnerParams) ([]GetWoWLogGroupsByOwnerRow, error)
 	InsertEncounter(ctx context.Context, arg InsertEncounterParams) (LogInstanceEncounter, error)
 	InsertEncounterCharacterFights(ctx context.Context, arg []InsertEncounterCharacterFightsParams) *InsertEncounterCharacterFightsBatchResults
-	InsertGuildMember(ctx context.Context, arg InsertGuildMemberParams) (GuildMember, error)
 	InsertGuildPagePanel(ctx context.Context, arg InsertGuildPagePanelParams) (GuildPagePanel, error)
 	InsertGuildPageTab(ctx context.Context, arg InsertGuildPageTabParams) (GuildPageTab, error)
 	InsertInstance(ctx context.Context, arg InsertInstanceParams) (LogInstance, error)
@@ -107,12 +103,10 @@ type sqlcQuerier interface {
 	ListAllWoWLogGroupsWithOwnerPaginated(ctx context.Context, arg ListAllWoWLogGroupsWithOwnerPaginatedParams) ([]ListAllWoWLogGroupsWithOwnerPaginatedRow, error)
 	ListDistinctInstanceNames(ctx context.Context) ([]string, error)
 	ListGuildJoinRequests(ctx context.Context, guildID uuid.UUID) ([]ListGuildJoinRequestsRow, error)
-	ListGuildMembers(ctx context.Context, guildID uuid.UUID) ([]ListGuildMembersRow, error)
 	// Guild Page Panels
 	ListGuildPagePanels(ctx context.Context, tabID uuid.UUID) ([]GuildPagePanel, error)
 	// Guild Page Tabs
 	ListGuildPageTabs(ctx context.Context, pageID uuid.UUID) ([]GuildPageTab, error)
-	ListGuildsForUser(ctx context.Context, userID uuid.UUID) ([]Guild, error)
 	ListGuildsWithPages(ctx context.Context, arg ListGuildsWithPagesParams) ([]ListGuildsWithPagesRow, error)
 	ListInstancesByTimeRange(ctx context.Context, arg ListInstancesByTimeRangeParams) ([]ListInstancesByTimeRangeRow, error)
 	ListRecentInstances(ctx context.Context, arg ListRecentInstancesParams) ([]ListRecentInstancesRow, error)

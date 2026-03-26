@@ -223,11 +223,8 @@ func (api *API) AcceptJoinRequest(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Add user as guild member (writes SpiceDB relation via interceptor)
-	_, err = api.Opts.Zed.InsertGuildMember(ctx, database.InsertGuildMemberParams{
-		GuildID: guild.ID,
-		UserID:  found.UserID,
-	})
+	// Add user as guild member (SpiceDB relation)
+	err = api.Zed.AddGuildMember(ctx, guild.ID, found.UserID)
 	if err != nil {
 		httpapi.InternalServerError(w, err)
 		return

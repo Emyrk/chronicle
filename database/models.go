@@ -726,13 +726,6 @@ type GuildJoinRequest struct {
 	CreatedAt pgtype.Timestamptz `db:"created_at" json:"created_at"`
 }
 
-type GuildMember struct {
-	ID       uuid.UUID          `db:"id" json:"id"`
-	GuildID  uuid.UUID          `db:"guild_id" json:"guild_id"`
-	UserID   uuid.UUID          `db:"user_id" json:"user_id"`
-	JoinedAt pgtype.Timestamptz `db:"joined_at" json:"joined_at"`
-}
-
 type GuildPage struct {
 	ID        uuid.UUID          `db:"id" json:"id"`
 	GuildID   uuid.UUID          `db:"guild_id" json:"guild_id"`

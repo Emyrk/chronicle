@@ -214,14 +214,6 @@ export interface GuildJoinRequest {
 }
 
 // From chroniclesdk/guild_page.go
-export interface GuildMember {
-    readonly id: string;
-    readonly user_id: string;
-    readonly username: string;
-    readonly joined_at: string;
-}
-
-// From chroniclesdk/guild_page.go
 export interface GuildPageConfig {
     readonly id: string;
     readonly guild_id: string;

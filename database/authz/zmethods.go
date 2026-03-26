@@ -131,3 +131,29 @@ func (z *Authz) GuildRosterMembers(ctx context.Context, guildID uuid.UUID) ([]Gu
 	return members, nil
 }
 
+// AddGuildMember writes the member relation to SpiceDB only.
+func (z *Authz) AddGuildMember(ctx context.Context, guildID, userID uuid.UUID) error {
+	b := policy.New()
+	g := b.Guild(guildID)
+	g.Chronicle(b.GlobalChronicle())
+	g.Member(b.User(userID))
+	_, err := z.Write(ctx, *b.Txn())
+	return err
+}
+
+// RemoveGuildMember deletes all guild relations for a user from SpiceDB.
+func (z *Authz) RemoveGuildMember(ctx context.Context, guildID, userID uuid.UUID) error {
+	g := policy.New().Guild(guildID).Object()
+	u := policy.New().User(userID).Object()
+	f := rel.NewFilter(g.Typ, g.ID, "")
+	f.WithSubjectFilter(u.Typ, u.ID, "")
+	return z.Delete(ctx, rel.NewPreconditionedFilter(f))
+}
+
+// IsGuildMember checks if a user has any relation (member/leader) to a guild.
+func (z *Authz) IsGuildMember(ctx context.Context, guildID, userID uuid.UUID) (bool, error) {
+	zg := policy.New().Guild(guildID)
+	actor := policy.New().User(userID)
+	return z.CheckOne(ctx, nil, zg.CanView_chronicle_roster_User(actor))
+}
+

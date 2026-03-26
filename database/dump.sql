@@ -305,13 +305,6 @@ CREATE TABLE guild_join_requests (
     created_at timestamp with time zone DEFAULT now() NOT NULL
 );
 
-CREATE TABLE guild_members (
-    id uuid DEFAULT gen_random_uuid() NOT NULL,
-    guild_id uuid NOT NULL,
-    user_id uuid NOT NULL,
-    joined_at timestamp with time zone DEFAULT now() NOT NULL
-);
-
 CREATE TABLE guild_page_panels (
     id uuid DEFAULT gen_random_uuid() NOT NULL,
     tab_id uuid NOT NULL,
@@ -881,12 +874,6 @@ ALTER TABLE ONLY guild_join_requests
 ALTER TABLE ONLY guild_join_requests
     ADD CONSTRAINT guild_join_requests_pkey PRIMARY KEY (id);
 
-ALTER TABLE ONLY guild_members
-    ADD CONSTRAINT guild_members_guild_id_user_id_key UNIQUE (guild_id, user_id);
-
-ALTER TABLE ONLY guild_members
-    ADD CONSTRAINT guild_members_pkey PRIMARY KEY (id);
-
 ALTER TABLE ONLY guild_page_panels
     ADD CONSTRAINT guild_page_panels_pkey PRIMARY KEY (id);
 
@@ -1030,10 +1017,6 @@ CREATE INDEX idx_data_grants_user_id ON data_grants USING btree (user_id);
 
 CREATE INDEX idx_guild_join_requests_guild ON guild_join_requests USING btree (guild_id);
 
-CREATE INDEX idx_guild_members_guild ON guild_members USING btree (guild_id);
-
-CREATE INDEX idx_guild_members_user ON guild_members USING btree (user_id);
-
 CREATE INDEX idx_guild_page_panels_tab ON guild_page_panels USING btree (tab_id);
 
 CREATE INDEX idx_guild_page_tabs_page ON guild_page_tabs USING btree (page_id);
@@ -1099,12 +1082,6 @@ ALTER TABLE ONLY guild_join_requests
 
 ALTER TABLE ONLY guild_join_requests
     ADD CONSTRAINT guild_join_requests_user_id_fkey FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE;
-
-ALTER TABLE ONLY guild_members
-    ADD CONSTRAINT guild_members_guild_id_fkey FOREIGN KEY (guild_id) REFERENCES guilds(id) ON DELETE CASCADE;
-
-ALTER TABLE ONLY guild_members
-    ADD CONSTRAINT guild_members_user_id_fkey FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE;
 
 ALTER TABLE ONLY guild_page_panels
     ADD CONSTRAINT guild_page_panels_tab_id_fkey FOREIGN KEY (tab_id) REFERENCES guild_page_tabs(id) ON DELETE CASCADE;

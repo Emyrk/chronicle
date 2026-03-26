@@ -1015,20 +1015,6 @@ func (q *sqlQuerier) BulkUpsertGuildPagePanels(ctx context.Context, dollar_1 []b
 	return err
 }
 
-const deleteGuildMember = `-- name: DeleteGuildMember :exec
-DELETE FROM guild_members WHERE guild_id = $1 AND user_id = $2
-`
-
-type DeleteGuildMemberParams struct {
-	GuildID uuid.UUID `db:"guild_id" json:"guild_id"`
-	UserID  uuid.UUID `db:"user_id" json:"user_id"`
-}
-
-func (q *sqlQuerier) DeleteGuildMember(ctx context.Context, arg DeleteGuildMemberParams) error {
-	_, err := q.db.Exec(ctx, deleteGuildMember, arg.GuildID, arg.UserID)
-	return err
-}
-
 const deleteGuildPage = `-- name: DeleteGuildPage :exec
 DELETE FROM guild_pages WHERE guild_id = $1
 `
@@ -1143,29 +1129,6 @@ func (q *sqlQuerier) GetGuildByID(ctx context.Context, id uuid.UUID) (GetGuildBy
 	return i, err
 }
 
-const getGuildMember = `-- name: GetGuildMember :one
-
-SELECT id, guild_id, user_id, joined_at FROM guild_members WHERE guild_id = $1 AND user_id = $2
-`
-
-type GetGuildMemberParams struct {
-	GuildID uuid.UUID `db:"guild_id" json:"guild_id"`
-	UserID  uuid.UUID `db:"user_id" json:"user_id"`
-}
-
-// Guild Members
-func (q *sqlQuerier) GetGuildMember(ctx context.Context, arg GetGuildMemberParams) (GuildMember, error) {
-	row := q.db.QueryRow(ctx, getGuildMember, arg.GuildID, arg.UserID)
-	var i GuildMember
-	err := row.Scan(
-		&i.ID,
-		&i.GuildID,
-		&i.UserID,
-		&i.JoinedAt,
-	)
-	return i, err
-}
-
 const getGuildPage = `-- name: GetGuildPage :one
 
 SELECT id, guild_id, theme, created_at, updated_at FROM guild_pages WHERE guild_id = $1
@@ -1239,29 +1202,6 @@ func (q *sqlQuerier) GetGuildPageTab(ctx context.Context, id uuid.UUID) (GuildPa
 	return i, err
 }
 
-const insertGuildMember = `-- name: InsertGuildMember :one
-INSERT INTO guild_members (guild_id, user_id)
-VALUES ($1, $2)
-RETURNING id, guild_id, user_id, joined_at
-`
-
-type InsertGuildMemberParams struct {
-	GuildID uuid.UUID `db:"guild_id" json:"guild_id"`
-	UserID  uuid.UUID `db:"user_id" json:"user_id"`
-}
-
-func (q *sqlQuerier) InsertGuildMember(ctx context.Context, arg InsertGuildMemberParams) (GuildMember, error) {
-	row := q.db.QueryRow(ctx, insertGuildMember, arg.GuildID, arg.UserID)
-	var i GuildMember
-	err := row.Scan(
-		&i.ID,
-		&i.GuildID,
-		&i.UserID,
-		&i.JoinedAt,
-	)
-	return i, err
-}
-
 const insertGuildPagePanel = `-- name: InsertGuildPagePanel :one
 INSERT INTO guild_page_panels (tab_id, panel_type, config, position)
 VALUES ($1, $2, $3, $4)
@@ -1327,48 +1267,6 @@ func (q *sqlQuerier) InsertGuildPageTab(ctx context.Context, arg InsertGuildPage
 	return i, err
 }
 
-const listGuildMembers = `-- name: ListGuildMembers :many
-SELECT gm.id, gm.guild_id, gm.user_id, gm.joined_at, u.username
-FROM guild_members gm
-JOIN users u ON u.id = gm.user_id
-WHERE gm.guild_id = $1
-ORDER BY gm.joined_at
-`
-
-type ListGuildMembersRow struct {
-	ID       uuid.UUID          `db:"id" json:"id"`
-	GuildID  uuid.UUID          `db:"guild_id" json:"guild_id"`
-	UserID   uuid.UUID          `db:"user_id" json:"user_id"`
-	JoinedAt pgtype.Timestamptz `db:"joined_at" json:"joined_at"`
-	Username string             `db:"username" json:"username"`
-}
-
-func (q *sqlQuerier) ListGuildMembers(ctx context.Context, guildID uuid.UUID) ([]ListGuildMembersRow, error) {
-	rows, err := q.db.Query(ctx, listGuildMembers, guildID)
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-	var items []ListGuildMembersRow
-	for rows.Next() {
-		var i ListGuildMembersRow
-		if err := rows.Scan(
-			&i.ID,
-			&i.GuildID,
-			&i.UserID,
-			&i.JoinedAt,
-			&i.Username,
-		); err != nil {
-			return nil, err
-		}
-		items = append(items, i)
-	}
-	if err := rows.Err(); err != nil {
-		return nil, err
-	}
-	return items, nil
-}
-
 const listGuildPagePanels = `-- name: ListGuildPagePanels :many
 
 SELECT id, tab_id, panel_type, config, position, created_at, updated_at FROM guild_page_panels
@@ -1428,39 +1326,6 @@ func (q *sqlQuerier) ListGuildPageTabs(ctx context.Context, pageID uuid.UUID) ([
 			&i.Label,
 			&i.Slug,
 			&i.SortOrder,
-			&i.CreatedAt,
-		); err != nil {
-			return nil, err
-		}
-		items = append(items, i)
-	}
-	if err := rows.Err(); err != nil {
-		return nil, err
-	}
-	return items, nil
-}
-
-const listGuildsForUser = `-- name: ListGuildsForUser :many
-SELECT g.id, g.realm_id, g.name, g.created_at
-FROM guilds g
-JOIN guild_members gm ON gm.guild_id = g.id
-WHERE gm.user_id = $1
-ORDER BY g.name
-`
-
-func (q *sqlQuerier) ListGuildsForUser(ctx context.Context, userID uuid.UUID) ([]Guild, error) {
-	rows, err := q.db.Query(ctx, listGuildsForUser, userID)
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-	var items []Guild
-	for rows.Next() {
-		var i Guild
-		if err := rows.Scan(
-			&i.ID,
-			&i.RealmID,
-			&i.Name,
 			&i.CreatedAt,
 		); err != nil {
 			return nil, err
