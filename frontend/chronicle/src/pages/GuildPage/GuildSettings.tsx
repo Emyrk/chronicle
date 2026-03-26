@@ -1,8 +1,11 @@
+import { useState } from "react";
 import { useParams, Link } from "react-router-dom";
 import { useGuildSettings, useUpdateGuildSettings, useGuildPage } from "@/api/queries";
-import { ArrowLeft, Settings } from "lucide-react";
+import { ArrowLeft, Settings, UserPlus, Menu, X } from "lucide-react";
+import type { LucideIcon } from "lucide-react";
 import { GuildPageHeader, GuildActionsMenu } from "./components";
 import { Button } from "@/components/ui/button";
+import { useIsMobile } from "@/hooks/useIsMobile";
 
 function isOpen(until: string | null | undefined): boolean {
   if (!until) return false;
@@ -16,11 +19,24 @@ const DURATION_OPTIONS = [
   { label: "30 days", hours: 24 * 30 },
 ] as const;
 
+type Tab = {
+  id: string;
+  label: string;
+  icon: LucideIcon;
+};
+
+const tabs: Tab[] = [
+  { id: "join-requests", label: "Join Requests", icon: UserPlus },
+];
+
 export function GuildSettings() {
   const { guildId } = useParams<{ guildId: string }>();
   const { data: pageConfig } = useGuildPage(guildId);
   const { data: settings, isLoading } = useGuildSettings(guildId);
   const updateSettings = useUpdateGuildSettings(guildId);
+  const isMobile = useIsMobile();
+  const [mobileSidebarOpen, setMobileSidebarOpen] = useState(false);
+  const [activeTab, setActiveTab] = useState("join-requests");
 
   const open = isOpen(settings?.allow_join_requests_until);
 
@@ -31,6 +47,94 @@ export function GuildSettings() {
       </div>
     );
   }
+
+  const renderNavLinks = (closeOnNavigate: boolean) => (
+    <ul className="space-y-1">
+      {tabs.map((tab) => (
+        <li key={tab.id}>
+          <button
+            type="button"
+            onClick={() => {
+              setActiveTab(tab.id);
+              if (closeOnNavigate) setMobileSidebarOpen(false);
+            }}
+            className={`w-full flex items-center gap-3 px-3 py-2 rounded-md text-sm transition-colors ${
+              activeTab === tab.id
+                ? "bg-accent text-accent-foreground"
+                : "hover:bg-muted text-muted-foreground hover:text-foreground"
+            }`}
+          >
+            <tab.icon className="h-4 w-4" />
+            {tab.label}
+          </button>
+        </li>
+      ))}
+    </ul>
+  );
+
+  const settingsContent = (
+    <>
+      {activeTab === "join-requests" && (
+        <div className="space-y-4">
+          <div>
+            <h2 className="text-xl font-semibold">Join Requests</h2>
+            <p className="text-muted-foreground">
+              Control whether users can request to join your guild.
+            </p>
+          </div>
+
+          <div className="border border-border rounded-lg p-6">
+            <h3 className="font-medium">Open Join Window</h3>
+            <p className="text-sm text-muted-foreground mt-1">
+              Open join requests for a set duration. Users can request to join
+              your guild from the guild page. Requests must be approved by a
+              guild leader.
+            </p>
+
+            {open && settings?.allow_join_requests_until && (
+              <p className="text-sm text-green-600 mt-3">
+                Open until{" "}
+                {new Date(settings.allow_join_requests_until).toLocaleString()}
+              </p>
+            )}
+
+            <div className="flex flex-wrap gap-2 mt-4">
+              {DURATION_OPTIONS.map((opt) => (
+                <Button
+                  key={opt.hours}
+                  variant="outline"
+                  size="sm"
+                  disabled={updateSettings.isPending}
+                  onClick={() => {
+                    const until = new Date(
+                      Date.now() + opt.hours * 60 * 60 * 1000,
+                    ).toISOString();
+                    updateSettings.mutate({
+                      allow_join_requests_until: until,
+                    });
+                  }}
+                >
+                  {opt.label}
+                </Button>
+              ))}
+              {open && (
+                <Button
+                  variant="destructive"
+                  size="sm"
+                  disabled={updateSettings.isPending}
+                  onClick={() =>
+                    updateSettings.mutate({ allow_join_requests_until: null })
+                  }
+                >
+                  Close Now
+                </Button>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
+    </>
+  );
 
   return (
     <div className="relative w-full px-4 md:px-12">
@@ -44,6 +148,7 @@ export function GuildSettings() {
           <GuildPageHeader guild={pageConfig.guild} theme={pageConfig.theme} />
         </>
       )}
+
       <div className="flex items-center gap-3 mb-6">
         <Link
           to={`/g/${guildId}`}
@@ -51,61 +156,62 @@ export function GuildSettings() {
         >
           <ArrowLeft className="h-5 w-5" />
         </Link>
-        <h1 className="text-2xl font-bold flex items-center gap-2">
-          <Settings className="h-6 w-6" />
-          Guild Settings
-        </h1>
+        <h1 className="text-lg font-semibold">Guild Settings</h1>
       </div>
 
-      <div className="border border-border rounded-lg p-6 max-w-xl">
-        <div>
-          <h3 className="font-medium">Allow Join Requests</h3>
-          <p className="text-sm text-muted-foreground mt-1">
-            Open join requests for a set duration. Users can request to join your
-            guild from the guild page. Requests must be approved by a guild leader.
-          </p>
-
-          {open && settings?.allow_join_requests_until && (
-            <p className="text-sm text-green-600 mt-2">
-              Open until{" "}
-              {new Date(settings.allow_join_requests_until).toLocaleString()}
-            </p>
+      {isMobile ? (
+        <div className="relative min-h-[calc(100vh-16rem)]">
+          {mobileSidebarOpen && (
+            <button
+              type="button"
+              className="fixed inset-0 z-40 bg-black/50"
+              onClick={() => setMobileSidebarOpen(false)}
+              aria-label="Close settings menu"
+            />
           )}
 
-          <div className="flex flex-wrap gap-2 mt-4">
-            {DURATION_OPTIONS.map((opt) => (
+          <nav
+            className={`fixed left-0 top-0 z-50 h-full w-72 border-r bg-background p-4 shadow-xl transition-transform duration-200 ${
+              mobileSidebarOpen ? "translate-x-0" : "-translate-x-full"
+            }`}
+          >
+            <div className="mb-4 flex items-center justify-between">
+              <h2 className="text-lg font-semibold">Settings</h2>
               <Button
-                key={opt.hours}
-                variant="outline"
-                size="sm"
-                disabled={updateSettings.isPending}
-                onClick={() => {
-                  const until = new Date(
-                    Date.now() + opt.hours * 60 * 60 * 1000,
-                  ).toISOString();
-                  updateSettings.mutate({
-                    allow_join_requests_until: until,
-                  });
-                }}
+                variant="ghost"
+                size="icon"
+                onClick={() => setMobileSidebarOpen(false)}
+                aria-label="Close settings menu"
               >
-                {opt.label}
+                <X className="h-4 w-4" />
               </Button>
-            ))}
-            {open && (
-              <Button
-                variant="destructive"
-                size="sm"
-                disabled={updateSettings.isPending}
-                onClick={() =>
-                  updateSettings.mutate({ allow_join_requests_until: null })
-                }
-              >
-                Close Now
-              </Button>
-            )}
-          </div>
+            </div>
+            {renderNavLinks(true)}
+          </nav>
+
+          <main>
+            <Button
+              variant="outline"
+              size="sm"
+              className="mb-4 gap-2"
+              onClick={() => setMobileSidebarOpen(true)}
+            >
+              <Menu className="h-4 w-4" />
+              Settings menu
+            </Button>
+            {settingsContent}
+          </main>
         </div>
-      </div>
+      ) : (
+        <div className="flex min-h-[calc(100vh-16rem)]">
+          <nav className="w-56 border-r pr-4">
+            {renderNavLinks(false)}
+          </nav>
+          <main className="flex-1 pl-8">
+            {settingsContent}
+          </main>
+        </div>
+      )}
     </div>
   );
 }

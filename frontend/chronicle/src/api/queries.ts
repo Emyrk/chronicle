@@ -937,6 +937,7 @@ export function useGuildPage(guildId: string | undefined) {
       return response.json() as Promise<GuildPageConfig>;
     },
     enabled: !!guildId,
+    retry: false,
   });
 }
 
@@ -954,6 +955,7 @@ export function useGuildRoster(guildId: string | undefined) {
       return response.json() as Promise<GuildRosterMember[]>;
     },
     enabled: !!guildId,
+    retry: false,
   });
 }
 
@@ -971,6 +973,7 @@ export function useGuildSettings(guildId: string | undefined) {
       return response.json() as Promise<GuildSettings>;
     },
     enabled: !!guildId,
+    retry: false,
   });
 }
 
