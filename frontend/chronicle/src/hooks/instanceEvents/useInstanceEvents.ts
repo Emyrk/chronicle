@@ -39,6 +39,9 @@ function getSchemaForType(type: StreamType): DescMessage {
     case "aura_cast":
       // aura_cast uses the same schema structure - return null to skip for now
       return null as unknown as DescMessage;
+    case "unit_classification":
+      // unit_classification uses fast cursor path, not schema-based
+      return null as unknown as DescMessage;
     default: {
       const _exhaustive: never = type;
       throw new Error(`Unknown stream type: ${_exhaustive}`);

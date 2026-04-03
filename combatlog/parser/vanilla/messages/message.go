@@ -549,3 +549,19 @@ type PossessionChange struct {
 
 func (t PossessionChange) Affects() []guid.GUID { return []guid.GUID{t.Controller, t.Target} }
 func (*PossessionChange) isMessage()            {}
+
+// UnitClassificationEvent is a synthetic event injected during encounter processing
+// to communicate affiliation/possession state changes to the frontend.
+type UnitClassificationEvent struct {
+	MessageBase
+	Target      guid.GUID
+	UnitType    types.UnitType
+	Affiliation types.Affiliation
+	Owner       *guid.GUID      // permanent owner (pet/totem)
+	Controller  *guid.GUID      // possession controller (nil if not possessed)
+	Spell       *chrondbc.Spell // possession spell (nil if not possessed)
+}
+
+func (u *UnitClassificationEvent) Affects() []guid.GUID { return []guid.GUID{u.Target} }
+func (*UnitClassificationEvent) isMessage()              {}
+

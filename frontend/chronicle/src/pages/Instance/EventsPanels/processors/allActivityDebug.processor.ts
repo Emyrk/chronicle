@@ -2,7 +2,7 @@
  * All Activity Debug processor - stores raw events for debugging stream interleaving
  */
 
-import type { DamageProcessorEvent, HealProcessorEvent, PanelProcessor, ProcessorContext, ResourceChangeProcessorEvent, CastProcessorEvent, CastAction, AuraProcessorEvent, AuraApplication, SlainProcessorEvent, SpellGoProcessorEvent, AuraCastProcessorEvent, ExtraAttackProcessorEvent } from "../processorTypes";
+import type { DamageProcessorEvent, HealProcessorEvent, PanelProcessor, ProcessorContext, ResourceChangeProcessorEvent, CastProcessorEvent, CastAction, AuraProcessorEvent, AuraApplication, SlainProcessorEvent, SpellGoProcessorEvent, AuraCastProcessorEvent, ExtraAttackProcessorEvent, UnitClassificationProcessorEvent } from "../processorTypes";
 import type { StreamType } from "@/hooks/instanceEvents";
 
 /**
@@ -45,6 +45,8 @@ export interface RawDebugEvent {
   spellRank?: number | null;
   // Aura-specific fields
   auraApplication?: AuraApplication;
+  // Classification-specific fields
+  affiliation?: number; // 0=Unknown, 1=Friendly, 2=Hostile, 3=Neutral
   // Debug annotations (when WithDebug is enabled during reparse)
   // Can have multiple activity entries per event
   activityEvents?: ActivityEventInfo[];
@@ -76,14 +78,14 @@ export interface AllActivityDebugState {
 }
 
 // This processor handles damage, heal, resource_change, cast, aura, slain, spell_go, and aura_cast events
-type AllActivityEvent = DamageProcessorEvent | HealProcessorEvent | ResourceChangeProcessorEvent | CastProcessorEvent | AuraProcessorEvent | SlainProcessorEvent | SpellGoProcessorEvent | AuraCastProcessorEvent | ExtraAttackProcessorEvent;
+type AllActivityEvent = DamageProcessorEvent | HealProcessorEvent | ResourceChangeProcessorEvent | CastProcessorEvent | AuraProcessorEvent | SlainProcessorEvent | SpellGoProcessorEvent | AuraCastProcessorEvent | ExtraAttackProcessorEvent | UnitClassificationProcessorEvent;
 
 // Default page size if no pagination specified
 const DEFAULT_PAGE_SIZE = 100;
 
 export const allActivityProcessor: PanelProcessor<AllActivityDebugState, AllActivityEvent> = {
   id: "all_activity",
-  streams: ["damage", "heal", "resource_change", "aura", "slain", "spell_go", "aura_cast", "extra_attack"],
+  streams: ["damage", "heal", "resource_change", "aura", "slain", "spell_go", "aura_cast", "extra_attack", "unit_classification"],
   
   createState: () => ({
     counts: new Map<string, number>(),
@@ -96,7 +98,7 @@ export const allActivityProcessor: PanelProcessor<AllActivityDebugState, AllActi
       cast: [],
       aura: [],
       spell_go: [],
-      aura_cast: [], spell_start: [], spell_fail: [],
+      aura_cast: [], spell_start: [], spell_fail: [], unit_classification: [],
     },
     streamCounts: {
       damage: 0,
@@ -107,7 +109,7 @@ export const allActivityProcessor: PanelProcessor<AllActivityDebugState, AllActi
       cast: 0,
       aura: 0,
       spell_go: 0,
-      aura_cast: 0, spell_start: 0, spell_fail: 0,
+      aura_cast: 0, spell_start: 0, spell_fail: 0, unit_classification: 0,
     },
     encounters: new Map<string, EncounterMeta>(),
     totalProcessed: 0,
@@ -184,6 +186,8 @@ export const allActivityProcessor: PanelProcessor<AllActivityDebugState, AllActi
       } else if (streamType === "extra_attack") {
         const extraEvent = event as ExtraAttackProcessorEvent;
         abilityName = extraEvent.sourceName;
+      } else if (streamType === "unit_classification") {
+        abilityName = "Classification";
       } else {
         const regularEvent = event as DamageProcessorEvent | HealProcessorEvent | ResourceChangeProcessorEvent;
         abilityName = regularEvent.sourceName;
@@ -291,6 +295,9 @@ export const allActivityProcessor: PanelProcessor<AllActivityDebugState, AllActi
       const extraEvent = event as ExtraAttackProcessorEvent;
       sourceName = extraEvent.sourceName;
       amount = extraEvent.amount;
+    } else if (streamType === "unit_classification") {
+      sourceName = "Classification";
+      amount = 0;
     } else {
       const regularEvent = event as DamageProcessorEvent | HealProcessorEvent | ResourceChangeProcessorEvent;
       sourceName = regularEvent.sourceName;
@@ -379,6 +386,22 @@ export const allActivityProcessor: PanelProcessor<AllActivityDebugState, AllActi
     } else if (streamType === "extra_attack") {
       const extraEvent = event as ExtraAttackProcessorEvent;
       rawEvent.extra = `extra attacks=${extraEvent.amount}`;
+    } else if (streamType === "unit_classification") {
+      const ucEvent = event as UnitClassificationProcessorEvent;
+      rawEvent.affiliation = ucEvent.affiliation;
+      // Show controller as the "caster" (the unit doing the possessing)
+      if (ucEvent.controller) {
+        rawEvent.caster = ucEvent.controller;
+        rawEvent.casterName = context.players[ucEvent.controller]?.name
+          ?? context.units?.[ucEvent.controller]?.name
+          ?? ucEvent.controller;
+      }
+      const affiliationNames = ["Unknown", "Friendly", "Hostile", "Neutral"];
+      const unitTypeNames = ["Unknown", "Player", "Creature", "Object", "Vehicle"];
+      const parts = [`${affiliationNames[ucEvent.affiliation] || "Unknown"} ${unitTypeNames[ucEvent.unitType] || "Unknown"}`];
+      if (ucEvent.owner) parts.push(`owner=${ucEvent.owner.slice(-6)}`);
+      if (ucEvent.spellId) parts.push(`spell=${ucEvent.spellId}`);
+      rawEvent.extra = parts.join(" ");
     }
     
     // Store in appropriate stream bucket

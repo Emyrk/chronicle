@@ -25,9 +25,10 @@ type EncounterEvents struct {
 	Aura       *Builder[*messages.Aura, *chronicleproto.Aura]
 	AuraCast   *Builder[*messages.AuraCast, *chronicleproto.AuraCast]
 	SpellGo    *Builder[*messages.SpellGo, *chronicleproto.SpellGo]
-	SpellStart *Builder[*messages.SpellStart, *chronicleproto.SpellStart]
-	SpellFail  *Builder[*messages.SpellFail, *chronicleproto.SpellFail]
-	cnter      int32
+	SpellStart         *Builder[*messages.SpellStart, *chronicleproto.SpellStart]
+	SpellFail          *Builder[*messages.SpellFail, *chronicleproto.SpellFail]
+	UnitClassification *Builder[*messages.UnitClassificationEvent, *chronicleproto.UnitClassification]
+	cnter              int32
 }
 
 func New(verbose bool) *EncounterEventsInProgress {
@@ -43,7 +44,8 @@ func New(verbose bool) *EncounterEventsInProgress {
 		AuraCast:       NewBuilder[*messages.AuraCast, *chronicleproto.AuraCast](),
 		SpellGo:        NewBuilder[*messages.SpellGo, *chronicleproto.SpellGo](),
 		SpellStart:     NewBuilder[*messages.SpellStart, *chronicleproto.SpellStart](),
-		SpellFail:      NewBuilder[*messages.SpellFail, *chronicleproto.SpellFail](),
+		SpellFail:          NewBuilder[*messages.SpellFail, *chronicleproto.SpellFail](),
+		UnitClassification: NewBuilder[*messages.UnitClassificationEvent, *chronicleproto.UnitClassification](),
 	}
 }
 
@@ -100,7 +102,12 @@ func (e *EncounterEventsInProgress) Finalize(merge *Events, encounterID uuid.UUI
 
 	spellFail, err := e.SpellFail.Finalize(encounterID)
 	if err != nil {
-		return fmt.Errorf("finalizing spell start events: %w", err)
+		return fmt.Errorf("finalizing spell fail events: %w", err)
+	}
+
+	unitClassification, err := e.UnitClassification.Finalize(encounterID)
+	if err != nil {
+		return fmt.Errorf("finalizing unit classification events: %w", err)
 	}
 
 	merge.Damage = append(merge.Damage, damagePayload...)
@@ -114,6 +121,7 @@ func (e *EncounterEventsInProgress) Finalize(merge *Events, encounterID uuid.UUI
 	merge.AuraCasts = append(merge.AuraCasts, auraCasts...)
 	merge.SpellStart = append(merge.SpellStart, spellStart...)
 	merge.SpellFail = append(merge.SpellFail, spellFail...)
+	merge.UnitClassification = append(merge.UnitClassification, unitClassification...)
 
 	return nil
 }
@@ -179,6 +187,11 @@ func (e *EncounterEventsInProgress) Process(m messages.Message) error {
 		if err != nil {
 			return fmt.Errorf("spell fail proto: %w", err)
 		}
+	case *messages.UnitClassificationEvent:
+		err := AddToBuilder(e.UnitClassification, ty, e.nextIndex(), types2proto.UnitClassification)
+		if err != nil {
+			return fmt.Errorf("unit classification proto: %w", err)
+		}
 	}
 	return nil
 }
@@ -199,6 +212,7 @@ func (e *EncounterEventsInProgress) setFirsts(t time.Time) {
 	e.AuraCast.SetZero(e.first)
 	e.SpellStart.SetZero(e.first)
 	e.SpellFail.SetZero(e.first)
+	e.UnitClassification.SetZero(e.first)
 }
 
 func (e *EncounterEventsInProgress) nextIndex() int32 {

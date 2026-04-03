@@ -100,6 +100,14 @@ export function InstanceEventsProvider({ instanceId, children }: InstanceEventsP
       try {
         const response = await fetch(getStreamEndpoint(instanceId, type));
         
+        if (response.status === 404) {
+          // Stream type doesn't exist for this instance (e.g., older instances
+          // parsed before unit_classification was added). Treat as empty.
+          const emptyStream: CachedStream = { data: new Uint8Array(0), headers: [] };
+          cacheRef.current.set(type, emptyStream);
+          return emptyStream;
+        }
+
         if (!response.ok) {
           const text = await response.text();
           throw new Error(`HTTP ${response.status}: ${text || response.statusText}`);

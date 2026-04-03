@@ -1552,6 +1552,98 @@ func (x *SpellFail) GetFailedBySever() bool {
 	return false
 }
 
+type UnitClassification struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Meta          *EventMeta             `protobuf:"bytes,1,opt,name=meta,proto3" json:"meta,omitempty"`
+	Target        string                 `protobuf:"bytes,2,opt,name=target,proto3" json:"target,omitempty"`
+	UnitType      int32                  `protobuf:"varint,3,opt,name=unitType,proto3" json:"unitType,omitempty"`
+	Affiliation   int32                  `protobuf:"varint,4,opt,name=affiliation,proto3" json:"affiliation,omitempty"`
+	Owner         *string                `protobuf:"bytes,5,opt,name=owner,proto3,oneof" json:"owner,omitempty"`
+	Controller    *string                `protobuf:"bytes,6,opt,name=controller,proto3,oneof" json:"controller,omitempty"`
+	SpellId       int32                  `protobuf:"varint,7,opt,name=spellId,proto3" json:"spellId,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *UnitClassification) Reset() {
+	*x = UnitClassification{}
+	mi := &file_chronicle_proto_msgTypes[16]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *UnitClassification) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*UnitClassification) ProtoMessage() {}
+
+func (x *UnitClassification) ProtoReflect() protoreflect.Message {
+	mi := &file_chronicle_proto_msgTypes[16]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use UnitClassification.ProtoReflect.Descriptor instead.
+func (*UnitClassification) Descriptor() ([]byte, []int) {
+	return file_chronicle_proto_rawDescGZIP(), []int{16}
+}
+
+func (x *UnitClassification) GetMeta() *EventMeta {
+	if x != nil {
+		return x.Meta
+	}
+	return nil
+}
+
+func (x *UnitClassification) GetTarget() string {
+	if x != nil {
+		return x.Target
+	}
+	return ""
+}
+
+func (x *UnitClassification) GetUnitType() int32 {
+	if x != nil {
+		return x.UnitType
+	}
+	return 0
+}
+
+func (x *UnitClassification) GetAffiliation() int32 {
+	if x != nil {
+		return x.Affiliation
+	}
+	return 0
+}
+
+func (x *UnitClassification) GetOwner() string {
+	if x != nil && x.Owner != nil {
+		return *x.Owner
+	}
+	return ""
+}
+
+func (x *UnitClassification) GetController() string {
+	if x != nil && x.Controller != nil {
+		return *x.Controller
+	}
+	return ""
+}
+
+func (x *UnitClassification) GetSpellId() int32 {
+	if x != nil {
+		return x.SpellId
+	}
+	return 0
+}
+
 var File_chronicle_proto protoreflect.FileDescriptor
 
 const file_chronicle_proto_rawDesc = "" +
@@ -1707,7 +1799,19 @@ const file_chronicle_proto_rawDesc = "" +
 	"\tspellData\x18\x03 \x01(\v2\x19.chronicleproto.SpellDataH\x00R\tspellData\x88\x01\x01\x12$\n" +
 	"\rfailedBySever\x18\x04 \x01(\bR\rfailedBySeverB\f\n" +
 	"\n" +
-	"_spellData*p\n" +
+	"_spellData\"\x8c\x02\n" +
+	"\x12UnitClassification\x12-\n" +
+	"\x04meta\x18\x01 \x01(\v2\x19.chronicleproto.EventMetaR\x04meta\x12\x16\n" +
+	"\x06target\x18\x02 \x01(\tR\x06target\x12\x1a\n" +
+	"\bunitType\x18\x03 \x01(\x05R\bunitType\x12 \n" +
+	"\vaffiliation\x18\x04 \x01(\x05R\vaffiliation\x12\x19\n" +
+	"\x05owner\x18\x05 \x01(\tH\x00R\x05owner\x88\x01\x01\x12#\n" +
+	"\n" +
+	"controller\x18\x06 \x01(\tH\x01R\n" +
+	"controller\x88\x01\x01\x12\x18\n" +
+	"\aspellId\x18\a \x01(\x05R\aspellIdB\b\n" +
+	"\x06_ownerB\r\n" +
+	"\v_controller*p\n" +
 	"\x06School\x12\v\n" +
 	"\aUnknown\x10\x00\x12\b\n" +
 	"\x04None\x10\x01\x12\f\n" +
@@ -1753,28 +1857,29 @@ func file_chronicle_proto_rawDescGZIP() []byte {
 }
 
 var file_chronicle_proto_enumTypes = make([]protoimpl.EnumInfo, 4)
-var file_chronicle_proto_msgTypes = make([]protoimpl.MessageInfo, 16)
+var file_chronicle_proto_msgTypes = make([]protoimpl.MessageInfo, 17)
 var file_chronicle_proto_goTypes = []any{
-	(School)(0),            // 0: chronicleproto.School
-	(CastAction)(0),        // 1: chronicleproto.CastAction
-	(AuraApplication)(0),   // 2: chronicleproto.AuraApplication
-	(AuraState)(0),         // 3: chronicleproto.AuraState
-	(*SpellData)(nil),      // 4: chronicleproto.SpellData
-	(*Tailer)(nil),         // 5: chronicleproto.Tailer
-	(*ActivityEntry)(nil),  // 6: chronicleproto.ActivityEntry
-	(*EventMeta)(nil),      // 7: chronicleproto.EventMeta
-	(*Heal)(nil),           // 8: chronicleproto.Heal
-	(*Damage)(nil),         // 9: chronicleproto.Damage
-	(*ResourceChange)(nil), // 10: chronicleproto.ResourceChange
-	(*ExtraAttack)(nil),    // 11: chronicleproto.ExtraAttack
-	(*Slain)(nil),          // 12: chronicleproto.Slain
-	(*Spell)(nil),          // 13: chronicleproto.Spell
-	(*Cast)(nil),           // 14: chronicleproto.Cast
-	(*Aura)(nil),           // 15: chronicleproto.Aura
-	(*AuraCast)(nil),       // 16: chronicleproto.AuraCast
-	(*SpellGo)(nil),        // 17: chronicleproto.SpellGo
-	(*SpellStart)(nil),     // 18: chronicleproto.SpellStart
-	(*SpellFail)(nil),      // 19: chronicleproto.SpellFail
+	(School)(0),                // 0: chronicleproto.School
+	(CastAction)(0),            // 1: chronicleproto.CastAction
+	(AuraApplication)(0),       // 2: chronicleproto.AuraApplication
+	(AuraState)(0),             // 3: chronicleproto.AuraState
+	(*SpellData)(nil),          // 4: chronicleproto.SpellData
+	(*Tailer)(nil),             // 5: chronicleproto.Tailer
+	(*ActivityEntry)(nil),      // 6: chronicleproto.ActivityEntry
+	(*EventMeta)(nil),          // 7: chronicleproto.EventMeta
+	(*Heal)(nil),               // 8: chronicleproto.Heal
+	(*Damage)(nil),             // 9: chronicleproto.Damage
+	(*ResourceChange)(nil),     // 10: chronicleproto.ResourceChange
+	(*ExtraAttack)(nil),        // 11: chronicleproto.ExtraAttack
+	(*Slain)(nil),              // 12: chronicleproto.Slain
+	(*Spell)(nil),              // 13: chronicleproto.Spell
+	(*Cast)(nil),               // 14: chronicleproto.Cast
+	(*Aura)(nil),               // 15: chronicleproto.Aura
+	(*AuraCast)(nil),           // 16: chronicleproto.AuraCast
+	(*SpellGo)(nil),            // 17: chronicleproto.SpellGo
+	(*SpellStart)(nil),         // 18: chronicleproto.SpellStart
+	(*SpellFail)(nil),          // 19: chronicleproto.SpellFail
+	(*UnitClassification)(nil), // 20: chronicleproto.UnitClassification
 }
 var file_chronicle_proto_depIdxs = []int32{
 	6,  // 0: chronicleproto.EventMeta.activity:type_name -> chronicleproto.ActivityEntry
@@ -1806,11 +1911,12 @@ var file_chronicle_proto_depIdxs = []int32{
 	4,  // 26: chronicleproto.SpellStart.spellData:type_name -> chronicleproto.SpellData
 	7,  // 27: chronicleproto.SpellFail.meta:type_name -> chronicleproto.EventMeta
 	4,  // 28: chronicleproto.SpellFail.spellData:type_name -> chronicleproto.SpellData
-	29, // [29:29] is the sub-list for method output_type
-	29, // [29:29] is the sub-list for method input_type
-	29, // [29:29] is the sub-list for extension type_name
-	29, // [29:29] is the sub-list for extension extendee
-	0,  // [0:29] is the sub-list for field type_name
+	7,  // 29: chronicleproto.UnitClassification.meta:type_name -> chronicleproto.EventMeta
+	30, // [30:30] is the sub-list for method output_type
+	30, // [30:30] is the sub-list for method input_type
+	30, // [30:30] is the sub-list for extension type_name
+	30, // [30:30] is the sub-list for extension extendee
+	0,  // [0:30] is the sub-list for field type_name
 }
 
 func init() { file_chronicle_proto_init() }
@@ -1831,13 +1937,14 @@ func file_chronicle_proto_init() {
 	file_chronicle_proto_msgTypes[13].OneofWrappers = []any{}
 	file_chronicle_proto_msgTypes[14].OneofWrappers = []any{}
 	file_chronicle_proto_msgTypes[15].OneofWrappers = []any{}
+	file_chronicle_proto_msgTypes[16].OneofWrappers = []any{}
 	type x struct{}
 	out := protoimpl.TypeBuilder{
 		File: protoimpl.DescBuilder{
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_chronicle_proto_rawDesc), len(file_chronicle_proto_rawDesc)),
 			NumEnums:      4,
-			NumMessages:   16,
+			NumMessages:   17,
 			NumExtensions: 0,
 			NumServices:   0,
 		},

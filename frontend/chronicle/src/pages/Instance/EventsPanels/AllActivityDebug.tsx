@@ -3,7 +3,7 @@
  */
 
 import { useState, useMemo, useCallback, useRef, useEffect } from "react";
-import { Skull, Swords, Heart, Zap, Wand2, Sparkles, ChevronLeft, ChevronRight, ChevronsLeft, ChevronsRight, Search, X, Crosshair, Timer } from "lucide-react";
+import { Skull, Swords, Heart, Zap, Wand2, Sparkles, ChevronLeft, ChevronRight, ChevronsLeft, ChevronsRight, Search, X, Crosshair, Timer, Shield } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { formatNumber } from "@/lib/format";
 import { ScrollArea, ScrollBar } from "@/components/ui/ScrollArea/ScrollArea";
@@ -36,6 +36,7 @@ const STREAM_CONFIG: Record<StreamType, { icon: React.ElementType; color: string
   aura_cast: { icon: Timer, color: "text-teal-500", label: "Aura Cast" },
   spell_start: { icon: Crosshair, color: "text-lime-500", label: "Spell Start" },
   spell_fail: { icon: Crosshair, color: "text-red-400", label: "Spell Fail" },
+  unit_classification: { icon: Shield, color: "text-indigo-500", label: "Classification" },
 };
 // --- Panel option encode/decode helpers for state persistence ---
 
@@ -45,6 +46,7 @@ const STREAM_CODES: Record<StreamType, string> = {
   damage: "d", heal: "h", resource_change: "r", cast: "c",
   aura: "a", slain: "x", spell_go: "g", aura_cast: "u", spell_start: "ss", spell_fail: "sf",
   extra_attack: "e",
+  unit_classification: "uc",
 };
 const CODE_TO_STREAM = Object.fromEntries(
   Object.entries(STREAM_CODES).map(([k, v]) => [v, k as StreamType]),
@@ -235,7 +237,12 @@ function RawEventRow({ event, index, useRelativeTime = false, useLocalTime = fal
       <span className="text-orange-400 w-24 shrink-0 truncate" title={event.caster}>{event.casterName || "-"}</span>
       <span className="text-blue-400 w-24 shrink-0 truncate" title={event.sourceName}>{event.sourceName}</span>
       <span className="text-muted-foreground shrink-0">→</span>
-      <span className="text-purple-400 w-24 shrink-0 truncate" title={event.target ?? undefined}>{event.targetName}</span>
+      <span className={cn("w-24 shrink-0 truncate",
+        event.affiliation === 1 ? "text-green-400" :
+        event.affiliation === 2 ? "text-red-400" :
+        event.affiliation === 3 ? "text-yellow-400" :
+        "text-purple-400"
+      )} title={event.target ?? undefined}>{event.targetName}</span>
       {event.extra ? (
         <Tooltip>
           <TooltipTrigger asChild>{amountElement}</TooltipTrigger>
@@ -400,12 +407,12 @@ function AllActivityContent({
 }: AllActivityContentProps) {
   
   // Default state during loading
-  const emptyByStream = { damage: [], heal: [], resource_change: [], extra_attack: [], slain: [], cast: [], aura: [], spell_go: [], aura_cast: [], spell_start: [], spell_fail: [] };
+  const emptyByStream = { damage: [], heal: [], resource_change: [], extra_attack: [], slain: [], cast: [], aura: [], spell_go: [], aura_cast: [], spell_start: [], spell_fail: [], unit_classification: [] };
   const emptyEncounters = new Map<string, EncounterMeta>();
   const safeResult = result ?? {
     counts: new Map<string, number>(),
     rawEventsByStream: emptyByStream,
-    streamCounts: { damage: 0, heal: 0, resource_change: 0, extra_attack: 0, slain: 0, cast: 0, aura: 0, spell_go: 0, aura_cast: 0, spell_start: 0, spell_fail: 0 },
+    streamCounts: { damage: 0, heal: 0, resource_change: 0, extra_attack: 0, slain: 0, cast: 0, aura: 0, spell_go: 0, aura_cast: 0, spell_start: 0, spell_fail: 0, unit_classification: 0 },
     encounters: emptyEncounters,
     totalProcessed: 0,
     eventsSkipped: 0,
@@ -429,6 +436,7 @@ function AllActivityContent({
     ...rawEventsByStream.spell_go,
     ...rawEventsByStream.aura_cast,
     ...rawEventsByStream.extra_attack,
+    ...rawEventsByStream.unit_classification,
   ];
   
   // Sort by encounter first, then by index within encounter to reconstruct true event order
@@ -448,7 +456,7 @@ function AllActivityContent({
       {/* Stream toggles and ability filter */}
       <div className="flex items-center gap-2 mb-2 flex-wrap">
         <span className="text-xs text-muted-foreground">Streams:</span>
-        {(["damage", "heal", "resource_change", "extra_attack", "aura", "slain", "spell_go", "aura_cast", "spell_start", "spell_fail"] as StreamType[]).map((stream) => (
+        {(["damage", "heal", "resource_change", "extra_attack", "aura", "slain", "spell_go", "aura_cast", "spell_start", "spell_fail", "unit_classification"] as StreamType[]).map((stream) => (
           <StreamToggle
             key={stream}
             streamType={stream}

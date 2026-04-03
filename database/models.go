@@ -154,7 +154,8 @@ const (
 	LogInstanceEventTypeSpellGo        LogInstanceEventType = "spell_go"
 	LogInstanceEventTypeAuraCast       LogInstanceEventType = "aura_cast"
 	LogInstanceEventTypeSpellStart     LogInstanceEventType = "spell_start"
-	LogInstanceEventTypeSpellFail      LogInstanceEventType = "spell_fail"
+	LogInstanceEventTypeSpellFail            LogInstanceEventType = "spell_fail"
+	LogInstanceEventTypeUnitClassification  LogInstanceEventType = "unit_classification"
 )
 
 func (e *LogInstanceEventType) Scan(src interface{}) error {

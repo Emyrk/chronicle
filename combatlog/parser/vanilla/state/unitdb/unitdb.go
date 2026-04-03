@@ -43,8 +43,9 @@ func (us *Units) Classify(g guid.GUID) UnitClassification {
 
 	if ps, ok := us.Possessed[g]; ok {
 		c.Possession = &ps
-		// A possessed hostile becomes effectively friendly for the duration.
-		c.Affiliation = AffiliationFriendly
+		// A possessed hostile uses their parent's affiliation.
+		cl := us.Classify(ps.Controller)
+		c.Affiliation = cl.Affiliation
 	}
 
 	return c
@@ -87,6 +88,10 @@ func (us *Units) expirePossessions(now time.Time) {
 
 // SetPossessed marks a unit as temporarily controlled by another unit.
 func (us *Units) SetPossessed(target, controller guid.GUID, spell *chrondbc.Spell, t time.Time, duration time.Duration) {
+	if controller == target {
+		// this should never happen
+		return
+	}
 	ps := PossessionState{
 		Controller: controller,
 		Spell:      spell,

@@ -179,3 +179,12 @@ message SpellFail {
   optional SpellData spellData = 3;
   bool failedBySever = 4;
 }
+message UnitClassification {
+  EventMeta meta = 1;
+  string target = 2;
+  int32 unitType = 3;
+  int32 affiliation = 4;
+  optional string owner = 5;
+  optional string controller = 6;
+  int32 spellId = 7;
+}

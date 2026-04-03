@@ -279,6 +279,27 @@ func HitType(hitType types.HitType) uint32 {
 	return uint32(hitType)
 }
 
+func UnitClassification(from time.Time, idx int32, msg *messages.UnitClassificationEvent) *chronicleproto.UnitClassification {
+	uc := &chronicleproto.UnitClassification{
+		Meta:        EventMeta(from, idx, msg),
+		Target:      msg.Target.String(),
+		UnitType:    int32(msg.UnitType),
+		Affiliation: int32(msg.Affiliation),
+	}
+	if msg.Spell != nil {
+		uc.SpellId = int32(msg.Spell.ID)
+	}
+	if msg.Owner != nil {
+		s := msg.Owner.String()
+		uc.Owner = &s
+	}
+	if msg.Controller != nil {
+		s := msg.Controller.String()
+		uc.Controller = &s
+	}
+	return uc
+}
+
 func School(school types.School) chronicleproto.School {
 	switch school {
 	case types.NoneSchool:

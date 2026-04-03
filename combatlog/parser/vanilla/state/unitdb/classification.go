@@ -4,44 +4,32 @@ import (
 	"time"
 
 	"github.com/Emyrk/chronicle/combatlog/parser/guid"
+	"github.com/Emyrk/chronicle/combatlog/parser/types"
 	"github.com/Emyrk/chronicle/database/gamedb/chrondbc"
 )
 
-// UnitType is derived from GUID bits — immutable for a given unit.
-type UnitType int
+// Type aliases so existing unitdb consumers don't need to change imports.
+type UnitType = types.UnitType
 
 const (
-	UnitTypeUnknown  UnitType = iota
-	UnitTypePlayer
-	UnitTypeCreature // Includes GUID "pet" type — pet is a relation (creature with owner), not a distinct type
-	UnitTypeObject
-	UnitTypeVehicle
+	UnitTypeUnknown  = types.UnitTypeUnknown
+	UnitTypePlayer   = types.UnitTypePlayer
+	UnitTypeCreature = types.UnitTypeCreature
+	UnitTypeObject   = types.UnitTypeObject
+	UnitTypeVehicle  = types.UnitTypeVehicle
 )
 
 // UnitTypeFromGUID derives the UnitType from the GUID's high bits.
-func UnitTypeFromGUID(g guid.GUID) UnitType {
-	switch {
-	case g.IsPlayer():
-		return UnitTypePlayer
-	case g.IsCreature(), g.IsPet():
-		return UnitTypeCreature
-	case g.IsObject():
-		return UnitTypeObject
-	case g.IsVehicle():
-		return UnitTypeVehicle
-	default:
-		return UnitTypeUnknown
-	}
-}
+var UnitTypeFromGUID = types.UnitTypeFromGUID
 
-// Affiliation describes a unit's relationship to the raid.
-type Affiliation int
+// Type aliases so existing unitdb consumers don't need to change imports.
+type Affiliation = types.Affiliation
 
 const (
-	AffiliationUnknown  Affiliation = iota
-	AffiliationFriendly
-	AffiliationHostile
-	AffiliationNeutral
+	AffiliationUnknown  = types.AffiliationUnknown
+	AffiliationFriendly = types.AffiliationFriendly
+	AffiliationHostile  = types.AffiliationHostile
+	AffiliationNeutral  = types.AffiliationNeutral
 )
 
 // UnitRelation tracks the permanent owner of a unit (pets, totems, summons).

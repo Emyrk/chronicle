@@ -64,6 +64,14 @@ func (f *CommonFactory) NewHookable(ctx context.Context, logger *slog.Logger, db
 	characters := character.NewCharacters(db)
 	characters.RegisterHook(p)
 
+	// classificationEmitter needs a forward reference to the hookable for the emit callback.
+	// We set the emit function after creating the hookable.
+	ce := &classificationEmitter{
+		units:      db,
+		characters: characters,
+	}
+	characters.RegisterHook(ce)
+
 	c := &Hookable{
 		name:          f.Name,
 		zoneNameMatch: f.ZoneName,
@@ -77,10 +85,17 @@ func (f *CommonFactory) NewHookable(ctx context.Context, logger *slog.Logger, db
 		p:             p,
 		hooks: []instancehook.Hook{
 			g,
+			ce,
 		},
 		verbose:         parseoptions.IsVerbose(ctx),
 		timings:         timings.New(),
 		completedFights: make([]Fight, 0),
+	}
+
+	ce.emit = func(evt *messages.UnitClassificationEvent) {
+		if c.currentFight != nil && c.currentFight.active() {
+			c.currentFight.Events.Process(evt)
+		}
 	}
 
 	return c

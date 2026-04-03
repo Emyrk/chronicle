@@ -27,7 +27,9 @@ func (s *possession) ProcessMessages(msgs []messages.Message) []messages.Message
 				continue
 			}
 
-			if !isPossessionSpell(m.Spell) {
+			if !isPossessionSpell(m.Spell) ||
+				// When casting MC, the caster also gets an aura of effect 4 (AuraEffectDummy)
+				m.EffectAuraName != chrondbc.AuraEffectModPossess {
 				continue
 			}
 

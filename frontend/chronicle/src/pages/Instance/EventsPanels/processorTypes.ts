@@ -271,8 +271,18 @@ export interface SpellFailProcessorEvent extends EventMeta {
   spell: { id: number; name: string };  // SpellData: id + name
   failedByServer: boolean;  // Whether the failure was server-side
 }
+export interface UnitClassificationProcessorEvent extends EventMeta {
+  type: "unit_classification";
+  target: string;          // The unit whose classification changed
+  unitType: number;        // UnitType enum (0=Unknown, 1=Player, 2=Creature, 3=Object, 4=Vehicle)
+  affiliation: number;     // Affiliation enum (0=Unknown, 1=Friendly, 2=Hostile, 3=Neutral)
+  owner: string | null;    // Permanent owner GUID (pet/totem)
+  controller: string | null; // Possession controller GUID
+  spellId: number;         // Possession spell ID (0 if not possessed)
+}
 
-export type ProcessorEvent = DamageProcessorEvent | HealProcessorEvent | ResourceChangeProcessorEvent | ExtraAttackProcessorEvent | SlainProcessorEvent | CastProcessorEvent | AuraProcessorEvent | SpellGoProcessorEvent | AuraCastProcessorEvent | SpellStartProcessorEvent | SpellFailProcessorEvent;
+
+export type ProcessorEvent = DamageProcessorEvent | HealProcessorEvent | ResourceChangeProcessorEvent | ExtraAttackProcessorEvent | SlainProcessorEvent | CastProcessorEvent | AuraProcessorEvent | SpellGoProcessorEvent | AuraCastProcessorEvent | SpellStartProcessorEvent | SpellFailProcessorEvent | UnitClassificationProcessorEvent;
 
 /**
  * Selection state for filtering entities (serializable for worker transport).

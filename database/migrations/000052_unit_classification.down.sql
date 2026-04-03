@@ -1,0 +1,2 @@
+-- Postgres does not support removing enum values.
+-- This migration is not reversible.
