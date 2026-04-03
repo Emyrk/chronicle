@@ -101,7 +101,7 @@ func TestClassificationEmitter_EmitsRegardlessOfFightState(t *testing.T) {
 		Controller:  mustGUID(t, "0x0000000000000001"),
 		Gained:      true,
 	}
-	units.ProcessMessage(pc)
+	_ = units.ProcessMessage(pc)
 
 	// ProcessMessage emits even when active=false (emit callback gates on fight state).
 	err := ce.ProcessMessage(false, uuid.New(), pc)
@@ -132,7 +132,7 @@ func TestClassificationEmitter_NewOwner(t *testing.T) {
 		Target:      creatureGUID,
 		NewOwner:    ownerGUID,
 	}
-	units.ProcessMessage(no)
+	_ = units.ProcessMessage(no)
 
 	err := ce.ProcessMessage(true, uuid.New(), no)
 	require.NoError(t, err)
