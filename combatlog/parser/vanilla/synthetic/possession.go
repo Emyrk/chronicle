@@ -30,7 +30,7 @@ func (s *possession) ProcessMessages(msgs []messages.Message) []messages.Message
 
 			if !isControlSpell(m.Spell) ||
 				// When casting MC, the caster also gets an aura of effect 4 (AuraEffectDummy)
-				!(m.EffectAuraName == chrondbc.AuraEffectModPossess || m.EffectAuraName == chrondbc.AuraEffectModCharm) {
+				(m.EffectAuraName != chrondbc.AuraEffectModPossess && m.EffectAuraName != chrondbc.AuraEffectModCharm) {
 				continue
 			}
 

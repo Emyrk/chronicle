@@ -49,7 +49,7 @@ func TestClassificationEmitter_PossessionChange(t *testing.T) {
 		Gained:      true,
 	}
 	// First update unit state so the emitter sees the possession.
-	units.ProcessMessage(pc)
+	_ = units.ProcessMessage(pc)
 
 	err := ce.ProcessMessage(true, uuid.New(), pc)
 	require.NoError(t, err)
@@ -68,7 +68,7 @@ func TestClassificationEmitter_PossessionChange(t *testing.T) {
 		Controller:  playerGUID,
 		Gained:      false,
 	}
-	units.ProcessMessage(release)
+	_ = units.ProcessMessage(release)
 
 	err = ce.ProcessMessage(true, uuid.New(), release)
 	require.NoError(t, err)

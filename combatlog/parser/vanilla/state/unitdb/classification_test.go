@@ -265,7 +265,7 @@ func TestProcessMessage_PossessionGainAndRelease(t *testing.T) {
 	})
 
 	// Gain possession via ProcessMessage
-	units.ProcessMessage(&messages.PossessionChange{
+	_ = units.ProcessMessage(&messages.PossessionChange{
 		MessageBase: messages.Base(now),
 		Target:      mobGUID,
 		Controller:  playerGUID,
@@ -276,7 +276,7 @@ func TestProcessMessage_PossessionGainAndRelease(t *testing.T) {
 	assert.Equal(t, unitdb.AffiliationFriendly, units.Classify(mobGUID).Affiliation)
 
 	// Release possession via ProcessMessage
-	units.ProcessMessage(&messages.PossessionChange{
+	_ = units.ProcessMessage(&messages.PossessionChange{
 		MessageBase: messages.Base(now.Add(5 * time.Second)),
 		Target:      mobGUID,
 		Spell:       mcSpell,
