@@ -129,7 +129,7 @@ function PeriodsTimeline({ context }: { context: PanelContext }) {
   }
 
   return (
-    <ScrollArea className="h-80">
+    <ScrollArea className="h-full">
       <div className="p-2 min-w-max">
         {/* Header */}
         <div className="flex items-center gap-2 text-[10px] font-medium text-muted-foreground mb-2 border-b pb-1">

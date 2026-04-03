@@ -43,9 +43,15 @@ func (us *Units) Classify(g guid.GUID) UnitClassification {
 
 	if ps, ok := us.Possessed[g]; ok {
 		c.Possession = &ps
-		// A possessed hostile uses their parent's affiliation.
+		// A possessed hostile uses their controller's affiliation.
+		// If the controller isn't registered (e.g. player not in Info map),
+		// default to Friendly since only friendly units can possess.
 		cl := us.Classify(ps.Controller)
-		c.Affiliation = cl.Affiliation
+		if cl.Affiliation != AffiliationUnknown {
+			c.Affiliation = cl.Affiliation
+		} else {
+			c.Affiliation = AffiliationFriendly
+		}
 	}
 
 	return c

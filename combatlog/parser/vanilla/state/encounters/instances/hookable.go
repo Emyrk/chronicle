@@ -94,7 +94,10 @@ func (f *CommonFactory) NewHookable(ctx context.Context, logger *slog.Logger, db
 
 	ce.emit = func(evt *messages.UnitClassificationEvent) {
 		if c.currentFight != nil && c.currentFight.active() {
-			c.currentFight.Events.Process(evt)
+			err := c.currentFight.Events.Process(evt)
+			if err != nil {
+				logger.Error("processing classification event in ongoing fight", slog.String("error", err.Error()))
+			}
 		}
 	}
 
@@ -112,7 +115,10 @@ func (h *Hookable) SetRealm(r *realm.Info) { h.realm = r }
 func (h *Hookable) MatchesZone(z zone.Zone) bool { return h.zoneNameMatch(z.Name) }
 
 func (h *Hookable) Process(m messages.Message) (finalError error) {
-	h.units.ProcessMessage(m)
+	err := h.units.ProcessMessage(m)
+	if err != nil {
+		return fmt.Errorf("processing unit message: %w", err)
+	}
 
 	switch msg := m.(type) {
 	case *messages.Realm:

@@ -49,6 +49,7 @@ import { createJudgementPanel } from "./Judgement/Judgement";
 import { createAuraUptimePanel } from "./AuraUptime/AuraUptime";
 import { createMetricsPanel } from "./Metrics/Metrics";
 import { PeriodsPanel } from "./PeriodsPanel/PeriodsPanel";
+import { createPossessionPanel } from "./PossessionPanel/PossessionPanel";
 import { createComparisonPanel } from "./ComparisonPanel/ComparisonPanel";
 import { createTimelinePanel } from "./Timeline/Timeline";
 import { createRotationsPanel } from "./Rotations/Rotations";
@@ -96,6 +97,8 @@ export const PANELS: Record<string, PanelDefinition<any, any>> = {
   timeline: createTimelinePanel(),
   // Rotations
   rotations: createRotationsPanel(),
+  // Possession timeline
+  possession: createPossessionPanel(),
 };
 
 export type EventsPanelType = keyof typeof PANELS;

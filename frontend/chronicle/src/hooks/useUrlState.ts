@@ -642,6 +642,7 @@ const PANEL_CODES: Record<PanelType, string> = {
   // Charts
   timeline: 'tl',
   rotations: 'rot',
+  possession: 'pos',
 };
 
 // ============================================================================

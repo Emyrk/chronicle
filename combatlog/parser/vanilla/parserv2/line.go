@@ -22,7 +22,7 @@ type Matched struct {
 // TODO: Reuse the same slice
 func ParseLine(content string) (time.Time, string, *Matched, error) {
 	parts := strings.Split(content, "|")
-	if len(parts) < 3 {
+	if len(parts) < 2 {
 		return time.Time{}, "", nil, fmt.Errorf("invalid line format: expected at least 3 parts, got %d", len(parts))
 	}
 
@@ -33,6 +33,13 @@ func ParseLine(content string) (time.Time, string, *Matched, error) {
 
 	for i := range parts {
 		parts[i] = strings.TrimSpace(parts[i])
+	}
+
+	if len(parts) < 3 {
+		return time.UnixMilli(unixMilli), parts[1], &Matched{
+			parts: []string{},
+			index: 0,
+		}, nil
 	}
 
 	return time.UnixMilli(unixMilli), parts[1], &Matched{

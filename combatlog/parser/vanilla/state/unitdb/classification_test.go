@@ -17,6 +17,12 @@ import (
 func makeSpell(name string) *chrondbc.Spell {
 	return &chrondbc.Spell{
 		Name_lang: i18n.Text{i18n.English: name},
+		Effect: [3]chrondbc.Effect{
+			chrondbc.EffectApplyAura,
+		},
+		EffectAura: [3]chrondbc.AuraEffect{
+			chrondbc.AuraEffectModCharm,
+		},
 	}
 }
 
@@ -172,7 +178,7 @@ func TestPossession_ExpiresAutomatically(t *testing.T) {
 	assert.Equal(t, unitdb.AffiliationFriendly, units.Classify(mobGUID).Affiliation)
 
 	// Send a message at now+3s — possession still active
-	units.ProcessMessage(&messages.NewOwner{
+	_ = units.ProcessMessage(&messages.NewOwner{
 		MessageBase: messages.Base(now.Add(3 * time.Second)),
 		Target:      mustGUID("0x0030000000000099"), // unrelated
 		NewOwner:    playerGUID,
@@ -180,7 +186,7 @@ func TestPossession_ExpiresAutomatically(t *testing.T) {
 	assert.Equal(t, unitdb.AffiliationFriendly, units.Classify(mobGUID).Affiliation, "should still be possessed before expiry")
 
 	// Send a message at now+6s — possession should have expired
-	units.ProcessMessage(&messages.NewOwner{
+	_ = units.ProcessMessage(&messages.NewOwner{
 		MessageBase: messages.Base(now.Add(6 * time.Second)),
 		Target:      mustGUID("0x0030000000000099"),
 		NewOwner:    playerGUID,
@@ -211,7 +217,7 @@ func TestPossession_NoDuration_NoExpiry(t *testing.T) {
 	assert.True(t, c.Possession.ExpiresAt.IsZero(), "zero duration should mean no expiry")
 
 	// Even a much later message won't expire it
-	units.ProcessMessage(&messages.NewOwner{
+	_ = units.ProcessMessage(&messages.NewOwner{
 		MessageBase: messages.Base(now.Add(time.Hour)),
 		Target:      mustGUID("0x0030000000000099"),
 		NewOwner:    playerGUID,
@@ -232,7 +238,7 @@ func TestProcessMessage_NewOwner(t *testing.T) {
 		Name: "Imp",
 	})
 
-	units.ProcessMessage(&messages.NewOwner{
+	_ = units.ProcessMessage(&messages.NewOwner{
 		MessageBase: messages.Base(now),
 		Target:      petGUID,
 		NewOwner:    playerGUID,
@@ -264,8 +270,8 @@ func TestProcessMessage_PossessionGainAndRelease(t *testing.T) {
 		Target:      mobGUID,
 		Controller:  playerGUID,
 		Spell:       mcSpell,
-		Gained:   true,
-		Duration: 10 * time.Second,
+		Gained:      true,
+		Duration:    10 * time.Second,
 	})
 	assert.Equal(t, unitdb.AffiliationFriendly, units.Classify(mobGUID).Affiliation)
 

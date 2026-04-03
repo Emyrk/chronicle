@@ -4,6 +4,7 @@ import (
 	"log/slog"
 	"time"
 
+	"github.com/Emyrk/chronicle/combatlog/parser/vanilla/data/warlockdemon"
 	"github.com/Emyrk/chronicle/combatlog/parser/vanilla/messages"
 	"github.com/Emyrk/chronicle/database/gamedb/chrondbc"
 )
@@ -27,9 +28,20 @@ func (s *possession) ProcessMessages(msgs []messages.Message) []messages.Message
 				continue
 			}
 
-			if !isPossessionSpell(m.Spell) ||
+			if !isControlSpell(m.Spell) ||
 				// When casting MC, the caster also gets an aura of effect 4 (AuraEffectDummy)
-				m.EffectAuraName != chrondbc.AuraEffectModPossess {
+				!(m.EffectAuraName == chrondbc.AuraEffectModPossess || m.EffectAuraName == chrondbc.AuraEffectModCharm) {
+				continue
+			}
+
+			if *m.Target == m.Caster {
+				// Spell 58035 does this. If a caster MC's themselves... it does not matter?
+				continue
+			}
+
+			_, isDemon := warlockdemon.IsWarlockDemon(*m.Target)
+			if isDemon && m.Spell != nil && m.Spell.ID == 53222 {
+				// Warlock's enslave demon is handled differently. TODO if it should be.
 				continue
 			}
 
@@ -47,7 +59,7 @@ func (s *possession) ProcessMessages(msgs []messages.Message) []messages.Message
 			}
 
 			if m.Amount == 0 {
-				if isPossessionSpell(m.SpellData) {
+				if isControlSpell(m.SpellData) {
 					add = append(add, &messages.PossessionChange{
 						MessageBase: messages.Base(m.Date()),
 						Target:      m.Target,
@@ -66,9 +78,10 @@ func (s *possession) ProcessMessages(msgs []messages.Message) []messages.Message
 	return append(msgs, add...)
 }
 
-func isPossessionSpell(spell *chrondbc.Spell) bool {
+func isControlSpell(spell *chrondbc.Spell) bool {
 	for i, eff := range spell.Effect {
-		if eff == chrondbc.EffectApplyAura && spell.EffectAura[i] == chrondbc.AuraEffectModPossess {
+		if eff == chrondbc.EffectApplyAura &&
+			(spell.EffectAura[i] == chrondbc.AuraEffectModPossess || spell.EffectAura[i] == chrondbc.AuraEffectModCharm) {
 			return true
 		}
 	}
