@@ -138,7 +138,7 @@ func TestClassify_Possession(t *testing.T) {
 
 	// Set possessed (with 10s duration)
 	mcSpell := makeSpell("Mind Control")
-	units.SetPossessed(mobGUID, playerGUID, mcSpell, now, 10000)
+	units.SetPossessed(mobGUID, playerGUID, mcSpell, now, 10*time.Second)
 	c = units.Classify(mobGUID)
 	assert.Equal(t, unitdb.AffiliationFriendly, c.Affiliation, "possessed hostile should become friendly")
 	require.NotNil(t, c.Possession)
@@ -168,7 +168,7 @@ func TestPossession_ExpiresAutomatically(t *testing.T) {
 	})
 
 	// Possess with 5s duration
-	units.SetPossessed(mobGUID, playerGUID, makeSpell("Mind Control"), now, 5000)
+	units.SetPossessed(mobGUID, playerGUID, makeSpell("Mind Control"), now, 5*time.Second)
 	assert.Equal(t, unitdb.AffiliationFriendly, units.Classify(mobGUID).Affiliation)
 
 	// Send a message at now+3s — possession still active
@@ -264,8 +264,8 @@ func TestProcessMessage_PossessionGainAndRelease(t *testing.T) {
 		Target:      mobGUID,
 		Controller:  playerGUID,
 		Spell:       mcSpell,
-		Gained:      true,
-		DurationMS:  10000,
+		Gained:   true,
+		Duration: 10 * time.Second,
 	})
 	assert.Equal(t, unitdb.AffiliationFriendly, units.Classify(mobGUID).Affiliation)
 
