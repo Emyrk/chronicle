@@ -20,6 +20,8 @@ import (
 var _ instancehook.Hook = (*Tracker)(nil)
 
 type Tracker struct {
+	instancehook.BaseHook
+
 	Guilds      map[string]map[guid.GUID]struct{}
 	Participant map[guid.GUID]struct{}
 	Players     map[guid.GUID]combatant.Combatant

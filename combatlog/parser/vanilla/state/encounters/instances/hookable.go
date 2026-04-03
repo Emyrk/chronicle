@@ -175,6 +175,7 @@ func (h *Hookable) FightDetectionHandler(m messages.Message) (func() error, erro
 		}
 	}
 
+	wasActive := h.currentFight.active()
 	activeTotal := 0
 	var latestEnd *period.Moment
 	err := h.Characters.All.ForEach(func(char character.Character) error {
@@ -213,8 +214,17 @@ func (h *Hookable) FightDetectionHandler(m messages.Message) (func() error, erro
 		return nil, fmt.Errorf("iterating characters for fight detection: %w", err)
 	}
 
+	if !wasActive && h.currentFight.active() {
+		for _, hook := range h.hooks {
+			hook.FightStarted(h.currentFight.EncounterID, m)
+		}
+	}
+
 	if activeTotal == 0 && h.currentFight.active() {
 		return func() error {
+			for _, hook := range h.hooks {
+				hook.FightEnded(h.currentFight.EncounterID, m)
+			}
 			return timings.Do1(h.timings, timingsFinalizeFight, func() error {
 				h.currentFight.End = latestEnd
 				return h.finalizeFight()
