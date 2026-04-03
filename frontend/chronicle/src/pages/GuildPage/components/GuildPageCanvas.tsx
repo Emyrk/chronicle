@@ -81,26 +81,32 @@ export function GuildPageCanvas({
   const rowHeight = isMobile ? 120 : 100;
 
   const layout = useMemo(
-    () =>
-      panels.map((p, index) => {
-        const definition = getPanelDefinition(p.panel_type);
-        
-        if (isMobile) {
-          // On mobile, stack panels in a single column, full width
-          return {
+    () => {
+      if (isMobile) {
+        // On mobile, stack panels in a single column, full width.
+        // Accumulate y offsets to avoid gaps/overlaps (static items skip compaction).
+        let yOffset = 0;
+        return panels.map((p) => {
+          const h = Math.max(2, Math.min(p.position.h, 3));
+          const item = {
             i: p.id,
             x: 0,
-            y: index * 2, // Stack vertically
+            y: yOffset,
             w: 2, // Full width (2 of 2 columns)
-            h: Math.max(2, Math.min(p.position.h, 3)), // Constrain height
+            h,
             minW: 2,
             minH: 2,
             maxW: 2,
             maxH: 4,
             static: true, // Disable drag/resize on mobile
           };
-        }
-        
+          yOffset += h;
+          return item;
+        });
+      }
+
+      return panels.map((p) => {
+        const definition = getPanelDefinition(p.panel_type);
         return {
           i: p.id,
           x: p.position.x,
@@ -112,7 +118,8 @@ export function GuildPageCanvas({
           maxW: definition?.maxSize?.w ?? 12,
           maxH: definition?.maxSize?.h ?? 8,
         };
-      }),
+      });
+    },
     [panels, isMobile]
   );
 

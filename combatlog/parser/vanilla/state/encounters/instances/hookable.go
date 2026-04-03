@@ -97,10 +97,9 @@ func (h *Hookable) SetRealm(r *realm.Info) { h.realm = r }
 func (h *Hookable) MatchesZone(z zone.Zone) bool { return h.zoneNameMatch(z.Name) }
 
 func (h *Hookable) Process(m messages.Message) (finalError error) {
+	h.units.ProcessMessage(m)
+
 	switch msg := m.(type) {
-	case *messages.NewOwner:
-		// Can happen from example enslave demons
-		h.units.UpdateOwner(msg.Target, msg.NewOwner)
 	case *messages.Realm:
 		if h.realm != nil {
 			if h.realm.RealmName != msg.RealmName {

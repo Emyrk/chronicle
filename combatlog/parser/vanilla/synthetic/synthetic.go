@@ -15,6 +15,7 @@ type Synthetic struct {
 	mitigation  *mitigator
 	extraAttack *extraAttack
 	demons      *enslaveDemon
+	possession  *possession
 	wowDB       gamedb.SpellFetcher
 }
 
@@ -25,6 +26,7 @@ func New(logger *slog.Logger, wowDB gamedb.SpellFetcher) *Synthetic {
 		mitigation:  newMitigator(logger, wowDB),
 		extraAttack: newExtraAttack(logger, wowDB),
 		demons:      newEnslaveDemon(logger),
+		possession:  newPossession(logger),
 		wowDB:       wowDB,
 	}
 }
@@ -36,6 +38,7 @@ func (s *Synthetic) ProcessMessages(msgs []messages.Message) ([]messages.Message
 
 	msgs = s.extraAttack.ProcessMessage(msgs)
 	msgs = s.demons.ProcessMessages(msgs)
+	msgs = s.possession.ProcessMessages(msgs)
 
 	return msgs, nil
 }

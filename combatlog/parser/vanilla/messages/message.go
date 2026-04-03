@@ -534,3 +534,18 @@ type NewOwner struct {
 
 func (t NewOwner) Affects() []guid.GUID { return []guid.GUID{t.NewOwner, t.Target} }
 func (*NewOwner) isMessage()            {}
+
+// PossessionChange represents a temporary control effect starting or ending.
+// Unlike NewOwner (permanent ownership), this tracks temporal effects like Mind Control.
+type PossessionChange struct {
+	MessageBase
+	Target     guid.GUID
+	Controller guid.GUID
+	Spell      *chrondbc.Spell
+	Gained     bool // true = possessed, false = released
+	// Duration is the max duration.
+	Duration time.Duration // from AuraCast.DurationMS; 0 = unknown
+}
+
+func (t PossessionChange) Affects() []guid.GUID { return []guid.GUID{t.Controller, t.Target} }
+func (*PossessionChange) isMessage()            {}

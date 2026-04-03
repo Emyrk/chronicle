@@ -77,6 +77,11 @@ func (s *State) Process(m messages.Message) error {
 		s.timings.Add("encounter_state.total", time.Since(totalStart))
 	}()
 
+	err := s.Units.ProcessMessage(m)
+	if err != nil {
+		return fmt.Errorf("units process: %w", err)
+	}
+
 	switch typed := m.(type) {
 	case *messages.Realm:
 		s.CurrentRealm = &typed.Info
@@ -88,10 +93,6 @@ func (s *State) Process(m messages.Message) error {
 		//s.Damage(typed)
 	case *messages.Cast:
 		//s.CastV2(typed)
-	case *messages.Combatant:
-		s.Combatant(*typed)
-	case *messages.Unit:
-		s.Unit(*typed)
 	case *messages.Slain:
 		//s.Slain(typed)
 	}
@@ -115,14 +116,6 @@ func (s *State) DetailedTimes() map[string]time.Duration {
 		}
 	}
 	return times
-}
-
-func (s *State) Combatant(c messages.Combatant) {
-	s.Units.UpdatePlayer(c.Combatant)
-}
-
-func (s *State) Unit(u messages.Unit) {
-	s.Units.Update(u.Info)
 }
 
 func (s *State) Zone(z messages.Zone) {
