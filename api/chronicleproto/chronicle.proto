@@ -69,6 +69,7 @@ message Heal {
   uint32 hitType = 7;
   optional SpellData spellData = 8;
   School school = 9;
+  int32 overheal = 10;
 }
 
 message Damage {
@@ -94,6 +95,7 @@ message ResourceChange {
   optional string sourceName = 7;
   string direction = 8;
   optional SpellData spellData = 9;
+  int32 overResource = 10;
 }
 
 message ExtraAttack {

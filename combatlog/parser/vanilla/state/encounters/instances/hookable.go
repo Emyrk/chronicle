@@ -72,6 +72,10 @@ func (f *CommonFactory) NewHookable(ctx context.Context, logger *slog.Logger, db
 	}
 	characters.RegisterHook(ce)
 
+	overheals := &Overhealing{
+		deficits: make(map[guid.GUID]int32),
+	}
+
 	c := &Hookable{
 		name:          f.Name,
 		zoneNameMatch: f.ZoneName,
@@ -86,6 +90,7 @@ func (f *CommonFactory) NewHookable(ctx context.Context, logger *slog.Logger, db
 		hooks: []instancehook.Hook{
 			g,
 			ce,
+			overheals,
 		},
 		verbose:         parseoptions.IsVerbose(ctx),
 		timings:         timings.New(),

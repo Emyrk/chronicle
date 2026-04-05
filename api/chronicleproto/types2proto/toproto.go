@@ -62,6 +62,7 @@ func Heal(from time.Time, idx int32, heal *messages.Heal) *chronicleproto.Heal {
 		HitType:    HitType(heal.HitType),
 		SpellData:  SpellData(heal.SpellData),
 		School:     School(heal.School),
+		Overheal:   heal.Overheal,
 	}
 }
 
@@ -75,6 +76,7 @@ func ResourceChange(from time.Time, idx int32, rc *messages.ResourceChange) *chr
 		SourceName:   rc.SpellName,
 		Direction:    rc.Direction.String(),
 		SpellData:    SpellData(rc.SpellData),
+		OverResource: rc.OverResource,
 	}
 }
 

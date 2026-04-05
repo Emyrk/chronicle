@@ -251,8 +251,9 @@ func (*Clock) isMessage()            {}
 type ResourceChange struct {
 	MessageBase
 	Target    guid.GUID
-	Amount    int32
-	Resource  types.Resource
+	Amount       int32
+	OverResource int32
+	Resource     types.Resource
 	Caster    *guid.GUID
 	SpellName *string
 	SpellData *chrondbc.Spell
@@ -337,6 +338,7 @@ type Heal struct {
 	SpellName string
 	SpellData *chrondbc.Spell
 	Amount    int32
+	Overheal  int32
 	HitType   types.HitType
 	School    types.School
 }
@@ -563,5 +565,4 @@ type UnitClassificationEvent struct {
 }
 
 func (u *UnitClassificationEvent) Affects() []guid.GUID { return []guid.GUID{u.Target} }
-func (*UnitClassificationEvent) isMessage()              {}
-
+func (*UnitClassificationEvent) isMessage()             {}

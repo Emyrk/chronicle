@@ -481,6 +481,7 @@ type Heal struct {
 	HitType       uint32                 `protobuf:"varint,7,opt,name=hitType,proto3" json:"hitType,omitempty"`
 	SpellData     *SpellData             `protobuf:"bytes,8,opt,name=spellData,proto3,oneof" json:"spellData,omitempty"`
 	School        School                 `protobuf:"varint,9,opt,name=school,proto3,enum=chronicleproto.School" json:"school,omitempty"`
+	Overheal      int32                  `protobuf:"varint,10,opt,name=overheal,proto3" json:"overheal,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -569,6 +570,13 @@ func (x *Heal) GetSchool() School {
 		return x.School
 	}
 	return School_Unknown
+}
+
+func (x *Heal) GetOverheal() int32 {
+	if x != nil {
+		return x.Overheal
+	}
+	return 0
 }
 
 type Damage struct {
@@ -690,6 +698,7 @@ type ResourceChange struct {
 	SourceName    *string                `protobuf:"bytes,7,opt,name=sourceName,proto3,oneof" json:"sourceName,omitempty"`
 	Direction     string                 `protobuf:"bytes,8,opt,name=direction,proto3" json:"direction,omitempty"`
 	SpellData     *SpellData             `protobuf:"bytes,9,opt,name=spellData,proto3,oneof" json:"spellData,omitempty"`
+	OverResource  int32                  `protobuf:"varint,10,opt,name=overResource,proto3" json:"overResource,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -778,6 +787,13 @@ func (x *ResourceChange) GetSpellData() *SpellData {
 		return x.SpellData
 	}
 	return nil
+}
+
+func (x *ResourceChange) GetOverResource() int32 {
+	if x != nil {
+		return x.OverResource
+	}
+	return 0
 }
 
 type ExtraAttack struct {
@@ -1663,7 +1679,7 @@ const file_chronicle_proto_rawDesc = "" +
 	"\tEventMeta\x12\x14\n" +
 	"\x05index\x18\x01 \x01(\x05R\x05index\x12 \n" +
 	"\voffsetMilli\x18\x02 \x01(\x03R\voffsetMilli\x129\n" +
-	"\bactivity\x18\x03 \x03(\v2\x1d.chronicleproto.ActivityEntryR\bactivity\"\xb3\x02\n" +
+	"\bactivity\x18\x03 \x03(\v2\x1d.chronicleproto.ActivityEntryR\bactivity\"\xcf\x02\n" +
 	"\x04Heal\x12-\n" +
 	"\x04meta\x18\x01 \x01(\v2\x19.chronicleproto.EventMetaR\x04meta\x12\x16\n" +
 	"\x06caster\x18\x03 \x01(\tR\x06caster\x12\x16\n" +
@@ -1674,7 +1690,9 @@ const file_chronicle_proto_rawDesc = "" +
 	"\x06amount\x18\x06 \x01(\x05R\x06amount\x12\x18\n" +
 	"\ahitType\x18\a \x01(\rR\ahitType\x12<\n" +
 	"\tspellData\x18\b \x01(\v2\x19.chronicleproto.SpellDataH\x00R\tspellData\x88\x01\x01\x12.\n" +
-	"\x06school\x18\t \x01(\x0e2\x16.chronicleproto.SchoolR\x06schoolB\f\n" +
+	"\x06school\x18\t \x01(\x0e2\x16.chronicleproto.SchoolR\x06school\x12\x1a\n" +
+	"\boverheal\x18\n" +
+	" \x01(\x05R\boverhealB\f\n" +
 	"\n" +
 	"_spellData\"\xf7\x02\n" +
 	"\x06Damage\x12-\n" +
@@ -1692,7 +1710,7 @@ const file_chronicle_proto_rawDesc = "" +
 	" \x01(\v2\x19.chronicleproto.SpellDataH\x01R\tspellData\x88\x01\x01B\t\n" +
 	"\a_casterB\f\n" +
 	"\n" +
-	"_spellData\"\xd9\x02\n" +
+	"_spellData\"\xfd\x02\n" +
 	"\x0eResourceChange\x12-\n" +
 	"\x04meta\x18\x01 \x01(\v2\x19.chronicleproto.EventMetaR\x04meta\x12\x16\n" +
 	"\x06target\x18\x03 \x01(\tR\x06target\x12\x16\n" +
@@ -1703,7 +1721,9 @@ const file_chronicle_proto_rawDesc = "" +
 	"sourceName\x18\a \x01(\tH\x01R\n" +
 	"sourceName\x88\x01\x01\x12\x1c\n" +
 	"\tdirection\x18\b \x01(\tR\tdirection\x12<\n" +
-	"\tspellData\x18\t \x01(\v2\x19.chronicleproto.SpellDataH\x02R\tspellData\x88\x01\x01B\t\n" +
+	"\tspellData\x18\t \x01(\v2\x19.chronicleproto.SpellDataH\x02R\tspellData\x88\x01\x01\x12\"\n" +
+	"\foverResource\x18\n" +
+	" \x01(\x05R\foverResourceB\t\n" +
 	"\a_casterB\r\n" +
 	"\v_sourceNameB\f\n" +
 	"\n" +

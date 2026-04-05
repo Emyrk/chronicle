@@ -446,6 +446,7 @@ export interface ReusableHeal {
   activityCount: number;
   spellId: number | null; // From SpellData field 8
   spellAttackOutcome: number | null; // From SpellData field 3 (AttackOutcome bitmask)
+  overheal: number;
 }
 
 /**
@@ -502,6 +503,7 @@ export class HealDecoder {
     msg.activityCount = 0;
     msg.spellId = null;
     msg.spellAttackOutcome = null;
+    msg.overheal = 0;
     
     while (offset < end) {
       const tag = data[offset++];
@@ -516,6 +518,7 @@ export class HealDecoder {
         if (fieldNumber === 6) msg.amount = value;
         else if (fieldNumber === 7) msg.hitType = value;
         else if (fieldNumber === 9) msg.school = value;
+        else if (fieldNumber === 10) msg.overheal = value;
       } else if (wireType === 2) {
         // Length-delimited
         const { value: len, bytesRead } = readVarintFast(data, offset);
@@ -744,6 +747,7 @@ export interface ReusableResourceChange {
   amount: number;
   resourceType: string;
   direction: string;
+  overResource: number;
   activity: ReusableActivityEntry[];
   activityCount: number;
 }
@@ -796,6 +800,7 @@ export class ResourceChangeDecoder {
     msg.amount = 0;
     msg.resourceType = "";
     msg.direction = "";
+    msg.overResource = 0;
     msg.activityCount = 0;
     
     while (offset < end) {
@@ -809,6 +814,7 @@ export class ResourceChangeDecoder {
         offset += bytesRead;
         
         if (fieldNumber === 4) msg.amount = value;
+        else if (fieldNumber === 10) msg.overResource = value;
       } else if (wireType === 2) {
         // Length-delimited
         const { value: len, bytesRead } = readVarintFast(data, offset);
