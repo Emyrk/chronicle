@@ -74,6 +74,7 @@ export interface HealProcessorEvent extends EventMeta {
   target: string;
   hitType: number;
   amount: number;
+  overheal: number;
   school: number;
   spellId: number | null;
   /** AttackOutcome bitmask of possible hit table results (from SpellData) */
@@ -89,6 +90,7 @@ export interface ResourceChangeProcessorEvent extends EventMeta {
   sourceName: string;
   target: string;
   amount: number;
+  overResource: number;
   resourceType: string;
   direction: string;
 }
@@ -361,6 +363,9 @@ export interface SerializableProcessorContext {
   /** Optional panel-specific context payload for processor configuration. */
   panelContext?: Record<string, unknown> | null;
 
+  /** Server-computed feature flags for this instance (e.g., "overheal"). */
+  capabilities?: string[];
+
   /** Optional event filters evaluated before processor.processEvent. */
   filters?: PanelFilter[];
 }
@@ -389,6 +394,9 @@ export interface ProcessorContext {
 
   /** Optional panel-specific context payload for processor configuration. */
   panelContext?: Record<string, unknown> | null;
+
+  /** Server-computed feature flags for this instance (e.g., "overheal"). */
+  capabilities?: string[];
 
   /** Optional event filters evaluated before processor.processEvent. */
   filters?: PanelFilter[];

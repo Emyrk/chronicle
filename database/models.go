@@ -144,18 +144,18 @@ func AllKillTypeValues() []KillType {
 type LogInstanceEventType string
 
 const (
-	LogInstanceEventTypeDamage         LogInstanceEventType = "damage"
-	LogInstanceEventTypeHeal           LogInstanceEventType = "heal"
-	LogInstanceEventTypeResourceChange LogInstanceEventType = "resource_change"
-	LogInstanceEventTypeExtraAttack    LogInstanceEventType = "extra_attack"
-	LogInstanceEventTypeSlain          LogInstanceEventType = "slain"
-	LogInstanceEventTypeCast           LogInstanceEventType = "cast"
-	LogInstanceEventTypeAura           LogInstanceEventType = "aura"
-	LogInstanceEventTypeSpellGo        LogInstanceEventType = "spell_go"
-	LogInstanceEventTypeAuraCast       LogInstanceEventType = "aura_cast"
-	LogInstanceEventTypeSpellStart     LogInstanceEventType = "spell_start"
-	LogInstanceEventTypeSpellFail            LogInstanceEventType = "spell_fail"
-	LogInstanceEventTypeUnitClassification  LogInstanceEventType = "unit_classification"
+	LogInstanceEventTypeDamage             LogInstanceEventType = "damage"
+	LogInstanceEventTypeHeal               LogInstanceEventType = "heal"
+	LogInstanceEventTypeResourceChange     LogInstanceEventType = "resource_change"
+	LogInstanceEventTypeExtraAttack        LogInstanceEventType = "extra_attack"
+	LogInstanceEventTypeSlain              LogInstanceEventType = "slain"
+	LogInstanceEventTypeCast               LogInstanceEventType = "cast"
+	LogInstanceEventTypeAura               LogInstanceEventType = "aura"
+	LogInstanceEventTypeSpellGo            LogInstanceEventType = "spell_go"
+	LogInstanceEventTypeAuraCast           LogInstanceEventType = "aura_cast"
+	LogInstanceEventTypeSpellStart         LogInstanceEventType = "spell_start"
+	LogInstanceEventTypeSpellFail          LogInstanceEventType = "spell_fail"
+	LogInstanceEventTypeUnitClassification LogInstanceEventType = "unit_classification"
 )
 
 func (e *LogInstanceEventType) Scan(src interface{}) error {
@@ -205,7 +205,8 @@ func (e LogInstanceEventType) Valid() bool {
 		LogInstanceEventTypeSpellGo,
 		LogInstanceEventTypeAuraCast,
 		LogInstanceEventTypeSpellStart,
-		LogInstanceEventTypeSpellFail:
+		LogInstanceEventTypeSpellFail,
+		LogInstanceEventTypeUnitClassification:
 		return true
 	}
 	return false
@@ -224,6 +225,7 @@ func AllLogInstanceEventTypeValues() []LogInstanceEventType {
 		LogInstanceEventTypeAuraCast,
 		LogInstanceEventTypeSpellStart,
 		LogInstanceEventTypeSpellFail,
+		LogInstanceEventTypeUnitClassification,
 	}
 }
 
@@ -785,9 +787,10 @@ type LogInstance struct {
 	Name       string      `db:"name" json:"name"`
 	HashedSlug pgtype.Text `db:"hashed_slug" json:"hashed_slug"`
 	// If set, that means it was a guild run.
-	GuildID   uuid.NullUUID      `db:"guild_id" json:"guild_id"`
-	StartTime pgtype.Timestamptz `db:"start_time" json:"start_time"`
-	EndTime   pgtype.Timestamptz `db:"end_time" json:"end_time"`
+	GuildID      uuid.NullUUID      `db:"guild_id" json:"guild_id"`
+	StartTime    pgtype.Timestamptz `db:"start_time" json:"start_time"`
+	EndTime      pgtype.Timestamptz `db:"end_time" json:"end_time"`
+	Capabilities []string           `db:"capabilities" json:"capabilities"`
 }
 
 type LogInstanceEncounter struct {
@@ -861,6 +864,7 @@ type LogInstancesGuild struct {
 	Name           string             `db:"name" json:"name"`
 	HashedSlug     pgtype.Text        `db:"hashed_slug" json:"hashed_slug"`
 	GuildID        uuid.NullUUID      `db:"guild_id" json:"guild_id"`
+	Capabilities   []string           `db:"capabilities" json:"capabilities"`
 	RealmName      string             `db:"realm_name" json:"realm_name"`
 	GuildName      pgtype.Text        `db:"guild_name" json:"guild_name"`
 	GuildRealmID   uuid.NullUUID      `db:"guild_realm_id" json:"guild_realm_id"`

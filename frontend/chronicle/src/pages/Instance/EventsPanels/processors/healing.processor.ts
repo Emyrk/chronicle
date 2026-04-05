@@ -105,12 +105,15 @@ export type UnifiedHealingResult = {
   
   // === Shared state ===
   // Health deficit tracking: targetGUID -> deficit (positive = damage taken)
-  // Reset to empty when encounterID changes
+  // Reset to empty when encounterID changes. Only used when ServerOverheal is false.
   HealthDeficits: Map<string, number>;
   // Track last encounter ID to detect transitions
   LastEncounterID: string | null;
   // GUID cache for performance (avoids repeated parsing)
   GuidCache: GuidCache;
+  // Cached capability check — null means not yet resolved.
+  // When true, server provides event.overheal; when false, client computes via deficit tracking.
+  ServerOverheal: boolean | null;
 }
 
 /**
@@ -160,6 +163,7 @@ export function createUnifiedHealingProcessor(): PanelProcessor<UnifiedHealingRe
       HealthDeficits: new Map(),
       LastEncounterID: null,
       GuidCache: createGuidCache(),
+      ServerOverheal: null,
     }),
 
     processEvent: (
@@ -170,13 +174,12 @@ export function createUnifiedHealingProcessor(): PanelProcessor<UnifiedHealingRe
       streamType: string,
       context: ProcessorContext
     ) => {
-      const deficits = getDeficits(state, encounterID);
       const guidCache = state.GuidCache;
       
       // Helper to check if a target is a player or a player-owned pet.
       // Fast path: if already in deficits map, we've validated them before.
       const isPlayerOrFriendlyPet = (targetGuid: string): boolean => {
-        if (deficits.has(targetGuid)) return true;
+        if (state.HealthDeficits.has(targetGuid)) return true;
         if (isPlayerGuidFast(targetGuid)) return true;
         if (isPetGuidFast(targetGuid)) {
           // Pet must have a player owner
@@ -187,35 +190,74 @@ export function createUnifiedHealingProcessor(): PanelProcessor<UnifiedHealingRe
         }
         return false;
       };
+
+      // ──────────────────────────────────────────────
+      // PHASE 1: Ensure event.overheal is populated.
+      // When the server provides overheal (capability "overheal"), it's already set.
+      // Otherwise, run client-side deficit tracking to compute and write it onto the event.
+      // ──────────────────────────────────────────────
       
-      // Handle damage events - increase target's health deficit
-      if (isDamageEvent(event, streamType)) {
-        // Only players and player-owned pets can have health deficits tracked
-        if (!isPlayerOrFriendlyPet(event.target)) return;
-        
-        const currentDeficit = deficits.get(event.target) || 0;
-        deficits.set(event.target, currentDeficit + event.amount);
-        return;
-      }
-      
-      // Handle resource change - health loss increases deficit, health gain is like a heal
-      if (isResourceChangeEvent(event, streamType)) {
-        if (event.resourceType !== "Health") return;
-        
-        // Only track player and player-owned pet health
-        if (!isPlayerOrFriendlyPet(event.target)) return;
-        
-        if (event.direction === "Loss") {
-          // Health loss (like Life Tap) increases deficit
-          const currentDeficit = deficits.get(event.target) || 0;
-          deficits.set(event.target, currentDeficit + event.amount);
-          return;
-        }
-        
-        // Health gain - treat as healing (fall through to healing logic below)
-        if (event.direction !== "Gain") return;
+      // Resolve capability once on first event
+      if (state.ServerOverheal === null) {
+        state.ServerOverheal = context.capabilities?.includes("overheal") ?? false;
       }
 
+      if (!state.ServerOverheal) {
+        // Legacy: client-side deficit tracking to polyfill event.overheal
+        const deficits = getDeficits(state, encounterID);
+
+        // Damage → increase deficit, done
+        if (isDamageEvent(event, streamType)) {
+          if (!isPlayerOrFriendlyPet(event.target)) return;
+          deficits.set(event.target, (deficits.get(event.target) || 0) + event.amount);
+          return;
+        }
+
+        // Resource change health loss → increase deficit, done
+        if (isResourceChangeEvent(event, streamType)) {
+          if (event.resourceType !== "Health") return;
+          if (!isPlayerOrFriendlyPet(event.target)) return;
+          if (event.direction === "Loss") {
+            deficits.set(event.target, (deficits.get(event.target) || 0) + event.amount);
+            return;
+          }
+          // Health gain - treat as healing (fall through to healing logic below)
+          if (event.direction !== "Gain") return;
+        }
+
+        // Heal/resource_change health gain → compute overheal from deficit, write onto event
+        if (streamType === "heal" || streamType === "resource_change") {
+          if (isPlayerOrFriendlyPet(event.target)) {
+            const deficit = deficits.get(event.target) || 0;
+            const effective = Math.min(event.amount, deficit);
+            const over = event.amount - effective;
+            deficits.set(event.target, Math.max(0, deficit - effective));
+            if (streamType === "heal") {
+              (event as HealProcessorEvent).overheal = over;
+            } else {
+              (event as ResourceChangeProcessorEvent).overResource = over;
+            }
+          } else {
+            // Non-player, non-pet targets: count all healing as overheal
+            if (streamType === "heal") {
+              (event as HealProcessorEvent).overheal = event.amount;
+            } else {
+              (event as ResourceChangeProcessorEvent).overResource = event.amount;
+            }
+          }
+        }
+      } else {
+        // Server provided overheal — skip damage/resource_change entirely
+        if (isDamageEvent(event, streamType)) return;
+        if (isResourceChangeEvent(event, streamType)) {
+          if (event.resourceType !== "Health" || event.direction !== "Gain") return;
+        }
+      }
+
+      // ──────────────────────────────────────────────
+      // PHASE 2: Aggregation — event.overheal is always set by now
+      // ──────────────────────────────────────────────
+      
       // From here on, we're handling heal events or resource_change health gains
       if (!(streamType === "heal" || streamType === "resource_change")) return;
       if (!event.caster) return;
@@ -227,24 +269,10 @@ export function createUnifiedHealingProcessor(): PanelProcessor<UnifiedHealingRe
       const healerID = event.caster;
       const targetID = event.target;
       const healAmount = event.amount;
-
-      // Calculate effective healing based on target's deficit
-      // For players and player-owned pets, use deficit tracking
-      // For other targets (friendly NPCs, etc.), count all as overheal
-      let effectiveHeal: number;
-      let overheal: number;
-      
-      if (isPlayerOrFriendlyPet(targetID)) {
-        const currentDeficit = deficits.get(targetID) || 0;
-        effectiveHeal = Math.min(healAmount, currentDeficit);
-        overheal = healAmount - effectiveHeal;
-        // Update deficit (reduce by effective heal, never go below 0)
-        deficits.set(targetID, Math.max(0, currentDeficit - effectiveHeal));
-      } else {
-        // Non-player, non-pet targets: count all healing as overheal
-        effectiveHeal = 0;
-        overheal = healAmount;
-      }
+      const overheal = streamType === "heal"
+        ? (event as HealProcessorEvent).overheal ?? 0
+        : (event as ResourceChangeProcessorEvent).overResource ?? 0;
+      const effectiveHeal = healAmount - overheal;
 
       // Filter check: deficit tracking above always runs, but only aggregate events that pass the filter
       if (context.compiledFilter && !context.compiledFilter(event)) return;

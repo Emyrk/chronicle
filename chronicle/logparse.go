@@ -382,8 +382,9 @@ func (w *WorkerLogParse) Work(ctx context.Context, job *river.Job[ArgsLogParse])
 					UUID:  guildID,
 					Valid: guildID != uuid.Nil,
 				},
-				StartTime: instanceStart,
-				EndTime:   instanceEnd,
+				StartTime:    instanceStart,
+				EndTime:      instanceEnd,
+				Capabilities: []string{"overheal"},
 			}
 
 			// Handling colliding slugs

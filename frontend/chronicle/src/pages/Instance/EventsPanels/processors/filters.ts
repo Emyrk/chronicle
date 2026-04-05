@@ -174,7 +174,7 @@ function compileEntityFilter(
 /** Known toggle option keys for source_type / target_type filters */
 const ENTITY_TYPE_OPTION_KEYS = new Set([
   "selected_players", "selected_enemies", "custom",
-  "player", "pet", "enemy_pet", "enemy", "object",
+  "player", "pet", "enemy_pet", "enemy", "object", "none",
 ]);
 
 /**
@@ -198,6 +198,7 @@ function compileEntityTypeFilter(
   const wantEnemyPet = rawValues.has("enemy_pet"); // enemy pet (non-player-owned)
   const wantEnemy = rawValues.has("enemy");
   const wantObject = rawValues.has("object");
+  const wantNone = rawValues.has("none");
 
   // Entity selection flags
   const wantSelectedPlayers = rawValues.has("selected_players");
@@ -226,7 +227,7 @@ function compileEntityTypeFilter(
   return (event) => {
     if (!(field in event)) return false;
     const guid = (event as unknown as Record<string, unknown>)[field];
-    if (typeof guid !== "string" || !guid) return false;
+    if (typeof guid !== "string" || !guid) return wantNone;
 
     // Selected players: match if guid is in playerIds (or a pet owned by one), or any player/player-pet if none selected
     if (wantSelectedPlayers) {

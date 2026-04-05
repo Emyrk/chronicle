@@ -85,6 +85,7 @@ function toSerializableContext(
     pagination: ctx.pagination,
     panelOption,
     panelContext,
+    capabilities: ctx.instance.capabilities ?? [],
   };
 }
 

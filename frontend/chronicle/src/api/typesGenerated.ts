@@ -889,6 +889,11 @@ export interface VideoTimestamp {
  */
 export const WoWAddonDateFormat = "02.01.06 15:04:05";
 
+// From types/classification.go
+export type WoWAffiliation = 1 | 2 | 3 | 0;
+
+export const WoWAffiliations: WoWAffiliation[] = [1, 2, 3, 0];
+
 // From types/constants.go
 export type WoWAuraApplication = "Fades" | "Gains" | "Removed" | "Unknown";
 
@@ -981,6 +986,7 @@ export interface WoWInstance {
     readonly name: string;
     readonly slug: string;
     readonly guild?: Guild;
+    readonly capabilities: readonly string[];
 }
 
 // From chroniclesdk/log.go
@@ -1057,5 +1063,10 @@ export interface WoWTrailerEntry {
     readonly Amount: number | null;
     readonly HitType: WoWHitType;
 }
+
+// From types/classification.go
+export type WoWUnitType = 2 | 3 | 1 | 0 | 4;
+
+export const WoWUnitTypes: WoWUnitType[] = [2, 3, 1, 0, 4];
 
 

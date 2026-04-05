@@ -161,10 +161,6 @@ func (h *Hookable) Process(m messages.Message) (finalError error) {
 		}
 	}
 
-	err = timings.Do1(h.timings, timingsProcessOngoingFightProcess, func() error {
-		return h.currentFight.Process(m)
-	})
-
 	if len(h.hooks) > 0 {
 		err = timings.Do1(h.timings, timingsHooks, func() error {
 			for _, hook := range h.hooks {
@@ -180,6 +176,10 @@ func (h *Hookable) Process(m messages.Message) (finalError error) {
 			return nil
 		})
 	}
+
+	err = timings.Do1(h.timings, timingsProcessOngoingFightProcess, func() error {
+		return h.currentFight.Process(m)
+	})
 
 	return nil
 }

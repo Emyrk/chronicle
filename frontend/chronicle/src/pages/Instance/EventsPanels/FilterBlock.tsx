@@ -63,6 +63,7 @@ const SOURCE_TYPE_TYPE_OPTIONS = [
   { label: "Enemy Pet", value: "enemy_pet" },
   { label: "Enemy", value: "enemy" },
   { label: "Object", value: "object" },
+  { label: "None", value: "none" },
 ] as const;
 
 const SOURCE_TYPE_ALL_OPTIONS = [...SOURCE_TYPE_IDENTITY_OPTIONS, ...SOURCE_TYPE_TYPE_OPTIONS];

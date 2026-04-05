@@ -28,7 +28,8 @@ CREATE TYPE log_instance_event_type AS ENUM (
     'spell_go',
     'aura_cast',
     'spell_start',
-    'spell_fail'
+    'spell_fail',
+    'unit_classification'
 );
 
 CREATE TYPE log_type AS ENUM (
@@ -419,7 +420,8 @@ CREATE TABLE log_instances (
     hashed_slug text,
     guild_id uuid,
     start_time timestamp with time zone,
-    end_time timestamp with time zone
+    end_time timestamp with time zone,
+    capabilities text[] DEFAULT '{}'::text[] NOT NULL
 );
 
 COMMENT ON COLUMN log_instances.guild_id IS 'If set, that means it was a guild run.';
@@ -437,6 +439,7 @@ CREATE VIEW log_instances_guild AS
     li.name,
     li.hashed_slug,
     li.guild_id,
+    li.capabilities,
     COALESCE(wsr.name, 'Unknown'::text) AS realm_name,
     g.name AS guild_name,
     g.realm_id AS guild_realm_id,

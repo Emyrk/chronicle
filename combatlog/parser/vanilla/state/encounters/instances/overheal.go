@@ -32,8 +32,7 @@ func (o *Overhealing) ProcessMessage(active bool, _ uuid.UUID, m messages.Messag
 		case types.ResourceHealth:
 			amount := msg.Amount
 			if msg.Direction == types.ChangeDirectionLoss {
-				amount = -amount
-				o.deficits[msg.Target] -= amount
+				o.deficits[msg.Target] += amount
 				return nil
 			}
 			msg.OverResource = o.heal(msg.Target, amount)
@@ -45,12 +44,15 @@ func (o *Overhealing) ProcessMessage(active bool, _ uuid.UUID, m messages.Messag
 }
 
 func (o *Overhealing) heal(target guid.GUID, amount int32) int32 {
+	// deficit is how much health the unit is missing
 	deficit := o.deficits[target]
 	// Effective healing is the minimum of the amount and the current deficit
 	effective := min(amount, deficit)
+	// Overheal is how much healing exceeds the current deficit
 	overheal := amount - effective
+
 	// Should never go below 0
-	o.deficits[target] -= max(0, deficit-effective)
+	o.deficits[target] = max(0, deficit-effective)
 	return overheal
 }
 

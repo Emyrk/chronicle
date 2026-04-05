@@ -47,6 +47,8 @@ export interface Instance {
   players?: Record<string, InstancePlayer>;
   // GUID -> unit info lookup (creatures, pets, etc.)
   units?: Record<string, InstanceUnit>;
+  // Server-computed feature flags for this instance
+  capabilities: string[];
 }
 
 // Helper to get unit name from lookup, with fallback
@@ -119,6 +121,7 @@ function transformToInstance(
     encounters,
     players,
     units,
+    capabilities: apiInstance.capabilities ?? [],
   };
 }
 

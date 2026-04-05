@@ -49,9 +49,9 @@ VALUES
 
 -- name: InsertInstance :one
 INSERT INTO
-  log_instances (id, realm_id, log_group_id, name, hashed_slug, guild_id, start_time, end_time)
+  log_instances (id, realm_id, log_group_id, name, hashed_slug, guild_id, start_time, end_time, capabilities)
 VALUES
-  ($1, $2, $3, $4, $5, $6, $7, $8)
+  ($1, $2, $3, $4, $5, $6, $7, $8, $9)
 RETURNING *
 ;
 

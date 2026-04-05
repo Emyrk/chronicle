@@ -94,12 +94,13 @@ func WoWInstanceWithGuild(instance database.LogInstance, dbG *database.Guild) ch
 		}
 	}
 	return chroniclesdk.WoWInstance{
-		ID:         instance.ID,
-		RealmID:    instance.RealmID,
-		LogGroupID: instance.LogGroupID,
-		Name:       instance.Name,
-		Slug:       instance.HashedSlug.String,
-		Guild:      g,
+		ID:           instance.ID,
+		RealmID:      instance.RealmID,
+		LogGroupID:   instance.LogGroupID,
+		Name:         instance.Name,
+		Slug:         instance.HashedSlug.String,
+		Guild:        g,
+		Capabilities: instance.Capabilities,
 	}
 }
 
@@ -113,12 +114,13 @@ func WoWInstance(instance database.LogInstancesGuild) chroniclesdk.WoWInstance {
 		}
 	}
 	return chroniclesdk.WoWInstance{
-		ID:         instance.ID,
-		RealmID:    instance.RealmID,
-		LogGroupID: instance.LogGroupID,
-		Name:       instance.Name,
-		Slug:       instance.HashedSlug.String,
-		Guild:      g,
+		ID:           instance.ID,
+		RealmID:      instance.RealmID,
+		LogGroupID:   instance.LogGroupID,
+		Name:         instance.Name,
+		Slug:         instance.HashedSlug.String,
+		Guild:        g,
+		Capabilities: instance.Capabilities,
 	}
 }
 
