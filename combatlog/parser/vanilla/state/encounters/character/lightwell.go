@@ -60,10 +60,6 @@ func NewLightwell(id guid.GUID, all *Characters) (Character, bool) {
 	return nil, false
 }
 
-// TODO: REDO PROCESS FOR TOTEMS
-// - Look for "Cast" for when it comes alive to set max life
-// - look for owner "recall"
-// - look for owner death?
 func (c *Lightwell) Process(m messages.Message) error {
 	if c.LastSlain != nil {
 		return nil // Totems can't be revived
