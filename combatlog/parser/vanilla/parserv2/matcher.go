@@ -236,6 +236,10 @@ func (p *Parser) unitInfo(ctx context.Context, ts time.Time, m *Matched) ([]mess
 	challenges := m.CSV()
 	maxHealth := m.Int64()
 	var _ = maxHealth
+	var charm *guid.GUID
+	if m.Remain() > 0 {
+		charm = m.OptionalGuid()
+	}
 
 	if err := m.Error(); err != nil {
 		return nil, err
@@ -264,6 +268,7 @@ func (p *Parser) unitInfo(ctx context.Context, ts time.Time, m *Matched) ([]mess
 			Buffs:        buffs,
 			Level:        int32(level),
 			Challenges:   challenges,
+			Charm:        charm,
 		},
 	})
 }

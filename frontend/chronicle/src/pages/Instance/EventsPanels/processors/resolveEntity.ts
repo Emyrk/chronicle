@@ -159,6 +159,31 @@ export const PET_MODE_OPTIONS: GroupingOption[] = [
 ];
 
 // ---------------------------------------------------------------------------
+// Shared panel option sets (used by DamageDone, HealingDone, etc.)
+// ---------------------------------------------------------------------------
+
+/** Grouping options for panels with merged default (pets fold into owners). */
+export const MERGED_GROUPING_OPTIONS: GroupingOption[] = [
+  { value: "merged", label: "By Unit (Merged)" },
+  { value: "default", label: "By Unit" },
+  { value: "name", label: "By Name" },
+];
+
+/** Grouping options for pet-focused panels (individual is the default). */
+export const PET_PANEL_GROUPING_OPTIONS: GroupingOption[] = [
+  { value: "default", label: "By Unit" },
+  { value: "merged", label: "By Unit (Merged)" },
+  { value: "name", label: "By Name" },
+];
+
+/** Pet handling options for panel settings. */
+export const PET_GROUPING_OPTIONS: GroupingOption[] = [
+  { value: "owner", label: "By Owner" },
+  { value: "individual", label: "By Pet" },
+  { value: "name", label: "By Pet Name" },
+];
+
+// ---------------------------------------------------------------------------
 // panelOption token extraction helpers
 // ---------------------------------------------------------------------------
 

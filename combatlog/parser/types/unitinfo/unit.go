@@ -35,6 +35,7 @@ type Info struct {
 	Buffs        []Buff
 	Level        int32
 	Challenges   []string
+	Charm        *guid.GUID
 }
 
 // TODO:

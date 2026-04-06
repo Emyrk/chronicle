@@ -20,6 +20,7 @@ import { hasHitType, HitTypePeriodic } from "@/lib/hittype/hittype";
 import { accumulateAbilityBreakout, accumulateAbilityBreakoutBySpellId, type DamageAbilityBreakout, type SpellIdAbilityBreakout } from "./abilityBreakout";
 import { isResourceChangeEvent, isDamageEvent } from "./events";
 import { createGuidCache, getCachedGuid, isPlayerGuidFast, isPetGuidFast, type GuidCache } from "./guidCache";
+import { resolveEntity, extractGroupingFromPanelOption, extractPetModeFromPanelOption } from "./resolveEntity";
 
 // Re-export the shared type (works for healing too)
 export type { DamageAbilityBreakout as HealingAbilityBreakout } from "./abilityBreakout";
@@ -262,11 +263,12 @@ export function createUnifiedHealingProcessor(): PanelProcessor<UnifiedHealingRe
       if (!(streamType === "heal" || streamType === "resource_change")) return;
       if (!event.caster) return;
 
-      // Caster must be a player
-      const isCasterPlayer = isPlayerGuidFast(event.caster) || getCachedGuid(guidCache, event.caster).isPlayer();
-      if (!isCasterPlayer) return;
+      // Resolve caster via resolveEntity (handles players, pets, objects)
+      const grouping = extractGroupingFromPanelOption(context.panelOption, "merged");
+      const petMode = extractPetModeFromPanelOption(context.panelOption);
+      const entity = resolveEntity(event.caster, context, grouping, petMode);
 
-      const healerID = event.caster;
+      const healerID = entity.id;
       const targetID = event.target;
       const healAmount = event.amount;
       const overheal = streamType === "heal"
@@ -277,9 +279,15 @@ export function createUnifiedHealingProcessor(): PanelProcessor<UnifiedHealingRe
       // Filter check: deficit tracking above always runs, but only aggregate events that pass the filter
       if (context.compiledFilter && !context.compiledFilter(event)) return;
 
-      // Get player info
-      const healerName = context.players[healerID]?.name || healerID;
-      const healerClass = context.players[healerID]?.class || "UNKNOWN";
+      // Get healer info from resolved entity
+      let healerName = entity.name;
+      const healerClass = entity.class;
+
+      // When merged grouping merges pet healing into a player-owner row,
+      // use the owner's actual name instead of "Owner's Companions"
+      if (grouping === "merged" && healerID !== event.caster && context.players[healerID]) {
+        healerName = context.players[healerID].name || healerName;
+      }
       
       // Determine if this is an "other" target (non-player, non-pet)
       const isOtherTarget = effectiveHeal === 0 && overheal === healAmount && !isPlayerOrFriendlyPet(targetID);
@@ -382,6 +390,13 @@ export function createUnifiedHealingProcessor(): PanelProcessor<UnifiedHealingRe
       const hitType = isResourceChangeEvent(event, streamType) ? HitTypePeriodic : (event as HealProcessorEvent).hitType;
       if (hasHitType(hitType, HitTypePeriodic)) {
         abilityName = abilityName + " (HoT)";
+      }
+
+      // When pet healing is merged into the owner row, label abilities as "<PetName> (Pet)"
+      const casterHasOwner = !!context.units?.[event.caster]?.owner;
+      if (casterHasOwner && grouping === "merged") {
+        const petName = context.units?.[event.caster]?.name || event.caster.toString();
+        abilityName = `${petName} (Pet)`;
       }
 
       // --- Healer breakouts (ability + target breakdown) ---

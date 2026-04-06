@@ -17,6 +17,7 @@ var characterFactories = []characterFactory{
 	// Global
 	NewTotemCharacter,
 	NewCritterCharacter,
+	NewLightwell,
 	// Wailing Caverns,
 	NewDiscipleOfNaralex,
 	// Deadmines
@@ -161,10 +162,8 @@ func (c Characters) Add(id guid.GUID, now time.Time) (_ Character, newChar bool)
 			char = NewCommonCharacter(id, &c)
 		}
 
-		if id.IsAnyCreature() {
-			if entry, ok := id.GetEntry(); ok {
-				c.ByEntry[entry] = append(c.ByEntry[entry], char)
-			}
+		if entry, ok := id.GetEntry(); ok {
+			c.ByEntry[entry] = append(c.ByEntry[entry], char)
 		}
 		c.All.Add(char, now)
 	}

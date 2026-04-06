@@ -5,6 +5,7 @@
 import { Heart } from "lucide-react";
 import type { PanelDefinition, PanelRenderProps } from "../types";
 import type { PanelFilter } from "../processors/filters";
+import { MERGED_GROUPING_OPTIONS, PET_GROUPING_OPTIONS } from "../processors/resolveEntity";
 import { unifiedHealingProcessor, type UnifiedHealingResult } from "../processors";
 import { HealingDoneContent } from "./HealingDoneContent";
 
@@ -37,7 +38,8 @@ export function createHealingDonePanel(
 
   // Fixed: only healing from player casters (matches processor's isCasterPlayer check)
   const fixedFilters: PanelFilter[] = [
-    { type: "source_type" as const, value: ["player"], applyTo: heal },
+    { type: "source_type" as const, value: ["player", "pet"], applyTo: heal },
+    
   ];
 
   // Default: narrow to healing targeted at selected players
@@ -55,6 +57,8 @@ export function createHealingDonePanel(
     supportsFiltering: true,
     fixedFilters,
     defaultFilters,
+    groupingOptions: MERGED_GROUPING_OPTIONS,
+    petOptions: PET_GROUPING_OPTIONS,
     
     render: (props: PanelRenderProps<UnifiedHealingResult>) => {
       return <HealingDoneContent {...props} sourceType={sourceType} />;

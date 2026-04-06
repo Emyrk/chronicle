@@ -33,11 +33,11 @@ func TestPossession_AuraCastGeneratesPossessionChange(t *testing.T) {
 	mcSpell := makePossessionSpell("Mind Control")
 	msgs := []messages.Message{
 		&messages.AuraCast{
-			MessageBase:     messages.Base(now),
-			Spell:           mcSpell,
-			Caster:          casterGUID,
-			Target:          &targetGUID,
-			EffectAuraName:  chrondbc.AuraEffectModPossess,
+			MessageBase:    messages.Base(now),
+			Spell:          mcSpell,
+			Caster:         casterGUID,
+			Target:         &targetGUID,
+			EffectAuraName: chrondbc.AuraEffectModPossess,
 		},
 	}
 
@@ -64,12 +64,12 @@ func TestPossession_AuraCastPassesDuration(t *testing.T) {
 
 	msgs := []messages.Message{
 		&messages.AuraCast{
-			MessageBase:     messages.Base(now),
-			Spell:           makePossessionSpell("Mind Control"),
-			Caster:          casterGUID,
-			Target:          &targetGUID,
-			DurationMS:      15000,
-			EffectAuraName:  chrondbc.AuraEffectModPossess,
+			MessageBase:    messages.Base(now),
+			Spell:          makePossessionSpell("Mind Control"),
+			Caster:         casterGUID,
+			Target:         &targetGUID,
+			DurationMS:     15000,
+			EffectAuraName: chrondbc.AuraEffectModPossess,
 		},
 	}
 
