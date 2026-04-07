@@ -6,51 +6,57 @@ import (
 
 	"github.com/Emyrk/chronicle/combatlog/parser/guid"
 	"github.com/Emyrk/chronicle/combatlog/parser/types/zone"
+	"github.com/Emyrk/chronicle/combatlog/parser/vanilla/data/trainingdummies"
 	"github.com/Emyrk/chronicle/combatlog/parser/vanilla/messages"
 	"github.com/Emyrk/chronicle/combatlog/parser/vanilla/state/unitdb"
 )
 
-var orgrimmarDummyEntries = map[uint32]struct{}{
-	2673: {},
-	5652: {},
-	2674: {},
-}
+func cityFilter(id guid.GUID) bool {
+	if trainingdummies.IsTrainingDummy(id) {
+		return true
+	}
 
-func isTrainingDummy(id guid.GUID) bool {
 	entry, ok := id.GetEntry()
 	if !ok {
 		return false
 	}
-	_, isDummy := orgrimmarDummyEntries[entry]
-	return isDummy
+
+	switch entry {
+	case 6466: // Gamon
+		return true
+	}
+	return false
 }
 
 // newTrainingDummyFilter returns a message filter that only keeps messages
 // involving training dummies or units that have previously interacted with one.
 func newTrainingDummyFilter() func(m messages.Message) bool {
-	engagedUnits := make(map[guid.GUID]struct{})
+	var me guid.GUID
 
 	return func(m messages.Message) bool {
-		affected := m.Affects()
-		switch m.(type) {
-		case *messages.Realm, *messages.Combatant:
+		switch ty := m.(type) {
+		case *messages.Realm, *messages.Zone, *messages.Slain:
+			return true
+		case *messages.Combatant:
+			if ty.IsMe() {
+				//me = ty.Guid
+			}
+			return true
+		case *messages.Unit:
+			if ty.IsMe() {
+				me = ty.Guid
+			}
 			return true
 		}
 
+		affected := m.Affects()
 		for _, id := range affected {
-			if isTrainingDummy(id) {
-				for _, otherid := range affected {
-					engagedUnits[otherid] = struct{}{}
-				}
-				return true
-			}
-
-			if _, ok := engagedUnits[id]; ok {
-				return true
+			if !(cityFilter(id) || id == me) {
+				return false
 			}
 		}
 
-		return false
+		return true
 	}
 }
 

@@ -1135,9 +1135,11 @@ func TimbermawHoldHostiles() map[uint32]Identity {
 func OrgrimmarHostiles() map[uint32]Identity {
 	hostile := make(map[uint32]Identity)
 	LoadBosses(hostile, map[uint32]string{
-		2673: "Training Dummy",
-		5652: "Training Dummy",
-		2674: "Training Dummy",
+		50514: "Heroic Training Dummy",
+		50516: "Expert Training Dummy",
+		50515: "Apprentice Training Dummy",
+
+		6466: "Gamon",
 	})
 	return hostile
 }

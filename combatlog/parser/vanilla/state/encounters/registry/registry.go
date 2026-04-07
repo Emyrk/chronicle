@@ -33,7 +33,9 @@ func DefaultRegistry(logger *slog.Logger) *Registry {
 	r.Register(wrap(instances.DireMaul))
 	r.Register(wrap(instances.StormwindVault))
 	r.Register(wrap(instances.Stockades))
-	r.RegisterWithComment(wrap(instances.TrainingDummy), "Training dummies only")
+	// TODO: There is an issue with other players making the dummy "active".
+	//   Applied auras are especially tricky, since auras have no caster detail.
+	//r.RegisterWithComment(wrap(instances.TrainingDummy), "Training dummies only")
 	r.RegisterWithComment(wrap(instances.SunkenTemple), "not yet complete")
 
 	r.RegisterWithComment(wrap(instances.BlackrockSpire), "Only upper spire is supported at the moment")
