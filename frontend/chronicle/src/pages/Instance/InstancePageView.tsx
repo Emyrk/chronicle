@@ -10,6 +10,7 @@ import { useHelpfulHints } from "@/hooks/useHelpfulHints";
 import { useLocalStorage } from "@/hooks/useLocalStorage";
 import { useInstanceDefaultsCache } from "@/hooks/useInstanceDefaultsCache";
 import { type LayoutType, type PanelType } from "@/hooks/useUrlState";
+import { useTimeRangeContextOptional } from "./TimeRangeContext";
 import type { GridEditorItem } from "@/components/layout/GridLayoutEditor";
 import type { ActionBarSlotsResponse, ActivityPeriod, InstancePlayer } from "@/api/typesGenerated";
 import { PeriodMomentDisplay } from "@/components/PeriodMomentDisplay";
@@ -795,6 +796,8 @@ interface SharedViewPayload {
     panelOptions?: Record<string, unknown>;
     panelFilters?: Record<string, PanelFilter[]>;
     includeWipes?: boolean;
+    /** Time range selection in ms offsets from encounter start. */
+    timeRange?: { startMs: number; endMs: number };
   };
 }
 
@@ -1523,6 +1526,8 @@ export function InstancePageView({
   logDetailUrl,
   onOpenTimeRange,
 }: InstancePageViewProps) {
+  const timeRange = useTimeRangeContextOptional();
+
   // URL state for explainer mode (simple ?explain=panel_type)
   const [searchParams, setSearchParams] = useSearchParams();
   const explainerPanelType = searchParams.get("explain") as EventsPanelType | null;
@@ -2104,7 +2109,14 @@ export function InstancePageView({
     setSeedFiltersByID(importedFilters);
     setPanelFiltersByID(importedFilters);
     setSeedFiltersVersion((v) => v + 1);
-  }, [allMergedEnemies, instance.encounters, instance.id, instance.players, setViewState]);
+
+    // Restore time range selection if present
+    if (payload.view?.timeRange && timeRange) {
+      timeRange.setRange(payload.view.timeRange.startMs, payload.view.timeRange.endMs);
+    } else {
+      timeRange?.reset();
+    }
+  }, [allMergedEnemies, instance.encounters, instance.id, instance.players, setViewState, timeRange]);
 
   const handleImportLayout = useCallback(() => {
     const raw = window.prompt("Paste exported layout JSON");
@@ -2193,8 +2205,11 @@ export function InstancePageView({
         ),
         ...(Object.keys(panelFiltersByID).length > 0 ? { panelFilters: panelFiltersByID } : {}),
         ...(viewState.includeWipes ? { includeWipes: true } : {}),
+        ...(timeRange?.enabled && timeRange.startOffsetMs != null && timeRange.endOffsetMs != null
+          ? { timeRange: { startMs: timeRange.startOffsetMs, endMs: timeRange.endOffsetMs } }
+          : {}),
       },
-    }), [activeLayoutId, activeLayoutItems, allMergedEnemies, instance.encounters, instance.id, instance.players, panelFiltersByID, panelOptionsByID, panelTypesByID, viewState.encounters, viewState.enemies, viewState.includeWipes, viewState.players]);
+    }), [activeLayoutId, activeLayoutItems, allMergedEnemies, instance.encounters, instance.id, instance.players, panelFiltersByID, panelOptionsByID, panelTypesByID, timeRange?.enabled, timeRange?.startOffsetMs, timeRange?.endOffsetMs, viewState.encounters, viewState.enemies, viewState.includeWipes, viewState.players]);
 
   const copyStateToClipboard = useCallback(async () => {
     try {
