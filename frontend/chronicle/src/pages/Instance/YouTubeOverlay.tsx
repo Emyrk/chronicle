@@ -326,10 +326,17 @@ export function YouTubeOverlay({ videoUrl, timestamps, targetTime, pauseTime, on
     }
     
     if (startVideoTime !== null && endVideoTime !== null) {
+      // Use combat log duration (always accurate) for display,
+      // video times only for seeking. OCR interpolation can distort
+      // video duration when segments span loading screens.
+      const combatLogDurationSecs = targetTime && pauseTime
+        ? (new Date(pauseTime).getTime() - new Date(targetTime).getTime()) / 1000
+        : endVideoTime - startVideoTime;
       return {
         start: startVideoTime,
         end: endVideoTime,
-        duration: endVideoTime - startVideoTime,
+        duration: combatLogDurationSecs,
+        videoDuration: endVideoTime - startVideoTime,
       };
     }
     return null;
@@ -582,27 +589,52 @@ export function YouTubeOverlay({ videoUrl, timestamps, targetTime, pauseTime, on
     const rect = seekBarRef.current.getBoundingClientRect();
     const clickX = e.clientX - rect.left;
     const percent = Math.max(0, Math.min(1, clickX / rect.width));
-    const seekTime = encounterVideoTimes.start + percent * encounterVideoTimes.duration;
+    
+    // Map percent through combat log time → video time for accurate seeking
+    let seekTime: number;
+    if (targetTime && pauseTime && timestamps?.length) {
+      const startMs = new Date(targetTime).getTime();
+      const endMs = new Date(pauseTime).getTime();
+      const targetDate = new Date(startMs + percent * (endMs - startMs));
+      const targetSec = targetDate.getUTCHours() * 3600 + targetDate.getUTCMinutes() * 60 + targetDate.getUTCSeconds();
+      seekTime = calculateVideoTime(targetSec, timestamps) ??
+        (encounterVideoTimes.start + percent * encounterVideoTimes.videoDuration);
+    } else {
+      seekTime = encounterVideoTimes.start + percent * encounterVideoTimes.videoDuration;
+    }
     
     playerRef.current.seekTo(seekTime, true);
     // Re-enable auto-pause when user seeks within encounter (if pauseAtEnd is enabled)
     if (pauseAtEnd) {
       pauseVideoTimeRef.current = encounterVideoTimes.end;
     }
-  }, [encounterVideoTimes, pauseAtEnd]);
+  }, [encounterVideoTimes, pauseAtEnd, targetTime, pauseTime, timestamps]);
 
-  // Calculate seek bar progress
+  // Calculate seek bar progress using combat log time for accuracy
   const seekBarProgress = useMemo(() => {
-    if (!encounterVideoTimes) return 0;
+    if (!encounterVideoTimes || !targetTime) return 0;
+    const combatLogTime = timestamps?.length && referenceDate
+      ? videoTimeToCombatLogTime(currentVideoTime, timestamps, referenceDate)
+      : null;
+    if (combatLogTime) {
+      const elapsed = (combatLogTime.getTime() - new Date(targetTime).getTime()) / 1000;
+      return Math.max(0, Math.min(1, elapsed / encounterVideoTimes.duration));
+    }
     const elapsed = currentVideoTime - encounterVideoTimes.start;
-    return Math.max(0, Math.min(1, elapsed / encounterVideoTimes.duration));
-  }, [currentVideoTime, encounterVideoTimes]);
+    return Math.max(0, Math.min(1, elapsed / encounterVideoTimes.videoDuration));
+  }, [currentVideoTime, encounterVideoTimes, timestamps, referenceDate, targetTime]);
 
-  // Calculate elapsed time within encounter
+  // Calculate elapsed time within encounter using combat log time
   const encounterElapsed = useMemo(() => {
-    if (!encounterVideoTimes) return 0;
+    if (!encounterVideoTimes || !targetTime) return 0;
+    const combatLogTime = timestamps?.length && referenceDate
+      ? videoTimeToCombatLogTime(currentVideoTime, timestamps, referenceDate)
+      : null;
+    if (combatLogTime) {
+      return Math.max(0, (combatLogTime.getTime() - new Date(targetTime).getTime()) / 1000);
+    }
     return Math.max(0, currentVideoTime - encounterVideoTimes.start);
-  }, [currentVideoTime, encounterVideoTimes]);
+  }, [currentVideoTime, encounterVideoTimes, timestamps, referenceDate, targetTime]);
 
   if (!videoId) {
     return null;
