@@ -267,6 +267,12 @@ WHERE true
             li.guild_id = @guild_id
         ELSE true
     END
+    -- Filter by player GUID
+    AND CASE
+        WHEN @player_guid :: wow_guid != 0 THEN
+            EXISTS (SELECT 1 FROM log_instance_players lip_filter WHERE lip_filter.instance_id = li.id AND lip_filter.unit_guid = @player_guid)
+        ELSE true
+    END
 ORDER BY first_encounter_time DESC, li.id DESC
 LIMIT CASE WHEN @limit_count :: int > 0 THEN @limit_count ELSE NULL END
 OFFSET @offset_count;

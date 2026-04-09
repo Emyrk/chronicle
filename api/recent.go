@@ -7,6 +7,7 @@ import (
 
 	"github.com/Emyrk/chronicle/api/chroniclesdk"
 	"github.com/Emyrk/chronicle/api/httpapi"
+	"github.com/Emyrk/chronicle/combatlog/parser/guid"
 	"github.com/Emyrk/chronicle/database"
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgtype"
@@ -101,6 +102,13 @@ func (api *API) InstancesByTimeRange(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
+	var playerGUID guid.GUID
+	if pg := q.Get("player_guid"); pg != "" {
+		if g, parseErr := guid.FromString(pg); parseErr == nil {
+			playerGUID = g
+		}
+	}
+
 	var limitCount int32
 	if l := q.Get("limit"); l != "" {
 		if parsed, err := strconv.Atoi(l); err == nil && parsed > 0 {
@@ -122,6 +130,7 @@ func (api *API) InstancesByTimeRange(w http.ResponseWriter, r *http.Request) {
 		HasVideo:      hasVideo,
 		RealmID:       realmID,
 		GuildID:       guildID,
+		PlayerGuid:    playerGUID,
 		LimitCount:    limitCount,
 		OffsetCount:   offsetCount,
 	})

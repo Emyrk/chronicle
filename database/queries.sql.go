@@ -2117,9 +2117,15 @@ WHERE true
             li.guild_id = $6
         ELSE true
     END
+    -- Filter by player GUID
+    AND CASE
+        WHEN $7 :: wow_guid != 0 THEN
+            EXISTS (SELECT 1 FROM log_instance_players lip_filter WHERE lip_filter.instance_id = li.id AND lip_filter.unit_guid = $7)
+        ELSE true
+    END
 ORDER BY first_encounter_time DESC, li.id DESC
-LIMIT CASE WHEN $8 :: int > 0 THEN $8 ELSE NULL END
-OFFSET $7
+LIMIT CASE WHEN $9 :: int > 0 THEN $9 ELSE NULL END
+OFFSET $8
 `
 
 type ListInstancesByTimeRangeParams struct {
@@ -2129,6 +2135,7 @@ type ListInstancesByTimeRangeParams struct {
 	HasVideo      string             `db:"has_video" json:"has_video"`
 	RealmID       uuid.UUID          `db:"realm_id" json:"realm_id"`
 	GuildID       uuid.UUID          `db:"guild_id" json:"guild_id"`
+	PlayerGuid    guid.GUID          `db:"player_guid" json:"player_guid"`
 	OffsetCount   int32              `db:"offset_count" json:"offset_count"`
 	LimitCount    int32              `db:"limit_count" json:"limit_count"`
 }
@@ -2160,6 +2167,7 @@ func (q *sqlQuerier) ListInstancesByTimeRange(ctx context.Context, arg ListInsta
 		arg.HasVideo,
 		arg.RealmID,
 		arg.GuildID,
+		arg.PlayerGuid,
 		arg.OffsetCount,
 		arg.LimitCount,
 	)
