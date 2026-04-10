@@ -269,7 +269,7 @@ WHERE true
     END
     -- Filter by player GUID
     AND CASE
-        WHEN @player_guid :: wow_guid != 0 THEN
+        WHEN @player_guid :: wow_guid != '0x0000000000000000' :: wow_guid THEN
             EXISTS (SELECT 1 FROM log_instance_players lip_filter WHERE lip_filter.instance_id = li.id AND lip_filter.unit_guid = @player_guid)
         ELSE true
     END
