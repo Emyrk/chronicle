@@ -18,6 +18,7 @@ import (
 	"github.com/Emyrk/chronicle/combatlog/parser/vanilla/state/encounters/encounterevents"
 	"github.com/Emyrk/chronicle/combatlog/parser/vanilla/state/encounters/instances/instancehook"
 	"github.com/Emyrk/chronicle/combatlog/parser/vanilla/state/encounters/period"
+	"github.com/Emyrk/chronicle/combatlog/parser/vanilla/state/loot"
 	"github.com/Emyrk/chronicle/combatlog/parser/vanilla/state/participants"
 	"github.com/Emyrk/chronicle/combatlog/parser/vanilla/state/unitdb"
 	"github.com/Emyrk/chronicle/internal/timings"
@@ -53,8 +54,9 @@ type Hookable struct {
 	completedFights []Fight
 
 	// finalized references
-	g *armory.Tracker
-	p *participants.Tracker
+	g            *armory.Tracker
+	p            *participants.Tracker
+	lootTracking *loot.LootTracker
 }
 
 func (f *CommonFactory) NewHookable(ctx context.Context, logger *slog.Logger, db *unitdb.Units, z zone.Zone) *Hookable {
@@ -78,6 +80,8 @@ func (f *CommonFactory) NewHookable(ctx context.Context, logger *slog.Logger, db
 	}
 	characters.RegisterHook(cie)
 
+	lootTracking := loot.New(db)
+
 	overheals := &Overhealing{
 		deficits: make(map[guid.GUID]int32),
 	}
@@ -93,11 +97,13 @@ func (f *CommonFactory) NewHookable(ctx context.Context, logger *slog.Logger, db
 		events:        encounterevents.NewEvents(),
 		g:             g,
 		p:             p,
+		lootTracking:  lootTracking,
 		hooks: []instancehook.Hook{
 			g,
 			ce,
 			cie,
 			overheals,
+			lootTracking,
 		},
 		verbose:         parseoptions.IsVerbose(ctx),
 		timings:         timings.New(),
@@ -430,6 +436,7 @@ func (h *Hookable) Finalize(ctx context.Context) (*FinalizedInstance, error) {
 		Encounters: encounters,
 		// TODO: Break off guild and spellbook
 		Guilds:       h.g,
+		Loot:         h.lootTracking,
 		Participants: h.p,
 
 		//SpellBook:  c.SpellBook,

@@ -30,8 +30,8 @@ CREATE TYPE log_instance_event_type AS ENUM (
     'spell_start',
     'spell_fail',
     'unit_classification',
-    'combatant_info',
-    'dispel'
+    'dispel',
+    'combatant_info'
 );
 
 CREATE TYPE log_type AS ENUM (
@@ -346,6 +346,20 @@ CREATE TABLE guilds (
     realm_id uuid NOT NULL,
     name text NOT NULL,
     created_at timestamp with time zone DEFAULT now()
+);
+
+CREATE TABLE instance_loot (
+    id uuid DEFAULT gen_random_uuid() NOT NULL,
+    instance_id uuid NOT NULL,
+    realm_id uuid NOT NULL,
+    source_guid bigint NOT NULL,
+    source_ts timestamp with time zone NOT NULL,
+    received_guid bigint NOT NULL,
+    received_ts timestamp with time zone NOT NULL,
+    item_id integer NOT NULL,
+    item_name text NOT NULL,
+    loot_suffix integer DEFAULT 0 NOT NULL,
+    quantity integer DEFAULT 1 NOT NULL
 );
 
 CREATE TABLE log_instance_encounter_damage_unit_summary (
@@ -903,6 +917,9 @@ ALTER TABLE ONLY guilds
 ALTER TABLE ONLY guilds
     ADD CONSTRAINT guilds_realm_id_name_key UNIQUE (realm_id, name);
 
+ALTER TABLE ONLY instance_loot
+    ADD CONSTRAINT instance_loot_pkey PRIMARY KEY (id);
+
 ALTER TABLE ONLY log_file
     ADD CONSTRAINT log_file_pkey PRIMARY KEY (id);
 
@@ -1026,6 +1043,12 @@ CREATE INDEX idx_guild_page_panels_tab ON guild_page_panels USING btree (tab_id)
 
 CREATE INDEX idx_guild_page_tabs_page ON guild_page_tabs USING btree (page_id);
 
+CREATE INDEX idx_instance_loot_instance ON instance_loot USING btree (instance_id);
+
+CREATE INDEX idx_instance_loot_item ON instance_loot USING btree (item_id);
+
+CREATE INDEX idx_instance_loot_received ON instance_loot USING btree (received_guid);
+
 CREATE INDEX idx_log_instance_encounters_instance_id ON log_instance_encounters USING btree (instance_id);
 
 CREATE INDEX idx_log_instance_players_instance_id ON log_instance_players USING btree (instance_id);
@@ -1102,6 +1125,9 @@ ALTER TABLE ONLY guild_settings
 
 ALTER TABLE ONLY guilds
     ADD CONSTRAINT guilds_realm_id_fkey FOREIGN KEY (realm_id) REFERENCES wow_server_realms(id);
+
+ALTER TABLE ONLY instance_loot
+    ADD CONSTRAINT instance_loot_instance_id_fkey FOREIGN KEY (instance_id) REFERENCES log_instances(id) ON DELETE CASCADE;
 
 ALTER TABLE ONLY log_file
     ADD CONSTRAINT log_file_owner_fkey FOREIGN KEY (owner) REFERENCES users(id);

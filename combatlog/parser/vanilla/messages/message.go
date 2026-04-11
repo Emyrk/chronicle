@@ -594,3 +594,26 @@ type Dispel struct {
 
 func (d Dispel) Affects() []guid.GUID { return []guid.GUID{d.Caster, d.Target} }
 func (*Dispel) isMessage()            {}
+
+type Loot struct {
+	MessageBase
+	PlayerName   string
+	ItemName     string
+	ItemID       int32
+	ItemSuffixID int32
+	Quantity     int32
+}
+
+func (l Loot) Affects() []guid.GUID { return []guid.GUID{} }
+func (*Loot) isMessage()            {}
+
+type LootTrade struct {
+	MessageBase
+	FromPlayerName string
+	ToPlayerName   string
+	ItemName       string
+	// Quantity?
+}
+
+func (l LootTrade) Affects() []guid.GUID { return []guid.GUID{} }
+func (*LootTrade) isMessage()            {}

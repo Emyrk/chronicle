@@ -356,6 +356,10 @@ func (w *WorkerLogParse) Work(ctx context.Context, job *river.Job[ArgsLogParse])
 				guildID = guild.ID
 			}
 
+			if err := finalized.Loot.Insert(ctx, instanceID, realmID, tx); err != nil {
+				return fmt.Errorf("insert loot: %w", err)
+			}
+
 			// Compute instance time range from encounters
 			var instanceStart, instanceEnd pgtype.Timestamptz
 			for _, enc := range finalized.Encounters {

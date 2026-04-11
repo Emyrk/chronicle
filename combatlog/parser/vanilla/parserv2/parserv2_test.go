@@ -264,6 +264,40 @@ func TestParserMessages(t *testing.T) {
 		)
 	})
 
+	t.Run("Loot", func(t *testing.T) {
+		testCase(t,
+			"1775358110340|LOOT|Cielcin||cffffffff|Hitem:61760:0:0:0|h[Burnt Copy of \"Vorgendor\"]|h|r\n",
+			&messages.Loot{
+				MessageBase:  messages.Base(time.UnixMilli(1775358110340)),
+				PlayerName:   "Cielcin",
+				ItemName:     `Burnt Copy of "Vorgendor"`,
+				ItemID:       61760,
+				ItemSuffixID: 0,
+				Quantity:     1,
+			},
+		)
+
+		testCase(t,
+			"1775355374273|LOOT|Defen||cffffffff|Hitem:14047:0:0:0|h[Runecloth]|h|rx3",
+			&messages.Loot{
+				MessageBase:  messages.Base(time.UnixMilli(1775355374273)),
+				PlayerName:   "Defen",
+				ItemName:     `Runecloth`,
+				ItemID:       14047,
+				ItemSuffixID: 0,
+				Quantity:     3,
+			})
+
+		testCase(t,
+			"1775356811498|LOOT_TRADE|Jimmythehand trades item Bloodfang Spaulders to Eithinis.",
+			&messages.LootTrade{
+				MessageBase:    messages.Base(time.UnixMilli(1775356811498)),
+				FromPlayerName: "Jimmythehand",
+				ToPlayerName:   "Eithinis",
+				ItemName:       "Bloodfang Spaulders",
+			})
+	})
+
 	//t.Run("MissPeriodicAoE", func(t *testing.T) {
 	//	t.Parallel()
 	//

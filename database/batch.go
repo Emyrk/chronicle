@@ -75,6 +75,76 @@ func (b *InsertEncounterCharacterFightsBatchResults) Close() error {
 	return b.br.Close()
 }
 
+const insertInstanceLoot = `-- name: InsertInstanceLoot :batchexec
+INSERT INTO instance_loot (
+    instance_id, realm_id,
+    source_guid, source_ts,
+    received_guid, received_ts,
+    item_id, item_name, loot_suffix, quantity
+) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
+`
+
+type InsertInstanceLootBatchResults struct {
+	br     pgx.BatchResults
+	tot    int
+	closed bool
+}
+
+type InsertInstanceLootParams struct {
+	InstanceID   uuid.UUID          `db:"instance_id" json:"instance_id"`
+	RealmID      uuid.UUID          `db:"realm_id" json:"realm_id"`
+	SourceGuid   int64              `db:"source_guid" json:"source_guid"`
+	SourceTs     pgtype.Timestamptz `db:"source_ts" json:"source_ts"`
+	ReceivedGuid int64              `db:"received_guid" json:"received_guid"`
+	ReceivedTs   pgtype.Timestamptz `db:"received_ts" json:"received_ts"`
+	ItemID       int32              `db:"item_id" json:"item_id"`
+	ItemName     string             `db:"item_name" json:"item_name"`
+	LootSuffix   int32              `db:"loot_suffix" json:"loot_suffix"`
+	Quantity     int32              `db:"quantity" json:"quantity"`
+}
+
+func (q *sqlQuerier) InsertInstanceLoot(ctx context.Context, arg []InsertInstanceLootParams) *InsertInstanceLootBatchResults {
+	batch := &pgx.Batch{}
+	for _, a := range arg {
+		vals := []interface{}{
+			a.InstanceID,
+			a.RealmID,
+			a.SourceGuid,
+			a.SourceTs,
+			a.ReceivedGuid,
+			a.ReceivedTs,
+			a.ItemID,
+			a.ItemName,
+			a.LootSuffix,
+			a.Quantity,
+		}
+		batch.Queue(insertInstanceLoot, vals...)
+	}
+	br := q.db.SendBatch(ctx, batch)
+	return &InsertInstanceLootBatchResults{br, len(arg), false}
+}
+
+func (b *InsertInstanceLootBatchResults) Exec(f func(int, error)) {
+	defer b.br.Close()
+	for t := 0; t < b.tot; t++ {
+		if b.closed {
+			if f != nil {
+				f(t, ErrBatchAlreadyClosed)
+			}
+			continue
+		}
+		_, err := b.br.Exec()
+		if f != nil {
+			f(t, err)
+		}
+	}
+}
+
+func (b *InsertInstanceLootBatchResults) Close() error {
+	b.closed = true
+	return b.br.Close()
+}
+
 const insertInstancePlayers = `-- name: InsertInstancePlayers :batchexec
 INSERT INTO
   log_instance_players (instance_id, unit_guid, name, level, class, race, guild_id)

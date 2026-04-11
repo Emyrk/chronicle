@@ -84,6 +84,15 @@ func (m *Matched) peek() string {
 	return m.parts[m.index]
 }
 
+func (m *Matched) rest() []string {
+	if m.index >= len(m.parts) {
+		return []string{}
+	}
+	res := m.parts[m.index:]
+	m.index = len(m.parts)
+	return res
+}
+
 func (m *Matched) SetError(err error) {
 	if m.err != nil {
 		return // Do not override existing error

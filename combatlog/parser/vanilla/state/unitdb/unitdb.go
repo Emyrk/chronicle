@@ -12,16 +12,18 @@ import (
 
 type Units struct {
 	// TODO: Slain to remove units?
-	Info      map[guid.GUID]unitinfo.Info
-	Players   map[guid.GUID]combatant.Combatant
-	Possessed map[guid.GUID]PossessionState
+	Info         map[guid.GUID]unitinfo.Info
+	Players      map[guid.GUID]combatant.Combatant
+	PlayerByName map[string]guid.GUID
+	Possessed    map[guid.GUID]PossessionState
 }
 
 func New() *Units {
 	return &Units{
-		Info:      make(map[guid.GUID]unitinfo.Info),
-		Players:   make(map[guid.GUID]combatant.Combatant),
-		Possessed: make(map[guid.GUID]PossessionState),
+		Info:         make(map[guid.GUID]unitinfo.Info),
+		Players:      make(map[guid.GUID]combatant.Combatant),
+		PlayerByName: make(map[string]guid.GUID),
+		Possessed:    make(map[guid.GUID]PossessionState),
 	}
 }
 
@@ -131,6 +133,14 @@ func (us *Units) GetPlayer(gid guid.GUID) (combatant.Combatant, bool) {
 	return c, ok
 }
 
+func (us *Units) GetPlayerByName(name string) (combatant.Combatant, bool) {
+	gid, ok := us.PlayerByName[name]
+	if !ok {
+		return combatant.Combatant{}, false
+	}
+	return us.GetPlayer(gid)
+}
+
 func (us *Units) Update(u unitinfo.Info) {
 	if u.Name == "" {
 		// Do no overwrite an existing entry if this one is missing a name.
@@ -138,6 +148,10 @@ func (us *Units) Update(u unitinfo.Info) {
 		if exists {
 			return
 		}
+	}
+
+	if u.Guid.IsPlayer() && u.Name != "" {
+		us.PlayerByName[u.Name] = u.Guid
 	}
 	us.Info[u.Guid] = u
 }
@@ -157,6 +171,7 @@ func (us *Units) UpdateUnitName(gid guid.GUID, name string) {
 
 func (us *Units) UpdatePlayer(c combatant.Combatant) {
 	us.Players[c.Guid] = c
+	us.PlayerByName[c.Name] = c.Guid
 	// TODO: REMOVE this. It is a crutch because `unit_info` is not perfect.
 	if _, ok := us.Info[c.Guid]; !ok {
 		us.Update(unitinfo.Info{

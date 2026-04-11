@@ -1627,6 +1627,42 @@ func (q *sqlQuerier) UpsertGuildSettings(ctx context.Context, arg UpsertGuildSet
 	return i, err
 }
 
+const getInstanceLoot = `-- name: GetInstanceLoot :many
+SELECT id, instance_id, realm_id, source_guid, source_ts, received_guid, received_ts, item_id, item_name, loot_suffix, quantity FROM instance_loot WHERE instance_id = $1 ORDER BY source_ts
+`
+
+func (q *sqlQuerier) GetInstanceLoot(ctx context.Context, instanceID uuid.UUID) ([]InstanceLoot, error) {
+	rows, err := q.db.Query(ctx, getInstanceLoot, instanceID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []InstanceLoot
+	for rows.Next() {
+		var i InstanceLoot
+		if err := rows.Scan(
+			&i.ID,
+			&i.InstanceID,
+			&i.RealmID,
+			&i.SourceGuid,
+			&i.SourceTs,
+			&i.ReceivedGuid,
+			&i.ReceivedTs,
+			&i.ItemID,
+			&i.ItemName,
+			&i.LootSuffix,
+			&i.Quantity,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const deleteAllParsedLogsByGroupID = `-- name: DeleteAllParsedLogsByGroupID :exec
 DELETE FROM
   parsed_log_group

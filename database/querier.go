@@ -50,6 +50,7 @@ type sqlcQuerier interface {
 	// Guild Settings
 	GetGuildSettings(ctx context.Context, guildID uuid.UUID) (GuildSetting, error)
 	GetInstanceEncounterCharacterFights(ctx context.Context, instanceID uuid.UUID) ([]LogInstanceEncounterHostile, error)
+	GetInstanceLoot(ctx context.Context, instanceID uuid.UUID) ([]InstanceLoot, error)
 	GetInstanceYoutubeData(ctx context.Context, logInstanceID uuid.UUID) (LogInstanceYoutubeTimestamped, error)
 	GetItemRandomPropertiesByID(ctx context.Context, id int32) (DbcItemRandomProperty, error)
 	GetItemSetBonuses(ctx context.Context, setID int32) ([]DbcItemSetBonu, error)
@@ -82,6 +83,7 @@ type sqlcQuerier interface {
 	InsertGuildPagePanel(ctx context.Context, arg InsertGuildPagePanelParams) (GuildPagePanel, error)
 	InsertGuildPageTab(ctx context.Context, arg InsertGuildPageTabParams) (GuildPageTab, error)
 	InsertInstance(ctx context.Context, arg InsertInstanceParams) (LogInstance, error)
+	InsertInstanceLoot(ctx context.Context, arg []InsertInstanceLootParams) *InsertInstanceLootBatchResults
 	InsertInstancePlayers(ctx context.Context, arg []InsertInstancePlayersParams) *InsertInstancePlayersBatchResults
 	InsertInstanceUnits(ctx context.Context, arg []InsertInstanceUnitsParams) *InsertInstanceUnitsBatchResults
 	InsertLogFile(ctx context.Context, arg InsertLogFileParams) (LogFile, error)

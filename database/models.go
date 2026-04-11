@@ -156,8 +156,8 @@ const (
 	LogInstanceEventTypeSpellStart         LogInstanceEventType = "spell_start"
 	LogInstanceEventTypeSpellFail          LogInstanceEventType = "spell_fail"
 	LogInstanceEventTypeUnitClassification LogInstanceEventType = "unit_classification"
-	LogInstanceEventTypeCombatantInfo      LogInstanceEventType = "combatant_info"
 	LogInstanceEventTypeDispel             LogInstanceEventType = "dispel"
+	LogInstanceEventTypeCombatantInfo      LogInstanceEventType = "combatant_info"
 )
 
 func (e *LogInstanceEventType) Scan(src interface{}) error {
@@ -209,8 +209,8 @@ func (e LogInstanceEventType) Valid() bool {
 		LogInstanceEventTypeSpellStart,
 		LogInstanceEventTypeSpellFail,
 		LogInstanceEventTypeUnitClassification,
-		LogInstanceEventTypeCombatantInfo,
-		LogInstanceEventTypeDispel:
+		LogInstanceEventTypeDispel,
+		LogInstanceEventTypeCombatantInfo:
 		return true
 	}
 	return false
@@ -230,8 +230,8 @@ func AllLogInstanceEventTypeValues() []LogInstanceEventType {
 		LogInstanceEventTypeSpellStart,
 		LogInstanceEventTypeSpellFail,
 		LogInstanceEventTypeUnitClassification,
-		LogInstanceEventTypeCombatantInfo,
 		LogInstanceEventTypeDispel,
+		LogInstanceEventTypeCombatantInfo,
 	}
 }
 
@@ -766,6 +766,20 @@ type GuildSetting struct {
 	GuildID                uuid.UUID          `db:"guild_id" json:"guild_id"`
 	AllowJoinRequestsUntil pgtype.Timestamptz `db:"allow_join_requests_until" json:"allow_join_requests_until"`
 	UpdatedAt              pgtype.Timestamptz `db:"updated_at" json:"updated_at"`
+}
+
+type InstanceLoot struct {
+	ID           uuid.UUID          `db:"id" json:"id"`
+	InstanceID   uuid.UUID          `db:"instance_id" json:"instance_id"`
+	RealmID      uuid.UUID          `db:"realm_id" json:"realm_id"`
+	SourceGuid   int64              `db:"source_guid" json:"source_guid"`
+	SourceTs     pgtype.Timestamptz `db:"source_ts" json:"source_ts"`
+	ReceivedGuid int64              `db:"received_guid" json:"received_guid"`
+	ReceivedTs   pgtype.Timestamptz `db:"received_ts" json:"received_ts"`
+	ItemID       int32              `db:"item_id" json:"item_id"`
+	ItemName     string             `db:"item_name" json:"item_name"`
+	LootSuffix   int32              `db:"loot_suffix" json:"loot_suffix"`
+	Quantity     int32              `db:"quantity" json:"quantity"`
 }
 
 type LogFile struct {
