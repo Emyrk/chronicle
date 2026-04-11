@@ -25,6 +25,7 @@ import { possessionProcessor } from "../PossessionPanel/possession.processor";
 import { unitLookupProcessor } from "../UnitLookup/unitLookup.processor";
 import { dispelProcessor } from "../Dispel/dispel.processor";
 import { equipmentProcessor } from "../Equipment/equipment.processor";
+import { lootProcessor } from "../LootPanel/loot.processor";
 
 // Export individual processors
 export { damageDoneProcessor, vulnerabilityEffectProcessor, enemyDamageDoneProcessor, petDamageDoneProcessor, friendlyFireProcessor } from "../DamageDone/damageDone.processor";
@@ -49,6 +50,7 @@ export { possessionProcessor } from "../PossessionPanel/possession.processor";
 export { unitLookupProcessor } from "../UnitLookup/unitLookup.processor";
 export { dispelProcessor } from "../Dispel/dispel.processor";
 export { equipmentProcessor } from "../Equipment/equipment.processor";
+export { lootProcessor } from "../LootPanel/loot.processor";
 
 // Export state types
 export type { DamageDoneResult as DamageDoneState, DamageDoneData, DamageSourceType } from "../DamageDone/damageDone.processor";
@@ -71,6 +73,7 @@ export type { TimelineSeriesConfig, AggregationType, TimelineSettings } from "..
 export type { RotationsResult, CastEntry, AuraSegment } from "../Rotations/rotations.processor";
 export type { DispelResult, DispelEntityData, DispelSpellData, DispelCategory, DispelLogEvent } from "../Dispel/dispel.processor";
 export type { EquipmentResult, PlayerSnapshot } from "../Equipment/equipment.processor";
+export type { LootResult } from "../LootPanel/loot.processor";
 // Note: ResourceType is exported from allActivityDebug.processor above
 export type { PlayerRoleData, InferredRole, RoleSummary, RoleDetectionDebug, InferRolesResult } from "../Roles/roles.processor";
 export { inferRoles, getRoleSummary } from "../Roles/roles.processor";
@@ -131,4 +134,6 @@ export const processorRegistry: Record<string, PanelProcessor<any, any>> = {
   dispel_log: dispelProcessor,
   // Equipment
   equipment: equipmentProcessor,
+  // Loot
+  loot: lootProcessor,
 };

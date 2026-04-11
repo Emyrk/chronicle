@@ -297,6 +297,20 @@ export interface InstanceDefaultsResponse {
     readonly action_bar_layouts: readonly UserPanelLayout[];
 }
 
+// From chroniclesdk/loot.go
+export interface InstanceLoot {
+    readonly source_guid: GUID;
+    readonly source_ts: string;
+    readonly received_guid: GUID;
+    readonly received_ts: string;
+    readonly item_id: number;
+    readonly item_name: string;
+    readonly loot_suffix: number;
+    readonly quantity: number;
+    readonly quality: number;
+    readonly icon: string;
+}
+
 // From chroniclesdk/log.go
 export interface InstancePlayer {
     readonly name: string;

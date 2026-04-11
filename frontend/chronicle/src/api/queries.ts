@@ -12,6 +12,7 @@ import type {
   WoWEncounter as WoWEncounterGenerated,
   WoWInstance as WoWInstanceGenerated,
   Video as VideoGenerated,
+  InstanceLoot as InstanceLootGenerated,
   AdminUsersResponse as AdminUsersResponseGenerated,
   AdminLogsResponse as AdminLogsResponseGenerated,
   User as UserGenerated,
@@ -58,6 +59,8 @@ export type WoWParsedInstance = WoWParsedInstanceGenerated;
 export type WoWEncounter = WoWEncounterGenerated;
 export type WoWInstance = WoWInstanceGenerated;
 export type Video = VideoGenerated;
+export type InstanceLoot = InstanceLootGenerated;
+
 export type AdminUsersResponse = AdminUsersResponseGenerated;
 export type AdminLogsResponse = AdminLogsResponseGenerated;
 export type User = UserGenerated;
@@ -677,6 +680,20 @@ export function useInstanceYoutube(instanceId: string, options?: Omit<UseQueryOp
     ...options,
   });
 }
+
+export function useInstanceLoot(instanceId: string, options?: Omit<UseQueryOptions<InstanceLoot[]>, "queryKey" | "queryFn">) {
+  return useQuery({
+    queryKey: ["instanceLoot", instanceId],
+    retry: false,
+    queryFn: async () => {
+      const response = await fetch(`/api/v1/raidlogs/instances/${instanceId}/loot`);
+      if (!response.ok) throw new Error("Failed to fetch loot");
+      return response.json() as Promise<InstanceLoot[]>;
+    },
+    ...options,
+  });
+}
+
 
 export function useUploadInstanceYoutube() {
   const queryClient = useQueryClient();

@@ -1,6 +1,6 @@
 CREATE TABLE instance_loot (
     id            UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-    instance_id   UUID NOT NULL REFERENCES log_instances(id) ON DELETE CASCADE,
+    instance_id   UUID NOT NULL REFERENCES log_instances(id) ON DELETE CASCADE INITIALLY DEFERRED,
     realm_id      UUID NOT NULL,
     -- Who originally looted
     source_guid   BIGINT NOT NULL,

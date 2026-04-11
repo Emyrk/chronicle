@@ -56,6 +56,7 @@ import { createTimelinePanel } from "./Timeline/Timeline";
 import { createRotationsPanel } from "./Rotations/Rotations";
 import { createUnitLookupPanel } from "./UnitLookup/UnitLookup";
 import { createEquipmentPanel } from "./Equipment/Equipment";
+import { createLootPanel } from "./LootPanel/LootPanel";
 import { createDispelsDonePanel, createDispelsReceivedPanel } from "./Dispel/Dispel";
 import { createDispelLogPanel } from "./Dispel/DispelLog";
 // TODO: Avoidance panel requires spell school data which isn't available yet
@@ -111,6 +112,7 @@ export const PANELS: Record<string, PanelDefinition<any, any>> = {
   dispels_done: createDispelsDonePanel(),
   dispels_received: createDispelsReceivedPanel(),
   dispel_log: createDispelLogPanel(),
+  loot: createLootPanel(),
 };
 
 export type EventsPanelType = keyof typeof PANELS;

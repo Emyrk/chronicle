@@ -180,3 +180,22 @@ func (api *API) GetInstanceYoutube(w http.ResponseWriter, r *http.Request) {
 
 	httpapi.Write(ctx, w, http.StatusOK, db2sdk.Video(data))
 }
+
+func (api *API) GetInstanceLoot(w http.ResponseWriter, r *http.Request) {
+	ctx := r.Context()
+	inst := httpmw.Instance(ctx)
+	db := api.Opts.Zed
+
+	loot, err := db.GetInstanceLoot(ctx, inst.ID)
+	if err != nil {
+		httpapi.HandleResponseError(ctx, w, err, httpapi.APIError{
+			Response: chroniclesdk.Response{
+				Message: "Failed to fetch loot for instance",
+				Detail:  err.Error(),
+			},
+		})
+		return
+	}
+
+	httpapi.Write(ctx, w, http.StatusOK, db2sdk.InstanceLoot(loot))
+}

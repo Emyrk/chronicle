@@ -251,6 +251,8 @@ func (api *API) Routes() chi.Router {
 							r.Get("/", api.Instance)
 
 							r.Get("/youtube", api.GetInstanceYoutube)
+							r.Get("/loot", api.GetInstanceLoot)
+
 							r.Group(func(r chi.Router) {
 								r.Use(
 									api.Auth.Authenticated(false),

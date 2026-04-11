@@ -81,7 +81,12 @@ INSERT INTO instance_loot (
     source_guid, source_ts,
     received_guid, received_ts,
     item_id, item_name, loot_suffix, quantity
-) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
+)
+SELECT $1, $2, $3, $4, $5, $6, $7, $8, $9, $10
+WHERE NOT EXISTS (
+    SELECT 1 FROM world_item_template wit
+    WHERE wit.entry = $7 AND wit.quality <= 1
+)
 `
 
 type InsertInstanceLootBatchResults struct {

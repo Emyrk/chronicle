@@ -294,6 +294,25 @@ func JobStatus(status rivertype.JobRow) chroniclesdk.JobStatus {
 	}
 }
 
+func InstanceLoot(loot []database.GetInstanceLootRow) []chroniclesdk.InstanceLoot {
+	result := make([]chroniclesdk.InstanceLoot, 0, len(loot))
+	for _, l := range loot {
+		result = append(result, chroniclesdk.InstanceLoot{
+			SourceGuid:   guid.GUID(l.SourceGuid),
+			SourceTS:     l.SourceTs.Time,
+			ReceivedGuid: guid.GUID(l.ReceivedGuid),
+			ReceivedTS:   l.ReceivedTs.Time,
+			ItemID:       l.ItemID,
+			ItemName:     l.ItemName,
+			LootSuffix:   l.LootSuffix,
+			Quantity:     l.Quantity,
+			Quality:      l.Quality,
+			Icon:         l.Icon,
+		})
+	}
+	return result
+}
+
 func Video(video database.LogInstanceYoutubeTimestamped) chroniclesdk.Video {
 	return chroniclesdk.Video{
 		URL:        video.VideoUrl,
