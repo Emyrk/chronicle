@@ -128,5 +128,5 @@ func buildPeriod(p period.Period, enc instances.Encounter) PeriodSnapshot {
 // BuildSnapshotJSON builds a snapshot and marshals it to deterministic JSON.
 func BuildSnapshotJSON(finalized []*instances.FinalizedInstance, instanceNames []string) ([]byte, error) {
 	snap := BuildSnapshot(finalized, instanceNames)
-	return json.MarshalIndent(snap, "", "  ")
+	return json.Marshal(snap)
 }

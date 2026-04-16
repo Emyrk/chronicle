@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"compress/gzip"
 	"context"
+	"encoding/json"
 	"database/sql"
 	"errors"
 	"fmt"
@@ -160,8 +161,14 @@ func (w *WorkerRegressionSnapshot) Work(ctx context.Context, job *river.Job[Args
 	prev, err := db.GetLatestRegressionSnapshot(ctx, job.Args.FixtureID)
 	if err == nil {
 		previousSnapshotID = uuid.NullUUID{UUID: prev.ID, Valid: true}
-		matches := bytes.Equal(prev.Snapshot, jsonBytes)
-		matchesPrevious = pgtype.Bool{Bool: matches, Valid: true}
+		// Compare as compact JSON since JSONB storage strips formatting
+		var prevCompact, newCompact bytes.Buffer
+		if err := json.Compact(&prevCompact, prev.Snapshot); err == nil {
+			if err := json.Compact(&newCompact, jsonBytes); err == nil {
+				matches := bytes.Equal(prevCompact.Bytes(), newCompact.Bytes())
+				matchesPrevious = pgtype.Bool{Bool: matches, Valid: true}
+			}
+		}
 	}
 	// If no previous snapshot exists (sql.ErrNoRows), leave both as null
 
