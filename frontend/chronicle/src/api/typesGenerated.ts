@@ -130,6 +130,12 @@ export interface CreateJoinRequestBody {
     readonly message: string;
 }
 
+// From chroniclesdk/regression.go
+export interface CreateRegressionFixtureRequest {
+    readonly log_group_id: string;
+    readonly note: string;
+}
+
 // From chroniclesdk/share.go
 export interface CreateShareRequest {
     readonly instance_id: string;
@@ -621,9 +627,40 @@ export interface RecentInstancesResponse {
     readonly has_more: boolean;
 }
 
+// From chroniclesdk/regression.go
+export interface RegressionFixture {
+    readonly id: string;
+    readonly log_group_id: string;
+    readonly note: string;
+    readonly created_at: string;
+}
+
+// From chroniclesdk/regression.go
+export interface RegressionSnapshotFull extends RegressionSnapshotSummary {
+    readonly snapshot: Record<string, string>;
+}
+
+// From chroniclesdk/regression.go
+export interface RegressionSnapshotSummary {
+    readonly id: string;
+    readonly fixture_id: string;
+    readonly version: string;
+    readonly created_at: string;
+}
+
 // From chroniclesdk/guild_page.go
 export interface ReorderTabsRequest {
     readonly tab_ids: readonly string[];
+}
+
+// From chroniclesdk/regression.go
+export interface RequeueVersionRequest {
+    readonly version: string;
+}
+
+// From chroniclesdk/regression.go
+export interface RequeueVersionResponse {
+    readonly requeued_count: number;
 }
 
 // From chroniclesdk/response.go
@@ -809,6 +846,11 @@ export interface UpdateGuildSettingsRequest {
 export interface UpdateLayoutDefaultsRequest {
     readonly default_desktop_layout_id?: string;
     readonly default_mobile_layout_id?: string;
+}
+
+// From chroniclesdk/regression.go
+export interface UpdateRegressionFixtureNoteRequest {
+    readonly note: string;
 }
 
 // From chroniclesdk/guild_page.go
