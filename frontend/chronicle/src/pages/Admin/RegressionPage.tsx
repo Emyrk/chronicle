@@ -1,7 +1,7 @@
 import { useState, Fragment } from "react";
 import { Card } from "@/components/ui/Card/Card";
 import { Button } from "@/components/ui/button";
-import { TestTube, Plus, Trash2, Camera, RefreshCw, GitCompare, AlertTriangle } from "lucide-react";
+import { TestTube, Plus, Trash2, Camera, RefreshCw, GitCompare, AlertTriangle, ChevronDown, ChevronRight } from "lucide-react";
 import {
   useRegressionFixtures,
   useRegressionSnapshots,
@@ -12,58 +12,186 @@ import {
   useTakeSnapshot,
   useSnapshotAll,
   useRequeueVersion,
+  useDeleteRegressionSnapshot,
 } from "@/api/queries";
-import type { RegressionSnapshotSummary } from "@/api/typesGenerated";
+import type { RegressionSnapshotSummary, RegressionFixture } from "@/api/typesGenerated";
 
-function SimpleDiff({ left, right }: { left: string; right: string }) {
+function SimpleDiff({ left, right, leftLabel, rightLabel }: { left: string; right: string; leftLabel?: string; rightLabel?: string }) {
   const leftLines = left.split("\n");
   const rightLines = right.split("\n");
   const maxLines = Math.max(leftLines.length, rightLines.length);
 
   return (
-    <div className="grid grid-cols-2 gap-2 font-mono text-xs overflow-auto max-h-[600px]">
-      {Array.from({ length: maxLines }, (_, i) => {
-        const l = leftLines[i] ?? "";
-        const r = rightLines[i] ?? "";
-        const differs = l !== r;
-        return (
-          <Fragment key={i}>
-            <div className={differs ? "bg-red-900/30 px-1" : "px-1"}>{l}</div>
-            <div className={differs ? "bg-green-900/30 px-1" : "px-1"}>{r}</div>
-          </Fragment>
-        );
-      })}
+    <div className="overflow-auto max-h-[600px] border border-gray-700 rounded">
+      {(leftLabel || rightLabel) && (
+        <div className="grid grid-cols-2 gap-0 border-b border-gray-700 bg-gray-800/50 text-xs font-semibold text-gray-300 sticky top-0">
+          <div className="px-2 py-1 border-r border-gray-700">{leftLabel || "Left"}</div>
+          <div className="px-2 py-1">{rightLabel || "Right"}</div>
+        </div>
+      )}
+      <div className="grid grid-cols-2 gap-0 font-mono text-xs">
+        {Array.from({ length: maxLines }, (_, i) => {
+          const l = leftLines[i] ?? "";
+          const r = rightLines[i] ?? "";
+          const differs = l !== r;
+          return (
+            <Fragment key={i}>
+              <div className={`px-2 py-0.5 border-r border-gray-800 ${differs ? "bg-red-900/30" : ""}`}>{l || "\u00A0"}</div>
+              <div className={`px-2 py-0.5 ${differs ? "bg-green-900/30" : ""}`}>{r || "\u00A0"}</div>
+            </Fragment>
+          );
+        })}
+      </div>
     </div>
   );
 }
 
-function FixtureSnapshots({
-  fixtureId,
+function FixtureCard({
+  fixture,
   selectedSnapshots,
   onToggleSnapshot,
+  onDeleteSnapshot,
+  onTakeSnapshot,
+  onDeleteFixture,
+  onUpdateNote,
 }: {
-  fixtureId: string;
+  fixture: RegressionFixture;
   selectedSnapshots: Map<string, RegressionSnapshotSummary>;
   onToggleSnapshot: (s: RegressionSnapshotSummary) => void;
+  onDeleteSnapshot: (id: string) => void;
+  onTakeSnapshot: (fixtureId: string) => void;
+  onDeleteFixture: (fixtureId: string) => void;
+  onUpdateNote: (fixtureId: string, note: string) => void;
 }) {
-  const { data: snapshots, isLoading } = useRegressionSnapshots(fixtureId);
+  const [expanded, setExpanded] = useState(true);
+  const [editingNote, setEditingNote] = useState<string | null>(null);
+  const { data: snapshots, isLoading } = useRegressionSnapshots(fixture.id);
 
-  if (isLoading) return <div className="text-sm text-gray-400 py-2">Loading snapshots...</div>;
-  if (!snapshots?.length) return <div className="text-sm text-gray-400 py-2">No snapshots yet.</div>;
+  const snapshotCount = snapshots?.length ?? 0;
 
   return (
-    <div className="pl-4 border-l border-gray-700 ml-2">
-      {snapshots.map((s) => (
-        <label key={s.id} className="flex items-center gap-2 py-1 text-sm cursor-pointer hover:bg-gray-800/50 px-2 rounded">
-          <input
-            type="checkbox"
-            checked={selectedSnapshots.has(s.id)}
-            onChange={() => onToggleSnapshot(s)}
-          />
-          <span className="font-mono">{s.version}</span>
-          <span className="text-gray-500">{new Date(s.created_at).toLocaleString()}</span>
-        </label>
-      ))}
+    <div className="border border-gray-700 rounded-lg overflow-hidden">
+      {/* Fixture Header */}
+      <div className="flex items-center gap-3 px-4 py-3 bg-gray-800/30">
+        <button onClick={() => setExpanded(!expanded)} className="text-gray-400 hover:text-white">
+          {expanded ? <ChevronDown className="h-4 w-4" /> : <ChevronRight className="h-4 w-4" />}
+        </button>
+
+        <div className="flex-1 min-w-0">
+          <div className="flex items-center gap-2">
+            {editingNote !== null ? (
+              <form
+                className="flex items-center gap-1 flex-1"
+                onSubmit={(e) => {
+                  e.preventDefault();
+                  onUpdateNote(fixture.id, editingNote);
+                  setEditingNote(null);
+                }}
+              >
+                <input
+                  className="px-2 py-0.5 rounded bg-gray-800 border border-gray-600 text-sm flex-1"
+                  value={editingNote}
+                  onChange={(e) => setEditingNote(e.target.value)}
+                  autoFocus
+                />
+                <Button size="sm" type="submit">Save</Button>
+                <Button size="sm" variant="ghost" onClick={() => setEditingNote(null)}>Cancel</Button>
+              </form>
+            ) : (
+              <button
+                className="text-sm font-medium hover:text-blue-400 text-left truncate"
+                onClick={() => setEditingNote(fixture.note)}
+                title="Click to edit note"
+              >
+                {fixture.note || <span className="text-gray-500 italic">Click to add a description...</span>}
+              </button>
+            )}
+          </div>
+          <div className="flex items-center gap-3 mt-0.5 text-xs text-gray-500">
+            <a
+              href={`/logs/${fixture.log_group_id}`}
+              className="text-blue-400/70 hover:text-blue-400 hover:underline font-mono"
+            >
+              Log: {fixture.log_group_id.slice(0, 12)}...
+            </a>
+            <span>Pinned {new Date(fixture.created_at).toLocaleDateString()}</span>
+            <span>{snapshotCount} snapshot{snapshotCount !== 1 ? "s" : ""}</span>
+          </div>
+        </div>
+
+        <Button size="sm" variant="ghost" onClick={() => onTakeSnapshot(fixture.id)} title="Take Snapshot">
+          <Camera className="h-4 w-4" />
+        </Button>
+        <Button
+          size="sm"
+          variant="ghost"
+          onClick={() => { if (confirm("Delete this fixture and all its snapshots?")) onDeleteFixture(fixture.id); }}
+          title="Delete fixture"
+        >
+          <Trash2 className="h-4 w-4 text-red-400" />
+        </Button>
+      </div>
+
+      {/* Snapshots List */}
+      {expanded && (
+        <div className="border-t border-gray-700">
+          {isLoading ? (
+            <div className="px-4 py-3 text-sm text-gray-400">Loading snapshots...</div>
+          ) : !snapshots?.length ? (
+            <div className="px-4 py-3 text-sm text-gray-500 italic">
+              No snapshots yet. Click <Camera className="h-3 w-3 inline" /> to take one.
+            </div>
+          ) : (
+            <table className="w-full text-sm">
+              <thead>
+                <tr className="text-xs text-gray-500 border-b border-gray-800">
+                  <th className="px-4 py-1.5 text-left w-8"></th>
+                  <th className="px-2 py-1.5 text-left">Version</th>
+                  <th className="px-2 py-1.5 text-left">Build Time</th>
+                  <th className="px-2 py-1.5 text-left">Snapshot Taken</th>
+                  <th className="px-2 py-1.5 text-right w-8"></th>
+                </tr>
+              </thead>
+              <tbody>
+                {snapshots.map((s) => (
+                  <tr key={s.id} className="hover:bg-gray-800/40 border-b border-gray-800/50 last:border-0">
+                    <td className="px-4 py-1.5">
+                      <input
+                        type="checkbox"
+                        checked={selectedSnapshots.has(s.id)}
+                        onChange={() => onToggleSnapshot(s)}
+                        className="cursor-pointer"
+                      />
+                    </td>
+                    <td className="px-2 py-1.5 font-mono text-xs">
+                      {s.version === "unknown" ? (
+                        <span className="text-gray-500">{s.version}</span>
+                      ) : (
+                        <span className="text-blue-300">{s.version.slice(0, 10)}</span>
+                      )}
+                    </td>
+                    <td className="px-2 py-1.5 text-xs text-gray-400">
+                      {s.build_time && s.build_time !== "unknown" ? s.build_time : <span className="text-gray-600">—</span>}
+                    </td>
+                    <td className="px-2 py-1.5 text-xs text-gray-400">
+                      {new Date(s.created_at).toLocaleString()}
+                    </td>
+                    <td className="px-2 py-1.5 text-right">
+                      <button
+                        className="text-red-400/60 hover:text-red-400 p-0.5"
+                        title="Delete snapshot"
+                        onClick={() => { if (confirm("Delete this snapshot?")) onDeleteSnapshot(s.id); }}
+                      >
+                        <Trash2 className="h-3 w-3" />
+                      </button>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          )}
+        </div>
+      )}
     </div>
   );
 }
@@ -76,11 +204,10 @@ export function RegressionPage() {
   const takeSnapshot = useTakeSnapshot();
   const snapshotAll = useSnapshotAll();
   const requeueVersion = useRequeueVersion();
+  const deleteSnapshot = useDeleteRegressionSnapshot();
 
   const [newLogGroupId, setNewLogGroupId] = useState("");
   const [newNote, setNewNote] = useState("");
-  const [expandedFixture, setExpandedFixture] = useState<string | null>(null);
-  const [editingNote, setEditingNote] = useState<{ id: string; note: string } | null>(null);
   const [selectedSnapshots, setSelectedSnapshots] = useState<Map<string, RegressionSnapshotSummary>>(new Map());
   const [requeueVersionInput, setRequeueVersionInput] = useState("");
   const [requeueResult, setRequeueResult] = useState<number | null>(null);
@@ -88,12 +215,13 @@ export function RegressionPage() {
   // Diff state
   const [diffLeft, setDiffLeft] = useState<string | null>(null);
   const [diffRight, setDiffRight] = useState<string | null>(null);
+  const [diffLeftLabel, setDiffLeftLabel] = useState<string>("");
+  const [diffRightLabel, setDiffRightLabel] = useState<string>("");
   const [remoteUrl, setRemoteUrl] = useState("");
   const [fetchingRemote, setFetchingRemote] = useState(false);
 
   const selectedArray = Array.from(selectedSnapshots.values());
 
-  // For fetching full snapshots for diff
   const [compareIds, setCompareIds] = useState<[string, string] | null>(null);
   const snap1 = useRegressionSnapshot(compareIds?.[0] ?? "");
   const snap2 = useRegressionSnapshot(compareIds?.[1] ?? "");
@@ -110,11 +238,19 @@ export function RegressionPage() {
     });
   };
 
+  const snapshotLabel = (s: RegressionSnapshotSummary) => {
+    const ver = s.version === "unknown" ? "dev" : s.version.slice(0, 8);
+    const bt = s.build_time && s.build_time !== "unknown" ? ` (${s.build_time})` : "";
+    return `${ver}${bt}`;
+  };
+
   const handleCompare = () => {
     if (selectedArray.length === 2) {
       setCompareIds([selectedArray[0].id, selectedArray[1].id]);
       setDiffLeft(null);
       setDiffRight(null);
+      setDiffLeftLabel(snapshotLabel(selectedArray[0]));
+      setDiffRightLabel(snapshotLabel(selectedArray[1]));
     }
   };
 
@@ -125,10 +261,11 @@ export function RegressionPage() {
       const response = await fetch(remoteUrl);
       const data = await response.json();
       setDiffRight(JSON.stringify(data.snapshot ?? data, null, 2));
-      // Fetch the local one
+      setDiffRightLabel("Remote");
       const localResp = await fetch(`/api/v1/regression/snapshots/${selectedArray[0].id}`);
       const localData = await localResp.json();
       setDiffLeft(JSON.stringify(localData.snapshot, null, 2));
+      setDiffLeftLabel(snapshotLabel(selectedArray[0]));
       setCompareIds(null);
     } catch {
       alert("Failed to fetch remote snapshot");
@@ -138,10 +275,7 @@ export function RegressionPage() {
   };
 
   // Update diff display when both snapshots load
-  const showCompareResult =
-    compareIds && snap1.data && snap2.data && !diffLeft && !diffRight;
-  if (showCompareResult) {
-    // Side-effect in render is intentional for simplicity — triggers once
+  if (compareIds && snap1.data && snap2.data && !diffLeft && !diffRight) {
     const l = JSON.stringify(snap1.data.snapshot, null, 2);
     const r = JSON.stringify(snap2.data.snapshot, null, 2);
     setDiffLeft(l);
@@ -150,15 +284,18 @@ export function RegressionPage() {
 
   return (
     <div className="max-w-6xl mx-auto p-6 space-y-6">
-      <div className="flex items-center gap-3 mb-6">
+      <div className="flex items-center gap-3 mb-2">
         <TestTube className="h-6 w-6" />
         <h1 className="text-2xl font-bold">Regression Testing</h1>
       </div>
+      <p className="text-sm text-gray-400 -mt-4">
+        Pin raid logs, take parse snapshots across versions, and compare results to detect regressions.
+      </p>
 
       {/* Fixtures Section */}
       <Card className="p-4 space-y-4">
         <div className="flex items-center justify-between">
-          <h2 className="text-lg font-semibold">Fixtures</h2>
+          <h2 className="text-lg font-semibold">Pinned Fixtures</h2>
           <Button
             size="sm"
             onClick={() => snapshotAll.mutate()}
@@ -170,23 +307,23 @@ export function RegressionPage() {
         </div>
 
         {/* Add Fixture Form */}
-        <div className="flex items-end gap-2">
+        <div className="flex items-end gap-2 p-3 rounded bg-gray-800/30 border border-gray-700/50">
           <div className="flex-1">
-            <label className="text-sm text-gray-400">Log Group ID</label>
+            <label className="text-xs text-gray-400 uppercase tracking-wide">Log Group ID</label>
             <input
-              className="w-full mt-1 px-3 py-1.5 rounded bg-gray-800 border border-gray-700 text-sm"
+              className="w-full mt-1 px-3 py-1.5 rounded bg-gray-800 border border-gray-700 text-sm font-mono"
               value={newLogGroupId}
               onChange={(e) => setNewLogGroupId(e.target.value)}
-              placeholder="Log group ID..."
+              placeholder="paste log group UUID..."
             />
           </div>
           <div className="flex-1">
-            <label className="text-sm text-gray-400">Note</label>
+            <label className="text-xs text-gray-400 uppercase tracking-wide">Description</label>
             <input
               className="w-full mt-1 px-3 py-1.5 rounded bg-gray-800 border border-gray-700 text-sm"
               value={newNote}
               onChange={(e) => setNewNote(e.target.value)}
-              placeholder="Optional note..."
+              placeholder="e.g. MC full clear with 40-man raid"
             />
           </div>
           <Button
@@ -195,111 +332,36 @@ export function RegressionPage() {
               if (!newLogGroupId) return;
               createFixture.mutate(
                 { log_group_id: newLogGroupId, note: newNote },
-                {
-                  onSuccess: () => {
-                    setNewLogGroupId("");
-                    setNewNote("");
-                  },
-                },
+                { onSuccess: () => { setNewLogGroupId(""); setNewNote(""); } },
               );
             }}
             disabled={createFixture.isPending || !newLogGroupId}
           >
             <Plus className="h-4 w-4 mr-1" />
-            Add
+            Pin
           </Button>
         </div>
 
-        {/* Fixtures Table */}
+        {/* Fixtures List */}
         {fixturesLoading ? (
           <div className="text-gray-400 text-sm">Loading fixtures...</div>
         ) : !fixtures?.length ? (
-          <div className="text-gray-400 text-sm flex items-center gap-2">
-            <AlertTriangle className="h-4 w-4" /> No fixtures yet.
+          <div className="text-gray-400 text-sm flex items-center gap-2 py-4 justify-center">
+            <AlertTriangle className="h-4 w-4" /> No fixtures pinned yet. Add a log group above.
           </div>
         ) : (
-          <div className="space-y-1">
+          <div className="space-y-2">
             {fixtures.map((f) => (
-              <div key={f.id} className="border border-gray-700 rounded">
-                <div className="flex items-center gap-3 px-3 py-2 text-sm">
-                  <button
-                    className="text-left flex-1 hover:underline font-mono text-xs truncate"
-                    onClick={() => setExpandedFixture(expandedFixture === f.id ? null : f.id)}
-                    title={f.id}
-                  >
-                    {f.id.slice(0, 8)}...
-                  </button>
-                  <a
-                    href={`/logs/${f.log_group_id}`}
-                    className="text-blue-400 hover:underline font-mono text-xs"
-                    title={f.log_group_id}
-                  >
-                    {f.log_group_id.slice(0, 8)}...
-                  </a>
-                  {editingNote?.id === f.id ? (
-                    <form
-                      className="flex items-center gap-1"
-                      onSubmit={(e) => {
-                        e.preventDefault();
-                        updateNote.mutate(
-                          { fixtureId: f.id, note: editingNote.note },
-                          { onSuccess: () => setEditingNote(null) },
-                        );
-                      }}
-                    >
-                      <input
-                        className="px-2 py-0.5 rounded bg-gray-800 border border-gray-600 text-xs w-40"
-                        value={editingNote.note}
-                        onChange={(e) => setEditingNote({ ...editingNote, note: e.target.value })}
-                        autoFocus
-                      />
-                      <Button size="sm" type="submit" disabled={updateNote.isPending}>
-                        Save
-                      </Button>
-                      <Button size="sm" variant="ghost" onClick={() => setEditingNote(null)}>
-                        Cancel
-                      </Button>
-                    </form>
-                  ) : (
-                    <button
-                      className="text-gray-300 hover:text-white text-xs truncate max-w-48"
-                      onClick={() => setEditingNote({ id: f.id, note: f.note })}
-                      title="Click to edit note"
-                    >
-                      {f.note || <span className="text-gray-500 italic">no note</span>}
-                    </button>
-                  )}
-                  <span className="text-gray-500 text-xs">{new Date(f.created_at).toLocaleDateString()}</span>
-                  <Button
-                    size="sm"
-                    variant="ghost"
-                    onClick={() => takeSnapshot.mutate(f.id)}
-                    disabled={takeSnapshot.isPending}
-                    title="Take Snapshot"
-                  >
-                    <Camera className="h-3.5 w-3.5" />
-                  </Button>
-                  <Button
-                    size="sm"
-                    variant="ghost"
-                    onClick={() => {
-                      if (confirm("Delete this fixture?")) deleteFixture.mutate(f.id);
-                    }}
-                    title="Delete"
-                  >
-                    <Trash2 className="h-3.5 w-3.5 text-red-400" />
-                  </Button>
-                </div>
-                {expandedFixture === f.id && (
-                  <div className="px-3 pb-3">
-                    <FixtureSnapshots
-                      fixtureId={f.id}
-                      selectedSnapshots={selectedSnapshots}
-                      onToggleSnapshot={handleToggleSnapshot}
-                    />
-                  </div>
-                )}
-              </div>
+              <FixtureCard
+                key={f.id}
+                fixture={f}
+                selectedSnapshots={selectedSnapshots}
+                onToggleSnapshot={handleToggleSnapshot}
+                onDeleteSnapshot={(id) => deleteSnapshot.mutate(id)}
+                onTakeSnapshot={(id) => takeSnapshot.mutate(id)}
+                onDeleteFixture={(id) => deleteFixture.mutate(id)}
+                onUpdateNote={(id, note) => updateNote.mutate({ fixtureId: id, note })}
+              />
             ))}
           </div>
         )}
@@ -312,10 +374,22 @@ export function RegressionPage() {
           <h2 className="text-lg font-semibold">Compare Snapshots</h2>
         </div>
 
+        {/* Selection info */}
         <div className="text-sm text-gray-400">
-          {selectedArray.length === 0 && "Select snapshots from fixtures above to compare."}
-          {selectedArray.length === 1 && "Select one more snapshot, or use a remote URL to compare."}
-          {selectedArray.length === 2 && "Two snapshots selected. Click Compare."}
+          {selectedArray.length === 0 && "Select snapshots from fixtures above to compare (check two boxes)."}
+          {selectedArray.length === 1 && (
+            <>
+              Selected: <span className="text-blue-300 font-mono">{snapshotLabel(selectedArray[0])}</span>
+              {" — select one more, or use a remote URL below."}
+            </>
+          )}
+          {selectedArray.length === 2 && (
+            <>
+              Comparing: <span className="text-blue-300 font-mono">{snapshotLabel(selectedArray[0])}</span>
+              {" vs "}
+              <span className="text-blue-300 font-mono">{snapshotLabel(selectedArray[1])}</span>
+            </>
+          )}
           {selectedArray.length > 2 && (
             <span className="text-yellow-400">Select exactly 2 snapshots to compare.</span>
           )}
@@ -331,13 +405,13 @@ export function RegressionPage() {
 
           {selectedArray.length >= 1 && (
             <>
-              <div>
-                <label className="text-sm text-gray-400">Remote URL</label>
+              <div className="flex-1 min-w-64">
+                <label className="text-xs text-gray-400 uppercase tracking-wide">Remote URL</label>
                 <input
-                  className="w-full mt-1 px-3 py-1.5 rounded bg-gray-800 border border-gray-700 text-sm"
+                  className="w-full mt-1 px-3 py-1.5 rounded bg-gray-800 border border-gray-700 text-sm font-mono"
                   value={remoteUrl}
                   onChange={(e) => setRemoteUrl(e.target.value)}
-                  placeholder="https://prod.example.com/api/v1/regression/snapshots/..."
+                  placeholder="http://localhost:3000/api/v1/regression/snapshots/..."
                 />
               </div>
               <Button
@@ -365,7 +439,17 @@ export function RegressionPage() {
           )}
         </div>
 
-        {diffLeft && diffRight && <SimpleDiff left={diffLeft} right={diffRight} />}
+        {diffLeft && diffRight && (
+          <div>
+            {diffLeft === diffRight ? (
+              <div className="text-green-400 text-sm font-medium py-4 text-center">
+                ✓ Snapshots are identical — no regressions detected.
+              </div>
+            ) : (
+              <SimpleDiff left={diffLeft} right={diffRight} leftLabel={diffLeftLabel} rightLabel={diffRightLabel} />
+            )}
+          </div>
+        )}
       </Card>
 
       {/* Requeue Section */}
@@ -374,14 +458,17 @@ export function RegressionPage() {
           <RefreshCw className="h-5 w-5" />
           <h2 className="text-lg font-semibold">Requeue by Version</h2>
         </div>
+        <p className="text-sm text-gray-400">
+          Re-parse all instances that were parsed by a specific version. Useful when a buggy version is identified.
+        </p>
         <div className="flex items-end gap-2">
           <div>
-            <label className="text-sm text-gray-400">Version</label>
+            <label className="text-xs text-gray-400 uppercase tracking-wide">Parser Version (git commit)</label>
             <input
-              className="w-full mt-1 px-3 py-1.5 rounded bg-gray-800 border border-gray-700 text-sm"
+              className="w-full mt-1 px-3 py-1.5 rounded bg-gray-800 border border-gray-700 text-sm font-mono"
               value={requeueVersionInput}
               onChange={(e) => setRequeueVersionInput(e.target.value)}
-              placeholder="v1.2.3"
+              placeholder="abc123..."
             />
           </div>
           <Button
@@ -400,7 +487,7 @@ export function RegressionPage() {
           </Button>
         </div>
         {requeueResult !== null && (
-          <div className="text-sm text-green-400">Requeued {requeueResult} fixture(s).</div>
+          <div className="text-sm text-green-400">Requeued {requeueResult} log group(s) for re-parsing.</div>
         )}
       </Card>
     </div>

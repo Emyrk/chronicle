@@ -2615,6 +2615,15 @@ func (q *sqlQuerier) DeleteRegressionFixture(ctx context.Context, id uuid.UUID) 
 	return err
 }
 
+const deleteRegressionSnapshot = `-- name: DeleteRegressionSnapshot :exec
+DELETE FROM regression_snapshots WHERE id = $1
+`
+
+func (q *sqlQuerier) DeleteRegressionSnapshot(ctx context.Context, id uuid.UUID) error {
+	_, err := q.db.Exec(ctx, deleteRegressionSnapshot, id)
+	return err
+}
+
 const getRegressionFixture = `-- name: GetRegressionFixture :one
 SELECT id, log_group_id, note, created_at FROM regression_fixtures WHERE id = $1
 `
@@ -2632,7 +2641,7 @@ func (q *sqlQuerier) GetRegressionFixture(ctx context.Context, id uuid.UUID) (Re
 }
 
 const getRegressionSnapshot = `-- name: GetRegressionSnapshot :one
-SELECT id, fixture_id, version, snapshot, created_at FROM regression_snapshots WHERE id = $1
+SELECT id, fixture_id, version, build_time, snapshot, created_at FROM regression_snapshots WHERE id = $1
 `
 
 func (q *sqlQuerier) GetRegressionSnapshot(ctx context.Context, id uuid.UUID) (RegressionSnapshot, error) {
@@ -2642,6 +2651,7 @@ func (q *sqlQuerier) GetRegressionSnapshot(ctx context.Context, id uuid.UUID) (R
 		&i.ID,
 		&i.FixtureID,
 		&i.Version,
+		&i.BuildTime,
 		&i.Snapshot,
 		&i.CreatedAt,
 	)
@@ -2670,23 +2680,30 @@ func (q *sqlQuerier) InsertRegressionFixture(ctx context.Context, arg InsertRegr
 }
 
 const insertRegressionSnapshot = `-- name: InsertRegressionSnapshot :one
-INSERT INTO regression_snapshots (fixture_id, version, snapshot)
-VALUES ($1, $2, $3) RETURNING id, fixture_id, version, snapshot, created_at
+INSERT INTO regression_snapshots (fixture_id, version, build_time, snapshot)
+VALUES ($1, $2, $3, $4) RETURNING id, fixture_id, version, build_time, snapshot, created_at
 `
 
 type InsertRegressionSnapshotParams struct {
 	FixtureID uuid.UUID `db:"fixture_id" json:"fixture_id"`
 	Version   string    `db:"version" json:"version"`
+	BuildTime string    `db:"build_time" json:"build_time"`
 	Snapshot  []byte    `db:"snapshot" json:"snapshot"`
 }
 
 func (q *sqlQuerier) InsertRegressionSnapshot(ctx context.Context, arg InsertRegressionSnapshotParams) (RegressionSnapshot, error) {
-	row := q.db.QueryRow(ctx, insertRegressionSnapshot, arg.FixtureID, arg.Version, arg.Snapshot)
+	row := q.db.QueryRow(ctx, insertRegressionSnapshot,
+		arg.FixtureID,
+		arg.Version,
+		arg.BuildTime,
+		arg.Snapshot,
+	)
 	var i RegressionSnapshot
 	err := row.Scan(
 		&i.ID,
 		&i.FixtureID,
 		&i.Version,
+		&i.BuildTime,
 		&i.Snapshot,
 		&i.CreatedAt,
 	)
@@ -2754,7 +2771,7 @@ func (q *sqlQuerier) ListRegressionFixtures(ctx context.Context) ([]RegressionFi
 }
 
 const listRegressionSnapshots = `-- name: ListRegressionSnapshots :many
-SELECT id, fixture_id, version, created_at
+SELECT id, fixture_id, version, build_time, created_at
 FROM regression_snapshots WHERE fixture_id = $1
 ORDER BY created_at DESC LIMIT $2
 `
@@ -2768,6 +2785,7 @@ type ListRegressionSnapshotsRow struct {
 	ID        uuid.UUID          `db:"id" json:"id"`
 	FixtureID uuid.UUID          `db:"fixture_id" json:"fixture_id"`
 	Version   string             `db:"version" json:"version"`
+	BuildTime string             `db:"build_time" json:"build_time"`
 	CreatedAt pgtype.Timestamptz `db:"created_at" json:"created_at"`
 }
 
@@ -2784,6 +2802,7 @@ func (q *sqlQuerier) ListRegressionSnapshots(ctx context.Context, arg ListRegres
 			&i.ID,
 			&i.FixtureID,
 			&i.Version,
+			&i.BuildTime,
 			&i.CreatedAt,
 		); err != nil {
 			return nil, err

@@ -43,10 +43,10 @@ type Hookable struct {
 	// Static
 	CurrentZone zone.Zone
 	*Identifier
-	verbose bool
+	verbose      bool
 	realm        *realm.Info         // mostly static
 	versions     map[string]string   // addon/dependency versions from HEADER
-	recorderGUID *guid.GUID         // recording player GUID from HEADER
+	recorderGUID *guid.GUID          // recording player GUID from HEADER
 	hooks        []instancehook.Hook // TODO: unroll?
 
 	// Live tracking data
@@ -142,7 +142,6 @@ func (h *Hookable) SetVersions(versions map[string]string, player *guid.GUID) {
 	h.versions = versions
 	h.recorderGUID = player
 }
-
 
 // MatchesZone
 // TODO: Should we care about the instance ID here?
@@ -353,6 +352,7 @@ func (h *Hookable) Finalize(ctx context.Context) (*FinalizedInstance, error) {
 		if ctx.Err() != nil {
 			return nil, ctx.Err()
 		}
+		adEncounterName := ""
 		encounterName := ""
 		encounterType := types.EncounterTypeTRASH
 		isBossFight := false
@@ -389,12 +389,15 @@ func (h *Hookable) Finalize(ctx context.Context) (*FinalizedInstance, error) {
 				}
 			}
 
-			if encounterName == "" {
-				info, hasInfo := h.units.Get(hostile.ID)
-				if hasInfo {
-					encounterName = info.Name
+			info, hasInfo := h.units.Get(hostile.ID)
+			if hasInfo {
+				if info.Name == "" || info.Name > adEncounterName {
+					adEncounterName = info.Name
 				}
 			}
+		}
+		if encounterName == "" {
+			encounterName = adEncounterName
 		}
 
 		rr := fight.EndStates()

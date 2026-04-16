@@ -171,6 +171,7 @@ func (w *WorkerRegressionSnapshot) Work(ctx context.Context, job *river.Job[Args
 	_, err = db.InsertRegressionSnapshot(ctx, database.InsertRegressionSnapshotParams{
 		FixtureID: job.Args.FixtureID,
 		Version:   version.GitCommit,
+		BuildTime: version.BuildTime,
 		Snapshot:  jsonBytes,
 	})
 	if err != nil {

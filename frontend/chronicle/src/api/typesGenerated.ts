@@ -645,6 +645,7 @@ export interface RegressionSnapshotSummary {
     readonly id: string;
     readonly fixture_id: string;
     readonly version: string;
+    readonly build_time: string;
     readonly created_at: string;
 }
 

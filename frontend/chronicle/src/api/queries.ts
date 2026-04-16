@@ -1340,6 +1340,19 @@ export function useSnapshotAll() {
   });
 }
 
+export function useDeleteRegressionSnapshot() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async (snapshotId: string) => {
+      const response = await fetch(`/api/v1/regression/snapshots/${snapshotId}`, {
+        method: "DELETE",
+      });
+      if (!response.ok) throw new Error("Failed to delete snapshot");
+    },
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ["regression"] }),
+  });
+}
+
 export function useRequeueVersion() {
   return useMutation({
     mutationFn: async (req: { version: string }) => {

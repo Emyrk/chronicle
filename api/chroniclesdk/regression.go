@@ -18,6 +18,7 @@ type RegressionSnapshotSummary struct {
 	ID        uuid.UUID `json:"id"`
 	FixtureID uuid.UUID `json:"fixture_id"`
 	Version   string    `json:"version"`
+	BuildTime string    `json:"build_time"`
 	CreatedAt time.Time `json:"created_at"`
 }
 

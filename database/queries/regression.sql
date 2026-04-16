@@ -16,11 +16,11 @@ FROM regression_fixtures rf
 ORDER BY rf.created_at DESC;
 
 -- name: InsertRegressionSnapshot :one
-INSERT INTO regression_snapshots (fixture_id, version, snapshot)
-VALUES (@fixture_id, @version, @snapshot) RETURNING *;
+INSERT INTO regression_snapshots (fixture_id, version, build_time, snapshot)
+VALUES (@fixture_id, @version, @build_time, @snapshot) RETURNING *;
 
 -- name: ListRegressionSnapshots :many
-SELECT id, fixture_id, version, created_at
+SELECT id, fixture_id, version, build_time, created_at
 FROM regression_snapshots WHERE fixture_id = @fixture_id
 ORDER BY created_at DESC LIMIT @lim;
 
@@ -32,3 +32,6 @@ UPDATE log_instances SET parser_version = @parser_version WHERE id = @id;
 
 -- name: ListInstancesByParserVersion :many
 SELECT id, log_group_id FROM log_instances WHERE parser_version = @parser_version;
+
+-- name: DeleteRegressionSnapshot :exec
+DELETE FROM regression_snapshots WHERE id = @id;

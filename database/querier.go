@@ -29,6 +29,7 @@ type sqlcQuerier interface {
 	DeleteGuildPageTabsByPage(ctx context.Context, pageID uuid.UUID) error
 	DeleteLogInstanceByIDAndGroup(ctx context.Context, arg DeleteLogInstanceByIDAndGroupParams) (uuid.UUID, error)
 	DeleteRegressionFixture(ctx context.Context, id uuid.UUID) error
+	DeleteRegressionSnapshot(ctx context.Context, id uuid.UUID) error
 	DeleteUserPanelLayoutByID(ctx context.Context, id uuid.UUID) (int64, error)
 	DeleteWoWLogGroup(ctx context.Context, id uuid.UUID) error
 	DeleteWoWLogGroupFiles(ctx context.Context, arg DeleteWoWLogGroupFilesParams) ([]LogFile, error)

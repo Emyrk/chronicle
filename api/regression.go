@@ -183,6 +183,7 @@ func (api *API) RegressionListSnapshots(w http.ResponseWriter, r *http.Request) 
 			ID:        row.ID,
 			FixtureID: row.FixtureID,
 			Version:   row.Version,
+			BuildTime: row.BuildTime,
 			CreatedAt: row.CreatedAt.Time,
 		})
 	}
@@ -213,10 +214,32 @@ func (api *API) RegressionGetSnapshot(w http.ResponseWriter, r *http.Request) {
 			ID:        snapshot.ID,
 			FixtureID: snapshot.FixtureID,
 			Version:   snapshot.Version,
+			BuildTime: snapshot.BuildTime,
 			CreatedAt: snapshot.CreatedAt.Time,
 		},
 		Snapshot: json.RawMessage(snapshot.Snapshot),
 	})
+}
+
+func (api *API) RegressionDeleteSnapshot(w http.ResponseWriter, r *http.Request) {
+	ctx := r.Context()
+
+	snapshotID, err := uuid.Parse(chi.URLParam(r, "snapshotID"))
+	if err != nil {
+		httpapi.Write(ctx, w, http.StatusBadRequest, chroniclesdk.Response{
+			Message: "Invalid snapshot ID",
+			Detail:  err.Error(),
+		})
+		return
+	}
+
+	err = api.Zed.DeleteRegressionSnapshot(ctx, snapshotID)
+	if err != nil {
+		httpapi.InternalServerError(w, err)
+		return
+	}
+
+	httpapi.Write(ctx, w, http.StatusNoContent, nil)
 }
 
 func (api *API) RegressionRequeueVersion(w http.ResponseWriter, r *http.Request) {
