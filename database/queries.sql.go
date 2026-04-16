@@ -2783,25 +2783,39 @@ func (q *sqlQuerier) ListInstancesByParserVersion(ctx context.Context, parserVer
 }
 
 const listRegressionFixtures = `-- name: ListRegressionFixtures :many
-SELECT rf.id, rf.log_group_id, rf.note, rf.created_at
+SELECT rf.id, rf.log_group_id, rf.note, rf.created_at,
+  NOT EXISTS(
+    SELECT 1 FROM log_file lf
+    WHERE lf.wow_log_id = rf.log_group_id
+    AND lf.storage_deleted_at IS NULL
+  ) AS files_deleted
 FROM regression_fixtures rf
 ORDER BY rf.created_at DESC
 `
 
-func (q *sqlQuerier) ListRegressionFixtures(ctx context.Context) ([]RegressionFixture, error) {
+type ListRegressionFixturesRow struct {
+	ID           uuid.UUID          `db:"id" json:"id"`
+	LogGroupID   uuid.UUID          `db:"log_group_id" json:"log_group_id"`
+	Note         string             `db:"note" json:"note"`
+	CreatedAt    pgtype.Timestamptz `db:"created_at" json:"created_at"`
+	FilesDeleted bool               `db:"files_deleted" json:"files_deleted"`
+}
+
+func (q *sqlQuerier) ListRegressionFixtures(ctx context.Context) ([]ListRegressionFixturesRow, error) {
 	rows, err := q.db.Query(ctx, listRegressionFixtures)
 	if err != nil {
 		return nil, err
 	}
 	defer rows.Close()
-	var items []RegressionFixture
+	var items []ListRegressionFixturesRow
 	for rows.Next() {
-		var i RegressionFixture
+		var i ListRegressionFixturesRow
 		if err := rows.Scan(
 			&i.ID,
 			&i.LogGroupID,
 			&i.Note,
 			&i.CreatedAt,
+			&i.FilesDeleted,
 		); err != nil {
 			return nil, err
 		}

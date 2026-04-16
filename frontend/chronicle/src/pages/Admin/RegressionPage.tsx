@@ -136,11 +136,17 @@ function FixtureCard({
             </a>
             <span>Pinned {new Date(fixture.created_at).toLocaleDateString()}</span>
             <span>{snapshotCount} snapshot{snapshotCount !== 1 ? "s" : ""}</span>
+            {fixture.files_deleted && (
+              <span className="text-red-400 flex items-center gap-1">
+                <AlertTriangle className="h-3 w-3" />
+                Files deleted
+              </span>
+            )}
           </div>
         </div>
 
-        <Button size="sm" variant="ghost" onClick={() => onTakeSnapshot(fixture.id)} title="Take Snapshot">
-          <Camera className="h-4 w-4" />
+        <Button size="sm" variant="ghost" onClick={() => onTakeSnapshot(fixture.id)} title={fixture.files_deleted ? "Files deleted" : "Take Snapshot"} disabled={fixture.files_deleted}>
+          <Camera className={`h-4 w-4 ${fixture.files_deleted ? "text-gray-600" : ""}`} />
         </Button>
         <Button
           size="sm"

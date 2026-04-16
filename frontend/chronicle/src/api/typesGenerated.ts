@@ -633,6 +633,7 @@ export interface RegressionFixture {
     readonly log_group_id: string;
     readonly note: string;
     readonly created_at: string;
+    readonly files_deleted: boolean;
 }
 
 // From chroniclesdk/regression.go

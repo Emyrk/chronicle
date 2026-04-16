@@ -8,10 +8,11 @@ import (
 )
 
 type RegressionFixture struct {
-	ID         uuid.UUID `json:"id"`
-	LogGroupID uuid.UUID `json:"log_group_id"`
-	Note       string    `json:"note"`
-	CreatedAt  time.Time `json:"created_at"`
+	ID           uuid.UUID `json:"id"`
+	LogGroupID   uuid.UUID `json:"log_group_id"`
+	Note         string    `json:"note"`
+	CreatedAt    time.Time `json:"created_at"`
+	FilesDeleted bool      `json:"files_deleted"`
 }
 
 type RegressionSnapshotSummary struct {

@@ -24,10 +24,11 @@ func (api *API) RegressionListFixtures(w http.ResponseWriter, r *http.Request) {
 	resp := make([]chroniclesdk.RegressionFixture, 0, len(fixtures))
 	for _, f := range fixtures {
 		resp = append(resp, chroniclesdk.RegressionFixture{
-			ID:         f.ID,
-			LogGroupID: f.LogGroupID,
-			Note:       f.Note,
-			CreatedAt:  f.CreatedAt.Time,
+			ID:           f.ID,
+			LogGroupID:   f.LogGroupID,
+			Note:         f.Note,
+			CreatedAt:    f.CreatedAt.Time,
+			FilesDeleted: f.FilesDeleted,
 		})
 	}
 

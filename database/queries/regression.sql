@@ -11,7 +11,12 @@ UPDATE regression_fixtures SET note = @note WHERE id = @id;
 SELECT * FROM regression_fixtures WHERE id = @id;
 
 -- name: ListRegressionFixtures :many
-SELECT rf.*
+SELECT rf.*,
+  NOT EXISTS(
+    SELECT 1 FROM log_file lf
+    WHERE lf.wow_log_id = rf.log_group_id
+    AND lf.storage_deleted_at IS NULL
+  ) AS files_deleted
 FROM regression_fixtures rf
 ORDER BY rf.created_at DESC;
 
