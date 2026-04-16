@@ -16,11 +16,16 @@ FROM regression_fixtures rf
 ORDER BY rf.created_at DESC;
 
 -- name: InsertRegressionSnapshot :one
-INSERT INTO regression_snapshots (fixture_id, version, build_time, snapshot)
-VALUES (@fixture_id, @version, @build_time, @snapshot) RETURNING *;
+INSERT INTO regression_snapshots (fixture_id, version, build_time, snapshot, matches_previous, previous_snapshot_id)
+VALUES (@fixture_id, @version, @build_time, @snapshot, @matches_previous, @previous_snapshot_id) RETURNING *;
+
+-- name: GetLatestRegressionSnapshot :one
+SELECT * FROM regression_snapshots
+WHERE fixture_id = @fixture_id
+ORDER BY created_at DESC LIMIT 1;
 
 -- name: ListRegressionSnapshots :many
-SELECT id, fixture_id, version, build_time, created_at
+SELECT id, fixture_id, version, build_time, matches_previous, previous_snapshot_id, created_at
 FROM regression_snapshots WHERE fixture_id = @fixture_id
 ORDER BY created_at DESC LIMIT @lim;
 

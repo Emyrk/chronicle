@@ -913,12 +913,14 @@ type RegressionFixture struct {
 }
 
 type RegressionSnapshot struct {
-	ID        uuid.UUID          `db:"id" json:"id"`
-	FixtureID uuid.UUID          `db:"fixture_id" json:"fixture_id"`
-	Version   string             `db:"version" json:"version"`
-	Snapshot  []byte             `db:"snapshot" json:"snapshot"`
-	CreatedAt pgtype.Timestamptz `db:"created_at" json:"created_at"`
-	BuildTime string             `db:"build_time" json:"build_time"`
+	ID                 uuid.UUID          `db:"id" json:"id"`
+	FixtureID          uuid.UUID          `db:"fixture_id" json:"fixture_id"`
+	Version            string             `db:"version" json:"version"`
+	Snapshot           []byte             `db:"snapshot" json:"snapshot"`
+	CreatedAt          pgtype.Timestamptz `db:"created_at" json:"created_at"`
+	BuildTime          string             `db:"build_time" json:"build_time"`
+	MatchesPrevious    pgtype.Bool        `db:"matches_previous" json:"matches_previous"`
+	PreviousSnapshotID uuid.NullUUID      `db:"previous_snapshot_id" json:"previous_snapshot_id"`
 }
 
 type RiverClient struct {

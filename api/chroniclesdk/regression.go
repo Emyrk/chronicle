@@ -15,11 +15,13 @@ type RegressionFixture struct {
 }
 
 type RegressionSnapshotSummary struct {
-	ID        uuid.UUID `json:"id"`
-	FixtureID uuid.UUID `json:"fixture_id"`
-	Version   string    `json:"version"`
-	BuildTime string    `json:"build_time"`
-	CreatedAt time.Time `json:"created_at"`
+	ID                 uuid.UUID  `json:"id"`
+	FixtureID          uuid.UUID  `json:"fixture_id"`
+	Version            string     `json:"version"`
+	BuildTime          string     `json:"build_time"`
+	MatchesPrevious    *bool      `json:"matches_previous"`
+	PreviousSnapshotID *uuid.UUID `json:"previous_snapshot_id"`
+	CreatedAt          time.Time  `json:"created_at"`
 }
 
 type RegressionSnapshotFull struct {

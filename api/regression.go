@@ -204,13 +204,20 @@ func (api *API) RegressionListSnapshots(w http.ResponseWriter, r *http.Request) 
 
 	resp := make([]chroniclesdk.RegressionSnapshotSummary, 0, len(rows))
 	for _, row := range rows {
-		resp = append(resp, chroniclesdk.RegressionSnapshotSummary{
+		s := chroniclesdk.RegressionSnapshotSummary{
 			ID:        row.ID,
 			FixtureID: row.FixtureID,
 			Version:   row.Version,
 			BuildTime: row.BuildTime,
 			CreatedAt: row.CreatedAt.Time,
-		})
+		}
+		if row.MatchesPrevious.Valid {
+			s.MatchesPrevious = &row.MatchesPrevious.Bool
+		}
+		if row.PreviousSnapshotID.Valid {
+			s.PreviousSnapshotID = &row.PreviousSnapshotID.UUID
+		}
+		resp = append(resp, s)
 	}
 
 	httpapi.Write(ctx, w, http.StatusOK, resp)
@@ -234,15 +241,22 @@ func (api *API) RegressionGetSnapshot(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	s := chroniclesdk.RegressionSnapshotSummary{
+		ID:        snapshot.ID,
+		FixtureID: snapshot.FixtureID,
+		Version:   snapshot.Version,
+		BuildTime: snapshot.BuildTime,
+		CreatedAt: snapshot.CreatedAt.Time,
+	}
+	if snapshot.MatchesPrevious.Valid {
+		s.MatchesPrevious = &snapshot.MatchesPrevious.Bool
+	}
+	if snapshot.PreviousSnapshotID.Valid {
+		s.PreviousSnapshotID = &snapshot.PreviousSnapshotID.UUID
+	}
 	httpapi.Write(ctx, w, http.StatusOK, chroniclesdk.RegressionSnapshotFull{
-		RegressionSnapshotSummary: chroniclesdk.RegressionSnapshotSummary{
-			ID:        snapshot.ID,
-			FixtureID: snapshot.FixtureID,
-			Version:   snapshot.Version,
-			BuildTime: snapshot.BuildTime,
-			CreatedAt: snapshot.CreatedAt.Time,
-		},
-		Snapshot: json.RawMessage(snapshot.Snapshot),
+		RegressionSnapshotSummary: s,
+		Snapshot:                  json.RawMessage(snapshot.Snapshot),
 	})
 }
 

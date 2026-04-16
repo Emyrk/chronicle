@@ -2,7 +2,7 @@ import { useState, Fragment, useEffect } from "react";
 import { toast } from "sonner";
 import { Card } from "@/components/ui/Card/Card";
 import { Button } from "@/components/ui/button";
-import { TestTube, Plus, Trash2, Camera, GitCompare, AlertTriangle, ChevronDown, ChevronRight } from "lucide-react";
+import { TestTube, Plus, Trash2, Camera, GitCompare, AlertTriangle, ChevronDown, ChevronRight, Check, X, Minus } from "lucide-react";
 import {
   useRegressionFixtures,
   useRegressionSnapshots,
@@ -46,6 +46,16 @@ function SimpleDiff({ left, right, leftLabel, rightLabel }: { left: string; righ
   );
 }
 
+function MatchBadge({ matches }: { matches: boolean | null | undefined }) {
+  if (matches === null || matches === undefined) {
+    return <Minus className="h-3.5 w-3.5 text-gray-500" title="No previous snapshot to compare" />;
+  }
+  if (matches) {
+    return <Check className="h-3.5 w-3.5 text-green-400" title="Matches previous snapshot" />;
+  }
+  return <X className="h-3.5 w-3.5 text-red-400" title="Differs from previous snapshot" />;
+}
+
 function FixtureCard({
   fixture,
   selectedSnapshots,
@@ -68,6 +78,8 @@ function FixtureCard({
   const { data: snapshots, isLoading } = useRegressionSnapshots(fixture.id);
 
   const snapshotCount = snapshots?.length ?? 0;
+  // Latest snapshot with a matches_previous value (first in desc order that has it set)
+  const latestWithStatus = snapshots?.find((s) => s.matches_previous !== null && s.matches_previous !== undefined);
 
   return (
     <div className="border border-gray-700 rounded-lg overflow-hidden">
@@ -76,6 +88,13 @@ function FixtureCard({
         <button onClick={() => setExpanded(!expanded)} className="text-gray-400 hover:text-white">
           {expanded ? <ChevronDown className="h-4 w-4" /> : <ChevronRight className="h-4 w-4" />}
         </button>
+
+        {/* Latest status badge */}
+        {latestWithStatus ? (
+          <MatchBadge matches={latestWithStatus.matches_previous} />
+        ) : (
+          <Minus className="h-3.5 w-3.5 text-gray-600" title="No comparison data yet" />
+        )}
 
         <div className="flex-1 min-w-0">
           <div className="flex items-center gap-2">
@@ -146,6 +165,7 @@ function FixtureCard({
               <thead>
                 <tr className="text-xs text-gray-500 border-b border-gray-800">
                   <th className="px-4 py-1.5 text-left w-8"></th>
+                  <th className="px-2 py-1.5 text-center w-8" title="Matches previous">Status</th>
                   <th className="px-2 py-1.5 text-left">Version</th>
                   <th className="px-2 py-1.5 text-left">Build Time</th>
                   <th className="px-2 py-1.5 text-left">Snapshot Taken</th>
@@ -162,6 +182,9 @@ function FixtureCard({
                         onChange={() => onToggleSnapshot(s)}
                         className="cursor-pointer"
                       />
+                    </td>
+                    <td className="px-2 py-1.5 text-center">
+                      <MatchBadge matches={s.matches_previous} />
                     </td>
                     <td className="px-2 py-1.5 font-mono text-xs">
                       {s.version === "unknown" ? (

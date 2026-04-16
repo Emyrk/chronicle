@@ -509,7 +509,9 @@ CREATE TABLE regression_snapshots (
     version text NOT NULL,
     snapshot jsonb NOT NULL,
     created_at timestamp with time zone DEFAULT now() NOT NULL,
-    build_time text DEFAULT ''::text NOT NULL
+    build_time text DEFAULT ''::text NOT NULL,
+    matches_previous boolean,
+    previous_snapshot_id uuid
 );
 
 CREATE UNLOGGED TABLE river_client (
@@ -1236,6 +1238,9 @@ ALTER TABLE ONLY regression_fixtures
 
 ALTER TABLE ONLY regression_snapshots
     ADD CONSTRAINT regression_snapshots_fixture_id_fkey FOREIGN KEY (fixture_id) REFERENCES regression_fixtures(id) ON DELETE CASCADE;
+
+ALTER TABLE ONLY regression_snapshots
+    ADD CONSTRAINT regression_snapshots_previous_snapshot_id_fkey FOREIGN KEY (previous_snapshot_id) REFERENCES regression_snapshots(id) ON DELETE SET NULL;
 
 ALTER TABLE ONLY river_client_queue
     ADD CONSTRAINT river_client_queue_river_client_id_fkey FOREIGN KEY (river_client_id) REFERENCES river_client(id) ON DELETE CASCADE;

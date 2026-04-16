@@ -18,6 +18,7 @@ import (
 	"github.com/Emyrk/chronicle/combatlog/parser/vanilla/state/encounters/instances"
 	"github.com/Emyrk/chronicle/database"
 	"github.com/Emyrk/chronicle/internal/leveledlog"
+	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/Emyrk/chronicle/internal/version"
 	"github.com/google/uuid"
 	"github.com/riverqueue/river"
@@ -152,12 +153,26 @@ func (w *WorkerRegressionSnapshot) Work(ctx context.Context, job *river.Job[Args
 		return fmt.Errorf("build snapshot JSON: %w", err)
 	}
 
-	// 5. Insert snapshot
+	// 5. Compare with previous snapshot
+	var matchesPrevious pgtype.Bool
+	var previousSnapshotID uuid.NullUUID
+
+	prev, err := db.GetLatestRegressionSnapshot(ctx, job.Args.FixtureID)
+	if err == nil {
+		previousSnapshotID = uuid.NullUUID{UUID: prev.ID, Valid: true}
+		matches := bytes.Equal(prev.Snapshot, jsonBytes)
+		matchesPrevious = pgtype.Bool{Bool: matches, Valid: true}
+	}
+	// If no previous snapshot exists (sql.ErrNoRows), leave both as null
+
+	// 6. Insert snapshot
 	_, err = db.InsertRegressionSnapshot(ctx, database.InsertRegressionSnapshotParams{
-		FixtureID: job.Args.FixtureID,
-		Version:   version.GitCommit,
-		BuildTime: version.BuildTime,
-		Snapshot:  jsonBytes,
+		FixtureID:          job.Args.FixtureID,
+		Version:            version.GitCommit,
+		BuildTime:          version.BuildTime,
+		Snapshot:           jsonBytes,
+		MatchesPrevious:    matchesPrevious,
+		PreviousSnapshotID: previousSnapshotID,
 	})
 	if err != nil {
 		return fmt.Errorf("insert regression snapshot: %w", err)
