@@ -1320,7 +1320,10 @@ export function useTakeSnapshot() {
       const response = await fetch(`/api/v1/regression/fixtures/${fixtureId}/snapshot`, {
         method: "POST",
       });
-      if (!response.ok) throw new Error("Failed to take snapshot");
+      if (!response.ok) {
+        const body = await response.json().catch(() => null);
+        throw new Error(body?.message || "Failed to take snapshot");
+      }
       return response.json() as Promise<RegressionSnapshotSummaryGenerated>;
     },
     onSuccess: () => queryClient.invalidateQueries({ queryKey: ["regression"] }),
@@ -1331,10 +1334,13 @@ export function useSnapshotAll() {
   const queryClient = useQueryClient();
   return useMutation({
     mutationFn: async () => {
-      const response = await fetch("/api/v1/regression/fixtures/snapshot-all", {
+      const response = await fetch("/api/v1/regression/snapshot-all", {
         method: "POST",
       });
-      if (!response.ok) throw new Error("Failed to snapshot all");
+      if (!response.ok) {
+        const body = await response.json().catch(() => null);
+        throw new Error(body?.message || "Failed to snapshot all");
+      }
     },
     onSuccess: () => queryClient.invalidateQueries({ queryKey: ["regression"] }),
   });

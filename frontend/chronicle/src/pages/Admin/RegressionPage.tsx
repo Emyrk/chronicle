@@ -1,4 +1,5 @@
-import { useState, Fragment } from "react";
+import { useState, Fragment, useEffect } from "react";
+import { toast } from "sonner";
 import { Card } from "@/components/ui/Card/Card";
 import { Button } from "@/components/ui/button";
 import { TestTube, Plus, Trash2, Camera, RefreshCw, GitCompare, AlertTriangle, ChevronDown, ChevronRight } from "lucide-react";
@@ -205,6 +206,28 @@ export function RegressionPage() {
   const snapshotAll = useSnapshotAll();
   const requeueVersion = useRequeueVersion();
   const deleteSnapshot = useDeleteRegressionSnapshot();
+
+  // Toast on mutation errors
+  useEffect(() => {
+    const errors = [
+      { mutation: createFixture, label: "Create fixture" },
+      { mutation: deleteFixture, label: "Delete fixture" },
+      { mutation: updateNote, label: "Update note" },
+      { mutation: takeSnapshot, label: "Take snapshot" },
+      { mutation: snapshotAll, label: "Snapshot all" },
+      { mutation: requeueVersion, label: "Requeue" },
+      { mutation: deleteSnapshot, label: "Delete snapshot" },
+    ];
+    for (const { mutation, label } of errors) {
+      if (mutation.error) {
+        toast.error(`${label}: ${mutation.error.message}`);
+      }
+    }
+  }, [
+    createFixture.error, deleteFixture.error, updateNote.error,
+    takeSnapshot.error, snapshotAll.error, requeueVersion.error,
+    deleteSnapshot.error,
+  ]);
 
   const [newLogGroupId, setNewLogGroupId] = useState("");
   const [newNote, setNewNote] = useState("");
