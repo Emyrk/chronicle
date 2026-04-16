@@ -13,10 +13,6 @@ import (
 	"github.com/Emyrk/chronicle/chronicle/regression"
 	"github.com/Emyrk/chronicle/chronicle/riverqueue"
 	"github.com/Emyrk/chronicle/combatlog/consumers"
-	"github.com/Emyrk/chronicle/combatlog/parser/logfile"
-	"github.com/Emyrk/chronicle/combatlog/parser/sorter"
-	"github.com/Emyrk/chronicle/combatlog/parser/types/realmclock"
-	"github.com/Emyrk/chronicle/combatlog/parser/vanilla"
 	"github.com/Emyrk/chronicle/combatlog/parser/vanilla/parserv2"
 	"github.com/Emyrk/chronicle/combatlog/parser/vanilla/state/encounters"
 	"github.com/Emyrk/chronicle/combatlog/parser/vanilla/state/encounters/instances"
@@ -95,36 +91,21 @@ func (w *WorkerRegressionSnapshot) Work(ctx context.Context, job *river.Job[Args
 		return fmt.Errorf("get log files: %w", err)
 	}
 
-	// 3. Parse the combat log (same logic as logparse.go)
+	// Only V2 logs are supported for regression testing
+	if logGroup.WoWLogGroup.LogType != database.LogTypeV2 {
+		return river.JobCancel(fmt.Errorf("only V2 logs are supported for regression snapshots, got %s", logGroup.WoWLogGroup.LogType))
+	}
+
+	if len(files) != 1 {
+		return river.JobCancel(fmt.Errorf("V2 log group expects 1 file, has %d", len(files)))
+	}
+
+	// 3. Parse the combat log
 	encountersState := encounters.New(ctx, logger)
 	c := consumers.New(logger, encountersState)
 
 	var consumeErr error
-	switch logGroup.WoWLogGroup.LogType {
-	case database.LogTypeV1:
-		var ri *realmclock.Info
-		rdrs := make([]logfile.Reader, len(files))
-		for i, file := range files {
-			var fri *realmclock.Info
-			rdrs[i], fri, err = w.loadAndSortFile(ctx, file)
-			if err != nil {
-				return fmt.Errorf("load file: %w", err)
-			}
-			if ri == nil && fri != nil {
-				ri = fri
-			}
-		}
-
-		m := vanilla.Merger(logger)
-		liner, scan, err := m.LineScanner(ctx, ri, rdrs[0], rdrs[1])
-		if err != nil {
-			return fmt.Errorf("create line scanner: %w", err)
-		}
-
-		p := vanilla.NewFromScanner(logger, liner, scan, w.parent.WoWDB)
-		consumeErr = c.ConsumeAll(ctx, p)
-
-	case database.LogTypeV2:
+	{
 		rdr, err := w.loadFile(ctx, files[0])
 		if err != nil {
 			return fmt.Errorf("load log file: %w", err)
@@ -136,9 +117,6 @@ func (w *WorkerRegressionSnapshot) Work(ctx context.Context, job *river.Job[Args
 		}
 
 		consumeErr = c.ConsumeAll(ctx, p)
-
-	default:
-		return fmt.Errorf("unknown log type: %s", logGroup.WoWLogGroup.LogType)
 	}
 
 	if consumeErr != nil && !errors.Is(consumeErr, io.EOF) {
@@ -209,20 +187,4 @@ func (w *WorkerRegressionSnapshot) loadFile(ctx context.Context, file database.L
 	return reader, nil
 }
 
-// loadAndSortFile loads and sorts a V1 log file.
-func (w *WorkerRegressionSnapshot) loadAndSortFile(ctx context.Context, file database.LogFile) (logfile.Reader, *realmclock.Info, error) {
-	logger := leveledlog.New(w.parent.logger, slog.LevelInfo)
 
-	rdr, err := w.loadFile(ctx, file)
-	if err != nil {
-		return nil, nil, err
-	}
-
-	fileData := &bytes.Buffer{}
-	sum, ri, err := sorter.SortLogs(ctx, logger, rdr, fileData)
-	if err != nil {
-		return nil, ri, fmt.Errorf("sort log file %s: %w", file.ID, err)
-	}
-
-	return logfile.New(&sum.IsRaw, fileData), ri, nil
-}

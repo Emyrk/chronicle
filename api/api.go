@@ -144,7 +144,7 @@ func (api *API) Routes() chi.Router {
 		r.Route("/regression", func(r chi.Router) {
 			r.Use(
 				api.Auth.Authenticated(false),
-				httpmw.Can(api.Zed, policy.New().GlobalChronicle().CanAdmin_users_User),
+				httpmw.Can(api.Zed, policy.New().GlobalChronicle().CanAdmin_regressions_User),
 			)
 			r.Get("/fixtures", api.RegressionListFixtures)
 			r.Post("/fixtures", api.RegressionCreateFixture)
