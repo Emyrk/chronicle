@@ -36,7 +36,7 @@ func (ArgsRegressionSnapshot) InsertOpts() river.InsertOpts {
 	return river.InsertOpts{
 		Queue:       riverqueue.QueueLogParsing,
 		Priority:    riverqueue.PriorityLow,
-		MaxAttempts: 3,
+		MaxAttempts: 1,
 		UniqueOpts: river.UniqueOpts{
 			ByArgs: true,
 			ByState: []rivertype.JobState{
@@ -87,6 +87,9 @@ func (w *WorkerRegressionSnapshot) Work(ctx context.Context, job *river.Job[Args
 	}
 
 	files, err := db.GetWoWLogFilesByGroupID(ctx, fixture.LogGroupID)
+	if errors.Is(err, sql.ErrNoRows) || len(files) == 0 {
+		return river.JobCancel(errors.New("no log files found for log group, cannot run regression"))
+	}
 	if err != nil {
 		return fmt.Errorf("get log files: %w", err)
 	}
@@ -98,6 +101,10 @@ func (w *WorkerRegressionSnapshot) Work(ctx context.Context, job *river.Job[Args
 
 	if len(files) != 1 {
 		return river.JobCancel(fmt.Errorf("V2 log group expects 1 file, has %d", len(files)))
+	}
+
+	if files[0].StorageDeletedAt.Valid {
+		return river.JobCancel(fmt.Errorf("log file %s is marked deleted, cannot run regression", files[0].ID))
 	}
 
 	// 3. Parse the combat log
@@ -186,5 +193,3 @@ func (w *WorkerRegressionSnapshot) loadFile(ctx context.Context, file database.L
 
 	return reader, nil
 }
-
-

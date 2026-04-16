@@ -121,6 +121,31 @@ func (api *API) RegressionTakeSnapshot(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// Pre-check: verify the fixture's log files still exist before enqueuing
+	fixture, err := api.Zed.GetRegressionFixture(ctx, fixtureID)
+	if err != nil {
+		httpapi.InternalServerError(w, err)
+		return
+	}
+
+	files, err := api.Zed.GetWoWLogFilesByGroupID(ctx, fixture.LogGroupID)
+	if err != nil {
+		httpapi.InternalServerError(w, err)
+		return
+	}
+	if len(files) == 0 {
+		httpapi.Write(ctx, w, http.StatusBadRequest, chroniclesdk.Response{
+			Message: "No log files found for this fixture's log group",
+		})
+		return
+	}
+	if files[0].StorageDeletedAt.Valid {
+		httpapi.Write(ctx, w, http.StatusBadRequest, chroniclesdk.Response{
+			Message: "Log files have been deleted from storage",
+		})
+		return
+	}
+
 	_, err = api.Chronicle.EnqueueRegressionSnapshot(ctx, fixtureID)
 	if err != nil {
 		httpapi.InternalServerError(w, err)
