@@ -87,7 +87,7 @@ function formatTimestamp(ts: string): string {
   return d.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit", second: "2-digit" });
 }
 
-function LootRow({ item, context, useOffset, instanceStartMs }: { item: InstanceLoot; context: PanelRenderProps<LootResult>["context"]; useOffset: boolean; instanceStartMs: number }) {
+function LootRow({ item, context, useOffset, instanceStartMs, greyed }: { item: InstanceLoot; context: PanelRenderProps<LootResult>["context"]; useOffset: boolean; instanceStartMs: number; greyed?: boolean }) {
   const [hovered, setHovered] = useState(false);
   const tooltip = useItemTooltip(
     hovered ? { itemId: item.item_id, randomProperty: item.loot_suffix || undefined } : null,
@@ -97,7 +97,7 @@ function LootRow({ item, context, useOffset, instanceStartMs }: { item: Instance
 
   return (
     <tr
-      className={cn("border-b border-border/50", traded && "bg-muted/30")}
+      className={cn("border-b border-border/50", traded && "bg-muted/30", greyed && "opacity-30")}
       onMouseEnter={() => setHovered(true)}
       onMouseLeave={() => setHovered(false)}
     >
@@ -311,6 +311,21 @@ function LootContent({ context, panelOption, setPanelOption, useOffset }: Pick<P
     return ids;
   }, [instanceFilters, instanceFilterStates]);
 
+  // Earliest selected encounter start time — loot before this is greyed out
+  const encounterStartMs = useMemo(() => {
+    const ids = context.selectedEncounterIds;
+    if (!ids || ids.length === 0) return null;
+    const idSet = new Set(ids);
+    let earliest = Infinity;
+    for (const enc of context.instance.encounters ?? []) {
+      if (idSet.has(enc.id)) {
+        const t = new Date(enc.start_time).getTime();
+        if (t < earliest) earliest = t;
+      }
+    }
+    return earliest === Infinity ? null : earliest;
+  }, [context.selectedEncounterIds, context.instance.encounters]);
+
   // Selected players filter — when players are selected, only show their loot
   const selectedPlayerIds = context.entitySelection.playerIds;
 
@@ -411,6 +426,9 @@ function LootContent({ context, panelOption, setPanelOption, useOffset }: Pick<P
                 })}
               </div>
             )}
+            {encounterStartMs !== null && (
+              <p className="text-2xs text-zinc-500 italic mb-1.5">Loot before the selected encounter is greyed out.</p>
+            )}
             <table className="w-full">
               <thead>
                 <tr className="text-muted-foreground border-b border-border text-xs">
@@ -421,7 +439,7 @@ function LootContent({ context, panelOption, setPanelOption, useOffset }: Pick<P
               </thead>
               <tbody>
                 {filtered.map((item: InstanceLoot, i: number) => (
-                  <LootRow key={i} item={item} context={context} useOffset={useOffset} instanceStartMs={instanceStartMs} />
+                  <LootRow key={i} item={item} context={context} useOffset={useOffset} instanceStartMs={instanceStartMs} greyed={encounterStartMs !== null && new Date(item.source_ts).getTime() < encounterStartMs} />
                 ))}
               </tbody>
             </table>
