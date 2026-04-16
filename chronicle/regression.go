@@ -5,6 +5,7 @@ import (
 	"compress/gzip"
 	"context"
 	"encoding/json"
+	"reflect"
 	"database/sql"
 	"errors"
 	"fmt"
@@ -161,11 +162,11 @@ func (w *WorkerRegressionSnapshot) Work(ctx context.Context, job *river.Job[Args
 	prev, err := db.GetLatestRegressionSnapshot(ctx, job.Args.FixtureID)
 	if err == nil {
 		previousSnapshotID = uuid.NullUUID{UUID: prev.ID, Valid: true}
-		// Compare as compact JSON since JSONB storage strips formatting
-		var prevCompact, newCompact bytes.Buffer
-		if err := json.Compact(&prevCompact, prev.Snapshot); err == nil {
-			if err := json.Compact(&newCompact, jsonBytes); err == nil {
-				matches := bytes.Equal(prevCompact.Bytes(), newCompact.Bytes())
+		// Unmarshal both and compare structurally — JSONB may reorder keys
+		var prevVal, newVal interface{}
+		if err := json.Unmarshal(prev.Snapshot, &prevVal); err == nil {
+			if err := json.Unmarshal(jsonBytes, &newVal); err == nil {
+				matches := reflect.DeepEqual(prevVal, newVal)
 				matchesPrevious = pgtype.Bool{Bool: matches, Valid: true}
 			}
 		}
