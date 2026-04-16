@@ -1,6 +1,9 @@
 package httpmw
 
 import (
+	"bytes"
+	"compress/gzip"
+	"io"
 	"log/slog"
 	"net/http"
 )
@@ -51,10 +54,20 @@ func Log500(logger *slog.Logger) func(http.Handler) http.Handler {
 			sw := &statusWriter{ResponseWriter: rw}
 			next.ServeHTTP(sw, r)
 			if sw.status == http.StatusInternalServerError {
+				body := sw.body
+				// Decompress gzip body so error messages are readable in logs.
+				if len(body) >= 2 && body[0] == 0x1f && body[1] == 0x8b {
+					if gr, err := gzip.NewReader(bytes.NewReader(body)); err == nil {
+						if decompressed, err := io.ReadAll(gr); err == nil {
+							body = decompressed
+						}
+						_ = gr.Close()
+					}
+				}
 				logger.ErrorContext(r.Context(), "returned 500",
 					slog.String("method", r.Method),
 					slog.String("path", r.URL.Path),
-					slog.String("body", string(sw.body)),
+					slog.String("body", string(body)),
 				)
 			}
 		})

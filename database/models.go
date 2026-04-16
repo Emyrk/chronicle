@@ -916,9 +916,9 @@ type RegressionSnapshot struct {
 	ID        uuid.UUID          `db:"id" json:"id"`
 	FixtureID uuid.UUID          `db:"fixture_id" json:"fixture_id"`
 	Version   string             `db:"version" json:"version"`
-	BuildTime string             `db:"build_time" json:"build_time"`
 	Snapshot  []byte             `db:"snapshot" json:"snapshot"`
 	CreatedAt pgtype.Timestamptz `db:"created_at" json:"created_at"`
+	BuildTime string             `db:"build_time" json:"build_time"`
 }
 
 type RiverClient struct {

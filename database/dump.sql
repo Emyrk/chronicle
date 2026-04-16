@@ -507,9 +507,9 @@ CREATE TABLE regression_snapshots (
     id uuid DEFAULT gen_random_uuid() NOT NULL,
     fixture_id uuid NOT NULL,
     version text NOT NULL,
-    build_time text DEFAULT ''::text NOT NULL,
     snapshot jsonb NOT NULL,
-    created_at timestamp with time zone DEFAULT now() NOT NULL
+    created_at timestamp with time zone DEFAULT now() NOT NULL,
+    build_time text DEFAULT ''::text NOT NULL
 );
 
 CREATE UNLOGGED TABLE river_client (
