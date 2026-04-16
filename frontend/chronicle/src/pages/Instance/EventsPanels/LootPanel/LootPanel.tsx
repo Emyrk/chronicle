@@ -87,7 +87,7 @@ function formatTimestamp(ts: string): string {
   return d.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit", second: "2-digit" });
 }
 
-function LootRow({ item, context, useOffset, instanceStartMs, greyed }: { item: InstanceLoot; context: PanelRenderProps<LootResult>["context"]; useOffset: boolean; instanceStartMs: number; greyed?: boolean }) {
+function LootRow({ item, context, useOffset, instanceStartMs, greyed, scrollRef }: { item: InstanceLoot; context: PanelRenderProps<LootResult>["context"]; useOffset: boolean; instanceStartMs: number; greyed?: boolean; scrollRef?: React.Ref<HTMLTableRowElement> }) {
   const [hovered, setHovered] = useState(false);
   const tooltip = useItemTooltip(
     hovered ? { itemId: item.item_id, randomProperty: item.loot_suffix || undefined } : null,
@@ -97,7 +97,8 @@ function LootRow({ item, context, useOffset, instanceStartMs, greyed }: { item: 
 
   return (
     <tr
-      className={cn("border-b border-border/50", traded && "bg-muted/30", greyed && "opacity-30")}
+      ref={scrollRef}
+      className={cn("border-b border-border/50", traded && "bg-muted/30", greyed && "opacity-50")}
       onMouseEnter={() => setHovered(true)}
       onMouseLeave={() => setHovered(false)}
     >
@@ -222,6 +223,57 @@ function TurninContent({ context, config, loot }: {
         </table>
       </div>
     </div>
+  );
+}
+
+function LootTable({ filtered, context, useOffset, instanceStartMs, encounterStartMs }: {
+  filtered: InstanceLoot[];
+  context: PanelRenderProps<LootResult>["context"];
+  useOffset: boolean;
+  instanceStartMs: number;
+  encounterStartMs: number | null;
+}) {
+  const firstRevealedRef = useRef<HTMLTableRowElement>(null);
+
+  // Find the index of the first non-greyed item
+  const firstRevealedIndex = useMemo(() => {
+    if (encounterStartMs === null) return -1;
+    return filtered.findIndex((item) => new Date(item.source_ts).getTime() >= encounterStartMs);
+  }, [filtered, encounterStartMs]);
+
+  // Auto-scroll to the first revealed row when encounter selection changes
+  useEffect(() => {
+    if (firstRevealedRef.current) {
+      firstRevealedRef.current.scrollIntoView({ block: "start", behavior: "smooth" });
+    }
+  }, [encounterStartMs, firstRevealedIndex]);
+
+  return (
+    <table className="w-full">
+      <thead>
+        <tr className="text-muted-foreground border-b border-border text-xs">
+          <th className="text-left py-1 px-2">Item</th>
+          <th className="text-left py-1 px-2">Player</th>
+          <th className="text-left py-1 px-2">Time</th>
+        </tr>
+      </thead>
+      <tbody>
+        {filtered.map((item: InstanceLoot, i: number) => {
+          const greyed = encounterStartMs !== null && new Date(item.source_ts).getTime() < encounterStartMs;
+          return (
+            <LootRow
+              key={i}
+              item={item}
+              context={context}
+              useOffset={useOffset}
+              instanceStartMs={instanceStartMs}
+              greyed={greyed}
+              scrollRef={i === firstRevealedIndex ? firstRevealedRef : undefined}
+            />
+          );
+        })}
+      </tbody>
+    </table>
   );
 }
 
@@ -429,20 +481,7 @@ function LootContent({ context, panelOption, setPanelOption, useOffset }: Pick<P
             {encounterStartMs !== null && (
               <p className="text-2xs text-zinc-500 italic mb-1.5">Loot before the selected encounter is greyed out.</p>
             )}
-            <table className="w-full">
-              <thead>
-                <tr className="text-muted-foreground border-b border-border text-xs">
-                  <th className="text-left py-1 px-2">Item</th>
-                  <th className="text-left py-1 px-2">Player</th>
-                  <th className="text-left py-1 px-2">Time</th>
-                </tr>
-              </thead>
-              <tbody>
-                {filtered.map((item: InstanceLoot, i: number) => (
-                  <LootRow key={i} item={item} context={context} useOffset={useOffset} instanceStartMs={instanceStartMs} greyed={encounterStartMs !== null && new Date(item.source_ts).getTime() < encounterStartMs} />
-                ))}
-              </tbody>
-            </table>
+            <LootTable filtered={filtered} context={context} useOffset={useOffset} instanceStartMs={instanceStartMs} encounterStartMs={encounterStartMs} />
           </div>
         </div>
       )}
