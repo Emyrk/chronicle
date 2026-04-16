@@ -14,7 +14,6 @@ CREATE TABLE regression_snapshots (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     fixture_id UUID NOT NULL REFERENCES regression_fixtures(id) ON DELETE CASCADE,
     version TEXT NOT NULL,
-    build_time TEXT NOT NULL DEFAULT '',
     snapshot JSONB NOT NULL,
     created_at TIMESTAMPTZ NOT NULL DEFAULT now()
 );

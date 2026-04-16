@@ -288,7 +288,7 @@ export function RegressionPage() {
         <TestTube className="h-6 w-6" />
         <h1 className="text-2xl font-bold">Regression Testing</h1>
       </div>
-      <p className="text-sm text-gray-400 -mt-4">
+      <p className="text-sm text-gray-400">
         Pin raid logs, take parse snapshots across versions, and compare results to detect regressions.
       </p>
 
