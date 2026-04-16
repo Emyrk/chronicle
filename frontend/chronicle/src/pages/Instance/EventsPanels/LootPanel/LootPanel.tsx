@@ -241,11 +241,20 @@ function LootTable({ filtered, context, useOffset, instanceStartMs, encounterSta
     return filtered.findIndex((item) => new Date(item.source_ts).getTime() >= encounterStartMs);
   }, [filtered, encounterStartMs]);
 
-  // Auto-scroll to the first revealed row when encounter selection changes
+  // Auto-scroll to the first revealed row within the panel's scroll container
   useEffect(() => {
-    if (firstRevealedRef.current) {
-      firstRevealedRef.current.scrollIntoView({ block: "start", behavior: "smooth" });
+    const row = firstRevealedRef.current;
+    if (!row) return;
+    // Find the nearest scrollable ancestor (the panel's overflow-auto div)
+    let scrollParent: HTMLElement | null = row.parentElement;
+    while (scrollParent) {
+      const { overflow, overflowY } = getComputedStyle(scrollParent);
+      if (overflow === "auto" || overflow === "scroll" || overflowY === "auto" || overflowY === "scroll") break;
+      scrollParent = scrollParent.parentElement;
     }
+    if (!scrollParent) return;
+    const rowTop = row.offsetTop - scrollParent.offsetTop;
+    scrollParent.scrollTo({ top: rowTop, behavior: "smooth" });
   }, [encounterStartMs, firstRevealedIndex]);
 
   return (
