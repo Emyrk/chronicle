@@ -66,6 +66,7 @@ type sqlcQuerier interface {
 	GetLogFile(ctx context.Context, id uuid.UUID) (LogFile, error)
 	GetPanelLayoutByCode(ctx context.Context, code pgtype.Text) (GetPanelLayoutByCodeRow, error)
 	GetPanelLayoutByID(ctx context.Context, id uuid.UUID) (GetPanelLayoutByIDRow, error)
+	GetRegressionFixture(ctx context.Context, id uuid.UUID) (RegressionFixture, error)
 	GetRegressionSnapshot(ctx context.Context, id uuid.UUID) (RegressionSnapshot, error)
 	GetSharedViewByCode(ctx context.Context, code string) (SharedView, error)
 	GetSharedViewByInstanceAndHash(ctx context.Context, arg GetSharedViewByInstanceAndHashParams) (SharedView, error)

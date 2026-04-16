@@ -7,6 +7,9 @@ DELETE FROM regression_fixtures WHERE id = @id;
 -- name: UpdateRegressionFixtureNote :exec
 UPDATE regression_fixtures SET note = @note WHERE id = @id;
 
+-- name: GetRegressionFixture :one
+SELECT * FROM regression_fixtures WHERE id = @id;
+
 -- name: ListRegressionFixtures :many
 SELECT rf.*
 FROM regression_fixtures rf

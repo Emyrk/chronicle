@@ -2615,6 +2615,22 @@ func (q *sqlQuerier) DeleteRegressionFixture(ctx context.Context, id uuid.UUID) 
 	return err
 }
 
+const getRegressionFixture = `-- name: GetRegressionFixture :one
+SELECT id, log_group_id, note, created_at FROM regression_fixtures WHERE id = $1
+`
+
+func (q *sqlQuerier) GetRegressionFixture(ctx context.Context, id uuid.UUID) (RegressionFixture, error) {
+	row := q.db.QueryRow(ctx, getRegressionFixture, id)
+	var i RegressionFixture
+	err := row.Scan(
+		&i.ID,
+		&i.LogGroupID,
+		&i.Note,
+		&i.CreatedAt,
+	)
+	return i, err
+}
+
 const getRegressionSnapshot = `-- name: GetRegressionSnapshot :one
 SELECT id, fixture_id, version, snapshot, created_at FROM regression_snapshots WHERE id = $1
 `

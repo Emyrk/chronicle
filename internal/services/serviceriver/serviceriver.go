@@ -78,6 +78,7 @@ func (s *Service) Start(ctx context.Context) error {
 
 	riverqueue.AddWorker(q, chron.NewWorkerLogParse())
 	riverqueue.AddWorker(q, chron.NewWorkerReLogParse())
+	riverqueue.AddWorker(q, chron.NewWorkerRegressionSnapshot())
 	riverqueue.AddWorker(q, bot.NewWorkerSyncDiscordUser())
 
 	err = q.Start(ctx)
