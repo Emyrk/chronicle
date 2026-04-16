@@ -807,13 +807,14 @@ type LogInstance struct {
 	Name       string      `db:"name" json:"name"`
 	HashedSlug pgtype.Text `db:"hashed_slug" json:"hashed_slug"`
 	// If set, that means it was a guild run.
-	GuildID      uuid.NullUUID      `db:"guild_id" json:"guild_id"`
-	StartTime    pgtype.Timestamptz `db:"start_time" json:"start_time"`
-	EndTime      pgtype.Timestamptz `db:"end_time" json:"end_time"`
-	Capabilities []string           `db:"capabilities" json:"capabilities"`
-	Versions     VersionsMap        `db:"versions" json:"versions"`
-	RecorderName string             `db:"recorder_name" json:"recorder_name"`
-	RecorderGuid string             `db:"recorder_guid" json:"recorder_guid"`
+	GuildID       uuid.NullUUID      `db:"guild_id" json:"guild_id"`
+	StartTime     pgtype.Timestamptz `db:"start_time" json:"start_time"`
+	EndTime       pgtype.Timestamptz `db:"end_time" json:"end_time"`
+	Capabilities  []string           `db:"capabilities" json:"capabilities"`
+	Versions      VersionsMap        `db:"versions" json:"versions"`
+	RecorderName  string             `db:"recorder_name" json:"recorder_name"`
+	RecorderGuid  string             `db:"recorder_guid" json:"recorder_guid"`
+	ParserVersion string             `db:"parser_version" json:"parser_version"`
 }
 
 type LogInstanceEncounter struct {
@@ -902,6 +903,21 @@ type LogInstancesGuild struct {
 // A parsed_log_group is a wow_log_group that has been processed and contains parsed logs. A duplicate allows deleting this one row to clear all parsed logs for a given wow_log_group.
 type ParsedLogGroup struct {
 	ID uuid.UUID `db:"id" json:"id"`
+}
+
+type RegressionFixture struct {
+	ID         uuid.UUID          `db:"id" json:"id"`
+	LogGroupID uuid.UUID          `db:"log_group_id" json:"log_group_id"`
+	Note       string             `db:"note" json:"note"`
+	CreatedAt  pgtype.Timestamptz `db:"created_at" json:"created_at"`
+}
+
+type RegressionSnapshot struct {
+	ID        uuid.UUID          `db:"id" json:"id"`
+	FixtureID uuid.UUID          `db:"fixture_id" json:"fixture_id"`
+	Version   string             `db:"version" json:"version"`
+	Snapshot  []byte             `db:"snapshot" json:"snapshot"`
+	CreatedAt pgtype.Timestamptz `db:"created_at" json:"created_at"`
 }
 
 type RiverClient struct {

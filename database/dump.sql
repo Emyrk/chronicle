@@ -459,7 +459,8 @@ CREATE TABLE log_instances (
     capabilities text[] DEFAULT '{}'::text[] NOT NULL,
     versions jsonb DEFAULT '{}'::jsonb NOT NULL,
     recorder_name text DEFAULT ''::text NOT NULL,
-    recorder_guid text DEFAULT ''::text NOT NULL
+    recorder_guid text DEFAULT ''::text NOT NULL,
+    parser_version text DEFAULT '0.0'::text NOT NULL
 );
 
 COMMENT ON COLUMN log_instances.guild_id IS 'If set, that means it was a guild run.';
@@ -494,6 +495,21 @@ CREATE TABLE parsed_log_group (
 );
 
 COMMENT ON TABLE parsed_log_group IS 'A parsed_log_group is a wow_log_group that has been processed and contains parsed logs. A duplicate allows deleting this one row to clear all parsed logs for a given wow_log_group.';
+
+CREATE TABLE regression_fixtures (
+    id uuid DEFAULT gen_random_uuid() NOT NULL,
+    log_group_id uuid NOT NULL,
+    note text DEFAULT ''::text NOT NULL,
+    created_at timestamp with time zone DEFAULT now() NOT NULL
+);
+
+CREATE TABLE regression_snapshots (
+    id uuid DEFAULT gen_random_uuid() NOT NULL,
+    fixture_id uuid NOT NULL,
+    version text NOT NULL,
+    snapshot jsonb NOT NULL,
+    created_at timestamp with time zone DEFAULT now() NOT NULL
+);
 
 CREATE UNLOGGED TABLE river_client (
     id text NOT NULL,
@@ -970,6 +986,15 @@ ALTER TABLE ONLY log_instances
 ALTER TABLE ONLY parsed_log_group
     ADD CONSTRAINT parsed_log_group_pkey PRIMARY KEY (id);
 
+ALTER TABLE ONLY regression_fixtures
+    ADD CONSTRAINT regression_fixtures_log_group_id_key UNIQUE (log_group_id);
+
+ALTER TABLE ONLY regression_fixtures
+    ADD CONSTRAINT regression_fixtures_pkey PRIMARY KEY (id);
+
+ALTER TABLE ONLY regression_snapshots
+    ADD CONSTRAINT regression_snapshots_pkey PRIMARY KEY (id);
+
 ALTER TABLE ONLY river_client
     ADD CONSTRAINT river_client_pkey PRIMARY KEY (id);
 
@@ -1082,6 +1107,8 @@ CREATE INDEX idx_log_instance_players_instance_id ON log_instance_players USING 
 CREATE INDEX idx_log_instances_log_group_id ON log_instances USING btree (log_group_id);
 
 CREATE INDEX idx_log_instances_realm_id ON log_instances USING btree (realm_id);
+
+CREATE INDEX idx_regression_snapshots_fixture ON regression_snapshots USING btree (fixture_id, created_at DESC);
 
 CREATE INDEX idx_shared_views_code ON shared_views USING btree (code);
 
@@ -1202,6 +1229,12 @@ ALTER TABLE ONLY log_instances
 
 ALTER TABLE ONLY parsed_log_group
     ADD CONSTRAINT parsed_log_group_id_fkey FOREIGN KEY (id) REFERENCES wow_log_groups(id) ON DELETE CASCADE;
+
+ALTER TABLE ONLY regression_fixtures
+    ADD CONSTRAINT regression_fixtures_log_group_id_fkey FOREIGN KEY (log_group_id) REFERENCES wow_log_groups(id) ON DELETE CASCADE;
+
+ALTER TABLE ONLY regression_snapshots
+    ADD CONSTRAINT regression_snapshots_fixture_id_fkey FOREIGN KEY (fixture_id) REFERENCES regression_fixtures(id) ON DELETE CASCADE;
 
 ALTER TABLE ONLY river_client_queue
     ADD CONSTRAINT river_client_queue_river_client_id_fkey FOREIGN KEY (river_client_id) REFERENCES river_client(id) ON DELETE CASCADE;
