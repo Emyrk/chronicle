@@ -45,6 +45,11 @@ import type {
   GuildJoinRequest as GuildJoinRequestGenerated,
   UpdateGuildSettingsRequest as UpdateGuildSettingsRequestGenerated,
   CreateJoinRequestBody as CreateJoinRequestBodyGenerated,
+  RegressionFixture as RegressionFixtureGenerated,
+  RegressionSnapshotSummary as RegressionSnapshotSummaryGenerated,
+  RegressionSnapshotFull as RegressionSnapshotFullGenerated,
+  CreateRegressionFixtureRequest as CreateRegressionFixtureRequestGenerated,
+  RequeueVersionResponse as RequeueVersionResponseGenerated,
 } from "./typesGenerated";
 
 // Re-export types for convenience
@@ -1223,6 +1228,128 @@ export function useSaveGuildPage(guildId: string | undefined) {
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["guild-page", guildId] });
+    },
+  });
+}
+
+// ─── Regression Testing ───────────────────────────────────────────────
+
+export function useRegressionFixtures() {
+  return useQuery({
+    queryKey: ["regression", "fixtures"],
+    queryFn: async () => {
+      const response = await fetch("/api/v1/regression/fixtures");
+      if (!response.ok) throw new Error("Failed to fetch fixtures");
+      return response.json() as Promise<RegressionFixtureGenerated[]>;
+    },
+  });
+}
+
+export function useRegressionSnapshots(fixtureId: string) {
+  return useQuery({
+    queryKey: ["regression", "snapshots", fixtureId],
+    queryFn: async () => {
+      const response = await fetch(`/api/v1/regression/fixtures/${fixtureId}/snapshots`);
+      if (!response.ok) throw new Error("Failed to fetch snapshots");
+      return response.json() as Promise<RegressionSnapshotSummaryGenerated[]>;
+    },
+    enabled: !!fixtureId,
+  });
+}
+
+export function useRegressionSnapshot(snapshotId: string) {
+  return useQuery({
+    queryKey: ["regression", "snapshot", snapshotId],
+    queryFn: async () => {
+      const response = await fetch(`/api/v1/regression/snapshots/${snapshotId}`);
+      if (!response.ok) throw new Error("Failed to fetch snapshot");
+      return response.json() as Promise<RegressionSnapshotFullGenerated>;
+    },
+    enabled: !!snapshotId,
+  });
+}
+
+export function useCreateRegressionFixture() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async (req: CreateRegressionFixtureRequestGenerated) => {
+      const response = await fetch("/api/v1/regression/fixtures", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(req),
+      });
+      if (!response.ok) throw new Error("Failed to create fixture");
+      return response.json() as Promise<RegressionFixtureGenerated>;
+    },
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ["regression", "fixtures"] }),
+  });
+}
+
+export function useDeleteRegressionFixture() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async (fixtureId: string) => {
+      const response = await fetch(`/api/v1/regression/fixtures/${fixtureId}`, {
+        method: "DELETE",
+      });
+      if (!response.ok) throw new Error("Failed to delete fixture");
+    },
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ["regression", "fixtures"] }),
+  });
+}
+
+export function useUpdateRegressionFixtureNote() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async ({ fixtureId, note }: { fixtureId: string; note: string }) => {
+      const response = await fetch(`/api/v1/regression/fixtures/${fixtureId}/note`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ note }),
+      });
+      if (!response.ok) throw new Error("Failed to update note");
+    },
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ["regression", "fixtures"] }),
+  });
+}
+
+export function useTakeSnapshot() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async (fixtureId: string) => {
+      const response = await fetch(`/api/v1/regression/fixtures/${fixtureId}/snapshot`, {
+        method: "POST",
+      });
+      if (!response.ok) throw new Error("Failed to take snapshot");
+      return response.json() as Promise<RegressionSnapshotSummaryGenerated>;
+    },
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ["regression"] }),
+  });
+}
+
+export function useSnapshotAll() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async () => {
+      const response = await fetch("/api/v1/regression/fixtures/snapshot-all", {
+        method: "POST",
+      });
+      if (!response.ok) throw new Error("Failed to snapshot all");
+    },
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ["regression"] }),
+  });
+}
+
+export function useRequeueVersion() {
+  return useMutation({
+    mutationFn: async (req: { version: string }) => {
+      const response = await fetch("/api/v1/regression/requeue", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(req),
+      });
+      if (!response.ok) throw new Error("Failed to requeue");
+      return response.json() as Promise<RequeueVersionResponseGenerated>;
     },
   });
 }

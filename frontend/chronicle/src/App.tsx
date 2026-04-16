@@ -18,6 +18,7 @@ import { YouTubeSyncPage } from "./pages/YouTubeSync/YouTubeSyncPage"
 import { AdminPage } from "./pages/Admin/AdminPage"
 import { AdminStoragePage } from "./pages/Admin/AdminStoragePage"
 import { AdminUsersPage } from "./pages/Admin/AdminUsersPage"
+import { RegressionPage } from "./pages/Admin/RegressionPage"
 import { SpellPage } from "./pages/WoWDB/SpellPage"
 import { SpellByNamePage } from "./pages/WoWDB/SpellByNamePage"
 import { ItemPage } from "./pages/WoWDB/ItemPage"
@@ -83,6 +84,7 @@ function App() {
         <Route path="/admin" element={<AdminPage />} />
         <Route path="/admin/users" element={<AdminUsersPage />} />
         <Route path="/admin/storage" element={<AdminStoragePage />} />
+        <Route path="/admin/regression" element={<RegressionPage />} />
         <Route path="/wowdb/spell" element={<SpellPage />} />
         <Route path="/wowdb/spell/:spellId" element={<SpellPage />} />
         <Route path="/wowdb/spell-by-name" element={<SpellByNamePage />} />
