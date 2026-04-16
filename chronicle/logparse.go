@@ -36,8 +36,8 @@ import (
 	"github.com/Emyrk/chronicle/database/jsontransform"
 	"github.com/Emyrk/chronicle/internal/leveledlog"
 	"github.com/Emyrk/chronicle/internal/ptr"
-	"github.com/Emyrk/chronicle/internal/version"
 	"github.com/Emyrk/chronicle/internal/slice"
+	"github.com/Emyrk/chronicle/internal/version"
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgtype"
@@ -405,8 +405,9 @@ func (w *WorkerLogParse) Work(ctx context.Context, job *river.Job[ArgsLogParse])
 				EndTime:      instanceEnd,
 				Capabilities: []string{"overheal"},
 				Versions:     database.VersionsMap(finalized.Versions),
-				RecorderName: recorderName,
+				RecorderName:  recorderName,
 				RecorderGuid: recorderGUID,
+				ParserVersion: version.GitTag + "+" + version.GitCommit,
 			}
 
 			// Handling colliding slugs
@@ -418,14 +419,6 @@ func (w *WorkerLogParse) Work(ctx context.Context, job *river.Job[ArgsLogParse])
 			dbinstance, err := tx.InsertInstance(ctx, insertInstanceParams)
 			if err != nil {
 				return fmt.Errorf("insert instance: %w", err)
-			}
-
-			err = tx.UpdateInstanceParserVersion(ctx, database.UpdateInstanceParserVersionParams{
-				ID:            dbinstance.ID,
-				ParserVersion: version.GitCommit,
-			})
-			if err != nil {
-				return fmt.Errorf("update instance parser version: %w", err)
 			}
 
 			// Reattach of shared_views and youtube rows is handled by

@@ -133,7 +133,6 @@ type sqlcQuerier interface {
 	UntrackUserPanelLayout(ctx context.Context, arg UntrackUserPanelLayoutParams) (int64, error)
 	UpdateGuildPagePanel(ctx context.Context, arg UpdateGuildPagePanelParams) (GuildPagePanel, error)
 	UpdateGuildPageTab(ctx context.Context, arg UpdateGuildPageTabParams) (GuildPageTab, error)
-	UpdateInstanceParserVersion(ctx context.Context, arg UpdateInstanceParserVersionParams) error
 	UpdateRegressionFixtureNote(ctx context.Context, arg UpdateRegressionFixtureNoteParams) error
 	UpdateUserAuthSessionTokens(ctx context.Context, arg UpdateUserAuthSessionTokensParams) (UserAuthSession, error)
 	UpdateUserPanelLayoutByID(ctx context.Context, arg UpdateUserPanelLayoutByIDParams) (UserPanelLayout, error)

@@ -1931,25 +1931,26 @@ func (q *sqlQuerier) InsertEncounter(ctx context.Context, arg InsertEncounterPar
 
 const insertInstance = `-- name: InsertInstance :one
 INSERT INTO
-  log_instances (id, realm_id, log_group_id, name, hashed_slug, guild_id, start_time, end_time, capabilities, versions, recorder_name, recorder_guid)
+  log_instances (id, realm_id, log_group_id, name, hashed_slug, guild_id, start_time, end_time, capabilities, versions, recorder_name, recorder_guid, parser_version)
 VALUES
-  ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)
+  ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)
 RETURNING id, realm_id, log_group_id, name, hashed_slug, guild_id, start_time, end_time, capabilities, versions, recorder_name, recorder_guid, parser_version
 `
 
 type InsertInstanceParams struct {
-	ID           uuid.UUID          `db:"id" json:"id"`
-	RealmID      uuid.UUID          `db:"realm_id" json:"realm_id"`
-	LogGroupID   uuid.UUID          `db:"log_group_id" json:"log_group_id"`
-	Name         string             `db:"name" json:"name"`
-	HashedSlug   pgtype.Text        `db:"hashed_slug" json:"hashed_slug"`
-	GuildID      uuid.NullUUID      `db:"guild_id" json:"guild_id"`
-	StartTime    pgtype.Timestamptz `db:"start_time" json:"start_time"`
-	EndTime      pgtype.Timestamptz `db:"end_time" json:"end_time"`
-	Capabilities []string           `db:"capabilities" json:"capabilities"`
-	Versions     VersionsMap        `db:"versions" json:"versions"`
-	RecorderName string             `db:"recorder_name" json:"recorder_name"`
-	RecorderGuid string             `db:"recorder_guid" json:"recorder_guid"`
+	ID            uuid.UUID          `db:"id" json:"id"`
+	RealmID       uuid.UUID          `db:"realm_id" json:"realm_id"`
+	LogGroupID    uuid.UUID          `db:"log_group_id" json:"log_group_id"`
+	Name          string             `db:"name" json:"name"`
+	HashedSlug    pgtype.Text        `db:"hashed_slug" json:"hashed_slug"`
+	GuildID       uuid.NullUUID      `db:"guild_id" json:"guild_id"`
+	StartTime     pgtype.Timestamptz `db:"start_time" json:"start_time"`
+	EndTime       pgtype.Timestamptz `db:"end_time" json:"end_time"`
+	Capabilities  []string           `db:"capabilities" json:"capabilities"`
+	Versions      VersionsMap        `db:"versions" json:"versions"`
+	RecorderName  string             `db:"recorder_name" json:"recorder_name"`
+	RecorderGuid  string             `db:"recorder_guid" json:"recorder_guid"`
+	ParserVersion string             `db:"parser_version" json:"parser_version"`
 }
 
 func (q *sqlQuerier) InsertInstance(ctx context.Context, arg InsertInstanceParams) (LogInstance, error) {
@@ -1966,6 +1967,7 @@ func (q *sqlQuerier) InsertInstance(ctx context.Context, arg InsertInstanceParam
 		arg.Versions,
 		arg.RecorderName,
 		arg.RecorderGuid,
+		arg.ParserVersion,
 	)
 	var i LogInstance
 	err := row.Scan(
@@ -2874,20 +2876,6 @@ func (q *sqlQuerier) ListRegressionSnapshots(ctx context.Context, arg ListRegres
 		return nil, err
 	}
 	return items, nil
-}
-
-const updateInstanceParserVersion = `-- name: UpdateInstanceParserVersion :exec
-UPDATE log_instances SET parser_version = $1 WHERE id = $2
-`
-
-type UpdateInstanceParserVersionParams struct {
-	ParserVersion string    `db:"parser_version" json:"parser_version"`
-	ID            uuid.UUID `db:"id" json:"id"`
-}
-
-func (q *sqlQuerier) UpdateInstanceParserVersion(ctx context.Context, arg UpdateInstanceParserVersionParams) error {
-	_, err := q.db.Exec(ctx, updateInstanceParserVersion, arg.ParserVersion, arg.ID)
-	return err
 }
 
 const updateRegressionFixtureNote = `-- name: UpdateRegressionFixtureNote :exec

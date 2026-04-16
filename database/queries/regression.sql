@@ -37,9 +37,6 @@ ORDER BY created_at DESC LIMIT @lim;
 -- name: GetRegressionSnapshot :one
 SELECT * FROM regression_snapshots WHERE id = @id;
 
--- name: UpdateInstanceParserVersion :exec
-UPDATE log_instances SET parser_version = @parser_version WHERE id = @id;
-
 -- name: ListInstancesByParserVersion :many
 SELECT id, log_group_id FROM log_instances WHERE parser_version = @parser_version;
 
