@@ -136,10 +136,15 @@ function FixtureCard({
             </a>
             <span>Pinned {new Date(fixture.created_at).toLocaleDateString()}</span>
             <span>{snapshotCount} snapshot{snapshotCount !== 1 ? "s" : ""}</span>
-            {fixture.files_deleted && (
-              <span className="text-red-400 flex items-center gap-1">
+            {fixture.files_deleted ? (
+              <span className="text-red-400 bg-red-400/10 px-1.5 py-0.5 rounded flex items-center gap-1 font-medium">
                 <AlertTriangle className="h-3 w-3" />
                 Files deleted
+              </span>
+            ) : (
+              <span className="text-green-400/70 flex items-center gap-1">
+                <Check className="h-3 w-3" />
+                Files available
               </span>
             )}
           </div>
