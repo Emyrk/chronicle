@@ -38,6 +38,10 @@ type UpdateRegressionFixtureNoteRequest struct {
 	Note string `json:"note"`
 }
 
+type RegressionJobStatus struct {
+	PendingJobs int64 `json:"pending_jobs"`
+}
+
 type RequeueVersionRequest struct {
 	Version string `json:"version"`
 }

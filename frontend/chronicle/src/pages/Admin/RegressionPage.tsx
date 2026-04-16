@@ -2,7 +2,7 @@ import { useState, Fragment, useEffect } from "react";
 import { toast } from "sonner";
 import { Card } from "@/components/ui/Card/Card";
 import { Button } from "@/components/ui/button";
-import { TestTube, Plus, Trash2, Camera, GitCompare, AlertTriangle, ChevronDown, ChevronRight, Check, X, Minus } from "lucide-react";
+import { TestTube, Plus, Trash2, Camera, GitCompare, AlertTriangle, ChevronDown, ChevronRight, Check, X, Minus, Loader2 } from "lucide-react";
 import {
   useRegressionFixtures,
   useRegressionSnapshots,
@@ -13,6 +13,7 @@ import {
   useTakeSnapshot,
   useSnapshotAll,
   useDeleteRegressionSnapshot,
+  useRegressionJobStatus,
 } from "@/api/queries";
 import type { RegressionSnapshotSummary, RegressionFixture } from "@/api/typesGenerated";
 
@@ -228,6 +229,7 @@ export function RegressionPage() {
   const snapshotAll = useSnapshotAll();
 
   const deleteSnapshot = useDeleteRegressionSnapshot();
+  const { data: jobStatus } = useRegressionJobStatus();
 
   // Toast on mutation errors
   useEffect(() => {
@@ -331,6 +333,12 @@ export function RegressionPage() {
       <div className="flex items-center gap-3 mb-2">
         <TestTube className="h-6 w-6" />
         <h1 className="text-2xl font-bold">Regression Testing</h1>
+        {jobStatus && jobStatus.pending_jobs > 0 && (
+          <span className="flex items-center gap-1.5 text-sm text-yellow-400 bg-yellow-400/10 px-2.5 py-1 rounded-full">
+            <Loader2 className="h-3.5 w-3.5 animate-spin" />
+            {jobStatus.pending_jobs} pending job{jobStatus.pending_jobs !== 1 ? "s" : ""}
+          </span>
+        )}
       </div>
       <p className="text-sm text-gray-400">
         Pin raid logs, take parse snapshots across versions, and compare results to detect regressions.

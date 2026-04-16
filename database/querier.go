@@ -13,6 +13,7 @@ import (
 
 type sqlcQuerier interface {
 	BulkUpsertGuildPagePanels(ctx context.Context, dollar_1 []byte) error
+	CountActiveRegressionJobs(ctx context.Context) (int64, error)
 	CountAllWoWLogGroups(ctx context.Context, arg CountAllWoWLogGroupsParams) (int32, error)
 	CountUserPanelLayoutsTotal(ctx context.Context, userID uuid.NullUUID) (int32, error)
 	// Guild Join Requests

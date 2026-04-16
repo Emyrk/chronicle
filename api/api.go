@@ -155,6 +155,7 @@ func (api *API) Routes() chi.Router {
 			r.Get("/fixtures/{fixtureID}/snapshots", api.RegressionListSnapshots)
 			r.Get("/snapshots/{snapshotID}", api.RegressionGetSnapshot)
 			r.Delete("/snapshots/{snapshotID}", api.RegressionDeleteSnapshot)
+			r.Get("/jobs", api.RegressionJobStatus)
 			r.Post("/requeue-version", api.RegressionRequeueVersion)
 		})
 

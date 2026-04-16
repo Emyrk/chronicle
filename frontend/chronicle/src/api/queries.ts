@@ -1346,6 +1346,18 @@ export function useSnapshotAll() {
   });
 }
 
+export function useRegressionJobStatus() {
+  return useQuery({
+    queryKey: ["regression", "jobs"],
+    queryFn: async () => {
+      const response = await fetch("/api/v1/regression/jobs");
+      if (!response.ok) throw new Error("Failed to fetch job status");
+      return response.json() as Promise<{ pending_jobs: number }>;
+    },
+    refetchInterval: 5000,
+  });
+}
+
 export function useDeleteRegressionSnapshot() {
   const queryClient = useQueryClient();
   return useMutation({

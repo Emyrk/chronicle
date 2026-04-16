@@ -281,6 +281,20 @@ func (api *API) RegressionDeleteSnapshot(w http.ResponseWriter, r *http.Request)
 	httpapi.Write(ctx, w, http.StatusNoContent, nil)
 }
 
+func (api *API) RegressionJobStatus(w http.ResponseWriter, r *http.Request) {
+	ctx := r.Context()
+
+	count, err := api.Zed.CountActiveRegressionJobs(ctx)
+	if err != nil {
+		httpapi.InternalServerError(w, err)
+		return
+	}
+
+	httpapi.Write(ctx, w, http.StatusOK, chroniclesdk.RegressionJobStatus{
+		PendingJobs: count,
+	})
+}
+
 func (api *API) RegressionRequeueVersion(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 

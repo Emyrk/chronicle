@@ -636,6 +636,11 @@ export interface RegressionFixture {
 }
 
 // From chroniclesdk/regression.go
+export interface RegressionJobStatus {
+    readonly pending_jobs: number;
+}
+
+// From chroniclesdk/regression.go
 export interface RegressionSnapshotFull extends RegressionSnapshotSummary {
     readonly snapshot: Record<string, string>;
 }

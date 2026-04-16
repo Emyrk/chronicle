@@ -40,3 +40,8 @@ SELECT id, log_group_id FROM log_instances WHERE parser_version = @parser_versio
 
 -- name: DeleteRegressionSnapshot :exec
 DELETE FROM regression_snapshots WHERE id = @id;
+
+-- name: CountActiveRegressionJobs :one
+SELECT COUNT(*) FROM river_job
+WHERE kind = 'regression-snapshot'
+AND state IN ('available', 'pending', 'scheduled', 'running');

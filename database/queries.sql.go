@@ -2606,6 +2606,19 @@ func (q *sqlQuerier) PruneParsedInstanceFromLogOutput(ctx context.Context, arg P
 	return err
 }
 
+const countActiveRegressionJobs = `-- name: CountActiveRegressionJobs :one
+SELECT COUNT(*) FROM river_job
+WHERE kind = 'regression-snapshot'
+AND state IN ('available', 'pending', 'scheduled', 'running')
+`
+
+func (q *sqlQuerier) CountActiveRegressionJobs(ctx context.Context) (int64, error) {
+	row := q.db.QueryRow(ctx, countActiveRegressionJobs)
+	var count int64
+	err := row.Scan(&count)
+	return count, err
+}
+
 const deleteRegressionFixture = `-- name: DeleteRegressionFixture :exec
 DELETE FROM regression_fixtures WHERE id = $1
 `
