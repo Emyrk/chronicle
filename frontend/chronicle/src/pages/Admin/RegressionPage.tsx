@@ -2,7 +2,7 @@ import { useState, Fragment, useEffect } from "react";
 import { toast } from "sonner";
 import { Card } from "@/components/ui/Card/Card";
 import { Button } from "@/components/ui/button";
-import { TestTube, Plus, Trash2, Camera, RefreshCw, GitCompare, AlertTriangle, ChevronDown, ChevronRight } from "lucide-react";
+import { TestTube, Plus, Trash2, Camera, GitCompare, AlertTriangle, ChevronDown, ChevronRight } from "lucide-react";
 import {
   useRegressionFixtures,
   useRegressionSnapshots,
@@ -12,7 +12,6 @@ import {
   useUpdateRegressionFixtureNote,
   useTakeSnapshot,
   useSnapshotAll,
-  useRequeueVersion,
   useDeleteRegressionSnapshot,
 } from "@/api/queries";
 import type { RegressionSnapshotSummary, RegressionFixture } from "@/api/typesGenerated";
@@ -204,7 +203,7 @@ export function RegressionPage() {
   const updateNote = useUpdateRegressionFixtureNote();
   const takeSnapshot = useTakeSnapshot();
   const snapshotAll = useSnapshotAll();
-  const requeueVersion = useRequeueVersion();
+
   const deleteSnapshot = useDeleteRegressionSnapshot();
 
   // Toast on mutation errors
@@ -215,7 +214,7 @@ export function RegressionPage() {
       { mutation: updateNote, label: "Update note" },
       { mutation: takeSnapshot, label: "Take snapshot" },
       { mutation: snapshotAll, label: "Snapshot all" },
-      { mutation: requeueVersion, label: "Requeue" },
+
       { mutation: deleteSnapshot, label: "Delete snapshot" },
     ];
     for (const { mutation, label } of errors) {
@@ -225,15 +224,14 @@ export function RegressionPage() {
     }
   }, [
     createFixture.error, deleteFixture.error, updateNote.error,
-    takeSnapshot.error, snapshotAll.error, requeueVersion.error,
+    takeSnapshot.error, snapshotAll.error,
     deleteSnapshot.error,
   ]);
 
   const [newLogGroupId, setNewLogGroupId] = useState("");
   const [newNote, setNewNote] = useState("");
   const [selectedSnapshots, setSelectedSnapshots] = useState<Map<string, RegressionSnapshotSummary>>(new Map());
-  const [requeueVersionInput, setRequeueVersionInput] = useState("");
-  const [requeueResult, setRequeueResult] = useState<number | null>(null);
+
 
   // Diff state
   const [diffLeft, setDiffLeft] = useState<string | null>(null);
@@ -475,44 +473,7 @@ export function RegressionPage() {
         )}
       </Card>
 
-      {/* Requeue Section */}
-      <Card className="p-4 space-y-4">
-        <div className="flex items-center gap-3">
-          <RefreshCw className="h-5 w-5" />
-          <h2 className="text-lg font-semibold">Requeue by Version</h2>
-        </div>
-        <p className="text-sm text-gray-400">
-          Re-parse all instances that were parsed by a specific version. Useful when a buggy version is identified.
-        </p>
-        <div className="flex items-end gap-2">
-          <div>
-            <label className="text-xs text-gray-400 uppercase tracking-wide">Parser Version (git commit)</label>
-            <input
-              className="w-full mt-1 px-3 py-1.5 rounded bg-gray-800 border border-gray-700 text-sm font-mono"
-              value={requeueVersionInput}
-              onChange={(e) => setRequeueVersionInput(e.target.value)}
-              placeholder="abc123..."
-            />
-          </div>
-          <Button
-            size="sm"
-            onClick={() => {
-              if (!requeueVersionInput) return;
-              requeueVersion.mutate(
-                { version: requeueVersionInput },
-                { onSuccess: (data) => setRequeueResult(data.requeued_count) },
-              );
-            }}
-            disabled={requeueVersion.isPending || !requeueVersionInput}
-          >
-            <RefreshCw className="h-4 w-4 mr-1" />
-            {requeueVersion.isPending ? "Requeuing..." : "Requeue"}
-          </Button>
-        </div>
-        {requeueResult !== null && (
-          <div className="text-sm text-green-400">Requeued {requeueResult} log group(s) for re-parsing.</div>
-        )}
-      </Card>
+
     </div>
   );
 }
