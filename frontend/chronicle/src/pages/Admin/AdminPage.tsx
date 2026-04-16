@@ -662,6 +662,16 @@ export function AdminPage() {
             Storage Grants
           </Button>
         </Link>
+        <Link to="/admin/regression">
+          <Button
+            variant="outline"
+            size="sm"
+            className="gap-2"
+          >
+            <TestTube className="h-4 w-4" />
+            Regression Testing
+          </Button>
+        </Link>
       </div>
 
       {/* Content */}
