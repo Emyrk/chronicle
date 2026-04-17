@@ -12,7 +12,9 @@ import { PlayerMetricChart, type PlayerMetricChartData } from "@/components/ui/P
 import { ScrollArea } from "@/components/ui/ScrollArea/ScrollArea";
 import { useSpell } from "@/api/queries";
 import { SpellIconWithTooltip } from "@/components/ui/SpellIconWithTooltip";
+import { ChevronLeft } from "lucide-react";
 import { useBreakoutHover } from "@/components/ui/AbilityBreakout/BreakoutHoverContext";
+import { RowContextMenu, getArmoryUrl } from "@/components/ui/PlayerMetricChart/RowContextMenu";
 import { GenericPanel } from "../GenericPanel";
 import type { PanelRenderProps } from "../types";
 import {
@@ -23,6 +25,24 @@ import {
 } from "./dispel.processor";
 import { useCachedValue } from "@/hooks/useCachedValue";
 import { formatNumber } from "@/lib/format";
+
+const FOCUS_PREFIX = "f:";
+
+function parseFocusFromOption(option: string | null | undefined): string | null {
+  if (!option) return null;
+  const token = option.split(",").find(t => t.startsWith(FOCUS_PREFIX));
+  return token ? token.slice(FOCUS_PREFIX.length) : null;
+}
+
+function updatePanelOptionToken(
+  current: string | null | undefined,
+  prefix: string,
+  value: string | null,
+): string | null {
+  const tokens = current ? current.split(",").filter(t => !t.startsWith(prefix)) : [];
+  if (value) tokens.push(`${prefix}${value}`);
+  return tokens.length > 0 ? tokens.join(",") : null;
+}
 
 // ============================================================================
 // Category config
@@ -334,6 +354,17 @@ export interface DispelContentProps extends PanelRenderProps<DispelResult> {
 }
 
 export function DispelContent(props: DispelContentProps) {
+  // Ctrl+click context menu
+  const [contextMenu, setContextMenu] = useState<{
+    x: number; y: number; playerId: string; playerName: string;
+  } | null>(null);
+
+  const focusedPlayerId = useMemo(() => parseFocusFromOption(props.panelOption), [props.panelOption]);
+  const setFocusedPlayerId = useCallback((id: string | null) => {
+    if (!props.setPanelOption) return;
+    props.setPanelOption(updatePanelOptionToken(props.panelOption, FOCUS_PREFIX, id));
+  }, [props.setPanelOption, props.panelOption]);
+
   const { result, context, loading, processing, perspective } = props;
 
   const { cachedValue: cachedResult, hasCache: hasData } = useCachedValue(
@@ -400,6 +431,47 @@ export function DispelContent(props: DispelContentProps) {
     processing: hasData ? false : props.processing,
   };
 
+  const handleRowCtrlClick = useCallback((playerId: string, event: React.MouseEvent) => {
+    const playerName = chartData.find(d => d.playerID === playerId)?.playerName ?? playerId;
+    setContextMenu({ x: event.clientX, y: event.clientY, playerId, playerName });
+  }, [chartData]);
+
+  // ESC key to unfocus
+  useEffect(() => {
+    if (!focusedPlayerId) return;
+    const handler = (e: KeyboardEvent) => {
+      if (e.key === "Escape") setFocusedPlayerId(null);
+    };
+    document.addEventListener("keydown", handler);
+    return () => document.removeEventListener("keydown", handler);
+  }, [focusedPlayerId, setFocusedPlayerId]);
+
+  // Build per-ability data for the focused player
+  const focusedPlayer = focusedPlayerId
+    ? chartData.find(d => d.playerID === focusedPlayerId)
+    : null;
+
+  const focusedAbilityData = useMemo(() => {
+    if (!focusedPlayerId || !cachedResult) return null;
+    const abilityMap = perspective === "done"
+      ? cachedResult.casterByAbility.get(focusedPlayerId)
+      : cachedResult.targetByAbility.get(focusedPlayerId);
+    if (!abilityMap || abilityMap.size === 0) return null;
+
+    const barClassName = focusedPlayer?.className ?? "foreground";
+    const data: PlayerMetricChartData[] = [];
+    for (const [abilityName, count] of abilityMap) {
+      data.push({
+        playerID: abilityName,
+        playerName: abilityName,
+        className: barClassName,
+        specialization: "",
+        value: count,
+      });
+    }
+    return data.sort((a, b) => b.value - a.value);
+  }, [focusedPlayerId, cachedResult, perspective, focusedPlayer?.className]);
+
   // Breakout function
   const breakout = useCallback(
     (playerID: string) => {
@@ -461,15 +533,52 @@ export function DispelContent(props: DispelContentProps) {
           availableTypes={availableTypes}
         />
       </div>
-      <PlayerMetricChart
-        data={chartData}
-        type={"healing"}
-        panelTitle={perspective === "done" ? "Dispels Done" : "Dispels Received"}
-        duration_millis={props.durationMs}
-        perSecond={props.perSecond}
-        breakout={breakout}
-        disableInteractions={props.context.renderMode === "layout_lab"}
-      />
+      {/* Focus header with back button */}
+      {focusedPlayerId && focusedAbilityData && (
+        <div className="flex items-center gap-1.5 mb-1">
+          <button
+            className="text-xs text-muted-foreground hover:text-foreground flex items-center gap-1 cursor-pointer"
+            onClick={() => setFocusedPlayerId(null)}
+          >
+            <ChevronLeft className="h-3.5 w-3.5" />
+            Back
+          </button>
+          <span className="text-xs font-medium">
+            {focusedPlayer?.playerName}
+          </span>
+        </div>
+      )}
+
+      {focusedPlayerId && focusedAbilityData ? (
+        <PlayerMetricChart
+          data={focusedAbilityData}
+          type="healing"
+          panelTitle="Ability Breakdown"
+          duration_millis={props.durationMs}
+          perSecond={props.perSecond}
+          disableInteractions={props.context.renderMode === "layout_lab"}
+        />
+      ) : (
+        <PlayerMetricChart
+          data={chartData}
+          type={"healing"}
+          panelTitle={perspective === "done" ? "Dispels Done" : "Dispels Received"}
+          duration_millis={props.durationMs}
+          perSecond={props.perSecond}
+          breakout={breakout}
+          onRowCtrlClick={handleRowCtrlClick}
+          disableInteractions={props.context.renderMode === "layout_lab"}
+        />
+      )}
+      {contextMenu && (
+        <RowContextMenu
+          position={{ x: contextMenu.x, y: contextMenu.y }}
+          playerName={contextMenu.playerName}
+          onFocus={() => { setFocusedPlayerId(contextMenu.playerId); setContextMenu(null); }}
+          onClose={() => setContextMenu(null)}
+          armoryUrl={getArmoryUrl(props.context.instance, contextMenu.playerId)}
+        />
+      )}
     </GenericPanel>
   );
 }

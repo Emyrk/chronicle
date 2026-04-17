@@ -18,9 +18,11 @@ export interface RowContextMenuProps {
   onClose: () => void
   /** If provided, a "View Armory" link is shown */
   armoryUrl?: string
+  /** Hide the "Focus" button (useful when there's no breakout view) */
+  hideFocus?: boolean
 }
 
-export function RowContextMenu({ position, playerName, onFocus, onClose, armoryUrl }: RowContextMenuProps) {
+export function RowContextMenu({ position, playerName, onFocus, onClose, armoryUrl, hideFocus }: RowContextMenuProps) {
   useEffect(() => {
     const handler = () => onClose()
     // Defer listener setup so the triggering click event doesn't immediately close the menu
@@ -40,16 +42,19 @@ export function RowContextMenu({ position, playerName, onFocus, onClose, armoryU
       className="fixed z-50 min-w-[160px] rounded-md border bg-popover p-1 text-popover-foreground shadow-md"
       style={{ left: position.x, top: position.y }}
     >
-      <button
-        className={btnClass}
-        onClick={(e) => { e.stopPropagation(); onFocus(); onClose() }}
-      >
-        <Focus className="h-3.5 w-3.5" />
-        Focus {playerName}
-      </button>
+      {!hideFocus && (
+        <button
+          className={btnClass}
+          onClick={(e) => { e.stopPropagation(); onFocus(); onClose() }}
+        >
+          <Focus className="h-3.5 w-3.5" />
+          Focus {playerName}
+        </button>
+      )}
       {armoryUrl && (
         <Link
           to={armoryUrl}
+          target="_blank"
           className={btnClass}
           onClick={(e) => { e.stopPropagation(); onClose() }}
         >

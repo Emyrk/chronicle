@@ -651,6 +651,7 @@ const PANEL_CODES: Record<PanelType, string> = {
   dispel_log: 'dsl',
   loot: 'lt',
   logging_metadata: 'lm',
+  absorbed_damage: 'ad',
 
 };
 

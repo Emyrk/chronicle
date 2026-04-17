@@ -37,7 +37,7 @@ const PANEL_CATEGORIES: PanelCategory[] = [
   },
   {
     label: "Survivability",
-    items: ["damage_taken", "enemy_damage_taken", "mitigation"], // TODO: Add "avoidance" when spell school data is available
+    items: ["damage_taken", "enemy_damage_taken", "mitigation", "absorbed_damage"], // TODO: Add "avoidance" when spell school data is available
   },
   {
     label: "Resources",
