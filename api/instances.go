@@ -109,6 +109,37 @@ func (api *API) Instance(w http.ResponseWriter, r *http.Request) {
 	httpapi.Write(ctx, w, http.StatusOK, db2sdk.WowDecoratedInstance(inst, units, players, encounters, fights))
 }
 
+func (api *API) InstanceSpeedrun(w http.ResponseWriter, r *http.Request) {
+	ctx := r.Context()
+	inst := httpmw.Instance(ctx)
+
+	sr, err := api.Opts.Zed.GetInstanceSpeedrun(ctx, inst.ID)
+	if err != nil {
+		httpapi.Write(ctx, w, http.StatusNotFound, chroniclesdk.Response{
+			Message: "No speedrun data for this instance",
+		})
+		return
+	}
+
+	result := db2sdk.SpeedrunResult(sr)
+
+	// Attach version qualification status if requirements exist.
+	req, err := api.Opts.Zed.GetLeaderboardVersionRequirements(ctx, sr.InstanceName)
+	if err == nil {
+		parserVersion := inst.Versions["chronicle"]
+		result.VersionStatus = &chroniclesdk.SpeedrunVersionStatus{
+			ParserVersion:    parserVersion,
+			MinParserVersion: req.MinParserVersion,
+			ParserQualified:  sr.ParserVersionNum >= req.MinParserVersionNum,
+			AddonVersion:     sr.AddonVersion,
+			MinAddonVersion:  req.MinAddonVersion,
+			AddonQualified:   sr.AddonVersionNum >= req.MinAddonVersionNum,
+		}
+	}
+
+	httpapi.Write(ctx, w, http.StatusOK, result)
+}
+
 func (api *API) PostInstanceYoutube(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 	inst := httpmw.Instance(ctx)

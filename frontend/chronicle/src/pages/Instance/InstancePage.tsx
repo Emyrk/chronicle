@@ -138,6 +138,7 @@ function transformToInstance(
     versions: apiInstance.versions,
     recorderName: apiInstance.recorder_name,
     recorderGuid: apiInstance.recorder_guid,
+
   };
 }
 

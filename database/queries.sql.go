@@ -1629,6 +1629,95 @@ func (q *sqlQuerier) UpsertGuildSettings(ctx context.Context, arg UpsertGuildSet
 	return i, err
 }
 
+const getLeaderboardVersionRequirements = `-- name: GetLeaderboardVersionRequirements :one
+SELECT instance_name, min_parser_version, min_parser_version_num, min_addon_version, min_addon_version_num, updated_at FROM leaderboard_version_requirements WHERE instance_name = $1
+`
+
+func (q *sqlQuerier) GetLeaderboardVersionRequirements(ctx context.Context, instanceName string) (LeaderboardVersionRequirement, error) {
+	row := q.db.QueryRow(ctx, getLeaderboardVersionRequirements, instanceName)
+	var i LeaderboardVersionRequirement
+	err := row.Scan(
+		&i.InstanceName,
+		&i.MinParserVersion,
+		&i.MinParserVersionNum,
+		&i.MinAddonVersion,
+		&i.MinAddonVersionNum,
+		&i.UpdatedAt,
+	)
+	return i, err
+}
+
+const listLeaderboardVersionRequirements = `-- name: ListLeaderboardVersionRequirements :many
+SELECT instance_name, min_parser_version, min_parser_version_num, min_addon_version, min_addon_version_num, updated_at FROM leaderboard_version_requirements ORDER BY instance_name
+`
+
+func (q *sqlQuerier) ListLeaderboardVersionRequirements(ctx context.Context) ([]LeaderboardVersionRequirement, error) {
+	rows, err := q.db.Query(ctx, listLeaderboardVersionRequirements)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []LeaderboardVersionRequirement
+	for rows.Next() {
+		var i LeaderboardVersionRequirement
+		if err := rows.Scan(
+			&i.InstanceName,
+			&i.MinParserVersion,
+			&i.MinParserVersionNum,
+			&i.MinAddonVersion,
+			&i.MinAddonVersionNum,
+			&i.UpdatedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const upsertLeaderboardVersionRequirements = `-- name: UpsertLeaderboardVersionRequirements :one
+INSERT INTO leaderboard_version_requirements (
+    instance_name, min_parser_version, min_parser_version_num,
+    min_addon_version, min_addon_version_num, updated_at
+) VALUES ($1, $2, $3, $4, $5, now())
+ON CONFLICT (instance_name) DO UPDATE SET
+    min_parser_version = $2, min_parser_version_num = $3,
+    min_addon_version = $4, min_addon_version_num = $5,
+    updated_at = now()
+RETURNING instance_name, min_parser_version, min_parser_version_num, min_addon_version, min_addon_version_num, updated_at
+`
+
+type UpsertLeaderboardVersionRequirementsParams struct {
+	InstanceName        string `db:"instance_name" json:"instance_name"`
+	MinParserVersion    string `db:"min_parser_version" json:"min_parser_version"`
+	MinParserVersionNum int64  `db:"min_parser_version_num" json:"min_parser_version_num"`
+	MinAddonVersion     string `db:"min_addon_version" json:"min_addon_version"`
+	MinAddonVersionNum  int64  `db:"min_addon_version_num" json:"min_addon_version_num"`
+}
+
+func (q *sqlQuerier) UpsertLeaderboardVersionRequirements(ctx context.Context, arg UpsertLeaderboardVersionRequirementsParams) (LeaderboardVersionRequirement, error) {
+	row := q.db.QueryRow(ctx, upsertLeaderboardVersionRequirements,
+		arg.InstanceName,
+		arg.MinParserVersion,
+		arg.MinParserVersionNum,
+		arg.MinAddonVersion,
+		arg.MinAddonVersionNum,
+	)
+	var i LeaderboardVersionRequirement
+	err := row.Scan(
+		&i.InstanceName,
+		&i.MinParserVersion,
+		&i.MinParserVersionNum,
+		&i.MinAddonVersion,
+		&i.MinAddonVersionNum,
+		&i.UpdatedAt,
+	)
+	return i, err
+}
+
 const getInstanceLoot = `-- name: GetInstanceLoot :many
 SELECT
   il.id, il.instance_id, il.realm_id, il.source_guid, il.source_ts, il.received_guid, il.received_ts, il.item_id, il.item_name, il.loot_suffix, il.quantity,
@@ -3167,6 +3256,148 @@ func (q *sqlQuerier) GetSharedViewByInstanceAndHash(ctx context.Context, arg Get
 		&i.InstanceSlug,
 	)
 	return i, err
+}
+
+const getInstanceSpeedrun = `-- name: GetInstanceSpeedrun :one
+SELECT instance_id, instance_name, realm_id, guild_id, qualified, start_time, completion_time, duration_ms, proof, created_at, addon_version, parser_version_num, addon_version_num FROM instance_speedruns WHERE instance_id = $1
+`
+
+func (q *sqlQuerier) GetInstanceSpeedrun(ctx context.Context, instanceID uuid.UUID) (InstanceSpeedrun, error) {
+	row := q.db.QueryRow(ctx, getInstanceSpeedrun, instanceID)
+	var i InstanceSpeedrun
+	err := row.Scan(
+		&i.InstanceID,
+		&i.InstanceName,
+		&i.RealmID,
+		&i.GuildID,
+		&i.Qualified,
+		&i.StartTime,
+		&i.CompletionTime,
+		&i.DurationMs,
+		&i.Proof,
+		&i.CreatedAt,
+		&i.AddonVersion,
+		&i.ParserVersionNum,
+		&i.AddonVersionNum,
+	)
+	return i, err
+}
+
+const insertInstanceSpeedrun = `-- name: InsertInstanceSpeedrun :exec
+INSERT INTO instance_speedruns (
+    instance_id, instance_name, realm_id, guild_id,
+    qualified, start_time, completion_time, duration_ms, proof,
+    addon_version, parser_version_num, addon_version_num
+) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)
+`
+
+type InsertInstanceSpeedrunParams struct {
+	InstanceID       uuid.UUID          `db:"instance_id" json:"instance_id"`
+	InstanceName     string             `db:"instance_name" json:"instance_name"`
+	RealmID          uuid.UUID          `db:"realm_id" json:"realm_id"`
+	GuildID          uuid.NullUUID      `db:"guild_id" json:"guild_id"`
+	Qualified        bool               `db:"qualified" json:"qualified"`
+	StartTime        pgtype.Timestamptz `db:"start_time" json:"start_time"`
+	CompletionTime   pgtype.Timestamptz `db:"completion_time" json:"completion_time"`
+	DurationMs       int64              `db:"duration_ms" json:"duration_ms"`
+	Proof            []byte             `db:"proof" json:"proof"`
+	AddonVersion     string             `db:"addon_version" json:"addon_version"`
+	ParserVersionNum int64              `db:"parser_version_num" json:"parser_version_num"`
+	AddonVersionNum  int64              `db:"addon_version_num" json:"addon_version_num"`
+}
+
+func (q *sqlQuerier) InsertInstanceSpeedrun(ctx context.Context, arg InsertInstanceSpeedrunParams) error {
+	_, err := q.db.Exec(ctx, insertInstanceSpeedrun,
+		arg.InstanceID,
+		arg.InstanceName,
+		arg.RealmID,
+		arg.GuildID,
+		arg.Qualified,
+		arg.StartTime,
+		arg.CompletionTime,
+		arg.DurationMs,
+		arg.Proof,
+		arg.AddonVersion,
+		arg.ParserVersionNum,
+		arg.AddonVersionNum,
+	)
+	return err
+}
+
+const speedrunLeaderboard = `-- name: SpeedrunLeaderboard :many
+SELECT DISTINCT ON (COALESCE(li.duplicate_group_id, li.id))
+    sr.instance_id,
+    sr.instance_name,
+    sr.duration_ms,
+    sr.start_time,
+    sr.completion_time,
+    sr.qualified,
+    sr.addon_version,
+    li.hashed_slug,
+    li.duplicate_group_id,
+    li.parser_version,
+    COALESCE(g.name, '') AS guild_name,
+    COALESCE(wsr.name, '') AS realm_name
+FROM instance_speedruns sr
+JOIN log_instances li ON li.id = sr.instance_id
+LEFT JOIN guilds g ON sr.guild_id = g.id
+LEFT JOIN wow_server_realms wsr ON sr.realm_id = wsr.id
+LEFT JOIN leaderboard_version_requirements lvr ON lvr.instance_name = sr.instance_name
+WHERE sr.instance_name = $1
+  AND sr.qualified = true
+  AND sr.parser_version_num >= COALESCE(lvr.min_parser_version_num, 0)
+  AND sr.addon_version_num >= COALESCE(lvr.min_addon_version_num, 0)
+ORDER BY COALESCE(li.duplicate_group_id, li.id), sr.duration_ms ASC
+`
+
+type SpeedrunLeaderboardRow struct {
+	InstanceID       uuid.UUID          `db:"instance_id" json:"instance_id"`
+	InstanceName     string             `db:"instance_name" json:"instance_name"`
+	DurationMs       int64              `db:"duration_ms" json:"duration_ms"`
+	StartTime        pgtype.Timestamptz `db:"start_time" json:"start_time"`
+	CompletionTime   pgtype.Timestamptz `db:"completion_time" json:"completion_time"`
+	Qualified        bool               `db:"qualified" json:"qualified"`
+	AddonVersion     string             `db:"addon_version" json:"addon_version"`
+	HashedSlug       pgtype.Text        `db:"hashed_slug" json:"hashed_slug"`
+	DuplicateGroupID uuid.NullUUID      `db:"duplicate_group_id" json:"duplicate_group_id"`
+	ParserVersion    string             `db:"parser_version" json:"parser_version"`
+	GuildName        string             `db:"guild_name" json:"guild_name"`
+	RealmName        string             `db:"realm_name" json:"realm_name"`
+}
+
+// Returns best qualified run per duplicate group for a given instance name.
+// Filters out entries below admin-configured minimum version requirements.
+func (q *sqlQuerier) SpeedrunLeaderboard(ctx context.Context, instanceName string) ([]SpeedrunLeaderboardRow, error) {
+	rows, err := q.db.Query(ctx, speedrunLeaderboard, instanceName)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []SpeedrunLeaderboardRow
+	for rows.Next() {
+		var i SpeedrunLeaderboardRow
+		if err := rows.Scan(
+			&i.InstanceID,
+			&i.InstanceName,
+			&i.DurationMs,
+			&i.StartTime,
+			&i.CompletionTime,
+			&i.Qualified,
+			&i.AddonVersion,
+			&i.HashedSlug,
+			&i.DuplicateGroupID,
+			&i.ParserVersion,
+			&i.GuildName,
+			&i.RealmName,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
 }
 
 const getUserActionBarSlots = `-- name: GetUserActionBarSlots :one

@@ -5,6 +5,7 @@ import (
 	"compress/gzip"
 	"context"
 	"database/sql"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
@@ -37,6 +38,7 @@ import (
 	"github.com/Emyrk/chronicle/internal/leveledlog"
 	"github.com/Emyrk/chronicle/internal/ptr"
 	"github.com/Emyrk/chronicle/internal/slice"
+	"github.com/Emyrk/chronicle/internal/semverenc"
 	"github.com/Emyrk/chronicle/internal/version"
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
@@ -356,8 +358,11 @@ func (w *WorkerLogParse) Work(ctx context.Context, job *river.Job[ArgsLogParse])
 		// multi-worker, but for now it is a simple way for duplicate detection to not
 		// have race conditions.
 		w.parent.insertParsedInstanceMu.Lock()
-		defer w.parent.insertParsedInstanceMu.Unlock()
 		err = db.InTx(func(tx *authz.AuthzTX) error {
+			defer func() {
+				// Always unlock at the end of the tx
+				w.parent.insertParsedInstanceMu.Unlock()
+			}()
 			guild, err := finalized.Guilds.Insert(ctx, encountersState.Units, instanceID, realmID, tx)
 			if err != nil {
 				return fmt.Errorf("insert guild: %w", err)
@@ -503,6 +508,40 @@ func (w *WorkerLogParse) Work(ctx context.Context, job *river.Job[ArgsLogParse])
 			if instanceStart.Valid {
 				if dupErr := detectAndLinkDuplicate(ctx, tx, dbinstance.ID, dbinstance.RealmID, dbinstance.Name, instanceStart, builder.participants); dupErr != nil {
 					slog.WarnContext(ctx, "duplicate detection failed", slog.String("err", dupErr.Error()))
+				}
+			}
+
+			// Persist speedrun result if available.
+			if finalized.Rankings != nil && finalized.Rankings.Speedrun != nil {
+				sr := finalized.Rankings.Speedrun
+				proofJSON, err := json.Marshal(sr.Proof)
+				if err != nil {
+					return fmt.Errorf("marshal speedrun proof: %w", err)
+				}
+				addonVersion := ""
+				if finalized.Versions != nil {
+					addonVersion = finalized.Versions["chronicle_companion"]
+				}
+				parserVer := version.GitTag + "+" + version.GitCommit
+				err = tx.InsertInstanceSpeedrun(ctx, database.InsertInstanceSpeedrunParams{
+					InstanceID:   dbinstance.ID,
+					InstanceName: inst.Name(),
+					RealmID:      dbinstance.RealmID,
+					GuildID: uuid.NullUUID{
+						UUID:  guildID,
+						Valid: guildID != uuid.Nil,
+					},
+					Qualified:        sr.Qualified,
+					StartTime:        database.Timestamptz(sr.StartTime),
+					CompletionTime:   database.Timestamptz(sr.CompletionTime),
+					DurationMs:       sr.Duration.Milliseconds(),
+					Proof:            proofJSON,
+					AddonVersion:     addonVersion,
+					ParserVersionNum: semverenc.Encode(parserVer),
+					AddonVersionNum:  semverenc.Encode(addonVersion),
+				})
+				if err != nil {
+					return fmt.Errorf("insert speedrun: %w", err)
 				}
 			}
 

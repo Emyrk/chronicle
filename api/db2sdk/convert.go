@@ -1,6 +1,7 @@
 package db2sdk
 
 import (
+	"encoding/json"
 	"strings"
 	"time"
 
@@ -144,7 +145,7 @@ func WowDecoratedInstance(instance database.LogInstancesGuild,
 	encounters []database.LogInstanceEncounter,
 	fights []database.LogInstanceEncounterHostile,
 ) chroniclesdk.WoWParsedInstance {
-	return chroniclesdk.WoWParsedInstance{
+	ret := chroniclesdk.WoWParsedInstance{
 		WoWInstance: WoWInstance(instance),
 		RealmName:   instance.RealmName,
 		Encounters:  WoWEncountersWithHostiles(encounters, fights),
@@ -162,6 +163,49 @@ func WowDecoratedInstance(instance database.LogInstancesGuild,
 				Race:  HeroRace(u.Race),
 			}
 		}),
+	}
+	return ret
+}
+
+// SpeedrunResult converts a database speedrun row to an SDK SpeedrunResult.
+// The proof column is stored as JSONB and decoded into SDK proof types.
+func SpeedrunResult(sr database.InstanceSpeedrun) *chroniclesdk.SpeedrunResult {
+	var proof []chroniclesdk.SpeedrunProof
+	_ = json.Unmarshal(sr.Proof, &proof)
+
+	return &chroniclesdk.SpeedrunResult{
+		Qualified:      sr.Qualified,
+		StartTime:      sr.StartTime.Time,
+		CompletionTime: sr.CompletionTime.Time,
+		DurationMs:     sr.DurationMs,
+		Proof:          proof,
+	}
+}
+
+// SpeedrunLeaderboardEntry converts a database leaderboard row to an SDK entry.
+func SpeedrunLeaderboardEntry(row database.SpeedrunLeaderboardRow) chroniclesdk.SpeedrunLeaderboardEntry {
+	entry := chroniclesdk.SpeedrunLeaderboardEntry{
+		InstanceID:    row.InstanceID,
+		Slug:          row.HashedSlug.String,
+		DurationMs:    row.DurationMs,
+		GuildName:     row.GuildName,
+		RealmName:     row.RealmName,
+		StartTime:     row.StartTime.Time,
+		ParserVersion: row.ParserVersion,
+		AddonVersion:  row.AddonVersion,
+	}
+	if row.DuplicateGroupID.Valid {
+		entry.DuplicateGroupID = &row.DuplicateGroupID.UUID
+	}
+	return entry
+}
+
+// LeaderboardVersionRequirements converts a database row to SDK type.
+func LeaderboardVersionRequirements(row database.LeaderboardVersionRequirement) chroniclesdk.LeaderboardVersionRequirements {
+	return chroniclesdk.LeaderboardVersionRequirements{
+		InstanceName:     row.InstanceName,
+		MinParserVersion: row.MinParserVersion,
+		MinAddonVersion:  row.MinAddonVersion,
 	}
 }
 

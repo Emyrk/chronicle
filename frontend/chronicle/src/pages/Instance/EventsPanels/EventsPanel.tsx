@@ -43,6 +43,7 @@ import { AllActivityPanel } from "./AllActivityDebug";
 import { createMitigationPanel } from "./Mitigation/Mitigation";
 import { createRolesPanel } from "./Roles/Roles";
 import { createEmptyPanel } from "./Empty/Empty";
+import { createLeaderboardPanel } from "./LeaderboardPanel/LeaderboardPanel";
 import { createResourceRegenPanel } from "./ResourceRegen/ResourceRegen";
 import { createInnervatePanel } from "./Innervate/Innervate";
 import { createSunderPanel } from "./Sunder/Sunder";
@@ -89,6 +90,7 @@ export const PANELS: Record<string, PanelDefinition<any, any>> = {
   roles: createRolesPanel(),
   all_activity: AllActivityPanel,
   empty: createEmptyPanel(),
+  leaderboard: createLeaderboardPanel(),
   // Class: Druid
   innervate: createInnervatePanel(),
   // Class: Warrior

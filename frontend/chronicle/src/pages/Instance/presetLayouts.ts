@@ -201,6 +201,7 @@ export const PRESET_LAYOUTS: PresetLayout[] = [
       { id: "panel-3", title: "Possession", x: 0, y: 8, w: 12, h: 4, minW: 4 },
       { id: "panel-4", title: "Logging Metadata", x: 0, y: 12, w: 6, h: 5, minW: 4 },
       { id: "panel-5", title: "Unit Lookup", x: 6, y: 12, w: 6, h: 5, minW: 4 },
+      { id: "panel-8", title: "Leaderboard", x: 0, y: 17, w: 12, h: 4, minW: 4 },
     ],
     panelTypes: {
       "panel-6": "all_activity",
@@ -208,6 +209,7 @@ export const PRESET_LAYOUTS: PresetLayout[] = [
       "panel-3": "possession",
       "panel-4": "logging_metadata",
       "panel-5": "unit_lookup",
+      "panel-8": "leaderboard",
     },
     panelOptions: {
       "panel-6": "s:dghr",

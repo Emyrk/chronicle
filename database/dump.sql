@@ -380,6 +380,31 @@ CREATE TABLE instance_loot (
     quantity integer DEFAULT 1 NOT NULL
 );
 
+CREATE TABLE instance_speedruns (
+    instance_id uuid NOT NULL,
+    instance_name text NOT NULL,
+    realm_id uuid NOT NULL,
+    guild_id uuid,
+    qualified boolean NOT NULL,
+    start_time timestamp with time zone NOT NULL,
+    completion_time timestamp with time zone NOT NULL,
+    duration_ms bigint NOT NULL,
+    proof jsonb NOT NULL,
+    created_at timestamp with time zone DEFAULT now() NOT NULL,
+    addon_version text DEFAULT ''::text NOT NULL,
+    parser_version_num bigint DEFAULT 0 NOT NULL,
+    addon_version_num bigint DEFAULT 0 NOT NULL
+);
+
+CREATE TABLE leaderboard_version_requirements (
+    instance_name text NOT NULL,
+    min_parser_version text DEFAULT ''::text NOT NULL,
+    min_parser_version_num bigint DEFAULT 0 NOT NULL,
+    min_addon_version text DEFAULT ''::text NOT NULL,
+    min_addon_version_num bigint DEFAULT 0 NOT NULL,
+    updated_at timestamp with time zone DEFAULT now() NOT NULL
+);
+
 CREATE TABLE log_instance_encounter_damage_unit_summary (
     encounter_id uuid NOT NULL,
     unit_guid wow_guid NOT NULL,
@@ -968,6 +993,12 @@ ALTER TABLE ONLY guilds
 ALTER TABLE ONLY instance_loot
     ADD CONSTRAINT instance_loot_pkey PRIMARY KEY (id);
 
+ALTER TABLE ONLY instance_speedruns
+    ADD CONSTRAINT instance_speedruns_pkey PRIMARY KEY (instance_id);
+
+ALTER TABLE ONLY leaderboard_version_requirements
+    ADD CONSTRAINT leaderboard_version_requirements_pkey PRIMARY KEY (instance_name);
+
 ALTER TABLE ONLY log_file
     ADD CONSTRAINT log_file_pkey PRIMARY KEY (id);
 
@@ -1106,6 +1137,10 @@ CREATE INDEX idx_instance_loot_item ON instance_loot USING btree (item_id);
 
 CREATE INDEX idx_instance_loot_received ON instance_loot USING btree (received_guid);
 
+CREATE INDEX idx_instance_speedruns_leaderboard ON instance_speedruns USING btree (instance_name, duration_ms) WHERE (qualified = true);
+
+CREATE INDEX idx_instance_speedruns_realm ON instance_speedruns USING btree (realm_id, instance_name);
+
 CREATE INDEX idx_log_instance_encounters_instance_id ON log_instance_encounters USING btree (instance_id);
 
 CREATE INDEX idx_log_instance_players_instance_id ON log_instance_players USING btree (instance_id);
@@ -1195,6 +1230,15 @@ ALTER TABLE ONLY guilds
 
 ALTER TABLE ONLY instance_loot
     ADD CONSTRAINT instance_loot_instance_id_fkey FOREIGN KEY (instance_id) REFERENCES log_instances(id) ON DELETE CASCADE DEFERRABLE INITIALLY DEFERRED;
+
+ALTER TABLE ONLY instance_speedruns
+    ADD CONSTRAINT instance_speedruns_guild_id_fkey FOREIGN KEY (guild_id) REFERENCES guilds(id);
+
+ALTER TABLE ONLY instance_speedruns
+    ADD CONSTRAINT instance_speedruns_instance_id_fkey FOREIGN KEY (instance_id) REFERENCES log_instances(id) ON DELETE CASCADE;
+
+ALTER TABLE ONLY instance_speedruns
+    ADD CONSTRAINT instance_speedruns_realm_id_fkey FOREIGN KEY (realm_id) REFERENCES wow_server_realms(id);
 
 ALTER TABLE ONLY log_file
     ADD CONSTRAINT log_file_owner_fkey FOREIGN KEY (owner) REFERENCES users(id);

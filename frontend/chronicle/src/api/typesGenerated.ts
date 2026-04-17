@@ -502,6 +502,17 @@ export interface LayoutDefaultsResponse {
     readonly default_mobile_layout_id: string | null;
 }
 
+// From chroniclesdk/log.go
+/**
+ * LeaderboardVersionRequirements holds admin-configured minimum version
+ * thresholds for leaderboard filtering.
+ */
+export interface LeaderboardVersionRequirements {
+    readonly instance_name: string;
+    readonly min_parser_version: string;
+    readonly min_addon_version: string;
+}
+
 // From chroniclesdk/guild_page.go
 export interface ListGuildsResponse {
     readonly guilds: readonly GuildInfo[];
@@ -849,6 +860,80 @@ export interface SimItemSpell {
 export type SocialPlatform = "discord" | "twitch" | "twitter" | "website" | "youtube";
 
 export const SocialPlatforms: SocialPlatform[] = ["discord", "twitch", "twitter", "website", "youtube"];
+
+// From chroniclesdk/log.go
+/**
+ * SpeedrunKillRecord captures a single kill contributing to a requirement.
+ */
+export interface SpeedrunKillRecord {
+    readonly entry_id: number;
+    readonly guid: string;
+    readonly timestamp: string;
+}
+
+// From chroniclesdk/log.go
+/**
+ * SpeedrunLeaderboardEntry is one row in the leaderboard.
+ */
+export interface SpeedrunLeaderboardEntry {
+    readonly instance_id: string;
+    readonly slug: string;
+    readonly duration_ms: number;
+    readonly guild_name: string;
+    readonly realm_name: string;
+    readonly start_time: string;
+    readonly parser_version: string;
+    readonly addon_version: string;
+    readonly duplicate_group_id?: string;
+}
+
+// From chroniclesdk/log.go
+/**
+ * SpeedrunProof ties a requirement to the kills that satisfied (or failed to satisfy) it.
+ */
+export interface SpeedrunProof {
+    readonly requirement: SpeedrunRequirement;
+    readonly kills: readonly SpeedrunKillRecord[];
+    readonly satisfied: boolean;
+}
+
+// From chroniclesdk/log.go
+/**
+ * SpeedrunRequirement describes one rule for a valid speedrun.
+ */
+export interface SpeedrunRequirement {
+    readonly name: string;
+    readonly entry_ids: readonly number[];
+    readonly count: number;
+    readonly category: string;
+}
+
+// From chroniclesdk/log.go
+/**
+ * SpeedrunResult is the outcome of evaluating speedrun rules against an instance.
+ */
+export interface SpeedrunResult {
+    readonly qualified: boolean;
+    readonly start_time: string;
+    readonly completion_time: string;
+    readonly duration_ms: number;
+    readonly proof: readonly SpeedrunProof[];
+    readonly version_status?: SpeedrunVersionStatus;
+}
+
+// From chroniclesdk/log.go
+/**
+ * SpeedrunVersionStatus reports whether the instance's tooling versions
+ * meet the leaderboard minimum requirements.
+ */
+export interface SpeedrunVersionStatus {
+    readonly parser_version: string;
+    readonly min_parser_version: string;
+    readonly parser_qualified: boolean;
+    readonly addon_version: string;
+    readonly min_addon_version: string;
+    readonly addon_qualified: boolean;
+}
 
 // From chroniclesdk/panel_layout.go
 /**

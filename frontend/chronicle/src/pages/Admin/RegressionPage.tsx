@@ -1,8 +1,9 @@
 import { useState, Fragment, useEffect } from "react";
+import { Link } from "react-router-dom";
 import { toast } from "sonner";
 import { Card } from "@/components/ui/Card/Card";
 import { Button } from "@/components/ui/button";
-import { TestTube, Plus, Trash2, Camera, GitCompare, AlertTriangle, ChevronDown, ChevronRight, Check, X, Minus, Loader2 } from "lucide-react";
+import { TestTube, Plus, Trash2, Camera, GitCompare, AlertTriangle, ChevronDown, ChevronRight, Check, X, Minus, Loader2, ArrowLeft } from "lucide-react";
 import {
   useRegressionFixtures,
   useRegressionSnapshots,
@@ -342,6 +343,12 @@ export function RegressionPage() {
   return (
     <div className="max-w-6xl mx-auto p-6 space-y-6">
       <div className="flex items-center gap-3 mb-2">
+        <Link to="/admin">
+          <Button variant="ghost" size="sm" className="gap-1">
+            <ArrowLeft className="h-4 w-4" />
+            Admin
+          </Button>
+        </Link>
         <TestTube className="h-6 w-6" />
         <h1 className="text-2xl font-bold">Regression Testing</h1>
         {jobStatus && jobStatus.pending_jobs > 0 && (

@@ -626,6 +626,7 @@ const PANEL_CODES: Record<PanelType, string> = {
   roles: 'r',
   all_activity: 'aa',
   empty: 'e',
+  leaderboard: 'lb',
   // Class: Druid
   innervate: 'inn',
   // Class: Warrior

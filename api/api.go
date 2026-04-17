@@ -137,7 +137,13 @@ func (api *API) Routes() chi.Router {
 			r.Delete("/users/{userID}/grants/{source}", api.DeleteUserGrant)
 			r.Get("/logs", api.AdminListLogs)
 			r.Get("/instance-names", api.AdminListInstanceNames)
-
+			r.Route("/leaderboard", func(r chi.Router) {
+				r.Get("/version-requirements", api.AdminListLeaderboardVersionRequirements)
+				r.Group(func(r chi.Router) {
+					r.Use(httpmw.Can(api.Zed, policy.New().GlobalChronicle().CanAdmin_speedrun_requirements_User))
+					r.Put("/version-requirements", api.AdminUpsertLeaderboardVersionRequirements)
+				})
+			})
 		})
 
 		// Regression testing routes (under admin auth)
@@ -272,6 +278,7 @@ func (api *API) Routes() chi.Router {
 
 							r.Get("/youtube", api.GetInstanceYoutube)
 							r.Get("/loot", api.GetInstanceLoot)
+							r.Get("/speedrun", api.InstanceSpeedrun)
 							r.Get("/duplicates", api.ListDuplicateInstances)
 
 							r.Group(func(r chi.Router) {
@@ -292,6 +299,10 @@ func (api *API) Routes() chi.Router {
 					})
 				})
 			})
+		})
+
+		r.Route("/leaderboard", func(r chi.Router) {
+			r.Get("/speedrun", api.SpeedrunLeaderboard)
 		})
 
 		if api.Opts.InternalGameData != nil {

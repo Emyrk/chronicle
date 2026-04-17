@@ -8,6 +8,7 @@ import (
 	"github.com/Emyrk/chronicle/combatlog/parser/types/realm"
 	"github.com/Emyrk/chronicle/combatlog/parser/types/zone"
 	"github.com/Emyrk/chronicle/combatlog/parser/vanilla/state/armory"
+	"github.com/Emyrk/chronicle/combatlog/parser/vanilla/state/encounters/instances/rankings"
 	"github.com/Emyrk/chronicle/combatlog/parser/vanilla/state/loot"
 	"github.com/Emyrk/chronicle/combatlog/parser/vanilla/state/participants"
 	"github.com/Emyrk/chronicle/combatlog/parser/vanilla/state/unitdb"
@@ -21,6 +22,7 @@ type FinalizedInstance struct {
 	Guilds       *armory.Tracker
 	Loot         *loot.LootTracker
 	Participants *participants.Tracker
+	Rankings     *rankings.RankingsResult
 }
 
 func ZoneNameMatcher(names ...string) func(z string) bool {
@@ -39,6 +41,7 @@ type CommonFactory struct {
 	ZoneName       func(z string) bool
 	OtherZoneNames []string
 	Hostiles       func() *Identifier
+	Rankings       *rankings.Rankings
 }
 
 // New handles all the extra hooks

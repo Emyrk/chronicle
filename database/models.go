@@ -783,6 +783,31 @@ type InstanceLoot struct {
 	Quantity     int32              `db:"quantity" json:"quantity"`
 }
 
+type InstanceSpeedrun struct {
+	InstanceID       uuid.UUID          `db:"instance_id" json:"instance_id"`
+	InstanceName     string             `db:"instance_name" json:"instance_name"`
+	RealmID          uuid.UUID          `db:"realm_id" json:"realm_id"`
+	GuildID          uuid.NullUUID      `db:"guild_id" json:"guild_id"`
+	Qualified        bool               `db:"qualified" json:"qualified"`
+	StartTime        pgtype.Timestamptz `db:"start_time" json:"start_time"`
+	CompletionTime   pgtype.Timestamptz `db:"completion_time" json:"completion_time"`
+	DurationMs       int64              `db:"duration_ms" json:"duration_ms"`
+	Proof            []byte             `db:"proof" json:"proof"`
+	CreatedAt        pgtype.Timestamptz `db:"created_at" json:"created_at"`
+	AddonVersion     string             `db:"addon_version" json:"addon_version"`
+	ParserVersionNum int64              `db:"parser_version_num" json:"parser_version_num"`
+	AddonVersionNum  int64              `db:"addon_version_num" json:"addon_version_num"`
+}
+
+type LeaderboardVersionRequirement struct {
+	InstanceName        string             `db:"instance_name" json:"instance_name"`
+	MinParserVersion    string             `db:"min_parser_version" json:"min_parser_version"`
+	MinParserVersionNum int64              `db:"min_parser_version_num" json:"min_parser_version_num"`
+	MinAddonVersion     string             `db:"min_addon_version" json:"min_addon_version"`
+	MinAddonVersionNum  int64              `db:"min_addon_version_num" json:"min_addon_version_num"`
+	UpdatedAt           pgtype.Timestamptz `db:"updated_at" json:"updated_at"`
+}
+
 type LogFile struct {
 	ID       uuid.UUID `db:"id" json:"id"`
 	Owner    uuid.UUID `db:"owner" json:"owner"`

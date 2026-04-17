@@ -1,5 +1,7 @@
 package instances
 
+import "github.com/Emyrk/chronicle/combatlog/parser/vanilla/state/encounters/instances/rankings"
+
 var (
 	WindhornCanyon = (&CommonFactory{
 		Name:     "Windhorn Canyon",
@@ -47,6 +49,11 @@ var (
 		Name:     "Molten Core",
 		ZoneName: ZoneNameMatcher("molten core"),
 		Hostiles: FromMap(MoltenCoreHostiles()),
+		Rankings: &rankings.Rankings{
+			Speedrun: &rankings.SpeedrunRules{
+				Requirements: MoltenCoreSpeedrunRequirements(),
+			},
+		},
 	}).New
 
 	TowerOfKarazhan = (&CommonFactory{

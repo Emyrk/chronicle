@@ -17,6 +17,7 @@ import (
 	"github.com/Emyrk/chronicle/combatlog/parser/vanilla/state/encounters/character"
 	"github.com/Emyrk/chronicle/combatlog/parser/vanilla/state/encounters/encounterevents"
 	"github.com/Emyrk/chronicle/combatlog/parser/vanilla/state/encounters/instances/instancehook"
+	"github.com/Emyrk/chronicle/combatlog/parser/vanilla/state/encounters/instances/rankings"
 	"github.com/Emyrk/chronicle/combatlog/parser/vanilla/state/encounters/period"
 	"github.com/Emyrk/chronicle/combatlog/parser/vanilla/state/loot"
 	"github.com/Emyrk/chronicle/combatlog/parser/vanilla/state/participants"
@@ -47,7 +48,8 @@ type Hookable struct {
 	realm        *realm.Info         // mostly static
 	versions     map[string]string   // addon/dependency versions from HEADER
 	recorderGUID *guid.GUID          // recording player GUID from HEADER
-	hooks        []instancehook.Hook // TODO: unroll?
+	hooks           []instancehook.Hook // TODO: unroll?
+	speedrunTracker *rankings.SpeedrunTracker
 
 	// Live tracking data
 	Characters      *character.Characters
@@ -82,31 +84,43 @@ func (f *CommonFactory) NewHookable(ctx context.Context, logger *slog.Logger, db
 	}
 	characters.RegisterHook(cie)
 
+	var speedrunTracker *rankings.SpeedrunTracker
+	if f.Rankings != nil && f.Rankings.Speedrun != nil {
+		speedrunTracker = rankings.NewSpeedrunTracker(*f.Rankings.Speedrun)
+		characters.RegisterHook(speedrunTracker)
+	}
+
 	lootTracking := loot.New(db)
 
 	overheals := &Overhealing{
 		deficits: make(map[guid.GUID]int32),
 	}
 
+	hooks := []instancehook.Hook{
+		g,
+		ce,
+		cie,
+		overheals,
+		lootTracking,
+	}
+	if speedrunTracker != nil {
+		hooks = append(hooks, speedrunTracker)
+	}
+
 	c := &Hookable{
-		name:          f.Name,
-		zoneNameMatch: f.ZoneName,
-		logger:        logger,
-		units:         db,
-		CurrentZone:   z,
-		Characters:    characters,
-		Identifier:    f.Hostiles(),
-		events:        encounterevents.NewEvents(),
-		g:             g,
-		p:             p,
-		lootTracking:  lootTracking,
-		hooks: []instancehook.Hook{
-			g,
-			ce,
-			cie,
-			overheals,
-			lootTracking,
-		},
+		name:            f.Name,
+		zoneNameMatch:   f.ZoneName,
+		logger:          logger,
+		units:           db,
+		CurrentZone:     z,
+		Characters:      characters,
+		Identifier:      f.Hostiles(),
+		events:          encounterevents.NewEvents(),
+		g:               g,
+		p:               p,
+		lootTracking:    lootTracking,
+		hooks:           hooks,
+		speedrunTracker: speedrunTracker,
 		verbose:         parseoptions.IsVerbose(ctx),
 		timings:         timings.New(),
 		completedFights: make([]Fight, 0),
@@ -469,6 +483,13 @@ func (h *Hookable) Finalize(ctx context.Context) (*FinalizedInstance, error) {
 		}
 	}
 
+	var rankingsResult *rankings.RankingsResult
+	if h.speedrunTracker != nil {
+		rankingsResult = &rankings.RankingsResult{
+			Speedrun: h.speedrunTracker.Result(),
+		}
+	}
+
 	return &FinalizedInstance{
 		Realm:        h.realm,
 		Versions:     h.versions,
@@ -478,6 +499,7 @@ func (h *Hookable) Finalize(ctx context.Context) (*FinalizedInstance, error) {
 		Guilds:       h.g,
 		Loot:         h.lootTracking,
 		Participants: h.p,
+		Rankings:     rankingsResult,
 
 		//SpellBook:  c.SpellBook,
 	}, nil

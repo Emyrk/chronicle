@@ -188,6 +188,70 @@ type WoWParsedInstance struct {
 	Players    map[GUIDString]InstancePlayer `json:"players"`
 }
 
+// SpeedrunRequirement describes one rule for a valid speedrun.
+type SpeedrunRequirement struct {
+	Name     string   `json:"name"`
+	EntryIDs []uint32 `json:"entry_ids"`
+	Count    int      `json:"count"`
+	Category string   `json:"category"`
+}
+
+// SpeedrunKillRecord captures a single kill contributing to a requirement.
+type SpeedrunKillRecord struct {
+	EntryID   uint32    `json:"entry_id"`
+	GUID      string    `json:"guid"`
+	Timestamp time.Time `json:"timestamp"`
+}
+
+// SpeedrunProof ties a requirement to the kills that satisfied (or failed to satisfy) it.
+type SpeedrunProof struct {
+	Requirement SpeedrunRequirement  `json:"requirement"`
+	Kills       []SpeedrunKillRecord `json:"kills"`
+	Satisfied   bool                 `json:"satisfied"`
+}
+
+// SpeedrunResult is the outcome of evaluating speedrun rules against an instance.
+type SpeedrunResult struct {
+	Qualified      bool                  `json:"qualified"`
+	StartTime      time.Time             `json:"start_time"`
+	CompletionTime time.Time             `json:"completion_time"`
+	DurationMs     int64                 `json:"duration_ms"`
+	Proof          []SpeedrunProof       `json:"proof"`
+	VersionStatus  *SpeedrunVersionStatus `json:"version_status,omitempty"`
+}
+
+// SpeedrunVersionStatus reports whether the instance's tooling versions
+// meet the leaderboard minimum requirements.
+type SpeedrunVersionStatus struct {
+	ParserVersion    string `json:"parser_version"`
+	MinParserVersion string `json:"min_parser_version"`
+	ParserQualified  bool   `json:"parser_qualified"`
+	AddonVersion     string `json:"addon_version"`
+	MinAddonVersion  string `json:"min_addon_version"`
+	AddonQualified   bool   `json:"addon_qualified"`
+}
+
+// SpeedrunLeaderboardEntry is one row in the leaderboard.
+type SpeedrunLeaderboardEntry struct {
+	InstanceID       uuid.UUID  `json:"instance_id"`
+	Slug             string     `json:"slug"`
+	DurationMs       int64      `json:"duration_ms"`
+	GuildName        string     `json:"guild_name"`
+	RealmName        string     `json:"realm_name"`
+	StartTime        time.Time  `json:"start_time"`
+	ParserVersion    string     `json:"parser_version"`
+	AddonVersion     string     `json:"addon_version"`
+	DuplicateGroupID *uuid.UUID `json:"duplicate_group_id,omitempty"`
+}
+
+// LeaderboardVersionRequirements holds admin-configured minimum version
+// thresholds for leaderboard filtering.
+type LeaderboardVersionRequirements struct {
+	InstanceName     string `json:"instance_name"`
+	MinParserVersion string `json:"min_parser_version"`
+	MinAddonVersion  string `json:"min_addon_version"`
+}
+
 // RecentInstancesResponse is the response for listing recently uploaded instances.
 type RecentInstancesResponse struct {
 	Instances  []RecentInstance `json:"instances"`
