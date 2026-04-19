@@ -1,3 +1,4 @@
+logarchive
 services/saffron
 # Common ignore patterns, these rules applies in both root and subdirectories.
 .DS_Store
