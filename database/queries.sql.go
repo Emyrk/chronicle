@@ -3336,6 +3336,32 @@ func (q *sqlQuerier) GetSharedViewByInstanceAndHash(ctx context.Context, arg Get
 	return i, err
 }
 
+const getSiteConfig = `-- name: GetSiteConfig :one
+SELECT id, signups_enabled, updated_at FROM site_config WHERE id = TRUE
+`
+
+func (q *sqlQuerier) GetSiteConfig(ctx context.Context) (SiteConfig, error) {
+	row := q.db.QueryRow(ctx, getSiteConfig)
+	var i SiteConfig
+	err := row.Scan(&i.ID, &i.SignupsEnabled, &i.UpdatedAt)
+	return i, err
+}
+
+const updateSiteConfig = `-- name: UpdateSiteConfig :one
+UPDATE site_config SET
+    signups_enabled = $1,
+    updated_at = now()
+WHERE id = TRUE
+RETURNING id, signups_enabled, updated_at
+`
+
+func (q *sqlQuerier) UpdateSiteConfig(ctx context.Context, signupsEnabled bool) (SiteConfig, error) {
+	row := q.db.QueryRow(ctx, updateSiteConfig, signupsEnabled)
+	var i SiteConfig
+	err := row.Scan(&i.ID, &i.SignupsEnabled, &i.UpdatedAt)
+	return i, err
+}
+
 const getInstanceSpeedrun = `-- name: GetInstanceSpeedrun :one
 SELECT instance_id, instance_name, realm_id, guild_id, qualified, start_time, completion_time, duration_ms, proof, created_at, addon_version, parser_version_num, addon_version_num FROM instance_speedruns WHERE instance_id = $1
 `
@@ -4221,13 +4247,234 @@ func (q *sqlQuerier) UpdateUserPanelLayoutByID(ctx context.Context, arg UpdateUs
 	return i, err
 }
 
+const clearResetToken = `-- name: ClearResetToken :exec
+UPDATE user_passwords
+SET reset_token_hash = NULL,
+    reset_token_expires_at = NULL,
+    updated_at = now()
+WHERE user_auth_id = $1
+`
+
+func (q *sqlQuerier) ClearResetToken(ctx context.Context, userAuthID uuid.UUID) error {
+	_, err := q.db.Exec(ctx, clearResetToken, userAuthID)
+	return err
+}
+
+const getUserPasswordByAuthID = `-- name: GetUserPasswordByAuthID :one
+SELECT user_auth_id, password_hash, updated_at, email_verified, verification_token_hash, verification_token_expires_at, verification_token_created_at, reset_token_hash, reset_token_expires_at, reset_token_created_at FROM user_passwords WHERE user_auth_id = $1
+`
+
+func (q *sqlQuerier) GetUserPasswordByAuthID(ctx context.Context, userAuthID uuid.UUID) (UserPassword, error) {
+	row := q.db.QueryRow(ctx, getUserPasswordByAuthID, userAuthID)
+	var i UserPassword
+	err := row.Scan(
+		&i.UserAuthID,
+		&i.PasswordHash,
+		&i.UpdatedAt,
+		&i.EmailVerified,
+		&i.VerificationTokenHash,
+		&i.VerificationTokenExpiresAt,
+		&i.VerificationTokenCreatedAt,
+		&i.ResetTokenHash,
+		&i.ResetTokenExpiresAt,
+		&i.ResetTokenCreatedAt,
+	)
+	return i, err
+}
+
+const getUserPasswordByResetToken = `-- name: GetUserPasswordByResetToken :one
+SELECT up.user_auth_id, up.password_hash, up.updated_at, up.email_verified, up.verification_token_hash, up.verification_token_expires_at, up.verification_token_created_at, up.reset_token_hash, up.reset_token_expires_at, up.reset_token_created_at, ual.linked_id, ual.user_id
+FROM user_passwords up
+JOIN user_auth_links ual ON ual.id = up.user_auth_id
+WHERE up.reset_token_hash = $1
+  AND up.reset_token_expires_at > now()
+`
+
+type GetUserPasswordByResetTokenRow struct {
+	UserAuthID                 uuid.UUID          `db:"user_auth_id" json:"user_auth_id"`
+	PasswordHash               string             `db:"password_hash" json:"password_hash"`
+	UpdatedAt                  pgtype.Timestamptz `db:"updated_at" json:"updated_at"`
+	EmailVerified              bool               `db:"email_verified" json:"email_verified"`
+	VerificationTokenHash      pgtype.Text        `db:"verification_token_hash" json:"verification_token_hash"`
+	VerificationTokenExpiresAt pgtype.Timestamptz `db:"verification_token_expires_at" json:"verification_token_expires_at"`
+	VerificationTokenCreatedAt pgtype.Timestamptz `db:"verification_token_created_at" json:"verification_token_created_at"`
+	ResetTokenHash             pgtype.Text        `db:"reset_token_hash" json:"reset_token_hash"`
+	ResetTokenExpiresAt        pgtype.Timestamptz `db:"reset_token_expires_at" json:"reset_token_expires_at"`
+	ResetTokenCreatedAt        pgtype.Timestamptz `db:"reset_token_created_at" json:"reset_token_created_at"`
+	LinkedID                   string             `db:"linked_id" json:"linked_id"`
+	UserID                     uuid.UUID          `db:"user_id" json:"user_id"`
+}
+
+func (q *sqlQuerier) GetUserPasswordByResetToken(ctx context.Context, resetTokenHash pgtype.Text) (GetUserPasswordByResetTokenRow, error) {
+	row := q.db.QueryRow(ctx, getUserPasswordByResetToken, resetTokenHash)
+	var i GetUserPasswordByResetTokenRow
+	err := row.Scan(
+		&i.UserAuthID,
+		&i.PasswordHash,
+		&i.UpdatedAt,
+		&i.EmailVerified,
+		&i.VerificationTokenHash,
+		&i.VerificationTokenExpiresAt,
+		&i.VerificationTokenCreatedAt,
+		&i.ResetTokenHash,
+		&i.ResetTokenExpiresAt,
+		&i.ResetTokenCreatedAt,
+		&i.LinkedID,
+		&i.UserID,
+	)
+	return i, err
+}
+
+const getUserPasswordByVerificationToken = `-- name: GetUserPasswordByVerificationToken :one
+SELECT up.user_auth_id, up.password_hash, up.updated_at, up.email_verified, up.verification_token_hash, up.verification_token_expires_at, up.verification_token_created_at, up.reset_token_hash, up.reset_token_expires_at, up.reset_token_created_at, ual.linked_id, ual.user_id
+FROM user_passwords up
+JOIN user_auth_links ual ON ual.id = up.user_auth_id
+WHERE up.verification_token_hash = $1
+  AND up.verification_token_expires_at > now()
+  AND up.email_verified = FALSE
+`
+
+type GetUserPasswordByVerificationTokenRow struct {
+	UserAuthID                 uuid.UUID          `db:"user_auth_id" json:"user_auth_id"`
+	PasswordHash               string             `db:"password_hash" json:"password_hash"`
+	UpdatedAt                  pgtype.Timestamptz `db:"updated_at" json:"updated_at"`
+	EmailVerified              bool               `db:"email_verified" json:"email_verified"`
+	VerificationTokenHash      pgtype.Text        `db:"verification_token_hash" json:"verification_token_hash"`
+	VerificationTokenExpiresAt pgtype.Timestamptz `db:"verification_token_expires_at" json:"verification_token_expires_at"`
+	VerificationTokenCreatedAt pgtype.Timestamptz `db:"verification_token_created_at" json:"verification_token_created_at"`
+	ResetTokenHash             pgtype.Text        `db:"reset_token_hash" json:"reset_token_hash"`
+	ResetTokenExpiresAt        pgtype.Timestamptz `db:"reset_token_expires_at" json:"reset_token_expires_at"`
+	ResetTokenCreatedAt        pgtype.Timestamptz `db:"reset_token_created_at" json:"reset_token_created_at"`
+	LinkedID                   string             `db:"linked_id" json:"linked_id"`
+	UserID                     uuid.UUID          `db:"user_id" json:"user_id"`
+}
+
+func (q *sqlQuerier) GetUserPasswordByVerificationToken(ctx context.Context, verificationTokenHash pgtype.Text) (GetUserPasswordByVerificationTokenRow, error) {
+	row := q.db.QueryRow(ctx, getUserPasswordByVerificationToken, verificationTokenHash)
+	var i GetUserPasswordByVerificationTokenRow
+	err := row.Scan(
+		&i.UserAuthID,
+		&i.PasswordHash,
+		&i.UpdatedAt,
+		&i.EmailVerified,
+		&i.VerificationTokenHash,
+		&i.VerificationTokenExpiresAt,
+		&i.VerificationTokenCreatedAt,
+		&i.ResetTokenHash,
+		&i.ResetTokenExpiresAt,
+		&i.ResetTokenCreatedAt,
+		&i.LinkedID,
+		&i.UserID,
+	)
+	return i, err
+}
+
+const insertUserPassword = `-- name: InsertUserPassword :one
+INSERT INTO user_passwords (user_auth_id, password_hash, updated_at)
+VALUES ($1, $2, $3)
+RETURNING user_auth_id, password_hash, updated_at, email_verified, verification_token_hash, verification_token_expires_at, verification_token_created_at, reset_token_hash, reset_token_expires_at, reset_token_created_at
+`
+
+type InsertUserPasswordParams struct {
+	UserAuthID   uuid.UUID          `db:"user_auth_id" json:"user_auth_id"`
+	PasswordHash string             `db:"password_hash" json:"password_hash"`
+	UpdatedAt    pgtype.Timestamptz `db:"updated_at" json:"updated_at"`
+}
+
+func (q *sqlQuerier) InsertUserPassword(ctx context.Context, arg InsertUserPasswordParams) (UserPassword, error) {
+	row := q.db.QueryRow(ctx, insertUserPassword, arg.UserAuthID, arg.PasswordHash, arg.UpdatedAt)
+	var i UserPassword
+	err := row.Scan(
+		&i.UserAuthID,
+		&i.PasswordHash,
+		&i.UpdatedAt,
+		&i.EmailVerified,
+		&i.VerificationTokenHash,
+		&i.VerificationTokenExpiresAt,
+		&i.VerificationTokenCreatedAt,
+		&i.ResetTokenHash,
+		&i.ResetTokenExpiresAt,
+		&i.ResetTokenCreatedAt,
+	)
+	return i, err
+}
+
+const markEmailVerified = `-- name: MarkEmailVerified :exec
+UPDATE user_passwords
+SET email_verified = TRUE,
+    verification_token_hash = NULL,
+    verification_token_expires_at = NULL,
+    updated_at = now()
+WHERE user_auth_id = $1
+`
+
+func (q *sqlQuerier) MarkEmailVerified(ctx context.Context, userAuthID uuid.UUID) error {
+	_, err := q.db.Exec(ctx, markEmailVerified, userAuthID)
+	return err
+}
+
+const setResetToken = `-- name: SetResetToken :exec
+UPDATE user_passwords
+SET reset_token_hash = $1,
+    reset_token_expires_at = $2,
+    reset_token_created_at = now(),
+    updated_at = now()
+WHERE user_auth_id = $3
+`
+
+type SetResetTokenParams struct {
+	ResetTokenHash      pgtype.Text        `db:"reset_token_hash" json:"reset_token_hash"`
+	ResetTokenExpiresAt pgtype.Timestamptz `db:"reset_token_expires_at" json:"reset_token_expires_at"`
+	UserAuthID          uuid.UUID          `db:"user_auth_id" json:"user_auth_id"`
+}
+
+func (q *sqlQuerier) SetResetToken(ctx context.Context, arg SetResetTokenParams) error {
+	_, err := q.db.Exec(ctx, setResetToken, arg.ResetTokenHash, arg.ResetTokenExpiresAt, arg.UserAuthID)
+	return err
+}
+
+const setVerificationToken = `-- name: SetVerificationToken :exec
+UPDATE user_passwords
+SET verification_token_hash = $1,
+    verification_token_expires_at = $2,
+    verification_token_created_at = now(),
+    updated_at = now()
+WHERE user_auth_id = $3
+`
+
+type SetVerificationTokenParams struct {
+	VerificationTokenHash      pgtype.Text        `db:"verification_token_hash" json:"verification_token_hash"`
+	VerificationTokenExpiresAt pgtype.Timestamptz `db:"verification_token_expires_at" json:"verification_token_expires_at"`
+	UserAuthID                 uuid.UUID          `db:"user_auth_id" json:"user_auth_id"`
+}
+
+func (q *sqlQuerier) SetVerificationToken(ctx context.Context, arg SetVerificationTokenParams) error {
+	_, err := q.db.Exec(ctx, setVerificationToken, arg.VerificationTokenHash, arg.VerificationTokenExpiresAt, arg.UserAuthID)
+	return err
+}
+
+const updateUserPassword = `-- name: UpdateUserPassword :exec
+UPDATE user_passwords SET password_hash = $1, updated_at = now()
+WHERE user_auth_id = $2
+`
+
+type UpdateUserPasswordParams struct {
+	PasswordHash string    `db:"password_hash" json:"password_hash"`
+	UserAuthID   uuid.UUID `db:"user_auth_id" json:"user_auth_id"`
+}
+
+func (q *sqlQuerier) UpdateUserPassword(ctx context.Context, arg UpdateUserPasswordParams) error {
+	_, err := q.db.Exec(ctx, updateUserPassword, arg.PasswordHash, arg.UserAuthID)
+	return err
+}
+
 const getUserAuthByLinkedID = `-- name: GetUserAuthByLinkedID :one
 SELECT
   id, linked_id, user_id, provider, created_at, updated_at
 FROM
   user_auth_links
 WHERE
-  linked_id = $1 AND
+  LOWER(linked_id) = LOWER($1) AND
   provider = $2
 `
 
@@ -4298,6 +4545,25 @@ func (q *sqlQuerier) GetUserAuthSessionByID(ctx context.Context, id uuid.UUID) (
 		&i.CreatedAt,
 		&i.UpdatedAt,
 		&i.JwtID,
+	)
+	return i, err
+}
+
+const getUserByEmail = `-- name: GetUserByEmail :one
+SELECT id, username, email, created_at, updated_at, default_desktop_layout_id, default_mobile_layout_id FROM users WHERE LOWER(email) = LOWER($1)
+`
+
+func (q *sqlQuerier) GetUserByEmail(ctx context.Context, email string) (User, error) {
+	row := q.db.QueryRow(ctx, getUserByEmail, email)
+	var i User
+	err := row.Scan(
+		&i.ID,
+		&i.Username,
+		&i.Email,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+		&i.DefaultDesktopLayoutID,
+		&i.DefaultMobileLayoutID,
 	)
 	return i, err
 }
@@ -4654,6 +4920,66 @@ func (q *sqlQuerier) InsertStampedYoutubeVideo(ctx context.Context, arg InsertSt
 	return err
 }
 
+const getCreatureTemplatesByEntries = `-- name: GetCreatureTemplatesByEntries :many
+SELECT entry, display_id1, display_id2, display_id3, display_id4, mount_display_id, name, subname, level_min, level_max, health_min, health_max, mana_min, mana_max, armor, dmg_min, dmg_max, dmg_school, attack_power, dmg_multiplier, base_attack_time, ranged_attack_time, unit_class, unit_flags, ranged_dmg_min, ranged_dmg_max, holy_res, fire_res, nature_res, frost_res, shadow_res, arcane_res, mechanic_immune_mask, school_immune_mask, immunity_flags FROM world_creature_template WHERE entry = ANY($1::int[])
+`
+
+func (q *sqlQuerier) GetCreatureTemplatesByEntries(ctx context.Context, entries []int32) ([]WorldCreatureTemplate, error) {
+	rows, err := q.db.Query(ctx, getCreatureTemplatesByEntries, entries)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []WorldCreatureTemplate
+	for rows.Next() {
+		var i WorldCreatureTemplate
+		if err := rows.Scan(
+			&i.Entry,
+			&i.DisplayId1,
+			&i.DisplayId2,
+			&i.DisplayId3,
+			&i.DisplayId4,
+			&i.MountDisplayID,
+			&i.Name,
+			&i.Subname,
+			&i.LevelMin,
+			&i.LevelMax,
+			&i.HealthMin,
+			&i.HealthMax,
+			&i.ManaMin,
+			&i.ManaMax,
+			&i.Armor,
+			&i.DmgMin,
+			&i.DmgMax,
+			&i.DmgSchool,
+			&i.AttackPower,
+			&i.DmgMultiplier,
+			&i.BaseAttackTime,
+			&i.RangedAttackTime,
+			&i.UnitClass,
+			&i.UnitFlags,
+			&i.RangedDmgMin,
+			&i.RangedDmgMax,
+			&i.HolyRes,
+			&i.FireRes,
+			&i.NatureRes,
+			&i.FrostRes,
+			&i.ShadowRes,
+			&i.ArcaneRes,
+			&i.MechanicImmuneMask,
+			&i.SchoolImmuneMask,
+			&i.ImmunityFlags,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const getDBCItemDisplayInfoByID = `-- name: GetDBCItemDisplayInfoByID :one
 SELECT id, model_name, model_texture, geoset_group, flags, spell_visual_id, helmet_geoset_vis, texture, item_visual, particle_color_id, attachment_geoset_group, item_ranged_display_info_id, model_material_resources_id, model_resources_id, model_type_1, override_swoosh_sound_kit_id, sheathe_transform_matrix_id, sheathed_spell_visual_kit_id, state_spell_visual_kit_id, unsheathed_spell_visual_kit_id, inventory_icon, group_sound_index, ground_model, item_size, helmet_geoset_vis_id FROM dbc_item_display_info WHERE id = $1
 `
@@ -4747,7 +5073,7 @@ func (q *sqlQuerier) GetItemSetBonuses(ctx context.Context, setID int32) ([]DbcI
 }
 
 const getItemSetByID = `-- name: GetItemSetByID :one
-SELECT id, name_lang, required_skill, required_skill_rank FROM dbc_item_set WHERE id = $1
+SELECT id, name_lang, required_skill, required_skill_rank, item_ids FROM dbc_item_set WHERE id = $1
 `
 
 func (q *sqlQuerier) GetItemSetByID(ctx context.Context, id int32) (DbcItemSet, error) {
@@ -4758,12 +5084,37 @@ func (q *sqlQuerier) GetItemSetByID(ctx context.Context, id int32) (DbcItemSet, 
 		&i.NameLang,
 		&i.RequiredSkill,
 		&i.RequiredSkillRank,
+		&i.ItemIds,
 	)
 	return i, err
 }
 
+const getItemSetItems = `-- name: GetItemSetItems :many
+SELECT set_id, item_entry FROM dbc_item_set_item WHERE set_id = $1 ORDER BY item_entry
+`
+
+func (q *sqlQuerier) GetItemSetItems(ctx context.Context, setID int32) ([]DbcItemSetItem, error) {
+	rows, err := q.db.Query(ctx, getItemSetItems, setID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []DbcItemSetItem
+	for rows.Next() {
+		var i DbcItemSetItem
+		if err := rows.Scan(&i.SetID, &i.ItemEntry); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const getItemTemplateByEntry = `-- name: GetItemTemplateByEntry :one
-SELECT entry, class, subclass, name, description, display_id, quality, flags, buy_count, buy_price, sell_price, inventory_type, allowable_class, allowable_race, item_level, required_level, required_skill, required_skill_rank, required_spell, required_honor_rank, required_city_rank, required_reputation_faction, required_reputation_rank, max_count, stackable, container_slots, stat_type1, stat_value1, stat_type2, stat_value2, stat_type3, stat_value3, stat_type4, stat_value4, stat_type5, stat_value5, stat_type6, stat_value6, stat_type7, stat_value7, stat_type8, stat_value8, stat_type9, stat_value9, stat_type10, stat_value10, delay, range_mod, ammo_type, dmg_min1, dmg_max1, dmg_type1, dmg_min2, dmg_max2, dmg_type2, dmg_min3, dmg_max3, dmg_type3, dmg_min4, dmg_max4, dmg_type4, dmg_min5, dmg_max5, dmg_type5, block, armor, holy_res, fire_res, nature_res, frost_res, shadow_res, arcane_res, spellid_1, spelltrigger_1, spellcharges_1, spellppmrate_1, spellcooldown_1, spellcategory_1, spellcategorycooldown_1, spellid_2, spelltrigger_2, spellcharges_2, spellppmrate_2, spellcooldown_2, spellcategory_2, spellcategorycooldown_2, spellid_3, spelltrigger_3, spellcharges_3, spellppmrate_3, spellcooldown_3, spellcategory_3, spellcategorycooldown_3, spellid_4, spelltrigger_4, spellcharges_4, spellppmrate_4, spellcooldown_4, spellcategory_4, spellcategorycooldown_4, spellid_5, spelltrigger_5, spellcharges_5, spellppmrate_5, spellcooldown_5, spellcategory_5, spellcategorycooldown_5, bonding, page_text, page_language, page_material, start_quest, lock_id, material, sheath, random_property, set_id, max_durability, area_bound, map_bound, duration, bag_family, disenchant_id, food_type, min_money_loot, max_money_loot, wrapped_gift, extra_flags, other_team_entry, script_name, patch FROM world_item_template WHERE entry = $1
+SELECT entry, class, subclass, name, description, display_id, quality, flags, buy_count, buy_price, sell_price, inventory_type, allowable_class, allowable_race, item_level, required_level, required_skill, required_skill_rank, required_spell, required_honor_rank, required_city_rank, required_reputation_faction, required_reputation_rank, max_count, stackable, container_slots, stat_type1, stat_value1, stat_type2, stat_value2, stat_type3, stat_value3, stat_type4, stat_value4, stat_type5, stat_value5, stat_type6, stat_value6, stat_type7, stat_value7, stat_type8, stat_value8, stat_type9, stat_value9, stat_type10, stat_value10, delay, range_mod, ammo_type, dmg_min1, dmg_max1, dmg_type1, dmg_min2, dmg_max2, dmg_type2, dmg_min3, dmg_max3, dmg_type3, dmg_min4, dmg_max4, dmg_type4, dmg_min5, dmg_max5, dmg_type5, block, armor, holy_res, fire_res, nature_res, frost_res, shadow_res, arcane_res, spellid_1, spelltrigger_1, spellcharges_1, spellppmrate_1, spellcooldown_1, spellcategory_1, spellcategorycooldown_1, spellid_2, spelltrigger_2, spellcharges_2, spellppmrate_2, spellcooldown_2, spellcategory_2, spellcategorycooldown_2, spellid_3, spelltrigger_3, spellcharges_3, spellppmrate_3, spellcooldown_3, spellcategory_3, spellcategorycooldown_3, spellid_4, spelltrigger_4, spellcharges_4, spellppmrate_4, spellcooldown_4, spellcategory_4, spellcategorycooldown_4, spellid_5, spelltrigger_5, spellcharges_5, spellppmrate_5, spellcooldown_5, spellcategory_5, spellcategorycooldown_5, bonding, page_text, page_language, page_material, start_quest, lock_id, material, sheath, random_property, set_id, max_durability, area_bound, map_bound, duration, bag_family, disenchant_id, food_type, min_money_loot, max_money_loot, wrapped_gift, extra_flags, other_team_entry, script_name, patch, tooltip_set_id, random_suffix, totem_category, socket_color_1, socket_content_1, socket_color_2, socket_content_2, socket_color_3, socket_content_3, socket_bonus, gem_properties, required_disenchant_skill, armor_damage_modifier, scaling_stat_distribution, scaling_stat_value, item_limit_category, holiday_id FROM world_item_template WHERE entry = $1
 `
 
 func (q *sqlQuerier) GetItemTemplateByEntry(ctx context.Context, entry int32) (WorldItemTemplate, error) {
@@ -4901,6 +5252,23 @@ func (q *sqlQuerier) GetItemTemplateByEntry(ctx context.Context, entry int32) (W
 		&i.OtherTeamEntry,
 		&i.ScriptName,
 		&i.Patch,
+		&i.TooltipSetID,
+		&i.RandomSuffix,
+		&i.TotemCategory,
+		&i.SocketColor1,
+		&i.SocketContent1,
+		&i.SocketColor2,
+		&i.SocketContent2,
+		&i.SocketColor3,
+		&i.SocketContent3,
+		&i.SocketBonus,
+		&i.GemProperties,
+		&i.RequiredDisenchantSkill,
+		&i.ArmorDamageModifier,
+		&i.ScalingStatDistribution,
+		&i.ScalingStatValue,
+		&i.ItemLimitCategory,
+		&i.HolidayID,
 	)
 	return i, err
 }
@@ -4960,6 +5328,179 @@ func (q *sqlQuerier) GetItemTemplateMetadataBatch(ctx context.Context, arg GetIt
 			&i.Name,
 			&i.Quality,
 			&i.Icon,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const getItemTemplatesByEntries = `-- name: GetItemTemplatesByEntries :many
+SELECT entry, class, subclass, name, description, display_id, quality, flags, buy_count, buy_price, sell_price, inventory_type, allowable_class, allowable_race, item_level, required_level, required_skill, required_skill_rank, required_spell, required_honor_rank, required_city_rank, required_reputation_faction, required_reputation_rank, max_count, stackable, container_slots, stat_type1, stat_value1, stat_type2, stat_value2, stat_type3, stat_value3, stat_type4, stat_value4, stat_type5, stat_value5, stat_type6, stat_value6, stat_type7, stat_value7, stat_type8, stat_value8, stat_type9, stat_value9, stat_type10, stat_value10, delay, range_mod, ammo_type, dmg_min1, dmg_max1, dmg_type1, dmg_min2, dmg_max2, dmg_type2, dmg_min3, dmg_max3, dmg_type3, dmg_min4, dmg_max4, dmg_type4, dmg_min5, dmg_max5, dmg_type5, block, armor, holy_res, fire_res, nature_res, frost_res, shadow_res, arcane_res, spellid_1, spelltrigger_1, spellcharges_1, spellppmrate_1, spellcooldown_1, spellcategory_1, spellcategorycooldown_1, spellid_2, spelltrigger_2, spellcharges_2, spellppmrate_2, spellcooldown_2, spellcategory_2, spellcategorycooldown_2, spellid_3, spelltrigger_3, spellcharges_3, spellppmrate_3, spellcooldown_3, spellcategory_3, spellcategorycooldown_3, spellid_4, spelltrigger_4, spellcharges_4, spellppmrate_4, spellcooldown_4, spellcategory_4, spellcategorycooldown_4, spellid_5, spelltrigger_5, spellcharges_5, spellppmrate_5, spellcooldown_5, spellcategory_5, spellcategorycooldown_5, bonding, page_text, page_language, page_material, start_quest, lock_id, material, sheath, random_property, set_id, max_durability, area_bound, map_bound, duration, bag_family, disenchant_id, food_type, min_money_loot, max_money_loot, wrapped_gift, extra_flags, other_team_entry, script_name, patch, tooltip_set_id, random_suffix, totem_category, socket_color_1, socket_content_1, socket_color_2, socket_content_2, socket_color_3, socket_content_3, socket_bonus, gem_properties, required_disenchant_skill, armor_damage_modifier, scaling_stat_distribution, scaling_stat_value, item_limit_category, holiday_id FROM world_item_template WHERE entry = ANY($1::int[])
+`
+
+func (q *sqlQuerier) GetItemTemplatesByEntries(ctx context.Context, entries []int32) ([]WorldItemTemplate, error) {
+	rows, err := q.db.Query(ctx, getItemTemplatesByEntries, entries)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []WorldItemTemplate
+	for rows.Next() {
+		var i WorldItemTemplate
+		if err := rows.Scan(
+			&i.Entry,
+			&i.Class,
+			&i.Subclass,
+			&i.Name,
+			&i.Description,
+			&i.DisplayID,
+			&i.Quality,
+			&i.Flags,
+			&i.BuyCount,
+			&i.BuyPrice,
+			&i.SellPrice,
+			&i.InventoryType,
+			&i.AllowableClass,
+			&i.AllowableRace,
+			&i.ItemLevel,
+			&i.RequiredLevel,
+			&i.RequiredSkill,
+			&i.RequiredSkillRank,
+			&i.RequiredSpell,
+			&i.RequiredHonorRank,
+			&i.RequiredCityRank,
+			&i.RequiredReputationFaction,
+			&i.RequiredReputationRank,
+			&i.MaxCount,
+			&i.Stackable,
+			&i.ContainerSlots,
+			&i.StatType1,
+			&i.StatValue1,
+			&i.StatType2,
+			&i.StatValue2,
+			&i.StatType3,
+			&i.StatValue3,
+			&i.StatType4,
+			&i.StatValue4,
+			&i.StatType5,
+			&i.StatValue5,
+			&i.StatType6,
+			&i.StatValue6,
+			&i.StatType7,
+			&i.StatValue7,
+			&i.StatType8,
+			&i.StatValue8,
+			&i.StatType9,
+			&i.StatValue9,
+			&i.StatType10,
+			&i.StatValue10,
+			&i.Delay,
+			&i.RangeMod,
+			&i.AmmoType,
+			&i.DmgMin1,
+			&i.DmgMax1,
+			&i.DmgType1,
+			&i.DmgMin2,
+			&i.DmgMax2,
+			&i.DmgType2,
+			&i.DmgMin3,
+			&i.DmgMax3,
+			&i.DmgType3,
+			&i.DmgMin4,
+			&i.DmgMax4,
+			&i.DmgType4,
+			&i.DmgMin5,
+			&i.DmgMax5,
+			&i.DmgType5,
+			&i.Block,
+			&i.Armor,
+			&i.HolyRes,
+			&i.FireRes,
+			&i.NatureRes,
+			&i.FrostRes,
+			&i.ShadowRes,
+			&i.ArcaneRes,
+			&i.Spellid1,
+			&i.Spelltrigger1,
+			&i.Spellcharges1,
+			&i.Spellppmrate1,
+			&i.Spellcooldown1,
+			&i.Spellcategory1,
+			&i.Spellcategorycooldown1,
+			&i.Spellid2,
+			&i.Spelltrigger2,
+			&i.Spellcharges2,
+			&i.Spellppmrate2,
+			&i.Spellcooldown2,
+			&i.Spellcategory2,
+			&i.Spellcategorycooldown2,
+			&i.Spellid3,
+			&i.Spelltrigger3,
+			&i.Spellcharges3,
+			&i.Spellppmrate3,
+			&i.Spellcooldown3,
+			&i.Spellcategory3,
+			&i.Spellcategorycooldown3,
+			&i.Spellid4,
+			&i.Spelltrigger4,
+			&i.Spellcharges4,
+			&i.Spellppmrate4,
+			&i.Spellcooldown4,
+			&i.Spellcategory4,
+			&i.Spellcategorycooldown4,
+			&i.Spellid5,
+			&i.Spelltrigger5,
+			&i.Spellcharges5,
+			&i.Spellppmrate5,
+			&i.Spellcooldown5,
+			&i.Spellcategory5,
+			&i.Spellcategorycooldown5,
+			&i.Bonding,
+			&i.PageText,
+			&i.PageLanguage,
+			&i.PageMaterial,
+			&i.StartQuest,
+			&i.LockID,
+			&i.Material,
+			&i.Sheath,
+			&i.RandomProperty,
+			&i.SetID,
+			&i.MaxDurability,
+			&i.AreaBound,
+			&i.MapBound,
+			&i.Duration,
+			&i.BagFamily,
+			&i.DisenchantID,
+			&i.FoodType,
+			&i.MinMoneyLoot,
+			&i.MaxMoneyLoot,
+			&i.WrappedGift,
+			&i.ExtraFlags,
+			&i.OtherTeamEntry,
+			&i.ScriptName,
+			&i.Patch,
+			&i.TooltipSetID,
+			&i.RandomSuffix,
+			&i.TotemCategory,
+			&i.SocketColor1,
+			&i.SocketContent1,
+			&i.SocketColor2,
+			&i.SocketContent2,
+			&i.SocketColor3,
+			&i.SocketContent3,
+			&i.SocketBonus,
+			&i.GemProperties,
+			&i.RequiredDisenchantSkill,
+			&i.ArmorDamageModifier,
+			&i.ScalingStatDistribution,
+			&i.ScalingStatValue,
+			&i.ItemLimitCategory,
+			&i.HolidayID,
 		); err != nil {
 			return nil, err
 		}

@@ -8,6 +8,7 @@
 
 import { useCallback, useMemo, useRef, useState } from "react";
 import { RotateCcw, Minus, Plus } from "lucide-react";
+import { iconUrl } from "@/config/iconUrl";
 import type { PanelDefinition, PanelRenderProps } from "../types";
 import type { PanelFilter } from "../processors/filters";
 import { useSpell } from "@/api/queries";
@@ -120,7 +121,7 @@ function CastIcon({
           <Tooltip delayDuration={150}>
             <TooltipTrigger asChild>
               <img
-                src="https://icons.chronicleclassic.com/inv_sword_04.webp"
+                src={iconUrl("inv_sword_04")}
                 alt={isOffHand ? "Auto Attack - Offhand" : "Auto Attack"}
                 width={ICON_SIZE}
                 height={ICON_SIZE}
@@ -181,7 +182,7 @@ function HiddenSpellIcon({
       title={`Show ${spellName} (click to restore)`}
     >
       {isAutoAttack ? (
-        <img src="https://icons.chronicleclassic.com/inv_sword_04.webp" alt="Auto Attack" width={16} height={16} className="rounded-sm" />
+        <img src={iconUrl("inv_sword_04")} alt="Auto Attack" width={16} height={16} className="rounded-sm" />
       ) : spell ? (
         <SpellIconWithTooltip spell={spell} size={16} showTooltip={false} />
       ) : (

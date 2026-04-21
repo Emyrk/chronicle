@@ -14,6 +14,7 @@ func DerivedStaticsCmd() *serpent.Command {
 	var tsDir string
 	var assetsDir string
 	var dbcPath string
+	var server string
 
 	return &serpent.Command{
 		Use:   "derived-statics",
@@ -37,13 +38,8 @@ func DerivedStaticsCmd() *serpent.Command {
 				Flag:        "assets-dir",
 				Value:       serpent.StringOf(&assetsDir),
 			},
-			{
-				Name:        "dbc",
-				Description: "Path to WoW client directory.",
-				Flag:        "dbc",
-				Value:       serpent.StringOf(&dbcPath),
-				Default:     "/home/steven/Games/turtlewow/drive_c/Program Files (x86)/TurtleWoW",
-			},
+			DBCOption(&dbcPath),
+			ServerOption(&server),
 		},
 		Handler: func(inv *serpent.Invocation) error {
 			if goDir == "" {
@@ -53,21 +49,25 @@ func DerivedStaticsCmd() *serpent.Command {
 				return fmt.Errorf("--ts-dir is required")
 			}
 
-			wc, err := dbcdb.New(dbcPath)
+			resolved, err := ResolveDBCPath(dbcPath, server)
 			if err != nil {
-				return fmt.Errorf("open wow client: %w", err)
+				return err
+			}
+			wc, err := dbcdb.New(resolved)
+			if err != nil {
+				return fmt.Errorf("(derived statics) open wow client: %w", err)
 			}
 
-			if err := generateDerivedPeriodicSpells(wc, goDir); err != nil {
+			if err := generateDerivedPeriodicSpells(wc, goDir, server); err != nil {
 				return fmt.Errorf("generate periodic spells: %w", err)
 			}
-			if err := generateDerivedVulnerabilitySpells(wc, goDir, tsDir); err != nil {
+			if err := generateDerivedVulnerabilitySpells(wc, goDir, tsDir, server); err != nil {
 				return fmt.Errorf("generate vulnerability spells: %w", err)
 			}
-			if err := generateDerivedExtraAttacks(wc, goDir, tsDir); err != nil {
+			if err := generateDerivedExtraAttacks(wc, goDir, tsDir, server); err != nil {
 				return fmt.Errorf("generate extra attack spells: %w", err)
 			}
-			if err := generateDerivedDurationModifiers(wc, goDir, tsDir); err != nil {
+			if err := generateDerivedDurationModifiers(wc, goDir, tsDir, server); err != nil {
 				return fmt.Errorf("generate duration modifiers: %w", err)
 			}
 			if err := generateClassSpells(wc, assetsDir); err != nil {
@@ -82,39 +82,39 @@ func DerivedStaticsCmd() *serpent.Command {
 	}
 }
 
-func generateDerivedPeriodicSpells(wc *dbcdb.WoWClient, goDir string) error {
+func generateDerivedPeriodicSpells(wc *dbcdb.WoWClient, goDir string, server string) error {
 	entries, err := collectPeriodicSpells(wc)
 	if err != nil {
 		return err
 	}
 
-	return writeTemplate(filepath.Join(goDir, "periodicspells.go"), periodicSpellsGoTemplate, entries)
+	return writeTemplate(filepath.Join(goDir, "periodicspells.go"), periodicSpellsGoTemplate, serverData{Server: server, Entries: entries}, server)
 }
 
-func generateDerivedVulnerabilitySpells(wc *dbcdb.WoWClient, goDir, tsDir string) error {
+func generateDerivedVulnerabilitySpells(wc *dbcdb.WoWClient, goDir, tsDir string, server string) error {
 	entries, err := collectVulnerabilitySpells(wc)
 	if err != nil {
 		return err
 	}
 
-	if err := writeTemplate(filepath.Join(goDir, "vulnerabilityspells.go"), vulnerabilitySpellsGoTemplate, entries); err != nil {
+	if err := writeTemplate(filepath.Join(goDir, "vulnerabilityspells.go"), vulnerabilitySpellsGoTemplate, serverData{Server: server, Entries: entries}, server); err != nil {
 		return err
 	}
 
-	return writeTemplate(filepath.Join(tsDir, "VulnerabilitySpells.ts"), vulnerabilitySpellsTSTemplate, entries)
+	return writeTemplate(filepath.Join(tsDir, "VulnerabilitySpells.ts"), vulnerabilitySpellsTSTemplate, entries, server)
 }
 
-func generateDerivedExtraAttacks(wc *dbcdb.WoWClient, goDir, tsDir string) error {
+func generateDerivedExtraAttacks(wc *dbcdb.WoWClient, goDir, tsDir string, server string) error {
 	entries, err := collectExtraAttackSpells(wc)
 	if err != nil {
 		return err
 	}
 
-	if err := writeTemplate(filepath.Join(goDir, "extraattack.go"), extraAttacksGoTemplate, entries); err != nil {
+	if err := writeTemplate(filepath.Join(goDir, "extraattack.go"), extraAttacksGoTemplate, serverData{Server: server, Entries: entries}, server); err != nil {
 		return err
 	}
 
-	return writeTemplate(filepath.Join(tsDir, "ExtraAttack.ts"), extraAttacksTSTemplate, entries)
+	return writeTemplate(filepath.Join(tsDir, "ExtraAttack.ts"), extraAttacksTSTemplate, entries, server)
 }
 
 func generateClassSpells(wc *dbcdb.WoWClient, assetsDir string) error {
@@ -126,13 +126,13 @@ func generateClassSpells(wc *dbcdb.WoWClient, assetsDir string) error {
 	return writeJSON(filepath.Join(assetsDir, "class-spells.json"), data)
 }
 
-func generateDerivedDurationModifiers(wc *dbcdb.WoWClient, goDir, tsDir string) error {
+func generateDerivedDurationModifiers(wc *dbcdb.WoWClient, goDir, tsDir string, server string) error {
 	data, err := collectDurationModifiers(wc)
 	if err != nil {
 		return err
 	}
 
-	if err := writeTemplate(filepath.Join(goDir, "durationmodifiers.go"), durationModifiersGoTemplate, data); err != nil {
+	if err := writeTemplate(filepath.Join(goDir, "durationmodifiers.go"), durationModifiersGoTemplate, serverData{Server: server, Entries: data}, server); err != nil {
 		return err
 	}
 
@@ -141,5 +141,5 @@ func generateDerivedDurationModifiers(wc *dbcdb.WoWClient, goDir, tsDir string) 
 		return err
 	}
 
-	return writeTemplate(filepath.Join(tsDir, "DurationModifiers.ts"), durationModifiersTSTemplate, affected)
+	return writeTemplate(filepath.Join(tsDir, "DurationModifiers.ts"), durationModifiersTSTemplate, affected, server)
 }

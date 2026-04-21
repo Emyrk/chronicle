@@ -463,3 +463,31 @@ func (a *API) AdminListOutdatedInstances(w http.ResponseWriter, r *http.Request)
 		MinVersion: minParserVersion,
 	})
 }
+func (a *API) AdminGetSiteConfig(w http.ResponseWriter, r *http.Request) {
+	ctx := r.Context()
+	config, err := a.Opts.Zed.GetSiteConfig(ctx)
+	if err != nil {
+		httpapi.InternalServerError(w, err)
+		return
+	}
+	httpapi.Write(ctx, w, http.StatusOK, chroniclesdk.SiteConfig{
+		SignupsEnabled: config.SignupsEnabled,
+	})
+}
+
+func (a *API) AdminUpdateSiteConfig(w http.ResponseWriter, r *http.Request) {
+	ctx := r.Context()
+	var req chroniclesdk.SiteConfig
+	if !httpapi.Read(ctx, w, r, &req) {
+		return
+	}
+	config, err := a.Opts.Zed.UpdateSiteConfig(ctx, req.SignupsEnabled)
+	if err != nil {
+		httpapi.InternalServerError(w, err)
+		return
+	}
+	httpapi.Write(ctx, w, http.StatusOK, chroniclesdk.SiteConfig{
+		SignupsEnabled: config.SignupsEnabled,
+	})
+}
+

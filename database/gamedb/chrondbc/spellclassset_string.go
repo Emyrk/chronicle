@@ -20,15 +20,25 @@ func _() {
 	_ = x[SpellClassSetHunter-9]
 	_ = x[SpellClassSetPaladin-10]
 	_ = x[SpellClassSetShaman-11]
+	_ = x[SpellClassSetDeathKnight-15]
 }
 
-const _SpellClassSet_name = "Generic12MageWarriorWarlockPriestDruidRogueHunterPaladinShaman"
+const (
+	_SpellClassSet_name_0 = "Generic12MageWarriorWarlockPriestDruidRogueHunterPaladinShaman"
+	_SpellClassSet_name_1 = "DeathKnight"
+)
 
-var _SpellClassSet_index = [...]uint8{0, 7, 8, 9, 13, 20, 27, 33, 38, 43, 49, 56, 62}
+var (
+	_SpellClassSet_index_0 = [...]uint8{0, 7, 8, 9, 13, 20, 27, 33, 38, 43, 49, 56, 62}
+)
 
 func (i SpellClassSet) String() string {
-	if i < 0 || i >= SpellClassSet(len(_SpellClassSet_index)-1) {
+	switch {
+	case 0 <= i && i <= 11:
+		return _SpellClassSet_name_0[_SpellClassSet_index_0[i]:_SpellClassSet_index_0[i+1]]
+	case i == 15:
+		return _SpellClassSet_name_1
+	default:
 		return "SpellClassSet(" + strconv.FormatInt(int64(i), 10) + ")"
 	}
-	return _SpellClassSet_name[_SpellClassSet_index[i]:_SpellClassSet_index[i+1]]
 }

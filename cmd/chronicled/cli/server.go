@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/Emyrk/chronicle/internal/services"
+	"github.com/Emyrk/chronicle/internal/services/serviceaccessurl"
 	"github.com/Emyrk/chronicle/internal/services/serviceapi"
 	"github.com/Emyrk/chronicle/internal/services/serviceauthz"
 	"github.com/Emyrk/chronicle/internal/services/servicebot"
@@ -20,6 +21,7 @@ import (
 	"github.com/Emyrk/chronicle/internal/services/servicestorage"
 	"github.com/Emyrk/chronicle/internal/services/serviceassets"
 	"github.com/Emyrk/chronicle/internal/services/servicegamedata"
+	"github.com/Emyrk/chronicle/internal/services/servicemail"
 	"github.com/Emyrk/chronicle/internal/services/servicewowdb"
 	"github.com/Emyrk/chronicle/internal/version"
 
@@ -29,6 +31,7 @@ import (
 func ServerCmd() *serpent.Command {
 	srvs := services.New()
 	err := srvs.Register(
+		serviceaccessurl.New(srvs),
 		servicelogger.New(srvs),
 		servicepprof.New(srvs),
 		serviceprometheus.New(srvs),
@@ -42,6 +45,7 @@ func ServerCmd() *serpent.Command {
 		servicegamedata.New(srvs),
 		servicechronicle.New(srvs),
 		servicebot.New(srvs),
+		servicemail.New(srvs),
 		serviceapi.New(srvs),
 	)
 	if err != nil {
@@ -62,6 +66,7 @@ func ServerCmd() *serpent.Command {
 
 			logger := getLogger(i)
 			logger.Info("🚀🚀 startup sequence initiated 🚀🚀",
+				slog.String("server", services.ServerName),
 				slog.String("tag", version.GitTag),
 				slog.String("commit", version.GitCommit),
 				slog.String("build_time", version.BuildTime),

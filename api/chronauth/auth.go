@@ -12,10 +12,13 @@ import (
 	"net/url"
 	"sort"
 	"strings"
+	"sync"
+	"time"
 
 	"github.com/Emyrk/chronicle/api/chronauth/fakeoidc"
 	"github.com/Emyrk/chronicle/api/httpapi"
 	"github.com/Emyrk/chronicle/chroniclebot"
+	"github.com/Emyrk/chronicle/chroniclemail"
 	"github.com/Emyrk/chronicle/database"
 	"github.com/Emyrk/chronicle/database/authz"
 	"github.com/go-chi/chi/v5"
@@ -39,6 +42,7 @@ type Options struct {
 	Zed       *authz.Authz
 	Discord   DiscordOAuth
 	Bot       *chroniclebot.Bot
+	Mailer    *chroniclemail.Mailer
 
 	Sessions SessionOptions
 }
@@ -51,6 +55,14 @@ type Service struct {
 	logger    *slog.Logger
 
 	sessions *Sessions
+	mailer   *chroniclemail.Mailer
+	devMode  bool
+
+	registerMu       sync.Mutex
+	registerAttempts map[string]time.Time
+
+	loginMu       sync.Mutex
+	loginAttempts map[string]time.Time
 }
 
 func New(ctx context.Context, logger *slog.Logger, opts Options) (*Service, error) {
@@ -98,12 +110,16 @@ func New(ctx context.Context, logger *slog.Logger, opts Options) (*Service, erro
 	}
 
 	return &Service{
-		Providers: providers,
-		Store:     store,
-		logger:    logger.With(slog.String("service", "auth")),
-		sessions:  sess,
-		Bot:       opts.Bot,
-		Zed:       opts.Zed,
+		Providers:        providers,
+		Store:            store,
+		logger:           logger.With(slog.String("service", "auth")),
+		sessions:         sess,
+		Bot:              opts.Bot,
+		Zed:              opts.Zed,
+		mailer:           opts.Mailer,
+		devMode:          opts.DevServer,
+		registerAttempts: make(map[string]time.Time),
+		loginAttempts:    make(map[string]time.Time),
 	}, nil
 }
 
@@ -271,6 +287,7 @@ func (s *Service) Handler() http.Handler {
 	mux := chi.NewRouter()
 	mux.Group(func(r chi.Router) {
 		r.Use(
+			s.AuthenticationMiddleware,
 			s.Authenticated(true),
 		)
 
@@ -331,6 +348,21 @@ func (s *Service) Handler() http.Handler {
 			_ = s.Logout(w, r)
 			httpapi.Write(r.Context(), w, http.StatusNoContent, nil)
 		})
+	})
+
+	// Password auth routes (no authentication required)
+	mux.Post("/password/register", s.PasswordRegister)
+	mux.Post("/password/login", s.PasswordLogin)
+	mux.Get("/password/verify-email", s.VerifyEmail)
+	mux.Post("/password/forgot-password", s.ForgotPassword)
+	mux.Post("/password/reset-password", s.ResetPassword)
+
+	mux.Group(func(r chi.Router) {
+		r.Use(
+			s.AuthenticationMiddleware,
+			s.Authenticated(false),
+		)
+		r.Post("/password/resend-verification", s.ResendVerification)
 	})
 
 	mux.Get("/list", func(w http.ResponseWriter, r *http.Request) {

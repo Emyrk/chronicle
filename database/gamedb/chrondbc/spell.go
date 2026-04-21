@@ -38,6 +38,7 @@ type Spell struct {
 	MaxTargetLevel int32           `json:"max_target_level"` // Maximum target level (0 = no limit, used for CC diminishing)
 
 	// === Behavior ===
+	// 3.3.5a uses SchoolMask instead of School. Bitmask of damage schools (1=Phys,2=Holy,4=Fire,8=Nature,16=Frost,32=Shadow,64=Arcane)
 	School             School             `json:"school"`           // Magic school: physical, holy, fire, nature, frost, shadow, arcane
 	SpellPriority      int32              `json:"spell_priority"`   // AI priority for NPC spell selection
 	StanceBarOrder     int32              `json:"stance_bar_order"` // Position on stance/shapeshift action bar
@@ -119,6 +120,19 @@ type Spell struct {
 	MinReputation      int32    `json:"min_reputation"`
 	SpellVisualID      [2]int32 `json:"spell_visual_id"`
 
+	// === 3.3.5a+ Fields ===
+	// These fields are only populated for WotLK (3.3.5a) servers; zero for vanilla.
+	RuneCostID             int32 `json:"rune_cost_id"`              // Lookup into SpellRuneCost.dbc for Death Knight rune costs (blood/frost/unholy/runic power)
+	SpellMissileID         int32 `json:"spell_missile_id"`          // Lookup into SpellMissile.dbc for projectile visual behavior (speed, arc, model)
+	DescriptionVariablesID int32 `json:"description_variables_id"`  // Lookup into SpellDescriptionVariables.dbc for complex tooltip variable definitions
+	CasterAuraSpell        int32 `json:"caster_aura_spell"`         // Caster must have this spell's aura active to cast (0 = no requirement)
+	TargetAuraSpell        int32 `json:"target_aura_spell"`         // Target must have this spell's aura active (0 = no requirement)
+	ExcludeCasterAuraSpell int32 `json:"exclude_caster_aura_spell"` // Caster must NOT have this spell's aura active to cast (0 = no exclusion)
+	ExcludeTargetAuraSpell int32 `json:"exclude_target_aura_spell"` // Target must NOT have this spell's aura active (0 = no exclusion)
+	ExcludeCasterAuraState int32 `json:"exclude_caster_aura_state"` // Caster must NOT be in this AuraState (inverse of CasterAuraState)
+	ExcludeTargetAuraState int32 `json:"exclude_target_aura_state"` // Target must NOT be in this AuraState (inverse of TargetAuraState)
+	ManaPerSecondPerLevel  int32 `json:"mana_per_second_per_level"` // Additional channeling cost per caster level per second
+
 	// No value
 	//RequiredAreaID          int32
 	//ShapeshiftMask          []int32
@@ -126,13 +140,11 @@ type Spell struct {
 	//ChannelInterruptFlags   []int32
 	//FacingCasterFlags       int32
 	//ScalingID               int32     // Always 0
-	//SchoolMask              int32     // Always 0
 	//CategoriesID            int32     // Always 0
 	//CooldownsID             int32     // Always 0
 	//Difficulty              int32     // Used for mythic/20man/heroic
 	//ShapeshiftID            int32     // Always 0
 	//ReagentsID              int32     // Always 0
-	//ManaPerSecondPerLevel   int32     // Always 0
 	//EffectSpellClassMaskA   []int32   // Always nil
 	//EffectSpellClassMaskB   []int32   // Always nil
 	//EffectSpellClassMaskC   []int32   // Always nil
@@ -140,9 +152,6 @@ type Spell struct {
 	//RequiredTotemCategoryID []int32   // Always nil
 	//EffectMiscValueB        []int32   // Always nil
 	//EffectRadiusIndexB      []int32   // Always nil
-	//RuneCostID              int32     // Always 0
-	//SpellMissileID          int32     // Always 0
-	//DescriptionVariablesID  int32     // Always 0
 	//AuraOptionsID           int32
 	//AuraRestrictionsID      int32
 	//CastingRequirementsID   int32
@@ -153,14 +162,7 @@ type Spell struct {
 	//TargetRestrictionsID    int32
 	//RequiredProjectID       int32
 	//MiscID                  int32
-	//CasterAuraSpell         int32
-	//TargetAuraSpell         int32
-	//ExcludeCasterAuraSpell  int32
-	//ExcludeTargetAuraSpell  int32
 	//PowerDisplayID          int32
-	//ManaPerSecondPerLevel   int32
-	//ExcludeCasterAuraState  int32
-	//ExcludeTargetAuraState  int32
 }
 
 func (s Spell) String() string {

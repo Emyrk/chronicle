@@ -74,8 +74,16 @@ github.com/AzureAD/microsoft-authentication-library-for-go v1.5.0/go.mod h1:HKpQ
 github.com/BurntSushi/toml v0.3.1/go.mod h1:xHWCNGjB5oqiDr8zfno3MHue2Ht5sIBksp03qcyfWMU=
 github.com/BurntSushi/toml v1.5.0 h1:W5quZX/G/csjUnuI8SUYlsHs9M38FC7znL0lIO+DvMg=
 github.com/BurntSushi/toml v1.5.0/go.mod h1:ukJfTF/6rtPPRCnwkur4qwRxa8vTRFBF0uk2lLoLwho=
-github.com/Emyrk/core v0.0.0-20260228020554-a0e7784de9cb h1:RxyrA6pwSIZMJjbgYAya6saqrAv6Sy/qmEL987V3Ras=
-github.com/Emyrk/core v0.0.0-20260228020554-a0e7784de9cb/go.mod h1:BLkLA6t8H1k2uugNpTVFbr8dKFehuP+8z/RsY//L0pI=
+github.com/Emyrk/core v0.0.0-20260420081341-5169560c2f84 h1:tQs3Tc4hiooRFutxdhhleV8c09bnPPlKvMeZC2UFLqs=
+github.com/Emyrk/core v0.0.0-20260420081341-5169560c2f84/go.mod h1:BLkLA6t8H1k2uugNpTVFbr8dKFehuP+8z/RsY//L0pI=
+github.com/Emyrk/core v0.0.0-20260420083951-93f52500f4f6 h1:yGIsFGXOIC4DC9ae7hXT1aSSxY2KLUIL/i2mP9BlNH4=
+github.com/Emyrk/core v0.0.0-20260420083951-93f52500f4f6/go.mod h1:BLkLA6t8H1k2uugNpTVFbr8dKFehuP+8z/RsY//L0pI=
+github.com/Emyrk/core v0.0.0-20260420091949-31a9e3f3f80d h1:Dz1IsyN6Ry9s0+ml3QhbRiDwV7L2KDDE5RPVc6ztLOQ=
+github.com/Emyrk/core v0.0.0-20260420091949-31a9e3f3f80d/go.mod h1:BLkLA6t8H1k2uugNpTVFbr8dKFehuP+8z/RsY//L0pI=
+github.com/Emyrk/core v0.0.0-20260420221854-5926ee924c45 h1:cicoUWwlDNxoEux6Z4U4abg5AaLipI7upXx96SFVtGA=
+github.com/Emyrk/core v0.0.0-20260420221854-5926ee924c45/go.mod h1:BLkLA6t8H1k2uugNpTVFbr8dKFehuP+8z/RsY//L0pI=
+github.com/Emyrk/core v0.0.0-20260420221947-ce916b0df45f h1:TeCKj7fpTmtUAMv/AMs1ubcgHf/yMU+OUWtYrvprrqk=
+github.com/Emyrk/core v0.0.0-20260420221947-ce916b0df45f/go.mod h1:BLkLA6t8H1k2uugNpTVFbr8dKFehuP+8z/RsY//L0pI=
 github.com/Emyrk/core/gotiny v0.0.0-20260217042645-fddd00b2f688 h1:cE7VzZQ0d4u/1slm+qb+I8MOQjsUHb6ZlBFVo2b7kI4=
 github.com/Emyrk/core/gotiny v0.0.0-20260217042645-fddd00b2f688/go.mod h1:LjhkCDCHbvOgyfZ0kSW+cEFLTlCdSwje0fmcMP2m6YE=
 github.com/Emyrk/zedgen v0.0.0-20260212105940-a30f9042561f h1:pTAJh+8PR9GJ9LbCzqartCAtG1EN/zpBwDWEsKC+Nnc=
@@ -645,6 +653,8 @@ github.com/prometheus/common v0.67.4 h1:yR3NqWO1/UyO1w2PhUvXlGQs/PtFmoveVO0KZ4+L
 github.com/prometheus/common v0.67.4/go.mod h1:gP0fq6YjjNCLssJCQp0yk4M8W6ikLURwkdd/YKtTbyI=
 github.com/prometheus/procfs v0.17.0 h1:FuLQ+05u4ZI+SS/w9+BWEM2TXiHKsUQ9TADiRH7DuK0=
 github.com/prometheus/procfs v0.17.0/go.mod h1:oPQLaDAMRbA+u8H5Pbfq+dl3VDAvHxMUOVhe0wYB2zw=
+github.com/resend/resend-go/v2 v2.28.0 h1:ttM1/VZR4fApBv3xI1TneSKi1pbfFsVrq7fXFlHKtj4=
+github.com/resend/resend-go/v2 v2.28.0/go.mod h1:3YCb8c8+pLiqhtRFXTyFwlLvfjQtluxOr9HEh2BwCkQ=
 github.com/riverqueue/apiframe v0.0.0-20251229202423-2b52ce1c482e h1:OwOgxT3MRpOj5Mp6DhFdZP43FOQOf2hhywAuT5XZCR4=
 github.com/riverqueue/apiframe v0.0.0-20251229202423-2b52ce1c482e/go.mod h1:O7UmsAMjpMYuToN4au5GNXdmN1gli+5FTldgXqAfaD0=
 github.com/riverqueue/river v0.30.0 h1:+70zIYLi15sVmg/uBIEUvp9p161YJeC8hYkEkTYmvxQ=

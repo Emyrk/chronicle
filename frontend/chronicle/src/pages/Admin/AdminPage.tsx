@@ -9,6 +9,8 @@ import {
   useResyncUserRoles,
   useUpsertUserGrant,
   useAuthorizationCheck,
+  useSiteConfig,
+  useUpdateSiteConfig,
   type User,
   type AdminLog,
   type AdminLogsSortField,
@@ -574,7 +576,7 @@ export function AdminPage() {
   
   const { data: usersData, isLoading: usersLoading, error: usersError } = useAdminUsers();
   
-  const [activeTab, setActiveTab] = useState<"users" | "logs" | "leaderboard">("users");
+  const [activeTab, setActiveTab] = useState<"users" | "logs" | "leaderboard" | "settings">("users");
 
   const sessionLoading = authLoading || authzLoading;
 
@@ -652,7 +654,17 @@ export function AdminPage() {
           <Trophy className="h-4 w-4" />
           Leaderboard
         </Button>
+        <div className="border-l h-6 mx-1" />        <Button
+          variant={activeTab === "settings" ? "secondary" : "ghost"}
+          size="sm"
+          onClick={() => setActiveTab("settings")}
+          className="gap-2"
+        >
+          <Shield className="h-4 w-4" />
+          Settings
+        </Button>
         <div className="border-l h-6 mx-1" />
+
         <Link to="/admin/users">
           <Button
             variant="outline"
@@ -732,7 +744,60 @@ export function AdminPage() {
 
       {activeTab === "logs" && <LogsSection users={usersData?.users ?? []} />}
       {activeTab === "leaderboard" && <LeaderboardSection />}
+      {activeTab === "settings" && <SiteSettingsSection />}
     </div>
+  );
+}
+
+function SiteSettingsSection() {
+  const { data: config, isLoading } = useSiteConfig();
+  const updateConfig = useUpdateSiteConfig();
+
+  if (isLoading) {
+    return (
+      <Card className="p-6">
+        <div className="flex items-center gap-2">
+          <Loader2 className="h-4 w-4 animate-spin" />
+          <span className="text-muted-foreground">Loading settings...</span>
+        </div>
+      </Card>
+    );
+  }
+
+  return (
+    <Card className="p-6 space-y-4">
+      <h2 className="text-lg font-semibold">Site Settings</h2>
+      <div className="flex items-center justify-between">
+        <div>
+          <p className="font-medium">Signups Enabled</p>
+          <p className="text-sm text-muted-foreground">
+            When disabled, new users cannot register via OAuth or email/password.
+          </p>
+        </div>
+        <Button
+          variant={config?.signups_enabled ? "default" : "destructive"}
+          size="sm"
+          disabled={updateConfig.isPending}
+          onClick={() => {
+            updateConfig.mutate({ signups_enabled: !config?.signups_enabled });
+          }}
+        >
+          {updateConfig.isPending ? (
+            <Loader2 className="h-4 w-4 animate-spin" />
+          ) : config?.signups_enabled ? (
+            <>
+              <Check className="h-4 w-4 mr-1" />
+              Enabled
+            </>
+          ) : (
+            <>
+              <X className="h-4 w-4 mr-1" />
+              Disabled
+            </>
+          )}
+        </Button>
+      </div>
+    </Card>
   );
 }
 

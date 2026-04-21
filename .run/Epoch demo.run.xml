@@ -1,0 +1,16 @@
+<component name="ProjectRunConfigurationManager">
+  <configuration default="false" name="Epoch demo" type="GoApplicationRunConfiguration" factoryName="Go Application">
+    <module name="chronicle" />
+    <working_directory value="$PROJECT_DIR$" />
+    <parameters value="demo --server=epoch" />
+    <EXTENSION ID="com.fapiko.jetbrains.plugins.better_direnv.runconfigs.GolandRunConfigurationExtension">
+      <option name="DIRENV_ENABLED" value="false" />
+      <option name="DIRENV_TRUSTED" value="false" />
+    </EXTENSION>
+    <kind value="PACKAGE" />
+    <package value="github.com/Emyrk/chronicle/scripts/dbcdata" />
+    <directory value="$PROJECT_DIR$" />
+    <filePath value="$PROJECT_DIR$/scripts/dbcdata/main.go" />
+    <method v="2" />
+  </configuration>
+</component>

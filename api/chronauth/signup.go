@@ -17,6 +17,8 @@ import (
 	"github.com/markbates/goth"
 )
 
+var errSignupsDisabled = errors.New("signups are currently disabled")
+
 func (s *Service) Signup(w http.ResponseWriter, r *http.Request, user goth.User) (database.UserAuthSession, bool) {
 	var session database.UserAuthSession
 	now := time.Now()
@@ -36,6 +38,15 @@ func (s *Service) Signup(w http.ResponseWriter, r *http.Request, user goth.User)
 		}
 
 		if linked.ID == uuid.Nil {
+			// Check if signups are enabled
+			siteConfig, err := tx.GetSiteConfig(ctx)
+			if err != nil {
+				return fmt.Errorf("get site config: %w", err)
+			}
+			if !siteConfig.SignupsEnabled {
+				return errSignupsDisabled
+			}
+
 			// Sign up the user
 			name := user.Name
 
@@ -123,6 +134,10 @@ func (s *Service) Signup(w http.ResponseWriter, r *http.Request, user goth.User)
 		return nil
 	}, nil)
 	if err != nil {
+		if errors.Is(err, errSignupsDisabled) {
+			http.Redirect(w, r, "/login?error=signups_disabled", http.StatusTemporaryRedirect)
+			return session, false
+		}
 		if errors.Is(err, chroniclebot.ErrMustJoinDiscordServer) {
 			http.Redirect(w, r, "/login?error=not_in_discord", http.StatusTemporaryRedirect)
 			return session, false

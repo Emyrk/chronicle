@@ -57,7 +57,7 @@ func (s *Service) Options() serpent.OptionSet {
 			Name:        "assets-generated-dir",
 			Description: "Directory for generated JSON asset files.",
 			Flag:        "assets-generated-dir",
-			Default:     "./assets/generated",
+			Default:     "./assets/" + services.ServerName + "/generated",
 			Env:         "CHRONICLE_ASSETS_GENERATED_DIR",
 			Value:       serpent.StringOf(&s.dir),
 		},

@@ -39,9 +39,13 @@ func (s *Service) handleItemTooltip(w http.ResponseWriter, r *http.Request) {
 
 	tooltip := buildBaseTooltip(ctx, db, item)
 
-	// Resolve item set info
-	if item.SetID != 0 {
-		applyItemSet(ctx, db, &tooltip, item.SetID)
+	// Resolve item set info.
+	// tooltip_set_id points to the tier-specific synthetic set (for display).
+	// set_id is the original DBC value (for cross-tier eligibility).
+	if item.TooltipSetID != 0 {
+		applyItemSet(ctx, db, &tooltip, item.TooltipSetID, item.SetID)
+	} else if item.SetID != 0 {
+		applyItemSet(ctx, db, &tooltip, item.SetID, item.SetID)
 	}
 
 	// Handle ?random_property=ID
@@ -198,22 +202,40 @@ func applyRandomProperty(ctx context.Context, db database.Store, tooltip *chroni
 }
 
 // applyItemSet resolves item set info: name, member items, and set bonuses.
-func applyItemSet(ctx context.Context, db database.Store, tooltip *chroniclesdk.ItemTooltip, setID int32) {
-	set, err := db.GetItemSetByID(ctx, setID)
+// tooltipSetID is the tier-specific set (possibly synthetic) for display.
+// eligibleSetID is the original DBC set for cross-tier eligibility.
+func applyItemSet(ctx context.Context, db database.Store, tooltip *chroniclesdk.ItemTooltip, tooltipSetID, eligibleSetID int32) {
+	set, err := db.GetItemSetByID(ctx, tooltipSetID)
 	if err != nil {
 		return
 	}
 
 	info := &chroniclesdk.ItemSetInfo{
-		ID:   set.ID,
-		Name: set.NameLang,
+		ID:      set.ID,
+		Name:    set.NameLang,
+		ItemIDs: set.ItemIds,
 	}
 
-	// Get all items in the set
-	items, err := db.GetItemTemplatesBySetID(ctx, setID)
+	// Resolve canonical item IDs to names for tooltip display.
+	if len(info.ItemIDs) > 0 {
+		items, err := db.GetItemTemplatesByEntries(ctx, info.ItemIDs)
+		if err == nil {
+			for _, item := range items {
+				info.Items = append(info.Items, chroniclesdk.ItemSetPiece{
+					Entry:         item.Entry,
+					Name:          item.Name,
+					InventoryType: item.InventoryType,
+				})
+			}
+		}
+	}
+
+	// Get all eligible items (includes cross-tier pieces like Furious in a Wrathful set).
+	// The frontend uses this to check if an equipped piece counts toward the set bonus.
+	eligible, err := db.GetItemTemplatesBySetID(ctx, eligibleSetID)
 	if err == nil {
-		for _, item := range items {
-			info.Items = append(info.Items, chroniclesdk.ItemSetPiece{
+		for _, item := range eligible {
+			info.EligibleItems = append(info.EligibleItems, chroniclesdk.ItemSetPiece{
 				Entry:         item.Entry,
 				Name:          item.Name,
 				InventoryType: item.InventoryType,
@@ -221,8 +243,14 @@ func applyItemSet(ctx context.Context, db database.Store, tooltip *chroniclesdk.
 		}
 	}
 
-	// Get set bonuses
-	bonuses, err := db.GetItemSetBonuses(ctx, setID)
+	// For classic/single-tier sets where item_ids may be empty,
+	// fall back to eligible items for display.
+	if len(info.Items) == 0 {
+		info.Items = info.EligibleItems
+	}
+
+	// Get set bonuses from the tooltip set (synthetic sets have copied bonuses).
+	bonuses, err := db.GetItemSetBonuses(ctx, tooltipSetID)
 	if err == nil {
 		for _, b := range bonuses {
 			info.Bonuses = append(info.Bonuses, chroniclesdk.ItemSetBonus{

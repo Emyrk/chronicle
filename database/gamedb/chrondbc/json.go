@@ -61,16 +61,17 @@ func (p Power) MarshalJSON() ([]byte, error) {
 func (s SpellClassSet) MarshalJSON() ([]byte, error) {
 	// SpellClassSet doesn't have stringer, use known names
 	names := map[SpellClassSet]string{
-		SpellClassSetGeneric: "Generic",
-		SpellClassSetMage:    "Mage",
-		SpellClassSetWarrior: "Warrior",
-		SpellClassSetWarlock: "Warlock",
-		SpellClassSetPriest:  "Priest",
-		SpellClassSetDruid:   "Druid",
-		SpellClassSetRogue:   "Rogue",
-		SpellClassSetHunter:  "Hunter",
-		SpellClassSetPaladin: "Paladin",
-		SpellClassSetShaman:  "Shaman",
+		SpellClassSetGeneric:     "Generic",
+		SpellClassSetMage:        "Mage",
+		SpellClassSetWarrior:     "Warrior",
+		SpellClassSetWarlock:     "Warlock",
+		SpellClassSetPriest:      "Priest",
+		SpellClassSetDruid:       "Druid",
+		SpellClassSetRogue:       "Rogue",
+		SpellClassSetHunter:      "Hunter",
+		SpellClassSetPaladin:     "Paladin",
+		SpellClassSetShaman:      "Shaman",
+		SpellClassSetDeathKnight: "Death Knight",
 	}
 	name, ok := names[s]
 	if !ok {

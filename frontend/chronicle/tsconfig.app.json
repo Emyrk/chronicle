@@ -11,6 +11,9 @@
     /* Shadcn */
     "baseUrl": ".",
     "paths": {
+      "@/constants/dbmem/*": [
+        "./src/constants/dbmem/turtle/*"
+      ],
       "@/*": [
         "./src/*"
       ]

@@ -270,13 +270,19 @@ CREATE TABLE dbc_item_set (
     id integer NOT NULL,
     name_lang text DEFAULT ''::text NOT NULL,
     required_skill integer DEFAULT 0 NOT NULL,
-    required_skill_rank integer DEFAULT 0 NOT NULL
+    required_skill_rank integer DEFAULT 0 NOT NULL,
+    item_ids integer[] DEFAULT '{}'::integer[] NOT NULL
 );
 
 CREATE TABLE dbc_item_set_bonus (
     set_id integer NOT NULL,
     threshold integer NOT NULL,
     spell_id integer NOT NULL
+);
+
+CREATE TABLE dbc_item_set_item (
+    set_id integer NOT NULL,
+    item_entry integer NOT NULL
 );
 
 CREATE TABLE dbc_spell_item_enchantment (
@@ -637,6 +643,13 @@ CREATE TABLE shared_views (
     CONSTRAINT shared_views_payload_max_10kb CHECK ((octet_length((payload)::text) <= 10240))
 );
 
+CREATE TABLE site_config (
+    id boolean DEFAULT true NOT NULL,
+    signups_enabled boolean DEFAULT true NOT NULL,
+    updated_at timestamp with time zone DEFAULT now() NOT NULL,
+    CONSTRAINT site_config_id_check CHECK (id)
+);
+
 CREATE TABLE user_action_bar_slots (
     user_id uuid NOT NULL,
     slot_1 uuid,
@@ -689,6 +702,19 @@ CREATE TABLE user_panel_layouts (
     CONSTRAINT user_panel_layouts_title_format_chk CHECK ((title ~ '^[A-Za-z0-9_\-\s]+$'::text))
 );
 
+CREATE TABLE user_passwords (
+    user_auth_id uuid NOT NULL,
+    password_hash text NOT NULL,
+    updated_at timestamp with time zone DEFAULT now() NOT NULL,
+    email_verified boolean DEFAULT false NOT NULL,
+    verification_token_hash text,
+    verification_token_expires_at timestamp with time zone,
+    verification_token_created_at timestamp with time zone,
+    reset_token_hash text,
+    reset_token_expires_at timestamp with time zone,
+    reset_token_created_at timestamp with time zone
+);
+
 CREATE TABLE user_tracked_layouts (
     id uuid DEFAULT gen_random_uuid() NOT NULL,
     user_id uuid NOT NULL,
@@ -721,8 +747,8 @@ CREATE TABLE world_creature_template (
     mana_min integer DEFAULT 0 NOT NULL,
     mana_max integer DEFAULT 0 NOT NULL,
     armor integer DEFAULT 0 NOT NULL,
-    dmg_min integer DEFAULT 0 NOT NULL,
-    dmg_max integer DEFAULT 0 NOT NULL,
+    dmg_min double precision DEFAULT 0 NOT NULL,
+    dmg_max double precision DEFAULT 0 NOT NULL,
     dmg_school integer DEFAULT 0 NOT NULL,
     attack_power integer DEFAULT 0 NOT NULL,
     dmg_multiplier double precision DEFAULT 1 NOT NULL,
@@ -885,7 +911,24 @@ CREATE TABLE world_item_template (
     extra_flags integer DEFAULT 0 NOT NULL,
     other_team_entry integer DEFAULT 0 NOT NULL,
     script_name text,
-    patch text
+    patch text,
+    tooltip_set_id integer DEFAULT 0 NOT NULL,
+    random_suffix integer DEFAULT 0 NOT NULL,
+    totem_category integer DEFAULT 0 NOT NULL,
+    socket_color_1 integer DEFAULT 0 NOT NULL,
+    socket_content_1 integer DEFAULT 0 NOT NULL,
+    socket_color_2 integer DEFAULT 0 NOT NULL,
+    socket_content_2 integer DEFAULT 0 NOT NULL,
+    socket_color_3 integer DEFAULT 0 NOT NULL,
+    socket_content_3 integer DEFAULT 0 NOT NULL,
+    socket_bonus integer DEFAULT 0 NOT NULL,
+    gem_properties integer DEFAULT 0 NOT NULL,
+    required_disenchant_skill integer DEFAULT '-1'::integer NOT NULL,
+    armor_damage_modifier double precision DEFAULT 0 NOT NULL,
+    scaling_stat_distribution integer DEFAULT 0 NOT NULL,
+    scaling_stat_value integer DEFAULT 0 NOT NULL,
+    item_limit_category integer DEFAULT 0 NOT NULL,
+    holiday_id integer DEFAULT 0 NOT NULL
 );
 
 CREATE TABLE world_spell_area (
@@ -950,6 +993,9 @@ ALTER TABLE ONLY dbc_item_random_properties
 
 ALTER TABLE ONLY dbc_item_set_bonus
     ADD CONSTRAINT dbc_item_set_bonus_pkey PRIMARY KEY (set_id, threshold, spell_id);
+
+ALTER TABLE ONLY dbc_item_set_item
+    ADD CONSTRAINT dbc_item_set_item_pkey PRIMARY KEY (set_id, item_entry);
 
 ALTER TABLE ONLY dbc_item_set
     ADD CONSTRAINT dbc_item_set_pkey PRIMARY KEY (id);
@@ -1059,6 +1105,9 @@ ALTER TABLE ONLY shared_views
 ALTER TABLE ONLY shared_views
     ADD CONSTRAINT shared_views_pkey PRIMARY KEY (id);
 
+ALTER TABLE ONLY site_config
+    ADD CONSTRAINT site_config_pkey PRIMARY KEY (id);
+
 ALTER TABLE ONLY user_action_bar_slots
     ADD CONSTRAINT user_action_bar_slots_pkey PRIMARY KEY (user_id);
 
@@ -1073,6 +1122,9 @@ ALTER TABLE ONLY user_panel_layouts
 
 ALTER TABLE ONLY user_panel_layouts
     ADD CONSTRAINT user_panel_layouts_pkey PRIMARY KEY (id);
+
+ALTER TABLE ONLY user_passwords
+    ADD CONSTRAINT user_passwords_pkey PRIMARY KEY (user_auth_id);
 
 ALTER TABLE ONLY user_tracked_layouts
     ADD CONSTRAINT user_tracked_layouts_pkey PRIMARY KEY (id);
@@ -1183,7 +1235,7 @@ CREATE INDEX river_job_state_and_finalized_at_index ON river_job USING btree (st
 
 CREATE UNIQUE INDEX river_job_unique_idx ON river_job USING btree (unique_key) WHERE ((unique_key IS NOT NULL) AND (unique_states IS NOT NULL) AND river_job_state_in_bitmask(unique_states, state));
 
-CREATE UNIQUE INDEX user_auths_unique_linked_id ON user_auth_links USING btree (linked_id, provider);
+CREATE UNIQUE INDEX user_auths_unique_linked_id ON user_auth_links USING btree (lower(linked_id), provider);
 
 CREATE UNIQUE INDEX user_panel_layouts_user_title_ci_uidx ON user_panel_layouts USING btree (user_id, title_normalized) WHERE (user_id IS NOT NULL);
 
@@ -1307,13 +1359,16 @@ ALTER TABLE ONLY user_auth_links
     ADD CONSTRAINT user_auth_links_user_id_fkey FOREIGN KEY (user_id) REFERENCES users(id);
 
 ALTER TABLE ONLY user_auth_session
-    ADD CONSTRAINT user_auth_session_user_auth_id_fkey FOREIGN KEY (user_auth_id) REFERENCES user_auth_links(id);
+    ADD CONSTRAINT user_auth_session_user_auth_id_fkey FOREIGN KEY (user_auth_id) REFERENCES user_auth_links(id) ON DELETE CASCADE;
 
 ALTER TABLE ONLY user_auth_session
     ADD CONSTRAINT user_auth_session_user_id_fkey FOREIGN KEY (user_id) REFERENCES users(id);
 
 ALTER TABLE ONLY user_panel_layouts
     ADD CONSTRAINT user_panel_layouts_user_id_fkey FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE;
+
+ALTER TABLE ONLY user_passwords
+    ADD CONSTRAINT user_passwords_user_auth_id_fkey FOREIGN KEY (user_auth_id) REFERENCES user_auth_links(id) ON DELETE CASCADE;
 
 ALTER TABLE ONLY user_tracked_layouts
     ADD CONSTRAINT user_tracked_layouts_layout_id_fkey FOREIGN KEY (layout_id) REFERENCES user_panel_layouts(id) ON DELETE CASCADE;

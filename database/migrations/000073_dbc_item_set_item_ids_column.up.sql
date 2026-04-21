@@ -1,0 +1,1 @@
+ALTER TABLE dbc_item_set ADD COLUMN item_ids INTEGER[] NOT NULL DEFAULT '{}';

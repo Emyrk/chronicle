@@ -20,8 +20,8 @@ SELECT
 FROM
   user_auth_links
 WHERE
-  linked_id = $1 AND
-  provider = $2
+  LOWER(linked_id) = LOWER(@linked_id) AND
+  provider = @provider
 ;
 
 
@@ -91,3 +91,7 @@ FROM
   chronicle_users
 WHERE
   id = ANY(@ids::uuid[]);
+
+-- name: GetUserByEmail :one
+SELECT * FROM users WHERE LOWER(email) = LOWER(@email);
+

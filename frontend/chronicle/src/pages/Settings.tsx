@@ -1,7 +1,8 @@
 import { useEffect, useMemo, useState } from "react";
 import { Link, Outlet, useLocation, useNavigate, useSearchParams } from "react-router-dom";
+import { ICON_LIST_URL } from "@/config/iconUrl";
 import { toast } from "sonner";
-import { HardDrive, Clock, LayoutTemplate, Download, Upload, Plus, Trash2, BookOpenText, Save, Pencil, Trash, Share2, ChevronLeft, ChevronRight, Copy, Eye, Monitor, Smartphone, Menu, X } from "lucide-react";
+import { HardDrive, Clock, LayoutTemplate, Download, Upload, Plus, Trash2, BookOpenText, Save, Pencil, Trash, Share2, ChevronLeft, ChevronRight, Copy, Eye, Monitor, Smartphone, Menu, X, User } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
 import {
   useInstance,
@@ -160,7 +161,7 @@ type Tab = {
 };
 
 const tabs: Tab[] = [
-  // { path: "/account/settings", label: "Profile", icon: User },
+  { path: "/account/settings", label: "Profile", icon: User },
   { path: "/account/storage", label: "Storage", icon: HardDrive },
   // { path: "/account/notifications", label: "Notifications", icon: Bell },
   // { path: "/account/privacy", label: "Privacy", icon: Shield },
@@ -257,10 +258,91 @@ export function AccountLayout() {
 }
 
 export function ProfileSettings() {
+  const { data: session } = useSession();
+  const [resending, setResending] = useState(false);
+  const [resendSuccess, setResendSuccess] = useState(false);
+
+  const isPasswordAuth = session?.auth_provider === "password";
+  const email = session?.email;
+  const emailVerified = session?.email_verified ?? false;
+
+  const handleResendVerification = async () => {
+    if (!email) return;
+    setResending(true);
+    setResendSuccess(false);
+    try {
+      const res = await fetch("/auth/password/resend-verification", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ email }),
+      });
+      if (res.status === 429) {
+        toast.error("Please wait before requesting another verification email.");
+      } else if (!res.ok) {
+        const body = await res.json().catch(() => null);
+        const message = body?.message || "Failed to send verification email.";
+        toast.error(message, {
+          description: body?.detail ? (
+            <span className="mt-1 block font-mono text-xs whitespace-pre-wrap break-all">{body.detail}</span>
+          ) : undefined,
+        });
+      } else {
+        setResendSuccess(true);
+        toast.success("Verification email sent.");
+      }
+    } catch {
+      toast.error("Failed to send verification email.");
+    } finally {
+      setResending(false);
+    }
+  };
+
   return (
-    <div className="space-y-4">
-      <h2 className="text-xl font-semibold">Profile Settings</h2>
-      <p className="text-muted-foreground">Manage your profile information.</p>
+    <div className="space-y-6">
+      <div>
+        <h2 className="text-xl font-semibold">Profile Settings</h2>
+        <p className="text-muted-foreground">Manage your profile information.</p>
+      </div>
+
+      {email && (
+        <div className="rounded-lg border p-4 space-y-3">
+          <h3 className="text-sm font-medium">Email</h3>
+          <div className="flex items-center gap-2">
+            <span className="text-sm">{email}</span>
+            {isPasswordAuth && (
+              emailVerified ? (
+                <span className="inline-flex items-center rounded-full bg-green-500/10 px-2 py-0.5 text-xs font-medium text-green-500">
+                  Verified
+                </span>
+              ) : (
+                <span className="inline-flex items-center rounded-full bg-yellow-500/10 px-2 py-0.5 text-xs font-medium text-yellow-500">
+                  Unverified
+                </span>
+              )
+            )}
+          </div>
+          {isPasswordAuth && !emailVerified && (
+            <div className="flex items-center gap-2">
+              <Button
+                variant="outline"
+                size="sm"
+                disabled={resending || resendSuccess}
+                onClick={handleResendVerification}
+              >
+                {resending ? "Sending..." : resendSuccess ? "Email sent" : "Resend verification email"}
+              </Button>
+              <span className="text-xs text-muted-foreground">Check your inbox for a verification link.</span>
+            </div>
+          )}
+        </div>
+      )}
+
+      {session?.auth_provider && (
+        <div className="rounded-lg border p-4 space-y-3">
+          <h3 className="text-sm font-medium">Sign-in Method</h3>
+          <span className="text-sm capitalize">{session.auth_provider === "password" ? "Email & Password" : session.auth_provider}</span>
+        </div>
+      )}
     </div>
   );
 }
@@ -952,7 +1034,7 @@ export function LayoutLabSettings() {
   }, [instance, selectedEncounterIds]);
 
   useEffect(() => {
-    void fetch("https://icons.chronicleclassic.com/icon-list.json")
+    void fetch(ICON_LIST_URL)
       .then((res) => (res.ok ? res.json() : Promise.reject(new Error("failed"))))
       .then((data: unknown) => {
         if (Array.isArray(data)) {

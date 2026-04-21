@@ -1,5 +1,6 @@
 import { useMemo } from "react";
 import { Link } from "react-router-dom";
+import { iconUrl } from "@/config/iconUrl";
 import { useQueries } from "@tanstack/react-query";
 import type { ItemTooltip as ItemTooltipData, ItemSpell } from "@/api/typesGenerated";
 import { useSpell } from "@/api/queries";
@@ -87,8 +88,7 @@ const SPELL_TRIGGER_TEXT: Record<number, string> = {
 };
 
 function getItemIconUrl(icon: string): string {
-  if (!icon) return "";
-  return `https://icons.chronicleclassic.com/${icon.toLowerCase()}.webp`;
+  return iconUrl(icon);
 }
 
 interface ItemTooltipProps {
@@ -325,15 +325,21 @@ function SpellLine({ spell, includeReferenceLinks }: { spell: ItemSpell; include
 }
 
 function ItemSetSection({ set, includeReferenceLinks, equippedItemIds }: { set: NonNullable<ItemTooltipData["set"]>; includeReferenceLinks: boolean; equippedItemIds?: ReadonlySet<number> }) {
+  const items = set.items ?? [];
+  // Count equipped from eligible_items (cross-tier: a Furious piece counts toward Wrathful set).
+  const eligible = set.eligible_items ?? [];
   const equippedCount = equippedItemIds
-    ? set.items.filter((p) => equippedItemIds.has(p.entry)).length
+    ? eligible.filter((p) => equippedItemIds.has(p.entry)).length
     : 0;
 
   return (
     <div className="mt-2 pt-2 border-t border-[#4a4a6a]">
-      <div className="text-yellow-400 font-medium">{set.name} ({equippedCount}/{set.items.length})</div>
-      {set.items.map((piece) => {
-        const isEquipped = equippedItemIds?.has(piece.entry) ?? false;
+      <div className="text-yellow-400 font-medium">{set.name} ({equippedCount}/{items.length})</div>
+      {items.map((piece) => {
+        // Check if this piece OR a cross-tier equivalent (same inventory_type) is equipped.
+        const isEquipped = equippedItemIds
+          ? equippedItemIds.has(piece.entry) || eligible.some((e) => e.inventory_type === piece.inventory_type && equippedItemIds.has(e.entry))
+          : false;
         return (
           <div key={piece.entry} className={cn("ml-2", isEquipped ? "text-item-set-active" : "text-gray-500")}>
             {includeReferenceLinks ? (
@@ -350,9 +356,9 @@ function ItemSetSection({ set, includeReferenceLinks, equippedItemIds }: { set: 
           </div>
         );
       })}
-      {set.bonuses.length > 0 && (
+      {(set.bonuses ?? []).length > 0 && (
         <div className="mt-1 space-y-0.5">
-          {set.bonuses.map((bonus, i) => (
+          {(set.bonuses ?? []).map((bonus, i) => (
             <SetBonusLine key={i} threshold={bonus.threshold} spellId={bonus.spell_id} includeReferenceLinks={includeReferenceLinks} active={bonus.threshold <= equippedCount} />
           ))}
         </div>

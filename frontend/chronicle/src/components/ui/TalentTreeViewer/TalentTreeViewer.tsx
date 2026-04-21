@@ -1,5 +1,6 @@
 import { useQuery } from "@tanstack/react-query";
 import { cn } from "@/lib/utils";
+import { iconUrl } from "@/config/iconUrl";
 import { useMemo, useState } from "react";
 import { createPortal } from "react-dom";
 import { useSpell } from "@/api/queries";
@@ -67,8 +68,7 @@ export interface TalentTreeViewerProps {
 // ─── Helpers ──────────────────────────────────────────────────────
 
 function talentIconUrl(texture: string): string {
-  if (!texture) return "";
-  return `https://icons.chronicleclassic.com/${texture.toLowerCase()}.webp`;
+  return iconUrl(texture);
 }
 
 const CLASS_NAMES: Record<number, string> = {

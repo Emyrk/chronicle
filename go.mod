@@ -7,6 +7,7 @@ require (
 	github.com/Emyrk/zedgen v0.0.0-20260212105940-a30f9042561f
 	github.com/Gophercraft/core v0.5.2-0.20240410205646-00865bbdb78a
 	github.com/KromDaniel/regengo v0.5.3
+	github.com/Masterminds/semver v1.5.0
 	github.com/authzed/authzed-go v1.7.0
 	github.com/authzed/gochugaru v0.0.0-20250806201116-319cc7551988
 	github.com/authzed/spicedb v1.49.1
@@ -42,6 +43,7 @@ require (
 	github.com/ory/dockertest/v3 v3.12.0
 	github.com/prometheus/client_golang v1.23.2
 	github.com/prometheus/client_model v0.6.2
+	github.com/resend/resend-go/v2 v2.28.0
 	github.com/riverqueue/river v0.30.0
 	github.com/riverqueue/river/riverdriver/riverdatabasesql v0.30.0
 	github.com/riverqueue/river/riverdriver/riverpgxv5 v0.30.0
@@ -53,6 +55,7 @@ require (
 	github.com/xlab/treeprint v1.2.0
 	go.uber.org/goleak v1.3.0
 	go.uber.org/mock v0.6.0
+	golang.org/x/crypto v0.46.0
 	golang.org/x/exp v0.0.0-20251209150349-8475f28825e9
 	golang.org/x/mod v0.32.0
 	golang.org/x/text v0.33.0
@@ -83,7 +86,6 @@ require (
 	github.com/BurntSushi/toml v1.5.0 // indirect
 	github.com/Gophercraft/log v0.0.0-20240214234900-fcacaad0d20e // indirect
 	github.com/Masterminds/goutils v1.1.1 // indirect
-	github.com/Masterminds/semver v1.5.0 // indirect
 	github.com/Masterminds/semver/v3 v3.4.0 // indirect
 	github.com/Masterminds/sprig/v3 v3.3.0 // indirect
 	github.com/Microsoft/go-winio v0.6.2 // indirect
@@ -312,7 +314,6 @@ require (
 	go.uber.org/zap v1.27.0 // indirect
 	go.yaml.in/yaml/v2 v2.4.3 // indirect
 	go.yaml.in/yaml/v3 v3.0.4 // indirect
-	golang.org/x/crypto v0.46.0 // indirect
 	golang.org/x/net v0.48.0 // indirect
 	golang.org/x/oauth2 v0.34.0 // indirect
 	golang.org/x/sync v0.19.0 // indirect
@@ -345,6 +346,6 @@ tool (
 // which we use in the awsiamrds package.
 replace github.com/lib/pq => github.com/coder/pq v1.10.5-0.20250807075151-6ad9b0a25151
 
-replace github.com/Gophercraft/core => github.com/Emyrk/core v0.0.0-20260228020554-a0e7784de9cb
+replace github.com/Gophercraft/core => github.com/Emyrk/core v0.0.0-20260420221947-ce916b0df45f
 
 replace github.com/cybriq/gotiny => github.com/Emyrk/core/gotiny v0.0.0-20260217042645-fddd00b2f688

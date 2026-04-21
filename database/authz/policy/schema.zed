@@ -32,6 +32,7 @@ definition chronicle {
 
   permission upload_log = upload_capable + administer + supporter + chronicle_guild_member + chronicle_member
   permission create_layout = chronicle_guild_member + chronicle_member
+  permission admin_world_data = technical_admin
 }
 
 definition layout {

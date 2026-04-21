@@ -1,0 +1,18 @@
+ALTER TABLE world_item_template
+    DROP COLUMN IF EXISTS random_suffix,
+    DROP COLUMN totem_category,
+    DROP COLUMN socket_color_1,
+    DROP COLUMN socket_content_1,
+    DROP COLUMN socket_color_2,
+    DROP COLUMN socket_content_2,
+    DROP COLUMN socket_color_3,
+    DROP COLUMN socket_content_3,
+    DROP COLUMN socket_bonus,
+    DROP COLUMN gem_properties,
+    DROP COLUMN required_disenchant_skill,
+    DROP COLUMN armor_damage_modifier,
+    DROP COLUMN scaling_stat_distribution,
+    DROP COLUMN scaling_stat_value,
+    DROP COLUMN item_limit_category,
+    DROP COLUMN holiday_id,
+    DROP COLUMN script_name;

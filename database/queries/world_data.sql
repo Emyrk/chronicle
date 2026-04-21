@@ -18,6 +18,9 @@ SELECT * FROM dbc_item_set WHERE id = $1;
 
 -- name: GetItemSetBonuses :many
 SELECT * FROM dbc_item_set_bonus WHERE set_id = $1 ORDER BY threshold;
+-- name: GetItemSetItems :many
+SELECT * FROM dbc_item_set_item WHERE set_id = $1 ORDER BY item_entry;
+
 
 -- name: GetItemTemplatesBySetID :many
 SELECT entry, name, inventory_type FROM world_item_template WHERE set_id = $1 ORDER BY inventory_type;
@@ -49,3 +52,10 @@ SELECT
 FROM combined c
   LEFT JOIN world_display_info wdi ON wdi.id = c.display_id
   LEFT JOIN dbc_item_display_info dbi ON c.display_id = dbi.id;
+
+-- name: GetItemTemplatesByEntries :many
+SELECT * FROM world_item_template WHERE entry = ANY(@entries::int[]);
+
+-- name: GetCreatureTemplatesByEntries :many
+SELECT * FROM world_creature_template WHERE entry = ANY(@entries::int[]);
+

@@ -196,7 +196,7 @@ func (s *Service) Options() serpent.OptionSet {
 		{
 			Name:        "spell-dbc-path",
 			Description: "Path to Spell.dbc file.",
-			Default:     "./assets/Spell.dbc",
+			Default:     "./assets/" + services.ServerName + "/Spell.dbc",
 			Env:         "CHRONICLE_SPELL_DBC_PATH",
 			Value:       serpent.StringOf(&s.spellDBCPath),
 		},

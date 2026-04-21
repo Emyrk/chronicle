@@ -670,16 +670,22 @@ type DbcItemRandomProperty struct {
 }
 
 type DbcItemSet struct {
-	ID                int32  `db:"id" json:"id"`
-	NameLang          string `db:"name_lang" json:"name_lang"`
-	RequiredSkill     int32  `db:"required_skill" json:"required_skill"`
-	RequiredSkillRank int32  `db:"required_skill_rank" json:"required_skill_rank"`
+	ID                int32   `db:"id" json:"id"`
+	NameLang          string  `db:"name_lang" json:"name_lang"`
+	RequiredSkill     int32   `db:"required_skill" json:"required_skill"`
+	RequiredSkillRank int32   `db:"required_skill_rank" json:"required_skill_rank"`
+	ItemIds           []int32 `db:"item_ids" json:"item_ids"`
 }
 
 type DbcItemSetBonu struct {
 	SetID     int32 `db:"set_id" json:"set_id"`
 	Threshold int32 `db:"threshold" json:"threshold"`
 	SpellID   int32 `db:"spell_id" json:"spell_id"`
+}
+
+type DbcItemSetItem struct {
+	SetID     int32 `db:"set_id" json:"set_id"`
+	ItemEntry int32 `db:"item_entry" json:"item_entry"`
 }
 
 type DbcSpellItemEnchantment struct {
@@ -1023,6 +1029,12 @@ type SharedView struct {
 	InstanceSlug string             `db:"instance_slug" json:"instance_slug"`
 }
 
+type SiteConfig struct {
+	ID             bool               `db:"id" json:"id"`
+	SignupsEnabled bool               `db:"signups_enabled" json:"signups_enabled"`
+	UpdatedAt      pgtype.Timestamptz `db:"updated_at" json:"updated_at"`
+}
+
 type User struct {
 	ID                     uuid.UUID          `db:"id" json:"id"`
 	Username               string             `db:"username" json:"username"`
@@ -1083,6 +1095,19 @@ type UserPanelLayout struct {
 	Code            pgtype.Text        `db:"code" json:"code"`
 }
 
+type UserPassword struct {
+	UserAuthID                 uuid.UUID          `db:"user_auth_id" json:"user_auth_id"`
+	PasswordHash               string             `db:"password_hash" json:"password_hash"`
+	UpdatedAt                  pgtype.Timestamptz `db:"updated_at" json:"updated_at"`
+	EmailVerified              bool               `db:"email_verified" json:"email_verified"`
+	VerificationTokenHash      pgtype.Text        `db:"verification_token_hash" json:"verification_token_hash"`
+	VerificationTokenExpiresAt pgtype.Timestamptz `db:"verification_token_expires_at" json:"verification_token_expires_at"`
+	VerificationTokenCreatedAt pgtype.Timestamptz `db:"verification_token_created_at" json:"verification_token_created_at"`
+	ResetTokenHash             pgtype.Text        `db:"reset_token_hash" json:"reset_token_hash"`
+	ResetTokenExpiresAt        pgtype.Timestamptz `db:"reset_token_expires_at" json:"reset_token_expires_at"`
+	ResetTokenCreatedAt        pgtype.Timestamptz `db:"reset_token_created_at" json:"reset_token_created_at"`
+}
+
 type UserStorageLimit struct {
 	UserID          uuid.UUID   `db:"user_id" json:"user_id"`
 	MaxStorageBytes int64       `db:"max_storage_bytes" json:"max_storage_bytes"`
@@ -1129,8 +1154,8 @@ type WorldCreatureTemplate struct {
 	ManaMin            int32       `db:"mana_min" json:"mana_min"`
 	ManaMax            int32       `db:"mana_max" json:"mana_max"`
 	Armor              int32       `db:"armor" json:"armor"`
-	DmgMin             int32       `db:"dmg_min" json:"dmg_min"`
-	DmgMax             int32       `db:"dmg_max" json:"dmg_max"`
+	DmgMin             float64     `db:"dmg_min" json:"dmg_min"`
+	DmgMax             float64     `db:"dmg_max" json:"dmg_max"`
 	DmgSchool          int32       `db:"dmg_school" json:"dmg_school"`
 	AttackPower        int32       `db:"attack_power" json:"attack_power"`
 	DmgMultiplier      float64     `db:"dmg_multiplier" json:"dmg_multiplier"`
@@ -1294,6 +1319,23 @@ type WorldItemTemplate struct {
 	OtherTeamEntry            int32       `db:"other_team_entry" json:"other_team_entry"`
 	ScriptName                pgtype.Text `db:"script_name" json:"script_name"`
 	Patch                     pgtype.Text `db:"patch" json:"patch"`
+	TooltipSetID              int32       `db:"tooltip_set_id" json:"tooltip_set_id"`
+	RandomSuffix              int32       `db:"random_suffix" json:"random_suffix"`
+	TotemCategory             int32       `db:"totem_category" json:"totem_category"`
+	SocketColor1              int32       `db:"socket_color_1" json:"socket_color_1"`
+	SocketContent1            int32       `db:"socket_content_1" json:"socket_content_1"`
+	SocketColor2              int32       `db:"socket_color_2" json:"socket_color_2"`
+	SocketContent2            int32       `db:"socket_content_2" json:"socket_content_2"`
+	SocketColor3              int32       `db:"socket_color_3" json:"socket_color_3"`
+	SocketContent3            int32       `db:"socket_content_3" json:"socket_content_3"`
+	SocketBonus               int32       `db:"socket_bonus" json:"socket_bonus"`
+	GemProperties             int32       `db:"gem_properties" json:"gem_properties"`
+	RequiredDisenchantSkill   int32       `db:"required_disenchant_skill" json:"required_disenchant_skill"`
+	ArmorDamageModifier       float64     `db:"armor_damage_modifier" json:"armor_damage_modifier"`
+	ScalingStatDistribution   int32       `db:"scaling_stat_distribution" json:"scaling_stat_distribution"`
+	ScalingStatValue          int32       `db:"scaling_stat_value" json:"scaling_stat_value"`
+	ItemLimitCategory         int32       `db:"item_limit_category" json:"item_limit_category"`
+	HolidayID                 int32       `db:"holiday_id" json:"holiday_id"`
 }
 
 type WorldSpellArea struct {

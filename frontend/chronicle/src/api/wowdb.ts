@@ -1,5 +1,7 @@
 // WoWDB types for spell data from /api/v1/wowdb/spell/{id}
 
+import { iconUrl } from "@/config/iconUrl";
+
 // i18n.Text serializes as Record<locale, string> where "0" = enUS
 export type I18nText = Record<string, string>;
 
@@ -264,7 +266,7 @@ export function getLocalizedText(
 
 export function getSpellIconUrl(icon: SpellIcon): string {
   if (!icon.TextureFilename) return "";
-  return `https://icons.chronicleclassic.com/${icon.TextureFilename.toLowerCase()}.webp`;
+  return iconUrl(icon.TextureFilename);
 }
 
 export function formatCastTime(spell: WoWSpell): string {

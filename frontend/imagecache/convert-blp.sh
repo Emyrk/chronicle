@@ -2,9 +2,9 @@
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-BLP_DIR="${SCRIPT_DIR}/blp"
-ICONS_DIR="${SCRIPT_DIR}/icons"
-FAILED_LOG="${SCRIPT_DIR}/failed_conversions.log"
+BLP_DIR="${BLP_DIR:-${SCRIPT_DIR}/${SERVER:-turtle}/blp}"
+ICONS_DIR="${ICONS_DIR:-${SCRIPT_DIR}/${SERVER:-turtle}/icons}"
+FAILED_LOG="${FAILED_LOG:-${SCRIPT_DIR}/${SERVER:-turtle}/failed_conversions.log}"
 
 if [[ ! -d "$BLP_DIR" ]]; then
   echo "Error: BLP directory not found: $BLP_DIR"

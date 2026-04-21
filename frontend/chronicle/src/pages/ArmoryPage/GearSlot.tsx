@@ -1,5 +1,6 @@
 import { useState, useCallback } from "react";
 import { AlertTriangle } from "lucide-react";
+import { iconUrl } from "@/config/iconUrl";
 import { useItemTooltip } from "@/api/gamedata";
 import type { PlayerGear } from "@/api/typesGenerated";
 import { ItemTooltip } from "@/components/ui/ItemTooltip/ItemTooltip";
@@ -9,8 +10,7 @@ import type { GearSlotDef } from "./types";
 import { getQualityBorderClass, getQualityTextClass } from "./types";
 
 function getItemIconUrl(icon: string): string {
-  if (!icon) return "";
-  return `https://icons.chronicleclassic.com/${icon.toLowerCase()}.webp`;
+  return iconUrl(icon);
 }
 
 export type GearSlotSide = "left" | "right" | "bottom";

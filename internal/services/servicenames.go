@@ -15,4 +15,6 @@ const (
 	ServiceWoWDB      = "wow-db"
 	ServiceAssets     = "assets"
 	ServiceGameData   = "gamedata"
+	ServiceMail       = "mail"
+	ServiceAccessURL  = "accessurl"
 )

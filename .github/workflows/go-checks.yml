@@ -42,7 +42,7 @@ jobs:
         uses: golangci/golangci-lint-action@v9
         with:
           version: "v2.6.2"
-          args: --timeout=10m --verbose
+          args: --timeout=10m --verbose --build-tags turtle
           # Optional: show only new issues if it's a pull request
           only-new-issues: ${{ github.event_name == 'pull_request' }}
 
@@ -90,10 +90,13 @@ jobs:
           echo "All Go checks passed! ✅"
 
   docker-push:
-    name: Build and Push Docker Image
+    name: Build and Push Docker Image (${{ matrix.server }})
     needs: [golangci-lint, test]
     runs-on: ubuntu-latest
     environment: actions
+    strategy:
+      matrix:
+        server: [turtle, epoch, kronos, warmane]
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -122,25 +125,42 @@ jobs:
           context: .
           file: services/chronicled/Dockerfile
           push: true
-          tags: emyrk/chronicled:${{ github.ref_type == 'tag' && 'latest' || 'unstable' }}
+          tags: emyrk/chronicled:${{ github.ref_type == 'tag' && matrix.server || format('{0}-unstable', matrix.server) }}
           build-args: |
             GIT_TAG=${{ steps.version.outputs.GIT_TAG }}
             GIT_COMMIT=${{ steps.version.outputs.GIT_COMMIT }}
             BUILD_TIME=${{ steps.version.outputs.BUILD_TIME }}
+            SERVER=${{ matrix.server }}
 
   deploy-railway:
-    name: Deploy to Railway
+    name: Deploy to Railway (${{ matrix.server }})
     if: github.ref_type == 'tag'
-    needs: docker-push  # Use the image pushed to DockerHub
+    needs: docker-push
     runs-on: ubuntu-latest
     environment: railway
+    strategy:
+      matrix:
+        include:
+          - server: turtle
+            railway_service: chronicled
+            railway_token_secret: RAILWAY_TOKEN
+          - server: epoch
+            railway_service: chronicled
+            railway_token_secret: RAILWAY_TOKEN_EPOCH
+          - server: kronos
+            railway_service: chronicled
+            railway_token_secret: RAILWAY_TOKEN_KRONOS
+          - server: warmane
+            railway_service: chronicled
+            railway_token_secret: RAILWAY_TOKEN_WARMANE
+#          - server: ascension
+#            railway_service: chronicled
+#            railway_token_secret: RAILWAY_TOKEN_ASCENSION
     steps:
       - name: Install Railway CLI
         run: npm install -g @railway/cli
 
-      - name: Redeploy chronicled on Railway
-        # The Railway service is configured to use emyrk/chronicled:latest
-        # This triggers a redeploy to pull the new image
-        run: railway redeploy --service chronicled --yes
+      - name: Redeploy ${{ matrix.server }} on Railway
+        run: railway redeploy --service ${{ matrix.railway_service }} --yes
         env:
-          RAILWAY_TOKEN: ${{ secrets.RAILWAY_TOKEN }}
+          RAILWAY_TOKEN: ${{ secrets[matrix.railway_token_secret] }}

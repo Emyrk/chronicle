@@ -1,0 +1,1 @@
+Lua reference: https://web.archive.org/web/20100726112636/http://wowprogramming.com/docs/api_categories

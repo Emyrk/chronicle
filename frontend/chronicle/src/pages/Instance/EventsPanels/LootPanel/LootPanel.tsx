@@ -1,4 +1,5 @@
 import { useState, useMemo, useCallback, useRef, useEffect } from "react";
+import { iconUrl } from "@/config/iconUrl";
 import { lootProcessor, type LootResult } from "./loot.processor";
 import type { PanelDefinition, PanelRenderProps } from "../types";
 import { Package, HelpCircle } from "lucide-react";
@@ -10,8 +11,7 @@ import { getInstanceLootFilters, getInstanceTurninConfig, type InstanceTurninCon
 import { cn } from "../../../../lib/utils";
 
 function getItemIconUrl(icon: string): string {
-  if (!icon) return "";
-  return `https://icons.chronicleclassic.com/${icon.toLowerCase()}.webp`;
+  return iconUrl(icon);
 }
 
 // Quality levels displayed as filter badges (highest first)

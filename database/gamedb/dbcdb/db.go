@@ -6,7 +6,15 @@ import (
 	"github.com/Gophercraft/core/format/content"
 	"github.com/Gophercraft/core/format/dbc"
 	"github.com/Gophercraft/core/format/dbc/dbdefs"
+	"github.com/Gophercraft/core/vsn"
 )
+
+// SpellBuildOverride, when non-zero, overrides the build version used to
+// select the Spell.dbc layout. This allows private servers with non-standard
+// Spell layouts (e.g. Warmane) to register a custom layout under a
+// pseudo-build number without affecting other servers sharing the same
+// detected build version.
+var SpellBuildOverride vsn.Build
 
 type WoWClient struct {
 	content.Volume
@@ -20,6 +28,15 @@ func New(path string) (*WoWClient, error) {
 		return nil, err
 	}
 	return &WoWClient{Volume: vol}, nil
+}
+
+func (w *WoWClient) SpellDBCBytes() ([]byte, error) {
+	data, err := w.ReadFile("DBFilesClient\\Spell.dbc")
+	if err != nil {
+		return nil, err
+	}
+
+	return data, nil
 }
 
 func (w *WoWClient) SpellItemEnchantment() (Table[dbdefs.Ent_SpellItemEnchantment], error) {
@@ -58,7 +75,11 @@ func (w *WoWClient) Spells() (Table[dbdefs.Ent_Spell], error) {
 		return nil, err
 	}
 
-	db := dbc.NewDB(w.Build())
+	build := w.Build()
+	if SpellBuildOverride != 0 {
+		build = SpellBuildOverride
+	}
+	db := dbc.NewDB(build)
 	table, err := db.Open("Spell", bytes.NewReader(data))
 	if err != nil {
 		return nil, err
@@ -397,6 +418,52 @@ func (w *WoWClient) ItemSubClass() (Table[dbdefs.Ent_ItemSubClass], error) {
 
 	return WrapTable[dbdefs.Ent_ItemSubClass](table), nil
 }
+
+func (w *WoWClient) ItemSparse() (Table[dbdefs.Ent_ItemSparse], error) {
+	data, err := w.ReadFile("DBFilesClient\\ItemSparse.dbc")
+	if err != nil {
+		return nil, err
+	}
+
+	db := dbc.NewDB(w.Build())
+	table, err := db.Open("ItemSparse", bytes.NewReader(data))
+	if err != nil {
+		return nil, err
+	}
+
+	return WrapTable[dbdefs.Ent_ItemSparse](table), nil
+}
+
+func (w *WoWClient) ItemNameDescription() (Table[dbdefs.Ent_ItemNameDescription], error) {
+	data, err := w.ReadFile("DBFilesClient\\ItemNameDescription.dbc")
+	if err != nil {
+		return nil, err
+	}
+
+	db := dbc.NewDB(w.Build())
+	table, err := db.Open("ItemNameDescription", bytes.NewReader(data))
+	if err != nil {
+		return nil, err
+	}
+
+	return WrapTable[dbdefs.Ent_ItemNameDescription](table), nil
+}
+
+func (w *WoWClient) Item() (Table[dbdefs.Ent_Item], error) {
+	data, err := w.ReadFile("DBFilesClient\\Item.dbc")
+	if err != nil {
+		return nil, err
+	}
+
+	db := dbc.NewDB(w.Build())
+	table, err := db.Open("Item", bytes.NewReader(data))
+	if err != nil {
+		return nil, err
+	}
+
+	return WrapTable[dbdefs.Ent_Item](table), nil
+}
+
 func (w *WoWClient) ItemSet() (Table[dbdefs.Ent_ItemSet], error) {
 	data, err := w.ReadFile("DBFilesClient\\ItemSet.dbc")
 	if err != nil {

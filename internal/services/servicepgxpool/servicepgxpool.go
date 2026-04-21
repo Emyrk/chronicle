@@ -80,6 +80,11 @@ func (s *Service) Close(_ context.Context) error {
 }
 
 func (s *Service) Options() serpent.OptionSet {
+	dbname := services.ServerName
+	if services.ServerName == "turtle" {
+		dbname = "chronicle"
+	}
+	def := fmt.Sprintf("postgresql://postgres:postgres@localhost:5433/%s?sslmode=disable", dbname)
 	return serpent.OptionSet{
 		{
 			Name:        "Postgres URL",
@@ -87,7 +92,7 @@ func (s *Service) Options() serpent.OptionSet {
 			Required:    false,
 			Flag:        "postgres-url",
 			Env:         "CHRONICLE_POSTGRES_URL",
-			Default:     "postgresql://postgres:postgres@localhost:5433/chronicle?sslmode=disable",
+			Default:     def,
 			Value:       serpent.StringOf(&s.pgURL),
 		},
 	}

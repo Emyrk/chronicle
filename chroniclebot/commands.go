@@ -22,6 +22,14 @@ func (b *Bot) RegisterCommands(commands []Command) error {
 	b.mu.Lock()
 	defer b.mu.Unlock()
 
+	// Resolve the application (bot user) ID. State.User is populated by the
+	// Ready event; if the gateway hasn't delivered it yet, fall back to "" so
+	// discordgo uses the default application ID from the token.
+	appID := ""
+	if b.session.State != nil && b.session.State.User != nil {
+		appID = b.session.State.User.ID
+	}
+
 	// Create a map of command handlers
 	handlers := make(map[string]func(s *discordgo.Session, i *discordgo.InteractionCreate))
 	for _, cmd := range commands {
@@ -42,7 +50,7 @@ func (b *Bot) RegisterCommands(commands []Command) error {
 	// Register commands with Discord
 	for _, cmd := range commands {
 		_, err := b.session.ApplicationCommandCreate(
-			b.session.State.User.ID,
+			appID,
 			b.config.GuildID, // Empty string = global
 			cmd.Definition,
 		)
@@ -61,7 +69,7 @@ func (b *Bot) RegisterCommands(commands []Command) error {
 	for _, cmd := range commands {
 		registeredNames[cmd.Definition.Name] = true
 	}
-	existing, err := b.session.ApplicationCommands(b.session.State.User.ID, b.config.GuildID)
+	existing, err := b.session.ApplicationCommands(appID, b.config.GuildID)
 	if err != nil {
 		b.logger.Warn("failed to list existing commands for cleanup",
 			slog.String("error", err.Error()),
@@ -69,7 +77,7 @@ func (b *Bot) RegisterCommands(commands []Command) error {
 	} else {
 		for _, cmd := range existing {
 			if !registeredNames[cmd.Name] {
-				if err := b.session.ApplicationCommandDelete(b.session.State.User.ID, b.config.GuildID, cmd.ID); err != nil {
+				if err := b.session.ApplicationCommandDelete(appID, b.config.GuildID, cmd.ID); err != nil {
 					b.logger.Error("failed to delete stale command",
 						slog.String("name", cmd.Name),
 						slog.String("error", err.Error()),

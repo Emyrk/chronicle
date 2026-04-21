@@ -13,6 +13,13 @@ type Session struct {
 	MaxStorageBytes      int64       `json:"max_storage_bytes"`
 	ConsumedStorageBytes int64       `json:"consumed_storage_bytes"`
 	Preferences          Preferences `json:"preferences"`
+	// Email is the user's email address (if available).
+	Email string `json:"email"`
+	// EmailVerified indicates whether the user's email has been verified.
+	// Only meaningful for password-auth users.
+	EmailVerified bool `json:"email_verified"`
+	// AuthProvider is the provider used for the current session (e.g. "discord", "password").
+	AuthProvider string `json:"auth_provider"`
 }
 
 type Preferences struct {
@@ -94,4 +101,8 @@ type AdminOutdatedInstancesResponse struct {
 	Instances  []AdminOutdatedInstance `json:"instances"`
 	MinVersion string                  `json:"min_version"`
 }
+type SiteConfig struct {
+	SignupsEnabled bool `json:"signups_enabled"`
+}
+
 

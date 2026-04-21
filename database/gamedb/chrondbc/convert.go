@@ -77,6 +77,31 @@ func SpellFromDB(def *dbdefs.Ent_Spell) *Spell {
 		sch = SchoolArcane
 	}
 
+	if def.SchoolMask != 0 {
+		// (1=Phys,2=Holy,4=Fire,8=Nature,16=Frost,32=Shadow,64=Arcane)
+		if def.SchoolMask&0x01 != 0 {
+			sch |= SchoolPhysical
+		}
+		if def.SchoolMask&0x02 != 0 {
+			sch |= SchoolHoly
+		}
+		if def.SchoolMask&0x04 != 0 {
+			sch |= SchoolFire
+		}
+		if def.SchoolMask&0x08 != 0 {
+			sch |= SchoolNature
+		}
+		if def.SchoolMask&0x10 != 0 {
+			sch |= SchoolFrost
+		}
+		if def.SchoolMask&0x20 != 0 {
+			sch |= SchoolShadow
+		}
+		if def.SchoolMask&0x40 != 0 {
+			sch |= SchoolArcane
+		}
+	}
+
 	s := &Spell{
 		// === Core Identification ===
 		ID:                   SpellID(def.ID),
@@ -158,6 +183,18 @@ func SpellFromDB(def *dbdefs.Ent_Spell) *Spell {
 		RequiredAuraVision: def.RequiredAuraVision,
 		MinFactionID:       def.MinFactionID,
 		MinReputation:      def.MinReputation,
+
+		// === 3.3.5a+ Fields ===
+		RuneCostID:             def.RuneCostID,
+		SpellMissileID:         def.SpellMissileID,
+		DescriptionVariablesID: def.DescriptionVariablesID,
+		CasterAuraSpell:        def.CasterAuraSpell,
+		TargetAuraSpell:        def.TargetAuraSpell,
+		ExcludeCasterAuraSpell: def.ExcludeCasterAuraSpell,
+		ExcludeTargetAuraSpell: def.ExcludeTargetAuraSpell,
+		ExcludeCasterAuraState: def.ExcludeCasterAuraState,
+		ExcludeTargetAuraState: def.ExcludeTargetAuraState,
+		ManaPerSecondPerLevel:  def.ManaPerSecondPerLevel,
 	}
 
 	// AuraInterruptFlags - use first element if available

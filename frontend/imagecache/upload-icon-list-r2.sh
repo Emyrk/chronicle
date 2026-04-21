@@ -2,12 +2,19 @@
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-ICON_LIST_FILE="${SCRIPT_DIR}/icon-list.json"
+ICON_LIST_FILE="${ICON_LIST_FILE:-${SCRIPT_DIR}/${SERVER:-turtle}/icon-list.json}"
+
+# Source .envrc for rclone credentials if direnv hasn't already
+if [[ -f "${SCRIPT_DIR}/.envrc" ]]; then
+  # shellcheck disable=SC1091
+  source "${SCRIPT_DIR}/.envrc"
+fi
 
 # R2 remote name (configure with: rclone config)
+# Per-server upload: SERVER=turtle ./upload-icon-list-r2.sh (or SERVER=epoch)
 R2_REMOTE="${R2_REMOTE:-r2}"
 R2_BUCKET="${R2_BUCKET-icons}"
-R2_PATH="${R2_PATH-}"
+R2_PATH="${R2_PATH-${SERVER:-turtle}}"
 R2_FILENAME="${R2_FILENAME-icon-list.json}"
 R2_PUBLIC_BASE_URL="${R2_PUBLIC_BASE_URL-https://70f93c8cfa460e9932953b7fa0c9ec04.r2.cloudflarestorage.com/icons}"
 

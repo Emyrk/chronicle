@@ -12,6 +12,9 @@ const dirname = typeof __dirname !== 'undefined' ? __dirname : path.dirname(file
 
 // More info at: https://storybook.js.org/docs/next/writing-tests/integrations/vitest-addon
 export default defineConfig({
+  define: {
+    'import.meta.env.VITE_SERVER_NAME': JSON.stringify(process.env.SERVER || 'turtle'),
+  },
   plugins: [react({
     babel: {
       plugins: [['babel-plugin-react-compiler']]
@@ -30,7 +33,11 @@ export default defineConfig({
   }],
   resolve: {
     alias: {
-      "@": path.resolve(__dirname, "src")
+      // Server-specific generated constants (must come before generic "@")
+      "@/constants/dbmem": path.resolve(__dirname, `src/constants/dbmem/${process.env.SERVER || 'turtle'}`),
+      // Server-specific spell test vectors
+      "@testdata/spellTestVectors": path.resolve(__dirname, `src/api/testdata/spellTestVectors.${process.env.SERVER || 'turtle'}.generated`),
+      "@": path.resolve(__dirname, "src"),
     }
   },
   server: {

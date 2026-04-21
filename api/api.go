@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/Emyrk/chronicle/api/chronauth"
+	"github.com/Emyrk/chronicle/api/gamedataapi"
 	"github.com/Emyrk/chronicle/api/guildapi"
 	"github.com/Emyrk/chronicle/api/httpapi"
 	"github.com/Emyrk/chronicle/api/httpmw"
@@ -16,12 +17,14 @@ import (
 	"github.com/Emyrk/chronicle/chronicle"
 	"github.com/Emyrk/chronicle/chronicle/riverqueue"
 	"github.com/Emyrk/chronicle/chroniclebot"
+	"github.com/Emyrk/chronicle/chroniclemail"
 	"github.com/Emyrk/chronicle/database/authz"
 	"github.com/Emyrk/chronicle/database/authz/policy"
 	"github.com/Emyrk/chronicle/database/storage"
 	"github.com/Emyrk/chronicle/frontend"
 	"github.com/authzed/gochugaru/rel"
 	"github.com/go-chi/chi/v5"
+	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/go-chi/chi/v5/middleware"
 	context2 "github.com/gorilla/context"
 	"github.com/prometheus/client_golang/prometheus"
@@ -31,6 +34,7 @@ type Options struct {
 	Logger           *slog.Logger
 	Storage          storage.ObjectStorage
 	Zed              *authz.Authz
+	Pool             *pgxpool.Pool
 	Chronicle        *chronicle.Chronicle
 	RiverQueue       *riverqueue.Queues
 	Bot              *chroniclebot.Bot
@@ -39,6 +43,7 @@ type Options struct {
 	WoWDB            http.Handler
 	Assets           http.Handler
 	InternalGameData http.Handler
+	Mailer           *chroniclemail.Mailer
 
 	Registry  *prometheus.Registry
 	AccessURL *url.URL
@@ -67,6 +72,7 @@ func New(ctx context.Context, opts Options) (*API, error) {
 		Discord:   opts.Discord,
 		Bot:       opts.Bot,
 		Zed:       opts.Zed,
+		Mailer:    opts.Mailer,
 		Sessions: chronauth.SessionOptions{
 			SecretPEM: opts.SecretPEM,
 			Registry:  opts.Registry,
@@ -122,7 +128,9 @@ func (api *API) Routes() chi.Router {
 			r.Post("/share", api.CreateShare)
 		})
 		r.Mount("/panel-layout", panellayoutapi.New(api.Opts.Zed, api.Auth).Routes())
+		r.Mount("/game-data", gamedataapi.New(api.Opts.Zed, api.Auth, api.Opts.Pool).Routes())
 		r.Get("/share/{code}", api.GetShare)
+		r.Get("/site-config", api.AdminGetSiteConfig)
 
 		// Admin routes - require admin or technical_admin role
 		r.Route("/admin", func(r chi.Router) {
@@ -138,6 +146,8 @@ func (api *API) Routes() chi.Router {
 			r.Get("/logs", api.AdminListLogs)
 			r.Get("/instance-names", api.AdminListInstanceNames)
 			r.Get("/outdated-instances", api.AdminListOutdatedInstances)
+			r.Get("/site-config", api.AdminGetSiteConfig)
+			r.Put("/site-config", api.AdminUpdateSiteConfig)
 
 			r.Route("/leaderboard", func(r chi.Router) {
 				r.Get("/version-requirements", api.AdminListLeaderboardVersionRequirements)

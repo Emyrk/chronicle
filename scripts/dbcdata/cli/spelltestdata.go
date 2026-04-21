@@ -15,13 +15,14 @@ import (
 	"github.com/coder/serpent"
 )
 
-// testSpellIDs is the list of spell IDs to generate test vectors for.
+// sharedSpellIDs are spells that exist in both vanilla (1.12.1) and WotLK (3.3.5a)
+// clients. These are tested for every server.
 //
 // Adding a new regression test:
 //
-//  1. Add the spell ID to this list.
+//  1. Add the spell ID to the appropriate list below.
 //  2. Run: make gen
-//  3. Run: cd frontend/chronicle && npx vitest run src/api/wowdb.test.ts
+//  3. Run: cd frontend/chronicle && SERVER=<server> npx vitest run src/api/wowdb.test.ts
 //     → The new spell will FAIL with a message showing the raw template,
 //     the resolved description, and cross-spell references.
 //  4. Verify the resolved text is correct. If it's wrong, fix the resolver
@@ -30,22 +31,55 @@ import (
 //     frontend/chronicle/src/api/wowdb.test.ts (the failure message
 //     gives you the exact line to paste).
 //  6. Run tests again — should pass.
-var testSpellIDs = []int{
+var sharedSpellIDs = []int{
 	133,   // Fireball rank 1 — basic $s1, $d
 	139,   // Renew rank 1 — $o1 periodic total
 	15237, // Holy Fire Nova — $s1, $a1 radius
 	18941, // Windfury — $l pluralization
 	17347, // Hemorrhage — $l pluralization, $n
-	52551, // Drain Life variant — $*N;s1 arithmetic
 	16511, // Hemorrhage -- point:points;.
 	25175, // Triple attack -- attack:attacks;.
 	709,   // Drain life -- $*5;s1
-	52550, // Dark Harvest
 	11712, // Curse of Agony
-	46269, // Fire Breath — ${expr} inline arithmetic
-	16454, // Flamestrike — $d1 indexed duration
-	51839, // Arcane Missiles — $t unindexed tick interval
-	21973, // Priest T2 set bonus — $/1000;S1 fractional division
+}
+
+// serverSpellIDs holds additional spells that only exist (or differ) for specific servers.
+var serverSpellIDs = map[string][]int{
+	"turtle": {
+		52551, // Dark Harvest variant — $*N;s1 arithmetic (Turtle custom)
+		52550, // Dark Harvest (Turtle custom)
+		46269, // Fire Breath — ${expr} inline arithmetic
+		16454, // Flamestrike — $d1 indexed duration
+		51839, // Arcane Missiles — $t unindexed tick interval
+		21973, // Priest T2 set bonus — $/1000;S1 fractional division
+	},
+	"kronos": {
+		12322, // Unbridled Wrath — $h1 proc chance
+		46269, // Fire Breath — ${expr} inline arithmetic
+		16454, // Flamestrike — $d1 indexed duration
+		51839, // Arcane Missiles — $t unindexed tick interval
+		21973, // Priest T2 set bonus — $/1000;S1 fractional division
+	},
+	"epoch": {
+		48461, // Wrath rank 10 — WotLK spell
+		48441, // Flash of Light rank 9 — WotLK spell
+	},
+	"warmane": {
+		48461, // Wrath rank 10 — WotLK spell
+		48441, // Flash of Light rank 9 — WotLK spell
+	},
+	"ascension": {
+		48461, // Wrath rank 10 — WotLK spell
+		48441, // Flash of Light rank 9 — WotLK spell
+	},
+}
+
+// testSpellIDsForServer returns the combined spell ID list for a given server.
+func testSpellIDsForServer(server string) []int {
+	ids := make([]int, len(sharedSpellIDs))
+	copy(ids, sharedSpellIDs)
+	ids = append(ids, serverSpellIDs[server]...)
+	return ids
 }
 
 // crossSpellRef matches patterns like $3137s1 (spell 3137, variable s1).
@@ -100,6 +134,7 @@ type spellResponse struct {
 func SpellTestDataCmd() *serpent.Command {
 	var tsDir string
 	var dbcPath string
+	var server string
 
 	return &serpent.Command{
 		Use:   "spell-test-data",
@@ -111,45 +146,46 @@ func SpellTestDataCmd() *serpent.Command {
 				Flag:        "ts-dir",
 				Value:       serpent.StringOf(&tsDir),
 			},
-			{
-				Name:        "dbc",
-				Description: "Path to WoW client directory.",
-				Flag:        "dbc",
-				Value:       serpent.StringOf(&dbcPath),
-				Default:     "/home/steven/Games/turtlewow/drive_c/Program Files (x86)/TurtleWoW",
-			},
+			DBCOption(&dbcPath),
+			ServerOption(&server),
 		},
 		Handler: func(inv *serpent.Invocation) error {
 			if tsDir == "" {
 				return fmt.Errorf("--ts-dir is required")
 			}
 
-			wc, err := dbcdb.New(dbcPath)
+			resolved, err := ResolveDBCPath(dbcPath, server)
 			if err != nil {
-				return fmt.Errorf("open wow client: %w", err)
+				return err
+			}
+			wc, err := dbcdb.New(resolved)
+			if err != nil {
+				return fmt.Errorf("(spelltest) open wow client: %w", err)
 			}
 
-			data, err := collectSpellTestData(wc)
+			data, err := collectSpellTestData(wc, server)
 			if err != nil {
 				return fmt.Errorf("collect spell test data: %w", err)
 			}
 
 			return writeTemplate(
-				filepath.Join(tsDir, "spellTestVectors.generated.ts"),
+				filepath.Join(tsDir, fmt.Sprintf("spellTestVectors.%s.generated.ts", server)),
 				spellTestDataTSTemplate,
 				data,
+				server,
 			)
 		},
 	}
 }
 
-func collectSpellTestData(wc *dbcdb.WoWClient) (*spellTestData, error) {
+func collectSpellTestData(wc *dbcdb.WoWClient, server string) (*spellTestData, error) {
 	spellsDBC, err := wc.Spells()
 	if err != nil {
 		return nil, fmt.Errorf("read spells: %w", err)
 	}
 
 	spells := chrondbc.NewSpells(spellsDBC.Underlying())
+	testSpellIDs := testSpellIDsForServer(server)
 
 	// Collect all spell IDs we need: test subjects + cross-references
 	needed := make(map[int]bool)
@@ -160,12 +196,15 @@ func collectSpellTestData(wc *dbcdb.WoWClient) (*spellTestData, error) {
 	// First pass: load test subjects and discover cross-references
 	loaded := make(map[int]*chrondbc.Spell)
 	var targets []spellTestTarget
+	var validIDs []int
 	for _, id := range testSpellIDs {
 		spell, err := spells.ID(id)
 		if err != nil {
-			return nil, fmt.Errorf("spell %d not found: %w", id, err)
+			fmt.Printf("warning: test spell %d not found in %s DBC, skipping\n", id, server)
+			continue
 		}
 		loaded[id] = spell
+		validIDs = append(validIDs, id)
 
 		// Collect cross-spell references from both descriptions
 		descRefs := extractReferencedSpellIDs(spell.Description())
@@ -208,7 +247,7 @@ func collectSpellTestData(wc *dbcdb.WoWClient) (*spellTestData, error) {
 	// Build entries with JSON
 	var entries []spellTestEntry
 	isTarget := make(map[int]bool)
-	for _, id := range testSpellIDs {
+	for _, id := range validIDs {
 		isTarget[id] = true
 	}
 
@@ -234,7 +273,7 @@ func collectSpellTestData(wc *dbcdb.WoWClient) (*spellTestData, error) {
 	})
 
 	return &spellTestData{
-		TestSpellIDs: testSpellIDs,
+		TestSpellIDs: validIDs,
 		Targets:      targets,
 		Entries:      entries,
 	}, nil

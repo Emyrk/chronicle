@@ -2,6 +2,7 @@ package main
 
 import (
 	"encoding/json"
+	"flag"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -22,12 +23,25 @@ func main() {
 }
 
 func run() error {
+	iconsDirFlag := flag.String("icons-dir", "", "Directory containing .webp icons (default: <repo>/frontend/imagecache/turtle/icons)")
+	outFileFlag := flag.String("out", "", "Output icon-list.json path (default: <repo>/frontend/imagecache/turtle/icon-list.json)")
+	flag.Parse()
+
 	root, err := repoRoot()
 	if err != nil {
 		return err
 	}
 
-	iconsDir := filepath.Join(root, "frontend", "imagecache", "icons")
+	iconsDir := *iconsDirFlag
+	if iconsDir == "" {
+		iconsDir = filepath.Join(root, "frontend", "imagecache", "turtle", "icons")
+	}
+
+	outPath := *outFileFlag
+	if outPath == "" {
+		outPath = filepath.Join(root, "frontend", "imagecache", "turtle", "icon-list.json")
+	}
+
 	entries, err := os.ReadDir(iconsDir)
 	if err != nil {
 		return fmt.Errorf("read icons directory: %w", err)
@@ -49,7 +63,6 @@ func run() error {
 
 	sort.Strings(names)
 
-	outPath := filepath.Join(root, "frontend", "imagecache", "icon-list.json")
 	if err := os.MkdirAll(filepath.Dir(outPath), 0o755); err != nil {
 		return fmt.Errorf("create output directory: %w", err)
 	}

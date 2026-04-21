@@ -1,0 +1,5 @@
+# Per-server icon assets (large binary files, extracted from WoW clients)
+*/blp/
+*/icons/
+*/icon-list.json
+*/failed_conversions.log

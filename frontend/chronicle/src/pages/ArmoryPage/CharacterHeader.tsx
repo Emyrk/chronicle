@@ -1,5 +1,6 @@
 import { Link } from "react-router-dom";
 import type { ArmoryPlayer } from "@/api/typesGenerated";
+import { iconUrl } from "@/config/iconUrl";
 import { getClassColorVar } from "./types";
 
 export function formatClassLabel(cls: string): string {
@@ -20,10 +21,10 @@ interface CharacterHeaderProps {
 function getRaceIconUrl(race: string, gender: string): string {
   const name = race === "Scourge" ? "forsaken" : race.toLowerCase().replace(" ", "");
   if (gender == "Female") {
-    return `https://icons.chronicleclassic.com/inv_misc_head_${name}_02.webp`;
+    return iconUrl(`inv_misc_head_${name}_02`);
   }
 
-  return `https://icons.chronicleclassic.com/race_${name}.webp`;
+  return iconUrl(`race_${name}`);
 }
 
 function getClassIconUrl(cls: string): string {

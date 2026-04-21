@@ -1,6 +1,8 @@
 package api
 
 import (
+	"database/sql"
+	"errors"
 	"net/http"
 
 	"github.com/Emyrk/chronicle/api/chronauth"
@@ -25,7 +27,7 @@ func (a *API) WhoAmI(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	httpapi.Write(r.Context(), w, http.StatusOK, chroniclesdk.Session{
+	sess := chroniclesdk.Session{
 		UserID:               state.Claims.Subject,
 		SessionID:            state.Claims.SessionID,
 		Roles:                roles,
@@ -35,7 +37,23 @@ func (a *API) WhoAmI(w http.ResponseWriter, r *http.Request) {
 			// Should allow people to disable hints if they want, but for now we'll just enable them by default
 			HelpfulHints: true,
 		},
-	})
+		Email:        user.Email,
+		AuthProvider: state.Claims.Provider,
+	}
+
+	// For password-auth users, look up email verification status
+	if state.Claims.Provider == chronauth.PasswordProvider {
+		pw, err := a.Opts.Zed.GetUserPasswordByAuthID(ctx, state.Claims.UserAuthID)
+		if err != nil && !errors.Is(err, sql.ErrNoRows) {
+			httpapi.InternalServerError(w, err)
+			return
+		}
+		if err == nil {
+			sess.EmailVerified = pw.EmailVerified
+		}
+	}
+
+	httpapi.Write(r.Context(), w, http.StatusOK, sess)
 }
 
 // GetMyStorage returns the current user's storage info with grant breakdown

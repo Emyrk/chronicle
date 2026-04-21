@@ -53,8 +53,13 @@ type ItemResistance struct {
 type ItemSetInfo struct {
 	ID      int32          `json:"id"`
 	Name    string         `json:"name"`
-	Items   []ItemSetPiece `json:"items"`
-	Bonuses []ItemSetBonus `json:"bonuses"`
+	ItemIDs []int32        `json:"item_ids"` // canonical item entries from ItemSet.dbc
+	Items   []ItemSetPiece `json:"items"`    // resolved canonical pieces (for tooltip display)
+	// EligibleItems includes all items with this set_id (cross-tier pieces).
+	// The frontend uses this to check if an equipped item counts toward the set,
+	// even if it's not one of the canonical pieces (e.g. Furious piece in a Wrathful set).
+	EligibleItems []ItemSetPiece `json:"eligible_items"`
+	Bonuses       []ItemSetBonus `json:"bonuses"`
 }
 
 type ItemSetPiece struct {

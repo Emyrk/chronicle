@@ -1,12 +1,13 @@
 import type { GuildPageTheme, GuildTag, SocialPlatform } from "@/api/typesGenerated";
 import { GuildTags, SocialPlatforms } from "@/api/typesGenerated";
+import { ICON_BASE_URL } from "@/config/iconUrl";
 import { SOCIAL_PLATFORM_META } from "./GuildPageHeader";
 import { ChevronDown, ChevronUp } from "lucide-react";
 import { useMemo, useState } from "react";
 
 const ALLOWED_IMAGE_HOSTS = [
   "cdn.brandfetch.io",
-  "icons.chronicleclassic.com",
+  new URL(ICON_BASE_URL).hostname,
   "cdn.discordapp.com",
   "i.imgur.com",
   "avatars.githubusercontent.com",

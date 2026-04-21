@@ -7,6 +7,8 @@
   "compilerOptions": {
     "baseUrl": ".",
     "paths": {
+      "@/constants/dbmem/*": ["./src/constants/dbmem/turtle/*"],
+      "@testdata/spellTestVectors": ["./src/api/testdata/spellTestVectors.turtle.generated"],
       "@/*": ["./src/*"]
     }
   }

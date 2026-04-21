@@ -51,6 +51,7 @@ import type {
   CreateRegressionFixtureRequest as CreateRegressionFixtureRequestGenerated,
   RequeueVersionResponse as RequeueVersionResponseGenerated,
   AdminOutdatedInstancesResponse,
+  SiteConfig,
 } from "./typesGenerated";
 
 // Re-export types for convenience
@@ -805,6 +806,35 @@ export function useAdminOutdatedInstances(instanceName?: string, parserVersion?:
     },
   });
 }
+export function useSiteConfig() {
+  return useQuery({
+    queryKey: ["site-config"],
+    queryFn: async () => {
+      const response = await fetch("/api/v1/site-config");
+      if (!response.ok) throw new Error("Failed to fetch site config");
+      return response.json() as Promise<SiteConfig>;
+    },
+  });
+}
+
+export function useUpdateSiteConfig() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async (config: SiteConfig) => {
+      const response = await fetch("/api/v1/admin/site-config", {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(config),
+      });
+      if (!response.ok) throw new Error("Failed to update site config");
+      return response.json() as Promise<SiteConfig>;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["site-config"] });
+    },
+  });
+}
+
 
 export function useResyncUserRoles() {
   const queryClient = useQueryClient();

@@ -108,9 +108,15 @@ func (b *Bot) Open(ctx context.Context) error {
 		return fmt.Errorf("open discord session: %w", err)
 	}
 
+	var username, discriminator string
+	if b.session.State != nil && b.session.State.User != nil {
+		username = b.session.State.User.Username
+		discriminator = b.session.State.User.Discriminator
+	}
+
 	b.logger.Info("discord bot connected",
-		slog.String("username", b.session.State.User.Username),
-		slog.String("discriminator", b.session.State.User.Discriminator),
+		slog.String("username", username),
+		slog.String("discriminator", discriminator),
 	)
 
 	return nil

@@ -109,18 +109,19 @@ func (m SpellClassMask) Has(other SpellClassMask) bool {
 type SpellClassSet int32
 
 const (
-	SpellClassSetGeneric SpellClassSet = 0
-	SpellClassSet1       SpellClassSet = 1 // Unknown/unused in vanilla
-	SpellClassSet2       SpellClassSet = 2 // Unknown/unused in vanilla
-	SpellClassSetMage    SpellClassSet = 3
-	SpellClassSetWarrior SpellClassSet = 4
-	SpellClassSetWarlock SpellClassSet = 5
-	SpellClassSetPriest  SpellClassSet = 6
-	SpellClassSetDruid   SpellClassSet = 7
-	SpellClassSetRogue   SpellClassSet = 8
-	SpellClassSetHunter  SpellClassSet = 9
-	SpellClassSetPaladin SpellClassSet = 10
-	SpellClassSetShaman  SpellClassSet = 11
+	SpellClassSetGeneric     SpellClassSet = 0
+	SpellClassSet1           SpellClassSet = 1 // Unknown/unused in vanilla
+	SpellClassSet2           SpellClassSet = 2 // Unknown/unused in vanilla
+	SpellClassSetMage        SpellClassSet = 3
+	SpellClassSetWarrior     SpellClassSet = 4
+	SpellClassSetWarlock     SpellClassSet = 5
+	SpellClassSetPriest      SpellClassSet = 6
+	SpellClassSetDruid       SpellClassSet = 7
+	SpellClassSetRogue       SpellClassSet = 8
+	SpellClassSetHunter      SpellClassSet = 9
+	SpellClassSetPaladin     SpellClassSet = 10
+	SpellClassSetShaman      SpellClassSet = 11
+	SpellClassSetDeathKnight SpellClassSet = 15
 )
 
 //go:generate stringer -type DispelType -trimprefix=DispelType

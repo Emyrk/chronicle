@@ -1,6 +1,6 @@
 import { useMemo, useState } from "react";
 import { Link, useLocation } from "react-router-dom";
-import { Settings, Upload, LogOut, FileText, Shield, Key, Castle, Menu, Swords, Trophy } from "lucide-react";
+import { Settings, Upload, LogOut, FileText, Shield, Key, Castle, Menu, Swords, Trophy, Database } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
 import { useAuth } from "@/hooks/useAuth";
 import { useAuthorizationCheck } from "@/api/queries";
@@ -31,17 +31,20 @@ export function NavBar() {
   const authzChecks = useMemo(() => ({
     admin: "chronicle:chronicle#admin_users",
     adminAuthz: "chronicle:chronicle#administer_authz",
+    adminWorldData: "chronicle:chronicle#admin_world_data",
   }), []);
   const { data: authz } = useAuthorizationCheck(authzChecks, {
     enabled: isAuthenticated,
   });
   const isAdmin = authz?.admin ?? false;
   const canAdminAuthz = authz?.adminAuthz ?? false;
+  const canAdminWorldData = authz?.adminWorldData ?? false;
 
   const accountMenuItems: NavItem[] = [
     { title: "My Logs", href: "/logs", icon: FileText },
     { title: "Upload", href: "/upload", icon: Upload },
     ...(isAdmin ? [{ title: "Admin", href: "/admin", icon: Shield } as NavItem] : []),
+    ...(canAdminWorldData ? [{ title: "Game Data", href: "/game-data", icon: Database } as NavItem] : []),
     ...(canAdminAuthz ? [{ title: "Saffron", href: "/saffron", icon: Key, external: true } as NavItem] : []),
     { title: "Settings", href: "/account/settings", icon: Settings },
     { title: "Sign Out", onClick: logout, icon: LogOut },

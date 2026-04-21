@@ -1,4 +1,5 @@
 import { useMemo, useState, useRef, useEffect } from "react";
+import { iconUrl } from "@/config/iconUrl";
 import type { PanelRenderProps } from "../types";
 import type { EquipmentResult, PlayerSnapshot } from "./equipment.processor";
 import { useCachedValue } from "@/hooks/useCachedValue";
@@ -41,8 +42,7 @@ const SLOT_ORDER = [
 ];
 
 function getItemIconUrl(icon: string): string {
-  if (!icon) return "";
-  return `https://icons.chronicleclassic.com/${icon.toLowerCase()}.webp`;
+  return iconUrl(icon);
 }
 
 /** Compact single-row item display with tooltip-fetched icon/name/quality. */

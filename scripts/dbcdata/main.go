@@ -31,6 +31,8 @@ func rootCmd() *serpent.Command {
 		cli.StaticPopulateCmd(),
 		cli.DerivedStaticsCmd(),
 		cli.SpellTestDataCmd(),
+		cli.ExtractDBCCmd(),
+		cli.ExtractIconsCmd(),
 		demo(),
 		jsonDump(),
 	)
@@ -39,22 +41,22 @@ func rootCmd() *serpent.Command {
 
 func jsonDump() *serpent.Command {
 	var dbcPath string
+	var server string
 	return &serpent.Command{
 		Use:   "dump",
 		Short: "Dump.",
 		Options: serpent.OptionSet{
-			{
-				Name:        "dbc",
-				Description: "Path to WoW client directory.",
-				Flag:        "dbc",
-				Value:       serpent.StringOf(&dbcPath),
-				Default:     "/home/steven/Games/turtlewow/drive_c/Program Files (x86)/TurtleWoW",
-			},
+			cli.DBCOption(&dbcPath),
+			cli.ServerOption(&server),
 		},
 		Handler: func(inv *serpent.Invocation) error {
-			wc, err := dbcdb.New(dbcPath)
+			resolved, err := cli.ResolveDBCPath(dbcPath, server)
 			if err != nil {
-				return fmt.Errorf("open wow client: %w", err)
+				return err
+			}
+			wc, err := dbcdb.New(resolved)
+			if err != nil {
+				return fmt.Errorf("(dump) open wow client: %w", err)
 			}
 
 			var cpy []dbdefs.Ent_ItemSubClass
@@ -80,23 +82,40 @@ func jsonDump() *serpent.Command {
 
 func demo() *serpent.Command {
 	var dbcPath string
+	var server string
 	return &serpent.Command{
 		Use:   "demo",
 		Short: "Demo.",
 		Options: serpent.OptionSet{
-			{
-				Name:        "dbc",
-				Description: "Path to WoW client directory.",
-				Flag:        "dbc",
-				Value:       serpent.StringOf(&dbcPath),
-				Default:     "/home/steven/Games/turtlewow/drive_c/Program Files (x86)/TurtleWoW",
-			},
+			cli.DBCOption(&dbcPath),
+			cli.ServerOption(&server),
 		},
 		Handler: func(inv *serpent.Invocation) error {
-			wc, err := dbcdb.New(dbcPath)
+			resolved, err := cli.ResolveDBCPath(dbcPath, server)
 			if err != nil {
-				return fmt.Errorf("open wow client: %w", err)
+				return err
 			}
+			wc, err := dbcdb.New(resolved)
+			if err != nil {
+				return fmt.Errorf("(demo) open wow client: %w", err)
+			}
+
+			si, err := wc.ItemSet()
+			if err != nil {
+				return fmt.Errorf("read items: %w", err)
+			}
+			si.Range(func(cursor *dbdefs.Ent_ItemSet) bool {
+				fmt.Println(cursor.Name_lang)
+				cursor.ItemID
+				if cursor.ID == 765 {
+					fmt.Println(cursor.ID)
+				}
+				return true
+			})
+
+			return nil
+			fmt.Println("s")
+			fmt.Println(si.Len())
 
 			spdb, err := wc.Spells()
 			if err != nil {
@@ -104,12 +123,16 @@ func demo() *serpent.Command {
 			}
 
 			_ = spdb.Range(func(cursor *dbdefs.Ent_Spell) bool {
-				sp := chrondbc.SpellFromDB(cursor)
-				for _, eff := range sp.Effect {
-					if eff == chrondbc.EffectEnvironmentalDMG {
-						fmt.Println(cursor.ID, cursor.Name_lang.String())
-					}
+				if cursor.SchoolMask != 0 {
+					sp := chrondbc.SpellFromDB(cursor)
+					fmt.Println(sp.Name())
 				}
+				//for _, v := range cursor.EffectSpellClassMaskA {
+				//	if v != 0 {
+				//		sp := chrondbc.SpellFromDB(cursor)
+				//		fmt.Println(sp.Name())
+				//	}
+				//}
 
 				//sp := chrondbc.SpellFromDB(cursor)
 				////if sp.Attrs.Has(chrondbc.AttrEx3_DeathPersistent) {
@@ -144,13 +167,13 @@ func demo() *serpent.Command {
 			//	fmt.Println(cursor.EnumID, cursor.Name_lang.String())
 			//	return true
 			//})
-
-			spell, err := spdb.ID(44095)
-			if err != nil {
-				return fmt.Errorf("spell not found")
-			}
-			d, _ := json.Marshal(spell)
-			fmt.Println(string(d))
+			//
+			//spell, err := spdb.ID(44095)
+			//if err != nil {
+			//	return fmt.Errorf("spell not found")
+			//}
+			//d, _ := json.Marshal(spell)
+			//fmt.Println(string(d))
 			//c := make(map[int]int)
 			//err = spdb.Range(func(cursor *dbdefs.Ent_Spell) bool {
 			//	c[len(cursor.Reagent)]++

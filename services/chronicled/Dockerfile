@@ -1,5 +1,7 @@
 # Stage 1: Build frontend
 FROM node:20.19.1-alpine AS frontend
+ARG SERVER=turtle
+ENV SERVER=${SERVER}
 
 RUN apk --no-cache add make && npm install -g pnpm@9
 
@@ -17,6 +19,7 @@ FROM golang:1.25.7-alpine3.22 AS backend
 ARG GIT_TAG=unknown
 ARG GIT_COMMIT=unknown
 ARG BUILD_TIME=unknown
+ARG SERVER=turtle
 
 RUN apk --no-cache add make git
 
@@ -27,8 +30,8 @@ RUN go mod download
 COPY . .
 COPY --from=frontend /chronicle/frontend/chronicle/dist ./frontend/chronicle/dist
 
-# Pass version info to the Go build via ldflags
-RUN GIT_TAG=${GIT_TAG} GIT_COMMIT=${GIT_COMMIT} BUILD_TIME=${BUILD_TIME} make build-backend
+# Pass version info and server target to the Go build
+RUN GIT_TAG=${GIT_TAG} GIT_COMMIT=${GIT_COMMIT} BUILD_TIME=${BUILD_TIME} SERVER=${SERVER} make build-backend
 
 # Stage 3: Final minimal image
 FROM alpine:latest
