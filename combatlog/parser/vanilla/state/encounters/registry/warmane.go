@@ -12,6 +12,9 @@ func WarmaneStaticRegistry(logger *slog.Logger) *Registry {
 
 	// Dungeons
 	r.RegisterEntry(FromCommonFactory(instances.NexusFactory))
+	r.RegisterEntry(FromCommonFactory(instances.OculusFactory))
+	r.RegisterEntry(FromCommonFactory(instances.ForgeOfSoulsFactory))
+	r.RegisterEntry(FromCommonFactory(instances.HallsOfReflectionFactory))
 	r.RegisterEntry(FromCommonFactory(classic.DeadminesFactory))
 	r.RegisterEntry(FromCommonFactory(classic.WailingCavernsFactory))
 	r.RegisterEntry(FromCommonFactory(classic.RazorfenKraulFactory))
@@ -37,6 +40,9 @@ func WarmaneStaticRegistry(logger *slog.Logger) *Registry {
 
 	r.RegisterEntry(FromCommonFactory(instances.VoAFactory))
 	r.RegisterEntry(FromCommonFactory(instances.ObsidianSanctumFactory))
+	r.RegisterEntry(FromCommonFactory(instances.EyeOfEternityFactory))
+	r.RegisterEntry(FromCommonFactory(instances.TrialOfTheCrusaderFactory).WithComment("Bosses and major adds registered; faction champions are not exhaustive"))
+	r.RegisterEntry(FromCommonFactory(instances.RubySanctumFactory))
 	r.RegisterEntry(FromCommonFactory(instances.NaxxramasFactory))
 
 	return r

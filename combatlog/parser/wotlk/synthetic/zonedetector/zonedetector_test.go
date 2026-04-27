@@ -46,6 +46,45 @@ func TestZoneDetector_EmitsZoneOnNexusCreature(t *testing.T) {
 	assert.Equal(t, "the nexus", zd.LastZone())
 }
 
+func TestZoneDetector_EmitsZoneOnSupportedWarmaneRaidCreatures(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name         string
+		entry        uint32
+		expectedZone string
+	}{
+		{name: "oculus", entry: 27656, expectedZone: "the oculus"},
+		{name: "forge of souls", entry: 36502, expectedZone: "forge of souls"},
+		{name: "halls of reflection", entry: 38112, expectedZone: "halls of reflection"},
+		{name: "vault of archavon", entry: 31125, expectedZone: "vault of archavon"},
+		{name: "obsidian sanctum", entry: 28860, expectedZone: "the obsidian sanctum"},
+		{name: "eye of eternity", entry: 28859, expectedZone: "the eye of eternity"},
+		{name: "trial of the crusader", entry: 34780, expectedZone: "trial of the crusader"},
+		{name: "ruby sanctum", entry: 39863, expectedZone: "the ruby sanctum"},
+		{name: "naxxramas", entry: 15956, expectedZone: "naxxramas"},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			reg := registry.WarmaneStaticRegistry(slog.Default())
+			zd := zonedetector.New(reg)
+
+			ts := time.Date(2025, 1, 1, 12, 0, 0, 0, time.UTC)
+			msg := unitMsg(ts, creatureGUID(tt.entry))
+
+			result := zd.ProcessMessages([]messages.Message{msg})
+			require.Greater(t, len(result), 1, "should prepend a synthetic zone message")
+
+			zoneMsg, ok := result[0].(*messages.Zone)
+			require.True(t, ok, "first message should be *messages.Zone")
+			assert.Equal(t, tt.expectedZone, zoneMsg.Name)
+			assert.True(t, zoneMsg.IsInstance)
+			assert.Equal(t, tt.expectedZone, zd.LastZone())
+		})
+	}
+}
+
 func TestZoneDetector_NoDuplicateZone(t *testing.T) {
 	t.Parallel()
 

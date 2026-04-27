@@ -98,3 +98,40 @@ func TestFinalize_King_AllAddsKilled_BossAbsent_IsWipe(t *testing.T) {
 	require.Equal(t, KillTypeWipe, enc.KillType,
 		"adds dead + boss required but absent + player deaths = wipe")
 }
+
+func TestFinalize_InconsistentHostileIDMapping_ReturnsError(t *testing.T) {
+	t.Parallel()
+
+	realGUID := creatureGUID(59972, 1)
+	wrongGUID := creatureGUID(59972, 2)
+	base := time.Date(2026, time.January, 1, 0, 0, 0, 0, time.UTC)
+	startMsg := &messages.Damage{
+		MessageBase: messages.Base(base),
+		Amount:      1,
+	}
+
+	h := &Hookable{
+		Identifier: NewIdentifier(TowerOfKarazhanHostiles()),
+		units:      unitdb.New(),
+		completedFights: []Fight{{
+			EncounterID: uuid.New(),
+			Hostiles: map[guid.GUID]CharacterFight{
+				wrongGUID: {
+					ID: realGUID,
+					Activity: []period.Period{{
+						Start:    &period.Moment{Timestamp: startMsg, Reason: "damage"},
+						End:      &period.Moment{Timestamp: startMsg, Reason: "damage"},
+						EndState: period.EndStateTimeout,
+					}},
+				},
+			},
+			Start: base,
+			End:   base,
+		}},
+	}
+
+	result, err := h.Finalize(context.Background())
+	require.Nil(t, result)
+	require.Error(t, err)
+	require.Contains(t, err.Error(), "inconsistent hostile ID mapping")
+}

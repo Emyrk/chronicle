@@ -412,7 +412,7 @@ func (h *Hookable) Finalize(ctx context.Context) (*FinalizedInstance, error) {
 				return nil, ctx.Err()
 			}
 			if hid != hostile.ID {
-				panic("inconsistent hostile ID mapping")
+				return nil, fmt.Errorf("inconsistent hostile ID mapping: key=%v hostile=%v", hid, hostile.ID)
 			}
 
 			id := h.IdentifyUnit(hostile.ID)

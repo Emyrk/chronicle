@@ -88,7 +88,7 @@ func (s *Service) Options() serpent.OptionSet {
 		{
 			Name:        "Disable Discord Bot",
 			Description: "Discord bot is used to sync roles to the Chronicle discord server. Disable if you do not want this.",
-			Required:    true,
+			Required:    false,
 			Flag:        "disable-discord-bot",
 			Env:         "CHRONICLE_DISCORD_BOT_DISABLE",
 			Default:     "false",

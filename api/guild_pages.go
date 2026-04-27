@@ -589,7 +589,19 @@ func (api *API) AdminRemoveGuildMember(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// TODO: Cannot remove members that are also admins - need to check if the user is an admin before allowing removal
+	targetCanAdmin, err := api.Zed.CheckOne(ctx, nil, policy.New().Guild(guild.ID).CanAdmin_guild_User(policy.New().User(userID)))
+	if err != nil {
+		httpapi.InternalServerError(w, err)
+		return
+	}
+	if targetCanAdmin {
+		httpapi.Write(ctx, w, http.StatusBadRequest, chroniclesdk.Response{
+			Message: "Cannot remove a guild admin directly",
+			Detail:  "Change the user's guild role before removing them from the guild",
+		})
+		return
+	}
+
 	if err := api.Zed.RemoveGuildMember(ctx, guild.ID, userID); err != nil {
 		httpapi.InternalServerError(w, err)
 		return

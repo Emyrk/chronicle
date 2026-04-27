@@ -46,6 +46,8 @@ func New(ctx context.Context, logger *slog.Logger, config Config) (*Bot, error) 
 	if config.Disabled {
 		logger.Info("discord bot is disabled, skipping initialization")
 		return &Bot{
+			logger:   logger.With(slog.String("component", "discord-bot")),
+			config:   config,
 			disabled: true,
 		}, nil
 	}
