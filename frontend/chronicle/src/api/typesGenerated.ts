@@ -74,6 +74,21 @@ export interface AdminOutdatedInstancesResponse {
 }
 
 // From chroniclesdk/user.go
+export interface AdminBulkReparseFailure {
+    readonly log_group_id: string;
+    readonly name: string;
+    readonly detail: string;
+}
+
+// From chroniclesdk/user.go
+export interface AdminBulkReparseResponse {
+    readonly matched: number;
+    readonly enqueued: number;
+    readonly min_version: string;
+    readonly failed: readonly AdminBulkReparseFailure[];
+}
+
+// From chroniclesdk/user.go
 /**
  * AdminSetUserRetentionRequest is the request body for setting a user's raw log retention.
  */

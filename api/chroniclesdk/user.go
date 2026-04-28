@@ -101,6 +101,7 @@ type UpsertDataGrantRequest struct {
 	Description  string     `json:"description,omitempty"`
 	ExpiresAt    *time.Time `json:"expires_at,omitempty"`
 }
+
 // AdminOutdatedInstance is an instance that is not on the latest parser version.
 type AdminOutdatedInstance struct {
 	ID             uuid.UUID `json:"id"`
@@ -119,8 +120,22 @@ type AdminOutdatedInstancesResponse struct {
 	Instances  []AdminOutdatedInstance `json:"instances"`
 	MinVersion string                  `json:"min_version"`
 }
+
+type AdminBulkReparseFailure struct {
+	LogGroupID uuid.UUID `json:"log_group_id"`
+	Name       string    `json:"name"`
+	Detail     string    `json:"detail"`
+}
+
+type AdminBulkReparseResponse struct {
+	Matched    int                       `json:"matched"`
+	Enqueued   int                       `json:"enqueued"`
+	MinVersion string                    `json:"min_version"`
+	Failed     []AdminBulkReparseFailure `json:"failed"`
+}
+
 type SiteConfig struct {
-	SignupsEnabled   bool   `json:"signups_enabled"`
+	SignupsEnabled  bool   `json:"signups_enabled"`
 	ShortLinkDomain string `json:"short_link_domain,omitempty"`
 }
 
@@ -128,5 +143,3 @@ type SiteConfig struct {
 type SetUserRolesRequest struct {
 	Roles []string `json:"roles"`
 }
-
-

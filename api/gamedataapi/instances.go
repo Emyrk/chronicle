@@ -57,6 +57,12 @@ func (h *Handler) UpsertInstance(w http.ResponseWriter, r *http.Request) {
 		})
 		return
 	}
+	if req.WorldID == uuid.Nil {
+		httpapi.Write(ctx, w, http.StatusBadRequest, chroniclesdk.Response{
+			Message: "world_id is required",
+		})
+		return
+	}
 
 	store := database.New(h.pool)
 
@@ -79,6 +85,7 @@ func (h *Handler) UpsertInstance(w http.ResponseWriter, r *http.Request) {
 
 		var txErr error
 		wit, txErr = tx.UpsertWorldInstanceTemplate(ctx, database.UpsertWorldInstanceTemplateParams{
+			WorldID:      req.WorldID,
 			Name:         req.Name,
 			Abbreviation: abbrev,
 			Category:     database.InstanceCategory(req.Category),

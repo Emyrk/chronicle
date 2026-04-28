@@ -1,6 +1,7 @@
 package api
 
 import (
+	"context"
 	"fmt"
 	"mime/multipart"
 	"net/http"
@@ -19,6 +20,45 @@ import (
 
 const MaxLogFileSize = 250 * 1024 * 1024 // 250 MB
 
+func (api *API) enqueueReparseLogGroup(ctx context.Context, logID uuid.UUID, verbose bool, identityMode bool, overrideType *database.LogType) (int64, error) {
+	files, err := api.Zed.GetWoWLogFilesByGroupID(ctx, logID)
+	if err != nil {
+		return 0, err
+	}
+
+	for _, f := range files {
+		if f.StorageDeletedAt.Valid {
+			return 0, httpapi.NewAPIError(
+				fmt.Errorf("log files were deleted at %s", f.StorageDeletedAt.Time),
+				"re-parse requires the log files to be present in storage",
+				http.StatusBadRequest,
+			)
+		}
+	}
+
+	if overrideType != nil {
+		err := api.Zed.UpdateWoWLogGroupLogType(ctx, database.UpdateWoWLogGroupLogTypeParams{
+			ID:      logID,
+			LogType: *overrideType,
+		})
+		if err != nil {
+			return 0, err
+		}
+	}
+
+	var realmID uuid.UUID
+	if meta, metaErr := api.Zed.GetServerUploadMetaRealmID(ctx, logID); metaErr == nil && meta.Valid {
+		realmID = meta.UUID
+	}
+
+	res, err := api.Chronicle.EnqueueReParseLog(ctx, logID, verbose, identityMode, realmID)
+	if err != nil {
+		return 0, err
+	}
+
+	return res.Job.ID, nil
+}
+
 func (api *API) WoWLogReparse(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 	logID := httpmw.LogID(ctx)
@@ -28,33 +68,6 @@ func (api *API) WoWLogReparse(w http.ResponseWriter, r *http.Request) {
 	if err != nil || !ok {
 		httpapi.Forbidden(w, err)
 		return
-	}
-
-	files, err := api.Zed.GetWoWLogFilesByGroupID(ctx, logID)
-	if err != nil {
-		httpapi.HandleResponseError(ctx, w, err, httpapi.APIError{
-			Response: chroniclesdk.Response{
-				Message: "Failed to locate log files for re-parse",
-				Detail:  err.Error(),
-			},
-			Status: http.StatusInternalServerError,
-		})
-
-		return
-	}
-
-	for _, f := range files {
-		if f.StorageDeletedAt.Valid {
-			httpapi.HandleResponseError(ctx, w, err, httpapi.APIError{
-				Response: chroniclesdk.Response{
-					Message: fmt.Sprintf("Log files were deleted at %s, cannot re-parse", f.StorageDeletedAt.Time),
-					Detail:  "re-parse requires the log files to be present in storage",
-				},
-				Status: http.StatusBadRequest,
-			})
-
-			return
-		}
 	}
 
 	verbose := r.URL.Query().Get("verbose") == "true"
@@ -70,10 +83,11 @@ func (api *API) WoWLogReparse(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
+	var overrideType *database.LogType
 	// Admin override: allow changing the log_type before reparsing.
 	if override := r.URL.Query().Get("log_type"); override != "" {
-		overrideType := database.LogType(override)
-		if !overrideType.Valid() {
+		parsedOverrideType := database.LogType(override)
+		if !parsedOverrideType.Valid() {
 			httpapi.Write(ctx, w, http.StatusBadRequest, chroniclesdk.Response{
 				Message: "Invalid log_type override",
 				Detail:  fmt.Sprintf("unknown log type: %q", override),
@@ -88,24 +102,10 @@ func (api *API) WoWLogReparse(w http.ResponseWriter, r *http.Request) {
 			})
 			return
 		}
-		err := api.Zed.UpdateWoWLogGroupLogType(ctx, database.UpdateWoWLogGroupLogTypeParams{
-			ID:      logID,
-			LogType: overrideType,
-		})
-		if err != nil {
-			httpapi.InternalServerError(w, err)
-			return
-		}
+		overrideType = &parsedOverrideType
 	}
 
-	// Look up realm ID from server_upload_meta (e.g. AzerothCore uploads
-	// where REALM_INFO is not present in the combat log).
-	var realmID uuid.UUID
-	if meta, metaErr := api.Zed.GetServerUploadMetaRealmID(ctx, logID); metaErr == nil && meta.Valid {
-		realmID = meta.UUID
-	}
-
-	res, err := api.Chronicle.EnqueueReParseLog(ctx, logID, verbose, identityMode, realmID)
+	jobID, err := api.enqueueReparseLogGroup(ctx, logID, verbose, identityMode, overrideType)
 	if err != nil {
 		httpapi.HandleResponseError(ctx, w, err, httpapi.APIError{
 			Response: chroniclesdk.Response{
@@ -118,7 +118,7 @@ func (api *API) WoWLogReparse(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	httpapi.Write(ctx, w, http.StatusAccepted, res.Job.ID)
+	httpapi.Write(ctx, w, http.StatusAccepted, jobID)
 }
 
 func (api *API) DeleteWoWLogFiles(w http.ResponseWriter, r *http.Request) {
@@ -308,4 +308,3 @@ func (api *API) WoWLogUploadV2(w http.ResponseWriter, r *http.Request) {
 		Files: fileIDs,
 	})
 }
-

@@ -1384,6 +1384,7 @@ type WorldDisplayInfo struct {
 
 type WorldInstanceTemplate struct {
 	ID           uuid.UUID          `db:"id" json:"id"`
+	WorldID      uuid.UUID          `db:"world_id" json:"world_id"`
 	Name         string             `db:"name" json:"name"`
 	Abbreviation pgtype.Text        `db:"abbreviation" json:"abbreviation"`
 	Category     InstanceCategory   `db:"category" json:"category"`

@@ -8,6 +8,7 @@ import (
 func WorldInstanceTemplate(wit database.WorldInstanceTemplate, zoneNames []database.WorldInstanceZoneName) chroniclesdk.WorldInstanceTemplate {
 	t := chroniclesdk.WorldInstanceTemplate{
 		ID:       wit.ID,
+		WorldID:  wit.WorldID,
 		Name:     wit.Name,
 		Category: chroniclesdk.InstanceCategory(wit.Category),
 	}

@@ -1,6 +1,7 @@
 package chronicle
 
 import (
+	"bufio"
 	"bytes"
 	"compress/gzip"
 	"context"
@@ -13,6 +14,7 @@ import (
 	"os"
 	"reflect"
 	"slices"
+	"strconv"
 	"strings"
 	"time"
 
@@ -150,6 +152,72 @@ func (w *WorkerLogParse) loadAndSortFile(ctx context.Context, file database.LogF
 	}
 
 	return logfile.New(&sum.IsRaw, fileData), ri, nil
+}
+
+type unixMillisLogLine struct {
+	ts      int64
+	idx     int
+	content string
+}
+
+func (w *WorkerLogParse) loadAndSortUnixMillisFile(ctx context.Context, file database.LogFile) (io.Reader, error) {
+	rdr, err := w.loadFile(ctx, file)
+	if err != nil {
+		return nil, err
+	}
+	return sortUnixMillisReader(ctx, rdr, file.ID)
+}
+
+func sortUnixMillisReader(ctx context.Context, rdr io.Reader, fileID uuid.UUID) (io.Reader, error) {
+	scanner := bufio.NewScanner(rdr)
+	lines := make([]unixMillisLogLine, 0)
+	idx := 0
+	for scanner.Scan() {
+		if ctx.Err() != nil {
+			return nil, ctx.Err()
+		}
+
+		text := scanner.Text()
+		prefix := text
+		if sp := strings.IndexByte(text, ' '); sp >= 0 {
+			prefix = text[:sp]
+		}
+		ts, parseErr := strconv.ParseInt(prefix, 10, 64)
+		if parseErr != nil {
+			return nil, fmt.Errorf("parse unix millis timestamp for log file %s: %w", fileID, parseErr)
+		}
+		lines = append(lines, unixMillisLogLine{ts: ts, idx: idx, content: text})
+		idx++
+	}
+	if err := scanner.Err(); err != nil {
+		return nil, fmt.Errorf("scan log file %s: %w", fileID, err)
+	}
+
+	slices.SortStableFunc(lines, func(a, b unixMillisLogLine) int {
+		if a.ts < b.ts {
+			return -1
+		}
+		if a.ts > b.ts {
+			return 1
+		}
+		if a.idx < b.idx {
+			return -1
+		}
+		if a.idx > b.idx {
+			return 1
+		}
+		return 0
+	})
+
+	var buf bytes.Buffer
+	for i, line := range lines {
+		if i > 0 {
+			buf.WriteByte('\n')
+		}
+		buf.WriteString(line.content)
+	}
+
+	return &buf, nil
 }
 
 func (w *WorkerLogParse) Work(ctx context.Context, job *river.Job[ArgsLogParse]) error {
@@ -320,9 +388,9 @@ func (w *WorkerLogParse) Work(ctx context.Context, job *river.Job[ArgsLogParse])
 		}
 
 	case database.LogTypeAzerothcore:
-		// Load single file
+		// Load single file and normalize concatenated server chunks by unix timestamp.
 		loadStart := time.Now()
-		rdr, err := w.loadFile(ctx, files[0])
+		rdr, err := w.loadAndSortUnixMillisFile(ctx, files[0])
 		if err != nil {
 			return fmt.Errorf("load log file: %w", err)
 		}

@@ -2,6 +2,7 @@ package registry
 
 import (
 	"context"
+	"errors"
 	"log/slog"
 	"sync"
 
@@ -9,7 +10,9 @@ import (
 	"github.com/Emyrk/chronicle/database"
 	"github.com/Emyrk/chronicle/database/authz"
 	"github.com/Emyrk/chronicle/database/pubsub"
+	"github.com/Emyrk/chronicle/internal/services"
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5"
 )
 
 const InstanceRegistryChannel = "instance_registry_changed"
@@ -91,6 +94,38 @@ func (dr *DBRegistry) Reload(ctx context.Context) error {
 // Does NOT publish — used internally and by the pubsub listener to avoid loops.
 func (dr *DBRegistry) reload(ctx context.Context) error {
 	r := NewRegistry(dr.logger)
+	if dr.fallback != nil {
+		r.SetFallback(dr.fallback)
+	}
+
+	server, err := dr.store.GetWoWServerByName(ctx, services.ServerName)
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			dr.logger.Warn("no active server row found for DB-backed registry", slog.String("server", services.ServerName))
+			dr.mu.Lock()
+			dr.registry = r
+			dr.mu.Unlock()
+			return nil
+		}
+		return err
+	}
+
+	worlds, err := dr.store.GetWorldsByServer(ctx, server.ID)
+	if err != nil {
+		return err
+	}
+
+	allowedWorlds := make(map[uuid.UUID]struct{}, len(worlds))
+	for _, world := range worlds {
+		allowedWorlds[world.ID] = struct{}{}
+	}
+	if len(allowedWorlds) == 0 {
+		dr.logger.Warn("no worlds assigned to active server for DB-backed registry", slog.String("server", services.ServerName), slog.String("server_id", server.ID.String()))
+		dr.mu.Lock()
+		dr.registry = r
+		dr.mu.Unlock()
+		return nil
+	}
 
 	templates, err := dr.store.ListWorldInstanceTemplates(ctx)
 	if err != nil {
@@ -118,7 +153,11 @@ func (dr *DBRegistry) reload(ctx context.Context) error {
 		unitsByInstance[u.InstanceID] = append(unitsByInstance[u.InstanceID], u)
 	}
 
+	loaded := 0
 	for _, tmpl := range templates {
+		if _, ok := allowedWorlds[tmpl.WorldID]; !ok {
+			continue
+		}
 		zoneNames := zoneNamesByInstance[tmpl.ID]
 		units := unitsByInstance[tmpl.ID]
 
@@ -150,14 +189,13 @@ func (dr *DBRegistry) reload(ctx context.Context) error {
 		}
 
 		r.RegisterEntry(FromCommonFactory(factory))
-	}
-
-	if dr.fallback != nil {
-		r.SetFallback(dr.fallback)
+		loaded++
 	}
 
 	dr.logger.Info("reloaded instance registry from database",
-		slog.Int("instances", len(templates)),
+		slog.String("server", services.ServerName),
+		slog.Int("instances", loaded),
+		slog.Int("worlds", len(allowedWorlds)),
 	)
 
 	dr.mu.Lock()

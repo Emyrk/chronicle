@@ -6791,7 +6791,7 @@ func (q *sqlQuerier) DeleteWorldInstanceZoneNames(ctx context.Context, instanceI
 }
 
 const getWorldInstanceTemplateByZoneName = `-- name: GetWorldInstanceTemplateByZoneName :one
-SELECT wit.id, wit.name, wit.abbreviation, wit.category, wit.boss_count, wit.background, wit.created_at, wit.updated_at
+SELECT wit.id, wit.world_id, wit.name, wit.abbreviation, wit.category, wit.boss_count, wit.background, wit.created_at, wit.updated_at
 FROM world_instance_template wit
 JOIN world_instance_zone_names wizn ON wit.id = wizn.instance_id
 WHERE wizn.zone_name = $1
@@ -6802,6 +6802,7 @@ func (q *sqlQuerier) GetWorldInstanceTemplateByZoneName(ctx context.Context, zon
 	var i WorldInstanceTemplate
 	err := row.Scan(
 		&i.ID,
+		&i.WorldID,
 		&i.Name,
 		&i.Abbreviation,
 		&i.Category,
@@ -6902,7 +6903,9 @@ func (q *sqlQuerier) InsertWorldInstanceZoneName(ctx context.Context, arg Insert
 }
 
 const listWorldInstanceTemplates = `-- name: ListWorldInstanceTemplates :many
-SELECT id, name, abbreviation, category, boss_count, background, created_at, updated_at FROM world_instance_template ORDER BY name
+SELECT id, world_id, name, abbreviation, category, boss_count, background, created_at, updated_at
+FROM world_instance_template
+ORDER BY name
 `
 
 func (q *sqlQuerier) ListWorldInstanceTemplates(ctx context.Context) ([]WorldInstanceTemplate, error) {
@@ -6916,6 +6919,7 @@ func (q *sqlQuerier) ListWorldInstanceTemplates(ctx context.Context) ([]WorldIns
 		var i WorldInstanceTemplate
 		if err := rows.Scan(
 			&i.ID,
+			&i.WorldID,
 			&i.Name,
 			&i.Abbreviation,
 			&i.Category,
@@ -7004,18 +7008,19 @@ func (q *sqlQuerier) ListWorldInstanceZoneNames(ctx context.Context) ([]WorldIns
 }
 
 const upsertWorldInstanceTemplate = `-- name: UpsertWorldInstanceTemplate :one
-INSERT INTO world_instance_template (name, abbreviation, category, boss_count, background)
-VALUES ($1, $2, $3, $4, $5)
-ON CONFLICT (name) DO UPDATE SET
+INSERT INTO world_instance_template (world_id, name, abbreviation, category, boss_count, background)
+VALUES ($1, $2, $3, $4, $5, $6)
+ON CONFLICT (world_id, name) DO UPDATE SET
   abbreviation = EXCLUDED.abbreviation,
   category = EXCLUDED.category,
   boss_count = EXCLUDED.boss_count,
   background = EXCLUDED.background,
   updated_at = NOW()
-RETURNING id, name, abbreviation, category, boss_count, background, created_at, updated_at
+RETURNING id, world_id, name, abbreviation, category, boss_count, background, created_at, updated_at
 `
 
 type UpsertWorldInstanceTemplateParams struct {
+	WorldID      uuid.UUID        `db:"world_id" json:"world_id"`
 	Name         string           `db:"name" json:"name"`
 	Abbreviation pgtype.Text      `db:"abbreviation" json:"abbreviation"`
 	Category     InstanceCategory `db:"category" json:"category"`
@@ -7025,6 +7030,7 @@ type UpsertWorldInstanceTemplateParams struct {
 
 func (q *sqlQuerier) UpsertWorldInstanceTemplate(ctx context.Context, arg UpsertWorldInstanceTemplateParams) (WorldInstanceTemplate, error) {
 	row := q.db.QueryRow(ctx, upsertWorldInstanceTemplate,
+		arg.WorldID,
 		arg.Name,
 		arg.Abbreviation,
 		arg.Category,
@@ -7034,6 +7040,7 @@ func (q *sqlQuerier) UpsertWorldInstanceTemplate(ctx context.Context, arg Upsert
 	var i WorldInstanceTemplate
 	err := row.Scan(
 		&i.ID,
+		&i.WorldID,
 		&i.Name,
 		&i.Abbreviation,
 		&i.Category,

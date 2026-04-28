@@ -15,6 +15,8 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 )
 
+const defaultMinParserVersion = "v0.0.437"
+
 // AdminListUsers returns all users in the system.
 // @Summary List all users
 // @Tags Admin
@@ -513,8 +515,6 @@ func (a *API) AdminListInstanceNames(w http.ResponseWriter, r *http.Request) {
 func (a *API) AdminListOutdatedInstances(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 
-	const defaultMinParserVersion = "v0.0.437"
-
 	minParserVersion := r.URL.Query().Get("parser_version")
 	if minParserVersion == "" {
 		minParserVersion = defaultMinParserVersion
@@ -558,6 +558,52 @@ func (a *API) AdminListOutdatedInstances(w http.ResponseWriter, r *http.Request)
 		Instances:  instances,
 		MinVersion: minParserVersion,
 	})
+}
+
+func (a *API) AdminBulkReparseOutdatedInstances(w http.ResponseWriter, r *http.Request) {
+	ctx := r.Context()
+
+	minParserVersion := r.URL.Query().Get("parser_version")
+	if minParserVersion == "" {
+		minParserVersion = defaultMinParserVersion
+	}
+
+	nameFilter := r.URL.Query().Get("instance_name")
+	var instanceName pgtype.Text
+	if nameFilter != "" {
+		instanceName = pgtype.Text{String: nameFilter, Valid: true}
+	}
+
+	rows, err := a.Opts.Zed.AdminListOutdatedParserVersionInstances(ctx, database.AdminListOutdatedParserVersionInstancesParams{
+		MinParserVersion: minParserVersion,
+		InstanceName:     instanceName,
+	})
+	if err != nil {
+		httpapi.InternalServerError(w, err)
+		return
+	}
+
+	resp := chroniclesdk.AdminBulkReparseResponse{
+		Matched:    len(rows),
+		Enqueued:   0,
+		MinVersion: minParserVersion,
+		Failed:     make([]chroniclesdk.AdminBulkReparseFailure, 0),
+	}
+
+	for _, row := range rows {
+		_, enqueueErr := a.enqueueReparseLogGroup(ctx, row.LogGroupID, false, false, nil)
+		if enqueueErr != nil {
+			resp.Failed = append(resp.Failed, chroniclesdk.AdminBulkReparseFailure{
+				LogGroupID: row.LogGroupID,
+				Name:       row.Name,
+				Detail:     enqueueErr.Error(),
+			})
+			continue
+		}
+		resp.Enqueued++
+	}
+
+	httpapi.Write(ctx, w, http.StatusAccepted, resp)
 }
 func (a *API) AdminGetSiteConfig(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
