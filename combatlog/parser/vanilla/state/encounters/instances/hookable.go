@@ -452,7 +452,7 @@ func (h *Hookable) Finalize(ctx context.Context) (*FinalizedInstance, error) {
 						encounterName = res.EncounterName
 						encounterNamedAt = &namedAt
 					}
-					if res.Bosses != nil && len(res.Bosses) > 0 {
+					if len(res.Bosses) > 0 {
 						encounterType = types.EncounterTypeBOSS
 						isBossFight = isBossFight || len(res.Bosses) > 0
 						for _, bossID := range res.Bosses {
