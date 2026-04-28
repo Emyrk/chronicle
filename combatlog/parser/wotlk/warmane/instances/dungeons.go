@@ -37,6 +37,7 @@ func NexusHostiles() map[uint32]instances.Identity {
 var NexusFactory = &instances.CommonFactory{
 	Name:      "The Nexus",
 	ZoneNames: []string{"the nexus"},
+	MapIDs:    []uint32{576},
 	Hostiles:  instances.FromMap(NexusHostiles()),
 }
 
@@ -67,6 +68,7 @@ func OculusHostiles() map[uint32]instances.Identity {
 var OculusFactory = &instances.CommonFactory{
 	Name:      "The Oculus",
 	ZoneNames: []string{"the oculus", "oculus"},
+	MapIDs:    []uint32{578},
 	Hostiles:  instances.FromMap(OculusHostiles()),
 }
 
@@ -94,6 +96,7 @@ func ForgeOfSoulsHostiles() map[uint32]instances.Identity {
 var ForgeOfSoulsFactory = &instances.CommonFactory{
 	Name:      "Forge of Souls",
 	ZoneNames: []string{"forge of souls"},
+	MapIDs:    []uint32{632},
 	Hostiles:  instances.FromMap(ForgeOfSoulsHostiles()),
 }
 
@@ -122,5 +125,6 @@ func HallsOfReflectionHostiles() map[uint32]instances.Identity {
 var HallsOfReflectionFactory = &instances.CommonFactory{
 	Name:      "Halls of Reflection",
 	ZoneNames: []string{"halls of reflection"},
+	MapIDs:    []uint32{668},
 	Hostiles:  instances.FromMap(HallsOfReflectionHostiles()),
 }

@@ -105,7 +105,7 @@ func (p *Parser) parseHeader(ts time.Time, m *wotlk.Matched, _ string) ([]messag
 // Fields: "zoneName", mapId, instanceId, "instanceType"
 func (p *Parser) parseZoneInfo(ts time.Time, m *wotlk.Matched, _ string) ([]messages.Message, error) {
 	zoneName := m.String()
-	_ = m.Uint32() // mapId — zone.Zone has no field for it
+	mapID := m.Uint32()
 	instanceID := m.Uint32()
 	instanceType := m.String()
 
@@ -120,6 +120,7 @@ func (p *Parser) parseZoneInfo(ts time.Time, m *wotlk.Matched, _ string) ([]mess
 			Zone: zone.Zone{
 				Seen:         ts,
 				Name:         strings.ToLower(zoneName),
+				MapID:        mapID,
 				InstanceID:   instanceID,
 				InstanceType: instanceType,
 				IsInstance:   true,

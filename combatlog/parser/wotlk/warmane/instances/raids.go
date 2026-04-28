@@ -39,6 +39,7 @@ func VoAHostiles() map[uint32]instances.Identity {
 var VoAFactory = &instances.CommonFactory{
 	Name:      "Vault of Archavon",
 	ZoneNames: []string{"vault of archavon"},
+	MapIDs:    []uint32{624},
 	Hostiles:  instances.FromMap(VoAHostiles()),
 }
 
@@ -69,6 +70,7 @@ func ObsidianSanctumHostiles() map[uint32]instances.Identity {
 var ObsidianSanctumFactory = &instances.CommonFactory{
 	Name:      "Obsidian Sanctum",
 	ZoneNames: []string{"the obsidian sanctum"},
+	MapIDs:    []uint32{615},
 	Hostiles:  instances.FromMap(ObsidianSanctumHostiles()),
 }
 
@@ -88,6 +90,7 @@ func NaxxramasHostiles() map[uint32]instances.Identity {
 var NaxxramasFactory = &instances.CommonFactory{
 	Name:      "Naxxramas",
 	ZoneNames: []string{"naxxramas", "the upper necropolis"},
+	MapIDs:    []uint32{533},
 	Hostiles:  instances.FromMap(NaxxramasHostiles()),
 }
 
@@ -107,6 +110,7 @@ func EyeOfEternityHostiles() map[uint32]instances.Identity {
 var EyeOfEternityFactory = &instances.CommonFactory{
 	Name:      "Eye of Eternity",
 	ZoneNames: []string{"the eye of eternity", "eye of eternity"},
+	MapIDs:    []uint32{616},
 	Hostiles:  instances.FromMap(EyeOfEternityHostiles()),
 }
 
@@ -136,6 +140,7 @@ func RubySanctumHostiles() map[uint32]instances.Identity {
 var RubySanctumFactory = &instances.CommonFactory{
 	Name:      "Ruby Sanctum",
 	ZoneNames: []string{"the ruby sanctum", "ruby sanctum"},
+	MapIDs:    []uint32{724},
 	Hostiles:  instances.FromMap(RubySanctumHostiles()),
 }
 
@@ -184,5 +189,6 @@ func TrialOfTheCrusaderHostiles() map[uint32]instances.Identity {
 var TrialOfTheCrusaderFactory = &instances.CommonFactory{
 	Name:      "Trial of the Crusader",
 	ZoneNames: []string{"trial of the crusader", "trial of the grand crusader"},
+	MapIDs:    []uint32{649},
 	Hostiles:  instances.FromMap(TrialOfTheCrusaderHostiles()),
 }

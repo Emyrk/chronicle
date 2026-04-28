@@ -41,11 +41,11 @@ const (
 )
 
 type Hookable struct {
-	name          string
-	timings       *timings.Accumulator
+	name    string
+	timings *timings.Accumulator
 	factory *CommonFactory
-	logger        *slog.Logger
-	units         *unitdb.Units
+	logger  *slog.Logger
+	units   *unitdb.Units
 
 	// Static
 	CurrentZone zone.Zone
@@ -131,11 +131,11 @@ func (f *CommonFactory) NewHookable(ctx context.Context, logger *slog.Logger, db
 	}
 
 	c := &Hookable{
-		name:          f.Name,
-		factory:       f,
-		logger:        logger,
-		units:         db,
-		CurrentZone:   z,
+		name:        f.Name,
+		factory:     f,
+		logger:      logger,
+		units:       db,
+		CurrentZone: z,
 		//Auras:           auraTracking,
 		Characters:      chrs,
 		Identifier:      f.Hostiles(),
@@ -192,7 +192,7 @@ func (h *Hookable) SetVersions(versions map[string]string, player *guid.GUID) {
 
 // MatchesZone
 // TODO: Should we care about the instance ID here?
-func (h *Hookable) MatchesZone(z zone.Zone) bool { return h.factory.MatchZone(z.Name) }
+func (h *Hookable) MatchesZone(z zone.Zone) bool { return h.factory.MatchZone(z) }
 
 func (h *Hookable) Process(m messages.Message) (finalError error) {
 	err := h.units.ProcessMessage(m)

@@ -56,6 +56,7 @@ var (
 	MoltenCoreFactory = &CommonFactory{
 		Name:      "Molten Core",
 		ZoneNames: []string{"molten core", "熔火之心"},
+		MapIDs:    []uint32{409},
 		Hostiles:  FromMap(MoltenCoreHostiles()),
 		Rankings: &rankings.Rankings{
 			Speedrun: &rankings.SpeedrunRules{
@@ -75,6 +76,7 @@ var (
 	OnyxiaFactory = &CommonFactory{
 		Name:      "Onyxia's Lair",
 		ZoneNames: []string{"onyxia's lair", "奥妮克希亚的巢穴"},
+		MapIDs:    []uint32{249},
 		Hostiles:  FromMap(OnyxiaHostiles()),
 		Rankings: &rankings.Rankings{
 			Speedrun: &rankings.SpeedrunRules{
@@ -92,6 +94,7 @@ var (
 	ZulGurubFactory = &CommonFactory{
 		Name:      "Zul'Gurub",
 		ZoneNames: []string{"zul'gurub", "祖尔格拉布"},
+		MapIDs:    []uint32{309},
 		Hostiles:  FromMap(ZulGurubHostiles()),
 		Rankings: &rankings.Rankings{
 			Speedrun: &rankings.SpeedrunRules{
@@ -109,6 +112,7 @@ var (
 	BlackrockDepthsFactory = &CommonFactory{
 		Name:      "Blackrock Depths",
 		ZoneNames: []string{"blackrock depths", "黑石深渊"},
+		MapIDs:    []uint32{230},
 		Hostiles:  FromMap(BlackrockDepthsHostiles()),
 	}
 
@@ -121,6 +125,7 @@ var (
 	TempleOfAhnQirajFactory = &CommonFactory{
 		Name:      "Temple of Ahn'Qiraj",
 		ZoneNames: []string{"ahn'qiraj", "安其拉神庙"},
+		MapIDs:    []uint32{531},
 		Hostiles:  FromMap(TempleOfAhnQirajHostiles()),
 		Rankings: &rankings.Rankings{
 			Speedrun: &rankings.SpeedrunRules{
@@ -132,6 +137,7 @@ var (
 	RuinsOfAhnQirajFactory = &CommonFactory{
 		Name:      "Ruins of Ahn'Qiraj",
 		ZoneNames: []string{"ruins of ahn'qiraj", "安其拉废墟"},
+		MapIDs:    []uint32{509},
 		Hostiles:  FromMap(RuinsOfAhnQirajHostiles()),
 		Rankings: &rankings.Rankings{
 			Speedrun: &rankings.SpeedrunRules{
@@ -143,6 +149,7 @@ var (
 	BlackwingLairFactory = &CommonFactory{
 		Name:      "Blackwing Lair",
 		ZoneNames: []string{"blackwing lair", "黑翼之巢"},
+		MapIDs:    []uint32{469},
 		Hostiles:  FromMap(BlackwingLairHostiles()),
 		Rankings: &rankings.Rankings{
 			Speedrun: &rankings.SpeedrunRules{
@@ -156,6 +163,7 @@ var (
 		ZoneNames: []string{"naxxramas", "the upper necropolis",
 			"纳克萨玛斯", // Naxxramas
 		},
+		MapIDs:   []uint32{533},
 		Hostiles: FromMap(NaxxramasHostiles()),
 		Rankings: &rankings.Rankings{
 			Speedrun: &rankings.SpeedrunRules{
@@ -173,6 +181,7 @@ var (
 	BlackMorassFactory = &CommonFactory{
 		Name:      "Black Morass",
 		ZoneNames: []string{"the black morass", "黑色沼泽"},
+		MapIDs:    []uint32{269},
 		Hostiles:  FromMap(TheBlackMorassHostiles()),
 	}
 

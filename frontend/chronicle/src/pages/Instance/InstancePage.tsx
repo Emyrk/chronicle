@@ -74,6 +74,8 @@ function transformToInstance(
     id: string;
     slug?: string;
     name: string;
+    start_time?: string;
+    end_time?: string;
     realm_name?: string;
     guild?: { id: string; name: string };
     encounters: readonly WoWEncounterWithHostiles[];
@@ -120,8 +122,8 @@ function transformToInstance(
   const sortedEncounters = [...apiInstance.encounters].sort(
     (a, b) => new Date(a.start_time).getTime() - new Date(b.start_time).getTime()
   );
-  const startTime = sortedEncounters[0]?.start_time || new Date().toISOString();
-  const endTime = sortedEncounters[sortedEncounters.length - 1]?.end_time;
+  const startTime = apiInstance.start_time || sortedEncounters[0]?.start_time || new Date().toISOString();
+  const endTime = apiInstance.end_time || sortedEncounters[sortedEncounters.length - 1]?.end_time;
 
   return {
     id: apiInstance.id,
