@@ -1,3 +1,5 @@
+BEGIN;
+
 CREATE TABLE world_instance_script (
     map INTEGER PRIMARY KEY,
     parent INTEGER NOT NULL DEFAULT 0,
@@ -13,3 +15,5 @@ CREATE TABLE world_boss_credit (
 );
 
 CREATE INDEX idx_world_boss_credit_credit_entry ON world_boss_credit (credit_entry);
+
+COMMIT;

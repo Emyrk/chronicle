@@ -1,3 +1,5 @@
+BEGIN;
+
 DROP VIEW IF EXISTS log_instances_guild;
 
 CREATE VIEW log_instances_guild AS
@@ -24,3 +26,5 @@ FROM
   LEFT JOIN wow_server_realms wsr ON wsr.id = li.realm_id
   LEFT JOIN guilds g ON li.guild_id = g.id
 ;
+
+COMMIT;
