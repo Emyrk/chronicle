@@ -679,12 +679,22 @@ type UnitCombatEnter struct {
 func (u UnitCombatEnter) Affects() []guid.GUID { return []guid.GUID{u.UnitGUID, u.VictimGUID} }
 func (*UnitCombatEnter) isMessage()            {}
 
+// EncounterCredit is emitted when the server grants encounter credit for a boss kill.
+type EncounterCredit struct {
+	MessageBase
+	UnitGUID guid.GUID
+	UnitName string
+}
+
+func (e EncounterCredit) Affects() []guid.GUID { return []guid.GUID{e.UnitGUID} }
+func (*EncounterCredit) isMessage()            {}
+
 // Absorbed records which absorb aura soaked how much of an
 // incoming damage event. Fires once per absorb aura per hit.
 type Absorbed struct {
 	MessageBase
-	Attacker     guid.GUID
-	Victim       guid.GUID
+	Attacker guid.GUID
+	Victim   guid.GUID
 	// DamageSpell is nil for melee (swing) damage.
 	DamageSpell  *chrondbc.Spell
 	AbsorbCaster guid.GUID
@@ -697,4 +707,3 @@ func (s Absorbed) Affects() []guid.GUID {
 	return []guid.GUID{s.Attacker, s.Victim, s.AbsorbCaster}
 }
 func (*Absorbed) isMessage() {}
-

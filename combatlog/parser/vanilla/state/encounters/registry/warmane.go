@@ -47,6 +47,7 @@ func WarmaneStaticRegistry(logger *slog.Logger) *Registry {
 	r.RegisterEntry(FromCommonFactory(instances.TrialOfTheCrusaderFactory).WithComment("Bosses and major adds registered; faction champions are not exhaustive"))
 	r.RegisterEntry(FromCommonFactory(instances.RubySanctumFactory))
 	r.RegisterEntry(FromCommonFactory(instances.NaxxramasFactory))
+	r.RegisterEntry(FromCommonFactory(instances.IcecrownCitadelFactory).WithComment("Boss-first coverage for major encounters; trash and some scripted events are not yet exhaustive"))
 
 	return r
 }

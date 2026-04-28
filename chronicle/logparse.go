@@ -96,82 +96,6 @@ type WorkerLogParse struct {
 	river.WorkerDefaults[ArgsLogParse]
 }
 
-type progressReader struct {
-	io.Reader
-	onRead func(int)
-}
-
-func (r *progressReader) Read(p []byte) (int, error) {
-	n, err := r.Reader.Read(p)
-	if n > 0 && r.onRead != nil {
-		r.onRead(n)
-	}
-	return n, err
-}
-
-type logParseProgressReporter struct {
-	ctx            context.Context
-	jobOut         *chroniclesdk.WoWParsedLogJobOutput
-	lastPhase      string
-	lastPercent    float64
-	lastRecordedAt time.Time
-}
-
-func newLogParseProgressReporter(ctx context.Context, jobOut *chroniclesdk.WoWParsedLogJobOutput) *logParseProgressReporter {
-	return &logParseProgressReporter{
-		ctx:    ctx,
-		jobOut: jobOut,
-	}
-}
-
-func (r *logParseProgressReporter) Record(progress chroniclesdk.LogParseProgress, force bool) {
-	if r == nil || r.jobOut == nil || r.ctx.Err() != nil {
-		return
-	}
-
-	now := time.Now()
-	progress.Percent = clampProgressPercent(progress.Percent)
-	if !force {
-		if progress.Phase == r.lastPhase && progress.Percent < 100 && now.Sub(r.lastRecordedAt) < 500*time.Millisecond && progress.Percent-r.lastPercent < 2 {
-			return
-		}
-	}
-
-	output := *r.jobOut
-	output.Progress = &progress
-	_ = river.RecordOutput(r.ctx, output)
-
-	r.lastPhase = progress.Phase
-	r.lastPercent = progress.Percent
-	r.lastRecordedAt = now
-}
-
-func clampProgressPercent(percent float64) float64 {
-	if percent < 0 {
-		return 0
-	}
-	if percent > 100 {
-		return 100
-	}
-	return percent
-}
-
-func weightedProgressPercent(base, span float64, processed, total int64) float64 {
-	if total <= 0 {
-		return clampProgressPercent(base)
-	}
-
-	ratio := float64(processed) / float64(total)
-	if ratio < 0 {
-		ratio = 0
-	}
-	if ratio > 1 {
-		ratio = 1
-	}
-
-	return clampProgressPercent(base + (ratio * span))
-}
-
 func (c *Chronicle) NewWorkerLogParse() river.Worker[ArgsLogParse] {
 	return &WorkerLogParse{
 		parent: c,
@@ -307,11 +231,6 @@ func (w *WorkerLogParse) Work(ctx context.Context, job *river.Job[ArgsLogParse])
 		InstanceFailures: make(map[string]string),
 		Instances:        make([]chroniclesdk.WoWSimpleParsedInstance, 0),
 	}
-	progressReporter := newLogParseProgressReporter(ctx, &jobOut)
-	progressReporter.Record(chroniclesdk.LogParseProgress{
-		Phase:   "preparing",
-		Percent: 2,
-	}, true)
 
 	// Track job completion for metrics (defer only handles Prometheus metrics)
 	var jobResult string
@@ -398,26 +317,6 @@ func (w *WorkerLogParse) Work(ctx context.Context, job *river.Job[ArgsLogParse])
 		report.LoadFileDuration = chroniclesdk.DurationFrom(loadDuration)
 		metrics.loadFileDuration.Observe(loadDuration.Seconds())
 
-		totalBytes := int64(0)
-		for _, file := range files {
-			totalBytes += file.SizeBytes
-		}
-		var parsedBytes int64
-		for i := range rdrs {
-			rdrs[i] = logfile.New(rdrs[i].Raw(), &progressReader{
-				Reader: rdrs[i],
-				onRead: func(n int) {
-					parsedBytes += int64(n)
-					progressReporter.Record(chroniclesdk.LogParseProgress{
-						Phase:          "parsing",
-						Percent:        weightedProgressPercent(10, 70, parsedBytes, totalBytes),
-						ProcessedBytes: parsedBytes,
-						TotalBytes:     totalBytes,
-					}, false)
-				},
-			})
-		}
-
 		// V1 parser: requires 2 files merged
 		m := vanilla.Merger(logger)
 		liner, scan, err := m.LineScanner(ctx, ri, rdrs[0], rdrs[1])
@@ -450,21 +349,6 @@ func (w *WorkerLogParse) Work(ctx context.Context, job *river.Job[ArgsLogParse])
 		report.LoadFileDuration = chroniclesdk.DurationFrom(loadDuration)
 		metrics.loadFileDuration.Observe(loadDuration.Seconds())
 
-		var parsedBytes int64
-		totalBytes := files[0].SizeBytes
-		rdr = &progressReader{
-			Reader: rdr,
-			onRead: func(n int) {
-				parsedBytes += int64(n)
-				progressReporter.Record(chroniclesdk.LogParseProgress{
-					Phase:          "parsing",
-					Percent:        weightedProgressPercent(10, 70, parsedBytes, totalBytes),
-					ProcessedBytes: parsedBytes,
-					TotalBytes:     totalBytes,
-				}, false)
-			},
-		}
-
 		// V2 parser: single file
 		p, err := parserv2.New(logLogger, rdr, w.parent.WoWDB, w.parent.ItemFetcher)
 		if err != nil {
@@ -492,21 +376,6 @@ func (w *WorkerLogParse) Work(ctx context.Context, job *river.Job[ArgsLogParse])
 		loadDuration := time.Since(loadStart)
 		report.LoadFileDuration = chroniclesdk.DurationFrom(loadDuration)
 		metrics.loadFileDuration.Observe(loadDuration.Seconds())
-
-		var parsedBytes int64
-		totalBytes := files[0].SizeBytes
-		rdr = &progressReader{
-			Reader: rdr,
-			onRead: func(n int) {
-				parsedBytes += int64(n)
-				progressReporter.Record(chroniclesdk.LogParseProgress{
-					Phase:          "parsing",
-					Percent:        weightedProgressPercent(10, 70, parsedBytes, totalBytes),
-					ProcessedBytes: parsedBytes,
-					TotalBytes:     totalBytes,
-				}, false)
-			},
-		}
 
 		// Warmane (WotLK 3.3.5a) parser: single file
 		p, err := wotlk.New(ctx, logLogger, rdr, w.parent.WoWDB, w.parent.ItemFetcher, reg)
@@ -536,21 +405,6 @@ func (w *WorkerLogParse) Work(ctx context.Context, job *river.Job[ArgsLogParse])
 		loadDuration := time.Since(loadStart)
 		report.LoadFileDuration = chroniclesdk.DurationFrom(loadDuration)
 		metrics.loadFileDuration.Observe(loadDuration.Seconds())
-
-		var parsedBytes int64
-		totalBytes := files[0].SizeBytes
-		rdr = &progressReader{
-			Reader: rdr,
-			onRead: func(n int) {
-				parsedBytes += int64(n)
-				progressReporter.Record(chroniclesdk.LogParseProgress{
-					Phase:          "parsing",
-					Percent:        weightedProgressPercent(10, 70, parsedBytes, totalBytes),
-					ProcessedBytes: parsedBytes,
-					TotalBytes:     totalBytes,
-				}, false)
-			},
-		}
 
 		p, err := azerothcore.New(ctx, logLogger, rdr, w.parent.WoWDB, w.parent.ItemFetcher, reg)
 		if err != nil {
@@ -632,16 +486,8 @@ func (w *WorkerLogParse) Work(ctx context.Context, job *river.Job[ArgsLogParse])
 	// Track total finalize and DB insert durations
 	var totalFinalizeDuration time.Duration
 	var totalDBInsertDuration time.Duration
-	totalInstances := len(encountersState.Instances)
-	progressReporter.Record(chroniclesdk.LogParseProgress{
-		Phase:              "finalizing",
-		Percent:            weightedProgressPercent(80, 20, 0, int64(totalInstances)),
-		ProcessedInstances: 0,
-		TotalInstances:     totalInstances,
-	}, true)
 
 	for i, inst := range encountersState.Instances {
-		processedInstances := i + 1
 		instanceID := uuid.New()
 		builder := newInstanceBuilder(encountersState.Units, instanceID)
 
@@ -652,12 +498,6 @@ func (w *WorkerLogParse) Work(ctx context.Context, job *river.Job[ArgsLogParse])
 		totalFinalizeDuration += instFinalizeDuration
 
 		if finalized == nil {
-			progressReporter.Record(chroniclesdk.LogParseProgress{
-				Phase:              "finalizing",
-				Percent:            weightedProgressPercent(80, 20, int64(processedInstances), int64(totalInstances)),
-				ProcessedInstances: processedInstances,
-				TotalInstances:     totalInstances,
-			}, true)
 			continue
 		}
 
@@ -669,12 +509,6 @@ func (w *WorkerLogParse) Work(ctx context.Context, job *river.Job[ArgsLogParse])
 		if err != nil {
 			jobOut.InstanceFailures[fmt.Sprintf("%s_%d", inst.Name(), i)] = err.Error()
 			report.Instances = append(report.Instances, instReport)
-			progressReporter.Record(chroniclesdk.LogParseProgress{
-				Phase:              "finalizing",
-				Percent:            weightedProgressPercent(80, 20, int64(processedInstances), int64(totalInstances)),
-				ProcessedInstances: processedInstances,
-				TotalInstances:     totalInstances,
-			}, true)
 			continue
 		}
 
@@ -915,12 +749,6 @@ func (w *WorkerLogParse) Work(ctx context.Context, job *river.Job[ArgsLogParse])
 		}
 
 		metrics.encountersParsed.Add(float64(len(finalized.Encounters)))
-		progressReporter.Record(chroniclesdk.LogParseProgress{
-			Phase:              "finalizing",
-			Percent:            weightedProgressPercent(80, 20, int64(processedInstances), int64(totalInstances)),
-			ProcessedInstances: processedInstances,
-			TotalInstances:     totalInstances,
-		}, true)
 	}
 
 	// Record aggregate timing
@@ -948,12 +776,6 @@ func (w *WorkerLogParse) Work(ctx context.Context, job *river.Job[ArgsLogParse])
 
 	jobOut.Report = report
 	jobOut.Complete = ptr.Ref(time.Now())
-	jobOut.Progress = &chroniclesdk.LogParseProgress{
-		Phase:              "complete",
-		Percent:            100,
-		ProcessedInstances: totalInstances,
-		TotalInstances:     totalInstances,
-	}
 	jobResult = "success"
 	_ = river.RecordOutput(ctx, jobOut)
 

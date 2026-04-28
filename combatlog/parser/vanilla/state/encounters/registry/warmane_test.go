@@ -48,6 +48,7 @@ func TestWarmaneStaticRegistryMatchesImplementedFactories(t *testing.T) {
 		wotlk.TrialOfTheCrusaderFactory,
 		wotlk.RubySanctumFactory,
 		wotlk.NaxxramasFactory,
+		wotlk.IcecrownCitadelFactory,
 	} {
 		factory := factory
 		t.Run(factory.Name, func(t *testing.T) {

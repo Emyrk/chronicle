@@ -138,7 +138,7 @@ func (s *Service) Options() serpent.OptionSet {
 			Required:    false,
 			Flag:        "log-parse-worker-count",
 			Env:         "CHRONICLE_LOG_PARSING_WORKERS",
-			Default:     "1",
+			Default:     "4",
 			Value:       serpent.Int64Of(&s.logParsingWorkers),
 		},
 	}

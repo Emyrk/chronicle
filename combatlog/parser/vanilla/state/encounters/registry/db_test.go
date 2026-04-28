@@ -32,3 +32,19 @@ func TestWorldInstanceFactoryUsesMapIDFallback(t *testing.T) {
 	require.True(t, ident[4275].Boss)
 	require.Equal(t, "Archmage Arugal", ident[4275].EncounterName)
 }
+
+func TestWorldInstanceFactoryFallsBackToZoneDisplayName(t *testing.T) {
+	t.Parallel()
+
+	factory := worldInstanceFactory(
+		database.WorldInstanceTemplate{
+			Name:  "   ",
+			MapID: pgtype.Int4{Int32: 33, Valid: true},
+		},
+		[]database.WorldInstanceZoneName{{ZoneName: "shadowfang keep", DisplayName: "Shadowfang Keep"}},
+		nil,
+	)
+
+	require.Equal(t, "Shadowfang Keep", factory.Name)
+	require.True(t, factory.MatchZone(zone.Zone{Name: "shadowfang keep", MapID: 33}))
+}

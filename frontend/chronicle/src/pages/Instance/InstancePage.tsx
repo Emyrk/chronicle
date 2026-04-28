@@ -68,6 +68,14 @@ function getUnitName(guidStr: string, units: Record<string, InstanceUnit>): stri
   return `Enemy ${guidStr}`;
 }
 
+function normalizeRecord<T>(value: Record<string, T> | null | undefined): Record<string, T> {
+  return value ?? {};
+}
+
+function normalizeArray<T>(value: readonly T[] | null | undefined): readonly T[] {
+  return value ?? [];
+}
+
 // Helper to transform API data to view data
 function transformToInstance(
   apiInstance: {
@@ -78,21 +86,23 @@ function transformToInstance(
     end_time?: string;
     realm_name?: string;
     guild?: { id: string; name: string };
-    encounters: readonly WoWEncounterWithHostiles[];
-    players: Record<string, InstancePlayer>;
-    units: Record<string, InstanceUnit>;
+    encounters: readonly WoWEncounterWithHostiles[] | null;
+    players: Record<string, InstancePlayer> | null;
+    units: Record<string, InstanceUnit> | null;
     capabilities?: readonly string[];
     versions?: Record<string, string>;
     recorder_name?: string;
     recorder_guid?: string;
   },
 ): Instance {
-  const { players, units } = apiInstance;
+  const players = normalizeRecord(apiInstance.players);
+  const units = normalizeRecord(apiInstance.units);
+  const apiEncounters = normalizeArray(apiInstance.encounters);
 
   // Map encounters
-  const encounters: Encounter[] = apiInstance.encounters.map((enc) => {
+  const encounters: Encounter[] = apiEncounters.map((enc) => {
     // Build enemies from encounter hostiles
-    const enemies: EnemyUnit[] = enc.hostiles
+    const enemies: EnemyUnit[] = normalizeArray(enc.hostiles)
       .map((hostile) => {
         const guidStr = String(hostile.id);
         return {
@@ -119,7 +129,7 @@ function transformToInstance(
   });
 
   // Compute instance timing from encounters
-  const sortedEncounters = [...apiInstance.encounters].sort(
+  const sortedEncounters = [...apiEncounters].sort(
     (a, b) => new Date(a.start_time).getTime() - new Date(b.start_time).getTime()
   );
   const startTime = apiInstance.start_time || sortedEncounters[0]?.start_time || new Date().toISOString();

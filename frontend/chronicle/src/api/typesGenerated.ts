@@ -653,16 +653,6 @@ export interface JobStatus {
 }
 
 // From chroniclesdk/log.go
-export interface LogParseProgress {
-    readonly phase?: string;
-    readonly percent: number;
-    readonly processed_bytes?: number;
-    readonly total_bytes?: number;
-    readonly processed_instances?: number;
-    readonly total_instances?: number;
-}
-
-// From chroniclesdk/log.go
 export type KillType = "clean" | "partial" | "reset" | "wipe";
 
 export const KillTypes: KillType[] = ["clean", "partial", "reset", "wipe"];
@@ -1645,7 +1635,6 @@ export interface WoWParsedLogJobOutput {
     readonly complete: string | null;
     readonly instance_failures: Record<string, string>;
     readonly instances: readonly WoWSimpleParsedInstance[];
-    readonly progress?: LogParseProgress;
     /**
      * Report contains detailed timing and performance metrics for the parse job.
      */

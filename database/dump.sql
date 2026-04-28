@@ -1596,7 +1596,7 @@ ALTER TABLE ONLY wow_server_realms
     ADD CONSTRAINT wow_server_realms_created_by_fkey FOREIGN KEY (created_by) REFERENCES users(id);
 
 ALTER TABLE ONLY wow_server_realms
-    ADD CONSTRAINT wow_server_realms_server_id_fkey FOREIGN KEY (server_id) REFERENCES wow_servers(id);
+    ADD CONSTRAINT wow_server_realms_server_id_fkey FOREIGN KEY (server_id) REFERENCES wow_servers(id) ON DELETE CASCADE;
 
 ALTER TABLE ONLY wow_server_upload_keys
     ADD CONSTRAINT wow_server_upload_keys_created_by_fkey FOREIGN KEY (created_by) REFERENCES users(id);

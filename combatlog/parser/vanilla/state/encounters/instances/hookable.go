@@ -200,6 +200,8 @@ func (h *Hookable) Process(m messages.Message) (finalError error) {
 		return fmt.Errorf("processing unit message: %w", err)
 	}
 
+	var callbacks []func() error
+
 	switch msg := m.(type) {
 	case *messages.Realm:
 		if h.realm != nil {
@@ -230,10 +232,29 @@ func (h *Hookable) Process(m messages.Message) (finalError error) {
 		// callback is used to finish the fight. This should happen after all hooks
 		// have processed the message, but before the next message is processed.
 		if callback != nil {
-			defer func() {
-				finalError = callback()
-			}()
+			callbacks = append(callbacks, callback)
 		}
+	}
+
+	if msg, ok := m.(*messages.EncounterCredit); ok {
+		callback, err := h.EncounterCreditHandler(msg)
+		if err != nil {
+			return fmt.Errorf("encounter credit: %w", err)
+		}
+		if callback != nil {
+			callbacks = append(callbacks, callback)
+		}
+	}
+
+	if len(callbacks) > 0 {
+		defer func() {
+			for _, callback := range callbacks {
+				if err := callback(); err != nil {
+					finalError = err
+					return
+				}
+			}
+		}()
 	}
 
 	if len(h.hooks) > 0 {
@@ -257,6 +278,42 @@ func (h *Hookable) Process(m messages.Message) (finalError error) {
 	})
 
 	return nil
+}
+
+func (h *Hookable) EncounterCreditHandler(m *messages.EncounterCredit) (func() error, error) {
+	if h.currentFight == nil || !h.currentFight.active() {
+		return nil, nil
+	}
+
+	return func() error {
+		for _, hook := range h.hooks {
+			hook.FightEnded(h.currentFight.EncounterID, m)
+		}
+
+		return timings.Do1(h.timings, timingsFinalizeFight, func() error {
+			for id := range h.currentFight.ActiveHostiles {
+				char, ok := h.Characters.Get(id)
+				if !ok {
+					return fmt.Errorf("could not find character for hostile %s", id)
+				}
+
+				if id == m.UnitGUID {
+					char.Died("encounter credit", m)
+					continue
+				}
+
+				ender, ok := char.(interface {
+					End(reason string, m messages.Message, state period.EndState)
+				})
+				if ok {
+					ender.End("encounter credit", m, period.EndStateReset)
+				}
+			}
+
+			h.currentFight.End = &period.Moment{Timestamp: m, Reason: "encounter credit"}
+			return h.finalizeFight()
+		})
+	}, nil
 }
 
 // FightDetectionHandler manages the life of "currentFight".

@@ -605,6 +605,7 @@ func (a *API) AdminBulkReparseOutdatedInstances(w http.ResponseWriter, r *http.R
 
 	httpapi.Write(ctx, w, http.StatusAccepted, resp)
 }
+
 func (a *API) AdminGetSiteConfig(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 	config, err := a.Opts.Zed.GetSiteConfig(ctx)

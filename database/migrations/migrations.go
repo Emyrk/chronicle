@@ -13,6 +13,7 @@ import (
 	"sync"
 
 	"github.com/golang-migrate/migrate/v4"
+	migratedatabase "github.com/golang-migrate/migrate/v4/database"
 	"github.com/golang-migrate/migrate/v4/database/postgres"
 	"github.com/golang-migrate/migrate/v4/source"
 	"github.com/golang-migrate/migrate/v4/source/iofs"
@@ -22,6 +23,155 @@ import (
 	"github.com/riverqueue/river/rivermigrate"
 	"golang.org/x/xerrors"
 )
+
+func publicSchemaHasUserTables(db *sql.DB) (bool, error) {
+	const query = `
+		SELECT EXISTS (
+			SELECT 1
+			FROM information_schema.tables
+			WHERE table_schema = 'public'
+			  AND table_name <> 'schema_migrations'
+		)
+	`
+
+	var hasTables bool
+	if err := db.QueryRowContext(context.Background(), query).Scan(&hasTables); err != nil {
+		return false, fmt.Errorf("check public schema tables: %w", err)
+	}
+
+	return hasTables, nil
+}
+
+func cleanupInitBootstrapArtifacts(db *sql.DB) error {
+	const query = `
+		DROP DOMAIN IF EXISTS wow_log_group_files;
+		DROP DOMAIN IF EXISTS wow_guid;
+		DROP DOMAIN IF EXISTS activity_periods;
+	`
+
+	if _, err := db.ExecContext(context.Background(), query); err != nil {
+		return fmt.Errorf("cleanup init bootstrap artifacts: %w", err)
+	}
+
+	return nil
+}
+
+func cleanupParsedLogsBootstrapArtifacts(db *sql.DB) error {
+	const query = `
+		DROP TABLE IF EXISTS log_instance_players CASCADE;
+		DROP TABLE IF EXISTS log_instance_units CASCADE;
+		DROP TABLE IF EXISTS log_instance_encounter_damage_unit_summary CASCADE;
+		DROP TABLE IF EXISTS log_instance_encounter_hostiles CASCADE;
+		DROP TABLE IF EXISTS log_instance_encounters CASCADE;
+		DROP TABLE IF EXISTS log_instances CASCADE;
+		DROP TABLE IF EXISTS parsed_log_group CASCADE;
+		DROP TABLE IF EXISTS wow_server_realms CASCADE;
+		DROP TABLE IF EXISTS wow_servers CASCADE;
+		DROP TYPE IF EXISTS wow_playable_class CASCADE;
+		DROP TYPE IF EXISTS wow_playable_race CASCADE;
+	`
+
+	if _, err := db.ExecContext(context.Background(), query); err != nil {
+		return fmt.Errorf("cleanup parsed log bootstrap artifacts: %w", err)
+	}
+
+	return nil
+}
+
+func currentSchemaMigrationState(db *sql.DB) (version int, dirty bool, exists bool, err error) {
+	const query = `SELECT version, dirty FROM schema_migrations LIMIT 1`
+	if err = db.QueryRowContext(context.Background(), query).Scan(&version, &dirty); err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			return 0, false, false, nil
+		}
+		return 0, false, false, fmt.Errorf("read schema_migrations state: %w", err)
+	}
+	return version, dirty, true, nil
+}
+
+func normalizeEmptyBootstrapVersion(db *sql.DB, m *migrate.Migrate) error {
+	hasTables, err := publicSchemaHasUserTables(db)
+	if err != nil {
+		return err
+	}
+	if hasTables {
+		return nil
+	}
+
+	if err := cleanupInitBootstrapArtifacts(db); err != nil {
+		return err
+	}
+
+	version, dirty, exists, err := currentSchemaMigrationState(db)
+	if err != nil {
+		return err
+	}
+	if !exists {
+		return nil
+	}
+	if version == 0 && !dirty {
+		if forceErr := m.Force(migratedatabase.NilVersion); forceErr != nil {
+			return fmt.Errorf("normalize empty bootstrap migration version: %w", forceErr)
+		}
+	}
+
+	return nil
+}
+
+func runUpWithDirtyBootstrapRecovery(db *sql.DB, m *migrate.Migrate) error {
+	if err := normalizeEmptyBootstrapVersion(db, m); err != nil {
+		return err
+	}
+
+	err := m.Up()
+	if err == nil || errors.Is(err, migrate.ErrNoChange) {
+		return nil
+	}
+
+	var dirtyErr migrate.ErrDirty
+	if !errors.As(err, &dirtyErr) {
+		return fmt.Errorf("up: %w", err)
+	}
+
+	if dirtyErr.Version != 1 {
+		if dirtyErr.Version == 2 {
+			if cleanupErr := cleanupParsedLogsBootstrapArtifacts(db); cleanupErr != nil {
+				return cleanupErr
+			}
+			if forceErr := m.Force(1); forceErr != nil {
+				return fmt.Errorf("force migration version 1 after dirty parsed logs bootstrap: %w", forceErr)
+			}
+
+			err = m.Up()
+			if err != nil && !errors.Is(err, migrate.ErrNoChange) {
+				return fmt.Errorf("up after dirty parsed logs bootstrap recovery: %w", err)
+			}
+
+			return nil
+		}
+
+		return fmt.Errorf("up: %w", err)
+	}
+
+	hasTables, checkErr := publicSchemaHasUserTables(db)
+	if checkErr != nil {
+		return checkErr
+	}
+	if hasTables {
+		return fmt.Errorf("up: %w", err)
+	}
+
+	if forceErr := m.Force(migratedatabase.NilVersion); forceErr != nil {
+		return fmt.Errorf("force nil migration version after dirty bootstrap: %w", forceErr)
+	}
+
+	err = m.Up()
+	if err != nil && !errors.Is(err, migrate.ErrNoChange) {
+		return fmt.Errorf("up after dirty bootstrap recovery: %w", err)
+	}
+
+	return nil
+}
 
 //go:embed *.sql
 var migrations embed.FS
@@ -67,13 +217,9 @@ func UpFromSQLDB(db *sql.DB) (retErr error) {
 		retErr = srcErr
 	}()
 
-	err = m.Up()
+	err = runUpWithDirtyBootstrapRecovery(db, m)
 	if err != nil {
-		if errors.Is(err, migrate.ErrNoChange) {
-			// It's OK if no changes happened!
-		} else {
-			return fmt.Errorf("up: %w", err)
-		}
+		return err
 	}
 
 	err = RiverMigrateFromSQLDB(db)
@@ -98,6 +244,10 @@ func RiverMigrateFromSQLDB(db *sql.DB) error {
 	}
 
 	return nil
+}
+
+func RiverMigrate(pool *pgxpool.Pool) error {
+	return RiverMigrateFromSQLDB(stdlib.OpenDBFromPool(pool))
 }
 
 // Up runs SQL migrations to ensure the database schema is up-to-date.

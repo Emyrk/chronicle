@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"log/slog"
+	"strings"
 	"sync"
 
 	"github.com/Emyrk/chronicle/combatlog/parser/vanilla/state/encounters/instances"
@@ -33,12 +34,16 @@ func worldInstanceFactory(
 	}
 
 	names := make([]string, 0, len(zoneNames))
+	displayName := strings.TrimSpace(tmpl.Name)
 	for _, zn := range zoneNames {
 		names = append(names, zn.ZoneName)
+		if displayName == "" {
+			displayName = strings.TrimSpace(zn.DisplayName)
+		}
 	}
 
 	factory := &instances.CommonFactory{
-		Name:      tmpl.Name,
+		Name:      displayName,
 		ZoneNames: names,
 		Hostiles:  instances.FromMap(hostiles),
 	}

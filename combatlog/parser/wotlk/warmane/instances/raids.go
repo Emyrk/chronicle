@@ -192,3 +192,32 @@ var TrialOfTheCrusaderFactory = &instances.CommonFactory{
 	MapIDs:    []uint32{649},
 	Hostiles:  instances.FromMap(TrialOfTheCrusaderHostiles()),
 }
+
+// IcecrownCitadelHostiles returns the major boss creature entry IDs for Icecrown Citadel (map 631).
+// Coverage is boss-first and intentionally not exhaustive for trash or scripted events.
+func IcecrownCitadelHostiles() map[uint32]instances.Identity {
+	hostile := make(map[uint32]instances.Identity)
+	instances.LoadBosses(hostile, map[uint32]string{
+		36612: "Lord Marrowgar",
+		36855: "Lady Deathwhisper",
+		37813: "Deathbringer Saurfang",
+		36626: "Festergut",
+		36627: "Rotface",
+		36678: "Professor Putricide",
+		37955: "Blood-Queen Lana'thel",
+		36789: "Valithria Dreamwalker",
+		36853: "Sindragosa",
+		36597: "The Lich King",
+	})
+	hostile[37970] = instances.Identity{Hostile: true, EncounterName: "Blood Council", Boss: true}
+	hostile[37972] = instances.Identity{Hostile: true, EncounterName: "Blood Council", Boss: true}
+	hostile[37973] = instances.Identity{Hostile: true, EncounterName: "Blood Council", Boss: true}
+	return hostile
+}
+
+var IcecrownCitadelFactory = &instances.CommonFactory{
+	Name:      "Icecrown Citadel",
+	ZoneNames: []string{"icecrown citadel"},
+	MapIDs:    []uint32{631},
+	Hostiles:  instances.FromMap(IcecrownCitadelHostiles()),
+}

@@ -49,7 +49,7 @@ func New(ctx context.Context, logger *slog.Logger, r io.Reader, wowDB gamedb.Gam
 	inner.WithEventHook("CHRONICLE_UNIT_COMBAT", p.parseUnitCombat)
 	inner.WithEventHook("CHRONICLE_ENCOUNTER_START", p.parseEncounterNoop)
 	inner.WithEventHook("CHRONICLE_ENCOUNTER_END", p.parseEncounterNoop)
-	inner.WithEventHook("CHRONICLE_ENCOUNTER_CREDIT", p.parseEncounterNoop)
+	inner.WithEventHook("CHRONICLE_ENCOUNTER_CREDIT", p.parseEncounterCredit)
 	inner.WithEventHook("CHRONICLE_SPELL_TARGET_RESULT", p.parseChronicleNoop)
 	inner.WithEventHook("CHRONICLE_LOOT_ITEM", p.parseChronicleNoop)
 	inner.WithEventHook("CHRONICLE_LOOT_MONEY", p.parseChronicleNoop)
@@ -366,9 +366,40 @@ func (p *Parser) parseSpellInterrupt(ts time.Time, m *wotlk.Matched, _ string) (
 	}, nil
 }
 
+// parseEncounterCredit converts a CHRONICLE_ENCOUNTER_CREDIT line into a
+// messages.EncounterCredit so the instance tracker can close active boss fights
+// even when AzerothCore does not emit a UNIT_DIED for the boss.
+//
+// Fields: mapId, instanceId, encounterSlot, creatureEntry, creditType,
+// encounterID, "encounterName", durationSecs, unitGuid, "unitName"
+func (p *Parser) parseEncounterCredit(ts time.Time, m *wotlk.Matched, _ string) ([]messages.Message, error) {
+	_ = m.Int32()
+	_ = m.Int32()
+	_ = m.Int32()
+	_ = m.Int32()
+	_ = m.Int32()
+	_ = m.Int32()
+	_ = m.String()
+	_ = m.Int32()
+	unitGUID := m.Guid()
+	unitName := m.String()
+
+	if err := m.Error(); err != nil {
+		p.logger.Warn("failed to parse CHRONICLE_ENCOUNTER_CREDIT", "error", err)
+		return nil, nil
+	}
+
+	return []messages.Message{
+		&messages.EncounterCredit{
+			MessageBase: messages.Base(ts),
+			UnitGUID:    unitGUID,
+			UnitName:    unitName,
+		},
+	}, nil
+}
+
 // parseEncounterNoop consumes encounter bookkeeping events without producing any
-// messages. TODO: parse into typed messages when the frontend needs encounter
-// events.
+// messages.
 func (p *Parser) parseEncounterNoop(_ time.Time, _ *wotlk.Matched, _ string) ([]messages.Message, error) {
 	return nil, nil
 }

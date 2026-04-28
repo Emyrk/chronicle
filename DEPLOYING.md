@@ -190,7 +190,7 @@ All configuration is set via environment variables (prefixed `CHRONICLE_`) or eq
 
 | Variable | Flag | Default | Description |
 |----------|------|---------|-------------|
-| `CHRONICLE_LOG_PARSING_WORKERS` | `--log-parse-worker-count` | `1` | Number of parallel combat log parsing workers |
+| `CHRONICLE_LOG_PARSING_WORKERS` | `--log-parse-worker-count` | `4` | Number of parallel combat log parsing workers |
 
 ### Email (Optional)
 

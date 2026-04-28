@@ -17,6 +17,7 @@ import (
 	"github.com/Emyrk/chronicle/combatlog/parser/types/combatant"
 	"github.com/Emyrk/chronicle/combatlog/parser/vanilla/messages"
 	"github.com/Emyrk/chronicle/combatlog/parser/vanilla/state/encounters"
+	encounterinstances "github.com/Emyrk/chronicle/combatlog/parser/vanilla/state/encounters/instances"
 	"github.com/Emyrk/chronicle/combatlog/parser/vanilla/state/encounters/registry"
 	"github.com/Emyrk/chronicle/database"
 	"github.com/Emyrk/chronicle/database/gamedb"
@@ -231,5 +232,69 @@ func TestZulFarrakBossEncounterRegression(t *testing.T) {
 	require.Equal(t, "Theka the Martyr", result.Encounters[0].Name)
 	require.True(t, result.Encounters[0].Boss)
 	require.Nil(t, result.UnknownUnits)
+	require.EqualValues(t, 4, p.Metrics().TotalLinesParsed)
+}
+
+func TestEncounterCreditFinalizesActiveBossFight(t *testing.T) {
+	t.Parallel()
+
+	ctx := parsectx.WithType(context.Background(), database.LogTypeAzerothcore)
+	reg := registry.WarmaneStaticRegistry(slog.Default())
+	bossGUID := creatureGUID(38433, 14)
+	logData := strings.Join([]string{
+		`1777340510851  CHRONICLE_HEADER,"","3.3.5a",12340`,
+		`1777340510851  CHRONICLE_ZONE_INFO,"Vault of Archavon",624,12,"raid"`,
+		fmt.Sprintf(`1777340511000  SPELL_DAMAGE,0x0000000000000001,"Chronicle",0x400,0x%016X,"Toravon the Ice Watcher",0xa48,1,"Test Spell",0x1,10,0,1,0,0,0,nil,nil,nil`, uint64(bossGUID)),
+		fmt.Sprintf(`1777340512000  CHRONICLE_ENCOUNTER_CREDIT,624,12,0,38433,1,886,"Toravon the Ice Watcher",240,0x%016X,"Toravon the Ice Watcher"`, uint64(bossGUID)),
+	}, "\n")
+
+	p, err := New(ctx, slog.Default(), strings.NewReader(logData), stubSpellDB{}, nil, reg)
+	require.NoError(t, err)
+
+	output := encounters.New(ctx, slog.Default(), reg)
+	c := consumers.New(slog.Default(), output)
+	err = c.ConsumeAll(ctx, p)
+	require.NoError(t, err)
+	require.Len(t, output.Instances, 1)
+
+	result, err := output.Instances[0].Finalize(ctx)
+	require.NoError(t, err)
+	require.Len(t, result.Encounters, 1)
+	require.Equal(t, "Toravon the Ice Watcher", result.Encounters[0].Name)
+	require.True(t, result.Encounters[0].Boss)
+	require.Equal(t, encounterinstances.KillTypeClean, result.Encounters[0].KillType)
+	const totalLines = 4
+	require.EqualValues(t, totalLines, p.Metrics().TotalLinesParsed)
+}
+
+func TestIcecrownCitadelCouncilEncounterRegression(t *testing.T) {
+	t.Parallel()
+
+	ctx := parsectx.WithType(context.Background(), database.LogTypeAzerothcore)
+	reg := registry.WarmaneStaticRegistry(slog.Default())
+	bossGUID := creatureGUID(37970, 31)
+	logData := strings.Join([]string{
+		`1777340510851  CHRONICLE_HEADER,"","3.3.5a",12340`,
+		`1777340510851  CHRONICLE_ZONE_INFO,"Icecrown Citadel",631,254,"raid"`,
+		fmt.Sprintf(`1777340511000  SPELL_DAMAGE,0x0000000000000001,"Chronicle",0x400,0x%016X,"Prince Valanar",0x0,1,"Test Spell",0x1,10,0,1,0,0,0,nil,nil,nil`, uint64(bossGUID)),
+		fmt.Sprintf(`1777340512000  CHRONICLE_ENCOUNTER_CREDIT,631,254,0,37970,1,864,"Blood Council",0,0x%016X,"Prince Valanar"`, uint64(bossGUID)),
+	}, "\n")
+
+	p, err := New(ctx, slog.Default(), strings.NewReader(logData), stubSpellDB{}, nil, reg)
+	require.NoError(t, err)
+
+	output := encounters.New(ctx, slog.Default(), reg)
+	c := consumers.New(slog.Default(), output)
+	err = c.ConsumeAll(ctx, p)
+	require.NoError(t, err)
+	require.Len(t, output.Instances, 1)
+	require.Equal(t, "Icecrown Citadel", output.Instances[0].Name())
+
+	result, err := output.Instances[0].Finalize(ctx)
+	require.NoError(t, err)
+	require.Len(t, result.Encounters, 1)
+	require.Equal(t, "Blood Council", result.Encounters[0].Name)
+	require.True(t, result.Encounters[0].Boss)
+	require.Equal(t, encounterinstances.KillTypeClean, result.Encounters[0].KillType)
 	require.EqualValues(t, 4, p.Metrics().TotalLinesParsed)
 }
