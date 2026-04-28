@@ -1,5 +1,5 @@
 import { Link } from "react-router-dom";
-import { useAdminOutdatedInstances, useReparseLogGroup } from "@/api/queries";
+import { useAdminOutdatedInstances, useBulkReparseOutdatedInstances, useReparseLogGroup } from "@/api/queries";
 import { Card } from "@/components/ui/Card/Card";
 import { Button } from "@/components/ui/button";
 import { RefreshCw, Loader2, Search } from "lucide-react";
@@ -22,6 +22,7 @@ export function AdminOutdatedInstancesPage() {
   const [debouncedParserVersion, setDebouncedParserVersion] = useState("");
   const { data, isLoading, error, refetch } = useAdminOutdatedInstances(debouncedFilter || undefined, debouncedParserVersion || undefined);
   const reparseLogGroup = useReparseLogGroup();
+  const bulkReparse = useBulkReparseOutdatedInstances();
   const [reparsingIds, setReparsingIds] = useState<Set<string>>(new Set());
   const [debounceTimer, setDebounceTimer] = useState<ReturnType<typeof setTimeout>>();
   const [versionDebounceTimer, setVersionDebounceTimer] = useState<ReturnType<typeof setTimeout>>();
@@ -65,6 +66,34 @@ export function AdminOutdatedInstancesPage() {
     );
   };
 
+  const handleBulkReparse = () => {
+  bulkReparse.mutate(
+    {
+    instanceName: debouncedFilter || undefined,
+    parserVersion: debouncedParserVersion || undefined,
+    },
+    {
+    onSuccess: (result) => {
+      if (result.failed.length > 0) {
+      toast.warning("Bulk reparse partially queued", {
+        description: `${result.enqueued} of ${result.matched} logs were enqueued. ${result.failed.length} failed.`,
+      });
+      } else {
+      toast.success("Bulk reparse started", {
+        description: `${result.enqueued} logs were enqueued for reparse.`,
+      });
+      }
+      refetch();
+    },
+    onError: (err) => {
+      toast.error("Failed to bulk reparse", {
+      description: err.message,
+      });
+    },
+    }
+  );
+  };
+
   return (
     <div className="space-y-6">
       <div className="flex items-center gap-3">
@@ -97,6 +126,18 @@ export function AdminOutdatedInstancesPage() {
               className="w-full px-3 py-2 text-sm border rounded-md bg-background font-mono"
             />
           </div>
+      <Button
+      variant="default"
+      disabled={bulkReparse.isPending || isLoading || !data || data.instances.length === 0}
+      onClick={handleBulkReparse}
+      >
+      {bulkReparse.isPending ? (
+        <Loader2 className="h-4 w-4 animate-spin mr-2" />
+      ) : (
+        <RefreshCw className="h-4 w-4 mr-2" />
+      )}
+      Reparse All Filtered
+      </Button>
         </div>
       </Card>
 

@@ -53,6 +53,7 @@ import type {
   RequeueVersionResponse as RequeueVersionResponseGenerated,
   AdminBulkDeleteResponse as AdminBulkDeleteResponseGenerated,
   AdminBulkSelectedReparseResponse as AdminBulkSelectedReparseResponseGenerated,
+  AdminBulkReparseResponse as AdminBulkReparseResponseGenerated,
   AdminOutdatedInstancesResponse,
   SiteConfig,
 } from "./typesGenerated";
@@ -105,6 +106,7 @@ export type UpdateGuildSettingsRequest = UpdateGuildSettingsRequestGenerated;
 export type CreateJoinRequestBody = CreateJoinRequestBodyGenerated;
 export type AdminBulkDeleteResponse = AdminBulkDeleteResponseGenerated;
 export type AdminBulkSelectedReparseResponse = AdminBulkSelectedReparseResponseGenerated;
+export type AdminBulkReparseResponse = AdminBulkReparseResponseGenerated;
 
 export function useWhoami(options?: Omit<UseQueryOptions<boolean>, "queryKey" | "queryFn">) {
   return useQuery({
@@ -651,6 +653,28 @@ export function useReparseLogGroup() {
     onSuccess: (_data, { logId }) => {
       // Invalidate to refetch with new job status
       queryClient.invalidateQueries({ queryKey: ["logGroup", logId] });
+    },
+  });
+}
+
+export function useBulkReparseOutdatedInstances() {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: async ({ instanceName, parserVersion }: { instanceName?: string; parserVersion?: string }) => {
+      const params = new URLSearchParams();
+      if (instanceName) params.set("instance_name", instanceName);
+      if (parserVersion) params.set("parser_version", parserVersion);
+      const url = "/api/v1/admin/outdated-instances/reparse" + (params.toString() ? `?${params}` : "");
+      const response = await fetch(url, { method: "POST" });
+      if (!response.ok) {
+        const error = await response.json().catch(() => ({ message: "Failed to bulk reparse logs" }));
+        throw new Error(error.message || "Failed to bulk reparse logs");
+      }
+      return response.json() as Promise<AdminBulkReparseResponse>;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["admin", "outdated-instances"] });
     },
   });
 }

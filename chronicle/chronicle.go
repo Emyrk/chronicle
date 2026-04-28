@@ -64,7 +64,7 @@ type Chronicle struct {
 	ItemFetcher        gamedb.GearResolver
 	metrics            *logParseMetrics
 	emitParsingLogs    bool
-	instanceRegistry   *registry.Registry
+	instanceRegistry   registryProvider
 
 	mu                     sync.Mutex
 	insertParsedInstanceMu sync.Mutex
@@ -79,13 +79,29 @@ type Options struct {
 	EmitParsingLogs bool
 }
 
+type registryProvider interface {
+	Registry() *registry.Registry
+}
+
+type staticRegistryProvider struct {
+	reg *registry.Registry
+}
+
+func (s staticRegistryProvider) Registry() *registry.Registry {
+	return s.reg
+}
+
 func New(ctx context.Context, logger *slog.Logger, opts Options) (*Chronicle, error) {
-	//reg, err := registry.NewDBRegistry(ctx, logger, opts.Zed, opts.Ps, registry.DefaultRegistry(logger))
-	//if err != nil {
-	//	return nil, err
-	//}
-	//
-	reg := registry.DefaultRegistry(logger)
+	fallback := registry.DefaultRegistry(logger)
+	regProvider := registryProvider(staticRegistryProvider{reg: fallback})
+	if opts.Zed != nil {
+		dbReg, err := registry.NewDBRegistry(ctx, logger, opts.Zed, opts.Ps, fallback)
+		if err != nil {
+			logger.Warn("failed to initialize DB-backed instance registry, falling back to static registry", slog.String("error", err.Error()))
+		} else {
+			regProvider = dbReg
+		}
+	}
 
 	c := &Chronicle{
 		AppContext:         ctx,
@@ -98,7 +114,7 @@ func New(ctx context.Context, logger *slog.Logger, opts Options) (*Chronicle, er
 		metrics:            newLogParseMetrics(opts.Registry),
 		ItemFetcher:        opts.WoWDB,
 		emitParsingLogs:    opts.EmitParsingLogs,
-		instanceRegistry:   reg,
+		instanceRegistry:   regProvider,
 	}
 
 	err := c.initStorage(ctx)
@@ -115,7 +131,7 @@ func (c *Chronicle) EmitParsingLogs() bool {
 }
 
 func (c *Chronicle) Registry() *registry.Registry {
-	return c.instanceRegistry
+	return c.instanceRegistry.Registry()
 }
 
 func (c *Chronicle) SetQueue(queue *riverqueue.Queues) {

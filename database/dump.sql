@@ -558,6 +558,8 @@ CREATE VIEW log_instances_guild AS
     li.recorder_name,
     li.recorder_guid,
     li.duplicate_group_id,
+    li.start_time,
+    li.end_time,
     COALESCE(wsr.name, 'Unknown'::text) AS realm_name,
     g.name AS guild_name,
     g.realm_id AS guild_realm_id,
@@ -1594,7 +1596,7 @@ ALTER TABLE ONLY wow_server_realms
     ADD CONSTRAINT wow_server_realms_created_by_fkey FOREIGN KEY (created_by) REFERENCES users(id);
 
 ALTER TABLE ONLY wow_server_realms
-    ADD CONSTRAINT wow_server_realms_server_id_fkey FOREIGN KEY (server_id) REFERENCES wow_servers(id);
+    ADD CONSTRAINT wow_server_realms_server_id_fkey FOREIGN KEY (server_id) REFERENCES wow_servers(id) ON DELETE CASCADE;
 
 ALTER TABLE ONLY wow_server_upload_keys
     ADD CONSTRAINT wow_server_upload_keys_created_by_fkey FOREIGN KEY (created_by) REFERENCES users(id);

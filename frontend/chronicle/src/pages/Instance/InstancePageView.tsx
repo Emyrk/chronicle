@@ -2855,7 +2855,16 @@ export function InstancePageView({
           </Button>
         )}
         
-        {selectedEncounters.length > 0 ? (
+        {instance.encounters.length === 0 ? (
+          <div className="flex-1 flex items-center justify-center">
+            <Card className="max-w-xl p-6 text-center">
+              <p className="text-lg font-semibold">No encounters were parsed for this instance</p>
+              <p className="mt-2 text-sm text-muted-foreground">
+                The log matched this instance, but it did not produce any finalized encounters. This usually means the log only contains trash, setup activity, or incomplete combat for the zone.
+              </p>
+            </Card>
+          </div>
+        ) : selectedEncounters.length > 0 ? (
           <EncounterDetail
             instance={instance}
             encounters={selectedEncounters}

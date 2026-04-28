@@ -142,6 +142,19 @@ type AdminBulkSelectedReparseResponse struct {
 	Failed    []AdminBulkLogFailure `json:"failed"`
 }
 
+type AdminBulkReparseFailure struct {
+	LogGroupID uuid.UUID `json:"log_group_id"`
+	Name       string    `json:"name"`
+	Detail     string    `json:"detail"`
+}
+
+type AdminBulkReparseResponse struct {
+	Matched    int                       `json:"matched"`
+	Enqueued   int                       `json:"enqueued"`
+	MinVersion string                    `json:"min_version"`
+	Failed     []AdminBulkReparseFailure `json:"failed"`
+}
+
 type SiteConfig struct {
 	SignupsEnabled  bool   `json:"signups_enabled"`
 	ShortLinkDomain string `json:"short_link_domain,omitempty"`

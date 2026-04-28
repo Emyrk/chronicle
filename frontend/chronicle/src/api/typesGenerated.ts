@@ -43,6 +43,13 @@ export interface AdminBulkLogFailure {
 }
 
 // From chroniclesdk/user.go
+export interface AdminBulkReparseFailure {
+    readonly log_group_id: string;
+    readonly name: string;
+    readonly detail: string;
+}
+
+// From chroniclesdk/user.go
 export interface AdminBulkLogRequest {
     readonly log_ids: readonly string[];
 }
@@ -52,6 +59,14 @@ export interface AdminBulkSelectedReparseResponse {
     readonly requested: number;
     readonly enqueued: number;
     readonly failed: readonly AdminBulkLogFailure[];
+}
+
+// From chroniclesdk/user.go
+export interface AdminBulkReparseResponse {
+    readonly matched: number;
+    readonly enqueued: number;
+    readonly min_version: string;
+    readonly failed: readonly AdminBulkReparseFailure[];
 }
 
 // From chroniclesdk/user.go
@@ -1591,6 +1606,8 @@ export interface WoWInstance {
     readonly log_group_id: string;
     readonly name: string;
     readonly slug: string;
+    readonly start_time?: string;
+    readonly end_time?: string;
     readonly guild?: Guild;
     readonly capabilities: readonly string[];
     readonly versions: Record<string, string>;

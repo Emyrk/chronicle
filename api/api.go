@@ -161,6 +161,7 @@ func (api *API) Routes() chi.Router {
 			r.Post("/logs/reparse", api.AdminBulkReparseLogs)
 			r.Get("/instance-names", api.AdminListInstanceNames)
 			r.Get("/outdated-instances", api.AdminListOutdatedInstances)
+			r.Post("/outdated-instances/reparse", api.AdminBulkReparseOutdatedInstances)
 			r.Get("/site-config", api.AdminGetSiteConfig)
 			r.Put("/site-config", api.AdminUpdateSiteConfig)
 

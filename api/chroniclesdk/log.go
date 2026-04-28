@@ -72,6 +72,8 @@ type WoWInstance struct {
 	LogGroupID       uuid.UUID         `json:"log_group_id"`
 	Name             string            `json:"name"`
 	Slug             string            `json:"slug"`
+	StartTime        *time.Time        `json:"start_time,omitempty"`
+	EndTime          *time.Time        `json:"end_time,omitempty"`
 	Guild            *Guild            `json:"guild,omitempty"`
 	Capabilities     []string          `json:"capabilities"`
 	Versions         map[string]string `json:"versions"`

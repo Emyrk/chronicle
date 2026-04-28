@@ -111,6 +111,12 @@ func WoWInstanceWithGuild(instance database.LogInstance, dbG *database.Guild) ch
 		RecorderName: instance.RecorderName,
 		RecorderGUID: instance.RecorderGuid,
 	}
+	if instance.StartTime.Valid {
+		ret.StartTime = &instance.StartTime.Time
+	}
+	if instance.EndTime.Valid {
+		ret.EndTime = &instance.EndTime.Time
+	}
 	if instance.DuplicateGroupID.Valid {
 		ret.DuplicateGroupID = &instance.DuplicateGroupID.UUID
 	}
