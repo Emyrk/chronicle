@@ -49,6 +49,7 @@ build-backend:
 
 # Docker Compose targets for local development services
 COMPOSE_FILE := scripts/development/docker-compose.yml
+DOCKER_COMPOSE_FILE := compose.yml
 
 .PHONY: services-up
 services-up:
@@ -65,6 +66,26 @@ services-logs:
 .PHONY: services-clean
 services-clean:
 	docker compose -f $(COMPOSE_FILE) down -v
+
+.PHONY: docker-build
+docker-build:
+	docker compose -f $(DOCKER_COMPOSE_FILE) build
+
+.PHONY: docker-up
+docker-up:
+	docker compose -f $(DOCKER_COMPOSE_FILE) up --build -d
+
+.PHONY: docker-down
+docker-down:
+	docker compose -f $(DOCKER_COMPOSE_FILE) down
+
+.PHONY: docker-logs
+docker-logs:
+	docker compose -f $(DOCKER_COMPOSE_FILE) logs -f
+
+.PHONY: docker-clean
+docker-clean:
+	docker compose -f $(DOCKER_COMPOSE_FILE) down -v --remove-orphans
 
 # Default postgres port for docker-compose setup (5433)
 POSTGRES_PORT ?= 5433
@@ -178,4 +199,3 @@ test-postgres-docker:
 .PHONY: docs
 docs:
 	cd docs && pnpm dev
-

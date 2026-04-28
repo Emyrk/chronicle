@@ -1,0 +1,102 @@
+name: chronicle
+
+services:
+  app:
+    build:
+      context: .
+      dockerfile: services/chronicled/Dockerfile
+      args:
+        SERVER: ${SERVER:-turtle}
+        GIT_TAG: ${GIT_TAG:-docker}
+        GIT_COMMIT: ${GIT_COMMIT:-docker}
+        BUILD_TIME: ${BUILD_TIME:-docker}
+    depends_on:
+      postgres:
+        condition: service_healthy
+      spicedb:
+        condition: service_healthy
+      ocr-server:
+        condition: service_started
+    command: ["--dev-auth"]
+    environment:
+      CHRONICLE_ACCESS_URL: ${CHRONICLE_ACCESS_URL:-http://localhost:4000}
+      CHRONICLE_HTTP_ADDRESS: 0.0.0.0:4000
+      CHRONICLE_JWT_SECRET_PEM: ${CHRONICLE_JWT_SECRET_PEM:-dev}
+      CHRONICLE_POSTGRES_URL: postgresql://postgres:postgres@postgres:5432/${POSTGRES_DB:-chronicle}?sslmode=disable
+      CHRONICLE_SPICEDB_GRPC_URL: spicedb:50051
+      CHRONICLE_SPICEDB_PRESHARED_KEY: ${CHRONICLE_SPICEDB_PRESHARED_KEY:-chronicle-dev-key}
+      CHRONICLE_OCR_URL: http://ocr-server:8080
+      CHRONICLE_STORAGE_TYPE: local
+      CHRONICLE_DISCORD_BOT_DISABLE: ${CHRONICLE_DISCORD_BOT_DISABLE:-true}
+      CHRONICLE_JSON_LOGS: ${CHRONICLE_JSON_LOGS:-true}
+      CHRONICLE_PROMETHEUS_ENABLED: ${CHRONICLE_PROMETHEUS_ENABLED:-false}
+      CHRONICLE_PPROF_ENABLED: ${CHRONICLE_PPROF_ENABLED:-false}
+      CHRONICLE_DISCORD_CLIENT_ID: ${CHRONICLE_DISCORD_CLIENT_ID:-}
+      CHRONICLE_DISCORD_CLIENT_SECRET: ${CHRONICLE_DISCORD_CLIENT_SECRET:-}
+      CHRONICLE_DISCORD_BOT_TOKEN: ${CHRONICLE_DISCORD_BOT_TOKEN:-}
+      CHRONICLE_RESEND_API_KEY: ${CHRONICLE_RESEND_API_KEY:-}
+    ports:
+      - "4000:4000"
+    restart: unless-stopped
+    volumes:
+      - chronicle-storage:/root/.chronicle/storage
+
+  postgres:
+    image: postgres:17
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+      POSTGRES_DB: ${POSTGRES_DB:-chronicle}
+    volumes:
+      - chronicle-postgres-data:/var/lib/postgresql/data
+      - ./scripts/development/init-db.sh:/docker-entrypoint-initdb.d/init-db.sh:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres -d ${POSTGRES_DB:-chronicle}"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  spicedb-migrate:
+    image: authzed/spicedb:latest
+    command: migrate head
+    restart: on-failure
+    environment:
+      SPICEDB_DATASTORE_ENGINE: postgres
+      SPICEDB_DATASTORE_CONN_URI: postgres://postgres:postgres@postgres:5432/spicedb?sslmode=disable
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+  spicedb:
+    image: authzed/spicedb:latest
+    command: serve
+    restart: unless-stopped
+    environment:
+      SPICEDB_DATASTORE_ENGINE: postgres
+      SPICEDB_DATASTORE_CONN_URI: postgres://postgres:postgres@postgres:5432/spicedb?sslmode=disable
+      SPICEDB_GRPC_PRESHARED_KEY: ${CHRONICLE_SPICEDB_PRESHARED_KEY:-chronicle-dev-key}
+      SPICEDB_HTTP_ENABLED: "true"
+      SPICEDB_MAX_READ_RELATIONSHIPS_LIMIT: "20000"
+      SPICEDB_MAX_DELETE_RELATIONSHIPS_LIMIT: "20000"
+    depends_on:
+      spicedb-migrate:
+        condition: service_completed_successfully
+    healthcheck:
+      test: ["CMD", "grpc_health_probe", "-addr=localhost:50051"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 10s
+
+  ocr-server:
+    build:
+      context: ./internal/ocrserver
+      dockerfile: Dockerfile
+    environment:
+      PORT: 8080
+    restart: unless-stopped
+
+volumes:
+  chronicle-postgres-data:
+  chronicle-storage:
