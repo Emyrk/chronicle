@@ -77,8 +77,14 @@ cd frontend/chronicle && pnpm build
 ### Development
 
 ```bash
-# Start full dev server (backend on :3000, builds frontend)
+# Start local dependencies first (Postgres on :5433, SpiceDB, OCR)
+make services-up
+
+# Start full dev server (backend on :4000, builds frontend)
 make develop
+
+# Start backend only without requiring frontend/dist assets
+make develop-backend
 
 # Start frontend dev server with hot reload (proxies to backend)
 cd frontend/chronicle && pnpm dev
@@ -93,7 +99,7 @@ make test
 # Start Postgres in Docker for testing
 make test-postgres-docker
 
-# Create test database
+# Create the chronicle database when using local Postgres client tools
 make create-db
 ```
 

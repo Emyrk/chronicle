@@ -8,7 +8,7 @@ CREATE TABLE wow_servers (
 
 CREATE TABLE wow_server_realms (
   id UUID PRIMARY KEY,
-  server_id UUID NOT NULL REFERENCES wow_servers(id),
+  server_id UUID NOT NULL REFERENCES wow_servers(id) ON DELETE CASCADE,
   name TEXT NOT NULL
 )
 ;

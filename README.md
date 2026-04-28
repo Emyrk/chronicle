@@ -94,14 +94,22 @@ To build a different embedded server dataset, override `SERVER`, for example `SE
 ### Local Hybrid Development
 
 ```bash
-make services-up -d
-# Backend (runs on :4000)
+# Start local dependencies first (Postgres on :5433, SpiceDB, OCR)
+make services-up
+
+# Full dev server: backend on :4000 with built frontend assets served by Go
 make develop
 
-# Frontend with hot reload (proxies to backend)
+# Backend only: no embedded dist build required, uses slim frontend assets
+make develop-backend
+
+# Frontend with hot reload (proxies to backend on :4000)
 cd frontend/chronicle
 pnpm install
 pnpm dev
+
+# Optional: create the chronicle database when using a local Postgres client
+make create-db
 ```
 
 ## Tech Stack

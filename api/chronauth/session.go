@@ -2,6 +2,7 @@ package chronauth
 
 import (
 	"context"
+	"database/sql"
 	"errors"
 	"fmt"
 	"log/slog"
@@ -10,6 +11,7 @@ import (
 
 	"github.com/Emyrk/chronicle/api/chronauth/claims"
 	"github.com/Emyrk/chronicle/database/authz"
+	"github.com/jackc/pgx/v5"
 )
 
 type authContextKey struct{}
@@ -74,6 +76,21 @@ func (s *Service) AuthenticationMiddleware(next http.Handler) http.Handler {
 			_ = s.Logout(w, r)
 			next.ServeHTTP(w, withState(r, &AuthenticationContext{
 				Error: fmt.Errorf("invalid session (%s): %w", err.Error(), ErrNotAuthorized),
+			}))
+			return
+		}
+
+		if _, err := s.Zed.GetUserByID(r.Context(), c.Subject); err != nil {
+			if errors.Is(err, sql.ErrNoRows) || errors.Is(err, pgx.ErrNoRows) {
+				_ = s.Logout(w, r)
+				next.ServeHTTP(w, withState(r, &AuthenticationContext{
+					Error: fmt.Errorf("session user missing (%s): %w", c.Subject.String(), ErrNotAuthorized),
+				}))
+				return
+			}
+
+			next.ServeHTTP(w, withState(r, &AuthenticationContext{
+				Error: fmt.Errorf("lookup session user: %w", err),
 			}))
 			return
 		}

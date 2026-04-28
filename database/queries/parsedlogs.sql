@@ -150,7 +150,7 @@ WHERE
 SELECT 
     li.id,
     li.hashed_slug as slug,
-    li.name,
+  COALESCE(NULLIF(btrim(li.name), ''), NULLIF(btrim(sm.instance_name), ''), li.name) as name,
     li.realm_id,
     wsr.name as realm_name,
     wlg.owner as uploader_id,
@@ -173,6 +173,7 @@ SELECT
 FROM log_instances li
 JOIN parsed_log_group plg ON plg.id = li.log_group_id
 JOIN wow_log_groups wlg ON wlg.id = plg.id
+LEFT JOIN server_upload_meta sm ON sm.log_group_id = li.log_group_id
 JOIN users u ON u.id = wlg.owner
 JOIN wow_server_realms wsr ON wsr.id = li.realm_id
 LEFT JOIN guilds g ON g.id = li.guild_id
@@ -180,7 +181,7 @@ WHERE true
     -- Filter by instance names
     AND CASE
         WHEN cardinality(@instance_names :: text[]) > 0 THEN
-            li.name = ANY(@instance_names :: text[])
+      COALESCE(NULLIF(btrim(li.name), ''), NULLIF(btrim(sm.instance_name), ''), li.name) = ANY(@instance_names :: text[])
         ELSE true
     END
     -- Filter by video presence
@@ -217,7 +218,7 @@ LIMIT @limit_count;
 SELECT 
     li.id,
     li.hashed_slug as slug,
-    li.name,
+  COALESCE(NULLIF(btrim(li.name), ''), NULLIF(btrim(sm.instance_name), ''), li.name) as name,
     li.realm_id,
     wsr.name as realm_name,
     wlg.owner as uploader_id,
@@ -240,6 +241,7 @@ SELECT
 FROM log_instances li
 JOIN parsed_log_group plg ON plg.id = li.log_group_id
 JOIN wow_log_groups wlg ON wlg.id = plg.id
+LEFT JOIN server_upload_meta sm ON sm.log_group_id = li.log_group_id
 JOIN users u ON u.id = wlg.owner
 JOIN wow_server_realms wsr ON wsr.id = li.realm_id
 LEFT JOIN guilds g ON g.id = li.guild_id
@@ -256,7 +258,7 @@ WHERE true
     -- Filter by instance names
     AND CASE
         WHEN cardinality(@instance_names :: text[]) > 0 THEN
-            li.name = ANY(@instance_names :: text[])
+        COALESCE(NULLIF(btrim(li.name), ''), NULLIF(btrim(sm.instance_name), ''), li.name) = ANY(@instance_names :: text[])
         ELSE true
     END
     -- Filter by video presence
@@ -296,7 +298,7 @@ SELECT DISTINCT ON (
     )
     li.id,
     li.hashed_slug as slug,
-    li.name,
+    COALESCE(NULLIF(btrim(li.name), ''), NULLIF(btrim(sm.instance_name), ''), li.name) as name,
     li.realm_id,
     wsr.name as realm_name,
     wlg.owner as uploader_id,
@@ -320,6 +322,7 @@ FROM log_instances li
 JOIN log_instance_players lip ON lip.instance_id = li.id
 JOIN parsed_log_group plg ON plg.id = li.log_group_id
 JOIN wow_log_groups wlg ON wlg.id = plg.id
+LEFT JOIN server_upload_meta sm ON sm.log_group_id = li.log_group_id
 JOIN users u ON u.id = wlg.owner
 JOIN wow_server_realms wsr ON wsr.id = li.realm_id
 LEFT JOIN guilds g ON g.id = li.guild_id
@@ -327,7 +330,7 @@ WHERE lip.name ILIKE @player_name
     -- Filter by instance names
     AND CASE
         WHEN cardinality(@instance_names :: text[]) > 0 THEN
-            li.name = ANY(@instance_names :: text[])
+      COALESCE(NULLIF(btrim(li.name), ''), NULLIF(btrim(sm.instance_name), ''), li.name) = ANY(@instance_names :: text[])
         ELSE true
     END
     -- Filter by video presence

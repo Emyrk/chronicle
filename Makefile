@@ -24,11 +24,12 @@ frontend/chronicle/dist: $(wildcard frontend/**)
 	(cd frontend/chronicle; pnpm install; SERVER=$(SERVER) pnpm build)
 
 # SERVER controls which WoW server DBC data to compile in (turtle, epoch, etc.)
-SERVER ?= turtle
+SERVER ?= warmane
+DB_NAME := $(if $(filter turtle,$(SERVER)),chronicle,$(SERVER))
 
 .PHONY: develop
 develop: frontend/chronicle/dist create-db
-	go run --tags "static $(SERVER)" $(LD_BUILD_FLAGS) ./cmd/chronicled server --dev-auth --jwt-secret-pem="dev" --ocr-url="http://localhost:8730"
+	go run --tags "static $(SERVER)" $(LD_BUILD_FLAGS) ./cmd/chronicled server --dev-auth --jwt-secret-pem="dev" --ocr-url="http://localhost:8730" --disable-discord-bot=true
 
 develop-backend-fresh:
 	docker rm -f chronicle-db-fresh 2>/dev/null || true
@@ -38,13 +39,17 @@ develop-backend-fresh:
 	go run --tags "static $(SERVER)" $(LD_BUILD_FLAGS) ./cmd/chronicled server --dev-auth --jwt-secret-pem="dev" --log-parse-worker-count=4 --ocr-url="http://localhost:8730" --emit-parse-logs --postgres-url="postgres://postgres:postgres@127.0.0.1:5533/postgres?sslmode=disable"
 
 develop-backend: create-db
-	go run --tags "static $(SERVER)" $(LD_BUILD_FLAGS) ./cmd/chronicled server --dev-auth --jwt-secret-pem="dev" --log-parse-worker-count=4 --ocr-url="http://localhost:8730" --emit-parse-logs
+	go run --tags "$(SERVER)" $(LD_BUILD_FLAGS) ./cmd/chronicled server --dev-auth --jwt-secret-pem="dev" --log-parse-worker-count=4 --ocr-url="http://localhost:8730" --emit-parse-logs --disable-discord-bot=true
 
 .PHONY: build
-build: build-backend frontend/chronicle/dist
+build: build-backend-static
 
 .PHONY: build-backend
 build-backend:
+	go build --tags "$(SERVER)" $(LD_BUILD_FLAGS) -o bin/chronicled ./cmd/chronicled
+
+.PHONY: build-backend-static
+build-backend-static: frontend/chronicle/dist
 	go build --tags "static $(SERVER)" $(LD_BUILD_FLAGS) -o bin/chronicled ./cmd/chronicled
 
 # Docker Compose targets for local development services
@@ -92,7 +97,23 @@ POSTGRES_PORT ?= 5433
 
 .PHONY: create-db
 create-db:
-	PGPASSWORD='postgres' createdb -U postgres -h localhost -p $(POSTGRES_PORT) chronicle || true
+	@set -e; \
+	if command -v createdb >/dev/null 2>&1; then \
+		output="$$(PGPASSWORD='postgres' createdb -U postgres -h localhost -p $(POSTGRES_PORT) $(DB_NAME) 2>&1)" || status=$$?; \
+	elif docker compose -f $(COMPOSE_FILE) ps postgres >/dev/null 2>&1; then \
+		output="$$(docker compose -f $(COMPOSE_FILE) exec -T postgres psql -U postgres -d postgres -v ON_ERROR_STOP=1 -c 'CREATE DATABASE $(DB_NAME);' 2>&1)" || status=$$?; \
+	else \
+		echo "createdb not found and dockerized Postgres is unavailable. Install PostgreSQL client tools or run 'make services-up'." >&2; \
+		exit 1; \
+	fi; \
+	if [ -z "$${status:-}" ]; then \
+		:; \
+	elif printf '%s\n' "$$output" | grep -q "already exists"; then \
+		:; \
+	else \
+		printf '%s\n' "$$output" >&2; \
+		exit "$$status"; \
+	fi
 
 frontend/chronicle/src/api/typesGenerated.ts: gen/go $(wildcard scripts/apitypings/*) $(shell find ./api/chroniclesdk $(FIND_EXCLUSIONS) -type f -name '*.go') go.mod go.sum
 	# -C sets the directory for the go run command
