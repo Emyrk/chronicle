@@ -22,6 +22,8 @@ var tableDetectors = []tableDetector{
 	{"world_display_info", []string{"ID", "icon"}},
 	{"world_creature_spawn", []string{"guid", "map"}},
 	{"world_creature_template", []string{"entry", "display_id1", "subname"}},
+	{"world_instance_script", []string{"map", "parent", "script"}},
+	{"world_boss_credit", []string{"entry", "creditType", "creditEntry", "lastEncounterDungeon"}},
 	{"world_item_template", []string{"entry", "inventory_type"}},
 	{"world_item_enchantment", []string{"entry", "ench", "chance"}},
 	{"world_spell_area", []string{"spell", "area", "autocast"}},
@@ -62,6 +64,20 @@ var tableSchemas = map[string]*tableSchema{
 			"school_immune_mask", "immunity_flags",
 		},
 		PKColumns: []string{"entry"},
+	},
+	"world_instance_script": {
+		Columns:   []string{"map", "parent", "script"},
+		PKColumns: []string{"map"},
+	},
+	"world_boss_credit": {
+		Columns:   []string{"entry", "credit_type", "credit_entry", "last_encounter_dungeon", "comment"},
+		PKColumns: []string{"entry"},
+		JSONToDB: map[string]string{
+			"creditType":           "credit_type",
+			"creditEntry":          "credit_entry",
+			"lastEncounterDungeon": "last_encounter_dungeon",
+		},
+		TextColumns: map[string]bool{"comment": true},
 	},
 	"world_item_enchantment": {
 		Columns:   []string{"entry", "ench", "chance"},

@@ -1,19 +1,22 @@
 -- name: ListWorldInstanceTemplates :many
-SELECT * FROM world_instance_template ORDER BY name;
+SELECT id, name, abbreviation, category, boss_count, background, map_id, created_at, updated_at
+FROM world_instance_template
+ORDER BY name;
 
 -- name: GetWorldInstanceTemplateByZoneName :one
-SELECT wit.*
+SELECT wit.id, wit.name, wit.abbreviation, wit.category, wit.boss_count, wit.background, wit.map_id, wit.created_at, wit.updated_at
 FROM world_instance_template wit
 JOIN world_instance_zone_names wizn ON wit.id = wizn.instance_id
 WHERE wizn.zone_name = $1;
 
 -- name: UpsertWorldInstanceTemplate :one
-INSERT INTO world_instance_template (name, abbreviation, category, boss_count, background)
-VALUES ($1, $2, $3, $4, $5)
+INSERT INTO world_instance_template (name, abbreviation, category, boss_count, background, map_id)
+VALUES ($1, $2, $3, $4, $5, $6)
 ON CONFLICT (name) DO UPDATE SET
   abbreviation = EXCLUDED.abbreviation,
   category = EXCLUDED.category,
   boss_count = EXCLUDED.boss_count,
+  map_id = EXCLUDED.map_id,
   background = EXCLUDED.background,
   updated_at = NOW()
 RETURNING *;

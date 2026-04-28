@@ -39,8 +39,10 @@ func VoAHostiles() map[uint32]instances.Identity {
 var VoAFactory = &instances.CommonFactory{
 	Name:      "Vault of Archavon",
 	ZoneNames: []string{"vault of archavon"},
+	MapIDs:    []uint32{624},
 	Hostiles:  instances.FromMap(VoAHostiles()),
 }
+
 // ObsidianSanctumHostiles returns creature entry IDs for The Obsidian Sanctum (zone 4493).
 // Single boss (Sartharion) with three optional drake lieutenants.
 func ObsidianSanctumHostiles() map[uint32]instances.Identity {
@@ -68,8 +70,10 @@ func ObsidianSanctumHostiles() map[uint32]instances.Identity {
 var ObsidianSanctumFactory = &instances.CommonFactory{
 	Name:      "Obsidian Sanctum",
 	ZoneNames: []string{"the obsidian sanctum"},
+	MapIDs:    []uint32{615},
 	Hostiles:  instances.FromMap(ObsidianSanctumHostiles()),
 }
+
 // NaxxramasHostiles returns creature entry IDs for Naxxramas (WotLK).
 // Reuses the Vanilla Naxx hostile list, replacing Highlord Mograine with Baron Rivendare
 // for the Four Horsemen encounter.
@@ -86,7 +90,134 @@ func NaxxramasHostiles() map[uint32]instances.Identity {
 var NaxxramasFactory = &instances.CommonFactory{
 	Name:      "Naxxramas",
 	ZoneNames: []string{"naxxramas", "the upper necropolis"},
+	MapIDs:    []uint32{533},
 	Hostiles:  instances.FromMap(NaxxramasHostiles()),
 }
 
+// EyeOfEternityHostiles returns creature entry IDs for The Eye of Eternity (map 616).
+// The live AzerothCore map data only exposes Malygos and encounter vortexes as hostile units.
+func EyeOfEternityHostiles() map[uint32]instances.Identity {
+	hostile := make(map[uint32]instances.Identity)
+	instances.LoadAdds(hostile, map[uint32]string{
+		30090: "Vortex",
+	})
+	instances.LoadBosses(hostile, map[uint32]string{
+		28859: "Malygos",
+	})
+	return hostile
+}
 
+var EyeOfEternityFactory = &instances.CommonFactory{
+	Name:      "Eye of Eternity",
+	ZoneNames: []string{"the eye of eternity", "eye of eternity"},
+	MapIDs:    []uint32{616},
+	Hostiles:  instances.FromMap(EyeOfEternityHostiles()),
+}
+
+// RubySanctumHostiles returns creature entry IDs for The Ruby Sanctum (map 724).
+// Hostiles are sourced from the live AzerothCore map spawns for the instance.
+func RubySanctumHostiles() map[uint32]instances.Identity {
+	hostile := make(map[uint32]instances.Identity)
+	instances.LoadAdds(hostile, map[uint32]string{
+		40417: "Charscale Invoker",
+		40419: "Charscale Assaulter",
+		40628: "Ruby Scalebane",
+		40421: "Charscale Elite",
+		40626: "Ruby Drakonid",
+		40627: "Ruby Drake",
+		39794: "Zarithrian Spawn Stalker",
+		40423: "Charscale Commander",
+	})
+	instances.LoadBosses(hostile, map[uint32]string{
+		39746: "General Zarithrian",
+		39747: "Saviana Ragefire",
+		39751: "Baltharus the Warborn",
+		39863: "Halion",
+	})
+	return hostile
+}
+
+var RubySanctumFactory = &instances.CommonFactory{
+	Name:      "Ruby Sanctum",
+	ZoneNames: []string{"the ruby sanctum", "ruby sanctum"},
+	MapIDs:    []uint32{724},
+	Hostiles:  instances.FromMap(RubySanctumHostiles()),
+}
+
+// TrialOfTheCrusaderHostiles returns creature entry IDs for Trial of the Crusader (map 649).
+// This slice covers the primary raid bosses, their major adds, and the known faction champion units
+// exposed in the live AzerothCore creature templates. Champion coverage is intentionally not exhaustive.
+func TrialOfTheCrusaderHostiles() map[uint32]instances.Identity {
+	hostile := make(map[uint32]instances.Identity)
+	instances.LoadAdds(hostile, map[uint32]string{
+		34784: "Legion Flame",
+		34813: "Infernal Volcano",
+		34825: "Nether Portal",
+		34826: "Mistress of Pain",
+		34606: "Frost Sphere",
+		34607: "Nerubian Burrower",
+		35314: "Orgrimmar Champion",
+		35323: "Sen'jin Champion",
+		35325: "Thunder Bluff Champion",
+		35326: "Silvermoon Champion",
+		35327: "Undercity Champion",
+		35328: "Stormwind Champion",
+		35329: "Ironforge Champion",
+		35330: "Exodar Champion",
+		35331: "Gnomeregan Champion",
+		35332: "Darnassus Champion",
+	})
+	instances.LoadBosses(hostile, map[uint32]string{
+		34780: "Lord Jaraxxus",
+		34796: "Gormok the Impaler",
+		34797: "Icehowl",
+		34799: "Dreadscale",
+		35144: "Acidmaw",
+		34496: "Eydis Darkbane",
+		34497: "Fjola Lightbane",
+		29120: "Anub'arak",
+		35469: "Gormok the Impaler",
+		35470: "Icehowl",
+		36065: "Fjola Lightbane",
+		36066: "Eydis Darkbane",
+		34564: "Anub'arak",
+		34660: "Anub'arak",
+	})
+	return hostile
+}
+
+var TrialOfTheCrusaderFactory = &instances.CommonFactory{
+	Name:      "Trial of the Crusader",
+	ZoneNames: []string{"trial of the crusader", "trial of the grand crusader"},
+	MapIDs:    []uint32{649},
+	Hostiles:  instances.FromMap(TrialOfTheCrusaderHostiles()),
+}
+
+// IcecrownCitadelHostiles returns the major boss creature entry IDs for Icecrown Citadel (map 631).
+// Coverage is boss-first and intentionally not exhaustive for trash or scripted events.
+func IcecrownCitadelHostiles() map[uint32]instances.Identity {
+	hostile := make(map[uint32]instances.Identity)
+	instances.LoadBosses(hostile, map[uint32]string{
+		36612: "Lord Marrowgar",
+		36855: "Lady Deathwhisper",
+		37813: "Deathbringer Saurfang",
+		36626: "Festergut",
+		36627: "Rotface",
+		36678: "Professor Putricide",
+		37955: "Blood-Queen Lana'thel",
+		36789: "Valithria Dreamwalker",
+		36853: "Sindragosa",
+		36597: "The Lich King",
+	})
+	hostile[37970] = instances.Identity{Hostile: true, EncounterName: "Blood Council", Boss: true}
+	hostile[37972] = instances.Identity{Hostile: true, EncounterName: "Blood Council", Boss: true}
+	hostile[37973] = instances.Identity{Hostile: true, EncounterName: "Blood Council", Boss: true}
+	return hostile
+}
+
+var IcecrownCitadelFactory = &instances.CommonFactory{
+	Name:      "Icecrown Citadel",
+	ZoneNames: []string{"icecrown citadel"},
+	MapIDs:    []uint32{631},
+	Hostiles:  instances.FromMap(IcecrownCitadelHostiles()),
+}

@@ -41,11 +41,11 @@ const (
 )
 
 type Hookable struct {
-	name          string
-	timings       *timings.Accumulator
+	name    string
+	timings *timings.Accumulator
 	factory *CommonFactory
-	logger        *slog.Logger
-	units         *unitdb.Units
+	logger  *slog.Logger
+	units   *unitdb.Units
 
 	// Static
 	CurrentZone zone.Zone
@@ -131,11 +131,11 @@ func (f *CommonFactory) NewHookable(ctx context.Context, logger *slog.Logger, db
 	}
 
 	c := &Hookable{
-		name:          f.Name,
-		factory:       f,
-		logger:        logger,
-		units:         db,
-		CurrentZone:   z,
+		name:        f.Name,
+		factory:     f,
+		logger:      logger,
+		units:       db,
+		CurrentZone: z,
 		//Auras:           auraTracking,
 		Characters:      chrs,
 		Identifier:      f.Hostiles(),
@@ -192,13 +192,15 @@ func (h *Hookable) SetVersions(versions map[string]string, player *guid.GUID) {
 
 // MatchesZone
 // TODO: Should we care about the instance ID here?
-func (h *Hookable) MatchesZone(z zone.Zone) bool { return h.factory.MatchZone(z.Name) }
+func (h *Hookable) MatchesZone(z zone.Zone) bool { return h.factory.MatchZone(z) }
 
 func (h *Hookable) Process(m messages.Message) (finalError error) {
 	err := h.units.ProcessMessage(m)
 	if err != nil {
 		return fmt.Errorf("processing unit message: %w", err)
 	}
+
+	var callbacks []func() error
 
 	switch msg := m.(type) {
 	case *messages.Realm:
@@ -230,10 +232,29 @@ func (h *Hookable) Process(m messages.Message) (finalError error) {
 		// callback is used to finish the fight. This should happen after all hooks
 		// have processed the message, but before the next message is processed.
 		if callback != nil {
-			defer func() {
-				finalError = callback()
-			}()
+			callbacks = append(callbacks, callback)
 		}
+	}
+
+	if msg, ok := m.(*messages.EncounterCredit); ok {
+		callback, err := h.EncounterCreditHandler(msg)
+		if err != nil {
+			return fmt.Errorf("encounter credit: %w", err)
+		}
+		if callback != nil {
+			callbacks = append(callbacks, callback)
+		}
+	}
+
+	if len(callbacks) > 0 {
+		defer func() {
+			for _, callback := range callbacks {
+				if err := callback(); err != nil {
+					finalError = err
+					return
+				}
+			}
+		}()
 	}
 
 	if len(h.hooks) > 0 {
@@ -257,6 +278,42 @@ func (h *Hookable) Process(m messages.Message) (finalError error) {
 	})
 
 	return nil
+}
+
+func (h *Hookable) EncounterCreditHandler(m *messages.EncounterCredit) (func() error, error) {
+	if h.currentFight == nil || !h.currentFight.active() {
+		return nil, nil
+	}
+
+	return func() error {
+		for _, hook := range h.hooks {
+			hook.FightEnded(h.currentFight.EncounterID, m)
+		}
+
+		return timings.Do1(h.timings, timingsFinalizeFight, func() error {
+			for id := range h.currentFight.ActiveHostiles {
+				char, ok := h.Characters.Get(id)
+				if !ok {
+					return fmt.Errorf("could not find character for hostile %s", id)
+				}
+
+				if id == m.UnitGUID {
+					char.Died("encounter credit", m)
+					continue
+				}
+
+				ender, ok := char.(interface {
+					End(reason string, m messages.Message, state period.EndState)
+				})
+				if ok {
+					ender.End("encounter credit", m, period.EndStateReset)
+				}
+			}
+
+			h.currentFight.End = &period.Moment{Timestamp: m, Reason: "encounter credit"}
+			return h.finalizeFight()
+		})
+	}, nil
 }
 
 // FightDetectionHandler manages the life of "currentFight".
@@ -401,6 +458,7 @@ func (h *Hookable) Finalize(ctx context.Context) (*FinalizedInstance, error) {
 		}
 		adEncounterName := ""
 		encounterName := ""
+		var encounterNamedAt *time.Time
 		encounterType := types.EncounterTypeTRASH
 		isBossFight := false
 		// TODO: Fix to boss count, as there can be 2 bosses
@@ -412,7 +470,7 @@ func (h *Hookable) Finalize(ctx context.Context) (*FinalizedInstance, error) {
 				return nil, ctx.Err()
 			}
 			if hid != hostile.ID {
-				panic("inconsistent hostile ID mapping")
+				return nil, fmt.Errorf("inconsistent hostile ID mapping: key=%v hostile=%v", hid, hostile.ID)
 			}
 
 			id := h.IdentifyUnit(hostile.ID)
@@ -432,16 +490,26 @@ func (h *Hookable) Finalize(ctx context.Context) (*FinalizedInstance, error) {
 				killed[entry]++
 			}
 
-			// Always take the encounter name if set
+			namedAt := hostile.Activity[0].Start.Timestamp.Date()
+
+			// Prefer the earliest named hostile in the fight so encounter naming is
+			// deterministic even when multiple named boss/helper units are present.
 			if id.EncounterName != "" {
-				encounterName = id.EncounterName
-				encounterType = types.EncounterTypeBOSS
+				if encounterNamedAt == nil || namedAt.Before(*encounterNamedAt) {
+					encounterName = id.EncounterName
+					encounterType = types.EncounterTypeBOSS
+					encounterNamedAt = &namedAt
+				}
 			}
 
 			if id.EncounterNameFn != nil {
 				if res := id.EncounterNameFn(fight); res != nil {
-					encounterName = res.EncounterName
+					if encounterNamedAt == nil || namedAt.Before(*encounterNamedAt) {
+						encounterName = res.EncounterName
+						encounterNamedAt = &namedAt
+					}
 					if res.Bosses != nil {
+						encounterType = types.EncounterTypeBOSS
 						isBossFight = isBossFight || len(res.Bosses) > 0
 						for _, bossID := range res.Bosses {
 							bossesRequired[bossID] = struct{}{}

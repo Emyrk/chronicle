@@ -803,6 +803,14 @@ CREATE TABLE world (
     created_at timestamp with time zone DEFAULT now() NOT NULL
 );
 
+CREATE TABLE world_boss_credit (
+    entry integer NOT NULL,
+    credit_type integer DEFAULT 0 NOT NULL,
+    credit_entry integer DEFAULT 0 NOT NULL,
+    last_encounter_dungeon integer DEFAULT 0 NOT NULL,
+    comment text DEFAULT ''::text NOT NULL
+);
+
 CREATE TABLE world_creature_spawn (
     guid integer NOT NULL,
     id integer DEFAULT 0 NOT NULL,
@@ -855,6 +863,12 @@ CREATE TABLE world_display_info (
     icon text DEFAULT ''::text NOT NULL
 );
 
+CREATE TABLE world_instance_script (
+    map integer NOT NULL,
+    parent integer DEFAULT 0 NOT NULL,
+    script text DEFAULT ''::text NOT NULL
+);
+
 CREATE TABLE world_instance_template (
     id uuid DEFAULT gen_random_uuid() NOT NULL,
     name text NOT NULL,
@@ -863,7 +877,8 @@ CREATE TABLE world_instance_template (
     boss_count integer,
     background text,
     created_at timestamp with time zone DEFAULT now() NOT NULL,
-    updated_at timestamp with time zone DEFAULT now() NOT NULL
+    updated_at timestamp with time zone DEFAULT now() NOT NULL,
+    map_id integer
 );
 
 CREATE TABLE world_instance_units (
@@ -1281,6 +1296,9 @@ ALTER TABLE ONLY user_tracked_layouts
 ALTER TABLE ONLY users
     ADD CONSTRAINT users_pkey PRIMARY KEY (id);
 
+ALTER TABLE ONLY world_boss_credit
+    ADD CONSTRAINT world_boss_credit_pkey PRIMARY KEY (entry);
+
 ALTER TABLE ONLY world_creature_spawn
     ADD CONSTRAINT world_creature_spawn_pkey PRIMARY KEY (guid);
 
@@ -1289,6 +1307,9 @@ ALTER TABLE ONLY world_creature_template
 
 ALTER TABLE ONLY world_display_info
     ADD CONSTRAINT world_display_info_pkey PRIMARY KEY (id);
+
+ALTER TABLE ONLY world_instance_script
+    ADD CONSTRAINT world_instance_script_pkey PRIMARY KEY (map);
 
 ALTER TABLE ONLY world_instance_template
     ADD CONSTRAINT world_instance_template_name_key UNIQUE (name);
@@ -1386,6 +1407,8 @@ CREATE INDEX idx_shared_views_instance_hash ON shared_views USING btree (instanc
 CREATE INDEX idx_upload_keys_realm ON wow_server_upload_keys USING btree (realm_id);
 
 CREATE INDEX idx_user_panel_layouts_code ON user_panel_layouts USING btree (code);
+
+CREATE INDEX idx_world_boss_credit_credit_entry ON world_boss_credit USING btree (credit_entry);
 
 CREATE INDEX idx_world_creature_spawn_id ON world_creature_spawn USING btree (id);
 

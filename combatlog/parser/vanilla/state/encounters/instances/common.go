@@ -37,15 +37,21 @@ type FinalizedInstance struct {
 type CommonFactory struct {
 	Name      string
 	ZoneNames []string
+	MapIDs    []uint32
 	Hostiles  func() *Identifier
 	Rankings  *rankings.Rankings
 }
 
 // MatchZone returns true if z matches any of the factory's zone names
-// (case-insensitive).
-func (f *CommonFactory) MatchZone(z string) bool {
+// (case-insensitive) or, when present, one of the instance map IDs.
+func (f *CommonFactory) MatchZone(z zone.Zone) bool {
 	for _, name := range f.ZoneNames {
-		if strings.EqualFold(z, name) {
+		if strings.EqualFold(z.Name, name) {
+			return true
+		}
+	}
+	for _, mapID := range f.MapIDs {
+		if z.MapID != 0 && z.MapID == mapID {
 			return true
 		}
 	}

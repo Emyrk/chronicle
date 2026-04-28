@@ -16,6 +16,11 @@ export const INSTANCE_CONFIG: Record<string, InstanceConfig> = {
   "Blackwing Lair": { background: "/c/images/loadingscreens/LoadScreenBlackWingLair.webp", bossCount: 8, abbrev: "BWL", category: "raid" },
   "Temple of Ahn'Qiraj": { background: "/c/images/loadingscreens/LoadScreenAhnQiraj40man.webp", bossCount: 9, abbrev: "AQ40", category: "raid" },
   "Naxxramas": { background: "/c/images/loadingscreens/LoadScreenNaxxramas.webp", bossCount: 15, abbrev: "Naxx", category: "raid" },
+  "Vault of Archavon": { background: "/c/images/loadingscreens/LoadScreenRaid.webp", bossCount: 4, abbrev: "VoA", category: "raid" },
+  "Obsidian Sanctum": { background: "/c/images/loadingscreens/LoadScreenRaid.webp", bossCount: 4, abbrev: "OS", category: "raid" },
+  "Eye of Eternity": { background: "/c/images/loadingscreens/LoadScreenRaid.webp", bossCount: 1, abbrev: "EoE", category: "raid" },
+  "Trial of the Crusader": { background: "/c/images/loadingscreens/LoadScreenRaid.webp", bossCount: 5, abbrev: "ToC", category: "raid" },
+  "Ruby Sanctum": { background: "/c/images/loadingscreens/LoadScreenRaid.webp", bossCount: 4, abbrev: "RS", category: "raid" },
   "Emerald Sanctum": { background: "/c/images/loadingscreens/LoadScreenEmeraldSanctum.webp", bossCount: 2, abbrev: "ES", category: "raid" },
   // 20-man Raids
   "Zul'Gurub": { background: "/c/images/loadingscreens/LoadScreenZulGurub.webp", bossCount: 10, abbrev: "ZG", category: "raid" },
@@ -33,6 +38,10 @@ export const INSTANCE_CONFIG: Record<string, InstanceConfig> = {
   // Dungeons
   "Frostmane Hollow": { background: "/c/images/loadingscreens/LoadScreenFrostmane.webp", abbrev: "FH" },
   "Black Morass": { background: "/c/images/loadingscreens/LoadScreenCavernsTime.webp", bossCount: 4, abbrev: "BM" },
+  "Forge of Souls": { background: "/c/images/loadingscreens/LoadScreenDungeon.webp", bossCount: 2, abbrev: "FoS" },
+  "Halls of Reflection": { background: "/c/images/loadingscreens/LoadScreenDungeon.webp", bossCount: 3, abbrev: "HoR" },
+  "The Nexus": { background: "/c/images/loadingscreens/LoadScreenDungeon.webp", bossCount: 5, abbrev: "Nexus" },
+  "The Oculus": { background: "/c/images/loadingscreens/LoadScreenDungeon.webp", bossCount: 4, abbrev: "Oculus" },
   "Blackrock Spire": { background: "/c/images/loadingscreens/LoadScreenBlackrockSpire.webp", abbrev: "BRS" },
   "Upper Blackrock Spire": { background: "/c/images/loadingscreens/LoadScreenBlackrockSpire.webp", bossCount: 5, abbrev: "UBRS"},
   "Lower Blackrock Spire": { background: "/c/images/loadingscreens/LoadScreenBlackrockSpire.webp", abbrev: "LBRS" },
