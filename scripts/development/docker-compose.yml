@@ -62,11 +62,10 @@ services:
       start_period: 10s
 
   ocr-server:
-    image: ocrserver
+    image: emyrk/ocr-server:latest
     container_name: chronicle-ocr-server
     restart: unless-stopped
     ports:
       - "8730:8080"
-
 volumes:
   chronicle-postgres-data:

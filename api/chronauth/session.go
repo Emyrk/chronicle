@@ -40,6 +40,7 @@ func withState(r *http.Request, s *AuthenticationContext) *http.Request {
 	return r.WithContext(context.WithValue(r.Context(), authContextKey{}, s))
 }
 
+// AuthenticationMiddleware should avoid hitting the database.
 func (s *Service) AuthenticationMiddleware(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		auth, err := s.Store.Get(r, AuthSessionName)

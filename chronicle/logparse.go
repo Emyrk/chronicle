@@ -159,6 +159,10 @@ func (w *WorkerLogParse) Work(ctx context.Context, job *river.Job[ArgsLogParse])
 	report := &chroniclesdk.LogParseReport{
 		Instances: make([]chroniclesdk.InstanceReport, 0),
 	}
+	jobOut := chroniclesdk.WoWParsedLogJobOutput{
+		InstanceFailures: make(map[string]string),
+		Instances:        make([]chroniclesdk.WoWSimpleParsedInstance, 0),
+	}
 
 	// Track job completion for metrics (defer only handles Prometheus metrics)
 	var jobResult string
@@ -319,8 +323,12 @@ func (w *WorkerLogParse) Work(ctx context.Context, job *river.Job[ArgsLogParse])
 			return fmt.Errorf("consume warmane log: %w", consumeErr)
 		}
 
+		parserMetrics := p.Metrics()
+		report.TotalLines = parserMetrics.TotalLinesParsed
+		metrics.linesProcessed.Add(float64(parserMetrics.TotalLinesParsed))
+
 	case database.LogTypeAzerothcore:
-		// Load single file
+		// Load single file and normalize concatenated server chunks by unix timestamp.
 		loadStart := time.Now()
 		rdr, err := w.loadFile(ctx, files[0])
 		if err != nil {
@@ -342,6 +350,10 @@ func (w *WorkerLogParse) Work(ctx context.Context, job *river.Job[ArgsLogParse])
 			jobResult = "failure"
 			return fmt.Errorf("consume azerothcore log: %w", consumeErr)
 		}
+
+		parserMetrics := p.Metrics()
+		report.TotalLines = parserMetrics.TotalLinesParsed
+		metrics.linesProcessed.Add(float64(parserMetrics.TotalLinesParsed))
 
 	default:
 		jobResult = "failure"
@@ -397,12 +409,6 @@ func (w *WorkerLogParse) Work(ctx context.Context, job *river.Job[ArgsLogParse])
 		report.Identity = buildIdentityReport(creaturesState)
 	}
 
-	jobOut := chroniclesdk.WoWParsedLogJobOutput{
-		InstanceFailures: make(map[string]string),
-		Instances:        make([]chroniclesdk.WoWSimpleParsedInstance, 0),
-		Report:           report,
-	}
-
 	err = db.InsertParsedLogGroup(ctx, job.Args.LogID)
 	if err != nil {
 		jobResult = "cancelled"
@@ -424,7 +430,6 @@ func (w *WorkerLogParse) Work(ctx context.Context, job *river.Job[ArgsLogParse])
 		totalFinalizeDuration += instFinalizeDuration
 
 		if finalized == nil || len(finalized.Encounters) == 0 {
-			// Skip instances with no encounters
 			continue
 		}
 
@@ -701,6 +706,7 @@ func (w *WorkerLogParse) Work(ctx context.Context, job *river.Job[ArgsLogParse])
 	// Set total duration right before recording output (not in defer)
 	report.TotalDuration = chroniclesdk.DurationFrom(time.Since(jobStart))
 
+	jobOut.Report = report
 	jobOut.Complete = ptr.Ref(time.Now())
 	jobResult = "success"
 	_ = river.RecordOutput(ctx, jobOut)

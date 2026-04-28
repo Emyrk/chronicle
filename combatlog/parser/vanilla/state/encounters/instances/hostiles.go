@@ -3,14 +3,14 @@ package instances
 import "github.com/Emyrk/chronicle/internal/services"
 
 func LoadAdds(src map[uint32]Identity, adds map[uint32]string) {
-	for k := range adds {
-		src[k] = Identity{Hostile: true}
+	for k, name := range adds {
+		src[k] = Identity{Hostile: true, Name: name}
 	}
 }
 
 func LoadBosses(src map[uint32]Identity, bosses map[uint32]string) {
 	for k, name := range bosses {
-		src[k] = Identity{Hostile: true, EncounterName: name, Boss: true}
+		src[k] = Identity{Hostile: true, Name: name, EncounterName: name, Boss: true}
 	}
 }
 
@@ -642,6 +642,26 @@ func DeadminesHostiles() map[uint32]Identity {
 	return hostile
 }
 
+func ShadowfangKeepHostiles() map[uint32]Identity {
+	hostile := make(map[uint32]Identity)
+	LoadAdds(hostile, map[uint32]string{
+		3872: "Deathsworn Captain",
+	})
+
+	LoadBosses(hostile, map[uint32]string{
+		3886: "Razorclaw the Butcher",
+		3887: "Baron Silverlaine",
+		3914: "Rethilgore",
+		3927: "Wolf Master Nandos",
+		4274: "Fenrus the Devourer",
+		4275: "Archmage Arugal",
+		4278: "Commander Springvale",
+		4279: "Odo the Blindwatcher",
+	})
+
+	return hostile
+}
+
 func EmeraldSanctumHostiles() map[uint32]Identity {
 	hostile := make(map[uint32]Identity)
 	LoadAdds(hostile, map[uint32]string{
@@ -745,6 +765,7 @@ func TempleOfAhnQirajHostiles() map[uint32]Identity {
 	})
 	LoadBosses(hostile, map[uint32]string{
 		15517: "Ouro",
+		15957: "Ouro", // Ouro Spawner helper casts drive some AzerothCore logs.
 		15510: "Fankriss the Unyielding",
 		15516: "Battleguard Sartura",
 		15299: "Viscidus",
@@ -1311,6 +1332,49 @@ func FrostmaneHollowHostiles() map[uint32]Identity {
 		63129: "Kan'za the Seer",     // 1 times
 		63130: "Hailar the Frigid",   // 1 times
 	})
+
+	return hostile
+}
+
+func ZulFarrakHostiles() map[uint32]Identity {
+	hostile := make(map[uint32]Identity)
+	LoadAdds(hostile, map[uint32]string{
+		5648: "Sandfury Shadowcaster",
+		5649: "Sandfury Blood Drinker",
+		5650: "Sandfury Witch Doctor",
+		7246: "Sandfury Shadowhunter",
+		7247: "Sandfury Soul Eater",
+		7268: "Sandfury Guardian",
+		7269: "Scarab",
+		7274: "Sandfury Executioner",
+		7787: "Sandfury Slave",
+		7788: "Sandfury Drudge",
+		7789: "Sandfury Cretin",
+		7797: "Ruuzlu",
+		8095: "Sul'lithuz Sandcrawler",
+		8120: "Sul'lithuz Abomination",
+		8876: "Sandfury Acolyte",
+		8877: "Sandfury Zealot",
+	})
+	LoadBosses(hostile, map[uint32]string{
+		7271: "Witch Doctor Zum'rah",
+		7272: "Theka the Martyr",
+		7275: "Shadowpriest Sezz'ziz",
+		8127: "Antu'sul",
+		7267: "Chief Ukorz Sandscalp",
+		7796: "Chief Ukorz Sandscalp",
+	})
+
+	// Known event helpers and triggers in the dungeon should not be reported as
+	// unknown units, but they also should not drive encounter classification.
+	hostile[7604] = Identity{Hostile: false}
+	hostile[7605] = Identity{Hostile: false}
+	hostile[7606] = Identity{Hostile: false}
+	hostile[7607] = Identity{Hostile: false}
+	hostile[7608] = Identity{Hostile: false}
+	hostile[10081] = Identity{Hostile: false}
+	hostile[12999] = Identity{Hostile: false}
+	hostile[141612] = Identity{Hostile: false}
 
 	return hostile
 }

@@ -97,6 +97,8 @@ func ProcessCommonActivity(c CharacterBase, m messages.Message) error {
 				c.Start(fmt.Sprintf("cc_%s", data.Spell.Name), m)
 			}
 		}
+	case *messages.SpellStart:
+	case *messages.SpellGo:
 	case *messages.Aura:
 		if c.ID() != data.Target {
 			return nil

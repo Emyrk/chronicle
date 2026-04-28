@@ -4,6 +4,22 @@ import "github.com/google/uuid"
 
 type InstanceCategory string
 
+// SupportedInstanceUnit is a hostile creature in a supported instance.
+type SupportedInstanceUnit struct {
+	EntryID uint32 `json:"entry_id"`
+	Name    string `json:"name"`
+}
+
+// SupportedInstance describes a registered instance with its metadata.
+type SupportedInstance struct {
+	Name      string                  `json:"name"`
+	Comment   string                  `json:"comment,omitempty"`
+	Fallback  bool                    `json:"fallback,omitempty"`
+	ZoneNames []string                `json:"zone_names,omitempty"`
+	Bosses    []SupportedInstanceUnit `json:"bosses,omitempty"`
+	Trash     []SupportedInstanceUnit `json:"trash,omitempty"`
+}
+
 const (
 	InstanceCategoryRaid    InstanceCategory = "raid"
 	InstanceCategoryDungeon InstanceCategory = "dungeon"
@@ -21,13 +37,13 @@ const (
 )
 
 type WorldInstanceTemplate struct {
-	ID           uuid.UUID                `json:"id"`
-	Name         string                   `json:"name"`
-	Abbreviation string                   `json:"abbreviation,omitempty"`
-	Category     InstanceCategory         `json:"category"`
-	BossCount    *int32                   `json:"boss_count,omitempty"`
-	Background   string                   `json:"background,omitempty"`
-	ZoneNames    []WorldInstanceZoneName  `json:"zone_names"`
+	ID           uuid.UUID               `json:"id"`
+	Name         string                  `json:"name"`
+	Abbreviation string                  `json:"abbreviation,omitempty"`
+	Category     InstanceCategory        `json:"category"`
+	BossCount    *int32                  `json:"boss_count,omitempty"`
+	Background   string                  `json:"background,omitempty"`
+	ZoneNames    []WorldInstanceZoneName `json:"zone_names"`
 }
 
 type WorldInstanceZoneName struct {
@@ -37,7 +53,7 @@ type WorldInstanceZoneName struct {
 
 type WorldInstanceUnit struct {
 	EntryID       int32           `json:"entry_id"`
-	Name          string          `json:"name"`                      // Resolved: override_name ?? world_creature_template.name ?? "Unknown"
+	Name          string          `json:"name"` // Resolved: override_name ?? world_creature_template.name ?? "Unknown"
 	OverrideName  string          `json:"override_name,omitempty"`
 	EncounterName string          `json:"encounter_name,omitempty"`
 	Boss          bool            `json:"boss"`

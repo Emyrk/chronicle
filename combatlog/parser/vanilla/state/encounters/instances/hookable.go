@@ -41,11 +41,11 @@ const (
 )
 
 type Hookable struct {
-	name          string
-	timings       *timings.Accumulator
+	name    string
+	timings *timings.Accumulator
 	factory *CommonFactory
-	logger        *slog.Logger
-	units         *unitdb.Units
+	logger  *slog.Logger
+	units   *unitdb.Units
 
 	// Static
 	CurrentZone zone.Zone
@@ -131,11 +131,11 @@ func (f *CommonFactory) NewHookable(ctx context.Context, logger *slog.Logger, db
 	}
 
 	c := &Hookable{
-		name:          f.Name,
-		factory:       f,
-		logger:        logger,
-		units:         db,
-		CurrentZone:   z,
+		name:        f.Name,
+		factory:     f,
+		logger:      logger,
+		units:       db,
+		CurrentZone: z,
 		//Auras:           auraTracking,
 		Characters:      chrs,
 		Identifier:      f.Hostiles(),
@@ -192,7 +192,7 @@ func (h *Hookable) SetVersions(versions map[string]string, player *guid.GUID) {
 
 // MatchesZone
 // TODO: Should we care about the instance ID here?
-func (h *Hookable) MatchesZone(z zone.Zone) bool { return h.factory.MatchZone(z.Name) }
+func (h *Hookable) MatchesZone(z zone.Zone) bool { return h.factory.MatchZone(z) }
 
 func (h *Hookable) Process(m messages.Message) (finalError error) {
 	err := h.units.ProcessMessage(m)
@@ -401,6 +401,7 @@ func (h *Hookable) Finalize(ctx context.Context) (*FinalizedInstance, error) {
 		}
 		adEncounterName := ""
 		encounterName := ""
+		var encounterNamedAt *time.Time
 		encounterType := types.EncounterTypeTRASH
 		isBossFight := false
 		// TODO: Fix to boss count, as there can be 2 bosses
@@ -412,7 +413,7 @@ func (h *Hookable) Finalize(ctx context.Context) (*FinalizedInstance, error) {
 				return nil, ctx.Err()
 			}
 			if hid != hostile.ID {
-				panic("inconsistent hostile ID mapping")
+				return nil, fmt.Errorf("inconsistent hostile ID mapping: key=%v hostile=%v", hid, hostile.ID)
 			}
 
 			id := h.IdentifyUnit(hostile.ID)
@@ -432,16 +433,27 @@ func (h *Hookable) Finalize(ctx context.Context) (*FinalizedInstance, error) {
 				killed[entry]++
 			}
 
-			// Always take the encounter name if set
+			namedAt := hostile.Activity[0].Start.Timestamp.Date()
+
+			// Prefer the earliest named hostile in the fight so encounter naming is
+			// deterministic even when multiple named boss/helper units are present.
 			if id.EncounterName != "" {
-				encounterName = id.EncounterName
-				encounterType = types.EncounterTypeBOSS
+				// Bosses always take the earliest.
+				if encounterNamedAt == nil || namedAt.Before(*encounterNamedAt) {
+					encounterName = id.EncounterName
+					encounterType = types.EncounterTypeBOSS
+					encounterNamedAt = &namedAt
+				}
 			}
 
 			if id.EncounterNameFn != nil {
 				if res := id.EncounterNameFn(fight); res != nil {
-					encounterName = res.EncounterName
-					if res.Bosses != nil {
+					if encounterNamedAt == nil || namedAt.Before(*encounterNamedAt) {
+						encounterName = res.EncounterName
+						encounterNamedAt = &namedAt
+					}
+					if len(res.Bosses) > 0 {
+						encounterType = types.EncounterTypeBOSS
 						isBossFight = isBossFight || len(res.Bosses) > 0
 						for _, bossID := range res.Bosses {
 							bossesRequired[bossID] = struct{}{}

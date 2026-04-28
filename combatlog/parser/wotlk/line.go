@@ -11,6 +11,27 @@ import (
 	"github.com/Emyrk/chronicle/combatlog/parser/types"
 )
 
+// ExtractUnixMilli extracts the unix-millisecond timestamp and the raw payload
+// from a line of the form "<unix_millis>  EVENT,field,...". It does NOT parse
+// the CSV fields — use ParseLineUnixMillis for full parsing.
+func ExtractUnixMilli(line string) (ts time.Time, payload string, err error) {
+	if line == "" {
+		return time.Time{}, "", errors.New("empty line")
+	}
+
+	idx := strings.Index(line, "  ")
+	if idx < 0 {
+		return time.Time{}, "", fmt.Errorf("no double-space separator found in line: %q", truncate(line, 80))
+	}
+
+	ms, err := strconv.ParseInt(line[:idx], 10, 64)
+	if err != nil {
+		return time.Time{}, "", fmt.Errorf("parsing unix millis %q: %w", line[:idx], err)
+	}
+
+	return time.UnixMilli(ms), line[idx+2:], nil
+}
+
 // ParseLineUnixMillis parses an AzerothCore combat log line of the form:
 //
 //	<unix_millis>  EVENT,field,field,...
@@ -18,23 +39,10 @@ import (
 // Same structure as ParseLine (double-space separator, comma-separated fields)
 // but the timestamp is Unix epoch milliseconds instead of M/DD HH:MM:SS.mmm.
 func ParseLineUnixMillis(content string) (time.Time, string, *Matched, error) {
-	if content == "" {
-		return time.Time{}, "", nil, errors.New("empty line")
-	}
-
-	idx := strings.Index(content, "  ")
-	if idx < 0 {
-		return time.Time{}, "", nil, fmt.Errorf("no double-space separator found in line: %q", truncate(content, 80))
-	}
-
-	tsStr := content[:idx]
-	payload := content[idx+2:]
-
-	ms, err := strconv.ParseInt(tsStr, 10, 64)
+	ts, payload, err := ExtractUnixMilli(content)
 	if err != nil {
-		return time.Time{}, "", nil, fmt.Errorf("parsing unix millis %q: %w", tsStr, err)
+		return time.Time{}, "", nil, err
 	}
-	ts := time.UnixMilli(ms)
 
 	parts := splitCSVFields(payload)
 	if len(parts) < 1 || parts[0] == "" {

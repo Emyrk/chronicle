@@ -1091,6 +1091,8 @@ type LogInstancesGuild struct {
 	RecorderName     string             `db:"recorder_name" json:"recorder_name"`
 	RecorderGuid     string             `db:"recorder_guid" json:"recorder_guid"`
 	DuplicateGroupID uuid.NullUUID      `db:"duplicate_group_id" json:"duplicate_group_id"`
+	StartTime        pgtype.Timestamptz `db:"start_time" json:"start_time"`
+	EndTime          pgtype.Timestamptz `db:"end_time" json:"end_time"`
 	RealmName        string             `db:"realm_name" json:"realm_name"`
 	GuildName        pgtype.Text        `db:"guild_name" json:"guild_name"`
 	GuildRealmID     uuid.NullUUID      `db:"guild_realm_id" json:"guild_realm_id"`

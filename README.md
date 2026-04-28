@@ -14,8 +14,6 @@
 
 ---
 
-Chronicle transforms raid logs into a live, interactive breakdown of everything that happened in your raid.
-
 ![Overview](.github/assets/overview.png)
 
 ## Features
@@ -31,35 +29,24 @@ Chronicle transforms raid logs into a live, interactive breakdown of everything 
 
 ![Custom Filters](.github/assets/filter.png)
 
-</details>
-
-🔗 **Shareable Links** — Every view is URL-encoded — encounters, filters, layout, time range. Copy the link and anyone sees exactly what you see.
-
-📐 **Customizable Layouts** — Resize, rearrange, and swap panels. Save layouts and share them with your guild.
-
-<details>
-<summary>Mainhand vs Offhand damage layout</summary>
-
-![Custom Layout](.github/assets/customlayout.png)
-
-</details>
-
-⏱️ **Time Range Selection** — Drag-select on the timeline to filter every panel to that slice.
-
-<details>
-<summary>Time range selection example</summary>
-
 ![Time Range](.github/assets/timerange.png)
 
-</details>
+# Start local dependencies first (Postgres on :5433, SpiceDB, OCR)
+make services-up
 
-🎒 **Loot & Gear** — See what dropped and inspect player gear from the log.
+# Full dev server: backend on :4000 with built frontend assets served by Go
 
+
+# Backend only: no embedded dist build required, uses slim frontend assets
+make develop-backend
 <details>
 <summary>Loot</summary>
 
 ![Loot](.github/assets/loot.png)
 
+
+# Optional: create the chronicle database when using a local Postgres client
+make create-db
 </details>
 
 <details>
@@ -77,6 +64,25 @@ Chronicle transforms raid logs into a live, interactive breakdown of everything 
 
 ### Full Docker Stack
 
+<<<<<<< HEAD
+```bash
+# Optional: copy defaults before customizing
+cp .env.example .env
+
+# Build and start Chronicle, Postgres, SpiceDB, and OCR
+docker compose up --build
+```
+
+The app will be available at `http://localhost:4000`.
+
+The supporting services stay on the Docker network by default so the stack does not collide with local Postgres, SpiceDB, or OCR processes you may already have running.
+
+To build a different embedded server dataset, override `SERVER`, for example `SERVER=warmane docker compose up --build`.
+
+### Local Hybrid Development
+
+=======
+>>>>>>> upstream/main
 ```bash
 # Optional: copy defaults before customizing
 cp .env.example .env
@@ -94,14 +100,22 @@ To build a different embedded server dataset, override `SERVER`, for example `SE
 ### Local Hybrid Development
 
 ```bash
-make services-up -d
-# Backend (runs on :4000)
+# Start local dependencies first (Postgres on :5433, SpiceDB, OCR)
+make services-up
+
+# Full dev server: backend on :4000 with built frontend assets served by Go
 make develop
 
-# Frontend with hot reload (proxies to backend)
+# Backend only: no embedded dist build required, uses slim frontend assets
+make develop-backend
+
+# Frontend with hot reload (proxies to backend on :4000)
 cd frontend/chronicle
 pnpm install
 pnpm dev
+
+# Optional: create the chronicle database when using a local Postgres client
+make create-db
 ```
 
 ## Tech Stack

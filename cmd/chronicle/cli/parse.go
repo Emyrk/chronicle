@@ -28,6 +28,10 @@ import (
 	"github.com/coder/serpent"
 )
 
+func defaultSpellDBCPath() string {
+	return "./assets/" + services.ServerName + "/Spell.dbc"
+}
+
 func ParseV2Cmd() *serpent.Command {
 	var (
 		dumpMetrics bool
@@ -229,7 +233,7 @@ func CreaturesCmd() *serpent.Command {
 			if len(files) == 1 {
 				// v2 parser for single file
 				wowDB, err := gamedb.New(ctx, gamedb.Options{
-					SpellsDBCPath: "./assets/Spell.dbc",
+					SpellsDBCPath: defaultSpellDBCPath(),
 				})
 				if err != nil {
 					return fmt.Errorf("creating wowdb: %w", err)
@@ -447,7 +451,7 @@ func HitTypeCMD() *serpent.Command {
 			var p consumers.Advancer
 			if len(files) == 1 {
 				wowDB, err := gamedb.New(ctx, gamedb.Options{
-					SpellsDBCPath: "./assets/Spell.dbc",
+					SpellsDBCPath: defaultSpellDBCPath(),
 				})
 				if err != nil {
 					return fmt.Errorf("creating wowdb: %w", err)

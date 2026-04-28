@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"log/slog"
+	"sort"
 
 	"github.com/Emyrk/chronicle/combatlog/parseoptions"
 	"github.com/Emyrk/chronicle/combatlog/parser/types/zone"
@@ -167,10 +168,80 @@ func (r *Registry) AllInstances() []string {
 
 func (r *Registry) AllInstancesWithComments() map[string]string {
 	all := make(map[string]string)
+	if r.fallback != nil {
+		for k, v := range r.fallback.AllInstancesWithComments() {
+			all[k] = fmt.Sprintf("%s (fallback)", v)
+		}
+	}
 	for name, entry := range r.entries {
 		all[name] = entry.Comment
 	}
 	return all
+}
+// InstanceDetailUnit is a hostile creature entry ID + display name.
+type InstanceDetailUnit struct {
+	EntryID uint32
+	Name    string
+}
+
+// InstanceDetail holds enriched metadata for a registered instance.
+type InstanceDetail struct {
+	Name      string
+	Comment   string
+	Fallback  bool
+	ZoneNames []string
+	Bosses    []InstanceDetailUnit
+	Trash     []InstanceDetailUnit
+}
+
+// AllInstanceDetails returns enriched metadata for every registered instance,
+// including zone names, boss names, and trash mob names.
+func (r *Registry) AllInstanceDetails() []InstanceDetail {
+	seen := make(map[string]struct{})
+	var result []InstanceDetail
+
+	collect := func(reg *Registry, fallback bool) {
+		for _, entry := range reg.entries {
+			if _, ok := seen[entry.Name]; ok {
+				continue
+			}
+			seen[entry.Name] = struct{}{}
+
+			var bosses, trash []InstanceDetailUnit
+			for entryID, id := range entry.HostileEntries {
+				if !id.Hostile {
+					continue
+				}
+				u := InstanceDetailUnit{EntryID: entryID, Name: id.Name}
+				if id.Boss {
+					bosses = append(bosses, u)
+				} else {
+					trash = append(trash, u)
+				}
+			}
+			sort.Slice(bosses, func(i, j int) bool { return bosses[i].Name < bosses[j].Name })
+			sort.Slice(trash, func(i, j int) bool { return trash[i].Name < trash[j].Name })
+
+			result = append(result, InstanceDetail{
+				Name:      entry.Name,
+				Comment:   entry.Comment,
+				Fallback:  fallback,
+				ZoneNames: entry.ZoneNames,
+				Bosses:    bosses,
+				Trash:     trash,
+			})
+		}
+	}
+
+	collect(r, false)
+	if r.fallback != nil {
+		collect(r.fallback, true)
+	}
+
+	sort.Slice(result, func(i, j int) bool {
+		return result[i].Name < result[j].Name
+	})
+	return result
 }
 
 func wrap(do func(ctx context.Context, logger *slog.Logger, db *unitdb.Units, z zone.Zone) *instances.Hookable) InstanceFactory {

@@ -558,6 +558,8 @@ CREATE VIEW log_instances_guild AS
     li.recorder_name,
     li.recorder_guid,
     li.duplicate_group_id,
+    li.start_time,
+    li.end_time,
     COALESCE(wsr.name, 'Unknown'::text) AS realm_name,
     g.name AS guild_name,
     g.realm_id AS guild_realm_id,

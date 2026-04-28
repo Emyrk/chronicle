@@ -172,8 +172,9 @@ func (api *API) GetShare(w http.ResponseWriter, r *http.Request) {
 }
 
 func (api *API) shortLinkRedirectMiddleware(next http.Handler) http.Handler {
+	shortHost := cleanDomain(api.Opts.ShortLinkDomain) // computed once at init
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if api.Opts.ShortLinkDomain == "" {
+		if shortHost == "" {
 			next.ServeHTTP(w, r)
 			return
 		}
@@ -183,7 +184,7 @@ func (api *API) shortLinkRedirectMiddleware(next http.Handler) http.Handler {
 			host = host[:i]
 		}
 
-		if host == api.Opts.ShortLinkDomain && r.Method == http.MethodGet {
+		if host == shortHost && r.Method == http.MethodGet {
 			accessURL := api.Opts.AccessURL.String()
 			path := strings.TrimPrefix(r.URL.Path, "/")
 			if code, ok := strings.CutPrefix(path, "l/"); ok && code != "" && !strings.Contains(code, "/") {
@@ -199,11 +200,19 @@ func (api *API) shortLinkRedirectMiddleware(next http.Handler) http.Handler {
 	})
 }
 
+// cleanDomain strips any scheme prefix so ShareURL can safely prepend https://.
+func cleanDomain(d string) string {
+	d = strings.TrimPrefix(d, "https://")
+	d = strings.TrimPrefix(d, "http://")
+	d = strings.TrimSuffix(d, "/")
+	return d
+}
+
 // ShareURL returns the short share URL for a given code. If a short link domain
 // is configured, it uses that domain. Otherwise it falls back to same-origin paths.
 func (api *API) ShareURL(r *http.Request, code string) string {
 	if api.Opts.ShortLinkDomain != "" {
-		return "https://" + api.Opts.ShortLinkDomain + "/" + code
+		return "https://" + cleanDomain(api.Opts.ShortLinkDomain) + "/" + code
 	}
 	return requestOrigin(r) + "/s/" + code
 }
@@ -212,7 +221,7 @@ func (api *API) ShareURL(r *http.Request, code string) string {
 // domain is configured, it uses that domain. Otherwise it falls back to same-origin paths.
 func (api *API) LayoutShareURL(r *http.Request, code string) string {
 	if api.Opts.ShortLinkDomain != "" {
-		return "https://" + api.Opts.ShortLinkDomain + "/l/" + code
+		return "https://" + cleanDomain(api.Opts.ShortLinkDomain) + "/l/" + code
 	}
 	return requestOrigin(r) + "/account/layout-lab?shared_code=" + code
 }

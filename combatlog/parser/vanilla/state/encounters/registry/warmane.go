@@ -12,7 +12,11 @@ func WarmaneStaticRegistry(logger *slog.Logger) *Registry {
 
 	// Dungeons
 	r.RegisterEntry(FromCommonFactory(instances.NexusFactory))
+	r.RegisterEntry(FromCommonFactory(instances.OculusFactory))
+	r.RegisterEntry(FromCommonFactory(instances.ForgeOfSoulsFactory))
+	r.RegisterEntry(FromCommonFactory(instances.HallsOfReflectionFactory))
 	r.RegisterEntry(FromCommonFactory(classic.DeadminesFactory))
+	r.RegisterEntry(FromCommonFactory(classic.ShadowfangKeepFactory).WithComment("Boss-first coverage from world creature templates; trash is not yet exhaustive"))
 	r.RegisterEntry(FromCommonFactory(classic.WailingCavernsFactory))
 	r.RegisterEntry(FromCommonFactory(classic.RazorfenKraulFactory))
 	r.RegisterEntry(FromCommonFactory(classic.RagefireChasmFactory))
@@ -20,9 +24,11 @@ func WarmaneStaticRegistry(logger *slog.Logger) *Registry {
 	r.RegisterEntry(FromCommonFactory(classic.ScarletMonasteryLibraryFactory))
 	r.RegisterEntry(FromCommonFactory(classic.BlackrockDepthsFactory).WithComment("Most bosses & mobs are not yet supported"))
 	r.RegisterEntry(FromCommonFactory(classic.ScholomanceFactory).WithComment("**new** not fully implemented"))
+	r.RegisterEntry(FromCommonFactory(classic.BlackMorassFactory))
 	r.RegisterEntry(FromCommonFactory(classic.StratholmeFactory).WithComment("Only undead side, mechanics not implemented"))
 	r.RegisterEntry(FromCommonFactory(classic.DireMaulFactory))
 	r.RegisterEntry(FromCommonFactory(classic.StockadesFactory))
+	r.RegisterEntry(FromCommonFactory(classic.ZulFarrakFactory))
 	r.RegisterEntry(FromCommonFactory(classic.SunkenTempleFactory).WithComment("not yet complete"))
 	r.RegisterEntry(FromCommonFactory(classic.BlackrockSpireFactory).WithComment("Only upper spire is supported at the moment"))
 
@@ -37,7 +43,11 @@ func WarmaneStaticRegistry(logger *slog.Logger) *Registry {
 
 	r.RegisterEntry(FromCommonFactory(instances.VoAFactory))
 	r.RegisterEntry(FromCommonFactory(instances.ObsidianSanctumFactory))
+	r.RegisterEntry(FromCommonFactory(instances.EyeOfEternityFactory))
+	r.RegisterEntry(FromCommonFactory(instances.TrialOfTheCrusaderFactory).WithComment("Bosses and major adds registered; faction champions are not exhaustive"))
+	r.RegisterEntry(FromCommonFactory(instances.RubySanctumFactory))
 	r.RegisterEntry(FromCommonFactory(instances.NaxxramasFactory))
+	r.RegisterEntry(FromCommonFactory(instances.IcecrownCitadelFactory).WithComment("Boss-first coverage for major encounters; trash and some scripted events are not yet exhaustive"))
 
 	return r
 }
