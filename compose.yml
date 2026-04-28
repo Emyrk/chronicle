@@ -17,7 +17,6 @@ services:
         condition: service_healthy
       ocr-server:
         condition: service_started
-    command: ["--dev-auth"]
     environment:
       CHRONICLE_ACCESS_URL: ${CHRONICLE_ACCESS_URL:-http://localhost:4000}
       CHRONICLE_HTTP_ADDRESS: 0.0.0.0:4000

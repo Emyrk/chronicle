@@ -29,11 +29,12 @@ func validateVersion(ver *string) error {
 		return fmt.Errorf("token version is missing: re-login required")
 	}
 
-	// Empty or unknown means local/dev build — always accept.
-	if *ver == "" || *ver == "unknown" {
+	// Empty, unknown, or non-semver tags mean local/dev builds — always accept.
+	normalized := normalizeVersion(*ver)
+	if *ver == "" || *ver == "unknown" || !semver.IsValid(normalized) {
 		return nil
 	}
-	if semver.Compare(normalizeVersion(*ver), normalizeVersion(MinimumVersion)) < 0 {
+	if semver.Compare(normalized, normalizeVersion(MinimumVersion)) < 0 {
 		return fmt.Errorf("token version %s is below minimum %s: re-login required", *ver, MinimumVersion)
 	}
 	return nil
