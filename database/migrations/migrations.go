@@ -67,6 +67,15 @@ func UpFromSQLDB(db *sql.DB) (retErr error) {
 		retErr = srcErr
 	}()
 
+	err = m.Up()
+	if err != nil {
+		if errors.Is(err, migrate.ErrNoChange) {
+			// It's OK if no changes happened!
+		} else {
+			return fmt.Errorf("up: %w", err)
+		}
+	}
+
 	err = RiverMigrateFromSQLDB(db)
 	if err != nil {
 		return xerrors.Errorf("river migrate: %w", err)
@@ -89,10 +98,6 @@ func RiverMigrateFromSQLDB(db *sql.DB) error {
 	}
 
 	return nil
-}
-
-func RiverMigrate(pool *pgxpool.Pool) error {
-	return RiverMigrateFromSQLDB(stdlib.OpenDBFromPool(pool))
 }
 
 // Up runs SQL migrations to ensure the database schema is up-to-date.

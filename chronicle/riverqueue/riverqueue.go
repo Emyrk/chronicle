@@ -9,7 +9,6 @@ import (
 
 	"github.com/Emyrk/chronicle/api/chronauth"
 	"github.com/Emyrk/chronicle/chronicle/riverqueue/riverconst"
-	"github.com/Emyrk/chronicle/database/migrations"
 	"github.com/Emyrk/chronicle/internal/leveledlog"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
@@ -74,10 +73,6 @@ func (q *Queues) AddPeriodicJob(job *river.PeriodicJob) *Queues {
 }
 
 func (q *Queues) Start(ctx context.Context) error {
-	if err := migrations.RiverMigrate(q.opts.Pool); err != nil {
-		return fmt.Errorf("ensure river migrations: %w", err)
-	}
-
 	driver := riverpgxv5.New(q.opts.Pool)
 	queues := q.queues
 	if q.opts.InsertOnly {
