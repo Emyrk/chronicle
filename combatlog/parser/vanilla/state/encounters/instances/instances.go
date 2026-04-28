@@ -19,6 +19,13 @@ var (
 		Hostiles:  FromMap(DeadminesHostiles()),
 	}
 
+	ShadowfangKeepFactory = &CommonFactory{
+		Name:      "Shadowfang Keep",
+		ZoneNames: []string{"shadowfang keep", "影牙城堡"},
+		MapIDs:    []uint32{33},
+		Hostiles:  FromMap(ShadowfangKeepHostiles()),
+	}
+
 	WailingCavernsFactory = &CommonFactory{
 		Name:      "Wailing Caverns",
 		ZoneNames: []string{"wailing caverns", "哀嚎洞穴"},
@@ -124,7 +131,7 @@ var (
 
 	TempleOfAhnQirajFactory = &CommonFactory{
 		Name:      "Temple of Ahn'Qiraj",
-		ZoneNames: []string{"ahn'qiraj", "安其拉神庙"},
+		ZoneNames: []string{"ahn'qiraj", "temple of ahn'qiraj", "ahn'qiraj temple", "安其拉神庙"},
 		MapIDs:    []uint32{531},
 		Hostiles:  FromMap(TempleOfAhnQirajHostiles()),
 		Rankings: &rankings.Rankings{
@@ -224,6 +231,13 @@ var (
 		Name:      "Frostmane Hollow",
 		ZoneNames: []string{"frostmane hollow"},
 		Hostiles:  FromMap(FrostmaneHollowHostiles()),
+	}
+
+	ZulFarrakFactory = &CommonFactory{
+		Name:      "Zul'Farrak",
+		ZoneNames: []string{"zul'farrak", "祖尔法拉克"},
+		MapIDs:    []uint32{209},
+		Hostiles:  FromMap(ZulFarrakHostiles()),
 	}
 )
 

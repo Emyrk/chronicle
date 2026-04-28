@@ -15,6 +15,40 @@ import (
 	"github.com/jackc/pgx/v5"
 )
 
+func worldInstanceFactory(
+	tmpl database.WorldInstanceTemplate,
+	zoneNames []database.WorldInstanceZoneName,
+	units []database.ListWorldInstanceUnitsRow,
+) *instances.CommonFactory {
+	hostiles := make(map[uint32]instances.Identity)
+	for _, u := range units {
+		id := instances.Identity{Hostile: u.Affiliation == database.UnitAffiliationHostile}
+		if u.Boss {
+			id.Boss = true
+			if u.EncounterName.Valid {
+				id.EncounterName = u.EncounterName.String
+			}
+		}
+		hostiles[uint32(u.EntryID)] = id
+	}
+
+	names := make([]string, 0, len(zoneNames))
+	for _, zn := range zoneNames {
+		names = append(names, zn.ZoneName)
+	}
+
+	factory := &instances.CommonFactory{
+		Name:      tmpl.Name,
+		ZoneNames: names,
+		Hostiles:  instances.FromMap(hostiles),
+	}
+	if tmpl.MapID.Valid {
+		factory.MapIDs = []uint32{uint32(tmpl.MapID.Int32)}
+	}
+
+	return factory
+}
+
 const InstanceRegistryChannel = "instance_registry_changed"
 
 // DBRegistry is a Registry that can reload its entries from the database.
@@ -138,37 +172,7 @@ func (dr *DBRegistry) reload(ctx context.Context) error {
 
 	loaded := 0
 	for _, tmpl := range templates {
-		zoneNames := zoneNamesByInstance[tmpl.ID]
-		units := unitsByInstance[tmpl.ID]
-
-		// Build Identity map from DB units.
-		hostiles := make(map[uint32]instances.Identity)
-		for _, u := range units {
-			id := instances.Identity{
-				Hostile: u.Affiliation == database.UnitAffiliationHostile,
-			}
-			if u.Boss {
-				id.Boss = true
-				if u.EncounterName.Valid {
-					id.EncounterName = u.EncounterName.String
-				}
-			}
-			hostiles[uint32(u.EntryID)] = id
-		}
-
-		// Build zone name list.
-		names := make([]string, 0, len(zoneNames))
-		for _, zn := range zoneNames {
-			names = append(names, zn.ZoneName)
-		}
-
-		factory := &instances.CommonFactory{
-			Name:      tmpl.Name,
-			ZoneNames: names,
-			Hostiles:  instances.FromMap(hostiles),
-		}
-
-		r.RegisterEntry(FromCommonFactory(factory))
+		r.RegisterEntry(FromCommonFactory(worldInstanceFactory(tmpl, zoneNamesByInstance[tmpl.ID], unitsByInstance[tmpl.ID])))
 		loaded++
 	}
 

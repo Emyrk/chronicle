@@ -1384,6 +1384,20 @@ type WorldDisplayInfo struct {
 	Icon string `db:"icon" json:"icon"`
 }
 
+type WorldBossCredit struct {
+	Entry               int32  `db:"entry" json:"entry"`
+	CreditType          int32  `db:"credit_type" json:"credit_type"`
+	CreditEntry         int32  `db:"credit_entry" json:"credit_entry"`
+	LastEncounterDungeon int32 `db:"last_encounter_dungeon" json:"last_encounter_dungeon"`
+	Comment             string `db:"comment" json:"comment"`
+}
+
+type WorldInstanceScript struct {
+	Map    int32  `db:"map" json:"map"`
+	Parent int32  `db:"parent" json:"parent"`
+	Script string `db:"script" json:"script"`
+}
+
 type WorldInstanceTemplate struct {
 	ID           uuid.UUID          `db:"id" json:"id"`
 	Name         string             `db:"name" json:"name"`
@@ -1391,6 +1405,7 @@ type WorldInstanceTemplate struct {
 	Category     InstanceCategory   `db:"category" json:"category"`
 	BossCount    pgtype.Int4        `db:"boss_count" json:"boss_count"`
 	Background   pgtype.Text        `db:"background" json:"background"`
+	MapID        pgtype.Int4        `db:"map_id" json:"map_id"`
 	CreatedAt    pgtype.Timestamptz `db:"created_at" json:"created_at"`
 	UpdatedAt    pgtype.Timestamptz `db:"updated_at" json:"updated_at"`
 }

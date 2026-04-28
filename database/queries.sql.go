@@ -6958,7 +6958,7 @@ func (q *sqlQuerier) DeleteWorldInstanceZoneNames(ctx context.Context, instanceI
 }
 
 const getWorldInstanceTemplateByZoneName = `-- name: GetWorldInstanceTemplateByZoneName :one
-SELECT wit.id, wit.name, wit.abbreviation, wit.category, wit.boss_count, wit.background, wit.created_at, wit.updated_at
+SELECT wit.id, wit.name, wit.abbreviation, wit.category, wit.boss_count, wit.background, wit.map_id, wit.created_at, wit.updated_at
 FROM world_instance_template wit
 JOIN world_instance_zone_names wizn ON wit.id = wizn.instance_id
 WHERE wizn.zone_name = $1
@@ -6974,6 +6974,7 @@ func (q *sqlQuerier) GetWorldInstanceTemplateByZoneName(ctx context.Context, zon
 		&i.Category,
 		&i.BossCount,
 		&i.Background,
+		&i.MapID,
 		&i.CreatedAt,
 		&i.UpdatedAt,
 	)
@@ -7068,8 +7069,102 @@ func (q *sqlQuerier) InsertWorldInstanceZoneName(ctx context.Context, arg Insert
 	return err
 }
 
+const listWorldBossCredits = `-- name: ListWorldBossCredits :many
+SELECT entry, credit_type, credit_entry, last_encounter_dungeon, comment
+FROM world_boss_credit
+ORDER BY entry
+`
+
+func (q *sqlQuerier) ListWorldBossCredits(ctx context.Context) ([]WorldBossCredit, error) {
+	rows, err := q.db.Query(ctx, listWorldBossCredits)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []WorldBossCredit
+	for rows.Next() {
+		var i WorldBossCredit
+		if err := rows.Scan(&i.Entry, &i.CreditType, &i.CreditEntry, &i.LastEncounterDungeon, &i.Comment); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listWorldInstanceScripts = `-- name: ListWorldInstanceScripts :many
+SELECT map, parent, script
+FROM world_instance_script
+ORDER BY map
+`
+
+func (q *sqlQuerier) ListWorldInstanceScripts(ctx context.Context) ([]WorldInstanceScript, error) {
+	rows, err := q.db.Query(ctx, listWorldInstanceScripts)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []WorldInstanceScript
+	for rows.Next() {
+		var i WorldInstanceScript
+		if err := rows.Scan(&i.Map, &i.Parent, &i.Script); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listWorldInstanceSpawnEntries = `-- name: ListWorldInstanceSpawnEntries :many
+WITH entries AS (
+  SELECT map, id AS entry_id FROM world_creature_spawn WHERE id <> 0
+  UNION
+  SELECT map, id2 AS entry_id FROM world_creature_spawn WHERE id2 <> 0
+  UNION
+  SELECT map, id3 AS entry_id FROM world_creature_spawn WHERE id3 <> 0
+  UNION
+  SELECT map, id4 AS entry_id FROM world_creature_spawn WHERE id4 <> 0
+)
+SELECT e.map, e.entry_id, COALESCE(wct.name, 'Unknown') AS name
+FROM entries e
+LEFT JOIN world_creature_template wct ON wct.entry = e.entry_id
+ORDER BY e.map, e.entry_id
+`
+
+type ListWorldInstanceSpawnEntriesRow struct {
+	Map     int32  `db:"map" json:"map"`
+	EntryID int32  `db:"entry_id" json:"entry_id"`
+	Name    string `db:"name" json:"name"`
+}
+
+func (q *sqlQuerier) ListWorldInstanceSpawnEntries(ctx context.Context) ([]ListWorldInstanceSpawnEntriesRow, error) {
+	rows, err := q.db.Query(ctx, listWorldInstanceSpawnEntries)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListWorldInstanceSpawnEntriesRow
+	for rows.Next() {
+		var i ListWorldInstanceSpawnEntriesRow
+		if err := rows.Scan(&i.Map, &i.EntryID, &i.Name); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const listWorldInstanceTemplates = `-- name: ListWorldInstanceTemplates :many
-SELECT id, name, abbreviation, category, boss_count, background, created_at, updated_at
+SELECT id, name, abbreviation, category, boss_count, background, map_id, created_at, updated_at
 FROM world_instance_template
 ORDER BY name
 `
@@ -7090,6 +7185,7 @@ func (q *sqlQuerier) ListWorldInstanceTemplates(ctx context.Context) ([]WorldIns
 			&i.Category,
 			&i.BossCount,
 			&i.Background,
+			&i.MapID,
 			&i.CreatedAt,
 			&i.UpdatedAt,
 		); err != nil {
@@ -7173,15 +7269,16 @@ func (q *sqlQuerier) ListWorldInstanceZoneNames(ctx context.Context) ([]WorldIns
 }
 
 const upsertWorldInstanceTemplate = `-- name: UpsertWorldInstanceTemplate :one
-INSERT INTO world_instance_template (name, abbreviation, category, boss_count, background)
-VALUES ($1, $2, $3, $4, $5)
+INSERT INTO world_instance_template (name, abbreviation, category, boss_count, background, map_id)
+VALUES ($1, $2, $3, $4, $5, $6)
 ON CONFLICT (name) DO UPDATE SET
   abbreviation = EXCLUDED.abbreviation,
   category = EXCLUDED.category,
   boss_count = EXCLUDED.boss_count,
+	map_id = EXCLUDED.map_id,
   background = EXCLUDED.background,
   updated_at = NOW()
-RETURNING id, name, abbreviation, category, boss_count, background, created_at, updated_at
+RETURNING id, name, abbreviation, category, boss_count, background, map_id, created_at, updated_at
 `
 
 type UpsertWorldInstanceTemplateParams struct {
@@ -7190,6 +7287,7 @@ type UpsertWorldInstanceTemplateParams struct {
 	Category     InstanceCategory `db:"category" json:"category"`
 	BossCount    pgtype.Int4      `db:"boss_count" json:"boss_count"`
 	Background   pgtype.Text      `db:"background" json:"background"`
+	MapID        pgtype.Int4      `db:"map_id" json:"map_id"`
 }
 
 func (q *sqlQuerier) UpsertWorldInstanceTemplate(ctx context.Context, arg UpsertWorldInstanceTemplateParams) (WorldInstanceTemplate, error) {
@@ -7199,6 +7297,7 @@ func (q *sqlQuerier) UpsertWorldInstanceTemplate(ctx context.Context, arg Upsert
 		arg.Category,
 		arg.BossCount,
 		arg.Background,
+		arg.MapID,
 	)
 	var i WorldInstanceTemplate
 	err := row.Scan(
@@ -7208,6 +7307,7 @@ func (q *sqlQuerier) UpsertWorldInstanceTemplate(ctx context.Context, arg Upsert
 		&i.Category,
 		&i.BossCount,
 		&i.Background,
+		&i.MapID,
 		&i.CreatedAt,
 		&i.UpdatedAt,
 	)

@@ -522,6 +522,10 @@ func (w *WorkerLogParse) Work(ctx context.Context, job *river.Job[ArgsLogParse])
 			return fmt.Errorf("consume warmane log: %w", consumeErr)
 		}
 
+		parserMetrics := p.Metrics()
+		report.TotalLines = parserMetrics.TotalLinesParsed
+		metrics.linesProcessed.Add(float64(parserMetrics.TotalLinesParsed))
+
 	case database.LogTypeAzerothcore:
 		// Load single file and normalize concatenated server chunks by unix timestamp.
 		loadStart := time.Now()
@@ -560,6 +564,10 @@ func (w *WorkerLogParse) Work(ctx context.Context, job *river.Job[ArgsLogParse])
 			jobResult = "failure"
 			return fmt.Errorf("consume azerothcore log: %w", consumeErr)
 		}
+
+		parserMetrics := p.Metrics()
+		report.TotalLines = parserMetrics.TotalLinesParsed
+		metrics.linesProcessed.Add(float64(parserMetrics.TotalLinesParsed))
 
 	default:
 		jobResult = "failure"

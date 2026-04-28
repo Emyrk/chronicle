@@ -2,6 +2,8 @@ package chronicle
 
 import (
 	"context"
+	"database/sql"
+	"errors"
 	"fmt"
 
 	"github.com/Emyrk/chronicle/chronicle/riverqueue"
@@ -57,6 +59,9 @@ func (w *WorkerLogReparse) Work(ctx context.Context, job *river.Job[ArgsLogRepar
 
 	logGroup, err := db.GetWoWLogGroupByID(ctx, job.Args.LogID)
 	if err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			return river.JobCancel(fmt.Errorf("log group %s not found", job.Args.LogID))
+		}
 		return fmt.Errorf("fetch log group: %w", err)
 	}
 

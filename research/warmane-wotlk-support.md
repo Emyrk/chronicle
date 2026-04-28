@@ -25,7 +25,7 @@ Status meanings:
 
 | Map | Script | Instance | Status | Notes |
 | --- | --- | --- | --- | --- |
-| 33 | `instance_shadowfang_keep` | Shadowfang Keep | missing | No Warmane registry entry. |
+| 33 | `instance_shadowfang_keep` | Shadowfang Keep | partial | Registered with boss-first hostile coverage sourced from world creature templates; trash is not yet exhaustive. |
 | 34 | `instance_the_stockade` | The Stockade | supported | Covered by `StockadesFactory` with zone alias `the stockade`. |
 | 36 | `instance_deadmines` | Deadmines | supported | Registered with hostile coverage. |
 | 43 | `instance_wailing_caverns` | Wailing Caverns | supported | Registered with hostile coverage. |

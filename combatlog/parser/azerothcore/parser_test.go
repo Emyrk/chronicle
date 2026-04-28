@@ -7,6 +7,8 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/Emyrk/chronicle/combatlog/consumers"
+	"github.com/Emyrk/chronicle/combatlog/parser/common/parsectx"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
@@ -14,6 +16,7 @@ import (
 	"github.com/Emyrk/chronicle/combatlog/parser/types"
 	"github.com/Emyrk/chronicle/combatlog/parser/types/combatant"
 	"github.com/Emyrk/chronicle/combatlog/parser/vanilla/messages"
+	"github.com/Emyrk/chronicle/combatlog/parser/vanilla/state/encounters"
 	"github.com/Emyrk/chronicle/combatlog/parser/vanilla/state/encounters/registry"
 	"github.com/Emyrk/chronicle/database"
 	"github.com/Emyrk/chronicle/database/gamedb"
@@ -24,8 +27,8 @@ var _ gamedb.GameDB = (*stubSpellDB)(nil)
 
 type stubSpellDB struct{}
 
-func (stubSpellDB) ResolveGear([]combatant.GearItem)                              {}
-func (stubSpellDB) Creature(int32) (*database.WorldCreatureTemplate, bool)         { return nil, false }
+func (stubSpellDB) ResolveGear([]combatant.GearItem)                       {}
+func (stubSpellDB) Creature(int32) (*database.WorldCreatureTemplate, bool) { return nil, false }
 func (stubSpellDB) Spell(chrondbc.SpellID) (*chrondbc.Spell, error) {
 	return nil, fmt.Errorf("no spell database loaded")
 }
@@ -35,6 +38,10 @@ func newTestParser(t *testing.T, logData string) *Parser {
 	p, err := New(context.Background(), slog.Default(), strings.NewReader(logData), stubSpellDB{}, nil, registry.NewRegistry(slog.Default()))
 	require.NoError(t, err)
 	return p
+}
+
+func creatureGUID(entry uint32, seed uint32) guid.GUID {
+	return guid.GUID(0xF130000000000000 | uint64(entry&0xFFFFFF)<<24 | uint64(seed&0xFFFFFF))
 }
 
 // advanceOne calls Advance and returns the first non-Unit/non-Combatant message.
@@ -114,4 +121,115 @@ func TestParseSpellInterrupt(t *testing.T) {
 	// Spell lookups return nil from stub DB.
 	assert.Nil(t, ir.InterruptSpell)
 	assert.Nil(t, ir.InterruptedSpell)
+}
+
+func TestParseSpellPeriodicDrain(t *testing.T) {
+	t.Parallel()
+	line := `1777228582945  SPELL_PERIODIC_DRAIN,0x0000000000000001,"Chronicle",0x400,0xF130002C36000022,"Ragefire Trogg",0x0,8129,"Mana Burn",0x40,15,0,0`
+
+	p := newTestParser(t, line)
+	msg := advanceOne(t, p)
+
+	rc, ok := msg.(*messages.ResourceChange)
+	require.True(t, ok, "expected *messages.ResourceChange, got %T", msg)
+
+	assert.Equal(t, guid.GUID(0xF130002C36000022), rc.Target)
+	assert.NotNil(t, rc.Caster)
+	assert.Equal(t, guid.GUID(0x0000000000000001), *rc.Caster)
+	assert.Equal(t, int32(15), rc.Amount)
+	assert.Equal(t, types.ResourceMana, rc.Resource)
+	assert.Equal(t, types.ChangeDirectionLoss, rc.Direction)
+}
+
+func TestParseSpellDispel(t *testing.T) {
+	t.Parallel()
+	line := `1777228582945  SPELL_DISPEL,0x0000000000000001,"Chronicle",0x400,0xF130002C36000022,"Ragefire Trogg",0x0,527,"Dispel Magic",0x2,331,"Healing Wave",0x8,BUFF`
+
+	p := newTestParser(t, line)
+	msg := advanceOne(t, p)
+
+	dispel, ok := msg.(*messages.Dispel)
+	require.True(t, ok, "expected *messages.Dispel, got %T", msg)
+
+	assert.Equal(t, guid.GUID(0x0000000000000001), dispel.Caster)
+	assert.Equal(t, guid.GUID(0xF130002C36000022), dispel.Target)
+}
+
+func TestParseSpellStolen(t *testing.T) {
+	t.Parallel()
+	line := `1777228582945  SPELL_STOLEN,0x0000000000000001,"Chronicle",0x400,0xF130002C36000022,"Ragefire Trogg",0x0,30449,"Spellsteal",0x10,1459,"Arcane Intellect",0x40,BUFF`
+
+	p := newTestParser(t, line)
+	msg := advanceOne(t, p)
+
+	dispel, ok := msg.(*messages.Dispel)
+	require.True(t, ok, "expected *messages.Dispel, got %T", msg)
+
+	assert.Equal(t, guid.GUID(0x0000000000000001), dispel.Caster)
+	assert.Equal(t, guid.GUID(0xF130002C36000022), dispel.Target)
+}
+
+func TestChronicleCustomEventsAreAcceptedAsNoops(t *testing.T) {
+	t.Parallel()
+
+	for _, event := range []string{
+		`1777340510851  CHRONICLE_SPELL_TARGET_RESULT,0x0000000000000001,"Chronicle",12345,"Test Spell",0x1,"MISS"`,
+		`1777340510851  CHRONICLE_LOOT_ITEM,"Chronicle",12345,"Test Item",2`,
+		`1777340510851  CHRONICLE_LOOT_MONEY,"Chronicle",12500`,
+	} {
+		t.Run(event, func(t *testing.T) {
+			t.Parallel()
+			p := newTestParser(t, event)
+			msgs, err := p.Advance(context.Background())
+			require.NoError(t, err)
+			assert.Empty(t, msgs)
+		})
+	}
+}
+
+func TestMetricsTotalLinesParsed(t *testing.T) {
+	t.Parallel()
+
+	p := newTestParser(t, strings.Join([]string{
+		`1777340510851  CHRONICLE_HEADER,"","3.3.5a",12340`,
+		`1777340510851  CHRONICLE_ZONE_INFO,"Zul'Farrak",209,230,"party"`,
+	}, "\n"))
+
+	_, err := p.Advance(context.Background())
+	require.NoError(t, err)
+	_, err = p.Advance(context.Background())
+	require.NoError(t, err)
+
+	require.EqualValues(t, 2, p.Metrics().TotalLinesParsed)
+}
+
+func TestZulFarrakBossEncounterRegression(t *testing.T) {
+	t.Parallel()
+
+	ctx := parsectx.WithType(context.Background(), database.LogTypeAzerothcore)
+	reg := registry.WarmaneStaticRegistry(slog.Default())
+	bossGUID := creatureGUID(7272, 1)
+	logData := strings.Join([]string{
+		`1777340510851  CHRONICLE_HEADER,"","3.3.5a",12340`,
+		`1777340510851  CHRONICLE_ZONE_INFO,"Zul'Farrak",209,230,"party"`,
+		fmt.Sprintf(`1777340511000  SPELL_DAMAGE,0x0000000000000001,"Chronicle",0x400,0x%016X,"Theka the Martyr",0x0,1,"Test Spell",0x1,10,0,1,0,0,0,nil,nil,nil`, uint64(bossGUID)),
+		fmt.Sprintf(`1777340512000  UNIT_DIED,0x0000000000000000,nil,0x80000000,0x%016X,"Theka the Martyr",0xa48`, uint64(bossGUID)),
+	}, "\n")
+
+	p, err := New(ctx, slog.Default(), strings.NewReader(logData), stubSpellDB{}, nil, reg)
+	require.NoError(t, err)
+
+	output := encounters.New(ctx, slog.Default(), reg)
+	c := consumers.New(slog.Default(), output)
+	err = c.ConsumeAll(ctx, p)
+	require.NoError(t, err)
+	require.Len(t, output.Instances, 1)
+
+	result, err := output.Instances[0].Finalize(ctx)
+	require.NoError(t, err)
+	require.Len(t, result.Encounters, 1)
+	require.Equal(t, "Theka the Martyr", result.Encounters[0].Name)
+	require.True(t, result.Encounters[0].Boss)
+	require.Nil(t, result.UnknownUnits)
+	require.EqualValues(t, 4, p.Metrics().TotalLinesParsed)
 }

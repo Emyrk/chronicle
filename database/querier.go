@@ -207,6 +207,9 @@ type sqlcQuerier interface {
 	ListWoWServerRealms(ctx context.Context, serverID uuid.UUID) ([]WowServerRealm, error)
 	// Servers
 	ListWoWServers(ctx context.Context) ([]WowServer, error)
+	ListWorldBossCredits(ctx context.Context) ([]WorldBossCredit, error)
+	ListWorldInstanceScripts(ctx context.Context) ([]WorldInstanceScript, error)
+	ListWorldInstanceSpawnEntries(ctx context.Context) ([]ListWorldInstanceSpawnEntriesRow, error)
 	ListWorldInstanceTemplates(ctx context.Context) ([]WorldInstanceTemplate, error)
 	ListWorldInstanceUnits(ctx context.Context) ([]ListWorldInstanceUnitsRow, error)
 	ListWorldInstanceZoneNames(ctx context.Context) ([]WorldInstanceZoneName, error)
