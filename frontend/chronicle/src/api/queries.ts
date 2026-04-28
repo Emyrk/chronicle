@@ -51,6 +51,8 @@ import type {
   RegressionSnapshotFull as RegressionSnapshotFullGenerated,
   CreateRegressionFixtureRequest as CreateRegressionFixtureRequestGenerated,
   RequeueVersionResponse as RequeueVersionResponseGenerated,
+  AdminBulkDeleteResponse as AdminBulkDeleteResponseGenerated,
+  AdminBulkSelectedReparseResponse as AdminBulkSelectedReparseResponseGenerated,
   AdminOutdatedInstancesResponse,
   SiteConfig,
 } from "./typesGenerated";
@@ -101,6 +103,8 @@ export type GuildSettings = GuildSettingsGenerated;
 export type GuildJoinRequest = GuildJoinRequestGenerated;
 export type UpdateGuildSettingsRequest = UpdateGuildSettingsRequestGenerated;
 export type CreateJoinRequestBody = CreateJoinRequestBodyGenerated;
+export type AdminBulkDeleteResponse = AdminBulkDeleteResponseGenerated;
+export type AdminBulkSelectedReparseResponse = AdminBulkSelectedReparseResponseGenerated;
 
 export function useWhoami(options?: Omit<UseQueryOptions<boolean>, "queryKey" | "queryFn">) {
   return useQuery({
@@ -800,6 +804,56 @@ export function useAdminInstanceNames(options?: Omit<UseQueryOptions<string[]>, 
     },
     staleTime: 5 * 60 * 1000, // Cache for 5 minutes
     ...options,
+  });
+}
+
+export function useAdminBulkDeleteLogs() {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: async (logIds: string[]) => {
+      const response = await fetch("/api/v1/admin/logs/delete", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ log_ids: logIds }),
+      });
+      if (!response.ok) {
+        const error = await response.json().catch(() => ({ message: "Failed to bulk delete logs" }));
+        throw new Error(error.message || "Failed to bulk delete logs");
+      }
+      return response.json() as Promise<AdminBulkDeleteResponse>;
+    },
+    onSuccess: (_data, logIds) => {
+      queryClient.invalidateQueries({ queryKey: ["admin", "logs"] });
+      for (const logId of logIds) {
+        queryClient.removeQueries({ queryKey: ["logGroup", logId] });
+      }
+    },
+  });
+}
+
+export function useAdminBulkReparseLogs() {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: async (logIds: string[]) => {
+      const response = await fetch("/api/v1/admin/logs/reparse", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ log_ids: logIds }),
+      });
+      if (!response.ok) {
+        const error = await response.json().catch(() => ({ message: "Failed to bulk reparse logs" }));
+        throw new Error(error.message || "Failed to bulk reparse logs");
+      }
+      return response.json() as Promise<AdminBulkSelectedReparseResponse>;
+    },
+    onSuccess: (_data, logIds) => {
+      queryClient.invalidateQueries({ queryKey: ["admin", "logs"] });
+      for (const logId of logIds) {
+        queryClient.invalidateQueries({ queryKey: ["logGroup", logId] });
+      }
+    },
   });
 }
 

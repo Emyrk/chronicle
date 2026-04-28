@@ -559,6 +559,90 @@ func (a *API) AdminListOutdatedInstances(w http.ResponseWriter, r *http.Request)
 		MinVersion: minParserVersion,
 	})
 }
+
+func (a *API) AdminBulkDeleteLogs(w http.ResponseWriter, r *http.Request) {
+	ctx := r.Context()
+
+	var req chroniclesdk.AdminBulkLogRequest
+	if !httpapi.Read(ctx, w, r, &req) {
+		return
+	}
+
+	resp := chroniclesdk.AdminBulkDeleteResponse{
+		Requested: len(req.LogIDs),
+		Failed:    make([]chroniclesdk.AdminBulkLogFailure, 0),
+	}
+
+	for _, logID := range req.LogIDs {
+		if err := a.Chronicle.DeleteWoWLogGroup(ctx, logID); err != nil {
+			resp.Failed = append(resp.Failed, chroniclesdk.AdminBulkLogFailure{
+				LogGroupID: logID,
+				Detail:     err.Error(),
+			})
+			continue
+		}
+		resp.Deleted++
+	}
+
+	httpapi.Write(ctx, w, http.StatusOK, resp)
+}
+
+func (a *API) AdminBulkReparseLogs(w http.ResponseWriter, r *http.Request) {
+	ctx := r.Context()
+
+	var req chroniclesdk.AdminBulkLogRequest
+	if !httpapi.Read(ctx, w, r, &req) {
+		return
+	}
+
+	resp := chroniclesdk.AdminBulkSelectedReparseResponse{
+		Requested: len(req.LogIDs),
+		Failed:    make([]chroniclesdk.AdminBulkLogFailure, 0),
+	}
+
+	for _, logID := range req.LogIDs {
+		files, err := a.Zed.GetWoWLogFilesByGroupID(ctx, logID)
+		if err != nil {
+			resp.Failed = append(resp.Failed, chroniclesdk.AdminBulkLogFailure{
+				LogGroupID: logID,
+				Detail:     err.Error(),
+			})
+			continue
+		}
+
+		storageDeleted := false
+		for _, f := range files {
+			if f.StorageDeletedAt.Valid {
+				storageDeleted = true
+				resp.Failed = append(resp.Failed, chroniclesdk.AdminBulkLogFailure{
+					LogGroupID: logID,
+					Detail:     "re-parse requires the log files to be present in storage",
+				})
+				break
+			}
+		}
+		if storageDeleted {
+			continue
+		}
+
+		var realmID uuid.UUID
+		if meta, metaErr := a.Zed.GetServerUploadMetaRealmID(ctx, logID); metaErr == nil && meta.Valid {
+			realmID = meta.UUID
+		}
+
+		if _, err := a.Chronicle.EnqueueReParseLog(ctx, logID, false, false, realmID); err != nil {
+			resp.Failed = append(resp.Failed, chroniclesdk.AdminBulkLogFailure{
+				LogGroupID: logID,
+				Detail:     err.Error(),
+			})
+			continue
+		}
+		resp.Enqueued++
+	}
+
+	httpapi.Write(ctx, w, http.StatusAccepted, resp)
+}
+
 func (a *API) AdminGetSiteConfig(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 	config, err := a.Opts.Zed.GetSiteConfig(ctx)

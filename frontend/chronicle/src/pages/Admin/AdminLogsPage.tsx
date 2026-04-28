@@ -1,15 +1,19 @@
 import { useState } from "react";
 import { Link } from "react-router-dom";
 import {
+  useAdminBulkDeleteLogs,
+  useAdminBulkReparseLogs,
   useAdminUsers,
   useAdminLogs,
   useAdminInstanceNames,
   type AdminLog,
   type AdminLogsSortField,
 } from "@/api/queries";
-import { FileText, Loader2, ChevronRight, ChevronLeft, ChevronsLeft, ChevronsRight, ArrowUpDown, ArrowUp, ArrowDown, X, Filter } from "lucide-react";
+import { FileText, Loader2, ChevronRight, ChevronLeft, ChevronsLeft, ChevronsRight, ArrowUpDown, ArrowUp, ArrowDown, X, Filter, RefreshCw, Trash2 } from "lucide-react";
 import { Card } from "@/components/ui/Card/Card";
 import { Button } from "@/components/ui/button";
+import { Checkbox } from "@/components/ui/Checkbox/Checkbox";
+import { toast } from "sonner";
 
 function formatBytes(bytes: number): string {
   if (bytes === 0) return "0 B";
@@ -19,41 +23,51 @@ function formatBytes(bytes: number): string {
   return `${parseFloat((bytes / Math.pow(k, i)).toFixed(1))} ${sizes[i]}`;
 }
 
-function LogRow({ log }: { log: AdminLog }) {
+interface LogRowProps {
+  log: AdminLog;
+  selected: boolean;
+  onToggleSelected: (logId: string, checked: boolean) => void;
+}
+
+function LogRow({ log, selected, onToggleSelected }: LogRowProps) {
   return (
-    <Link
-      to={`/logs/${log.id}`}
-      className="group flex items-center gap-3 py-3 px-4 hover:bg-accent/50 transition-colors"
-    >
+    <div className="flex items-center gap-3 py-3 px-4 hover:bg-accent/50 transition-colors">
+      <Checkbox
+        checked={selected}
+        onCheckedChange={(checked) => onToggleSelected(log.id, checked === true)}
+        aria-label={`Select log ${log.id}`}
+      />
       <FileText className="h-4 w-4 text-muted-foreground flex-shrink-0" />
-      <div className="flex-1 min-w-0">
-        <div className="flex items-center gap-2">
-          <span className="text-sm font-mono">{log.id.slice(0, 8)}...</span>
-          <span className={`px-2 py-0.5 text-xs font-medium rounded ${
-            log.state === "processed" 
-              ? "bg-green-500/15 text-green-400"
-              : "bg-yellow-500/15 text-yellow-400"
-          }`}>
-            {log.state}
+      <Link to={`/logs/${log.id}`} className="group flex min-w-0 flex-1 items-center gap-3">
+        <div className="flex-1 min-w-0">
+          <div className="flex items-center gap-2">
+            <span className="text-sm font-mono">{log.id.slice(0, 8)}...</span>
+            <span className={`px-2 py-0.5 text-xs font-medium rounded ${
+              log.state === "processed"
+                ? "bg-green-500/15 text-green-400"
+                : "bg-yellow-500/15 text-yellow-400"
+            }`}>
+              {log.state}
+            </span>
+          </div>
+          <span className="text-xs text-muted-foreground">
+            by {log.owner_name || "Unknown"}
           </span>
         </div>
-        <span className="text-xs text-muted-foreground">
-          by {log.owner_name || "Unknown"}
+        {log.instance_names && log.instance_names.length > 0 && (
+          <span className="text-xs text-muted-foreground truncate max-w-32" title={log.instance_names.join(", ")}>
+            {log.instance_names.join(", ")}
+          </span>
+        )}
+        <span className="text-xs text-muted-foreground tabular-nums w-16 text-right">
+          {formatBytes(log.size_bytes)}
         </span>
-      </div>
-      {log.instance_names && log.instance_names.length > 0 && (
-        <span className="text-xs text-muted-foreground truncate max-w-32" title={log.instance_names.join(", ")}>
-          {log.instance_names.join(", ")}
+        <span className="text-xs text-muted-foreground w-24 text-right">
+          {new Date(log.created_at).toLocaleDateString(undefined, { month: "short", day: "numeric", year: "numeric" })}
         </span>
-      )}
-      <span className="text-xs text-muted-foreground tabular-nums w-16 text-right">
-        {formatBytes(log.size_bytes)}
-      </span>
-      <span className="text-xs text-muted-foreground w-24 text-right">
-        {new Date(log.created_at).toLocaleDateString(undefined, { month: "short", day: "numeric", year: "numeric" })}
-      </span>
-      <ChevronRight className="h-4 w-4 text-muted-foreground" />
-    </Link>
+        <ChevronRight className="h-4 w-4 text-muted-foreground" />
+      </Link>
+    </div>
   );
 }
 
@@ -146,12 +160,15 @@ function PaginationControls({ currentPage, totalPages, hasMore, onPageChange, is
 export function AdminLogsPage() {
   const { data: usersData } = useAdminUsers();
   const users = usersData?.users ?? [];
+  const bulkDeleteLogs = useAdminBulkDeleteLogs();
+  const bulkReparseLogs = useAdminBulkReparseLogs();
 
   const [sortBy, setSortBy] = useState<AdminLogsSortField>("date");
   const [sortOrder, setSortOrder] = useState<"asc" | "desc">("desc");
   const [page, setPage] = useState(0);
   const [filterUserId, setFilterUserId] = useState<string>("");
   const [filterInstanceName, setFilterInstanceName] = useState<string>("");
+  const [selectedLogIds, setSelectedLogIds] = useState<Set<string>>(new Set());
   const pageSize = 50;
 
   const { data: instanceNames } = useAdminInstanceNames();
@@ -166,6 +183,7 @@ export function AdminLogsPage() {
   });
 
   const toggleSort = (field: AdminLogsSortField) => {
+    setSelectedLogIds(new Set());
     if (sortBy === field) {
       setSortOrder((prev) => (prev === "asc" ? "desc" : "asc"));
     } else {
@@ -176,6 +194,7 @@ export function AdminLogsPage() {
   };
 
   const handleFilterChange = (type: "user" | "instance", value: string) => {
+    setSelectedLogIds(new Set());
     if (type === "user") {
       setFilterUserId(value);
     } else {
@@ -185,6 +204,7 @@ export function AdminLogsPage() {
   };
 
   const clearFilters = () => {
+    setSelectedLogIds(new Set());
     setFilterUserId("");
     setFilterInstanceName("");
     setPage(0);
@@ -192,6 +212,101 @@ export function AdminLogsPage() {
 
   const hasActiveFilters = filterUserId || filterInstanceName;
   const totalPages = data ? Math.ceil(data.total_count / pageSize) : 0;
+  const visibleLogIds = data?.logs.map((log) => log.id) ?? [];
+  const selectedVisibleCount = visibleLogIds.filter((logId) => selectedLogIds.has(logId)).length;
+  const allVisibleSelected = visibleLogIds.length > 0 && selectedVisibleCount === visibleLogIds.length;
+  const anyVisibleSelected = selectedVisibleCount > 0;
+  const bulkActionPending = bulkDeleteLogs.isPending || bulkReparseLogs.isPending;
+
+  const handleToggleSelected = (logId: string, checked: boolean) => {
+    setSelectedLogIds((prev) => {
+      const next = new Set(prev);
+      if (checked) {
+        next.add(logId);
+      } else {
+        next.delete(logId);
+      }
+      return next;
+    });
+  };
+
+  const handleToggleAllVisible = (checked: boolean) => {
+    setSelectedLogIds((prev) => {
+      const next = new Set(prev);
+      for (const logId of visibleLogIds) {
+        if (checked) {
+          next.add(logId);
+        } else {
+          next.delete(logId);
+        }
+      }
+      return next;
+    });
+  };
+
+  const clearSelection = () => {
+    setSelectedLogIds(new Set());
+  };
+
+  const handleBulkReparse = () => {
+    const logIds = Array.from(selectedLogIds);
+    if (logIds.length === 0) {
+      return;
+    }
+
+    bulkReparseLogs.mutate(logIds, {
+      onSuccess: (result) => {
+        clearSelection();
+        if (result.failed.length > 0) {
+          toast.warning("Bulk reparse partially queued", {
+            description: `${result.enqueued} of ${result.requested} selected logs were enqueued. ${result.failed.length} failed.`,
+          });
+          return;
+        }
+
+        toast.success("Bulk reparse started", {
+          description: `${result.enqueued} selected logs were enqueued for reparse.`,
+        });
+      },
+      onError: (err) => {
+        toast.error("Failed to bulk reparse", {
+          description: err.message,
+        });
+      },
+    });
+  };
+
+  const handleBulkDelete = () => {
+    const logIds = Array.from(selectedLogIds);
+    if (logIds.length === 0) {
+      return;
+    }
+
+    if (!confirm(`Delete ${logIds.length} selected logs? This cannot be undone.`)) {
+      return;
+    }
+
+    bulkDeleteLogs.mutate(logIds, {
+      onSuccess: (result) => {
+        clearSelection();
+        if (result.failed.length > 0) {
+          toast.warning("Bulk delete partially completed", {
+            description: `${result.deleted} of ${result.requested} selected logs were deleted. ${result.failed.length} failed.`,
+          });
+          return;
+        }
+
+        toast.success("Bulk delete completed", {
+          description: `${result.deleted} selected logs were deleted.`,
+        });
+      },
+      onError: (err) => {
+        toast.error("Failed to bulk delete logs", {
+          description: err.message,
+        });
+      },
+    });
+  };
 
   return (
     <div className="space-y-4">
@@ -241,6 +356,57 @@ export function AdminLogsPage() {
           </span>
         )}
       </div>
+
+      {!isLoading && !error && data && data.logs.length > 0 && (
+        <Card className="p-4">
+          <div className="flex flex-wrap items-center gap-3">
+            <div className="flex items-center gap-2">
+              <Checkbox
+                checked={allVisibleSelected ? true : anyVisibleSelected ? "indeterminate" : false}
+                onCheckedChange={(checked) => handleToggleAllVisible(checked === true)}
+                aria-label="Select all visible logs"
+              />
+              <span className="text-sm text-muted-foreground">
+                {selectedVisibleCount > 0 ? `${selectedVisibleCount} selected on this page` : "Select visible logs"}
+              </span>
+            </div>
+
+            {selectedLogIds.size > 0 && (
+              <>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={handleBulkReparse}
+                  disabled={bulkActionPending}
+                >
+                  {bulkReparseLogs.isPending ? (
+                    <Loader2 className="h-4 w-4 animate-spin" />
+                  ) : (
+                    <RefreshCw className="h-4 w-4" />
+                  )}
+                  Reparse Selected
+                </Button>
+                <Button
+                  variant="destructive"
+                  size="sm"
+                  onClick={handleBulkDelete}
+                  disabled={bulkActionPending}
+                >
+                  {bulkDeleteLogs.isPending ? (
+                    <Loader2 className="h-4 w-4 animate-spin" />
+                  ) : (
+                    <Trash2 className="h-4 w-4" />
+                  )}
+                  Delete Selected
+                </Button>
+                <Button variant="ghost" size="sm" onClick={clearSelection} disabled={bulkActionPending}>
+                  Clear Selection
+                </Button>
+              </>
+            )}
+          </div>
+        </Card>
+      )}
 
       {/* Sort controls */}
       <div className="flex items-center gap-2 flex-wrap">
@@ -303,7 +469,12 @@ export function AdminLogsPage() {
         <>
           <Card className="overflow-hidden divide-y divide-border/50">
             {data.logs.map((log) => (
-              <LogRow key={log.id} log={log} />
+              <LogRow
+                key={log.id}
+                log={log}
+                selected={selectedLogIds.has(log.id)}
+                onToggleSelected={handleToggleSelected}
+              />
             ))}
           </Card>
 
@@ -312,7 +483,10 @@ export function AdminLogsPage() {
               currentPage={page + 1}
               totalPages={totalPages}
               hasMore={data.has_more}
-              onPageChange={(p) => setPage(p - 1)}
+              onPageChange={(p) => {
+                clearSelection();
+                setPage(p - 1);
+              }}
               isLoading={isLoading}
             />
           )}

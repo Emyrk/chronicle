@@ -30,6 +30,31 @@ export interface AddGuildMemberRequest {
 }
 
 // From chroniclesdk/user.go
+export interface AdminBulkDeleteResponse {
+    readonly requested: number;
+    readonly deleted: number;
+    readonly failed: readonly AdminBulkLogFailure[];
+}
+
+// From chroniclesdk/user.go
+export interface AdminBulkLogFailure {
+    readonly log_group_id: string;
+    readonly detail: string;
+}
+
+// From chroniclesdk/user.go
+export interface AdminBulkLogRequest {
+    readonly log_ids: readonly string[];
+}
+
+// From chroniclesdk/user.go
+export interface AdminBulkSelectedReparseResponse {
+    readonly requested: number;
+    readonly enqueued: number;
+    readonly failed: readonly AdminBulkLogFailure[];
+}
+
+// From chroniclesdk/user.go
 export interface AdminLog {
     readonly id: string;
     readonly owner_id: string;
@@ -422,6 +447,10 @@ export interface IdentityReport {
      * UnitSpells maps creature entry ID → list of spell names that creature cast.
      */
     readonly unit_spells?: Record<number, string[]>;
+    /**
+     * GoCode contains generated Go source code for instance definitions.
+     */
+    readonly go_code?: string;
 }
 
 // From chroniclesdk/log.go
@@ -1593,8 +1622,7 @@ export interface WoWLogGroup {
     readonly updated_at: string;
     readonly log_type: string;
     readonly files: readonly WoWLogFile[];
-    // empty interface{} type, falling back to unknown
-    readonly processing_output?: unknown;
+    readonly processing_output?: Record<string, string>;
 }
 
 // From chroniclesdk/log.go
