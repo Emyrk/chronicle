@@ -58,7 +58,7 @@ import {
   type WoWEncounter,
   type Video,
 } from "@/api/queries";
-import type { WoWSimpleParsedInstance, LogParseReport, IdentityReport, Duration } from "@/api/typesGenerated";
+import type { WoWSimpleParsedInstance, LogParseReport, IdentityReport, Duration, LogParseProgress } from "@/api/typesGenerated";
 
 function formatDate(timestamp: unknown): string {
   if (!timestamp) return "Unknown";
@@ -129,6 +129,89 @@ function parseLogParseOutput(output: Record<string, string> | undefined, kind: s
     return null;
   }
   return parsed;
+}
+
+function formatProgressPhase(phase?: string): string {
+  switch (phase) {
+    case "preparing":
+      return "Preparing log files";
+    case "parsing":
+      return "Parsing combat log";
+    case "finalizing":
+      return "Finalizing detected instances";
+    case "complete":
+      return "Completed";
+    default:
+      return "Processing log";
+  }
+}
+
+function formatProgressDetail(progress: LogParseProgress): string | null {
+  if (progress.phase === "parsing" && progress.total_bytes) {
+    return `${formatBytes(progress.processed_bytes ?? 0)} of ${formatBytes(progress.total_bytes)} processed`;
+  }
+
+  if (progress.phase === "finalizing" && progress.total_instances) {
+    const processedInstances = progress.processed_instances ?? 0;
+    return `${processedInstances} of ${progress.total_instances} detected instance${progress.total_instances === 1 ? "" : "s"} finalized`;
+  }
+
+  return null;
+}
+
+function ParseProgressCard({ log }: { log: WoWLogGroupState }) {
+  if (log.status.kind !== JOB_KINDS.logParse || isJobComplete(log.status.state)) {
+    return null;
+  }
+
+  const parsedOutput = parseLogParseOutput(log.status.output, log.status.kind);
+  const progress = parsedOutput?.progress;
+  const detectedInstances = parsedOutput?.instances.length ?? 0;
+  const percent = progress?.percent ?? (log.status.state === RIVER_STATES.running ? 10 : 0);
+  const determinate = Boolean(
+    progress && ((progress.total_bytes ?? 0) > 0 || (progress.total_instances ?? 0) > 0),
+  );
+  const clampedWidth = `${Math.max(2, Math.min(percent, 100))}%`;
+  const detail = progress
+    ? formatProgressDetail(progress)
+    : log.status.state === RIVER_STATES.running
+      ? "Parsing has started. Progress will appear as the worker reports it."
+      : "Waiting for a worker to start processing this job.";
+
+  return (
+    <div className="rounded-lg border border-blue-200/60 bg-blue-50/70 p-4 dark:border-blue-900 dark:bg-blue-950/40">
+      <div className="mb-3 flex items-center justify-between gap-3">
+        <div>
+          <p className="text-sm font-medium text-blue-900 dark:text-blue-100">
+            {formatProgressPhase(progress?.phase)}
+          </p>
+          <p className="text-xs text-blue-700/90 dark:text-blue-300/90">
+            {detail}
+          </p>
+        </div>
+        <span className="text-sm font-semibold tabular-nums text-blue-900 dark:text-blue-100">
+          {Math.round(percent)}%
+        </span>
+      </div>
+
+      <div className="h-2 overflow-hidden rounded-full bg-blue-100/90 dark:bg-blue-900/70">
+        {determinate ? (
+          <div
+            className="h-full rounded-full bg-blue-600 transition-all duration-500 ease-out dark:bg-blue-400"
+            style={{ width: clampedWidth }}
+          />
+        ) : (
+          <div className="h-full w-1/3 animate-pulse rounded-full bg-blue-600/80 dark:bg-blue-400/80" />
+        )}
+      </div>
+
+      {detectedInstances > 0 && (
+        <p className="mt-3 text-xs text-blue-700/90 dark:text-blue-300/90">
+          {detectedInstances} instance{detectedInstances === 1 ? "" : "s"} detected so far.
+        </p>
+      )}
+    </div>
+  );
 }
 
 function formatDuration(start: string, end: string): string {
@@ -1030,6 +1113,8 @@ export function LogDetailView({
                 )}
               </div>
 
+              <ParseProgressCard log={log} />
+
               {(log.status.state === RIVER_STATES.pending || 
                 log.status.state === RIVER_STATES.available || 
                 log.status.state === RIVER_STATES.scheduled) && (
@@ -1360,6 +1445,11 @@ export function LogDetail() {
     isRefetching,
   } = useLogGroup(logId || "", {
     enabled: isAuthenticated && !!logId,
+    refetchInterval: ({ state }) => {
+      const currentLog = state.data as WoWLogGroupState | undefined;
+      return currentLog && isJobComplete(currentLog.status.state) ? false : 2000;
+    },
+    refetchIntervalInBackground: true,
   });
 
   const deleteLogGroup = useDeleteLogGroup();
@@ -1502,6 +1592,11 @@ export function LogDetailByHash() {
     isRefetching,
   } = useLogGroupByFileHash(fileHash || "", {
     enabled: isAuthenticated && !!fileHash,
+    refetchInterval: ({ state }) => {
+      const currentLog = state.data as WoWLogGroupState | undefined;
+      return currentLog && isJobComplete(currentLog.status.state) ? false : 2000;
+    },
+    refetchIntervalInBackground: true,
   });
 
   const logId = log?.id;
