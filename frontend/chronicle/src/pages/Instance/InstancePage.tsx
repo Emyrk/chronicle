@@ -362,7 +362,7 @@ export function InstancePage() {
         <InstanceEventsProvider instanceId={instance.id}>
           <InstancePageInner
             instance={instance}
-            selectedEncounterIds={userSelectedEncounterIds ?? undefined}
+            selectedEncounterIds={selectedEncounterIds}
             onSelectEncounters={setUserSelectedEncounterIds}
             youtubeData={youtubeData}
             selectedEncounterTimes={selectedEncounterTimes}
