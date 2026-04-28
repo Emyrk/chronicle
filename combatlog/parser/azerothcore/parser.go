@@ -13,6 +13,7 @@ import (
 	"github.com/Emyrk/chronicle/combatlog/parser/types/realm"
 	"github.com/Emyrk/chronicle/combatlog/parser/types/unitinfo"
 	"github.com/Emyrk/chronicle/combatlog/parser/types/zone"
+	parservanilla "github.com/Emyrk/chronicle/combatlog/parser/vanilla"
 	"github.com/Emyrk/chronicle/combatlog/parser/vanilla/messages"
 	"github.com/Emyrk/chronicle/combatlog/parser/vanilla/state/encounters/registry"
 	"github.com/Emyrk/chronicle/combatlog/parser/wotlk"
@@ -48,7 +49,10 @@ func New(ctx context.Context, logger *slog.Logger, r io.Reader, wowDB gamedb.Gam
 	inner.WithEventHook("CHRONICLE_UNIT_COMBAT", p.parseUnitCombat)
 	inner.WithEventHook("CHRONICLE_ENCOUNTER_START", p.parseEncounterNoop)
 	inner.WithEventHook("CHRONICLE_ENCOUNTER_END", p.parseEncounterNoop)
-	inner.WithEventHook("CHRONICLE_ENCOUNTER_CREDIT", p.parseEncounterNoop)
+	inner.WithEventHook("CHRONICLE_ENCOUNTER_CREDIT", p.parseEncounterCredit)
+	inner.WithEventHook("CHRONICLE_SPELL_TARGET_RESULT", p.parseChronicleNoop)
+	inner.WithEventHook("CHRONICLE_LOOT_ITEM", p.parseChronicleNoop)
+	inner.WithEventHook("CHRONICLE_LOOT_MONEY", p.parseChronicleNoop)
 	inner.WithEventHook("SPELL_INTERRUPT", p.parseSpellInterrupt)
 	inner.WithEventHook("SPELL_ABSORBED", p.parseSpellAbsorbed)
 
@@ -72,6 +76,10 @@ func (p *Parser) Advance(ctx context.Context) ([]messages.Message, error) {
 // DetailedTimes delegates to the inner parser for timing metrics.
 func (p *Parser) DetailedTimes() map[string]time.Duration {
 	return p.inner.DetailedTimes()
+}
+
+func (p *Parser) Metrics() parservanilla.Metrics {
+	return p.inner.Metrics()
 }
 
 // parseHeader converts a CHRONICLE_HEADER line into a messages.Realm.
@@ -105,7 +113,7 @@ func (p *Parser) parseHeader(ts time.Time, m *wotlk.Matched, _ string) ([]messag
 // Fields: "zoneName", mapId, instanceId, "instanceType"
 func (p *Parser) parseZoneInfo(ts time.Time, m *wotlk.Matched, _ string) ([]messages.Message, error) {
 	zoneName := m.String()
-	_ = m.Uint32() // mapId — zone.Zone has no field for it
+	mapID := m.Uint32()
 	instanceID := m.Uint32()
 	instanceType := m.String()
 
@@ -120,6 +128,7 @@ func (p *Parser) parseZoneInfo(ts time.Time, m *wotlk.Matched, _ string) ([]mess
 			Zone: zone.Zone{
 				Seen:         ts,
 				Name:         strings.ToLower(zoneName),
+				MapID:        mapID,
 				InstanceID:   instanceID,
 				InstanceType: instanceType,
 				IsInstance:   true,
@@ -357,10 +366,47 @@ func (p *Parser) parseSpellInterrupt(ts time.Time, m *wotlk.Matched, _ string) (
 	}, nil
 }
 
-// parseEncounterNoop consumes CHRONICLE_ENCOUNTER_START, CHRONICLE_ENCOUNTER_END,
-// and CHRONICLE_ENCOUNTER_CREDIT without producing any messages.
-// TODO: parse into typed messages when the frontend needs encounter events.
+// parseEncounterCredit converts a CHRONICLE_ENCOUNTER_CREDIT line into a
+// messages.EncounterCredit so the instance tracker can close active boss fights
+// even when AzerothCore does not emit a UNIT_DIED for the boss.
+//
+// Fields: mapId, instanceId, encounterSlot, creatureEntry, creditType,
+// encounterID, "encounterName", durationSecs, unitGuid, "unitName"
+func (p *Parser) parseEncounterCredit(ts time.Time, m *wotlk.Matched, _ string) ([]messages.Message, error) {
+	_ = m.Int32()
+	_ = m.Int32()
+	_ = m.Int32()
+	_ = m.Int32()
+	_ = m.Int32()
+	_ = m.Int32()
+	_ = m.String()
+	_ = m.Int32()
+	unitGUID := m.Guid()
+	unitName := m.String()
+
+	if err := m.Error(); err != nil {
+		p.logger.Warn("failed to parse CHRONICLE_ENCOUNTER_CREDIT", "error", err)
+		return nil, nil
+	}
+
+	return []messages.Message{
+		&messages.EncounterCredit{
+			MessageBase: messages.Base(ts),
+			UnitGUID:    unitGUID,
+			UnitName:    unitName,
+		},
+	}, nil
+}
+
+// parseEncounterNoop consumes encounter bookkeeping events without producing any
+// messages.
 func (p *Parser) parseEncounterNoop(_ time.Time, _ *wotlk.Matched, _ string) ([]messages.Message, error) {
+	return nil, nil
+}
+
+// parseChronicleNoop explicitly accepts Chronicle extension events that are
+// valid for ingestion but are not persisted or surfaced yet.
+func (p *Parser) parseChronicleNoop(_ time.Time, _ *wotlk.Matched, _ string) ([]messages.Message, error) {
 	return nil, nil
 }
 

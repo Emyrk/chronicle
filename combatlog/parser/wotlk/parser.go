@@ -8,6 +8,7 @@ import (
 	"log/slog"
 	"time"
 
+	parservanilla "github.com/Emyrk/chronicle/combatlog/parser/vanilla"
 	"github.com/Emyrk/chronicle/combatlog/parser/vanilla/messages"
 	"github.com/Emyrk/chronicle/combatlog/parser/vanilla/parseerrors"
 	"github.com/Emyrk/chronicle/combatlog/parser/vanilla/state/encounters/registry"
@@ -32,6 +33,7 @@ type Parser struct {
 
 	lineParseDur  time.Duration
 	syntheticsDur time.Duration
+	metrics       parservanilla.Metrics
 
 	missedSpells map[chrondbc.SpellID]missedSpellEntry
 	//eventHooks allow overriding or extending handling of specific events without needing to replace the entire processer.
@@ -53,6 +55,10 @@ func New(ctx context.Context, logger *slog.Logger, r io.Reader, wowDB gamedb.Gam
 		synthetics:   synthetic.New(ctx, logger, wowDB, reg, gn),
 		itemFetcher:  gear,
 		baseYear:     time.Now().Year(),
+		metrics: parservanilla.Metrics{
+			MatchingTime:   make(map[string]time.Duration),
+			UnmatchingTime: make(map[string]time.Duration),
+		},
 		missedSpells: make(map[chrondbc.SpellID]missedSpellEntry),
 	}, nil
 }
@@ -94,13 +100,20 @@ func (p *Parser) DetailedTimes() map[string]time.Duration {
 	return map[string]time.Duration{}
 }
 
+func (p *Parser) Metrics() parservanilla.Metrics {
+	return p.metrics
+}
+
 func (p *Parser) Advance(ctx context.Context) ([]messages.Message, error) {
 	now := time.Now()
 	msgs, err := p.advance(ctx)
-	p.lineParseDur += time.Since(now)
+	parseDuration := time.Since(now)
+	p.lineParseDur += parseDuration
+	p.metrics.TotalParseDuration += parseDuration
 	if err != nil {
 		return nil, err
 	}
+	p.metrics.TotalLinesParsed++
 
 	now = time.Now()
 	msgs, err = p.synthetics.ProcessMessages(msgs)

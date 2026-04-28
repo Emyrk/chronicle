@@ -97,6 +97,14 @@ func ProcessCommonActivity(c CharacterBase, m messages.Message) error {
 				c.Start(fmt.Sprintf("cc_%s", data.Spell.Name), m)
 			}
 		}
+	case *messages.SpellStart:
+		if data.Caster == c.ID() && (c.ID().IsCreature() || c.ID().IsVehicle()) {
+			c.Start("creature spell", m)
+		}
+	case *messages.SpellGo:
+		if data.Caster == c.ID() && (c.ID().IsCreature() || c.ID().IsVehicle()) {
+			c.Start("creature spell", m)
+		}
 	case *messages.Aura:
 		if c.ID() != data.Target {
 			return nil

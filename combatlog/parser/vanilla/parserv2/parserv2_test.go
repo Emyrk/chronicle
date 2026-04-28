@@ -4,6 +4,7 @@ import (
 	"context"
 	"log/slog"
 	"os"
+	"path/filepath"
 	"reflect"
 	"strings"
 	"testing"
@@ -17,6 +18,7 @@ import (
 	"github.com/Emyrk/chronicle/database/gamedb"
 	"github.com/Emyrk/chronicle/database/gamedb/chrondbc"
 	"github.com/Emyrk/chronicle/internal/ptr"
+	"github.com/Emyrk/chronicle/internal/services"
 	"github.com/google/go-cmp/cmp"
 	"github.com/google/go-cmp/cmp/cmpopts"
 	"github.com/rs/zerolog"
@@ -24,13 +26,13 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-// testSpellDB creates a WoWDB from assets/Spell.dbc for testing.
+// testSpellDB creates a WoWDB from the server-specific Spell.dbc for testing.
 // Skips the test if the file doesn't exist (allows tests to run without it).
 func testSpellDB(t *testing.T) gamedb.SpellFetcher {
 	t.Helper()
-	dbcPath := "../../../../assets/Spell.dbc"
+	dbcPath := filepath.Join("..", "..", "..", "..", "assets", services.ServerName, "Spell.dbc")
 	if _, err := os.Stat(dbcPath); os.IsNotExist(err) {
-		t.Skip("assets/Spell.dbc not found, skipping test requiring spell database")
+		t.Skipf("%s not found, skipping test requiring spell database", dbcPath)
 	}
 
 	ctx := context.Background()

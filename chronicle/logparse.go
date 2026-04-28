@@ -1,6 +1,7 @@
 package chronicle
 
 import (
+	"bufio"
 	"bytes"
 	"compress/gzip"
 	"context"
@@ -13,6 +14,7 @@ import (
 	"os"
 	"reflect"
 	"slices"
+	"strconv"
 	"strings"
 	"time"
 
@@ -152,12 +154,82 @@ func (w *WorkerLogParse) loadAndSortFile(ctx context.Context, file database.LogF
 	return logfile.New(&sum.IsRaw, fileData), ri, nil
 }
 
+type unixMillisLogLine struct {
+	ts      int64
+	idx     int
+	content string
+}
+
+func (w *WorkerLogParse) loadAndSortUnixMillisFile(ctx context.Context, file database.LogFile) (io.Reader, error) {
+	rdr, err := w.loadFile(ctx, file)
+	if err != nil {
+		return nil, err
+	}
+	return sortUnixMillisReader(ctx, rdr, file.ID)
+}
+
+func sortUnixMillisReader(ctx context.Context, rdr io.Reader, fileID uuid.UUID) (io.Reader, error) {
+	scanner := bufio.NewScanner(rdr)
+	lines := make([]unixMillisLogLine, 0)
+	idx := 0
+	for scanner.Scan() {
+		if ctx.Err() != nil {
+			return nil, ctx.Err()
+		}
+
+		text := scanner.Text()
+		prefix := text
+		if sp := strings.IndexByte(text, ' '); sp >= 0 {
+			prefix = text[:sp]
+		}
+		ts, parseErr := strconv.ParseInt(prefix, 10, 64)
+		if parseErr != nil {
+			return nil, fmt.Errorf("parse unix millis timestamp for log file %s: %w", fileID, parseErr)
+		}
+		lines = append(lines, unixMillisLogLine{ts: ts, idx: idx, content: text})
+		idx++
+	}
+	if err := scanner.Err(); err != nil {
+		return nil, fmt.Errorf("scan log file %s: %w", fileID, err)
+	}
+
+	slices.SortStableFunc(lines, func(a, b unixMillisLogLine) int {
+		if a.ts < b.ts {
+			return -1
+		}
+		if a.ts > b.ts {
+			return 1
+		}
+		if a.idx < b.idx {
+			return -1
+		}
+		if a.idx > b.idx {
+			return 1
+		}
+		return 0
+	})
+
+	var buf bytes.Buffer
+	for i, line := range lines {
+		if i > 0 {
+			buf.WriteByte('\n')
+		}
+		buf.WriteString(line.content)
+	}
+
+	return &buf, nil
+}
+
 func (w *WorkerLogParse) Work(ctx context.Context, job *river.Job[ArgsLogParse]) error {
 	logger := leveledlog.New(w.parent.logger, slog.LevelInfo)
 	jobStart := time.Now()
 	metrics := w.parent.metrics
 	report := &chroniclesdk.LogParseReport{
 		Instances: make([]chroniclesdk.InstanceReport, 0),
+	}
+	jobOut := chroniclesdk.WoWParsedLogJobOutput{
+		InstanceFailures: make(map[string]string),
+		Instances:        make([]chroniclesdk.WoWSimpleParsedInstance, 0),
 	}
 
 	// Track job completion for metrics (defer only handles Prometheus metrics)
@@ -319,10 +391,14 @@ func (w *WorkerLogParse) Work(ctx context.Context, job *river.Job[ArgsLogParse])
 			return fmt.Errorf("consume warmane log: %w", consumeErr)
 		}
 
+		parserMetrics := p.Metrics()
+		report.TotalLines = parserMetrics.TotalLinesParsed
+		metrics.linesProcessed.Add(float64(parserMetrics.TotalLinesParsed))
+
 	case database.LogTypeAzerothcore:
-		// Load single file
+		// Load single file and normalize concatenated server chunks by unix timestamp.
 		loadStart := time.Now()
-		rdr, err := w.loadFile(ctx, files[0])
+		rdr, err := w.loadAndSortUnixMillisFile(ctx, files[0])
 		if err != nil {
 			return fmt.Errorf("load log file: %w", err)
 		}
@@ -342,6 +418,10 @@ func (w *WorkerLogParse) Work(ctx context.Context, job *river.Job[ArgsLogParse])
 			jobResult = "failure"
 			return fmt.Errorf("consume azerothcore log: %w", consumeErr)
 		}
+
+		parserMetrics := p.Metrics()
+		report.TotalLines = parserMetrics.TotalLinesParsed
+		metrics.linesProcessed.Add(float64(parserMetrics.TotalLinesParsed))
 
 	default:
 		jobResult = "failure"
@@ -397,12 +477,6 @@ func (w *WorkerLogParse) Work(ctx context.Context, job *river.Job[ArgsLogParse])
 		report.Identity = buildIdentityReport(creaturesState)
 	}
 
-	jobOut := chroniclesdk.WoWParsedLogJobOutput{
-		InstanceFailures: make(map[string]string),
-		Instances:        make([]chroniclesdk.WoWSimpleParsedInstance, 0),
-		Report:           report,
-	}
-
 	err = db.InsertParsedLogGroup(ctx, job.Args.LogID)
 	if err != nil {
 		jobResult = "cancelled"
@@ -423,8 +497,7 @@ func (w *WorkerLogParse) Work(ctx context.Context, job *river.Job[ArgsLogParse])
 		instFinalizeDuration := time.Since(finalizeStart)
 		totalFinalizeDuration += instFinalizeDuration
 
-		if finalized == nil || len(finalized.Encounters) == 0 {
-			// Skip instances with no encounters
+		if finalized == nil {
 			continue
 		}
 
@@ -701,6 +774,7 @@ func (w *WorkerLogParse) Work(ctx context.Context, job *river.Job[ArgsLogParse])
 	// Set total duration right before recording output (not in defer)
 	report.TotalDuration = chroniclesdk.DurationFrom(time.Since(jobStart))
 
+	jobOut.Report = report
 	jobOut.Complete = ptr.Ref(time.Now())
 	jobResult = "success"
 	_ = river.RecordOutput(ctx, jobOut)
