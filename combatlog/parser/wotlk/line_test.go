@@ -233,3 +233,26 @@ func TestParseLineUnixMillis_QuotedComma(t *testing.T) {
 	assert.Equal(t, 0, m.Remain())
 }
 
+func TestExtractUnixMilli(t *testing.T) {
+	t.Parallel()
+
+	ts, payload, err := ExtractUnixMilli("1714300000000  SPELL_DAMAGE,0x1,\"A\",0x0")
+	require.NoError(t, err)
+	assert.Equal(t, int64(1714300000000), ts.UnixMilli())
+	assert.Equal(t, "SPELL_DAMAGE,0x1,\"A\",0x0", payload)
+}
+
+func TestExtractUnixMilli_EmptyLine(t *testing.T) {
+	t.Parallel()
+
+	_, _, err := ExtractUnixMilli("")
+	require.Error(t, err)
+}
+
+func TestExtractUnixMilli_NoSeparator(t *testing.T) {
+	t.Parallel()
+
+	_, _, err := ExtractUnixMilli("1714300000000SPELL_DAMAGE")
+	require.Error(t, err)
+}
+

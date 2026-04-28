@@ -438,6 +438,7 @@ func (h *Hookable) Finalize(ctx context.Context) (*FinalizedInstance, error) {
 			// Prefer the earliest named hostile in the fight so encounter naming is
 			// deterministic even when multiple named boss/helper units are present.
 			if id.EncounterName != "" {
+				// Bosses always take the earliest.
 				if encounterNamedAt == nil || namedAt.Before(*encounterNamedAt) {
 					encounterName = id.EncounterName
 					encounterType = types.EncounterTypeBOSS
@@ -451,7 +452,7 @@ func (h *Hookable) Finalize(ctx context.Context) (*FinalizedInstance, error) {
 						encounterName = res.EncounterName
 						encounterNamedAt = &namedAt
 					}
-					if res.Bosses != nil {
+					if res.Bosses != nil && len(res.Bosses) > 0 {
 						encounterType = types.EncounterTypeBOSS
 						isBossFight = isBossFight || len(res.Bosses) > 0
 						for _, bossID := range res.Bosses {
