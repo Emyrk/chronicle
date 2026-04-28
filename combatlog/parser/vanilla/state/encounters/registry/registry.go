@@ -167,6 +167,12 @@ func (r *Registry) AllInstances() []string {
 
 func (r *Registry) AllInstancesWithComments() map[string]string {
 	all := make(map[string]string)
+	if r.fallback != nil {
+		for k, v := range r.fallback.AllInstancesWithComments() {
+			all[k] = v
+		}
+	}
+
 	for name, entry := range r.entries {
 		all[name] = entry.Comment
 	}
