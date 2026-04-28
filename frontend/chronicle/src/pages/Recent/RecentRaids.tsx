@@ -86,7 +86,7 @@ export function RecentRaids() {
   );
 
   const instanceOptions = useMemo(() => {
-    const supportedNames = supportedInstances ? Object.keys(supportedInstances) : [];
+    const supportedNames = Array.isArray(supportedInstances) ? supportedInstances.map(i => i.name) : [];
     const fallbackNames = Object.keys(INSTANCE_CONFIG);
     const baseNames = supportedNames.length > 0 ? supportedNames : fallbackNames;
 

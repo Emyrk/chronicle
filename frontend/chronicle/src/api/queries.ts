@@ -1,6 +1,6 @@
 import { useQuery, useMutation, useQueryClient, keepPreviousData, type UseQueryOptions } from "@tanstack/react-query";
 import type { WoWSpell } from "./wowdb";
-import type { WoWServer, WoWServerRealm, UploadKey, CreateWoWServerRequest, CreateWoWServerRealmRequest, CreateUploadKeyRequest, RetentionPolicy, RetentionPreviewResponse, RetentionPreviewRequest } from "./typesGenerated";
+import type { WoWServer, WoWServerRealm, UploadKey, CreateWoWServerRequest, CreateWoWServerRealmRequest, CreateUploadKeyRequest, RetentionPolicy, RetentionPreviewResponse, RetentionPreviewRequest, SupportedInstance } from "./typesGenerated";
 import type { 
   WoWLogGroup as WoWLogGroupGenerated, 
   WoWLogFile as WoWLogFileGenerated,
@@ -501,16 +501,13 @@ export function useAuthProviders(options?: Omit<UseQueryOptions<string[]>, "quer
   });
 }
 
-// Map of instance name to optional note/caveat (empty string = fully supported)
-export type SupportedInstances = Record<string, string>;
-
-export function useSupportedInstances(options?: Omit<UseQueryOptions<SupportedInstances>, "queryKey" | "queryFn">) {
+export function useSupportedInstances(options?: Omit<UseQueryOptions<SupportedInstance[]>, "queryKey" | "queryFn">) {
   return useQuery({
     queryKey: ["supportedInstances"],
     queryFn: async () => {
       const response = await fetch("/api/v1/raidlogs/supported");
       if (!response.ok) throw new Error("Failed to fetch supported instances");
-      return response.json() as Promise<SupportedInstances>;
+      return response.json() as Promise<SupportedInstance[]>;
     },
     staleTime: 1000 * 60 * 60, // Cache for 1 hour - this data rarely changes
     ...options,

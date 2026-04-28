@@ -22,7 +22,28 @@ func (api *API) SupportedInstances(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 
 	reg := api.Chronicle.Registry()
-	httpapi.Write(ctx, w, http.StatusOK, reg.AllInstancesWithComments())
+	details := reg.AllInstanceDetails()
+
+	result := make([]chroniclesdk.SupportedInstance, len(details))
+	for i, d := range details {
+		bosses := make([]chroniclesdk.SupportedInstanceUnit, len(d.Bosses))
+		for j, b := range d.Bosses {
+			bosses[j] = chroniclesdk.SupportedInstanceUnit{EntryID: b.EntryID, Name: b.Name}
+		}
+		trash := make([]chroniclesdk.SupportedInstanceUnit, len(d.Trash))
+		for j, t := range d.Trash {
+			trash[j] = chroniclesdk.SupportedInstanceUnit{EntryID: t.EntryID, Name: t.Name}
+		}
+		result[i] = chroniclesdk.SupportedInstance{
+			Name:      d.Name,
+			Comment:   d.Comment,
+			Fallback:  d.Fallback,
+			ZoneNames: d.ZoneNames,
+			Bosses:    bosses,
+			Trash:     trash,
+		}
+	}
+	httpapi.Write(ctx, w, http.StatusOK, result)
 }
 
 func (api *API) InstanceEvents(w http.ResponseWriter, r *http.Request) {

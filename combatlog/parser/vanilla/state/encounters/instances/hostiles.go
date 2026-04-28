@@ -3,14 +3,14 @@ package instances
 import "github.com/Emyrk/chronicle/internal/services"
 
 func LoadAdds(src map[uint32]Identity, adds map[uint32]string) {
-	for k := range adds {
-		src[k] = Identity{Hostile: true}
+	for k, name := range adds {
+		src[k] = Identity{Hostile: true, Name: name}
 	}
 }
 
 func LoadBosses(src map[uint32]Identity, bosses map[uint32]string) {
 	for k, name := range bosses {
-		src[k] = Identity{Hostile: true, EncounterName: name, Boss: true}
+		src[k] = Identity{Hostile: true, Name: name, EncounterName: name, Boss: true}
 	}
 }
 

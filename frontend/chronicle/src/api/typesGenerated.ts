@@ -43,22 +43,15 @@ export interface AdminBulkLogFailure {
 }
 
 // From chroniclesdk/user.go
-export interface AdminBulkReparseFailure {
-    readonly log_group_id: string;
-    readonly name: string;
-    readonly detail: string;
-}
-
-// From chroniclesdk/user.go
 export interface AdminBulkLogRequest {
     readonly log_ids: readonly string[];
 }
 
 // From chroniclesdk/user.go
-export interface AdminBulkSelectedReparseResponse {
-    readonly requested: number;
-    readonly enqueued: number;
-    readonly failed: readonly AdminBulkLogFailure[];
+export interface AdminBulkReparseFailure {
+    readonly log_group_id: string;
+    readonly name: string;
+    readonly detail: string;
 }
 
 // From chroniclesdk/user.go
@@ -67,6 +60,13 @@ export interface AdminBulkReparseResponse {
     readonly enqueued: number;
     readonly min_version: string;
     readonly failed: readonly AdminBulkReparseFailure[];
+}
+
+// From chroniclesdk/user.go
+export interface AdminBulkSelectedReparseResponse {
+    readonly requested: number;
+    readonly enqueued: number;
+    readonly failed: readonly AdminBulkLogFailure[];
 }
 
 // From chroniclesdk/user.go
@@ -1250,6 +1250,28 @@ export interface SpeedrunVersionStatus {
     readonly addon_version: string;
     readonly min_addon_version: string;
     readonly addon_qualified: boolean;
+}
+
+// From chroniclesdk/world_instance.go
+/**
+ * SupportedInstance describes a registered instance with its metadata.
+ */
+export interface SupportedInstance {
+    readonly name: string;
+    readonly comment?: string;
+    readonly fallback?: boolean;
+    readonly zone_names?: readonly string[];
+    readonly bosses?: readonly SupportedInstanceUnit[];
+    readonly trash?: readonly SupportedInstanceUnit[];
+}
+
+// From chroniclesdk/world_instance.go
+/**
+ * SupportedInstanceUnit is a hostile creature in a supported instance.
+ */
+export interface SupportedInstanceUnit {
+    readonly entry_id: number;
+    readonly name: string;
 }
 
 // From chroniclesdk/panel_layout.go

@@ -21,6 +21,8 @@ type EncounterFuncResult struct {
 
 type Identity struct {
 	Hostile bool
+	// Name is the display name for this unit (e.g. "Lava Surger", "Ragnaros").
+	Name string
 	// EncounterName, if set, will be used to identify a named encounter.
 	EncounterName string
 	// Boss indicates if the unit is considered a boss for encounter purposes.
