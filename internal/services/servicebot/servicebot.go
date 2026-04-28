@@ -86,15 +86,6 @@ func (s *Service) Close(_ context.Context) error {
 func (s *Service) Options() serpent.OptionSet {
 	return serpent.OptionSet{
 		{
-			Name:        "Disable Discord Bot",
-			Description: "Discord bot is used to sync roles to the Chronicle discord server. Disable if you do not want this.",
-			Required:    false,
-			Flag:        "disable-discord-bot",
-			Env:         "CHRONICLE_DISCORD_BOT_DISABLE",
-			Default:     "false",
-			Value:       serpent.BoolOf(&s.cfg.Disabled),
-		},
-		{
 			Name:        "Discord bot token",
 			Description: "Address to serve the api on.",
 			Required:    false,
