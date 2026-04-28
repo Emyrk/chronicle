@@ -745,6 +745,7 @@ func TempleOfAhnQirajHostiles() map[uint32]Identity {
 	})
 	LoadBosses(hostile, map[uint32]string{
 		15517: "Ouro",
+		15957: "Ouro", // Ouro Spawner helper casts drive some AzerothCore logs.
 		15510: "Fankriss the Unyielding",
 		15516: "Battleguard Sartura",
 		15299: "Viscidus",

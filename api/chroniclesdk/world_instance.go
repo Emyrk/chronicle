@@ -22,7 +22,6 @@ const (
 
 type WorldInstanceTemplate struct {
 	ID           uuid.UUID               `json:"id"`
-	WorldID      uuid.UUID               `json:"world_id"`
 	Name         string                  `json:"name"`
 	Abbreviation string                  `json:"abbreviation,omitempty"`
 	Category     InstanceCategory        `json:"category"`
@@ -47,7 +46,6 @@ type WorldInstanceUnit struct {
 
 // UpsertWorldInstanceTemplateRequest is the request body for creating/updating an instance template.
 type UpsertWorldInstanceTemplateRequest struct {
-	WorldID      uuid.UUID               `json:"world_id"`
 	Name         string                  `json:"name"`
 	Abbreviation string                  `json:"abbreviation,omitempty"`
 	Category     InstanceCategory        `json:"category"`

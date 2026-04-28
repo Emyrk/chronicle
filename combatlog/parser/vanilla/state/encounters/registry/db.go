@@ -98,7 +98,7 @@ func (dr *DBRegistry) reload(ctx context.Context) error {
 		r.SetFallback(dr.fallback)
 	}
 
-	server, err := dr.store.GetWoWServerByName(ctx, services.ServerName)
+	_, err := dr.store.GetWoWServerByName(ctx, services.ServerName)
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
 			dr.logger.Warn("no active server row found for DB-backed registry", slog.String("server", services.ServerName))
@@ -108,23 +108,6 @@ func (dr *DBRegistry) reload(ctx context.Context) error {
 			return nil
 		}
 		return err
-	}
-
-	worlds, err := dr.store.GetWorldsByServer(ctx, server.ID)
-	if err != nil {
-		return err
-	}
-
-	allowedWorlds := make(map[uuid.UUID]struct{}, len(worlds))
-	for _, world := range worlds {
-		allowedWorlds[world.ID] = struct{}{}
-	}
-	if len(allowedWorlds) == 0 {
-		dr.logger.Warn("no worlds assigned to active server for DB-backed registry", slog.String("server", services.ServerName), slog.String("server_id", server.ID.String()))
-		dr.mu.Lock()
-		dr.registry = r
-		dr.mu.Unlock()
-		return nil
 	}
 
 	templates, err := dr.store.ListWorldInstanceTemplates(ctx)
@@ -155,9 +138,6 @@ func (dr *DBRegistry) reload(ctx context.Context) error {
 
 	loaded := 0
 	for _, tmpl := range templates {
-		if _, ok := allowedWorlds[tmpl.WorldID]; !ok {
-			continue
-		}
 		zoneNames := zoneNamesByInstance[tmpl.ID]
 		units := unitsByInstance[tmpl.ID]
 
@@ -195,7 +175,6 @@ func (dr *DBRegistry) reload(ctx context.Context) error {
 	dr.logger.Info("reloaded instance registry from database",
 		slog.String("server", services.ServerName),
 		slog.Int("instances", loaded),
-		slog.Int("worlds", len(allowedWorlds)),
 	)
 
 	dr.mu.Lock()

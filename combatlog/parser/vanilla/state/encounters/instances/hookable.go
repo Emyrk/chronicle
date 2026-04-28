@@ -401,6 +401,7 @@ func (h *Hookable) Finalize(ctx context.Context) (*FinalizedInstance, error) {
 		}
 		adEncounterName := ""
 		encounterName := ""
+		var encounterNamedAt *time.Time
 		encounterType := types.EncounterTypeTRASH
 		isBossFight := false
 		// TODO: Fix to boss count, as there can be 2 bosses
@@ -432,16 +433,26 @@ func (h *Hookable) Finalize(ctx context.Context) (*FinalizedInstance, error) {
 				killed[entry]++
 			}
 
-			// Always take the encounter name if set
+			namedAt := hostile.Activity[0].Start.Timestamp.Date()
+
+			// Prefer the earliest named hostile in the fight so encounter naming is
+			// deterministic even when multiple named boss/helper units are present.
 			if id.EncounterName != "" {
-				encounterName = id.EncounterName
-				encounterType = types.EncounterTypeBOSS
+				if encounterNamedAt == nil || namedAt.Before(*encounterNamedAt) {
+					encounterName = id.EncounterName
+					encounterType = types.EncounterTypeBOSS
+					encounterNamedAt = &namedAt
+				}
 			}
 
 			if id.EncounterNameFn != nil {
 				if res := id.EncounterNameFn(fight); res != nil {
-					encounterName = res.EncounterName
+					if encounterNamedAt == nil || namedAt.Before(*encounterNamedAt) {
+						encounterName = res.EncounterName
+						encounterNamedAt = &namedAt
+					}
 					if res.Bosses != nil {
+						encounterType = types.EncounterTypeBOSS
 						isBossFight = isBossFight || len(res.Bosses) > 0
 						for _, bossID := range res.Bosses {
 							bossesRequired[bossID] = struct{}{}

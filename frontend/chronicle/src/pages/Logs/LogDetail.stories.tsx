@@ -193,6 +193,16 @@ export const Processing: Story = {
         ...mockJobStatus,
         state: "running",
         attempted_at: "2026-01-10T14:31:00Z",
+        output: {
+          instances: mockParsedOutput.instances.slice(0, 1),
+          instance_failures: {},
+          progress: {
+            phase: "parsing",
+            percent: 47,
+            processed_bytes: 1245184,
+            total_bytes: 2621440,
+          },
+        } as unknown as Record<string, string>,
       },
     },
   },

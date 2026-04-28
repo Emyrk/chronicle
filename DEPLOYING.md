@@ -45,6 +45,25 @@ docker run -p 4000:4000 \
   emyrk/chronicled:turtle
 ```
 
+When running behind nginx on the same host, prefer binding Chronicle to loopback instead of exposing it publicly:
+
+```bash
+docker run -p 127.0.0.1:4000:4000 \
+  -e CHRONICLE_POSTGRES_URL="postgresql://user:pass@db-host:5432/chronicle?sslmode=require" \
+  -e CHRONICLE_ACCESS_URL="https://logs.oldmanwarcraft.com" \
+  -e CHRONICLE_JWT_SECRET_PEM="<base64-encoded PEM private key>" \
+  -e CHRONICLE_DISCORD_CLIENT_ID="..." \
+  -e CHRONICLE_DISCORD_CLIENT_SECRET="..." \
+  -e CHRONICLE_SPICEDB_GRPC_URL="spicedb:50051" \
+  -e CHRONICLE_SPICEDB_PRESHARED_KEY="your-secret-key" \
+  -e CHRONICLE_STORAGE_TYPE="s3" \
+  -e CHRONICLE_S3_REGION="us-east-1" \
+  -e CHRONICLE_S3_ACCESS_KEY="..." \
+  -e CHRONICLE_S3_SECRET_KEY="..." \
+  -e CHRONICLE_S3_BUCKET="chronicle-logs" \
+  emyrk/chronicled:warmane
+```
+
 ### Docker Compose
 
 ```yaml
@@ -216,3 +235,56 @@ Both endpoints are opt-in:
 
 - **Prometheus metrics** — set `CHRONICLE_PROMETHEUS_ENABLED=true` to expose metrics on port `9091` (configurable). Scrape `/metrics`.
 - **pprof profiling** — set `CHRONICLE_PPROF_ENABLED=true` to expose Go profiling on port `6060` (configurable). Access at `/debug/pprof/`.
+
+## Nginx and Certbot
+
+For a host-level deployment at `https://logs.oldmanwarcraft.com/`, run Chronicle on `127.0.0.1:4000` and let nginx terminate TLS and proxy requests to the app.
+
+### 1. Install nginx and certbot
+
+Ubuntu/Debian:
+
+```bash
+sudo apt update
+sudo apt install -y nginx certbot python3-certbot-nginx
+```
+
+### 2. Install the nginx site
+
+An example site config is included at `services/nginx/logs.oldmanwarcraft.com.conf.example`.
+
+```bash
+sudo cp services/nginx/logs.oldmanwarcraft.com.conf.example /etc/nginx/sites-available/logs.oldmanwarcraft.com
+sudo ln -s /etc/nginx/sites-available/logs.oldmanwarcraft.com /etc/nginx/sites-enabled/logs.oldmanwarcraft.com
+sudo nginx -t
+sudo systemctl reload nginx
+```
+
+### 3. Issue the TLS certificate
+
+```bash
+sudo certbot --nginx -d logs.oldmanwarcraft.com
+```
+
+Certbot will update the nginx config in place to reference the Let's Encrypt certificate and install automatic renewal.
+
+### 4. Cloudflare settings
+
+- Point the DNS record for `logs.oldmanwarcraft.com` at the host running nginx.
+- Set Cloudflare SSL/TLS mode to `Full (strict)` after the origin certificate is issued.
+- If the ACME HTTP challenge fails while the record is proxied through Cloudflare, temporarily switch the DNS record to `DNS only`, rerun certbot, then re-enable the proxy.
+
+### 5. Renewals and validation
+
+```bash
+sudo certbot renew --dry-run
+curl -I https://logs.oldmanwarcraft.com/
+```
+
+The application must also be configured with:
+
+```bash
+CHRONICLE_ACCESS_URL=https://logs.oldmanwarcraft.com
+```
+
+That keeps Chronicle's redirects, OAuth callbacks, and absolute URLs aligned with the public origin.

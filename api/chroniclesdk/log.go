@@ -123,10 +123,20 @@ type WoWLogGroupState struct {
 	Status JobStatus `json:"status"`
 }
 
+type LogParseProgress struct {
+	Phase              string  `json:"phase,omitempty"`
+	Percent            float64 `json:"percent"`
+	ProcessedBytes     int64   `json:"processed_bytes,omitempty"`
+	TotalBytes         int64   `json:"total_bytes,omitempty"`
+	ProcessedInstances int     `json:"processed_instances,omitempty"`
+	TotalInstances     int     `json:"total_instances,omitempty"`
+}
+
 type WoWParsedLogJobOutput struct {
 	Complete         *time.Time                `json:"complete"`
 	InstanceFailures map[string]string         `json:"instance_failures"`
 	Instances        []WoWSimpleParsedInstance `json:"instances"`
+	Progress         *LogParseProgress         `json:"progress,omitempty"`
 
 	// Report contains detailed timing and performance metrics for the parse job.
 	Report *LogParseReport `json:"report,omitempty"`
