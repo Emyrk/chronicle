@@ -29,7 +29,7 @@ DB_NAME := $(if $(filter turtle,$(SERVER)),chronicle,$(SERVER))
 
 .PHONY: develop
 develop: frontend/chronicle/dist create-db
-	go run --tags "static $(SERVER)" $(LD_BUILD_FLAGS) ./cmd/chronicled server --dev-auth --jwt-secret-pem="dev" --ocr-url="http://localhost:8730" --disable-discord-bot=true
+	go run --tags "static $(SERVER)" $(LD_BUILD_FLAGS) ./cmd/chronicled server --dev-auth --jwt-secret-pem="dev" --ocr-url="http://localhost:8730"
 
 develop-backend-fresh:
 	docker rm -f chronicle-db-fresh 2>/dev/null || true
@@ -39,7 +39,7 @@ develop-backend-fresh:
 	go run --tags "static $(SERVER)" $(LD_BUILD_FLAGS) ./cmd/chronicled server --dev-auth --jwt-secret-pem="dev" --log-parse-worker-count=4 --ocr-url="http://localhost:8730" --emit-parse-logs --postgres-url="postgres://postgres:postgres@127.0.0.1:5533/postgres?sslmode=disable"
 
 develop-backend: create-db
-	go run --tags "$(SERVER)" $(LD_BUILD_FLAGS) ./cmd/chronicled server --dev-auth --jwt-secret-pem="dev" --log-parse-worker-count=4 --ocr-url="http://localhost:8730" --emit-parse-logs --disable-discord-bot=true
+	go run --tags "$(SERVER)" $(LD_BUILD_FLAGS) ./cmd/chronicled server --dev-auth --jwt-secret-pem="dev" --log-parse-worker-count=4 --ocr-url="http://localhost:8730" --emit-parse-logs
 
 .PHONY: build
 build: build-backend-static

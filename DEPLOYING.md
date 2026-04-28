@@ -190,7 +190,7 @@ All configuration is set via environment variables (prefixed `CHRONICLE_`) or eq
 
 | Variable | Flag | Default | Description |
 |----------|------|---------|-------------|
-| `CHRONICLE_LOG_PARSING_WORKERS` | `--log-parse-worker-count` | `4` | Number of parallel combat log parsing workers |
+| `CHRONICLE_LOG_PARSING_WORKERS` | `--log-parse-worker-count` | `1`     | Number of parallel combat log parsing workers |
 
 ### Email (Optional)
 
@@ -238,7 +238,7 @@ Both endpoints are opt-in:
 
 ## Nginx and Certbot
 
-For a host-level deployment at `https://logs.oldmanwarcraft.com/`, run Chronicle on `127.0.0.1:4000` and let nginx terminate TLS and proxy requests to the app.
+For a host-level deployment at `https://logs.example.com/`, run Chronicle on `127.0.0.1:4000` and let nginx terminate TLS and proxy requests to the app.
 
 ### 1. Install nginx and certbot
 
@@ -251,11 +251,11 @@ sudo apt install -y nginx certbot python3-certbot-nginx
 
 ### 2. Install the nginx site
 
-An example site config is included at `services/nginx/logs.oldmanwarcraft.com.conf.example`.
+An example site config is included at `services/nginx/logs.example.com.conf.example`.
 
 ```bash
-sudo cp services/nginx/logs.oldmanwarcraft.com.conf.example /etc/nginx/sites-available/logs.oldmanwarcraft.com
-sudo ln -s /etc/nginx/sites-available/logs.oldmanwarcraft.com /etc/nginx/sites-enabled/logs.oldmanwarcraft.com
+sudo cp services/nginx/logs.example.com.conf.example /etc/nginx/sites-available/logs.example.com
+sudo ln -s /etc/nginx/sites-available/logs.example.com /etc/nginx/sites-enabled/logs.example.com
 sudo nginx -t
 sudo systemctl reload nginx
 ```
@@ -263,14 +263,14 @@ sudo systemctl reload nginx
 ### 3. Issue the TLS certificate
 
 ```bash
-sudo certbot --nginx -d logs.oldmanwarcraft.com
+sudo certbot --nginx -d logs.example.com
 ```
 
 Certbot will update the nginx config in place to reference the Let's Encrypt certificate and install automatic renewal.
 
 ### 4. Cloudflare settings
 
-- Point the DNS record for `logs.oldmanwarcraft.com` at the host running nginx.
+- Point the DNS record for `logs.example.com` at the host running nginx.
 - Set Cloudflare SSL/TLS mode to `Full (strict)` after the origin certificate is issued.
 - If the ACME HTTP challenge fails while the record is proxied through Cloudflare, temporarily switch the DNS record to `DNS only`, rerun certbot, then re-enable the proxy.
 
@@ -278,13 +278,13 @@ Certbot will update the nginx config in place to reference the Let's Encrypt cer
 
 ```bash
 sudo certbot renew --dry-run
-curl -I https://logs.oldmanwarcraft.com/
+curl -I https://logs.example.com/
 ```
 
 The application must also be configured with:
 
 ```bash
-CHRONICLE_ACCESS_URL=https://logs.oldmanwarcraft.com
+CHRONICLE_ACCESS_URL=https://logs.example.com
 ```
 
 That keeps Chronicle's redirects, OAuth callbacks, and absolute URLs aligned with the public origin.
