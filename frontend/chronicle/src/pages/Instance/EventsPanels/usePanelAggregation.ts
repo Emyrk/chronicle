@@ -58,6 +58,7 @@ function toSerializableContext(
       players[guid] = {
         name: player.name,
         class: player.class,
+        level: player.level,
       };
     }
   }

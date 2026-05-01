@@ -226,6 +226,7 @@ type InstancePlayer struct {
 	Name  string            `json:"name"`
 	Class types.HeroClasses `json:"class"`
 	Race  types.HeroRaces   `json:"race"`
+	Level int32             `json:"level"`
 }
 
 type WoWParsedInstance struct {

@@ -356,6 +356,7 @@ export interface ProcessorEntitySelection {
 export interface ProcessorPlayer {
   name: string;
   class: string;
+  level?: number;
 }
 
 /**

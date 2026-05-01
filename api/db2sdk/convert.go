@@ -172,6 +172,7 @@ func WowDecoratedInstance(instance database.LogInstancesGuild,
 				Name:  u.Name,
 				Class: HeroClass(u.Class),
 				Race:  HeroRace(u.Race),
+				Level: u.Level,
 			}
 		}),
 	}

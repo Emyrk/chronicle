@@ -287,6 +287,7 @@ export function EquipmentContent(props: PanelRenderProps<EquipmentResult>) {
           {selected && (
             <span className="text-2xs text-muted-foreground flex items-center gap-1">
               {selected.heroClass} · {formatRaceLabel(selected.race)}
+              {context.instance.players?.[selected.guid]?.level ? ` · Level ${context.instance.players[selected.guid].level}` : ""}
               {selected.talents && ` · ${selected.talents.summary.join("/")}`}
               {selected.guildName && ` · <${selected.guildName}>`}
               {context.instance.realm && (

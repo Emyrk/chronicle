@@ -499,6 +499,7 @@ export interface InstancePlayer {
     readonly name: string;
     readonly class: WoWHeroClasses;
     readonly race: WoWHeroRaces;
+    readonly level: number;
 }
 
 // From chroniclesdk/log.go
