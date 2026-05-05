@@ -8,8 +8,8 @@ services:
       POSTGRES_PASSWORD: postgres
       POSTGRES_DB: chronicle
     ports:
-      # Non-standard port to avoid conflicts with local postgres
-      - "5433:5432"
+      # Bind to loopback only so the dev database is not exposed remotely.
+      - "127.0.0.1:5433:5432"
     volumes:
       - chronicle-postgres-data:/var/lib/postgresql/data
       - ./init-db.sh:/docker-entrypoint-initdb.d/init-db.sh:ro
