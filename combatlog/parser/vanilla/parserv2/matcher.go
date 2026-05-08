@@ -237,7 +237,7 @@ func (p *Parser) aura(ctx context.Context, event string, ts time.Time, buff bool
 
 func (p *Parser) zoneInfo(ctx context.Context, ts time.Time, m *Matched) ([]messages.Message, error) {
 	name := m.String()
-	instanceID := uint32(m.Uint64())
+	instanceID := m.OptionalUint32()
 	inInstance := m.Int64() == 1
 	instanceType := m.String() // none, party, raid, pvp
 	isGhost := m.Int64() == 1

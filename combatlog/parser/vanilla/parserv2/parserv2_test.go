@@ -14,6 +14,7 @@ import (
 	"github.com/Emyrk/chronicle/combatlog/parser/types"
 	"github.com/Emyrk/chronicle/combatlog/parser/types/realm"
 	"github.com/Emyrk/chronicle/combatlog/parser/types/unitinfo"
+	"github.com/Emyrk/chronicle/combatlog/parser/types/zone"
 	"github.com/Emyrk/chronicle/combatlog/parser/vanilla/messages"
 	"github.com/Emyrk/chronicle/database/gamedb"
 	"github.com/Emyrk/chronicle/database/gamedb/chrondbc"
@@ -211,6 +212,25 @@ func TestParserMessages(t *testing.T) {
 					Buffs:        []unitinfo.Buff{},
 					Level:        60,
 					Challenges:   []string{},
+				},
+			},
+		)
+	})
+
+	t.Run("ZoneInfoEmptyInstanceID", func(t *testing.T) {
+		t.Parallel()
+
+		testCase(t,
+			"1778208220441|ZONE_INFO|Tower of Karazhan||1|raid|0",
+			&messages.Zone{
+				MessageBase: messages.Base(time.UnixMilli(1778208220441)),
+				Zone: zone.Zone{
+					Seen:         time.UnixMilli(1778208220441),
+					Name:         "tower of karazhan",
+					InstanceID:   0,
+					Ghost:        false,
+					InstanceType: "raid",
+					IsInstance:   true,
 				},
 			},
 		)
