@@ -14,7 +14,7 @@ const dirname = typeof __dirname !== 'undefined' ? __dirname : path.dirname(file
 // while targeting the backend port. e.g. epoch.localhost:5173 → epoch.localhost:4000
 function backendProxy(): ProxyOptions {
   return {
-    target: "http://localhost:4000",
+    target: process.env.HOST || "http://localhost:4000",
     configure: (proxy) => {
       proxy.on('proxyReq', (proxyReq, req) => {
         const host = req.headers.host;
