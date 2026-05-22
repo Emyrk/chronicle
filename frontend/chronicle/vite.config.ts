@@ -13,8 +13,12 @@ const dirname = typeof __dirname !== 'undefined' ? __dirname : path.dirname(file
 // Proxy helper that rewrites the Host header to preserve the subdomain
 // while targeting the backend port. e.g. epoch.localhost:5173 → epoch.localhost:4000
 function backendProxy(): ProxyOptions {
+  const target = process.env.HOST || "http://localhost:4000";
+  const isRemote = target.startsWith("https://");
   return {
-    target: process.env.HOST || "http://localhost:4000",
+    target,
+    secure: !isRemote,
+    changeOrigin: isRemote,
     configure: (proxy) => {
       proxy.on('proxyReq', (proxyReq, req) => {
         const host = req.headers.host;
