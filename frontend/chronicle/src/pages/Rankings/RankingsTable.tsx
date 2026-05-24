@@ -1,6 +1,6 @@
 import { ExternalLink } from "lucide-react"
 import { Link } from "react-router-dom"
-import type { RankingEntry, MetricType } from "./mockData"
+import type { RankingEntry } from "./mockData"
 import { CLASS_CSS_VAR, CLASS_DISPLAY } from "./mockData"
 
 const MEDAL_ICONS: Record<number, string> = { 1: "🥇", 2: "🥈", 3: "🥉" }
@@ -20,20 +20,11 @@ function formatDate(iso: string): string {
   })
 }
 
-function formatMetricValue(value: number, metric: MetricType): string {
-  if (metric === "damage_done" || metric === "healing_done") {
-    if (value >= 1_000_000) return `${(value / 1_000_000).toFixed(1)}M`
-    if (value >= 1_000) return `${(value / 1_000).toFixed(1)}K`
-  }
-  return value.toLocaleString()
-}
-
 interface RankingsTableProps {
   entries: RankingEntry[]
-  metric: MetricType
 }
 
-export function RankingsTable({ entries, metric }: RankingsTableProps) {
+export function RankingsTable({ entries }: RankingsTableProps) {
   if (entries.length === 0) {
     return (
       <div className="rounded-xl border p-8 text-center text-muted-foreground">
@@ -64,7 +55,7 @@ export function RankingsTable({ entries, metric }: RankingsTableProps) {
               <div className="flex items-center justify-between gap-2">
                 <span className="truncate font-medium">{entry.playerName}</span>
                 <span className="shrink-0 font-mono font-semibold">
-                  {formatMetricValue(entry.value, metric)}
+                  {entry.value.toLocaleString()}
                 </span>
               </div>
               <div className="mt-0.5 flex items-center gap-3 text-xs text-muted-foreground">
@@ -91,7 +82,7 @@ export function RankingsTable({ entries, metric }: RankingsTableProps) {
               <th className="w-16 px-4 py-3 text-center">Rank</th>
               <th className="px-4 py-3">Player</th>
               <th className="px-4 py-3">Class</th>
-              <th className="px-4 py-3 text-right">Value</th>
+              <th className="px-4 py-3 text-right">DPS</th>
               <th className="px-4 py-3 text-right">Duration</th>
               <th className="px-4 py-3">Guild</th>
               <th className="px-4 py-3 text-right">Date</th>
@@ -130,7 +121,7 @@ export function RankingsTable({ entries, metric }: RankingsTableProps) {
                   </span>
                 </td>
                 <td className="px-4 py-3 text-right font-mono font-semibold">
-                  {formatMetricValue(entry.value, metric)}
+                  {entry.value.toLocaleString()}
                 </td>
                 <td className="px-4 py-3 text-right font-mono text-muted-foreground">
                   {formatDuration(entry.durationMs)}

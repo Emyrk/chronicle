@@ -1,25 +1,16 @@
 import { Crown, TrendingUp, Hash, Users } from "lucide-react"
-import type { RankingSummary, MetricType } from "./mockData"
+import type { RankingSummary } from "./mockData"
 import { CLASS_CSS_VAR, CLASS_DISPLAY } from "./mockData"
-
-function formatValue(value: number, metric: MetricType): string {
-  if (metric === "damage_done" || metric === "healing_done") {
-    if (value >= 1_000_000) return `${(value / 1_000_000).toFixed(1)}M`
-    if (value >= 1_000) return `${(value / 1_000).toFixed(1)}K`
-  }
-  return value.toLocaleString()
-}
 
 interface RankingsSummaryCardsProps {
   summary: RankingSummary
-  metric: MetricType
 }
 
-export function RankingsSummaryCards({ summary, metric }: RankingsSummaryCardsProps) {
+export function RankingsSummaryCards({ summary }: RankingsSummaryCardsProps) {
   const cards = [
     {
-      label: "Record",
-      value: formatValue(summary.record.value, metric),
+      label: "Record DPS",
+      value: summary.record.value.toLocaleString(),
       sub: (
         <span className="flex items-center gap-1">
           <span
@@ -35,8 +26,8 @@ export function RankingsSummaryCards({ summary, metric }: RankingsSummaryCardsPr
       icon: Crown,
     },
     {
-      label: "Median",
-      value: formatValue(summary.median, metric),
+      label: "Median DPS",
+      value: summary.median.toLocaleString(),
       sub: "Across all records",
       icon: TrendingUp,
     },

@@ -2,13 +2,11 @@ import { useMemo, useState } from "react"
 import { ArrowLeft, Skull } from "lucide-react"
 import type { WoWHeroClasses } from "@/api/typesGenerated"
 import {
-  type MetricType,
   type BossInfo,
   getRankings,
   getRankingSummary,
   getClassAverages,
 } from "./mockData"
-import { MetricTabs } from "./MetricTabs"
 import { RankingsFilters } from "./RankingsFilters"
 import { type TimePeriod, getTimePeriodDays } from "./timePeriod"
 import { RankingsSummaryCards } from "./RankingsSummaryCards"
@@ -17,8 +15,6 @@ import { ClassBreakdownChart } from "./ClassBreakdownChart"
 
 interface RankingsViewProps {
   boss: BossInfo
-  metric: MetricType
-  onMetricChange: (m: MetricType) => void
   selectedClasses: Set<WoWHeroClasses>
   onToggleClass: (cls: WoWHeroClasses) => void
   timePeriod: TimePeriod
@@ -28,16 +24,14 @@ interface RankingsViewProps {
 
 export function RankingsView({
   boss,
-  metric,
-  onMetricChange,
   selectedClasses,
   onToggleClass,
   timePeriod,
   onTimePeriodChange,
   onBack,
 }: RankingsViewProps) {
-  // Get raw entries for this boss + metric
-  const allEntries = useMemo(() => getRankings(boss.id, metric), [boss.id, metric])
+  // Get raw DPS entries for this boss
+  const allEntries = useMemo(() => getRankings(boss.id), [boss.id])
 
   // Snapshot "now" once at mount so time-period filtering is stable across re-renders
   const [now] = useState(() => Date.now())
@@ -87,11 +81,8 @@ export function RankingsView({
         </div>
       </div>
 
-      {/* Metric tabs */}
-      <MetricTabs value={metric} onChange={onMetricChange} />
-
       {/* Summary cards */}
-      <RankingsSummaryCards summary={summary} metric={metric} />
+      <RankingsSummaryCards summary={summary} />
 
       {/* Filters */}
       <RankingsFilters
@@ -102,10 +93,10 @@ export function RankingsView({
       />
 
       {/* Rankings table */}
-      <RankingsTable entries={filtered} metric={metric} />
+      <RankingsTable entries={filtered} />
 
       {/* Class breakdown chart */}
-      <ClassBreakdownChart averages={classAverages} metric={metric} />
+      <ClassBreakdownChart averages={classAverages} />
     </div>
   )
 }

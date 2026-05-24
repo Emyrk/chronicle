@@ -1,12 +1,11 @@
-import type { ClassAverage, MetricType } from "./mockData"
-import { CLASS_CSS_VAR, CLASS_DISPLAY, METRIC_LABELS } from "./mockData"
+import type { ClassAverage } from "./mockData"
+import { CLASS_CSS_VAR, CLASS_DISPLAY } from "./mockData"
 
 interface ClassBreakdownChartProps {
   averages: ClassAverage[]
-  metric: MetricType
 }
 
-export function ClassBreakdownChart({ averages, metric }: ClassBreakdownChartProps) {
+export function ClassBreakdownChart({ averages }: ClassBreakdownChartProps) {
   if (averages.length === 0) return null
 
   const maxValue = Math.max(...averages.map((a) => a.average))
@@ -14,7 +13,7 @@ export function ClassBreakdownChart({ averages, metric }: ClassBreakdownChartPro
   return (
     <div className="rounded-xl border bg-card p-5">
       <h3 className="mb-4 text-sm font-medium text-muted-foreground">
-        Average {METRIC_LABELS[metric]} by Class
+        Average DPS by Class
       </h3>
       <div className="space-y-2.5">
         {averages.map((avg) => {
