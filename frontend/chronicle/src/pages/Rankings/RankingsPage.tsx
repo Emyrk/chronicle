@@ -1,12 +1,12 @@
 import { useCallback, useMemo } from "react"
 import { useSearchParams } from "react-router-dom"
 import type { WoWHeroClasses } from "@/api/typesGenerated"
-import { type MetricType, getBossInfo } from "./mockData"
+import { getBossInfo, getInstanceByName } from "./mockData"
 import type { TimePeriod } from "./timePeriod"
-import { BossBrowser } from "./BossBrowser"
+import { DpsOverview } from "./DpsOverview"
 import { RankingsView } from "./RankingsView"
+import { InstanceView } from "./InstanceView"
 
-const VALID_METRICS = new Set<MetricType>(["dps", "hps", "damage_done", "healing_done", "dispels", "interrupts"])
 const VALID_PERIODS = new Set<TimePeriod>(["all", "90d", "30d", "7d"])
 
 export function RankingsPage() {
@@ -17,10 +17,13 @@ export function RankingsPage() {
   const bossId = params.get("boss") ?? ""
   const bossInfo = useMemo(() => (bossId ? getBossInfo(bossId) : undefined), [bossId])
 
-  const metric: MetricType = useMemo(() => {
-    const raw = params.get("metric")
-    return raw && VALID_METRICS.has(raw as MetricType) ? (raw as MetricType) : "dps"
-  }, [params])
+  const instance = params.get("instance")
+  const viewParam = params.get("view")
+
+  const instanceInfo = useMemo(
+    () => (viewParam === "instance" && instance ? getInstanceByName(instance) : undefined),
+    [viewParam, instance],
+  )
 
   const timePeriod: TimePeriod = useMemo(() => {
     const raw = params.get("period")
@@ -58,13 +61,39 @@ export function RankingsPage() {
   const handleBack = useCallback(() => {
     setParams((prev) => {
       const next = new URLSearchParams(prev)
-      next.delete("boss")
+      if (next.has("boss")) {
+        next.delete("boss")
+      } else if (next.has("view")) {
+        next.delete("view")
+        next.delete("instance")
+      }
       return next
     })
   }, [setParams])
 
-  const handleMetricChange = useCallback(
-    (m: MetricType) => setParam("metric", m === "dps" ? null : m),
+  const handleSelectInstance = useCallback(
+    (name: string) => {
+      setParams((prev) => {
+        const next = new URLSearchParams(prev)
+        next.set("view", "instance")
+        next.set("instance", name)
+        return next
+      })
+    },
+    [setParams],
+  )
+
+  const handleInstanceBack = useCallback(() => {
+    setParams((prev) => {
+      const next = new URLSearchParams(prev)
+      next.delete("view")
+      next.delete("instance")
+      return next
+    })
+  }, [setParams])
+
+  const handleInstanceChange = useCallback(
+    (v: string | null) => setParam("instance", v),
     [setParam],
   )
 
@@ -103,16 +132,33 @@ export function RankingsPage() {
       {bossInfo ? (
         <RankingsView
           boss={bossInfo}
-          metric={metric}
-          onMetricChange={handleMetricChange}
           selectedClasses={selectedClasses}
           onToggleClass={handleToggleClass}
           timePeriod={timePeriod}
           onTimePeriodChange={handleTimePeriodChange}
           onBack={handleBack}
         />
+      ) : instanceInfo ? (
+        <InstanceView
+          instance={instanceInfo}
+          timePeriod={timePeriod}
+          onTimePeriodChange={handleTimePeriodChange}
+          selectedClasses={selectedClasses}
+          onToggleClass={handleToggleClass}
+          onSelectBoss={handleSelectBoss}
+          onBack={handleInstanceBack}
+        />
       ) : (
-        <BossBrowser onSelectBoss={handleSelectBoss} />
+        <DpsOverview
+          instance={instance}
+          onInstanceChange={handleInstanceChange}
+          timePeriod={timePeriod}
+          onTimePeriodChange={handleTimePeriodChange}
+          selectedClasses={selectedClasses}
+          onToggleClass={handleToggleClass}
+          onSelectBoss={handleSelectBoss}
+          onSelectInstance={handleSelectInstance}
+        />
       )}
     </div>
   )

@@ -2,14 +2,6 @@ import type { WoWHeroClasses } from "@/api/typesGenerated"
 
 // ── Types ──────────────────────────────────────────────────────────────────
 
-export type MetricType =
-  | "dps"
-  | "hps"
-  | "damage_done"
-  | "healing_done"
-  | "dispels"
-  | "interrupts"
-
 export interface RankingEntry {
   rank: number
   playerName: string
@@ -117,8 +109,6 @@ const DPS_CLASSES: WoWHeroClasses[] = [
   "PRIEST", "DRUID", "PALADIN", "SHAMAN",
 ]
 
-const HEALER_CLASSES: WoWHeroClasses[] = ["PRIEST", "DRUID", "PALADIN", "SHAMAN"]
-
 // DPS ranges per class [min, max]
 const DPS_RANGES: Record<string, [number, number]> = {
   WARRIOR: [500, 1200],
@@ -130,13 +120,6 @@ const DPS_RANGES: Record<string, [number, number]> = {
   DRUID: [300, 600],
   PALADIN: [250, 550],
   SHAMAN: [300, 700],
-}
-
-const HPS_RANGES: Record<string, [number, number]> = {
-  PRIEST: [500, 1200],
-  DRUID: [450, 1100],
-  PALADIN: [400, 1000],
-  SHAMAN: [400, 950],
 }
 
 // Class weight distribution — more warriors/rogues/mages
@@ -231,130 +214,22 @@ function generateBossEntries(): RankingEntry[] {
     e.rank = i + 1
   })
 
-  // Also pre-generate healer / dispel / interrupt variants keyed on player
   return entries
-}
-
-// ── Build full dataset ─────────────────────────────────────────────────────
-
-type BossDataset = {
-  dps: RankingEntry[]
-  hps: RankingEntry[]
-  damage_done: RankingEntry[]
-  healing_done: RankingEntry[]
-  dispels: RankingEntry[]
-  interrupts: RankingEntry[]
-}
-
-function generateBossDataset(): BossDataset {
-  const dpsEntries = generateBossEntries()
-
-  // HPS: only healers
-  const hpsEntries: RankingEntry[] = []
-  const hpsCount = randInt(20, 35)
-  for (let i = 0; i < hpsCount; i++) {
-    const cls = pick(HEALER_CLASSES)
-    const names = NAMES_BY_CLASS[cls] ?? NAMES_BY_CLASS.PRIEST
-    const hpsRange = HPS_RANGES[cls] ?? [400, 900]
-    const dur = randInt(60, 300)
-    const daysAgo = randInt(0, 89)
-    hpsEntries.push({
-      rank: 0,
-      playerName: pick(names) + randInt(1, 99),
-      className: cls,
-      value: randInt(hpsRange[0], hpsRange[1]),
-      durationMs: dur * 1000,
-      guildName: pick(GUILD_NAMES),
-      date: new Date(Date.now() - daysAgo * 86400000).toISOString(),
-      instanceId: uuid(),
-    })
-  }
-  hpsEntries.sort((a, b) => b.value - a.value)
-  hpsEntries.forEach((e, i) => { e.rank = i + 1 })
-
-  // Damage done = DPS * duration / 1000
-  const damageEntries = dpsEntries.map((e) => ({
-    ...e,
-    rank: 0,
-    value: Math.round(e.value * (e.durationMs / 1000)),
-  }))
-  damageEntries.sort((a, b) => b.value - a.value)
-  damageEntries.forEach((e, i) => { e.rank = i + 1 })
-
-  // Healing done
-  const healingEntries = hpsEntries.map((e) => ({
-    ...e,
-    rank: 0,
-    value: Math.round(e.value * (e.durationMs / 1000)),
-  }))
-  healingEntries.sort((a, b) => b.value - a.value)
-  healingEntries.forEach((e, i) => { e.rank = i + 1 })
-
-  // Dispels — all classes can dispel something
-  const dispelEntries: RankingEntry[] = []
-  const dispelCount = randInt(25, 45)
-  for (let i = 0; i < dispelCount; i++) {
-    const cls = weightedClass()
-    const names = NAMES_BY_CLASS[cls] ?? NAMES_BY_CLASS.WARRIOR
-    const daysAgo = randInt(0, 89)
-    dispelEntries.push({
-      rank: 0,
-      playerName: pick(names) + randInt(1, 99),
-      className: cls,
-      value: randInt(5, 45),
-      durationMs: randInt(60, 300) * 1000,
-      guildName: pick(GUILD_NAMES),
-      date: new Date(Date.now() - daysAgo * 86400000).toISOString(),
-      instanceId: uuid(),
-    })
-  }
-  dispelEntries.sort((a, b) => b.value - a.value)
-  dispelEntries.forEach((e, i) => { e.rank = i + 1 })
-
-  // Interrupts
-  const interruptEntries: RankingEntry[] = []
-  const intCount = randInt(20, 35)
-  for (let i = 0; i < intCount; i++) {
-    const cls = weightedClass()
-    const names = NAMES_BY_CLASS[cls] ?? NAMES_BY_CLASS.WARRIOR
-    const daysAgo = randInt(0, 89)
-    interruptEntries.push({
-      rank: 0,
-      playerName: pick(names) + randInt(1, 99),
-      className: cls,
-      value: randInt(3, 25),
-      durationMs: randInt(60, 300) * 1000,
-      guildName: pick(GUILD_NAMES),
-      date: new Date(Date.now() - daysAgo * 86400000).toISOString(),
-      instanceId: uuid(),
-    })
-  }
-  interruptEntries.sort((a, b) => b.value - a.value)
-  interruptEntries.forEach((e, i) => { e.rank = i + 1 })
-
-  return {
-    dps: dpsEntries,
-    hps: hpsEntries,
-    damage_done: damageEntries,
-    healing_done: healingEntries,
-    dispels: dispelEntries,
-    interrupts: interruptEntries,
-  }
 }
 
 // ── Exported data ──────────────────────────────────────────────────────────
 
-// Build boss id → dataset map and instance info
-const bossDatasets = new Map<string, BossDataset>()
+// Build boss id → entries map and instance info
+const bossEntries = new Map<string, RankingEntry[]>()
 const bossInfoMap = new Map<string, BossInfo>()
 
 export const INSTANCES: InstanceInfo[] = INSTANCES_RAW.map((inst) => {
   let totalRecords = 0
   const bosses: BossInfo[] = inst.bosses.map((bossName) => {
     const id = `${inst.name}::${bossName}`.toLowerCase().replace(/[^a-z0-9]+/g, "-")
-    const dataset = generateBossDataset()
-    bossDatasets.set(id, dataset)
-    const kills = dataset.dps.length
+    const entries = generateBossEntries()
+    bossEntries.set(id, entries)
+    const kills = entries.length
     totalRecords += kills
     const info: BossInfo = { id, name: bossName, instanceName: inst.name, totalKills: kills }
     bossInfoMap.set(id, info)
@@ -367,8 +242,8 @@ export function getBossInfo(bossId: string): BossInfo | undefined {
   return bossInfoMap.get(bossId)
 }
 
-export function getRankings(bossId: string, metric: MetricType): RankingEntry[] {
-  return bossDatasets.get(bossId)?.[metric] ?? []
+export function getRankings(bossId: string): RankingEntry[] {
+  return bossEntries.get(bossId) ?? []
 }
 
 export function getClassAverages(entries: RankingEntry[]): ClassAverage[] {
@@ -411,6 +286,82 @@ export function getRankingSummary(entries: RankingEntry[]): RankingSummary {
   }
 }
 
+// ── Aggregate queries ──────────────────────────────────────────────────────
+
+/** Return all DPS entries, optionally filtered to bosses in a specific instance. */
+export function getAllEntries(instanceName?: string): RankingEntry[] {
+  const result: RankingEntry[] = []
+  for (const inst of INSTANCES) {
+    if (instanceName && inst.name !== instanceName) continue
+    for (const boss of inst.bosses) {
+      const entries = bossEntries.get(boss.id)
+      if (entries) result.push(...entries)
+    }
+  }
+  return result
+}
+
+/** Get top N entries for a boss (already sorted desc by value). */
+export function getTopEntries(bossId: string, n = 5): RankingEntry[] {
+  return (bossEntries.get(bossId) ?? []).slice(0, n)
+}
+
+/** Look up InstanceInfo by name. */
+export function getInstanceByName(name: string): InstanceInfo | undefined {
+  return INSTANCES.find((i) => i.name === name)
+}
+
+export interface BoxPlotStats {
+  className: WoWHeroClasses
+  min: number
+  q1: number
+  median: number
+  q3: number
+  max: number
+  count: number
+}
+
+function percentile(sorted: number[], p: number): number {
+  if (sorted.length === 0) return 0
+  const idx = (p / 100) * (sorted.length - 1)
+  const lo = Math.floor(idx)
+  const hi = Math.ceil(idx)
+  if (lo === hi) return sorted[lo]
+  return sorted[lo] + (sorted[hi] - sorted[lo]) * (idx - lo)
+}
+
+export function computeBoxPlotStats(entries: RankingEntry[]): BoxPlotStats[] {
+  const byClass = new Map<WoWHeroClasses, number[]>()
+  for (const e of entries) {
+    let arr = byClass.get(e.className)
+    if (!arr) {
+      arr = []
+      byClass.set(e.className, arr)
+    }
+    arr.push(e.value)
+  }
+
+  const result: BoxPlotStats[] = []
+  for (const [className, values] of byClass) {
+    values.sort((a, b) => a - b)
+    result.push({
+      className,
+      min: values[0],
+      q1: Math.round(percentile(values, 25)),
+      median: Math.round(percentile(values, 50)),
+      q3: Math.round(percentile(values, 75)),
+      max: values[values.length - 1],
+      count: values.length,
+    })
+  }
+
+  // Sort by median descending
+  result.sort((a, b) => b.median - a.median)
+  return result
+}
+
+export const INSTANCE_NAMES = INSTANCES_RAW.map((i) => i.name)
+
 // ── Display helpers ────────────────────────────────────────────────────────
 
 export const CLASS_DISPLAY: Record<string, string> = {
@@ -439,15 +390,6 @@ export const CLASS_CSS_VAR: Record<string, string> = {
   SHAMAN: "var(--color-class-shaman)",
   DEATHKNIGHT: "var(--color-class-deathknight)",
   UNKNOWN: "var(--color-class-unknown)",
-}
-
-export const METRIC_LABELS: Record<MetricType, string> = {
-  dps: "DPS",
-  hps: "HPS",
-  damage_done: "Damage Done",
-  healing_done: "Healing Done",
-  dispels: "Dispels",
-  interrupts: "Interrupts",
 }
 
 export const ALL_DPS_CLASSES = DPS_CLASSES
