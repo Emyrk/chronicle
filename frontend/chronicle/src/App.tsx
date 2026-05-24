@@ -66,6 +66,7 @@ import { WDBTab } from "./pages/GameData/WDBTab"
 import { ImportSQLTab } from "./pages/GameData/ImportSQLTab"
 import { DBCTab } from "./pages/GameData/DBCTab"
 import { SpeedrunLeaderboard } from "./pages/Leaderboard/SpeedrunLeaderboard"
+import { RankingsPage } from "./pages/Rankings"
 import { CensusPage } from "./pages/Census/CensusPage"
 import { Layout } from "./components/Layout/Layout"
 
@@ -105,6 +106,7 @@ function App() {
         <Route path="/armory/:realmName/:playerIdentifier" element={<ArmoryPage />} />
         <Route path="/sim" element={<SimPage />} />
         <Route path="/leaderboard" element={<SpeedrunLeaderboard />} />
+        <Route path="/rankings" element={<RankingsPage />} />
         <Route path="/apply" element={<ApplyPage />} />
         <Route path="/apply/:id" element={<ApplicationPage />} />
         <Route path="/census" element={<CensusPage />} />
