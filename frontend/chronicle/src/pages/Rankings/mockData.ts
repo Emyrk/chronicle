@@ -22,6 +22,7 @@ export interface BossInfo {
   name: string
   instanceName: string
   totalKills: number
+  isTrash: boolean
 }
 
 export interface InstanceInfo {
@@ -258,10 +259,26 @@ export const INSTANCES: InstanceInfo[] = INSTANCES_RAW.map((inst) => {
     bossEntries.set(id, entries)
     const kills = entries.length
     totalRecords += kills
-    const info: BossInfo = { id, name: bossName, instanceName: inst.name, totalKills: kills }
+    const info: BossInfo = { id, name: bossName, instanceName: inst.name, totalKills: kills, isTrash: false }
     bossInfoMap.set(id, info)
     return info
   })
+
+  // Add a "Trash" pseudo-encounter per instance (aggregated non-boss damage)
+  const trashId = `${inst.name}::trash`.toLowerCase().replace(/[^a-z0-9]+/g, "-")
+  const trashEntries = generateBossEntries("Trash")
+  // Trash DPS tends to be lower — scale down
+  for (const e of trashEntries) {
+    e.value = Math.round(e.value * 0.7)
+  }
+  trashEntries.sort((a, b) => b.value - a.value)
+  trashEntries.forEach((e, i) => { e.rank = i + 1 })
+  bossEntries.set(trashId, trashEntries)
+  totalRecords += trashEntries.length
+  const trashInfo: BossInfo = { id: trashId, name: "Trash", instanceName: inst.name, totalKills: trashEntries.length, isTrash: true }
+  bossInfoMap.set(trashId, trashInfo)
+  bosses.push(trashInfo)
+
   return { name: inst.name, bosses, totalRecords }
 })
 

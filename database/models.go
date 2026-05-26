@@ -769,7 +769,7 @@ type DeploymentInfo struct {
 
 type EncounterDpsRanking struct {
 	ID            uuid.UUID          `db:"id" json:"id"`
-	EncounterID   uuid.UUID          `db:"encounter_id" json:"encounter_id"`
+	EncounterID   uuid.NullUUID      `db:"encounter_id" json:"encounter_id"`
 	InstanceID    uuid.UUID          `db:"instance_id" json:"instance_id"`
 	EncounterName string             `db:"encounter_name" json:"encounter_name"`
 	InstanceName  string             `db:"instance_name" json:"instance_name"`

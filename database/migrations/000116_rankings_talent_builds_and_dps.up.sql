@@ -16,7 +16,8 @@ CREATE INDEX idx_tb_sub_spec ON talent_builds (sub_spec) WHERE sub_spec IS NOT N
 -- encounter_dps_rankings: materialized per-player per-encounter DPS data.
 CREATE TABLE encounter_dps_rankings (
     id              UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-    encounter_id    UUID NOT NULL REFERENCES log_instance_encounters(id) ON DELETE CASCADE,
+    -- NULL encounter_id for trash (aggregate of all non-boss encounters in a run)
+    encounter_id    UUID REFERENCES log_instance_encounters(id) ON DELETE CASCADE,
     instance_id     UUID NOT NULL REFERENCES log_instances(id) ON DELETE CASCADE,
     encounter_name  TEXT NOT NULL,
     instance_name   TEXT NOT NULL,
@@ -36,8 +37,14 @@ CREATE TABLE encounter_dps_rankings (
     log_hashed_slug TEXT NOT NULL DEFAULT '',
     killed_at       TIMESTAMPTZ NOT NULL,
     created_at      TIMESTAMPTZ NOT NULL DEFAULT now(),
+    -- For boss encounters: unique per encounter+player.
+    -- For trash (encounter_id IS NULL): unique per instance+player via partial index below.
     UNIQUE (encounter_id, player_guid)
 );
+
+-- Partial unique index for trash rows (encounter_id IS NULL): one trash entry per player per instance.
+CREATE UNIQUE INDEX idx_edr_trash_unique ON encounter_dps_rankings (instance_id, player_guid)
+    WHERE encounter_id IS NULL;
 
 CREATE INDEX idx_edr_instance_name ON encounter_dps_rankings (instance_name);
 CREATE INDEX idx_edr_encounter_name ON encounter_dps_rankings (encounter_name);

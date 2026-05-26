@@ -33,6 +33,14 @@ export function InstanceView({ instanceName }: InstanceViewProps) {
 
   const instance = useMemo(() => getInstanceByName(instanceName), [instanceName])
   const encounterNames = useMemo(() => getEncounterNames(instanceName), [instanceName])
+  const bossNames = useMemo(
+    () => new Set(instance?.bosses.filter((b) => !b.isTrash).map((b) => b.name) ?? []),
+    [instance],
+  )
+  const trashNames = useMemo(
+    () => new Set(instance?.bosses.filter((b) => b.isTrash).map((b) => b.name) ?? []),
+    [instance],
+  )
 
   // ── URL state ────────────────────────────────────────────────────────
 
@@ -141,14 +149,19 @@ export function InstanceView({ instanceName }: InstanceViewProps) {
   )
 
   const handleQuickSelect = useCallback(
-    (mode: "all") => {
+    (mode: "all" | "bosses" | "trash") => {
       setParams((prev) => {
         const next = new URLSearchParams(prev)
-        if (mode === "all") next.delete("encounters")
+        if (mode === "all") {
+          next.delete("encounters")
+        } else {
+          const names = mode === "bosses" ? bossNames : trashNames
+          next.set("encounters", [...names].join(","))
+        }
         return next
       })
     },
-    [setParams],
+    [setParams, bossNames, trashNames],
   )
 
   // ── Filtered entries ─────────────────────────────────────────────────
@@ -182,6 +195,8 @@ export function InstanceView({ instanceName }: InstanceViewProps) {
   }, [filteredEntries])
 
   const allSelected = selectedEncounters.size === encounterNames.length
+  const bossesOnly = bossNames.size > 0 && selectedEncounters.size === bossNames.size && [...bossNames].every((n) => selectedEncounters.has(n))
+  const trashOnly = trashNames.size > 0 && selectedEncounters.size === trashNames.size && [...trashNames].every((n) => selectedEncounters.has(n))
 
   if (!instance) {
     return (
@@ -212,11 +227,34 @@ export function InstanceView({ instanceName }: InstanceViewProps) {
           >
             All Encounters
           </button>
+          <button
+            onClick={() => handleQuickSelect("bosses")}
+            className={cn(
+              "w-full rounded-md px-3 py-1.5 text-xs font-medium text-left transition-colors",
+              bossesOnly
+                ? "bg-[#5F8FA6]/20 text-[#5F8FA6]"
+                : "text-muted-foreground hover:text-foreground hover:bg-muted/20",
+            )}
+          >
+            Bosses
+          </button>
+          <button
+            onClick={() => handleQuickSelect("trash")}
+            className={cn(
+              "w-full rounded-md px-3 py-1.5 text-xs font-medium text-left transition-colors",
+              trashOnly
+                ? "bg-[#5F8FA6]/20 text-[#5F8FA6]"
+                : "text-muted-foreground hover:text-foreground hover:bg-muted/20",
+            )}
+          >
+            Trash
+          </button>
 
           {/* Individual encounters */}
           <div className="space-y-0.5">
             {encounterNames.map((name) => {
               const active = selectedEncounters.has(name)
+              const isTrash = trashNames.has(name)
               return (
                 <button
                   key={name}
@@ -226,6 +264,7 @@ export function InstanceView({ instanceName }: InstanceViewProps) {
                     active
                       ? "bg-white/5 text-foreground font-medium"
                       : "text-muted-foreground/60 hover:text-muted-foreground hover:bg-muted/10",
+                    isTrash && "border-t border-white/5 mt-1 pt-2 italic",
                   )}
                   title={`${name} — Click to select, Ctrl+Click to toggle`}
                 >
@@ -267,6 +306,28 @@ export function InstanceView({ instanceName }: InstanceViewProps) {
               )}
             >
               All
+            </button>
+            <button
+              onClick={() => handleQuickSelect("bosses")}
+              className={cn(
+                "rounded-md border px-2 py-1 text-xs font-medium transition-colors",
+                bossesOnly
+                  ? "border-[#5F8FA6]/40 bg-[#5F8FA6]/20 text-[#5F8FA6]"
+                  : "border-transparent text-muted-foreground hover:text-foreground",
+              )}
+            >
+              Bosses
+            </button>
+            <button
+              onClick={() => handleQuickSelect("trash")}
+              className={cn(
+                "rounded-md border px-2 py-1 text-xs font-medium transition-colors",
+                trashOnly
+                  ? "border-[#5F8FA6]/40 bg-[#5F8FA6]/20 text-[#5F8FA6]"
+                  : "border-transparent text-muted-foreground hover:text-foreground",
+              )}
+            >
+              Trash
             </button>
             {encounterNames.map((name) => {
               const active = selectedEncounters.has(name)
