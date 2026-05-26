@@ -1,7 +1,9 @@
-package api
+package servicerankings
 
 import (
+	"context"
 	"encoding/json"
+	"log/slog"
 	"net/http"
 	"strconv"
 	"strings"
@@ -9,15 +11,90 @@ import (
 	"github.com/Emyrk/chronicle/api/chroniclesdk"
 	"github.com/Emyrk/chronicle/api/httpapi"
 	"github.com/Emyrk/chronicle/database"
+	"github.com/Emyrk/chronicle/database/authz"
+	"github.com/Emyrk/chronicle/internal/services"
+	"github.com/Emyrk/chronicle/internal/services/serviceauthz"
+	"github.com/Emyrk/chronicle/internal/services/servicelogger"
+	"github.com/go-chi/chi/v5"
+
+	"github.com/coder/serpent"
 )
 
-// RankingsInstances returns per-instance summaries with top 3 players.
+var _ services.Servicer = (*Service)(nil)
+
+// Rankings returns the rankings service from the broker.
+func Rankings(broker *services.Services) *Service {
+	return services.MustGet[*Service](broker)
+}
+
+// OnRankings returns the service name for dependency declarations.
+func OnRankings() string {
+	return (&Service{}).Name()
+}
+
+// Service provides DPS performance rankings queries and (future) population.
+type Service struct {
+	broker *services.Services
+	router chi.Router
+	logger *slog.Logger
+	store  *authz.Authz
+}
+
+func New(broker *services.Services) *Service {
+	return &Service{
+		broker: broker,
+	}
+}
+
+func (s *Service) Name() string {
+	return services.ServiceRankings
+}
+
+func (s *Service) DependsOn() []string {
+	return []string{
+		servicelogger.OnLogger(),
+		serviceauthz.OnAuthz(),
+	}
+}
+
+func (s *Service) Configures() []string { return []string{} }
+func (s *Service) Options() serpent.OptionSet {
+	return serpent.OptionSet{}
+}
+
+func (s *Service) Start(_ context.Context) error {
+	s.logger = servicelogger.Logger(s.broker)
+	s.store = serviceauthz.Authz(s.broker)
+
+	s.router = chi.NewRouter()
+	s.setupRoutes()
+
+	s.logger.Info("rankings service started")
+	return nil
+}
+
+func (s *Service) Close(_ context.Context) error {
+	return nil
+}
+
+func (s *Service) ServeHTTP(w http.ResponseWriter, r *http.Request) {
+	s.router.ServeHTTP(w, r)
+}
+
+func (s *Service) setupRoutes() {
+	s.router.Get("/instances", s.handleInstances)
+	s.router.Get("/encounters", s.handleEncounters)
+	s.router.Get("/leaderboard", s.handleLeaderboard)
+	s.router.Get("/stats", s.handleStats)
+}
+
+// handleInstances returns per-instance summaries with top 3 players.
 //
-//	GET /api/v1/rankings/instances
-func (api *API) RankingsInstances(w http.ResponseWriter, r *http.Request) {
+//	GET /instances
+func (s *Service) handleInstances(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 
-	rows, err := api.Opts.Zed.RankingsInstanceSummaries(ctx)
+	rows, err := s.store.RankingsInstanceSummaries(ctx)
 	if err != nil {
 		httpapi.HandleResponseError(ctx, w, err, httpapi.APIError{
 			Response: chroniclesdk.Response{
@@ -51,10 +128,10 @@ func (api *API) RankingsInstances(w http.ResponseWriter, r *http.Request) {
 	httpapi.Write(ctx, w, http.StatusOK, out)
 }
 
-// RankingsEncounters returns encounters available in rankings for one instance.
+// handleEncounters returns encounters available in rankings for one instance.
 //
-//	GET /api/v1/rankings/instances/{instance_name}/encounters
-func (api *API) RankingsEncounters(w http.ResponseWriter, r *http.Request) {
+//	GET /encounters?instance_name=Molten+Core
+func (s *Service) handleEncounters(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 
 	instanceName := r.URL.Query().Get("instance_name")
@@ -65,7 +142,7 @@ func (api *API) RankingsEncounters(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	rows, err := api.Opts.Zed.RankingsEncounterList(ctx, instanceName)
+	rows, err := s.store.RankingsEncounterList(ctx, instanceName)
 	if err != nil {
 		httpapi.HandleResponseError(ctx, w, err, httpapi.APIError{
 			Response: chroniclesdk.Response{
@@ -88,10 +165,10 @@ func (api *API) RankingsEncounters(w http.ResponseWriter, r *http.Request) {
 	httpapi.Write(ctx, w, http.StatusOK, out)
 }
 
-// RankingsLeaderboard returns paginated DPS rankings with filters.
+// handleLeaderboard returns paginated DPS rankings with filters.
 //
-//	GET /api/v1/rankings/leaderboard
-func (api *API) RankingsLeaderboard(w http.ResponseWriter, r *http.Request) {
+//	GET /leaderboard?instance_names=Molten+Core&encounter_names=Ragnaros&period=90d
+func (s *Service) handleLeaderboard(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 	q := r.URL.Query()
 
@@ -115,7 +192,7 @@ func (api *API) RankingsLeaderboard(w http.ResponseWriter, r *http.Request) {
 		sinceDays = periodToDays(v)
 	}
 
-	rows, err := api.Opts.Zed.RankingsLeaderboard(ctx, database.RankingsLeaderboardParams{
+	rows, err := s.store.RankingsLeaderboard(ctx, database.RankingsLeaderboardParams{
 		InstanceNames:  splitCSV(q.Get("instance_names")),
 		EncounterNames: splitCSV(q.Get("encounter_names")),
 		RealmID:        q.Get("realm_id"),
@@ -172,10 +249,10 @@ func (api *API) RankingsLeaderboard(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
-// RankingsStats returns box plot statistics per class/spec.
+// handleStats returns box plot statistics per class/spec.
 //
-//	GET /api/v1/rankings/stats
-func (api *API) RankingsStats(w http.ResponseWriter, r *http.Request) {
+//	GET /stats?instance_names=Molten+Core&period=90d
+func (s *Service) handleStats(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 	q := r.URL.Query()
 
@@ -184,7 +261,7 @@ func (api *API) RankingsStats(w http.ResponseWriter, r *http.Request) {
 		sinceDays = periodToDays(v)
 	}
 
-	rows, err := api.Opts.Zed.RankingsBoxPlotStats(ctx, database.RankingsBoxPlotStatsParams{
+	rows, err := s.store.RankingsBoxPlotStats(ctx, database.RankingsBoxPlotStatsParams{
 		InstanceNames:  splitCSV(q.Get("instance_names")),
 		EncounterNames: splitCSV(q.Get("encounter_names")),
 		RealmID:        q.Get("realm_id"),
@@ -218,7 +295,6 @@ func (api *API) RankingsStats(w http.ResponseWriter, r *http.Request) {
 }
 
 // splitCSV splits a comma-separated string into a slice, trimming whitespace.
-// Returns nil for empty input.
 func splitCSV(s string) []string {
 	if s == "" {
 		return nil
@@ -238,7 +314,6 @@ func splitCSV(s string) []string {
 }
 
 // periodToDays converts a period string like "7d", "30d", "90d" to days.
-// Returns 0 for "all" or unrecognized values.
 func periodToDays(period string) int64 {
 	switch period {
 	case "7d":

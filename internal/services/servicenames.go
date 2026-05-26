@@ -21,4 +21,5 @@ const (
 	ServiceTelemetry   = "telemetry"
 	ServiceTenant      = "tenant"
 	ServiceApplication = "application"
+	ServiceRankings    = "rankings"
 )

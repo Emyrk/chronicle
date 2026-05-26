@@ -25,6 +25,7 @@ import (
 	"github.com/Emyrk/chronicle/internal/services/servicemail"
 	"github.com/Emyrk/chronicle/internal/services/servicepgxpool"
 	"github.com/Emyrk/chronicle/internal/services/serviceprometheus"
+	"github.com/Emyrk/chronicle/internal/services/servicerankings"
 	"github.com/Emyrk/chronicle/internal/services/serviceriver"
 	"github.com/Emyrk/chronicle/internal/services/servicestorage"
 	"github.com/Emyrk/chronicle/internal/services/serviceapplication"
@@ -87,6 +88,7 @@ func (s *Service) DependsOn() []string {
 		servicewowdb.OnWoWDB(),
 		serviceassets.OnAssets(),
 		servicegamedata.OnInternalGameData(),
+		servicerankings.OnRankings(),
 		servicemail.OnMailer(),
 		serviceaccessurl.OnAccessURL(),
 		servicetenant.OnTenant(),
@@ -160,6 +162,7 @@ func (s *Service) Start(ctx context.Context) error {
 	wowdb := servicewowdb.WoWDB(s.broker)
 	assets := serviceassets.Assets(s.broker)
 	gamedata := servicegamedata.InternalGameData(s.broker)
+	rankings := servicerankings.Rankings(s.broker)
 	mailer := servicemail.Mailer(s.broker)
 	handler, err := api.New(ctx, api.Options{
 		Logger:           logger,
@@ -176,6 +179,7 @@ func (s *Service) Start(ctx context.Context) error {
 		WoWDB:            wowdb,
 		Assets:           assets,
 		InternalGameData: gamedata,
+		Rankings:         rankings,
 		Mailer:           mailer,
 
 		AccessURL:       au,
