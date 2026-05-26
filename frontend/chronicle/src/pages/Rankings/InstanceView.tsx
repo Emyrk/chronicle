@@ -801,11 +801,11 @@ function KillTimeContent({ stats }: { stats: RankingsKillTimeStats[] }) {
                   <span className="text-[10px] text-muted-foreground">{s.count.toLocaleString()} kills</span>
                 </div>
                 <div className="space-y-1 text-xs">
-                  <TimeStatLine label="Fastest" desc="Best kill" value={formatTime(s.min_secs)} />
-                  <TimeStatLine label="Top 25%" desc="75th percentile" value={formatTime(s.q1_secs)} />
-                  <TimeStatLine label="Typical" desc="Median (50th)" value={formatTime(s.median_secs)} highlight />
-                  <TimeStatLine label="Bottom 25%" desc="25th percentile" value={formatTime(s.q3_secs)} />
-                  <TimeStatLine label="Slowest" desc="Longest kill" value={formatTime(s.max_secs)} />
+                  <TimeStatLine label="Fastest" value={formatTime(s.min_secs)} />
+                  <TimeStatLine label="Top 25%" value={formatTime(s.q1_secs)} />
+                  <TimeStatLine label="Typical" value={formatTime(s.median_secs)} highlight />
+                  <TimeStatLine label="Bottom 25%" value={formatTime(s.q3_secs)} />
+                  <TimeStatLine label="Slowest" value={formatTime(s.max_secs)} />
                   <div className="border-t border-white/5 pt-1 mt-1">
                     <TimeStatLine label="Spread" desc="IQR (Q3 − Q1)" value={formatTime(iqr)} />
                   </div>
@@ -837,12 +837,12 @@ function KillTimeContent({ stats }: { stats: RankingsKillTimeStats[] }) {
   )
 }
 
-function TimeStatLine({ label, desc, value, highlight }: { label: string; desc: string; value: string; highlight?: boolean }) {
+function TimeStatLine({ label, desc, value, highlight }: { label: string; desc?: string; value: string; highlight?: boolean }) {
   return (
     <div className="flex items-center justify-between gap-2">
       <div className="min-w-0">
-        <span className={highlight ? "font-semibold text-foreground" : "text-muted-foreground"}>{label}</span>
-        <span className="text-[10px] text-muted-foreground/50 ml-1">{desc}</span>
+        <span className={highlight ? "font-semibold text-foreground" : "text-foreground"}>{label}</span>
+        {desc && <span className="text-[10px] text-muted-foreground/50 ml-1">{desc}</span>}
       </div>
       <span className={`font-mono shrink-0 ${highlight ? "font-semibold text-foreground" : "font-medium"}`}>
         {value}
