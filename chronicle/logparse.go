@@ -743,8 +743,8 @@ func (w *WorkerLogParse) Work(ctx context.Context, job *river.Job[ArgsLogParse])
 				}
 			}
 
-			// Persist DPS rankings for clean kills.
-			if finalized.Rankings != nil && finalized.Rankings.DPS != nil {
+			// Persist DPS rankings for clean kills (only for instances with ranking rules).
+			if finalized.Rankings != nil && finalized.Rankings.DPS != nil && finalized.RankingRules != nil {
 				insertDPSRankings(ctx, tx, finalized, dbinstance, inst.Name(), realmName, guildID)
 			}
 
@@ -1198,6 +1198,7 @@ func detectAndLinkDuplicate(
 
 // insertDPSRankings persists per-player DPS rankings for each clean-kill encounter.
 // Roles are computed statistically from damage done/taken/healing per encounter.
+// Players outside the configured level range are excluded.
 func insertDPSRankings(
 	ctx context.Context,
 	tx *authz.AuthzTX,
@@ -1207,6 +1208,12 @@ func insertDPSRankings(
 	realmName string,
 	guildID uuid.UUID,
 ) {
+	// Level range from speedrun rules (if configured).
+	var levelRange *rankings.LevelRangeRequirement
+	if finalized.RankingRules != nil && finalized.RankingRules.Speedrun != nil {
+		levelRange = finalized.RankingRules.Speedrun.LevelRange
+	}
+
 	for _, enc := range finalized.Encounters {
 		dpsResult, ok := finalized.Rankings.DPS[enc.Combat.EncounterID]
 		if !ok {
@@ -1264,6 +1271,13 @@ func insertDPSRankings(
 			var playerLevel int16
 			if player.Level != nil {
 				playerLevel = int16(*player.Level)
+			}
+
+			// Enforce level range from ranking rules.
+			if levelRange != nil && playerLevel > 0 {
+				if int32(playerLevel) < levelRange.MinLevel || int32(playerLevel) > levelRange.MaxLevel {
+					continue
+				}
 			}
 
 			dps := float64(stats.DamageDone) / durationSecs

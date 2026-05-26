@@ -30,6 +30,9 @@ type FinalizedInstance struct {
 	Loot         *loot.LootTracker
 	Participants *participants.Tracker
 	Rankings     *rankings.RankingsResult
+	// RankingRules carries the eligibility rules (level range, etc.) for this instance.
+	// Nil if this instance has no ranking configuration.
+	RankingRules *rankings.Rankings
 	// UnknownUnits maps creature entry IDs not in the hostiles map to their name and hit count.
 	UnknownUnits map[uint32]UnknownUnit
 }
