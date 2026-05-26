@@ -83,9 +83,20 @@ func (t *DPSTracker) ProcessMessage(active bool, _ uuid.UUID, m messages.Message
 			t.damageTaken[msg.Target] += int64(msg.Amount)
 		}
 
-		// Only track player (or pet/totem) damage output to hostile targets.
+		// Only track player (or pet/totem) damage output to hostile non-player targets.
+		// Exclude player targets even if temporarily hostile (e.g., mind-controlled).
 		if msg.Caster == nil {
 			return nil // skip environmental damage for damage-done
+		}
+		// Never count damage to players or player-owned units (pets/totems).
+		if targetCls.Type == unitdb.UnitTypePlayer {
+			return nil
+		}
+		if targetCls.Relation.HasOwner() {
+			ownerCls := t.units.Classify(*targetCls.Relation.Owner)
+			if ownerCls.Type == unitdb.UnitTypePlayer {
+				return nil
+			}
 		}
 		caster := *msg.Caster
 		casterCls := t.units.Classify(caster)
