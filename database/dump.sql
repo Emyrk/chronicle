@@ -1430,7 +1430,7 @@ CREATE INDEX idx_edr_killed_at ON encounter_dps_rankings USING btree (killed_at)
 
 CREATE INDEX idx_edr_realm ON encounter_dps_rankings USING btree (realm_id);
 
-CREATE UNIQUE INDEX idx_edr_trash_unique ON encounter_dps_rankings USING btree (instance_id, player_guid) WHERE (encounter_id IS NULL);
+CREATE UNIQUE INDEX idx_edr_trash_unique ON encounter_dps_rankings USING btree (instance_id, player_guid, player_spec) WHERE (encounter_id IS NULL);
 
 CREATE INDEX idx_guild_join_requests_guild ON guild_join_requests USING btree (guild_id);
 
