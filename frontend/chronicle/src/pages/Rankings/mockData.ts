@@ -176,8 +176,14 @@ function weightedClass(): WoWHeroClasses {
 
 // Difficulty options per instance (for mock generation)
 const DIFFICULTIES_BY_INSTANCE: Record<string, { label: string; maxPlayers: number }[]> = {
-  "Molten Core": [{ label: "40 Player", maxPlayers: 40 }],
-  "Blackwing Lair": [{ label: "40 Player", maxPlayers: 40 }],
+  "Molten Core": [
+    { label: "20 Player", maxPlayers: 20 },
+    { label: "40 Player", maxPlayers: 40 },
+  ],
+  "Blackwing Lair": [
+    { label: "20 Player", maxPlayers: 20 },
+    { label: "40 Player", maxPlayers: 40 },
+  ],
   "Ahn'Qiraj": [
     { label: "20 Player", maxPlayers: 20 },
     { label: "40 Player", maxPlayers: 40 },
