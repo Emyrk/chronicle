@@ -24,6 +24,11 @@ type pendingTalent struct {
 	talents *combatant.Talents
 }
 
+// respecSpellID is the Turtle WoW goblin respec spell.
+// When a player casts this, their talent data is invalidated until a new
+// COMBATANT_INFO message arrives with fresh talents.
+const respecSpellID = 57734
+
 type Tracker struct {
 	instancehook.BaseHook
 
@@ -32,15 +37,20 @@ type Tracker struct {
 	Players        map[guid.GUID]combatant.Combatant
 	ByName         map[string]guid.GUID
 	PendingTalents map[guid.GUID]pendingTalent
+	// InvalidatedTalents tracks players who have respecced but haven't yet
+	// received a fresh COMBATANT_INFO. Their Talents field is set to nil
+	// so downstream consumers (DPS rankings) see "Unknown" spec.
+	InvalidatedTalents map[guid.GUID]struct{}
 }
 
 func New() *Tracker {
 	return &Tracker{
-		Guilds:         make(map[string]map[guid.GUID]struct{}),
-		Participant:    make(map[guid.GUID]struct{}),
-		Players:        make(map[guid.GUID]combatant.Combatant),
-		ByName:         make(map[string]guid.GUID),
-		PendingTalents: make(map[guid.GUID]pendingTalent),
+		Guilds:             make(map[string]map[guid.GUID]struct{}),
+		Participant:        make(map[guid.GUID]struct{}),
+		Players:            make(map[guid.GUID]combatant.Combatant),
+		ByName:             make(map[string]guid.GUID),
+		PendingTalents:     make(map[guid.GUID]pendingTalent),
+		InvalidatedTalents: make(map[guid.GUID]struct{}),
 	}
 }
 
@@ -219,8 +229,22 @@ func (g *Tracker) ProcessMessage(active bool, encounterID uuid.UUID, msg message
 	case *messages.Combatant:
 		g.Guild(ty)
 		g.Player(ty)
+		// Fresh COMBATANT_INFO repairs invalidated talents.
+		delete(g.InvalidatedTalents, ty.Guid)
 	case *messages.CombatantTalents:
 		g.CombatantTalents(ty)
+		// Fresh talent data also repairs invalidation.
+		delete(g.InvalidatedTalents, ty.Guid)
+	case *messages.SpellGo:
+		// Detect respec: when a player casts the goblin respec spell,
+		// invalidate their talent data until the next COMBATANT_INFO.
+		if ty.SpellData != nil && int(ty.SpellData.ID) == respecSpellID && ty.Caster.IsPlayer() {
+			g.InvalidatedTalents[ty.Caster] = struct{}{}
+			if p, ok := g.Players[ty.Caster]; ok {
+				p.Talents = nil
+				g.Players[ty.Caster] = p
+			}
+		}
 	case *messages.Transmog:
 		g.Transmog(ty)
 	}
