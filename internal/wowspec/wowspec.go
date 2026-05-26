@@ -68,11 +68,15 @@ const (
 )
 
 // Z-score thresholds for statistical role detection.
+// These are tuned more conservatively than the frontend's Roles.tsx
+// because rankings classification must be reliable across all raids,
+// not just a single interactive view. False positives (DPS marked as
+// healer) are worse than false negatives here.
 const (
-	TankZThreshold       = 1.5   // damage taken ≥ 1.5σ above mean
-	HealerZThreshold     = 0.3   // healing done ≥ 0.3σ above mean
-	LowDPSZThreshold     = -0.90 // DPS ≤ -0.90σ (bottom ~18.5%)
-	HealerHighZThreshold = 1.5   // healing done ≥ 1.5σ bypasses DPS check
+	TankZThreshold       = 1.5  // damage taken ≥ 1.5σ above mean
+	HealerZThreshold     = 1.0  // healing done ≥ 1.0σ above mean (stricter than frontend's 0.3)
+	LowDPSZThreshold     = -0.5 // DPS ≤ -0.5σ (stricter: must clearly be low DPS)
+	HealerHighZThreshold = 2.0  // healing done ≥ 2.0σ bypasses DPS check (stricter than frontend's 1.5)
 )
 
 // PlayerMetrics holds the three metrics needed for role inference.
@@ -120,9 +124,15 @@ func InferRoles[K comparable](players map[K]PlayerMetrics) map[K]string {
 		ddZ := zScore(float64(m.DamageDone), ddMean, ddStd)
 
 		isTank := dtZ >= TankZThreshold && m.DamageTaken > 0
-		hasHealing := hdZ >= HealerZThreshold && m.HealingDone > 0
+
+		// Healer detection: require healing z-score above threshold AND
+		// the player's healing must exceed their damage done. This prevents
+		// DPS classes with incidental self-healing (Drain Life, Vampiric
+		// Embrace, Second Wind) from being classified as healers.
+		healingExceedsDamage := m.HealingDone > m.DamageDone
+		hasHealing := hdZ >= HealerZThreshold && m.HealingDone > 0 && healingExceedsDamage
 		hasLowDPS := ddZ <= LowDPSZThreshold
-		hasHighHealing := hdZ >= HealerHighZThreshold
+		hasHighHealing := hdZ >= HealerHighZThreshold && healingExceedsDamage
 		isHealer := hasHealing && (hasLowDPS || hasHighHealing)
 
 		if isTank {
