@@ -122,15 +122,18 @@ func InferRoles[K comparable](players map[K]PlayerMetrics) map[K]string {
 
 		isTank := dtZ >= TankZThreshold && m.DamageTaken > 0
 
-		// Healer detection: require healing z-score above threshold AND
-		// the player's healing must exceed their damage done. This prevents
-		// DPS classes with incidental self-healing (Drain Life, Vampiric
-		// Embrace, Second Wind) from being classified as healers.
-		healingExceedsDamage := m.HealingDone > m.DamageDone
-		hasHealing := hdZ >= HealerZThreshold && m.HealingDone > 0 && healingExceedsDamage
-		hasLowDPS := ddZ <= LowDPSZThreshold
-		hasHighHealing := hdZ >= HealerHighZThreshold && healingExceedsDamage
-		isHealer := hasHealing && (hasLowDPS || hasHighHealing)
+		// Healer detection:
+		// 1. Must have done meaningful healing (> 0)
+		// 2. Healing z-score must be above threshold
+		// 3. Healing must exceed damage done (prevents DPS self-healers)
+		// 4. Must also have low DPS OR very high healing
+		var isHealer bool
+		if m.HealingDone > 0 && m.HealingDone > m.DamageDone {
+			hasHealing := hdZ >= HealerZThreshold
+			hasLowDPS := ddZ <= LowDPSZThreshold
+			hasHighHealing := hdZ >= HealerHighZThreshold
+			isHealer = hasHealing && (hasLowDPS || hasHighHealing)
+		}
 
 		if isTank {
 			roles[k] = RoleTank
