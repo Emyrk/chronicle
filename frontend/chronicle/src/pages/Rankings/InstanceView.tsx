@@ -81,7 +81,7 @@ export function InstanceView({ instanceName }: InstanceViewProps) {
   const dpsSubTab: DpsSubTab = params.get("tab") === "leaderboard" ? "leaderboard" : "boxplot"
   const filterClass = params.get("class") ?? undefined
   const filterSpec = params.get("spec") ?? undefined
-  const filterRole = params.get("role") || "dps"  // default to DPS
+  const filterRole = useMemo(() => params.get("role") || "dps", [params])
 
   const page = useMemo(() => {
     const raw = params.get("page")
