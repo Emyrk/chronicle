@@ -42,6 +42,8 @@ export function useRankingsLeaderboard(params: {
   instance_names?: string;
   encounter_names?: string;
   period?: string;
+  class?: string;
+  spec?: string;
   limit?: number;
   offset?: number;
 }) {
@@ -49,6 +51,8 @@ export function useRankingsLeaderboard(params: {
   if (params.instance_names) searchParams.set("instance_names", params.instance_names);
   if (params.encounter_names) searchParams.set("encounter_names", params.encounter_names);
   if (params.period) searchParams.set("period", params.period);
+  if (params.class) searchParams.set("class", params.class);
+  if (params.spec) searchParams.set("spec", params.spec);
   if (params.limit != null) searchParams.set("limit", String(params.limit));
   if (params.offset != null) searchParams.set("offset", String(params.offset));
   const qs = searchParams.toString();

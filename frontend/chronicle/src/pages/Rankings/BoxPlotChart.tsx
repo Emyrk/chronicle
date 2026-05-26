@@ -13,9 +13,10 @@ import { CLASS_CSS_VAR, CLASS_DISPLAY } from "./classDisplay"
 interface BoxPlotRowProps {
   stats: RankingsBoxPlotStats
   scaleMax: number
+  onClick?: () => void
 }
 
-function BoxPlotRow({ stats, scaleMax }: BoxPlotRowProps) {
+function BoxPlotRow({ stats, scaleMax, onClick }: BoxPlotRowProps) {
   const pct = (v: number) => `${(v / scaleMax) * 100}%`
   const color = CLASS_CSS_VAR[stats.player_class]
   const iqr = stats.q3_dps - stats.q1_dps
@@ -26,7 +27,13 @@ function BoxPlotRow({ stats, scaleMax }: BoxPlotRowProps) {
   return (
     <Tooltip>
       <TooltipTrigger asChild>
-        <div className="group flex items-center gap-3 rounded-md px-1 py-1.5 transition-colors hover:bg-muted/20 cursor-default">
+        <div
+          className={`group flex items-center gap-3 rounded-md px-1 py-1.5 transition-colors hover:bg-muted/20 ${onClick ? "cursor-pointer" : "cursor-default"}`}
+          onClick={onClick}
+          role={onClick ? "button" : undefined}
+          tabIndex={onClick ? 0 : undefined}
+          onKeyDown={onClick ? (e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); onClick() } } : undefined}
+        >
           {/* Class label */}
           <div className="flex w-32 shrink-0 items-center gap-1.5 text-xs">
             <span
@@ -133,9 +140,10 @@ function StatLine({ label, value }: { label: string; value: number }) {
 interface BoxPlotChartProps {
   stats: RankingsBoxPlotStats[]
   title?: string
+  onRowClick?: (playerClass: string, playerSpec: string) => void
 }
 
-export function BoxPlotChart({ stats, title = "DPS Distribution by Class" }: BoxPlotChartProps) {
+export function BoxPlotChart({ stats, title = "DPS Distribution by Class", onRowClick }: BoxPlotChartProps) {
   const scaleMax = useMemo(() => {
     if (stats.length === 0) return 1200
     return Math.max(...stats.map((s) => s.max_dps))
@@ -164,7 +172,12 @@ export function BoxPlotChart({ stats, title = "DPS Distribution by Class" }: Box
         <TooltipProvider>
           <div className="space-y-1">
             {stats.map((s) => (
-              <BoxPlotRow key={`${s.player_class}-${s.player_spec ?? ""}`} stats={s} scaleMax={ticks.max} />
+              <BoxPlotRow
+                key={`${s.player_class}-${s.player_spec ?? ""}`}
+                stats={s}
+                scaleMax={ticks.max}
+                onClick={onRowClick ? () => onRowClick(s.player_class, s.player_spec) : undefined}
+              />
             ))}
 
             {/* X-axis ticks */}

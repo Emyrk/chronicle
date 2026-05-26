@@ -23,6 +23,7 @@ import {
   useRankingsKillTimes,
   useRankingsSuccessRates,
 } from "@/api/rankingsQueries"
+import { CLASS_DISPLAY } from "./classDisplay"
 import type { RankedEntry } from "./RankingsTable"
 import type { TimePeriod } from "./timePeriod"
 import { BoxPlotChart } from "./BoxPlotChart"
@@ -72,6 +73,8 @@ export function InstanceView({ instanceName }: InstanceViewProps) {
   }, [params])
 
   const dpsSubTab: DpsSubTab = params.get("tab") === "leaderboard" ? "leaderboard" : "boxplot"
+  const filterClass = params.get("class") ?? undefined
+  const filterSpec = params.get("spec") ?? undefined
 
   const page = useMemo(() => {
     const raw = params.get("page")
@@ -135,6 +138,8 @@ export function InstanceView({ instanceName }: InstanceViewProps) {
       next.delete("period")
       next.delete("diff")
       next.delete("page")
+      next.delete("class")
+      next.delete("spec")
       return next
     })
   }, [setParams])
@@ -154,8 +159,21 @@ export function InstanceView({ instanceName }: InstanceViewProps) {
   )
 
   const handleDpsSubTabChange = useCallback(
-    (t: DpsSubTab) => setParam("tab", t === "boxplot" ? null : t),
-    [setParam],
+    (t: DpsSubTab) => {
+      setParams((prev) => {
+        const next = new URLSearchParams(prev)
+        if (t === "boxplot") {
+          next.delete("tab")
+          next.delete("class")
+          next.delete("spec")
+          next.delete("page")
+        } else {
+          next.set("tab", t)
+        }
+        return next
+      })
+    },
+    [setParams],
   )
 
   const handleTimePeriodChange = useCallback(
@@ -175,6 +193,31 @@ export function InstanceView({ instanceName }: InstanceViewProps) {
     (newPage: number) => setParam("page", newPage <= 1 ? null : String(newPage)),
     [setParam],
   )
+
+  const handleBoxPlotRowClick = useCallback(
+    (playerClass: string, playerSpec: string) => {
+      setParams((prev) => {
+        const next = new URLSearchParams(prev)
+        next.set("tab", "leaderboard")
+        next.set("class", playerClass)
+        if (playerSpec) next.set("spec", playerSpec)
+        else next.delete("spec")
+        next.delete("page")
+        return next
+      })
+    },
+    [setParams],
+  )
+
+  const handleClearClassFilter = useCallback(() => {
+    setParams((prev) => {
+      const next = new URLSearchParams(prev)
+      next.delete("class")
+      next.delete("spec")
+      next.delete("page")
+      return next
+    })
+  }, [setParams])
 
   const handleEncounterClick = useCallback(
     (name: string, ctrlKey: boolean) => {
@@ -250,6 +293,8 @@ export function InstanceView({ instanceName }: InstanceViewProps) {
     instance_names: instanceName,
     encounter_names: encounterNamesParam,
     period: periodParam,
+    class: filterClass,
+    spec: filterSpec,
     limit: PAGE_SIZE,
     offset: (page - 1) * PAGE_SIZE,
   })
@@ -557,9 +602,30 @@ export function InstanceView({ instanceName }: InstanceViewProps) {
         {/* Content */}
         {metric === "dps" && (
           dpsSubTab === "boxplot" ? (
-            <BoxPlotChart stats={boxPlotStats} title="DPS Distribution by Class & Spec" />
+            <BoxPlotChart
+              stats={boxPlotStats}
+              title="DPS Distribution by Class & Spec"
+              onRowClick={handleBoxPlotRowClick}
+            />
           ) : (
             <>
+              {/* Active class/spec filter badge */}
+              {filterClass && (
+                <div className="flex items-center gap-2 text-xs">
+                  <span className="text-muted-foreground">Filtered:</span>
+                  <span className="rounded-md border border-white/10 bg-white/5 px-2 py-0.5 font-medium">
+                    {CLASS_DISPLAY[filterClass] ?? filterClass}
+                    {filterSpec ? ` – ${filterSpec}` : ""}
+                  </span>
+                  <button
+                    onClick={handleClearClassFilter}
+                    className="text-muted-foreground hover:text-foreground transition-colors"
+                    title="Clear filter"
+                  >
+                    <X className="h-3.5 w-3.5" />
+                  </button>
+                </div>
+              )}
               <RankingsTable entries={leaderboardEntries} />
               {/* Pagination */}
               {totalPages > 1 && (
@@ -613,7 +679,10 @@ export function InstanceView({ instanceName }: InstanceViewProps) {
 function formatTime(seconds: number): string {
   const m = Math.floor(seconds / 60)
   const s = seconds % 60
-  return `${m}:${String(s).padStart(2, "0")}`
+  const sWhole = Math.floor(s)
+  const sFrac = s - sWhole
+  const fracStr = sFrac > 0 ? `.${sFrac.toFixed(2).slice(2)}` : ""
+  return `${m}:${String(sWhole).padStart(2, "0")}${fracStr}`
 }
 
 function KillTimeContent({ stats }: { stats: RankingsKillTimeStats[] }) {
@@ -635,6 +704,12 @@ function KillTimeContent({ stats }: { stats: RankingsKillTimeStats[] }) {
   return (
     <div className="rounded-xl border bg-card p-5">
       <h3 className="mb-5 text-sm font-medium text-muted-foreground">Kill Time by Encounter</h3>
+      {/* Column header */}
+      <div className="flex items-center gap-3 px-1 pb-1">
+        <div className="w-40 shrink-0" />
+        <div className="flex-1" />
+        <div className="w-28 shrink-0 text-right text-[10px] text-muted-foreground/60">Avg (sample count)</div>
+      </div>
       <div className="space-y-1.5">
         {stats.map((s) => {
           const pct = (v: number) => `${(v / axisMax) * 100}%`
@@ -665,11 +740,11 @@ function KillTimeContent({ stats }: { stats: RankingsKillTimeStats[] }) {
                 />
               </div>
 
-              {/* Values */}
-              <div className="w-20 shrink-0 text-right text-xs text-muted-foreground">
+              {/* Avg (sample count) */}
+              <div className="w-28 shrink-0 text-right text-xs text-muted-foreground">
                 <span className="font-mono font-semibold text-foreground">{formatTime(s.median_secs)}</span>
                 {" "}
-                <span className="hidden sm:inline">({s.count})</span>
+                <span className="text-muted-foreground/60">({s.count})</span>
               </div>
             </div>
           )
@@ -689,7 +764,7 @@ function KillTimeContent({ stats }: { stats: RankingsKillTimeStats[] }) {
               </span>
             ))}
           </div>
-          <div className="w-20 shrink-0" />
+          <div className="w-28 shrink-0" />
         </div>
       </div>
     </div>
