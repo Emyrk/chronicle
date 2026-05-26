@@ -6,6 +6,7 @@ import { Button } from "@/components/ui/button"
 import {
   DropdownMenu,
   DropdownMenuContent,
+  DropdownMenuCheckboxItem,
   DropdownMenuRadioGroup,
   DropdownMenuRadioItem,
   DropdownMenuTrigger,
@@ -16,6 +17,7 @@ import { cn } from "@/lib/utils"
 import {
   getInstanceByName,
   getEncounterNames,
+  getInstanceDifficulties,
   getAllEntries,
   computeBoxPlotStatsBySpec,
   getKillTimeStats,
@@ -48,6 +50,7 @@ export function InstanceView({ instanceName }: InstanceViewProps) {
 
   const instance = useMemo(() => getInstanceByName(instanceName), [instanceName])
   const encounterNames = useMemo(() => getEncounterNames(instanceName), [instanceName])
+  const availableDifficulties = useMemo(() => getInstanceDifficulties(instanceName), [instanceName])
   const bossNames = useMemo(
     () => new Set(instance?.bosses.filter((b) => !b.isTrash).map((b) => b.name) ?? []),
     [instance],
@@ -72,7 +75,31 @@ export function InstanceView({ instanceName }: InstanceViewProps) {
     return raw && VALID_PERIODS.has(raw as TimePeriod) ? (raw as TimePeriod) : "all"
   }, [params])
 
+  // Difficulty filter — empty set means all difficulties selected
+  const selectedDifficulties: Set<string> = useMemo(() => {
+    const raw = params.get("diff")
+    if (!raw) return new Set<string>()
+    return new Set(raw.split(",").filter(Boolean))
+  }, [params])
 
+  const handleToggleDifficulty = useCallback(
+    (diff: string) => {
+      setParams((prev) => {
+        const next = new URLSearchParams(prev)
+        const raw = prev.get("diff")
+        const current = raw ? new Set(raw.split(",").filter(Boolean)) : new Set<string>()
+        if (current.has(diff)) current.delete(diff)
+        else current.add(diff)
+        if (current.size === 0 || current.size === availableDifficulties.length) {
+          next.delete("diff")
+        } else {
+          next.set("diff", [...current].join(","))
+        }
+        return next
+      })
+    },
+    [setParams, availableDifficulties.length],
+  )
 
   const selectedEncounters: Set<string> = useMemo(() => {
     const raw = params.get("encounters")
@@ -102,6 +129,7 @@ export function InstanceView({ instanceName }: InstanceViewProps) {
       next.delete("tab")
       next.delete("encounters")
       next.delete("period")
+      next.delete("diff")
       return next
     })
   }, [setParams])
@@ -184,6 +212,10 @@ export function InstanceView({ instanceName }: InstanceViewProps) {
     let entries = getAllEntries(instanceName)
     // Filter by selected encounters
     entries = entries.filter((e) => selectedEncounters.has(e.encounterName))
+    // Filter by difficulty
+    if (selectedDifficulties.size > 0) {
+      entries = entries.filter((e) => selectedDifficulties.has(e.difficulty))
+    }
     // Filter by time period
     const days = getTimePeriodDays(timePeriod)
     if (days !== null) {
@@ -191,7 +223,7 @@ export function InstanceView({ instanceName }: InstanceViewProps) {
       entries = entries.filter((e) => new Date(e.date).getTime() >= cutoff)
     }
     return entries
-  }, [instanceName, selectedEncounters, timePeriod, now])
+  }, [instanceName, selectedEncounters, selectedDifficulties, timePeriod, now])
 
   const boxPlotStats = useMemo(
     () => computeBoxPlotStatsBySpec(filteredEntries),
@@ -394,6 +426,33 @@ export function InstanceView({ instanceName }: InstanceViewProps) {
                     </button>
                   ))}
                 </div>
+              )}
+
+              {/* Difficulty filter (only when multiple difficulties exist) */}
+              {availableDifficulties.length > 1 && (
+                <DropdownMenu>
+                  <DropdownMenuTrigger asChild>
+                    <Button variant="outline" size="sm" className="h-7 gap-1.5 text-xs">
+                      {selectedDifficulties.size === 0
+                        ? "All Difficulties"
+                        : selectedDifficulties.size === 1
+                          ? [...selectedDifficulties][0]
+                          : `${selectedDifficulties.size} Difficulties`}
+                      <ChevronDown className="h-3 w-3 opacity-50" />
+                    </Button>
+                  </DropdownMenuTrigger>
+                  <DropdownMenuContent align="start">
+                    {availableDifficulties.map((diff) => (
+                      <DropdownMenuCheckboxItem
+                        key={diff}
+                        checked={selectedDifficulties.size === 0 || selectedDifficulties.has(diff)}
+                        onCheckedChange={() => handleToggleDifficulty(diff)}
+                      >
+                        {diff}
+                      </DropdownMenuCheckboxItem>
+                    ))}
+                  </DropdownMenuContent>
+                </DropdownMenu>
               )}
 
               {/* Time period filter */}

@@ -10,6 +10,8 @@ export interface RankingEntry {
   playerLevel: number
   realmName: string
   encounterName: string
+  difficulty: string   // e.g. "40 Player", "20 Player", "25 Player (Heroic)"
+  maxPlayers: number   // e.g. 40, 20, 25
   value: number
   durationMs: number
   guildName: string
@@ -172,6 +174,21 @@ function weightedClass(): WoWHeroClasses {
 
 // ── Instance / Boss Data ───────────────────────────────────────────────────
 
+// Difficulty options per instance (for mock generation)
+const DIFFICULTIES_BY_INSTANCE: Record<string, { label: string; maxPlayers: number }[]> = {
+  "Molten Core": [{ label: "40 Player", maxPlayers: 40 }],
+  "Blackwing Lair": [{ label: "40 Player", maxPlayers: 40 }],
+  "Ahn'Qiraj": [
+    { label: "20 Player", maxPlayers: 20 },
+    { label: "40 Player", maxPlayers: 40 },
+  ],
+  "Naxxramas": [
+    { label: "10 Player", maxPlayers: 10 },
+    { label: "25 Player", maxPlayers: 25 },
+    { label: "25 Player (Heroic)", maxPlayers: 25 },
+  ],
+}
+
 const INSTANCES_RAW: { name: string; bosses: string[] }[] = [
   {
     name: "Molten Core",
@@ -204,9 +221,23 @@ const INSTANCES_RAW: { name: string; bosses: string[] }[] = [
   },
 ]
 
+/** Get distinct difficulty labels from actual ranking entries for an instance. */
+export function getInstanceDifficulties(instanceName: string): string[] {
+  const entries = getAllEntries(instanceName)
+  const seen = new Set<string>()
+  for (const e of entries) {
+    if (e.difficulty) seen.add(e.difficulty)
+  }
+  return [...seen].sort()
+}
+
 // ── Generate entries for a single boss ─────────────────────────────────────
 
-function generateBossEntries(encounterName: string): RankingEntry[] {
+function generateBossEntries(
+  encounterName: string,
+  instanceName: string,
+): RankingEntry[] {
+  const difficulties = DIFFICULTIES_BY_INSTANCE[instanceName] ?? [{ label: "", maxPlayers: 0 }]
   const count = randInt(50, 80)
   const baseDuration = randInt(60, 300)
   const entries: RankingEntry[] = []
@@ -221,6 +252,7 @@ function generateBossEntries(encounterName: string): RankingEntry[] {
     const durationMs = Math.max(dur, 30) * 1000
     const daysAgo = randInt(0, 89)
     const date = new Date(Date.now() - daysAgo * 86400000)
+    const diff = pick(difficulties)
 
     entries.push({
       rank: 0, // filled later
@@ -230,6 +262,8 @@ function generateBossEntries(encounterName: string): RankingEntry[] {
       playerLevel: 60,
       realmName: pick(REALM_NAMES),
       encounterName,
+      difficulty: diff.label,
+      maxPlayers: diff.maxPlayers,
       value: dps,
       durationMs,
       guildName: pick(GUILD_NAMES),
@@ -257,7 +291,7 @@ export const INSTANCES: InstanceInfo[] = INSTANCES_RAW.map((inst) => {
   let totalRecords = 0
   const bosses: BossInfo[] = inst.bosses.map((bossName) => {
     const id = `${inst.name}::${bossName}`.toLowerCase().replace(/[^a-z0-9]+/g, "-")
-    const entries = generateBossEntries(bossName)
+    const entries = generateBossEntries(bossName, inst.name)
     bossEntries.set(id, entries)
     const kills = entries.length
     totalRecords += kills
@@ -268,7 +302,7 @@ export const INSTANCES: InstanceInfo[] = INSTANCES_RAW.map((inst) => {
 
   // Add a "Trash" pseudo-encounter per instance (aggregated non-boss damage)
   const trashId = `${inst.name}::trash`.toLowerCase().replace(/[^a-z0-9]+/g, "-")
-  const trashEntries = generateBossEntries("Trash")
+  const trashEntries = generateBossEntries("Trash", inst.name)
   // Trash DPS tends to be lower — scale down
   for (const e of trashEntries) {
     e.value = Math.round(e.value * 0.7)
