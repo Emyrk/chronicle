@@ -141,14 +141,6 @@ export function NavBar() {
                 Leaderboards
               </Link>
               <Link
-                to="/rankings"
-                onClick={() => setMobileMenuOpen(false)}
-                className="flex items-center gap-2 text-sm text-muted-foreground hover:text-foreground transition-colors py-2"
-              >
-                <BarChart3 className="h-4 w-4" />
-                Rankings
-              </Link>
-              <Link
                 to="/census"
                 onClick={() => setMobileMenuOpen(false)}
                 className="flex items-center gap-2 text-sm text-muted-foreground hover:text-foreground transition-colors py-2"
@@ -242,12 +234,6 @@ export function NavBar() {
               <Link to="/leaderboard" className="flex items-center gap-2">
                 <Trophy className="h-4 w-4" />
                 Leaderboards
-              </Link>
-            </DropdownMenuItem>
-            <DropdownMenuItem asChild>
-              <Link to="/rankings" className="flex items-center gap-2">
-                <BarChart3 className="h-4 w-4" />
-                Rankings
               </Link>
             </DropdownMenuItem>
             <DropdownMenuItem asChild>
