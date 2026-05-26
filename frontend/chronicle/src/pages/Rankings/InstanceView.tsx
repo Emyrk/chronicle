@@ -1,7 +1,7 @@
 import { useCallback, useMemo, useState } from "react"
 import { createPortal } from "react-dom"
 import { useSearchParams } from "react-router-dom"
-import { ArrowLeft, CheckCircle, ChevronDown, List, Loader2, X } from "lucide-react"
+import { ArrowLeft, CheckCircle, ChevronDown, ChevronLeft, ChevronRight, List, Loader2, X } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import {
   DropdownMenu,
@@ -31,6 +31,7 @@ import { RankingsTable } from "./RankingsTable"
 
 type MetricTab = "dps" | "killtime" | "success"
 type DpsSubTab = "boxplot" | "leaderboard"
+const PAGE_SIZE = 50
 
 const VALID_PERIODS = new Set<TimePeriod>(["all", "90d", "30d", "7d"])
 
@@ -70,6 +71,12 @@ export function InstanceView({ instanceName }: InstanceViewProps) {
   }, [params])
 
   const dpsSubTab: DpsSubTab = params.get("tab") === "leaderboard" ? "leaderboard" : "boxplot"
+
+  const page = useMemo(() => {
+    const raw = params.get("page")
+    const n = raw ? parseInt(raw, 10) : 1
+    return Number.isFinite(n) && n >= 1 ? n : 1
+  }, [params])
 
   const timePeriod: TimePeriod = useMemo(() => {
     const raw = params.get("period")
@@ -112,6 +119,7 @@ export function InstanceView({ instanceName }: InstanceViewProps) {
       next.delete("encounters")
       next.delete("period")
       next.delete("diff")
+      next.delete("page")
       return next
     })
   }, [setParams])
@@ -136,7 +144,20 @@ export function InstanceView({ instanceName }: InstanceViewProps) {
   )
 
   const handleTimePeriodChange = useCallback(
-    (p: TimePeriod) => setParam("period", p === "all" ? null : p),
+    (p: TimePeriod) => {
+      setParams((prev) => {
+        const next = new URLSearchParams(prev)
+        if (p === "all") next.delete("period")
+        else next.set("period", p)
+        next.delete("page") // reset to page 1
+        return next
+      })
+    },
+    [setParams],
+  )
+
+  const handlePageChange = useCallback(
+    (newPage: number) => setParam("page", newPage <= 1 ? null : String(newPage)),
     [setParam],
   )
 
@@ -209,8 +230,8 @@ export function InstanceView({ instanceName }: InstanceViewProps) {
     instance_names: instanceName,
     encounter_names: encounterNamesParam,
     period: periodParam,
-    limit: 50,
-    offset: 0,
+    limit: PAGE_SIZE,
+    offset: (page - 1) * PAGE_SIZE,
   })
 
   // Derive available difficulties from leaderboard entries
@@ -240,6 +261,9 @@ export function InstanceView({ instanceName }: InstanceViewProps) {
     [setParams, availableDifficulties.length],
   )
 
+  const totalCount = leaderboardData?.total_count ?? 0
+  const totalPages = Math.max(1, Math.ceil(totalCount / PAGE_SIZE))
+
   const leaderboardEntries: RankedEntry[] = useMemo(() => {
     const entries = leaderboardData?.entries ?? []
     // Client-side difficulty filter (not yet a backend param)
@@ -247,8 +271,9 @@ export function InstanceView({ instanceName }: InstanceViewProps) {
     if (selectedDifficulties.size > 0) {
       filtered = filtered.filter((e) => selectedDifficulties.has(e.difficulty_name))
     }
-    return filtered.map((e, i) => ({ ...e, rank: i + 1 }))
-  }, [leaderboardData, selectedDifficulties])
+    const offset = (page - 1) * PAGE_SIZE
+    return filtered.map((e, i) => ({ ...e, rank: offset + i + 1 }))
+  }, [leaderboardData, selectedDifficulties, page])
 
   const { data: killTimeStats = [] } = useRankingsKillTimes(instanceName, periodParam)
   const { data: successRates = [] } = useRankingsSuccessRates(instanceName, periodParam)
@@ -501,7 +526,40 @@ export function InstanceView({ instanceName }: InstanceViewProps) {
           dpsSubTab === "boxplot" ? (
             <BoxPlotChart stats={boxPlotStats} title="DPS Distribution by Class & Spec" />
           ) : (
-            <RankingsTable entries={leaderboardEntries} />
+            <>
+              <RankingsTable entries={leaderboardEntries} />
+              {/* Pagination */}
+              {totalPages > 1 && (
+                <div className="flex items-center justify-between pt-2">
+                  <span className="text-xs text-muted-foreground">
+                    {totalCount.toLocaleString()} results
+                  </span>
+                  <div className="flex items-center gap-2">
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      className="h-7 w-7 p-0"
+                      disabled={page <= 1}
+                      onClick={() => handlePageChange(page - 1)}
+                    >
+                      <ChevronLeft className="h-4 w-4" />
+                    </Button>
+                    <span className="text-xs text-muted-foreground">
+                      Page {page} of {totalPages}
+                    </span>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      className="h-7 w-7 p-0"
+                      disabled={page >= totalPages}
+                      onClick={() => handlePageChange(page + 1)}
+                    >
+                      <ChevronRight className="h-4 w-4" />
+                    </Button>
+                  </div>
+                </div>
+              )}
+            </>
           )
         )}
 
