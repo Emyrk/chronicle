@@ -6,6 +6,9 @@ export interface RankingEntry {
   rank: number
   playerName: string
   className: WoWHeroClasses
+  playerSpec: string
+  realmName: string
+  encounterName: string
   value: number
   durationMs: number
   guildName: string
@@ -38,6 +41,12 @@ export interface RankingSummary {
   median: number
   totalRecords: number
   classCount: number
+}
+
+export interface InstanceSummary {
+  instanceName: string
+  totalKills: number
+  topPlayers: { name: string; realm: string; className: WoWHeroClasses; dps: number }[]
 }
 
 // ── Seeded PRNG ────────────────────────────────────────────────────────────
@@ -108,6 +117,20 @@ const DPS_CLASSES: WoWHeroClasses[] = [
   "WARRIOR", "ROGUE", "MAGE", "WARLOCK", "HUNTER",
   "PRIEST", "DRUID", "PALADIN", "SHAMAN",
 ]
+
+export const SPEC_BY_CLASS: Record<string, readonly string[]> = {
+  WARRIOR: ["Arms", "Fury", "Protection"],
+  ROGUE: ["Assassination", "Combat", "Subtlety"],
+  MAGE: ["Arcane", "Fire", "Frost"],
+  WARLOCK: ["Affliction", "Demonology", "Destruction"],
+  HUNTER: ["Beast Mastery", "Marksmanship", "Survival"],
+  PRIEST: ["Discipline", "Holy", "Shadow"],
+  DRUID: ["Balance", "Feral", "Restoration"],
+  PALADIN: ["Holy", "Protection", "Retribution"],
+  SHAMAN: ["Elemental", "Enhancement", "Restoration"],
+}
+
+export const REALM_NAMES = ["Ambershire", "Tel'Abim", "Nordanaar"] as const
 
 // DPS ranges per class [min, max]
 const DPS_RANGES: Record<string, [number, number]> = {
@@ -181,7 +204,7 @@ const INSTANCES_RAW: { name: string; bosses: string[] }[] = [
 
 // ── Generate entries for a single boss ─────────────────────────────────────
 
-function generateBossEntries(): RankingEntry[] {
+function generateBossEntries(encounterName: string): RankingEntry[] {
   const count = randInt(50, 80)
   const baseDuration = randInt(60, 300)
   const entries: RankingEntry[] = []
@@ -189,6 +212,7 @@ function generateBossEntries(): RankingEntry[] {
   for (let i = 0; i < count; i++) {
     const cls = weightedClass()
     const names = NAMES_BY_CLASS[cls] ?? NAMES_BY_CLASS.WARRIOR
+    const specs = SPEC_BY_CLASS[cls] ?? ["Unknown"]
     const dpsRange = DPS_RANGES[cls] ?? [300, 700]
     const dps = randInt(dpsRange[0], dpsRange[1])
     const dur = baseDuration + randInt(-30, 60)
@@ -200,6 +224,9 @@ function generateBossEntries(): RankingEntry[] {
       rank: 0, // filled later
       playerName: pick(names) + randInt(1, 99),
       className: cls,
+      playerSpec: pick(specs),
+      realmName: pick(REALM_NAMES),
+      encounterName,
       value: dps,
       durationMs,
       guildName: pick(GUILD_NAMES),
@@ -227,7 +254,7 @@ export const INSTANCES: InstanceInfo[] = INSTANCES_RAW.map((inst) => {
   let totalRecords = 0
   const bosses: BossInfo[] = inst.bosses.map((bossName) => {
     const id = `${inst.name}::${bossName}`.toLowerCase().replace(/[^a-z0-9]+/g, "-")
-    const entries = generateBossEntries()
+    const entries = generateBossEntries(bossName)
     bossEntries.set(id, entries)
     const kills = entries.length
     totalRecords += kills
@@ -313,6 +340,7 @@ export function getInstanceByName(name: string): InstanceInfo | undefined {
 
 export interface BoxPlotStats {
   className: WoWHeroClasses
+  specName?: string
   min: number
   q1: number
   median: number
@@ -390,6 +418,63 @@ export const CLASS_CSS_VAR: Record<string, string> = {
   SHAMAN: "var(--color-class-shaman)",
   DEATHKNIGHT: "var(--color-class-deathknight)",
   UNKNOWN: "var(--color-class-unknown)",
+}
+
+export function computeBoxPlotStatsBySpec(entries: RankingEntry[]): BoxPlotStats[] {
+  const byKey = new Map<string, { className: WoWHeroClasses; specName: string; values: number[] }>()
+  for (const e of entries) {
+    const key = `${e.className}::${e.playerSpec}`
+    let bucket = byKey.get(key)
+    if (!bucket) {
+      bucket = { className: e.className, specName: e.playerSpec, values: [] }
+      byKey.set(key, bucket)
+    }
+    bucket.values.push(e.value)
+  }
+
+  const result: BoxPlotStats[] = []
+  for (const { className, specName, values } of byKey.values()) {
+    values.sort((a, b) => a - b)
+    result.push({
+      className,
+      specName,
+      min: values[0],
+      q1: Math.round(percentile(values, 25)),
+      median: Math.round(percentile(values, 50)),
+      q3: Math.round(percentile(values, 75)),
+      max: values[values.length - 1],
+      count: values.length,
+    })
+  }
+  result.sort((a, b) => b.median - a.median)
+  return result
+}
+
+/** Return encounter (boss) names for a given instance. */
+export function getEncounterNames(instanceName: string): string[] {
+  const inst = INSTANCES.find((i) => i.name === instanceName)
+  if (!inst) return []
+  return inst.bosses.map((b) => b.name)
+}
+
+/** Return summaries for all instances (for landing page cards). */
+export function getInstanceSummaries(): InstanceSummary[] {
+  return INSTANCES.map((inst) => {
+    // Gather all entries for instance, sorted by DPS desc
+    const allEntries = getAllEntries(inst.name)
+    const sorted = [...allEntries].sort((a, b) => b.value - a.value)
+    const topPlayers = sorted.slice(0, 3).map((e) => ({
+      name: e.playerName,
+      realm: e.realmName,
+      className: e.className,
+      dps: e.value,
+    }))
+    return {
+      instanceName: inst.name,
+      totalKills: inst.totalRecords,
+      topPlayers,
+    }
+  })
 }
 
 export const ALL_DPS_CLASSES = DPS_CLASSES

@@ -66,6 +66,8 @@ export function RankingsTable({ entries }: RankingsTableProps) {
                   />
                   {CLASS_DISPLAY[entry.className]}
                 </span>
+                <span>{entry.playerSpec}</span>
+                <span>{entry.realmName}</span>
                 <span className="font-mono">{formatDuration(entry.durationMs)}</span>
                 <span className="ml-auto">{formatDate(entry.date)}</span>
               </div>
@@ -81,7 +83,9 @@ export function RankingsTable({ entries }: RankingsTableProps) {
             <tr className="border-b bg-muted/50 text-left text-muted-foreground">
               <th className="w-16 px-4 py-3 text-center">Rank</th>
               <th className="px-4 py-3">Player</th>
+              <th className="px-4 py-3">Realm</th>
               <th className="px-4 py-3">Class</th>
+              <th className="px-4 py-3">Spec</th>
               <th className="px-4 py-3 text-right">DPS</th>
               <th className="px-4 py-3 text-right">Duration</th>
               <th className="px-4 py-3">Guild</th>
@@ -111,6 +115,7 @@ export function RankingsTable({ entries }: RankingsTableProps) {
                     <span className="font-medium">{entry.playerName}</span>
                   </span>
                 </td>
+                <td className="px-4 py-3 text-muted-foreground">{entry.realmName}</td>
                 <td className="px-4 py-3">
                   <span className="flex items-center gap-1.5 text-muted-foreground">
                     <span
@@ -120,6 +125,7 @@ export function RankingsTable({ entries }: RankingsTableProps) {
                     {CLASS_DISPLAY[entry.className]}
                   </span>
                 </td>
+                <td className="px-4 py-3 text-muted-foreground">{entry.playerSpec}</td>
                 <td className="px-4 py-3 text-right font-mono font-semibold">
                   {entry.value.toLocaleString()}
                 </td>

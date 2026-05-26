@@ -1,273 +1,328 @@
-import { useMemo, useState } from "react"
-import { ArrowLeft, Crown, Hash, Skull, Swords, TrendingUp } from "lucide-react"
+import { useCallback, useMemo, useState } from "react"
+import { useSearchParams } from "react-router-dom"
+import { ArrowLeft, Skull } from "lucide-react"
 import type { WoWHeroClasses } from "@/api/typesGenerated"
+import { cn } from "@/lib/utils"
 import {
-  type InstanceInfo,
+  getInstanceByName,
+  getEncounterNames,
   getAllEntries,
-  getTopEntries,
-  computeBoxPlotStats,
-  CLASS_CSS_VAR,
-  CLASS_DISPLAY,
+  computeBoxPlotStatsBySpec,
 } from "./mockData"
 import type { TimePeriod } from "./timePeriod"
 import { getTimePeriodDays } from "./timePeriod"
 import { RankingsFilters } from "./RankingsFilters"
 import { BoxPlotChart } from "./BoxPlotChart"
+import { RankingsTable } from "./RankingsTable"
+
+// ── Types ─────────────────────────────────────────────────────────────────
+
+type TabType = "boxplot" | "leaderboard"
+
+const VALID_PERIODS = new Set<TimePeriod>(["all", "90d", "30d", "7d"])
+
+interface InstanceViewProps {
+  instanceName: string
+}
 
 // ── Component ─────────────────────────────────────────────────────────────
 
-interface InstanceViewProps {
-  instance: InstanceInfo
-  timePeriod: TimePeriod
-  onTimePeriodChange: (p: TimePeriod) => void
-  selectedClasses: Set<WoWHeroClasses>
-  onToggleClass: (cls: WoWHeroClasses) => void
-  onSelectBoss: (bossId: string) => void
-  onBack: () => void
-}
-
-const MEDALS = ["🥇", "🥈", "🥉"]
-
-function formatDuration(ms: number): string {
-  const dur = Math.round(ms / 1000)
-  const m = Math.floor(dur / 60)
-  const s = dur % 60
-  return `${m}:${s.toString().padStart(2, "0")}`
-}
-
-export function InstanceView({
-  instance,
-  timePeriod,
-  onTimePeriodChange,
-  selectedClasses,
-  onToggleClass,
-  onSelectBoss,
-  onBack,
-}: InstanceViewProps) {
+export function InstanceView({ instanceName }: InstanceViewProps) {
+  const [params, setParams] = useSearchParams()
   const [now] = useState(() => Date.now())
 
-  // All entries for this instance, filtered by time period
+  const instance = useMemo(() => getInstanceByName(instanceName), [instanceName])
+  const encounterNames = useMemo(() => getEncounterNames(instanceName), [instanceName])
+
+  // ── URL state ────────────────────────────────────────────────────────
+
+  const tab: TabType = params.get("tab") === "leaderboard" ? "leaderboard" : "boxplot"
+
+  const timePeriod: TimePeriod = useMemo(() => {
+    const raw = params.get("period")
+    return raw && VALID_PERIODS.has(raw as TimePeriod) ? (raw as TimePeriod) : "all"
+  }, [params])
+
+  const selectedClasses: Set<WoWHeroClasses> = useMemo(() => {
+    const raw = params.get("classes")
+    if (!raw) return new Set<WoWHeroClasses>()
+    return new Set(raw.split(",").filter(Boolean) as WoWHeroClasses[])
+  }, [params])
+
+  const selectedEncounters: Set<string> = useMemo(() => {
+    const raw = params.get("encounters")
+    if (!raw) return new Set(encounterNames)
+    return new Set(raw.split(",").filter(Boolean))
+  }, [params, encounterNames])
+
+  // ── Setters ──────────────────────────────────────────────────────────
+
+  const setParam = useCallback(
+    (key: string, value: string | null) => {
+      setParams((prev) => {
+        const next = new URLSearchParams(prev)
+        if (value === null || value === "") next.delete(key)
+        else next.set(key, value)
+        return next
+      })
+    },
+    [setParams],
+  )
+
+  const handleBack = useCallback(() => {
+    setParams((prev) => {
+      const next = new URLSearchParams(prev)
+      next.delete("instance")
+      next.delete("tab")
+      next.delete("encounters")
+      next.delete("period")
+      next.delete("classes")
+      return next
+    })
+  }, [setParams])
+
+  const handleTabChange = useCallback(
+    (t: TabType) => setParam("tab", t === "boxplot" ? null : t),
+    [setParam],
+  )
+
+  const handleTimePeriodChange = useCallback(
+    (p: TimePeriod) => setParam("period", p === "all" ? null : p),
+    [setParam],
+  )
+
+  const handleToggleClass = useCallback(
+    (cls: WoWHeroClasses) => {
+      setParams((prev) => {
+        const next = new URLSearchParams(prev)
+        const current = new Set(
+          (prev.get("classes") ?? "").split(",").filter(Boolean) as WoWHeroClasses[],
+        )
+        if (current.has(cls)) current.delete(cls)
+        else current.add(cls)
+        if (current.size === 0) next.delete("classes")
+        else next.set("classes", [...current].join(","))
+        return next
+      })
+    },
+    [setParams],
+  )
+
+  const handleEncounterClick = useCallback(
+    (name: string, ctrlKey: boolean) => {
+      setParams((prev) => {
+        const next = new URLSearchParams(prev)
+        const raw = prev.get("encounters")
+        const current = raw ? new Set(raw.split(",").filter(Boolean)) : new Set(encounterNames)
+
+        if (ctrlKey) {
+          // Toggle individual
+          if (current.has(name)) current.delete(name)
+          else current.add(name)
+        } else {
+          // Single-select: if already solo-selected, select all; otherwise select only this one
+          if (current.size === 1 && current.has(name)) {
+            next.delete("encounters")
+            return next
+          }
+          current.clear()
+          current.add(name)
+        }
+
+        if (current.size === 0 || current.size === encounterNames.length) {
+          next.delete("encounters")
+        } else {
+          next.set("encounters", [...current].join(","))
+        }
+        return next
+      })
+    },
+    [setParams, encounterNames],
+  )
+
+  const handleQuickSelect = useCallback(
+    (mode: "all") => {
+      setParams((prev) => {
+        const next = new URLSearchParams(prev)
+        if (mode === "all") next.delete("encounters")
+        return next
+      })
+    },
+    [setParams],
+  )
+
+  // ── Filtered entries ─────────────────────────────────────────────────
+
   const filteredEntries = useMemo(() => {
-    let entries = getAllEntries(instance.name)
+    let entries = getAllEntries(instanceName)
+    // Filter by selected encounters
+    entries = entries.filter((e) => selectedEncounters.has(e.encounterName))
+    // Filter by time period
     const days = getTimePeriodDays(timePeriod)
     if (days !== null) {
       const cutoff = now - days * 86400000
       entries = entries.filter((e) => new Date(e.date).getTime() >= cutoff)
     }
+    // Filter by class
     if (selectedClasses.size > 0) {
       entries = entries.filter((e) => selectedClasses.has(e.className))
     }
     return entries
-  }, [instance.name, timePeriod, selectedClasses, now])
+  }, [instanceName, selectedEncounters, timePeriod, selectedClasses, now])
 
-  // Box plot stats
   const boxPlotStats = useMemo(
-    () => computeBoxPlotStats(filteredEntries),
+    () => computeBoxPlotStatsBySpec(filteredEntries),
     [filteredEntries],
   )
 
-  // Summary values
-  const summary = useMemo(() => {
+  const leaderboardEntries = useMemo(() => {
     const sorted = [...filteredEntries].sort((a, b) => b.value - a.value)
-    const top = sorted[0]
+    sorted.forEach((e, i) => { e.rank = i + 1 })
+    return sorted.slice(0, 50)
+  }, [filteredEntries])
 
-    let median = 0
-    if (sorted.length > 0) {
-      const mid = Math.floor(sorted.length / 2)
-      median =
-        sorted.length % 2 === 0
-          ? Math.round((sorted[mid - 1].value + sorted[mid].value) / 2)
-          : sorted[mid].value
-    }
+  const allSelected = selectedEncounters.size === encounterNames.length
 
-    return {
-      record: top ?? null,
-      median,
-      totalRecords: sorted.length,
-      bossCount: instance.bosses.length,
-    }
-  }, [filteredEntries, instance.bosses.length])
-
-  const summaryCards = [
-    {
-      label: "Record DPS",
-      value: summary.record ? summary.record.value.toLocaleString() : "—",
-      sub: summary.record ? (
-        <span className="flex items-center gap-1">
-          <span
-            className="inline-block h-2 w-2 rounded-full"
-            style={{ backgroundColor: CLASS_CSS_VAR[summary.record.className] }}
-          />
-          {summary.record.playerName}
-        </span>
-      ) : (
-        "No records"
-      ),
-      icon: Crown,
-    },
-    {
-      label: "Median DPS",
-      value: summary.median.toLocaleString(),
-      sub: "Across all records",
-      icon: TrendingUp,
-    },
-    {
-      label: "Total Records",
-      value: summary.totalRecords.toLocaleString(),
-      sub: "Recorded performances",
-      icon: Hash,
-    },
-    {
-      label: "Bosses",
-      value: summary.bossCount.toString(),
-      sub: "Boss encounters",
-      icon: Swords,
-    },
-  ]
+  if (!instance) {
+    return (
+      <div className="text-center text-muted-foreground py-16">
+        Instance not found: {instanceName}
+      </div>
+    )
+  }
 
   return (
-    <div className="mx-auto max-w-4xl space-y-5">
-      {/* Header */}
-      <div>
-        <button
-          onClick={onBack}
-          className="mb-3 flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground transition-colors"
-        >
-          <ArrowLeft className="h-3.5 w-3.5" />
-          Back to Overview
-        </button>
-        <div className="flex items-center gap-2">
-          <Skull className="h-6 w-6 text-[#5F8FA6]" />
-          <h1 className="text-2xl font-bold">{instance.name}</h1>
-        </div>
-      </div>
+    <div className="flex gap-6">
+      {/* Left sidebar — encounter selector */}
+      <div className="hidden lg:block w-56 shrink-0">
+        <div className="sticky top-8 space-y-2">
+          <h3 className="text-xs font-medium text-muted-foreground uppercase tracking-wider mb-3">
+            Encounters
+          </h3>
 
-      {/* Summary cards */}
-      <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
-        {summaryCards.map((c) => (
-          <div key={c.label} className="rounded-xl border bg-card p-4">
-            <div className="flex items-center gap-2 text-xs text-muted-foreground">
-              <c.icon className="h-3.5 w-3.5" />
-              {c.label}
-            </div>
-            <div className="mt-1 font-mono text-xl font-semibold">{c.value}</div>
-            <div className="mt-0.5 text-xs text-muted-foreground">{c.sub}</div>
+          {/* Quick-select */}
+          <button
+            onClick={() => handleQuickSelect("all")}
+            className={cn(
+              "w-full rounded-md px-3 py-1.5 text-xs font-medium text-left transition-colors",
+              allSelected
+                ? "bg-[#5F8FA6]/20 text-[#5F8FA6]"
+                : "text-muted-foreground hover:text-foreground hover:bg-muted/20",
+            )}
+          >
+            All Encounters
+          </button>
+
+          {/* Individual encounters */}
+          <div className="space-y-0.5">
+            {encounterNames.map((name) => {
+              const active = selectedEncounters.has(name)
+              return (
+                <button
+                  key={name}
+                  onClick={(e) => handleEncounterClick(name, e.ctrlKey || e.metaKey)}
+                  className={cn(
+                    "w-full rounded-md px-3 py-1.5 text-xs text-left transition-colors truncate",
+                    active
+                      ? "bg-white/5 text-foreground font-medium"
+                      : "text-muted-foreground/60 hover:text-muted-foreground hover:bg-muted/10",
+                  )}
+                  title={`${name} — Click to select, Ctrl+Click to toggle`}
+                >
+                  {name}
+                </button>
+              )
+            })}
           </div>
-        ))}
-      </div>
-
-      {/* Filters */}
-      <RankingsFilters
-        selectedClasses={selectedClasses}
-        onToggleClass={onToggleClass}
-        timePeriod={timePeriod}
-        onTimePeriodChange={onTimePeriodChange}
-      />
-
-      {/* Box plot */}
-      <BoxPlotChart stats={boxPlotStats} />
-
-      {/* Boss top-5 cards */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-        {instance.bosses.map((boss) => (
-          <BossTopCard
-            key={boss.id}
-            bossName={boss.name}
-            bossId={boss.id}
-            timePeriod={timePeriod}
-            selectedClasses={selectedClasses}
-            now={now}
-            onViewAll={() => onSelectBoss(boss.id)}
-          />
-        ))}
-      </div>
-    </div>
-  )
-}
-
-// ── Boss Top-5 Card ───────────────────────────────────────────────────────
-
-interface BossTopCardProps {
-  bossName: string
-  bossId: string
-  timePeriod: TimePeriod
-  selectedClasses: Set<WoWHeroClasses>
-  now: number
-  onViewAll: () => void
-}
-
-function BossTopCard({
-  bossName,
-  bossId,
-  timePeriod,
-  selectedClasses,
-  now,
-  onViewAll,
-}: BossTopCardProps) {
-  const entries = useMemo(() => {
-    let all = getTopEntries(bossId, 50) // get more then filter
-    const days = getTimePeriodDays(timePeriod)
-    if (days !== null) {
-      const cutoff = now - days * 86400000
-      all = all.filter((e) => new Date(e.date).getTime() >= cutoff)
-    }
-    if (selectedClasses.size > 0) {
-      all = all.filter((e) => selectedClasses.has(e.className))
-    }
-    return all.slice(0, 5)
-  }, [bossId, timePeriod, selectedClasses, now])
-
-  return (
-    <div className="rounded-xl border bg-card overflow-hidden">
-      {/* Header */}
-      <div className="flex items-center justify-between px-4 py-3 border-b">
-        <span className="font-medium text-sm">{bossName}</span>
-        <button
-          onClick={onViewAll}
-          className="text-xs text-[#5F8FA6] hover:text-[#5F8FA6]/80 font-medium transition-colors"
-        >
-          View All →
-        </button>
-      </div>
-
-      {/* Rows */}
-      {entries.length === 0 ? (
-        <p className="px-4 py-6 text-center text-xs text-muted-foreground">
-          No records for current filters.
-        </p>
-      ) : (
-        <div>
-          {entries.map((entry, i) => (
-            <div
-              key={`${entry.playerName}-${entry.value}`}
-              className={`flex items-center gap-3 px-4 py-2 ${i % 2 === 0 ? "bg-muted/10" : ""}`}
-            >
-              {/* Rank */}
-              <span className="w-6 shrink-0 text-center text-sm">
-                {i < 3 ? MEDALS[i] : i + 1}
-              </span>
-              {/* Player name */}
-              <span className="flex-1 truncate text-sm font-medium">{entry.playerName}</span>
-              {/* Class */}
-              <span className="flex items-center gap-1 text-xs text-muted-foreground">
-                <span
-                  className="inline-block h-2 w-2 rounded-full"
-                  style={{ backgroundColor: CLASS_CSS_VAR[entry.className] }}
-                />
-                {CLASS_DISPLAY[entry.className]}
-              </span>
-              {/* DPS value */}
-              <span className="font-mono text-sm font-semibold">
-                {entry.value.toLocaleString()}
-              </span>
-              {/* Duration */}
-              <span className="text-xs text-muted-foreground">
-                {formatDuration(entry.durationMs)}
-              </span>
-            </div>
-          ))}
         </div>
-      )}
+      </div>
+
+      {/* Main area */}
+      <div className="min-w-0 flex-1 space-y-5">
+        {/* Header */}
+        <div>
+          <button
+            onClick={handleBack}
+            className="mb-3 flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground transition-colors"
+          >
+            <ArrowLeft className="h-3.5 w-3.5" />
+            Back to Rankings
+          </button>
+          <div className="flex items-center gap-2">
+            <Skull className="h-6 w-6 text-[#5F8FA6]" />
+            <h1 className="text-2xl font-bold">{instanceName}</h1>
+          </div>
+        </div>
+
+        {/* Mobile encounter selector */}
+        <div className="lg:hidden">
+          <div className="flex flex-wrap gap-1">
+            <button
+              onClick={() => handleQuickSelect("all")}
+              className={cn(
+                "rounded-md border px-2 py-1 text-xs font-medium transition-colors",
+                allSelected
+                  ? "border-[#5F8FA6]/40 bg-[#5F8FA6]/20 text-[#5F8FA6]"
+                  : "border-transparent text-muted-foreground hover:text-foreground",
+              )}
+            >
+              All
+            </button>
+            {encounterNames.map((name) => {
+              const active = selectedEncounters.has(name)
+              return (
+                <button
+                  key={name}
+                  onClick={(e) => handleEncounterClick(name, e.ctrlKey || e.metaKey)}
+                  className={cn(
+                    "rounded-md border px-2 py-1 text-xs transition-colors truncate max-w-[120px]",
+                    active
+                      ? "border-white/20 bg-white/5 text-foreground"
+                      : "border-transparent text-muted-foreground/50 hover:text-muted-foreground",
+                  )}
+                >
+                  {name}
+                </button>
+              )
+            })}
+          </div>
+        </div>
+
+        {/* Tab selector */}
+        <div className="flex items-center justify-between gap-4">
+          <div className="flex gap-1 rounded-lg border border-white/10 bg-black/30 p-1">
+            {(["boxplot", "leaderboard"] as const).map((t) => (
+              <button
+                key={t}
+                onClick={() => handleTabChange(t)}
+                className={cn(
+                  "rounded-md px-3 py-1 text-xs font-medium transition-colors",
+                  tab === t
+                    ? "bg-[#5F8FA6] text-white"
+                    : "text-muted-foreground hover:text-foreground",
+                )}
+              >
+                {t === "boxplot" ? "Box Plot" : "Leaderboard"}
+              </button>
+            ))}
+          </div>
+        </div>
+
+        {/* Filters */}
+        <RankingsFilters
+          selectedClasses={selectedClasses}
+          onToggleClass={handleToggleClass}
+          timePeriod={timePeriod}
+          onTimePeriodChange={handleTimePeriodChange}
+        />
+
+        {/* Content */}
+        {tab === "boxplot" ? (
+          <BoxPlotChart stats={boxPlotStats} title="DPS Distribution by Class & Spec" />
+        ) : (
+          <RankingsTable entries={leaderboardEntries} />
+        )}
+      </div>
     </div>
   )
 }

@@ -19,18 +19,21 @@ function BoxPlotRow({ stats, scaleMax }: BoxPlotRowProps) {
   const pct = (v: number) => `${(v / scaleMax) * 100}%`
   const color = CLASS_CSS_VAR[stats.className]
   const iqr = stats.q3 - stats.q1
+  const label = stats.specName
+    ? `${CLASS_DISPLAY[stats.className]} - ${stats.specName}`
+    : CLASS_DISPLAY[stats.className]
 
   return (
     <Tooltip>
       <TooltipTrigger asChild>
         <div className="group flex items-center gap-3 rounded-md px-1 py-1.5 transition-colors hover:bg-muted/20 cursor-default">
           {/* Class label */}
-          <div className="flex w-20 shrink-0 items-center gap-1.5 text-xs">
+          <div className="flex w-32 shrink-0 items-center gap-1.5 text-xs">
             <span
               className="inline-block h-2.5 w-2.5 shrink-0 rounded-full"
               style={{ backgroundColor: color }}
             />
-            <span className="truncate font-medium">{CLASS_DISPLAY[stats.className]}</span>
+            <span className="truncate font-medium">{label}</span>
           </div>
 
           {/* Box plot */}
@@ -97,7 +100,7 @@ function BoxPlotRow({ stats, scaleMax }: BoxPlotRowProps) {
             className="inline-block h-2.5 w-2.5 rounded-full"
             style={{ backgroundColor: color }}
           />
-          <span className="text-xs font-semibold">{CLASS_DISPLAY[stats.className]}</span>
+          <span className="text-xs font-semibold">{label}</span>
           <span className="ml-auto text-[10px] text-muted-foreground">
             {stats.count.toLocaleString()} records
           </span>
@@ -161,12 +164,12 @@ export function BoxPlotChart({ stats, title = "DPS Distribution by Class" }: Box
         <TooltipProvider>
           <div className="space-y-1">
             {stats.map((s) => (
-              <BoxPlotRow key={s.className} stats={s} scaleMax={ticks.max} />
+              <BoxPlotRow key={`${s.className}-${s.specName ?? ""}`} stats={s} scaleMax={ticks.max} />
             ))}
 
             {/* X-axis ticks */}
             <div className="flex items-center gap-3 pt-2">
-              <div className="w-20 shrink-0" />
+              <div className="w-32 shrink-0" />
               <div className="relative flex-1 h-5">
                 {ticks.values.map((v) => {
                   const pct = (v / ticks.max) * 100
