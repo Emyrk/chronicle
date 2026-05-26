@@ -393,7 +393,7 @@ export function InstanceView({ instanceName }: InstanceViewProps) {
               <div className="flex flex-wrap items-center gap-2">
                 <DropdownMenu>
                   <DropdownMenuTrigger asChild>
-                    <Button variant="outline" size="sm" className="h-7 gap-1.5 text-xs">
+                    <Button variant="outline" size="sm" className="h-7 gap-1.5 text-xs min-w-[120px] justify-between">
                       {metric === "dps" ? "DPS Rankings" : metric === "killtime" ? "Kill Time" : "Success Rate"}
                       <ChevronDown className="h-3 w-3 opacity-50" />
                     </Button>
@@ -411,7 +411,7 @@ export function InstanceView({ instanceName }: InstanceViewProps) {
                 {availableDifficulties.length > 1 && (
                   <DropdownMenu>
                     <DropdownMenuTrigger asChild>
-                      <Button variant="outline" size="sm" className="h-7 gap-1.5 text-xs">
+                      <Button variant="outline" size="sm" className="h-7 gap-1.5 text-xs min-w-[130px] justify-between">
                         {selectedDifficulties.size === 0
                           ? "All Difficulties"
                           : selectedDifficulties.size === 1
