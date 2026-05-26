@@ -1219,7 +1219,7 @@ func insertDPSRankings(
 		if !ok {
 			continue
 		}
-		if string(enc.KillType) != "kill" {
+		if enc.KillType != instances.KillTypeClean {
 			continue
 		}
 		durationSecs := enc.Combat.End.Sub(enc.Combat.Start).Seconds()
@@ -1252,14 +1252,24 @@ func insertDPSRankings(
 			}
 		}
 
-		// Compute statistical roles for this encounter.
+		// Sum pet/totem damage into their owner's totals.
+		// The DPS tracker records damage under the raw caster GUID (pet or player).
+		// We need to attribute pet damage to the owning player.
+		ownerDamage := make(map[guid.GUID]int64) // owner GUID → additional damage from pets
+		for _, stats := range dpsResult.Units {
+			if stats.OwnerGUID != nil && !stats.IsPlayer {
+				ownerDamage[*stats.OwnerGUID] += stats.DamageDone
+			}
+		}
+
+		// Compute statistical roles for this encounter (using player+pet damage).
 		playerMetrics := make(map[guid.GUID]wowspec.PlayerMetrics)
 		for unitGUID, stats := range dpsResult.Units {
 			if !stats.IsPlayer {
 				continue
 			}
 			playerMetrics[unitGUID] = wowspec.PlayerMetrics{
-				DamageDone:  stats.DamageDone,
+				DamageDone:  stats.DamageDone + ownerDamage[unitGUID],
 				DamageTaken: stats.DamageTaken,
 				HealingDone: stats.HealingDone,
 			}
@@ -1301,7 +1311,8 @@ func insertDPSRankings(
 				playerLevel = int16(*player.Level)
 			}
 
-			dps := float64(stats.DamageDone) / durationSecs
+			totalDamage := stats.DamageDone + ownerDamage[unitGUID]
+			dps := float64(totalDamage) / durationSecs
 			playerGuildName := findPlayerGuild(finalized.Guilds.Guilds, unitGUID)
 
 			err := tx.InsertEncounterDpsRanking(ctx, database.InsertEncounterDpsRankingParams{
@@ -1328,7 +1339,7 @@ func insertDPSRankings(
 					Valid: playerGuildName != "",
 				},
 				GuildName:     playerGuildName,
-				DamageDone:    stats.DamageDone,
+				DamageDone:    totalDamage,
 				DurationSecs:  durationSecs,
 				Dps:           dps,
 				LogHashedSlug: dbinstance.HashedSlug.String,
