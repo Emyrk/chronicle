@@ -234,8 +234,10 @@ type sqlcQuerier interface {
 	RankingsBoxPlotStats(ctx context.Context, arg RankingsBoxPlotStatsParams) ([]RankingsBoxPlotStatsRow, error)
 	// Returns encounters available in rankings for a given instance.
 	RankingsEncounterList(ctx context.Context, instanceName string) ([]RankingsEncounterListRow, error)
-	// Returns per-instance summary with top 3 players by DPS.
-	// Deduplicates by (player_guid, encounter_name, duplicate_group) keeping best DPS.
+	// Returns per-instance summary with top 3 players by aggregated DPS.
+	// DPS is computed as total damage / total duration across all encounters per player.
+	// Deduplicates by (player_guid, encounter_name, duplicate_group) before aggregating.
+	// Aggregate per player per instance: sum damage across encounters.
 	RankingsInstanceSummaries(ctx context.Context) ([]RankingsInstanceSummariesRow, error)
 	// Box plot stats on encounter duration (seconds) per encounter name.
 	// Deduplicates encounters across duplicate log groups.

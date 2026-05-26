@@ -4098,28 +4098,50 @@ func (q *sqlQuerier) RankingsEncounterList(ctx context.Context, instanceName str
 const rankingsInstanceSummaries = `-- name: RankingsInstanceSummaries :many
 WITH deduped AS (
     SELECT DISTINCT ON (edr.player_guid, edr.encounter_name, COALESCE(li.duplicate_group_id, li.id))
-        edr.id, edr.encounter_id, edr.instance_id, edr.encounter_name, edr.instance_name, edr.player_guid, edr.player_name, edr.player_class, edr.player_spec, edr.player_role, edr.player_level, edr.talent_build_id, edr.difficulty_name, edr.max_players, edr.realm_id, edr.realm_name, edr.guild_id, edr.guild_name, edr.damage_done, edr.duration_secs, edr.dps, edr.avg_ilvl, edr.log_hashed_slug, edr.killed_at, edr.created_at
+        edr.instance_name,
+        edr.player_guid,
+        edr.player_name,
+        edr.realm_name,
+        edr.player_class,
+        edr.player_role,
+        edr.damage_done,
+        edr.duration_secs,
+        edr.dps
     FROM encounter_dps_rankings edr
     JOIN log_instances li ON li.id = edr.instance_id
     JOIN wow_server_realms wsr ON wsr.id = edr.realm_id
+    WHERE edr.dps > 0
     ORDER BY edr.player_guid, edr.encounter_name, COALESCE(li.duplicate_group_id, li.id), edr.dps DESC
+),
+per_player AS (
+    SELECT
+        d.instance_name,
+        d.player_guid,
+        (array_agg(d.player_name ORDER BY d.damage_done DESC))[1] AS player_name,
+        (array_agg(d.realm_name ORDER BY d.damage_done DESC))[1] AS realm_name,
+        (array_agg(d.player_class ORDER BY d.damage_done DESC))[1] AS player_class,
+        (SUM(d.damage_done)::double precision / NULLIF(SUM(d.duration_secs), 0)) AS dps
+    FROM deduped d
+    WHERE d.player_role = 'dps'
+    GROUP BY d.instance_name, d.player_guid
 ),
 instance_stats AS (
     SELECT
         d.instance_name,
-        COUNT(*)::bigint AS total_kills
+        COUNT(DISTINCT d.player_guid)::bigint AS total_kills
     FROM deduped d
     GROUP BY d.instance_name
 ),
 top_players AS (
-    SELECT DISTINCT ON (d.instance_name, rank_num)
-        d.instance_name,
-        d.player_name,
-        d.realm_name,
-        d.player_class,
-        d.dps,
-        ROW_NUMBER() OVER (PARTITION BY d.instance_name ORDER BY d.dps DESC) AS rank_num
-    FROM deduped d
+    SELECT
+        p.instance_name,
+        p.player_name,
+        p.realm_name,
+        p.player_class,
+        p.dps,
+        ROW_NUMBER() OVER (PARTITION BY p.instance_name ORDER BY p.dps DESC) AS rank_num
+    FROM per_player p
+    WHERE p.dps > 0
 )
 SELECT
     s.instance_name,
@@ -4145,8 +4167,10 @@ type RankingsInstanceSummariesRow struct {
 	TopPlayers   interface{} `db:"top_players" json:"top_players"`
 }
 
-// Returns per-instance summary with top 3 players by DPS.
-// Deduplicates by (player_guid, encounter_name, duplicate_group) keeping best DPS.
+// Returns per-instance summary with top 3 players by aggregated DPS.
+// DPS is computed as total damage / total duration across all encounters per player.
+// Deduplicates by (player_guid, encounter_name, duplicate_group) before aggregating.
+// Aggregate per player per instance: sum damage across encounters.
 func (q *sqlQuerier) RankingsInstanceSummaries(ctx context.Context) ([]RankingsInstanceSummariesRow, error) {
 	rows, err := q.db.Query(ctx, rankingsInstanceSummaries)
 	if err != nil {
@@ -4340,7 +4364,7 @@ aggregated AS (
         COALESCE(MAX(d.avg_ilvl), 0)::smallint AS avg_ilvl,
         ((array_agg(d.log_hashed_slug ORDER BY d.damage_done DESC))[1])::text AS log_hashed_slug,
         MAX(d.killed_at)::timestamptz AS killed_at,
-        ((array_agg(d.talent_sub_spec ORDER BY d.damage_done DESC))[1])::text AS talent_sub_spec
+        COALESCE(((array_agg(d.talent_sub_spec ORDER BY d.damage_done DESC))[1])::text, '') AS talent_sub_spec
     FROM deduped d
     GROUP BY d.player_guid
 )
@@ -4386,7 +4410,7 @@ type RankingsLeaderboardRow struct {
 	AvgIlvl        int16              `db:"avg_ilvl" json:"avg_ilvl"`
 	LogHashedSlug  string             `db:"log_hashed_slug" json:"log_hashed_slug"`
 	KilledAt       pgtype.Timestamptz `db:"killed_at" json:"killed_at"`
-	TalentSubSpec  string             `db:"talent_sub_spec" json:"talent_sub_spec"`
+	TalentSubSpec  interface{}        `db:"talent_sub_spec" json:"talent_sub_spec"`
 	TotalCount     int64              `db:"total_count" json:"total_count"`
 }
 
