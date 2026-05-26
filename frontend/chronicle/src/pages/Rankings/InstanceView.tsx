@@ -389,11 +389,9 @@ export function InstanceView({ instanceName }: InstanceViewProps) {
               <h1 className="text-2xl font-bold">{instanceName}</h1>
             </div>
 
-            {/* Filters — left: dropdowns, right: view + time */}
-            <div className="flex flex-wrap items-start justify-between gap-3">
-              {/* Left: metric + difficulty dropdowns */}
+            {/* Row 1: dropdowns left, view toggle right */}
+            <div className="flex flex-wrap items-center justify-between gap-2">
               <div className="flex flex-wrap items-center gap-2">
-                {/* Metric dropdown */}
                 <DropdownMenu>
                   <DropdownMenuTrigger asChild>
                     <Button variant="outline" size="sm" className="h-7 gap-1.5 text-xs">
@@ -438,50 +436,49 @@ export function InstanceView({ instanceName }: InstanceViewProps) {
                 )}
               </div>
 
-              {/* Right: view toggle + time period */}
-              <div className="flex flex-col items-end gap-2">
-                {/* DPS sub-tabs (only when DPS metric is active) */}
-                {metric === "dps" && (
-                  <div className="flex gap-1 rounded-lg border border-white/10 bg-black/20 p-1">
-                    {(["boxplot", "leaderboard"] as const).map((t) => (
-                      <button
-                        key={t}
-                        onClick={() => handleDpsSubTabChange(t)}
-                        className={cn(
-                          "rounded-md px-2.5 py-0.5 text-[11px] font-medium transition-colors",
-                          dpsSubTab === t
-                            ? "bg-white/15 text-foreground"
-                            : "text-muted-foreground hover:text-foreground",
-                        )}
-                      >
-                        {t === "boxplot" ? "Box Plot" : "Leaderboard"}
-                      </button>
-                    ))}
-                  </div>
-                )}
-
-                {/* Time period */}
-                <div className="flex gap-1 rounded-lg border border-white/10 bg-black/30 p-1">
-                  {([
-                    { value: "all" as const, label: "All Time" },
-                    { value: "90d" as const, label: "90d" },
-                    { value: "30d" as const, label: "30d" },
-                    { value: "7d" as const, label: "7d" },
-                  ]).map((opt) => (
+              {/* DPS sub-tabs (only when DPS metric is active) */}
+              {metric === "dps" && (
+                <div className="flex gap-1 rounded-lg border border-white/10 bg-black/20 p-1">
+                  {(["boxplot", "leaderboard"] as const).map((t) => (
                     <button
-                      key={opt.value}
-                      onClick={() => handleTimePeriodChange(opt.value)}
+                      key={t}
+                      onClick={() => handleDpsSubTabChange(t)}
                       className={cn(
-                        "rounded-md px-3 py-1 text-xs font-medium transition-colors",
-                        timePeriod === opt.value
-                          ? "bg-[#5F8FA6] text-white"
+                        "rounded-md px-2.5 py-0.5 text-[11px] font-medium transition-colors",
+                        dpsSubTab === t
+                          ? "bg-white/15 text-foreground"
                           : "text-muted-foreground hover:text-foreground",
                       )}
                     >
-                      {opt.label}
+                      {t === "boxplot" ? "Box Plot" : "Leaderboard"}
                     </button>
                   ))}
                 </div>
+              )}
+            </div>
+
+            {/* Row 2: time period, right-aligned */}
+            <div className="flex justify-end">
+              <div className="flex gap-1 rounded-lg border border-white/10 bg-black/30 p-1">
+                {([
+                  { value: "all" as const, label: "All Time" },
+                  { value: "90d" as const, label: "90d" },
+                  { value: "30d" as const, label: "30d" },
+                  { value: "7d" as const, label: "7d" },
+                ]).map((opt) => (
+                  <button
+                    key={opt.value}
+                    onClick={() => handleTimePeriodChange(opt.value)}
+                    className={cn(
+                      "rounded-md px-3 py-1 text-xs font-medium transition-colors",
+                      timePeriod === opt.value
+                        ? "bg-[#5F8FA6] text-white"
+                        : "text-muted-foreground hover:text-foreground",
+                    )}
+                  >
+                    {opt.label}
+                  </button>
+                ))}
               </div>
             </div>
           </div>
