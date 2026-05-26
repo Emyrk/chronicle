@@ -1218,6 +1218,9 @@ func insertDPSRankings(
 		if !ok {
 			continue
 		}
+		if !enc.Boss {
+			continue // non-boss encounters go to trash aggregation
+		}
 		if enc.KillType != instances.KillTypeClean {
 			continue
 		}
