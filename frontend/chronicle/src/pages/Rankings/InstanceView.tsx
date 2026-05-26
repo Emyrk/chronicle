@@ -3,6 +3,12 @@ import { createPortal } from "react-dom"
 import { useSearchParams } from "react-router-dom"
 import { ArrowLeft, CheckCircle, ChevronDown, ChevronLeft, ChevronRight, List, Loader2, X } from "lucide-react"
 import { Checkbox } from "@/components/ui/Checkbox/Checkbox"
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger,
+} from "@/components/ui/Tooltip/tooltip"
 import { Button } from "@/components/ui/button"
 import {
   DropdownMenu,
@@ -75,6 +81,7 @@ export function InstanceView({ instanceName }: InstanceViewProps) {
   const dpsSubTab: DpsSubTab = params.get("tab") === "leaderboard" ? "leaderboard" : "boxplot"
   const filterClass = params.get("class") ?? undefined
   const filterSpec = params.get("spec") ?? undefined
+  const filterRole = params.get("role") || "dps"  // default to DPS
 
   const page = useMemo(() => {
     const raw = params.get("page")
@@ -282,6 +289,7 @@ export function InstanceView({ instanceName }: InstanceViewProps) {
     instance_names: instanceName,
     encounter_names: encounterNamesParam,
     period: periodParam,
+    role: filterRole,
   })
 
   const boxPlotStats = useMemo(() => {
@@ -295,6 +303,7 @@ export function InstanceView({ instanceName }: InstanceViewProps) {
     period: periodParam,
     class: filterClass,
     spec: filterSpec,
+    role: filterRole,
     limit: PAGE_SIZE,
     offset: (page - 1) * PAGE_SIZE,
   })
@@ -710,43 +719,70 @@ function KillTimeContent({ stats }: { stats: RankingsKillTimeStats[] }) {
         <div className="flex-1" />
         <div className="w-28 shrink-0 text-right text-[10px] text-muted-foreground/60">Avg (sample count)</div>
       </div>
+      <TooltipProvider>
       <div className="space-y-1.5">
         {stats.map((s) => {
           const pct = (v: number) => `${(v / axisMax) * 100}%`
+          const iqr = s.q3_secs - s.q1_secs
           return (
-            <div key={s.encounter_name} className="flex items-center gap-3 px-1 py-1.5 rounded-md hover:bg-muted/20 transition-colors">
-              {/* Label */}
-              <div className="w-40 shrink-0 text-xs font-medium truncate">{s.encounter_name}</div>
+            <Tooltip key={s.encounter_name}>
+              <TooltipTrigger asChild>
+                <div className="flex items-center gap-3 px-1 py-1.5 rounded-md hover:bg-muted/20 transition-colors cursor-default">
+                  {/* Label */}
+                  <div className="w-40 shrink-0 text-xs font-medium truncate">{s.encounter_name}</div>
 
-              {/* Box plot */}
-              <div className="relative flex-1 h-7">
-                {/* Whisker */}
-                <div
-                  className="absolute top-1/2 h-px -translate-y-1/2 bg-muted-foreground/30"
-                  style={{ left: pct(s.min_secs), width: `calc(${pct(s.max_secs)} - ${pct(s.min_secs)})` }}
-                />
-                {/* Caps */}
-                <div className="absolute top-1/2 -translate-y-1/2 w-px h-2.5 bg-muted-foreground/40" style={{ left: pct(s.min_secs) }} />
-                <div className="absolute top-1/2 -translate-y-1/2 w-px h-2.5 bg-muted-foreground/40" style={{ left: pct(s.max_secs) }} />
-                {/* IQR box */}
-                <div
-                  className="absolute top-1 bottom-1 rounded-sm border border-[#5F8FA6] bg-[#5F8FA6]/30"
-                  style={{ left: pct(s.q1_secs), width: `calc(${pct(s.q3_secs)} - ${pct(s.q1_secs)})` }}
-                />
-                {/* Median */}
-                <div
-                  className="absolute top-0.5 bottom-0.5 w-0.5 rounded-full bg-[#5F8FA6]"
-                  style={{ left: pct(s.median_secs) }}
-                />
-              </div>
+                  {/* Box plot */}
+                  <div className="relative flex-1 h-7">
+                    {/* Whisker */}
+                    <div
+                      className="absolute top-1/2 h-px -translate-y-1/2 bg-muted-foreground/30"
+                      style={{ left: pct(s.min_secs), width: `calc(${pct(s.max_secs)} - ${pct(s.min_secs)})` }}
+                    />
+                    {/* Caps */}
+                    <div className="absolute top-1/2 -translate-y-1/2 w-px h-2.5 bg-muted-foreground/40" style={{ left: pct(s.min_secs) }} />
+                    <div className="absolute top-1/2 -translate-y-1/2 w-px h-2.5 bg-muted-foreground/40" style={{ left: pct(s.max_secs) }} />
+                    {/* IQR box */}
+                    <div
+                      className="absolute top-1 bottom-1 rounded-sm border border-[#5F8FA6] bg-[#5F8FA6]/30"
+                      style={{ left: pct(s.q1_secs), width: `calc(${pct(s.q3_secs)} - ${pct(s.q1_secs)})` }}
+                    />
+                    {/* Median */}
+                    <div
+                      className="absolute top-0.5 bottom-0.5 w-0.5 rounded-full bg-[#5F8FA6]"
+                      style={{ left: pct(s.median_secs) }}
+                    />
+                  </div>
 
-              {/* Avg (sample count) */}
-              <div className="w-28 shrink-0 text-right text-xs text-muted-foreground">
-                <span className="font-mono font-semibold text-foreground">{formatTime(s.median_secs)}</span>
-                {" "}
-                <span className="text-muted-foreground/60">({s.count})</span>
-              </div>
-            </div>
+                  {/* Avg (sample count) */}
+                  <div className="w-28 shrink-0 text-right text-xs text-muted-foreground">
+                    <span className="font-mono font-semibold text-foreground">{formatTime(s.median_secs)}</span>
+                    {" "}
+                    <span className="text-muted-foreground/60">({s.count})</span>
+                  </div>
+                </div>
+              </TooltipTrigger>
+              <TooltipContent
+                side="top"
+                sideOffset={6}
+                hideArrow
+                className="bg-popover border border-white/10 rounded-lg shadow-lg p-3 text-foreground w-56"
+              >
+                <div className="flex items-center justify-between mb-2.5">
+                  <span className="text-xs font-semibold">{s.encounter_name}</span>
+                  <span className="text-[10px] text-muted-foreground">{s.count.toLocaleString()} kills</span>
+                </div>
+                <div className="space-y-1 text-xs">
+                  <TimeStatLine label="Fastest" desc="Best kill" value={formatTime(s.min_secs)} />
+                  <TimeStatLine label="Top 25%" desc="75th percentile" value={formatTime(s.q1_secs)} />
+                  <TimeStatLine label="Typical" desc="Median (50th)" value={formatTime(s.median_secs)} highlight />
+                  <TimeStatLine label="Bottom 25%" desc="25th percentile" value={formatTime(s.q3_secs)} />
+                  <TimeStatLine label="Slowest" desc="Longest kill" value={formatTime(s.max_secs)} />
+                  <div className="border-t border-white/5 pt-1 mt-1">
+                    <TimeStatLine label="Spread" desc="IQR (Q3 − Q1)" value={formatTime(iqr)} />
+                  </div>
+                </div>
+              </TooltipContent>
+            </Tooltip>
           )
         })}
 
@@ -767,6 +803,21 @@ function KillTimeContent({ stats }: { stats: RankingsKillTimeStats[] }) {
           <div className="w-28 shrink-0" />
         </div>
       </div>
+      </TooltipProvider>
+    </div>
+  )
+}
+
+function TimeStatLine({ label, desc, value, highlight }: { label: string; desc: string; value: string; highlight?: boolean }) {
+  return (
+    <div className="flex items-center justify-between gap-2">
+      <div className="min-w-0">
+        <span className={highlight ? "font-semibold text-foreground" : "text-muted-foreground"}>{label}</span>
+        <span className="text-[10px] text-muted-foreground/50 ml-1">{desc}</span>
+      </div>
+      <span className={`font-mono shrink-0 ${highlight ? "font-semibold text-foreground" : "font-medium"}`}>
+        {value}
+      </span>
     </div>
   )
 }

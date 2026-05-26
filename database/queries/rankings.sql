@@ -113,6 +113,10 @@ WITH deduped AS (
         ELSE true
     END
     AND CASE
+        WHEN @role :: text != '' THEN edr.player_role = @role
+        ELSE true
+    END
+    AND CASE
         WHEN @since_days :: bigint > 0 THEN edr.killed_at >= now() - make_interval(days => @since_days::int)
         ELSE true
     END
@@ -147,6 +151,10 @@ WITH deduped AS (
     END
     AND CASE
         WHEN @realm_id :: text != '' THEN edr.realm_id = @realm_id :: uuid
+        ELSE true
+    END
+    AND CASE
+        WHEN @role :: text != '' THEN edr.player_role = @role
         ELSE true
     END
     AND CASE

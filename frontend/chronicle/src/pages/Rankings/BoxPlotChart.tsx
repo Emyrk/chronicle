@@ -99,38 +99,45 @@ function BoxPlotRow({ stats, scaleMax, onClick }: BoxPlotRowProps) {
         side="top"
         sideOffset={6}
         hideArrow
-        className="bg-popover border border-white/10 rounded-lg shadow-lg p-3 text-foreground w-52"
+        className="bg-popover border border-white/10 rounded-lg shadow-lg p-3 text-foreground w-56"
       >
         {/* Header */}
-        <div className="flex items-center gap-1.5 mb-2">
+        <div className="flex items-center gap-1.5 mb-2.5">
           <span
             className="inline-block h-2.5 w-2.5 rounded-full"
             style={{ backgroundColor: color }}
           />
           <span className="text-xs font-semibold">{label}</span>
           <span className="ml-auto text-[10px] text-muted-foreground">
-            {stats.count.toLocaleString()} records
+            {stats.count.toLocaleString()} parses
           </span>
         </div>
-        {/* Stats grid */}
-        <div className="grid grid-cols-2 gap-x-4 gap-y-1 text-xs">
-          <StatLine label="Max" value={Math.round(stats.max_dps)} />
-          <StatLine label="Q3" value={Math.round(stats.q3_dps)} />
-          <StatLine label="Median" value={Math.round(stats.median_dps)} />
-          <StatLine label="Q1" value={Math.round(stats.q1_dps)} />
-          <StatLine label="Min" value={Math.round(stats.min_dps)} />
-          <StatLine label="IQR" value={Math.round(iqr)} />
+        {/* Stats */}
+        <div className="space-y-1 text-xs">
+          <DpsStatLine label="Best" value={Math.round(stats.max_dps)} />
+          <DpsStatLine label="Top 25%" value={Math.round(stats.q3_dps)} />
+          <DpsStatLine label="Typical" value={Math.round(stats.median_dps)} highlight />
+          <DpsStatLine label="Bottom 25%" value={Math.round(stats.q1_dps)} />
+          <DpsStatLine label="Lowest" value={Math.round(stats.min_dps)} />
+          <div className="border-t border-white/5 pt-1 mt-1">
+            <DpsStatLine label="Spread" desc="IQR (Q3 − Q1)" value={Math.round(iqr)} />
+          </div>
         </div>
       </TooltipContent>
     </Tooltip>
   )
 }
 
-function StatLine({ label, value }: { label: string; value: number }) {
+function DpsStatLine({ label, desc, value, highlight }: { label: string; desc?: string; value: number; highlight?: boolean }) {
   return (
-    <div className="flex items-center justify-between">
-      <span className="text-muted-foreground">{label}</span>
-      <span className="font-mono font-medium">{value.toLocaleString()}</span>
+    <div className="flex items-center justify-between gap-2">
+      <div className="min-w-0">
+        <span className={highlight ? "font-semibold text-foreground" : "text-foreground"}>{label}</span>
+        {desc && <span className="text-[10px] text-muted-foreground/50 ml-1">{desc}</span>}
+      </div>
+      <span className={`font-mono shrink-0 ${highlight ? "font-semibold text-foreground" : "font-medium"}`}>
+        {value.toLocaleString()}/s
+      </span>
     </div>
   )
 }

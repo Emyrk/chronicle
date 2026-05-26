@@ -3947,7 +3947,11 @@ WITH deduped AS (
         ELSE true
     END
     AND CASE
-        WHEN $4 :: bigint > 0 THEN edr.killed_at >= now() - make_interval(days => $4::int)
+        WHEN $4 :: text != '' THEN edr.player_role = $4
+        ELSE true
+    END
+    AND CASE
+        WHEN $5 :: bigint > 0 THEN edr.killed_at >= now() - make_interval(days => $5::int)
         ELSE true
     END
     ORDER BY edr.player_guid, edr.encounter_name, COALESCE(li.duplicate_group_id, li.id), edr.dps DESC
@@ -3970,6 +3974,7 @@ type RankingsBoxPlotStatsParams struct {
 	InstanceNames  []string `db:"instance_names" json:"instance_names"`
 	EncounterNames []string `db:"encounter_names" json:"encounter_names"`
 	RealmID        string   `db:"realm_id" json:"realm_id"`
+	Role           string   `db:"role" json:"role"`
 	SinceDays      int64    `db:"since_days" json:"since_days"`
 }
 
@@ -3991,6 +3996,7 @@ func (q *sqlQuerier) RankingsBoxPlotStats(ctx context.Context, arg RankingsBoxPl
 		arg.InstanceNames,
 		arg.EncounterNames,
 		arg.RealmID,
+		arg.Role,
 		arg.SinceDays,
 	)
 	if err != nil {
@@ -4262,7 +4268,11 @@ WITH deduped AS (
         ELSE true
     END
     AND CASE
-        WHEN $8 :: bigint > 0 THEN edr.killed_at >= now() - make_interval(days => $8::int)
+        WHEN $8 :: text != '' THEN edr.player_role = $8
+        ELSE true
+    END
+    AND CASE
+        WHEN $9 :: bigint > 0 THEN edr.killed_at >= now() - make_interval(days => $9::int)
         ELSE true
     END
     ORDER BY edr.player_guid, edr.encounter_name, COALESCE(li.duplicate_group_id, li.id), edr.dps DESC
@@ -4284,6 +4294,7 @@ type RankingsLeaderboardParams struct {
 	RealmID        string   `db:"realm_id" json:"realm_id"`
 	Class          string   `db:"class" json:"class"`
 	Spec           string   `db:"spec" json:"spec"`
+	Role           string   `db:"role" json:"role"`
 	SinceDays      int64    `db:"since_days" json:"since_days"`
 }
 
@@ -4323,6 +4334,7 @@ func (q *sqlQuerier) RankingsLeaderboard(ctx context.Context, arg RankingsLeader
 		arg.RealmID,
 		arg.Class,
 		arg.Spec,
+		arg.Role,
 		arg.SinceDays,
 	)
 	if err != nil {

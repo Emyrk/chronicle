@@ -200,6 +200,7 @@ func (s *Service) handleLeaderboard(w http.ResponseWriter, r *http.Request) {
 		RealmID:        q.Get("realm_id"),
 		Class:          q.Get("class"),
 		Spec:           q.Get("spec"),
+		Role:           q.Get("role"),
 		SinceDays:      sinceDays,
 		QueryLimit:     limit,
 		QueryOffset:    offset,
@@ -271,6 +272,7 @@ func (s *Service) handleStats(w http.ResponseWriter, r *http.Request) {
 		InstanceNames:  splitCSV(q.Get("instance_names")),
 		EncounterNames: splitCSV(q.Get("encounter_names")),
 		RealmID:        q.Get("realm_id"),
+		Role:           q.Get("role"),
 		SinceDays:      sinceDays,
 	})
 	if err != nil {
