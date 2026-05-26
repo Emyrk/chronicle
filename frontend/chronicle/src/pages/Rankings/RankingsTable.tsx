@@ -141,7 +141,7 @@ export function RankingsTable({ entries }: RankingsTableProps) {
                 </td>
                 <td className="px-4 py-3 text-center">
                   <Link
-                    to={`/i/${entry.log_hashed_slug}`}
+                    to={`/instances/${entry.log_hashed_slug}`}
                     className="text-muted-foreground transition-colors hover:text-foreground"
                     title="View instance"
                   >
