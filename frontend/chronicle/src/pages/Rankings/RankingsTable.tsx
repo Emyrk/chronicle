@@ -1,15 +1,14 @@
 import { ExternalLink } from "lucide-react"
 import { Link } from "react-router-dom"
-import type { RankingEntry } from "./mockData"
-import { CLASS_CSS_VAR, CLASS_DISPLAY } from "./mockData"
+import type { RankingsEntry } from "@/api/typesGenerated"
+import { CLASS_CSS_VAR, CLASS_DISPLAY } from "./classDisplay"
 
 const MEDAL_ICONS: Record<number, string> = { 1: "🥇", 2: "🥈", 3: "🥉" }
 
-function formatDuration(ms: number): string {
-  const totalSeconds = Math.floor(ms / 1000)
-  const minutes = Math.floor(totalSeconds / 60)
-  const seconds = totalSeconds % 60
-  return `${minutes}:${String(seconds).padStart(2, "0")}`
+function formatDuration(seconds: number): string {
+  const minutes = Math.floor(seconds / 60)
+  const secs = Math.round(seconds % 60)
+  return `${minutes}:${String(secs).padStart(2, "0")}`
 }
 
 function formatDate(iso: string): string {
@@ -20,8 +19,12 @@ function formatDate(iso: string): string {
   })
 }
 
+export interface RankedEntry extends RankingsEntry {
+  rank: number
+}
+
 interface RankingsTableProps {
-  entries: RankingEntry[]
+  entries: RankedEntry[]
 }
 
 export function RankingsTable({ entries }: RankingsTableProps) {
@@ -39,7 +42,7 @@ export function RankingsTable({ entries }: RankingsTableProps) {
       <div className="md:hidden divide-y border-y">
         {entries.map((entry, i) => (
           <div
-            key={`${entry.playerName}-${entry.date}-${i}`}
+            key={`${entry.player_name}-${entry.killed_at}-${i}`}
             className={`flex items-center gap-3 px-4 py-3 ${i % 2 === 1 ? "bg-muted/20" : ""}`}
           >
             <div className="w-8 shrink-0 text-center">
@@ -49,27 +52,27 @@ export function RankingsTable({ entries }: RankingsTableProps) {
             </div>
             <span
               className="h-full w-0.5 shrink-0 self-stretch rounded-full"
-              style={{ backgroundColor: CLASS_CSS_VAR[entry.className] }}
+              style={{ backgroundColor: CLASS_CSS_VAR[entry.player_class] }}
             />
             <div className="min-w-0 flex-1">
               <div className="flex items-center justify-between gap-2">
-                <span className="truncate font-medium">{entry.playerName}</span>
+                <span className="truncate font-medium">{entry.player_name}</span>
                 <span className="shrink-0 font-mono font-semibold">
-                  {entry.value.toLocaleString()}
+                  {Math.round(entry.dps).toLocaleString()}
                 </span>
               </div>
               <div className="mt-0.5 flex items-center gap-3 text-xs text-muted-foreground">
                 <span className="flex items-center gap-1">
                   <span
                     className="inline-block h-2 w-2 rounded-full"
-                    style={{ backgroundColor: CLASS_CSS_VAR[entry.className] }}
+                    style={{ backgroundColor: CLASS_CSS_VAR[entry.player_class] }}
                   />
-                  {CLASS_DISPLAY[entry.className]}
+                  {CLASS_DISPLAY[entry.player_class]}
                 </span>
-                <span>{entry.playerSpec}</span>
-                <span>{entry.realmName}</span>
-                <span className="font-mono">{formatDuration(entry.durationMs)}</span>
-                <span className="ml-auto">{formatDate(entry.date)}</span>
+                <span>{entry.player_spec}</span>
+                <span>{entry.realm_name}</span>
+                <span className="font-mono">{formatDuration(entry.duration_secs)}</span>
+                <span className="ml-auto">{formatDate(entry.killed_at)}</span>
               </div>
             </div>
           </div>
@@ -96,7 +99,7 @@ export function RankingsTable({ entries }: RankingsTableProps) {
           <tbody>
             {entries.map((entry, i) => (
               <tr
-                key={`${entry.playerName}-${entry.date}-${i}`}
+                key={`${entry.player_name}-${entry.killed_at}-${i}`}
                 className={`border-b last:border-b-0 transition-colors hover:bg-muted/40 ${
                   i % 2 === 1 ? "bg-muted/20" : ""
                 }`}
@@ -110,35 +113,35 @@ export function RankingsTable({ entries }: RankingsTableProps) {
                   <span className="flex items-center gap-2">
                     <span
                       className="inline-block h-2.5 w-0.5 rounded-full"
-                      style={{ backgroundColor: CLASS_CSS_VAR[entry.className] }}
+                      style={{ backgroundColor: CLASS_CSS_VAR[entry.player_class] }}
                     />
-                    <span className="font-medium">{entry.playerName}</span>
+                    <span className="font-medium">{entry.player_name}</span>
                   </span>
                 </td>
-                <td className="px-4 py-3 text-muted-foreground">{entry.realmName}</td>
+                <td className="px-4 py-3 text-muted-foreground">{entry.realm_name}</td>
                 <td className="px-4 py-3">
                   <span className="flex items-center gap-1.5 text-muted-foreground">
                     <span
                       className="inline-block h-2.5 w-2.5 rounded-full"
-                      style={{ backgroundColor: CLASS_CSS_VAR[entry.className] }}
+                      style={{ backgroundColor: CLASS_CSS_VAR[entry.player_class] }}
                     />
-                    {CLASS_DISPLAY[entry.className]}
+                    {CLASS_DISPLAY[entry.player_class]}
                   </span>
                 </td>
-                <td className="px-4 py-3 text-muted-foreground">{entry.playerSpec}</td>
+                <td className="px-4 py-3 text-muted-foreground">{entry.player_spec}</td>
                 <td className="px-4 py-3 text-right font-mono font-semibold">
-                  {entry.value.toLocaleString()}
+                  {Math.round(entry.dps).toLocaleString()}
                 </td>
                 <td className="px-4 py-3 text-right font-mono text-muted-foreground">
-                  {formatDuration(entry.durationMs)}
+                  {formatDuration(entry.duration_secs)}
                 </td>
-                <td className="px-4 py-3 text-muted-foreground">{entry.guildName}</td>
+                <td className="px-4 py-3 text-muted-foreground">{entry.guild_name}</td>
                 <td className="px-4 py-3 text-right text-muted-foreground">
-                  {formatDate(entry.date)}
+                  {formatDate(entry.killed_at)}
                 </td>
                 <td className="px-4 py-3 text-center">
                   <Link
-                    to={`/instances/${entry.instanceId}`}
+                    to={`/i/${entry.log_hashed_slug}`}
                     className="text-muted-foreground transition-colors hover:text-foreground"
                     title="View instance"
                   >

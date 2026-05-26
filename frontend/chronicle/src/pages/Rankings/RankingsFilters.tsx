@@ -1,6 +1,6 @@
 import { cn } from "@/lib/utils"
 import type { WoWHeroClasses } from "@/api/typesGenerated"
-import { ALL_DPS_CLASSES, CLASS_CSS_VAR, CLASS_DISPLAY } from "./mockData"
+import { ALL_DPS_CLASSES, CLASS_CSS_VAR, CLASS_DISPLAY } from "./classDisplay"
 import type { TimePeriod } from "./timePeriod"
 
 const TIME_OPTIONS: { value: TimePeriod; label: string }[] = [

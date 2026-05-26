@@ -5,23 +5,23 @@ import {
   TooltipProvider,
   TooltipTrigger,
 } from "@/components/ui/Tooltip/tooltip"
-import type { BoxPlotStats } from "./mockData"
-import { CLASS_CSS_VAR, CLASS_DISPLAY } from "./mockData"
+import type { RankingsBoxPlotStats } from "@/api/typesGenerated"
+import { CLASS_CSS_VAR, CLASS_DISPLAY } from "./classDisplay"
 
 // ── Box Plot Row ──────────────────────────────────────────────────────────
 
 interface BoxPlotRowProps {
-  stats: BoxPlotStats
+  stats: RankingsBoxPlotStats
   scaleMax: number
 }
 
 function BoxPlotRow({ stats, scaleMax }: BoxPlotRowProps) {
   const pct = (v: number) => `${(v / scaleMax) * 100}%`
-  const color = CLASS_CSS_VAR[stats.className]
-  const iqr = stats.q3 - stats.q1
-  const label = stats.specName
-    ? `${CLASS_DISPLAY[stats.className]} - ${stats.specName}`
-    : CLASS_DISPLAY[stats.className]
+  const color = CLASS_CSS_VAR[stats.player_class]
+  const iqr = stats.q3_dps - stats.q1_dps
+  const label = stats.player_spec
+    ? `${CLASS_DISPLAY[stats.player_class]} - ${stats.player_spec}`
+    : CLASS_DISPLAY[stats.player_class]
 
   return (
     <Tooltip>
@@ -42,8 +42,8 @@ function BoxPlotRow({ stats, scaleMax }: BoxPlotRowProps) {
             <div
               className="absolute top-1/2 h-px -translate-y-1/2"
               style={{
-                left: pct(stats.min),
-                width: `calc(${pct(stats.max)} - ${pct(stats.min)})`,
+                left: pct(stats.min_dps),
+                width: `calc(${pct(stats.max_dps)} - ${pct(stats.min_dps)})`,
                 backgroundColor: color,
                 opacity: 0.35,
               }}
@@ -52,19 +52,19 @@ function BoxPlotRow({ stats, scaleMax }: BoxPlotRowProps) {
             {/* Whisker caps */}
             <div
               className="absolute top-1/2 -translate-y-1/2 w-px h-2.5"
-              style={{ left: pct(stats.min), backgroundColor: color, opacity: 0.4 }}
+              style={{ left: pct(stats.min_dps), backgroundColor: color, opacity: 0.4 }}
             />
             <div
               className="absolute top-1/2 -translate-y-1/2 w-px h-2.5"
-              style={{ left: pct(stats.max), backgroundColor: color, opacity: 0.4 }}
+              style={{ left: pct(stats.max_dps), backgroundColor: color, opacity: 0.4 }}
             />
 
             {/* IQR box: Q1 → Q3 */}
             <div
               className="absolute top-1 bottom-1 rounded-sm"
               style={{
-                left: pct(stats.q1),
-                width: `calc(${pct(stats.q3)} - ${pct(stats.q1)})`,
+                left: pct(stats.q1_dps),
+                width: `calc(${pct(stats.q3_dps)} - ${pct(stats.q1_dps)})`,
                 backgroundColor: color,
                 opacity: 0.3,
                 border: `1px solid`,
@@ -75,14 +75,14 @@ function BoxPlotRow({ stats, scaleMax }: BoxPlotRowProps) {
             {/* Median line */}
             <div
               className="absolute top-0.5 bottom-0.5 w-0.5 rounded-full"
-              style={{ left: pct(stats.median), backgroundColor: color }}
+              style={{ left: pct(stats.median_dps), backgroundColor: color }}
             />
           </div>
 
           {/* Count + median value */}
           <div className="w-24 shrink-0 text-right text-xs text-muted-foreground">
             <span className="font-mono font-semibold text-foreground">
-              {stats.median.toLocaleString()}
+              {Math.round(stats.median_dps).toLocaleString()}
             </span>{" "}
             <span className="hidden sm:inline">({stats.count})</span>
           </div>
@@ -107,12 +107,12 @@ function BoxPlotRow({ stats, scaleMax }: BoxPlotRowProps) {
         </div>
         {/* Stats grid */}
         <div className="grid grid-cols-2 gap-x-4 gap-y-1 text-xs">
-          <StatLine label="Max" value={stats.max} />
-          <StatLine label="Q3" value={stats.q3} />
-          <StatLine label="Median" value={stats.median} />
-          <StatLine label="Q1" value={stats.q1} />
-          <StatLine label="Min" value={stats.min} />
-          <StatLine label="IQR" value={iqr} />
+          <StatLine label="Max" value={Math.round(stats.max_dps)} />
+          <StatLine label="Q3" value={Math.round(stats.q3_dps)} />
+          <StatLine label="Median" value={Math.round(stats.median_dps)} />
+          <StatLine label="Q1" value={Math.round(stats.q1_dps)} />
+          <StatLine label="Min" value={Math.round(stats.min_dps)} />
+          <StatLine label="IQR" value={Math.round(iqr)} />
         </div>
       </TooltipContent>
     </Tooltip>
@@ -131,14 +131,14 @@ function StatLine({ label, value }: { label: string; value: number }) {
 // ── Box Plot Chart ────────────────────────────────────────────────────────
 
 interface BoxPlotChartProps {
-  stats: BoxPlotStats[]
+  stats: RankingsBoxPlotStats[]
   title?: string
 }
 
 export function BoxPlotChart({ stats, title = "DPS Distribution by Class" }: BoxPlotChartProps) {
   const scaleMax = useMemo(() => {
     if (stats.length === 0) return 1200
-    return Math.max(...stats.map((s) => s.max))
+    return Math.max(...stats.map((s) => s.max_dps))
   }, [stats])
 
   const ticks = useMemo(() => {
@@ -164,7 +164,7 @@ export function BoxPlotChart({ stats, title = "DPS Distribution by Class" }: Box
         <TooltipProvider>
           <div className="space-y-1">
             {stats.map((s) => (
-              <BoxPlotRow key={`${s.className}-${s.specName ?? ""}`} stats={s} scaleMax={ticks.max} />
+              <BoxPlotRow key={`${s.player_class}-${s.player_spec ?? ""}`} stats={s} scaleMax={ticks.max} />
             ))}
 
             {/* X-axis ticks */}

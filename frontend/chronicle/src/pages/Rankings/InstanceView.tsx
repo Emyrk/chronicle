@@ -1,7 +1,7 @@
 import { useCallback, useMemo, useState } from "react"
 import { createPortal } from "react-dom"
 import { useSearchParams } from "react-router-dom"
-import { ArrowLeft, CheckCircle, ChevronDown, List, X } from "lucide-react"
+import { ArrowLeft, CheckCircle, ChevronDown, List, Loader2, X } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import {
   DropdownMenu,
@@ -14,18 +14,16 @@ import {
 import { useIsMobile } from "@/hooks/useIsMobile"
 import { getInstanceBackground } from "@/pages/Logs/utils/instanceImages"
 import { cn } from "@/lib/utils"
+import type { RankingsKillTimeStats, RankingsSuccessRate } from "@/api/typesGenerated"
 import {
-  getInstanceByName,
-  getEncounterNames,
-  getInstanceDifficulties,
-  getAllEntries,
-  computeBoxPlotStatsBySpec,
-  getKillTimeStats,
-  getSuccessRates,
-} from "./mockData"
-import type { KillTimeStats, EncounterSuccessRate } from "./mockData"
+  useRankingsEncounters,
+  useRankingsStats,
+  useRankingsLeaderboard,
+  useRankingsKillTimes,
+  useRankingsSuccessRates,
+} from "@/api/rankingsQueries"
+import type { RankedEntry } from "./RankingsTable"
 import type { TimePeriod } from "./timePeriod"
-import { getTimePeriodDays } from "./timePeriod"
 import { BoxPlotChart } from "./BoxPlotChart"
 import { RankingsTable } from "./RankingsTable"
 
@@ -44,20 +42,23 @@ interface InstanceViewProps {
 
 export function InstanceView({ instanceName }: InstanceViewProps) {
   const [params, setParams] = useSearchParams()
-  const [now] = useState(() => Date.now())
   const isMobile = useIsMobile()
   const [sidebarOpen, setSidebarOpen] = useState(false)
 
-  const instance = useMemo(() => getInstanceByName(instanceName), [instanceName])
-  const encounterNames = useMemo(() => getEncounterNames(instanceName), [instanceName])
-  const availableDifficulties = useMemo(() => getInstanceDifficulties(instanceName), [instanceName])
+  // ── API queries ───────────────────────────────────────────────────────
+  const { data: encounterSummaries, isLoading: encountersLoading } = useRankingsEncounters(instanceName)
+  const encounterNames = useMemo(
+    () => (encounterSummaries ?? []).map((e) => e.encounter_name),
+    [encounterSummaries],
+  )
+  // We derive boss vs trash: "Trash" is the only trash encounter name by convention
   const bossNames = useMemo(
-    () => new Set(instance?.bosses.filter((b) => !b.isTrash).map((b) => b.name) ?? []),
-    [instance],
+    () => new Set(encounterNames.filter((n) => n !== "Trash")),
+    [encounterNames],
   )
   const trashNames = useMemo(
-    () => new Set(instance?.bosses.filter((b) => b.isTrash).map((b) => b.name) ?? []),
-    [instance],
+    () => new Set(encounterNames.filter((n) => n === "Trash")),
+    [encounterNames],
   )
 
   // ── URL state ────────────────────────────────────────────────────────
@@ -75,31 +76,12 @@ export function InstanceView({ instanceName }: InstanceViewProps) {
     return raw && VALID_PERIODS.has(raw as TimePeriod) ? (raw as TimePeriod) : "all"
   }, [params])
 
-  // Difficulty filter — empty set means all difficulties selected
+  // Difficulty filter — kept in URL state but not yet a backend param
   const selectedDifficulties: Set<string> = useMemo(() => {
     const raw = params.get("diff")
     if (!raw) return new Set<string>()
     return new Set(raw.split(",").filter(Boolean))
   }, [params])
-
-  const handleToggleDifficulty = useCallback(
-    (diff: string) => {
-      setParams((prev) => {
-        const next = new URLSearchParams(prev)
-        const raw = prev.get("diff")
-        const current = raw ? new Set(raw.split(",").filter(Boolean)) : new Set<string>()
-        if (current.has(diff)) current.delete(diff)
-        else current.add(diff)
-        if (current.size === 0 || current.size === availableDifficulties.length) {
-          next.delete("diff")
-        } else {
-          next.set("diff", [...current].join(","))
-        }
-        return next
-      })
-    },
-    [setParams, availableDifficulties.length],
-  )
 
   const selectedEncounters: Set<string> = useMemo(() => {
     const raw = params.get("encounters")
@@ -206,46 +188,77 @@ export function InstanceView({ instanceName }: InstanceViewProps) {
     [setParams, bossNames, trashNames],
   )
 
-  // ── Filtered entries ─────────────────────────────────────────────────
+  // ── API query params ─────────────────────────────────────────────────
 
-  const filteredEntries = useMemo(() => {
-    let entries = getAllEntries(instanceName)
-    // Filter by selected encounters
-    entries = entries.filter((e) => selectedEncounters.has(e.encounterName))
-    // Filter by difficulty
-    if (selectedDifficulties.size > 0) {
-      entries = entries.filter((e) => selectedDifficulties.has(e.difficulty))
-    }
-    // Filter by time period
-    const days = getTimePeriodDays(timePeriod)
-    if (days !== null) {
-      const cutoff = now - days * 86400000
-      entries = entries.filter((e) => new Date(e.date).getTime() >= cutoff)
-    }
-    return entries
-  }, [instanceName, selectedEncounters, selectedDifficulties, timePeriod, now])
+  const encounterNamesParam = useMemo(() => {
+    if (selectedEncounters.size === 0 || selectedEncounters.size === encounterNames.length) return undefined
+    return [...selectedEncounters].join(",")
+  }, [selectedEncounters, encounterNames.length])
 
-  const boxPlotStats = useMemo(
-    () => computeBoxPlotStatsBySpec(filteredEntries),
-    [filteredEntries],
+  const periodParam = timePeriod === "all" ? undefined : timePeriod
+
+  // ── Data hooks ─────────────────────────────────────────────────────
+
+  const { data: boxPlotStats = [] } = useRankingsStats({
+    instance_names: instanceName,
+    encounter_names: encounterNamesParam,
+    period: periodParam,
+  })
+
+  const { data: leaderboardData } = useRankingsLeaderboard({
+    instance_names: instanceName,
+    encounter_names: encounterNamesParam,
+    period: periodParam,
+    limit: 50,
+    offset: 0,
+  })
+
+  // Derive available difficulties from leaderboard entries
+  const availableDifficulties = useMemo(() => {
+    const entries = leaderboardData?.entries ?? []
+    const seen = new Set<string>()
+    for (const e of entries) if (e.difficulty_name) seen.add(e.difficulty_name)
+    return [...seen].sort()
+  }, [leaderboardData])
+
+  const handleToggleDifficulty = useCallback(
+    (diff: string) => {
+      setParams((prev) => {
+        const next = new URLSearchParams(prev)
+        const raw = prev.get("diff")
+        const current = raw ? new Set(raw.split(",").filter(Boolean)) : new Set<string>()
+        if (current.has(diff)) current.delete(diff)
+        else current.add(diff)
+        if (current.size === 0 || current.size === availableDifficulties.length) {
+          next.delete("diff")
+        } else {
+          next.set("diff", [...current].join(","))
+        }
+        return next
+      })
+    },
+    [setParams, availableDifficulties.length],
   )
 
-  const leaderboardEntries = useMemo(() => {
-    const sorted = [...filteredEntries].sort((a, b) => b.value - a.value)
-    sorted.forEach((e, i) => { e.rank = i + 1 })
-    return sorted.slice(0, 50)
-  }, [filteredEntries])
+  const leaderboardEntries: RankedEntry[] = useMemo(() => {
+    const entries = leaderboardData?.entries ?? []
+    // Client-side difficulty filter (not yet a backend param)
+    let filtered = [...entries]
+    if (selectedDifficulties.size > 0) {
+      filtered = filtered.filter((e) => selectedDifficulties.has(e.difficulty_name))
+    }
+    return filtered.map((e, i) => ({ ...e, rank: i + 1 }))
+  }, [leaderboardData, selectedDifficulties])
 
-  // Kill time + success rate data (per encounter, no sidebar filtering)
-  const killTimeStats = useMemo(() => getKillTimeStats(instanceName), [instanceName])
-  const successRates = useMemo(() => getSuccessRates(instanceName), [instanceName])
+  const { data: killTimeStats = [] } = useRankingsKillTimes(instanceName, periodParam)
+  const { data: successRates = [] } = useRankingsSuccessRates(instanceName, periodParam)
 
+  // ── Loading state ──────────────────────────────────────────────────
 
-
-  if (!instance) {
+  if (encountersLoading) {
     return (
-      <div className="text-center text-muted-foreground py-16">
-        Instance not found: {instanceName}
+      <div className="flex items-center justify-center py-16">
+        <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
       </div>
     )
   }
@@ -512,8 +525,8 @@ function formatTime(seconds: number): string {
   return `${m}:${String(s).padStart(2, "0")}`
 }
 
-function KillTimeContent({ stats }: { stats: KillTimeStats[] }) {
-  const scaleMax = Math.max(...stats.map((s) => s.max), 1)
+function KillTimeContent({ stats }: { stats: RankingsKillTimeStats[] }) {
+  const scaleMax = Math.max(...stats.map((s) => s.max_secs), 1)
   const step = scaleMax <= 300 ? 30 : 60
   const ticks: number[] = []
   for (let v = 0; v <= scaleMax; v += step) ticks.push(v)
@@ -535,35 +548,35 @@ function KillTimeContent({ stats }: { stats: KillTimeStats[] }) {
         {stats.map((s) => {
           const pct = (v: number) => `${(v / axisMax) * 100}%`
           return (
-            <div key={s.encounterName} className="flex items-center gap-3 px-1 py-1.5 rounded-md hover:bg-muted/20 transition-colors">
+            <div key={s.encounter_name} className="flex items-center gap-3 px-1 py-1.5 rounded-md hover:bg-muted/20 transition-colors">
               {/* Label */}
-              <div className="w-40 shrink-0 text-xs font-medium truncate">{s.encounterName}</div>
+              <div className="w-40 shrink-0 text-xs font-medium truncate">{s.encounter_name}</div>
 
               {/* Box plot */}
               <div className="relative flex-1 h-7">
                 {/* Whisker */}
                 <div
                   className="absolute top-1/2 h-px -translate-y-1/2 bg-muted-foreground/30"
-                  style={{ left: pct(s.min), width: `calc(${pct(s.max)} - ${pct(s.min)})` }}
+                  style={{ left: pct(s.min_secs), width: `calc(${pct(s.max_secs)} - ${pct(s.min_secs)})` }}
                 />
                 {/* Caps */}
-                <div className="absolute top-1/2 -translate-y-1/2 w-px h-2.5 bg-muted-foreground/40" style={{ left: pct(s.min) }} />
-                <div className="absolute top-1/2 -translate-y-1/2 w-px h-2.5 bg-muted-foreground/40" style={{ left: pct(s.max) }} />
+                <div className="absolute top-1/2 -translate-y-1/2 w-px h-2.5 bg-muted-foreground/40" style={{ left: pct(s.min_secs) }} />
+                <div className="absolute top-1/2 -translate-y-1/2 w-px h-2.5 bg-muted-foreground/40" style={{ left: pct(s.max_secs) }} />
                 {/* IQR box */}
                 <div
                   className="absolute top-1 bottom-1 rounded-sm border border-[#5F8FA6] bg-[#5F8FA6]/30"
-                  style={{ left: pct(s.q1), width: `calc(${pct(s.q3)} - ${pct(s.q1)})` }}
+                  style={{ left: pct(s.q1_secs), width: `calc(${pct(s.q3_secs)} - ${pct(s.q1_secs)})` }}
                 />
                 {/* Median */}
                 <div
                   className="absolute top-0.5 bottom-0.5 w-0.5 rounded-full bg-[#5F8FA6]"
-                  style={{ left: pct(s.median) }}
+                  style={{ left: pct(s.median_secs) }}
                 />
               </div>
 
               {/* Values */}
               <div className="w-20 shrink-0 text-right text-xs text-muted-foreground">
-                <span className="font-mono font-semibold text-foreground">{formatTime(s.median)}</span>
+                <span className="font-mono font-semibold text-foreground">{formatTime(s.median_secs)}</span>
                 {" "}
                 <span className="hidden sm:inline">({s.count})</span>
               </div>
@@ -594,7 +607,7 @@ function KillTimeContent({ stats }: { stats: KillTimeStats[] }) {
 
 // ── Success Rate Content ─────────────────────────────────────────────────
 
-function SuccessRateContent({ rates }: { rates: EncounterSuccessRate[] }) {
+function SuccessRateContent({ rates }: { rates: RankingsSuccessRate[] }) {
   if (rates.length === 0) {
     return (
       <div className="rounded-xl border p-8 text-center text-muted-foreground">
@@ -607,40 +620,43 @@ function SuccessRateContent({ rates }: { rates: EncounterSuccessRate[] }) {
     <div className="rounded-xl border bg-card p-5">
       <h3 className="mb-5 text-sm font-medium text-muted-foreground">Success Rate by Encounter</h3>
       <div className="space-y-2">
-        {rates.map((r) => (
-          <div key={r.encounterName} className="flex items-center gap-3 px-1 py-1.5 rounded-md hover:bg-muted/20 transition-colors">
-            {/* Label */}
-            <div className="w-40 shrink-0 text-xs font-medium truncate">{r.encounterName}</div>
+        {rates.map((r) => {
+          const successPct = r.total > 0 ? Math.round((r.kills / r.total) * 100) : 0
+          return (
+            <div key={r.encounter_name} className="flex items-center gap-3 px-1 py-1.5 rounded-md hover:bg-muted/20 transition-colors">
+              {/* Label */}
+              <div className="w-40 shrink-0 text-xs font-medium truncate">{r.encounter_name}</div>
 
-            {/* Bar */}
-            <div className="relative flex-1 h-6 rounded-md bg-muted/20 overflow-hidden">
-              {/* Success portion */}
-              <div
-                className="absolute inset-y-0 left-0 rounded-md bg-green-500/70 transition-all duration-500"
-                style={{ width: `${r.successPct}%` }}
-              />
-              {/* Wipe portion */}
-              <div
-                className="absolute inset-y-0 right-0 rounded-r-md bg-red-500/30"
-                style={{ width: `${100 - r.successPct}%` }}
-              />
-              {/* Percentage label */}
-              <div className="absolute inset-0 flex items-center justify-center">
-                <span className="text-[11px] font-semibold text-foreground drop-shadow-sm">
-                  {r.successPct}%
-                </span>
+              {/* Bar */}
+              <div className="relative flex-1 h-6 rounded-md bg-muted/20 overflow-hidden">
+                {/* Success portion */}
+                <div
+                  className="absolute inset-y-0 left-0 rounded-md bg-green-500/70 transition-all duration-500"
+                  style={{ width: `${successPct}%` }}
+                />
+                {/* Wipe portion */}
+                <div
+                  className="absolute inset-y-0 right-0 rounded-r-md bg-red-500/30"
+                  style={{ width: `${100 - successPct}%` }}
+                />
+                {/* Percentage label */}
+                <div className="absolute inset-0 flex items-center justify-center">
+                  <span className="text-[11px] font-semibold text-foreground drop-shadow-sm">
+                    {successPct}%
+                  </span>
+                </div>
+              </div>
+
+              {/* Counts */}
+              <div className="w-28 shrink-0 text-right text-xs text-muted-foreground">
+                <span className="text-green-400">{r.kills}</span>
+                {" / "}
+                <span className="text-red-400">{r.wipes}</span>
+                <span className="hidden sm:inline text-muted-foreground/60"> ({r.total})</span>
               </div>
             </div>
-
-            {/* Counts */}
-            <div className="w-28 shrink-0 text-right text-xs text-muted-foreground">
-              <span className="text-green-400">{r.kills}</span>
-              {" / "}
-              <span className="text-red-400">{r.wipes}</span>
-              <span className="hidden sm:inline text-muted-foreground/60"> ({r.total})</span>
-            </div>
-          </div>
-        ))}
+          )
+        })}
       </div>
     </div>
   )
