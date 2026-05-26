@@ -2,6 +2,7 @@ import { useCallback, useMemo, useState } from "react"
 import { createPortal } from "react-dom"
 import { useSearchParams } from "react-router-dom"
 import { ArrowLeft, CheckCircle, ChevronDown, ChevronLeft, ChevronRight, List, Loader2, X } from "lucide-react"
+import { Checkbox } from "@/components/ui/Checkbox/Checkbox"
 import { Button } from "@/components/ui/button"
 import {
   DropdownMenu,
@@ -82,6 +83,20 @@ export function InstanceView({ instanceName }: InstanceViewProps) {
     const raw = params.get("period")
     return raw && VALID_PERIODS.has(raw as TimePeriod) ? (raw as TimePeriod) : "all"
   }, [params])
+
+  // Hide unknowns — checked by default (no URL param = hide).
+  // Only ?unknowns=show makes them visible.
+  const hideUnknowns = params.get("unknowns") !== "show"
+
+  const handleToggleUnknowns = useCallback(() => {
+    setParams((prev) => {
+      const next = new URLSearchParams(prev)
+      if (prev.get("unknowns") === "show") next.delete("unknowns")
+      else next.set("unknowns", "show")
+      next.delete("page")
+      return next
+    })
+  }, [setParams])
 
   // Difficulty filter — kept in URL state but not yet a backend param
   const selectedDifficulties: Set<string> = useMemo(() => {
@@ -220,11 +235,16 @@ export function InstanceView({ instanceName }: InstanceViewProps) {
 
   // ── Data hooks ─────────────────────────────────────────────────────
 
-  const { data: boxPlotStats = [] } = useRankingsStats({
+  const { data: rawBoxPlotStats = [] } = useRankingsStats({
     instance_names: instanceName,
     encounter_names: encounterNamesParam,
     period: periodParam,
   })
+
+  const boxPlotStats = useMemo(() => {
+    if (!hideUnknowns) return rawBoxPlotStats
+    return rawBoxPlotStats.filter((s) => s.player_class !== "Unknown" && s.player_spec !== "Unknown")
+  }, [rawBoxPlotStats, hideUnknowns])
 
   const { data: leaderboardData } = useRankingsLeaderboard({
     instance_names: instanceName,
@@ -266,14 +286,17 @@ export function InstanceView({ instanceName }: InstanceViewProps) {
 
   const leaderboardEntries: RankedEntry[] = useMemo(() => {
     const entries = leaderboardData?.entries ?? []
-    // Client-side difficulty filter (not yet a backend param)
+    // Client-side filters
     let filtered = [...entries]
     if (selectedDifficulties.size > 0) {
       filtered = filtered.filter((e) => selectedDifficulties.has(e.difficulty_name))
     }
+    if (hideUnknowns) {
+      filtered = filtered.filter((e) => e.player_class !== "Unknown" && e.player_spec !== "Unknown")
+    }
     const offset = (page - 1) * PAGE_SIZE
     return filtered.map((e, i) => ({ ...e, rank: offset + i + 1 }))
-  }, [leaderboardData, selectedDifficulties, page])
+  }, [leaderboardData, selectedDifficulties, hideUnknowns, page])
 
   const { data: killTimeStats = [] } = useRankingsKillTimes(instanceName, periodParam)
   const { data: successRates = [] } = useRankingsSuccessRates(instanceName, periodParam)
@@ -471,6 +494,16 @@ export function InstanceView({ instanceName }: InstanceViewProps) {
                     </DropdownMenuContent>
                   </DropdownMenu>
                 )}
+
+                {/* Hide unknowns toggle */}
+                <label className="flex items-center gap-1.5 text-xs text-muted-foreground cursor-pointer select-none">
+                  <Checkbox
+                    checked={hideUnknowns}
+                    onCheckedChange={() => handleToggleUnknowns()}
+                    className="size-3.5"
+                  />
+                  Hide unknowns
+                </label>
               </div>
 
               {/* DPS sub-tabs (only when DPS metric is active) */}
