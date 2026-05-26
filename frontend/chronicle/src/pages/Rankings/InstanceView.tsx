@@ -1,8 +1,15 @@
 import { useCallback, useMemo, useState } from "react"
 import { createPortal } from "react-dom"
 import { useSearchParams } from "react-router-dom"
-import { ArrowLeft, CheckCircle, List, X } from "lucide-react"
+import { ArrowLeft, CheckCircle, ChevronDown, List, X } from "lucide-react"
 import { Button } from "@/components/ui/button"
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuRadioGroup,
+  DropdownMenuRadioItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/DropdownMenu/DropdownMenu"
 import { useIsMobile } from "@/hooks/useIsMobile"
 import { getInstanceBackground } from "@/pages/Logs/utils/instanceImages"
 import { cn } from "@/lib/utils"
@@ -350,28 +357,24 @@ export function InstanceView({ instanceName }: InstanceViewProps) {
               <h1 className="text-2xl font-bold">{instanceName}</h1>
             </div>
 
-            {/* Metric tabs */}
+            {/* Metric selector + filters */}
             <div className="flex flex-wrap items-center gap-3">
-              <div className="flex gap-1 rounded-lg border border-white/10 bg-black/30 p-1">
-                {([
-                  { value: "dps" as const, label: "DPS Rankings" },
-                  { value: "killtime" as const, label: "Kill Time" },
-                  { value: "success" as const, label: "Success Rate" },
-                ] as const).map((m) => (
-                  <button
-                    key={m.value}
-                    onClick={() => handleMetricChange(m.value)}
-                    className={cn(
-                      "rounded-md px-3 py-1 text-xs font-medium transition-colors",
-                      metric === m.value
-                        ? "bg-[#5F8FA6] text-white"
-                        : "text-muted-foreground hover:text-foreground",
-                    )}
-                  >
-                    {m.label}
-                  </button>
-                ))}
-              </div>
+              {/* Metric dropdown */}
+              <DropdownMenu>
+                <DropdownMenuTrigger asChild>
+                  <Button variant="outline" size="sm" className="h-7 gap-1.5 text-xs">
+                    {metric === "dps" ? "DPS Rankings" : metric === "killtime" ? "Kill Time" : "Success Rate"}
+                    <ChevronDown className="h-3 w-3 opacity-50" />
+                  </Button>
+                </DropdownMenuTrigger>
+                <DropdownMenuContent align="start">
+                  <DropdownMenuRadioGroup value={metric} onValueChange={(v) => handleMetricChange(v as MetricTab)}>
+                    <DropdownMenuRadioItem value="dps">DPS Rankings</DropdownMenuRadioItem>
+                    <DropdownMenuRadioItem value="killtime">Kill Time</DropdownMenuRadioItem>
+                    <DropdownMenuRadioItem value="success">Success Rate</DropdownMenuRadioItem>
+                  </DropdownMenuRadioGroup>
+                </DropdownMenuContent>
+              </DropdownMenu>
 
               {/* DPS sub-tabs (only when DPS metric is active) */}
               {metric === "dps" && (
