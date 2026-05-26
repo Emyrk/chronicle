@@ -74,6 +74,7 @@ WITH deduped AS (
         edr.player_name,
         edr.player_class,
         edr.player_spec,
+        edr.player_role,
         edr.player_level,
         edr.difficulty_name,
         edr.max_players,
@@ -166,3 +167,93 @@ SELECT
 FROM deduped d
 GROUP BY d.player_class, d.player_spec
 ORDER BY median_dps DESC;
+
+-- name: UpsertTalentBuild :one
+-- Insert a unique talent build, returning its ID. If the build already exists,
+-- return the existing row's ID.
+WITH ins AS (
+    INSERT INTO talent_builds (player_class, talent_summary, talent_layout, spec)
+    VALUES (@player_class, @talent_summary, @talent_layout, @spec)
+    ON CONFLICT (player_class, talent_layout) DO NOTHING
+    RETURNING id
+)
+SELECT id FROM ins
+UNION ALL
+SELECT id FROM talent_builds WHERE player_class = @player_class AND talent_layout = @talent_layout
+LIMIT 1;
+
+-- name: InsertEncounterDpsRanking :exec
+INSERT INTO encounter_dps_rankings (
+    encounter_id, instance_id, encounter_name, instance_name,
+    player_guid, player_name, player_class, player_spec, player_role, player_level,
+    talent_build_id, difficulty_name, max_players,
+    realm_id, realm_name, guild_id, guild_name,
+    damage_done, duration_secs, dps, avg_ilvl,
+    log_hashed_slug, killed_at
+) VALUES (
+    @encounter_id, @instance_id, @encounter_name, @instance_name,
+    @player_guid, @player_name, @player_class, @player_spec, @player_role, @player_level,
+    @talent_build_id, @difficulty_name, @max_players,
+    @realm_id, @realm_name, @guild_id, @guild_name,
+    @damage_done, @duration_secs, @dps, @avg_ilvl,
+    @log_hashed_slug, @killed_at
+) ON CONFLICT (encounter_id, player_guid) DO NOTHING;
+
+-- name: RankingsKillTimeStats :many
+-- Box plot stats on encounter duration (seconds) per encounter name.
+-- Deduplicates encounters across duplicate log groups.
+WITH deduped AS (
+    SELECT DISTINCT ON (lie.name, COALESCE(li.duplicate_group_id, li.id))
+        lie.name AS encounter_name,
+        EXTRACT(EPOCH FROM (lie.end_time - lie.start_time))::double precision AS duration_secs
+    FROM log_instance_encounters lie
+    JOIN log_instances li ON li.id = lie.instance_id
+    JOIN wow_server_realms wsr ON wsr.id = li.realm_id
+    WHERE li.name = @instance_name
+      AND lie.boss = true
+      AND lie.kill_type = 'clean'
+      AND CASE
+          WHEN @since_days :: bigint > 0 THEN lie.end_time >= now() - make_interval(days => @since_days::int)
+          ELSE true
+      END
+    ORDER BY lie.name, COALESCE(li.duplicate_group_id, li.id), lie.end_time DESC
+)
+SELECT
+    d.encounter_name,
+    MIN(d.duration_secs)::double precision AS min_secs,
+    PERCENTILE_CONT(0.25) WITHIN GROUP (ORDER BY d.duration_secs) AS q1_secs,
+    PERCENTILE_CONT(0.50) WITHIN GROUP (ORDER BY d.duration_secs) AS median_secs,
+    PERCENTILE_CONT(0.75) WITHIN GROUP (ORDER BY d.duration_secs) AS q3_secs,
+    MAX(d.duration_secs)::double precision AS max_secs,
+    COUNT(*)::bigint AS count
+FROM deduped d
+GROUP BY d.encounter_name
+ORDER BY d.encounter_name;
+
+-- name: RankingsSuccessRates :many
+-- Kill/wipe/total counts per encounter name within an instance.
+-- Deduplicates across duplicate log groups.
+WITH deduped AS (
+    SELECT DISTINCT ON (lie.name, lie.kill_type, COALESCE(li.duplicate_group_id, li.id))
+        lie.name AS encounter_name,
+        lie.kill_type,
+        lie.boss
+    FROM log_instance_encounters lie
+    JOIN log_instances li ON li.id = lie.instance_id
+    JOIN wow_server_realms wsr ON wsr.id = li.realm_id
+    WHERE li.name = @instance_name
+      AND lie.boss = true
+      AND CASE
+          WHEN @since_days :: bigint > 0 THEN lie.end_time >= now() - make_interval(days => @since_days::int)
+          ELSE true
+      END
+    ORDER BY lie.name, lie.kill_type, COALESCE(li.duplicate_group_id, li.id), lie.end_time DESC
+)
+SELECT
+    d.encounter_name,
+    COUNT(*) FILTER (WHERE d.kill_type = 'clean')::bigint AS kills,
+    COUNT(*) FILTER (WHERE d.kill_type = 'wipe')::bigint AS wipes,
+    COUNT(*)::bigint AS total
+FROM deduped d
+GROUP BY d.encounter_name
+ORDER BY d.encounter_name;

@@ -86,6 +86,8 @@ func (s *Service) setupRoutes() {
 	s.router.Get("/encounters", s.handleEncounters)
 	s.router.Get("/leaderboard", s.handleLeaderboard)
 	s.router.Get("/stats", s.handleStats)
+	s.router.Get("/kill-times", s.handleKillTimes)
+	s.router.Get("/success-rates", s.handleSuccessRates)
 }
 
 // handleInstances returns per-instance summaries with top 3 players.
@@ -224,6 +226,7 @@ func (s *Service) handleLeaderboard(w http.ResponseWriter, r *http.Request) {
 			PlayerName:    row.PlayerName,
 			PlayerClass:   row.PlayerClass,
 			PlayerSpec:    row.PlayerSpec,
+			PlayerRole:    row.PlayerRole,
 			PlayerLevel:    row.PlayerLevel,
 			DifficultyName: row.DifficultyName,
 			MaxPlayers:     row.MaxPlayers,
@@ -314,6 +317,103 @@ func splitCSV(s string) []string {
 		return nil
 	}
 	return out
+}
+
+// handleKillTimes returns box plot stats on encounter kill durations.
+//
+//	GET /kill-times?instance_name=Molten+Core&period=90d
+func (s *Service) handleKillTimes(w http.ResponseWriter, r *http.Request) {
+	ctx := r.Context()
+	q := r.URL.Query()
+
+	instanceName := q.Get("instance_name")
+	if instanceName == "" {
+		httpapi.Write(ctx, w, http.StatusBadRequest, chroniclesdk.Response{
+			Message: "instance_name query parameter is required",
+		})
+		return
+	}
+
+	var sinceDays int64
+	if v := q.Get("period"); v != "" {
+		sinceDays = periodToDays(v)
+	}
+
+	rows, err := s.store.RankingsKillTimeStats(ctx, database.RankingsKillTimeStatsParams{
+		InstanceName: instanceName,
+		SinceDays:    sinceDays,
+	})
+	if err != nil {
+		httpapi.HandleResponseError(ctx, w, err, httpapi.APIError{
+			Response: chroniclesdk.Response{
+				Message: "Failed to fetch kill time stats",
+				Detail:  err.Error(),
+			},
+		})
+		return
+	}
+
+	out := make([]chroniclesdk.RankingsKillTimeStats, 0, len(rows))
+	for _, row := range rows {
+		out = append(out, chroniclesdk.RankingsKillTimeStats{
+			EncounterName: row.EncounterName,
+			MinSecs:       row.MinSecs,
+			Q1Secs:        row.Q1Secs,
+			MedianSecs:    row.MedianSecs,
+			Q3Secs:        row.Q3Secs,
+			MaxSecs:       row.MaxSecs,
+			Count:         row.Count,
+		})
+	}
+
+	httpapi.Write(ctx, w, http.StatusOK, out)
+}
+
+// handleSuccessRates returns kill/wipe/total counts per encounter.
+//
+//	GET /success-rates?instance_name=Molten+Core&period=90d
+func (s *Service) handleSuccessRates(w http.ResponseWriter, r *http.Request) {
+	ctx := r.Context()
+	q := r.URL.Query()
+
+	instanceName := q.Get("instance_name")
+	if instanceName == "" {
+		httpapi.Write(ctx, w, http.StatusBadRequest, chroniclesdk.Response{
+			Message: "instance_name query parameter is required",
+		})
+		return
+	}
+
+	var sinceDays int64
+	if v := q.Get("period"); v != "" {
+		sinceDays = periodToDays(v)
+	}
+
+	rows, err := s.store.RankingsSuccessRates(ctx, database.RankingsSuccessRatesParams{
+		InstanceName: instanceName,
+		SinceDays:    sinceDays,
+	})
+	if err != nil {
+		httpapi.HandleResponseError(ctx, w, err, httpapi.APIError{
+			Response: chroniclesdk.Response{
+				Message: "Failed to fetch success rates",
+				Detail:  err.Error(),
+			},
+		})
+		return
+	}
+
+	out := make([]chroniclesdk.RankingsSuccessRate, 0, len(rows))
+	for _, row := range rows {
+		out = append(out, chroniclesdk.RankingsSuccessRate{
+			EncounterName: row.EncounterName,
+			Kills:         row.Kills,
+			Wipes:         row.Wipes,
+			Total:         row.Total,
+		})
+	}
+
+	httpapi.Write(ctx, w, http.StatusOK, out)
 }
 
 // periodToDays converts a period string like "7d", "30d", "90d" to days.

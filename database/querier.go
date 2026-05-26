@@ -159,6 +159,7 @@ type sqlcQuerier interface {
 	GetWorldsByServer(ctx context.Context, serverID uuid.UUID) ([]World, error)
 	InsertEncounter(ctx context.Context, arg InsertEncounterParams) (LogInstanceEncounter, error)
 	InsertEncounterCharacterFights(ctx context.Context, arg []InsertEncounterCharacterFightsParams) *InsertEncounterCharacterFightsBatchResults
+	InsertEncounterDpsRanking(ctx context.Context, arg InsertEncounterDpsRankingParams) error
 	InsertGuildPagePanel(ctx context.Context, arg InsertGuildPagePanelParams) (GuildPagePanel, error)
 	InsertGuildPageTab(ctx context.Context, arg InsertGuildPageTabParams) (GuildPageTab, error)
 	InsertInstance(ctx context.Context, arg InsertInstanceParams) (LogInstance, error)
@@ -236,9 +237,15 @@ type sqlcQuerier interface {
 	// Returns per-instance summary with top 3 players by DPS.
 	// Deduplicates by (player_guid, encounter_name, duplicate_group) keeping best DPS.
 	RankingsInstanceSummaries(ctx context.Context) ([]RankingsInstanceSummariesRow, error)
+	// Box plot stats on encounter duration (seconds) per encounter name.
+	// Deduplicates encounters across duplicate log groups.
+	RankingsKillTimeStats(ctx context.Context, arg RankingsKillTimeStatsParams) ([]RankingsKillTimeStatsRow, error)
 	// Returns paginated DPS rankings, deduplicated and filtered.
 	// Supports multi-instance, multi-encounter, time period, realm, class, and spec filters.
 	RankingsLeaderboard(ctx context.Context, arg RankingsLeaderboardParams) ([]RankingsLeaderboardRow, error)
+	// Kill/wipe/total counts per encounter name within an instance.
+	// Deduplicates across duplicate log groups.
+	RankingsSuccessRates(ctx context.Context, arg RankingsSuccessRatesParams) ([]RankingsSuccessRatesRow, error)
 	RecordAuthzMigration(ctx context.Context, version int32) error
 	SearchCreatureTemplates(ctx context.Context, arg SearchCreatureTemplatesParams) ([]SearchCreatureTemplatesRow, error)
 	SearchGamePlayers(ctx context.Context, arg SearchGamePlayersParams) ([]SearchGamePlayersRow, error)
@@ -301,6 +308,9 @@ type sqlcQuerier interface {
 	UpsertRetentionPolicy(ctx context.Context, arg UpsertRetentionPolicyParams) (RetentionPolicy, error)
 	UpsertRetentionPolicyByRealm(ctx context.Context, arg UpsertRetentionPolicyByRealmParams) (RetentionPolicy, error)
 	UpsertRetentionRule(ctx context.Context, arg UpsertRetentionRuleParams) (RetentionRule, error)
+	// Insert a unique talent build, returning its ID. If the build already exists,
+	// return the existing row's ID.
+	UpsertTalentBuild(ctx context.Context, arg UpsertTalentBuildParams) (uuid.UUID, error)
 	UpsertUserActionBarSlots(ctx context.Context, arg UpsertUserActionBarSlotsParams) (UpsertUserActionBarSlotsRow, error)
 }
 

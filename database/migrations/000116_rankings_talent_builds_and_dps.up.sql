@@ -25,6 +25,7 @@ CREATE TABLE encounter_dps_rankings (
     player_name     TEXT NOT NULL,
     player_class    TEXT NOT NULL DEFAULT 'Unknown',
     player_spec     TEXT NOT NULL DEFAULT 'Unknown',
+    player_role     TEXT NOT NULL DEFAULT 'dps',  -- 'dps', 'heal', 'tank'
     player_level    SMALLINT NOT NULL DEFAULT 0,
     talent_build_id UUID REFERENCES talent_builds(id),
     -- Instance difficulty context

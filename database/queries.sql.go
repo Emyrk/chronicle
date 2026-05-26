@@ -3852,6 +3852,79 @@ func (q *sqlQuerier) SetDuplicateGroupIDs(ctx context.Context, arg SetDuplicateG
 	return err
 }
 
+const insertEncounterDpsRanking = `-- name: InsertEncounterDpsRanking :exec
+INSERT INTO encounter_dps_rankings (
+    encounter_id, instance_id, encounter_name, instance_name,
+    player_guid, player_name, player_class, player_spec, player_role, player_level,
+    talent_build_id, difficulty_name, max_players,
+    realm_id, realm_name, guild_id, guild_name,
+    damage_done, duration_secs, dps, avg_ilvl,
+    log_hashed_slug, killed_at
+) VALUES (
+    $1, $2, $3, $4,
+    $5, $6, $7, $8, $9, $10,
+    $11, $12, $13,
+    $14, $15, $16, $17,
+    $18, $19, $20, $21,
+    $22, $23
+) ON CONFLICT (encounter_id, player_guid) DO NOTHING
+`
+
+type InsertEncounterDpsRankingParams struct {
+	EncounterID    uuid.NullUUID      `db:"encounter_id" json:"encounter_id"`
+	InstanceID     uuid.UUID          `db:"instance_id" json:"instance_id"`
+	EncounterName  string             `db:"encounter_name" json:"encounter_name"`
+	InstanceName   string             `db:"instance_name" json:"instance_name"`
+	PlayerGuid     string             `db:"player_guid" json:"player_guid"`
+	PlayerName     string             `db:"player_name" json:"player_name"`
+	PlayerClass    string             `db:"player_class" json:"player_class"`
+	PlayerSpec     string             `db:"player_spec" json:"player_spec"`
+	PlayerRole     string             `db:"player_role" json:"player_role"`
+	PlayerLevel    int16              `db:"player_level" json:"player_level"`
+	TalentBuildID  uuid.NullUUID      `db:"talent_build_id" json:"talent_build_id"`
+	DifficultyName string             `db:"difficulty_name" json:"difficulty_name"`
+	MaxPlayers     int16              `db:"max_players" json:"max_players"`
+	RealmID        uuid.UUID          `db:"realm_id" json:"realm_id"`
+	RealmName      string             `db:"realm_name" json:"realm_name"`
+	GuildID        uuid.NullUUID      `db:"guild_id" json:"guild_id"`
+	GuildName      string             `db:"guild_name" json:"guild_name"`
+	DamageDone     int64              `db:"damage_done" json:"damage_done"`
+	DurationSecs   float64            `db:"duration_secs" json:"duration_secs"`
+	Dps            float64            `db:"dps" json:"dps"`
+	AvgIlvl        pgtype.Int2        `db:"avg_ilvl" json:"avg_ilvl"`
+	LogHashedSlug  string             `db:"log_hashed_slug" json:"log_hashed_slug"`
+	KilledAt       pgtype.Timestamptz `db:"killed_at" json:"killed_at"`
+}
+
+func (q *sqlQuerier) InsertEncounterDpsRanking(ctx context.Context, arg InsertEncounterDpsRankingParams) error {
+	_, err := q.db.Exec(ctx, insertEncounterDpsRanking,
+		arg.EncounterID,
+		arg.InstanceID,
+		arg.EncounterName,
+		arg.InstanceName,
+		arg.PlayerGuid,
+		arg.PlayerName,
+		arg.PlayerClass,
+		arg.PlayerSpec,
+		arg.PlayerRole,
+		arg.PlayerLevel,
+		arg.TalentBuildID,
+		arg.DifficultyName,
+		arg.MaxPlayers,
+		arg.RealmID,
+		arg.RealmName,
+		arg.GuildID,
+		arg.GuildName,
+		arg.DamageDone,
+		arg.DurationSecs,
+		arg.Dps,
+		arg.AvgIlvl,
+		arg.LogHashedSlug,
+		arg.KilledAt,
+	)
+	return err
+}
+
 const rankingsBoxPlotStats = `-- name: RankingsBoxPlotStats :many
 WITH deduped AS (
     SELECT DISTINCT ON (edr.player_guid, edr.encounter_name, COALESCE(li.duplicate_group_id, li.id))
@@ -3950,7 +4023,7 @@ func (q *sqlQuerier) RankingsBoxPlotStats(ctx context.Context, arg RankingsBoxPl
 const rankingsEncounterList = `-- name: RankingsEncounterList :many
 WITH deduped AS (
     SELECT DISTINCT ON (edr.player_guid, edr.encounter_name, COALESCE(li.duplicate_group_id, li.id))
-        edr.id, edr.encounter_id, edr.instance_id, edr.encounter_name, edr.instance_name, edr.player_guid, edr.player_name, edr.player_class, edr.player_spec, edr.player_level, edr.talent_build_id, edr.difficulty_name, edr.max_players, edr.realm_id, edr.realm_name, edr.guild_id, edr.guild_name, edr.damage_done, edr.duration_secs, edr.dps, edr.avg_ilvl, edr.log_hashed_slug, edr.killed_at, edr.created_at
+        edr.id, edr.encounter_id, edr.instance_id, edr.encounter_name, edr.instance_name, edr.player_guid, edr.player_name, edr.player_class, edr.player_spec, edr.player_role, edr.player_level, edr.talent_build_id, edr.difficulty_name, edr.max_players, edr.realm_id, edr.realm_name, edr.guild_id, edr.guild_name, edr.damage_done, edr.duration_secs, edr.dps, edr.avg_ilvl, edr.log_hashed_slug, edr.killed_at, edr.created_at
     FROM encounter_dps_rankings edr
     JOIN log_instances li ON li.id = edr.instance_id
     JOIN wow_server_realms wsr ON wsr.id = edr.realm_id
@@ -3996,7 +4069,7 @@ func (q *sqlQuerier) RankingsEncounterList(ctx context.Context, instanceName str
 const rankingsInstanceSummaries = `-- name: RankingsInstanceSummaries :many
 WITH deduped AS (
     SELECT DISTINCT ON (edr.player_guid, edr.encounter_name, COALESCE(li.duplicate_group_id, li.id))
-        edr.id, edr.encounter_id, edr.instance_id, edr.encounter_name, edr.instance_name, edr.player_guid, edr.player_name, edr.player_class, edr.player_spec, edr.player_level, edr.talent_build_id, edr.difficulty_name, edr.max_players, edr.realm_id, edr.realm_name, edr.guild_id, edr.guild_name, edr.damage_done, edr.duration_secs, edr.dps, edr.avg_ilvl, edr.log_hashed_slug, edr.killed_at, edr.created_at
+        edr.id, edr.encounter_id, edr.instance_id, edr.encounter_name, edr.instance_name, edr.player_guid, edr.player_name, edr.player_class, edr.player_spec, edr.player_role, edr.player_level, edr.talent_build_id, edr.difficulty_name, edr.max_players, edr.realm_id, edr.realm_name, edr.guild_id, edr.guild_name, edr.damage_done, edr.duration_secs, edr.dps, edr.avg_ilvl, edr.log_hashed_slug, edr.killed_at, edr.created_at
     FROM encounter_dps_rankings edr
     JOIN log_instances li ON li.id = edr.instance_id
     JOIN wow_server_realms wsr ON wsr.id = edr.realm_id
@@ -4065,6 +4138,81 @@ func (q *sqlQuerier) RankingsInstanceSummaries(ctx context.Context) ([]RankingsI
 	return items, nil
 }
 
+const rankingsKillTimeStats = `-- name: RankingsKillTimeStats :many
+WITH deduped AS (
+    SELECT DISTINCT ON (lie.name, COALESCE(li.duplicate_group_id, li.id))
+        lie.name AS encounter_name,
+        EXTRACT(EPOCH FROM (lie.end_time - lie.start_time))::double precision AS duration_secs
+    FROM log_instance_encounters lie
+    JOIN log_instances li ON li.id = lie.instance_id
+    JOIN wow_server_realms wsr ON wsr.id = li.realm_id
+    WHERE li.name = $1
+      AND lie.boss = true
+      AND lie.kill_type = 'clean'
+      AND CASE
+          WHEN $2 :: bigint > 0 THEN lie.end_time >= now() - make_interval(days => $2::int)
+          ELSE true
+      END
+    ORDER BY lie.name, COALESCE(li.duplicate_group_id, li.id), lie.end_time DESC
+)
+SELECT
+    d.encounter_name,
+    MIN(d.duration_secs)::double precision AS min_secs,
+    PERCENTILE_CONT(0.25) WITHIN GROUP (ORDER BY d.duration_secs) AS q1_secs,
+    PERCENTILE_CONT(0.50) WITHIN GROUP (ORDER BY d.duration_secs) AS median_secs,
+    PERCENTILE_CONT(0.75) WITHIN GROUP (ORDER BY d.duration_secs) AS q3_secs,
+    MAX(d.duration_secs)::double precision AS max_secs,
+    COUNT(*)::bigint AS count
+FROM deduped d
+GROUP BY d.encounter_name
+ORDER BY d.encounter_name
+`
+
+type RankingsKillTimeStatsParams struct {
+	InstanceName string `db:"instance_name" json:"instance_name"`
+	SinceDays    int64  `db:"since_days" json:"since_days"`
+}
+
+type RankingsKillTimeStatsRow struct {
+	EncounterName string  `db:"encounter_name" json:"encounter_name"`
+	MinSecs       float64 `db:"min_secs" json:"min_secs"`
+	Q1Secs        float64 `db:"q1_secs" json:"q1_secs"`
+	MedianSecs    float64 `db:"median_secs" json:"median_secs"`
+	Q3Secs        float64 `db:"q3_secs" json:"q3_secs"`
+	MaxSecs       float64 `db:"max_secs" json:"max_secs"`
+	Count         int64   `db:"count" json:"count"`
+}
+
+// Box plot stats on encounter duration (seconds) per encounter name.
+// Deduplicates encounters across duplicate log groups.
+func (q *sqlQuerier) RankingsKillTimeStats(ctx context.Context, arg RankingsKillTimeStatsParams) ([]RankingsKillTimeStatsRow, error) {
+	rows, err := q.db.Query(ctx, rankingsKillTimeStats, arg.InstanceName, arg.SinceDays)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []RankingsKillTimeStatsRow
+	for rows.Next() {
+		var i RankingsKillTimeStatsRow
+		if err := rows.Scan(
+			&i.EncounterName,
+			&i.MinSecs,
+			&i.Q1Secs,
+			&i.MedianSecs,
+			&i.Q3Secs,
+			&i.MaxSecs,
+			&i.Count,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const rankingsLeaderboard = `-- name: RankingsLeaderboard :many
 WITH deduped AS (
     SELECT DISTINCT ON (edr.player_guid, edr.encounter_name, COALESCE(li.duplicate_group_id, li.id))
@@ -4075,6 +4223,7 @@ WITH deduped AS (
         edr.player_name,
         edr.player_class,
         edr.player_spec,
+        edr.player_role,
         edr.player_level,
         edr.difficulty_name,
         edr.max_players,
@@ -4119,7 +4268,7 @@ WITH deduped AS (
     ORDER BY edr.player_guid, edr.encounter_name, COALESCE(li.duplicate_group_id, li.id), edr.dps DESC
 )
 SELECT
-    d.id, d.encounter_name, d.instance_name, d.player_guid, d.player_name, d.player_class, d.player_spec, d.player_level, d.difficulty_name, d.max_players, d.realm_id, d.realm_name, d.guild_name, d.damage_done, d.duration_secs, d.dps, d.avg_ilvl, d.log_hashed_slug, d.killed_at, d.talent_sub_spec,
+    d.id, d.encounter_name, d.instance_name, d.player_guid, d.player_name, d.player_class, d.player_spec, d.player_role, d.player_level, d.difficulty_name, d.max_players, d.realm_id, d.realm_name, d.guild_name, d.damage_done, d.duration_secs, d.dps, d.avg_ilvl, d.log_hashed_slug, d.killed_at, d.talent_sub_spec,
     COUNT(*) OVER() AS total_count
 FROM deduped d
 ORDER BY d.dps DESC
@@ -4146,6 +4295,7 @@ type RankingsLeaderboardRow struct {
 	PlayerName     string             `db:"player_name" json:"player_name"`
 	PlayerClass    string             `db:"player_class" json:"player_class"`
 	PlayerSpec     string             `db:"player_spec" json:"player_spec"`
+	PlayerRole     string             `db:"player_role" json:"player_role"`
 	PlayerLevel    int16              `db:"player_level" json:"player_level"`
 	DifficultyName string             `db:"difficulty_name" json:"difficulty_name"`
 	MaxPlayers     int16              `db:"max_players" json:"max_players"`
@@ -4190,6 +4340,7 @@ func (q *sqlQuerier) RankingsLeaderboard(ctx context.Context, arg RankingsLeader
 			&i.PlayerName,
 			&i.PlayerClass,
 			&i.PlayerSpec,
+			&i.PlayerRole,
 			&i.PlayerLevel,
 			&i.DifficultyName,
 			&i.MaxPlayers,
@@ -4213,6 +4364,106 @@ func (q *sqlQuerier) RankingsLeaderboard(ctx context.Context, arg RankingsLeader
 		return nil, err
 	}
 	return items, nil
+}
+
+const rankingsSuccessRates = `-- name: RankingsSuccessRates :many
+WITH deduped AS (
+    SELECT DISTINCT ON (lie.name, lie.kill_type, COALESCE(li.duplicate_group_id, li.id))
+        lie.name AS encounter_name,
+        lie.kill_type,
+        lie.boss
+    FROM log_instance_encounters lie
+    JOIN log_instances li ON li.id = lie.instance_id
+    JOIN wow_server_realms wsr ON wsr.id = li.realm_id
+    WHERE li.name = $1
+      AND lie.boss = true
+      AND CASE
+          WHEN $2 :: bigint > 0 THEN lie.end_time >= now() - make_interval(days => $2::int)
+          ELSE true
+      END
+    ORDER BY lie.name, lie.kill_type, COALESCE(li.duplicate_group_id, li.id), lie.end_time DESC
+)
+SELECT
+    d.encounter_name,
+    COUNT(*) FILTER (WHERE d.kill_type = 'clean')::bigint AS kills,
+    COUNT(*) FILTER (WHERE d.kill_type = 'wipe')::bigint AS wipes,
+    COUNT(*)::bigint AS total
+FROM deduped d
+GROUP BY d.encounter_name
+ORDER BY d.encounter_name
+`
+
+type RankingsSuccessRatesParams struct {
+	InstanceName string `db:"instance_name" json:"instance_name"`
+	SinceDays    int64  `db:"since_days" json:"since_days"`
+}
+
+type RankingsSuccessRatesRow struct {
+	EncounterName string `db:"encounter_name" json:"encounter_name"`
+	Kills         int64  `db:"kills" json:"kills"`
+	Wipes         int64  `db:"wipes" json:"wipes"`
+	Total         int64  `db:"total" json:"total"`
+}
+
+// Kill/wipe/total counts per encounter name within an instance.
+// Deduplicates across duplicate log groups.
+func (q *sqlQuerier) RankingsSuccessRates(ctx context.Context, arg RankingsSuccessRatesParams) ([]RankingsSuccessRatesRow, error) {
+	rows, err := q.db.Query(ctx, rankingsSuccessRates, arg.InstanceName, arg.SinceDays)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []RankingsSuccessRatesRow
+	for rows.Next() {
+		var i RankingsSuccessRatesRow
+		if err := rows.Scan(
+			&i.EncounterName,
+			&i.Kills,
+			&i.Wipes,
+			&i.Total,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const upsertTalentBuild = `-- name: UpsertTalentBuild :one
+WITH ins AS (
+    INSERT INTO talent_builds (player_class, talent_summary, talent_layout, spec)
+    VALUES ($1, $2, $3, $4)
+    ON CONFLICT (player_class, talent_layout) DO NOTHING
+    RETURNING id
+)
+SELECT id FROM ins
+UNION ALL
+SELECT id FROM talent_builds WHERE player_class = $1 AND talent_layout = $3
+LIMIT 1
+`
+
+type UpsertTalentBuildParams struct {
+	PlayerClass   string  `db:"player_class" json:"player_class"`
+	TalentSummary []int16 `db:"talent_summary" json:"talent_summary"`
+	TalentLayout  string  `db:"talent_layout" json:"talent_layout"`
+	Spec          string  `db:"spec" json:"spec"`
+}
+
+// Insert a unique talent build, returning its ID. If the build already exists,
+// return the existing row's ID.
+func (q *sqlQuerier) UpsertTalentBuild(ctx context.Context, arg UpsertTalentBuildParams) (uuid.UUID, error) {
+	row := q.db.QueryRow(ctx, upsertTalentBuild,
+		arg.PlayerClass,
+		arg.TalentSummary,
+		arg.TalentLayout,
+		arg.Spec,
+	)
+	var id uuid.UUID
+	err := row.Scan(&id)
+	return id, err
 }
 
 const adminListOutdatedParserVersionInstances = `-- name: AdminListOutdatedParserVersionInstances :many

@@ -59,6 +59,7 @@ type Hookable struct {
 	hooks             []instancehook.Hook // TODO: unroll?
 	engagementTracker *rankings.EngagementTracker
 	speedrunTracker   *rankings.SpeedrunTracker
+	dpsTracker        *rankings.DPSTracker
 
 	// Live tracking data
 	Auras           *auras.Tracking
@@ -126,6 +127,7 @@ func NewHookable(ctx context.Context, logger *slog.Logger, db *unitdb.Units, z z
 	chrs.RegisterHook(cie)
 
 	engagementTracker := rankings.NewEngagementTracker(db)
+	dpsTracker := rankings.NewDPSTracker(db)
 
 	var speedrunTracker *rankings.SpeedrunTracker
 	if ip.Rankings != nil && ip.Rankings.Speedrun != nil {
@@ -144,6 +146,7 @@ func NewHookable(ctx context.Context, logger *slog.Logger, db *unitdb.Units, z z
 		cie,
 		lootTracking,
 		engagementTracker,
+		dpsTracker,
 		//auraTracking,
 	}...)
 	if speedrunTracker != nil {
@@ -175,6 +178,7 @@ func NewHookable(ctx context.Context, logger *slog.Logger, db *unitdb.Units, z z
 		hooks:             hooks,
 		engagementTracker: engagementTracker,
 		speedrunTracker:   speedrunTracker,
+		dpsTracker:        dpsTracker,
 		verbose:           parseoptions.IsVerbose(ctx),
 		timings:           timings.New(),
 		completedFights:   make([]Fight, 0),
@@ -555,11 +559,11 @@ func (h *Hookable) Finalize(ctx context.Context) (*FinalizedInstance, error) {
 		}
 	}
 
-	var rankingsResult *rankings.RankingsResult
+	rankingsResult := &rankings.RankingsResult{
+		DPS: h.dpsTracker.Result(),
+	}
 	if h.speedrunTracker != nil {
-		rankingsResult = &rankings.RankingsResult{
-			Speedrun: h.speedrunTracker.Result(),
-		}
+		rankingsResult.Speedrun = h.speedrunTracker.Result()
 	}
 
 	return &FinalizedInstance{

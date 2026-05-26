@@ -47,6 +47,7 @@ import (
 	"github.com/Emyrk/chronicle/internal/leveledlog"
 	"github.com/Emyrk/chronicle/internal/ptr"
 	"github.com/Emyrk/chronicle/internal/semverenc"
+	"github.com/Emyrk/chronicle/internal/wowspec"
 	"github.com/Emyrk/chronicle/internal/services/servicetenant"
 	"github.com/Emyrk/chronicle/internal/slice"
 	"github.com/Emyrk/chronicle/internal/version"
@@ -737,6 +738,127 @@ func (w *WorkerLogParse) Work(ctx context.Context, job *river.Job[ArgsLogParse])
 				})
 				if err != nil {
 					return fmt.Errorf("insert speedrun: %w", err)
+				}
+			}
+
+			// Persist DPS rankings for clean kills.
+			if finalized.Rankings != nil && finalized.Rankings.DPS != nil {
+				for _, enc := range finalized.Encounters {
+					dpsResult, ok := finalized.Rankings.DPS[enc.Combat.EncounterID]
+					if !ok {
+						continue
+					}
+					// Only rank clean kills.
+					if string(enc.KillType) != "kill" {
+						continue
+					}
+					durationSecs := enc.Combat.End.Sub(enc.Combat.Start).Seconds()
+					if durationSecs < 15 {
+						continue // skip trivially short encounters
+					}
+
+					for unitGUID, dmg := range dpsResult.Units {
+						if !dmg.IsPlayer {
+							continue
+						}
+						player, ok := finalized.Guilds.Players[unitGUID]
+						if !ok {
+							continue
+						}
+
+						className := string(player.HeroClass)
+						var spec string
+						var talentLayout string
+						var talentSummary []int16
+						if player.Talents != nil {
+							spec = wowspec.InferSpec(className, player.Talents.Summary)
+							talentSummary = make([]int16, 3)
+							for i, v := range player.Talents.Summary {
+								talentSummary[i] = int16(v)
+							}
+							// Build layout string from trees.
+							for i, tree := range player.Talents.Trees {
+								if i > 0 {
+									talentLayout += "}"
+								}
+								for _, rank := range tree {
+									talentLayout += fmt.Sprintf("%d", rank)
+								}
+							}
+						} else {
+							spec = "Unknown"
+						}
+
+						var talentBuildID uuid.NullUUID
+						if talentLayout != "" {
+							tbID, err := tx.UpsertTalentBuild(ctx, database.UpsertTalentBuildParams{
+								PlayerClass:   className,
+								TalentSummary: talentSummary,
+								TalentLayout:  talentLayout,
+								Spec:          spec,
+							})
+							if err != nil {
+								slog.WarnContext(ctx, "upsert talent build", slog.String("err", err.Error()))
+							} else {
+								talentBuildID = uuid.NullUUID{UUID: tbID, Valid: true}
+							}
+						}
+
+						var playerLevel int16
+						if player.Level != nil {
+							playerLevel = int16(*player.Level)
+						}
+
+						role := wowspec.InferRole(className, spec)
+						dps := float64(dmg.DamageDone) / durationSecs
+
+						// Find guild name for this player.
+						playerGuildName := ""
+						for gName, members := range finalized.Guilds.Guilds {
+							if _, ok := members[unitGUID]; ok {
+								playerGuildName = gName
+								break
+							}
+						}
+
+						err := tx.InsertEncounterDpsRanking(ctx, database.InsertEncounterDpsRankingParams{
+							EncounterID: uuid.NullUUID{
+								UUID:  enc.Combat.EncounterID,
+								Valid: true,
+							},
+							InstanceID:     dbinstance.ID,
+							EncounterName:  enc.Name,
+							InstanceName:   inst.Name(),
+							PlayerGuid:     unitGUID.String(),
+							PlayerName:     player.Name,
+							PlayerClass:    className,
+							PlayerSpec:     spec,
+							PlayerRole:     role,
+							PlayerLevel:    playerLevel,
+							TalentBuildID:  talentBuildID,
+							DifficultyName: dbinstance.DifficultyName,
+							MaxPlayers:     int16(dbinstance.MaxPlayers),
+							RealmID:        dbinstance.RealmID,
+							RealmName:      realmName,
+							GuildID: uuid.NullUUID{
+								UUID:  guildID,
+								Valid: playerGuildName != "",
+							},
+							GuildName:     playerGuildName,
+							DamageDone:    dmg.DamageDone,
+							DurationSecs:  durationSecs,
+							Dps:           dps,
+							LogHashedSlug: dbinstance.HashedSlug.String,
+							KilledAt:      database.Timestamptz(enc.Combat.End),
+						})
+						if err != nil {
+							slog.WarnContext(ctx, "insert dps ranking",
+								slog.String("encounter", enc.Name),
+								slog.String("player", player.Name),
+								slog.String("err", err.Error()),
+							)
+						}
+					}
 				}
 			}
 

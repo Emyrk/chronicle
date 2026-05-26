@@ -77,6 +77,46 @@ func TestInferSpec(t *testing.T) {
 	}
 }
 
+func TestInferRole(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		class, spec string
+		expected    string
+	}{
+		{"WARRIOR", "Arms", "dps"},
+		{"WARRIOR", "Fury", "dps"},
+		{"WARRIOR", "Protection", "tank"},
+		{"PALADIN", "Holy", "heal"},
+		{"PALADIN", "Protection", "tank"},
+		{"PALADIN", "Retribution", "dps"},
+		{"PRIEST", "Discipline", "heal"},
+		{"PRIEST", "Holy", "heal"},
+		{"PRIEST", "Shadow", "dps"},
+		{"SHAMAN", "Elemental", "dps"},
+		{"SHAMAN", "Enhancement", "dps"},
+		{"SHAMAN", "Restoration", "heal"},
+		{"DRUID", "Balance", "dps"},
+		{"DRUID", "Feral", "tank"},
+		{"DRUID", "Restoration", "heal"},
+		{"MAGE", "Fire", "dps"},
+		{"ROGUE", "Combat", "dps"},
+		{"WARLOCK", "Affliction", "dps"},
+		{"HUNTER", "Marksmanship", "dps"},
+		{"DEATH_KNIGHT", "Blood", "tank"},
+		{"DEATH_KNIGHT", "Frost", "dps"},
+		{"DEATH_KNIGHT", "Unholy", "dps"},
+		{"UNKNOWN", "Unknown", "dps"},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.class+"/"+tt.spec, func(t *testing.T) {
+			t.Parallel()
+			require.Equal(t, tt.expected, wowspec.InferRole(tt.class, tt.spec))
+		})
+	}
+}
+
 func TestTreeNames(t *testing.T) {
 	t.Parallel()
 

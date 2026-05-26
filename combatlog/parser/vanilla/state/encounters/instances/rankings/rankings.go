@@ -3,6 +3,8 @@ package rankings
 import (
 	"time"
 
+	"github.com/google/uuid"
+
 	"github.com/Emyrk/chronicle/combatlog/parser/guid"
 )
 
@@ -97,5 +99,6 @@ type SpeedrunProofPayload struct {
 // RankingsResult holds results from all ranking evaluations.
 type RankingsResult struct {
 	Speedrun *SpeedrunResult `json:"speedrun,omitempty"`
-	// Future: DPS *DPSResult, etc.
+	// DPS maps encounter ID → per-unit damage results.
+	DPS map[uuid.UUID]*DPSResult `json:"-"`
 }

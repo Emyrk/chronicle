@@ -38,6 +38,7 @@ type RankingsEntry struct {
 	PlayerName    string     `json:"player_name"`
 	PlayerClass   string     `json:"player_class"`
 	PlayerSpec    string     `json:"player_spec"`
+	PlayerRole    string     `json:"player_role"`
 	PlayerLevel    int16      `json:"player_level"`
 	DifficultyName string    `json:"difficulty_name"`
 	MaxPlayers     int16     `json:"max_players"`
@@ -69,6 +70,25 @@ type RankingsBoxPlotStats struct {
 	Q3DPS       float64 `json:"q3_dps"`
 	MaxDPS      float64 `json:"max_dps"`
 	Count       int64   `json:"count"`
+}
+
+// RankingsKillTimeStats contains box plot statistics for encounter kill durations.
+type RankingsKillTimeStats struct {
+	EncounterName string  `json:"encounter_name"`
+	MinSecs       float64 `json:"min_secs"`
+	Q1Secs        float64 `json:"q1_secs"`
+	MedianSecs    float64 `json:"median_secs"`
+	Q3Secs        float64 `json:"q3_secs"`
+	MaxSecs       float64 `json:"max_secs"`
+	Count         int64   `json:"count"`
+}
+
+// RankingsSuccessRate contains kill/wipe counts for an encounter.
+type RankingsSuccessRate struct {
+	EncounterName string `json:"encounter_name"`
+	Kills         int64  `json:"kills"`
+	Wipes         int64  `json:"wipes"`
+	Total         int64  `json:"total"`
 }
 
 // TalentBuild represents a unique talent tree layout, nameable for sub-spec grouping.

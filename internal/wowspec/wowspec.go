@@ -57,3 +57,41 @@ func Classes() []string {
 func TreeNames(class string) [3]string {
 	return specMap[class]
 }
+
+// Role represents a player's combat role.
+const (
+	RoleDPS  = "dps"
+	RoleHeal = "heal"
+	RoleTank = "tank"
+)
+
+// healSpecs and tankSpecs define which class+spec combos are non-DPS.
+var healSpecs = map[string]map[string]bool{
+	"PRIEST":  {"Discipline": true, "Holy": true},
+	"PALADIN": {"Holy": true},
+	"SHAMAN":  {"Restoration": true},
+	"DRUID":   {"Restoration": true},
+}
+
+var tankSpecs = map[string]map[string]bool{
+	"WARRIOR":      {"Protection": true},
+	"PALADIN":      {"Protection": true},
+	"DRUID":        {"Feral": true}, // Feral can be tank or DPS; default to tank
+	"DEATH_KNIGHT": {"Blood": true},
+}
+
+// InferRole returns the combat role for a given class and spec.
+// Returns "dps" for unknown combinations.
+func InferRole(class, spec string) string {
+	if specs, ok := healSpecs[class]; ok {
+		if specs[spec] {
+			return RoleHeal
+		}
+	}
+	if specs, ok := tankSpecs[class]; ok {
+		if specs[spec] {
+			return RoleTank
+		}
+	}
+	return RoleDPS
+}
