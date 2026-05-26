@@ -391,23 +391,6 @@ export function InstanceView({ instanceName }: InstanceViewProps) {
 
             {/* Metric selector + filters */}
             <div className="flex flex-wrap items-center gap-3">
-              {/* Metric dropdown */}
-              <DropdownMenu>
-                <DropdownMenuTrigger asChild>
-                  <Button variant="outline" size="sm" className="h-7 gap-1.5 text-xs">
-                    {metric === "dps" ? "DPS Rankings" : metric === "killtime" ? "Kill Time" : "Success Rate"}
-                    <ChevronDown className="h-3 w-3 opacity-50" />
-                  </Button>
-                </DropdownMenuTrigger>
-                <DropdownMenuContent align="start">
-                  <DropdownMenuRadioGroup value={metric} onValueChange={(v) => handleMetricChange(v as MetricTab)}>
-                    <DropdownMenuRadioItem value="dps">DPS Rankings</DropdownMenuRadioItem>
-                    <DropdownMenuRadioItem value="killtime">Kill Time</DropdownMenuRadioItem>
-                    <DropdownMenuRadioItem value="success">Success Rate</DropdownMenuRadioItem>
-                  </DropdownMenuRadioGroup>
-                </DropdownMenuContent>
-              </DropdownMenu>
-
               {/* DPS sub-tabs (only when DPS metric is active) */}
               {metric === "dps" && (
                 <div className="flex gap-1 rounded-lg border border-white/10 bg-black/20 p-1">
@@ -427,6 +410,23 @@ export function InstanceView({ instanceName }: InstanceViewProps) {
                   ))}
                 </div>
               )}
+
+              {/* Metric dropdown */}
+              <DropdownMenu>
+                <DropdownMenuTrigger asChild>
+                  <Button variant="outline" size="sm" className="h-7 gap-1.5 text-xs">
+                    {metric === "dps" ? "DPS Rankings" : metric === "killtime" ? "Kill Time" : "Success Rate"}
+                    <ChevronDown className="h-3 w-3 opacity-50" />
+                  </Button>
+                </DropdownMenuTrigger>
+                <DropdownMenuContent align="start">
+                  <DropdownMenuRadioGroup value={metric} onValueChange={(v) => handleMetricChange(v as MetricTab)}>
+                    <DropdownMenuRadioItem value="dps">DPS Rankings</DropdownMenuRadioItem>
+                    <DropdownMenuRadioItem value="killtime">Kill Time</DropdownMenuRadioItem>
+                    <DropdownMenuRadioItem value="success">Success Rate</DropdownMenuRadioItem>
+                  </DropdownMenuRadioGroup>
+                </DropdownMenuContent>
+              </DropdownMenu>
 
               {/* Difficulty filter (only when multiple difficulties exist) */}
               {availableDifficulties.length > 1 && (
