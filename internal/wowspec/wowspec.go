@@ -68,15 +68,12 @@ const (
 )
 
 // Z-score thresholds for statistical role detection.
-// These are tuned more conservatively than the frontend's Roles.tsx
-// because rankings classification must be reliable across all raids,
-// not just a single interactive view. False positives (DPS marked as
-// healer) are worse than false negatives here.
+// Must match frontend Roles.processor.ts thresholds exactly.
 const (
-	TankZThreshold       = 1.5  // damage taken ≥ 1.5σ above mean
-	HealerZThreshold     = 1.0  // healing done ≥ 1.0σ above mean (stricter than frontend's 0.3)
-	LowDPSZThreshold     = -0.5 // DPS ≤ -0.5σ (stricter: must clearly be low DPS)
-	HealerHighZThreshold = 2.0  // healing done ≥ 2.0σ bypasses DPS check (stricter than frontend's 1.5)
+	TankZThreshold       = 1.5   // damage taken ≥ 1.5σ above mean (~7% highest)
+	HealerZThreshold     = 0.3   // healing done ≥ 0.3σ above mean (~62nd percentile)
+	LowDPSZThreshold     = -0.90 // DPS ≤ -0.90σ (bottom ~18.5%)
+	HealerHighZThreshold = 1.5   // healing done ≥ 1.5σ bypasses DPS check (~93rd percentile)
 )
 
 // PlayerMetrics holds the three metrics needed for role inference.
