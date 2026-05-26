@@ -284,6 +284,11 @@ export function InstanceView({ instanceName }: InstanceViewProps) {
             )
           })}
         </div>
+
+        {/* Info hint */}
+        <p className="mt-4 text-[11px] leading-relaxed text-muted-foreground/50">
+          Metrics reflect the selected encounters. Ctrl+Click to toggle individual encounters.
+        </p>
       </div>
 
       {/* Main area */}
