@@ -391,7 +391,7 @@ export function InstanceView({ instanceName }: InstanceViewProps) {
             {/* Row 1: dropdowns left, view toggle right */}
             <div className="flex flex-wrap items-center justify-between gap-2">
               <div className="flex flex-wrap items-center gap-2">
-                <DropdownMenu>
+                <DropdownMenu modal={false}>
                   <DropdownMenuTrigger asChild>
                     <Button variant="outline" size="sm" className="h-7 gap-1.5 text-xs min-w-[120px] justify-between">
                       {metric === "dps" ? "DPS Rankings" : metric === "killtime" ? "Kill Time" : "Success Rate"}
@@ -409,7 +409,7 @@ export function InstanceView({ instanceName }: InstanceViewProps) {
 
                 {/* Difficulty filter (only when multiple difficulties exist) */}
                 {availableDifficulties.length > 1 && (
-                  <DropdownMenu>
+                  <DropdownMenu modal={false}>
                     <DropdownMenuTrigger asChild>
                       <Button variant="outline" size="sm" className="h-7 gap-1.5 text-xs min-w-[130px] justify-between">
                         {selectedDifficulties.size === 0
