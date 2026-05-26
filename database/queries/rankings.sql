@@ -120,6 +120,7 @@ WITH deduped AS (
         WHEN @since_days :: bigint > 0 THEN edr.killed_at >= now() - make_interval(days => @since_days::int)
         ELSE true
     END
+    AND edr.dps > 0
     ORDER BY edr.player_guid, edr.encounter_name, COALESCE(li.duplicate_group_id, li.id), edr.dps DESC
 )
 SELECT
@@ -164,17 +165,40 @@ WITH deduped AS (
     ORDER BY edr.player_guid, edr.encounter_name, COALESCE(li.duplicate_group_id, li.id), edr.dps DESC
 )
 SELECT
-    d.player_class,
-    d.player_spec,
-    MIN(d.dps)::double precision AS min_dps,
-    PERCENTILE_CONT(0.25) WITHIN GROUP (ORDER BY d.dps) AS q1_dps,
-    PERCENTILE_CONT(0.50) WITHIN GROUP (ORDER BY d.dps) AS median_dps,
-    PERCENTILE_CONT(0.75) WITHIN GROUP (ORDER BY d.dps) AS q3_dps,
-    MAX(d.dps)::double precision AS max_dps,
-    COUNT(*)::bigint AS count
-FROM deduped d
-GROUP BY d.player_class, d.player_spec
-ORDER BY median_dps DESC;
+    s.player_class,
+    s.player_spec,
+    s.min_dps,
+    s.q1_dps,
+    s.median_dps,
+    s.q3_dps,
+    s.max_dps,
+    s.count
+FROM (
+    SELECT
+        d.player_class,
+        d.player_spec,
+        PERCENTILE_CONT(0.25) WITHIN GROUP (ORDER BY d.dps) AS q1_dps,
+        PERCENTILE_CONT(0.50) WITHIN GROUP (ORDER BY d.dps) AS median_dps,
+        PERCENTILE_CONT(0.75) WITHIN GROUP (ORDER BY d.dps) AS q3_dps,
+        -- Whiskers capped at 1.5×IQR from Q1/Q3 (standard box plot convention).
+        -- min_dps = lowest value >= Q1 - 1.5*IQR (or actual min if none below).
+        -- max_dps = highest value <= Q3 + 1.5*IQR (or actual max if none above).
+        GREATEST(
+            MIN(d.dps),
+            PERCENTILE_CONT(0.25) WITHIN GROUP (ORDER BY d.dps)
+                - 1.5 * (PERCENTILE_CONT(0.75) WITHIN GROUP (ORDER BY d.dps) - PERCENTILE_CONT(0.25) WITHIN GROUP (ORDER BY d.dps))
+        )::double precision AS min_dps,
+        LEAST(
+            MAX(d.dps),
+            PERCENTILE_CONT(0.75) WITHIN GROUP (ORDER BY d.dps)
+                + 1.5 * (PERCENTILE_CONT(0.75) WITHIN GROUP (ORDER BY d.dps) - PERCENTILE_CONT(0.25) WITHIN GROUP (ORDER BY d.dps))
+        )::double precision AS max_dps,
+        COUNT(*)::bigint AS count
+    FROM deduped d
+    WHERE d.dps > 0
+    GROUP BY d.player_class, d.player_spec
+) s
+ORDER BY s.median_dps DESC;
 
 -- name: UpsertTalentBuild :one
 -- Insert a unique talent build, returning its ID. If the build already exists,
@@ -227,16 +251,35 @@ WITH deduped AS (
     ORDER BY lie.name, COALESCE(li.duplicate_group_id, li.id), lie.end_time DESC
 )
 SELECT
-    d.encounter_name,
-    MIN(d.duration_secs)::double precision AS min_secs,
-    PERCENTILE_CONT(0.25) WITHIN GROUP (ORDER BY d.duration_secs) AS q1_secs,
-    PERCENTILE_CONT(0.50) WITHIN GROUP (ORDER BY d.duration_secs) AS median_secs,
-    PERCENTILE_CONT(0.75) WITHIN GROUP (ORDER BY d.duration_secs) AS q3_secs,
-    MAX(d.duration_secs)::double precision AS max_secs,
-    COUNT(*)::bigint AS count
-FROM deduped d
-GROUP BY d.encounter_name
-ORDER BY d.encounter_name;
+    s.encounter_name,
+    s.min_secs,
+    s.q1_secs,
+    s.median_secs,
+    s.q3_secs,
+    s.max_secs,
+    s.count
+FROM (
+    SELECT
+        d.encounter_name,
+        PERCENTILE_CONT(0.25) WITHIN GROUP (ORDER BY d.duration_secs) AS q1_secs,
+        PERCENTILE_CONT(0.50) WITHIN GROUP (ORDER BY d.duration_secs) AS median_secs,
+        PERCENTILE_CONT(0.75) WITHIN GROUP (ORDER BY d.duration_secs) AS q3_secs,
+        GREATEST(
+            MIN(d.duration_secs),
+            PERCENTILE_CONT(0.25) WITHIN GROUP (ORDER BY d.duration_secs)
+                - 1.5 * (PERCENTILE_CONT(0.75) WITHIN GROUP (ORDER BY d.duration_secs) - PERCENTILE_CONT(0.25) WITHIN GROUP (ORDER BY d.duration_secs))
+        )::double precision AS min_secs,
+        LEAST(
+            MAX(d.duration_secs),
+            PERCENTILE_CONT(0.75) WITHIN GROUP (ORDER BY d.duration_secs)
+                + 1.5 * (PERCENTILE_CONT(0.75) WITHIN GROUP (ORDER BY d.duration_secs) - PERCENTILE_CONT(0.25) WITHIN GROUP (ORDER BY d.duration_secs))
+        )::double precision AS max_secs,
+        COUNT(*)::bigint AS count
+    FROM deduped d
+    WHERE d.duration_secs > 0
+    GROUP BY d.encounter_name
+) s
+ORDER BY s.encounter_name;
 
 -- name: RankingsSuccessRates :many
 -- Kill/wipe/total counts per encounter name within an instance.
