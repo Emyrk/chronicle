@@ -57,7 +57,7 @@ export function InstanceView({ instanceName }: InstanceViewProps) {
     [encounterNames],
   )
   const trashNames = useMemo(
-    () => new Set(encounterNames.filter((n) => n === "Trash")),
+    () => new Set<string>(encounterNames.filter((n) => n === "Trash")),
     [encounterNames],
   )
 

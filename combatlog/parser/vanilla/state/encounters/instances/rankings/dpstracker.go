@@ -6,6 +6,7 @@ import (
 	"github.com/google/uuid"
 
 	"github.com/Emyrk/chronicle/combatlog/parser/guid"
+	"github.com/Emyrk/chronicle/combatlog/parser/types/combatant"
 	"github.com/Emyrk/chronicle/combatlog/parser/vanilla/messages"
 	"github.com/Emyrk/chronicle/combatlog/parser/vanilla/state/encounters/instances/instancehook"
 	"github.com/Emyrk/chronicle/combatlog/parser/vanilla/state/unitdb"
@@ -20,6 +21,9 @@ type UnitCombatStats struct {
 	HealingDone int64
 	IsPlayer    bool
 	OwnerGUID   *guid.GUID // Non-nil if this unit is a pet/totem/summon.
+	// Talents snapshot at fight end. Nil if the player had no talent data
+	// (e.g., talents were invalidated by a respec, or addon didn't report).
+	Talents *combatant.Talents
 }
 
 // DPSResult holds per-unit combat stats for a single encounter.
@@ -120,11 +124,22 @@ func (t *DPSTracker) FightEnded(encounterID uuid.UUID, _ messages.Message) {
 
 	for g := range allGUIDs {
 		cls := t.units.Classify(g)
+		isPlayer := cls.Type == unitdb.UnitTypePlayer
+		// Snapshot talents for players from the unitdb at fight end.
+		var talents *combatant.Talents
+		if isPlayer {
+			if p, ok := t.units.Players[g]; ok && p.Talents != nil {
+				// Deep copy the summary so it's not mutated later.
+				cp := *p.Talents
+				talents = &cp
+			}
+		}
 		stats := &UnitCombatStats{
 			DamageDone:  t.damageDone[g],
 			DamageTaken: t.damageTaken[g],
 			HealingDone: t.healingDone[g],
-			IsPlayer:    cls.Type == unitdb.UnitTypePlayer,
+			IsPlayer:    isPlayer,
+			Talents:     talents,
 		}
 		if cls.Relation.HasOwner() {
 			owner := *cls.Relation.Owner

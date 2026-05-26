@@ -1276,7 +1276,10 @@ func insertDPSRankings(
 			}
 
 			className := string(player.HeroClass)
-			spec, talentLayout, talentSummary := extractTalentInfo(className, player)
+			// Use the per-encounter talent snapshot from the DPS tracker,
+			// not the armory tracker's final state, so mid-raid respecs
+			// and respec invalidation are correctly captured.
+			spec, talentLayout, talentSummary := extractTalentInfoFromSnapshot(className, stats.Talents)
 
 			var talentBuildID uuid.NullUUID
 			if talentLayout != "" {
@@ -1342,18 +1345,19 @@ func insertDPSRankings(
 	}
 }
 
-// extractTalentInfo returns the inferred spec, talent layout string, and talent
-// summary for a player. Returns "Unknown" spec if no talent data is available.
-func extractTalentInfo(className string, player combatant.Combatant) (spec string, layout string, summary []int16) {
-	if player.Talents == nil {
+// extractTalentInfoFromSnapshot returns the inferred spec, talent layout string,
+// and talent summary from a per-encounter talent snapshot. Returns "Unknown" spec
+// if the snapshot is nil (e.g., talents were invalidated by a respec).
+func extractTalentInfoFromSnapshot(className string, talents *combatant.Talents) (spec string, layout string, summary []int16) {
+	if talents == nil {
 		return "Unknown", "", nil
 	}
-	spec = wowspec.InferSpec(className, player.Talents.Summary)
+	spec = wowspec.InferSpec(className, talents.Summary)
 	summary = make([]int16, 3)
-	for i, v := range player.Talents.Summary {
+	for i, v := range talents.Summary {
 		summary[i] = int16(v)
 	}
-	for i, tree := range player.Talents.Trees {
+	for i, tree := range talents.Trees {
 		if i > 0 {
 			layout += "}"
 		}
