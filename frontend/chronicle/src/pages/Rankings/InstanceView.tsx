@@ -1,10 +1,10 @@
 import { useCallback, useMemo, useState } from "react"
 import { createPortal } from "react-dom"
 import { useSearchParams } from "react-router-dom"
-import { ArrowLeft, CheckCircle, List, Skull, X } from "lucide-react"
+import { ArrowLeft, CheckCircle, List, X } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { useIsMobile } from "@/hooks/useIsMobile"
-import type { WoWHeroClasses } from "@/api/typesGenerated"
+import { getInstanceBackground } from "@/pages/Logs/utils/instanceImages"
 import { cn } from "@/lib/utils"
 import {
   getInstanceByName,
@@ -14,7 +14,6 @@ import {
 } from "./mockData"
 import type { TimePeriod } from "./timePeriod"
 import { getTimePeriodDays } from "./timePeriod"
-import { RankingsFilters } from "./RankingsFilters"
 import { BoxPlotChart } from "./BoxPlotChart"
 import { RankingsTable } from "./RankingsTable"
 
@@ -56,11 +55,7 @@ export function InstanceView({ instanceName }: InstanceViewProps) {
     return raw && VALID_PERIODS.has(raw as TimePeriod) ? (raw as TimePeriod) : "all"
   }, [params])
 
-  const selectedClasses: Set<WoWHeroClasses> = useMemo(() => {
-    const raw = params.get("classes")
-    if (!raw) return new Set<WoWHeroClasses>()
-    return new Set(raw.split(",").filter(Boolean) as WoWHeroClasses[])
-  }, [params])
+
 
   const selectedEncounters: Set<string> = useMemo(() => {
     const raw = params.get("encounters")
@@ -89,7 +84,6 @@ export function InstanceView({ instanceName }: InstanceViewProps) {
       next.delete("tab")
       next.delete("encounters")
       next.delete("period")
-      next.delete("classes")
       return next
     })
   }, [setParams])
@@ -102,23 +96,6 @@ export function InstanceView({ instanceName }: InstanceViewProps) {
   const handleTimePeriodChange = useCallback(
     (p: TimePeriod) => setParam("period", p === "all" ? null : p),
     [setParam],
-  )
-
-  const handleToggleClass = useCallback(
-    (cls: WoWHeroClasses) => {
-      setParams((prev) => {
-        const next = new URLSearchParams(prev)
-        const current = new Set(
-          (prev.get("classes") ?? "").split(",").filter(Boolean) as WoWHeroClasses[],
-        )
-        if (current.has(cls)) current.delete(cls)
-        else current.add(cls)
-        if (current.size === 0) next.delete("classes")
-        else next.set("classes", [...current].join(","))
-        return next
-      })
-    },
-    [setParams],
   )
 
   const handleEncounterClick = useCallback(
@@ -181,12 +158,8 @@ export function InstanceView({ instanceName }: InstanceViewProps) {
       const cutoff = now - days * 86400000
       entries = entries.filter((e) => new Date(e.date).getTime() >= cutoff)
     }
-    // Filter by class
-    if (selectedClasses.size > 0) {
-      entries = entries.filter((e) => selectedClasses.has(e.className))
-    }
     return entries
-  }, [instanceName, selectedEncounters, timePeriod, selectedClasses, now])
+  }, [instanceName, selectedEncounters, timePeriod, now])
 
   const boxPlotStats = useMemo(
     () => computeBoxPlotStatsBySpec(filteredEntries),
@@ -322,48 +295,77 @@ export function InstanceView({ instanceName }: InstanceViewProps) {
 
       {/* Main area */}
       <div className={cn("min-w-0 flex-1 space-y-5", !isMobile && "pl-6")}>
-        {/* Header */}
-        <div>
-          <button
-            onClick={handleBack}
-            className="mb-3 flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground transition-colors"
-          >
-            <ArrowLeft className="h-3.5 w-3.5" />
-            Back to Rankings
-          </button>
-          <div className="flex items-center gap-2">
-            <Skull className="h-6 w-6 text-[#5F8FA6]" />
-            <h1 className="text-2xl font-bold">{instanceName}</h1>
+        {/* Hero header with instance background */}
+        <div className="rounded-lg border relative overflow-hidden">
+          {/* Background image */}
+          <div className="absolute inset-0 z-0">
+            <img
+              src={getInstanceBackground(instanceName)}
+              alt=""
+              className="h-full w-full object-cover opacity-70"
+            />
+            <div className="absolute inset-0 bg-gradient-to-r from-background/90 via-background/70 to-background/50" />
           </div>
-        </div>
 
-        {/* Tab selector */}
-        <div className="flex items-center justify-between gap-4">
-          <div className="flex gap-1 rounded-lg border border-white/10 bg-black/30 p-1">
-            {(["boxplot", "leaderboard"] as const).map((t) => (
+          {/* Header content */}
+          <div className="relative z-10 p-4 space-y-3">
+            {/* Back + Title */}
+            <div>
               <button
-                key={t}
-                onClick={() => handleTabChange(t)}
-                className={cn(
-                  "rounded-md px-3 py-1 text-xs font-medium transition-colors",
-                  tab === t
-                    ? "bg-[#5F8FA6] text-white"
-                    : "text-muted-foreground hover:text-foreground",
-                )}
+                onClick={handleBack}
+                className="mb-2 flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground transition-colors"
               >
-                {t === "boxplot" ? "Box Plot" : "Leaderboard"}
+                <ArrowLeft className="h-3.5 w-3.5" />
+                Back to Rankings
               </button>
-            ))}
+              <h1 className="text-2xl font-bold">{instanceName}</h1>
+            </div>
+
+            {/* Tabs + Filters row */}
+            <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+              {/* Tab selector */}
+              <div className="flex gap-1 rounded-lg border border-white/10 bg-black/30 p-1">
+                {(["boxplot", "leaderboard"] as const).map((t) => (
+                  <button
+                    key={t}
+                    onClick={() => handleTabChange(t)}
+                    className={cn(
+                      "rounded-md px-3 py-1 text-xs font-medium transition-colors",
+                      tab === t
+                        ? "bg-[#5F8FA6] text-white"
+                        : "text-muted-foreground hover:text-foreground",
+                    )}
+                  >
+                    {t === "boxplot" ? "Box Plot" : "Leaderboard"}
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            {/* Time period filter */}
+            <div className="flex gap-1 rounded-lg border border-white/10 bg-black/30 p-1 w-fit">
+              {([
+                { value: "all" as const, label: "All Time" },
+                { value: "90d" as const, label: "90d" },
+                { value: "30d" as const, label: "30d" },
+                { value: "7d" as const, label: "7d" },
+              ]).map((opt) => (
+                <button
+                  key={opt.value}
+                  onClick={() => handleTimePeriodChange(opt.value)}
+                  className={cn(
+                    "rounded-md px-3 py-1 text-xs font-medium transition-colors",
+                    timePeriod === opt.value
+                      ? "bg-[#5F8FA6] text-white"
+                      : "text-muted-foreground hover:text-foreground",
+                  )}
+                >
+                  {opt.label}
+                </button>
+              ))}
+            </div>
           </div>
         </div>
-
-        {/* Filters */}
-        <RankingsFilters
-          selectedClasses={selectedClasses}
-          onToggleClass={handleToggleClass}
-          timePeriod={timePeriod}
-          onTimePeriodChange={handleTimePeriodChange}
-        />
 
         {/* Content */}
         {tab === "boxplot" ? (
