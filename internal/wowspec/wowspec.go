@@ -70,7 +70,7 @@ const (
 // Z-score thresholds for statistical role detection.
 // Must match frontend Roles.processor.ts thresholds exactly.
 const (
-	TankZThreshold       = 1.5   // damage taken ≥ 1.5σ above mean (~7% highest)
+	TankZThreshold       = 1.7   // damage taken ≥ 1.7σ above mean
 	HealerZThreshold     = 0.3   // healing done ≥ 0.3σ above mean (~62nd percentile)
 	LowDPSZThreshold     = -0.90 // DPS ≤ -0.90σ (bottom ~18.5%)
 	HealerHighZThreshold = 1.5   // healing done ≥ 1.5σ bypasses DPS check (~93rd percentile)

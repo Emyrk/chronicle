@@ -108,7 +108,7 @@ export interface InferRolesResult {
 // Lower = more sensitive (catches more tanks/healers)
 // 1.0 = 1 standard deviation above mean (catches ~16% of highest values)
 // 1.5 = 1.5 standard deviations (catches ~7% of highest values)
-const TANK_Z_THRESHOLD = 1.5;
+const TANK_Z_THRESHOLD = 1.7;
 
 // Healer detection uses TWO criteria:
 // 1. Healing done above a lower threshold (since many healers in a raid skew the average)
