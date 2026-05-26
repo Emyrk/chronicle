@@ -74,6 +74,7 @@ WITH deduped AS (
         edr.player_name,
         edr.player_class,
         edr.player_spec,
+        edr.player_level,
         edr.realm_id,
         edr.realm_name,
         edr.guild_name,

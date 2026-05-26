@@ -25,6 +25,7 @@ CREATE TABLE encounter_dps_rankings (
     player_name     TEXT NOT NULL,
     player_class    TEXT NOT NULL DEFAULT 'Unknown',
     player_spec     TEXT NOT NULL DEFAULT 'Unknown',
+    player_level    SMALLINT NOT NULL DEFAULT 0,
     talent_build_id UUID REFERENCES talent_builds(id),
     realm_id        UUID NOT NULL REFERENCES wow_server_realms(id),
     realm_name      TEXT NOT NULL,

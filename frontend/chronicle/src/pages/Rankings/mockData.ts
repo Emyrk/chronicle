@@ -7,6 +7,7 @@ export interface RankingEntry {
   playerName: string
   className: WoWHeroClasses
   playerSpec: string
+  playerLevel: number
   realmName: string
   encounterName: string
   value: number
@@ -226,6 +227,7 @@ function generateBossEntries(encounterName: string): RankingEntry[] {
       playerName: pick(names) + randInt(1, 99),
       className: cls,
       playerSpec: pick(specs),
+      playerLevel: 60,
       realmName: pick(REALM_NAMES),
       encounterName,
       value: dps,

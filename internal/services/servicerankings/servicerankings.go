@@ -224,6 +224,7 @@ func (s *Service) handleLeaderboard(w http.ResponseWriter, r *http.Request) {
 			PlayerName:    row.PlayerName,
 			PlayerClass:   row.PlayerClass,
 			PlayerSpec:    row.PlayerSpec,
+			PlayerLevel:   row.PlayerLevel,
 			RealmID:       row.RealmID,
 			RealmName:     row.RealmName,
 			GuildName:     row.GuildName,

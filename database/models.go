@@ -777,6 +777,7 @@ type EncounterDpsRanking struct {
 	PlayerName    string             `db:"player_name" json:"player_name"`
 	PlayerClass   string             `db:"player_class" json:"player_class"`
 	PlayerSpec    string             `db:"player_spec" json:"player_spec"`
+	PlayerLevel   int16              `db:"player_level" json:"player_level"`
 	TalentBuildID uuid.NullUUID      `db:"talent_build_id" json:"talent_build_id"`
 	RealmID       uuid.UUID          `db:"realm_id" json:"realm_id"`
 	RealmName     string             `db:"realm_name" json:"realm_name"`

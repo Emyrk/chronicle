@@ -38,6 +38,7 @@ type RankingsEntry struct {
 	PlayerName    string     `json:"player_name"`
 	PlayerClass   string     `json:"player_class"`
 	PlayerSpec    string     `json:"player_spec"`
+	PlayerLevel   int16      `json:"player_level"`
 	SubSpec       *string    `json:"sub_spec,omitempty"`
 	RealmID       uuid.UUID  `json:"realm_id"`
 	RealmName     string     `json:"realm_name"`

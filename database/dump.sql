@@ -357,6 +357,7 @@ CREATE TABLE encounter_dps_rankings (
     player_name text NOT NULL,
     player_class text DEFAULT 'Unknown'::text NOT NULL,
     player_spec text DEFAULT 'Unknown'::text NOT NULL,
+    player_level smallint DEFAULT 0 NOT NULL,
     talent_build_id uuid,
     realm_id uuid NOT NULL,
     realm_name text NOT NULL,

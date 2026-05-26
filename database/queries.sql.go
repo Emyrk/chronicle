@@ -3950,7 +3950,7 @@ func (q *sqlQuerier) RankingsBoxPlotStats(ctx context.Context, arg RankingsBoxPl
 const rankingsEncounterList = `-- name: RankingsEncounterList :many
 WITH deduped AS (
     SELECT DISTINCT ON (edr.player_guid, edr.encounter_name, COALESCE(li.duplicate_group_id, li.id))
-        edr.id, edr.encounter_id, edr.instance_id, edr.encounter_name, edr.instance_name, edr.player_guid, edr.player_name, edr.player_class, edr.player_spec, edr.talent_build_id, edr.realm_id, edr.realm_name, edr.guild_id, edr.guild_name, edr.damage_done, edr.duration_secs, edr.dps, edr.avg_ilvl, edr.log_hashed_slug, edr.killed_at, edr.created_at
+        edr.id, edr.encounter_id, edr.instance_id, edr.encounter_name, edr.instance_name, edr.player_guid, edr.player_name, edr.player_class, edr.player_spec, edr.player_level, edr.talent_build_id, edr.realm_id, edr.realm_name, edr.guild_id, edr.guild_name, edr.damage_done, edr.duration_secs, edr.dps, edr.avg_ilvl, edr.log_hashed_slug, edr.killed_at, edr.created_at
     FROM encounter_dps_rankings edr
     JOIN log_instances li ON li.id = edr.instance_id
     JOIN wow_server_realms wsr ON wsr.id = edr.realm_id
@@ -3996,7 +3996,7 @@ func (q *sqlQuerier) RankingsEncounterList(ctx context.Context, instanceName str
 const rankingsInstanceSummaries = `-- name: RankingsInstanceSummaries :many
 WITH deduped AS (
     SELECT DISTINCT ON (edr.player_guid, edr.encounter_name, COALESCE(li.duplicate_group_id, li.id))
-        edr.id, edr.encounter_id, edr.instance_id, edr.encounter_name, edr.instance_name, edr.player_guid, edr.player_name, edr.player_class, edr.player_spec, edr.talent_build_id, edr.realm_id, edr.realm_name, edr.guild_id, edr.guild_name, edr.damage_done, edr.duration_secs, edr.dps, edr.avg_ilvl, edr.log_hashed_slug, edr.killed_at, edr.created_at
+        edr.id, edr.encounter_id, edr.instance_id, edr.encounter_name, edr.instance_name, edr.player_guid, edr.player_name, edr.player_class, edr.player_spec, edr.player_level, edr.talent_build_id, edr.realm_id, edr.realm_name, edr.guild_id, edr.guild_name, edr.damage_done, edr.duration_secs, edr.dps, edr.avg_ilvl, edr.log_hashed_slug, edr.killed_at, edr.created_at
     FROM encounter_dps_rankings edr
     JOIN log_instances li ON li.id = edr.instance_id
     JOIN wow_server_realms wsr ON wsr.id = edr.realm_id
@@ -4075,6 +4075,7 @@ WITH deduped AS (
         edr.player_name,
         edr.player_class,
         edr.player_spec,
+        edr.player_level,
         edr.realm_id,
         edr.realm_name,
         edr.guild_name,
@@ -4116,7 +4117,7 @@ WITH deduped AS (
     ORDER BY edr.player_guid, edr.encounter_name, COALESCE(li.duplicate_group_id, li.id), edr.dps DESC
 )
 SELECT
-    d.id, d.encounter_name, d.instance_name, d.player_guid, d.player_name, d.player_class, d.player_spec, d.realm_id, d.realm_name, d.guild_name, d.damage_done, d.duration_secs, d.dps, d.avg_ilvl, d.log_hashed_slug, d.killed_at, d.talent_sub_spec,
+    d.id, d.encounter_name, d.instance_name, d.player_guid, d.player_name, d.player_class, d.player_spec, d.player_level, d.realm_id, d.realm_name, d.guild_name, d.damage_done, d.duration_secs, d.dps, d.avg_ilvl, d.log_hashed_slug, d.killed_at, d.talent_sub_spec,
     COUNT(*) OVER() AS total_count
 FROM deduped d
 ORDER BY d.dps DESC
@@ -4143,6 +4144,7 @@ type RankingsLeaderboardRow struct {
 	PlayerName    string             `db:"player_name" json:"player_name"`
 	PlayerClass   string             `db:"player_class" json:"player_class"`
 	PlayerSpec    string             `db:"player_spec" json:"player_spec"`
+	PlayerLevel   int16              `db:"player_level" json:"player_level"`
 	RealmID       uuid.UUID          `db:"realm_id" json:"realm_id"`
 	RealmName     string             `db:"realm_name" json:"realm_name"`
 	GuildName     string             `db:"guild_name" json:"guild_name"`
@@ -4184,6 +4186,7 @@ func (q *sqlQuerier) RankingsLeaderboard(ctx context.Context, arg RankingsLeader
 			&i.PlayerName,
 			&i.PlayerClass,
 			&i.PlayerSpec,
+			&i.PlayerLevel,
 			&i.RealmID,
 			&i.RealmName,
 			&i.GuildName,
