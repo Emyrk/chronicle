@@ -376,7 +376,7 @@ export function InstanceView({ instanceName }: InstanceViewProps) {
           </div>
 
           {/* Header content */}
-          <div className="relative z-10 p-4 space-y-3">
+          <div className="relative z-10 p-4 space-y-2">
             {/* Back + Title */}
             <div>
               <button
