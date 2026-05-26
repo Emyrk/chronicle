@@ -745,7 +745,7 @@ func (w *WorkerLogParse) Work(ctx context.Context, job *river.Job[ArgsLogParse])
 
 			// Persist DPS rankings for clean kills (only for instances with ranking rules).
 			if finalized.Rankings != nil && finalized.Rankings.DPS != nil && finalized.RankingRules != nil {
-				insertDPSRankings(ctx, tx, finalized, dbinstance, inst.Name(), realmName, guildID)
+				insertDPSRankings(ctx, tx, finalized, dbinstance, inst.Name(), realmName)
 			}
 
 			inst := db2sdk.WoWInstanceWithGuild(dbinstance, guild)
@@ -1206,7 +1206,6 @@ func insertDPSRankings(
 	dbinstance database.LogInstance,
 	instanceName string,
 	realmName string,
-	guildID uuid.UUID,
 ) {
 	// Level range from speedrun rules (if configured).
 	var levelRange *rankings.LevelRangeRequirement
@@ -1334,10 +1333,7 @@ func insertDPSRankings(
 				MaxPlayers:     int16(dbinstance.MaxPlayers),
 				RealmID:        dbinstance.RealmID,
 				RealmName:      realmName,
-				GuildID: uuid.NullUUID{
-					UUID:  guildID,
-					Valid: playerGuildName != "",
-				},
+				GuildID:       uuid.NullUUID{}, // guild_name is sufficient; avoid FK constraint issues
 				GuildName:     playerGuildName,
 				DamageDone:    totalDamage,
 				DurationSecs:  durationSecs,
@@ -1356,7 +1352,7 @@ func insertDPSRankings(
 	}
 
 	// Aggregate trash (non-boss) encounters into per-(player, spec) ranking rows.
-	insertTrashRankings(ctx, tx, finalized, dbinstance, instanceName, realmName, guildID, levelRange)
+	insertTrashRankings(ctx, tx, finalized, dbinstance, instanceName, realmName, levelRange)
 }
 
 // trashPlayerKey groups trash damage by player GUID + spec.
@@ -1385,7 +1381,6 @@ func insertTrashRankings(
 	dbinstance database.LogInstance,
 	instanceName string,
 	realmName string,
-	guildID uuid.UUID,
 	levelRange *rankings.LevelRangeRequirement,
 ) {
 	accum := make(map[trashPlayerKey]*trashPlayerAccum)
@@ -1530,10 +1525,7 @@ func insertTrashRankings(
 			MaxPlayers:     int16(dbinstance.MaxPlayers),
 			RealmID:        dbinstance.RealmID,
 			RealmName:      realmName,
-			GuildID: uuid.NullUUID{
-				UUID:  guildID,
-				Valid: playerGuildName != "",
-			},
+			GuildID:       uuid.NullUUID{}, // guild_name is sufficient; avoid FK constraint issues
 			GuildName:     playerGuildName,
 			DamageDone:    a.DamageDone,
 			DurationSecs:  a.DurationSecs,
@@ -1583,3 +1575,5 @@ func findPlayerGuild(guilds map[string]map[guid.GUID]struct{}, playerGUID guid.G
 	}
 	return ""
 }
+
+
