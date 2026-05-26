@@ -389,93 +389,99 @@ export function InstanceView({ instanceName }: InstanceViewProps) {
               <h1 className="text-2xl font-bold">{instanceName}</h1>
             </div>
 
-            {/* Metric selector + filters */}
-            <div className="flex flex-wrap items-center gap-3">
-              {/* DPS sub-tabs (only when DPS metric is active) */}
-              {metric === "dps" && (
-                <div className="flex gap-1 rounded-lg border border-white/10 bg-black/20 p-1">
-                  {(["boxplot", "leaderboard"] as const).map((t) => (
-                    <button
-                      key={t}
-                      onClick={() => handleDpsSubTabChange(t)}
-                      className={cn(
-                        "rounded-md px-2.5 py-0.5 text-[11px] font-medium transition-colors",
-                        dpsSubTab === t
-                          ? "bg-white/15 text-foreground"
-                          : "text-muted-foreground hover:text-foreground",
-                      )}
-                    >
-                      {t === "boxplot" ? "Box Plot" : "Leaderboard"}
-                    </button>
-                  ))}
-                </div>
-              )}
-
-              {/* Metric dropdown */}
-              <DropdownMenu>
-                <DropdownMenuTrigger asChild>
-                  <Button variant="outline" size="sm" className="h-7 gap-1.5 text-xs">
-                    {metric === "dps" ? "DPS Rankings" : metric === "killtime" ? "Kill Time" : "Success Rate"}
-                    <ChevronDown className="h-3 w-3 opacity-50" />
-                  </Button>
-                </DropdownMenuTrigger>
-                <DropdownMenuContent align="start">
-                  <DropdownMenuRadioGroup value={metric} onValueChange={(v) => handleMetricChange(v as MetricTab)}>
-                    <DropdownMenuRadioItem value="dps">DPS Rankings</DropdownMenuRadioItem>
-                    <DropdownMenuRadioItem value="killtime">Kill Time</DropdownMenuRadioItem>
-                    <DropdownMenuRadioItem value="success">Success Rate</DropdownMenuRadioItem>
-                  </DropdownMenuRadioGroup>
-                </DropdownMenuContent>
-              </DropdownMenu>
-
-              {/* Difficulty filter (only when multiple difficulties exist) */}
-              {availableDifficulties.length > 1 && (
+            {/* Filters — left: dropdowns, right: view + time */}
+            <div className="flex flex-wrap items-start justify-between gap-3">
+              {/* Left: metric + difficulty dropdowns */}
+              <div className="flex flex-wrap items-center gap-2">
+                {/* Metric dropdown */}
                 <DropdownMenu>
                   <DropdownMenuTrigger asChild>
                     <Button variant="outline" size="sm" className="h-7 gap-1.5 text-xs">
-                      {selectedDifficulties.size === 0
-                        ? "All Difficulties"
-                        : selectedDifficulties.size === 1
-                          ? [...selectedDifficulties][0]
-                          : `${selectedDifficulties.size} Difficulties`}
+                      {metric === "dps" ? "DPS Rankings" : metric === "killtime" ? "Kill Time" : "Success Rate"}
                       <ChevronDown className="h-3 w-3 opacity-50" />
                     </Button>
                   </DropdownMenuTrigger>
                   <DropdownMenuContent align="start">
-                    {availableDifficulties.map((diff) => (
-                      <DropdownMenuCheckboxItem
-                        key={diff}
-                        checked={selectedDifficulties.size === 0 || selectedDifficulties.has(diff)}
-                        onCheckedChange={() => handleToggleDifficulty(diff)}
-                      >
-                        {diff}
-                      </DropdownMenuCheckboxItem>
-                    ))}
+                    <DropdownMenuRadioGroup value={metric} onValueChange={(v) => handleMetricChange(v as MetricTab)}>
+                      <DropdownMenuRadioItem value="dps">DPS Rankings</DropdownMenuRadioItem>
+                      <DropdownMenuRadioItem value="killtime">Kill Time</DropdownMenuRadioItem>
+                      <DropdownMenuRadioItem value="success">Success Rate</DropdownMenuRadioItem>
+                    </DropdownMenuRadioGroup>
                   </DropdownMenuContent>
                 </DropdownMenu>
-              )}
 
-              {/* Time period filter */}
-              <div className="flex gap-1 rounded-lg border border-white/10 bg-black/30 p-1 ml-auto">
-                {([
-                  { value: "all" as const, label: "All Time" },
-                  { value: "90d" as const, label: "90d" },
-                  { value: "30d" as const, label: "30d" },
-                  { value: "7d" as const, label: "7d" },
-                ]).map((opt) => (
-                  <button
-                    key={opt.value}
-                    onClick={() => handleTimePeriodChange(opt.value)}
-                    className={cn(
-                      "rounded-md px-3 py-1 text-xs font-medium transition-colors",
-                      timePeriod === opt.value
-                        ? "bg-[#5F8FA6] text-white"
-                        : "text-muted-foreground hover:text-foreground",
-                    )}
-                  >
-                    {opt.label}
-                  </button>
-                ))}
+                {/* Difficulty filter (only when multiple difficulties exist) */}
+                {availableDifficulties.length > 1 && (
+                  <DropdownMenu>
+                    <DropdownMenuTrigger asChild>
+                      <Button variant="outline" size="sm" className="h-7 gap-1.5 text-xs">
+                        {selectedDifficulties.size === 0
+                          ? "All Difficulties"
+                          : selectedDifficulties.size === 1
+                            ? [...selectedDifficulties][0]
+                            : `${selectedDifficulties.size} Difficulties`}
+                        <ChevronDown className="h-3 w-3 opacity-50" />
+                      </Button>
+                    </DropdownMenuTrigger>
+                    <DropdownMenuContent align="start">
+                      {availableDifficulties.map((diff) => (
+                        <DropdownMenuCheckboxItem
+                          key={diff}
+                          checked={selectedDifficulties.size === 0 || selectedDifficulties.has(diff)}
+                          onCheckedChange={() => handleToggleDifficulty(diff)}
+                        >
+                          {diff}
+                        </DropdownMenuCheckboxItem>
+                      ))}
+                    </DropdownMenuContent>
+                  </DropdownMenu>
+                )}
+              </div>
+
+              {/* Right: view toggle + time period */}
+              <div className="flex flex-col items-end gap-2">
+                {/* DPS sub-tabs (only when DPS metric is active) */}
+                {metric === "dps" && (
+                  <div className="flex gap-1 rounded-lg border border-white/10 bg-black/20 p-1">
+                    {(["boxplot", "leaderboard"] as const).map((t) => (
+                      <button
+                        key={t}
+                        onClick={() => handleDpsSubTabChange(t)}
+                        className={cn(
+                          "rounded-md px-2.5 py-0.5 text-[11px] font-medium transition-colors",
+                          dpsSubTab === t
+                            ? "bg-white/15 text-foreground"
+                            : "text-muted-foreground hover:text-foreground",
+                        )}
+                      >
+                        {t === "boxplot" ? "Box Plot" : "Leaderboard"}
+                      </button>
+                    ))}
+                  </div>
+                )}
+
+                {/* Time period */}
+                <div className="flex gap-1 rounded-lg border border-white/10 bg-black/30 p-1">
+                  {([
+                    { value: "all" as const, label: "All Time" },
+                    { value: "90d" as const, label: "90d" },
+                    { value: "30d" as const, label: "30d" },
+                    { value: "7d" as const, label: "7d" },
+                  ]).map((opt) => (
+                    <button
+                      key={opt.value}
+                      onClick={() => handleTimePeriodChange(opt.value)}
+                      className={cn(
+                        "rounded-md px-3 py-1 text-xs font-medium transition-colors",
+                        timePeriod === opt.value
+                          ? "bg-[#5F8FA6] text-white"
+                          : "text-muted-foreground hover:text-foreground",
+                      )}
+                    >
+                      {opt.label}
+                    </button>
+                  ))}
+                </div>
               </div>
             </div>
           </div>
