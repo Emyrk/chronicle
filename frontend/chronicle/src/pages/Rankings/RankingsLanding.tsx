@@ -31,7 +31,7 @@ export function RankingsLanding() {
           <button
             key={s.instanceName}
             onClick={() => handleSelectInstance(s.instanceName)}
-            className="group relative overflow-hidden rounded-xl border bg-card text-left transition-all hover:border-white/20 hover:shadow-lg aspect-[16/10]"
+            className="group relative overflow-hidden rounded-xl border bg-card text-left transition-all hover:border-white/20 hover:shadow-lg aspect-[16/7]"
           >
             {/* Background image */}
             <img
