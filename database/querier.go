@@ -228,6 +228,17 @@ type sqlcQuerier interface {
 	ListWorlds(ctx context.Context) ([]World, error)
 	MarkEmailVerified(ctx context.Context, userAuthID uuid.UUID) error
 	PruneParsedInstanceFromLogOutput(ctx context.Context, arg PruneParsedInstanceFromLogOutputParams) error
+	// Returns box plot statistics (min, q1, median, q3, max, count) per class/spec.
+	// Deduplicated and filtered same as leaderboard.
+	RankingsBoxPlotStats(ctx context.Context, arg RankingsBoxPlotStatsParams) ([]RankingsBoxPlotStatsRow, error)
+	// Returns encounters available in rankings for a given instance.
+	RankingsEncounterList(ctx context.Context, instanceName string) ([]RankingsEncounterListRow, error)
+	// Returns per-instance summary with top 3 players by DPS.
+	// Deduplicates by (player_guid, encounter_name, duplicate_group) keeping best DPS.
+	RankingsInstanceSummaries(ctx context.Context) ([]RankingsInstanceSummariesRow, error)
+	// Returns paginated DPS rankings, deduplicated and filtered.
+	// Supports multi-instance, multi-encounter, time period, realm, class, and spec filters.
+	RankingsLeaderboard(ctx context.Context, arg RankingsLeaderboardParams) ([]RankingsLeaderboardRow, error)
 	RecordAuthzMigration(ctx context.Context, version int32) error
 	SearchCreatureTemplates(ctx context.Context, arg SearchCreatureTemplatesParams) ([]SearchCreatureTemplatesRow, error)
 	SearchGamePlayers(ctx context.Context, arg SearchGamePlayersParams) ([]SearchGamePlayersRow, error)

@@ -347,6 +347,32 @@ CREATE TABLE deployment_info (
     last_telemetry_heartbeat timestamp with time zone
 );
 
+CREATE TABLE encounter_dps_rankings (
+    id uuid DEFAULT gen_random_uuid() NOT NULL,
+    encounter_id uuid NOT NULL,
+    instance_id uuid NOT NULL,
+    encounter_name text NOT NULL,
+    instance_name text NOT NULL,
+    player_guid text NOT NULL,
+    player_name text NOT NULL,
+    player_class text DEFAULT 'Unknown'::text NOT NULL,
+    player_spec text DEFAULT 'Unknown'::text NOT NULL,
+    talent_build_id uuid,
+    realm_id uuid NOT NULL,
+    realm_name text NOT NULL,
+    guild_id uuid,
+    guild_name text DEFAULT ''::text NOT NULL,
+    damage_done bigint NOT NULL,
+    duration_secs double precision NOT NULL,
+    dps double precision NOT NULL,
+    avg_ilvl smallint,
+    log_hashed_slug text DEFAULT ''::text NOT NULL,
+    killed_at timestamp with time zone NOT NULL,
+    created_at timestamp with time zone DEFAULT now() NOT NULL
+);
+
+ALTER TABLE ONLY encounter_dps_rankings FORCE ROW LEVEL SECURITY;
+
 CREATE TABLE game_players (
     id wow_guid NOT NULL,
     realm_id uuid NOT NULL,
@@ -787,6 +813,16 @@ CREATE TABLE site_config (
     CONSTRAINT site_config_id_check CHECK (id)
 );
 
+CREATE TABLE talent_builds (
+    id uuid DEFAULT gen_random_uuid() NOT NULL,
+    player_class text NOT NULL,
+    talent_summary smallint[] NOT NULL,
+    talent_layout text NOT NULL,
+    spec text DEFAULT 'Unknown'::text NOT NULL,
+    sub_spec text,
+    created_at timestamp with time zone DEFAULT now() NOT NULL
+);
+
 CREATE TABLE user_action_bar_slots (
     user_id uuid NOT NULL,
     slot_1 uuid,
@@ -1156,6 +1192,12 @@ ALTER TABLE ONLY dbc_spell_item_enchantment
 ALTER TABLE ONLY deployment_info
     ADD CONSTRAINT deployment_info_pkey PRIMARY KEY (id);
 
+ALTER TABLE ONLY encounter_dps_rankings
+    ADD CONSTRAINT encounter_dps_rankings_encounter_id_player_guid_key UNIQUE (encounter_id, player_guid);
+
+ALTER TABLE ONLY encounter_dps_rankings
+    ADD CONSTRAINT encounter_dps_rankings_pkey PRIMARY KEY (id);
+
 ALTER TABLE ONLY game_players
     ADD CONSTRAINT game_players_pkey PRIMARY KEY (id, realm_id);
 
@@ -1282,6 +1324,12 @@ ALTER TABLE ONLY shared_views
 ALTER TABLE ONLY site_config
     ADD CONSTRAINT site_config_pkey PRIMARY KEY (id);
 
+ALTER TABLE ONLY talent_builds
+    ADD CONSTRAINT talent_builds_pkey PRIMARY KEY (id);
+
+ALTER TABLE ONLY talent_builds
+    ADD CONSTRAINT talent_builds_player_class_talent_layout_key UNIQUE (player_class, talent_layout);
+
 ALTER TABLE ONLY tenants
     ADD CONSTRAINT tenants_pkey PRIMARY KEY (id);
 
@@ -1366,6 +1414,18 @@ CREATE INDEX game_players_player_and_realm ON game_players USING btree (name, re
 
 CREATE INDEX idx_data_grants_user_id ON data_grants USING btree (user_id);
 
+CREATE INDEX idx_edr_class_spec ON encounter_dps_rankings USING btree (player_class, player_spec);
+
+CREATE INDEX idx_edr_dps_desc ON encounter_dps_rankings USING btree (encounter_name, dps DESC);
+
+CREATE INDEX idx_edr_encounter_name ON encounter_dps_rankings USING btree (encounter_name);
+
+CREATE INDEX idx_edr_instance_name ON encounter_dps_rankings USING btree (instance_name);
+
+CREATE INDEX idx_edr_killed_at ON encounter_dps_rankings USING btree (killed_at);
+
+CREATE INDEX idx_edr_realm ON encounter_dps_rankings USING btree (realm_id);
+
 CREATE INDEX idx_guild_join_requests_guild ON guild_join_requests USING btree (guild_id);
 
 CREATE INDEX idx_guild_page_panels_tab ON guild_page_panels USING btree (tab_id);
@@ -1403,6 +1463,10 @@ CREATE INDEX idx_server_upload_meta_token ON server_upload_meta USING btree (ins
 CREATE INDEX idx_shared_views_code ON shared_views USING btree (code);
 
 CREATE INDEX idx_shared_views_instance_hash ON shared_views USING btree (instance_id, hash);
+
+CREATE INDEX idx_tb_class_spec ON talent_builds USING btree (player_class, spec);
+
+CREATE INDEX idx_tb_sub_spec ON talent_builds USING btree (sub_spec) WHERE (sub_spec IS NOT NULL);
 
 CREATE UNIQUE INDEX idx_tenants_name_unique ON tenants USING btree (lower(name));
 
@@ -1459,6 +1523,21 @@ ALTER TABLE ONLY application_modification_requests
 
 ALTER TABLE ONLY data_grants
     ADD CONSTRAINT data_grants_user_id_fkey FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE;
+
+ALTER TABLE ONLY encounter_dps_rankings
+    ADD CONSTRAINT encounter_dps_rankings_encounter_id_fkey FOREIGN KEY (encounter_id) REFERENCES log_instance_encounters(id) ON DELETE CASCADE;
+
+ALTER TABLE ONLY encounter_dps_rankings
+    ADD CONSTRAINT encounter_dps_rankings_guild_id_fkey FOREIGN KEY (guild_id) REFERENCES guilds(id);
+
+ALTER TABLE ONLY encounter_dps_rankings
+    ADD CONSTRAINT encounter_dps_rankings_instance_id_fkey FOREIGN KEY (instance_id) REFERENCES log_instances(id) ON DELETE CASCADE;
+
+ALTER TABLE ONLY encounter_dps_rankings
+    ADD CONSTRAINT encounter_dps_rankings_realm_id_fkey FOREIGN KEY (realm_id) REFERENCES wow_server_realms(id);
+
+ALTER TABLE ONLY encounter_dps_rankings
+    ADD CONSTRAINT encounter_dps_rankings_talent_build_id_fkey FOREIGN KEY (talent_build_id) REFERENCES talent_builds(id);
 
 ALTER TABLE ONLY game_players
     ADD CONSTRAINT game_players_guild_id_fkey FOREIGN KEY (guild_id) REFERENCES guilds(id) ON DELETE SET NULL;
@@ -1640,9 +1719,16 @@ ALTER TABLE ONLY wow_servers
 ALTER TABLE ONLY wow_servers
     ADD CONSTRAINT wow_servers_tenant_id_fkey FOREIGN KEY (tenant_id) REFERENCES tenants(id);
 
+ALTER TABLE encounter_dps_rankings ENABLE ROW LEVEL SECURITY;
+
+CREATE POLICY tenant_admin_bypass ON encounter_dps_rankings USING ((current_setting('app.tenant_bypass'::text, true) = 'true'::text));
+
 CREATE POLICY tenant_admin_bypass ON wow_server_realms USING ((current_setting('app.tenant_bypass'::text, true) = 'true'::text));
 
 CREATE POLICY tenant_admin_bypass ON wow_servers USING ((current_setting('app.tenant_bypass'::text, true) = 'true'::text));
+
+CREATE POLICY tenant_isolation ON encounter_dps_rankings USING ((realm_id IN ( SELECT wow_server_realms.id
+   FROM wow_server_realms)));
 
 CREATE POLICY tenant_isolation ON wow_servers USING (
 CASE

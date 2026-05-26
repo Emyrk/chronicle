@@ -3852,6 +3852,360 @@ func (q *sqlQuerier) SetDuplicateGroupIDs(ctx context.Context, arg SetDuplicateG
 	return err
 }
 
+const rankingsBoxPlotStats = `-- name: RankingsBoxPlotStats :many
+WITH deduped AS (
+    SELECT DISTINCT ON (edr.player_guid, edr.encounter_name, COALESCE(li.duplicate_group_id, li.id))
+        edr.player_class,
+        edr.player_spec,
+        edr.dps
+    FROM encounter_dps_rankings edr
+    JOIN log_instances li ON li.id = edr.instance_id
+    JOIN wow_server_realms wsr ON wsr.id = edr.realm_id
+    WHERE CASE
+        WHEN cardinality($1 :: text[]) > 0 THEN edr.instance_name = ANY($1 :: text[])
+        ELSE true
+    END
+    AND CASE
+        WHEN cardinality($2 :: text[]) > 0 THEN edr.encounter_name = ANY($2 :: text[])
+        ELSE true
+    END
+    AND CASE
+        WHEN $3 :: text != '' THEN edr.realm_id = $3 :: uuid
+        ELSE true
+    END
+    AND CASE
+        WHEN $4 :: bigint > 0 THEN edr.killed_at >= now() - make_interval(days => $4::int)
+        ELSE true
+    END
+    ORDER BY edr.player_guid, edr.encounter_name, COALESCE(li.duplicate_group_id, li.id), edr.dps DESC
+)
+SELECT
+    d.player_class,
+    d.player_spec,
+    MIN(d.dps)::double precision AS min_dps,
+    PERCENTILE_CONT(0.25) WITHIN GROUP (ORDER BY d.dps) AS q1_dps,
+    PERCENTILE_CONT(0.50) WITHIN GROUP (ORDER BY d.dps) AS median_dps,
+    PERCENTILE_CONT(0.75) WITHIN GROUP (ORDER BY d.dps) AS q3_dps,
+    MAX(d.dps)::double precision AS max_dps,
+    COUNT(*)::bigint AS count
+FROM deduped d
+GROUP BY d.player_class, d.player_spec
+ORDER BY median_dps DESC
+`
+
+type RankingsBoxPlotStatsParams struct {
+	InstanceNames  []string `db:"instance_names" json:"instance_names"`
+	EncounterNames []string `db:"encounter_names" json:"encounter_names"`
+	RealmID        string   `db:"realm_id" json:"realm_id"`
+	SinceDays      int64    `db:"since_days" json:"since_days"`
+}
+
+type RankingsBoxPlotStatsRow struct {
+	PlayerClass string  `db:"player_class" json:"player_class"`
+	PlayerSpec  string  `db:"player_spec" json:"player_spec"`
+	MinDps      float64 `db:"min_dps" json:"min_dps"`
+	Q1Dps       float64 `db:"q1_dps" json:"q1_dps"`
+	MedianDps   float64 `db:"median_dps" json:"median_dps"`
+	Q3Dps       float64 `db:"q3_dps" json:"q3_dps"`
+	MaxDps      float64 `db:"max_dps" json:"max_dps"`
+	Count       int64   `db:"count" json:"count"`
+}
+
+// Returns box plot statistics (min, q1, median, q3, max, count) per class/spec.
+// Deduplicated and filtered same as leaderboard.
+func (q *sqlQuerier) RankingsBoxPlotStats(ctx context.Context, arg RankingsBoxPlotStatsParams) ([]RankingsBoxPlotStatsRow, error) {
+	rows, err := q.db.Query(ctx, rankingsBoxPlotStats,
+		arg.InstanceNames,
+		arg.EncounterNames,
+		arg.RealmID,
+		arg.SinceDays,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []RankingsBoxPlotStatsRow
+	for rows.Next() {
+		var i RankingsBoxPlotStatsRow
+		if err := rows.Scan(
+			&i.PlayerClass,
+			&i.PlayerSpec,
+			&i.MinDps,
+			&i.Q1Dps,
+			&i.MedianDps,
+			&i.Q3Dps,
+			&i.MaxDps,
+			&i.Count,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const rankingsEncounterList = `-- name: RankingsEncounterList :many
+WITH deduped AS (
+    SELECT DISTINCT ON (edr.player_guid, edr.encounter_name, COALESCE(li.duplicate_group_id, li.id))
+        edr.id, edr.encounter_id, edr.instance_id, edr.encounter_name, edr.instance_name, edr.player_guid, edr.player_name, edr.player_class, edr.player_spec, edr.talent_build_id, edr.realm_id, edr.realm_name, edr.guild_id, edr.guild_name, edr.damage_done, edr.duration_secs, edr.dps, edr.avg_ilvl, edr.log_hashed_slug, edr.killed_at, edr.created_at
+    FROM encounter_dps_rankings edr
+    JOIN log_instances li ON li.id = edr.instance_id
+    JOIN wow_server_realms wsr ON wsr.id = edr.realm_id
+    WHERE edr.instance_name = $1
+    ORDER BY edr.player_guid, edr.encounter_name, COALESCE(li.duplicate_group_id, li.id), edr.dps DESC
+)
+SELECT
+    d.encounter_name,
+    COUNT(*)::bigint AS total_kills,
+    MAX(d.dps)::double precision AS top_dps
+FROM deduped d
+GROUP BY d.encounter_name
+ORDER BY d.encounter_name
+`
+
+type RankingsEncounterListRow struct {
+	EncounterName string  `db:"encounter_name" json:"encounter_name"`
+	TotalKills    int64   `db:"total_kills" json:"total_kills"`
+	TopDps        float64 `db:"top_dps" json:"top_dps"`
+}
+
+// Returns encounters available in rankings for a given instance.
+func (q *sqlQuerier) RankingsEncounterList(ctx context.Context, instanceName string) ([]RankingsEncounterListRow, error) {
+	rows, err := q.db.Query(ctx, rankingsEncounterList, instanceName)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []RankingsEncounterListRow
+	for rows.Next() {
+		var i RankingsEncounterListRow
+		if err := rows.Scan(&i.EncounterName, &i.TotalKills, &i.TopDps); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const rankingsInstanceSummaries = `-- name: RankingsInstanceSummaries :many
+WITH deduped AS (
+    SELECT DISTINCT ON (edr.player_guid, edr.encounter_name, COALESCE(li.duplicate_group_id, li.id))
+        edr.id, edr.encounter_id, edr.instance_id, edr.encounter_name, edr.instance_name, edr.player_guid, edr.player_name, edr.player_class, edr.player_spec, edr.talent_build_id, edr.realm_id, edr.realm_name, edr.guild_id, edr.guild_name, edr.damage_done, edr.duration_secs, edr.dps, edr.avg_ilvl, edr.log_hashed_slug, edr.killed_at, edr.created_at
+    FROM encounter_dps_rankings edr
+    JOIN log_instances li ON li.id = edr.instance_id
+    JOIN wow_server_realms wsr ON wsr.id = edr.realm_id
+    ORDER BY edr.player_guid, edr.encounter_name, COALESCE(li.duplicate_group_id, li.id), edr.dps DESC
+),
+instance_stats AS (
+    SELECT
+        d.instance_name,
+        COUNT(*)::bigint AS total_kills
+    FROM deduped d
+    GROUP BY d.instance_name
+),
+top_players AS (
+    SELECT DISTINCT ON (d.instance_name, rank_num)
+        d.instance_name,
+        d.player_name,
+        d.realm_name,
+        d.player_class,
+        d.dps,
+        ROW_NUMBER() OVER (PARTITION BY d.instance_name ORDER BY d.dps DESC) AS rank_num
+    FROM deduped d
+)
+SELECT
+    s.instance_name,
+    s.total_kills,
+    COALESCE(
+        (SELECT json_agg(json_build_object(
+            'player_name', tp.player_name,
+            'realm_name', tp.realm_name,
+            'player_class', tp.player_class,
+            'dps', tp.dps
+        ) ORDER BY tp.rank_num)
+        FROM top_players tp
+        WHERE tp.instance_name = s.instance_name AND tp.rank_num <= 3),
+        '[]'::json
+    ) AS top_players
+FROM instance_stats s
+ORDER BY s.instance_name
+`
+
+type RankingsInstanceSummariesRow struct {
+	InstanceName string      `db:"instance_name" json:"instance_name"`
+	TotalKills   int64       `db:"total_kills" json:"total_kills"`
+	TopPlayers   interface{} `db:"top_players" json:"top_players"`
+}
+
+// Returns per-instance summary with top 3 players by DPS.
+// Deduplicates by (player_guid, encounter_name, duplicate_group) keeping best DPS.
+func (q *sqlQuerier) RankingsInstanceSummaries(ctx context.Context) ([]RankingsInstanceSummariesRow, error) {
+	rows, err := q.db.Query(ctx, rankingsInstanceSummaries)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []RankingsInstanceSummariesRow
+	for rows.Next() {
+		var i RankingsInstanceSummariesRow
+		if err := rows.Scan(&i.InstanceName, &i.TotalKills, &i.TopPlayers); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const rankingsLeaderboard = `-- name: RankingsLeaderboard :many
+WITH deduped AS (
+    SELECT DISTINCT ON (edr.player_guid, edr.encounter_name, COALESCE(li.duplicate_group_id, li.id))
+        edr.id,
+        edr.encounter_name,
+        edr.instance_name,
+        edr.player_guid,
+        edr.player_name,
+        edr.player_class,
+        edr.player_spec,
+        edr.realm_id,
+        edr.realm_name,
+        edr.guild_name,
+        edr.damage_done,
+        edr.duration_secs,
+        edr.dps,
+        edr.avg_ilvl,
+        edr.log_hashed_slug,
+        edr.killed_at,
+        tb.sub_spec AS talent_sub_spec
+    FROM encounter_dps_rankings edr
+    JOIN log_instances li ON li.id = edr.instance_id
+    JOIN wow_server_realms wsr ON wsr.id = edr.realm_id
+    LEFT JOIN talent_builds tb ON tb.id = edr.talent_build_id
+    WHERE CASE
+        WHEN cardinality($3 :: text[]) > 0 THEN edr.instance_name = ANY($3 :: text[])
+        ELSE true
+    END
+    AND CASE
+        WHEN cardinality($4 :: text[]) > 0 THEN edr.encounter_name = ANY($4 :: text[])
+        ELSE true
+    END
+    AND CASE
+        WHEN $5 :: text != '' THEN edr.realm_id = $5 :: uuid
+        ELSE true
+    END
+    AND CASE
+        WHEN $6 :: text != '' THEN edr.player_class = $6
+        ELSE true
+    END
+    AND CASE
+        WHEN $7 :: text != '' THEN edr.player_spec = $7
+        ELSE true
+    END
+    AND CASE
+        WHEN $8 :: bigint > 0 THEN edr.killed_at >= now() - make_interval(days => $8::int)
+        ELSE true
+    END
+    ORDER BY edr.player_guid, edr.encounter_name, COALESCE(li.duplicate_group_id, li.id), edr.dps DESC
+)
+SELECT
+    d.id, d.encounter_name, d.instance_name, d.player_guid, d.player_name, d.player_class, d.player_spec, d.realm_id, d.realm_name, d.guild_name, d.damage_done, d.duration_secs, d.dps, d.avg_ilvl, d.log_hashed_slug, d.killed_at, d.talent_sub_spec,
+    COUNT(*) OVER() AS total_count
+FROM deduped d
+ORDER BY d.dps DESC
+LIMIT $2::bigint
+OFFSET $1::bigint
+`
+
+type RankingsLeaderboardParams struct {
+	QueryOffset    int64    `db:"query_offset" json:"query_offset"`
+	QueryLimit     int64    `db:"query_limit" json:"query_limit"`
+	InstanceNames  []string `db:"instance_names" json:"instance_names"`
+	EncounterNames []string `db:"encounter_names" json:"encounter_names"`
+	RealmID        string   `db:"realm_id" json:"realm_id"`
+	Class          string   `db:"class" json:"class"`
+	Spec           string   `db:"spec" json:"spec"`
+	SinceDays      int64    `db:"since_days" json:"since_days"`
+}
+
+type RankingsLeaderboardRow struct {
+	ID            uuid.UUID          `db:"id" json:"id"`
+	EncounterName string             `db:"encounter_name" json:"encounter_name"`
+	InstanceName  string             `db:"instance_name" json:"instance_name"`
+	PlayerGuid    string             `db:"player_guid" json:"player_guid"`
+	PlayerName    string             `db:"player_name" json:"player_name"`
+	PlayerClass   string             `db:"player_class" json:"player_class"`
+	PlayerSpec    string             `db:"player_spec" json:"player_spec"`
+	RealmID       uuid.UUID          `db:"realm_id" json:"realm_id"`
+	RealmName     string             `db:"realm_name" json:"realm_name"`
+	GuildName     string             `db:"guild_name" json:"guild_name"`
+	DamageDone    int64              `db:"damage_done" json:"damage_done"`
+	DurationSecs  float64            `db:"duration_secs" json:"duration_secs"`
+	Dps           float64            `db:"dps" json:"dps"`
+	AvgIlvl       pgtype.Int2        `db:"avg_ilvl" json:"avg_ilvl"`
+	LogHashedSlug string             `db:"log_hashed_slug" json:"log_hashed_slug"`
+	KilledAt      pgtype.Timestamptz `db:"killed_at" json:"killed_at"`
+	TalentSubSpec pgtype.Text        `db:"talent_sub_spec" json:"talent_sub_spec"`
+	TotalCount    int64              `db:"total_count" json:"total_count"`
+}
+
+// Returns paginated DPS rankings, deduplicated and filtered.
+// Supports multi-instance, multi-encounter, time period, realm, class, and spec filters.
+func (q *sqlQuerier) RankingsLeaderboard(ctx context.Context, arg RankingsLeaderboardParams) ([]RankingsLeaderboardRow, error) {
+	rows, err := q.db.Query(ctx, rankingsLeaderboard,
+		arg.QueryOffset,
+		arg.QueryLimit,
+		arg.InstanceNames,
+		arg.EncounterNames,
+		arg.RealmID,
+		arg.Class,
+		arg.Spec,
+		arg.SinceDays,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []RankingsLeaderboardRow
+	for rows.Next() {
+		var i RankingsLeaderboardRow
+		if err := rows.Scan(
+			&i.ID,
+			&i.EncounterName,
+			&i.InstanceName,
+			&i.PlayerGuid,
+			&i.PlayerName,
+			&i.PlayerClass,
+			&i.PlayerSpec,
+			&i.RealmID,
+			&i.RealmName,
+			&i.GuildName,
+			&i.DamageDone,
+			&i.DurationSecs,
+			&i.Dps,
+			&i.AvgIlvl,
+			&i.LogHashedSlug,
+			&i.KilledAt,
+			&i.TalentSubSpec,
+			&i.TotalCount,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const adminListOutdatedParserVersionInstances = `-- name: AdminListOutdatedParserVersionInstances :many
 SELECT
   li.id,

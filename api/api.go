@@ -424,6 +424,13 @@ func (api *API) Routes() chi.Router {
 				r.Get("/speedrun/rules", api.SpeedrunRules)
 			})
 
+			r.Route("/rankings", func(r chi.Router) {
+				r.Get("/instances", api.RankingsInstances)
+				r.Get("/encounters", api.RankingsEncounters)
+				r.Get("/leaderboard", api.RankingsLeaderboard)
+				r.Get("/stats", api.RankingsStats)
+			})
+
 			if api.Opts.InternalGameData != nil {
 				r.Group(func(r chi.Router) {
 					r.Use(api.Auth.Authenticated(true))
