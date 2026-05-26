@@ -4337,7 +4337,7 @@ aggregated AS (
         SUM(d.damage_done)::bigint AS damage_done,
         SUM(d.duration_secs)::double precision AS duration_secs,
         (SUM(d.damage_done)::double precision / NULLIF(SUM(d.duration_secs), 0))::double precision AS dps,
-        MAX(d.avg_ilvl)::smallint AS avg_ilvl,
+        COALESCE(MAX(d.avg_ilvl), 0)::smallint AS avg_ilvl,
         ((array_agg(d.log_hashed_slug ORDER BY d.damage_done DESC))[1])::text AS log_hashed_slug,
         MAX(d.killed_at)::timestamptz AS killed_at,
         ((array_agg(d.talent_sub_spec ORDER BY d.damage_done DESC))[1])::text AS talent_sub_spec
