@@ -11,7 +11,10 @@ import {
   getEncounterNames,
   getAllEntries,
   computeBoxPlotStatsBySpec,
+  getKillTimeStats,
+  getSuccessRates,
 } from "./mockData"
+import type { KillTimeStats, EncounterSuccessRate } from "./mockData"
 import type { TimePeriod } from "./timePeriod"
 import { getTimePeriodDays } from "./timePeriod"
 import { BoxPlotChart } from "./BoxPlotChart"
@@ -19,7 +22,8 @@ import { RankingsTable } from "./RankingsTable"
 
 // ── Types ─────────────────────────────────────────────────────────────────
 
-type TabType = "boxplot" | "leaderboard"
+type MetricTab = "dps" | "killtime" | "success"
+type DpsSubTab = "boxplot" | "leaderboard"
 
 const VALID_PERIODS = new Set<TimePeriod>(["all", "90d", "30d", "7d"])
 
@@ -48,7 +52,13 @@ export function InstanceView({ instanceName }: InstanceViewProps) {
 
   // ── URL state ────────────────────────────────────────────────────────
 
-  const tab: TabType = params.get("tab") === "leaderboard" ? "leaderboard" : "boxplot"
+  const metric: MetricTab = useMemo(() => {
+    const raw = params.get("metric")
+    if (raw === "killtime" || raw === "success") return raw
+    return "dps"
+  }, [params])
+
+  const dpsSubTab: DpsSubTab = params.get("tab") === "leaderboard" ? "leaderboard" : "boxplot"
 
   const timePeriod: TimePeriod = useMemo(() => {
     const raw = params.get("period")
@@ -81,6 +91,7 @@ export function InstanceView({ instanceName }: InstanceViewProps) {
     setParams((prev) => {
       const next = new URLSearchParams(prev)
       next.delete("instance")
+      next.delete("metric")
       next.delete("tab")
       next.delete("encounters")
       next.delete("period")
@@ -88,8 +99,22 @@ export function InstanceView({ instanceName }: InstanceViewProps) {
     })
   }, [setParams])
 
-  const handleTabChange = useCallback(
-    (t: TabType) => setParam("tab", t === "boxplot" ? null : t),
+  const handleMetricChange = useCallback(
+    (m: MetricTab) => {
+      setParams((prev) => {
+        const next = new URLSearchParams(prev)
+        if (m === "dps") next.delete("metric")
+        else next.set("metric", m)
+        // Clear DPS sub-tab when switching metrics
+        next.delete("tab")
+        return next
+      })
+    },
+    [setParams],
+  )
+
+  const handleDpsSubTabChange = useCallback(
+    (t: DpsSubTab) => setParam("tab", t === "boxplot" ? null : t),
     [setParam],
   )
 
@@ -171,6 +196,10 @@ export function InstanceView({ instanceName }: InstanceViewProps) {
     sorted.forEach((e, i) => { e.rank = i + 1 })
     return sorted.slice(0, 50)
   }, [filteredEntries])
+
+  // Kill time + success rate data (per encounter, no sidebar filtering)
+  const killTimeStats = useMemo(() => getKillTimeStats(instanceName), [instanceName])
+  const successRates = useMemo(() => getSuccessRates(instanceName), [instanceName])
 
 
 
@@ -258,16 +287,16 @@ export function InstanceView({ instanceName }: InstanceViewProps) {
 
   return (
     <div className="flex">
-      {/* Mobile backdrop */}
-      {isMobile && sidebarOpen && (
+      {/* Mobile backdrop (DPS only) */}
+      {metric === "dps" && isMobile && sidebarOpen && (
         <div
           className="fixed inset-0 z-40 bg-black/50"
           onClick={() => setSidebarOpen(false)}
         />
       )}
 
-      {/* Mobile FAB */}
-      {isMobile && createPortal(
+      {/* Mobile FAB (DPS only) */}
+      {metric === "dps" && isMobile && createPortal(
         <Button
           variant="default"
           size="icon"
@@ -280,8 +309,8 @@ export function InstanceView({ instanceName }: InstanceViewProps) {
         document.body,
       )}
 
-      {/* Sidebar — desktop: sticky inline, mobile: fixed overlay */}
-      {(!isMobile || sidebarOpen) && (
+      {/* Sidebar — desktop: sticky inline, mobile: fixed overlay (DPS only) */}
+      {metric === "dps" && (!isMobile || sidebarOpen) && (
         <div
           className={cn(
             "pt-1 w-64 shrink-0 border-r pr-4 overflow-y-auto styled-scrollbar",
@@ -321,58 +350,233 @@ export function InstanceView({ instanceName }: InstanceViewProps) {
               <h1 className="text-2xl font-bold">{instanceName}</h1>
             </div>
 
-            {/* Tabs + Filters row */}
-            <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-              {/* Tab selector */}
+            {/* Metric tabs */}
+            <div className="flex flex-wrap items-center gap-3">
               <div className="flex gap-1 rounded-lg border border-white/10 bg-black/30 p-1">
-                {(["boxplot", "leaderboard"] as const).map((t) => (
+                {([
+                  { value: "dps" as const, label: "DPS Rankings" },
+                  { value: "killtime" as const, label: "Kill Time" },
+                  { value: "success" as const, label: "Success Rate" },
+                ] as const).map((m) => (
                   <button
-                    key={t}
-                    onClick={() => handleTabChange(t)}
+                    key={m.value}
+                    onClick={() => handleMetricChange(m.value)}
                     className={cn(
                       "rounded-md px-3 py-1 text-xs font-medium transition-colors",
-                      tab === t
+                      metric === m.value
                         ? "bg-[#5F8FA6] text-white"
                         : "text-muted-foreground hover:text-foreground",
                     )}
                   >
-                    {t === "boxplot" ? "Box Plot" : "Leaderboard"}
+                    {m.label}
                   </button>
                 ))}
               </div>
-            </div>
 
-            {/* Time period filter */}
-            <div className="flex gap-1 rounded-lg border border-white/10 bg-black/30 p-1 w-fit">
-              {([
-                { value: "all" as const, label: "All Time" },
-                { value: "90d" as const, label: "90d" },
-                { value: "30d" as const, label: "30d" },
-                { value: "7d" as const, label: "7d" },
-              ]).map((opt) => (
-                <button
-                  key={opt.value}
-                  onClick={() => handleTimePeriodChange(opt.value)}
-                  className={cn(
-                    "rounded-md px-3 py-1 text-xs font-medium transition-colors",
-                    timePeriod === opt.value
-                      ? "bg-[#5F8FA6] text-white"
-                      : "text-muted-foreground hover:text-foreground",
-                  )}
-                >
-                  {opt.label}
-                </button>
-              ))}
+              {/* DPS sub-tabs (only when DPS metric is active) */}
+              {metric === "dps" && (
+                <div className="flex gap-1 rounded-lg border border-white/10 bg-black/20 p-1">
+                  {(["boxplot", "leaderboard"] as const).map((t) => (
+                    <button
+                      key={t}
+                      onClick={() => handleDpsSubTabChange(t)}
+                      className={cn(
+                        "rounded-md px-2.5 py-0.5 text-[11px] font-medium transition-colors",
+                        dpsSubTab === t
+                          ? "bg-white/15 text-foreground"
+                          : "text-muted-foreground hover:text-foreground",
+                      )}
+                    >
+                      {t === "boxplot" ? "Box Plot" : "Leaderboard"}
+                    </button>
+                  ))}
+                </div>
+              )}
+
+              {/* Time period filter */}
+              <div className="flex gap-1 rounded-lg border border-white/10 bg-black/30 p-1 ml-auto">
+                {([
+                  { value: "all" as const, label: "All Time" },
+                  { value: "90d" as const, label: "90d" },
+                  { value: "30d" as const, label: "30d" },
+                  { value: "7d" as const, label: "7d" },
+                ]).map((opt) => (
+                  <button
+                    key={opt.value}
+                    onClick={() => handleTimePeriodChange(opt.value)}
+                    className={cn(
+                      "rounded-md px-3 py-1 text-xs font-medium transition-colors",
+                      timePeriod === opt.value
+                        ? "bg-[#5F8FA6] text-white"
+                        : "text-muted-foreground hover:text-foreground",
+                    )}
+                  >
+                    {opt.label}
+                  </button>
+                ))}
+              </div>
             </div>
           </div>
         </div>
 
         {/* Content */}
-        {tab === "boxplot" ? (
-          <BoxPlotChart stats={boxPlotStats} title="DPS Distribution by Class & Spec" />
-        ) : (
-          <RankingsTable entries={leaderboardEntries} />
+        {metric === "dps" && (
+          dpsSubTab === "boxplot" ? (
+            <BoxPlotChart stats={boxPlotStats} title="DPS Distribution by Class & Spec" />
+          ) : (
+            <RankingsTable entries={leaderboardEntries} />
+          )
         )}
+
+        {metric === "killtime" && (
+          <KillTimeContent stats={killTimeStats} />
+        )}
+
+        {metric === "success" && (
+          <SuccessRateContent rates={successRates} />
+        )}
+      </div>
+    </div>
+  )
+}
+
+// ── Kill Time Content ────────────────────────────────────────────────────
+
+function formatTime(seconds: number): string {
+  const m = Math.floor(seconds / 60)
+  const s = seconds % 60
+  return `${m}:${String(s).padStart(2, "0")}`
+}
+
+function KillTimeContent({ stats }: { stats: KillTimeStats[] }) {
+  const scaleMax = Math.max(...stats.map((s) => s.max), 1)
+  const step = scaleMax <= 300 ? 30 : 60
+  const ticks: number[] = []
+  for (let v = 0; v <= scaleMax; v += step) ticks.push(v)
+  if (ticks[ticks.length - 1] < scaleMax) ticks.push(Math.ceil(scaleMax / step) * step)
+  const axisMax = ticks[ticks.length - 1]
+
+  if (stats.length === 0) {
+    return (
+      <div className="rounded-xl border p-8 text-center text-muted-foreground">
+        No kill time data available.
+      </div>
+    )
+  }
+
+  return (
+    <div className="rounded-xl border bg-card p-5">
+      <h3 className="mb-5 text-sm font-medium text-muted-foreground">Kill Time by Encounter</h3>
+      <div className="space-y-1.5">
+        {stats.map((s) => {
+          const pct = (v: number) => `${(v / axisMax) * 100}%`
+          return (
+            <div key={s.encounterName} className="flex items-center gap-3 px-1 py-1.5 rounded-md hover:bg-muted/20 transition-colors">
+              {/* Label */}
+              <div className="w-40 shrink-0 text-xs font-medium truncate">{s.encounterName}</div>
+
+              {/* Box plot */}
+              <div className="relative flex-1 h-7">
+                {/* Whisker */}
+                <div
+                  className="absolute top-1/2 h-px -translate-y-1/2 bg-muted-foreground/30"
+                  style={{ left: pct(s.min), width: `calc(${pct(s.max)} - ${pct(s.min)})` }}
+                />
+                {/* Caps */}
+                <div className="absolute top-1/2 -translate-y-1/2 w-px h-2.5 bg-muted-foreground/40" style={{ left: pct(s.min) }} />
+                <div className="absolute top-1/2 -translate-y-1/2 w-px h-2.5 bg-muted-foreground/40" style={{ left: pct(s.max) }} />
+                {/* IQR box */}
+                <div
+                  className="absolute top-1 bottom-1 rounded-sm border border-[#5F8FA6] bg-[#5F8FA6]/30"
+                  style={{ left: pct(s.q1), width: `calc(${pct(s.q3)} - ${pct(s.q1)})` }}
+                />
+                {/* Median */}
+                <div
+                  className="absolute top-0.5 bottom-0.5 w-0.5 rounded-full bg-[#5F8FA6]"
+                  style={{ left: pct(s.median) }}
+                />
+              </div>
+
+              {/* Values */}
+              <div className="w-20 shrink-0 text-right text-xs text-muted-foreground">
+                <span className="font-mono font-semibold text-foreground">{formatTime(s.median)}</span>
+                {" "}
+                <span className="hidden sm:inline">({s.count})</span>
+              </div>
+            </div>
+          )
+        })}
+
+        {/* X-axis */}
+        <div className="flex items-center gap-3 pt-2">
+          <div className="w-40 shrink-0" />
+          <div className="relative flex-1 h-5">
+            {ticks.map((v) => (
+              <span
+                key={v}
+                className="absolute -translate-x-1/2 text-[10px] text-muted-foreground/60 font-mono"
+                style={{ left: `${(v / axisMax) * 100}%` }}
+              >
+                {formatTime(v)}
+              </span>
+            ))}
+          </div>
+          <div className="w-20 shrink-0" />
+        </div>
+      </div>
+    </div>
+  )
+}
+
+// ── Success Rate Content ─────────────────────────────────────────────────
+
+function SuccessRateContent({ rates }: { rates: EncounterSuccessRate[] }) {
+  if (rates.length === 0) {
+    return (
+      <div className="rounded-xl border p-8 text-center text-muted-foreground">
+        No success rate data available.
+      </div>
+    )
+  }
+
+  return (
+    <div className="rounded-xl border bg-card p-5">
+      <h3 className="mb-5 text-sm font-medium text-muted-foreground">Success Rate by Encounter</h3>
+      <div className="space-y-2">
+        {rates.map((r) => (
+          <div key={r.encounterName} className="flex items-center gap-3 px-1 py-1.5 rounded-md hover:bg-muted/20 transition-colors">
+            {/* Label */}
+            <div className="w-40 shrink-0 text-xs font-medium truncate">{r.encounterName}</div>
+
+            {/* Bar */}
+            <div className="relative flex-1 h-6 rounded-md bg-muted/20 overflow-hidden">
+              {/* Success portion */}
+              <div
+                className="absolute inset-y-0 left-0 rounded-md bg-green-500/70 transition-all duration-500"
+                style={{ width: `${r.successPct}%` }}
+              />
+              {/* Wipe portion */}
+              <div
+                className="absolute inset-y-0 right-0 rounded-r-md bg-red-500/30"
+                style={{ width: `${100 - r.successPct}%` }}
+              />
+              {/* Percentage label */}
+              <div className="absolute inset-0 flex items-center justify-center">
+                <span className="text-[11px] font-semibold text-foreground drop-shadow-sm">
+                  {r.successPct}%
+                </span>
+              </div>
+            </div>
+
+            {/* Counts */}
+            <div className="w-28 shrink-0 text-right text-xs text-muted-foreground">
+              <span className="text-green-400">{r.kills}</span>
+              {" / "}
+              <span className="text-red-400">{r.wipes}</span>
+              <span className="hidden sm:inline text-muted-foreground/60"> ({r.total})</span>
+            </div>
+          </div>
+        ))}
       </div>
     </div>
   )

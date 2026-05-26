@@ -495,3 +495,75 @@ export function getInstanceSummaries(): InstanceSummary[] {
 }
 
 export const ALL_DPS_CLASSES = DPS_CLASSES
+
+// ── Kill Time Data ─────────────────────────────────────────────────────────
+
+export interface KillTimeStats {
+  encounterName: string
+  min: number       // seconds
+  q1: number
+  median: number
+  q3: number
+  max: number
+  count: number
+}
+
+/** Generate kill time box plot stats for each boss in an instance. */
+export function getKillTimeStats(instanceName: string): KillTimeStats[] {
+  const inst = INSTANCES.find((i) => i.name === instanceName)
+  if (!inst) return []
+
+  return inst.bosses
+    .filter((b) => !b.isTrash)
+    .map((boss) => {
+      const entries = bossEntries.get(boss.id) ?? []
+      // Use durationMs from entries as kill times
+      const times = entries.map((e) => e.durationMs / 1000).sort((a, b) => a - b)
+      if (times.length === 0) return null
+      return {
+        encounterName: boss.name,
+        min: Math.round(times[0]),
+        q1: Math.round(percentile(times, 25)),
+        median: Math.round(percentile(times, 50)),
+        q3: Math.round(percentile(times, 75)),
+        max: Math.round(times[times.length - 1]),
+        count: times.length,
+      }
+    })
+    .filter((s): s is KillTimeStats => s !== null)
+}
+
+// ── Success Rate Data ──────────────────────────────────────────────────────
+
+export interface EncounterSuccessRate {
+  encounterName: string
+  kills: number
+  wipes: number
+  total: number
+  successPct: number
+}
+
+/** Generate success rate per boss for an instance. */
+export function getSuccessRates(instanceName: string): EncounterSuccessRate[] {
+  const inst = INSTANCES.find((i) => i.name === instanceName)
+  if (!inst) return []
+
+  return inst.bosses
+    .filter((b) => !b.isTrash)
+    .map((boss) => {
+      const entries = bossEntries.get(boss.id) ?? []
+      const kills = entries.length
+      // Simulate wipes: harder bosses have more wipes
+      const bossIdx = inst.bosses.filter((b) => !b.isTrash).indexOf(boss)
+      const wipeRate = 0.05 + (bossIdx / inst.bosses.length) * 0.35 // 5-40% wipe rate, later bosses harder
+      const wipes = Math.round(kills * (wipeRate / (1 - wipeRate)))
+      const total = kills + wipes
+      return {
+        encounterName: boss.name,
+        kills,
+        wipes,
+        total,
+        successPct: total > 0 ? Math.round((kills / total) * 100) : 0,
+      }
+    })
+}
