@@ -1,7 +1,9 @@
 import { useCallback, useMemo, useState } from "react"
+import { createPortal } from "react-dom"
 import { useSearchParams } from "react-router-dom"
-import { ArrowLeft, CheckCircle, Skull } from "lucide-react"
+import { ArrowLeft, CheckCircle, List, Skull, X } from "lucide-react"
 import { Button } from "@/components/ui/button"
+import { useIsMobile } from "@/hooks/useIsMobile"
 import type { WoWHeroClasses } from "@/api/typesGenerated"
 import { cn } from "@/lib/utils"
 import {
@@ -31,6 +33,8 @@ interface InstanceViewProps {
 export function InstanceView({ instanceName }: InstanceViewProps) {
   const [params, setParams] = useSearchParams()
   const [now] = useState(() => Date.now())
+  const isMobile = useIsMobile()
+  const [sidebarOpen, setSidebarOpen] = useState(false)
 
   const instance = useMemo(() => getInstanceByName(instanceName), [instanceName])
   const encounterNames = useMemo(() => getEncounterNames(instanceName), [instanceName])
@@ -205,94 +209,119 @@ export function InstanceView({ instanceName }: InstanceViewProps) {
     )
   }
 
-  return (
-    <div className="flex">
-      {/* Left sidebar — encounter selector (mirrors instance page EncounterSidebar) */}
-      <div className="hidden lg:block pt-1 w-64 shrink-0 border-r pr-4 overflow-y-auto styled-scrollbar sticky top-4 max-h-[calc(100vh-2rem)]">
-        <h3 className="text-xs font-medium text-muted-foreground uppercase tracking-wider mb-2">
+  const sidebarContent = (
+    <>
+      <div className="flex items-center justify-between mb-2">
+        <h3 className="text-xs font-medium text-muted-foreground uppercase tracking-wider">
           Encounters
         </h3>
-
-        {/* Quick-select buttons */}
-        <div className="flex gap-1 mt-1.5">
+        {isMobile && (
           <Button
-            variant="outline"
-            size="sm"
-            className="h-5 px-1.5 text-xs"
-            onClick={() => handleQuickSelect("all")}
-            title="Select all encounters"
+            variant="ghost"
+            size="icon"
+            className="h-6 w-6"
+            onClick={() => setSidebarOpen(false)}
+            title="Close encounters"
           >
-            All
+            <X className="h-4 w-4" />
           </Button>
-          <Button
-            variant="outline"
-            size="sm"
-            className="h-5 px-1.5 text-xs"
-            onClick={() => handleQuickSelect("bosses")}
-            title="Select boss encounters only"
-          >
-            Bosses
-          </Button>
-          <Button
-            variant="outline"
-            size="sm"
-            className="h-5 px-1.5 text-xs"
-            onClick={() => handleQuickSelect("trash")}
-            title="Select trash encounters only"
-          >
-            Trash
-          </Button>
-        </div>
-
-        {/* Encounter list */}
-        <div className="mt-3 space-y-1">
-          {encounterNames.map((name) => {
-            const isSelected = selectedEncounters.has(name)
-            const isTrashEnc = trashNames.has(name)
-            return (
-              <div
-                role="button"
-                tabIndex={0}
-                key={name}
-                onClick={(e) => handleEncounterClick(name, e.ctrlKey || e.metaKey)}
-                onKeyDown={(e) => {
-                  if (e.key === "Enter" || e.key === " ") {
-                    e.preventDefault()
-                    handleEncounterClick(name, e.ctrlKey || e.metaKey)
-                  }
-                }}
-                className={cn(
-                  "w-full flex items-center gap-2 px-3 py-2 rounded-md text-sm text-left transition-all duration-150 cursor-pointer",
-                  isSelected
-                    ? "bg-primary-darker text-primary-foreground border-l-3 border-l-primary-foreground/70 shadow-sm"
-                    : "hover:bg-accent/50 hover:translate-x-0.5",
-                  !isSelected && isTrashEnc && "text-muted-foreground",
-                  isTrashEnc && "mt-3 border-t border-white/5 pt-3",
-                )}
-                title={`${name} — Click to select, Ctrl+Click to toggle`}
-              >
-                <CheckCircle
-                  className={cn(
-                    "h-4 w-4 shrink-0",
-                    isTrashEnc ? "text-green-500/60" : "text-green-500",
-                  )}
-                />
-                <span className={cn("truncate flex-1", isTrashEnc && !isSelected && "italic")}>
-                  {name}
-                </span>
-              </div>
-            )
-          })}
-        </div>
-
-        {/* Info hint */}
-        <p className="mt-4 text-[11px] leading-relaxed text-muted-foreground/50">
-          Metrics reflect the selected encounters. Ctrl+Click to toggle individual encounters.
-        </p>
+        )}
       </div>
 
+      {/* Quick-select buttons */}
+      <div className="flex gap-1 mt-1.5">
+        <Button variant="outline" size="sm" className="h-5 px-1.5 text-xs" onClick={() => handleQuickSelect("all")} title="Select all encounters">All</Button>
+        <Button variant="outline" size="sm" className="h-5 px-1.5 text-xs" onClick={() => handleQuickSelect("bosses")} title="Select boss encounters only">Bosses</Button>
+        <Button variant="outline" size="sm" className="h-5 px-1.5 text-xs" onClick={() => handleQuickSelect("trash")} title="Select trash encounters only">Trash</Button>
+      </div>
+
+      {/* Encounter list */}
+      <div className="mt-3 space-y-1">
+        {encounterNames.map((name) => {
+          const isSelected = selectedEncounters.has(name)
+          const isTrashEnc = trashNames.has(name)
+          return (
+            <div
+              role="button"
+              tabIndex={0}
+              key={name}
+              onClick={(e) => handleEncounterClick(name, e.ctrlKey || e.metaKey)}
+              onKeyDown={(e) => {
+                if (e.key === "Enter" || e.key === " ") {
+                  e.preventDefault()
+                  handleEncounterClick(name, e.ctrlKey || e.metaKey)
+                }
+              }}
+              className={cn(
+                "w-full flex items-center gap-2 px-3 py-2 rounded-md text-sm text-left transition-all duration-150 cursor-pointer",
+                isSelected
+                  ? "bg-primary-darker text-primary-foreground border-l-3 border-l-primary-foreground/70 shadow-sm"
+                  : "hover:bg-accent/50 hover:translate-x-0.5",
+                !isSelected && isTrashEnc && "text-muted-foreground",
+                isTrashEnc && "mt-3 border-t border-white/5 pt-3",
+              )}
+              title={`${name} — Click to select, Ctrl+Click to toggle`}
+            >
+              <CheckCircle
+                className={cn(
+                  "h-4 w-4 shrink-0",
+                  isTrashEnc ? "text-green-500/60" : "text-green-500",
+                )}
+              />
+              <span className={cn("truncate flex-1", isTrashEnc && !isSelected && "italic")}>
+                {name}
+              </span>
+            </div>
+          )
+        })}
+      </div>
+
+      {/* Info hint */}
+      <p className="mt-4 text-[11px] leading-relaxed text-muted-foreground/50">
+        Metrics reflect the selected encounters. Ctrl+Click to toggle individual encounters.
+      </p>
+    </>
+  )
+
+  return (
+    <div className="flex">
+      {/* Mobile backdrop */}
+      {isMobile && sidebarOpen && (
+        <div
+          className="fixed inset-0 z-40 bg-black/50"
+          onClick={() => setSidebarOpen(false)}
+        />
+      )}
+
+      {/* Mobile FAB */}
+      {isMobile && createPortal(
+        <Button
+          variant="default"
+          size="icon"
+          onClick={() => setSidebarOpen(!sidebarOpen)}
+          className="fixed bottom-8 left-8 z-50 h-14 w-14 rounded-full shadow-lg"
+          title={sidebarOpen ? "Close encounters" : "Show encounters"}
+        >
+          {sidebarOpen ? <X className="h-5 w-5" /> : <List className="h-5 w-5" />}
+        </Button>,
+        document.body,
+      )}
+
+      {/* Sidebar — desktop: sticky inline, mobile: fixed overlay */}
+      {(!isMobile || sidebarOpen) && (
+        <div
+          className={cn(
+            "pt-1 w-64 shrink-0 border-r pr-4 overflow-y-auto styled-scrollbar",
+            !isMobile && "sticky top-4 max-h-[calc(100vh-2rem)]",
+            isMobile && "fixed inset-y-0 left-0 z-50 bg-background border-r shadow-lg pl-4 pt-4",
+          )}
+        >
+          {sidebarContent}
+        </div>
+      )}
+
       {/* Main area */}
-      <div className="min-w-0 flex-1 space-y-5 pl-6">
+      <div className={cn("min-w-0 flex-1 space-y-5", !isMobile && "pl-6")}>
         {/* Header */}
         <div>
           <button
@@ -305,55 +334,6 @@ export function InstanceView({ instanceName }: InstanceViewProps) {
           <div className="flex items-center gap-2">
             <Skull className="h-6 w-6 text-[#5F8FA6]" />
             <h1 className="text-2xl font-bold">{instanceName}</h1>
-          </div>
-        </div>
-
-        {/* Mobile encounter selector */}
-        <div className="lg:hidden">
-          <div className="flex flex-wrap gap-1">
-            <Button
-              variant="outline"
-              size="sm"
-              className="h-6 px-2 text-xs"
-              onClick={() => handleQuickSelect("all")}
-            >
-              All
-            </Button>
-            <Button
-              variant="outline"
-              size="sm"
-              className="h-6 px-2 text-xs"
-              onClick={() => handleQuickSelect("bosses")}
-            >
-              Bosses
-            </Button>
-            <Button
-              variant="outline"
-              size="sm"
-              className="h-6 px-2 text-xs"
-              onClick={() => handleQuickSelect("trash")}
-            >
-              Trash
-            </Button>
-            {encounterNames.map((name) => {
-              const active = selectedEncounters.has(name)
-              const isTrashEnc = trashNames.has(name)
-              return (
-                <button
-                  key={name}
-                  onClick={(e) => handleEncounterClick(name, e.ctrlKey || e.metaKey)}
-                  className={cn(
-                    "rounded-md border px-2 py-1 text-xs transition-colors truncate max-w-[120px]",
-                    active
-                      ? "border-white/20 bg-white/5 text-foreground"
-                      : "border-transparent text-muted-foreground/50 hover:text-muted-foreground",
-                    isTrashEnc && !active && "italic",
-                  )}
-                >
-                  {name}
-                </button>
-              )
-            })}
           </div>
         </div>
 
