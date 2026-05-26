@@ -4065,7 +4065,7 @@ SELECT
     MAX(d.dps)::double precision AS top_dps
 FROM deduped d
 GROUP BY d.encounter_name
-ORDER BY d.encounter_name
+ORDER BY (d.encounter_name = 'Trash'), d.encounter_name
 `
 
 type RankingsEncounterListRow struct {
@@ -4213,7 +4213,7 @@ FROM (
     WHERE d.duration_secs > 0
     GROUP BY d.encounter_name
 ) s
-ORDER BY s.encounter_name
+ORDER BY (s.encounter_name = 'Trash'), s.encounter_name
 `
 
 type RankingsKillTimeStatsParams struct {
@@ -4264,15 +4264,14 @@ func (q *sqlQuerier) RankingsKillTimeStats(ctx context.Context, arg RankingsKill
 const rankingsLeaderboard = `-- name: RankingsLeaderboard :many
 WITH deduped AS (
     SELECT DISTINCT ON (edr.player_guid, edr.encounter_name, COALESCE(li.duplicate_group_id, li.id))
-        edr.id,
-        edr.encounter_name,
-        edr.instance_name,
         edr.player_guid,
         edr.player_name,
         edr.player_class,
         edr.player_spec,
         edr.player_role,
         edr.player_level,
+        edr.instance_name,
+        edr.encounter_name,
         edr.difficulty_name,
         edr.max_players,
         edr.realm_id,
@@ -4280,7 +4279,6 @@ WITH deduped AS (
         edr.guild_name,
         edr.damage_done,
         edr.duration_secs,
-        edr.dps,
         edr.avg_ilvl,
         edr.log_hashed_slug,
         edr.killed_at,
@@ -4319,12 +4317,39 @@ WITH deduped AS (
     END
     AND edr.dps > 0
     ORDER BY edr.player_guid, edr.encounter_name, COALESCE(li.duplicate_group_id, li.id), edr.dps DESC
+),
+aggregated AS (
+    SELECT
+        d.player_guid,
+        -- Use the values from the row with highest damage for display fields.
+        ((array_agg(d.player_name ORDER BY d.damage_done DESC))[1])::text AS player_name,
+        ((array_agg(d.player_class ORDER BY d.damage_done DESC))[1])::text AS player_class,
+        ((array_agg(d.player_spec ORDER BY d.damage_done DESC))[1])::text AS player_spec,
+        ((array_agg(d.player_role ORDER BY d.damage_done DESC))[1])::text AS player_role,
+        MAX(d.player_level)::smallint AS player_level,
+        ((array_agg(d.instance_name ORDER BY d.damage_done DESC))[1])::text AS instance_name,
+        ((array_agg(d.encounter_name ORDER BY d.damage_done DESC))[1])::text AS encounter_name,
+        ((array_agg(d.difficulty_name ORDER BY d.damage_done DESC))[1])::text AS difficulty_name,
+        MAX(d.max_players)::smallint AS max_players,
+        ((array_agg(d.realm_id ORDER BY d.damage_done DESC))[1])::uuid AS realm_id,
+        ((array_agg(d.realm_name ORDER BY d.damage_done DESC))[1])::text AS realm_name,
+        ((array_agg(d.guild_name ORDER BY d.damage_done DESC))[1])::text AS guild_name,
+        SUM(d.damage_done)::bigint AS damage_done,
+        SUM(d.duration_secs)::double precision AS duration_secs,
+        (SUM(d.damage_done)::double precision / NULLIF(SUM(d.duration_secs), 0))::double precision AS dps,
+        MAX(d.avg_ilvl)::smallint AS avg_ilvl,
+        ((array_agg(d.log_hashed_slug ORDER BY d.damage_done DESC))[1])::text AS log_hashed_slug,
+        MAX(d.killed_at)::timestamptz AS killed_at,
+        ((array_agg(d.talent_sub_spec ORDER BY d.damage_done DESC))[1])::text AS talent_sub_spec
+    FROM deduped d
+    GROUP BY d.player_guid
 )
 SELECT
-    d.id, d.encounter_name, d.instance_name, d.player_guid, d.player_name, d.player_class, d.player_spec, d.player_role, d.player_level, d.difficulty_name, d.max_players, d.realm_id, d.realm_name, d.guild_name, d.damage_done, d.duration_secs, d.dps, d.avg_ilvl, d.log_hashed_slug, d.killed_at, d.talent_sub_spec,
+    a.player_guid, a.player_name, a.player_class, a.player_spec, a.player_role, a.player_level, a.instance_name, a.encounter_name, a.difficulty_name, a.max_players, a.realm_id, a.realm_name, a.guild_name, a.damage_done, a.duration_secs, a.dps, a.avg_ilvl, a.log_hashed_slug, a.killed_at, a.talent_sub_spec,
     COUNT(*) OVER() AS total_count
-FROM deduped d
-ORDER BY d.dps DESC
+FROM aggregated a
+WHERE a.dps > 0
+ORDER BY a.dps DESC
 LIMIT $2::bigint
 OFFSET $1::bigint
 `
@@ -4342,15 +4367,14 @@ type RankingsLeaderboardParams struct {
 }
 
 type RankingsLeaderboardRow struct {
-	ID             uuid.UUID          `db:"id" json:"id"`
-	EncounterName  string             `db:"encounter_name" json:"encounter_name"`
-	InstanceName   string             `db:"instance_name" json:"instance_name"`
 	PlayerGuid     string             `db:"player_guid" json:"player_guid"`
 	PlayerName     string             `db:"player_name" json:"player_name"`
 	PlayerClass    string             `db:"player_class" json:"player_class"`
 	PlayerSpec     string             `db:"player_spec" json:"player_spec"`
 	PlayerRole     string             `db:"player_role" json:"player_role"`
 	PlayerLevel    int16              `db:"player_level" json:"player_level"`
+	InstanceName   string             `db:"instance_name" json:"instance_name"`
+	EncounterName  string             `db:"encounter_name" json:"encounter_name"`
 	DifficultyName string             `db:"difficulty_name" json:"difficulty_name"`
 	MaxPlayers     int16              `db:"max_players" json:"max_players"`
 	RealmID        uuid.UUID          `db:"realm_id" json:"realm_id"`
@@ -4359,15 +4383,18 @@ type RankingsLeaderboardRow struct {
 	DamageDone     int64              `db:"damage_done" json:"damage_done"`
 	DurationSecs   float64            `db:"duration_secs" json:"duration_secs"`
 	Dps            float64            `db:"dps" json:"dps"`
-	AvgIlvl        pgtype.Int2        `db:"avg_ilvl" json:"avg_ilvl"`
+	AvgIlvl        int16              `db:"avg_ilvl" json:"avg_ilvl"`
 	LogHashedSlug  string             `db:"log_hashed_slug" json:"log_hashed_slug"`
 	KilledAt       pgtype.Timestamptz `db:"killed_at" json:"killed_at"`
-	TalentSubSpec  pgtype.Text        `db:"talent_sub_spec" json:"talent_sub_spec"`
+	TalentSubSpec  string             `db:"talent_sub_spec" json:"talent_sub_spec"`
 	TotalCount     int64              `db:"total_count" json:"total_count"`
 }
 
-// Returns paginated DPS rankings, deduplicated and filtered.
-// Supports multi-instance, multi-encounter, time period, realm, class, and spec filters.
+// Returns paginated DPS rankings aggregated per player across selected encounters.
+// When multiple encounters are selected, damage and duration are summed per player
+// and DPS is recomputed as total_damage / total_duration.
+// Deduplicates by (player, encounter, duplicate_group) before aggregating.
+// Aggregate per player: sum damage and duration across encounters, recompute DPS.
 func (q *sqlQuerier) RankingsLeaderboard(ctx context.Context, arg RankingsLeaderboardParams) ([]RankingsLeaderboardRow, error) {
 	rows, err := q.db.Query(ctx, rankingsLeaderboard,
 		arg.QueryOffset,
@@ -4388,15 +4415,14 @@ func (q *sqlQuerier) RankingsLeaderboard(ctx context.Context, arg RankingsLeader
 	for rows.Next() {
 		var i RankingsLeaderboardRow
 		if err := rows.Scan(
-			&i.ID,
-			&i.EncounterName,
-			&i.InstanceName,
 			&i.PlayerGuid,
 			&i.PlayerName,
 			&i.PlayerClass,
 			&i.PlayerSpec,
 			&i.PlayerRole,
 			&i.PlayerLevel,
+			&i.InstanceName,
+			&i.EncounterName,
 			&i.DifficultyName,
 			&i.MaxPlayers,
 			&i.RealmID,
@@ -4445,7 +4471,7 @@ SELECT
     COUNT(*)::bigint AS total
 FROM deduped d
 GROUP BY d.encounter_name
-ORDER BY d.encounter_name
+ORDER BY (d.encounter_name = 'Trash'), d.encounter_name
 `
 
 type RankingsSuccessRatesParams struct {

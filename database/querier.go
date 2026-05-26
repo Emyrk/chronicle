@@ -240,8 +240,11 @@ type sqlcQuerier interface {
 	// Box plot stats on encounter duration (seconds) per encounter name.
 	// Deduplicates encounters across duplicate log groups.
 	RankingsKillTimeStats(ctx context.Context, arg RankingsKillTimeStatsParams) ([]RankingsKillTimeStatsRow, error)
-	// Returns paginated DPS rankings, deduplicated and filtered.
-	// Supports multi-instance, multi-encounter, time period, realm, class, and spec filters.
+	// Returns paginated DPS rankings aggregated per player across selected encounters.
+	// When multiple encounters are selected, damage and duration are summed per player
+	// and DPS is recomputed as total_damage / total_duration.
+	// Deduplicates by (player, encounter, duplicate_group) before aggregating.
+	// Aggregate per player: sum damage and duration across encounters, recompute DPS.
 	RankingsLeaderboard(ctx context.Context, arg RankingsLeaderboardParams) ([]RankingsLeaderboardRow, error)
 	// Kill/wipe/total counts per encounter name within an instance.
 	// Deduplicates across duplicate log groups.

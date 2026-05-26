@@ -60,22 +60,23 @@ SELECT
     MAX(d.dps)::double precision AS top_dps
 FROM deduped d
 GROUP BY d.encounter_name
-ORDER BY d.encounter_name;
+ORDER BY (d.encounter_name = 'Trash'), d.encounter_name;
 
 -- name: RankingsLeaderboard :many
--- Returns paginated DPS rankings, deduplicated and filtered.
--- Supports multi-instance, multi-encounter, time period, realm, class, and spec filters.
+-- Returns paginated DPS rankings aggregated per player across selected encounters.
+-- When multiple encounters are selected, damage and duration are summed per player
+-- and DPS is recomputed as total_damage / total_duration.
+-- Deduplicates by (player, encounter, duplicate_group) before aggregating.
 WITH deduped AS (
     SELECT DISTINCT ON (edr.player_guid, edr.encounter_name, COALESCE(li.duplicate_group_id, li.id))
-        edr.id,
-        edr.encounter_name,
-        edr.instance_name,
         edr.player_guid,
         edr.player_name,
         edr.player_class,
         edr.player_spec,
         edr.player_role,
         edr.player_level,
+        edr.instance_name,
+        edr.encounter_name,
         edr.difficulty_name,
         edr.max_players,
         edr.realm_id,
@@ -83,7 +84,6 @@ WITH deduped AS (
         edr.guild_name,
         edr.damage_done,
         edr.duration_secs,
-        edr.dps,
         edr.avg_ilvl,
         edr.log_hashed_slug,
         edr.killed_at,
@@ -122,12 +122,40 @@ WITH deduped AS (
     END
     AND edr.dps > 0
     ORDER BY edr.player_guid, edr.encounter_name, COALESCE(li.duplicate_group_id, li.id), edr.dps DESC
+),
+-- Aggregate per player: sum damage and duration across encounters, recompute DPS.
+aggregated AS (
+    SELECT
+        d.player_guid,
+        -- Use the values from the row with highest damage for display fields.
+        ((array_agg(d.player_name ORDER BY d.damage_done DESC))[1])::text AS player_name,
+        ((array_agg(d.player_class ORDER BY d.damage_done DESC))[1])::text AS player_class,
+        ((array_agg(d.player_spec ORDER BY d.damage_done DESC))[1])::text AS player_spec,
+        ((array_agg(d.player_role ORDER BY d.damage_done DESC))[1])::text AS player_role,
+        MAX(d.player_level)::smallint AS player_level,
+        ((array_agg(d.instance_name ORDER BY d.damage_done DESC))[1])::text AS instance_name,
+        ((array_agg(d.encounter_name ORDER BY d.damage_done DESC))[1])::text AS encounter_name,
+        ((array_agg(d.difficulty_name ORDER BY d.damage_done DESC))[1])::text AS difficulty_name,
+        MAX(d.max_players)::smallint AS max_players,
+        ((array_agg(d.realm_id ORDER BY d.damage_done DESC))[1])::uuid AS realm_id,
+        ((array_agg(d.realm_name ORDER BY d.damage_done DESC))[1])::text AS realm_name,
+        ((array_agg(d.guild_name ORDER BY d.damage_done DESC))[1])::text AS guild_name,
+        SUM(d.damage_done)::bigint AS damage_done,
+        SUM(d.duration_secs)::double precision AS duration_secs,
+        (SUM(d.damage_done)::double precision / NULLIF(SUM(d.duration_secs), 0))::double precision AS dps,
+        MAX(d.avg_ilvl)::smallint AS avg_ilvl,
+        ((array_agg(d.log_hashed_slug ORDER BY d.damage_done DESC))[1])::text AS log_hashed_slug,
+        MAX(d.killed_at)::timestamptz AS killed_at,
+        ((array_agg(d.talent_sub_spec ORDER BY d.damage_done DESC))[1])::text AS talent_sub_spec
+    FROM deduped d
+    GROUP BY d.player_guid
 )
 SELECT
-    d.*,
+    a.*,
     COUNT(*) OVER() AS total_count
-FROM deduped d
-ORDER BY d.dps DESC
+FROM aggregated a
+WHERE a.dps > 0
+ORDER BY a.dps DESC
 LIMIT @query_limit::bigint
 OFFSET @query_offset::bigint;
 
@@ -279,7 +307,7 @@ FROM (
     WHERE d.duration_secs > 0
     GROUP BY d.encounter_name
 ) s
-ORDER BY s.encounter_name;
+ORDER BY (s.encounter_name = 'Trash'), s.encounter_name;
 
 -- name: RankingsSuccessRates :many
 -- Kill/wipe/total counts per encounter name within an instance.
@@ -307,4 +335,4 @@ SELECT
     COUNT(*)::bigint AS total
 FROM deduped d
 GROUP BY d.encounter_name
-ORDER BY d.encounter_name;
+ORDER BY (d.encounter_name = 'Trash'), d.encounter_name;

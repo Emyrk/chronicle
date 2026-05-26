@@ -220,32 +220,31 @@ func (s *Service) handleLeaderboard(w http.ResponseWriter, r *http.Request) {
 	for _, row := range rows {
 		totalCount = row.TotalCount
 		entry := chroniclesdk.RankingsEntry{
-			ID:            row.ID,
-			EncounterName: row.EncounterName,
-			InstanceName:  row.InstanceName,
-			PlayerGUID:    row.PlayerGuid,
-			PlayerName:    row.PlayerName,
-			PlayerClass:   row.PlayerClass,
-			PlayerSpec:    row.PlayerSpec,
-			PlayerRole:    row.PlayerRole,
+			EncounterName:  row.EncounterName,
+			InstanceName:   row.InstanceName,
+			PlayerGUID:     row.PlayerGuid,
+			PlayerName:     row.PlayerName,
+			PlayerClass:    row.PlayerClass,
+			PlayerSpec:     row.PlayerSpec,
+			PlayerRole:     row.PlayerRole,
 			PlayerLevel:    row.PlayerLevel,
 			DifficultyName: row.DifficultyName,
 			MaxPlayers:     row.MaxPlayers,
 			RealmID:        row.RealmID,
-			RealmName:     row.RealmName,
-			GuildName:     row.GuildName,
-			DamageDone:    row.DamageDone,
-			DurationSecs:  row.DurationSecs,
-			DPS:           row.Dps,
-			LogHashedSlug: row.LogHashedSlug,
-			KilledAt:      row.KilledAt.Time,
+			RealmName:      row.RealmName,
+			GuildName:      row.GuildName,
+			DamageDone:     row.DamageDone,
+			DurationSecs:   row.DurationSecs,
+			DPS:            row.Dps,
+			LogHashedSlug:  row.LogHashedSlug,
+			KilledAt:       row.KilledAt.Time,
 		}
-		if row.AvgIlvl.Valid {
-			v := row.AvgIlvl.Int16
+		if row.AvgIlvl > 0 {
+			v := row.AvgIlvl
 			entry.AvgIlvl = &v
 		}
-		if row.TalentSubSpec.Valid {
-			entry.SubSpec = &row.TalentSubSpec.String
+		if row.TalentSubSpec != "" {
+			entry.SubSpec = &row.TalentSubSpec
 		}
 		entries = append(entries, entry)
 	}
