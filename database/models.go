@@ -768,28 +768,30 @@ type DeploymentInfo struct {
 }
 
 type EncounterDpsRanking struct {
-	ID            uuid.UUID          `db:"id" json:"id"`
-	EncounterID   uuid.NullUUID      `db:"encounter_id" json:"encounter_id"`
-	InstanceID    uuid.UUID          `db:"instance_id" json:"instance_id"`
-	EncounterName string             `db:"encounter_name" json:"encounter_name"`
-	InstanceName  string             `db:"instance_name" json:"instance_name"`
-	PlayerGuid    string             `db:"player_guid" json:"player_guid"`
-	PlayerName    string             `db:"player_name" json:"player_name"`
-	PlayerClass   string             `db:"player_class" json:"player_class"`
-	PlayerSpec    string             `db:"player_spec" json:"player_spec"`
-	PlayerLevel   int16              `db:"player_level" json:"player_level"`
-	TalentBuildID uuid.NullUUID      `db:"talent_build_id" json:"talent_build_id"`
-	RealmID       uuid.UUID          `db:"realm_id" json:"realm_id"`
-	RealmName     string             `db:"realm_name" json:"realm_name"`
-	GuildID       uuid.NullUUID      `db:"guild_id" json:"guild_id"`
-	GuildName     string             `db:"guild_name" json:"guild_name"`
-	DamageDone    int64              `db:"damage_done" json:"damage_done"`
-	DurationSecs  float64            `db:"duration_secs" json:"duration_secs"`
-	Dps           float64            `db:"dps" json:"dps"`
-	AvgIlvl       pgtype.Int2        `db:"avg_ilvl" json:"avg_ilvl"`
-	LogHashedSlug string             `db:"log_hashed_slug" json:"log_hashed_slug"`
-	KilledAt      pgtype.Timestamptz `db:"killed_at" json:"killed_at"`
-	CreatedAt     pgtype.Timestamptz `db:"created_at" json:"created_at"`
+	ID             uuid.UUID          `db:"id" json:"id"`
+	EncounterID    uuid.NullUUID      `db:"encounter_id" json:"encounter_id"`
+	InstanceID     uuid.UUID          `db:"instance_id" json:"instance_id"`
+	EncounterName  string             `db:"encounter_name" json:"encounter_name"`
+	InstanceName   string             `db:"instance_name" json:"instance_name"`
+	PlayerGuid     string             `db:"player_guid" json:"player_guid"`
+	PlayerName     string             `db:"player_name" json:"player_name"`
+	PlayerClass    string             `db:"player_class" json:"player_class"`
+	PlayerSpec     string             `db:"player_spec" json:"player_spec"`
+	PlayerLevel    int16              `db:"player_level" json:"player_level"`
+	TalentBuildID  uuid.NullUUID      `db:"talent_build_id" json:"talent_build_id"`
+	DifficultyName string             `db:"difficulty_name" json:"difficulty_name"`
+	MaxPlayers     int16              `db:"max_players" json:"max_players"`
+	RealmID        uuid.UUID          `db:"realm_id" json:"realm_id"`
+	RealmName      string             `db:"realm_name" json:"realm_name"`
+	GuildID        uuid.NullUUID      `db:"guild_id" json:"guild_id"`
+	GuildName      string             `db:"guild_name" json:"guild_name"`
+	DamageDone     int64              `db:"damage_done" json:"damage_done"`
+	DurationSecs   float64            `db:"duration_secs" json:"duration_secs"`
+	Dps            float64            `db:"dps" json:"dps"`
+	AvgIlvl        pgtype.Int2        `db:"avg_ilvl" json:"avg_ilvl"`
+	LogHashedSlug  string             `db:"log_hashed_slug" json:"log_hashed_slug"`
+	KilledAt       pgtype.Timestamptz `db:"killed_at" json:"killed_at"`
+	CreatedAt      pgtype.Timestamptz `db:"created_at" json:"created_at"`
 }
 
 type GamePlayer struct {
