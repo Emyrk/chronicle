@@ -23,7 +23,7 @@ export function RankingsLanding() {
     <div className="space-y-6">
       <div className="flex items-center gap-2">
         <Trophy className="h-6 w-6 text-[#5F8FA6]" />
-        <h1 className="text-2xl font-bold">DPS Rankings</h1>
+        <h1 className="text-2xl font-bold">Rankings</h1>
       </div>
 
       <div className="grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-3">
