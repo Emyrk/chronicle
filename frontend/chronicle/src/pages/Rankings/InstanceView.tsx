@@ -504,22 +504,21 @@ export function InstanceView({ instanceName }: InstanceViewProps) {
             <div className="absolute inset-0 bg-gradient-to-r from-background/90 via-background/70 to-background/50" />
           </div>
 
-          {/* Header content */}
-          <div className="relative z-10 p-4 space-y-2">
-            {/* Back + Title */}
-            <div>
-              <button
-                onClick={handleBack}
-                className="mb-2 flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground transition-colors"
-              >
-                <ArrowLeft className="h-3.5 w-3.5" />
-                Back to Rankings
-              </button>
-              <h1 className="text-2xl font-bold">{instanceName}</h1>
-            </div>
+          {/* Header content — two columns, both touch bottom */}
+          <div className="relative z-10 p-4 flex flex-col sm:flex-row gap-4">
+            {/* Left: back, title, dropdowns */}
+            <div className="flex-1 flex flex-col justify-between gap-2">
+              <div>
+                <button
+                  onClick={handleBack}
+                  className="mb-2 flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground transition-colors"
+                >
+                  <ArrowLeft className="h-3.5 w-3.5" />
+                  Back to Rankings
+                </button>
+                <h1 className="text-2xl font-bold">{instanceName}</h1>
+              </div>
 
-            {/* Row 1: dropdowns left, view toggle right */}
-            <div className="flex flex-wrap items-center justify-between gap-2">
               <div className="flex flex-wrap items-center gap-2">
                 <DropdownMenu modal={false}>
                   <DropdownMenuTrigger asChild>
@@ -537,7 +536,6 @@ export function InstanceView({ instanceName }: InstanceViewProps) {
                   </DropdownMenuContent>
                 </DropdownMenu>
 
-                {/* Role selector (only for DPS metric) */}
                 {metric === "dps" && (
                   <DropdownMenu modal={false}>
                     <DropdownMenuTrigger asChild>
@@ -556,7 +554,6 @@ export function InstanceView({ instanceName }: InstanceViewProps) {
                   </DropdownMenu>
                 )}
 
-                {/* Difficulty filter (only when multiple difficulties exist) */}
                 {availableDifficulties.length > 1 && (
                   <DropdownMenu modal={false}>
                     <DropdownMenuTrigger asChild>
@@ -583,7 +580,6 @@ export function InstanceView({ instanceName }: InstanceViewProps) {
                   </DropdownMenu>
                 )}
 
-                {/* Hide unknowns toggle */}
                 <label className="flex items-center gap-1.5 text-xs text-muted-foreground cursor-pointer select-none">
                   <Checkbox
                     checked={hideUnknowns}
@@ -593,8 +589,10 @@ export function InstanceView({ instanceName }: InstanceViewProps) {
                   Hide unknowns
                 </label>
               </div>
+            </div>
 
-              {/* DPS sub-tabs (only when DPS metric is active) */}
+            {/* Right: sub-tabs + time period, bottom-aligned */}
+            <div className="flex flex-col justify-end items-end gap-2 shrink-0">
               {metric === "dps" && (
                 <div className="flex gap-1 rounded-lg border border-white/10 bg-black/20 p-1">
                   {(["boxplot", "leaderboard"] as const).map((t) => (
@@ -613,10 +611,7 @@ export function InstanceView({ instanceName }: InstanceViewProps) {
                   ))}
                 </div>
               )}
-            </div>
 
-            {/* Row 2: time period, right-aligned */}
-            <div className="flex justify-end">
               <div className="flex gap-1 rounded-lg border border-white/10 bg-black/30 p-1">
                 {([
                   { value: "all" as const, label: "All Time" },
