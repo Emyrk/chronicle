@@ -348,15 +348,14 @@ export function InstanceView({ instanceName }: InstanceViewProps) {
         document.body,
       )}
 
-      {/* Sidebar — desktop: sticky inline, mobile: fixed overlay (DPS only) */}
-      {metric === "dps" && (!isMobile || sidebarOpen) && (
-        <div
-          className={cn(
-            "pt-1 w-64 shrink-0 border-r pr-4 overflow-y-auto styled-scrollbar",
-            !isMobile && "sticky top-4 max-h-[calc(100vh-2rem)]",
-            isMobile && "fixed inset-y-0 left-0 z-50 bg-background border-r shadow-lg pl-4 pt-4",
-          )}
-        >
+      {/* Sidebar — desktop: always present (empty when not DPS to preserve layout), mobile: overlay */}
+      {!isMobile && (
+        <div className="pt-1 w-64 shrink-0 border-r pr-4 overflow-y-auto styled-scrollbar sticky top-4 max-h-[calc(100vh-2rem)]">
+          {metric === "dps" && sidebarContent}
+        </div>
+      )}
+      {metric === "dps" && isMobile && sidebarOpen && (
+        <div className="fixed inset-y-0 left-0 z-50 w-64 bg-background border-r shadow-lg pl-4 pt-4 overflow-y-auto styled-scrollbar">
           {sidebarContent}
         </div>
       )}
