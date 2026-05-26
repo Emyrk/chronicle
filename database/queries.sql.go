@@ -4364,7 +4364,7 @@ aggregated AS (
         COALESCE(MAX(d.avg_ilvl), 0)::smallint AS avg_ilvl,
         ((array_agg(d.log_hashed_slug ORDER BY d.damage_done DESC))[1])::text AS log_hashed_slug,
         MAX(d.killed_at)::timestamptz AS killed_at,
-        COALESCE(((array_agg(d.talent_sub_spec ORDER BY d.damage_done DESC))[1])::text, '') AS talent_sub_spec
+        COALESCE((array_agg(d.talent_sub_spec ORDER BY d.damage_done DESC))[1], '')::text AS talent_sub_spec
     FROM deduped d
     GROUP BY d.player_guid
 )
@@ -4410,7 +4410,7 @@ type RankingsLeaderboardRow struct {
 	AvgIlvl        int16              `db:"avg_ilvl" json:"avg_ilvl"`
 	LogHashedSlug  string             `db:"log_hashed_slug" json:"log_hashed_slug"`
 	KilledAt       pgtype.Timestamptz `db:"killed_at" json:"killed_at"`
-	TalentSubSpec  interface{}        `db:"talent_sub_spec" json:"talent_sub_spec"`
+	TalentSubSpec  string             `db:"talent_sub_spec" json:"talent_sub_spec"`
 	TotalCount     int64              `db:"total_count" json:"total_count"`
 }
 

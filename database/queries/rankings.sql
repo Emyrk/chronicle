@@ -170,7 +170,7 @@ aggregated AS (
         COALESCE(MAX(d.avg_ilvl), 0)::smallint AS avg_ilvl,
         ((array_agg(d.log_hashed_slug ORDER BY d.damage_done DESC))[1])::text AS log_hashed_slug,
         MAX(d.killed_at)::timestamptz AS killed_at,
-        COALESCE(((array_agg(d.talent_sub_spec ORDER BY d.damage_done DESC))[1])::text, '') AS talent_sub_spec
+        COALESCE((array_agg(d.talent_sub_spec ORDER BY d.damage_done DESC))[1], '')::text AS talent_sub_spec
     FROM deduped d
     GROUP BY d.player_guid
 )
