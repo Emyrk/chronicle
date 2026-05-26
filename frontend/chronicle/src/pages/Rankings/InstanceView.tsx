@@ -196,6 +196,21 @@ export function InstanceView({ instanceName }: InstanceViewProps) {
     [setParams],
   )
 
+  const handleRoleChange = useCallback(
+    (role: string) => {
+      setParams((prev) => {
+        const next = new URLSearchParams(prev)
+        if (role === "dps") next.delete("role")
+        else next.set("role", role)
+        next.delete("page")
+        next.delete("class")
+        next.delete("spec")
+        return next
+      })
+    },
+    [setParams],
+  )
+
   const handlePageChange = useCallback(
     (newPage: number) => setParam("page", newPage <= 1 ? null : String(newPage)),
     [setParam],
@@ -521,6 +536,25 @@ export function InstanceView({ instanceName }: InstanceViewProps) {
                     </DropdownMenuRadioGroup>
                   </DropdownMenuContent>
                 </DropdownMenu>
+
+                {/* Role selector (only for DPS metric) */}
+                {metric === "dps" && (
+                  <DropdownMenu modal={false}>
+                    <DropdownMenuTrigger asChild>
+                      <Button variant="outline" size="sm" className="h-7 gap-1.5 text-xs min-w-[80px] justify-between">
+                        {filterRole === "dps" ? "DPS" : filterRole === "heal" ? "Healer" : "Tank"}
+                        <ChevronDown className="h-3 w-3 opacity-50" />
+                      </Button>
+                    </DropdownMenuTrigger>
+                    <DropdownMenuContent align="start">
+                      <DropdownMenuRadioGroup value={filterRole} onValueChange={(v) => handleRoleChange(v)}>
+                        <DropdownMenuRadioItem value="dps">DPS</DropdownMenuRadioItem>
+                        <DropdownMenuRadioItem value="tank">Tank</DropdownMenuRadioItem>
+                        <DropdownMenuRadioItem value="heal">Healer</DropdownMenuRadioItem>
+                      </DropdownMenuRadioGroup>
+                    </DropdownMenuContent>
+                  </DropdownMenu>
+                )}
 
                 {/* Difficulty filter (only when multiple difficulties exist) */}
                 {availableDifficulties.length > 1 && (
