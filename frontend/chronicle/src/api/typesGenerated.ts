@@ -803,7 +803,7 @@ export interface ItemSetSearchResult {
 
 // From chroniclesdk/tooltip.go
 export interface ItemSocket {
-    readonly color: number; // Bitmask: 1=Red, 2=Yellow, 4=Blue, 8=Meta
+    readonly color: number; // Bitmask: 1=Meta, 2=Red, 4=Yellow, 8=Blue
 }
 
 // From chroniclesdk/tooltip.go
@@ -1070,6 +1070,114 @@ export interface Preferences {
      * after upload. nil means keep forever.
      */
     readonly raw_log_retention_hours: number | null;
+}
+
+// From chroniclesdk/rankings.go
+/**
+ * RankingsBoxPlotStats contains box plot statistics for a class/spec combination.
+ */
+export interface RankingsBoxPlotStats {
+    readonly player_class: string;
+    readonly player_spec: string;
+    readonly min_dps: number;
+    readonly q1_dps: number;
+    readonly median_dps: number;
+    readonly q3_dps: number;
+    readonly max_dps: number;
+    readonly count: number;
+}
+
+// From chroniclesdk/rankings.go
+/**
+ * RankingsEncounterSummary is a summary of rankings for one encounter within an instance.
+ */
+export interface RankingsEncounterSummary {
+    readonly encounter_name: string;
+    readonly total_kills: number;
+    readonly top_dps: number;
+}
+
+// From chroniclesdk/rankings.go
+/**
+ * RankingsEntry is a single row in the DPS rankings leaderboard.
+ */
+export interface RankingsEntry {
+    readonly id: string;
+    readonly encounter_name: string;
+    readonly instance_name: string;
+    readonly player_guid: string;
+    readonly player_name: string;
+    readonly player_class: string;
+    readonly player_spec: string;
+    readonly player_role: string;
+    readonly player_level: number;
+    readonly difficulty_name: string;
+    readonly max_players: number;
+    readonly sub_spec?: string;
+    readonly realm_id: string;
+    readonly realm_name: string;
+    readonly guild_name: string;
+    readonly damage_done: number;
+    readonly duration_secs: number;
+    readonly dps: number;
+    readonly avg_ilvl?: number;
+    readonly log_hashed_slug: string;
+    readonly killed_at: string;
+}
+
+// From chroniclesdk/rankings.go
+/**
+ * RankingsInstanceSummary is a summary of DPS rankings for a single instance.
+ */
+export interface RankingsInstanceSummary {
+    readonly instance_name: string;
+    readonly total_kills: number;
+    readonly top_players: readonly RankingsInstanceTopPlayer[];
+}
+
+// From chroniclesdk/rankings.go
+/**
+ * RankingsInstanceTopPlayer is a top-performing player for an instance summary.
+ */
+export interface RankingsInstanceTopPlayer {
+    readonly player_name: string;
+    readonly realm_name: string;
+    readonly player_class: string;
+    readonly dps: number;
+}
+
+// From chroniclesdk/rankings.go
+/**
+ * RankingsKillTimeStats contains box plot statistics for encounter kill durations.
+ */
+export interface RankingsKillTimeStats {
+    readonly encounter_name: string;
+    readonly min_secs: number;
+    readonly q1_secs: number;
+    readonly median_secs: number;
+    readonly q3_secs: number;
+    readonly max_secs: number;
+    readonly count: number;
+}
+
+// From chroniclesdk/rankings.go
+/**
+ * RankingsLeaderboardResponse wraps leaderboard entries with total count for pagination.
+ */
+export interface RankingsLeaderboardResponse {
+    readonly entries: readonly RankingsEntry[];
+    readonly total_count: number;
+}
+
+// From chroniclesdk/rankings.go
+/**
+ * RankingsSuccessRate contains kill/wipe counts for an encounter.
+ */
+export interface RankingsSuccessRate {
+    readonly encounter_name: string;
+    readonly kills: number;
+    readonly wipes: number;
+    readonly total: number;
 }
 
 // From chroniclesdk/server_application.go
@@ -1670,6 +1778,19 @@ export interface SupportedInstance {
 export interface SupportedInstanceUnit {
     readonly entry_id: number;
     readonly name: string;
+}
+
+// From chroniclesdk/rankings.go
+/**
+ * TalentBuild represents a unique talent tree layout, nameable for sub-spec grouping.
+ */
+export interface TalentBuild {
+    readonly id: string;
+    readonly player_class: string;
+    readonly spec: string;
+    readonly sub_spec?: string;
+    readonly talent_summary: readonly number[];
+    readonly talent_layout: string;
 }
 
 // From chroniclesdk/tenant.go
