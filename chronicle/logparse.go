@@ -1227,6 +1227,31 @@ func insertDPSRankings(
 			continue
 		}
 
+		// Enforce level range: ALL players must be within the level cap.
+		// If any player violates the range, skip the entire encounter.
+		if levelRange != nil {
+			levelViolation := false
+			for unitGUID, stats := range dpsResult.Units {
+				if !stats.IsPlayer {
+					continue
+				}
+				player, ok := finalized.Guilds.Players[unitGUID]
+				if !ok {
+					continue
+				}
+				if player.Level != nil {
+					lvl := int32(*player.Level)
+					if lvl < levelRange.MinLevel || lvl > levelRange.MaxLevel {
+						levelViolation = true
+						break
+					}
+				}
+			}
+			if levelViolation {
+				continue // skip entire encounter
+			}
+		}
+
 		// Compute statistical roles for this encounter.
 		playerMetrics := make(map[guid.GUID]wowspec.PlayerMetrics)
 		for unitGUID, stats := range dpsResult.Units {
@@ -1271,13 +1296,6 @@ func insertDPSRankings(
 			var playerLevel int16
 			if player.Level != nil {
 				playerLevel = int16(*player.Level)
-			}
-
-			// Enforce level range from ranking rules.
-			if levelRange != nil && playerLevel > 0 {
-				if int32(playerLevel) < levelRange.MinLevel || int32(playerLevel) > levelRange.MaxLevel {
-					continue
-				}
 			}
 
 			dps := float64(stats.DamageDone) / durationSecs
