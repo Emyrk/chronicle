@@ -26,6 +26,7 @@ import (
 	"github.com/Emyrk/chronicle/combatlog/parser/common/characters/period"
 	"github.com/Emyrk/chronicle/combatlog/parser/common/parsectx"
 	"github.com/Emyrk/chronicle/combatlog/parser/guid"
+	"github.com/Emyrk/chronicle/combatlog/parser/types/combatant"
 	"github.com/Emyrk/chronicle/combatlog/parser/logfile"
 	"github.com/Emyrk/chronicle/combatlog/parser/sorter"
 	"github.com/Emyrk/chronicle/combatlog/parser/types/realmclock"
@@ -36,6 +37,7 @@ import (
 	"github.com/Emyrk/chronicle/combatlog/parser/vanilla/parserv2"
 	"github.com/Emyrk/chronicle/combatlog/parser/vanilla/state/creatures"
 	"github.com/Emyrk/chronicle/combatlog/parser/vanilla/state/encounters"
+	"github.com/Emyrk/chronicle/combatlog/parser/vanilla/state/encounters/instances"
 	"github.com/Emyrk/chronicle/combatlog/parser/vanilla/state/encounters/instances/rankings"
 	"github.com/Emyrk/chronicle/combatlog/parser/vanilla/state/unitdb"
 	"github.com/Emyrk/chronicle/combatlog/parser/wotlk"
@@ -743,123 +745,7 @@ func (w *WorkerLogParse) Work(ctx context.Context, job *river.Job[ArgsLogParse])
 
 			// Persist DPS rankings for clean kills.
 			if finalized.Rankings != nil && finalized.Rankings.DPS != nil {
-				for _, enc := range finalized.Encounters {
-					dpsResult, ok := finalized.Rankings.DPS[enc.Combat.EncounterID]
-					if !ok {
-						continue
-					}
-					// Only rank clean kills.
-					if string(enc.KillType) != "kill" {
-						continue
-					}
-					durationSecs := enc.Combat.End.Sub(enc.Combat.Start).Seconds()
-					if durationSecs < 15 {
-						continue // skip trivially short encounters
-					}
-
-					for unitGUID, dmg := range dpsResult.Units {
-						if !dmg.IsPlayer {
-							continue
-						}
-						player, ok := finalized.Guilds.Players[unitGUID]
-						if !ok {
-							continue
-						}
-
-						className := string(player.HeroClass)
-						var spec string
-						var talentLayout string
-						var talentSummary []int16
-						if player.Talents != nil {
-							spec = wowspec.InferSpec(className, player.Talents.Summary)
-							talentSummary = make([]int16, 3)
-							for i, v := range player.Talents.Summary {
-								talentSummary[i] = int16(v)
-							}
-							// Build layout string from trees.
-							for i, tree := range player.Talents.Trees {
-								if i > 0 {
-									talentLayout += "}"
-								}
-								for _, rank := range tree {
-									talentLayout += fmt.Sprintf("%d", rank)
-								}
-							}
-						} else {
-							spec = "Unknown"
-						}
-
-						var talentBuildID uuid.NullUUID
-						if talentLayout != "" {
-							tbID, err := tx.UpsertTalentBuild(ctx, database.UpsertTalentBuildParams{
-								PlayerClass:   className,
-								TalentSummary: talentSummary,
-								TalentLayout:  talentLayout,
-								Spec:          spec,
-							})
-							if err != nil {
-								slog.WarnContext(ctx, "upsert talent build", slog.String("err", err.Error()))
-							} else {
-								talentBuildID = uuid.NullUUID{UUID: tbID, Valid: true}
-							}
-						}
-
-						var playerLevel int16
-						if player.Level != nil {
-							playerLevel = int16(*player.Level)
-						}
-
-						role := wowspec.InferRole(className, spec)
-						dps := float64(dmg.DamageDone) / durationSecs
-
-						// Find guild name for this player.
-						playerGuildName := ""
-						for gName, members := range finalized.Guilds.Guilds {
-							if _, ok := members[unitGUID]; ok {
-								playerGuildName = gName
-								break
-							}
-						}
-
-						err := tx.InsertEncounterDpsRanking(ctx, database.InsertEncounterDpsRankingParams{
-							EncounterID: uuid.NullUUID{
-								UUID:  enc.Combat.EncounterID,
-								Valid: true,
-							},
-							InstanceID:     dbinstance.ID,
-							EncounterName:  enc.Name,
-							InstanceName:   inst.Name(),
-							PlayerGuid:     unitGUID.String(),
-							PlayerName:     player.Name,
-							PlayerClass:    className,
-							PlayerSpec:     spec,
-							PlayerRole:     role,
-							PlayerLevel:    playerLevel,
-							TalentBuildID:  talentBuildID,
-							DifficultyName: dbinstance.DifficultyName,
-							MaxPlayers:     int16(dbinstance.MaxPlayers),
-							RealmID:        dbinstance.RealmID,
-							RealmName:      realmName,
-							GuildID: uuid.NullUUID{
-								UUID:  guildID,
-								Valid: playerGuildName != "",
-							},
-							GuildName:     playerGuildName,
-							DamageDone:    dmg.DamageDone,
-							DurationSecs:  durationSecs,
-							Dps:           dps,
-							LogHashedSlug: dbinstance.HashedSlug.String,
-							KilledAt:      database.Timestamptz(enc.Combat.End),
-						})
-						if err != nil {
-							slog.WarnContext(ctx, "insert dps ranking",
-								slog.String("encounter", enc.Name),
-								slog.String("player", player.Name),
-								slog.String("err", err.Error()),
-							)
-						}
-					}
-				}
+				insertDPSRankings(ctx, tx, finalized, dbinstance, inst.Name(), realmName, guildID)
 			}
 
 			inst := db2sdk.WoWInstanceWithGuild(dbinstance, guild)
@@ -1308,4 +1194,150 @@ func detectAndLinkDuplicate(
 	}
 
 	return nil
+}
+
+// insertDPSRankings persists per-player DPS rankings for each clean-kill encounter.
+// Roles are computed statistically from damage done/taken/healing per encounter.
+func insertDPSRankings(
+	ctx context.Context,
+	tx *authz.AuthzTX,
+	finalized *instances.FinalizedInstance,
+	dbinstance database.LogInstance,
+	instanceName string,
+	realmName string,
+	guildID uuid.UUID,
+) {
+	for _, enc := range finalized.Encounters {
+		dpsResult, ok := finalized.Rankings.DPS[enc.Combat.EncounterID]
+		if !ok {
+			continue
+		}
+		if string(enc.KillType) != "kill" {
+			continue
+		}
+		durationSecs := enc.Combat.End.Sub(enc.Combat.Start).Seconds()
+		if durationSecs < 15 {
+			continue
+		}
+
+		// Compute statistical roles for this encounter.
+		playerMetrics := make(map[guid.GUID]wowspec.PlayerMetrics)
+		for unitGUID, stats := range dpsResult.Units {
+			if !stats.IsPlayer {
+				continue
+			}
+			playerMetrics[unitGUID] = wowspec.PlayerMetrics{
+				DamageDone:  stats.DamageDone,
+				DamageTaken: stats.DamageTaken,
+				HealingDone: stats.HealingDone,
+			}
+		}
+		roles := wowspec.InferRoles(playerMetrics)
+
+		for unitGUID, stats := range dpsResult.Units {
+			if !stats.IsPlayer {
+				continue
+			}
+			player, ok := finalized.Guilds.Players[unitGUID]
+			if !ok {
+				continue
+			}
+
+			className := string(player.HeroClass)
+			spec, talentLayout, talentSummary := extractTalentInfo(className, player)
+
+			var talentBuildID uuid.NullUUID
+			if talentLayout != "" {
+				tbID, err := tx.UpsertTalentBuild(ctx, database.UpsertTalentBuildParams{
+					PlayerClass:   className,
+					TalentSummary: talentSummary,
+					TalentLayout:  talentLayout,
+					Spec:          spec,
+				})
+				if err != nil {
+					slog.WarnContext(ctx, "upsert talent build", slog.String("err", err.Error()))
+				} else {
+					talentBuildID = uuid.NullUUID{UUID: tbID, Valid: true}
+				}
+			}
+
+			var playerLevel int16
+			if player.Level != nil {
+				playerLevel = int16(*player.Level)
+			}
+
+			dps := float64(stats.DamageDone) / durationSecs
+			playerGuildName := findPlayerGuild(finalized.Guilds.Guilds, unitGUID)
+
+			err := tx.InsertEncounterDpsRanking(ctx, database.InsertEncounterDpsRankingParams{
+				EncounterID: uuid.NullUUID{
+					UUID:  enc.Combat.EncounterID,
+					Valid: true,
+				},
+				InstanceID:     dbinstance.ID,
+				EncounterName:  enc.Name,
+				InstanceName:   instanceName,
+				PlayerGuid:     unitGUID.String(),
+				PlayerName:     player.Name,
+				PlayerClass:    className,
+				PlayerSpec:     spec,
+				PlayerRole:     roles[unitGUID],
+				PlayerLevel:    playerLevel,
+				TalentBuildID:  talentBuildID,
+				DifficultyName: dbinstance.DifficultyName,
+				MaxPlayers:     int16(dbinstance.MaxPlayers),
+				RealmID:        dbinstance.RealmID,
+				RealmName:      realmName,
+				GuildID: uuid.NullUUID{
+					UUID:  guildID,
+					Valid: playerGuildName != "",
+				},
+				GuildName:     playerGuildName,
+				DamageDone:    stats.DamageDone,
+				DurationSecs:  durationSecs,
+				Dps:           dps,
+				LogHashedSlug: dbinstance.HashedSlug.String,
+				KilledAt:      database.Timestamptz(enc.Combat.End),
+			})
+			if err != nil {
+				slog.WarnContext(ctx, "insert dps ranking",
+					slog.String("encounter", enc.Name),
+					slog.String("player", player.Name),
+					slog.String("err", err.Error()),
+				)
+			}
+		}
+	}
+}
+
+// extractTalentInfo returns the inferred spec, talent layout string, and talent
+// summary for a player. Returns "Unknown" spec if no talent data is available.
+func extractTalentInfo(className string, player combatant.Combatant) (spec string, layout string, summary []int16) {
+	if player.Talents == nil {
+		return "Unknown", "", nil
+	}
+	spec = wowspec.InferSpec(className, player.Talents.Summary)
+	summary = make([]int16, 3)
+	for i, v := range player.Talents.Summary {
+		summary[i] = int16(v)
+	}
+	for i, tree := range player.Talents.Trees {
+		if i > 0 {
+			layout += "}"
+		}
+		for _, rank := range tree {
+			layout += fmt.Sprintf("%d", rank)
+		}
+	}
+	return spec, layout, summary
+}
+
+// findPlayerGuild returns the guild name for a player, or "" if not in a guild.
+func findPlayerGuild(guilds map[string]map[guid.GUID]struct{}, playerGUID guid.GUID) string {
+	for gName, members := range guilds {
+		if _, ok := members[playerGUID]; ok {
+			return gName
+		}
+	}
+	return ""
 }

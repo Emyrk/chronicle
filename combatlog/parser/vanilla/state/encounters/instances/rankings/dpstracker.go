@@ -13,27 +13,32 @@ import (
 
 var _ instancehook.Hook = (*DPSTracker)(nil)
 
-// UnitDamage holds accumulated damage for a single unit in an encounter.
-type UnitDamage struct {
-	DamageDone int64
-	IsPlayer   bool
-	OwnerGUID  *guid.GUID // Non-nil if this unit is a pet/totem/summon.
+// UnitCombatStats holds accumulated combat metrics for a single unit in an encounter.
+type UnitCombatStats struct {
+	DamageDone  int64
+	DamageTaken int64
+	HealingDone int64
+	IsPlayer    bool
+	OwnerGUID   *guid.GUID // Non-nil if this unit is a pet/totem/summon.
 }
 
-// DPSResult holds per-unit damage totals for a single encounter.
+// DPSResult holds per-unit combat stats for a single encounter.
 type DPSResult struct {
-	Units map[guid.GUID]*UnitDamage
+	Units map[guid.GUID]*UnitCombatStats
 }
 
-// DPSTracker is an instance hook that accumulates damage done per unit per
-// encounter. At FightEnded it classifies each unit (player vs creature,
-// owner relationship) via unitdb and stores the results keyed by encounter ID.
+// DPSTracker is an instance hook that accumulates damage done, damage taken,
+// and healing done per unit per encounter. At FightEnded it classifies each
+// unit (player vs creature, owner relationship) via unitdb and stores the
+// results keyed by encounter ID.
 type DPSTracker struct {
 	instancehook.BaseHook
 	units *unitdb.Units
 
 	// Per-encounter state, reset on FightStarted.
-	current map[guid.GUID]int64
+	damageDone  map[guid.GUID]int64
+	damageTaken map[guid.GUID]int64
+	healingDone map[guid.GUID]int64
 
 	// Results across all encounters.
 	results map[uuid.UUID]*DPSResult
@@ -43,14 +48,18 @@ type DPSTracker struct {
 // classifying GUIDs at fight end.
 func NewDPSTracker(units *unitdb.Units) *DPSTracker {
 	return &DPSTracker{
-		units:   units,
-		current: make(map[guid.GUID]int64),
-		results: make(map[uuid.UUID]*DPSResult),
+		units:       units,
+		damageDone:  make(map[guid.GUID]int64),
+		damageTaken: make(map[guid.GUID]int64),
+		healingDone: make(map[guid.GUID]int64),
+		results:     make(map[uuid.UUID]*DPSResult),
 	}
 }
 
 func (t *DPSTracker) FightStarted(_ uuid.UUID, _ messages.Message) {
-	t.current = make(map[guid.GUID]int64)
+	t.damageDone = make(map[guid.GUID]int64)
+	t.damageTaken = make(map[guid.GUID]int64)
+	t.healingDone = make(map[guid.GUID]int64)
 }
 
 func (t *DPSTracker) ProcessMessage(active bool, _ uuid.UUID, m messages.Message) error {
@@ -58,40 +67,70 @@ func (t *DPSTracker) ProcessMessage(active bool, _ uuid.UUID, m messages.Message
 		return nil
 	}
 
-	dmg, ok := m.(*messages.Damage)
-	if !ok {
-		return nil
-	}
+	switch msg := m.(type) {
+	case *messages.Damage:
+		if msg.Amount <= 0 {
+			return nil
+		}
 
-	// Skip environmental damage (nil caster).
-	if dmg.Caster == nil {
-		return nil
-	}
+		// Track damage taken by players from all sources (for role detection).
+		targetCls := t.units.Classify(msg.Target)
+		if targetCls.Type == unitdb.UnitTypePlayer {
+			t.damageTaken[msg.Target] += int64(msg.Amount)
+		}
 
-	// Only count actual damage dealt (skip misses which have Amount=0).
-	if dmg.Amount > 0 {
-		t.current[*dmg.Caster] += int64(dmg.Amount)
+		// Only track player (or pet/totem) damage output to hostile targets.
+		if msg.Caster == nil {
+			return nil // skip environmental damage for damage-done
+		}
+		caster := *msg.Caster
+		casterCls := t.units.Classify(caster)
+		isPlayerOrPet := casterCls.Type == unitdb.UnitTypePlayer || casterCls.Relation.HasOwner()
+		if isPlayerOrPet && targetCls.Affiliation == unitdb.AffiliationHostile {
+			t.damageDone[caster] += int64(msg.Amount)
+		}
+
+	case *messages.Heal:
+		// Only count effective healing (subtract overheal).
+		effective := int64(msg.Amount) - int64(msg.Overheal)
+		if effective > 0 {
+			t.healingDone[msg.Caster] += effective
+		}
 	}
 
 	return nil
 }
 
 func (t *DPSTracker) FightEnded(encounterID uuid.UUID, _ messages.Message) {
-	result := &DPSResult{
-		Units: make(map[guid.GUID]*UnitDamage, len(t.current)),
+	// Merge all GUIDs seen across all three metric maps.
+	allGUIDs := make(map[guid.GUID]struct{})
+	for g := range t.damageDone {
+		allGUIDs[g] = struct{}{}
+	}
+	for g := range t.damageTaken {
+		allGUIDs[g] = struct{}{}
+	}
+	for g := range t.healingDone {
+		allGUIDs[g] = struct{}{}
 	}
 
-	for g, total := range t.current {
+	result := &DPSResult{
+		Units: make(map[guid.GUID]*UnitCombatStats, len(allGUIDs)),
+	}
+
+	for g := range allGUIDs {
 		cls := t.units.Classify(g)
-		ud := &UnitDamage{
-			DamageDone: total,
-			IsPlayer:   cls.Type == unitdb.UnitTypePlayer,
+		stats := &UnitCombatStats{
+			DamageDone:  t.damageDone[g],
+			DamageTaken: t.damageTaken[g],
+			HealingDone: t.healingDone[g],
+			IsPlayer:    cls.Type == unitdb.UnitTypePlayer,
 		}
 		if cls.Relation.HasOwner() {
 			owner := *cls.Relation.Owner
-			ud.OwnerGUID = &owner
+			stats.OwnerGUID = &owner
 		}
-		result.Units[g] = ud
+		result.Units[g] = stats
 	}
 
 	t.results[encounterID] = result

@@ -1,6 +1,8 @@
 // Package wowspec provides World of Warcraft talent specialization inference.
 package wowspec
 
+import "math"
+
 // specMap maps class name → [3]talent tree spec names (tree0, tree1, tree2).
 var specMap = map[string][3]string{
 	"WARRIOR":      {"Arms", "Fury", "Protection"},
@@ -58,40 +60,109 @@ func TreeNames(class string) [3]string {
 	return specMap[class]
 }
 
-// Role represents a player's combat role.
+// Role constants.
 const (
 	RoleDPS  = "dps"
 	RoleHeal = "heal"
 	RoleTank = "tank"
 )
 
-// healSpecs and tankSpecs define which class+spec combos are non-DPS.
-var healSpecs = map[string]map[string]bool{
-	"PRIEST":  {"Discipline": true, "Holy": true},
-	"PALADIN": {"Holy": true},
-	"SHAMAN":  {"Restoration": true},
-	"DRUID":   {"Restoration": true},
+// Z-score thresholds for statistical role detection.
+const (
+	TankZThreshold       = 1.5   // damage taken ≥ 1.5σ above mean
+	HealerZThreshold     = 0.3   // healing done ≥ 0.3σ above mean
+	LowDPSZThreshold     = -0.90 // DPS ≤ -0.90σ (bottom ~18.5%)
+	HealerHighZThreshold = 1.5   // healing done ≥ 1.5σ bypasses DPS check
+)
+
+// PlayerMetrics holds the three metrics needed for role inference.
+type PlayerMetrics struct {
+	DamageDone  int64
+	DamageTaken int64
+	HealingDone int64
 }
 
-var tankSpecs = map[string]map[string]bool{
-	"WARRIOR":      {"Protection": true},
-	"PALADIN":      {"Protection": true},
-	"DRUID":        {"Feral": true}, // Feral can be tank or DPS; default to tank
-	"DEATH_KNIGHT": {"Blood": true},
+// InferRoles classifies each player's role using statistical outlier detection.
+// Returns a map of player ID → role string ("dps", "heal", "tank").
+//
+// Algorithm: compute mean+stddev across the raid for each metric, then:
+//   - Tank = damage taken z-score ≥ 1.5σ
+//   - Healer = healing z-score ≥ 0.3σ AND (low DPS ≤ -0.90σ OR very high healing ≥ 1.5σ)
+//   - DPS = everyone else
+//
+// Priority: Tank > Healer > DPS.
+func InferRoles[K comparable](players map[K]PlayerMetrics) map[K]string {
+	roles := make(map[K]string, len(players))
+	if len(players) < 2 {
+		for k := range players {
+			roles[k] = RoleDPS
+		}
+		return roles
+	}
+
+	// Collect values for stats.
+	dtValues := make([]float64, 0, len(players))
+	hdValues := make([]float64, 0, len(players))
+	ddValues := make([]float64, 0, len(players))
+	for _, m := range players {
+		dtValues = append(dtValues, float64(m.DamageTaken))
+		hdValues = append(hdValues, float64(m.HealingDone))
+		ddValues = append(ddValues, float64(m.DamageDone))
+	}
+
+	dtMean, dtStd := meanStdDev(dtValues)
+	hdMean, hdStd := meanStdDev(hdValues)
+	ddMean, ddStd := meanStdDev(ddValues)
+
+	for k, m := range players {
+		dtZ := zScore(float64(m.DamageTaken), dtMean, dtStd)
+		hdZ := zScore(float64(m.HealingDone), hdMean, hdStd)
+		ddZ := zScore(float64(m.DamageDone), ddMean, ddStd)
+
+		isTank := dtZ >= TankZThreshold && m.DamageTaken > 0
+		hasHealing := hdZ >= HealerZThreshold && m.HealingDone > 0
+		hasLowDPS := ddZ <= LowDPSZThreshold
+		hasHighHealing := hdZ >= HealerHighZThreshold
+		isHealer := hasHealing && (hasLowDPS || hasHighHealing)
+
+		if isTank {
+			roles[k] = RoleTank
+		} else if isHealer {
+			roles[k] = RoleHeal
+		} else {
+			roles[k] = RoleDPS
+		}
+	}
+
+	return roles
 }
 
-// InferRole returns the combat role for a given class and spec.
-// Returns "dps" for unknown combinations.
-func InferRole(class, spec string) string {
-	if specs, ok := healSpecs[class]; ok {
-		if specs[spec] {
-			return RoleHeal
-		}
+func meanStdDev(values []float64) (float64, float64) {
+	if len(values) == 0 {
+		return 0, 0
 	}
-	if specs, ok := tankSpecs[class]; ok {
-		if specs[spec] {
-			return RoleTank
-		}
+	var sum float64
+	for _, v := range values {
+		sum += v
 	}
-	return RoleDPS
+	avg := sum / float64(len(values))
+	if len(values) < 2 {
+		return avg, 0
+	}
+	var sqDiffSum float64
+	for _, v := range values {
+		d := v - avg
+		sqDiffSum += d * d
+	}
+	return avg, math.Sqrt(sqDiffSum / float64(len(values)))
+}
+
+func zScore(value, avg, sd float64) float64 {
+	if sd == 0 {
+		if value > avg {
+			return math.Inf(1)
+		}
+		return 0
+	}
+	return (value - avg) / sd
 }

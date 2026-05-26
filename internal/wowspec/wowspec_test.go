@@ -77,44 +77,63 @@ func TestInferSpec(t *testing.T) {
 	}
 }
 
-func TestInferRole(t *testing.T) {
+func TestInferRoles(t *testing.T) {
 	t.Parallel()
 
-	tests := []struct {
-		class, spec string
-		expected    string
-	}{
-		{"WARRIOR", "Arms", "dps"},
-		{"WARRIOR", "Fury", "dps"},
-		{"WARRIOR", "Protection", "tank"},
-		{"PALADIN", "Holy", "heal"},
-		{"PALADIN", "Protection", "tank"},
-		{"PALADIN", "Retribution", "dps"},
-		{"PRIEST", "Discipline", "heal"},
-		{"PRIEST", "Holy", "heal"},
-		{"PRIEST", "Shadow", "dps"},
-		{"SHAMAN", "Elemental", "dps"},
-		{"SHAMAN", "Enhancement", "dps"},
-		{"SHAMAN", "Restoration", "heal"},
-		{"DRUID", "Balance", "dps"},
-		{"DRUID", "Feral", "tank"},
-		{"DRUID", "Restoration", "heal"},
-		{"MAGE", "Fire", "dps"},
-		{"ROGUE", "Combat", "dps"},
-		{"WARLOCK", "Affliction", "dps"},
-		{"HUNTER", "Marksmanship", "dps"},
-		{"DEATH_KNIGHT", "Blood", "tank"},
-		{"DEATH_KNIGHT", "Frost", "dps"},
-		{"DEATH_KNIGHT", "Unholy", "dps"},
-		{"UNKNOWN", "Unknown", "dps"},
-	}
+	t.Run("typical_raid", func(t *testing.T) {
+		t.Parallel()
+		players := map[string]wowspec.PlayerMetrics{
+			// Tank: high damage taken
+			"tank1": {DamageDone: 50000, DamageTaken: 200000, HealingDone: 0},
+			// Healers: high healing, low DPS
+			"healer1": {DamageDone: 5000, DamageTaken: 10000, HealingDone: 150000},
+			"healer2": {DamageDone: 3000, DamageTaken: 8000, HealingDone: 120000},
+			// DPS: high damage, low healing, low damage taken
+			"dps1": {DamageDone: 180000, DamageTaken: 15000, HealingDone: 0},
+			"dps2": {DamageDone: 160000, DamageTaken: 12000, HealingDone: 0},
+			"dps3": {DamageDone: 150000, DamageTaken: 14000, HealingDone: 0},
+			"dps4": {DamageDone: 140000, DamageTaken: 11000, HealingDone: 500},
+			"dps5": {DamageDone: 130000, DamageTaken: 13000, HealingDone: 0},
+		}
+		roles := wowspec.InferRoles(players)
+		require.Equal(t, "tank", roles["tank1"])
+		require.Equal(t, "heal", roles["healer1"])
+		require.Equal(t, "heal", roles["healer2"])
+		require.Equal(t, "dps", roles["dps1"])
+		require.Equal(t, "dps", roles["dps2"])
+		require.Equal(t, "dps", roles["dps3"])
+		require.Equal(t, "dps", roles["dps4"])
+		require.Equal(t, "dps", roles["dps5"])
+	})
 
-	for _, tt := range tests {
-		t.Run(tt.class+"/"+tt.spec, func(t *testing.T) {
-			t.Parallel()
-			require.Equal(t, tt.expected, wowspec.InferRole(tt.class, tt.spec))
-		})
-	}
+	t.Run("single_player", func(t *testing.T) {
+		t.Parallel()
+		players := map[string]wowspec.PlayerMetrics{
+			"solo": {DamageDone: 100000, DamageTaken: 50000, HealingDone: 0},
+		}
+		roles := wowspec.InferRoles(players)
+		require.Equal(t, "dps", roles["solo"])
+	})
+
+	t.Run("empty", func(t *testing.T) {
+		t.Parallel()
+		roles := wowspec.InferRoles(map[string]wowspec.PlayerMetrics{})
+		require.Empty(t, roles)
+	})
+
+	t.Run("all_same_stats", func(t *testing.T) {
+		t.Parallel()
+		players := map[string]wowspec.PlayerMetrics{
+			"p1": {DamageDone: 100, DamageTaken: 100, HealingDone: 100},
+			"p2": {DamageDone: 100, DamageTaken: 100, HealingDone: 100},
+			"p3": {DamageDone: 100, DamageTaken: 100, HealingDone: 100},
+		}
+		roles := wowspec.InferRoles(players)
+		// All identical — stddev = 0, no outliers — all DPS
+		for _, r := range roles {
+			require.Equal(t, "dps", r)
+		}
+	})
 }
 
 func TestTreeNames(t *testing.T) {
