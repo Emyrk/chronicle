@@ -4490,8 +4490,8 @@ WITH deduped AS (
 )
 SELECT
     d.encounter_name,
-    COUNT(*) FILTER (WHERE d.kill_type = 'clean')::bigint AS kills,
-    COUNT(*) FILTER (WHERE d.kill_type = 'wipe')::bigint AS wipes,
+    COUNT(*) FILTER (WHERE d.kill_type IN ('clean', 'partial'))::bigint AS kills,
+    COUNT(*) FILTER (WHERE d.kill_type IN ('wipe', 'reset'))::bigint AS wipes,
     COUNT(*)::bigint AS total
 FROM deduped d
 GROUP BY d.encounter_name
