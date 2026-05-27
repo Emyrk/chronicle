@@ -81,7 +81,7 @@ export function InstanceView({ instanceName }: InstanceViewProps) {
   const dpsSubTab: DpsSubTab = params.get("tab") === "leaderboard" ? "leaderboard" : "boxplot"
   const filterClass = params.get("class") ?? undefined
   const filterSpec = params.get("spec") ?? undefined
-  const filterRole = useMemo(() => params.get("role") || "dps", [params])
+  const filterRole = useMemo(() => params.get("role") || "", [params])  // "" = all roles
 
   const page = useMemo(() => {
     const raw = params.get("page")
@@ -200,7 +200,7 @@ export function InstanceView({ instanceName }: InstanceViewProps) {
     (role: string) => {
       setParams((prev) => {
         const next = new URLSearchParams(prev)
-        if (role === "dps") next.delete("role")
+        if (role === "") next.delete("role")
         else next.set("role", role)
         next.delete("page")
         next.delete("class")
@@ -540,12 +540,13 @@ export function InstanceView({ instanceName }: InstanceViewProps) {
                   <DropdownMenu modal={false}>
                     <DropdownMenuTrigger asChild>
                       <Button variant="outline" size="sm" className="h-7 gap-1.5 text-xs min-w-[80px] justify-between">
-                        {filterRole === "dps" ? "DPS" : filterRole === "heal" ? "Healer" : "Tank"}
+                        {filterRole === "" ? "All Roles" : filterRole === "dps" ? "DPS" : filterRole === "heal" ? "Healer" : "Tank"}
                         <ChevronDown className="h-3 w-3 opacity-50" />
                       </Button>
                     </DropdownMenuTrigger>
                     <DropdownMenuContent align="start">
                       <DropdownMenuRadioGroup value={filterRole} onValueChange={(v) => handleRoleChange(v)}>
+                        <DropdownMenuRadioItem value="">All Roles</DropdownMenuRadioItem>
                         <DropdownMenuRadioItem value="dps">DPS</DropdownMenuRadioItem>
                         <DropdownMenuRadioItem value="tank">Tank</DropdownMenuRadioItem>
                         <DropdownMenuRadioItem value="heal">Healer</DropdownMenuRadioItem>
