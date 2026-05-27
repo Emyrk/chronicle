@@ -81,6 +81,25 @@ type PlayerMetrics struct {
 	DamageDone  int64
 	DamageTaken int64
 	HealingDone int64
+	// Class and Spec are optional. When set, spec-based role overrides
+	// are applied (e.g., Shadow Priest is always DPS despite high healing).
+	Class string
+	Spec  string
+}
+
+// dpsOnlySpecs lists class+spec combinations that are always DPS regardless
+// of statistical detection. These specs produce high healing as a byproduct
+// of their damage (e.g., Vampiric Embrace) which confuses the healer detector.
+var dpsOnlySpecs = map[string]map[string]bool{
+	"PRIEST": {"Shadow": true},
+}
+
+// isDPSOnlySpec returns true if the class+spec combo should always be DPS.
+func isDPSOnlySpec(class, spec string) bool {
+	if specs, ok := dpsOnlySpecs[class]; ok {
+		return specs[spec]
+	}
+	return false
 }
 
 // InferRoles classifies each player's role using statistical outlier detection.
@@ -116,6 +135,12 @@ func InferRoles[K comparable](players map[K]PlayerMetrics) map[K]string {
 	ddMean, ddStd := meanStdDev(ddValues)
 
 	for k, m := range players {
+		// Spec-based override: some specs are always DPS regardless of stats.
+		if isDPSOnlySpec(m.Class, m.Spec) {
+			roles[k] = RoleDPS
+			continue
+		}
+
 		dtZ := zScore(float64(m.DamageTaken), dtMean, dtStd)
 		hdZ := zScore(float64(m.HealingDone), hdMean, hdStd)
 		ddZ := zScore(float64(m.DamageDone), ddMean, ddStd)
