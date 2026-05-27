@@ -100,9 +100,26 @@ func (t *DPSTracker) ProcessMessage(active bool, _ uuid.UUID, m messages.Message
 		}
 		caster := *msg.Caster
 		casterCls := t.units.Classify(caster)
-		isPlayerOrPet := casterCls.Type == unitdb.UnitTypePlayer || casterCls.Relation.HasOwner()
-		if isPlayerOrPet && targetCls.Affiliation == unitdb.AffiliationHostile {
-			t.damageDone[caster] += int64(msg.Amount)
+
+		// Determine who gets credit for this damage.
+		// - Player caster → credit to player
+		// - Pet/totem (has owner) → credit to the pet GUID (owner attribution in logparse)
+		// - Possessed creature (mind control) → credit to the controlling player
+		// - Anything else → skip
+		creditGUID := caster
+		if casterCls.Type == unitdb.UnitTypePlayer {
+			// Direct player damage — credit to player.
+		} else if casterCls.Relation.HasOwner() {
+			// Pet/totem — record under pet GUID; logparse sums into owner.
+		} else if casterCls.Possession != nil && t.units.Classify(casterCls.Possession.Controller).Type == unitdb.UnitTypePlayer {
+			// Possessed creature — credit to the controlling player directly.
+			creditGUID = casterCls.Possession.Controller
+		} else {
+			return nil // not player-attributable damage
+		}
+
+		if targetCls.Affiliation == unitdb.AffiliationHostile {
+			t.damageDone[creditGUID] += int64(msg.Amount)
 		}
 
 	case *messages.Heal:
