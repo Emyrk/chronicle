@@ -114,11 +114,11 @@ function BoxPlotRow({ stats, scaleMax, onClick }: BoxPlotRowProps) {
         </div>
         {/* Stats */}
         <div className="space-y-1 text-xs">
-          <DpsStatLine label="Best" value={Math.round(stats.max_dps)} />
+          <DpsStatLine label="Top 5%" value={Math.round(stats.max_dps)} />
           <DpsStatLine label="Top 25%" value={Math.round(stats.q3_dps)} />
           <DpsStatLine label="Typical" value={Math.round(stats.median_dps)} highlight />
           <DpsStatLine label="Bottom 25%" value={Math.round(stats.q1_dps)} />
-          <DpsStatLine label="Lowest" value={Math.round(stats.min_dps)} />
+          <DpsStatLine label="Bottom 5%" value={Math.round(stats.min_dps)} />
           <div className="border-t border-white/5 pt-1 mt-1">
             <DpsStatLine label="Spread" desc="IQR (Q3 − Q1)" value={Math.round(iqr)} />
           </div>
