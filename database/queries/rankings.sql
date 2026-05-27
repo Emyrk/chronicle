@@ -223,7 +223,7 @@ SELECT
     PERCENTILE_CONT(0.25) WITHIN GROUP (ORDER BY d.dps) AS q1_dps,
     PERCENTILE_CONT(0.50) WITHIN GROUP (ORDER BY d.dps) AS median_dps,
     PERCENTILE_CONT(0.75) WITHIN GROUP (ORDER BY d.dps) AS q3_dps,
-    PERCENTILE_CONT(0.95) WITHIN GROUP (ORDER BY d.dps) AS max_dps,
+    MAX(d.dps)::double precision AS max_dps,
     COUNT(*)::bigint AS count
 FROM deduped d
 WHERE d.dps > 0
@@ -282,11 +282,11 @@ WITH deduped AS (
 )
 SELECT
     d.encounter_name,
-    PERCENTILE_CONT(0.05) WITHIN GROUP (ORDER BY d.duration_secs) AS min_secs,
+    MIN(d.duration_secs)::double precision AS min_secs,
     PERCENTILE_CONT(0.25) WITHIN GROUP (ORDER BY d.duration_secs) AS q1_secs,
     PERCENTILE_CONT(0.50) WITHIN GROUP (ORDER BY d.duration_secs) AS median_secs,
     PERCENTILE_CONT(0.75) WITHIN GROUP (ORDER BY d.duration_secs) AS q3_secs,
-    PERCENTILE_CONT(0.95) WITHIN GROUP (ORDER BY d.duration_secs) AS max_secs,
+    MAX(d.duration_secs)::double precision AS max_secs,
     COUNT(*)::bigint AS count
 FROM deduped d
 WHERE d.duration_secs > 0

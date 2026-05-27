@@ -641,11 +641,16 @@ export function InstanceView({ instanceName }: InstanceViewProps) {
         {/* Content */}
         {metric === "dps" && (
           dpsSubTab === "boxplot" ? (
-            <BoxPlotChart
-              stats={boxPlotStats}
-              title="DPS Distribution by Class & Spec"
-              onRowClick={handleBoxPlotRowClick}
-            />
+            <>
+              <BoxPlotChart
+                stats={boxPlotStats}
+                title="DPS Distribution by Class & Spec"
+                onRowClick={handleBoxPlotRowClick}
+              />
+              <p className="text-[11px] text-muted-foreground/50 mt-1">
+                Bottom 5% of parses excluded (early deaths, incomplete data)
+              </p>
+            </>
           ) : (
             <>
               {/* Active class/spec filter badge */}
@@ -802,11 +807,11 @@ function KillTimeContent({ stats }: { stats: RankingsKillTimeStats[] }) {
                   <span className="text-[10px] text-muted-foreground">{s.count.toLocaleString()} kills</span>
                 </div>
                 <div className="space-y-1 text-xs">
-                  <TimeStatLine label="Top 5%" value={formatTime(s.min_secs)} />
+                  <TimeStatLine label="Fastest" value={formatTime(s.min_secs)} />
                   <TimeStatLine label="Top 25%" value={formatTime(s.q1_secs)} />
                   <TimeStatLine label="Typical" value={formatTime(s.median_secs)} highlight />
                   <TimeStatLine label="Bottom 25%" value={formatTime(s.q3_secs)} />
-                  <TimeStatLine label="Bottom 5%" value={formatTime(s.max_secs)} />
+                  <TimeStatLine label="Slowest" value={formatTime(s.max_secs)} />
                   <div className="border-t border-white/5 pt-1 mt-1">
                     <TimeStatLine label="Spread" desc="IQR (Q3 − Q1)" value={formatTime(iqr)} />
                   </div>
