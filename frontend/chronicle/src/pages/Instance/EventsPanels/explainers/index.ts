@@ -15,6 +15,7 @@ import { healingDoneExplainer } from "../HealingDone/HealingDone.explainer";
 import { sunderExplainer } from "../Sunder/Sunder.explainer";
 import { damageTakenExplainer } from "../DamageTaken/DamageTaken.explainer";
 import { rolesExplainer } from "../Roles/Roles.explainer";
+import { pullsAndCleanupExplainer } from "../PullsAndCleanup/PullsAndCleanup.explainer";
 
 /**
  * Map of panel types to their explainer configurations.
@@ -31,6 +32,7 @@ export const PANEL_EXPLAINERS: Partial<Record<EventsPanelType, PanelExplainer<an
   damage_taken: damageTakenExplainer,
   enemy_damage_taken: damageTakenExplainer, // Same explainer, different context
   roles: rolesExplainer,
+  pulls_and_cleanup: pullsAndCleanupExplainer,
 };
 
 /**

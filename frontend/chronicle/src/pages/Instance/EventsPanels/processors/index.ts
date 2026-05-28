@@ -34,6 +34,7 @@ import { absorbedDamageProcessor } from "../AbsorbedDamage/absorbedDamage.proces
 import { resistsProcessor } from "../ResistsPanel/resists.processor";
 import { guildsProcessor } from "../Guilds/guilds.processor";
 import { companionStatsProcessor } from "../CompanionStats/companionStats.processor";
+import { pullsAndCleanupProcessor } from "../PullsAndCleanup/pullsAndCleanup.processor";
 
 // Export individual processors
 export { damageDoneProcessor, vulnerabilityEffectProcessor, enemyDamageDoneProcessor, petDamageDoneProcessor, friendlyFireProcessor } from "../DamageDone/damageDone.processor";
@@ -66,6 +67,7 @@ export { lootProcessor } from "../LootPanel/loot.processor";
 export { absorbedDamageProcessor } from "../AbsorbedDamage/absorbedDamage.processor";
 export { resistsProcessor } from "../ResistsPanel/resists.processor";
 export { guildsProcessor } from "../Guilds/guilds.processor";
+export { pullsAndCleanupProcessor } from "../PullsAndCleanup/pullsAndCleanup.processor";
 
 // Export state types
 export type { DamageDoneResult as DamageDoneState, DamageDoneData, DamageSourceType } from "../DamageDone/damageDone.processor";
@@ -93,6 +95,7 @@ export type { LootResult } from "../LootPanel/loot.processor";
 export type { AbsorbedDamageResult, AbsorbedDamageData } from "../AbsorbedDamage/absorbedDamage.processor";
 export type { ResistsResult, PlayerResistData, AbilityResistBreakout } from "../ResistsPanel/resists.processor";
 export type { GuildsResult, GuildEntry, GuildPlayerInfo } from "../Guilds/guilds.processor";
+export type { PullsAndCleanupResult } from "../PullsAndCleanup/pullsAndCleanup.processor";
 // Note: ResourceType is exported from allActivityDebug.processor above
 export type { PlayerRoleData, InferredRole, RoleSummary, RoleDetectionDebug, InferRolesResult } from "../Roles/roles.processor";
 export { inferRoles, getRoleSummary } from "../Roles/roles.processor";
@@ -165,4 +168,5 @@ export const processorRegistry: Record<string, PanelProcessor<any, any>> = {
   resists: resistsProcessor,
   guilds: guildsProcessor,
   companion_stats: companionStatsProcessor,
+  pulls_and_cleanup: pullsAndCleanupProcessor,
 };
