@@ -82,3 +82,7 @@ WHERE uk.secret_hash = $1;
 
 -- name: TouchUploadKeyLastUsed :exec
 UPDATE wow_server_upload_keys SET last_used_at = now() WHERE id = $1;
+
+-- name: SetServerDataset :exec
+UPDATE wow_servers SET default_dataset_id = $2 WHERE id = $1;
+

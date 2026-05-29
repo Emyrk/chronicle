@@ -61,6 +61,15 @@ SCRIPT_DIR=$(dirname "${BASH_SOURCE[0]}")
 	go mod download
 	go run golang.org/x/tools/cmd/goimports@latest -w queries.sql.go
 
+	# Dataset queries — separate package, no merge needed.
+	# sqlc generates directly into datasetdb/.
+	# Rename the interface for clarity.
+	if [ -d "datasetdb" ]; then
+		gofmt -w -r 'Querier -> Store' -- datasetdb/*.go
+		gofmt -w -r 'Queries -> querier' -- datasetdb/*.go
+		goimports -w datasetdb/
+	fi
+
 	# Generate enums (e.g. unique constraints).
 #	go run gen/enum/main.go
 )

@@ -359,7 +359,7 @@ func (q *sqlQuerier) GetUploadKeyByHash(ctx context.Context, secretHash string) 
 }
 
 const getWoWServer = `-- name: GetWoWServer :one
-SELECT id, name, created_by, url, description, tenant_id FROM wow_servers WHERE id = $1
+SELECT id, name, created_by, url, description, tenant_id, default_dataset_id FROM wow_servers WHERE id = $1
 `
 
 func (q *sqlQuerier) GetWoWServer(ctx context.Context, id uuid.UUID) (WowServer, error) {
@@ -372,12 +372,13 @@ func (q *sqlQuerier) GetWoWServer(ctx context.Context, id uuid.UUID) (WowServer,
 		&i.Url,
 		&i.Description,
 		&i.TenantID,
+		&i.DefaultDatasetID,
 	)
 	return i, err
 }
 
 const getWoWServerByName = `-- name: GetWoWServerByName :one
-SELECT id, name, created_by, url, description, tenant_id FROM wow_servers WHERE name = $1
+SELECT id, name, created_by, url, description, tenant_id, default_dataset_id FROM wow_servers WHERE name = $1
 `
 
 func (q *sqlQuerier) GetWoWServerByName(ctx context.Context, name string) (WowServer, error) {
@@ -390,6 +391,7 @@ func (q *sqlQuerier) GetWoWServerByName(ctx context.Context, name string) (WowSe
 		&i.Url,
 		&i.Description,
 		&i.TenantID,
+		&i.DefaultDatasetID,
 	)
 	return i, err
 }
@@ -468,7 +470,7 @@ func (q *sqlQuerier) InsertUploadKey(ctx context.Context, arg InsertUploadKeyPar
 
 const insertWoWServer = `-- name: InsertWoWServer :one
 INSERT INTO wow_servers (id, name, description, url, created_by)
-VALUES ($1, $2, $3, $4, $5) RETURNING id, name, created_by, url, description, tenant_id
+VALUES ($1, $2, $3, $4, $5) RETURNING id, name, created_by, url, description, tenant_id, default_dataset_id
 `
 
 type InsertWoWServerParams struct {
@@ -495,6 +497,7 @@ func (q *sqlQuerier) InsertWoWServer(ctx context.Context, arg InsertWoWServerPar
 		&i.Url,
 		&i.Description,
 		&i.TenantID,
+		&i.DefaultDatasetID,
 	)
 	return i, err
 }
@@ -641,7 +644,7 @@ func (q *sqlQuerier) ListWoWServerRealms(ctx context.Context, serverID uuid.UUID
 
 const listWoWServers = `-- name: ListWoWServers :many
 
-SELECT id, name, created_by, url, description, tenant_id FROM wow_servers ORDER BY name
+SELECT id, name, created_by, url, description, tenant_id, default_dataset_id FROM wow_servers ORDER BY name
 `
 
 // Servers
@@ -661,6 +664,7 @@ func (q *sqlQuerier) ListWoWServers(ctx context.Context) ([]WowServer, error) {
 			&i.Url,
 			&i.Description,
 			&i.TenantID,
+			&i.DefaultDatasetID,
 		); err != nil {
 			return nil, err
 		}
@@ -673,7 +677,7 @@ func (q *sqlQuerier) ListWoWServers(ctx context.Context) ([]WowServer, error) {
 }
 
 const listWoWServersByTenantID = `-- name: ListWoWServersByTenantID :many
-SELECT id, name, created_by, url, description, tenant_id FROM wow_servers WHERE tenant_id = $1 ORDER BY name
+SELECT id, name, created_by, url, description, tenant_id, default_dataset_id FROM wow_servers WHERE tenant_id = $1 ORDER BY name
 `
 
 func (q *sqlQuerier) ListWoWServersByTenantID(ctx context.Context, tenantID uuid.NullUUID) ([]WowServer, error) {
@@ -692,6 +696,7 @@ func (q *sqlQuerier) ListWoWServersByTenantID(ctx context.Context, tenantID uuid
 			&i.Url,
 			&i.Description,
 			&i.TenantID,
+			&i.DefaultDatasetID,
 		); err != nil {
 			return nil, err
 		}
@@ -701,6 +706,20 @@ func (q *sqlQuerier) ListWoWServersByTenantID(ctx context.Context, tenantID uuid
 		return nil, err
 	}
 	return items, nil
+}
+
+const setServerDataset = `-- name: SetServerDataset :exec
+UPDATE wow_servers SET default_dataset_id = $2 WHERE id = $1
+`
+
+type SetServerDatasetParams struct {
+	ID               uuid.UUID     `db:"id" json:"id"`
+	DefaultDatasetID uuid.NullUUID `db:"default_dataset_id" json:"default_dataset_id"`
+}
+
+func (q *sqlQuerier) SetServerDataset(ctx context.Context, arg SetServerDatasetParams) error {
+	_, err := q.db.Exec(ctx, setServerDataset, arg.ID, arg.DefaultDatasetID)
+	return err
 }
 
 const touchUploadKeyLastUsed = `-- name: TouchUploadKeyLastUsed :exec
@@ -718,7 +737,7 @@ UPDATE wow_servers SET
     description = $2,
     url = $3
 WHERE id = $4
-RETURNING id, name, created_by, url, description, tenant_id
+RETURNING id, name, created_by, url, description, tenant_id, default_dataset_id
 `
 
 type UpdateWoWServerParams struct {
@@ -743,6 +762,7 @@ func (q *sqlQuerier) UpdateWoWServer(ctx context.Context, arg UpdateWoWServerPar
 		&i.Url,
 		&i.Description,
 		&i.TenantID,
+		&i.DefaultDatasetID,
 	)
 	return i, err
 }
@@ -6501,7 +6521,7 @@ func (q *sqlQuerier) DeleteTenant(ctx context.Context, id uuid.UUID) error {
 }
 
 const getTenantByID = `-- name: GetTenantByID :one
-SELECT id, slug, name, disable_client_upload, include_in_all, branding, created_at, updated_at, discoverable FROM tenants WHERE id = $1
+SELECT id, slug, name, disable_client_upload, include_in_all, branding, created_at, updated_at, discoverable, default_dataset_id FROM tenants WHERE id = $1
 `
 
 func (q *sqlQuerier) GetTenantByID(ctx context.Context, id uuid.UUID) (Tenant, error) {
@@ -6517,13 +6537,14 @@ func (q *sqlQuerier) GetTenantByID(ctx context.Context, id uuid.UUID) (Tenant, e
 		&i.CreatedAt,
 		&i.UpdatedAt,
 		&i.Discoverable,
+		&i.DefaultDatasetID,
 	)
 	return i, err
 }
 
 const getTenantBySlug = `-- name: GetTenantBySlug :one
 
-SELECT id, slug, name, disable_client_upload, include_in_all, branding, created_at, updated_at, discoverable FROM tenants WHERE slug = $1
+SELECT id, slug, name, disable_client_upload, include_in_all, branding, created_at, updated_at, discoverable, default_dataset_id FROM tenants WHERE slug = $1
 `
 
 // Tenant queries. These run with AdminBypass context since the tenants table
@@ -6541,6 +6562,7 @@ func (q *sqlQuerier) GetTenantBySlug(ctx context.Context, slug pgtype.Text) (Ten
 		&i.CreatedAt,
 		&i.UpdatedAt,
 		&i.Discoverable,
+		&i.DefaultDatasetID,
 	)
 	return i, err
 }
@@ -6548,7 +6570,7 @@ func (q *sqlQuerier) GetTenantBySlug(ctx context.Context, slug pgtype.Text) (Ten
 const insertTenant = `-- name: InsertTenant :one
 INSERT INTO tenants (id, slug, name, disable_client_upload, include_in_all, branding, discoverable)
 VALUES ($1, $2, $3, $4, $5, $6, $7)
-RETURNING id, slug, name, disable_client_upload, include_in_all, branding, created_at, updated_at, discoverable
+RETURNING id, slug, name, disable_client_upload, include_in_all, branding, created_at, updated_at, discoverable, default_dataset_id
 `
 
 type InsertTenantParams struct {
@@ -6582,12 +6604,13 @@ func (q *sqlQuerier) InsertTenant(ctx context.Context, arg InsertTenantParams) (
 		&i.CreatedAt,
 		&i.UpdatedAt,
 		&i.Discoverable,
+		&i.DefaultDatasetID,
 	)
 	return i, err
 }
 
 const listTenants = `-- name: ListTenants :many
-SELECT id, slug, name, disable_client_upload, include_in_all, branding, created_at, updated_at, discoverable FROM tenants ORDER BY name
+SELECT id, slug, name, disable_client_upload, include_in_all, branding, created_at, updated_at, discoverable, default_dataset_id FROM tenants ORDER BY name
 `
 
 func (q *sqlQuerier) ListTenants(ctx context.Context) ([]Tenant, error) {
@@ -6609,6 +6632,7 @@ func (q *sqlQuerier) ListTenants(ctx context.Context) ([]Tenant, error) {
 			&i.CreatedAt,
 			&i.UpdatedAt,
 			&i.Discoverable,
+			&i.DefaultDatasetID,
 		); err != nil {
 			return nil, err
 		}
@@ -6636,6 +6660,20 @@ func (q *sqlQuerier) SetServerTenant(ctx context.Context, arg SetServerTenantPar
 	return err
 }
 
+const setTenantDataset = `-- name: SetTenantDataset :exec
+UPDATE tenants SET default_dataset_id = $2, updated_at = now() WHERE id = $1
+`
+
+type SetTenantDatasetParams struct {
+	ID               uuid.UUID     `db:"id" json:"id"`
+	DefaultDatasetID uuid.NullUUID `db:"default_dataset_id" json:"default_dataset_id"`
+}
+
+func (q *sqlQuerier) SetTenantDataset(ctx context.Context, arg SetTenantDatasetParams) error {
+	_, err := q.db.Exec(ctx, setTenantDataset, arg.ID, arg.DefaultDatasetID)
+	return err
+}
+
 const updateTenant = `-- name: UpdateTenant :one
 UPDATE tenants SET
     slug = COALESCE($1, slug),
@@ -6646,7 +6684,7 @@ UPDATE tenants SET
     discoverable = COALESCE($6, discoverable),
     updated_at = now()
 WHERE id = $7
-RETURNING id, slug, name, disable_client_upload, include_in_all, branding, created_at, updated_at, discoverable
+RETURNING id, slug, name, disable_client_upload, include_in_all, branding, created_at, updated_at, discoverable, default_dataset_id
 `
 
 type UpdateTenantParams struct {
@@ -6681,6 +6719,7 @@ func (q *sqlQuerier) UpdateTenant(ctx context.Context, arg UpdateTenantParams) (
 		&i.CreatedAt,
 		&i.UpdatedAt,
 		&i.Discoverable,
+		&i.DefaultDatasetID,
 	)
 	return i, err
 }
@@ -9005,7 +9044,7 @@ func (q *sqlQuerier) DeleteWorld(ctx context.Context, id uuid.UUID) error {
 }
 
 const getServersForWorld = `-- name: GetServersForWorld :many
-SELECT s.id, s.name, s.created_by, s.url, s.description, s.tenant_id
+SELECT s.id, s.name, s.created_by, s.url, s.description, s.tenant_id, s.default_dataset_id
 FROM wow_servers s
 JOIN world_server ws ON s.id = ws.server_id
 WHERE ws.world_id = $1
@@ -9028,6 +9067,7 @@ func (q *sqlQuerier) GetServersForWorld(ctx context.Context, worldID uuid.UUID) 
 			&i.Url,
 			&i.Description,
 			&i.TenantID,
+			&i.DefaultDatasetID,
 		); err != nil {
 			return nil, err
 		}

@@ -275,9 +275,11 @@ type sqlcQuerier interface {
 	SetDuplicateGroupIDs(ctx context.Context, arg SetDuplicateGroupIDsParams) error
 	SetPanelLayoutCode(ctx context.Context, arg SetPanelLayoutCodeParams) (int64, error)
 	SetResetToken(ctx context.Context, arg SetResetTokenParams) error
+	SetServerDataset(ctx context.Context, arg SetServerDatasetParams) error
 	// Assigns or removes a tenant from a server.
 	// Pass NULL to remove the tenant assignment.
 	SetServerTenant(ctx context.Context, arg SetServerTenantParams) error
+	SetTenantDataset(ctx context.Context, arg SetTenantDatasetParams) error
 	SetVerificationToken(ctx context.Context, arg SetVerificationTokenParams) error
 	// Returns distinct instance names that have at least one qualified speedrun.
 	// JOINs wow_server_realms so RLS tenant filtering cascades.

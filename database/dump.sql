@@ -580,6 +580,24 @@ CREATE TABLE log_instances (
 
 COMMENT ON COLUMN log_instances.guild_id IS 'If set, that means it was a guild run.';
 
+CREATE TABLE datasets (
+    id uuid DEFAULT gen_random_uuid() NOT NULL,
+    name text NOT NULL,
+    slug text NOT NULL,
+    wow_version text NOT NULL,
+    build_version integer DEFAULT 5875 NOT NULL,
+    description text DEFAULT ''::text NOT NULL,
+    created_at timestamp with time zone DEFAULT now() NOT NULL,
+    updated_at timestamp with time zone DEFAULT now() NOT NULL,
+    CONSTRAINT datasets_slug_format CHECK ((slug ~ '^[a-z0-9][a-z0-9-]{1,48}[a-z0-9]$'::text))
+);
+
+ALTER TABLE ONLY datasets
+    ADD CONSTRAINT datasets_pkey PRIMARY KEY (id);
+
+ALTER TABLE ONLY datasets
+    ADD CONSTRAINT datasets_slug_key UNIQUE (slug);
+
 CREATE TABLE tenants (
     id uuid DEFAULT gen_random_uuid() NOT NULL,
     slug text,
@@ -590,6 +608,7 @@ CREATE TABLE tenants (
     created_at timestamp with time zone DEFAULT now() NOT NULL,
     updated_at timestamp with time zone DEFAULT now() NOT NULL,
     discoverable boolean DEFAULT false NOT NULL,
+    default_dataset_id uuid,
     CONSTRAINT tenants_slug_format CHECK (((slug IS NULL) OR (slug ~ '^[a-z0-9][a-z0-9-]{1,30}[a-z0-9]$'::text))),
     CONSTRAINT tenants_slug_reserved CHECK ((slug <> ALL (ARRAY['www'::text, 'api'::text, 'auth'::text, 'admin'::text, 'legacy'::text, 'app'::text, 'mail'::text, 'staging'::text])))
 );
@@ -611,7 +630,8 @@ CREATE TABLE wow_servers (
     created_by uuid,
     url text,
     description text DEFAULT ''::text NOT NULL,
-    tenant_id uuid
+    tenant_id uuid,
+    default_dataset_id uuid
 );
 
 ALTER TABLE ONLY wow_servers FORCE ROW LEVEL SECURITY;
@@ -1738,6 +1758,12 @@ ALTER TABLE ONLY wow_servers
 
 ALTER TABLE ONLY wow_servers
     ADD CONSTRAINT wow_servers_tenant_id_fkey FOREIGN KEY (tenant_id) REFERENCES tenants(id);
+
+ALTER TABLE ONLY tenants
+    ADD CONSTRAINT tenants_default_dataset_id_fkey FOREIGN KEY (default_dataset_id) REFERENCES datasets(id);
+
+ALTER TABLE ONLY wow_servers
+    ADD CONSTRAINT wow_servers_default_dataset_id_fkey FOREIGN KEY (default_dataset_id) REFERENCES datasets(id);
 
 ALTER TABLE encounter_dps_rankings ENABLE ROW LEVEL SECURITY;
 

@@ -2,13 +2,12 @@
 // versions:
 //   sqlc v1.30.0
 
-package database
+package datasetdb
 
 import (
 	"database/sql/driver"
 	"fmt"
 
-	"github.com/Emyrk/chronicle/combatlog/parser/guid"
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgtype"
 )
@@ -57,26 +56,6 @@ func (ns NullItemEffectType) Value() (driver.Value, error) {
 	return string(ns.ItemEffectType), nil
 }
 
-func (e ItemEffectType) Valid() bool {
-	switch e {
-	case ItemEffectTypeOnUse,
-		ItemEffectTypeOnEquip,
-		ItemEffectTypeOnHit,
-		ItemEffectTypeProc:
-		return true
-	}
-	return false
-}
-
-func AllItemEffectTypeValues() []ItemEffectType {
-	return []ItemEffectType{
-		ItemEffectTypeOnUse,
-		ItemEffectTypeOnEquip,
-		ItemEffectTypeOnHit,
-		ItemEffectTypeProc,
-	}
-}
-
 type KillType string
 
 const (
@@ -119,26 +98,6 @@ func (ns NullKillType) Value() (driver.Value, error) {
 		return nil, nil
 	}
 	return string(ns.KillType), nil
-}
-
-func (e KillType) Valid() bool {
-	switch e {
-	case KillTypeClean,
-		KillTypePartial,
-		KillTypeWipe,
-		KillTypeReset:
-		return true
-	}
-	return false
-}
-
-func AllKillTypeValues() []KillType {
-	return []KillType{
-		KillTypeClean,
-		KillTypePartial,
-		KillTypeWipe,
-		KillTypeReset,
-	}
 }
 
 type LogInstanceEventType string
@@ -198,52 +157,6 @@ func (ns NullLogInstanceEventType) Value() (driver.Value, error) {
 	return string(ns.LogInstanceEventType), nil
 }
 
-func (e LogInstanceEventType) Valid() bool {
-	switch e {
-	case LogInstanceEventTypeDamage,
-		LogInstanceEventTypeHeal,
-		LogInstanceEventTypeResourceChange,
-		LogInstanceEventTypeExtraAttack,
-		LogInstanceEventTypeSlain,
-		LogInstanceEventTypeCast,
-		LogInstanceEventTypeAura,
-		LogInstanceEventTypeSpellGo,
-		LogInstanceEventTypeAuraCast,
-		LogInstanceEventTypeSpellStart,
-		LogInstanceEventTypeSpellFail,
-		LogInstanceEventTypeUnitClassification,
-		LogInstanceEventTypeDispel,
-		LogInstanceEventTypeCombatantInfo,
-		LogInstanceEventTypeInterrupt,
-		LogInstanceEventTypeAbsorbed,
-		LogInstanceEventTypeCompanionStats:
-		return true
-	}
-	return false
-}
-
-func AllLogInstanceEventTypeValues() []LogInstanceEventType {
-	return []LogInstanceEventType{
-		LogInstanceEventTypeDamage,
-		LogInstanceEventTypeHeal,
-		LogInstanceEventTypeResourceChange,
-		LogInstanceEventTypeExtraAttack,
-		LogInstanceEventTypeSlain,
-		LogInstanceEventTypeCast,
-		LogInstanceEventTypeAura,
-		LogInstanceEventTypeSpellGo,
-		LogInstanceEventTypeAuraCast,
-		LogInstanceEventTypeSpellStart,
-		LogInstanceEventTypeSpellFail,
-		LogInstanceEventTypeUnitClassification,
-		LogInstanceEventTypeDispel,
-		LogInstanceEventTypeCombatantInfo,
-		LogInstanceEventTypeInterrupt,
-		LogInstanceEventTypeAbsorbed,
-		LogInstanceEventTypeCompanionStats,
-	}
-}
-
 type LogType string
 
 const (
@@ -289,32 +202,6 @@ func (ns NullLogType) Value() (driver.Value, error) {
 		return nil, nil
 	}
 	return string(ns.LogType), nil
-}
-
-func (e LogType) Valid() bool {
-	switch e {
-	case LogTypeV1,
-		LogTypeV2,
-		LogTypeWarmane,
-		LogTypeEpoch,
-		LogTypeKronos,
-		LogTypeAzerothcore,
-		LogTypeAzerothcoreClientside:
-		return true
-	}
-	return false
-}
-
-func AllLogTypeValues() []LogType {
-	return []LogType{
-		LogTypeV1,
-		LogTypeV2,
-		LogTypeWarmane,
-		LogTypeEpoch,
-		LogTypeKronos,
-		LogTypeAzerothcore,
-		LogTypeAzerothcoreClientside,
-	}
 }
 
 type RiverJobState string
@@ -363,34 +250,6 @@ func (ns NullRiverJobState) Value() (driver.Value, error) {
 		return nil, nil
 	}
 	return string(ns.RiverJobState), nil
-}
-
-func (e RiverJobState) Valid() bool {
-	switch e {
-	case RiverJobStateAvailable,
-		RiverJobStateCancelled,
-		RiverJobStateCompleted,
-		RiverJobStateDiscarded,
-		RiverJobStatePending,
-		RiverJobStateRetryable,
-		RiverJobStateRunning,
-		RiverJobStateScheduled:
-		return true
-	}
-	return false
-}
-
-func AllRiverJobStateValues() []RiverJobState {
-	return []RiverJobState{
-		RiverJobStateAvailable,
-		RiverJobStateCancelled,
-		RiverJobStateCompleted,
-		RiverJobStateDiscarded,
-		RiverJobStatePending,
-		RiverJobStateRetryable,
-		RiverJobStateRunning,
-		RiverJobStateScheduled,
-	}
 }
 
 type WowPlayableClass string
@@ -446,44 +305,6 @@ func (ns NullWowPlayableClass) Value() (driver.Value, error) {
 	return string(ns.WowPlayableClass), nil
 }
 
-func (e WowPlayableClass) Valid() bool {
-	switch e {
-	case WowPlayableClassWARRIOR,
-		WowPlayableClassPALADIN,
-		WowPlayableClassHUNTER,
-		WowPlayableClassROGUE,
-		WowPlayableClassPRIEST,
-		WowPlayableClassDEATHKNIGHT,
-		WowPlayableClassSHAMAN,
-		WowPlayableClassMAGE,
-		WowPlayableClassWARLOCK,
-		WowPlayableClassDRUID,
-		WowPlayableClassMONK,
-		WowPlayableClassDEMONHUNTER,
-		WowPlayableClassUNKNOWN:
-		return true
-	}
-	return false
-}
-
-func AllWowPlayableClassValues() []WowPlayableClass {
-	return []WowPlayableClass{
-		WowPlayableClassWARRIOR,
-		WowPlayableClassPALADIN,
-		WowPlayableClassHUNTER,
-		WowPlayableClassROGUE,
-		WowPlayableClassPRIEST,
-		WowPlayableClassDEATHKNIGHT,
-		WowPlayableClassSHAMAN,
-		WowPlayableClassMAGE,
-		WowPlayableClassWARLOCK,
-		WowPlayableClassDRUID,
-		WowPlayableClassMONK,
-		WowPlayableClassDEMONHUNTER,
-		WowPlayableClassUNKNOWN,
-	}
-}
-
 type WowPlayableGender string
 
 const (
@@ -526,26 +347,6 @@ func (ns NullWowPlayableGender) Value() (driver.Value, error) {
 		return nil, nil
 	}
 	return string(ns.WowPlayableGender), nil
-}
-
-func (e WowPlayableGender) Valid() bool {
-	switch e {
-	case WowPlayableGenderNotSet,
-		WowPlayableGenderUnknown,
-		WowPlayableGenderMale,
-		WowPlayableGenderFemale:
-		return true
-	}
-	return false
-}
-
-func AllWowPlayableGenderValues() []WowPlayableGender {
-	return []WowPlayableGender{
-		WowPlayableGenderNotSet,
-		WowPlayableGenderUnknown,
-		WowPlayableGenderMale,
-		WowPlayableGenderFemale,
-	}
 }
 
 type WowPlayableRace string
@@ -598,42 +399,6 @@ func (ns NullWowPlayableRace) Value() (driver.Value, error) {
 		return nil, nil
 	}
 	return string(ns.WowPlayableRace), nil
-}
-
-func (e WowPlayableRace) Valid() bool {
-	switch e {
-	case WowPlayableRaceScourge,
-		WowPlayableRaceOrc,
-		WowPlayableRaceTroll,
-		WowPlayableRaceTauren,
-		WowPlayableRaceGoblin,
-		WowPlayableRaceHuman,
-		WowPlayableRaceGnome,
-		WowPlayableRaceDwarf,
-		WowPlayableRaceNightElf,
-		WowPlayableRaceBloodElf,
-		WowPlayableRaceUnknown,
-		WowPlayableRaceDraenei:
-		return true
-	}
-	return false
-}
-
-func AllWowPlayableRaceValues() []WowPlayableRace {
-	return []WowPlayableRace{
-		WowPlayableRaceScourge,
-		WowPlayableRaceOrc,
-		WowPlayableRaceTroll,
-		WowPlayableRaceTauren,
-		WowPlayableRaceGoblin,
-		WowPlayableRaceHuman,
-		WowPlayableRaceGnome,
-		WowPlayableRaceDwarf,
-		WowPlayableRaceNightElf,
-		WowPlayableRaceBloodElf,
-		WowPlayableRaceUnknown,
-		WowPlayableRaceDraenei,
-	}
 }
 
 type ApplicationModificationRequest struct {
@@ -807,7 +572,7 @@ type EncounterDpsRanking struct {
 }
 
 type GamePlayer struct {
-	ID                  guid.GUID          `db:"id" json:"id"`
+	ID                  interface{}        `db:"id" json:"id"`
 	RealmID             uuid.UUID          `db:"realm_id" json:"realm_id"`
 	CreatedAt           pgtype.Timestamptz `db:"created_at" json:"created_at"`
 	GuildID             uuid.NullUUID      `db:"guild_id" json:"guild_id"`
@@ -815,11 +580,11 @@ type GamePlayer struct {
 	Class               WowPlayableClass   `db:"class" json:"class"`
 	Gender              WowPlayableGender  `db:"gender" json:"gender"`
 	Race                WowPlayableRace    `db:"race" json:"race"`
-	Gear                *PlayerOutfit      `db:"gear" json:"gear"`
+	Gear                []byte             `db:"gear" json:"gear"`
 	UpdatedAt           pgtype.Timestamptz `db:"updated_at" json:"updated_at"`
 	UpdatedFromInstance uuid.NullUUID      `db:"updated_from_instance" json:"updated_from_instance"`
 	Level               int16              `db:"level" json:"level"`
-	Talents             *PlayerTalents     `db:"talents" json:"talents"`
+	Talents             []byte             `db:"talents" json:"talents"`
 }
 
 type Guild struct {
@@ -947,7 +712,7 @@ type LogInstance struct {
 	StartTime         pgtype.Timestamptz `db:"start_time" json:"start_time"`
 	EndTime           pgtype.Timestamptz `db:"end_time" json:"end_time"`
 	Capabilities      []string           `db:"capabilities" json:"capabilities"`
-	Versions          VersionsMap        `db:"versions" json:"versions"`
+	Versions          []byte             `db:"versions" json:"versions"`
 	RecorderName      string             `db:"recorder_name" json:"recorder_name"`
 	RecorderGuid      string             `db:"recorder_guid" json:"recorder_guid"`
 	ParserVersion     string             `db:"parser_version" json:"parser_version"`
@@ -961,7 +726,7 @@ type LogInstanceEncounter struct {
 	ID         uuid.UUID          `db:"id" json:"id"`
 	InstanceID uuid.UUID          `db:"instance_id" json:"instance_id"`
 	Name       string             `db:"name" json:"name"`
-	Remaining  guid.GUIDs         `db:"remaining" json:"remaining"`
+	Remaining  []interface{}      `db:"remaining" json:"remaining"`
 	Boss       bool               `db:"boss" json:"boss"`
 	StartTime  pgtype.Timestamptz `db:"start_time" json:"start_time"`
 	EndTime    pgtype.Timestamptz `db:"end_time" json:"end_time"`
@@ -969,22 +734,22 @@ type LogInstanceEncounter struct {
 }
 
 type LogInstanceEncounterDamageUnitSummary struct {
-	EncounterID          uuid.UUID                        `db:"encounter_id" json:"encounter_id"`
-	UnitGuid             guid.GUID                        `db:"unit_guid" json:"unit_guid"`
-	UnitName             string                           `db:"unit_name" json:"unit_name"`
-	DamageDoneTotal      int64                            `db:"damage_done_total" json:"damage_done_total"`
-	DamageTakenTotal     int64                            `db:"damage_taken_total" json:"damage_taken_total"`
-	DamageDoneAbilities  map[guid.GUID]map[string]Ability `db:"damage_done_abilities" json:"damage_done_abilities"`
-	DamageTakenAbilities map[guid.GUID]map[string]Ability `db:"damage_taken_abilities" json:"damage_taken_abilities"`
-	IsPlayer             bool                             `db:"is_player" json:"is_player"`
-	OwnerGuid            *guid.GUID                       `db:"owner_guid" json:"owner_guid"`
+	EncounterID          uuid.UUID   `db:"encounter_id" json:"encounter_id"`
+	UnitGuid             interface{} `db:"unit_guid" json:"unit_guid"`
+	UnitName             string      `db:"unit_name" json:"unit_name"`
+	DamageDoneTotal      int64       `db:"damage_done_total" json:"damage_done_total"`
+	DamageTakenTotal     int64       `db:"damage_taken_total" json:"damage_taken_total"`
+	DamageDoneAbilities  []byte      `db:"damage_done_abilities" json:"damage_done_abilities"`
+	DamageTakenAbilities []byte      `db:"damage_taken_abilities" json:"damage_taken_abilities"`
+	IsPlayer             bool        `db:"is_player" json:"is_player"`
+	OwnerGuid            interface{} `db:"owner_guid" json:"owner_guid"`
 }
 
 type LogInstanceEncounterHostile struct {
-	EncounterID uuid.UUID `db:"encounter_id" json:"encounter_id"`
-	ID          guid.GUID `db:"id" json:"id"`
-	Periods     Periods   `db:"periods" json:"periods"`
-	Boss        bool      `db:"boss" json:"boss"`
+	EncounterID uuid.UUID   `db:"encounter_id" json:"encounter_id"`
+	ID          interface{} `db:"id" json:"id"`
+	Periods     interface{} `db:"periods" json:"periods"`
+	Boss        bool        `db:"boss" json:"boss"`
 }
 
 type LogInstanceEvent struct {
@@ -996,7 +761,7 @@ type LogInstanceEvent struct {
 
 type LogInstancePlayer struct {
 	InstanceID uuid.UUID        `db:"instance_id" json:"instance_id"`
-	UnitGuid   guid.GUID        `db:"unit_guid" json:"unit_guid"`
+	UnitGuid   interface{}      `db:"unit_guid" json:"unit_guid"`
 	Name       string           `db:"name" json:"name"`
 	Level      int32            `db:"level" json:"level"`
 	Class      WowPlayableClass `db:"class" json:"class"`
@@ -1006,11 +771,11 @@ type LogInstancePlayer struct {
 
 // Stores all units (NPCs, not players) that participated in an instance.
 type LogInstanceUnit struct {
-	InstanceID uuid.UUID  `db:"instance_id" json:"instance_id"`
-	UnitGuid   guid.GUID  `db:"unit_guid" json:"unit_guid"`
-	Name       string     `db:"name" json:"name"`
-	Entry      int32      `db:"entry" json:"entry"`
-	OwnerGuid  *guid.GUID `db:"owner_guid" json:"owner_guid"`
+	InstanceID uuid.UUID   `db:"instance_id" json:"instance_id"`
+	UnitGuid   interface{} `db:"unit_guid" json:"unit_guid"`
+	Name       string      `db:"name" json:"name"`
+	Entry      int32       `db:"entry" json:"entry"`
+	OwnerGuid  interface{} `db:"owner_guid" json:"owner_guid"`
 }
 
 type LogInstanceYoutubeTimestamped struct {
@@ -1018,7 +783,7 @@ type LogInstanceYoutubeTimestamped struct {
 	CreatedAt     pgtype.Timestamptz `db:"created_at" json:"created_at"`
 	ExportedAt    pgtype.Timestamptz `db:"exported_at" json:"exported_at"`
 	VideoUrl      string             `db:"video_url" json:"video_url"`
-	Payload       []VideoTimestamp   `db:"payload" json:"payload"`
+	Payload       []byte             `db:"payload" json:"payload"`
 	InstanceSlug  pgtype.Text        `db:"instance_slug" json:"instance_slug"`
 	ID            uuid.UUID          `db:"id" json:"id"`
 }
@@ -1031,7 +796,7 @@ type LogInstancesGuild struct {
 	HashedSlug         pgtype.Text        `db:"hashed_slug" json:"hashed_slug"`
 	GuildID            uuid.NullUUID      `db:"guild_id" json:"guild_id"`
 	Capabilities       []string           `db:"capabilities" json:"capabilities"`
-	Versions           VersionsMap        `db:"versions" json:"versions"`
+	Versions           []byte             `db:"versions" json:"versions"`
 	RecorderName       string             `db:"recorder_name" json:"recorder_name"`
 	RecorderGuid       string             `db:"recorder_guid" json:"recorder_guid"`
 	DuplicateGroupID   uuid.NullUUID      `db:"duplicate_group_id" json:"duplicate_group_id"`
@@ -1314,14 +1079,6 @@ type UserTrackedLayout struct {
 	CreatedAt pgtype.Timestamptz `db:"created_at" json:"created_at"`
 }
 
-type WoWLogGroup struct {
-	ID        uuid.UUID          `db:"id" json:"id"`
-	Owner     uuid.UUID          `db:"owner" json:"owner"`
-	CreatedAt pgtype.Timestamptz `db:"created_at" json:"created_at"`
-	UpdatedAt pgtype.Timestamptz `db:"updated_at" json:"updated_at"`
-	LogType   LogType            `db:"log_type" json:"log_type"`
-}
-
 type World struct {
 	ID        uuid.UUID          `db:"id" json:"id"`
 	Name      string             `db:"name" json:"name"`
@@ -1564,6 +1321,14 @@ type WorldSpellThreat struct {
 	Threat     int32   `db:"threat" json:"threat"`
 	Multiplier float64 `db:"multiplier" json:"multiplier"`
 	ApBonus    float64 `db:"ap_bonus" json:"ap_bonus"`
+}
+
+type WowLogGroup struct {
+	ID        uuid.UUID          `db:"id" json:"id"`
+	Owner     uuid.UUID          `db:"owner" json:"owner"`
+	CreatedAt pgtype.Timestamptz `db:"created_at" json:"created_at"`
+	UpdatedAt pgtype.Timestamptz `db:"updated_at" json:"updated_at"`
+	LogType   LogType            `db:"log_type" json:"log_type"`
 }
 
 type WowServer struct {
