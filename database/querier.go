@@ -31,6 +31,7 @@ type sqlcQuerier interface {
 	CreateUserPanelLayout(ctx context.Context, arg CreateUserPanelLayoutParams) (UserPanelLayout, error)
 	DeleteAllParsedLogsByGroupID(ctx context.Context, id uuid.UUID) error
 	DeleteDataGrant(ctx context.Context, arg DeleteDataGrantParams) error
+	DeleteDataset(ctx context.Context, id uuid.UUID) error
 	DeleteGuildJoinRequest(ctx context.Context, arg DeleteGuildJoinRequestParams) error
 	DeleteGuildPage(ctx context.Context, guildID uuid.UUID) error
 	DeleteGuildPagePanel(ctx context.Context, id uuid.UUID) error
@@ -62,6 +63,10 @@ type sqlcQuerier interface {
 	GetAppliedAuthzMigrations(ctx context.Context) ([]int32, error)
 	GetCreatureTemplatesByEntries(ctx context.Context, entries []int32) ([]WorldCreatureTemplate, error)
 	GetDBCItemDisplayInfoByID(ctx context.Context, id int32) (DbcItemDisplayInfo, error)
+	// Dataset queries. These run with AdminBypass context since the datasets table
+	// itself is not behind RLS.
+	GetDataset(ctx context.Context, id uuid.UUID) (Dataset, error)
+	GetDatasetBySlug(ctx context.Context, slug string) (Dataset, error)
 	GetDeploymentInfo(ctx context.Context) (DeploymentInfo, error)
 	GetDisplayInfoByID(ctx context.Context, id int32) (WorldDisplayInfo, error)
 	GetEncounterSummariesByInstanceID(ctx context.Context, instanceID uuid.UUID) ([]GetEncounterSummariesByInstanceIDRow, error)
@@ -157,6 +162,7 @@ type sqlcQuerier interface {
 	GetWorld(ctx context.Context, id uuid.UUID) (World, error)
 	GetWorldByName(ctx context.Context, name string) (World, error)
 	GetWorldsByServer(ctx context.Context, serverID uuid.UUID) ([]World, error)
+	InsertDataset(ctx context.Context, arg InsertDatasetParams) (Dataset, error)
 	InsertEncounter(ctx context.Context, arg InsertEncounterParams) (LogInstanceEncounter, error)
 	InsertEncounterCharacterFights(ctx context.Context, arg []InsertEncounterCharacterFightsParams) *InsertEncounterCharacterFightsBatchResults
 	InsertEncounterDpsRanking(ctx context.Context, arg InsertEncounterDpsRankingParams) error
@@ -201,6 +207,7 @@ type sqlcQuerier interface {
 	ListAllWoWLogGroupsWithOwner(ctx context.Context) ([]ListAllWoWLogGroupsWithOwnerRow, error)
 	ListAllWoWLogGroupsWithOwnerPaginated(ctx context.Context, arg ListAllWoWLogGroupsWithOwnerPaginatedParams) ([]ListAllWoWLogGroupsWithOwnerPaginatedRow, error)
 	ListAllWoWServerRealms(ctx context.Context) ([]WowServerRealm, error)
+	ListDatasets(ctx context.Context) ([]Dataset, error)
 	ListDistinctInstanceNames(ctx context.Context) ([]string, error)
 	ListGuildJoinRequests(ctx context.Context, guildID uuid.UUID) ([]ListGuildJoinRequestsRow, error)
 	// Guild Page Panels
@@ -275,9 +282,15 @@ type sqlcQuerier interface {
 	SetDuplicateGroupIDs(ctx context.Context, arg SetDuplicateGroupIDsParams) error
 	SetPanelLayoutCode(ctx context.Context, arg SetPanelLayoutCodeParams) (int64, error)
 	SetResetToken(ctx context.Context, arg SetResetTokenParams) error
+	// Assigns or removes a default dataset from a server.
+	// Pass NULL to remove the assignment.
+	SetServerDataset(ctx context.Context, arg SetServerDatasetParams) error
 	// Assigns or removes a tenant from a server.
 	// Pass NULL to remove the tenant assignment.
 	SetServerTenant(ctx context.Context, arg SetServerTenantParams) error
+	// Assigns or removes a default dataset from a tenant.
+	// Pass NULL to remove the assignment.
+	SetTenantDataset(ctx context.Context, arg SetTenantDatasetParams) error
 	SetVerificationToken(ctx context.Context, arg SetVerificationTokenParams) error
 	// Returns distinct instance names that have at least one qualified speedrun.
 	// JOINs wow_server_realms so RLS tenant filtering cascades.
@@ -300,6 +313,8 @@ type sqlcQuerier interface {
 	TrackUserPanelLayout(ctx context.Context, arg TrackUserPanelLayoutParams) (UserTrackedLayout, error)
 	UnassignWorldFromServer(ctx context.Context, arg UnassignWorldFromServerParams) error
 	UntrackUserPanelLayout(ctx context.Context, arg UntrackUserPanelLayoutParams) (int64, error)
+	// Only non-null params are applied; NULL means "keep existing value".
+	UpdateDataset(ctx context.Context, arg UpdateDatasetParams) (Dataset, error)
 	UpdateGuildPagePanel(ctx context.Context, arg UpdateGuildPagePanelParams) (GuildPagePanel, error)
 	UpdateGuildPageTab(ctx context.Context, arg UpdateGuildPageTabParams) (GuildPageTab, error)
 	UpdateLogFileAfterAppend(ctx context.Context, arg UpdateLogFileAfterAppendParams) error

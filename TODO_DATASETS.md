@@ -44,8 +44,8 @@ independent and self-contained. Dependencies between tasks are explicit.
 **Dependencies:** None
 **Scope:** Database schema only. No Go service code.
 
-- [ ] Run `./database/migrations/create_migration.sh "add_datasets"` to get next number
-- [ ] Write the up migration:
+- [x] Run `./database/migrations/create_migration.sh "add_datasets"` to get next number
+- [x] Write the up migration:
 
 ```sql
 CREATE TABLE datasets (
@@ -65,20 +65,20 @@ ALTER TABLE tenants ADD COLUMN default_dataset_id UUID REFERENCES datasets(id);
 ALTER TABLE wow_servers ADD COLUMN default_dataset_id UUID REFERENCES datasets(id);
 ```
 
-- [ ] Write down migration: drop columns first (order matters for FK), then table
-- [ ] New `database/queries/datasets.sql`:
+- [x] Write down migration: drop columns first (order matters for FK), then table
+- [x] New `database/queries/datasets.sql`:
   - `GetDataset :one` — `SELECT * FROM datasets WHERE id = $1`
   - `GetDatasetBySlug :one` — `SELECT * FROM datasets WHERE slug = $1`
   - `ListDatasets :many` — `SELECT * FROM datasets ORDER BY name`
   - `InsertDataset :one` — all fields, `RETURNING *`
   - `UpdateDataset :one` — COALESCE pattern (match `UpdateTenant` in `tenants.sql`)
   - `DeleteDataset :exec` — `DELETE FROM datasets WHERE id = $1`
-- [ ] Add to `database/queries/tenants.sql`:
+- [x] Add to `database/queries/tenants.sql`:
   - `SetTenantDataset :exec` — `UPDATE tenants SET default_dataset_id = $2, updated_at = now() WHERE id = $1`
-- [ ] Add to `database/queries/azerothcore.sql`:
+- [x] Add to `database/queries/azerothcore.sql`:
   - `SetServerDataset :exec` — `UPDATE wow_servers SET default_dataset_id = $2 WHERE id = $1`
-- [ ] `make gen/db`
-- [ ] Verify: `go build -tags turtle ./...` passes
+- [x] `make gen/db`
+- [x] Verify: `go build -tags turtle ./...` passes
 
 **Acceptance:** Migration applies cleanly; sqlc generates without errors; build passes.
 
@@ -89,7 +89,7 @@ ALTER TABLE wow_servers ADD COLUMN default_dataset_id UUID REFERENCES datasets(i
 **Dependencies:** Task A (needs generated DB types)
 **Scope:** SDK types + conversion functions only. No handlers, no service.
 
-- [ ] New `api/chroniclesdk/dataset.go`:
+- [x] New `api/chroniclesdk/dataset.go`:
   ```go
   type Dataset struct {
       ID           uuid.UUID `json:"id"`
@@ -105,13 +105,13 @@ ALTER TABLE wow_servers ADD COLUMN default_dataset_id UUID REFERENCES datasets(i
   - `DatasetFromDB(database.Dataset) Dataset`
   - `UpsertDatasetRequest` struct with pointer fields for optional update
   - `ToInsertParams()` / `ToUpdateParams()` methods (match `UpsertTenantRequest` pattern)
-- [ ] Extend `api/chroniclesdk/tenant.go`:
+- [x] Extend `api/chroniclesdk/tenant.go`:
   - Add `DefaultDatasetID *uuid.UUID `json:"default_dataset_id"`` to `Tenant`
   - Update `TenantFromDB` — read `t.DefaultDatasetID` (it's `uuid.NullUUID`)
   - Add `DefaultDatasetID *uuid.UUID` to `UpsertTenantRequest`
   - Update `ToInsertParams`/`ToUpdateParams` to handle it
-- [ ] Run `make gen` to regenerate TypeScript types
-- [ ] Verify: `go build -tags turtle ./...` and `cd frontend/chronicle && pnpm build` pass
+- [ ] Run `make gen` to regenerate TypeScript types (deferred — frontend build not yet validated)
+- [x] Verify: `go build -tags turtle ./...` passes
 
 **Acceptance:** Types compile; frontend types regenerated; no existing tests break.
 
@@ -124,8 +124,8 @@ ALTER TABLE wow_servers ADD COLUMN default_dataset_id UUID REFERENCES datasets(i
 dataset CRUD only (no DBC upload, no dataset-aware WoWDB).
 
 ### C1: Service scaffold
-- [ ] Add `ServiceDataset = "dataset"` to `internal/services/servicenames.go`
-- [ ] Create `internal/services/servicedataset/servicedataset.go`:
+- [x] Add `ServiceDataset = "dataset"` to `internal/services/servicenames.go`
+- [x] Create `internal/services/servicedataset/servicedataset.go`:
   - `Service` struct with `broker *services.Services`, `db database.Store`
   - `New(broker) *Service`
   - `Name() → services.ServiceDataset`
@@ -137,7 +137,7 @@ dataset CRUD only (no DBC upload, no dataset-aware WoWDB).
   - Export helpers: `OnDataset()`, `Dataset(broker)`
 
 ### C2: Handlers
-- [ ] Create `internal/services/servicedataset/handler.go`:
+- [x] Create `internal/services/servicedataset/handler.go`:
   - `Routes() http.Handler` — chi router
     - `GET /` → List
     - `POST /` → Upsert (create)
@@ -149,28 +149,28 @@ dataset CRUD only (no DBC upload, no dataset-aware WoWDB).
   - Follow `servicetenant/handler.go` patterns exactly
 
 ### C3: Context helpers
-- [ ] Create `internal/services/servicedataset/context.go`:
+- [x] Create `internal/services/servicedataset/context.go`:
   - `WithDatasetID(ctx, uuid.UUID) context.Context`
   - `DatasetIDFromContext(ctx) uuid.UUID` (returns `uuid.Nil` if unset)
 
 ### C4: Wiring
-- [ ] `cmd/chronicled/cli/server.go` — add `servicedataset.New(srvs)` to `srvs.Register()`
+- [x] `cmd/chronicled/cli/server.go` — add `servicedataset.New(srvs)` to `srvs.Register()`
   (place after `serviceassets`, before `servicechronicle`)
-- [ ] `api/api.go` — add `Dataset *servicedataset.Service` to `Options` struct
-- [ ] `api/api.go` `Routes()` — mount under admin:
+- [x] `api/api.go` — add `Dataset *servicedataset.Service` to `Options` struct
+- [x] `api/api.go` `Routes()` — mount under admin:
   ```go
   r.Route("/datasets", func(r chi.Router) {
       r.Use(httpmw.Can(api.Zed, policy.New().GlobalChronicle().CanAdmin_tenants_User))
       r.Mount("/", api.Opts.Dataset.Routes())
   })
   ```
-- [ ] `internal/services/serviceapi/serviceapi.go` — retrieve and pass dataset service:
+- [x] `internal/services/serviceapi/serviceapi.go` — retrieve and pass dataset service:
   ```go
   datasetSvc := servicedataset.Dataset(s.broker)
   // add to api.Options{Dataset: datasetSvc}
   ```
 
-- [ ] Verify: `make lint`, `make build`, endpoints reachable (manual or test)
+- [x] Verify: `make lint`, `make build`, endpoints reachable (manual or test)
 
 **Acceptance:** Service starts, routes registered, CRUD operations work. Existing
 tests pass. `make lint` clean.

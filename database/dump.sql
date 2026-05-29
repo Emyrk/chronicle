@@ -260,6 +260,19 @@ CREATE VIEW chronicle_users AS
           WHERE (log_file.storage_deleted_at IS NULL)
           GROUP BY log_file.owner) lf ON ((lf.owner = u.id)));
 
+CREATE TABLE datasets (
+    id uuid DEFAULT gen_random_uuid() NOT NULL,
+    name text NOT NULL,
+    slug text NOT NULL,
+    wow_version text NOT NULL,
+    build_version integer DEFAULT 5875 NOT NULL,
+    description text DEFAULT ''::text NOT NULL,
+    spell_dbc_storage_key text,
+    created_at timestamp with time zone DEFAULT now() NOT NULL,
+    updated_at timestamp with time zone DEFAULT now() NOT NULL,
+    CONSTRAINT datasets_slug_format CHECK ((slug ~ '^[a-z0-9][a-z0-9-]{1,48}[a-z0-9]$'::text))
+);
+
 CREATE TABLE dbc_item_display_info (
     id integer NOT NULL,
     model_name jsonb DEFAULT '[]'::jsonb NOT NULL,
@@ -590,6 +603,7 @@ CREATE TABLE tenants (
     created_at timestamp with time zone DEFAULT now() NOT NULL,
     updated_at timestamp with time zone DEFAULT now() NOT NULL,
     discoverable boolean DEFAULT false NOT NULL,
+    default_dataset_id uuid,
     CONSTRAINT tenants_slug_format CHECK (((slug IS NULL) OR (slug ~ '^[a-z0-9][a-z0-9-]{1,30}[a-z0-9]$'::text))),
     CONSTRAINT tenants_slug_reserved CHECK ((slug <> ALL (ARRAY['www'::text, 'api'::text, 'auth'::text, 'admin'::text, 'legacy'::text, 'app'::text, 'mail'::text, 'staging'::text])))
 );
@@ -611,7 +625,8 @@ CREATE TABLE wow_servers (
     created_by uuid,
     url text,
     description text DEFAULT ''::text NOT NULL,
-    tenant_id uuid
+    tenant_id uuid,
+    default_dataset_id uuid
 );
 
 ALTER TABLE ONLY wow_servers FORCE ROW LEVEL SECURITY;
@@ -1186,6 +1201,12 @@ ALTER TABLE ONLY data_grants
 ALTER TABLE ONLY data_grants
     ADD CONSTRAINT data_grants_user_id_source_key UNIQUE (user_id, source);
 
+ALTER TABLE ONLY datasets
+    ADD CONSTRAINT datasets_pkey PRIMARY KEY (id);
+
+ALTER TABLE ONLY datasets
+    ADD CONSTRAINT datasets_slug_key UNIQUE (slug);
+
 ALTER TABLE ONLY dbc_item_display_info
     ADD CONSTRAINT dbc_item_display_info_pkey PRIMARY KEY (id);
 
@@ -1682,6 +1703,9 @@ ALTER TABLE ONLY shared_views
 ALTER TABLE ONLY shared_views
     ADD CONSTRAINT shared_views_instance_id_fkey FOREIGN KEY (instance_id) REFERENCES log_instances(id) ON DELETE SET NULL;
 
+ALTER TABLE ONLY tenants
+    ADD CONSTRAINT tenants_default_dataset_id_fkey FOREIGN KEY (default_dataset_id) REFERENCES datasets(id);
+
 ALTER TABLE ONLY user_action_bar_slots
     ADD CONSTRAINT user_action_bar_slots_user_id_fkey FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE;
 
@@ -1735,6 +1759,9 @@ ALTER TABLE ONLY wow_server_upload_keys
 
 ALTER TABLE ONLY wow_servers
     ADD CONSTRAINT wow_servers_created_by_fkey FOREIGN KEY (created_by) REFERENCES users(id);
+
+ALTER TABLE ONLY wow_servers
+    ADD CONSTRAINT wow_servers_default_dataset_id_fkey FOREIGN KEY (default_dataset_id) REFERENCES datasets(id);
 
 ALTER TABLE ONLY wow_servers
     ADD CONSTRAINT wow_servers_tenant_id_fkey FOREIGN KEY (tenant_id) REFERENCES tenants(id);

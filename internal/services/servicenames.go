@@ -22,4 +22,5 @@ const (
 	ServiceTenant      = "tenant"
 	ServiceApplication = "application"
 	ServiceRankings    = "rankings"
+	ServiceDataset     = "dataset"
 )

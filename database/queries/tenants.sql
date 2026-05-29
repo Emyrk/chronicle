@@ -36,3 +36,8 @@ DELETE FROM tenants WHERE id = $1;
 -- Pass NULL to remove the tenant assignment.
 UPDATE wow_servers SET tenant_id = $2 WHERE id = $1;
 
+-- name: SetTenantDataset :exec
+-- Assigns or removes a default dataset from a tenant.
+-- Pass NULL to remove the assignment.
+UPDATE tenants SET default_dataset_id = $2, updated_at = now() WHERE id = $1;
+

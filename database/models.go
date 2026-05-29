@@ -680,6 +680,18 @@ type DataGrant struct {
 	ExpiresAt    pgtype.Timestamptz `db:"expires_at" json:"expires_at"`
 }
 
+type Dataset struct {
+	ID                 uuid.UUID          `db:"id" json:"id"`
+	Name               string             `db:"name" json:"name"`
+	Slug               string             `db:"slug" json:"slug"`
+	WowVersion         string             `db:"wow_version" json:"wow_version"`
+	BuildVersion       int32              `db:"build_version" json:"build_version"`
+	Description        string             `db:"description" json:"description"`
+	SpellDbcStorageKey pgtype.Text        `db:"spell_dbc_storage_key" json:"spell_dbc_storage_key"`
+	CreatedAt          pgtype.Timestamptz `db:"created_at" json:"created_at"`
+	UpdatedAt          pgtype.Timestamptz `db:"updated_at" json:"updated_at"`
+}
+
 type DbcItemDisplayInfo struct {
 	ID                         int32  `db:"id" json:"id"`
 	ModelName                  []byte `db:"model_name" json:"model_name"`
@@ -1213,6 +1225,7 @@ type Tenant struct {
 	CreatedAt           pgtype.Timestamptz `db:"created_at" json:"created_at"`
 	UpdatedAt           pgtype.Timestamptz `db:"updated_at" json:"updated_at"`
 	Discoverable        bool               `db:"discoverable" json:"discoverable"`
+	DefaultDatasetID    uuid.NullUUID      `db:"default_dataset_id" json:"default_dataset_id"`
 }
 
 type User struct {
@@ -1555,12 +1568,13 @@ type WorldSpellThreat struct {
 }
 
 type WowServer struct {
-	ID          uuid.UUID     `db:"id" json:"id"`
-	Name        string        `db:"name" json:"name"`
-	CreatedBy   uuid.NullUUID `db:"created_by" json:"created_by"`
-	Url         pgtype.Text   `db:"url" json:"url"`
-	Description string        `db:"description" json:"description"`
-	TenantID    uuid.NullUUID `db:"tenant_id" json:"tenant_id"`
+	ID               uuid.UUID     `db:"id" json:"id"`
+	Name             string        `db:"name" json:"name"`
+	CreatedBy        uuid.NullUUID `db:"created_by" json:"created_by"`
+	Url              pgtype.Text   `db:"url" json:"url"`
+	Description      string        `db:"description" json:"description"`
+	TenantID         uuid.NullUUID `db:"tenant_id" json:"tenant_id"`
+	DefaultDatasetID uuid.NullUUID `db:"default_dataset_id" json:"default_dataset_id"`
 }
 
 type WowServerRealm struct {

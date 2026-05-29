@@ -11,15 +11,16 @@ import (
 
 // Tenant is the SDK type exposed to the frontend.
 type Tenant struct {
-	ID                  uuid.UUID `json:"id"`
-	Slug                *string   `json:"slug"`
-	Name                string    `json:"name"`
-	DisableClientUpload bool      `json:"disable_client_upload"`
-	IncludeInAll        bool      `json:"include_in_all"`
-	Discoverable        bool      `json:"discoverable"`
-	Branding            *Branding `json:"branding"`
-	CreatedAt           time.Time `json:"created_at"`
-	UpdatedAt           time.Time `json:"updated_at"`
+	ID                  uuid.UUID  `json:"id"`
+	Slug                *string    `json:"slug"`
+	Name                string     `json:"name"`
+	DisableClientUpload bool       `json:"disable_client_upload"`
+	IncludeInAll        bool       `json:"include_in_all"`
+	Discoverable        bool       `json:"discoverable"`
+	Branding            *Branding  `json:"branding"`
+	DefaultDatasetID    *uuid.UUID `json:"default_dataset_id"`
+	CreatedAt           time.Time  `json:"created_at"`
+	UpdatedAt           time.Time  `json:"updated_at"`
 }
 
 // Branding holds the visual identity for a tenant subdomain or the primary domain.
@@ -54,6 +55,9 @@ func TenantFromDB(t database.Tenant) Tenant {
 		if err := json.Unmarshal(t.Branding, &b); err == nil {
 			out.Branding = &b
 		}
+	}
+	if t.DefaultDatasetID.Valid {
+		out.DefaultDatasetID = &t.DefaultDatasetID.UUID
 	}
 	return out
 }

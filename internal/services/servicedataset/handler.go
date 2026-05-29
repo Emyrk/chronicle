@@ -1,0 +1,123 @@
+package servicedataset
+
+import (
+	"net/http"
+
+	"github.com/Emyrk/chronicle/api/chroniclesdk"
+	"github.com/Emyrk/chronicle/api/httpapi"
+	"github.com/Emyrk/chronicle/database"
+	"github.com/Emyrk/chronicle/internal/services/servicetenant"
+
+	"github.com/go-chi/chi/v5"
+	"github.com/google/uuid"
+)
+
+// Routes returns the dataset admin CRUD router.
+// Callers are responsible for wrapping with auth middleware.
+func (s *Service) Routes() http.Handler {
+	r := chi.NewRouter()
+	r.Get("/", s.List)
+	r.Post("/", s.Upsert)
+	r.Get("/{datasetID}", s.Get)
+	r.Put("/{datasetID}", s.Upsert)
+	r.Delete("/{datasetID}", s.Delete)
+	return r
+}
+
+func (s *Service) List(w http.ResponseWriter, r *http.Request) {
+	ctx := servicetenant.AdminBypass(r.Context())
+	datasets, err := s.db.ListDatasets(ctx)
+	if err != nil {
+		httpapi.InternalServerError(w, err)
+		return
+	}
+
+	out := make([]chroniclesdk.Dataset, 0, len(datasets))
+	for _, d := range datasets {
+		out = append(out, chroniclesdk.DatasetFromDB(d))
+	}
+	httpapi.Write(ctx, w, http.StatusOK, out)
+}
+
+func (s *Service) Get(w http.ResponseWriter, r *http.Request) {
+	ctx := servicetenant.AdminBypass(r.Context())
+	id, err := uuid.Parse(chi.URLParam(r, "datasetID"))
+	if err != nil {
+		httpapi.Write(ctx, w, http.StatusBadRequest, chroniclesdk.Response{Message: "invalid dataset id"})
+		return
+	}
+
+	d, err := s.db.GetDataset(ctx, id)
+	if err != nil {
+		httpapi.InternalServerError(w, err)
+		return
+	}
+	httpapi.Write(ctx, w, http.StatusOK, chroniclesdk.DatasetFromDB(d))
+}
+
+func (s *Service) Upsert(w http.ResponseWriter, r *http.Request) {
+	ctx := servicetenant.AdminBypass(r.Context())
+	var req chroniclesdk.UpsertDatasetRequest
+	if !httpapi.Read(ctx, w, r, &req) {
+		return
+	}
+
+	// On PUT, the ID comes from the URL path, not the body.
+	if idStr := chi.URLParam(r, "datasetID"); idStr != "" {
+		parsed, err := uuid.Parse(idStr)
+		if err != nil {
+			httpapi.Write(ctx, w, http.StatusBadRequest, chroniclesdk.Response{Message: "invalid dataset id"})
+			return
+		}
+		req.ID = uuid.NullUUID{UUID: parsed, Valid: true}
+	}
+
+	var d database.Dataset
+	var err error
+	if req.IsCreate() {
+		if req.Name == "" {
+			httpapi.Write(ctx, w, http.StatusBadRequest, chroniclesdk.Response{Message: "name is required"})
+			return
+		}
+		if req.Slug == "" {
+			httpapi.Write(ctx, w, http.StatusBadRequest, chroniclesdk.Response{Message: "slug is required"})
+			return
+		}
+		if req.WoWVersion == "" {
+			httpapi.Write(ctx, w, http.StatusBadRequest, chroniclesdk.Response{Message: "wow_version is required"})
+			return
+		}
+		d, err = s.db.InsertDataset(ctx, req.ToInsertParams())
+	} else {
+		d, err = s.db.UpdateDataset(ctx, req.ToUpdateParams())
+	}
+	if err != nil {
+		if database.IsUniqueViolation(err) {
+			httpapi.Write(ctx, w, http.StatusConflict, chroniclesdk.Response{
+				Message: "dataset slug already exists",
+			})
+			return
+		}
+		httpapi.InternalServerError(w, err)
+		return
+	}
+
+	httpapi.Write(ctx, w, http.StatusOK, chroniclesdk.DatasetFromDB(d))
+}
+
+func (s *Service) Delete(w http.ResponseWriter, r *http.Request) {
+	ctx := servicetenant.AdminBypass(r.Context())
+	id, err := uuid.Parse(chi.URLParam(r, "datasetID"))
+	if err != nil {
+		httpapi.Write(ctx, w, http.StatusBadRequest, chroniclesdk.Response{Message: "invalid dataset id"})
+		return
+	}
+
+	err = s.db.DeleteDataset(ctx, id)
+	if err != nil {
+		httpapi.InternalServerError(w, err)
+		return
+	}
+
+	httpapi.Write(ctx, w, http.StatusOK, chroniclesdk.Response{Message: "deleted"})
+}

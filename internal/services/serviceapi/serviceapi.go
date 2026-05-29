@@ -29,6 +29,7 @@ import (
 	"github.com/Emyrk/chronicle/internal/services/serviceriver"
 	"github.com/Emyrk/chronicle/internal/services/servicestorage"
 	"github.com/Emyrk/chronicle/internal/services/serviceapplication"
+	"github.com/Emyrk/chronicle/internal/services/servicedataset"
 	"github.com/Emyrk/chronicle/internal/services/servicetenant"
 	"github.com/Emyrk/chronicle/internal/services/servicewowdb"
 
@@ -93,6 +94,7 @@ func (s *Service) DependsOn() []string {
 		serviceaccessurl.OnAccessURL(),
 		servicetenant.OnTenant(),
 		serviceapplication.OnApplication(),
+		servicedataset.OnDataset(),
 	}
 }
 
@@ -111,6 +113,7 @@ func (s *Service) Start(ctx context.Context) error {
 	if !appSvc.Enabled() {
 		appSvc = nil
 	}
+	datasetSvc := servicedataset.Dataset(s.broker)
 
 	serverLn, err := ProvisionListener(logger, s.httpAddress)
 	if err != nil {
@@ -190,6 +193,7 @@ func (s *Service) Start(ctx context.Context) error {
 		SecretPEM:       decodedSecret,
 		Tenant:          tenantSvc,
 		Application:     appSvc,
+		Dataset:         datasetSvc,
 	})
 
 	if err != nil {
