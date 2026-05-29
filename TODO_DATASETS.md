@@ -11,32 +11,316 @@ supported log types.
 
 ---
 
-## 1. Database Schema
+## Agent Task Guide
 
-### 1.1 `datasets` table
-- [ ] Create migration `NNNNNN_add_datasets.up.sql`
+This plan is structured for parallel agent execution. Each **Task** below is
+independent and self-contained. Dependencies between tasks are explicit.
+
+**Key conventions every agent must follow:**
+- Read `AGENTS.md` at repo root before writing any code
+- Run `make gen/db` after changing migrations or queries
+- Run `make lint` and `make test` (with `-tags turtle`) before claiming done
+- Use `./database/migrations/create_migration.sh "description"` to get the next
+  migration number (do NOT hardcode a number — it may have advanced)
+- Follow the `database/queries/tenants.sql` `COALESCE(sqlc.narg(...), col)` pattern for updates
+- `servicedataset` gets its DB store via `servicedbstore.DatabaseStore(broker)` (NOT direct pool)
+- `servicetenant` owns the `PrepareConn`/`ResetConn` hooks — dataset context additions
+  go there (it already manages all session variable lifecycle)
+- Creatures and gear come from the world DB, not DBC — they are NOT dataset-scoped
+- The `GameDB` interface has `SpellFetcher`, `GearResolver`, `CreatureFetcher`.
+  Only `SpellFetcher` + `DBCMem()` are dataset-specific. `GearResolver` and
+  `CreatureFetcher` are shared/world-scoped.
+- REALM_INFO extraction happens during parsing (not pre-scanned). The future
+  pre-scan solution should be a separate lightweight pass OUTSIDE the parser,
+  not added to `parsectx` (keep it minimal).
+- Object storage uses buckets. Combat logs are in bucket `raidlogs` with key
+  pattern `logs/{fileID}`. DBC files go in a new bucket (e.g. `datasets`) with
+  key pattern `datasets/{datasetID}/{filename}`.
+
+---
+
+## Task A: Migration + sqlc Queries
+
+**Dependencies:** None
+**Scope:** Database schema only. No Go service code.
+
+- [ ] Run `./database/migrations/create_migration.sh "add_datasets"` to get next number
+- [ ] Write the up migration:
 
 ```sql
 CREATE TABLE datasets (
     id            UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-    name          TEXT NOT NULL,              -- "Vanilla 1.12", "V+", "Wrath 3.3.5a"
-    slug          TEXT UNIQUE NOT NULL,       -- "vanilla-112", "vplus", "wrath-335a"
-    wow_version   TEXT NOT NULL,             -- "1.12.2", "3.3.5a"
-    build_version INT  NOT NULL DEFAULT 5875, -- vsn constant (5875=1.12.2, 12340=3.3.5a)
+    name          TEXT NOT NULL,
+    slug          TEXT UNIQUE NOT NULL,
+    wow_version   TEXT NOT NULL,
+    build_version INT  NOT NULL DEFAULT 5875,
     description   TEXT NOT NULL DEFAULT '',
-    -- Object-storage key for raw Spell.dbc
-    spell_dbc_storage_key TEXT,
-    -- Object-storage keys for generated JSON assets
-    -- {"class-spells": "datasets/<id>/class-spells.json", ...}
-    asset_keys    JSONB NOT NULL DEFAULT '{}',
     created_at    TIMESTAMPTZ NOT NULL DEFAULT now(),
     updated_at    TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 ALTER TABLE datasets ADD CONSTRAINT datasets_slug_format
     CHECK (slug ~ '^[a-z0-9][a-z0-9-]{1,48}[a-z0-9]$');
+
+ALTER TABLE tenants ADD COLUMN default_dataset_id UUID REFERENCES datasets(id);
+ALTER TABLE wow_servers ADD COLUMN default_dataset_id UUID REFERENCES datasets(id);
 ```
 
-### 1.2 dbcmem lookup tables (one per type, all FK → datasets)
+- [ ] Write down migration: drop columns first (order matters for FK), then table
+- [ ] New `database/queries/datasets.sql`:
+  - `GetDataset :one` — `SELECT * FROM datasets WHERE id = $1`
+  - `GetDatasetBySlug :one` — `SELECT * FROM datasets WHERE slug = $1`
+  - `ListDatasets :many` — `SELECT * FROM datasets ORDER BY name`
+  - `InsertDataset :one` — all fields, `RETURNING *`
+  - `UpdateDataset :one` — COALESCE pattern (match `UpdateTenant` in `tenants.sql`)
+  - `DeleteDataset :exec` — `DELETE FROM datasets WHERE id = $1`
+- [ ] Add to `database/queries/tenants.sql`:
+  - `SetTenantDataset :exec` — `UPDATE tenants SET default_dataset_id = $2, updated_at = now() WHERE id = $1`
+- [ ] Add to `database/queries/azerothcore.sql`:
+  - `SetServerDataset :exec` — `UPDATE wow_servers SET default_dataset_id = $2 WHERE id = $1`
+- [ ] `make gen/db`
+- [ ] Verify: `go build -tags turtle ./...` passes
+
+**Acceptance:** Migration applies cleanly; sqlc generates without errors; build passes.
+
+---
+
+## Task B: SDK Types
+
+**Dependencies:** Task A (needs generated DB types)
+**Scope:** SDK types + conversion functions only. No handlers, no service.
+
+- [ ] New `api/chroniclesdk/dataset.go`:
+  ```go
+  type Dataset struct {
+      ID           uuid.UUID `json:"id"`
+      Name         string    `json:"name"`
+      Slug         string    `json:"slug"`
+      WoWVersion   string    `json:"wow_version"`
+      BuildVersion int       `json:"build_version"`
+      Description  string    `json:"description"`
+      CreatedAt    time.Time `json:"created_at"`
+      UpdatedAt    time.Time `json:"updated_at"`
+  }
+  ```
+  - `DatasetFromDB(database.Dataset) Dataset`
+  - `UpsertDatasetRequest` struct with pointer fields for optional update
+  - `ToInsertParams()` / `ToUpdateParams()` methods (match `UpsertTenantRequest` pattern)
+- [ ] Extend `api/chroniclesdk/tenant.go`:
+  - Add `DefaultDatasetID *uuid.UUID `json:"default_dataset_id"`` to `Tenant`
+  - Update `TenantFromDB` — read `t.DefaultDatasetID` (it's `uuid.NullUUID`)
+  - Add `DefaultDatasetID *uuid.UUID` to `UpsertTenantRequest`
+  - Update `ToInsertParams`/`ToUpdateParams` to handle it
+- [ ] Run `make gen` to regenerate TypeScript types
+- [ ] Verify: `go build -tags turtle ./...` and `cd frontend/chronicle && pnpm build` pass
+
+**Acceptance:** Types compile; frontend types regenerated; no existing tests break.
+
+---
+
+## Task C: `servicedataset` Service + Wiring
+
+**Dependencies:** Task A, Task B
+**Scope:** New service package, registration, route mounting. The service handles
+dataset CRUD only (no DBC upload, no dataset-aware WoWDB).
+
+### C1: Service scaffold
+- [ ] Add `ServiceDataset = "dataset"` to `internal/services/servicenames.go`
+- [ ] Create `internal/services/servicedataset/servicedataset.go`:
+  - `Service` struct with `broker *services.Services`, `db database.Store`
+  - `New(broker) *Service`
+  - `Name() → services.ServiceDataset`
+  - `DependsOn() → [servicelogger.OnLogger(), servicedbstore.OnDatabaseStore()]`
+  - `Configures() → nil`
+  - `Options() → nil` (no CLI flags needed yet)
+  - `Start()` — get DB from `servicedbstore.DatabaseStore(s.broker)`
+  - `Close() → nil`
+  - Export helpers: `OnDataset()`, `Dataset(broker)`
+
+### C2: Handlers
+- [ ] Create `internal/services/servicedataset/handler.go`:
+  - `Routes() http.Handler` — chi router
+    - `GET /` → List
+    - `POST /` → Upsert (create)
+    - `GET /{datasetID}` → Get
+    - `PUT /{datasetID}` → Upsert (update)
+    - `DELETE /{datasetID}` → Delete
+  - All handlers use `servicetenant.AdminBypass(ctx)` for DB queries (datasets
+    table is not behind RLS)
+  - Follow `servicetenant/handler.go` patterns exactly
+
+### C3: Context helpers
+- [ ] Create `internal/services/servicedataset/context.go`:
+  - `WithDatasetID(ctx, uuid.UUID) context.Context`
+  - `DatasetIDFromContext(ctx) uuid.UUID` (returns `uuid.Nil` if unset)
+
+### C4: Wiring
+- [ ] `cmd/chronicled/cli/server.go` — add `servicedataset.New(srvs)` to `srvs.Register()`
+  (place after `serviceassets`, before `servicechronicle`)
+- [ ] `api/api.go` — add `Dataset *servicedataset.Service` to `Options` struct
+- [ ] `api/api.go` `Routes()` — mount under admin:
+  ```go
+  r.Route("/datasets", func(r chi.Router) {
+      r.Use(httpmw.Can(api.Zed, policy.New().GlobalChronicle().CanAdmin_tenants_User))
+      r.Mount("/", api.Opts.Dataset.Routes())
+  })
+  ```
+- [ ] `internal/services/serviceapi/serviceapi.go` — retrieve and pass dataset service:
+  ```go
+  datasetSvc := servicedataset.Dataset(s.broker)
+  // add to api.Options{Dataset: datasetSvc}
+  ```
+
+- [ ] Verify: `make lint`, `make build`, endpoints reachable (manual or test)
+
+**Acceptance:** Service starts, routes registered, CRUD operations work. Existing
+tests pass. `make lint` clean.
+
+---
+
+## Task D: Dataset Context in PrepareConn
+
+**Dependencies:** Task C (needs context helpers)
+**Scope:** Extend the existing tenant connection hooks to also propagate dataset_id.
+
+- [ ] In `servicetenant/conn.go` `PrepareConn()`:
+  - After tenant_id logic, add:
+    ```go
+    datasetID := servicedataset.DatasetIDFromContext(ctx)
+    if datasetID != uuid.Nil {
+        _, err := conn.Exec(ctx, fmt.Sprintf("SET app.dataset_id = '%s'", datasetID.String()))
+        if err != nil { return err }
+    }
+    ```
+  - **Import:** `servicedataset` package. This creates a dependency from
+    `servicetenant` → `servicedataset` for the context helper only. If this
+    creates an import cycle, move `WithDatasetID`/`DatasetIDFromContext` into a
+    shared package (e.g. `internal/services/servicecontext/`).
+
+- [ ] In `servicetenant/conn.go` `ResetConn()`:
+  - Add: `_, _ = conn.Exec(context.Background(), "RESET app.dataset_id")`
+
+- [ ] In `servicetenant/conn.go` `CheckNestedTx()`:
+  - Add dataset_id check:
+    ```go
+    outerDataset := servicedataset.DatasetIDFromContext(outerCtx)
+    innerDataset := servicedataset.DatasetIDFromContext(innerCtx)
+    if outerDataset != innerDataset {
+        return fmt.Errorf("outer tx dataset=%s but nested InTx dataset=%s", outerDataset, innerDataset)
+    }
+    ```
+
+- [ ] Wire dataset_id into context during request lifecycle. In the tenant
+  middleware or a new middleware, after tenant is resolved:
+  ```go
+  if tenant != nil && tenant.DefaultDatasetID.Valid {
+      ctx = servicedataset.WithDatasetID(ctx, tenant.DefaultDatasetID.UUID)
+  }
+  ```
+  **Note:** Check where `servicetenant.Middleware()` runs and whether
+  `tenant.DefaultDatasetID` is available there (the column must be loaded in
+  the tenant cache refresh).
+
+- [ ] Verify: `make test -tags turtle`, check that existing tenant tests still pass
+
+**Acceptance:** `app.dataset_id` is set/reset on every connection; nested tx
+validation works; no regressions.
+
+**⚠️ Import cycle risk:** If `servicetenant` → `servicedataset` creates a cycle,
+extract the context key functions into `internal/services/servicecontext/dataset.go`
+(a tiny package with no imports of other services). Both packages can then import it.
+
+---
+
+## Architecture Decisions
+
+### Dataset Resolution via `app.dataset_id` Session Variable
+
+Same strategy as tenant RLS. When a connection is acquired from the pool:
+
+```
+Request arrives
+  → tenant middleware: ctx = WithTenantID(ctx, tenant.ID)
+  → dataset context:   tenant.DefaultDatasetID → ctx = WithDatasetID(ctx, datasetID)
+  → PrepareConn:       SET app.tenant_id = '...', SET app.dataset_id = '...'
+  → future dbcmem tables can use WHERE dataset_id = current_setting('app.dataset_id')::uuid
+```
+
+### Primary Domain Problem (No Tenant → No Dataset)
+
+Realm is detected **during** parsing from `REALM_INFO` in the combat log, but
+WoWDB is needed **before** parsing starts. REALM_INFO is processed by the line
+matcher during full parse (not pre-scanned). The `parsectx` package only carries
+`LogType` — keep it minimal.
+
+**Future solution (decided):** Pre-scan REALM_INFO before full parse. This is a
+separate lightweight pass **outside** the parser (do NOT add fields to `parsectx`).
+Resolve `realm → server → dataset`, then parse with the correct WoWDB.
+
+**Current fallback:** No dataset in context → compiled-in data via build tags.
+
+### Dataset Lives on Both `tenants` and `wow_servers`
+
+Resolution order: `server.default_dataset_id` > `tenant.default_dataset_id` > compiled-in fallback.
+
+Rationale: servers define their game version. A tenant with multiple servers
+(e.g. Vanilla + TBC) needs per-server datasets. Tenant-level is the fallback
+for single-server tenants that don't configure per-server.
+
+### GameDB Interface — What's Dataset-Scoped vs Shared
+
+```
+GameDB interface
+├── SpellFetcher       ← dataset-scoped (from DBC files)
+├── GearResolver       ← shared/world-scoped (from internal_game_data DB)
+├── CreatureFetcher    ← shared/world-scoped (from internal_game_data DB)
+└── DBCMem() Provider  ← dataset-scoped (future, from dbcmem lookup tables)
+```
+
+`DatasetGameDB` only replaces `SpellFetcher` + `DBCMem()`. Gear and creature
+lookups remain on the shared `WoWDB` regardless of dataset.
+
+### Why Separate Tables for dbcmem (Not JSONB)
+
+- Vanilla SpellIcons alone has ~4,000 entries; WotLK has ~10,000+
+- Full dbcmem JSON blob estimated 2–5 MB per dataset
+- Separate tables allow incremental writes, individual row queries, and future
+  auto-scoping via `app.dataset_id` in WHERE clauses
+- Avoids PostgreSQL TOAST overhead on frequent reads
+
+### DBC File Storage
+
+DBC files are stored in object storage under a convention-based prefix:
+
+```
+bucket: datasets
+key pattern: datasets/{dataset_id}/{filename}
+
+datasets/{dataset_id}/
+├── Spell.dbc
+├── SpellIcon.dbc
+├── SpellCastTimes.dbc
+├── SpellDuration.dbc
+└── ...
+```
+
+No DB column needed — the prefix is derived from `datasets/{id}/`. Different
+datasets can have different sets of DBC files (Vanilla has fewer than WotLK).
+Reload/re-process a dataset by reading its DBC files back from storage.
+
+---
+
+## Future Tasks (Not for this round)
+
+These tasks depend on Tasks A–D and are documented here for context.
+
+### Future: DBC Upload Endpoints
+- [ ] `PUT /api/v1/datasets/{id}/dbc/{filename}` — upload any DBC file
+- [ ] `GET /api/v1/datasets/{id}/dbc` — list stored DBC files
+- [ ] `GET /api/v1/datasets/{id}/dbc/{filename}` — download a DBC file
+- [ ] `DELETE /api/v1/datasets/{id}/dbc/{filename}` — remove a DBC file
+- [ ] Create `datasets` bucket in object storage on service startup
+
+### Future: dbcmem Lookup Tables (one per type, all FK → datasets)
 
 Each table stores one dbcmem map type. The `entry_id` is the original DBC ID
 (the map key in current Go code). All tables share the same pattern:
@@ -54,199 +338,130 @@ Each table stores one dbcmem map type. The `entry_id` is the original DBC ID
 - [ ] `dataset_extra_attack_spells` — `entry_id INT, name TEXT, num_extra_attacks INT`
 - [ ] `dataset_duration_modifiers` — `entry_id INT, spell_id INT, name TEXT, percent INT, flat INT, deprecated BOOLEAN`
 - [ ] `dataset_duration_modifiers_by_class_bit` — `spell_class_set INT, family_mask_bit BIGINT, modifier_spell_id INT`
-  - (This is the flattened form of `map[int32]map[uint64][]int32`)
 
 All tables: `PRIMARY KEY (dataset_id, entry_id)` (except `_by_class_bit` which
 is `(dataset_id, spell_class_set, family_mask_bit, modifier_spell_id)`).
 
-### 1.3 Tenant columns
-- [ ] `ALTER TABLE tenants ADD COLUMN default_dataset_id UUID REFERENCES datasets(id);`
-- [ ] `ALTER TABLE tenants ADD COLUMN supported_log_types log_type[] NOT NULL DEFAULT '{}';`
-  - Empty array = all types allowed (backward-compatible).
-
-### 1.4 sqlc queries
-- [ ] New file `database/queries/datasets.sql`
-  - `GetDataset`, `GetDatasetBySlug`, `ListDatasets`
-  - `InsertDataset`, `UpdateDataset`, `DeleteDataset`
-  - Bulk-insert queries for each lookup table (use `COPY`-style or multi-row VALUES)
-  - Bulk-select queries: `GetDatasetSpellCastTimes(dataset_id) → []row`
-- [ ] Extend `database/queries/tenants.sql`
-  - `SetTenantDataset`, `SetTenantLogTypes`
-- [ ] `make gen/db`
-
----
-
-## 2. SDK Types & API
-
-### 2.1 SDK types
-- [ ] New `api/chroniclesdk/dataset.go` — `Dataset` struct (metadata only, no bulk data)
-- [ ] Extend `api/chroniclesdk/tenant.go` — add `DefaultDatasetID *uuid.UUID`, `SupportedLogTypes []string`
-- [ ] Update `TenantFromDB` conversion
-- [ ] Update `UpsertTenantRequest` + `ToInsertParams`/`ToUpdateParams`
-
-### 2.2 API endpoints (admin-only)
-- [ ] `GET    /api/v1/datasets`               — list all
-- [ ] `GET    /api/v1/datasets/{id}`           — get metadata
-- [ ] `POST   /api/v1/datasets`               — create
-- [ ] `PUT    /api/v1/datasets/{id}`           — update metadata
-- [ ] `DELETE /api/v1/datasets/{id}`           — delete
-- [ ] `PUT    /api/v1/datasets/{id}/spell-dbc` — upload Spell.dbc to object storage
-- [ ] `POST   /api/v1/datasets/{id}/populate`  — bulk-upload dbcmem tables (JSON body)
-- [ ] `PUT    /api/v1/datasets/{id}/assets/{name}` — upload generated asset JSON
-- [ ] `GET    /api/v1/datasets/{id}/assets/{name}` — fetch asset JSON
-
-### 2.3 Tenant endpoint changes
-- [ ] `PUT /api/v1/tenants/{id}` — accept `default_dataset_id`, `supported_log_types`
-
-### 2.4 Files
-- `api/chroniclesdk/dataset.go` (new)
-- `api/chroniclesdk/tenant.go` (extend)
-- `api/datasets.go` (new handlers)
-- `api/api.go` (register routes)
-
----
-
-## 3. DBCMemProvider Interface
+### Future: DBCMemProvider Interface
 
 Decouple consumers from the `dbcmem` package-level globals so they can use
 dataset-specific data.
 
-### 3.1 Define interface
-- [ ] In `database/gamedb/chrondbc/dbcmem/types.go`, add:
-  ```go
-  type Provider interface {
-      GetCastTime(id int32) SpellCastTime
-      GetSpellIcon(id int32) SpellIcon
-      GetSpellDuration(id int32) SpellDuration
-      GetSpellRange(id int32) SpellRange
-      GetSpellCategory(id int32) SpellCategory
-      GetSpellRadius(id int32) SpellRadius
-      GetSpellFocusObject(id int32) SpellFocusObject
-      GetPeriodicSpell(id int32) (PeriodicSpell, bool)
-      GetVulnerabilitySpell(id int32) (VulnerabilitySpell, bool)
-      GetExtraAttackSpell(id int32) (ExtraAttackSpell, bool)
-      GetDurationModifier(id int32) (DurationModifier, bool)
-      GetDurationModifiersByClassBit(classSet int32) (map[uint64][]int32, bool)
-  }
-  ```
+- [ ] `dbcmem.Provider` interface in `database/gamedb/chrondbc/dbcmem/types.go`
+- [ ] `GlobalProvider struct{}` wrapping existing package globals (backward-compat fallback)
+- [ ] Thread provider through consumers:
+  - `database/gamedb/chrondbc/durationcalc.go`
+  - `internal/services/servicewowdb/servicewowdb.go`
+  - `combatlog/parser/vanilla/synthetic/extrattack.go`
+- [ ] `GameDB` interface gains `DBCMem() dbcmem.Provider`
 
-### 3.2 Globals-backed default implementation
-- [ ] Add `type GlobalProvider struct{}` that wraps existing package globals
-  - So existing code can do `var DefaultProvider Provider = GlobalProvider{}`
-  - This is the backward-compatible fallback
+### Future: Dataset-Aware WoWDB
 
-### 3.3 Thread provider through consumers
-These files currently call `dbcmem.GetXxx()` or `dbcmem.XxxMap[key]` directly:
-- [ ] `database/gamedb/chrondbc/durationcalc.go` — `MaxAuraDuration` uses `DurationModifiersByClassBit`, `DurationModifiers`
-- [ ] `database/gamedb/chrondbc/types.go` — getter functions (these become the GlobalProvider impl)
-- [ ] `internal/services/servicewowdb/servicewowdb.go` — `PeriodicSpells`
-- [ ] `combatlog/parser/vanilla/synthetic/extrattack.go` — `ExtraAttackSpells`
+- [ ] `DatasetGameDB` type implementing `SpellFetcher` + `DBCMem()`
+  (delegates `GearResolver` and `CreatureFetcher` to shared `WoWDB`)
+- [ ] `DatasetLoader` — LRU cache of loaded datasets
+- [ ] `servicewowdb.GameDBForDataset(ctx, datasetID)` — returns dataset-specific or fallback
 
-### 3.4 Extend GameDB interface
-- [ ] `database/gamedb/wowdb.go` — `GameDB` interface gains `DBCMem() dbcmem.Provider`
-- [ ] `WoWDB` (compiled-in) returns `GlobalProvider`
-- [ ] `DatasetGameDB` (new, Phase 4) returns its dataset-specific provider
+### Future: Parser Integration
 
----
+- [ ] Resolve dataset in `WorkerLogParse.Work()`: log group → server → tenant → dataset
+- [ ] Pre-scan REALM_INFO (lightweight pass outside parser) for primary domain uploads
+- [ ] Log type validation at upload (`supported_log_types` on tenant)
 
-## 4. Dataset-Aware WoWDB
+### Future: Dataset Population Tooling
 
-### 4.1 DatasetGameDB
-- [ ] New `database/gamedb/dataset.go`
-  - Implements `GameDB` interface
-  - Holds dataset-specific spell DBC + all 12 lookup maps
-  - `DBCMem()` returns a provider backed by its maps (loaded from DB tables)
+- [ ] `scripts/dbcdata export-dataset` — output JSON from DBC files for bulk API upload
+- [ ] `chronicled dataset seed --from-compiled` — bootstrap datasets from current dbcmem globals
+- [ ] `POST /api/v1/datasets/{id}/populate` — bulk-upload dbcmem tables
 
-### 4.2 DatasetLoader
-- [ ] New `database/gamedb/datasetloader.go`
-  - `Load(ctx, datasetID) → (GameDB, error)`
-  - LRU cache of loaded datasets (5–10 entries)
-  - Steps: check cache → fetch dataset row → download Spell.dbc from object storage →
-    bulk-select all 12 lookup tables → construct DatasetGameDB → cache → return
-  - Cache eviction on dataset `updated_at` change
+### Future: Frontend Asset Resolution
 
-### 4.3 Integrate into servicewowdb
-- [ ] `servicewowdb.Service` gains `datasetLoader *gamedb.DatasetLoader`
-- [ ] New method: `GameDBForDataset(ctx, datasetID) → (GameDB, error)`
-  - `uuid.Nil` → return compiled-in fallback
-- [ ] Initialize loader in `Start()` (needs DB store + object storage)
+- [ ] `serviceassets` resolves tenant → dataset → object storage for JSON assets
+- [ ] Spell icon CDN becomes dataset-aware
+- [ ] Frontend `iconUrl()` uses dataset context instead of `VITE_SERVER_NAME`
 
----
+### Future: Prometheus Metrics
 
-## 5. Parser Integration
+Instrument WoWDB with Prometheus metrics to observe cache behavior and access
+patterns. These drive caching strategy decisions.
 
-### 5.1 Resolve dataset before parsing
-- [ ] In `chronicle/logparse.go` `WorkerLogParse.Work()`:
-  - Look up log group → server → tenant → `default_dataset_id`
-  - Call `GameDBForDataset(ctx, datasetID)` to get the right GameDB
-  - Pass resolved GameDB to parser (replacing `w.parent.WoWDB`)
-- [ ] `chronicle/chronicle.go` — add `WoWDBService` reference (for `GameDBForDataset`)
+**Cache metrics** (per cache, labeled by `dataset_id` where per-dataset):
+- `wowdb_cache_size` (gauge) — current entries
+- `wowdb_cache_capacity` (gauge) — max capacity
+- `wowdb_cache_hits_total` (counter) — labeled by `cache` (spell, icon, cast_time, …)
+- `wowdb_cache_misses_total` (counter)
+- `wowdb_cache_evictions_total` (counter)
 
-### 5.2 Log type validation at upload
-- [ ] In `api/upload.go`:
-  - After resolving tenant, check `supported_log_types`
-  - If non-empty and log type not in list → HTTP 400
-  - Empty list = allow all (backward-compatible)
+**Query metrics** (labeled by `data_type` and `dataset_id`):
+- `wowdb_queries_total` (counter)
+- `wowdb_query_duration_seconds` (histogram)
+- `wowdb_query_errors_total` (counter)
 
----
+**Dataset loader metrics:**
+- `wowdb_dataset_loads_total` (counter)
+- `wowdb_dataset_load_duration_seconds` (histogram)
+- `wowdb_datasets_loaded` (gauge)
 
-## 6. Dataset Population Tooling
+### Future: Remove Compiled-In Data
 
-### 6.1 Export command
-- [ ] `scripts/dbcdata export-dataset` — new CLI command
-  - Reads DBC files, outputs JSON matching the bulk-upload API shape
-  - Produces one JSON object with all 12 table types
-  - Can be piped to `curl POST /api/v1/datasets/{id}/populate`
+The end goal is to **remove all compiled-in static assets entirely**:
+- `dbcmem` package globals → deleted
+- Build-tagged wiring files (`server_turtle.go` etc.) → deleted
+- `assets/{server}/` directories → deleted
+- `services.ServerName` / `services.ServerBuild` → no longer needed for data selection
+- `Makefile SERVER=turtle` → no longer selects game data
 
-### 6.2 Seed from compiled-in data
-- [ ] CLI command `chronicled dataset seed --from-compiled`
-  - Creates a dataset row + populates all lookup tables from current dbcmem globals
-  - Uploads the local Spell.dbc to object storage
-  - Useful for bootstrapping existing deployments
-
-### 6.3 Admin workflow
-1. Create dataset → `POST /api/v1/datasets`
-2. Upload Spell.dbc → `PUT /api/v1/datasets/{id}/spell-dbc`
-3. Populate lookup tables → `POST /api/v1/datasets/{id}/populate`
-4. Upload asset JSONs → `PUT /api/v1/datasets/{id}/assets/{name}`
-5. Assign to tenant → `PUT /api/v1/tenants/{id}` with `default_dataset_id`
-
----
-
-## 7. Frontend Asset Resolution
-
-### 7.1 Dataset-aware assets service
-- [ ] `serviceassets` resolves tenant → dataset → asset keys → object storage
-- [ ] Fallback: no dataset → serve from compiled-in `./assets/{server}/generated/`
-
-### 7.2 Spell icon CDN
-- [ ] Include icon CDN base URL in dataset metadata (or derive from slug)
-- [ ] Frontend `iconUrl()` reads from tenant/dataset context instead of `VITE_SERVER_NAME`
+Each deployment becomes a single generic binary. Datasets are loaded at runtime.
 
 ---
 
 ## Design Notes
 
-### Backward Compatibility
-- No dataset configured → compiled-in data (current behavior)
-- Empty `supported_log_types` → all types allowed
-- Existing binaries → unchanged
-- `dbcmem` package globals → still populated by `init()` for compiled-in fallback
+### WoWDB as the Universal Game Data Gateway
 
-### Migration Path
-1. Ship schema (§1) + SDK/API (§2)
-2. Ship DBCMemProvider interface (§3) — refactor, no behavior change
-3. Ship DatasetLoader + parser integration (§4–5) — feature flag or fallback
-4. Seed datasets from compiled-in data (§6)
-5. Assign datasets to tenants
-6. Frontend resolution (§7) — last, can ship independently
+WoWDB becomes the **primary method of accessing anything related to the game
+client**. All consumers (parsers, tooltip API, periodic spell lookup, duration
+calc, extra attacks, frontend assets) go through WoWDB.
+
+WoWDB will inject **hot caches** that can span datasets or be per-dataset:
+
+```
+WoWDB
+├── DatasetLoader (loads full datasets from DB + object storage)
+│   └── per-dataset LRU (DatasetGameDB instances, keyed by dataset_id)
+│
+├── Spell LRU (cross-dataset? per-dataset? TBD)
+├── SpellIcon LRU
+├── Cast Time LRU
+└── ... other per-table caches
+```
+
+**Open questions on caching strategy:**
+- Per-dataset LRUs: simple isolation, higher memory, no cross-dataset sharing
+- Cross-dataset LRUs: keyed by `(dataset_id, entry_id)`, saves memory if
+  datasets overlap (e.g. Vanilla spells shared by V+ and Turtle)
+- Hybrid: per-dataset for the full DatasetGameDB object, cross-dataset for
+  individual hot-path lookups (spell by ID, icon by ID)
+- Decision deferred — implement per-dataset first, measure with metrics, then optimize
+
+### Backward Compatibility (During Migration)
+- No dataset configured → compiled-in data (current behavior, temporary)
+- Empty `supported_log_types` → all types allowed
+- Existing binaries → unchanged until compiled-in data is removed
+
+### Execution Order
+1. **Tasks A–D** (this round) — datasets table, SDK, CRUD service, PrepareConn plumbing
+2. DBC upload endpoints + object storage bucket
+3. dbcmem lookup tables (12 new tables + bulk queries)
+4. DBCMemProvider interface + GlobalProvider refactor
+5. DatasetLoader + DatasetGameDB + servicewowdb integration
+6. Parser integration (dataset resolution + pre-scan REALM_INFO)
+7. Population tooling (export, seed)
+8. Frontend asset resolution
+9. Prometheus metrics
+10. Remove compiled-in data
 
 ### Memory Budget
-- Each loaded dataset: Spell.dbc (~2–7 MB) + 12 lookup maps (~1–3 MB) ≈ 3–10 MB
+- Each loaded dataset: DBC files (~2–7 MB) + 12 lookup maps (~1–3 MB) ≈ 3–10 MB
 - LRU cache of 5 datasets ≈ 15–50 MB total — acceptable
-
-### Why Separate Tables (Not JSONB)
-- Vanilla SpellIcons alone has ~4,000 entries; WotLK has ~10,000+
-- Full dbcmem JSON blob estimated 2–5 MB per dataset
-- Separate tables allow incremental writes, individual row queries, and future indexing
-- Avoids PostgreSQL TOAST overhead on frequent reads
+- Hot caches for individual lookups: TBD based on access patterns
