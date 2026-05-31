@@ -698,84 +698,90 @@ type DatasetTalentTree struct {
 }
 
 type DbcItemDisplayInfo struct {
-	ID                         int32  `db:"id" json:"id"`
-	ModelName                  []byte `db:"model_name" json:"model_name"`
-	ModelTexture               []byte `db:"model_texture" json:"model_texture"`
-	GeosetGroup                []byte `db:"geoset_group" json:"geoset_group"`
-	Flags                      int32  `db:"flags" json:"flags"`
-	SpellVisualID              int32  `db:"spell_visual_id" json:"spell_visual_id"`
-	HelmetGeosetVis            []byte `db:"helmet_geoset_vis" json:"helmet_geoset_vis"`
-	Texture                    []byte `db:"texture" json:"texture"`
-	ItemVisual                 int32  `db:"item_visual" json:"item_visual"`
-	ParticleColorID            int32  `db:"particle_color_id" json:"particle_color_id"`
-	AttachmentGeosetGroup      []byte `db:"attachment_geoset_group" json:"attachment_geoset_group"`
-	ItemRangedDisplayInfoID    int32  `db:"item_ranged_display_info_id" json:"item_ranged_display_info_id"`
-	ModelMaterialResourcesID   []byte `db:"model_material_resources_id" json:"model_material_resources_id"`
-	ModelResourcesID           []byte `db:"model_resources_id" json:"model_resources_id"`
-	ModelType1                 int32  `db:"model_type_1" json:"model_type_1"`
-	OverrideSwooshSoundKitID   int32  `db:"override_swoosh_sound_kit_id" json:"override_swoosh_sound_kit_id"`
-	SheatheTransformMatrixID   int32  `db:"sheathe_transform_matrix_id" json:"sheathe_transform_matrix_id"`
-	SheathedSpellVisualKitID   int32  `db:"sheathed_spell_visual_kit_id" json:"sheathed_spell_visual_kit_id"`
-	StateSpellVisualKitID      int32  `db:"state_spell_visual_kit_id" json:"state_spell_visual_kit_id"`
-	UnsheathedSpellVisualKitID int32  `db:"unsheathed_spell_visual_kit_id" json:"unsheathed_spell_visual_kit_id"`
-	InventoryIcon              []byte `db:"inventory_icon" json:"inventory_icon"`
-	GroupSoundIndex            int32  `db:"group_sound_index" json:"group_sound_index"`
-	GroundModel                string `db:"ground_model" json:"ground_model"`
-	ItemSize                   int32  `db:"item_size" json:"item_size"`
-	HelmetGeosetVisID          []byte `db:"helmet_geoset_vis_id" json:"helmet_geoset_vis_id"`
+	ID                         int32     `db:"id" json:"id"`
+	ModelName                  []byte    `db:"model_name" json:"model_name"`
+	ModelTexture               []byte    `db:"model_texture" json:"model_texture"`
+	GeosetGroup                []byte    `db:"geoset_group" json:"geoset_group"`
+	Flags                      int32     `db:"flags" json:"flags"`
+	SpellVisualID              int32     `db:"spell_visual_id" json:"spell_visual_id"`
+	HelmetGeosetVis            []byte    `db:"helmet_geoset_vis" json:"helmet_geoset_vis"`
+	Texture                    []byte    `db:"texture" json:"texture"`
+	ItemVisual                 int32     `db:"item_visual" json:"item_visual"`
+	ParticleColorID            int32     `db:"particle_color_id" json:"particle_color_id"`
+	AttachmentGeosetGroup      []byte    `db:"attachment_geoset_group" json:"attachment_geoset_group"`
+	ItemRangedDisplayInfoID    int32     `db:"item_ranged_display_info_id" json:"item_ranged_display_info_id"`
+	ModelMaterialResourcesID   []byte    `db:"model_material_resources_id" json:"model_material_resources_id"`
+	ModelResourcesID           []byte    `db:"model_resources_id" json:"model_resources_id"`
+	ModelType1                 int32     `db:"model_type_1" json:"model_type_1"`
+	OverrideSwooshSoundKitID   int32     `db:"override_swoosh_sound_kit_id" json:"override_swoosh_sound_kit_id"`
+	SheatheTransformMatrixID   int32     `db:"sheathe_transform_matrix_id" json:"sheathe_transform_matrix_id"`
+	SheathedSpellVisualKitID   int32     `db:"sheathed_spell_visual_kit_id" json:"sheathed_spell_visual_kit_id"`
+	StateSpellVisualKitID      int32     `db:"state_spell_visual_kit_id" json:"state_spell_visual_kit_id"`
+	UnsheathedSpellVisualKitID int32     `db:"unsheathed_spell_visual_kit_id" json:"unsheathed_spell_visual_kit_id"`
+	InventoryIcon              []byte    `db:"inventory_icon" json:"inventory_icon"`
+	GroupSoundIndex            int32     `db:"group_sound_index" json:"group_sound_index"`
+	GroundModel                string    `db:"ground_model" json:"ground_model"`
+	ItemSize                   int32     `db:"item_size" json:"item_size"`
+	HelmetGeosetVisID          []byte    `db:"helmet_geoset_vis_id" json:"helmet_geoset_vis_id"`
+	DatasetID                  uuid.UUID `db:"dataset_id" json:"dataset_id"`
 }
 
 type DbcItemRandomProperty struct {
-	ID           int32  `db:"id" json:"id"`
-	Name         string `db:"name" json:"name"`
-	NameLang     string `db:"name_lang" json:"name_lang"`
-	Enchantment1 int32  `db:"enchantment_1" json:"enchantment_1"`
-	Enchantment2 int32  `db:"enchantment_2" json:"enchantment_2"`
-	Enchantment3 int32  `db:"enchantment_3" json:"enchantment_3"`
-	Enchantment4 int32  `db:"enchantment_4" json:"enchantment_4"`
-	Enchantment5 int32  `db:"enchantment_5" json:"enchantment_5"`
+	ID           int32     `db:"id" json:"id"`
+	Name         string    `db:"name" json:"name"`
+	NameLang     string    `db:"name_lang" json:"name_lang"`
+	Enchantment1 int32     `db:"enchantment_1" json:"enchantment_1"`
+	Enchantment2 int32     `db:"enchantment_2" json:"enchantment_2"`
+	Enchantment3 int32     `db:"enchantment_3" json:"enchantment_3"`
+	Enchantment4 int32     `db:"enchantment_4" json:"enchantment_4"`
+	Enchantment5 int32     `db:"enchantment_5" json:"enchantment_5"`
+	DatasetID    uuid.UUID `db:"dataset_id" json:"dataset_id"`
 }
 
 type DbcItemSet struct {
-	ID                int32   `db:"id" json:"id"`
-	NameLang          string  `db:"name_lang" json:"name_lang"`
-	RequiredSkill     int32   `db:"required_skill" json:"required_skill"`
-	RequiredSkillRank int32   `db:"required_skill_rank" json:"required_skill_rank"`
-	ItemIds           []int32 `db:"item_ids" json:"item_ids"`
+	ID                int32     `db:"id" json:"id"`
+	NameLang          string    `db:"name_lang" json:"name_lang"`
+	RequiredSkill     int32     `db:"required_skill" json:"required_skill"`
+	RequiredSkillRank int32     `db:"required_skill_rank" json:"required_skill_rank"`
+	ItemIds           []int32   `db:"item_ids" json:"item_ids"`
+	DatasetID         uuid.UUID `db:"dataset_id" json:"dataset_id"`
 }
 
 type DbcItemSetBonu struct {
-	SetID     int32 `db:"set_id" json:"set_id"`
-	Threshold int32 `db:"threshold" json:"threshold"`
-	SpellID   int32 `db:"spell_id" json:"spell_id"`
+	SetID     int32     `db:"set_id" json:"set_id"`
+	Threshold int32     `db:"threshold" json:"threshold"`
+	SpellID   int32     `db:"spell_id" json:"spell_id"`
+	DatasetID uuid.UUID `db:"dataset_id" json:"dataset_id"`
 }
 
 type DbcItemSetItem struct {
-	SetID     int32 `db:"set_id" json:"set_id"`
-	ItemEntry int32 `db:"item_entry" json:"item_entry"`
+	SetID     int32     `db:"set_id" json:"set_id"`
+	ItemEntry int32     `db:"item_entry" json:"item_entry"`
+	DatasetID uuid.UUID `db:"dataset_id" json:"dataset_id"`
 }
 
 type DbcSpellItemEnchantment struct {
-	ID                int32  `db:"id" json:"id"`
-	Charges           int32  `db:"charges" json:"charges"`
-	Effect1           int32  `db:"effect_1" json:"effect_1"`
-	Effect2           int32  `db:"effect_2" json:"effect_2"`
-	Effect3           int32  `db:"effect_3" json:"effect_3"`
-	EffectPointsMin1  int32  `db:"effect_points_min_1" json:"effect_points_min_1"`
-	EffectPointsMin2  int32  `db:"effect_points_min_2" json:"effect_points_min_2"`
-	EffectPointsMin3  int32  `db:"effect_points_min_3" json:"effect_points_min_3"`
-	EffectArg1        int32  `db:"effect_arg_1" json:"effect_arg_1"`
-	EffectArg2        int32  `db:"effect_arg_2" json:"effect_arg_2"`
-	EffectArg3        int32  `db:"effect_arg_3" json:"effect_arg_3"`
-	NameLang          string `db:"name_lang" json:"name_lang"`
-	ItemVisual        int32  `db:"item_visual" json:"item_visual"`
-	Flags             int32  `db:"flags" json:"flags"`
-	SrcItemID         int32  `db:"src_item_id" json:"src_item_id"`
-	ConditionID       int32  `db:"condition_id" json:"condition_id"`
-	RequiredSkillID   int32  `db:"required_skill_id" json:"required_skill_id"`
-	RequiredSkillRank int32  `db:"required_skill_rank" json:"required_skill_rank"`
-	MinLevel          int32  `db:"min_level" json:"min_level"`
-	MaxLevel          int32  `db:"max_level" json:"max_level"`
+	ID                int32     `db:"id" json:"id"`
+	Charges           int32     `db:"charges" json:"charges"`
+	Effect1           int32     `db:"effect_1" json:"effect_1"`
+	Effect2           int32     `db:"effect_2" json:"effect_2"`
+	Effect3           int32     `db:"effect_3" json:"effect_3"`
+	EffectPointsMin1  int32     `db:"effect_points_min_1" json:"effect_points_min_1"`
+	EffectPointsMin2  int32     `db:"effect_points_min_2" json:"effect_points_min_2"`
+	EffectPointsMin3  int32     `db:"effect_points_min_3" json:"effect_points_min_3"`
+	EffectArg1        int32     `db:"effect_arg_1" json:"effect_arg_1"`
+	EffectArg2        int32     `db:"effect_arg_2" json:"effect_arg_2"`
+	EffectArg3        int32     `db:"effect_arg_3" json:"effect_arg_3"`
+	NameLang          string    `db:"name_lang" json:"name_lang"`
+	ItemVisual        int32     `db:"item_visual" json:"item_visual"`
+	Flags             int32     `db:"flags" json:"flags"`
+	SrcItemID         int32     `db:"src_item_id" json:"src_item_id"`
+	ConditionID       int32     `db:"condition_id" json:"condition_id"`
+	RequiredSkillID   int32     `db:"required_skill_id" json:"required_skill_id"`
+	RequiredSkillRank int32     `db:"required_skill_rank" json:"required_skill_rank"`
+	MinLevel          int32     `db:"min_level" json:"min_level"`
+	MaxLevel          int32     `db:"max_level" json:"max_level"`
+	DatasetID         uuid.UUID `db:"dataset_id" json:"dataset_id"`
 }
 
 type DeploymentInfo struct {
@@ -1370,17 +1376,20 @@ type WorldCreatureTemplate struct {
 	MechanicImmuneMask int64       `db:"mechanic_immune_mask" json:"mechanic_immune_mask"`
 	SchoolImmuneMask   int32       `db:"school_immune_mask" json:"school_immune_mask"`
 	ImmunityFlags      int32       `db:"immunity_flags" json:"immunity_flags"`
+	DatasetID          uuid.UUID   `db:"dataset_id" json:"dataset_id"`
 }
 
 type WorldDisplayInfo struct {
-	ID   int32  `db:"id" json:"id"`
-	Icon string `db:"icon" json:"icon"`
+	ID        int32     `db:"id" json:"id"`
+	Icon      string    `db:"icon" json:"icon"`
+	DatasetID uuid.UUID `db:"dataset_id" json:"dataset_id"`
 }
 
 type WorldItemEnchantment struct {
-	Entry  int32   `db:"entry" json:"entry"`
-	Ench   int32   `db:"ench" json:"ench"`
-	Chance float64 `db:"chance" json:"chance"`
+	Entry     int32     `db:"entry" json:"entry"`
+	Ench      int32     `db:"ench" json:"ench"`
+	Chance    float64   `db:"chance" json:"chance"`
+	DatasetID uuid.UUID `db:"dataset_id" json:"dataset_id"`
 }
 
 type WorldItemTemplate struct {
@@ -1532,44 +1541,50 @@ type WorldItemTemplate struct {
 	ScalingStatValue          int32       `db:"scaling_stat_value" json:"scaling_stat_value"`
 	ItemLimitCategory         int32       `db:"item_limit_category" json:"item_limit_category"`
 	HolidayID                 int32       `db:"holiday_id" json:"holiday_id"`
+	DatasetID                 uuid.UUID   `db:"dataset_id" json:"dataset_id"`
 }
 
 type WorldServer struct {
-	ServerID uuid.UUID `db:"server_id" json:"server_id"`
-	WorldID  uuid.UUID `db:"world_id" json:"world_id"`
+	ServerID  uuid.UUID `db:"server_id" json:"server_id"`
+	WorldID   uuid.UUID `db:"world_id" json:"world_id"`
+	DatasetID uuid.UUID `db:"dataset_id" json:"dataset_id"`
 }
 
 type WorldSpellArea struct {
-	Spell            int32 `db:"spell" json:"spell"`
-	Area             int32 `db:"area" json:"area"`
-	QuestStart       int32 `db:"quest_start" json:"quest_start"`
-	QuestStartActive int32 `db:"quest_start_active" json:"quest_start_active"`
-	QuestEnd         int32 `db:"quest_end" json:"quest_end"`
-	AuraSpell        int32 `db:"aura_spell" json:"aura_spell"`
-	Racemask         int32 `db:"racemask" json:"racemask"`
-	Gender           int32 `db:"gender" json:"gender"`
-	Autocast         int32 `db:"autocast" json:"autocast"`
+	Spell            int32     `db:"spell" json:"spell"`
+	Area             int32     `db:"area" json:"area"`
+	QuestStart       int32     `db:"quest_start" json:"quest_start"`
+	QuestStartActive int32     `db:"quest_start_active" json:"quest_start_active"`
+	QuestEnd         int32     `db:"quest_end" json:"quest_end"`
+	AuraSpell        int32     `db:"aura_spell" json:"aura_spell"`
+	Racemask         int32     `db:"racemask" json:"racemask"`
+	Gender           int32     `db:"gender" json:"gender"`
+	Autocast         int32     `db:"autocast" json:"autocast"`
+	DatasetID        uuid.UUID `db:"dataset_id" json:"dataset_id"`
 }
 
 type WorldSpellChain struct {
-	SpellID    int32 `db:"spell_id" json:"spell_id"`
-	PrevSpell  int32 `db:"prev_spell" json:"prev_spell"`
-	FirstSpell int32 `db:"first_spell" json:"first_spell"`
-	Rank       int32 `db:"rank" json:"rank"`
-	ReqSpell   int32 `db:"req_spell" json:"req_spell"`
+	SpellID    int32     `db:"spell_id" json:"spell_id"`
+	PrevSpell  int32     `db:"prev_spell" json:"prev_spell"`
+	FirstSpell int32     `db:"first_spell" json:"first_spell"`
+	Rank       int32     `db:"rank" json:"rank"`
+	ReqSpell   int32     `db:"req_spell" json:"req_spell"`
+	DatasetID  uuid.UUID `db:"dataset_id" json:"dataset_id"`
 }
 
 type WorldSpellGroup struct {
-	GroupID      int32 `db:"group_id" json:"group_id"`
-	GroupSpellID int32 `db:"group_spell_id" json:"group_spell_id"`
-	SpellID      int32 `db:"spell_id" json:"spell_id"`
+	GroupID      int32     `db:"group_id" json:"group_id"`
+	GroupSpellID int32     `db:"group_spell_id" json:"group_spell_id"`
+	SpellID      int32     `db:"spell_id" json:"spell_id"`
+	DatasetID    uuid.UUID `db:"dataset_id" json:"dataset_id"`
 }
 
 type WorldSpellThreat struct {
-	Entry      int32   `db:"entry" json:"entry"`
-	Threat     int32   `db:"threat" json:"threat"`
-	Multiplier float64 `db:"multiplier" json:"multiplier"`
-	ApBonus    float64 `db:"ap_bonus" json:"ap_bonus"`
+	Entry      int32     `db:"entry" json:"entry"`
+	Threat     int32     `db:"threat" json:"threat"`
+	Multiplier float64   `db:"multiplier" json:"multiplier"`
+	ApBonus    float64   `db:"ap_bonus" json:"ap_bonus"`
+	DatasetID  uuid.UUID `db:"dataset_id" json:"dataset_id"`
 }
 
 type WowServer struct {

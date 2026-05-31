@@ -2,15 +2,24 @@ package servicedataset
 
 import (
 	"context"
+	"fmt"
+	"log/slog"
 
 	"github.com/Emyrk/chronicle/database"
 	"github.com/Emyrk/chronicle/internal/services"
 	"github.com/Emyrk/chronicle/internal/services/servicedbstore"
 	"github.com/Emyrk/chronicle/internal/services/servicelogger"
+	"github.com/Emyrk/chronicle/internal/services/servicetenant"
+	"github.com/Gophercraft/core/vsn"
+	"github.com/jackc/pgx/v5/pgtype"
 
 	"github.com/coder/serpent"
 	"github.com/google/uuid"
 )
+
+// DefaultDatasetID is the well-known UUID for the default dataset.
+// Inserted by migration 000121 and referenced by all existing world_*/dbc_* rows.
+var DefaultDatasetID = uuid.MustParse("00000000-0000-0000-0000-000000000001")
 
 // DatasetStore is the narrow query interface for dataset CRUD.
 // database.Store satisfies this implicitly.
@@ -54,8 +63,12 @@ func (s *Service) DependsOn() []string {
 	}
 }
 
-func (s *Service) Start(_ context.Context) error {
+func (s *Service) Start(ctx context.Context) error {
 	s.db = servicedbstore.DatabaseStore(s.broker)
+
+	if err := s.ensureDefaultDataset(ctx); err != nil {
+		return fmt.Errorf("ensure default dataset: %w", err)
+	}
 	return nil
 }
 
@@ -65,4 +78,51 @@ func (s *Service) Close(_ context.Context) error {
 
 func (s *Service) Options() serpent.OptionSet {
 	return serpent.OptionSet{}
+}
+
+// ensureDefaultDataset upserts the wow_version and build_version on the
+// default dataset row (inserted by migration 000121). These fields depend
+// on build tags (services.ServerName / services.ServerBuild) so they can't
+// be set correctly in SQL.
+func (s *Service) ensureDefaultDataset(ctx context.Context) error {
+	ctx = servicetenant.AdminBypass(ctx)
+	logger := servicelogger.Logger(s.broker)
+
+	wowVersion := wowVersionFromBuild(services.ServerBuild)
+	buildVersion := int32(services.ServerBuild)
+
+	_, err := s.db.UpdateDataset(ctx, database.UpdateDatasetParams{
+		ID:           DefaultDatasetID,
+		WowVersion:   pgtype.Text{String: wowVersion, Valid: true},
+		BuildVersion: pgtype.Int4{Int32: buildVersion, Valid: true},
+	})
+	if err != nil {
+		return fmt.Errorf("update default dataset build info: %w", err)
+	}
+
+	logger.Info("default dataset ensured",
+		slog.String("server", services.ServerName),
+		slog.String("wow_version", wowVersion),
+		slog.Int("build_version", int(buildVersion)),
+	)
+	return nil
+}
+
+// wowVersionFromBuild maps Gophercraft build constants to human-readable
+// WoW version strings.
+func wowVersionFromBuild(build vsn.Build) string {
+	// vsn.V1_12_1 = 5875, vsn.V1_12_2 = 6005, vsn.V2_4_3 = 8606,
+	// vsn.V3_3_5a = 12340
+	switch {
+	case build <= 5875:
+		return "1.12.1"
+	case build <= 6005:
+		return "1.12.2"
+	case build <= 8606:
+		return "2.4.3"
+	case build <= 12340:
+		return "3.3.5a"
+	default:
+		return fmt.Sprintf("unknown-%d", build)
+	}
 }
