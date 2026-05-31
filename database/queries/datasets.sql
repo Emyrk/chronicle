@@ -11,8 +11,8 @@ SELECT * FROM datasets WHERE slug = $1;
 SELECT * FROM datasets ORDER BY name;
 
 -- name: InsertDataset :one
-INSERT INTO datasets (name, slug, wow_version, build_version, description, spell_dbc_storage_key)
-VALUES (@name, @slug, @wow_version, @build_version, @description, @spell_dbc_storage_key)
+INSERT INTO datasets (name, slug, wow_version, build_version, description)
+VALUES (@name, @slug, @wow_version, @build_version, @description)
 RETURNING *;
 
 -- name: UpdateDataset :one
@@ -23,7 +23,6 @@ UPDATE datasets SET
     wow_version       = COALESCE(sqlc.narg('wow_version'), wow_version),
     build_version     = COALESCE(sqlc.narg('build_version'), build_version),
     description       = COALESCE(sqlc.narg('description'), description),
-    spell_dbc_storage_key = COALESCE(sqlc.narg('spell_dbc_storage_key'), spell_dbc_storage_key),
     updated_at        = now()
 WHERE id = @id
 RETURNING *;

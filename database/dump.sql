@@ -267,7 +267,6 @@ CREATE TABLE datasets (
     wow_version text NOT NULL,
     build_version integer DEFAULT 5875 NOT NULL,
     description text DEFAULT ''::text NOT NULL,
-    spell_dbc_storage_key text,
     created_at timestamp with time zone DEFAULT now() NOT NULL,
     updated_at timestamp with time zone DEFAULT now() NOT NULL,
     CONSTRAINT datasets_slug_format CHECK ((slug ~ '^[a-z0-9][a-z0-9-]{1,48}[a-z0-9]$'::text))

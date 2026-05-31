@@ -5,7 +5,6 @@ CREATE TABLE datasets (
     wow_version   TEXT NOT NULL,
     build_version INT  NOT NULL DEFAULT 5875,
     description   TEXT NOT NULL DEFAULT '',
-    spell_dbc_storage_key TEXT,
     created_at    TIMESTAMPTZ NOT NULL DEFAULT now(),
     updated_at    TIMESTAMPTZ NOT NULL DEFAULT now()
 );

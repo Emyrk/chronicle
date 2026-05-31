@@ -17,7 +17,6 @@ type Dataset struct {
 	WoWVersion        string     `json:"wow_version"`
 	BuildVersion      int32      `json:"build_version"`
 	Description       string     `json:"description"`
-	SpellDBCStorageKey *string   `json:"spell_dbc_storage_key"`
 	CreatedAt         time.Time  `json:"created_at"`
 	UpdatedAt         time.Time  `json:"updated_at"`
 }
@@ -34,9 +33,6 @@ func DatasetFromDB(d database.Dataset) Dataset {
 		CreatedAt:    d.CreatedAt.Time,
 		UpdatedAt:    d.UpdatedAt.Time,
 	}
-	if d.SpellDbcStorageKey.Valid {
-		out.SpellDBCStorageKey = &d.SpellDbcStorageKey.String
-	}
 	return out
 }
 
@@ -50,7 +46,6 @@ type UpsertDatasetRequest struct {
 	WoWVersion         string        `json:"wow_version"`
 	BuildVersion       *int32        `json:"build_version"`
 	Description        *string       `json:"description"`
-	SpellDBCStorageKey *string       `json:"spell_dbc_storage_key"`
 }
 
 // IsCreate returns true when the request should insert a new dataset.
@@ -70,18 +65,12 @@ func (r UpsertDatasetRequest) ToInsertParams() database.InsertDatasetParams {
 		description = *r.Description
 	}
 
-	var spellKey pgtype.Text
-	if r.SpellDBCStorageKey != nil {
-		spellKey = pgtype.Text{String: *r.SpellDBCStorageKey, Valid: true}
-	}
-
 	return database.InsertDatasetParams{
-		Name:               r.Name,
-		Slug:               r.Slug,
-		WowVersion:         r.WoWVersion,
-		BuildVersion:       buildVersion,
-		Description:        description,
-		SpellDbcStorageKey: spellKey,
+		Name:         r.Name,
+		Slug:         r.Slug,
+		WowVersion:   r.WoWVersion,
+		BuildVersion: buildVersion,
+		Description:  description,
 	}
 }
 
@@ -113,18 +102,12 @@ func (r UpsertDatasetRequest) ToUpdateParams() database.UpdateDatasetParams {
 		description = pgtype.Text{String: *r.Description, Valid: true}
 	}
 
-	var spellKey pgtype.Text
-	if r.SpellDBCStorageKey != nil {
-		spellKey = pgtype.Text{String: *r.SpellDBCStorageKey, Valid: true}
-	}
-
 	return database.UpdateDatasetParams{
-		ID:                 r.ID.UUID,
-		Name:               name,
-		Slug:               slug,
-		WowVersion:         wowVersion,
-		BuildVersion:       buildVersion,
-		Description:        description,
-		SpellDbcStorageKey: spellKey,
+		ID:           r.ID.UUID,
+		Name:         name,
+		Slug:         slug,
+		WowVersion:   wowVersion,
+		BuildVersion: buildVersion,
+		Description:  description,
 	}
 }

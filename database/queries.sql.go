@@ -904,7 +904,7 @@ func (q *sqlQuerier) DeleteDataset(ctx context.Context, id uuid.UUID) error {
 
 const getDataset = `-- name: GetDataset :one
 
-SELECT id, name, slug, wow_version, build_version, description, spell_dbc_storage_key, created_at, updated_at FROM datasets WHERE id = $1
+SELECT id, name, slug, wow_version, build_version, description, created_at, updated_at FROM datasets WHERE id = $1
 `
 
 // Dataset queries. These run with AdminBypass context since the datasets table
@@ -919,7 +919,6 @@ func (q *sqlQuerier) GetDataset(ctx context.Context, id uuid.UUID) (Dataset, err
 		&i.WowVersion,
 		&i.BuildVersion,
 		&i.Description,
-		&i.SpellDbcStorageKey,
 		&i.CreatedAt,
 		&i.UpdatedAt,
 	)
@@ -927,7 +926,7 @@ func (q *sqlQuerier) GetDataset(ctx context.Context, id uuid.UUID) (Dataset, err
 }
 
 const getDatasetBySlug = `-- name: GetDatasetBySlug :one
-SELECT id, name, slug, wow_version, build_version, description, spell_dbc_storage_key, created_at, updated_at FROM datasets WHERE slug = $1
+SELECT id, name, slug, wow_version, build_version, description, created_at, updated_at FROM datasets WHERE slug = $1
 `
 
 func (q *sqlQuerier) GetDatasetBySlug(ctx context.Context, slug string) (Dataset, error) {
@@ -940,7 +939,6 @@ func (q *sqlQuerier) GetDatasetBySlug(ctx context.Context, slug string) (Dataset
 		&i.WowVersion,
 		&i.BuildVersion,
 		&i.Description,
-		&i.SpellDbcStorageKey,
 		&i.CreatedAt,
 		&i.UpdatedAt,
 	)
@@ -948,18 +946,17 @@ func (q *sqlQuerier) GetDatasetBySlug(ctx context.Context, slug string) (Dataset
 }
 
 const insertDataset = `-- name: InsertDataset :one
-INSERT INTO datasets (name, slug, wow_version, build_version, description, spell_dbc_storage_key)
-VALUES ($1, $2, $3, $4, $5, $6)
-RETURNING id, name, slug, wow_version, build_version, description, spell_dbc_storage_key, created_at, updated_at
+INSERT INTO datasets (name, slug, wow_version, build_version, description)
+VALUES ($1, $2, $3, $4, $5)
+RETURNING id, name, slug, wow_version, build_version, description, created_at, updated_at
 `
 
 type InsertDatasetParams struct {
-	Name               string      `db:"name" json:"name"`
-	Slug               string      `db:"slug" json:"slug"`
-	WowVersion         string      `db:"wow_version" json:"wow_version"`
-	BuildVersion       int32       `db:"build_version" json:"build_version"`
-	Description        string      `db:"description" json:"description"`
-	SpellDbcStorageKey pgtype.Text `db:"spell_dbc_storage_key" json:"spell_dbc_storage_key"`
+	Name         string `db:"name" json:"name"`
+	Slug         string `db:"slug" json:"slug"`
+	WowVersion   string `db:"wow_version" json:"wow_version"`
+	BuildVersion int32  `db:"build_version" json:"build_version"`
+	Description  string `db:"description" json:"description"`
 }
 
 func (q *sqlQuerier) InsertDataset(ctx context.Context, arg InsertDatasetParams) (Dataset, error) {
@@ -969,7 +966,6 @@ func (q *sqlQuerier) InsertDataset(ctx context.Context, arg InsertDatasetParams)
 		arg.WowVersion,
 		arg.BuildVersion,
 		arg.Description,
-		arg.SpellDbcStorageKey,
 	)
 	var i Dataset
 	err := row.Scan(
@@ -979,7 +975,6 @@ func (q *sqlQuerier) InsertDataset(ctx context.Context, arg InsertDatasetParams)
 		&i.WowVersion,
 		&i.BuildVersion,
 		&i.Description,
-		&i.SpellDbcStorageKey,
 		&i.CreatedAt,
 		&i.UpdatedAt,
 	)
@@ -987,7 +982,7 @@ func (q *sqlQuerier) InsertDataset(ctx context.Context, arg InsertDatasetParams)
 }
 
 const listDatasets = `-- name: ListDatasets :many
-SELECT id, name, slug, wow_version, build_version, description, spell_dbc_storage_key, created_at, updated_at FROM datasets ORDER BY name
+SELECT id, name, slug, wow_version, build_version, description, created_at, updated_at FROM datasets ORDER BY name
 `
 
 func (q *sqlQuerier) ListDatasets(ctx context.Context) ([]Dataset, error) {
@@ -1006,7 +1001,6 @@ func (q *sqlQuerier) ListDatasets(ctx context.Context) ([]Dataset, error) {
 			&i.WowVersion,
 			&i.BuildVersion,
 			&i.Description,
-			&i.SpellDbcStorageKey,
 			&i.CreatedAt,
 			&i.UpdatedAt,
 		); err != nil {
@@ -1027,20 +1021,18 @@ UPDATE datasets SET
     wow_version       = COALESCE($3, wow_version),
     build_version     = COALESCE($4, build_version),
     description       = COALESCE($5, description),
-    spell_dbc_storage_key = COALESCE($6, spell_dbc_storage_key),
     updated_at        = now()
-WHERE id = $7
-RETURNING id, name, slug, wow_version, build_version, description, spell_dbc_storage_key, created_at, updated_at
+WHERE id = $6
+RETURNING id, name, slug, wow_version, build_version, description, created_at, updated_at
 `
 
 type UpdateDatasetParams struct {
-	Name               pgtype.Text `db:"name" json:"name"`
-	Slug               pgtype.Text `db:"slug" json:"slug"`
-	WowVersion         pgtype.Text `db:"wow_version" json:"wow_version"`
-	BuildVersion       pgtype.Int4 `db:"build_version" json:"build_version"`
-	Description        pgtype.Text `db:"description" json:"description"`
-	SpellDbcStorageKey pgtype.Text `db:"spell_dbc_storage_key" json:"spell_dbc_storage_key"`
-	ID                 uuid.UUID   `db:"id" json:"id"`
+	Name         pgtype.Text `db:"name" json:"name"`
+	Slug         pgtype.Text `db:"slug" json:"slug"`
+	WowVersion   pgtype.Text `db:"wow_version" json:"wow_version"`
+	BuildVersion pgtype.Int4 `db:"build_version" json:"build_version"`
+	Description  pgtype.Text `db:"description" json:"description"`
+	ID           uuid.UUID   `db:"id" json:"id"`
 }
 
 // Only non-null params are applied; NULL means "keep existing value".
@@ -1051,7 +1043,6 @@ func (q *sqlQuerier) UpdateDataset(ctx context.Context, arg UpdateDatasetParams)
 		arg.WowVersion,
 		arg.BuildVersion,
 		arg.Description,
-		arg.SpellDbcStorageKey,
 		arg.ID,
 	)
 	var i Dataset
@@ -1062,7 +1053,6 @@ func (q *sqlQuerier) UpdateDataset(ctx context.Context, arg UpdateDatasetParams)
 		&i.WowVersion,
 		&i.BuildVersion,
 		&i.Description,
-		&i.SpellDbcStorageKey,
 		&i.CreatedAt,
 		&i.UpdatedAt,
 	)
