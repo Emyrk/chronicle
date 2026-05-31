@@ -9,6 +9,7 @@ import (
 	"github.com/Emyrk/chronicle/api/chroniclesdk"
 	"github.com/Emyrk/chronicle/api/httpapi"
 	"github.com/Emyrk/chronicle/database"
+	"github.com/Emyrk/chronicle/internal/services/servicedataset"
 	"github.com/Emyrk/chronicle/internal/wdb"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
@@ -32,7 +33,7 @@ func (h *Handler) handleCreatureUpload(ctx context.Context, w http.ResponseWrite
 	for i, c := range creatures {
 		entries[i] = int32(c.Entry)
 	}
-	existingRows, err := h.zed.GetCreatureTemplatesByEntries(ctx, entries)
+	existingRows, err := h.zed.GetCreatureTemplatesByEntries(ctx, database.GetCreatureTemplatesByEntriesParams{DatasetID: servicedataset.DefaultDatasetID, Entries: entries})
 	if err != nil {
 		httpapi.Write(ctx, w, http.StatusInternalServerError, chroniclesdk.Response{
 			Message: "Failed to fetch existing creatures from database",

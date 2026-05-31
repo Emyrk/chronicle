@@ -9,6 +9,7 @@ import (
 	"github.com/Emyrk/chronicle/api/chroniclesdk"
 	"github.com/Emyrk/chronicle/api/httpapi"
 	"github.com/Emyrk/chronicle/database"
+	"github.com/Emyrk/chronicle/internal/services/servicedataset"
 	"github.com/Emyrk/chronicle/internal/wdb"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
@@ -34,7 +35,7 @@ func (h *Handler) handleItemUpload(ctx context.Context, w http.ResponseWriter, m
 	for i, it := range items {
 		entries[i] = int32(it.Entry)
 	}
-	existingRows, err := h.zed.GetItemTemplatesByEntries(ctx, entries)
+	existingRows, err := h.zed.GetItemTemplatesByEntries(ctx, database.GetItemTemplatesByEntriesParams{DatasetID: servicedataset.DefaultDatasetID, Entries: entries})
 	if err != nil {
 		httpapi.Write(ctx, w, http.StatusInternalServerError, chroniclesdk.Response{
 			Message: "Failed to fetch existing items from database",

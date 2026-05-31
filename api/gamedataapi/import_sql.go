@@ -11,6 +11,7 @@ import (
 	"github.com/Emyrk/chronicle/api/chroniclesdk"
 	"github.com/Emyrk/chronicle/api/httpapi"
 	"github.com/Emyrk/chronicle/database"
+	"github.com/Emyrk/chronicle/internal/services/servicedataset"
 	"github.com/Emyrk/chronicle/internal/wdb"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
@@ -182,7 +183,7 @@ func (h *Handler) importCreatureTemplateSQL(ctx context.Context, w http.Response
 	for i, c := range creatures {
 		entries[i] = c.Entry
 	}
-	existingRows, err := h.zed.GetCreatureTemplatesByEntries(ctx, entries)
+	existingRows, err := h.zed.GetCreatureTemplatesByEntries(ctx, database.GetCreatureTemplatesByEntriesParams{DatasetID: servicedataset.DefaultDatasetID, Entries: entries})
 	if err != nil {
 		httpapi.Write(ctx, w, http.StatusInternalServerError, chroniclesdk.Response{
 			Message: "Failed to fetch existing creatures from database",
@@ -288,7 +289,7 @@ func (h *Handler) importItemTemplateSQL(ctx context.Context, w http.ResponseWrit
 	for i, it := range items {
 		entries[i] = it.Entry
 	}
-	existingRows, err := h.zed.GetItemTemplatesByEntries(ctx, entries)
+	existingRows, err := h.zed.GetItemTemplatesByEntries(ctx, database.GetItemTemplatesByEntriesParams{DatasetID: servicedataset.DefaultDatasetID, Entries: entries})
 	if err != nil {
 		httpapi.Write(ctx, w, http.StatusInternalServerError, chroniclesdk.Response{
 			Message: "Failed to fetch existing items from database",
