@@ -13,6 +13,7 @@ import (
 	"github.com/Emyrk/chronicle/database"
 	"github.com/Emyrk/chronicle/internal/services/servicedataset"
 	"github.com/Emyrk/chronicle/internal/wdb"
+	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 )
@@ -247,7 +248,7 @@ func (h *Handler) importCreatureTemplateSQL(ctx context.Context, w http.Response
 	}
 
 	if (mode == "upsert" || mode == "insert") && len(toUpsert) > 0 {
-		if err := upsertCreaturesSQL(ctx, h.pool, toUpsert); err != nil {
+		if err := upsertCreaturesSQL(ctx, h.pool, servicedataset.DefaultDatasetID, toUpsert); err != nil {
 			httpapi.Write(ctx, w, http.StatusInternalServerError, chroniclesdk.Response{
 				Message: "Failed to upsert creatures",
 				Detail:  err.Error(),
@@ -369,7 +370,7 @@ func (h *Handler) importItemTemplateSQL(ctx context.Context, w http.ResponseWrit
 	}
 
 	if (mode == "upsert" || mode == "insert") && len(toUpsert) > 0 {
-		if err := upsertItems(ctx, h.pool, toUpsert); err != nil {
+		if err := upsertItems(ctx, h.pool, servicedataset.DefaultDatasetID, toUpsert); err != nil {
 			httpapi.Write(ctx, w, http.StatusInternalServerError, chroniclesdk.Response{
 				Message: "Failed to upsert items",
 				Detail:  err.Error(),
@@ -392,7 +393,7 @@ func (h *Handler) importItemTemplateSQL(ctx context.Context, w http.ResponseWrit
 
 // sqlCreatureUpsertColumns includes all fields available from AzerothCore SQL dumps.
 var sqlCreatureUpsertColumns = []string{
-	"entry", "name", "subname",
+	"dataset_id", "entry", "name", "subname",
 	"display_id1", "display_id2", "display_id3", "display_id4",
 	"level_min", "level_max",
 	"dmg_min", "dmg_max", "dmg_school", "attack_power", "dmg_multiplier",
@@ -411,19 +412,20 @@ func init() {
 		placeholders[i] = fmt.Sprintf("$%d", i+1)
 	}
 	var setClauses []string
-	for _, col := range sqlCreatureUpsertColumns[1:] {
+	for _, col := range sqlCreatureUpsertColumns[2:] { // skip "dataset_id" and "entry" (composite PK)
 		setClauses = append(setClauses, fmt.Sprintf("%s = EXCLUDED.%s", col, col))
 	}
 	upsertCreatureSQLStmt = fmt.Sprintf(
-		"INSERT INTO world_creature_template (%s) VALUES (%s) ON CONFLICT (entry) DO UPDATE SET %s",
+		"INSERT INTO world_creature_template (%s) VALUES (%s) ON CONFLICT (dataset_id, entry) DO UPDATE SET %s",
 		strings.Join(sqlCreatureUpsertColumns, ", "),
 		strings.Join(placeholders, ", "),
 		strings.Join(setClauses, ", "),
 	)
 }
 
-func sqlCreatureRowArgs(r database.WorldCreatureTemplate) []any {
+func sqlCreatureRowArgs(datasetID uuid.UUID, r database.WorldCreatureTemplate) []any {
 	return []any{
+		datasetID,
 		r.Entry, r.Name, r.Subname,
 		r.DisplayId1, r.DisplayId2, r.DisplayId3, r.DisplayId4,
 		r.LevelMin, r.LevelMax,
@@ -436,13 +438,13 @@ func sqlCreatureRowArgs(r database.WorldCreatureTemplate) []any {
 	}
 }
 
-func upsertCreaturesSQL(ctx context.Context, pool *pgxpool.Pool, rows []database.WorldCreatureTemplate) error {
+func upsertCreaturesSQL(ctx context.Context, pool *pgxpool.Pool, datasetID uuid.UUID, rows []database.WorldCreatureTemplate) error {
 	const batchSize = 500
 	for i := 0; i < len(rows); i += batchSize {
 		end := min(i+batchSize, len(rows))
 		batch := &pgx.Batch{}
 		for _, r := range rows[i:end] {
-			batch.Queue(upsertCreatureSQLStmt, sqlCreatureRowArgs(r)...)
+			batch.Queue(upsertCreatureSQLStmt, sqlCreatureRowArgs(datasetID, r)...)
 		}
 		br := pool.SendBatch(ctx, batch)
 		for range rows[i:end] {

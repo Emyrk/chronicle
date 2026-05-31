@@ -10,6 +10,7 @@ import (
 
 	"github.com/Emyrk/chronicle/api/chroniclesdk"
 	"github.com/Emyrk/chronicle/api/httpapi"
+	"github.com/Emyrk/chronicle/internal/services/servicedataset"
 	"github.com/Gophercraft/core/format/dbc"
 	"github.com/Gophercraft/core/format/dbc/dbdefs"
 	"github.com/Gophercraft/core/vsn"
@@ -146,9 +147,9 @@ func (h *Handler) handleItemDisplayInfoUpload(ctx context.Context, w http.Respon
 			override_swoosh_sound_kit_id, sheathe_transform_matrix_id,
 			sheathed_spell_visual_kit_id, state_spell_visual_kit_id,
 			unsheathed_spell_visual_kit_id, inventory_icon, group_sound_index,
-			ground_model, item_size, helmet_geoset_vis_id
-		) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,$22,$23,$24,$25)
-		ON CONFLICT (id) DO UPDATE SET
+			ground_model, item_size, helmet_geoset_vis_id, dataset_id
+		) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,$22,$23,$24,$25,$26)
+		ON CONFLICT (dataset_id, id) DO UPDATE SET
 			model_name=EXCLUDED.model_name, model_texture=EXCLUDED.model_texture,
 			geoset_group=EXCLUDED.geoset_group, flags=EXCLUDED.flags,
 			spell_visual_id=EXCLUDED.spell_visual_id, helmet_geoset_vis=EXCLUDED.helmet_geoset_vis,
@@ -167,9 +168,9 @@ func (h *Handler) handleItemDisplayInfoUpload(ctx context.Context, w http.Respon
 			ground_model=EXCLUDED.ground_model, item_size=EXCLUDED.item_size,
 			helmet_geoset_vis_id=EXCLUDED.helmet_geoset_vis_id`
 
-	const wdiSQL = `INSERT INTO world_display_info (id, icon)
-		VALUES ($1, $2)
-		ON CONFLICT (id) DO UPDATE SET icon=EXCLUDED.icon`
+	const wdiSQL = `INSERT INTO world_display_info (id, icon, dataset_id)
+		VALUES ($1, $2, $3)
+		ON CONFLICT (dataset_id, id) DO UPDATE SET icon=EXCLUDED.icon`
 
 	batch := &pgx.Batch{}
 	for _, row := range rows {
@@ -186,6 +187,7 @@ func (h *Handler) handleItemDisplayInfoUpload(ctx context.Context, w http.Respon
 			row.StateSpellVisualKitID, row.UnsheathedSpellVisualKitID,
 			jsonSlice(row.InventoryIcon), row.GroupSoundIndex,
 			row.GroundModel, row.ItemSize, jsonSlice(row.HelmetGeosetVisID),
+			servicedataset.DefaultDatasetID,
 		)
 
 		// Also populate world_display_info with the first inventory icon.
@@ -193,7 +195,7 @@ func (h *Handler) handleItemDisplayInfoUpload(ctx context.Context, w http.Respon
 		if len(row.InventoryIcon) > 0 {
 			icon = row.InventoryIcon[0]
 		}
-		batch.Queue(wdiSQL, row.ID, icon)
+		batch.Queue(wdiSQL, row.ID, icon, servicedataset.DefaultDatasetID)
 
 		if batch.Len() >= batchSize {
 			if err := flushBatch(ctx, h.pool, batch); err != nil {
@@ -273,9 +275,9 @@ func (h *Handler) handleSpellItemEnchantmentUpload(ctx context.Context, w http.R
 			effect_arg_1, effect_arg_2, effect_arg_3,
 			name_lang, item_visual, flags, src_item_id,
 			condition_id, required_skill_id, required_skill_rank,
-			min_level, max_level
-		) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20)
-		ON CONFLICT (id) DO UPDATE SET
+			min_level, max_level, dataset_id
+		) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21)
+		ON CONFLICT (dataset_id, id) DO UPDATE SET
 			charges=EXCLUDED.charges,
 			effect_1=EXCLUDED.effect_1, effect_2=EXCLUDED.effect_2, effect_3=EXCLUDED.effect_3,
 			effect_points_min_1=EXCLUDED.effect_points_min_1, effect_points_min_2=EXCLUDED.effect_points_min_2,
@@ -296,6 +298,7 @@ func (h *Handler) handleSpellItemEnchantmentUpload(ctx context.Context, w http.R
 			row.Name_lang.String(), row.ItemVisual, row.Flags, row.Src_itemID,
 			row.Condition_ID, row.RequiredSkillID, row.RequiredSkillRank,
 			row.MinLevel, row.MaxLevel,
+			servicedataset.DefaultDatasetID,
 		)
 
 		if batch.Len() >= batchSize {
@@ -351,9 +354,9 @@ func (h *Handler) handleItemRandomPropertiesUpload(ctx context.Context, w http.R
 
 	const batchSize = 500
 	const irpSQL = `INSERT INTO dbc_item_random_properties (
-			id, name, name_lang, enchantment_1, enchantment_2, enchantment_3, enchantment_4, enchantment_5
-		) VALUES ($1,$2,$3,$4,$5,$6,$7,$8)
-		ON CONFLICT (id) DO UPDATE SET
+			id, name, name_lang, enchantment_1, enchantment_2, enchantment_3, enchantment_4, enchantment_5, dataset_id
+		) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9)
+		ON CONFLICT (dataset_id, id) DO UPDATE SET
 			name=EXCLUDED.name, name_lang=EXCLUDED.name_lang,
 			enchantment_1=EXCLUDED.enchantment_1, enchantment_2=EXCLUDED.enchantment_2,
 			enchantment_3=EXCLUDED.enchantment_3, enchantment_4=EXCLUDED.enchantment_4,
@@ -366,6 +369,7 @@ func (h *Handler) handleItemRandomPropertiesUpload(ctx context.Context, w http.R
 			int32At(row.Enchantment, 0), int32At(row.Enchantment, 1),
 			int32At(row.Enchantment, 2), int32At(row.Enchantment, 3),
 			int32At(row.Enchantment, 4),
+			servicedataset.DefaultDatasetID,
 		)
 		if batch.Len() >= batchSize {
 			if err := flushBatch(ctx, h.pool, batch); err != nil {
@@ -421,16 +425,16 @@ func (h *Handler) handleItemSetUpload(ctx context.Context, w http.ResponseWriter
 	const batchSize = 500
 
 	// 1. Upsert dbc_item_set (set metadata)
-	const setSQL = `INSERT INTO dbc_item_set (id, name_lang, required_skill, required_skill_rank)
-		VALUES ($1,$2,$3,$4)
-		ON CONFLICT (id) DO UPDATE SET
+	const setSQL = `INSERT INTO dbc_item_set (id, name_lang, required_skill, required_skill_rank, dataset_id)
+		VALUES ($1,$2,$3,$4,$5)
+		ON CONFLICT (dataset_id, id) DO UPDATE SET
 			name_lang=EXCLUDED.name_lang,
 			required_skill=EXCLUDED.required_skill,
 			required_skill_rank=EXCLUDED.required_skill_rank`
 
 	batch := &pgx.Batch{}
 	for _, row := range rows {
-		batch.Queue(setSQL, row.ID, row.Name_lang.String(), row.RequiredSkill, row.RequiredSkillRank)
+		batch.Queue(setSQL, row.ID, row.Name_lang.String(), row.RequiredSkill, row.RequiredSkillRank, servicedataset.DefaultDatasetID)
 		if batch.Len() >= batchSize {
 			if err := flushBatch(ctx, h.pool, batch); err != nil {
 				httpapi.Write(ctx, w, http.StatusInternalServerError, chroniclesdk.Response{
@@ -453,9 +457,9 @@ func (h *Handler) handleItemSetUpload(ctx context.Context, w http.ResponseWriter
 	}
 
 	// 2. Upsert dbc_item_set_bonus (set bonus spells)
-	const bonusSQL = `INSERT INTO dbc_item_set_bonus (set_id, threshold, spell_id)
-		VALUES ($1,$2,$3)
-		ON CONFLICT (set_id, threshold, spell_id) DO NOTHING`
+	const bonusSQL = `INSERT INTO dbc_item_set_bonus (set_id, threshold, spell_id, dataset_id)
+		VALUES ($1,$2,$3,$4)
+		ON CONFLICT (dataset_id, set_id, threshold, spell_id) DO NOTHING`
 
 	batch = &pgx.Batch{}
 	for _, row := range rows {
@@ -468,7 +472,7 @@ func (h *Handler) handleItemSetUpload(ctx context.Context, w http.ResponseWriter
 			if spellID == 0 || threshold == 0 {
 				continue
 			}
-			batch.Queue(bonusSQL, row.ID, threshold, spellID)
+			batch.Queue(bonusSQL, row.ID, threshold, spellID, servicedataset.DefaultDatasetID)
 			if batch.Len() >= batchSize {
 				if err := flushBatch(ctx, h.pool, batch); err != nil {
 					httpapi.Write(ctx, w, http.StatusInternalServerError, chroniclesdk.Response{
@@ -492,9 +496,9 @@ func (h *Handler) handleItemSetUpload(ctx context.Context, w http.ResponseWriter
 	}
 
 	// 3. Upsert dbc_item_set_item (set membership)
-	const itemSQL = `INSERT INTO dbc_item_set_item (set_id, item_entry)
-		VALUES ($1,$2)
-		ON CONFLICT (set_id, item_entry) DO NOTHING`
+	const itemSQL = `INSERT INTO dbc_item_set_item (set_id, item_entry, dataset_id)
+		VALUES ($1,$2,$3)
+		ON CONFLICT (dataset_id, set_id, item_entry) DO NOTHING`
 
 	batch = &pgx.Batch{}
 	for _, row := range rows {
@@ -502,7 +506,7 @@ func (h *Handler) handleItemSetUpload(ctx context.Context, w http.ResponseWriter
 			if itemID == 0 {
 				continue
 			}
-			batch.Queue(itemSQL, row.ID, itemID)
+			batch.Queue(itemSQL, row.ID, itemID, servicedataset.DefaultDatasetID)
 			if batch.Len() >= batchSize {
 				if err := flushBatch(ctx, h.pool, batch); err != nil {
 					httpapi.Write(ctx, w, http.StatusInternalServerError, chroniclesdk.Response{
