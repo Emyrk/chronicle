@@ -8,11 +8,16 @@ import (
 	"net/url"
 	"strconv"
 
+	"github.com/Emyrk/chronicle/api/chroniclesdk"
+	"github.com/Emyrk/chronicle/api/httpapi"
 	"github.com/Emyrk/chronicle/database/gamedb/chrondbc"
 	"github.com/Emyrk/chronicle/database/gamedb/chrondbc/dbcmem"
+	"github.com/Emyrk/chronicle/database/gamedb/talents"
 	"github.com/Emyrk/chronicle/internal/services/serviceauthz"
+	"github.com/Emyrk/chronicle/internal/services/servicedbstore"
 	"github.com/Emyrk/chronicle/internal/services/servicelogger"
 	"github.com/go-chi/chi/v5"
+	"github.com/google/uuid"
 
 	"github.com/Emyrk/chronicle/database/gamedb"
 	"github.com/Emyrk/chronicle/internal/services"
@@ -57,15 +62,19 @@ func (s *Service) DependsOn() []string {
 	return []string{
 		servicelogger.OnLogger(),
 		serviceauthz.OnAuthz(),
+		servicedbstore.OnDatabaseStore(),
 	}
 }
 
 func (s *Service) Start(ctx context.Context) error {
 	logger := servicelogger.Logger(s.broker)
 	az := serviceauthz.Authz(s.broker)
+	store := servicedbstore.DatabaseStore(s.broker)
+	talentFetcher := talents.NewFetcher(store, 16)
 	db, err := gamedb.New(ctx, gamedb.Options{
 		SpellsDBCPath: s.spellDBCPath,
 		DB:            az,
+		Talents:       talentFetcher,
 	})
 	if err != nil {
 		return err
@@ -85,6 +94,7 @@ func (s *Service) setupRoutes() {
 	s.router.Get("/spell/{id}", s.handleGetSpell)
 	s.router.Get("/spell-by-name/{name}", s.handleGetSpellByName)
 	s.router.Get("/periodic-spells", s.handleGetPeriodicSpells)
+	s.router.Get("/talent-trees", s.handleGetTalentTrees)
 }
 
 type SpellResponse struct {
@@ -178,6 +188,33 @@ func (s *Service) handleGetPeriodicSpells(w http.ResponseWriter, r *http.Request
 	w.Header().Set("Cache-Control", "public, max-age=86400")
 	w.Header().Set("Content-Type", "application/json")
 	_ = json.NewEncoder(w).Encode(spells)
+}
+
+func (s *Service) handleGetTalentTrees(w http.ResponseWriter, r *http.Request) {
+	datasetIDStr := r.URL.Query().Get("dataset_id")
+	if datasetIDStr == "" {
+		httpapi.Write(r.Context(), w, http.StatusBadRequest, chroniclesdk.Response{
+			Message: "dataset_id query parameter is required",
+		})
+		return
+	}
+
+	datasetID, err := uuid.Parse(datasetIDStr)
+	if err != nil {
+		httpapi.Write(r.Context(), w, http.StatusBadRequest, chroniclesdk.Response{
+			Message: "invalid dataset_id",
+		})
+		return
+	}
+
+	data, err := s.db.TalentTrees(r.Context(), datasetID)
+	if err != nil {
+		httpapi.InternalServerError(w, err)
+		return
+	}
+
+	w.Header().Set("Cache-Control", "public, max-age=86400")
+	httpapi.Write(r.Context(), w, http.StatusOK, data)
 }
 
 func (s *Service) ServeHTTP(w http.ResponseWriter, r *http.Request) {

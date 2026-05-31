@@ -1,0 +1,53 @@
+package talents
+
+import (
+	"context"
+	"encoding/json"
+	"fmt"
+
+	"github.com/google/uuid"
+	lru "github.com/hashicorp/golang-lru/v2"
+)
+
+// TalentFetcher loads and caches pre-computed talent tree data per dataset.
+type TalentFetcher interface {
+	// TalentTrees returns the talent tree data for a dataset.
+	// Results are cached per dataset_id.
+	TalentTrees(ctx context.Context, datasetID uuid.UUID) (*TalentTreeData, error)
+}
+
+// TalentQuerier is the narrow DB interface for talent tree data.
+// database.Store satisfies this implicitly.
+type TalentQuerier interface {
+	GetDatasetTalentTrees(ctx context.Context, datasetID uuid.UUID) ([]byte, error)
+}
+
+type fetcher struct {
+	db    TalentQuerier
+	cache *lru.Cache[uuid.UUID, *TalentTreeData]
+}
+
+// NewFetcher creates a TalentFetcher backed by the given DB and an LRU cache.
+func NewFetcher(db TalentQuerier, cacheSize int) TalentFetcher {
+	cache, _ := lru.New[uuid.UUID, *TalentTreeData](cacheSize)
+	return &fetcher{db: db, cache: cache}
+}
+
+func (f *fetcher) TalentTrees(ctx context.Context, datasetID uuid.UUID) (*TalentTreeData, error) {
+	if cached, ok := f.cache.Get(datasetID); ok {
+		return cached, nil
+	}
+
+	raw, err := f.db.GetDatasetTalentTrees(ctx, datasetID)
+	if err != nil {
+		return nil, fmt.Errorf("get talent trees for dataset %s: %w", datasetID, err)
+	}
+
+	var data TalentTreeData
+	if err := json.Unmarshal(raw, &data); err != nil {
+		return nil, fmt.Errorf("unmarshal talent trees for dataset %s: %w", datasetID, err)
+	}
+
+	f.cache.Add(datasetID, &data)
+	return &data, nil
+}

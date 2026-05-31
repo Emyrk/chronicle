@@ -691,6 +691,12 @@ type Dataset struct {
 	UpdatedAt    pgtype.Timestamptz `db:"updated_at" json:"updated_at"`
 }
 
+type DatasetTalentTree struct {
+	DatasetID uuid.UUID          `db:"dataset_id" json:"dataset_id"`
+	Data      []byte             `db:"data" json:"data"`
+	UpdatedAt pgtype.Timestamptz `db:"updated_at" json:"updated_at"`
+}
+
 type DbcItemDisplayInfo struct {
 	ID                         int32  `db:"id" json:"id"`
 	ModelName                  []byte `db:"model_name" json:"model_name"`

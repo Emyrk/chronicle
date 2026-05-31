@@ -13,7 +13,7 @@ import {
   TooltipTrigger,
 } from "@/components/ui/Tooltip/tooltip";
 
-// ─── Types matching talent-trees.json ─────────────────────────────
+// ─── Types matching /wowdb/talent-trees response ─────────────────
 
 interface TalentEntry {
   id: number;
@@ -104,7 +104,7 @@ function useTalentTrees() {
   return useQuery<TalentTreeJSON>({
     queryKey: ["talent-trees"],
     queryFn: async () => {
-      const res = await fetch("/api/v1/assets/talent-trees.json");
+      const res = await fetch("/api/v1/wowdb/talent-trees");
       if (!res.ok) throw new Error("Failed to fetch talent trees");
       return res.json();
     },

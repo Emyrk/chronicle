@@ -19,7 +19,7 @@ const CLASSES = [
   { id: 11, name: "Druid" },
 ];
 
-// Minimal type for the talent-trees.json structure
+// Minimal type for the /wowdb/talent-trees response
 interface TalentTreeJSON {
   classes: Record<
     string,
@@ -79,7 +79,7 @@ export function TalentTreesPage() {
   const { data: treeData } = useQuery<TalentTreeJSON>({
     queryKey: ["talent-trees"],
     queryFn: async () => {
-      const res = await fetch("/api/v1/assets/talent-trees.json");
+      const res = await fetch("/api/v1/wowdb/talent-trees");
       if (!res.ok) throw new Error("Failed to fetch talent trees");
       return res.json();
     },

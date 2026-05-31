@@ -1059,6 +1059,42 @@ func (q *sqlQuerier) UpdateDataset(ctx context.Context, arg UpdateDatasetParams)
 	return i, err
 }
 
+const deleteDatasetTalentTrees = `-- name: DeleteDatasetTalentTrees :exec
+DELETE FROM dataset_talent_trees WHERE dataset_id = $1
+`
+
+func (q *sqlQuerier) DeleteDatasetTalentTrees(ctx context.Context, datasetID uuid.UUID) error {
+	_, err := q.db.Exec(ctx, deleteDatasetTalentTrees, datasetID)
+	return err
+}
+
+const getDatasetTalentTrees = `-- name: GetDatasetTalentTrees :one
+SELECT data FROM dataset_talent_trees WHERE dataset_id = $1
+`
+
+func (q *sqlQuerier) GetDatasetTalentTrees(ctx context.Context, datasetID uuid.UUID) ([]byte, error) {
+	row := q.db.QueryRow(ctx, getDatasetTalentTrees, datasetID)
+	var data []byte
+	err := row.Scan(&data)
+	return data, err
+}
+
+const upsertDatasetTalentTrees = `-- name: UpsertDatasetTalentTrees :exec
+INSERT INTO dataset_talent_trees (dataset_id, data, updated_at)
+VALUES ($1, $2, now())
+ON CONFLICT (dataset_id) DO UPDATE SET data = $2, updated_at = now()
+`
+
+type UpsertDatasetTalentTreesParams struct {
+	DatasetID uuid.UUID `db:"dataset_id" json:"dataset_id"`
+	Data      []byte    `db:"data" json:"data"`
+}
+
+func (q *sqlQuerier) UpsertDatasetTalentTrees(ctx context.Context, arg UpsertDatasetTalentTreesParams) error {
+	_, err := q.db.Exec(ctx, upsertDatasetTalentTrees, arg.DatasetID, arg.Data)
+	return err
+}
+
 const instanceEvent = `-- name: InstanceEvent :one
 SELECT
   log_instance_events.instance_id, log_instance_events.type, log_instance_events.events
