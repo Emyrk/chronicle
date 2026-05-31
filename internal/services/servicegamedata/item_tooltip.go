@@ -13,6 +13,7 @@ import (
 	"github.com/Emyrk/chronicle/api/chroniclesdk"
 	"github.com/Emyrk/chronicle/api/httpapi"
 	"github.com/Emyrk/chronicle/database"
+	"github.com/Emyrk/chronicle/internal/services/servicedataset"
 	"github.com/Emyrk/chronicle/internal/services/servicedbstore"
 )
 
@@ -27,7 +28,7 @@ func (s *Service) handleItemTooltip(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	item, err := db.GetItemTemplateByEntry(ctx, int32(itemID))
+	item, err := db.GetItemTemplateByEntry(ctx, database.GetItemTemplateByEntryParams{DatasetID: servicedataset.DefaultDatasetID, Entry: int32(itemID)})
 	if err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
 			httpapi.Write(ctx, w, http.StatusNotFound, map[string]string{"error": "item not found"})
@@ -89,13 +90,13 @@ func buildBaseTooltip(ctx context.Context, db database.Store, item database.Worl
 
 	// Resolve icon from display_info
 	if item.DisplayID != 0 {
-		di, err := db.GetDisplayInfoByID(ctx, item.DisplayID)
+		di, err := db.GetDisplayInfoByID(ctx, database.GetDisplayInfoByIDParams{DatasetID: servicedataset.DefaultDatasetID, ID: item.DisplayID})
 		if err == nil {
 			tooltip.Icon = di.Icon
 		}
 		// Fall back to DBC data if the world JSON export is incomplete.
 		if tooltip.Icon == "" {
-			ddi, err := db.GetDBCItemDisplayInfoByID(ctx, item.DisplayID)
+			ddi, err := db.GetDBCItemDisplayInfoByID(ctx, database.GetDBCItemDisplayInfoByIDParams{DatasetID: servicedataset.DefaultDatasetID, ID: item.DisplayID})
 			if err == nil {
 				var icons []string
 				if jsonErr := json.Unmarshal(ddi.InventoryIcon, &icons); jsonErr == nil && len(icons) > 0 {
@@ -185,7 +186,7 @@ func buildBaseTooltip(ctx context.Context, db database.Store, item database.Worl
 // applyRandomProperty resolves a random property suffix (e.g. "of the Owl") and merges
 // its enchantment stats into the tooltip.
 func applyRandomProperty(ctx context.Context, db database.Store, tooltip *chroniclesdk.ItemTooltip, rpID int32) {
-	rp, err := db.GetItemRandomPropertiesByID(ctx, rpID)
+	rp, err := db.GetItemRandomPropertiesByID(ctx, database.GetItemRandomPropertiesByIDParams{DatasetID: servicedataset.DefaultDatasetID, ID: rpID})
 	if err != nil {
 		return
 	}
@@ -199,7 +200,7 @@ func applyRandomProperty(ctx context.Context, db database.Store, tooltip *chroni
 		if enchID == 0 {
 			continue
 		}
-		ench, err := db.GetSpellItemEnchantmentByID(ctx, enchID)
+		ench, err := db.GetSpellItemEnchantmentByID(ctx, database.GetSpellItemEnchantmentByIDParams{DatasetID: servicedataset.DefaultDatasetID, ID: enchID})
 		if err != nil {
 			continue
 		}
@@ -216,7 +217,7 @@ func applyRandomProperty(ctx context.Context, db database.Store, tooltip *chroni
 // tooltipSetID is the tier-specific set (possibly synthetic) for display.
 // eligibleSetID is the original DBC set for cross-tier eligibility.
 func applyItemSet(ctx context.Context, db database.Store, tooltip *chroniclesdk.ItemTooltip, tooltipSetID, eligibleSetID int32) {
-	set, err := db.GetItemSetByID(ctx, tooltipSetID)
+	set, err := db.GetItemSetByID(ctx, database.GetItemSetByIDParams{DatasetID: servicedataset.DefaultDatasetID, ID: tooltipSetID})
 	if err != nil {
 		return
 	}
@@ -229,7 +230,7 @@ func applyItemSet(ctx context.Context, db database.Store, tooltip *chroniclesdk.
 
 	// Resolve canonical item IDs to names for tooltip display.
 	if len(info.ItemIDs) > 0 {
-		items, err := db.GetItemTemplatesByEntries(ctx, info.ItemIDs)
+		items, err := db.GetItemTemplatesByEntries(ctx, database.GetItemTemplatesByEntriesParams{DatasetID: servicedataset.DefaultDatasetID, Entries: info.ItemIDs})
 		if err == nil {
 			for _, item := range items {
 				info.Items = append(info.Items, chroniclesdk.ItemSetPiece{
@@ -243,7 +244,7 @@ func applyItemSet(ctx context.Context, db database.Store, tooltip *chroniclesdk.
 
 	// Get all eligible items (includes cross-tier pieces like Furious in a Wrathful set).
 	// The frontend uses this to check if an equipped piece counts toward the set bonus.
-	eligible, err := db.GetItemTemplatesBySetID(ctx, eligibleSetID)
+	eligible, err := db.GetItemTemplatesBySetID(ctx, database.GetItemTemplatesBySetIDParams{DatasetID: servicedataset.DefaultDatasetID, SetID: eligibleSetID})
 	if err == nil {
 		for _, item := range eligible {
 			info.EligibleItems = append(info.EligibleItems, chroniclesdk.ItemSetPiece{
@@ -261,7 +262,7 @@ func applyItemSet(ctx context.Context, db database.Store, tooltip *chroniclesdk.
 	}
 
 	// Get set bonuses from the tooltip set (synthetic sets have copied bonuses).
-	bonuses, err := db.GetItemSetBonuses(ctx, tooltipSetID)
+	bonuses, err := db.GetItemSetBonuses(ctx, database.GetItemSetBonusesParams{DatasetID: servicedataset.DefaultDatasetID, SetID: tooltipSetID})
 	if err == nil {
 		for _, b := range bonuses {
 			info.Bonuses = append(info.Bonuses, chroniclesdk.ItemSetBonus{
@@ -276,7 +277,7 @@ func applyItemSet(ctx context.Context, db database.Store, tooltip *chroniclesdk.
 
 // applyEnchantment resolves a player-applied enchantment and adds its display name to the tooltip.
 func applyEnchantment(ctx context.Context, db database.Store, tooltip *chroniclesdk.ItemTooltip, enchID int32) {
-	ench, err := db.GetSpellItemEnchantmentByID(ctx, enchID)
+	ench, err := db.GetSpellItemEnchantmentByID(ctx, database.GetSpellItemEnchantmentByIDParams{DatasetID: servicedataset.DefaultDatasetID, ID: enchID})
 	if err != nil {
 		return
 	}

@@ -14,6 +14,7 @@ import (
 	"github.com/Emyrk/chronicle/database/gamedb/chrondbc/dbcmem"
 	"github.com/Emyrk/chronicle/database/gamedb/talents"
 	"github.com/Emyrk/chronicle/internal/services/serviceauthz"
+	"github.com/Emyrk/chronicle/internal/services/servicedataset"
 	"github.com/Emyrk/chronicle/internal/services/servicedbstore"
 	"github.com/Emyrk/chronicle/internal/services/servicelogger"
 	"github.com/go-chi/chi/v5"
@@ -74,6 +75,7 @@ func (s *Service) Start(ctx context.Context) error {
 	db, err := gamedb.New(ctx, gamedb.Options{
 		SpellsDBCPath: s.spellDBCPath,
 		DB:            az,
+		DatasetID:     servicedataset.DefaultDatasetID,
 		Talents:       talentFetcher,
 	})
 	if err != nil {

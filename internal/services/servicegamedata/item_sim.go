@@ -11,6 +11,7 @@ import (
 	"github.com/Emyrk/chronicle/api/chroniclesdk"
 	"github.com/Emyrk/chronicle/api/httpapi"
 	"github.com/Emyrk/chronicle/database"
+	"github.com/Emyrk/chronicle/internal/services/servicedataset"
 	"github.com/Emyrk/chronicle/internal/services/servicedbstore"
 )
 
@@ -25,7 +26,7 @@ func (s *Service) handleItemSim(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	item, err := db.GetItemTemplateByEntry(ctx, int32(itemID))
+	item, err := db.GetItemTemplateByEntry(ctx, database.GetItemTemplateByEntryParams{DatasetID: servicedataset.DefaultDatasetID, Entry: int32(itemID)})
 	if err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
 			httpapi.Write(ctx, w, http.StatusNotFound, map[string]string{"error": "item not found"})

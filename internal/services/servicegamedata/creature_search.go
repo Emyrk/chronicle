@@ -7,6 +7,7 @@ import (
 	"github.com/Emyrk/chronicle/api/chroniclesdk"
 	"github.com/Emyrk/chronicle/api/httpapi"
 	"github.com/Emyrk/chronicle/database"
+	"github.com/Emyrk/chronicle/internal/services/servicedataset"
 	"github.com/Emyrk/chronicle/internal/services/servicedbstore"
 )
 
@@ -32,6 +33,7 @@ func (s *Service) handleSearchCreatures(w http.ResponseWriter, r *http.Request) 
 
 	sortParam := r.URL.Query().Get("sort")
 	params := database.SearchCreatureTemplatesParams{
+		DatasetID:  servicedataset.DefaultDatasetID,
 		SearchTerm: q,
 		UnitClass:  unitClass,
 	}

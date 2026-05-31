@@ -62,15 +62,15 @@ type sqlcQuerier interface {
 	// instance_id, instance_name, and realm_id.
 	FindMatchingServerUpload(ctx context.Context, arg FindMatchingServerUploadParams) (WoWLogGroup, error)
 	GetAppliedAuthzMigrations(ctx context.Context) ([]int32, error)
-	GetCreatureTemplatesByEntries(ctx context.Context, entries []int32) ([]WorldCreatureTemplate, error)
-	GetDBCItemDisplayInfoByID(ctx context.Context, id int32) (DbcItemDisplayInfo, error)
+	GetCreatureTemplatesByEntries(ctx context.Context, arg GetCreatureTemplatesByEntriesParams) ([]WorldCreatureTemplate, error)
+	GetDBCItemDisplayInfoByID(ctx context.Context, arg GetDBCItemDisplayInfoByIDParams) (DbcItemDisplayInfo, error)
 	// Dataset queries. These run with AdminBypass context since the datasets table
 	// itself is not behind RLS.
 	GetDataset(ctx context.Context, id uuid.UUID) (Dataset, error)
 	GetDatasetBySlug(ctx context.Context, slug string) (Dataset, error)
 	GetDatasetTalentTrees(ctx context.Context, datasetID uuid.UUID) ([]byte, error)
 	GetDeploymentInfo(ctx context.Context) (DeploymentInfo, error)
-	GetDisplayInfoByID(ctx context.Context, id int32) (WorldDisplayInfo, error)
+	GetDisplayInfoByID(ctx context.Context, arg GetDisplayInfoByIDParams) (WorldDisplayInfo, error)
 	GetEncounterSummariesByInstanceID(ctx context.Context, instanceID uuid.UUID) ([]GetEncounterSummariesByInstanceIDRow, error)
 	GetEncounterSummariesByInstanceIDs(ctx context.Context, instanceIds []uuid.UUID) ([]GetEncounterSummariesByInstanceIDsRow, error)
 	// Returns log groups whose raw files are past their owner's retention window.
@@ -100,19 +100,19 @@ type sqlcQuerier interface {
 	// Fetches a page of log instances for cursor-based retention processing.
 	// Ordered by end_time ASC so older logs are processed first.
 	GetInstancesForRetentionCheckPaged(ctx context.Context, arg GetInstancesForRetentionCheckPagedParams) ([]GetInstancesForRetentionCheckPagedRow, error)
-	GetItemRandomPropertiesByID(ctx context.Context, id int32) (DbcItemRandomProperty, error)
-	GetItemSetBonuses(ctx context.Context, setID int32) ([]DbcItemSetBonu, error)
-	GetItemSetByID(ctx context.Context, id int32) (DbcItemSet, error)
-	GetItemSetItems(ctx context.Context, setID int32) ([]DbcItemSetItem, error)
+	GetItemRandomPropertiesByID(ctx context.Context, arg GetItemRandomPropertiesByIDParams) (DbcItemRandomProperty, error)
+	GetItemSetBonuses(ctx context.Context, arg GetItemSetBonusesParams) ([]DbcItemSetBonu, error)
+	GetItemSetByID(ctx context.Context, arg GetItemSetByIDParams) (DbcItemSet, error)
+	GetItemSetItems(ctx context.Context, arg GetItemSetItemsParams) ([]DbcItemSetItem, error)
 	// Returns set pieces with item details for a specific set.
-	GetItemSetWithPieces(ctx context.Context, setID int32) ([]GetItemSetWithPiecesRow, error)
-	GetItemTemplateByEntry(ctx context.Context, entry int32) (WorldItemTemplate, error)
+	GetItemSetWithPieces(ctx context.Context, arg GetItemSetWithPiecesParams) ([]GetItemSetWithPiecesRow, error)
+	GetItemTemplateByEntry(ctx context.Context, arg GetItemTemplateByEntryParams) (WorldItemTemplate, error)
 	// Looks up items by ID. For items not found by ID (e.g. transmog IDs),
 	// falls back to name lookup but only if the name is unique in the table.
 	// Pass paired arrays where item_ids[i] corresponds to item_names[i].
 	GetItemTemplateMetadataBatch(ctx context.Context, arg GetItemTemplateMetadataBatchParams) ([]GetItemTemplateMetadataBatchRow, error)
-	GetItemTemplatesByEntries(ctx context.Context, entries []int32) ([]WorldItemTemplate, error)
-	GetItemTemplatesBySetID(ctx context.Context, setID int32) ([]GetItemTemplatesBySetIDRow, error)
+	GetItemTemplatesByEntries(ctx context.Context, arg GetItemTemplatesByEntriesParams) ([]WorldItemTemplate, error)
+	GetItemTemplatesBySetID(ctx context.Context, arg GetItemTemplatesBySetIDParams) ([]GetItemTemplatesBySetIDRow, error)
 	GetLatestRegressionSnapshot(ctx context.Context, fixtureID uuid.UUID) (RegressionSnapshot, error)
 	GetLeaderboardVersionRequirements(ctx context.Context, instanceName string) (LeaderboardVersionRequirement, error)
 	GetLogFile(ctx context.Context, id uuid.UUID) (LogFile, error)
@@ -135,7 +135,7 @@ type sqlcQuerier interface {
 	GetSharedViewByCode(ctx context.Context, code string) (SharedView, error)
 	GetSharedViewByInstanceAndHash(ctx context.Context, arg GetSharedViewByInstanceAndHashParams) (SharedView, error)
 	GetSiteConfig(ctx context.Context) (SiteConfig, error)
-	GetSpellItemEnchantmentByID(ctx context.Context, id int32) (DbcSpellItemEnchantment, error)
+	GetSpellItemEnchantmentByID(ctx context.Context, arg GetSpellItemEnchantmentByIDParams) (DbcSpellItemEnchantment, error)
 	GetTenantByID(ctx context.Context, id uuid.UUID) (Tenant, error)
 	// Tenant queries. These run with AdminBypass context since the tenants table
 	// itself is not behind RLS (only wow_servers/wow_server_realms are).
@@ -279,7 +279,7 @@ type sqlcQuerier interface {
 	RecordAuthzMigration(ctx context.Context, version int32) error
 	SearchCreatureTemplates(ctx context.Context, arg SearchCreatureTemplatesParams) ([]SearchCreatureTemplatesRow, error)
 	SearchGamePlayers(ctx context.Context, arg SearchGamePlayersParams) ([]SearchGamePlayersRow, error)
-	SearchItemSets(ctx context.Context, searchTerm string) ([]SearchItemSetsRow, error)
+	SearchItemSets(ctx context.Context, arg SearchItemSetsParams) ([]SearchItemSetsRow, error)
 	SearchItemTemplates(ctx context.Context, arg SearchItemTemplatesParams) ([]SearchItemTemplatesRow, error)
 	SetDuplicateGroupIDs(ctx context.Context, arg SetDuplicateGroupIDsParams) error
 	SetPanelLayoutCode(ctx context.Context, arg SetPanelLayoutCodeParams) (int64, error)

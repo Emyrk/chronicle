@@ -48,6 +48,7 @@ type WorldQuerier interface {
 type Options struct {
 	SpellsDBCPath string
 	DB            WorldQuerier
+	DatasetID     uuid.UUID // Dataset for item/creature lookups. Defaults to DefaultDatasetID.
 	Talents       talents.TalentFetcher
 }
 
@@ -101,8 +102,8 @@ func New(ctx context.Context, opts Options) (*WoWDB, error) {
 		spellLRU:        c,
 		spellFiles:      sf,
 		spells:          spDBC,
-		itemFetcher:     newItemFetcher(ctx, opts.DB, 400),
-		creatureFetcher: newCreatureFetcher(ctx, opts.DB, 500),
+		itemFetcher:     newItemFetcher(ctx, opts.DB, opts.DatasetID, 400),
+		creatureFetcher: newCreatureFetcher(ctx, opts.DB, opts.DatasetID, 500),
 		talents:         opts.Talents,
 	}
 	go func() {

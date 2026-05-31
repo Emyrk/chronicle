@@ -6,6 +6,7 @@ import (
 
 	"github.com/Emyrk/chronicle/combatlog/parser/types/combatant"
 	"github.com/Emyrk/chronicle/database"
+	"github.com/google/uuid"
 	lru "github.com/hashicorp/golang-lru/v2"
 )
 
@@ -19,20 +20,22 @@ type ItemMetadataQuerier interface {
 //   - idCache:   itemID → itemID (correct IDs map to themselves, unknown IDs map to 0)
 //   - nameCache: itemName → itemID (for name-based fallback resolution)
 type itemFetcher struct {
-	db  ItemMetadataQuerier
-	ctx context.Context
+	db        ItemMetadataQuerier
+	ctx       context.Context
+	datasetID uuid.UUID
 
 	mu        sync.Mutex
 	idCache   *lru.Cache[int, int]    // itemID → resolved itemID (0 = not found)
 	nameCache *lru.Cache[string, int] // itemName → resolved itemID (0 = not found)
 }
 
-func newItemFetcher(ctx context.Context, db ItemMetadataQuerier, cacheSize int) *itemFetcher {
+func newItemFetcher(ctx context.Context, db ItemMetadataQuerier, datasetID uuid.UUID, cacheSize int) *itemFetcher {
 	idC, _ := lru.New[int, int](cacheSize)
 	nameC, _ := lru.New[string, int](cacheSize)
 	return &itemFetcher{
 		db:        db,
 		ctx:       ctx,
+		datasetID: datasetID,
 		idCache:   idC,
 		nameCache: nameC,
 	}
@@ -95,6 +98,7 @@ func (f *itemFetcher) ResolveGear(gear []combatant.GearItem) {
 	}
 
 	rows, err := f.db.GetItemTemplateMetadataBatch(f.ctx, database.GetItemTemplateMetadataBatchParams{
+		DatasetID: f.datasetID,
 		ItemIds:   ids,
 		ItemNames: names,
 	})

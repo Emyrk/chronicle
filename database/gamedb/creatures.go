@@ -5,12 +5,13 @@ import (
 	"sync"
 
 	"github.com/Emyrk/chronicle/database"
+	"github.com/google/uuid"
 	lru "github.com/hashicorp/golang-lru/v2"
 )
 
 // CreatureQuerier is the subset of database.Store needed for creature lookups.
 type CreatureQuerier interface {
-	GetCreatureTemplatesByEntries(ctx context.Context, entries []int32) ([]database.WorldCreatureTemplate, error)
+	GetCreatureTemplatesByEntries(ctx context.Context, arg database.GetCreatureTemplatesByEntriesParams) ([]database.WorldCreatureTemplate, error)
 }
 
 // CreatureFetcher resolves creature entry IDs to their template data.
@@ -19,19 +20,21 @@ type CreatureFetcher interface {
 }
 
 type creatureFetcher struct {
-	db  CreatureQuerier
-	ctx context.Context
+	db        CreatureQuerier
+	ctx       context.Context
+	datasetID uuid.UUID
 
 	mu    sync.Mutex
 	cache *lru.Cache[int32, *database.WorldCreatureTemplate] // nil value = negative cache
 }
 
-func newCreatureFetcher(ctx context.Context, db CreatureQuerier, cacheSize int) *creatureFetcher {
+func newCreatureFetcher(ctx context.Context, db CreatureQuerier, datasetID uuid.UUID, cacheSize int) *creatureFetcher {
 	c, _ := lru.New[int32, *database.WorldCreatureTemplate](cacheSize)
 	return &creatureFetcher{
-		db:    db,
-		ctx:   ctx,
-		cache: c,
+		db:        db,
+		ctx:       ctx,
+		datasetID: datasetID,
+		cache:     c,
 	}
 }
 
@@ -49,7 +52,10 @@ func (f *creatureFetcher) Creature(entry int32) (*database.WorldCreatureTemplate
 	}
 	f.mu.Unlock()
 
-	rows, err := f.db.GetCreatureTemplatesByEntries(f.ctx, []int32{entry})
+	rows, err := f.db.GetCreatureTemplatesByEntries(f.ctx, database.GetCreatureTemplatesByEntriesParams{
+		DatasetID: f.datasetID,
+		Entries:   []int32{entry},
+	})
 	if err != nil || len(rows) == 0 {
 		f.mu.Lock()
 		f.cache.Add(entry, nil) // negative cache
