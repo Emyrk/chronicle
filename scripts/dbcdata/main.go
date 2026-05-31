@@ -33,7 +33,7 @@ func rootCmd() *serpent.Command {
 		cli.ExtractDBCCmd(),
 		cli.ExtractIconsCmd(),
 		cli.ExtractLoadingScreensCmd(),
-		cli.ImportTalentsCmd(),
+		cli.ImportCmd(),
 		demo(),
 		jsonDump(),
 	)
