@@ -31,9 +31,6 @@ func NewAzerothCoreCharacterFactories() []characters.CharacterFactory {
 
 		// Hellfire Ramparts
 		NewOmarTheUnscarred,
-
-		// Obsidian Sanctum
-		NewSarthrion,
 	}, cres...)
 
 	return cres
