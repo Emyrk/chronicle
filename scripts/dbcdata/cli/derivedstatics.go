@@ -73,9 +73,9 @@ func DerivedStaticsCmd() *serpent.Command {
 			if err := generateClassSpells(wc, assetsDir); err != nil {
 				return fmt.Errorf("generate class spells: %w", err)
 			}
-			if err := generateTalentTrees(wc, assetsDir); err != nil {
-				return fmt.Errorf("generate talent trees: %w", err)
-			}
+			// Talent trees are no longer generated as a static asset; they are
+			// imported into the dataset_talent_trees table via the
+			// `dbcdata import` command and served from the database.
 
 			return nil
 		},

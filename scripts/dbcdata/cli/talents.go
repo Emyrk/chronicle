@@ -2,7 +2,6 @@ package cli
 
 import (
 	"fmt"
-	"path/filepath"
 	"sort"
 
 	"github.com/Emyrk/chronicle/database/gamedb/dbcdb"
@@ -221,13 +220,4 @@ func collectTalentTrees(wc *dbcdb.WoWClient) (*talentTreeData, error) {
 	}
 
 	return result, nil
-}
-
-func generateTalentTrees(wc *dbcdb.WoWClient, assetsDir string) error {
-	data, err := collectTalentTrees(wc)
-	if err != nil {
-		return err
-	}
-
-	return writeJSON(filepath.Join(assetsDir, "talent-trees.json"), data)
 }
