@@ -10,7 +10,6 @@ DELETE FROM world_spell_threat WHERE dataset_id != '00000000-0000-0000-0000-0000
 DELETE FROM world_item_enchantment WHERE dataset_id != '00000000-0000-0000-0000-000000000001';
 DELETE FROM world_spell_area WHERE dataset_id != '00000000-0000-0000-0000-000000000001';
 DELETE FROM world_spell_group WHERE dataset_id != '00000000-0000-0000-0000-000000000001';
-DELETE FROM world_spell_threat WHERE dataset_id != '00000000-0000-0000-0000-000000000001';
 DELETE FROM dbc_item_display_info WHERE dataset_id != '00000000-0000-0000-0000-000000000001';
 DELETE FROM dbc_item_random_properties WHERE dataset_id != '00000000-0000-0000-0000-000000000001';
 DELETE FROM dbc_item_set WHERE dataset_id != '00000000-0000-0000-0000-000000000001';
