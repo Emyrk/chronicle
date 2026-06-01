@@ -26,12 +26,15 @@ func resolveToken(baseURL, token, cookie string) (string, error) {
 	if err != nil {
 		return "", fmt.Errorf("new request: %w", err)
 	}
-	// The cookie value may be pasted as either the raw value or the full
-	// "name=value" pair; normalize to a Cookie header.
-	if strings.Contains(cookie, "=") {
+	// The cookie value may be pasted as either the raw session value or the
+	// full "name=value" pair. Detect by the cookie name, NOT by '=' — the
+	// gorilla session value is base64 and ends with '=' padding, so an
+	// '='-based check misfires and drops the name prefix.
+	const cookieName = "chronicle_auth_session"
+	if strings.Contains(cookie, cookieName+"=") {
 		req.Header.Set("Cookie", cookie)
 	} else {
-		req.Header.Set("Cookie", "chronicle_auth_session="+cookie)
+		req.Header.Set("Cookie", cookieName+"="+cookie)
 	}
 	req.Header.Set("X-Chronicle-Token-Dump", "1")
 
