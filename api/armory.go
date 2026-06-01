@@ -55,7 +55,9 @@ func (api *API) GetArmoryPlayer(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	httpapi.Write(ctx, w, http.StatusOK, db2sdk.ArmoryPlayer(player))
+	out := db2sdk.ArmoryPlayer(player)
+	out.DatasetID = api.Opts.Dataset.ResolveDatasetForRealm(ctx, realmID)
+	httpapi.Write(ctx, w, http.StatusOK, out)
 }
 
 func (api *API) SearchArmoryPlayers(w http.ResponseWriter, r *http.Request) {

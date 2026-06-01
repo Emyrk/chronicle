@@ -156,6 +156,12 @@ export interface ArmoryPlayer {
     readonly talents?: PlayerTalents;
     readonly updated_at: string;
     readonly updated_from_instance?: string;
+    /**
+     * DatasetID is the resolved game-data dataset for this player's realm.
+     * Frontends use it to fetch matching talent/spell data regardless of the
+     * tenant domain serving the request.
+     */
+    readonly dataset_id: string;
 }
 
 // From chroniclesdk/armory.go
@@ -2228,6 +2234,12 @@ export const WoWHitTypes: WoWHitType[] = [4, 512, 32768, 2048, 16384, 1024, 128,
 export interface WoWInstance {
     readonly id: string;
     readonly realm_id: string;
+    /**
+     * DatasetID is the resolved game-data dataset for this instance's realm.
+     * Frontends use it to fetch matching talent/spell data regardless of the
+     * tenant domain serving the request. Only populated on the detail endpoint.
+     */
+    readonly dataset_id?: string;
     readonly realm_name?: string;
     readonly server_name?: string;
     readonly tenant_name?: string;

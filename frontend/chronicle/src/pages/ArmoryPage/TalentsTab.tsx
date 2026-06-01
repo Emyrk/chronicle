@@ -49,6 +49,7 @@ export function TalentsTab({ player }: { player: ArmoryPlayer }) {
     <TalentTreeViewer
       classId={classId}
       allocations={allocations}
+      datasetId={player.dataset_id || undefined}
     />
   );
 }

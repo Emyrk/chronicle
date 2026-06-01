@@ -280,6 +280,12 @@ type sqlcQuerier interface {
 	// Used by the dispatch worker to skip if refreshed recently.
 	RankingsSummaryMaxUpdatedAt(ctx context.Context, tenantID uuid.UUID) (pgtype.Timestamptz, error)
 	RecordAuthzMigration(ctx context.Context, version int32) error
+	// Resolves the dataset for a realm. Precedence:
+	//   server.default_dataset_id > tenant.default_dataset_id.
+	// The result is NULL when neither is set (and when the realm is unknown the
+	// query returns no rows); in both cases the caller falls back to the
+	// compiled-in default dataset.
+	ResolveDatasetByRealm(ctx context.Context, id uuid.UUID) (uuid.NullUUID, error)
 	SearchCreatureTemplates(ctx context.Context, arg SearchCreatureTemplatesParams) ([]SearchCreatureTemplatesRow, error)
 	SearchGamePlayers(ctx context.Context, arg SearchGamePlayersParams) ([]SearchGamePlayersRow, error)
 	SearchItemSets(ctx context.Context, arg SearchItemSetsParams) ([]SearchItemSetsRow, error)

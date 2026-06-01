@@ -174,7 +174,13 @@ const CLASS_NAME_TO_ID: Record<string, number> = {
   shaman: 7, mage: 8, warlock: 9, druid: 11,
 };
 
-function PlayerTalentsView({ player }: { player: PlayerSnapshot }) {
+function PlayerTalentsView({
+  player,
+  datasetId,
+}: {
+  player: PlayerSnapshot;
+  datasetId?: string;
+}) {
   const classId = CLASS_NAME_TO_ID[player.heroClass.toLowerCase()];
 
   const allocations = useMemo<TalentAllocation[] | undefined>(() => {
@@ -194,7 +200,13 @@ function PlayerTalentsView({ player }: { player: PlayerSnapshot }) {
     return <div className="text-sm text-muted-foreground p-4">No talent data available for this player.</div>;
   }
 
-  return <TalentTreeViewer classId={classId} allocations={allocations} />;
+  return (
+    <TalentTreeViewer
+      classId={classId}
+      allocations={allocations}
+      datasetId={datasetId}
+    />
+  );
 }
 
 type SubTab = "gear" | "talents";
@@ -341,7 +353,7 @@ export function EquipmentContent(props: PanelRenderProps<EquipmentResult>) {
 
         {/* Talents view */}
         {selected && subTab === "talents" && (
-          <PlayerTalentsView player={selected} />
+          <PlayerTalentsView player={selected} datasetId={context.instance.datasetId} />
         )}
       </div>
     </GenericPanel>

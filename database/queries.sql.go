@@ -1053,6 +1053,28 @@ func (q *sqlQuerier) ListTenantsByDataset(ctx context.Context, defaultDatasetID 
 	return items, nil
 }
 
+const resolveDatasetByRealm = `-- name: ResolveDatasetByRealm :one
+SELECT COALESCE(s.default_dataset_id, t.default_dataset_id) AS dataset_id
+FROM wow_server_realms r
+JOIN wow_servers s ON s.id = r.server_id
+LEFT JOIN tenants t ON t.id = s.tenant_id
+WHERE r.id = $1
+`
+
+// Resolves the dataset for a realm. Precedence:
+//
+//	server.default_dataset_id > tenant.default_dataset_id.
+//
+// The result is NULL when neither is set (and when the realm is unknown the
+// query returns no rows); in both cases the caller falls back to the
+// compiled-in default dataset.
+func (q *sqlQuerier) ResolveDatasetByRealm(ctx context.Context, id uuid.UUID) (uuid.NullUUID, error) {
+	row := q.db.QueryRow(ctx, resolveDatasetByRealm, id)
+	var dataset_id uuid.NullUUID
+	err := row.Scan(&dataset_id)
+	return dataset_id, err
+}
+
 const updateDataset = `-- name: UpdateDataset :one
 UPDATE datasets SET
     name              = COALESCE($1, name),

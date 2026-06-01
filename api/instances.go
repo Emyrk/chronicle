@@ -127,7 +127,9 @@ func (api *API) Instance(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	httpapi.Write(ctx, w, http.StatusOK, db2sdk.WowDecoratedInstance(inst, units, players, encounters, fights))
+	out := db2sdk.WowDecoratedInstance(inst, units, players, encounters, fights)
+	out.DatasetID = api.Opts.Dataset.ResolveDatasetForRealm(ctx, inst.RealmID)
+	httpapi.Write(ctx, w, http.StatusOK, out)
 }
 
 func (api *API) InstanceSpeedrun(w http.ResponseWriter, r *http.Request) {

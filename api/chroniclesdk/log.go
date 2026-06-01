@@ -69,6 +69,10 @@ type Guild struct {
 type WoWInstance struct {
 	ID                uuid.UUID         `json:"id"`
 	RealmID           uuid.UUID         `json:"realm_id"`
+	// DatasetID is the resolved game-data dataset for this instance's realm.
+	// Frontends use it to fetch matching talent/spell data regardless of the
+	// tenant domain serving the request. Only populated on the detail endpoint.
+	DatasetID         uuid.UUID         `json:"dataset_id,omitempty"`
 	RealmName         string            `json:"realm_name,omitempty"`
 	ServerName        string            `json:"server_name,omitempty"`
 	TenantName        string            `json:"tenant_name,omitempty"`

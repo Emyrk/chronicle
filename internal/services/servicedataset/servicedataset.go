@@ -31,6 +31,7 @@ type DatasetStore interface {
 	UpdateDataset(ctx context.Context, arg database.UpdateDatasetParams) (database.Dataset, error)
 	DeleteDataset(ctx context.Context, id uuid.UUID) error
 	ListTenantsByDataset(ctx context.Context, datasetID uuid.NullUUID) ([]database.ListTenantsByDatasetRow, error)
+	ResolveDatasetByRealm(ctx context.Context, id uuid.UUID) (uuid.NullUUID, error)
 }
 
 var _ services.Servicer = (*Service)(nil)
@@ -71,6 +72,20 @@ func (s *Service) Start(ctx context.Context) error {
 		return fmt.Errorf("ensure default dataset: %w", err)
 	}
 	return nil
+}
+
+// ResolveDatasetForRealm returns the dataset ID that applies to a realm,
+// using the precedence server.default_dataset_id > tenant.default_dataset_id >
+// the compiled-in default. Used by instance/armory endpoints so talent (and
+// future game) data is served for the dataset that the viewed data belongs to,
+// regardless of which tenant domain the request came in on.
+func (s *Service) ResolveDatasetForRealm(ctx context.Context, realmID uuid.UUID) uuid.UUID {
+	ctx = servicetenant.AdminBypass(ctx)
+	resolved, err := s.db.ResolveDatasetByRealm(ctx, realmID)
+	if err != nil || !resolved.Valid {
+		return DefaultDatasetID
+	}
+	return resolved.UUID
 }
 
 func (s *Service) Close(_ context.Context) error {

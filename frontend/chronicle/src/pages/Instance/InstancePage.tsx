@@ -41,6 +41,9 @@ export interface Instance {
   slug?: string;
   name: string;
   realm?: string;
+  // Resolved game-data dataset for this instance's realm. Used to fetch
+  // matching talent/spell data regardless of the tenant domain.
+  datasetId?: string;
   guild?: { id: string; name: string };
   startTime: string;
   endTime?: string;
@@ -157,6 +160,7 @@ function transformToInstance(
     slug: apiInstance.slug,
     name: apiInstance.name,
     realm: apiInstance.realm_name,
+    datasetId: apiInstance.dataset_id,
     guild: apiInstance.guild,
     startTime,
     endTime,

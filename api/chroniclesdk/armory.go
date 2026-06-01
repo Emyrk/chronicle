@@ -21,6 +21,10 @@ type ArmoryPlayer struct {
 	Talents             *PlayerTalents  `json:"talents,omitempty"`
 	UpdatedAt           time.Time       `json:"updated_at"`
 	UpdatedFromInstance *uuid.UUID      `json:"updated_from_instance,omitempty"`
+	// DatasetID is the resolved game-data dataset for this player's realm.
+	// Frontends use it to fetch matching talent/spell data regardless of the
+	// tenant domain serving the request.
+	DatasetID uuid.UUID `json:"dataset_id"`
 }
 
 // PlayerTalents represents a player's talent allocation across three trees.
