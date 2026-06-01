@@ -108,6 +108,34 @@ func TestLocationProcess(t *testing.T) {
 		assert.Equal(t, 1, loc.DynamicDifficulty)
 	})
 
+	t.Run("SyntheticCanChangeToDifferentZoneAfterReal", func(t *testing.T) {
+		t.Parallel()
+		loc := zoner.NewLocation()
+		// First: a real zone message for molten core.
+		loc.Process(zoneMsg("molten core", 1, 0, "", 0, 0))
+		// Second: a synthetic zone message for a different zone.
+		synth := zoneMsg("blackwing lair", 2, 0, "", 0, 0)
+		synth.MessageBase = messages.Base(synth.Date(), messages.WithSynthetic())
+		result := loc.Process(synth)
+		assert.Equal(t, zone.ZoneChanged, result)
+		assert.Equal(t, "blackwing lair", loc.Name)
+	})
+
+	t.Run("SyntheticCannotOverrideSameZoneAfterReal", func(t *testing.T) {
+		t.Parallel()
+		loc := zoner.NewLocation()
+		// First: a real zone message for icecrown citadel with difficulty.
+		loc.Process(zoneMsg("icecrown citadel", 5, 25, "25 Player", 2, 0))
+		// Second: a synthetic zone message for same zone, no difficulty.
+		synth := zoneMsg("icecrown citadel", 5, 0, "", 0, 0)
+		synth.MessageBase = messages.Base(synth.Date(), messages.WithSynthetic())
+		result := loc.Process(synth)
+		assert.Equal(t, zone.NoChange, result)
+		// Difficulty should be preserved from the real message.
+		assert.Equal(t, 25, loc.MaxPlayers)
+		assert.Equal(t, "25 Player", loc.DifficultyName)
+	})
+
 	t.Run("NoChange_IncomingNoDifficulty_ExistingHasDifficulty", func(t *testing.T) {
 		t.Parallel()
 		loc := zoner.NewLocation()

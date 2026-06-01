@@ -24,8 +24,13 @@ func (l *Location) Process(z messages.Zone) zone.ZoneChangeResult {
 	}
 
 	if l.synthetic != nil && !*l.synthetic && z.Synthetic {
-		// Synthetic zones cant override non-synthetic zones.
-		return zone.NoChange
+		// Synthetic zones can't override non-synthetic zones within the same zone
+		// (preserves difficulty/metadata from real messages). But a synthetic zone
+		// CAN trigger a change to a different zone (e.g., instance change before
+		// the real ZONE_INFO arrives).
+		if l.Name == z.Name {
+			return zone.NoChange
+		}
 	}
 
 	// At this point we track the "synthetic" property and propagate it properly

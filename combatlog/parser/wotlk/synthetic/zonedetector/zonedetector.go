@@ -16,8 +16,6 @@ type ZoneDetector struct {
 	entryToZone map[uint32]string
 	currentZone string
 	logger      *slog.Logger
-
-	sawReal bool
 }
 
 // New builds a ZoneDetector from a registry, indexing all hostile entries
@@ -58,7 +56,7 @@ func New(logger *slog.Logger, reg *registry.Registry) *ZoneDetector {
 // ProcessMessages scans messages for creature GUIDs that belong to a known
 // instance. When a new zone is detected, a synthetic Zone message is prepended.
 func (zd *ZoneDetector) ProcessMessages(msgs []messages.Message) []messages.Message {
-	if zd == nil || zd.sawReal {
+	if zd == nil {
 		return msgs
 	}
 
@@ -66,9 +64,10 @@ func (zd *ZoneDetector) ProcessMessages(msgs []messages.Message) []messages.Mess
 		switch ty := msg.(type) {
 		case *messages.Zone:
 			if !ty.Synthetic {
-				// If we see a real zone message, we don't need this logic anymore.
-				zd.sawReal = true
-				return msgs
+				// A real zone message is authoritative — sync our tracking
+				// so we don't redundantly emit a synthetic for the same zone.
+				zd.currentZone = ty.Name
+				continue
 			}
 		}
 
