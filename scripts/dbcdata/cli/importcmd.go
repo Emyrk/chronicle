@@ -1,6 +1,7 @@
 package cli
 
 import (
+	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -28,6 +29,7 @@ func ImportCmd() *serpent.Command {
 		datasetID string
 		token    string
 		mode     string
+		yes      bool
 	)
 
 	return &serpent.Command{
@@ -86,11 +88,52 @@ func ImportCmd() *serpent.Command {
 				Default:     "upsert",
 				Value:       serpent.StringOf(&mode),
 			},
+			{
+				Name:        "yes",
+				Description: "Skip the interactive dataset selector and confirmation guard (requires --dataset-id).",
+				Flag:        "yes",
+				Value:       serpent.BoolOf(&yes),
+			},
 		},
 		Handler: func(inv *serpent.Invocation) error {
+			// Default importer set from --import.
 			selected, err := selectImporters(imports)
 			if err != nil {
 				return err
+			}
+
+			// Validate the output mode up front and, for uploads, resolve the
+			// target dataset and final importer set (possibly interactively).
+			upload := exportAs == ""
+			if exportAs != "" && exportAs != "files" {
+				return fmt.Errorf("invalid --export-as %q (only 'files' is supported)", exportAs)
+			}
+			if upload {
+				if apiURL == "" {
+					return fmt.Errorf("either --export-as=files or --api-url is required")
+				}
+				if token == "" {
+					return fmt.Errorf("--token (or CHRONICLE_TOKEN) is required for upload")
+				}
+				if yes {
+					// Non-interactive: dataset must be specified explicitly.
+					if datasetID == "" {
+						return fmt.Errorf("--yes requires --dataset-id (or CHRONICLE_DATASET_ID)")
+					}
+				} else {
+					// Interactive: dataset selector (unless preset) + guard +
+					// optional importer picker.
+					res, err := runInteractive(apiURL, token, datasetID, selected)
+					if err != nil {
+						if errors.Is(err, errCanceled) {
+							_, _ = fmt.Fprintln(inv.Stdout, "Canceled.")
+							return nil
+						}
+						return err
+					}
+					datasetID = res.datasetID
+					selected = res.importers
+				}
 			}
 
 			resolved, err := ResolveDBCPath(dbcPath, server)
@@ -125,8 +168,7 @@ func ImportCmd() *serpent.Command {
 				_, _ = fmt.Fprintf(inv.Stdout, "Produced %s (%d artifact(s))\n", imp.Name(), len(arts))
 			}
 
-			switch exportAs {
-			case "files":
+			if !upload {
 				if err := os.MkdirAll(outDir, 0o755); err != nil {
 					return fmt.Errorf("create out dir: %w", err)
 				}
@@ -140,30 +182,18 @@ func ImportCmd() *serpent.Command {
 					}
 				}
 				return nil
-			case "":
-				// Upload mode.
-				if apiURL == "" {
-					return fmt.Errorf("either --export-as=files or --api-url is required")
-				}
-				if datasetID == "" {
-					return fmt.Errorf("--dataset-id (or CHRONICLE_DATASET_ID) is required for upload")
-				}
-				if token == "" {
-					return fmt.Errorf("--token (or CHRONICLE_TOKEN) is required for upload")
-				}
-				up := newUploader(apiURL, token, datasetID, mode)
-				for _, p := range all {
-					for _, art := range p.artifacts {
-						if err := up.Upload(art); err != nil {
-							return fmt.Errorf("upload %s (%s): %w", p.imp.Name(), art.Filename, err)
-						}
-						_, _ = fmt.Fprintf(inv.Stdout, "Uploaded %s → %s\n", art.Filename, p.imp.Name())
-					}
-				}
-				return nil
-			default:
-				return fmt.Errorf("invalid --export-as %q (only 'files' is supported)", exportAs)
 			}
+
+			up := newUploader(apiURL, token, datasetID, mode)
+			for _, p := range all {
+				for _, art := range p.artifacts {
+					if err := up.Upload(art); err != nil {
+						return fmt.Errorf("upload %s (%s): %w", p.imp.Name(), art.Filename, err)
+					}
+					_, _ = fmt.Fprintf(inv.Stdout, "Uploaded %s → %s\n", art.Filename, p.imp.Name())
+				}
+			}
+			return nil
 		},
 	}
 }

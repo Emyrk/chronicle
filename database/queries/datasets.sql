@@ -29,3 +29,15 @@ RETURNING *;
 
 -- name: DeleteDataset :exec
 DELETE FROM datasets WHERE id = $1;
+
+-- name: ListTenantsByDataset :many
+-- Tenants that use this dataset, either directly (tenant.default_dataset_id)
+-- or via a server they own (wow_servers.default_dataset_id).
+SELECT DISTINCT t.id, t.name, t.slug
+FROM tenants t
+WHERE t.default_dataset_id = $1
+   OR EXISTS (
+     SELECT 1 FROM wow_servers s
+     WHERE s.tenant_id = t.id AND s.default_dataset_id = $1
+   )
+ORDER BY t.name;

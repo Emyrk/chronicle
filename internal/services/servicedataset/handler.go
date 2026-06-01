@@ -10,6 +10,7 @@ import (
 
 	"github.com/go-chi/chi/v5"
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5/pgtype"
 )
 
 // Routes returns the dataset admin CRUD router.
@@ -19,9 +20,45 @@ func (s *Service) Routes() http.Handler {
 	r.Get("/", s.List)
 	r.Post("/", s.Upsert)
 	r.Get("/{datasetID}", s.Get)
+	r.Get("/{datasetID}/tenants", s.ListTenants)
 	r.Put("/{datasetID}", s.Upsert)
 	r.Delete("/{datasetID}", s.Delete)
 	return r
+}
+
+// ListTenants returns the tenants that use a dataset (directly or via a
+// server they own). Used by the import CLI's confirmation guard.
+func (s *Service) ListTenants(w http.ResponseWriter, r *http.Request) {
+	ctx := servicetenant.AdminBypass(r.Context())
+	id, err := uuid.Parse(chi.URLParam(r, "datasetID"))
+	if err != nil {
+		httpapi.Write(ctx, w, http.StatusBadRequest, chroniclesdk.Response{Message: "invalid dataset id"})
+		return
+	}
+
+	rows, err := s.db.ListTenantsByDataset(ctx, uuid.NullUUID{UUID: id, Valid: true})
+	if err != nil {
+		httpapi.InternalServerError(w, err)
+		return
+	}
+
+	out := make([]chroniclesdk.DatasetTenantSummary, 0, len(rows))
+	for _, row := range rows {
+		out = append(out, chroniclesdk.DatasetTenantSummary{
+			ID:   row.ID,
+			Name: row.Name,
+			Slug: nullStr(row.Slug),
+		})
+	}
+	httpapi.Write(ctx, w, http.StatusOK, out)
+}
+
+// nullStr unwraps a pgtype.Text-like slug into a plain string.
+func nullStr(s pgtype.Text) string {
+	if s.Valid {
+		return s.String
+	}
+	return ""
 }
 
 func (s *Service) List(w http.ResponseWriter, r *http.Request) {

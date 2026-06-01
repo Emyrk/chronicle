@@ -397,6 +397,33 @@ export interface DataGrant {
     readonly expires_at?: string;
 }
 
+// From chroniclesdk/dataset.go
+/**
+ * Dataset represents a game-data payload (DBC files, spell tables, etc.)
+ * scoped to a specific WoW client version.
+ */
+export interface Dataset {
+    readonly id: string;
+    readonly name: string;
+    readonly slug: string;
+    readonly wow_version: string;
+    readonly build_version: number;
+    readonly description: string;
+    readonly created_at: string;
+    readonly updated_at: string;
+}
+
+// From chroniclesdk/dataset.go
+/**
+ * DatasetTenantSummary is a lightweight tenant reference used by the import
+ * CLI's confirmation guard to show which tenants a dataset affects.
+ */
+export interface DatasetTenantSummary {
+    readonly id: string;
+    readonly name: string;
+    readonly slug: string;
+}
+
 // From chroniclesdk/server_application.go
 /**
  * DeleteRealmPayload requests removal of a realm.
@@ -1131,6 +1158,8 @@ export interface RankingsEntry {
  */
 export interface RankingsInstanceSummary {
     readonly instance_name: string;
+    readonly difficulty_name: string;
+    readonly max_players: number;
     readonly total_kills: number;
     readonly top_players: readonly RankingsInstanceTopPlayer[];
 }
@@ -1805,6 +1834,7 @@ export interface Tenant {
     readonly include_in_all: boolean;
     readonly discoverable: boolean;
     readonly branding: Branding | null;
+    readonly default_dataset_id: string | null;
     readonly created_at: string;
     readonly updated_at: string;
 }
@@ -1930,6 +1960,21 @@ export interface UpsertDataGrantRequest {
     readonly storage_bytes: number;
     readonly description?: string;
     readonly expires_at?: string;
+}
+
+// From chroniclesdk/dataset.go
+/**
+ * UpsertDatasetRequest is the request body for creating or updating a dataset.
+ * Pointer fields are optional — if nil on update, no change occurs (COALESCE
+ * preserves the existing value).
+ */
+export interface UpsertDatasetRequest {
+    readonly id: string | null;
+    readonly name: string;
+    readonly slug: string;
+    readonly wow_version: string;
+    readonly build_version: number | null;
+    readonly description: string | null;
 }
 
 // From chroniclesdk/retention.go

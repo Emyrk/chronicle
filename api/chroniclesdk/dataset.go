@@ -53,6 +53,14 @@ func (r UpsertDatasetRequest) IsCreate() bool {
 	return !r.ID.Valid || r.ID.UUID == uuid.Nil
 }
 
+// DatasetTenantSummary is a lightweight tenant reference used by the import
+// CLI's confirmation guard to show which tenants a dataset affects.
+type DatasetTenantSummary struct {
+	ID   uuid.UUID `json:"id"`
+	Name string    `json:"name"`
+	Slug string    `json:"slug"`
+}
+
 // ToInsertParams converts the request for a new dataset.
 func (r UpsertDatasetRequest) ToInsertParams() database.InsertDatasetParams {
 	buildVersion := int32(5875)

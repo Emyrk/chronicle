@@ -30,6 +30,7 @@ type DatasetStore interface {
 	InsertDataset(ctx context.Context, arg database.InsertDatasetParams) (database.Dataset, error)
 	UpdateDataset(ctx context.Context, arg database.UpdateDatasetParams) (database.Dataset, error)
 	DeleteDataset(ctx context.Context, id uuid.UUID) error
+	ListTenantsByDataset(ctx context.Context, datasetID uuid.NullUUID) ([]database.ListTenantsByDatasetRow, error)
 }
 
 var _ services.Servicer = (*Service)(nil)
