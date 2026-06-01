@@ -134,6 +134,25 @@ func (s *Service) AuthenticationMiddleware(next http.Handler) http.Handler {
 	})
 }
 
+// RawSessionJWT returns the raw signed JWT stored in the request's session
+// cookie. Used by the token-dump endpoint so users can extract a token for
+// CLI / programmatic use. Returns ErrNotAuthorized if no session JWT exists.
+func (s *Service) RawSessionJWT(r *http.Request) (string, error) {
+	auth, err := s.Store.Get(r, AuthSessionName)
+	if err != nil {
+		return "", err
+	}
+	jwt, ok := auth.Values["jwt"]
+	if !ok {
+		return "", ErrNotAuthorized
+	}
+	jwtStr, ok := jwt.(string)
+	if !ok || jwtStr == "" {
+		return "", ErrNotAuthorized
+	}
+	return jwtStr, nil
+}
+
 // WithClaims injects synthetic claims into context for service-to-service auth.
 // Used by server-side log upload to impersonate the chronicle-service account.
 func WithClaims(ctx context.Context, c *claims.Claims) context.Context {

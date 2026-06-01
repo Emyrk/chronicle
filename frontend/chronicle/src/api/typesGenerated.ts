@@ -1844,6 +1844,14 @@ export interface ThemePayload {
     readonly theme: Record<string, string>;
 }
 
+// From chroniclesdk/user.go
+/**
+ * TokenDumpResponse carries the caller's raw session JWT for CLI use.
+ */
+export interface TokenDumpResponse {
+    readonly token: string;
+}
+
 // From chroniclesdk/panel_layout.go
 /**
  * TrackLayoutRequest identifies a layout to track.

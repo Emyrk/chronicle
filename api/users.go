@@ -55,6 +55,33 @@ func (a *API) WhoAmI(w http.ResponseWriter, r *http.Request) {
 	httpapi.Write(r.Context(), w, http.StatusOK, sess)
 }
 
+// DumpToken returns the caller's raw session JWT so it can be used as a Bearer
+// token for CLI / programmatic access (e.g. the dbcdata import command).
+//
+// CSRF protection: a custom request header (X-Chronicle-Token-Dump) is
+// required. Browsers cannot set custom headers on cross-site requests without
+// a CORS preflight, which this same-origin-only endpoint never grants — so a
+// malicious site cannot ride the user's cookie to steal the token.
+func (a *API) DumpToken(w http.ResponseWriter, r *http.Request) {
+	ctx := r.Context()
+	if r.Header.Get("X-Chronicle-Token-Dump") == "" {
+		httpapi.Write(ctx, w, http.StatusBadRequest, chroniclesdk.Response{
+			Message: "Missing required X-Chronicle-Token-Dump header",
+		})
+		return
+	}
+
+	token, err := a.Auth.RawSessionJWT(r)
+	if err != nil {
+		httpapi.Write(ctx, w, http.StatusUnauthorized, chroniclesdk.Response{
+			Message: "No session token available",
+		})
+		return
+	}
+
+	httpapi.Write(ctx, w, http.StatusOK, chroniclesdk.TokenDumpResponse{Token: token})
+}
+
 // GetMyStorage returns the current user's storage info with grant breakdown
 func (a *API) GetMyStorage(w http.ResponseWriter, r *http.Request) {
 	state := chronauth.AuthenticationState(r)

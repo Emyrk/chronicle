@@ -6,6 +6,11 @@ import (
 	"github.com/google/uuid"
 )
 
+// TokenDumpResponse carries the caller's raw session JWT for CLI use.
+type TokenDumpResponse struct {
+	Token string `json:"token"`
+}
+
 type Session struct {
 	UserID               uuid.UUID   `json:"user_id"`
 	SessionID            uuid.UUID   `json:"session_id"`

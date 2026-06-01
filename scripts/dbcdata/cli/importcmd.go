@@ -28,6 +28,7 @@ func ImportCmd() *serpent.Command {
 		apiURL   string
 		datasetID string
 		token    string
+		cookie   string
 		mode     string
 		yes      bool
 	)
@@ -82,6 +83,13 @@ func ImportCmd() *serpent.Command {
 				Value:       serpent.StringOf(&token),
 			},
 			{
+				Name:        "cookie",
+				Description: "Session cookie value (or 'name=value') to exchange for a token via /whoami/dump. Alternative to --token.",
+				Flag:        "cookie",
+				Env:         "CHRONICLE_COOKIE",
+				Value:       serpent.StringOf(&cookie),
+			},
+			{
 				Name:        "mode",
 				Description: "Upload mode for DBC artifacts: compare, upsert, or insert.",
 				Flag:        "mode",
@@ -112,8 +120,10 @@ func ImportCmd() *serpent.Command {
 				if apiURL == "" {
 					return fmt.Errorf("either --export-as=files or --api-url is required")
 				}
-				if token == "" {
-					return fmt.Errorf("--token (or CHRONICLE_TOKEN) is required for upload")
+				// Resolve a Bearer token, exchanging a session cookie if needed.
+				token, err = resolveToken(apiURL, token, cookie)
+				if err != nil {
+					return err
 				}
 				if yes {
 					// Non-interactive: dataset must be specified explicitly.

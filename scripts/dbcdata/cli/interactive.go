@@ -10,6 +10,51 @@ import (
 	"github.com/Emyrk/chronicle/api/chroniclesdk"
 )
 
+// resolveToken returns a Bearer token. If token is already set it is returned
+// as-is. Otherwise, if a session cookie is provided, it calls /whoami/dump to
+// exchange the cookie for the raw JWT.
+func resolveToken(baseURL, token, cookie string) (string, error) {
+	if token != "" {
+		return token, nil
+	}
+	if cookie == "" {
+		return "", fmt.Errorf("provide --token (CHRONICLE_TOKEN) or --cookie (CHRONICLE_COOKIE)")
+	}
+
+	endpoint := strings.TrimSuffix(baseURL, "/") + "/api/v1/whoami/dump"
+	req, err := http.NewRequest(http.MethodGet, endpoint, nil)
+	if err != nil {
+		return "", fmt.Errorf("new request: %w", err)
+	}
+	// The cookie value may be pasted as either the raw value or the full
+	// "name=value" pair; normalize to a Cookie header.
+	if strings.Contains(cookie, "=") {
+		req.Header.Set("Cookie", cookie)
+	} else {
+		req.Header.Set("Cookie", "chronicle_auth_session="+cookie)
+	}
+	req.Header.Set("X-Chronicle-Token-Dump", "1")
+
+	resp, err := (&http.Client{}).Do(req)
+	if err != nil {
+		return "", fmt.Errorf("token dump request failed: %w", err)
+	}
+	defer func() { _ = resp.Body.Close() }()
+	if resp.StatusCode >= 300 {
+		msg, _ := io.ReadAll(io.LimitReader(resp.Body, 4096))
+		return "", fmt.Errorf("token dump returned %d: %s", resp.StatusCode, strings.TrimSpace(string(msg)))
+	}
+
+	var out chroniclesdk.TokenDumpResponse
+	if err := json.NewDecoder(resp.Body).Decode(&out); err != nil {
+		return "", fmt.Errorf("decode token dump: %w", err)
+	}
+	if out.Token == "" {
+		return "", fmt.Errorf("token dump returned an empty token")
+	}
+	return out.Token, nil
+}
+
 // apiGet performs an authenticated GET and decodes the JSON response into v.
 func apiGet(baseURL, token, path string, v any) error {
 	endpoint := strings.TrimSuffix(baseURL, "/") + path

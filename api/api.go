@@ -177,6 +177,7 @@ func (api *API) Routes() chi.Router {
 					api.Auth.Authenticated(false),
 				)
 				r.Get("/whoami", api.WhoAmI)
+				r.Get("/whoami/dump", api.DumpToken)
 				r.Post("/authcheck", api.checkAuthorization)
 				r.Get("/me/storage", api.GetMyStorage)
 				r.Patch("/me/preferences", api.UpdateMyPreferences)
