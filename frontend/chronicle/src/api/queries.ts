@@ -58,6 +58,7 @@ import type {
   AdminOutdatedInstancesResponse,
   SiteConfig,
   UpdateSiteConfigRequest,
+  Dataset,
 } from "./typesGenerated";
 
 // Re-export types for convenience
@@ -910,6 +911,20 @@ export function useSiteConfig() {
       if (!response.ok) throw new Error("Failed to fetch site config");
       return response.json() as Promise<SiteConfig>;
     },
+  });
+}
+
+// useDatasets lists the available game-data datasets (id, name, slug, version).
+// Used by the talent-tree dataset selector.
+export function useDatasets() {
+  return useQuery({
+    queryKey: ["datasets"],
+    queryFn: async () => {
+      const response = await fetch("/api/v1/datasets");
+      if (!response.ok) throw new Error("Failed to fetch datasets");
+      return response.json() as Promise<Dataset[]>;
+    },
+    staleTime: 5 * 60 * 1000,
   });
 }
 

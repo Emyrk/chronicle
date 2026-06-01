@@ -3,11 +3,17 @@ package talents
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5"
 	lru "github.com/hashicorp/golang-lru/v2"
 )
+
+// ErrNoTalentData indicates a dataset has no talent tree data imported yet.
+// Callers should treat this as a 404, not a server error.
+var ErrNoTalentData = errors.New("no talent data for dataset")
 
 // TalentFetcher loads and caches pre-computed talent tree data per dataset.
 type TalentFetcher interface {
@@ -40,6 +46,9 @@ func (f *fetcher) TalentTrees(ctx context.Context, datasetID uuid.UUID) (*Talent
 
 	raw, err := f.db.GetDatasetTalentTrees(ctx, datasetID)
 	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return nil, fmt.Errorf("%w: %s", ErrNoTalentData, datasetID)
+		}
 		return nil, fmt.Errorf("get talent trees for dataset %s: %w", datasetID, err)
 	}
 

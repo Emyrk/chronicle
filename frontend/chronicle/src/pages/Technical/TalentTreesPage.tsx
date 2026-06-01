@@ -6,6 +6,7 @@ import {
   TalentTreeViewer,
   type TalentAllocation,
 } from "@/components/ui/TalentTreeViewer/TalentTreeViewer";
+import { useDatasets, useSiteConfig } from "@/api/queries";
 
 const CLASSES = [
   { id: 1, name: "Warrior" },
@@ -75,11 +76,23 @@ function parseTalentString(
 export function TalentTreesPage() {
   const [input, setInput] = useState("");
 
+  // Dataset selection. Defaults to the current tenant's default dataset
+  // (resolved by the context handler); the user can override via the selector.
+  const { data: siteConfig } = useSiteConfig();
+  const { data: datasets } = useDatasets();
+  const [datasetOverride, setDatasetOverride] = useState<string>("");
+  const datasetId =
+    datasetOverride || siteConfig?.tenant?.default_dataset_id || "";
+
   // Fetch talent tree data to resolve tab names → class ID
-  const { data: treeData } = useQuery<TalentTreeJSON>({
-    queryKey: ["talent-trees"],
+  const { data: treeData } = useQuery<TalentTreeJSON | null>({
+    queryKey: ["talent-trees", datasetId || "default"],
     queryFn: async () => {
-      const res = await fetch("/api/v1/wowdb/talent-trees");
+      const url = datasetId
+        ? `/api/v1/wowdb/talent-trees?dataset_id=${encodeURIComponent(datasetId)}`
+        : "/api/v1/wowdb/talent-trees";
+      const res = await fetch(url);
+      if (res.status === 404) return null;
       if (!res.ok) throw new Error("Failed to fetch talent trees");
       return res.json();
     },
@@ -120,9 +133,29 @@ export function TalentTreesPage() {
         Back to Technical
       </Link>
 
-      <div className="flex items-center gap-2 mb-4">
-        <TreePine className="h-5 w-5" />
-        <h1 className="text-xl font-bold">Talent Trees</h1>
+      <div className="flex items-center justify-between gap-2 mb-4 flex-wrap">
+        <div className="flex items-center gap-2">
+          <TreePine className="h-5 w-5" />
+          <h1 className="text-xl font-bold">Talent Trees</h1>
+        </div>
+        {datasets && datasets.length > 0 && (
+          <label className="flex items-center gap-2 text-sm text-zinc-400">
+            Dataset
+            <select
+              value={datasetId}
+              onChange={(e) => setDatasetOverride(e.target.value)}
+              className="bg-zinc-900 border border-zinc-700 rounded px-2 py-1 text-sm text-zinc-200 focus:outline-none focus:border-zinc-500"
+            >
+              {/* Empty value = let the server resolve the tenant default. */}
+              <option value="">Tenant default</option>
+              {datasets.map((d) => (
+                <option key={d.id} value={d.id}>
+                  {d.name} ({d.wow_version})
+                </option>
+              ))}
+            </select>
+          </label>
+        )}
       </div>
 
       {/* Input for COMBATANT_TALENTS string */}
@@ -166,6 +199,7 @@ export function TalentTreesPage() {
           <TalentTreeViewer
             classId={detectedClassId}
             allocations={parsed.allocations}
+            datasetId={datasetId || undefined}
           />
         </div>
       )}
@@ -173,7 +207,11 @@ export function TalentTreesPage() {
       {/* All class trees */}
       <div className="flex flex-col gap-8">
         {CLASSES.map((cls) => (
-          <TalentTreeViewer key={cls.id} classId={cls.id} />
+          <TalentTreeViewer
+            key={cls.id}
+            classId={cls.id}
+            datasetId={datasetId || undefined}
+          />
         ))}
       </div>
     </div>

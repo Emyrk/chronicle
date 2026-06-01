@@ -199,6 +199,8 @@ func (api *API) Routes() chi.Router {
 			r.Get("/share/{code}", api.GetShare)
 			r.Get("/site-config", api.AdminGetSiteConfig)
 			r.Get("/discovery", api.Discovery)
+			// Public read-only dataset list for the talent-tree dataset selector.
+			r.Get("/datasets", api.Opts.Dataset.List)
 
 			// Admin routes - require admin or technical_admin role
 			r.Route("/admin", func(r chi.Router) {

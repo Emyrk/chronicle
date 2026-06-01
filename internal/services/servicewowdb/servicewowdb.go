@@ -3,6 +3,7 @@ package servicewowdb
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"log/slog"
 	"net/http"
 	"net/url"
@@ -17,6 +18,7 @@ import (
 	"github.com/Emyrk/chronicle/internal/services/servicedataset"
 	"github.com/Emyrk/chronicle/internal/services/servicedbstore"
 	"github.com/Emyrk/chronicle/internal/services/servicelogger"
+	"github.com/Emyrk/chronicle/internal/services/servicetenant"
 	"github.com/go-chi/chi/v5"
 	"github.com/google/uuid"
 
@@ -193,30 +195,44 @@ func (s *Service) handleGetPeriodicSpells(w http.ResponseWriter, r *http.Request
 }
 
 func (s *Service) handleGetTalentTrees(w http.ResponseWriter, r *http.Request) {
-	datasetIDStr := r.URL.Query().Get("dataset_id")
-	if datasetIDStr == "" {
-		httpapi.Write(r.Context(), w, http.StatusBadRequest, chroniclesdk.Response{
-			Message: "dataset_id query parameter is required",
-		})
-		return
+	ctx := r.Context()
+
+	// dataset_id is optional. Resolution order:
+	//   1. explicit ?dataset_id= query param
+	//   2. the request tenant's default dataset (from tenant context)
+	//   3. the server's compiled-in default dataset
+	datasetID := servicedataset.DefaultDatasetID
+	if t := servicetenant.TenantFromContext(ctx); t != nil && t.DefaultDatasetID.Valid {
+		datasetID = t.DefaultDatasetID.UUID
+	}
+	if q := r.URL.Query().Get("dataset_id"); q != "" {
+		parsed, err := uuid.Parse(q)
+		if err != nil {
+			httpapi.Write(ctx, w, http.StatusBadRequest, chroniclesdk.Response{
+				Message: "invalid dataset_id",
+			})
+			return
+		}
+		datasetID = parsed
 	}
 
-	datasetID, err := uuid.Parse(datasetIDStr)
+	data, err := s.db.TalentTrees(ctx, datasetID)
 	if err != nil {
-		httpapi.Write(r.Context(), w, http.StatusBadRequest, chroniclesdk.Response{
-			Message: "invalid dataset_id",
-		})
-		return
-	}
-
-	data, err := s.db.TalentTrees(r.Context(), datasetID)
-	if err != nil {
+		// No talent data imported for this dataset yet → 404 so the UI can
+		// degrade gracefully (e.g. show an "import talents" hint) instead of
+		// surfacing a server error.
+		if errors.Is(err, talents.ErrNoTalentData) {
+			httpapi.Write(ctx, w, http.StatusNotFound, chroniclesdk.Response{
+				Message: "no talent data for this dataset",
+			})
+			return
+		}
 		httpapi.InternalServerError(w, err)
 		return
 	}
 
 	w.Header().Set("Cache-Control", "public, max-age=86400")
-	httpapi.Write(r.Context(), w, http.StatusOK, data)
+	httpapi.Write(ctx, w, http.StatusOK, data)
 }
 
 func (s *Service) ServeHTTP(w http.ResponseWriter, r *http.Request) {

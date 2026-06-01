@@ -61,6 +61,11 @@ export interface TalentTreeViewerProps {
   classId: number;
   /** Optional talent allocations from combat log. If omitted, shows empty tree. */
   allocations?: TalentAllocation[];
+  /**
+   * Dataset to load talent trees from. If omitted, the server resolves the
+   * request tenant's default dataset.
+   */
+  datasetId?: string;
   /** Additional CSS class for the root element */
   className?: string;
 }
@@ -100,11 +105,20 @@ const CLASS_COLORS: Record<number, string> = {
 
 // ─── Data fetching ────────────────────────────────────────────────
 
-function useTalentTrees() {
-  return useQuery<TalentTreeJSON>({
-    queryKey: ["talent-trees"],
+/**
+ * Fetches talent trees for a dataset. A 404 means the dataset has no talent
+ * data imported yet; that resolves to `null` (handled as a graceful empty
+ * state) rather than throwing.
+ */
+function useTalentTrees(datasetId?: string) {
+  return useQuery<TalentTreeJSON | null>({
+    queryKey: ["talent-trees", datasetId ?? "default"],
     queryFn: async () => {
-      const res = await fetch("/api/v1/wowdb/talent-trees");
+      const url = datasetId
+        ? `/api/v1/wowdb/talent-trees?dataset_id=${encodeURIComponent(datasetId)}`
+        : "/api/v1/wowdb/talent-trees";
+      const res = await fetch(url);
+      if (res.status === 404) return null;
       if (!res.ok) throw new Error("Failed to fetch talent trees");
       return res.json();
     },
@@ -418,9 +432,10 @@ function TalentTab({
 export function TalentTreeViewer({
   classId,
   allocations,
+  datasetId,
   className,
 }: TalentTreeViewerProps) {
-  const { data, isLoading, error } = useTalentTrees();
+  const { data, isLoading, error } = useTalentTrees(datasetId);
 
   if (isLoading) {
     return (
@@ -430,10 +445,19 @@ export function TalentTreeViewer({
     );
   }
 
-  if (error || !data) {
+  if (error) {
     return (
       <div className={cn("flex items-center justify-center py-8 text-red-400 text-sm", className)}>
         Failed to load talent data
+      </div>
+    );
+  }
+
+  // data === null means the dataset has no talent data imported yet (404).
+  if (!data) {
+    return (
+      <div className={cn("flex items-center justify-center py-8 text-zinc-500 text-sm", className)}>
+        Talent data is not available for this dataset yet.
       </div>
     );
   }
