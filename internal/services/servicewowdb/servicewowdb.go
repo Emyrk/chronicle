@@ -216,6 +216,10 @@ func (s *Service) handleGetTalentTrees(w http.ResponseWriter, r *http.Request) {
 		datasetID = parsed
 	}
 
+	// Surface the resolved dataset for debugging. Set before any Write so it
+	// is present on the 404 path too (helps diagnose "wrong dataset" issues).
+	w.Header().Set(httpapi.DatasetHeader, datasetID.String())
+
 	data, err := s.db.TalentTrees(ctx, datasetID)
 	if err != nil {
 		// No talent data imported for this dataset yet → 404 so the UI can

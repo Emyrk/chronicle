@@ -98,6 +98,7 @@ function transformToInstance(
     start_time?: string;
     end_time?: string;
     realm_name?: string;
+    dataset_id?: string;
     guild?: { id: string; name: string };
     encounters: readonly WoWEncounterWithHostiles[] | null;
     players: Record<string, InstancePlayer> | null;

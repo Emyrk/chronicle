@@ -129,6 +129,7 @@ func (api *API) Instance(w http.ResponseWriter, r *http.Request) {
 
 	out := db2sdk.WowDecoratedInstance(inst, units, players, encounters, fights)
 	out.DatasetID = api.Opts.Dataset.ResolveDatasetForRealm(ctx, inst.RealmID)
+	w.Header().Set(httpapi.DatasetHeader, out.DatasetID.String())
 	httpapi.Write(ctx, w, http.StatusOK, out)
 }
 

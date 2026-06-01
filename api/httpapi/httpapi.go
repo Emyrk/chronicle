@@ -10,6 +10,10 @@ import (
 	"github.com/Emyrk/chronicle/api/chroniclesdk"
 )
 
+// DatasetHeader is set on responses whose game data is resolved from a
+// specific dataset. It exposes the resolved dataset ID for debugging.
+const DatasetHeader = "X-Chronicle-Dataset"
+
 func Forbidden(rw http.ResponseWriter, err error) {
 	var details string
 	if err != nil {
