@@ -20,6 +20,14 @@ func BrowserOnly(accessURL *url.URL) func(next http.Handler) http.Handler {
 				return
 			}
 
+			// Bearer-token clients (CLI / programmatic) are not browsers and
+			// carry no cookie, so they are not a CSRF risk. Let them through;
+			// the auth middleware still validates the token.
+			if r.Header.Get("Authorization") != "" {
+				next.ServeHTTP(w, r)
+				return
+			}
+
 			site := r.Header.Get("Sec-Fetch-Site")
 			if site == "" || site == "cross-site" {
 				// TODO: Standardize this more

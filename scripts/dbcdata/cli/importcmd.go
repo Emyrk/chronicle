@@ -26,6 +26,8 @@ func ImportCmd() *serpent.Command {
 		outDir   string
 		apiURL   string
 		datasetID string
+		token    string
+		mode     string
 	)
 
 	return &serpent.Command{
@@ -67,7 +69,22 @@ func ImportCmd() *serpent.Command {
 				Name:        "dataset-id",
 				Description: "UUID of the dataset to import into (required for upload).",
 				Flag:        "dataset-id",
+				Env:         "CHRONICLE_DATASET_ID",
 				Value:       serpent.StringOf(&datasetID),
+			},
+			{
+				Name:        "token",
+				Description: "Bearer token for authenticating uploads.",
+				Flag:        "token",
+				Env:         "CHRONICLE_TOKEN",
+				Value:       serpent.StringOf(&token),
+			},
+			{
+				Name:        "mode",
+				Description: "Upload mode for DBC artifacts: compare, upsert, or insert.",
+				Flag:        "mode",
+				Default:     "upsert",
+				Value:       serpent.StringOf(&mode),
 			},
 		},
 		Handler: func(inv *serpent.Invocation) error {
@@ -128,11 +145,22 @@ func ImportCmd() *serpent.Command {
 				if apiURL == "" {
 					return fmt.Errorf("either --export-as=files or --api-url is required")
 				}
-				// TODO: HTTP upload is pending a CLI auth mechanism decision.
-				// The server's admin endpoints currently authenticate via session
-				// cookie only (no Bearer/API-key path). Once that lands, wire the
-				// upload transport here using Artifact.UploadKind / DBCType.
-				return fmt.Errorf("--api-url upload is not yet implemented (pending CLI auth); use --export-as=files for now")
+				if datasetID == "" {
+					return fmt.Errorf("--dataset-id (or CHRONICLE_DATASET_ID) is required for upload")
+				}
+				if token == "" {
+					return fmt.Errorf("--token (or CHRONICLE_TOKEN) is required for upload")
+				}
+				up := newUploader(apiURL, token, datasetID, mode)
+				for _, p := range all {
+					for _, art := range p.artifacts {
+						if err := up.Upload(art); err != nil {
+							return fmt.Errorf("upload %s (%s): %w", p.imp.Name(), art.Filename, err)
+						}
+						_, _ = fmt.Fprintf(inv.Stdout, "Uploaded %s → %s\n", art.Filename, p.imp.Name())
+					}
+				}
+				return nil
 			default:
 				return fmt.Errorf("invalid --export-as %q (only 'files' is supported)", exportAs)
 			}

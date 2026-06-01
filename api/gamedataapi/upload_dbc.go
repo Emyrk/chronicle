@@ -14,6 +14,7 @@ import (
 	"github.com/Gophercraft/core/format/dbc"
 	"github.com/Gophercraft/core/format/dbc/dbdefs"
 	"github.com/Gophercraft/core/vsn"
+	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 )
@@ -36,6 +37,21 @@ func (h *Handler) UploadDBC(w http.ResponseWriter, r *http.Request) {
 			Message: "Invalid mode, must be 'compare', 'upsert', or 'insert'",
 		})
 		return
+	}
+
+	// dataset_id selects which dataset to write into. Defaults to the
+	// server's default dataset for backwards compatibility.
+	datasetID := servicedataset.DefaultDatasetID
+	if dsStr := r.URL.Query().Get("dataset_id"); dsStr != "" {
+		parsed, err := uuid.Parse(dsStr)
+		if err != nil {
+			httpapi.Write(ctx, w, http.StatusBadRequest, chroniclesdk.Response{
+				Message: "Invalid dataset_id",
+				Detail:  err.Error(),
+			})
+			return
+		}
+		datasetID = parsed
 	}
 
 	file, header, err := r.FormFile("dbc_file")
@@ -92,13 +108,13 @@ func (h *Handler) UploadDBC(w http.ResponseWriter, r *http.Request) {
 
 	switch dbcType {
 	case "ItemDisplayInfo":
-		h.handleItemDisplayInfoUpload(ctx, w, mode, table)
+		h.handleItemDisplayInfoUpload(ctx, w, mode, table, datasetID)
 	case "SpellItemEnchantment":
-		h.handleSpellItemEnchantmentUpload(ctx, w, mode, table)
+		h.handleSpellItemEnchantmentUpload(ctx, w, mode, table, datasetID)
 	case "ItemRandomProperties":
-		h.handleItemRandomPropertiesUpload(ctx, w, mode, table)
+		h.handleItemRandomPropertiesUpload(ctx, w, mode, table, datasetID)
 	case "ItemSet":
-		h.handleItemSetUpload(ctx, w, mode, table)
+		h.handleItemSetUpload(ctx, w, mode, table, datasetID)
 	default:
 		httpapi.Write(ctx, w, http.StatusBadRequest, chroniclesdk.Response{
 			Message: fmt.Sprintf("Unsupported DBC type: %s", dbcType),
@@ -106,7 +122,7 @@ func (h *Handler) UploadDBC(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
-func (h *Handler) handleItemDisplayInfoUpload(ctx context.Context, w http.ResponseWriter, mode string, table *dbc.Table) {
+func (h *Handler) handleItemDisplayInfoUpload(ctx context.Context, w http.ResponseWriter, mode string, table *dbc.Table, datasetID uuid.UUID) {
 	var rows []dbdefs.Ent_ItemDisplayInfo
 	var x dbdefs.Ent_ItemDisplayInfo
 	_ = table.ID(50182, &x)
@@ -187,7 +203,7 @@ func (h *Handler) handleItemDisplayInfoUpload(ctx context.Context, w http.Respon
 			row.StateSpellVisualKitID, row.UnsheathedSpellVisualKitID,
 			jsonSlice(row.InventoryIcon), row.GroupSoundIndex,
 			row.GroundModel, row.ItemSize, jsonSlice(row.HelmetGeosetVisID),
-			servicedataset.DefaultDatasetID,
+			datasetID,
 		)
 
 		// Also populate world_display_info with the first inventory icon.
@@ -195,7 +211,7 @@ func (h *Handler) handleItemDisplayInfoUpload(ctx context.Context, w http.Respon
 		if len(row.InventoryIcon) > 0 {
 			icon = row.InventoryIcon[0]
 		}
-		batch.Queue(wdiSQL, row.ID, icon, servicedataset.DefaultDatasetID)
+		batch.Queue(wdiSQL, row.ID, icon, datasetID)
 
 		if batch.Len() >= batchSize {
 			if err := flushBatch(ctx, h.pool, batch); err != nil {
@@ -241,7 +257,7 @@ func jsonSlice(v any) []byte {
 	}
 	return b
 }
-func (h *Handler) handleSpellItemEnchantmentUpload(ctx context.Context, w http.ResponseWriter, mode string, table *dbc.Table) {
+func (h *Handler) handleSpellItemEnchantmentUpload(ctx context.Context, w http.ResponseWriter, mode string, table *dbc.Table, datasetID uuid.UUID) {
 	var rows []dbdefs.Ent_SpellItemEnchantment
 	err := table.Range(func(cursor *dbdefs.Ent_SpellItemEnchantment) bool {
 		rows = append(rows, *cursor)
@@ -298,7 +314,7 @@ func (h *Handler) handleSpellItemEnchantmentUpload(ctx context.Context, w http.R
 			row.Name_lang.String(), row.ItemVisual, row.Flags, row.Src_itemID,
 			row.Condition_ID, row.RequiredSkillID, row.RequiredSkillRank,
 			row.MinLevel, row.MaxLevel,
-			servicedataset.DefaultDatasetID,
+			datasetID,
 		)
 
 		if batch.Len() >= batchSize {
@@ -326,7 +342,7 @@ func (h *Handler) handleSpellItemEnchantmentUpload(ctx context.Context, w http.R
 	httpapi.Write(ctx, w, http.StatusOK, resp)
 }
 
-func (h *Handler) handleItemRandomPropertiesUpload(ctx context.Context, w http.ResponseWriter, mode string, table *dbc.Table) {
+func (h *Handler) handleItemRandomPropertiesUpload(ctx context.Context, w http.ResponseWriter, mode string, table *dbc.Table, datasetID uuid.UUID) {
 	var rows []dbdefs.Ent_ItemRandomProperties
 	err := table.Range(func(cursor *dbdefs.Ent_ItemRandomProperties) bool {
 		rows = append(rows, *cursor)
@@ -369,7 +385,7 @@ func (h *Handler) handleItemRandomPropertiesUpload(ctx context.Context, w http.R
 			int32At(row.Enchantment, 0), int32At(row.Enchantment, 1),
 			int32At(row.Enchantment, 2), int32At(row.Enchantment, 3),
 			int32At(row.Enchantment, 4),
-			servicedataset.DefaultDatasetID,
+			datasetID,
 		)
 		if batch.Len() >= batchSize {
 			if err := flushBatch(ctx, h.pool, batch); err != nil {
@@ -396,7 +412,7 @@ func (h *Handler) handleItemRandomPropertiesUpload(ctx context.Context, w http.R
 	httpapi.Write(ctx, w, http.StatusOK, resp)
 }
 
-func (h *Handler) handleItemSetUpload(ctx context.Context, w http.ResponseWriter, mode string, table *dbc.Table) {
+func (h *Handler) handleItemSetUpload(ctx context.Context, w http.ResponseWriter, mode string, table *dbc.Table, datasetID uuid.UUID) {
 	var rows []dbdefs.Ent_ItemSet
 	err := table.Range(func(cursor *dbdefs.Ent_ItemSet) bool {
 		rows = append(rows, *cursor)
@@ -434,7 +450,7 @@ func (h *Handler) handleItemSetUpload(ctx context.Context, w http.ResponseWriter
 
 	batch := &pgx.Batch{}
 	for _, row := range rows {
-		batch.Queue(setSQL, row.ID, row.Name_lang.String(), row.RequiredSkill, row.RequiredSkillRank, servicedataset.DefaultDatasetID)
+		batch.Queue(setSQL, row.ID, row.Name_lang.String(), row.RequiredSkill, row.RequiredSkillRank, datasetID)
 		if batch.Len() >= batchSize {
 			if err := flushBatch(ctx, h.pool, batch); err != nil {
 				httpapi.Write(ctx, w, http.StatusInternalServerError, chroniclesdk.Response{
@@ -472,7 +488,7 @@ func (h *Handler) handleItemSetUpload(ctx context.Context, w http.ResponseWriter
 			if spellID == 0 || threshold == 0 {
 				continue
 			}
-			batch.Queue(bonusSQL, row.ID, threshold, spellID, servicedataset.DefaultDatasetID)
+			batch.Queue(bonusSQL, row.ID, threshold, spellID, datasetID)
 			if batch.Len() >= batchSize {
 				if err := flushBatch(ctx, h.pool, batch); err != nil {
 					httpapi.Write(ctx, w, http.StatusInternalServerError, chroniclesdk.Response{
@@ -506,7 +522,7 @@ func (h *Handler) handleItemSetUpload(ctx context.Context, w http.ResponseWriter
 			if itemID == 0 {
 				continue
 			}
-			batch.Queue(itemSQL, row.ID, itemID, servicedataset.DefaultDatasetID)
+			batch.Queue(itemSQL, row.ID, itemID, datasetID)
 			if batch.Len() >= batchSize {
 				if err := flushBatch(ctx, h.pool, batch); err != nil {
 					httpapi.Write(ctx, w, http.StatusInternalServerError, chroniclesdk.Response{

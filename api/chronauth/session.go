@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"log/slog"
 	"net/http"
+	"strings"
 	"time"
 
 	"github.com/Emyrk/chronicle/api/chronauth/claims"
@@ -40,9 +41,38 @@ func withState(r *http.Request, s *AuthenticationContext) *http.Request {
 	return r.WithContext(context.WithValue(r.Context(), authContextKey{}, s))
 }
 
+// bearerToken extracts a JWT from an "Authorization: Bearer <token>" header.
+// Returns "" if the header is absent or malformed.
+func bearerToken(r *http.Request) string {
+	h := r.Header.Get("Authorization")
+	const prefix = "Bearer "
+	if len(h) > len(prefix) && strings.EqualFold(h[:len(prefix)], prefix) {
+		return strings.TrimSpace(h[len(prefix):])
+	}
+	return ""
+}
+
 // AuthenticationMiddleware should avoid hitting the database.
 func (s *Service) AuthenticationMiddleware(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		// Bearer token auth (CLI / programmatic clients). Takes precedence over
+		// the session cookie. Unlike the cookie path, a bad bearer token does
+		// not trigger a logout (there is no session to clear) and tokens are
+		// never auto-refreshed — clients re-authenticate when they expire.
+		if token := bearerToken(r); token != "" {
+			c, err := s.sessions.ValidateSession(token)
+			if err != nil {
+				next.ServeHTTP(w, withState(r, &AuthenticationContext{
+					Error: fmt.Errorf("invalid bearer token (%s): %w", err.Error(), ErrNotAuthorized),
+				}))
+				return
+			}
+			next.ServeHTTP(w, withState(r, &AuthenticationContext{
+				Claims: &c,
+			}))
+			return
+		}
+
 		auth, err := s.Store.Get(r, AuthSessionName)
 		if err != nil {
 			_ = s.Logout(w, r)

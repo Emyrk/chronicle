@@ -31,6 +31,7 @@ func (h *Handler) Routes() http.Handler {
 	r.Post("/sql/import", h.ImportSQL)
 	r.Post("/sql/import-url", h.ImportSQLFromURL)
 	r.Post("/dbc/upload", h.UploadDBC)
+	r.Put("/datasets/{datasetID}/talent-trees", h.UploadTalentTrees)
 
 	// World <-> Server assignment
 	r.Post("/worlds/{worldID}/servers/{serverID}", h.AssignWorldToServer)
