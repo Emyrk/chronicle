@@ -79,3 +79,72 @@ func TestUnknownLogTypeFlavor(t *testing.T) {
 		t.Fatalf("unknown LogType.Flavor() = %v, want nil", got)
 	}
 }
+
+// TestServerFlavor checks the build-tag default flavor mapping.
+func TestServerFlavor(t *testing.T) {
+	t.Parallel()
+
+	cases := []struct {
+		name string
+		base database.FlavorTag
+		want []database.FlavorTag
+	}{
+		{"turtle", database.FlavorVanilla, []database.FlavorTag{database.FlavorVanilla, database.FlavorNightmareOfUrsol, database.FlavorTurtle}},
+		{"kronos", database.FlavorVanilla, []database.FlavorTag{database.FlavorVanilla, database.FlavorKronos}},
+		{"vanillaplus", database.FlavorVanilla, []database.FlavorTag{database.FlavorVanilla, database.FlavorVanillaPlus}},
+		{"octowow", database.FlavorVanilla, []database.FlavorTag{database.FlavorVanilla, database.FlavorNightmareOfUrsol, database.FlavorOctoWoW}},
+		{"epoch", database.FlavorWrath, []database.FlavorTag{database.FlavorWrath, database.FlavorEpoch}},
+		{"azerothcore", database.FlavorWrath, []database.FlavorTag{database.FlavorWrath, database.FlavorAzerothcore}},
+		{"ascension", database.FlavorWrath, []database.FlavorTag{database.FlavorWrath, database.FlavorAscension}},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			got := database.ServerFlavor(tc.name, tc.base)
+			if len(got) != len(tc.want) {
+				t.Fatalf("ServerFlavor(%q, %q) = %v, want %v", tc.name, tc.base, got, tc.want)
+			}
+			for _, tag := range tc.want {
+				if !got.Has(tag) {
+					t.Errorf("ServerFlavor(%q, %q) missing %q (got %v)", tc.name, tc.base, tag, got)
+				}
+			}
+		})
+	}
+}
+
+// TestServerFlavorNoDuplicateBase: if server name equals the base tag, the base
+// is not duplicated.
+func TestServerFlavorNoDuplicateBase(t *testing.T) {
+	t.Parallel()
+
+	got := database.ServerFlavor("vanilla", database.FlavorVanilla)
+	if len(got) != 1 || !got.Has(database.FlavorVanilla) {
+		t.Fatalf("ServerFlavor(vanilla, vanilla) = %v, want [vanilla]", got)
+	}
+}
+
+// TestFlavorStringsRoundtrip: Strings and FlavorFromStrings are inverses, and
+// nil round-trips to nil (NULL column).
+func TestFlavorStringsRoundtrip(t *testing.T) {
+	t.Parallel()
+
+	f := database.WoWFlavor{database.FlavorWrath, database.FlavorAzerothcore}
+	got := database.FlavorFromStrings(f.Strings())
+	if len(got) != len(f) {
+		t.Fatalf("roundtrip changed length: %v -> %v", f, got)
+	}
+	for i := range f {
+		if got[i] != f[i] {
+			t.Errorf("roundtrip mismatch at %d: %q != %q", i, got[i], f[i])
+		}
+	}
+
+	var nilFlavor database.WoWFlavor
+	if nilFlavor.Strings() != nil {
+		t.Errorf("nil flavor Strings() should be nil")
+	}
+	if database.FlavorFromStrings(nil) != nil {
+		t.Errorf("FlavorFromStrings(nil) should be nil")
+	}
+}

@@ -1202,7 +1202,8 @@ CREATE TABLE wow_log_groups (
     created_at timestamp with time zone,
     updated_at timestamp with time zone,
     log_type log_type DEFAULT 'v1'::log_type NOT NULL,
-    format log_format
+    format log_format,
+    flavor text[]
 );
 
 CREATE TABLE wow_server_upload_keys (

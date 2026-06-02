@@ -15,6 +15,9 @@ import (
 type sqlcQuerier interface {
 	AdminListOutdatedParserVersionInstances(ctx context.Context, arg AdminListOutdatedParserVersionInstancesParams) ([]AdminListOutdatedParserVersionInstancesRow, error)
 	AssignWorldToServer(ctx context.Context, arg AssignWorldToServerParams) error
+	// Sets the flavor for every log group that has none yet. The flavor value is
+	// build-tag dependent (resolved in Go), so this can't be a SQL migration.
+	BackfillLogGroupFlavors(ctx context.Context, flavor []string) (int64, error)
 	BulkUpsertGuildPagePanels(ctx context.Context, dollar_1 []byte) error
 	// JOINs wow_server_realms so RLS tenant filtering cascades.
 	CensusPlayerCounts(ctx context.Context, arg CensusPlayerCountsParams) ([]CensusPlayerCountsRow, error)

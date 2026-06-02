@@ -1397,6 +1397,7 @@ type WoWLogGroup struct {
 	UpdatedAt pgtype.Timestamptz `db:"updated_at" json:"updated_at"`
 	LogType   LogType            `db:"log_type" json:"log_type"`
 	Format    NullLogFormat      `db:"format" json:"format"`
+	Flavor    []string           `db:"flavor" json:"flavor"`
 }
 
 type World struct {

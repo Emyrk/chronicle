@@ -1181,6 +1181,22 @@ func (q *sqlQuerier) InstanceEvent(ctx context.Context, arg InstanceEventParams)
 	return i, err
 }
 
+const backfillLogGroupFlavors = `-- name: BackfillLogGroupFlavors :execrows
+UPDATE wow_log_groups
+SET flavor = $1::text[]
+WHERE flavor IS NULL
+`
+
+// Sets the flavor for every log group that has none yet. The flavor value is
+// build-tag dependent (resolved in Go), so this can't be a SQL migration.
+func (q *sqlQuerier) BackfillLogGroupFlavors(ctx context.Context, flavor []string) (int64, error) {
+	result, err := q.db.Exec(ctx, backfillLogGroupFlavors, flavor)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
+}
+
 const countAllWoWLogGroups = `-- name: CountAllWoWLogGroups :one
 SELECT COUNT(*)::int FROM wow_log_groups
 LEFT JOIN LATERAL (
@@ -1412,7 +1428,7 @@ func (q *sqlQuerier) GetWoWLogFilesByGroupID(ctx context.Context, wowLogID uuid.
 
 const getWoWLogGroupByID = `-- name: GetWoWLogGroupByID :one
 SELECT
-  wow_log_groups.id, wow_log_groups.owner, wow_log_groups.created_at, wow_log_groups.updated_at, wow_log_groups.log_type, wow_log_groups.format,
+  wow_log_groups.id, wow_log_groups.owner, wow_log_groups.created_at, wow_log_groups.updated_at, wow_log_groups.log_type, wow_log_groups.format, wow_log_groups.flavor,
   COALESCE(
       jsonb_agg(
       jsonb_build_object(
@@ -1457,6 +1473,7 @@ func (q *sqlQuerier) GetWoWLogGroupByID(ctx context.Context, id uuid.UUID) (GetW
 		&i.WoWLogGroup.UpdatedAt,
 		&i.WoWLogGroup.LogType,
 		&i.WoWLogGroup.Format,
+		&i.WoWLogGroup.Flavor,
 		&i.Files,
 	)
 	return i, err
@@ -1464,7 +1481,7 @@ func (q *sqlQuerier) GetWoWLogGroupByID(ctx context.Context, id uuid.UUID) (GetW
 
 const getWoWLogGroupsByOwner = `-- name: GetWoWLogGroupsByOwner :many
 SELECT
-  wow_log_groups.id, wow_log_groups.owner, wow_log_groups.created_at, wow_log_groups.updated_at, wow_log_groups.log_type, wow_log_groups.format,
+  wow_log_groups.id, wow_log_groups.owner, wow_log_groups.created_at, wow_log_groups.updated_at, wow_log_groups.log_type, wow_log_groups.format, wow_log_groups.flavor,
   files_agg.files,
   instances_output.output AS processing_output
 FROM
@@ -1580,6 +1597,7 @@ func (q *sqlQuerier) GetWoWLogGroupsByOwner(ctx context.Context, arg GetWoWLogGr
 			&i.WoWLogGroup.UpdatedAt,
 			&i.WoWLogGroup.LogType,
 			&i.WoWLogGroup.Format,
+			&i.WoWLogGroup.Flavor,
 			&i.Files,
 			&i.ProcessingOutput,
 		); err != nil {
@@ -1673,6 +1691,7 @@ INSERT INTO
     owner,
     log_type,
     format,
+    flavor,
     created_at,
     updated_at
   )
@@ -1683,9 +1702,10 @@ VALUES
     $3,
     $4,
     $5,
-    $6
+    $6,
+    $7
   )
-RETURNING id, owner, created_at, updated_at, log_type, format
+RETURNING id, owner, created_at, updated_at, log_type, format, flavor
 `
 
 type InsertWoWLogGroupParams struct {
@@ -1693,6 +1713,7 @@ type InsertWoWLogGroupParams struct {
 	Owner     uuid.UUID          `db:"owner" json:"owner"`
 	LogType   LogType            `db:"log_type" json:"log_type"`
 	Format    NullLogFormat      `db:"format" json:"format"`
+	Flavor    []string           `db:"flavor" json:"flavor"`
 	CreatedAt pgtype.Timestamptz `db:"created_at" json:"created_at"`
 	UpdatedAt pgtype.Timestamptz `db:"updated_at" json:"updated_at"`
 }
@@ -1703,6 +1724,7 @@ func (q *sqlQuerier) InsertWoWLogGroup(ctx context.Context, arg InsertWoWLogGrou
 		arg.Owner,
 		arg.LogType,
 		arg.Format,
+		arg.Flavor,
 		arg.CreatedAt,
 		arg.UpdatedAt,
 	)
@@ -1714,13 +1736,14 @@ func (q *sqlQuerier) InsertWoWLogGroup(ctx context.Context, arg InsertWoWLogGrou
 		&i.UpdatedAt,
 		&i.LogType,
 		&i.Format,
+		&i.Flavor,
 	)
 	return i, err
 }
 
 const listAllWoWLogGroupsWithOwner = `-- name: ListAllWoWLogGroupsWithOwner :many
 SELECT
-  wow_log_groups.id, wow_log_groups.owner, wow_log_groups.created_at, wow_log_groups.updated_at, wow_log_groups.log_type, wow_log_groups.format,
+  wow_log_groups.id, wow_log_groups.owner, wow_log_groups.created_at, wow_log_groups.updated_at, wow_log_groups.log_type, wow_log_groups.format, wow_log_groups.flavor,
   u.username AS owner_name,
   files_agg.files,
   instances_output.output AS processing_output
@@ -1837,6 +1860,7 @@ func (q *sqlQuerier) ListAllWoWLogGroupsWithOwner(ctx context.Context) ([]ListAl
 			&i.WoWLogGroup.UpdatedAt,
 			&i.WoWLogGroup.LogType,
 			&i.WoWLogGroup.Format,
+			&i.WoWLogGroup.Flavor,
 			&i.OwnerName,
 			&i.Files,
 			&i.ProcessingOutput,
@@ -1853,7 +1877,7 @@ func (q *sqlQuerier) ListAllWoWLogGroupsWithOwner(ctx context.Context) ([]ListAl
 
 const listAllWoWLogGroupsWithOwnerPaginated = `-- name: ListAllWoWLogGroupsWithOwnerPaginated :many
 SELECT
-  wow_log_groups.id, wow_log_groups.owner, wow_log_groups.created_at, wow_log_groups.updated_at, wow_log_groups.log_type, wow_log_groups.format,
+  wow_log_groups.id, wow_log_groups.owner, wow_log_groups.created_at, wow_log_groups.updated_at, wow_log_groups.log_type, wow_log_groups.format, wow_log_groups.flavor,
   u.username AS owner_name,
   files_agg.files,
   files_agg.total_size_bytes,
@@ -2017,6 +2041,7 @@ func (q *sqlQuerier) ListAllWoWLogGroupsWithOwnerPaginated(ctx context.Context, 
 			&i.WoWLogGroup.UpdatedAt,
 			&i.WoWLogGroup.LogType,
 			&i.WoWLogGroup.Format,
+			&i.WoWLogGroup.Flavor,
 			&i.OwnerName,
 			&i.Files,
 			&i.TotalSizeBytes,
@@ -6202,7 +6227,7 @@ func (q *sqlQuerier) UpsertPendingModificationRequest(ctx context.Context, arg U
 }
 
 const findMatchingServerUpload = `-- name: FindMatchingServerUpload :one
-SELECT wlg.id, wlg.owner, wlg.created_at, wlg.updated_at, wlg.log_type, wlg.format
+SELECT wlg.id, wlg.owner, wlg.created_at, wlg.updated_at, wlg.log_type, wlg.format, wlg.flavor
 FROM wow_log_groups wlg
 JOIN server_upload_meta sm ON sm.log_group_id = wlg.id
 WHERE wlg.owner = $1
@@ -6243,6 +6268,7 @@ func (q *sqlQuerier) FindMatchingServerUpload(ctx context.Context, arg FindMatch
 		&i.UpdatedAt,
 		&i.LogType,
 		&i.Format,
+		&i.Flavor,
 	)
 	return i, err
 }

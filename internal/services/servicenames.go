@@ -23,4 +23,7 @@ const (
 	ServiceApplication = "application"
 	ServiceRankings    = "rankings"
 	ServiceDataset     = "dataset"
+	// ServiceFlavorBackfill is a one-shot boot migration service. It is intended
+	// to be deleted (package and registration) once all rows carry a flavor.
+	ServiceFlavorBackfill = "flavor-backfill"
 )

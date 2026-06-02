@@ -35,6 +35,7 @@ INSERT INTO
     owner,
     log_type,
     format,
+    flavor,
     created_at,
     updated_at
   )
@@ -45,9 +46,18 @@ VALUES
     $3,
     $4,
     $5,
-    $6
+    $6,
+    $7
   )
 RETURNING *
+;
+
+-- name: BackfillLogGroupFlavors :execrows
+-- Sets the flavor for every log group that has none yet. The flavor value is
+-- build-tag dependent (resolved in Go), so this can't be a SQL migration.
+UPDATE wow_log_groups
+SET flavor = @flavor::text[]
+WHERE flavor IS NULL
 ;
 
 -- name: GetWoWLogFilesByGroupID :many

@@ -66,6 +66,7 @@ type Chronicle struct {
 	emitParsingLogs    bool
 	instanceRegistry   *registry.Registry
 	primaryDomain      string
+	defaultFlavor      database.WoWFlavor
 
 	mu                     sync.Mutex
 	insertParsedInstanceMu sync.Mutex
@@ -81,12 +82,17 @@ type Options struct {
 	// PrimaryDomain is the root domain (e.g. "chronicleclassic.com") used to
 	// build tenant upload URLs in rejection messages.
 	PrimaryDomain string
+	// DefaultFlavor is the build-tag-derived flavor stamped on new log groups.
+	// Resolved from services.ServerName/ServerBuild by the constructing service
+	// (the chronicle package can't import services). Empty leaves flavor NULL.
+	DefaultFlavor database.WoWFlavor
 }
 
 func New(ctx context.Context, logger *slog.Logger, opts Options) (*Chronicle, error) {
 	c := &Chronicle{
 		AppContext:         ctx,
 		primaryDomain:      opts.PrimaryDomain,
+		defaultFlavor:      opts.DefaultFlavor,
 		Storage:            opts.Storage,
 		Zed:                opts.Zed,
 		ps:                 opts.Ps,
@@ -299,8 +305,11 @@ func (c *Chronicle) UploadLogs(ctx context.Context, inputs []UploadInput, logTyp
 			// log_type stays the persisted source for now; format is dual-written
 			// (derived from it) so consumers can read the format axis directly and
 			// we can later flip format to the source of truth.
-			LogType:   logType,
-			Format:    database.NullLogFormat{LogFormat: logType.Format(), Valid: logType.Format().Valid()},
+			LogType: logType,
+			Format:  database.NullLogFormat{LogFormat: logType.Format(), Valid: logType.Format().Valid()},
+			// flavor is the server's identity (build-tag default), independent
+			// of log_type. nil DefaultFlavor leaves the column NULL.
+			Flavor:    c.defaultFlavor.Strings(),
 			CreatedAt: database.Timestamptz(now),
 			UpdatedAt: database.Timestamptz(now),
 		})

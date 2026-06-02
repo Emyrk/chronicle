@@ -31,7 +31,75 @@ const (
 	// FlavorAzerothcore is AzerothCore-specific behavior (server-side or
 	// client-side; distinguish the two via LogFormat, not this tag).
 	FlavorAzerothcore FlavorTag = "azerothcore"
+	// FlavorVanillaPlus is VanillaPlus-specific behavior.
+	FlavorVanillaPlus FlavorTag = "vanillaplus"
+	// FlavorOctoWoW is OctoWoW-specific behavior.
+	FlavorOctoWoW FlavorTag = "octowow"
+	// FlavorAscension is Ascension-specific behavior.
+	FlavorAscension FlavorTag = "ascension"
+	// FlavorNightmareOfUrsol is the "Nightmare of Ursol" custom content shared
+	// by Turtle and OctoWoW.
+	FlavorNightmareOfUrsol FlavorTag = "nightmare-of-ursol"
 )
+
+// serverFlavors holds explicit tag sets for servers whose flavor is more than
+// {base, serverTag} — e.g. servers that share custom content with another
+// server. Keyed by services.ServerName; string literals are used here because
+// the database package can't import services (import cycle). Keep these keys in
+// sync with the services.ServerIdentity* constants.
+var serverFlavors = map[string]WoWFlavor{
+	"turtle":  {FlavorVanilla, FlavorNightmareOfUrsol, FlavorTurtle},
+	"octowow": {FlavorVanilla, FlavorNightmareOfUrsol, FlavorOctoWoW},
+}
+
+// ServerFlavor builds the default flavor tag set for a server build. base is
+// the era tag the build belongs to (FlavorVanilla for 1.12, FlavorWrath for
+// 3.3.5a); serverName is services.ServerName, whose value doubles as the
+// server-specific tag (e.g. "turtle", "epoch").
+//
+// Servers with shared/custom content are listed explicitly in serverFlavors;
+// everything else falls back to the generic {base, serverTag}.
+//
+// This is the build-tag-derived default used to stamp new log groups and to
+// backfill existing rows. It is a bootstrap: flavor's permanent source of truth
+// is per-tenant runtime config (server > tenant), like datasets. Because flavor
+// is stored as a plain text[] (FlavorTag is the vocabulary), the tag set can be
+// revised without a schema change.
+func ServerFlavor(serverName string, base FlavorTag) WoWFlavor {
+	if f, ok := serverFlavors[serverName]; ok {
+		return f
+	}
+	tag := FlavorTag(serverName)
+	if tag == base {
+		// Avoid duplicating the base tag (defensive; server names differ today).
+		return WoWFlavor{base}
+	}
+	return WoWFlavor{base, tag}
+}
+
+// Strings renders the flavor as a []string for storage in a text[] column.
+func (f WoWFlavor) Strings() []string {
+	if f == nil {
+		return nil
+	}
+	out := make([]string, len(f))
+	for i, t := range f {
+		out[i] = string(t)
+	}
+	return out
+}
+
+// FlavorFromStrings reconstructs a WoWFlavor from a text[] column value.
+func FlavorFromStrings(s []string) WoWFlavor {
+	if s == nil {
+		return nil
+	}
+	out := make(WoWFlavor, len(s))
+	for i, v := range s {
+		out[i] = FlavorTag(v)
+	}
+	return out
+}
 
 // Has reports whether the flavor includes tag.
 func (f WoWFlavor) Has(tag FlavorTag) bool {

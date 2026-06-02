@@ -9,23 +9,24 @@ import (
 	"github.com/Emyrk/chronicle/internal/services"
 	"github.com/Emyrk/chronicle/internal/services/serviceaccessurl"
 	"github.com/Emyrk/chronicle/internal/services/serviceapi"
-	"github.com/Emyrk/chronicle/internal/services/serviceauthz"
 	"github.com/Emyrk/chronicle/internal/services/serviceapplication"
+	"github.com/Emyrk/chronicle/internal/services/serviceassets"
+	"github.com/Emyrk/chronicle/internal/services/serviceauthz"
 	"github.com/Emyrk/chronicle/internal/services/servicebot"
 	"github.com/Emyrk/chronicle/internal/services/servicechronicle"
+	"github.com/Emyrk/chronicle/internal/services/servicedataset"
 	"github.com/Emyrk/chronicle/internal/services/servicedbstore"
+	"github.com/Emyrk/chronicle/internal/services/serviceflavorbackfill"
+	"github.com/Emyrk/chronicle/internal/services/servicegamedata"
 	"github.com/Emyrk/chronicle/internal/services/servicelogger"
+	"github.com/Emyrk/chronicle/internal/services/servicemail"
 	"github.com/Emyrk/chronicle/internal/services/servicepgxpool"
 	"github.com/Emyrk/chronicle/internal/services/servicepprof"
 	"github.com/Emyrk/chronicle/internal/services/serviceprometheus"
-	"github.com/Emyrk/chronicle/internal/services/serviceriver"
-	"github.com/Emyrk/chronicle/internal/services/servicestorage"
-	"github.com/Emyrk/chronicle/internal/services/serviceassets"
-	"github.com/Emyrk/chronicle/internal/services/servicedataset"
-	"github.com/Emyrk/chronicle/internal/services/servicegamedata"
-	"github.com/Emyrk/chronicle/internal/services/servicemail"
 	"github.com/Emyrk/chronicle/internal/services/servicerankings"
 	"github.com/Emyrk/chronicle/internal/services/serviceretention"
+	"github.com/Emyrk/chronicle/internal/services/serviceriver"
+	"github.com/Emyrk/chronicle/internal/services/servicestorage"
 	"github.com/Emyrk/chronicle/internal/services/servicetelemetry"
 	"github.com/Emyrk/chronicle/internal/services/servicetenant"
 	"github.com/Emyrk/chronicle/internal/services/servicewowdb"
@@ -53,6 +54,8 @@ func ServerCmd() *serpent.Command {
 		servicegamedata.New(srvs),
 		servicerankings.New(srvs),
 		servicechronicle.New(srvs),
+		// One-shot boot migration; delete once all log groups carry a flavor.
+		serviceflavorbackfill.New(srvs),
 		serviceretention.New(srvs),
 		servicetelemetry.New(srvs),
 		servicebot.New(srvs),

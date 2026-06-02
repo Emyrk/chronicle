@@ -4,6 +4,7 @@ import (
 	"context"
 
 	"github.com/Emyrk/chronicle/chronicle"
+	"github.com/Emyrk/chronicle/database"
 	"github.com/Emyrk/chronicle/internal/services"
 	"github.com/Emyrk/chronicle/internal/services/serviceauthz"
 	"github.com/Emyrk/chronicle/internal/services/servicelogger"
@@ -12,6 +13,7 @@ import (
 	"github.com/Emyrk/chronicle/internal/services/servicetenant"
 	"github.com/Emyrk/chronicle/internal/services/servicewowdb"
 
+	"github.com/Gophercraft/core/vsn"
 	"github.com/coder/serpent"
 )
 
@@ -53,6 +55,18 @@ func (s *Service) DependsOn() []string {
 	}
 }
 
+// BuildTagFlavor resolves the default flavor for this binary from its build
+// tags (services.ServerName / ServerBuild). It is the bootstrap source of
+// flavor until per-tenant runtime config exists, used both to stamp new log
+// groups (here) and to backfill old ones (serviceflavorbackfill).
+func BuildTagFlavor() database.WoWFlavor {
+	base := database.FlavorVanilla
+	if services.ServerBuild == vsn.V3_3_5a {
+		base = database.FlavorWrath
+	}
+	return database.ServerFlavor(services.ServerName, base)
+}
+
 func (s *Service) Start(ctx context.Context) error {
 	logger := servicelogger.Logger(s.broker)
 	st := servicestorage.Storage(s.broker)
@@ -69,6 +83,9 @@ func (s *Service) Start(ctx context.Context) error {
 		WoWDB:           wowDB.GameDB(),
 		EmitParsingLogs: s.emitParseLogs,
 		PrimaryDomain:   tenantSvc.PrimaryDomain(),
+		// Stamp the build-tag flavor on new log groups. Backfilling old rows is
+		// handled separately by serviceflavorbackfill.
+		DefaultFlavor: BuildTagFlavor(),
 	})
 	if err != nil {
 		return err
