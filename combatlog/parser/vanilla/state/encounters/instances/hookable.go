@@ -100,17 +100,19 @@ func NewHookable(ctx context.Context, logger *slog.Logger, db *unitdb.Units, z z
 
 	combatantStrategy := EmitAllActive
 	cres := classiccreatures.TurtleCharacterFactories()
-	logType, ok := parsectx.Type(ctx)
-	if !ok {
-		logType = database.LogTypeV2
-	}
+
+	// Read the resolved flavor + format from the parse context (stamped in
+	// logparse from the persisted columns). An unset context yields an empty
+	// flavor, which falls through to the default Turtle factories.
+	flavor, _ := parsectx.Flavor(ctx)
+	format, _ := parsectx.Format(ctx)
 
 	// AzerothCore flavor selects AzerothCore character factories over the
 	// default Turtle ones. The server-side mod and the client-side addon emit
 	// different data, so within the AzerothCore flavor the *format* picks the
 	// factory variant (server-side also emits all players, not just active).
-	if logType.Flavor().Has(database.FlavorAzerothcore) {
-		if logType.Format() == database.LogFormatAzerothcoreMod {
+	if flavor.Has(database.FlavorAzerothcore) {
+		if format == database.LogFormatAzerothcoreMod {
 			cres = wotlkcreatures.AzerothServersideCoreCharacterFactories()
 			combatantStrategy = EmitAllPlayers
 		} else {

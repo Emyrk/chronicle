@@ -197,8 +197,23 @@ func (w *WorkerLogParse) Work(ctx context.Context, job *river.Job[ArgsLogParse])
 		jobResult = "failure"
 		return fmt.Errorf("fetch log group: %w", err)
 	}
-	ctx = parsectx.WithType(ctx, logGroup.WoWLogGroup.LogType)
-	logFormat := logGroup.WoWLogGroup.LogType.Format()
+	// Resolve the parse metadata, preferring the persisted format/flavor
+	// columns and falling back to deriving from the legacy log type (rows
+	// predating the columns, or before the flavor backfill ran).
+	lg := logGroup.WoWLogGroup
+	logFormat := lg.LogType.Format()
+	if lg.Format.Valid {
+		logFormat = lg.Format.LogFormat
+	}
+	flavor := lg.LogType.Flavor()
+	if len(lg.Flavor) > 0 {
+		flavor = database.FlavorFromStrings(lg.Flavor)
+	}
+	ctx = parsectx.With(ctx, parsectx.Context{
+		Type:   lg.LogType,
+		Format: logFormat,
+		Flavor: flavor,
+	})
 
 	files, err := db.GetWoWLogFilesByGroupID(ctx, job.Args.LogID)
 	if err != nil {
