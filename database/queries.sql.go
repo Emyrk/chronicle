@@ -1412,7 +1412,7 @@ func (q *sqlQuerier) GetWoWLogFilesByGroupID(ctx context.Context, wowLogID uuid.
 
 const getWoWLogGroupByID = `-- name: GetWoWLogGroupByID :one
 SELECT
-  wow_log_groups.id, wow_log_groups.owner, wow_log_groups.created_at, wow_log_groups.updated_at, wow_log_groups.log_type,
+  wow_log_groups.id, wow_log_groups.owner, wow_log_groups.created_at, wow_log_groups.updated_at, wow_log_groups.log_type, wow_log_groups.format,
   COALESCE(
       jsonb_agg(
       jsonb_build_object(
@@ -1456,6 +1456,7 @@ func (q *sqlQuerier) GetWoWLogGroupByID(ctx context.Context, id uuid.UUID) (GetW
 		&i.WoWLogGroup.CreatedAt,
 		&i.WoWLogGroup.UpdatedAt,
 		&i.WoWLogGroup.LogType,
+		&i.WoWLogGroup.Format,
 		&i.Files,
 	)
 	return i, err
@@ -1463,7 +1464,7 @@ func (q *sqlQuerier) GetWoWLogGroupByID(ctx context.Context, id uuid.UUID) (GetW
 
 const getWoWLogGroupsByOwner = `-- name: GetWoWLogGroupsByOwner :many
 SELECT
-  wow_log_groups.id, wow_log_groups.owner, wow_log_groups.created_at, wow_log_groups.updated_at, wow_log_groups.log_type,
+  wow_log_groups.id, wow_log_groups.owner, wow_log_groups.created_at, wow_log_groups.updated_at, wow_log_groups.log_type, wow_log_groups.format,
   files_agg.files,
   instances_output.output AS processing_output
 FROM
@@ -1578,6 +1579,7 @@ func (q *sqlQuerier) GetWoWLogGroupsByOwner(ctx context.Context, arg GetWoWLogGr
 			&i.WoWLogGroup.CreatedAt,
 			&i.WoWLogGroup.UpdatedAt,
 			&i.WoWLogGroup.LogType,
+			&i.WoWLogGroup.Format,
 			&i.Files,
 			&i.ProcessingOutput,
 		); err != nil {
@@ -1681,7 +1683,7 @@ VALUES
     $4,
     $5
   )
-RETURNING id, owner, created_at, updated_at, log_type
+RETURNING id, owner, created_at, updated_at, log_type, format
 `
 
 type InsertWoWLogGroupParams struct {
@@ -1707,13 +1709,14 @@ func (q *sqlQuerier) InsertWoWLogGroup(ctx context.Context, arg InsertWoWLogGrou
 		&i.CreatedAt,
 		&i.UpdatedAt,
 		&i.LogType,
+		&i.Format,
 	)
 	return i, err
 }
 
 const listAllWoWLogGroupsWithOwner = `-- name: ListAllWoWLogGroupsWithOwner :many
 SELECT
-  wow_log_groups.id, wow_log_groups.owner, wow_log_groups.created_at, wow_log_groups.updated_at, wow_log_groups.log_type,
+  wow_log_groups.id, wow_log_groups.owner, wow_log_groups.created_at, wow_log_groups.updated_at, wow_log_groups.log_type, wow_log_groups.format,
   u.username AS owner_name,
   files_agg.files,
   instances_output.output AS processing_output
@@ -1829,6 +1832,7 @@ func (q *sqlQuerier) ListAllWoWLogGroupsWithOwner(ctx context.Context) ([]ListAl
 			&i.WoWLogGroup.CreatedAt,
 			&i.WoWLogGroup.UpdatedAt,
 			&i.WoWLogGroup.LogType,
+			&i.WoWLogGroup.Format,
 			&i.OwnerName,
 			&i.Files,
 			&i.ProcessingOutput,
@@ -1845,7 +1849,7 @@ func (q *sqlQuerier) ListAllWoWLogGroupsWithOwner(ctx context.Context) ([]ListAl
 
 const listAllWoWLogGroupsWithOwnerPaginated = `-- name: ListAllWoWLogGroupsWithOwnerPaginated :many
 SELECT
-  wow_log_groups.id, wow_log_groups.owner, wow_log_groups.created_at, wow_log_groups.updated_at, wow_log_groups.log_type,
+  wow_log_groups.id, wow_log_groups.owner, wow_log_groups.created_at, wow_log_groups.updated_at, wow_log_groups.log_type, wow_log_groups.format,
   u.username AS owner_name,
   files_agg.files,
   files_agg.total_size_bytes,
@@ -2008,6 +2012,7 @@ func (q *sqlQuerier) ListAllWoWLogGroupsWithOwnerPaginated(ctx context.Context, 
 			&i.WoWLogGroup.CreatedAt,
 			&i.WoWLogGroup.UpdatedAt,
 			&i.WoWLogGroup.LogType,
+			&i.WoWLogGroup.Format,
 			&i.OwnerName,
 			&i.Files,
 			&i.TotalSizeBytes,
@@ -6191,7 +6196,7 @@ func (q *sqlQuerier) UpsertPendingModificationRequest(ctx context.Context, arg U
 }
 
 const findMatchingServerUpload = `-- name: FindMatchingServerUpload :one
-SELECT wlg.id, wlg.owner, wlg.created_at, wlg.updated_at, wlg.log_type
+SELECT wlg.id, wlg.owner, wlg.created_at, wlg.updated_at, wlg.log_type, wlg.format
 FROM wow_log_groups wlg
 JOIN server_upload_meta sm ON sm.log_group_id = wlg.id
 WHERE wlg.owner = $1
@@ -6231,6 +6236,7 @@ func (q *sqlQuerier) FindMatchingServerUpload(ctx context.Context, arg FindMatch
 		&i.CreatedAt,
 		&i.UpdatedAt,
 		&i.LogType,
+		&i.Format,
 	)
 	return i, err
 }

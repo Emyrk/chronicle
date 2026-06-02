@@ -141,6 +141,70 @@ func AllKillTypeValues() []KillType {
 	}
 }
 
+type LogFormat string
+
+const (
+	LogFormat112aSuperwowAddon LogFormat = "1.12a-superwow-addon"
+	LogFormat112aCcAddon       LogFormat = "1.12a-cc-addon"
+	LogFormat335aCcAddon       LogFormat = "3.3.5a-cc-addon"
+	LogFormatAzerothcoreMod    LogFormat = "azerothcore-mod"
+)
+
+func (e *LogFormat) Scan(src interface{}) error {
+	switch s := src.(type) {
+	case []byte:
+		*e = LogFormat(s)
+	case string:
+		*e = LogFormat(s)
+	default:
+		return fmt.Errorf("unsupported scan type for LogFormat: %T", src)
+	}
+	return nil
+}
+
+type NullLogFormat struct {
+	LogFormat LogFormat `json:"log_format"`
+	Valid     bool      `json:"valid"` // Valid is true if LogFormat is not NULL
+}
+
+// Scan implements the Scanner interface.
+func (ns *NullLogFormat) Scan(value interface{}) error {
+	if value == nil {
+		ns.LogFormat, ns.Valid = "", false
+		return nil
+	}
+	ns.Valid = true
+	return ns.LogFormat.Scan(value)
+}
+
+// Value implements the driver Valuer interface.
+func (ns NullLogFormat) Value() (driver.Value, error) {
+	if !ns.Valid {
+		return nil, nil
+	}
+	return string(ns.LogFormat), nil
+}
+
+func (e LogFormat) Valid() bool {
+	switch e {
+	case LogFormat112aSuperwowAddon,
+		LogFormat112aCcAddon,
+		LogFormat335aCcAddon,
+		LogFormatAzerothcoreMod:
+		return true
+	}
+	return false
+}
+
+func AllLogFormatValues() []LogFormat {
+	return []LogFormat{
+		LogFormat112aSuperwowAddon,
+		LogFormat112aCcAddon,
+		LogFormat335aCcAddon,
+		LogFormatAzerothcoreMod,
+	}
+}
+
 type LogInstanceEventType string
 
 const (
@@ -1332,6 +1396,7 @@ type WoWLogGroup struct {
 	CreatedAt pgtype.Timestamptz `db:"created_at" json:"created_at"`
 	UpdatedAt pgtype.Timestamptz `db:"updated_at" json:"updated_at"`
 	LogType   LogType            `db:"log_type" json:"log_type"`
+	Format    NullLogFormat      `db:"format" json:"format"`
 }
 
 type World struct {

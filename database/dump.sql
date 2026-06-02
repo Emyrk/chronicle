@@ -17,6 +17,13 @@ CREATE TYPE kill_type AS ENUM (
     'reset'
 );
 
+CREATE TYPE log_format AS ENUM (
+    '1.12a-superwow-addon',
+    '1.12a-cc-addon',
+    '3.3.5a-cc-addon',
+    'azerothcore-mod'
+);
+
 CREATE TYPE log_instance_event_type AS ENUM (
     'damage',
     'heal',
@@ -1194,7 +1201,8 @@ CREATE TABLE wow_log_groups (
     owner uuid NOT NULL,
     created_at timestamp with time zone,
     updated_at timestamp with time zone,
-    log_type log_type DEFAULT 'v1'::log_type NOT NULL
+    log_type log_type DEFAULT 'v1'::log_type NOT NULL,
+    format log_format
 );
 
 CREATE TABLE wow_server_upload_keys (
