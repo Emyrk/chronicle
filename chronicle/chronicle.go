@@ -150,7 +150,17 @@ func (c *Chronicle) initStorage(ctx context.Context) error {
 	return nil
 }
 
-func (c *Chronicle) UploadLogs(ctx context.Context, inputs []UploadInput, logType database.LogType, realmID uuid.UUID) (*database.WoWLogGroup, []database.LogFile, error) {
+// UploadMeta carries optional caller-chosen overrides for a log group's parse
+// axes. The frontend picks these from the build tag (and, later, the tenant)
+// because the realm — and thus a server-side resolution — is not known until
+// after parsing. Empty fields fall back to server-side derivation: Format from
+// logType, Flavor from the build-tag default.
+type UploadMeta struct {
+	Format database.LogFormat
+	Flavor database.WoWFlavor
+}
+
+func (c *Chronicle) UploadLogs(ctx context.Context, inputs []UploadInput, logType database.LogType, realmID uuid.UUID, meta UploadMeta) (*database.WoWLogGroup, []database.LogFile, error) {
 	clean := cleanup.New()
 	defer clean.Do()
 
@@ -299,17 +309,29 @@ func (c *Chronicle) UploadLogs(ctx context.Context, inputs []UploadInput, logTyp
 	err = c.Zed.InTx(ctx, func(tx *authz.AuthzTX) error {
 		// Insert the log group
 		var err error
+		// Resolve the parse axes, preferring caller-supplied overrides (the
+		// frontend's build-tag/tenant choice) and falling back to server-side
+		// derivation.
+		format := logType.Format()
+		if meta.Format != "" {
+			format = meta.Format
+		}
+		flavor := c.defaultFlavor
+		if meta.Flavor != nil {
+			flavor = meta.Flavor
+		}
+
 		group, err = tx.InsertWoWLogGroup(ctx, database.InsertWoWLogGroupParams{
 			ID:    uuid.New(),
 			Owner: cl.Subject,
 			// log_type stays the persisted source for now; format is dual-written
-			// (derived from it) so consumers can read the format axis directly and
-			// we can later flip format to the source of truth.
+			// so consumers can read the format axis directly and we can later flip
+			// format to the source of truth.
 			LogType: logType,
-			Format:  database.NullLogFormat{LogFormat: logType.Format(), Valid: logType.Format().Valid()},
-			// flavor is the server's identity (build-tag default), independent
-			// of log_type. nil DefaultFlavor leaves the column NULL.
-			Flavor:    c.defaultFlavor.Strings(),
+			Format:  database.NullLogFormat{LogFormat: format, Valid: format.Valid()},
+			// flavor is the server's identity, independent of log_type. nil leaves
+			// the column NULL.
+			Flavor:    flavor.Strings(),
 			CreatedAt: database.Timestamptz(now),
 			UpdatedAt: database.Timestamptz(now),
 		})

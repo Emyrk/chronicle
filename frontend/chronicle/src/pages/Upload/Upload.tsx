@@ -9,7 +9,12 @@ import { Switch } from "@/components/ui/Switch/Switch";
 import { Label } from "@/components/ui/label";
 import { useAuth } from "@/hooks/useAuth";
 import { useAuthorizationCheck, useSiteConfig } from "@/api/queries";
-import { serverCapabilities } from "@/config/serverCapabilities";
+import {
+  serverCapabilities,
+  hasExplicitServerCapabilities,
+  LOG_FORMAT_OPTIONS,
+  FLAVOR_PRESET_OPTIONS,
+} from "@/config/serverCapabilities";
 
 /** Reusable file drop zone — supports click-to-browse and drag-and-drop. */
 function FileDropZone({
@@ -101,16 +106,6 @@ function FileDropZone({
   );
 }
 
-const LOG_TYPE_OPTIONS = [
-  { value: "", label: "Default (server)" },
-  { value: "v1", label: "V1 (Vanilla addon)" },
-  { value: "v2", label: "V2 (ChronicleCompanion Addon)" },
-  { value: "azerothcore-clientside", label: "AzerothCore Client-Side (WotLK)" },
-  { value: "epoch", label: "Epoch" },
-  { value: "kronos", label: "Kronos" },
-  { value: "azerothcore", label: "AzerothCore" },
-] as const;
-
 export interface UploadViewProps {
   isAuthenticated: boolean;
   authLoading: boolean;
@@ -127,8 +122,10 @@ export interface UploadViewProps {
   useV2Upload: boolean;
   onToggleV2Upload: (checked: boolean) => void;
   showLegacy: boolean;
-  logTypeOverride: string;
-  onLogTypeOverrideChange: (value: string) => void;
+  formatOverride: string;
+  onFormatOverrideChange: (value: string) => void;
+  flavorOverride: string;
+  onFlavorOverrideChange: (value: string) => void;
 }
 
 export function UploadView({
@@ -147,8 +144,10 @@ export function UploadView({
   useV2Upload,
   onToggleV2Upload,
   showLegacy,
-  logTypeOverride,
-  onLogTypeOverrideChange,
+  formatOverride,
+  onFormatOverrideChange,
+  flavorOverride,
+  onFlavorOverrideChange,
 }: UploadViewProps) {
   return (
     <div className="max-w-4xl mx-auto p-8 space-y-8">
@@ -254,24 +253,45 @@ export function UploadView({
             </Alert>
           )}
 
-          {/* Admin-only log type override */}
+          {/* Admin-only format + flavor override */}
           {hasAdminLogs && (
-            <div className="flex items-center gap-3">
-              <Label htmlFor="log-type-override" className="text-sm font-medium whitespace-nowrap">
-                Log Type
-              </Label>
-              <select
-                id="log-type-override"
-                value={logTypeOverride}
-                onChange={(e) => onLogTypeOverrideChange(e.target.value)}
-                className="h-8 px-2 rounded-md border border-input bg-background text-sm focus:outline-none focus:ring-2 focus:ring-ring"
-              >
-                {LOG_TYPE_OPTIONS.map((opt) => (
-                  <option key={opt.value} value={opt.value}>
-                    {opt.label}
-                  </option>
-                ))}
-              </select>
+            <div className="flex flex-wrap items-center gap-3">
+              <div className="flex items-center gap-2">
+                <Label htmlFor="format-override" className="text-sm font-medium whitespace-nowrap">
+                  Format
+                </Label>
+                <select
+                  id="format-override"
+                  value={formatOverride}
+                  onChange={(e) => onFormatOverrideChange(e.target.value)}
+                  className="h-8 px-2 rounded-md border border-input bg-background text-sm focus:outline-none focus:ring-2 focus:ring-ring"
+                >
+                  <option value="">Server default</option>
+                  {LOG_FORMAT_OPTIONS.map((opt) => (
+                    <option key={opt.value} value={opt.value}>
+                      {opt.label}
+                    </option>
+                  ))}
+                </select>
+              </div>
+              <div className="flex items-center gap-2">
+                <Label htmlFor="flavor-override" className="text-sm font-medium whitespace-nowrap">
+                  Flavor
+                </Label>
+                <select
+                  id="flavor-override"
+                  value={flavorOverride}
+                  onChange={(e) => onFlavorOverrideChange(e.target.value)}
+                  className="h-8 px-2 rounded-md border border-input bg-background text-sm focus:outline-none focus:ring-2 focus:ring-ring"
+                >
+                  <option value="">Server default</option>
+                  {FLAVOR_PRESET_OPTIONS.map((opt) => (
+                    <option key={opt.value} value={opt.value}>
+                      {opt.label}
+                    </option>
+                  ))}
+                </select>
+              </div>
             </div>
           )}
 
@@ -313,6 +333,22 @@ export function UploadView({
                   onFile={(f) => onFileDrop(f, "combat")}
                   label="Click or drag file here"
                 />
+                <p className="text-[10px] text-muted-foreground mt-1 text-center">
+                  Uploading as{" "}
+                  {formatOverride ? (
+                    <span className="font-mono">{formatOverride}</span>
+                  ) : (
+                    <span className="font-mono">server default</span>
+                  )}
+                  {flavorOverride && (
+                    <>
+                      {" · "}
+                      <span className="font-mono">
+                        [{flavorOverride.split(",").join(", ")}]
+                      </span>
+                    </>
+                  )}
+                </p>
               </div>
             </Card>
           ) : (
@@ -642,7 +678,16 @@ export function Upload() {
 
   const [combatLog, setCombatLog] = useState<File | null>(null);
   const [rawCombatLog, setRawCombatLog] = useState<File | null>(null);
-  const [logTypeOverride, setLogTypeOverride] = useState("");
+  // Admins can override the parse axes. They default to this build's values
+  // only when the server is explicitly configured; otherwise they start empty
+  // ("server default") so we don't mis-stamp an unconfigured server — the
+  // server's own derivation is authoritative.
+  const [formatOverride, setFormatOverride] = useState<string>(
+    hasExplicitServerCapabilities ? serverCapabilities.defaultFormat : "",
+  );
+  const [flavorOverride, setFlavorOverride] = useState<string>(
+    hasExplicitServerCapabilities ? serverCapabilities.defaultFlavor.join(",") : "",
+  );
   const [uploading, setUploading] = useState(false);
   const [uploadProgress, setUploadProgress] = useState(0);
   const [error, setError] = useState<{ message: string; call_to_action?: string; detail?: string; link?: string; link_text?: string } | null>(null);
@@ -780,8 +825,14 @@ export function Upload() {
       let endpoint = useV2Upload
         ? "/api/v1/raidlogs/logs/upload-v2"
         : "/api/v1/raidlogs/logs/upload";
-      if (logTypeOverride && useV2Upload) {
-        endpoint += `?log_type=${encodeURIComponent(logTypeOverride)}`;
+      if (useV2Upload) {
+        // Stamp the parse axes the frontend chose (defaulting to this build's
+        // values). The server uses these, falling back to its own derivation if
+        // somehow absent.
+        const params = new URLSearchParams();
+        if (formatOverride) params.set("format", formatOverride);
+        if (flavorOverride) params.set("flavor", flavorOverride);
+        endpoint += `?${params.toString()}`;
       }
       xhr.open("POST", endpoint);
       xhr.send(formData);
@@ -792,7 +843,7 @@ export function Upload() {
         detail: err instanceof Error ? err.message : String(err),
       });
     }
-  }, [combatLog, rawCombatLog, useV2Upload, logTypeOverride]);
+  }, [combatLog, rawCombatLog, useV2Upload, formatOverride, flavorOverride]);
 
   if (uploadsDisabled) {
     return (
@@ -825,8 +876,10 @@ export function Upload() {
       useV2Upload={useV2Upload}
       onToggleV2Upload={handleToggleV2Upload}
       showLegacy={showLegacy}
-      logTypeOverride={logTypeOverride}
-      onLogTypeOverrideChange={setLogTypeOverride}
+      formatOverride={formatOverride}
+      onFormatOverrideChange={setFormatOverride}
+      flavorOverride={flavorOverride}
+      onFlavorOverrideChange={setFlavorOverride}
     />
   );
 }

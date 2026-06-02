@@ -223,7 +223,7 @@ func (api *API) WoWLogUpload(w http.ResponseWriter, r *http.Request) {
 		IsGzipped: isGzipped(secondHeader),
 	}
 
-	group, files, err := api.Chronicle.UploadLogs(ctx, []chronicle.UploadInput{firstInput, secondInput}, database.LogTypeV1, uuid.Nil)
+	group, files, err := api.Chronicle.UploadLogs(ctx, []chronicle.UploadInput{firstInput, secondInput}, database.LogTypeV1, uuid.Nil, chronicle.UploadMeta{})
 	if err != nil {
 		httpapi.HandleResponseError(ctx, w, err, httpapi.APIError{
 			Response: chroniclesdk.Response{
@@ -332,7 +332,33 @@ func (api *API) WoWLogUploadV2(w http.ResponseWriter, r *http.Request) {
 		logType = overrideType
 	}
 
-	group, files, err := api.Chronicle.UploadLogs(ctx, []chronicle.UploadInput{input}, logType, uuid.Nil)
+	// The frontend chooses format + flavor from its build tag (and later the
+	// tenant), since the realm is unknown until after parsing. Both are
+	// optional; empty values fall back to server-side derivation.
+	var meta chronicle.UploadMeta
+	if f := r.URL.Query().Get("format"); f != "" {
+		format := database.LogFormat(f)
+		if !format.Valid() {
+			httpapi.Write(ctx, w, http.StatusBadRequest, chroniclesdk.Response{
+				Message: "Invalid format",
+				Detail:  fmt.Sprintf("unknown log format: %q", f),
+			})
+			return
+		}
+		meta.Format = format
+	}
+	if fl := r.URL.Query().Get("flavor"); fl != "" {
+		tags := strings.Split(fl, ",")
+		flavor := make(database.WoWFlavor, 0, len(tags))
+		for _, t := range tags {
+			if t = strings.TrimSpace(t); t != "" {
+				flavor = append(flavor, database.FlavorTag(t))
+			}
+		}
+		meta.Flavor = flavor
+	}
+
+	group, files, err := api.Chronicle.UploadLogs(ctx, []chronicle.UploadInput{input}, logType, uuid.Nil, meta)
 	if err != nil {
 		httpapi.HandleResponseError(ctx, w, err, httpapi.APIError{
 			Response: chroniclesdk.Response{
