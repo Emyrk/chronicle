@@ -1124,6 +1124,8 @@ type LogInstancesGuild struct {
 	TenantName         pgtype.Text        `db:"tenant_name" json:"tenant_name"`
 	TenantSlug         pgtype.Text        `db:"tenant_slug" json:"tenant_slug"`
 	TenantIncludeInAll bool               `db:"tenant_include_in_all" json:"tenant_include_in_all"`
+	Format             NullLogFormat      `db:"format" json:"format"`
+	Flavor             []string           `db:"flavor" json:"flavor"`
 }
 
 // A parsed_log_group is a wow_log_group that has been processed and contains parsed logs. A duplicate allows deleting this one row to clear all parsed logs for a given wow_log_group.

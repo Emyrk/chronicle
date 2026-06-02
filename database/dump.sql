@@ -626,6 +626,16 @@ CREATE TABLE tenants (
     CONSTRAINT tenants_slug_reserved CHECK ((slug <> ALL (ARRAY['www'::text, 'api'::text, 'auth'::text, 'admin'::text, 'legacy'::text, 'app'::text, 'mail'::text, 'staging'::text])))
 );
 
+CREATE TABLE wow_log_groups (
+    id uuid NOT NULL,
+    owner uuid NOT NULL,
+    created_at timestamp with time zone,
+    updated_at timestamp with time zone,
+    log_type log_type DEFAULT 'v1'::log_type NOT NULL,
+    format log_format,
+    flavor text[]
+);
+
 CREATE TABLE wow_server_realms (
     id uuid NOT NULL,
     server_id uuid NOT NULL,
@@ -673,12 +683,15 @@ CREATE VIEW log_instances_guild AS
     ws.name AS server_name,
     t.name AS tenant_name,
     t.slug AS tenant_slug,
-    COALESCE(t.include_in_all, true) AS tenant_include_in_all
-   FROM ((((public.log_instances li
+    COALESCE(t.include_in_all, true) AS tenant_include_in_all,
+    wlg.format,
+    wlg.flavor
+   FROM (((((public.log_instances li
      LEFT JOIN wow_server_realms wsr ON ((wsr.id = li.realm_id)))
      LEFT JOIN wow_servers ws ON ((wsr.server_id = ws.id)))
      LEFT JOIN tenants t ON ((ws.tenant_id = t.id)))
-     LEFT JOIN guilds g ON ((li.guild_id = g.id)));
+     LEFT JOIN guilds g ON ((li.guild_id = g.id)))
+     LEFT JOIN wow_log_groups wlg ON ((wlg.id = li.log_group_id)));
 
 CREATE TABLE parsed_log_group (
     id uuid NOT NULL
@@ -1194,16 +1207,6 @@ CREATE TABLE world_spell_threat (
     multiplier double precision DEFAULT 1 NOT NULL,
     ap_bonus double precision DEFAULT 0 NOT NULL,
     dataset_id uuid NOT NULL
-);
-
-CREATE TABLE wow_log_groups (
-    id uuid NOT NULL,
-    owner uuid NOT NULL,
-    created_at timestamp with time zone,
-    updated_at timestamp with time zone,
-    log_type log_type DEFAULT 'v1'::log_type NOT NULL,
-    format log_format,
-    flavor text[]
 );
 
 CREATE TABLE wow_server_upload_keys (

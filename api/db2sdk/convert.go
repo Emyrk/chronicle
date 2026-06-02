@@ -185,6 +185,10 @@ func WoWInstance(instance database.LogInstancesGuild) chroniclesdk.WoWInstance {
 		ret.TenantSlug = instance.TenantSlug.String
 	}
 	ret.TenantIncludeAll = instance.TenantIncludeInAll
+	if instance.Format.Valid {
+		ret.Format = string(instance.Format.LogFormat)
+	}
+	ret.Flavor = instance.Flavor
 	return ret
 }
 

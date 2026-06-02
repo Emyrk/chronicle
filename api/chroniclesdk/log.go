@@ -73,6 +73,11 @@ type WoWInstance struct {
 	// Frontends use it to fetch matching talent/spell data regardless of the
 	// tenant domain serving the request. Only populated on the detail endpoint.
 	DatasetID         uuid.UUID         `json:"dataset_id,omitempty"`
+	// Format is the log group's parse format (e.g. "1.12a-cc-addon").
+	// Flavor is the server-mechanics tag set. Both come from the log group and
+	// are only populated on the detail endpoint.
+	Format            string            `json:"format,omitempty"`
+	Flavor            []string          `json:"flavor,omitempty"`
 	RealmName         string            `json:"realm_name,omitempty"`
 	ServerName        string            `json:"server_name,omitempty"`
 	TenantName        string            `json:"tenant_name,omitempty"`

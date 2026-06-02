@@ -54,6 +54,9 @@ export interface Instance {
   units?: Record<string, InstanceUnit>;
   // Server-computed feature flags for this instance
   capabilities: readonly string[];
+  // Parse format and server-mechanics flavor of the source log group
+  format?: string;
+  flavor?: readonly string[];
   // Addon/dependency version metadata from the combat log header
   versions?: Record<string, string>;
   // Name of the player who recorded the combat log
@@ -104,6 +107,8 @@ function transformToInstance(
     players: Record<string, InstancePlayer> | null;
     units: Record<string, InstanceUnit> | null;
     capabilities?: readonly string[];
+    format?: string;
+    flavor?: readonly string[];
     versions?: Record<string, string>;
     recorder_name?: string;
     recorder_guid?: string;
@@ -169,6 +174,8 @@ function transformToInstance(
     players,
     units,
     capabilities: apiInstance.capabilities ?? [],
+    format: apiInstance.format,
+    flavor: apiInstance.flavor,
     versions: apiInstance.versions,
     recorderName: apiInstance.recorder_name,
     recorderGuid: apiInstance.recorder_guid,

@@ -2249,6 +2249,13 @@ export interface WoWInstance {
      * tenant domain serving the request. Only populated on the detail endpoint.
      */
     readonly dataset_id?: string;
+    /**
+     * Format is the log group's parse format (e.g. "1.12a-cc-addon").
+     * Flavor is the server-mechanics tag set. Both come from the log group and
+     * are only populated on the detail endpoint.
+     */
+    readonly format?: string;
+    readonly flavor?: readonly string[];
     readonly realm_name?: string;
     readonly server_name?: string;
     readonly tenant_name?: string;

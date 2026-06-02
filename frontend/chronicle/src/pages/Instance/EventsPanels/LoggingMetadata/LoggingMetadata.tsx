@@ -41,8 +41,10 @@ function LoggingMetadataContent({ context }: PanelRenderProps<LoggingMetadataRes
   const versions = instance.versions ?? {};
   const hasVersions = Object.keys(versions).length > 0;
   const hasRecorder = !!instance.recorderName || !!instance.recorderGuid;
+  const flavor = instance.flavor ?? [];
+  const hasSource = !!instance.format || flavor.length > 0;
 
-  if (!hasVersions && !hasRecorder) {
+  if (!hasVersions && !hasRecorder && !hasSource) {
     return (
       <div className="text-center py-4 text-muted-foreground text-sm">
         No logging metadata available for this instance.
@@ -52,6 +54,34 @@ function LoggingMetadataContent({ context }: PanelRenderProps<LoggingMetadataRes
 
   return (
     <div className="space-y-3 px-2 py-2 text-sm">
+      {hasSource && (
+        <div>
+          <h4 className="font-medium text-muted-foreground mb-1.5">Source</h4>
+          <div className="grid grid-cols-[auto_1fr] gap-x-4 gap-y-1">
+            {instance.format && (
+              <>
+                <span className="text-muted-foreground">Format</span>
+                <span className="font-mono text-xs">{instance.format}</span>
+              </>
+            )}
+            {flavor.length > 0 && (
+              <>
+                <span className="text-muted-foreground">Flavor</span>
+                <span className="flex flex-wrap gap-1">
+                  {flavor.map((tag) => (
+                    <span
+                      key={tag}
+                      className="rounded bg-muted px-1.5 py-0.5 font-mono text-xs"
+                    >
+                      {tag}
+                    </span>
+                  ))}
+                </span>
+              </>
+            )}
+          </div>
+        </div>
+      )}
       {hasRecorder && (
         <div>
           <h4 className="font-medium text-muted-foreground mb-1.5">Recorded By</h4>
