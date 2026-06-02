@@ -198,6 +198,7 @@ func (w *WorkerLogParse) Work(ctx context.Context, job *river.Job[ArgsLogParse])
 		return fmt.Errorf("fetch log group: %w", err)
 	}
 	ctx = parsectx.WithType(ctx, logGroup.WoWLogGroup.LogType)
+	logFormat := logGroup.WoWLogGroup.LogType.Format()
 
 	files, err := db.GetWoWLogFilesByGroupID(ctx, job.Args.LogID)
 	if err != nil {
@@ -205,9 +206,10 @@ func (w *WorkerLogParse) Work(ctx context.Context, job *river.Job[ArgsLogParse])
 		return fmt.Errorf("fetch log files: %w", err)
 	}
 
-	// Validate file count based on log type
+	// Validate file count based on log format. SuperWoW (1.12a) emits two
+	// files; every other format is a single file.
 	expectedFiles := 1
-	if logGroup.WoWLogGroup.LogType == database.LogTypeV1 {
+	if logFormat == database.LogFormat112aSuperwowAddon {
 		expectedFiles = 2
 	}
 	if len(files) != expectedFiles {
@@ -224,7 +226,7 @@ func (w *WorkerLogParse) Work(ctx context.Context, job *river.Job[ArgsLogParse])
 	var encountersState *encounters.State
 	reg := w.parent.Registry()
 
-	if logGroup.WoWLogGroup.LogType == database.LogTypeAzerothcore {
+	if logFormat == database.LogFormatAzerothcoreMod {
 		encountersState = azencounters.New(ctx, logLogger)
 	} else {
 		encountersState = encounters.New(ctx, logLogger, reg)
@@ -242,8 +244,8 @@ func (w *WorkerLogParse) Work(ctx context.Context, job *river.Job[ArgsLogParse])
 	}
 
 	var consumeErr error
-	switch logGroup.WoWLogGroup.LogType {
-	case database.LogTypeV1:
+	switch logFormat {
+	case database.LogFormat112aSuperwowAddon:
 		// Load and sort files
 		loadStart := time.Now()
 		var ri *realmclock.Info
@@ -284,7 +286,7 @@ func (w *WorkerLogParse) Work(ctx context.Context, job *river.Job[ArgsLogParse])
 		report.TotalLines = parserMetrics.TotalLinesParsed
 		metrics.linesProcessed.Add(float64(parserMetrics.TotalLinesParsed))
 
-	case database.LogTypeV2, database.LogTypeKronos:
+	case database.LogFormat112aCcAddon:
 		// Load and sort files
 		loadStart := time.Now()
 		rdr, err := w.loadFile(ctx, files[0])
@@ -311,7 +313,8 @@ func (w *WorkerLogParse) Work(ctx context.Context, job *river.Job[ArgsLogParse])
 
 		// V2 parser doesn't have metrics yet
 		// TODO: Add metrics to v2 parser
-	case database.LogTypeAzerothcoreClientside, database.LogTypeEpoch:
+	case database.LogFormat335aCcAddon:
+		// 3.3.5a client-side addon logs: warmane, epoch, azerothcore-clientside.
 		logCapabilities = append(logCapabilities, "interrupt")
 		// Load single file
 		loadStart := time.Now()
@@ -341,7 +344,7 @@ func (w *WorkerLogParse) Work(ctx context.Context, job *river.Job[ArgsLogParse])
 		report.TotalLines = parserMetrics.TotalLinesParsed
 		metrics.linesProcessed.Add(float64(parserMetrics.TotalLinesParsed))
 
-	case database.LogTypeAzerothcore:
+	case database.LogFormatAzerothcoreMod:
 		logCapabilities = append(logCapabilities, "interrupt", "absorb", "server-side")
 		// Load single file and normalize concatenated server chunks by unix timestamp.
 		loadStart := time.Now()
@@ -372,7 +375,7 @@ func (w *WorkerLogParse) Work(ctx context.Context, job *river.Job[ArgsLogParse])
 
 	default:
 		jobResult = "failure"
-		return fmt.Errorf("unknown log type: %s", logGroup.WoWLogGroup.LogType)
+		return fmt.Errorf("unknown log format %q (log type %q)", logFormat, logGroup.WoWLogGroup.LogType)
 	}
 
 	parseDuration := time.Since(parseStart)

@@ -97,13 +97,16 @@ func (w *WorkerRegressionSnapshot) Work(ctx context.Context, job *river.Job[Args
 		return fmt.Errorf("get log files: %w", err)
 	}
 
-	// Only V2 logs are supported for regression testing
-	if logGroup.WoWLogGroup.LogType != database.LogTypeV2 {
-		return river.JobCancel(fmt.Errorf("only V2 logs are supported for regression snapshots, got %s", logGroup.WoWLogGroup.LogType))
+	// Regression snapshots run through the v2 parser, which handles the
+	// 1.12a ChronicleCompanion addon format (log types v2 and kronos).
+	// Broadening to other formats requires sharing the full parser dispatch
+	// from logparse.go — tracked as future work.
+	if logGroup.WoWLogGroup.LogType.Format() != database.LogFormat112aCcAddon {
+		return river.JobCancel(fmt.Errorf("regression snapshots support the 1.12a-cc-addon format (v2/kronos), got log type %s (format %s)", logGroup.WoWLogGroup.LogType, logGroup.WoWLogGroup.LogType.Format()))
 	}
 
 	if len(files) != 1 {
-		return river.JobCancel(fmt.Errorf("V2 log group expects 1 file, has %d", len(files)))
+		return river.JobCancel(fmt.Errorf("1.12a-cc-addon log group expects 1 file, has %d", len(files)))
 	}
 
 	if files[0].StorageDeletedAt.Valid {
@@ -162,7 +165,7 @@ func (w *WorkerRegressionSnapshot) Work(ctx context.Context, job *river.Job[Args
 	prev, err := db.GetLatestRegressionSnapshot(ctx, job.Args.FixtureID)
 	if err == nil {
 		previousSnapshotID = uuid.NullUUID{UUID: prev.ID, Valid: true}
-		// Unmarshal both and compare structurally — JSONB may reorder keys
+		// Unmarshal both and compare structurally â JSONB may reorder keys
 		var prevVal, newVal interface{}
 		if err := json.Unmarshal(prev.Snapshot, &prevVal); err == nil {
 			if err := json.Unmarshal(jsonBytes, &newVal); err == nil {

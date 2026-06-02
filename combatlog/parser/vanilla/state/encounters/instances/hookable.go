@@ -105,12 +105,17 @@ func NewHookable(ctx context.Context, logger *slog.Logger, db *unitdb.Units, z z
 		logType = database.LogTypeV2
 	}
 
-	switch logType {
-	case database.LogTypeAzerothcore:
-		cres = wotlkcreatures.AzerothServersideCoreCharacterFactories()
-		combatantStrategy = EmitAllPlayers
-	case database.LogTypeAzerothcoreClientside:
-		cres = wotlkcreatures.NewAzerothCoreCharacterFactories()
+	// AzerothCore flavor selects AzerothCore character factories over the
+	// default Turtle ones. The server-side mod and the client-side addon emit
+	// different data, so within the AzerothCore flavor the *format* picks the
+	// factory variant (server-side also emits all players, not just active).
+	if logType.Flavor().Has(database.FlavorAzerothcore) {
+		if logType.Format() == database.LogFormatAzerothcoreMod {
+			cres = wotlkcreatures.AzerothServersideCoreCharacterFactories()
+			combatantStrategy = EmitAllPlayers
+		} else {
+			cres = wotlkcreatures.NewAzerothCoreCharacterFactories()
+		}
 	}
 
 	chrs := characters.NewCharacters(db, cres, ip.Idf)
