@@ -676,7 +676,7 @@ func (a *API) AdminBulkReparseOutdatedInstances(w http.ResponseWriter, r *http.R
 	}
 
 	for _, row := range rows {
-		_, enqueueErr := a.enqueueReparseLogGroup(ctx, row.LogGroupID, false, false, nil)
+		_, enqueueErr := a.enqueueReparseLogGroup(ctx, row.LogGroupID, false, false, reparseOverride{})
 		if enqueueErr != nil {
 			resp.Failed = append(resp.Failed, chroniclesdk.AdminBulkReparseFailure{
 				LogGroupID: row.LogGroupID,

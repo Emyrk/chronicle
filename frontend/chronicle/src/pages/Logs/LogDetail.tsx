@@ -42,6 +42,7 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/DropdownMenu/DropdownMenu";
 import { useAuth } from "@/hooks/useAuth";
+import { LOG_FORMAT_OPTIONS, FLAVOR_PRESET_OPTIONS } from "@/config/serverCapabilities";
 import { 
   useLogGroup,
   useLogGroupByFileHash,
@@ -90,6 +91,7 @@ const REPARSE_LOG_TYPES = [
   { value: "kronos", label: "Kronos" },
   { value: "azerothcore", label: "AzerothCore" },
 ] as const;
+
 
 const RIVER_STATES = {
   available: "available",
@@ -864,7 +866,7 @@ export interface LogDetailViewProps {
   isDeleting: boolean;
   showDeleteConfirm: boolean;
   setShowDeleteConfirm: (show: boolean) => void;
-  onReparse: (verbose: boolean, identityMode?: boolean, logType?: string) => void;
+  onReparse: (verbose: boolean, identityMode?: boolean, logType?: string, format?: string, flavor?: string) => void;
   isReparsing: boolean;
   canReparse: boolean;
   onDeleteFiles: () => void;
@@ -904,6 +906,15 @@ export function LogDetailView({
   isRefreshing,
 }: LogDetailViewProps) {
   const location = useLocation();
+  const [showReparseAxis, setShowReparseAxis] = useState(false);
+  const [reparseFormat, setReparseFormat] = useState("");
+  const [reparseFlavor, setReparseFlavor] = useState("");
+  // Open the axis panel, seeding the selects from the log's current values.
+  const openReparseAxis = () => {
+    setReparseFormat(log?.format ?? "");
+    setReparseFlavor((log?.flavor ?? []).join(","));
+    setShowReparseAxis(true);
+  };
   return (
     <div className="max-w-4xl mx-auto p-8 space-y-8">
       {/* Back link */}
@@ -1061,12 +1072,67 @@ export function LogDetailView({
                           ))}
                         </DropdownMenuSubContent>
                       </DropdownMenuSub>
+                      <DropdownMenuItem onClick={openReparseAxis}>
+                        <Play className="h-4 w-4 mr-2 text-purple-500" />
+                        Reparse format + flavor...
+                      </DropdownMenuItem>
                     </>
                   )}
                 </DropdownMenuContent>
               </DropdownMenu>
             )}
           </div>
+
+          {/* Reparse format + flavor panel (admin) */}
+          {showReparseAxis && (
+            <Card className="p-4 space-y-3 border-purple-500/40">
+              <h3 className="font-medium text-sm">Reparse with format + flavor</h3>
+              <div className="grid gap-3 sm:grid-cols-2">
+                <div className="space-y-1">
+                  <label className="text-xs text-muted-foreground">Format</label>
+                  <select
+                    value={reparseFormat}
+                    onChange={(e) => setReparseFormat(e.target.value)}
+                    className="w-full rounded-md border bg-background px-2 py-1 text-sm"
+                  >
+                    <option value="">(keep current)</option>
+                    {LOG_FORMAT_OPTIONS.map((opt) => (
+                      <option key={opt.value} value={opt.value}>{opt.label}</option>
+                    ))}
+                  </select>
+                </div>
+                <div className="space-y-1">
+                  <label className="text-xs text-muted-foreground">Flavor</label>
+                  <select
+                    value={reparseFlavor}
+                    onChange={(e) => setReparseFlavor(e.target.value)}
+                    className="w-full rounded-md border bg-background px-2 py-1 text-sm"
+                  >
+                    <option value="">(keep current)</option>
+                    {FLAVOR_PRESET_OPTIONS.map((opt) => (
+                      <option key={opt.value} value={opt.value}>{opt.label}</option>
+                    ))}
+                  </select>
+                </div>
+              </div>
+              <div className="flex gap-2">
+                <Button
+                  size="sm"
+                  disabled={isReparsing || (!reparseFormat && !reparseFlavor)}
+                  onClick={() => {
+                    onReparse(false, false, undefined, reparseFormat || undefined, reparseFlavor || undefined);
+                    setShowReparseAxis(false);
+                  }}
+                >
+                  <Play className="h-4 w-4 mr-2" />
+                  Reparse
+                </Button>
+                <Button size="sm" variant="outline" onClick={() => setShowReparseAxis(false)}>
+                  Cancel
+                </Button>
+              </div>
+            </Card>
+          )}
 
           {/* Processing Status Card */}
           <Card className="p-6">
@@ -1492,15 +1558,16 @@ export function LogDetail() {
     });
   };
 
-  const handleReparse = (withDebug = false, identityMode = false, logType?: string) => {
+  const handleReparse = (withDebug = false, identityMode = false, logType?: string, format?: string, flavor?: string) => {
     if (!logId) return;
-    reparseLogGroup.mutate({ logId, withDebug, identityMode, logType }, {
+    reparseLogGroup.mutate({ logId, withDebug, identityMode, logType, format, flavor }, {
       onSuccess: () => {
-        const label = logType
-          ? `Reparse as ${logType} started`
+        const axis = logType ?? format ?? flavor;
+        const label = axis
+          ? `Reparse as ${axis} started`
           : identityMode ? "Identity reparse started" : withDebug ? "Debug reparse started" : "Reparse started";
-        const desc = logType
-          ? `Your log is being reprocessed as ${logType}.`
+        const desc = axis
+          ? `Your log is being reprocessed as ${axis}.`
           : identityMode
             ? "Your log is being reprocessed to collect all creatures and spells."
             : withDebug
@@ -1651,15 +1718,16 @@ export function LogDetailByHash() {
     });
   };
 
-  const handleReparse = (withDebug = false, identityMode = false, logType?: string) => {
+  const handleReparse = (withDebug = false, identityMode = false, logType?: string, format?: string, flavor?: string) => {
     if (!logId) return;
-    reparseLogGroup.mutate({ logId, withDebug, identityMode, logType }, {
+    reparseLogGroup.mutate({ logId, withDebug, identityMode, logType, format, flavor }, {
       onSuccess: () => {
-        const label = logType
-          ? `Reparse as ${logType} started`
+        const axis = logType ?? format ?? flavor;
+        const label = axis
+          ? `Reparse as ${axis} started`
           : identityMode ? "Identity reparse started" : withDebug ? "Debug reparse started" : "Reparse started";
-        const desc = logType
-          ? `Your log is being reprocessed as ${logType}.`
+        const desc = axis
+          ? `Your log is being reprocessed as ${axis}.`
           : identityMode
             ? "Your log is being reprocessed to collect all creatures and spells."
             : withDebug

@@ -74,14 +74,19 @@ func WoWLogGroupRow[T database.GetWoWLogGroupsByOwnerRow | database.GetWoWLogGro
 			ProcessingOutput: g.ProcessingOutput,
 		}
 	case database.GetWoWLogGroupByIDRow:
-		return chroniclesdk.WoWLogGroup{
+		out := chroniclesdk.WoWLogGroup{
 			ID:        g.WoWLogGroup.ID,
 			Owner:     g.WoWLogGroup.Owner,
 			CreatedAt: g.WoWLogGroup.CreatedAt,
 			UpdatedAt: g.WoWLogGroup.UpdatedAt,
 			LogType:   string(g.WoWLogGroup.LogType),
+			Flavor:    g.WoWLogGroup.Flavor,
 			Files:     slice.List(g.Files, WoWLogFile),
 		}
+		if g.WoWLogGroup.Format.Valid {
+			out.Format = string(g.WoWLogGroup.Format.LogFormat)
+		}
+		return out
 	default:
 		panic("unexpected type")
 	}

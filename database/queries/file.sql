@@ -71,6 +71,19 @@ ORDER BY
   created_at DESC
 ;
 
+-- name: UpdateWoWLogGroupFormatFlavor :exec
+-- Sets the parse axes directly (admin reparse override). Either may be omitted
+-- via a NULL narg to leave that column unchanged.
+UPDATE
+  wow_log_groups
+SET
+  format = COALESCE(sqlc.narg('format')::log_format, format),
+  flavor = COALESCE(sqlc.narg('flavor')::text[], flavor),
+  updated_at = NOW()
+WHERE
+  id = sqlc.arg('id')
+;
+
 -- name: UpdateWoWLogGroupLogType :exec
 UPDATE
   wow_log_groups

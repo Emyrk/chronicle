@@ -21,7 +21,28 @@ import (
 
 const MaxLogFileSize = 250 * 1024 * 1024 // 250 MB
 
-func (api *API) enqueueReparseLogGroup(ctx context.Context, logID uuid.UUID, verbose bool, identityMode bool, overrideType *database.LogType) (int64, error) {
+// parseFlavorParam parses a comma-separated flavor query param into a WoWFlavor,
+// trimming whitespace and dropping empties.
+func parseFlavorParam(raw string) database.WoWFlavor {
+	tags := strings.Split(raw, ",")
+	flavor := make(database.WoWFlavor, 0, len(tags))
+	for _, t := range tags {
+		if t = strings.TrimSpace(t); t != "" {
+			flavor = append(flavor, database.FlavorTag(t))
+		}
+	}
+	return flavor
+}
+
+// reparseOverride carries optional admin overrides applied to the log group
+// before reparsing. Any nil/empty field leaves the persisted value unchanged.
+type reparseOverride struct {
+	LogType *database.LogType
+	Format  *database.LogFormat
+	Flavor  database.WoWFlavor
+}
+
+func (api *API) enqueueReparseLogGroup(ctx context.Context, logID uuid.UUID, verbose bool, identityMode bool, override reparseOverride) (int64, error) {
 	files, err := api.Zed.GetWoWLogFilesByGroupID(ctx, logID)
 	if err != nil {
 		return 0, err
@@ -37,14 +58,30 @@ func (api *API) enqueueReparseLogGroup(ctx context.Context, logID uuid.UUID, ver
 		}
 	}
 
-	if overrideType != nil {
+	if override.LogType != nil {
 		err := api.Zed.UpdateWoWLogGroupLogType(ctx, database.UpdateWoWLogGroupLogTypeParams{
 			ID:      logID,
-			LogType: *overrideType,
+			LogType: *override.LogType,
 			// Keep the dual-written format axis in sync with the overridden type.
-			Format: database.NullLogFormat{LogFormat: overrideType.Format(), Valid: overrideType.Format().Valid()},
+			Format: database.NullLogFormat{LogFormat: override.LogType.Format(), Valid: override.LogType.Format().Valid()},
 		})
 		if err != nil {
+			return 0, err
+		}
+	}
+
+	// Direct format/flavor overrides win over any log-type-derived format and
+	// are the only way to set flavor. Applied after the log_type update so an
+	// explicit format isn't clobbered by the derived one.
+	if override.Format != nil || override.Flavor != nil {
+		params := database.UpdateWoWLogGroupFormatFlavorParams{ID: logID}
+		if override.Format != nil {
+			params.Format = database.NullLogFormat{LogFormat: *override.Format, Valid: override.Format.Valid()}
+		}
+		if override.Flavor != nil {
+			params.Flavor = override.Flavor.Strings()
+		}
+		if err := api.Zed.UpdateWoWLogGroupFormatFlavor(ctx, params); err != nil {
 			return 0, err
 		}
 	}
@@ -86,29 +123,47 @@ func (api *API) WoWLogReparse(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	var overrideType *database.LogType
-	// Admin override: allow changing the log_type before reparsing.
-	if override := r.URL.Query().Get("log_type"); override != "" {
-		parsedOverrideType := database.LogType(override)
-		if !parsedOverrideType.Valid() {
-			httpapi.Write(ctx, w, http.StatusBadRequest, chroniclesdk.Response{
-				Message: "Invalid log_type override",
-				Detail:  fmt.Sprintf("unknown log type: %q", override),
-			})
-			return
-		}
+	var override reparseOverride
+	q := r.URL.Query()
+	// Admin overrides: log_type, format, and/or flavor. Any of these requires
+	// admin; check once if at least one is present.
+	if q.Get("log_type") != "" || q.Get("format") != "" || q.Get("flavor") != "" {
 		ltActor, _ := authz.ActorFromContext(ctx)
 		isAdmin, adminErr := api.Zed.CheckOne(ctx, nil, policy.New().GlobalChronicle().CanAdmin_logs_User(ltActor))
 		if adminErr != nil || !isAdmin {
 			httpapi.Write(ctx, w, http.StatusForbidden, chroniclesdk.Response{
-				Message: "Only admins can override the log type",
+				Message: "Only admins can override the parse axes",
 			})
 			return
 		}
-		overrideType = &parsedOverrideType
+	}
+	if lt := q.Get("log_type"); lt != "" {
+		parsedOverrideType := database.LogType(lt)
+		if !parsedOverrideType.Valid() {
+			httpapi.Write(ctx, w, http.StatusBadRequest, chroniclesdk.Response{
+				Message: "Invalid log_type override",
+				Detail:  fmt.Sprintf("unknown log type: %q", lt),
+			})
+			return
+		}
+		override.LogType = &parsedOverrideType
+	}
+	if f := q.Get("format"); f != "" {
+		format := database.LogFormat(f)
+		if !format.Valid() {
+			httpapi.Write(ctx, w, http.StatusBadRequest, chroniclesdk.Response{
+				Message: "Invalid format override",
+				Detail:  fmt.Sprintf("unknown log format: %q", f),
+			})
+			return
+		}
+		override.Format = &format
+	}
+	if fl := q.Get("flavor"); fl != "" {
+		override.Flavor = parseFlavorParam(fl)
 	}
 
-	jobID, err := api.enqueueReparseLogGroup(ctx, logID, verbose, identityMode, overrideType)
+	jobID, err := api.enqueueReparseLogGroup(ctx, logID, verbose, identityMode, override)
 	if err != nil {
 		httpapi.HandleResponseError(ctx, w, err, httpapi.APIError{
 			Response: chroniclesdk.Response{
@@ -348,14 +403,7 @@ func (api *API) WoWLogUploadV2(w http.ResponseWriter, r *http.Request) {
 		meta.Format = format
 	}
 	if fl := r.URL.Query().Get("flavor"); fl != "" {
-		tags := strings.Split(fl, ",")
-		flavor := make(database.WoWFlavor, 0, len(tags))
-		for _, t := range tags {
-			if t = strings.TrimSpace(t); t != "" {
-				flavor = append(flavor, database.FlavorTag(t))
-			}
-		}
-		meta.Flavor = flavor
+		meta.Flavor = parseFlavorParam(fl)
 	}
 
 	group, files, err := api.Chronicle.UploadLogs(ctx, []chronicle.UploadInput{input}, logType, uuid.Nil, meta)

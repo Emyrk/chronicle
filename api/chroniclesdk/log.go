@@ -41,6 +41,8 @@ type WoWLogGroup struct {
 	CreatedAt pgtype.Timestamptz `json:"created_at"`
 	UpdatedAt pgtype.Timestamptz `json:"updated_at"`
 	LogType   string             `json:"log_type"`
+	Format    string             `json:"format,omitempty"`
+	Flavor    []string           `json:"flavor,omitempty"`
 
 	Files            []WoWLogFile    `json:"files"`
 	ProcessingOutput json.RawMessage `json:"processing_output,omitempty"`

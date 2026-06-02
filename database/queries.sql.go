@@ -2130,6 +2130,30 @@ func (q *sqlQuerier) UpdateLogFileAfterAppend(ctx context.Context, arg UpdateLog
 	return err
 }
 
+const updateWoWLogGroupFormatFlavor = `-- name: UpdateWoWLogGroupFormatFlavor :exec
+UPDATE
+  wow_log_groups
+SET
+  format = COALESCE($1::log_format, format),
+  flavor = COALESCE($2::text[], flavor),
+  updated_at = NOW()
+WHERE
+  id = $3
+`
+
+type UpdateWoWLogGroupFormatFlavorParams struct {
+	Format NullLogFormat `db:"format" json:"format"`
+	Flavor []string      `db:"flavor" json:"flavor"`
+	ID     uuid.UUID     `db:"id" json:"id"`
+}
+
+// Sets the parse axes directly (admin reparse override). Either may be omitted
+// via a NULL narg to leave that column unchanged.
+func (q *sqlQuerier) UpdateWoWLogGroupFormatFlavor(ctx context.Context, arg UpdateWoWLogGroupFormatFlavorParams) error {
+	_, err := q.db.Exec(ctx, updateWoWLogGroupFormatFlavor, arg.Format, arg.Flavor, arg.ID)
+	return err
+}
+
 const updateWoWLogGroupLogType = `-- name: UpdateWoWLogGroupLogType :exec
 UPDATE
   wow_log_groups

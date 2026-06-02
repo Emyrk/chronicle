@@ -2299,6 +2299,8 @@ export interface WoWLogGroup {
     readonly created_at: string;
     readonly updated_at: string;
     readonly log_type: string;
+    readonly format?: string;
+    readonly flavor?: readonly string[];
     readonly files: readonly WoWLogFile[];
     readonly processing_output?: Record<string, string>;
 }

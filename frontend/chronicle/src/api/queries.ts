@@ -632,13 +632,17 @@ export interface ReparseLogGroupOptions {
   identityMode?: boolean;
   /** Override the log type before reparsing (admin only) */
   logType?: string;
+  /** Override the parse format before reparsing (admin only) */
+  format?: string;
+  /** Override the server flavor (comma-joined tags) before reparsing (admin only) */
+  flavor?: string;
 }
 
 export function useReparseLogGroup() {
   const queryClient = useQueryClient();
   
   return useMutation({
-    mutationFn: async ({ logId, withDebug = false, identityMode = false, logType }: ReparseLogGroupOptions) => {
+    mutationFn: async ({ logId, withDebug = false, identityMode = false, logType, format, flavor }: ReparseLogGroupOptions) => {
       const url = new URL(`/api/v1/raidlogs/logs/${logId}/reparse`, window.location.origin);
       if (withDebug) {
         url.searchParams.set("verbose", "true");
@@ -648,6 +652,12 @@ export function useReparseLogGroup() {
       }
       if (logType) {
         url.searchParams.set("log_type", logType);
+      }
+      if (format) {
+        url.searchParams.set("format", format);
+      }
+      if (flavor) {
+        url.searchParams.set("flavor", flavor);
       }
       const response = await fetch(url.toString(), {
         method: "POST",

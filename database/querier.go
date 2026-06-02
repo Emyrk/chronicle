@@ -346,6 +346,9 @@ type sqlcQuerier interface {
 	UpdateUserPanelLayoutDefaults(ctx context.Context, arg UpdateUserPanelLayoutDefaultsParams) (UpdateUserPanelLayoutDefaultsRow, error)
 	UpdateUserPassword(ctx context.Context, arg UpdateUserPasswordParams) error
 	UpdateUserRawLogRetentionHours(ctx context.Context, arg UpdateUserRawLogRetentionHoursParams) (User, error)
+	// Sets the parse axes directly (admin reparse override). Either may be omitted
+	// via a NULL narg to leave that column unchanged.
+	UpdateWoWLogGroupFormatFlavor(ctx context.Context, arg UpdateWoWLogGroupFormatFlavorParams) error
 	UpdateWoWLogGroupLogType(ctx context.Context, arg UpdateWoWLogGroupLogTypeParams) error
 	UpdateWoWServer(ctx context.Context, arg UpdateWoWServerParams) (WowServer, error)
 	UpdateWoWServerRealm(ctx context.Context, arg UpdateWoWServerRealmParams) (WowServerRealm, error)
