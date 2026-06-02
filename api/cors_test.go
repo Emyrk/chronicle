@@ -31,6 +31,8 @@ func TestCors(t *testing.T) {
 		{"production origin OPTIONS allowed", "https://chronicleclassic.com", "OPTIONS", true},
 		{"production origin GET allowed", "https://chronicleclassic.com", "GET", true},
 		{"production origin POST disallowed", "https://chronicleclassic.com", "POST", false},
+		{"wiki subdomain OPTIONS allowed", "https://wiki.chronicleclassic.com", "OPTIONS", true},
+		{"wiki subdomain GET allowed", "https://wiki.chronicleclassic.com", "GET", true},
 		{"random origin rejected", "https://evil.com", "OPTIONS", false},
 		{"no origin", "", "OPTIONS", false},
 	}

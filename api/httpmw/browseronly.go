@@ -35,6 +35,7 @@ func BrowserOnly(accessURL *url.URL) func(next http.Handler) http.Handler {
 				switch strings.TrimSuffix(origin, "/") {
 				case "https://jollygrin.github.io":
 				case "https://chronicleclassic.com":
+				case "https://wiki.chronicleclassic.com":
 				default:
 					http.Error(w, "Forbidden, only browser requests from https://chronicleclassic.com are allowed", http.StatusForbidden)
 					return

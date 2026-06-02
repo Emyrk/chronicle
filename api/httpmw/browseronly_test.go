@@ -25,14 +25,16 @@ func TestBrowserOnly(t *testing.T) {
 		name       string
 		accessURL  *url.URL
 		secFetch   string
+		origin     string
 		wantStatus int
 	}{
-		{"prod same-origin allowed", prodURL, "same-origin", http.StatusOK},
-		{"prod same-site allowed", prodURL, "same-site", http.StatusOK},
-		{"prod none allowed", prodURL, "none", http.StatusOK},
-		{"prod cross-site rejected", prodURL, "cross-site", http.StatusForbidden},
-		{"prod missing header rejected", prodURL, "", http.StatusForbidden},
-		{"dev missing header allowed", devURL, "", http.StatusOK},
+		{"prod same-origin allowed", prodURL, "same-origin", "", http.StatusOK},
+		{"prod same-site allowed", prodURL, "same-site", "", http.StatusOK},
+		{"prod none allowed", prodURL, "none", "", http.StatusOK},
+		{"prod cross-site wiki allowed", prodURL, "cross-site", "https://wiki.chronicleclassic.com", http.StatusOK},
+		{"prod cross-site rejected", prodURL, "cross-site", "", http.StatusForbidden},
+		{"prod missing header rejected", prodURL, "", "", http.StatusForbidden},
+		{"dev missing header allowed", devURL, "", "", http.StatusOK},
 	}
 
 	for _, tc := range tests {
@@ -43,6 +45,9 @@ func TestBrowserOnly(t *testing.T) {
 			req := httptest.NewRequest(http.MethodGet, "/api/v1/whoami", nil)
 			if tc.secFetch != "" {
 				req.Header.Set("Sec-Fetch-Site", tc.secFetch)
+			}
+			if tc.origin != "" {
+				req.Header.Set("Origin", tc.origin)
 			}
 			rec := httptest.NewRecorder()
 			handler.ServeHTTP(rec, req)

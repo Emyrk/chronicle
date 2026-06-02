@@ -171,7 +171,7 @@ func (s *Service) IsAllowedOrigin(origin string) bool {
 	}
 
 	// Always allow known base origins.
-	if origin == "https://chronicleclassic.com" || origin == "https://jollygrin.github.io" {
+	if origin == "https://chronicleclassic.com" || origin == "https://wiki.chronicleclassic.com" || origin == "https://jollygrin.github.io" {
 		return true
 	}
 
