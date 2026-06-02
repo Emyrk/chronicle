@@ -164,6 +164,7 @@ type sqlcQuerier interface {
 	GetWorld(ctx context.Context, id uuid.UUID) (World, error)
 	GetWorldByName(ctx context.Context, name string) (World, error)
 	GetWorldsByServer(ctx context.Context, serverID uuid.UUID) ([]World, error)
+	HasInstanceDpsRankings(ctx context.Context, instanceID uuid.UUID) (bool, error)
 	InsertDataset(ctx context.Context, arg InsertDatasetParams) (Dataset, error)
 	InsertEncounter(ctx context.Context, arg InsertEncounterParams) (LogInstanceEncounter, error)
 	InsertEncounterCharacterFights(ctx context.Context, arg []InsertEncounterCharacterFightsParams) *InsertEncounterCharacterFightsBatchResults

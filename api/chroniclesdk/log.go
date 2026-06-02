@@ -307,7 +307,13 @@ type SpeedrunResult struct {
 	Proof          []SpeedrunProof           `json:"proof"`
 	VersionStatus    *SpeedrunVersionStatus      `json:"version_status,omitempty"`
 	LevelRange       *SpeedrunLevelRangeResult   `json:"level_range,omitempty"`
-	DataSourceStatus *SpeedrunDataSourceStatus   `json:"data_source,omitempty"`
+	DataSourceStatus  *SpeedrunDataSourceStatus   `json:"data_source,omitempty"`
+	DpsRankingsStatus *DpsRankingsStatus          `json:"dps_rankings,omitempty"`
+}
+
+// DpsRankingsStatus reports whether DPS rankings were recorded for this instance.
+type DpsRankingsStatus struct {
+	HasRankings bool `json:"has_rankings"`
 }
 
 // SpeedrunDataSourceStatus reports whether the instance has a valid data source

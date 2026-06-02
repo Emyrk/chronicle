@@ -476,6 +476,14 @@ export interface DiscoveryEntry {
 
 // From chroniclesdk/log.go
 /**
+ * DpsRankingsStatus reports whether DPS rankings were recorded for this instance.
+ */
+export interface DpsRankingsStatus {
+    readonly has_rankings: boolean;
+}
+
+// From chroniclesdk/log.go
+/**
  * DuplicateInstance is a sibling instance in the same duplicate group.
  */
 export interface DuplicateInstance {
@@ -1767,6 +1775,7 @@ export interface SpeedrunResult {
     readonly version_status?: SpeedrunVersionStatus;
     readonly level_range?: SpeedrunLevelRangeResult;
     readonly data_source?: SpeedrunDataSourceStatus;
+    readonly dps_rankings?: DpsRankingsStatus;
 }
 
 // From chroniclesdk/log.go

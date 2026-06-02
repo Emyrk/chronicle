@@ -173,6 +173,24 @@ function LeaderboardContent(props: PanelRenderProps<LeaderboardPanelResult>) {
         </div>
       )}
 
+      {speedrun.dps_rankings && (
+        <div className="mt-3 pt-3 border-t border-zinc-800">
+          <div className="flex items-center gap-1.5 text-xs mb-1">
+            {speedrun.dps_rankings.has_rankings ? (
+              <CheckCircle2 className="h-3 w-3 text-emerald-500 shrink-0" />
+            ) : (
+              <XCircle className="h-3 w-3 text-zinc-600 shrink-0" />
+            )}
+            <span className="font-medium text-zinc-500">
+              DPS Rankings:{" "}
+              <span className={speedrun.dps_rankings.has_rankings ? "text-zinc-300" : "text-zinc-500"}>
+                {speedrun.dps_rankings.has_rankings ? "Recorded" : "Not recorded"}
+              </span>
+            </span>
+          </div>
+        </div>
+      )}
+
       {speedrun.level_range && (
         <div className="mt-3 pt-3 border-t border-zinc-800">
           <div className="flex items-center gap-1.5 text-xs mb-1">

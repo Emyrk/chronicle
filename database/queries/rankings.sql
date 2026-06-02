@@ -439,3 +439,9 @@ SELECT
 FROM deduped d
 GROUP BY d.encounter_name
 ORDER BY (d.encounter_name = 'Trash'), d.encounter_name;
+
+
+-- name: HasInstanceDpsRankings :one
+SELECT EXISTS(
+    SELECT 1 FROM encounter_dps_rankings WHERE instance_id = @instance_id
+) AS has_rankings;

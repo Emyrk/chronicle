@@ -4137,6 +4137,19 @@ func (q *sqlQuerier) SetDuplicateGroupIDs(ctx context.Context, arg SetDuplicateG
 	return err
 }
 
+const hasInstanceDpsRankings = `-- name: HasInstanceDpsRankings :one
+SELECT EXISTS(
+    SELECT 1 FROM encounter_dps_rankings WHERE instance_id = $1
+) AS has_rankings
+`
+
+func (q *sqlQuerier) HasInstanceDpsRankings(ctx context.Context, instanceID uuid.UUID) (bool, error) {
+	row := q.db.QueryRow(ctx, hasInstanceDpsRankings, instanceID)
+	var has_rankings bool
+	err := row.Scan(&has_rankings)
+	return has_rankings, err
+}
+
 const insertEncounterDpsRanking = `-- name: InsertEncounterDpsRanking :exec
 INSERT INTO encounter_dps_rankings (
     encounter_id, instance_id, encounter_name, instance_name,

@@ -170,6 +170,14 @@ func (api *API) InstanceSpeedrun(w http.ResponseWriter, r *http.Request) {
 		Eligible:        hasServerSide || hasAddonVersion,
 	}
 
+	// Attach DPS rankings status.
+	hasRankings, err := api.Opts.Zed.HasInstanceDpsRankings(ctx, inst.ID)
+	if err == nil {
+		result.DpsRankingsStatus = &chroniclesdk.DpsRankingsStatus{
+			HasRankings: hasRankings,
+		}
+	}
+
 	httpapi.Write(ctx, w, http.StatusOK, result)
 }
 
