@@ -34,6 +34,7 @@ INSERT INTO
     id,
     owner,
     log_type,
+    format,
     created_at,
     updated_at
   )
@@ -43,7 +44,8 @@ VALUES
     $2,
     $3,
     $4,
-    $5
+    $5,
+    $6
   )
 RETURNING *
 ;
@@ -64,6 +66,7 @@ UPDATE
   wow_log_groups
 SET
   log_type = $2,
+  format = $3,
   updated_at = NOW()
 WHERE
   id = $1

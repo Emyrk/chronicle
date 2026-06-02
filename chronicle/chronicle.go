@@ -63,9 +63,9 @@ type Chronicle struct {
 	WoWDB              *gamedb.WoWDB
 	ItemFetcher        gamedb.GearResolver
 	metrics            *logParseMetrics
-	emitParsingLogs  bool
-	instanceRegistry *registry.Registry
-	primaryDomain    string
+	emitParsingLogs    bool
+	instanceRegistry   *registry.Registry
+	primaryDomain      string
 
 	mu                     sync.Mutex
 	insertParsedInstanceMu sync.Mutex
@@ -85,18 +85,18 @@ type Options struct {
 
 func New(ctx context.Context, logger *slog.Logger, opts Options) (*Chronicle, error) {
 	c := &Chronicle{
-		AppContext:     ctx,
-		primaryDomain: opts.PrimaryDomain,
+		AppContext:         ctx,
+		primaryDomain:      opts.PrimaryDomain,
 		Storage:            opts.Storage,
 		Zed:                opts.Zed,
 		ps:                 opts.Ps,
 		logger:             logger,
 		WoWDB:              opts.WoWDB,
 		TemporaryDirectory: filepath.Join(os.TempDir(), "chronicle_uploads"),
-		metrics:          newLogParseMetrics(opts.Registry),
-		ItemFetcher:      opts.WoWDB,
-		emitParsingLogs:  opts.EmitParsingLogs,
-		instanceRegistry: registry.DefaultRegistry(logger),
+		metrics:            newLogParseMetrics(opts.Registry),
+		ItemFetcher:        opts.WoWDB,
+		emitParsingLogs:    opts.EmitParsingLogs,
+		instanceRegistry:   registry.DefaultRegistry(logger),
 	}
 
 	err := c.initStorage(ctx)
@@ -294,9 +294,13 @@ func (c *Chronicle) UploadLogs(ctx context.Context, inputs []UploadInput, logTyp
 		// Insert the log group
 		var err error
 		group, err = tx.InsertWoWLogGroup(ctx, database.InsertWoWLogGroupParams{
-			ID:        uuid.New(),
-			Owner:     cl.Subject,
+			ID:    uuid.New(),
+			Owner: cl.Subject,
+			// log_type stays the persisted source for now; format is dual-written
+			// (derived from it) so consumers can read the format axis directly and
+			// we can later flip format to the source of truth.
 			LogType:   logType,
+			Format:    database.NullLogFormat{LogFormat: logType.Format(), Valid: logType.Format().Valid()},
 			CreatedAt: database.Timestamptz(now),
 			UpdatedAt: database.Timestamptz(now),
 		})

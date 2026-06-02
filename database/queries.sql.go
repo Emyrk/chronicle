@@ -1672,6 +1672,7 @@ INSERT INTO
     id,
     owner,
     log_type,
+    format,
     created_at,
     updated_at
   )
@@ -1681,7 +1682,8 @@ VALUES
     $2,
     $3,
     $4,
-    $5
+    $5,
+    $6
   )
 RETURNING id, owner, created_at, updated_at, log_type, format
 `
@@ -1690,6 +1692,7 @@ type InsertWoWLogGroupParams struct {
 	ID        uuid.UUID          `db:"id" json:"id"`
 	Owner     uuid.UUID          `db:"owner" json:"owner"`
 	LogType   LogType            `db:"log_type" json:"log_type"`
+	Format    NullLogFormat      `db:"format" json:"format"`
 	CreatedAt pgtype.Timestamptz `db:"created_at" json:"created_at"`
 	UpdatedAt pgtype.Timestamptz `db:"updated_at" json:"updated_at"`
 }
@@ -1699,6 +1702,7 @@ func (q *sqlQuerier) InsertWoWLogGroup(ctx context.Context, arg InsertWoWLogGrou
 		arg.ID,
 		arg.Owner,
 		arg.LogType,
+		arg.Format,
 		arg.CreatedAt,
 		arg.UpdatedAt,
 	)
@@ -2106,18 +2110,20 @@ UPDATE
   wow_log_groups
 SET
   log_type = $2,
+  format = $3,
   updated_at = NOW()
 WHERE
   id = $1
 `
 
 type UpdateWoWLogGroupLogTypeParams struct {
-	ID      uuid.UUID `db:"id" json:"id"`
-	LogType LogType   `db:"log_type" json:"log_type"`
+	ID      uuid.UUID     `db:"id" json:"id"`
+	LogType LogType       `db:"log_type" json:"log_type"`
+	Format  NullLogFormat `db:"format" json:"format"`
 }
 
 func (q *sqlQuerier) UpdateWoWLogGroupLogType(ctx context.Context, arg UpdateWoWLogGroupLogTypeParams) error {
-	_, err := q.db.Exec(ctx, updateWoWLogGroupLogType, arg.ID, arg.LogType)
+	_, err := q.db.Exec(ctx, updateWoWLogGroupLogType, arg.ID, arg.LogType, arg.Format)
 	return err
 }
 

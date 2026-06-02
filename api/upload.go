@@ -41,6 +41,8 @@ func (api *API) enqueueReparseLogGroup(ctx context.Context, logID uuid.UUID, ver
 		err := api.Zed.UpdateWoWLogGroupLogType(ctx, database.UpdateWoWLogGroupLogTypeParams{
 			ID:      logID,
 			LogType: *overrideType,
+			// Keep the dual-written format axis in sync with the overridden type.
+			Format: database.NullLogFormat{LogFormat: overrideType.Format(), Valid: overrideType.Format().Valid()},
 		})
 		if err != nil {
 			return 0, err
