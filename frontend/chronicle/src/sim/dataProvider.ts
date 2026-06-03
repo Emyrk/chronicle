@@ -24,9 +24,12 @@ export function wowSpellToSpellData(ws: WoWSpell): SpellData {
     manaCost: ws.mana_cost ?? 0,
     manaCostPct: ws.mana_cost_pct ?? 0,
     castTimeMs: ws.casting_time?.Base ?? 0,
-    cooldownMs: (ws.recovery_time ?? 0) / 1_000_000, // nanoseconds → ms
-    categoryCooldownMs: (ws.category_recovery_time ?? 0) / 1_000_000,
-    gcdMs: (ws.start_recovery_time ?? 0) / 1_000_000,
+    // recovery_time / category_recovery_time / start_recovery_time are raw DBC
+    // values already in milliseconds (despite the Go time.Duration type, the ms
+    // integer is serialized verbatim). Use them directly — no unit conversion.
+    cooldownMs: ws.recovery_time ?? 0,
+    categoryCooldownMs: ws.category_recovery_time ?? 0,
+    gcdMs: ws.start_recovery_time ?? 0,
     durationMs: ws.duration?.Duration ?? 0,
     spellLevel: ws.spell_level ?? 0,
     baseLevel: ws.base_level ?? 0,
