@@ -59,6 +59,7 @@ import type {
   SiteConfig,
   UpdateSiteConfigRequest,
   Dataset,
+  UpsertDatasetRequest,
 } from "./typesGenerated";
 
 // Re-export types for convenience
@@ -935,6 +936,57 @@ export function useDatasets() {
       return response.json() as Promise<Dataset[]>;
     },
     staleTime: 5 * 60 * 1000,
+  });
+}
+
+/** The well-known default dataset; it is the bottom of every resolution chain
+ * and cannot be deleted. Mirrors servicedataset.DefaultDatasetID. */
+export const DEFAULT_DATASET_ID = "00000000-0000-0000-0000-000000000001";
+
+// useUpsertDataset creates (no id) or updates (with id) a dataset via the admin
+// route. Invalidates the datasets list on success.
+export function useUpsertDataset() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async (req: UpsertDatasetRequest) => {
+      const isUpdate = !!req.id;
+      const url = isUpdate
+        ? `/api/v1/admin/datasets/${req.id}`
+        : "/api/v1/admin/datasets/";
+      const response = await fetch(url, {
+        method: isUpdate ? "PUT" : "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(req),
+      });
+      if (!response.ok) {
+        const body = await response.json().catch(() => null);
+        throw new Error(body?.message ?? `Failed to save dataset (${response.status})`);
+      }
+      return response.json() as Promise<Dataset>;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["datasets"] });
+    },
+  });
+}
+
+// useDeleteDataset removes a dataset (the default dataset is rejected server-side).
+export function useDeleteDataset() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async (id: string) => {
+      const response = await fetch(`/api/v1/admin/datasets/${id}`, {
+        method: "DELETE",
+      });
+      if (!response.ok) {
+        const body = await response.json().catch(() => null);
+        throw new Error(body?.message ?? `Failed to delete dataset (${response.status})`);
+      }
+      return response.json();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["datasets"] });
+    },
   });
 }
 

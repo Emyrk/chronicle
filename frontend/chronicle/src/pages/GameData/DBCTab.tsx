@@ -3,6 +3,8 @@ import { FileText, Upload as UploadIcon, Database } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/Card/Card";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/Alert/Alert";
+import { DatasetSelect } from "./DatasetSelect";
+import { DEFAULT_DATASET_ID } from "@/api/queries";
 
 interface SupportedDBC {
   value: string;
@@ -50,6 +52,7 @@ interface DBCUploadResult {
 export function DBCTab() {
   const [file, setFile] = useState<File | null>(null);
   const [dbcType, setDbcType] = useState<string>(SUPPORTED_DBCS[0].value);
+  const [datasetID, setDatasetID] = useState<string>(DEFAULT_DATASET_ID);
   const [mode, setMode] = useState<"compare" | "upsert" | "insert">("compare");
   const [uploading, setUploading] = useState(false);
   const [result, setResult] = useState<DBCUploadResult | null>(null);
@@ -99,7 +102,7 @@ export function DBCTab() {
       const formData = new FormData();
       formData.append("dbc_file", file);
 
-      const response = await fetch(`/api/v1/game-data/dbc/upload?mode=${mode}&dbc_type=${dbcType}`, {
+      const response = await fetch(`/api/v1/game-data/dbc/upload?mode=${mode}&dbc_type=${dbcType}&dataset_id=${datasetID}`, {
         method: "POST",
         body: formData,
       });
@@ -134,6 +137,8 @@ export function DBCTab() {
             <Database className="h-5 w-5 text-muted-foreground" />
             <h3 className="font-semibold">DBC File</h3>
           </div>
+
+          <DatasetSelect value={datasetID} onChange={setDatasetID} />
 
           <div>
             <label className="block text-sm font-medium mb-1">DBC Type</label>

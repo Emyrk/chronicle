@@ -65,6 +65,7 @@ import { GameDataLayout } from "./pages/GameData/GameDataPage"
 import { WDBTab } from "./pages/GameData/WDBTab"
 import { ImportSQLTab } from "./pages/GameData/ImportSQLTab"
 import { DBCTab } from "./pages/GameData/DBCTab"
+import { DatasetsTab } from "./pages/GameData/DatasetsTab"
 import { LeaderboardsPage, LeaderboardRedirect, RankingsRedirect } from "./pages/Leaderboards/LeaderboardsPage"
 import { CensusPage } from "./pages/Census/CensusPage"
 import { Layout } from "./components/Layout/Layout"
@@ -159,7 +160,8 @@ function App() {
         <Route path="/g/:guildId/roster" element={<GuildRoster />} />
         <Route path="/g/:guildId/settings" element={<GuildSettings />} />
         <Route path="/game-data" element={<GameDataLayout />}>
-          <Route index element={<Navigate to="/game-data/wdb" replace />} />
+          <Route index element={<Navigate to="/game-data/datasets" replace />} />
+          <Route path="datasets" element={<DatasetsTab />} />
           <Route path="wdb" element={<WDBTab />} />
           <Route path="import-sql" element={<ImportSQLTab />} />
           <Route path="dbc" element={<DBCTab />} />

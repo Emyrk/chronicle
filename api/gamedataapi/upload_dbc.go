@@ -10,7 +10,6 @@ import (
 
 	"github.com/Emyrk/chronicle/api/chroniclesdk"
 	"github.com/Emyrk/chronicle/api/httpapi"
-	"github.com/Emyrk/chronicle/internal/services/servicedataset"
 	"github.com/Gophercraft/core/format/dbc"
 	"github.com/Gophercraft/core/format/dbc/dbdefs"
 	"github.com/Gophercraft/core/vsn"
@@ -41,17 +40,9 @@ func (h *Handler) UploadDBC(w http.ResponseWriter, r *http.Request) {
 
 	// dataset_id selects which dataset to write into. Defaults to the
 	// server's default dataset for backwards compatibility.
-	datasetID := servicedataset.DefaultDatasetID
-	if dsStr := r.URL.Query().Get("dataset_id"); dsStr != "" {
-		parsed, err := uuid.Parse(dsStr)
-		if err != nil {
-			httpapi.Write(ctx, w, http.StatusBadRequest, chroniclesdk.Response{
-				Message: "Invalid dataset_id",
-				Detail:  err.Error(),
-			})
-			return
-		}
-		datasetID = parsed
+	datasetID, ok := datasetIDFromQuery(ctx, w, r)
+	if !ok {
+		return
 	}
 
 	file, header, err := r.FormFile("dbc_file")
@@ -556,4 +547,3 @@ func int32At(s []int32, i int) int32 {
 	}
 	return 0
 }
-

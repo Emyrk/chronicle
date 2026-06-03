@@ -25,6 +25,11 @@ func (h *Handler) UploadWDB(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	datasetID, ok := datasetIDFromQuery(ctx, w, r)
+	if !ok {
+		return
+	}
+
 	file, header, err := r.FormFile("wdb_file")
 	if err != nil {
 		httpapi.Write(ctx, w, http.StatusBadRequest, chroniclesdk.Response{
@@ -53,9 +58,9 @@ func (h *Handler) UploadWDB(w http.ResponseWriter, r *http.Request) {
 
 	switch wdbHeader.Signature {
 	case wdb.SigItem:
-		h.handleItemUpload(ctx, w, mode, wdbHeader, records)
+		h.handleItemUpload(ctx, w, mode, wdbHeader, records, datasetID)
 	case wdb.SigCreature:
-		h.handleCreatureUpload(ctx, w, mode, wdbHeader, records)
+		h.handleCreatureUpload(ctx, w, mode, wdbHeader, records, datasetID)
 	default:
 		httpapi.Write(ctx, w, http.StatusBadRequest, chroniclesdk.Response{
 			Message: fmt.Sprintf("Unsupported WDB signature %q, expected item (%q) or creature (%q)", wdbHeader.Signature, wdb.SigItem, wdb.SigCreature),

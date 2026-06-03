@@ -150,6 +150,15 @@ func (s *Service) Delete(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// The default dataset is the bottom of every resolution chain and must
+	// always exist; never allow deleting it.
+	if id == DefaultDatasetID {
+		httpapi.Write(ctx, w, http.StatusBadRequest, chroniclesdk.Response{
+			Message: "The default dataset cannot be deleted",
+		})
+		return
+	}
+
 	err = s.db.DeleteDataset(ctx, id)
 	if err != nil {
 		httpapi.InternalServerError(w, err)

@@ -9,14 +9,13 @@ import (
 	"github.com/Emyrk/chronicle/api/chroniclesdk"
 	"github.com/Emyrk/chronicle/api/httpapi"
 	"github.com/Emyrk/chronicle/database"
-	"github.com/Emyrk/chronicle/internal/services/servicedataset"
 	"github.com/Emyrk/chronicle/internal/wdb"
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 )
 
-func (h *Handler) handleItemUpload(ctx context.Context, w http.ResponseWriter, mode string, wdbHeader wdb.Header, records []wdb.Record) {
+func (h *Handler) handleItemUpload(ctx context.Context, w http.ResponseWriter, mode string, wdbHeader wdb.Header, records []wdb.Record, datasetID uuid.UUID) {
 	// Parse all records.
 	items := make([]wdb.Item, 0, len(records))
 	for _, rec := range records {
@@ -36,7 +35,7 @@ func (h *Handler) handleItemUpload(ctx context.Context, w http.ResponseWriter, m
 	for i, it := range items {
 		entries[i] = int32(it.Entry)
 	}
-	existingRows, err := h.zed.GetItemTemplatesByEntries(ctx, database.GetItemTemplatesByEntriesParams{DatasetID: servicedataset.DefaultDatasetID, Entries: entries})
+	existingRows, err := h.zed.GetItemTemplatesByEntries(ctx, database.GetItemTemplatesByEntriesParams{DatasetID: datasetID, Entries: entries})
 	if err != nil {
 		httpapi.Write(ctx, w, http.StatusInternalServerError, chroniclesdk.Response{
 			Message: "Failed to fetch existing items from database",
@@ -120,7 +119,7 @@ func (h *Handler) handleItemUpload(ctx context.Context, w http.ResponseWriter, m
 
 	// Perform upserts if requested.
 	if (mode == "upsert" || mode == "insert") && len(toUpsert) > 0 {
-		if err := upsertItems(ctx, h.pool, servicedataset.DefaultDatasetID, toUpsert); err != nil {
+		if err := upsertItems(ctx, h.pool, datasetID, toUpsert); err != nil {
 			httpapi.Write(ctx, w, http.StatusInternalServerError, chroniclesdk.Response{
 				Message: "Failed to upsert items",
 				Detail:  err.Error(),

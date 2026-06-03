@@ -11,7 +11,6 @@ import (
 	"github.com/Emyrk/chronicle/api/chroniclesdk"
 	"github.com/Emyrk/chronicle/api/httpapi"
 	"github.com/Emyrk/chronicle/database"
-	"github.com/Emyrk/chronicle/internal/services/servicedataset"
 	"github.com/Emyrk/chronicle/internal/wdb"
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
@@ -43,6 +42,11 @@ func (h *Handler) ImportSQLFromURL(w http.ResponseWriter, r *http.Request) {
 		httpapi.Write(ctx, w, http.StatusBadRequest, chroniclesdk.Response{
 			Message: "Missing 'table' query parameter (e.g. 'creature_template')",
 		})
+		return
+	}
+
+	datasetID, ok := datasetIDFromQuery(ctx, w, r)
+	if !ok {
 		return
 	}
 
@@ -92,9 +96,9 @@ func (h *Handler) ImportSQLFromURL(w http.ResponseWriter, r *http.Request) {
 
 	switch table {
 	case "creature_template":
-		h.importCreatureTemplateSQL(ctx, w, mode, body)
+		h.importCreatureTemplateSQL(ctx, w, mode, body, datasetID)
 	case "item_template":
-		h.importItemTemplateSQL(ctx, w, mode, body)
+		h.importItemTemplateSQL(ctx, w, mode, body, datasetID)
 	default:
 		httpapi.Write(ctx, w, http.StatusBadRequest, chroniclesdk.Response{
 			Message: fmt.Sprintf("Unsupported table %q, supported: creature_template, item_template", table),
@@ -109,7 +113,6 @@ func allowedSQLHostList() string {
 	}
 	return strings.Join(hosts, ", ")
 }
-
 
 func (h *Handler) ImportSQL(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
@@ -133,6 +136,11 @@ func (h *Handler) ImportSQL(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	datasetID, ok := datasetIDFromQuery(ctx, w, r)
+	if !ok {
+		return
+	}
+
 	file, header, err := r.FormFile("sql_file")
 	if err != nil {
 		httpapi.Write(ctx, w, http.StatusBadRequest, chroniclesdk.Response{
@@ -152,9 +160,9 @@ func (h *Handler) ImportSQL(w http.ResponseWriter, r *http.Request) {
 
 	switch table {
 	case "creature_template":
-		h.importCreatureTemplateSQL(ctx, w, mode, file)
+		h.importCreatureTemplateSQL(ctx, w, mode, file, datasetID)
 	case "item_template":
-		h.importItemTemplateSQL(ctx, w, mode, file)
+		h.importItemTemplateSQL(ctx, w, mode, file, datasetID)
 	default:
 		httpapi.Write(ctx, w, http.StatusBadRequest, chroniclesdk.Response{
 			Message: fmt.Sprintf("Unsupported table %q, supported: creature_template, item_template", table),
@@ -162,7 +170,7 @@ func (h *Handler) ImportSQL(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
-func (h *Handler) importCreatureTemplateSQL(ctx context.Context, w http.ResponseWriter, mode string, file io.Reader) {
+func (h *Handler) importCreatureTemplateSQL(ctx context.Context, w http.ResponseWriter, mode string, file io.Reader, datasetID uuid.UUID) {
 	creatures, err := wdb.ParseCreatureTemplateSQL(file)
 	if err != nil {
 		httpapi.Write(ctx, w, http.StatusBadRequest, chroniclesdk.Response{
@@ -184,7 +192,7 @@ func (h *Handler) importCreatureTemplateSQL(ctx context.Context, w http.Response
 	for i, c := range creatures {
 		entries[i] = c.Entry
 	}
-	existingRows, err := h.zed.GetCreatureTemplatesByEntries(ctx, database.GetCreatureTemplatesByEntriesParams{DatasetID: servicedataset.DefaultDatasetID, Entries: entries})
+	existingRows, err := h.zed.GetCreatureTemplatesByEntries(ctx, database.GetCreatureTemplatesByEntriesParams{DatasetID: datasetID, Entries: entries})
 	if err != nil {
 		httpapi.Write(ctx, w, http.StatusInternalServerError, chroniclesdk.Response{
 			Message: "Failed to fetch existing creatures from database",
@@ -248,7 +256,7 @@ func (h *Handler) importCreatureTemplateSQL(ctx context.Context, w http.Response
 	}
 
 	if (mode == "upsert" || mode == "insert") && len(toUpsert) > 0 {
-		if err := upsertCreaturesSQL(ctx, h.pool, servicedataset.DefaultDatasetID, toUpsert); err != nil {
+		if err := upsertCreaturesSQL(ctx, h.pool, datasetID, toUpsert); err != nil {
 			httpapi.Write(ctx, w, http.StatusInternalServerError, chroniclesdk.Response{
 				Message: "Failed to upsert creatures",
 				Detail:  err.Error(),
@@ -269,7 +277,7 @@ func (h *Handler) importCreatureTemplateSQL(ctx context.Context, w http.Response
 	})
 }
 
-func (h *Handler) importItemTemplateSQL(ctx context.Context, w http.ResponseWriter, mode string, file io.Reader) {
+func (h *Handler) importItemTemplateSQL(ctx context.Context, w http.ResponseWriter, mode string, file io.Reader, datasetID uuid.UUID) {
 	items, err := wdb.ParseItemTemplateSQL(file)
 	if err != nil {
 		httpapi.Write(ctx, w, http.StatusBadRequest, chroniclesdk.Response{
@@ -290,7 +298,7 @@ func (h *Handler) importItemTemplateSQL(ctx context.Context, w http.ResponseWrit
 	for i, it := range items {
 		entries[i] = it.Entry
 	}
-	existingRows, err := h.zed.GetItemTemplatesByEntries(ctx, database.GetItemTemplatesByEntriesParams{DatasetID: servicedataset.DefaultDatasetID, Entries: entries})
+	existingRows, err := h.zed.GetItemTemplatesByEntries(ctx, database.GetItemTemplatesByEntriesParams{DatasetID: datasetID, Entries: entries})
 	if err != nil {
 		httpapi.Write(ctx, w, http.StatusInternalServerError, chroniclesdk.Response{
 			Message: "Failed to fetch existing items from database",
@@ -370,7 +378,7 @@ func (h *Handler) importItemTemplateSQL(ctx context.Context, w http.ResponseWrit
 	}
 
 	if (mode == "upsert" || mode == "insert") && len(toUpsert) > 0 {
-		if err := upsertItems(ctx, h.pool, servicedataset.DefaultDatasetID, toUpsert); err != nil {
+		if err := upsertItems(ctx, h.pool, datasetID, toUpsert); err != nil {
 			httpapi.Write(ctx, w, http.StatusInternalServerError, chroniclesdk.Response{
 				Message: "Failed to upsert items",
 				Detail:  err.Error(),

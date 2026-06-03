@@ -3,6 +3,8 @@ import { FileText, Upload as UploadIcon } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/Card/Card";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/Alert/Alert";
+import { DatasetSelect } from "./DatasetSelect";
+import { DEFAULT_DATASET_ID } from "@/api/queries";
 
 interface FieldDiff {
   field: string;
@@ -43,6 +45,7 @@ interface WDBUploadProps {
 export function WDBUpload({ title, description, fileHint, showUnreliableFilter, cardHeader }: WDBUploadProps) {
   const [file, setFile] = useState<File | null>(null);
   const [mode, setMode] = useState<"compare" | "upsert" | "insert">("compare");
+  const [datasetID, setDatasetID] = useState<string>(DEFAULT_DATASET_ID);
   const [uploading, setUploading] = useState(false);
   const [result, setResult] = useState<UploadResult | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -93,7 +96,7 @@ export function WDBUpload({ title, description, fileHint, showUnreliableFilter, 
       const formData = new FormData();
       formData.append("wdb_file", file);
 
-      const response = await fetch(`/api/v1/game-data/wdb/upload?mode=${mode}`, {
+      const response = await fetch(`/api/v1/game-data/wdb/upload?mode=${mode}&dataset_id=${datasetID}`, {
         method: "POST",
         body: formData,
       });
@@ -125,6 +128,7 @@ export function WDBUpload({ title, description, fileHint, showUnreliableFilter, 
             <FileText className="h-5 w-5 text-muted-foreground" />
             <h3 className="font-semibold">WDB File</h3>
           </div>
+          <DatasetSelect value={datasetID} onChange={setDatasetID} />
           {cardHeader}
           <p className="text-sm text-muted-foreground">
             Select your <code>{fileHint}</code> file, typically found in your

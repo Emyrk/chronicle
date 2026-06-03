@@ -3,6 +3,8 @@ import { FileText, Upload as UploadIcon, Database, ExternalLink, Download } from
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/Card/Card";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/Alert/Alert";
+import { DatasetSelect } from "./DatasetSelect";
+import { DEFAULT_DATASET_ID } from "@/api/queries";
 
 interface FieldDiff {
   field: string;
@@ -64,6 +66,7 @@ const SUPPORTED_TABLES: SupportedTable[] = [
 export function ImportSQLTab() {
   const [file, setFile] = useState<File | null>(null);
   const [table, setTable] = useState<string>(SUPPORTED_TABLES[0].value);
+  const [datasetID, setDatasetID] = useState<string>(DEFAULT_DATASET_ID);
   const [mode, setMode] = useState<"compare" | "upsert" | "insert">("compare");
   const [uploading, setUploading] = useState(false);
   const [fetchingUrl, setFetchingUrl] = useState<string | null>(null);
@@ -110,7 +113,7 @@ export function ImportSQLTab() {
 
     try {
       const response = await fetch(
-        `/api/v1/game-data/sql/import-url?mode=${mode}&table=${table}&url=${encodeURIComponent(sourceUrl)}`,
+        `/api/v1/game-data/sql/import-url?mode=${mode}&table=${table}&dataset_id=${datasetID}&url=${encodeURIComponent(sourceUrl)}`,
         { method: "POST" },
       );
 
@@ -138,7 +141,7 @@ export function ImportSQLTab() {
       const formData = new FormData();
       formData.append("sql_file", file);
 
-      const response = await fetch(`/api/v1/game-data/sql/import?mode=${mode}&table=${table}`, {
+      const response = await fetch(`/api/v1/game-data/sql/import?mode=${mode}&table=${table}&dataset_id=${datasetID}`, {
         method: "POST",
         body: formData,
       });
@@ -173,6 +176,8 @@ export function ImportSQLTab() {
             <Database className="h-5 w-5 text-muted-foreground" />
             <h3 className="font-semibold">SQL File</h3>
           </div>
+
+          <DatasetSelect value={datasetID} onChange={setDatasetID} />
 
           <div>
             <label className="block text-sm font-medium mb-1">Target Table</label>
