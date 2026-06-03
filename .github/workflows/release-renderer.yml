@@ -1,0 +1,84 @@
+name: Release wow-tooltip-renderer
+
+# Publishes @emyrk/wow-tooltip-renderer to npm.
+#
+# Gating:
+#   - Only runs when files under the package (or this workflow) change on main.
+#   - Publish is gated on typecheck + tests + build all passing.
+#   - Publish is skipped (no error) unless package.json "version" is new, so
+#     merging a code change without bumping the version is a no-op publish.
+#
+# To cut a release: bump "version" in
+# frontend/wow-tooltip-renderer/package.json and merge to main.
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - 'frontend/wow-tooltip-renderer/**'
+      - '.github/workflows/release-renderer.yml'
+  workflow_dispatch:
+
+concurrency:
+  group: release-renderer
+  cancel-in-progress: false
+
+jobs:
+  release:
+    name: Test, build, and publish
+    runs-on: ubuntu-latest
+    if: github.repository == 'Emyrk/chronicle'
+    defaults:
+      run:
+        working-directory: frontend/wow-tooltip-renderer
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          registry-url: 'https://registry.npmjs.org'
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 10
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      # --- CI gate: nothing publishes unless all of these pass ---
+      - name: Typecheck
+        run: pnpm run typecheck
+
+      - name: Test
+        run: pnpm test
+
+      - name: Build
+        run: pnpm run build
+
+      # --- Version gate: only publish a version that isn't on npm yet ---
+      - name: Check whether version is already published
+        id: check
+        run: |
+          NAME=$(node -p "require('./package.json').name")
+          VERSION=$(node -p "require('./package.json').version")
+          echo "name=$NAME"       >> "$GITHUB_OUTPUT"
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+          PUBLISHED=$(npm view "$NAME@$VERSION" version 2>/dev/null || true)
+          if [ "$PUBLISHED" = "$VERSION" ]; then
+            echo "published=true" >> "$GITHUB_OUTPUT"
+            echo "::notice::$NAME@$VERSION already on npm — skipping publish."
+          else
+            echo "published=false" >> "$GITHUB_OUTPUT"
+            echo "::notice::Publishing $NAME@$VERSION."
+          fi
+
+      - name: Publish to npm
+        if: steps.check.outputs.published == 'false'
+        run: npm publish --access public
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}

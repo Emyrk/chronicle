@@ -2,13 +2,13 @@
 //
 // The deterministic spell-template resolver, formatters, constants, and the
 // WoWSpell type now live in the pure, shareable package
-// @chronicle/wow-tooltip-renderer. This module is a thin shim that re-exports
+// @emyrk/wow-tooltip-renderer. This module is a thin shim that re-exports
 // that package and adds the few app-specific helpers that depend on Chronicle's
 // runtime (tenant icon CDN, Tailwind theme classes).
 //
-// Prefer importing from "@chronicle/wow-tooltip-renderer" directly in new code.
+// Prefer importing from "@emyrk/wow-tooltip-renderer" directly in new code.
 
-import type { SpellIcon } from "@chronicle/wow-tooltip-renderer";
+import type { SpellIcon } from "@emyrk/wow-tooltip-renderer";
 import { iconUrl } from "@/config/iconUrl";
 
 // --- Re-exported types (package is the source of truth) ---
@@ -25,7 +25,7 @@ export type {
   SpellAttributes,
   WoWSpell,
   LocaleIndex,
-} from "@chronicle/wow-tooltip-renderer";
+} from "@emyrk/wow-tooltip-renderer";
 
 // --- Re-exported resolver / formatters / constants ---
 export {
@@ -48,7 +48,7 @@ export {
   AttackOutcome,
   getDamageTypeLabels,
   getAttackOutcomeLabels,
-} from "@chronicle/wow-tooltip-renderer";
+} from "@emyrk/wow-tooltip-renderer";
 
 // --- App-specific helpers (not part of the pure package) ---
 

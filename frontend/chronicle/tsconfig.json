@@ -9,7 +9,7 @@
     "paths": {
       "@/constants/dbmem/*": ["./src/constants/dbmem/turtle/*"],
       "@testdata/spellTestVectors": ["./src/api/testdata/spellTestVectors.turtle.generated"],
-      "@chronicle/wow-tooltip-renderer": ["../wow-tooltip-renderer/src/index.ts"],
+      "@emyrk/wow-tooltip-renderer": ["../wow-tooltip-renderer/src/index.ts"],
       "@/*": ["./src/*"]
     }
   }

@@ -1,4 +1,4 @@
-# @chronicle/wow-tooltip-renderer
+# @emyrk/wow-tooltip-renderer
 
 Pure TypeScript renderer for World of Warcraft spell and item tooltips built from
 DBC-style records. **No React, no fetch, no styling** — data in, strings (and hex
@@ -12,13 +12,27 @@ text contains template variables (`$s1`, `$o1`, `$d`, `$23455s1`, `$lpoint:point
 `${$m1*3}`, …). This package owns the deterministic resolution of those templates
 and the static game-data lookup tables, so consumers don't hand-roll their own.
 
+## Install
+
+Published to npm as `@emyrk/wow-tooltip-renderer`:
+
+```sh
+pnpm add @emyrk/wow-tooltip-renderer
+```
+
+Inside this monorepo the Chronicle frontend consumes the package source directly
+via a path alias (see `frontend/chronicle/vite.config.ts`), so it always tracks
+the working tree. External consumers (e.g. Chronicle Wiki) install the published
+build. Releases are cut by bumping `version` in `package.json` and merging to
+`main` — see `.github/workflows/release-renderer.yml`.
+
 ## Usage
 
 ```ts
 import {
   extractReferencedSpellIds,
   resolveSpellDescription,
-} from "@chronicle/wow-tooltip-renderer";
+} from "@emyrk/wow-tooltip-renderer";
 
 // 1. Find cross-spell references the template needs.
 const refIds = extractReferencedSpellIds(template); // e.g. [23455]
@@ -39,7 +53,7 @@ import {
   calculateDPS,     // (damageRange, delayMs) -> number | null
   getQualityColor,  // quality level -> hex
   STAT_DISPLAY, INVENTORY_TYPE_TEXT, SOCKET_INFO, /* ... */
-} from "@chronicle/wow-tooltip-renderer";
+} from "@emyrk/wow-tooltip-renderer";
 ```
 
 ## Design rules

@@ -66,7 +66,7 @@ export default defineConfig({
       // Server-specific spell test vectors
       "@testdata/spellTestVectors": path.resolve(__dirname, `src/api/testdata/spellTestVectors.${process.env.SERVER || 'turtle'}.generated`),
       // Shared pure tooltip renderer package
-      "@chronicle/wow-tooltip-renderer": path.resolve(__dirname, "../wow-tooltip-renderer/src/index.ts"),
+      "@emyrk/wow-tooltip-renderer": path.resolve(__dirname, "../wow-tooltip-renderer/src/index.ts"),
       "@": path.resolve(__dirname, "src"),
     }
   },

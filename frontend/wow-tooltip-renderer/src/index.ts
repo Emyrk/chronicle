@@ -1,4 +1,4 @@
-// @chronicle/wow-tooltip-renderer
+// @emyrk/wow-tooltip-renderer
 //
 // Pure TypeScript renderer for WoW spell/item tooltips. No React, no fetch, no
 // styling — data in, strings (and hex colors) out. The React tooltip components

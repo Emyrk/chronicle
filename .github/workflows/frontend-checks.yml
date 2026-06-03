@@ -7,6 +7,7 @@ on:
       - develop
     paths:
       - 'frontend/chronicle/**'
+      - 'frontend/wow-tooltip-renderer/**'
       - '.github/workflows/frontend-checks.yml'
   push:
     branches:
@@ -46,3 +47,37 @@ jobs:
       - name: Run unit tests
         working-directory: frontend/chronicle
         run: pnpm vitest run --project unit
+
+  renderer-package:
+    name: wow-tooltip-renderer (typecheck + test + build)
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 10
+
+      - name: Install dependencies
+        working-directory: frontend/wow-tooltip-renderer
+        run: pnpm install --frozen-lockfile
+
+      - name: Typecheck
+        working-directory: frontend/wow-tooltip-renderer
+        run: pnpm run typecheck
+
+      - name: Test
+        working-directory: frontend/wow-tooltip-renderer
+        run: pnpm test
+
+      - name: Build
+        working-directory: frontend/wow-tooltip-renderer
+        run: pnpm run build
