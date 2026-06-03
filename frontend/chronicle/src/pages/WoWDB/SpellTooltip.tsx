@@ -26,7 +26,7 @@ export function SpellTooltip({ spell, locale = "0", detailed = false }: SpellToo
   const descriptionTemplate = getLocalizedText(spell.description, locale);
   const auraDescTemplate = getLocalizedText(spell.aura_description, locale);
   const iconUrl = getSpellIconUrl(spell.spell_icon);
-  const cooldown = formatCooldown(spell.recovery_time);
+  const cooldown = formatCooldown(spell);
   // schoolColor handled by SpellSchoolText component
 
   // Extract referenced spell IDs from templates

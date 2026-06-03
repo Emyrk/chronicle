@@ -33,9 +33,15 @@ export function formatRange(range: SpellRange): string {
   return `${range.RangeMax} yd`;
 }
 
-export function formatCooldown(recoveryTimeNs: number): string | null {
-  if (recoveryTimeNs === 0) return null;
-  const secs = recoveryTimeNs / 1_000_000_000;
+export function formatCooldown(spell: WoWSpell): string | null {
+  // recovery_time and category_recovery_time are raw DBC values in MILLISECONDS
+  // (despite the Go time.Duration type, the millisecond integer is serialized
+  // verbatim). The effective cooldown is the larger of the spell's own recovery
+  // and its shared category recovery — many spells (e.g. Power Word: Shield)
+  // store their cooldown only in the category field.
+  const ms = Math.max(spell.recovery_time || 0, spell.category_recovery_time || 0);
+  if (ms <= 0) return null;
+  const secs = ms / 1000;
   if (secs >= 60) return `${Math.floor(secs / 60)} min cooldown`;
   return `${secs} sec cooldown`;
 }
