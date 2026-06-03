@@ -1,0 +1,250 @@
+import type { WoWSpell } from "../types.js";
+import { getEnglishText } from "../shared/localization.js";
+import {
+  formatValue,
+  getPeriodicTotal,
+  getScaledValue,
+} from "./effects.js";
+import { resolveVariable } from "./variables.js";
+import { evaluateArithmetic } from "./arithmetic.js";
+
+// === WoW Spell Description Template Parser ===
+//
+// WoW spell descriptions are literal text interleaved with `$`-prefixed escape
+// sequences. This is a single left-to-right pass over the template (replacing
+// the previous five sequential regex passes). The grammar:
+//
+//   template = (literal | escape)*
+//   escape   = '$' (arithMod | inlineExpr | crossRef | plural | gender | localVar)
+//   arithMod = ('*' | '/') DIGITS ';' varRef          -- $*8;s1, $/1000;s1
+//   inlineExpr = '{' (literal | escape)* '}'           -- ${$m1*3}, ${5*$AR*0.01}
+//   crossRef = DIGITS varRef                           -- $23455s1  (optionally -$...)
+//   plural   = 'l' TEXT ':' TEXT ';'                   -- $lpoint:points;  (lowercase l only)
+//   gender   = ('g'|'G') TEXT ':' TEXT ';'             -- $ghe:she;
+//   localVar = LETTER DIGIT?                            -- $s1, $d, $n  (optionally -$...)
+//   varRef   = LETTER DIGIT?
+//
+// Notes on fidelity to the historical resolver:
+//   - Pluralization picks singular when the most recently emitted number is 1,
+//     otherwise plural (default plural when no number has been emitted).
+//   - Gender always resolves to the male form (no caster gender at tooltip time).
+//   - A '-' immediately before a crossRef/localVar is consumed: numeric results
+//     become negative, non-numeric results drop the sign. arithMod and inlineExpr
+//     never consume a leading '-'.
+//   - Missing cross-referenced spells leave the placeholder intact (visible for
+//     diagnosis); a preceding '-' is preserved in that case.
+//   - Inline expressions resolve their inner variables first, then evaluate; if
+//     evaluation fails the (partially resolved) `${...}` text is kept verbatim.
+
+const RE_ARITH_MUL = /^\$\*(\d+);([a-zA-Z])(\d)?/;
+const RE_ARITH_DIV = /^\$\/(\d+);([a-zA-Z])(\d)?/;
+const RE_INLINE = /^\$\{([^}]+)\}/;
+const RE_CROSSREF = /^\$(\d+)([a-zA-Z])(\d)?/;
+const RE_PLURAL = /^\$l([^:]+):([^;]+);/; // lowercase $l only
+const RE_GENDER = /^\$g([^:]+):([^;]+);/i; // $g / $G
+const RE_LOCALVAR = /^\$([a-zA-Z])(\d)?/;
+
+// Last run of digits in a string, used to update the pluralization anchor.
+const RE_LAST_NUMBER = /(\d+)(?![\s\S]*\d)/;
+
+function applyArith(
+  spell: WoWSpell,
+  type: string,
+  index: string | undefined,
+  lvl: number,
+  op: (n: number) => number,
+  floating: boolean,
+  original: string,
+): string {
+  const t = type.toLowerCase();
+  const idx = index ? parseInt(index, 10) - 1 : 0;
+  if (t === "s" || t === "m") {
+    return formatValue(getScaledValue(spell, idx, lvl, op), floating);
+  }
+  if (t === "o") {
+    return formatValue(getPeriodicTotal(spell, idx, lvl, op), floating);
+  }
+  // Fallback: resolve the bare variable as a string, then apply the scalar.
+  const variable = `$${type}${index || ""}`;
+  const resolved = resolveVariable(spell, variable, lvl);
+  const num = Number(resolved);
+  if (!isNaN(num)) {
+    const out = op(num);
+    return Number.isInteger(out)
+      ? String(out)
+      : out.toFixed(1).replace(/\.0$/, "");
+  }
+  return original;
+}
+
+/**
+ * Resolve all template variables in a spell description string.
+ *
+ * @param spell The spell being described.
+ * @param template The template string with $ variables.
+ * @param referencedSpells Optional map of spell ID -> WoWSpell for cross-spell references.
+ * @param forLevel Optional caster level for scaling (defaults to spell level).
+ */
+export function resolveSpellDescription(
+  spell: WoWSpell,
+  template: string,
+  referencedSpells?: Map<number, WoWSpell>,
+  forLevel?: number,
+): string {
+  if (!template) return "";
+
+  const lvl = forLevel ?? spell.spell_level;
+  let result = "";
+  let lastNumber: number | null = null;
+
+  const append = (s: string) => {
+    result += s;
+    const m = s.match(RE_LAST_NUMBER);
+    if (m) lastNumber = parseInt(m[1], 10);
+  };
+
+  // Resolve a numeric/negative variable result, honoring a '-' already emitted
+  // immediately before the current escape. Used by crossRef and localVar.
+  const appendVar = (resolved: string) => {
+    if (result.endsWith("-")) {
+      result = result.slice(0, -1); // consume the leading '-'
+      const num = Number(resolved);
+      if (!isNaN(num)) {
+        append(String(-Math.abs(num)));
+      } else {
+        append(resolved);
+      }
+    } else {
+      append(resolved);
+    }
+  };
+
+  let i = 0;
+  const n = template.length;
+  while (i < n) {
+    if (template[i] !== "$") {
+      append(template[i]);
+      i++;
+      continue;
+    }
+
+    const rest = template.slice(i);
+    let m: RegExpExecArray | null;
+
+    // $*N;var — multiply
+    if ((m = RE_ARITH_MUL.exec(rest))) {
+      const mult = parseInt(m[1], 10);
+      append(
+        applyArith(spell, m[2], m[3], lvl, (x) => x * mult, false, m[0]),
+      );
+      i += m[0].length;
+      continue;
+    }
+
+    // $/N;var — divide (floating output)
+    if ((m = RE_ARITH_DIV.exec(rest))) {
+      const div = parseInt(m[1], 10);
+      if (div === 0) {
+        append(m[0]); // avoid divide-by-zero; keep placeholder
+      } else {
+        append(
+          applyArith(spell, m[2], m[3], lvl, (x) => x / div, true, m[0]),
+        );
+      }
+      i += m[0].length;
+      continue;
+    }
+
+    // ${expr} — inline arithmetic (resolve inner variables first, then evaluate)
+    if ((m = RE_INLINE.exec(rest))) {
+      const inner = resolveSpellDescription(
+        spell,
+        m[1],
+        referencedSpells,
+        forLevel,
+      );
+      const evaluated = evaluateArithmetic(inner);
+      append(evaluated !== null ? String(evaluated) : `\${${inner}}`);
+      i += m[0].length;
+      continue;
+    }
+
+    // $NNNNvar — cross-spell reference
+    if ((m = RE_CROSSREF.exec(rest))) {
+      const refSpell = referencedSpells?.get(parseInt(m[1], 10));
+      if (!refSpell) {
+        append(m[0]); // leave placeholder; any leading '-' is preserved
+      } else {
+        const variable = `$${m[2]}${m[3] || ""}`;
+        appendVar(resolveVariable(refSpell, variable, lvl));
+      }
+      i += m[0].length;
+      continue;
+    }
+
+    // $lsingular:plural; — pluralization (lowercase l only)
+    if ((m = RE_PLURAL.exec(rest))) {
+      append(lastNumber === 1 ? m[1] : m[2]);
+      i += m[0].length;
+      continue;
+    }
+
+    // $gmale:female; — gender (defaults to male)
+    if ((m = RE_GENDER.exec(rest))) {
+      append(m[1]);
+      i += m[0].length;
+      continue;
+    }
+
+    // $Xn — local variable
+    if ((m = RE_LOCALVAR.exec(rest))) {
+      const variable = `$${m[1]}${m[2] || ""}`;
+      appendVar(resolveVariable(spell, variable, lvl));
+      i += m[0].length;
+      continue;
+    }
+
+    // Bare '$' with nothing recognizable after it.
+    append("$");
+    i++;
+  }
+
+  return result;
+}
+
+/**
+ * Extract all referenced spell IDs from a template string.
+ * Matches patterns like $3137s1 (spell ID 3137, variable s1).
+ */
+export function extractReferencedSpellIds(template: string): number[] {
+  if (!template) return [];
+  const ids = new Set<number>();
+  const regex = /\$(\d+)([a-zA-Z])(\d)?/g;
+  let match: RegExpExecArray | null;
+  while ((match = regex.exec(template)) !== null) {
+    ids.add(parseInt(match[1], 10));
+  }
+  return Array.from(ids);
+}
+
+/**
+ * Get the resolved English description for a spell.
+ */
+export function getResolvedDescription(
+  spell: WoWSpell,
+  forLevel?: number,
+): string {
+  const template = getEnglishText(spell.description);
+  return resolveSpellDescription(spell, template, undefined, forLevel);
+}
+
+/**
+ * Get the resolved English aura description for a spell.
+ */
+export function getResolvedAuraDescription(
+  spell: WoWSpell,
+  forLevel?: number,
+): string {
+  const template = getEnglishText(spell.aura_description);
+  return resolveSpellDescription(spell, template, undefined, forLevel);
+}
