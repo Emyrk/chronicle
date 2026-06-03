@@ -83,10 +83,10 @@ type Spell struct {
 
 	// === Timing ===
 	CastingTimeIndex      CastingTimeID `json:"casting_time"`            // Cast time lookup (→ SpellCastTimes.dbc)
-	RecoveryTime          time.Duration `json:"recovery_time"`           // Spell cooldown in milliseconds
+	RecoveryTime          time.Duration `json:"recovery_time"`           // Spell cooldown (real time.Duration; JSON is nanoseconds)
 	StartRecoveryCategory int32         `json:"start_recovery_category"` // controls which Global Cooldown (GCD) group a spell belongs to.
-	StartRecoveryTime     time.Duration `json:"start_recovery_time"`     // GCD in ms
-	CategoryRecoveryTime  time.Duration `json:"category_recovery_time"`  // Shared cooldown in milliseconds for spells in the same category
+	StartRecoveryTime     time.Duration `json:"start_recovery_time"`     // GCD (real time.Duration; JSON is nanoseconds)
+	CategoryRecoveryTime  time.Duration `json:"category_recovery_time"`  // Shared cooldown for spells in the same category (real time.Duration; JSON is nanoseconds)
 	RangeIndex            RangeID       `json:"range"`                   // Min/max range lookup (→ SpellRange.dbc)
 	DurationIndex         DurationID    `json:"duration"`                // Buff/debuff duration lookup (→ SpellDuration.dbc)
 

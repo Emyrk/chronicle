@@ -155,10 +155,13 @@ func SpellFromDB(def *dbdefs.Ent_Spell) *Spell {
 
 		// === Timing ===
 		CastingTimeIndex:      CastingTimeID(def.CastingTimeIndex),
-		RecoveryTime:          time.Duration(def.RecoveryTime),
+		// DBC stores these as millisecond integers; scale to a real
+		// time.Duration so Go duration math (.Seconds(), etc.) is correct.
+		// JSON marshals time.Duration as its int64 nanosecond value.
+		RecoveryTime:          time.Duration(def.RecoveryTime) * time.Millisecond,
 		StartRecoveryCategory: def.StartRecoveryCategory,
-		StartRecoveryTime:     time.Duration(def.StartRecoveryTime),
-		CategoryRecoveryTime:  time.Duration(def.CategoryRecoveryTime),
+		StartRecoveryTime:     time.Duration(def.StartRecoveryTime) * time.Millisecond,
+		CategoryRecoveryTime:  time.Duration(def.CategoryRecoveryTime) * time.Millisecond,
 		RangeIndex:            RangeID(def.RangeIndex),
 		DurationIndex:         DurationID(def.DurationIndex),
 

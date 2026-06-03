@@ -109,7 +109,7 @@ export interface WoWSpell {
   recovery_time: number; // nanoseconds (cooldown)
   start_recovery_time: number; // GCD in nanoseconds
   start_recovery_category: number;
-  category_recovery_time: number;
+  category_recovery_time: number; // shared category cooldown in nanoseconds
 
   // Mechanics
   mechanic: EnumValue;
