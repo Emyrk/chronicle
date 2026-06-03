@@ -379,25 +379,68 @@ function TalentTab({
                 })}
               </defs>
               {arrows.map((a, i) => {
-                const x1 = a.fromCol * cellW + iconSize / 2;
-                const y1 = a.fromTier * cellH + iconSize;
-                const x2 = a.toCol * cellW + iconSize / 2;
-                const y2 = a.toTier * cellH - 3;
                 const targetRank = ranks.get(a.toTabIndex) ?? 0;
                 const color = targetRank >= a.toMaxRank
                   ? "#fbbf24" // amber-400 — maxed
                   : targetRank > 0
                     ? "#22c55e" // green-500 — partially filled
                     : "#71717a"; // zinc-500 — unused
+
+                // Y midpoint in the gap between tier t and t+1
+                const gapY = (t: number) =>
+                  t * cellH + iconSize + (cellH - iconSize) / 2;
+
+                let d: string;
+                if (a.fromTier === a.toTier) {
+                  // ── Same tier: horizontal side-to-side arrow ──
+                  const leftToRight = a.fromCol < a.toCol;
+                  const sx = a.fromCol * cellW + (leftToRight ? iconSize : 0);
+                  const sy = a.fromTier * cellH + iconSize / 2;
+                  const ex = a.toCol * cellW + (leftToRight ? -3 : iconSize + 3);
+                  const ey = sy;
+                  d = `M ${sx} ${sy} L ${ex} ${ey}`;
+                } else if (a.fromCol === a.toCol) {
+                  // ── Same column: straight vertical ──
+                  const x = a.fromCol * cellW + iconSize / 2;
+                  const y1 = a.fromTier * cellH + iconSize;
+                  const y2 = a.toTier * cellH - 3;
+                  d = `M ${x} ${y1} L ${x} ${y2}`;
+                } else {
+                  // ── Different tier + column: L-shaped routing ──
+                  // Start at bottom-center of source, end at top-center of dest.
+                  const sx = a.fromCol * cellW + iconSize / 2;
+                  const sy = a.fromTier * cellH + iconSize;
+                  const ex = a.toCol * cellW + iconSize / 2;
+                  const ey = a.toTier * cellH - 3;
+
+                  // Strategy 1: route horizontal in gap just below source tier,
+                  // then down the dest column. Check dest column is clear.
+                  let destBlocked = false;
+                  for (let t = a.fromTier + 1; t < a.toTier; t++) {
+                    if (grid[t]?.[a.toCol] != null) {
+                      destBlocked = true;
+                      break;
+                    }
+                  }
+
+                  if (!destBlocked) {
+                    const gy = gapY(a.fromTier);
+                    d = `M ${sx} ${sy} L ${sx} ${gy} L ${ex} ${gy} L ${ex} ${ey}`;
+                  } else {
+                    // Strategy 2: down the source column, route horizontal
+                    // in gap just above dest tier, then across.
+                    const gy = gapY(a.toTier - 1);
+                    d = `M ${sx} ${sy} L ${sx} ${gy} L ${ex} ${gy} L ${ex} ${ey}`;
+                  }
+                }
+
                 return (
-                  <line
+                  <path
                     key={i}
-                    x1={x1}
-                    y1={y1}
-                    x2={x2}
-                    y2={y2}
+                    d={d}
                     stroke={color}
                     strokeWidth={2}
+                    fill="none"
                     markerEnd={`url(#arrow-${tab.id}-${i})`}
                   />
                 );
