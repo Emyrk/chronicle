@@ -139,6 +139,63 @@ const expectedByServer: Record<string, Record<string, string>> = {
     "48461": "Causes 553 to 623 Nature damage to the target.",
     "48441": "Heals the target for 1690 over 15 sec.",
     "48441_aura": "Heals 338 damage every 3 seconds.",
+
+    // Guardian Spirit — multi-effect %s
+    "47788": "Calls upon a guardian spirit to watch over the friendly target. The spirit increases the healing received by the target by 40%, and also prevents the target from dying by sacrificing itself.  This sacrifice terminates the effect but heals the target of 50% of their maximum health. Lasts 10 sec.",
+    "47788_aura": "Increased healing received by 40% and will prevent 1 killing blow.",
+
+    // Bone Shield — $G gender in real spell
+    "49222": "The Death Knight is surrounded by 4 whirling bones.  While at least 1 bone remains, he takes 20% less damage from all sources and deals 2% more damage with all attacks, spells and abilities.  Each damaging attack that lands consumes 1 bone.  Lasts 5 min.",
+    "49222_aura": "Damage reduced by 20%.",
+
+    // Icebound Fortitude — $G gender
+    "48792": "The Death Knight freezes his blood to become immune to Stun effects and reduce all damage taken by 20% plus additional damage reduction based on Defense for 12 sec.",
+    "48792_aura": "Damage taken reduced.\r\nImmune to Stun effects.",
+
+    // Recklessness — $n proc charges
+    "1719": "Your next 3 special ability attacks have an additional 100% to critically hit but all damage taken is increased by 20%.  Lasts 12 sec.",
+    "1719_aura": "Special ability attacks have an additional 100% chance to critically hit but all damage taken is increased by 20%.",
+
+    // Avenging Wrath — cross-ref $61987d
+    "31884": "Increases all damage and healing caused by 20% for 20 sec.  Cannot be used within 30 sec of being the target of Divine Shield, Divine Protection, or Hand of Protection.",
+    "31884_aura": "All damage and healing caused increased by 20%.",
+
+    // Divine Plea — $o1 periodic total
+    "54428": "You gain 25% of your total mana over 15 sec, but the amount healed by your Flash of Light, Holy Light, and Holy Shock spells is reduced by 50%.",
+    "54428_aura": "Gaining 25% of total mana.\r\nHealing spells reduced by 50%.",
+
+    // Unholy Frenzy — multi-effect %s
+    "49016": "Induces a friendly unit into a killing frenzy for 30 sec.  The target is Enraged, which increases their physical damage by 20%, but causes them to lose health equal to 1% of their maximum health every second.",
+    "49016_aura": "Enraged.\r\nPhysical damage increased by 20%.\r\nHealth equal to 1% of maximum health lost every sec.",
+
+    // Vampiric Blood — multi-effect %s
+    "55233": "Temporarily grants the Death Knight 15% of maximum health and increases the amount of health generated through spells and effects by 35% for 20 sec.  After the effect expires, the health is lost.",
+    "55233_aura": "Healing improved by 35%\r\nMaximum health increased by 15%",
+
+    // Death Wish — $s1/$s3/$d (skips effect 2)
+    "12292": "When activated you become enraged, increasing your physical damage by 20% but increasing all damage taken by 5%.  Lasts 30 sec.",
+    "12292_aura": "Increases physical damage by 20%.  Increases all damage taken by 5%.",
+
+    // Replenishment — self-referencing cross-spell $57669d
+    "57669": "Replenishes 1% of maximum mana per 5 sec for 15 sec.",
+    "57669_aura": "Replenishes 1% of maximum mana per 5 sec.",
+
+    // Enchant Weapon - Mongoose — static text, no variables
+    "27984": "Permanently enchant a melee weapon to occasionally increase Agility by 120 and attack speed slightly.  Requires a level 35 or higher item.",
+
+    // Obliterate — ${$m1*$m2/100} inline arithmetic with variables
+    "49020": "A brutal instant attack that deals 80% weapon damage plus 198, total damage increased 13.1% per each of your diseases on the target, but consumes the diseases.",
+
+    // Death Strike — ${$m1*$m2/100} + $G + $F (unresolved runtime var)
+    "49998": "A deadly attack that deals 75% weapon damage plus 84 and heals the Death Knight for $F% of his maximum health for each of his diseases on the target.",
+
+    // Unbreakable Armor — ${$m1*$AR*0.01} runtime var in arithmetic (stays unresolved)
+    "51271": "Reinforces your armor with a thick coat of ice, reducing damage from all attacks by ${5*$AR*0.01} and increasing your Strength by 25% for 20 sec.  The amount of damage reduced increases as your armor increases.",
+    "51271_aura": "Damage taken reduced by armor.\r\nStrength increased by 25%.",
+
+    // Seal of Vengeance — $SPH/$AP/$AR runtime vars + cross-refs
+    "31801": "Fills the Paladin with holy power, causing attacks to apply Holy Vengeance, which deals ${(0.013*$SPH+0.025*$AP)*5} additional Holy damage over 15 sec.  Holy Vengeance can stack up to 5 times.  Once stacked to 5 times, each of the Paladin's attacks also deals 33% weapon damage as additional Holy damage.  Only one Seal can be active on the Paladin at any one time.  Lasts 30 min.\r\n\r\nUnleashing this Seal's energy will deal ${1+0.22*$SPH+0.14*$AP} Holy damage to an enemy, increased by 10% for each application of Holy Vengeance on the target.",
+    "31801_aura": "Melee attacks cause Holy damage over 15 sec.",
   },
 
   // Ascension (3.3.5a — modified client, identical DBC to AzerothCore for base spells)
@@ -252,3 +309,54 @@ describe("extractReferencedSpellIds", () => {
     expect(extractReferencedSpellIds("")).toEqual([]);
   });
 });
+// Spells whose descriptions intentionally contain unresolved runtime variables
+// ($AR, $AP, $SPH, $F are player-specific values the tooltip resolver cannot compute).
+// These are excluded from the "no raw placeholders" assertion.
+const RUNTIME_VARIABLE_SPELLS = new Set([
+  49998, // Death Strike — $F (cumulative_aura, unhandled uppercase)
+  51271, // Unbreakable Armor — $AR (player armor)
+  31801, // Seal of Vengeance — $SPH, $AP, $AR (player stats)
+]);
+
+describe("no raw placeholders in resolved descriptions", () => {
+  // These patterns should never appear in resolved output for fully-resolvable spells.
+  // They indicate the resolver failed to substitute a template variable.
+  const rawPlaceholderPatterns = [
+    { pattern: /\$[sSmMoO]\d/g, label: "effect value ($s1, $m1, $o1)" },
+    { pattern: /\$[dD]\b/g, label: "duration ($d)" },
+    { pattern: /\$[tT]\d/g, label: "tick interval ($t1)" },
+    { pattern: /\$[aA]\d/g, label: "radius ($a1)" },
+    { pattern: /\$[nN]\b/g, label: "proc charges ($n)" },
+    { pattern: /\$[hH]\b/g, label: "proc chance ($h)" },
+    { pattern: /\$[xX]\d/g, label: "chain targets ($x1)" },
+    { pattern: /\$[bB]\d/g, label: "combo points ($b1)" },
+    { pattern: /\$l[^:]+:[^;]+;/g, label: "pluralization ($l...;)" },
+    { pattern: /\$[gG][^:]+:[^;]+;/g, label: "gender ($g...;)" },
+  ];
+
+  testSpells.forEach(({ id, name, descriptionTemplate, auraDescriptionTemplate }) => {
+    if (RUNTIME_VARIABLE_SPELLS.has(id)) return;
+
+    for (const { template, label } of [
+      { template: descriptionTemplate, label: "description" },
+      { template: auraDescriptionTemplate, label: "aura" },
+    ]) {
+      if (!template || template === "<empty>") continue;
+
+      it(`spell ${id} (${name}) ${label} has no raw placeholders`, () => {
+        const resolved = resolveTestSpell(id, template);
+        for (const { pattern, label: patLabel } of rawPlaceholderPatterns) {
+          const matches = resolved.match(pattern);
+          if (matches) {
+            expect.fail(
+              `Resolved ${label} for spell ${id} (${name}) contains raw ${patLabel}: ${matches.join(", ")}\n` +
+              `Template: ${template}\n` +
+              `Resolved: ${resolved}`
+            );
+          }
+        }
+      });
+    }
+  });
+});
+

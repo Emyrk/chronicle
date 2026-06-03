@@ -66,7 +66,26 @@ var serverSpellIDs = map[string][]int{
 	},
 	"azerothcore": {
 		48461, // Wrath rank 10 — WotLK spell
-		48441, // Flash of Light rank 9 — WotLK spell
+		48441, // Rejuvenation rank 15 — WotLK spell
+
+		// WotLK abilities with complex template patterns
+		47788, // Guardian Spirit — multi-effect %s ($s1, $s2, $d)
+		49222, // Bone Shield — $G gender in real spell + $s1/$s2/$d
+		48792, // Icebound Fortitude — $G gender + $d
+		1719,  // Recklessness — $n proc charges + $s1/$s2/$d
+		31884, // Avenging Wrath — $s1/$d + cross-ref $61987d
+		54428, // Divine Plea — $o1 periodic total + $s2/$d
+		49016, // Unholy Frenzy — multi-effect %s ($s1/$s2/$d)
+		55233, // Vampiric Blood — multi-effect %s ($s1/$s2/$d)
+		12292, // Death Wish — $s1/$s3/$d (skips effect 2)
+		57669, // Replenishment — self-referencing cross-spell $57669d
+		27984, // Enchant Weapon - Mongoose — static text, no variables
+
+		// Complex arithmetic and runtime variables (tests graceful fallback)
+		49020, // Obliterate — ${$m1*$m2/100} inline arithmetic with vars
+		49998, // Death Strike — ${$m1*$m2/100} + $G + $F
+		51271, // Unbreakable Armor — ${$m1*$AR*0.01} runtime var in arithmetic
+		31801, // Seal of Vengeance — $SPH/$AP/$AR runtime vars + cross-refs
 	},
 	"ascension": {
 		48461, // Wrath rank 10 — WotLK spell
