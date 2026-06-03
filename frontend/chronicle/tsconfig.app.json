@@ -15,7 +15,7 @@
         "./src/constants/dbmem/turtle/*"
       ],
       "@chronicle/wow-tooltip-renderer": [
-        "../../packages/wow-tooltip-renderer/src/index.ts"
+        "../wow-tooltip-renderer/src/index.ts"
       ],
       "@/*": [
         "./src/*"

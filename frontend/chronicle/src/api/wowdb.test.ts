@@ -217,6 +217,44 @@ const expectedByServer: Record<string, Record<string, string>> = {
     "48441": "Heals the target for 1690 over 15 sec.",
     "48441_aura": "Heals 338 damage every 3 seconds.",
   },
+
+  // VanillaPlus (1.12.1 vanilla base — values match Turtle/Kronos for shared spells)
+  vanillaplus: {
+    "133": "Hurls a fiery ball that causes 14 to 22 Fire damage and an additional 2 Fire damage over 4 sec.",
+    "133_aura": "1 Fire damage every 2 seconds.",
+    "139": "Heals the target of 45 damage over 15 sec.",
+    "139_aura": "Healing 9 damage every 3 seconds.",
+    "15237": "Causes an explosion of holy light around the caster, causing 28 to 32 Holy damage to all enemy targets within 10 yards and healing all party members within 10 yards for 52 to 60.  These effects cause no threat.",
+    "18941": "Gives the caster 1 extra attack.",
+    "17347": "An instant strike that damages the opponent and causes the target to hemorrhage, increasing any Physical damage dealt to the target by up to 15.  Lasts 15 sec.  Awards 1 combo point.",
+    "17347_aura": "Increases damage taken by 15.",
+    "16511": "An instant strike that damages the opponent and causes the target to hemorrhage, increasing any Physical damage dealt to the target by up to 7.  Lasts 15 sec.  Awards 1 combo point.",
+    "16511_aura": "Increases damage taken by 7.",
+    "25175": "Gives the caster 2 extra attacks.",
+    "709": "Transfers 29 health every 1 sec from the target to the caster.  Lasts 5 sec.",
+    "709_aura": "Drains 29 health every 1 sec to the caster.",
+    "11712": "Curses the target with agony, causing 780 Shadow damage over 24 sec.  This damage is dealt slowly at first, and builds up as the Curse reaches its full duration.  Only one Curse per Warlock can be active on any one target.",
+    "11712_aura": "780 Shadow damage over 24 sec.",
+  },
+
+  // OctoWoW (1.12.1 vanilla base with custom tweaks, similar to Turtle)
+  octowow: {
+    "133": "Hurls a fiery ball that causes 14 to 22 Fire damage and an additional 2 Fire damage over 4 sec.",
+    "133_aura": "1 Fire damage every 2 seconds.",
+    "139": "Heals the target of 45 damage over 15 sec.",
+    "139_aura": "Healing 9 damage every 3 seconds.",
+    "15237": "Causes an explosion of holy light around the caster, causing 26 to 30 Holy damage to all enemy targets within 10 yards and healing all party members within 10 yards for 52 to 60. Using this spell while in Shadowform damages you instead of healing you. These effects cause reduced threat.",
+    "18941": "Gives the caster 1 extra attack.",
+    "17347": "An instant strike that damages the opponent and causes the target to hemorrhage, increasing any Physical damage dealt to the target by up to 5.  Lasts 30 charges or 15 sec.  Awards 1 combo point.",
+    "17347_aura": "Increases damage taken by 5.",
+    "16511": "An instant strike that deals 110% weapon damage and causes the target to hemorrhage, increasing any Physical damage dealt to the target by 2%.  Lasts 50 charges or 15 sec.  Awards 1 combo point.",
+    "16511_aura": "Increases damage taken by 2%.",
+    "25175": "Gives the caster 2 extra attacks.",
+    "709": "Transfers 145 Health from the target to the caster over 5 sec.",
+    "709_aura": "Periodically drains 29 health to the caster.",
+    "11712": "Curses the target with agony, causing 780 Shadow damage over 24 sec.  This damage is dealt slowly at first, and builds up as the Curse reaches its full duration.  Only one Curse per Warlock can be active on any one target.",
+    "11712_aura": "780 Shadow damage over 24 sec.",
+  },
 };
 
 const expectedDescriptions: Record<string, string> = expectedByServer[serverName] ?? {};

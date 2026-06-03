@@ -76,9 +76,14 @@ pnpm test        # unit + golden fixture tests
 pnpm typecheck
 ```
 
-A **parity test** in the Chronicle frontend
-(`frontend/chronicle/src/api/wowdb.parity.test.ts`) asserts this package produces
-byte-for-byte identical output to Chronicle's incumbent resolver across every
-generated DBC vector, for all servers. That incumbent resolver
-(`frontend/chronicle/src/api/wowdb.ts`) is retained during the migration as the
-comparison baseline.
+The Chronicle frontend consumes this package through a thin shim at
+`frontend/chronicle/src/api/wowdb.ts`, which re-exports the resolver, formatters,
+constants, and `WoWSpell` type (this package is the source of truth) and adds the
+few app-specific helpers that depend on Chronicle's runtime (tenant icon CDN,
+Tailwind theme classes). The frontend's golden tests
+(`frontend/chronicle/src/api/wowdb.test.ts`) run real generated DBC vectors
+through the shim — and therefore this package — for all servers.
+
+The rewrite from the previous regex resolver to this parser was validated with a
+differential parity test asserting byte-for-byte identical output across every
+DBC vector for all 7 servers before the old implementation was removed.
