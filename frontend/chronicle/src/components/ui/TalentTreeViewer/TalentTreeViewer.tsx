@@ -1,6 +1,6 @@
 import { useQuery } from "@tanstack/react-query";
 import { cn } from "@/lib/utils";
-import { iconUrl } from "@/config/iconUrl";
+import { iconUrl, talentBackgroundUrl } from "@/config/iconUrl";
 import { useMemo, useState } from "react";
 import { createPortal } from "react-dom";
 import { useSpell } from "@/api/queries";
@@ -345,7 +345,20 @@ function TalentTab({
       </div>
 
       {/* Talent grid */}
-      <div className="p-3">
+      <div
+        className="p-3 relative bg-cover bg-center bg-no-repeat"
+        style={
+          tab.backgroundFile
+            ? {
+                backgroundImage: `url(${talentBackgroundUrl(tab.backgroundFile)})`,
+              }
+            : undefined
+        }
+      >
+        {/* Dark overlay so icons remain readable on top of the background */}
+        {tab.backgroundFile && (
+          <div className="absolute inset-0 bg-black/50 pointer-events-none" />
+        )}
         <div className="relative">
           {/* Arrow SVG overlay */}
           {arrows.length > 0 && (

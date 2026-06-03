@@ -165,6 +165,17 @@ icons/upload:
 # Full pipeline: convert → manifest → upload
 .PHONY: icons
 icons: icons/convert icons/manifest icons/upload
+.PHONY: icons/talents-extract
+icons/talents-extract:
+	go run ./scripts/dbcdata extract-talent-backgrounds --server=$(SERVER) --out=frontend/imagecache/$(SERVER)/talent-backgrounds
+
+.PHONY: icons/talents-upload
+icons/talents-upload:
+	$(call run-imagecache,./upload-talent-bg-r2.sh)
+
+# Full talent-background pipeline: extract from client → upload to R2
+.PHONY: icons/talents
+icons/talents: icons/talents-extract icons/talents-upload
 
 .PHONY: gen/hostiles-azerothcore
 gen/hostiles-azerothcore:
