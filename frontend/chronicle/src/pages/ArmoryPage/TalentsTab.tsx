@@ -1,6 +1,6 @@
 import type { ArmoryPlayer } from "@/api/typesGenerated";
 import {
-  TalentTreeViewer,
+  TalentTreeViewerLegacy as TalentTreeViewer,
   type TalentAllocation,
 } from "@/components/ui/TalentTreeViewer/TalentTreeViewer";
 import { useMemo } from "react";

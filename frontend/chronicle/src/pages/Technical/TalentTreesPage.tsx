@@ -3,7 +3,7 @@ import { ArrowLeft, TreePine } from "lucide-react";
 import { useState, useMemo } from "react";
 import { useQuery } from "@tanstack/react-query";
 import {
-  TalentTreeViewer,
+  TalentTreeViewerLegacy as TalentTreeViewer,
   type TalentAllocation,
 } from "@/components/ui/TalentTreeViewer/TalentTreeViewer";
 import { useDatasets, useSiteConfig } from "@/api/queries";

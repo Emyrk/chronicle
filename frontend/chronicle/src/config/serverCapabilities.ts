@@ -48,6 +48,12 @@ export interface ServerCapabilities {
   defaultFormat: LogFormat;
   /** Server-mechanics flavor tags the frontend stamps on uploads. */
   defaultFlavor: readonly string[];
+  /** Talent calculator configuration. */
+  talentCalculator?: {
+    maxTalentPoints: number;
+    maxLevel: number;
+    classIds: number[];
+  };
 }
 
 const CAPABILITIES: Record<string, ServerCapabilities> = {
@@ -104,6 +110,11 @@ const DEFAULT_CAPABILITIES: ServerCapabilities = {
   defaultLogType: "v2",
   defaultFormat: "1.12a-cc-addon",
   defaultFlavor: ["vanilla"],
+  talentCalculator: {
+    maxTalentPoints: 51,
+    maxLevel: 60,
+    classIds: [1, 2, 3, 4, 5, 7, 8, 9, 11],
+  },
 };
 
 /**

@@ -17,7 +17,7 @@ import {
   TooltipTrigger,
 } from "@/components/ui/Tooltip/tooltip";
 import { Link } from "react-router-dom";
-import { TalentTreeViewer, type TalentAllocation } from "@/components/ui/TalentTreeViewer/TalentTreeViewer";
+import { TalentTreeViewerLegacy as TalentTreeViewer, type TalentAllocation } from "@/components/ui/TalentTreeViewer/TalentTreeViewer";
 
 const SLOT_ORDER = [
   { index: 0, label: "Head" },
