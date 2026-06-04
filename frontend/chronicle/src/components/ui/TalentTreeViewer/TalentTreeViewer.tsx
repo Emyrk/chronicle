@@ -224,7 +224,7 @@ function TalentPrereqArrows({ arrows, ranks, height, talents }: { arrows: Talent
 
 // ─── Talent button ────────────────────────────────────────────────
 
-function TalentButton({ talent, rank, locked, talents, ranks, onChange, readOnly }: {
+function TalentButton({ talent, rank, locked, talents, ranks, onChange, readOnly, debug }: {
   talent: TalentEntry;
   rank: number;
   locked: boolean;
@@ -232,6 +232,7 @@ function TalentButton({ talent, rank, locked, talents, ranks, onChange, readOnly
   ranks: TalentRanks;
   onChange: (rank: number) => void;
   readOnly: boolean;
+  debug?: boolean;
 }) {
   const maxed = rank >= talent.maxRank;
   const visualState = talentVisualState(rank, talent.maxRank, locked);
@@ -380,6 +381,12 @@ function TalentButton({ talent, rank, locked, talents, ranks, onChange, readOnly
         event.preventDefault();
         onChange(Math.max(0, rank - 1));
       }}
+      onAuxClick={(event) => {
+        if (!debug || event.button !== 1) return;
+        event.preventDefault();
+        const spellId = talent.spellRanks[Math.max(0, rank - 1)] ?? talent.spellRanks[0];
+        if (spellId != null) void navigator.clipboard.writeText(String(spellId));
+      }}
       className={cn(
         "group relative h-11 w-11 rounded-sm border bg-zinc-950 shadow-lg transition before:absolute before:-inset-0.5 before:rounded-sm before:content-['']",
         visualState === "locked" && "talent-state-locked cursor-not-allowed border-zinc-700 opacity-75 before:bg-black/10",
@@ -426,12 +433,14 @@ function TalentTab({
   readOnly,
   onRankChange,
   onReset,
+  debug,
 }: {
   tab: TalentTabData;
   ranks: TalentRanks;
   readOnly: boolean;
   onRankChange: (talent: TalentEntry, rank: number) => void;
   onReset: () => void;
+  debug?: boolean;
 }) {
   const points = useMemo(() => tab.talents.reduce((sum, talent) => sum + (ranks[talent.id] ?? 0), 0), [tab.talents, ranks]);
   const arrows = useMemo(() => prerequisiteArrows(tab.talents), [tab.talents]);
@@ -507,6 +516,7 @@ function TalentTab({
                           talents={tab.talents}
                           ranks={ranks}
                           readOnly={readOnly}
+                          debug={debug}
                           onChange={(rank) => onRankChange(t, rank)}
                         />
                       )}
@@ -632,6 +642,7 @@ export function TalentTreeViewer({
             tab={tab}
             ranks={ranks}
             readOnly={readOnly}
+            debug={searchParams.get("debug") === "true"}
             onRankChange={(talent, rank) => commitRanks(updateTalentRank(talent, rank, tab.talents, ranks, { maxPoints }))}
             onReset={() => commitRanks(resetTalentTabRanks(tabTalentLists, ranks, tab.talents, maxPoints))}
           />
