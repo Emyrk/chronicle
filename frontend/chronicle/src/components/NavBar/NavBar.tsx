@@ -1,6 +1,6 @@
 import { useMemo, useState } from "react";
 import { Link, useLocation } from "react-router-dom";
-import { Settings, Upload, LogOut, FileText, Shield, Key, Castle, Menu, Swords, Trophy, Database, Server, Users, Compass, Sparkles } from "lucide-react";
+import { Settings, Upload, LogOut, FileText, Shield, Key, Castle, Menu, Swords, Trophy, Database, Server, Users, Compass, Sparkles, Wrench } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
 import { serverCapabilities } from "@/config/serverCapabilities";
 import { useAuth } from "@/hooks/useAuth";
@@ -148,13 +148,18 @@ export function NavBar() {
                 <Users className="h-4 w-4" />
                 Census
               </Link>
+              <div className="border-t my-2" />
+              <span className="flex items-center gap-2 text-xs font-semibold uppercase tracking-wider text-muted-foreground/60 py-1">
+                <Wrench className="h-3.5 w-3.5" />
+                Tools
+              </span>
               <Link
                 to="/talents"
                 onClick={() => setMobileMenuOpen(false)}
-                className="flex items-center gap-2 text-sm text-muted-foreground hover:text-foreground transition-colors py-2"
+                className="flex items-center gap-2 text-sm text-muted-foreground hover:text-foreground transition-colors py-2 pl-6"
               >
                 <Sparkles className="h-4 w-4" />
-                Talents
+                Talent Builder
               </Link>
               {isAuthenticated && (
                 <>
@@ -250,10 +255,20 @@ export function NavBar() {
                 Census
               </Link>
             </DropdownMenuItem>
+          </DropdownMenuContent>
+        </DropdownMenu>
+        <DropdownMenu modal={false}>
+          <DropdownMenuTrigger asChild>
+            <button className="flex items-center gap-1.5 text-sm text-muted-foreground hover:text-foreground transition-colors">
+              <Wrench className="h-4 w-4" />
+              Tools
+            </button>
+          </DropdownMenuTrigger>
+          <DropdownMenuContent align="end" className="w-[180px]">
             <DropdownMenuItem asChild>
               <Link to="/talents" className="flex items-center gap-2">
                 <Sparkles className="h-4 w-4" />
-                Talents
+                Talent Builder
               </Link>
             </DropdownMenuItem>
           </DropdownMenuContent>
