@@ -31,19 +31,19 @@ export function TalentCalculatorPage() {
     return CLASS_INFO.filter((c) => tc.classIds.includes(c.id));
   }, [tc]);
 
-  // Default to the first available class when no slug is provided.
-  if (!classSlug) {
-    const first = availableClasses[0];
-    return <Navigate to={`/talents/${first.slug}`} replace />;
-  }
-
   const selectedClass = availableClasses.find((c) => c.slug === classSlug);
   const selectedClassId = selectedClass?.id;
 
   const classTreeData = useMemo(() => {
     if (!talentData || !selectedClassId) return undefined;
-    return talentData.classes?.find((c) => c.classId === selectedClassId);
+    return talentData.classes?.[String(selectedClassId)];
   }, [talentData, selectedClassId]);
+
+  // Default to the first available class when no slug is provided.
+  if (!classSlug) {
+    const first = availableClasses[0];
+    return <Navigate to={`/talents/${first.slug}`} replace />;
+  }
 
   return (
     <div className="container mx-auto px-4 py-4 max-w-7xl">
