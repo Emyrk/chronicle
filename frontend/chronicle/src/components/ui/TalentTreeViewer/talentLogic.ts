@@ -399,11 +399,13 @@ export function mergeTalentRankDescriptions(descriptions: string[], activeRank: 
   const [firstTokens] = tokenizedDescriptions;
   if (firstTokens.length === 0 || !firstTokens.some((token) => token.type === "number")) return null;
 
-  const sameTemplate = tokenizedDescriptions.every((tokens) =>
+  // Require same token count and types, but allow text tokens to differ
+  // slightly (e.g. "rage point." vs "rage points." singular/plural).
+  const compatibleTemplate = tokenizedDescriptions.every((tokens) =>
     tokens.length === firstTokens.length
-    && tokens.every((token, index) => token.type === firstTokens[index].type && (token.type === "number" || token.value === firstTokens[index].value)),
+    && tokens.every((token, index) => token.type === firstTokens[index].type),
   );
-  if (!sameTemplate) return null;
+  if (!compatibleTemplate) return null;
 
   const changingNumberIndexes = firstTokens
     .map((token, index) => ({ token, index }))
@@ -411,8 +413,10 @@ export function mergeTalentRankDescriptions(descriptions: string[], activeRank: 
     .map(({ index }) => index);
   if (changingNumberIndexes.length === 0) return null;
 
+  // Use the active rank's text tokens so singular/plural matches the highlighted value.
   const activeIndex = activeRank > 0 && activeRank <= usableDescriptions.length ? activeRank - 1 : -1;
-  return firstTokens.reduce<TalentRankDescriptionPart[]>((parts, token, index) => {
+  const templateTokens = activeIndex >= 0 ? tokenizedDescriptions[activeIndex] : firstTokens;
+  return templateTokens.reduce<TalentRankDescriptionPart[]>((parts, token, index) => {
     const nextPart = token.type === "number" && changingNumberIndexes.includes(index)
       ? { type: "ladder" as const, values: tokenizedDescriptions.map((tokens) => tokens[index].value), activeIndex }
       : { type: "text" as const, text: token.value };

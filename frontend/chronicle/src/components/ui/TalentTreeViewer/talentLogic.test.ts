@@ -186,6 +186,30 @@ describe("TalentTreeViewer rank description merging", () => {
       { type: "text", text: " sec." },
     ]);
   });
+
+  it("merges descriptions with singular/plural text differences", () => {
+    expect(mergeTalentRankDescriptions([
+      "Reduces the cost of your Heroic Strike ability by 1 rage point.",
+      "Reduces the cost of your Heroic Strike ability by 2 rage points.",
+      "Reduces the cost of your Heroic Strike ability by 3 rage points.",
+    ], 2)).toEqual([
+      { type: "text", text: "Reduces the cost of your Heroic Strike ability by " },
+      { type: "ladder", values: ["1", "2", "3"], activeIndex: 1 },
+      { type: "text", text: " rage points." },
+    ]);
+  });
+
+  it("uses active rank text for singular/plural when rank 1 is active", () => {
+    expect(mergeTalentRankDescriptions([
+      "Reduces the cost of your Heroic Strike ability by 1 rage point.",
+      "Reduces the cost of your Heroic Strike ability by 2 rage points.",
+      "Reduces the cost of your Heroic Strike ability by 3 rage points.",
+    ], 1)).toEqual([
+      { type: "text", text: "Reduces the cost of your Heroic Strike ability by " },
+      { type: "ladder", values: ["1", "2", "3"], activeIndex: 0 },
+      { type: "text", text: " rage point." },
+    ]);
+  });
 });
 
 describe("TalentTreeViewer tooltip positioning", () => {
