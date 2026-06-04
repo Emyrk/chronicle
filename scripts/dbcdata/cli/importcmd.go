@@ -77,14 +77,14 @@ func ImportCmd() *serpent.Command {
 			},
 			{
 				Name:        "token",
-				Description: "Bearer token for authenticating uploads.",
+				Description: "Bearer token for authenticating uploads. Also checks CHRONICLE_TOKEN_<SERVER>.",
 				Flag:        "token",
 				Env:         "CHRONICLE_TOKEN",
 				Value:       serpent.StringOf(&token),
 			},
 			{
 				Name:        "cookie",
-				Description: "Session cookie value (or 'name=value') to exchange for a token via /whoami/dump. Alternative to --token.",
+				Description: "Session cookie value (or 'name=value') to exchange for a token via /whoami/dump. Alternative to --token. Also checks CHRONICLE_COOKIE_<SERVER>.",
 				Flag:        "cookie",
 				Env:         "CHRONICLE_COOKIE",
 				Value:       serpent.StringOf(&cookie),
@@ -104,6 +104,16 @@ func ImportCmd() *serpent.Command {
 			},
 		},
 		Handler: func(inv *serpent.Invocation) error {
+			// Prefer per-server env vars, e.g. CHRONICLE_TOKEN_TURTLE,
+			// CHRONICLE_COOKIE_TURTLE, falling back to the generic ones
+			// that serpent already resolved.
+			if token == "" {
+				token = os.Getenv("CHRONICLE_TOKEN_" + strings.ToUpper(server))
+			}
+			if cookie == "" {
+				cookie = os.Getenv("CHRONICLE_COOKIE_" + strings.ToUpper(server))
+			}
+
 			// Default importer set from --import.
 			selected, err := selectImporters(imports)
 			if err != nil {
