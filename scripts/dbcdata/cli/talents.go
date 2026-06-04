@@ -28,15 +28,16 @@ type talentTabData struct {
 }
 
 type talentEntry struct {
-	ID          int32   `json:"id"`
-	TierID      int32   `json:"tierID"`
-	ColumnIndex int32   `json:"columnIndex"`
-	MaxRank     int32   `json:"maxRank"`
-	TabIndex    int32   `json:"tabIndex"` // 0-based index within tab (sorted by tier, then column)
-	SpellRanks  []int32 `json:"spellRanks"` // spell ID per rank (rank 1 = index 0)
+	ID           int32   `json:"id"`
+	Name         string  `json:"name"`
+	TierID       int32   `json:"tierID"`
+	ColumnIndex  int32   `json:"columnIndex"`
+	MaxRank      int32   `json:"maxRank"`
+	TabIndex     int32   `json:"tabIndex"` // 0-based index within tab (sorted by tier, then column)
+	SpellRanks   []int32 `json:"spellRanks"` // spell ID per rank (rank 1 = index 0)
 	PrereqTalent []int32 `json:"prereqTalent,omitempty"`
 	PrereqRank   []int32 `json:"prereqRank,omitempty"`
-	IconTexture string  `json:"iconTexture"`
+	IconTexture  string  `json:"iconTexture"`
 }
 
 // classMaskToIDs converts a bitmask to class IDs (1=Warrior, 2=Paladin, etc.)
@@ -84,13 +85,17 @@ func collectTalentTrees(wc *dbcdb.WoWClient) (*talentTreeData, error) {
 		return nil, fmt.Errorf("iterate spell icons: %w", err)
 	}
 
-	// Build spell icon lookup (spell ID -> icon texture)
+	// Build spell icon + name lookup (spell ID -> icon texture / name)
 	spellIconMap := make(map[int32]string)
+	spellNameMap := make(map[int32]string)
 	err = spellsDBC.Range(func(cursor *dbdefs.Ent_Spell) bool {
 		if cursor.SpellIconID != 0 {
 			if tex, ok := iconMap[cursor.SpellIconID]; ok {
 				spellIconMap[cursor.ID] = tex
 			}
+		}
+		if name := cursor.Name_lang.String(); name != "" {
+			spellNameMap[cursor.ID] = name
 		}
 		return true
 	})
@@ -164,14 +169,17 @@ func collectTalentTrees(wc *dbcdb.WoWClient) (*talentTreeData, error) {
 				continue
 			}
 
-			// Get icon from first rank spell
+			// Get icon and name from first rank spell
 			iconTex := ""
+			spellName := ""
 			if len(spellRanks) > 0 {
 				iconTex = spellIconMap[spellRanks[0]]
+				spellName = spellNameMap[spellRanks[0]]
 			}
 
 			entry := talentEntry{
 				ID:          t.ID,
+				Name:        spellName,
 				TierID:      t.TierID,
 				ColumnIndex: t.ColumnIndex,
 				MaxRank:     maxRank,

@@ -27,6 +27,7 @@ type TalentTabData struct {
 // TalentEntry represents a single talent within a tab.
 type TalentEntry struct {
 	ID           int32   `json:"id"`
+	Name         string  `json:"name"`
 	TierID       int32   `json:"tierID"`
 	ColumnIndex  int32   `json:"columnIndex"`
 	MaxRank      int32   `json:"maxRank"`

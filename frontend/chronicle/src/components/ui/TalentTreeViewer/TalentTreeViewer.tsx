@@ -441,10 +441,6 @@ function TalentTab({
   const [failedBackgroundUrl, setFailedBackgroundUrl] = useState<string | null>(null);
   const showBackground = isTalentBackgroundVisible(backgroundUrl, failedBackgroundUrl);
 
-  useEffect(() => {
-    setFailedBackgroundUrl(null);
-  }, [backgroundUrl]);
-
   return (
     <section className="talent-tree-card relative max-w-full self-start overflow-hidden rounded-lg border border-amber-400/20 bg-[radial-gradient(circle_at_top_left,rgba(20,184,166,0.14),transparent_32%),linear-gradient(180deg,rgba(120,83,38,0.16),rgba(9,9,11,0.58))] p-4 shadow-2xl shadow-black/30" aria-label={`${tab.name} talent tree`}>
       {showBackground && backgroundUrl && (
@@ -579,9 +575,12 @@ export function TalentTreeViewer({
   const total = useMemo(() => totalTalentPoints(ranks), [ranks]);
   const requiredLevel = useMemo(() => calculateRequiredPlayerLevel(total, flavor), [flavor, total]);
 
-  // Sync when data/params change externally
+  // Sync ranks when external inputs (data, URL params, allocations) change.
+  // This is a legitimate prop→state synchronization — ranks are also updated
+  // by user clicks via commitRanks(), so we can't simply derive them.
   useEffect(() => {
     if (allocations && allocations.length > 0) {
+      // eslint-disable-next-line react-hooks/set-state-in-effect -- legitimate prop→state sync; ranks are also mutated by user clicks
       setRanks(normalizeTalentRanks(tabTalentLists, allocationsToRanks(data.tabs, allocations), maxPoints));
     } else {
       setRanks(normalizeTalentRanks(tabTalentLists, decodeTalentBuild(searchParams.get(TALENT_BUILD_PARAM)), maxPoints));
