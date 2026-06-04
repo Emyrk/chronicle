@@ -17,6 +17,7 @@ func convertToExportedTypes(data *talentTreeData) *talents.TalentTreeData {
 			for _, e := range tab.Talents {
 				entries = append(entries, talents.TalentEntry{
 					ID:           e.ID,
+					Name:         e.Name,
 					TierID:       e.TierID,
 					ColumnIndex:  e.ColumnIndex,
 					MaxRank:      e.MaxRank,
