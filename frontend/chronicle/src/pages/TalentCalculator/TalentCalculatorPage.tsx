@@ -7,15 +7,15 @@ import { TalentTreeViewer } from "@/components/ui/TalentTreeViewer/TalentTreeVie
 import { useTalentTrees } from "@/components/ui/TalentTreeViewer/useTalentTrees";
 
 const CLASS_INFO: { id: number; name: string; slug: string; iconTexture: string }[] = [
-  { id: 1, name: "Warrior", slug: "warrior", iconTexture: "classicon_warrior" },
-  { id: 2, name: "Paladin", slug: "paladin", iconTexture: "classicon_paladin" },
-  { id: 3, name: "Hunter", slug: "hunter", iconTexture: "classicon_hunter" },
-  { id: 4, name: "Rogue", slug: "rogue", iconTexture: "classicon_rogue" },
-  { id: 5, name: "Priest", slug: "priest", iconTexture: "classicon_priest" },
-  { id: 7, name: "Shaman", slug: "shaman", iconTexture: "classicon_shaman" },
-  { id: 8, name: "Mage", slug: "mage", iconTexture: "classicon_mage" },
-  { id: 9, name: "Warlock", slug: "warlock", iconTexture: "classicon_warlock" },
-  { id: 11, name: "Druid", slug: "druid", iconTexture: "classicon_druid" },
+  { id: 1, name: "Warrior", slug: "warrior", iconTexture: "class_warrior" },
+  { id: 2, name: "Paladin", slug: "paladin", iconTexture: "class_paladin" },
+  { id: 3, name: "Hunter", slug: "hunter", iconTexture: "class_hunter" },
+  { id: 4, name: "Rogue", slug: "rogue", iconTexture: "class_rogue" },
+  { id: 5, name: "Priest", slug: "priest", iconTexture: "class_priest" },
+  { id: 7, name: "Shaman", slug: "shaman", iconTexture: "class_shaman" },
+  { id: 8, name: "Mage", slug: "mage", iconTexture: "class_mage" },
+  { id: 9, name: "Warlock", slug: "warlock", iconTexture: "class_warlock" },
+  { id: 11, name: "Druid", slug: "druid", iconTexture: "class_druid" },
 ];
 
 export function TalentCalculatorPage() {
