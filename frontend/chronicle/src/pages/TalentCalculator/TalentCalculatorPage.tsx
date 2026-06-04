@@ -1,21 +1,20 @@
 import { useMemo } from "react";
 import { Link, useParams, Navigate } from "react-router-dom";
 import { cn } from "@/lib/utils";
-import { iconUrl } from "@/config/iconUrl";
 import { serverCapabilities } from "@/config/serverCapabilities";
 import { TalentTreeViewer } from "@/components/ui/TalentTreeViewer/TalentTreeViewer";
 import { useTalentTrees } from "@/components/ui/TalentTreeViewer/useTalentTrees";
 
-const CLASS_INFO: { id: number; name: string; slug: string; iconTexture: string }[] = [
-  { id: 1, name: "Warrior", slug: "warrior", iconTexture: "class_warrior" },
-  { id: 2, name: "Paladin", slug: "paladin", iconTexture: "class_paladin" },
-  { id: 3, name: "Hunter", slug: "hunter", iconTexture: "class_hunter" },
-  { id: 4, name: "Rogue", slug: "rogue", iconTexture: "class_rogue" },
-  { id: 5, name: "Priest", slug: "priest", iconTexture: "class_priest" },
-  { id: 7, name: "Shaman", slug: "shaman", iconTexture: "class_shaman" },
-  { id: 8, name: "Mage", slug: "mage", iconTexture: "class_mage" },
-  { id: 9, name: "Warlock", slug: "warlock", iconTexture: "class_warlock" },
-  { id: 11, name: "Druid", slug: "druid", iconTexture: "class_druid" },
+const CLASS_INFO: { id: number; name: string; slug: string }[] = [
+  { id: 1, name: "Warrior", slug: "warrior" },
+  { id: 2, name: "Paladin", slug: "paladin" },
+  { id: 3, name: "Hunter", slug: "hunter" },
+  { id: 4, name: "Rogue", slug: "rogue" },
+  { id: 5, name: "Priest", slug: "priest" },
+  { id: 7, name: "Shaman", slug: "shaman" },
+  { id: 8, name: "Mage", slug: "mage" },
+  { id: 9, name: "Warlock", slug: "warlock" },
+  { id: 11, name: "Druid", slug: "druid" },
 ];
 
 export function TalentCalculatorPage() {
@@ -69,9 +68,10 @@ export function TalentCalculatorPage() {
             )}
           >
             <img
-              src={iconUrl(cls.iconTexture)}
+              src={`/c/icons/class_${cls.slug}.png`}
               alt=""
               className="h-6 w-6 rounded"
+              onError={(e) => { (e.target as HTMLImageElement).src = "/c/icons/class_unknown.png"; }}
             />
             <span>{cls.name}</span>
           </Link>
