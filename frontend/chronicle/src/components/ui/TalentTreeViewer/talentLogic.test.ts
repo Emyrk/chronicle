@@ -251,15 +251,17 @@ describe("TalentTreeViewer tree reset and background", () => {
     const arcane = [talent({ id: 310, tierID: 0, columnIndex: 0, maxRank: 5 })];
     const fire = [talent({ id: 320, tierID: 0, columnIndex: 0, maxRank: 5 })];
     const frost = [talent({ id: 330, tierID: 0, columnIndex: 0, maxRank: 5 })];
+    const allTabs = [arcane, fire, frost];
 
-    const resetArcane = resetTalentTabRanks([arcane, fire, frost], { 310: 3, 320: 2, 330: 1 }, arcane, 51);
+    const resetArcane = resetTalentTabRanks(allTabs, { 310: 3, 320: 2, 330: 1 }, arcane, 51);
 
     expect(resetArcane).toEqual({ 320: 2, 330: 1 });
-    expect(searchParamsWithTalentBuild(new URLSearchParams("build=old"), resetArcane).toString()).toBe("build=8w.2_96.1");
+    expect(searchParamsWithTalentBuild(new URLSearchParams("build=old"), resetArcane, allTabs).toString()).toBe("build=-2-1");
   });
 
   it("reset-all still clears every tree and removes the canonical build param", () => {
-    expect(searchParamsWithTalentBuild(new URLSearchParams("build=8m.3_8w.2"), {}).toString()).toBe("");
+    const allTabs = [[talent({ id: 310, tierID: 0, columnIndex: 0, maxRank: 5 })]];
+    expect(searchParamsWithTalentBuild(new URLSearchParams("build=old"), {}, allTabs).toString()).toBe("");
   });
 });
 
@@ -332,15 +334,40 @@ describe("TalentTreeViewer prerequisite arrows", () => {
 });
 
 describe("TalentTreeViewer URL build state", () => {
-  it("encodes and decodes nonzero ranks with compact URL-safe tokens", () => {
-    expect(encodeTalentBuild({ 20: 2, 10: 0, 30: 1 })).toBe("k.2_u.1");
-    expect(decodeTalentBuild("k.2_u.1_bad_14.0")).toEqual({ 20: 2, 30: 1 });
+  const tab1 = [
+    talent({ id: 10, tierID: 0, columnIndex: 0, maxRank: 5, tabIndex: 0 }),
+    talent({ id: 11, tierID: 0, columnIndex: 1, maxRank: 5, tabIndex: 1 }),
+    talent({ id: 12, tierID: 0, columnIndex: 2, maxRank: 3, tabIndex: 2 }),
+    talent({ id: 13, tierID: 1, columnIndex: 0, maxRank: 2, tabIndex: 3 }),
+    talent({ id: 14, tierID: 1, columnIndex: 1, maxRank: 5, tabIndex: 4 }),
+  ];
+  const tab2 = [
+    talent({ id: 20, tierID: 0, columnIndex: 0, maxRank: 5, tabIndex: 0 }),
+    talent({ id: 21, tierID: 0, columnIndex: 1, maxRank: 3, tabIndex: 1 }),
+  ];
+  const tabs = [tab1, tab2];
+
+  it("encodes positional build as digits-per-talent with dash-separated tabs", () => {
+    expect(encodeTalentBuild({ 10: 3, 11: 5, 14: 2 }, tabs)).toBe("35002");
+    expect(encodeTalentBuild({ 10: 3, 20: 1 }, tabs)).toBe("3-1");
+    expect(encodeTalentBuild({ 20: 2, 21: 1 }, tabs)).toBe("-21");
+    expect(encodeTalentBuild({}, tabs)).toBe("");
+  });
+
+  it("decodes positional build back to talent IDs", () => {
+    expect(decodeTalentBuild("35002", tabs)).toEqual({ 10: 3, 11: 5, 14: 2 });
+    expect(decodeTalentBuild("3-1", tabs)).toEqual({ 10: 3, 20: 1 });
+    expect(decodeTalentBuild("-21", tabs)).toEqual({ 20: 2, 21: 1 });
+  });
+
+  it("still decodes legacy base36 dot-underscore format", () => {
+    expect(decodeTalentBuild("k.2_u.1")).toEqual({ 20: 2, 30: 1 });
     expect(decodeTalentBuild("20:2,30:1,wat:2,40:0")).toEqual({ 20: 2, 30: 1 });
   });
 
-  it("writes compact build state into URL search params without percent-escaped separators", () => {
-    const params = searchParamsWithTalentBuild(new URLSearchParams("foo=bar"), { 12: 2, 30: 1 });
-    expect(params.toString()).toBe("foo=bar&build=c.2_u.1");
+  it("writes positional build into URL search params", () => {
+    const params = searchParamsWithTalentBuild(new URLSearchParams("foo=bar"), { 10: 2, 21: 1 }, tabs);
+    expect(params.toString()).toBe("foo=bar&build=2-01");
   });
 
   it("normalizes shared ranks through row, arrow, max-rank, and point-cap rules", () => {
@@ -354,33 +381,31 @@ describe("TalentTreeViewer URL build state", () => {
   });
 
   it("clears build state from URL search params without dropping other params", () => {
-    const params = searchParamsWithTalentBuild(new URLSearchParams("foo=bar"), { 12: 2, 30: 1 });
-    const cleared = searchParamsWithTalentBuild(params, {});
+    const params = searchParamsWithTalentBuild(new URLSearchParams("foo=bar"), { 10: 2 }, tabs);
+    const cleared = searchParamsWithTalentBuild(params, {}, tabs);
     expect(cleared.toString()).toBe("foo=bar");
   });
 
-  it("builds the canonical copy URL from the current server route, class route, and encoded build state", () => {
-    const url = canonicalTalentBuildUrl("https://wiki.chronicleclassic.com/turtle/talents/mage?foo=bar", { 12: 2, 30: 1 });
-
-    expect(url).toBe("https://wiki.chronicleclassic.com/turtle/talents/mage?foo=bar&build=c.2_u.1");
+  it("builds the canonical copy URL with positional encoding", () => {
+    const url = canonicalTalentBuildUrl("https://wiki.chronicleclassic.com/turtle/talents/mage?foo=bar", { 10: 3, 20: 1 }, tabs);
+    expect(url).toBe("https://wiki.chronicleclassic.com/turtle/talents/mage?foo=bar&build=3-1");
   });
 
   it("copies the canonical build URL through the Copy build link action", async () => {
     const copied: string[] = [];
-
-    await copyTalentBuildUrl({ writeText: async (value) => { copied.push(value); } }, "https://wiki.chronicleclassic.com/turtle/talents/mage?build=stale", { 12: 2 });
-
-    expect(copied).toEqual(["https://wiki.chronicleclassic.com/turtle/talents/mage?build=c.2"]);
+    await copyTalentBuildUrl({ writeText: async (value) => { copied.push(value); } }, "https://wiki.chronicleclassic.com/turtle/talents/mage?build=stale", { 10: 2 }, tabs);
+    expect(copied).toEqual(["https://wiki.chronicleclassic.com/turtle/talents/mage?build=2"]);
   });
 
   it("normalizes invalid or stale shared build strings before generating the canonical copy URL", () => {
     const valid = talent({ id: 1, tierID: 0, columnIndex: 0, maxRank: 2 });
     const stale = talent({ id: 2, tierID: 1, columnIndex: 0, maxRank: 3 });
-    const normalized = normalizeTalentRanks([[valid, stale]], decodeTalentBuild("1.9_2.2_missing"), 2);
+    const normTabs = [[valid, stale]];
+    const normalized = normalizeTalentRanks(normTabs, decodeTalentBuild("1.9_2.2_missing"), 2);
 
     expect(normalized).toEqual({ 1: 2 });
-    expect(canonicalTalentBuildUrl("https://wiki.chronicleclassic.com/turtle/talents/mage?build=1.9_2.2_missing", normalized)).toBe(
-      "https://wiki.chronicleclassic.com/turtle/talents/mage?build=1.2",
+    expect(canonicalTalentBuildUrl("https://wiki.chronicleclassic.com/turtle/talents/mage?build=1.9_2.2_missing", normalized, normTabs)).toBe(
+      "https://wiki.chronicleclassic.com/turtle/talents/mage?build=2",
     );
   });
 });

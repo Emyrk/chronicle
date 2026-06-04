@@ -627,7 +627,7 @@ export function TalentTreeViewer({
     if (allocations && allocations.length > 0) {
       return normalizeTalentRanks(tabTalentLists, allocationsToRanks(data.tabs, allocations), maxPoints);
     }
-    return normalizeTalentRanks(tabTalentLists, decodeTalentBuild(searchParams.get(TALENT_BUILD_PARAM)), maxPoints);
+    return normalizeTalentRanks(tabTalentLists, decodeTalentBuild(searchParams.get(TALENT_BUILD_PARAM), tabTalentLists), maxPoints);
   }, [allocations, data.tabs, maxPoints, searchParams, tabTalentLists]);
 
   const [ranks, setRanks] = useState<TalentRanks>(initialRanks);
@@ -642,20 +642,20 @@ export function TalentTreeViewer({
       // eslint-disable-next-line react-hooks/set-state-in-effect -- legitimate prop→state sync; ranks are also mutated by user clicks
       setRanks(normalizeTalentRanks(tabTalentLists, allocationsToRanks(data.tabs, allocations), maxPoints));
     } else {
-      setRanks(normalizeTalentRanks(tabTalentLists, decodeTalentBuild(searchParams.get(TALENT_BUILD_PARAM)), maxPoints));
+      setRanks(normalizeTalentRanks(tabTalentLists, decodeTalentBuild(searchParams.get(TALENT_BUILD_PARAM), tabTalentLists), maxPoints));
     }
   }, [data.id, maxPoints, searchParams, tabTalentLists, allocations, data.tabs]);
 
   function commitRanks(nextRanks: TalentRanks) {
     setRanks(nextRanks);
     if (!readOnly && !allocations) {
-      setSearchParams(searchParamsWithTalentBuild(searchParams, nextRanks), { replace: true });
+      setSearchParams(searchParamsWithTalentBuild(searchParams, nextRanks, tabTalentLists), { replace: true });
     }
   }
 
   async function copyBuildLink() {
     if (typeof window === "undefined") return;
-    await copyTalentBuildUrl(navigator.clipboard, window.location.href, ranks);
+    await copyTalentBuildUrl(navigator.clipboard, window.location.href, ranks, tabTalentLists);
   }
 
   return (

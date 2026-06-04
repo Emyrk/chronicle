@@ -172,33 +172,67 @@ export function updateTalentRank(
 
 // ─── Build encoding / decoding ────────────────────────────────────
 
-function decodeTalentBuildNumber(value: string, radix: number) {
-  if (!/^[0-9a-z]+$/i.test(value)) return Number.NaN;
-  const number = Number.parseInt(value, radix);
-  return Number.isFinite(number) ? number : Number.NaN;
+// ─── Build encoding ───────────────────────────────────────────────
+// WoWHead-style positional format: one digit per talent in tab order,
+// tabs separated by dashes, trailing zeros trimmed.
+// Example: "35003-05032-00000" → tab0 talents at ranks 3,5,0,0,3 etc.
+
+export function encodeTalentBuild(ranks: TalentRanks, tabs: TalentEntry[][]) {
+  const sections = tabs.map((talents) => {
+    const digits = talents.map((t) => String(Math.min(ranks[t.id] ?? 0, 9)));
+    // Trim trailing zeros from each tab section
+    let last = digits.length;
+    while (last > 0 && digits[last - 1] === "0") last--;
+    return digits.slice(0, last).join("");
+  });
+  // Trim trailing empty tab sections
+  let lastTab = sections.length;
+  while (lastTab > 0 && sections[lastTab - 1] === "") lastTab--;
+  if (lastTab === 0) return "";
+  return sections.slice(0, lastTab).join("-");
 }
 
-export function encodeTalentBuild(ranks: TalentRanks) {
-  return Object.entries(ranks)
-    .map(([id, rank]) => [Number(id), rank] as const)
-    .filter(([id, rank]) => Number.isFinite(id) && rank > 0)
-    .sort(([left], [right]) => left - right)
-    .map(([id, rank]) => `${id.toString(36)}.${rank.toString(36)}`)
-    .join("_");
-}
-
-export function decodeTalentBuild(value: string | null | undefined): TalentRanks {
+export function decodeTalentBuild(value: string | null | undefined, tabs?: TalentEntry[][]): TalentRanks {
   if (!value) return {};
-  const ranks: TalentRanks = {};
-  const isLegacyBuild = value.includes(":") || value.includes(",");
-  const entries = isLegacyBuild ? value.split(",").map((part) => part.split(":")) : value.split("_").map((part) => part.split("."));
 
+  // Legacy formats: "k.2_u.1" (base36 id.rank) or "20:2,30:1" (decimal id:rank)
+  const isLegacy = value.includes(".") || value.includes(":") || value.includes(",");
+  if (isLegacy) return decodeLegacyBuild(value);
+
+  // Positional format: "35003-05032-00000"
+  if (!tabs) return {};
+  const ranks: TalentRanks = {};
+  const sections = value.split("-");
+  for (let tabIdx = 0; tabIdx < Math.min(sections.length, tabs.length); tabIdx++) {
+    const digits = sections[tabIdx];
+    const talents = tabs[tabIdx];
+    for (let i = 0; i < Math.min(digits.length, talents.length); i++) {
+      const rank = parseInt(digits[i], 10);
+      if (rank > 0) ranks[talents[i].id] = rank;
+    }
+  }
+  return ranks;
+}
+
+function decodeLegacyBuild(value: string): TalentRanks {
+  const ranks: TalentRanks = {};
+  const isColon = value.includes(":") || value.includes(",");
+  const entries = isColon
+    ? value.split(",").map((part) => part.split(":"))
+    : value.split("_").map((part) => part.split("."));
   for (const [idText, rankText] of entries) {
-    const id = decodeTalentBuildNumber(idText ?? "", isLegacyBuild ? 10 : 36);
-    const rank = decodeTalentBuildNumber(rankText ?? "", isLegacyBuild ? 10 : 36);
+    const radix = isColon ? 10 : 36;
+    const id = decodeBuildNumber(idText ?? "", radix);
+    const rank = decodeBuildNumber(rankText ?? "", radix);
     if (Number.isInteger(id) && Number.isInteger(rank) && id > 0 && rank > 0) ranks[id] = rank;
   }
   return ranks;
+}
+
+function decodeBuildNumber(value: string, radix: number) {
+  if (!/^[0-9a-z]+$/i.test(value)) return Number.NaN;
+  const number = Number.parseInt(value, radix);
+  return Number.isFinite(number) ? number : Number.NaN;
 }
 
 // ─── Normalization and reset ──────────────────────────────────────
@@ -225,25 +259,25 @@ export function resetTalentTabRanks(tabs: TalentEntry[][], ranks: TalentRanks, r
 
 // ─── URL helpers ──────────────────────────────────────────────────
 
-export function searchParamsWithTalentBuild(params: URLSearchParams, ranks: TalentRanks) {
+export function searchParamsWithTalentBuild(params: URLSearchParams, ranks: TalentRanks, tabs: TalentEntry[][]) {
   const next = new URLSearchParams(params);
-  const build = encodeTalentBuild(ranks);
+  const build = encodeTalentBuild(ranks, tabs);
   if (build) next.set(TALENT_BUILD_PARAM, build);
   else next.delete(TALENT_BUILD_PARAM);
   return next;
 }
 
-export function canonicalTalentBuildUrl(href: string, ranks: TalentRanks) {
+export function canonicalTalentBuildUrl(href: string, ranks: TalentRanks, tabs: TalentEntry[][]) {
   const url = new URL(href);
-  url.search = searchParamsWithTalentBuild(url.searchParams, ranks).toString();
+  url.search = searchParamsWithTalentBuild(url.searchParams, ranks, tabs).toString();
   return url.toString();
 }
 
 type BuildUrlClipboard = Pick<Clipboard, "writeText">;
 
-export async function copyTalentBuildUrl(clipboard: BuildUrlClipboard | undefined, href: string, ranks: TalentRanks) {
+export async function copyTalentBuildUrl(clipboard: BuildUrlClipboard | undefined, href: string, ranks: TalentRanks, tabs: TalentEntry[][]) {
   if (!clipboard) return;
-  await clipboard.writeText(canonicalTalentBuildUrl(href, ranks));
+  await clipboard.writeText(canonicalTalentBuildUrl(href, ranks, tabs));
 }
 
 // ─── Arrow path geometry ──────────────────────────────────────────
