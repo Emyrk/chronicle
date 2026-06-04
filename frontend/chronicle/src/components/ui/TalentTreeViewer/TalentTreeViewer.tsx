@@ -295,9 +295,12 @@ function TalentButton({ talent, rank, locked, talents, ranks, onChange, readOnly
     return map;
   }, [referencedIds, refQueries]);
 
-  // Resolve description text for each rank spell
+  // Resolve description text for each rank spell.
+  // Wait until all referenced spells are loaded so templates like ${57518}s1
+  // fully resolve — otherwise partially-resolved text breaks the rank ladder merge.
+  const refsReady = referencedIds.length === 0 || refQueries.every((q) => !q.isPending);
   const fetchedRankTexts = rankSpellQueries.map((q) => {
-    if (!q.data) return "";
+    if (!q.data || !refsReady) return "";
     const desc = resolveSpellDescription(q.data, getEnglishText(q.data.description), referencedSpells);
     if (desc) return desc;
     return resolveSpellDescription(q.data, getEnglishText(q.data.aura_description), referencedSpells) ?? "";
