@@ -175,6 +175,18 @@ describe("TalentTreeViewer rank description merging", () => {
     ], 1)).toBeNull();
   });
 
+  it("strips '(More effective than Rank N)' boilerplate before merging", () => {
+    expect(mergeTalentRankDescriptions([
+      "You retain up to an additional 5 of your rage points when you change stances.",
+      "You retain up to an additional 10 of your rage points when you change stances (More effective than Rank 1).",
+      "You retain up to an additional 15 of your rage points when you change stances (More effective than Rank 2).",
+    ], 2)).toEqual([
+      { type: "text", text: "You retain up to an additional " },
+      { type: "ladder", values: ["5", "10", "15"], activeIndex: 1 },
+      { type: "text", text: " of your rage points when you change stances." },
+    ]);
+  });
+
   it("merges descriptions after WoW spell variables have already resolved", () => {
     expect(mergeTalentRankDescriptions([
       "Reduces the casting time of your Fireball spell by 0.1 sec.",

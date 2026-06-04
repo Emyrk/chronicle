@@ -391,8 +391,20 @@ function tokenizeRankDescription(description: string) {
   return tokens;
 }
 
+// Strip Blizzard boilerplate like "(More effective than Rank 1)." appended to higher ranks.
+// Restores the trailing period so the cleaned text ends consistently.
+const RANK_COMPARISON_SUFFIX = /\s*\(More effective than Rank \d+\)\.?\s*$/i;
+function stripRankBoilerplate(text: string): string {
+  const cleaned = text.trim().replace(RANK_COMPARISON_SUFFIX, "");
+  if (cleaned === text.trim()) return text.trim();
+  // Restore trailing period if the original had one and the cleaned text doesn't
+  return cleaned.endsWith(".") ? cleaned : cleaned + ".";
+}
+
 export function mergeTalentRankDescriptions(descriptions: string[], activeRank: number): TalentRankDescriptionPart[] | null {
-  const usableDescriptions = descriptions.map((description) => description.trim()).filter(Boolean);
+  const usableDescriptions = descriptions
+    .map(stripRankBoilerplate)
+    .filter(Boolean);
   if (usableDescriptions.length < 2) return null;
 
   const tokenizedDescriptions = usableDescriptions.map(tokenizeRankDescription);
