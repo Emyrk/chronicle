@@ -5,7 +5,7 @@ import { cn } from "@/lib/utils";
 import { iconUrl, talentBackgroundUrl } from "@/config/iconUrl";
 import { useQueries, useQueryClient } from "@tanstack/react-query";
 import type { WoWSpell } from "@emyrk/wow-tooltip-renderer";
-import { resolveSpellDescription, getEnglishText } from "@emyrk/wow-tooltip-renderer";
+import { resolveSpellDescription, getEnglishText, extractReferencedSpellIds } from "@emyrk/wow-tooltip-renderer";
 import {
   type ClassTalentData,
   type TalentEntry,
@@ -259,12 +259,48 @@ function TalentButton({ talent, rank, locked, talents, ranks, onChange, readOnly
     })),
   });
 
+  // Extract spell IDs referenced in description templates (e.g. ${57518}s1)
+  const referencedIds = useMemo(() => {
+    const ids = new Set<number>();
+    for (const q of rankSpellQueries) {
+      if (!q.data) continue;
+      for (const template of [getEnglishText(q.data.description), getEnglishText(q.data.aura_description)]) {
+        if (template) extractReferencedSpellIds(template).forEach((id) => ids.add(id));
+      }
+    }
+    return Array.from(ids);
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- re-derive when any rank spell loads
+  }, [rankSpellQueries.map((q) => q.dataUpdatedAt).join(",")]);
+
+  // Fetch referenced spells
+  const refQueries = useQueries({
+    queries: referencedIds.map((id) => ({
+      queryKey: ["wowdb", "spell", String(id)],
+      queryFn: async () => {
+        const res = await fetch(`/api/v1/wowdb/spell/${id}`);
+        if (!res.ok) return null;
+        return res.json() as Promise<WoWSpell>;
+      },
+      staleTime: Infinity,
+      retry: false,
+    })),
+  });
+
+  const referencedSpells = useMemo(() => {
+    const map = new Map<number, WoWSpell>();
+    referencedIds.forEach((id, i) => {
+      const data = refQueries[i]?.data;
+      if (data) map.set(id, data);
+    });
+    return map;
+  }, [referencedIds, refQueries]);
+
   // Resolve description text for each rank spell
   const fetchedRankTexts = rankSpellQueries.map((q) => {
     if (!q.data) return "";
-    const desc = resolveSpellDescription(q.data, getEnglishText(q.data.description));
+    const desc = resolveSpellDescription(q.data, getEnglishText(q.data.description), referencedSpells);
     if (desc) return desc;
-    return resolveSpellDescription(q.data, getEnglishText(q.data.aura_description)) ?? "";
+    return resolveSpellDescription(q.data, getEnglishText(q.data.aura_description), referencedSpells) ?? "";
   });
 
   // Determine which spell IDs to query
@@ -275,8 +311,8 @@ function TalentButton({ talent, rank, locked, talents, ranks, onChange, readOnly
     ? rankSpellQueries[rank - 1]?.data
     : rankSpellQueries[rank]?.data ?? rankSpellQueries[0]?.data;
   const description = (primarySpell
-    ? resolveSpellDescription(primarySpell, getEnglishText(primarySpell.description))
-      || resolveSpellDescription(primarySpell, getEnglishText(primarySpell.aura_description))
+    ? resolveSpellDescription(primarySpell, getEnglishText(primarySpell.description), referencedSpells)
+      || resolveSpellDescription(primarySpell, getEnglishText(primarySpell.aura_description), referencedSpells)
     : undefined) ?? talentDescription(talent);
 
   // Override current/next rank text from fetched data
@@ -294,7 +330,7 @@ function TalentButton({ talent, rank, locked, talents, ranks, onChange, readOnly
   );
 
   const loadingSpellDetails = Boolean(
-    tooltipPosition && talent.spellRanks.length > 0 && rankSpellQueries.some((q) => q.isPending)
+    tooltipPosition && talent.spellRanks.length > 0 && (rankSpellQueries.some((q) => q.isPending) || refQueries.some((q) => q.isPending))
   );
   const lockReasons = locked ? lockedTalentReasons(talent, talents, ranks) : [];
   const title = locked ? `${talent.name} locked. ${lockReasons.join(" ")}` : `${talent.name} (${rank}/${talent.maxRank})`;
@@ -316,7 +352,15 @@ function TalentButton({ talent, rank, locked, talents, ranks, onChange, readOnly
       });
     }
   };
-  const hideTooltip = () => setTooltipPosition(undefined);
+  const tooltipPinned = useRef(false);
+  const hideTooltip = () => {
+    if (tooltipPinned.current) return;
+    setTooltipPosition(undefined);
+  };
+  const unpinAndHide = () => {
+    tooltipPinned.current = false;
+    setTooltipPosition(undefined);
+  };
 
   useEffect(() => {
     if (!tooltipPosition || typeof document === "undefined") return undefined;
@@ -325,10 +369,10 @@ function TalentButton({ talent, rank, locked, talents, ranks, onChange, readOnly
       const target = event.target;
       if (!(target instanceof Node)) return;
       if (buttonRef.current?.contains(target)) return;
-      hideTooltip();
+      unpinAndHide();
     };
     const closeOnEscape = (event: KeyboardEvent) => {
-      if (event.key === "Escape") hideTooltip();
+      if (event.key === "Escape") unpinAndHide();
     };
 
     document.addEventListener("pointerdown", closeOnOutsidePointer);
@@ -384,6 +428,8 @@ function TalentButton({ talent, rank, locked, talents, ranks, onChange, readOnly
       onAuxClick={(event) => {
         if (!debug || event.button !== 1) return;
         event.preventDefault();
+        tooltipPinned.current = true;
+        showTooltip();
         const spellId = talent.spellRanks[Math.max(0, rank - 1)] ?? talent.spellRanks[0];
         if (spellId != null) void navigator.clipboard.writeText(String(spellId));
       }}
