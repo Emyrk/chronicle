@@ -61,6 +61,7 @@ import { GuildSearchPage } from "./pages/GuildSearch"
 import { ApplyPage } from "./pages/Apply/ApplyPage"
 import { ApplicationPage } from "./pages/Apply/ApplicationPage"
 import { SimPage } from "./pages/Sim"
+import { TalentCalculatorPage } from "./pages/TalentCalculator/TalentCalculatorPage"
 import { GameDataLayout } from "./pages/GameData/GameDataPage"
 import { WDBTab } from "./pages/GameData/WDBTab"
 import { ImportSQLTab } from "./pages/GameData/ImportSQLTab"
@@ -104,6 +105,8 @@ function App() {
         <Route path="/armory" element={<ArmorySearchPage />} />
         <Route path="/armory/:realmName/:playerIdentifier" element={<ArmoryPage />} />
         <Route path="/sim" element={<SimPage />} />
+        <Route path="/talents" element={<TalentCalculatorPage />} />
+        <Route path="/talents/:classSlug" element={<TalentCalculatorPage />} />
         <Route path="/leaderboards" element={<LeaderboardsPage />} />
         <Route path="/leaderboard" element={<LeaderboardRedirect />} />
         <Route path="/rankings" element={<RankingsRedirect />} />

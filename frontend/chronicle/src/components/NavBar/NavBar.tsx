@@ -1,6 +1,6 @@
 import { useMemo, useState } from "react";
 import { Link, useLocation } from "react-router-dom";
-import { Settings, Upload, LogOut, FileText, Shield, Key, Castle, Menu, Swords, Trophy, Database, Server, Users, Compass } from "lucide-react";
+import { Settings, Upload, LogOut, FileText, Shield, Key, Castle, Menu, Swords, Trophy, Database, Server, Users, Compass, Sparkles } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
 import { serverCapabilities } from "@/config/serverCapabilities";
 import { useAuth } from "@/hooks/useAuth";
@@ -148,6 +148,14 @@ export function NavBar() {
                 <Users className="h-4 w-4" />
                 Census
               </Link>
+              <Link
+                to="/talents"
+                onClick={() => setMobileMenuOpen(false)}
+                className="flex items-center gap-2 text-sm text-muted-foreground hover:text-foreground transition-colors py-2"
+              >
+                <Sparkles className="h-4 w-4" />
+                Talents
+              </Link>
               {isAuthenticated && (
                 <>
                   <div className="border-t my-2" />
@@ -240,6 +248,12 @@ export function NavBar() {
               <Link to="/census" className="flex items-center gap-2">
                 <Users className="h-4 w-4" />
                 Census
+              </Link>
+            </DropdownMenuItem>
+            <DropdownMenuItem asChild>
+              <Link to="/talents" className="flex items-center gap-2">
+                <Sparkles className="h-4 w-4" />
+                Talents
               </Link>
             </DropdownMenuItem>
           </DropdownMenuContent>
