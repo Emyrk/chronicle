@@ -111,6 +111,24 @@ describe("resolveSpellDescription — cross-spell references", () => {
     ).toBe("heals for 52.");
   });
 
+  it("resolves $/N;SPELLIDvar from the referenced spell with division", () => {
+    const target = makeSpell({ id: 100, effect_base_points: [-1, 0, 0] });
+    const ref = makeSpell({ id: 23690, effect_base_points: [100, 0, 0] });
+    const map = new Map<number, WoWSpell>([[23690, ref]]);
+    expect(
+      resolveSpellDescription(target, "generate $/10;23690s1 rage.", map),
+    ).toBe("generate 10 rage.");
+  });
+
+  it("resolves $*N;SPELLIDvar from the referenced spell with multiplication", () => {
+    const target = makeSpell({ id: 100, effect_base_points: [0, 0, 0] });
+    const ref = makeSpell({ id: 5000, effect_base_points: [3, 0, 0] });
+    const map = new Map<number, WoWSpell>([[5000, ref]]);
+    expect(
+      resolveSpellDescription(target, "deals $*2;5000s1 damage.", map),
+    ).toBe("deals 6 damage.");
+  });
+
   it("leaves the placeholder intact when the referenced spell is missing", () => {
     const target = makeSpell({ id: 100 });
     expect(resolveSpellDescription(target, "heals for $23455s1.")).toBe(
@@ -128,6 +146,14 @@ describe("extractReferencedSpellIds", () => {
   });
   it("deduplicates IDs", () => {
     expect(extractReferencedSpellIds("$100s1 plus $100s2")).toEqual([100]);
+  });
+  it("extracts arithmetic cross-spell references", () => {
+    expect(extractReferencedSpellIds("$/10;23690s1 rage")).toEqual([23690]);
+    expect(extractReferencedSpellIds("$*8;5000s1 damage")).toEqual([5000]);
+  });
+  it("extracts both direct and arithmetic cross-refs", () => {
+    const ids = extractReferencedSpellIds("$3137s1 and $/10;23690s1");
+    expect(ids.sort((a, b) => a - b)).toEqual([3137, 23690]);
   });
   it("handles empty input", () => {
     expect(extractReferencedSpellIds("")).toEqual([]);
