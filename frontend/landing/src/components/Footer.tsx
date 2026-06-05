@@ -1,4 +1,6 @@
+import { useState } from "react";
 import { DiscordIcon } from "./DiscordIcon";
+import { CryptoTipModal } from "./CryptoTipModal";
 
 const DISCORD_URL = "https://discord.gg/gz97ABFVAj";
 const PATREON_URL = "https://www.patreon.com/cw/ChronicleClassic";
@@ -14,6 +16,8 @@ const GITHUB_URL = "https://github.com/Emyrk/chronicle";
 const GITHUB_SPONSORS_URL = "https://github.com/sponsors/Emyrk";
 
 export function Footer() {
+  const [cryptoModalOpen, setCryptoModalOpen] = useState(false);
+
   return (
     <footer className="border-t border-border bg-muted/30">
       <div className="container mx-auto px-4 py-8">
@@ -99,6 +103,18 @@ export function Footer() {
                   Buy Me a Coffee
                 </a>
               </li>
+              <li>
+                <button
+                  onClick={() => setCryptoModalOpen(true)}
+                  className="hover:text-foreground transition-colors inline-flex items-center gap-1"
+                >
+                  <svg className="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                    <circle cx="12" cy="12" r="10" />
+                    <path d="M9.5 8h5a2 2 0 0 1 0 4h-5m0-4v8m0-8H8m1.5 4h4.5a2 2 0 0 1 0 4H9.5m0 0H8" />
+                  </svg>
+                  Tip with Crypto
+                </button>
+              </li>
             </ul>
           </div>
 
@@ -112,6 +128,12 @@ export function Footer() {
           </div>
         </div>
       </div>
+      {cryptoModalOpen && (
+        <CryptoTipModal
+          open
+          onClose={() => setCryptoModalOpen(false)}
+        />
+      )}
     </footer>
   );
 }
