@@ -6,9 +6,9 @@ import (
 	"errors"
 	"fmt"
 
+	"github.com/Emyrk/chronicle/internal/lrucache"
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
-	lru "github.com/hashicorp/golang-lru/v2"
 )
 
 // ErrNoTalentData indicates a dataset has no talent tree data imported yet.
@@ -30,12 +30,17 @@ type TalentQuerier interface {
 
 type fetcher struct {
 	db    TalentQuerier
-	cache *lru.Cache[uuid.UUID, *TalentTreeData]
+	cache *lrucache.Cache[uuid.UUID, *TalentTreeData]
 }
 
 // NewFetcher creates a TalentFetcher backed by the given DB and an LRU cache.
-func NewFetcher(db TalentQuerier, cacheSize int) TalentFetcher {
-	cache, _ := lru.New[uuid.UUID, *TalentTreeData](cacheSize)
+func NewFetcher(db TalentQuerier, cacheSize int, metrics *lrucache.Metrics) TalentFetcher {
+	cache, _ := lrucache.New(lrucache.Opts[uuid.UUID, *TalentTreeData]{
+		Name:      "talents",
+		Capacity:  cacheSize,
+		Metrics:   metrics,
+		DatasetOf: func(k uuid.UUID) string { return k.String() },
+	})
 	return &fetcher{db: db, cache: cache}
 }
 

@@ -14,6 +14,7 @@ import (
 	"github.com/Emyrk/chronicle/database/gamedb/chrondbc"
 	"github.com/Emyrk/chronicle/database/gamedb/chrondbc/dbcmem"
 	"github.com/Emyrk/chronicle/database/gamedb/talents"
+	"github.com/Emyrk/chronicle/internal/lrucache"
 	"github.com/Emyrk/chronicle/internal/services/serviceauthz"
 	"github.com/Emyrk/chronicle/internal/services/servicedataset"
 	"github.com/Emyrk/chronicle/internal/services/servicedbstore"
@@ -26,6 +27,7 @@ import (
 	"github.com/Emyrk/chronicle/internal/services"
 
 	"github.com/coder/serpent"
+	"github.com/prometheus/client_golang/prometheus"
 )
 
 var _ services.Servicer = (*Service)(nil)
@@ -73,12 +75,14 @@ func (s *Service) Start(ctx context.Context) error {
 	logger := servicelogger.Logger(s.broker)
 	az := serviceauthz.Authz(s.broker)
 	store := servicedbstore.DatabaseStore(s.broker)
-	talentFetcher := talents.NewFetcher(store, 16)
+	cacheMetrics := lrucache.NewMetrics(prometheus.DefaultRegisterer)
+	talentFetcher := talents.NewFetcher(store, 16, cacheMetrics)
 	db, err := gamedb.New(ctx, gamedb.Options{
 		SpellsDBCPath: s.spellDBCPath,
 		DB:            az,
 		DatasetID:     servicedataset.DefaultDatasetID,
 		Talents:       talentFetcher,
+		Metrics:       cacheMetrics,
 	})
 	if err != nil {
 		return err
