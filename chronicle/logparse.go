@@ -1,16 +1,12 @@
 package chronicle
 
 import (
-	"bytes"
-	"compress/gzip"
 	"context"
 	"database/sql"
 	"encoding/json"
 	"errors"
 	"fmt"
-	"io"
 	"log/slog"
-	"os"
 	"reflect"
 	"slices"
 	"strings"
@@ -19,36 +15,23 @@ import (
 	"github.com/Emyrk/chronicle/api/chroniclesdk"
 	"github.com/Emyrk/chronicle/api/db2sdk"
 	"github.com/Emyrk/chronicle/chronicle/riverqueue"
-	"github.com/Emyrk/chronicle/combatlog/consumers"
 	"github.com/Emyrk/chronicle/combatlog/parseoptions"
-	"github.com/Emyrk/chronicle/combatlog/parser/azerothcore"
-	azencounters "github.com/Emyrk/chronicle/combatlog/parser/azerothcore/encounters"
 	"github.com/Emyrk/chronicle/combatlog/parser/common/characters/period"
 	"github.com/Emyrk/chronicle/combatlog/parser/common/encounter"
 	"github.com/Emyrk/chronicle/combatlog/parser/common/parsectx"
 	"github.com/Emyrk/chronicle/combatlog/parser/guid"
-	"github.com/Emyrk/chronicle/combatlog/parser/logfile"
-	"github.com/Emyrk/chronicle/combatlog/parser/sorter"
 	"github.com/Emyrk/chronicle/combatlog/parser/types"
 	"github.com/Emyrk/chronicle/combatlog/parser/types/combatant"
-	"github.com/Emyrk/chronicle/combatlog/parser/types/realmclock"
 	"github.com/Emyrk/chronicle/combatlog/parser/unitname"
-	"github.com/Emyrk/chronicle/combatlog/parser/vanilla"
 	"github.com/Emyrk/chronicle/combatlog/parser/vanilla/data/totems"
 	"github.com/Emyrk/chronicle/combatlog/parser/vanilla/data/warlockdemon"
-	"github.com/Emyrk/chronicle/combatlog/parser/vanilla/parserv2"
 	"github.com/Emyrk/chronicle/combatlog/parser/vanilla/state/creatures"
-	"github.com/Emyrk/chronicle/combatlog/parser/vanilla/state/encounters"
 	"github.com/Emyrk/chronicle/combatlog/parser/vanilla/state/encounters/instances"
 	"github.com/Emyrk/chronicle/combatlog/parser/vanilla/state/encounters/instances/rankings"
 	"github.com/Emyrk/chronicle/combatlog/parser/vanilla/state/unitdb"
-	"github.com/Emyrk/chronicle/combatlog/parser/wotlk"
 	"github.com/Emyrk/chronicle/database"
 	"github.com/Emyrk/chronicle/database/authz"
-	"github.com/Emyrk/chronicle/database/dbstatic"
-	"github.com/Emyrk/chronicle/database/gamedb/chrondbc"
 	"github.com/Emyrk/chronicle/database/jsontransform"
-	"github.com/Emyrk/chronicle/internal/leveledlog"
 	"github.com/Emyrk/chronicle/internal/ptr"
 	"github.com/Emyrk/chronicle/internal/semverenc"
 	"github.com/Emyrk/chronicle/internal/services/servicetenant"
@@ -112,61 +95,7 @@ func (c *Chronicle) NewWorkerLogParse() river.Worker[ArgsLogParse] {
 	}
 }
 
-func (w *WorkerLogParse) loadFile(ctx context.Context, file database.LogFile) (io.Reader, error) {
-	storage := w.parent.Storage
-
-	fd, err := storage.DownloadFile(ctx, BucketRaidLogs, w.parent.logPath(file.ID))
-	if err != nil {
-		err = fmt.Errorf("download log file %s: %w", file.ID, err)
-		if errors.Is(err, os.ErrNotExist) {
-			err = river.JobCancel(err)
-		}
-		return nil, err
-	}
-
-	// Decompress if stored as gzip
-	var reader io.Reader = bytes.NewReader(fd)
-	if file.ContentEncoding.Valid && file.ContentEncoding.String == "gzip" {
-		gzReader, err := gzip.NewReader(reader)
-		if err != nil {
-			return nil, fmt.Errorf("decompress log file %s: %w", file.ID, err)
-		}
-		defer func() { _ = gzReader.Close() }()
-
-		decompressed := &bytes.Buffer{}
-		if _, err := io.Copy(decompressed, gzReader); err != nil {
-			return nil, fmt.Errorf("read decompressed log file %s: %w", file.ID, err)
-		}
-		reader = decompressed
-	}
-
-	// Help GC
-	//nolint:ineffassign
-	fd = nil
-
-	return reader, nil
-}
-
-func (w *WorkerLogParse) loadAndSortFile(ctx context.Context, file database.LogFile) (logfile.Reader, *realmclock.Info, error) {
-	logger := leveledlog.New(w.parent.logger, slog.LevelInfo)
-
-	rdr, err := w.loadFile(ctx, file)
-	if err != nil {
-		return nil, nil, err
-	}
-
-	fileData := &bytes.Buffer{}
-	sum, ri, err := sorter.SortLogs(ctx, logger, rdr, fileData, false)
-	if err != nil {
-		return nil, ri, fmt.Errorf("sort log file %s: %w", file.ID, err)
-	}
-
-	return logfile.New(&sum.IsRaw, fileData), ri, nil
-}
-
 func (w *WorkerLogParse) Work(ctx context.Context, job *river.Job[ArgsLogParse]) error {
-	logCapabilities := []string{"overheal"}
-	logger := leveledlog.New(w.parent.logger, slog.LevelInfo)
 	jobStart := time.Now()
 	metrics := w.parent.metrics
 	report := &chroniclesdk.LogParseReport{
@@ -235,214 +164,34 @@ func (w *WorkerLogParse) Work(ctx context.Context, job *river.Job[ArgsLogParse])
 		return river.JobCancel(fmt.Errorf("log group (type %s) expects %d files, has %d", logGroup.WoWLogGroup.LogType, expectedFiles, len(files)))
 	}
 
-	logLogger := w.parent.logger
-	if !w.parent.EmitParsingLogs() {
-		logLogger = slog.New(slog.NewTextHandler(io.Discard, nil))
-	}
-
-	// encounters — use DB-backed registry if available, otherwise fall back to default.
-	var encountersState *encounters.State
+	// ── Parse ────────────────────────────────────────────────────────────
 	reg := w.parent.Registry()
-
-	if logFormat == database.LogFormatAzerothcoreMod {
-		encountersState = azencounters.New(ctx, logLogger)
-	} else {
-		encountersState = encounters.New(ctx, logLogger, reg)
-	}
-
-	// Parse combat log - branch based on log type
-	parseStart := time.Now()
-	var creaturesState *creatures.Creatures
-	var c *consumers.Consumers
-	if job.Args.IdentityMode {
-		creaturesState = creatures.New(logLogger)
-		c = consumers.New(logLogger, encountersState, creaturesState)
-	} else {
-		c = consumers.New(logLogger, encountersState)
-	}
-
-	var consumeErr error
-	switch logFormat {
-	case database.LogFormat112aSuperwowAddon:
-		// Load and sort files
-		loadStart := time.Now()
-		var ri *realmclock.Info
-		rdrs := make([]logfile.Reader, len(files))
-		for i, file := range files {
-			var fri *realmclock.Info
-			rdrs[i], fri, err = w.loadAndSortFile(ctx, file)
-			if err != nil {
-				jobResult = "failure"
-				return err
-			}
-			if ri == nil && fri != nil {
-				ri = fri
-			}
-		}
-		loadDuration := time.Since(loadStart)
-		report.LoadFileDuration = chroniclesdk.DurationFrom(loadDuration)
-		metrics.loadFileDuration.Observe(loadDuration.Seconds())
-
-		// V1 parser: requires 2 files merged
-		m := vanilla.Merger(logger)
-		liner, scan, err := m.LineScanner(ctx, ri, rdrs[0], rdrs[1])
-		if err != nil {
-			jobResult = "failure"
-			return fmt.Errorf("create line scanner: %w", err)
-		}
-
-		p := vanilla.NewFromScanner(logger, liner, scan, w.parent.WoWDB)
-		c.Advancer = p
-		consumeErr = c.ConsumeAll(ctx, p)
-		if consumeErr != nil && !errors.Is(consumeErr, io.EOF) {
-			jobResult = "failure"
-			return fmt.Errorf("consume v1 log: %w", consumeErr)
-		}
-
-		// Capture parser metrics
-		parserMetrics := p.Metrics()
-		report.TotalLines = parserMetrics.TotalLinesParsed
-		metrics.linesProcessed.Add(float64(parserMetrics.TotalLinesParsed))
-
-	case database.LogFormat112aCcAddon:
-		// Load and sort files
-		loadStart := time.Now()
-		rdr, err := w.loadFile(ctx, files[0])
-		if err != nil {
-			return fmt.Errorf("load log file: %w", err)
-		}
-		loadDuration := time.Since(loadStart)
-		report.LoadFileDuration = chroniclesdk.DurationFrom(loadDuration)
-		metrics.loadFileDuration.Observe(loadDuration.Seconds())
-
-		// V2 parser: single file
-		p, err := parserv2.New(logLogger, rdr, w.parent.WoWDB, w.parent.ItemFetcher)
-		if err != nil {
-			jobResult = "failure"
-			return fmt.Errorf("create v2 parser: %w", err)
-		}
-
-		c.Advancer = p
-		consumeErr = c.ConsumeAll(ctx, p)
-		if consumeErr != nil && !errors.Is(consumeErr, io.EOF) {
-			jobResult = "failure"
-			return fmt.Errorf("consume v2 log: %w", consumeErr)
-		}
-
-		// V2 parser doesn't have metrics yet
-		// TODO: Add metrics to v2 parser
-	case database.LogFormat335aCcAddon:
-		// 3.3.5a client-side addon logs: warmane, epoch, azerothcore-clientside.
-		logCapabilities = append(logCapabilities, "interrupt")
-		// Load single file
-		loadStart := time.Now()
-		rdr, err := w.loadFile(ctx, files[0])
-		if err != nil {
-			return fmt.Errorf("load log file: %w", err)
-		}
-		loadDuration := time.Since(loadStart)
-		report.LoadFileDuration = chroniclesdk.DurationFrom(loadDuration)
-		metrics.loadFileDuration.Observe(loadDuration.Seconds())
-
-		// AzerothCore client-side (WotLK 3.3.5a) parser: single file
-		p, err := wotlk.New(ctx, logLogger, rdr, w.parent.WoWDB, w.parent.ItemFetcher, reg)
-		if err != nil {
-			jobResult = "failure"
-			return fmt.Errorf("create azerothcore-clientside parser: %w", err)
-		}
-
-		c.Advancer = p
-		consumeErr = c.ConsumeAll(ctx, p)
-		if consumeErr != nil && !errors.Is(consumeErr, io.EOF) {
-			jobResult = "failure"
-			return fmt.Errorf("consume azerothcore-clientside log: %w", consumeErr)
-		}
-
-		parserMetrics := p.Metrics()
-		report.TotalLines = parserMetrics.TotalLinesParsed
-		metrics.linesProcessed.Add(float64(parserMetrics.TotalLinesParsed))
-
-	case database.LogFormatAzerothcoreMod:
-		logCapabilities = append(logCapabilities, "interrupt", "absorb", "server-side")
-		// Load single file and normalize concatenated server chunks by unix timestamp.
-		loadStart := time.Now()
-		rdr, err := w.loadFile(ctx, files[0])
-		if err != nil {
-			return fmt.Errorf("load log file: %w", err)
-		}
-		loadDuration := time.Since(loadStart)
-		report.LoadFileDuration = chroniclesdk.DurationFrom(loadDuration)
-		metrics.loadFileDuration.Observe(loadDuration.Seconds())
-
-		p, err := azerothcore.New(ctx, logLogger, rdr, w.parent.WoWDB, w.parent.ItemFetcher)
-		if err != nil {
-			jobResult = "failure"
-			return fmt.Errorf("create azerothcore parser: %w", err)
-		}
-
-		c.Advancer = p
-		consumeErr = c.ConsumeAll(ctx, p)
-		if consumeErr != nil && !errors.Is(consumeErr, io.EOF) {
-			jobResult = "failure"
-			return fmt.Errorf("consume azerothcore log: %w", consumeErr)
-		}
-
-		parserMetrics := p.Metrics()
-		report.TotalLines = parserMetrics.TotalLinesParsed
-		metrics.linesProcessed.Add(float64(parserMetrics.TotalLinesParsed))
-
-	default:
+	parsed, err := w.parseCombatLog(ctx, logFormat, files, w.parent.WoWDB, reg, job.Args.IdentityMode)
+	if err != nil {
 		jobResult = "failure"
-		return fmt.Errorf("unknown log format %q (log type %q)", logFormat, logGroup.WoWLogGroup.LogType)
+		return err
 	}
 
-	parseDuration := time.Since(parseStart)
-	report.ParseDuration = chroniclesdk.DurationFrom(parseDuration)
-	metrics.parseDuration.Observe(parseDuration.Seconds())
+	logCapabilities := parsed.logCapabilities
+	encountersState := parsed.encountersState
 
-	// Capture consumer times
-	consumerTimes := c.Times()
-	if len(consumerTimes) > 0 {
-		report.ConsumerTimes = make(map[string]chroniclesdk.Duration, len(consumerTimes))
-		for k, v := range consumerTimes {
+	report.LoadFileDuration = chroniclesdk.DurationFrom(parsed.report.loadFileDuration)
+	report.ParseDuration = chroniclesdk.DurationFrom(parsed.report.parseDuration)
+	report.TotalLines = parsed.report.totalLines
+	metrics.loadFileDuration.Observe(parsed.report.loadFileDuration.Seconds())
+	metrics.parseDuration.Observe(parsed.report.parseDuration.Seconds())
+	metrics.linesProcessed.Add(float64(parsed.report.totalLines))
+
+	if len(parsed.report.consumerTimes) > 0 {
+		report.ConsumerTimes = make(map[string]chroniclesdk.Duration, len(parsed.report.consumerTimes))
+		for k, v := range parsed.report.consumerTimes {
 			report.ConsumerTimes[k] = chroniclesdk.DurationFrom(v)
 		}
 	}
+	report.MissedSpells = parsed.report.missedSpells
 
-	// Capture missed spells from parser
-	type missedSpellEntry struct {
-		Count int
-		Name  string
-	}
-	type missedSpeller interface {
-		MissedSpells() map[chrondbc.SpellID]missedSpellEntry
-	}
-	if ms, ok := c.Advancer.(missedSpeller); ok {
-		missed := ms.MissedSpells()
-		if len(missed) > 0 {
-			report.MissedSpells = make(map[int32]chroniclesdk.MissedSpell, len(missed))
-			for id, entry := range missed {
-				report.MissedSpells[int32(id)] = chroniclesdk.MissedSpell{
-					Count: entry.Count,
-					Name:  entry.Name,
-				}
-			}
-		}
-	}
-
-	if consumeErr != nil {
-		consumeErr = fmt.Errorf("consume log: %w", consumeErr)
-		if !errors.Is(consumeErr, context.Canceled) {
-			jobResult = "cancelled"
-			consumeErr = river.JobCancel(consumeErr)
-		} else {
-			jobResult = "failure"
-		}
-		return consumeErr
-	}
-
-	if creaturesState != nil {
-		report.Identity = buildIdentityReport(creaturesState)
+	if parsed.creaturesState != nil {
+		report.Identity = buildIdentityReport(parsed.creaturesState)
 	}
 
 	err = db.InsertParsedLogGroup(ctx, job.Args.LogID)
@@ -491,72 +240,15 @@ func (w *WorkerLogParse) Work(ctx context.Context, job *river.Job[ArgsLogParse])
 			}
 		}
 
-		// Use bypass context for realm lookups so we can see all realms
-		// regardless of tenant RLS. We validate ownership explicitly below.
-		bypassCtx := servicetenant.AdminBypass(ctx)
+		realm := resolveRealm(ctx, db, finalized, job.Args.RealmID)
+		realmID := realm.ID
+		realmName := realm.Name
 
-		var realmID uuid.UUID
-		var realmName string
-		if finalized.Realm != nil {
-			realmName = finalized.Realm.RealmName
-			realm, err := db.GetWoWServerRealmByName(bypassCtx, realmName)
-			if err == nil {
-				realmID = realm.ID
-			}
-		}
-		// Fallback: use realm ID from job args (e.g. AzerothCore uploads
-		// where REALM_INFO is not present in the combat log).
-		if realmID == uuid.Nil && job.Args.RealmID != uuid.Nil {
-			realmID = job.Args.RealmID
-			// Populate realmName from DB if we only had the ID.
-			if realmName == "" {
-				if r, err := db.GetWoWServerRealm(bypassCtx, realmID); err == nil {
-					realmName = r.Name
-				}
-			}
-		}
-		// Final fallback: use the "Unknown" realm so FK constraints are
-		// satisfied. If it doesn't exist yet, create it with the well-known
-		// UUIDs from dbstatic.
-		if realmID == uuid.Nil {
-			realmID = dbstatic.RealmUnknown()
-			_, err := db.GetWoWServerRealm(bypassCtx, realmID)
-			if err != nil {
-				_, _ = db.InsertWoWServer(bypassCtx, database.InsertWoWServerParams{
-					ID:   dbstatic.ServerUnknown(),
-					Name: "Unknown",
-				})
-				_, _ = db.InsertWoWServerRealm(bypassCtx, database.InsertWoWServerRealmParams{
-					ID:       realmID,
-					ServerID: dbstatic.ServerUnknown(),
-					Name:     "Unknown",
-				})
-			}
-		}
-
-		// Tenant realm validation: skip (don't insert) instances whose
-		// realm doesn't belong to the uploading tenant. Record the
-		// instance in InstanceFailures so the UI can show what was
-		// detected and why it was rejected.
-		if job.Args.TenantID != uuid.Nil {
-			reject := false
-			realmRow, err := db.GetWoWServerRealm(bypassCtx, realmID)
-			if err != nil {
-				jobOut.InstanceFailures[fmt.Sprintf("%s_%d", inst.Name(), i)] =
-					w.realmRejectionMessage(bypassCtx, db, realmName, uuid.Nil, logGroup.WoWLogGroup.LogType, job.Args.LogID)
-				reject = true
-			} else {
-				server, sErr := db.GetWoWServer(bypassCtx, realmRow.ServerID)
-				if sErr != nil || !server.TenantID.Valid || server.TenantID.UUID != job.Args.TenantID {
-					jobOut.InstanceFailures[fmt.Sprintf("%s_%d", inst.Name(), i)] =
-						w.realmRejectionMessage(bypassCtx, db, realmRow.Name, realmRow.ServerID, logGroup.WoWLogGroup.LogType, job.Args.LogID)
-					reject = true
-				}
-			}
-			if reject {
-				report.Instances = append(report.Instances, instReport)
-				continue
-			}
+		keep, failureMsg := w.validateRealmTenant(ctx, db, realm, job.Args.TenantID, lg.LogType, job.Args.LogID)
+		if !keep {
+			jobOut.InstanceFailures[fmt.Sprintf("%s_%d", inst.Name(), i)] = failureMsg
+			report.Instances = append(report.Instances, instReport)
+			continue
 		}
 
 		// Time DB insert
@@ -1034,66 +726,6 @@ func buildIdentityReport(cs *creatures.Creatures) *chroniclesdk.IdentityReport {
 	rpt.GoCode = rpt.GenerateGoCode()
 
 	return rpt
-}
-
-// realmRejection is JSON-encoded into InstanceFailures values so the frontend
-// can render a rich error UI instead of a plain string.
-type realmRejection struct {
-	Type      string `json:"type"`                 // always "realm_rejection"
-	Realm     string `json:"realm,omitempty"`      // detected realm name
-	Message   string `json:"message"`              // headline
-	UploadURL string `json:"upload_url,omitempty"` // suggested upload domain
-	AddonURL  string `json:"addon_url,omitempty"`  // companion addon link
-}
-
-// realmRejectionMessage builds a JSON-encoded rejection string for InstanceFailures.
-func (w *WorkerLogParse) realmRejectionMessage(ctx context.Context, db *authz.Authz, realmName string, serverID uuid.UUID, logType database.LogType, logGroupID uuid.UUID) string {
-	r := realmRejection{
-		Type:  "realm_rejection",
-		Realm: realmName,
-	}
-
-	if realmName == "" || realmName == "Unknown" {
-		r.Message = "Realm not found for this server."
-	} else {
-		r.Message = fmt.Sprintf("Realm %q does not belong to this server.", realmName)
-	}
-
-	// Build a suggested URL so the user can parse the same log on the
-	// correct site. For known realms we trace back to the owning tenant;
-	// for unknown/empty realms we fall back to the primary domain.
-	primaryDomain := w.parent.primaryDomain
-	logPath := "/logs/" + logGroupID.String()
-
-	if primaryDomain != "" {
-		if realmName != "" && realmName != "Unknown" && serverID != uuid.Nil {
-			if server, err := db.GetWoWServer(ctx, serverID); err == nil {
-				if server.TenantID.Valid {
-					if tenant, tErr := db.GetTenantByID(ctx, server.TenantID.UUID); tErr == nil && tenant.Slug.Valid {
-						r.UploadURL = tenant.Slug.String + "." + primaryDomain + logPath
-					}
-				} else {
-					r.UploadURL = primaryDomain + logPath
-				}
-			}
-		} else {
-			// Unknown realm — suggest the primary domain.
-			r.UploadURL = primaryDomain + logPath
-		}
-	}
-
-	// If this is an AzerothCore log type, the companion addon might be
-	// outdated and not sending REALM_INFO correctly.
-	if logType == database.LogTypeAzerothcoreClientside || logType == database.LogTypeAzerothcore {
-		r.AddonURL = "https://github.com/Emyrk/ChronicleCompanionWoTLK"
-	}
-
-	if logType == database.LogTypeV2 {
-		r.AddonURL = "https://github.com/Emyrk/ChronicleCompanion"
-	}
-
-	b, _ := json.Marshal(r)
-	return string(b)
 }
 
 func (c *Chronicle) EnqueueParseLog(ctx context.Context, log database.WoWLogGroup, verbose bool, identityMode bool, realmID uuid.UUID) (*rivertype.JobInsertResult, error) {
