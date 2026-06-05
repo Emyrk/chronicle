@@ -444,27 +444,29 @@ WoWDB
    composite-PK migration, explicit `dataset_id` scoping, realm resolver,
    import CLI + auth. **Deployed to production.**
 2. ✅ **Talents** — first data type migrated end-to-end (the recipe).
-3. **Seam PR 1 — `LogFormat` enum + flavor tag set** (branch `seam`). Decompose
-   the 7 `LogType`s into 4 formats; flavor becomes a runtime-config tag set with
-   `.Has()`; column + backfill; re-home consumers. No behavior change. (See Log
-   Format / Flavor Split.)
-4. **Seam PR 2 — pre-scan + `parsectx` metadata.** Detect+validate format,
-   resolve realm→server→tenant→dataset+flavor, stamp onto `parsectx`,
-   primary-domain Game selector. Dataset still defaults. Makes every later swap a
-   one-liner.
-5. **class-spells** — direct sibling of talents (document-shaped/JSONB).
-6. dbcmem lookup tables (row-queryable types: spells, icons, cast times, …),
+3. ✅ **Seam — log format / flavor split** (10-PR Graphite stack, #117–#128,
+   merged to main). Decomposes `LogType` into `LogFormat` enum + `WoWFlavor`
+   capability tag set; rehomes consumers; persists format/flavor columns;
+   stamps onto `parsectx`; surfaces in UI (upload + admin reparse + metadata
+   panel). Verified as a **mergeable production no-op checkpoint** — zero
+   behavior change on any deployed server. Regression analysis in the vault:
+   `[[chronicle-dataset-loader]]` § "Log format / flavor seam —
+   merge-readiness". One regression found & fixed: incomplete
+   `serverCapabilities` lookup table in the frontend could mis-stamp
+   unconfigured builds; guarded with a "defer to server" fallback.
+4. **class-spells** — direct sibling of talents (document-shaped/JSONB).
+5. dbcmem lookup tables (row-queryable types: spells, icons, cast times, …),
    one type at a time via the recipe.
-7. DBCMemProvider interface + GlobalProvider refactor (decouple consumers from
+6. DBCMemProvider interface + GlobalProvider refactor (decouple consumers from
    `dbcmem` globals so dataset-specific data can be threaded through).
-8. DatasetLoader + DatasetGameDB + servicewowdb integration.
-9. Parser **consumes** dataset/flavor from `parsectx` (the field is already there
-   from step 4 — stop defaulting, honor the resolved values).
-10. DBC upload endpoints + object storage bucket (if raw-file storage is needed).
-11. Population tooling (export, seed from compiled).
-12. Frontend asset resolution (icons CDN dataset-aware).
-13. Prometheus metrics (drive caching strategy).
-14. Remove compiled-in data (delete `dbcmem` globals, build-tag wiring,
+7. DatasetLoader + DatasetGameDB + servicewowdb integration.
+8. Parser **consumes** dataset/flavor from `parsectx` (the field is already there
+   from step 3 — stop defaulting, honor the resolved values).
+9. DBC upload endpoints + object storage bucket (if raw-file storage is needed).
+10. Population tooling (export, seed from compiled).
+11. Frontend asset resolution (icons CDN dataset-aware).
+12. Prometheus metrics (drive caching strategy).
+13. Remove compiled-in data (delete `dbcmem` globals, build-tag wiring,
     `assets/{server}/`).
 
 ### Memory Budget
