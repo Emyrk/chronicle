@@ -472,6 +472,14 @@ export interface DiscoveryEntry {
      * URL is the canonical URL for this server/tenant's Chronicle deployment.
      */
     readonly url: string;
+    /**
+     * Instances14d is the number of instances uploaded in the last 14 days.
+     */
+    readonly instances_14d?: number;
+    /**
+     * UniquePlayers14d is the number of distinct players across instances in the last 14 days.
+     */
+    readonly unique_players_14d?: number;
 }
 
 // From chroniclesdk/log.go
@@ -1527,6 +1535,16 @@ export interface Session {
 
 // From chroniclesdk/tenant.go
 /**
+ * SetDatasetRequest assigns or removes a default dataset from a server or
+ * tenant. Pass null dataset_id to remove the assignment (resolution then falls
+ * back to the next level in the chain, ultimately the default dataset).
+ */
+export interface SetDatasetRequest {
+    readonly dataset_id: string | null;
+}
+
+// From chroniclesdk/tenant.go
+/**
  * SetServerTenantRequest assigns or removes a tenant from a server.
  * Pass null tenant_id to remove the assignment.
  */
@@ -2347,6 +2365,7 @@ export interface WoWServer {
     readonly url?: string;
     readonly created_by?: string;
     readonly tenant_id?: string;
+    readonly default_dataset_id?: string;
 }
 
 // From chroniclesdk/azerothcore.go

@@ -1916,6 +1916,64 @@ export function useSetServerTenant() {
   });
 }
 
+export function useSetServerDataset() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async ({
+      serverId,
+      datasetId,
+    }: {
+      serverId: string;
+      datasetId: string | null;
+    }) => {
+      const response = await fetch(
+        `/api/v1/admin/servers/${serverId}/dataset`,
+        {
+          method: "PUT",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ dataset_id: datasetId }),
+        },
+      );
+      if (!response.ok) {
+        const error = await response.json().catch(() => null);
+        throw new Error(error?.message || "Failed to set server dataset");
+      }
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["azerothcore", "servers"] });
+    },
+  });
+}
+
+export function useSetTenantDataset() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async ({
+      tenantId,
+      datasetId,
+    }: {
+      tenantId: string;
+      datasetId: string | null;
+    }) => {
+      const response = await fetch(
+        `/api/v1/admin/tenants/${tenantId}/dataset`,
+        {
+          method: "PUT",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ dataset_id: datasetId }),
+        },
+      );
+      if (!response.ok) {
+        const error = await response.json().catch(() => null);
+        throw new Error(error?.message || "Failed to set tenant dataset");
+      }
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["admin", "tenants"] });
+    },
+  });
+}
+
 
 
 export function useRetentionPolicies(options?: Omit<UseQueryOptions<RetentionPolicy[]>, "queryKey" | "queryFn">) {

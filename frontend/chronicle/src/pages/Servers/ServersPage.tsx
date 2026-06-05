@@ -12,6 +12,9 @@ import {
   useUpsertTenant,
   useDeleteTenant,
   useSetServerTenant,
+  useDatasets,
+  useSetServerDataset,
+  useSetTenantDataset,
 } from "@/api/queries";
 import { Loader2, Trash2, Plus, ChevronDown, ChevronRight, ExternalLink, Building2, Pencil } from "lucide-react";
 import type { WoWServer, Tenant } from "@/api/typesGenerated";
@@ -297,6 +300,10 @@ function TenantSection() {
                   {tenant.include_in_all && <span>✓ Included in root</span>}
                   {tenant.disable_client_upload && <span>⊘ Uploads disabled</span>}
                 </div>
+                <div className="flex items-center gap-2 mt-1.5">
+                  <span className="text-xs text-muted-foreground">Dataset:</span>
+                  <TenantDatasetSelect tenant={tenant} />
+                </div>
               </div>
               <div className="flex gap-1">
                 <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => setEditingId(tenant.id)}>
@@ -346,6 +353,58 @@ function TenantSelect({ server, tenants }: { server: WoWServer; tenants: Tenant[
   );
 }
 
+/** Dataset assignment for a server. Empty value clears the assignment so the
+ * server inherits its tenant's dataset (or the default dataset). */
+function ServerDatasetSelect({ server }: { server: WoWServer }) {
+  const { data: datasets } = useDatasets();
+  const setServerDataset = useSetServerDataset();
+
+  return (
+    <select
+      className="rounded-md border bg-background px-2 py-1 text-xs"
+      value={server.default_dataset_id ?? ""}
+      onChange={(e) => {
+        const datasetId = e.target.value || null;
+        setServerDataset.mutate({ serverId: server.id, datasetId });
+      }}
+      disabled={setServerDataset.isPending}
+    >
+      <option value="">Inherit (tenant / default)</option>
+      {(datasets ?? []).map((d) => (
+        <option key={d.id} value={d.id}>
+          {d.name}
+        </option>
+      ))}
+    </select>
+  );
+}
+
+/** Dataset assignment for a tenant. Empty value clears the assignment so the
+ * tenant falls back to the default dataset. */
+function TenantDatasetSelect({ tenant }: { tenant: Tenant }) {
+  const { data: datasets } = useDatasets();
+  const setTenantDataset = useSetTenantDataset();
+
+  return (
+    <select
+      className="rounded-md border bg-background px-2 py-1 text-xs"
+      value={tenant.default_dataset_id ?? ""}
+      onChange={(e) => {
+        const datasetId = e.target.value || null;
+        setTenantDataset.mutate({ tenantId: tenant.id, datasetId });
+      }}
+      disabled={setTenantDataset.isPending}
+    >
+      <option value="">Default dataset</option>
+      {(datasets ?? []).map((d) => (
+        <option key={d.id} value={d.id}>
+          {d.name}
+        </option>
+      ))}
+    </select>
+  );
+}
+
 function ServerCard({ server, tenants }: { server: WoWServer; tenants: Tenant[] }) {
   const deleteServer = useDeleteAzerothcoreServer();
   const [expanded, setExpanded] = useState(false);
@@ -361,9 +420,15 @@ function ServerCard({ server, tenants }: { server: WoWServer; tenants: Tenant[] 
               {server.url} <ExternalLink className="h-3 w-3" />
             </a>
           )}
-          <div className="flex items-center gap-2 mt-1.5">
-            <span className="text-xs text-muted-foreground">Tenant:</span>
-            <TenantSelect server={server} tenants={tenants} />
+          <div className="flex flex-wrap items-center gap-x-4 gap-y-1.5 mt-1.5">
+            <div className="flex items-center gap-2">
+              <span className="text-xs text-muted-foreground">Tenant:</span>
+              <TenantSelect server={server} tenants={tenants} />
+            </div>
+            <div className="flex items-center gap-2">
+              <span className="text-xs text-muted-foreground">Dataset:</span>
+              <ServerDatasetSelect server={server} />
+            </div>
           </div>
         </div>
         <Button

@@ -81,12 +81,12 @@ type Options struct {
 }
 
 type API struct {
-	AppContext  context.Context
-	Opts        *Options
-	Auth        *chronauth.Service
-	Chronicle   *chronicle.Chronicle
-	Queues      *riverqueue.Queues
-	Zed         *authz.Authz
+	AppContext     context.Context
+	Opts           *Options
+	Auth           *chronauth.Service
+	Chronicle      *chronicle.Chronicle
+	Queues         *riverqueue.Queues
+	Zed            *authz.Authz
 	recentCache    *recentRaidsCache
 	discoveryStats discoveryStatsCache
 }
@@ -247,6 +247,7 @@ func (api *API) Routes() chi.Router {
 					r.Mount("/", api.Opts.Tenant.Routes())
 				})
 				r.Put("/servers/{serverID}/tenant", api.Opts.Tenant.SetServerTenant)
+				r.Put("/servers/{serverID}/dataset", api.Opts.Tenant.SetServerDataset)
 
 				// Dataset management — routes owned by servicedataset
 				r.Route("/datasets", func(r chi.Router) {

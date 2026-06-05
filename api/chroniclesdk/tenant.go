@@ -68,6 +68,13 @@ type SetServerTenantRequest struct {
 	TenantID *uuid.UUID `json:"tenant_id"`
 }
 
+// SetDatasetRequest assigns or removes a default dataset from a server or
+// tenant. Pass null dataset_id to remove the assignment (resolution then falls
+// back to the next level in the chain, ultimately the default dataset).
+type SetDatasetRequest struct {
+	DatasetID *uuid.UUID `json:"dataset_id"`
+}
+
 // UpsertTenantRequest is the request body for creating or updating a tenant.
 // UpsertTenantRequest is the request body for creating or updating a tenant.
 // Pointer fields are optional — if nil on update, no change occurs (COALESCE

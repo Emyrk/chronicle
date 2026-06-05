@@ -7,12 +7,13 @@ import (
 )
 
 type WoWServer struct {
-	ID          uuid.UUID  `json:"id"`
-	Name        string     `json:"name"`
-	Description string     `json:"description"`
-	URL         *string    `json:"url,omitempty"`
-	CreatedBy   *uuid.UUID `json:"created_by,omitempty"`
-	TenantID    *uuid.UUID `json:"tenant_id,omitempty"`
+	ID               uuid.UUID  `json:"id"`
+	Name             string     `json:"name"`
+	Description      string     `json:"description"`
+	URL              *string    `json:"url,omitempty"`
+	CreatedBy        *uuid.UUID `json:"created_by,omitempty"`
+	TenantID         *uuid.UUID `json:"tenant_id,omitempty"`
+	DefaultDatasetID *uuid.UUID `json:"default_dataset_id,omitempty"`
 }
 
 type CreateWoWServerRequest struct {

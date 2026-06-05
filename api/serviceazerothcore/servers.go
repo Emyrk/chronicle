@@ -45,12 +45,13 @@ func pgtextPtr(t pgtype.Text) *string {
 
 func serverToSDK(s database.WowServer) chroniclesdk.WoWServer {
 	return chroniclesdk.WoWServer{
-		ID:          s.ID,
-		Name:        s.Name,
-		Description: s.Description,
-		URL:         pgtextPtr(s.Url),
-		CreatedBy:   nullUUIDPtr(s.CreatedBy),
-		TenantID:    nullUUIDPtr(s.TenantID),
+		ID:               s.ID,
+		Name:             s.Name,
+		Description:      s.Description,
+		URL:              pgtextPtr(s.Url),
+		CreatedBy:        nullUUIDPtr(s.CreatedBy),
+		TenantID:         nullUUIDPtr(s.TenantID),
+		DefaultDatasetID: nullUUIDPtr(s.DefaultDatasetID),
 	}
 }
 

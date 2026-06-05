@@ -19,6 +19,7 @@ func (s *Service) Routes() http.Handler {
 	r.Post("/", s.Upsert)
 	r.Get("/{tenantID}", s.Get)
 	r.Put("/{tenantID}", s.Upsert)
+	r.Put("/{tenantID}/dataset", s.SetTenantDataset)
 	r.Delete("/{tenantID}", s.Delete)
 	return r
 }
@@ -141,5 +142,62 @@ func (s *Service) SetServerTenant(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	httpapi.Write(ctx, w, http.StatusOK, chroniclesdk.Response{Message: "updated"})
+}
+
+// SetServerDataset assigns or removes the default dataset of a server.
+// Pass a null dataset_id to clear the assignment.
+func (s *Service) SetServerDataset(w http.ResponseWriter, r *http.Request) {
+	ctx := AdminBypass(r.Context())
+	serverID, err := uuid.Parse(chi.URLParam(r, "serverID"))
+	if err != nil {
+		httpapi.Write(ctx, w, http.StatusBadRequest, chroniclesdk.Response{Message: "invalid server id"})
+		return
+	}
+
+	var req chroniclesdk.SetDatasetRequest
+	if !httpapi.Read(ctx, w, r, &req) {
+		return
+	}
+
+	params := database.SetServerDatasetParams{ID: serverID}
+	if req.DatasetID != nil {
+		params.DefaultDatasetID = uuid.NullUUID{UUID: *req.DatasetID, Valid: true}
+	}
+
+	if err := s.db.SetServerDataset(ctx, params); err != nil {
+		httpapi.InternalServerError(w, err)
+		return
+	}
+
+	httpapi.Write(ctx, w, http.StatusOK, chroniclesdk.Response{Message: "updated"})
+}
+
+// SetTenantDataset assigns or removes the default dataset of a tenant.
+// Pass a null dataset_id to clear the assignment.
+func (s *Service) SetTenantDataset(w http.ResponseWriter, r *http.Request) {
+	ctx := AdminBypass(r.Context())
+	tenantID, err := uuid.Parse(chi.URLParam(r, "tenantID"))
+	if err != nil {
+		httpapi.Write(ctx, w, http.StatusBadRequest, chroniclesdk.Response{Message: "invalid tenant id"})
+		return
+	}
+
+	var req chroniclesdk.SetDatasetRequest
+	if !httpapi.Read(ctx, w, r, &req) {
+		return
+	}
+
+	params := database.SetTenantDatasetParams{ID: tenantID}
+	if req.DatasetID != nil {
+		params.DefaultDatasetID = uuid.NullUUID{UUID: *req.DatasetID, Valid: true}
+	}
+
+	if err := s.db.SetTenantDataset(ctx, params); err != nil {
+		httpapi.InternalServerError(w, err)
+		return
+	}
+
+	s.InvalidateCache()
 	httpapi.Write(ctx, w, http.StatusOK, chroniclesdk.Response{Message: "updated"})
 }
