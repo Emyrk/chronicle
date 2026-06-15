@@ -164,9 +164,54 @@ func (w *WorkerLogParse) Work(ctx context.Context, job *river.Job[ArgsLogParse])
 		return river.JobCancel(fmt.Errorf("log group (type %s) expects %d files, has %d", logGroup.WoWLogGroup.LogType, expectedFiles, len(files)))
 	}
 
+	// ── Resolve dataset ────────────────────────────────────────────────
+	// If the caller already knows the realm (e.g. AzerothCore uploads),
+	// skip the pre-scan entirely.
+	preRealmID := job.Args.RealmID
+	var preloadedFirst []byte
+	if preRealmID == uuid.Nil {
+		// Load and decompress the first file for the realm pre-scan.
+		// The bytes are kept and passed to parseCombatLog to avoid a
+		// second download from object storage.
+		var scanErr error
+		preloadedFirst, scanErr = w.loadFileBytes(ctx, files[0])
+		if scanErr != nil {
+			jobResult = "failure"
+			return fmt.Errorf("load file for realm scan: %w", scanErr)
+		}
+		realmName := scanRealmName(logFormat, preloadedFirst)
+		if realmName == "" {
+			jobResult = "cancelled"
+			msg := fmt.Sprintf("no realm info found in log (format %s)", logFormat)
+			if logFormat == database.LogFormat335aCcAddon {
+				msg += "; the ChronicleCompanion addon is required for 3.3.5a client-side logs (https://github.com/Emyrk/ChronicleCompanionWoTLK)"
+			}
+			return river.JobCancel(fmt.Errorf("%s", msg))
+		}
+		bypassCtx := servicetenant.AdminBypass(ctx)
+		if r, lookupErr := db.GetWoWServerRealmByName(bypassCtx, realmName); lookupErr == nil {
+			preRealmID = r.ID
+		}
+		// If the realm name was found but isn't registered in the DB,
+		// preRealmID stays nil — resolveDataset falls back to default.
+
+		// Early tenant validation: if the log was uploaded on a tenant
+		// subdomain, reject before parsing if the realm belongs to a
+		// different tenant. This avoids wasting time parsing a log that
+		// will fail at insert due to RLS.
+		if preRealmID != uuid.Nil && job.Args.TenantID != uuid.Nil {
+			preRealm := resolvedRealm{ID: preRealmID, Name: realmName}
+			if keep, failureMsg := w.validateRealmTenant(ctx, db, preRealm, job.Args.TenantID, lg.LogType, job.Args.LogID); !keep {
+				jobResult = "cancelled"
+				return river.JobCancel(fmt.Errorf("realm tenant mismatch: %s", failureMsg))
+			}
+		}
+	}
+	gameDB := w.parent.gameDBForRealm(ctx, preRealmID)
+
 	// ── Parse ────────────────────────────────────────────────────────────
 	reg := w.parent.Registry()
-	parsed, err := w.parseCombatLog(ctx, logFormat, files, w.parent.WoWDB, reg, job.Args.IdentityMode)
+	parsed, err := w.parseCombatLog(ctx, logFormat, files, gameDB, reg, job.Args.IdentityMode, preloadedFirst)
 	if err != nil {
 		jobResult = "failure"
 		return err

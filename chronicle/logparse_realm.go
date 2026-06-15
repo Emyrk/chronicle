@@ -1,10 +1,14 @@
 package chronicle
 
 import (
+	"bufio"
+	"bytes"
 	"context"
 	"encoding/json"
 	"fmt"
-
+	"strings"
+	"github.com/Emyrk/chronicle/combatlog/parser/types/realm"
+	"github.com/Emyrk/chronicle/combatlog/parser/types/realmclock"
 	"github.com/Emyrk/chronicle/combatlog/parser/vanilla/state/encounters/instances"
 	"github.com/Emyrk/chronicle/database"
 	"github.com/Emyrk/chronicle/database/authz"
@@ -20,24 +24,37 @@ type resolvedRealm struct {
 }
 
 // resolveRealm resolves the realm for a finalized instance using the three-tier
-// precedence:
-//  1. Realm name parsed from the combat log (REALM_INFO header)
-//  2. Realm ID from job args (e.g. AzerothCore uploads where REALM_INFO is absent)
-//  3. Well-known "Unknown" realm (created on demand)
+// precedence. It extracts the realm name from the finalized instance and
+// delegates to resolveRealmByName.
 func resolveRealm(
 	ctx context.Context,
 	db *authz.Authz,
 	finalized *instances.FinalizedInstance,
 	jobRealmID uuid.UUID,
 ) resolvedRealm {
+	var realmName string
+	if finalized.Realm != nil {
+		realmName = finalized.Realm.RealmName
+	}
+	return resolveRealmByName(ctx, db, realmName, jobRealmID)
+}
+
+// resolveRealmByName resolves a realm using the three-tier precedence:
+//  1. Realm name (from pre-scan or parsed log)
+//  2. Realm ID from job args (e.g. AzerothCore uploads where REALM_INFO is absent)
+//  3. Well-known "Unknown" realm (created on demand)
+func resolveRealmByName(
+	ctx context.Context,
+	db *authz.Authz,
+	realmName string,
+	jobRealmID uuid.UUID,
+) resolvedRealm {
 	bypassCtx := servicetenant.AdminBypass(ctx)
 
 	var realmID uuid.UUID
-	var realmName string
 
-	// Tier 1: realm name from the parsed log.
-	if finalized.Realm != nil {
-		realmName = finalized.Realm.RealmName
+	// Tier 1: realm name lookup.
+	if realmName != "" {
 		realm, err := db.GetWoWServerRealmByName(bypassCtx, realmName)
 		if err == nil {
 			realmID = realm.ID
@@ -72,6 +89,100 @@ func resolveRealm(
 	}
 
 	return resolvedRealm{ID: realmID, Name: realmName}
+}
+
+// scanRealmName scans a raw (decompressed) combat log and extracts the realm
+// name using format-specific markers. It reuses the existing parsing functions
+// from the combatlog packages where possible. Returns "" if no realm info is
+// found. Scans the entire file — realm info can appear at any point depending
+// on format.
+func scanRealmName(logFormat database.LogFormat, data []byte) string {
+	scanner := bufio.NewScanner(bytes.NewReader(data))
+	for scanner.Scan() {
+		line := scanner.Text()
+		switch logFormat {
+		case database.LogFormat112aSuperwowAddon:
+			// Real v1 lines have a WoW timestamp prefix:
+			//   2/11 12:30:48.404  REALM_INFO: ...
+			// The existing parser strips the prefix before calling
+			// realm.IsRealmInfo, so we need to find REALM_INFO: in the
+			// line and pass the substring.
+			if idx := strings.Index(line, realm.PrefixRealmInfo); idx >= 0 {
+				content := line[idx:]
+				info, err := realm.ParseRealmInfo(&realmclock.Info{}, content)
+				if err == nil && info.RealmName != "" {
+					return info.RealmName
+				}
+			}
+
+		case database.LogFormat112aCcAddon:
+			// V2 format: <unix_ms>|HEADER|<guid>|<realmName>|<zone>|...
+			if strings.Contains(line, "|HEADER|") {
+				parts := strings.Split(line, "|")
+				// parts[0]=ts, [1]=HEADER, [2]=guid, [3]=realmName
+				if len(parts) >= 4 {
+					if name := strings.TrimSpace(parts[3]); name != "" {
+						return name
+					}
+				}
+			}
+
+		case database.LogFormat335aCcAddon:
+			// WoTLK companion smuggles data in SPELL_CAST_FAILED's failedType
+			// as bin-packed frames: [1Z:zone...][2H:ver,realm,...][3P...][4P...]
+			// The payload can span multiple lines when long, but the H: header
+			// frame is always short and appears early. Look for [<digit>H:
+			// directly and extract the realm from the known field layout:
+			//   H:<addonVersion>,<realmName>,<locale>,<wowVersion>,<build>,<sessionId>
+			if name := scanCompanionHeaderRealm(line); name != "" {
+				return name
+			}
+
+		case database.LogFormatAzerothcoreMod:
+			// <unix_ms>  CHRONICLE_HEADER,"<realmName>","<version>",<build>
+			if strings.Contains(line, "CHRONICLE_HEADER") {
+				rest := line[strings.Index(line, "CHRONICLE_HEADER")+len("CHRONICLE_HEADER"):]
+				if idx := strings.Index(rest, "\""); idx >= 0 {
+					rest = rest[idx+1:]
+					if end := strings.Index(rest, "\""); end >= 0 {
+						if name := rest[:end]; name != "" {
+							return name
+						}
+					}
+				}
+			}
+		}
+	}
+	return ""
+}
+
+// scanCompanionHeaderRealm finds the companion H: header frame in a line and
+// extracts the realm name. The companion addon packs multiple frames into
+// SPELL_CAST_FAILED's failedType field:
+//
+//	[1Z:zone,mode,...][2H:ver,realm,locale,wowVer,build,session][3P...][4P...]
+//
+// The H: frame is always short and appears early, before any line wrapping.
+// Returns "" if no H: frame is found.
+func scanCompanionHeaderRealm(line string) string {
+	// Look for [<digit>H: pattern.
+	for i := 0; i < len(line)-3; i++ {
+		if line[i] == '[' && line[i+1] >= '0' && line[i+1] <= '9' && line[i+2] == 'H' && line[i+3] == ':' {
+			// Found the start of the H: frame. Extract payload until ].
+			payload := line[i+4:] // skip "[NH:"
+			end := strings.Index(payload, "]")
+			if end < 0 {
+				// Frame not closed on this line — unlikely for H: but be safe.
+				return ""
+			}
+			// payload is: <addonVersion>,<realmName>,<locale>,<wowVersion>,<build>,<sessionId>
+			parts := strings.SplitN(payload[:end], ",", 3) // only need first 2 fields
+			if len(parts) >= 2 {
+				return strings.TrimSpace(parts[1])
+			}
+		}
+	}
+	return ""
 }
 
 // validateRealmTenant checks whether a realm belongs to the uploading tenant.

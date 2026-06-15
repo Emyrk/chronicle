@@ -1,32 +1,33 @@
 package chronicle
 
 import (
-	"bytes"
-	"context"
-	"errors"
-	"fmt"
-	"io"
-	"log/slog"
-	"time"
+  "bytes"
+  "compress/gzip"
+  "context"
+  "errors"
+  "fmt"
+  "io"
+  "log/slog"
+  "time"
 
-	"compress/gzip"
-	"github.com/Emyrk/chronicle/api/chroniclesdk"
-	"github.com/Emyrk/chronicle/combatlog/consumers"
-	"github.com/Emyrk/chronicle/combatlog/parser/azerothcore"
-	azencounters "github.com/Emyrk/chronicle/combatlog/parser/azerothcore/encounters"
-	"github.com/Emyrk/chronicle/combatlog/parser/logfile"
-	"github.com/Emyrk/chronicle/combatlog/parser/sorter"
-	"github.com/Emyrk/chronicle/combatlog/parser/types/realmclock"
-	"github.com/Emyrk/chronicle/combatlog/parser/vanilla"
-	"github.com/Emyrk/chronicle/combatlog/parser/vanilla/parserv2"
-	"github.com/Emyrk/chronicle/combatlog/parser/vanilla/state/creatures"
-	"github.com/Emyrk/chronicle/combatlog/parser/vanilla/state/encounters"
-	"github.com/Emyrk/chronicle/combatlog/parser/vanilla/state/encounters/registry"
-	"github.com/Emyrk/chronicle/combatlog/parser/wotlk"
-	"github.com/Emyrk/chronicle/database"
-	"github.com/Emyrk/chronicle/database/gamedb"
-	"github.com/Emyrk/chronicle/database/gamedb/chrondbc"
-	"github.com/Emyrk/chronicle/internal/leveledlog"
+  "github.com/Emyrk/chronicle/api/chroniclesdk"
+  "github.com/Emyrk/chronicle/combatlog/consumers"
+  "github.com/Emyrk/chronicle/combatlog/parser/azerothcore"
+  azencounters "github.com/Emyrk/chronicle/combatlog/parser/azerothcore/encounters"
+  "github.com/Emyrk/chronicle/combatlog/parser/logfile"
+  "github.com/Emyrk/chronicle/combatlog/parser/sorter"
+  "github.com/Emyrk/chronicle/combatlog/parser/types/realmclock"
+  "github.com/Emyrk/chronicle/combatlog/parser/vanilla"
+  "github.com/Emyrk/chronicle/combatlog/parser/vanilla/parserv2"
+  "github.com/Emyrk/chronicle/combatlog/parser/vanilla/state/creatures"
+  "github.com/Emyrk/chronicle/combatlog/parser/vanilla/state/encounters"
+  "github.com/Emyrk/chronicle/combatlog/parser/vanilla/state/encounters/registry"
+  "github.com/Emyrk/chronicle/combatlog/parser/wotlk"
+  "github.com/Emyrk/chronicle/database"
+  "github.com/Emyrk/chronicle/database/gamedb"
+  "github.com/Emyrk/chronicle/database/gamedb/chrondbc"
+  "github.com/Emyrk/chronicle/internal/leveledlog"
+  "github.com/google/uuid"
 )
 
 // parseResult holds everything produced by the parse phase that the
@@ -51,13 +52,18 @@ type parseTimingReport struct {
 // parseCombatLog loads log files, creates a format-specific parser, and
 // consumes all events. It returns the encounter/creature state and timing
 // metrics. The caller is responsible for finalization and DB insertion.
+//
+// preloadedFirst is optional pre-loaded data for files[0] (from the realm
+// pre-scan). When non-nil, the first file is read from this buffer instead
+// of re-downloading from object storage.
 func (w *WorkerLogParse) parseCombatLog(
 	ctx context.Context,
 	logFormat database.LogFormat,
 	files []database.LogFile,
-	gameDB *gamedb.WoWDB,
+	gameDB gamedb.GameDB,
 	reg *registry.Registry,
 	identityMode bool,
+	preloadedFirst []byte,
 ) (*parseResult, error) {
 	logger := leveledlog.New(w.parent.logger, slog.LevelInfo)
 	logLogger := w.parent.logger
@@ -85,6 +91,15 @@ func (w *WorkerLogParse) parseCombatLog(
 		c = consumers.New(logLogger, encountersState)
 	}
 
+	// loadFirstFile returns a reader for files[0], using preloaded data if
+	// available to avoid re-downloading from object storage.
+	loadFirstFile := func() (io.Reader, error) {
+		if preloadedFirst != nil {
+			return bytes.NewReader(preloadedFirst), nil
+		}
+		return w.loadFile(ctx, files[0])
+	}
+
 	parseStart := time.Now()
 	var loadFileDuration time.Duration
 	var totalLines int64
@@ -96,9 +111,18 @@ func (w *WorkerLogParse) parseCombatLog(
 		var ri *realmclock.Info
 		rdrs := make([]logfile.Reader, len(files))
 		for i, file := range files {
-			var fri *realmclock.Info
+			var rdr io.Reader
 			var err error
-			rdrs[i], fri, err = w.loadAndSortFile(ctx, file)
+			if i == 0 && preloadedFirst != nil {
+				rdr = bytes.NewReader(preloadedFirst)
+			} else {
+				rdr, err = w.loadFile(ctx, file)
+				if err != nil {
+					return nil, err
+				}
+			}
+			var fri *realmclock.Info
+			rdrs[i], fri, err = w.sortReader(ctx, rdr, file.ID)
 			if err != nil {
 				return nil, err
 			}
@@ -124,7 +148,7 @@ func (w *WorkerLogParse) parseCombatLog(
 
 	case database.LogFormat112aCcAddon:
 		loadStart := time.Now()
-		rdr, err := w.loadFile(ctx, files[0])
+		rdr, err := loadFirstFile()
 		if err != nil {
 			return nil, fmt.Errorf("load log file: %w", err)
 		}
@@ -143,7 +167,7 @@ func (w *WorkerLogParse) parseCombatLog(
 	case database.LogFormat335aCcAddon:
 		logCapabilities = append(logCapabilities, "interrupt")
 		loadStart := time.Now()
-		rdr, err := w.loadFile(ctx, files[0])
+		rdr, err := loadFirstFile()
 		if err != nil {
 			return nil, fmt.Errorf("load log file: %w", err)
 		}
@@ -163,7 +187,7 @@ func (w *WorkerLogParse) parseCombatLog(
 	case database.LogFormatAzerothcoreMod:
 		logCapabilities = append(logCapabilities, "interrupt", "absorb", "server-side")
 		loadStart := time.Now()
-		rdr, err := w.loadFile(ctx, files[0])
+		rdr, err := loadFirstFile()
 		if err != nil {
 			return nil, fmt.Errorf("load log file: %w", err)
 		}
@@ -231,21 +255,29 @@ func (w *WorkerLogParse) parseCombatLog(
 	}, nil
 }
 
-// loadAndSortFile loads, decompresses, and sorts a single log file.
-func (w *WorkerLogParse) loadAndSortFile(ctx context.Context, file database.LogFile) (logfile.Reader, *realmclock.Info, error) {
-	logger := leveledlog.New(w.parent.logger, slog.LevelInfo)
-
+// loadFileBytes downloads and decompresses a log file, returning the raw bytes.
+// Used by scanRealmName where we need bytes (not io.Reader) and don't want to
+// consume the reader that loadFile returns.
+func (w *WorkerLogParse) loadFileBytes(ctx context.Context, file database.LogFile) ([]byte, error) {
 	rdr, err := w.loadFile(ctx, file)
 	if err != nil {
-		return nil, nil, err
+		return nil, err
 	}
+	buf := &bytes.Buffer{}
+	if _, err := io.Copy(buf, rdr); err != nil {
+		return nil, err
+	}
+	return buf.Bytes(), nil
+}
 
+// sortReader sorts an already-loaded log reader.
+func (w *WorkerLogParse) sortReader(ctx context.Context, rdr io.Reader, fileID uuid.UUID) (logfile.Reader, *realmclock.Info, error) {
+	logger := leveledlog.New(w.parent.logger, slog.LevelInfo)
 	fileData := &bytes.Buffer{}
 	sum, ri, err := sorter.SortLogs(ctx, logger, rdr, fileData, false)
 	if err != nil {
-		return nil, ri, fmt.Errorf("sort log file %s: %w", file.ID, err)
+		return nil, ri, fmt.Errorf("sort log file %s: %w", fileID, err)
 	}
-
 	return logfile.New(&sum.IsRaw, fileData), ri, nil
 }
 

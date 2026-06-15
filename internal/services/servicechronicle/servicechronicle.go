@@ -8,6 +8,7 @@ import (
 	"github.com/Emyrk/chronicle/internal/services"
 	"github.com/Emyrk/chronicle/internal/services/serviceauthz"
 	"github.com/Emyrk/chronicle/internal/services/servicelogger"
+	"github.com/Emyrk/chronicle/internal/services/servicedataset"
 	"github.com/Emyrk/chronicle/internal/services/servicepgxpool"
 	"github.com/Emyrk/chronicle/internal/services/servicestorage"
 	"github.com/Emyrk/chronicle/internal/services/servicetenant"
@@ -52,6 +53,7 @@ func (s *Service) DependsOn() []string {
 		servicestorage.OnStorage(),
 		servicewowdb.OnWoWDB(),
 		servicetenant.OnTenant(),
+		servicedataset.OnDataset(),
 	}
 }
 
@@ -75,6 +77,7 @@ func (s *Service) Start(ctx context.Context) error {
 	ps := servicepgxpool.Pubsub(s.broker)
 
 	tenantSvc := servicetenant.Tenant(s.broker)
+	datasetSvc := servicedataset.Dataset(s.broker)
 
 	c, err := chronicle.New(ctx, logger, chronicle.Options{
 		Storage:         st,
@@ -85,7 +88,8 @@ func (s *Service) Start(ctx context.Context) error {
 		PrimaryDomain:   tenantSvc.PrimaryDomain(),
 		// Stamp the build-tag flavor on new log groups. Backfilling old rows is
 		// handled separately by serviceflavorbackfill.
-		DefaultFlavor: BuildTagFlavor(),
+		DefaultFlavor:  BuildTagFlavor(),
+		ResolveDataset: datasetSvc.ResolveDatasetForRealm,
 	})
 	if err != nil {
 		return err

@@ -67,6 +67,7 @@ type Chronicle struct {
 	instanceRegistry   *registry.Registry
 	primaryDomain      string
 	defaultFlavor      database.WoWFlavor
+	resolveDataset     func(ctx context.Context, realmID uuid.UUID) uuid.UUID
 
 	mu                     sync.Mutex
 	insertParsedInstanceMu sync.Mutex
@@ -86,6 +87,10 @@ type Options struct {
 	// Resolved from services.ServerName/ServerBuild by the constructing service
 	// (the chronicle package can't import services). Empty leaves flavor NULL.
 	DefaultFlavor database.WoWFlavor
+	// ResolveDataset maps a realm ID to the dataset that should be used for
+	// parsing. The resolver follows the server > tenant > default chain.
+	// If nil, the default dataset is always used.
+	ResolveDataset func(ctx context.Context, realmID uuid.UUID) uuid.UUID
 }
 
 func New(ctx context.Context, logger *slog.Logger, opts Options) (*Chronicle, error) {
@@ -103,6 +108,7 @@ func New(ctx context.Context, logger *slog.Logger, opts Options) (*Chronicle, er
 		ItemFetcher:        opts.WoWDB,
 		emitParsingLogs:    opts.EmitParsingLogs,
 		instanceRegistry:   registry.DefaultRegistry(logger),
+		resolveDataset:     opts.ResolveDataset,
 	}
 
 	err := c.initStorage(ctx)
@@ -120,6 +126,17 @@ func (c *Chronicle) EmitParsingLogs() bool {
 
 func (c *Chronicle) Registry() *registry.Registry {
 	return c.instanceRegistry
+}
+
+// gameDBForRealm resolves the dataset for a realm and returns a dataset-scoped
+// GameDB. When the resolver is nil or the realm is unknown, returns the default
+// WoWDB (zero overhead — ForDataset returns the receiver itself).
+func (c *Chronicle) gameDBForRealm(ctx context.Context, realmID uuid.UUID) gamedb.GameDB {
+	if c.resolveDataset == nil || realmID == uuid.Nil {
+		return c.WoWDB
+	}
+	datasetID := c.resolveDataset(ctx, realmID)
+	return c.WoWDB.ForDataset(datasetID)
 }
 
 func (c *Chronicle) SetQueue(queue *riverqueue.Queues) {
