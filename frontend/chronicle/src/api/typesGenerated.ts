@@ -415,6 +415,7 @@ export interface Dataset {
     readonly wow_version: string;
     readonly build_version: number;
     readonly description: string;
+    readonly default_flavor: readonly string[];
     readonly created_at: string;
     readonly updated_at: string;
 }
@@ -2016,6 +2017,7 @@ export interface UpsertDatasetRequest {
     readonly wow_version: string;
     readonly build_version: number | null;
     readonly description: string | null;
+    readonly default_flavor: readonly string[];
 }
 
 // From chroniclesdk/retention.go

@@ -745,14 +745,15 @@ type DataGrant struct {
 }
 
 type Dataset struct {
-	ID           uuid.UUID          `db:"id" json:"id"`
-	Name         string             `db:"name" json:"name"`
-	Slug         string             `db:"slug" json:"slug"`
-	WowVersion   string             `db:"wow_version" json:"wow_version"`
-	BuildVersion int32              `db:"build_version" json:"build_version"`
-	Description  string             `db:"description" json:"description"`
-	CreatedAt    pgtype.Timestamptz `db:"created_at" json:"created_at"`
-	UpdatedAt    pgtype.Timestamptz `db:"updated_at" json:"updated_at"`
+	ID            uuid.UUID          `db:"id" json:"id"`
+	Name          string             `db:"name" json:"name"`
+	Slug          string             `db:"slug" json:"slug"`
+	WowVersion    string             `db:"wow_version" json:"wow_version"`
+	BuildVersion  int32              `db:"build_version" json:"build_version"`
+	Description   string             `db:"description" json:"description"`
+	CreatedAt     pgtype.Timestamptz `db:"created_at" json:"created_at"`
+	UpdatedAt     pgtype.Timestamptz `db:"updated_at" json:"updated_at"`
+	DefaultFlavor []string           `db:"default_flavor" json:"default_flavor"`
 }
 
 type DatasetTalentTree struct {

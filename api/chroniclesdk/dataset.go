@@ -11,27 +11,29 @@ import (
 // Dataset represents a game-data payload (DBC files, spell tables, etc.)
 // scoped to a specific WoW client version.
 type Dataset struct {
-	ID                uuid.UUID  `json:"id"`
-	Name              string     `json:"name"`
-	Slug              string     `json:"slug"`
-	WoWVersion        string     `json:"wow_version"`
-	BuildVersion      int32      `json:"build_version"`
-	Description       string     `json:"description"`
-	CreatedAt         time.Time  `json:"created_at"`
-	UpdatedAt         time.Time  `json:"updated_at"`
+	ID            uuid.UUID `json:"id"`
+	Name          string    `json:"name"`
+	Slug          string    `json:"slug"`
+	WoWVersion    string    `json:"wow_version"`
+	BuildVersion  int32     `json:"build_version"`
+	Description   string    `json:"description"`
+	DefaultFlavor []string  `json:"default_flavor"`
+	CreatedAt     time.Time `json:"created_at"`
+	UpdatedAt     time.Time `json:"updated_at"`
 }
 
 // DatasetFromDB converts a database.Dataset to the SDK type.
 func DatasetFromDB(d database.Dataset) Dataset {
 	out := Dataset{
-		ID:           d.ID,
-		Name:         d.Name,
-		Slug:         d.Slug,
-		WoWVersion:   d.WowVersion,
-		BuildVersion: d.BuildVersion,
-		Description:  d.Description,
-		CreatedAt:    d.CreatedAt.Time,
-		UpdatedAt:    d.UpdatedAt.Time,
+		ID:            d.ID,
+		Name:          d.Name,
+		Slug:          d.Slug,
+		WoWVersion:    d.WowVersion,
+		BuildVersion:  d.BuildVersion,
+		Description:   d.Description,
+		DefaultFlavor: d.DefaultFlavor,
+		CreatedAt:     d.CreatedAt.Time,
+		UpdatedAt:     d.UpdatedAt.Time,
 	}
 	return out
 }
@@ -40,12 +42,13 @@ func DatasetFromDB(d database.Dataset) Dataset {
 // Pointer fields are optional — if nil on update, no change occurs (COALESCE
 // preserves the existing value).
 type UpsertDatasetRequest struct {
-	ID                 uuid.NullUUID `json:"id"`
-	Name               string        `json:"name"`
-	Slug               string        `json:"slug"`
-	WoWVersion         string        `json:"wow_version"`
-	BuildVersion       *int32        `json:"build_version"`
-	Description        *string       `json:"description"`
+	ID            uuid.NullUUID `json:"id"`
+	Name          string        `json:"name"`
+	Slug          string        `json:"slug"`
+	WoWVersion    string        `json:"wow_version"`
+	BuildVersion  *int32        `json:"build_version"`
+	Description   *string       `json:"description"`
+	DefaultFlavor []string      `json:"default_flavor"`
 }
 
 // IsCreate returns true when the request should insert a new dataset.
@@ -74,11 +77,12 @@ func (r UpsertDatasetRequest) ToInsertParams() database.InsertDatasetParams {
 	}
 
 	return database.InsertDatasetParams{
-		Name:         r.Name,
-		Slug:         r.Slug,
-		WowVersion:   r.WoWVersion,
-		BuildVersion: buildVersion,
-		Description:  description,
+		Name:          r.Name,
+		Slug:          r.Slug,
+		WowVersion:    r.WoWVersion,
+		BuildVersion:  buildVersion,
+		Description:   description,
+		DefaultFlavor: r.DefaultFlavor,
 	}
 }
 
@@ -111,11 +115,12 @@ func (r UpsertDatasetRequest) ToUpdateParams() database.UpdateDatasetParams {
 	}
 
 	return database.UpdateDatasetParams{
-		ID:           r.ID.UUID,
-		Name:         name,
-		Slug:         slug,
-		WowVersion:   wowVersion,
-		BuildVersion: buildVersion,
-		Description:  description,
+		ID:            r.ID.UUID,
+		Name:          name,
+		Slug:          slug,
+		WowVersion:    wowVersion,
+		BuildVersion:  buildVersion,
+		Description:   description,
+		DefaultFlavor: r.DefaultFlavor,
 	}
 }

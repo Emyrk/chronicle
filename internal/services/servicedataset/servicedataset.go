@@ -32,6 +32,7 @@ type DatasetStore interface {
 	DeleteDataset(ctx context.Context, id uuid.UUID) error
 	ListTenantsByDataset(ctx context.Context, datasetID uuid.NullUUID) ([]database.ListTenantsByDatasetRow, error)
 	ResolveDatasetByRealm(ctx context.Context, id uuid.UUID) (uuid.NullUUID, error)
+	ResolveDatasetWithFlavorByRealm(ctx context.Context, id uuid.UUID) (database.ResolveDatasetWithFlavorByRealmRow, error)
 }
 
 var _ services.Servicer = (*Service)(nil)
@@ -88,6 +89,17 @@ func (s *Service) ResolveDatasetForRealm(ctx context.Context, realmID uuid.UUID)
 	return resolved.UUID
 }
 
+// ResolveDatasetWithFlavorForRealm resolves the dataset AND its default_flavor
+// for a realm. Falls back to DefaultDatasetID with empty flavor on any error.
+func (s *Service) ResolveDatasetWithFlavorForRealm(ctx context.Context, realmID uuid.UUID) (uuid.UUID, database.WoWFlavor) {
+	ctx = servicetenant.AdminBypass(ctx)
+	row, err := s.db.ResolveDatasetWithFlavorByRealm(ctx, realmID)
+	if err != nil {
+		return DefaultDatasetID, nil
+	}
+	return row.DatasetID, database.FlavorFromStrings(row.DefaultFlavor)
+}
+
 func (s *Service) Close(_ context.Context) error {
 	return nil
 }
@@ -96,10 +108,10 @@ func (s *Service) Options() serpent.OptionSet {
 	return serpent.OptionSet{}
 }
 
-// ensureDefaultDataset upserts the wow_version and build_version on the
-// default dataset row (inserted by migration 000121). These fields depend
-// on build tags (services.ServerName / services.ServerBuild) so they can't
-// be set correctly in SQL.
+// ensureDefaultDataset upserts the wow_version, build_version, and
+// default_flavor on the default dataset row (inserted by migration 000121).
+// These fields depend on build tags (services.ServerName / services.ServerBuild)
+// so they can't be set correctly in SQL.
 func (s *Service) ensureDefaultDataset(ctx context.Context) error {
 	ctx = servicetenant.AdminBypass(ctx)
 	logger := servicelogger.Logger(s.broker)
@@ -107,10 +119,18 @@ func (s *Service) ensureDefaultDataset(ctx context.Context) error {
 	wowVersion := wowVersionFromBuild(services.ServerBuild)
 	buildVersion := int32(services.ServerBuild)
 
+	// Derive flavor from the compiled-in server identity.
+	baseFlavor := database.FlavorVanilla
+	if services.ServerBuild == vsn.V3_3_5a {
+		baseFlavor = database.FlavorWrath
+	}
+	flavor := database.ServerFlavor(services.ServerName, baseFlavor)
+
 	_, err := s.db.UpdateDataset(ctx, database.UpdateDatasetParams{
-		ID:           DefaultDatasetID,
-		WowVersion:   pgtype.Text{String: wowVersion, Valid: true},
-		BuildVersion: pgtype.Int4{Int32: buildVersion, Valid: true},
+		ID:            DefaultDatasetID,
+		WowVersion:    pgtype.Text{String: wowVersion, Valid: true},
+		BuildVersion:  pgtype.Int4{Int32: buildVersion, Valid: true},
+		DefaultFlavor: flavor.Strings(),
 	})
 	if err != nil {
 		return fmt.Errorf("update default dataset build info: %w", err)
@@ -120,6 +140,7 @@ func (s *Service) ensureDefaultDataset(ctx context.Context) error {
 		slog.String("server", services.ServerName),
 		slog.String("wow_version", wowVersion),
 		slog.Int("build_version", int(buildVersion)),
+		slog.Any("default_flavor", flavor.Strings()),
 	)
 	return nil
 }

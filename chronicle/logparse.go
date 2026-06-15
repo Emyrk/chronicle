@@ -137,15 +137,15 @@ func (w *WorkerLogParse) Work(ctx context.Context, job *river.Job[ArgsLogParse])
 	if lg.Format.Valid {
 		logFormat = lg.Format.LogFormat
 	}
+	// Resolve flavor: prefer the persisted column on the log group, then
+	// fall back to legacy LogType derivation. After dataset resolution
+	// (below), the dataset's default_flavor may override this if the log
+	// group didn't have an explicit flavor.
+	explicitFlavor := len(lg.Flavor) > 0
 	flavor := lg.LogType.Flavor()
-	if len(lg.Flavor) > 0 {
+	if explicitFlavor {
 		flavor = database.FlavorFromStrings(lg.Flavor)
 	}
-	ctx = parsectx.With(ctx, parsectx.Context{
-		Type:   lg.LogType,
-		Format: logFormat,
-		Flavor: flavor,
-	})
 
 	files, err := db.GetWoWLogFilesByGroupID(ctx, job.Args.LogID)
 	if err != nil {
@@ -164,7 +164,7 @@ func (w *WorkerLogParse) Work(ctx context.Context, job *river.Job[ArgsLogParse])
 		return river.JobCancel(fmt.Errorf("log group (type %s) expects %d files, has %d", logGroup.WoWLogGroup.LogType, expectedFiles, len(files)))
 	}
 
-	// ── Resolve dataset ────────────────────────────────────────────────
+	// ── Resolve dataset + flavor ────────────────────────────────────────
 	// If the caller already knows the realm (e.g. AzerothCore uploads),
 	// skip the pre-scan entirely.
 	preRealmID := job.Args.RealmID
@@ -192,13 +192,8 @@ func (w *WorkerLogParse) Work(ctx context.Context, job *river.Job[ArgsLogParse])
 		if r, lookupErr := db.GetWoWServerRealmByName(bypassCtx, realmName); lookupErr == nil {
 			preRealmID = r.ID
 		}
-		// If the realm name was found but isn't registered in the DB,
-		// preRealmID stays nil — resolveDataset falls back to default.
 
-		// Early tenant validation: if the log was uploaded on a tenant
-		// subdomain, reject before parsing if the realm belongs to a
-		// different tenant. This avoids wasting time parsing a log that
-		// will fail at insert due to RLS.
+		// Early tenant validation.
 		if preRealmID != uuid.Nil && job.Args.TenantID != uuid.Nil {
 			preRealm := resolvedRealm{ID: preRealmID, Name: realmName}
 			if keep, failureMsg := w.validateRealmTenant(ctx, db, preRealm, job.Args.TenantID, lg.LogType, job.Args.LogID); !keep {
@@ -207,7 +202,21 @@ func (w *WorkerLogParse) Work(ctx context.Context, job *river.Job[ArgsLogParse])
 			}
 		}
 	}
-	gameDB := w.parent.gameDBForRealm(ctx, preRealmID)
+
+	resolved := w.parent.resolveForRealm(ctx, preRealmID)
+	gameDB := w.parent.WoWDB.ForDataset(resolved.DatasetID)
+
+	// If the log group didn't have an explicit flavor (from the upload
+	// request), use the dataset's default_flavor instead.
+	if !explicitFlavor && len(resolved.Flavor) > 0 {
+		flavor = resolved.Flavor
+	}
+
+	ctx = parsectx.With(ctx, parsectx.Context{
+		Type:   lg.LogType,
+		Format: logFormat,
+		Flavor: flavor,
+	})
 
 	// ── Parse ────────────────────────────────────────────────────────────
 	reg := w.parent.Registry()

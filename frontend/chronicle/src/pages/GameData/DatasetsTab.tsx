@@ -11,6 +11,21 @@ import {
 } from "@/api/queries";
 import type { Dataset, UpsertDatasetRequest } from "@/api/typesGenerated";
 
+/** Known flavor tags. Mirrors FlavorTag constants in database/flavor.go.
+ * Base flavors first, then server-specific, then content tags. */
+const KNOWN_FLAVOR_TAGS = [
+  { tag: "vanilla", label: "Vanilla", group: "base" },
+  { tag: "wrath", label: "Wrath", group: "base" },
+  { tag: "turtle", label: "Turtle", group: "server" },
+  { tag: "kronos", label: "Kronos", group: "server" },
+  { tag: "epoch", label: "Epoch", group: "server" },
+  { tag: "azerothcore", label: "AzerothCore", group: "server" },
+  { tag: "vanillaplus", label: "VanillaPlus", group: "server" },
+  { tag: "octowow", label: "OctoWoW", group: "server" },
+  { tag: "ascension", label: "Ascension", group: "server" },
+  { tag: "nightmare-of-ursol", label: "Nightmare of Ursol", group: "content" },
+] as const;
+
 /** Known WoW client versions and their build numbers (suggestions only — any
  * value is allowed). Mirrors the vsn constants used server-side. */
 const KNOWN_VERSIONS: { wow: string; build: number; label: string }[] = [
@@ -28,7 +43,14 @@ function DatasetForm({ dataset, onDone }: { dataset?: Dataset; onDone: () => voi
   const [wowVersion, setWowVersion] = useState(dataset?.wow_version ?? "");
   const [buildVersion, setBuildVersion] = useState(String(dataset?.build_version ?? ""));
   const [description, setDescription] = useState(dataset?.description ?? "");
+  const [flavorTags, setFlavorTags] = useState<string[]>([...(dataset?.default_flavor ?? [])]);
   const [error, setError] = useState<string | null>(null);
+
+  const toggleFlavor = (tag: string) => {
+    setFlavorTags((prev) =>
+      prev.includes(tag) ? prev.filter((t) => t !== tag) : [...prev, tag],
+    );
+  };
 
   const submit = () => {
     setError(null);
@@ -39,6 +61,7 @@ function DatasetForm({ dataset, onDone }: { dataset?: Dataset; onDone: () => voi
       wow_version: wowVersion,
       build_version: buildVersion ? Number(buildVersion) : null,
       description: description || null,
+      default_flavor: flavorTags,
     };
     upsert.mutate(req, {
       onSuccess: () => onDone(),
@@ -115,6 +138,28 @@ function DatasetForm({ dataset, onDone }: { dataset?: Dataset; onDone: () => voi
           placeholder="Optional"
         />
       </label>
+      <div className="space-y-1">
+        <span className="text-xs text-muted-foreground">Flavor tags</span>
+        <div className="flex flex-wrap gap-1.5">
+          {KNOWN_FLAVOR_TAGS.map(({ tag, label }) => {
+            const active = flavorTags.includes(tag);
+            return (
+              <button
+                key={tag}
+                type="button"
+                onClick={() => toggleFlavor(tag)}
+                className={`rounded-full px-2.5 py-0.5 text-xs font-medium border transition-colors ${
+                  active
+                    ? "bg-primary text-primary-foreground border-primary"
+                    : "bg-muted/50 text-muted-foreground border-border hover:bg-muted"
+                }`}
+              >
+                {label}
+              </button>
+            );
+          })}
+        </div>
+      </div>
       {error && <p className="text-sm text-destructive">{error}</p>}
       <div className="flex gap-2">
         <Button
@@ -204,6 +249,15 @@ export function DatasetsTab() {
                   </p>
                   {d.description && (
                     <p className="text-xs text-muted-foreground mt-1 line-clamp-3">{d.description}</p>
+                  )}
+                  {d.default_flavor.length > 0 && (
+                    <div className="flex flex-wrap gap-1 mt-1.5">
+                      {d.default_flavor.map((tag) => (
+                        <span key={tag} className="rounded-full bg-primary/10 text-primary px-2 py-0.5 text-[10px] font-medium">
+                          {tag}
+                        </span>
+                      ))}
+                    </div>
                   )}
                 </div>
                 <div className="flex gap-1 justify-end">

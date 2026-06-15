@@ -67,7 +67,7 @@ type Chronicle struct {
 	instanceRegistry   *registry.Registry
 	primaryDomain      string
 	defaultFlavor      database.WoWFlavor
-	resolveDataset     func(ctx context.Context, realmID uuid.UUID) uuid.UUID
+	resolveDataset     func(ctx context.Context, realmID uuid.UUID) ResolvedDataset
 
 	mu                     sync.Mutex
 	insertParsedInstanceMu sync.Mutex
@@ -87,10 +87,10 @@ type Options struct {
 	// Resolved from services.ServerName/ServerBuild by the constructing service
 	// (the chronicle package can't import services). Empty leaves flavor NULL.
 	DefaultFlavor database.WoWFlavor
-	// ResolveDataset maps a realm ID to the dataset that should be used for
-	// parsing. The resolver follows the server > tenant > default chain.
+	// ResolveDataset maps a realm ID to the dataset and its default flavor.
+	// The resolver follows the server > tenant > default chain.
 	// If nil, the default dataset is always used.
-	ResolveDataset func(ctx context.Context, realmID uuid.UUID) uuid.UUID
+	ResolveDataset func(ctx context.Context, realmID uuid.UUID) ResolvedDataset
 }
 
 func New(ctx context.Context, logger *slog.Logger, opts Options) (*Chronicle, error) {
@@ -128,15 +128,21 @@ func (c *Chronicle) Registry() *registry.Registry {
 	return c.instanceRegistry
 }
 
-// gameDBForRealm resolves the dataset for a realm and returns a dataset-scoped
-// GameDB. When the resolver is nil or the realm is unknown, returns the default
-// WoWDB (zero overhead — ForDataset returns the receiver itself).
-func (c *Chronicle) gameDBForRealm(ctx context.Context, realmID uuid.UUID) gamedb.GameDB {
+// ResolvedDataset holds the result of dataset resolution: the dataset ID and
+// its default flavor tags (empty if no flavor is configured on the dataset).
+type ResolvedDataset struct {
+	DatasetID uuid.UUID
+	Flavor    database.WoWFlavor
+}
+
+// resolveForRealm resolves the dataset and flavor for a realm. When the
+// resolver is nil or the realm is unknown, returns the default dataset with
+// an empty flavor (caller should fall back to its own default).
+func (c *Chronicle) resolveForRealm(ctx context.Context, realmID uuid.UUID) ResolvedDataset {
 	if c.resolveDataset == nil || realmID == uuid.Nil {
-		return c.WoWDB
+		return ResolvedDataset{}
 	}
-	datasetID := c.resolveDataset(ctx, realmID)
-	return c.WoWDB.ForDataset(datasetID)
+	return c.resolveDataset(ctx, realmID)
 }
 
 func (c *Chronicle) SetQueue(queue *riverqueue.Queues) {

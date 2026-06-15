@@ -904,7 +904,7 @@ func (q *sqlQuerier) DeleteDataset(ctx context.Context, id uuid.UUID) error {
 
 const getDataset = `-- name: GetDataset :one
 
-SELECT id, name, slug, wow_version, build_version, description, created_at, updated_at FROM datasets WHERE id = $1
+SELECT id, name, slug, wow_version, build_version, description, created_at, updated_at, default_flavor FROM datasets WHERE id = $1
 `
 
 // Dataset queries. These run with AdminBypass context since the datasets table
@@ -921,12 +921,13 @@ func (q *sqlQuerier) GetDataset(ctx context.Context, id uuid.UUID) (Dataset, err
 		&i.Description,
 		&i.CreatedAt,
 		&i.UpdatedAt,
+		&i.DefaultFlavor,
 	)
 	return i, err
 }
 
 const getDatasetBySlug = `-- name: GetDatasetBySlug :one
-SELECT id, name, slug, wow_version, build_version, description, created_at, updated_at FROM datasets WHERE slug = $1
+SELECT id, name, slug, wow_version, build_version, description, created_at, updated_at, default_flavor FROM datasets WHERE slug = $1
 `
 
 func (q *sqlQuerier) GetDatasetBySlug(ctx context.Context, slug string) (Dataset, error) {
@@ -941,22 +942,24 @@ func (q *sqlQuerier) GetDatasetBySlug(ctx context.Context, slug string) (Dataset
 		&i.Description,
 		&i.CreatedAt,
 		&i.UpdatedAt,
+		&i.DefaultFlavor,
 	)
 	return i, err
 }
 
 const insertDataset = `-- name: InsertDataset :one
-INSERT INTO datasets (name, slug, wow_version, build_version, description)
-VALUES ($1, $2, $3, $4, $5)
-RETURNING id, name, slug, wow_version, build_version, description, created_at, updated_at
+INSERT INTO datasets (name, slug, wow_version, build_version, description, default_flavor)
+VALUES ($1, $2, $3, $4, $5, $6)
+RETURNING id, name, slug, wow_version, build_version, description, created_at, updated_at, default_flavor
 `
 
 type InsertDatasetParams struct {
-	Name         string `db:"name" json:"name"`
-	Slug         string `db:"slug" json:"slug"`
-	WowVersion   string `db:"wow_version" json:"wow_version"`
-	BuildVersion int32  `db:"build_version" json:"build_version"`
-	Description  string `db:"description" json:"description"`
+	Name          string   `db:"name" json:"name"`
+	Slug          string   `db:"slug" json:"slug"`
+	WowVersion    string   `db:"wow_version" json:"wow_version"`
+	BuildVersion  int32    `db:"build_version" json:"build_version"`
+	Description   string   `db:"description" json:"description"`
+	DefaultFlavor []string `db:"default_flavor" json:"default_flavor"`
 }
 
 func (q *sqlQuerier) InsertDataset(ctx context.Context, arg InsertDatasetParams) (Dataset, error) {
@@ -966,6 +969,7 @@ func (q *sqlQuerier) InsertDataset(ctx context.Context, arg InsertDatasetParams)
 		arg.WowVersion,
 		arg.BuildVersion,
 		arg.Description,
+		arg.DefaultFlavor,
 	)
 	var i Dataset
 	err := row.Scan(
@@ -977,12 +981,13 @@ func (q *sqlQuerier) InsertDataset(ctx context.Context, arg InsertDatasetParams)
 		&i.Description,
 		&i.CreatedAt,
 		&i.UpdatedAt,
+		&i.DefaultFlavor,
 	)
 	return i, err
 }
 
 const listDatasets = `-- name: ListDatasets :many
-SELECT id, name, slug, wow_version, build_version, description, created_at, updated_at FROM datasets ORDER BY name
+SELECT id, name, slug, wow_version, build_version, description, created_at, updated_at, default_flavor FROM datasets ORDER BY name
 `
 
 func (q *sqlQuerier) ListDatasets(ctx context.Context) ([]Dataset, error) {
@@ -1003,6 +1008,7 @@ func (q *sqlQuerier) ListDatasets(ctx context.Context) ([]Dataset, error) {
 			&i.Description,
 			&i.CreatedAt,
 			&i.UpdatedAt,
+			&i.DefaultFlavor,
 		); err != nil {
 			return nil, err
 		}
@@ -1075,6 +1081,30 @@ func (q *sqlQuerier) ResolveDatasetByRealm(ctx context.Context, id uuid.UUID) (u
 	return dataset_id, err
 }
 
+const resolveDatasetWithFlavorByRealm = `-- name: ResolveDatasetWithFlavorByRealm :one
+SELECT d.id AS dataset_id, d.default_flavor
+FROM wow_server_realms r
+JOIN wow_servers s ON s.id = r.server_id
+LEFT JOIN tenants t ON t.id = s.tenant_id
+JOIN datasets d ON d.id = COALESCE(s.default_dataset_id, t.default_dataset_id)
+WHERE r.id = $1
+`
+
+type ResolveDatasetWithFlavorByRealmRow struct {
+	DatasetID     uuid.UUID `db:"dataset_id" json:"dataset_id"`
+	DefaultFlavor []string  `db:"default_flavor" json:"default_flavor"`
+}
+
+// Resolves the dataset for a realm and returns the dataset's default_flavor.
+// Uses the same precedence as ResolveDatasetByRealm, then joins to the
+// datasets table to fetch the flavor tags.
+func (q *sqlQuerier) ResolveDatasetWithFlavorByRealm(ctx context.Context, id uuid.UUID) (ResolveDatasetWithFlavorByRealmRow, error) {
+	row := q.db.QueryRow(ctx, resolveDatasetWithFlavorByRealm, id)
+	var i ResolveDatasetWithFlavorByRealmRow
+	err := row.Scan(&i.DatasetID, &i.DefaultFlavor)
+	return i, err
+}
+
 const updateDataset = `-- name: UpdateDataset :one
 UPDATE datasets SET
     name              = COALESCE($1, name),
@@ -1082,18 +1112,20 @@ UPDATE datasets SET
     wow_version       = COALESCE($3, wow_version),
     build_version     = COALESCE($4, build_version),
     description       = COALESCE($5, description),
+    default_flavor    = COALESCE($6, default_flavor),
     updated_at        = now()
-WHERE id = $6
-RETURNING id, name, slug, wow_version, build_version, description, created_at, updated_at
+WHERE id = $7
+RETURNING id, name, slug, wow_version, build_version, description, created_at, updated_at, default_flavor
 `
 
 type UpdateDatasetParams struct {
-	Name         pgtype.Text `db:"name" json:"name"`
-	Slug         pgtype.Text `db:"slug" json:"slug"`
-	WowVersion   pgtype.Text `db:"wow_version" json:"wow_version"`
-	BuildVersion pgtype.Int4 `db:"build_version" json:"build_version"`
-	Description  pgtype.Text `db:"description" json:"description"`
-	ID           uuid.UUID   `db:"id" json:"id"`
+	Name          pgtype.Text `db:"name" json:"name"`
+	Slug          pgtype.Text `db:"slug" json:"slug"`
+	WowVersion    pgtype.Text `db:"wow_version" json:"wow_version"`
+	BuildVersion  pgtype.Int4 `db:"build_version" json:"build_version"`
+	Description   pgtype.Text `db:"description" json:"description"`
+	DefaultFlavor []string    `db:"default_flavor" json:"default_flavor"`
+	ID            uuid.UUID   `db:"id" json:"id"`
 }
 
 // Only non-null params are applied; NULL means "keep existing value".
@@ -1104,6 +1136,7 @@ func (q *sqlQuerier) UpdateDataset(ctx context.Context, arg UpdateDatasetParams)
 		arg.WowVersion,
 		arg.BuildVersion,
 		arg.Description,
+		arg.DefaultFlavor,
 		arg.ID,
 	)
 	var i Dataset
@@ -1116,6 +1149,7 @@ func (q *sqlQuerier) UpdateDataset(ctx context.Context, arg UpdateDatasetParams)
 		&i.Description,
 		&i.CreatedAt,
 		&i.UpdatedAt,
+		&i.DefaultFlavor,
 	)
 	return i, err
 }
