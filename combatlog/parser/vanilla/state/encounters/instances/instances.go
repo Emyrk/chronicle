@@ -63,17 +63,23 @@ var (
 		Hostiles:  FromMap(SMArmoryHostiles()),
 	}
 
+	ScarletMonasteryArmoryVPRaid = &CommonFactory{
+		Name:      "Scarlet Monastery Raid",
+		ZoneNames: []string{"scarlet monastery (raid)"},
+		Hostiles:  FromMap(VanillaPlusSMRaidHostiles()),
+	}
+
 	AllScarletMonasteryFactory = &CommonFactory{
 		MultiZone: true,
 		Name:      "Scarlet Monastery",
 		ZoneNames: []string{"scarlet monastery"},
-    DerivedName: NewMultiInstanceZone(map[string][]uint32{
-      "Scarlet Monastery Cathedral": {3976,3977,4542 },
-      "Scarlet Monastery Library":   {3974, 61983, 6487 },
-      "Scarlet Monastery Armory":    {3975},
-      "Scarlet Monastery Graveyard": {3983,4543 },
-    }),
-		Hostiles:  FromMaps(SMGraveyardHostiles(), SMLibraryHostiles(), SMArmoryHostiles(), CathedralHostiles()),
+		DerivedName: NewMultiInstanceZone(map[string][]uint32{
+			"Scarlet Monastery Cathedral": {3976, 3977, 4542},
+			"Scarlet Monastery Library":   {3974, 61983, 6487},
+			"Scarlet Monastery Armory":    {3975},
+			"Gates of Scarlet Monastery":  {25221, 25222, 25243, 25245},
+		}),
+		Hostiles: FromMaps(SMGraveyardHostiles(), SMLibraryHostiles(), SMArmoryHostiles(), CathedralHostiles(), VanillaPlusSMRaidHostiles()),
 	}
 
 	BlackrockSpireFactory = &CommonFactory{

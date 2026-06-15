@@ -115,6 +115,25 @@ func SMArmoryHostiles() map[uint32]Identity {
 	return hostile
 }
 
+func VanillaPlusSMRaidHostiles() map[uint32]Identity {
+	hostile := make(map[uint32]Identity)
+	LoadAdds(hostile, map[uint32]string{
+		25245: "Soul Hunter",
+		25246: "Soul",
+		// TODO: Are these critters or a mechanic?
+		25254: "Cockroach",
+		25255: "Cockroach",
+		25256: "Green Fog",
+	})
+	LoadBosses(hostile, map[uint32]string{
+		25221: "Brother Michael",
+		25222: "Fairbanks",
+		25243: "Beltheris",
+	})
+
+	return hostile
+}
+
 func BlackrockSpireHostiles() map[uint32]Identity {
 	hostile := make(map[uint32]Identity)
 	LoadAdds(hostile, map[uint32]string{
