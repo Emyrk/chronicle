@@ -499,15 +499,39 @@ func (p *Parser) suffixAura(ts time.Time, base baseParams, spell *spellInfo, sta
 		amt = 0
 	}
 
-	return set(&messages.Aura{
+	var source *guid.GUID
+	if !base.sourceGUID.IsZero() {
+		source = &base.sourceGUID
+	}
+
+	auraMsg := &messages.Aura{
 		MessageBase: messages.Base(ts),
 		IsBuff:      isBuff,
+		Source:      source,
 		Target:      base.destGUID,
 		SpellName:   spellName,
 		SpellData:   spellData,
 		Amount:      amt,
 		State:       state,
-	})
+	}
+
+	// Emit an AuraCast alongside the Aura on application so downstream
+	// consumers (possession, enslave demon, etc.) get the same signal they
+	// get from vanilla logs.
+	if state == types.AuraStateAdded && spellData != nil {
+		dest := base.destGUID
+		return []messages.Message{
+			auraMsg,
+			&messages.AuraCast{
+				MessageBase: messages.Base(ts),
+				Spell:       spellData,
+				Caster:      base.sourceGUID,
+				Target:      &dest,
+			},
+		}, nil
+	}
+
+	return set(auraMsg)
 }
 
 // suffixAuraDose handles _AURA_APPLIED_DOSE and _AURA_REMOVED_DOSE: auraType, amount
@@ -528,9 +552,15 @@ func (p *Parser) suffixAuraDose(ts time.Time, base baseParams, spell *spellInfo,
 		spellData = p.lookupSpell(chrondbc.SpellID(spell.spellID), spell.spellName)
 	}
 
+	var source *guid.GUID
+	if !base.sourceGUID.IsZero() {
+		source = &base.sourceGUID
+	}
+
 	return set(&messages.Aura{
 		MessageBase: messages.Base(ts),
 		IsBuff:      isBuff,
+		Source:      source,
 		Target:      base.destGUID,
 		SpellName:   spellName,
 		SpellData:   spellData,
@@ -559,9 +589,15 @@ func (p *Parser) suffixAuraBrokenSpell(ts time.Time, base baseParams, spell *spe
 		spellData = p.lookupSpell(chrondbc.SpellID(spell.spellID), spell.spellName)
 	}
 
+	var source *guid.GUID
+	if !base.sourceGUID.IsZero() {
+		source = &base.sourceGUID
+	}
+
 	return set(&messages.Aura{
 		MessageBase: messages.Base(ts),
 		IsBuff:      isBuff,
+		Source:      source,
 		Target:      base.destGUID,
 		SpellName:   spellName,
 		SpellData:   spellData,

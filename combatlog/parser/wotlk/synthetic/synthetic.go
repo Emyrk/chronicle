@@ -25,13 +25,15 @@ type Synthetic struct {
 	logger *slog.Logger
 
 	unitInfo     *unitInfo
+	petOwnership *petOwnership
 	zoneDetector *zonedetector.ZoneDetector
 	slain        *synthetic.SlainDetective
 
 	wowDB gamedb.GameDB
 
-	unitInfoDur     time.Duration
-	zoneDetectorDur time.Duration
+	unitInfoDur      time.Duration
+	petOwnershipDur  time.Duration
+	zoneDetectorDur  time.Duration
 }
 
 func New(ctx context.Context, logger *slog.Logger, wowDB gamedb.GameDB, reg *registry.Registry, names NameResolver) *Synthetic {
@@ -45,14 +47,16 @@ func New(ctx context.Context, logger *slog.Logger, wowDB gamedb.GameDB, reg *reg
 		logger:       logger,
 		wowDB:        wowDB,
 		unitInfo:     newUnitInfo(ctx, logger, wowDB, names, wowDB),
+		petOwnership: newPetOwnership(logger, names),
 		zoneDetector: zd,
 	}
 }
 
 func (s *Synthetic) DetailedTimes() map[string]time.Duration {
 	return map[string]time.Duration{
-		"parser.synthetic.unit_info":     s.unitInfoDur,
-		"parser.synthetic.zone_detector": s.zoneDetectorDur,
+		"parser.synthetic.unit_info":      s.unitInfoDur,
+		"parser.synthetic.pet_ownership":  s.petOwnershipDur,
+		"parser.synthetic.zone_detector":  s.zoneDetectorDur,
 	}
 }
 
@@ -60,6 +64,10 @@ func (s *Synthetic) ProcessMessages(msgs []messages.Message) ([]messages.Message
 	now := time.Now()
 	msgs = s.unitInfo.ProcessMessages(msgs)
 	s.unitInfoDur += time.Since(now)
+
+	now = time.Now()
+	msgs = s.petOwnership.ProcessMessages(msgs)
+	s.petOwnershipDur += time.Since(now)
 
 	if s.zoneDetector != nil {
 		now = time.Now()

@@ -448,7 +448,10 @@ func (*AuraCast) isMessage() {}
 type Aura struct {
 	MessageBase
 	// IsBuff is false if it is a debuff
-	IsBuff    bool
+	IsBuff bool
+	// Source is who applied the aura. Nil when unknown (e.g. vanilla parser
+	// logs that don't carry source information for aura events).
+	Source    *guid.GUID
 	Target    guid.GUID
 	SpellName string
 	SpellData *chrondbc.Spell
@@ -460,7 +463,12 @@ type Aura struct {
 	State       types.AuraState
 }
 
-func (a Aura) Affects() []guid.GUID { return []guid.GUID{a.Target} }
+func (a Aura) Affects() []guid.GUID {
+	if a.Source != nil {
+		return []guid.GUID{*a.Source, a.Target}
+	}
+	return []guid.GUID{a.Target}
+}
 func (*Aura) isMessage()            {}
 
 type Interrupt struct {
