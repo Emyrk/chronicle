@@ -3286,5 +3286,18 @@ func init() {
 		4427: {ID: 4427, TextureFilename: "spell_shadow_corrupted_aid"},
 		4428: {ID: 4428, TextureFilename: "icon_swords"},
 		4429: {ID: 4429, TextureFilename: "icon_shields"},
+		4430: {ID: 4430, TextureFilename: "spell_true_stoicism"},
+		4431: {ID: 4431, TextureFilename: "spell_rocky_bash"},
+		4432: {ID: 4432, TextureFilename: "Spell_SpellSteal"},
+		4433: {ID: 4433, TextureFilename: "spell_nzinsanity_shortsighted"},
+		4434: {ID: 4434, TextureFilename: "ability_weapon_expertise2"},
+		4435: {ID: 4435, TextureFilename: "ability_weapon_expertise3"},
+		4436: {ID: 4436, TextureFilename: "ability_highground"},
+		4437: {ID: 4437, TextureFilename: "mount_scarlet_charger"},
+		4438: {ID: 4438, TextureFilename: "ability_weapon_expertise"},
+		4439: {ID: 4439, TextureFilename: "ability_weapon_expertise4"},
+		4440: {ID: 4440, TextureFilename: "inv_shield_lordaeron"},
+		4441: {ID: 4441, TextureFilename: "INV_Banner_04"},
+		4442: {ID: 4442, TextureFilename: "ability_ambush_day"},
 	}
 }

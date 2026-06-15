@@ -26,7 +26,7 @@ func init() {
 		37: {ID: 37, RangeMin: 0, RangeMax: 50, Flags: 0, Name: "Extended Range"},
 		38: {ID: 38, RangeMin: 10, RangeMax: 25, Flags: 0, Name: "Extra Medium Range"},
 		54: {ID: 54, RangeMin: 5, RangeMax: 30, Flags: 0, Name: "Geoff Monster Shoot"},
-		74: {ID: 74, RangeMin: 8, RangeMax: 30, Flags: 0, Name: "Ranged Weapon"},
+		74: {ID: 74, RangeMin: 10, RangeMax: 30, Flags: 0, Name: "Ranged Weapon"},
 		94: {ID: 94, RangeMin: 8, RangeMax: 40, Flags: 0, Name: "Sting"},
 		95: {ID: 95, RangeMin: 8, RangeMax: 25, Flags: 0, Name: "Charge"},
 		96: {ID: 96, RangeMin: 0, RangeMax: 2, Flags: 0, Name: "Trap"},
