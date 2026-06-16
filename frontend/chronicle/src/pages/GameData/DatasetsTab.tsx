@@ -7,8 +7,10 @@ import {
   useDatasets,
   useUpsertDataset,
   useDeleteDataset,
+  useDatasetImportSummary,
   DEFAULT_DATASET_ID,
 } from "@/api/queries";
+import type { DatasetImportSummary } from "@/api/queries";
 import type { Dataset, UpsertDatasetRequest } from "@/api/typesGenerated";
 
 /** Known flavor tags. Mirrors FlavorTag constants in database/flavor.go.
@@ -34,6 +36,47 @@ const KNOWN_VERSIONS: { wow: string; build: number; label: string }[] = [
   { wow: "2.4.3", build: 8606, label: "TBC 2.4.3" },
   { wow: "3.3.5a", build: 12340, label: "WotLK 3.3.5a" },
 ];
+
+/** Data types tracked per dataset with their summary field names. */
+const DATA_TYPES: { label: string; key: keyof DatasetImportSummary; isBool?: boolean }[] = [
+  { label: "Spells", key: "spells_count" },
+  { label: "Talents", key: "has_talents", isBool: true },
+  { label: "Creatures", key: "creatures_count" },
+  { label: "Items", key: "items_count" },
+  { label: "Item Display Info", key: "item_display_count" },
+  { label: "Enchantments", key: "enchantments_count" },
+  { label: "Random Properties", key: "random_properties_count" },
+  { label: "Item Sets", key: "item_sets_count" },
+];
+
+/** Shows green/red import status for each data type in a dataset. */
+function ImportStatusList({ datasetId }: { datasetId: string }) {
+  const { data: summary, isLoading } = useDatasetImportSummary(datasetId);
+
+  if (isLoading || !summary) {
+    return <div className="mt-1.5 text-[10px] text-muted-foreground/40">Loading…</div>;
+  }
+
+  return (
+    <div className="mt-1.5 grid grid-cols-2 gap-x-2 gap-y-0.5 text-[10px]">
+      {DATA_TYPES.map(({ label, key, isBool }) => {
+        const value = summary[key];
+        const imported = isBool ? !!value : (value as number) > 0;
+        return (
+          <div key={key} className={imported ? "text-emerald-500" : "text-muted-foreground/40"}>
+            {imported ? "✓" : "✗"}{" "}
+            {label}
+            {!isBool && imported && (
+              <span className="text-muted-foreground/60 ml-0.5">
+                ({(value as number).toLocaleString()})
+              </span>
+            )}
+          </div>
+        );
+      })}
+    </div>
+  );
+}
 
 /** Inline create/edit form for a dataset. */
 function DatasetForm({ dataset, onDone }: { dataset?: Dataset; onDone: () => void }) {
@@ -226,11 +269,11 @@ export function DatasetsTab() {
           <Loader2 className="h-4 w-4 animate-spin" /> Loading datasets…
         </div>
       ) : (
-        <div className="grid gap-3 grid-cols-[repeat(auto-fill,minmax(15rem,1fr))]">
+        <div className="grid gap-3 grid-cols-[repeat(auto-fill,minmax(22rem,1fr))]">
           {(datasets ?? []).map((d) => {
             const isDefault = d.id === DEFAULT_DATASET_ID;
             return (
-              <Card key={d.id} className="p-4 flex flex-col gap-2 aspect-square">
+              <Card key={d.id} className="p-4 flex flex-col gap-2">
                 <div className="flex items-start gap-2">
                   <Database className="h-4 w-4 text-muted-foreground shrink-0 mt-0.5" />
                   <span className="font-medium leading-tight">{d.name}</span>
@@ -241,6 +284,13 @@ export function DatasetsTab() {
                   </span>
                 )}
                 <div className="min-w-0 flex-1">
+                  <p
+                    className="text-[10px] text-muted-foreground/60 font-mono break-all cursor-pointer hover:text-muted-foreground transition-colors"
+                    title="Click to copy dataset ID"
+                    onClick={() => navigator.clipboard.writeText(d.id)}
+                  >
+                    {d.id}
+                  </p>
                   <p className="text-xs text-muted-foreground font-mono break-words">
                     {d.slug}
                   </p>
@@ -259,6 +309,7 @@ export function DatasetsTab() {
                       ))}
                     </div>
                   )}
+                  <ImportStatusList datasetId={d.id} />
                 </div>
                 <div className="flex gap-1 justify-end">
                   <Button size="icon" variant="ghost" onClick={() => setEditing(d)} aria-label="Edit">

@@ -416,6 +416,8 @@ export interface Dataset {
     readonly build_version: number;
     readonly description: string;
     readonly default_flavor: readonly string[];
+    readonly spells_imported_at: string | null;
+    readonly spells_count: number;
     readonly created_at: string;
     readonly updated_at: string;
 }

@@ -11,15 +11,17 @@ import (
 // Dataset represents a game-data payload (DBC files, spell tables, etc.)
 // scoped to a specific WoW client version.
 type Dataset struct {
-	ID            uuid.UUID `json:"id"`
-	Name          string    `json:"name"`
-	Slug          string    `json:"slug"`
-	WoWVersion    string    `json:"wow_version"`
-	BuildVersion  int32     `json:"build_version"`
-	Description   string    `json:"description"`
-	DefaultFlavor []string  `json:"default_flavor"`
-	CreatedAt     time.Time `json:"created_at"`
-	UpdatedAt     time.Time `json:"updated_at"`
+	ID               uuid.UUID  `json:"id"`
+	Name             string     `json:"name"`
+	Slug             string     `json:"slug"`
+	WoWVersion       string     `json:"wow_version"`
+	BuildVersion     int32      `json:"build_version"`
+	Description      string     `json:"description"`
+	DefaultFlavor    []string   `json:"default_flavor"`
+	SpellsImportedAt *time.Time `json:"spells_imported_at"`
+	SpellsCount      int32      `json:"spells_count"`
+	CreatedAt        time.Time  `json:"created_at"`
+	UpdatedAt        time.Time  `json:"updated_at"`
 }
 
 // DatasetFromDB converts a database.Dataset to the SDK type.
@@ -32,8 +34,12 @@ func DatasetFromDB(d database.Dataset) Dataset {
 		BuildVersion:  d.BuildVersion,
 		Description:   d.Description,
 		DefaultFlavor: d.DefaultFlavor,
+		SpellsCount:   d.SpellsCount,
 		CreatedAt:     d.CreatedAt.Time,
 		UpdatedAt:     d.UpdatedAt.Time,
+	}
+	if d.SpellsImportedAt.Valid {
+		out.SpellsImportedAt = &d.SpellsImportedAt.Time
 	}
 	return out
 }

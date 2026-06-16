@@ -64,6 +64,7 @@ type Importer interface {
 func Registry() []Importer {
 	return []Importer{
 		&talentImporter{},
+		&rawDBCImporter{key: "spells", name: "Spells", file: FileSpell, dbcType: "Spell"},
 		&rawDBCImporter{key: "item-display-info", name: "Item Display Info", file: FileItemDisplayInfo, dbcType: "ItemDisplayInfo"},
 		&rawDBCImporter{key: "spell-enchantments", name: "Spell Item Enchantments", file: FileSpellItemEnchantment, dbcType: "SpellItemEnchantment"},
 		&rawDBCImporter{key: "item-random-properties", name: "Item Random Properties", file: FileItemRandomProperties, dbcType: "ItemRandomProperties"},

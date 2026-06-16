@@ -283,6 +283,8 @@ CREATE TABLE datasets (
     created_at timestamp with time zone DEFAULT now() NOT NULL,
     updated_at timestamp with time zone DEFAULT now() NOT NULL,
     default_flavor text[] DEFAULT '{}'::text[] NOT NULL,
+    spells_imported_at timestamp with time zone,
+    spells_count integer DEFAULT 0 NOT NULL,
     CONSTRAINT datasets_slug_format CHECK ((slug ~ '^[a-z0-9][a-z0-9-]{1,48}[a-z0-9]$'::text))
 );
 
@@ -371,6 +373,138 @@ CREATE TABLE dbc_spell_item_enchantment (
     min_level integer DEFAULT 0 NOT NULL,
     max_level integer DEFAULT 0 NOT NULL,
     dataset_id uuid NOT NULL
+);
+
+CREATE TABLE dbc_spells (
+    dataset_id uuid NOT NULL,
+    spell_id integer NOT NULL,
+    name text DEFAULT ''::text NOT NULL,
+    name_subtext text DEFAULT ''::text NOT NULL,
+    description text DEFAULT ''::text NOT NULL,
+    aura_description text DEFAULT ''::text NOT NULL,
+    spell_icon_id integer DEFAULT 0 NOT NULL,
+    active_icon_id integer DEFAULT 0 NOT NULL,
+    max_level integer DEFAULT 0 NOT NULL,
+    base_level integer DEFAULT 0 NOT NULL,
+    spell_level integer DEFAULT 0 NOT NULL,
+    category integer DEFAULT 0 NOT NULL,
+    max_target_level integer DEFAULT 0 NOT NULL,
+    school integer DEFAULT 0 NOT NULL,
+    spell_priority integer DEFAULT 0 NOT NULL,
+    stance_bar_order integer DEFAULT 0 NOT NULL,
+    proc_type_mask integer DEFAULT 0 NOT NULL,
+    proc_flags integer DEFAULT 0 NOT NULL,
+    proc_chance integer DEFAULT 0 NOT NULL,
+    proc_charges integer DEFAULT 0 NOT NULL,
+    speed real DEFAULT 0 NOT NULL,
+    dispel_type integer DEFAULT 0 NOT NULL,
+    aura_interrupt_flags integer DEFAULT 0 NOT NULL,
+    modal_next_spell integer DEFAULT 0 NOT NULL,
+    interrupt_flags integer DEFAULT 0 NOT NULL,
+    cumulative_aura integer DEFAULT 0 NOT NULL,
+    mechanic integer DEFAULT 0 NOT NULL,
+    defense_type integer DEFAULT 0 NOT NULL,
+    caster_aura_state integer DEFAULT 0 NOT NULL,
+    target_aura_state integer DEFAULT 0 NOT NULL,
+    max_targets integer DEFAULT 0 NOT NULL,
+    target_creature_type integer DEFAULT 0 NOT NULL,
+    requires_spell_focus integer DEFAULT 0 NOT NULL,
+    power_type integer DEFAULT 0 NOT NULL,
+    mana_cost integer DEFAULT 0 NOT NULL,
+    mana_cost_pct integer DEFAULT 0 NOT NULL,
+    mana_cost_per_level integer DEFAULT 0 NOT NULL,
+    mana_per_second integer DEFAULT 0 NOT NULL,
+    reagent integer[] DEFAULT '{}'::integer[] NOT NULL,
+    reagent_count integer[] DEFAULT '{}'::integer[] NOT NULL,
+    casting_time_index integer DEFAULT 0 NOT NULL,
+    recovery_time_ms bigint DEFAULT 0 NOT NULL,
+    start_recovery_category integer DEFAULT 0 NOT NULL,
+    start_recovery_time_ms bigint DEFAULT 0 NOT NULL,
+    category_recovery_time_ms bigint DEFAULT 0 NOT NULL,
+    range_index integer DEFAULT 0 NOT NULL,
+    duration_index integer DEFAULT 0 NOT NULL,
+    attributes integer[] DEFAULT '{}'::integer[] NOT NULL,
+    targets integer DEFAULT 0 NOT NULL,
+    spell_class_set integer DEFAULT 0 NOT NULL,
+    spell_class_mask bigint DEFAULT 0 NOT NULL,
+    equipped_item_inv_types integer DEFAULT 0 NOT NULL,
+    equipped_item_class integer DEFAULT 0 NOT NULL,
+    equipped_item_subclass integer DEFAULT 0 NOT NULL,
+    prevention_type integer DEFAULT 0 NOT NULL,
+    effect_0 integer DEFAULT 0 NOT NULL,
+    effect_die_sides_0 integer DEFAULT 0 NOT NULL,
+    effect_real_pts_per_level_0 real DEFAULT 0 NOT NULL,
+    effect_base_points_0 integer DEFAULT 0 NOT NULL,
+    effect_mechanic_0 integer DEFAULT 0 NOT NULL,
+    effect_radius_index_0 integer DEFAULT 0 NOT NULL,
+    effect_aura_0 integer DEFAULT 0 NOT NULL,
+    effect_aura_period_0 integer DEFAULT 0 NOT NULL,
+    effect_amplitude_0 real DEFAULT 0 NOT NULL,
+    effect_chain_targets_0 integer DEFAULT 0 NOT NULL,
+    effect_item_type_0 integer DEFAULT 0 NOT NULL,
+    effect_misc_value_0 integer DEFAULT 0 NOT NULL,
+    effect_trigger_spell_0 integer DEFAULT 0 NOT NULL,
+    effect_pts_per_combo_0 real DEFAULT 0 NOT NULL,
+    effect_base_dice_0 integer DEFAULT 0 NOT NULL,
+    effect_dice_per_level_0 integer DEFAULT 0 NOT NULL,
+    effect_chain_amplitude_0 real DEFAULT 0 NOT NULL,
+    implicit_target_a_0 integer DEFAULT 0 NOT NULL,
+    implicit_target_b_0 integer DEFAULT 0 NOT NULL,
+    effect_1 integer DEFAULT 0 NOT NULL,
+    effect_die_sides_1 integer DEFAULT 0 NOT NULL,
+    effect_real_pts_per_level_1 real DEFAULT 0 NOT NULL,
+    effect_base_points_1 integer DEFAULT 0 NOT NULL,
+    effect_mechanic_1 integer DEFAULT 0 NOT NULL,
+    effect_radius_index_1 integer DEFAULT 0 NOT NULL,
+    effect_aura_1 integer DEFAULT 0 NOT NULL,
+    effect_aura_period_1 integer DEFAULT 0 NOT NULL,
+    effect_amplitude_1 real DEFAULT 0 NOT NULL,
+    effect_chain_targets_1 integer DEFAULT 0 NOT NULL,
+    effect_item_type_1 integer DEFAULT 0 NOT NULL,
+    effect_misc_value_1 integer DEFAULT 0 NOT NULL,
+    effect_trigger_spell_1 integer DEFAULT 0 NOT NULL,
+    effect_pts_per_combo_1 real DEFAULT 0 NOT NULL,
+    effect_base_dice_1 integer DEFAULT 0 NOT NULL,
+    effect_dice_per_level_1 integer DEFAULT 0 NOT NULL,
+    effect_chain_amplitude_1 real DEFAULT 0 NOT NULL,
+    implicit_target_a_1 integer DEFAULT 0 NOT NULL,
+    implicit_target_b_1 integer DEFAULT 0 NOT NULL,
+    effect_2 integer DEFAULT 0 NOT NULL,
+    effect_die_sides_2 integer DEFAULT 0 NOT NULL,
+    effect_real_pts_per_level_2 real DEFAULT 0 NOT NULL,
+    effect_base_points_2 integer DEFAULT 0 NOT NULL,
+    effect_mechanic_2 integer DEFAULT 0 NOT NULL,
+    effect_radius_index_2 integer DEFAULT 0 NOT NULL,
+    effect_aura_2 integer DEFAULT 0 NOT NULL,
+    effect_aura_period_2 integer DEFAULT 0 NOT NULL,
+    effect_amplitude_2 real DEFAULT 0 NOT NULL,
+    effect_chain_targets_2 integer DEFAULT 0 NOT NULL,
+    effect_item_type_2 integer DEFAULT 0 NOT NULL,
+    effect_misc_value_2 integer DEFAULT 0 NOT NULL,
+    effect_trigger_spell_2 integer DEFAULT 0 NOT NULL,
+    effect_pts_per_combo_2 real DEFAULT 0 NOT NULL,
+    effect_base_dice_2 integer DEFAULT 0 NOT NULL,
+    effect_dice_per_level_2 integer DEFAULT 0 NOT NULL,
+    effect_chain_amplitude_2 real DEFAULT 0 NOT NULL,
+    implicit_target_a_2 integer DEFAULT 0 NOT NULL,
+    implicit_target_b_2 integer DEFAULT 0 NOT NULL,
+    totems_id integer DEFAULT 0 NOT NULL,
+    totem integer[] DEFAULT '{}'::integer[] NOT NULL,
+    cast_ui integer DEFAULT 0 NOT NULL,
+    required_aura_vision integer DEFAULT 0 NOT NULL,
+    min_faction_id integer DEFAULT 0 NOT NULL,
+    min_reputation integer DEFAULT 0 NOT NULL,
+    spell_visual_id integer[] DEFAULT '{}'::integer[] NOT NULL,
+    rune_cost_id integer DEFAULT 0 NOT NULL,
+    spell_missile_id integer DEFAULT 0 NOT NULL,
+    description_variables_id integer DEFAULT 0 NOT NULL,
+    caster_aura_spell integer DEFAULT 0 NOT NULL,
+    target_aura_spell integer DEFAULT 0 NOT NULL,
+    exclude_caster_aura_spell integer DEFAULT 0 NOT NULL,
+    exclude_target_aura_spell integer DEFAULT 0 NOT NULL,
+    exclude_caster_aura_state integer DEFAULT 0 NOT NULL,
+    exclude_target_aura_state integer DEFAULT 0 NOT NULL,
+    mana_per_second_per_level integer DEFAULT 0 NOT NULL
 );
 
 CREATE TABLE deployment_info (
@@ -1261,6 +1395,9 @@ ALTER TABLE ONLY dbc_item_set
 ALTER TABLE ONLY dbc_spell_item_enchantment
     ADD CONSTRAINT dbc_spell_item_enchantment_pkey PRIMARY KEY (dataset_id, id);
 
+ALTER TABLE ONLY dbc_spells
+    ADD CONSTRAINT dbc_spells_pkey PRIMARY KEY (dataset_id, spell_id);
+
 ALTER TABLE ONLY deployment_info
     ADD CONSTRAINT deployment_info_pkey PRIMARY KEY (id);
 
@@ -1489,6 +1626,8 @@ CREATE INDEX game_players_player_and_realm ON game_players USING btree (name, re
 
 CREATE INDEX idx_data_grants_user_id ON data_grants USING btree (user_id);
 
+CREATE INDEX idx_dbc_spells_name ON dbc_spells USING btree (dataset_id, name);
+
 CREATE INDEX idx_edr_class_spec ON encounter_dps_rankings USING btree (player_class, player_spec);
 
 CREATE INDEX idx_edr_dps_desc ON encounter_dps_rankings USING btree (encounter_name, dps DESC);
@@ -1621,6 +1760,9 @@ ALTER TABLE ONLY dbc_item_set_item
 
 ALTER TABLE ONLY dbc_spell_item_enchantment
     ADD CONSTRAINT dbc_spell_item_enchantment_dataset_id_fkey FOREIGN KEY (dataset_id) REFERENCES datasets(id);
+
+ALTER TABLE ONLY dbc_spells
+    ADD CONSTRAINT dbc_spells_dataset_id_fkey FOREIGN KEY (dataset_id) REFERENCES datasets(id) ON DELETE CASCADE;
 
 ALTER TABLE ONLY encounter_dps_rankings
     ADD CONSTRAINT encounter_dps_rankings_encounter_id_fkey FOREIGN KEY (encounter_id) REFERENCES log_instance_encounters(id) ON DELETE CASCADE;

@@ -941,6 +941,32 @@ export function useDatasets() {
 
 /** The well-known default dataset; it is the bottom of every resolution chain
  * and cannot be deleted. Mirrors servicedataset.DefaultDatasetID. */
+export interface DatasetImportSummary {
+  spells_count: number;
+  creatures_count: number;
+  items_count: number;
+  item_display_count: number;
+  enchantments_count: number;
+  random_properties_count: number;
+  item_sets_count: number;
+  has_talents: boolean;
+}
+
+export function useDatasetImportSummary(datasetId: string | undefined) {
+  return useQuery({
+    queryKey: ["datasets", datasetId, "import-summary"],
+    queryFn: async () => {
+      const response = await fetch(
+        `/api/v1/admin/datasets/${datasetId}/import-summary`,
+      );
+      if (!response.ok) throw new Error("Failed to fetch import summary");
+      return response.json() as Promise<DatasetImportSummary>;
+    },
+    enabled: !!datasetId,
+    staleTime: 30 * 1000,
+  });
+}
+
 export const DEFAULT_DATASET_ID = "00000000-0000-0000-0000-000000000001";
 
 // useUpsertDataset creates (no id) or updates (with id) a dataset via the admin

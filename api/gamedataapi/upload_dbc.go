@@ -106,6 +106,8 @@ func (h *Handler) UploadDBC(w http.ResponseWriter, r *http.Request) {
 		h.handleItemRandomPropertiesUpload(ctx, w, mode, table, datasetID)
 	case "ItemSet":
 		h.handleItemSetUpload(ctx, w, mode, table, datasetID)
+	case "Spell":
+		h.handleSpellUpload(ctx, w, mode, table, datasetID)
 	default:
 		httpapi.Write(ctx, w, http.StatusBadRequest, chroniclesdk.Response{
 			Message: fmt.Sprintf("Unsupported DBC type: %s", dbcType),

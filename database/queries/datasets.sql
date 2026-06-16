@@ -65,3 +65,17 @@ JOIN wow_servers s ON s.id = r.server_id
 LEFT JOIN tenants t ON t.id = s.tenant_id
 JOIN datasets d ON d.id = COALESCE(s.default_dataset_id, t.default_dataset_id)
 WHERE r.id = $1;
+
+-- name: GetDatasetImportSummary :one
+-- Returns row counts for each per-dataset data table, plus whether talent
+-- trees have been imported. Used by the dataset management UI.
+SELECT
+    (SELECT COUNT(*) FROM dbc_spells s WHERE s.dataset_id = $1)::INT AS spells_count,
+    (SELECT COUNT(*) FROM world_creature_template ct WHERE ct.dataset_id = $1)::INT AS creatures_count,
+    (SELECT COUNT(*) FROM world_item_template it WHERE it.dataset_id = $1)::INT AS items_count,
+    (SELECT COUNT(*) FROM dbc_item_display_info di WHERE di.dataset_id = $1)::INT AS item_display_count,
+    (SELECT COUNT(*) FROM dbc_spell_item_enchantment se WHERE se.dataset_id = $1)::INT AS enchantments_count,
+    (SELECT COUNT(*) FROM dbc_item_random_properties rp WHERE rp.dataset_id = $1)::INT AS random_properties_count,
+    (SELECT COUNT(*) FROM dbc_item_set ist WHERE ist.dataset_id = $1)::INT AS item_sets_count,
+    (SELECT EXISTS(SELECT 1 FROM dataset_talent_trees tt WHERE tt.dataset_id = $1))::BOOL AS has_talents;
+

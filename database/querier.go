@@ -71,6 +71,9 @@ type sqlcQuerier interface {
 	// itself is not behind RLS.
 	GetDataset(ctx context.Context, id uuid.UUID) (Dataset, error)
 	GetDatasetBySlug(ctx context.Context, slug string) (Dataset, error)
+	// Returns row counts for each per-dataset data table, plus whether talent
+	// trees have been imported. Used by the dataset management UI.
+	GetDatasetImportSummary(ctx context.Context, datasetID uuid.UUID) (GetDatasetImportSummaryRow, error)
 	GetDatasetTalentTrees(ctx context.Context, datasetID uuid.UUID) ([]byte, error)
 	GetDeploymentInfo(ctx context.Context) (DeploymentInfo, error)
 	GetDisplayInfoByID(ctx context.Context, arg GetDisplayInfoByIDParams) (WorldDisplayInfo, error)

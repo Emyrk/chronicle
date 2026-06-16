@@ -904,7 +904,7 @@ func (q *sqlQuerier) DeleteDataset(ctx context.Context, id uuid.UUID) error {
 
 const getDataset = `-- name: GetDataset :one
 
-SELECT id, name, slug, wow_version, build_version, description, created_at, updated_at, default_flavor FROM datasets WHERE id = $1
+SELECT id, name, slug, wow_version, build_version, description, created_at, updated_at, default_flavor, spells_imported_at, spells_count FROM datasets WHERE id = $1
 `
 
 // Dataset queries. These run with AdminBypass context since the datasets table
@@ -922,12 +922,14 @@ func (q *sqlQuerier) GetDataset(ctx context.Context, id uuid.UUID) (Dataset, err
 		&i.CreatedAt,
 		&i.UpdatedAt,
 		&i.DefaultFlavor,
+		&i.SpellsImportedAt,
+		&i.SpellsCount,
 	)
 	return i, err
 }
 
 const getDatasetBySlug = `-- name: GetDatasetBySlug :one
-SELECT id, name, slug, wow_version, build_version, description, created_at, updated_at, default_flavor FROM datasets WHERE slug = $1
+SELECT id, name, slug, wow_version, build_version, description, created_at, updated_at, default_flavor, spells_imported_at, spells_count FROM datasets WHERE slug = $1
 `
 
 func (q *sqlQuerier) GetDatasetBySlug(ctx context.Context, slug string) (Dataset, error) {
@@ -943,6 +945,49 @@ func (q *sqlQuerier) GetDatasetBySlug(ctx context.Context, slug string) (Dataset
 		&i.CreatedAt,
 		&i.UpdatedAt,
 		&i.DefaultFlavor,
+		&i.SpellsImportedAt,
+		&i.SpellsCount,
+	)
+	return i, err
+}
+
+const getDatasetImportSummary = `-- name: GetDatasetImportSummary :one
+SELECT
+    (SELECT COUNT(*) FROM dbc_spells s WHERE s.dataset_id = $1)::INT AS spells_count,
+    (SELECT COUNT(*) FROM world_creature_template ct WHERE ct.dataset_id = $1)::INT AS creatures_count,
+    (SELECT COUNT(*) FROM world_item_template it WHERE it.dataset_id = $1)::INT AS items_count,
+    (SELECT COUNT(*) FROM dbc_item_display_info di WHERE di.dataset_id = $1)::INT AS item_display_count,
+    (SELECT COUNT(*) FROM dbc_spell_item_enchantment se WHERE se.dataset_id = $1)::INT AS enchantments_count,
+    (SELECT COUNT(*) FROM dbc_item_random_properties rp WHERE rp.dataset_id = $1)::INT AS random_properties_count,
+    (SELECT COUNT(*) FROM dbc_item_set ist WHERE ist.dataset_id = $1)::INT AS item_sets_count,
+    (SELECT EXISTS(SELECT 1 FROM dataset_talent_trees tt WHERE tt.dataset_id = $1))::BOOL AS has_talents
+`
+
+type GetDatasetImportSummaryRow struct {
+	SpellsCount           int32 `db:"spells_count" json:"spells_count"`
+	CreaturesCount        int32 `db:"creatures_count" json:"creatures_count"`
+	ItemsCount            int32 `db:"items_count" json:"items_count"`
+	ItemDisplayCount      int32 `db:"item_display_count" json:"item_display_count"`
+	EnchantmentsCount     int32 `db:"enchantments_count" json:"enchantments_count"`
+	RandomPropertiesCount int32 `db:"random_properties_count" json:"random_properties_count"`
+	ItemSetsCount         int32 `db:"item_sets_count" json:"item_sets_count"`
+	HasTalents            bool  `db:"has_talents" json:"has_talents"`
+}
+
+// Returns row counts for each per-dataset data table, plus whether talent
+// trees have been imported. Used by the dataset management UI.
+func (q *sqlQuerier) GetDatasetImportSummary(ctx context.Context, datasetID uuid.UUID) (GetDatasetImportSummaryRow, error) {
+	row := q.db.QueryRow(ctx, getDatasetImportSummary, datasetID)
+	var i GetDatasetImportSummaryRow
+	err := row.Scan(
+		&i.SpellsCount,
+		&i.CreaturesCount,
+		&i.ItemsCount,
+		&i.ItemDisplayCount,
+		&i.EnchantmentsCount,
+		&i.RandomPropertiesCount,
+		&i.ItemSetsCount,
+		&i.HasTalents,
 	)
 	return i, err
 }
@@ -950,7 +995,7 @@ func (q *sqlQuerier) GetDatasetBySlug(ctx context.Context, slug string) (Dataset
 const insertDataset = `-- name: InsertDataset :one
 INSERT INTO datasets (name, slug, wow_version, build_version, description, default_flavor)
 VALUES ($1, $2, $3, $4, $5, $6)
-RETURNING id, name, slug, wow_version, build_version, description, created_at, updated_at, default_flavor
+RETURNING id, name, slug, wow_version, build_version, description, created_at, updated_at, default_flavor, spells_imported_at, spells_count
 `
 
 type InsertDatasetParams struct {
@@ -982,12 +1027,14 @@ func (q *sqlQuerier) InsertDataset(ctx context.Context, arg InsertDatasetParams)
 		&i.CreatedAt,
 		&i.UpdatedAt,
 		&i.DefaultFlavor,
+		&i.SpellsImportedAt,
+		&i.SpellsCount,
 	)
 	return i, err
 }
 
 const listDatasets = `-- name: ListDatasets :many
-SELECT id, name, slug, wow_version, build_version, description, created_at, updated_at, default_flavor FROM datasets ORDER BY name
+SELECT id, name, slug, wow_version, build_version, description, created_at, updated_at, default_flavor, spells_imported_at, spells_count FROM datasets ORDER BY name
 `
 
 func (q *sqlQuerier) ListDatasets(ctx context.Context) ([]Dataset, error) {
@@ -1009,6 +1056,8 @@ func (q *sqlQuerier) ListDatasets(ctx context.Context) ([]Dataset, error) {
 			&i.CreatedAt,
 			&i.UpdatedAt,
 			&i.DefaultFlavor,
+			&i.SpellsImportedAt,
+			&i.SpellsCount,
 		); err != nil {
 			return nil, err
 		}
@@ -1115,7 +1164,7 @@ UPDATE datasets SET
     default_flavor    = COALESCE($6, default_flavor),
     updated_at        = now()
 WHERE id = $7
-RETURNING id, name, slug, wow_version, build_version, description, created_at, updated_at, default_flavor
+RETURNING id, name, slug, wow_version, build_version, description, created_at, updated_at, default_flavor, spells_imported_at, spells_count
 `
 
 type UpdateDatasetParams struct {
@@ -1150,6 +1199,8 @@ func (q *sqlQuerier) UpdateDataset(ctx context.Context, arg UpdateDatasetParams)
 		&i.CreatedAt,
 		&i.UpdatedAt,
 		&i.DefaultFlavor,
+		&i.SpellsImportedAt,
+		&i.SpellsCount,
 	)
 	return i, err
 }
