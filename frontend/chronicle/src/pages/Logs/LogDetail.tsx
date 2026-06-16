@@ -511,24 +511,26 @@ function IdentitySection({ identity }: { identity: IdentityReport }) {
 }
 
 function BossEncounterRow({ encounter }: { encounter: WoWEncounter }) {
-  const isKill = encounter.kill_type !== "wipe";
   const badgeStyle = 
     encounter.kill_type === "clean" ? "bg-green-100 text-green-700 dark:bg-green-950 dark:text-green-300" :
     encounter.kill_type === "partial" ? "bg-yellow-100 text-yellow-700 dark:bg-yellow-950 dark:text-yellow-300" :
+    encounter.kill_type === "reset" ? "bg-orange-100 text-orange-700 dark:bg-orange-950 dark:text-orange-300" :
     "bg-red-100 text-red-700 dark:bg-red-950 dark:text-red-300";
   const badgeText = 
     encounter.kill_type === "clean" ? "Kill" :
     encounter.kill_type === "partial" ? "Partial" :
+    encounter.kill_type === "reset" ? "Reset" :
     "Wipe";
+  const icon =
+    encounter.kill_type === "clean" ? <Skull className="h-3.5 w-3.5 text-green-600 flex-shrink-0" /> :
+    encounter.kill_type === "partial" ? <AlertTriangle className="h-3.5 w-3.5 text-yellow-600 flex-shrink-0" /> :
+    encounter.kill_type === "reset" ? <RotateCcw className="h-3.5 w-3.5 text-orange-500 flex-shrink-0" /> :
+    <Shield className="h-3.5 w-3.5 text-destructive flex-shrink-0" />;
   
   return (
     <div className="flex items-center justify-between py-1.5 px-2 rounded hover:bg-muted/50 transition-colors">
       <div className="flex items-center gap-2 min-w-0">
-        {isKill ? (
-          <Skull className="h-3.5 w-3.5 text-green-600 flex-shrink-0" />
-        ) : (
-          <Shield className="h-3.5 w-3.5 text-destructive flex-shrink-0" />
-        )}
+        {icon}
         <span className="font-medium text-sm truncate">{encounter.name}</span>
       </div>
       <div className="flex items-center gap-2 flex-shrink-0 ml-2">

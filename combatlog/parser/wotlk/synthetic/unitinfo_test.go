@@ -38,7 +38,10 @@ type mockSpellFetcher struct {
 	spells map[chrondbc.SpellID]*chrondbc.Spell
 }
 
-func (m *mockSpellFetcher) Spell(id chrondbc.SpellID) (*chrondbc.Spell, error) {
+func (m *mockSpellFetcher) SpellsByName(_ context.Context, _ string) ([]*chrondbc.Spell, error) {
+	return nil, nil
+}
+func (m *mockSpellFetcher) Spell(_ context.Context, id chrondbc.SpellID) (*chrondbc.Spell, error) {
 	s, ok := m.spells[id]
 	if !ok {
 		return nil, nil

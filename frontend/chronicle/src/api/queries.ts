@@ -1176,12 +1176,14 @@ export function useDeleteUserGrant() {
 
 export function useSpell(
   spellId: string,
-  options?: Omit<UseQueryOptions<WoWSpell>, "queryKey" | "queryFn">
+  datasetId?: string,
+  options?: Omit<UseQueryOptions<WoWSpell>, "queryKey" | "queryFn">,
 ) {
+  const ds = datasetId ? `?dataset_id=${datasetId}` : "";
   return useQuery({
-    queryKey: ["wowdb", "spell", spellId],
+    queryKey: ["wowdb", "spell", spellId, datasetId ?? "default"],
     queryFn: async () => {
-      const response = await fetch(`/api/v1/wowdb/spell/${spellId}`);
+      const response = await fetch(`/api/v1/wowdb/spell/${spellId}${ds}`);
       if (!response.ok) throw new Error("Spell not found");
       return response.json() as Promise<WoWSpell>;
     },
@@ -1193,12 +1195,16 @@ export function useSpell(
 
 export function useSpellsByName(
   name: string,
-  options?: Omit<UseQueryOptions<WoWSpell[]>, "queryKey" | "queryFn">
+  datasetId?: string,
+  options?: Omit<UseQueryOptions<WoWSpell[]>, "queryKey" | "queryFn">,
 ) {
+  const ds = datasetId ? `?dataset_id=${datasetId}` : "";
   return useQuery({
-    queryKey: ["wowdb", "spell-by-name", name],
+    queryKey: ["wowdb", "spell-by-name", name, datasetId ?? "default"],
     queryFn: async () => {
-      const response = await fetch(`/api/v1/wowdb/spell-by-name/${encodeURIComponent(name)}`);
+      const response = await fetch(
+        `/api/v1/wowdb/spell-by-name/${encodeURIComponent(name)}${ds}`,
+      );
       if (!response.ok) throw new Error("Spell not found");
       return response.json() as Promise<WoWSpell[]>;
     },

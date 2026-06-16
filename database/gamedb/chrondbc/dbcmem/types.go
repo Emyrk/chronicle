@@ -1,3 +1,9 @@
+// TODO: The global variables in this package (SpellCastTimes, SpellDurations,
+// SpellRanges, PeriodicSpells, VulnerabilitySpells, ExtraAttackSpells,
+// DurationModifiers, etc.) are populated once at init() from compiled-in
+// server-specific data. They need to be moved to per-dataset DB tables so
+// a multi-tenant deployment can serve different WoW versions. Until then,
+// these globals are only correct for the compiled-in server identity.
 package dbcmem
 
 // This file defines the shared types, package-level variables, and getter

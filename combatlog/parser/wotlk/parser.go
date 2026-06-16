@@ -173,8 +173,8 @@ func (p *Parser) advance(_ context.Context) (_ []messages.Message, final error) 
 	return p.dispatch(ts, event, m, next)
 }
 
-func (p *Parser) Spell(id chrondbc.SpellID) (*chrondbc.Spell, error) {
-	return p.wowDB.Spell(id)
+func (p *Parser) Spell(ctx context.Context, id chrondbc.SpellID) (*chrondbc.Spell, error) {
+	return p.wowDB.Spell(ctx, id)
 }
 
 type missedSpellEntry struct {

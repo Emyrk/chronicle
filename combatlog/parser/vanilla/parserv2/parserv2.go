@@ -18,6 +18,7 @@ import (
 )
 
 type Parser struct {
+	ctx     context.Context
 	logger  *slog.Logger
 	wowDB   gamedb.SpellFetcher
 	scanner *bufio.Scanner
@@ -34,15 +35,16 @@ type Parser struct {
 	missedSpells map[chrondbc.SpellID]missedSpellEntry
 }
 
-func New(logger *slog.Logger, r io.Reader, wowDB gamedb.SpellFetcher, gear gamedb.GearResolver) (*Parser, error) {
+func New(ctx context.Context, logger *slog.Logger, r io.Reader, wowDB gamedb.SpellFetcher, gear gamedb.GearResolver) (*Parser, error) {
 	if wowDB == nil {
 		return nil, fmt.Errorf("wowDB cannot be nil")
 	}
 	return &Parser{
+		ctx:          ctx,
 		logger:       logger,
 		wowDB:        wowDB,
 		scanner:      bufio.NewScanner(r),
-		synthetics:   synthetic.New(logger, wowDB),
+		synthetics:   synthetic.New(ctx, logger, wowDB),
 		itemFetcher:  gear,
 		missedSpells: make(map[chrondbc.SpellID]missedSpellEntry),
 	}, nil
@@ -60,6 +62,7 @@ func (p *Parser) DetailedTimes() map[string]time.Duration {
 }
 
 func (p *Parser) Advance(ctx context.Context) ([]messages.Message, error) {
+	p.ctx = ctx
 	now := time.Now()
 	msgs, err := p.advance(ctx)
 	p.lineParseDur += time.Since(now)
@@ -158,8 +161,8 @@ func (p *Parser) advance(ctx context.Context) (_ []messages.Message, final error
 	return messages.Unparsed(ts, next), nil
 }
 
-func (p *Parser) Spell(id chrondbc.SpellID) (*chrondbc.Spell, error) {
-	sp, err := p.wowDB.Spell(id)
+func (p *Parser) Spell(ctx context.Context, id chrondbc.SpellID) (*chrondbc.Spell, error) {
+	sp, err := p.wowDB.Spell(ctx, id)
 	if err != nil {
 		entry := p.missedSpells[id]
 		entry.Count++

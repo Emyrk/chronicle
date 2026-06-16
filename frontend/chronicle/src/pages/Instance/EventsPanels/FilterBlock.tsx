@@ -3,6 +3,7 @@ import { createPortal } from "react-dom";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { useSpell } from "@/api/queries";
+import { useDatasetId } from "@/hooks/useDatasetId";
 import { SpellIconWithTooltip } from "@/components/ui/SpellIconWithTooltip";
 import type { PanelFilter, PanelFilterType } from "./processors/filters";
 import { useTimeRangeContextOptional } from "../TimeRangeContext";
@@ -243,8 +244,10 @@ function SegmentedToggle({ options, values, onToggle, multiSelect = true }: {
 
 function AbilityIdChip({ id, onRemove }: { id: string; onRemove: () => void }) {
   const spellId = parseInt(id, 10);
+  const datasetId = useDatasetId();
   const { data: spell } = useSpell(
     isNaN(spellId) ? "" : spellId.toString(),
+    datasetId,
     { enabled: !isNaN(spellId) && spellId > 0 },
   );
 

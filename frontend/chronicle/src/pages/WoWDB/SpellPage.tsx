@@ -26,7 +26,7 @@ export function SpellPage() {
     });
   };
   
-  const { data: spell, isLoading, error } = useSpell(spellId || "", {
+  const { data: spell, isLoading, error } = useSpell(spellId || "", undefined, {
     enabled: !!spellId,
   });
 

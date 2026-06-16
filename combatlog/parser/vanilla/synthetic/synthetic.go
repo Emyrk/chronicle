@@ -1,6 +1,7 @@
 package synthetic
 
 import (
+	"context"
 	"log/slog"
 	"time"
 
@@ -34,12 +35,12 @@ type Synthetic struct {
 	vanillaPlusDur  time.Duration
 }
 
-func New(logger *slog.Logger, wowDB gamedb.SpellFetcher) *Synthetic {
+func New(ctx context.Context, logger *slog.Logger, wowDB gamedb.SpellFetcher) *Synthetic {
 	return &Synthetic{
 		logger:       logger,
 		slain:        NewSlainDetective(),
 		mitigation:   newMitigator(logger, wowDB),
-		extraAttack:  newExtraAttack(logger, wowDB),
+		extraAttack:  newExtraAttack(ctx, logger, wowDB),
 		demons:       newEnslaveDemon(logger),
 		possession:   newPossession(logger),
 		knownObjects: newKnownObjects(),

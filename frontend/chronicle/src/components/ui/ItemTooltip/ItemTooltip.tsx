@@ -321,7 +321,7 @@ export function ItemTooltip({ item, className, includeReferenceLinks = false, sh
  * the description templates with full placeholder substitution ($s1, $d, $53202s1, etc).
  */
 function useResolvedSpellText(spellId: number): string {
-  const { data: spellData } = useSpell(String(spellId), {
+  const { data: spellData } = useSpell(String(spellId), undefined, {
     enabled: spellId > 0,
   });
 

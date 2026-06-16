@@ -12,6 +12,7 @@ import { iconUrl } from "@/config/iconUrl";
 import type { PanelDefinition, PanelRenderProps } from "../types";
 import type { PanelFilter } from "../processors/filters";
 import { useSpell } from "@/api/queries";
+import { useDatasetId } from "@/hooks/useDatasetId";
 import { SpellIconWithTooltip } from "@/components/ui/SpellIconWithTooltip";
 import {
   Tooltip,
@@ -82,7 +83,8 @@ function CastIcon({
   isOffHand?: boolean;
 }) {
   const isAutoAttack = spellId === AUTO_ATTACK_SPELL_ID;
-  const { data: spell } = useSpell(String(spellId), {
+  const datasetId = useDatasetId();
+  const { data: spell } = useSpell(String(spellId), datasetId, {
     enabled: spellId > 0 && !isAutoAttack,
   });
 
@@ -172,8 +174,9 @@ function HiddenSpellIcon({
   spellName: string;
   onUnhide: (spellId: number) => void;
 }) {
+  const datasetId = useDatasetId();
   const isAutoAttack = spellId === AUTO_ATTACK_SPELL_ID;
-  const { data: spell } = useSpell(String(spellId), { enabled: spellId > 0 && !isAutoAttack });
+  const { data: spell } = useSpell(String(spellId), datasetId, { enabled: spellId > 0 && !isAutoAttack });
   return (
     <button
       onClick={() => onUnhide(spellId)}
@@ -194,7 +197,8 @@ function HiddenSpellIcon({
 
 /** Tiny icon for the label column in focus mode. */
 function FocusRowIcon({ spellId }: { spellId: number }) {
-  const { data: spell } = useSpell(String(spellId), { enabled: spellId > 0 });
+  const datasetId = useDatasetId();
+  const { data: spell } = useSpell(String(spellId), datasetId, { enabled: spellId > 0 });
   if (!spell) return null;
   return <SpellIconWithTooltip spell={spell} size={14} />;
 }

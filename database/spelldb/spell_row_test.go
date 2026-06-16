@@ -174,9 +174,10 @@ func TestSpellRoundTrip(t *testing.T) {
 	assert.Equal(t, original.SpellVisualID, roundTripped.SpellVisualID)
 
 	// Verify name lookup also works
-	byName, err := spelldb.GetSpellByName(ctx, pool, datasetID, "Fireball")
-	require.NoError(t, err, "get spell by name")
-	assert.Equal(t, chrondbc.SpellID(byName.SpellID), original.ID)
+	byName, err := spelldb.GetSpellsByName(ctx, pool, datasetID, "Fireball")
+	require.NoError(t, err, "get spells by name")
+	require.Len(t, byName, 1)
+	assert.Equal(t, chrondbc.SpellID(byName[0].SpellID), original.ID)
 
 	// Verify methods still work on the round-tripped spell
 	assert.Equal(t, original.SpellDamageType(), roundTripped.SpellDamageType())

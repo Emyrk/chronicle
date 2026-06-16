@@ -111,7 +111,7 @@ func stringifySpellAt(parts []string, idx int, wdb *gamedb.WoWDB) {
 		return
 	}
 
-	spell, err := wdb.Spell(chrondbc.SpellID(spellID))
+	spell, err := wdb.Spell(context.Background(), chrondbc.SpellID(spellID))
 	if err != nil || spell == nil {
 		return
 	}

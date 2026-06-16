@@ -78,7 +78,7 @@ func ParseV2Cmd() *serpent.Command {
 			}
 			defer func() { closeFiles(files...) }()
 
-			p, err := parserv2.New(logger, files[0], servicewowdb.WoWDB(srvs).GameDB(), nil)
+			p, err := parserv2.New(ctx, logger, files[0], servicewowdb.WoWDB(srvs).GameDB(), nil)
 			if err != nil {
 				return fmt.Errorf("creating parser: %w", err)
 			}
@@ -161,7 +161,7 @@ func ParseCmd() *serpent.Command {
 				return err
 			}
 
-			p := vanilla.NewFromScanner(logger, liner, scan, nil)
+			p := vanilla.NewFromScanner(ctx, logger, liner, scan, nil)
 			output := encounters.New(ctx, logger, nil)
 			c := consumers.New(logger, output)
 			err = c.ConsumeAll(ctx, p)
@@ -239,7 +239,7 @@ func CreaturesCmd() *serpent.Command {
 				if err != nil {
 					return fmt.Errorf("creating wowdb: %w", err)
 				}
-				p, err = parserv2.New(logger, files[0], wowDB, nil)
+				p, err = parserv2.New(ctx, logger, files[0], wowDB, nil)
 				if err != nil {
 					return fmt.Errorf("creating parser: %w", err)
 				}
@@ -268,7 +268,7 @@ func CreaturesCmd() *serpent.Command {
 					return err
 				}
 
-				p = vanilla.NewFromScanner(logger, liner, scan, nil)
+				p = vanilla.NewFromScanner(ctx, logger, liner, scan, nil)
 			}
 
 			output := creatures.New(logger)
@@ -354,7 +354,7 @@ func Zoner() *serpent.Command {
 				return nil
 			})
 
-			p := vanilla.NewFromScanner(logger, liner, scan, nil)
+			p := vanilla.NewFromScanner(ctx, logger, liner, scan, nil)
 			err = consumers.New(logger, each).ConsumeAll(ctx, p)
 			if err != nil {
 				return err
@@ -402,7 +402,7 @@ func RegrowthBug() *serpent.Command {
 				return nil
 			})
 
-			p := vanilla.NewFromScanner(logger, liner, scan, nil)
+			p := vanilla.NewFromScanner(ctx, logger, liner, scan, nil)
 			err = consumers.New(logger, each).ConsumeAll(ctx, p)
 			if err != nil {
 				return err
@@ -457,7 +457,7 @@ func HitTypeCMD() *serpent.Command {
 				if err != nil {
 					return fmt.Errorf("creating wowdb: %w", err)
 				}
-				p, err = parserv2.New(logger, files[0], wowDB, nil)
+				p, err = parserv2.New(ctx, logger, files[0], wowDB, nil)
 				if err != nil {
 					return fmt.Errorf("creating parser: %w", err)
 				}
@@ -468,7 +468,7 @@ func HitTypeCMD() *serpent.Command {
 					return err
 				}
 
-				p = vanilla.NewFromScanner(logger, liner, scan, nil)
+				p = vanilla.NewFromScanner(ctx, logger, liner, scan, nil)
 			}
 
 			h := &hitTypeConsumer{

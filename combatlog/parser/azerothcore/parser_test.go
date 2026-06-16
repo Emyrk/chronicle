@@ -31,7 +31,10 @@ type stubSpellDB struct{}
 
 func (stubSpellDB) ResolveGear([]combatant.GearItem)                       {}
 func (stubSpellDB) Creature(int32) (*database.WorldCreatureTemplate, bool) { return nil, false }
-func (stubSpellDB) Spell(chrondbc.SpellID) (*chrondbc.Spell, error) {
+func (stubSpellDB) Spell(_ context.Context, _ chrondbc.SpellID) (*chrondbc.Spell, error) {
+	return nil, fmt.Errorf("no spell database loaded")
+}
+func (stubSpellDB) SpellsByName(_ context.Context, _ string) ([]*chrondbc.Spell, error) {
 	return nil, fmt.Errorf("no spell database loaded")
 }
 func (stubSpellDB) TalentTrees(_ context.Context, _ uuid.UUID) (*talents.TalentTreeData, error) {

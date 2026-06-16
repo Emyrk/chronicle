@@ -11,6 +11,7 @@ import { Sparkles, Skull, Bug, Droplets, HelpCircle } from "lucide-react";
 import { PlayerMetricChart, type PlayerMetricChartData } from "@/components/ui/PlayerMetricChart/PlayerMetricChart";
 import { ScrollArea } from "@/components/ui/ScrollArea/ScrollArea";
 import { useSpell } from "@/api/queries";
+import { useDatasetId } from "@/hooks/useDatasetId";
 import { SpellIconWithTooltip } from "@/components/ui/SpellIconWithTooltip";
 import { ChevronLeft } from "lucide-react";
 import { useBreakoutHover } from "@/components/ui/AbilityBreakout/BreakoutHoverContext";
@@ -156,8 +157,10 @@ interface DispelAbilityDisplay {
 
 /** Inline spell icon + name for breakout rows. */
 function BreakoutSpellCell({ spellId, spellName }: { spellId: number | null; spellName: string }) {
+  const datasetId = useDatasetId();
   const { data: spell } = useSpell(
     spellId != null && spellId > 0 ? String(spellId) : "",
+    datasetId,
     { enabled: spellId != null && spellId > 0 },
   );
 

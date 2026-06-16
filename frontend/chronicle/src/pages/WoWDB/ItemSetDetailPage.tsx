@@ -57,7 +57,7 @@ const SKILL_LABELS: Record<number, string> = {
 // --- Spell text resolution (same pattern as ItemTooltip.tsx) ---
 
 function useResolvedSpellText(spellId: number): string {
-  const { data: spellData } = useSpell(String(spellId), {
+  const { data: spellData } = useSpell(String(spellId), undefined, {
     enabled: spellId > 0,
   });
 

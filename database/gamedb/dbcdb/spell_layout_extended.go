@@ -16,14 +16,18 @@ import (
 // The standard 3.3.5a layout is not affected (Epoch uses the stock layout).
 const ExtendedSpellBuild vsn.Build = 12341
 
-// registerExtendedSpellLayout sets SpellBuildOverride and registers a patched
-// Spell definition layout under ExtendedSpellBuild. Call from init() in
-// server-specific build-tagged files.
-//
-//nolint:unused
-func registerExtendedSpellLayout() {
-	SpellBuildOverride = ExtendedSpellBuild
+func init() {
+	// Always register the extended layout so any binary can parse AzerothCore/
+	// Ascension Spell.dbc files (e.g. when importing into a non-AC dataset).
+	// Only server-specific init() functions set SpellBuildOverride to make it
+	// the default for parsing the compiled-in Spell.dbc.
+	ensureExtendedSpellLayout()
+}
 
+// ensureExtendedSpellLayout registers the patched Spell definition layout
+// under ExtendedSpellBuild. Safe to call multiple times (idempotent via
+// dbdefs.Register which overwrites).
+func ensureExtendedSpellLayout() {
 	def, err := dbdefs.Lookup("Spell")
 	if err != nil {
 		panic("dbcdb: extended spell layout: " + err.Error())

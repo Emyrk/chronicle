@@ -219,7 +219,7 @@ func (w *WorkerLogParse) Work(ctx context.Context, job *river.Job[ArgsLogParse])
 	})
 
 	// ── Parse ────────────────────────────────────────────────────────────
-	reg := w.parent.Registry()
+	reg := w.parent.RegistryForFlavor(flavor)
 	parsed, err := w.parseCombatLog(ctx, logFormat, files, gameDB, reg, job.Args.IdentityMode, preloadedFirst)
 	if err != nil {
 		jobResult = "failure"

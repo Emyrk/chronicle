@@ -32,7 +32,7 @@ export function SpellByNamePage() {
     data: spells,
     isLoading,
     error,
-  } = useSpellsByName(name || "", {
+  } = useSpellsByName(name || "", undefined, {
     enabled: !!name,
   });
 

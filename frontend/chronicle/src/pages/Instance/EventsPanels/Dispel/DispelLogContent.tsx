@@ -8,6 +8,7 @@ import { Sparkles, Skull, Bug, Droplets, HelpCircle } from "lucide-react";
 import { GenericPanel } from "../GenericPanel";
 import { ScrollArea } from "@/components/ui/ScrollArea/ScrollArea";
 import { useSpell } from "@/api/queries";
+import { useDatasetId } from "@/hooks/useDatasetId";
 import { SpellIconWithTooltip } from "@/components/ui/SpellIconWithTooltip";
 import type { PanelRenderProps } from "../types";
 import type { DispelResult, DispelCategory } from "./dispel.processor";
@@ -115,8 +116,10 @@ function DispelLogFilter({ selected, onChange, availableTypes }: DispelLogFilter
 
 /** Inline spell icon + name for a dispel log row. */
 function SpellCell({ spellId, spellName }: { spellId: number | null; spellName: string }) {
+  const datasetId = useDatasetId();
   const { data: spell } = useSpell(
     spellId != null && spellId > 0 ? String(spellId) : "",
+    datasetId,
     { enabled: spellId != null && spellId > 0 },
   );
 

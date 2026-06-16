@@ -15,10 +15,12 @@ import (
 	"github.com/Emyrk/chronicle/api/chronauth/authkeys"
 	"github.com/Emyrk/chronicle/internal/services"
 	"github.com/Emyrk/chronicle/internal/services/serviceaccessurl"
+	"github.com/Emyrk/chronicle/internal/services/serviceapplication"
 	"github.com/Emyrk/chronicle/internal/services/serviceassets"
 	"github.com/Emyrk/chronicle/internal/services/serviceauthz"
 	"github.com/Emyrk/chronicle/internal/services/servicebot"
 	"github.com/Emyrk/chronicle/internal/services/servicechronicle"
+	"github.com/Emyrk/chronicle/internal/services/servicedataset"
 	"github.com/Emyrk/chronicle/internal/services/servicedbstore"
 	"github.com/Emyrk/chronicle/internal/services/servicegamedata"
 	"github.com/Emyrk/chronicle/internal/services/servicelogger"
@@ -28,8 +30,6 @@ import (
 	"github.com/Emyrk/chronicle/internal/services/servicerankings"
 	"github.com/Emyrk/chronicle/internal/services/serviceriver"
 	"github.com/Emyrk/chronicle/internal/services/servicestorage"
-	"github.com/Emyrk/chronicle/internal/services/serviceapplication"
-	"github.com/Emyrk/chronicle/internal/services/servicedataset"
 	"github.com/Emyrk/chronicle/internal/services/servicetenant"
 	"github.com/Emyrk/chronicle/internal/services/servicewowdb"
 
@@ -50,16 +50,16 @@ func OnAPI() string {
 type Service struct {
 	broker *services.Services
 
-	secretPem       string
-	httpAddress     string
-	devAuth         bool
-	saffronURL      *url.URL
-	ocrURL          *url.URL
+	secretPem             string
+	httpAddress           string
+	devAuth               bool
+	saffronURL            *url.URL
+	ocrURL                *url.URL
 	shortLinkDomain       string
 	clientUploadsDisabled bool
 	discordAuth           chronauth.DiscordOAuth
-	app             *api.API
-	closeListener   func()
+	app                   *api.API
+	closeListener         func()
 }
 
 func New(broker *services.Services) *Service {
@@ -162,7 +162,8 @@ func (s *Service) Start(ctx context.Context) error {
 	if s.ocrURL.Scheme == "" {
 		ocrURL = nil
 	}
-	wowdb := servicewowdb.WoWDB(s.broker)
+	wowDBSvc := servicewowdb.WoWDB(s.broker)
+	wowdb := wowDBSvc
 	assets := serviceassets.Assets(s.broker)
 	gamedata := servicegamedata.InternalGameData(s.broker)
 	rankings := servicerankings.Rankings(s.broker)
@@ -180,20 +181,21 @@ func (s *Service) Start(ctx context.Context) error {
 		SaffronURL:       saffronURL,
 		OCRURL:           ocrURL,
 		WoWDB:            wowdb,
+		GameDB:           wowDBSvc.GameDB(),
 		Assets:           assets,
 		InternalGameData: gamedata,
 		Rankings:         rankings,
 		Mailer:           mailer,
 
-		AccessURL:       au,
+		AccessURL:             au,
 		ShortLinkDomain:       s.shortLinkDomain,
 		ClientUploadsDisabled: s.clientUploadsDisabled,
 		DevOAuth:              s.devAuth,
-		Discord:         s.discordAuth,
-		SecretPEM:       decodedSecret,
-		Tenant:          tenantSvc,
-		Application:     appSvc,
-		Dataset:         datasetSvc,
+		Discord:               s.discordAuth,
+		SecretPEM:             decodedSecret,
+		Tenant:                tenantSvc,
+		Application:           appSvc,
+		Dataset:               datasetSvc,
 	})
 
 	if err != nil {

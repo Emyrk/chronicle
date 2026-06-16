@@ -117,7 +117,7 @@ func TestCharacters(t *testing.T) {
 12/9 17:13:34.186  0x000000000001C7AC hits 0xF1300010C7009C09 for 135.`
 
 		logger := testutil.Logger(t)
-		parser, err := vanilla.New(logger, strings.NewReader(logs), nil)
+		parser, err := vanilla.New(context.Background(), logger, strings.NewReader(logs), nil)
 		require.NoError(t, err)
 
 		for {

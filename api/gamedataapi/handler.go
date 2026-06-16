@@ -10,27 +10,33 @@ import (
 	"github.com/Emyrk/chronicle/api/httpmw"
 	"github.com/Emyrk/chronicle/database/authz"
 	"github.com/Emyrk/chronicle/database/authz/policy"
+	"github.com/Emyrk/chronicle/database/gamedb"
 	"github.com/Emyrk/chronicle/internal/services/servicedataset"
+	"github.com/Emyrk/chronicle/internal/services/servicetenant"
 	"github.com/go-chi/chi/v5"
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgxpool"
 )
 
 type Handler struct {
-	zed  *authz.Authz
-	auth *chronauth.Service
-	pool *pgxpool.Pool
+	zed   *authz.Authz
+	auth  *chronauth.Service
+	pool  *pgxpool.Pool
+	wowDB *gamedb.WoWDB
 }
 
-func New(zed *authz.Authz, auth *chronauth.Service, pool *pgxpool.Pool) *Handler {
-	return &Handler{zed: zed, auth: auth, pool: pool}
+func New(zed *authz.Authz, auth *chronauth.Service, pool *pgxpool.Pool, wowDB *gamedb.WoWDB) *Handler {
+	return &Handler{zed: zed, auth: auth, pool: pool, wowDB: wowDB}
 }
 
-// datasetIDFromQuery parses the optional ?dataset_id= query param, defaulting
-// to the server's default dataset for backwards compatibility. Returns false
-// (after writing a 400) when the param is present but malformed.
+// datasetIDFromQuery parses the optional ?dataset_id= query param.
+// Resolution order:
+//  1. Explicit ?dataset_id= query param
+//  2. Tenant's default dataset (from tenant context / subdomain)
+//  3. Server's compiled-in default dataset
+//
+// Returns false (after writing a 400) when the param is present but malformed.
 func datasetIDFromQuery(ctx context.Context, w http.ResponseWriter, r *http.Request) (uuid.UUID, bool) {
-	datasetID := servicedataset.DefaultDatasetID
 	if dsStr := r.URL.Query().Get("dataset_id"); dsStr != "" {
 		parsed, err := uuid.Parse(dsStr)
 		if err != nil {
@@ -40,9 +46,13 @@ func datasetIDFromQuery(ctx context.Context, w http.ResponseWriter, r *http.Requ
 			})
 			return uuid.Nil, false
 		}
-		datasetID = parsed
+		return parsed, true
 	}
-	return datasetID, true
+	// Fall back to tenant's default dataset if available.
+	if t := servicetenant.TenantFromContext(ctx); t != nil && t.DefaultDatasetID.Valid {
+		return t.DefaultDatasetID.UUID, true
+	}
+	return servicedataset.DefaultDatasetID, true
 }
 
 func (h *Handler) Routes() http.Handler {

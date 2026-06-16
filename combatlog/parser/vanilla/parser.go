@@ -43,7 +43,7 @@ type Parser struct {
 	synthetics   *synthetic.Synthetic
 }
 
-func New(logger *slog.Logger, r io.Reader, wowDB gamedb.SpellFetcher) (*Parser, error) {
+func New(ctx context.Context, logger *slog.Logger, r io.Reader, wowDB gamedb.SpellFetcher) (*Parser, error) {
 	// Single liner shared between scanner and parser so CLOCK_INFO from scanner
 	// propagates to parser for timestamp adjustments.
 	liner := lines.NewLiner()
@@ -51,7 +51,7 @@ func New(logger *slog.Logger, r io.Reader, wowDB gamedb.SpellFetcher) (*Parser, 
 		logger:     logger,
 		scanner:    merge.FromIOReader(liner, r),
 		liner:      liner,
-		synthetics: synthetic.New(logger, wowDB),
+		synthetics: synthetic.New(ctx, logger, wowDB),
 		metrics: Metrics{
 			PreProcessDuration: 0,
 			TotalParseDuration: 0,
@@ -63,7 +63,7 @@ func New(logger *slog.Logger, r io.Reader, wowDB gamedb.SpellFetcher) (*Parser, 
 	}, nil
 }
 
-func NewFromScanner(logger *slog.Logger, liner *lines.Liner, scan merge.Scan, wowDB gamedb.SpellFetcher) *Parser {
+func NewFromScanner(ctx context.Context, logger *slog.Logger, liner *lines.Liner, scan merge.Scan, wowDB gamedb.SpellFetcher) *Parser {
 	return &Parser{
 		logger:  logger,
 		scanner: scan,
@@ -76,7 +76,7 @@ func NewFromScanner(logger *slog.Logger, liner *lines.Liner, scan merge.Scan, wo
 			MatchingTime:       make(map[string]time.Duration),
 			UnmatchingTime:     make(map[string]time.Duration),
 		},
-		synthetics: synthetic.New(logger, wowDB),
+		synthetics: synthetic.New(ctx, logger, wowDB),
 	}
 }
 

@@ -64,7 +64,8 @@ type Chronicle struct {
 	ItemFetcher        gamedb.GearResolver
 	metrics            *logParseMetrics
 	emitParsingLogs    bool
-	instanceRegistry   *registry.Registry
+	registryMu         sync.Mutex
+	registryByFlavor   map[string]*registry.Registry
 	primaryDomain      string
 	defaultFlavor      database.WoWFlavor
 	resolveDataset     func(ctx context.Context, realmID uuid.UUID) ResolvedDataset
@@ -107,7 +108,7 @@ func New(ctx context.Context, logger *slog.Logger, opts Options) (*Chronicle, er
 		metrics:            newLogParseMetrics(opts.Registry),
 		ItemFetcher:        opts.WoWDB,
 		emitParsingLogs:    opts.EmitParsingLogs,
-		instanceRegistry:   registry.DefaultRegistry(logger),
+		registryByFlavor:   make(map[string]*registry.Registry),
 		resolveDataset:     opts.ResolveDataset,
 	}
 
@@ -124,8 +125,28 @@ func (c *Chronicle) EmitParsingLogs() bool {
 	return c.emitParsingLogs
 }
 
+// RegistryForFlavor returns the instance registry for the given flavor.
+// Registries are lazily created and cached by a canonical key derived from
+// the sorted, deduplicated flavor tags.
+func (c *Chronicle) RegistryForFlavor(flavor database.WoWFlavor) *registry.Registry {
+	key := flavor.CanonicalKey()
+
+	c.registryMu.Lock()
+	defer c.registryMu.Unlock()
+
+	if reg, ok := c.registryByFlavor[key]; ok {
+		return reg
+	}
+
+	reg := registry.RegistryForFlavor(c.logger, flavor)
+	c.registryByFlavor[key] = reg
+	return reg
+}
+
+// Registry returns the default instance registry (for the server's compiled-in
+// flavor). Used by code paths that don't have a resolved flavor yet.
 func (c *Chronicle) Registry() *registry.Registry {
-	return c.instanceRegistry
+	return c.RegistryForFlavor(c.defaultFlavor)
 }
 
 // ResolvedDataset holds the result of dataset resolution: the dataset ID and

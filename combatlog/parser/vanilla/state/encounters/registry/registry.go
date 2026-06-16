@@ -11,6 +11,7 @@ import (
 	"github.com/Emyrk/chronicle/combatlog/parser/vanilla/state/encounters/instances"
 	"github.com/Emyrk/chronicle/combatlog/parser/vanilla/state/encounters/instances/rankings"
 	"github.com/Emyrk/chronicle/combatlog/parser/vanilla/state/unitdb"
+	"github.com/Emyrk/chronicle/database"
 	"github.com/Emyrk/chronicle/internal/services"
 )
 
@@ -66,10 +67,9 @@ func FromCommonFactory(f *instances.CommonFactory) Entry {
 	}
 }
 
-// DefaultRegistry returns a registry with all known instances.
-// When store and serverID are provided, the caller can use them to create
-// a DB-backed registry wrapping the static one. This function only returns
-// the static registry; the DB wrapping is done by the caller.
+// DefaultRegistry returns a registry with all known instances for the
+// compiled-in server identity. Prefer RegistryForFlavor when the flavor
+// is known from dataset resolution.
 func DefaultRegistry(logger *slog.Logger) *Registry {
 	switch services.ServerName {
 	case services.ServerIdentityTurtle, services.ServerIdentityOctoWoW:
@@ -81,6 +81,20 @@ func DefaultRegistry(logger *slog.Logger) *Registry {
 	default:
 		return TurtleRegistry(logger)
 	}
+}
+
+// RegistryForFlavor returns an instance registry based on flavor tags.
+// This allows a single binary to serve multiple WoW versions by selecting
+// the right encounter definitions at parse time.
+func RegistryForFlavor(logger *slog.Logger, flavor database.WoWFlavor) *Registry {
+	if flavor.Has(database.FlavorAzerothcore) {
+		return AzerothcoreStaticRegistry(logger)
+	}
+	if flavor.Has(database.FlavorWrath) {
+		return AzerothcoreStaticRegistry(logger)
+	}
+	// Vanilla-family: turtle, kronos, epoch, octowow, vanillaplus, etc.
+	return TurtleRegistry(logger)
 }
 
 // Registry manages available instances

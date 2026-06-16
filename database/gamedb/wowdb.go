@@ -15,6 +15,7 @@ import (
 	"github.com/Emyrk/chronicle/internal/services"
 	"github.com/Gophercraft/core/format/dbc"
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5/pgxpool"
 )
 
 // GameDB is the read interface for game data during parsing. Both [WoWDB] and
@@ -31,9 +32,10 @@ type TalentTreeFetcher interface {
 	TalentTrees(ctx context.Context, datasetID uuid.UUID) (*talents.TalentTreeData, error)
 }
 
-// SpellFetcher looks up spells by ID.
+// SpellFetcher looks up spells, scoped to a dataset.
 type SpellFetcher interface {
-	Spell(id chrondbc.SpellID) (*chrondbc.Spell, error)
+	Spell(ctx context.Context, id chrondbc.SpellID) (*chrondbc.Spell, error)
+	SpellsByName(ctx context.Context, name string) ([]*chrondbc.Spell, error)
 }
 
 // GearResolver resolves item IDs/names in a gear slice in-place.
@@ -56,9 +58,10 @@ type WorldQuerier interface {
 type Options struct {
 	SpellsDBCPath string
 	DB            WorldQuerier
-	DatasetID     uuid.UUID              // Default dataset for item/creature lookups.
+	Pool          *pgxpool.Pool // For DB-backed spell lookups; nil = DBC-only.
+	DatasetID     uuid.UUID     // Default dataset for item/creature lookups.
 	Talents       talents.TalentFetcher
-	Metrics       *lrucache.Metrics      // nil disables cache instrumentation.
+	Metrics       *lrucache.Metrics // nil disables cache instrumentation.
 }
 
 // WoWDB holds all game data sources used during parsing and API serving.
@@ -94,7 +97,7 @@ func New(ctx context.Context, opts Options) (*WoWDB, error) {
 	}
 
 	spDBC := chrondbc.NewSpells(v)
-	spellFetcher := spells.NewFetcher(ctx, spDBC, customSpells, 1000, opts.Metrics)
+	spellFetcher := spells.NewFetcher(ctx, opts.Pool, spDBC, customSpells, 1000, opts.Metrics)
 
 	return &WoWDB{
 		ctx:             ctx,
@@ -120,8 +123,8 @@ func (w *WoWDB) ForDataset(datasetID uuid.UUID) GameDB {
 
 // --- GameDB interface (default dataset) ---
 
-func (w *WoWDB) Spell(id chrondbc.SpellID) (*chrondbc.Spell, error) {
-	return w.spells.Spell(id)
+func (w *WoWDB) Spell(ctx context.Context, id chrondbc.SpellID) (*chrondbc.Spell, error) {
+	return w.spells.Spell(ctx, w.datasetID, id)
 }
 
 func (w *WoWDB) ResolveGear(gear []combatant.GearItem) {
@@ -141,9 +144,17 @@ func (w *WoWDB) TalentTrees(ctx context.Context, datasetID uuid.UUID) (*talents.
 
 // --- Delegated spell helpers (used by HTTP API) ---
 
-func (w *WoWDB) TotalSpells() int                          { return w.spells.TotalSpells() }
-func (w *WoWDB) SpellByName(name string) ([]int32, error)  { return w.spells.SpellByName(name) }
+func (w *WoWDB) TotalSpells() int { return w.spells.TotalSpells() }
+func (w *WoWDB) SpellsByName(ctx context.Context, name string) ([]*chrondbc.Spell, error) {
+	return w.spells.SpellsByName(ctx, w.datasetID, name)
+}
 func (w *WoWDB) RangeSpells(f func(*chrondbc.Spell) bool) error { return w.spells.RangeSpells(f) }
+
+// InvalidateSpellCache evicts all cached spells for a dataset. Call after
+// importing new spell data so subsequent lookups hit the database.
+func (w *WoWDB) InvalidateSpellCache(datasetID uuid.UUID) {
+	w.spells.InvalidateDataset(datasetID)
+}
 
 func (w *WoWDB) Close() error {
 	_ = w.spellFile.Close()
@@ -157,8 +168,12 @@ type ScopedGameDB struct {
 	datasetID uuid.UUID
 }
 
-func (s *ScopedGameDB) Spell(id chrondbc.SpellID) (*chrondbc.Spell, error) {
-	return s.w.spells.Spell(id)
+func (s *ScopedGameDB) Spell(ctx context.Context, id chrondbc.SpellID) (*chrondbc.Spell, error) {
+	return s.w.spells.Spell(ctx, s.datasetID, id)
+}
+
+func (s *ScopedGameDB) SpellsByName(ctx context.Context, name string) ([]*chrondbc.Spell, error) {
+	return s.w.spells.SpellsByName(ctx, s.datasetID, name)
 }
 
 func (s *ScopedGameDB) ResolveGear(gear []combatant.GearItem) {

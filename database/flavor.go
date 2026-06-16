@@ -1,5 +1,10 @@
 package database
 
+import (
+	"sort"
+	"strings"
+)
+
 // WoWFlavor is the server-mechanics axis split out of LogType (format vs flavor
 // vs dataset). A flavor is a *set of capability tags*, not a scalar: servers
 // overlap and split on the edges (e.g. Turtle/Kronos/VanillaPlus share most
@@ -109,6 +114,26 @@ func (f WoWFlavor) Has(tag FlavorTag) bool {
 		}
 	}
 	return false
+}
+
+// CanonicalKey returns a stable string key for a flavor set by sorting and
+// deduplicating tags. Two flavors with the same tags in any order produce the
+// same key. Used as a map key for caching per-flavor resources.
+func (f WoWFlavor) CanonicalKey() string {
+	if len(f) == 0 {
+		return ""
+	}
+	seen := make(map[FlavorTag]struct{}, len(f))
+	tags := make([]string, 0, len(f))
+	for _, t := range f {
+		if _, ok := seen[t]; ok {
+			continue
+		}
+		seen[t] = struct{}{}
+		tags = append(tags, string(t))
+	}
+	sort.Strings(tags)
+	return strings.Join(tags, ",")
 }
 
 // Flavor returns the bootstrap flavor tag set for a LogType.

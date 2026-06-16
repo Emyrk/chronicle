@@ -1,5 +1,6 @@
 import { useState, useRef, useEffect } from "react";
 import { useSpell } from "@/api/queries";
+import { useDatasetId } from "@/hooks/useDatasetId";
 import { SpellIconWithTooltip } from "../SpellIconWithTooltip";
 
 interface SpellIdTooltipProps {
@@ -49,9 +50,11 @@ export function SpellIdTooltip({
   }, [spellId]);
   
   // Only fetch when visible and we have a spell ID
+  const datasetId = useDatasetId();
   const { data: spell } = useSpell(
-    spellId?.toString() ?? "", 
-    { enabled: isVisible && spellId != null }
+    spellId?.toString() ?? "",
+    datasetId,
+    { enabled: isVisible && spellId != null },
   );
 
   // No spell ID - render plain text

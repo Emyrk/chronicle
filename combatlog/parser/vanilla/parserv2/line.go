@@ -1,6 +1,7 @@
 package parserv2
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"strconv"
@@ -9,7 +10,6 @@ import (
 
 	"github.com/Emyrk/chronicle/combatlog/parser/guid"
 	"github.com/Emyrk/chronicle/combatlog/parser/types"
-	"github.com/Emyrk/chronicle/database/gamedb"
 	"github.com/Emyrk/chronicle/database/gamedb/chrondbc"
 	"github.com/Emyrk/chronicle/internal/ptr"
 )
@@ -297,7 +297,12 @@ func (m *Matched) CSV() []string {
 	return strings.Split(str, ",")
 }
 
-func (m *Matched) DBCSpellByID(db gamedb.SpellFetcher) *chrondbc.Spell {
+// spellByIDer is the narrow interface needed by DBCSpellByID — just Spell().
+type spellByIDer interface {
+	Spell(ctx context.Context, id chrondbc.SpellID) (*chrondbc.Spell, error)
+}
+
+func (m *Matched) DBCSpellByID(ctx context.Context, db spellByIDer) *chrondbc.Spell {
 	return parseMatch(m, func(s string) (*chrondbc.Spell, error) {
 		id, err := strconv.ParseInt(s, 10, 32)
 		if err != nil {
@@ -308,7 +313,7 @@ func (m *Matched) DBCSpellByID(db gamedb.SpellFetcher) *chrondbc.Spell {
 			return nil, nil
 		}
 
-		spell, err := db.Spell(chrondbc.SpellID(int32(id)))
+		spell, err := db.Spell(ctx, chrondbc.SpellID(int32(id)))
 		if err != nil {
 			if chrondbc.IsSpellNotFound(err) {
 				return ptr.Ref(chrondbc.UnknownSpell(chrondbc.SpellID(id))), nil

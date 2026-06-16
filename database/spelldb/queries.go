@@ -235,18 +235,27 @@ func GetSpell(ctx context.Context, pool *pgxpool.Pool, datasetID uuid.UUID, spel
 	return &row, nil
 }
 
-// GetSpellByName retrieves a single spell by dataset + name (first match).
-func GetSpellByName(ctx context.Context, pool *pgxpool.Pool, datasetID uuid.UUID, name string) (*SpellRow, error) {
+// GetSpellsByName retrieves all spells matching a name within a dataset.
+func GetSpellsByName(ctx context.Context, pool *pgxpool.Pool, datasetID uuid.UUID, name string) ([]SpellRow, error) {
 	sql := fmt.Sprintf(
-		`SELECT %s FROM dbc_spells WHERE dataset_id = $1 AND name = $2 LIMIT 1`,
+		`SELECT %s FROM dbc_spells WHERE dataset_id = $1 AND name = $2`,
 		columnsSQL(),
 	)
-	var row SpellRow
-	err := pool.QueryRow(ctx, sql, datasetID, name).Scan(row.scanDests()...)
+	rows, err := pool.Query(ctx, sql, datasetID, name)
 	if err != nil {
 		return nil, err
 	}
-	return &row, nil
+	defer rows.Close()
+
+	var result []SpellRow
+	for rows.Next() {
+		var row SpellRow
+		if err := rows.Scan(row.scanDests()...); err != nil {
+			return nil, err
+		}
+		result = append(result, row)
+	}
+	return result, rows.Err()
 }
 
 // UpsertBatch inserts multiple spells in a single round-trip using pgx Batch.

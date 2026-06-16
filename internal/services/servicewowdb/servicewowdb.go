@@ -19,6 +19,7 @@ import (
 	"github.com/Emyrk/chronicle/internal/services/servicedataset"
 	"github.com/Emyrk/chronicle/internal/services/servicedbstore"
 	"github.com/Emyrk/chronicle/internal/services/servicelogger"
+	"github.com/Emyrk/chronicle/internal/services/servicepgxpool"
 	"github.com/Emyrk/chronicle/internal/services/servicetenant"
 	"github.com/go-chi/chi/v5"
 	"github.com/google/uuid"
@@ -68,6 +69,7 @@ func (s *Service) DependsOn() []string {
 		servicelogger.OnLogger(),
 		serviceauthz.OnAuthz(),
 		servicedbstore.OnDatabaseStore(),
+		servicepgxpool.OnPGXPool(),
 	}
 }
 
@@ -75,11 +77,13 @@ func (s *Service) Start(ctx context.Context) error {
 	logger := servicelogger.Logger(s.broker)
 	az := serviceauthz.Authz(s.broker)
 	store := servicedbstore.DatabaseStore(s.broker)
+	pool := servicepgxpool.PGXPool(s.broker)
 	cacheMetrics := lrucache.NewMetrics(prometheus.DefaultRegisterer)
 	talentFetcher := talents.NewFetcher(store, 16, cacheMetrics)
 	db, err := gamedb.New(ctx, gamedb.Options{
 		SpellsDBCPath: s.spellDBCPath,
 		DB:            az,
+		Pool:          pool,
 		DatasetID:     servicedataset.DefaultDatasetID,
 		Talents:       talentFetcher,
 		Metrics:       cacheMetrics,
@@ -111,7 +115,23 @@ type SpellResponse struct {
 	AttackOutcome chrondbc.AttackOutcome   `json:"attack_outcome"`
 }
 
+// resolveDatasetID resolves the dataset for a request using the same
+// precedence as the talent-trees endpoint:
+//  1. Explicit ?dataset_id= query param
+//  2. Tenant's default dataset (from tenant context)
+//  3. Server's compiled-in default dataset
+func resolveDatasetID(r *http.Request) (uuid.UUID, error) {
+	if q := r.URL.Query().Get("dataset_id"); q != "" {
+		return uuid.Parse(q)
+	}
+	if t := servicetenant.TenantFromContext(r.Context()); t != nil && t.DefaultDatasetID.Valid {
+		return t.DefaultDatasetID.UUID, nil
+	}
+	return servicedataset.DefaultDatasetID, nil
+}
+
 func (s *Service) handleGetSpell(w http.ResponseWriter, r *http.Request) {
+	ctx := r.Context()
 	idStr := chi.URLParam(r, "id")
 	id, err := strconv.Atoi(idStr)
 	if err != nil {
@@ -119,13 +139,20 @@ func (s *Service) handleGetSpell(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	spell, err := s.db.Spell(chrondbc.SpellID(id))
+	datasetID, err := resolveDatasetID(r)
+	if err != nil {
+		httpapi.Write(ctx, w, http.StatusBadRequest, chroniclesdk.Response{Message: "invalid dataset_id"})
+		return
+	}
+
+	gameDB := s.db.ForDataset(datasetID)
+	spell, err := gameDB.Spell(ctx, chrondbc.SpellID(id))
 	if err != nil {
 		http.Error(w, "spell not found", http.StatusNotFound)
 		return
 	}
 
-	// Cache for 24 hours since these are static data that won't change for the most part.
+	w.Header().Set(httpapi.DatasetHeader, datasetID.String())
 	w.Header().Set("Cache-Control", "public, max-age=86400")
 	w.Header().Set("Content-Type", "application/json")
 	_ = json.NewEncoder(w).Encode(SpellResponse{
@@ -136,40 +163,33 @@ func (s *Service) handleGetSpell(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Service) handleGetSpellByName(w http.ResponseWriter, r *http.Request) {
+	ctx := r.Context()
 	name := chi.URLParam(r, "name")
 	if name == "" {
 		http.Error(w, "name is required", http.StatusBadRequest)
 		return
 	}
 
-	// URL-decode the name (chi gives us the raw URL-encoded value)
 	decodedName, err := url.PathUnescape(name)
 	if err != nil {
 		http.Error(w, "invalid name encoding", http.StatusBadRequest)
 		return
 	}
 
-	ids, err := s.db.SpellByName(decodedName)
+	datasetID, err := resolveDatasetID(r)
 	if err != nil {
+		httpapi.Write(ctx, w, http.StatusBadRequest, chroniclesdk.Response{Message: "invalid dataset_id"})
+		return
+	}
+
+	gameDB := s.db.ForDataset(datasetID)
+	spells, err := gameDB.SpellsByName(ctx, decodedName)
+	if err != nil || len(spells) == 0 {
 		http.Error(w, "spell not found", http.StatusNotFound)
 		return
 	}
 
-	// Fetch all spells by ID
-	spells := make([]any, 0, len(ids))
-	for _, id := range ids {
-		if r.Context().Err() != nil {
-			http.Error(w, "cancelled", http.StatusInternalServerError)
-			return
-		}
-		spell, err := s.db.Spell(chrondbc.SpellID(id))
-		if err != nil {
-			continue // Skip missing spells
-		}
-		spells = append(spells, spell)
-	}
-
-	// Cache for 24 hours since these are static data that won't change for the most part.
+	w.Header().Set(httpapi.DatasetHeader, datasetID.String())
 	w.Header().Set("Cache-Control", "public, max-age=86400")
 	w.Header().Set("Content-Type", "application/json")
 	_ = json.NewEncoder(w).Encode(spells)
@@ -182,6 +202,9 @@ type PeriodicSpellEntry struct {
 	HasDirect bool   `json:"has_direct"` // true if spell also has direct damage/healing
 }
 
+// TODO: PeriodicSpells are served from the compiled-in dbcmem global tables.
+// Once dbcmem data is moved to per-dataset DB tables, this endpoint should
+// accept ?dataset_id= and query from the database.
 func (s *Service) handleGetPeriodicSpells(w http.ResponseWriter, r *http.Request) {
 	spells := make([]PeriodicSpellEntry, 0, len(dbcmem.PeriodicSpells))
 	for id, spell := range dbcmem.PeriodicSpells {
@@ -201,23 +224,10 @@ func (s *Service) handleGetPeriodicSpells(w http.ResponseWriter, r *http.Request
 func (s *Service) handleGetTalentTrees(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 
-	// dataset_id is optional. Resolution order:
-	//   1. explicit ?dataset_id= query param
-	//   2. the request tenant's default dataset (from tenant context)
-	//   3. the server's compiled-in default dataset
-	datasetID := servicedataset.DefaultDatasetID
-	if t := servicetenant.TenantFromContext(ctx); t != nil && t.DefaultDatasetID.Valid {
-		datasetID = t.DefaultDatasetID.UUID
-	}
-	if q := r.URL.Query().Get("dataset_id"); q != "" {
-		parsed, err := uuid.Parse(q)
-		if err != nil {
-			httpapi.Write(ctx, w, http.StatusBadRequest, chroniclesdk.Response{
-				Message: "invalid dataset_id",
-			})
-			return
-		}
-		datasetID = parsed
+	datasetID, err := resolveDatasetID(r)
+	if err != nil {
+		httpapi.Write(ctx, w, http.StatusBadRequest, chroniclesdk.Response{Message: "invalid dataset_id"})
+		return
 	}
 
 	// Surface the resolved dataset for debugging. Set before any Write so it

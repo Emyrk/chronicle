@@ -1,6 +1,7 @@
 package creatures_test
 
 import (
+	"context"
 	"errors"
 	"io"
 	"os"
@@ -35,7 +36,7 @@ func TestSonOfHakkar(t *testing.T) {
 	liner, scans, err := m.LineScanner(ctx, nil, logfile.New(nil, raw), logfile.New(nil, logs))
 	require.NoError(t, err)
 
-	p := vanilla.NewFromScanner(logger, liner, scans, nil)
+	p := vanilla.NewFromScanner(context.Background(), logger, liner, scans, nil)
 	output := encounters.New(ctx, logger, nil)
 	for {
 		msgs, err := p.Advance(ctx)

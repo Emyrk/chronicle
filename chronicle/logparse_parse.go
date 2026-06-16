@@ -138,7 +138,7 @@ func (w *WorkerLogParse) parseCombatLog(
 			return nil, fmt.Errorf("create line scanner: %w", err)
 		}
 
-		p := vanilla.NewFromScanner(logger, liner, scan, gameDB)
+		p := vanilla.NewFromScanner(ctx, logger, liner, scan, gameDB)
 		c.Advancer = p
 		consumeErr = c.ConsumeAll(ctx, p)
 		if consumeErr != nil && !errors.Is(consumeErr, io.EOF) {
@@ -154,7 +154,7 @@ func (w *WorkerLogParse) parseCombatLog(
 		}
 		loadFileDuration = time.Since(loadStart)
 
-		p, err := parserv2.New(logLogger, rdr, gameDB, gameDB)
+		p, err := parserv2.New(ctx, logLogger, rdr, gameDB, gameDB)
 		if err != nil {
 			return nil, fmt.Errorf("create v2 parser: %w", err)
 		}

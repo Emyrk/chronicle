@@ -73,6 +73,12 @@ func (h *Handler) handleSpellUpload(ctx context.Context, w http.ResponseWriter, 
 		return
 	}
 
+	// Invalidate the spell cache so subsequent lookups for this dataset
+	// hit the freshly-imported DB data instead of stale cache entries.
+	if h.wowDB != nil {
+		h.wowDB.InvalidateSpellCache(datasetID)
+	}
+
 	resp.Inserted = len(spells)
 	httpapi.Write(ctx, w, http.StatusOK, resp)
 }

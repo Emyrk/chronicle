@@ -130,7 +130,7 @@ type interactiveResult struct {
 //
 // defaultImporters is the set chosen via --import (or all); it seeds the
 // "Yes, some" multi-select and is used as-is for "Yes, all".
-func runInteractive(baseURL, token, presetDatasetID string, defaultImporters []Importer) (*interactiveResult, error) {
+func runInteractive(baseURL, token, presetDatasetID string, defaultImporters []Importer, gamePath string) (*interactiveResult, error) {
 	datasets, err := fetchDatasets(baseURL, token)
 	if err != nil {
 		return nil, fmt.Errorf("fetch datasets: %w", err)
@@ -183,7 +183,7 @@ func runInteractive(baseURL, token, presetDatasetID string, defaultImporters []I
 		tenantNote = strings.Join(names, ", ")
 	}
 
-	guardTitle := fmt.Sprintf("Dataset %q selected.\nAffected tenants: %s", chosen.Name, tenantNote)
+	guardTitle := fmt.Sprintf("Dataset %q selected.\nGame Filepath: %q\nAffected tenants: %s", chosen.Name, gamePath, tenantNote)
 	guardIdx, err := runSingleSelect(guardTitle, []listItem{
 		{label: "Yes, import all", desc: "run every selected importer"},
 		{label: "Yes, select imports", desc: "choose which importers to run"},

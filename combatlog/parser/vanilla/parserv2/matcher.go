@@ -123,7 +123,7 @@ func (p *Parser) header(ctx context.Context, ts time.Time, m *Matched) ([]messag
 }
 
 func (p *Parser) auraCast(ctx context.Context, ts time.Time, m *Matched) ([]messages.Message, error) {
-	spell := m.DBCSpellByID(p)
+	spell := m.DBCSpellByID(p.ctx, p)
 	caster := m.Guid()
 	target := m.OptionalGuid()
 	effect := chrondbc.Effect(m.Int32())
@@ -158,7 +158,7 @@ func (p *Parser) auraUpdate(ctx context.Context, ts time.Time, buff bool, m *Mat
 func (p *Parser) energize(ctx context.Context, ts time.Time, m *Matched) ([]messages.Message, error) {
 	target := m.Guid()
 	caster := m.OptionalGuid()
-	spell := m.DBCSpellByID(p.wowDB)
+	spell := m.DBCSpellByID(p.ctx, p.wowDB)
 	powerType := m.PowerType()
 	amount := m.Int32()
 	periodic := m.Int64() == 1
@@ -195,7 +195,7 @@ func (p *Parser) energize(ctx context.Context, ts time.Time, m *Matched) ([]mess
 func (p *Parser) aura(ctx context.Context, event string, ts time.Time, buff bool, m *Matched) ([]messages.Message, error) {
 	target := m.Guid()
 	m.skip() // buff slot
-	spell := m.DBCSpellByID(p.wowDB)
+	spell := m.DBCSpellByID(p.ctx, p.wowDB)
 	stack := m.Int32()
 	m.skip() // aura level
 	m.skip() // aura slot
@@ -479,7 +479,7 @@ func (p *Parser) swing(ctx context.Context, ts time.Time, m *Matched) ([]message
 		return nil, err
 	}
 
-	auto, err := p.wowDB.Spell(chrondbc.SpellIDAutoAttack)
+	auto, err := p.wowDB.Spell(p.ctx, chrondbc.SpellIDAutoAttack)
 	if err != nil {
 		if chrondbc.IsSpellNotFound(err) {
 			auto = ptr.Ref(chrondbc.UnknownSpell(chrondbc.SpellIDAutoAttack))
@@ -507,7 +507,7 @@ func (p *Parser) swing(ctx context.Context, ts time.Time, m *Matched) ([]message
 func (p *Parser) heal(ctx context.Context, ts time.Time, m *Matched) ([]messages.Message, error) {
 	target := m.Guid()
 	caster := m.Guid()
-	spell := m.DBCSpellByID(p)
+	spell := m.DBCSpellByID(p.ctx, p)
 	amount := int32(m.Int64())
 	crit := m.Int64() == 1
 	periodic := m.Int64() == 1
@@ -546,7 +546,7 @@ func (p *Parser) heal(ctx context.Context, ts time.Time, m *Matched) ([]messages
 func (p *Parser) spellMiss(ctx context.Context, ts time.Time, m *Matched) ([]messages.Message, error) {
 	caster := m.Guid()
 	target := m.Guid()
-	spell := m.DBCSpellByID(p)
+	spell := m.DBCSpellByID(p.ctx, p)
 	hit := m.SpellMissInfo()
 
 	if err := m.Error(); err != nil {
@@ -610,7 +610,7 @@ func (p *Parser) dmgShield(ctx context.Context, ts time.Time, m *Matched) ([]mes
 		return nil, fmt.Errorf("unknown school type: %d", school)
 	}
 
-	spell, err := p.wowDB.Spell(spellID)
+	spell, err := p.wowDB.Spell(p.ctx, spellID)
 	if err != nil {
 		if chrondbc.IsSpellNotFound(err) {
 			spell = ptr.Ref(chrondbc.UnknownSpell(spellID))
@@ -693,7 +693,7 @@ func (p *Parser) envDmg(ctx context.Context, ts time.Time, m *Matched) ([]messag
 		return nil, fmt.Errorf("unknown environment damage type: %d", dmgType)
 	}
 
-	spell, err := p.wowDB.Spell(spellID)
+	spell, err := p.wowDB.Spell(p.ctx, spellID)
 	if err != nil {
 		if chrondbc.IsSpellNotFound(err) {
 			spell = ptr.Ref(chrondbc.UnknownSpell(spellID))
@@ -724,7 +724,7 @@ func (p *Parser) envDmg(ctx context.Context, ts time.Time, m *Matched) ([]messag
 func (p *Parser) spell_dmg(ctx context.Context, ts time.Time, m *Matched) ([]messages.Message, error) {
 	target := m.Guid()
 	caster := m.Guid()
-	spell := m.DBCSpellByID(p)
+	spell := m.DBCSpellByID(p.ctx, p)
 	amount := int32(m.Int64())
 	mitigated := m.Int32s() // 3 values: blocked, absorbed, resisted
 	hitInfo := m.Int64()
@@ -809,7 +809,7 @@ func (p *Parser) spell_dmg(ctx context.Context, ts time.Time, m *Matched) ([]mes
 
 //func (p *Parser) spellStart(_ context.Context, ts time.Time, m *Matched) ([]messages.Message, error) {
 //	itemID := m.Int32() // 0 if no item triggered it
-//	spellData := m.DBCSpellByID(p)
+//	spellData := m.DBCSpellByID(p.ctx, p)
 //	caster := m.Guid()
 //	target := m.OptionalGuid() // 0x0000000000000000 if no target
 //	castFlags := m.CastFlags()
@@ -845,7 +845,7 @@ func (p *Parser) spell_dmg(ctx context.Context, ts time.Time, m *Matched) ([]mes
 // SPELL_DMG and "MISS" logs.
 func (p *Parser) spellGo(_ context.Context, ts time.Time, m *Matched) ([]messages.Message, error) {
 	itemID := m.Int32() // 0 if no item triggered it
-	spellData := m.DBCSpellByID(p)
+	spellData := m.DBCSpellByID(p.ctx, p)
 	caster := m.Guid()
 	target := m.OptionalGuid() // 0x0000000000000000 if no target
 	castFlags := m.CastFlags()
@@ -880,7 +880,7 @@ func (p *Parser) spellGo(_ context.Context, ts time.Time, m *Matched) ([]message
 
 func (p *Parser) spellStart(_ context.Context, ts time.Time, m *Matched) ([]messages.Message, error) {
 	itemID := m.Int32() // 0 if no item triggered it
-	spellData := m.DBCSpellByID(p)
+	spellData := m.DBCSpellByID(p.ctx, p)
 	caster := m.Guid()
 	target := m.OptionalGuid() // 0x0000000000000000 if no target
 	castFlags := m.CastFlags()
@@ -917,7 +917,7 @@ func (p *Parser) spellFail(_ context.Context, ts time.Time, m *Matched) ([]messa
 	}
 
 	caster := m.Guid()
-	spell := m.DBCSpellByID(p.wowDB)
+	spell := m.DBCSpellByID(p.ctx, p.wowDB)
 	serverSide := true
 	if m.Remain() > 0 {
 		serverSide = m.Bool()
@@ -954,7 +954,7 @@ func (p *Parser) slain(_ context.Context, ts time.Time, m *Matched) ([]messages.
 func (p *Parser) dispel(ctx context.Context, ts time.Time, m *Matched) ([]messages.Message, error) {
 	caster := m.Guid()
 	target := m.Guid()
-	spell := m.DBCSpellByID(p)
+	spell := m.DBCSpellByID(p.ctx, p)
 
 	if err := m.Error(); err != nil {
 		return nil, err

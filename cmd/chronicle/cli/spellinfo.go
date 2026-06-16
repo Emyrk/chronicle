@@ -52,7 +52,7 @@ func NightfallEffect() *serpent.Command {
 
 			wdb := servicewowdb.WoWDB(srvs).GameDB()
 
-			nfProc, err := wdb.Spell(23605)
+			nfProc, err := wdb.Spell(context.Background(), 23605)
 			if err != nil {
 				return err
 			}

@@ -323,7 +323,7 @@ func (p *Parser) lookupSpell(id chrondbc.SpellID) *chrondbc.Spell {
 	if id == 0 {
 		return nil
 	}
-	s, err := p.wowDB.Spell(id)
+	s, err := p.wowDB.Spell(context.Background(), id)
 	if err != nil {
 		if chrondbc.IsSpellNotFound(err) {
 			return ptr.Ref(chrondbc.UnknownSpell(id))
@@ -473,7 +473,7 @@ func (p *Parser) parseSpellAbsorbed(ts time.Time, m *wotlk.Matched, _ string) ([
 			Attacker:     srcGUID,
 			Target:       dstGUID,
 			DamageSpell:  dmgSpell,
-			Caster: absorbCaster,
+			Caster:       absorbCaster,
 			AbsorbSpell:  absorbSpell,
 			AbsorbSchool: absorbSchool,
 			Amount:       amount,

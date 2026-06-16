@@ -1,6 +1,7 @@
 package synthetic
 
 import (
+	"context"
 	"log/slog"
 
 	"github.com/Emyrk/chronicle/combatlog/parser/guid"
@@ -15,14 +16,16 @@ import (
 // 11815 is the item id for HoJ
 
 type extraAttack struct {
+	ctx         context.Context
 	WoWDB       gamedb.SpellFetcher
 	logger      *slog.Logger
 	currentZone *zoner.Location
 	lastDamage  map[guid.GUID]*messages.Damage
 }
 
-func newExtraAttack(logger *slog.Logger, wowDB gamedb.SpellFetcher) *extraAttack {
+func newExtraAttack(ctx context.Context, logger *slog.Logger, wowDB gamedb.SpellFetcher) *extraAttack {
 	return &extraAttack{
+		ctx:         ctx,
 		WoWDB:       wowDB,
 		logger:      logger,
 		currentZone: zoner.NewLocation(),
@@ -39,7 +42,7 @@ func (s *extraAttack) ProcessMessage(msgs []messages.Message) []messages.Message
 				continue
 			}
 			if extra, ok := dbcmem.ExtraAttackSpells[int32(m.SpellData.ID)]; ok {
-				spellData, err := s.WoWDB.Spell(m.SpellData.ID)
+				spellData, err := s.WoWDB.Spell(s.ctx, m.SpellData.ID)
 				if err != nil {
 					if chrondbc.IsSpellNotFound(err) {
 						spellData = ptr.Ref(chrondbc.UnknownSpell(m.SpellData.ID))

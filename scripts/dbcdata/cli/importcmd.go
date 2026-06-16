@@ -20,17 +20,17 @@ import (
 // declare the DBC files they need so each file is read exactly once.
 func ImportCmd() *serpent.Command {
 	var (
-		dbcPath  string
-		server   string
-		imports  []string
-		exportAs string
-		outDir   string
-		apiURL   string
+		dbcPath   string
+		server    string
+		imports   []string
+		exportAs  string
+		outDir    string
+		apiURL    string
 		datasetID string
-		token    string
-		cookie   string
-		mode     string
-		yes      bool
+		token     string
+		cookie    string
+		mode      string
+		yes       bool
 	)
 
 	return &serpent.Command{
@@ -120,6 +120,11 @@ func ImportCmd() *serpent.Command {
 				return err
 			}
 
+			resolved, err := ResolveDBCPath(dbcPath, server)
+			if err != nil {
+				return err
+			}
+
 			// Validate the output mode up front and, for uploads, resolve the
 			// target dataset and final importer set (possibly interactively).
 			upload := exportAs == ""
@@ -143,7 +148,7 @@ func ImportCmd() *serpent.Command {
 				} else {
 					// Interactive: dataset selector (unless preset) + guard +
 					// optional importer picker.
-					res, err := runInteractive(apiURL, token, datasetID, selected)
+					res, err := runInteractive(apiURL, token, datasetID, selected, resolved)
 					if err != nil {
 						if errors.Is(err, errCanceled) {
 							_, _ = fmt.Fprintln(inv.Stdout, "Canceled.")
@@ -156,10 +161,6 @@ func ImportCmd() *serpent.Command {
 				}
 			}
 
-			resolved, err := ResolveDBCPath(dbcPath, server)
-			if err != nil {
-				return err
-			}
 			wc, err := dbcdb.New(resolved)
 			if err != nil {
 				return fmt.Errorf("open wow client: %w", err)

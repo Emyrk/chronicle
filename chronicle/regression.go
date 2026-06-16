@@ -124,7 +124,7 @@ func (w *WorkerRegressionSnapshot) Work(ctx context.Context, job *river.Job[Args
 			return fmt.Errorf("load log file: %w", err)
 		}
 
-		p, err := parserv2.New(logger, rdr, w.parent.WoWDB, w.parent.ItemFetcher)
+		p, err := parserv2.New(ctx, logger, rdr, w.parent.WoWDB, w.parent.ItemFetcher)
 		if err != nil {
 			return fmt.Errorf("create v2 parser: %w", err)
 		}

@@ -1,6 +1,7 @@
 package wotlk
 
 import (
+	"context"
 	"log/slog"
 	"time"
 
@@ -790,7 +791,7 @@ func (p *Parser) lookupSpell(id chrondbc.SpellID, names ...string) *chrondbc.Spe
 	if id == 0 {
 		return nil
 	}
-	s, err := p.wowDB.Spell(id)
+	s, err := p.wowDB.Spell(context.Background(), id)
 	if err != nil {
 		entry := p.missedSpells[id]
 		entry.Count++

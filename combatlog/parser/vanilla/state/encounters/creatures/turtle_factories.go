@@ -11,6 +11,10 @@ func TurtleCharacterFactories() []characters.CharacterFactory {
 		NewTotemCharacter,
 		NewCritterCharacter,
 		NewObject,
+		// SM (V+)
+		NewVanillaPlusSMSoul,
+		NewVanillaPlusSMSoulHunter,
+		NewVanillaPlusBrotherMicheal,
 		// Sunken Temple
 		NewAtalalDeathwalkerSpirit,
 		// Wailing Caverns
@@ -96,6 +100,6 @@ func TurtleCharacterFactories() []characters.CharacterFactory {
 
 		// Eye of Eternity
 		NewMalygos,
-    NewPowerSpark,
+		NewPowerSpark,
 	}
 }

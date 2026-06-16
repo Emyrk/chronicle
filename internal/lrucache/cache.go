@@ -160,6 +160,25 @@ func (c *Cache[K, V]) Remove(key K) bool {
 	return ok
 }
 
+// RemoveFunc evicts all keys for which match returns true.
+// Useful for bulk-invalidating a subset of the cache (e.g. all entries for a
+// dataset after an import). Holds the lock for the full scan to prevent
+// new entries from sneaking in between the snapshot and the removals.
+func (c *Cache[K, V]) RemoveFunc(match func(K) bool) {
+	c.mu.Lock()
+	for _, k := range c.inner.Keys() {
+		if match(k) {
+			c.inner.Remove(k) // fires eviction callback (dataset_entries dec)
+		}
+	}
+	size := c.inner.Len()
+	c.mu.Unlock()
+
+	if c.metrics != nil {
+		c.metrics.entries.WithLabelValues(c.name).Set(float64(size))
+	}
+}
+
 // Contains checks whether key is present without updating recency.
 func (c *Cache[K, V]) Contains(key K) bool {
 	c.mu.Lock()

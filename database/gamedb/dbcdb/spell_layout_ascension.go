@@ -3,5 +3,5 @@
 package dbcdb
 
 func init() {
-	registerExtendedSpellLayout()
+	SpellBuildOverride = ExtendedSpellBuild
 }

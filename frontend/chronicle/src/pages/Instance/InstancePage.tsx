@@ -4,6 +4,7 @@ import { ArrowLeft, Loader2, Youtube, Timer, TriangleAlert } from "lucide-react"
 import { useInstance, useInstanceYoutube, useAuthorizationCheck } from "@/api/queries";
 import { useAuth } from "@/hooks/useAuth";
 import { InstanceEventsProvider } from "@/hooks/instanceEvents";
+import { DatasetProvider } from "@/hooks/useDatasetId";
 import type { ActivityPeriod, InstancePlayer, InstanceUnit, WoWEncounterWithHostiles, KillType } from "@/api/typesGenerated";
 import { Card } from "@/components/ui/Card/Card";
 import { Button } from "@/components/ui/button";
@@ -409,6 +410,7 @@ export function InstancePage() {
   }
 
   return (
+    <DatasetProvider value={instance.datasetId}>
     <SyncModeProvider>
       <TimeRangeProvider totalDurationMs={totalEncounterDurationMs}>
         <InstanceEventsProvider instanceId={instance.id}>
@@ -432,6 +434,7 @@ export function InstancePage() {
         </InstanceEventsProvider>
       </TimeRangeProvider>
     </SyncModeProvider>
+    </DatasetProvider>
   );
 }
 

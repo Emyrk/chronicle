@@ -12,12 +12,12 @@ import (
 	"github.com/Emyrk/chronicle/combatlog/parser/types"
 	"github.com/Emyrk/chronicle/combatlog/parser/types/combatant"
 	"github.com/Emyrk/chronicle/combatlog/parser/vanilla/messages"
+	"github.com/Emyrk/chronicle/combatlog/parser/vanilla/state/encounters/registry"
 	"github.com/Emyrk/chronicle/database"
 	"github.com/Emyrk/chronicle/database/gamedb"
 	"github.com/Emyrk/chronicle/database/gamedb/chrondbc"
 	"github.com/Emyrk/chronicle/database/gamedb/talents"
 	"github.com/google/uuid"
-	"github.com/Emyrk/chronicle/combatlog/parser/vanilla/state/encounters/registry"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -29,7 +29,10 @@ type stubSpellDB struct{}
 
 func (d stubSpellDB) ResolveGear(gear []combatant.GearItem)                        {}
 func (d stubSpellDB) Creature(entry int32) (*database.WorldCreatureTemplate, bool) { return nil, false }
-func (stubSpellDB) Spell(chrondbc.SpellID) (*chrondbc.Spell, error) {
+func (stubSpellDB) Spell(_ context.Context, _ chrondbc.SpellID) (*chrondbc.Spell, error) {
+	return nil, fmt.Errorf("no spell database loaded")
+}
+func (stubSpellDB) SpellsByName(_ context.Context, _ string) ([]*chrondbc.Spell, error) {
 	return nil, fmt.Errorf("no spell database loaded")
 }
 func (stubSpellDB) TalentTrees(_ context.Context, _ uuid.UUID) (*talents.TalentTreeData, error) {

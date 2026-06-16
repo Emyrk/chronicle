@@ -7,6 +7,7 @@ import { cn } from "@/lib/utils";
 import { GenericPanel } from "../GenericPanel";
 import { ScrollArea } from "@/components/ui/ScrollArea/ScrollArea";
 import { useSpell } from "@/api/queries";
+import { useDatasetId } from "@/hooks/useDatasetId";
 import { SpellIconWithTooltip } from "@/components/ui/SpellIconWithTooltip";
 import type { PanelRenderProps } from "../types";
 import type { InterruptResult } from "./interrupt.processor";
@@ -74,8 +75,10 @@ function formatRelativeTime(offsetMilli: number): string {
 
 /** Inline spell icon + name for a log row. */
 function SpellCell({ spellId, spellName }: { spellId: number; spellName: string }) {
+  const datasetId = useDatasetId();
   const { data: spell } = useSpell(
     spellId > 0 ? String(spellId) : "",
+    datasetId,
     { enabled: spellId > 0 },
   );
 

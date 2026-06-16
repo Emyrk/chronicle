@@ -7,9 +7,11 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"strings"
 
 	"github.com/Emyrk/chronicle/api/chroniclesdk"
 	"github.com/Emyrk/chronicle/api/httpapi"
+	"github.com/Emyrk/chronicle/database/gamedb/chrondbc"
 	"github.com/Gophercraft/core/format/dbc"
 	"github.com/Gophercraft/core/format/dbc/dbdefs"
 	"github.com/Gophercraft/core/vsn"
@@ -76,23 +78,55 @@ func (h *Handler) UploadDBC(w http.ResponseWriter, r *http.Request) {
 		dbcType = "ItemDisplayInfo" // backwards compat
 	}
 
-	// Try to open the DBC file, auto-detecting the build version.
+	// Determine which build(s) to use for parsing the DBC layout.
+	// If the target dataset has a build_version, use that directly (and for
+	// Spell.dbc, also try the extended layout variant at build+1).
+	// Otherwise fall back to auto-detection across known builds.
+	builds := knownBuilds
+	var dsRow struct{ BuildVersion int32 }
+	if err := h.pool.QueryRow(ctx,
+		`SELECT build_version FROM datasets WHERE id = $1`, datasetID,
+	).Scan(&dsRow.BuildVersion); err == nil && dsRow.BuildVersion > 0 {
+		dsBuild := vsn.Build(dsRow.BuildVersion)
+		if dbcType == "Spell" {
+			// Also try the extended layout (build+1) used by
+			// AzerothCore/Ascension for non-standard Spell columns.
+			builds = []vsn.Build{dsBuild, vsn.Build(dsRow.BuildVersion + 1)}
+		} else {
+			builds = []vsn.Build{dsBuild}
+		}
+	}
+
 	var table *dbc.Table
-	var lastErr error
-	for _, build := range knownBuilds {
+	var triedErrs []string
+	for _, build := range builds {
 		d := dbc.NewDB(build)
 		t, err := d.Open(dbcType, bytes.NewReader(data))
 		if err != nil {
-			lastErr = err
+			triedErrs = append(triedErrs, fmt.Sprintf("%s: %v", build, err))
 			continue
+		}
+		// For Spell.dbc, validate the parse by checking a known spell.SpellBuildOverride
+		// Renew (Rank 1) = ID 139 should exist in all WoW versions.
+		if dbcType == "Spell" {
+			spDBC := chrondbc.NewSpells(t)
+			sp, spErr := spDBC.ID(139)
+			if spErr != nil {
+				triedErrs = append(triedErrs, fmt.Sprintf("%s: spell 139 lookup failed: %v", build, spErr))
+				continue
+			}
+			if !strings.Contains(strings.ToLower(sp.Name()), "renew") {
+				triedErrs = append(triedErrs, fmt.Sprintf("%s: spell 139 expected 'Renew', got name=%q subtext=%q", build, sp.Name(), sp.Subtext()))
+				continue
+			}
 		}
 		table = t
 		break
 	}
 	if table == nil {
 		httpapi.Write(ctx, w, http.StatusBadRequest, chroniclesdk.Response{
-			Message: fmt.Sprintf("Failed to parse DBC file as %s (tried vanilla, TBC, WotLK builds)", dbcType),
-			Detail:  lastErr.Error(),
+			Message: fmt.Sprintf("Failed to parse DBC file as %s", dbcType),
+			Detail:  strings.Join(triedErrs, "; "),
 		})
 		return
 	}

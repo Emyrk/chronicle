@@ -2,7 +2,7 @@ import { useState, useMemo, useEffect, useCallback, useRef, useDeferredValue, ty
 import { createPortal } from "react-dom";
 import { useSearchParams, Link } from "react-router-dom";
 import { useSession, useCreateShare, fetchSharedView, type UserPanelLayout } from "@/api/queries";
-import { Skull, CheckCircle, AlertTriangle, ChevronDown, ChevronRight, Clock, PanelLeftClose, PanelLeft, Users, Crown, List, FolderTree, X, HelpCircle, Copy, Share2, BookOpen, ExternalLink, Hourglass, ClockArrowUp, ClockArrowDown } from "lucide-react";
+import { Skull, CheckCircle, AlertTriangle, ChevronDown, ChevronRight, Clock, PanelLeftClose, PanelLeft, Users, Crown, List, FolderTree, X, HelpCircle, Copy, Share2, BookOpen, ExternalLink, Hourglass, ClockArrowUp, ClockArrowDown, RotateCcw } from "lucide-react";
 import { Popover as PopoverPrimitive } from "radix-ui";
 import { toast } from "sonner";
 import { useIsMobile } from "@/hooks/useIsMobile";
@@ -290,7 +290,7 @@ function groupTrashEncounters(encounters: Encounter[]): TrashGroup[] {
   return Array.from(groups.entries()).map(([name, encs]) => ({
     name,
     encounters: encs,
-    kills: encs.filter((e) => e.kill_type !== "wipe").length,
+    kills: encs.filter((e) => e.kill_type !== "wipe" && e.kill_type !== "reset").length,
     wipes: encs.filter((e) => e.kill_type === "wipe").length,
   }));
 }
@@ -602,7 +602,7 @@ function EncounterSidebar({
         <div className="space-y-1">
           {chronologicalEncounters.map((encounter) => {
             const isSelected = selectedIds.includes(encounter.id);
-            const isWipe = encounter.kill_type === "wipe";
+            const isWipeOrReset = encounter.kill_type === "wipe" || encounter.kill_type === "reset";
             
             return (
               <div
@@ -621,7 +621,7 @@ function EncounterSidebar({
                   isSelected
                     ? "bg-primary-darker text-primary-foreground border-l-3 border-l-primary-foreground/70 shadow-sm"
                     : "hover:bg-accent/50 hover:translate-x-0.5",
-                  isWipe && !isSelected && "opacity-60",
+                  isWipeOrReset && !isSelected && "opacity-60",
                   !encounter.boss && !isSelected && "text-muted-foreground"
                 )}
               >
@@ -629,6 +629,8 @@ function EncounterSidebar({
                   <CheckCircle className={cn("h-4 w-4 shrink-0", encounter.boss ? "text-green-500" : "text-green-500/60")} />
                 ) : encounter.kill_type === "partial" ? (
                   <AlertTriangle className={cn("h-4 w-4 shrink-0", encounter.boss ? "text-yellow-500" : "text-yellow-500/60")} />
+                ) : encounter.kill_type === "reset" ? (
+                  <RotateCcw className={cn("h-4 w-4 shrink-0", encounter.boss ? "text-orange-500" : "text-orange-500/60")} />
                 ) : (
                   <Skull className={cn("h-4 w-4 shrink-0", encounter.boss ? "text-red-500" : "text-red-500/60")} />
                 )}
@@ -660,7 +662,7 @@ function EncounterSidebar({
       <div className="space-y-1">
         {bossEncounters.map((encounter) => {
           const isSelected = selectedIds.includes(encounter.id);
-          const isWipe = encounter.kill_type === "wipe";
+          const isWipeOrReset = encounter.kill_type === "wipe" || encounter.kill_type === "reset";
           
           return (
             <div
@@ -679,13 +681,15 @@ function EncounterSidebar({
                 isSelected
                   ? "bg-primary-darker text-primary-foreground border-l-3 border-l-primary-foreground/70 shadow-sm"
                   : "hover:bg-accent/50 hover:translate-x-0.5",
-                isWipe && !isSelected && "opacity-60"
+                isWipeOrReset && !isSelected && "opacity-60"
               )}
             >
               {encounter.kill_type === "clean" ? (
                 <CheckCircle className="h-4 w-4 shrink-0 text-green-500" />
               ) : encounter.kill_type === "partial" ? (
                 <AlertTriangle className="h-4 w-4 shrink-0 text-yellow-500" />
+              ) : encounter.kill_type === "reset" ? (
+                <RotateCcw className="h-4 w-4 shrink-0 text-orange-500" />
               ) : (
                 <Skull className="h-4 w-4 shrink-0 text-red-500" />
               )}
@@ -771,6 +775,8 @@ function EncounterSidebar({
                               <CheckCircle className="h-3 w-3 text-green-500" />
                             ) : encounter.kill_type === "partial" ? (
                               <AlertTriangle className="h-3 w-3 text-yellow-500" />
+                            ) : encounter.kill_type === "reset" ? (
+                              <RotateCcw className="h-3 w-3 text-orange-500" />
                             ) : (
                               <Skull className="h-3 w-3 text-red-500" />
                             )}
@@ -1101,7 +1107,7 @@ function EncounterDetail({
     : `${encounters.length} Encounters Selected`;
 
   const subtitle = isSingle
-    ? (encounter.kill_type === "wipe" ? "(Wipe)" : encounter.kill_type === "partial" ? "(Partial)" : null)
+    ? (encounter.kill_type === "wipe" ? "(Wipe)" : encounter.kill_type === "partial" ? "(Partial)" : encounter.kill_type === "reset" ? "(Reset)" : null)
     : encounters.map(e => e.name).filter((v, i, a) => a.indexOf(v) === i).join(", ");
 
   return (
@@ -1114,6 +1120,8 @@ function EncounterDetail({
               <CheckCircle className="h-6 w-6 text-green-500" />
             ) : encounter.kill_type === "partial" ? (
               <AlertTriangle className="h-6 w-6 text-yellow-500" />
+            ) : encounter.kill_type === "reset" ? (
+              <RotateCcw className="h-6 w-6 text-orange-500" />
             ) : (
               <Skull className="h-6 w-6 text-red-500" />
             )
