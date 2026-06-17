@@ -3,6 +3,7 @@ package gamedataapi
 import (
 	"context"
 	"net/http"
+	"strings"
 
 	"github.com/Emyrk/chronicle/api/chroniclesdk"
 	"github.com/Emyrk/chronicle/api/httpapi"
@@ -11,6 +12,15 @@ import (
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
 )
+
+// cutIconPrefix strips the "Interface\Icons\" DBC path prefix case-insensitively.
+func cutIconPrefix(s string) string {
+	const prefix = `Interface\Icons\`
+	if len(s) >= len(prefix) && strings.EqualFold(s[:len(prefix)], prefix) {
+		return s[len(prefix):]
+	}
+	return s
+}
 
 func (h *Handler) handleSpellCastTimesUpload(ctx context.Context, w http.ResponseWriter, mode string, table *dbc.Table, datasetID uuid.UUID) {
 	var rows []dbdefs.Ent_SpellCastTimes
@@ -252,7 +262,7 @@ func (h *Handler) handleSpellIconsUpload(ctx context.Context, w http.ResponseWri
 	batch := &pgx.Batch{}
 	for _, row := range rows {
 		batch.Queue(`INSERT INTO dbc_spell_icons (dataset_id, id, texture_filename) VALUES ($1,$2,$3)`,
-			datasetID, row.ID, row.TextureFilename,
+			datasetID, row.ID, cutIconPrefix(row.TextureFilename),
 		)
 		if batch.Len() >= batchSize {
 			if err := flushBatch(ctx, h.pool, batch); err != nil {
