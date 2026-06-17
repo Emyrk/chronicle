@@ -21,10 +21,12 @@ const (
 	ReflectArcane   chrondbc.SpellID = 900107
 )
 
+// customSpells are synthetic spells that don't exist in any DBC file.
+// They're injected by the spell fetcher and bypass DB/DBC lookups entirely.
 var customSpells = map[chrondbc.SpellID]chrondbc.Spell{
 	chrondbc.SpellIDAutoAttack: {
 		ID: chrondbc.SpellIDAutoAttack, Name_lang: i18n.GetEnglish("Auto Attack"),
-		SpellIcon: dbcmem.SpellIcon{ID: 368},
+		SpellIcon: dbcmem.SpellIcon{ID: 368, TextureFilename: "INV_Sword_04"},
 		School:    chrondbc.SchoolPhysical, BaseLevel: 1, SpellLevel: 1,
 		StanceBarOrder: -1,
 		Range:          dbcmem.SpellRange{ID: 1},
@@ -37,54 +39,54 @@ var customSpells = map[chrondbc.SpellID]chrondbc.Spell{
 	},
 	EnvironmentFalling: {
 		ID: EnvironmentFalling, Name_lang: i18n.GetEnglish("Falling"),
-		SpellIcon: dbcmem.SpellIcon{ID: 246}, // Ability_Kick
+		SpellIcon: dbcmem.SpellIcon{ID: 246, TextureFilename: "Ability_Kick"},
 		School:      chrondbc.SchoolPhysical, BaseLevel: 1, SpellLevel: 1,
 		Effect: [3]chrondbc.Effect{chrondbc.EffectEnvironmentalDMG},
 	},
 	EnvironmentDrowning: {
 		ID: EnvironmentDrowning, Name_lang: i18n.GetEnglish("Drowning"),
-		SpellIcon: dbcmem.SpellIcon{ID: 545}, // Spell_Shadow_DemonBreath
+		SpellIcon: dbcmem.SpellIcon{ID: 545, TextureFilename: "Spell_Shadow_DemonBreath"},
 		School:      chrondbc.SchoolPhysical, BaseLevel: 1, SpellLevel: 1,
 		Effect: [3]chrondbc.Effect{chrondbc.EffectEnvironmentalDMG},
 	},
 	EnvironmentFatigue: {
 		ID: EnvironmentFatigue, Name_lang: i18n.GetEnglish("Fatigue"),
 		School: chrondbc.SchoolPhysical, BaseLevel: 1, SpellLevel: 1,
-		SpellIcon: dbcmem.SpellIcon{ID: 1611},
+		SpellIcon: dbcmem.SpellIcon{ID: 1611, TextureFilename: "Ability_Suffocate"},
 		Effect:    [3]chrondbc.Effect{chrondbc.EffectEnvironmentalDMG},
 	},
 	EnvironmentFire: {
 		ID: EnvironmentFire, Name_lang: i18n.GetEnglish("Fire"),
 		School: chrondbc.SchoolFire, BaseLevel: 1, SpellLevel: 1,
-		SpellIcon: dbcmem.SpellIcon{ID: 11}, // Spell_Fire_Fire
+		SpellIcon: dbcmem.SpellIcon{ID: 11, TextureFilename: "Spell_Fire_Fire"},
 		Effect:    [3]chrondbc.Effect{chrondbc.EffectEnvironmentalDMG},
 	},
 
 	// Reflect damage by school
 	ReflectNature: {
 		ID: ReflectNature, Name_lang: i18n.GetEnglish("Reflect Physical"),
-		SpellIcon: dbcmem.SpellIcon{ID: 1749},
+		SpellIcon: dbcmem.SpellIcon{ID: 1749, TextureFilename: "Spell_Nature_StoneClawTotem"},
 		School:    chrondbc.SchoolNature, BaseLevel: 1, SpellLevel: 1,
 		Effect:     [3]chrondbc.Effect{chrondbc.EffectApplyAura},
 		EffectAura: [3]chrondbc.AuraEffect{chrondbc.AuraEffectDamageShield},
 	},
 	ReflectHoly: {
 		ID: ReflectHoly, Name_lang: i18n.GetEnglish("Reflect Holy"),
-		SpellIcon: dbcmem.SpellIcon{ID: 70},
+		SpellIcon: dbcmem.SpellIcon{ID: 70, TextureFilename: "Spell_Holy_HolyBolt"},
 		School:    chrondbc.SchoolHoly, BaseLevel: 1, SpellLevel: 1,
 		Effect:     [3]chrondbc.Effect{chrondbc.EffectApplyAura},
 		EffectAura: [3]chrondbc.AuraEffect{chrondbc.AuraEffectDamageShield},
 	},
 	ReflectFire: {
 		ID: ReflectFire, Name_lang: i18n.GetEnglish("Reflect Fire"),
-		SpellIcon: dbcmem.SpellIcon{ID: 11},
+		SpellIcon: dbcmem.SpellIcon{ID: 11, TextureFilename: "Spell_Fire_Fire"},
 		School:    chrondbc.SchoolFire, BaseLevel: 1, SpellLevel: 1,
 		Effect:     [3]chrondbc.Effect{chrondbc.EffectApplyAura},
 		EffectAura: [3]chrondbc.AuraEffect{chrondbc.AuraEffectDamageShield},
 	},
 	ReflectFrost: {
 		ID: ReflectFrost, Name_lang: i18n.GetEnglish("Reflect Frost"),
-		SpellIcon: dbcmem.SpellIcon{ID: 188},
+		SpellIcon: dbcmem.SpellIcon{ID: 188, TextureFilename: "Spell_Frost_FrostShock"},
 		School:    chrondbc.SchoolFrost,
 		BaseLevel:   1, SpellLevel: 1,
 		Effect:     [3]chrondbc.Effect{chrondbc.EffectApplyAura},
@@ -92,14 +94,14 @@ var customSpells = map[chrondbc.SpellID]chrondbc.Spell{
 	},
 	ReflectShadow: {
 		ID: ReflectShadow, Name_lang: i18n.GetEnglish("Reflect Shadow"),
-		SpellIcon: dbcmem.SpellIcon{ID: 234},
+		SpellIcon: dbcmem.SpellIcon{ID: 234, TextureFilename: "Spell_Shadow_AntiShadow"},
 		School:    chrondbc.SchoolShadow, BaseLevel: 1, SpellLevel: 1,
 		Effect:     [3]chrondbc.Effect{chrondbc.EffectApplyAura},
 		EffectAura: [3]chrondbc.AuraEffect{chrondbc.AuraEffectDamageShield},
 	},
 	ReflectArcane: {
 		ID: ReflectArcane, Name_lang: i18n.GetEnglish("Reflect Arcane"),
-		SpellIcon: dbcmem.SpellIcon{ID: 1485},
+		SpellIcon: dbcmem.SpellIcon{ID: 1485, TextureFilename: "Spell_Shadow_ManaFeed"},
 		School:    chrondbc.SchoolArcane, BaseLevel: 1, SpellLevel: 1,
 		Effect:     [3]chrondbc.Effect{chrondbc.EffectApplyAura},
 		EffectAura: [3]chrondbc.AuraEffect{chrondbc.AuraEffectDamageShield},
