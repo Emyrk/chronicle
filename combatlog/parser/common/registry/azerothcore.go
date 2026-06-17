@@ -4,7 +4,7 @@ import (
 	"log/slog"
 
 	classic "github.com/Emyrk/chronicle/combatlog/parser/common/instances"
-	"github.com/Emyrk/chronicle/combatlog/parser/wotlk/azerothcore/instances"
+	"github.com/Emyrk/chronicle/combatlog/parser/wotlk/instances"
 )
 
 func RegisterTBCEncounters(r *Registry) {
