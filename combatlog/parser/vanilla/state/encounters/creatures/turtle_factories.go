@@ -71,16 +71,16 @@ func VanillaCharacterFactories(flavor database.WoWFlavor) []characters.Character
 		NewEyeStalk,
 		// L/UBRS
 		NewMotherSmolderweb,
-		NewBloodaxeWorgPup,
 	}
 
 	// ── VanillaPlus content ────────────────────────────────────────
-	if flavor.Has(database.FlavorVanillaPlus) || flavor.Has(database.FlavorTurtle) || flavor.Has(database.FlavorOctoWoW) {
+	if flavor.Has(database.FlavorVanillaPlus) {
 		cres = append(cres,
 			// SM (V+)
 			NewVanillaPlusSMSoul,
 			NewVanillaPlusSMSoulHunter,
 			NewVanillaPlusBrotherMicheal,
+			NewVanillaPlusBloodaxeWorgPup,
 		)
 	}
 
@@ -101,7 +101,7 @@ func VanillaCharacterFactories(flavor database.WoWFlavor) []characters.Character
 	}
 
 	// ── Turtle WoW custom content ──────────────────────────────────
-	if flavor.Has(database.FlavorTurtle) {
+	if flavor.Has(database.FlavorTurtle) || flavor.Has(database.FlavorOctoWoW) {
 		cres = append(cres,
 			// Kara 40
 			NewKruul,
@@ -120,9 +120,6 @@ func VanillaCharacterFactories(flavor database.WoWFlavor) []characters.Character
 			NewIncantagos,
 			// Emerald Sanctum
 			NewSolnius,
-			// Eye of Eternity
-			NewMalygos,
-			NewPowerSpark,
 		)
 	}
 

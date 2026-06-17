@@ -6,7 +6,6 @@ import (
 	"github.com/Emyrk/chronicle/combatlog/parser/common/characters"
 	"github.com/Emyrk/chronicle/combatlog/parser/guid"
 	"github.com/Emyrk/chronicle/combatlog/parser/vanilla/messages"
-	"github.com/Emyrk/chronicle/internal/services"
 )
 
 const (
@@ -27,7 +26,7 @@ type BloodaxeWorgPup struct {
 	all *characters.Characters
 }
 
-func NewBloodaxeWorgPup(id guid.GUID, all *characters.Characters) (characters.Character, bool) {
+func NewVanillaPlusBloodaxeWorgPup(id guid.GUID, all *characters.Characters) (characters.Character, bool) {
 	if !id.IsCreature() {
 		return nil, false
 	}
@@ -36,9 +35,6 @@ func NewBloodaxeWorgPup(id guid.GUID, all *characters.Characters) (characters.Ch
 	}
 
 	base := characters.NewCommonCharacter(id, all)
-	if services.ServerName != services.ServerIdentityVanillaPlus {
-		return base, true
-	}
 
 	// V+ has a quest where you can "capture" a pup.
 	return &BloodaxeWorgPup{

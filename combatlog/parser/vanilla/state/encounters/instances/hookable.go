@@ -22,7 +22,6 @@ import (
 	"github.com/Emyrk/chronicle/combatlog/parser/vanilla/parseerrors"
 	"github.com/Emyrk/chronicle/combatlog/parser/vanilla/state/armory"
 	"github.com/Emyrk/chronicle/combatlog/parser/vanilla/state/encounters/auras"
-	classiccreatures "github.com/Emyrk/chronicle/combatlog/parser/vanilla/state/encounters/creatures"
 	"github.com/Emyrk/chronicle/combatlog/parser/vanilla/state/encounters/encounterevents"
 	"github.com/Emyrk/chronicle/combatlog/parser/vanilla/state/encounters/instances/instancehook"
 	"github.com/Emyrk/chronicle/combatlog/parser/vanilla/state/encounters/instances/rankings"
@@ -113,12 +112,9 @@ func NewHookable(ctx context.Context, logger *slog.Logger, db *unitdb.Units, z z
 		// Server-side mod: minimal factories, emit all players.
 		cres = wotlkcreatures.AzerothServersideCoreCharacterFactories()
 		combatantStrategy = EmitAllPlayers
-	case flavor.Has(database.FlavorAzerothcore):
-		// Client-side addon: WotLK additions + vanilla base.
-		cres = wotlkcreatures.NewAzerothCoreCharacterFactories(flavor)
 	default:
-		// Vanilla-family: factories selected by flavor tags.
-		cres = classiccreatures.VanillaCharacterFactories(flavor)
+		// Client-side addon all the way up to WoTLK
+		cres = wotlkcreatures.NewAzerothCoreCharacterFactories(flavor)
 	}
 
 	chrs := characters.NewCharacters(db, cres, ip.Idf)

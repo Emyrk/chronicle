@@ -22,28 +22,31 @@ func AzerothServersideCoreCharacterFactories() []characters.CharacterFactory {
 
 func NewAzerothCoreCharacterFactories(flavor database.WoWFlavor) []characters.CharacterFactory {
 	cres := creatures.VanillaCharacterFactories(flavor)
+	if flavor.Has(database.FlavorWrath) {
+		cres = append([]characters.CharacterFactory{
+			// The Nexus
+			NewAzureEnforcer,
+			NewCrazedManaWraith,
+			NewMageHunterAscendant,
+			NewCrystallineFrayer,
 
-	cres = append([]characters.CharacterFactory{
-		// The Nexus
-		NewAzureEnforcer,
-		NewCrazedManaWraith,
-		NewMageHunterAscendant,
-		NewCrystallineFrayer,
+			// Hellfire Ramparts
+			NewOmarTheUnscarred,
 
-		// Hellfire Ramparts
-		NewOmarTheUnscarred,
+			// Gundrak
+			NewDrakkariFrenzy,
 
-		// Gundrak
-		NewDrakkariFrenzy,
+			// Underbog
+			NewClaw,
 
-		// TBC
+			// Obsidian Sanctum
+			NewSarthrion,
 
-		// Underbog
-		NewClaw,
-
-		// Obsidian Sanctum
-		NewSarthrion,
-	}, cres...)
+			// Eye of Eternity
+			NewMalygos,
+			NewPowerSpark,
+		}, cres...)
+	}
 
 	return cres
 }
