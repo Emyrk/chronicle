@@ -226,6 +226,7 @@ type SpellRow struct {
 	R2RadiusMin  *float32 `db:"-"`
 	R2RadiusMax  *float32 `db:"-"`
 	FocusName    *string  `db:"-"` // from dbc_spell_focus_objects
+	DescVariables *string `db:"-"` // from dbc_spell_description_variables
 }
 
 // ToSpell converts a SpellRow to a chrondbc.Spell for use in parsing.
@@ -398,6 +399,9 @@ func (r *SpellRow) ToSpell() chrondbc.Spell {
 	}
 	if r.FocusName != nil {
 		s.SpellFocus = dbcmem.SpellFocusObject{ID: r.RequiresSpellFocus, Name: *r.FocusName}
+	}
+	if r.DescVariables != nil {
+		s.DescriptionVariables = *r.DescVariables
 	}
 
 	return s

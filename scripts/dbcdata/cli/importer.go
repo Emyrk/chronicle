@@ -24,7 +24,8 @@ const (
 	FileSpellRange           DBCFile = "SpellRange.dbc"
 	FileSpellCategory        DBCFile = "SpellCategory.dbc"
 	FileSpellRadius          DBCFile = "SpellRadius.dbc"
-	FileSpellFocusObject     DBCFile = "SpellFocusObject.dbc"
+	FileSpellFocusObject              DBCFile = "SpellFocusObject.dbc"
+	FileSpellDescriptionVariables     DBCFile = "SpellDescriptionVariables.dbc"
 )
 
 // UploadKind describes how an artifact is sent to the Chronicle API.
@@ -82,6 +83,7 @@ func Registry() []Importer {
 		&rawDBCImporter{key: "spell-categories", name: "Spell Categories", file: FileSpellCategory, dbcType: "SpellCategory"},
 		&rawDBCImporter{key: "spell-radii", name: "Spell Radii", file: FileSpellRadius, dbcType: "SpellRadius"},
 		&rawDBCImporter{key: "spell-focus-objects", name: "Spell Focus Objects", file: FileSpellFocusObject, dbcType: "SpellFocusObject"},
+		&rawDBCImporter{key: "spell-desc-vars", name: "Spell Description Variables", file: FileSpellDescriptionVariables, dbcType: "SpellDescriptionVariables"},
 	}
 }
 

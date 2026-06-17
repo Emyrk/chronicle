@@ -396,6 +396,12 @@ CREATE TABLE dbc_spell_categories (
     type_mask integer DEFAULT 0 NOT NULL
 );
 
+CREATE TABLE dbc_spell_description_variables (
+    dataset_id uuid NOT NULL,
+    id integer NOT NULL,
+    variables text DEFAULT ''::text NOT NULL
+);
+
 CREATE TABLE dbc_spell_durations (
     dataset_id uuid NOT NULL,
     id integer NOT NULL,
@@ -1490,6 +1496,9 @@ ALTER TABLE ONLY dbc_spell_cast_times
 ALTER TABLE ONLY dbc_spell_categories
     ADD CONSTRAINT dbc_spell_categories_pkey PRIMARY KEY (dataset_id, id);
 
+ALTER TABLE ONLY dbc_spell_description_variables
+    ADD CONSTRAINT dbc_spell_description_variables_pkey PRIMARY KEY (dataset_id, id);
+
 ALTER TABLE ONLY dbc_spell_durations
     ADD CONSTRAINT dbc_spell_durations_pkey PRIMARY KEY (dataset_id, id);
 
@@ -1885,6 +1894,9 @@ ALTER TABLE ONLY dbc_spell_cast_times
 
 ALTER TABLE ONLY dbc_spell_categories
     ADD CONSTRAINT dbc_spell_categories_dataset_id_fkey FOREIGN KEY (dataset_id) REFERENCES datasets(id) ON DELETE CASCADE;
+
+ALTER TABLE ONLY dbc_spell_description_variables
+    ADD CONSTRAINT dbc_spell_description_variables_dataset_id_fkey FOREIGN KEY (dataset_id) REFERENCES datasets(id) ON DELETE CASCADE;
 
 ALTER TABLE ONLY dbc_spell_durations
     ADD CONSTRAINT dbc_spell_durations_dataset_id_fkey FOREIGN KEY (dataset_id) REFERENCES datasets(id) ON DELETE CASCADE;

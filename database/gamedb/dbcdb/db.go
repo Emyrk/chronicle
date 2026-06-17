@@ -138,6 +138,25 @@ func (w *WoWClient) Spells() (Table[dbdefs.Ent_Spell], error) {
 	return WrapTable[dbdefs.Ent_Spell](table), nil
 }
 
+func (w *WoWClient) SpellDescriptionVariables() (Table[dbdefs.Ent_SpellDescriptionVariables], error) {
+	data, err := w.ReadFile("DBFilesClient\\SpellDescriptionVariables.dbc")
+	if err != nil {
+		return nil, err
+	}
+
+	build := w.Build()
+	if SpellBuildOverride != 0 {
+		build = SpellBuildOverride
+	}
+	db := dbc.NewDB(build)
+	table, err := db.Open("SpellDescriptionVariables", bytes.NewReader(data))
+	if err != nil {
+		return nil, err
+	}
+
+	return WrapTable[dbdefs.Ent_SpellDescriptionVariables](table), nil
+}
+
 func (w *WoWClient) SpellCategory() (Table[dbdefs.Ent_SpellCategory], error) {
 	data, err := w.ReadFile("DBFilesClient\\SpellCategory.dbc")
 	if err != nil {

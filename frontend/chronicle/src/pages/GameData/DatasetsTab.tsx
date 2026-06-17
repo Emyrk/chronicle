@@ -70,6 +70,7 @@ const DATA_TYPES: { label: string; key: keyof DatasetImportSummary; isBool?: boo
   { label: "Extra Attacks", key: "extra_attacks_count" },
   { label: "Duration Mods", key: "duration_modifiers_count" },
   { label: "Periodic Spells", key: "periodic_spells_count" },
+  { label: "Desc Variables", key: "desc_variables_count" },
 ];
 
 /** Shows green/red import status for each data type in a dataset. */

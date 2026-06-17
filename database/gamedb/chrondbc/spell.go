@@ -147,6 +147,11 @@ type Spell struct {
 	ExcludeTargetAuraState int32 `json:"exclude_target_aura_state"` // Target must NOT be in this AuraState (inverse of TargetAuraState)
 	ManaPerSecondPerLevel  int32 `json:"mana_per_second_per_level"` // Additional channeling cost per caster level per second
 
+	// DescriptionVariables holds the raw variable definitions from
+	// SpellDescriptionVariables.dbc (e.g. "$total=${$m1*5}"). Used by
+	// the tooltip renderer to resolve $<name> placeholders.
+	DescriptionVariables string `json:"description_variables,omitempty"`
+
 	// Raw FK IDs for DB round-trip. These are the original index values
 	// from the DBC/database that reference the companion lookup tables.
 	// Not serialized to JSON — use the resolved structs above instead.

@@ -102,21 +102,17 @@ func demo() *serpent.Command {
 				return fmt.Errorf("(demo) open wow client: %w", err)
 			}
 
-			spells, err := wc.Spells()
+			spells, err := wc.SpellDescriptionVariables()
 			if err != nil {
 				return fmt.Errorf("read spells: %w", err)
 			}
 
-			_ = spells.Range(func(cursor *dbdefs.Ent_Spell) bool {
-				if cursor.ID == 6603 {
-					fmt.Println(cursor.Name_lang.String())
-				}
-				if cursor.Name_lang.String() == "Ice Shards" {
-					fmt.Println(cursor.Description_lang.String())
-				}
+			_ = spells.Range(func(cursor *dbdefs.Ent_SpellDescriptionVariables) bool {
+				fmt.Println(cursor.ID, cursor.Variables)
 				return true
 			})
 
+			return nil
 			spdb, err := wc.LoadingScreens()
 			if err != nil {
 				return fmt.Errorf("read: %w", err)

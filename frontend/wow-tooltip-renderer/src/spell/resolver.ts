@@ -43,6 +43,7 @@ const RE_INLINE = /^\$\{([^}]+)\}/;
 const RE_CROSSREF = /^\$(\d+)([a-zA-Z])(\d)?/;
 const RE_PLURAL = /^\$l([^:]+):([^;]+);/; // lowercase $l only
 const RE_GENDER = /^\$g([^:]+):([^;]+);/i; // $g / $G
+const RE_DESCVAR = /^\$<([a-zA-Z_][a-zA-Z0-9_]*)>/; // $<total>, $<bonus>, etc.
 const RE_LOCALVAR = /^\$([a-zA-Z])(\d)?/;
 
 // Last run of digits in a string, used to update the pluralization anchor.
@@ -93,6 +94,10 @@ export function resolveSpellDescription(
   forLevel?: number,
 ): string {
   if (!template) return "";
+
+  // Pre-process: parse description_variables to build a name→expression map.
+  // Format is "$name=expr\n$name2=expr2\n..." from SpellDescriptionVariables.dbc.
+  const descVarMap = parseDescriptionVariables(spell.description_variables);
 
   const lvl = forLevel ?? spell.spell_level;
   let result = "";
@@ -199,6 +204,22 @@ export function resolveSpellDescription(
       continue;
     }
 
+    // $<name> — description variable (WotLK SpellDescriptionVariables.dbc)
+    if ((m = RE_DESCVAR.exec(rest))) {
+      const varName = m[1];
+      const expr = descVarMap.get(varName);
+      if (expr !== undefined) {
+        // Resolve inner variables in the expression, then evaluate arithmetic.
+        const resolved = resolveSpellDescription(spell, expr, referencedSpells, forLevel);
+        const evaluated = evaluateArithmetic(resolved);
+        append(evaluated !== null ? String(evaluated) : resolved);
+      } else {
+        append(m[0]); // keep placeholder if variable not found
+      }
+      i += m[0].length;
+      continue;
+    }
+
     // $Xn — local variable
     if ((m = RE_LOCALVAR.exec(rest))) {
       const variable = `$${m[1]}${m[2] || ""}`;
@@ -235,6 +256,29 @@ export function extractReferencedSpellIds(template: string): number[] {
     ids.add(parseInt(match[2], 10));
   }
   return Array.from(ids);
+}
+
+/**
+ * Parse SpellDescriptionVariables.dbc text into a name→expression map.
+ * Format: "$name=expr\n$name2=expr2\n..." where each line defines a variable.
+ * Variables can reference other variables via $<name> syntax.
+ * Returns a Map from variable name (without $) to its expression string.
+ */
+function parseDescriptionVariables(raw: string | undefined): Map<string, string> {
+  const map = new Map<string, string>();
+  if (!raw) return map;
+
+  // Each line is "$name=expression" — split on newlines, parse each.
+  for (const line of raw.split("\n")) {
+    const trimmed = line.trim();
+    if (!trimmed || !trimmed.startsWith("$")) continue;
+    const eqIdx = trimmed.indexOf("=");
+    if (eqIdx < 2) continue; // need at least "$X="
+    const name = trimmed.substring(1, eqIdx); // strip leading $
+    const expr = trimmed.substring(eqIdx + 1);
+    map.set(name, expr);
+  }
+  return map;
 }
 
 /**

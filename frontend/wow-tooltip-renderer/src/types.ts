@@ -177,6 +177,10 @@ export interface WoWSpell {
   min_reputation: number;
   spell_visual_id: number[];
 
+  // Description variables (SpellDescriptionVariables.dbc)
+  // Raw multi-line text like "$total=${$m1*5}\n$bonus=${$s1}"
+  description_variables?: string;
+
   // Chronicle metadata
   damage_type: number;
   attack_outcome: number;

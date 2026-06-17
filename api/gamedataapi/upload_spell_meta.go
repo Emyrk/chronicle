@@ -14,6 +14,70 @@ import (
 )
 
 // cutIconPrefix strips the "Interface\Icons\" DBC path prefix case-insensitively.
+func (h *Handler) handleSpellDescriptionVariablesUpload(ctx context.Context, w http.ResponseWriter, mode string, table *dbc.Table, datasetID uuid.UUID) {
+	var rows []dbdefs.Ent_SpellDescriptionVariables
+	err := table.Range(func(cursor *dbdefs.Ent_SpellDescriptionVariables) bool {
+		rows = append(rows, *cursor)
+		return true
+	})
+	if err != nil {
+		httpapi.Write(ctx, w, http.StatusInternalServerError, chroniclesdk.Response{
+			Message: "Failed to iterate SpellDescriptionVariables.dbc rows",
+			Detail:  err.Error(),
+		})
+		return
+	}
+
+	resp := chroniclesdk.DBCUploadResponse{
+		DBCName:     "SpellDescriptionVariables",
+		RecordCount: len(rows),
+		Mode:        mode,
+	}
+	if mode == "compare" {
+		resp.Inserted = len(rows)
+		httpapi.Write(ctx, w, http.StatusOK, resp)
+		return
+	}
+
+	if _, err := h.pool.Exec(ctx, `DELETE FROM dbc_spell_description_variables WHERE dataset_id = $1`, datasetID); err != nil {
+		httpapi.Write(ctx, w, http.StatusInternalServerError, chroniclesdk.Response{
+			Message: "Failed to clear existing description variables",
+			Detail:  err.Error(),
+		})
+		return
+	}
+
+	const batchSize = 500
+	batch := &pgx.Batch{}
+	for _, row := range rows {
+		batch.Queue(`INSERT INTO dbc_spell_description_variables (dataset_id, id, variables) VALUES ($1,$2,$3)`,
+			datasetID, row.ID, row.Variables,
+		)
+		if batch.Len() >= batchSize {
+			if err := flushBatch(ctx, h.pool, batch); err != nil {
+				httpapi.Write(ctx, w, http.StatusInternalServerError, chroniclesdk.Response{
+					Message: "Failed to insert description variables",
+					Detail:  err.Error(),
+				})
+				return
+			}
+			batch = &pgx.Batch{}
+		}
+	}
+	if batch.Len() > 0 {
+		if err := flushBatch(ctx, h.pool, batch); err != nil {
+			httpapi.Write(ctx, w, http.StatusInternalServerError, chroniclesdk.Response{
+				Message: "Failed to insert description variables (final batch)",
+				Detail:  err.Error(),
+			})
+			return
+		}
+	}
+
+	resp.Inserted = len(rows)
+	httpapi.Write(ctx, w, http.StatusOK, resp)
+}
+
 func cutIconPrefix(s string) string {
 	const prefix = `Interface\Icons\`
 	if len(s) >= len(prefix) && strings.EqualFold(s[:len(prefix)], prefix) {

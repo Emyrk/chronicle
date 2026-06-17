@@ -200,6 +200,7 @@ func (r *SpellRow) scanDestsWithJoins() []any {
 		&r.R1Radius, &r.R1RadiusPerLevel, &r.R1RadiusMin, &r.R1RadiusMax,
 		&r.R2Radius, &r.R2RadiusPerLevel, &r.R2RadiusMin, &r.R2RadiusMax,
 		&r.FocusName,
+		&r.DescVariables,
 	)
 }
 
@@ -236,7 +237,8 @@ var joinSQL = ` LEFT JOIN dbc_spell_cast_times ct    ON ct.dataset_id = s.datase
  LEFT JOIN dbc_spell_radii r0         ON r0.dataset_id = s.dataset_id AND r0.id = s.effect_radius_index_0
  LEFT JOIN dbc_spell_radii r1         ON r1.dataset_id = s.dataset_id AND r1.id = s.effect_radius_index_1
  LEFT JOIN dbc_spell_radii r2         ON r2.dataset_id = s.dataset_id AND r2.id = s.effect_radius_index_2
- LEFT JOIN dbc_spell_focus_objects sfo ON sfo.dataset_id = s.dataset_id AND sfo.id = s.requires_spell_focus`
+ LEFT JOIN dbc_spell_focus_objects sfo ON sfo.dataset_id = s.dataset_id AND sfo.id = s.requires_spell_focus
+ LEFT JOIN dbc_spell_description_variables sdv ON sdv.dataset_id = s.dataset_id AND sdv.id = s.description_variables_id`
 
 var joinColumnsSQL = `,
     ct.base AS ct_base, ct.per_level AS ct_per_level, ct.minimum AS ct_minimum,
@@ -249,7 +251,8 @@ var joinColumnsSQL = `,
     r0.radius AS r0_radius, r0.radius_per_level AS r0_rpl, r0.radius_min AS r0_min, r0.radius_max AS r0_max,
     r1.radius AS r1_radius, r1.radius_per_level AS r1_rpl, r1.radius_min AS r1_min, r1.radius_max AS r1_max,
     r2.radius AS r2_radius, r2.radius_per_level AS r2_rpl, r2.radius_min AS r2_min, r2.radius_max AS r2_max,
-    sfo.name AS focus_name`
+    sfo.name AS focus_name,
+    sdv.variables AS desc_variables`
 
 // placeholdersSQL builds $1, $2, ... $N for the column count.
 func placeholdersSQL() string {

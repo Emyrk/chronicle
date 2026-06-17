@@ -1004,6 +1004,12 @@ type DbcSpellCategory struct {
 	TypeMask           int32     `db:"type_mask" json:"type_mask"`
 }
 
+type DbcSpellDescriptionVariable struct {
+	DatasetID uuid.UUID `db:"dataset_id" json:"dataset_id"`
+	ID        int32     `db:"id" json:"id"`
+	Variables string    `db:"variables" json:"variables"`
+}
+
 type DbcSpellDuration struct {
 	DatasetID        uuid.UUID `db:"dataset_id" json:"dataset_id"`
 	ID               int32     `db:"id" json:"id"`

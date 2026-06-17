@@ -972,6 +972,7 @@ SELECT
     (SELECT COUNT(*) FROM dbc_extra_attack_spells WHERE dataset_id = $1)::INT AS extra_attacks_count,
     (SELECT COUNT(*) FROM dbc_duration_modifiers WHERE dataset_id = $1)::INT AS duration_modifiers_count,
     (SELECT COUNT(*) FROM dbc_periodic_spells WHERE dataset_id = $1)::INT AS periodic_spells_count,
+    (SELECT COUNT(*) FROM dbc_spell_description_variables WHERE dataset_id = $1)::INT AS desc_variables_count,
     (SELECT EXISTS(SELECT 1 FROM dataset_talent_trees tt WHERE tt.dataset_id = $1))::BOOL AS has_talents
 `
 
@@ -993,6 +994,7 @@ type GetDatasetImportSummaryRow struct {
 	ExtraAttacksCount      int32 `db:"extra_attacks_count" json:"extra_attacks_count"`
 	DurationModifiersCount int32 `db:"duration_modifiers_count" json:"duration_modifiers_count"`
 	PeriodicSpellsCount    int32 `db:"periodic_spells_count" json:"periodic_spells_count"`
+	DescVariablesCount     int32 `db:"desc_variables_count" json:"desc_variables_count"`
 	HasTalents             bool  `db:"has_talents" json:"has_talents"`
 }
 
@@ -1019,6 +1021,7 @@ func (q *sqlQuerier) GetDatasetImportSummary(ctx context.Context, datasetID uuid
 		&i.ExtraAttacksCount,
 		&i.DurationModifiersCount,
 		&i.PeriodicSpellsCount,
+		&i.DescVariablesCount,
 		&i.HasTalents,
 	)
 	return i, err
