@@ -78,5 +78,15 @@ SELECT
     (SELECT COUNT(*) FROM dbc_spell_item_enchantment se WHERE se.dataset_id = $1)::INT AS enchantments_count,
     (SELECT COUNT(*) FROM dbc_item_random_properties rp WHERE rp.dataset_id = $1)::INT AS random_properties_count,
     (SELECT COUNT(*) FROM dbc_item_set ist WHERE ist.dataset_id = $1)::INT AS item_sets_count,
+    (SELECT COUNT(*) FROM dbc_spell_cast_times WHERE dataset_id = $1)::INT AS cast_times_count,
+    (SELECT COUNT(*) FROM dbc_spell_durations WHERE dataset_id = $1)::INT AS durations_count,
+    (SELECT COUNT(*) FROM dbc_spell_ranges WHERE dataset_id = $1)::INT AS ranges_count,
+    (SELECT COUNT(*) FROM dbc_spell_icons WHERE dataset_id = $1)::INT AS icons_count,
+    (SELECT COUNT(*) FROM dbc_spell_categories WHERE dataset_id = $1)::INT AS categories_count,
+    (SELECT COUNT(*) FROM dbc_spell_radii WHERE dataset_id = $1)::INT AS radii_count,
+    (SELECT COUNT(*) FROM dbc_spell_focus_objects WHERE dataset_id = $1)::INT AS focus_objects_count,
+    (SELECT COUNT(*) FROM dbc_extra_attack_spells WHERE dataset_id = $1)::INT AS extra_attacks_count,
+    (SELECT COUNT(*) FROM dbc_duration_modifiers WHERE dataset_id = $1)::INT AS duration_modifiers_count,
+    (SELECT COUNT(*) FROM dbc_periodic_spells WHERE dataset_id = $1)::INT AS periodic_spells_count,
     (SELECT EXISTS(SELECT 1 FROM dataset_talent_trees tt WHERE tt.dataset_id = $1))::BOOL AS has_talents;
 

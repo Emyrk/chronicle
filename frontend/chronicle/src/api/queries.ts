@@ -949,6 +949,17 @@ export interface DatasetImportSummary {
   enchantments_count: number;
   random_properties_count: number;
   item_sets_count: number;
+  // Spell metadata counts:
+  cast_times_count: number;
+  durations_count: number;
+  ranges_count: number;
+  icons_count: number;
+  categories_count: number;
+  radii_count: number;
+  focus_objects_count: number;
+  extra_attacks_count: number;
+  duration_modifiers_count: number;
+  periodic_spells_count: number;
   has_talents: boolean;
 }
 

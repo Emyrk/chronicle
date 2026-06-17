@@ -58,6 +58,18 @@ const DATA_TYPES: { label: string; key: keyof DatasetImportSummary; isBool?: boo
   { label: "Enchantments", key: "enchantments_count" },
   { label: "Random Properties", key: "random_properties_count" },
   { label: "Item Sets", key: "item_sets_count" },
+  // Spell metadata (companion DBC files):
+  { label: "Cast Times", key: "cast_times_count" },
+  { label: "Durations", key: "durations_count" },
+  { label: "Ranges", key: "ranges_count" },
+  { label: "Icons", key: "icons_count" },
+  { label: "Categories", key: "categories_count" },
+  { label: "Radii", key: "radii_count" },
+  { label: "Focus Objects", key: "focus_objects_count" },
+  // Derived data:
+  { label: "Extra Attacks", key: "extra_attacks_count" },
+  { label: "Duration Mods", key: "duration_modifiers_count" },
+  { label: "Periodic Spells", key: "periodic_spells_count" },
 ];
 
 /** Shows green/red import status for each data type in a dataset. */
