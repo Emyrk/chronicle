@@ -147,7 +147,7 @@ func NewHookable(ctx context.Context, logger *slog.Logger, db *unitdb.Units, z z
 		}
 	}
 
-	//auraTracking := auras.New()
+	//auraTracking := auras.New(nil)
 	//chrs.RegisterHook(auraTracking)
 
 	lootTracking := loot.New(db)

@@ -32,14 +32,17 @@ type AuraState struct {
 type Tracking struct {
 	// units maps GUID -> spell -> aura state
 	units map[guid.GUID]map[chrondbc.SpellID]*AuraState
+	// mods is loaded once per parse job and passed to MaxAuraDuration.
+	mods *chrondbc.DurationModifierSet
 	// emit is set after construction to inject synthetic aura messages into the
 	// active fight's event stream.
 	emit func(*messages.Aura)
 }
 
-func New() *Tracking {
+func New(mods *chrondbc.DurationModifierSet) *Tracking {
 	return &Tracking{
 		units: make(map[guid.GUID]map[chrondbc.SpellID]*AuraState),
+		mods:  mods,
 	}
 }
 
@@ -78,7 +81,7 @@ func (t *Tracking) applyAura(msg *messages.Aura) {
 	}
 	state.Stacks = msg.Amount
 	state.Buff = msg.IsBuff
-	maxDuration := chrondbc.MaxAuraDuration(msg.SpellData)
+	maxDuration := chrondbc.MaxAuraDuration(msg.SpellData, t.mods)
 	state.MaxExistsUntil = msg.Date().Add(maxDuration)
 	state.SpellID = msg.SpellData.ID
 	state.SpellName = msg.SpellName

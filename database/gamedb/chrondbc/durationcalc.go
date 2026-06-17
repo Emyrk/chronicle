@@ -6,17 +6,27 @@ import (
 	"github.com/Emyrk/chronicle/database/gamedb/chrondbc/dbcmem"
 )
 
+// DurationModifierSet holds duration modifier data for a dataset, pre-indexed
+// by spell class set and bit for efficient lookup during aura processing.
+type DurationModifierSet struct {
+	ByID       map[int32]dbcmem.DurationModifier
+	ByClassBit map[int32]map[uint64][]int32 // SpellClassSet → bit → modifier IDs
+}
+
 // MaxAuraDuration returns the theoretical maximum duration for a spell,
 // assuming every possible duration modifier talent is active at max rank.
 // Returns the base MaxDuration for spells with no modifiers.
 // Returns -1ms for permanent auras, 0 for instant/no duration.
-func MaxAuraDuration(spell *Spell) time.Duration {
+func MaxAuraDuration(spell *Spell, mods *DurationModifierSet) time.Duration {
 	dur := spell.Duration
 	if dur.MaxDuration <= 0 {
 		return time.Duration(dur.MaxDuration) * time.Millisecond
 	}
+	if mods == nil {
+		return time.Duration(dur.MaxDuration) * time.Millisecond
+	}
 
-	bitMap, ok := dbcmem.DurationModifiersByClassBit[int32(spell.SpellClassSet)]
+	bitMap, ok := mods.ByClassBit[int32(spell.SpellClassSet)]
 	if !ok {
 		return time.Duration(dur.MaxDuration) * time.Millisecond
 	}
@@ -35,7 +45,7 @@ func MaxAuraDuration(spell *Spell) time.Duration {
 				continue
 			}
 			seen[id] = true
-			mod := dbcmem.DurationModifiers[id]
+			mod := mods.ByID[id]
 			if mod.Deprecated {
 				continue
 			}

@@ -6,6 +6,7 @@ import (
 	"text/template"
 
 	"github.com/Emyrk/chronicle/database/gamedb/chrondbc"
+	"github.com/Emyrk/chronicle/database/gamedb/chrondbc/dbcmem"
 	"github.com/Emyrk/chronicle/database/gamedb/dbcdb"
 )
 
@@ -237,7 +238,10 @@ func collectAffectedSpells(wc *dbcdb.WoWClient, modifiers []durationModifierEntr
 		}
 		sort.Slice(mods, func(i, j int) bool { return mods[i].ID < mods[j].ID })
 
-		maxDur := chrondbc.MaxAuraDuration(spell)
+		maxDur := chrondbc.MaxAuraDuration(spell, &chrondbc.DurationModifierSet{
+			ByID:       dbcmem.DurationModifiers,
+			ByClassBit: dbcmem.DurationModifiersByClassBit,
+		})
 
 		entries = append(entries, affectedSpellEntry{
 			ID:            int32(spell.ID),

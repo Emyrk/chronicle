@@ -8,6 +8,7 @@ import (
 	"github.com/Emyrk/chronicle/combatlog/parser/types/combatant"
 	"github.com/Emyrk/chronicle/database"
 	"github.com/Emyrk/chronicle/database/gamedb/chrondbc"
+	"github.com/Emyrk/chronicle/database/gamedb/chrondbc/dbcmem"
 	"github.com/Emyrk/chronicle/database/gamedb/dbcdb"
 	"github.com/Emyrk/chronicle/database/gamedb/spells"
 	"github.com/Emyrk/chronicle/database/gamedb/talents"
@@ -25,6 +26,9 @@ type GameDB interface {
 	GearResolver
 	CreatureFetcher
 	TalentTreeFetcher
+	ExtraAttackSpell(ctx context.Context, spellID int32) (dbcmem.ExtraAttackSpell, bool)
+	DurationModifiers(ctx context.Context) (*chrondbc.DurationModifierSet, error)
+	PeriodicSpells(ctx context.Context) (map[int32]dbcmem.PeriodicSpell, error)
 }
 
 // TalentTreeFetcher loads pre-computed talent tree data per dataset.
@@ -71,11 +75,17 @@ type WoWDB struct {
 	ctx       context.Context
 	spellFile *os.File
 	datasetID uuid.UUID
+	pool      *pgxpool.Pool // For DB-backed derived data queries; nil = fallback to compiled-in globals.
 
 	spells          *spells.Fetcher
 	itemFetcher     *itemFetcher
 	creatureFetcher *creatureFetcher
 	talents         talents.TalentFetcher
+
+	// Per-dataset caches for derived spell data.
+	extraAttacks   *lrucache.Cache[uuid.UUID, map[int32]dbcmem.ExtraAttackSpell]
+	durationMods   *lrucache.Cache[uuid.UUID, *chrondbc.DurationModifierSet]
+	periodicSpells *lrucache.Cache[uuid.UUID, map[int32]dbcmem.PeriodicSpell]
 }
 
 // New creates a WoWDB. The spell DBC file is opened and held for the lifetime
@@ -99,14 +109,28 @@ func New(ctx context.Context, opts Options) (*WoWDB, error) {
 	spDBC := chrondbc.NewSpells(v)
 	spellFetcher := spells.NewFetcher(ctx, opts.Pool, spDBC, customSpells, 1000, opts.Metrics)
 
+	eaCache, _ := lrucache.New(lrucache.Opts[uuid.UUID, map[int32]dbcmem.ExtraAttackSpell]{
+		Capacity: 64, Metrics: opts.Metrics, Name: "extra_attacks",
+	})
+	dmCache, _ := lrucache.New(lrucache.Opts[uuid.UUID, *chrondbc.DurationModifierSet]{
+		Capacity: 64, Metrics: opts.Metrics, Name: "duration_mods",
+	})
+	psCache, _ := lrucache.New(lrucache.Opts[uuid.UUID, map[int32]dbcmem.PeriodicSpell]{
+		Capacity: 64, Metrics: opts.Metrics, Name: "periodic_spells",
+	})
+
 	return &WoWDB{
 		ctx:             ctx,
 		spellFile:       sf,
 		datasetID:       opts.DatasetID,
+		pool:            opts.Pool,
 		spells:          spellFetcher,
 		itemFetcher:     newItemFetcher(ctx, opts.DB, 400, opts.Metrics),
 		creatureFetcher: newCreatureFetcher(ctx, opts.DB, 500, opts.Metrics),
 		talents:         opts.Talents,
+		extraAttacks:    eaCache,
+		durationMods:    dmCache,
+		periodicSpells:  psCache,
 	}, nil
 }
 
@@ -150,10 +174,160 @@ func (w *WoWDB) SpellsByName(ctx context.Context, name string) ([]*chrondbc.Spel
 }
 func (w *WoWDB) RangeSpells(f func(*chrondbc.Spell) bool) error { return w.spells.RangeSpells(f) }
 
+// --- Derived spell data resolvers (default dataset) ---
+
+func (w *WoWDB) ExtraAttackSpell(ctx context.Context, spellID int32) (dbcmem.ExtraAttackSpell, bool) {
+	return w.extraAttackSpell(ctx, w.datasetID, spellID)
+}
+
+func (w *WoWDB) DurationModifiers(ctx context.Context) (*chrondbc.DurationModifierSet, error) {
+	return w.durationModifiers(ctx, w.datasetID)
+}
+
+func (w *WoWDB) PeriodicSpells(ctx context.Context) (map[int32]dbcmem.PeriodicSpell, error) {
+	return w.periodicSpells_(ctx, w.datasetID)
+}
+
+// Internal methods parameterised by datasetID so ScopedGameDB can reuse them.
+
+func (w *WoWDB) extraAttackSpell(ctx context.Context, datasetID uuid.UUID, spellID int32) (dbcmem.ExtraAttackSpell, bool) {
+	m, ok := w.extraAttacks.Get(datasetID)
+	if !ok {
+		m = w.loadExtraAttacks(ctx, datasetID)
+		w.extraAttacks.Add(datasetID, m)
+	}
+	ea, found := m[spellID]
+	return ea, found
+}
+
+func (w *WoWDB) durationModifiers(ctx context.Context, datasetID uuid.UUID) (*chrondbc.DurationModifierSet, error) {
+	if ms, ok := w.durationMods.Get(datasetID); ok {
+		return ms, nil
+	}
+	ms := w.loadDurationModifiers(ctx, datasetID)
+	w.durationMods.Add(datasetID, ms)
+	return ms, nil
+}
+
+func (w *WoWDB) periodicSpells_(ctx context.Context, datasetID uuid.UUID) (map[int32]dbcmem.PeriodicSpell, error) {
+	if m, ok := w.periodicSpells.Get(datasetID); ok {
+		return m, nil
+	}
+	m := w.loadPeriodicSpells(ctx, datasetID)
+	w.periodicSpells.Add(datasetID, m)
+	return m, nil
+}
+
+// --- Load functions (DB with compiled-in fallback) ---
+
+func (w *WoWDB) loadExtraAttacks(ctx context.Context, datasetID uuid.UUID) map[int32]dbcmem.ExtraAttackSpell {
+	if w.pool != nil {
+		rows, err := w.pool.Query(ctx,
+			`SELECT spell_id, name, num_extra_attacks FROM dbc_extra_attack_spells WHERE dataset_id = $1`, datasetID)
+		if err == nil {
+			defer rows.Close()
+			m := make(map[int32]dbcmem.ExtraAttackSpell)
+			for rows.Next() {
+				var id, num int32
+				var name string
+				if err := rows.Scan(&id, &name, &num); err == nil {
+					m[id] = dbcmem.ExtraAttackSpell{Name: name, NumExtraAttacks: num}
+				}
+			}
+			if len(m) > 0 {
+				return m
+			}
+		}
+	}
+	// Fallback to compiled-in globals.
+	return dbcmem.ExtraAttackSpells
+}
+
+func (w *WoWDB) loadDurationModifiers(ctx context.Context, datasetID uuid.UUID) *chrondbc.DurationModifierSet {
+	if w.pool != nil {
+		rows, err := w.pool.Query(ctx,
+			`SELECT spell_id, name, percent, flat, deprecated, spell_class_set, spell_class_mask FROM dbc_duration_modifiers WHERE dataset_id = $1`, datasetID)
+		if err == nil {
+			defer rows.Close()
+			ms := &chrondbc.DurationModifierSet{
+				ByID:       make(map[int32]dbcmem.DurationModifier),
+				ByClassBit: make(map[int32]map[uint64][]int32),
+			}
+			for rows.Next() {
+				var mod dbcmem.DurationModifier
+				var classSet int32
+				var classMask int64
+				if err := rows.Scan(&mod.SpellID, &mod.Name, &mod.Percent, &mod.Flat, &mod.Deprecated, &classSet, &classMask); err == nil {
+					ms.ByID[mod.SpellID] = mod
+					mask := uint64(classMask)
+					if _, ok := ms.ByClassBit[classSet]; !ok {
+						ms.ByClassBit[classSet] = make(map[uint64][]int32)
+					}
+					for bit := uint64(0); bit < 64; bit++ {
+						b := uint64(1) << bit
+						if mask&b != 0 {
+							ms.ByClassBit[classSet][b] = append(ms.ByClassBit[classSet][b], mod.SpellID)
+						}
+					}
+				}
+			}
+			if len(ms.ByID) > 0 {
+				return ms
+			}
+		}
+	}
+	// Fallback to compiled-in globals.
+	return &chrondbc.DurationModifierSet{
+		ByID:       dbcmem.DurationModifiers,
+		ByClassBit: dbcmem.DurationModifiersByClassBit,
+	}
+}
+
+func (w *WoWDB) loadPeriodicSpells(ctx context.Context, datasetID uuid.UUID) map[int32]dbcmem.PeriodicSpell {
+	if w.pool != nil {
+		rows, err := w.pool.Query(ctx,
+			`SELECT spell_id, name, has_direct FROM dbc_periodic_spells WHERE dataset_id = $1`, datasetID)
+		if err == nil {
+			defer rows.Close()
+			m := make(map[int32]dbcmem.PeriodicSpell)
+			for rows.Next() {
+				var id int32
+				var name string
+				var hasDirect bool
+				if err := rows.Scan(&id, &name, &hasDirect); err == nil {
+					m[id] = dbcmem.PeriodicSpell{Name: name, HasDirect: hasDirect}
+				}
+			}
+			if len(m) > 0 {
+				return m
+			}
+		}
+	}
+	// Fallback to compiled-in globals.
+	return dbcmem.PeriodicSpells
+}
+
+// --- Invalidation ---
+
 // InvalidateSpellCache evicts all cached spells for a dataset. Call after
 // importing new spell data so subsequent lookups hit the database.
 func (w *WoWDB) InvalidateSpellCache(datasetID uuid.UUID) {
 	w.spells.InvalidateDataset(datasetID)
+}
+
+// InvalidateExtraAttacks evicts cached extra-attack data for a dataset.
+func (w *WoWDB) InvalidateExtraAttacks(datasetID uuid.UUID) {
+	w.extraAttacks.Remove(datasetID)
+}
+
+// InvalidateDurationModifiers evicts cached duration modifier data for a dataset.
+func (w *WoWDB) InvalidateDurationModifiers(datasetID uuid.UUID) {
+	w.durationMods.Remove(datasetID)
+}
+
+// InvalidatePeriodicSpells evicts cached periodic spell data for a dataset.
+func (w *WoWDB) InvalidatePeriodicSpells(datasetID uuid.UUID) {
+	w.periodicSpells.Remove(datasetID)
 }
 
 func (w *WoWDB) Close() error {
@@ -186,4 +360,16 @@ func (s *ScopedGameDB) Creature(entry int32) (*database.WorldCreatureTemplate, b
 
 func (s *ScopedGameDB) TalentTrees(ctx context.Context, datasetID uuid.UUID) (*talents.TalentTreeData, error) {
 	return s.w.TalentTrees(ctx, datasetID)
+}
+
+func (s *ScopedGameDB) ExtraAttackSpell(ctx context.Context, spellID int32) (dbcmem.ExtraAttackSpell, bool) {
+	return s.w.extraAttackSpell(ctx, s.datasetID, spellID)
+}
+
+func (s *ScopedGameDB) DurationModifiers(ctx context.Context) (*chrondbc.DurationModifierSet, error) {
+	return s.w.durationModifiers(ctx, s.datasetID)
+}
+
+func (s *ScopedGameDB) PeriodicSpells(ctx context.Context) (map[int32]dbcmem.PeriodicSpell, error) {
+	return s.w.periodicSpells_(ctx, s.datasetID)
 }

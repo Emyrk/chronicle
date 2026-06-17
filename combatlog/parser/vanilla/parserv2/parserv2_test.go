@@ -29,7 +29,7 @@ import (
 
 // testSpellDB creates a WoWDB from the server-specific Spell.dbc for testing.
 // Skips the test if the file doesn't exist (allows tests to run without it).
-func testSpellDB(t *testing.T) gamedb.SpellFetcher {
+func testSpellDB(t *testing.T) gamedb.GameDB {
 	t.Helper()
 	dbcPath := filepath.Join("..", "..", "..", "..", "assets", services.ServerName, "Spell.dbc")
 	if _, err := os.Stat(dbcPath); os.IsNotExist(err) {
@@ -51,8 +51,8 @@ func testCase[T messages.Message](t *testing.T, line string, expected T) {
 	testCaseWithDB[T](t, line, expected, testSpellDB(t))
 }
 
-// testCaseWithDB parses line with a SpellFetcher and asserts result matches expected
-func testCaseWithDB[T messages.Message](t *testing.T, line string, expected T, wowDB gamedb.SpellFetcher) {
+// testCaseWithDB parses line with a GameDB and asserts result matches expected
+func testCaseWithDB[T messages.Message](t *testing.T, line string, expected T, wowDB gamedb.GameDB) {
 	t.Helper()
 	ctx := context.Background()
 

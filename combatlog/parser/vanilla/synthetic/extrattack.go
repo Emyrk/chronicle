@@ -9,7 +9,6 @@ import (
 	"github.com/Emyrk/chronicle/combatlog/parser/common/zoner"
 	"github.com/Emyrk/chronicle/database/gamedb"
 	"github.com/Emyrk/chronicle/database/gamedb/chrondbc"
-	"github.com/Emyrk/chronicle/database/gamedb/chrondbc/dbcmem"
 	"github.com/Emyrk/chronicle/internal/ptr"
 )
 
@@ -17,13 +16,13 @@ import (
 
 type extraAttack struct {
 	ctx         context.Context
-	WoWDB       gamedb.SpellFetcher
+	WoWDB       gamedb.GameDB
 	logger      *slog.Logger
 	currentZone *zoner.Location
 	lastDamage  map[guid.GUID]*messages.Damage
 }
 
-func newExtraAttack(ctx context.Context, logger *slog.Logger, wowDB gamedb.SpellFetcher) *extraAttack {
+func newExtraAttack(ctx context.Context, logger *slog.Logger, wowDB gamedb.GameDB) *extraAttack {
 	return &extraAttack{
 		ctx:         ctx,
 		WoWDB:       wowDB,
@@ -41,7 +40,7 @@ func (s *extraAttack) ProcessMessage(msgs []messages.Message) []messages.Message
 			if m.SpellData == nil {
 				continue
 			}
-			if extra, ok := dbcmem.ExtraAttackSpells[int32(m.SpellData.ID)]; ok {
+			if extra, ok := s.WoWDB.ExtraAttackSpell(s.ctx, int32(m.SpellData.ID)); ok {
 				spellData, err := s.WoWDB.Spell(s.ctx, m.SpellData.ID)
 				if err != nil {
 					if chrondbc.IsSpellNotFound(err) {

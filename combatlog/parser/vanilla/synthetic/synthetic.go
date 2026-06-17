@@ -21,7 +21,7 @@ type Synthetic struct {
 	possession   *possession
 	knownObjects *knownObjects
 	razuvious    *razuviousOverkill
-	wowDB        gamedb.SpellFetcher
+	wowDB        gamedb.GameDB
 	knownArmor   *knownArmor
 	vanillaPlus  *vanillaplus
 
@@ -35,7 +35,7 @@ type Synthetic struct {
 	vanillaPlusDur  time.Duration
 }
 
-func New(ctx context.Context, logger *slog.Logger, wowDB gamedb.SpellFetcher) *Synthetic {
+func New(ctx context.Context, logger *slog.Logger, wowDB gamedb.GameDB) *Synthetic {
 	return &Synthetic{
 		logger:       logger,
 		slain:        NewSlainDetective(),

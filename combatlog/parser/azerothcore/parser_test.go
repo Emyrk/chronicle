@@ -21,6 +21,7 @@ import (
 	"github.com/Emyrk/chronicle/database"
 	"github.com/Emyrk/chronicle/database/gamedb"
 	"github.com/Emyrk/chronicle/database/gamedb/chrondbc"
+	"github.com/Emyrk/chronicle/database/gamedb/chrondbc/dbcmem"
 	"github.com/Emyrk/chronicle/database/gamedb/talents"
 	"github.com/google/uuid"
 )
@@ -39,6 +40,15 @@ func (stubSpellDB) SpellsByName(_ context.Context, _ string) ([]*chrondbc.Spell,
 }
 func (stubSpellDB) TalentTrees(_ context.Context, _ uuid.UUID) (*talents.TalentTreeData, error) {
 	return nil, fmt.Errorf("no talent database loaded")
+}
+func (stubSpellDB) ExtraAttackSpell(_ context.Context, _ int32) (dbcmem.ExtraAttackSpell, bool) {
+	return dbcmem.ExtraAttackSpell{}, false
+}
+func (stubSpellDB) DurationModifiers(_ context.Context) (*chrondbc.DurationModifierSet, error) {
+	return nil, nil
+}
+func (stubSpellDB) PeriodicSpells(_ context.Context) (map[int32]dbcmem.PeriodicSpell, error) {
+	return nil, nil
 }
 
 func newTestParser(t *testing.T, logData string) *Parser {

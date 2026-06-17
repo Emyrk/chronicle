@@ -43,7 +43,7 @@ type Parser struct {
 	synthetics   *synthetic.Synthetic
 }
 
-func New(ctx context.Context, logger *slog.Logger, r io.Reader, wowDB gamedb.SpellFetcher) (*Parser, error) {
+func New(ctx context.Context, logger *slog.Logger, r io.Reader, wowDB gamedb.GameDB) (*Parser, error) {
 	// Single liner shared between scanner and parser so CLOCK_INFO from scanner
 	// propagates to parser for timestamp adjustments.
 	liner := lines.NewLiner()
@@ -63,7 +63,7 @@ func New(ctx context.Context, logger *slog.Logger, r io.Reader, wowDB gamedb.Spe
 	}, nil
 }
 
-func NewFromScanner(ctx context.Context, logger *slog.Logger, liner *lines.Liner, scan merge.Scan, wowDB gamedb.SpellFetcher) *Parser {
+func NewFromScanner(ctx context.Context, logger *slog.Logger, liner *lines.Liner, scan merge.Scan, wowDB gamedb.GameDB) *Parser {
 	return &Parser{
 		logger:  logger,
 		scanner: scan,

@@ -20,7 +20,7 @@ import (
 type Parser struct {
 	ctx     context.Context
 	logger  *slog.Logger
-	wowDB   gamedb.SpellFetcher
+	wowDB   gamedb.GameDB
 	scanner *bufio.Scanner
 
 	lastDate    time.Time
@@ -35,7 +35,7 @@ type Parser struct {
 	missedSpells map[chrondbc.SpellID]missedSpellEntry
 }
 
-func New(ctx context.Context, logger *slog.Logger, r io.Reader, wowDB gamedb.SpellFetcher, gear gamedb.GearResolver) (*Parser, error) {
+func New(ctx context.Context, logger *slog.Logger, r io.Reader, wowDB gamedb.GameDB, gear gamedb.GearResolver) (*Parser, error) {
 	if wowDB == nil {
 		return nil, fmt.Errorf("wowDB cannot be nil")
 	}
