@@ -962,18 +962,38 @@ SELECT
     (SELECT COUNT(*) FROM dbc_spell_item_enchantment se WHERE se.dataset_id = $1)::INT AS enchantments_count,
     (SELECT COUNT(*) FROM dbc_item_random_properties rp WHERE rp.dataset_id = $1)::INT AS random_properties_count,
     (SELECT COUNT(*) FROM dbc_item_set ist WHERE ist.dataset_id = $1)::INT AS item_sets_count,
+    (SELECT COUNT(*) FROM dbc_spell_cast_times WHERE dataset_id = $1)::INT AS cast_times_count,
+    (SELECT COUNT(*) FROM dbc_spell_durations WHERE dataset_id = $1)::INT AS durations_count,
+    (SELECT COUNT(*) FROM dbc_spell_ranges WHERE dataset_id = $1)::INT AS ranges_count,
+    (SELECT COUNT(*) FROM dbc_spell_icons WHERE dataset_id = $1)::INT AS icons_count,
+    (SELECT COUNT(*) FROM dbc_spell_categories WHERE dataset_id = $1)::INT AS categories_count,
+    (SELECT COUNT(*) FROM dbc_spell_radii WHERE dataset_id = $1)::INT AS radii_count,
+    (SELECT COUNT(*) FROM dbc_spell_focus_objects WHERE dataset_id = $1)::INT AS focus_objects_count,
+    (SELECT COUNT(*) FROM dbc_extra_attack_spells WHERE dataset_id = $1)::INT AS extra_attacks_count,
+    (SELECT COUNT(*) FROM dbc_duration_modifiers WHERE dataset_id = $1)::INT AS duration_modifiers_count,
+    (SELECT COUNT(*) FROM dbc_periodic_spells WHERE dataset_id = $1)::INT AS periodic_spells_count,
     (SELECT EXISTS(SELECT 1 FROM dataset_talent_trees tt WHERE tt.dataset_id = $1))::BOOL AS has_talents
 `
 
 type GetDatasetImportSummaryRow struct {
-	SpellsCount           int32 `db:"spells_count" json:"spells_count"`
-	CreaturesCount        int32 `db:"creatures_count" json:"creatures_count"`
-	ItemsCount            int32 `db:"items_count" json:"items_count"`
-	ItemDisplayCount      int32 `db:"item_display_count" json:"item_display_count"`
-	EnchantmentsCount     int32 `db:"enchantments_count" json:"enchantments_count"`
-	RandomPropertiesCount int32 `db:"random_properties_count" json:"random_properties_count"`
-	ItemSetsCount         int32 `db:"item_sets_count" json:"item_sets_count"`
-	HasTalents            bool  `db:"has_talents" json:"has_talents"`
+	SpellsCount            int32 `db:"spells_count" json:"spells_count"`
+	CreaturesCount         int32 `db:"creatures_count" json:"creatures_count"`
+	ItemsCount             int32 `db:"items_count" json:"items_count"`
+	ItemDisplayCount       int32 `db:"item_display_count" json:"item_display_count"`
+	EnchantmentsCount      int32 `db:"enchantments_count" json:"enchantments_count"`
+	RandomPropertiesCount  int32 `db:"random_properties_count" json:"random_properties_count"`
+	ItemSetsCount          int32 `db:"item_sets_count" json:"item_sets_count"`
+	CastTimesCount         int32 `db:"cast_times_count" json:"cast_times_count"`
+	DurationsCount         int32 `db:"durations_count" json:"durations_count"`
+	RangesCount            int32 `db:"ranges_count" json:"ranges_count"`
+	IconsCount             int32 `db:"icons_count" json:"icons_count"`
+	CategoriesCount        int32 `db:"categories_count" json:"categories_count"`
+	RadiiCount             int32 `db:"radii_count" json:"radii_count"`
+	FocusObjectsCount      int32 `db:"focus_objects_count" json:"focus_objects_count"`
+	ExtraAttacksCount      int32 `db:"extra_attacks_count" json:"extra_attacks_count"`
+	DurationModifiersCount int32 `db:"duration_modifiers_count" json:"duration_modifiers_count"`
+	PeriodicSpellsCount    int32 `db:"periodic_spells_count" json:"periodic_spells_count"`
+	HasTalents             bool  `db:"has_talents" json:"has_talents"`
 }
 
 // Returns row counts for each per-dataset data table, plus whether talent
@@ -989,6 +1009,16 @@ func (q *sqlQuerier) GetDatasetImportSummary(ctx context.Context, datasetID uuid
 		&i.EnchantmentsCount,
 		&i.RandomPropertiesCount,
 		&i.ItemSetsCount,
+		&i.CastTimesCount,
+		&i.DurationsCount,
+		&i.RangesCount,
+		&i.IconsCount,
+		&i.CategoriesCount,
+		&i.RadiiCount,
+		&i.FocusObjectsCount,
+		&i.ExtraAttacksCount,
+		&i.DurationModifiersCount,
+		&i.PeriodicSpellsCount,
 		&i.HasTalents,
 	)
 	return i, err

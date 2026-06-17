@@ -765,6 +765,24 @@ type DatasetTalentTree struct {
 	UpdatedAt pgtype.Timestamptz `db:"updated_at" json:"updated_at"`
 }
 
+type DbcDurationModifier struct {
+	DatasetID      uuid.UUID `db:"dataset_id" json:"dataset_id"`
+	SpellID        int32     `db:"spell_id" json:"spell_id"`
+	Name           string    `db:"name" json:"name"`
+	Percent        int32     `db:"percent" json:"percent"`
+	Flat           int32     `db:"flat" json:"flat"`
+	Deprecated     bool      `db:"deprecated" json:"deprecated"`
+	SpellClassSet  int32     `db:"spell_class_set" json:"spell_class_set"`
+	SpellClassMask int64     `db:"spell_class_mask" json:"spell_class_mask"`
+}
+
+type DbcExtraAttackSpell struct {
+	DatasetID       uuid.UUID `db:"dataset_id" json:"dataset_id"`
+	SpellID         int32     `db:"spell_id" json:"spell_id"`
+	Name            string    `db:"name" json:"name"`
+	NumExtraAttacks int32     `db:"num_extra_attacks" json:"num_extra_attacks"`
+}
+
 type DbcItemDisplayInfo struct {
 	ID                         int32     `db:"id" json:"id"`
 	ModelName                  []byte    `db:"model_name" json:"model_name"`
@@ -826,6 +844,13 @@ type DbcItemSetItem struct {
 	SetID     int32     `db:"set_id" json:"set_id"`
 	ItemEntry int32     `db:"item_entry" json:"item_entry"`
 	DatasetID uuid.UUID `db:"dataset_id" json:"dataset_id"`
+}
+
+type DbcPeriodicSpell struct {
+	DatasetID uuid.UUID `db:"dataset_id" json:"dataset_id"`
+	SpellID   int32     `db:"spell_id" json:"spell_id"`
+	Name      string    `db:"name" json:"name"`
+	HasDirect bool      `db:"has_direct" json:"has_direct"`
 }
 
 type DbcSpell struct {
@@ -960,6 +985,45 @@ type DbcSpell struct {
 	ManaPerSecondPerLevel  int32     `db:"mana_per_second_per_level" json:"mana_per_second_per_level"`
 }
 
+type DbcSpellCastTime struct {
+	DatasetID uuid.UUID `db:"dataset_id" json:"dataset_id"`
+	ID        int32     `db:"id" json:"id"`
+	Base      int32     `db:"base" json:"base"`
+	PerLevel  int32     `db:"per_level" json:"per_level"`
+	Minimum   int32     `db:"minimum" json:"minimum"`
+}
+
+type DbcSpellCategory struct {
+	DatasetID          uuid.UUID `db:"dataset_id" json:"dataset_id"`
+	ID                 int32     `db:"id" json:"id"`
+	Flags              int32     `db:"flags" json:"flags"`
+	UsesPerWeek        int32     `db:"uses_per_week" json:"uses_per_week"`
+	Name               string    `db:"name" json:"name"`
+	MaxCharges         int32     `db:"max_charges" json:"max_charges"`
+	ChargeRecoveryTime int32     `db:"charge_recovery_time" json:"charge_recovery_time"`
+	TypeMask           int32     `db:"type_mask" json:"type_mask"`
+}
+
+type DbcSpellDuration struct {
+	DatasetID        uuid.UUID `db:"dataset_id" json:"dataset_id"`
+	ID               int32     `db:"id" json:"id"`
+	Duration         int32     `db:"duration" json:"duration"`
+	DurationPerLevel int32     `db:"duration_per_level" json:"duration_per_level"`
+	MaxDuration      int32     `db:"max_duration" json:"max_duration"`
+}
+
+type DbcSpellFocusObject struct {
+	DatasetID uuid.UUID `db:"dataset_id" json:"dataset_id"`
+	ID        int32     `db:"id" json:"id"`
+	Name      string    `db:"name" json:"name"`
+}
+
+type DbcSpellIcon struct {
+	DatasetID       uuid.UUID `db:"dataset_id" json:"dataset_id"`
+	ID              int32     `db:"id" json:"id"`
+	TextureFilename string    `db:"texture_filename" json:"texture_filename"`
+}
+
 type DbcSpellItemEnchantment struct {
 	ID                int32     `db:"id" json:"id"`
 	Charges           int32     `db:"charges" json:"charges"`
@@ -982,6 +1046,24 @@ type DbcSpellItemEnchantment struct {
 	MinLevel          int32     `db:"min_level" json:"min_level"`
 	MaxLevel          int32     `db:"max_level" json:"max_level"`
 	DatasetID         uuid.UUID `db:"dataset_id" json:"dataset_id"`
+}
+
+type DbcSpellRadii struct {
+	DatasetID      uuid.UUID `db:"dataset_id" json:"dataset_id"`
+	ID             int32     `db:"id" json:"id"`
+	Radius         float32   `db:"radius" json:"radius"`
+	RadiusPerLevel float32   `db:"radius_per_level" json:"radius_per_level"`
+	RadiusMin      float32   `db:"radius_min" json:"radius_min"`
+	RadiusMax      float32   `db:"radius_max" json:"radius_max"`
+}
+
+type DbcSpellRange struct {
+	DatasetID uuid.UUID `db:"dataset_id" json:"dataset_id"`
+	ID        int32     `db:"id" json:"id"`
+	RangeMin  float32   `db:"range_min" json:"range_min"`
+	RangeMax  float32   `db:"range_max" json:"range_max"`
+	Flags     int32     `db:"flags" json:"flags"`
+	Name      string    `db:"name" json:"name"`
 }
 
 type DeploymentInfo struct {

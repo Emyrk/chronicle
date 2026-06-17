@@ -289,6 +289,24 @@ CREATE TABLE datasets (
     CONSTRAINT datasets_slug_format CHECK ((slug ~ '^[a-z0-9][a-z0-9-]{1,48}[a-z0-9]$'::text))
 );
 
+CREATE TABLE dbc_duration_modifiers (
+    dataset_id uuid NOT NULL,
+    spell_id integer NOT NULL,
+    name text NOT NULL,
+    percent integer DEFAULT 0 NOT NULL,
+    flat integer DEFAULT 0 NOT NULL,
+    deprecated boolean DEFAULT false NOT NULL,
+    spell_class_set integer NOT NULL,
+    spell_class_mask bigint NOT NULL
+);
+
+CREATE TABLE dbc_extra_attack_spells (
+    dataset_id uuid NOT NULL,
+    spell_id integer NOT NULL,
+    name text NOT NULL,
+    num_extra_attacks integer NOT NULL
+);
+
 CREATE TABLE dbc_item_display_info (
     id integer NOT NULL,
     model_name jsonb DEFAULT '[]'::jsonb NOT NULL,
@@ -352,6 +370,52 @@ CREATE TABLE dbc_item_set_item (
     dataset_id uuid NOT NULL
 );
 
+CREATE TABLE dbc_periodic_spells (
+    dataset_id uuid NOT NULL,
+    spell_id integer NOT NULL,
+    name text NOT NULL,
+    has_direct boolean DEFAULT false NOT NULL
+);
+
+CREATE TABLE dbc_spell_cast_times (
+    dataset_id uuid NOT NULL,
+    id integer NOT NULL,
+    base integer DEFAULT 0 NOT NULL,
+    per_level integer DEFAULT 0 NOT NULL,
+    minimum integer DEFAULT 0 NOT NULL
+);
+
+CREATE TABLE dbc_spell_categories (
+    dataset_id uuid NOT NULL,
+    id integer NOT NULL,
+    flags integer DEFAULT 0 NOT NULL,
+    uses_per_week integer DEFAULT 0 NOT NULL,
+    name text DEFAULT ''::text NOT NULL,
+    max_charges integer DEFAULT 0 NOT NULL,
+    charge_recovery_time integer DEFAULT 0 NOT NULL,
+    type_mask integer DEFAULT 0 NOT NULL
+);
+
+CREATE TABLE dbc_spell_durations (
+    dataset_id uuid NOT NULL,
+    id integer NOT NULL,
+    duration integer DEFAULT 0 NOT NULL,
+    duration_per_level integer DEFAULT 0 NOT NULL,
+    max_duration integer DEFAULT 0 NOT NULL
+);
+
+CREATE TABLE dbc_spell_focus_objects (
+    dataset_id uuid NOT NULL,
+    id integer NOT NULL,
+    name text DEFAULT ''::text NOT NULL
+);
+
+CREATE TABLE dbc_spell_icons (
+    dataset_id uuid NOT NULL,
+    id integer NOT NULL,
+    texture_filename text DEFAULT ''::text NOT NULL
+);
+
 CREATE TABLE dbc_spell_item_enchantment (
     id integer NOT NULL,
     charges integer DEFAULT 0 NOT NULL,
@@ -374,6 +438,24 @@ CREATE TABLE dbc_spell_item_enchantment (
     min_level integer DEFAULT 0 NOT NULL,
     max_level integer DEFAULT 0 NOT NULL,
     dataset_id uuid NOT NULL
+);
+
+CREATE TABLE dbc_spell_radii (
+    dataset_id uuid NOT NULL,
+    id integer NOT NULL,
+    radius real DEFAULT 0 NOT NULL,
+    radius_per_level real DEFAULT 0 NOT NULL,
+    radius_min real DEFAULT 0 NOT NULL,
+    radius_max real DEFAULT 0 NOT NULL
+);
+
+CREATE TABLE dbc_spell_ranges (
+    dataset_id uuid NOT NULL,
+    id integer NOT NULL,
+    range_min real DEFAULT 0 NOT NULL,
+    range_max real DEFAULT 0 NOT NULL,
+    flags integer DEFAULT 0 NOT NULL,
+    name text DEFAULT ''::text NOT NULL
 );
 
 CREATE TABLE dbc_spells (
@@ -1378,6 +1460,12 @@ ALTER TABLE ONLY datasets
 ALTER TABLE ONLY datasets
     ADD CONSTRAINT datasets_slug_key UNIQUE (slug);
 
+ALTER TABLE ONLY dbc_duration_modifiers
+    ADD CONSTRAINT dbc_duration_modifiers_pkey PRIMARY KEY (dataset_id, spell_id);
+
+ALTER TABLE ONLY dbc_extra_attack_spells
+    ADD CONSTRAINT dbc_extra_attack_spells_pkey PRIMARY KEY (dataset_id, spell_id);
+
 ALTER TABLE ONLY dbc_item_display_info
     ADD CONSTRAINT dbc_item_display_info_pkey PRIMARY KEY (dataset_id, id);
 
@@ -1393,8 +1481,32 @@ ALTER TABLE ONLY dbc_item_set_item
 ALTER TABLE ONLY dbc_item_set
     ADD CONSTRAINT dbc_item_set_pkey PRIMARY KEY (dataset_id, id);
 
+ALTER TABLE ONLY dbc_periodic_spells
+    ADD CONSTRAINT dbc_periodic_spells_pkey PRIMARY KEY (dataset_id, spell_id);
+
+ALTER TABLE ONLY dbc_spell_cast_times
+    ADD CONSTRAINT dbc_spell_cast_times_pkey PRIMARY KEY (dataset_id, id);
+
+ALTER TABLE ONLY dbc_spell_categories
+    ADD CONSTRAINT dbc_spell_categories_pkey PRIMARY KEY (dataset_id, id);
+
+ALTER TABLE ONLY dbc_spell_durations
+    ADD CONSTRAINT dbc_spell_durations_pkey PRIMARY KEY (dataset_id, id);
+
+ALTER TABLE ONLY dbc_spell_focus_objects
+    ADD CONSTRAINT dbc_spell_focus_objects_pkey PRIMARY KEY (dataset_id, id);
+
+ALTER TABLE ONLY dbc_spell_icons
+    ADD CONSTRAINT dbc_spell_icons_pkey PRIMARY KEY (dataset_id, id);
+
 ALTER TABLE ONLY dbc_spell_item_enchantment
     ADD CONSTRAINT dbc_spell_item_enchantment_pkey PRIMARY KEY (dataset_id, id);
+
+ALTER TABLE ONLY dbc_spell_radii
+    ADD CONSTRAINT dbc_spell_radii_pkey PRIMARY KEY (dataset_id, id);
+
+ALTER TABLE ONLY dbc_spell_ranges
+    ADD CONSTRAINT dbc_spell_ranges_pkey PRIMARY KEY (dataset_id, id);
 
 ALTER TABLE ONLY dbc_spells
     ADD CONSTRAINT dbc_spells_pkey PRIMARY KEY (dataset_id, spell_id);
@@ -1744,6 +1856,12 @@ ALTER TABLE ONLY data_grants
 ALTER TABLE ONLY dataset_talent_trees
     ADD CONSTRAINT dataset_talent_trees_dataset_id_fkey FOREIGN KEY (dataset_id) REFERENCES datasets(id) ON DELETE CASCADE;
 
+ALTER TABLE ONLY dbc_duration_modifiers
+    ADD CONSTRAINT dbc_duration_modifiers_dataset_id_fkey FOREIGN KEY (dataset_id) REFERENCES datasets(id) ON DELETE CASCADE;
+
+ALTER TABLE ONLY dbc_extra_attack_spells
+    ADD CONSTRAINT dbc_extra_attack_spells_dataset_id_fkey FOREIGN KEY (dataset_id) REFERENCES datasets(id) ON DELETE CASCADE;
+
 ALTER TABLE ONLY dbc_item_display_info
     ADD CONSTRAINT dbc_item_display_info_dataset_id_fkey FOREIGN KEY (dataset_id) REFERENCES datasets(id);
 
@@ -1759,8 +1877,32 @@ ALTER TABLE ONLY dbc_item_set
 ALTER TABLE ONLY dbc_item_set_item
     ADD CONSTRAINT dbc_item_set_item_dataset_id_fkey FOREIGN KEY (dataset_id) REFERENCES datasets(id);
 
+ALTER TABLE ONLY dbc_periodic_spells
+    ADD CONSTRAINT dbc_periodic_spells_dataset_id_fkey FOREIGN KEY (dataset_id) REFERENCES datasets(id) ON DELETE CASCADE;
+
+ALTER TABLE ONLY dbc_spell_cast_times
+    ADD CONSTRAINT dbc_spell_cast_times_dataset_id_fkey FOREIGN KEY (dataset_id) REFERENCES datasets(id) ON DELETE CASCADE;
+
+ALTER TABLE ONLY dbc_spell_categories
+    ADD CONSTRAINT dbc_spell_categories_dataset_id_fkey FOREIGN KEY (dataset_id) REFERENCES datasets(id) ON DELETE CASCADE;
+
+ALTER TABLE ONLY dbc_spell_durations
+    ADD CONSTRAINT dbc_spell_durations_dataset_id_fkey FOREIGN KEY (dataset_id) REFERENCES datasets(id) ON DELETE CASCADE;
+
+ALTER TABLE ONLY dbc_spell_focus_objects
+    ADD CONSTRAINT dbc_spell_focus_objects_dataset_id_fkey FOREIGN KEY (dataset_id) REFERENCES datasets(id) ON DELETE CASCADE;
+
+ALTER TABLE ONLY dbc_spell_icons
+    ADD CONSTRAINT dbc_spell_icons_dataset_id_fkey FOREIGN KEY (dataset_id) REFERENCES datasets(id) ON DELETE CASCADE;
+
 ALTER TABLE ONLY dbc_spell_item_enchantment
     ADD CONSTRAINT dbc_spell_item_enchantment_dataset_id_fkey FOREIGN KEY (dataset_id) REFERENCES datasets(id);
+
+ALTER TABLE ONLY dbc_spell_radii
+    ADD CONSTRAINT dbc_spell_radii_dataset_id_fkey FOREIGN KEY (dataset_id) REFERENCES datasets(id) ON DELETE CASCADE;
+
+ALTER TABLE ONLY dbc_spell_ranges
+    ADD CONSTRAINT dbc_spell_ranges_dataset_id_fkey FOREIGN KEY (dataset_id) REFERENCES datasets(id) ON DELETE CASCADE;
 
 ALTER TABLE ONLY dbc_spells
     ADD CONSTRAINT dbc_spells_dataset_id_fkey FOREIGN KEY (dataset_id) REFERENCES datasets(id) ON DELETE CASCADE;
