@@ -19,6 +19,12 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 )
 
+// TODO: The frontend "Technical" pages (ExtraAttackSpellsPage, VulnerabilitySpellsPage,
+// AuraDurationModifiersPage) read from compiled-in TS constants generated per build tag
+// (frontend/chronicle/src/constants/dbmem/{server}/*.ts, aliased via tsconfig). These
+// should become dataset-aware API endpoints so the correct data is shown for non-default
+// datasets. The constants are consumed via @/constants/dbmem/ExtraAttack, etc.
+
 // GameDB is the read interface for game data during parsing. Both [WoWDB] and
 // [ScopedGameDB] implement it.
 type GameDB interface {
