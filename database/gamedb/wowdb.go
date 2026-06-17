@@ -186,6 +186,16 @@ func (w *WoWDB) ExtraAttackSpell(ctx context.Context, spellID int32) (dbcmem.Ext
 	return w.extraAttackSpell(ctx, w.datasetID, spellID)
 }
 
+// ExtraAttackSpells returns the full extra-attack spell map for a dataset.
+func (w *WoWDB) ExtraAttackSpells(ctx context.Context, datasetID uuid.UUID) map[int32]dbcmem.ExtraAttackSpell {
+	m, ok := w.extraAttacks.Get(datasetID)
+	if !ok {
+		m = w.loadExtraAttacks(ctx, datasetID)
+		w.extraAttacks.Add(datasetID, m)
+	}
+	return m
+}
+
 func (w *WoWDB) DurationModifiers(ctx context.Context) (*chrondbc.DurationModifierSet, error) {
 	return w.durationModifiers(ctx, w.datasetID)
 }

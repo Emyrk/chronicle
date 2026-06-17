@@ -106,6 +106,7 @@ func (s *Service) setupRoutes() {
 	s.router.Get("/spell/{id}", s.handleGetSpell)
 	s.router.Get("/spell-by-name/{name}", s.handleGetSpellByName)
 	s.router.Get("/periodic-spells", s.handleGetPeriodicSpells)
+	s.router.Get("/extra-attack-spells", s.handleGetExtraAttackSpells)
 	s.router.Get("/talent-trees", s.handleGetTalentTrees)
 }
 
@@ -220,6 +221,43 @@ func (s *Service) handleGetPeriodicSpells(w http.ResponseWriter, r *http.Request
 	w.Header().Set("Content-Type", "application/json")
 	_ = json.NewEncoder(w).Encode(spells)
 }
+
+// ExtraAttackSpellEntry is a minimal spell entry for listing extra-attack spells.
+type ExtraAttackSpellEntry struct {
+	ID              int32  `json:"id"`
+	Name            string `json:"name"`
+	NumExtraAttacks int32  `json:"numExtraAttacks"`
+}
+
+func (s *Service) handleGetExtraAttackSpells(w http.ResponseWriter, r *http.Request) {
+	ctx := r.Context()
+
+	datasetID, err := resolveDatasetID(r)
+	if err != nil {
+		httpapi.Write(ctx, w, http.StatusBadRequest, chroniclesdk.Response{Message: "invalid dataset_id"})
+		return
+	}
+
+	m := s.db.ExtraAttackSpells(ctx, datasetID)
+	spells := make([]ExtraAttackSpellEntry, 0, len(m))
+	for id, spell := range m {
+		spells = append(spells, ExtraAttackSpellEntry{
+			ID:              id,
+			Name:            spell.Name,
+			NumExtraAttacks: spell.NumExtraAttacks,
+		})
+	}
+
+	w.Header().Set("Cache-Control", "public, max-age=86400")
+	w.Header().Set("Content-Type", "application/json")
+	_ = json.NewEncoder(w).Encode(spells)
+}
+
+// TODO: DurationModifiers Technical page currently reads from compiled-in TS
+// constants (frontend/chronicle/src/constants/dbmem/{server}/DurationModifiers.ts).
+// Add a dataset-aware API endpoint here that serves the AffectedSpells
+// cross-reference from the dbc_duration_modifiers DB table, then update the
+// AuraDurationModifiersPage to fetch from the API instead.
 
 func (s *Service) handleGetTalentTrees(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()

@@ -1,21 +1,33 @@
 import { useMemo, useState } from "react";
+import { useQuery } from "@tanstack/react-query";
 import { Link } from "react-router-dom";
 import { ArrowLeft, ExternalLink, Search, Swords } from "lucide-react";
 import { Card } from "@/components/ui/Card/Card";
 import { SpellIdTooltip } from "@/components/ui/SpellIdTooltip/SpellIdTooltip";
-import { ExtraAttackSpells } from "@/constants/dbmem/ExtraAttack";
+
+interface ExtraAttackSpellEntry {
+  id: number;
+  name: string;
+  numExtraAttacks: number;
+}
+
+function useExtraAttackSpells() {
+  return useQuery({
+    queryKey: ["wowdb", "extra-attack-spells"],
+    queryFn: async () => {
+      const res = await fetch("/api/v1/wowdb/extra-attack-spells");
+      if (!res.ok) throw new Error("Failed to fetch extra attack spells");
+      return res.json() as Promise<ExtraAttackSpellEntry[]>;
+    },
+    staleTime: 24 * 60 * 60 * 1000, // 24h — static data
+  });
+}
 
 export function ExtraAttackSpellsPage() {
   const [search, setSearch] = useState("");
+  const { data: spellsData, isLoading } = useExtraAttackSpells();
 
-  const spells = useMemo(
-    () =>
-      Object.entries(ExtraAttackSpells).map(([id, spell]) => ({
-        id: Number(id),
-        ...spell,
-      })),
-    []
-  );
+  const spells = useMemo(() => spellsData ?? [], [spellsData]);
 
   const filteredSpells = useMemo(() => {
     if (!search.trim()) return spells;
@@ -70,7 +82,9 @@ export function ExtraAttackSpellsPage() {
       </div>
 
       <Card className="divide-y divide-border/30 max-h-[75vh] overflow-auto styled-scrollbar">
-        {sortedSpells.length === 0 ? (
+        {isLoading ? (
+          <div className="p-4 text-center text-sm text-muted-foreground">Loading…</div>
+        ) : sortedSpells.length === 0 ? (
           <div className="p-4 text-center text-sm text-muted-foreground">No spells match your search.</div>
         ) : (
           sortedSpells.map((spell) => (
