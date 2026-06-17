@@ -756,6 +756,7 @@ type Dataset struct {
 	DefaultFlavor    []string           `db:"default_flavor" json:"default_flavor"`
 	SpellsImportedAt pgtype.Timestamptz `db:"spells_imported_at" json:"spells_imported_at"`
 	SpellsCount      int32              `db:"spells_count" json:"spells_count"`
+	IconBaseUrl      string             `db:"icon_base_url" json:"icon_base_url"`
 }
 
 type DatasetTalentTree struct {

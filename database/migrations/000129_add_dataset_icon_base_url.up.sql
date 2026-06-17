@@ -1,0 +1,5 @@
+BEGIN;
+
+ALTER TABLE datasets ADD COLUMN icon_base_url TEXT NOT NULL DEFAULT '';
+
+END;

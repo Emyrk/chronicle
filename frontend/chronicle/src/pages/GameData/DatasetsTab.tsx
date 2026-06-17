@@ -28,6 +28,17 @@ const KNOWN_FLAVOR_TAGS = [
   { tag: "nightmare-of-ursol", label: "Nightmare of Ursol", group: "content" },
 ] as const;
 
+/** Known icon CDN base URLs. Users can also type a custom URL. */
+const KNOWN_ICON_CDNS = [
+  { url: "https://icons.chronicleclassic.com/turtle", label: "Turtle WoW" },
+  { url: "https://icons.chronicleclassic.com/azerothcore", label: "AzerothCore" },
+  { url: "https://icons.chronicleclassic.com/kronos", label: "Kronos" },
+  { url: "https://icons.chronicleclassic.com/epoch", label: "Epoch" },
+  { url: "https://icons.chronicleclassic.com/octowow", label: "OctoWoW" },
+  { url: "https://icons.chronicleclassic.com/vanillaplus", label: "VanillaPlus" },
+  { url: "https://icons.chronicleclassic.com/ascension", label: "Ascension" },
+] as const;
+
 /** Known WoW client versions and their build numbers (suggestions only — any
  * value is allowed). Mirrors the vsn constants used server-side. */
 const KNOWN_VERSIONS: { wow: string; build: number; label: string }[] = [
@@ -87,6 +98,7 @@ function DatasetForm({ dataset, onDone }: { dataset?: Dataset; onDone: () => voi
   const [buildVersion, setBuildVersion] = useState(String(dataset?.build_version ?? ""));
   const [description, setDescription] = useState(dataset?.description ?? "");
   const [flavorTags, setFlavorTags] = useState<string[]>([...(dataset?.default_flavor ?? [])]);
+  const [iconBaseUrl, setIconBaseUrl] = useState(dataset?.icon_base_url ?? "");
   const [error, setError] = useState<string | null>(null);
 
   const toggleFlavor = (tag: string) => {
@@ -105,6 +117,7 @@ function DatasetForm({ dataset, onDone }: { dataset?: Dataset; onDone: () => voi
       build_version: buildVersion ? Number(buildVersion) : null,
       description: description || null,
       default_flavor: flavorTags,
+      icon_base_url: iconBaseUrl || null,
     };
     upsert.mutate(req, {
       onSuccess: () => onDone(),
@@ -203,6 +216,21 @@ function DatasetForm({ dataset, onDone }: { dataset?: Dataset; onDone: () => voi
           })}
         </div>
       </div>
+      <label className="space-y-1 block">
+        <span className="text-xs text-muted-foreground">Icon CDN base URL</span>
+        <input
+          value={iconBaseUrl}
+          onChange={(e) => setIconBaseUrl(e.target.value)}
+          list="icon-cdn-options"
+          className="w-full rounded-md border bg-background px-2 py-1 text-sm font-mono"
+          placeholder="https://icons.chronicleclassic.com/turtle"
+        />
+        <datalist id="icon-cdn-options">
+          {KNOWN_ICON_CDNS.map((k) => (
+            <option key={k.url} value={k.url}>{k.label}</option>
+          ))}
+        </datalist>
+      </label>
       {error && <p className="text-sm text-destructive">{error}</p>}
       <div className="flex gap-2">
         <Button

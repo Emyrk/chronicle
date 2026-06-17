@@ -1,5 +1,6 @@
 import type { WoWSpell, LocaleIndex } from "@/api/wowdb";
 import { getSpellIconUrl } from "@/api/wowdb";
+import { useIconBaseUrl } from "@/hooks/useDatasetId";
 import { SpellTooltip } from "@/pages/WoWDB/SpellTooltip";
 import {
   Tooltip,
@@ -44,7 +45,8 @@ export function SpellIconWithTooltip({
   children,
   tooltipHeader,
 }: SpellIconWithTooltipProps) {
-  const iconUrl = getSpellIconUrl(spell.spell_icon);
+  const iconBaseUrl = useIconBaseUrl();
+  const iconUrl = getSpellIconUrl(spell.spell_icon, iconBaseUrl);
 
   const icon = iconUrl ? (
     <img

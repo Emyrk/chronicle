@@ -18,6 +18,7 @@ type Dataset struct {
 	BuildVersion     int32      `json:"build_version"`
 	Description      string     `json:"description"`
 	DefaultFlavor    []string   `json:"default_flavor"`
+	IconBaseURL      string     `json:"icon_base_url"`
 	SpellsImportedAt *time.Time `json:"spells_imported_at"`
 	SpellsCount      int32      `json:"spells_count"`
 	CreatedAt        time.Time  `json:"created_at"`
@@ -34,6 +35,7 @@ func DatasetFromDB(d database.Dataset) Dataset {
 		BuildVersion:  d.BuildVersion,
 		Description:   d.Description,
 		DefaultFlavor: d.DefaultFlavor,
+		IconBaseURL:   d.IconBaseUrl,
 		SpellsCount:   d.SpellsCount,
 		CreatedAt:     d.CreatedAt.Time,
 		UpdatedAt:     d.UpdatedAt.Time,
@@ -55,6 +57,7 @@ type UpsertDatasetRequest struct {
 	BuildVersion  *int32        `json:"build_version"`
 	Description   *string       `json:"description"`
 	DefaultFlavor []string      `json:"default_flavor"`
+	IconBaseURL   *string       `json:"icon_base_url"`
 }
 
 // IsCreate returns true when the request should insert a new dataset.
@@ -82,6 +85,11 @@ func (r UpsertDatasetRequest) ToInsertParams() database.InsertDatasetParams {
 		description = *r.Description
 	}
 
+	iconBaseURL := ""
+	if r.IconBaseURL != nil {
+		iconBaseURL = *r.IconBaseURL
+	}
+
 	return database.InsertDatasetParams{
 		Name:          r.Name,
 		Slug:          r.Slug,
@@ -89,6 +97,7 @@ func (r UpsertDatasetRequest) ToInsertParams() database.InsertDatasetParams {
 		BuildVersion:  buildVersion,
 		Description:   description,
 		DefaultFlavor: r.DefaultFlavor,
+		IconBaseUrl:   iconBaseURL,
 	}
 }
 
@@ -128,5 +137,13 @@ func (r UpsertDatasetRequest) ToUpdateParams() database.UpdateDatasetParams {
 		BuildVersion:  buildVersion,
 		Description:   description,
 		DefaultFlavor: r.DefaultFlavor,
+		IconBaseUrl:   pgTextFromPtr(r.IconBaseURL),
 	}
+}
+
+func pgTextFromPtr(s *string) pgtype.Text {
+	if s == nil {
+		return pgtype.Text{}
+	}
+	return pgtype.Text{String: *s, Valid: true}
 }

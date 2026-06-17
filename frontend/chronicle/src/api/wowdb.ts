@@ -53,9 +53,9 @@ export {
 // --- App-specific helpers (not part of the pure package) ---
 
 /** Resolve a spell icon to a tenant-aware CDN URL. */
-export function getSpellIconUrl(icon: SpellIcon): string {
+export function getSpellIconUrl(icon: SpellIcon, baseUrl?: string): string {
   if (!icon.TextureFilename) return "";
-  return iconUrl(icon.TextureFilename);
+  return iconUrl(icon.TextureFilename, baseUrl);
 }
 
 // School colors for styling — Tailwind classes from the central component.

@@ -45,6 +45,7 @@ export interface Instance {
   // Resolved game-data dataset for this instance's realm. Used to fetch
   // matching talent/spell data regardless of the tenant domain.
   datasetId?: string;
+  iconBaseUrl?: string;
   guild?: { id: string; name: string };
   startTime: string;
   endTime?: string;
@@ -103,6 +104,7 @@ function transformToInstance(
     end_time?: string;
     realm_name?: string;
     dataset_id?: string;
+    icon_base_url?: string;
     guild?: { id: string; name: string };
     encounters: readonly WoWEncounterWithHostiles[] | null;
     players: Record<string, InstancePlayer> | null;
@@ -168,6 +170,7 @@ function transformToInstance(
     name: apiInstance.name,
     realm: apiInstance.realm_name,
     datasetId: apiInstance.dataset_id,
+    iconBaseUrl: apiInstance.icon_base_url,
     guild: apiInstance.guild,
     startTime,
     endTime,
@@ -410,7 +413,7 @@ export function InstancePage() {
   }
 
   return (
-    <DatasetProvider value={instance.datasetId}>
+    <DatasetProvider datasetId={instance.datasetId} iconBaseUrl={instance.iconBaseUrl}>
     <SyncModeProvider>
       <TimeRangeProvider totalDurationMs={totalEncounterDurationMs}>
         <InstanceEventsProvider instanceId={instance.id}>

@@ -904,7 +904,7 @@ func (q *sqlQuerier) DeleteDataset(ctx context.Context, id uuid.UUID) error {
 
 const getDataset = `-- name: GetDataset :one
 
-SELECT id, name, slug, wow_version, build_version, description, created_at, updated_at, default_flavor, spells_imported_at, spells_count FROM datasets WHERE id = $1
+SELECT id, name, slug, wow_version, build_version, description, created_at, updated_at, default_flavor, spells_imported_at, spells_count, icon_base_url FROM datasets WHERE id = $1
 `
 
 // Dataset queries. These run with AdminBypass context since the datasets table
@@ -924,12 +924,13 @@ func (q *sqlQuerier) GetDataset(ctx context.Context, id uuid.UUID) (Dataset, err
 		&i.DefaultFlavor,
 		&i.SpellsImportedAt,
 		&i.SpellsCount,
+		&i.IconBaseUrl,
 	)
 	return i, err
 }
 
 const getDatasetBySlug = `-- name: GetDatasetBySlug :one
-SELECT id, name, slug, wow_version, build_version, description, created_at, updated_at, default_flavor, spells_imported_at, spells_count FROM datasets WHERE slug = $1
+SELECT id, name, slug, wow_version, build_version, description, created_at, updated_at, default_flavor, spells_imported_at, spells_count, icon_base_url FROM datasets WHERE slug = $1
 `
 
 func (q *sqlQuerier) GetDatasetBySlug(ctx context.Context, slug string) (Dataset, error) {
@@ -947,6 +948,7 @@ func (q *sqlQuerier) GetDatasetBySlug(ctx context.Context, slug string) (Dataset
 		&i.DefaultFlavor,
 		&i.SpellsImportedAt,
 		&i.SpellsCount,
+		&i.IconBaseUrl,
 	)
 	return i, err
 }
@@ -993,9 +995,9 @@ func (q *sqlQuerier) GetDatasetImportSummary(ctx context.Context, datasetID uuid
 }
 
 const insertDataset = `-- name: InsertDataset :one
-INSERT INTO datasets (name, slug, wow_version, build_version, description, default_flavor)
-VALUES ($1, $2, $3, $4, $5, $6)
-RETURNING id, name, slug, wow_version, build_version, description, created_at, updated_at, default_flavor, spells_imported_at, spells_count
+INSERT INTO datasets (name, slug, wow_version, build_version, description, default_flavor, icon_base_url)
+VALUES ($1, $2, $3, $4, $5, $6, $7)
+RETURNING id, name, slug, wow_version, build_version, description, created_at, updated_at, default_flavor, spells_imported_at, spells_count, icon_base_url
 `
 
 type InsertDatasetParams struct {
@@ -1005,6 +1007,7 @@ type InsertDatasetParams struct {
 	BuildVersion  int32    `db:"build_version" json:"build_version"`
 	Description   string   `db:"description" json:"description"`
 	DefaultFlavor []string `db:"default_flavor" json:"default_flavor"`
+	IconBaseUrl   string   `db:"icon_base_url" json:"icon_base_url"`
 }
 
 func (q *sqlQuerier) InsertDataset(ctx context.Context, arg InsertDatasetParams) (Dataset, error) {
@@ -1015,6 +1018,7 @@ func (q *sqlQuerier) InsertDataset(ctx context.Context, arg InsertDatasetParams)
 		arg.BuildVersion,
 		arg.Description,
 		arg.DefaultFlavor,
+		arg.IconBaseUrl,
 	)
 	var i Dataset
 	err := row.Scan(
@@ -1029,12 +1033,13 @@ func (q *sqlQuerier) InsertDataset(ctx context.Context, arg InsertDatasetParams)
 		&i.DefaultFlavor,
 		&i.SpellsImportedAt,
 		&i.SpellsCount,
+		&i.IconBaseUrl,
 	)
 	return i, err
 }
 
 const listDatasets = `-- name: ListDatasets :many
-SELECT id, name, slug, wow_version, build_version, description, created_at, updated_at, default_flavor, spells_imported_at, spells_count FROM datasets ORDER BY name
+SELECT id, name, slug, wow_version, build_version, description, created_at, updated_at, default_flavor, spells_imported_at, spells_count, icon_base_url FROM datasets ORDER BY name
 `
 
 func (q *sqlQuerier) ListDatasets(ctx context.Context) ([]Dataset, error) {
@@ -1058,6 +1063,7 @@ func (q *sqlQuerier) ListDatasets(ctx context.Context) ([]Dataset, error) {
 			&i.DefaultFlavor,
 			&i.SpellsImportedAt,
 			&i.SpellsCount,
+			&i.IconBaseUrl,
 		); err != nil {
 			return nil, err
 		}
@@ -1162,9 +1168,10 @@ UPDATE datasets SET
     build_version     = COALESCE($4, build_version),
     description       = COALESCE($5, description),
     default_flavor    = COALESCE($6, default_flavor),
+    icon_base_url     = COALESCE($7, icon_base_url),
     updated_at        = now()
-WHERE id = $7
-RETURNING id, name, slug, wow_version, build_version, description, created_at, updated_at, default_flavor, spells_imported_at, spells_count
+WHERE id = $8
+RETURNING id, name, slug, wow_version, build_version, description, created_at, updated_at, default_flavor, spells_imported_at, spells_count, icon_base_url
 `
 
 type UpdateDatasetParams struct {
@@ -1174,6 +1181,7 @@ type UpdateDatasetParams struct {
 	BuildVersion  pgtype.Int4 `db:"build_version" json:"build_version"`
 	Description   pgtype.Text `db:"description" json:"description"`
 	DefaultFlavor []string    `db:"default_flavor" json:"default_flavor"`
+	IconBaseUrl   pgtype.Text `db:"icon_base_url" json:"icon_base_url"`
 	ID            uuid.UUID   `db:"id" json:"id"`
 }
 
@@ -1186,6 +1194,7 @@ func (q *sqlQuerier) UpdateDataset(ctx context.Context, arg UpdateDatasetParams)
 		arg.BuildVersion,
 		arg.Description,
 		arg.DefaultFlavor,
+		arg.IconBaseUrl,
 		arg.ID,
 	)
 	var i Dataset
@@ -1201,6 +1210,7 @@ func (q *sqlQuerier) UpdateDataset(ctx context.Context, arg UpdateDatasetParams)
 		&i.DefaultFlavor,
 		&i.SpellsImportedAt,
 		&i.SpellsCount,
+		&i.IconBaseUrl,
 	)
 	return i, err
 }

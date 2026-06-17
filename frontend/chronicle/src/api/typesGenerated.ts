@@ -416,6 +416,7 @@ export interface Dataset {
     readonly build_version: number;
     readonly description: string;
     readonly default_flavor: readonly string[];
+    readonly icon_base_url: string;
     readonly spells_imported_at: string | null;
     readonly spells_count: number;
     readonly created_at: string;
@@ -2020,6 +2021,7 @@ export interface UpsertDatasetRequest {
     readonly build_version: number | null;
     readonly description: string | null;
     readonly default_flavor: readonly string[];
+    readonly icon_base_url: string | null;
 }
 
 // From chroniclesdk/retention.go
@@ -2271,6 +2273,7 @@ export interface WoWInstance {
      * tenant domain serving the request. Only populated on the detail endpoint.
      */
     readonly dataset_id?: string;
+    readonly icon_base_url?: string;
     /**
      * Format is the log group's parse format (e.g. "1.12a-cc-addon").
      * Flavor is the server-mechanics tag set. Both come from the log group and

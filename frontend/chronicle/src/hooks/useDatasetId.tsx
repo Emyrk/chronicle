@@ -1,16 +1,38 @@
-import { createContext, useContext } from "react";
+import { createContext, useContext, useMemo } from "react";
 
-/**
- * DatasetContext provides the resolved dataset_id for the current page scope
- * (e.g. an instance page). Components like spell tooltips use this to fetch
- * data from the correct dataset. When not provided, API calls fall back to the
- * server/tenant default.
- */
-const DatasetContext = createContext<string | undefined>(undefined);
+interface DatasetContextValue {
+  datasetId: string | undefined;
+  iconBaseUrl: string | undefined;
+}
 
-export const DatasetProvider = DatasetContext.Provider;
+const DatasetContext = createContext<DatasetContextValue>({
+  datasetId: undefined,
+  iconBaseUrl: undefined,
+});
+
+/** Wraps children with dataset scope (dataset_id + icon CDN base URL). */
+export function DatasetProvider({
+  datasetId,
+  iconBaseUrl,
+  children,
+}: {
+  datasetId?: string;
+  iconBaseUrl?: string;
+  children: React.ReactNode;
+}) {
+  const value = useMemo(
+    () => ({ datasetId, iconBaseUrl }),
+    [datasetId, iconBaseUrl],
+  );
+  return <DatasetContext.Provider value={value}>{children}</DatasetContext.Provider>;
+}
 
 /** Returns the dataset_id from the nearest DatasetProvider, or undefined. */
 export function useDatasetId(): string | undefined {
-  return useContext(DatasetContext);
+  return useContext(DatasetContext).datasetId;
+}
+
+/** Returns the icon base URL from the nearest DatasetProvider, or undefined. */
+export function useIconBaseUrl(): string | undefined {
+  return useContext(DatasetContext).iconBaseUrl;
 }

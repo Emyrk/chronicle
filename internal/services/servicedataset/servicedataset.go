@@ -81,6 +81,13 @@ func (s *Service) Start(ctx context.Context) error {
 // the compiled-in default. Used by instance/armory endpoints so talent (and
 // future game) data is served for the dataset that the viewed data belongs to,
 // regardless of which tenant domain the request came in on.
+// GetDataset returns a dataset by ID. Used by API handlers that need to look
+// up dataset fields (e.g. icon_base_url) after resolving the dataset ID.
+func (s *Service) GetDataset(ctx context.Context, id uuid.UUID) (database.Dataset, error) {
+	ctx = servicetenant.AdminBypass(ctx)
+	return s.db.GetDataset(ctx, id)
+}
+
 func (s *Service) ResolveDatasetForRealm(ctx context.Context, realmID uuid.UUID) uuid.UUID {
 	ctx = servicetenant.AdminBypass(ctx)
 	resolved, err := s.db.ResolveDatasetByRealm(ctx, realmID)

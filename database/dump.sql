@@ -285,6 +285,7 @@ CREATE TABLE datasets (
     default_flavor text[] DEFAULT '{}'::text[] NOT NULL,
     spells_imported_at timestamp with time zone,
     spells_count integer DEFAULT 0 NOT NULL,
+    icon_base_url text DEFAULT ''::text NOT NULL,
     CONSTRAINT datasets_slug_format CHECK ((slug ~ '^[a-z0-9][a-z0-9-]{1,48}[a-z0-9]$'::text))
 );
 
