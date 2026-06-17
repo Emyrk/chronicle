@@ -5,6 +5,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/Emyrk/chronicle/database/gamedb/chrondbc/dbcmem"
 	"github.com/Emyrk/chronicle/internal/bitmask"
 	"github.com/Gophercraft/core/i18n"
 )
@@ -24,7 +25,8 @@ func UnknownSpell(id SpellID) Spell {
 		ID:               id,
 		Name_lang:        i18n.Text{i18n.English: fmt.Sprintf("Unknown Spell (%d)", id)},
 		Description_lang: i18n.Text{i18n.English: "Spell is missing from Spells.dbc. Report this as a bug."},
-		SpellIconID:      1, // INV_Misc_QuestionMark
+		SpellIcon:        dbcmem.SpellIcon{ID: 1}, // INV_Misc_QuestionMark
+		SpellIconID_:     1,
 		BaseLevel:        1,
 		SpellLevel:       1,
 	}
@@ -39,14 +41,14 @@ type Spell struct {
 	AuraDescription_lang i18n.Text `json:"aura_description"` // Buff/debuff tooltip shown when aura is active
 
 	// === Display ===
-	SpellIconID  IconID `json:"spell_icon"`  // Icon shown in spellbook and action bars (→ SpellIcon.dbc)
-	ActiveIconID IconID `json:"active_icon"` // Icon shown while spell is active/channeling (often 0)
+	SpellIcon  dbcmem.SpellIcon `json:"spell_icon"`  // Resolved icon from SpellIcon.dbc
+	ActiveIcon dbcmem.SpellIcon `json:"active_icon"` // Icon shown while spell is active/channeling (often zero)
 
 	// === Level Requirements ===
 	MaxLevel       int32           `json:"max_level"`        // Level cap for scaling (0 = no cap)
 	BaseLevel      int32           `json:"base_level"`       // Minimum player level to use this spell
 	SpellLevel     int32           `json:"spell_level"`      // Spell's own level for scaling calculations
-	Category       SpellCategoryID `json:"category"`         // Spell category for shared cooldowns (→ SpellCategory.dbc)
+	Category       dbcmem.SpellCategory `json:"category"`         // Resolved spell category from SpellCategory.dbc
 	MaxTargetLevel int32           `json:"max_target_level"` // Maximum target level (0 = no limit, used for CC diminishing)
 
 	// === Behavior ===
@@ -70,7 +72,7 @@ type Spell struct {
 	TargetAuraState    AuraState          `json:"target_aura_state"`
 	MaxTargets         int32              `json:"max_targets"`
 	TargetCreatureType TargetCreatureType `json:"target_creature_type"`
-	RequiresSpellFocus SpellFocusObject   `json:"requires_spell_focus"` // The game checks if there's a matching game object within range (usually ~5 yards) before allowing the cast.
+	SpellFocus         dbcmem.SpellFocusObject `json:"requires_spell_focus"` // Resolved focus object from SpellFocusObject.dbc
 
 	// === Resource Cost ===
 	PowerType        Power     `json:"power_type"`          // Resource type: 0=mana, 1=rage, 2=focus, 3=energy
@@ -82,13 +84,13 @@ type Spell struct {
 	ReagentCount     [8]int32  `json:"reagent_count"`       // Quantity of each reagent consumed per cast
 
 	// === Timing ===
-	CastingTimeIndex      CastingTimeID `json:"casting_time"`            // Cast time lookup (→ SpellCastTimes.dbc)
-	RecoveryTime          time.Duration `json:"recovery_time"`           // Spell cooldown (real time.Duration; JSON is nanoseconds)
-	StartRecoveryCategory int32         `json:"start_recovery_category"` // controls which Global Cooldown (GCD) group a spell belongs to.
-	StartRecoveryTime     time.Duration `json:"start_recovery_time"`     // GCD (real time.Duration; JSON is nanoseconds)
-	CategoryRecoveryTime  time.Duration `json:"category_recovery_time"`  // Shared cooldown for spells in the same category (real time.Duration; JSON is nanoseconds)
-	RangeIndex            RangeID       `json:"range"`                   // Min/max range lookup (→ SpellRange.dbc)
-	DurationIndex         DurationID    `json:"duration"`                // Buff/debuff duration lookup (→ SpellDuration.dbc)
+	CastTime              dbcmem.SpellCastTime `json:"casting_time"`            // Resolved cast time from SpellCastTimes.dbc
+	RecoveryTime          time.Duration        `json:"recovery_time"`           // Spell cooldown (real time.Duration; JSON is nanoseconds)
+	StartRecoveryCategory int32                `json:"start_recovery_category"` // controls which Global Cooldown (GCD) group a spell belongs to.
+	StartRecoveryTime     time.Duration        `json:"start_recovery_time"`     // GCD (real time.Duration; JSON is nanoseconds)
+	CategoryRecoveryTime  time.Duration        `json:"category_recovery_time"`  // Shared cooldown for spells in the same category (real time.Duration; JSON is nanoseconds)
+	Range                 dbcmem.SpellRange    `json:"range"`                   // Resolved range from SpellRange.dbc
+	Duration              dbcmem.SpellDuration `json:"duration"`                // Resolved duration from SpellDuration.dbc
 
 	// === Filtering/Logic ===
 	Attrs                SpellAttributes      `json:"attributes"`              // 9 attribute flags controlling spell behavior (can't crit, channeled, etc.)
@@ -106,7 +108,7 @@ type Spell struct {
 	EffectRealPointsPerLevel [3]float32        `json:"effect_real_points_per_level"` // Bonus points per caster level (for scaling)
 	EffectBasePoints         [3]int32          `json:"effect_base_points"`           // Base value for effect calculations
 	EffectMechanic           [3]int32          `json:"effect_mechanic"`              // Combat mechanic: stun, root, bleed, etc. (for immunity checks)
-	EffectRadiusIndex        [3]SpellRadiusID  `json:"effect_radius"`                // AoE radius lookup (→ SpellRadius.dbc)
+	EffectRadius             [3]dbcmem.SpellRadius `json:"effect_radius"`                // Resolved AoE radius from SpellRadius.dbc
 	EffectAura               [3]AuraEffect     `json:"effect_aura"`                  // Aura type if Effect is ApplyAura (mod stat, periodic damage, etc.)
 	EffectAuraPeriod         [3]int32          `json:"effect_aura_period"`           // Tick interval in ms for periodic effects (e.g., 3000 = 3 sec)
 	EffectAmplitude          [3]float32        `json:"effect_amplitude"`             // Amplitude modifier for periodic effects
@@ -144,6 +146,18 @@ type Spell struct {
 	ExcludeCasterAuraState int32 `json:"exclude_caster_aura_state"` // Caster must NOT be in this AuraState (inverse of CasterAuraState)
 	ExcludeTargetAuraState int32 `json:"exclude_target_aura_state"` // Target must NOT be in this AuraState (inverse of TargetAuraState)
 	ManaPerSecondPerLevel  int32 `json:"mana_per_second_per_level"` // Additional channeling cost per caster level per second
+
+	// Raw FK IDs for DB round-trip. These are the original index values
+	// from the DBC/database that reference the companion lookup tables.
+	// Not serialized to JSON — use the resolved structs above instead.
+	SpellIconID_       int32    `json:"-"`
+	ActiveIconID_      int32    `json:"-"`
+	CastingTimeIndex_  int32    `json:"-"`
+	RangeIndex_        int32    `json:"-"`
+	DurationIndex_     int32    `json:"-"`
+	CategoryID_        int32    `json:"-"`
+	EffectRadiusIndex_ [3]int32 `json:"-"`
+	SpellFocusID_      int32    `json:"-"`
 
 	// No value
 	//RequiredAreaID          int32

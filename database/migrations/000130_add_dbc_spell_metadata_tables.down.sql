@@ -1,0 +1,10 @@
+DROP TABLE IF EXISTS dbc_periodic_spells;
+DROP TABLE IF EXISTS dbc_duration_modifiers;
+DROP TABLE IF EXISTS dbc_extra_attack_spells;
+DROP TABLE IF EXISTS dbc_spell_focus_objects;
+DROP TABLE IF EXISTS dbc_spell_radii;
+DROP TABLE IF EXISTS dbc_spell_categories;
+DROP TABLE IF EXISTS dbc_spell_icons;
+DROP TABLE IF EXISTS dbc_spell_ranges;
+DROP TABLE IF EXISTS dbc_spell_durations;
+DROP TABLE IF EXISTS dbc_spell_cast_times;

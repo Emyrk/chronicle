@@ -11,7 +11,7 @@ import (
 // Returns the base MaxDuration for spells with no modifiers.
 // Returns -1ms for permanent auras, 0 for instant/no duration.
 func MaxAuraDuration(spell *Spell) time.Duration {
-	dur := spell.DurationIndex.Get()
+	dur := spell.Duration
 	if dur.MaxDuration <= 0 {
 		return time.Duration(dur.MaxDuration) * time.Millisecond
 	}

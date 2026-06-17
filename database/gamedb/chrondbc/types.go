@@ -5,7 +5,6 @@ import (
 	"fmt"
 
 	"github.com/Emyrk/chronicle/combatlog/parser/types"
-	"github.com/Emyrk/chronicle/database/gamedb/chrondbc/dbcmem"
 	"github.com/Emyrk/chronicle/internal/bitmask"
 )
 
@@ -21,48 +20,6 @@ func (s SpellNotFound) Error() string {
 func IsSpellNotFound(err error) bool {
 	var as SpellNotFound
 	return errors.As(err, &as)
-}
-
-type IconID int32
-
-func (i IconID) Get() dbcmem.SpellIcon {
-	return dbcmem.SpellIcons[int32(i)]
-}
-
-type SpellCategoryID int32
-
-func (s SpellCategoryID) Get() dbcmem.SpellCategory {
-	return dbcmem.SpellCategories[int32(s)]
-}
-
-type DurationID int32
-
-func (d DurationID) Get() dbcmem.SpellDuration {
-	return dbcmem.SpellDurations[int32(d)]
-}
-
-type RangeID int32
-
-func (d RangeID) Get() dbcmem.SpellRange {
-	return dbcmem.SpellRanges[int32(d)]
-}
-
-type CastingTimeID int32
-
-func (d CastingTimeID) Get() dbcmem.SpellCastTime {
-	return dbcmem.SpellCastTimes[int32(d)]
-}
-
-type SpellRadiusID int32
-
-func (d SpellRadiusID) Get() dbcmem.SpellRadius {
-	return dbcmem.SpellRadii[int32(d)]
-}
-
-type SpellFocusObject int32
-
-func (d SpellFocusObject) Get() dbcmem.SpellFocusObject {
-	return dbcmem.SpellFocusObjects[int32(d)]
 }
 
 //go:generate stringer -type School -trimprefix=School

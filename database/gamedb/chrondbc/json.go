@@ -18,36 +18,6 @@ type BitmaskJSON struct {
 	String string `json:"string"`
 }
 
-// === ID types with .Get() - marshal as the underlying dbcmem struct ===
-
-func (i IconID) MarshalJSON() ([]byte, error) {
-	return json.Marshal(i.Get())
-}
-
-func (s SpellCategoryID) MarshalJSON() ([]byte, error) {
-	return json.Marshal(s.Get())
-}
-
-func (d DurationID) MarshalJSON() ([]byte, error) {
-	return json.Marshal(d.Get())
-}
-
-func (r RangeID) MarshalJSON() ([]byte, error) {
-	return json.Marshal(r.Get())
-}
-
-func (c CastingTimeID) MarshalJSON() ([]byte, error) {
-	return json.Marshal(c.Get())
-}
-
-func (s SpellRadiusID) MarshalJSON() ([]byte, error) {
-	return json.Marshal(s.Get())
-}
-
-func (s SpellFocusObject) MarshalJSON() ([]byte, error) {
-	return json.Marshal(s.Get())
-}
-
 // === Enums with stringer - {"value": N, "string": "..."} ===
 
 func (s School) MarshalJSON() ([]byte, error) {

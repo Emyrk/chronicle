@@ -222,7 +222,7 @@ func collectAffectedSpells(wc *dbcdb.WoWClient, modifiers []durationModifierEntr
 			return true
 		}
 
-		dur := spell.DurationIndex.Get()
+		dur := spell.Duration
 
 		var mods []affectedModifier
 		for idx := range seen {
