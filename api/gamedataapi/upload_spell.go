@@ -60,6 +60,17 @@ func (h *Handler) handleSpellUpload(ctx context.Context, w http.ResponseWriter, 
 		}
 	}
 
+	// Derive extra_attacks, duration_modifiers, periodic_spells from the
+	// imported spell data. This runs before metadata update so a failure
+	// doesn't leave the dataset in an inconsistent state.
+	if err := h.deriveSpellMetadata(ctx, datasetID, spellDBC); err != nil {
+		httpapi.Write(ctx, w, http.StatusInternalServerError, chroniclesdk.Response{
+			Message: "Spells imported but derived table generation failed",
+			Detail:  err.Error(),
+		})
+		return
+	}
+
 	// Update dataset import metadata.
 	_, err = h.pool.Exec(ctx,
 		`UPDATE datasets SET spells_imported_at = now(), spells_count = $2, updated_at = now() WHERE id = $1`,
@@ -77,6 +88,9 @@ func (h *Handler) handleSpellUpload(ctx context.Context, w http.ResponseWriter, 
 	// hit the freshly-imported DB data instead of stale cache entries.
 	if h.wowDB != nil {
 		h.wowDB.InvalidateSpellCache(datasetID)
+		h.wowDB.InvalidateExtraAttacks(datasetID)
+		h.wowDB.InvalidateDurationModifiers(datasetID)
+		h.wowDB.InvalidatePeriodicSpells(datasetID)
 	}
 
 	resp.Inserted = len(spells)

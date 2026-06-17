@@ -19,6 +19,12 @@ const (
 	FileSpellItemEnchantment DBCFile = "SpellItemEnchantment.dbc"
 	FileItemRandomProperties DBCFile = "ItemRandomProperties.dbc"
 	FileItemSet              DBCFile = "ItemSet.dbc"
+	FileSpellCastTimes       DBCFile = "SpellCastTimes.dbc"
+	FileSpellDuration        DBCFile = "SpellDuration.dbc"
+	FileSpellRange           DBCFile = "SpellRange.dbc"
+	FileSpellCategory        DBCFile = "SpellCategory.dbc"
+	FileSpellRadius          DBCFile = "SpellRadius.dbc"
+	FileSpellFocusObject     DBCFile = "SpellFocusObject.dbc"
 )
 
 // UploadKind describes how an artifact is sent to the Chronicle API.
@@ -69,6 +75,13 @@ func Registry() []Importer {
 		&rawDBCImporter{key: "spell-enchantments", name: "Spell Item Enchantments", file: FileSpellItemEnchantment, dbcType: "SpellItemEnchantment"},
 		&rawDBCImporter{key: "item-random-properties", name: "Item Random Properties", file: FileItemRandomProperties, dbcType: "ItemRandomProperties"},
 		&rawDBCImporter{key: "item-sets", name: "Item Sets", file: FileItemSet, dbcType: "ItemSet"},
+		&rawDBCImporter{key: "spell-cast-times", name: "Spell Cast Times", file: FileSpellCastTimes, dbcType: "SpellCastTimes"},
+		&rawDBCImporter{key: "spell-durations", name: "Spell Durations", file: FileSpellDuration, dbcType: "SpellDuration"},
+		&rawDBCImporter{key: "spell-ranges", name: "Spell Ranges", file: FileSpellRange, dbcType: "SpellRange"},
+		&rawDBCImporter{key: "spell-icons", name: "Spell Icons", file: FileSpellIcon, dbcType: "SpellIcon"},
+		&rawDBCImporter{key: "spell-categories", name: "Spell Categories", file: FileSpellCategory, dbcType: "SpellCategory"},
+		&rawDBCImporter{key: "spell-radii", name: "Spell Radii", file: FileSpellRadius, dbcType: "SpellRadius"},
+		&rawDBCImporter{key: "spell-focus-objects", name: "Spell Focus Objects", file: FileSpellFocusObject, dbcType: "SpellFocusObject"},
 	}
 }
 

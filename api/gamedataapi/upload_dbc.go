@@ -142,6 +142,20 @@ func (h *Handler) UploadDBC(w http.ResponseWriter, r *http.Request) {
 		h.handleItemSetUpload(ctx, w, mode, table, datasetID)
 	case "Spell":
 		h.handleSpellUpload(ctx, w, mode, table, datasetID)
+	case "SpellCastTimes":
+		h.handleSpellCastTimesUpload(ctx, w, mode, table, datasetID)
+	case "SpellDuration":
+		h.handleSpellDurationsUpload(ctx, w, mode, table, datasetID)
+	case "SpellRange":
+		h.handleSpellRangesUpload(ctx, w, mode, table, datasetID)
+	case "SpellIcon":
+		h.handleSpellIconsUpload(ctx, w, mode, table, datasetID)
+	case "SpellCategory":
+		h.handleSpellCategoriesUpload(ctx, w, mode, table, datasetID)
+	case "SpellRadius":
+		h.handleSpellRadiiUpload(ctx, w, mode, table, datasetID)
+	case "SpellFocusObject":
+		h.handleSpellFocusObjectsUpload(ctx, w, mode, table, datasetID)
 	default:
 		httpapi.Write(ctx, w, http.StatusBadRequest, chroniclesdk.Response{
 			Message: fmt.Sprintf("Unsupported DBC type: %s", dbcType),
