@@ -2,19 +2,21 @@ package creatures
 
 import (
 	"github.com/Emyrk/chronicle/combatlog/parser/common/characters"
+	"github.com/Emyrk/chronicle/database"
 )
 
-// TurtleCharacterFactories returns the CharacterFactory list for Turtle WoW (vanilla).
-func TurtleCharacterFactories() []characters.CharacterFactory {
-	return []characters.CharacterFactory{
-		// Global
+// VanillaCharacterFactories returns the CharacterFactory list for vanilla
+// WoW content. The flavor tags control which content-specific factories are
+// included (e.g. Turtle-custom bosses, VanillaPlus encounters, Nightmare of
+// Ursol content). Call with an empty flavor to get the base vanilla set.
+func VanillaCharacterFactories(flavor database.WoWFlavor) []characters.CharacterFactory {
+	cres := []characters.CharacterFactory{
+		// ── Global (always included) ───────────────────────────────────
 		NewTotemCharacter,
 		NewCritterCharacter,
 		NewObject,
-		// SM (V+)
-		NewVanillaPlusSMSoul,
-		NewVanillaPlusSMSoulHunter,
-		NewVanillaPlusBrotherMicheal,
+
+		// ── Stock vanilla content ──────────────────────────────────────
 		// Sunken Temple
 		NewAtalalDeathwalkerSpirit,
 		// Wailing Caverns
@@ -55,16 +57,6 @@ func TurtleCharacterFactories() []characters.CharacterFactory {
 		NewDiseasedGhoul,
 		// Stratholme
 		NewCryptScarab,
-		// Timbermaw Hold
-		NewKarrsh,
-		NewChieftainPartath,
-		NewOrmanos,
-		NewUrsol,
-		NewNightmareFiend,
-		NewVileSkitterer,
-		NewSelenaxxFoulheart,
-		NewLoktanagTheVile,
-		NewPerotharn,
 		// AQ 40
 		NewCthun,
 		// Naxx
@@ -77,29 +69,73 @@ func TurtleCharacterFactories() []characters.CharacterFactory {
 		NewHeiganTheUnclean,
 		NewDiseasedMaggot,
 		NewEyeStalk,
-		// Kara 40
-		NewKruul,
-		NewKing,
-		NewMephistroth,
-		NewDemonicEye,
-		NewSanvTasDal,
-		NewDraeneiNetherWalker,
-		NewKeeperGnarlmoon,
-		NewAnomalus,
-		NewEchoOfMedivh,
-		NewFragmentOfRupturan,
-		NewRupturanTheBroken,
-		NewFelheart,
-		NewLivingStone,
-		NewIncantagos,
-		// Emerald Sanctum
-		NewSolnius,
 		// L/UBRS
 		NewMotherSmolderweb,
 		NewBloodaxeWorgPup,
-
-		// Eye of Eternity
-		NewMalygos,
-		NewPowerSpark,
 	}
+
+	// ── VanillaPlus content ────────────────────────────────────────
+	if flavor.Has(database.FlavorVanillaPlus) || flavor.Has(database.FlavorTurtle) || flavor.Has(database.FlavorOctoWoW) {
+		cres = append(cres,
+			// SM (V+)
+			NewVanillaPlusSMSoul,
+			NewVanillaPlusSMSoulHunter,
+			NewVanillaPlusBrotherMicheal,
+		)
+	}
+
+	// ── Nightmare of Ursol content (Turtle, OctoWoW) ───────────────
+	if flavor.Has(database.FlavorNightmareOfUrsol) {
+		cres = append(cres,
+			// Timbermaw Hold
+			NewKarrsh,
+			NewChieftainPartath,
+			NewOrmanos,
+			NewUrsol,
+			NewNightmareFiend,
+			NewVileSkitterer,
+			NewSelenaxxFoulheart,
+			NewLoktanagTheVile,
+			NewPerotharn,
+		)
+	}
+
+	// ── Turtle WoW custom content ──────────────────────────────────
+	if flavor.Has(database.FlavorTurtle) {
+		cres = append(cres,
+			// Kara 40
+			NewKruul,
+			NewKing,
+			NewMephistroth,
+			NewDemonicEye,
+			NewSanvTasDal,
+			NewDraeneiNetherWalker,
+			NewKeeperGnarlmoon,
+			NewAnomalus,
+			NewEchoOfMedivh,
+			NewFragmentOfRupturan,
+			NewRupturanTheBroken,
+			NewFelheart,
+			NewLivingStone,
+			NewIncantagos,
+			// Emerald Sanctum
+			NewSolnius,
+			// Eye of Eternity
+			NewMalygos,
+			NewPowerSpark,
+		)
+	}
+
+	return cres
+}
+
+// TurtleCharacterFactories is a convenience alias for
+// VanillaCharacterFactories with the full Turtle flavor set.
+// Deprecated: prefer VanillaCharacterFactories(flavor) for new code.
+func TurtleCharacterFactories() []characters.CharacterFactory {
+	return VanillaCharacterFactories(database.WoWFlavor{
+		database.FlavorVanilla,
+		database.FlavorNightmareOfUrsol,
+		database.FlavorTurtle,
+	})
 }
