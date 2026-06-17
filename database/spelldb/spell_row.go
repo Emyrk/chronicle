@@ -7,10 +7,32 @@ import (
 	"time"
 
 	"github.com/Emyrk/chronicle/database/gamedb/chrondbc"
+	"github.com/Emyrk/chronicle/database/gamedb/chrondbc/dbcmem"
 	"github.com/Emyrk/chronicle/internal/bitmask"
 	"github.com/Gophercraft/core/i18n"
 	"github.com/google/uuid"
 )
+
+func derefOr(p *int32) int32 {
+	if p != nil {
+		return *p
+	}
+	return 0
+}
+
+func derefOrF(p *float32) float32 {
+	if p != nil {
+		return *p
+	}
+	return 0
+}
+
+func derefOrS(p *string) string {
+	if p != nil {
+		return *p
+	}
+	return ""
+}
 
 // SpellRow is the database representation of a spell, mapping 1:1 to the
 // dbc_spells table. All custom types are flattened to primitive Go types so
@@ -171,6 +193,39 @@ type SpellRow struct {
 	ExcludeCasterAuraState int32 `db:"exclude_caster_aura_state"`
 	ExcludeTargetAuraState int32 `db:"exclude_target_aura_state"`
 	ManaPerSecondPerLevel  int32 `db:"mana_per_second_per_level"`
+
+	// Resolved metadata from LEFT JOINs (nullable — NULL when metadata tables not imported)
+	CtBase       *int32   `db:"-"` // from dbc_spell_cast_times
+	CtPerLevel   *int32   `db:"-"`
+	CtMinimum    *int32   `db:"-"`
+	DurBase      *int32   `db:"-"` // from dbc_spell_durations
+	DurPerLevel  *int32   `db:"-"`
+	DurMax       *int32   `db:"-"`
+	RangeMin     *float32 `db:"-"` // from dbc_spell_ranges
+	RangeMax     *float32 `db:"-"`
+	RangeFlags   *int32   `db:"-"`
+	RangeName    *string  `db:"-"`
+	IconTexture  *string  `db:"-"` // from dbc_spell_icons (primary)
+	ActiveIconTexture *string `db:"-"` // from dbc_spell_icons (active)
+	CatFlags     *int32   `db:"-"` // from dbc_spell_categories
+	CatUsesPerWeek *int32 `db:"-"`
+	CatName      *string  `db:"-"`
+	CatMaxCharges *int32  `db:"-"`
+	CatChargeRecoveryTime *int32 `db:"-"`
+	CatTypeMask  *int32   `db:"-"`
+	R0Radius     *float32 `db:"-"` // from dbc_spell_radii (effect 0)
+	R0RadiusPerLevel *float32 `db:"-"`
+	R0RadiusMin  *float32 `db:"-"`
+	R0RadiusMax  *float32 `db:"-"`
+	R1Radius     *float32 `db:"-"` // from dbc_spell_radii (effect 1)
+	R1RadiusPerLevel *float32 `db:"-"`
+	R1RadiusMin  *float32 `db:"-"`
+	R1RadiusMax  *float32 `db:"-"`
+	R2Radius     *float32 `db:"-"` // from dbc_spell_radii (effect 2)
+	R2RadiusPerLevel *float32 `db:"-"`
+	R2RadiusMin  *float32 `db:"-"`
+	R2RadiusMax  *float32 `db:"-"`
+	FocusName    *string  `db:"-"` // from dbc_spell_focus_objects
 }
 
 // ToSpell converts a SpellRow to a chrondbc.Spell for use in parsing.
@@ -182,13 +237,16 @@ func (r *SpellRow) ToSpell() chrondbc.Spell {
 		Description_lang:     i18n.Text{i18n.English: r.Description},
 		AuraDescription_lang: i18n.Text{i18n.English: r.AuraDescription},
 
-		SpellIconID:  chrondbc.IconID(r.SpellIconID),
-		ActiveIconID: chrondbc.IconID(r.ActiveIconID),
+		SpellIconID_:  r.SpellIconID,
+		SpellIcon:     dbcmem.SpellIcon{ID: r.SpellIconID},
+		ActiveIconID_: r.ActiveIconID,
+		ActiveIcon:    dbcmem.SpellIcon{ID: r.ActiveIconID},
 
 		MaxLevel:       r.MaxLevel,
 		BaseLevel:      r.BaseLevel,
 		SpellLevel:     r.SpellLevel,
-		Category:       chrondbc.SpellCategoryID(r.Category),
+		CategoryID_:    r.Category,
+		Category:       dbcmem.SpellCategory{ID: r.Category},
 		MaxTargetLevel: r.MaxTargetLevel,
 
 		School:             chrondbc.School(r.School),
@@ -210,7 +268,8 @@ func (r *SpellRow) ToSpell() chrondbc.Spell {
 		TargetAuraState:    chrondbc.AuraState(r.TargetAuraState),
 		MaxTargets:         r.MaxTargets,
 		TargetCreatureType: chrondbc.TargetCreatureType(r.TargetCreatureType),
-		RequiresSpellFocus: chrondbc.SpellFocusObject(r.RequiresSpellFocus),
+		SpellFocusID_:  r.RequiresSpellFocus,
+		SpellFocus:     dbcmem.SpellFocusObject{ID: r.RequiresSpellFocus},
 
 		PowerType:        chrondbc.Power(r.PowerType),
 		ManaCost:         r.ManaCost,
@@ -218,13 +277,16 @@ func (r *SpellRow) ToSpell() chrondbc.Spell {
 		ManaCostPerLevel: r.ManaCostPerLevel,
 		ManaPerSecond:    r.ManaPerSecond,
 
-		CastingTimeIndex:      chrondbc.CastingTimeID(r.CastingTimeIndex),
+		CastingTimeIndex_:     r.CastingTimeIndex,
+		CastTime:              dbcmem.SpellCastTime{ID: r.CastingTimeIndex},
 		RecoveryTime:          time.Duration(r.RecoveryTimeMs) * time.Millisecond,
 		StartRecoveryCategory: r.StartRecoveryCategory,
 		StartRecoveryTime:     time.Duration(r.StartRecoveryTimeMs) * time.Millisecond,
 		CategoryRecoveryTime:  time.Duration(r.CategoryRecoveryTimeMs) * time.Millisecond,
-		RangeIndex:            chrondbc.RangeID(r.RangeIndex),
-		DurationIndex:         chrondbc.DurationID(r.DurationIndex),
+		RangeIndex_:           r.RangeIndex,
+		Range:                 dbcmem.SpellRange{ID: r.RangeIndex},
+		DurationIndex_:        r.DurationIndex,
+		Duration:              dbcmem.SpellDuration{ID: r.DurationIndex},
 
 		Targets:              chrondbc.TargetFlags(r.Targets),
 		SpellClassSet:        chrondbc.SpellClassSet(r.SpellClassSet),
@@ -282,7 +344,12 @@ func (r *SpellRow) ToSpell() chrondbc.Spell {
 	s.EffectRealPointsPerLevel = [3]float32{r.EffectRealPtsPerLevel0, r.EffectRealPtsPerLevel1, r.EffectRealPtsPerLevel2}
 	s.EffectBasePoints = [3]int32{r.EffectBasePoints0, r.EffectBasePoints1, r.EffectBasePoints2}
 	s.EffectMechanic = [3]int32{r.EffectMechanic0, r.EffectMechanic1, r.EffectMechanic2}
-	s.EffectRadiusIndex = [3]chrondbc.SpellRadiusID{chrondbc.SpellRadiusID(r.EffectRadiusIndex0), chrondbc.SpellRadiusID(r.EffectRadiusIndex1), chrondbc.SpellRadiusID(r.EffectRadiusIndex2)}
+	s.EffectRadiusIndex_ = [3]int32{r.EffectRadiusIndex0, r.EffectRadiusIndex1, r.EffectRadiusIndex2}
+	s.EffectRadius = [3]dbcmem.SpellRadius{
+		{ID: r.EffectRadiusIndex0},
+		{ID: r.EffectRadiusIndex1},
+		{ID: r.EffectRadiusIndex2},
+	}
 	s.EffectAura = [3]chrondbc.AuraEffect{chrondbc.AuraEffect(r.EffectAura0), chrondbc.AuraEffect(r.EffectAura1), chrondbc.AuraEffect(r.EffectAura2)}
 	s.EffectAuraPeriod = [3]int32{r.EffectAuraPeriod0, r.EffectAuraPeriod1, r.EffectAuraPeriod2}
 	s.EffectAmplitude = [3]float32{r.EffectAmplitude0, r.EffectAmplitude1, r.EffectAmplitude2}
@@ -297,6 +364,38 @@ func (r *SpellRow) ToSpell() chrondbc.Spell {
 	s.ImplicitTargetA = [3]chrondbc.ImplicitTarget{chrondbc.ImplicitTarget(r.ImplicitTargetA0), chrondbc.ImplicitTarget(r.ImplicitTargetA1), chrondbc.ImplicitTarget(r.ImplicitTargetA2)}
 	s.ImplicitTargetB = [3]chrondbc.ImplicitTarget{chrondbc.ImplicitTarget(r.ImplicitTargetB0), chrondbc.ImplicitTarget(r.ImplicitTargetB1), chrondbc.ImplicitTarget(r.ImplicitTargetB2)}
 
+	// Resolve JOINed metadata when non-nil.
+	if r.IconTexture != nil {
+		s.SpellIcon = dbcmem.SpellIcon{ID: r.SpellIconID, TextureFilename: *r.IconTexture}
+	}
+	if r.ActiveIconTexture != nil {
+		s.ActiveIcon = dbcmem.SpellIcon{ID: r.ActiveIconID, TextureFilename: *r.ActiveIconTexture}
+	}
+	if r.CtBase != nil {
+		s.CastTime = dbcmem.SpellCastTime{ID: r.CastingTimeIndex, Base: *r.CtBase, PerLevel: derefOr(r.CtPerLevel), Minimum: derefOr(r.CtMinimum)}
+	}
+	if r.DurBase != nil {
+		s.Duration = dbcmem.SpellDuration{ID: r.DurationIndex, Duration: *r.DurBase, DurationPerLevel: derefOr(r.DurPerLevel), MaxDuration: derefOr(r.DurMax)}
+	}
+	if r.RangeMin != nil {
+		s.Range = dbcmem.SpellRange{ID: r.RangeIndex, RangeMin: *r.RangeMin, RangeMax: derefOrF(r.RangeMax), Flags: derefOr(r.RangeFlags), Name: derefOrS(r.RangeName)}
+	}
+	if r.CatName != nil || r.CatFlags != nil {
+		s.Category = dbcmem.SpellCategory{ID: r.Category, Flags: derefOr(r.CatFlags), UsesPerWeek: derefOr(r.CatUsesPerWeek), Name: derefOrS(r.CatName), MaxCharges: derefOr(r.CatMaxCharges), ChargeRecoveryTime: derefOr(r.CatChargeRecoveryTime), TypeMask: derefOr(r.CatTypeMask)}
+	}
+	if r.R0Radius != nil {
+		s.EffectRadius[0] = dbcmem.SpellRadius{ID: r.EffectRadiusIndex0, Radius: *r.R0Radius, RadiusPerLevel: derefOrF(r.R0RadiusPerLevel), RadiusMin: derefOrF(r.R0RadiusMin), RadiusMax: derefOrF(r.R0RadiusMax)}
+	}
+	if r.R1Radius != nil {
+		s.EffectRadius[1] = dbcmem.SpellRadius{ID: r.EffectRadiusIndex1, Radius: *r.R1Radius, RadiusPerLevel: derefOrF(r.R1RadiusPerLevel), RadiusMin: derefOrF(r.R1RadiusMin), RadiusMax: derefOrF(r.R1RadiusMax)}
+	}
+	if r.R2Radius != nil {
+		s.EffectRadius[2] = dbcmem.SpellRadius{ID: r.EffectRadiusIndex2, Radius: *r.R2Radius, RadiusPerLevel: derefOrF(r.R2RadiusPerLevel), RadiusMin: derefOrF(r.R2RadiusMin), RadiusMax: derefOrF(r.R2RadiusMax)}
+	}
+	if r.FocusName != nil {
+		s.SpellFocus = dbcmem.SpellFocusObject{ID: r.RequiresSpellFocus, Name: *r.FocusName}
+	}
+
 	return s
 }
 
@@ -310,13 +409,13 @@ func FromSpell(datasetID uuid.UUID, s *chrondbc.Spell) SpellRow {
 		Description:     s.Description(),
 		AuraDescription: s.AuraDescription(),
 
-		SpellIconID:  int32(s.SpellIconID),
-		ActiveIconID: int32(s.ActiveIconID),
+		SpellIconID:  s.SpellIcon.ID,
+		ActiveIconID: s.ActiveIcon.ID,
 
 		MaxLevel:       s.MaxLevel,
 		BaseLevel:      s.BaseLevel,
 		SpellLevel:     s.SpellLevel,
-		Category:       int32(s.Category),
+		Category:       s.Category.ID,
 		MaxTargetLevel: s.MaxTargetLevel,
 
 		School:             int32(s.School),
@@ -338,7 +437,7 @@ func FromSpell(datasetID uuid.UUID, s *chrondbc.Spell) SpellRow {
 		TargetAuraState:    int32(s.TargetAuraState),
 		MaxTargets:         s.MaxTargets,
 		TargetCreatureType: int32(s.TargetCreatureType),
-		RequiresSpellFocus: int32(s.RequiresSpellFocus),
+		RequiresSpellFocus: s.SpellFocus.ID,
 
 		PowerType:        int32(s.PowerType),
 		ManaCost:         s.ManaCost,
@@ -348,13 +447,13 @@ func FromSpell(datasetID uuid.UUID, s *chrondbc.Spell) SpellRow {
 		Reagent:          int32SliceFromItemIDs(s.Reagent[:]),
 		ReagentCount:     s.ReagentCount[:],
 
-		CastingTimeIndex:       int32(s.CastingTimeIndex),
+		CastingTimeIndex:       s.CastTime.ID,
 		RecoveryTimeMs:         s.RecoveryTime.Milliseconds(),
 		StartRecoveryCategory:  s.StartRecoveryCategory,
 		StartRecoveryTimeMs:    s.StartRecoveryTime.Milliseconds(),
 		CategoryRecoveryTimeMs: s.CategoryRecoveryTime.Milliseconds(),
-		RangeIndex:             int32(s.RangeIndex),
-		DurationIndex:          int32(s.DurationIndex),
+		RangeIndex:             s.Range.ID,
+		DurationIndex:          s.Duration.ID,
 
 		Attributes:           int32SliceFromUint32(s.Attrs[:]),
 		Targets:              int32(s.Targets),
@@ -371,7 +470,7 @@ func FromSpell(datasetID uuid.UUID, s *chrondbc.Spell) SpellRow {
 		EffectRealPtsPerLevel0: s.EffectRealPointsPerLevel[0],
 		EffectBasePoints0:      s.EffectBasePoints[0],
 		EffectMechanic0:        s.EffectMechanic[0],
-		EffectRadiusIndex0:     int32(s.EffectRadiusIndex[0]),
+		EffectRadiusIndex0:     s.EffectRadius[0].ID,
 		EffectAura0:            int32(s.EffectAura[0]),
 		EffectAuraPeriod0:      s.EffectAuraPeriod[0],
 		EffectAmplitude0:       s.EffectAmplitude[0],
@@ -392,7 +491,7 @@ func FromSpell(datasetID uuid.UUID, s *chrondbc.Spell) SpellRow {
 		EffectRealPtsPerLevel1: s.EffectRealPointsPerLevel[1],
 		EffectBasePoints1:      s.EffectBasePoints[1],
 		EffectMechanic1:        s.EffectMechanic[1],
-		EffectRadiusIndex1:     int32(s.EffectRadiusIndex[1]),
+		EffectRadiusIndex1:     s.EffectRadius[1].ID,
 		EffectAura1:            int32(s.EffectAura[1]),
 		EffectAuraPeriod1:      s.EffectAuraPeriod[1],
 		EffectAmplitude1:       s.EffectAmplitude[1],
@@ -413,7 +512,7 @@ func FromSpell(datasetID uuid.UUID, s *chrondbc.Spell) SpellRow {
 		EffectRealPtsPerLevel2: s.EffectRealPointsPerLevel[2],
 		EffectBasePoints2:      s.EffectBasePoints[2],
 		EffectMechanic2:        s.EffectMechanic[2],
-		EffectRadiusIndex2:     int32(s.EffectRadiusIndex[2]),
+		EffectRadiusIndex2:     s.EffectRadius[2].ID,
 		EffectAura2:            int32(s.EffectAura[2]),
 		EffectAuraPeriod2:      s.EffectAuraPeriod[2],
 		EffectAmplitude2:       s.EffectAmplitude[2],

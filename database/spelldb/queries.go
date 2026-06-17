@@ -185,6 +185,24 @@ func (r *SpellRow) scanDests() []any {
 	}
 }
 
+// scanDestsWithJoins returns scanDests plus the JOINed nullable fields in
+// the order matching joinColumnsSQL.
+func (r *SpellRow) scanDestsWithJoins() []any {
+	dests := r.scanDests()
+	return append(dests,
+		&r.CtBase, &r.CtPerLevel, &r.CtMinimum,
+		&r.DurBase, &r.DurPerLevel, &r.DurMax,
+		&r.RangeMin, &r.RangeMax, &r.RangeFlags, &r.RangeName,
+		&r.IconTexture, &r.ActiveIconTexture,
+		&r.CatFlags, &r.CatUsesPerWeek, &r.CatName,
+		&r.CatMaxCharges, &r.CatChargeRecoveryTime, &r.CatTypeMask,
+		&r.R0Radius, &r.R0RadiusPerLevel, &r.R0RadiusMin, &r.R0RadiusMax,
+		&r.R1Radius, &r.R1RadiusPerLevel, &r.R1RadiusMin, &r.R1RadiusMax,
+		&r.R2Radius, &r.R2RadiusPerLevel, &r.R2RadiusMin, &r.R2RadiusMax,
+		&r.FocusName,
+	)
+}
+
 // columnsSQL builds a comma-separated column list.
 func columnsSQL() string {
 	s := ""
@@ -196,6 +214,42 @@ func columnsSQL() string {
 	}
 	return s
 }
+
+// columnsSQLPrefixed builds a comma-separated column list with a table prefix.
+func columnsSQLPrefixed(prefix string) string {
+	s := ""
+	for i, c := range columns {
+		if i > 0 {
+			s += ", "
+		}
+		s += prefix + "." + c
+	}
+	return s
+}
+
+var joinSQL = ` LEFT JOIN dbc_spell_cast_times ct    ON ct.dataset_id = s.dataset_id AND ct.id = s.casting_time_index
+ LEFT JOIN dbc_spell_durations sd     ON sd.dataset_id = s.dataset_id AND sd.id = s.duration_index
+ LEFT JOIN dbc_spell_ranges sr        ON sr.dataset_id = s.dataset_id AND sr.id = s.range_index
+ LEFT JOIN dbc_spell_icons si         ON si.dataset_id = s.dataset_id AND si.id = s.spell_icon_id
+ LEFT JOIN dbc_spell_icons sia        ON sia.dataset_id = s.dataset_id AND sia.id = s.active_icon_id
+ LEFT JOIN dbc_spell_categories sc    ON sc.dataset_id = s.dataset_id AND sc.id = s.category
+ LEFT JOIN dbc_spell_radii r0         ON r0.dataset_id = s.dataset_id AND r0.id = s.effect_radius_index_0
+ LEFT JOIN dbc_spell_radii r1         ON r1.dataset_id = s.dataset_id AND r1.id = s.effect_radius_index_1
+ LEFT JOIN dbc_spell_radii r2         ON r2.dataset_id = s.dataset_id AND r2.id = s.effect_radius_index_2
+ LEFT JOIN dbc_spell_focus_objects sfo ON sfo.dataset_id = s.dataset_id AND sfo.id = s.requires_spell_focus`
+
+var joinColumnsSQL = `,
+    ct.base AS ct_base, ct.per_level AS ct_per_level, ct.minimum AS ct_minimum,
+    sd.duration AS dur_base, sd.duration_per_level AS dur_per_level, sd.max_duration AS dur_max,
+    sr.range_min, sr.range_max, sr.flags AS range_flags, sr.name AS range_name,
+    si.texture_filename AS icon_texture,
+    sia.texture_filename AS active_icon_texture,
+    sc.flags AS cat_flags, sc.uses_per_week, sc.name AS cat_name,
+    sc.max_charges, sc.charge_recovery_time, sc.type_mask AS cat_type_mask,
+    r0.radius AS r0_radius, r0.radius_per_level AS r0_rpl, r0.radius_min AS r0_min, r0.radius_max AS r0_max,
+    r1.radius AS r1_radius, r1.radius_per_level AS r1_rpl, r1.radius_min AS r1_min, r1.radius_max AS r1_max,
+    r2.radius AS r2_radius, r2.radius_per_level AS r2_rpl, r2.radius_min AS r2_min, r2.radius_max AS r2_max,
+    sfo.name AS focus_name`
 
 // placeholdersSQL builds $1, $2, ... $N for the column count.
 func placeholdersSQL() string {
@@ -221,25 +275,27 @@ func InsertSpell(ctx context.Context, pool *pgxpool.Pool, row *SpellRow) error {
 	return err
 }
 
-// GetSpell retrieves a single spell by dataset + spell ID.
+// GetSpell retrieves a single spell by dataset + spell ID, LEFT JOINing
+// resolved metadata from companion DBC tables.
 func GetSpell(ctx context.Context, pool *pgxpool.Pool, datasetID uuid.UUID, spellID int32) (*SpellRow, error) {
 	sql := fmt.Sprintf(
-		`SELECT %s FROM dbc_spells WHERE dataset_id = $1 AND spell_id = $2`,
-		columnsSQL(),
+		`SELECT %s%s FROM dbc_spells s%s WHERE s.dataset_id = $1 AND s.spell_id = $2`,
+		columnsSQLPrefixed("s"), joinColumnsSQL, joinSQL,
 	)
 	var row SpellRow
-	err := pool.QueryRow(ctx, sql, datasetID, spellID).Scan(row.scanDests()...)
+	err := pool.QueryRow(ctx, sql, datasetID, spellID).Scan(row.scanDestsWithJoins()...)
 	if err != nil {
 		return nil, err
 	}
 	return &row, nil
 }
 
-// GetSpellsByName retrieves all spells matching a name within a dataset.
+// GetSpellsByName retrieves all spells matching a name within a dataset,
+// LEFT JOINing resolved metadata from companion DBC tables.
 func GetSpellsByName(ctx context.Context, pool *pgxpool.Pool, datasetID uuid.UUID, name string) ([]SpellRow, error) {
 	sql := fmt.Sprintf(
-		`SELECT %s FROM dbc_spells WHERE dataset_id = $1 AND name = $2`,
-		columnsSQL(),
+		`SELECT %s%s FROM dbc_spells s%s WHERE s.dataset_id = $1 AND s.name = $2`,
+		columnsSQLPrefixed("s"), joinColumnsSQL, joinSQL,
 	)
 	rows, err := pool.Query(ctx, sql, datasetID, name)
 	if err != nil {
@@ -250,7 +306,7 @@ func GetSpellsByName(ctx context.Context, pool *pgxpool.Pool, datasetID uuid.UUI
 	var result []SpellRow
 	for rows.Next() {
 		var row SpellRow
-		if err := rows.Scan(row.scanDests()...); err != nil {
+		if err := rows.Scan(row.scanDestsWithJoins()...); err != nil {
 			return nil, err
 		}
 		result = append(result, row)

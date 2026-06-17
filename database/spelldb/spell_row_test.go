@@ -6,6 +6,7 @@ import (
 
 	"github.com/Emyrk/chronicle/database/dbtestutil"
 	"github.com/Emyrk/chronicle/database/gamedb/chrondbc"
+	"github.com/Emyrk/chronicle/database/gamedb/chrondbc/dbcmem"
 	"github.com/Emyrk/chronicle/database/spelldb"
 	"github.com/Emyrk/chronicle/internal/bitmask"
 	"github.com/Emyrk/chronicle/internal/services/servicedataset"
@@ -31,12 +32,12 @@ func TestSpellRoundTrip(t *testing.T) {
 		NameSubtext_lang:      i18n.Text{i18n.English: "Rank 1"},
 		Description_lang:      i18n.Text{i18n.English: "Hurls a fiery ball that causes $s1 Fire damage."},
 		AuraDescription_lang:  i18n.Text{i18n.English: ""},
-		SpellIconID:           11,
-		ActiveIconID:          0,
+		SpellIcon:     dbcmem.SpellIcon{ID: 11},
+		SpellIconID_:  11,
 		MaxLevel:              0,
 		BaseLevel:             1,
 		SpellLevel:            1,
-		Category:              0,
+		CategoryID_:           0,
 		MaxTargetLevel:        0,
 		School:                chrondbc.SchoolFire,
 		SpellPriority:         0,
@@ -57,7 +58,7 @@ func TestSpellRoundTrip(t *testing.T) {
 		TargetAuraState:       0,
 		MaxTargets:            0,
 		TargetCreatureType:    0,
-		RequiresSpellFocus:    0,
+		SpellFocusID_:         0,
 		PowerType:             0, // Mana
 		ManaCost:              30,
 		ManaCostPct:           0,
@@ -65,13 +66,15 @@ func TestSpellRoundTrip(t *testing.T) {
 		ManaPerSecond:         0,
 		Reagent:               [8]chrondbc.ItemID{0, 0, 0, 0, 0, 0, 0, 0},
 		ReagentCount:          [8]int32{0, 0, 0, 0, 0, 0, 0, 0},
-		CastingTimeIndex:      3,
+		CastTime:              dbcmem.SpellCastTime{ID: 3},
+		CastingTimeIndex_:     3,
 		RecoveryTime:          0,
 		StartRecoveryCategory: 133,
 		StartRecoveryTime:     1500 * time.Millisecond,
 		CategoryRecoveryTime:  0,
-		RangeIndex:            4,
-		DurationIndex:         0,
+		Range:                 dbcmem.SpellRange{ID: 4},
+		RangeIndex_:           4,
+		DurationIndex_:        0,
 		Attrs:                 [9]uint32{0x00010000, 0, 0, 0, 0, 0, 0, 0, 0},
 		Targets:               0,
 		SpellClassSet:         3, // Mage
@@ -87,7 +90,7 @@ func TestSpellRoundTrip(t *testing.T) {
 		EffectRealPointsPerLevel: [3]float32{0.8, 0, 0},
 		EffectBasePoints:         [3]int32{13, 0, 0},
 		EffectMechanic:           [3]int32{0, 0, 0},
-		EffectRadiusIndex:        [3]chrondbc.SpellRadiusID{0, 0, 0},
+		EffectRadiusIndex_:       [3]int32{0, 0, 0},
 		EffectAura:               [3]chrondbc.AuraEffect{0, 0, 0},
 		EffectAuraPeriod:         [3]int32{0, 0, 0},
 		EffectAmplitude:          [3]float32{0, 0, 0},
@@ -137,7 +140,7 @@ func TestSpellRoundTrip(t *testing.T) {
 	assert.Equal(t, original.Name(), roundTripped.Name())
 	assert.Equal(t, original.Subtext(), roundTripped.Subtext())
 	assert.Equal(t, original.Description(), roundTripped.Description())
-	assert.Equal(t, original.SpellIconID, roundTripped.SpellIconID)
+	assert.Equal(t, original.SpellIcon.ID, roundTripped.SpellIcon.ID)
 	assert.Equal(t, original.BaseLevel, roundTripped.BaseLevel)
 	assert.Equal(t, original.SpellLevel, roundTripped.SpellLevel)
 	assert.Equal(t, original.School, roundTripped.School)
@@ -148,8 +151,8 @@ func TestSpellRoundTrip(t *testing.T) {
 
 	// Timing (round-trip via milliseconds)
 	assert.Equal(t, original.StartRecoveryTime, roundTripped.StartRecoveryTime)
-	assert.Equal(t, original.CastingTimeIndex, roundTripped.CastingTimeIndex)
-	assert.Equal(t, original.RangeIndex, roundTripped.RangeIndex)
+	assert.Equal(t, original.CastTime.ID, roundTripped.CastTime.ID)
+	assert.Equal(t, original.Range.ID, roundTripped.Range.ID)
 
 	// Attributes
 	assert.Equal(t, original.Attrs, roundTripped.Attrs)
@@ -196,16 +199,16 @@ func TestSpellUpsertBatch(t *testing.T) {
 
 	spells := []chrondbc.Spell{
 		{
-			ID:          100,
-			Name_lang:   i18n.Text{i18n.English: "Spell A"},
-			School:      chrondbc.School(bitmask.Bitmask32(chrondbc.SchoolFire)),
-			SpellIconID: 1,
+			ID:        100,
+			Name_lang: i18n.Text{i18n.English: "Spell A"},
+			School:    chrondbc.School(bitmask.Bitmask32(chrondbc.SchoolFire)),
+			SpellIcon: dbcmem.SpellIcon{ID: 1},
 		},
 		{
-			ID:          200,
-			Name_lang:   i18n.Text{i18n.English: "Spell B"},
-			School:      chrondbc.School(bitmask.Bitmask32(chrondbc.SchoolFrost)),
-			SpellIconID: 2,
+			ID:        200,
+			Name_lang: i18n.Text{i18n.English: "Spell B"},
+			School:    chrondbc.School(bitmask.Bitmask32(chrondbc.SchoolFrost)),
+			SpellIcon: dbcmem.SpellIcon{ID: 2},
 		},
 	}
 
