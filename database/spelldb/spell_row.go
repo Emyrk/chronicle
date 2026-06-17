@@ -364,7 +364,11 @@ func (r *SpellRow) ToSpell() chrondbc.Spell {
 	s.ImplicitTargetA = [3]chrondbc.ImplicitTarget{chrondbc.ImplicitTarget(r.ImplicitTargetA0), chrondbc.ImplicitTarget(r.ImplicitTargetA1), chrondbc.ImplicitTarget(r.ImplicitTargetA2)}
 	s.ImplicitTargetB = [3]chrondbc.ImplicitTarget{chrondbc.ImplicitTarget(r.ImplicitTargetB0), chrondbc.ImplicitTarget(r.ImplicitTargetB1), chrondbc.ImplicitTarget(r.ImplicitTargetB2)}
 
-	// Resolve JOINed metadata when non-nil.
+	// Resolve JOINed metadata when available. When the companion DBC
+	// tables have not been imported for this dataset, LEFT JOINs return
+	// NULL and the resolved structs keep their ID-only zero values.
+	// This is intentional — DB-backed spells should never silently fall
+	// back to compiled-in globals from a different server version.
 	if r.IconTexture != nil {
 		s.SpellIcon = dbcmem.SpellIcon{ID: r.SpellIconID, TextureFilename: *r.IconTexture}
 	}
