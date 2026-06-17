@@ -1,8 +1,8 @@
 package synthetic
 
 import (
-	"github.com/Emyrk/chronicle/combatlog/parser/vanilla/data/traps"
-	"github.com/Emyrk/chronicle/combatlog/parser/vanilla/messages"
+	"github.com/Emyrk/chronicle/combatlog/parser/common/traps"
+	"github.com/Emyrk/chronicle/combatlog/parser/common/messages"
 )
 
 type knownObjects struct {

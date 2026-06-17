@@ -3,7 +3,7 @@ package creatures
 import (
 	"github.com/Emyrk/chronicle/combatlog/parser/common/characters"
 	"github.com/Emyrk/chronicle/combatlog/parser/guid"
-	"github.com/Emyrk/chronicle/combatlog/parser/vanilla/state/encounters/creatures"
+	"github.com/Emyrk/chronicle/combatlog/parser/vanilla/creatures"
 	"github.com/Emyrk/chronicle/database"
 )
 

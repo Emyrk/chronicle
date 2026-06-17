@@ -4,7 +4,7 @@
 package instances
 
 import (
-	"github.com/Emyrk/chronicle/combatlog/parser/vanilla/state/encounters/instances"
+	"github.com/Emyrk/chronicle/combatlog/parser/common/instances"
 )
 
 // OnyxiasLairHostiles returns creature entry IDs for Onyxia's Lair (map 249).

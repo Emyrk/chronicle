@@ -1,6 +1,6 @@
 package instances
 
-import "github.com/Emyrk/chronicle/combatlog/parser/vanilla/state/encounters/instances/rankings"
+import "github.com/Emyrk/chronicle/combatlog/parser/common/instances/rankings"
 
 func UtgardeKeepSpeedrunRequirements() *rankings.Rankings {
 	return &rankings.Rankings{

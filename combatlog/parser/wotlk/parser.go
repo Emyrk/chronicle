@@ -9,9 +9,9 @@ import (
 	"time"
 
 	parservanilla "github.com/Emyrk/chronicle/combatlog/parser/vanilla"
-	"github.com/Emyrk/chronicle/combatlog/parser/vanilla/messages"
-	"github.com/Emyrk/chronicle/combatlog/parser/vanilla/parseerrors"
-	"github.com/Emyrk/chronicle/combatlog/parser/vanilla/state/encounters/registry"
+	"github.com/Emyrk/chronicle/combatlog/parser/common/messages"
+	"github.com/Emyrk/chronicle/combatlog/parser/common/parseerrors"
+	"github.com/Emyrk/chronicle/combatlog/parser/common/registry"
 	"github.com/Emyrk/chronicle/combatlog/parser/wotlk/companion"
 	"github.com/Emyrk/chronicle/combatlog/parser/wotlk/synthetic"
 	"github.com/Emyrk/chronicle/database/gamedb"

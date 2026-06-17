@@ -4,7 +4,7 @@
 package instances
 
 import (
-	"github.com/Emyrk/chronicle/combatlog/parser/vanilla/state/encounters/instances"
+	"github.com/Emyrk/chronicle/combatlog/parser/common/instances"
 )
 
 // BlackMorassHostiles returns creature entry IDs for The Black Morass (map 269).

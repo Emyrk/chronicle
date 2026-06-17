@@ -11,8 +11,8 @@ import (
 	"github.com/Emyrk/chronicle/combatlog/parser/guid"
 	"github.com/Emyrk/chronicle/combatlog/parser/types"
 	"github.com/Emyrk/chronicle/combatlog/parser/unitname"
-	"github.com/Emyrk/chronicle/combatlog/parser/vanilla/messages"
-	"github.com/Emyrk/chronicle/combatlog/parser/vanilla/state/unitdb"
+	"github.com/Emyrk/chronicle/combatlog/parser/common/messages"
+	"github.com/Emyrk/chronicle/combatlog/parser/common/unitdb"
 )
 
 // KillType represents the outcome of an encounter.

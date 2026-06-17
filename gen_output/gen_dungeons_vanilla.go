@@ -4,7 +4,7 @@
 package instances
 
 import (
-	"github.com/Emyrk/chronicle/combatlog/parser/vanilla/state/encounters/instances"
+	"github.com/Emyrk/chronicle/combatlog/parser/common/instances"
 )
 
 // ShadowfangKeepHostiles returns creature entry IDs for Shadowfang Keep (map 33).

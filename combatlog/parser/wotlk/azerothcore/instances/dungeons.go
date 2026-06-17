@@ -1,7 +1,7 @@
 package instances
 
 import (
-	"github.com/Emyrk/chronicle/combatlog/parser/vanilla/state/encounters/instances"
+	"github.com/Emyrk/chronicle/combatlog/parser/common/instances"
 )
 
 // NexusHostiles returns creature entry IDs for The Nexus dungeon (map 576).

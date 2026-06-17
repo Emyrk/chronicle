@@ -9,7 +9,7 @@ import (
 
 	"github.com/Emyrk/chronicle/combatlog/parser/lines"
 	"github.com/Emyrk/chronicle/combatlog/parser/vanilla"
-	"github.com/Emyrk/chronicle/combatlog/parser/vanilla/messages"
+	"github.com/Emyrk/chronicle/combatlog/parser/common/messages"
 
 	"github.com/coder/serpent"
 )

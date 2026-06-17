@@ -4,8 +4,8 @@ import (
 	"log/slog"
 
 	"github.com/Emyrk/chronicle/combatlog/parser/types/zone"
-	"github.com/Emyrk/chronicle/combatlog/parser/vanilla/messages"
-	"github.com/Emyrk/chronicle/combatlog/parser/vanilla/state/encounters/registry"
+	"github.com/Emyrk/chronicle/combatlog/parser/common/messages"
+	"github.com/Emyrk/chronicle/combatlog/parser/common/registry"
 )
 
 // ZoneDetector infers the current zone from creature entry IDs seen in combat.

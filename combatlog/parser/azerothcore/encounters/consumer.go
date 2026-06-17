@@ -6,11 +6,11 @@ import (
 
 	"github.com/Emyrk/chronicle/combatlog/parser/common/identifier"
 	"github.com/Emyrk/chronicle/combatlog/parser/types/zone"
-	"github.com/Emyrk/chronicle/combatlog/parser/vanilla/messages"
-	"github.com/Emyrk/chronicle/combatlog/parser/vanilla/state/encounters"
-	"github.com/Emyrk/chronicle/combatlog/parser/vanilla/state/encounters/instances"
-	"github.com/Emyrk/chronicle/combatlog/parser/vanilla/state/encounters/instances/instancehook"
-	"github.com/Emyrk/chronicle/combatlog/parser/vanilla/state/unitdb"
+	"github.com/Emyrk/chronicle/combatlog/parser/common/messages"
+	"github.com/Emyrk/chronicle/combatlog/parser/common/encounters"
+	"github.com/Emyrk/chronicle/combatlog/parser/common/instances"
+	"github.com/Emyrk/chronicle/combatlog/parser/common/instances/instancehook"
+	"github.com/Emyrk/chronicle/combatlog/parser/common/unitdb"
 	"github.com/google/uuid"
 )
 

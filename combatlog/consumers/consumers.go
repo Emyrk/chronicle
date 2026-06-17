@@ -9,8 +9,8 @@ import (
 	"maps"
 	"time"
 
-	"github.com/Emyrk/chronicle/combatlog/parser/vanilla/messages"
-	"github.com/Emyrk/chronicle/combatlog/parser/vanilla/parseerrors"
+	"github.com/Emyrk/chronicle/combatlog/parser/common/messages"
+	"github.com/Emyrk/chronicle/combatlog/parser/common/parseerrors"
 )
 
 type Consumer interface {

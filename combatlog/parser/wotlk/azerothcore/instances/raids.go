@@ -2,8 +2,8 @@ package instances
 
 import (
 	"github.com/Emyrk/chronicle/combatlog/parser/types"
-	"github.com/Emyrk/chronicle/combatlog/parser/vanilla/state/encounters/instances"
-	"github.com/Emyrk/chronicle/combatlog/parser/vanilla/state/encounters/instances/rankings"
+	"github.com/Emyrk/chronicle/combatlog/parser/common/instances"
+	"github.com/Emyrk/chronicle/combatlog/parser/common/instances/rankings"
 )
 
 // VoAHostiles returns creature entry IDs for Vault of Archavon (map 4603).

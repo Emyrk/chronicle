@@ -2,7 +2,7 @@ package whoami
 
 import (
 	"github.com/Emyrk/chronicle/combatlog/parser/types"
-	"github.com/Emyrk/chronicle/combatlog/parser/vanilla/messages"
+	"github.com/Emyrk/chronicle/combatlog/parser/common/messages"
 )
 
 type SharedMe struct {

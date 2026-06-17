@@ -105,7 +105,7 @@ func writeGoFile(path string, instances []genInstance) error {
 	fmt.Fprintf(&buf, "// Source: https://github.com/azerothcore/database-wotlk/\n\n")
 	fmt.Fprintf(&buf, "package instances\n\n")
 	fmt.Fprintf(&buf, "import (\n")
-	fmt.Fprintf(&buf, "\t\"github.com/Emyrk/chronicle/combatlog/parser/vanilla/state/encounters/instances\"\n")
+	fmt.Fprintf(&buf, "\t\"github.com/Emyrk/chronicle/combatlog/parser/common/instances\"\n")
 	fmt.Fprintf(&buf, ")\n")
 
 	for _, inst := range instances {

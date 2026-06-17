@@ -10,7 +10,7 @@ import (
 
 	"github.com/Emyrk/chronicle/combatlog/parser/types/combatant"
 	"github.com/Emyrk/chronicle/combatlog/parser/types/zone"
-	"github.com/Emyrk/chronicle/combatlog/parser/vanilla/messages"
+	"github.com/Emyrk/chronicle/combatlog/parser/common/messages"
 )
 
 var testTS = time.Date(2024, 1, 1, 12, 0, 0, 0, time.UTC)

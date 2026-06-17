@@ -5,7 +5,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/Emyrk/chronicle/combatlog/parser/vanilla/messages"
+	"github.com/Emyrk/chronicle/combatlog/parser/common/messages"
 )
 
 type Hook interface {

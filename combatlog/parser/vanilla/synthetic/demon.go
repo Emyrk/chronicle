@@ -3,8 +3,8 @@ package synthetic
 import (
 	"log/slog"
 
-	"github.com/Emyrk/chronicle/combatlog/parser/vanilla/data/warlockdemon"
-	"github.com/Emyrk/chronicle/combatlog/parser/vanilla/messages"
+	"github.com/Emyrk/chronicle/combatlog/parser/common/warlockdemon"
+	"github.com/Emyrk/chronicle/combatlog/parser/common/messages"
 )
 
 type enslaveDemon struct {
