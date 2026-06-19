@@ -333,7 +333,7 @@ function TenantSection() {
       )}
 
       {tenants?.map((tenant) => (
-        <Card key={tenant.id} className="p-4 space-y-2">
+        <Card key={tenant.id} className={`p-4 space-y-2 ${tenant.discoverable ? "border-green-500" : ""}`}>
           {editingId === tenant.id ? (
             <TenantForm tenant={tenant} onDone={() => setEditingId(null)} />
           ) : (
