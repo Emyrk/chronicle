@@ -64,7 +64,7 @@ export function ArmoryPage() {
   }
 
   return (
-    <div className="w-full py-8 px-4 grid grid-cols-[1fr_minmax(0,48rem)_1fr] gap-x-4">
+    <div className={`w-full py-8 px-4 grid gap-x-4 ${activeTab === "talents" ? "grid-cols-[1fr_minmax(0,72rem)_1fr]" : "grid-cols-[1fr_minmax(0,48rem)_1fr]"}`}>
       {/* Left placeholder column */}
       <div />
 
