@@ -141,10 +141,11 @@ func (s *Service) Create(w http.ResponseWriter, r *http.Request) {
 	bypassCtx := servicetenant.AdminBypass(ctx)
 	tenantID := uuid.New()
 	_, err := s.Zed.InsertTenant(bypassCtx, database.InsertTenantParams{
-		ID:           tenantID,
-		Name:         req.Name,
-		IncludeInAll: false,
-		Discoverable: false,
+		ID:               tenantID,
+		Name:             req.Name,
+		IncludeInAll:     false,
+		Discoverable:     false,
+		AvailableFormats: []string{},
 	})
 	if err != nil {
 		if isUniqueViolation(err) {

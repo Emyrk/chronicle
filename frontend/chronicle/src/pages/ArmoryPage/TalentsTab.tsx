@@ -50,6 +50,7 @@ export function TalentsTab({ player }: { player: ArmoryPlayer }) {
       classId={classId}
       allocations={allocations}
       datasetId={player.dataset_id || undefined}
+      compact
     />
   );
 }

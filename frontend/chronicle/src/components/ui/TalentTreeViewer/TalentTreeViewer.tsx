@@ -69,6 +69,8 @@ export interface TalentTreeViewerProps {
   maxLevel?: number;
   /** When true, hides interactive controls (default: false). */
   readOnly?: boolean;
+  /** When true, renders a more compact layout suitable for panels with limited space. */
+  compact?: boolean;
   className?: string;
 }
 
@@ -483,6 +485,7 @@ function TalentTab({
   onRankChange,
   onReset,
   debug,
+  compact,
 }: {
   tab: TalentTabData;
   ranks: TalentRanks;
@@ -490,6 +493,7 @@ function TalentTab({
   onRankChange: (talent: TalentEntry, rank: number) => void;
   onReset: () => void;
   debug?: boolean;
+  compact?: boolean;
 }) {
   const points = useMemo(() => tab.talents.reduce((sum, talent) => sum + (ranks[talent.id] ?? 0), 0), [tab.talents, ranks]);
   const arrows = useMemo(() => prerequisiteArrows(tab.talents), [tab.talents]);
@@ -499,8 +503,22 @@ function TalentTab({
   const [failedBackgroundUrl, setFailedBackgroundUrl] = useState<string | null>(null);
   const showBackground = isTalentBackgroundVisible(backgroundUrl, failedBackgroundUrl);
 
+  // In compact mode, scale the grid section to fit a smaller footprint.
+  // The grid is rendered at full internal size (so arrow geometry works)
+  // then CSS-scaled down. We compute the scaled dimensions for the wrapper.
+  const compactScale = 0.68;
+  const scaledGridWidth = compact
+    ? (TALENT_GRID_WIDTH + TALENT_GRID_GAP * 2) * compactScale
+    : undefined;
+  const scaledGridHeight = compact
+    ? (height + TALENT_GRID_GAP * 2) * compactScale
+    : undefined;
+
   return (
-    <section className="talent-tree-card relative max-w-full self-start overflow-hidden rounded-lg border border-amber-400/20 bg-[radial-gradient(circle_at_top_left,rgba(20,184,166,0.14),transparent_32%),linear-gradient(180deg,rgba(120,83,38,0.16),rgba(9,9,11,0.58))] p-4 shadow-2xl shadow-black/30" aria-label={`${tab.name} talent tree`}>
+    <section className={cn(
+      "talent-tree-card relative max-w-full self-start overflow-hidden rounded-lg border border-amber-400/20 bg-[radial-gradient(circle_at_top_left,rgba(20,184,166,0.14),transparent_32%),linear-gradient(180deg,rgba(120,83,38,0.16),rgba(9,9,11,0.58))] shadow-2xl shadow-black/30",
+      compact ? "p-2" : "p-4",
+    )} aria-label={`${tab.name} talent tree`}>
       {showBackground && backgroundUrl && (
         <img
           src={backgroundUrl}
@@ -514,17 +532,25 @@ function TalentTab({
       )}
       <div className="pointer-events-none absolute inset-0 bg-black/45" aria-hidden="true" />
       <div className="absolute inset-x-0 top-0 h-px bg-gradient-to-r from-transparent via-amber-300/40 to-transparent" aria-hidden="true" />
-      <div className="mb-4 flex items-center justify-between gap-3 rounded-lg border border-white/10 bg-black/30 p-2 shadow-inner shadow-black/30">
-        <div className="flex min-w-0 items-center gap-3">
-          <span className="rounded-lg border border-amber-300/35 bg-black/45 p-1 shadow-lg shadow-black/35">
-            <img src={iconUrl(tab.iconTexture)} alt="" className="h-10 w-10 rounded border border-primary/25 object-cover" />
-          </span>
+      <div className={cn(
+        "flex items-center justify-between rounded-lg border border-white/10 bg-black/30 shadow-inner shadow-black/30",
+        compact ? "mb-1.5 gap-2 p-1.5" : "mb-4 gap-3 p-2",
+      )}>
+        <div className={cn("flex min-w-0 items-center", compact ? "gap-2" : "gap-3")}>
+          {!compact && (
+            <span className="rounded-lg border border-amber-300/35 bg-black/45 p-1 shadow-lg shadow-black/35">
+              <img src={iconUrl(tab.iconTexture)} alt="" className="h-10 w-10 rounded border border-primary/25 object-cover" />
+            </span>
+          )}
+          {compact && (
+            <img src={iconUrl(tab.iconTexture)} alt="" className="h-6 w-6 rounded border border-primary/25 object-cover" />
+          )}
           <div className="min-w-0">
-            <h3 className="truncate text-xl font-bold text-white">{tab.name}</h3>
-            <p className="text-sm font-semibold text-amber-100/85">{points} points spent</p>
+            <h3 className={cn("truncate font-bold text-white", compact ? "text-xs" : "text-xl")}>{tab.name}</h3>
+            <p className={cn("font-semibold text-amber-100/85", compact ? "text-[10px] leading-tight" : "text-sm")}>{points} points</p>
           </div>
         </div>
-        {!readOnly && (
+        {!readOnly && !compact && (
           <button
             type="button"
             aria-label={`Reset ${tab.name} tree`}
@@ -536,12 +562,29 @@ function TalentTab({
           </button>
         )}
       </div>
-      <div className="-mx-4 overflow-x-auto overscroll-x-contain px-4 pb-3 touch-manipulation sm:mx-0 sm:px-0" aria-label="Scrollable talent tree grid">
+      <div className={cn(
+        "overflow-x-auto overscroll-x-contain touch-manipulation sm:mx-0 sm:px-0",
+        compact ? "pb-1" : "-mx-4 px-4 pb-3",
+      )} aria-label="Scrollable talent tree grid">
         <div
-          className="relative mx-auto min-w-max rounded-lg border border-white/5 bg-black/25 p-3"
-          style={{ width: `${TALENT_GRID_WIDTH + TALENT_GRID_GAP * 2}px` }}
+          className={cn("relative mx-auto overflow-hidden", compact ? "rounded border border-white/5 bg-black/25" : "min-w-max rounded-lg border border-white/5 bg-black/25 p-3")}
+          style={compact
+            ? { width: `${scaledGridWidth}px`, height: `${scaledGridHeight}px` }
+            : { width: `${TALENT_GRID_WIDTH + TALENT_GRID_GAP * 2}px` }
+          }
         >
-          <div className="relative" style={{ width: `${TALENT_GRID_WIDTH}px`, height: `${height}px` }}>
+          <div
+            className="relative"
+            style={compact
+              ? {
+                  width: `${TALENT_GRID_WIDTH}px`,
+                  height: `${height}px`,
+                  transform: `scale(${compactScale})`,
+                  transformOrigin: "top left",
+                }
+              : { width: `${TALENT_GRID_WIDTH}px`, height: `${height}px` }
+            }
+          >
             <TalentPrereqArrows arrows={arrows} ranks={ranks} height={height} talents={tab.talents} />
             <div
               className="relative z-10 grid justify-items-center"
@@ -613,12 +656,15 @@ export function TalentTreeViewer({
   maxTalentPoints = 51,
   maxLevel = 60,
   readOnly = false,
+  compact = false,
   className,
 }: TalentTreeViewerProps) {
   const [searchParams, setSearchParams] = useSearchParams();
   const tabTalentLists = useMemo(() => data.tabs.map((tab) => tab.talents), [data.tabs]);
   const deepestTabRows = useMemo(() => Math.max(...data.tabs.map((tab) => talentGridRows(tab.talents)), 0), [data.tabs]);
-  const tabGridClassName = deepestTabRows > 7 ? "grid min-w-0 gap-4 xl:grid-cols-2 2xl:grid-cols-3" : "grid min-w-0 gap-4 xl:grid-cols-3";
+  const tabGridClassName = compact
+    ? "grid min-w-0 gap-2 grid-cols-3"
+    : deepestTabRows > 7 ? "grid min-w-0 gap-4 xl:grid-cols-2 2xl:grid-cols-3" : "grid min-w-0 gap-4 xl:grid-cols-3";
   const maxPoints = maxTalentPoints;
   const flavor = useMemo(() => ({ maxLevel, maxTalentPoints }), [maxLevel, maxTalentPoints]);
 
@@ -688,6 +734,7 @@ export function TalentTreeViewer({
             tab={tab}
             ranks={ranks}
             readOnly={readOnly}
+            compact={compact}
             debug={searchParams.get("debug") === "true"}
             onRankChange={(talent, rank) => commitRanks(updateTalentRank(talent, rank, tab.talents, ranks, { maxPoints }))}
             onReset={() => commitRanks(resetTalentTabRanks(tabTalentLists, ranks, tab.talents, maxPoints))}
@@ -704,6 +751,7 @@ export interface TalentTreeViewerLegacyProps {
   classId: number;
   allocations?: TalentAllocation[];
   datasetId?: string;
+  compact?: boolean;
   className?: string;
 }
 
@@ -717,6 +765,7 @@ export function TalentTreeViewerLegacy({
   classId,
   allocations,
   datasetId,
+  compact,
   className,
 }: TalentTreeViewerLegacyProps) {
   const { data, isLoading, error } = useTalentTrees(datasetId);
@@ -759,6 +808,7 @@ export function TalentTreeViewerLegacy({
       data={classData}
       allocations={allocations}
       readOnly
+      compact={compact}
       className={className}
     />
   );
