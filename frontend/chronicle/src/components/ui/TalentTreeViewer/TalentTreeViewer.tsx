@@ -563,14 +563,14 @@ function TalentTab({
         )}
       </div>
       <div className={cn(
-        "overflow-x-auto overscroll-x-contain touch-manipulation sm:mx-0 sm:px-0",
-        compact ? "pb-1" : "-mx-4 px-4 pb-3",
+        "overscroll-x-contain touch-manipulation sm:mx-0 sm:px-0",
+        compact ? "pb-1" : "-mx-4 overflow-x-auto px-4 pb-3",
       )} aria-label="Scrollable talent tree grid">
         <div
-          className={cn("relative mx-auto overflow-hidden", compact ? "rounded border border-white/5 bg-black/25" : "min-w-max rounded-lg border border-white/5 bg-black/25 p-3")}
+          className={cn("relative mx-auto overflow-hidden", compact ? "rounded border border-white/5 bg-black/25" : "rounded-lg border border-white/5 bg-black/25 p-3")}
           style={compact
             ? { width: `${scaledGridWidth}px`, height: `${scaledGridHeight}px` }
-            : { width: `${TALENT_GRID_WIDTH + TALENT_GRID_GAP * 2}px` }
+            : { width: `${TALENT_GRID_WIDTH + TALENT_GRID_GAP * 2}px`, maxWidth: "100%" }
           }
         >
           <div
