@@ -20,7 +20,7 @@ const azerothcoreDataDir = "importdata/world/azerothcore"
 // importWorldAzerothcore imports world data for the Azerothcore server (WotLK 3.3.5a).
 // Items are sourced from JSON files converted from the cmangos/wotlk-db MySQL dumps.
 // See scripts/convert_cmangos_sql_to_json.py for the conversion tool.
-func importWorldAzerothcore(ctx context.Context, pool *pgxpool.Pool, inv *serpent.Invocation, _ ImportWorldOptions) error {
+func importWorldAzerothcore(ctx context.Context, pool *pgxpool.Pool, inv *serpent.Invocation, opts ImportWorldOptions) error {
 	dataDir := azerothcoreDataDir
 
 	detected, err := detectFiles(dataDir)
@@ -37,7 +37,7 @@ func importWorldAzerothcore(ctx context.Context, pool *pgxpool.Pool, inv *serpen
 
 	for file, table := range detected {
 		filePath := filepath.Join(dataDir, file)
-		n, err := importTable(ctx, pool, table, filePath)
+		n, err := importTable(ctx, pool, table, filePath, opts.DatasetID)
 		if err != nil {
 			return fmt.Errorf("importing %s: %w", table, err)
 		}
@@ -51,14 +51,14 @@ func importWorldAzerothcore(ctx context.Context, pool *pgxpool.Pool, inv *serpen
 		if err != nil {
 			return fmt.Errorf("opening WoW client at %s: %w", wowDir, err)
 		}
-		if err := importDBCTables(ctx, pool, wc, inv); err != nil {
+		if err := importDBCTables(ctx, pool, wc, inv, opts.DatasetID); err != nil {
 			return fmt.Errorf("importing DBC tables: %w", err)
 		}
 	} else {
 		_, _ = fmt.Fprintf(inv.Stderr, "no WoW client path for azerothcore; skipping DBC import\n")
 	}
 
-	if err := fixupMultiTierSets(ctx, pool, inv); err != nil {
+	if err := fixupMultiTierSets(ctx, pool, inv, opts.DatasetID); err != nil {
 		return fmt.Errorf("fixing up multi-tier sets: %w", err)
 	}
 

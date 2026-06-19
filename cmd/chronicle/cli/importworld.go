@@ -11,13 +11,15 @@ import (
 	"github.com/Emyrk/chronicle/database/gamedb/dbcdb"
 	"github.com/Emyrk/chronicle/database/migrations"
 	"github.com/coder/serpent"
+	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 )
 
 // ImportWorldOptions holds options passed to server importers.
 type ImportWorldOptions struct {
-	DryRun bool
+	DryRun    bool
+	DatasetID uuid.UUID
 }
 
 // ServerWorldImporter defines the import function for a specific server.
@@ -36,7 +38,7 @@ func ImportWorldCmd() *serpent.Command {
 		Short: "Import world data into PostgreSQL for a specific server",
 	}
 
-	var dbURL, server string
+	var dbURL, server, datasetIDStr string
 	var dryRun, truncate bool
 	cmd.Options = serpent.OptionSet{
 		{
@@ -53,6 +55,12 @@ func ImportWorldCmd() *serpent.Command {
 			Env:         "SERVER",
 			Default:     "turtle",
 			Value:       serpent.StringOf(&server),
+		},
+		{
+			Name:        "dataset-id",
+			Description: "Target dataset UUID. If omitted, an interactive picker is shown.",
+			Flag:        "dataset-id",
+			Value:       serpent.StringOf(&datasetIDStr),
 		},
 		{
 			Name:        "dry-run",
@@ -105,9 +113,22 @@ func ImportWorldCmd() *serpent.Command {
 			if err != nil {
 				return fmt.Errorf("pinging database: %w", err)
 			}
+
+			// Resolve dataset ID: from flag or interactive picker.
+			if datasetIDStr != "" {
+				opts.DatasetID, err = uuid.Parse(datasetIDStr)
+				if err != nil {
+					return fmt.Errorf("invalid --dataset-id %q: %w", datasetIDStr, err)
+				}
+			} else {
+				opts.DatasetID, err = pickDataset(ctx, pool)
+				if err != nil {
+					return fmt.Errorf("selecting dataset: %w", err)
+				}
+			}
 		}
 
-		_, _ = fmt.Fprintf(inv.Stderr, "importing world data for server %q (dry-run=%v)\n", server, dryRun)
+		_, _ = fmt.Fprintf(inv.Stderr, "importing world data for server %q into dataset %s (dry-run=%v)\n", server, opts.DatasetID, dryRun)
 
 		if truncate && !dryRun {
 			if err := truncateWorldTables(ctx, pool, inv); err != nil {
@@ -237,8 +258,53 @@ func truncateWorldTables(ctx context.Context, pool *pgxpool.Pool, inv *serpent.I
 	return nil
 }
 
+// pickDataset queries the datasets table and presents an interactive picker.
+func pickDataset(ctx context.Context, pool *pgxpool.Pool) (uuid.UUID, error) {
+	rows, err := pool.Query(ctx, `SELECT id, name, slug, wow_version FROM datasets ORDER BY name`)
+	if err != nil {
+		return uuid.Nil, fmt.Errorf("querying datasets: %w", err)
+	}
+	defer rows.Close()
+
+	type dataset struct {
+		id         uuid.UUID
+		name       string
+		slug       string
+		wowVersion string
+	}
+	var datasets []dataset
+	for rows.Next() {
+		var d dataset
+		if err := rows.Scan(&d.id, &d.name, &d.slug, &d.wowVersion); err != nil {
+			return uuid.Nil, fmt.Errorf("scanning dataset: %w", err)
+		}
+		datasets = append(datasets, d)
+	}
+	if err := rows.Err(); err != nil {
+		return uuid.Nil, fmt.Errorf("iterating datasets: %w", err)
+	}
+	if len(datasets) == 0 {
+		return uuid.Nil, fmt.Errorf("no datasets found in database; create one first")
+	}
+
+	fmt.Println("Select a dataset:")
+	for i, d := range datasets {
+		fmt.Printf("  [%d] %s (slug=%s, version=%s, id=%s)\n", i+1, d.name, d.slug, d.wowVersion, d.id)
+	}
+	fmt.Print("Enter number: ")
+
+	var choice int
+	if _, err := fmt.Scan(&choice); err != nil {
+		return uuid.Nil, fmt.Errorf("reading choice: %w", err)
+	}
+	if choice < 1 || choice > len(datasets) {
+		return uuid.Nil, fmt.Errorf("invalid choice %d (must be 1-%d)", choice, len(datasets))
+	}
+	return datasets[choice-1].id, nil
+}
+
 // importTable reads a JSON file and upserts all rows into the given table.
-func importTable(ctx context.Context, pool *pgxpool.Pool, table, filePath string) (int, error) {
+func importTable(ctx context.Context, pool *pgxpool.Pool, table string, filePath string, datasetID uuid.UUID) (int, error) {
 	schema, ok := tableSchemas[table]
 	if !ok {
 		return 0, fmt.Errorf("unknown table schema: %s", table)
@@ -260,7 +326,7 @@ func importTable(ctx context.Context, pool *pgxpool.Pool, table, filePath string
 		return 0, nil
 	}
 
-	// Build the upsert SQL once
+	// Build the upsert SQL once (includes dataset_id as first column).
 	upsertSQL := buildUpsertSQL(table, schema)
 
 	// Process in batches of 500
@@ -275,7 +341,9 @@ func importTable(ctx context.Context, pool *pgxpool.Pool, table, filePath string
 
 		batch := &pgx.Batch{}
 		for _, row := range chunk {
-			args := make([]interface{}, len(schema.Columns))
+			// First arg is always dataset_id.
+			args := make([]interface{}, 1+len(schema.Columns))
+			args[0] = datasetID
 			for j, col := range schema.Columns {
 				// Find the JSON key for this column
 				jsonKey := col
@@ -299,7 +367,7 @@ func importTable(ctx context.Context, pool *pgxpool.Pool, table, filePath string
 					// Coerce to string for TEXT columns (JSON may have numeric values).
 					v = fmt.Sprintf("%v", v)
 				}
-				args[j] = v
+				args[j+1] = v
 			}
 			batch.Queue(upsertSQL, args...)
 		}
@@ -322,25 +390,25 @@ func importTable(ctx context.Context, pool *pgxpool.Pool, table, filePath string
 
 // importDBCData extracts ItemRandomProperties and SpellItemEnchantment from the WoW client
 // and upserts them into PostgreSQL.
-func importDBCData(ctx context.Context, pool *pgxpool.Pool, wowDir string, inv *serpent.Invocation) error {
+func importDBCData(ctx context.Context, pool *pgxpool.Pool, wowDir string, inv *serpent.Invocation, datasetID uuid.UUID) error {
 	wc, err := dbcdb.New(wowDir)
 	if err != nil {
 		return fmt.Errorf("opening WoW client at %s: %w", wowDir, err)
 	}
 
-	return importDBCTables(ctx, pool, wc, inv)
+	return importDBCTables(ctx, pool, wc, inv, datasetID)
 }
 
-func importDBCTables(ctx context.Context, pool *pgxpool.Pool, wc *dbcdb.WoWClient, inv *serpent.Invocation) error {
+func importDBCTables(ctx context.Context, pool *pgxpool.Pool, wc *dbcdb.WoWClient, inv *serpent.Invocation, datasetID uuid.UUID) error {
 	// --- ItemRandomProperties ---
 	irpTable, err := wc.ItemRandomProperties()
 	if err != nil {
 		return fmt.Errorf("reading ItemRandomProperties.dbc: %w", err)
 	}
 
-	const irpSQL = `INSERT INTO dbc_item_random_properties (id, name, name_lang, enchantment_1, enchantment_2, enchantment_3, enchantment_4, enchantment_5)
-		VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
-		ON CONFLICT (id) DO UPDATE SET name=EXCLUDED.name, name_lang=EXCLUDED.name_lang,
+	const irpSQL = `INSERT INTO dbc_item_random_properties (dataset_id, id, name, name_lang, enchantment_1, enchantment_2, enchantment_3, enchantment_4, enchantment_5)
+		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
+		ON CONFLICT (dataset_id, id) DO UPDATE SET name=EXCLUDED.name, name_lang=EXCLUDED.name_lang,
 			enchantment_1=EXCLUDED.enchantment_1, enchantment_2=EXCLUDED.enchantment_2,
 			enchantment_3=EXCLUDED.enchantment_3, enchantment_4=EXCLUDED.enchantment_4,
 			enchantment_5=EXCLUDED.enchantment_5`
@@ -357,7 +425,7 @@ func importDBCTables(ctx context.Context, pool *pgxpool.Pool, wc *dbcdb.WoWClien
 		for j := 0; j < len(row.Enchantment) && j < 5; j++ {
 			enchs[j] = row.Enchantment[j]
 		}
-		batch.Queue(irpSQL, row.ID, row.Name, row.Name_lang.String(), enchs[0], enchs[1], enchs[2], enchs[3], enchs[4])
+		batch.Queue(irpSQL, datasetID, row.ID, row.Name, row.Name_lang.String(), enchs[0], enchs[1], enchs[2], enchs[3], enchs[4])
 		irpCount++
 
 		if batch.Len() >= batchSize {
@@ -381,13 +449,13 @@ func importDBCTables(ctx context.Context, pool *pgxpool.Pool, wc *dbcdb.WoWClien
 	}
 
 	const sieSQL = `INSERT INTO dbc_spell_item_enchantment
-		(id, charges, effect_1, effect_2, effect_3,
+		(dataset_id, id, charges, effect_1, effect_2, effect_3,
 		 effect_points_min_1, effect_points_min_2, effect_points_min_3,
 		 effect_arg_1, effect_arg_2, effect_arg_3,
 		 name_lang, item_visual, flags, src_item_id, condition_id,
 		 required_skill_id, required_skill_rank, min_level, max_level)
-		VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20)
-		ON CONFLICT (id) DO UPDATE SET
+		VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21)
+		ON CONFLICT (dataset_id, id) DO UPDATE SET
 			charges=EXCLUDED.charges, effect_1=EXCLUDED.effect_1, effect_2=EXCLUDED.effect_2, effect_3=EXCLUDED.effect_3,
 			effect_points_min_1=EXCLUDED.effect_points_min_1, effect_points_min_2=EXCLUDED.effect_points_min_2, effect_points_min_3=EXCLUDED.effect_points_min_3,
 			effect_arg_1=EXCLUDED.effect_arg_1, effect_arg_2=EXCLUDED.effect_arg_2, effect_arg_3=EXCLUDED.effect_arg_3,
@@ -408,7 +476,7 @@ func importDBCTables(ctx context.Context, pool *pgxpool.Pool, wc *dbcdb.WoWClien
 		args := padSlice(row.EffectArg, 3)
 
 		batch.Queue(sieSQL,
-			row.ID, row.Charges,
+			datasetID, row.ID, row.Charges,
 			effects[0], effects[1], effects[2],
 			pointsMin[0], pointsMin[1], pointsMin[2],
 			args[0], args[1], args[2],
@@ -439,19 +507,19 @@ func importDBCTables(ctx context.Context, pool *pgxpool.Pool, wc *dbcdb.WoWClien
 		return fmt.Errorf("reading ItemSet.dbc: %w", err)
 	}
 
-	const isSQL = `INSERT INTO dbc_item_set (id, name_lang, required_skill, required_skill_rank, item_ids)
-		VALUES ($1, $2, $3, $4, $5)
-		ON CONFLICT (id) DO UPDATE SET name_lang=EXCLUDED.name_lang,
+	const isSQL = `INSERT INTO dbc_item_set (dataset_id, id, name_lang, required_skill, required_skill_rank, item_ids)
+		VALUES ($1, $2, $3, $4, $5, $6)
+		ON CONFLICT (dataset_id, id) DO UPDATE SET name_lang=EXCLUDED.name_lang,
 			required_skill=EXCLUDED.required_skill, required_skill_rank=EXCLUDED.required_skill_rank,
 			item_ids=EXCLUDED.item_ids`
 
-	const isBonusSQL = `INSERT INTO dbc_item_set_bonus (set_id, threshold, spell_id)
-		VALUES ($1, $2, $3)
-		ON CONFLICT (set_id, threshold, spell_id) DO NOTHING`
+	const isBonusSQL = `INSERT INTO dbc_item_set_bonus (dataset_id, set_id, threshold, spell_id)
+		VALUES ($1, $2, $3, $4)
+		ON CONFLICT (dataset_id, set_id, threshold, spell_id) DO NOTHING`
 
-	const isItemSQL = `INSERT INTO dbc_item_set_item (set_id, item_entry)
-		VALUES ($1, $2)
-		ON CONFLICT (set_id, item_entry) DO NOTHING`
+	const isItemSQL = `INSERT INTO dbc_item_set_item (dataset_id, set_id, item_entry)
+		VALUES ($1, $2, $3)
+		ON CONFLICT (dataset_id, set_id, item_entry) DO NOTHING`
 
 	isCount := 0
 	isBonusCount := 0
@@ -469,13 +537,13 @@ func importDBCTables(ctx context.Context, pool *pgxpool.Pool, wc *dbcdb.WoWClien
 				itemIDs = append(itemIDs, id)
 			}
 		}
-		batch.Queue(isSQL, row.ID, row.Name_lang.String(), row.RequiredSkill, row.RequiredSkillRank, itemIDs)
+		batch.Queue(isSQL, datasetID, row.ID, row.Name_lang.String(), row.RequiredSkill, row.RequiredSkillRank, itemIDs)
 		isCount++
 
 		// Insert set bonuses (spell + threshold pairs)
 		for j := 0; j < len(row.SetSpellID) && j < len(row.SetThreshold); j++ {
 			if row.SetSpellID[j] != 0 && row.SetThreshold[j] != 0 {
-				batch.Queue(isBonusSQL, row.ID, row.SetThreshold[j], row.SetSpellID[j])
+				batch.Queue(isBonusSQL, datasetID, row.ID, row.SetThreshold[j], row.SetSpellID[j])
 				isBonusCount++
 			}
 		}
@@ -483,7 +551,7 @@ func importDBCTables(ctx context.Context, pool *pgxpool.Pool, wc *dbcdb.WoWClien
 		// Insert set item membership from DBC ItemID array
 		for _, itemID := range row.ItemID {
 			if itemID != 0 {
-				batch.Queue(isItemSQL, row.ID, itemID)
+				batch.Queue(isItemSQL, datasetID, row.ID, itemID)
 				isItemCount++
 			}
 		}
@@ -509,7 +577,7 @@ func importDBCTables(ctx context.Context, pool *pgxpool.Pool, wc *dbcdb.WoWClien
 	}
 
 	const idiSQL = `INSERT INTO dbc_item_display_info (
-			id, model_name, model_texture, geoset_group, flags, spell_visual_id,
+			dataset_id, id, model_name, model_texture, geoset_group, flags, spell_visual_id,
 			helmet_geoset_vis, texture, item_visual, particle_color_id,
 			attachment_geoset_group, item_ranged_display_info_id,
 			model_material_resources_id, model_resources_id, model_type_1,
@@ -517,8 +585,8 @@ func importDBCTables(ctx context.Context, pool *pgxpool.Pool, wc *dbcdb.WoWClien
 			sheathed_spell_visual_kit_id, state_spell_visual_kit_id,
 			unsheathed_spell_visual_kit_id, inventory_icon, group_sound_index,
 			ground_model, item_size, helmet_geoset_vis_id
-		) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,$22,$23,$24,$25)
-		ON CONFLICT (id) DO UPDATE SET
+		) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,$22,$23,$24,$25,$26)
+		ON CONFLICT (dataset_id, id) DO UPDATE SET
 			model_name=EXCLUDED.model_name, model_texture=EXCLUDED.model_texture,
 			geoset_group=EXCLUDED.geoset_group, flags=EXCLUDED.flags,
 			spell_visual_id=EXCLUDED.spell_visual_id, helmet_geoset_vis=EXCLUDED.helmet_geoset_vis,
@@ -545,7 +613,7 @@ func importDBCTables(ctx context.Context, pool *pgxpool.Pool, wc *dbcdb.WoWClien
 			return fmt.Errorf("reading ItemDisplayInfo row %d: %w", i, err)
 		}
 		batch.Queue(idiSQL,
-			row.ID,
+			datasetID, row.ID,
 			jsonSlice(row.ModelName), jsonSlice(row.ModelTexture),
 			jsonSlice(row.GeosetGroup), row.Flags, row.SpellVisualID,
 			jsonSlice(row.HelmetGeosetVis), jsonSlice(row.Texture),
@@ -582,14 +650,15 @@ func importDBCTables(ctx context.Context, pool *pgxpool.Pool, wc *dbcdb.WoWClien
 // This creates synthetic dbc_item_set rows (negative IDs) for each tier and sets
 // tooltip_set_id on world_item_template to point to the tier-specific row.
 // The original set_id is left untouched for cross-tier eligibility.
-func fixupMultiTierSets(ctx context.Context, pool *pgxpool.Pool, inv *serpent.Invocation) error {
+func fixupMultiTierSets(ctx context.Context, pool *pgxpool.Pool, inv *serpent.Invocation, datasetID uuid.UUID) error {
 	// Find sets where items have multiple distinct first-word prefixes.
 	rows, err := pool.Query(ctx, `
 		SELECT s.id, s.name_lang
 		FROM dbc_item_set s
-		JOIN world_item_template t ON t.set_id = s.id
+		JOIN world_item_template t ON t.dataset_id = s.dataset_id AND t.set_id = s.id
+		WHERE s.dataset_id = $1
 		GROUP BY s.id, s.name_lang
-		HAVING count(DISTINCT split_part(t.name, ' ', 1)) > 1`)
+		HAVING count(DISTINCT split_part(t.name, ' ', 1)) > 1`, datasetID)
 	if err != nil {
 		return fmt.Errorf("querying multi-tier sets: %w", err)
 	}
@@ -620,8 +689,8 @@ func fixupMultiTierSets(ctx context.Context, pool *pgxpool.Pool, inv *serpent.In
 		// Get items grouped by first-word prefix.
 		itemRows, err := pool.Query(ctx, `
 			SELECT entry, name, split_part(name, ' ', 1) as prefix
-			FROM world_item_template WHERE set_id = $1
-			ORDER BY name`, ms.id)
+			FROM world_item_template WHERE dataset_id = $1 AND set_id = $2
+			ORDER BY name`, datasetID, ms.id)
 		if err != nil {
 			return fmt.Errorf("querying items for set %d: %w", ms.id, err)
 		}
@@ -654,20 +723,20 @@ func fixupMultiTierSets(ctx context.Context, pool *pgxpool.Pool, inv *serpent.In
 
 			// Create synthetic dbc_item_set row.
 			_, err := pool.Exec(ctx, `
-				INSERT INTO dbc_item_set (id, name_lang, required_skill, required_skill_rank, item_ids)
-				VALUES ($1, $2, 0, 0, $3)
-				ON CONFLICT (id) DO UPDATE SET name_lang=EXCLUDED.name_lang, item_ids=EXCLUDED.item_ids`,
-				syntheticID, tierName, entryIDs)
+				INSERT INTO dbc_item_set (dataset_id, id, name_lang, required_skill, required_skill_rank, item_ids)
+				VALUES ($1, $2, $3, 0, 0, $4)
+				ON CONFLICT (dataset_id, id) DO UPDATE SET name_lang=EXCLUDED.name_lang, item_ids=EXCLUDED.item_ids`,
+				datasetID, syntheticID, tierName, entryIDs)
 			if err != nil {
 				return fmt.Errorf("inserting synthetic set for %q (set %d): %w", tierName, ms.id, err)
 			}
 
 			// Copy bonuses from original set.
 			_, err = pool.Exec(ctx, `
-				INSERT INTO dbc_item_set_bonus (set_id, threshold, spell_id)
-				SELECT $1, threshold, spell_id FROM dbc_item_set_bonus WHERE set_id = $2
-				ON CONFLICT (set_id, threshold, spell_id) DO NOTHING`,
-				syntheticID, ms.id)
+				INSERT INTO dbc_item_set_bonus (dataset_id, set_id, threshold, spell_id)
+				SELECT $1, $2, threshold, spell_id FROM dbc_item_set_bonus WHERE dataset_id = $1 AND set_id = $3
+				ON CONFLICT (dataset_id, set_id, threshold, spell_id) DO NOTHING`,
+				datasetID, syntheticID, ms.id)
 			if err != nil {
 				return fmt.Errorf("copying bonuses for synthetic set %d: %w", syntheticID, err)
 			}
@@ -676,7 +745,7 @@ func fixupMultiTierSets(ctx context.Context, pool *pgxpool.Pool, inv *serpent.In
 			_, err = pool.Exec(ctx, `
 				UPDATE world_item_template
 				SET tooltip_set_id = $1
-				WHERE entry = ANY($2)`, syntheticID, entryIDs)
+				WHERE dataset_id = $2 AND entry = ANY($3)`, syntheticID, datasetID, entryIDs)
 			if err != nil {
 				return fmt.Errorf("updating tooltip_set_id for synthetic set %d: %w", syntheticID, err)
 			}
@@ -690,7 +759,7 @@ func fixupMultiTierSets(ctx context.Context, pool *pgxpool.Pool, inv *serpent.In
 	_, err = pool.Exec(ctx, `
 		UPDATE world_item_template
 		SET tooltip_set_id = set_id
-		WHERE set_id != 0 AND tooltip_set_id = 0`)
+		WHERE dataset_id = $1 AND set_id != 0 AND tooltip_set_id = 0`, datasetID)
 	if err != nil {
 		return fmt.Errorf("setting default tooltip_set_id: %w", err)
 	}
@@ -728,23 +797,35 @@ func padSlice(s []int32, n int) []int32 {
 	return result
 }
 
-// buildUpsertSQL generates: INSERT INTO table (cols...) VALUES ($1, $2, ...) ON CONFLICT (pk) DO UPDATE SET col=EXCLUDED.col, ...
+// buildUpsertSQL generates: INSERT INTO table (dataset_id, cols...) VALUES ($1, $2, ...)
+// ON CONFLICT (dataset_id, pk) DO UPDATE SET col=EXCLUDED.col, ...
+// dataset_id is always $1; schema.Columns start at $2.
 func buildUpsertSQL(table string, schema *tableSchema) string {
-	cols := strings.Join(schema.Columns, ", ")
-	placeholders := make([]string, len(schema.Columns))
-	for i := range schema.Columns {
+	// dataset_id is prepended as the first column.
+	allCols := make([]string, 0, 1+len(schema.Columns))
+	allCols = append(allCols, "dataset_id")
+	allCols = append(allCols, schema.Columns...)
+
+	placeholders := make([]string, len(allCols))
+	for i := range allCols {
 		placeholders[i] = fmt.Sprintf("$%d", i+1)
 	}
+	cols := strings.Join(allCols, ", ")
 	vals := strings.Join(placeholders, ", ")
-	pk := strings.Join(schema.PKColumns, ", ")
 
-	// Build SET clause for non-PK columns
-	pkSet := make(map[string]bool, len(schema.PKColumns))
-	for _, p := range schema.PKColumns {
+	// PK always includes dataset_id.
+	pkCols := make([]string, 0, 1+len(schema.PKColumns))
+	pkCols = append(pkCols, "dataset_id")
+	pkCols = append(pkCols, schema.PKColumns...)
+	pk := strings.Join(pkCols, ", ")
+
+	// Build SET clause for non-PK columns.
+	pkSet := make(map[string]bool, len(pkCols))
+	for _, p := range pkCols {
 		pkSet[p] = true
 	}
 	var setClauses []string
-	for _, col := range schema.Columns {
+	for _, col := range allCols {
 		if !pkSet[col] {
 			setClauses = append(setClauses, fmt.Sprintf("%s = EXCLUDED.%s", col, col))
 		}

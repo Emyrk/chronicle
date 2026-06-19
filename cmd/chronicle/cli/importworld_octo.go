@@ -16,7 +16,7 @@ func init() {
 
 // importWorldOcto imports world data for OctoWoW.
 // OctoWoW shares the same world data as Turtle WoW.
-func importWorldOcto(ctx context.Context, pool *pgxpool.Pool, inv *serpent.Invocation, _ ImportWorldOptions) error {
+func importWorldOcto(ctx context.Context, pool *pgxpool.Pool, inv *serpent.Invocation, opts ImportWorldOptions) error {
 	dataDir := turtleDataDir // same world dump as turtle
 
 	detected, err := detectFiles(dataDir)
@@ -33,7 +33,7 @@ func importWorldOcto(ctx context.Context, pool *pgxpool.Pool, inv *serpent.Invoc
 
 	for file, table := range detected {
 		filePath := filepath.Join(dataDir, file)
-		n, err := importTable(ctx, pool, table, filePath)
+		n, err := importTable(ctx, pool, table, filePath, opts.DatasetID)
 		if err != nil {
 			return fmt.Errorf("importing %s: %w", table, err)
 		}

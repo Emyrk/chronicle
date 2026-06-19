@@ -127,7 +127,7 @@ const turtleDataDir = "importdata/world/turtle"
 
 // importWorldTurtle imports world data for the Turtle WoW server.
 // It reads JSON files from importdata/world/turtle/ and DBC data from the WoW client.
-func importWorldTurtle(ctx context.Context, pool *pgxpool.Pool, inv *serpent.Invocation, _ ImportWorldOptions) error {
+func importWorldTurtle(ctx context.Context, pool *pgxpool.Pool, inv *serpent.Invocation, opts ImportWorldOptions) error {
 	dataDir := turtleDataDir
 
 	detected, err := detectFiles(dataDir)
@@ -144,7 +144,7 @@ func importWorldTurtle(ctx context.Context, pool *pgxpool.Pool, inv *serpent.Inv
 
 	for file, table := range detected {
 		filePath := filepath.Join(dataDir, file)
-		n, err := importTable(ctx, pool, table, filePath)
+		n, err := importTable(ctx, pool, table, filePath, opts.DatasetID)
 		if err != nil {
 			return fmt.Errorf("importing %s: %w", table, err)
 		}
@@ -153,7 +153,7 @@ func importWorldTurtle(ctx context.Context, pool *pgxpool.Pool, inv *serpent.Inv
 
 	wowDir := dbcdatacli.DefaultClientPath("turtle")
 	_, _ = fmt.Fprintf(inv.Stderr, "importing DBC data from %s\n", wowDir)
-	if err := importDBCData(ctx, pool, wowDir, inv); err != nil {
+	if err := importDBCData(ctx, pool, wowDir, inv, opts.DatasetID); err != nil {
 		return fmt.Errorf("importing DBC data: %w", err)
 	}
 
