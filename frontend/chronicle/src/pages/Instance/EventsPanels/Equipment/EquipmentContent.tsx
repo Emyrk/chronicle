@@ -205,6 +205,7 @@ function PlayerTalentsView({
       classId={classId}
       allocations={allocations}
       datasetId={datasetId}
+      compact
     />
   );
 }
