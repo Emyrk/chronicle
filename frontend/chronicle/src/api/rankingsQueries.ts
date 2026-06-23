@@ -6,6 +6,7 @@ import type {
   RankingsBoxPlotStats,
   RankingsKillTimeStats,
   RankingsSuccessRate,
+  KillTimeLeaderboardResponse,
 } from "./typesGenerated";
 
 const RANKINGS_STALE_TIME = 5 * 60 * 1000; // 5 minutes
@@ -125,3 +126,28 @@ export function useRankingsSuccessRates(instanceName: string, period?: string) {
     enabled: !!instanceName,
   });
 }
+export function useRankingsKillTimeLeaderboard(params: {
+  instance_name: string;
+  encounter_name?: string;
+  period?: string;
+  limit?: number;
+  offset?: number;
+}) {
+  const searchParams = new URLSearchParams();
+  searchParams.set("instance_name", params.instance_name);
+  if (params.encounter_name) searchParams.set("encounter_name", params.encounter_name);
+  if (params.period) searchParams.set("period", params.period);
+  if (params.limit != null) searchParams.set("limit", String(params.limit));
+  if (params.offset != null) searchParams.set("offset", String(params.offset));
+
+  return useQuery({
+    queryKey: ["rankings", "kill-time-leaderboard", params],
+    queryFn: () =>
+      fetchJSON<KillTimeLeaderboardResponse>(
+        `/api/v1/rankings/kill-time-leaderboard?${searchParams.toString()}`,
+      ),
+    staleTime: RANKINGS_STALE_TIME,
+    enabled: !!params.instance_name,
+  });
+}
+

@@ -931,6 +931,29 @@ export interface JobStatus {
     readonly output?: Record<string, string>;
 }
 
+// From chroniclesdk/rankings.go
+/**
+ * KillTimeLeaderboardEntry is a single row in the kill time leaderboard.
+ */
+export interface KillTimeLeaderboardEntry {
+    readonly encounter_name: string;
+    readonly instance_name: string;
+    readonly guild_name: string;
+    readonly realm_name: string;
+    readonly duration_secs: number;
+    readonly killed_at: string;
+    readonly log_hashed_slug: string;
+}
+
+// From chroniclesdk/rankings.go
+/**
+ * KillTimeLeaderboardResponse wraps kill time leaderboard entries with total count for pagination.
+ */
+export interface KillTimeLeaderboardResponse {
+    readonly entries: readonly KillTimeLeaderboardEntry[];
+    readonly total_count: number;
+}
+
 // From chroniclesdk/log.go
 export type KillType = "clean" | "partial" | "reset" | "wipe";
 

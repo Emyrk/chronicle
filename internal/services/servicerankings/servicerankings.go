@@ -123,6 +123,7 @@ func (s *Service) setupRoutes() {
 	s.router.Get("/leaderboard", s.handleLeaderboard)
 	s.router.Get("/stats", s.handleStats)
 	s.router.Get("/kill-times", s.handleKillTimes)
+	s.router.Get("/kill-time-leaderboard", s.handleKillTimeLeaderboard)
 	s.router.Get("/success-rates", s.handleSuccessRates)
 
 	// Speedrun leaderboard
@@ -415,6 +416,79 @@ func (s *Service) handleKillTimes(w http.ResponseWriter, r *http.Request) {
 	}
 
 	httpapi.Write(ctx, w, http.StatusOK, out)
+}
+
+// handleKillTimeLeaderboard returns a paginated leaderboard of fastest encounter kills.
+//
+//	GET /kill-time-leaderboard?instance_name=Molten+Core&encounter_name=Ragnaros&period=90d
+func (s *Service) handleKillTimeLeaderboard(w http.ResponseWriter, r *http.Request) {
+	ctx := r.Context()
+	q := r.URL.Query()
+
+	instanceName := q.Get("instance_name")
+	if instanceName == "" {
+		httpapi.Write(ctx, w, http.StatusBadRequest, chroniclesdk.Response{
+			Message: "instance_name query parameter is required",
+		})
+		return
+	}
+
+	var sinceDays int64
+	if v := q.Get("period"); v != "" {
+		sinceDays = periodToDays(v)
+	}
+
+	var limit int64 = 50
+	if v := q.Get("limit"); v != "" {
+		if parsed, err := strconv.ParseInt(v, 10, 64); err == nil && parsed > 0 {
+			limit = parsed
+		}
+	}
+	if limit > 200 {
+		limit = 200
+	}
+
+	var offset int64
+	if v := q.Get("offset"); v != "" {
+		offset, _ = strconv.ParseInt(v, 10, 64)
+	}
+
+	rows, err := s.store.RankingsKillTimeLeaderboard(ctx, database.RankingsKillTimeLeaderboardParams{
+		InstanceName:  instanceName,
+		EncounterName: q.Get("encounter_name"),
+		SinceDays:     sinceDays,
+		QueryLimit:    limit,
+		QueryOffset:   offset,
+	})
+	if err != nil {
+		httpapi.HandleResponseError(ctx, w, err, httpapi.APIError{
+			Response: chroniclesdk.Response{
+				Message: "Failed to fetch kill time leaderboard",
+				Detail:  err.Error(),
+			},
+		})
+		return
+	}
+
+	var totalCount int64
+	entries := make([]chroniclesdk.KillTimeLeaderboardEntry, 0, len(rows))
+	for _, row := range rows {
+		totalCount = row.TotalCount
+		entries = append(entries, chroniclesdk.KillTimeLeaderboardEntry{
+			EncounterName: row.EncounterName,
+			InstanceName:  row.InstanceName,
+			GuildName:     row.GuildName,
+			RealmName:     row.RealmName,
+			DurationSecs:  row.DurationSecs,
+			KilledAt:      row.KilledAt.Time,
+			LogHashedSlug: row.LogHashedSlug.String,
+		})
+	}
+
+	httpapi.Write(ctx, w, http.StatusOK, chroniclesdk.KillTimeLeaderboardResponse{
+		Entries:    entries,
+		TotalCount: totalCount,
+	})
 }
 
 // handleSuccessRates returns kill/wipe/total counts per encounter.

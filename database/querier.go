@@ -263,6 +263,9 @@ type sqlcQuerier interface {
 	// Reads pre-computed per-instance summaries for a specific tenant.
 	// The table has no RLS; filtering is done explicitly by tenant_id.
 	RankingsInstanceSummaries(ctx context.Context, tenantID uuid.UUID) ([]RankingsInstanceSummariesRow, error)
+	// Paginated leaderboard of fastest encounter kills, ordered by duration.
+	// Deduplicates encounters across duplicate log groups (keeps fastest per group).
+	RankingsKillTimeLeaderboard(ctx context.Context, arg RankingsKillTimeLeaderboardParams) ([]RankingsKillTimeLeaderboardRow, error)
 	// Box plot stats on encounter duration (seconds) per encounter name.
 	// Deduplicates encounters across duplicate log groups.
 	RankingsKillTimeStats(ctx context.Context, arg RankingsKillTimeStatsParams) ([]RankingsKillTimeStatsRow, error)

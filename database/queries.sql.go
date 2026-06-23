@@ -4691,6 +4691,113 @@ func (q *sqlQuerier) RankingsInstanceSummaries(ctx context.Context, tenantID uui
 	return items, nil
 }
 
+const rankingsKillTimeLeaderboard = `-- name: RankingsKillTimeLeaderboard :many
+WITH deduped AS (
+    SELECT DISTINCT ON (lie.name, COALESCE(li.duplicate_group_id, li.id))
+        lie.id AS encounter_id,
+        lie.name AS encounter_name,
+        li.id AS instance_id,
+        li.hashed_slug AS log_hashed_slug,
+        li.name AS instance_name,
+        COALESCE(g.name, '')::text AS guild_name,
+        wsr.name AS realm_name,
+        EXTRACT(EPOCH FROM (lie.end_time - lie.start_time))::double precision AS duration_secs,
+        lie.end_time AS killed_at
+    FROM log_instance_encounters lie
+    JOIN log_instances li ON li.id = lie.instance_id
+    JOIN wow_server_realms wsr ON wsr.id = li.realm_id
+    LEFT JOIN guilds g ON g.id = li.guild_id
+    WHERE li.name = $3
+      AND lie.boss = true
+      AND lie.kill_type = 'clean'
+      AND CASE
+          WHEN $4 :: text != '' THEN lie.name = $4
+          ELSE true
+      END
+      AND CASE
+          WHEN $5 :: bigint > 0 THEN lie.end_time >= now() - make_interval(days => $5::int)
+          ELSE true
+      END
+    ORDER BY lie.name, COALESCE(li.duplicate_group_id, li.id),
+             EXTRACT(EPOCH FROM (lie.end_time - lie.start_time)) ASC
+)
+SELECT
+    d.encounter_id,
+    d.encounter_name,
+    d.instance_id,
+    d.log_hashed_slug,
+    d.instance_name,
+    d.guild_name,
+    d.realm_name,
+    d.duration_secs,
+    d.killed_at,
+    COUNT(*) OVER() AS total_count
+FROM deduped d
+WHERE d.duration_secs > 0
+ORDER BY d.duration_secs ASC
+LIMIT $2::bigint OFFSET $1::bigint
+`
+
+type RankingsKillTimeLeaderboardParams struct {
+	QueryOffset   int64  `db:"query_offset" json:"query_offset"`
+	QueryLimit    int64  `db:"query_limit" json:"query_limit"`
+	InstanceName  string `db:"instance_name" json:"instance_name"`
+	EncounterName string `db:"encounter_name" json:"encounter_name"`
+	SinceDays     int64  `db:"since_days" json:"since_days"`
+}
+
+type RankingsKillTimeLeaderboardRow struct {
+	EncounterID   uuid.UUID          `db:"encounter_id" json:"encounter_id"`
+	EncounterName string             `db:"encounter_name" json:"encounter_name"`
+	InstanceID    uuid.UUID          `db:"instance_id" json:"instance_id"`
+	LogHashedSlug pgtype.Text        `db:"log_hashed_slug" json:"log_hashed_slug"`
+	InstanceName  string             `db:"instance_name" json:"instance_name"`
+	GuildName     string             `db:"guild_name" json:"guild_name"`
+	RealmName     string             `db:"realm_name" json:"realm_name"`
+	DurationSecs  float64            `db:"duration_secs" json:"duration_secs"`
+	KilledAt      pgtype.Timestamptz `db:"killed_at" json:"killed_at"`
+	TotalCount    int64              `db:"total_count" json:"total_count"`
+}
+
+// Paginated leaderboard of fastest encounter kills, ordered by duration.
+// Deduplicates encounters across duplicate log groups (keeps fastest per group).
+func (q *sqlQuerier) RankingsKillTimeLeaderboard(ctx context.Context, arg RankingsKillTimeLeaderboardParams) ([]RankingsKillTimeLeaderboardRow, error) {
+	rows, err := q.db.Query(ctx, rankingsKillTimeLeaderboard,
+		arg.QueryOffset,
+		arg.QueryLimit,
+		arg.InstanceName,
+		arg.EncounterName,
+		arg.SinceDays,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []RankingsKillTimeLeaderboardRow
+	for rows.Next() {
+		var i RankingsKillTimeLeaderboardRow
+		if err := rows.Scan(
+			&i.EncounterID,
+			&i.EncounterName,
+			&i.InstanceID,
+			&i.LogHashedSlug,
+			&i.InstanceName,
+			&i.GuildName,
+			&i.RealmName,
+			&i.DurationSecs,
+			&i.KilledAt,
+			&i.TotalCount,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const rankingsKillTimeStats = `-- name: RankingsKillTimeStats :many
 WITH deduped AS (
     SELECT DISTINCT ON (lie.name, COALESCE(li.duplicate_group_id, li.id))

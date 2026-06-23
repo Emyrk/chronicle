@@ -412,6 +412,54 @@ FROM (
 ) s
 ORDER BY (s.encounter_name = 'Trash'), s.encounter_name;
 
+-- name: RankingsKillTimeLeaderboard :many
+-- Paginated leaderboard of fastest encounter kills, ordered by duration.
+-- Deduplicates encounters across duplicate log groups (keeps fastest per group).
+WITH deduped AS (
+    SELECT DISTINCT ON (lie.name, COALESCE(li.duplicate_group_id, li.id))
+        lie.id AS encounter_id,
+        lie.name AS encounter_name,
+        li.id AS instance_id,
+        li.hashed_slug AS log_hashed_slug,
+        li.name AS instance_name,
+        COALESCE(g.name, '')::text AS guild_name,
+        wsr.name AS realm_name,
+        EXTRACT(EPOCH FROM (lie.end_time - lie.start_time))::double precision AS duration_secs,
+        lie.end_time AS killed_at
+    FROM log_instance_encounters lie
+    JOIN log_instances li ON li.id = lie.instance_id
+    JOIN wow_server_realms wsr ON wsr.id = li.realm_id
+    LEFT JOIN guilds g ON g.id = li.guild_id
+    WHERE li.name = @instance_name
+      AND lie.boss = true
+      AND lie.kill_type = 'clean'
+      AND CASE
+          WHEN @encounter_name :: text != '' THEN lie.name = @encounter_name
+          ELSE true
+      END
+      AND CASE
+          WHEN @since_days :: bigint > 0 THEN lie.end_time >= now() - make_interval(days => @since_days::int)
+          ELSE true
+      END
+    ORDER BY lie.name, COALESCE(li.duplicate_group_id, li.id),
+             EXTRACT(EPOCH FROM (lie.end_time - lie.start_time)) ASC
+)
+SELECT
+    d.encounter_id,
+    d.encounter_name,
+    d.instance_id,
+    d.log_hashed_slug,
+    d.instance_name,
+    d.guild_name,
+    d.realm_name,
+    d.duration_secs,
+    d.killed_at,
+    COUNT(*) OVER() AS total_count
+FROM deduped d
+WHERE d.duration_secs > 0
+ORDER BY d.duration_secs ASC
+LIMIT @query_limit::bigint OFFSET @query_offset::bigint;
+
 -- name: RankingsSuccessRates :many
 -- Kill/wipe/total counts per encounter name within an instance.
 -- Deduplicates across duplicate log groups.

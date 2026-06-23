@@ -28,18 +28,22 @@ import {
   useRankingsStats,
   useRankingsLeaderboard,
   useRankingsKillTimes,
+  useRankingsKillTimeLeaderboard,
   useRankingsSuccessRates,
 } from "@/api/rankingsQueries"
 import { CLASS_DISPLAY } from "./classDisplay"
 import type { RankedEntry } from "./RankingsTable"
+import type { RankedKillTimeEntry } from "./KillTimeTable"
 import type { TimePeriod } from "./timePeriod"
 import { BoxPlotChart } from "./BoxPlotChart"
 import { RankingsTable } from "./RankingsTable"
+import { KillTimeTable } from "./KillTimeTable"
 
 // ── Types ─────────────────────────────────────────────────────────────────
 
 type MetricTab = "dps" | "killtime" | "success"
 type DpsSubTab = "boxplot" | "leaderboard"
+type KillTimeSubTab = "boxplot" | "leaderboard"
 const PAGE_SIZE = 50
 
 const VALID_PERIODS = new Set<TimePeriod>(["all", "90d", "30d", "7d"])
@@ -80,6 +84,7 @@ export function InstanceView({ instanceName }: InstanceViewProps) {
   }, [params])
 
   const dpsSubTab: DpsSubTab = params.get("tab") === "leaderboard" ? "leaderboard" : "boxplot"
+  const killTimeSubTab: KillTimeSubTab = params.get("tab") === "leaderboard" ? "leaderboard" : "boxplot"
   const filterClass = params.get("class") ?? undefined
   const filterSpec = params.get("spec") ?? undefined
   const filterRole = useMemo(() => params.get("role") || "", [params])  // "" = all roles
@@ -160,6 +165,7 @@ export function InstanceView({ instanceName }: InstanceViewProps) {
       next.delete("page")
       next.delete("class")
       next.delete("spec")
+      next.delete("kt_enc")
       return next
     })
   }, [setParams])
@@ -170,8 +176,10 @@ export function InstanceView({ instanceName }: InstanceViewProps) {
         const next = new URLSearchParams(prev)
         if (m === "dps") next.delete("metric")
         else next.set("metric", m)
-        // Clear DPS sub-tab when switching metrics
+        // Clear sub-tab and kill-time encounter when switching metrics
         next.delete("tab")
+        next.delete("page")
+        next.delete("kt_enc")
         return next
       })
     },
@@ -195,6 +203,23 @@ export function InstanceView({ instanceName }: InstanceViewProps) {
     },
     [setParams],
   )
+  const handleKillTimeSubTabChange = useCallback(
+    (t: KillTimeSubTab) => {
+      setParams((prev) => {
+        const next = new URLSearchParams(prev)
+        if (t === "boxplot") {
+          next.delete("tab")
+          next.delete("page")
+        } else {
+          next.set("tab", t)
+          next.delete("page")
+        }
+        return next
+      })
+    },
+    [setParams],
+  )
+
 
   const handleTimePeriodChange = useCallback(
     (p: TimePeriod) => {
@@ -386,6 +411,45 @@ export function InstanceView({ instanceName }: InstanceViewProps) {
   }, [leaderboardData, page])
 
   const { data: killTimeStats = [] } = useRankingsKillTimes(instanceName, periodParam)
+
+  // Kill time leaderboard: always a single encounter (mixing bosses is meaningless).
+  // Persisted via ?kt_enc= URL param; defaults to the first boss.
+  const bossList = useMemo(() => [...bossNames].sort(), [bossNames])
+  const killTimeEncounter = useMemo(() => {
+    const raw = params.get("kt_enc")
+    if (raw && bossNames.has(raw)) return raw
+    return bossList[0] ?? ""
+  }, [params, bossNames, bossList])
+
+  const handleKillTimeEncounterChange = useCallback(
+    (enc: string) => {
+      setParams((prev) => {
+        const next = new URLSearchParams(prev)
+        next.set("kt_enc", enc)
+        next.delete("page")
+        return next
+      })
+    },
+    [setParams],
+  )
+
+  const { data: killTimeLeaderboardData } = useRankingsKillTimeLeaderboard({
+    instance_name: instanceName,
+    encounter_name: killTimeEncounter,
+    period: periodParam,
+    limit: PAGE_SIZE,
+    offset: (page - 1) * PAGE_SIZE,
+  })
+
+  const killTimeTotalCount = killTimeLeaderboardData?.total_count ?? 0
+  const killTimeTotalPages = Math.max(1, Math.ceil(killTimeTotalCount / PAGE_SIZE))
+
+  const killTimeEntries: RankedKillTimeEntry[] = useMemo(() => {
+    const entries = killTimeLeaderboardData?.entries ?? []
+    const offset = (page - 1) * PAGE_SIZE
+    return entries.map((e, i) => ({ ...e, rank: offset + i + 1 }))
+  }, [killTimeLeaderboardData, page])
+
   const { data: successRates = [] } = useRankingsSuccessRates(instanceName, periodParam)
 
   // ── Loading state ──────────────────────────────────────────────────
@@ -630,15 +694,19 @@ export function InstanceView({ instanceName }: InstanceViewProps) {
 
             {/* Right: sub-tabs + time period, bottom-aligned */}
             <div className="flex flex-col justify-end items-end gap-2 shrink-0">
-              {metric === "dps" && (
+              {(metric === "dps" || metric === "killtime") && (
                 <div className="flex gap-1 rounded-lg border border-white/10 bg-black/20 p-1">
                   {(["boxplot", "leaderboard"] as const).map((t) => (
                     <button
                       key={t}
-                      onClick={() => handleDpsSubTabChange(t)}
+                      onClick={() =>
+                        metric === "dps"
+                          ? handleDpsSubTabChange(t)
+                          : handleKillTimeSubTabChange(t)
+                      }
                       className={cn(
                         "rounded-md px-2.5 py-0.5 text-[11px] font-medium transition-colors",
-                        dpsSubTab === t
+                        (metric === "dps" ? dpsSubTab : killTimeSubTab) === t
                           ? "bg-white/15 text-foreground"
                           : "text-muted-foreground hover:text-foreground",
                       )}
@@ -747,7 +815,61 @@ export function InstanceView({ instanceName }: InstanceViewProps) {
         )}
 
         {metric === "killtime" && (
-          <KillTimeContent stats={killTimeStats} />
+          killTimeSubTab === "boxplot" ? (
+            <KillTimeContent stats={killTimeStats} />
+          ) : (
+            <>
+              {/* Encounter selector — kill times only make sense per-boss */}
+              <div className="flex flex-wrap items-center gap-1.5">
+                {bossList.map((enc) => (
+                  <button
+                    key={enc}
+                    onClick={() => handleKillTimeEncounterChange(enc)}
+                    className={cn(
+                      "rounded-md border px-2.5 py-1 text-xs font-medium transition-colors",
+                      killTimeEncounter === enc
+                        ? "border-[#5F8FA6] bg-[#5F8FA6]/20 text-foreground"
+                        : "border-white/10 text-muted-foreground hover:text-foreground hover:bg-white/5",
+                    )}
+                  >
+                    {enc}
+                  </button>
+                ))}
+              </div>
+              <KillTimeTable entries={killTimeEntries} />
+              {/* Pagination */}
+              {killTimeTotalPages > 1 && (
+                <div className="flex items-center justify-between pt-2">
+                  <span className="text-xs text-muted-foreground">
+                    {killTimeTotalCount.toLocaleString()} kills
+                  </span>
+                  <div className="flex items-center gap-2">
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      className="h-7 w-7 p-0"
+                      disabled={page <= 1}
+                      onClick={() => handlePageChange(page - 1)}
+                    >
+                      <ChevronLeft className="h-4 w-4" />
+                    </Button>
+                    <span className="text-xs text-muted-foreground">
+                      Page {page} of {killTimeTotalPages}
+                    </span>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      className="h-7 w-7 p-0"
+                      disabled={page >= killTimeTotalPages}
+                      onClick={() => handlePageChange(page + 1)}
+                    >
+                      <ChevronRight className="h-4 w-4" />
+                    </Button>
+                  </div>
+                </div>
+              )}
+            </>
+          )
         )}
 
         {metric === "success" && (

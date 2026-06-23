@@ -85,6 +85,23 @@ type RankingsKillTimeStats struct {
 	Count         int64   `json:"count"`
 }
 
+// KillTimeLeaderboardEntry is a single row in the kill time leaderboard.
+type KillTimeLeaderboardEntry struct {
+	EncounterName string    `json:"encounter_name"`
+	InstanceName  string    `json:"instance_name"`
+	GuildName     string    `json:"guild_name"`
+	RealmName     string    `json:"realm_name"`
+	DurationSecs  float64   `json:"duration_secs"`
+	KilledAt      time.Time `json:"killed_at"`
+	LogHashedSlug string    `json:"log_hashed_slug"`
+}
+
+// KillTimeLeaderboardResponse wraps kill time leaderboard entries with total count for pagination.
+type KillTimeLeaderboardResponse struct {
+	Entries    []KillTimeLeaderboardEntry `json:"entries"`
+	TotalCount int64                      `json:"total_count"`
+}
+
 // RankingsSuccessRate contains kill/wipe counts for an encounter.
 type RankingsSuccessRate struct {
 	EncounterName string `json:"encounter_name"`
