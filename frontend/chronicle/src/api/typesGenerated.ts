@@ -2041,6 +2041,7 @@ export interface UpdateRegressionFixtureNoteRequest {
  */
 export interface UpdateSiteConfigRequest {
     readonly signups_enabled?: boolean;
+    readonly disable_client_upload?: boolean;
     readonly branding?: Branding;
     readonly discoverable?: boolean;
     readonly default_format?: string;

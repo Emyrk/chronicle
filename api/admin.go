@@ -699,12 +699,13 @@ func (a *API) AdminGetSiteConfig(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	t := servicetenant.TenantFromContext(ctx)
 	resp := chroniclesdk.SiteConfig{
 		SignupsEnabled:        config.SignupsEnabled,
 		ShortLinkDomain:       a.Opts.ShortLinkDomain,
-		ClientUploadsDisabled: a.Opts.ClientUploadsDisabled,
+		ClientUploadsDisabled: a.Opts.ClientUploadsDisabled || (t != nil && t.DisableClientUpload),
 	}
-	if t := servicetenant.TenantFromContext(ctx); t != nil {
+	if t != nil {
 		tenant := chroniclesdk.TenantFromDB(*t)
 		resp.Tenant = &tenant
 	}
@@ -726,7 +727,7 @@ func (a *API) AdminGetSiteConfig(w http.ResponseWriter, r *http.Request) {
 
 	// Resolve the tenant's default dataset flavor so the frontend can
 	// derive per-flavor settings (e.g. talent calculator max level).
-	if t := servicetenant.TenantFromContext(ctx); t != nil && t.DefaultDatasetID.Valid {
+	if t != nil && t.DefaultDatasetID.Valid {
 		ds, err := a.Opts.Dataset.GetDataset(ctx, t.DefaultDatasetID.UUID)
 		if err == nil {
 			resp.DatasetFlavor = ds.DefaultFlavor
@@ -762,6 +763,20 @@ func (a *API) AdminUpdateSiteConfig(w http.ResponseWriter, r *http.Request) {
 		params.AvailableFormats = req.AvailableFormats
 	}
 
+	// Update the per-tenant client upload flag if requested.
+	t := servicetenant.TenantFromContext(ctx)
+	if req.DisableClientUpload != nil && t != nil {
+		updated, err := a.Opts.Zed.UpdateTenant(ctx, database.UpdateTenantParams{
+			ID:                  t.ID,
+			DisableClientUpload: pgtype.Bool{Bool: *req.DisableClientUpload, Valid: true},
+		})
+		if err != nil {
+			httpapi.InternalServerError(w, err)
+			return
+		}
+		t = &updated
+	}
+
 	config, err := a.Opts.Zed.UpdateSiteConfig(ctx, params)
 	if err != nil {
 		httpapi.InternalServerError(w, err)
@@ -770,7 +785,7 @@ func (a *API) AdminUpdateSiteConfig(w http.ResponseWriter, r *http.Request) {
 	httpapi.Write(ctx, w, http.StatusOK, chroniclesdk.SiteConfig{
 		SignupsEnabled:        config.SignupsEnabled,
 		ShortLinkDomain:       a.Opts.ShortLinkDomain,
-		ClientUploadsDisabled: a.Opts.ClientUploadsDisabled,
+		ClientUploadsDisabled: a.Opts.ClientUploadsDisabled || (t != nil && t.DisableClientUpload),
 		Branding:              unmarshalBranding(config.Branding),
 		Discoverable:          config.Discoverable,
 	})

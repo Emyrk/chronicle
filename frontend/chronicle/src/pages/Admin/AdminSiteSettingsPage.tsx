@@ -140,6 +140,36 @@ export function AdminSiteSettingsPage() {
             )}
           </Button>
         </div>
+        <div className="flex items-center justify-between">
+          <div>
+            <p className="font-medium">Client Uploads</p>
+            <p className="text-sm text-muted-foreground">
+              When disabled, non-admin users cannot upload combat logs.
+            </p>
+          </div>
+          <Button
+            variant={config?.client_uploads_disabled ? "destructive" : "default"}
+            size="sm"
+            disabled={updateConfig.isPending}
+            onClick={() => {
+              updateConfig.mutate({ disable_client_upload: !config?.client_uploads_disabled });
+            }}
+          >
+            {updateConfig.isPending ? (
+              <Loader2 className="h-4 w-4 animate-spin" />
+            ) : config?.client_uploads_disabled ? (
+              <>
+                <X className="h-4 w-4 mr-1" />
+                Disabled
+              </>
+            ) : (
+              <>
+                <Check className="h-4 w-4 mr-1" />
+                Enabled
+              </>
+            )}
+          </Button>
+        </div>
       </Card>
 
       <Card className="p-6 space-y-4">
