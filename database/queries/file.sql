@@ -52,12 +52,12 @@ VALUES
 RETURNING *
 ;
 
--- name: BackfillLogGroupFlavors :execrows
--- Sets the flavor for every log group that has none yet. The flavor value is
--- build-tag dependent (resolved in Go), so this can't be a SQL migration.
+-- name: UpdateWoWLogGroupFlavor :exec
+-- Persists the resolved flavor back onto a log group after dataset-based
+-- resolution, so subsequent reparses use the correct value.
 UPDATE wow_log_groups
 SET flavor = @flavor::text[]
-WHERE flavor IS NULL
+WHERE id = @id
 ;
 
 -- name: GetWoWLogFilesByGroupID :many

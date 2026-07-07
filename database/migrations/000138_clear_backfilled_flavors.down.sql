@@ -1,0 +1,2 @@
+-- No-op: cannot reconstruct the original backfilled values; the next parse
+-- will re-resolve the correct flavor from the dataset.

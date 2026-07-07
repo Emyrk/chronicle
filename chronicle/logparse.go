@@ -132,7 +132,7 @@ func (w *WorkerLogParse) Work(ctx context.Context, job *river.Job[ArgsLogParse])
 	}
 	// Resolve the parse metadata, preferring the persisted format/flavor
 	// columns and falling back to deriving from the legacy log type (rows
-	// predating the columns, or before the flavor backfill ran).
+	// predating the columns).
 	lg := logGroup.WoWLogGroup
 	logFormat := lg.LogType.Format()
 	if lg.Format.Valid {
@@ -213,9 +213,14 @@ func (w *WorkerLogParse) Work(ctx context.Context, job *river.Job[ArgsLogParse])
 	gameDB := w.parent.WoWDB.ForDataset(resolved.DatasetID)
 
 	// If the log group didn't have an explicit flavor (from the upload
-	// request), use the dataset's default_flavor instead.
+	// request), use the dataset's default_flavor instead and persist it
+	// so subsequent reparses use the correct value.
 	if !explicitFlavor && len(resolved.Flavor) > 0 {
 		flavor = resolved.Flavor
+		_ = db.UpdateWoWLogGroupFlavor(ctx, database.UpdateWoWLogGroupFlavorParams{
+			ID:     lg.ID,
+			Flavor: flavor.Strings(),
+		})
 	}
 
 	ctx = parsectx.With(ctx, parsectx.Context{
