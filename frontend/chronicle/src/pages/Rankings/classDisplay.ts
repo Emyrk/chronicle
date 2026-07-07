@@ -30,8 +30,22 @@ export const CLASS_CSS_VAR: Record<string, string> = {
 
 export const ALL_DPS_CLASSES: WoWHeroClasses[] = [
   "WARRIOR", "ROGUE", "MAGE", "WARLOCK", "HUNTER",
-  "PRIEST", "DRUID", "PALADIN", "SHAMAN",
+  "PRIEST", "DRUID", "PALADIN", "SHAMAN", "DEATHKNIGHT",
 ]
+
+/** Maps WoWHeroClasses enum values to WoW numeric class IDs. */
+export const CLASS_NAME_TO_ID: Record<string, number> = {
+  WARRIOR: 1,
+  PALADIN: 2,
+  HUNTER: 3,
+  ROGUE: 4,
+  PRIEST: 5,
+  DEATHKNIGHT: 6,
+  SHAMAN: 7,
+  MAGE: 8,
+  WARLOCK: 9,
+  DRUID: 11,
+}
 
 export const SPEC_BY_CLASS: Record<string, readonly string[]> = {
   WARRIOR: ["Arms", "Fury", "Protection"],
@@ -43,6 +57,7 @@ export const SPEC_BY_CLASS: Record<string, readonly string[]> = {
   DRUID: ["Balance", "Feral", "Restoration"],
   PALADIN: ["Holy", "Protection", "Retribution"],
   SHAMAN: ["Elemental", "Enhancement", "Restoration"],
+  DEATHKNIGHT: ["Blood", "Frost", "Unholy"],
 }
 
 export const REALM_NAMES = ["Ambershire", "Tel'Abim", "Nordanaar"] as const

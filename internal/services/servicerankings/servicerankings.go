@@ -8,8 +8,10 @@ import (
 	"strings"
 
 	"github.com/Emyrk/chronicle/api/chroniclesdk"
+	"github.com/Emyrk/chronicle/api/db2sdk"
 	"github.com/Emyrk/chronicle/api/httpapi"
 	"github.com/Emyrk/chronicle/combatlog/parser/common/registry"
+	types "github.com/Emyrk/chronicle/combatlog/parser/types"
 	"github.com/Emyrk/chronicle/database"
 	"github.com/Emyrk/chronicle/database/authz"
 	"github.com/Emyrk/chronicle/internal/services"
@@ -238,12 +240,19 @@ func (s *Service) handleLeaderboard(w http.ResponseWriter, r *http.Request) {
 		sinceDays = periodToDays(v)
 	}
 
+	// Normalize class name: the frontend sends SDK-form names (e.g. DEATHKNIGHT)
+	// but the DB stores DB-form names (e.g. DEATH_KNIGHT).
+	classParam := q.Get("class")
+	if classParam != "" {
+		classParam = string(db2sdk.HeroClassToDB(types.HeroClasses(classParam)))
+	}
+
 	rows, err := s.store.RankingsLeaderboard(ctx, database.RankingsLeaderboardParams{
 		InstanceNames:   splitCSV(q.Get("instance_names")),
 		EncounterNames:  splitCSV(q.Get("encounter_names")),
 		DifficultyNames: splitCSV(q.Get("difficulty_names")),
 		RealmID:         q.Get("realm_id"),
-		Class:           q.Get("class"),
+		Class:           classParam,
 		Spec:            q.Get("spec"),
 		Role:            q.Get("role"),
 		SinceDays:       sinceDays,
@@ -270,7 +279,7 @@ func (s *Service) handleLeaderboard(w http.ResponseWriter, r *http.Request) {
 			InstanceName:   row.InstanceName,
 			PlayerGUID:     row.PlayerGuid,
 			PlayerName:     row.PlayerName,
-			PlayerClass:    row.PlayerClass,
+			PlayerClass:    normalizeClassName(row.PlayerClass),
 			PlayerSpec:     row.PlayerSpec,
 			PlayerRole:     row.PlayerRole,
 			PlayerLevel:    row.PlayerLevel,
@@ -335,7 +344,7 @@ func (s *Service) handleStats(w http.ResponseWriter, r *http.Request) {
 	out := make([]chroniclesdk.RankingsBoxPlotStats, 0, len(rows))
 	for _, row := range rows {
 		out = append(out, chroniclesdk.RankingsBoxPlotStats{
-			PlayerClass: row.PlayerClass,
+			PlayerClass: normalizeClassName(row.PlayerClass),
 			PlayerSpec:  row.PlayerSpec,
 			MinDPS:      row.MinDps,
 			Q1DPS:       row.Q1Dps,
@@ -347,6 +356,14 @@ func (s *Service) handleStats(w http.ResponseWriter, r *http.Request) {
 	}
 
 	httpapi.Write(ctx, w, http.StatusOK, out)
+}
+
+
+// normalizeClassName converts a DB-form class name (e.g. DEATH_KNIGHT) to the
+// SDK-form name (e.g. DEATHKNIGHT) used by the frontend. For classes without
+// underscores this is a no-op.
+func normalizeClassName(dbClass string) string {
+	return strings.ReplaceAll(dbClass, "_", "")
 }
 
 // splitCSV splits a comma-separated string into a slice, trimming whitespace.

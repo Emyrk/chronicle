@@ -1,5 +1,7 @@
+import { useMemo } from "react"
 import { cn } from "@/lib/utils"
-import { ALL_DPS_CLASSES, CLASS_CSS_VAR, CLASS_DISPLAY, SPEC_BY_CLASS } from "./classDisplay"
+import { serverCapabilities } from "@/config/serverCapabilities"
+import { ALL_DPS_CLASSES, CLASS_CSS_VAR, CLASS_DISPLAY, CLASS_NAME_TO_ID, SPEC_BY_CLASS } from "./classDisplay"
 
 interface ClassSpecFilterProps {
   selectedClass: string | null
@@ -16,11 +18,21 @@ export function ClassSpecFilter({
 }: ClassSpecFilterProps) {
   const specs = selectedClass ? SPEC_BY_CLASS[selectedClass] : undefined
 
+  const visibleClasses = useMemo(() => {
+    const classIds = serverCapabilities.talentCalculator?.classIds
+    if (!classIds) return ALL_DPS_CLASSES
+    const idSet = new Set(classIds)
+    return ALL_DPS_CLASSES.filter((cls) => {
+      const id = CLASS_NAME_TO_ID[cls]
+      return id !== undefined && idSet.has(id)
+    })
+  }, [])
+
   return (
     <div className="flex flex-col gap-1.5">
       {/* Class buttons */}
       <div className="flex flex-wrap items-center gap-1">
-        {ALL_DPS_CLASSES.map((cls) => {
+        {visibleClasses.map((cls) => {
           const active = selectedClass === cls
           const color = CLASS_CSS_VAR[cls]
           return (
