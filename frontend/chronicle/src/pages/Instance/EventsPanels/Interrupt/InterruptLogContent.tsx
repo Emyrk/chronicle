@@ -137,8 +137,15 @@ export const InterruptLogContent = (props: InterruptLogContentProps) => {
     processing: hasData ? false : props.processing,
   };
 
+  const supportsInterrupt = props.context.instance.capabilities?.includes("interrupt");
+
   return (
     <GenericPanel {...effectiveProps}>
+      {!supportsInterrupt ? (
+        <div className="flex items-center justify-center h-full text-muted-foreground text-sm">
+          Interrupts are not supported in this log format.
+        </div>
+      ) : (
       <div className="flex flex-col h-full min-h-0">
         <div className="flex items-center justify-between mb-2 gap-2 shrink-0">
           <div className="text-xs text-muted-foreground">
@@ -222,6 +229,7 @@ export const InterruptLogContent = (props: InterruptLogContentProps) => {
           </ScrollArea>
         )}
       </div>
+      )}
     </GenericPanel>
   );
 };

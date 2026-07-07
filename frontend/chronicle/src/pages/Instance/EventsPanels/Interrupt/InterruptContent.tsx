@@ -296,8 +296,15 @@ export function InterruptContent(props: PanelRenderProps<InterruptResult>) {
   const total = chartData.reduce((sum, d) => sum + d.value, 0);
   const displayTotal = formatNumber(total, 0);
 
+  const supportsInterrupt = props.context.instance.capabilities?.includes("interrupt");
+
   return (
     <GenericPanel {...effectiveProps}>
+      {!supportsInterrupt ? (
+        <div className="flex items-center justify-center h-full text-muted-foreground text-sm">
+          Interrupts are not supported in this log format.
+        </div>
+      ) : <>
       <div className="flex items-center justify-between gap-2">
         <div className="text-xs text-muted-foreground">
           Total: <span className="font-medium font-mono text-foreground">{displayTotal}</span>
@@ -349,6 +356,7 @@ export function InterruptContent(props: PanelRenderProps<InterruptResult>) {
           armoryUrl={getArmoryUrl(props.context.instance, contextMenu.playerId)}
         />
       )}
+      </>}
     </GenericPanel>
   );
 }
