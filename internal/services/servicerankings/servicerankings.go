@@ -165,6 +165,9 @@ func (s *Service) handleInstances(w http.ResponseWriter, r *http.Request) {
 		// TopPlayers is JSONB ([]byte) from the summary table.
 		if len(row.TopPlayers) > 0 {
 			summary.TopPlayers = chroniclesdk.TopPlayersFromJSON(row.TopPlayers)
+			for i := range summary.TopPlayers {
+				summary.TopPlayers[i].PlayerClass = normalizeClassName(summary.TopPlayers[i].PlayerClass)
+			}
 		}
 		if summary.TopPlayers == nil {
 			summary.TopPlayers = []chroniclesdk.RankingsInstanceTopPlayer{}
