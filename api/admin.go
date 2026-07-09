@@ -775,6 +775,11 @@ func (a *API) AdminUpdateSiteConfig(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		t = &updated
+		// Invalidate the tenant cache so subsequent requests see the update
+		// immediately (the middleware serves tenants from an in-memory cache).
+		if a.Opts.Tenant != nil {
+			a.Opts.Tenant.InvalidateCache()
+		}
 	}
 
 	config, err := a.Opts.Zed.UpdateSiteConfig(ctx, params)
