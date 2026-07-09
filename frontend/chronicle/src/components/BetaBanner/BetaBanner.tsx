@@ -3,10 +3,35 @@ import { X } from "lucide-react";
 
 const STORAGE_KEY = "beta-banner-dismissed";
 
+const isTurtleArchived =
+  window.location.hostname === "turtle.chronicleclassic.com";
+
 export function BetaBanner() {
   const [dismissed, setDismissed] = useState(() => {
     return localStorage.getItem(STORAGE_KEY) === "true";
   });
+
+  // The archived warning is never dismissible.
+  if (isTurtleArchived) {
+    return (
+      <div className="relative bg-amber-500/10 border-b border-amber-500/30 py-2 px-4 text-center text-sm">
+        <span className="font-medium text-amber-600 dark:text-amber-400">
+          ⚠️ Archived
+        </span>
+        <span className="text-muted-foreground ml-2">
+          Turtle WoW is archived and should no longer be used. Supported servers
+          are listed on{" "}
+          <a
+            href="https://chronicleclassic.com/"
+            className="underline text-amber-600 dark:text-amber-400 hover:text-amber-500"
+          >
+            chronicleclassic.com
+          </a>
+          .
+        </span>
+      </div>
+    );
+  }
 
   if (dismissed) {
     return null;
