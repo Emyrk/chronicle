@@ -691,6 +691,22 @@ func (a *API) AdminBulkReparseOutdatedInstances(w http.ResponseWriter, r *http.R
 	httpapi.Write(ctx, w, http.StatusAccepted, resp)
 }
 
+// resolveTenant returns the tenant from the request context if available,
+// falling back to resolving from the Host header. The middleware skips tenant
+// injection when the host matches the access URL, but the host may still
+// correspond to a tenant (e.g. turtle.chronicleclassic.com).
+func (a *API) resolveTenant(r *http.Request) *database.Tenant {
+	if t := servicetenant.TenantFromContext(r.Context()); t != nil {
+		return t
+	}
+	if a.Opts.Tenant != nil {
+		if resolved, ok := a.Opts.Tenant.ResolveFromHost(r.Host); ok {
+			return &resolved
+		}
+	}
+	return nil
+}
+
 func (a *API) AdminGetSiteConfig(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 	config, err := a.Opts.Zed.GetSiteConfig(ctx)
@@ -699,7 +715,7 @@ func (a *API) AdminGetSiteConfig(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	t := servicetenant.TenantFromContext(ctx)
+	t := a.resolveTenant(r)
 	resp := chroniclesdk.SiteConfig{
 		SignupsEnabled:        config.SignupsEnabled,
 		ShortLinkDomain:       a.Opts.ShortLinkDomain,
@@ -764,7 +780,7 @@ func (a *API) AdminUpdateSiteConfig(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Update the per-tenant client upload flag if requested.
-	t := servicetenant.TenantFromContext(ctx)
+	t := a.resolveTenant(r)
 	if req.DisableClientUpload != nil && t != nil {
 		updated, err := a.Opts.Zed.UpdateTenant(ctx, database.UpdateTenantParams{
 			ID:                  t.ID,

@@ -115,6 +115,17 @@ func (s *Service) Options() serpent.OptionSet {
 func (s *Service) GetTenantBySlug(slug string) (database.Tenant, bool) {
 	return s.slugs.Get(slug)
 }
+// ResolveFromHost extracts the tenant slug from a request Host header and
+// returns the cached tenant. Useful when the tenant middleware skipped
+// injection (e.g. the host matches the access URL).
+func (s *Service) ResolveFromHost(host string) (database.Tenant, bool) {
+	slug := s.extractSlug(host)
+	if slug == "" {
+		return database.Tenant{}, false
+	}
+	return s.GetTenantBySlug(slug)
+}
+
 
 const refreshInterval = 5 * time.Minute
 
