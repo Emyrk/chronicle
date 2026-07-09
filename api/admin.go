@@ -703,7 +703,7 @@ func (a *API) AdminGetSiteConfig(w http.ResponseWriter, r *http.Request) {
 	resp := chroniclesdk.SiteConfig{
 		SignupsEnabled:        config.SignupsEnabled,
 		ShortLinkDomain:       a.Opts.ShortLinkDomain,
-		ClientUploadsDisabled: a.Opts.ClientUploadsDisabled || (t != nil && t.DisableClientUpload),
+		ClientUploadsDisabled: a.Opts.ClientUploadsDisabled || config.ClientUploadsDisabled || (t != nil && t.DisableClientUpload),
 	}
 	if t != nil {
 		tenant := chroniclesdk.TenantFromDB(*t)
@@ -762,25 +762,11 @@ func (a *API) AdminUpdateSiteConfig(w http.ResponseWriter, r *http.Request) {
 	if req.AvailableFormats != nil {
 		params.AvailableFormats = req.AvailableFormats
 	}
-
-	// Update the per-tenant client upload flag if requested.
-	t := servicetenant.TenantFromContext(ctx)
-	if req.DisableClientUpload != nil && t != nil {
-		updated, err := a.Opts.Zed.UpdateTenant(ctx, database.UpdateTenantParams{
-			ID:                  t.ID,
-			DisableClientUpload: pgtype.Bool{Bool: *req.DisableClientUpload, Valid: true},
-		})
-		if err != nil {
-			httpapi.InternalServerError(w, err)
-			return
-		}
-		t = &updated
-		// Invalidate the tenant cache so subsequent requests see the update
-		// immediately (the middleware serves tenants from an in-memory cache).
-		if a.Opts.Tenant != nil {
-			a.Opts.Tenant.InvalidateCache()
-		}
+	if req.DisableClientUpload != nil {
+		params.ClientUploadsDisabled = pgtype.Bool{Bool: *req.DisableClientUpload, Valid: true}
 	}
+
+	t := servicetenant.TenantFromContext(ctx)
 
 	config, err := a.Opts.Zed.UpdateSiteConfig(ctx, params)
 	if err != nil {
@@ -790,7 +776,7 @@ func (a *API) AdminUpdateSiteConfig(w http.ResponseWriter, r *http.Request) {
 	httpapi.Write(ctx, w, http.StatusOK, chroniclesdk.SiteConfig{
 		SignupsEnabled:        config.SignupsEnabled,
 		ShortLinkDomain:       a.Opts.ShortLinkDomain,
-		ClientUploadsDisabled: a.Opts.ClientUploadsDisabled || (t != nil && t.DisableClientUpload),
+		ClientUploadsDisabled: a.Opts.ClientUploadsDisabled || config.ClientUploadsDisabled || (t != nil && t.DisableClientUpload),
 		Branding:              unmarshalBranding(config.Branding),
 		Discoverable:          config.Discoverable,
 	})

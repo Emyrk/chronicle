@@ -6675,7 +6675,7 @@ func (q *sqlQuerier) GetSharedViewByInstanceAndHash(ctx context.Context, arg Get
 }
 
 const getSiteConfig = `-- name: GetSiteConfig :one
-SELECT id, signups_enabled, updated_at, branding, discoverable, default_format, available_formats FROM site_config WHERE id = TRUE
+SELECT id, signups_enabled, updated_at, branding, discoverable, default_format, available_formats, client_uploads_disabled FROM site_config WHERE id = TRUE
 `
 
 func (q *sqlQuerier) GetSiteConfig(ctx context.Context) (SiteConfig, error) {
@@ -6689,6 +6689,7 @@ func (q *sqlQuerier) GetSiteConfig(ctx context.Context) (SiteConfig, error) {
 		&i.Discoverable,
 		&i.DefaultFormat,
 		&i.AvailableFormats,
+		&i.ClientUploadsDisabled,
 	)
 	return i, err
 }
@@ -6700,17 +6701,19 @@ UPDATE site_config SET
     discoverable = COALESCE($3, discoverable),
     default_format = COALESCE($4, default_format),
     available_formats = COALESCE($5, available_formats),
+    client_uploads_disabled = COALESCE($6, client_uploads_disabled),
     updated_at = now()
 WHERE id = TRUE
-RETURNING id, signups_enabled, updated_at, branding, discoverable, default_format, available_formats
+RETURNING id, signups_enabled, updated_at, branding, discoverable, default_format, available_formats, client_uploads_disabled
 `
 
 type UpdateSiteConfigParams struct {
-	SignupsEnabled   pgtype.Bool   `db:"signups_enabled" json:"signups_enabled"`
-	Branding         []byte        `db:"branding" json:"branding"`
-	Discoverable     pgtype.Bool   `db:"discoverable" json:"discoverable"`
-	DefaultFormat    NullLogFormat `db:"default_format" json:"default_format"`
-	AvailableFormats []string      `db:"available_formats" json:"available_formats"`
+	SignupsEnabled        pgtype.Bool   `db:"signups_enabled" json:"signups_enabled"`
+	Branding              []byte        `db:"branding" json:"branding"`
+	Discoverable          pgtype.Bool   `db:"discoverable" json:"discoverable"`
+	DefaultFormat         NullLogFormat `db:"default_format" json:"default_format"`
+	AvailableFormats      []string      `db:"available_formats" json:"available_formats"`
+	ClientUploadsDisabled pgtype.Bool   `db:"client_uploads_disabled" json:"client_uploads_disabled"`
 }
 
 func (q *sqlQuerier) UpdateSiteConfig(ctx context.Context, arg UpdateSiteConfigParams) (SiteConfig, error) {
@@ -6720,6 +6723,7 @@ func (q *sqlQuerier) UpdateSiteConfig(ctx context.Context, arg UpdateSiteConfigP
 		arg.Discoverable,
 		arg.DefaultFormat,
 		arg.AvailableFormats,
+		arg.ClientUploadsDisabled,
 	)
 	var i SiteConfig
 	err := row.Scan(
@@ -6730,6 +6734,7 @@ func (q *sqlQuerier) UpdateSiteConfig(ctx context.Context, arg UpdateSiteConfigP
 		&i.Discoverable,
 		&i.DefaultFormat,
 		&i.AvailableFormats,
+		&i.ClientUploadsDisabled,
 	)
 	return i, err
 }

@@ -1499,13 +1499,14 @@ type SharedView struct {
 }
 
 type SiteConfig struct {
-	ID               bool               `db:"id" json:"id"`
-	SignupsEnabled   bool               `db:"signups_enabled" json:"signups_enabled"`
-	UpdatedAt        pgtype.Timestamptz `db:"updated_at" json:"updated_at"`
-	Branding         []byte             `db:"branding" json:"branding"`
-	Discoverable     bool               `db:"discoverable" json:"discoverable"`
-	DefaultFormat    NullLogFormat      `db:"default_format" json:"default_format"`
-	AvailableFormats []string           `db:"available_formats" json:"available_formats"`
+	ID                    bool               `db:"id" json:"id"`
+	SignupsEnabled        bool               `db:"signups_enabled" json:"signups_enabled"`
+	UpdatedAt             pgtype.Timestamptz `db:"updated_at" json:"updated_at"`
+	Branding              []byte             `db:"branding" json:"branding"`
+	Discoverable          bool               `db:"discoverable" json:"discoverable"`
+	DefaultFormat         NullLogFormat      `db:"default_format" json:"default_format"`
+	AvailableFormats      []string           `db:"available_formats" json:"available_formats"`
+	ClientUploadsDisabled bool               `db:"client_uploads_disabled" json:"client_uploads_disabled"`
 }
 
 type TalentBuild struct {

@@ -8,6 +8,7 @@ UPDATE site_config SET
     discoverable = COALESCE(sqlc.narg('discoverable'), discoverable),
     default_format = COALESCE(sqlc.narg('default_format'), default_format),
     available_formats = COALESCE(sqlc.narg('available_formats'), available_formats),
+    client_uploads_disabled = COALESCE(sqlc.narg('client_uploads_disabled'), client_uploads_disabled),
     updated_at = now()
 WHERE id = TRUE
 RETURNING *;

@@ -1099,6 +1099,7 @@ CREATE TABLE site_config (
     discoverable boolean DEFAULT false NOT NULL,
     default_format log_format,
     available_formats text[] DEFAULT '{}'::text[] NOT NULL,
+    client_uploads_disabled boolean DEFAULT false NOT NULL,
     CONSTRAINT site_config_id_check CHECK (id)
 );
 

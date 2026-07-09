@@ -207,21 +207,25 @@ func (api *API) DeleteWoWLogFiles(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
+// clientUploadsDisabled checks whether client uploads are disabled at the
+// server-option, site-config (DB), or per-tenant level.
+func (api *API) clientUploadsDisabled(ctx context.Context) bool {
+	if api.Opts.ClientUploadsDisabled {
+		return true
+	}
+	if t := servicetenant.TenantFromContext(ctx); t != nil && t.DisableClientUpload {
+		return true
+	}
+	if config, err := api.Opts.Zed.GetSiteConfig(ctx); err == nil && config.ClientUploadsDisabled {
+		return true
+	}
+	return false
+}
+
 func (api *API) WoWLogUpload(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 
-	if api.Opts.ClientUploadsDisabled {
-		actor, _ := authz.ActorFromContext(ctx)
-		isAdmin, err := api.Zed.CheckOne(ctx, nil, policy.New().GlobalChronicle().CanAdmin_logs_User(actor))
-		if err != nil || !isAdmin {
-			httpapi.Write(ctx, w, http.StatusForbidden, chroniclesdk.Response{
-				Message: "Client-side uploads are disabled on this server.",
-			})
-			return
-		}
-	}
-
-	if t := servicetenant.TenantFromContext(ctx); t != nil && t.DisableClientUpload {
+	if api.clientUploadsDisabled(ctx) {
 		actor, _ := authz.ActorFromContext(ctx)
 		isAdmin, err := api.Zed.CheckOne(ctx, nil, policy.New().GlobalChronicle().CanAdmin_logs_User(actor))
 		if err != nil || !isAdmin {
@@ -311,18 +315,7 @@ func isGzipped(header *multipart.FileHeader) bool {
 func (api *API) WoWLogUploadV2(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 
-	if api.Opts.ClientUploadsDisabled {
-		actor, _ := authz.ActorFromContext(ctx)
-		isAdmin, err := api.Zed.CheckOne(ctx, nil, policy.New().GlobalChronicle().CanAdmin_logs_User(actor))
-		if err != nil || !isAdmin {
-			httpapi.Write(ctx, w, http.StatusForbidden, chroniclesdk.Response{
-				Message: "Client-side uploads are disabled on this server.",
-			})
-			return
-		}
-	}
-
-	if t := servicetenant.TenantFromContext(ctx); t != nil && t.DisableClientUpload {
+	if api.clientUploadsDisabled(ctx) {
 		actor, _ := authz.ActorFromContext(ctx)
 		isAdmin, err := api.Zed.CheckOne(ctx, nil, policy.New().GlobalChronicle().CanAdmin_logs_User(actor))
 		if err != nil || !isAdmin {
