@@ -5231,7 +5231,8 @@ WITH deduped AS (
     SELECT DISTINCT ON (edr.player_guid, edr.encounter_name, COALESCE(li.duplicate_group_id, li.id))
         edr.player_guid, edr.player_name, edr.realm_name,
         edr.player_class, edr.encounter_name,
-        edr.damage_done, edr.duration_secs, edr.dps
+        edr.damage_done, edr.duration_secs, edr.dps,
+        COALESCE(li.duplicate_group_id, li.id) AS run_id
     FROM encounter_dps_rankings edr
     JOIN log_instances li ON li.id = edr.instance_id
     JOIN wow_server_realms wsr ON wsr.id = edr.realm_id
@@ -5244,16 +5245,27 @@ WITH deduped AS (
 instance_encounter_count AS (
     SELECT COUNT(DISTINCT d.encounter_name) AS cnt FROM deduped d
 ),
-per_player AS (
+per_run AS (
     SELECT
         d.player_guid,
+        d.run_id,
         (array_agg(d.player_name ORDER BY d.damage_done DESC))[1] AS player_name,
         (array_agg(d.realm_name ORDER BY d.damage_done DESC))[1] AS realm_name,
         (array_agg(d.player_class ORDER BY d.damage_done DESC))[1] AS player_class,
         (SUM(d.damage_done)::double precision / NULLIF(SUM(d.duration_secs), 0)) AS dps
     FROM deduped d
-    GROUP BY d.player_guid
+    GROUP BY d.player_guid, d.run_id
     HAVING COUNT(DISTINCT d.encounter_name) = (SELECT cnt FROM instance_encounter_count)
+),
+per_player AS (
+    SELECT DISTINCT ON (pr.player_guid)
+        pr.player_guid,
+        pr.player_name,
+        pr.realm_name,
+        pr.player_class,
+        pr.dps
+    FROM per_run pr
+    ORDER BY pr.player_guid, pr.dps DESC
 ),
 stats AS (
     SELECT COUNT(DISTINCT player_guid)::bigint AS total_kills FROM deduped
@@ -5298,6 +5310,8 @@ type UpsertRankingsInstanceSummaryParams struct {
 // (instance, difficulty, max_players, tenant) combo.
 // The caller sets tenant context so RLS on encounter_dps_rankings
 // scopes to the correct realms automatically.
+// Step 1: aggregate per player per run (sum encounters within one instance run).
+// Step 2: pick each player's best run.
 func (q *sqlQuerier) UpsertRankingsInstanceSummary(ctx context.Context, arg UpsertRankingsInstanceSummaryParams) error {
 	_, err := q.db.Exec(ctx, upsertRankingsInstanceSummary,
 		arg.InstanceName,

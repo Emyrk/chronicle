@@ -377,6 +377,8 @@ type sqlcQuerier interface {
 	// (instance, difficulty, max_players, tenant) combo.
 	// The caller sets tenant context so RLS on encounter_dps_rankings
 	// scopes to the correct realms automatically.
+	// Step 1: aggregate per player per run (sum encounters within one instance run).
+	// Step 2: pick each player's best run.
 	UpsertRankingsInstanceSummary(ctx context.Context, arg UpsertRankingsInstanceSummaryParams) error
 	UpsertRetentionPolicy(ctx context.Context, arg UpsertRetentionPolicyParams) (RetentionPolicy, error)
 	UpsertRetentionPolicyByRealm(ctx context.Context, arg UpsertRetentionPolicyByRealmParams) (RetentionPolicy, error)
