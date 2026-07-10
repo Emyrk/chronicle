@@ -5197,18 +5197,26 @@ func (q *sqlQuerier) RankingsSuccessRates(ctx context.Context, arg RankingsSucce
 }
 
 const rankingsSummaryLastRowCount = `-- name: RankingsSummaryLastRowCount :one
-SELECT COALESCE(MAX(last_row_count), 0)::bigint AS last_row_count
+SELECT
+    COALESCE(MAX(last_row_count), 0)::bigint AS last_row_count,
+    COALESCE(MIN(query_version), 0)::smallint AS query_version
 FROM rankings_instance_summaries
 WHERE tenant_id = $1
 `
 
-// Returns the last_row_count stored in the summary table for a tenant.
-// If no summaries exist yet, returns 0 (forcing a refresh).
-func (q *sqlQuerier) RankingsSummaryLastRowCount(ctx context.Context, tenantID uuid.UUID) (int64, error) {
+type RankingsSummaryLastRowCountRow struct {
+	LastRowCount int64 `db:"last_row_count" json:"last_row_count"`
+	QueryVersion int16 `db:"query_version" json:"query_version"`
+}
+
+// Returns the last_row_count and minimum query_version stored in the
+// summary table for a tenant. If no summaries exist yet, returns 0
+// for both (forcing a refresh).
+func (q *sqlQuerier) RankingsSummaryLastRowCount(ctx context.Context, tenantID uuid.UUID) (RankingsSummaryLastRowCountRow, error) {
 	row := q.db.QueryRow(ctx, rankingsSummaryLastRowCount, tenantID)
-	var last_row_count int64
-	err := row.Scan(&last_row_count)
-	return last_row_count, err
+	var i RankingsSummaryLastRowCountRow
+	err := row.Scan(&i.LastRowCount, &i.QueryVersion)
+	return i, err
 }
 
 const rankingsSummaryMaxUpdatedAt = `-- name: RankingsSummaryMaxUpdatedAt :one
@@ -5275,7 +5283,7 @@ top3 AS (
     FROM per_player WHERE dps > 0
     ORDER BY dps DESC LIMIT 3
 )
-INSERT INTO rankings_instance_summaries (instance_name, difficulty_name, max_players, tenant_id, total_kills, top_players, last_row_count, updated_at)
+INSERT INTO rankings_instance_summaries (instance_name, difficulty_name, max_players, tenant_id, total_kills, top_players, last_row_count, query_version, updated_at)
 VALUES (
     $1,
     $2,
@@ -5289,12 +5297,14 @@ VALUES (
         'dps', t.dps
     )) FROM top3 t), '[]'::json),
     $5,
+    $6,
     now()
 )
 ON CONFLICT (instance_name, difficulty_name, max_players, tenant_id) DO UPDATE SET
     total_kills = EXCLUDED.total_kills,
     top_players = EXCLUDED.top_players,
     last_row_count = EXCLUDED.last_row_count,
+    query_version = EXCLUDED.query_version,
     updated_at = EXCLUDED.updated_at
 `
 
@@ -5304,6 +5314,7 @@ type UpsertRankingsInstanceSummaryParams struct {
 	MaxPlayers     int16     `db:"max_players" json:"max_players"`
 	TenantID       uuid.UUID `db:"tenant_id" json:"tenant_id"`
 	LastRowCount   int64     `db:"last_row_count" json:"last_row_count"`
+	QueryVersion   int16     `db:"query_version" json:"query_version"`
 }
 
 // Recompute and upsert the rankings summary for a single
@@ -5319,6 +5330,7 @@ func (q *sqlQuerier) UpsertRankingsInstanceSummary(ctx context.Context, arg Upse
 		arg.MaxPlayers,
 		arg.TenantID,
 		arg.LastRowCount,
+		arg.QueryVersion,
 	)
 	return err
 }

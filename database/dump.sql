@@ -933,7 +933,8 @@ CREATE TABLE rankings_instance_summaries (
     total_kills bigint DEFAULT 0 NOT NULL,
     top_players jsonb DEFAULT '[]'::jsonb NOT NULL,
     last_row_count bigint DEFAULT 0 NOT NULL,
-    updated_at timestamp with time zone DEFAULT now() NOT NULL
+    updated_at timestamp with time zone DEFAULT now() NOT NULL,
+    query_version smallint DEFAULT 0 NOT NULL
 );
 
 CREATE TABLE regression_fixtures (

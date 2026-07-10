@@ -14,6 +14,12 @@ import (
 	"github.com/riverqueue/river/rivertype"
 )
 
+// rankingsQueryVersion is bumped whenever the UpsertRankingsInstanceSummary
+// query logic changes (e.g. aggregation method). The staleness guard compares
+// this against the stored version to force a recompute even when row counts
+// have not changed.
+const rankingsQueryVersion int16 = 1
+
 // ---------------------------------------------------------------------------
 // ArgsRefreshRankingsSummaries — dispatch job (periodic, hourly).
 // Fans out one ArgsRefreshRankingsSummaryTenant per tenant.
@@ -147,16 +153,18 @@ func (w *WorkerRefreshRankingsSummaryTenant) Work(ctx context.Context, job *rive
 		ctx = servicetenant.WithTenantID(ctx, tid)
 	}
 
-	// Staleness guard: skip if row count hasn't changed since last refresh.
+	// Staleness guard: skip if row count hasn't changed AND query version
+	// matches. A query version mismatch forces a full recompute even when
+	// the underlying data hasn't changed.
 	currentCount, err := w.Store.RankingsRowCount(ctx)
 	if err != nil {
 		return err
 	}
-	lastCount, err := w.Store.RankingsSummaryLastRowCount(ctx, tid)
+	lastSummary, err := w.Store.RankingsSummaryLastRowCount(ctx, tid)
 	if err != nil {
 		return err
 	}
-	if currentCount == lastCount && lastCount > 0 {
+	if currentCount == lastSummary.LastRowCount && lastSummary.LastRowCount > 0 && lastSummary.QueryVersion >= rankingsQueryVersion {
 		w.Logger.Info("rankings row count unchanged, skipping",
 			slog.String("tenant_id", tid.String()),
 			slog.Int64("row_count", currentCount),
@@ -181,6 +189,7 @@ func (w *WorkerRefreshRankingsSummaryTenant) Work(ctx context.Context, job *rive
 			MaxPlayers:     c.MaxPlayers,
 			TenantID:       tid,
 			LastRowCount:   currentCount,
+			QueryVersion:   rankingsQueryVersion,
 		}); err != nil {
 			w.Logger.Error("refresh rankings summary failed",
 				slog.String("tenant_id", tid.String()),

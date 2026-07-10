@@ -1366,6 +1366,7 @@ type RankingsInstanceSummary struct {
 	TopPlayers     []byte             `db:"top_players" json:"top_players"`
 	LastRowCount   int64              `db:"last_row_count" json:"last_row_count"`
 	UpdatedAt      pgtype.Timestamptz `db:"updated_at" json:"updated_at"`
+	QueryVersion   int16              `db:"query_version" json:"query_version"`
 }
 
 type RegressionFixture struct {

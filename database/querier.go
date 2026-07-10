@@ -280,9 +280,10 @@ type sqlcQuerier interface {
 	// Kill/wipe/total counts per encounter name within an instance.
 	// Deduplicates across duplicate log groups.
 	RankingsSuccessRates(ctx context.Context, arg RankingsSuccessRatesParams) ([]RankingsSuccessRatesRow, error)
-	// Returns the last_row_count stored in the summary table for a tenant.
-	// If no summaries exist yet, returns 0 (forcing a refresh).
-	RankingsSummaryLastRowCount(ctx context.Context, tenantID uuid.UUID) (int64, error)
+	// Returns the last_row_count and minimum query_version stored in the
+	// summary table for a tenant. If no summaries exist yet, returns 0
+	// for both (forcing a refresh).
+	RankingsSummaryLastRowCount(ctx context.Context, tenantID uuid.UUID) (RankingsSummaryLastRowCountRow, error)
 	// Most recent updated_at among summaries for a given tenant.
 	// Used by the dispatch worker to skip if refreshed recently.
 	RankingsSummaryMaxUpdatedAt(ctx context.Context, tenantID uuid.UUID) (pgtype.Timestamptz, error)

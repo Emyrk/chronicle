@@ -61,7 +61,7 @@ top3 AS (
     FROM per_player WHERE dps > 0
     ORDER BY dps DESC LIMIT 3
 )
-INSERT INTO rankings_instance_summaries (instance_name, difficulty_name, max_players, tenant_id, total_kills, top_players, last_row_count, updated_at)
+INSERT INTO rankings_instance_summaries (instance_name, difficulty_name, max_players, tenant_id, total_kills, top_players, last_row_count, query_version, updated_at)
 VALUES (
     @instance_name,
     @difficulty_name,
@@ -75,12 +75,14 @@ VALUES (
         'dps', t.dps
     )) FROM top3 t), '[]'::json),
     @last_row_count,
+    @query_version,
     now()
 )
 ON CONFLICT (instance_name, difficulty_name, max_players, tenant_id) DO UPDATE SET
     total_kills = EXCLUDED.total_kills,
     top_players = EXCLUDED.top_players,
     last_row_count = EXCLUDED.last_row_count,
+    query_version = EXCLUDED.query_version,
     updated_at = EXCLUDED.updated_at;
 
 -- name: RankingsDistinctSummaryKeys :many
@@ -97,9 +99,12 @@ SELECT COUNT(*)::bigint AS row_count
 FROM encounter_dps_rankings;
 
 -- name: RankingsSummaryLastRowCount :one
--- Returns the last_row_count stored in the summary table for a tenant.
--- If no summaries exist yet, returns 0 (forcing a refresh).
-SELECT COALESCE(MAX(last_row_count), 0)::bigint AS last_row_count
+-- Returns the last_row_count and minimum query_version stored in the
+-- summary table for a tenant. If no summaries exist yet, returns 0
+-- for both (forcing a refresh).
+SELECT
+    COALESCE(MAX(last_row_count), 0)::bigint AS last_row_count,
+    COALESCE(MIN(query_version), 0)::smallint AS query_version
 FROM rankings_instance_summaries
 WHERE tenant_id = @tenant_id;
 
