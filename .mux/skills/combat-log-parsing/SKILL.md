@@ -407,18 +407,22 @@ func (p *Parser) fDamageNoSchool(ts, content) { return p.fDamage(false, ts, cont
 
 ## Synthetic Absorb Attribution
 
-The synthetic generator `combatlog/parser/vanilla/synthetic/absorption.go` infers which
-absorb buff absorbed damage in vanilla 1.12 logs (where the log only reports `(N absorbed)`
-without naming the shield). It emits synthetic `*messages.Absorbed` events marked
-`IsSynthetic()=true`.
+The synthetic generator `combatlog/parser/vanilla/synthetic/absorption.go` (exported as
+`synthetic.Absorption`, shared by the vanilla **and** WotLK pipelines) infers which absorb
+buff absorbed damage in client-side logs (where the log only reports `(N absorbed)` without
+naming the shield). It emits synthetic `*messages.Absorbed` events marked `IsSynthetic()=true`.
 
 **How it works:**
-1. Identifies absorb spells data-driven from DBC: `EffectAura == AuraEffectSchoolAbsorb` (69).
-2. Tracks active shields per target via `Aura` gain/fade events.
-3. Attributes caster by correlating recent `SpellGo` events (same spell + target within 2s).
-4. On damage with `(N absorbed)` trailer, picks the best shield:
+1. Tracks active shields per target from `AuraCast` events:
+   - Vanilla CC v2: `AURA_CAST` carries `EffectAuraName == AuraEffectSchoolAbsorb` (69),
+     school mask, and `DurationMS` directly.
+   - WotLK CLEU: `SPELL_AURA_APPLIED` produces an `AuraCast` with only Spell/Caster/Target;
+     the absorb effect, school mask, and duration are backfilled from DBC spell data.
+2. Removes shields on duration expiry (lazy, checked per damage event) and on
+   `Aura` fade events (`AuraStateRemoved` — reliable in WotLK, client-visible-only in vanilla).
+3. On damage with `(N absorbed)` trailer, picks the best shield:
    school-specific (wards) > all-school (PW:S), most-recently-applied tiebreak.
-5. Full absorbs (no amount) are skipped (Phase 3 work).
+4. Full absorbs (no amount) are skipped (Phase 3 work).
 
 The `Absorbed` proto message has `bool estimated = 9` to distinguish synthetic attribution
 from server-reported (AzerothCore) events.

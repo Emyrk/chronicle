@@ -9,6 +9,7 @@ import (
 	"github.com/Emyrk/chronicle/combatlog/parser/guid"
 	"github.com/Emyrk/chronicle/combatlog/parser/types"
 	"github.com/Emyrk/chronicle/database/gamedb/chrondbc"
+	"github.com/Emyrk/chronicle/database/gamedb/chrondbc/dbcmem"
 	"github.com/Gophercraft/core/i18n"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -50,7 +51,7 @@ func trailAbsorbed(amount uint32) types.Trailer {
 func TestAbsorption_AuraCastPWSPartialAbsorb(t *testing.T) {
 	t.Parallel()
 
-	a := newAbsorption(slog.Default())
+	a := NewAbsorption(slog.Default())
 	now := time.Now()
 
 	priestGUID := mustGUID("0x0000000000000001")
@@ -93,7 +94,7 @@ func TestAbsorption_AuraCastPWSPartialAbsorb(t *testing.T) {
 func TestAbsorption_DurationExpiry(t *testing.T) {
 	t.Parallel()
 
-	a := newAbsorption(slog.Default())
+	a := NewAbsorption(slog.Default())
 	now := time.Now()
 
 	priestGUID := mustGUID("0x0000000000000001")
@@ -124,7 +125,7 @@ func TestAbsorption_DurationExpiry(t *testing.T) {
 func TestAbsorption_DurationNotExpiredYet(t *testing.T) {
 	t.Parallel()
 
-	a := newAbsorption(slog.Default())
+	a := NewAbsorption(slog.Default())
 	now := time.Now()
 
 	priestGUID := mustGUID("0x0000000000000001")
@@ -158,7 +159,7 @@ func TestAbsorption_DurationNotExpiredYet(t *testing.T) {
 func TestAbsorption_WardPrioritizedOverPWS(t *testing.T) {
 	t.Parallel()
 
-	a := newAbsorption(slog.Default())
+	a := NewAbsorption(slog.Default())
 	now := time.Now()
 
 	casterGUID := mustGUID("0x0000000000000001")
@@ -194,7 +195,7 @@ func TestAbsorption_WardPrioritizedOverPWS(t *testing.T) {
 func TestAbsorption_WardDoesNotMatchWrongSchool(t *testing.T) {
 	t.Parallel()
 
-	a := newAbsorption(slog.Default())
+	a := NewAbsorption(slog.Default())
 	now := time.Now()
 
 	targetGUID := mustGUID("0x0000000000000002")
@@ -222,7 +223,7 @@ func TestAbsorption_WardDoesNotMatchWrongSchool(t *testing.T) {
 func TestAbsorption_CapacityExhaustion(t *testing.T) {
 	t.Parallel()
 
-	a := newAbsorption(slog.Default())
+	a := NewAbsorption(slog.Default())
 	now := time.Now()
 
 	casterGUID := mustGUID("0x0000000000000001")
@@ -269,7 +270,7 @@ func TestAbsorption_CapacityExhaustion(t *testing.T) {
 func TestAbsorption_SelfCastViaAuraCast(t *testing.T) {
 	t.Parallel()
 
-	a := newAbsorption(slog.Default())
+	a := NewAbsorption(slog.Default())
 	now := time.Now()
 
 	mageGUID := mustGUID("0x0000000000000001")
@@ -302,7 +303,7 @@ func TestAbsorption_SelfCastViaAuraCast(t *testing.T) {
 func TestAbsorption_TrailerAbsorbWithoutHitTypeFlag(t *testing.T) {
 	t.Parallel()
 
-	a := newAbsorption(slog.Default())
+	a := NewAbsorption(slog.Default())
 	now := time.Now()
 
 	casterGUID := mustGUID("0x0000000000000001")
@@ -337,7 +338,7 @@ func TestAbsorption_TrailerAbsorbWithoutHitTypeFlag(t *testing.T) {
 func TestAbsorption_FullAbsorbSkipped(t *testing.T) {
 	t.Parallel()
 
-	a := newAbsorption(slog.Default())
+	a := NewAbsorption(slog.Default())
 	now := time.Now()
 
 	casterGUID := mustGUID("0x0000000000000001")
@@ -366,7 +367,7 @@ func TestAbsorption_FullAbsorbSkipped(t *testing.T) {
 func TestAbsorption_NoShieldNoEmit(t *testing.T) {
 	t.Parallel()
 
-	a := newAbsorption(slog.Default())
+	a := NewAbsorption(slog.Default())
 	now := time.Now()
 
 	targetGUID := mustGUID("0x0000000000000002")
@@ -389,10 +390,131 @@ func TestAbsorption_NoShieldNoEmit(t *testing.T) {
 	require.Len(t, result, 1, "no shield tracked — should not emit absorbed")
 }
 
+// auraCastWotlk mimics the WotLK CLEU parser: only Spell/Caster/Target are
+// populated on the AuraCast; EffectAuraName, EffectMiscValue, and DurationMS
+// are zero and must be backfilled from DBC spell data.
+func auraCastWotlk(ts time.Time, spell *chrondbc.Spell, caster guid.GUID, target guid.GUID) *messages.AuraCast {
+	return &messages.AuraCast{
+		MessageBase: messages.Base(ts),
+		Spell:       spell,
+		Caster:      caster,
+		Target:      &target,
+	}
+}
+
+func TestAbsorption_WotlkDBCFallback(t *testing.T) {
+	t.Parallel()
+
+	a := NewAbsorption(slog.Default())
+	now := time.Now()
+
+	priestGUID := mustGUID("0x0000000000000001")
+	tankGUID := mustGUID("0x0000000000000002")
+	bossGUID := mustGUID("0x0030000000000003")
+
+	// WotLK-style: EffectAuraName is not populated; absorb detected via DBC scan.
+	pwsSpell := makeAbsorbSpell("Power Word: Shield", 500, 127)
+
+	msgs := []messages.Message{
+		auraCastWotlk(now, pwsSpell, priestGUID, tankGUID),
+		&messages.Damage{
+			MessageBase: messages.Base(now.Add(2 * time.Second)),
+			Caster:      &bossGUID,
+			Target:      tankGUID,
+			Amount:      200,
+			HitType:     types.HitTypeHit,
+			School:      types.PhysicalSchool,
+			Trailer:     trailAbsorbed(150),
+		},
+	}
+
+	result := a.ProcessMessages(msgs)
+	require.Len(t, result, 3, "WotLK-style AuraCast should create shield via DBC fallback")
+
+	absorbed := result[2].(*messages.Absorbed)
+	assert.Equal(t, int32(150), absorbed.Amount)
+	assert.Equal(t, priestGUID, absorbed.Caster)
+	require.NotNil(t, absorbed.AbsorbSpell)
+	assert.Equal(t, "Power Word: Shield", absorbed.AbsorbSpell.Name())
+	assert.Equal(t, types.School(127), absorbed.AbsorbSchool,
+		"school mask should be backfilled from DBC EffectMiscValue")
+}
+
+func TestAbsorption_WotlkDBCFallbackDuration(t *testing.T) {
+	t.Parallel()
+
+	a := NewAbsorption(slog.Default())
+	now := time.Now()
+
+	priestGUID := mustGUID("0x0000000000000001")
+	tankGUID := mustGUID("0x0000000000000002")
+	bossGUID := mustGUID("0x0030000000000003")
+
+	// Spell with a 30s duration from DBC
+	pwsSpell := makeAbsorbSpell("Power Word: Shield", 500, 127)
+	pwsSpell.Duration = dbcmem.SpellDuration{Duration: 30000}
+
+	msgs := []messages.Message{
+		auraCastWotlk(now, pwsSpell, priestGUID, tankGUID),
+		// Damage 31s later — DBC-derived duration should have expired the shield
+		&messages.Damage{
+			MessageBase: messages.Base(now.Add(31 * time.Second)),
+			Caster:      &bossGUID,
+			Target:      tankGUID,
+			Amount:      200,
+			HitType:     types.HitTypeHit,
+			School:      types.PhysicalSchool,
+			Trailer:     trailAbsorbed(150),
+		},
+	}
+
+	result := a.ProcessMessages(msgs)
+	require.Len(t, result, 2, "shield should expire based on DBC duration fallback")
+}
+
+func TestAbsorption_AuraFadeRemovesShield(t *testing.T) {
+	t.Parallel()
+
+	a := NewAbsorption(slog.Default())
+	now := time.Now()
+
+	priestGUID := mustGUID("0x0000000000000001")
+	tankGUID := mustGUID("0x0000000000000002")
+	bossGUID := mustGUID("0x0030000000000003")
+
+	pwsSpell := makeAbsorbSpell("Power Word: Shield", 500, 127)
+
+	msgs := []messages.Message{
+		auraCastAbsorb(now, pwsSpell, priestGUID, tankGUID, 127),
+		// SPELL_AURA_REMOVED (WotLK) / BUFF_REM (vanilla, if visible)
+		&messages.Aura{
+			MessageBase: messages.Base(now.Add(5 * time.Second)),
+			IsBuff:      true,
+			Target:      tankGUID,
+			SpellName:   "Power Word: Shield",
+			SpellData:   pwsSpell,
+			State:       types.AuraStateRemoved,
+		},
+		// Damage after the shield faded — no attribution
+		&messages.Damage{
+			MessageBase: messages.Base(now.Add(6 * time.Second)),
+			Caster:      &bossGUID,
+			Target:      tankGUID,
+			Amount:      100,
+			HitType:     types.HitTypeHit,
+			School:      types.PhysicalSchool,
+			Trailer:     trailAbsorbed(50),
+		},
+	}
+
+	result := a.ProcessMessages(msgs)
+	require.Len(t, result, 3, "should not emit absorbed after aura fade removed the shield")
+}
+
 func TestAbsorption_NonAbsorbAuraCastIgnored(t *testing.T) {
 	t.Parallel()
 
-	a := newAbsorption(slog.Default())
+	a := NewAbsorption(slog.Default())
 	now := time.Now()
 
 	casterGUID := mustGUID("0x0000000000000001")

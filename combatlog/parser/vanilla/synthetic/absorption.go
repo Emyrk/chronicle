@@ -10,29 +10,39 @@ import (
 	"github.com/Emyrk/chronicle/database/gamedb/chrondbc"
 )
 
-// absorption is a synthetic event generator that attributes absorbed damage
+// Absorption is a synthetic event generator that attributes absorbed damage
 // to the specific absorb buff (e.g. Power Word: Shield) that absorbed it.
+// It is shared by the vanilla (1.12 CC v2 addon) and WotLK (3.3.5a client-side)
+// parser pipelines.
 //
-// Vanilla 1.12 combat logs report absorbs without attribution: partial absorbs
+// Client-side combat logs report absorbs without attribution: partial absorbs
 // appear as trailers "(N absorbed)" on damage lines, and full absorbs appear
 // as amount-less lines. This generator tracks active absorb auras and emits
 // synthetic messages.Absorbed events attributed to the most likely shield.
 //
-// Shield detection uses AuraCast events (CC v2 addon): server-side aura
-// applications emitted for all raid members regardless of client visibility.
-// BUFF_ADD/BUFF_REM events are client-side and unreliable for distant players,
-// so they are not used.
+// Shield detection uses AuraCast events:
+//   - Vanilla CC v2 addon: AURA_CAST carries EffectAuraName, EffectMiscValue
+//     (school mask), and DurationMS directly. Emitted server-side for all raid
+//     members regardless of client visibility. BUFF_ADD/BUFF_REM are client-side
+//     and unreliable for distant players, so they are not used for application.
+//   - WotLK CLEU: SPELL_AURA_APPLIED produces AuraCast with only Spell/Caster/
+//     Target populated. The absorb effect, school mask, and duration are
+//     backfilled from DBC spell data.
 //
-// Shield expiry uses AuraCast.DurationMS. When a shield's duration has elapsed
-// since application, it is removed from tracking on the next damage check.
+// Shield removal:
+//   - Duration expiry (AuraCast.DurationMS or DBC duration fallback), checked
+//     lazily on each damage event.
+//   - Aura fade events (AuraStateRemoved). Reliable in WotLK CLEU; in vanilla
+//     these are client-side BUFF_REM and only help when visible.
 //
 // Attribution algorithm:
-//  1. Identify absorb buffs via AuraCast.EffectAuraName == AuraEffectSchoolAbsorb.
+//  1. Identify absorb buffs via AuraCast.EffectAuraName == AuraEffectSchoolAbsorb,
+//     or via DBC spell effects when EffectAuraName is not populated.
 //  2. Track active shields per target GUID with duration-based expiry.
 //  3. On damage with absorb trailer, pick the best matching shield
 //     (school-specific > all-school, most-recently-applied tiebreak).
 //  4. Emit synthetic Absorbed event immediately after the triggering Damage.
-type absorption struct {
+type Absorption struct {
 	logger *slog.Logger
 
 	// activeShields tracks shields per target GUID.
@@ -50,14 +60,14 @@ type activeShield struct {
 	exhausted    bool         // deprioritized when capacity likely gone
 }
 
-func newAbsorption(logger *slog.Logger) *absorption {
-	return &absorption{
+func NewAbsorption(logger *slog.Logger) *Absorption {
+	return &Absorption{
 		logger:        logger,
 		activeShields: make(map[guid.GUID][]*activeShield),
 	}
 }
 
-func (a *absorption) ProcessMessages(msgs []messages.Message) []messages.Message {
+func (a *Absorption) ProcessMessages(msgs []messages.Message) []messages.Message {
 	var result []messages.Message
 
 	for _, msg := range msgs {
@@ -66,6 +76,8 @@ func (a *absorption) ProcessMessages(msgs []messages.Message) []messages.Message
 		switch m := msg.(type) {
 		case *messages.AuraCast:
 			a.processAuraCast(m)
+		case *messages.Aura:
+			a.processAuraFade(m)
 		case *messages.Damage:
 			if synth := a.processDamage(m); synth != nil {
 				result = append(result, synth)
@@ -76,16 +88,36 @@ func (a *absorption) ProcessMessages(msgs []messages.Message) []messages.Message
 	return result
 }
 
-// processAuraCast handles the CC v2 addon's AURA_CAST events. These are
-// server-side aura applications emitted for all raid members regardless of
-// client visibility. Each AURA_CAST carries a single effect; a spell with
-// multiple effects (e.g. PW:S with absorb + Weakened Soul) produces multiple
-// AURA_CAST events — we only care about the one with AuraEffectSchoolAbsorb.
-func (a *absorption) processAuraCast(ac *messages.AuraCast) {
-	if ac.EffectAuraName != chrondbc.AuraEffectSchoolAbsorb {
+// processAuraCast handles aura application events.
+//
+// Vanilla CC v2 addon: each AURA_CAST carries a single effect with
+// EffectAuraName populated; a spell with multiple effects (e.g. PW:S with
+// absorb + Weakened Soul) produces multiple AURA_CAST events — we only care
+// about the one with AuraEffectSchoolAbsorb.
+//
+// WotLK CLEU: SPELL_AURA_APPLIED produces one AuraCast per application with
+// EffectAuraName unset (zero). We fall back to scanning the DBC spell effects
+// to detect absorb buffs and derive the school mask + duration.
+func (a *Absorption) processAuraCast(ac *messages.AuraCast) {
+	if ac.Target == nil {
 		return
 	}
-	if ac.Target == nil {
+
+	// absorbEffect is the effect index carrying AuraEffectSchoolAbsorb, or -1.
+	absorbEffect := -1
+	if ac.Spell != nil {
+		for i, ae := range ac.Spell.EffectAura {
+			if ae == chrondbc.AuraEffectSchoolAbsorb {
+				absorbEffect = i
+				break
+			}
+		}
+	}
+
+	explicit := ac.EffectAuraName == chrondbc.AuraEffectSchoolAbsorb
+	// Fallback path (WotLK): EffectAuraName not populated, rely on DBC scan.
+	fallback := ac.EffectAuraName == chrondbc.AuraEffectNone && absorbEffect >= 0
+	if !explicit && !fallback {
 		return
 	}
 
@@ -104,26 +136,46 @@ func (a *absorption) processAuraCast(ac *messages.AuraCast) {
 		schoolMask: types.School(ac.EffectMiscValue),
 	}
 
-	// Extract absorb capacity from spell data if available.
-	if ac.Spell != nil {
-		for i, ae := range ac.Spell.EffectAura {
-			if ae == chrondbc.AuraEffectSchoolAbsorb {
-				base := ac.Spell.EffectBasePoints[i]
-				dice := ac.Spell.EffectDieSides[i]
-				// Use 2x capacity as a soft upper bound to account for
-				// talents (Improved PW:S), spell power scaling, and
-				// private server customizations.
-				shield.estRemaining = (base + dice) * 2
-				break
-			}
+	// Backfill capacity, school mask, and duration from DBC spell data.
+	if absorbEffect >= 0 {
+		base := ac.Spell.EffectBasePoints[absorbEffect]
+		dice := ac.Spell.EffectDieSides[absorbEffect]
+		// Use 2x capacity as a soft upper bound to account for talents
+		// (Improved PW:S), spell power scaling, and private server
+		// customizations.
+		shield.estRemaining = (base + dice) * 2
+
+		if shield.schoolMask == 0 {
+			shield.schoolMask = types.School(ac.Spell.EffectMiscValue[absorbEffect])
+		}
+		if shield.durationMS == 0 {
+			shield.durationMS = ac.Spell.Duration.Duration
 		}
 	}
 
 	a.activeShields[target] = append(a.activeShields[target], shield)
 }
 
+// processAuraFade removes a tracked shield when its aura fades.
+// In WotLK CLEU this is SPELL_AURA_REMOVED and is reliable; in vanilla it is
+// the client-side BUFF_REM and only fires for buffs visible to the recording
+// player — duration expiry covers the rest.
+func (a *Absorption) processAuraFade(aura *messages.Aura) {
+	if !aura.IsBuff || aura.State != types.AuraStateRemoved {
+		return
+	}
+
+	shields := a.activeShields[aura.Target]
+	for i, s := range shields {
+		if s.spellName == aura.SpellName {
+			a.activeShields[aura.Target] = append(shields[:i], shields[i+1:]...)
+			return
+		}
+	}
+}
+
 // expireShields removes shields whose duration has elapsed at the given time.
-func (a *absorption) expireShields(target guid.GUID, now time.Time) {
+func (a *Absorption) expireShields(target guid.GUID, now time.Time) {
 	shields := a.activeShields[target]
 	if len(shields) == 0 {
 		return
@@ -147,7 +199,7 @@ func (a *absorption) expireShields(target guid.GUID, now time.Time) {
 	a.activeShields[target] = shields[:n]
 }
 
-func (a *absorption) processDamage(dmg *messages.Damage) *messages.Absorbed {
+func (a *Absorption) processDamage(dmg *messages.Damage) *messages.Absorbed {
 	// Always check trailers for absorbed amounts — the parent HitType flag
 	// is not always set even when the trailer carries an absorb entry.
 	absorbAmount := trailerAbsorbAmount(dmg.Trailer)

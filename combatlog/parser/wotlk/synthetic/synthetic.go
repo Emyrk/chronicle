@@ -28,12 +28,14 @@ type Synthetic struct {
 	petOwnership *petOwnership
 	zoneDetector *zonedetector.ZoneDetector
 	slain        *synthetic.SlainDetective
+	absorption   *synthetic.Absorption
 
 	wowDB gamedb.GameDB
 
-	unitInfoDur      time.Duration
-	petOwnershipDur  time.Duration
-	zoneDetectorDur  time.Duration
+	unitInfoDur     time.Duration
+	petOwnershipDur time.Duration
+	zoneDetectorDur time.Duration
+	absorptionDur   time.Duration
 }
 
 func New(ctx context.Context, logger *slog.Logger, wowDB gamedb.GameDB, reg *registry.Registry, names NameResolver) *Synthetic {
@@ -44,6 +46,7 @@ func New(ctx context.Context, logger *slog.Logger, wowDB gamedb.GameDB, reg *reg
 
 	return &Synthetic{
 		slain:        synthetic.NewSlainDetective(),
+		absorption:   synthetic.NewAbsorption(logger),
 		logger:       logger,
 		wowDB:        wowDB,
 		unitInfo:     newUnitInfo(ctx, logger, wowDB, names, wowDB),
@@ -54,9 +57,10 @@ func New(ctx context.Context, logger *slog.Logger, wowDB gamedb.GameDB, reg *reg
 
 func (s *Synthetic) DetailedTimes() map[string]time.Duration {
 	return map[string]time.Duration{
-		"parser.synthetic.unit_info":      s.unitInfoDur,
-		"parser.synthetic.pet_ownership":  s.petOwnershipDur,
-		"parser.synthetic.zone_detector":  s.zoneDetectorDur,
+		"parser.synthetic.unit_info":     s.unitInfoDur,
+		"parser.synthetic.pet_ownership": s.petOwnershipDur,
+		"parser.synthetic.zone_detector": s.zoneDetectorDur,
+		"parser.synthetic.absorption":    s.absorptionDur,
 	}
 }
 
@@ -76,6 +80,10 @@ func (s *Synthetic) ProcessMessages(msgs []messages.Message) ([]messages.Message
 	}
 
 	s.slain.ProcessMessages(msgs)
+
+	now = time.Now()
+	msgs = s.absorption.ProcessMessages(msgs)
+	s.absorptionDur += time.Since(now)
 
 	return msgs, nil
 }

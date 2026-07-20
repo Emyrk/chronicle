@@ -26,7 +26,7 @@ type Synthetic struct {
 	wowDB        gamedb.GameDB
 	knownArmor   *knownArmor
 	vanillaPlus  *vanillaplus
-	absorption   *absorption
+	absorption   *Absorption
 
 	slainDur        time.Duration
 	extraAttackDur  time.Duration
@@ -52,7 +52,7 @@ func New(ctx context.Context, logger *slog.Logger, wowDB gamedb.GameDB) *Synthet
 		razuvious:    newRazuviousOverkill(),
 		knownArmor:   newKnownArmor(),
 		vanillaPlus:  newVanillaPlus(),
-		absorption:   newAbsorption(logger),
+		absorption:   NewAbsorption(logger),
 		wowDB:        wowDB,
 		flavor:       fl,
 	}
