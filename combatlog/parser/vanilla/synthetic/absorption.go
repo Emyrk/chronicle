@@ -162,10 +162,13 @@ func (a *Absorption) processAuraCast(ac *messages.AuraCast) {
 const defaultMaxShieldDurationMS = 5 * 60 * 1000
 
 // resolveShieldDuration determines how long a shield is tracked:
-//   - Prefer the explicit duration from the log event, capped by the DBC
-//     max duration (guards against bogus values).
-//   - Fall back to the DBC max duration (auto-generated from
+//   - Prefer the explicit duration from the log event (server-provided, so it
+//     already includes talent/glyph extensions), capped by 2x the DBC max
+//     duration to guard against bogus values.
+//   - Fall back to 2x the DBC max duration (auto-generated from
 //     SpellDuration.dbc) when the log carries none — the WotLK CLEU case.
+//     The 2x slack mirrors the capacity bound: talents and glyphs can extend
+//     durations beyond the untalented DBC base.
 //   - Fall back to defaultMaxShieldDurationMS when neither is known, so a
 //     shield always expires eventually.
 func resolveShieldDuration(explicitMS int32, spell *chrondbc.Spell) int32 {
@@ -176,6 +179,8 @@ func resolveShieldDuration(explicitMS int32, spell *chrondbc.Spell) int32 {
 			dbcMax = spell.Duration.Duration
 		}
 	}
+	// Talents/glyphs can extend durations beyond the DBC base value.
+	dbcMax *= 2
 
 	switch {
 	case explicitMS > 0 && dbcMax > 0:

@@ -450,15 +450,15 @@ func TestAbsorption_WotlkDBCFallbackDuration(t *testing.T) {
 	tankGUID := mustGUID("0x0000000000000002")
 	bossGUID := mustGUID("0x0030000000000003")
 
-	// Spell with a 30s duration from DBC
+	// Spell with a 30s duration from DBC → tracked for 2x = 60s (talent slack)
 	pwsSpell := makeAbsorbSpell("Power Word: Shield", 500, 127)
 	pwsSpell.Duration = dbcmem.SpellDuration{Duration: 30000}
 
 	msgs := []messages.Message{
 		auraCastWotlk(now, pwsSpell, priestGUID, tankGUID),
-		// Damage 31s later — DBC-derived duration should have expired the shield
+		// Damage 61s later — past the doubled DBC duration, shield expired
 		&messages.Damage{
-			MessageBase: messages.Base(now.Add(31 * time.Second)),
+			MessageBase: messages.Base(now.Add(61 * time.Second)),
 			Caster:      &bossGUID,
 			Target:      tankGUID,
 			Amount:      200,
@@ -487,11 +487,12 @@ func TestResolveShieldDuration(t *testing.T) {
 		spell      *chrondbc.Spell
 		want       int32
 	}{
-		{"explicit capped by dbc max", 600000, withMax(30000, 30000), 30000},
-		{"explicit below dbc max kept", 20000, withMax(30000, 30000), 20000},
+		// DBC-derived bounds are doubled for talent/glyph duration extensions.
+		{"explicit capped by 2x dbc max", 600000, withMax(30000, 30000), 60000},
+		{"explicit below 2x dbc max kept", 45000, withMax(30000, 30000), 45000},
 		{"explicit only, no spell", 30000, nil, 30000},
-		{"dbc max fallback when no explicit", 0, withMax(30000, 45000), 45000},
-		{"dbc duration fallback when max is zero", 0, withMax(30000, 0), 30000},
+		{"2x dbc max fallback when no explicit", 0, withMax(30000, 45000), 90000},
+		{"2x dbc duration fallback when max is zero", 0, withMax(30000, 0), 60000},
 		{"default cap when nothing known", 0, nil, defaultMaxShieldDurationMS},
 		{"default cap when spell has no duration", 0, withMax(0, 0), defaultMaxShieldDurationMS},
 	}
