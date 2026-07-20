@@ -136,7 +136,7 @@ func (a *Absorption) processAuraCast(ac *messages.AuraCast) {
 		schoolMask: types.School(ac.EffectMiscValue),
 	}
 
-	// Backfill capacity, school mask, and duration from DBC spell data.
+	// Backfill capacity and school mask from DBC spell data.
 	if absorbEffect >= 0 {
 		base := ac.Spell.EffectBasePoints[absorbEffect]
 		dice := ac.Spell.EffectDieSides[absorbEffect]
@@ -148,12 +148,45 @@ func (a *Absorption) processAuraCast(ac *messages.AuraCast) {
 		if shield.schoolMask == 0 {
 			shield.schoolMask = types.School(ac.Spell.EffectMiscValue[absorbEffect])
 		}
-		if shield.durationMS == 0 {
-			shield.durationMS = ac.Spell.Duration.Duration
+	}
+
+	shield.durationMS = resolveShieldDuration(ac.DurationMS, ac.Spell)
+
+	a.activeShields[target] = append(a.activeShields[target], shield)
+}
+
+// defaultMaxShieldDurationMS is the hard cap applied when neither the log
+// event nor the DBC provide a duration. Without it, a shield on a unit that
+// leaves combat-log range would never expire (no fade event is ever seen)
+// and would soak up wrong attributions for the rest of the log.
+const defaultMaxShieldDurationMS = 5 * 60 * 1000
+
+// resolveShieldDuration determines how long a shield is tracked:
+//   - Prefer the explicit duration from the log event, capped by the DBC
+//     max duration (guards against bogus values).
+//   - Fall back to the DBC max duration (auto-generated from
+//     SpellDuration.dbc) when the log carries none — the WotLK CLEU case.
+//   - Fall back to defaultMaxShieldDurationMS when neither is known, so a
+//     shield always expires eventually.
+func resolveShieldDuration(explicitMS int32, spell *chrondbc.Spell) int32 {
+	var dbcMax int32
+	if spell != nil {
+		dbcMax = spell.Duration.MaxDuration
+		if dbcMax <= 0 {
+			dbcMax = spell.Duration.Duration
 		}
 	}
 
-	a.activeShields[target] = append(a.activeShields[target], shield)
+	switch {
+	case explicitMS > 0 && dbcMax > 0:
+		return min(explicitMS, dbcMax)
+	case explicitMS > 0:
+		return explicitMS
+	case dbcMax > 0:
+		return dbcMax
+	default:
+		return defaultMaxShieldDurationMS
+	}
 }
 
 // processAuraFade removes a tracked shield when its aura fades.

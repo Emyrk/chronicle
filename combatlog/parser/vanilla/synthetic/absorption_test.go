@@ -472,6 +472,71 @@ func TestAbsorption_WotlkDBCFallbackDuration(t *testing.T) {
 	require.Len(t, result, 2, "shield should expire based on DBC duration fallback")
 }
 
+func TestResolveShieldDuration(t *testing.T) {
+	t.Parallel()
+
+	withMax := func(durMS, maxMS int32) *chrondbc.Spell {
+		s := makeAbsorbSpell("Test Shield", 100, 127)
+		s.Duration = dbcmem.SpellDuration{Duration: durMS, MaxDuration: maxMS}
+		return s
+	}
+
+	cases := []struct {
+		name       string
+		explicitMS int32
+		spell      *chrondbc.Spell
+		want       int32
+	}{
+		{"explicit capped by dbc max", 600000, withMax(30000, 30000), 30000},
+		{"explicit below dbc max kept", 20000, withMax(30000, 30000), 20000},
+		{"explicit only, no spell", 30000, nil, 30000},
+		{"dbc max fallback when no explicit", 0, withMax(30000, 45000), 45000},
+		{"dbc duration fallback when max is zero", 0, withMax(30000, 0), 30000},
+		{"default cap when nothing known", 0, nil, defaultMaxShieldDurationMS},
+		{"default cap when spell has no duration", 0, withMax(0, 0), defaultMaxShieldDurationMS},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			assert.Equal(t, tc.want, resolveShieldDuration(tc.explicitMS, tc.spell))
+		})
+	}
+}
+
+func TestAbsorption_NoDurationShieldStillExpires(t *testing.T) {
+	t.Parallel()
+
+	a := NewAbsorption(slog.Default())
+	now := time.Now()
+
+	priestGUID := mustGUID("0x0000000000000001")
+	tankGUID := mustGUID("0x0000000000000002")
+	bossGUID := mustGUID("0x0030000000000003")
+
+	// No explicit duration and no DBC duration — falls back to the default cap.
+	// A unit out of combat-log range never produces a fade event, so without
+	// the cap this shield would soak attributions forever.
+	pwsSpell := makeAbsorbSpell("Power Word: Shield", 500, 127)
+
+	msgs := []messages.Message{
+		auraCastAbsorb(now, pwsSpell, priestGUID, tankGUID, 127),
+		// Damage after the default cap has elapsed — shield must be gone.
+		&messages.Damage{
+			MessageBase: messages.Base(now.Add(defaultMaxShieldDurationMS*time.Millisecond + time.Second)),
+			Caster:      &bossGUID,
+			Target:      tankGUID,
+			Amount:      200,
+			HitType:     types.HitTypeHit,
+			School:      types.PhysicalSchool,
+			Trailer:     trailAbsorbed(150),
+		},
+	}
+
+	result := a.ProcessMessages(msgs)
+	require.Len(t, result, 2, "shield without any known duration must still expire via default cap")
+}
+
 func TestAbsorption_AuraFadeRemovesShield(t *testing.T) {
 	t.Parallel()
 
