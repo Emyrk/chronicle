@@ -101,11 +101,18 @@ type Message interface {
 - `Damage` - All damage events (spell, melee, periodic, environmental)
 - `Heal` - Healing events
 - `Aura` - Buff/debuff applications and fades
-- `Cast` - Spell cast events (from CAST: v2 format)
+- `SpellGo` - Spell cast completion events (preferred; carries `*chrondbc.Spell`, bare `guid.GUID` fields)
+- `Cast` - **Deprecated.** Legacy cast events from CAST: v2 format (uses `types.Unit` wrappers). Use `SpellGo` in new code.
+- `Absorbed` - Absorb attribution events (server-reported for AzerothCore, synthetic for vanilla)
 - `ResourceChange` - Mana/rage/energy gains/losses
 - `Slain` - Death events
 - `Interrupt` - Spell interrupts
 - `ExtraAttack` - Extra attack procs (Windfury, etc.)
+
+> **Cast vs SpellGo:** The parser now emits `SpellGo` for spell completions. `Cast` is retained
+> for backward compatibility but should not be used in new synthetic processors or consumers.
+> Key differences: `SpellGo.Caster` is `guid.GUID` (not `types.Unit`), `SpellGo.Target` is
+> `*guid.GUID` (not `*types.Unit`), and `SpellGo.SpellData` is `*chrondbc.Spell` (not `types.Spell`).
 
 ### Matcher Pattern
 
@@ -398,9 +405,28 @@ func (p *Parser) fDamageNoSchool(ts, content) { return p.fDamage(false, ts, cont
 4. **Print raw lines** - Add logging in `Advance()` to see preprocessing results
 5. **Check GUID format** - Old logs use names, new logs use `0x...` format
 
+## Synthetic Absorb Attribution
+
+The synthetic generator `combatlog/parser/vanilla/synthetic/absorption.go` infers which
+absorb buff absorbed damage in vanilla 1.12 logs (where the log only reports `(N absorbed)`
+without naming the shield). It emits synthetic `*messages.Absorbed` events marked
+`IsSynthetic()=true`.
+
+**How it works:**
+1. Identifies absorb spells data-driven from DBC: `EffectAura == AuraEffectSchoolAbsorb` (69).
+2. Tracks active shields per target via `Aura` gain/fade events.
+3. Attributes caster by correlating recent `SpellGo` events (same spell + target within 2s).
+4. On damage with `(N absorbed)` trailer, picks the best shield:
+   school-specific (wards) > all-school (PW:S), most-recently-applied tiebreak.
+5. Full absorbs (no amount) are skipped (Phase 3 work).
+
+The `Absorbed` proto message has `bool estimated = 9` to distinguish synthetic attribution
+from server-reported (AzerothCore) events.
+
 ## Related Files
 
 - `combatlog/parser/types/constants.go` - HitType, School, Resource enums
 - `combatlog/parser/types/trailer.go` - Trailer parsing (absorbed, blocked, etc.)
 - `combatlog/parser/vanilla/synthetic/` - Synthetic event generation
+- `combatlog/parser/vanilla/synthetic/absorption.go` - Absorb attribution (vanilla)
 - `combatlog/parser/vanilla/whoami/` - "You" → player name resolution

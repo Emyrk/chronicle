@@ -283,9 +283,11 @@ export function createUnifiedHealingProcessor(): PanelProcessor<UnifiedHealingRe
 
       // ──────────────────────────────────────────────
       // PHASE 2: Aggregation — event.overheal is always set by now.
-      // Also handles "absorbed" events (3.3.5a only — damage prevented by
-      // absorb shields). Absorbed events pass through Phase 1 untouched
-      // because they are neither damage nor heal nor resource_change.
+      // Also handles "absorbed" events (damage prevented by absorb shields).
+      // For 3.3.5a these are server-reported; for vanilla 1.12 they are
+      // synthetically attributed via aura tracking heuristics (estimated=true).
+      // Absorbed events pass through Phase 1 untouched because they are
+      // neither damage nor heal nor resource_change.
       // ──────────────────────────────────────────────
       
       const isAbsorbed = streamType === "absorbed";

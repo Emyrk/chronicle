@@ -171,6 +171,10 @@ func (c LegacyCast) Affects() []guid.GUID {
 }
 func (*LegacyCast) isMessage() {}
 
+// Deprecated: Cast is the legacy cast message from the CAST: v2 log format.
+// New code should use SpellGo, which carries richer spell data (*chrondbc.Spell)
+// and uses bare guid.GUID fields instead of types.Unit wrappers.
+// Cast is retained for backward compatibility with older log formats.
 type Cast struct {
 	castv2.CastV2
 	MessageBase

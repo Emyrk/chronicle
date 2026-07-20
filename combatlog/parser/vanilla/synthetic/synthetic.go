@@ -26,6 +26,7 @@ type Synthetic struct {
 	wowDB        gamedb.GameDB
 	knownArmor   *knownArmor
 	vanillaPlus  *vanillaplus
+	absorption   *absorption
 
 	slainDur        time.Duration
 	extraAttackDur  time.Duration
@@ -35,6 +36,7 @@ type Synthetic struct {
 	razuviousDur    time.Duration
 	knownArmorDur   time.Duration
 	vanillaPlusDur  time.Duration
+	absorptionDur   time.Duration
 }
 
 func New(ctx context.Context, logger *slog.Logger, wowDB gamedb.GameDB) *Synthetic {
@@ -50,6 +52,7 @@ func New(ctx context.Context, logger *slog.Logger, wowDB gamedb.GameDB) *Synthet
 		razuvious:    newRazuviousOverkill(),
 		knownArmor:   newKnownArmor(),
 		vanillaPlus:  newVanillaPlus(),
+		absorption:   newAbsorption(logger),
 		wowDB:        wowDB,
 		flavor:       fl,
 	}
@@ -65,6 +68,7 @@ func (s *Synthetic) DetailedTimes() map[string]time.Duration {
 		"parser.synthetic.razuvious":     s.razuviousDur,
 		"parser.synthetic.known_armor":   s.knownArmorDur,
 		"parser.synthetic.vanilla_plus":  s.vanillaPlusDur,
+		"parser.synthetic.absorption":    s.absorptionDur,
 	}
 }
 
@@ -102,6 +106,10 @@ func (s *Synthetic) ProcessMessages(msgs []messages.Message) ([]messages.Message
 		s.vanillaPlus.ProcessMessages(msgs)
 		s.vanillaPlusDur += time.Since(now)
 	}
+
+	now = time.Now()
+	msgs = s.absorption.ProcessMessages(msgs)
+	s.absorptionDur += time.Since(now)
 
 	return msgs, nil
 }

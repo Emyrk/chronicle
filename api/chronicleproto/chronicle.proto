@@ -240,6 +240,10 @@ message Absorbed {
   optional SpellData absorbSpellData = 6;
   School absorbSchool = 7;
   int32 amount = 8;
+  // estimated is true when the absorb attribution was synthetically inferred
+  // from aura tracking heuristics rather than reported by the server (e.g.
+  // vanilla 1.12 logs). AzerothCore events leave this false.
+  bool estimated = 9;
 }
 
 

@@ -73,7 +73,7 @@ func (w *WorkerLogParse) parseCombatLog(
 		logLogger = slog.New(slog.NewTextHandler(io.Discard, nil))
 	}
 
-	logCapabilities := []string{"overheal"}
+	logCapabilities := []string{"overheal", "absorb"}
 
 	// encounters — use azerothcore-specific state for server-side logs,
 	// otherwise use the general registry.
@@ -193,7 +193,7 @@ func (w *WorkerLogParse) parseCombatLog(
 		totalLines = p.Metrics().TotalLinesParsed
 
 	case database.LogFormatAzerothcoreMod:
-		logCapabilities = append(logCapabilities, "interrupt", "absorb", "server-side")
+		logCapabilities = append(logCapabilities, "interrupt", "server-side")
 		loadStart := time.Now()
 		rdr, err := loadFirstFile()
 		if err != nil {

@@ -2015,8 +2015,12 @@ type Absorbed struct {
 	AbsorbSpellData *SpellData             `protobuf:"bytes,6,opt,name=absorbSpellData,proto3,oneof" json:"absorbSpellData,omitempty"`
 	AbsorbSchool    School                 `protobuf:"varint,7,opt,name=absorbSchool,proto3,enum=chronicleproto.School" json:"absorbSchool,omitempty"`
 	Amount          int32                  `protobuf:"varint,8,opt,name=amount,proto3" json:"amount,omitempty"`
-	unknownFields   protoimpl.UnknownFields
-	sizeCache       protoimpl.SizeCache
+	// estimated is true when the absorb attribution was synthetically inferred
+	// from aura tracking heuristics rather than reported by the server (e.g.
+	// vanilla 1.12 logs). AzerothCore events leave this false.
+	Estimated     bool `protobuf:"varint,9,opt,name=estimated,proto3" json:"estimated,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
 }
 
 func (x *Absorbed) Reset() {
@@ -2103,6 +2107,13 @@ func (x *Absorbed) GetAmount() int32 {
 		return x.Amount
 	}
 	return 0
+}
+
+func (x *Absorbed) GetEstimated() bool {
+	if x != nil {
+		return x.Estimated
+	}
+	return false
 }
 
 type CombatantGearSlot struct {
@@ -2485,7 +2496,7 @@ const file_chronicle_proto_rawDesc = "" +
 	"\n" +
 	"spell_name\x18\x04 \x01(\tR\tspellName\x12$\n" +
 	"\x0eextra_spell_id\x18\x05 \x01(\x05R\fextraSpellId\x129\n" +
-	"\fextra_school\x18\x06 \x01(\x0e2\x16.chronicleproto.SchoolR\vextraSchool\"\x95\x03\n" +
+	"\fextra_school\x18\x06 \x01(\x0e2\x16.chronicleproto.SchoolR\vextraSchool\"\xb3\x03\n" +
 	"\bAbsorbed\x12-\n" +
 	"\x04meta\x18\x01 \x01(\v2\x19.chronicleproto.EventMetaR\x04meta\x12\x1a\n" +
 	"\battacker\x18\x02 \x01(\tR\battacker\x12\x16\n" +
@@ -2494,7 +2505,8 @@ const file_chronicle_proto_rawDesc = "" +
 	"\x06caster\x18\x05 \x01(\tR\x06caster\x12H\n" +
 	"\x0fabsorbSpellData\x18\x06 \x01(\v2\x19.chronicleproto.SpellDataH\x01R\x0fabsorbSpellData\x88\x01\x01\x12:\n" +
 	"\fabsorbSchool\x18\a \x01(\x0e2\x16.chronicleproto.SchoolR\fabsorbSchool\x12\x16\n" +
-	"\x06amount\x18\b \x01(\x05R\x06amountB\x12\n" +
+	"\x06amount\x18\b \x01(\x05R\x06amount\x12\x1c\n" +
+	"\testimated\x18\t \x01(\bR\testimatedB\x12\n" +
 	"\x10_damageSpellDataB\x12\n" +
 	"\x10_absorbSpellData\"\xa8\x01\n" +
 	"\x11CombatantGearSlot\x12\x16\n" +

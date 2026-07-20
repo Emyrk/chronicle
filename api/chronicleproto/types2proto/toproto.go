@@ -424,6 +424,7 @@ func Absorbed(from time.Time, idx int32, a *messages.Absorbed) *chronicleproto.A
 		AbsorbSpellData: SpellData(a.AbsorbSpell),
 		AbsorbSchool:    schoolWithFallback(a.AbsorbSchool, a.AbsorbSpell),
 		Amount:          a.Amount,
+		Estimated:       a.IsSynthetic(),
 	}
 }
 

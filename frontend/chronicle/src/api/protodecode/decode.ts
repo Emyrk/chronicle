@@ -4312,6 +4312,8 @@ export interface ReusableAbsorbed {
   absorbSpellName: string | null;
   absorbSchool: number;
   amount: number;
+  /** True when absorb attribution was synthetically inferred (e.g. vanilla logs). */
+  estimated: boolean;
   activity: ReusableActivityEntry[];
   activityCount: number;
 }
@@ -4328,6 +4330,7 @@ export interface ReusableAbsorbed {
  *   6: absorbSpellData (optional SpellData) — nested: 1=id, 2=name, 3=attack_outcome
  *   7: absorbSchool (School enum varint)
  *   8: amount (int32 varint)
+ *   9: estimated (bool varint)
  */
 export class AbsorbedDecoder {
   private readonly textDecoder = sharedTextDecoder;
@@ -4346,6 +4349,7 @@ export class AbsorbedDecoder {
     absorbSpellName: null,
     absorbSchool: 0,
     amount: 0,
+    estimated: false,
     activity: [],
     activityCount: 0,
   };
@@ -4366,6 +4370,7 @@ export class AbsorbedDecoder {
     msg.absorbSpellName = null;
     msg.absorbSchool = 0;
     msg.amount = 0;
+    msg.estimated = false;
     msg.activityCount = 0;
 
     while (offset < end) {
@@ -4480,6 +4485,7 @@ export class AbsorbedDecoder {
         offset += bytesRead;
         if (fieldNumber === 7) msg.absorbSchool = value;
         else if (fieldNumber === 8) msg.amount = value;
+        else if (fieldNumber === 9) msg.estimated = value !== 0;
       }
     }
 
