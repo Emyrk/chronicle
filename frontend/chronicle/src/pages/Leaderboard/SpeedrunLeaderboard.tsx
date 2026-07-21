@@ -16,7 +16,14 @@ function useSpeedrunBoards() {
     queryFn: async () => {
       const res = await fetch("/api/v1/rankings/speedrun/instances")
       if (!res.ok) throw new Error("Failed to fetch instances")
-      return res.json()
+      const data: (SpeedrunInstanceBoard | string)[] = await res.json()
+      // Older backends returned plain instance-name strings. Normalize so a
+      // stale API doesn't crash the page.
+      return data.map((item) =>
+        typeof item === "string"
+          ? { instance_name: item, difficulty_name: "" }
+          : item
+      )
     },
     staleTime: SPEEDRUN_STALE_TIME,
   })
