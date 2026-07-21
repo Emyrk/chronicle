@@ -82,14 +82,16 @@ WHERE (CASE WHEN @min_players::bigint > 0 THEN player_count >= @min_players ELSE
 ORDER BY duration_ms ASC
 LIMIT 50;
 
--- name: SpeedrunInstanceNames :many
--- Returns distinct instance names that have at least one qualified speedrun.
+-- name: SpeedrunInstanceBoards :many
+-- Returns distinct (instance, difficulty) boards that have at least one
+-- qualified speedrun. Each difficulty has its own leaderboard.
 -- JOINs wow_server_realms so RLS tenant filtering cascades.
-SELECT DISTINCT sr.instance_name
+SELECT DISTINCT sr.instance_name, li.difficulty_name
 FROM instance_speedruns sr
+JOIN log_instances li ON li.id = sr.instance_id
 JOIN wow_server_realms wsr ON wsr.id = sr.realm_id
 WHERE sr.qualified = true
-ORDER BY sr.instance_name;
+ORDER BY sr.instance_name, li.difficulty_name;
 
 -- name: SpeedrunDifficulties :many
 -- Returns distinct difficulty names that have at least one qualified speedrun

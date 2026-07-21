@@ -319,9 +319,10 @@ type sqlcQuerier interface {
 	// for the given instance. Each difficulty has its own leaderboard.
 	// JOINs wow_server_realms so RLS tenant filtering cascades.
 	SpeedrunDifficulties(ctx context.Context, instanceName string) ([]string, error)
-	// Returns distinct instance names that have at least one qualified speedrun.
+	// Returns distinct (instance, difficulty) boards that have at least one
+	// qualified speedrun. Each difficulty has its own leaderboard.
 	// JOINs wow_server_realms so RLS tenant filtering cascades.
-	SpeedrunInstanceNames(ctx context.Context) ([]string, error)
+	SpeedrunInstanceBoards(ctx context.Context) ([]SpeedrunInstanceBoardsRow, error)
 	// Returns the leaderboard for a given instance name.
 	// Deduplicates by duplicate_group, then by guild (best per guild unless guild_id filter is set).
 	// Excludes runs without a guild. Optional filters: realm, player count, guild.

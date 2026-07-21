@@ -6885,29 +6885,36 @@ func (q *sqlQuerier) SpeedrunDifficulties(ctx context.Context, instanceName stri
 	return items, nil
 }
 
-const speedrunInstanceNames = `-- name: SpeedrunInstanceNames :many
-SELECT DISTINCT sr.instance_name
+const speedrunInstanceBoards = `-- name: SpeedrunInstanceBoards :many
+SELECT DISTINCT sr.instance_name, li.difficulty_name
 FROM instance_speedruns sr
+JOIN log_instances li ON li.id = sr.instance_id
 JOIN wow_server_realms wsr ON wsr.id = sr.realm_id
 WHERE sr.qualified = true
-ORDER BY sr.instance_name
+ORDER BY sr.instance_name, li.difficulty_name
 `
 
-// Returns distinct instance names that have at least one qualified speedrun.
+type SpeedrunInstanceBoardsRow struct {
+	InstanceName   string `db:"instance_name" json:"instance_name"`
+	DifficultyName string `db:"difficulty_name" json:"difficulty_name"`
+}
+
+// Returns distinct (instance, difficulty) boards that have at least one
+// qualified speedrun. Each difficulty has its own leaderboard.
 // JOINs wow_server_realms so RLS tenant filtering cascades.
-func (q *sqlQuerier) SpeedrunInstanceNames(ctx context.Context) ([]string, error) {
-	rows, err := q.db.Query(ctx, speedrunInstanceNames)
+func (q *sqlQuerier) SpeedrunInstanceBoards(ctx context.Context) ([]SpeedrunInstanceBoardsRow, error) {
+	rows, err := q.db.Query(ctx, speedrunInstanceBoards)
 	if err != nil {
 		return nil, err
 	}
 	defer rows.Close()
-	var items []string
+	var items []SpeedrunInstanceBoardsRow
 	for rows.Next() {
-		var instance_name string
-		if err := rows.Scan(&instance_name); err != nil {
+		var i SpeedrunInstanceBoardsRow
+		if err := rows.Scan(&i.InstanceName, &i.DifficultyName); err != nil {
 			return nil, err
 		}
-		items = append(items, instance_name)
+		items = append(items, i)
 	}
 	if err := rows.Err(); err != nil {
 		return nil, err

@@ -71,25 +71,33 @@ func (s *Service) handleSpeedrunLeaderboard(w http.ResponseWriter, r *http.Reque
 	httpapi.Write(ctx, w, http.StatusOK, slice.List(rows, db2sdk.SpeedrunLeaderboardEntry))
 }
 
-// handleSpeedrunInstances returns the list of instance names that have
-// qualified speedruns.
+// handleSpeedrunInstances returns the list of (instance, difficulty) boards
+// that have qualified speedruns. Each difficulty has its own board.
 //
 //	GET /speedrun/instances
 func (s *Service) handleSpeedrunInstances(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 
-	names, err := s.store.SpeedrunInstanceNames(ctx)
+	rows, err := s.store.SpeedrunInstanceBoards(ctx)
 	if err != nil {
 		httpapi.HandleResponseError(ctx, w, err, httpapi.APIError{
 			Response: chroniclesdk.Response{
-				Message: "Failed to fetch speedrun instance names",
+				Message: "Failed to fetch speedrun instance boards",
 				Detail:  err.Error(),
 			},
 		})
 		return
 	}
 
-	httpapi.Write(ctx, w, http.StatusOK, names)
+	boards := make([]chroniclesdk.SpeedrunInstanceBoard, len(rows))
+	for i, row := range rows {
+		boards[i] = chroniclesdk.SpeedrunInstanceBoard{
+			InstanceName:   row.InstanceName,
+			DifficultyName: row.DifficultyName,
+		}
+	}
+
+	httpapi.Write(ctx, w, http.StatusOK, boards)
 }
 
 // handleSpeedrunRealms returns the list of realm names that have qualified speedruns.
