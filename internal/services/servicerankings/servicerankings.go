@@ -132,6 +132,7 @@ func (s *Service) setupRoutes() {
 	s.router.Get("/speedrun", s.handleSpeedrunLeaderboard)
 	s.router.Get("/speedrun/instances", s.handleSpeedrunInstances)
 	s.router.Get("/speedrun/realms", s.handleSpeedrunRealms)
+	s.router.Get("/speedrun/difficulties", s.handleSpeedrunDifficulties)
 	s.router.Get("/speedrun/rules", s.handleSpeedrunRules)
 }
 

@@ -33,15 +33,18 @@ function useSpeedrunRealms() {
   })
 }
 
+// Each difficulty has its own board. `difficulty` may be an empty string
+// (runs with no recorded difficulty); pass null to skip filtering entirely.
 function useSpeedrunLeaderboard(
   instanceName: string,
   realmNames: string[],
   minPlayers: string,
   maxPlayers: string,
-  sinceDays: string
+  sinceDays: string,
+  difficulty: string | null
 ) {
   return useQuery<SpeedrunLeaderboardEntry[]>({
-    queryKey: ["leaderboard", "speedrun", instanceName, realmNames, minPlayers, maxPlayers, sinceDays],
+    queryKey: ["leaderboard", "speedrun", instanceName, realmNames, minPlayers, maxPlayers, sinceDays, difficulty],
     queryFn: async () => {
       const params = new URLSearchParams()
       params.set("instance_name", instanceName)
@@ -51,6 +54,7 @@ function useSpeedrunLeaderboard(
       if (minPlayers) params.set("min_players", minPlayers)
       if (maxPlayers) params.set("max_players", maxPlayers)
       if (sinceDays) params.set("since_days", sinceDays)
+      if (difficulty !== null) params.set("difficulty_name", difficulty)
       const res = await fetch(`/api/v1/rankings/speedrun?${params.toString()}`)
       if (!res.ok) throw new Error("Failed to fetch leaderboard")
       return res.json()
@@ -58,6 +62,24 @@ function useSpeedrunLeaderboard(
     enabled: !!instanceName,
     staleTime: SPEEDRUN_STALE_TIME,
   })
+}
+
+function useSpeedrunDifficulties(instanceName: string) {
+  return useQuery<string[]>({
+    queryKey: ["leaderboard", "speedrun", "difficulties", instanceName],
+    queryFn: async () => {
+      const res = await fetch(`/api/v1/rankings/speedrun/difficulties?instance_name=${encodeURIComponent(instanceName)}`)
+      if (!res.ok) throw new Error("Failed to fetch difficulties")
+      return res.json()
+    },
+    enabled: !!instanceName,
+    staleTime: SPEEDRUN_STALE_TIME,
+  })
+}
+
+// Empty difficulty_name means the log did not record one (older logs / default).
+function difficultyLabel(difficulty: string): string {
+  return difficulty === "" ? "Normal" : difficulty
 }
 
 function useSpeedrunRules(instanceName: string) {
@@ -414,7 +436,7 @@ function formatDuration(ms: number): string {
 
 function InstanceCard({ name, onSelect }: { name: string; onSelect: (name: string) => void }) {
   const bg = getInstanceBackground(name)
-  const { data: entries } = useSpeedrunLeaderboard(name, [], "", "", "")
+  const { data: entries } = useSpeedrunLeaderboard(name, [], "", "", "", null)
   const top3 = entries?.slice(0, 3) ?? []
 
   return (
@@ -513,13 +535,28 @@ export function SpeedrunLeaderboard({ overrideInstance }: { overrideInstance?: s
   const maxPlayers = searchParams.get("max_players") || ""
   const sinceDays = searchParams.get("since_days") || ""
 
+  // Each difficulty has its own board. Default to the first available
+  // difficulty; note the URL value may legitimately be "" (no recorded
+  // difficulty), so check presence rather than truthiness.
+  const { data: difficulties } = useSpeedrunDifficulties(selectedInstance)
+  const selectedDifficulty = searchParams.has("difficulty")
+    ? (searchParams.get("difficulty") ?? "")
+    : (difficulties?.[0] ?? null)
+
   const { data: entries, isLoading: entriesLoading } = useSpeedrunLeaderboard(
     selectedInstance,
     selectedRealms,
     minPlayers,
     maxPlayers,
-    sinceDays
+    sinceDays,
+    selectedDifficulty
   )
+
+  const setDifficulty = (difficulty: string) => {
+    const next = new URLSearchParams(searchParams)
+    next.set("difficulty", difficulty)
+    setSearchParams(next)
+  }
 
   const activeFilterCount =
     (selectedRealms.length > 0 ? 1 : 0) +
@@ -543,6 +580,11 @@ export function SpeedrunLeaderboard({ overrideInstance }: { overrideInstance?: s
     if (state.minPlayers) next.set("min_players", state.minPlayers)
     if (state.maxPlayers) next.set("max_players", state.maxPlayers)
     if (sinceDays) next.set("since_days", sinceDays)
+    // Preserve the difficulty board only when staying on the same instance;
+    // difficulties differ per instance.
+    if (state.instance === selectedInstance && searchParams.has("difficulty")) {
+      next.set("difficulty", searchParams.get("difficulty") ?? "")
+    }
     setSearchParams(next)
   }
 
@@ -592,6 +634,7 @@ export function SpeedrunLeaderboard({ overrideInstance }: { overrideInstance?: s
             onClick={() => {
               const next = new URLSearchParams(searchParams)
               next.delete("instance")
+              next.delete("difficulty")
               setSearchParams(next)
             }}
             className="text-sm text-muted-foreground hover:text-foreground flex items-center gap-1 mb-4 transition-colors"
@@ -663,6 +706,25 @@ export function SpeedrunLeaderboard({ overrideInstance }: { overrideInstance?: s
               )}
             </button>
           </div>
+
+          {/* Difficulty Boards — each difficulty has its own leaderboard */}
+          {difficulties && difficulties.length > 1 && (
+            <div className="flex rounded-lg border border-white/10 overflow-hidden w-fit mb-6">
+              {difficulties.map((difficulty) => (
+                <button
+                  key={difficulty}
+                  onClick={() => setDifficulty(difficulty)}
+                  className={`px-3 py-2 text-sm font-medium transition-colors ${
+                    selectedDifficulty === difficulty
+                      ? "bg-[#5F8FA6] text-white"
+                      : "bg-black/30 text-muted-foreground hover:text-foreground"
+                  }`}
+                >
+                  {difficultyLabel(difficulty)}
+                </button>
+              ))}
+            </div>
+          )}
 
           {/* Desktop Podium */}
           {!entriesLoading && entries && entries.length > 0 && (

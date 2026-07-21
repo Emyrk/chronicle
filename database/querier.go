@@ -315,12 +315,18 @@ type sqlcQuerier interface {
 	// Pass NULL to remove the assignment.
 	SetTenantDataset(ctx context.Context, arg SetTenantDatasetParams) error
 	SetVerificationToken(ctx context.Context, arg SetVerificationTokenParams) error
+	// Returns distinct difficulty names that have at least one qualified speedrun
+	// for the given instance. Each difficulty has its own leaderboard.
+	// JOINs wow_server_realms so RLS tenant filtering cascades.
+	SpeedrunDifficulties(ctx context.Context, instanceName string) ([]string, error)
 	// Returns distinct instance names that have at least one qualified speedrun.
 	// JOINs wow_server_realms so RLS tenant filtering cascades.
 	SpeedrunInstanceNames(ctx context.Context) ([]string, error)
 	// Returns the leaderboard for a given instance name.
 	// Deduplicates by duplicate_group, then by guild (best per guild unless guild_id filter is set).
 	// Excludes runs without a guild. Optional filters: realm, player count, guild.
+	// Each difficulty has its own board: set filter_difficulty to select the board
+	// matching difficulty_name (empty string matches runs with no recorded difficulty).
 	// When no guild filter: keep only the best run per guild.
 	// When guild filter is set: keep all runs for that guild.
 	SpeedrunLeaderboard(ctx context.Context, arg SpeedrunLeaderboardParams) ([]SpeedrunLeaderboardRow, error)

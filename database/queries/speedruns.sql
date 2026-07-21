@@ -15,10 +15,13 @@ WHERE sr.instance_id = $1;
 -- Returns the leaderboard for a given instance name.
 -- Deduplicates by duplicate_group, then by guild (best per guild unless guild_id filter is set).
 -- Excludes runs without a guild. Optional filters: realm, player count, guild.
+-- Each difficulty has its own board: set filter_difficulty to select the board
+-- matching difficulty_name (empty string matches runs with no recorded difficulty).
 WITH deduped AS (
     SELECT DISTINCT ON (COALESCE(li.duplicate_group_id, li.id))
         sr.instance_id,
         sr.instance_name,
+        li.difficulty_name,
         sr.guild_id,
         sr.duration_ms,
         sr.start_time,
@@ -56,6 +59,10 @@ WITH deduped AS (
           WHEN @since_days :: bigint > 0 THEN sr.completion_time >= now() - make_interval(days => @since_days::int)
           ELSE true
       END
+      AND CASE
+          WHEN @filter_difficulty :: boolean THEN li.difficulty_name = @difficulty_name :: text
+          ELSE true
+      END
     ORDER BY COALESCE(li.duplicate_group_id, li.id), sr.duration_ms ASC
 ),
 -- When no guild filter: keep only the best run per guild.
@@ -83,6 +90,18 @@ FROM instance_speedruns sr
 JOIN wow_server_realms wsr ON wsr.id = sr.realm_id
 WHERE sr.qualified = true
 ORDER BY sr.instance_name;
+
+-- name: SpeedrunDifficulties :many
+-- Returns distinct difficulty names that have at least one qualified speedrun
+-- for the given instance. Each difficulty has its own leaderboard.
+-- JOINs wow_server_realms so RLS tenant filtering cascades.
+SELECT DISTINCT li.difficulty_name
+FROM instance_speedruns sr
+JOIN log_instances li ON li.id = sr.instance_id
+JOIN wow_server_realms wsr ON wsr.id = sr.realm_id
+WHERE sr.instance_name = @instance_name
+  AND sr.qualified = true
+ORDER BY li.difficulty_name;
 
 -- name: SpeedrunRealmNames :many
 -- Returns distinct realm names that have at least one qualified speedrun.

@@ -352,6 +352,7 @@ type SpeedrunVersionStatus struct {
 type SpeedrunLeaderboardEntry struct {
 	InstanceID       uuid.UUID  `json:"instance_id"`
 	Slug             string     `json:"slug"`
+	DifficultyName   string     `json:"difficulty_name"`
 	DurationMs       int64      `json:"duration_ms"`
 	GuildName        string     `json:"guild_name"`
 	RealmName        string     `json:"realm_name"`

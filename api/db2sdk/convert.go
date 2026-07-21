@@ -258,6 +258,7 @@ func SpeedrunLeaderboardEntry(row database.SpeedrunLeaderboardRow) chroniclesdk.
 	entry := chroniclesdk.SpeedrunLeaderboardEntry{
 		InstanceID:     row.InstanceID,
 		Slug:           row.HashedSlug.String,
+		DifficultyName: row.DifficultyName,
 		DurationMs:     row.DurationMs,
 		GuildName:      row.GuildName,
 		RealmName:      row.RealmName,

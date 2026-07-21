@@ -1778,6 +1778,7 @@ export interface SpeedrunKillRecord {
 export interface SpeedrunLeaderboardEntry {
     readonly instance_id: string;
     readonly slug: string;
+    readonly difficulty_name: string;
     readonly duration_ms: number;
     readonly guild_name: string;
     readonly realm_name: string;

@@ -43,13 +43,20 @@ func (s *Service) handleSpeedrunLeaderboard(w http.ResponseWriter, r *http.Reque
 		sinceDays, _ = strconv.ParseInt(v, 10, 64)
 	}
 
+	// Each difficulty has its own board. The presence of the parameter (even
+	// empty, which matches runs with no recorded difficulty) enables the filter.
+	filterDifficulty := r.URL.Query().Has("difficulty_name")
+	difficultyName := r.URL.Query().Get("difficulty_name")
+
 	rows, err := s.store.SpeedrunLeaderboard(ctx, database.SpeedrunLeaderboardParams{
-		InstanceName: instanceName,
-		RealmNames:   realmNames,
-		MinPlayers:   minPlayers,
-		MaxPlayers:   maxPlayers,
-		GuildID:      guildID,
-		SinceDays:    sinceDays,
+		InstanceName:     instanceName,
+		RealmNames:       realmNames,
+		MinPlayers:       minPlayers,
+		MaxPlayers:       maxPlayers,
+		GuildID:          guildID,
+		SinceDays:        sinceDays,
+		FilterDifficulty: filterDifficulty,
+		DifficultyName:   difficultyName,
 	})
 	if err != nil {
 		httpapi.HandleResponseError(ctx, w, err, httpapi.APIError{
@@ -96,6 +103,35 @@ func (s *Service) handleSpeedrunRealms(w http.ResponseWriter, r *http.Request) {
 		httpapi.HandleResponseError(ctx, w, err, httpapi.APIError{
 			Response: chroniclesdk.Response{
 				Message: "Failed to fetch speedrun realm names",
+				Detail:  err.Error(),
+			},
+		})
+		return
+	}
+
+	httpapi.Write(ctx, w, http.StatusOK, names)
+}
+
+// handleSpeedrunDifficulties returns the list of difficulty names that have
+// qualified speedruns for a given instance. Each difficulty has its own board.
+//
+//	GET /speedrun/difficulties?instance_name=...
+func (s *Service) handleSpeedrunDifficulties(w http.ResponseWriter, r *http.Request) {
+	ctx := r.Context()
+
+	instanceName := r.URL.Query().Get("instance_name")
+	if instanceName == "" {
+		httpapi.Write(ctx, w, http.StatusBadRequest, chroniclesdk.Response{
+			Message: "instance_name query parameter is required",
+		})
+		return
+	}
+
+	names, err := s.store.SpeedrunDifficulties(ctx, instanceName)
+	if err != nil {
+		httpapi.HandleResponseError(ctx, w, err, httpapi.APIError{
+			Response: chroniclesdk.Response{
+				Message: "Failed to fetch speedrun difficulties",
 				Detail:  err.Error(),
 			},
 		})

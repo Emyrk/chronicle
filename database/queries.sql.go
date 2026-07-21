@@ -6852,6 +6852,39 @@ func (q *sqlQuerier) InsertInstanceSpeedrun(ctx context.Context, arg InsertInsta
 	return err
 }
 
+const speedrunDifficulties = `-- name: SpeedrunDifficulties :many
+SELECT DISTINCT li.difficulty_name
+FROM instance_speedruns sr
+JOIN log_instances li ON li.id = sr.instance_id
+JOIN wow_server_realms wsr ON wsr.id = sr.realm_id
+WHERE sr.instance_name = $1
+  AND sr.qualified = true
+ORDER BY li.difficulty_name
+`
+
+// Returns distinct difficulty names that have at least one qualified speedrun
+// for the given instance. Each difficulty has its own leaderboard.
+// JOINs wow_server_realms so RLS tenant filtering cascades.
+func (q *sqlQuerier) SpeedrunDifficulties(ctx context.Context, instanceName string) ([]string, error) {
+	rows, err := q.db.Query(ctx, speedrunDifficulties, instanceName)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []string
+	for rows.Next() {
+		var difficulty_name string
+		if err := rows.Scan(&difficulty_name); err != nil {
+			return nil, err
+		}
+		items = append(items, difficulty_name)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const speedrunInstanceNames = `-- name: SpeedrunInstanceNames :many
 SELECT DISTINCT sr.instance_name
 FROM instance_speedruns sr
@@ -6887,6 +6920,7 @@ WITH deduped AS (
     SELECT DISTINCT ON (COALESCE(li.duplicate_group_id, li.id))
         sr.instance_id,
         sr.instance_name,
+        li.difficulty_name,
         sr.guild_id,
         sr.duration_ms,
         sr.start_time,
@@ -6924,18 +6958,22 @@ WITH deduped AS (
           WHEN $6 :: bigint > 0 THEN sr.completion_time >= now() - make_interval(days => $6::int)
           ELSE true
       END
+      AND CASE
+          WHEN $7 :: boolean THEN li.difficulty_name = $8 :: text
+          ELSE true
+      END
     ORDER BY COALESCE(li.duplicate_group_id, li.id), sr.duration_ms ASC
 ),
 best AS (
     SELECT DISTINCT ON (
         CASE WHEN $5 :: text = '' THEN guild_id END
-    ) instance_id, instance_name, guild_id, duration_ms, start_time, completion_time, qualified, addon_version, hashed_slug, duplicate_group_id, parser_version, guild_name, realm_name, player_count, guild_logo_url
+    ) instance_id, instance_name, difficulty_name, guild_id, duration_ms, start_time, completion_time, qualified, addon_version, hashed_slug, duplicate_group_id, parser_version, guild_name, realm_name, player_count, guild_logo_url
     FROM deduped
     ORDER BY
         CASE WHEN $5 :: text = '' THEN guild_id END,
         duration_ms ASC
 )
-SELECT instance_id, instance_name, guild_id, duration_ms, start_time, completion_time, qualified, addon_version, hashed_slug, duplicate_group_id, parser_version, guild_name, realm_name, player_count, guild_logo_url FROM best
+SELECT instance_id, instance_name, difficulty_name, guild_id, duration_ms, start_time, completion_time, qualified, addon_version, hashed_slug, duplicate_group_id, parser_version, guild_name, realm_name, player_count, guild_logo_url FROM best
 WHERE (CASE WHEN $1::bigint > 0 THEN player_count >= $1 ELSE true END)
   AND (CASE WHEN $2::bigint > 0 THEN player_count <= $2 ELSE true END)
 ORDER BY duration_ms ASC
@@ -6943,17 +6981,20 @@ LIMIT 50
 `
 
 type SpeedrunLeaderboardParams struct {
-	MinPlayers   int64    `db:"min_players" json:"min_players"`
-	MaxPlayers   int64    `db:"max_players" json:"max_players"`
-	InstanceName string   `db:"instance_name" json:"instance_name"`
-	RealmNames   []string `db:"realm_names" json:"realm_names"`
-	GuildID      string   `db:"guild_id" json:"guild_id"`
-	SinceDays    int64    `db:"since_days" json:"since_days"`
+	MinPlayers       int64    `db:"min_players" json:"min_players"`
+	MaxPlayers       int64    `db:"max_players" json:"max_players"`
+	InstanceName     string   `db:"instance_name" json:"instance_name"`
+	RealmNames       []string `db:"realm_names" json:"realm_names"`
+	GuildID          string   `db:"guild_id" json:"guild_id"`
+	SinceDays        int64    `db:"since_days" json:"since_days"`
+	FilterDifficulty bool     `db:"filter_difficulty" json:"filter_difficulty"`
+	DifficultyName   string   `db:"difficulty_name" json:"difficulty_name"`
 }
 
 type SpeedrunLeaderboardRow struct {
 	InstanceID       uuid.UUID          `db:"instance_id" json:"instance_id"`
 	InstanceName     string             `db:"instance_name" json:"instance_name"`
+	DifficultyName   string             `db:"difficulty_name" json:"difficulty_name"`
 	GuildID          uuid.NullUUID      `db:"guild_id" json:"guild_id"`
 	DurationMs       int64              `db:"duration_ms" json:"duration_ms"`
 	StartTime        pgtype.Timestamptz `db:"start_time" json:"start_time"`
@@ -6972,6 +7013,8 @@ type SpeedrunLeaderboardRow struct {
 // Returns the leaderboard for a given instance name.
 // Deduplicates by duplicate_group, then by guild (best per guild unless guild_id filter is set).
 // Excludes runs without a guild. Optional filters: realm, player count, guild.
+// Each difficulty has its own board: set filter_difficulty to select the board
+// matching difficulty_name (empty string matches runs with no recorded difficulty).
 // When no guild filter: keep only the best run per guild.
 // When guild filter is set: keep all runs for that guild.
 func (q *sqlQuerier) SpeedrunLeaderboard(ctx context.Context, arg SpeedrunLeaderboardParams) ([]SpeedrunLeaderboardRow, error) {
@@ -6982,6 +7025,8 @@ func (q *sqlQuerier) SpeedrunLeaderboard(ctx context.Context, arg SpeedrunLeader
 		arg.RealmNames,
 		arg.GuildID,
 		arg.SinceDays,
+		arg.FilterDifficulty,
+		arg.DifficultyName,
 	)
 	if err != nil {
 		return nil, err
@@ -6993,6 +7038,7 @@ func (q *sqlQuerier) SpeedrunLeaderboard(ctx context.Context, arg SpeedrunLeader
 		if err := rows.Scan(
 			&i.InstanceID,
 			&i.InstanceName,
+			&i.DifficultyName,
 			&i.GuildID,
 			&i.DurationMs,
 			&i.StartTime,
