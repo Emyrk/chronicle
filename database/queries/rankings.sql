@@ -338,7 +338,7 @@ per_run AS (
         (CASE WHEN @metric :: text = 'hps'
             THEN SUM(d.healing_done + d.absorbed_done)::double precision / NULLIF(SUM(d.duration_secs), 0)
             ELSE SUM(d.damage_done)::double precision / NULLIF(SUM(d.duration_secs), 0)
-        END)::double precision AS dps
+        END)::double precision AS metric_value
     FROM deduped d
     GROUP BY d.player_guid, d.run_id, d.player_class, d.player_spec
     HAVING COUNT(DISTINCT d.encounter_name) = (SELECT cnt FROM total_encounters)
@@ -356,19 +356,19 @@ FROM (
     SELECT
         d.player_class,
         (CASE WHEN @group_by_class :: bool THEN '' ELSE d.player_spec END)::text AS player_spec,
-        PERCENTILE_CONT(0.25) WITHIN GROUP (ORDER BY d.dps) AS q1_dps,
-        PERCENTILE_CONT(0.50) WITHIN GROUP (ORDER BY d.dps) AS median_dps,
-        PERCENTILE_CONT(0.75) WITHIN GROUP (ORDER BY d.dps) AS q3_dps,
+        PERCENTILE_CONT(0.25) WITHIN GROUP (ORDER BY d.metric_value) AS q1_dps,
+        PERCENTILE_CONT(0.50) WITHIN GROUP (ORDER BY d.metric_value) AS median_dps,
+        PERCENTILE_CONT(0.75) WITHIN GROUP (ORDER BY d.metric_value) AS q3_dps,
         -- When we have enough samples, trim the bottom 5% to exclude
         -- outliers (e.g. early deaths). Otherwise show the true minimum.
         CASE WHEN COUNT(*) > 100
-            THEN PERCENTILE_CONT(0.05) WITHIN GROUP (ORDER BY d.dps)
-            ELSE MIN(d.dps)
+            THEN PERCENTILE_CONT(0.05) WITHIN GROUP (ORDER BY d.metric_value)
+            ELSE MIN(d.metric_value)
         END::double precision AS min_dps,
-        MAX(d.dps)::double precision AS max_dps,
+        MAX(d.metric_value)::double precision AS max_dps,
         COUNT(*)::bigint AS count
     FROM per_run d
-    WHERE d.dps > 0
+    WHERE d.metric_value > 0
     GROUP BY d.player_class, (CASE WHEN @group_by_class :: bool THEN '' ELSE d.player_spec END)::text
 ) s
 ORDER BY s.median_dps DESC;

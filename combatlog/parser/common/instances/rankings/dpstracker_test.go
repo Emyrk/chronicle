@@ -188,6 +188,19 @@ func TestDPSTracker_AbsorbAttribution(t *testing.T) {
 	require.Contains(t, results[encID].Units, priest)
 	assert.Equal(t, int64(750), results[encID].Units[priest].HealingAbsorbed)
 	assert.Equal(t, int64(0), results[encID].Units[priest].HealingDone)
+	// The damage target gets no absorb credit.
+	if tankStats, ok := results[encID].Units[tank]; ok {
+		assert.Equal(t, int64(0), tankStats.HealingAbsorbed)
+	}
+
+	// Absorb state resets between fights.
+	encID2 := uuid.New()
+	tracker.FightStarted(encID2, nil)
+	tracker.FightEnded(encID2, nil)
+	results = tracker.Result()
+	if priestStats, ok := results[encID2].Units[priest]; ok {
+		assert.Equal(t, int64(0), priestStats.HealingAbsorbed)
+	}
 }
 
 func TestDPSTracker_DamageTakenPlayersOnly(t *testing.T) {

@@ -138,6 +138,9 @@ func (t *DPSTracker) ProcessMessage(active bool, _ uuid.UUID, m messages.Message
 
 	case *messages.Absorbed:
 		// Credit absorbed damage to the shield caster (e.g., PW:Shield priest).
+		// Like the Heal handler, this intentionally credits msg.Caster directly
+		// without player/pet classification: absorb shields are player-cast, and
+		// logparse only persists rankings for units classified as players anyway.
 		if msg.Amount > 0 && !msg.Caster.IsZero() {
 			t.absorbDone[msg.Caster] += int64(msg.Amount)
 		}

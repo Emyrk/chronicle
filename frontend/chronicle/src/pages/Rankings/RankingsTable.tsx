@@ -34,7 +34,8 @@ function metricValue(entry: RankedEntry, metric: "dps" | "hps"): number {
 
 function metricTitle(entry: RankedEntry, metric: "dps" | "hps"): string | undefined {
   if (metric !== "hps") return undefined
-  return `Effective healing: ${entry.healing_done.toLocaleString()} · Absorbed: ${entry.absorbed_done.toLocaleString()}`
+  const total = entry.healing_done + entry.absorbed_done
+  return `Effective healing: ${entry.healing_done.toLocaleString()} · Absorbed: ${entry.absorbed_done.toLocaleString()} · Total: ${total.toLocaleString()}`
 }
 
 export function RankingsTable({ entries, metric = "dps" }: RankingsTableProps) {
