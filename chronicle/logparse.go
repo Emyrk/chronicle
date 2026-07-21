@@ -481,7 +481,17 @@ func (w *WorkerLogParse) Work(ctx context.Context, job *river.Job[ArgsLogParse])
 			}
 
 			// Persist speedrun result if available.
-			if finalized.Rankings != nil && finalized.Rankings.Speedrun != nil {
+			// Skip speedrun submission entirely for trash-only instances
+			// (zero boss kills). Partial boss kills still get recorded so
+			// the speedrun panel can show progress.
+			hasBossKill := false
+			for _, enc := range finalized.Encounters {
+				if enc.Boss && (enc.KillType == encounter.KillTypeClean || enc.KillType == encounter.KillTypePartial) {
+					hasBossKill = true
+					break
+				}
+			}
+			if finalized.Rankings != nil && finalized.Rankings.Speedrun != nil && hasBossKill {
 				sr := finalized.Rankings.Speedrun
 				proofJSON, err := json.Marshal(rankings.SpeedrunProofPayload{
 					Proof:      sr.Proof,
