@@ -25,9 +25,19 @@ export interface RankedEntry extends RankingsEntry {
 
 interface RankingsTableProps {
   entries: RankedEntry[]
+  metric?: "dps" | "hps"
 }
 
-export function RankingsTable({ entries }: RankingsTableProps) {
+function metricValue(entry: RankedEntry, metric: "dps" | "hps"): number {
+  return metric === "hps" ? entry.hps : entry.dps
+}
+
+function metricTitle(entry: RankedEntry, metric: "dps" | "hps"): string | undefined {
+  if (metric !== "hps") return undefined
+  return `Effective healing: ${entry.healing_done.toLocaleString()} · Absorbed: ${entry.absorbed_done.toLocaleString()}`
+}
+
+export function RankingsTable({ entries, metric = "dps" }: RankingsTableProps) {
   if (entries.length === 0) {
     return (
       <div className="rounded-xl border p-8 text-center text-muted-foreground">
@@ -59,8 +69,8 @@ export function RankingsTable({ entries }: RankingsTableProps) {
             <div className="min-w-0 flex-1">
               <div className="flex items-center justify-between gap-2">
                 <span className="truncate font-medium">{entry.player_name}</span>
-                <span className="shrink-0 font-mono font-semibold">
-                  {Math.round(entry.dps).toLocaleString()}
+                <span className="shrink-0 font-mono font-semibold" title={metricTitle(entry, metric)}>
+                  {Math.round(metricValue(entry, metric)).toLocaleString()}
                 </span>
               </div>
               <div className="mt-0.5 flex items-center gap-3 text-xs text-muted-foreground">
@@ -83,7 +93,7 @@ export function RankingsTable({ entries }: RankingsTableProps) {
               <th className="px-4 py-3">Player</th>
               <th className="px-4 py-3">Realm</th>
               <th className="px-4 py-3">Spec</th>
-              <th className="px-4 py-3 text-right">DPS</th>
+              <th className="px-4 py-3 text-right">{metric === "hps" ? "HPS" : "DPS"}</th>
               <th className="px-4 py-3 text-right">Duration</th>
               <th className="px-4 py-3">Guild</th>
               <th className="px-4 py-3 text-right">Date</th>
@@ -124,8 +134,8 @@ export function RankingsTable({ entries }: RankingsTableProps) {
                     <span style={{ color: CLASS_CSS_VAR[entry.player_class] }}>{entry.player_spec}</span>
                   </span>
                 </td>
-                <td className="px-4 py-3 text-right font-mono font-semibold">
-                  {Math.round(entry.dps).toLocaleString()}
+                <td className="px-4 py-3 text-right font-mono font-semibold" title={metricTitle(entry, metric)}>
+                  {Math.round(metricValue(entry, metric)).toLocaleString()}
                 </td>
                 <td className="px-4 py-3 text-right font-mono text-muted-foreground">
                   {formatDuration(entry.duration_secs)}

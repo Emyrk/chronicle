@@ -1221,8 +1221,11 @@ export interface RankingsEntry {
     readonly realm_name: string;
     readonly guild_name: string;
     readonly damage_done: number;
+    readonly healing_done: number;
+    readonly absorbed_done: number;
     readonly duration_secs: number;
     readonly dps: number;
+    readonly hps: number;
     readonly avg_ilvl?: number;
     readonly log_hashed_slug: string;
     readonly killed_at: string;

@@ -261,6 +261,7 @@ func (s *Service) handleLeaderboard(w http.ResponseWriter, r *http.Request) {
 		Role:            q.Get("role"),
 		SinceDays:       sinceDays,
 		HideUnknowns:    q.Get("hide_unknowns") == "true",
+		Metric:          normalizeMetric(q.Get("metric")),
 		QueryLimit:      limit,
 		QueryOffset:     offset,
 	})
@@ -293,8 +294,11 @@ func (s *Service) handleLeaderboard(w http.ResponseWriter, r *http.Request) {
 			RealmName:      row.RealmName,
 			GuildName:      row.GuildName,
 			DamageDone:     row.DamageDone,
+			HealingDone:    row.HealingDone,
+			AbsorbedDone:   row.AbsorbedDone,
 			DurationSecs:   row.DurationSecs,
 			DPS:            row.Dps,
+			HPS:            row.Hps,
 			LogHashedSlug:  row.LogHashedSlug,
 			KilledAt:       row.KilledAt.Time,
 		}
@@ -333,7 +337,8 @@ func (s *Service) handleStats(w http.ResponseWriter, r *http.Request) {
 		RealmID:         q.Get("realm_id"),
 		Role:            q.Get("role"),
 		SinceDays:       sinceDays,
-		GroupByClass:     q.Get("group_by_class") == "true",
+		Metric:          normalizeMetric(q.Get("metric")),
+		GroupByClass:    q.Get("group_by_class") == "true",
 	})
 	if err != nil {
 		httpapi.HandleResponseError(ctx, w, err, httpapi.APIError{
@@ -362,6 +367,15 @@ func (s *Service) handleStats(w http.ResponseWriter, r *http.Request) {
 	httpapi.Write(ctx, w, http.StatusOK, out)
 }
 
+
+// normalizeMetric validates the leaderboard metric selector.
+// Only "hps" is recognized; anything else falls back to "dps".
+func normalizeMetric(m string) string {
+	if m == "hps" {
+		return "hps"
+	}
+	return "dps"
+}
 
 // normalizeClassName converts a DB-form class name (e.g. DEATH_KNIGHT) to the
 // SDK-form name (e.g. DEATHKNIGHT) used by the frontend. For classes without

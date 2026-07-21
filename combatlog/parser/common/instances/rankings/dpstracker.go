@@ -18,8 +18,12 @@ var _ instancehook.Hook = (*DPSTracker)(nil)
 type UnitCombatStats struct {
 	DamageDone  int64
 	DamageTaken int64
+	// HealingDone is effective healing only (overheal subtracted).
 	HealingDone int64
-	IsPlayer    bool
+	// HealingAbsorbed is damage prevented by absorb shields cast by this unit
+	// (e.g., Power Word: Shield), attributed to the shield caster.
+	HealingAbsorbed int64
+	IsPlayer        bool
 	OwnerGUID   *guid.GUID // Non-nil if this unit is a pet/totem/summon.
 	// Talents snapshot at fight end. Nil if the player had no talent data
 	// (e.g., talents were invalidated by a respec, or addon didn't report).
@@ -43,6 +47,7 @@ type DPSTracker struct {
 	damageDone  map[guid.GUID]int64
 	damageTaken map[guid.GUID]int64
 	healingDone map[guid.GUID]int64
+	absorbDone  map[guid.GUID]int64
 
 	// Results across all encounters.
 	results map[uuid.UUID]*DPSResult
@@ -56,6 +61,7 @@ func NewDPSTracker(units *unitdb.Units) *DPSTracker {
 		damageDone:  make(map[guid.GUID]int64),
 		damageTaken: make(map[guid.GUID]int64),
 		healingDone: make(map[guid.GUID]int64),
+		absorbDone:  make(map[guid.GUID]int64),
 		results:     make(map[uuid.UUID]*DPSResult),
 	}
 }
@@ -64,6 +70,7 @@ func (t *DPSTracker) FightStarted(_ uuid.UUID, _ messages.Message) {
 	t.damageDone = make(map[guid.GUID]int64)
 	t.damageTaken = make(map[guid.GUID]int64)
 	t.healingDone = make(map[guid.GUID]int64)
+	t.absorbDone = make(map[guid.GUID]int64)
 }
 
 func (t *DPSTracker) ProcessMessage(active bool, _ uuid.UUID, m messages.Message) error {
@@ -128,6 +135,12 @@ func (t *DPSTracker) ProcessMessage(active bool, _ uuid.UUID, m messages.Message
 		if effective > 0 {
 			t.healingDone[msg.Caster] += effective
 		}
+
+	case *messages.Absorbed:
+		// Credit absorbed damage to the shield caster (e.g., PW:Shield priest).
+		if msg.Amount > 0 && !msg.Caster.IsZero() {
+			t.absorbDone[msg.Caster] += int64(msg.Amount)
+		}
 	}
 
 	return nil
@@ -143,6 +156,9 @@ func (t *DPSTracker) FightEnded(encounterID uuid.UUID, _ messages.Message) {
 		allGUIDs[g] = struct{}{}
 	}
 	for g := range t.healingDone {
+		allGUIDs[g] = struct{}{}
+	}
+	for g := range t.absorbDone {
 		allGUIDs[g] = struct{}{}
 	}
 
@@ -163,11 +179,12 @@ func (t *DPSTracker) FightEnded(encounterID uuid.UUID, _ messages.Message) {
 			}
 		}
 		stats := &UnitCombatStats{
-			DamageDone:  t.damageDone[g],
-			DamageTaken: t.damageTaken[g],
-			HealingDone: t.healingDone[g],
-			IsPlayer:    isPlayer,
-			Talents:     talents,
+			DamageDone:      t.damageDone[g],
+			DamageTaken:     t.damageTaken[g],
+			HealingDone:     t.healingDone[g],
+			HealingAbsorbed: t.absorbDone[g],
+			IsPlayer:        isPlayer,
+			Talents:         talents,
 		}
 		if cls.Relation.HasOwner() {
 			owner := *cls.Relation.Owner

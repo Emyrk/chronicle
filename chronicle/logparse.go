@@ -989,13 +989,17 @@ func insertDPSRankings(
 			}
 		}
 
-		// Sum pet/totem damage into their owner's totals.
-		// The DPS tracker records damage under the raw caster GUID (pet or player).
-		// We need to attribute pet damage to the owning player.
-		ownerDamage := make(map[guid.GUID]int64) // owner GUID → additional damage from pets
+		// Sum pet/totem damage and healing into their owner's totals.
+		// The DPS tracker records metrics under the raw caster GUID (pet or player).
+		// We need to attribute pet contributions to the owning player.
+		ownerDamage := make(map[guid.GUID]int64)  // owner GUID → additional damage from pets
+		ownerHealing := make(map[guid.GUID]int64) // owner GUID → additional healing from pets/totems
+		ownerAbsorb := make(map[guid.GUID]int64)  // owner GUID → additional absorbs from pets/totems
 		for _, stats := range dpsResult.Units {
 			if stats.OwnerGUID != nil && !stats.IsPlayer {
 				ownerDamage[*stats.OwnerGUID] += stats.DamageDone
+				ownerHealing[*stats.OwnerGUID] += stats.HealingDone
+				ownerAbsorb[*stats.OwnerGUID] += stats.HealingAbsorbed
 			}
 		}
 
@@ -1062,6 +1066,9 @@ func insertDPSRankings(
 
 			totalDamage := stats.DamageDone + ownerDamage[unitGUID]
 			dps := float64(totalDamage) / durationSecs
+			totalHealing := stats.HealingDone + ownerHealing[unitGUID]
+			totalAbsorbed := stats.HealingAbsorbed + ownerAbsorb[unitGUID]
+			hps := float64(totalHealing+totalAbsorbed) / durationSecs
 			playerGuildName := findPlayerGuild(finalized.Guilds.Guilds, unitGUID)
 
 			err := tx.InsertEncounterDpsRanking(ctx, database.InsertEncounterDpsRankingParams{
@@ -1088,6 +1095,9 @@ func insertDPSRankings(
 				DamageDone:     totalDamage,
 				DurationSecs:   durationSecs,
 				Dps:            dps,
+				HealingDone:    totalHealing,
+				AbsorbedDone:   totalAbsorbed,
+				Hps:            hps,
 				LogHashedSlug:  dbinstance.HashedSlug.String,
 				KilledAt:       database.Timestamptz(enc.Combat.End),
 			})
@@ -1120,6 +1130,7 @@ type trashPlayerAccum struct {
 	DamageDone    int64
 	DamageTaken   int64
 	HealingDone   int64
+	AbsorbedDone  int64
 	DurationSecs  float64
 	Talents       *combatant.Talents
 	TalentLayout  string
@@ -1168,11 +1179,15 @@ func insertTrashRankings(
 			}
 		}
 
-		// Sum pet damage into owner for this encounter.
+		// Sum pet damage and healing into owner for this encounter.
 		ownerDamage := make(map[guid.GUID]int64)
+		ownerHealing := make(map[guid.GUID]int64)
+		ownerAbsorb := make(map[guid.GUID]int64)
 		for _, stats := range dpsResult.Units {
 			if stats.OwnerGUID != nil && !stats.IsPlayer {
 				ownerDamage[*stats.OwnerGUID] += stats.DamageDone
+				ownerHealing[*stats.OwnerGUID] += stats.HealingDone
+				ownerAbsorb[*stats.OwnerGUID] += stats.HealingAbsorbed
 			}
 		}
 
@@ -1195,7 +1210,8 @@ func insertTrashRankings(
 			}
 			a.DamageDone += stats.DamageDone + ownerDamage[unitGUID]
 			a.DamageTaken += stats.DamageTaken
-			a.HealingDone += stats.HealingDone
+			a.HealingDone += stats.HealingDone + ownerHealing[unitGUID]
+			a.AbsorbedDone += stats.HealingAbsorbed + ownerAbsorb[unitGUID]
 			a.DurationSecs += durationSecs
 			if enc.Combat.End.After(a.LastKilledAt) {
 				a.LastKilledAt = enc.Combat.End
@@ -1259,6 +1275,7 @@ func insertTrashRankings(
 		}
 
 		dps := float64(a.DamageDone) / a.DurationSecs
+		hps := float64(a.HealingDone+a.AbsorbedDone) / a.DurationSecs
 		playerGuildName := findPlayerGuild(finalized.Guilds.Guilds, key.GUID)
 
 		err := tx.InsertEncounterDpsRanking(ctx, database.InsertEncounterDpsRankingParams{
@@ -1282,6 +1299,9 @@ func insertTrashRankings(
 			DamageDone:     a.DamageDone,
 			DurationSecs:   a.DurationSecs,
 			Dps:            dps,
+			HealingDone:    a.HealingDone,
+			AbsorbedDone:   a.AbsorbedDone,
+			Hps:            hps,
 			LogHashedSlug:  dbinstance.HashedSlug.String,
 			KilledAt:       database.Timestamptz(a.LastKilledAt),
 		})

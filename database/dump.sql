@@ -627,7 +627,10 @@ CREATE TABLE encounter_dps_rankings (
     avg_ilvl smallint,
     log_hashed_slug text DEFAULT ''::text NOT NULL,
     killed_at timestamp with time zone NOT NULL,
-    created_at timestamp with time zone DEFAULT now() NOT NULL
+    created_at timestamp with time zone DEFAULT now() NOT NULL,
+    healing_done bigint DEFAULT 0 NOT NULL,
+    absorbed_done bigint DEFAULT 0 NOT NULL,
+    hps double precision DEFAULT 0 NOT NULL
 );
 
 ALTER TABLE ONLY encounter_dps_rankings FORCE ROW LEVEL SECURITY;

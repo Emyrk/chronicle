@@ -49,8 +49,11 @@ type RankingsEntry struct {
 	RealmName     string     `json:"realm_name"`
 	GuildName     string     `json:"guild_name"`
 	DamageDone    int64      `json:"damage_done"`
+	HealingDone   int64      `json:"healing_done"`
+	AbsorbedDone  int64      `json:"absorbed_done"`
 	DurationSecs  float64    `json:"duration_secs"`
 	DPS           float64    `json:"dps"`
+	HPS           float64    `json:"hps"`
 	AvgIlvl       *int16     `json:"avg_ilvl,omitempty"`
 	LogHashedSlug string     `json:"log_hashed_slug"`
 	KilledAt      time.Time  `json:"killed_at"`

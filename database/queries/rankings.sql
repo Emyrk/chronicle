@@ -156,6 +156,8 @@ WITH deduped AS (
         edr.realm_name,
         edr.guild_name,
         edr.damage_done,
+        edr.healing_done,
+        edr.absorbed_done,
         edr.duration_secs,
         edr.avg_ilvl,
         edr.log_hashed_slug,
@@ -202,8 +204,9 @@ WITH deduped AS (
         WHEN cardinality(@difficulty_names :: text[]) > 0 THEN edr.difficulty_name = ANY(@difficulty_names :: text[])
         ELSE true
     END
-    AND edr.dps > 0
-    ORDER BY edr.player_guid, edr.encounter_name, COALESCE(li.duplicate_group_id, li.id), edr.dps DESC
+    AND (CASE WHEN @metric :: text = 'hps' THEN edr.hps ELSE edr.dps END) > 0
+    ORDER BY edr.player_guid, edr.encounter_name, COALESCE(li.duplicate_group_id, li.id),
+        (CASE WHEN @metric :: text = 'hps' THEN edr.hps ELSE edr.dps END) DESC
 ),
 -- Step 1: aggregate per player per run (sum encounters within a single instance run).
 per_run AS (
@@ -223,8 +226,11 @@ per_run AS (
         ((array_agg(d.realm_name ORDER BY d.damage_done DESC))[1])::text AS realm_name,
         ((array_agg(d.guild_name ORDER BY d.damage_done DESC))[1])::text AS guild_name,
         SUM(d.damage_done)::bigint AS damage_done,
+        SUM(d.healing_done)::bigint AS healing_done,
+        SUM(d.absorbed_done)::bigint AS absorbed_done,
         SUM(d.duration_secs)::double precision AS duration_secs,
         (SUM(d.damage_done)::double precision / NULLIF(SUM(d.duration_secs), 0))::double precision AS dps,
+        (SUM(d.healing_done + d.absorbed_done)::double precision / NULLIF(SUM(d.duration_secs), 0))::double precision AS hps,
         COALESCE(MAX(d.avg_ilvl), 0)::smallint AS avg_ilvl,
         ((array_agg(d.log_hashed_slug ORDER BY d.damage_done DESC))[1])::text AS log_hashed_slug,
         MAX(d.killed_at)::timestamptz AS killed_at,
@@ -253,21 +259,24 @@ aggregated AS (
         pr.realm_name,
         pr.guild_name,
         pr.damage_done,
+        pr.healing_done,
+        pr.absorbed_done,
         pr.duration_secs,
         pr.dps,
+        pr.hps,
         pr.avg_ilvl,
         pr.log_hashed_slug,
         pr.killed_at,
         pr.talent_sub_spec
     FROM per_run pr
-    ORDER BY pr.player_guid, pr.dps DESC
+    ORDER BY pr.player_guid, (CASE WHEN @metric :: text = 'hps' THEN pr.hps ELSE pr.dps END) DESC
 )
 SELECT
     a.*,
     COUNT(*) OVER() AS total_count
 FROM aggregated a
-WHERE a.dps > 0
-ORDER BY a.dps DESC
+WHERE (CASE WHEN @metric :: text = 'hps' THEN a.hps ELSE a.dps END) > 0
+ORDER BY (CASE WHEN @metric :: text = 'hps' THEN a.hps ELSE a.dps END) DESC
 LIMIT @query_limit::bigint
 OFFSET @query_offset::bigint;
 
@@ -282,6 +291,8 @@ WITH deduped AS (
         edr.player_class,
         edr.player_spec,
         edr.damage_done,
+        edr.healing_done,
+        edr.absorbed_done,
         edr.duration_secs,
         COALESCE(li.duplicate_group_id, li.id) AS run_id
     FROM encounter_dps_rankings edr
@@ -311,7 +322,8 @@ WITH deduped AS (
         WHEN cardinality(@difficulty_names :: text[]) > 0 THEN edr.difficulty_name = ANY(@difficulty_names :: text[])
         ELSE true
     END
-    ORDER BY edr.player_guid, edr.encounter_name, COALESCE(li.duplicate_group_id, li.id), edr.dps DESC
+    ORDER BY edr.player_guid, edr.encounter_name, COALESCE(li.duplicate_group_id, li.id),
+        (CASE WHEN @metric :: text = 'hps' THEN edr.hps ELSE edr.dps END) DESC
 ),
 total_encounters AS (
     SELECT COUNT(DISTINCT d.encounter_name) AS cnt FROM deduped d
@@ -323,7 +335,10 @@ per_run AS (
     SELECT
         d.player_class,
         d.player_spec,
-        (SUM(d.damage_done)::double precision / NULLIF(SUM(d.duration_secs), 0))::double precision AS dps
+        (CASE WHEN @metric :: text = 'hps'
+            THEN SUM(d.healing_done + d.absorbed_done)::double precision / NULLIF(SUM(d.duration_secs), 0)
+            ELSE SUM(d.damage_done)::double precision / NULLIF(SUM(d.duration_secs), 0)
+        END)::double precision AS dps
     FROM deduped d
     GROUP BY d.player_guid, d.run_id, d.player_class, d.player_spec
     HAVING COUNT(DISTINCT d.encounter_name) = (SELECT cnt FROM total_encounters)
@@ -379,6 +394,7 @@ INSERT INTO encounter_dps_rankings (
     talent_build_id, difficulty_name, max_players,
     realm_id, realm_name, guild_id, guild_name,
     damage_done, duration_secs, dps, avg_ilvl,
+    healing_done, absorbed_done, hps,
     log_hashed_slug, killed_at
 ) VALUES (
     @encounter_id, @instance_id, @encounter_name, @instance_name,
@@ -386,6 +402,7 @@ INSERT INTO encounter_dps_rankings (
     @talent_build_id, @difficulty_name, @max_players,
     @realm_id, @realm_name, @guild_id, @guild_name,
     @damage_done, @duration_secs, @dps, @avg_ilvl,
+    @healing_done, @absorbed_done, @hps,
     @log_hashed_slug, @killed_at
 ) ON CONFLICT (encounter_id, player_guid) DO NOTHING;
 

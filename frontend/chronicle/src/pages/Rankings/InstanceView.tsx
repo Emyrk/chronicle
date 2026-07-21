@@ -41,7 +41,7 @@ import { ClassSpecFilter } from "./ClassSpecFilter"
 
 // ── Types ─────────────────────────────────────────────────────────────────
 
-type MetricTab = "dps" | "killtime" | "success"
+type MetricTab = "dps" | "hps" | "killtime" | "success"
 type DpsSubTab = "boxplot" | "leaderboard"
 type KillTimeSubTab = "boxplot" | "leaderboard"
 const PAGE_SIZE = 50
@@ -79,9 +79,13 @@ export function InstanceView({ instanceName }: InstanceViewProps) {
 
   const metric: MetricTab = useMemo(() => {
     const raw = params.get("metric")
-    if (raw === "killtime" || raw === "success") return raw
+    if (raw === "hps" || raw === "killtime" || raw === "success") return raw
     return "dps"
   }, [params])
+
+  // DPS and HPS share the same leaderboard/box-plot UI; only the value metric differs.
+  const isPlayerMetric = metric === "dps" || metric === "hps"
+  const valueMetric: "dps" | "hps" = metric === "hps" ? "hps" : "dps"
 
   const dpsSubTab: DpsSubTab = params.get("tab") === "leaderboard" ? "leaderboard" : "boxplot"
   const killTimeSubTab: KillTimeSubTab = params.get("tab") === "leaderboard" ? "leaderboard" : "boxplot"
@@ -165,6 +169,7 @@ export function InstanceView({ instanceName }: InstanceViewProps) {
       next.delete("page")
       next.delete("class")
       next.delete("spec")
+      next.delete("role")
       next.delete("kt_enc")
       return next
     })
@@ -180,6 +185,9 @@ export function InstanceView({ instanceName }: InstanceViewProps) {
         next.delete("tab")
         next.delete("page")
         next.delete("kt_enc")
+        // HPS defaults the role filter to healers (still user-changeable).
+        if (m === "hps") next.set("role", "heal")
+        else next.delete("role")
         return next
       })
     },
@@ -366,6 +374,7 @@ export function InstanceView({ instanceName }: InstanceViewProps) {
     difficulty_names: difficultyNamesParam,
     period: periodParam,
     role: filterRole,
+    metric: valueMetric,
     group_by_class: groupByClass,
   })
 
@@ -383,6 +392,7 @@ export function InstanceView({ instanceName }: InstanceViewProps) {
     spec: filterSpec,
     role: filterRole,
     hide_unknowns: hideUnknowns,
+    metric: valueMetric,
     limit: PAGE_SIZE,
     offset: (page - 1) * PAGE_SIZE,
   })
@@ -564,7 +574,7 @@ export function InstanceView({ instanceName }: InstanceViewProps) {
   return (
     <div className="flex">
       {/* Mobile backdrop (DPS only) */}
-      {metric === "dps" && isMobile && sidebarOpen && (
+      {isPlayerMetric && isMobile && sidebarOpen && (
         <div
           className="fixed inset-0 z-40 bg-black/50"
           onClick={() => setSidebarOpen(false)}
@@ -572,7 +582,7 @@ export function InstanceView({ instanceName }: InstanceViewProps) {
       )}
 
       {/* Mobile FAB (DPS only) */}
-      {metric === "dps" && isMobile && createPortal(
+      {isPlayerMetric && isMobile && createPortal(
         <Button
           variant="default"
           size="icon"
@@ -588,10 +598,10 @@ export function InstanceView({ instanceName }: InstanceViewProps) {
       {/* Sidebar — desktop: always present (empty when not DPS to preserve layout), mobile: overlay */}
       {!isMobile && (
         <div className="pt-1 w-64 shrink-0 border-r pr-4 overflow-y-auto styled-scrollbar sticky top-4 max-h-[calc(100vh-2rem)]">
-          {metric === "dps" && sidebarContent}
+          {isPlayerMetric && sidebarContent}
         </div>
       )}
-      {metric === "dps" && isMobile && sidebarOpen && (
+      {isPlayerMetric && isMobile && sidebarOpen && (
         <div className="fixed inset-y-0 left-0 z-50 w-64 bg-background border-r shadow-lg pl-4 pt-4 overflow-y-auto styled-scrollbar">
           {sidebarContent}
         </div>
@@ -635,20 +645,21 @@ export function InstanceView({ instanceName }: InstanceViewProps) {
                 <DropdownMenu modal={false}>
                   <DropdownMenuTrigger asChild>
                     <Button variant="outline" size="sm" className="h-7 gap-1.5 text-xs min-w-[120px] justify-between">
-                      {metric === "dps" ? "DPS Rankings" : metric === "killtime" ? "Kill Time" : "Success Rate"}
+                      {metric === "dps" ? "DPS Rankings" : metric === "hps" ? "HPS Rankings" : metric === "killtime" ? "Kill Time" : "Success Rate"}
                       <ChevronDown className="h-3 w-3 opacity-50" />
                     </Button>
                   </DropdownMenuTrigger>
                   <DropdownMenuContent align="start">
                     <DropdownMenuRadioGroup value={metric} onValueChange={(v) => handleMetricChange(v as MetricTab)}>
                       <DropdownMenuRadioItem value="dps">DPS Rankings</DropdownMenuRadioItem>
+                      <DropdownMenuRadioItem value="hps">HPS Rankings</DropdownMenuRadioItem>
                       <DropdownMenuRadioItem value="killtime">Kill Time</DropdownMenuRadioItem>
                       <DropdownMenuRadioItem value="success">Success Rate</DropdownMenuRadioItem>
                     </DropdownMenuRadioGroup>
                   </DropdownMenuContent>
                 </DropdownMenu>
 
-                {metric === "dps" && (
+                {isPlayerMetric && (
                   <DropdownMenu modal={false}>
                     <DropdownMenuTrigger asChild>
                       <Button variant="outline" size="sm" className="h-7 gap-1.5 text-xs min-w-[80px] justify-between">
@@ -709,7 +720,7 @@ export function InstanceView({ instanceName }: InstanceViewProps) {
                   Hide unknowns
                 </label>
 
-                {metric === "dps" && dpsSubTab === "boxplot" && (
+                {isPlayerMetric && dpsSubTab === "boxplot" && (
                   <label className="flex items-center gap-1.5 text-xs text-muted-foreground cursor-pointer select-none">
                     <Checkbox
                       checked={groupByClass}
@@ -724,19 +735,19 @@ export function InstanceView({ instanceName }: InstanceViewProps) {
 
             {/* Right: sub-tabs + time period, bottom-aligned */}
             <div className="flex flex-col justify-end items-end gap-2 shrink-0">
-              {(metric === "dps" || metric === "killtime") && (
+              {(isPlayerMetric || metric === "killtime") && (
                 <div className="flex gap-1 rounded-lg border border-white/10 bg-black/20 p-1">
                   {(["boxplot", "leaderboard"] as const).map((t) => (
                     <button
                       key={t}
                       onClick={() =>
-                        metric === "dps"
+                        isPlayerMetric
                           ? handleDpsSubTabChange(t)
                           : handleKillTimeSubTabChange(t)
                       }
                       className={cn(
                         "rounded-md px-2.5 py-0.5 text-[11px] font-medium transition-colors",
-                        (metric === "dps" ? dpsSubTab : killTimeSubTab) === t
+                        (isPlayerMetric ? dpsSubTab : killTimeSubTab) === t
                           ? "bg-white/15 text-foreground"
                           : "text-muted-foreground hover:text-foreground",
                       )}
@@ -773,19 +784,19 @@ export function InstanceView({ instanceName }: InstanceViewProps) {
         </div>
 
         {/* Multi-encounter notice */}
-        {metric === "dps" && selectedEncounters.size > 1 && (
+        {isPlayerMetric && selectedEncounters.size > 1 && (
           <p className="text-xs text-muted-foreground/70 italic">
-            Showing combined DPS across {selectedEncounters.size} encounters per run.
+            Showing combined {valueMetric.toUpperCase()} across {selectedEncounters.size} encounters per run.
             Runs missing any selected encounter are excluded.
           </p>
         )}
 
         {/* Content */}
-        {metric === "dps" && (
+        {isPlayerMetric && (
           dpsSubTab === "boxplot" ? (
             <BoxPlotChart
               stats={boxPlotStats}
-              title="DPS Distribution by Class & Spec"
+              title={`${valueMetric.toUpperCase()} Distribution by Class & Spec`}
               subtitle={`${boxPlotStats.reduce((sum, s) => sum + s.count, 0).toLocaleString()} total runs`}
               onRowClick={handleBoxPlotRowClick}
             />
@@ -797,7 +808,7 @@ export function InstanceView({ instanceName }: InstanceViewProps) {
                 onClassSelect={handleClassSelect}
                 onSpecSelect={handleSpecSelect}
               />
-              <RankingsTable entries={leaderboardEntries} />
+              <RankingsTable entries={leaderboardEntries} metric={valueMetric} />
               {/* Pagination */}
               {totalPages > 1 && (
                 <div className="flex items-center justify-between pt-2">

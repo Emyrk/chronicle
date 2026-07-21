@@ -155,6 +155,41 @@ func TestDPSTracker_EffectiveHealing(t *testing.T) {
 	assert.Equal(t, int64(400), results[encID].Units[healer].HealingDone)
 }
 
+func TestDPSTracker_AbsorbAttribution(t *testing.T) {
+	t.Parallel()
+	tracker, units := setupDPSTracker()
+
+	priest := makePlayerGUID(1)
+	tank := makePlayerGUID(2)
+	boss := makeCreatureGUID(100, 1)
+	encID := uuid.New()
+
+	units.Info[priest] = unitinfo.Info{Guid: priest, Name: "Priest", IsPlayer: true, CanCooperate: true}
+	units.Info[tank] = unitinfo.Info{Guid: tank, Name: "Tank", IsPlayer: true, CanCooperate: true}
+	units.Info[boss] = unitinfo.Info{Guid: boss, Name: "Boss", CanCooperate: false}
+
+	tracker.FightStarted(encID, nil)
+
+	// Absorbs are credited to the shield caster.
+	_ = tracker.ProcessMessage(true, encID, &messages.Absorbed{
+		Attacker: boss, Target: tank, Caster: priest, Amount: 600,
+	})
+	_ = tracker.ProcessMessage(true, encID, &messages.Absorbed{
+		Attacker: boss, Target: tank, Caster: priest, Amount: 150,
+	})
+	// Unknown caster → not credited.
+	_ = tracker.ProcessMessage(true, encID, &messages.Absorbed{
+		Attacker: boss, Target: tank, Caster: guid.GUID(0), Amount: 999,
+	})
+
+	tracker.FightEnded(encID, nil)
+
+	results := tracker.Result()
+	require.Contains(t, results[encID].Units, priest)
+	assert.Equal(t, int64(750), results[encID].Units[priest].HealingAbsorbed)
+	assert.Equal(t, int64(0), results[encID].Units[priest].HealingDone)
+}
+
 func TestDPSTracker_DamageTakenPlayersOnly(t *testing.T) {
 	t.Parallel()
 	tracker, units := setupDPSTracker()

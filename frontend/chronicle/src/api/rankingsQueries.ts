@@ -48,6 +48,7 @@ export function useRankingsLeaderboard(params: {
   spec?: string;
   role?: string;
   hide_unknowns?: boolean;
+  metric?: "dps" | "hps";
   limit?: number;
   offset?: number;
 }) {
@@ -60,6 +61,7 @@ export function useRankingsLeaderboard(params: {
   if (params.spec) searchParams.set("spec", params.spec);
   if (params.role) searchParams.set("role", params.role);
   if (params.hide_unknowns) searchParams.set("hide_unknowns", "true");
+  if (params.metric && params.metric !== "dps") searchParams.set("metric", params.metric);
   if (params.limit != null) searchParams.set("limit", String(params.limit));
   if (params.offset != null) searchParams.set("offset", String(params.offset));
   const qs = searchParams.toString();
@@ -78,6 +80,7 @@ export function useRankingsStats(params: {
   difficulty_names?: string;
   period?: string;
   role?: string;
+  metric?: "dps" | "hps";
   group_by_class?: boolean;
 }) {
   const searchParams = new URLSearchParams();
@@ -86,6 +89,7 @@ export function useRankingsStats(params: {
   if (params.difficulty_names) searchParams.set("difficulty_names", params.difficulty_names);
   if (params.period) searchParams.set("period", params.period);
   if (params.role) searchParams.set("role", params.role);
+  if (params.metric && params.metric !== "dps") searchParams.set("metric", params.metric);
   if (params.group_by_class) searchParams.set("group_by_class", "true");
   const qs = searchParams.toString();
 
