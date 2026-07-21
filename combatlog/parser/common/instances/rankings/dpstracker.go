@@ -24,7 +24,7 @@ type UnitCombatStats struct {
 	// (e.g., Power Word: Shield), attributed to the shield caster.
 	HealingAbsorbed int64
 	IsPlayer        bool
-	OwnerGUID   *guid.GUID // Non-nil if this unit is a pet/totem/summon.
+	OwnerGUID       *guid.GUID // Non-nil if this unit is a pet/totem/summon.
 	// Talents snapshot at fight end. Nil if the player had no talent data
 	// (e.g., talents were invalidated by a respec, or addon didn't report).
 	Talents *combatant.Talents
