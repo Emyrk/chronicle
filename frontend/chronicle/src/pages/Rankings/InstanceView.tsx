@@ -418,6 +418,14 @@ export function InstanceView({ instanceName }: InstanceViewProps) {
     [setParams, availableDifficulties.length],
   )
 
+  // Difficulty shown next to the instance name: the filtered selection, or
+  // the only available difficulty when the instance has just one.
+  const headerDifficulty = useMemo(() => {
+    if (selectedDifficulties.size > 0) return [...selectedDifficulties].sort().join(", ")
+    if (availableDifficulties.length === 1) return availableDifficulties[0]
+    return ""
+  }, [selectedDifficulties, availableDifficulties])
+
   const totalCount = leaderboardData?.total_count ?? 0
   const totalPages = Math.max(1, Math.ceil(totalCount / PAGE_SIZE))
 
@@ -615,7 +623,12 @@ export function InstanceView({ instanceName }: InstanceViewProps) {
                   <ArrowLeft className="h-3.5 w-3.5" />
                   Back to Rankings
                 </button>
-                <h1 className="text-2xl font-bold">{instanceName}</h1>
+                <h1 className="text-2xl font-bold">
+                  {instanceName}
+                  {headerDifficulty && (
+                    <span className="ml-2 text-lg font-normal text-muted-foreground">{headerDifficulty}</span>
+                  )}
+                </h1>
               </div>
 
               <div className="flex flex-wrap items-center gap-2">
