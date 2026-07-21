@@ -5,6 +5,7 @@ import type { UnifiedHealingResult } from "../processors";
 import type { PanelContext } from "../types";
 import type { HealingViewMode } from "./HealingTakenContent";
 import type { WoWSpell } from "@/api/wowdb";
+import { realSpellId } from "../processors/abilityBreakout";
 
 /**
  * Resolve a unit name from context, formatting pets as "{Owner}'s Pet {PetName}".
@@ -176,14 +177,14 @@ function getSourcesForUnit(
   return sources.sort((a, b) => b.value - a.value);
 }
 
-interface AbilityDataWithSpellId extends AbilityData {
+export interface AbilityDataWithSpellId extends AbilityData {
   spellId: number;
 }
 
 /**
  * Get abilities keyed by spell ID for a target unit (for "Show ranks" mode).
  */
-function getAbilitiesBySpellIdForUnit(
+export function getAbilitiesBySpellIdForUnit(
   result: UnifiedHealingResult,
   unitId: string,
   viewMode: HealingViewMode
@@ -195,8 +196,8 @@ function getAbilitiesBySpellIdForUnit(
   if (viewMode === "overheal") {
     if (!overhealAbilities) return [];
     const abilities: AbilityDataWithSpellId[] = [];
-    for (const [spellId, data] of overhealAbilities) {
-      abilities.push({ ...data, name: data.spellName, value: data.Total, spellId });
+    for (const [compositeId, data] of overhealAbilities) {
+      abilities.push({ ...data, name: data.spellName, value: data.Total, spellId: realSpellId(compositeId) });
     }
     return abilities.sort((a, b) => b.value - a.value);
   }
@@ -205,8 +206,8 @@ function getAbilitiesBySpellIdForUnit(
     const totalAbilities = result.TargetByAbilityTotalBySpellId.get(unitId);
     if (!totalAbilities) return [];
     const abilities: AbilityDataWithSpellId[] = [];
-    for (const [spellId, data] of totalAbilities) {
-      abilities.push({ ...data, name: data.spellName, value: data.Total, absorbed: absorbedAbilities?.get(spellId), spellId });
+    for (const [compositeId, data] of totalAbilities) {
+      abilities.push({ ...data, name: data.spellName, value: data.Total, absorbed: absorbedAbilities?.get(compositeId), spellId: realSpellId(compositeId) });
     }
     return abilities.sort((a, b) => b.value - a.value);
   }
@@ -214,15 +215,15 @@ function getAbilitiesBySpellIdForUnit(
   // Default: effective - include overheal as separate column
   if (!effectiveAbilities) return [];
   const abilities: AbilityDataWithSpellId[] = [];
-  for (const [spellId, data] of effectiveAbilities) {
-    const overhealData = overhealAbilities?.get(spellId);
-    abilities.push({ ...data, name: data.spellName, value: data.Total, overheal: overhealData?.Total, absorbed: absorbedAbilities?.get(spellId), spellId });
+  for (const [compositeId, data] of effectiveAbilities) {
+    const overhealData = overhealAbilities?.get(compositeId);
+    abilities.push({ ...data, name: data.spellName, value: data.Total, overheal: overhealData?.Total, absorbed: absorbedAbilities?.get(compositeId), spellId: realSpellId(compositeId) });
   }
   
   if (overhealAbilities) {
-    for (const [spellId, data] of overhealAbilities) {
-      if (!effectiveAbilities?.has(spellId)) {
-        abilities.push({ ...data, name: data.spellName, value: 0, overheal: data.Total, spellId });
+    for (const [compositeId, data] of overhealAbilities) {
+      if (!effectiveAbilities?.has(compositeId)) {
+        abilities.push({ ...data, name: data.spellName, value: 0, overheal: data.Total, spellId: realSpellId(compositeId) });
       }
     }
   }
@@ -233,19 +234,19 @@ function getAbilitiesBySpellIdForUnit(
 /**
  * Collect all unique spell IDs from the target result for fetching spell data.
  */
-function getAllTargetSpellIds(result: UnifiedHealingResult | undefined): number[] {
+export function getAllTargetSpellIds(result: UnifiedHealingResult | undefined): number[] {
   if (!result) return [];
   
   const spellIds = new Set<number>();
   
   for (const targetMap of result.TargetByAbilityBySpellId.values()) {
-    for (const id of targetMap.keys()) spellIds.add(id);
+    for (const id of targetMap.keys()) spellIds.add(realSpellId(id));
   }
   for (const targetMap of result.TargetByAbilityOverhealBySpellId.values()) {
-    for (const id of targetMap.keys()) spellIds.add(id);
+    for (const id of targetMap.keys()) spellIds.add(realSpellId(id));
   }
   for (const targetMap of result.TargetByAbilityTotalBySpellId.values()) {
-    for (const id of targetMap.keys()) spellIds.add(id);
+    for (const id of targetMap.keys()) spellIds.add(realSpellId(id));
   }
   
   return Array.from(spellIds);
