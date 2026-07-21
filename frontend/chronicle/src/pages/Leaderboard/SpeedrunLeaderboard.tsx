@@ -674,7 +674,10 @@ export function SpeedrunLeaderboard({ overrideInstance }: { overrideInstance?: s
                 </div>
               ) : selectedInstance ? (
                 <span className="flex items-center gap-2 text-xl md:text-3xl font-bold truncate">
-                  {boardTitle(selectedInstance, selectedDifficulty ?? "")}
+                  {selectedInstance}
+                  {selectedDifficulty && (
+                    <span className="text-base md:text-xl font-normal text-muted-foreground">{selectedDifficulty}</span>
+                  )}
                   {rulesData && (
                     <button
                       onClick={() => setRulesOpen(true)}
