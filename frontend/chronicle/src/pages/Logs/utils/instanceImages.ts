@@ -24,6 +24,8 @@ export const INSTANCE_CONFIG: Record<string, InstanceConfig> = {
   "Onyxia's Lair": { background: "/c/images/loadingscreens/LoadScreenRaid.webp", bossCount: 1, abbrev: "Ony", category: "raid" },
   // Turtle WoW Custom
   "Tower of Karazhan": { background: "/c/images/loadingscreens/LoadScreenKarazhan.webp", bossCount: 5, abbrev: "Kara", category: "raid" },
+  "Lower Tower of Karazhan": { background: "/c/images/loadingscreens/LoadScreenKarazhan.webp", bossCount: 5, abbrev: "Lower Kara", category: "raid" },
+  "Upper Tower of Karazhan": { background: "/c/images/loadingscreens/LoadScreenKarazhan.webp", bossCount: 9, abbrev: "Upper Kara", category: "raid" },
   "Karazhan Crypts": { background: "/c/images/loadingscreens/LoadscreenKarazhanCrypt.webp", bossCount: 3, abbrev: "Crypt", },
   "Hateforge Quarry": { background: "/c/images/loadingscreens/LoadScreenHateforge.webp", bossCount: 4, abbrev: "HQ", },
   "Gilneas City": { background: "/c/images/loadingscreens/LoadScreenGilneasCity.webp", bossCount: 3, abbrev: "Gilneas", },
