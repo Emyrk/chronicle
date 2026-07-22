@@ -80,7 +80,7 @@ const (
 type PlayerMetrics struct {
 	DamageDone  int64
 	DamageTaken int64
-	HealingDone int64
+	HealingDone int64 // should include absorbs (e.g. Power Word: Shield) for accurate healer detection
 	// Class and Spec are optional. When set, spec-based role overrides
 	// are applied (e.g., Shadow Priest is always DPS despite high healing).
 	Class string
@@ -107,7 +107,7 @@ func isDPSOnlySpec(class, spec string) bool {
 //
 // Algorithm: compute mean+stddev across the raid for each metric, then:
 //   - Tank = damage taken z-score ≥ 1.5σ
-//   - Healer = healing z-score ≥ 0.3σ AND (low DPS ≤ -0.90σ OR very high healing ≥ 1.5σ)
+//   - Healer = healing (incl. absorbs) z-score ≥ 0.3σ AND (low DPS ≤ -0.90σ OR very high healing ≥ 1.5σ)
 //   - DPS = everyone else
 //
 // Priority: Tank > Healer > DPS.

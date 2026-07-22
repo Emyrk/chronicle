@@ -185,9 +185,7 @@ export function InstanceView({ instanceName }: InstanceViewProps) {
         next.delete("tab")
         next.delete("page")
         next.delete("kt_enc")
-        // HPS defaults the role filter to healers (still user-changeable).
-        if (m === "hps") next.set("role", "heal")
-        else next.delete("role")
+        next.delete("role")
         return next
       })
     },

@@ -1019,7 +1019,7 @@ func insertDPSRankings(
 			playerMetrics[unitGUID] = wowspec.PlayerMetrics{
 				DamageDone:  stats.DamageDone + ownerDamage[unitGUID],
 				DamageTaken: stats.DamageTaken,
-				HealingDone: stats.HealingDone,
+				HealingDone: stats.HealingDone + ownerHealing[unitGUID] + stats.HealingAbsorbed + ownerAbsorb[unitGUID],
 				Class:       class,
 				Spec:        spec,
 			}

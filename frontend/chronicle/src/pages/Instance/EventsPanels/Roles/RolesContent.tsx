@@ -306,7 +306,9 @@ export const RolesContent = ({ context }: RolesContentProps) => {
     return result;
   }, [damageTakenAgg.result, context.selectedEncounterIds]);
 
-  // Aggregate healing done from the processor result
+  // Aggregate healing done (including absorbs) from the processor result.
+  // Absorbs must be included so that absorb-heavy healers (e.g. Disc Priest)
+  // are correctly detected as healers by inferRoles().
   const healingDoneMap = useMemo(() => {
     const result = new Map<string, number>();
     if (!healingDoneAgg.result) return result;
@@ -319,6 +321,18 @@ export const RolesContent = ({ context }: RolesContentProps) => {
         result.set(playerId, (result.get(playerId) || 0) + data.effectiveTotal);
       }
     }
+
+    // Add absorb totals per player (tracked globally, not per-encounter)
+    for (const [playerId, abilityMap] of healingDoneAgg.result.HealerByAbilityAbsorbed) {
+      let totalAbsorbed = 0;
+      for (const amount of abilityMap.values()) {
+        totalAbsorbed += amount;
+      }
+      if (totalAbsorbed > 0) {
+        result.set(playerId, (result.get(playerId) || 0) + totalAbsorbed);
+      }
+    }
+
     return result;
   }, [healingDoneAgg.result, context.selectedEncounterIds]);
 
