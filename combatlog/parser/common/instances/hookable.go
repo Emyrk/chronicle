@@ -62,6 +62,12 @@ type Hookable struct {
 	dpsTracker        *rankings.DPSTracker
 	rankingRules      *rankings.Rankings
 
+	// derivedSpeedrunTrackers holds per-sub-instance speedrun trackers when
+	// DerivedRankings is configured. At finalization the tracker matching the
+	// derived name is selected.
+	derivedSpeedrunTrackers map[string]*rankings.SpeedrunTracker
+	derivedRankingRules     map[string]*rankings.Rankings
+
 	// Live tracking data
 	Auras           *auras.Tracking
 	Characters      *characters.Characters
@@ -234,6 +240,35 @@ func NewHookable(ctx context.Context, logger *slog.Logger, db *unitdb.Units, z z
 func (h *Hookable) AddHook(hook instancehook.Hook) {
 	h.hooks = append(h.hooks, hook)
 }
+
+// initDerivedRankings creates a SpeedrunTracker for each sub-instance defined
+// in derivedRankings and a shared DPSTracker. All trackers run as hooks during
+// parsing; at finalization the tracker matching the derived name is selected.
+func (h *Hookable) initDerivedRankings(flavor database.WoWFlavor, derivedRankings map[string]func(database.WoWFlavor) *rankings.Rankings) {
+	h.derivedSpeedrunTrackers = make(map[string]*rankings.SpeedrunTracker, len(derivedRankings))
+	h.derivedRankingRules = make(map[string]*rankings.Rankings, len(derivedRankings))
+
+	// Ensure a shared DPS tracker exists (created once, shared across all derived sub-instances).
+	if h.dpsTracker == nil {
+		h.dpsTracker = rankings.NewDPSTracker(h.units)
+		h.hooks = append(h.hooks, h.dpsTracker)
+	}
+
+	for name, rankingsFn := range derivedRankings {
+		r := rankingsFn(flavor)
+		if r == nil {
+			continue
+		}
+		h.derivedRankingRules[name] = r
+		if r.Speedrun != nil {
+			tracker := rankings.NewSpeedrunTracker(*r.Speedrun, h.units, h.engagementTracker)
+			h.Characters.RegisterHook(tracker)
+			h.hooks = append(h.hooks, tracker)
+			h.derivedSpeedrunTrackers[name] = tracker
+		}
+	}
+}
+
 func (h *Hookable) Name() string {
 	if h.derivedName != nil {
 		name, ok := h.derivedName.Name(h.completedFights)
@@ -582,14 +617,29 @@ func (h *Hookable) Finalize(ctx context.Context) (*FinalizedInstance, error) {
 		}
 	}
 
+	// Select the appropriate speedrun tracker and ranking rules.
+	// When DerivedRankings is configured, pick the tracker matching the
+	// resolved derived name; otherwise fall back to the single tracker.
+	activeSpeedrunTracker := h.speedrunTracker
+	activeRankingRules := h.rankingRules
+	if len(h.derivedSpeedrunTrackers) > 0 {
+		derivedName := h.Name()
+		if tracker, ok := h.derivedSpeedrunTrackers[derivedName]; ok {
+			activeSpeedrunTracker = tracker
+		}
+		if rules, ok := h.derivedRankingRules[derivedName]; ok {
+			activeRankingRules = rules
+		}
+	}
+
 	var rankingsResult *rankings.RankingsResult
-	if h.dpsTracker != nil || h.speedrunTracker != nil {
+	if h.dpsTracker != nil || activeSpeedrunTracker != nil {
 		rankingsResult = &rankings.RankingsResult{}
 		if h.dpsTracker != nil {
 			rankingsResult.DPS = h.dpsTracker.Result()
 		}
-		if h.speedrunTracker != nil {
-			rankingsResult.Speedrun = h.speedrunTracker.Result()
+		if activeSpeedrunTracker != nil {
+			rankingsResult.Speedrun = activeSpeedrunTracker.Result()
 		}
 	}
 
@@ -603,7 +653,7 @@ func (h *Hookable) Finalize(ctx context.Context) (*FinalizedInstance, error) {
 		Loot:         h.lootTracking,
 		Participants: h.p,
 		Rankings:     rankingsResult,
-		RankingRules: h.rankingRules,
+		RankingRules: activeRankingRules,
 		UnknownUnits: h.resolveUnknownUnits(),
 
 		//SpellBook:  c.SpellBook,

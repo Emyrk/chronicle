@@ -131,6 +131,26 @@ var (
 
 	TowerOfKarazhanFactory = &CommonFactory{
 		Name: "Tower of Karazhan",
+		DerivedName: NewMultiInstanceZone(map[string][]uint32{
+			"Lower Tower of Karazhan": {61222, 61221, 61224, 61223, 61225},
+			"Upper Tower of Karazhan": {61939, 61951, 59961, 93333, 61946, 61958, 59967, 59981, 59991},
+		}),
+		DerivedRankings: map[string]func(database.WoWFlavor) *rankings.Rankings{
+			"Lower Tower of Karazhan": func(database.WoWFlavor) *rankings.Rankings {
+				return &rankings.Rankings{
+					Speedrun: &rankings.SpeedrunRules{
+						Requirements: LowerTowerOfKarazhanSpeedrunRequirements(),
+					},
+				}
+			},
+			"Upper Tower of Karazhan": func(database.WoWFlavor) *rankings.Rankings {
+				return &rankings.Rankings{
+					Speedrun: &rankings.SpeedrunRules{
+						Requirements: UpperTowerOfKarazhanSpeedrunRequirements(),
+					},
+				}
+			},
+		},
 		ZoneNames: []string{"tower of karazhan", "the rock of desolation",
 			"卡拉赞之塔", // Tower of Karazhan
 		},

@@ -265,3 +265,31 @@ func TimbermawHoldSpeedrunRequirements() []rankings.SpeedrunRequirement {
 		{Name: "Peroth'arn", EntryIDs: []uint32{60686}, Count: 1, Category: rankings.SpeedrunCategoryBosses},
 	}
 }
+// LowerTowerOfKarazhanSpeedrunRequirements returns the boss kills required for
+// a valid Lower Tower of Karazhan speedrun (10-man).
+func LowerTowerOfKarazhanSpeedrunRequirements() []rankings.SpeedrunRequirement {
+	return []rankings.SpeedrunRequirement{
+		{Name: "Lord Blackwald II", EntryIDs: []uint32{61222}, Count: 1, Category: rankings.SpeedrunCategoryBosses},
+		{Name: "Brood Queen Araxxna", EntryIDs: []uint32{61221}, Count: 1, Category: rankings.SpeedrunCategoryBosses},
+		{Name: "Grizikil", EntryIDs: []uint32{61224}, Count: 1, Category: rankings.SpeedrunCategoryBosses},
+		{Name: "Clawlord Howlfang", EntryIDs: []uint32{61223}, Count: 1, Category: rankings.SpeedrunCategoryBosses},
+		{Name: "Moroes", EntryIDs: []uint32{61225}, Count: 1, Category: rankings.SpeedrunCategoryBosses},
+	}
+}
+
+// UpperTowerOfKarazhanSpeedrunRequirements returns the boss kills required for
+// a valid Upper Tower of Karazhan speedrun (40-man).
+func UpperTowerOfKarazhanSpeedrunRequirements() []rankings.SpeedrunRequirement {
+	return []rankings.SpeedrunRequirement{
+		{Name: "Keeper Gnarlmoon", EntryIDs: []uint32{61939}, Count: 1, Category: rankings.SpeedrunCategoryBosses},
+		{Name: "Anomalus", EntryIDs: []uint32{61951}, Count: 1, Category: rankings.SpeedrunCategoryBosses},
+		{Name: "Rupturan the Broken", EntryIDs: []uint32{59961}, Count: 1, Category: rankings.SpeedrunCategoryBosses},
+		{Name: "Mephistroth", EntryIDs: []uint32{93333}, Count: 1, Category: rankings.SpeedrunCategoryBosses},
+		{Name: "Ley-Watcher Incantagos", EntryIDs: []uint32{61946}, Count: 1, Category: rankings.SpeedrunCategoryBosses},
+		{Name: "Echo of Medivh", EntryIDs: []uint32{61958}, Count: 1, Category: rankings.SpeedrunCategoryBosses},
+		{Name: "King", EntryIDs: []uint32{59967}, Count: 1, Category: rankings.SpeedrunCategoryBosses},
+		{Name: "Sanv Tas'dal", EntryIDs: []uint32{59981}, Count: 1, Category: rankings.SpeedrunCategoryBosses},
+		{Name: "Kruul", EntryIDs: []uint32{59991}, Count: 1, Category: rankings.SpeedrunCategoryBosses},
+	}
+}
+

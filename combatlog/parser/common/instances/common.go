@@ -47,9 +47,13 @@ type CommonFactory struct {
 	// DerivedName allows changing the name dynamically based on the fight data.
 	// If 2 or more instances share the same zone.
 	DerivedName *MultiInstanceZone
-	ZoneNames   []string
-	MapIDs      []uint32
-	Hostiles    func(flavor database.WoWFlavor) *identifier.Identifier
+	// DerivedRankings maps derived instance names to their ranking configuration.
+	// When set alongside DerivedName, each sub-instance gets its own independent
+	// speedrun tracker. Keys must match the names used in DerivedName.
+	DerivedRankings map[string]func(database.WoWFlavor) *rankings.Rankings
+	ZoneNames       []string
+	MapIDs          []uint32
+	Hostiles        func(flavor database.WoWFlavor) *identifier.Identifier
 	FlavoredRankings func(flavor database.WoWFlavor) *rankings.Rankings
 }
 
@@ -74,6 +78,9 @@ func (f *CommonFactory) New(ctx context.Context, logger *slog.Logger, db *unitdb
 	h := f.NewHookable(ctx, logger, db, z, flavor)
 	if f.DerivedName != nil {
 		h.derivedName = f.DerivedName
+	}
+	if f.DerivedRankings != nil {
+		h.initDerivedRankings(flavor, f.DerivedRankings)
 	}
 	return h
 }

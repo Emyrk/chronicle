@@ -35,6 +35,9 @@ type Entry struct {
 	HostileEntries map[uint32]instances.Identity
 	// SpeedrunRules holds the speedrun rules captured at registration time.
 	SpeedrunRules *rankings.SpeedrunRules
+	// DerivedSpeedrunRules holds per-sub-instance speedrun rules when
+	// the factory uses DerivedRankings (e.g. Lower/Upper Tower of Karazhan).
+	DerivedSpeedrunRules map[string]*rankings.SpeedrunRules
 }
 
 // WithComment returns a copy of the Entry with Comment set.
@@ -57,7 +60,7 @@ func FromFlavoredFactory(flavor database.WoWFlavor, f *instances.CommonFactory) 
 		}
 	}
 
-	return Entry{
+	entry := Entry{
 		Name:           f.Name,
 		MultiZone:      f.MultiZone,
 		Factory:        wrap(f.New),
@@ -65,6 +68,19 @@ func FromFlavoredFactory(flavor database.WoWFlavor, f *instances.CommonFactory) 
 		HostileEntries: hostiles,
 		SpeedrunRules:  speedrun,
 	}
+
+	// When DerivedRankings are present, collect per-sub-instance speedrun rules
+	// so they can be discovered via the registry (e.g. for admin/display).
+	if f.DerivedRankings != nil {
+		entry.DerivedSpeedrunRules = make(map[string]*rankings.SpeedrunRules, len(f.DerivedRankings))
+		for name, rankingsFn := range f.DerivedRankings {
+			if r := rankingsFn(flavor); r != nil && r.Speedrun != nil {
+				entry.DerivedSpeedrunRules[name] = r.Speedrun
+			}
+		}
+	}
+
+	return entry
 }
 
 // FromCommonFactory builds an Entry from a CommonFactory, extracting
@@ -203,6 +219,9 @@ func (r *Registry) SpeedrunRules() map[string]*rankings.SpeedrunRules {
 	for _, entry := range r.entries {
 		if entry.SpeedrunRules != nil {
 			m[entry.Name] = entry.SpeedrunRules
+		}
+		for name, rules := range entry.DerivedSpeedrunRules {
+			m[name] = rules
 		}
 	}
 	return m
