@@ -104,14 +104,6 @@ var (
 			"黑石塔上层", // "upper"
 		},
 		Hostiles: FromMap(BlackrockSpireHostiles()),
-		FlavoredRankings: func(fl database.WoWFlavor) *rankings.Rankings {
-			return &rankings.Rankings{
-				Speedrun: &rankings.SpeedrunRules{
-					Requirements: BlackrockSpireSpeedrunRequirements(),
-					LevelRange:   Level60Cap(fl),
-				},
-			}
-		},
 	}
 
 	MoltenCoreFactory = &CommonFactory{

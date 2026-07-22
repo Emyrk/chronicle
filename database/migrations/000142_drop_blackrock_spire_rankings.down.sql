@@ -1,0 +1,2 @@
+-- Data deletion is not reversible; re-parsing logs would regenerate rankings.
+-- No-op down migration.
