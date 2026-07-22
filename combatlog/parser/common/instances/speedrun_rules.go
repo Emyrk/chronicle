@@ -54,20 +54,6 @@ func DeadminesSpeedrunRequirements() *rankings.Rankings {
 	}
 }
 
-func BlackrockSpireSpeedrunRequirements() []rankings.SpeedrunRequirement {
-	base := []rankings.SpeedrunRequirement{
-		{Name: "Pyroguard Emberseer", EntryIDs: []uint32{9816}, Count: 1, Category: rankings.SpeedrunCategoryBosses},
-		{Name: "The Beast", EntryIDs: []uint32{10430}, Count: 1, Category: rankings.SpeedrunCategoryBosses},
-		{Name: "Warchief Rend Blackhand", EntryIDs: []uint32{10429}, Count: 1, Category: rankings.SpeedrunCategoryBosses},
-		{Name: "Gyth", EntryIDs: []uint32{10339}, Count: 1, Category: rankings.SpeedrunCategoryBosses},
-		{Name: "General Drakkisath", EntryIDs: []uint32{10363}, Count: 1, Category: rankings.SpeedrunCategoryBosses},
-		{Name: "Solakar Flamewreath", EntryIDs: []uint32{10264}, Count: 1, Category: rankings.SpeedrunCategoryBosses},
-		{Name: "Goraluk Anvilcrack", EntryIDs: []uint32{10899}, Count: 1, Category: rankings.SpeedrunCategoryBosses},
-	}
-
-	return base
-}
-
 // MoltenCoreSpeedrunRequirements returns the 10 boss kills required for a
 // valid Molten Core speedrun.
 func MoltenCoreSpeedrunRequirements(fl database.WoWFlavor) []rankings.SpeedrunRequirement {

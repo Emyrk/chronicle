@@ -104,14 +104,6 @@ var (
 			"黑石塔上层", // "upper"
 		},
 		Hostiles: FromMap(BlackrockSpireHostiles()),
-		FlavoredRankings: func(fl database.WoWFlavor) *rankings.Rankings {
-			return &rankings.Rankings{
-				Speedrun: &rankings.SpeedrunRules{
-					Requirements: BlackrockSpireSpeedrunRequirements(),
-					LevelRange:   Level60Cap(fl),
-				},
-			}
-		},
 	}
 
 	MoltenCoreFactory = &CommonFactory{
@@ -151,8 +143,10 @@ var (
 				}
 			},
 		},
-		ZoneNames: []string{"tower of karazhan", "the rock of desolation",
+		ZoneNames: []string{
+			"tower of karazhan", "the rock of desolation",
 			"卡拉赞之塔", // Tower of Karazhan
+			"荒芜巨岩",  // "Desolate Giant Rock"
 		},
 		Hostiles: FromMap(TowerOfKarazhanHostiles()),
 	}
