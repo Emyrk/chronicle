@@ -149,6 +149,17 @@ WHERE rsm.snapshot_id = @snapshot_id
   AND rsm.instance_id = @instance_id
 ORDER BY rsm.encounter_name, rsm.dps DESC;
 
+-- name: ListSnapshotMembersForInstanceWithNames :many
+-- List snapshot members for an instance, joining to encounter_dps_rankings for player name/role.
+SELECT rsm.*,
+       edr.player_name,
+       edr.player_role
+FROM ranking_snapshot_members rsm
+JOIN encounter_dps_rankings edr ON edr.id = rsm.ranking_id
+WHERE rsm.snapshot_id = @snapshot_id
+  AND rsm.instance_id = @instance_id
+ORDER BY rsm.encounter_name, rsm.dps DESC;
+
 -- name: ListSnapshotMembersByPlayerGUID :many
 -- List a player's member entries across a snapshot (for history/best parses).
 SELECT rsm.*

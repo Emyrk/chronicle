@@ -258,6 +258,8 @@ type sqlcQuerier interface {
 	ListSnapshotMembersByPlayerGUID(ctx context.Context, arg ListSnapshotMembersByPlayerGUIDParams) ([]RankingSnapshotMember, error)
 	// List all snapshot members from a given instance.
 	ListSnapshotMembersForInstance(ctx context.Context, arg ListSnapshotMembersForInstanceParams) ([]RankingSnapshotMember, error)
+	// List snapshot members for an instance, joining to encounter_dps_rankings for player name/role.
+	ListSnapshotMembersForInstanceWithNames(ctx context.Context, arg ListSnapshotMembersForInstanceWithNamesParams) ([]ListSnapshotMembersForInstanceWithNamesRow, error)
 	ListTenants(ctx context.Context) ([]Tenant, error)
 	// Tenants that use this dataset, either directly (tenant.default_dataset_id)
 	// or via a server they own (wow_servers.default_dataset_id).

@@ -7,6 +7,7 @@ import type {
   RankingsKillTimeStats,
   RankingsSuccessRate,
   KillTimeLeaderboardResponse,
+  InstanceParsesResponse,
 } from "./typesGenerated";
 
 const RANKINGS_STALE_TIME = 5 * 60 * 1000; // 5 minutes
@@ -152,6 +153,47 @@ export function useRankingsKillTimeLeaderboard(params: {
       ),
     staleTime: RANKINGS_STALE_TIME,
     enabled: !!params.instance_name,
+  });
+}
+
+export function useInstanceParses(params: {
+  instanceId: string;
+  encounterNames?: string[];
+  metric?: "dps" | "hps";
+  period?: string;
+  timeframe?: "historical" | "current";
+}) {
+  const searchParams = new URLSearchParams();
+  // Sort encounter names for stable query key.
+  const sortedEncounters = params.encounterNames
+    ? [...params.encounterNames].sort()
+    : undefined;
+  if (sortedEncounters?.length) {
+    searchParams.set("encounter_names", sortedEncounters.join(","));
+  }
+  if (params.metric && params.metric !== "dps") searchParams.set("metric", params.metric);
+  if (params.period) searchParams.set("period", params.period);
+  if (params.timeframe && params.timeframe !== "historical") {
+    searchParams.set("timeframe", params.timeframe);
+  }
+  const qs = searchParams.toString();
+
+  return useQuery({
+    queryKey: [
+      "rankings",
+      "instance-parses",
+      params.instanceId,
+      sortedEncounters,
+      params.metric ?? "dps",
+      params.period ?? "all",
+      params.timeframe ?? "historical",
+    ],
+    queryFn: () =>
+      fetchJSON<InstanceParsesResponse>(
+        `/api/v1/rankings/instances/${params.instanceId}/parses${qs ? `?${qs}` : ""}`,
+      ),
+    staleTime: RANKINGS_STALE_TIME,
+    enabled: !!params.instanceId,
   });
 }
 

@@ -709,6 +709,94 @@ export interface InstanceLoot {
     readonly icon: string;
 }
 
+// From chroniclesdk/rankings.go
+/**
+ * InstanceParseAverage is the average parse across multiple bosses.
+ */
+export interface InstanceParseAverage {
+    readonly precise_score: number;
+    readonly display_score: number;
+    readonly killed: number;
+    readonly selected: number;
+}
+
+// From chroniclesdk/rankings.go
+/**
+ * InstanceParseBoss is a player's parse result for a single boss encounter.
+ */
+export interface InstanceParseBoss {
+    readonly encounter_name: string;
+    readonly metric_value: number;
+    readonly precise_score: number;
+    readonly display_score: number;
+    readonly rank: number;
+    readonly sample_size: number;
+    /**
+     * Status: "ok", "low_confidence", "sample_too_small".
+     */
+    readonly status: string;
+}
+
+// From chroniclesdk/rankings.go
+/**
+ * InstanceParsePlayer is a player's parse data across selected encounters.
+ */
+export interface InstanceParsePlayer {
+    readonly player_guid: string;
+    readonly player_name: string;
+    readonly player_class: string;
+    readonly player_spec: string;
+    readonly player_role: string;
+    /**
+     * Bosses contains per-encounter parse results for bosses this player killed.
+     */
+    readonly bosses: readonly InstanceParseBoss[];
+    /**
+     * AverageParse is the mean of per-boss parse scores across killed selected bosses.
+     * Nil when the player has no scored bosses.
+     */
+    readonly average_parse: InstanceParseAverage | null;
+    /**
+     * Status is empty string for normal, "unknown_spec" when spec mode can't score,
+     * or "sample_too_small" when all bosses have too-small cohorts.
+     */
+    readonly status?: string;
+    /**
+     * Reason provides a human-readable explanation for the status.
+     */
+    readonly reason?: string;
+}
+
+// From chroniclesdk/rankings.go
+/**
+ * InstanceParsesResponse is the top-level response for the instance parses endpoint.
+ */
+export interface InstanceParsesResponse {
+    /**
+     * Available is false when no published snapshot exists yet.
+     */
+    readonly available: boolean;
+    /**
+     * Snapshot metadata (zero values when Available=false).
+     */
+    readonly snapshot_id: string;
+    readonly cutoff: string;
+    readonly lookback_days: number;
+    readonly cohort_mode: string;
+    /**
+     * SelectedEncounters lists the encounter names that were requested.
+     */
+    readonly selected_encounters: readonly string[];
+    /**
+     * Metric is "dps" or "hps".
+     */
+    readonly metric: string;
+    /**
+     * Players contains one entry per unique player GUID in the instance.
+     */
+    readonly players: readonly InstanceParsePlayer[];
+}
+
 // From chroniclesdk/log.go
 export interface InstancePlayer {
     readonly name: string;
@@ -1100,6 +1188,33 @@ export interface ModificationRequest {
  */
 export interface ModifyApplicationAdminRequest {
     readonly user_id: string;
+}
+
+// From chroniclesdk/tenant.go
+/**
+ * ParseConfig holds tenant-level parse scoring settings, stored as JSONB.
+ */
+export interface ParseConfig {
+    /**
+     * CohortMode is "spec" (default) or "class".
+     */
+    readonly cohort_mode?: string;
+    /**
+     * DefaultLookbackDays is the default lookback window (0 = all-time).
+     */
+    readonly default_lookback_days?: number;
+    /**
+     * AllowedLookbackDays lists the selectable lookback windows.
+     */
+    readonly allowed_lookback_days?: readonly number[];
+    /**
+     * EnabledMetrics lists active metric names (e.g. "dps", "hps").
+     */
+    readonly enabled_metrics?: readonly string[];
+    /**
+     * SnapshotCadence is the publication interval description (e.g. "6h", "daily").
+     */
+    readonly snapshot_cadence?: string;
 }
 
 // From chroniclesdk/log.go
@@ -1952,6 +2067,7 @@ export interface Tenant {
     readonly include_in_all: boolean;
     readonly discoverable: boolean;
     readonly branding: Branding | null;
+    readonly parse_config: ParseConfig | null;
     readonly default_dataset_id: string | null;
     /**
      * DefaultFormat is the tenant's preferred log parse format (e.g.

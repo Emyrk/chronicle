@@ -4818,6 +4818,91 @@ func (q *sqlQuerier) ListSnapshotMembersForInstance(ctx context.Context, arg Lis
 	return items, nil
 }
 
+const listSnapshotMembersForInstanceWithNames = `-- name: ListSnapshotMembersForInstanceWithNames :many
+SELECT rsm.id, rsm.snapshot_id, rsm.ranking_id, rsm.instance_id, rsm.run_id, rsm.instance_name, rsm.encounter_name, rsm.player_guid, rsm.player_class, rsm.player_spec, rsm.difficulty_name, rsm.max_players, rsm.killed_at, rsm.created_at_ranking, rsm.damage_done, rsm.healing_done, rsm.absorbed_done, rsm.duration_secs, rsm.dps, rsm.hps,
+       edr.player_name,
+       edr.player_role
+FROM ranking_snapshot_members rsm
+JOIN encounter_dps_rankings edr ON edr.id = rsm.ranking_id
+WHERE rsm.snapshot_id = $1
+  AND rsm.instance_id = $2
+ORDER BY rsm.encounter_name, rsm.dps DESC
+`
+
+type ListSnapshotMembersForInstanceWithNamesParams struct {
+	SnapshotID uuid.UUID `db:"snapshot_id" json:"snapshot_id"`
+	InstanceID uuid.UUID `db:"instance_id" json:"instance_id"`
+}
+
+type ListSnapshotMembersForInstanceWithNamesRow struct {
+	ID               uuid.UUID          `db:"id" json:"id"`
+	SnapshotID       uuid.UUID          `db:"snapshot_id" json:"snapshot_id"`
+	RankingID        uuid.UUID          `db:"ranking_id" json:"ranking_id"`
+	InstanceID       uuid.UUID          `db:"instance_id" json:"instance_id"`
+	RunID            uuid.UUID          `db:"run_id" json:"run_id"`
+	InstanceName     string             `db:"instance_name" json:"instance_name"`
+	EncounterName    string             `db:"encounter_name" json:"encounter_name"`
+	PlayerGuid       string             `db:"player_guid" json:"player_guid"`
+	PlayerClass      string             `db:"player_class" json:"player_class"`
+	PlayerSpec       string             `db:"player_spec" json:"player_spec"`
+	DifficultyName   string             `db:"difficulty_name" json:"difficulty_name"`
+	MaxPlayers       int16              `db:"max_players" json:"max_players"`
+	KilledAt         pgtype.Timestamptz `db:"killed_at" json:"killed_at"`
+	CreatedAtRanking pgtype.Timestamptz `db:"created_at_ranking" json:"created_at_ranking"`
+	DamageDone       int64              `db:"damage_done" json:"damage_done"`
+	HealingDone      int64              `db:"healing_done" json:"healing_done"`
+	AbsorbedDone     int64              `db:"absorbed_done" json:"absorbed_done"`
+	DurationSecs     float64            `db:"duration_secs" json:"duration_secs"`
+	Dps              float64            `db:"dps" json:"dps"`
+	Hps              float64            `db:"hps" json:"hps"`
+	PlayerName       string             `db:"player_name" json:"player_name"`
+	PlayerRole       string             `db:"player_role" json:"player_role"`
+}
+
+// List snapshot members for an instance, joining to encounter_dps_rankings for player name/role.
+func (q *sqlQuerier) ListSnapshotMembersForInstanceWithNames(ctx context.Context, arg ListSnapshotMembersForInstanceWithNamesParams) ([]ListSnapshotMembersForInstanceWithNamesRow, error) {
+	rows, err := q.db.Query(ctx, listSnapshotMembersForInstanceWithNames, arg.SnapshotID, arg.InstanceID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListSnapshotMembersForInstanceWithNamesRow
+	for rows.Next() {
+		var i ListSnapshotMembersForInstanceWithNamesRow
+		if err := rows.Scan(
+			&i.ID,
+			&i.SnapshotID,
+			&i.RankingID,
+			&i.InstanceID,
+			&i.RunID,
+			&i.InstanceName,
+			&i.EncounterName,
+			&i.PlayerGuid,
+			&i.PlayerClass,
+			&i.PlayerSpec,
+			&i.DifficultyName,
+			&i.MaxPlayers,
+			&i.KilledAt,
+			&i.CreatedAtRanking,
+			&i.DamageDone,
+			&i.HealingDone,
+			&i.AbsorbedDone,
+			&i.DurationSecs,
+			&i.Dps,
+			&i.Hps,
+			&i.PlayerName,
+			&i.PlayerRole,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const publishRankingSnapshot = `-- name: PublishRankingSnapshot :one
 UPDATE ranking_snapshots
 SET status = 'published', published_at = now()

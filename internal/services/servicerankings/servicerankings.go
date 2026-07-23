@@ -142,6 +142,9 @@ func (s *Service) setupRoutes() {
 	s.router.Get("/kill-time-leaderboard", s.handleKillTimeLeaderboard)
 	s.router.Get("/success-rates", s.handleSuccessRates)
 
+	// Instance parses
+	s.router.Get("/instances/{instanceID}/parses", s.handleInstanceParses)
+
 	// Speedrun leaderboard
 	s.router.Get("/speedrun", s.handleSpeedrunLeaderboard)
 	s.router.Get("/speedrun/instances", s.handleSpeedrunInstances)

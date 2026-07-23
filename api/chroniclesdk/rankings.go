@@ -131,3 +131,68 @@ func TopPlayersFromJSON(data json.RawMessage) []RankingsInstanceTopPlayer {
 	}
 	return players
 }
+// ── Instance Parses ──────────────────────────────────────────────────────
+
+// InstanceParsesResponse is the top-level response for the instance parses endpoint.
+type InstanceParsesResponse struct {
+	// Available is false when no published snapshot exists yet.
+	Available bool `json:"available"`
+
+	// Snapshot metadata (zero values when Available=false).
+	SnapshotID   uuid.UUID `json:"snapshot_id"`
+	Cutoff       time.Time `json:"cutoff"`
+	LookbackDays int32     `json:"lookback_days"`
+	CohortMode   string    `json:"cohort_mode"`
+
+	// SelectedEncounters lists the encounter names that were requested.
+	SelectedEncounters []string `json:"selected_encounters"`
+
+	// Metric is "dps" or "hps".
+	Metric string `json:"metric"`
+
+	// Players contains one entry per unique player GUID in the instance.
+	Players []InstanceParsePlayer `json:"players"`
+}
+
+// InstanceParsePlayer is a player's parse data across selected encounters.
+type InstanceParsePlayer struct {
+	PlayerGUID  string `json:"player_guid"`
+	PlayerName  string `json:"player_name"`
+	PlayerClass string `json:"player_class"`
+	PlayerSpec  string `json:"player_spec"`
+	PlayerRole  string `json:"player_role"`
+
+	// Bosses contains per-encounter parse results for bosses this player killed.
+	Bosses []InstanceParseBoss `json:"bosses"`
+
+	// AverageParse is the mean of per-boss parse scores across killed selected bosses.
+	// Nil when the player has no scored bosses.
+	AverageParse *InstanceParseAverage `json:"average_parse"`
+
+	// Status is empty string for normal, "unknown_spec" when spec mode can't score,
+	// or "sample_too_small" when all bosses have too-small cohorts.
+	Status string `json:"status,omitempty"`
+	// Reason provides a human-readable explanation for the status.
+	Reason string `json:"reason,omitempty"`
+}
+
+// InstanceParseBoss is a player's parse result for a single boss encounter.
+type InstanceParseBoss struct {
+	EncounterName string  `json:"encounter_name"`
+	MetricValue   float64 `json:"metric_value"`
+	PreciseScore  float64 `json:"precise_score"`
+	DisplayScore  int     `json:"display_score"`
+	Rank          int     `json:"rank"`
+	SampleSize    int     `json:"sample_size"`
+	// Status: "ok", "low_confidence", "sample_too_small".
+	Status string `json:"status"`
+}
+
+// InstanceParseAverage is the average parse across multiple bosses.
+type InstanceParseAverage struct {
+	PreciseScore float64 `json:"precise_score"`
+	DisplayScore int     `json:"display_score"`
+	Killed       int     `json:"killed"`
+	Selected     int     `json:"selected"`
+}
+
