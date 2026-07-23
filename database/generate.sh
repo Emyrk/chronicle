@@ -47,6 +47,10 @@ SCRIPT_DIR=$(dirname "${BASH_SOURCE[0]}")
 	mv genqueries/querier.go .
 	mv genqueries/models.go .
 	mv genqueries/batch.go .
+	# copyfrom.go is generated when :copyfrom queries exist.
+	if [ -f genqueries/copyfrom.go ]; then
+		mv genqueries/copyfrom.go .
+	fi
 
 	# Remove temporary go files.
 	rm -f genqueries/*.go

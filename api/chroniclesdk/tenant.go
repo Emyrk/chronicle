@@ -17,8 +17,9 @@ type Tenant struct {
 	DisableClientUpload bool       `json:"disable_client_upload"`
 	IncludeInAll        bool       `json:"include_in_all"`
 	Discoverable        bool       `json:"discoverable"`
-	Branding            *Branding  `json:"branding"`
-	DefaultDatasetID    *uuid.UUID `json:"default_dataset_id"`
+	Branding            *Branding    `json:"branding"`
+	ParseConfig         *ParseConfig `json:"parse_config"`
+	DefaultDatasetID    *uuid.UUID   `json:"default_dataset_id"`
 	// DefaultFormat is the tenant's preferred log parse format (e.g.
 	// "1.12a-cc-addon"). Nil means no preference — the frontend falls back
 	// to the compiled-in server default.
@@ -28,6 +29,20 @@ type Tenant struct {
 	AvailableFormats []string  `json:"available_formats"`
 	CreatedAt        time.Time `json:"created_at"`
 	UpdatedAt        time.Time `json:"updated_at"`
+}
+
+// ParseConfig holds tenant-level parse scoring settings, stored as JSONB.
+type ParseConfig struct {
+	// CohortMode is "spec" (default) or "class".
+	CohortMode string `json:"cohort_mode,omitempty"`
+	// DefaultLookbackDays is the default lookback window (0 = all-time).
+	DefaultLookbackDays int `json:"default_lookback_days,omitempty"`
+	// AllowedLookbackDays lists the selectable lookback windows.
+	AllowedLookbackDays []int `json:"allowed_lookback_days,omitempty"`
+	// EnabledMetrics lists active metric names (e.g. "dps", "hps").
+	EnabledMetrics []string `json:"enabled_metrics,omitempty"`
+	// SnapshotCadence is the publication interval description (e.g. "6h", "daily").
+	SnapshotCadence string `json:"snapshot_cadence,omitempty"`
 }
 
 // Branding holds the visual identity for a tenant subdomain or the primary domain.
@@ -61,6 +76,12 @@ func TenantFromDB(t database.Tenant) Tenant {
 		var b Branding
 		if err := json.Unmarshal(t.Branding, &b); err == nil {
 			out.Branding = &b
+		}
+	}
+	if len(t.ParseConfig) > 0 {
+		var pc ParseConfig
+		if err := json.Unmarshal(t.ParseConfig, &pc); err == nil {
+			out.ParseConfig = &pc
 		}
 	}
 	if t.DefaultDatasetID.Valid {

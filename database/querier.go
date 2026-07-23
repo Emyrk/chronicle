@@ -15,6 +15,13 @@ import (
 type sqlcQuerier interface {
 	AdminListOutdatedParserVersionInstances(ctx context.Context, arg AdminListOutdatedParserVersionInstancesParams) ([]AdminListOutdatedParserVersionInstancesRow, error)
 	AssignWorldToServer(ctx context.Context, arg AssignWorldToServerParams) error
+	// Populate a pending snapshot's members from eligible encounter_dps_rankings rows.
+	// Boss kills only (encounter_id IS NOT NULL), deduplicated by duplicate group
+	// keeping the best DPS copy, bounded by the snapshot's cutoff and optional window_start.
+	// Note: parser/addon version requirement values are stored on the snapshot for
+	// documentation; log_instances does not carry numeric version columns yet, so
+	// version filtering is the caller's responsibility if needed.
+	BatchInsertSnapshotMembersFromRankings(ctx context.Context, snapshotID uuid.UUID) error
 	BulkUpsertGuildPagePanels(ctx context.Context, dollar_1 []byte) error
 	// JOINs wow_server_realms so RLS tenant filtering cascades.
 	CensusPlayerCounts(ctx context.Context, arg CensusPlayerCountsParams) ([]CensusPlayerCountsRow, error)
@@ -74,6 +81,8 @@ type sqlcQuerier interface {
 	GetDatasetTalentTrees(ctx context.Context, datasetID uuid.UUID) ([]byte, error)
 	GetDeploymentInfo(ctx context.Context) (DeploymentInfo, error)
 	GetDisplayInfoByID(ctx context.Context, arg GetDisplayInfoByIDParams) (WorldDisplayInfo, error)
+	// Return the earliest published snapshot that contains members from a given instance.
+	GetEarliestSnapshotForInstance(ctx context.Context, arg GetEarliestSnapshotForInstanceParams) (RankingSnapshot, error)
 	GetEncounterSummariesByInstanceID(ctx context.Context, instanceID uuid.UUID) ([]GetEncounterSummariesByInstanceIDRow, error)
 	GetEncounterSummariesByInstanceIDs(ctx context.Context, instanceIds []uuid.UUID) ([]GetEncounterSummariesByInstanceIDsRow, error)
 	// Returns log groups whose raw files are past their owner's retention window.
@@ -116,12 +125,15 @@ type sqlcQuerier interface {
 	GetItemTemplateMetadataBatch(ctx context.Context, arg GetItemTemplateMetadataBatchParams) ([]GetItemTemplateMetadataBatchRow, error)
 	GetItemTemplatesByEntries(ctx context.Context, arg GetItemTemplatesByEntriesParams) ([]WorldItemTemplate, error)
 	GetItemTemplatesBySetID(ctx context.Context, arg GetItemTemplatesBySetIDParams) ([]GetItemTemplatesBySetIDRow, error)
+	// Return the most recently published snapshot for a tenant+lookback.
+	GetLatestPublishedSnapshot(ctx context.Context, arg GetLatestPublishedSnapshotParams) (RankingSnapshot, error)
 	GetLatestRegressionSnapshot(ctx context.Context, fixtureID uuid.UUID) (RegressionSnapshot, error)
 	GetLeaderboardVersionRequirements(ctx context.Context, instanceName string) (LeaderboardVersionRequirement, error)
 	GetLogFile(ctx context.Context, id uuid.UUID) (LogFile, error)
 	GetModificationRequestByID(ctx context.Context, id uuid.UUID) (ApplicationModificationRequest, error)
 	GetPanelLayoutByCode(ctx context.Context, code pgtype.Text) (GetPanelLayoutByCodeRow, error)
 	GetPanelLayoutByID(ctx context.Context, id uuid.UUID) (GetPanelLayoutByIDRow, error)
+	GetRankingSnapshot(ctx context.Context, id uuid.UUID) (RankingSnapshot, error)
 	// Returns all realm IDs that have an applicable retention policy
 	// (either directly or through their server).
 	GetRealmsWithRetentionPolicies(ctx context.Context) ([]uuid.UUID, error)
@@ -138,6 +150,11 @@ type sqlcQuerier interface {
 	GetSharedViewByCode(ctx context.Context, code string) (SharedView, error)
 	GetSharedViewByInstanceAndHash(ctx context.Context, arg GetSharedViewByInstanceAndHashParams) (SharedView, error)
 	GetSiteConfig(ctx context.Context) (SiteConfig, error)
+	// Per-boss cohort: best metric value per player within a
+	// (snapshot, encounter, difficulty, max_players, class/spec) bucket.
+	// Pass @cohort_mode = 'spec' to group by (class, spec), 'class' for class only.
+	// Pass @metric = 'dps' or 'hps' to select the value column.
+	GetSnapshotCohortValues(ctx context.Context, arg GetSnapshotCohortValuesParams) ([]GetSnapshotCohortValuesRow, error)
 	GetSpellItemEnchantmentByID(ctx context.Context, arg GetSpellItemEnchantmentByIDParams) (DbcSpellItemEnchantment, error)
 	GetTenantByID(ctx context.Context, id uuid.UUID) (Tenant, error)
 	// Tenant queries. These run with AdminBypass context since the tenants table
@@ -184,6 +201,10 @@ type sqlcQuerier interface {
 	// Modification Requests
 	InsertModificationRequest(ctx context.Context, arg InsertModificationRequestParams) (ApplicationModificationRequest, error)
 	InsertParsedLogGroup(ctx context.Context, id uuid.UUID) error
+	// Create a new pending snapshot for a tenant+lookback.
+	InsertRankingSnapshot(ctx context.Context, arg InsertRankingSnapshotParams) (RankingSnapshot, error)
+	// Insert a single snapshot member (caller batches in a transaction).
+	InsertRankingSnapshotMember(ctx context.Context, arg InsertRankingSnapshotMemberParams) error
 	InsertRegressionFixture(ctx context.Context, arg InsertRegressionFixtureParams) (RegressionFixture, error)
 	InsertRegressionSnapshot(ctx context.Context, arg InsertRegressionSnapshotParams) (RegressionSnapshot, error)
 	// Server Applications
@@ -231,6 +252,10 @@ type sqlcQuerier interface {
 	ListRegressionFixtures(ctx context.Context) ([]ListRegressionFixturesRow, error)
 	ListRegressionSnapshots(ctx context.Context, arg ListRegressionSnapshotsParams) ([]ListRegressionSnapshotsRow, error)
 	ListServerApplications(ctx context.Context) ([]ListServerApplicationsRow, error)
+	// List a player's member entries across a snapshot (for history/best parses).
+	ListSnapshotMembersByPlayerGUID(ctx context.Context, arg ListSnapshotMembersByPlayerGUIDParams) ([]RankingSnapshotMember, error)
+	// List all snapshot members from a given instance.
+	ListSnapshotMembersForInstance(ctx context.Context, arg ListSnapshotMembersForInstanceParams) ([]RankingSnapshotMember, error)
 	ListTenants(ctx context.Context) ([]Tenant, error)
 	// Tenants that use this dataset, either directly (tenant.default_dataset_id)
 	// or via a server they own (wow_servers.default_dataset_id).
@@ -245,6 +270,8 @@ type sqlcQuerier interface {
 	ListWorlds(ctx context.Context) ([]World, error)
 	MarkEmailVerified(ctx context.Context, userAuthID uuid.UUID) error
 	PruneParsedInstanceFromLogOutput(ctx context.Context, arg PruneParsedInstanceFromLogOutputParams) error
+	// Transition a pending snapshot to published. Idempotent on already-published.
+	PublishRankingSnapshot(ctx context.Context, id uuid.UUID) (RankingSnapshot, error)
 	// Returns box plot statistics (min, q1, median, q3, max, count) per class/spec.
 	// DPS is aggregated per run (sum damage / sum duration across encounters in one
 	// instance run), so each run is one data point. Matches leaderboard aggregation.

@@ -4338,6 +4338,503 @@ func (q *sqlQuerier) SetDuplicateGroupIDs(ctx context.Context, arg SetDuplicateG
 	return err
 }
 
+const batchInsertSnapshotMembersFromRankings = `-- name: BatchInsertSnapshotMembersFromRankings :exec
+WITH snapshot AS (
+    SELECT id, cutoff, window_start
+    FROM ranking_snapshots WHERE id = $1
+),
+eligible AS (
+    SELECT DISTINCT ON (edr.player_guid, edr.encounter_name, COALESCE(li.duplicate_group_id, li.id))
+        edr.id AS ranking_id,
+        edr.instance_id,
+        COALESCE(li.duplicate_group_id, li.id) AS run_id,
+        edr.instance_name,
+        edr.encounter_name,
+        edr.player_guid,
+        edr.player_class,
+        edr.player_spec,
+        edr.difficulty_name,
+        edr.max_players,
+        edr.killed_at,
+        edr.created_at,
+        edr.damage_done,
+        edr.healing_done,
+        edr.absorbed_done,
+        edr.duration_secs,
+        edr.dps,
+        edr.hps
+    FROM encounter_dps_rankings edr
+    JOIN log_instances li ON li.id = edr.instance_id
+    CROSS JOIN snapshot s
+    WHERE edr.encounter_id IS NOT NULL      -- boss kills only
+      AND edr.dps > 0
+      AND edr.duration_secs > 0
+      AND edr.killed_at <= s.cutoff
+      AND (s.window_start IS NULL OR edr.killed_at >= s.window_start)
+    ORDER BY edr.player_guid, edr.encounter_name,
+             COALESCE(li.duplicate_group_id, li.id),
+             edr.dps DESC
+)
+INSERT INTO ranking_snapshot_members (
+    snapshot_id, ranking_id, instance_id, run_id,
+    instance_name, encounter_name,
+    player_guid, player_class, player_spec,
+    difficulty_name, max_players,
+    killed_at, created_at_ranking,
+    damage_done, healing_done, absorbed_done,
+    duration_secs, dps, hps
+)
+SELECT
+    $1, e.ranking_id, e.instance_id, e.run_id,
+    e.instance_name, e.encounter_name,
+    e.player_guid, e.player_class, e.player_spec,
+    e.difficulty_name, e.max_players,
+    e.killed_at, e.created_at,
+    e.damage_done, e.healing_done, e.absorbed_done,
+    e.duration_secs, e.dps, e.hps
+FROM eligible e
+ON CONFLICT (snapshot_id, ranking_id) DO NOTHING
+`
+
+// Populate a pending snapshot's members from eligible encounter_dps_rankings rows.
+// Boss kills only (encounter_id IS NOT NULL), deduplicated by duplicate group
+// keeping the best DPS copy, bounded by the snapshot's cutoff and optional window_start.
+// Note: parser/addon version requirement values are stored on the snapshot for
+// documentation; log_instances does not carry numeric version columns yet, so
+// version filtering is the caller's responsibility if needed.
+func (q *sqlQuerier) BatchInsertSnapshotMembersFromRankings(ctx context.Context, snapshotID uuid.UUID) error {
+	_, err := q.db.Exec(ctx, batchInsertSnapshotMembersFromRankings, snapshotID)
+	return err
+}
+
+const getEarliestSnapshotForInstance = `-- name: GetEarliestSnapshotForInstance :one
+SELECT rs.id, rs.tenant_id, rs.cutoff, rs.window_start, rs.lookback_days, rs.cohort_mode, rs.policy_version, rs.query_version, rs.min_parser_version_num, rs.min_addon_version_num, rs.status, rs.created_at, rs.published_at
+FROM ranking_snapshots rs
+WHERE rs.tenant_id = $1
+  AND rs.status = 'published'
+  AND EXISTS (
+      SELECT 1 FROM ranking_snapshot_members rsm
+      WHERE rsm.snapshot_id = rs.id AND rsm.instance_id = $2
+  )
+ORDER BY rs.published_at ASC
+LIMIT 1
+`
+
+type GetEarliestSnapshotForInstanceParams struct {
+	TenantID   uuid.UUID `db:"tenant_id" json:"tenant_id"`
+	InstanceID uuid.UUID `db:"instance_id" json:"instance_id"`
+}
+
+// Return the earliest published snapshot that contains members from a given instance.
+func (q *sqlQuerier) GetEarliestSnapshotForInstance(ctx context.Context, arg GetEarliestSnapshotForInstanceParams) (RankingSnapshot, error) {
+	row := q.db.QueryRow(ctx, getEarliestSnapshotForInstance, arg.TenantID, arg.InstanceID)
+	var i RankingSnapshot
+	err := row.Scan(
+		&i.ID,
+		&i.TenantID,
+		&i.Cutoff,
+		&i.WindowStart,
+		&i.LookbackDays,
+		&i.CohortMode,
+		&i.PolicyVersion,
+		&i.QueryVersion,
+		&i.MinParserVersionNum,
+		&i.MinAddonVersionNum,
+		&i.Status,
+		&i.CreatedAt,
+		&i.PublishedAt,
+	)
+	return i, err
+}
+
+const getLatestPublishedSnapshot = `-- name: GetLatestPublishedSnapshot :one
+SELECT id, tenant_id, cutoff, window_start, lookback_days, cohort_mode, policy_version, query_version, min_parser_version_num, min_addon_version_num, status, created_at, published_at
+FROM ranking_snapshots
+WHERE tenant_id = $1
+  AND lookback_days = $2
+  AND status = 'published'
+ORDER BY published_at DESC
+LIMIT 1
+`
+
+type GetLatestPublishedSnapshotParams struct {
+	TenantID     uuid.UUID `db:"tenant_id" json:"tenant_id"`
+	LookbackDays int32     `db:"lookback_days" json:"lookback_days"`
+}
+
+// Return the most recently published snapshot for a tenant+lookback.
+func (q *sqlQuerier) GetLatestPublishedSnapshot(ctx context.Context, arg GetLatestPublishedSnapshotParams) (RankingSnapshot, error) {
+	row := q.db.QueryRow(ctx, getLatestPublishedSnapshot, arg.TenantID, arg.LookbackDays)
+	var i RankingSnapshot
+	err := row.Scan(
+		&i.ID,
+		&i.TenantID,
+		&i.Cutoff,
+		&i.WindowStart,
+		&i.LookbackDays,
+		&i.CohortMode,
+		&i.PolicyVersion,
+		&i.QueryVersion,
+		&i.MinParserVersionNum,
+		&i.MinAddonVersionNum,
+		&i.Status,
+		&i.CreatedAt,
+		&i.PublishedAt,
+	)
+	return i, err
+}
+
+const getRankingSnapshot = `-- name: GetRankingSnapshot :one
+SELECT id, tenant_id, cutoff, window_start, lookback_days, cohort_mode, policy_version, query_version, min_parser_version_num, min_addon_version_num, status, created_at, published_at FROM ranking_snapshots WHERE id = $1
+`
+
+func (q *sqlQuerier) GetRankingSnapshot(ctx context.Context, id uuid.UUID) (RankingSnapshot, error) {
+	row := q.db.QueryRow(ctx, getRankingSnapshot, id)
+	var i RankingSnapshot
+	err := row.Scan(
+		&i.ID,
+		&i.TenantID,
+		&i.Cutoff,
+		&i.WindowStart,
+		&i.LookbackDays,
+		&i.CohortMode,
+		&i.PolicyVersion,
+		&i.QueryVersion,
+		&i.MinParserVersionNum,
+		&i.MinAddonVersionNum,
+		&i.Status,
+		&i.CreatedAt,
+		&i.PublishedAt,
+	)
+	return i, err
+}
+
+const getSnapshotCohortValues = `-- name: GetSnapshotCohortValues :many
+SELECT
+    rsm.encounter_name,
+    rsm.player_guid,
+    CASE WHEN $1::text = 'hps' THEN MAX(rsm.hps) ELSE MAX(rsm.dps) END AS best_value
+FROM ranking_snapshot_members rsm
+WHERE rsm.snapshot_id = $2
+  AND rsm.encounter_name = $3
+  AND rsm.difficulty_name = $4
+  AND rsm.max_players = $5
+  AND rsm.player_class = $6
+  AND ($7::text IS NULL OR rsm.player_spec = $7)
+GROUP BY rsm.encounter_name, rsm.player_guid
+`
+
+type GetSnapshotCohortValuesParams struct {
+	Metric         string      `db:"metric" json:"metric"`
+	SnapshotID     uuid.UUID   `db:"snapshot_id" json:"snapshot_id"`
+	EncounterName  string      `db:"encounter_name" json:"encounter_name"`
+	DifficultyName string      `db:"difficulty_name" json:"difficulty_name"`
+	MaxPlayers     int16       `db:"max_players" json:"max_players"`
+	PlayerClass    string      `db:"player_class" json:"player_class"`
+	PlayerSpec     pgtype.Text `db:"player_spec" json:"player_spec"`
+}
+
+type GetSnapshotCohortValuesRow struct {
+	EncounterName string      `db:"encounter_name" json:"encounter_name"`
+	PlayerGuid    string      `db:"player_guid" json:"player_guid"`
+	BestValue     interface{} `db:"best_value" json:"best_value"`
+}
+
+// Per-boss cohort: best metric value per player within a
+// (snapshot, encounter, difficulty, max_players, class/spec) bucket.
+// Pass @cohort_mode = 'spec' to group by (class, spec), 'class' for class only.
+// Pass @metric = 'dps' or 'hps' to select the value column.
+func (q *sqlQuerier) GetSnapshotCohortValues(ctx context.Context, arg GetSnapshotCohortValuesParams) ([]GetSnapshotCohortValuesRow, error) {
+	rows, err := q.db.Query(ctx, getSnapshotCohortValues,
+		arg.Metric,
+		arg.SnapshotID,
+		arg.EncounterName,
+		arg.DifficultyName,
+		arg.MaxPlayers,
+		arg.PlayerClass,
+		arg.PlayerSpec,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []GetSnapshotCohortValuesRow
+	for rows.Next() {
+		var i GetSnapshotCohortValuesRow
+		if err := rows.Scan(&i.EncounterName, &i.PlayerGuid, &i.BestValue); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const insertRankingSnapshot = `-- name: InsertRankingSnapshot :one
+INSERT INTO ranking_snapshots (
+    tenant_id, cutoff, window_start, lookback_days, cohort_mode,
+    policy_version, query_version,
+    min_parser_version_num, min_addon_version_num, status
+) VALUES (
+    $1, $2, $3, $4, $5,
+    $6, $7,
+    $8, $9, 'pending'
+) RETURNING id, tenant_id, cutoff, window_start, lookback_days, cohort_mode, policy_version, query_version, min_parser_version_num, min_addon_version_num, status, created_at, published_at
+`
+
+type InsertRankingSnapshotParams struct {
+	TenantID            uuid.UUID          `db:"tenant_id" json:"tenant_id"`
+	Cutoff              pgtype.Timestamptz `db:"cutoff" json:"cutoff"`
+	WindowStart         pgtype.Timestamptz `db:"window_start" json:"window_start"`
+	LookbackDays        int32              `db:"lookback_days" json:"lookback_days"`
+	CohortMode          string             `db:"cohort_mode" json:"cohort_mode"`
+	PolicyVersion       int16              `db:"policy_version" json:"policy_version"`
+	QueryVersion        int16              `db:"query_version" json:"query_version"`
+	MinParserVersionNum int64              `db:"min_parser_version_num" json:"min_parser_version_num"`
+	MinAddonVersionNum  int64              `db:"min_addon_version_num" json:"min_addon_version_num"`
+}
+
+// Create a new pending snapshot for a tenant+lookback.
+func (q *sqlQuerier) InsertRankingSnapshot(ctx context.Context, arg InsertRankingSnapshotParams) (RankingSnapshot, error) {
+	row := q.db.QueryRow(ctx, insertRankingSnapshot,
+		arg.TenantID,
+		arg.Cutoff,
+		arg.WindowStart,
+		arg.LookbackDays,
+		arg.CohortMode,
+		arg.PolicyVersion,
+		arg.QueryVersion,
+		arg.MinParserVersionNum,
+		arg.MinAddonVersionNum,
+	)
+	var i RankingSnapshot
+	err := row.Scan(
+		&i.ID,
+		&i.TenantID,
+		&i.Cutoff,
+		&i.WindowStart,
+		&i.LookbackDays,
+		&i.CohortMode,
+		&i.PolicyVersion,
+		&i.QueryVersion,
+		&i.MinParserVersionNum,
+		&i.MinAddonVersionNum,
+		&i.Status,
+		&i.CreatedAt,
+		&i.PublishedAt,
+	)
+	return i, err
+}
+
+const insertRankingSnapshotMember = `-- name: InsertRankingSnapshotMember :exec
+INSERT INTO ranking_snapshot_members (
+    snapshot_id, ranking_id, instance_id, run_id,
+    instance_name, encounter_name,
+    player_guid, player_class, player_spec,
+    difficulty_name, max_players,
+    killed_at, created_at_ranking,
+    damage_done, healing_done, absorbed_done,
+    duration_secs, dps, hps
+) VALUES (
+    $1, $2, $3, $4,
+    $5, $6,
+    $7, $8, $9,
+    $10, $11,
+    $12, $13,
+    $14, $15, $16,
+    $17, $18, $19
+) ON CONFLICT (snapshot_id, ranking_id) DO NOTHING
+`
+
+type InsertRankingSnapshotMemberParams struct {
+	SnapshotID       uuid.UUID          `db:"snapshot_id" json:"snapshot_id"`
+	RankingID        uuid.UUID          `db:"ranking_id" json:"ranking_id"`
+	InstanceID       uuid.UUID          `db:"instance_id" json:"instance_id"`
+	RunID            uuid.UUID          `db:"run_id" json:"run_id"`
+	InstanceName     string             `db:"instance_name" json:"instance_name"`
+	EncounterName    string             `db:"encounter_name" json:"encounter_name"`
+	PlayerGuid       string             `db:"player_guid" json:"player_guid"`
+	PlayerClass      string             `db:"player_class" json:"player_class"`
+	PlayerSpec       string             `db:"player_spec" json:"player_spec"`
+	DifficultyName   string             `db:"difficulty_name" json:"difficulty_name"`
+	MaxPlayers       int16              `db:"max_players" json:"max_players"`
+	KilledAt         pgtype.Timestamptz `db:"killed_at" json:"killed_at"`
+	CreatedAtRanking pgtype.Timestamptz `db:"created_at_ranking" json:"created_at_ranking"`
+	DamageDone       int64              `db:"damage_done" json:"damage_done"`
+	HealingDone      int64              `db:"healing_done" json:"healing_done"`
+	AbsorbedDone     int64              `db:"absorbed_done" json:"absorbed_done"`
+	DurationSecs     float64            `db:"duration_secs" json:"duration_secs"`
+	Dps              float64            `db:"dps" json:"dps"`
+	Hps              float64            `db:"hps" json:"hps"`
+}
+
+// Insert a single snapshot member (caller batches in a transaction).
+func (q *sqlQuerier) InsertRankingSnapshotMember(ctx context.Context, arg InsertRankingSnapshotMemberParams) error {
+	_, err := q.db.Exec(ctx, insertRankingSnapshotMember,
+		arg.SnapshotID,
+		arg.RankingID,
+		arg.InstanceID,
+		arg.RunID,
+		arg.InstanceName,
+		arg.EncounterName,
+		arg.PlayerGuid,
+		arg.PlayerClass,
+		arg.PlayerSpec,
+		arg.DifficultyName,
+		arg.MaxPlayers,
+		arg.KilledAt,
+		arg.CreatedAtRanking,
+		arg.DamageDone,
+		arg.HealingDone,
+		arg.AbsorbedDone,
+		arg.DurationSecs,
+		arg.Dps,
+		arg.Hps,
+	)
+	return err
+}
+
+const listSnapshotMembersByPlayerGUID = `-- name: ListSnapshotMembersByPlayerGUID :many
+SELECT rsm.id, rsm.snapshot_id, rsm.ranking_id, rsm.instance_id, rsm.run_id, rsm.instance_name, rsm.encounter_name, rsm.player_guid, rsm.player_class, rsm.player_spec, rsm.difficulty_name, rsm.max_players, rsm.killed_at, rsm.created_at_ranking, rsm.damage_done, rsm.healing_done, rsm.absorbed_done, rsm.duration_secs, rsm.dps, rsm.hps
+FROM ranking_snapshot_members rsm
+WHERE rsm.snapshot_id = $1
+  AND rsm.player_guid = $2
+ORDER BY rsm.encounter_name, rsm.dps DESC
+`
+
+type ListSnapshotMembersByPlayerGUIDParams struct {
+	SnapshotID uuid.UUID `db:"snapshot_id" json:"snapshot_id"`
+	PlayerGuid string    `db:"player_guid" json:"player_guid"`
+}
+
+// List a player's member entries across a snapshot (for history/best parses).
+func (q *sqlQuerier) ListSnapshotMembersByPlayerGUID(ctx context.Context, arg ListSnapshotMembersByPlayerGUIDParams) ([]RankingSnapshotMember, error) {
+	rows, err := q.db.Query(ctx, listSnapshotMembersByPlayerGUID, arg.SnapshotID, arg.PlayerGuid)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []RankingSnapshotMember
+	for rows.Next() {
+		var i RankingSnapshotMember
+		if err := rows.Scan(
+			&i.ID,
+			&i.SnapshotID,
+			&i.RankingID,
+			&i.InstanceID,
+			&i.RunID,
+			&i.InstanceName,
+			&i.EncounterName,
+			&i.PlayerGuid,
+			&i.PlayerClass,
+			&i.PlayerSpec,
+			&i.DifficultyName,
+			&i.MaxPlayers,
+			&i.KilledAt,
+			&i.CreatedAtRanking,
+			&i.DamageDone,
+			&i.HealingDone,
+			&i.AbsorbedDone,
+			&i.DurationSecs,
+			&i.Dps,
+			&i.Hps,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listSnapshotMembersForInstance = `-- name: ListSnapshotMembersForInstance :many
+SELECT rsm.id, rsm.snapshot_id, rsm.ranking_id, rsm.instance_id, rsm.run_id, rsm.instance_name, rsm.encounter_name, rsm.player_guid, rsm.player_class, rsm.player_spec, rsm.difficulty_name, rsm.max_players, rsm.killed_at, rsm.created_at_ranking, rsm.damage_done, rsm.healing_done, rsm.absorbed_done, rsm.duration_secs, rsm.dps, rsm.hps
+FROM ranking_snapshot_members rsm
+WHERE rsm.snapshot_id = $1
+  AND rsm.instance_id = $2
+ORDER BY rsm.encounter_name, rsm.dps DESC
+`
+
+type ListSnapshotMembersForInstanceParams struct {
+	SnapshotID uuid.UUID `db:"snapshot_id" json:"snapshot_id"`
+	InstanceID uuid.UUID `db:"instance_id" json:"instance_id"`
+}
+
+// List all snapshot members from a given instance.
+func (q *sqlQuerier) ListSnapshotMembersForInstance(ctx context.Context, arg ListSnapshotMembersForInstanceParams) ([]RankingSnapshotMember, error) {
+	rows, err := q.db.Query(ctx, listSnapshotMembersForInstance, arg.SnapshotID, arg.InstanceID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []RankingSnapshotMember
+	for rows.Next() {
+		var i RankingSnapshotMember
+		if err := rows.Scan(
+			&i.ID,
+			&i.SnapshotID,
+			&i.RankingID,
+			&i.InstanceID,
+			&i.RunID,
+			&i.InstanceName,
+			&i.EncounterName,
+			&i.PlayerGuid,
+			&i.PlayerClass,
+			&i.PlayerSpec,
+			&i.DifficultyName,
+			&i.MaxPlayers,
+			&i.KilledAt,
+			&i.CreatedAtRanking,
+			&i.DamageDone,
+			&i.HealingDone,
+			&i.AbsorbedDone,
+			&i.DurationSecs,
+			&i.Dps,
+			&i.Hps,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const publishRankingSnapshot = `-- name: PublishRankingSnapshot :one
+UPDATE ranking_snapshots
+SET status = 'published', published_at = now()
+WHERE id = $1 AND status IN ('pending', 'published')
+RETURNING id, tenant_id, cutoff, window_start, lookback_days, cohort_mode, policy_version, query_version, min_parser_version_num, min_addon_version_num, status, created_at, published_at
+`
+
+// Transition a pending snapshot to published. Idempotent on already-published.
+func (q *sqlQuerier) PublishRankingSnapshot(ctx context.Context, id uuid.UUID) (RankingSnapshot, error) {
+	row := q.db.QueryRow(ctx, publishRankingSnapshot, id)
+	var i RankingSnapshot
+	err := row.Scan(
+		&i.ID,
+		&i.TenantID,
+		&i.Cutoff,
+		&i.WindowStart,
+		&i.LookbackDays,
+		&i.CohortMode,
+		&i.PolicyVersion,
+		&i.QueryVersion,
+		&i.MinParserVersionNum,
+		&i.MinAddonVersionNum,
+		&i.Status,
+		&i.CreatedAt,
+		&i.PublishedAt,
+	)
+	return i, err
+}
+
 const hasInstanceDpsRankings = `-- name: HasInstanceDpsRankings :one
 SELECT EXISTS(
     SELECT 1 FROM encounter_dps_rankings WHERE instance_id = $1
@@ -6734,7 +7231,7 @@ func (q *sqlQuerier) GetSharedViewByInstanceAndHash(ctx context.Context, arg Get
 }
 
 const getSiteConfig = `-- name: GetSiteConfig :one
-SELECT id, signups_enabled, updated_at, branding, discoverable, default_format, available_formats, client_uploads_disabled FROM site_config WHERE id = TRUE
+SELECT id, signups_enabled, updated_at, branding, discoverable, default_format, available_formats, client_uploads_disabled, parse_config FROM site_config WHERE id = TRUE
 `
 
 func (q *sqlQuerier) GetSiteConfig(ctx context.Context) (SiteConfig, error) {
@@ -6749,6 +7246,7 @@ func (q *sqlQuerier) GetSiteConfig(ctx context.Context) (SiteConfig, error) {
 		&i.DefaultFormat,
 		&i.AvailableFormats,
 		&i.ClientUploadsDisabled,
+		&i.ParseConfig,
 	)
 	return i, err
 }
@@ -6763,7 +7261,7 @@ UPDATE site_config SET
     client_uploads_disabled = COALESCE($6, client_uploads_disabled),
     updated_at = now()
 WHERE id = TRUE
-RETURNING id, signups_enabled, updated_at, branding, discoverable, default_format, available_formats, client_uploads_disabled
+RETURNING id, signups_enabled, updated_at, branding, discoverable, default_format, available_formats, client_uploads_disabled, parse_config
 `
 
 type UpdateSiteConfigParams struct {
@@ -6794,6 +7292,7 @@ func (q *sqlQuerier) UpdateSiteConfig(ctx context.Context, arg UpdateSiteConfigP
 		&i.DefaultFormat,
 		&i.AvailableFormats,
 		&i.ClientUploadsDisabled,
+		&i.ParseConfig,
 	)
 	return i, err
 }
@@ -7252,7 +7751,7 @@ func (q *sqlQuerier) DeleteTenant(ctx context.Context, id uuid.UUID) error {
 }
 
 const getTenantByID = `-- name: GetTenantByID :one
-SELECT id, slug, name, disable_client_upload, include_in_all, branding, created_at, updated_at, discoverable, default_dataset_id, default_format, available_formats FROM tenants WHERE id = $1
+SELECT id, slug, name, disable_client_upload, include_in_all, branding, created_at, updated_at, discoverable, default_dataset_id, default_format, available_formats, parse_config FROM tenants WHERE id = $1
 `
 
 func (q *sqlQuerier) GetTenantByID(ctx context.Context, id uuid.UUID) (Tenant, error) {
@@ -7271,13 +7770,14 @@ func (q *sqlQuerier) GetTenantByID(ctx context.Context, id uuid.UUID) (Tenant, e
 		&i.DefaultDatasetID,
 		&i.DefaultFormat,
 		&i.AvailableFormats,
+		&i.ParseConfig,
 	)
 	return i, err
 }
 
 const getTenantBySlug = `-- name: GetTenantBySlug :one
 
-SELECT id, slug, name, disable_client_upload, include_in_all, branding, created_at, updated_at, discoverable, default_dataset_id, default_format, available_formats FROM tenants WHERE slug = $1
+SELECT id, slug, name, disable_client_upload, include_in_all, branding, created_at, updated_at, discoverable, default_dataset_id, default_format, available_formats, parse_config FROM tenants WHERE slug = $1
 `
 
 // Tenant queries. These run with AdminBypass context since the tenants table
@@ -7298,6 +7798,7 @@ func (q *sqlQuerier) GetTenantBySlug(ctx context.Context, slug pgtype.Text) (Ten
 		&i.DefaultDatasetID,
 		&i.DefaultFormat,
 		&i.AvailableFormats,
+		&i.ParseConfig,
 	)
 	return i, err
 }
@@ -7305,7 +7806,7 @@ func (q *sqlQuerier) GetTenantBySlug(ctx context.Context, slug pgtype.Text) (Ten
 const insertTenant = `-- name: InsertTenant :one
 INSERT INTO tenants (id, slug, name, disable_client_upload, include_in_all, branding, discoverable, default_format, available_formats)
 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
-RETURNING id, slug, name, disable_client_upload, include_in_all, branding, created_at, updated_at, discoverable, default_dataset_id, default_format, available_formats
+RETURNING id, slug, name, disable_client_upload, include_in_all, branding, created_at, updated_at, discoverable, default_dataset_id, default_format, available_formats, parse_config
 `
 
 type InsertTenantParams struct {
@@ -7346,12 +7847,13 @@ func (q *sqlQuerier) InsertTenant(ctx context.Context, arg InsertTenantParams) (
 		&i.DefaultDatasetID,
 		&i.DefaultFormat,
 		&i.AvailableFormats,
+		&i.ParseConfig,
 	)
 	return i, err
 }
 
 const listTenants = `-- name: ListTenants :many
-SELECT id, slug, name, disable_client_upload, include_in_all, branding, created_at, updated_at, discoverable, default_dataset_id, default_format, available_formats FROM tenants ORDER BY name
+SELECT id, slug, name, disable_client_upload, include_in_all, branding, created_at, updated_at, discoverable, default_dataset_id, default_format, available_formats, parse_config FROM tenants ORDER BY name
 `
 
 func (q *sqlQuerier) ListTenants(ctx context.Context) ([]Tenant, error) {
@@ -7376,6 +7878,7 @@ func (q *sqlQuerier) ListTenants(ctx context.Context) ([]Tenant, error) {
 			&i.DefaultDatasetID,
 			&i.DefaultFormat,
 			&i.AvailableFormats,
+			&i.ParseConfig,
 		); err != nil {
 			return nil, err
 		}
@@ -7474,7 +7977,7 @@ UPDATE tenants SET
     available_formats = COALESCE($8, available_formats),
     updated_at = now()
 WHERE id = $9
-RETURNING id, slug, name, disable_client_upload, include_in_all, branding, created_at, updated_at, discoverable, default_dataset_id, default_format, available_formats
+RETURNING id, slug, name, disable_client_upload, include_in_all, branding, created_at, updated_at, discoverable, default_dataset_id, default_format, available_formats, parse_config
 `
 
 type UpdateTenantParams struct {
@@ -7516,6 +8019,7 @@ func (q *sqlQuerier) UpdateTenant(ctx context.Context, arg UpdateTenantParams) (
 		&i.DefaultDatasetID,
 		&i.DefaultFormat,
 		&i.AvailableFormats,
+		&i.ParseConfig,
 	)
 	return i, err
 }

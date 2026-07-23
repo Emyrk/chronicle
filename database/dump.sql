@@ -851,6 +851,7 @@ CREATE TABLE tenants (
     default_dataset_id uuid,
     default_format log_format,
     available_formats text[] DEFAULT '{}'::text[] NOT NULL,
+    parse_config jsonb,
     CONSTRAINT tenants_slug_format CHECK (((slug IS NULL) OR (slug ~ '^[a-z0-9][a-z0-9-]{1,30}[a-z0-9]$'::text))),
     CONSTRAINT tenants_slug_reserved CHECK ((slug <> ALL (ARRAY['www'::text, 'api'::text, 'auth'::text, 'admin'::text, 'legacy'::text, 'app'::text, 'mail'::text, 'staging'::text])))
 );
@@ -927,6 +928,45 @@ CREATE TABLE parsed_log_group (
 );
 
 COMMENT ON TABLE parsed_log_group IS 'A parsed_log_group is a wow_log_group that has been processed and contains parsed logs. A duplicate allows deleting this one row to clear all parsed logs for a given wow_log_group.';
+
+CREATE TABLE ranking_snapshot_members (
+    id uuid DEFAULT gen_random_uuid() NOT NULL,
+    snapshot_id uuid NOT NULL,
+    ranking_id uuid NOT NULL,
+    instance_id uuid NOT NULL,
+    run_id uuid NOT NULL,
+    instance_name text NOT NULL,
+    encounter_name text NOT NULL,
+    player_guid text NOT NULL,
+    player_class text NOT NULL,
+    player_spec text NOT NULL,
+    difficulty_name text DEFAULT ''::text NOT NULL,
+    max_players smallint DEFAULT 0 NOT NULL,
+    killed_at timestamp with time zone NOT NULL,
+    created_at_ranking timestamp with time zone NOT NULL,
+    damage_done bigint NOT NULL,
+    healing_done bigint DEFAULT 0 NOT NULL,
+    absorbed_done bigint DEFAULT 0 NOT NULL,
+    duration_secs double precision NOT NULL,
+    dps double precision NOT NULL,
+    hps double precision DEFAULT 0 NOT NULL
+);
+
+CREATE TABLE ranking_snapshots (
+    id uuid DEFAULT gen_random_uuid() NOT NULL,
+    tenant_id uuid DEFAULT '00000000-0000-0000-0000-000000000000'::uuid NOT NULL,
+    cutoff timestamp with time zone NOT NULL,
+    window_start timestamp with time zone,
+    lookback_days integer DEFAULT 0 NOT NULL,
+    cohort_mode text DEFAULT 'spec'::text NOT NULL,
+    policy_version smallint DEFAULT 1 NOT NULL,
+    query_version smallint DEFAULT 1 NOT NULL,
+    min_parser_version_num bigint DEFAULT 0 NOT NULL,
+    min_addon_version_num bigint DEFAULT 0 NOT NULL,
+    status text DEFAULT 'pending'::text NOT NULL,
+    created_at timestamp with time zone DEFAULT now() NOT NULL,
+    published_at timestamp with time zone
+);
 
 CREATE TABLE rankings_instance_summaries (
     instance_name text NOT NULL,
@@ -1104,6 +1144,7 @@ CREATE TABLE site_config (
     default_format log_format,
     available_formats text[] DEFAULT '{}'::text[] NOT NULL,
     client_uploads_disabled boolean DEFAULT false NOT NULL,
+    parse_config jsonb,
     CONSTRAINT site_config_id_check CHECK (id)
 );
 
@@ -1604,6 +1645,15 @@ ALTER TABLE ONLY log_instances
 ALTER TABLE ONLY parsed_log_group
     ADD CONSTRAINT parsed_log_group_pkey PRIMARY KEY (id);
 
+ALTER TABLE ONLY ranking_snapshot_members
+    ADD CONSTRAINT ranking_snapshot_members_pkey PRIMARY KEY (id);
+
+ALTER TABLE ONLY ranking_snapshot_members
+    ADD CONSTRAINT ranking_snapshot_members_snapshot_id_ranking_id_key UNIQUE (snapshot_id, ranking_id);
+
+ALTER TABLE ONLY ranking_snapshots
+    ADD CONSTRAINT ranking_snapshots_pkey PRIMARY KEY (id);
+
 ALTER TABLE ONLY rankings_instance_summaries
     ADD CONSTRAINT rankings_instance_summaries_pkey PRIMARY KEY (instance_name, difficulty_name, max_players, tenant_id);
 
@@ -1802,6 +1852,18 @@ CREATE INDEX idx_log_instances_realm_id ON log_instances USING btree (realm_id);
 CREATE UNIQUE INDEX idx_mod_requests_pending ON application_modification_requests USING btree (application_id, type, COALESCE(parent_id, '00000000-0000-0000-0000-000000000000'::uuid)) WHERE ((status = 'pending'::text) AND (type <> ALL (ARRAY['server'::text, 'realm'::text])));
 
 CREATE INDEX idx_regression_snapshots_fixture ON regression_snapshots USING btree (fixture_id, created_at DESC);
+
+CREATE INDEX idx_rs_tenant_lookback ON ranking_snapshots USING btree (tenant_id, lookback_days, published_at DESC NULLS LAST);
+
+CREATE INDEX idx_rs_tenant_status ON ranking_snapshots USING btree (tenant_id, status);
+
+CREATE INDEX idx_rsm_cohort_class ON ranking_snapshot_members USING btree (snapshot_id, encounter_name, difficulty_name, max_players, player_class);
+
+CREATE INDEX idx_rsm_cohort_spec ON ranking_snapshot_members USING btree (snapshot_id, encounter_name, difficulty_name, max_players, player_class, player_spec);
+
+CREATE INDEX idx_rsm_instance ON ranking_snapshot_members USING btree (snapshot_id, instance_id);
+
+CREATE INDEX idx_rsm_player ON ranking_snapshot_members USING btree (snapshot_id, player_guid);
 
 CREATE INDEX idx_server_upload_meta_lookup ON server_upload_meta USING btree (instance_id, instance_name, realm_id);
 
@@ -2026,6 +2088,12 @@ ALTER TABLE ONLY log_instances
 
 ALTER TABLE ONLY parsed_log_group
     ADD CONSTRAINT parsed_log_group_id_fkey FOREIGN KEY (id) REFERENCES wow_log_groups(id) ON DELETE CASCADE;
+
+ALTER TABLE ONLY ranking_snapshot_members
+    ADD CONSTRAINT ranking_snapshot_members_ranking_id_fkey FOREIGN KEY (ranking_id) REFERENCES encounter_dps_rankings(id) ON DELETE CASCADE;
+
+ALTER TABLE ONLY ranking_snapshot_members
+    ADD CONSTRAINT ranking_snapshot_members_snapshot_id_fkey FOREIGN KEY (snapshot_id) REFERENCES ranking_snapshots(id) ON DELETE CASCADE;
 
 ALTER TABLE ONLY regression_fixtures
     ADD CONSTRAINT regression_fixtures_log_group_id_fkey FOREIGN KEY (log_group_id) REFERENCES wow_log_groups(id) ON DELETE CASCADE;

@@ -1360,6 +1360,45 @@ type ParsedLogGroup struct {
 	ID uuid.UUID `db:"id" json:"id"`
 }
 
+type RankingSnapshot struct {
+	ID                  uuid.UUID          `db:"id" json:"id"`
+	TenantID            uuid.UUID          `db:"tenant_id" json:"tenant_id"`
+	Cutoff              pgtype.Timestamptz `db:"cutoff" json:"cutoff"`
+	WindowStart         pgtype.Timestamptz `db:"window_start" json:"window_start"`
+	LookbackDays        int32              `db:"lookback_days" json:"lookback_days"`
+	CohortMode          string             `db:"cohort_mode" json:"cohort_mode"`
+	PolicyVersion       int16              `db:"policy_version" json:"policy_version"`
+	QueryVersion        int16              `db:"query_version" json:"query_version"`
+	MinParserVersionNum int64              `db:"min_parser_version_num" json:"min_parser_version_num"`
+	MinAddonVersionNum  int64              `db:"min_addon_version_num" json:"min_addon_version_num"`
+	Status              string             `db:"status" json:"status"`
+	CreatedAt           pgtype.Timestamptz `db:"created_at" json:"created_at"`
+	PublishedAt         pgtype.Timestamptz `db:"published_at" json:"published_at"`
+}
+
+type RankingSnapshotMember struct {
+	ID               uuid.UUID          `db:"id" json:"id"`
+	SnapshotID       uuid.UUID          `db:"snapshot_id" json:"snapshot_id"`
+	RankingID        uuid.UUID          `db:"ranking_id" json:"ranking_id"`
+	InstanceID       uuid.UUID          `db:"instance_id" json:"instance_id"`
+	RunID            uuid.UUID          `db:"run_id" json:"run_id"`
+	InstanceName     string             `db:"instance_name" json:"instance_name"`
+	EncounterName    string             `db:"encounter_name" json:"encounter_name"`
+	PlayerGuid       string             `db:"player_guid" json:"player_guid"`
+	PlayerClass      string             `db:"player_class" json:"player_class"`
+	PlayerSpec       string             `db:"player_spec" json:"player_spec"`
+	DifficultyName   string             `db:"difficulty_name" json:"difficulty_name"`
+	MaxPlayers       int16              `db:"max_players" json:"max_players"`
+	KilledAt         pgtype.Timestamptz `db:"killed_at" json:"killed_at"`
+	CreatedAtRanking pgtype.Timestamptz `db:"created_at_ranking" json:"created_at_ranking"`
+	DamageDone       int64              `db:"damage_done" json:"damage_done"`
+	HealingDone      int64              `db:"healing_done" json:"healing_done"`
+	AbsorbedDone     int64              `db:"absorbed_done" json:"absorbed_done"`
+	DurationSecs     float64            `db:"duration_secs" json:"duration_secs"`
+	Dps              float64            `db:"dps" json:"dps"`
+	Hps              float64            `db:"hps" json:"hps"`
+}
+
 type RankingsInstanceSummary struct {
 	InstanceName   string             `db:"instance_name" json:"instance_name"`
 	DifficultyName string             `db:"difficulty_name" json:"difficulty_name"`
@@ -1511,6 +1550,7 @@ type SiteConfig struct {
 	DefaultFormat         NullLogFormat      `db:"default_format" json:"default_format"`
 	AvailableFormats      []string           `db:"available_formats" json:"available_formats"`
 	ClientUploadsDisabled bool               `db:"client_uploads_disabled" json:"client_uploads_disabled"`
+	ParseConfig           []byte             `db:"parse_config" json:"parse_config"`
 }
 
 type TalentBuild struct {
@@ -1536,6 +1576,7 @@ type Tenant struct {
 	DefaultDatasetID    uuid.NullUUID      `db:"default_dataset_id" json:"default_dataset_id"`
 	DefaultFormat       NullLogFormat      `db:"default_format" json:"default_format"`
 	AvailableFormats    []string           `db:"available_formats" json:"available_formats"`
+	ParseConfig         []byte             `db:"parse_config" json:"parse_config"`
 }
 
 type User struct {
