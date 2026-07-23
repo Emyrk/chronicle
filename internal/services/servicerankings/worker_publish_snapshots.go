@@ -1,0 +1,277 @@
+package servicerankings
+
+import (
+	"context"
+	"encoding/json"
+	"fmt"
+	"log/slog"
+	"time"
+
+	"github.com/Emyrk/chronicle/chronicle/riverqueue"
+	"github.com/Emyrk/chronicle/chronicle/riverqueue/riverconst"
+	"github.com/Emyrk/chronicle/database"
+	"github.com/Emyrk/chronicle/internal/parsepolicy"
+	"github.com/Emyrk/chronicle/internal/services/servicetenant"
+	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgtype"
+	"github.com/riverqueue/river"
+	"github.com/riverqueue/river/rivertype"
+)
+
+// snapshotQueryVersion is bumped whenever the BatchInsertSnapshotMembersFromRankings
+// query logic changes. Stored on each snapshot for reproducibility.
+const snapshotQueryVersion int16 = 1
+
+// ---------------------------------------------------------------------------
+// ArgsPublishParseSnapshots — dispatch job (periodic).
+// Fans out one ArgsPublishParseSnapshotTenant per tenant per lookback window.
+// ---------------------------------------------------------------------------
+
+const KindPublishParseSnapshots = "publish-parse-snapshots"
+
+type ArgsPublishParseSnapshots struct{}
+
+func (ArgsPublishParseSnapshots) Kind() string { return KindPublishParseSnapshots }
+
+func (ArgsPublishParseSnapshots) InsertOpts() river.InsertOpts {
+	return river.InsertOpts{
+		Queue:       riverconst.QueueRankings,
+		Priority:    riverconst.PriorityDefault,
+		MaxAttempts: 3,
+		UniqueOpts: river.UniqueOpts{
+			ByState: []rivertype.JobState{
+				rivertype.JobStateScheduled,
+				rivertype.JobStatePending,
+				rivertype.JobStateAvailable,
+				rivertype.JobStateRunning,
+			},
+		},
+	}
+}
+
+// WorkerPublishParseSnapshots is the dispatch worker. It enumerates tenants
+// plus root scope and enqueues one per-tenant publication job per configured
+// lookback window.
+type WorkerPublishParseSnapshots struct {
+	river.WorkerDefaults[ArgsPublishParseSnapshots]
+
+	Store  database.Store
+	Queue  *riverqueue.Queues
+	Logger *slog.Logger
+}
+
+func (w *WorkerPublishParseSnapshots) Work(ctx context.Context, _ *river.Job[ArgsPublishParseSnapshots]) error {
+	ctx = servicetenant.AdminBypass(ctx)
+
+	tenants, err := w.Store.ListTenants(ctx)
+	if err != nil {
+		return err
+	}
+
+	// Root domain (uuid.Nil) + each real tenant.
+	type tenantJob struct {
+		id          uuid.UUID
+		parseConfig []byte
+	}
+	jobs := make([]tenantJob, 0, len(tenants)+1)
+	jobs = append(jobs, tenantJob{id: uuid.Nil})
+	for _, t := range tenants {
+		jobs = append(jobs, tenantJob{id: t.ID, parseConfig: t.ParseConfig})
+	}
+
+	now := time.Now()
+	var enqueued int
+	for _, tj := range jobs {
+		lookbacks := resolveLookbackDays(tj.parseConfig)
+		for _, lb := range lookbacks {
+			if _, err := w.Queue.Insert(ctx, ArgsPublishParseSnapshotTenant{
+				TenantID:      tj.id,
+				Cutoff:        now,
+				LookbackDays:  int32(lb),
+				PolicyVersion: int16(parsepolicy.PolicyVersion),
+			}, nil); err != nil {
+				w.Logger.Error("failed to enqueue snapshot tenant job",
+					slog.String("tenant_id", tj.id.String()),
+					slog.Int("lookback_days", int(lb)),
+					slog.String("error", err.Error()),
+				)
+			} else {
+				enqueued++
+			}
+		}
+	}
+
+	w.Logger.Info("dispatched parse snapshot publication jobs",
+		slog.Int("enqueued", enqueued),
+		slog.Int("tenants", len(jobs)),
+	)
+	return nil
+}
+
+// resolveLookbackDays returns the set of lookback windows to snapshot for a
+// tenant. Falls back to all-time only when no ParseConfig is present.
+func resolveLookbackDays(parseConfigJSON []byte) []parsepolicy.LookbackDays {
+	if len(parseConfigJSON) > 0 {
+		var pc struct {
+			AllowedLookbackDays []int `json:"allowed_lookback_days"`
+		}
+		if err := json.Unmarshal(parseConfigJSON, &pc); err == nil && len(pc.AllowedLookbackDays) > 0 {
+			out := make([]parsepolicy.LookbackDays, len(pc.AllowedLookbackDays))
+			for i, d := range pc.AllowedLookbackDays {
+				out[i] = parsepolicy.LookbackDays(d)
+			}
+			return out
+		}
+	}
+	return []parsepolicy.LookbackDays{parsepolicy.LookbackAllTime}
+}
+
+// ---------------------------------------------------------------------------
+// ArgsPublishParseSnapshotTenant — per-tenant worker.
+// Creates a pending snapshot, populates members, and publishes it.
+// ---------------------------------------------------------------------------
+
+const KindPublishParseSnapshotTenant = "publish-parse-snapshot-tenant"
+
+type ArgsPublishParseSnapshotTenant struct {
+	TenantID      uuid.UUID `json:"tenant_id"`
+	Cutoff        time.Time `json:"cutoff"`
+	LookbackDays  int32     `json:"lookback_days"`
+	PolicyVersion int16     `json:"policy_version"`
+}
+
+func (ArgsPublishParseSnapshotTenant) Kind() string { return KindPublishParseSnapshotTenant }
+
+func (ArgsPublishParseSnapshotTenant) InsertOpts() river.InsertOpts {
+	return river.InsertOpts{
+		Queue:       riverconst.QueueRankings,
+		Priority:    riverconst.PriorityLow,
+		MaxAttempts: 3,
+		UniqueOpts: river.UniqueOpts{
+			ByArgs: true,
+			ByState: []rivertype.JobState{
+				rivertype.JobStateScheduled,
+				rivertype.JobStatePending,
+				rivertype.JobStateAvailable,
+				rivertype.JobStateRunning,
+			},
+		},
+	}
+}
+
+// WorkerPublishParseSnapshotTenant creates and publishes a snapshot for one
+// tenant and lookback window. Published snapshots are immutable; re-running
+// creates a new snapshot.
+type WorkerPublishParseSnapshotTenant struct {
+	river.WorkerDefaults[ArgsPublishParseSnapshotTenant]
+
+	Store  database.Store
+	Logger *slog.Logger
+}
+
+func (w *WorkerPublishParseSnapshotTenant) Work(ctx context.Context, job *river.Job[ArgsPublishParseSnapshotTenant]) error {
+	args := job.Args
+	start := time.Now()
+
+	// Resolve tenant ParseConfig for cohort mode.
+	cohortMode := string(parsepolicy.CohortModeSpec)
+	if args.TenantID != uuid.Nil {
+		ctx = servicetenant.WithTenantID(ctx, args.TenantID)
+		tenant, err := w.Store.GetTenantByID(ctx, args.TenantID)
+		if err == nil && len(tenant.ParseConfig) > 0 {
+			var pc struct {
+				CohortMode string `json:"cohort_mode"`
+			}
+			if err := json.Unmarshal(tenant.ParseConfig, &pc); err == nil && pc.CohortMode != "" {
+				cohortMode = pc.CohortMode
+			}
+		}
+	}
+
+	cutoff := pgtype.Timestamptz{Time: args.Cutoff, Valid: true}
+	var windowStart pgtype.Timestamptz
+	if args.LookbackDays > 0 {
+		ws := args.Cutoff.AddDate(0, 0, -int(args.LookbackDays))
+		windowStart = pgtype.Timestamptz{Time: ws, Valid: true}
+	}
+
+	var memberCount int64
+	txErr := w.Store.InTx(ctx, func(tx database.Store) error {
+		// 1. Create a pending snapshot.
+		snap, err := tx.InsertRankingSnapshot(ctx, database.InsertRankingSnapshotParams{
+			TenantID:            args.TenantID,
+			Cutoff:              cutoff,
+			WindowStart:         windowStart,
+			LookbackDays:        args.LookbackDays,
+			CohortMode:          cohortMode,
+			PolicyVersion:       args.PolicyVersion,
+			QueryVersion:        snapshotQueryVersion,
+			MinParserVersionNum: 0,
+			MinAddonVersionNum:  0,
+		})
+		if err != nil {
+			return fmt.Errorf("insert snapshot: %w", err)
+		}
+
+		// 2. Bulk-populate members from rankings.
+		if err := tx.BatchInsertSnapshotMembersFromRankings(ctx, snap.ID); err != nil {
+			return fmt.Errorf("batch insert members: %w", err)
+		}
+
+		// 3. Count members.
+		memberCount, err = tx.CountSnapshotMembers(ctx, snap.ID)
+		if err != nil {
+			return fmt.Errorf("count members: %w", err)
+		}
+
+		// 4. Publish the snapshot.
+		if _, err := tx.PublishRankingSnapshot(ctx, snap.ID); err != nil {
+			return fmt.Errorf("publish snapshot: %w", err)
+		}
+
+		return nil
+	}, &pgx.TxOptions{})
+	if txErr != nil {
+		return txErr
+	}
+
+	duration := time.Since(start)
+	w.Logger.Info("published parse snapshot",
+		slog.String("tenant_id", args.TenantID.String()),
+		slog.Int("lookback_days", int(args.LookbackDays)),
+		slog.Int64("member_count", memberCount),
+		slog.Duration("duration", duration),
+	)
+
+	_ = river.RecordOutput(ctx, map[string]any{
+		"tenant_id":     args.TenantID.String(),
+		"lookback_days": args.LookbackDays,
+		"member_count":  memberCount,
+		"duration_ms":   duration.Milliseconds(),
+	})
+
+	return nil
+}
+
+// ---------------------------------------------------------------------------
+// EnqueueParseSnapshotBackfill enqueues a per-tenant snapshot publication job
+// with explicit parameters. This is the backfill entry point for admin tooling
+// (the HTTP endpoint is planned for #182).
+// ---------------------------------------------------------------------------
+
+func EnqueueParseSnapshotBackfill(
+	ctx context.Context,
+	queue *riverqueue.Queues,
+	tenantID uuid.UUID,
+	cutoff time.Time,
+	lookbackDays int32,
+	policyVersion int16,
+) (*rivertype.JobInsertResult, error) {
+	return queue.Insert(ctx, ArgsPublishParseSnapshotTenant{
+		TenantID:      tenantID,
+		Cutoff:        cutoff,
+		LookbackDays:  lookbackDays,
+		PolicyVersion: policyVersion,
+	}, nil)
+}

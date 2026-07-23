@@ -159,3 +159,8 @@ ORDER BY rsm.encounter_name, rsm.dps DESC;
 
 -- name: GetRankingSnapshot :one
 SELECT * FROM ranking_snapshots WHERE id = @id;
+
+-- name: CountSnapshotMembers :one
+-- Return the number of members in a snapshot.
+SELECT COUNT(*) FROM ranking_snapshot_members WHERE snapshot_id = @snapshot_id;
+

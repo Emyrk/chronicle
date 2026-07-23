@@ -141,6 +141,9 @@ func (s *Service) Start(ctx context.Context) error {
 	rank.SummaryDispatchWorker.Queue = q
 	riverqueue.AddWorker(q, rank.SummaryDispatchWorker)
 	riverqueue.AddWorker(q, rank.SummaryTenantWorker)
+	rank.SnapshotDispatchWorker.Queue = q
+	riverqueue.AddWorker(q, rank.SnapshotDispatchWorker)
+	riverqueue.AddWorker(q, rank.SnapshotTenantWorker)
 	q.AddQueue(riverqueue.QueueRankings, river.QueueConfig{
 		MaxWorkers: 1,
 	})
@@ -149,6 +152,15 @@ func (s *Service) Start(ctx context.Context) error {
 			river.PeriodicInterval(1*time.Hour),
 			func() (river.JobArgs, *river.InsertOpts) {
 				return servicerankings.ArgsRefreshRankingsSummaries{}, nil
+			},
+			&river.PeriodicJobOpts{RunOnStart: true},
+		),
+	)
+	q.AddPeriodicJob(
+		river.NewPeriodicJob(
+			river.PeriodicInterval(1*time.Hour),
+			func() (river.JobArgs, *river.InsertOpts) {
+				return servicerankings.ArgsPublishParseSnapshots{}, nil
 			},
 			&river.PeriodicJobOpts{RunOnStart: true},
 		),

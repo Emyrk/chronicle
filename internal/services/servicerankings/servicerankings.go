@@ -49,6 +49,11 @@ type Service struct {
 	SummaryDispatchWorker *WorkerRefreshRankingsSummaries
 	// SummaryTenantWorker refreshes summaries for a single tenant.
 	SummaryTenantWorker *WorkerRefreshRankingsSummaryTenant
+
+	// SnapshotDispatchWorker fans out per-tenant snapshot publication jobs.
+	SnapshotDispatchWorker *WorkerPublishParseSnapshots
+	// SnapshotTenantWorker publishes a snapshot for a single tenant+lookback.
+	SnapshotTenantWorker *WorkerPublishParseSnapshotTenant
 }
 
 func New(broker *services.Services) *Service {
@@ -88,6 +93,15 @@ func (s *Service) Start(_ context.Context) error {
 		// Queue is set by serviceriver after queue creation.
 	}
 	s.SummaryTenantWorker = &WorkerRefreshRankingsSummaryTenant{
+		Store:  store,
+		Logger: namedLogger,
+	}
+	s.SnapshotDispatchWorker = &WorkerPublishParseSnapshots{
+		Store:  store,
+		Logger: namedLogger,
+		// Queue is set by serviceriver after queue creation.
+	}
+	s.SnapshotTenantWorker = &WorkerPublishParseSnapshotTenant{
 		Store:  store,
 		Logger: namedLogger,
 	}

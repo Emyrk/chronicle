@@ -196,12 +196,12 @@ func TestRankingSnapshots(t *testing.T) {
 		ctx := testutil.Context(t, testutil.WaitMedium)
 
 		snapshot, err := store.InsertRankingSnapshot(ctx, database.InsertRankingSnapshotParams{
-			TenantID:    uuid.UUID{}, // nil = root
-			Cutoff:      database.Timestamptz(baseTime.Add(time.Hour)),
-			LookbackDays: 0,
-			CohortMode:  "spec",
+			TenantID:      uuid.UUID{}, // nil = root
+			Cutoff:        database.Timestamptz(baseTime.Add(time.Hour)),
+			LookbackDays:  0,
+			CohortMode:    "spec",
 			PolicyVersion: 1,
-			QueryVersion: 1,
+			QueryVersion:  1,
 		})
 		require.NoError(t, err)
 		assert.Equal(t, "pending", snapshot.Status)
@@ -230,12 +230,12 @@ func TestRankingSnapshots(t *testing.T) {
 		ctx := testutil.Context(t, testutil.WaitMedium)
 
 		snapshot, err := store.InsertRankingSnapshot(ctx, database.InsertRankingSnapshotParams{
-			TenantID:    uuid.UUID{},
-			Cutoff:      database.Timestamptz(baseTime.Add(time.Hour)),
-			LookbackDays: 0,
-			CohortMode:  "spec",
+			TenantID:      uuid.UUID{},
+			Cutoff:        database.Timestamptz(baseTime.Add(time.Hour)),
+			LookbackDays:  0,
+			CohortMode:    "spec",
 			PolicyVersion: 1,
-			QueryVersion: 1,
+			QueryVersion:  1,
 		})
 		require.NoError(t, err)
 
@@ -258,12 +258,12 @@ func TestRankingSnapshots(t *testing.T) {
 		ctx := testutil.Context(t, testutil.WaitMedium)
 
 		snapshot, err := store.InsertRankingSnapshot(ctx, database.InsertRankingSnapshotParams{
-			TenantID:    uuid.UUID{},
-			Cutoff:      database.Timestamptz(baseTime.Add(time.Hour)),
-			LookbackDays: 0,
-			CohortMode:  "spec",
+			TenantID:      uuid.UUID{},
+			Cutoff:        database.Timestamptz(baseTime.Add(time.Hour)),
+			LookbackDays:  0,
+			CohortMode:    "spec",
 			PolicyVersion: 1,
-			QueryVersion: 1,
+			QueryVersion:  1,
 		})
 		require.NoError(t, err)
 		err = store.BatchInsertSnapshotMembersFromRankings(ctx, snapshot.ID)
@@ -316,12 +316,12 @@ func TestRankingSnapshots(t *testing.T) {
 		ctx := testutil.Context(t, testutil.WaitMedium)
 
 		snapshot, err := store.InsertRankingSnapshot(ctx, database.InsertRankingSnapshotParams{
-			TenantID:    uuid.UUID{},
-			Cutoff:      database.Timestamptz(baseTime.Add(time.Hour)),
-			LookbackDays: 0,
-			CohortMode:  "class",
+			TenantID:      uuid.UUID{},
+			Cutoff:        database.Timestamptz(baseTime.Add(time.Hour)),
+			LookbackDays:  0,
+			CohortMode:    "class",
 			PolicyVersion: 1,
-			QueryVersion: 1,
+			QueryVersion:  1,
 		})
 		require.NoError(t, err)
 		err = store.BatchInsertSnapshotMembersFromRankings(ctx, snapshot.ID)
@@ -351,12 +351,12 @@ func TestRankingSnapshots(t *testing.T) {
 
 		// Create and publish a snapshot with cutoff just after baseTime.
 		snapshot, err := store.InsertRankingSnapshot(ctx, database.InsertRankingSnapshotParams{
-			TenantID:    uuid.UUID{},
-			Cutoff:      database.Timestamptz(baseTime.Add(time.Hour)),
-			LookbackDays: 0,
-			CohortMode:  "spec",
+			TenantID:      uuid.UUID{},
+			Cutoff:        database.Timestamptz(baseTime.Add(time.Hour)),
+			LookbackDays:  0,
+			CohortMode:    "spec",
 			PolicyVersion: 1,
-			QueryVersion: 1,
+			QueryVersion:  1,
 		})
 		require.NoError(t, err)
 		err = store.BatchInsertSnapshotMembersFromRankings(ctx, snapshot.ID)
@@ -391,12 +391,12 @@ func TestRankingSnapshots(t *testing.T) {
 
 		// A new snapshot with a later cutoff SHOULD include P-IMMU.
 		snapshot2, err := store.InsertRankingSnapshot(ctx, database.InsertRankingSnapshotParams{
-			TenantID:    uuid.UUID{},
-			Cutoff:      database.Timestamptz(baseTime.Add(3 * time.Hour)),
-			LookbackDays: 0,
-			CohortMode:  "spec",
+			TenantID:      uuid.UUID{},
+			Cutoff:        database.Timestamptz(baseTime.Add(3 * time.Hour)),
+			LookbackDays:  0,
+			CohortMode:    "spec",
 			PolicyVersion: 1,
-			QueryVersion: 1,
+			QueryVersion:  1,
 		})
 		require.NoError(t, err)
 		err = store.BatchInsertSnapshotMembersFromRankings(ctx, snapshot2.ID)
@@ -425,13 +425,13 @@ func TestRankingSnapshots(t *testing.T) {
 
 		windowStart := baseTime.Add(-30 * 24 * time.Hour)
 		snapshot, err := store.InsertRankingSnapshot(ctx, database.InsertRankingSnapshotParams{
-			TenantID:    uuid.UUID{},
-			Cutoff:      database.Timestamptz(baseTime.Add(time.Hour)),
-			WindowStart: database.Timestamptz(windowStart),
-			LookbackDays: 30,
-			CohortMode:  "spec",
+			TenantID:      uuid.UUID{},
+			Cutoff:        database.Timestamptz(baseTime.Add(time.Hour)),
+			WindowStart:   database.Timestamptz(windowStart),
+			LookbackDays:  30,
+			CohortMode:    "spec",
 			PolicyVersion: 1,
-			QueryVersion: 1,
+			QueryVersion:  1,
 		})
 		require.NoError(t, err)
 		err = store.BatchInsertSnapshotMembersFromRankings(ctx, snapshot.ID)
@@ -488,12 +488,12 @@ func TestSnapshotDedupe(t *testing.T) {
 	ctx := testutil.Context(t, testutil.WaitMedium)
 
 	snapshot, err := store.InsertRankingSnapshot(ctx, database.InsertRankingSnapshotParams{
-		TenantID:    uuid.UUID{},
-		Cutoff:      database.Timestamptz(baseTime.Add(time.Hour)),
-		LookbackDays: 0,
-		CohortMode:  "spec",
+		TenantID:      uuid.UUID{},
+		Cutoff:        database.Timestamptz(baseTime.Add(time.Hour)),
+		LookbackDays:  0,
+		CohortMode:    "spec",
 		PolicyVersion: 1,
-		QueryVersion: 1,
+		QueryVersion:  1,
 	})
 	require.NoError(t, err)
 	err = store.BatchInsertSnapshotMembersFromRankings(ctx, snapshot.ID)

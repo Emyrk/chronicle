@@ -4407,6 +4407,18 @@ func (q *sqlQuerier) BatchInsertSnapshotMembersFromRankings(ctx context.Context,
 	return err
 }
 
+const countSnapshotMembers = `-- name: CountSnapshotMembers :one
+SELECT COUNT(*) FROM ranking_snapshot_members WHERE snapshot_id = $1
+`
+
+// Return the number of members in a snapshot.
+func (q *sqlQuerier) CountSnapshotMembers(ctx context.Context, snapshotID uuid.UUID) (int64, error) {
+	row := q.db.QueryRow(ctx, countSnapshotMembers, snapshotID)
+	var count int64
+	err := row.Scan(&count)
+	return count, err
+}
+
 const getEarliestSnapshotForInstance = `-- name: GetEarliestSnapshotForInstance :one
 SELECT rs.id, rs.tenant_id, rs.cutoff, rs.window_start, rs.lookback_days, rs.cohort_mode, rs.policy_version, rs.query_version, rs.min_parser_version_num, rs.min_addon_version_num, rs.status, rs.created_at, rs.published_at
 FROM ranking_snapshots rs
