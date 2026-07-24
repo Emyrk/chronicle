@@ -10,6 +10,10 @@ import (
 	"github.com/Emyrk/chronicle/combatlog/parser/guid"
 )
 
+const (
+	ragnarosEntry = 11502
+)
+
 func NewRagnarosCharacter(id guid.GUID, all *characters.Characters) (characters.Character, bool) {
 	if !id.IsCreature() {
 		return nil, false
@@ -20,7 +24,7 @@ func NewRagnarosCharacter(id guid.GUID, all *characters.Characters) (characters.
 		return nil, false
 	}
 
-	if entry != 11502 {
+	if entry != ragnarosEntry {
 		return nil, false
 	}
 
@@ -34,6 +38,65 @@ const (
 	sonOfFlame        = 12143
 	lavaSpawn         = 12265
 )
+
+// sonOfTheFlameCharacter propagates activity from Sons of Flame to
+// Ragnaros during his submerge phase, preventing the boss from timing
+// out while adds are still being fought.
+type sonOfTheFlameCharacter struct {
+	*characters.Common
+	all *characters.Characters
+}
+
+// NewSonOfTheFlameCharacter creates a character wrapper for Son of Flame
+// (entry 12143) that forwards every activity event to the active Ragnaros.
+func NewSonOfTheFlameCharacter(id guid.GUID, all *characters.Characters) (characters.Character, bool) {
+	entry, ok := id.GetEntry()
+	if !ok || entry != sonOfFlame {
+		return nil, false
+	}
+
+	return &sonOfTheFlameCharacter{
+		Common: characters.NewCommonCharacter(id, all),
+		all:    all,
+	}, true
+}
+
+// Process overrides Common.Process so that ProcessCommonActivity receives
+// the wrapper as the CharacterBase receiver, enabling dynamic dispatch to
+// our Start/Bump overrides.
+func (s *sonOfTheFlameCharacter) Process(m messages.Message) error {
+	cur, ok := s.Activity.Current()
+	if ok {
+		cur.HandleTimeout(m.Date())
+	}
+
+	return characters.ProcessCommonActivity(s, m)
+}
+
+// Start delegates to Common.Start, then bumps Ragnaros. Direct damage
+// routes through Start rather than Bump, so both must propagate.
+func (s *sonOfTheFlameCharacter) Start(reason string, m messages.Message) {
+	s.Common.Start(reason, m)
+	s.bumpRagnaros(m)
+}
+
+// Bump extends the Son's activity period and also bumps Ragnaros.
+// Periodic damage and mark bumps route through here.
+func (s *sonOfTheFlameCharacter) Bump(reason string, m messages.Message) {
+	s.Common.Bump(reason, m)
+	s.bumpRagnaros(m)
+}
+
+// bumpRagnaros refreshes the timeout of any currently active Ragnaros.
+// It never starts a new period — only bumps an existing active one.
+func (s *sonOfTheFlameCharacter) bumpRagnaros(m messages.Message) {
+	for _, rag := range s.all.ByEntry[ragnarosEntry] {
+		ragBase, ok := rag.(characters.CharacterBase)
+		if ok && ragBase.IsActive() {
+			ragBase.Bump("son_of_flame_activity", m)
+		}
+	}
+}
 
 func NewSulfuronHarbingerCharacter(id guid.GUID, all *characters.Characters) (characters.Character, bool) {
 	return characters.NewAdsGoWithBoss(sulfuronHarbinger, sonOfFlame, lavaSpawn)(id, all)

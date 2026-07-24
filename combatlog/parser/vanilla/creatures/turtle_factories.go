@@ -32,6 +32,7 @@ func VanillaCharacterFactories(flavor database.WoWFlavor) []characters.Character
 		NewCoreHoundCharacter,
 		NewMajordomoPartyCharacter,
 		NewIncindisCharacter,
+		NewSonOfTheFlameCharacter,
 		NewSulfuronHarbingerCharacter,
 		NewSmoldarisBasaltharCharacter,
 		NewSorcererThaneCharacter,
