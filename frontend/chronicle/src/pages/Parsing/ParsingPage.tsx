@@ -1,3 +1,4 @@
+import { Link } from "react-router-dom";
 import { parseColor, parseBgColor } from "@/pages/Instance/parseColors";
 
 /**
@@ -159,6 +160,17 @@ export function ParsingPage() {
             </div>
           ))}
         </div>
+      </section>
+
+      {/* Cohort viewer link */}
+      <section className="mb-8 p-4 bg-muted/30 rounded-lg">
+        <p className="text-muted-foreground">
+          Want to see the raw data?{" "}
+          <Link to="/parsing/cohorts" className="text-blue-400 hover:text-blue-300 font-medium">
+            Browse the cohort viewer
+          </Link>{" "}
+          to inspect the actual values and computed scores behind each parse bucket.
+        </p>
       </section>
     </div>
   );

@@ -145,6 +145,10 @@ func (s *Service) setupRoutes() {
 	// Instance parses
 	s.router.Get("/instances/{instanceID}/parses", s.handleInstanceParses)
 
+	// Cohort viewer (debugging/transparency)
+	s.router.Get("/snapshots", s.handleListSnapshots)
+	s.router.Get("/snapshots/{snapshotID}/cohort", s.handleSnapshotCohort)
+
 	// Speedrun leaderboard
 	s.router.Get("/speedrun", s.handleSpeedrunLeaderboard)
 	s.router.Get("/speedrun/instances", s.handleSpeedrunInstances)

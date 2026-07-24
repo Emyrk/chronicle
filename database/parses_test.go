@@ -739,4 +739,3 @@ func TestSnapshotDedupeDeterministic(t *testing.T) {
 	// With ORDER BY dps DESC, hps DESC the copy with higher HPS wins as tiebreak.
 	assert.Equal(t, 250.0, members[0].Hps, "should keep copy with higher HPS as tiebreak")
 }
-

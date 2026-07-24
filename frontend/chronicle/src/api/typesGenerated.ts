@@ -298,6 +298,51 @@ export interface ChronicleEncounterEvents {
     readonly start_time: string;
 }
 
+// From chroniclesdk/rankings.go
+/**
+ * CohortBucket describes one available (encounter, class, spec, difficulty, max_players) combination.
+ */
+export interface CohortBucket {
+    readonly encounter_name: string;
+    readonly player_class: string;
+    readonly player_spec: string;
+    readonly difficulty_name: string;
+    readonly max_players: number;
+}
+
+// From chroniclesdk/rankings.go
+/**
+ * CohortDebugEntry is a single datapoint in the cohort debug view.
+ */
+export interface CohortDebugEntry {
+    readonly rank: number;
+    readonly player_name: string;
+    readonly player_guid: string;
+    readonly metric_value: number;
+    readonly display_score: number;
+    readonly precise_score: number;
+    readonly killed_at: string;
+    readonly log_hashed_slug: string;
+}
+
+// From chroniclesdk/rankings.go
+/**
+ * CohortDebugResponse is the response for the cohort debug endpoint.
+ */
+export interface CohortDebugResponse {
+    readonly snapshot_id: string;
+    readonly encounter_name: string;
+    readonly player_class: string;
+    readonly player_spec: string;
+    readonly metric: string;
+    readonly total_kills: number;
+    readonly min_value: number;
+    readonly max_value: number;
+    readonly median_value: number;
+    readonly entries: readonly CohortDebugEntry[];
+    readonly buckets: readonly CohortBucket[];
+}
+
 // From chroniclesdk/server_application.go
 export interface CorePayload {
     readonly name: string;
@@ -1232,7 +1277,7 @@ export interface ParseConfig {
      */
     readonly cohort_mode?: string;
     /**
-     * DefaultLookbackDays is the default lookback window (0 = all-time).
+     * DefaultLookbackDays is the default lookback window (60 = last 60 days; 0 = all-time).
      */
     readonly default_lookback_days?: number;
     /**
@@ -1888,6 +1933,20 @@ export interface SiteConfig {
 // From chroniclesdk/server_application.go
 export interface SlugPayload {
     readonly slug: string;
+}
+
+// From chroniclesdk/rankings.go
+/**
+ * SnapshotSummary is a published snapshot listed for the cohort viewer.
+ */
+export interface SnapshotSummary {
+    readonly id: string;
+    readonly cutoff: string;
+    readonly lookback_days: number;
+    readonly cohort_mode: string;
+    readonly policy_version: number;
+    readonly member_count: number;
+    readonly published_at: string;
 }
 
 // From chroniclesdk/constants.go

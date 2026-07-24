@@ -163,6 +163,10 @@ type sqlcQuerier interface {
 	GetSharedViewByCode(ctx context.Context, code string) (SharedView, error)
 	GetSharedViewByInstanceAndHash(ctx context.Context, arg GetSharedViewByInstanceAndHashParams) (SharedView, error)
 	GetSiteConfig(ctx context.Context) (SiteConfig, error)
+	// Extended version of GetSnapshotCohortValues that includes identity fields
+	// for debugging/transparency. Joins to encounter_dps_rankings for player_name
+	// and log_hashed_slug.
+	GetSnapshotCohortDebug(ctx context.Context, arg GetSnapshotCohortDebugParams) ([]GetSnapshotCohortDebugRow, error)
 	// Per-boss cohort: ALL eligible kill metric values within a
 	// (snapshot, encounter, difficulty, max_players, class/spec) bucket.
 	// Each snapshot member row represents one kill (duplicate-group copies of the
@@ -265,6 +269,9 @@ type sqlcQuerier interface {
 	ListAllWoWLogGroupsWithOwnerPaginated(ctx context.Context, arg ListAllWoWLogGroupsWithOwnerPaginatedParams) ([]ListAllWoWLogGroupsWithOwnerPaginatedRow, error)
 	ListAllWoWServerRealms(ctx context.Context) ([]WowServerRealm, error)
 	ListDatasets(ctx context.Context) ([]Dataset, error)
+	// Return distinct (encounter_name, player_class, player_spec, difficulty_name, max_players)
+	// combinations available in a snapshot, for driving filter dropdowns.
+	ListDistinctCohortBuckets(ctx context.Context, snapshotID uuid.UUID) ([]ListDistinctCohortBucketsRow, error)
 	ListDistinctInstanceNames(ctx context.Context) ([]string, error)
 	ListGuildJoinRequests(ctx context.Context, guildID uuid.UUID) ([]ListGuildJoinRequestsRow, error)
 	// Guild Page Panels
@@ -277,6 +284,8 @@ type sqlcQuerier interface {
 	ListInstancesByTimeRange(ctx context.Context, arg ListInstancesByTimeRangeParams) ([]ListInstancesByTimeRangeRow, error)
 	ListLeaderboardVersionRequirements(ctx context.Context) ([]LeaderboardVersionRequirement, error)
 	ListModificationRequestsByApplicationID(ctx context.Context, applicationID uuid.UUID) ([]ApplicationModificationRequest, error)
+	// Return published snapshots for a tenant, most recent first.
+	ListPublishedSnapshots(ctx context.Context, tenantID uuid.UUID) ([]ListPublishedSnapshotsRow, error)
 	// Load ranking rows for a specific instance directly from encounter_dps_rankings.
 	// Used by the parses handler to get the viewed instance's own metric values
 	// independent of snapshot membership (the instance may not be a member of the

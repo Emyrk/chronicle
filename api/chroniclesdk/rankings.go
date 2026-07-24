@@ -215,3 +215,52 @@ type AdminTriggerSnapshotResponse struct {
 	JobID    int64  `json:"job_id"`
 	JobState string `json:"job_state"`
 }
+// ── Cohort Viewer (debugging) ────────────────────────────────────────────
+
+// SnapshotSummary is a published snapshot listed for the cohort viewer.
+type SnapshotSummary struct {
+	ID             uuid.UUID `json:"id"`
+	Cutoff         time.Time `json:"cutoff"`
+	LookbackDays   int32     `json:"lookback_days"`
+	CohortMode     string    `json:"cohort_mode"`
+	PolicyVersion  int16     `json:"policy_version"`
+	MemberCount    int64     `json:"member_count"`
+	PublishedAt    time.Time `json:"published_at"`
+}
+
+// CohortBucket describes one available (encounter, class, spec, difficulty, max_players) combination.
+type CohortBucket struct {
+	EncounterName  string `json:"encounter_name"`
+	PlayerClass    string `json:"player_class"`
+	PlayerSpec     string `json:"player_spec"`
+	DifficultyName string `json:"difficulty_name"`
+	MaxPlayers     int16  `json:"max_players"`
+}
+
+// CohortDebugEntry is a single datapoint in the cohort debug view.
+type CohortDebugEntry struct {
+	Rank          int       `json:"rank"`
+	PlayerName    string    `json:"player_name"`
+	PlayerGUID    string    `json:"player_guid"`
+	MetricValue   float64   `json:"metric_value"`
+	DisplayScore  int       `json:"display_score"`
+	PreciseScore  float64   `json:"precise_score"`
+	KilledAt      time.Time `json:"killed_at"`
+	LogHashedSlug string    `json:"log_hashed_slug"`
+}
+
+// CohortDebugResponse is the response for the cohort debug endpoint.
+type CohortDebugResponse struct {
+	SnapshotID    uuid.UUID          `json:"snapshot_id"`
+	EncounterName string             `json:"encounter_name"`
+	PlayerClass   string             `json:"player_class"`
+	PlayerSpec    string             `json:"player_spec"`
+	Metric        string             `json:"metric"`
+	TotalKills    int                `json:"total_kills"`
+	MinValue      float64            `json:"min_value"`
+	MaxValue      float64            `json:"max_value"`
+	MedianValue   float64            `json:"median_value"`
+	Entries       []CohortDebugEntry `json:"entries"`
+	Buckets       []CohortBucket     `json:"buckets"`
+}
+

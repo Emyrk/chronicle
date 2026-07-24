@@ -259,6 +259,55 @@ WHERE edr.encounter_id IS NOT NULL      -- boss kills only
   AND edr.killed_at < @cutoff
   AND (@window_start::timestamptz IS NULL OR edr.killed_at >= @window_start);
 
+-- name: ListPublishedSnapshots :many
+-- Return published snapshots for a tenant, most recent first.
+SELECT rs.*,
+       (SELECT COUNT(*) FROM ranking_snapshot_members WHERE snapshot_id = rs.id) AS member_count
+FROM ranking_snapshots rs
+WHERE rs.tenant_id = @tenant_id
+  AND rs.status = 'published'
+ORDER BY rs.published_at DESC
+LIMIT 50;
+
+-- name: GetSnapshotCohortDebug :many
+-- Extended version of GetSnapshotCohortValues that includes identity fields
+-- for debugging/transparency. Joins to encounter_dps_rankings for player_name
+-- and log_hashed_slug.
+SELECT
+    rsm.encounter_name,
+    rsm.player_guid,
+    edr.player_name,
+    rsm.player_class,
+    rsm.player_spec,
+    rsm.difficulty_name,
+    rsm.max_players,
+    rsm.killed_at,
+    edr.log_hashed_slug,
+    CASE WHEN @metric::text = 'hps' THEN rsm.hps ELSE rsm.dps END AS metric_value
+FROM ranking_snapshot_members rsm
+JOIN encounter_dps_rankings edr ON edr.id = rsm.ranking_id
+WHERE rsm.snapshot_id = @snapshot_id
+  AND rsm.encounter_name = @encounter_name
+  AND rsm.difficulty_name = @difficulty_name
+  AND rsm.max_players = @max_players
+  AND rsm.player_class = @player_class
+  AND (sqlc.narg('player_spec')::text IS NULL OR rsm.player_spec = @player_spec)
+  AND CASE WHEN @metric::text = 'hps' THEN rsm.hps ELSE rsm.dps END > 0
+ORDER BY CASE WHEN @metric::text = 'hps' THEN rsm.hps ELSE rsm.dps END DESC;
+
+-- name: ListDistinctCohortBuckets :many
+-- Return distinct (encounter_name, player_class, player_spec, difficulty_name, max_players)
+-- combinations available in a snapshot, for driving filter dropdowns.
+SELECT DISTINCT
+    rsm.encounter_name,
+    rsm.player_class,
+    rsm.player_spec,
+    rsm.difficulty_name,
+    rsm.max_players
+FROM ranking_snapshot_members rsm
+WHERE rsm.snapshot_id = @snapshot_id
+ORDER BY rsm.encounter_name, rsm.player_class, rsm.player_spec;
+
 -- name: GetLatestPublishedSnapshotForGuard :one
 -- Return the most recently published snapshot matching the full key dimensions
 -- used by the staleness guard (tenant, lookback, cohort_mode, policy_version, query_version).

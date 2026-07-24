@@ -4650,6 +4650,95 @@ func (q *sqlQuerier) GetRankingSnapshot(ctx context.Context, id uuid.UUID) (Rank
 	return i, err
 }
 
+const getSnapshotCohortDebug = `-- name: GetSnapshotCohortDebug :many
+SELECT
+    rsm.encounter_name,
+    rsm.player_guid,
+    edr.player_name,
+    rsm.player_class,
+    rsm.player_spec,
+    rsm.difficulty_name,
+    rsm.max_players,
+    rsm.killed_at,
+    edr.log_hashed_slug,
+    CASE WHEN $1::text = 'hps' THEN rsm.hps ELSE rsm.dps END AS metric_value
+FROM ranking_snapshot_members rsm
+JOIN encounter_dps_rankings edr ON edr.id = rsm.ranking_id
+WHERE rsm.snapshot_id = $2
+  AND rsm.encounter_name = $3
+  AND rsm.difficulty_name = $4
+  AND rsm.max_players = $5
+  AND rsm.player_class = $6
+  AND ($7::text IS NULL OR rsm.player_spec = $7)
+  AND CASE WHEN $1::text = 'hps' THEN rsm.hps ELSE rsm.dps END > 0
+ORDER BY CASE WHEN $1::text = 'hps' THEN rsm.hps ELSE rsm.dps END DESC
+`
+
+type GetSnapshotCohortDebugParams struct {
+	Metric         string      `db:"metric" json:"metric"`
+	SnapshotID     uuid.UUID   `db:"snapshot_id" json:"snapshot_id"`
+	EncounterName  string      `db:"encounter_name" json:"encounter_name"`
+	DifficultyName string      `db:"difficulty_name" json:"difficulty_name"`
+	MaxPlayers     int16       `db:"max_players" json:"max_players"`
+	PlayerClass    string      `db:"player_class" json:"player_class"`
+	PlayerSpec     pgtype.Text `db:"player_spec" json:"player_spec"`
+}
+
+type GetSnapshotCohortDebugRow struct {
+	EncounterName  string             `db:"encounter_name" json:"encounter_name"`
+	PlayerGuid     string             `db:"player_guid" json:"player_guid"`
+	PlayerName     string             `db:"player_name" json:"player_name"`
+	PlayerClass    string             `db:"player_class" json:"player_class"`
+	PlayerSpec     string             `db:"player_spec" json:"player_spec"`
+	DifficultyName string             `db:"difficulty_name" json:"difficulty_name"`
+	MaxPlayers     int16              `db:"max_players" json:"max_players"`
+	KilledAt       pgtype.Timestamptz `db:"killed_at" json:"killed_at"`
+	LogHashedSlug  string             `db:"log_hashed_slug" json:"log_hashed_slug"`
+	MetricValue    interface{}        `db:"metric_value" json:"metric_value"`
+}
+
+// Extended version of GetSnapshotCohortValues that includes identity fields
+// for debugging/transparency. Joins to encounter_dps_rankings for player_name
+// and log_hashed_slug.
+func (q *sqlQuerier) GetSnapshotCohortDebug(ctx context.Context, arg GetSnapshotCohortDebugParams) ([]GetSnapshotCohortDebugRow, error) {
+	rows, err := q.db.Query(ctx, getSnapshotCohortDebug,
+		arg.Metric,
+		arg.SnapshotID,
+		arg.EncounterName,
+		arg.DifficultyName,
+		arg.MaxPlayers,
+		arg.PlayerClass,
+		arg.PlayerSpec,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []GetSnapshotCohortDebugRow
+	for rows.Next() {
+		var i GetSnapshotCohortDebugRow
+		if err := rows.Scan(
+			&i.EncounterName,
+			&i.PlayerGuid,
+			&i.PlayerName,
+			&i.PlayerClass,
+			&i.PlayerSpec,
+			&i.DifficultyName,
+			&i.MaxPlayers,
+			&i.KilledAt,
+			&i.LogHashedSlug,
+			&i.MetricValue,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const getSnapshotCohortValues = `-- name: GetSnapshotCohortValues :many
 SELECT
     rsm.encounter_name,
@@ -4892,6 +4981,121 @@ func (q *sqlQuerier) InsertRankingSnapshotMember(ctx context.Context, arg Insert
 		arg.Hps,
 	)
 	return err
+}
+
+const listDistinctCohortBuckets = `-- name: ListDistinctCohortBuckets :many
+SELECT DISTINCT
+    rsm.encounter_name,
+    rsm.player_class,
+    rsm.player_spec,
+    rsm.difficulty_name,
+    rsm.max_players
+FROM ranking_snapshot_members rsm
+WHERE rsm.snapshot_id = $1
+ORDER BY rsm.encounter_name, rsm.player_class, rsm.player_spec
+`
+
+type ListDistinctCohortBucketsRow struct {
+	EncounterName  string `db:"encounter_name" json:"encounter_name"`
+	PlayerClass    string `db:"player_class" json:"player_class"`
+	PlayerSpec     string `db:"player_spec" json:"player_spec"`
+	DifficultyName string `db:"difficulty_name" json:"difficulty_name"`
+	MaxPlayers     int16  `db:"max_players" json:"max_players"`
+}
+
+// Return distinct (encounter_name, player_class, player_spec, difficulty_name, max_players)
+// combinations available in a snapshot, for driving filter dropdowns.
+func (q *sqlQuerier) ListDistinctCohortBuckets(ctx context.Context, snapshotID uuid.UUID) ([]ListDistinctCohortBucketsRow, error) {
+	rows, err := q.db.Query(ctx, listDistinctCohortBuckets, snapshotID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListDistinctCohortBucketsRow
+	for rows.Next() {
+		var i ListDistinctCohortBucketsRow
+		if err := rows.Scan(
+			&i.EncounterName,
+			&i.PlayerClass,
+			&i.PlayerSpec,
+			&i.DifficultyName,
+			&i.MaxPlayers,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listPublishedSnapshots = `-- name: ListPublishedSnapshots :many
+SELECT rs.id, rs.tenant_id, rs.cutoff, rs.window_start, rs.lookback_days, rs.cohort_mode, rs.policy_version, rs.query_version, rs.min_parser_version_num, rs.min_addon_version_num, rs.status, rs.created_at, rs.published_at, rs.source_row_count, rs.source_watermark,
+       (SELECT COUNT(*) FROM ranking_snapshot_members WHERE snapshot_id = rs.id) AS member_count
+FROM ranking_snapshots rs
+WHERE rs.tenant_id = $1
+  AND rs.status = 'published'
+ORDER BY rs.published_at DESC
+LIMIT 50
+`
+
+type ListPublishedSnapshotsRow struct {
+	ID                  uuid.UUID          `db:"id" json:"id"`
+	TenantID            uuid.UUID          `db:"tenant_id" json:"tenant_id"`
+	Cutoff              pgtype.Timestamptz `db:"cutoff" json:"cutoff"`
+	WindowStart         pgtype.Timestamptz `db:"window_start" json:"window_start"`
+	LookbackDays        int32              `db:"lookback_days" json:"lookback_days"`
+	CohortMode          string             `db:"cohort_mode" json:"cohort_mode"`
+	PolicyVersion       int16              `db:"policy_version" json:"policy_version"`
+	QueryVersion        int16              `db:"query_version" json:"query_version"`
+	MinParserVersionNum int64              `db:"min_parser_version_num" json:"min_parser_version_num"`
+	MinAddonVersionNum  int64              `db:"min_addon_version_num" json:"min_addon_version_num"`
+	Status              string             `db:"status" json:"status"`
+	CreatedAt           pgtype.Timestamptz `db:"created_at" json:"created_at"`
+	PublishedAt         pgtype.Timestamptz `db:"published_at" json:"published_at"`
+	SourceRowCount      int64              `db:"source_row_count" json:"source_row_count"`
+	SourceWatermark     pgtype.Timestamptz `db:"source_watermark" json:"source_watermark"`
+	MemberCount         int64              `db:"member_count" json:"member_count"`
+}
+
+// Return published snapshots for a tenant, most recent first.
+func (q *sqlQuerier) ListPublishedSnapshots(ctx context.Context, tenantID uuid.UUID) ([]ListPublishedSnapshotsRow, error) {
+	rows, err := q.db.Query(ctx, listPublishedSnapshots, tenantID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListPublishedSnapshotsRow
+	for rows.Next() {
+		var i ListPublishedSnapshotsRow
+		if err := rows.Scan(
+			&i.ID,
+			&i.TenantID,
+			&i.Cutoff,
+			&i.WindowStart,
+			&i.LookbackDays,
+			&i.CohortMode,
+			&i.PolicyVersion,
+			&i.QueryVersion,
+			&i.MinParserVersionNum,
+			&i.MinAddonVersionNum,
+			&i.Status,
+			&i.CreatedAt,
+			&i.PublishedAt,
+			&i.SourceRowCount,
+			&i.SourceWatermark,
+			&i.MemberCount,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
 }
 
 const listRankingsForInstance = `-- name: ListRankingsForInstance :many

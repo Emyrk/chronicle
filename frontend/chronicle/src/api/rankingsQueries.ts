@@ -8,6 +8,8 @@ import type {
   RankingsSuccessRate,
   KillTimeLeaderboardResponse,
   InstanceParsesResponse,
+  SnapshotSummary,
+  CohortDebugResponse,
 } from "./typesGenerated";
 
 const RANKINGS_STALE_TIME = 5 * 60 * 1000; // 5 minutes
@@ -153,6 +155,43 @@ export function useRankingsKillTimeLeaderboard(params: {
       ),
     staleTime: RANKINGS_STALE_TIME,
     enabled: !!params.instance_name,
+  });
+}
+
+export function useSnapshotsList() {
+  return useQuery({
+    queryKey: ["rankings", "snapshots"],
+    queryFn: () => fetchJSON<SnapshotSummary[]>("/api/v1/rankings/snapshots"),
+    staleTime: RANKINGS_STALE_TIME,
+  });
+}
+
+export function useSnapshotCohort(params: {
+  snapshotId: string;
+  encounter_name?: string;
+  class?: string;
+  spec?: string;
+  difficulty?: string;
+  max_players?: number;
+  metric?: "dps" | "hps";
+}) {
+  const searchParams = new URLSearchParams();
+  if (params.encounter_name) searchParams.set("encounter_name", params.encounter_name);
+  if (params.class) searchParams.set("class", params.class);
+  if (params.spec) searchParams.set("spec", params.spec);
+  if (params.difficulty !== undefined) searchParams.set("difficulty", params.difficulty);
+  if (params.max_players !== undefined) searchParams.set("max_players", String(params.max_players));
+  if (params.metric && params.metric !== "dps") searchParams.set("metric", params.metric);
+  const qs = searchParams.toString();
+
+  return useQuery({
+    queryKey: ["rankings", "snapshot-cohort", params],
+    queryFn: () =>
+      fetchJSON<CohortDebugResponse>(
+        `/api/v1/rankings/snapshots/${params.snapshotId}/cohort${qs ? `?${qs}` : ""}`,
+      ),
+    staleTime: RANKINGS_STALE_TIME,
+    enabled: !!params.snapshotId && !!params.encounter_name && !!params.class,
   });
 }
 
