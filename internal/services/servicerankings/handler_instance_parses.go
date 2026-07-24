@@ -65,16 +65,21 @@ func handleInstanceParsesWithStore(store parsesQuerier, logger *slog.Logger, w h
 	// Parse encounter_names filter.
 	encounterNames := splitCSV(q.Get("encounter_names"))
 
-	// Parse period (lookback days).
-	lookbackDays := parsepolicy.LookbackAllTime
+	// Parse period (lookback days). Default is 60 days to match what the
+	// worker publishes for tenants without explicit ParseConfig.
+	lookbackDays := parsepolicy.DefaultLookbackDays
 	if v := q.Get("period"); v != "" {
 		switch v {
 		case "30d":
 			lookbackDays = parsepolicy.Lookback30Days
+		case "60d":
+			lookbackDays = parsepolicy.Lookback60Days
 		case "90d":
 			lookbackDays = parsepolicy.Lookback90Days
 		case "180d":
 			lookbackDays = parsepolicy.Lookback180Days
+		case "all":
+			lookbackDays = parsepolicy.LookbackAllTime
 		}
 	}
 

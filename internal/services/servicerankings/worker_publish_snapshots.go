@@ -141,7 +141,7 @@ func isParseDisabled(parseConfigJSON []byte) bool {
 }
 
 // resolveLookbackDays returns the set of lookback windows to snapshot for a
-// tenant. Falls back to all-time only when no ParseConfig is present.
+// tenant. Falls back to the 60-day default when no ParseConfig is present.
 func resolveLookbackDays(parseConfigJSON []byte) []parsepolicy.LookbackDays {
 	if len(parseConfigJSON) > 0 {
 		var pc struct {
@@ -155,7 +155,7 @@ func resolveLookbackDays(parseConfigJSON []byte) []parsepolicy.LookbackDays {
 			return out
 		}
 	}
-	return []parsepolicy.LookbackDays{parsepolicy.LookbackAllTime}
+	return []parsepolicy.LookbackDays{parsepolicy.DefaultLookbackDays}
 }
 
 // ---------------------------------------------------------------------------

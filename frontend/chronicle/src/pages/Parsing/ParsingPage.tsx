@@ -40,14 +40,23 @@ export function ParsingPage() {
       <section className="mb-8">
         <h2 className="text-xl font-semibold mb-3">How Is the Score Computed?</h2>
         <p className="text-muted-foreground mb-3">
-          Chronicle collects <strong>every eligible kill</strong> on a given
-          boss into a comparison cohort — each raid counts as a separate
-          datapoint. Your metric (DPS or HPS) is then placed on a 0–100 scale
-          by <strong>linear interpolation</strong> between those values. If you
+          Chronicle collects every eligible kill from the{" "}
+          <strong>last 60 days</strong> on a given boss into a comparison
+          cohort — each raid counts as a separate datapoint. Your metric (DPS
+          or HPS) is then placed on a 0–100 scale by{" "}
+          <strong>linear interpolation</strong> between those values. If you
           match or beat the highest value in the cohort, you score 100.
           Performances with the same metric value receive the same score. On
           small servers this grows the dataset faster than a best-per-player
           approach and matches how parses (vs rankings) conventionally work.
+        </p>
+        <p className="text-muted-foreground mb-3">
+          The 60-day rolling window keeps scores reflecting the{" "}
+          <strong>current state of the server</strong> — as gear improves, new
+          buffs are discovered, and the player pool evolves, old kills age out
+          so the cohort stays relevant. The window is frozen at each daily
+          snapshot (see below), so all players in the same raid are compared
+          against the same dataset.
         </p>
       </section>
 
@@ -84,9 +93,10 @@ export function ParsingPage() {
         </h2>
         <p className="text-muted-foreground mb-3">
           Parse scores are computed against a dataset <strong>frozen at
-          00:00&nbsp;UTC each day</strong>. A raid is compared against all logs
-          uploaded before that day's snapshot. Uploads later the same day — or on
-          any future day — never change a raid's historical parse scores.
+          00:00&nbsp;UTC each day</strong>. A raid is compared against kills
+          from the last 60 days uploaded before that day's snapshot. Uploads
+          later the same day — or on any future day — never change a raid's
+          historical parse scores.
         </p>
         <p className="text-muted-foreground">
           A "current" comparison mode also exists, which uses the latest

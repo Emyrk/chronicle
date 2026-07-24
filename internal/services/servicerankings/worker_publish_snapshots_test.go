@@ -8,6 +8,7 @@ import (
 	"github.com/Emyrk/chronicle/combatlog/parser/guid"
 	"github.com/Emyrk/chronicle/database"
 	"github.com/Emyrk/chronicle/database/dbtestutil"
+	"github.com/Emyrk/chronicle/internal/parsepolicy"
 	"github.com/Emyrk/chronicle/internal/services/servicerankings"
 	"github.com/Emyrk/chronicle/internal/testutil"
 	"github.com/google/uuid"
@@ -452,6 +453,59 @@ func TestWorkerPublishParseSnapshotTenant(t *testing.T) {
 		assert.True(t, snap.WindowStart.Valid)
 	})
 
+	t.Run("Default60DayWindowBoundary", func(t *testing.T) {
+		t.Parallel()
+		pool, store, realmID := setupSnapshotTest(t)
+		ctx := testutil.Context(t, testutil.WaitMedium)
+
+		cutoff := time.Date(2024, 8, 1, 0, 0, 0, 0, time.UTC)
+		kill59DaysAgo := cutoff.AddDate(0, 0, -59) // within 60-day window
+		kill61DaysAgo := cutoff.AddDate(0, 0, -61) // outside 60-day window
+
+		insertRankingRow(t, pool, store, realmID, rankingOpts{
+			encounterName: "Ragnaros", instanceName: "Molten Core",
+			playerGUID: "P-Within", playerClass: "Warrior", playerSpec: "Fury",
+			difficultyName: "Normal", maxPlayers: 40,
+			damageDone: 150000, durationSecs: 300, dps: 500,
+			killedAt: kill59DaysAgo, isBoss: true,
+		})
+		insertRankingRow(t, pool, store, realmID, rankingOpts{
+			encounterName: "Ragnaros", instanceName: "Molten Core",
+			playerGUID: "P-Outside", playerClass: "Mage", playerSpec: "Fire",
+			difficultyName: "Normal", maxPlayers: 40,
+			damageDone: 180000, durationSecs: 300, dps: 600,
+			killedAt: kill61DaysAgo, isBoss: true,
+		})
+
+		worker := &servicerankings.WorkerPublishParseSnapshotTenant{
+			Store:  store,
+			Logger: slog.Default(),
+		}
+
+		err := worker.Work(ctx, &river.Job[servicerankings.ArgsPublishParseSnapshotTenant]{
+			Args: servicerankings.ArgsPublishParseSnapshotTenant{
+				TenantID:      uuid.Nil,
+				Cutoff:        cutoff,
+				LookbackDays:  int32(parsepolicy.DefaultLookbackDays),
+				PolicyVersion: 1,
+			},
+		})
+		require.NoError(t, err)
+
+		snap, err := store.GetLatestPublishedSnapshot(ctx, database.GetLatestPublishedSnapshotParams{
+			TenantID:     uuid.Nil,
+			LookbackDays: int32(parsepolicy.DefaultLookbackDays),
+		})
+		require.NoError(t, err)
+
+		memberCount, err := store.CountSnapshotMembers(ctx, snap.ID)
+		require.NoError(t, err)
+		// Kill 59 days before cutoff is included; kill 61 days before is excluded.
+		assert.Equal(t, int64(1), memberCount)
+		assert.True(t, snap.WindowStart.Valid)
+		assert.Equal(t, int32(parsepolicy.DefaultLookbackDays), snap.LookbackDays)
+	})
+
 	t.Run("TrashKillsExcluded", func(t *testing.T) {
 		t.Parallel()
 		pool, store, realmID := setupSnapshotTest(t)
@@ -592,7 +646,7 @@ func TestWorkerPublishParseSnapshotTenant(t *testing.T) {
 func TestResolveLookbackDays(t *testing.T) {
 	t.Parallel()
 
-	t.Run("NilConfigReturnsAllTime", func(t *testing.T) {
+	t.Run("NilConfigReturns60DayDefault", func(t *testing.T) {
 		t.Parallel()
 		// Use the InsertOpts for dispatch uniqueness testing — just verify the logic
 		// through the dispatch worker's internal resolution.

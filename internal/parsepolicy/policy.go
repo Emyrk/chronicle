@@ -35,8 +35,14 @@ type LookbackDays int
 const (
 	LookbackAllTime LookbackDays = 0
 	Lookback30Days  LookbackDays = 30
+	Lookback60Days  LookbackDays = 60
 	Lookback90Days  LookbackDays = 90
 	Lookback180Days LookbackDays = 180
+
+	// DefaultLookbackDays is the default rolling window used when no explicit
+	// configuration is present. 60 days keeps scores reflecting current server
+	// state (gear, buffs, player pool) while aging out stale data.
+	DefaultLookbackDays = Lookback60Days
 )
 
 // Sample-size thresholds. These count kill datapoints (not distinct players):
@@ -83,6 +89,6 @@ func DefaultPolicy(metric Metric) Policy {
 		Version:      PolicyVersion,
 		Metric:       metric,
 		CohortMode:   CohortModeSpec,
-		LookbackDays: LookbackAllTime,
+		LookbackDays: DefaultLookbackDays,
 	}
 }

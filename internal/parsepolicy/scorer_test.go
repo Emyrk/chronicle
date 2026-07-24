@@ -402,8 +402,8 @@ func TestPolicy(t *testing.T) {
 	if p.CohortMode != parsepolicy.CohortModeSpec {
 		t.Errorf("cohort_mode = %q, want %q", p.CohortMode, parsepolicy.CohortModeSpec)
 	}
-	if p.LookbackDays != parsepolicy.LookbackAllTime {
-		t.Errorf("lookback = %d, want %d", p.LookbackDays, parsepolicy.LookbackAllTime)
+	if p.LookbackDays != parsepolicy.DefaultLookbackDays {
+		t.Errorf("lookback = %d, want %d", p.LookbackDays, parsepolicy.DefaultLookbackDays)
 	}
 }
 

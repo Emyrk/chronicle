@@ -37,7 +37,7 @@ type ParseConfig struct {
 	// or "disabled". When disabled, no snapshots are created and the instance
 	// parses endpoint returns available=false.
 	CohortMode string `json:"cohort_mode,omitempty"`
-	// DefaultLookbackDays is the default lookback window (0 = all-time).
+	// DefaultLookbackDays is the default lookback window (60 = last 60 days; 0 = all-time).
 	DefaultLookbackDays int `json:"default_lookback_days,omitempty"`
 	// AllowedLookbackDays lists the selectable lookback windows.
 	AllowedLookbackDays []int `json:"allowed_lookback_days,omitempty"`

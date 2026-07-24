@@ -147,7 +147,7 @@ func (f parsesTestFixture) publishSnapshot(t *testing.T) database.RankingSnapsho
 	snap, err := f.store.InsertRankingSnapshot(ctx, database.InsertRankingSnapshotParams{
 		TenantID:      uuid.Nil,
 		Cutoff:        cutoff,
-		LookbackDays:  0,
+		LookbackDays:  int32(parsepolicy.DefaultLookbackDays),
 		CohortMode:    string(parsepolicy.CohortModeSpec),
 		PolicyVersion: int16(parsepolicy.PolicyVersion),
 		QueryVersion:  1,
@@ -717,7 +717,7 @@ func TestHandleInstanceParses_CanonicalResolution(t *testing.T) {
 			snap, sErr := store.InsertRankingSnapshot(ctx, database.InsertRankingSnapshotParams{
 				TenantID:      uuid.Nil,
 				Cutoff:        pgtype.Timestamptz{Time: cutoff, Valid: true},
-				LookbackDays:  0,
+				LookbackDays:  int32(parsepolicy.DefaultLookbackDays),
 				CohortMode:    string(parsepolicy.CohortModeSpec),
 				PolicyVersion: int16(parsepolicy.PolicyVersion),
 				QueryVersion:  1,
@@ -830,7 +830,7 @@ func TestHandleInstanceParses_CanonicalResolution(t *testing.T) {
 		snap, err := store.InsertRankingSnapshot(ctx, database.InsertRankingSnapshotParams{
 			TenantID:      uuid.Nil,
 			Cutoff:        pgtype.Timestamptz{Time: cutoffJuly, Valid: true},
-			LookbackDays:  0,
+			LookbackDays:  int32(parsepolicy.DefaultLookbackDays),
 			CohortMode:    string(parsepolicy.CohortModeSpec),
 			PolicyVersion: int16(parsepolicy.PolicyVersion),
 			QueryVersion:  1,
