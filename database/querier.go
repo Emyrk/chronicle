@@ -332,6 +332,9 @@ type sqlcQuerier interface {
 	// Returns box plot statistics (min, q1, median, q3, max, count) per class/spec.
 	// DPS is aggregated per run (sum damage / sum duration across encounters in one
 	// instance run), so each run is one data point. Matches leaderboard aggregation.
+	// Encounter counts are computed per realm: different realms (servers) can
+	// record different encounter names for the same instance, so requiring the
+	// union across realms would exclude every run when multiple realms are shown.
 	// Aggregate per player per run: sum damage/duration across encounters in one run.
 	// Each run becomes one data point for percentile computation.
 	// Only include runs where the player completed ALL encounters as the same spec.
@@ -355,6 +358,9 @@ type sqlcQuerier interface {
 	// Within a run, damage and duration are summed across encounters to get run DPS.
 	// Each player appears once with their highest-DPS run.
 	// Deduplicates by (player, encounter, duplicate_group) before aggregating.
+	// Encounter counts are computed per realm: different realms (servers) can
+	// record different encounter names for the same instance, so requiring the
+	// union across realms would exclude every run when multiple realms are shown.
 	// Step 1: aggregate per player per run (sum encounters within a single instance run).
 	// Step 2: pick each player's best run.
 	RankingsLeaderboard(ctx context.Context, arg RankingsLeaderboardParams) ([]RankingsLeaderboardRow, error)

@@ -5612,6 +5612,7 @@ WITH deduped AS (
         edr.encounter_name,
         edr.player_class,
         edr.player_spec,
+        edr.realm_id,
         edr.damage_done,
         edr.healing_done,
         edr.absorbed_done,
@@ -5647,8 +5648,10 @@ WITH deduped AS (
     ORDER BY edr.player_guid, edr.encounter_name, COALESCE(li.duplicate_group_id, li.id),
         (CASE WHEN $8 :: text = 'hps' THEN edr.hps ELSE edr.dps END) DESC
 ),
-total_encounters AS (
-    SELECT COUNT(DISTINCT d.encounter_name) AS cnt FROM deduped d
+realm_encounter_counts AS (
+    SELECT d.realm_id, COUNT(DISTINCT d.encounter_name) AS encounter_count
+    FROM deduped d
+    GROUP BY d.realm_id
 ),
 per_run AS (
     SELECT
@@ -5659,8 +5662,9 @@ per_run AS (
             ELSE SUM(d.damage_done)::double precision / NULLIF(SUM(d.duration_secs), 0)
         END)::double precision AS metric_value
     FROM deduped d
-    GROUP BY d.player_guid, d.run_id, d.player_class, d.player_spec
-    HAVING COUNT(DISTINCT d.encounter_name) = (SELECT cnt FROM total_encounters)
+    JOIN realm_encounter_counts rec ON rec.realm_id = d.realm_id
+    GROUP BY d.player_guid, d.run_id, d.player_class, d.player_spec, rec.encounter_count
+    HAVING COUNT(DISTINCT d.encounter_name) = rec.encounter_count
 )
 SELECT
     s.player_class,
@@ -5718,6 +5722,9 @@ type RankingsBoxPlotStatsRow struct {
 // Returns box plot statistics (min, q1, median, q3, max, count) per class/spec.
 // DPS is aggregated per run (sum damage / sum duration across encounters in one
 // instance run), so each run is one data point. Matches leaderboard aggregation.
+// Encounter counts are computed per realm: different realms (servers) can
+// record different encounter names for the same instance, so requiring the
+// union across realms would exclude every run when multiple realms are shown.
 // Aggregate per player per run: sum damage/duration across encounters in one run.
 // Each run becomes one data point for percentile computation.
 // Only include runs where the player completed ALL encounters as the same spec.
@@ -6144,6 +6151,11 @@ WITH deduped AS (
     ORDER BY edr.player_guid, edr.encounter_name, COALESCE(li.duplicate_group_id, li.id),
         (CASE WHEN $1 :: text = 'hps' THEN edr.hps ELSE edr.dps END) DESC
 ),
+realm_encounter_counts AS (
+    SELECT d.realm_id, COUNT(DISTINCT d.encounter_name) AS encounter_count
+    FROM deduped d
+    GROUP BY d.realm_id
+),
 per_run AS (
     SELECT
         d.player_guid,
@@ -6171,11 +6183,10 @@ per_run AS (
         MAX(d.killed_at)::timestamptz AS killed_at,
         COALESCE((array_agg(d.talent_sub_spec ORDER BY d.damage_done DESC))[1], '')::text AS talent_sub_spec
     FROM deduped d
-    GROUP BY d.player_guid, d.run_id
-    -- Only include runs where player has data for ALL encounters.
-    HAVING COUNT(DISTINCT d.encounter_name) = (
-        SELECT COUNT(DISTINCT d2.encounter_name) FROM deduped d2
-    )
+    JOIN realm_encounter_counts rec ON rec.realm_id = d.realm_id
+    GROUP BY d.player_guid, d.run_id, rec.encounter_count
+    -- Only include runs where player has data for ALL encounters on their realm.
+    HAVING COUNT(DISTINCT d.encounter_name) = rec.encounter_count
 ),
 aggregated AS (
     SELECT DISTINCT ON (pr.player_guid)
@@ -6262,6 +6273,9 @@ type RankingsLeaderboardRow struct {
 // Within a run, damage and duration are summed across encounters to get run DPS.
 // Each player appears once with their highest-DPS run.
 // Deduplicates by (player, encounter, duplicate_group) before aggregating.
+// Encounter counts are computed per realm: different realms (servers) can
+// record different encounter names for the same instance, so requiring the
+// union across realms would exclude every run when multiple realms are shown.
 // Step 1: aggregate per player per run (sum encounters within a single instance run).
 // Step 2: pick each player's best run.
 func (q *sqlQuerier) RankingsLeaderboard(ctx context.Context, arg RankingsLeaderboardParams) ([]RankingsLeaderboardRow, error) {
