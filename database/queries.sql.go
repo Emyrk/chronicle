@@ -4692,7 +4692,7 @@ const getSnapshotCohortValues = `-- name: GetSnapshotCohortValues :many
 SELECT
     rsm.encounter_name,
     rsm.player_guid,
-    CASE WHEN $1::text = 'hps' THEN MAX(rsm.hps) ELSE MAX(rsm.dps) END AS best_value
+    CASE WHEN $1::text = 'hps' THEN rsm.hps ELSE rsm.dps END AS metric_value
 FROM ranking_snapshot_members rsm
 WHERE rsm.snapshot_id = $2
   AND rsm.encounter_name = $3
@@ -4700,7 +4700,6 @@ WHERE rsm.snapshot_id = $2
   AND rsm.max_players = $5
   AND rsm.player_class = $6
   AND ($7::text IS NULL OR rsm.player_spec = $7)
-GROUP BY rsm.encounter_name, rsm.player_guid
 `
 
 type GetSnapshotCohortValuesParams struct {
@@ -4716,12 +4715,24 @@ type GetSnapshotCohortValuesParams struct {
 type GetSnapshotCohortValuesRow struct {
 	EncounterName string      `db:"encounter_name" json:"encounter_name"`
 	PlayerGuid    string      `db:"player_guid" json:"player_guid"`
-	BestValue     interface{} `db:"best_value" json:"best_value"`
+	MetricValue   interface{} `db:"metric_value" json:"metric_value"`
 }
 
-// Per-boss cohort: best metric value per player within a
+// Per-boss cohort: ALL eligible kill metric values within a
 // (snapshot, encounter, difficulty, max_players, class/spec) bucket.
-// Pass @cohort_mode = 'spec' to group by (class, spec), 'class' for class only.
+// Each snapshot member row represents one kill (duplicate-group copies of the
+// same raid are already collapsed to the best copy at insertion time by
+// BatchInsertSnapshotMembersFromRankings). A player with N separate raids
+// contributes N datapoints.
+//
+// Rationale: small servers have few players per spec; best-per-player caps the
+// cohort at player count and ratchets upward over time (players only improve
+// their best), inflating difficulty. All-kills cohorts grow with raid activity
+// (20 shamans × 5 raids = 100 datapoints) and keep typical performances in the
+// distribution. This matches Warcraft Logs' documented semantics: parses
+// compare against all logged kills; best-vs-best is reserved for
+// rankings/leaderboards (future #181).
+//
 // Pass @metric = 'dps' or 'hps' to select the value column.
 func (q *sqlQuerier) GetSnapshotCohortValues(ctx context.Context, arg GetSnapshotCohortValuesParams) ([]GetSnapshotCohortValuesRow, error) {
 	rows, err := q.db.Query(ctx, getSnapshotCohortValues,
@@ -4740,7 +4751,7 @@ func (q *sqlQuerier) GetSnapshotCohortValues(ctx context.Context, arg GetSnapsho
 	var items []GetSnapshotCohortValuesRow
 	for rows.Next() {
 		var i GetSnapshotCohortValuesRow
-		if err := rows.Scan(&i.EncounterName, &i.PlayerGuid, &i.BestValue); err != nil {
+		if err := rows.Scan(&i.EncounterName, &i.PlayerGuid, &i.MetricValue); err != nil {
 			return nil, err
 		}
 		items = append(items, i)

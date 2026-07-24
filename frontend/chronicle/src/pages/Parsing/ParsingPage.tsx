@@ -40,11 +40,14 @@ export function ParsingPage() {
       <section className="mb-8">
         <h2 className="text-xl font-semibold mb-3">How Is the Score Computed?</h2>
         <p className="text-muted-foreground mb-3">
-          Chronicle collects each player's <strong>best kill</strong> on a given
-          boss into a comparison cohort. Your metric (DPS or HPS) is then placed
-          on a 0–100 scale by <strong>linear interpolation</strong> between those
-          values. If you match or beat the highest value in the cohort, you
-          score 100. Players with the same metric value receive the same score.
+          Chronicle collects <strong>every eligible kill</strong> on a given
+          boss into a comparison cohort — each raid counts as a separate
+          datapoint. Your metric (DPS or HPS) is then placed on a 0–100 scale
+          by <strong>linear interpolation</strong> between those values. If you
+          match or beat the highest value in the cohort, you score 100.
+          Performances with the same metric value receive the same score. On
+          small servers this grows the dataset faster than a best-per-player
+          approach and matches how parses (vs rankings) conventionally work.
         </p>
       </section>
 
@@ -68,8 +71,8 @@ export function ParsingPage() {
         </p>
         <p className="text-muted-foreground">
           To keep things transparent, Chronicle always shows the{" "}
-          <strong>sample size</strong> ("N in cohort"). Scores require at least{" "}
-          <strong>5 players</strong> in the cohort; with 5–19 players a{" "}
+          <strong>sample size</strong> ("N kills in cohort"). Scores require at
+          least <strong>5 kills</strong> in the cohort; with 5–19 kills a{" "}
           <strong>low-confidence indicator</strong> is shown.
         </p>
       </section>

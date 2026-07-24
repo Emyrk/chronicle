@@ -157,22 +157,33 @@ LIMIT 1;
 SELECT start_time FROM log_instances WHERE id = @id;
 
 -- name: GetSnapshotCohortValues :many
--- Per-boss cohort: best metric value per player within a
+-- Per-boss cohort: ALL eligible kill metric values within a
 -- (snapshot, encounter, difficulty, max_players, class/spec) bucket.
--- Pass @cohort_mode = 'spec' to group by (class, spec), 'class' for class only.
+-- Each snapshot member row represents one kill (duplicate-group copies of the
+-- same raid are already collapsed to the best copy at insertion time by
+-- BatchInsertSnapshotMembersFromRankings). A player with N separate raids
+-- contributes N datapoints.
+--
+-- Rationale: small servers have few players per spec; best-per-player caps the
+-- cohort at player count and ratchets upward over time (players only improve
+-- their best), inflating difficulty. All-kills cohorts grow with raid activity
+-- (20 shamans × 5 raids = 100 datapoints) and keep typical performances in the
+-- distribution. This matches Warcraft Logs' documented semantics: parses
+-- compare against all logged kills; best-vs-best is reserved for
+-- rankings/leaderboards (future #181).
+--
 -- Pass @metric = 'dps' or 'hps' to select the value column.
 SELECT
     rsm.encounter_name,
     rsm.player_guid,
-    CASE WHEN @metric::text = 'hps' THEN MAX(rsm.hps) ELSE MAX(rsm.dps) END AS best_value
+    CASE WHEN @metric::text = 'hps' THEN rsm.hps ELSE rsm.dps END AS metric_value
 FROM ranking_snapshot_members rsm
 WHERE rsm.snapshot_id = @snapshot_id
   AND rsm.encounter_name = @encounter_name
   AND rsm.difficulty_name = @difficulty_name
   AND rsm.max_players = @max_players
   AND rsm.player_class = @player_class
-  AND (sqlc.narg('player_spec')::text IS NULL OR rsm.player_spec = @player_spec)
-GROUP BY rsm.encounter_name, rsm.player_guid;
+  AND (sqlc.narg('player_spec')::text IS NULL OR rsm.player_spec = @player_spec);
 
 -- name: ListSnapshotMembersForInstance :many
 -- List all snapshot members from a given instance.

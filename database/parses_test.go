@@ -298,7 +298,7 @@ func TestRankingSnapshots(t *testing.T) {
 		})
 		require.NoError(t, err)
 		assert.Len(t, armsValues, 1)
-		assert.Equal(t, 350.0, armsValues[0].BestValue)
+		assert.Equal(t, 350.0, armsValues[0].MetricValue)
 
 		// Mage Fire: should be P-D (600)
 		mageValues, err := store.GetSnapshotCohortValues(ctx, database.GetSnapshotCohortValuesParams{
@@ -312,7 +312,7 @@ func TestRankingSnapshots(t *testing.T) {
 		})
 		require.NoError(t, err)
 		assert.Len(t, mageValues, 1)
-		assert.Equal(t, 600.0, mageValues[0].BestValue)
+		assert.Equal(t, 600.0, mageValues[0].MetricValue)
 	})
 
 	t.Run("CohortIsolationByClass", func(t *testing.T) {
@@ -518,4 +518,95 @@ func TestSnapshotDedupe(t *testing.T) {
 	if len(members) > 0 {
 		assert.Equal(t, 450.0, members[0].Dps, "should keep the better DPS")
 	}
+}
+
+func TestCohortAllKills(t *testing.T) {
+	t.Parallel()
+
+	pool, store, realmID := setupParsesTest(t)
+	baseTime := time.Date(2024, 6, 1, 12, 0, 0, 0, time.UTC)
+
+	// Player X kills Ragnaros-AllKills in two separate raids — both should
+	// appear as separate cohort datapoints.
+	insertRankingRow(t, pool, store, realmID, rankingOpts{
+		encounterName: "Ragnaros-AllKills", instanceName: "Molten Core",
+		playerGUID: "P-X", playerClass: "Warrior", playerSpec: "Fury",
+		difficultyName: "Normal", maxPlayers: 40,
+		damageDone: 150000, durationSecs: 300, dps: 500,
+		killedAt: baseTime, isBoss: true,
+	})
+	insertRankingRow(t, pool, store, realmID, rankingOpts{
+		encounterName: "Ragnaros-AllKills", instanceName: "Molten Core",
+		playerGUID: "P-X", playerClass: "Warrior", playerSpec: "Fury",
+		difficultyName: "Normal", maxPlayers: 40,
+		damageDone: 120000, durationSecs: 300, dps: 400,
+		killedAt: baseTime.Add(24 * time.Hour), isBoss: true,
+	})
+
+	// Player Y kills the same boss once.
+	insertRankingRow(t, pool, store, realmID, rankingOpts{
+		encounterName: "Ragnaros-AllKills", instanceName: "Molten Core",
+		playerGUID: "P-Y", playerClass: "Warrior", playerSpec: "Fury",
+		difficultyName: "Normal", maxPlayers: 40,
+		damageDone: 135000, durationSecs: 300, dps: 450,
+		killedAt: baseTime, isBoss: true,
+	})
+
+	// Player Z has two uploads of the SAME kill (duplicate group) — only the
+	// best copy should appear.
+	dupGroup := uuid.New()
+	insertRankingRow(t, pool, store, realmID, rankingOpts{
+		encounterName: "Ragnaros-AllKills", instanceName: "Molten Core",
+		playerGUID: "P-Z", playerClass: "Warrior", playerSpec: "Fury",
+		difficultyName: "Normal", maxPlayers: 40,
+		damageDone: 99000, durationSecs: 300, dps: 330,
+		killedAt: baseTime, isBoss: true,
+		dupGroupID: &dupGroup,
+	})
+	insertRankingRow(t, pool, store, realmID, rankingOpts{
+		encounterName: "Ragnaros-AllKills", instanceName: "Molten Core",
+		playerGUID: "P-Z", playerClass: "Warrior", playerSpec: "Fury",
+		difficultyName: "Normal", maxPlayers: 40,
+		damageDone: 105000, durationSecs: 300, dps: 350,
+		killedAt: baseTime, isBoss: true,
+		dupGroupID: &dupGroup,
+	})
+
+	ctx := testutil.Context(t, testutil.WaitMedium)
+	snapshot, err := store.InsertRankingSnapshot(ctx, database.InsertRankingSnapshotParams{
+		TenantID:      uuid.UUID{},
+		Cutoff:        database.Timestamptz(baseTime.Add(48 * time.Hour)),
+		LookbackDays:  0,
+		CohortMode:    "spec",
+		PolicyVersion: 1,
+		QueryVersion:  1,
+	})
+	require.NoError(t, err)
+	err = store.BatchInsertSnapshotMembersFromRankings(ctx, snapshot.ID)
+	require.NoError(t, err)
+
+	cohort, err := store.GetSnapshotCohortValues(ctx, database.GetSnapshotCohortValuesParams{
+		SnapshotID:     snapshot.ID,
+		EncounterName:  "Ragnaros-AllKills",
+		DifficultyName: "Normal",
+		MaxPlayers:     40,
+		PlayerClass:    "Warrior",
+		PlayerSpec:     pgtype.Text{String: "Fury", Valid: true},
+		Metric:         "dps",
+	})
+	require.NoError(t, err)
+
+	// Expect 4 rows: P-X(500), P-X(400), P-Y(450), P-Z(350 best dup copy).
+	// NOT 3 (best-per-player) and NOT 5 (both dup copies).
+	assert.Len(t, cohort, 4, "all-kills cohort: 2 from P-X + 1 from P-Y + 1 from P-Z (dup collapsed)")
+
+	// Verify individual values.
+	values := make([]float64, 0, len(cohort))
+	for _, c := range cohort {
+		switch v := c.MetricValue.(type) {
+		case float64:
+			values = append(values, v)
+		}
+	}
+	assert.ElementsMatch(t, []float64{500, 400, 450, 350}, values)
 }

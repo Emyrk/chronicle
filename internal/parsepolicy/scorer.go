@@ -31,8 +31,10 @@ type ScoreResult struct {
 
 // Score computes a parse score for value against the given cohort.
 //
-// cohort must contain one best metric value per player, pre-deduplicated by
-// the caller. The slice is copied and sorted internally.
+// cohort contains one metric value per eligible kill in the bucket. A player
+// with N separate raids contributes N datapoints (duplicate-group copies of
+// the same kill are collapsed upstream). The slice is copied and sorted
+// internally.
 //
 // Returns an error description if value or any cohort entry is non-finite or
 // non-positive, or if the cohort is too small (< MinSampleForParse).

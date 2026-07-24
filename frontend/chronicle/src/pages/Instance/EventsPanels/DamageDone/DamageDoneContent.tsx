@@ -163,7 +163,7 @@ function ParsePillTooltipSingle({
         {" "}· Score {boss.precise_score.toFixed(1)}
       </p>
       <p className="text-xs text-zinc-400">
-        {boss.metric_value.toFixed(1)} DPS · {cohortBucketLabel(player, cohortMode)} · {boss.sample_size} in cohort
+        {boss.metric_value.toFixed(1)} DPS · {cohortBucketLabel(player, cohortMode)} · {boss.sample_size} kills in cohort
       </p>
       {isLow && (
         <p className="text-xs text-yellow-400">Low confidence (small sample)</p>

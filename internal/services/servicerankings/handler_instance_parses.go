@@ -321,7 +321,7 @@ func handleInstanceParsesWithStore(store parsesQuerier, logger *slog.Logger, w h
 				// Build cohort value slice.
 				cohort := make([]float64, 0, len(cohortRows))
 				for _, cr := range cohortRows {
-					if v, ok := toFloat64(cr.BestValue); ok && v > 0 {
+					if v, ok := toFloat64(cr.MetricValue); ok && v > 0 {
 						cohort = append(cohort, v)
 					}
 				}

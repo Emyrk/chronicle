@@ -39,12 +39,14 @@ const (
 	Lookback180Days LookbackDays = 180
 )
 
-// Sample-size thresholds.
+// Sample-size thresholds. These count kill datapoints (not distinct players):
+// a player with N separate raids contributes N entries to the cohort.
 const (
-	// MinSampleForParse is the minimum cohort size to produce any parse score.
+	// MinSampleForParse is the minimum cohort size (kill count) to produce any
+	// parse score.
 	MinSampleForParse = 5
-	// MinSampleForConfidence is the cohort size at which scores are no longer
-	// flagged as low-confidence.
+	// MinSampleForConfidence is the cohort size (kill count) at which scores
+	// are no longer flagged as low-confidence.
 	MinSampleForConfidence = 20
 )
 
