@@ -64,6 +64,42 @@ func (api *API) AdminTriggerParseSnapshot(w http.ResponseWriter, r *http.Request
 		return
 	}
 
+	if req.AllTenants && req.TenantID == "" {
+		store := database.New(api.Opts.Pool)
+		results, err := servicerankings.EnqueueParseSnapshotBackfillAllTenants(
+			ctx,
+			store,
+			api.Queues,
+			day,
+			req.LookbackDays,
+			int16(parsepolicy.PolicyVersion),
+		)
+		if err != nil {
+			httpapi.HandleResponseError(ctx, w, err, httpapi.APIError{
+				Response: chroniclesdk.Response{
+					Message: "Failed to enqueue all-tenants snapshot backfill",
+					Detail:  err.Error(),
+				},
+			})
+			return
+		}
+
+		jobs := make([]chroniclesdk.AdminTriggerSnapshotJobResult, 0, len(results))
+		for _, r := range results {
+			jobs = append(jobs, chroniclesdk.AdminTriggerSnapshotJobResult{
+				TenantID:     r.TenantID.String(),
+				LookbackDays: r.LookbackDays,
+				JobID:        r.JobID,
+				JobState:     r.JobState,
+			})
+		}
+
+		httpapi.Write(ctx, w, http.StatusAccepted, chroniclesdk.AdminTriggerSnapshotResponse{
+			Jobs: jobs,
+		})
+		return
+	}
+
 	result, err := servicerankings.EnqueueParseSnapshotBackfill(
 		ctx,
 		api.Queues,
@@ -83,8 +119,12 @@ func (api *API) AdminTriggerParseSnapshot(w http.ResponseWriter, r *http.Request
 	}
 
 	httpapi.Write(ctx, w, http.StatusAccepted, chroniclesdk.AdminTriggerSnapshotResponse{
-		JobID:    result.Job.ID,
-		JobState: string(result.Job.State),
+		Jobs: []chroniclesdk.AdminTriggerSnapshotJobResult{{
+			TenantID:     tenantID.String(),
+			LookbackDays: req.LookbackDays,
+			JobID:        result.Job.ID,
+			JobState:     string(result.Job.State),
+		}},
 	})
 }
 

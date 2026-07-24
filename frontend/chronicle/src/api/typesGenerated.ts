@@ -164,13 +164,32 @@ export interface AdminSnapshotSummary {
 
 // From chroniclesdk/rankings.go
 /**
+ * AdminTriggerSnapshotJobResult describes a single enqueued snapshot job.
+ */
+export interface AdminTriggerSnapshotJobResult {
+    readonly tenant_id: string;
+    readonly lookback_days: number;
+    readonly job_id: number;
+    readonly job_state: string;
+}
+
+// From chroniclesdk/rankings.go
+/**
  * AdminTriggerSnapshotRequest is the request body for the admin parse snapshot trigger.
  */
 export interface AdminTriggerSnapshotRequest {
     /**
      * TenantID scopes the snapshot to a specific tenant. Empty = root/all-time scope.
+     * Ignored when AllTenants is true.
      */
     readonly tenant_id: string;
+    /**
+     * AllTenants enqueues one job per non-disabled tenant (plus root), each
+     * using the tenant's own ParseConfig lookback windows. When true, TenantID
+     * is ignored and LookbackDays serves as the default for tenants without
+     * explicit AllowedLookbackDays.
+     */
+    readonly all_tenants: boolean;
     /**
      * LookbackDays overrides the default lookback window. 0 = all-time.
      */
@@ -185,11 +204,13 @@ export interface AdminTriggerSnapshotRequest {
 
 // From chroniclesdk/rankings.go
 /**
- * AdminTriggerSnapshotResponse is returned when a snapshot publication job is enqueued.
+ * AdminTriggerSnapshotResponse is returned when snapshot publication jobs are enqueued.
  */
 export interface AdminTriggerSnapshotResponse {
-    readonly job_id: number;
-    readonly job_state: string;
+    /**
+     * Jobs lists every enqueued job. For single-tenant requests this has one entry.
+     */
+    readonly jobs: readonly AdminTriggerSnapshotJobResult[];
 }
 
 // From chroniclesdk/user.go

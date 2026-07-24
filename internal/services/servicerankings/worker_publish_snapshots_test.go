@@ -1,10 +1,12 @@
 package servicerankings_test
 
 import (
+	"context"
 	"log/slog"
 	"testing"
 	"time"
 
+	"github.com/Emyrk/chronicle/chronicle/riverqueue"
 	"github.com/Emyrk/chronicle/combatlog/parser/guid"
 	"github.com/Emyrk/chronicle/database"
 	"github.com/Emyrk/chronicle/database/dbtestutil"
@@ -958,3 +960,98 @@ func TestDailyDispatchStalenessGuardStillApplies(t *testing.T) {
 	assert.Equal(t, snap1.ID, snap2.ID)
 }
 
+
+func setupQueueForTest(t *testing.T, pool *pgxpool.Pool) *riverqueue.Queues {
+	t.Helper()
+	ctx := testutil.Context(t, testutil.WaitShort)
+
+	q, err := riverqueue.New(ctx, riverqueue.Options{
+		Logger: slog.Default(),
+		Pool:   pool,
+	})
+	require.NoError(t, err)
+
+	// Register the worker and queue so river accepts the configuration.
+	riverqueue.AddWorker(q, &servicerankings.WorkerPublishParseSnapshotTenant{
+		Store:  database.New(pool),
+		Logger: slog.Default(),
+	})
+	q.AddQueue("rankings", river.QueueConfig{MaxWorkers: 1})
+
+	err = q.Start(ctx)
+	require.NoError(t, err)
+	t.Cleanup(func() { _ = q.Stop(context.Background()) })
+	return q
+}
+
+func TestEnqueueParseSnapshotBackfillAllTenants(t *testing.T) {
+	t.Parallel()
+
+	t.Run("EnqueuesRootPlusAllNonDisabledTenants", func(t *testing.T) {
+		t.Parallel()
+		pool, store, _ := setupSnapshotTest(t)
+		ctx := testutil.Context(t, testutil.WaitShort)
+		q := setupQueueForTest(t, pool)
+
+		// Create two tenants: one enabled, one disabled.
+		enabledTenant, err := store.InsertTenant(ctx, database.InsertTenantParams{
+			ID:               uuid.New(),
+			Name:             "enabled-tenant",
+			ParseConfig:      []byte(`{"cohort_mode":"spec","allowed_lookback_days":[30,90]}`),
+			IncludeInAll:     true,
+			AvailableFormats: []string{},
+		})
+		require.NoError(t, err)
+
+		_, err = store.InsertTenant(ctx, database.InsertTenantParams{
+			ID:               uuid.New(),
+			Name:             "disabled-tenant",
+			ParseConfig:      []byte(`{"cohort_mode":"disabled"}`),
+			IncludeInAll:     true,
+			AvailableFormats: []string{},
+		})
+		require.NoError(t, err)
+
+		day := time.Date(2024, 7, 1, 12, 0, 0, 0, time.UTC)
+		results, err := servicerankings.EnqueueParseSnapshotBackfillAllTenants(
+			ctx, store, q, day, 60, 1,
+		)
+		require.NoError(t, err)
+
+		// Root gets 1 job (default lookback = caller's 60), enabled tenant
+		// gets 2 jobs (30 + 90), disabled tenant is skipped.
+		assert.Len(t, results, 3, "expected root(1) + enabled(2) = 3 jobs")
+
+		// Verify root job.
+		assert.Equal(t, uuid.Nil, results[0].TenantID)
+		assert.Equal(t, int32(60), results[0].LookbackDays)
+
+		// Verify enabled tenant jobs use its own lookbacks.
+		tenantJobs := []servicerankings.BackfillJobResult{}
+		for _, r := range results {
+			if r.TenantID == enabledTenant.ID {
+				tenantJobs = append(tenantJobs, r)
+			}
+		}
+		assert.Len(t, tenantJobs, 2)
+		lookbacks := []int32{tenantJobs[0].LookbackDays, tenantJobs[1].LookbackDays}
+		assert.Contains(t, lookbacks, int32(30))
+		assert.Contains(t, lookbacks, int32(90))
+	})
+
+	t.Run("SingleTenantPathUnchanged", func(t *testing.T) {
+		t.Parallel()
+		pool, _, _ := setupSnapshotTest(t)
+		q := setupQueueForTest(t, pool)
+		ctx := testutil.Context(t, testutil.WaitShort)
+
+		tenantID := uuid.New()
+		day := time.Date(2024, 7, 1, 12, 0, 0, 0, time.UTC)
+		result, err := servicerankings.EnqueueParseSnapshotBackfill(
+			ctx, q, tenantID, day, 60, 1,
+		)
+		require.NoError(t, err)
+		assert.NotZero(t, result.Job.ID)
+		assert.Equal(t, servicerankings.KindPublishParseSnapshotTenant, result.Job.Kind)
+	})
+}
