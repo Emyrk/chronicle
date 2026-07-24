@@ -1,5 +1,5 @@
-import { useMemo, useState } from "react";
-import { Link } from "react-router-dom";
+import { useCallback, useMemo } from "react";
+import { Link, useSearchParams } from "react-router-dom";
 import { useSnapshotsList, useSnapshotCohort } from "@/api/rankingsQueries";
 import { parseColor, parseBgColor } from "@/pages/Instance/parseColors";
 import type { CohortBucket } from "@/api/typesGenerated";
@@ -16,13 +16,43 @@ function formatDate(d: string | Date): string {
 export function CohortViewerPage() {
   const { data: snapshots, isLoading: snapshotsLoading } = useSnapshotsList();
 
-  const [selectedSnapshotId, setSelectedSnapshotId] = useState<string>("");
-  const [encounterName, setEncounterName] = useState<string>("");
-  const [playerClass, setPlayerClass] = useState<string>("");
-  const [playerSpec, setPlayerSpec] = useState<string>("");
-  const [difficulty, setDifficulty] = useState<string>("");
-  const [maxPlayers, setMaxPlayers] = useState<number | undefined>(undefined);
-  const [metric, setMetric] = useState<"dps" | "hps">("dps");
+  // All selections live in the URL so a cohort view can be linked/shared,
+  // e.g. /parsing/cohorts?snapshot=...&encounter=Ragnaros&class=WARRIOR&metric=hps
+  const [searchParams, setSearchParams] = useSearchParams();
+  const selectedSnapshotId = searchParams.get("snapshot") ?? "";
+  const encounterName = searchParams.get("encounter") ?? "";
+  const playerClass = searchParams.get("class") ?? "";
+  const playerSpec = searchParams.get("spec") ?? "";
+  const difficulty = searchParams.get("difficulty") ?? "";
+  const maxPlayersRaw = Number(searchParams.get("max_players") ?? "");
+  const maxPlayers = Number.isFinite(maxPlayersRaw) && maxPlayersRaw > 0 ? maxPlayersRaw : undefined;
+  const metric: "dps" | "hps" = searchParams.get("metric") === "hps" ? "hps" : "dps";
+
+  // Apply several param changes at once (dropdowns cascade: picking a
+  // snapshot resets encounter/class/spec, etc.). Empty values delete the
+  // param to keep URLs short. replace avoids history spam while clicking
+  // through dropdowns.
+  const updateParams = useCallback(
+    (changes: Record<string, string>) => {
+      setSearchParams(
+        (prev) => {
+          const next = new URLSearchParams(prev);
+          for (const [key, value] of Object.entries(changes)) {
+            if (value) next.set(key, value);
+            else next.delete(key);
+          }
+          return next;
+        },
+        { replace: true },
+      );
+    },
+    [setSearchParams],
+  );
+
+  const setPlayerSpec = (v: string) => updateParams({ spec: v });
+  const setDifficulty = (v: string) => updateParams({ difficulty: v });
+  const setMaxPlayers = (v: number | undefined) => updateParams({ max_players: v ? String(v) : "" });
+  const setMetric = (v: "dps" | "hps") => updateParams({ metric: v === "dps" ? "" : v });
 
   const { data: cohort, isLoading: cohortLoading } = useSnapshotCohort({
     snapshotId: selectedSnapshotId,
@@ -96,12 +126,9 @@ export function CohortViewerPage() {
             <select
               className="w-full rounded border border-border bg-background px-3 py-2 text-sm"
               value={selectedSnapshotId}
-              onChange={(e) => {
-                setSelectedSnapshotId(e.target.value);
-                setEncounterName("");
-                setPlayerClass("");
-                setPlayerSpec("");
-              }}
+              onChange={(e) =>
+                updateParams({ snapshot: e.target.value, encounter: "", class: "", spec: "" })
+              }
             >
               <option value="">Select a snapshot…</option>
               {snapshots.map((s) => (
@@ -119,11 +146,7 @@ export function CohortViewerPage() {
           <select
             className="w-full rounded border border-border bg-background px-3 py-2 text-sm"
             value={encounterName}
-            onChange={(e) => {
-              setEncounterName(e.target.value);
-              setPlayerClass("");
-              setPlayerSpec("");
-            }}
+            onChange={(e) => updateParams({ encounter: e.target.value, class: "", spec: "" })}
             disabled={!selectedSnapshotId}
           >
             <option value="">{encounters.length ? "Select encounter…" : "Load a snapshot first"}</option>
@@ -140,10 +163,7 @@ export function CohortViewerPage() {
           <select
             className="w-full rounded border border-border bg-background px-3 py-2 text-sm"
             value={playerClass}
-            onChange={(e) => {
-              setPlayerClass(e.target.value);
-              setPlayerSpec("");
-            }}
+            onChange={(e) => updateParams({ class: e.target.value, spec: "" })}
             disabled={!encounterName}
           >
             <option value="">{classes.length ? "Select class…" : "Select encounter first"}</option>
