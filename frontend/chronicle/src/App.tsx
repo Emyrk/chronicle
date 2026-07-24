@@ -6,6 +6,7 @@ import { Privacy } from "./pages/Privacy"
 import { Disclaimer } from "./pages/Disclaimer"
 import { SupportedInstances } from "./pages/SupportedInstances"
 import { Terms } from "./pages/Terms"
+import { ParsingPage } from "./pages/Parsing/ParsingPage"
 import { Empty } from "./pages/Empty"
 import { Upload } from "./pages/Upload/Upload"
 import { LogsList } from "./pages/Logs/LogsList"
@@ -161,6 +162,7 @@ function App() {
         <Route path="/disclaimer" element={<Disclaimer />} />
         <Route path="/supported" element={<SupportedInstances />} />
         <Route path="/terms" element={<Terms />} />
+        <Route path="/parsing" element={<ParsingPage />} />
         <Route path="/g/:guildId" element={<GuildPage />} />
         <Route path="/g/:guildId/:tabSlug" element={<GuildPage />} />
         <Route path="/g/:guildId/edit" element={<GuildPageEditor />} />

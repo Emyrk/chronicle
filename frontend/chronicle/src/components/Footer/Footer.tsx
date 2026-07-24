@@ -60,6 +60,11 @@ export function Footer() {
                 </Link>
               </li>
               <li>
+                <Link to="/parsing" className="hover:text-foreground transition-colors">
+                  Parsing
+                </Link>
+              </li>
+              <li>
                 <Link to="/wowdb" className="hover:text-foreground transition-colors">
                   WoW Database
                 </Link>
