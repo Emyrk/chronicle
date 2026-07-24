@@ -45,33 +45,33 @@ type Spell struct {
 	ActiveIcon dbcmem.SpellIcon `json:"active_icon"` // Icon shown while spell is active/channeling (often zero)
 
 	// === Level Requirements ===
-	MaxLevel       int32           `json:"max_level"`        // Level cap for scaling (0 = no cap)
-	BaseLevel      int32           `json:"base_level"`       // Minimum player level to use this spell
-	SpellLevel     int32           `json:"spell_level"`      // Spell's own level for scaling calculations
+	MaxLevel       int32                `json:"max_level"`        // Level cap for scaling (0 = no cap)
+	BaseLevel      int32                `json:"base_level"`       // Minimum player level to use this spell
+	SpellLevel     int32                `json:"spell_level"`      // Spell's own level for scaling calculations
 	Category       dbcmem.SpellCategory `json:"category"`         // Resolved spell category from SpellCategory.dbc
-	MaxTargetLevel int32           `json:"max_target_level"` // Maximum target level (0 = no limit, used for CC diminishing)
+	MaxTargetLevel int32                `json:"max_target_level"` // Maximum target level (0 = no limit, used for CC diminishing)
 
 	// === Behavior ===
 	// 3.3.5a uses SchoolMask instead of School. Bitmask of damage schools (1=Phys,2=Holy,4=Fire,8=Nature,16=Frost,32=Shadow,64=Arcane)
-	School             School             `json:"school"`           // Magic school: physical, holy, fire, nature, frost, shadow, arcane
-	SpellPriority      int32              `json:"spell_priority"`   // AI priority for NPC spell selection
-	StanceBarOrder     int32              `json:"stance_bar_order"` // Position on stance/shapeshift action bar
-	ProcTypeMask       bitmask.Bitmask32  `json:"proc_type_mask"`   // Events that can trigger this spell (on hit, on crit, on kill, etc.)
-	ProcFlags          ProcFlags          `json:"proc_flags"`       // Additional proc configuration
-	ProcChance         int32              `json:"proc_chance"`      // Percent chance to proc (>100 means server-side calculation)
-	ProcCharges        int32              `json:"proc_charges"`     // Number of times proc can trigger before aura fades (0 = unlimited)
-	Speed              float32            `json:"speed"`            // Projectile travel speed in yards/sec (0 = instant)
-	DispelType         DispelType         `json:"dispel_type"`      // Dispel category: 0=none, 1=magic, 2=curse, 3=disease, 4=poison
-	AuraInterruptFlags AuraInterruptFlags `json:"aura_interrupt_flags"`
-	ModalNextSpell     int32              `json:"modal_next_spell"`  // The "Modal" suggests it's about spells that share a button slot but swap based on game state.
-	InterruptFlags     InterruptFlags     `json:"interrupt_flags"`   // what can interrupt a spell while casting (different from AuraInterruptFlags which is for buffs).
-	CumulativeAura     int32              `json:"cumulative_aura"`   // Max charges I think?
-	Mechanic           Mechanic           `json:"mechanic"`          // Combat mechanic: stun, root, silence, etc. (for immunity checks)
-	DefenseType        DefenseType        `json:"defense_type"`      // How the target can defend against this spell
-	CasterAuraState    AuraState          `json:"caster_aura_state"` // what state the target must be in for the spell to be usable.
-	TargetAuraState    AuraState          `json:"target_aura_state"`
-	MaxTargets         int32              `json:"max_targets"`
-	TargetCreatureType TargetCreatureType `json:"target_creature_type"`
+	School             School                  `json:"school"`           // Magic school: physical, holy, fire, nature, frost, shadow, arcane
+	SpellPriority      int32                   `json:"spell_priority"`   // AI priority for NPC spell selection
+	StanceBarOrder     int32                   `json:"stance_bar_order"` // Position on stance/shapeshift action bar
+	ProcTypeMask       bitmask.Bitmask32       `json:"proc_type_mask"`   // Events that can trigger this spell (on hit, on crit, on kill, etc.)
+	ProcFlags          ProcFlags               `json:"proc_flags"`       // Additional proc configuration
+	ProcChance         int32                   `json:"proc_chance"`      // Percent chance to proc (>100 means server-side calculation)
+	ProcCharges        int32                   `json:"proc_charges"`     // Number of times proc can trigger before aura fades (0 = unlimited)
+	Speed              float32                 `json:"speed"`            // Projectile travel speed in yards/sec (0 = instant)
+	DispelType         DispelType              `json:"dispel_type"`      // Dispel category: 0=none, 1=magic, 2=curse, 3=disease, 4=poison
+	AuraInterruptFlags AuraInterruptFlags      `json:"aura_interrupt_flags"`
+	ModalNextSpell     int32                   `json:"modal_next_spell"`  // The "Modal" suggests it's about spells that share a button slot but swap based on game state.
+	InterruptFlags     InterruptFlags          `json:"interrupt_flags"`   // what can interrupt a spell while casting (different from AuraInterruptFlags which is for buffs).
+	CumulativeAura     int32                   `json:"cumulative_aura"`   // Max charges I think?
+	Mechanic           Mechanic                `json:"mechanic"`          // Combat mechanic: stun, root, silence, etc. (for immunity checks)
+	DefenseType        DefenseType             `json:"defense_type"`      // How the target can defend against this spell
+	CasterAuraState    AuraState               `json:"caster_aura_state"` // what state the target must be in for the spell to be usable.
+	TargetAuraState    AuraState               `json:"target_aura_state"`
+	MaxTargets         int32                   `json:"max_targets"`
+	TargetCreatureType TargetCreatureType      `json:"target_creature_type"`
 	SpellFocus         dbcmem.SpellFocusObject `json:"requires_spell_focus"` // Resolved focus object from SpellFocusObject.dbc
 
 	// === Resource Cost ===
@@ -103,25 +103,25 @@ type Spell struct {
 	PreventionType       PreventionType       `json:"prevention_type"`
 
 	// === Effect Data (up to 3 effects per spell, index 0-2) ===
-	Effect                   [3]Effect         `json:"effect"`                       // Effect type: damage, heal, apply aura, summon, etc.
-	EffectDieSides           [3]int32          `json:"effect_die_sides"`             // Random range: value = BasePoints + rand(1, DieSides)
-	EffectRealPointsPerLevel [3]float32        `json:"effect_real_points_per_level"` // Bonus points per caster level (for scaling)
-	EffectBasePoints         [3]int32          `json:"effect_base_points"`           // Base value for effect calculations
-	EffectMechanic           [3]int32          `json:"effect_mechanic"`              // Combat mechanic: stun, root, bleed, etc. (for immunity checks)
+	Effect                   [3]Effect             `json:"effect"`                       // Effect type: damage, heal, apply aura, summon, etc.
+	EffectDieSides           [3]int32              `json:"effect_die_sides"`             // Random range: value = BasePoints + rand(1, DieSides)
+	EffectRealPointsPerLevel [3]float32            `json:"effect_real_points_per_level"` // Bonus points per caster level (for scaling)
+	EffectBasePoints         [3]int32              `json:"effect_base_points"`           // Base value for effect calculations
+	EffectMechanic           [3]int32              `json:"effect_mechanic"`              // Combat mechanic: stun, root, bleed, etc. (for immunity checks)
 	EffectRadius             [3]dbcmem.SpellRadius `json:"effect_radius"`                // Resolved AoE radius from SpellRadius.dbc
-	EffectAura               [3]AuraEffect     `json:"effect_aura"`                  // Aura type if Effect is ApplyAura (mod stat, periodic damage, etc.)
-	EffectAuraPeriod         [3]int32          `json:"effect_aura_period"`           // Tick interval in ms for periodic effects (e.g., 3000 = 3 sec)
-	EffectAmplitude          [3]float32        `json:"effect_amplitude"`             // Amplitude modifier for periodic effects
-	EffectChainTargets       [3]int32          `json:"effect_chain_targets"`         // Number of chain/bounce targets (Chain Lightning, etc.)
-	EffectItemType           [3]ItemID         `json:"effect_item_type"`             // Item created/affected by effect (Conjure Water creates item 5350)
-	EffectMiscValue          [3]int32          `json:"effect_misc_value"`            // Context-dependent: stat type, power type, creature ID, etc.
-	EffectTriggerSpell       [3]SpellID        `json:"effect_trigger_spell"`         // Spell triggered by this effect (procs, chain casts)
-	EffectPointsPerCombo     [3]float32        `json:"effect_points_per_combo"`      // Bonus points per combo point (rogue/druid finishers)
-	EffectBaseDice           [3]int32          `json:"effect_base_dice"`             // Base dice count for damage variance
-	EffectDicePerLevel       [3]int32          `json:"effect_dice_per_level"`        // Additional dice per caster level
-	EffectChainAmplitude     [3]float32        `json:"effect_chain_amplitude"`       // Damage multiplier per chain bounce (e.g., 0.7 = 30% reduction)
-	ImplicitTargetA          [3]ImplicitTarget `json:"implicit_target_a"`            // Primary targeting for each effect: who/what the effect affects (self, enemy, ally, area, etc.)
-	ImplicitTargetB          [3]ImplicitTarget `json:"implicit_target_b"`            // Secondary targeting for each effect: typically the location/destination (used for movement, AoE placement, etc.)
+	EffectAura               [3]AuraEffect         `json:"effect_aura"`                  // Aura type if Effect is ApplyAura (mod stat, periodic damage, etc.)
+	EffectAuraPeriod         [3]int32              `json:"effect_aura_period"`           // Tick interval in ms for periodic effects (e.g., 3000 = 3 sec)
+	EffectAmplitude          [3]float32            `json:"effect_amplitude"`             // Amplitude modifier for periodic effects
+	EffectChainTargets       [3]int32              `json:"effect_chain_targets"`         // Number of chain/bounce targets (Chain Lightning, etc.)
+	EffectItemType           [3]ItemID             `json:"effect_item_type"`             // Item created/affected by effect (Conjure Water creates item 5350)
+	EffectMiscValue          [3]int32              `json:"effect_misc_value"`            // Context-dependent: stat type, power type, creature ID, etc.
+	EffectTriggerSpell       [3]SpellID            `json:"effect_trigger_spell"`         // Spell triggered by this effect (procs, chain casts)
+	EffectPointsPerCombo     [3]float32            `json:"effect_points_per_combo"`      // Bonus points per combo point (rogue/druid finishers)
+	EffectBaseDice           [3]int32              `json:"effect_base_dice"`             // Base dice count for damage variance
+	EffectDicePerLevel       [3]int32              `json:"effect_dice_per_level"`        // Additional dice per caster level
+	EffectChainAmplitude     [3]float32            `json:"effect_chain_amplitude"`       // Damage multiplier per chain bounce (e.g., 0.7 = 30% reduction)
+	ImplicitTargetA          [3]ImplicitTarget     `json:"implicit_target_a"`            // Primary targeting for each effect: who/what the effect affects (self, enemy, ally, area, etc.)
+	ImplicitTargetB          [3]ImplicitTarget     `json:"implicit_target_b"`            // Secondary targeting for each effect: typically the location/destination (used for movement, AoE placement, etc.)
 
 	// === Totem Requirements (Shaman) ===
 	TotemsID int32     `json:"totems_id"` // Totem category/type ID
@@ -256,6 +256,8 @@ func (s Spell) SpellDamageType() SpellDamageType {
 	var base SpellDamageType
 
 	switch s.ID {
+	case 46079: // Detect Archmage Evanor (Detect Quest Invis)
+		return SpellDamageNoEngageCombat
 	case 64205: // Divine Sacrifice
 		// Seems to consistently affect mobs post-death.
 		return SpellDamageNoEngageCombat
