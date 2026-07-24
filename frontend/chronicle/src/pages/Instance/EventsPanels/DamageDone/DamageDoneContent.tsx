@@ -13,6 +13,8 @@ import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/comp
 import { ChevronLeft, Layers } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useInstanceParses } from "@/api/rankingsQueries";
+import { useSyncModeContextOptional } from "../../SyncModeContext";
+import { useTimeRangeContextOptional } from "../../TimeRangeContext";
 import { parseHexColor, parseColor } from "../../parseColors";
 import type { InstanceParsePlayer, InstanceParseBoss } from "@/api/typesGenerated";
 
@@ -295,7 +297,22 @@ export const DamageDoneContent = (props: DamageDoneContentProps) => {
       .map((e) => e.name);
   }, [context.instance.encounters, context.selectedEncounterIds]);
 
-  const showParsePills = sourceType === "players" && !props.hasCustomFilters && !focusedPlayerId;
+  // Parse pills compare full-encounter values against the snapshot cohort, so
+  // hide them whenever the displayed damage no longer represents the full
+  // encounter: live sync mode (partial playback), an active time-range
+  // selection, or an enemy selection (damage vs those enemies only).
+  const syncMode = useSyncModeContextOptional();
+  const timeRange = useTimeRangeContextOptional();
+  const timeRangeActive =
+    !!timeRange?.enabled && (timeRange.startOffsetMs != null || timeRange.endOffsetMs != null);
+  const enemySelected = context.entitySelection.enemyIds.size > 0;
+  const showParsePills =
+    sourceType === "players" &&
+    !props.hasCustomFilters &&
+    !focusedPlayerId &&
+    !syncMode?.enabled &&
+    !timeRangeActive &&
+    !enemySelected;
 
   const { data: parsesData } = useInstanceParses({
     instanceId: context.instance.id,
