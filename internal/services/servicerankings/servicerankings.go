@@ -138,6 +138,7 @@ func (s *Service) setupRoutes() {
 	s.router.Get("/encounters", s.handleEncounters)
 	s.router.Get("/leaderboard", s.handleLeaderboard)
 	s.router.Get("/stats", s.handleStats)
+	s.router.Get("/realms", s.handleRealms)
 	s.router.Get("/kill-times", s.handleKillTimes)
 	s.router.Get("/kill-time-leaderboard", s.handleKillTimeLeaderboard)
 	s.router.Get("/success-rates", s.handleSuccessRates)
@@ -276,7 +277,7 @@ func (s *Service) handleLeaderboard(w http.ResponseWriter, r *http.Request) {
 		InstanceNames:   splitCSV(q.Get("instance_names")),
 		EncounterNames:  splitCSV(q.Get("encounter_names")),
 		DifficultyNames: splitCSV(q.Get("difficulty_names")),
-		RealmID:         q.Get("realm_id"),
+		RealmNames:      splitCSV(q.Get("realm_names")),
 		Class:           classParam,
 		Spec:            q.Get("spec"),
 		Role:            q.Get("role"),
@@ -355,7 +356,7 @@ func (s *Service) handleStats(w http.ResponseWriter, r *http.Request) {
 		InstanceNames:   splitCSV(q.Get("instance_names")),
 		EncounterNames:  splitCSV(q.Get("encounter_names")),
 		DifficultyNames: splitCSV(q.Get("difficulty_names")),
-		RealmID:         q.Get("realm_id"),
+		RealmNames:      splitCSV(q.Get("realm_names")),
 		Role:            q.Get("role"),
 		SinceDays:       sinceDays,
 		Metric:          normalizeMetric(q.Get("metric")),
@@ -388,6 +389,26 @@ func (s *Service) handleStats(w http.ResponseWriter, r *http.Request) {
 	httpapi.Write(ctx, w, http.StatusOK, out)
 }
 
+
+// handleRealms returns the list of realm names that have DPS ranking data.
+//
+//	GET /realms
+func (s *Service) handleRealms(w http.ResponseWriter, r *http.Request) {
+	ctx := r.Context()
+
+	names, err := s.store.RankingsRealmNames(ctx)
+	if err != nil {
+		httpapi.HandleResponseError(ctx, w, err, httpapi.APIError{
+			Response: chroniclesdk.Response{
+				Message: "Failed to fetch rankings realm names",
+				Detail:  err.Error(),
+			},
+		})
+		return
+	}
+
+	httpapi.Write(ctx, w, http.StatusOK, names)
+}
 
 // normalizeMetric validates the leaderboard metric selector.
 // Only "hps" is recognized; anything else falls back to "dps".

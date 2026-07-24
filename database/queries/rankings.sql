@@ -179,7 +179,7 @@ WITH deduped AS (
         ELSE true
     END
     AND CASE
-        WHEN @realm_id :: text != '' THEN edr.realm_id = @realm_id :: uuid
+        WHEN cardinality(@realm_names :: text[]) > 0 THEN edr.realm_name = ANY(@realm_names :: text[])
         ELSE true
     END
     AND CASE
@@ -309,7 +309,7 @@ WITH deduped AS (
         ELSE true
     END
     AND CASE
-        WHEN @realm_id :: text != '' THEN edr.realm_id = @realm_id :: uuid
+        WHEN cardinality(@realm_names :: text[]) > 0 THEN edr.realm_name = ANY(@realm_names :: text[])
         ELSE true
     END
     AND CASE
@@ -526,6 +526,13 @@ FROM deduped d
 GROUP BY d.encounter_name
 ORDER BY (d.encounter_name = 'Trash'), d.encounter_name;
 
+
+-- name: RankingsRealmNames :many
+-- Distinct realm names that have DPS ranking data, for the realm filter dropdown.
+SELECT DISTINCT edr.realm_name
+FROM encounter_dps_rankings edr
+JOIN wow_server_realms wsr ON wsr.id = edr.realm_id
+ORDER BY edr.realm_name;
 
 -- name: HasInstanceDpsRankings :one
 SELECT EXISTS(

@@ -30,6 +30,7 @@ import {
   useRankingsKillTimes,
   useRankingsKillTimeLeaderboard,
   useRankingsSuccessRates,
+  useRankingsRealms,
 } from "@/api/rankingsQueries"
 import type { RankedEntry } from "./RankingsTable"
 import type { RankedKillTimeEntry } from "./KillTimeTable"
@@ -137,6 +138,13 @@ export function InstanceView({ instanceName }: InstanceViewProps) {
     return new Set(raw.split(",").filter(Boolean))
   }, [params])
 
+  // Realm filter — CSV of realm names in the URL, empty = all realms
+  const selectedRealms: Set<string> = useMemo(() => {
+    const raw = params.get("realms")
+    if (!raw) return new Set<string>()
+    return new Set(raw.split(",").filter(Boolean))
+  }, [params])
+
   // Default (no URL param) = bosses only; trash is opt-in via ?encounters=.
   const selectedEncounters: Set<string> = useMemo(() => {
     const raw = params.get("encounters")
@@ -167,6 +175,7 @@ export function InstanceView({ instanceName }: InstanceViewProps) {
       next.delete("encounters")
       next.delete("period")
       next.delete("diff")
+      next.delete("realms")
       next.delete("page")
       next.delete("class")
       next.delete("spec")
@@ -371,10 +380,16 @@ export function InstanceView({ instanceName }: InstanceViewProps) {
     ? [...selectedDifficulties].join(",")
     : undefined
 
+  // Build realm_names CSV for server-side filtering
+  const realmNamesParam = selectedRealms.size > 0
+    ? [...selectedRealms].join(",")
+    : undefined
+
   const { data: rawBoxPlotStats = [] } = useRankingsStats({
     instance_names: instanceName,
     encounter_names: encounterNamesParam,
     difficulty_names: difficultyNamesParam,
+    realm_names: realmNamesParam,
     period: periodParam,
     role: filterRole,
     metric: valueMetric,
@@ -390,6 +405,7 @@ export function InstanceView({ instanceName }: InstanceViewProps) {
     instance_names: instanceName,
     encounter_names: encounterNamesParam,
     difficulty_names: difficultyNamesParam,
+    realm_names: realmNamesParam,
     period: periodParam,
     class: filterClass,
     spec: filterSpec,
@@ -429,6 +445,29 @@ export function InstanceView({ instanceName }: InstanceViewProps) {
       })
     },
     [setParams, availableDifficulties.length],
+  )
+
+  // Realms available for the filter dropdown
+  const { data: availableRealms = [] } = useRankingsRealms()
+
+  const handleToggleRealm = useCallback(
+    (realm: string) => {
+      setParams((prev) => {
+        const next = new URLSearchParams(prev)
+        const raw = prev.get("realms")
+        const current = raw ? new Set(raw.split(",").filter(Boolean)) : new Set<string>()
+        if (current.has(realm)) current.delete(realm)
+        else current.add(realm)
+        if (current.size === 0 || current.size === availableRealms.length) {
+          next.delete("realms")
+        } else {
+          next.set("realms", [...current].join(","))
+        }
+        next.delete("page") // reset to page 1
+        return next
+      })
+    },
+    [setParams, availableRealms.length],
   )
 
   // Difficulty shown next to the instance name: the filtered selection, or
@@ -707,6 +746,39 @@ export function InstanceView({ instanceName }: InstanceViewProps) {
                           >
                             <Checkbox checked={checked} className="pointer-events-none" />
                             {diff}
+                          </DropdownMenuItem>
+                        )
+                      })}
+                    </DropdownMenuContent>
+                  </DropdownMenu>
+                )}
+
+                {isPlayerMetric && availableRealms.length > 1 && (
+                  <DropdownMenu modal={false}>
+                    <DropdownMenuTrigger asChild>
+                      <Button variant="outline" size="sm" className="h-7 gap-1.5 text-xs min-w-[110px] justify-between">
+                        {selectedRealms.size === 0
+                          ? "All Realms"
+                          : selectedRealms.size === 1
+                            ? [...selectedRealms][0]
+                            : `${selectedRealms.size} Realms`}
+                        <ChevronDown className="h-3 w-3 opacity-50" />
+                      </Button>
+                    </DropdownMenuTrigger>
+                    <DropdownMenuContent align="start">
+                      {availableRealms.map((realm) => {
+                        const checked = selectedRealms.size === 0 || selectedRealms.has(realm)
+                        return (
+                          <DropdownMenuItem
+                            key={realm}
+                            onSelect={(e) => {
+                              e.preventDefault()
+                              handleToggleRealm(realm)
+                            }}
+                            className="gap-2"
+                          >
+                            <Checkbox checked={checked} className="pointer-events-none" />
+                            {realm}
                           </DropdownMenuItem>
                         )
                       })}

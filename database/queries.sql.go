@@ -5629,7 +5629,7 @@ WITH deduped AS (
         ELSE true
     END
     AND CASE
-        WHEN $4 :: text != '' THEN edr.realm_id = $4 :: uuid
+        WHEN cardinality($4 :: text[]) > 0 THEN edr.realm_name = ANY($4 :: text[])
         ELSE true
     END
     AND CASE
@@ -5697,7 +5697,7 @@ type RankingsBoxPlotStatsParams struct {
 	GroupByClass    bool     `db:"group_by_class" json:"group_by_class"`
 	InstanceNames   []string `db:"instance_names" json:"instance_names"`
 	EncounterNames  []string `db:"encounter_names" json:"encounter_names"`
-	RealmID         string   `db:"realm_id" json:"realm_id"`
+	RealmNames      []string `db:"realm_names" json:"realm_names"`
 	Role            string   `db:"role" json:"role"`
 	SinceDays       int64    `db:"since_days" json:"since_days"`
 	DifficultyNames []string `db:"difficulty_names" json:"difficulty_names"`
@@ -5726,7 +5726,7 @@ func (q *sqlQuerier) RankingsBoxPlotStats(ctx context.Context, arg RankingsBoxPl
 		arg.GroupByClass,
 		arg.InstanceNames,
 		arg.EncounterNames,
-		arg.RealmID,
+		arg.RealmNames,
 		arg.Role,
 		arg.SinceDays,
 		arg.DifficultyNames,
@@ -6113,7 +6113,7 @@ WITH deduped AS (
         ELSE true
     END
     AND CASE
-        WHEN $6 :: text != '' THEN edr.realm_id = $6 :: uuid
+        WHEN cardinality($6 :: text[]) > 0 THEN edr.realm_name = ANY($6 :: text[])
         ELSE true
     END
     AND CASE
@@ -6221,7 +6221,7 @@ type RankingsLeaderboardParams struct {
 	QueryLimit      int64    `db:"query_limit" json:"query_limit"`
 	InstanceNames   []string `db:"instance_names" json:"instance_names"`
 	EncounterNames  []string `db:"encounter_names" json:"encounter_names"`
-	RealmID         string   `db:"realm_id" json:"realm_id"`
+	RealmNames      []string `db:"realm_names" json:"realm_names"`
 	Class           string   `db:"class" json:"class"`
 	Spec            string   `db:"spec" json:"spec"`
 	Role            string   `db:"role" json:"role"`
@@ -6271,7 +6271,7 @@ func (q *sqlQuerier) RankingsLeaderboard(ctx context.Context, arg RankingsLeader
 		arg.QueryLimit,
 		arg.InstanceNames,
 		arg.EncounterNames,
-		arg.RealmID,
+		arg.RealmNames,
 		arg.Class,
 		arg.Spec,
 		arg.Role,
@@ -6315,6 +6315,34 @@ func (q *sqlQuerier) RankingsLeaderboard(ctx context.Context, arg RankingsLeader
 			return nil, err
 		}
 		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const rankingsRealmNames = `-- name: RankingsRealmNames :many
+SELECT DISTINCT edr.realm_name
+FROM encounter_dps_rankings edr
+JOIN wow_server_realms wsr ON wsr.id = edr.realm_id
+ORDER BY edr.realm_name
+`
+
+// Distinct realm names that have DPS ranking data, for the realm filter dropdown.
+func (q *sqlQuerier) RankingsRealmNames(ctx context.Context) ([]string, error) {
+	rows, err := q.db.Query(ctx, rankingsRealmNames)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []string
+	for rows.Next() {
+		var realm_name string
+		if err := rows.Scan(&realm_name); err != nil {
+			return nil, err
+		}
+		items = append(items, realm_name)
 	}
 	if err := rows.Err(); err != nil {
 		return nil, err
