@@ -237,6 +237,7 @@ type AdminTriggerSnapshotResponse struct {
 type AdminSnapshotSummary struct {
 	ID            uuid.UUID  `json:"id"`
 	TenantID      uuid.UUID  `json:"tenant_id"`
+	TenantName    string     `json:"tenant_name"`
 	Cutoff        time.Time  `json:"cutoff"`
 	LookbackDays  int32      `json:"lookback_days"`
 	CohortMode    string     `json:"cohort_mode"`
@@ -246,6 +247,16 @@ type AdminSnapshotSummary struct {
 	Status        string     `json:"status"`
 	PublishedAt   *time.Time `json:"published_at"`
 	CreatedAt     time.Time  `json:"created_at"`
+}
+
+// AdminBulkDeleteSnapshotsRequest is the request body for bulk snapshot deletion.
+type AdminBulkDeleteSnapshotsRequest struct {
+	IDs []uuid.UUID `json:"ids"`
+}
+
+// AdminBulkDeleteSnapshotsResponse is the response for bulk snapshot deletion.
+type AdminBulkDeleteSnapshotsResponse struct {
+	Deleted int `json:"deleted"`
 }
 
 // ── Cohort Viewer (debugging) ────────────────────────────────────────────

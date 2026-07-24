@@ -57,6 +57,8 @@ type sqlcQuerier interface {
 	// resolve to the previous snapshot (or show no parses if none), and allows
 	// re-backfilling that day since the idempotency guard checks status='published'.
 	DeleteRankingSnapshot(ctx context.Context, id uuid.UUID) error
+	// Bulk-delete snapshots by IDs. Members are cascade-deleted via FK.
+	DeleteRankingSnapshots(ctx context.Context, ids []uuid.UUID) error
 	DeleteRegressionFixture(ctx context.Context, id uuid.UUID) error
 	DeleteRegressionSnapshot(ctx context.Context, id uuid.UUID) error
 	DeleteRetentionPolicy(ctx context.Context, id uuid.UUID) error
@@ -271,6 +273,7 @@ type sqlcQuerier interface {
 	IsLayoutTrackedByUser(ctx context.Context, arg IsLayoutTrackedByUserParams) (bool, error)
 	ListAllRetentionPolicies(ctx context.Context) ([]RetentionPolicy, error)
 	// Admin view: list all snapshots across tenants, most recent first.
+	// LEFT JOINs tenants to surface the tenant name (NULL for root scope).
 	ListAllSnapshots(ctx context.Context) ([]ListAllSnapshotsRow, error)
 	ListAllUsers(ctx context.Context) ([]ChronicleUser, error)
 	ListAllWoWLogGroupsWithOwner(ctx context.Context) ([]ListAllWoWLogGroupsWithOwnerRow, error)

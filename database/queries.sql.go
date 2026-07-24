@@ -4436,6 +4436,16 @@ func (q *sqlQuerier) DeleteRankingSnapshot(ctx context.Context, id uuid.UUID) er
 	return err
 }
 
+const deleteRankingSnapshots = `-- name: DeleteRankingSnapshots :exec
+DELETE FROM ranking_snapshots WHERE id = ANY($1::uuid[])
+`
+
+// Bulk-delete snapshots by IDs. Members are cascade-deleted via FK.
+func (q *sqlQuerier) DeleteRankingSnapshots(ctx context.Context, ids []uuid.UUID) error {
+	_, err := q.db.Exec(ctx, deleteRankingSnapshots, ids)
+	return err
+}
+
 const getLatestPublishedSnapshot = `-- name: GetLatestPublishedSnapshot :one
 SELECT id, tenant_id, cutoff, window_start, lookback_days, cohort_mode, policy_version, query_version, min_parser_version_num, min_addon_version_num, status, created_at, published_at, source_row_count, source_watermark
 FROM ranking_snapshots
@@ -5002,8 +5012,10 @@ func (q *sqlQuerier) InsertRankingSnapshotMember(ctx context.Context, arg Insert
 
 const listAllSnapshots = `-- name: ListAllSnapshots :many
 SELECT rs.id, rs.tenant_id, rs.cutoff, rs.window_start, rs.lookback_days, rs.cohort_mode, rs.policy_version, rs.query_version, rs.min_parser_version_num, rs.min_addon_version_num, rs.status, rs.created_at, rs.published_at, rs.source_row_count, rs.source_watermark,
-       (SELECT COUNT(*) FROM ranking_snapshot_members WHERE snapshot_id = rs.id) AS member_count
+       (SELECT COUNT(*) FROM ranking_snapshot_members WHERE snapshot_id = rs.id) AS member_count,
+       t.name AS tenant_name
 FROM ranking_snapshots rs
+LEFT JOIN tenants t ON t.id = rs.tenant_id
 ORDER BY rs.created_at DESC
 LIMIT 100
 `
@@ -5025,9 +5037,11 @@ type ListAllSnapshotsRow struct {
 	SourceRowCount      int64              `db:"source_row_count" json:"source_row_count"`
 	SourceWatermark     pgtype.Timestamptz `db:"source_watermark" json:"source_watermark"`
 	MemberCount         int64              `db:"member_count" json:"member_count"`
+	TenantName          pgtype.Text        `db:"tenant_name" json:"tenant_name"`
 }
 
 // Admin view: list all snapshots across tenants, most recent first.
+// LEFT JOINs tenants to surface the tenant name (NULL for root scope).
 func (q *sqlQuerier) ListAllSnapshots(ctx context.Context) ([]ListAllSnapshotsRow, error) {
 	rows, err := q.db.Query(ctx, listAllSnapshots)
 	if err != nil {
@@ -5054,6 +5068,7 @@ func (q *sqlQuerier) ListAllSnapshots(ctx context.Context) ([]ListAllSnapshotsRo
 			&i.SourceRowCount,
 			&i.SourceWatermark,
 			&i.MemberCount,
+			&i.TenantName,
 		); err != nil {
 			return nil, err
 		}

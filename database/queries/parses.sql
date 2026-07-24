@@ -327,9 +327,12 @@ LIMIT 1;
 
 -- name: ListAllSnapshots :many
 -- Admin view: list all snapshots across tenants, most recent first.
+-- LEFT JOINs tenants to surface the tenant name (NULL for root scope).
 SELECT rs.*,
-       (SELECT COUNT(*) FROM ranking_snapshot_members WHERE snapshot_id = rs.id) AS member_count
+       (SELECT COUNT(*) FROM ranking_snapshot_members WHERE snapshot_id = rs.id) AS member_count,
+       t.name AS tenant_name
 FROM ranking_snapshots rs
+LEFT JOIN tenants t ON t.id = rs.tenant_id
 ORDER BY rs.created_at DESC
 LIMIT 100;
 
@@ -340,4 +343,8 @@ LIMIT 100;
 -- resolve to the previous snapshot (or show no parses if none), and allows
 -- re-backfilling that day since the idempotency guard checks status='published'.
 DELETE FROM ranking_snapshots WHERE id = @id;
+
+-- name: DeleteRankingSnapshots :exec
+-- Bulk-delete snapshots by IDs. Members are cascade-deleted via FK.
+DELETE FROM ranking_snapshots WHERE id = ANY(@ids::uuid[]);
 

@@ -49,6 +49,40 @@ func (api *API) AdminDeleteSnapshot(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
+// AdminBulkDeleteSnapshots removes multiple snapshots in a single request.
+// Members are cascade-deleted via FK. Nonexistent IDs are silently ignored.
+//
+//	POST /api/v1/admin/parses/snapshots/delete
+func (api *API) AdminBulkDeleteSnapshots(w http.ResponseWriter, r *http.Request) {
+	ctx := r.Context()
+
+	var req chroniclesdk.AdminBulkDeleteSnapshotsRequest
+	if !httpapi.Read(ctx, w, r, &req) {
+		return
+	}
+
+	if len(req.IDs) == 0 {
+		httpapi.Write(ctx, w, http.StatusBadRequest, chroniclesdk.Response{
+			Message: "No snapshot IDs provided",
+		})
+		return
+	}
+
+	store := database.New(api.Opts.Pool)
+	if err := store.DeleteRankingSnapshots(ctx, req.IDs); err != nil {
+		httpapi.HandleResponseError(ctx, w, err, httpapi.APIError{
+			Response: chroniclesdk.Response{
+				Message: "Failed to delete snapshots",
+				Detail:  err.Error(),
+			},
+		})
+		return
+	}
+
+	httpapi.Write(ctx, w, http.StatusOK, chroniclesdk.AdminBulkDeleteSnapshotsResponse{
+		Deleted: len(req.IDs),
+	})
+}
 
 // AdminTriggerParseSnapshot enqueues the normal idempotent parse snapshot
 // publication job. Useful to trigger without waiting for the hourly tick;
@@ -185,9 +219,14 @@ func (api *API) AdminListSnapshots(w http.ResponseWriter, r *http.Request) {
 
 	out := make([]chroniclesdk.AdminSnapshotSummary, 0, len(rows))
 	for _, row := range rows {
+		tenantName := "Root"
+		if row.TenantName.Valid {
+			tenantName = row.TenantName.String
+		}
 		s := chroniclesdk.AdminSnapshotSummary{
 			ID:            row.ID,
 			TenantID:      row.TenantID,
+			TenantName:    tenantName,
 			LookbackDays:  row.LookbackDays,
 			CohortMode:    row.CohortMode,
 			PolicyVersion: row.PolicyVersion,

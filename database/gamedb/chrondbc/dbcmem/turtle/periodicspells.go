@@ -1047,7 +1047,6 @@ func init() {
 		45916: {Name: "Curse of Archimonde [PH]", HasDirect: false},
 		45918: {Name: "Curse of Sargeras [PH]", HasDirect: false},
 		45997: {Name: "Fungal Spores", HasDirect: false},
-		46079: {Name: "Call of Nightmare", HasDirect: false},
 		46269: {Name: "Fire Breath", HasDirect: true},
 		46270: {Name: "Fire Breath", HasDirect: true},
 		46271: {Name: "Poison Spit", HasDirect: false},

@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useMemo, useCallback } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import type {
   AdminSnapshotSummary,
@@ -10,6 +10,7 @@ import { Button } from "@/components/ui/button";
 
 export function AdminParsingPage() {
   const queryClient = useQueryClient();
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
 
   const {
     data: snapshots,
@@ -75,6 +76,53 @@ export function AdminParsingPage() {
     },
   });
 
+  const bulkDeleteMutation = useMutation({
+    mutationFn: async (ids: string[]) => {
+      const res = await fetch("/api/v1/admin/parses/snapshots/delete", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ ids }),
+      });
+      if (!res.ok) {
+        const body = await res.json().catch(() => ({}));
+        throw new Error(
+          (body as Record<string, string>).message ?? "Failed to delete snapshots",
+        );
+      }
+    },
+    onSuccess: () => {
+      setSelectedIds(new Set());
+      queryClient.invalidateQueries({ queryKey: ["admin", "parses", "snapshots"] });
+    },
+  });
+
+  const allSelected = useMemo(
+    () =>
+      !!snapshots && snapshots.length > 0 && snapshots.every((s) => selectedIds.has(s.id)),
+    [snapshots, selectedIds],
+  );
+
+  const toggleAll = useCallback(() => {
+    if (!snapshots) return;
+    if (allSelected) {
+      setSelectedIds(new Set());
+    } else {
+      setSelectedIds(new Set(snapshots.map((s) => s.id)));
+    }
+  }, [snapshots, allSelected]);
+
+  const toggleOne = useCallback((id: string) => {
+    setSelectedIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) {
+        next.delete(id);
+      } else {
+        next.add(id);
+      }
+      return next;
+    });
+  }, []);
+
   const formatDate = (iso: string) => {
     if (!iso || iso.startsWith("0001")) return "—";
     return new Date(iso).toLocaleDateString("en-US", {
@@ -86,6 +134,11 @@ export function AdminParsingPage() {
       timeZone: "UTC",
       timeZoneName: "short",
     });
+  };
+
+  const formatCutoffDate = (iso: string) => {
+    if (!iso || iso.startsWith("0001")) return "—";
+    return iso.slice(0, 10);
   };
 
   return (
@@ -179,9 +232,34 @@ export function AdminParsingPage() {
       <Card className="p-4">
         <div className="flex items-center justify-between mb-3">
           <h3 className="font-semibold">Published Snapshots</h3>
-          <Button variant="ghost" size="sm" onClick={() => refetch()}>
-            Refresh
-          </Button>
+          <div className="flex items-center gap-2">
+            {selectedIds.size > 0 && (
+              <Button
+                size="sm"
+                variant="destructive"
+                disabled={bulkDeleteMutation.isPending}
+                onClick={() => {
+                  if (
+                    window.confirm(
+                      `Delete ${selectedIds.size} snapshot(s)? Members will be cascade-deleted. Affected raids will fall back to the previous snapshot.`,
+                    )
+                  ) {
+                    bulkDeleteMutation.mutate([...selectedIds]);
+                  }
+                }}
+              >
+                {bulkDeleteMutation.isPending ? (
+                  <Loader2 className="h-4 w-4 animate-spin mr-1" />
+                ) : (
+                  <Trash2 className="h-4 w-4 mr-1" />
+                )}
+                Delete Selected ({selectedIds.size})
+              </Button>
+            )}
+            <Button variant="ghost" size="sm" onClick={() => refetch()}>
+              Refresh
+            </Button>
+          </div>
         </div>
 
         {isLoading ? (
@@ -193,9 +271,19 @@ export function AdminParsingPage() {
             <table className="w-full text-sm">
               <thead>
                 <tr className="border-b border-zinc-800 text-muted-foreground text-left">
+                  <th className="py-2 pr-2 w-8">
+                    <input
+                      type="checkbox"
+                      checked={allSelected}
+                      onChange={toggleAll}
+                      className="rounded border-zinc-700"
+                    />
+                  </th>
+                  <th className="py-2 pr-4">Tenant</th>
                   <th className="py-2 pr-4">Cutoff</th>
                   <th className="py-2 pr-4">Lookback</th>
                   <th className="py-2 pr-4">Cohort</th>
+                  <th className="py-2 pr-4">Version</th>
                   <th className="py-2 pr-4">Members</th>
                   <th className="py-2 pr-4">Status</th>
                   <th className="py-2 pr-4">Published</th>
@@ -205,14 +293,28 @@ export function AdminParsingPage() {
               <tbody>
                 {snapshots.map((snap) => (
                   <tr key={snap.id} className="border-b border-zinc-800/50">
-                    <td className="py-2 pr-4 font-mono text-xs">
-                      {formatDate(snap.cutoff)}
+                    <td className="py-2 pr-2">
+                      <input
+                        type="checkbox"
+                        checked={selectedIds.has(snap.id)}
+                        onChange={() => toggleOne(snap.id)}
+                        className="rounded border-zinc-700"
+                      />
                     </td>
-                    <td className="py-2 pr-4">
+                    <td className="py-2 pr-4 text-xs">{snap.tenant_name}</td>
+                    <td className="py-2 pr-4 font-mono text-xs">
+                      {formatCutoffDate(snap.cutoff)}
+                    </td>
+                    <td className="py-2 pr-4 text-xs">
                       {snap.lookback_days === 0 ? "all-time" : `${snap.lookback_days}d`}
                     </td>
-                    <td className="py-2 pr-4">{snap.cohort_mode}</td>
-                    <td className="py-2 pr-4 font-mono">
+                    <td className="py-2 pr-4 text-xs">{snap.cohort_mode}</td>
+                    <td className="py-2 pr-4">
+                      <span className="text-xs text-muted-foreground">
+                        p{snap.policy_version}/q{snap.query_version}
+                      </span>
+                    </td>
+                    <td className="py-2 pr-4 font-mono text-xs">
                       {snap.member_count.toLocaleString()}
                     </td>
                     <td className="py-2 pr-4">
@@ -258,11 +360,11 @@ export function AdminParsingPage() {
             No snapshots found. Create one to get started.
           </p>
         )}
-        {deleteMutation.isError && (
+        {(deleteMutation.isError || bulkDeleteMutation.isError) && (
           <p className="text-sm text-red-500 mt-2">
-            {deleteMutation.error instanceof Error
-              ? deleteMutation.error.message
-              : "Failed to delete snapshot"}
+            {(deleteMutation.error ?? bulkDeleteMutation.error) instanceof Error
+              ? ((deleteMutation.error ?? bulkDeleteMutation.error) as Error).message
+              : "Failed to delete snapshot(s)"}
           </p>
         )}
       </Card>

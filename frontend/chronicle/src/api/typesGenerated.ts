@@ -36,6 +36,22 @@ export interface AdminBulkDeleteResponse {
     readonly failed: readonly AdminBulkLogFailure[];
 }
 
+// From chroniclesdk/rankings.go
+/**
+ * AdminBulkDeleteSnapshotsRequest is the request body for bulk snapshot deletion.
+ */
+export interface AdminBulkDeleteSnapshotsRequest {
+    readonly ids: readonly string[];
+}
+
+// From chroniclesdk/rankings.go
+/**
+ * AdminBulkDeleteSnapshotsResponse is the response for bulk snapshot deletion.
+ */
+export interface AdminBulkDeleteSnapshotsResponse {
+    readonly deleted: number;
+}
+
 // From chroniclesdk/user.go
 export interface AdminBulkLogFailure {
     readonly log_group_id: string;
@@ -151,6 +167,7 @@ export interface AdminSetUserRetentionRequest {
 export interface AdminSnapshotSummary {
     readonly id: string;
     readonly tenant_id: string;
+    readonly tenant_name: string;
     readonly cutoff: string;
     readonly lookback_days: number;
     readonly cohort_mode: string;
