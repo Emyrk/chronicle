@@ -797,9 +797,15 @@ export interface InstanceParsePlayer {
  */
 export interface InstanceParsesResponse {
     /**
-     * Available is false when no published snapshot exists yet.
+     * Available is false when no published snapshot exists yet or parses
+     * are disabled for this tenant.
      */
     readonly available: boolean;
+    /**
+     * Reason explains why parses are unavailable (e.g. "disabled", "no_snapshot").
+     * Empty when Available is true.
+     */
+    readonly reason?: string;
     /**
      * Snapshot metadata (zero values when Available=false).
      */
@@ -1220,7 +1226,9 @@ export interface ModifyApplicationAdminRequest {
  */
 export interface ParseConfig {
     /**
-     * CohortMode is "spec" (default) or "class".
+     * CohortMode controls the parse scoring mode: "spec" (default), "class",
+     * or "disabled". When disabled, no snapshots are created and the instance
+     * parses endpoint returns available=false.
      */
     readonly cohort_mode?: string;
     /**
@@ -2295,6 +2303,7 @@ export interface UpsertTenantRequest {
     readonly include_in_all: boolean | null;
     readonly discoverable: boolean | null;
     readonly branding: Branding | null;
+    readonly parse_config: ParseConfig | null;
     readonly default_format: string | null;
     readonly available_formats: readonly string[];
 }

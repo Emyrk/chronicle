@@ -135,8 +135,13 @@ func TopPlayersFromJSON(data json.RawMessage) []RankingsInstanceTopPlayer {
 
 // InstanceParsesResponse is the top-level response for the instance parses endpoint.
 type InstanceParsesResponse struct {
-	// Available is false when no published snapshot exists yet.
+	// Available is false when no published snapshot exists yet or parses
+	// are disabled for this tenant.
 	Available bool `json:"available"`
+
+	// Reason explains why parses are unavailable (e.g. "disabled", "no_snapshot").
+	// Empty when Available is true.
+	Reason string `json:"reason,omitempty"`
 
 	// Snapshot metadata (zero values when Available=false).
 	SnapshotID   uuid.UUID `json:"snapshot_id"`

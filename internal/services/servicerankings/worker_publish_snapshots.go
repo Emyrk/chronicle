@@ -81,8 +81,15 @@ func (w *WorkerPublishParseSnapshots) Work(ctx context.Context, _ *river.Job[Arg
 	}
 
 	now := time.Now()
-	var enqueued int
+	var enqueued, skipped int
 	for _, tj := range jobs {
+		if isParseDisabled(tj.parseConfig) {
+			w.Logger.Debug("skipping disabled tenant for parse snapshot",
+				slog.String("tenant_id", tj.id.String()),
+			)
+			skipped++
+			continue
+		}
 		lookbacks := resolveLookbackDays(tj.parseConfig)
 		for _, lb := range lookbacks {
 			if _, err := w.Queue.Insert(ctx, ArgsPublishParseSnapshotTenant{
@@ -104,9 +111,32 @@ func (w *WorkerPublishParseSnapshots) Work(ctx context.Context, _ *river.Job[Arg
 
 	w.Logger.Info("dispatched parse snapshot publication jobs",
 		slog.Int("enqueued", enqueued),
+		slog.Int("skipped", skipped),
 		slog.Int("tenants", len(jobs)),
 	)
+
+	_ = river.RecordOutput(ctx, map[string]any{
+		"enqueued": enqueued,
+		"skipped":  skipped,
+		"tenants":  len(jobs),
+	})
+
 	return nil
+}
+
+// isParseDisabled returns true when the tenant's parse_config has
+// cohort_mode set to "disabled".
+func isParseDisabled(parseConfigJSON []byte) bool {
+	if len(parseConfigJSON) == 0 {
+		return false
+	}
+	var pc struct {
+		CohortMode string `json:"cohort_mode"`
+	}
+	if err := json.Unmarshal(parseConfigJSON, &pc); err == nil {
+		return pc.CohortMode == string(parsepolicy.CohortModeDisabled)
+	}
+	return false
 }
 
 // resolveLookbackDays returns the set of lookback windows to snapshot for a
@@ -180,6 +210,17 @@ func (w *WorkerPublishParseSnapshotTenant) Work(ctx context.Context, job *river.
 		ctx = servicetenant.WithTenantID(ctx, args.TenantID)
 		tenant, err := w.Store.GetTenantByID(ctx, args.TenantID)
 		if err == nil && len(tenant.ParseConfig) > 0 {
+			if isParseDisabled(tenant.ParseConfig) {
+				w.Logger.Debug("tenant parses disabled, skipping snapshot",
+					slog.String("tenant_id", args.TenantID.String()),
+				)
+				_ = river.RecordOutput(ctx, map[string]any{
+					"tenant_id": args.TenantID.String(),
+					"skipped":   true,
+					"reason":    "disabled",
+				})
+				return nil
+			}
 			var pc struct {
 				CohortMode string `json:"cohort_mode"`
 			}

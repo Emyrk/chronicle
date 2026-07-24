@@ -84,14 +84,25 @@ func handleInstanceParsesWithStore(store parsesQuerier, logger *slog.Logger, w h
 
 	tid := servicetenant.TenantIDFromContext(ctx)
 
-	// Resolve tenant parse config for default lookback override.
+	// Resolve tenant parse config for default lookback override and disabled check.
 	if tid != uuid.Nil {
 		tenant, tErr := store.GetTenantByID(ctx, tid)
 		if tErr == nil && len(tenant.ParseConfig) > 0 {
 			var pc struct {
-				LookbackDays *int `json:"default_lookback_days"`
+				CohortMode   string `json:"cohort_mode"`
+				LookbackDays *int   `json:"default_lookback_days"`
 			}
 			if jErr := json.Unmarshal(tenant.ParseConfig, &pc); jErr == nil {
+				if pc.CohortMode == string(parsepolicy.CohortModeDisabled) {
+					httpapi.Write(ctx, w, http.StatusOK, chroniclesdk.InstanceParsesResponse{
+						Available:          false,
+						Reason:             "disabled",
+						SelectedEncounters: encounterNames,
+						Metric:             string(metric),
+						Players:            []chroniclesdk.InstanceParsePlayer{},
+					})
+					return
+				}
 				// Only use tenant default if the client didn't explicitly set period.
 				if q.Get("period") == "" && pc.LookbackDays != nil {
 					lookbackDays = parsepolicy.LookbackDays(*pc.LookbackDays)
@@ -119,6 +130,7 @@ func handleInstanceParsesWithStore(store parsesQuerier, logger *slog.Logger, w h
 			// No published snapshot yet — return empty/unavailable state.
 			httpapi.Write(ctx, w, http.StatusOK, chroniclesdk.InstanceParsesResponse{
 				Available:          false,
+				Reason:             "no_snapshot",
 				SelectedEncounters: encounterNames,
 				Metric:             string(metric),
 				Players:            []chroniclesdk.InstanceParsePlayer{},

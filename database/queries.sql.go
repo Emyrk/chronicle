@@ -7901,8 +7901,8 @@ func (q *sqlQuerier) GetTenantBySlug(ctx context.Context, slug pgtype.Text) (Ten
 }
 
 const insertTenant = `-- name: InsertTenant :one
-INSERT INTO tenants (id, slug, name, disable_client_upload, include_in_all, branding, discoverable, default_format, available_formats)
-VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
+INSERT INTO tenants (id, slug, name, disable_client_upload, include_in_all, branding, discoverable, default_format, available_formats, parse_config)
+VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
 RETURNING id, slug, name, disable_client_upload, include_in_all, branding, created_at, updated_at, discoverable, default_dataset_id, default_format, available_formats, parse_config
 `
 
@@ -7916,6 +7916,7 @@ type InsertTenantParams struct {
 	Discoverable        bool          `db:"discoverable" json:"discoverable"`
 	DefaultFormat       NullLogFormat `db:"default_format" json:"default_format"`
 	AvailableFormats    []string      `db:"available_formats" json:"available_formats"`
+	ParseConfig         []byte        `db:"parse_config" json:"parse_config"`
 }
 
 func (q *sqlQuerier) InsertTenant(ctx context.Context, arg InsertTenantParams) (Tenant, error) {
@@ -7929,6 +7930,7 @@ func (q *sqlQuerier) InsertTenant(ctx context.Context, arg InsertTenantParams) (
 		arg.Discoverable,
 		arg.DefaultFormat,
 		arg.AvailableFormats,
+		arg.ParseConfig,
 	)
 	var i Tenant
 	err := row.Scan(
@@ -8072,8 +8074,9 @@ UPDATE tenants SET
     discoverable = COALESCE($6, discoverable),
     default_format = COALESCE($7, default_format),
     available_formats = COALESCE($8, available_formats),
+    parse_config = COALESCE($9, parse_config),
     updated_at = now()
-WHERE id = $9
+WHERE id = $10
 RETURNING id, slug, name, disable_client_upload, include_in_all, branding, created_at, updated_at, discoverable, default_dataset_id, default_format, available_formats, parse_config
 `
 
@@ -8086,6 +8089,7 @@ type UpdateTenantParams struct {
 	Discoverable        pgtype.Bool   `db:"discoverable" json:"discoverable"`
 	DefaultFormat       NullLogFormat `db:"default_format" json:"default_format"`
 	AvailableFormats    []string      `db:"available_formats" json:"available_formats"`
+	ParseConfig         []byte        `db:"parse_config" json:"parse_config"`
 	ID                  uuid.UUID     `db:"id" json:"id"`
 }
 
@@ -8100,6 +8104,7 @@ func (q *sqlQuerier) UpdateTenant(ctx context.Context, arg UpdateTenantParams) (
 		arg.Discoverable,
 		arg.DefaultFormat,
 		arg.AvailableFormats,
+		arg.ParseConfig,
 		arg.ID,
 	)
 	var i Tenant

@@ -17,6 +17,7 @@ import (
 	"github.com/Emyrk/chronicle/database/dbtestutil"
 	"github.com/Emyrk/chronicle/internal/parsepolicy"
 	"github.com/Emyrk/chronicle/internal/services/servicerankings"
+	"github.com/Emyrk/chronicle/internal/services/servicetenant"
 	"github.com/Emyrk/chronicle/internal/testutil"
 	"github.com/go-chi/chi/v5"
 	"github.com/google/uuid"
@@ -588,3 +589,40 @@ func readAll(t *testing.T, r io.Reader) []byte {
 	require.NoError(t, err)
 	return b
 }
+
+func TestHandleInstanceParses_DisabledTenant(t *testing.T) {
+	t.Parallel()
+
+	f := setupParsesTest(t)
+	ctx := testutil.Context(t, testutil.WaitShort)
+
+	// Create a tenant with parse_config.cohort_mode = "disabled".
+	tenant, err := f.store.InsertTenant(ctx, database.InsertTenantParams{
+		ID:               uuid.New(),
+		Name:             "disabled-tenant",
+		ParseConfig:      []byte(`{"cohort_mode":"disabled"}`),
+		IncludeInAll:     true,
+		AvailableFormats: []string{},
+	})
+	require.NoError(t, err)
+
+	svc := newTestService(t, f.store)
+	r := chi.NewRouter()
+	r.Get("/instances/{instanceID}/parses", func(w http.ResponseWriter, req *http.Request) {
+		// Inject tenant context.
+		ctx := servicetenant.WithTenantID(req.Context(), tenant.ID)
+		svc.HandleInstanceParses(w, req.WithContext(ctx))
+	})
+
+	req := httptest.NewRequest("GET", "/instances/"+f.instanceID.String()+"/parses", nil)
+	w := httptest.NewRecorder()
+	r.ServeHTTP(w, req)
+
+	require.Equal(t, http.StatusOK, w.Code)
+	var resp chroniclesdk.InstanceParsesResponse
+	require.NoError(t, json.NewDecoder(w.Body).Decode(&resp))
+	assert.False(t, resp.Available, "expected available=false for disabled tenant")
+	assert.Equal(t, "disabled", resp.Reason)
+	assert.Empty(t, resp.Players)
+}
+

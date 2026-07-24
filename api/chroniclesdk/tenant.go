@@ -33,7 +33,9 @@ type Tenant struct {
 
 // ParseConfig holds tenant-level parse scoring settings, stored as JSONB.
 type ParseConfig struct {
-	// CohortMode is "spec" (default) or "class".
+	// CohortMode controls the parse scoring mode: "spec" (default), "class",
+	// or "disabled". When disabled, no snapshots are created and the instance
+	// parses endpoint returns available=false.
 	CohortMode string `json:"cohort_mode,omitempty"`
 	// DefaultLookbackDays is the default lookback window (0 = all-time).
 	DefaultLookbackDays int `json:"default_lookback_days,omitempty"`
@@ -122,6 +124,7 @@ type UpsertTenantRequest struct {
 	IncludeInAll        *bool         `json:"include_in_all"`
 	Discoverable        *bool         `json:"discoverable"`
 	Branding            *Branding     `json:"branding"`
+	ParseConfig         *ParseConfig  `json:"parse_config"`
 	DefaultFormat    *string  `json:"default_format"`
 	AvailableFormats []string `json:"available_formats"`
 }
@@ -136,6 +139,14 @@ func (r UpsertTenantRequest) marshalBranding() []byte {
 		return nil
 	}
 	b, _ := json.Marshal(r.Branding)
+	return b
+}
+
+func (r UpsertTenantRequest) marshalParseConfig() []byte {
+	if r.ParseConfig == nil {
+		return nil
+	}
+	b, _ := json.Marshal(r.ParseConfig)
 	return b
 }
 
@@ -179,6 +190,7 @@ func (r UpsertTenantRequest) ToInsertParams() database.InsertTenantParams {
 		IncludeInAll:        includeInAll,
 		Discoverable:        discoverable,
 		Branding:            r.marshalBranding(),
+		ParseConfig:         r.marshalParseConfig(),
 		DefaultFormat:    defaultFormat,
 		AvailableFormats: r.AvailableFormats,
 	}
@@ -225,6 +237,7 @@ func (r UpsertTenantRequest) ToUpdateParams() database.UpdateTenantParams {
 		IncludeInAll:        includeInAll,
 		Discoverable:        discoverable,
 		Branding:            r.marshalBranding(),
+		ParseConfig:         r.marshalParseConfig(),
 		DefaultFormat:    defaultFormat,
 		AvailableFormats: r.AvailableFormats,
 	}

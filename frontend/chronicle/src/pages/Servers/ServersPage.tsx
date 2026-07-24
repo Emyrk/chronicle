@@ -126,6 +126,9 @@ function TenantForm({ tenant, onDone }: { tenant?: Tenant; onDone: () => void })
   const [disableUpload, setDisableUpload] = useState(tenant?.disable_client_upload ?? false);
   const [discoverable, setDiscoverable] = useState(tenant?.discoverable ?? false);
 
+  // Parse mode (spec / class / disabled)
+  const [parseMode, setParseMode] = useState(tenant?.parse_config?.cohort_mode || "spec");
+
   // Parse-axis defaults
   const [defaultFormat, setDefaultFormat] = useState(tenant?.default_format ?? "");
   const [availableFormats, setAvailableFormats] = useState<string[]>([...(tenant?.available_formats ?? [])]);
@@ -166,6 +169,7 @@ function TenantForm({ tenant, onDone }: { tenant?: Tenant; onDone: () => void })
               theme: Object.keys(theme).length > 0 ? theme : undefined,
             }
           : null,
+        parse_config: { cohort_mode: parseMode || undefined },
         default_format: defaultFormat || null,
         available_formats: availableFormats,
       },
@@ -196,6 +200,26 @@ function TenantForm({ tenant, onDone }: { tenant?: Tenant; onDone: () => void })
         <input type="checkbox" checked={discoverable} onChange={(e) => setDiscoverable(e.target.checked)} />
         Discoverable (appear on chronicleclassic.com)
       </label>
+      <div className="pt-2 border-t space-y-2">
+        <p className="text-xs font-medium text-muted-foreground">Parses</p>
+        <div className="space-y-1.5">
+          <label className="block text-xs text-muted-foreground">Parse mode</label>
+          <select
+            value={parseMode}
+            onChange={(e) => setParseMode(e.target.value)}
+            className="w-full rounded-md border bg-background px-3 py-1.5 text-sm"
+          >
+            <option value="spec">By spec (default)</option>
+            <option value="class">By class</option>
+            <option value="disabled">Disabled</option>
+          </select>
+          <p className="text-[10px] text-muted-foreground">
+            {parseMode === "spec" && "Players are ranked against others of the same class+spec."}
+            {parseMode === "class" && "Players are ranked against others of the same class (any spec)."}
+            {parseMode === "disabled" && "Parse scoring is turned off — no snapshots will be created."}
+          </p>
+        </div>
+      </div>
       <div className="pt-2 border-t space-y-2">
         <p className="text-xs font-medium text-muted-foreground">Parse Defaults</p>
         <div className="space-y-1.5">

@@ -466,3 +466,45 @@ func TestEnqueueParseSnapshotBackfill(t *testing.T) {
 	assert.Equal(t, servicerankings.KindPublishParseSnapshotTenant, args.Kind())
 	_ = pgtype.Timestamptz{} // ensure import used
 }
+
+func TestWorkerPublishParseSnapshotTenant_SkipsDisabledTenant(t *testing.T) {
+	t.Parallel()
+
+	_, store, _ := setupSnapshotTest(t)
+	ctx := testutil.Context(t, testutil.WaitShort)
+
+	// Create a tenant with parse_config.cohort_mode = "disabled".
+	tenant, err := store.InsertTenant(ctx, database.InsertTenantParams{
+		ID:               uuid.New(),
+		Name:             "disabled-tenant",
+		ParseConfig:      []byte(`{"cohort_mode":"disabled"}`),
+		IncludeInAll:     true,
+		AvailableFormats: []string{},
+	})
+	require.NoError(t, err)
+
+	worker := &servicerankings.WorkerPublishParseSnapshotTenant{
+		Store:  store,
+		Logger: slog.Default(),
+	}
+
+	job := &river.Job[servicerankings.ArgsPublishParseSnapshotTenant]{
+		Args: servicerankings.ArgsPublishParseSnapshotTenant{
+			TenantID:      tenant.ID,
+			Cutoff:        time.Now().Add(time.Hour),
+			LookbackDays:  0,
+			PolicyVersion: 1,
+		},
+	}
+
+	// Should succeed (skip), no snapshot rows created.
+	err = worker.Work(ctx, job)
+	require.NoError(t, err)
+
+	// Verify no snapshots were created for this tenant.
+	_, snapErr := store.GetLatestPublishedSnapshot(ctx, database.GetLatestPublishedSnapshotParams{
+		TenantID:     tenant.ID,
+		LookbackDays: 0,
+	})
+	require.Error(t, snapErr, "expected no snapshot for disabled tenant")
+}

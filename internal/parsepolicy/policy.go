@@ -23,8 +23,9 @@ const (
 type CohortMode string
 
 const (
-	CohortModeSpec  CohortMode = "spec"
-	CohortModeClass CohortMode = "class"
+	CohortModeSpec     CohortMode = "spec"
+	CohortModeClass    CohortMode = "class"
+	CohortModeDisabled CohortMode = "disabled"
 )
 
 // LookbackDays defines the rolling window for cohort inclusion.
