@@ -191,7 +191,9 @@ export function useSnapshotCohort(params: {
         `/api/v1/rankings/snapshots/${params.snapshotId}/cohort${qs ? `?${qs}` : ""}`,
       ),
     staleTime: RANKINGS_STALE_TIME,
-    enabled: !!params.snapshotId && !!params.encounter_name && !!params.class,
+    // With no encounter/class selected the endpoint returns a buckets-only
+    // response, which the cohort viewer uses to populate its dropdowns.
+    enabled: !!params.snapshotId,
   });
 }
 

@@ -87,17 +87,24 @@ func handleSnapshotCohortWithStore(store cohortQuerier, w http.ResponseWriter, r
 	}
 
 	encounterName := q.Get("encounter_name")
-	if encounterName == "" {
-		httpapi.Write(ctx, w, http.StatusBadRequest, chroniclesdk.Response{
-			Message: "encounter_name is required",
-		})
-		return
-	}
-
 	playerClass := q.Get("class")
-	if playerClass == "" {
-		httpapi.Write(ctx, w, http.StatusBadRequest, chroniclesdk.Response{
-			Message: "class is required",
+	// Without a full bucket selection, return just the available buckets so
+	// the UI can populate its dropdowns before the first cohort is chosen.
+	if encounterName == "" || playerClass == "" {
+		bucketRows, bErr := store.ListDistinctCohortBuckets(ctx, snapshotID)
+		if bErr != nil {
+			httpapi.HandleResponseError(ctx, w, bErr, httpapi.APIError{
+				Response: chroniclesdk.Response{
+					Message: "Failed to list cohort buckets",
+					Detail:  bErr.Error(),
+				},
+			})
+			return
+		}
+		httpapi.Write(ctx, w, http.StatusOK, chroniclesdk.CohortDebugResponse{
+			SnapshotID: snapshotID,
+			Entries:    []chroniclesdk.CohortDebugEntry{},
+			Buckets:    convertCohortBuckets(bucketRows),
 		})
 		return
 	}
@@ -205,16 +212,7 @@ func handleSnapshotCohortWithStore(store cohortQuerier, w http.ResponseWriter, r
 		return
 	}
 
-	buckets := make([]chroniclesdk.CohortBucket, 0, len(bucketRows))
-	for _, b := range bucketRows {
-		buckets = append(buckets, chroniclesdk.CohortBucket{
-			EncounterName:  b.EncounterName,
-			PlayerClass:    normalizeClassName(b.PlayerClass),
-			PlayerSpec:     b.PlayerSpec,
-			DifficultyName: b.DifficultyName,
-			MaxPlayers:     b.MaxPlayers,
-		})
-	}
+	buckets := convertCohortBuckets(bucketRows)
 
 	specStr := ""
 	if playerSpec.Valid {
@@ -234,4 +232,18 @@ func handleSnapshotCohortWithStore(store cohortQuerier, w http.ResponseWriter, r
 		Entries:       entries,
 		Buckets:       buckets,
 	})
+}
+
+func convertCohortBuckets(rows []database.ListDistinctCohortBucketsRow) []chroniclesdk.CohortBucket {
+	buckets := make([]chroniclesdk.CohortBucket, 0, len(rows))
+	for _, b := range rows {
+		buckets = append(buckets, chroniclesdk.CohortBucket{
+			EncounterName:  b.EncounterName,
+			PlayerClass:    normalizeClassName(b.PlayerClass),
+			PlayerSpec:     b.PlayerSpec,
+			DifficultyName: b.DifficultyName,
+			MaxPlayers:     b.MaxPlayers,
+		})
+	}
+	return buckets
 }

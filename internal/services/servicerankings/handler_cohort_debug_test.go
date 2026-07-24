@@ -297,7 +297,7 @@ func TestHandleSnapshotCohort(t *testing.T) {
 		assert.True(t, classSet["MAGE"])
 	})
 
-	t.Run("MissingRequiredParams", func(t *testing.T) {
+	t.Run("PartialParamsReturnBucketsOnly", func(t *testing.T) {
 		t.Parallel()
 		f := setupParsesTest(t)
 
@@ -307,19 +307,28 @@ func TestHandleSnapshotCohort(t *testing.T) {
 
 		snap := f.publishSnapshot(t)
 
-		// Missing encounter_name.
+		// Missing encounter_name: returns 200 with buckets only, so the UI
+		// can populate dropdowns before a bucket is chosen.
 		url := fmt.Sprintf("/snapshots/%s/cohort?class=WARRIOR", snap.ID)
 		req := httptest.NewRequest("GET", url, nil)
 		w := httptest.NewRecorder()
 		r.ServeHTTP(w, req)
-		assert.Equal(t, http.StatusBadRequest, w.Code)
+		require.Equal(t, http.StatusOK, w.Code)
+		var resp chroniclesdk.CohortDebugResponse
+		require.NoError(t, json.Unmarshal(readAll(t, w.Body), &resp))
+		assert.Empty(t, resp.Entries)
+		assert.NotEmpty(t, resp.Buckets)
 
-		// Missing class.
+		// Missing class: same buckets-only response.
 		url = fmt.Sprintf("/snapshots/%s/cohort?encounter_name=Ragnaros", snap.ID)
 		req = httptest.NewRequest("GET", url, nil)
 		w = httptest.NewRecorder()
 		r.ServeHTTP(w, req)
-		assert.Equal(t, http.StatusBadRequest, w.Code)
+		require.Equal(t, http.StatusOK, w.Code)
+		resp = chroniclesdk.CohortDebugResponse{}
+		require.NoError(t, json.Unmarshal(readAll(t, w.Body), &resp))
+		assert.Empty(t, resp.Entries)
+		assert.NotEmpty(t, resp.Buckets)
 	})
 
 	t.Run("EmptyBucket", func(t *testing.T) {
