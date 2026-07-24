@@ -288,10 +288,13 @@ FROM ranking_snapshot_members rsm
 JOIN encounter_dps_rankings edr ON edr.id = rsm.ranking_id
 WHERE rsm.snapshot_id = @snapshot_id
   AND rsm.encounter_name = @encounter_name
-  AND rsm.difficulty_name = @difficulty_name
-  AND rsm.max_players = @max_players
   AND rsm.player_class = @player_class
   AND (sqlc.narg('player_spec')::text IS NULL OR rsm.player_spec = @player_spec)
+  -- Difficulty and raid size are optional viewer filters: unlike the parses
+  -- handler (which always knows the viewed row's exact bucket), the debug
+  -- viewer may leave them unselected, meaning "any".
+  AND (sqlc.narg('difficulty_name')::text IS NULL OR rsm.difficulty_name = @difficulty_name)
+  AND (sqlc.narg('max_players')::smallint IS NULL OR rsm.max_players = @max_players)
   AND CASE WHEN @metric::text = 'hps' THEN rsm.hps ELSE rsm.dps END > 0
 ORDER BY CASE WHEN @metric::text = 'hps' THEN rsm.hps ELSE rsm.dps END DESC;
 

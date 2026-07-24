@@ -4680,10 +4680,13 @@ FROM ranking_snapshot_members rsm
 JOIN encounter_dps_rankings edr ON edr.id = rsm.ranking_id
 WHERE rsm.snapshot_id = $2
   AND rsm.encounter_name = $3
-  AND rsm.difficulty_name = $4
-  AND rsm.max_players = $5
-  AND rsm.player_class = $6
-  AND ($7::text IS NULL OR rsm.player_spec = $7)
+  AND rsm.player_class = $4
+  AND ($5::text IS NULL OR rsm.player_spec = $5)
+  -- Difficulty and raid size are optional viewer filters: unlike the parses
+  -- handler (which always knows the viewed row's exact bucket), the debug
+  -- viewer may leave them unselected, meaning "any".
+  AND ($6::text IS NULL OR rsm.difficulty_name = $6)
+  AND ($7::smallint IS NULL OR rsm.max_players = $7)
   AND CASE WHEN $1::text = 'hps' THEN rsm.hps ELSE rsm.dps END > 0
 ORDER BY CASE WHEN $1::text = 'hps' THEN rsm.hps ELSE rsm.dps END DESC
 `
@@ -4692,10 +4695,10 @@ type GetSnapshotCohortDebugParams struct {
 	Metric         string      `db:"metric" json:"metric"`
 	SnapshotID     uuid.UUID   `db:"snapshot_id" json:"snapshot_id"`
 	EncounterName  string      `db:"encounter_name" json:"encounter_name"`
-	DifficultyName string      `db:"difficulty_name" json:"difficulty_name"`
-	MaxPlayers     int16       `db:"max_players" json:"max_players"`
 	PlayerClass    string      `db:"player_class" json:"player_class"`
 	PlayerSpec     pgtype.Text `db:"player_spec" json:"player_spec"`
+	DifficultyName pgtype.Text `db:"difficulty_name" json:"difficulty_name"`
+	MaxPlayers     pgtype.Int2 `db:"max_players" json:"max_players"`
 }
 
 type GetSnapshotCohortDebugRow struct {
@@ -4719,10 +4722,10 @@ func (q *sqlQuerier) GetSnapshotCohortDebug(ctx context.Context, arg GetSnapshot
 		arg.Metric,
 		arg.SnapshotID,
 		arg.EncounterName,
-		arg.DifficultyName,
-		arg.MaxPlayers,
 		arg.PlayerClass,
 		arg.PlayerSpec,
+		arg.DifficultyName,
+		arg.MaxPlayers,
 	)
 	if err != nil {
 		return nil, err

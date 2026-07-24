@@ -114,12 +114,18 @@ func handleSnapshotCohortWithStore(store cohortQuerier, w http.ResponseWriter, r
 		metric = "hps"
 	}
 
-	difficulty := q.Get("difficulty")
-	maxPlayers := int16(0)
+	// Difficulty and raid size are optional: unselected means "any bucket".
+	// Chronicle data commonly stores real values (e.g. max_players=40), so
+	// filtering on ""/0 when unselected would match nothing.
+	var difficulty pgtype.Text
+	if v := q.Get("difficulty"); v != "" {
+		difficulty = pgtype.Text{String: v, Valid: true}
+	}
+	var maxPlayers pgtype.Int2
 	if v := q.Get("max_players"); v != "" {
 		mp, pErr := strconv.Atoi(v)
-		if pErr == nil {
-			maxPlayers = int16(mp)
+		if pErr == nil && mp > 0 {
+			maxPlayers = pgtype.Int2{Int16: int16(mp), Valid: true}
 		}
 	}
 
