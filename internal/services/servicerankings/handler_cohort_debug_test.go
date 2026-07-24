@@ -305,6 +305,31 @@ func TestHandleSnapshotCohort(t *testing.T) {
 		r := chi.NewRouter()
 		r.Get("/snapshots/{snapshotID}/cohort", svc.HandleSnapshotCohort)
 
+		// Seed one ranking so the snapshot has a bucket to return.
+		baseTime := time.Date(2024, 6, 1, 12, 0, 0, 0, time.UTC)
+		f.insertTestRanking(t, struct {
+			encounterName  string
+			playerGUID     string
+			playerName     string
+			playerClass    string
+			playerSpec     string
+			dps            float64
+			hps            float64
+			difficultyName string
+			maxPlayers     int16
+			killedAt       time.Time
+		}{
+			encounterName:  "Ragnaros",
+			playerGUID:     "Player-0-1",
+			playerName:     "Player1",
+			playerClass:    "WARRIOR",
+			playerSpec:     "Arms",
+			dps:            100,
+			difficultyName: "",
+			maxPlayers:     0,
+			killedAt:       baseTime,
+		})
+
 		snap := f.publishSnapshot(t)
 
 		// Missing encounter_name: returns 200 with buckets only, so the UI
