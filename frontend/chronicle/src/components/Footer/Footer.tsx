@@ -84,7 +84,7 @@ export function Footer() {
                   className="hover:text-foreground transition-colors inline-flex items-center gap-1"
                 >
                   <img src="/c/chronicle/ChronicleIconSquare.png" alt="" aria-hidden="true" className="h-4 w-4" />
-                  Chronicle
+                  Supported Servers
                 </a>
               </li>
               <li>
