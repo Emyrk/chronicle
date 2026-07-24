@@ -470,6 +470,16 @@ export function InstanceView({ instanceName }: InstanceViewProps) {
     [setParams, availableRealms.length],
   )
 
+  // "All" checkbox: clear the realm filter entirely (no filter = all realms).
+  const handleSelectAllRealms = useCallback(() => {
+    setParams((prev) => {
+      const next = new URLSearchParams(prev)
+      next.delete("realms")
+      next.delete("page") // reset to page 1
+      return next
+    })
+  }, [setParams])
+
   // Difficulty shown next to the instance name: the filtered selection, or
   // the only available difficulty when the instance has just one.
   const headerDifficulty = useMemo(() => {
@@ -766,6 +776,16 @@ export function InstanceView({ instanceName }: InstanceViewProps) {
                       </Button>
                     </DropdownMenuTrigger>
                     <DropdownMenuContent align="start">
+                      <DropdownMenuItem
+                        onSelect={(e) => {
+                          e.preventDefault()
+                          handleSelectAllRealms()
+                        }}
+                        className="gap-2"
+                      >
+                        <Checkbox checked={selectedRealms.size === 0} className="pointer-events-none" />
+                        All
+                      </DropdownMenuItem>
                       {availableRealms.map((realm) => {
                         const checked = selectedRealms.size === 0 || selectedRealms.has(realm)
                         return (

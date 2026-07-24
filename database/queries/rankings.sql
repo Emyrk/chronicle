@@ -529,9 +529,12 @@ ORDER BY (d.encounter_name = 'Trash'), d.encounter_name;
 
 -- name: RankingsRealmNames :many
 -- Distinct realm names that have DPS ranking data, for the realm filter dropdown.
+-- Rows with an empty realm name are excluded: they cannot be filtered on, and
+-- selecting "all realms" must collapse to no filter so those rows still appear.
 SELECT DISTINCT edr.realm_name
 FROM encounter_dps_rankings edr
 JOIN wow_server_realms wsr ON wsr.id = edr.realm_id
+WHERE edr.realm_name <> ''
 ORDER BY edr.realm_name;
 
 -- name: HasInstanceDpsRankings :one

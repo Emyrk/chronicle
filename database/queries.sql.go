@@ -6326,10 +6326,13 @@ const rankingsRealmNames = `-- name: RankingsRealmNames :many
 SELECT DISTINCT edr.realm_name
 FROM encounter_dps_rankings edr
 JOIN wow_server_realms wsr ON wsr.id = edr.realm_id
+WHERE edr.realm_name <> ''
 ORDER BY edr.realm_name
 `
 
 // Distinct realm names that have DPS ranking data, for the realm filter dropdown.
+// Rows with an empty realm name are excluded: they cannot be filtered on, and
+// selecting "all realms" must collapse to no filter so those rows still appear.
 func (q *sqlQuerier) RankingsRealmNames(ctx context.Context) ([]string, error) {
 	rows, err := q.db.Query(ctx, rankingsRealmNames)
 	if err != nil {

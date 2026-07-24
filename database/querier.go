@@ -359,6 +359,8 @@ type sqlcQuerier interface {
 	// Step 2: pick each player's best run.
 	RankingsLeaderboard(ctx context.Context, arg RankingsLeaderboardParams) ([]RankingsLeaderboardRow, error)
 	// Distinct realm names that have DPS ranking data, for the realm filter dropdown.
+	// Rows with an empty realm name are excluded: they cannot be filtered on, and
+	// selecting "all realms" must collapse to no filter so those rows still appear.
 	RankingsRealmNames(ctx context.Context) ([]string, error)
 	// Total row count in encounter_dps_rankings (scoped by tenant RLS).
 	// Used as a staleness guard — if count hasn't changed, skip refresh.
