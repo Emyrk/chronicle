@@ -244,7 +244,7 @@ export function CohortViewerPage() {
 
       {selectedSnapshotId && !encounterName && !cohortLoading && (
         <div className="text-center py-16 text-muted-foreground">
-          Select an encounter and class to view the cohort.
+          Select an encounter to begin, then choose a class to view the cohort.
         </div>
       )}
 

@@ -1899,6 +1899,8 @@ CREATE UNIQUE INDEX log_instance_youtube_timestamped_slug_idx ON log_instance_yo
 
 CREATE UNIQUE INDEX log_instances_hashed_slug_idx ON log_instances USING btree (hashed_slug) WHERE (hashed_slug IS NOT NULL);
 
+CREATE UNIQUE INDEX ranking_snapshots_published_key_idx ON ranking_snapshots USING btree (tenant_id, cutoff, lookback_days, cohort_mode, policy_version, query_version) WHERE (status = 'published'::text);
+
 CREATE INDEX river_job_args_index ON river_job USING gin (args);
 
 CREATE INDEX river_job_kind ON river_job USING btree (kind);

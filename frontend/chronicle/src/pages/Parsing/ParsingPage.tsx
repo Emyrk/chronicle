@@ -42,7 +42,7 @@ export function ParsingPage() {
         <h2 className="text-xl font-semibold mb-3">How Is the Score Computed?</h2>
         <p className="text-muted-foreground mb-3">
           Chronicle collects every eligible kill from the{" "}
-          <strong>last 60 days</strong> on a given boss into a comparison
+          <strong>rolling time window (by default, the last 60 days)</strong> on a given boss into a comparison
           cohort — each raid counts as a separate datapoint. Your metric (DPS
           or HPS) is then placed on a 0–100 scale by{" "}
           <strong>linear interpolation</strong> between those values. If you

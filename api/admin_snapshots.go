@@ -1,6 +1,7 @@
 package api
 
 import (
+	"fmt"
 	"net/http"
 	"time"
 
@@ -51,6 +52,18 @@ func (api *API) AdminTriggerParseSnapshot(w http.ResponseWriter, r *http.Request
 		day = parsed
 	}
 
+	// Only allow lookbacks the parse system actually publishes; anything else
+	// would enqueue a job whose snapshot no consumer ever resolves.
+	switch req.LookbackDays {
+	case 0, 30, 60, 90, 180:
+	default:
+		httpapi.Write(ctx, w, http.StatusBadRequest, chroniclesdk.Response{
+			Message: "Invalid lookback_days",
+			Detail:  fmt.Sprintf("must be one of: 0 (all-time), 30, 60, 90, 180; got %d", req.LookbackDays),
+		})
+		return
+	}
+
 	result, err := servicerankings.EnqueueParseSnapshotBackfill(
 		ctx,
 		api.Queues,
@@ -74,6 +87,7 @@ func (api *API) AdminTriggerParseSnapshot(w http.ResponseWriter, r *http.Request
 		JobState: string(result.Job.State),
 	})
 }
+
 // AdminListSnapshots returns all snapshots across tenants for admin viewing.
 //
 //	GET /api/v1/admin/parses/snapshots
@@ -116,4 +130,3 @@ func (api *API) AdminListSnapshots(w http.ResponseWriter, r *http.Request) {
 
 	httpapi.Write(ctx, w, http.StatusOK, out)
 }
-

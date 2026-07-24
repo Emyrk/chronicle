@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"log/slog"
 	"net/http"
 	"sort"
@@ -79,13 +80,27 @@ func handleInstanceParsesWithStore(store parsesQuerier, logger *slog.Logger, w h
 			lookbackDays = parsepolicy.Lookback180Days
 		case "all":
 			lookbackDays = parsepolicy.LookbackAllTime
+		default:
+			httpapi.Write(ctx, w, http.StatusBadRequest, chroniclesdk.Response{
+				Message: "Invalid period",
+				Detail:  fmt.Sprintf("period must be one of: 30d, 60d, 90d, 180d, all; got %q", v),
+			})
+			return
 		}
 	}
 
 	// Parse timeframe (historical = earliest snapshot containing instance; current = latest).
 	timeframe := q.Get("timeframe")
-	if timeframe == "" {
+	switch timeframe {
+	case "":
 		timeframe = "historical"
+	case "historical", "current":
+	default:
+		httpapi.Write(ctx, w, http.StatusBadRequest, chroniclesdk.Response{
+			Message: "Invalid timeframe",
+			Detail:  fmt.Sprintf("timeframe must be historical or current; got %q", timeframe),
+		})
+		return
 	}
 
 	tid := servicetenant.TenantIDFromContext(ctx)
@@ -262,6 +277,9 @@ func handleInstanceParsesWithStore(store parsesQuerier, logger *slog.Logger, w h
 
 	// Score each player's per-boss performance.
 	result := make([]chroniclesdk.InstanceParsePlayer, 0, len(players))
+	// Request-scoped cohort cache keyed by bucket; see comment at use site.
+	cohortCache := make(map[string][]float64)
+
 	for _, playerGUID := range playerOrder {
 		p := players[playerGUID]
 
@@ -303,36 +321,45 @@ func handleInstanceParsesWithStore(store parsesQuerier, logger *slog.Logger, w h
 			}
 
 			if !isUnknownSpec {
-				// Load cohort for this boss+class(+spec).
+				// Load cohort for this boss+class(+spec). Many players share a
+				// bucket (e.g. all Fury Warriors on one boss), so cache cohort
+				// slices per bucket key for the duration of this request to
+				// avoid an N+1 query pattern across players.
 				var playerSpec pgtype.Text
 				if snapshotCohortMode == parsepolicy.CohortModeSpec {
 					playerSpec = pgtype.Text{String: p.spec, Valid: true}
 				}
 
-				cohortRows, cErr := store.GetSnapshotCohortValues(ctx, database.GetSnapshotCohortValuesParams{
-					Metric:         string(metric),
-					SnapshotID:     snapshot.ID,
-					EncounterName:  encName,
-					DifficultyName: memberRow.DifficultyName,
-					MaxPlayers:     memberRow.MaxPlayers,
-					PlayerClass:    memberRow.PlayerClass,
-					PlayerSpec:     playerSpec,
-				})
-				if cErr != nil {
-					logger.Error("failed to load cohort values",
-						"encounter", encName,
-						"player_guid", playerGUID,
-						"error", cErr,
-					)
-					continue
-				}
-
-				// Build cohort value slice.
-				cohort := make([]float64, 0, len(cohortRows))
-				for _, cr := range cohortRows {
-					if v, ok := toFloat64(cr.MetricValue); ok && v > 0 {
-						cohort = append(cohort, v)
+				bucketKey := fmt.Sprintf("%s|%s|%d|%s|%s",
+					encName, memberRow.DifficultyName, memberRow.MaxPlayers,
+					memberRow.PlayerClass, playerSpec.String)
+				cohort, cached := cohortCache[bucketKey]
+				if !cached {
+					cohortRows, cErr := store.GetSnapshotCohortValues(ctx, database.GetSnapshotCohortValuesParams{
+						Metric:         string(metric),
+						SnapshotID:     snapshot.ID,
+						EncounterName:  encName,
+						DifficultyName: memberRow.DifficultyName,
+						MaxPlayers:     memberRow.MaxPlayers,
+						PlayerClass:    memberRow.PlayerClass,
+						PlayerSpec:     playerSpec,
+					})
+					if cErr != nil {
+						logger.Error("failed to load cohort values",
+							"encounter", encName,
+							"player_guid", playerGUID,
+							"error", cErr,
+						)
+						continue
 					}
+
+					cohort = make([]float64, 0, len(cohortRows))
+					for _, cr := range cohortRows {
+						if v, ok := toFloat64(cr.MetricValue); ok && v > 0 {
+							cohort = append(cohort, v)
+						}
+					}
+					cohortCache[bucketKey] = cohort
 				}
 
 				scoreResult, scored := parsepolicy.Score(cohort, metricValue)

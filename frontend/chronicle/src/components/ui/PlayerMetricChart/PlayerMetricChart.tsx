@@ -461,7 +461,7 @@ export function PlayerMetricRow({
     const ro = new ResizeObserver(compute)
     ro.observe(row)
     return () => ro.disconnect()
-  }, [parsePill, player.value, maximumValue, player.playerName])
+  }, [parsePill, player.value, maximumValue])
 
   const pillElement = parsePill ? (
     <TooltipProvider>
