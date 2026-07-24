@@ -11,6 +11,7 @@ import {
   INSTANCE_CONFIG,
 } from "@/pages/Logs/utils/instanceImages";
 import { RaidCard } from "./RaidCard";
+import { expandInstanceOptions, expandInstanceQuery } from "./recentRaids.utils";
 import type { RecentInstance, RecentInstancesResponse } from "@/api/typesGenerated";
 
 function renderItems(names: string[], selected: string[], onToggle: (name: string) => void) {
@@ -149,8 +150,13 @@ export function RecentRaids() {
     const fallbackNames = Object.keys(INSTANCE_CONFIG);
     const baseNames = supportedNames.length > 0 ? supportedNames : fallbackNames;
 
+    // Expand parent instances (e.g. "Tower of Karazhan") so their derived
+    // sub-instances ("Lower Tower of Karazhan", "Upper Tower of Karazhan")
+    // are searchable and selectable in the picker.
+    const expandedNames = expandInstanceOptions(baseNames);
+
     // Include selected instances so URL-provided values remain visible in the picker.
-    const uniqueNames = new Set<string>([...baseNames, ...stableSelectedInstances]);
+    const uniqueNames = new Set<string>([...expandedNames, ...stableSelectedInstances]);
     return Array.from(uniqueNames).sort((a, b) => a.localeCompare(b));
   }, [stableSelectedInstances, supportedInstances]);
 
@@ -168,20 +174,23 @@ export function RecentRaids() {
   );
 
   const effectiveInstanceNames = useMemo(() => {
+    let names: string[];
     if (selectedInstancesValid.length > 0) {
       if (category === "all") {
-        return selectedInstancesValid;
+        names = selectedInstancesValid;
+      } else {
+        const categorySet = new Set(categoryInstanceOptions);
+        names = selectedInstancesValid.filter((name) => categorySet.has(name));
       }
-
-      const categorySet = new Set(categoryInstanceOptions);
-      return selectedInstancesValid.filter((name) => categorySet.has(name));
+    } else if (category === "all") {
+      names = [];
+    } else {
+      names = categoryInstanceOptions;
     }
 
-    if (category === "all") {
-      return [];
-    }
-
-    return categoryInstanceOptions;
+    // Expand parent instances (e.g. "Tower of Karazhan") to include their
+    // derived sub-instances in the API query so all matching rows are returned.
+    return expandInstanceQuery(names);
   }, [category, categoryInstanceOptions, selectedInstancesValid]);
 
   const hasConflictingFilters = selectedInstancesValid.length > 0 && effectiveInstanceNames.length === 0;
