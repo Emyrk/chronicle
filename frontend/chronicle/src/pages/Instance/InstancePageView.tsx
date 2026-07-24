@@ -43,7 +43,7 @@ import { InstanceActionBar } from "@/components/InstanceActionBar/InstanceAction
 import { InstanceHelpSheet } from "@/components/HelpSheet";
 import { ENCOUNTER_TIPS, ENTITY_TIPS, CLASS_TOGGLE_TIPS } from "@/constants/tips";
 import { InstanceMenu } from "./InstanceMenu";
-import { InstanceParses } from "./InstanceParses";
+
 import { HeroicBadge } from "@/components/HeroicBadge";
 import { isHeroic } from "@/lib/wowUtils";
 import { DuplicatesBadge } from "./DuplicatesBadge";
@@ -2958,18 +2958,6 @@ export function InstancePageView({
           </div>
         )}
       </div>
-
-      {/* Parse Scores — shown when encounters are selected */}
-      {selectedEncounters.length > 0 && (
-        <div className="mt-4 px-1">
-          <InstanceParses
-            instanceId={instance.id}
-            selectedEncounterNames={selectedEncounters
-              .filter((e) => e.boss && e.kill_type !== "wipe" && e.kill_type !== "reset")
-              .map((e) => e.name)}
-          />
-        </div>
-      )}
 
       {/* Mobile: FAB toggle button - portaled to body to avoid fixed positioning issues */}
       {isMobile && createPortal(

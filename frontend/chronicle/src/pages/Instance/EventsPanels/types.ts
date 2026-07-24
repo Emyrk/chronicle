@@ -234,6 +234,9 @@ export interface PanelRenderProps<TResult> {
 
   /** Register this panel's PlayerMetricChartData[] in the shared ChartDataRegistry. */
   registerChartData?: (data: PlayerMetricChartData[]) => void;
+  /** Whether user-customized filters are active on this panel. */
+  hasCustomFilters?: boolean;
+
 }
 
 /**

@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { PlayerMetricChart, type PlayerMetricChartData } from "@/components/ui/PlayerMetricChart/PlayerMetricChart";
+import { PlayerMetricChart, type PlayerMetricChartData, type ParsePillData } from "@/components/ui/PlayerMetricChart/PlayerMetricChart";
 import { RowContextMenu, getArmoryUrl } from "@/components/ui/PlayerMetricChart/RowContextMenu";
 import { AbilityBreakout, type AbilityData } from "@/components/ui/AbilityBreakout";
 import { GenericPanel } from "../GenericPanel";
@@ -12,6 +12,9 @@ import { formatNumber } from "@/lib/format";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/Tooltip/tooltip";
 import { ChevronLeft, Layers } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { useInstanceParses } from "@/api/rankingsQueries";
+import { parseHexColor, parseColor } from "../../parseColors";
+import type { InstanceParsePlayer, InstanceParseBoss } from "@/api/typesGenerated";
 
 // ── Panel option encoding ──
 // panelOption is a comma-separated string of tokens stored in the URL.
@@ -95,6 +98,123 @@ function aggregateForEncounters(
 }
 
 
+// ── Parse pill builder ──
+
+function buildParsePill(
+  player: InstanceParsePlayer,
+  selectedEncounters: readonly string[],
+  singleBoss: boolean,
+  cohortMode: string,
+): ParsePillData | null {
+  if (player.status === "unknown_spec") return null;
+
+  if (singleBoss) {
+    const boss = player.bosses.find((b) => b.encounter_name === selectedEncounters[0]);
+    if (!boss || boss.status === "sample_too_small") return null;
+    return {
+      displayScore: boss.display_score,
+      color: parseHexColor(boss.display_score),
+      tooltipContent: <ParsePillTooltipSingle boss={boss} player={player} cohortMode={cohortMode} />,
+    };
+  }
+
+  // Multi-boss: show average parse
+  if (!player.average_parse) return null;
+  const avg = player.average_parse;
+  return {
+    displayScore: avg.display_score,
+    color: parseHexColor(avg.display_score),
+    tooltipContent: (
+      <ParsePillTooltipMulti
+        player={player}
+        encounterNames={selectedEncounters}
+        average={avg}
+        cohortMode={cohortMode}
+      />
+    ),
+  };
+}
+
+/** "Fury Warrior" in spec mode, "Warrior" in class mode. */
+function cohortBucketLabel(player: InstanceParsePlayer, cohortMode: string): string {
+  if (cohortMode === "class" || !player.player_spec) return player.player_class;
+  return `${player.player_spec} ${player.player_class}`;
+}
+
+function ParsePillTooltipSingle({
+  boss,
+  player,
+  cohortMode,
+}: {
+  boss: InstanceParseBoss;
+  player: InstanceParsePlayer;
+  cohortMode: string;
+}) {
+  const isLow = boss.status === "low_confidence";
+  return (
+    <div className="space-y-1">
+      <p className="font-medium">{boss.encounter_name}</p>
+      <p className="text-xs">
+        <span className={cn("font-mono font-bold", parseColor(boss.display_score))}>
+          {boss.display_score}
+        </span>
+        {" "}· Score {boss.precise_score.toFixed(1)}
+      </p>
+      <p className="text-xs text-zinc-400">
+        {boss.metric_value.toFixed(1)} DPS · {cohortBucketLabel(player, cohortMode)} · {boss.sample_size} in cohort
+      </p>
+      {isLow && (
+        <p className="text-xs text-yellow-400">Low confidence (small sample)</p>
+      )}
+    </div>
+  );
+}
+
+function ParsePillTooltipMulti({
+  player,
+  encounterNames,
+  average,
+  cohortMode,
+}: {
+  player: InstanceParsePlayer;
+  encounterNames: readonly string[];
+  average: NonNullable<InstanceParsePlayer["average_parse"]>;
+  cohortMode: string;
+}) {
+  const bossMap = new Map(player.bosses.map((b) => [b.encounter_name, b]));
+  return (
+    <div className="space-y-1">
+      <p className="font-medium">
+        Average Parse{" "}
+        <span className={cn("font-mono font-bold", parseColor(average.display_score))}>
+          {average.display_score}
+        </span>
+        <span className="text-xs text-zinc-500 ml-1">
+          · {average.killed}/{average.selected}
+        </span>
+      </p>
+      <p className="text-xs text-zinc-400">{cohortBucketLabel(player, cohortMode)}</p>
+      <div className="space-y-0.5 pt-0.5">
+        {encounterNames.map((enc) => {
+          const b = bossMap.get(enc);
+          return (
+            <div key={enc} className="flex items-center justify-between gap-3 text-xs">
+              <span className="text-zinc-300">{enc}</span>
+              {b ? (
+                <span className={cn("font-mono", parseColor(b.display_score))}>
+                  {b.display_score}
+                </span>
+              ) : (
+                <span className="text-zinc-500">—</span>
+              )}
+            </div>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
 interface DamageDoneContentProps extends PanelRenderProps<DamageDoneResult> {
   sourceType?: DamageSourceType;
 }
@@ -165,6 +285,42 @@ export const DamageDoneContent = (props: DamageDoneContentProps) => {
     processing: props.processing,
     showRanks,
   });
+
+  // ── Parse pills: fetch parse data and build pill map for bar rows ──
+  // Only fetch when no custom filters are active (filtered damage ≠ cohort values).
+  const selectedBossEncounterNames = useMemo(() => {
+    return context.instance.encounters
+      .filter((e) => e.boss && e.kill_type !== "wipe" && e.kill_type !== "reset")
+      .filter((e) => context.selectedEncounterIds.includes(e.id))
+      .map((e) => e.name);
+  }, [context.instance.encounters, context.selectedEncounterIds]);
+
+  const showParsePills = sourceType === "players" && !props.hasCustomFilters && !focusedPlayerId;
+
+  const { data: parsesData } = useInstanceParses({
+    instanceId: context.instance.id,
+    encounterNames: selectedBossEncounterNames,
+    metric: "dps",
+    // Don't fetch when pills can't render: filters active, focused view,
+    // non-player source, or no boss encounters selected.
+    enabled: showParsePills && selectedBossEncounterNames.length > 0,
+  });
+
+  const parsePills = useMemo(() => {
+    if (!showParsePills || !parsesData?.available || !parsesData.players.length) return undefined;
+
+    const singleBoss = parsesData.selected_encounters.length === 1;
+    const pills = new Map<string, ParsePillData>();
+
+    for (const player of parsesData.players) {
+      const pill = buildParsePill(player, parsesData.selected_encounters, singleBoss, parsesData.cohort_mode);
+      if (pill) {
+        // Match by player GUID (the playerID in PlayerMetricChartData)
+        pills.set(player.player_guid, pill);
+      }
+    }
+    return pills.size > 0 ? pills : undefined;
+  }, [showParsePills, parsesData]);
 
   // ── Focus feature: Ctrl+click a player row to show per-ability view ──
 
@@ -419,6 +575,7 @@ export const DamageDoneContent = (props: DamageDoneContentProps) => {
           breakout={breakout}
           onRowCtrlClick={handleRowCtrlClick}
           disableInteractions={props.context.renderMode === "layout_lab"}
+          parsePills={parsePills}
         />
       )}
 

@@ -196,3 +196,17 @@ type InstanceParseAverage struct {
 	Selected     int     `json:"selected"`
 }
 
+
+// AdminTriggerSnapshotRequest is the request body for the admin parse snapshot trigger.
+type AdminTriggerSnapshotRequest struct {
+	// TenantID scopes the snapshot to a specific tenant. Empty = root/all-time scope.
+	TenantID string `json:"tenant_id"`
+	// LookbackDays overrides the default lookback window. 0 = all-time.
+	LookbackDays int32 `json:"lookback_days"`
+}
+
+// AdminTriggerSnapshotResponse is returned when a snapshot publication job is enqueued.
+type AdminTriggerSnapshotResponse struct {
+	JobID    int64  `json:"job_id"`
+	JobState string `json:"job_state"`
+}

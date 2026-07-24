@@ -852,6 +852,7 @@ export function EventsPanel({
                 panelIndex,
                 panelId: effectivePanelId,
                 registerChartData,
+                hasCustomFilters,
               })}
             </div>
           </>

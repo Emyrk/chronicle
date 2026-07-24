@@ -1,4 +1,4 @@
-import { useMemo, useState, useRef, useCallback, useEffect, type ReactNode } from 'react'
+import { useMemo, useState, useRef, useCallback, useEffect, useLayoutEffect, type ReactNode } from 'react'
 import { createPortal } from 'react-dom'
 import {
   Tooltip,
@@ -25,6 +25,16 @@ export {
 /* eslint-enable react-refresh/only-export-components */
 
 export type ChartType = 'damage' | 'healing' | 'taken' | 'mitigation'
+
+/** Parse pill data for a player row. */
+export interface ParsePillData {
+  /** Display score (0-100 integer). */
+  displayScore: number;
+  /** Hex color for the score. */
+  color: string;
+  /** Tooltip content rendered on hover. */
+  tooltipContent: ReactNode;
+}
 
 export interface PlayerMetricChartData {
   playerID: string
@@ -72,6 +82,8 @@ interface PlayerMetricChartProps extends React.ComponentProps<"div"> {
   onRowCtrlClick?: (playerId: string, event: React.MouseEvent) => void
   /** Custom suffix appended to each row's value (e.g. '%'). Overrides the default '/s' from perSecond. */
   valueSuffix?: string
+  /** Parse pill data keyed by playerID. When provided, shows a colored score pill on each matching row. */
+  parsePills?: Map<string, ParsePillData>
 }
 
 export function PlayerMetricChart({
@@ -88,6 +100,7 @@ export function PlayerMetricChart({
   disableInteractions = false,
   onRowCtrlClick,
   valueSuffix,
+  parsePills,
   // Exclude dir from divProps to avoid type conflict with ScrollArea
   dir: _dir,
   ...divProps
@@ -174,6 +187,7 @@ export function PlayerMetricChart({
             stackedLabel={stackedLabel}
             isFirstRow={index === 0}
             onCtrlClick={onRowCtrlClick ? (e) => onRowCtrlClick(player.playerID, e) : undefined}
+            parsePill={parsePills?.get(player.playerID)}
           />
         })}
       </div>
@@ -199,6 +213,8 @@ export interface PlayerMetricRowProps {
   isFirstRow?: boolean
   /** Called when the row is Ctrl+clicked (or Cmd+clicked on Mac) */
   onCtrlClick?: (event: React.MouseEvent) => void
+  /** Optional parse score pill to show at the bar's right edge */
+  parsePill?: ParsePillData
 }
 
 // Draggable pinned tooltip component
@@ -376,6 +392,7 @@ export function PlayerMetricRow({
   stackedLabel = 'Overheal',
   isFirstRow = false,
   onCtrlClick: onCtrlClickProp,
+  parsePill,
 }: PlayerMetricRowProps) {
   const { ref, x, y } = useMouse<HTMLDivElement>();
   const rowRef = useRef<HTMLDivElement>(null)
@@ -417,6 +434,67 @@ export function PlayerMetricRow({
   }, [ref])
 
   const hasBreakout = !!breakout
+
+  // Parse pill placement: render inside the bar (right-aligned at the bar
+  // end) only when there is measured room between the end of the player
+  // name and the bar end. Otherwise render inline, right after the name.
+  const nameRef = useRef<HTMLSpanElement>(null)
+  const [pillInsideBar, setPillInsideBar] = useState(false)
+  useLayoutEffect(() => {
+    if (!parsePill) return
+    const row = rowRef.current
+    const name = nameRef.current
+    if (!row || !name) return
+    const compute = () => {
+      const rowWidth = row.clientWidth
+      const barEnd = rowWidth * (player.value / maximumValue)
+      // Name text end (offsetLeft covers rank/icon/padding; scrollWidth is
+      // the full text width even when the flex box is wider).
+      const nameEnd = name.offsetLeft + Math.min(name.scrollWidth, name.clientWidth)
+      const pillWidth = 43 // approx: 2-3 digits + padding + border
+      const rightReserved = 150 // damage value + percentage columns
+      const fitsAfterName = barEnd - 6 - pillWidth > nameEnd + 4
+      const fitsBeforeValues = barEnd <= rowWidth - rightReserved + pillWidth
+      setPillInsideBar(fitsAfterName && fitsBeforeValues)
+    }
+    compute()
+    const ro = new ResizeObserver(compute)
+    ro.observe(row)
+    return () => ro.disconnect()
+  }, [parsePill, player.value, maximumValue, player.playerName])
+
+  const pillElement = parsePill ? (
+    <TooltipProvider>
+      <Tooltip delayDuration={150}>
+        <TooltipTrigger asChild>
+          <span
+            className="font-mono font-bold tabular-nums shrink-0"
+            style={{
+              display: 'inline-block',
+              fontSize: '11px',
+              padding: '1.5px 7px',
+              borderRadius: '10px',
+              border: `1.5px solid ${parsePill.color}`,
+              color: parsePill.color,
+              background: 'oklch(0.15 0 0 / 0.85)',
+              lineHeight: '1.3',
+            }}
+            onClick={(e) => e.stopPropagation()}
+          >
+            {parsePill.displayScore}
+          </span>
+        </TooltipTrigger>
+        <TooltipContent
+          align="end"
+          sideOffset={5}
+          hideArrow
+          className="max-w-[280px] bg-popover text-foreground border border-border"
+        >
+          {parsePill.tooltipContent}
+        </TooltipContent>
+      </Tooltip>
+    </TooltipProvider>
+  ) : null
 
   const rowContent = (
     <div
@@ -502,6 +580,25 @@ export function PlayerMetricRow({
         );
       })()}
 
+      {/* Parse score pill (inside-the-bar variant): right-aligned at the
+          bar end, only when measurement confirmed room past the name. */}
+      {pillElement && pillInsideBar && (
+        <div
+          style={{
+            position: 'absolute',
+            top: 0,
+            bottom: 0,
+            height: '100%',
+            display: 'flex',
+            alignItems: 'center',
+            right: `calc(100% - ${(player.value / maximumValue) * 100}% + 6px)`,
+            zIndex: 2,
+          }}
+        >
+          {pillElement}
+        </div>
+      )}
+
       {/* Content overlay */}
       <div
         style={{
@@ -557,8 +654,10 @@ export function PlayerMetricRow({
 
         {/* Spec name */}
         <span
+          ref={nameRef}
           style={{
-            flex: 1,
+            flex: '0 1 auto',
+            minWidth: 0,
             fontSize: '13px',
             fontWeight: 500,
             whiteSpace: 'nowrap',
@@ -568,6 +667,17 @@ export function PlayerMetricRow({
         >
           {player.playerName}
         </span>
+
+        {/* Parse score pill (inline variant): right of the name when the
+            bar is too narrow to hold the pill past the name. */}
+        {pillElement && !pillInsideBar && (
+          <span style={{ marginLeft: '6px', display: 'inline-flex', flexShrink: 0 }}>
+            {pillElement}
+          </span>
+        )}
+
+        {/* Spacer - keeps values/percentage right-aligned */}
+        <span style={{ flex: 1, minWidth: 0 }} />
 
         {/* DPS value */}
         {formatValue(type, player, suffix, decimals)}
@@ -585,7 +695,7 @@ export function PlayerMetricRow({
         >
           {((player.value/summedValue)*100).toFixed(2)}%
         </span>
-        
+
         {/* Stacked percentage - shown when stackedValue exists */}
         {player.stackedValue !== undefined && player.stackedValue > 0 && (() => {
           const totalWithStacked = player.value + player.stackedValue;

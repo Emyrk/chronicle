@@ -162,6 +162,8 @@ export function useInstanceParses(params: {
   metric?: "dps" | "hps";
   period?: string;
   timeframe?: "historical" | "current";
+  /** Skip fetching entirely when the caller knows parses won't be shown. */
+  enabled?: boolean;
 }) {
   const searchParams = new URLSearchParams();
   // Sort encounter names for stable query key.
@@ -193,7 +195,7 @@ export function useInstanceParses(params: {
         `/api/v1/rankings/instances/${params.instanceId}/parses${qs ? `?${qs}` : ""}`,
       ),
     staleTime: RANKINGS_STALE_TIME,
-    enabled: !!params.instanceId,
+    enabled: !!params.instanceId && (params.enabled ?? true),
   });
 }
 

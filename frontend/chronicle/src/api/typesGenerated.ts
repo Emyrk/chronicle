@@ -144,6 +144,30 @@ export interface AdminSetUserRetentionRequest {
     readonly raw_log_retention_hours: number;
 }
 
+// From chroniclesdk/rankings.go
+/**
+ * AdminTriggerSnapshotRequest is the request body for the admin parse snapshot trigger.
+ */
+export interface AdminTriggerSnapshotRequest {
+    /**
+     * TenantID scopes the snapshot to a specific tenant. Empty = root/all-time scope.
+     */
+    readonly tenant_id: string;
+    /**
+     * LookbackDays overrides the default lookback window. 0 = all-time.
+     */
+    readonly lookback_days: number;
+}
+
+// From chroniclesdk/rankings.go
+/**
+ * AdminTriggerSnapshotResponse is returned when a snapshot publication job is enqueued.
+ */
+export interface AdminTriggerSnapshotResponse {
+    readonly job_id: number;
+    readonly job_state: string;
+}
+
 // From chroniclesdk/user.go
 export interface AdminUsersResponse {
     readonly users: readonly User[];
