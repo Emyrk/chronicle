@@ -4,7 +4,7 @@ import type {
   AdminSnapshotSummary,
   AdminTriggerSnapshotResponse,
 } from "@/api/typesGenerated";
-import { Loader2, Camera } from "lucide-react";
+import { Loader2, Camera, Trash2 } from "lucide-react";
 import { Card } from "@/components/ui/Card/Card";
 import { Button } from "@/components/ui/button";
 
@@ -52,6 +52,23 @@ export function AdminParsingPage() {
         );
       }
       return res.json() as Promise<AdminTriggerSnapshotResponse>;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["admin", "parses", "snapshots"] });
+    },
+  });
+
+  const deleteMutation = useMutation({
+    mutationFn: async (snapshotId: string) => {
+      const res = await fetch(`/api/v1/admin/parses/snapshots/${snapshotId}`, {
+        method: "DELETE",
+      });
+      if (!res.ok) {
+        const body = await res.json().catch(() => ({}));
+        throw new Error(
+          (body as Record<string, string>).message ?? "Failed to delete snapshot",
+        );
+      }
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["admin", "parses", "snapshots"] });
@@ -182,6 +199,7 @@ export function AdminParsingPage() {
                   <th className="py-2 pr-4">Members</th>
                   <th className="py-2 pr-4">Status</th>
                   <th className="py-2 pr-4">Published</th>
+                  <th className="py-2 pr-4"></th>
                 </tr>
               </thead>
               <tbody>
@@ -211,6 +229,25 @@ export function AdminParsingPage() {
                     <td className="py-2 pr-4 font-mono text-xs">
                       {snap.published_at ? formatDate(snap.published_at) : "—"}
                     </td>
+                    <td className="py-2 pr-4">
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        className="text-red-400 hover:text-red-300 hover:bg-red-500/10"
+                        disabled={deleteMutation.isPending}
+                        onClick={() => {
+                          if (
+                            window.confirm(
+                              `Delete snapshot ${snap.id}? Members will be cascade-deleted. Raids from this day will fall back to the previous snapshot.`,
+                            )
+                          ) {
+                            deleteMutation.mutate(snap.id);
+                          }
+                        }}
+                      >
+                        <Trash2 className="h-3.5 w-3.5" />
+                      </Button>
+                    </td>
                   </tr>
                 ))}
               </tbody>
@@ -219,6 +256,13 @@ export function AdminParsingPage() {
         ) : (
           <p className="text-sm text-muted-foreground text-center py-4">
             No snapshots found. Create one to get started.
+          </p>
+        )}
+        {deleteMutation.isError && (
+          <p className="text-sm text-red-500 mt-2">
+            {deleteMutation.error instanceof Error
+              ? deleteMutation.error.message
+              : "Failed to delete snapshot"}
           </p>
         )}
       </Card>

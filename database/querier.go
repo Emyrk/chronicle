@@ -51,6 +51,12 @@ type sqlcQuerier interface {
 	DeleteLogInstanceByIDAndGroup(ctx context.Context, arg DeleteLogInstanceByIDAndGroupParams) (uuid.UUID, error)
 	DeleteLogInstancesByIDs(ctx context.Context, ids []uuid.UUID) (int64, error)
 	DeleteModificationRequest(ctx context.Context, id uuid.UUID) error
+	// Delete a snapshot by ID. Members are cascade-deleted via the FK
+	// ranking_snapshot_members.snapshot_id → ranking_snapshots.id ON DELETE CASCADE
+	// (migration 000143). Deleting a day's snapshot makes raids from that day
+	// resolve to the previous snapshot (or show no parses if none), and allows
+	// re-backfilling that day since the idempotency guard checks status='published'.
+	DeleteRankingSnapshot(ctx context.Context, id uuid.UUID) error
 	DeleteRegressionFixture(ctx context.Context, id uuid.UUID) error
 	DeleteRegressionSnapshot(ctx context.Context, id uuid.UUID) error
 	DeleteRetentionPolicy(ctx context.Context, id uuid.UUID) error

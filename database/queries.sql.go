@@ -4422,6 +4422,20 @@ func (q *sqlQuerier) CountSnapshotMembers(ctx context.Context, snapshotID uuid.U
 	return count, err
 }
 
+const deleteRankingSnapshot = `-- name: DeleteRankingSnapshot :exec
+DELETE FROM ranking_snapshots WHERE id = $1
+`
+
+// Delete a snapshot by ID. Members are cascade-deleted via the FK
+// ranking_snapshot_members.snapshot_id → ranking_snapshots.id ON DELETE CASCADE
+// (migration 000143). Deleting a day's snapshot makes raids from that day
+// resolve to the previous snapshot (or show no parses if none), and allows
+// re-backfilling that day since the idempotency guard checks status='published'.
+func (q *sqlQuerier) DeleteRankingSnapshot(ctx context.Context, id uuid.UUID) error {
+	_, err := q.db.Exec(ctx, deleteRankingSnapshot, id)
+	return err
+}
+
 const getLatestPublishedSnapshot = `-- name: GetLatestPublishedSnapshot :one
 SELECT id, tenant_id, cutoff, window_start, lookback_days, cohort_mode, policy_version, query_version, min_parser_version_num, min_addon_version_num, status, created_at, published_at, source_row_count, source_watermark
 FROM ranking_snapshots

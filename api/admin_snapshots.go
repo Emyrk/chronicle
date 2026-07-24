@@ -10,8 +10,45 @@ import (
 	"github.com/Emyrk/chronicle/database"
 	"github.com/Emyrk/chronicle/internal/parsepolicy"
 	"github.com/Emyrk/chronicle/internal/services/servicerankings"
+	"github.com/go-chi/chi/v5"
 	"github.com/google/uuid"
 )
+// AdminDeleteSnapshot removes a snapshot and its cascade-deleted members.
+// DELETE is idempotent: deleting a nonexistent ID is a no-op 200.
+//
+// Deleting a day's snapshot makes raids from that day resolve to the previous
+// snapshot (or show no parses if none), and allows re-backfilling that day
+// since the idempotency guard only checks status='published'.
+//
+//	DELETE /api/v1/admin/parses/snapshots/{snapshotID}
+func (api *API) AdminDeleteSnapshot(w http.ResponseWriter, r *http.Request) {
+	ctx := r.Context()
+
+	snapshotID, err := uuid.Parse(chi.URLParam(r, "snapshotID"))
+	if err != nil {
+		httpapi.Write(ctx, w, http.StatusBadRequest, chroniclesdk.Response{
+			Message: "Invalid snapshot ID",
+			Detail:  err.Error(),
+		})
+		return
+	}
+
+	store := database.New(api.Opts.Pool)
+	if err := store.DeleteRankingSnapshot(ctx, snapshotID); err != nil {
+		httpapi.HandleResponseError(ctx, w, err, httpapi.APIError{
+			Response: chroniclesdk.Response{
+				Message: "Failed to delete snapshot",
+				Detail:  err.Error(),
+			},
+		})
+		return
+	}
+
+	httpapi.Write(ctx, w, http.StatusOK, chroniclesdk.Response{
+		Message: "Snapshot deleted",
+	})
+}
+
 
 // AdminTriggerParseSnapshot enqueues the normal idempotent parse snapshot
 // publication job. Useful to trigger without waiting for the hourly tick;
