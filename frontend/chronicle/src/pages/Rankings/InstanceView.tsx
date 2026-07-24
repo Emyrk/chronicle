@@ -137,11 +137,12 @@ export function InstanceView({ instanceName }: InstanceViewProps) {
     return new Set(raw.split(",").filter(Boolean))
   }, [params])
 
+  // Default (no URL param) = bosses only; trash is opt-in via ?encounters=.
   const selectedEncounters: Set<string> = useMemo(() => {
     const raw = params.get("encounters")
-    if (!raw) return new Set(encounterNames)
+    if (!raw) return new Set(bossNames)
     return new Set(raw.split(",").filter(Boolean))
-  }, [params, encounterNames])
+  }, [params, bossNames])
 
   // ── Setters ──────────────────────────────────────────────────────────
 
@@ -307,14 +308,14 @@ export function InstanceView({ instanceName }: InstanceViewProps) {
       setParams((prev) => {
         const next = new URLSearchParams(prev)
         const raw = prev.get("encounters")
-        const current = raw ? new Set(raw.split(",").filter(Boolean)) : new Set(encounterNames)
+        const current = raw ? new Set(raw.split(",").filter(Boolean)) : new Set(bossNames)
 
         if (ctrlKey) {
           // Toggle individual
           if (current.has(name)) current.delete(name)
           else current.add(name)
         } else {
-          // Single-select: if already solo-selected, select all; otherwise select only this one
+          // Single-select: if already solo-selected, reset to default (bosses); otherwise select only this one
           if (current.size === 1 && current.has(name)) {
             next.delete("encounters")
             return next
@@ -323,7 +324,10 @@ export function InstanceView({ instanceName }: InstanceViewProps) {
           current.add(name)
         }
 
-        if (current.size === 0 || current.size === encounterNames.length) {
+        // No param = default (bosses only). An empty selection also resets to default.
+        const isDefault =
+          current.size === bossNames.size && [...current].every((n) => bossNames.has(n))
+        if (current.size === 0 || isDefault) {
           next.delete("encounters")
         } else {
           next.set("encounters", [...current].join(","))
@@ -331,23 +335,24 @@ export function InstanceView({ instanceName }: InstanceViewProps) {
         return next
       })
     },
-    [setParams, encounterNames],
+    [setParams, bossNames],
   )
 
   const handleQuickSelect = useCallback(
     (mode: "all" | "bosses" | "trash") => {
       setParams((prev) => {
         const next = new URLSearchParams(prev)
-        if (mode === "all") {
+        if (mode === "bosses" || (mode === "all" && trashNames.size === 0)) {
+          // Bosses only is the default — no param needed.
           next.delete("encounters")
         } else {
-          const names = mode === "bosses" ? bossNames : trashNames
+          const names = mode === "all" ? encounterNames : [...trashNames]
           next.set("encounters", [...names].join(","))
         }
         return next
       })
     },
-    [setParams, bossNames, trashNames],
+    [setParams, encounterNames, trashNames],
   )
 
   // ── API query params ─────────────────────────────────────────────────

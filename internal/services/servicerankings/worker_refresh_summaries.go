@@ -18,7 +18,7 @@ import (
 // query logic changes (e.g. aggregation method). The staleness guard compares
 // this against the stored version to force a recompute even when row counts
 // have not changed.
-const rankingsQueryVersion int16 = 1
+const rankingsQueryVersion int16 = 2
 
 // ---------------------------------------------------------------------------
 // ArgsRefreshRankingsSummaries — dispatch job (periodic, hourly).

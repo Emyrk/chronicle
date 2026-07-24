@@ -24,6 +24,8 @@ WITH deduped AS (
       AND edr.difficulty_name = @difficulty_name
       AND edr.max_players = @max_players
       AND edr.dps > 0
+      -- Boss encounters only: trash is excluded from the top-3 preview by default.
+      AND edr.encounter_name <> 'Trash'
     ORDER BY edr.player_guid, edr.encounter_name, COALESCE(li.duplicate_group_id, li.id), edr.dps DESC
 ),
 instance_encounter_count AS (
