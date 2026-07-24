@@ -748,7 +748,7 @@ func TestHandleInstanceParses_CanonicalResolution(t *testing.T) {
 		assert.Equal(t, cutoffDay10, resp.Cutoff.UTC())
 	})
 
-	t.Run("FallsBackToEarliestSnapshotForOldRuns", func(t *testing.T) {
+	t.Run("RunsPredatingAllSnapshotsGetNoParses", func(t *testing.T) {
 		t.Parallel()
 		pool, _ := dbtestutil.NewPGXPool(t)
 		store := database.New(pool)
@@ -853,8 +853,11 @@ func TestHandleInstanceParses_CanonicalResolution(t *testing.T) {
 		var resp chroniclesdk.InstanceParsesResponse
 		require.NoError(t, json.Unmarshal(readAll(t, w.Body), &resp))
 
-		// Should fall back to the earliest snapshot even though it comes after the instance.
-		assert.True(t, resp.Available)
-		assert.Equal(t, cutoffJuly, resp.Cutoff.UTC())
+		// Runs predating all snapshots intentionally get no parses: there is
+		// no honest historical dataset for them, and comparing an old raid
+		// against current data would be misleading.
+		assert.False(t, resp.Available)
+		assert.Equal(t, "no_snapshot", resp.Reason)
+		_ = cutoffJuly // snapshot exists but postdates the run; must not be used
 	})
 }

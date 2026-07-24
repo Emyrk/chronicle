@@ -4420,46 +4420,6 @@ func (q *sqlQuerier) CountSnapshotMembers(ctx context.Context, snapshotID uuid.U
 	return count, err
 }
 
-const getEarliestPublishedSnapshot = `-- name: GetEarliestPublishedSnapshot :one
-SELECT id, tenant_id, cutoff, window_start, lookback_days, cohort_mode, policy_version, query_version, min_parser_version_num, min_addon_version_num, status, created_at, published_at, source_row_count, source_watermark
-FROM ranking_snapshots
-WHERE tenant_id = $1
-  AND lookback_days = $2
-  AND status = 'published'
-ORDER BY cutoff ASC
-LIMIT 1
-`
-
-type GetEarliestPublishedSnapshotParams struct {
-	TenantID     uuid.UUID `db:"tenant_id" json:"tenant_id"`
-	LookbackDays int32     `db:"lookback_days" json:"lookback_days"`
-}
-
-// Return the earliest published snapshot for a tenant+lookback.
-// Fallback when no snapshot has cutoff <= instance start (run predates all snapshots).
-func (q *sqlQuerier) GetEarliestPublishedSnapshot(ctx context.Context, arg GetEarliestPublishedSnapshotParams) (RankingSnapshot, error) {
-	row := q.db.QueryRow(ctx, getEarliestPublishedSnapshot, arg.TenantID, arg.LookbackDays)
-	var i RankingSnapshot
-	err := row.Scan(
-		&i.ID,
-		&i.TenantID,
-		&i.Cutoff,
-		&i.WindowStart,
-		&i.LookbackDays,
-		&i.CohortMode,
-		&i.PolicyVersion,
-		&i.QueryVersion,
-		&i.MinParserVersionNum,
-		&i.MinAddonVersionNum,
-		&i.Status,
-		&i.CreatedAt,
-		&i.PublishedAt,
-		&i.SourceRowCount,
-		&i.SourceWatermark,
-	)
-	return i, err
-}
-
 const getLatestPublishedSnapshot = `-- name: GetLatestPublishedSnapshot :one
 SELECT id, tenant_id, cutoff, window_start, lookback_days, cohort_mode, policy_version, query_version, min_parser_version_num, min_addon_version_num, status, created_at, published_at, source_row_count, source_watermark
 FROM ranking_snapshots

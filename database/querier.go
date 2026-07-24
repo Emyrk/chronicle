@@ -83,9 +83,6 @@ type sqlcQuerier interface {
 	GetDatasetTalentTrees(ctx context.Context, datasetID uuid.UUID) ([]byte, error)
 	GetDeploymentInfo(ctx context.Context) (DeploymentInfo, error)
 	GetDisplayInfoByID(ctx context.Context, arg GetDisplayInfoByIDParams) (WorldDisplayInfo, error)
-	// Return the earliest published snapshot for a tenant+lookback.
-	// Fallback when no snapshot has cutoff <= instance start (run predates all snapshots).
-	GetEarliestPublishedSnapshot(ctx context.Context, arg GetEarliestPublishedSnapshotParams) (RankingSnapshot, error)
 	GetEncounterSummariesByInstanceID(ctx context.Context, instanceID uuid.UUID) ([]GetEncounterSummariesByInstanceIDRow, error)
 	GetEncounterSummariesByInstanceIDs(ctx context.Context, instanceIds []uuid.UUID) ([]GetEncounterSummariesByInstanceIDsRow, error)
 	// Returns log groups whose raw files are past their owner's retention window.

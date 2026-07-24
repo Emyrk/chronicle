@@ -28,7 +28,6 @@ type parsesQuerier interface {
 	GetTenantByID(ctx context.Context, id uuid.UUID) (database.Tenant, error)
 	GetLatestPublishedSnapshot(ctx context.Context, arg database.GetLatestPublishedSnapshotParams) (database.RankingSnapshot, error)
 	GetLatestPublishedSnapshotBefore(ctx context.Context, arg database.GetLatestPublishedSnapshotBeforeParams) (database.RankingSnapshot, error)
-	GetEarliestPublishedSnapshot(ctx context.Context, arg database.GetEarliestPublishedSnapshotParams) (database.RankingSnapshot, error)
 	GetLogInstanceStartTime(ctx context.Context, id uuid.UUID) (pgtype.Timestamptz, error)
 	ListSnapshotMembersForInstanceWithNames(ctx context.Context, arg database.ListSnapshotMembersForInstanceWithNamesParams) ([]database.ListSnapshotMembersForInstanceWithNamesRow, error)
 	GetSnapshotCohortValues(ctx context.Context, arg database.GetSnapshotCohortValuesParams) ([]database.GetSnapshotCohortValuesRow, error)
@@ -147,16 +146,21 @@ func handleInstanceParsesWithStore(store parsesQuerier, logger *slog.Logger, w h
 			return
 		}
 
-		snapshot, err = store.GetLatestPublishedSnapshotBefore(ctx, database.GetLatestPublishedSnapshotBeforeParams{
-			TenantID:     tid,
-			LookbackDays: int32(lookbackDays),
-			Before:       startTime,
-		})
-		if errors.Is(err, pgx.ErrNoRows) {
-			// Run predates all snapshots — fall back to the earliest published
-			// snapshot. The data is not perfectly "historical" but it's the best
-			// we have; without this fallback very old runs would show no parses.
-			snapshot, err = store.GetEarliestPublishedSnapshot(ctx, database.GetEarliestPublishedSnapshotParams{
+		if startTime.Valid {
+			// Runs that predate all snapshots intentionally get no parses:
+			// there is no honest historical dataset for them (deploy-day is
+			// the epoch), and comparing an old raid against current data
+			// would be misleading. pgx.ErrNoRows falls through to the
+			// no_snapshot response below.
+			snapshot, err = store.GetLatestPublishedSnapshotBefore(ctx, database.GetLatestPublishedSnapshotBeforeParams{
+				TenantID:     tid,
+				LookbackDays: int32(lookbackDays),
+				Before:       startTime,
+			})
+		} else {
+			// No recorded start time: we cannot resolve a day-of-raid
+			// snapshot, so use the latest published one.
+			snapshot, err = store.GetLatestPublishedSnapshot(ctx, database.GetLatestPublishedSnapshotParams{
 				TenantID:     tid,
 				LookbackDays: int32(lookbackDays),
 			})

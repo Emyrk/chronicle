@@ -126,17 +126,6 @@ WHERE tenant_id = @tenant_id
 ORDER BY cutoff DESC
 LIMIT 1;
 
--- name: GetEarliestPublishedSnapshot :one
--- Return the earliest published snapshot for a tenant+lookback.
--- Fallback when no snapshot has cutoff <= instance start (run predates all snapshots).
-SELECT *
-FROM ranking_snapshots
-WHERE tenant_id = @tenant_id
-  AND lookback_days = @lookback_days
-  AND status = 'published'
-ORDER BY cutoff ASC
-LIMIT 1;
-
 -- name: GetPublishedSnapshotForCutoff :one
 -- Check if a published snapshot already exists for this exact cutoff+key.
 -- Used by the idempotency guard (one snapshot per day per key).
