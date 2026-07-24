@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { ChevronLeft, Layers } from "lucide-react";
 import { PlayerMetricChart, type PlayerMetricChartData } from "@/components/ui/PlayerMetricChart/PlayerMetricChart";
+import { useParsePills } from "../parsePills";
 import { RowContextMenu, getArmoryUrl } from "@/components/ui/PlayerMetricChart/RowContextMenu";
 import { AbilityBreakout, type AbilityData } from "@/components/ui/AbilityBreakout";
 import { GenericPanel } from "../GenericPanel";
@@ -169,6 +170,14 @@ export const HealingDoneContent = (props: HealingDoneContentProps) => {
     processing: props.processing,
     viewMode,
     showRanks,
+  });
+
+  // ── Parse pills ──
+  const parsePills = useParsePills({
+    metric: "hps",
+    props,
+    isPlayerSource: sourceType === "players",
+    isFocused: !!focusedPlayerId,
   });
 
   // ── Focus feature: right-click a player row to show per-ability view ──
@@ -396,6 +405,7 @@ export const HealingDoneContent = (props: HealingDoneContentProps) => {
           breakout={breakout}
           onRowCtrlClick={handleRowCtrlClick}
           disableInteractions={props.context.renderMode === "layout_lab"}
+          parsePills={parsePills}
         />
       )}
 
