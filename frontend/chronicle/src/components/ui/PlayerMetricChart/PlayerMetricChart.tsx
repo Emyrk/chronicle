@@ -435,15 +435,20 @@ export function PlayerMetricRow({
 
   const hasBreakout = !!breakout
 
-  // Parse pill placement: render inside the bar (right-aligned at the bar
-  // end) only when there is measured room between the end of the player
-  // name and the bar end. Otherwise render inline, right after the name.
+  // Parse pill placement: prefer sitting inside the bar, right-aligned at
+  // the bar end. The position is clamped so it can never overlap the value
+  // columns (measured via valuesRef). If the clamped position would collide
+  // with the player name (short bar or long name), fall back to rendering
+  // in-flow just left of the value columns.
   const nameRef = useRef<HTMLSpanElement>(null)
+  const valuesRef = useRef<HTMLSpanElement>(null)
   const [pillInsideBar, setPillInsideBar] = useState(false)
+  const [valuesWidth, setValuesWidth] = useState(0)
   useLayoutEffect(() => {
     if (!parsePill) return
     const row = rowRef.current
     const name = nameRef.current
+    const values = valuesRef.current
     if (!row || !name) return
     const compute = () => {
       const rowWidth = row.clientWidth
@@ -452,14 +457,19 @@ export function PlayerMetricRow({
       // the full text width even when the flex box is wider).
       const nameEnd = name.offsetLeft + Math.min(name.scrollWidth, name.clientWidth)
       const pillWidth = 43 // approx: 2-3 digits + padding + border
-      const rightReserved = 150 // damage value + percentage columns
-      const fitsAfterName = barEnd - 6 - pillWidth > nameEnd + 4
-      const fitsBeforeValues = barEnd <= rowWidth - rightReserved + pillWidth
-      setPillInsideBar(fitsAfterName && fitsBeforeValues)
+      // Measure the actual right-side columns (value + % + optional
+      // stacked %) so extra columns (e.g. overheal %) are accounted for.
+      const measuredValuesW = values?.offsetWidth ?? 0
+      setValuesWidth(measuredValuesW)
+      // Effective pill right edge after clamping away from the values.
+      const pillRight = Math.max(rowWidth - barEnd + 6, measuredValuesW + 16)
+      const pillLeftEdge = rowWidth - pillRight - pillWidth
+      setPillInsideBar(pillLeftEdge > nameEnd + 4)
     }
     compute()
     const ro = new ResizeObserver(compute)
     ro.observe(row)
+    if (values) ro.observe(values)
     return () => ro.disconnect()
   }, [parsePill, player.value, maximumValue])
 
@@ -581,7 +591,8 @@ export function PlayerMetricRow({
       })()}
 
       {/* Parse score pill (inside-the-bar variant): right-aligned at the
-          bar end, only when measurement confirmed room past the name. */}
+          bar end. The max() clamp guarantees the pill never overlaps the
+          value columns even if a resize races the measurement. */}
       {pillElement && pillInsideBar && (
         <div
           style={{
@@ -591,7 +602,7 @@ export function PlayerMetricRow({
             height: '100%',
             display: 'flex',
             alignItems: 'center',
-            right: `calc(100% - ${(player.value / maximumValue) * 100}% + 6px)`,
+            right: `max(calc(100% - ${(player.value / maximumValue) * 100}% + 6px), ${valuesWidth + 16}px)`,
             zIndex: 2,
           }}
         >
@@ -668,17 +679,19 @@ export function PlayerMetricRow({
           {player.playerName}
         </span>
 
-        {/* Parse score pill (inline variant): right of the name when the
-            bar is too narrow to hold the pill past the name. */}
+        {/* Parse score pill (fallback variant): right after the name when
+            the inside-bar position would collide with the player name. */}
         {pillElement && !pillInsideBar && (
-          <span style={{ marginLeft: '6px', display: 'inline-flex', flexShrink: 0 }}>
+          <span style={{ marginLeft: '8px', display: 'inline-flex', flexShrink: 0 }}>
             {pillElement}
           </span>
         )}
 
         {/* Spacer - keeps values/percentage right-aligned */}
         <span style={{ flex: 1, minWidth: 0 }} />
-
+        {/* Right-side value columns — measured via valuesRef so the parse
+            pill placement can avoid overlapping them. */}
+        <span ref={valuesRef} style={{ display: 'inline-flex', alignItems: 'center', flexShrink: 0 }}>
         {/* DPS value */}
         {formatValue(type, player, suffix, decimals)}
 
@@ -717,6 +730,7 @@ export function PlayerMetricRow({
             </span>
           );
         })()}
+        </span>
       </div>
     </div>
   )
