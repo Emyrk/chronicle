@@ -169,19 +169,24 @@ func NewHookable(ctx context.Context, logger *slog.Logger, db *unitdb.Units, z z
 		engagementTracker,
 		//auraTracking,
 	}...)
+	switch format {
+	case database.LogFormat112aCcAddon, database.LogFormat112aSuperwowAddon:
+		// 1.12 does not record overheals in the logs, so this hook derives
+		// msg.Overheal from tracked health deficits. It MUST run before any
+		// hook that reads Overheal (e.g. the DPS tracker's effective-healing
+		// accumulation): hooks execute in slice order, and mutating hooks
+		// registered after a reader leave the reader seeing Overheal == 0,
+		// silently turning effective healing into total healing.
+		hooks = append(hooks, &Overhealing{
+			deficits: make(map[guid.GUID]int32),
+		})
+	}
+
 	if dpsTracker != nil {
 		hooks = append(hooks, dpsTracker)
 	}
 	if speedrunTracker != nil {
 		hooks = append(hooks, speedrunTracker)
-	}
-
-	switch format {
-	case database.LogFormat112aCcAddon, database.LogFormat112aSuperwowAddon:
-		// 1.12 does not record overheals in the logs
-		hooks = append(hooks, &Overhealing{
-			deficits: make(map[guid.GUID]int32),
-		})
 	}
 
 	c := &Hookable{
