@@ -195,10 +195,14 @@ func TestRankingSnapshots(t *testing.T) {
 		t.Parallel()
 		ctx := testutil.Context(t, testutil.WaitMedium)
 
+		// Unique lookback for this subtest: sibling parallel subtests also
+		// publish root-tenant snapshots, and GetLatestPublishedSnapshot on a
+		// shared (tenant, lookback) key would race with them.
+		const lookbackDays = 7
 		snapshot, err := store.InsertRankingSnapshot(ctx, database.InsertRankingSnapshotParams{
 			TenantID:      uuid.UUID{}, // nil = root
 			Cutoff:        database.Timestamptz(baseTime.Add(time.Hour)),
-			LookbackDays:  0,
+			LookbackDays:  lookbackDays,
 			CohortMode:    "spec",
 			PolicyVersion: 1,
 			QueryVersion:  1,
@@ -219,7 +223,7 @@ func TestRankingSnapshots(t *testing.T) {
 		// Verify latest published.
 		latest, err := store.GetLatestPublishedSnapshot(ctx, database.GetLatestPublishedSnapshotParams{
 			TenantID:     uuid.UUID{},
-			LookbackDays: 0,
+			LookbackDays: lookbackDays,
 		})
 		require.NoError(t, err)
 		assert.Equal(t, snapshot.ID, latest.ID)
@@ -373,8 +377,11 @@ func TestRankingSnapshots(t *testing.T) {
 		assert.Len(t, membersOld, 0, "P-IMMU should not be in old snapshot")
 
 		// Insert a new ranking row AFTER the snapshot cutoff.
+		// Unique encounter name: parallel sibling subtests snapshot the shared
+		// rankings table, and per-encounter cohort assertions (e.g.
+		// CohortIsolationBySpec on "Ragnaros") must not see this row.
 		insertRankingRow(t, pool, store, realmID, rankingOpts{
-			encounterName: "Ragnaros", instanceName: "Molten Core",
+			encounterName: "Ragnaros-Immutability", instanceName: "Molten Core",
 			playerGUID: "P-IMMU", playerClass: "Warrior", playerSpec: "Fury",
 			difficultyName: "Normal", maxPlayers: 40,
 			damageDone: 180000, durationSecs: 300, dps: 600,
@@ -414,9 +421,11 @@ func TestRankingSnapshots(t *testing.T) {
 		t.Parallel()
 		ctx := testutil.Context(t, testutil.WaitMedium)
 
-		// Insert an old kill outside the window.
+		// Insert an old kill outside the window. Unique encounter name: with
+		// an all-time cutoff this old row is eligible for parallel sibling
+		// subtests' snapshots and would pollute their "Ragnaros" cohorts.
 		insertRankingRow(t, pool, store, realmID, rankingOpts{
-			encounterName: "Ragnaros", instanceName: "Molten Core",
+			encounterName: "Ragnaros-Window", instanceName: "Molten Core",
 			playerGUID: "P-OLD", playerClass: "Warrior", playerSpec: "Fury",
 			difficultyName: "Normal", maxPlayers: 40,
 			damageDone: 100000, durationSecs: 300, dps: 333,
