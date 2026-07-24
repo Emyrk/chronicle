@@ -42,6 +42,7 @@ func (api *API) AdminTriggerParseSnapshot(w http.ResponseWriter, r *http.Request
 		time.Now(),
 		req.LookbackDays,
 		int16(parsepolicy.PolicyVersion),
+		true, // Force: admin triggers always bypass the staleness guard.
 	)
 	if err != nil {
 		httpapi.HandleResponseError(ctx, w, err, httpapi.APIError{

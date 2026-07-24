@@ -169,6 +169,8 @@ type ArgsPublishParseSnapshotTenant struct {
 	Cutoff        time.Time `json:"cutoff"`
 	LookbackDays  int32     `json:"lookback_days"`
 	PolicyVersion int16     `json:"policy_version"`
+	// Force bypasses the staleness guard so manual/admin triggers always publish.
+	Force bool `json:"force,omitempty"`
 }
 
 func (ArgsPublishParseSnapshotTenant) Kind() string { return KindPublishParseSnapshotTenant }
@@ -237,9 +239,51 @@ func (w *WorkerPublishParseSnapshotTenant) Work(ctx context.Context, job *river.
 		windowStart = pgtype.Timestamptz{Time: ws, Valid: true}
 	}
 
+	// Compute source stats for the staleness guard.
+	// Uses the same eligibility filter as BatchInsertSnapshotMembersFromRankings
+	// (see GetSnapshotSourceStats in database/queries/parses.sql).
+	sourceStats, err := w.Store.GetSnapshotSourceStats(ctx, database.GetSnapshotSourceStatsParams{
+		Cutoff:      cutoff,
+		WindowStart: windowStart,
+	})
+	if err != nil {
+		return fmt.Errorf("get source stats: %w", err)
+	}
+
+	// Staleness guard: skip if the latest published snapshot for the same
+	// key dimensions already has identical source_row_count and source_watermark.
+	if !args.Force {
+		prev, prevErr := w.Store.GetLatestPublishedSnapshotForGuard(ctx, database.GetLatestPublishedSnapshotForGuardParams{
+			TenantID:      args.TenantID,
+			LookbackDays:  args.LookbackDays,
+			CohortMode:    cohortMode,
+			PolicyVersion: args.PolicyVersion,
+			QueryVersion:  snapshotQueryVersion,
+		})
+		if prevErr == nil {
+			watermarkMatch := prev.SourceWatermark.Valid == sourceStats.Watermark.Valid &&
+				(!prev.SourceWatermark.Valid || prev.SourceWatermark.Time.Equal(sourceStats.Watermark.Time))
+			if prev.SourceRowCount == sourceStats.RowCount && watermarkMatch {
+				w.Logger.Debug("skipping unchanged parse snapshot",
+					slog.String("tenant_id", args.TenantID.String()),
+					slog.Int("lookback_days", int(args.LookbackDays)),
+					slog.Int64("source_row_count", sourceStats.RowCount),
+				)
+				_ = river.RecordOutput(ctx, map[string]any{
+					"tenant_id":        args.TenantID.String(),
+					"skipped":          true,
+					"reason":           "unchanged",
+					"source_row_count": sourceStats.RowCount,
+				})
+				return nil
+			}
+		}
+		// pgx.ErrNoRows means no previous snapshot — proceed to publish.
+	}
+
 	var memberCount int64
 	txErr := w.Store.InTx(ctx, func(tx database.Store) error {
-		// 1. Create a pending snapshot.
+		// 1. Create a pending snapshot with source stats.
 		snap, err := tx.InsertRankingSnapshot(ctx, database.InsertRankingSnapshotParams{
 			TenantID:            args.TenantID,
 			Cutoff:              cutoff,
@@ -250,6 +294,8 @@ func (w *WorkerPublishParseSnapshotTenant) Work(ctx context.Context, job *river.
 			QueryVersion:        snapshotQueryVersion,
 			MinParserVersionNum: 0,
 			MinAddonVersionNum:  0,
+			SourceRowCount:      sourceStats.RowCount,
+			SourceWatermark:     sourceStats.Watermark,
 		})
 		if err != nil {
 			return fmt.Errorf("insert snapshot: %w", err)
@@ -282,14 +328,16 @@ func (w *WorkerPublishParseSnapshotTenant) Work(ctx context.Context, job *river.
 		slog.String("tenant_id", args.TenantID.String()),
 		slog.Int("lookback_days", int(args.LookbackDays)),
 		slog.Int64("member_count", memberCount),
+		slog.Int64("source_row_count", sourceStats.RowCount),
 		slog.Duration("duration", duration),
 	)
 
 	_ = river.RecordOutput(ctx, map[string]any{
-		"tenant_id":     args.TenantID.String(),
-		"lookback_days": args.LookbackDays,
-		"member_count":  memberCount,
-		"duration_ms":   duration.Milliseconds(),
+		"tenant_id":        args.TenantID.String(),
+		"lookback_days":    args.LookbackDays,
+		"member_count":     memberCount,
+		"source_row_count": sourceStats.RowCount,
+		"duration_ms":      duration.Milliseconds(),
 	})
 
 	return nil
@@ -308,11 +356,13 @@ func EnqueueParseSnapshotBackfill(
 	cutoff time.Time,
 	lookbackDays int32,
 	policyVersion int16,
+	force bool,
 ) (*rivertype.JobInsertResult, error) {
 	return queue.Insert(ctx, ArgsPublishParseSnapshotTenant{
 		TenantID:      tenantID,
 		Cutoff:        cutoff,
 		LookbackDays:  lookbackDays,
 		PolicyVersion: policyVersion,
+		Force:         force,
 	}, nil)
 }

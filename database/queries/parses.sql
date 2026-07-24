@@ -3,11 +3,13 @@
 INSERT INTO ranking_snapshots (
     tenant_id, cutoff, window_start, lookback_days, cohort_mode,
     policy_version, query_version,
-    min_parser_version_num, min_addon_version_num, status
+    min_parser_version_num, min_addon_version_num, status,
+    source_row_count, source_watermark
 ) VALUES (
     @tenant_id, @cutoff, @window_start, @lookback_days, @cohort_mode,
     @policy_version, @query_version,
-    @min_parser_version_num, @min_addon_version_num, 'pending'
+    @min_parser_version_num, @min_addon_version_num, 'pending',
+    @source_row_count, @source_watermark
 ) RETURNING *;
 
 -- name: PublishRankingSnapshot :one
@@ -174,4 +176,34 @@ SELECT * FROM ranking_snapshots WHERE id = @id;
 -- name: CountSnapshotMembers :one
 -- Return the number of members in a snapshot.
 SELECT COUNT(*) FROM ranking_snapshot_members WHERE snapshot_id = @snapshot_id;
+
+-- name: GetSnapshotSourceStats :one
+-- Compute the eligible row count and max(created_at) for the same eligibility
+-- filter as BatchInsertSnapshotMembersFromRankings. Used by the staleness guard
+-- to skip redundant snapshot publication when source data is unchanged.
+-- IMPORTANT: keep the WHERE clause in sync with BatchInsertSnapshotMembersFromRankings.
+SELECT
+    COUNT(*)::bigint AS row_count,
+    MAX(edr.created_at)::timestamptz AS watermark
+FROM encounter_dps_rankings edr
+JOIN log_instances li ON li.id = edr.instance_id
+WHERE edr.encounter_id IS NOT NULL      -- boss kills only
+  AND edr.dps > 0
+  AND edr.duration_secs > 0
+  AND edr.killed_at <= @cutoff
+  AND (@window_start::timestamptz IS NULL OR edr.killed_at >= @window_start);
+
+-- name: GetLatestPublishedSnapshotForGuard :one
+-- Return the most recently published snapshot matching the full key dimensions
+-- used by the staleness guard (tenant, lookback, cohort_mode, policy_version, query_version).
+SELECT *
+FROM ranking_snapshots
+WHERE tenant_id = @tenant_id
+  AND lookback_days = @lookback_days
+  AND cohort_mode = @cohort_mode
+  AND policy_version = @policy_version
+  AND query_version = @query_version
+  AND status = 'published'
+ORDER BY published_at DESC
+LIMIT 1;
 

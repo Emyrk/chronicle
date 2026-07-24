@@ -129,6 +129,9 @@ type sqlcQuerier interface {
 	GetItemTemplatesBySetID(ctx context.Context, arg GetItemTemplatesBySetIDParams) ([]GetItemTemplatesBySetIDRow, error)
 	// Return the most recently published snapshot for a tenant+lookback.
 	GetLatestPublishedSnapshot(ctx context.Context, arg GetLatestPublishedSnapshotParams) (RankingSnapshot, error)
+	// Return the most recently published snapshot matching the full key dimensions
+	// used by the staleness guard (tenant, lookback, cohort_mode, policy_version, query_version).
+	GetLatestPublishedSnapshotForGuard(ctx context.Context, arg GetLatestPublishedSnapshotForGuardParams) (RankingSnapshot, error)
 	GetLatestRegressionSnapshot(ctx context.Context, fixtureID uuid.UUID) (RegressionSnapshot, error)
 	GetLeaderboardVersionRequirements(ctx context.Context, instanceName string) (LeaderboardVersionRequirement, error)
 	GetLogFile(ctx context.Context, id uuid.UUID) (LogFile, error)
@@ -157,6 +160,11 @@ type sqlcQuerier interface {
 	// Pass @cohort_mode = 'spec' to group by (class, spec), 'class' for class only.
 	// Pass @metric = 'dps' or 'hps' to select the value column.
 	GetSnapshotCohortValues(ctx context.Context, arg GetSnapshotCohortValuesParams) ([]GetSnapshotCohortValuesRow, error)
+	// Compute the eligible row count and max(created_at) for the same eligibility
+	// filter as BatchInsertSnapshotMembersFromRankings. Used by the staleness guard
+	// to skip redundant snapshot publication when source data is unchanged.
+	// IMPORTANT: keep the WHERE clause in sync with BatchInsertSnapshotMembersFromRankings.
+	GetSnapshotSourceStats(ctx context.Context, arg GetSnapshotSourceStatsParams) (GetSnapshotSourceStatsRow, error)
 	GetSpellItemEnchantmentByID(ctx context.Context, arg GetSpellItemEnchantmentByIDParams) (DbcSpellItemEnchantment, error)
 	GetTenantByID(ctx context.Context, id uuid.UUID) (Tenant, error)
 	// Tenant queries. These run with AdminBypass context since the tenants table

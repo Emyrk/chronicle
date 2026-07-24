@@ -965,7 +965,9 @@ CREATE TABLE ranking_snapshots (
     min_addon_version_num bigint DEFAULT 0 NOT NULL,
     status text DEFAULT 'pending'::text NOT NULL,
     created_at timestamp with time zone DEFAULT now() NOT NULL,
-    published_at timestamp with time zone
+    published_at timestamp with time zone,
+    source_row_count bigint DEFAULT 0 NOT NULL,
+    source_watermark timestamp with time zone
 );
 
 CREATE TABLE rankings_instance_summaries (

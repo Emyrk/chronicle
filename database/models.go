@@ -1374,6 +1374,8 @@ type RankingSnapshot struct {
 	Status              string             `db:"status" json:"status"`
 	CreatedAt           pgtype.Timestamptz `db:"created_at" json:"created_at"`
 	PublishedAt         pgtype.Timestamptz `db:"published_at" json:"published_at"`
+	SourceRowCount      int64              `db:"source_row_count" json:"source_row_count"`
+	SourceWatermark     pgtype.Timestamptz `db:"source_watermark" json:"source_watermark"`
 }
 
 type RankingSnapshotMember struct {

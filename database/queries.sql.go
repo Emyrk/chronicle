@@ -4420,7 +4420,7 @@ func (q *sqlQuerier) CountSnapshotMembers(ctx context.Context, snapshotID uuid.U
 }
 
 const getEarliestSnapshotForInstance = `-- name: GetEarliestSnapshotForInstance :one
-SELECT rs.id, rs.tenant_id, rs.cutoff, rs.window_start, rs.lookback_days, rs.cohort_mode, rs.policy_version, rs.query_version, rs.min_parser_version_num, rs.min_addon_version_num, rs.status, rs.created_at, rs.published_at
+SELECT rs.id, rs.tenant_id, rs.cutoff, rs.window_start, rs.lookback_days, rs.cohort_mode, rs.policy_version, rs.query_version, rs.min_parser_version_num, rs.min_addon_version_num, rs.status, rs.created_at, rs.published_at, rs.source_row_count, rs.source_watermark
 FROM ranking_snapshots rs
 WHERE rs.tenant_id = $1
   AND rs.status = 'published'
@@ -4455,12 +4455,14 @@ func (q *sqlQuerier) GetEarliestSnapshotForInstance(ctx context.Context, arg Get
 		&i.Status,
 		&i.CreatedAt,
 		&i.PublishedAt,
+		&i.SourceRowCount,
+		&i.SourceWatermark,
 	)
 	return i, err
 }
 
 const getLatestPublishedSnapshot = `-- name: GetLatestPublishedSnapshot :one
-SELECT id, tenant_id, cutoff, window_start, lookback_days, cohort_mode, policy_version, query_version, min_parser_version_num, min_addon_version_num, status, created_at, published_at
+SELECT id, tenant_id, cutoff, window_start, lookback_days, cohort_mode, policy_version, query_version, min_parser_version_num, min_addon_version_num, status, created_at, published_at, source_row_count, source_watermark
 FROM ranking_snapshots
 WHERE tenant_id = $1
   AND lookback_days = $2
@@ -4492,12 +4494,66 @@ func (q *sqlQuerier) GetLatestPublishedSnapshot(ctx context.Context, arg GetLate
 		&i.Status,
 		&i.CreatedAt,
 		&i.PublishedAt,
+		&i.SourceRowCount,
+		&i.SourceWatermark,
+	)
+	return i, err
+}
+
+const getLatestPublishedSnapshotForGuard = `-- name: GetLatestPublishedSnapshotForGuard :one
+SELECT id, tenant_id, cutoff, window_start, lookback_days, cohort_mode, policy_version, query_version, min_parser_version_num, min_addon_version_num, status, created_at, published_at, source_row_count, source_watermark
+FROM ranking_snapshots
+WHERE tenant_id = $1
+  AND lookback_days = $2
+  AND cohort_mode = $3
+  AND policy_version = $4
+  AND query_version = $5
+  AND status = 'published'
+ORDER BY published_at DESC
+LIMIT 1
+`
+
+type GetLatestPublishedSnapshotForGuardParams struct {
+	TenantID      uuid.UUID `db:"tenant_id" json:"tenant_id"`
+	LookbackDays  int32     `db:"lookback_days" json:"lookback_days"`
+	CohortMode    string    `db:"cohort_mode" json:"cohort_mode"`
+	PolicyVersion int16     `db:"policy_version" json:"policy_version"`
+	QueryVersion  int16     `db:"query_version" json:"query_version"`
+}
+
+// Return the most recently published snapshot matching the full key dimensions
+// used by the staleness guard (tenant, lookback, cohort_mode, policy_version, query_version).
+func (q *sqlQuerier) GetLatestPublishedSnapshotForGuard(ctx context.Context, arg GetLatestPublishedSnapshotForGuardParams) (RankingSnapshot, error) {
+	row := q.db.QueryRow(ctx, getLatestPublishedSnapshotForGuard,
+		arg.TenantID,
+		arg.LookbackDays,
+		arg.CohortMode,
+		arg.PolicyVersion,
+		arg.QueryVersion,
+	)
+	var i RankingSnapshot
+	err := row.Scan(
+		&i.ID,
+		&i.TenantID,
+		&i.Cutoff,
+		&i.WindowStart,
+		&i.LookbackDays,
+		&i.CohortMode,
+		&i.PolicyVersion,
+		&i.QueryVersion,
+		&i.MinParserVersionNum,
+		&i.MinAddonVersionNum,
+		&i.Status,
+		&i.CreatedAt,
+		&i.PublishedAt,
+		&i.SourceRowCount,
+		&i.SourceWatermark,
 	)
 	return i, err
 }
 
 const getRankingSnapshot = `-- name: GetRankingSnapshot :one
-SELECT id, tenant_id, cutoff, window_start, lookback_days, cohort_mode, policy_version, query_version, min_parser_version_num, min_addon_version_num, status, created_at, published_at FROM ranking_snapshots WHERE id = $1
+SELECT id, tenant_id, cutoff, window_start, lookback_days, cohort_mode, policy_version, query_version, min_parser_version_num, min_addon_version_num, status, created_at, published_at, source_row_count, source_watermark FROM ranking_snapshots WHERE id = $1
 `
 
 func (q *sqlQuerier) GetRankingSnapshot(ctx context.Context, id uuid.UUID) (RankingSnapshot, error) {
@@ -4517,6 +4573,8 @@ func (q *sqlQuerier) GetRankingSnapshot(ctx context.Context, id uuid.UUID) (Rank
 		&i.Status,
 		&i.CreatedAt,
 		&i.PublishedAt,
+		&i.SourceRowCount,
+		&i.SourceWatermark,
 	)
 	return i, err
 }
@@ -4584,16 +4642,52 @@ func (q *sqlQuerier) GetSnapshotCohortValues(ctx context.Context, arg GetSnapsho
 	return items, nil
 }
 
+const getSnapshotSourceStats = `-- name: GetSnapshotSourceStats :one
+SELECT
+    COUNT(*)::bigint AS row_count,
+    MAX(edr.created_at)::timestamptz AS watermark
+FROM encounter_dps_rankings edr
+JOIN log_instances li ON li.id = edr.instance_id
+WHERE edr.encounter_id IS NOT NULL      -- boss kills only
+  AND edr.dps > 0
+  AND edr.duration_secs > 0
+  AND edr.killed_at <= $1
+  AND ($2::timestamptz IS NULL OR edr.killed_at >= $2)
+`
+
+type GetSnapshotSourceStatsParams struct {
+	Cutoff      pgtype.Timestamptz `db:"cutoff" json:"cutoff"`
+	WindowStart pgtype.Timestamptz `db:"window_start" json:"window_start"`
+}
+
+type GetSnapshotSourceStatsRow struct {
+	RowCount  int64              `db:"row_count" json:"row_count"`
+	Watermark pgtype.Timestamptz `db:"watermark" json:"watermark"`
+}
+
+// Compute the eligible row count and max(created_at) for the same eligibility
+// filter as BatchInsertSnapshotMembersFromRankings. Used by the staleness guard
+// to skip redundant snapshot publication when source data is unchanged.
+// IMPORTANT: keep the WHERE clause in sync with BatchInsertSnapshotMembersFromRankings.
+func (q *sqlQuerier) GetSnapshotSourceStats(ctx context.Context, arg GetSnapshotSourceStatsParams) (GetSnapshotSourceStatsRow, error) {
+	row := q.db.QueryRow(ctx, getSnapshotSourceStats, arg.Cutoff, arg.WindowStart)
+	var i GetSnapshotSourceStatsRow
+	err := row.Scan(&i.RowCount, &i.Watermark)
+	return i, err
+}
+
 const insertRankingSnapshot = `-- name: InsertRankingSnapshot :one
 INSERT INTO ranking_snapshots (
     tenant_id, cutoff, window_start, lookback_days, cohort_mode,
     policy_version, query_version,
-    min_parser_version_num, min_addon_version_num, status
+    min_parser_version_num, min_addon_version_num, status,
+    source_row_count, source_watermark
 ) VALUES (
     $1, $2, $3, $4, $5,
     $6, $7,
-    $8, $9, 'pending'
-) RETURNING id, tenant_id, cutoff, window_start, lookback_days, cohort_mode, policy_version, query_version, min_parser_version_num, min_addon_version_num, status, created_at, published_at
+    $8, $9, 'pending',
+    $10, $11
+) RETURNING id, tenant_id, cutoff, window_start, lookback_days, cohort_mode, policy_version, query_version, min_parser_version_num, min_addon_version_num, status, created_at, published_at, source_row_count, source_watermark
 `
 
 type InsertRankingSnapshotParams struct {
@@ -4606,6 +4700,8 @@ type InsertRankingSnapshotParams struct {
 	QueryVersion        int16              `db:"query_version" json:"query_version"`
 	MinParserVersionNum int64              `db:"min_parser_version_num" json:"min_parser_version_num"`
 	MinAddonVersionNum  int64              `db:"min_addon_version_num" json:"min_addon_version_num"`
+	SourceRowCount      int64              `db:"source_row_count" json:"source_row_count"`
+	SourceWatermark     pgtype.Timestamptz `db:"source_watermark" json:"source_watermark"`
 }
 
 // Create a new pending snapshot for a tenant+lookback.
@@ -4620,6 +4716,8 @@ func (q *sqlQuerier) InsertRankingSnapshot(ctx context.Context, arg InsertRankin
 		arg.QueryVersion,
 		arg.MinParserVersionNum,
 		arg.MinAddonVersionNum,
+		arg.SourceRowCount,
+		arg.SourceWatermark,
 	)
 	var i RankingSnapshot
 	err := row.Scan(
@@ -4636,6 +4734,8 @@ func (q *sqlQuerier) InsertRankingSnapshot(ctx context.Context, arg InsertRankin
 		&i.Status,
 		&i.CreatedAt,
 		&i.PublishedAt,
+		&i.SourceRowCount,
+		&i.SourceWatermark,
 	)
 	return i, err
 }
@@ -4907,7 +5007,7 @@ const publishRankingSnapshot = `-- name: PublishRankingSnapshot :one
 UPDATE ranking_snapshots
 SET status = 'published', published_at = now()
 WHERE id = $1 AND status IN ('pending', 'published')
-RETURNING id, tenant_id, cutoff, window_start, lookback_days, cohort_mode, policy_version, query_version, min_parser_version_num, min_addon_version_num, status, created_at, published_at
+RETURNING id, tenant_id, cutoff, window_start, lookback_days, cohort_mode, policy_version, query_version, min_parser_version_num, min_addon_version_num, status, created_at, published_at, source_row_count, source_watermark
 `
 
 // Transition a pending snapshot to published. Idempotent on already-published.
@@ -4928,6 +5028,8 @@ func (q *sqlQuerier) PublishRankingSnapshot(ctx context.Context, id uuid.UUID) (
 		&i.Status,
 		&i.CreatedAt,
 		&i.PublishedAt,
+		&i.SourceRowCount,
+		&i.SourceWatermark,
 	)
 	return i, err
 }
