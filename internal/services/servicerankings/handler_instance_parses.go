@@ -27,7 +27,9 @@ import (
 type parsesQuerier interface {
 	GetTenantByID(ctx context.Context, id uuid.UUID) (database.Tenant, error)
 	GetLatestPublishedSnapshot(ctx context.Context, arg database.GetLatestPublishedSnapshotParams) (database.RankingSnapshot, error)
-	GetEarliestSnapshotForInstance(ctx context.Context, arg database.GetEarliestSnapshotForInstanceParams) (database.RankingSnapshot, error)
+	GetLatestPublishedSnapshotBefore(ctx context.Context, arg database.GetLatestPublishedSnapshotBeforeParams) (database.RankingSnapshot, error)
+	GetEarliestPublishedSnapshot(ctx context.Context, arg database.GetEarliestPublishedSnapshotParams) (database.RankingSnapshot, error)
+	GetLogInstanceStartTime(ctx context.Context, id uuid.UUID) (pgtype.Timestamptz, error)
 	ListSnapshotMembersForInstanceWithNames(ctx context.Context, arg database.ListSnapshotMembersForInstanceWithNamesParams) ([]database.ListSnapshotMembersForInstanceWithNamesRow, error)
 	GetSnapshotCohortValues(ctx context.Context, arg database.GetSnapshotCohortValuesParams) ([]database.GetSnapshotCohortValuesRow, error)
 }
@@ -120,10 +122,40 @@ func handleInstanceParsesWithStore(store parsesQuerier, logger *slog.Logger, w h
 			LookbackDays: int32(lookbackDays),
 		})
 	default: // "historical"
-		snapshot, err = store.GetEarliestSnapshotForInstance(ctx, database.GetEarliestSnapshotForInstanceParams{
-			TenantID:   tid,
-			InstanceID: instanceID,
+		// Canonical snapshot: latest published snapshot whose cutoff <= instance start time.
+		// This means a raid on July 10 compares against the July 10 00:00 UTC snapshot
+		// (which includes data strictly before that day).
+		startTime, stErr := store.GetLogInstanceStartTime(ctx, instanceID)
+		if stErr != nil {
+			if errors.Is(stErr, pgx.ErrNoRows) {
+				httpapi.Write(ctx, w, http.StatusNotFound, chroniclesdk.Response{
+					Message: "Instance not found",
+				})
+				return
+			}
+			httpapi.HandleResponseError(ctx, w, stErr, httpapi.APIError{
+				Response: chroniclesdk.Response{
+					Message: "Failed to fetch instance",
+					Detail:  stErr.Error(),
+				},
+			})
+			return
+		}
+
+		snapshot, err = store.GetLatestPublishedSnapshotBefore(ctx, database.GetLatestPublishedSnapshotBeforeParams{
+			TenantID:     tid,
+			LookbackDays: int32(lookbackDays),
+			Before:       startTime,
 		})
+		if errors.Is(err, pgx.ErrNoRows) {
+			// Run predates all snapshots — fall back to the earliest published
+			// snapshot. The data is not perfectly "historical" but it's the best
+			// we have; without this fallback very old runs would show no parses.
+			snapshot, err = store.GetEarliestPublishedSnapshot(ctx, database.GetEarliestPublishedSnapshotParams{
+				TenantID:     tid,
+				LookbackDays: int32(lookbackDays),
+			})
+		}
 	}
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {

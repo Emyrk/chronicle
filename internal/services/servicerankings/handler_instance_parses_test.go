@@ -626,3 +626,235 @@ func TestHandleInstanceParses_DisabledTenant(t *testing.T) {
 	assert.Empty(t, resp.Players)
 }
 
+func TestHandleInstanceParses_CanonicalResolution(t *testing.T) {
+	t.Parallel()
+
+	t.Run("UsesSnapshotMatchingInstanceStartTime", func(t *testing.T) {
+		t.Parallel()
+		pool, _ := dbtestutil.NewPGXPool(t)
+		store := database.New(pool)
+		ctx := testutil.Context(t, testutil.WaitShort)
+
+		serverID := uuid.New()
+		realmID := uuid.New()
+		conn, err := pool.Acquire(ctx)
+		require.NoError(t, err)
+		_, err = conn.Exec(ctx, "SET app.tenant_bypass = 'true'")
+		require.NoError(t, err)
+		_, err = conn.Exec(ctx, "INSERT INTO wow_servers (id, name) VALUES ($1, $2)", serverID, "test-server")
+		require.NoError(t, err)
+		_, err = conn.Exec(ctx, "INSERT INTO wow_server_realms (id, server_id, name) VALUES ($1, $2, $3)", realmID, serverID, "test-realm")
+		require.NoError(t, err)
+		conn.Release()
+
+		userID := uuid.New()
+		_, err = store.InsertUser(ctx, database.InsertUserParams{ID: userID, Username: "u"})
+		require.NoError(t, err)
+
+		logGroupID := uuid.New()
+		now := time.Now()
+		_, err = store.InsertWoWLogGroup(ctx, database.InsertWoWLogGroupParams{
+			ID: logGroupID, Owner: userID, LogType: database.LogTypeV1,
+			CreatedAt: database.Timestamptz(now), UpdatedAt: database.Timestamptz(now),
+		})
+		require.NoError(t, err)
+		err = store.InsertParsedLogGroup(ctx, logGroupID)
+		require.NoError(t, err)
+
+		// Instance with start_time on July 10.
+		instanceID := uuid.New()
+		instanceStart := time.Date(2024, 7, 10, 14, 30, 0, 0, time.UTC)
+		_, err = store.InsertInstance(ctx, database.InsertInstanceParams{
+			ID: instanceID, RealmID: realmID, LogGroupID: logGroupID,
+			Name: "Molten Core", Capabilities: []string{},
+		})
+		require.NoError(t, err)
+		// Set start_time directly.
+		conn2, err := pool.Acquire(ctx)
+		require.NoError(t, err)
+		_, err = conn2.Exec(ctx, "UPDATE log_instances SET start_time = $1 WHERE id = $2", instanceStart, instanceID)
+		require.NoError(t, err)
+		conn2.Release()
+
+		// Insert a ranking for this instance.
+		encID := uuid.New()
+		_, err = store.InsertEncounter(ctx, database.InsertEncounterParams{
+			ID: encID, InstanceID: instanceID, Name: "Ragnaros",
+			KillType: database.KillTypeClean, Remaining: guid.GUIDs{}, Boss: true,
+			StartTime: database.Timestamptz(instanceStart),
+			EndTime:   database.Timestamptz(instanceStart.Add(5 * time.Minute)),
+		})
+		require.NoError(t, err)
+
+		err = store.InsertEncounterDpsRanking(ctx, database.InsertEncounterDpsRankingParams{
+			EncounterID:    uuid.NullUUID{UUID: encID, Valid: true},
+			InstanceID:     instanceID,
+			EncounterName:  "Ragnaros",
+			InstanceName:   "Molten Core",
+			PlayerGuid:     "P-1",
+			PlayerName:     "Player1",
+			PlayerClass:    "WARRIOR",
+			PlayerSpec:     "Arms",
+			DifficultyName: "Normal",
+			MaxPlayers:     40,
+			RealmID:        realmID,
+			RealmName:      "test-realm",
+			DamageDone:     30000,
+			DurationSecs:   300,
+			Dps:            100,
+			KilledAt:       database.Timestamptz(instanceStart.Add(5 * time.Minute)),
+			LogHashedSlug:  "slug-test-1",
+		})
+		require.NoError(t, err)
+
+		// Create two snapshots:
+		// July 10 00:00 UTC (cutoff <= instance start → should be used)
+		// July 11 00:00 UTC (cutoff > instance start → should NOT be used for historical)
+		cutoffDay10 := time.Date(2024, 7, 10, 0, 0, 0, 0, time.UTC)
+		cutoffDay11 := time.Date(2024, 7, 11, 0, 0, 0, 0, time.UTC)
+
+		for _, cutoff := range []time.Time{cutoffDay10, cutoffDay11} {
+			snap, sErr := store.InsertRankingSnapshot(ctx, database.InsertRankingSnapshotParams{
+				TenantID:      uuid.Nil,
+				Cutoff:        pgtype.Timestamptz{Time: cutoff, Valid: true},
+				LookbackDays:  0,
+				CohortMode:    string(parsepolicy.CohortModeSpec),
+				PolicyVersion: int16(parsepolicy.PolicyVersion),
+				QueryVersion:  1,
+			})
+			require.NoError(t, sErr)
+
+			sErr = store.BatchInsertSnapshotMembersFromRankings(ctx, snap.ID)
+			require.NoError(t, sErr)
+
+			_, sErr = store.PublishRankingSnapshot(ctx, snap.ID)
+			require.NoError(t, sErr)
+		}
+
+		svc := newTestService(t, store)
+		r := chi.NewRouter()
+		r.Get("/instances/{instanceID}/parses", svc.HandleInstanceParses)
+
+		req := httptest.NewRequest("GET", "/instances/"+instanceID.String()+"/parses?encounter_names=Ragnaros&metric=dps", nil)
+		w := httptest.NewRecorder()
+		r.ServeHTTP(w, req)
+
+		require.Equal(t, http.StatusOK, w.Code)
+		var resp chroniclesdk.InstanceParsesResponse
+		require.NoError(t, json.Unmarshal(readAll(t, w.Body), &resp))
+
+		assert.True(t, resp.Available)
+		// Should use the July 10 snapshot (cutoff <= instance start).
+		assert.Equal(t, cutoffDay10, resp.Cutoff.UTC())
+	})
+
+	t.Run("FallsBackToEarliestSnapshotForOldRuns", func(t *testing.T) {
+		t.Parallel()
+		pool, _ := dbtestutil.NewPGXPool(t)
+		store := database.New(pool)
+		ctx := testutil.Context(t, testutil.WaitShort)
+
+		serverID := uuid.New()
+		realmID := uuid.New()
+		conn, err := pool.Acquire(ctx)
+		require.NoError(t, err)
+		_, err = conn.Exec(ctx, "SET app.tenant_bypass = 'true'")
+		require.NoError(t, err)
+		_, err = conn.Exec(ctx, "INSERT INTO wow_servers (id, name) VALUES ($1, $2)", serverID, "test-server")
+		require.NoError(t, err)
+		_, err = conn.Exec(ctx, "INSERT INTO wow_server_realms (id, server_id, name) VALUES ($1, $2, $3)", realmID, serverID, "test-realm")
+		require.NoError(t, err)
+		conn.Release()
+
+		userID := uuid.New()
+		_, err = store.InsertUser(ctx, database.InsertUserParams{ID: userID, Username: "u"})
+		require.NoError(t, err)
+
+		logGroupID := uuid.New()
+		now := time.Now()
+		_, err = store.InsertWoWLogGroup(ctx, database.InsertWoWLogGroupParams{
+			ID: logGroupID, Owner: userID, LogType: database.LogTypeV1,
+			CreatedAt: database.Timestamptz(now), UpdatedAt: database.Timestamptz(now),
+		})
+		require.NoError(t, err)
+		err = store.InsertParsedLogGroup(ctx, logGroupID)
+		require.NoError(t, err)
+
+		// Instance from January 2024 (predates all snapshots).
+		instanceID := uuid.New()
+		instanceStart := time.Date(2024, 1, 5, 10, 0, 0, 0, time.UTC)
+		_, err = store.InsertInstance(ctx, database.InsertInstanceParams{
+			ID: instanceID, RealmID: realmID, LogGroupID: logGroupID,
+			Name: "Molten Core", Capabilities: []string{},
+		})
+		require.NoError(t, err)
+		conn2, err := pool.Acquire(ctx)
+		require.NoError(t, err)
+		_, err = conn2.Exec(ctx, "UPDATE log_instances SET start_time = $1 WHERE id = $2", instanceStart, instanceID)
+		require.NoError(t, err)
+		conn2.Release()
+
+		// Insert ranking.
+		encID := uuid.New()
+		_, err = store.InsertEncounter(ctx, database.InsertEncounterParams{
+			ID: encID, InstanceID: instanceID, Name: "Ragnaros",
+			KillType: database.KillTypeClean, Remaining: guid.GUIDs{}, Boss: true,
+			StartTime: database.Timestamptz(instanceStart),
+			EndTime:   database.Timestamptz(instanceStart.Add(5 * time.Minute)),
+		})
+		require.NoError(t, err)
+
+		err = store.InsertEncounterDpsRanking(ctx, database.InsertEncounterDpsRankingParams{
+			EncounterID:    uuid.NullUUID{UUID: encID, Valid: true},
+			InstanceID:     instanceID,
+			EncounterName:  "Ragnaros",
+			InstanceName:   "Molten Core",
+			PlayerGuid:     "P-1",
+			PlayerName:     "Player1",
+			PlayerClass:    "WARRIOR",
+			PlayerSpec:     "Arms",
+			DifficultyName: "Normal",
+			MaxPlayers:     40,
+			RealmID:        realmID,
+			RealmName:      "test-realm",
+			DamageDone:     30000,
+			DurationSecs:   300,
+			Dps:            100,
+			KilledAt:       database.Timestamptz(instanceStart.Add(5 * time.Minute)),
+			LogHashedSlug:  "slug-test-2",
+		})
+		require.NoError(t, err)
+
+		// Snapshots only from July 2024 (after the instance).
+		cutoffJuly := time.Date(2024, 7, 10, 0, 0, 0, 0, time.UTC)
+		snap, err := store.InsertRankingSnapshot(ctx, database.InsertRankingSnapshotParams{
+			TenantID:      uuid.Nil,
+			Cutoff:        pgtype.Timestamptz{Time: cutoffJuly, Valid: true},
+			LookbackDays:  0,
+			CohortMode:    string(parsepolicy.CohortModeSpec),
+			PolicyVersion: int16(parsepolicy.PolicyVersion),
+			QueryVersion:  1,
+		})
+		require.NoError(t, err)
+		err = store.BatchInsertSnapshotMembersFromRankings(ctx, snap.ID)
+		require.NoError(t, err)
+		_, err = store.PublishRankingSnapshot(ctx, snap.ID)
+		require.NoError(t, err)
+
+		svc := newTestService(t, store)
+		r := chi.NewRouter()
+		r.Get("/instances/{instanceID}/parses", svc.HandleInstanceParses)
+
+		req := httptest.NewRequest("GET", "/instances/"+instanceID.String()+"/parses?encounter_names=Ragnaros&metric=dps", nil)
+		w := httptest.NewRecorder()
+		r.ServeHTTP(w, req)
+
+		require.Equal(t, http.StatusOK, w.Code)
+		var resp chroniclesdk.InstanceParsesResponse
+		require.NoError(t, json.Unmarshal(readAll(t, w.Body), &resp))
+
+		// Should fall back to the earliest snapshot even though it comes after the instance.
+		assert.True(t, resp.Available)
+		assert.Equal(t, cutoffJuly, resp.Cutoff.UTC())
+	})
+}

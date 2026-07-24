@@ -76,7 +76,8 @@ eligible AS (
     WHERE edr.encounter_id IS NOT NULL      -- boss kills only
       AND edr.dps > 0
       AND edr.duration_secs > 0
-      AND edr.killed_at <= s.cutoff
+      -- Exclusive upper bound: data strictly before the snapshot cutoff (00:00 UTC boundary).
+      AND edr.killed_at < s.cutoff
       AND (s.window_start IS NULL OR edr.killed_at >= s.window_start)
     ORDER BY edr.player_guid, edr.encounter_name,
              COALESCE(li.duplicate_group_id, li.id),
@@ -112,18 +113,48 @@ WHERE tenant_id = @tenant_id
 ORDER BY published_at DESC
 LIMIT 1;
 
--- name: GetEarliestSnapshotForInstance :one
--- Return the earliest published snapshot that contains members from a given instance.
-SELECT rs.*
-FROM ranking_snapshots rs
-WHERE rs.tenant_id = @tenant_id
-  AND rs.status = 'published'
-  AND EXISTS (
-      SELECT 1 FROM ranking_snapshot_members rsm
-      WHERE rsm.snapshot_id = rs.id AND rsm.instance_id = @instance_id
-  )
-ORDER BY rs.published_at ASC
+-- name: GetLatestPublishedSnapshotBefore :one
+-- Return the latest published snapshot whose cutoff <= the given timestamp.
+-- Used for canonical parse resolution: a raid compares against the snapshot
+-- whose cutoff is at or before the instance's start time.
+SELECT *
+FROM ranking_snapshots
+WHERE tenant_id = @tenant_id
+  AND lookback_days = @lookback_days
+  AND status = 'published'
+  AND cutoff <= @before
+ORDER BY cutoff DESC
 LIMIT 1;
+
+-- name: GetEarliestPublishedSnapshot :one
+-- Return the earliest published snapshot for a tenant+lookback.
+-- Fallback when no snapshot has cutoff <= instance start (run predates all snapshots).
+SELECT *
+FROM ranking_snapshots
+WHERE tenant_id = @tenant_id
+  AND lookback_days = @lookback_days
+  AND status = 'published'
+ORDER BY cutoff ASC
+LIMIT 1;
+
+-- name: GetPublishedSnapshotForCutoff :one
+-- Check if a published snapshot already exists for this exact cutoff+key.
+-- Used by the idempotency guard (one snapshot per day per key).
+SELECT *
+FROM ranking_snapshots
+WHERE tenant_id = @tenant_id
+  AND lookback_days = @lookback_days
+  AND cohort_mode = @cohort_mode
+  AND policy_version = @policy_version
+  AND query_version = @query_version
+  AND cutoff = @cutoff
+  AND status = 'published'
+LIMIT 1;
+
+-- name: GetLogInstanceStartTime :one
+-- Return the start_time for a log instance. Used by the parses handler
+-- to resolve which snapshot cutoff applies to the instance.
+SELECT start_time FROM log_instances WHERE id = @id;
 
 -- name: GetSnapshotCohortValues :many
 -- Per-boss cohort: best metric value per player within a
@@ -190,7 +221,8 @@ JOIN log_instances li ON li.id = edr.instance_id
 WHERE edr.encounter_id IS NOT NULL      -- boss kills only
   AND edr.dps > 0
   AND edr.duration_secs > 0
-  AND edr.killed_at <= @cutoff
+  -- Exclusive upper bound: must match BatchInsertSnapshotMembersFromRankings.
+  AND edr.killed_at < @cutoff
   AND (@window_start::timestamptz IS NULL OR edr.killed_at >= @window_start);
 
 -- name: GetLatestPublishedSnapshotForGuard :one

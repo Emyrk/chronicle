@@ -83,8 +83,9 @@ type sqlcQuerier interface {
 	GetDatasetTalentTrees(ctx context.Context, datasetID uuid.UUID) ([]byte, error)
 	GetDeploymentInfo(ctx context.Context) (DeploymentInfo, error)
 	GetDisplayInfoByID(ctx context.Context, arg GetDisplayInfoByIDParams) (WorldDisplayInfo, error)
-	// Return the earliest published snapshot that contains members from a given instance.
-	GetEarliestSnapshotForInstance(ctx context.Context, arg GetEarliestSnapshotForInstanceParams) (RankingSnapshot, error)
+	// Return the earliest published snapshot for a tenant+lookback.
+	// Fallback when no snapshot has cutoff <= instance start (run predates all snapshots).
+	GetEarliestPublishedSnapshot(ctx context.Context, arg GetEarliestPublishedSnapshotParams) (RankingSnapshot, error)
 	GetEncounterSummariesByInstanceID(ctx context.Context, instanceID uuid.UUID) ([]GetEncounterSummariesByInstanceIDRow, error)
 	GetEncounterSummariesByInstanceIDs(ctx context.Context, instanceIds []uuid.UUID) ([]GetEncounterSummariesByInstanceIDsRow, error)
 	// Returns log groups whose raw files are past their owner's retention window.
@@ -129,15 +130,25 @@ type sqlcQuerier interface {
 	GetItemTemplatesBySetID(ctx context.Context, arg GetItemTemplatesBySetIDParams) ([]GetItemTemplatesBySetIDRow, error)
 	// Return the most recently published snapshot for a tenant+lookback.
 	GetLatestPublishedSnapshot(ctx context.Context, arg GetLatestPublishedSnapshotParams) (RankingSnapshot, error)
+	// Return the latest published snapshot whose cutoff <= the given timestamp.
+	// Used for canonical parse resolution: a raid compares against the snapshot
+	// whose cutoff is at or before the instance's start time.
+	GetLatestPublishedSnapshotBefore(ctx context.Context, arg GetLatestPublishedSnapshotBeforeParams) (RankingSnapshot, error)
 	// Return the most recently published snapshot matching the full key dimensions
 	// used by the staleness guard (tenant, lookback, cohort_mode, policy_version, query_version).
 	GetLatestPublishedSnapshotForGuard(ctx context.Context, arg GetLatestPublishedSnapshotForGuardParams) (RankingSnapshot, error)
 	GetLatestRegressionSnapshot(ctx context.Context, fixtureID uuid.UUID) (RegressionSnapshot, error)
 	GetLeaderboardVersionRequirements(ctx context.Context, instanceName string) (LeaderboardVersionRequirement, error)
 	GetLogFile(ctx context.Context, id uuid.UUID) (LogFile, error)
+	// Return the start_time for a log instance. Used by the parses handler
+	// to resolve which snapshot cutoff applies to the instance.
+	GetLogInstanceStartTime(ctx context.Context, id uuid.UUID) (pgtype.Timestamptz, error)
 	GetModificationRequestByID(ctx context.Context, id uuid.UUID) (ApplicationModificationRequest, error)
 	GetPanelLayoutByCode(ctx context.Context, code pgtype.Text) (GetPanelLayoutByCodeRow, error)
 	GetPanelLayoutByID(ctx context.Context, id uuid.UUID) (GetPanelLayoutByIDRow, error)
+	// Check if a published snapshot already exists for this exact cutoff+key.
+	// Used by the idempotency guard (one snapshot per day per key).
+	GetPublishedSnapshotForCutoff(ctx context.Context, arg GetPublishedSnapshotForCutoffParams) (RankingSnapshot, error)
 	GetRankingSnapshot(ctx context.Context, id uuid.UUID) (RankingSnapshot, error)
 	// Returns all realm IDs that have an applicable retention policy
 	// (either directly or through their server).

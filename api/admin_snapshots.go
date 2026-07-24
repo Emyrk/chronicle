@@ -2,7 +2,6 @@ package api
 
 import (
 	"net/http"
-	"time"
 
 	"github.com/Emyrk/chronicle/api/chroniclesdk"
 	"github.com/Emyrk/chronicle/api/httpapi"
@@ -11,7 +10,9 @@ import (
 	"github.com/google/uuid"
 )
 
-// AdminTriggerParseSnapshot enqueues a parse snapshot publication job.
+// AdminTriggerParseSnapshot enqueues the normal idempotent parse snapshot
+// publication job. Useful to trigger without waiting for the hourly tick;
+// the job will no-op if today's snapshot already exists.
 //
 //	POST /api/v1/admin/parses/snapshot
 func (api *API) AdminTriggerParseSnapshot(w http.ResponseWriter, r *http.Request) {
@@ -39,10 +40,8 @@ func (api *API) AdminTriggerParseSnapshot(w http.ResponseWriter, r *http.Request
 		ctx,
 		api.Queues,
 		tenantID,
-		time.Now(),
 		req.LookbackDays,
 		int16(parsepolicy.PolicyVersion),
-		true, // Force: admin triggers always bypass the staleness guard.
 	)
 	if err != nil {
 		httpapi.HandleResponseError(ctx, w, err, httpapi.APIError{

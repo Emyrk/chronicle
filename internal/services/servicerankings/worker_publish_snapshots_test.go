@@ -178,11 +178,13 @@ func TestWorkerPublishParseSnapshotTenant(t *testing.T) {
 		assert.Equal(t, int64(3), memberCount)
 	})
 
-	t.Run("ReRunWithForceCreatesNewSnapshot", func(t *testing.T) {
+	t.Run("IdempotentSameDayNoOp", func(t *testing.T) {
 		t.Parallel()
 		pool, store, realmID := setupSnapshotTest(t)
 		ctx := testutil.Context(t, testutil.WaitMedium)
 
+		// Cutoff at midnight UTC.
+		cutoff := time.Date(2024, 6, 2, 0, 0, 0, 0, time.UTC)
 		baseTime := time.Date(2024, 6, 1, 12, 0, 0, 0, time.UTC)
 		insertRankingRow(t, pool, store, realmID, rankingOpts{
 			encounterName: "Ragnaros", instanceName: "Molten Core",
@@ -199,13 +201,12 @@ func TestWorkerPublishParseSnapshotTenant(t *testing.T) {
 
 		args := servicerankings.ArgsPublishParseSnapshotTenant{
 			TenantID:      uuid.Nil,
-			Cutoff:        baseTime.Add(time.Hour),
+			Cutoff:        cutoff,
 			LookbackDays:  0,
 			PolicyVersion: 1,
-			Force:         true,
 		}
 
-		// First run.
+		// First run publishes.
 		err := worker.Work(ctx, &river.Job[servicerankings.ArgsPublishParseSnapshotTenant]{Args: args})
 		require.NoError(t, err)
 
@@ -214,9 +215,9 @@ func TestWorkerPublishParseSnapshotTenant(t *testing.T) {
 			LookbackDays: 0,
 		})
 		require.NoError(t, err)
+		assert.Equal(t, "published", snap1.Status)
 
-		// Second run with Force bypasses staleness guard.
-		args.Cutoff = baseTime.Add(2 * time.Hour)
+		// Second run with same cutoff is a no-op (already_published).
 		err = worker.Work(ctx, &river.Job[servicerankings.ArgsPublishParseSnapshotTenant]{Args: args})
 		require.NoError(t, err)
 
@@ -226,14 +227,8 @@ func TestWorkerPublishParseSnapshotTenant(t *testing.T) {
 		})
 		require.NoError(t, err)
 
-		// Both published, different IDs.
-		assert.NotEqual(t, snap1.ID, snap2.ID)
-		assert.Equal(t, "published", snap2.Status)
-
-		// First snapshot still exists and is published.
-		old, err := store.GetRankingSnapshot(ctx, snap1.ID)
-		require.NoError(t, err)
-		assert.Equal(t, "published", old.Status)
+		// Same snapshot — no new one was created.
+		assert.Equal(t, snap1.ID, snap2.ID)
 	})
 
 	t.Run("StalenessGuardSkipsUnchangedData", func(t *testing.T) {
@@ -255,14 +250,15 @@ func TestWorkerPublishParseSnapshotTenant(t *testing.T) {
 			Logger: slog.Default(),
 		}
 
+		// Day 1 cutoff publishes.
+		day1Cutoff := time.Date(2024, 6, 2, 0, 0, 0, 0, time.UTC)
 		args := servicerankings.ArgsPublishParseSnapshotTenant{
 			TenantID:      uuid.Nil,
-			Cutoff:        baseTime.Add(time.Hour),
+			Cutoff:        day1Cutoff,
 			LookbackDays:  0,
 			PolicyVersion: 1,
 		}
 
-		// First run publishes.
 		err := worker.Work(ctx, &river.Job[servicerankings.ArgsPublishParseSnapshotTenant]{Args: args})
 		require.NoError(t, err)
 
@@ -274,8 +270,9 @@ func TestWorkerPublishParseSnapshotTenant(t *testing.T) {
 		assert.Equal(t, "published", snap1.Status)
 		assert.Equal(t, int64(1), snap1.SourceRowCount)
 
-		// Second run with same data is skipped (no new snapshot row).
-		args.Cutoff = baseTime.Add(2 * time.Hour)
+		// Day 2 cutoff with same data is skipped (staleness guard).
+		day2Cutoff := time.Date(2024, 6, 3, 0, 0, 0, 0, time.UTC)
+		args.Cutoff = day2Cutoff
 		err = worker.Work(ctx, &river.Job[servicerankings.ArgsPublishParseSnapshotTenant]{Args: args})
 		require.NoError(t, err)
 
@@ -288,7 +285,7 @@ func TestWorkerPublishParseSnapshotTenant(t *testing.T) {
 		assert.Equal(t, snap1.ID, snap2.ID)
 	})
 
-	t.Run("StalenessGuardPublishesWhenNewData", func(t *testing.T) {
+	t.Run("MidnightRolloverPublishesNewDay", func(t *testing.T) {
 		t.Parallel()
 		pool, store, realmID := setupSnapshotTest(t)
 		ctx := testutil.Context(t, testutil.WaitMedium)
@@ -307,14 +304,14 @@ func TestWorkerPublishParseSnapshotTenant(t *testing.T) {
 			Logger: slog.Default(),
 		}
 
+		// Day N publishes.
+		dayNCutoff := time.Date(2024, 6, 2, 0, 0, 0, 0, time.UTC)
 		args := servicerankings.ArgsPublishParseSnapshotTenant{
 			TenantID:      uuid.Nil,
-			Cutoff:        baseTime.Add(time.Hour),
+			Cutoff:        dayNCutoff,
 			LookbackDays:  0,
 			PolicyVersion: 1,
 		}
-
-		// First run publishes.
 		err := worker.Work(ctx, &river.Job[servicerankings.ArgsPublishParseSnapshotTenant]{Args: args})
 		require.NoError(t, err)
 
@@ -324,17 +321,18 @@ func TestWorkerPublishParseSnapshotTenant(t *testing.T) {
 		})
 		require.NoError(t, err)
 
-		// Insert new ranking row.
+		// New data arrives (killed on day N, visible to day N+1 cutoff).
 		insertRankingRow(t, pool, store, realmID, rankingOpts{
 			encounterName: "Ragnaros", instanceName: "Molten Core",
 			playerGUID: "P-B", playerClass: "Mage", playerSpec: "Fire",
 			difficultyName: "Normal", maxPlayers: 40,
 			damageDone: 180000, durationSecs: 300, dps: 600,
-			killedAt: baseTime, isBoss: true,
+			killedAt: time.Date(2024, 6, 2, 18, 0, 0, 0, time.UTC), isBoss: true,
 		})
 
-		// Second run with new data publishes a new snapshot.
-		args.Cutoff = baseTime.Add(2 * time.Hour)
+		// Day N+1 publishes a new snapshot.
+		dayN1Cutoff := time.Date(2024, 6, 3, 0, 0, 0, 0, time.UTC)
+		args.Cutoff = dayN1Cutoff
 		err = worker.Work(ctx, &river.Job[servicerankings.ArgsPublishParseSnapshotTenant]{Args: args})
 		require.NoError(t, err)
 
@@ -349,18 +347,30 @@ func TestWorkerPublishParseSnapshotTenant(t *testing.T) {
 		assert.Equal(t, int64(2), snap2.SourceRowCount)
 	})
 
-	t.Run("ForceBypassesStalenessGuard", func(t *testing.T) {
+	t.Run("ExclusiveCutoffBoundary", func(t *testing.T) {
 		t.Parallel()
 		pool, store, realmID := setupSnapshotTest(t)
 		ctx := testutil.Context(t, testutil.WaitMedium)
 
-		baseTime := time.Date(2024, 6, 1, 12, 0, 0, 0, time.UTC)
+		// A kill at exactly midnight should NOT be included in that day's snapshot
+		// (cutoff is exclusive: killed_at < cutoff).
+		cutoff := time.Date(2024, 6, 2, 0, 0, 0, 0, time.UTC)
+
+		// Kill at exactly the cutoff time — should be excluded.
 		insertRankingRow(t, pool, store, realmID, rankingOpts{
 			encounterName: "Ragnaros", instanceName: "Molten Core",
-			playerGUID: "P-A", playerClass: "Warrior", playerSpec: "Fury",
+			playerGUID: "P-AtCutoff", playerClass: "Warrior", playerSpec: "Fury",
 			difficultyName: "Normal", maxPlayers: 40,
 			damageDone: 150000, durationSecs: 300, dps: 500,
-			killedAt: baseTime, isBoss: true,
+			killedAt: cutoff, isBoss: true,
+		})
+		// Kill before cutoff — should be included.
+		insertRankingRow(t, pool, store, realmID, rankingOpts{
+			encounterName: "Ragnaros", instanceName: "Molten Core",
+			playerGUID: "P-Before", playerClass: "Mage", playerSpec: "Fire",
+			difficultyName: "Normal", maxPlayers: 40,
+			damageDone: 120000, durationSecs: 300, dps: 400,
+			killedAt: cutoff.Add(-time.Hour), isBoss: true,
 		})
 
 		worker := &servicerankings.WorkerPublishParseSnapshotTenant{
@@ -368,36 +378,26 @@ func TestWorkerPublishParseSnapshotTenant(t *testing.T) {
 			Logger: slog.Default(),
 		}
 
-		// First run (no force).
-		args := servicerankings.ArgsPublishParseSnapshotTenant{
-			TenantID:      uuid.Nil,
-			Cutoff:        baseTime.Add(time.Hour),
-			LookbackDays:  0,
-			PolicyVersion: 1,
-		}
-		err := worker.Work(ctx, &river.Job[servicerankings.ArgsPublishParseSnapshotTenant]{Args: args})
+		err := worker.Work(ctx, &river.Job[servicerankings.ArgsPublishParseSnapshotTenant]{
+			Args: servicerankings.ArgsPublishParseSnapshotTenant{
+				TenantID:      uuid.Nil,
+				Cutoff:        cutoff,
+				LookbackDays:  0,
+				PolicyVersion: 1,
+			},
+		})
 		require.NoError(t, err)
 
-		snap1, err := store.GetLatestPublishedSnapshot(ctx, database.GetLatestPublishedSnapshotParams{
+		snap, err := store.GetLatestPublishedSnapshot(ctx, database.GetLatestPublishedSnapshotParams{
 			TenantID:     uuid.Nil,
 			LookbackDays: 0,
 		})
 		require.NoError(t, err)
 
-		// Second run with Force=true publishes even with unchanged data.
-		args.Cutoff = baseTime.Add(2 * time.Hour)
-		args.Force = true
-		err = worker.Work(ctx, &river.Job[servicerankings.ArgsPublishParseSnapshotTenant]{Args: args})
+		memberCount, err := store.CountSnapshotMembers(ctx, snap.ID)
 		require.NoError(t, err)
-
-		snap2, err := store.GetLatestPublishedSnapshot(ctx, database.GetLatestPublishedSnapshotParams{
-			TenantID:     uuid.Nil,
-			LookbackDays: 0,
-		})
-		require.NoError(t, err)
-
-		assert.NotEqual(t, snap1.ID, snap2.ID)
-		assert.Equal(t, "published", snap2.Status)
+		// Only the kill before cutoff should be included.
+		assert.Equal(t, int64(1), memberCount)
 	})
 
 	t.Run("LookbackWindowFiltersOldKills", func(t *testing.T) {

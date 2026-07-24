@@ -4369,7 +4369,8 @@ eligible AS (
     WHERE edr.encounter_id IS NOT NULL      -- boss kills only
       AND edr.dps > 0
       AND edr.duration_secs > 0
-      AND edr.killed_at <= s.cutoff
+      -- Exclusive upper bound: data strictly before the snapshot cutoff (00:00 UTC boundary).
+      AND edr.killed_at < s.cutoff
       AND (s.window_start IS NULL OR edr.killed_at >= s.window_start)
     ORDER BY edr.player_guid, edr.encounter_name,
              COALESCE(li.duplicate_group_id, li.id),
@@ -4419,27 +4420,25 @@ func (q *sqlQuerier) CountSnapshotMembers(ctx context.Context, snapshotID uuid.U
 	return count, err
 }
 
-const getEarliestSnapshotForInstance = `-- name: GetEarliestSnapshotForInstance :one
-SELECT rs.id, rs.tenant_id, rs.cutoff, rs.window_start, rs.lookback_days, rs.cohort_mode, rs.policy_version, rs.query_version, rs.min_parser_version_num, rs.min_addon_version_num, rs.status, rs.created_at, rs.published_at, rs.source_row_count, rs.source_watermark
-FROM ranking_snapshots rs
-WHERE rs.tenant_id = $1
-  AND rs.status = 'published'
-  AND EXISTS (
-      SELECT 1 FROM ranking_snapshot_members rsm
-      WHERE rsm.snapshot_id = rs.id AND rsm.instance_id = $2
-  )
-ORDER BY rs.published_at ASC
+const getEarliestPublishedSnapshot = `-- name: GetEarliestPublishedSnapshot :one
+SELECT id, tenant_id, cutoff, window_start, lookback_days, cohort_mode, policy_version, query_version, min_parser_version_num, min_addon_version_num, status, created_at, published_at, source_row_count, source_watermark
+FROM ranking_snapshots
+WHERE tenant_id = $1
+  AND lookback_days = $2
+  AND status = 'published'
+ORDER BY cutoff ASC
 LIMIT 1
 `
 
-type GetEarliestSnapshotForInstanceParams struct {
-	TenantID   uuid.UUID `db:"tenant_id" json:"tenant_id"`
-	InstanceID uuid.UUID `db:"instance_id" json:"instance_id"`
+type GetEarliestPublishedSnapshotParams struct {
+	TenantID     uuid.UUID `db:"tenant_id" json:"tenant_id"`
+	LookbackDays int32     `db:"lookback_days" json:"lookback_days"`
 }
 
-// Return the earliest published snapshot that contains members from a given instance.
-func (q *sqlQuerier) GetEarliestSnapshotForInstance(ctx context.Context, arg GetEarliestSnapshotForInstanceParams) (RankingSnapshot, error) {
-	row := q.db.QueryRow(ctx, getEarliestSnapshotForInstance, arg.TenantID, arg.InstanceID)
+// Return the earliest published snapshot for a tenant+lookback.
+// Fallback when no snapshot has cutoff <= instance start (run predates all snapshots).
+func (q *sqlQuerier) GetEarliestPublishedSnapshot(ctx context.Context, arg GetEarliestPublishedSnapshotParams) (RankingSnapshot, error) {
+	row := q.db.QueryRow(ctx, getEarliestPublishedSnapshot, arg.TenantID, arg.LookbackDays)
 	var i RankingSnapshot
 	err := row.Scan(
 		&i.ID,
@@ -4500,6 +4499,49 @@ func (q *sqlQuerier) GetLatestPublishedSnapshot(ctx context.Context, arg GetLate
 	return i, err
 }
 
+const getLatestPublishedSnapshotBefore = `-- name: GetLatestPublishedSnapshotBefore :one
+SELECT id, tenant_id, cutoff, window_start, lookback_days, cohort_mode, policy_version, query_version, min_parser_version_num, min_addon_version_num, status, created_at, published_at, source_row_count, source_watermark
+FROM ranking_snapshots
+WHERE tenant_id = $1
+  AND lookback_days = $2
+  AND status = 'published'
+  AND cutoff <= $3
+ORDER BY cutoff DESC
+LIMIT 1
+`
+
+type GetLatestPublishedSnapshotBeforeParams struct {
+	TenantID     uuid.UUID          `db:"tenant_id" json:"tenant_id"`
+	LookbackDays int32              `db:"lookback_days" json:"lookback_days"`
+	Before       pgtype.Timestamptz `db:"before" json:"before"`
+}
+
+// Return the latest published snapshot whose cutoff <= the given timestamp.
+// Used for canonical parse resolution: a raid compares against the snapshot
+// whose cutoff is at or before the instance's start time.
+func (q *sqlQuerier) GetLatestPublishedSnapshotBefore(ctx context.Context, arg GetLatestPublishedSnapshotBeforeParams) (RankingSnapshot, error) {
+	row := q.db.QueryRow(ctx, getLatestPublishedSnapshotBefore, arg.TenantID, arg.LookbackDays, arg.Before)
+	var i RankingSnapshot
+	err := row.Scan(
+		&i.ID,
+		&i.TenantID,
+		&i.Cutoff,
+		&i.WindowStart,
+		&i.LookbackDays,
+		&i.CohortMode,
+		&i.PolicyVersion,
+		&i.QueryVersion,
+		&i.MinParserVersionNum,
+		&i.MinAddonVersionNum,
+		&i.Status,
+		&i.CreatedAt,
+		&i.PublishedAt,
+		&i.SourceRowCount,
+		&i.SourceWatermark,
+	)
+	return i, err
+}
+
 const getLatestPublishedSnapshotForGuard = `-- name: GetLatestPublishedSnapshotForGuard :one
 SELECT id, tenant_id, cutoff, window_start, lookback_days, cohort_mode, policy_version, query_version, min_parser_version_num, min_addon_version_num, status, created_at, published_at, source_row_count, source_watermark
 FROM ranking_snapshots
@@ -4530,6 +4572,73 @@ func (q *sqlQuerier) GetLatestPublishedSnapshotForGuard(ctx context.Context, arg
 		arg.CohortMode,
 		arg.PolicyVersion,
 		arg.QueryVersion,
+	)
+	var i RankingSnapshot
+	err := row.Scan(
+		&i.ID,
+		&i.TenantID,
+		&i.Cutoff,
+		&i.WindowStart,
+		&i.LookbackDays,
+		&i.CohortMode,
+		&i.PolicyVersion,
+		&i.QueryVersion,
+		&i.MinParserVersionNum,
+		&i.MinAddonVersionNum,
+		&i.Status,
+		&i.CreatedAt,
+		&i.PublishedAt,
+		&i.SourceRowCount,
+		&i.SourceWatermark,
+	)
+	return i, err
+}
+
+const getLogInstanceStartTime = `-- name: GetLogInstanceStartTime :one
+SELECT start_time FROM log_instances WHERE id = $1
+`
+
+// Return the start_time for a log instance. Used by the parses handler
+// to resolve which snapshot cutoff applies to the instance.
+func (q *sqlQuerier) GetLogInstanceStartTime(ctx context.Context, id uuid.UUID) (pgtype.Timestamptz, error) {
+	row := q.db.QueryRow(ctx, getLogInstanceStartTime, id)
+	var start_time pgtype.Timestamptz
+	err := row.Scan(&start_time)
+	return start_time, err
+}
+
+const getPublishedSnapshotForCutoff = `-- name: GetPublishedSnapshotForCutoff :one
+SELECT id, tenant_id, cutoff, window_start, lookback_days, cohort_mode, policy_version, query_version, min_parser_version_num, min_addon_version_num, status, created_at, published_at, source_row_count, source_watermark
+FROM ranking_snapshots
+WHERE tenant_id = $1
+  AND lookback_days = $2
+  AND cohort_mode = $3
+  AND policy_version = $4
+  AND query_version = $5
+  AND cutoff = $6
+  AND status = 'published'
+LIMIT 1
+`
+
+type GetPublishedSnapshotForCutoffParams struct {
+	TenantID      uuid.UUID          `db:"tenant_id" json:"tenant_id"`
+	LookbackDays  int32              `db:"lookback_days" json:"lookback_days"`
+	CohortMode    string             `db:"cohort_mode" json:"cohort_mode"`
+	PolicyVersion int16              `db:"policy_version" json:"policy_version"`
+	QueryVersion  int16              `db:"query_version" json:"query_version"`
+	Cutoff        pgtype.Timestamptz `db:"cutoff" json:"cutoff"`
+}
+
+// Check if a published snapshot already exists for this exact cutoff+key.
+// Used by the idempotency guard (one snapshot per day per key).
+func (q *sqlQuerier) GetPublishedSnapshotForCutoff(ctx context.Context, arg GetPublishedSnapshotForCutoffParams) (RankingSnapshot, error) {
+	row := q.db.QueryRow(ctx, getPublishedSnapshotForCutoff,
+		arg.TenantID,
+		arg.LookbackDays,
+		arg.CohortMode,
+		arg.PolicyVersion,
+		arg.QueryVersion,
+		arg.Cutoff,
 	)
 	var i RankingSnapshot
 	err := row.Scan(
@@ -4651,7 +4760,8 @@ JOIN log_instances li ON li.id = edr.instance_id
 WHERE edr.encounter_id IS NOT NULL      -- boss kills only
   AND edr.dps > 0
   AND edr.duration_secs > 0
-  AND edr.killed_at <= $1
+  -- Exclusive upper bound: must match BatchInsertSnapshotMembersFromRankings.
+  AND edr.killed_at < $1
   AND ($2::timestamptz IS NULL OR edr.killed_at >= $2)
 `
 
