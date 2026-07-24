@@ -406,6 +406,78 @@ func EnqueueParseSnapshotBackfill(
 	}, nil)
 }
 
+// BackfillJobResult describes a single job enqueued by a backfill operation.
+type BackfillJobResult struct {
+	TenantID     uuid.UUID
+	LookbackDays int32
+	JobID        int64
+	JobState     string
+}
+
+// EnqueueParseSnapshotBackfillAllTenants enumerates root + all non-disabled
+// tenants and enqueues one backfill job per tenant per lookback window,
+// matching the dispatch worker's logic. defaultLookbackDays is used for tenants
+// (including root) that have no explicit AllowedLookbackDays in ParseConfig.
+func EnqueueParseSnapshotBackfillAllTenants(
+	ctx context.Context,
+	store database.Store,
+	queue *riverqueue.Queues,
+	day time.Time,
+	defaultLookbackDays int32,
+	policyVersion int16,
+) ([]BackfillJobResult, error) {
+	tenants, err := store.ListTenants(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("list tenants: %w", err)
+	}
+
+	type tenantEntry struct {
+		id          uuid.UUID
+		parseConfig []byte
+	}
+	entries := make([]tenantEntry, 0, len(tenants)+1)
+	entries = append(entries, tenantEntry{id: uuid.Nil}) // root scope
+	for _, t := range tenants {
+		entries = append(entries, tenantEntry{id: t.ID, parseConfig: t.ParseConfig})
+	}
+
+	cutoff := truncateToUTCMidnight(day)
+	adminBackfill := cutoff.Before(todayUTCMidnight())
+
+	var results []BackfillJobResult
+	for _, te := range entries {
+		if isParseDisabled(te.parseConfig) {
+			continue
+		}
+		lookbacks := resolveLookbackDays(te.parseConfig)
+		// When the tenant has no explicit lookbacks (fell back to default) and the
+		// caller specified a different default, use the caller's value.
+		if len(lookbacks) == 1 && lookbacks[0] == parsepolicy.DefaultLookbackDays && defaultLookbackDays != 0 {
+			lookbacks = []parsepolicy.LookbackDays{parsepolicy.LookbackDays(defaultLookbackDays)}
+		}
+		for _, lb := range lookbacks {
+			res, err := queue.Insert(ctx, ArgsPublishParseSnapshotTenant{
+				TenantID:      te.id,
+				Cutoff:        cutoff,
+				LookbackDays:  int32(lb),
+				PolicyVersion: policyVersion,
+				AdminBackfill: adminBackfill,
+			}, nil)
+			if err != nil {
+				return nil, fmt.Errorf("enqueue tenant %s lookback %d: %w", te.id, lb, err)
+			}
+			results = append(results, BackfillJobResult{
+				TenantID:     te.id,
+				LookbackDays: int32(lb),
+				JobID:        res.Job.ID,
+				JobState:     string(res.Job.State),
+			})
+		}
+	}
+
+	return results, nil
+}
+
 // truncateToUTCMidnight returns 00:00 UTC of the given day.
 func truncateToUTCMidnight(t time.Time) time.Time {
 	t = t.UTC()

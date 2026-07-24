@@ -205,7 +205,13 @@ type InstanceParseAverage struct {
 // AdminTriggerSnapshotRequest is the request body for the admin parse snapshot trigger.
 type AdminTriggerSnapshotRequest struct {
 	// TenantID scopes the snapshot to a specific tenant. Empty = root/all-time scope.
+	// Ignored when AllTenants is true.
 	TenantID string `json:"tenant_id"`
+	// AllTenants enqueues one job per non-disabled tenant (plus root), each
+	// using the tenant's own ParseConfig lookback windows. When true, TenantID
+	// is ignored and LookbackDays serves as the default for tenants without
+	// explicit AllowedLookbackDays.
+	AllTenants bool `json:"all_tenants"`
 	// LookbackDays overrides the default lookback window. 0 = all-time.
 	LookbackDays int32 `json:"lookback_days"`
 	// Day is the snapshot cutoff date as YYYY-MM-DD. Empty = today.
@@ -214,10 +220,18 @@ type AdminTriggerSnapshotRequest struct {
 	Day string `json:"day"`
 }
 
-// AdminTriggerSnapshotResponse is returned when a snapshot publication job is enqueued.
+// AdminTriggerSnapshotJobResult describes a single enqueued snapshot job.
+type AdminTriggerSnapshotJobResult struct {
+	TenantID     string `json:"tenant_id"`
+	LookbackDays int32  `json:"lookback_days"`
+	JobID        int64  `json:"job_id"`
+	JobState     string `json:"job_state"`
+}
+
+// AdminTriggerSnapshotResponse is returned when snapshot publication jobs are enqueued.
 type AdminTriggerSnapshotResponse struct {
-	JobID    int64  `json:"job_id"`
-	JobState string `json:"job_state"`
+	// Jobs lists every enqueued job. For single-tenant requests this has one entry.
+	Jobs []AdminTriggerSnapshotJobResult `json:"jobs"`
 }
 // AdminSnapshotSummary is a snapshot listed in the admin parsing tab.
 type AdminSnapshotSummary struct {
