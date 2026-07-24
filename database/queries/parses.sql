@@ -74,14 +74,16 @@ eligible AS (
     JOIN log_instances li ON li.id = edr.instance_id
     CROSS JOIN snapshot s
     WHERE edr.encounter_id IS NOT NULL      -- boss kills only
-      AND edr.dps > 0
+      AND (edr.dps > 0 OR edr.hps > 0)     -- metric-neutral: include healers with zero damage
       AND edr.duration_secs > 0
       -- Exclusive upper bound: data strictly before the snapshot cutoff (00:00 UTC boundary).
       AND edr.killed_at < s.cutoff
       AND (s.window_start IS NULL OR edr.killed_at >= s.window_start)
+    -- Duplicate-group collapse: copies of the same kill are near-identical, so
+    -- DPS DESC with HPS DESC tiebreak picks one deterministic representative.
     ORDER BY edr.player_guid, edr.encounter_name,
              COALESCE(li.duplicate_group_id, li.id),
-             edr.dps DESC
+             edr.dps DESC, edr.hps DESC
 )
 INSERT INTO ranking_snapshot_members (
     snapshot_id, ranking_id, instance_id, run_id,
@@ -172,7 +174,10 @@ WHERE rsm.snapshot_id = @snapshot_id
   AND rsm.difficulty_name = @difficulty_name
   AND rsm.max_players = @max_players
   AND rsm.player_class = @player_class
-  AND (sqlc.narg('player_spec')::text IS NULL OR rsm.player_spec = @player_spec);
+  AND (sqlc.narg('player_spec')::text IS NULL OR rsm.player_spec = @player_spec)
+  -- Only include rows with a positive value for the requested metric so
+  -- zero-DPS healers don't appear in DPS cohorts and vice versa.
+  AND CASE WHEN @metric::text = 'hps' THEN rsm.hps ELSE rsm.dps END > 0;
 
 -- name: ListSnapshotMembersForInstance :many
 -- List all snapshot members from a given instance.
@@ -208,6 +213,35 @@ SELECT * FROM ranking_snapshots WHERE id = @id;
 -- Return the number of members in a snapshot.
 SELECT COUNT(*) FROM ranking_snapshot_members WHERE snapshot_id = @snapshot_id;
 
+-- name: ListRankingsForInstance :many
+-- Load ranking rows for a specific instance directly from encounter_dps_rankings.
+-- Used by the parses handler to get the viewed instance's own metric values
+-- independent of snapshot membership (the instance may not be a member of the
+-- snapshot it scores against, e.g. historical canonical snapshots).
+SELECT
+    edr.id,
+    edr.encounter_name,
+    edr.instance_name,
+    edr.player_guid,
+    edr.player_name,
+    edr.player_class,
+    edr.player_spec,
+    edr.player_role,
+    edr.difficulty_name,
+    edr.max_players,
+    edr.killed_at,
+    edr.created_at,
+    edr.damage_done,
+    edr.healing_done,
+    edr.absorbed_done,
+    edr.duration_secs,
+    edr.dps,
+    edr.hps
+FROM encounter_dps_rankings edr
+WHERE edr.instance_id = @instance_id
+  AND edr.encounter_id IS NOT NULL  -- boss kills only
+ORDER BY edr.encounter_name, edr.dps DESC;
+
 -- name: GetSnapshotSourceStats :one
 -- Compute the eligible row count and max(created_at) for the same eligibility
 -- filter as BatchInsertSnapshotMembersFromRankings. Used by the staleness guard
@@ -219,7 +253,7 @@ SELECT
 FROM encounter_dps_rankings edr
 JOIN log_instances li ON li.id = edr.instance_id
 WHERE edr.encounter_id IS NOT NULL      -- boss kills only
-  AND edr.dps > 0
+  AND (edr.dps > 0 OR edr.hps > 0)     -- metric-neutral: must match BatchInsertSnapshotMembersFromRankings
   AND edr.duration_secs > 0
   -- Exclusive upper bound: must match BatchInsertSnapshotMembersFromRankings.
   AND edr.killed_at < @cutoff

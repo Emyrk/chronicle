@@ -610,3 +610,133 @@ func TestCohortAllKills(t *testing.T) {
 	}
 	assert.ElementsMatch(t, []float64{500, 400, 450, 350}, values)
 }
+func TestSnapshotMetricNeutralMembership(t *testing.T) {
+	t.Parallel()
+
+	pool, store, realmID := setupParsesTest(t)
+	baseTime := time.Date(2024, 6, 1, 12, 0, 0, 0, time.UTC)
+
+	// Healer with zero DPS but positive HPS — should become a member.
+	insertRankingRow(t, pool, store, realmID, rankingOpts{
+		encounterName: "Ragnaros-Neutral", instanceName: "Molten Core",
+		playerGUID: "P-HEAL", playerClass: "Priest", playerSpec: "Holy",
+		difficultyName: "Normal", maxPlayers: 40,
+		damageDone: 0, healingDone: 90000, durationSecs: 300, dps: 0, hps: 300,
+		killedAt: baseTime, isBoss: true,
+	})
+
+	// DPS player with positive DPS and zero HPS.
+	insertRankingRow(t, pool, store, realmID, rankingOpts{
+		encounterName: "Ragnaros-Neutral", instanceName: "Molten Core",
+		playerGUID: "P-DPS", playerClass: "Warrior", playerSpec: "Fury",
+		difficultyName: "Normal", maxPlayers: 40,
+		damageDone: 150000, durationSecs: 300, dps: 500, hps: 0,
+		killedAt: baseTime, isBoss: true,
+	})
+
+	ctx := testutil.Context(t, testutil.WaitMedium)
+
+	snapshot, err := store.InsertRankingSnapshot(ctx, database.InsertRankingSnapshotParams{
+		TenantID:      uuid.UUID{},
+		Cutoff:        database.Timestamptz(baseTime.Add(time.Hour)),
+		LookbackDays:  0,
+		CohortMode:    "spec",
+		PolicyVersion: 1,
+		QueryVersion:  1,
+	})
+	require.NoError(t, err)
+	err = store.BatchInsertSnapshotMembersFromRankings(ctx, snapshot.ID)
+	require.NoError(t, err)
+
+	t.Run("ZeroDPSHealerIsMember", func(t *testing.T) {
+		t.Parallel()
+		members, err := store.ListSnapshotMembersByPlayerGUID(ctx, database.ListSnapshotMembersByPlayerGUIDParams{
+			SnapshotID: snapshot.ID,
+			PlayerGuid: "P-HEAL",
+		})
+		require.NoError(t, err)
+		assert.Len(t, members, 1, "zero-DPS healer with positive HPS must be a snapshot member")
+	})
+
+	t.Run("HealerInHPSCohortNotDPS", func(t *testing.T) {
+		t.Parallel()
+		// HPS cohort should include the healer.
+		hpsValues, err := store.GetSnapshotCohortValues(ctx, database.GetSnapshotCohortValuesParams{
+			SnapshotID:     snapshot.ID,
+			EncounterName:  "Ragnaros-Neutral",
+			DifficultyName: "Normal",
+			MaxPlayers:     40,
+			PlayerClass:    "Priest",
+			PlayerSpec:     pgtype.Text{String: "Holy", Valid: true},
+			Metric:         "hps",
+		})
+		require.NoError(t, err)
+		assert.Len(t, hpsValues, 1, "healer should appear in HPS cohort")
+
+		// DPS cohort should NOT include the zero-DPS healer.
+		dpsValues, err := store.GetSnapshotCohortValues(ctx, database.GetSnapshotCohortValuesParams{
+			SnapshotID:     snapshot.ID,
+			EncounterName:  "Ragnaros-Neutral",
+			DifficultyName: "Normal",
+			MaxPlayers:     40,
+			PlayerClass:    "Priest",
+			PlayerSpec:     pgtype.Text{String: "Holy", Valid: true},
+			Metric:         "dps",
+		})
+		require.NoError(t, err)
+		assert.Len(t, dpsValues, 0, "zero-DPS healer must not appear in DPS cohort")
+	})
+}
+
+func TestSnapshotDedupeDeterministic(t *testing.T) {
+	t.Parallel()
+
+	pool, store, realmID := setupParsesTest(t)
+	baseTime := time.Date(2024, 6, 1, 12, 0, 0, 0, time.UTC)
+
+	dupGroup := uuid.New()
+
+	// Two copies of the same kill with different DPS/HPS ordering:
+	// Copy 1: 400 DPS, 200 HPS
+	// Copy 2: 400 DPS, 250 HPS (same DPS, higher HPS — should be kept)
+	insertRankingRow(t, pool, store, realmID, rankingOpts{
+		encounterName: "Ragnaros-DetDup", instanceName: "Molten Core",
+		playerGUID: "P-DDUP", playerClass: "Paladin", playerSpec: "Retribution",
+		difficultyName: "Normal", maxPlayers: 40,
+		damageDone: 120000, healingDone: 60000, durationSecs: 300, dps: 400, hps: 200,
+		killedAt: baseTime, isBoss: true,
+		dupGroupID: &dupGroup,
+	})
+	insertRankingRow(t, pool, store, realmID, rankingOpts{
+		encounterName: "Ragnaros-DetDup", instanceName: "Molten Core",
+		playerGUID: "P-DDUP", playerClass: "Paladin", playerSpec: "Retribution",
+		difficultyName: "Normal", maxPlayers: 40,
+		damageDone: 120000, healingDone: 75000, durationSecs: 300, dps: 400, hps: 250,
+		killedAt: baseTime, isBoss: true,
+		dupGroupID: &dupGroup,
+	})
+
+	ctx := testutil.Context(t, testutil.WaitMedium)
+
+	snapshot, err := store.InsertRankingSnapshot(ctx, database.InsertRankingSnapshotParams{
+		TenantID:      uuid.UUID{},
+		Cutoff:        database.Timestamptz(baseTime.Add(time.Hour)),
+		LookbackDays:  0,
+		CohortMode:    "spec",
+		PolicyVersion: 1,
+		QueryVersion:  1,
+	})
+	require.NoError(t, err)
+	err = store.BatchInsertSnapshotMembersFromRankings(ctx, snapshot.ID)
+	require.NoError(t, err)
+
+	members, err := store.ListSnapshotMembersByPlayerGUID(ctx, database.ListSnapshotMembersByPlayerGUIDParams{
+		SnapshotID: snapshot.ID,
+		PlayerGuid: "P-DDUP",
+	})
+	require.NoError(t, err)
+	require.Len(t, members, 1, "duplicate group should collapse to 1 member")
+	// With ORDER BY dps DESC, hps DESC the copy with higher HPS wins as tiebreak.
+	assert.Equal(t, 250.0, members[0].Hps, "should keep copy with higher HPS as tiebreak")
+}
+

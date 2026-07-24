@@ -277,6 +277,11 @@ type sqlcQuerier interface {
 	ListInstancesByTimeRange(ctx context.Context, arg ListInstancesByTimeRangeParams) ([]ListInstancesByTimeRangeRow, error)
 	ListLeaderboardVersionRequirements(ctx context.Context) ([]LeaderboardVersionRequirement, error)
 	ListModificationRequestsByApplicationID(ctx context.Context, applicationID uuid.UUID) ([]ApplicationModificationRequest, error)
+	// Load ranking rows for a specific instance directly from encounter_dps_rankings.
+	// Used by the parses handler to get the viewed instance's own metric values
+	// independent of snapshot membership (the instance may not be a member of the
+	// snapshot it scores against, e.g. historical canonical snapshots).
+	ListRankingsForInstance(ctx context.Context, instanceID uuid.UUID) ([]ListRankingsForInstanceRow, error)
 	ListRecentInstances(ctx context.Context, arg ListRecentInstancesParams) ([]ListRecentInstancesRow, error)
 	ListRecentInstancesByPlayer(ctx context.Context, arg ListRecentInstancesByPlayerParams) ([]ListRecentInstancesByPlayerRow, error)
 	ListRegressionFixtures(ctx context.Context) ([]ListRegressionFixturesRow, error)

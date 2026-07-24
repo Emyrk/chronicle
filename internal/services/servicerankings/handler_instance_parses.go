@@ -29,7 +29,7 @@ type parsesQuerier interface {
 	GetLatestPublishedSnapshot(ctx context.Context, arg database.GetLatestPublishedSnapshotParams) (database.RankingSnapshot, error)
 	GetLatestPublishedSnapshotBefore(ctx context.Context, arg database.GetLatestPublishedSnapshotBeforeParams) (database.RankingSnapshot, error)
 	GetLogInstanceStartTime(ctx context.Context, id uuid.UUID) (pgtype.Timestamptz, error)
-	ListSnapshotMembersForInstanceWithNames(ctx context.Context, arg database.ListSnapshotMembersForInstanceWithNamesParams) ([]database.ListSnapshotMembersForInstanceWithNamesRow, error)
+	ListRankingsForInstance(ctx context.Context, instanceID uuid.UUID) ([]database.ListRankingsForInstanceRow, error)
 	GetSnapshotCohortValues(ctx context.Context, arg database.GetSnapshotCohortValuesParams) ([]database.GetSnapshotCohortValuesRow, error)
 }
 
@@ -187,15 +187,15 @@ func handleInstanceParsesWithStore(store parsesQuerier, logger *slog.Logger, w h
 		return
 	}
 
-	// Load members for this instance from the snapshot.
-	members, err := store.ListSnapshotMembersForInstanceWithNames(ctx, database.ListSnapshotMembersForInstanceWithNamesParams{
-		SnapshotID: snapshot.ID,
-		InstanceID: instanceID,
-	})
+	// Load the instance's own ranking rows directly from encounter_dps_rankings.
+	// This is independent of snapshot membership — the instance may not be a
+	// member of the snapshot it scores against (e.g. a historical canonical
+	// snapshot whose cutoff equals the raid's own day).
+	rankings, err := store.ListRankingsForInstance(ctx, instanceID)
 	if err != nil {
 		httpapi.HandleResponseError(ctx, w, err, httpapi.APIError{
 			Response: chroniclesdk.Response{
-				Message: "Failed to fetch snapshot members",
+				Message: "Failed to fetch instance rankings",
 				Detail:  err.Error(),
 			},
 		})
@@ -208,10 +208,10 @@ func handleInstanceParsesWithStore(store parsesQuerier, logger *slog.Logger, w h
 		encounterSet[en] = struct{}{}
 	}
 
-	// If no encounters specified, use all encounters from the instance's members.
+	// If no encounters specified, use all encounters from the instance's rankings.
 	if len(encounterNames) == 0 {
 		seen := make(map[string]struct{})
-		for _, m := range members {
+		for _, m := range rankings {
 			if _, ok := seen[m.EncounterName]; !ok {
 				seen[m.EncounterName] = struct{}{}
 				encounterNames = append(encounterNames, m.EncounterName)
@@ -223,20 +223,20 @@ func handleInstanceParsesWithStore(store parsesQuerier, logger *slog.Logger, w h
 		}
 	}
 
-	// Group members by player GUID.
+	// Group ranking rows by player GUID.
 	type playerInfo struct {
 		name  string
 		class string
 		spec  string
 		role  string
-		// encounter -> member row (the instance's own member entry)
-		bosses map[string]database.ListSnapshotMembersForInstanceWithNamesRow
+		// encounter -> ranking row (the instance's own metric values)
+		bosses map[string]database.ListRankingsForInstanceRow
 	}
 	players := make(map[string]*playerInfo)
 	// Track player insertion order for stable output.
 	var playerOrder []string
 
-	for _, m := range members {
+	for _, m := range rankings {
 		if _, ok := encounterSet[m.EncounterName]; !ok {
 			continue
 		}
@@ -247,7 +247,7 @@ func handleInstanceParsesWithStore(store parsesQuerier, logger *slog.Logger, w h
 				class:  m.PlayerClass,
 				spec:   m.PlayerSpec,
 				role:   m.PlayerRole,
-				bosses: make(map[string]database.ListSnapshotMembersForInstanceWithNamesRow),
+				bosses: make(map[string]database.ListRankingsForInstanceRow),
 			}
 			players[m.PlayerGuid] = p
 			playerOrder = append(playerOrder, m.PlayerGuid)

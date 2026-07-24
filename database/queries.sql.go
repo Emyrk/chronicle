@@ -4367,14 +4367,16 @@ eligible AS (
     JOIN log_instances li ON li.id = edr.instance_id
     CROSS JOIN snapshot s
     WHERE edr.encounter_id IS NOT NULL      -- boss kills only
-      AND edr.dps > 0
+      AND (edr.dps > 0 OR edr.hps > 0)     -- metric-neutral: include healers with zero damage
       AND edr.duration_secs > 0
       -- Exclusive upper bound: data strictly before the snapshot cutoff (00:00 UTC boundary).
       AND edr.killed_at < s.cutoff
       AND (s.window_start IS NULL OR edr.killed_at >= s.window_start)
+    -- Duplicate-group collapse: copies of the same kill are near-identical, so
+    -- DPS DESC with HPS DESC tiebreak picks one deterministic representative.
     ORDER BY edr.player_guid, edr.encounter_name,
              COALESCE(li.duplicate_group_id, li.id),
-             edr.dps DESC
+             edr.dps DESC, edr.hps DESC
 )
 INSERT INTO ranking_snapshot_members (
     snapshot_id, ranking_id, instance_id, run_id,
@@ -4660,6 +4662,9 @@ WHERE rsm.snapshot_id = $2
   AND rsm.max_players = $5
   AND rsm.player_class = $6
   AND ($7::text IS NULL OR rsm.player_spec = $7)
+  -- Only include rows with a positive value for the requested metric so
+  -- zero-DPS healers don't appear in DPS cohorts and vice versa.
+  AND CASE WHEN $1::text = 'hps' THEN rsm.hps ELSE rsm.dps END > 0
 `
 
 type GetSnapshotCohortValuesParams struct {
@@ -4729,7 +4734,7 @@ SELECT
 FROM encounter_dps_rankings edr
 JOIN log_instances li ON li.id = edr.instance_id
 WHERE edr.encounter_id IS NOT NULL      -- boss kills only
-  AND edr.dps > 0
+  AND (edr.dps > 0 OR edr.hps > 0)     -- metric-neutral: must match BatchInsertSnapshotMembersFromRankings
   AND edr.duration_secs > 0
   -- Exclusive upper bound: must match BatchInsertSnapshotMembersFromRankings.
   AND edr.killed_at < $1
@@ -4887,6 +4892,96 @@ func (q *sqlQuerier) InsertRankingSnapshotMember(ctx context.Context, arg Insert
 		arg.Hps,
 	)
 	return err
+}
+
+const listRankingsForInstance = `-- name: ListRankingsForInstance :many
+SELECT
+    edr.id,
+    edr.encounter_name,
+    edr.instance_name,
+    edr.player_guid,
+    edr.player_name,
+    edr.player_class,
+    edr.player_spec,
+    edr.player_role,
+    edr.difficulty_name,
+    edr.max_players,
+    edr.killed_at,
+    edr.created_at,
+    edr.damage_done,
+    edr.healing_done,
+    edr.absorbed_done,
+    edr.duration_secs,
+    edr.dps,
+    edr.hps
+FROM encounter_dps_rankings edr
+WHERE edr.instance_id = $1
+  AND edr.encounter_id IS NOT NULL  -- boss kills only
+ORDER BY edr.encounter_name, edr.dps DESC
+`
+
+type ListRankingsForInstanceRow struct {
+	ID             uuid.UUID          `db:"id" json:"id"`
+	EncounterName  string             `db:"encounter_name" json:"encounter_name"`
+	InstanceName   string             `db:"instance_name" json:"instance_name"`
+	PlayerGuid     string             `db:"player_guid" json:"player_guid"`
+	PlayerName     string             `db:"player_name" json:"player_name"`
+	PlayerClass    string             `db:"player_class" json:"player_class"`
+	PlayerSpec     string             `db:"player_spec" json:"player_spec"`
+	PlayerRole     string             `db:"player_role" json:"player_role"`
+	DifficultyName string             `db:"difficulty_name" json:"difficulty_name"`
+	MaxPlayers     int16              `db:"max_players" json:"max_players"`
+	KilledAt       pgtype.Timestamptz `db:"killed_at" json:"killed_at"`
+	CreatedAt      pgtype.Timestamptz `db:"created_at" json:"created_at"`
+	DamageDone     int64              `db:"damage_done" json:"damage_done"`
+	HealingDone    int64              `db:"healing_done" json:"healing_done"`
+	AbsorbedDone   int64              `db:"absorbed_done" json:"absorbed_done"`
+	DurationSecs   float64            `db:"duration_secs" json:"duration_secs"`
+	Dps            float64            `db:"dps" json:"dps"`
+	Hps            float64            `db:"hps" json:"hps"`
+}
+
+// Load ranking rows for a specific instance directly from encounter_dps_rankings.
+// Used by the parses handler to get the viewed instance's own metric values
+// independent of snapshot membership (the instance may not be a member of the
+// snapshot it scores against, e.g. historical canonical snapshots).
+func (q *sqlQuerier) ListRankingsForInstance(ctx context.Context, instanceID uuid.UUID) ([]ListRankingsForInstanceRow, error) {
+	rows, err := q.db.Query(ctx, listRankingsForInstance, instanceID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListRankingsForInstanceRow
+	for rows.Next() {
+		var i ListRankingsForInstanceRow
+		if err := rows.Scan(
+			&i.ID,
+			&i.EncounterName,
+			&i.InstanceName,
+			&i.PlayerGuid,
+			&i.PlayerName,
+			&i.PlayerClass,
+			&i.PlayerSpec,
+			&i.PlayerRole,
+			&i.DifficultyName,
+			&i.MaxPlayers,
+			&i.KilledAt,
+			&i.CreatedAt,
+			&i.DamageDone,
+			&i.HealingDone,
+			&i.AbsorbedDone,
+			&i.DurationSecs,
+			&i.Dps,
+			&i.Hps,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
 }
 
 const listSnapshotMembersByPlayerGUID = `-- name: ListSnapshotMembersByPlayerGUID :many

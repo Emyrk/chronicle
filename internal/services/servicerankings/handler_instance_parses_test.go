@@ -676,7 +676,7 @@ func TestHandleInstanceParses_CanonicalResolution(t *testing.T) {
 		require.NoError(t, err)
 		conn2.Release()
 
-		// Insert a ranking for this instance.
+		// Insert a ranking for this instance (the July 10 raid).
 		encID := uuid.New()
 		_, err = store.InsertEncounter(ctx, database.InsertEncounterParams{
 			ID: encID, InstanceID: instanceID, Name: "Ragnaros",
@@ -686,6 +686,7 @@ func TestHandleInstanceParses_CanonicalResolution(t *testing.T) {
 		})
 		require.NoError(t, err)
 
+		// Player1 does 700 DPS — above the cohort max of 500, should score 100.
 		err = store.InsertEncounterDpsRanking(ctx, database.InsertEncounterDpsRankingParams{
 			EncounterID:    uuid.NullUUID{UUID: encID, Valid: true},
 			InstanceID:     instanceID,
@@ -699,13 +700,67 @@ func TestHandleInstanceParses_CanonicalResolution(t *testing.T) {
 			MaxPlayers:     40,
 			RealmID:        realmID,
 			RealmName:      "test-realm",
-			DamageDone:     30000,
+			DamageDone:     210000,
 			DurationSecs:   300,
-			Dps:            100,
+			Dps:            700,
 			KilledAt:       database.Timestamptz(instanceStart.Add(5 * time.Minute)),
 			LogHashedSlug:  "slug-test-1",
 		})
 		require.NoError(t, err)
+
+		// Insert 6 cohort rankings BEFORE the cutoff (July 9) so the
+		// day-10 snapshot has a meaningful cohort.
+		// These will be members of the day-10 snapshot; Player1's raid will NOT.
+		beforeCutoff := time.Date(2024, 7, 9, 12, 0, 0, 0, time.UTC)
+		for i, dps := range []float64{100, 200, 300, 400, 500} {
+			cohortInstanceID := uuid.New()
+			cohortLGID := uuid.New()
+			cohortUserID := uuid.New()
+			_, err = store.InsertUser(ctx, database.InsertUserParams{
+				ID: cohortUserID, Username: fmt.Sprintf("cohort-u-%d", i),
+			})
+			require.NoError(t, err)
+			_, err = store.InsertWoWLogGroup(ctx, database.InsertWoWLogGroupParams{
+				ID: cohortLGID, Owner: cohortUserID, LogType: database.LogTypeV1,
+				CreatedAt: database.Timestamptz(now), UpdatedAt: database.Timestamptz(now),
+			})
+			require.NoError(t, err)
+			err = store.InsertParsedLogGroup(ctx, cohortLGID)
+			require.NoError(t, err)
+			_, err = store.InsertInstance(ctx, database.InsertInstanceParams{
+				ID: cohortInstanceID, RealmID: realmID, LogGroupID: cohortLGID,
+				Name: "Molten Core", Capabilities: []string{},
+			})
+			require.NoError(t, err)
+			cohortEncID := uuid.New()
+			_, err = store.InsertEncounter(ctx, database.InsertEncounterParams{
+				ID: cohortEncID, InstanceID: cohortInstanceID, Name: "Ragnaros",
+				KillType: database.KillTypeClean, Remaining: guid.GUIDs{}, Boss: true,
+				StartTime: database.Timestamptz(beforeCutoff),
+				EndTime:   database.Timestamptz(beforeCutoff.Add(5 * time.Minute)),
+			})
+			require.NoError(t, err)
+			err = store.InsertEncounterDpsRanking(ctx, database.InsertEncounterDpsRankingParams{
+				EncounterID:    uuid.NullUUID{UUID: cohortEncID, Valid: true},
+				InstanceID:     cohortInstanceID,
+				EncounterName:  "Ragnaros",
+				InstanceName:   "Molten Core",
+				PlayerGuid:     fmt.Sprintf("P-cohort-%d", i),
+				PlayerName:     fmt.Sprintf("Cohort%d", i),
+				PlayerClass:    "WARRIOR",
+				PlayerSpec:     "Arms",
+				DifficultyName: "Normal",
+				MaxPlayers:     40,
+				RealmID:        realmID,
+				RealmName:      "test-realm",
+				DamageDone:     int64(dps * 300),
+				DurationSecs:   300,
+				Dps:            dps,
+				KilledAt:       database.Timestamptz(beforeCutoff.Add(time.Duration(i) * time.Minute)),
+				LogHashedSlug:  fmt.Sprintf("slug-cohort-%d", i),
+			})
+			require.NoError(t, err)
+		}
 
 		// Create two snapshots:
 		// July 10 00:00 UTC (cutoff <= instance start → should be used)
@@ -746,6 +801,25 @@ func TestHandleInstanceParses_CanonicalResolution(t *testing.T) {
 		assert.True(t, resp.Available)
 		// Should use the July 10 snapshot (cutoff <= instance start).
 		assert.Equal(t, cutoffDay10, resp.Cutoff.UTC())
+
+		// The raid's own players must be returned even though the raid is
+		// NOT a member of its own canonical snapshot (killed_at >= cutoff).
+		require.NotEmpty(t, resp.Players, "historical players must not be empty")
+
+		var player1 *chroniclesdk.InstanceParsePlayer
+		for i := range resp.Players {
+			if resp.Players[i].PlayerGUID == "P-1" {
+				player1 = &resp.Players[i]
+				break
+			}
+		}
+		require.NotNil(t, player1, "Player1 must be in response")
+		require.Len(t, player1.Bosses, 1)
+
+		// Player1's 700 DPS is above the frozen cohort max (500) → score 100.
+		assert.Equal(t, 100, player1.Bosses[0].DisplayScore,
+			"value above cohort max should score 100")
+		assert.Greater(t, player1.Bosses[0].SampleSize, 0, "sample size must be > 0")
 	})
 
 	t.Run("RunsPredatingAllSnapshotsGetNoParses", func(t *testing.T) {
