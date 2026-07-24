@@ -330,3 +330,11 @@ FROM ranking_snapshots rs
 ORDER BY rs.created_at DESC
 LIMIT 100;
 
+-- name: DeleteRankingSnapshot :exec
+-- Delete a snapshot by ID. Members are cascade-deleted via the FK
+-- ranking_snapshot_members.snapshot_id → ranking_snapshots.id ON DELETE CASCADE
+-- (migration 000143). Deleting a day's snapshot makes raids from that day
+-- resolve to the previous snapshot (or show no parses if none), and allows
+-- re-backfilling that day since the idempotency guard checks status='published'.
+DELETE FROM ranking_snapshots WHERE id = @id;
+
