@@ -320,6 +320,17 @@ func handleInstanceParsesWithStore(store parsesQuerier, logger *slog.Logger, w h
 				Status:        string(parsepolicy.StatusSampleTooSmall),
 			}
 
+			// A zero metric value cannot be scored (the scorer rejects
+			// non-positive values). Common causes: a DPS player viewed with
+			// metric=hps, or logs parsed before healing columns existed
+			// (pre-#170) that need a reparse. Mark explicitly so the UI can
+			// skip the pill instead of showing a misleading 0.
+			if metricValue <= 0 {
+				boss.Status = "no_metric_value"
+				sdkPlayer.Bosses = append(sdkPlayer.Bosses, boss)
+				continue
+			}
+
 			if !isUnknownSpec {
 				// Load cohort for this boss+class(+spec). Many players share a
 				// bucket (e.g. all Fury Warriors on one boss), so cache cohort

@@ -130,7 +130,11 @@ function buildParsePill(
 
   if (singleBoss) {
     const boss = player.bosses.find((b) => b.encounter_name === selectedEncounters[0]);
-    if (!boss || boss.status === "sample_too_small") return null;
+    // Only render a pill for actually-scored performances. "ok" and
+    // "low_confidence" are the two scored statuses; anything else
+    // (sample_too_small, no_metric_value, unknown/empty) has no score and a
+    // pill would misleadingly display 0.
+    if (!boss || (boss.status !== "ok" && boss.status !== "low_confidence")) return null;
     return {
       displayScore: boss.display_score,
       color: parseHexColor(boss.display_score),
