@@ -19,6 +19,7 @@ import {
   Loader2,
   ClipboardList,
   Database,
+  Camera,
 } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
 
@@ -39,6 +40,7 @@ const tabs: Tab[] = [
   { path: "/admin/outdated-instances", label: "Outdated Instances", icon: RefreshCw },
   { path: "/admin/applications", label: "Applications", icon: ClipboardList },
   { path: "/admin/cache-stats", label: "Cache Stats", icon: Database },
+  { path: "/admin/parsing", label: "Parsing", icon: Camera },
 ];
 
 export function AdminLayout() {

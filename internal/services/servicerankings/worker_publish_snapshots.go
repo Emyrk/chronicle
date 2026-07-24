@@ -170,6 +170,10 @@ type ArgsPublishParseSnapshotTenant struct {
 	Cutoff        time.Time `json:"cutoff"`
 	LookbackDays  int32     `json:"lookback_days"`
 	PolicyVersion int16     `json:"policy_version"`
+	// AdminBackfill, when true, skips the staleness guard so that a past-day
+	// snapshot is always created even if source stats match a previous snapshot.
+	// The already-published idempotency check still applies.
+	AdminBackfill bool `json:"admin_backfill,omitempty"`
 }
 
 func (ArgsPublishParseSnapshotTenant) Kind() string { return KindPublishParseSnapshotTenant }
@@ -278,32 +282,36 @@ func (w *WorkerPublishParseSnapshotTenant) Work(ctx context.Context, job *river.
 	// Staleness guard: skip if the latest published snapshot for the same
 	// key dimensions already has identical source_row_count and source_watermark.
 	// Consumers fall back to the older snapshot with identical data.
-	prev, prevErr := w.Store.GetLatestPublishedSnapshotForGuard(ctx, database.GetLatestPublishedSnapshotForGuardParams{
-		TenantID:      args.TenantID,
-		LookbackDays:  args.LookbackDays,
-		CohortMode:    cohortMode,
-		PolicyVersion: args.PolicyVersion,
-		QueryVersion:  snapshotQueryVersion,
-	})
-	if prevErr == nil {
-		watermarkMatch := prev.SourceWatermark.Valid == sourceStats.Watermark.Valid &&
-			(!prev.SourceWatermark.Valid || prev.SourceWatermark.Time.Equal(sourceStats.Watermark.Time))
-		if prev.SourceRowCount == sourceStats.RowCount && watermarkMatch {
-			w.Logger.Debug("skipping unchanged parse snapshot",
-				slog.String("tenant_id", args.TenantID.String()),
-				slog.Int("lookback_days", int(args.LookbackDays)),
-				slog.Int64("source_row_count", sourceStats.RowCount),
-			)
-			_ = river.RecordOutput(ctx, map[string]any{
-				"tenant_id":        args.TenantID.String(),
-				"skipped":          true,
-				"reason":           "unchanged",
-				"source_row_count": sourceStats.RowCount,
-			})
-			return nil
+	// Admin backfills skip this guard — a past-day snapshot is meaningful even
+	// if the source stats match a previous snapshot.
+	if !args.AdminBackfill {
+		prev, prevErr := w.Store.GetLatestPublishedSnapshotForGuard(ctx, database.GetLatestPublishedSnapshotForGuardParams{
+			TenantID:      args.TenantID,
+			LookbackDays:  args.LookbackDays,
+			CohortMode:    cohortMode,
+			PolicyVersion: args.PolicyVersion,
+			QueryVersion:  snapshotQueryVersion,
+		})
+		if prevErr == nil {
+			watermarkMatch := prev.SourceWatermark.Valid == sourceStats.Watermark.Valid &&
+				(!prev.SourceWatermark.Valid || prev.SourceWatermark.Time.Equal(sourceStats.Watermark.Time))
+			if prev.SourceRowCount == sourceStats.RowCount && watermarkMatch {
+				w.Logger.Debug("skipping unchanged parse snapshot",
+					slog.String("tenant_id", args.TenantID.String()),
+					slog.Int("lookback_days", int(args.LookbackDays)),
+					slog.Int64("source_row_count", sourceStats.RowCount),
+				)
+				_ = river.RecordOutput(ctx, map[string]any{
+					"tenant_id":        args.TenantID.String(),
+					"skipped":          true,
+					"reason":           "unchanged",
+					"source_row_count": sourceStats.RowCount,
+				})
+				return nil
+			}
 		}
+		// pgx.ErrNoRows means no previous snapshot — proceed to publish.
 	}
-	// pgx.ErrNoRows means no previous snapshot — proceed to publish.
 
 	var memberCount int64
 	txErr := w.Store.InTx(ctx, func(tx database.Store) error {
@@ -374,21 +382,34 @@ func (w *WorkerPublishParseSnapshotTenant) Work(ctx context.Context, job *river.
 // ---------------------------------------------------------------------------
 
 // EnqueueParseSnapshotBackfill enqueues the normal idempotent per-tenant
-// snapshot publication job. The cutoff is today's 00:00 UTC boundary; the job
-// will no-op if today's snapshot already exists.
+// snapshot publication job. day is truncated to 00:00 UTC; the job will no-op
+// if a snapshot for that cutoff already exists.
+//
+// When day is not today, AdminBackfill is set so the staleness guard is skipped
+// (a past-day snapshot is meaningful even if source stats match a previous one).
 func EnqueueParseSnapshotBackfill(
 	ctx context.Context,
 	queue *riverqueue.Queues,
 	tenantID uuid.UUID,
+	day time.Time,
 	lookbackDays int32,
 	policyVersion int16,
 ) (*rivertype.JobInsertResult, error) {
+	cutoff := truncateToUTCMidnight(day)
+	adminBackfill := cutoff.Before(todayUTCMidnight())
 	return queue.Insert(ctx, ArgsPublishParseSnapshotTenant{
 		TenantID:      tenantID,
-		Cutoff:        todayUTCMidnight(),
+		Cutoff:        cutoff,
 		LookbackDays:  lookbackDays,
 		PolicyVersion: policyVersion,
+		AdminBackfill: adminBackfill,
 	}, nil)
+}
+
+// truncateToUTCMidnight returns 00:00 UTC of the given day.
+func truncateToUTCMidnight(t time.Time) time.Time {
+	t = t.UTC()
+	return time.Date(t.Year(), t.Month(), t.Day(), 0, 0, 0, 0, time.UTC)
 }
 
 // todayUTCMidnight returns 00:00 UTC of the current day.

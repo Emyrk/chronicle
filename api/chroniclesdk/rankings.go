@@ -208,6 +208,10 @@ type AdminTriggerSnapshotRequest struct {
 	TenantID string `json:"tenant_id"`
 	// LookbackDays overrides the default lookback window. 0 = all-time.
 	LookbackDays int32 `json:"lookback_days"`
+	// Day is the snapshot cutoff date as YYYY-MM-DD. Empty = today.
+	// The snapshot window is [cutoff - lookback, cutoff), so a backfilled
+	// July 1 snapshot contains only pre-July-1 kills even if run today.
+	Day string `json:"day"`
 }
 
 // AdminTriggerSnapshotResponse is returned when a snapshot publication job is enqueued.
@@ -215,6 +219,21 @@ type AdminTriggerSnapshotResponse struct {
 	JobID    int64  `json:"job_id"`
 	JobState string `json:"job_state"`
 }
+// AdminSnapshotSummary is a snapshot listed in the admin parsing tab.
+type AdminSnapshotSummary struct {
+	ID            uuid.UUID  `json:"id"`
+	TenantID      uuid.UUID  `json:"tenant_id"`
+	Cutoff        time.Time  `json:"cutoff"`
+	LookbackDays  int32      `json:"lookback_days"`
+	CohortMode    string     `json:"cohort_mode"`
+	PolicyVersion int16      `json:"policy_version"`
+	QueryVersion  int16      `json:"query_version"`
+	MemberCount   int64      `json:"member_count"`
+	Status        string     `json:"status"`
+	PublishedAt   *time.Time `json:"published_at"`
+	CreatedAt     time.Time  `json:"created_at"`
+}
+
 // ── Cohort Viewer (debugging) ────────────────────────────────────────────
 
 // SnapshotSummary is a published snapshot listed for the cohort viewer.

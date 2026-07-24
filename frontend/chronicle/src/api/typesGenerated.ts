@@ -146,6 +146,24 @@ export interface AdminSetUserRetentionRequest {
 
 // From chroniclesdk/rankings.go
 /**
+ * AdminSnapshotSummary is a snapshot listed in the admin parsing tab.
+ */
+export interface AdminSnapshotSummary {
+    readonly id: string;
+    readonly tenant_id: string;
+    readonly cutoff: string;
+    readonly lookback_days: number;
+    readonly cohort_mode: string;
+    readonly policy_version: number;
+    readonly query_version: number;
+    readonly member_count: number;
+    readonly status: string;
+    readonly published_at: string | null;
+    readonly created_at: string;
+}
+
+// From chroniclesdk/rankings.go
+/**
  * AdminTriggerSnapshotRequest is the request body for the admin parse snapshot trigger.
  */
 export interface AdminTriggerSnapshotRequest {
@@ -157,6 +175,12 @@ export interface AdminTriggerSnapshotRequest {
      * LookbackDays overrides the default lookback window. 0 = all-time.
      */
     readonly lookback_days: number;
+    /**
+     * Day is the snapshot cutoff date as YYYY-MM-DD. Empty = today.
+     * The snapshot window is [cutoff - lookback, cutoff), so a backfilled
+     * July 1 snapshot contains only pre-July-1 kills even if run today.
+     */
+    readonly day: string;
 }
 
 // From chroniclesdk/rankings.go

@@ -4983,6 +4983,71 @@ func (q *sqlQuerier) InsertRankingSnapshotMember(ctx context.Context, arg Insert
 	return err
 }
 
+const listAllSnapshots = `-- name: ListAllSnapshots :many
+SELECT rs.id, rs.tenant_id, rs.cutoff, rs.window_start, rs.lookback_days, rs.cohort_mode, rs.policy_version, rs.query_version, rs.min_parser_version_num, rs.min_addon_version_num, rs.status, rs.created_at, rs.published_at, rs.source_row_count, rs.source_watermark,
+       (SELECT COUNT(*) FROM ranking_snapshot_members WHERE snapshot_id = rs.id) AS member_count
+FROM ranking_snapshots rs
+ORDER BY rs.created_at DESC
+LIMIT 100
+`
+
+type ListAllSnapshotsRow struct {
+	ID                  uuid.UUID          `db:"id" json:"id"`
+	TenantID            uuid.UUID          `db:"tenant_id" json:"tenant_id"`
+	Cutoff              pgtype.Timestamptz `db:"cutoff" json:"cutoff"`
+	WindowStart         pgtype.Timestamptz `db:"window_start" json:"window_start"`
+	LookbackDays        int32              `db:"lookback_days" json:"lookback_days"`
+	CohortMode          string             `db:"cohort_mode" json:"cohort_mode"`
+	PolicyVersion       int16              `db:"policy_version" json:"policy_version"`
+	QueryVersion        int16              `db:"query_version" json:"query_version"`
+	MinParserVersionNum int64              `db:"min_parser_version_num" json:"min_parser_version_num"`
+	MinAddonVersionNum  int64              `db:"min_addon_version_num" json:"min_addon_version_num"`
+	Status              string             `db:"status" json:"status"`
+	CreatedAt           pgtype.Timestamptz `db:"created_at" json:"created_at"`
+	PublishedAt         pgtype.Timestamptz `db:"published_at" json:"published_at"`
+	SourceRowCount      int64              `db:"source_row_count" json:"source_row_count"`
+	SourceWatermark     pgtype.Timestamptz `db:"source_watermark" json:"source_watermark"`
+	MemberCount         int64              `db:"member_count" json:"member_count"`
+}
+
+// Admin view: list all snapshots across tenants, most recent first.
+func (q *sqlQuerier) ListAllSnapshots(ctx context.Context) ([]ListAllSnapshotsRow, error) {
+	rows, err := q.db.Query(ctx, listAllSnapshots)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListAllSnapshotsRow
+	for rows.Next() {
+		var i ListAllSnapshotsRow
+		if err := rows.Scan(
+			&i.ID,
+			&i.TenantID,
+			&i.Cutoff,
+			&i.WindowStart,
+			&i.LookbackDays,
+			&i.CohortMode,
+			&i.PolicyVersion,
+			&i.QueryVersion,
+			&i.MinParserVersionNum,
+			&i.MinAddonVersionNum,
+			&i.Status,
+			&i.CreatedAt,
+			&i.PublishedAt,
+			&i.SourceRowCount,
+			&i.SourceWatermark,
+			&i.MemberCount,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const listDistinctCohortBuckets = `-- name: ListDistinctCohortBuckets :many
 SELECT DISTINCT
     rsm.encounter_name,

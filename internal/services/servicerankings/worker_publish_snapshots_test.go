@@ -727,3 +727,234 @@ func TestWorkerPublishParseSnapshotTenant_SkipsDisabledTenant(t *testing.T) {
 	})
 	require.Error(t, snapErr, "expected no snapshot for disabled tenant")
 }
+func TestBackfillExplicitPastDay(t *testing.T) {
+	t.Parallel()
+	pool, store, realmID := setupSnapshotTest(t)
+	ctx := testutil.Context(t, testutil.WaitMedium)
+
+	// Kill on June 15 — should be included in a July 1 snapshot.
+	june15Kill := time.Date(2024, 6, 15, 14, 0, 0, 0, time.UTC)
+	insertRankingRow(t, pool, store, realmID, rankingOpts{
+		encounterName: "Ragnaros", instanceName: "Molten Core",
+		playerGUID: "P-June", playerClass: "Warrior", playerSpec: "Fury",
+		difficultyName: "Normal", maxPlayers: 40,
+		damageDone: 150000, durationSecs: 300, dps: 500,
+		killedAt: june15Kill, isBoss: true,
+	})
+	// Kill on July 5 — should NOT be included in a July 1 snapshot.
+	july5Kill := time.Date(2024, 7, 5, 14, 0, 0, 0, time.UTC)
+	insertRankingRow(t, pool, store, realmID, rankingOpts{
+		encounterName: "Ragnaros", instanceName: "Molten Core",
+		playerGUID: "P-July", playerClass: "Mage", playerSpec: "Fire",
+		difficultyName: "Normal", maxPlayers: 40,
+		damageDone: 180000, durationSecs: 300, dps: 600,
+		killedAt: july5Kill, isBoss: true,
+	})
+
+	worker := &servicerankings.WorkerPublishParseSnapshotTenant{
+		Store:  store,
+		Logger: slog.Default(),
+	}
+
+	// Backfill July 1 cutoff with AdminBackfill=true.
+	cutoff := time.Date(2024, 7, 1, 0, 0, 0, 0, time.UTC)
+	err := worker.Work(ctx, &river.Job[servicerankings.ArgsPublishParseSnapshotTenant]{
+		Args: servicerankings.ArgsPublishParseSnapshotTenant{
+			TenantID:      uuid.Nil,
+			Cutoff:        cutoff,
+			LookbackDays:  0,
+			PolicyVersion: 1,
+			AdminBackfill: true,
+		},
+	})
+	require.NoError(t, err)
+
+	snap, err := store.GetLatestPublishedSnapshot(ctx, database.GetLatestPublishedSnapshotParams{
+		TenantID:     uuid.Nil,
+		LookbackDays: 0,
+	})
+	require.NoError(t, err)
+	assert.Equal(t, "published", snap.Status)
+
+	// Only the June kill should be included (July 5 is after the cutoff).
+	memberCount, err := store.CountSnapshotMembers(ctx, snap.ID)
+	require.NoError(t, err)
+	assert.Equal(t, int64(1), memberCount)
+}
+
+func TestBackfillIdempotencyStillHoldsForExplicitDays(t *testing.T) {
+	t.Parallel()
+	pool, store, realmID := setupSnapshotTest(t)
+	ctx := testutil.Context(t, testutil.WaitMedium)
+
+	baseTime := time.Date(2024, 6, 15, 14, 0, 0, 0, time.UTC)
+	insertRankingRow(t, pool, store, realmID, rankingOpts{
+		encounterName: "Ragnaros", instanceName: "Molten Core",
+		playerGUID: "P-A", playerClass: "Warrior", playerSpec: "Fury",
+		difficultyName: "Normal", maxPlayers: 40,
+		damageDone: 150000, durationSecs: 300, dps: 500,
+		killedAt: baseTime, isBoss: true,
+	})
+
+	worker := &servicerankings.WorkerPublishParseSnapshotTenant{
+		Store:  store,
+		Logger: slog.Default(),
+	}
+
+	cutoff := time.Date(2024, 7, 1, 0, 0, 0, 0, time.UTC)
+	args := servicerankings.ArgsPublishParseSnapshotTenant{
+		TenantID:      uuid.Nil,
+		Cutoff:        cutoff,
+		LookbackDays:  0,
+		PolicyVersion: 1,
+		AdminBackfill: true,
+	}
+
+	// First run publishes.
+	err := worker.Work(ctx, &river.Job[servicerankings.ArgsPublishParseSnapshotTenant]{Args: args})
+	require.NoError(t, err)
+
+	snap1, err := store.GetLatestPublishedSnapshot(ctx, database.GetLatestPublishedSnapshotParams{
+		TenantID:     uuid.Nil,
+		LookbackDays: 0,
+	})
+	require.NoError(t, err)
+
+	// Second run with same cutoff is a no-op (already_published).
+	err = worker.Work(ctx, &river.Job[servicerankings.ArgsPublishParseSnapshotTenant]{Args: args})
+	require.NoError(t, err)
+
+	snap2, err := store.GetLatestPublishedSnapshot(ctx, database.GetLatestPublishedSnapshotParams{
+		TenantID:     uuid.Nil,
+		LookbackDays: 0,
+	})
+	require.NoError(t, err)
+
+	// Same snapshot — no new one was created.
+	assert.Equal(t, snap1.ID, snap2.ID)
+}
+
+func TestBackfillSkipsStalenessGuard(t *testing.T) {
+	t.Parallel()
+	pool, store, realmID := setupSnapshotTest(t)
+	ctx := testutil.Context(t, testutil.WaitMedium)
+
+	baseTime := time.Date(2024, 6, 15, 14, 0, 0, 0, time.UTC)
+	insertRankingRow(t, pool, store, realmID, rankingOpts{
+		encounterName: "Ragnaros", instanceName: "Molten Core",
+		playerGUID: "P-A", playerClass: "Warrior", playerSpec: "Fury",
+		difficultyName: "Normal", maxPlayers: 40,
+		damageDone: 150000, durationSecs: 300, dps: 500,
+		killedAt: baseTime, isBoss: true,
+	})
+
+	worker := &servicerankings.WorkerPublishParseSnapshotTenant{
+		Store:  store,
+		Logger: slog.Default(),
+	}
+
+	// First: publish a snapshot for July 1.
+	cutoff1 := time.Date(2024, 7, 1, 0, 0, 0, 0, time.UTC)
+	err := worker.Work(ctx, &river.Job[servicerankings.ArgsPublishParseSnapshotTenant]{
+		Args: servicerankings.ArgsPublishParseSnapshotTenant{
+			TenantID:      uuid.Nil,
+			Cutoff:        cutoff1,
+			LookbackDays:  0,
+			PolicyVersion: 1,
+			AdminBackfill: true,
+		},
+	})
+	require.NoError(t, err)
+
+	snap1, err := store.GetLatestPublishedSnapshot(ctx, database.GetLatestPublishedSnapshotParams{
+		TenantID:     uuid.Nil,
+		LookbackDays: 0,
+	})
+	require.NoError(t, err)
+
+	// Second: backfill July 2 with same data. Admin backfill should NOT be
+	// blocked by staleness guard (source stats match the July 1 snapshot).
+	cutoff2 := time.Date(2024, 7, 2, 0, 0, 0, 0, time.UTC)
+	err = worker.Work(ctx, &river.Job[servicerankings.ArgsPublishParseSnapshotTenant]{
+		Args: servicerankings.ArgsPublishParseSnapshotTenant{
+			TenantID:      uuid.Nil,
+			Cutoff:        cutoff2,
+			LookbackDays:  0,
+			PolicyVersion: 1,
+			AdminBackfill: true,
+		},
+	})
+	require.NoError(t, err)
+
+	snap2, err := store.GetLatestPublishedSnapshot(ctx, database.GetLatestPublishedSnapshotParams{
+		TenantID:     uuid.Nil,
+		LookbackDays: 0,
+	})
+	require.NoError(t, err)
+
+	// A new snapshot was created despite identical source stats.
+	assert.NotEqual(t, snap1.ID, snap2.ID)
+	assert.Equal(t, "published", snap2.Status)
+}
+
+func TestDailyDispatchStalenessGuardStillApplies(t *testing.T) {
+	t.Parallel()
+	pool, store, realmID := setupSnapshotTest(t)
+	ctx := testutil.Context(t, testutil.WaitMedium)
+
+	baseTime := time.Date(2024, 6, 15, 14, 0, 0, 0, time.UTC)
+	insertRankingRow(t, pool, store, realmID, rankingOpts{
+		encounterName: "Ragnaros", instanceName: "Molten Core",
+		playerGUID: "P-A", playerClass: "Warrior", playerSpec: "Fury",
+		difficultyName: "Normal", maxPlayers: 40,
+		damageDone: 150000, durationSecs: 300, dps: 500,
+		killedAt: baseTime, isBoss: true,
+	})
+
+	worker := &servicerankings.WorkerPublishParseSnapshotTenant{
+		Store:  store,
+		Logger: slog.Default(),
+	}
+
+	// Day 1 publishes (AdminBackfill=false, i.e. daily dispatch).
+	cutoff1 := time.Date(2024, 7, 1, 0, 0, 0, 0, time.UTC)
+	err := worker.Work(ctx, &river.Job[servicerankings.ArgsPublishParseSnapshotTenant]{
+		Args: servicerankings.ArgsPublishParseSnapshotTenant{
+			TenantID:      uuid.Nil,
+			Cutoff:        cutoff1,
+			LookbackDays:  0,
+			PolicyVersion: 1,
+			AdminBackfill: false,
+		},
+	})
+	require.NoError(t, err)
+
+	snap1, err := store.GetLatestPublishedSnapshot(ctx, database.GetLatestPublishedSnapshotParams{
+		TenantID:     uuid.Nil,
+		LookbackDays: 0,
+	})
+	require.NoError(t, err)
+
+	// Day 2 with same data — staleness guard should skip it.
+	cutoff2 := time.Date(2024, 7, 2, 0, 0, 0, 0, time.UTC)
+	err = worker.Work(ctx, &river.Job[servicerankings.ArgsPublishParseSnapshotTenant]{
+		Args: servicerankings.ArgsPublishParseSnapshotTenant{
+			TenantID:      uuid.Nil,
+			Cutoff:        cutoff2,
+			LookbackDays:  0,
+			PolicyVersion: 1,
+			AdminBackfill: false,
+		},
+	})
+	require.NoError(t, err)
+
+	snap2, err := store.GetLatestPublishedSnapshot(ctx, database.GetLatestPublishedSnapshotParams{
+		TenantID:     uuid.Nil,
+		LookbackDays: 0,
+	})
+	require.NoError(t, err)
+
+	// Same snapshot — staleness guard blocked Day 2.
+	assert.Equal(t, snap1.ID, snap2.ID)
+}
+

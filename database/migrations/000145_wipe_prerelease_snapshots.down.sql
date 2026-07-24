@@ -1,0 +1,2 @@
+-- No-op: data deletion is irreversible. The tables and schema remain intact;
+-- snapshots will be re-created by the daily snapshot job or admin backfill.

@@ -322,3 +322,11 @@ WHERE tenant_id = @tenant_id
 ORDER BY published_at DESC
 LIMIT 1;
 
+-- name: ListAllSnapshots :many
+-- Admin view: list all snapshots across tenants, most recent first.
+SELECT rs.*,
+       (SELECT COUNT(*) FROM ranking_snapshot_members WHERE snapshot_id = rs.id) AS member_count
+FROM ranking_snapshots rs
+ORDER BY rs.created_at DESC
+LIMIT 100;
+

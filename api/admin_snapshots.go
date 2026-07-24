@@ -2,9 +2,11 @@ package api
 
 import (
 	"net/http"
+	"time"
 
 	"github.com/Emyrk/chronicle/api/chroniclesdk"
 	"github.com/Emyrk/chronicle/api/httpapi"
+	"github.com/Emyrk/chronicle/database"
 	"github.com/Emyrk/chronicle/internal/parsepolicy"
 	"github.com/Emyrk/chronicle/internal/services/servicerankings"
 	"github.com/google/uuid"
@@ -12,7 +14,7 @@ import (
 
 // AdminTriggerParseSnapshot enqueues the normal idempotent parse snapshot
 // publication job. Useful to trigger without waiting for the hourly tick;
-// the job will no-op if today's snapshot already exists.
+// the job will no-op if that day's snapshot already exists.
 //
 //	POST /api/v1/admin/parses/snapshot
 func (api *API) AdminTriggerParseSnapshot(w http.ResponseWriter, r *http.Request) {
@@ -36,10 +38,24 @@ func (api *API) AdminTriggerParseSnapshot(w http.ResponseWriter, r *http.Request
 		tenantID = parsed
 	}
 
+	day := time.Now().UTC()
+	if req.Day != "" {
+		parsed, err := time.Parse("2006-01-02", req.Day)
+		if err != nil {
+			httpapi.Write(ctx, w, http.StatusBadRequest, chroniclesdk.Response{
+				Message: "Invalid day format, expected YYYY-MM-DD",
+				Detail:  err.Error(),
+			})
+			return
+		}
+		day = parsed
+	}
+
 	result, err := servicerankings.EnqueueParseSnapshotBackfill(
 		ctx,
 		api.Queues,
 		tenantID,
+		day,
 		req.LookbackDays,
 		int16(parsepolicy.PolicyVersion),
 	)
@@ -58,3 +74,46 @@ func (api *API) AdminTriggerParseSnapshot(w http.ResponseWriter, r *http.Request
 		JobState: string(result.Job.State),
 	})
 }
+// AdminListSnapshots returns all snapshots across tenants for admin viewing.
+//
+//	GET /api/v1/admin/parses/snapshots
+func (api *API) AdminListSnapshots(w http.ResponseWriter, r *http.Request) {
+	ctx := r.Context()
+
+	store := database.New(api.Opts.Pool)
+	rows, err := store.ListAllSnapshots(ctx)
+	if err != nil {
+		httpapi.HandleResponseError(ctx, w, err, httpapi.APIError{
+			Response: chroniclesdk.Response{
+				Message: "Failed to list snapshots",
+				Detail:  err.Error(),
+			},
+		})
+		return
+	}
+
+	out := make([]chroniclesdk.AdminSnapshotSummary, 0, len(rows))
+	for _, row := range rows {
+		s := chroniclesdk.AdminSnapshotSummary{
+			ID:            row.ID,
+			TenantID:      row.TenantID,
+			LookbackDays:  row.LookbackDays,
+			CohortMode:    row.CohortMode,
+			PolicyVersion: row.PolicyVersion,
+			QueryVersion:  row.QueryVersion,
+			MemberCount:   row.MemberCount,
+			Status:        row.Status,
+		}
+		if row.Cutoff.Valid {
+			s.Cutoff = row.Cutoff.Time
+		}
+		if row.PublishedAt.Valid {
+			s.PublishedAt = &row.PublishedAt.Time
+		}
+		s.CreatedAt = row.CreatedAt.Time
+		out = append(out, s)
+	}
+
+	httpapi.Write(ctx, w, http.StatusOK, out)
+}
+
