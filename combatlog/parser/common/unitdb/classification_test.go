@@ -245,7 +245,8 @@ func TestUpdate_PossessionControllerNotPersistedAsOwner(t *testing.T) {
 	})
 
 	units.SetPossessed(mobGUID, playerGUID, makeSpell("Possess"), now, 0)
-	require.True(t, units.IsPossessed(mobGUID))
+	_, possessed := units.GetPossession(mobGUID)
+	require.True(t, possessed)
 
 	// While possessed, UNIT_INFO reports the controller as the owner.
 	units.Update(unitinfo.Info{

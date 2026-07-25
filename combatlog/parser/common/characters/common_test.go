@@ -93,3 +93,49 @@ func TestOwnerSlain_PossessedUnitSurvives(t *testing.T) {
 
 	require.True(t, bossChar.IsActive(), "possessed unit must not die with its controller")
 }
+
+// TestOwnerSlain_PossessedPetDiesWithPermanentOwner verifies that a permanent
+// pet that is temporarily possessed by an enemy still dies when its permanent
+// owner (not the controller) dies.
+func TestOwnerSlain_PossessedPetDiesWithPermanentOwner(t *testing.T) {
+	t.Parallel()
+
+	db := unitdb.New()
+	chars := NewCharacters(db, nil, identifier.NewIdentifier(map[uint32]identifier.Identity{}))
+
+	owner := guid.GUID(0x0000000000000001)
+	controller := guid.GUID(0xF130000000000004)
+	pet := guid.GUID(0xF140000844000002)
+	enemy := guid.GUID(0xF130000000000003)
+
+	db.Update(unitinfo.Info{Guid: pet, Name: "Broken Tooth", Owner: &owner})
+
+	base := time.Date(2026, time.January, 1, 0, 0, 0, 0, time.UTC)
+	// An enemy possesses the pet.
+	db.SetPossessed(pet, controller, nil, base, 0)
+
+	_, err := chars.Process(&messages.Damage{
+		MessageBase: messages.Base(base),
+		Caster:      &pet,
+		Target:      enemy,
+		Amount:      1,
+	})
+	require.NoError(t, err)
+
+	petChar, ok := chars.Get(pet)
+	require.True(t, ok)
+	require.True(t, petChar.IsActive(), "pet should be active after dealing damage")
+
+	// The permanent owner dies: the pet dies too, possession or not.
+	_, err = chars.Process(&messages.Slain{
+		MessageBase: messages.Base(base.Add(5 * time.Second)),
+		Victim:      owner,
+	})
+	require.NoError(t, err)
+
+	require.False(t, petChar.IsActive(), "possessed pet should still die with its permanent owner")
+	p, ok := petChar.CurrentPeriod()
+	require.True(t, ok)
+	require.Equal(t, period.EndStateSlain, p.EndState)
+	require.Equal(t, ReasonOwnerSlain, p.End.Reason)
+}

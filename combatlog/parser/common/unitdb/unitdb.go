@@ -111,11 +111,11 @@ func (us *Units) SetPossessed(target, controller guid.GUID, spell *chrondbc.Spel
 	us.Possessed[target] = ps
 }
 
-// IsPossessed reports whether the unit is currently under a temporary
-// control effect (e.g. Mind Control).
-func (us *Units) IsPossessed(target guid.GUID) bool {
-	_, ok := us.Possessed[target]
-	return ok
+// GetPossession returns the temporary control effect (e.g. Mind Control)
+// currently applied to the unit, if any.
+func (us *Units) GetPossession(target guid.GUID) (PossessionState, bool) {
+	ps, ok := us.Possessed[target]
+	return ps, ok
 }
 
 // ClearPossessed removes the temporary control effect from a unit.

@@ -141,9 +141,11 @@ func ProcessCommonActivity(c CharacterBase, m messages.Message) error {
 		owner, ok := c.Owner()
 		if ok && owner == data.Victim {
 			// A temporarily possessed unit (e.g. Mind Control, Orb of Dominion)
-			// can report its controller as an owner, but it does not die with
-			// them. Only a permanent pet dies with its owner.
-			if !c.Lookup().DB().IsPossessed(c.ID()) {
+			// can report its controller as an owner, but it does not die when
+			// the controller dies — the possession just ends. Death of the
+			// permanent owner still kills the pet, possessed or not.
+			ps, possessed := c.Lookup().DB().GetPossession(c.ID())
+			if !possessed || ps.Controller != data.Victim {
 				c.Died(ReasonOwnerSlain, m)
 				return nil
 			}
