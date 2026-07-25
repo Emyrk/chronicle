@@ -111,6 +111,13 @@ func (us *Units) SetPossessed(target, controller guid.GUID, spell *chrondbc.Spel
 	us.Possessed[target] = ps
 }
 
+// IsPossessed reports whether the unit is currently under a temporary
+// control effect (e.g. Mind Control).
+func (us *Units) IsPossessed(target guid.GUID) bool {
+	_, ok := us.Possessed[target]
+	return ok
+}
+
 // ClearPossessed removes the temporary control effect from a unit.
 func (us *Units) ClearPossessed(target guid.GUID) {
 	delete(us.Possessed, target)
@@ -155,6 +162,17 @@ func (us *Units) Update(u unitinfo.Info) {
 		// In the hunter case, we can at least be sure the pet doesn't go ownerless if we seen it have
 		// an owner at any point.
 		u.Owner = existing.Owner
+	}
+
+	if u.Owner != nil {
+		if ps, ok := us.Possessed[u.Guid]; ok && ps.Controller == *u.Owner {
+			// A temporarily possessed unit (e.g. Mind Control, Orb of Dominion)
+			// reports its controller as its owner in UNIT_INFO. That control is
+			// temporary, so do not persist it as permanent ownership. Otherwise
+			// the possessed unit would "die" with its controller (owner_slain),
+			// e.g. ending the Razorgore encounter when the MC'ing player dies.
+			u.Owner = existing.Owner
+		}
 	}
 
 	if u.Guid.IsPlayer() && u.Name != "" {

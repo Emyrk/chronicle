@@ -225,6 +225,40 @@ func TestPossession_NoDuration_NoExpiry(t *testing.T) {
 	assert.Equal(t, unitdb.AffiliationFriendly, units.Classify(mobGUID).Affiliation)
 }
 
+// TestUpdate_PossessionControllerNotPersistedAsOwner verifies that a UNIT_INFO
+// update reporting the possession controller as the unit's owner (which the
+// client does while a unit is Mind Controlled, e.g. Razorgore via the Orb of
+// Dominion) is not persisted as permanent ownership. Otherwise the possessed
+// unit would be killed via owner_slain when the controlling player dies.
+func TestUpdate_PossessionControllerNotPersistedAsOwner(t *testing.T) {
+	t.Parallel()
+
+	playerGUID := mustGUID("0x0000000000000001")
+	mobGUID := mustGUID("0x0030000000000002")
+	now := time.Now()
+
+	units := unitdb.New()
+	units.Update(unitinfo.Info{
+		Guid:         mobGUID,
+		Name:         "Razorgore the Untamed",
+		CanCooperate: false,
+	})
+
+	units.SetPossessed(mobGUID, playerGUID, makeSpell("Possess"), now, 0)
+	require.True(t, units.IsPossessed(mobGUID))
+
+	// While possessed, UNIT_INFO reports the controller as the owner.
+	units.Update(unitinfo.Info{
+		Guid:  mobGUID,
+		Name:  "Razorgore the Untamed",
+		Owner: &playerGUID,
+	})
+
+	info, ok := units.Get(mobGUID)
+	require.True(t, ok)
+	assert.Nil(t, info.Owner, "possession controller must not become a permanent owner")
+}
+
 func TestProcessMessage_NewOwner(t *testing.T) {
 	t.Parallel()
 
