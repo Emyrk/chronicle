@@ -531,10 +531,10 @@ function RaidSpotlight() {
 
         {/* Boards */}
         <div className="grid grid-cols-1 lg:grid-cols-[1.55fr_1fr] gap-6 mt-6">
-          {/* Top parses */}
+          {/* Top DPS */}
           <div className="rounded-lg border bg-muted/20 overflow-hidden">
             <div className="flex items-center justify-between px-4 py-3 border-b bg-muted/40">
-              <span className="text-sm font-semibold">Top parses · {spot.abbrev}</span>
+              <span className="text-sm font-semibold">Top DPS · {spot.abbrev}</span>
               <Link
                 to={`/leaderboards?instance=${encodeURIComponent(spot.name)}&tab=leaderboard${diffQS}`}
                 className="text-xs text-primary hover:underline"
@@ -565,7 +565,7 @@ function RaidSpotlight() {
                 >
                   {entry.player_spec}
                 </span>
-                <span className="font-mono font-bold text-right">{Math.round(entry.dps)}</span>
+                <span className="font-mono font-bold text-right">{Math.round(entry.dps)}/s</span>
                 <span className="hidden md:block text-xs text-muted-foreground text-right truncate">
                   {entry.guild_name}
                 </span>
