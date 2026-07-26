@@ -21,6 +21,7 @@ import { CLASS_CSS_VAR } from "@/pages/Rankings/classDisplay";
 import {
   getInstanceAbbrev,
   getInstanceBackground,
+  getInstanceCategory,
   INSTANCE_CONFIG,
 } from "@/pages/Logs/utils/instanceImages";
 import { Podium } from "@/pages/Leaderboard/Podium";
@@ -241,6 +242,9 @@ function RaidSpotlight() {
     if (!instanceSummaries) return [];
     const byName = new Map<string, SpotlightRaid>();
     for (const s of instanceSummaries) {
+      // Raids only. Known dungeons are excluded; unknown instances stay so a
+      // custom raid missing from INSTANCE_CONFIG doesn't silently vanish.
+      if (getInstanceCategory(s.instance_name) === "dungeon") continue;
       const board: SpotlightBoard = {
         difficulty: s.difficulty_name,
         maxPlayers: s.max_players,
