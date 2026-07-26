@@ -64,14 +64,14 @@ function RaidClearCard({ clear, config }: { clear: GuildRaidClear; config: RaidC
         <p className="text-sm font-semibold text-white truncate drop-shadow">
           {clear.instance_name}
         </p>
-        <div className="flex items-center gap-3 text-[11px] text-white/80">
+        <div className="flex items-center justify-between gap-3 text-[11px] text-white/80">
           {config.showBestTime && (
             <span className="tabular-nums">
               Best time: <span className="font-medium text-white">{formatClearDuration(clear.best_duration_ms)}</span>
             </span>
           )}
           {config.showLastCleared && (
-            <span>Last cleared {formatLastCleared(clear.last_cleared_at)}</span>
+            <span className="ml-auto text-right">Last cleared {formatLastCleared(clear.last_cleared_at)}</span>
           )}
         </div>
       </div>
