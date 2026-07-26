@@ -17,7 +17,7 @@ import type {
   SpeedrunLeaderboardEntry,
 } from "@/api/typesGenerated";
 import { CLASS_CSS_VAR } from "@/pages/Rankings/classDisplay";
-import { getInstanceAbbrev } from "@/pages/Logs/utils/instanceImages";
+import { getInstanceAbbrev, getInstanceBackground } from "@/pages/Logs/utils/instanceImages";
 import { Podium } from "@/pages/Leaderboard/Podium";
 
 const STALE_TIME = 5 * 60 * 1000; // 5 minutes
@@ -505,15 +505,28 @@ function RaidSpotlight() {
           </div>
         )}
 
-        {/* Speedrun podium */}
-        <div className="mt-8">
-          {speedruns && speedruns.length > 0 ? (
-            <Podium entries={speedruns.slice(0, 3)} instanceName={spot.name} />
-          ) : (
-            <div className="rounded-lg border bg-muted/30 py-10 text-center text-sm text-muted-foreground mb-10">
-              No qualified speedruns for {spot.name} yet.
-            </div>
-          )}
+        {/* Speedrun podium over the instance loading screen, matching the
+            leaderboard page's hero treatment. */}
+        <div
+          className="relative mt-8 rounded-xl border overflow-hidden bg-cover bg-center bg-no-repeat"
+          style={{ backgroundImage: `url('${getInstanceBackground(spot.name)}')` }}
+        >
+          <div className="absolute inset-0 bg-background/80" />
+          <Link
+            to={`/leaderboards?tab=speedrun&instance=${encodeURIComponent(spot.name)}${diffQS}`}
+            className="absolute top-3 right-4 z-10 text-xs text-primary hover:underline"
+          >
+            Full board →
+          </Link>
+          <div className="relative px-4 pt-10">
+            {speedruns && speedruns.length > 0 ? (
+              <Podium entries={speedruns.slice(0, 3)} instanceName={spot.name} />
+            ) : (
+              <div className="py-10 pb-20 text-center text-sm text-muted-foreground">
+                No qualified speedruns for {spot.name} yet.
+              </div>
+            )}
+          </div>
         </div>
 
         {/* Boards */}
@@ -565,12 +578,7 @@ function RaidSpotlight() {
             <div className="rounded-lg border bg-muted/20 overflow-hidden">
               <div className="flex items-center justify-between px-4 py-3 border-b bg-muted/40">
                 <span className="text-sm font-semibold">Guilds by clears</span>
-                <Link
-                  to={`/leaderboards?tab=speedrun&instance=${encodeURIComponent(spot.name)}${diffQS}`}
-                  className="text-xs text-primary hover:underline"
-                >
-                  Full board →
-                </Link>
+                {/* TODO: link to a dedicated guild-clears board once one exists. */}
               </div>
               {(!guildClears || guildClears.length === 0) && (
                 <div className="px-4 py-8 text-center text-sm text-muted-foreground">
