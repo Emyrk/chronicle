@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { Trophy, AlertCircle } from "lucide-react";
+import { Trophy, AlertCircle, CheckCircle } from "lucide-react";
 import type { GuildRaidClear, GuildRaidClearsResponse } from "@/api/typesGenerated";
 import { getInstanceBackground } from "@/pages/Logs/utils/instanceImages";
 import type { GuildPanelDefinition, GuildPanelRenderProps } from "./types";
@@ -53,10 +53,10 @@ function RaidClearCard({ clear, config }: { clear: GuildRaidClear; config: RaidC
       {/* Clear count badge - top right */}
       <div
         className="absolute top-2 right-2 z-10 flex items-center gap-1 bg-black/60 backdrop-blur-sm text-white px-2 py-0.5 rounded-full text-xs font-semibold tabular-nums"
-        title={`${clear.clear_count} clears`}
+        title={`Cleared ${clear.clear_count} times`}
       >
-        <Trophy className="h-3 w-3 text-amber-400" />
-        {clear.clear_count}
+        <CheckCircle className="h-3 w-3 text-emerald-400" />
+        {clear.clear_count}×
       </div>
 
       {/* Bottom text */}
@@ -168,9 +168,9 @@ function RaidClearsContent({ config, position, guild }: GuildPanelRenderProps<Ra
           )}
           <span
             className="inline-flex items-center justify-center min-w-[2rem] px-2 py-0.5 rounded-full bg-primary/10 text-primary text-xs font-semibold tabular-nums"
-            title={`${clear.clear_count} clears`}
+            title={`Cleared ${clear.clear_count} times`}
           >
-            {clear.clear_count}
+            {clear.clear_count}×
           </span>
         </div>
       ))}
