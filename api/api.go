@@ -387,6 +387,9 @@ func (api *API) Routes() chi.Router {
 			// Public census data
 			r.Get("/census", api.Census)
 
+			// Public site-wide statistics
+			r.Get("/stats", api.SiteStats)
+
 			r.Group(func(r chi.Router) {
 				r.Route("/raidlogs", func(r chi.Router) {
 					r.Get("/supported", api.SupportedInstances)

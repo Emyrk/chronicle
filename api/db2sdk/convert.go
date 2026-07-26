@@ -275,6 +275,16 @@ func SpeedrunLeaderboardEntry(row database.SpeedrunLeaderboardRow) chroniclesdk.
 	return entry
 }
 
+// SpeedrunGuildClearsEntry converts a database guild clears row to an SDK entry.
+func SpeedrunGuildClearsEntry(row database.SpeedrunGuildClearsRow) chroniclesdk.SpeedrunGuildClearsEntry {
+	return chroniclesdk.SpeedrunGuildClearsEntry{
+		GuildID:      row.GuildID,
+		GuildName:    row.GuildName,
+		GuildLogoURL: row.GuildLogoUrl,
+		Clears:       row.Clears,
+	}
+}
+
 // LeaderboardVersionRequirements converts a database row to SDK type.
 func LeaderboardVersionRequirements(row database.LeaderboardVersionRequirement) chroniclesdk.LeaderboardVersionRequirements {
 	return chroniclesdk.LeaderboardVersionRequirements{

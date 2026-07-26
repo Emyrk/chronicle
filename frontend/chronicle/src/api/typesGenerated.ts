@@ -2009,6 +2009,17 @@ export interface SiteConfig {
     readonly dataset_flavor: readonly string[];
 }
 
+// From chroniclesdk/stats.go
+/**
+ * SiteStats aggregates public site-wide statistics for the homepage.
+ */
+export interface SiteStats {
+    readonly logs_parsed: number;
+    readonly players_tracked: number;
+    readonly guilds: number;
+    readonly boss_kills: number;
+}
+
 // From chroniclesdk/server_application.go
 export interface SlugPayload {
     readonly slug: string;
@@ -2047,6 +2058,17 @@ export interface SpeedrunDataSourceStatus {
     readonly has_server_side: boolean;
     readonly has_addon_version: boolean;
     readonly eligible: boolean;
+}
+
+// From chroniclesdk/log.go
+/**
+ * SpeedrunGuildClearsEntry is one guild's qualified full-clear count for an instance.
+ */
+export interface SpeedrunGuildClearsEntry {
+    readonly guild_id: string;
+    readonly guild_name: string;
+    readonly guild_logo_url?: string;
+    readonly clears: number;
 }
 
 // From chroniclesdk/log.go

@@ -194,3 +194,50 @@ func (s *Service) handleSpeedrunRules(w http.ResponseWriter, r *http.Request) {
 
 	httpapi.Write(ctx, w, http.StatusOK, resp)
 }
+
+// handleSpeedrunGuildClears returns guilds ranked by qualified full clears of
+// the given instance.
+//
+//	GET /speedrun/guild-clears?instance_name=Molten+Core&difficulty_name=&limit=5
+func (s *Service) handleSpeedrunGuildClears(w http.ResponseWriter, r *http.Request) {
+	ctx := r.Context()
+
+	instanceName := r.URL.Query().Get("instance_name")
+	if instanceName == "" {
+		httpapi.Write(ctx, w, http.StatusBadRequest, chroniclesdk.Response{
+			Message: "instance_name query parameter is required",
+		})
+		return
+	}
+
+	// Each difficulty has its own board. The presence of the parameter (even
+	// empty, which matches runs with no recorded difficulty) enables the filter.
+	filterDifficulty := r.URL.Query().Has("difficulty_name")
+	difficultyName := r.URL.Query().Get("difficulty_name")
+
+	limit := int64(10)
+	if v := r.URL.Query().Get("limit"); v != "" {
+		parsed, err := strconv.ParseInt(v, 10, 64)
+		if err == nil && parsed > 0 && parsed <= 100 {
+			limit = parsed
+		}
+	}
+
+	rows, err := s.store.SpeedrunGuildClears(ctx, database.SpeedrunGuildClearsParams{
+		InstanceName:     instanceName,
+		FilterDifficulty: filterDifficulty,
+		DifficultyName:   difficultyName,
+		ResultLimit:      limit,
+	})
+	if err != nil {
+		httpapi.HandleResponseError(ctx, w, err, httpapi.APIError{
+			Response: chroniclesdk.Response{
+				Message: "Failed to fetch guild clears",
+				Detail:  err.Error(),
+			},
+		})
+		return
+	}
+
+	httpapi.Write(ctx, w, http.StatusOK, slice.List(rows, db2sdk.SpeedrunGuildClearsEntry))
+}

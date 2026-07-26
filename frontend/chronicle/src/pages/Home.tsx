@@ -1,190 +1,531 @@
 import { Link } from "react-router-dom";
+import { useQuery } from "@tanstack/react-query";
+import { useCallback, useEffect, useMemo, useState } from "react";
+import { Pause, Play, Users } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { Users, Shield, User, Upload, Eye, Share2 } from "lucide-react";
 import { useAuth } from "@/hooks/useAuth";
 import { useSiteConfig } from "@/api/queries";
+import {
+  useRankingsInstances,
+  useRankingsLeaderboard,
+  useRankingsStats,
+} from "@/api/rankingsQueries";
+import type {
+  RecentInstancesResponse,
+  SiteStats,
+  SpeedrunGuildClearsEntry,
+  SpeedrunLeaderboardEntry,
+} from "@/api/typesGenerated";
+import { CLASS_CSS_VAR } from "@/pages/Rankings/classDisplay";
+import { getInstanceAbbrev } from "@/pages/Logs/utils/instanceImages";
+import { Podium } from "@/pages/Leaderboard/Podium";
 
-export function Home() {
+const STALE_TIME = 5 * 60 * 1000; // 5 minutes
+const ROTATE_SECS = 5 * 60; // rotate the spotlight every 5 minutes
+const SPOTLIGHT_IDX_KEY = "homeSpotlightIdx";
+
+async function fetchJSON<T>(url: string): Promise<T> {
+  const response = await fetch(url);
+  if (!response.ok) {
+    throw new Error(`API error: ${response.status}`);
+  }
+  return response.json() as Promise<T>;
+}
+
+function useSiteStats() {
+  return useQuery({
+    queryKey: ["site", "stats"],
+    queryFn: () => fetchJSON<SiteStats>("/api/v1/stats"),
+    staleTime: 30 * 60 * 1000, // matches the server's Cache-Control
+  });
+}
+
+function useSpeedrunTop(instanceName: string) {
+  return useQuery({
+    queryKey: ["home", "speedrun", instanceName],
+    queryFn: () =>
+      fetchJSON<SpeedrunLeaderboardEntry[]>(
+        `/api/v1/rankings/speedrun?instance_name=${encodeURIComponent(instanceName)}`,
+      ),
+    staleTime: STALE_TIME,
+    enabled: !!instanceName,
+  });
+}
+
+function useGuildClears(instanceName: string) {
+  return useQuery({
+    queryKey: ["home", "guild-clears", instanceName],
+    queryFn: () =>
+      fetchJSON<SpeedrunGuildClearsEntry[]>(
+        `/api/v1/rankings/speedrun/guild-clears?instance_name=${encodeURIComponent(instanceName)}&limit=5`,
+      ),
+    staleTime: STALE_TIME,
+    enabled: !!instanceName,
+  });
+}
+
+function useRecentUploads() {
+  return useQuery({
+    queryKey: ["home", "recent-uploads"],
+    queryFn: () => fetchJSON<RecentInstancesResponse>("/api/v1/raidlogs/recent"),
+    staleTime: 60 * 1000,
+  });
+}
+
+function formatDuration(ms: number | null): string {
+  if (!ms) return "—";
+  const totalSeconds = Math.floor(ms / 1000);
+  const hours = Math.floor(totalSeconds / 3600);
+  const minutes = Math.floor((totalSeconds % 3600) / 60);
+  const seconds = totalSeconds % 60;
+  if (hours > 0) {
+    return `${hours}:${String(minutes).padStart(2, "0")}:${String(seconds).padStart(2, "0")}`;
+  }
+  return `${minutes}:${String(seconds).padStart(2, "0")}`;
+}
+
+function formatRelativeTime(dateStr: string): string {
+  const date = new Date(dateStr);
+  const diffMs = Date.now() - date.getTime();
+  const diffMins = Math.floor(diffMs / 60000);
+  if (diffMins < 1) return "just now";
+  if (diffMins < 60) return `${diffMins}m ago`;
+  const diffHours = Math.floor(diffMins / 60);
+  if (diffHours < 24) return `${diffHours}h ago`;
+  const diffDays = Math.floor(diffHours / 24);
+  if (diffDays < 7) return `${diffDays}d ago`;
+  return date.toLocaleDateString(undefined, { month: "short", day: "numeric" });
+}
+
+function formatTimer(secs: number): string {
+  const m = Math.floor(secs / 60);
+  const s = secs % 60;
+  return `${m}:${String(s).padStart(2, "0")}`;
+}
+
+interface SpotlightRaid {
+  name: string;
+  abbrev: string;
+  totalKills: number;
+}
+
+/** Hero: headline left, stacked CTAs right. */
+function HeroSection() {
   const { isAuthenticated } = useAuth();
   const { data: siteConfig } = useSiteConfig();
   const showUpload = !siteConfig?.client_uploads_disabled;
+
   return (
-    <div className="flex flex-col">
-      {/* Hero Section */}
-      <section 
-        className="relative py-20 md:py-32 px-6 bg-cover bg-center bg-no-repeat"
-        style={{ backgroundImage: "url('/c/images/herobackground.avif')" }}
-      >
-        {/* Overlay for text readability */}
-        <div className="absolute inset-0 bg-background/80" />
-        
-        <div className="relative max-w-4xl mx-auto text-center">
-          <h1 className="text-4xl md:text-5xl lg:text-6xl font-bold tracking-tight mb-6">
+    <section
+      className="relative px-6 py-14 md:py-20 bg-cover bg-center bg-no-repeat border-b"
+      style={{ backgroundImage: "url('/c/images/herobackground.avif')" }}
+    >
+      <div className="absolute inset-0 bg-background/80" />
+      <div className="relative max-w-6xl mx-auto flex flex-col md:flex-row items-center justify-between gap-10">
+        <div className="max-w-2xl text-center md:text-left">
+          <h1 className="text-4xl md:text-5xl font-bold tracking-tight">
             Every raid tells a story.
             <br />
             <span className="text-(--tertiary)">Chronicle helps you read it.</span>
           </h1>
-          
-          <p className="text-xl text-muted-foreground mb-8 max-w-2xl mx-auto">
-            Chronicle analyzes your logs and presents the results in a way that's easy to read, 
-            easy to share, and useful for raid leadership.
+          <p className="mt-4 text-lg text-muted-foreground">
+            Chronicle analyzes your logs and presents the results in a way that's easy to
+            read, easy to share, and useful for raid leadership.
           </p>
-          
-          <div className="flex flex-col sm:flex-row gap-4 justify-center mb-4">
+        </div>
+        <div className="flex flex-col gap-3 min-w-56">
+          {showUpload && (
             <Button asChild size="lg">
-              <Link to={isAuthenticated ? "/logs" : "/recent"}>{isAuthenticated ? "View Your Logs" : "View a Sample"}</Link>
+              <Link to="/upload">{isAuthenticated ? "Upload a Log" : "Upload Your First Log"}</Link>
             </Button>
-            {showUpload && (
-              <Button variant="outline" size="lg" asChild>
-                <Link to="/upload">{isAuthenticated ? "Upload a Log" : "How to Do This for Your Next Raid"}</Link>
-              </Button>
-            )}
-          </div>
-          
-          <p className="text-sm text-muted-foreground">
-            No account required. All guild pages are public.
-          </p>
-        </div>
-      </section>
-
-      {/* What Chronicle Does */}
-      <section className="py-16 md:py-24 px-6 bg-muted/30">
-        <div className="max-w-3xl mx-auto">
-          <p className="text-lg md:text-xl leading-relaxed mb-6">
-            Chronicle takes raw combat logs and turns them into summaries that answer practical 
-            questions leaders care about:
-          </p>
-          
-          <ul className="space-y-3 mb-6 text-lg">
-            <li className="flex items-start gap-3">
-              <span className="text-primary mt-1">•</span>
-              <span>Who contributed, and how</span>
-            </li>
-            <li className="flex items-start gap-3">
-              <span className="text-primary mt-1">•</span>
-              <span>What resources were used</span>
-            </li>
-            <li className="flex items-start gap-3">
-              <span className="text-primary mt-1">•</span>
-              <span>Where time or efficiency was lost</span>
-            </li>
-          </ul>
-          
-          <p className="text-muted-foreground text-lg">
-            It's built for reviewing raids and having clearer conversations—not digging through 
-            dense tables or ranking players.
-          </p>
-        </div>
-      </section>
-
-      {/* Who This is For */}
-      <section className="py-16 md:py-24 px-6">
-        <div className="max-w-5xl mx-auto">
-          <h2 className="text-2xl md:text-3xl font-bold text-center mb-12">
-            Built for those who lead in the moment and learn from the Chronicle.
-          </h2>
-          
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
-            {/* Raid Leaders */}
-            <div className="text-center p-6">
-              <div className="inline-flex items-center justify-center w-14 h-14 rounded-full bg-primary/10 text-primary mb-4">
-                <Users className="h-7 w-7" />
-              </div>
-              <h3 className="text-xl font-semibold mb-3">Raid Leaders</h3>
-              <p className="text-muted-foreground">
-                Coach more effectively with actionable insights.
-              </p>
-            </div>
-            
-            {/* Guild Masters */}
-            <div className="text-center p-6">
-              <div className="inline-flex items-center justify-center w-14 h-14 rounded-full bg-primary/10 text-primary mb-4">
-                <Shield className="h-7 w-7" />
-              </div>
-              <h3 className="text-xl font-semibold mb-3">Guild Masters</h3>
-              <p className="text-muted-foreground">
-                Record your group's performance and progression.
-              </p>
-            </div>
-            
-            {/* Individual Players */}
-            <div className="text-center p-6">
-              <div className="inline-flex items-center justify-center w-14 h-14 rounded-full bg-primary/10 text-primary mb-4">
-                <User className="h-7 w-7" />
-              </div>
-              <h3 className="text-xl font-semibold mb-3">Individual Players</h3>
-              <p className="text-muted-foreground">
-                Connect personal contributions to collective progress.
-              </p>
-            </div>
-          </div>
-        </div>
-      </section>
-
-      {/* Workflow Section */}
-      <section className="py-16 md:py-24 px-6 bg-muted/30">
-        <div className="max-w-5xl mx-auto">
-          <h2 className="text-2xl md:text-3xl font-bold text-center mb-12">
-            Raid Night Doesn't End at the Last Pull
-          </h2>
-          
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
-            {/* Step 1: Upload */}
-            <div className="relative p-6">
-              <div className="flex items-center gap-4 mb-4">
-                <div className="flex items-center justify-center w-10 h-10 rounded-full bg-primary text-primary-foreground font-bold">
-                  1
-                </div>
-                <Upload className="h-6 w-6 text-primary" />
-              </div>
-              <h3 className="text-lg font-semibold mb-2">Upload the Raid Log</h3>
-              <p className="text-muted-foreground">
-                Capture the full run as the night wraps up, while it's still fresh.
-              </p>
-            </div>
-            
-            {/* Step 2: Review */}
-            <div className="relative p-6">
-              <div className="flex items-center gap-4 mb-4">
-                <div className="flex items-center justify-center w-10 h-10 rounded-full bg-primary text-primary-foreground font-bold">
-                  2
-                </div>
-                <Eye className="h-6 w-6 text-primary" />
-              </div>
-              <h3 className="text-lg font-semibold mb-2">Review What Happened</h3>
-              <p className="text-muted-foreground">
-                See contributions, resource use, and where time was lost.
-              </p>
-            </div>
-            
-            {/* Step 3: Share */}
-            <div className="relative p-6">
-              <div className="flex items-center gap-4 mb-4">
-                <div className="flex items-center justify-center w-10 h-10 rounded-full bg-primary text-primary-foreground font-bold">
-                  3
-                </div>
-                <Share2 className="h-6 w-6 text-primary" />
-              </div>
-              <h3 className="text-lg font-semibold mb-2">Share the Chronicle</h3>
-              <p className="text-muted-foreground">
-                Use it as a shared reference for discussion and improvement.
-              </p>
-            </div>
-          </div>
-        </div>
-      </section>
-
-      {/* Closing CTA */}
-      <section className="py-16 md:py-24 px-6">
-        <div className="max-w-2xl mx-auto text-center">
-          <Button asChild size="lg">
-            <Link to={isAuthenticated ? "/logs" : "/recent"}>{isAuthenticated ? "View Your Logs" : "Browse Chronicle"}</Link>
+          )}
+          <Button variant="outline" size="lg" asChild>
+            <Link to={isAuthenticated ? "/logs" : "/recent"}>
+              {isAuthenticated ? "View Your Logs" : "View a Sample"}
+            </Link>
           </Button>
-          <p className="mt-4 text-muted-foreground">
-            Look through real guild pages before uploading anything.
-          </p>
+          <p className="text-center text-sm text-muted-foreground">No account required.</p>
         </div>
-      </section>
+      </div>
+    </section>
+  );
+}
+
+/** Site-wide stat strip below the hero. */
+function StatsStrip() {
+  const { data: stats } = useSiteStats();
+  const cells = [
+    { v: stats?.logs_parsed, k: "logs parsed" },
+    { v: stats?.players_tracked, k: "players tracked" },
+    { v: stats?.guilds, k: "guilds" },
+    { v: stats?.boss_kills, k: "boss kills" },
+  ];
+  return (
+    <section className="border-b bg-muted/30">
+      <div className="max-w-6xl mx-auto grid grid-cols-2 md:grid-cols-4">
+        {cells.map((c) => (
+          <div key={c.k} className="px-6 py-4 border-r last:border-r-0 max-md:even:border-r-0">
+            <div className="font-mono text-2xl font-bold text-(--tertiary)">
+              {c.v != null ? c.v.toLocaleString() : "—"}
+            </div>
+            <div className="mt-1 text-xs text-muted-foreground tracking-wide">{c.k}</div>
+          </div>
+        ))}
+      </div>
+    </section>
+  );
+}
+
+/** Rotating raid spotlight: speedrun podium, top parses, guild clears, best parse by spec. */
+function RaidSpotlight() {
+  const { data: instanceSummaries } = useRankingsInstances();
+
+  // One tab per raid, aggregated across difficulty/size boards.
+  const raids: SpotlightRaid[] = useMemo(() => {
+    if (!instanceSummaries) return [];
+    const byName = new Map<string, SpotlightRaid>();
+    for (const s of instanceSummaries) {
+      const existing = byName.get(s.instance_name);
+      if (existing) {
+        existing.totalKills += s.total_kills;
+      } else {
+        byName.set(s.instance_name, {
+          name: s.instance_name,
+          abbrev: getInstanceAbbrev(s.instance_name),
+          totalKills: s.total_kills,
+        });
+      }
+    }
+    return [...byName.values()].sort((a, b) => b.totalKills - a.totalKills);
+  }, [instanceSummaries]);
+
+  // Resume where the visitor left off.
+  const [raidIdx, setRaidIdx] = useState(() => {
+    const saved = Number(localStorage.getItem(SPOTLIGHT_IDX_KEY));
+    return Number.isFinite(saved) && saved >= 0 ? saved : 0;
+  });
+  const [paused, setPaused] = useState(false);
+  const [remaining, setRemaining] = useState(ROTATE_SECS);
+
+  const idx = raids.length > 0 ? raidIdx % raids.length : 0;
+  const spot = raids[idx];
+
+  const goRaid = useCallback((i: number) => {
+    setRaidIdx(i);
+    setRemaining(ROTATE_SECS);
+    localStorage.setItem(SPOTLIGHT_IDX_KEY, String(i));
+  }, []);
+
+  useEffect(() => {
+    if (paused || raids.length <= 1) return;
+    const timer = setInterval(() => {
+      setRemaining((r) => {
+        if (r > 1) return r - 1;
+        setRaidIdx((prev) => {
+          const next = (prev + 1) % raids.length;
+          localStorage.setItem(SPOTLIGHT_IDX_KEY, String(next));
+          return next;
+        });
+        return ROTATE_SECS;
+      });
+    }, 1000);
+    return () => clearInterval(timer);
+  }, [paused, raids.length]);
+
+  const { data: speedruns } = useSpeedrunTop(spot?.name ?? "");
+  const { data: guildClears } = useGuildClears(spot?.name ?? "");
+  const { data: leaderboard } = useRankingsLeaderboard({
+    instance_names: spot?.name ?? "",
+    hide_unknowns: true,
+    limit: 8,
+  });
+  const { data: boxPlotStats } = useRankingsStats({
+    instance_names: spot?.name ?? "",
+  });
+
+  const topSpecs = useMemo(() => {
+    if (!boxPlotStats) return [];
+    const known = boxPlotStats.filter(
+      (s) =>
+        s.player_spec &&
+        s.player_spec.toUpperCase() !== "UNKNOWN" &&
+        s.player_class.toUpperCase() !== "UNKNOWN",
+    );
+    const sorted = known.sort((a, b) => b.max_dps - a.max_dps).slice(0, 6);
+    const maxDps = sorted[0]?.max_dps ?? 1;
+    return sorted.map((s) => ({
+      key: `${s.player_class}-${s.player_spec}`,
+      spec: s.player_spec,
+      color: CLASS_CSS_VAR[s.player_class] ?? "var(--color-class-unknown)",
+      dps: Math.round(s.max_dps),
+      pct: Math.round((s.max_dps / maxDps) * 100),
+    }));
+  }, [boxPlotStats]);
+
+  const maxClears = guildClears?.[0]?.clears ?? 1;
+  const parses = leaderboard?.entries ?? [];
+
+  if (raids.length === 0) return null;
+
+  return (
+    <section className="px-6 py-10 border-b">
+      <div className="max-w-6xl mx-auto">
+        {/* Header row */}
+        <div className="flex items-center justify-between gap-4 flex-wrap">
+          <div className="flex items-baseline gap-3 flex-wrap">
+            <span className="font-mono text-[11px] tracking-widest text-(--tertiary) uppercase">
+              Raid Spotlight {idx + 1} / {raids.length}
+            </span>
+            <h2 className="text-2xl font-semibold">{spot.name}</h2>
+            <span className="text-sm text-muted-foreground">
+              {spot.totalKills.toLocaleString()} kills logged
+            </span>
+          </div>
+          {raids.length > 1 && (
+            <div className="flex items-center gap-2">
+              <div className="flex items-baseline gap-2 px-3 py-1.5 rounded-md border bg-muted/30 text-sm">
+                <span className="text-muted-foreground">
+                  {paused ? "Rotation paused" : "Next raid in"}
+                </span>
+                <span className="font-mono font-bold text-(--tertiary)">
+                  {formatTimer(remaining)}
+                </span>
+              </div>
+              <Button variant="outline" size="sm" onClick={() => setPaused((p) => !p)}>
+                {paused ? <Play className="h-3.5 w-3.5" /> : <Pause className="h-3.5 w-3.5" />}
+                {paused ? "Resume" : "Pause"}
+              </Button>
+            </div>
+          )}
+        </div>
+
+        {/* Raid tabs */}
+        <div className="flex gap-2 mt-4 flex-wrap">
+          {raids.map((r, i) => (
+            <button
+              key={r.name}
+              type="button"
+              onClick={() => goRaid(i)}
+              className={`flex flex-col items-start gap-0.5 px-3.5 py-2 rounded-lg border cursor-pointer transition-colors ${
+                i === idx
+                  ? "border-primary bg-primary/10"
+                  : "border-border bg-muted/30 hover:border-primary/50"
+              }`}
+            >
+              <span
+                className={`font-mono text-[11px] font-semibold tracking-wider ${
+                  i === idx ? "text-(--tertiary)" : "text-muted-foreground"
+                }`}
+              >
+                {r.abbrev}
+              </span>
+              <span className="text-xs text-muted-foreground">{r.name}</span>
+            </button>
+          ))}
+        </div>
+
+        {/* Rotation progress */}
+        {raids.length > 1 && (
+          <div className="h-0.75 rounded-full bg-muted mt-4 overflow-hidden">
+            <div
+              className="h-full bg-primary transition-[width] duration-1000 ease-linear"
+              style={{ width: `${((ROTATE_SECS - remaining) / ROTATE_SECS) * 100}%` }}
+            />
+          </div>
+        )}
+
+        {/* Speedrun podium */}
+        <div className="mt-8">
+          {speedruns && speedruns.length > 0 ? (
+            <Podium entries={speedruns.slice(0, 3)} instanceName={spot.name} />
+          ) : (
+            <div className="rounded-lg border bg-muted/30 py-10 text-center text-sm text-muted-foreground mb-10">
+              No qualified speedruns for {spot.name} yet.
+            </div>
+          )}
+        </div>
+
+        {/* Boards */}
+        <div className="grid grid-cols-1 lg:grid-cols-[1.55fr_1fr] gap-6">
+          {/* Top parses */}
+          <div className="rounded-lg border bg-muted/20 overflow-hidden self-start">
+            <div className="flex items-center justify-between px-4 py-3 border-b bg-muted/40">
+              <span className="text-sm font-semibold">Top parses · {spot.abbrev}</span>
+              <Link
+                to={`/leaderboards?instance=${encodeURIComponent(spot.name)}&tab=leaderboard`}
+                className="text-xs text-primary hover:underline"
+              >
+                Full board →
+              </Link>
+            </div>
+            {parses.length === 0 && (
+              <div className="px-4 py-8 text-center text-sm text-muted-foreground">
+                No parses recorded yet.
+              </div>
+            )}
+            {parses.map((entry, i) => (
+              <div
+                key={entry.id}
+                className="grid grid-cols-[32px_1fr_60px] md:grid-cols-[32px_1fr_130px_60px_1fr] gap-2 items-center px-4 py-2 border-b border-border/50 last:border-b-0 hover:bg-muted/40 text-sm"
+              >
+                <span className="font-mono text-xs text-muted-foreground">{i + 1}</span>
+                <span
+                  className="font-medium truncate"
+                  style={{ color: CLASS_CSS_VAR[entry.player_class] }}
+                >
+                  {entry.player_name}
+                </span>
+                <span
+                  className="hidden md:block text-xs opacity-80 truncate"
+                  style={{ color: CLASS_CSS_VAR[entry.player_class] }}
+                >
+                  {entry.player_spec}
+                </span>
+                <span className="font-mono font-bold text-right">{Math.round(entry.dps)}</span>
+                <span className="hidden md:block text-xs text-muted-foreground text-right truncate">
+                  {entry.guild_name}
+                </span>
+              </div>
+            ))}
+          </div>
+
+          <div className="flex flex-col gap-6">
+            {/* Guilds by clears */}
+            <div className="rounded-lg border bg-muted/20 overflow-hidden">
+              <div className="flex items-center justify-between px-4 py-3 border-b bg-muted/40">
+                <span className="text-sm font-semibold">Guilds by clears</span>
+                <Link
+                  to={`/leaderboards?tab=speedrun&instance=${encodeURIComponent(spot.name)}`}
+                  className="text-xs text-primary hover:underline"
+                >
+                  Full board →
+                </Link>
+              </div>
+              {(!guildClears || guildClears.length === 0) && (
+                <div className="px-4 py-8 text-center text-sm text-muted-foreground">
+                  No qualified clears yet.
+                </div>
+              )}
+              {guildClears?.map((g, i) => (
+                <div
+                  key={g.guild_id}
+                  className="flex items-center gap-3 px-4 py-2.5 border-b border-border/50 last:border-b-0 hover:bg-muted/40 text-sm"
+                >
+                  <span className="font-mono text-xs text-muted-foreground w-4">{i + 1}</span>
+                  <span className="flex-1 font-medium truncate">{g.guild_name}</span>
+                  <div className="w-16 h-1.5 rounded-full bg-muted overflow-hidden">
+                    <div
+                      className="h-full bg-primary"
+                      style={{ width: `${Math.round((g.clears / maxClears) * 100)}%` }}
+                    />
+                  </div>
+                  <span className="font-mono text-xs font-bold text-(--tertiary) w-9 text-right">
+                    {g.clears}
+                  </span>
+                </div>
+              ))}
+            </div>
+
+            {/* Best parse by spec */}
+            <div className="rounded-lg border bg-muted/20 overflow-hidden">
+              <div className="flex items-center justify-between px-4 py-3 border-b bg-muted/40">
+                <span className="text-sm font-semibold">Best parse by spec</span>
+                <Link
+                  to={`/leaderboards?instance=${encodeURIComponent(spot.name)}`}
+                  className="text-xs text-primary hover:underline"
+                >
+                  Box plot →
+                </Link>
+              </div>
+              <div className="px-4 py-3">
+                {topSpecs.length === 0 && (
+                  <div className="py-5 text-center text-sm text-muted-foreground">
+                    No parses recorded yet.
+                  </div>
+                )}
+                {topSpecs.map((s) => (
+                  <div key={s.key} className="flex items-center gap-2.5 py-1.5">
+                    <span className="w-27 text-xs truncate" style={{ color: s.color }}>
+                      {s.spec}
+                    </span>
+                    <div className="flex-1 h-2 rounded-sm bg-muted overflow-hidden">
+                      <div
+                        className="h-full opacity-75"
+                        style={{ width: `${s.pct}%`, backgroundColor: s.color }}
+                      />
+                    </div>
+                    <span className="w-10 font-mono text-xs text-muted-foreground text-right">
+                      {s.dps}
+                    </span>
+                  </div>
+                ))}
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+  );
+}
+
+/** Latest uploads table. */
+function LatestUploads() {
+  const { data } = useRecentUploads();
+  const uploads = data?.instances.slice(0, 6) ?? [];
+
+  return (
+    <section className="px-6 py-10">
+      <div className="max-w-6xl mx-auto">
+        <div className="flex items-baseline justify-between mb-3">
+          <h2 className="text-lg font-semibold">Latest uploads</h2>
+          <Link to="/recent" className="text-xs text-primary hover:underline">
+            Recent →
+          </Link>
+        </div>
+        <div className="rounded-lg border overflow-hidden">
+          {uploads.length === 0 && (
+            <div className="px-4 py-8 text-center text-sm text-muted-foreground">
+              No uploads yet.
+            </div>
+          )}
+          {uploads.map((u) => (
+            <Link
+              key={u.id}
+              to={u.slug ? `/instances/${u.slug}` : `/instances/${u.id}`}
+              className="grid grid-cols-[1.2fr_80px_80px] md:grid-cols-[1.2fr_1fr_90px_90px_1fr_90px] gap-3 items-center px-4 py-2.5 border-b border-border/50 last:border-b-0 hover:bg-muted/40 text-sm"
+            >
+              <span className="font-medium truncate">{u.name}</span>
+              <span className="hidden md:block text-xs text-muted-foreground truncate">
+                {u.guild_name ?? u.uploader_name}
+              </span>
+              <span className="font-mono text-xs text-muted-foreground">
+                {u.boss_kills}/{u.boss_count} bosses
+              </span>
+              <span className="hidden md:flex items-center gap-1 text-xs text-muted-foreground">
+                <Users className="h-3 w-3" />
+                {u.player_count}
+              </span>
+              <span className="hidden md:block font-mono text-xs text-muted-foreground">
+                {formatDuration(u.duration_ms)}
+              </span>
+              <span className="text-xs text-muted-foreground text-right">
+                {formatRelativeTime(u.uploaded_at)}
+              </span>
+            </Link>
+          ))}
+        </div>
+      </div>
+    </section>
+  );
+}
+
+export function Home() {
+  return (
+    <div className="flex flex-col">
+      <HeroSection />
+      <StatsStrip />
+      <RaidSpotlight />
+      <LatestUploads />
     </div>
   );
 }

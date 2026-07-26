@@ -147,3 +147,29 @@ SELECT
 FROM deduped
 GROUP BY instance_name
 ORDER BY clear_count DESC, instance_name;
+
+-- name: SpeedrunGuildClears :many
+-- Returns guilds ranked by number of qualified full clears of the given
+-- instance. Deduplicates runs by duplicate group so re-uploads of the same
+-- raid only count once. JOINs wow_server_realms so RLS tenant filtering
+-- cascades.
+SELECT
+    sr.guild_id::uuid AS guild_id,
+    g.name AS guild_name,
+    COALESCE(gp.theme->>'logo_url', '')::text AS guild_logo_url,
+    COUNT(DISTINCT COALESCE(li.duplicate_group_id, li.id))::bigint AS clears
+FROM instance_speedruns sr
+JOIN log_instances li ON li.id = sr.instance_id
+JOIN guilds g ON g.id = sr.guild_id
+LEFT JOIN guild_pages gp ON gp.guild_id = sr.guild_id
+JOIN wow_server_realms wsr ON wsr.id = sr.realm_id
+WHERE sr.instance_name = @instance_name
+  AND sr.qualified = true
+  AND sr.guild_id IS NOT NULL
+  AND CASE
+      WHEN @filter_difficulty :: boolean THEN li.difficulty_name = @difficulty_name :: text
+      ELSE true
+  END
+GROUP BY sr.guild_id, g.name, gp.theme
+ORDER BY clears DESC, g.name ASC
+LIMIT NULLIF(@result_limit :: bigint, 0);

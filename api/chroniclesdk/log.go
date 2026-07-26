@@ -373,6 +373,14 @@ type SpeedrunLeaderboardEntry struct {
 	DuplicateGroupID *uuid.UUID `json:"duplicate_group_id,omitempty"`
 }
 
+// SpeedrunGuildClearsEntry is one guild's qualified full-clear count for an instance.
+type SpeedrunGuildClearsEntry struct {
+	GuildID      uuid.UUID `json:"guild_id"`
+	GuildName    string    `json:"guild_name"`
+	GuildLogoURL string    `json:"guild_logo_url,omitempty"`
+	Clears       int64     `json:"clears"`
+}
+
 // SpeedrunRulesResponse is the response for the speedrun rules endpoint.
 type SpeedrunRulesResponse struct {
 	InstanceName string                         `json:"instance_name"`

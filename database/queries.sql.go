@@ -8020,6 +8020,46 @@ func (q *sqlQuerier) UpdateSiteConfig(ctx context.Context, arg UpdateSiteConfigP
 	return i, err
 }
 
+const siteStats = `-- name: SiteStats :one
+SELECT
+    (SELECT COUNT(*)
+       FROM log_instances li
+       JOIN wow_server_realms wsr ON wsr.id = li.realm_id)::bigint AS logs_parsed,
+    (SELECT COUNT(*)
+       FROM game_players gp
+       JOIN wow_server_realms wsr ON wsr.id = gp.realm_id)::bigint AS players_tracked,
+    (SELECT COUNT(*)
+       FROM guilds g
+       JOIN wow_server_realms wsr ON wsr.id = g.realm_id)::bigint AS guild_count,
+    (SELECT COUNT(*)
+       FROM log_instance_encounters lie
+       JOIN log_instances li ON li.id = lie.instance_id
+       JOIN wow_server_realms wsr ON wsr.id = li.realm_id
+      WHERE lie.boss = true
+        AND lie.kill_type IN ('clean', 'partial'))::bigint AS boss_kills
+`
+
+type SiteStatsRow struct {
+	LogsParsed     int64 `db:"logs_parsed" json:"logs_parsed"`
+	PlayersTracked int64 `db:"players_tracked" json:"players_tracked"`
+	GuildCount     int64 `db:"guild_count" json:"guild_count"`
+	BossKills      int64 `db:"boss_kills" json:"boss_kills"`
+}
+
+// Aggregate public site statistics for the homepage.
+// Each subquery JOINs wow_server_realms so RLS tenant filtering cascades.
+func (q *sqlQuerier) SiteStats(ctx context.Context) (SiteStatsRow, error) {
+	row := q.db.QueryRow(ctx, siteStats)
+	var i SiteStatsRow
+	err := row.Scan(
+		&i.LogsParsed,
+		&i.PlayersTracked,
+		&i.GuildCount,
+		&i.BossKills,
+	)
+	return i, err
+}
+
 const getInstanceSpeedrun = `-- name: GetInstanceSpeedrun :one
 SELECT sr.instance_id, sr.instance_name, sr.realm_id, sr.guild_id, sr.qualified, sr.start_time, sr.completion_time, sr.duration_ms, sr.proof, sr.created_at, sr.addon_version, sr.parser_version_num, sr.addon_version_num, li.capabilities
 FROM instance_speedruns sr
@@ -8208,6 +8248,77 @@ func (q *sqlQuerier) SpeedrunDifficulties(ctx context.Context, instanceName stri
 			return nil, err
 		}
 		items = append(items, difficulty_name)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const speedrunGuildClears = `-- name: SpeedrunGuildClears :many
+SELECT
+    sr.guild_id::uuid AS guild_id,
+    g.name AS guild_name,
+    COALESCE(gp.theme->>'logo_url', '')::text AS guild_logo_url,
+    COUNT(DISTINCT COALESCE(li.duplicate_group_id, li.id))::bigint AS clears
+FROM instance_speedruns sr
+JOIN log_instances li ON li.id = sr.instance_id
+JOIN guilds g ON g.id = sr.guild_id
+LEFT JOIN guild_pages gp ON gp.guild_id = sr.guild_id
+JOIN wow_server_realms wsr ON wsr.id = sr.realm_id
+WHERE sr.instance_name = $1
+  AND sr.qualified = true
+  AND sr.guild_id IS NOT NULL
+  AND CASE
+      WHEN $2 :: boolean THEN li.difficulty_name = $3 :: text
+      ELSE true
+  END
+GROUP BY sr.guild_id, g.name, gp.theme
+ORDER BY clears DESC, g.name ASC
+LIMIT NULLIF($4 :: bigint, 0)
+`
+
+type SpeedrunGuildClearsParams struct {
+	InstanceName     string `db:"instance_name" json:"instance_name"`
+	FilterDifficulty bool   `db:"filter_difficulty" json:"filter_difficulty"`
+	DifficultyName   string `db:"difficulty_name" json:"difficulty_name"`
+	ResultLimit      int64  `db:"result_limit" json:"result_limit"`
+}
+
+type SpeedrunGuildClearsRow struct {
+	GuildID      uuid.UUID `db:"guild_id" json:"guild_id"`
+	GuildName    string    `db:"guild_name" json:"guild_name"`
+	GuildLogoUrl string    `db:"guild_logo_url" json:"guild_logo_url"`
+	Clears       int64     `db:"clears" json:"clears"`
+}
+
+// Returns guilds ranked by number of qualified full clears of the given
+// instance. Deduplicates runs by duplicate group so re-uploads of the same
+// raid only count once. JOINs wow_server_realms so RLS tenant filtering
+// cascades.
+func (q *sqlQuerier) SpeedrunGuildClears(ctx context.Context, arg SpeedrunGuildClearsParams) ([]SpeedrunGuildClearsRow, error) {
+	rows, err := q.db.Query(ctx, speedrunGuildClears,
+		arg.InstanceName,
+		arg.FilterDifficulty,
+		arg.DifficultyName,
+		arg.ResultLimit,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []SpeedrunGuildClearsRow
+	for rows.Next() {
+		var i SpeedrunGuildClearsRow
+		if err := rows.Scan(
+			&i.GuildID,
+			&i.GuildName,
+			&i.GuildLogoUrl,
+			&i.Clears,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
 	}
 	if err := rows.Err(); err != nil {
 		return nil, err

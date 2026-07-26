@@ -156,6 +156,7 @@ func (s *Service) setupRoutes() {
 	s.router.Get("/speedrun/realms", s.handleSpeedrunRealms)
 	s.router.Get("/speedrun/difficulties", s.handleSpeedrunDifficulties)
 	s.router.Get("/speedrun/rules", s.handleSpeedrunRules)
+	s.router.Get("/speedrun/guild-clears", s.handleSpeedrunGuildClears)
 }
 
 // handleInstances returns per-instance summaries with top 3 players.

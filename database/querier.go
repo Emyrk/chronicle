@@ -418,10 +418,18 @@ type sqlcQuerier interface {
 	// Pass NULL to remove the assignment.
 	SetTenantDataset(ctx context.Context, arg SetTenantDatasetParams) error
 	SetVerificationToken(ctx context.Context, arg SetVerificationTokenParams) error
+	// Aggregate public site statistics for the homepage.
+	// Each subquery JOINs wow_server_realms so RLS tenant filtering cascades.
+	SiteStats(ctx context.Context) (SiteStatsRow, error)
 	// Returns distinct difficulty names that have at least one qualified speedrun
 	// for the given instance. Each difficulty has its own leaderboard.
 	// JOINs wow_server_realms so RLS tenant filtering cascades.
 	SpeedrunDifficulties(ctx context.Context, instanceName string) ([]string, error)
+	// Returns guilds ranked by number of qualified full clears of the given
+	// instance. Deduplicates runs by duplicate group so re-uploads of the same
+	// raid only count once. JOINs wow_server_realms so RLS tenant filtering
+	// cascades.
+	SpeedrunGuildClears(ctx context.Context, arg SpeedrunGuildClearsParams) ([]SpeedrunGuildClearsRow, error)
 	// Returns distinct (instance, difficulty) boards that have at least one
 	// qualified speedrun. Each difficulty has its own leaderboard.
 	// JOINs wow_server_realms so RLS tenant filtering cascades.
