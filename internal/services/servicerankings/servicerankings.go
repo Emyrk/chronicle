@@ -275,18 +275,19 @@ func (s *Service) handleLeaderboard(w http.ResponseWriter, r *http.Request) {
 	}
 
 	rows, err := s.store.RankingsLeaderboard(ctx, database.RankingsLeaderboardParams{
-		InstanceNames:   splitCSV(q.Get("instance_names")),
-		EncounterNames:  splitCSV(q.Get("encounter_names")),
-		DifficultyNames: splitCSV(q.Get("difficulty_names")),
-		RealmNames:      splitCSV(q.Get("realm_names")),
-		Class:           classParam,
-		Spec:            q.Get("spec"),
-		Role:            q.Get("role"),
-		SinceDays:       sinceDays,
-		HideUnknowns:    q.Get("hide_unknowns") == "true",
-		Metric:          normalizeMetric(q.Get("metric")),
-		QueryLimit:      limit,
-		QueryOffset:     offset,
+		InstanceNames:    splitCSV(q.Get("instance_names")),
+		EncounterNames:   splitCSV(q.Get("encounter_names")),
+		DifficultyNames:  splitCSV(q.Get("difficulty_names")),
+		RealmNames:       splitCSV(q.Get("realm_names")),
+		Class:            classParam,
+		Spec:             q.Get("spec"),
+		Role:             q.Get("role"),
+		SinceDays:        sinceDays,
+		HideUnknowns:     q.Get("hide_unknowns") == "true",
+		Metric:           normalizeMetric(q.Get("metric")),
+		FilterMaxPlayers: parseMaxPlayers(q.Get("max_players")),
+		QueryLimit:       limit,
+		QueryOffset:      offset,
 	})
 	if err != nil {
 		httpapi.HandleResponseError(ctx, w, err, httpapi.APIError{
@@ -354,14 +355,15 @@ func (s *Service) handleStats(w http.ResponseWriter, r *http.Request) {
 	}
 
 	rows, err := s.store.RankingsBoxPlotStats(ctx, database.RankingsBoxPlotStatsParams{
-		InstanceNames:   splitCSV(q.Get("instance_names")),
-		EncounterNames:  splitCSV(q.Get("encounter_names")),
-		DifficultyNames: splitCSV(q.Get("difficulty_names")),
-		RealmNames:      splitCSV(q.Get("realm_names")),
-		Role:            q.Get("role"),
-		SinceDays:       sinceDays,
-		Metric:          normalizeMetric(q.Get("metric")),
-		GroupByClass:    q.Get("group_by_class") == "true",
+		InstanceNames:    splitCSV(q.Get("instance_names")),
+		EncounterNames:   splitCSV(q.Get("encounter_names")),
+		DifficultyNames:  splitCSV(q.Get("difficulty_names")),
+		RealmNames:       splitCSV(q.Get("realm_names")),
+		Role:             q.Get("role"),
+		SinceDays:        sinceDays,
+		Metric:           normalizeMetric(q.Get("metric")),
+		GroupByClass:     q.Get("group_by_class") == "true",
+		FilterMaxPlayers: parseMaxPlayers(q.Get("max_players")),
 	})
 	if err != nil {
 		httpapi.HandleResponseError(ctx, w, err, httpapi.APIError{
@@ -389,7 +391,6 @@ func (s *Service) handleStats(w http.ResponseWriter, r *http.Request) {
 
 	httpapi.Write(ctx, w, http.StatusOK, out)
 }
-
 
 // handleRealms returns the list of realm names that have DPS ranking data.
 //
@@ -425,6 +426,18 @@ func normalizeMetric(m string) string {
 // underscores this is a no-op.
 func normalizeClassName(dbClass string) string {
 	return strings.ReplaceAll(dbClass, "_", "")
+}
+
+// parseMaxPlayers parses the max_players board filter. 0 disables the filter.
+func parseMaxPlayers(s string) int16 {
+	if s == "" {
+		return 0
+	}
+	v, err := strconv.ParseInt(s, 10, 16)
+	if err != nil || v < 0 {
+		return 0
+	}
+	return int16(v)
 }
 
 // splitCSV splits a comma-separated string into a slice, trimming whitespace.

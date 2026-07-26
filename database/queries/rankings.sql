@@ -206,6 +206,10 @@ WITH deduped AS (
         WHEN cardinality(@difficulty_names :: text[]) > 0 THEN edr.difficulty_name = ANY(@difficulty_names :: text[])
         ELSE true
     END
+    AND CASE
+        WHEN @filter_max_players :: smallint > 0 THEN edr.max_players = @filter_max_players
+        ELSE true
+    END
     AND (CASE WHEN @metric :: text = 'hps' THEN edr.hps ELSE edr.dps END) > 0
     ORDER BY edr.player_guid, edr.encounter_name, COALESCE(li.duplicate_group_id, li.id),
         (CASE WHEN @metric :: text = 'hps' THEN edr.hps ELSE edr.dps END) DESC
@@ -330,6 +334,10 @@ WITH deduped AS (
     END
     AND CASE
         WHEN cardinality(@difficulty_names :: text[]) > 0 THEN edr.difficulty_name = ANY(@difficulty_names :: text[])
+        ELSE true
+    END
+    AND CASE
+        WHEN @filter_max_players :: smallint > 0 THEN edr.max_players = @filter_max_players
         ELSE true
     END
     ORDER BY edr.player_guid, edr.encounter_name, COALESCE(li.duplicate_group_id, li.id),

@@ -5645,8 +5645,12 @@ WITH deduped AS (
         WHEN cardinality($7 :: text[]) > 0 THEN edr.difficulty_name = ANY($7 :: text[])
         ELSE true
     END
+    AND CASE
+        WHEN $8 :: smallint > 0 THEN edr.max_players = $8
+        ELSE true
+    END
     ORDER BY edr.player_guid, edr.encounter_name, COALESCE(li.duplicate_group_id, li.id),
-        (CASE WHEN $8 :: text = 'hps' THEN edr.hps ELSE edr.dps END) DESC
+        (CASE WHEN $9 :: text = 'hps' THEN edr.hps ELSE edr.dps END) DESC
 ),
 realm_encounter_counts AS (
     SELECT d.realm_id, COUNT(DISTINCT d.encounter_name) AS encounter_count
@@ -5657,7 +5661,7 @@ per_run AS (
     SELECT
         d.player_class,
         d.player_spec,
-        (CASE WHEN $8 :: text = 'hps'
+        (CASE WHEN $9 :: text = 'hps'
             THEN SUM(d.healing_done + d.absorbed_done)::double precision / NULLIF(SUM(d.duration_secs), 0)
             ELSE SUM(d.damage_done)::double precision / NULLIF(SUM(d.duration_secs), 0)
         END)::double precision AS metric_value
@@ -5698,14 +5702,15 @@ ORDER BY s.median_dps DESC
 `
 
 type RankingsBoxPlotStatsParams struct {
-	GroupByClass    bool     `db:"group_by_class" json:"group_by_class"`
-	InstanceNames   []string `db:"instance_names" json:"instance_names"`
-	EncounterNames  []string `db:"encounter_names" json:"encounter_names"`
-	RealmNames      []string `db:"realm_names" json:"realm_names"`
-	Role            string   `db:"role" json:"role"`
-	SinceDays       int64    `db:"since_days" json:"since_days"`
-	DifficultyNames []string `db:"difficulty_names" json:"difficulty_names"`
-	Metric          string   `db:"metric" json:"metric"`
+	GroupByClass     bool     `db:"group_by_class" json:"group_by_class"`
+	InstanceNames    []string `db:"instance_names" json:"instance_names"`
+	EncounterNames   []string `db:"encounter_names" json:"encounter_names"`
+	RealmNames       []string `db:"realm_names" json:"realm_names"`
+	Role             string   `db:"role" json:"role"`
+	SinceDays        int64    `db:"since_days" json:"since_days"`
+	DifficultyNames  []string `db:"difficulty_names" json:"difficulty_names"`
+	FilterMaxPlayers int16    `db:"filter_max_players" json:"filter_max_players"`
+	Metric           string   `db:"metric" json:"metric"`
 }
 
 type RankingsBoxPlotStatsRow struct {
@@ -5737,6 +5742,7 @@ func (q *sqlQuerier) RankingsBoxPlotStats(ctx context.Context, arg RankingsBoxPl
 		arg.Role,
 		arg.SinceDays,
 		arg.DifficultyNames,
+		arg.FilterMaxPlayers,
 		arg.Metric,
 	)
 	if err != nil {
@@ -6147,6 +6153,10 @@ WITH deduped AS (
         WHEN cardinality($12 :: text[]) > 0 THEN edr.difficulty_name = ANY($12 :: text[])
         ELSE true
     END
+    AND CASE
+        WHEN $13 :: smallint > 0 THEN edr.max_players = $13
+        ELSE true
+    END
     AND (CASE WHEN $1 :: text = 'hps' THEN edr.hps ELSE edr.dps END) > 0
     ORDER BY edr.player_guid, edr.encounter_name, COALESCE(li.duplicate_group_id, li.id),
         (CASE WHEN $1 :: text = 'hps' THEN edr.hps ELSE edr.dps END) DESC
@@ -6227,18 +6237,19 @@ OFFSET $2::bigint
 `
 
 type RankingsLeaderboardParams struct {
-	Metric          string   `db:"metric" json:"metric"`
-	QueryOffset     int64    `db:"query_offset" json:"query_offset"`
-	QueryLimit      int64    `db:"query_limit" json:"query_limit"`
-	InstanceNames   []string `db:"instance_names" json:"instance_names"`
-	EncounterNames  []string `db:"encounter_names" json:"encounter_names"`
-	RealmNames      []string `db:"realm_names" json:"realm_names"`
-	Class           string   `db:"class" json:"class"`
-	Spec            string   `db:"spec" json:"spec"`
-	Role            string   `db:"role" json:"role"`
-	SinceDays       int64    `db:"since_days" json:"since_days"`
-	HideUnknowns    bool     `db:"hide_unknowns" json:"hide_unknowns"`
-	DifficultyNames []string `db:"difficulty_names" json:"difficulty_names"`
+	Metric           string   `db:"metric" json:"metric"`
+	QueryOffset      int64    `db:"query_offset" json:"query_offset"`
+	QueryLimit       int64    `db:"query_limit" json:"query_limit"`
+	InstanceNames    []string `db:"instance_names" json:"instance_names"`
+	EncounterNames   []string `db:"encounter_names" json:"encounter_names"`
+	RealmNames       []string `db:"realm_names" json:"realm_names"`
+	Class            string   `db:"class" json:"class"`
+	Spec             string   `db:"spec" json:"spec"`
+	Role             string   `db:"role" json:"role"`
+	SinceDays        int64    `db:"since_days" json:"since_days"`
+	HideUnknowns     bool     `db:"hide_unknowns" json:"hide_unknowns"`
+	DifficultyNames  []string `db:"difficulty_names" json:"difficulty_names"`
+	FilterMaxPlayers int16    `db:"filter_max_players" json:"filter_max_players"`
 }
 
 type RankingsLeaderboardRow struct {
@@ -6292,6 +6303,7 @@ func (q *sqlQuerier) RankingsLeaderboard(ctx context.Context, arg RankingsLeader
 		arg.SinceDays,
 		arg.HideUnknowns,
 		arg.DifficultyNames,
+		arg.FilterMaxPlayers,
 	)
 	if err != nil {
 		return nil, err

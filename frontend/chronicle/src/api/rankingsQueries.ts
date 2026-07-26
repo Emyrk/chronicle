@@ -53,6 +53,7 @@ export function useRankingsLeaderboard(params: {
   role?: string;
   hide_unknowns?: boolean;
   metric?: "dps" | "hps";
+  max_players?: number;
   limit?: number;
   offset?: number;
 }) {
@@ -67,6 +68,7 @@ export function useRankingsLeaderboard(params: {
   if (params.role) searchParams.set("role", params.role);
   if (params.hide_unknowns) searchParams.set("hide_unknowns", "true");
   if (params.metric && params.metric !== "dps") searchParams.set("metric", params.metric);
+  if (params.max_players) searchParams.set("max_players", String(params.max_players));
   if (params.limit != null) searchParams.set("limit", String(params.limit));
   if (params.offset != null) searchParams.set("offset", String(params.offset));
   const qs = searchParams.toString();
@@ -88,6 +90,7 @@ export function useRankingsStats(params: {
   role?: string;
   metric?: "dps" | "hps";
   group_by_class?: boolean;
+  max_players?: number;
 }) {
   const searchParams = new URLSearchParams();
   if (params.instance_names) searchParams.set("instance_names", params.instance_names);
@@ -98,6 +101,7 @@ export function useRankingsStats(params: {
   if (params.role) searchParams.set("role", params.role);
   if (params.metric && params.metric !== "dps") searchParams.set("metric", params.metric);
   if (params.group_by_class) searchParams.set("group_by_class", "true");
+  if (params.max_players) searchParams.set("max_players", String(params.max_players));
   const qs = searchParams.toString();
 
   return useQuery({

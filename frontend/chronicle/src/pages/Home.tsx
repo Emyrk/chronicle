@@ -23,6 +23,26 @@ import { Podium } from "@/pages/Leaderboard/Podium";
 const STALE_TIME = 5 * 60 * 1000; // 5 minutes
 const ROTATE_SECS = 5 * 60; // rotate the spotlight every 5 minutes
 const SPOTLIGHT_IDX_KEY = "homeSpotlightIdx";
+const SPOTLIGHT_BOARD_KEY = "homeSpotlightBoards";
+
+interface BoardSelection {
+  difficulty: string;
+  maxPlayers: number;
+}
+
+function loadBoardSelections(): Record<string, BoardSelection> {
+  try {
+    return JSON.parse(localStorage.getItem(SPOTLIGHT_BOARD_KEY) ?? "{}");
+  } catch {
+    return {};
+  }
+}
+
+function saveBoardSelection(raidName: string, sel: BoardSelection) {
+  const all = loadBoardSelections();
+  all[raidName] = sel;
+  localStorage.setItem(SPOTLIGHT_BOARD_KEY, JSON.stringify(all));
+}
 
 async function fetchJSON<T>(url: string): Promise<T> {
   const response = await fetch(url);
@@ -40,25 +60,31 @@ function useSiteStats() {
   });
 }
 
-function useSpeedrunTop(instanceName: string) {
+// `difficulty` filters to one board when defined; undefined disables the
+// filter (raids with a single board keep the unfiltered behavior).
+function useSpeedrunTop(instanceName: string, difficulty?: string) {
   return useQuery({
-    queryKey: ["home", "speedrun", instanceName],
-    queryFn: () =>
-      fetchJSON<SpeedrunLeaderboardEntry[]>(
-        `/api/v1/rankings/speedrun?instance_name=${encodeURIComponent(instanceName)}`,
-      ),
+    queryKey: ["home", "speedrun", instanceName, difficulty],
+    queryFn: () => {
+      const params = new URLSearchParams({ instance_name: instanceName });
+      if (difficulty !== undefined) params.set("difficulty_name", difficulty);
+      return fetchJSON<SpeedrunLeaderboardEntry[]>(`/api/v1/rankings/speedrun?${params}`);
+    },
     staleTime: STALE_TIME,
     enabled: !!instanceName,
   });
 }
 
-function useGuildClears(instanceName: string) {
+function useGuildClears(instanceName: string, difficulty?: string) {
   return useQuery({
-    queryKey: ["home", "guild-clears", instanceName],
-    queryFn: () =>
-      fetchJSON<SpeedrunGuildClearsEntry[]>(
-        `/api/v1/rankings/speedrun/guild-clears?instance_name=${encodeURIComponent(instanceName)}&limit=5`,
-      ),
+    queryKey: ["home", "guild-clears", instanceName, difficulty],
+    queryFn: () => {
+      const params = new URLSearchParams({ instance_name: instanceName, limit: "5" });
+      if (difficulty !== undefined) params.set("difficulty_name", difficulty);
+      return fetchJSON<SpeedrunGuildClearsEntry[]>(
+        `/api/v1/rankings/speedrun/guild-clears?${params}`,
+      );
+    },
     staleTime: STALE_TIME,
     enabled: !!instanceName,
   });
@@ -103,10 +129,48 @@ function formatTimer(secs: number): string {
   return `${m}:${String(s).padStart(2, "0")}`;
 }
 
+interface SpotlightBoard {
+  difficulty: string;
+  maxPlayers: number;
+  kills: number;
+}
+
 interface SpotlightRaid {
   name: string;
   abbrev: string;
   totalKills: number;
+  boards: SpotlightBoard[];
+}
+
+/** Toggle group for switching between board variants (raid size, difficulty). */
+function BoardToggle({
+  options,
+  selected,
+  onSelect,
+}: {
+  options: { value: string; label: string }[];
+  selected: string;
+  onSelect: (value: string) => void;
+}) {
+  if (options.length < 2) return null;
+  return (
+    <div className="flex items-center gap-1 rounded-lg border bg-muted/30 p-1">
+      {options.map((o) => (
+        <button
+          key={o.value}
+          type="button"
+          onClick={() => onSelect(o.value)}
+          className={`px-3 py-1 rounded-md font-mono text-xs cursor-pointer transition-colors ${
+            o.value === selected
+              ? "bg-primary/15 text-(--tertiary) border border-primary/40"
+              : "text-muted-foreground border border-transparent hover:text-foreground"
+          }`}
+        >
+          {o.label}
+        </button>
+      ))}
+    </div>
+  );
 }
 
 /** Hero: headline left, stacked CTAs right. */
@@ -179,19 +243,27 @@ function StatsStrip() {
 function RaidSpotlight() {
   const { data: instanceSummaries } = useRankingsInstances();
 
-  // One tab per raid, aggregated across difficulty/size boards.
+  // One tab per raid; each raid keeps its per-(difficulty, size) boards so the
+  // user can toggle between them.
   const raids: SpotlightRaid[] = useMemo(() => {
     if (!instanceSummaries) return [];
     const byName = new Map<string, SpotlightRaid>();
     for (const s of instanceSummaries) {
+      const board: SpotlightBoard = {
+        difficulty: s.difficulty_name,
+        maxPlayers: s.max_players,
+        kills: s.total_kills,
+      };
       const existing = byName.get(s.instance_name);
       if (existing) {
         existing.totalKills += s.total_kills;
+        existing.boards.push(board);
       } else {
         byName.set(s.instance_name, {
           name: s.instance_name,
           abbrev: getInstanceAbbrev(s.instance_name),
           totalKills: s.total_kills,
+          boards: [board],
         });
       }
     }
@@ -208,6 +280,58 @@ function RaidSpotlight() {
 
   const idx = raids.length > 0 ? raidIdx % raids.length : 0;
   const spot = raids[idx];
+
+  // Board (difficulty + size) selection, persisted per raid.
+  const [boardSelections, setBoardSelections] = useState<Record<string, BoardSelection>>(
+    loadBoardSelections,
+  );
+
+  const sizeOptions = useMemo(() => {
+    if (!spot) return [];
+    const sizes = [...new Set(spot.boards.map((b) => b.maxPlayers))].sort((a, b) => b - a);
+    return sizes.map((s) => ({ value: String(s), label: s > 0 ? `${s}-man` : "Any" }));
+  }, [spot]);
+
+  const difficultyOptions = useMemo(() => {
+    if (!spot) return [];
+    const diffs = [...new Set(spot.boards.map((b) => b.difficulty))].sort();
+    return diffs.map((d) => ({ value: d, label: d || "Normal" }));
+  }, [spot]);
+
+  // Resolve the active board: saved selection if it still exists,
+  // otherwise the board with the most kills.
+  const activeBoard: SpotlightBoard | undefined = useMemo(() => {
+    if (!spot) return undefined;
+    const saved = boardSelections[spot.name];
+    if (saved) {
+      const match = spot.boards.find(
+        (b) => b.difficulty === saved.difficulty && b.maxPlayers === saved.maxPlayers,
+      );
+      if (match) return match;
+    }
+    return [...spot.boards].sort((a, b) => b.kills - a.kills)[0];
+  }, [spot, boardSelections]);
+
+  const selectBoard = useCallback(
+    (difficulty: string, maxPlayers: number) => {
+      if (!spot) return;
+      // Prefer an exact board; fall back to the best-populated board matching
+      // the changed axis so a stale combo never strands the user.
+      const exact = spot.boards.find(
+        (b) => b.difficulty === difficulty && b.maxPlayers === maxPlayers,
+      );
+      const board =
+        exact ??
+        [...spot.boards]
+          .filter((b) => b.difficulty === difficulty || b.maxPlayers === maxPlayers)
+          .sort((a, b) => b.kills - a.kills)[0];
+      if (!board) return;
+      const sel = { difficulty: board.difficulty, maxPlayers: board.maxPlayers };
+      setBoardSelections((prev) => ({ ...prev, [spot.name]: sel }));
+      saveBoardSelection(spot.name, sel);
+    },
+    [spot],
+  );
 
   const goRaid = useCallback((i: number) => {
     setRaidIdx(i);
@@ -231,15 +355,27 @@ function RaidSpotlight() {
     return () => clearInterval(timer);
   }, [paused, raids.length]);
 
-  const { data: speedruns } = useSpeedrunTop(spot?.name ?? "");
-  const { data: guildClears } = useGuildClears(spot?.name ?? "");
+  // Only pass a difficulty filter when the raid has multiple difficulty
+  // boards; single-board raids keep the unfiltered (legacy) behavior.
+  const difficultyFilter = difficultyOptions.length > 1 ? activeBoard?.difficulty : undefined;
+  const maxPlayersFilter =
+    sizeOptions.length > 1 && activeBoard && activeBoard.maxPlayers > 0
+      ? activeBoard.maxPlayers
+      : undefined;
+
+  const { data: speedruns } = useSpeedrunTop(spot?.name ?? "", difficultyFilter);
+  const { data: guildClears } = useGuildClears(spot?.name ?? "", difficultyFilter);
   const { data: leaderboard } = useRankingsLeaderboard({
     instance_names: spot?.name ?? "",
+    difficulty_names: difficultyFilter,
+    max_players: maxPlayersFilter,
     hide_unknowns: true,
     limit: 8,
   });
   const { data: boxPlotStats } = useRankingsStats({
     instance_names: spot?.name ?? "",
+    difficulty_names: difficultyFilter,
+    max_players: maxPlayersFilter,
   });
 
   const topSpecs = useMemo(() => {
@@ -264,6 +400,9 @@ function RaidSpotlight() {
   const maxClears = guildClears?.[0]?.clears ?? 1;
   const parses = leaderboard?.entries ?? [];
 
+  // Deep-link params for "Full board →" links.
+  const diffQS = difficultyFilter !== undefined ? `&diff=${encodeURIComponent(difficultyFilter)}` : "";
+
   if (raids.length === 0) return null;
 
   return (
@@ -271,13 +410,25 @@ function RaidSpotlight() {
       <div className="max-w-7xl mx-auto">
         {/* Header row */}
         <div className="flex items-center justify-between gap-4 flex-wrap">
-          <div className="flex items-baseline gap-3 flex-wrap">
-            <span className="font-mono text-[11px] tracking-widest text-(--tertiary) uppercase">
-              Raid Spotlight {idx + 1} / {raids.length}
-            </span>
-            <h2 className="text-2xl font-semibold">{spot.name}</h2>
+          <div className="flex items-center gap-3 flex-wrap">
+            <div className="flex items-baseline gap-3">
+              <span className="font-mono text-[11px] tracking-widest text-(--tertiary) uppercase">
+                Raid Spotlight {idx + 1} / {raids.length}
+              </span>
+              <h2 className="text-2xl font-semibold">{spot.name}</h2>
+            </div>
+            <BoardToggle
+              options={sizeOptions}
+              selected={String(activeBoard?.maxPlayers ?? 0)}
+              onSelect={(v) => selectBoard(activeBoard?.difficulty ?? "", Number(v))}
+            />
+            <BoardToggle
+              options={difficultyOptions}
+              selected={activeBoard?.difficulty ?? ""}
+              onSelect={(v) => selectBoard(v, activeBoard?.maxPlayers ?? 0)}
+            />
             <span className="text-sm text-muted-foreground">
-              {spot.totalKills.toLocaleString()} kills logged
+              {(activeBoard?.kills ?? spot.totalKills).toLocaleString()} kills logged
             </span>
           </div>
           {raids.length > 1 && (
@@ -351,7 +502,7 @@ function RaidSpotlight() {
             <div className="flex items-center justify-between px-4 py-3 border-b bg-muted/40">
               <span className="text-sm font-semibold">Top parses · {spot.abbrev}</span>
               <Link
-                to={`/leaderboards?instance=${encodeURIComponent(spot.name)}&tab=leaderboard`}
+                to={`/leaderboards?instance=${encodeURIComponent(spot.name)}&tab=leaderboard${diffQS}`}
                 className="text-xs text-primary hover:underline"
               >
                 Full board →
@@ -394,7 +545,7 @@ function RaidSpotlight() {
               <div className="flex items-center justify-between px-4 py-3 border-b bg-muted/40">
                 <span className="text-sm font-semibold">Guilds by clears</span>
                 <Link
-                  to={`/leaderboards?tab=speedrun&instance=${encodeURIComponent(spot.name)}`}
+                  to={`/leaderboards?tab=speedrun&instance=${encodeURIComponent(spot.name)}${diffQS}`}
                   className="text-xs text-primary hover:underline"
                 >
                   Full board →
@@ -430,7 +581,7 @@ function RaidSpotlight() {
               <div className="flex items-center justify-between px-4 py-3 border-b bg-muted/40">
                 <span className="text-sm font-semibold">Best parse by spec</span>
                 <Link
-                  to={`/leaderboards?instance=${encodeURIComponent(spot.name)}`}
+                  to={`/leaderboards?instance=${encodeURIComponent(spot.name)}${diffQS}`}
                   className="text-xs text-primary hover:underline"
                 >
                   Box plot →
