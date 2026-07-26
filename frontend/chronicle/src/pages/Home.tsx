@@ -129,8 +129,7 @@ function HeroSection() {
             <span className="text-(--tertiary)">Chronicle helps you read it.</span>
           </h1>
           <p className="mt-4 text-lg text-muted-foreground">
-            Chronicle analyzes your logs and presents the results in a way that's easy to
-            read, easy to share, and useful for raid leadership.
+            Logs in, insight out — easy to read, easy to share.
           </p>
         </div>
         <div className="flex flex-col gap-3 min-w-56">
