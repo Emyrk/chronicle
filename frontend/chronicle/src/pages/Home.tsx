@@ -530,7 +530,7 @@ function RaidSpotlight() {
         </div>
 
         {/* Boards */}
-        <div className="grid grid-cols-1 lg:grid-cols-[1.55fr_1fr] gap-6">
+        <div className="grid grid-cols-1 lg:grid-cols-[1.55fr_1fr] gap-6 mt-6">
           {/* Top parses */}
           <div className="rounded-lg border bg-muted/20 overflow-hidden self-start">
             <div className="flex items-center justify-between px-4 py-3 border-b bg-muted/40">
