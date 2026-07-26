@@ -121,7 +121,7 @@ function HeroSection() {
       style={{ backgroundImage: "url('/c/images/herobackground.avif')" }}
     >
       <div className="absolute inset-0 bg-background/80" />
-      <div className="relative max-w-6xl mx-auto flex flex-col md:flex-row items-center justify-between gap-10">
+      <div className="relative max-w-7xl mx-auto flex flex-col md:flex-row items-center justify-between gap-10">
         <div className="max-w-2xl text-center md:text-left">
           <h1 className="text-4xl md:text-5xl font-bold tracking-tight">
             Every raid tells a story.
@@ -162,7 +162,7 @@ function StatsStrip() {
   ];
   return (
     <section className="border-b bg-muted/30">
-      <div className="max-w-6xl mx-auto grid grid-cols-2 md:grid-cols-4">
+      <div className="max-w-7xl mx-auto grid grid-cols-2 md:grid-cols-4">
         {cells.map((c) => (
           <div key={c.k} className="px-6 py-4 border-r last:border-r-0 max-md:even:border-r-0">
             <div className="font-mono text-2xl font-bold text-(--tertiary)">
@@ -269,7 +269,7 @@ function RaidSpotlight() {
 
   return (
     <section className="px-6 py-10 border-b">
-      <div className="max-w-6xl mx-auto">
+      <div className="max-w-7xl mx-auto">
         {/* Header row */}
         <div className="flex items-center justify-between gap-4 flex-wrap">
           <div className="flex items-baseline gap-3 flex-wrap">
@@ -475,7 +475,7 @@ function LatestUploads() {
 
   return (
     <section className="px-6 py-10">
-      <div className="max-w-6xl mx-auto">
+      <div className="max-w-7xl mx-auto">
         <div className="flex items-baseline justify-between mb-3">
           <h2 className="text-lg font-semibold">Latest uploads</h2>
           <Link to="/recent" className="text-xs text-primary hover:underline">
