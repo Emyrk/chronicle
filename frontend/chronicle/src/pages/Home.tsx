@@ -136,18 +136,6 @@ function formatDurationMs(ms: number | null): string {
   return `${minutes}:${String(seconds).padStart(2, "0")}`;
 }
 
-function formatRelativeTime(dateStr: string): string {
-  const date = new Date(dateStr);
-  const diffMins = Math.floor((Date.now() - date.getTime()) / 60000);
-  if (diffMins < 1) return "just now";
-  if (diffMins < 60) return `${diffMins}m ago`;
-  const diffHours = Math.floor(diffMins / 60);
-  if (diffHours < 24) return `${diffHours}h ago`;
-  const diffDays = Math.floor(diffHours / 24);
-  if (diffDays < 7) return `${diffDays}d ago`;
-  return date.toLocaleDateString(undefined, { month: "short", day: "numeric" });
-}
-
 interface SpotlightBoard {
   difficulty: string;
   maxPlayers: number;
@@ -331,7 +319,7 @@ function MobileSpotlight({
       <h2 className="text-2xl font-semibold tracking-tight mt-1">{spot.name}</h2>
 
       {/* Raid picker: horizontally scrollable abbrev pills */}
-      <div className="flex gap-2 mt-3 overflow-x-auto -mx-4 px-4 pb-1 [scrollbar-width:none]">
+      <div className="flex gap-2 mt-3 overflow-x-auto -mx-4 px-4 pb-3 border-b [scrollbar-width:none]">
         {raids.map((r, i) => (
           <button
             key={r.name}
@@ -958,31 +946,7 @@ function LatestUploads() {
             No uploads yet.
           </div>
         )}
-        {/* Mobile: compact rows (design 1d's "fresh off raid night"). */}
-        <div className="flex flex-col gap-2 md:hidden">
-          {uploads.map((u) => (
-            <Link
-              key={u.id}
-              to={u.slug ? `/instances/${u.slug}` : `/instances/${u.id}`}
-              className="rounded-lg border bg-muted/20 px-3.5 py-3 hover:bg-muted/40"
-            >
-              <div className="flex items-baseline justify-between gap-2">
-                <span className="font-semibold text-sm truncate">{u.name}</span>
-                <span className="text-xs text-muted-foreground shrink-0">
-                  {formatRelativeTime(u.uploaded_at)}
-                </span>
-              </div>
-              <div className="mt-0.5 text-xs text-muted-foreground truncate">
-                <span className="text-(--tertiary)">{u.guild_name ?? u.uploader_name}</span>
-                {" · "}
-                {formatDurationMs(u.duration_ms)} · {u.player_count} players ·{" "}
-                {u.boss_kills}/{u.boss_count} bosses
-              </div>
-            </Link>
-          ))}
-        </div>
-        {/* Desktop: raid cards. */}
-        <div className="hidden md:grid grid-cols-2 lg:grid-cols-4 gap-4">
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
           {uploads.map((u) => (
             <RaidCard key={u.id} instance={u} />
           ))}
