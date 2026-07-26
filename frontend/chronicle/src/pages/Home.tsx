@@ -286,17 +286,34 @@ function RaidSpotlight() {
     loadBoardSelections,
   );
 
+  const distinctSizes = useMemo(
+    () => (spot ? [...new Set(spot.boards.map((b) => b.maxPlayers))] : []),
+    [spot],
+  );
+  const distinctDiffs = useMemo(
+    () => (spot ? [...new Set(spot.boards.map((b) => b.difficulty))] : []),
+    [spot],
+  );
+
+  // When every board is uniquely identified by its size (e.g. difficulty_name
+  // is "10 Player"/"25 Player" and just mirrors max_players), the difficulty
+  // toggle would duplicate the size toggle — collapse to a single toggle.
+  const axesRedundant =
+    spot != null &&
+    distinctSizes.length === spot.boards.length &&
+    distinctDiffs.length === spot.boards.length;
+
   const sizeOptions = useMemo(() => {
-    if (!spot) return [];
-    const sizes = [...new Set(spot.boards.map((b) => b.maxPlayers))].sort((a, b) => b - a);
-    return sizes.map((s) => ({ value: String(s), label: s > 0 ? `${s}-man` : "Any" }));
-  }, [spot]);
+    if (!spot || distinctSizes.length < 2) return [];
+    return [...distinctSizes]
+      .sort((a, b) => b - a)
+      .map((s) => ({ value: String(s), label: s > 0 ? `${s}-man` : "Any" }));
+  }, [spot, distinctSizes]);
 
   const difficultyOptions = useMemo(() => {
-    if (!spot) return [];
-    const diffs = [...new Set(spot.boards.map((b) => b.difficulty))].sort();
-    return diffs.map((d) => ({ value: d, label: d || "Normal" }));
-  }, [spot]);
+    if (!spot || axesRedundant || distinctDiffs.length < 2) return [];
+    return [...distinctDiffs].sort().map((d) => ({ value: d, label: d || "Normal" }));
+  }, [spot, axesRedundant, distinctDiffs]);
 
   // Resolve the active board: saved selection if it still exists,
   // otherwise the board with the most kills.
@@ -312,25 +329,27 @@ function RaidSpotlight() {
     return [...spot.boards].sort((a, b) => b.kills - a.kills)[0];
   }, [spot, boardSelections]);
 
+  // Change one axis of the board selection. Prefers the exact combo with the
+  // other axis unchanged; falls back to the best-populated board on the
+  // changed axis so a click always lands on a real board.
   const selectBoard = useCallback(
-    (difficulty: string, maxPlayers: number) => {
-      if (!spot) return;
-      // Prefer an exact board; fall back to the best-populated board matching
-      // the changed axis so a stale combo never strands the user.
-      const exact = spot.boards.find(
-        (b) => b.difficulty === difficulty && b.maxPlayers === maxPlayers,
+    (axis: "size" | "difficulty", value: string) => {
+      if (!spot || !activeBoard) return;
+      const matches = spot.boards.filter((b) =>
+        axis === "size" ? b.maxPlayers === Number(value) : b.difficulty === value,
       );
+      if (matches.length === 0) return;
       const board =
-        exact ??
-        [...spot.boards]
-          .filter((b) => b.difficulty === difficulty || b.maxPlayers === maxPlayers)
-          .sort((a, b) => b.kills - a.kills)[0];
-      if (!board) return;
+        matches.find((b) =>
+          axis === "size"
+            ? b.difficulty === activeBoard.difficulty
+            : b.maxPlayers === activeBoard.maxPlayers,
+        ) ?? [...matches].sort((a, b) => b.kills - a.kills)[0];
       const sel = { difficulty: board.difficulty, maxPlayers: board.maxPlayers };
       setBoardSelections((prev) => ({ ...prev, [spot.name]: sel }));
       saveBoardSelection(spot.name, sel);
     },
-    [spot],
+    [spot, activeBoard],
   );
 
   const goRaid = useCallback((i: number) => {
@@ -355,11 +374,13 @@ function RaidSpotlight() {
     return () => clearInterval(timer);
   }, [paused, raids.length]);
 
-  // Only pass a difficulty filter when the raid has multiple difficulty
-  // boards; single-board raids keep the unfiltered (legacy) behavior.
-  const difficultyFilter = difficultyOptions.length > 1 ? activeBoard?.difficulty : undefined;
+  // Only filter when the raid has multiple boards on that axis; single-board
+  // raids keep the unfiltered (legacy) behavior. Uses the underlying board
+  // axes, not the visible toggles, since the difficulty toggle may be
+  // collapsed when it mirrors the size axis.
+  const difficultyFilter = distinctDiffs.length > 1 ? activeBoard?.difficulty : undefined;
   const maxPlayersFilter =
-    sizeOptions.length > 1 && activeBoard && activeBoard.maxPlayers > 0
+    distinctSizes.length > 1 && activeBoard && activeBoard.maxPlayers > 0
       ? activeBoard.maxPlayers
       : undefined;
 
@@ -420,12 +441,12 @@ function RaidSpotlight() {
             <BoardToggle
               options={sizeOptions}
               selected={String(activeBoard?.maxPlayers ?? 0)}
-              onSelect={(v) => selectBoard(activeBoard?.difficulty ?? "", Number(v))}
+              onSelect={(v) => selectBoard("size", v)}
             />
             <BoardToggle
               options={difficultyOptions}
               selected={activeBoard?.difficulty ?? ""}
-              onSelect={(v) => selectBoard(v, activeBoard?.maxPlayers ?? 0)}
+              onSelect={(v) => selectBoard("difficulty", v)}
             />
             <span className="text-sm text-muted-foreground">
               {(activeBoard?.kills ?? spot.totalKills).toLocaleString()} kills logged
