@@ -8,6 +8,7 @@ import { formatClearDuration } from "./clearTimeUtils";
 interface RaidClearsConfig {
   displayMode: "cards" | "list";
   showBestTime: boolean;
+  showAvgTime: boolean;
   showLastCleared: boolean;
 }
 
@@ -65,11 +66,18 @@ function RaidClearCard({ clear, config }: { clear: GuildRaidClear; config: RaidC
           {clear.instance_name}
         </p>
         <div className="flex items-center justify-between gap-3 text-[11px] text-white/80">
-          {config.showBestTime && (
-            <span className="tabular-nums">
-              Best time: <span className="font-medium text-white">{formatClearDuration(clear.best_duration_ms)}</span>
-            </span>
-          )}
+          <span className="flex items-center gap-3">
+            {config.showBestTime && (
+              <span className="tabular-nums">
+                Best time: <span className="font-medium text-white">{formatClearDuration(clear.best_duration_ms)}</span>
+              </span>
+            )}
+            {config.showAvgTime && (
+              <span className="tabular-nums">
+                Avg: <span className="font-medium text-white">{formatClearDuration(clear.avg_duration_ms)}</span>
+              </span>
+            )}
+          </span>
           {config.showLastCleared && (
             <span className="ml-auto text-right">Last cleared {formatLastCleared(clear.last_cleared_at)}</span>
           )}
@@ -166,6 +174,14 @@ function RaidClearsContent({ config, position, guild }: GuildPanelRenderProps<Ra
               </span>
             </span>
           )}
+          {config.showAvgTime && (
+            <span className="text-xs text-muted-foreground tabular-nums">
+              Avg:{" "}
+              <span className="font-medium text-foreground">
+                {formatClearDuration(clear.avg_duration_ms)}
+              </span>
+            </span>
+          )}
           <span
             className="inline-flex items-center justify-center min-w-[2rem] px-2 py-0.5 rounded-full bg-primary/10 text-primary text-xs font-semibold tabular-nums"
             title={`Cleared ${clear.clear_count} times`}
@@ -204,6 +220,12 @@ export const RaidClearsPanel: GuildPanelDefinition<RaidClearsConfig> = {
       defaultValue: true,
     },
     {
+      name: "showAvgTime",
+      label: "Show average time",
+      type: "boolean",
+      defaultValue: true,
+    },
+    {
       name: "showLastCleared",
       label: "Show last cleared date",
       type: "boolean",
@@ -213,6 +235,7 @@ export const RaidClearsPanel: GuildPanelDefinition<RaidClearsConfig> = {
   defaultConfig: {
     displayMode: "cards",
     showBestTime: true,
+    showAvgTime: true,
     showLastCleared: true,
   },
   render: (props) => <RaidClearsContent {...props} />,

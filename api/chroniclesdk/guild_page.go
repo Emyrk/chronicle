@@ -169,22 +169,3 @@ type GuildRaidClear struct {
 type GuildRaidClearsResponse struct {
 	Clears []GuildRaidClear `json:"clears"`
 }
-
-// GuildClearTime is a single full clear of an instance by a guild.
-type GuildClearTime struct {
-	InstanceID     uuid.UUID `json:"instance_id"`
-	Slug           string    `json:"slug"`
-	InstanceName   string    `json:"instance_name"`
-	DifficultyName string    `json:"difficulty_name"`
-	DurationMs     int64     `json:"duration_ms"`
-	StartTime      time.Time `json:"start_time"`
-	CompletionTime time.Time `json:"completion_time"`
-	Qualified      bool      `json:"qualified"`
-}
-
-type GuildClearTimesResponse struct {
-	InstanceName   string           `json:"instance_name"`
-	Times          []GuildClearTime `json:"times"`
-	BestDurationMs int64            `json:"best_duration_ms"`
-	AvgDurationMs  int64            `json:"avg_duration_ms"`
-}

@@ -226,14 +226,6 @@ type sqlcQuerier interface {
 	GetWorld(ctx context.Context, id uuid.UUID) (World, error)
 	GetWorldByName(ctx context.Context, name string) (World, error)
 	GetWorldsByServer(ctx context.Context, serverID uuid.UUID) ([]World, error)
-	// Returns a guild's individual clears for one instance, newest first,
-	// used by the guild page "Clear Times" panel.
-	// Deduplicates by duplicate_group (best duration per group). Includes
-	// unqualified runs; the qualified flag is returned for display. Requires
-	// duration_ms > 0 to exclude incomplete runs (zero completion_time,
-	// negative sentinel duration).
-	// JOINs wow_server_realms so RLS tenant filtering cascades.
-	GuildClearTimes(ctx context.Context, arg GuildClearTimesParams) ([]GuildClearTimesRow, error)
 	// Returns per-instance clear counts and duration aggregates for a guild,
 	// used by the guild page "Raid Clears" panel.
 	// Deduplicates by duplicate_group so re-uploaded logs of the same raid count

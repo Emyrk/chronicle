@@ -3,7 +3,6 @@ import { RecentRaidsPanel } from "./RecentRaids";
 import { MarkdownPanel } from "./Markdown";
 import { CalendarPanel } from "./Calendar";
 import { RaidClearsPanel } from "./RaidClears";
-import { ClearTimesPanel } from "./ClearTimes";
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 type AnyPanelDefinition = GuildPanelDefinition<any>;
@@ -18,7 +17,6 @@ export const PANEL_REGISTRY: Record<string, AnyPanelDefinition> = {
   // leaderboard: LeaderboardPanel,
   calendar: CalendarPanel,
   raid_clears: RaidClearsPanel,
-  clear_times: ClearTimesPanel,
 };
 
 export type PanelType = keyof typeof PANEL_REGISTRY;

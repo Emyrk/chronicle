@@ -143,34 +143,3 @@ SELECT
 FROM deduped
 GROUP BY instance_name
 ORDER BY clear_count DESC, instance_name;
-
--- name: GuildClearTimes :many
--- Returns a guild's individual clears for one instance, newest first,
--- used by the guild page "Clear Times" panel.
--- Deduplicates by duplicate_group (best duration per group). Includes
--- unqualified runs; the qualified flag is returned for display. Requires
--- duration_ms > 0 to exclude incomplete runs (zero completion_time,
--- negative sentinel duration).
--- JOINs wow_server_realms so RLS tenant filtering cascades.
-WITH deduped AS (
-    SELECT DISTINCT ON (COALESCE(li.duplicate_group_id, li.id))
-        sr.instance_id,
-        sr.instance_name,
-        li.difficulty_name,
-        li.hashed_slug,
-        sr.duration_ms,
-        sr.start_time,
-        sr.completion_time,
-        sr.qualified
-    FROM instance_speedruns sr
-    JOIN log_instances li ON li.id = sr.instance_id
-    JOIN wow_server_realms wsr ON wsr.id = sr.realm_id
-    WHERE sr.guild_id = @guild_id :: uuid
-      AND sr.instance_name = @instance_name
-      AND sr.duration_ms > 0
-    ORDER BY COALESCE(li.duplicate_group_id, li.id), sr.duration_ms ASC
-)
-SELECT * FROM deduped
-ORDER BY completion_time DESC
-LIMIT 200;
-
