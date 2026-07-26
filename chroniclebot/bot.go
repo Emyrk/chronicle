@@ -69,14 +69,19 @@ func New(ctx context.Context, logger *slog.Logger, config Config) (*Bot, error) 
 	session.AddHandler(bot.onGuildMemberUpdate)
 	session.AddHandler(bot.onGuildMemberRemove)
 
-	bot.roles, err = bot.GetGuildRoles(bot.ChronicleGuildID())
-	if err != nil {
-		return nil, fmt.Errorf("fetch guild roles: %w", err)
-	}
-
 	err = bot.Open(ctx)
 	if err != nil {
 		return nil, fmt.Errorf("open bot session: %w", err)
+	}
+
+	// Pre-populate the roles cache. This is best-effort — a transient Discord
+	// API failure (rate-limit, CloudFlare HTML response, etc.) should not
+	// prevent the server from starting.
+	bot.roles, err = bot.GetGuildRoles(bot.ChronicleGuildID())
+	if err != nil {
+		bot.logger.Warn("initial guild role fetch failed, roles will be fetched on next call",
+			slog.String("error", err.Error()),
+		)
 	}
 
 	return bot, nil
