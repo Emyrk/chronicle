@@ -616,7 +616,6 @@ function RaidSpotlight() {
     encounter_names: bossEncounterNames,
     difficulty_names: difficultyFilter,
     max_players: maxPlayersFilter,
-    hide_unknowns: true,
     limit: 12,
   });
   const { data: boxPlotStats } = useRankingsStats({
