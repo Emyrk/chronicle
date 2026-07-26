@@ -134,11 +134,11 @@ function HeroSection() {
         </div>
         <div className="flex flex-col gap-3 min-w-56">
           {showUpload && (
-            <Button asChild size="lg">
+            <Button asChild size="lg" className="md:h-12 md:px-8 md:text-base">
               <Link to="/upload">{isAuthenticated ? "Upload a Log" : "Upload Your First Log"}</Link>
             </Button>
           )}
-          <Button variant="outline" size="lg" asChild>
+          <Button variant="outline" size="lg" asChild className="md:h-12 md:px-8 md:text-base">
             <Link to={isAuthenticated ? "/logs" : "/recent"}>
               {isAuthenticated ? "View Your Logs" : "View a Sample"}
             </Link>
