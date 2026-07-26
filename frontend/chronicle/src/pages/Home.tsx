@@ -4,6 +4,7 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { Pause, Play } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { useAuth } from "@/hooks/useAuth";
+import { useIsMobile } from "@/hooks/useIsMobile";
 import { useSiteConfig } from "@/api/queries";
 import {
   useRankingsEncounters,
@@ -12,6 +13,7 @@ import {
   useRankingsStats,
 } from "@/api/rankingsQueries";
 import type {
+  RankingsEntry,
   RecentInstancesResponse,
   SiteStats,
   SpeedrunGuildClearsEntry,
@@ -122,6 +124,30 @@ function formatTimer(secs: number): string {
   return `${m}:${String(s).padStart(2, "0")}`;
 }
 
+function formatDurationMs(ms: number | null): string {
+  if (!ms) return "—";
+  const totalSeconds = Math.floor(ms / 1000);
+  const hours = Math.floor(totalSeconds / 3600);
+  const minutes = Math.floor((totalSeconds % 3600) / 60);
+  const seconds = totalSeconds % 60;
+  if (hours > 0) {
+    return `${hours}:${String(minutes).padStart(2, "0")}:${String(seconds).padStart(2, "0")}`;
+  }
+  return `${minutes}:${String(seconds).padStart(2, "0")}`;
+}
+
+function formatRelativeTime(dateStr: string): string {
+  const date = new Date(dateStr);
+  const diffMins = Math.floor((Date.now() - date.getTime()) / 60000);
+  if (diffMins < 1) return "just now";
+  if (diffMins < 60) return `${diffMins}m ago`;
+  const diffHours = Math.floor(diffMins / 60);
+  if (diffHours < 24) return `${diffHours}h ago`;
+  const diffDays = Math.floor(diffHours / 24);
+  if (diffDays < 7) return `${diffDays}d ago`;
+  return date.toLocaleDateString(undefined, { month: "short", day: "numeric" });
+}
+
 interface SpotlightBoard {
   difficulty: string;
   maxPlayers: number;
@@ -218,9 +244,21 @@ function StatsStrip() {
   ];
   return (
     <section className="border-b bg-muted/30">
-      <div className="max-w-7xl mx-auto grid grid-cols-2 md:grid-cols-4">
+      {/* Mobile: single compact row of three stats (design 1d). */}
+      <div className="flex md:hidden items-center justify-between px-5 py-3">
+        {cells.slice(0, 3).map((c) => (
+          <div key={c.k} className="flex flex-col gap-0.5">
+            <span className="font-mono text-sm font-semibold text-(--tertiary)">
+              {c.v != null ? c.v.toLocaleString() : "—"}
+            </span>
+            <span className="text-[10px] text-muted-foreground">{c.k}</span>
+          </div>
+        ))}
+      </div>
+      {/* Desktop: four bordered cells. */}
+      <div className="max-w-7xl mx-auto hidden md:grid grid-cols-4">
         {cells.map((c) => (
-          <div key={c.k} className="px-6 py-4 border-r last:border-r-0 max-md:even:border-r-0">
+          <div key={c.k} className="px-6 py-4 border-r last:border-r-0">
             <div className="font-mono text-2xl font-bold text-(--tertiary)">
               {c.v != null ? c.v.toLocaleString() : "—"}
             </div>
@@ -232,8 +270,185 @@ function StatsStrip() {
   );
 }
 
+type MobileBoardTab = "speed" | "dps" | "guild";
+
+const MEDAL_TEXT = ["text-yellow-400", "text-slate-300", "text-amber-600"];
+
+/** Mobile spotlight (design 1d): segmented tabs over a single compact list. */
+function MobileSpotlight({
+  raids,
+  idx,
+  spot,
+  goRaid,
+  sizeOptions,
+  difficultyOptions,
+  activeBoard,
+  selectBoard,
+  speedruns,
+  parses,
+  guildClears,
+  diffQS,
+}: {
+  raids: SpotlightRaid[];
+  idx: number;
+  spot: SpotlightRaid;
+  goRaid: (i: number) => void;
+  sizeOptions: { value: string; label: string }[];
+  difficultyOptions: { value: string; label: string }[];
+  activeBoard: SpotlightBoard | undefined;
+  selectBoard: (axis: "size" | "difficulty", value: string) => void;
+  speedruns: SpeedrunLeaderboardEntry[];
+  parses: readonly RankingsEntry[];
+  guildClears: SpeedrunGuildClearsEntry[];
+  diffQS: string;
+}) {
+  const [tab, setTab] = useState<MobileBoardTab>("speed");
+
+  const tabs: { id: MobileBoardTab; label: string }[] = [
+    { id: "speed", label: "Speedruns" },
+    { id: "dps", label: "Top DPS" },
+    { id: "guild", label: "Clears" },
+  ];
+
+  const footerLink =
+    tab === "speed"
+      ? `/leaderboards?tab=speedrun&instance=${encodeURIComponent(spot.name)}${diffQS}`
+      : tab === "dps"
+        ? `/leaderboards?instance=${encodeURIComponent(spot.name)}&tab=leaderboard${diffQS}`
+        : null;
+
+  const rowClass =
+    "flex items-center gap-2.5 px-3.5 py-3 border-b border-border/50 text-sm";
+  const empty = (
+    <div className="px-4 py-8 text-center text-sm text-muted-foreground">Nothing here yet.</div>
+  );
+
+  return (
+    <section className="px-4 py-8 border-b">
+      <span className="font-mono text-[11px] tracking-[0.2em] text-(--tertiary) uppercase">
+        Raid Spotlight
+      </span>
+      <h2 className="text-2xl font-semibold tracking-tight mt-1">{spot.name}</h2>
+
+      {/* Raid picker: horizontally scrollable abbrev pills */}
+      <div className="flex gap-2 mt-3 overflow-x-auto -mx-4 px-4 pb-1 [scrollbar-width:none]">
+        {raids.map((r, i) => (
+          <button
+            key={r.name}
+            type="button"
+            onClick={() => goRaid(i)}
+            className={`shrink-0 px-3 py-1.5 rounded-md border font-mono text-xs cursor-pointer ${
+              i === idx
+                ? "border-primary/40 bg-primary/15 text-(--tertiary)"
+                : "border-border bg-muted/30 text-muted-foreground"
+            }`}
+          >
+            {r.abbrev}
+          </button>
+        ))}
+      </div>
+
+      {(sizeOptions.length > 1 || difficultyOptions.length > 1) && (
+        <div className="flex gap-2 mt-3 flex-wrap">
+          <BoardToggle
+            options={sizeOptions}
+            selected={String(activeBoard?.maxPlayers ?? 0)}
+            onSelect={(v) => selectBoard("size", v)}
+          />
+          <BoardToggle
+            options={difficultyOptions}
+            selected={activeBoard?.difficulty ?? ""}
+            onSelect={(v) => selectBoard("difficulty", v)}
+          />
+        </div>
+      )}
+
+      {/* Board tabs */}
+      <div className="flex gap-1.5 mt-4">
+        {tabs.map((t) => (
+          <button
+            key={t.id}
+            type="button"
+            onClick={() => setTab(t.id)}
+            className={`px-3.5 py-2 rounded-md text-sm cursor-pointer ${
+              tab === t.id
+                ? "bg-primary/15 text-(--tertiary) font-medium"
+                : "bg-muted/40 text-muted-foreground"
+            }`}
+          >
+            {t.label}
+          </button>
+        ))}
+      </div>
+
+      <div className="mt-3 rounded-lg border bg-muted/20 overflow-hidden">
+        {tab === "speed" &&
+          (speedruns.length === 0
+            ? empty
+            : speedruns.slice(0, 5).map((r, i) => (
+                <div key={`${r.instance_id}`} className={rowClass}>
+                  <span
+                    className={`w-5 font-mono text-xs font-semibold ${MEDAL_TEXT[i] ?? "text-muted-foreground"}`}
+                  >
+                    {i + 1}
+                  </span>
+                  <div className="flex-1 min-w-0">
+                    <div className="font-medium truncate">{r.guild_name}</div>
+                    <div className="text-xs text-muted-foreground truncate">
+                      {r.realm_name} · {r.player_count} players
+                    </div>
+                  </div>
+                  <span className="font-mono font-bold text-(--tertiary)">
+                    {formatDurationMs(r.duration_ms)}
+                  </span>
+                </div>
+              )))}
+        {tab === "dps" &&
+          (parses.length === 0
+            ? empty
+            : parses.slice(0, 5).map((r, i) => (
+                <div key={r.id} className={rowClass}>
+                  <span className="w-5 font-mono text-xs text-muted-foreground">{i + 1}</span>
+                  <div className="flex-1 min-w-0">
+                    <div
+                      className="font-medium truncate"
+                      style={{ color: CLASS_CSS_VAR[r.player_class] }}
+                    >
+                      {r.player_name}
+                    </div>
+                    <div className="text-xs text-muted-foreground truncate">
+                      {r.player_spec}
+                      {r.guild_name ? ` · ${r.guild_name}` : ""}
+                    </div>
+                  </div>
+                  <span className="font-mono font-bold">{Math.round(r.dps)}/s</span>
+                </div>
+              )))}
+        {tab === "guild" &&
+          (guildClears.length === 0
+            ? empty
+            : guildClears.slice(0, 5).map((g, i) => (
+                <div key={g.guild_id} className={rowClass}>
+                  <span className="w-5 font-mono text-xs text-muted-foreground">{i + 1}</span>
+                  <span className="flex-1 font-medium truncate">{g.guild_name}</span>
+                  <span className="font-mono font-bold text-(--tertiary)">{g.clears}</span>
+                </div>
+              )))}
+        {footerLink && (
+          <div className="px-4 py-3 text-center">
+            <Link to={footerLink} className="text-xs text-primary hover:underline">
+              Open full board →
+            </Link>
+          </div>
+        )}
+      </div>
+    </section>
+  );
+}
+
 /** Rotating raid spotlight: speedrun podium, top parses, guild clears, best parse by spec. */
 function RaidSpotlight() {
+  const isMobile = useIsMobile();
   const { data: instanceSummaries } = useRankingsInstances();
 
   // One tab per raid; each raid keeps its per-(difficulty, size) boards so the
@@ -355,7 +570,8 @@ function RaidSpotlight() {
   }, []);
 
   useEffect(() => {
-    if (paused || raids.length <= 1) return;
+    // No auto-rotation on mobile: the spotlight is a manual browser there.
+    if (paused || isMobile || raids.length <= 1) return;
     const timer = setInterval(() => {
       setRemaining((r) => {
         if (r > 1) return r - 1;
@@ -368,7 +584,7 @@ function RaidSpotlight() {
       });
     }, 1000);
     return () => clearInterval(timer);
-  }, [paused, raids.length]);
+  }, [paused, isMobile, raids.length]);
 
   // Only filter when the raid has multiple boards on that axis; single-board
   // raids keep the unfiltered (legacy) behavior. Uses the underlying board
@@ -441,6 +657,25 @@ function RaidSpotlight() {
   const diffQS = difficultyFilter !== undefined ? `&diff=${encodeURIComponent(difficultyFilter)}` : "";
 
   if (raids.length === 0) return null;
+
+  if (isMobile) {
+    return (
+      <MobileSpotlight
+        raids={raids}
+        idx={idx}
+        spot={spot}
+        goRaid={goRaid}
+        sizeOptions={sizeOptions}
+        difficultyOptions={difficultyOptions}
+        activeBoard={activeBoard}
+        selectBoard={selectBoard}
+        speedruns={speedruns ?? []}
+        parses={parses}
+        guildClears={guildClears ?? []}
+        diffQS={diffQS}
+      />
+    );
+  }
 
   return (
     <section className="px-6 py-10 border-b">
@@ -709,7 +944,31 @@ function LatestUploads() {
             No uploads yet.
           </div>
         )}
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+        {/* Mobile: compact rows (design 1d's "fresh off raid night"). */}
+        <div className="flex flex-col gap-2 md:hidden">
+          {uploads.map((u) => (
+            <Link
+              key={u.id}
+              to={u.slug ? `/instances/${u.slug}` : `/instances/${u.id}`}
+              className="rounded-lg border bg-muted/20 px-3.5 py-3 hover:bg-muted/40"
+            >
+              <div className="flex items-baseline justify-between gap-2">
+                <span className="font-semibold text-sm truncate">{u.name}</span>
+                <span className="text-xs text-muted-foreground shrink-0">
+                  {formatRelativeTime(u.uploaded_at)}
+                </span>
+              </div>
+              <div className="mt-0.5 text-xs text-muted-foreground truncate">
+                <span className="text-(--tertiary)">{u.guild_name ?? u.uploader_name}</span>
+                {" · "}
+                {formatDurationMs(u.duration_ms)} · {u.player_count} players ·{" "}
+                {u.boss_kills}/{u.boss_count} bosses
+              </div>
+            </Link>
+          ))}
+        </div>
+        {/* Desktop: raid cards. */}
+        <div className="hidden md:grid grid-cols-2 lg:grid-cols-4 gap-4">
           {uploads.map((u) => (
             <RaidCard key={u.id} instance={u} />
           ))}
