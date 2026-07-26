@@ -20,6 +20,17 @@ function formatLastCleared(iso: string): string {
   });
 }
 
+// Panels saved before a toggle existed have no key for it in their stored
+// config; treat missing as enabled so new stats show up without re-saving.
+function normalizeConfig(config: RaidClearsConfig): RaidClearsConfig {
+  return {
+    ...config,
+    showBestTime: config.showBestTime !== false,
+    showAvgTime: config.showAvgTime !== false,
+    showLastCleared: config.showLastCleared !== false,
+  };
+}
+
 function RaidClearCard({ clear, config }: { clear: GuildRaidClear; config: RaidClearsConfig }) {
   const [imageError, setImageError] = useState(false);
   const backgroundImage = getInstanceBackground(clear.instance_name);
@@ -87,7 +98,8 @@ function RaidClearCard({ clear, config }: { clear: GuildRaidClear; config: RaidC
   );
 }
 
-function RaidClearsContent({ config, position, guild }: GuildPanelRenderProps<RaidClearsConfig>) {
+function RaidClearsContent({ config: rawConfig, position, guild }: GuildPanelRenderProps<RaidClearsConfig>) {
+  const config = normalizeConfig(rawConfig);
   const [clears, setClears] = useState<GuildRaidClear[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
