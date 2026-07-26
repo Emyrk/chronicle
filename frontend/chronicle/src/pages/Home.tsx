@@ -421,14 +421,21 @@ function RaidSpotlight() {
         s.player_spec.toUpperCase() !== "UNKNOWN" &&
         s.player_class.toUpperCase() !== "UNKNOWN",
     );
-    const sorted = known.sort((a, b) => b.max_dps - a.max_dps).slice(0, 6);
-    const maxDps = sorted[0]?.max_dps ?? 1;
+    // Rank by median: the "typical" parse, not a single outlier's best.
+    const sorted = known.sort((a, b) => b.median_dps - a.median_dps).slice(0, 6);
+    const scale = Math.max(...sorted.map((s) => s.max_dps), 1);
+    const pct = (v: number) => (v / scale) * 100;
     return sorted.map((s) => ({
       key: `${s.player_class}-${s.player_spec}`,
       spec: s.player_spec,
       color: CLASS_CSS_VAR[s.player_class] ?? "var(--color-class-unknown)",
-      dps: Math.round(s.max_dps),
-      pct: Math.round((s.max_dps / maxDps) * 100),
+      dps: Math.round(s.median_dps),
+      // Compact box plot geometry, as percentages of the card width.
+      minPct: pct(s.min_dps),
+      maxPct: pct(s.max_dps),
+      q1Pct: pct(s.q1_dps),
+      q3Pct: pct(s.q3_dps),
+      medianPct: pct(s.median_dps),
     }));
   }, [boxPlotStats]);
 
@@ -635,7 +642,7 @@ function RaidSpotlight() {
             {/* Best parse by spec */}
             <div className="rounded-lg border bg-muted/20 overflow-hidden">
               <div className="flex items-center justify-between px-4 py-3 border-b bg-muted/40">
-                <span className="text-sm font-semibold">Best parse by spec</span>
+                <span className="text-sm font-semibold">Best typical parse by spec</span>
                 <Link
                   to={`/leaderboards?instance=${encodeURIComponent(spot.name)}${diffQS}`}
                   className="text-xs text-primary hover:underline"
@@ -654,10 +661,27 @@ function RaidSpotlight() {
                     <span className="w-27 text-xs truncate" style={{ color: s.color }}>
                       {s.spec}
                     </span>
-                    <div className="flex-1 h-2 rounded-sm bg-muted overflow-hidden">
+                    {/* Compact box plot: min–max whisker, q1–q3 box, median tick. */}
+                    <div className="relative flex-1 h-3">
                       <div
-                        className="h-full opacity-75"
-                        style={{ width: `${s.pct}%`, backgroundColor: s.color }}
+                        className="absolute top-1/2 -translate-y-1/2 h-px opacity-50"
+                        style={{
+                          left: `${s.minPct}%`,
+                          width: `${s.maxPct - s.minPct}%`,
+                          backgroundColor: s.color,
+                        }}
+                      />
+                      <div
+                        className="absolute inset-y-0 rounded-xs opacity-70"
+                        style={{
+                          left: `${s.q1Pct}%`,
+                          width: `${Math.max(s.q3Pct - s.q1Pct, 0.5)}%`,
+                          backgroundColor: s.color,
+                        }}
+                      />
+                      <div
+                        className="absolute inset-y-0 w-0.5 bg-foreground"
+                        style={{ left: `${s.medianPct}%` }}
                       />
                     </div>
                     <span className="w-10 font-mono text-xs text-muted-foreground text-right">
