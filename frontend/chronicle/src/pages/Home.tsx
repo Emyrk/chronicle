@@ -588,10 +588,10 @@ function RaidSpotlight() {
           </div>
 
           <div className="flex flex-col gap-6">
-            {/* Guilds by clears */}
+            {/* # Clears by Guild */}
             <div className="rounded-lg border bg-muted/20 overflow-hidden">
               <div className="flex items-center justify-between px-4 py-3 border-b bg-muted/40">
-                <span className="text-sm font-semibold">Guilds by clears</span>
+                <span className="text-sm font-semibold"># Clears by Guild</span>
                 {/* TODO: link to a dedicated guild-clears board once one exists. */}
               </div>
               {(!guildClears || guildClears.length === 0) && (
