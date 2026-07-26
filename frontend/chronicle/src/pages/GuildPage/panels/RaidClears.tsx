@@ -1,15 +1,85 @@
 import { useEffect, useState } from "react";
 import { Trophy, AlertCircle } from "lucide-react";
 import type { GuildRaidClear, GuildRaidClearsResponse } from "@/api/typesGenerated";
+import { getInstanceBackground } from "@/pages/Logs/utils/instanceImages";
 import type { GuildPanelDefinition, GuildPanelRenderProps } from "./types";
 import { formatClearDuration } from "./clearTimeUtils";
 
 interface RaidClearsConfig {
+  displayMode: "cards" | "list";
   showBestTime: boolean;
   showLastCleared: boolean;
 }
 
-function RaidClearsContent({ config, guild }: GuildPanelRenderProps<RaidClearsConfig>) {
+function formatLastCleared(iso: string): string {
+  return new Date(iso).toLocaleDateString(undefined, {
+    year: "numeric",
+    month: "short",
+    day: "numeric",
+  });
+}
+
+function RaidClearCard({ clear, config }: { clear: GuildRaidClear; config: RaidClearsConfig }) {
+  const [imageError, setImageError] = useState(false);
+  const backgroundImage = getInstanceBackground(clear.instance_name);
+
+  return (
+    <div className="relative h-28 rounded-lg overflow-hidden group">
+      {/* Solid color fallback background */}
+      <div className="absolute inset-0 bg-gradient-to-br from-slate-800 to-slate-900" />
+
+      {/* Background image - cropped to hide top/bottom decorative borders */}
+      {!imageError && (
+        <img
+          src={backgroundImage}
+          alt=""
+          onError={() => setImageError(true)}
+          className="absolute transition-transform duration-300 group-hover:scale-105 object-cover"
+          style={{
+            objectPosition: "center 35%",
+            top: "-15%",
+            bottom: "-10%",
+            left: 0,
+            right: 0,
+            width: "100%",
+            height: "125%",
+          }}
+        />
+      )}
+
+      {/* Dark gradient overlay for text readability */}
+      <div className="absolute inset-0 bg-gradient-to-t from-black/90 via-black/50 to-black/30" />
+
+      {/* Clear count badge - top right */}
+      <div
+        className="absolute top-2 right-2 z-10 flex items-center gap-1 bg-black/60 backdrop-blur-sm text-white px-2 py-0.5 rounded-full text-xs font-semibold tabular-nums"
+        title={`${clear.clear_count} clears`}
+      >
+        <Trophy className="h-3 w-3 text-amber-400" />
+        {clear.clear_count}
+      </div>
+
+      {/* Bottom text */}
+      <div className="absolute inset-x-0 bottom-0 z-10 p-2.5">
+        <p className="text-sm font-semibold text-white truncate drop-shadow">
+          {clear.instance_name}
+        </p>
+        <div className="flex items-center gap-3 text-[11px] text-white/80">
+          {config.showBestTime && (
+            <span className="tabular-nums">
+              Best time: <span className="font-medium text-white">{formatClearDuration(clear.best_duration_ms)}</span>
+            </span>
+          )}
+          {config.showLastCleared && (
+            <span>Last cleared {formatLastCleared(clear.last_cleared_at)}</span>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function RaidClearsContent({ config, position, guild }: GuildPanelRenderProps<RaidClearsConfig>) {
   const [clears, setClears] = useState<GuildRaidClear[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -61,6 +131,21 @@ function RaidClearsContent({ config, guild }: GuildPanelRenderProps<RaidClearsCo
     );
   }
 
+  if (config.displayMode !== "list") {
+    // Card view (default) - derive columns from panel grid width
+    const cols = position.w >= 9 ? 3 : position.w >= 6 ? 2 : 1;
+    return (
+      <div
+        className="grid gap-3 p-1"
+        style={{ gridTemplateColumns: `repeat(${cols}, minmax(0, 1fr))` }}
+      >
+        {clears.map((clear) => (
+          <RaidClearCard key={clear.instance_name} clear={clear} config={config} />
+        ))}
+      </div>
+    );
+  }
+
   return (
     <div className="flex flex-col divide-y divide-border/50 p-1">
       {clears.map((clear) => (
@@ -69,18 +154,16 @@ function RaidClearsContent({ config, guild }: GuildPanelRenderProps<RaidClearsCo
             <p className="text-sm font-medium truncate">{clear.instance_name}</p>
             {config.showLastCleared && (
               <p className="text-xs text-muted-foreground">
-                Last cleared{" "}
-                {new Date(clear.last_cleared_at).toLocaleDateString(undefined, {
-                  year: "numeric",
-                  month: "short",
-                  day: "numeric",
-                })}
+                Last cleared {formatLastCleared(clear.last_cleared_at)}
               </p>
             )}
           </div>
           {config.showBestTime && (
-            <span className="text-xs text-muted-foreground tabular-nums" title="Best clear time">
-              {formatClearDuration(clear.best_duration_ms)}
+            <span className="text-xs text-muted-foreground tabular-nums">
+              Best time:{" "}
+              <span className="font-medium text-foreground">
+                {formatClearDuration(clear.best_duration_ms)}
+              </span>
             </span>
           )}
           <span
@@ -105,8 +188,18 @@ export const RaidClearsPanel: GuildPanelDefinition<RaidClearsConfig> = {
   maxSize: { w: 12, h: 8 },
   configSchema: [
     {
+      name: "displayMode",
+      label: "Display",
+      type: "select",
+      options: [
+        { value: "cards", label: "Show as cards" },
+        { value: "list", label: "Compact list" },
+      ],
+      defaultValue: "cards",
+    },
+    {
       name: "showBestTime",
-      label: "Show best clear time",
+      label: "Show best time",
       type: "boolean",
       defaultValue: true,
     },
@@ -118,6 +211,7 @@ export const RaidClearsPanel: GuildPanelDefinition<RaidClearsConfig> = {
     },
   ],
   defaultConfig: {
+    displayMode: "cards",
     showBestTime: true,
     showLastCleared: true,
   },
