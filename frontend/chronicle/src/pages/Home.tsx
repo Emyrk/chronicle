@@ -391,7 +391,7 @@ function RaidSpotlight() {
     difficulty_names: difficultyFilter,
     max_players: maxPlayersFilter,
     hide_unknowns: true,
-    limit: 8,
+    limit: 12,
   });
   const { data: boxPlotStats } = useRankingsStats({
     instance_names: spot?.name ?? "",
@@ -532,7 +532,7 @@ function RaidSpotlight() {
         {/* Boards */}
         <div className="grid grid-cols-1 lg:grid-cols-[1.55fr_1fr] gap-6 mt-6">
           {/* Top parses */}
-          <div className="rounded-lg border bg-muted/20 overflow-hidden self-start">
+          <div className="rounded-lg border bg-muted/20 overflow-hidden">
             <div className="flex items-center justify-between px-4 py-3 border-b bg-muted/40">
               <span className="text-sm font-semibold">Top parses · {spot.abbrev}</span>
               <Link
@@ -585,24 +585,37 @@ function RaidSpotlight() {
                   No qualified clears yet.
                 </div>
               )}
-              {guildClears?.map((g, i) => (
-                <div
-                  key={g.guild_id}
-                  className="flex items-center gap-3 px-4 py-2.5 border-b border-border/50 last:border-b-0 hover:bg-muted/40 text-sm"
-                >
-                  <span className="font-mono text-xs text-muted-foreground w-4">{i + 1}</span>
-                  <span className="flex-1 font-medium truncate">{g.guild_name}</span>
-                  <div className="w-16 h-1.5 rounded-full bg-muted overflow-hidden">
+              {/* Always render 5 rows (padding with placeholders) so this
+                  card's height is stable across raids. */}
+              {guildClears &&
+                guildClears.length > 0 &&
+                Array.from({ length: 5 }, (_, i) => {
+                  const g = guildClears[i];
+                  return (
                     <div
-                      className="h-full bg-primary"
-                      style={{ width: `${Math.round((g.clears / maxClears) * 100)}%` }}
-                    />
-                  </div>
-                  <span className="font-mono text-xs font-bold text-(--tertiary) w-9 text-right">
-                    {g.clears}
-                  </span>
-                </div>
-              ))}
+                      key={g?.guild_id ?? `empty-${i}`}
+                      className="flex items-center gap-3 px-4 py-2.5 border-b border-border/50 last:border-b-0 hover:bg-muted/40 text-sm"
+                    >
+                      <span className="font-mono text-xs text-muted-foreground w-4">{i + 1}</span>
+                      {g ? (
+                        <>
+                          <span className="flex-1 font-medium truncate">{g.guild_name}</span>
+                          <div className="w-16 h-1.5 rounded-full bg-muted overflow-hidden">
+                            <div
+                              className="h-full bg-primary"
+                              style={{ width: `${Math.round((g.clears / maxClears) * 100)}%` }}
+                            />
+                          </div>
+                          <span className="font-mono text-xs font-bold text-(--tertiary) w-9 text-right">
+                            {g.clears}
+                          </span>
+                        </>
+                      ) : (
+                        <span className="flex-1 text-muted-foreground/50">—</span>
+                      )}
+                    </div>
+                  );
+                })}
             </div>
 
             {/* Best parse by spec */}
