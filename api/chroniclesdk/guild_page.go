@@ -154,3 +154,37 @@ type GuildJoinRequest struct {
 type CreateJoinRequestBody struct {
 	Message string `json:"message"`
 }
+
+// Guild Speedruns (guild page panels)
+
+// GuildRaidClear is a per-instance clear summary for a guild.
+type GuildRaidClear struct {
+	InstanceName   string    `json:"instance_name"`
+	ClearCount     int64     `json:"clear_count"`
+	BestDurationMs int64     `json:"best_duration_ms"`
+	AvgDurationMs  int64     `json:"avg_duration_ms"`
+	LastClearedAt  time.Time `json:"last_cleared_at"`
+}
+
+type GuildRaidClearsResponse struct {
+	Clears []GuildRaidClear `json:"clears"`
+}
+
+// GuildClearTime is a single full clear of an instance by a guild.
+type GuildClearTime struct {
+	InstanceID     uuid.UUID `json:"instance_id"`
+	Slug           string    `json:"slug"`
+	InstanceName   string    `json:"instance_name"`
+	DifficultyName string    `json:"difficulty_name"`
+	DurationMs     int64     `json:"duration_ms"`
+	StartTime      time.Time `json:"start_time"`
+	CompletionTime time.Time `json:"completion_time"`
+	Qualified      bool      `json:"qualified"`
+}
+
+type GuildClearTimesResponse struct {
+	InstanceName   string           `json:"instance_name"`
+	Times          []GuildClearTime `json:"times"`
+	BestDurationMs int64            `json:"best_duration_ms"`
+	AvgDurationMs  int64            `json:"avg_duration_ms"`
+}

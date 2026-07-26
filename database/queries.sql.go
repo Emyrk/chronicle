@@ -8066,6 +8066,142 @@ func (q *sqlQuerier) GetInstanceSpeedrun(ctx context.Context, instanceID uuid.UU
 	return i, err
 }
 
+const guildClearTimes = `-- name: GuildClearTimes :many
+WITH deduped AS (
+    SELECT DISTINCT ON (COALESCE(li.duplicate_group_id, li.id))
+        sr.instance_id,
+        sr.instance_name,
+        li.difficulty_name,
+        li.hashed_slug,
+        sr.duration_ms,
+        sr.start_time,
+        sr.completion_time,
+        sr.qualified
+    FROM instance_speedruns sr
+    JOIN log_instances li ON li.id = sr.instance_id
+    JOIN wow_server_realms wsr ON wsr.id = sr.realm_id
+    WHERE sr.guild_id = $1 :: uuid
+      AND sr.instance_name = $2
+    ORDER BY COALESCE(li.duplicate_group_id, li.id), sr.duration_ms ASC
+)
+SELECT instance_id, instance_name, difficulty_name, hashed_slug, duration_ms, start_time, completion_time, qualified FROM deduped
+ORDER BY completion_time DESC
+LIMIT 200
+`
+
+type GuildClearTimesParams struct {
+	GuildID      uuid.UUID `db:"guild_id" json:"guild_id"`
+	InstanceName string    `db:"instance_name" json:"instance_name"`
+}
+
+type GuildClearTimesRow struct {
+	InstanceID     uuid.UUID          `db:"instance_id" json:"instance_id"`
+	InstanceName   string             `db:"instance_name" json:"instance_name"`
+	DifficultyName string             `db:"difficulty_name" json:"difficulty_name"`
+	HashedSlug     pgtype.Text        `db:"hashed_slug" json:"hashed_slug"`
+	DurationMs     int64              `db:"duration_ms" json:"duration_ms"`
+	StartTime      pgtype.Timestamptz `db:"start_time" json:"start_time"`
+	CompletionTime pgtype.Timestamptz `db:"completion_time" json:"completion_time"`
+	Qualified      bool               `db:"qualified" json:"qualified"`
+}
+
+// Returns a guild's individual clears for one instance, newest first,
+// used by the guild page "Clear Times" panel.
+// Deduplicates by duplicate_group (best duration per group). Includes
+// unqualified runs; the qualified flag is returned for display.
+// JOINs wow_server_realms so RLS tenant filtering cascades.
+func (q *sqlQuerier) GuildClearTimes(ctx context.Context, arg GuildClearTimesParams) ([]GuildClearTimesRow, error) {
+	rows, err := q.db.Query(ctx, guildClearTimes, arg.GuildID, arg.InstanceName)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []GuildClearTimesRow
+	for rows.Next() {
+		var i GuildClearTimesRow
+		if err := rows.Scan(
+			&i.InstanceID,
+			&i.InstanceName,
+			&i.DifficultyName,
+			&i.HashedSlug,
+			&i.DurationMs,
+			&i.StartTime,
+			&i.CompletionTime,
+			&i.Qualified,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const guildRaidClears = `-- name: GuildRaidClears :many
+WITH deduped AS (
+    SELECT DISTINCT ON (COALESCE(li.duplicate_group_id, li.id))
+        sr.instance_name,
+        sr.duration_ms,
+        sr.completion_time
+    FROM instance_speedruns sr
+    JOIN log_instances li ON li.id = sr.instance_id
+    JOIN wow_server_realms wsr ON wsr.id = sr.realm_id
+    WHERE sr.guild_id = $1 :: uuid
+    ORDER BY COALESCE(li.duplicate_group_id, li.id), sr.duration_ms ASC
+)
+SELECT
+    instance_name,
+    COUNT(*) :: bigint AS clear_count,
+    MIN(duration_ms) :: bigint AS best_duration_ms,
+    AVG(duration_ms) :: bigint AS avg_duration_ms,
+    MAX(completion_time) :: timestamptz AS last_cleared_at
+FROM deduped
+GROUP BY instance_name
+ORDER BY clear_count DESC, instance_name
+`
+
+type GuildRaidClearsRow struct {
+	InstanceName   string             `db:"instance_name" json:"instance_name"`
+	ClearCount     int64              `db:"clear_count" json:"clear_count"`
+	BestDurationMs int64              `db:"best_duration_ms" json:"best_duration_ms"`
+	AvgDurationMs  int64              `db:"avg_duration_ms" json:"avg_duration_ms"`
+	LastClearedAt  pgtype.Timestamptz `db:"last_cleared_at" json:"last_cleared_at"`
+}
+
+// Returns per-instance clear counts and duration aggregates for a guild,
+// used by the guild page "Raid Clears" panel.
+// Deduplicates by duplicate_group so re-uploaded logs of the same raid count
+// once (best duration per group). Includes unqualified runs: a clear is a
+// clear, qualification only affects the public leaderboard.
+// JOINs wow_server_realms so RLS tenant filtering cascades.
+func (q *sqlQuerier) GuildRaidClears(ctx context.Context, guildID uuid.UUID) ([]GuildRaidClearsRow, error) {
+	rows, err := q.db.Query(ctx, guildRaidClears, guildID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []GuildRaidClearsRow
+	for rows.Next() {
+		var i GuildRaidClearsRow
+		if err := rows.Scan(
+			&i.InstanceName,
+			&i.ClearCount,
+			&i.BestDurationMs,
+			&i.AvgDurationMs,
+			&i.LastClearedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const insertInstanceSpeedrun = `-- name: InsertInstanceSpeedrun :exec
 INSERT INTO instance_speedruns (
     instance_id, instance_name, realm_id, guild_id,

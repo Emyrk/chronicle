@@ -677,6 +677,29 @@ export interface Guild {
 }
 
 // From chroniclesdk/guild_page.go
+/**
+ * GuildClearTime is a single full clear of an instance by a guild.
+ */
+export interface GuildClearTime {
+    readonly instance_id: string;
+    readonly slug: string;
+    readonly instance_name: string;
+    readonly difficulty_name: string;
+    readonly duration_ms: number;
+    readonly start_time: string;
+    readonly completion_time: string;
+    readonly qualified: boolean;
+}
+
+// From chroniclesdk/guild_page.go
+export interface GuildClearTimesResponse {
+    readonly instance_name: string;
+    readonly times: readonly GuildClearTime[];
+    readonly best_duration_ms: number;
+    readonly avg_duration_ms: number;
+}
+
+// From chroniclesdk/guild_page.go
 export interface GuildInfo {
     readonly id: string;
     readonly name: string;
@@ -751,6 +774,23 @@ export interface GuildPanelPosition {
     readonly y: number;
     readonly w: number;
     readonly h: number;
+}
+
+// From chroniclesdk/guild_page.go
+/**
+ * GuildRaidClear is a per-instance clear summary for a guild.
+ */
+export interface GuildRaidClear {
+    readonly instance_name: string;
+    readonly clear_count: number;
+    readonly best_duration_ms: number;
+    readonly avg_duration_ms: number;
+    readonly last_cleared_at: string;
+}
+
+// From chroniclesdk/guild_page.go
+export interface GuildRaidClearsResponse {
+    readonly clears: readonly GuildRaidClear[];
 }
 
 // From chroniclesdk/guild_page.go

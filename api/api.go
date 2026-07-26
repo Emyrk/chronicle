@@ -326,6 +326,8 @@ func (api *API) Routes() chi.Router {
 					r.Get("/", api.GetGuild)
 					r.Get("/page", api.GetGuildPage)
 					r.Get("/settings", api.GetGuildSettings)
+					r.Get("/speedruns/clears", api.GuildRaidClears)
+					r.Get("/speedruns/times", api.GuildClearTimes)
 
 					// Authenticated routes (non-admin)
 					r.Group(func(r chi.Router) {
