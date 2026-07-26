@@ -118,7 +118,9 @@ ORDER BY realm_name;
 -- used by the guild page "Raid Clears" panel.
 -- Deduplicates by duplicate_group so re-uploaded logs of the same raid count
 -- once (best duration per group). Includes unqualified runs: a clear is a
--- clear, qualification only affects the public leaderboard.
+-- clear, qualification only affects the public leaderboard. Requires
+-- duration_ms > 0 because incomplete runs are inserted with a zero
+-- completion_time and a negative sentinel duration (see chronicle/logparse.go).
 -- JOINs wow_server_realms so RLS tenant filtering cascades.
 WITH deduped AS (
     SELECT DISTINCT ON (COALESCE(li.duplicate_group_id, li.id))
@@ -129,6 +131,7 @@ WITH deduped AS (
     JOIN log_instances li ON li.id = sr.instance_id
     JOIN wow_server_realms wsr ON wsr.id = sr.realm_id
     WHERE sr.guild_id = @guild_id :: uuid
+      AND sr.duration_ms > 0
     ORDER BY COALESCE(li.duplicate_group_id, li.id), sr.duration_ms ASC
 )
 SELECT
@@ -145,7 +148,9 @@ ORDER BY clear_count DESC, instance_name;
 -- Returns a guild's individual clears for one instance, newest first,
 -- used by the guild page "Clear Times" panel.
 -- Deduplicates by duplicate_group (best duration per group). Includes
--- unqualified runs; the qualified flag is returned for display.
+-- unqualified runs; the qualified flag is returned for display. Requires
+-- duration_ms > 0 to exclude incomplete runs (zero completion_time,
+-- negative sentinel duration).
 -- JOINs wow_server_realms so RLS tenant filtering cascades.
 WITH deduped AS (
     SELECT DISTINCT ON (COALESCE(li.duplicate_group_id, li.id))
@@ -162,6 +167,7 @@ WITH deduped AS (
     JOIN wow_server_realms wsr ON wsr.id = sr.realm_id
     WHERE sr.guild_id = @guild_id :: uuid
       AND sr.instance_name = @instance_name
+      AND sr.duration_ms > 0
     ORDER BY COALESCE(li.duplicate_group_id, li.id), sr.duration_ms ASC
 )
 SELECT * FROM deduped
