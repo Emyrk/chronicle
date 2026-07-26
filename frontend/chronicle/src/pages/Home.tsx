@@ -1,7 +1,7 @@
 import { Link } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { Pause, Play, Users } from "lucide-react";
+import { Pause, Play } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { useAuth } from "@/hooks/useAuth";
 import { useSiteConfig } from "@/api/queries";
@@ -18,8 +18,13 @@ import type {
   SpeedrunLeaderboardEntry,
 } from "@/api/typesGenerated";
 import { CLASS_CSS_VAR } from "@/pages/Rankings/classDisplay";
-import { getInstanceAbbrev, getInstanceBackground } from "@/pages/Logs/utils/instanceImages";
+import {
+  getInstanceAbbrev,
+  getInstanceBackground,
+  INSTANCE_CONFIG,
+} from "@/pages/Logs/utils/instanceImages";
 import { Podium } from "@/pages/Leaderboard/Podium";
+import { RaidCard } from "@/pages/Recent/RaidCard";
 
 const STALE_TIME = 5 * 60 * 1000; // 5 minutes
 const ROTATE_SECS = 5 * 60; // rotate the spotlight every 5 minutes
@@ -91,37 +96,23 @@ function useGuildClears(instanceName: string, difficulty?: string) {
   });
 }
 
+// Raids only: dungeons are supported but off-topic for the homepage.
+// Filters server-side by the known raid names so a dungeon-heavy recent
+// page can't starve the homepage row.
+const RAID_NAMES = Object.entries(INSTANCE_CONFIG)
+  .filter(([, cfg]) => cfg.category === "raid")
+  .map(([name]) => name);
+
 function useRecentUploads() {
   return useQuery({
     queryKey: ["home", "recent-uploads"],
-    queryFn: () => fetchJSON<RecentInstancesResponse>("/api/v1/raidlogs/recent"),
+    queryFn: () => {
+      const params = new URLSearchParams();
+      for (const name of RAID_NAMES) params.append("instance_name", name);
+      return fetchJSON<RecentInstancesResponse>(`/api/v1/raidlogs/recent?${params}`);
+    },
     staleTime: 60 * 1000,
   });
-}
-
-function formatDuration(ms: number | null): string {
-  if (!ms) return "—";
-  const totalSeconds = Math.floor(ms / 1000);
-  const hours = Math.floor(totalSeconds / 3600);
-  const minutes = Math.floor((totalSeconds % 3600) / 60);
-  const seconds = totalSeconds % 60;
-  if (hours > 0) {
-    return `${hours}:${String(minutes).padStart(2, "0")}:${String(seconds).padStart(2, "0")}`;
-  }
-  return `${minutes}:${String(seconds).padStart(2, "0")}`;
-}
-
-function formatRelativeTime(dateStr: string): string {
-  const date = new Date(dateStr);
-  const diffMs = Date.now() - date.getTime();
-  const diffMins = Math.floor(diffMs / 60000);
-  if (diffMins < 1) return "just now";
-  if (diffMins < 60) return `${diffMins}m ago`;
-  const diffHours = Math.floor(diffMins / 60);
-  if (diffHours < 24) return `${diffHours}h ago`;
-  const diffDays = Math.floor(diffHours / 24);
-  if (diffDays < 7) return `${diffDays}d ago`;
-  return date.toLocaleDateString(undefined, { month: "short", day: "numeric" });
 }
 
 function formatTimer(secs: number): string {
@@ -698,10 +689,10 @@ function RaidSpotlight() {
   );
 }
 
-/** Latest uploads table. */
+/** Latest uploads as a horizontal row of raid cards, like the Recent page. */
 function LatestUploads() {
   const { data } = useRecentUploads();
-  const uploads = data?.instances.slice(0, 6) ?? [];
+  const uploads = (data?.instances ?? []).slice(0, 4);
 
   return (
     <section className="px-6 py-10">
@@ -712,36 +703,14 @@ function LatestUploads() {
             Recent →
           </Link>
         </div>
-        <div className="rounded-lg border overflow-hidden">
-          {uploads.length === 0 && (
-            <div className="px-4 py-8 text-center text-sm text-muted-foreground">
-              No uploads yet.
-            </div>
-          )}
+        {uploads.length === 0 && (
+          <div className="rounded-lg border px-4 py-8 text-center text-sm text-muted-foreground">
+            No uploads yet.
+          </div>
+        )}
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
           {uploads.map((u) => (
-            <Link
-              key={u.id}
-              to={u.slug ? `/instances/${u.slug}` : `/instances/${u.id}`}
-              className="grid grid-cols-[1.2fr_80px_80px] md:grid-cols-[1.2fr_1fr_90px_90px_1fr_90px] gap-3 items-center px-4 py-2.5 border-b border-border/50 last:border-b-0 hover:bg-muted/40 text-sm"
-            >
-              <span className="font-medium truncate">{u.name}</span>
-              <span className="hidden md:block text-xs text-muted-foreground truncate">
-                {u.guild_name ?? u.uploader_name}
-              </span>
-              <span className="font-mono text-xs text-muted-foreground">
-                {u.boss_kills}/{u.boss_count} bosses
-              </span>
-              <span className="hidden md:flex items-center gap-1 text-xs text-muted-foreground">
-                <Users className="h-3 w-3" />
-                {u.player_count}
-              </span>
-              <span className="hidden md:block font-mono text-xs text-muted-foreground">
-                {formatDuration(u.duration_ms)}
-              </span>
-              <span className="text-xs text-muted-foreground text-right">
-                {formatRelativeTime(u.uploaded_at)}
-              </span>
-            </Link>
+            <RaidCard key={u.id} instance={u} />
           ))}
         </div>
       </div>
