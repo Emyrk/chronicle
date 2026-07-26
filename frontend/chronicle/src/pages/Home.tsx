@@ -349,31 +349,45 @@ function MobileSpotlight({
       </div>
 
       {(sizeOptions.length > 1 || difficultyOptions.length > 1) && (
-        <div className="flex gap-2 mt-3 flex-wrap">
-          <BoardToggle
-            options={sizeOptions}
-            selected={String(activeBoard?.maxPlayers ?? 0)}
-            onSelect={(v) => selectBoard("size", v)}
-          />
-          <BoardToggle
-            options={difficultyOptions}
-            selected={activeBoard?.difficulty ?? ""}
-            onSelect={(v) => selectBoard("difficulty", v)}
-          />
+        <div className="flex gap-4 mt-3 flex-wrap">
+          {sizeOptions.length > 1 && (
+            <div className="flex items-center gap-2">
+              <span className="text-[10px] uppercase tracking-wider text-muted-foreground">
+                Size
+              </span>
+              <BoardToggle
+                options={sizeOptions}
+                selected={String(activeBoard?.maxPlayers ?? 0)}
+                onSelect={(v) => selectBoard("size", v)}
+              />
+            </div>
+          )}
+          {difficultyOptions.length > 1 && (
+            <div className="flex items-center gap-2">
+              <span className="text-[10px] uppercase tracking-wider text-muted-foreground">
+                Difficulty
+              </span>
+              <BoardToggle
+                options={difficultyOptions}
+                selected={activeBoard?.difficulty ?? ""}
+                onSelect={(v) => selectBoard("difficulty", v)}
+              />
+            </div>
+          )}
         </div>
       )}
 
-      {/* Board tabs */}
-      <div className="flex gap-1.5 mt-4">
+      {/* Category tabs: underline style, distinct from the raid chips above */}
+      <div className="flex gap-5 mt-5 border-b">
         {tabs.map((t) => (
           <button
             key={t.id}
             type="button"
             onClick={() => setTab(t.id)}
-            className={`px-3.5 py-2 rounded-md text-sm cursor-pointer ${
+            className={`pb-2 -mb-px text-sm cursor-pointer border-b-2 transition-colors ${
               tab === t.id
-                ? "bg-primary/15 text-(--tertiary) font-medium"
-                : "bg-muted/40 text-muted-foreground"
+                ? "border-primary text-foreground font-medium"
+                : "border-transparent text-muted-foreground"
             }`}
           >
             {t.label}
