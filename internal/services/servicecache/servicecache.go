@@ -28,6 +28,17 @@ const (
 	TTLPeriodicSpells = 15 * time.Minute
 )
 
+// TTLs for cached HTTP responses. These match the Cache-Control max-age the
+// corresponding endpoints already send, so the server-side cache and the
+// browser cache expire on the same schedule.
+const (
+	TTLRankingsResponses = 5 * time.Minute
+	TTLSiteStats         = 30 * time.Minute
+
+	// LoadTimeout bounds a single cache loader invocation.
+	LoadTimeout = 30 * time.Second
+)
+
 var _ services.Servicer = (*Service)(nil)
 
 // OnCache returns the service name for DependsOn declarations.
@@ -138,4 +149,15 @@ func NewCache[K comparable, V any](svc *Service, opts lrucache.Opts[K, V]) (*lru
 		svc.register(c)
 	}
 	return c, nil
+}
+
+// NewLoadingCache creates a string-keyed cache with a coalescing loader,
+// registered and instrumented like [NewCache]. Use it for expensive read
+// paths where many callers can request the same key at once.
+func NewLoadingCache[V any](svc *Service, opts lrucache.Opts[string, V]) (*lrucache.Loading[V], error) {
+	c, err := NewCache(svc, opts)
+	if err != nil {
+		return nil, err
+	}
+	return lrucache.NewLoading(c, LoadTimeout), nil
 }
