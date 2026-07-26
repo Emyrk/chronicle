@@ -6,6 +6,7 @@ import { Button } from "@/components/ui/button";
 import { useAuth } from "@/hooks/useAuth";
 import { useSiteConfig } from "@/api/queries";
 import {
+  useRankingsEncounters,
   useRankingsInstances,
   useRankingsLeaderboard,
   useRankingsStats,
@@ -386,8 +387,20 @@ function RaidSpotlight() {
 
   const { data: speedruns } = useSpeedrunTop(spot?.name ?? "", difficultyFilter);
   const { data: guildClears } = useGuildClears(spot?.name ?? "", difficultyFilter);
+
+  // Bosses only, like the leaderboard page's "All Bosses" default. "Trash" is
+  // the only trash encounter name by convention.
+  const { data: encounterSummaries } = useRankingsEncounters(spot?.name ?? "");
+  const bossEncounterNames = useMemo(() => {
+    const bosses = (encounterSummaries ?? [])
+      .map((e) => e.encounter_name)
+      .filter((n) => n !== "Trash");
+    return bosses.length > 0 ? bosses.join(",") : undefined;
+  }, [encounterSummaries]);
+
   const { data: leaderboard } = useRankingsLeaderboard({
     instance_names: spot?.name ?? "",
+    encounter_names: bossEncounterNames,
     difficulty_names: difficultyFilter,
     max_players: maxPlayersFilter,
     hide_unknowns: true,
@@ -395,6 +408,7 @@ function RaidSpotlight() {
   });
   const { data: boxPlotStats } = useRankingsStats({
     instance_names: spot?.name ?? "",
+    encounter_names: bossEncounterNames,
     difficulty_names: difficultyFilter,
     max_players: maxPlayersFilter,
   });
