@@ -441,32 +441,14 @@ function RaidSpotlight() {
   return (
     <section className="px-6 py-10 border-b">
       <div className="max-w-7xl mx-auto">
-        {/* Header row */}
-        <div className="flex items-center justify-between gap-4 flex-wrap">
-          <div className="flex items-center gap-3 flex-wrap">
-            <div className="flex items-baseline gap-3">
-              <span className="font-mono text-[11px] tracking-widest text-(--tertiary) uppercase">
-                Raid Spotlight {idx + 1} / {raids.length}
-              </span>
-              <h2 className="text-2xl font-semibold">{spot.name}</h2>
-            </div>
-            <BoardToggle
-              options={sizeOptions}
-              selected={String(activeBoard?.maxPlayers ?? 0)}
-              onSelect={(v) => selectBoard("size", v)}
-            />
-            <BoardToggle
-              options={difficultyOptions}
-              selected={activeBoard?.difficulty ?? ""}
-              onSelect={(v) => selectBoard("difficulty", v)}
-            />
-            <span className="text-sm text-muted-foreground">
-              {(activeBoard?.kills ?? spot.totalKills).toLocaleString()} kills logged
-            </span>
-          </div>
+        {/* Header: eyebrow + rotation controls, then raid name + board toggles */}
+        <div className="flex items-center justify-between gap-4">
+          <span className="font-mono text-xs tracking-[0.2em] text-(--tertiary) uppercase">
+            Raid Spotlight · {idx + 1} / {raids.length}
+          </span>
           {raids.length > 1 && (
             <div className="flex items-center gap-2">
-              <div className="flex items-baseline gap-2 px-3 py-1.5 rounded-md border bg-muted/30 text-sm">
+              <div className="flex items-baseline gap-2 text-sm">
                 <span className="text-muted-foreground">
                   {paused ? "Rotation paused" : "Next raid in"}
                 </span>
@@ -480,6 +462,21 @@ function RaidSpotlight() {
               </Button>
             </div>
           )}
+        </div>
+        <div className="flex items-center justify-between gap-4 flex-wrap mt-3">
+          <h2 className="text-3xl md:text-4xl font-semibold tracking-tight">{spot.name}</h2>
+          <div className="flex items-center gap-2">
+            <BoardToggle
+              options={sizeOptions}
+              selected={String(activeBoard?.maxPlayers ?? 0)}
+              onSelect={(v) => selectBoard("size", v)}
+            />
+            <BoardToggle
+              options={difficultyOptions}
+              selected={activeBoard?.difficulty ?? ""}
+              onSelect={(v) => selectBoard("difficulty", v)}
+            />
+          </div>
         </div>
 
         {/* Raid tabs */}
