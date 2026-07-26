@@ -132,6 +132,10 @@ WITH deduped AS (
     JOIN wow_server_realms wsr ON wsr.id = sr.realm_id
     WHERE sr.guild_id = @guild_id :: uuid
       AND sr.duration_ms > 0
+      AND CASE
+          WHEN @since_days :: bigint > 0 THEN sr.completion_time >= now() - make_interval(days => @since_days::int)
+          ELSE true
+      END
     ORDER BY COALESCE(li.duplicate_group_id, li.id), sr.duration_ms ASC
 )
 SELECT

@@ -234,7 +234,7 @@ type sqlcQuerier interface {
 	// duration_ms > 0 because incomplete runs are inserted with a zero
 	// completion_time and a negative sentinel duration (see chronicle/logparse.go).
 	// JOINs wow_server_realms so RLS tenant filtering cascades.
-	GuildRaidClears(ctx context.Context, guildID uuid.UUID) ([]GuildRaidClearsRow, error)
+	GuildRaidClears(ctx context.Context, arg GuildRaidClearsParams) ([]GuildRaidClearsRow, error)
 	HasInstanceDpsRankings(ctx context.Context, instanceID uuid.UUID) (bool, error)
 	InsertDataset(ctx context.Context, arg InsertDatasetParams) (Dataset, error)
 	InsertEncounter(ctx context.Context, arg InsertEncounterParams) (LogInstanceEncounter, error)

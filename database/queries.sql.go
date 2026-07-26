@@ -8077,6 +8077,10 @@ WITH deduped AS (
     JOIN wow_server_realms wsr ON wsr.id = sr.realm_id
     WHERE sr.guild_id = $1 :: uuid
       AND sr.duration_ms > 0
+      AND CASE
+          WHEN $2 :: bigint > 0 THEN sr.completion_time >= now() - make_interval(days => $2::int)
+          ELSE true
+      END
     ORDER BY COALESCE(li.duplicate_group_id, li.id), sr.duration_ms ASC
 )
 SELECT
@@ -8089,6 +8093,11 @@ FROM deduped
 GROUP BY instance_name
 ORDER BY clear_count DESC, instance_name
 `
+
+type GuildRaidClearsParams struct {
+	GuildID   uuid.UUID `db:"guild_id" json:"guild_id"`
+	SinceDays int64     `db:"since_days" json:"since_days"`
+}
 
 type GuildRaidClearsRow struct {
 	InstanceName   string             `db:"instance_name" json:"instance_name"`
@@ -8106,8 +8115,8 @@ type GuildRaidClearsRow struct {
 // duration_ms > 0 because incomplete runs are inserted with a zero
 // completion_time and a negative sentinel duration (see chronicle/logparse.go).
 // JOINs wow_server_realms so RLS tenant filtering cascades.
-func (q *sqlQuerier) GuildRaidClears(ctx context.Context, guildID uuid.UUID) ([]GuildRaidClearsRow, error) {
-	rows, err := q.db.Query(ctx, guildRaidClears, guildID)
+func (q *sqlQuerier) GuildRaidClears(ctx context.Context, arg GuildRaidClearsParams) ([]GuildRaidClearsRow, error) {
+	rows, err := q.db.Query(ctx, guildRaidClears, arg.GuildID, arg.SinceDays)
 	if err != nil {
 		return nil, err
 	}
