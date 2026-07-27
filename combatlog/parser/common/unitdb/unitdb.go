@@ -3,10 +3,10 @@ package unitdb
 import (
 	"time"
 
+	"github.com/Emyrk/chronicle/combatlog/parser/common/messages"
 	"github.com/Emyrk/chronicle/combatlog/parser/guid"
 	"github.com/Emyrk/chronicle/combatlog/parser/types/combatant"
 	"github.com/Emyrk/chronicle/combatlog/parser/types/unitinfo"
-	"github.com/Emyrk/chronicle/combatlog/parser/common/messages"
 	"github.com/Emyrk/chronicle/database/gamedb/chrondbc"
 )
 
@@ -193,6 +193,26 @@ func (us *Units) UpdateUnitName(gid guid.GUID, name string) {
 	}
 
 	us.Info[gid] = unitinfo.Info{Name: name}
+}
+
+// InvalidatePlayerTalents clears the talents used by encounter ranking snapshots.
+func (us *Units) InvalidatePlayerTalents(gid guid.GUID) {
+	player, ok := us.Players[gid]
+	if !ok {
+		return
+	}
+	player.Talents = nil
+	us.Players[gid] = player
+}
+
+// UpdatePlayerTalents replaces the talents used by encounter ranking snapshots.
+func (us *Units) UpdatePlayerTalents(gid guid.GUID, talents *combatant.Talents) {
+	player, ok := us.Players[gid]
+	if !ok {
+		return
+	}
+	player.Talents = talents
+	us.Players[gid] = player
 }
 
 func (us *Units) UpdatePlayer(c combatant.Combatant) {

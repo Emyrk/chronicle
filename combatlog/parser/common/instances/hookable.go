@@ -104,7 +104,7 @@ func (f *CommonFactory) NewHookable(ctx context.Context, logger *slog.Logger, db
 
 func NewHookable(ctx context.Context, logger *slog.Logger, db *unitdb.Units, z zone.Zone, ip InstanceParams) *Hookable {
 	p := participants.New()
-	g := armory.New()
+	g := armory.New(db)
 
 	combatantStrategy := EmitAllActive
 

@@ -6,11 +6,11 @@ import (
 	"time"
 
 	"github.com/Emyrk/chronicle/api/db2sdk"
+	"github.com/Emyrk/chronicle/combatlog/parser/common/instances/instancehook"
+	"github.com/Emyrk/chronicle/combatlog/parser/common/messages"
+	"github.com/Emyrk/chronicle/combatlog/parser/common/unitdb"
 	"github.com/Emyrk/chronicle/combatlog/parser/guid"
 	"github.com/Emyrk/chronicle/combatlog/parser/types/combatant"
-	"github.com/Emyrk/chronicle/combatlog/parser/common/messages"
-	"github.com/Emyrk/chronicle/combatlog/parser/common/instances/instancehook"
-	"github.com/Emyrk/chronicle/combatlog/parser/common/unitdb"
 	"github.com/Emyrk/chronicle/database"
 	"github.com/Emyrk/chronicle/database/authz"
 	"github.com/Emyrk/chronicle/internal/ptr"
@@ -32,6 +32,7 @@ const respecSpellID = 57734
 type Tracker struct {
 	instancehook.BaseHook
 
+	units          *unitdb.Units
 	Guilds         map[string]map[guid.GUID]struct{}
 	Participant    map[guid.GUID]struct{}
 	Players        map[guid.GUID]combatant.Combatant
@@ -45,8 +46,9 @@ type Tracker struct {
 	PlayerLevel map[guid.GUID]int32
 }
 
-func New() *Tracker {
+func New(units *unitdb.Units) *Tracker {
 	return &Tracker{
+		units:              units,
 		Guilds:             make(map[string]map[guid.GUID]struct{}),
 		Participant:        make(map[guid.GUID]struct{}),
 		Players:            make(map[guid.GUID]combatant.Combatant),
@@ -234,21 +236,24 @@ func (g *Tracker) ProcessMessage(active bool, encounterID uuid.UUID, msg message
 	case *messages.Combatant:
 		g.Guild(ty)
 		g.Player(ty)
-		// Fresh COMBATANT_INFO repairs invalidated talents.
-		delete(g.InvalidatedTalents, ty.Guid)
+		if ty.Talents != nil {
+			// Fresh COMBATANT_INFO talent data repairs invalidation.
+			delete(g.InvalidatedTalents, ty.Guid)
+		}
 	case *messages.CombatantTalents:
 		g.CombatantTalents(ty)
 		// Fresh talent data also repairs invalidation.
 		delete(g.InvalidatedTalents, ty.Guid)
 	case *messages.SpellGo:
 		// Detect respec: when a player casts the goblin respec spell,
-		// invalidate their talent data until the next COMBATANT_INFO.
+		// invalidate their talent data until the next talent update.
 		if ty.SpellData != nil && int(ty.SpellData.ID) == respecSpellID && ty.Caster.IsPlayer() {
 			g.InvalidatedTalents[ty.Caster] = struct{}{}
 			if p, ok := g.Players[ty.Caster]; ok {
 				p.Talents = nil
 				g.Players[ty.Caster] = p
 			}
+			g.units.InvalidatePlayerTalents(ty.Caster)
 		}
 	case *messages.Transmog:
 		g.Transmog(ty)
@@ -354,6 +359,7 @@ func (g *Tracker) CombatantTalents(msg *messages.CombatantTalents) {
 	if pl, ok := g.Players[gid]; ok {
 		pl.Talents = tls
 		g.Players[gid] = pl
+		g.units.UpdatePlayerTalents(gid, tls)
 		return
 	}
 

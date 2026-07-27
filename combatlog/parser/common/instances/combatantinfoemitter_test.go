@@ -4,13 +4,13 @@ import (
 	"testing"
 	"time"
 
+	"github.com/Emyrk/chronicle/combatlog/parser/common/armory"
 	"github.com/Emyrk/chronicle/combatlog/parser/common/characters"
 	"github.com/Emyrk/chronicle/combatlog/parser/common/identifier"
-	"github.com/Emyrk/chronicle/combatlog/parser/types/combatant"
 	"github.com/Emyrk/chronicle/combatlog/parser/common/messages"
-	"github.com/Emyrk/chronicle/combatlog/parser/common/armory"
-	"github.com/Emyrk/chronicle/combatlog/parser/vanilla/creatures"
 	"github.com/Emyrk/chronicle/combatlog/parser/common/unitdb"
+	"github.com/Emyrk/chronicle/combatlog/parser/types/combatant"
+	"github.com/Emyrk/chronicle/combatlog/parser/vanilla/creatures"
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -20,7 +20,8 @@ func TestCombatantInfoEmitter_FightStarted(t *testing.T) {
 	t.Parallel()
 
 	playerGUID := mustGUID(t, "0x0000000000000001")
-	tracker := armory.New()
+	units := unitdb.New()
+	tracker := armory.New(units)
 	tracker.Players[playerGUID] = combatant.Combatant{
 		Name: "TestPlayer",
 		Guid: playerGUID,
@@ -30,7 +31,6 @@ func TestCombatantInfoEmitter_FightStarted(t *testing.T) {
 		},
 	}
 
-	units := unitdb.New()
 	chars := characters.NewCharacters(units, creatures.TurtleCharacterFactories(), identifier.NewIdentifier(map[uint32]identifier.Identity{}))
 
 	var emitted []*messages.Combatant
@@ -67,10 +67,10 @@ func TestCombatantInfoEmitter_NoDataInArmory(t *testing.T) {
 	t.Parallel()
 
 	playerGUID := mustGUID(t, "0x0000000000000001")
-	tracker := armory.New()
+	units := unitdb.New()
+	tracker := armory.New(units)
 	// Don't add any player data to the armory.
 
-	units := unitdb.New()
 	chars := characters.NewCharacters(units, creatures.TurtleCharacterFactories(), identifier.NewIdentifier(map[uint32]identifier.Identity{}))
 
 	var emitted []*messages.Combatant
