@@ -42,6 +42,7 @@ export const INSTANCE_CONFIG: Record<string, InstanceConfig> = {
   "Black Temple": { background: "/c/images/loadingscreens/LoadScreenBlackTemple.webp", bossCount: 9, abbrev: "BT", category: "raid" },
   "Hyjal Summit": { background: "/c/images/loadingscreens/LoadScreenHyjal.webp", bossCount: 5, abbrev: "Hyjal", category: "raid" },
   "Magtheridon's Lair": { background: "/c/images/loadingscreens/LOADSCREENHELLFIRECITADELRAID.webp", bossCount: 1, abbrev: "Mag", category: "raid" },
+  "Gruul's Lair": { background: "/c/images/loadingscreens/LoadScreenGruulsLair.webp", bossCount: 2, abbrev: "Gruul", category: "raid" },
   "Tempest Keep": { background: "/c/images/loadingscreens/LOADSCREENTEMPESTKEEP.webp", bossCount: 4, abbrev: "TK", category: "raid" },
   "Sunwell Plateau": { background: "/c/images/loadingscreens/LoadScreenSunwell5Man.webp", bossCount: 6, abbrev: "SWP", category: "raid" },
   "World Bosses": { background: "/c/images/loadingscreens/LoadScreenRaid.webp", abbrev: "World", category: "raid" },
