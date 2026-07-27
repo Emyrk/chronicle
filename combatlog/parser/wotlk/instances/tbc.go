@@ -1061,12 +1061,14 @@ func GruulsLairHostiles() map[uint32]instances.Identity {
 		19389: "Lair Brute",
 		21350: "Gronn-Priest",
 	})
+	// The High King Maulgar council is a single encounter: all five units
+	// share one encounter name so the fight is reported as one boss kill.
 	instances.LoadBosses(hostile, map[uint32]string{
 		18831: "High King Maulgar",
-		18832: "Krosh Firehand",
-		18834: "Olm the Summoner",
-		18835: "Kiggler the Crazed",
-		18836: "Blindeye the Seer",
+		18832: "High King Maulgar", // Krosh Firehand
+		18834: "High King Maulgar", // Olm the Summoner
+		18835: "High King Maulgar", // Kiggler the Crazed
+		18836: "High King Maulgar", // Blindeye the Seer
 		19044: "Gruul the Dragonkiller",
 	})
 	return hostile
