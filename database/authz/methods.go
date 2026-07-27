@@ -15,6 +15,40 @@ type interceptor struct {
 	database.Store
 }
 
+func (z *interceptor) InsertUserCharacterLink(ctx context.Context, arg database.InsertUserCharacterLinkParams) (database.UserCharacterLink, error) {
+	// Insert into the database first: the unique constraint on
+	// (character_guid, realm_id) enforces link exclusivity.
+	link, err := z.Store.InsertUserCharacterLink(ctx, arg)
+	if err != nil {
+		return database.UserCharacterLink{}, err
+	}
+
+	b := policy.New()
+	b.Armory_player(arg.CharacterGuid).Owner(b.User(arg.UserID))
+	_, err = z.Write(ctx, *b.Txn())
+	if err != nil {
+		// Best effort rollback of the database row to stay consistent.
+		_, _ = z.Store.DeleteUserCharacterLink(ctx, database.DeleteUserCharacterLinkParams{
+			CharacterGuid: arg.CharacterGuid,
+			RealmID:       arg.RealmID,
+		})
+		return database.UserCharacterLink{}, fmt.Errorf("write authz relations: %w", err)
+	}
+	return link, nil
+}
+
+func (z *interceptor) DeleteUserCharacterLink(ctx context.Context, arg database.DeleteUserCharacterLinkParams) (database.UserCharacterLink, error) {
+	// Remove only the owner relation; the armory_player object keeps its
+	// chronicle relation.
+	obj := policy.New().Armory_player(arg.CharacterGuid)
+	f := rel.NewFilter(obj.Object().Typ, obj.Object().ID, obj.RelationOwner())
+	err := z.Delete(ctx, rel.NewPreconditionedFilter(f))
+	if err != nil {
+		return database.UserCharacterLink{}, fmt.Errorf("delete authz relations: %w", err)
+	}
+	return z.Store.DeleteUserCharacterLink(ctx, arg)
+}
+
 func (z *interceptor) DeleteAllParsedLogsByGroupID(ctx context.Context, id uuid.UUID) error {
 	return z.Store.DeleteAllParsedLogsByGroupID(ctx, id)
 }

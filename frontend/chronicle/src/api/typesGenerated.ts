@@ -1261,6 +1261,35 @@ export interface LeaderboardVersionRequirements {
     readonly min_addon_version: string;
 }
 
+// From chroniclesdk/characters.go
+/**
+ * LinkCharacterRequest links a character to a user account (admin only).
+ */
+export interface LinkCharacterRequest {
+    readonly realm_id: string;
+    readonly character_guid: string;
+}
+
+// From chroniclesdk/characters.go
+/**
+ * LinkedCharacter is an in-game character linked to a user account.
+ */
+export interface LinkedCharacter {
+    readonly link_id: string;
+    readonly user_id: string;
+    readonly character_guid: string;
+    readonly realm_id: string;
+    readonly realm_name: string;
+    readonly name: string;
+    readonly class: string;
+    readonly race: string;
+    readonly gender: string;
+    readonly level: number;
+    readonly guild_name?: string;
+    readonly is_primary: boolean;
+    readonly linked_at: string;
+}
+
 // From chroniclesdk/guild_page.go
 export interface ListGuildsResponse {
     readonly guilds: readonly GuildInfo[];
@@ -1893,6 +1922,16 @@ export interface Session {
  */
 export interface SetDatasetRequest {
     readonly dataset_id: string | null;
+}
+
+// From chroniclesdk/characters.go
+/**
+ * SetPrimaryCharacterRequest marks one of the user's linked characters as
+ * their primary ("main") character.
+ */
+export interface SetPrimaryCharacterRequest {
+    readonly realm_id: string;
+    readonly character_guid: string;
 }
 
 // From chroniclesdk/tenant.go

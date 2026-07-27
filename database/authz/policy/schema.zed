@@ -121,6 +121,12 @@ definition guild {
 
 definition armory_player {
   relation chronicle: chronicle
+  // The user account this character is linked to. Exclusivity (at most one
+  // owner) is enforced by the user_character_links table in Postgres.
+  relation owner: user
+
+  permission own = owner
+  permission manage_link = owner + chronicle->admin_users
 }
 
 definition raid_log {

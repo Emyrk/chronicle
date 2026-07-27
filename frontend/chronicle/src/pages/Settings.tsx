@@ -2,12 +2,15 @@ import { useEffect, useMemo, useState } from "react";
 import { Link, Outlet, useLocation, useNavigate, useSearchParams } from "react-router-dom";
 import { ICON_LIST_URL } from "@/config/iconUrl";
 import { toast } from "sonner";
-import { HardDrive, Clock, LayoutTemplate, Download, Upload, Plus, Trash2, BookOpenText, Save, Pencil, Trash, Share2, ChevronLeft, ChevronRight, Copy, Eye, Monitor, Smartphone, Menu, X, User } from "lucide-react";
+import { HardDrive, Clock, LayoutTemplate, Download, Upload, Plus, Trash2, BookOpenText, Save, Pencil, Trash, Share2, ChevronLeft, ChevronRight, Copy, Eye, Monitor, Smartphone, Menu, X, User, Swords, Star } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
 import {
   useInstance,
+  useMyCharacters,
   useMyStorage,
   useSession,
+  useSetPrimaryCharacter,
+  type LinkedCharacter,
   useUserPanelLayouts,
   useCreatePanelLayout,
   useDeletePanelLayout,
@@ -51,6 +54,7 @@ import { buildLayoutSpellTooltip } from "@/features/layoutBook/buildLayoutSpellT
 import { parseLayoutLab, parsePanelLayout, serializeLayoutLab } from "@/features/layoutBook/parseLayout";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/Tooltip/tooltip";
 import { getSpellIconUrl } from "@/api/wowdb";
+import { getClassColorVar } from "@/pages/ArmoryPage/types";
 import { SpellTooltip } from "@/pages/WoWDB/SpellTooltip";
 
 const LAYOUT_LAB_INSTANCE_REFERENCE_STORAGE_KEY = "layout-lab.instance-reference";
@@ -163,6 +167,7 @@ type Tab = {
 
 const allTabs: Tab[] = [
   { path: "/account/settings", label: "Profile", icon: User },
+  { path: "/account/characters", label: "Characters", icon: Swords },
   { path: "/account/storage", label: "Storage", icon: HardDrive },
   // { path: "/account/notifications", label: "Notifications", icon: Bell },
   // { path: "/account/privacy", label: "Privacy", icon: Shield },
@@ -346,6 +351,84 @@ export function ProfileSettings() {
         <div className="rounded-lg border p-4 space-y-3">
           <h3 className="text-sm font-medium">Sign-in Method</h3>
           <span className="text-sm capitalize">{session.auth_provider === "password" ? "Email & Password" : session.auth_provider}</span>
+        </div>
+      )}
+    </div>
+  );
+}
+
+export function CharacterSettings() {
+  const { data: characters, isLoading } = useMyCharacters();
+  const setPrimary = useSetPrimaryCharacter();
+
+  const handleSetPrimary = (character: LinkedCharacter) => {
+    setPrimary.mutate(
+      { realm_id: character.realm_id, character_guid: character.character_guid },
+      {
+        onSuccess: () => toast.success(`${character.name} is now your primary character.`),
+        onError: (error) => showRequestErrorToast("Failed to set primary character", error),
+      },
+    );
+  };
+
+  return (
+    <div className="space-y-6">
+      <div>
+        <h2 className="text-xl font-semibold">Characters</h2>
+        <p className="text-muted-foreground">In-game characters linked to your account.</p>
+      </div>
+
+      {isLoading ? (
+        <p className="text-sm text-muted-foreground">Loading characters...</p>
+      ) : !characters || characters.length === 0 ? (
+        <div className="rounded-lg border p-4">
+          <p className="text-sm text-muted-foreground">
+            No characters are linked to your account yet. Character linking is currently managed
+            by site administrators.
+          </p>
+        </div>
+      ) : (
+        <div className="space-y-3">
+          {characters.map((character) => (
+            <div
+              key={`${character.realm_id}-${character.character_guid}`}
+              className="rounded-lg border p-4 flex items-center justify-between gap-4"
+            >
+              <div className="min-w-0">
+                <div className="flex items-center gap-2">
+                  <Link
+                    to={`/armory/${encodeURIComponent(character.realm_name)}/${character.character_guid}`}
+                    className="text-sm font-medium hover:underline"
+                    style={{ color: getClassColorVar(character.class) }}
+                  >
+                    {character.name}
+                  </Link>
+                  {character.is_primary && (
+                    <span className="inline-flex items-center gap-1 rounded-full bg-yellow-500/10 px-2 py-0.5 text-xs font-medium text-yellow-500">
+                      <Star className="h-3 w-3" />
+                      Primary
+                    </span>
+                  )}
+                </div>
+                <p className="text-xs text-muted-foreground truncate">
+                  Level {character.level} {character.race} {character.class}
+                  {" · "}
+                  {character.realm_name}
+                  {character.guild_name ? ` · <${character.guild_name}>` : ""}
+                </p>
+              </div>
+              {!character.is_primary && (
+                <Button
+                  variant="outline"
+                  size="sm"
+                  disabled={setPrimary.isPending}
+                  onClick={() => handleSetPrimary(character)}
+                >
+                  Set as primary
+                </Button>
+              )}
+            </div>
+          ))}
         </div>
       )}
     </div>

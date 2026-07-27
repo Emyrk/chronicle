@@ -22,6 +22,8 @@ import type {
   AuthorizationRequest as AuthorizationRequestGenerated,
   AuthorizationResponse as AuthorizationResponseGenerated,
   UserStorageInfo as UserStorageInfoGenerated,
+  LinkedCharacter as LinkedCharacterGenerated,
+  SetPrimaryCharacterRequest as SetPrimaryCharacterRequestGenerated,
   DataGrant as DataGrantGenerated,
   UpsertDataGrantRequest as UpsertDataGrantRequestGenerated,
   ListUserPanelLayoutsResponse as ListUserPanelLayoutsResponseGenerated,
@@ -84,6 +86,8 @@ export type Session = SessionGenerated;
 export type AuthorizationRequest = AuthorizationRequestGenerated;
 export type AuthorizationResponse = AuthorizationResponseGenerated;
 export type UserStorageInfo = UserStorageInfoGenerated;
+export type LinkedCharacter = LinkedCharacterGenerated;
+export type SetPrimaryCharacterRequest = SetPrimaryCharacterRequestGenerated;
 export type DataGrant = DataGrantGenerated;
 export type UpsertDataGrantRequest = UpsertDataGrantRequestGenerated;
 export type ListUserPanelLayoutsResponse = ListUserPanelLayoutsResponseGenerated;
@@ -455,6 +459,43 @@ export function useUpdateActionBarSlots() {
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["user-panel-layouts"] });
+    },
+  });
+}
+
+export function useMyCharacters(options?: Omit<UseQueryOptions<LinkedCharacter[]>, "queryKey" | "queryFn">) {
+  return useQuery({
+    queryKey: ["my-characters"],
+    queryFn: async () => {
+      const response = await fetch("/api/v1/me/characters", { credentials: "include" });
+      if (!response.ok) {
+        throw new Error("Failed to fetch linked characters");
+      }
+      return response.json() as Promise<LinkedCharacter[]>;
+    },
+    ...options,
+  });
+}
+
+export function useSetPrimaryCharacter() {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: async (request: SetPrimaryCharacterRequest) => {
+      const response = await fetch("/api/v1/me/characters/primary", {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(request),
+        credentials: "include",
+      });
+      if (!response.ok) {
+        const error = await response.json().catch(() => null);
+        throw buildAPIError("Failed to set primary character", error);
+      }
+      return response.json() as Promise<LinkedCharacter[]>;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["my-characters"] });
     },
   });
 }

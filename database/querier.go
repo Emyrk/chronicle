@@ -66,6 +66,7 @@ type sqlcQuerier interface {
 	DeleteRetentionRule(ctx context.Context, id uuid.UUID) error
 	DeleteTenant(ctx context.Context, id uuid.UUID) error
 	DeleteUploadKey(ctx context.Context, id uuid.UUID) error
+	DeleteUserCharacterLink(ctx context.Context, arg DeleteUserCharacterLinkParams) (UserCharacterLink, error)
 	DeleteUserPanelLayoutByID(ctx context.Context, id uuid.UUID) (int64, error)
 	DeleteWoWLogGroup(ctx context.Context, id uuid.UUID) error
 	DeleteWoWLogGroupFiles(ctx context.Context, arg DeleteWoWLogGroupFilesParams) ([]LogFile, error)
@@ -211,6 +212,8 @@ type sqlcQuerier interface {
 	GetUserAuthSessionByID(ctx context.Context, id uuid.UUID) (UserAuthSession, error)
 	GetUserByEmail(ctx context.Context, email string) (User, error)
 	GetUserByID(ctx context.Context, id uuid.UUID) (ChronicleUser, error)
+	GetUserCharacterLink(ctx context.Context, arg GetUserCharacterLinkParams) (UserCharacterLink, error)
+	GetUserCharacterLinks(ctx context.Context, userID uuid.UUID) ([]GetUserCharacterLinksRow, error)
 	GetUserDataGrants(ctx context.Context, userID uuid.UUID) ([]DataGrant, error)
 	GetUserPanelLayoutDefaults(ctx context.Context, id uuid.UUID) (GetUserPanelLayoutDefaultsRow, error)
 	GetUserPasswordByAuthID(ctx context.Context, userAuthID uuid.UUID) (UserPassword, error)
@@ -271,6 +274,7 @@ type sqlcQuerier interface {
 	InsertUser(ctx context.Context, arg InsertUserParams) (User, error)
 	InsertUserAuth(ctx context.Context, arg InsertUserAuthParams) (UserAuthLink, error)
 	InsertUserAuthSession(ctx context.Context, arg InsertUserAuthSessionParams) (UserAuthSession, error)
+	InsertUserCharacterLink(ctx context.Context, arg InsertUserCharacterLinkParams) (UserCharacterLink, error)
 	InsertUserPassword(ctx context.Context, arg InsertUserPasswordParams) (UserPassword, error)
 	InsertWoWLogGroup(ctx context.Context, arg InsertWoWLogGroupParams) (WoWLogGroup, error)
 	InsertWoWServer(ctx context.Context, arg InsertWoWServerParams) (WowServer, error)
@@ -414,6 +418,7 @@ type sqlcQuerier interface {
 	SearchItemTemplates(ctx context.Context, arg SearchItemTemplatesParams) ([]SearchItemTemplatesRow, error)
 	SetDuplicateGroupIDs(ctx context.Context, arg SetDuplicateGroupIDsParams) error
 	SetPanelLayoutCode(ctx context.Context, arg SetPanelLayoutCodeParams) (int64, error)
+	SetPrimaryUserCharacter(ctx context.Context, arg SetPrimaryUserCharacterParams) (UserCharacterLink, error)
 	SetResetToken(ctx context.Context, arg SetResetTokenParams) error
 	// Assigns or removes a default dataset from a server.
 	// Pass NULL to remove the assignment.
@@ -463,6 +468,7 @@ type sqlcQuerier interface {
 	TouchUploadKeyLastUsed(ctx context.Context, id uuid.UUID) error
 	TrackUserPanelLayout(ctx context.Context, arg TrackUserPanelLayoutParams) (UserTrackedLayout, error)
 	UnassignWorldFromServer(ctx context.Context, arg UnassignWorldFromServerParams) error
+	UnsetPrimaryUserCharacter(ctx context.Context, userID uuid.UUID) error
 	UntrackUserPanelLayout(ctx context.Context, arg UntrackUserPanelLayoutParams) (int64, error)
 	// Only non-null params are applied; NULL means "keep existing value".
 	UpdateDataset(ctx context.Context, arg UpdateDatasetParams) (Dataset, error)

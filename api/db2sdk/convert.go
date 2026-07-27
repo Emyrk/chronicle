@@ -590,4 +590,30 @@ func ArmorySearchResult(row database.SearchGamePlayersRow) chroniclesdk.ArmorySe
 	}
 }
 
+func LinkedCharacter(row database.GetUserCharacterLinksRow) chroniclesdk.LinkedCharacter {
+	return chroniclesdk.LinkedCharacter{
+		LinkID:        row.LinkID,
+		UserID:        row.UserID,
+		CharacterGUID: row.CharacterGuid,
+		RealmID:       row.RealmID,
+		RealmName:     row.RealmName,
+		Name:          row.Name,
+		Class:         HeroClass(row.Class).String(),
+		Race:          HeroRace(row.Race).String(),
+		Gender:        HeroGender(row.Gender).String(),
+		Level:         int32(row.Level),
+		GuildName:     row.GuildName.String,
+		IsPrimary:     row.IsPrimary,
+		LinkedAt:      row.LinkedAt.Time,
+	}
+}
+
+func LinkedCharacters(rows []database.GetUserCharacterLinksRow) []chroniclesdk.LinkedCharacter {
+	out := make([]chroniclesdk.LinkedCharacter, 0, len(rows))
+	for _, row := range rows {
+		out = append(out, LinkedCharacter(row))
+	}
+	return out
+}
+
 

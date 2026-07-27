@@ -53,6 +53,7 @@ import {
 import {
   AccountLayout,
   ProfileSettings,
+  CharacterSettings,
   StorageSettings,
   NotificationSettings,
   PrivacySettings,
@@ -184,6 +185,7 @@ function App() {
         <Route path="/account" element={<AccountLayout />}>
           <Route index element={<Navigate to="/account/settings" replace />} />
           <Route path="settings" element={<ProfileSettings />} />
+          <Route path="characters" element={<CharacterSettings />} />
           <Route path="storage" element={<StorageSettings />} />
           <Route path="notifications" element={<NotificationSettings />} />
           <Route path="privacy" element={<PrivacySettings />} />

@@ -1212,6 +1212,16 @@ CREATE TABLE user_auth_session (
     jwt_id uuid DEFAULT gen_random_uuid() NOT NULL
 );
 
+CREATE TABLE user_character_links (
+    id uuid DEFAULT gen_random_uuid() NOT NULL,
+    user_id uuid NOT NULL,
+    character_guid wow_guid NOT NULL,
+    realm_id uuid NOT NULL,
+    is_primary boolean DEFAULT false NOT NULL,
+    linked_by uuid,
+    created_at timestamp with time zone DEFAULT now() NOT NULL
+);
+
 CREATE TABLE user_panel_layouts (
     id uuid DEFAULT gen_random_uuid() NOT NULL,
     user_id uuid,
@@ -1762,6 +1772,12 @@ ALTER TABLE ONLY user_auth_links
 ALTER TABLE ONLY user_auth_session
     ADD CONSTRAINT user_auth_session_pkey PRIMARY KEY (id);
 
+ALTER TABLE ONLY user_character_links
+    ADD CONSTRAINT user_character_links_character_guid_realm_id_key UNIQUE (character_guid, realm_id);
+
+ALTER TABLE ONLY user_character_links
+    ADD CONSTRAINT user_character_links_pkey PRIMARY KEY (id);
+
 ALTER TABLE ONLY user_panel_layouts
     ADD CONSTRAINT user_panel_layouts_code_key UNIQUE (code);
 
@@ -1938,6 +1954,10 @@ CREATE INDEX river_job_state_and_finalized_at_index ON river_job USING btree (st
 CREATE UNIQUE INDEX river_job_unique_idx ON river_job USING btree (unique_key) WHERE ((unique_key IS NOT NULL) AND (unique_states IS NOT NULL) AND river_job_state_in_bitmask(unique_states, state));
 
 CREATE UNIQUE INDEX user_auths_unique_linked_id ON user_auth_links USING btree (lower(linked_id), provider);
+
+CREATE UNIQUE INDEX user_character_links_one_primary ON user_character_links USING btree (user_id) WHERE is_primary;
+
+CREATE INDEX user_character_links_user_id ON user_character_links USING btree (user_id);
 
 CREATE UNIQUE INDEX user_panel_layouts_user_title_ci_uidx ON user_panel_layouts USING btree (user_id, title_normalized) WHERE (user_id IS NOT NULL);
 
@@ -2182,6 +2202,18 @@ ALTER TABLE ONLY user_auth_session
 
 ALTER TABLE ONLY user_auth_session
     ADD CONSTRAINT user_auth_session_user_id_fkey FOREIGN KEY (user_id) REFERENCES users(id);
+
+ALTER TABLE ONLY user_character_links
+    ADD CONSTRAINT user_character_links_character_guid_realm_id_fkey FOREIGN KEY (character_guid, realm_id) REFERENCES game_players(id, realm_id) ON DELETE CASCADE;
+
+ALTER TABLE ONLY user_character_links
+    ADD CONSTRAINT user_character_links_linked_by_fkey FOREIGN KEY (linked_by) REFERENCES users(id) ON DELETE SET NULL;
+
+ALTER TABLE ONLY user_character_links
+    ADD CONSTRAINT user_character_links_realm_id_fkey FOREIGN KEY (realm_id) REFERENCES wow_server_realms(id) ON DELETE CASCADE;
+
+ALTER TABLE ONLY user_character_links
+    ADD CONSTRAINT user_character_links_user_id_fkey FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE;
 
 ALTER TABLE ONLY user_panel_layouts
     ADD CONSTRAINT user_panel_layouts_user_id_fkey FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE;

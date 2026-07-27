@@ -1644,6 +1644,16 @@ type UserAuthSession struct {
 	JwtID             uuid.UUID          `db:"jwt_id" json:"jwt_id"`
 }
 
+type UserCharacterLink struct {
+	ID            uuid.UUID          `db:"id" json:"id"`
+	UserID        uuid.UUID          `db:"user_id" json:"user_id"`
+	CharacterGuid guid.GUID          `db:"character_guid" json:"character_guid"`
+	RealmID       uuid.UUID          `db:"realm_id" json:"realm_id"`
+	IsPrimary     bool               `db:"is_primary" json:"is_primary"`
+	LinkedBy      uuid.NullUUID      `db:"linked_by" json:"linked_by"`
+	CreatedAt     pgtype.Timestamptz `db:"created_at" json:"created_at"`
+}
+
 type UserPanelLayout struct {
 	ID              uuid.UUID          `db:"id" json:"id"`
 	UserID          uuid.NullUUID      `db:"user_id" json:"user_id"`

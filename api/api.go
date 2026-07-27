@@ -186,6 +186,8 @@ func (api *API) Routes() chi.Router {
 				r.Post("/authcheck", api.checkAuthorization)
 				r.Get("/me/storage", api.GetMyStorage)
 				r.Patch("/me/preferences", api.UpdateMyPreferences)
+				r.Get("/me/characters", api.ListMyCharacters)
+				r.Put("/me/characters/primary", api.SetMyPrimaryCharacter)
 				r.Post("/share", api.CreateShare)
 			})
 			r.Mount("/panel-layout", panellayoutapi.New(api.Opts.Zed, api.Auth).Routes())
@@ -223,6 +225,8 @@ func (api *API) Routes() chi.Router {
 					r.Get("/{userID}/grants", api.GetUserGrants)
 					r.Put("/{userID}/grants", api.UpsertUserGrant)
 					r.Delete("/{userID}/grants/{source}", api.DeleteUserGrant)
+					r.Post("/{userID}/characters", api.AdminLinkUserCharacter)
+					r.Delete("/{userID}/characters/{realmID}/{characterGUID}", api.AdminUnlinkUserCharacter)
 				})
 
 				r.Route("/logs", func(r chi.Router) {

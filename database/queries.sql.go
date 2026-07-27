@@ -9306,6 +9306,202 @@ func (q *sqlQuerier) UpsertUserActionBarSlots(ctx context.Context, arg UpsertUse
 	return i, err
 }
 
+const deleteUserCharacterLink = `-- name: DeleteUserCharacterLink :one
+DELETE FROM user_character_links
+WHERE character_guid = $1 AND realm_id = $2
+RETURNING id, user_id, character_guid, realm_id, is_primary, linked_by, created_at
+`
+
+type DeleteUserCharacterLinkParams struct {
+	CharacterGuid guid.GUID `db:"character_guid" json:"character_guid"`
+	RealmID       uuid.UUID `db:"realm_id" json:"realm_id"`
+}
+
+func (q *sqlQuerier) DeleteUserCharacterLink(ctx context.Context, arg DeleteUserCharacterLinkParams) (UserCharacterLink, error) {
+	row := q.db.QueryRow(ctx, deleteUserCharacterLink, arg.CharacterGuid, arg.RealmID)
+	var i UserCharacterLink
+	err := row.Scan(
+		&i.ID,
+		&i.UserID,
+		&i.CharacterGuid,
+		&i.RealmID,
+		&i.IsPrimary,
+		&i.LinkedBy,
+		&i.CreatedAt,
+	)
+	return i, err
+}
+
+const getUserCharacterLink = `-- name: GetUserCharacterLink :one
+SELECT id, user_id, character_guid, realm_id, is_primary, linked_by, created_at FROM user_character_links
+WHERE character_guid = $1 AND realm_id = $2
+`
+
+type GetUserCharacterLinkParams struct {
+	CharacterGuid guid.GUID `db:"character_guid" json:"character_guid"`
+	RealmID       uuid.UUID `db:"realm_id" json:"realm_id"`
+}
+
+func (q *sqlQuerier) GetUserCharacterLink(ctx context.Context, arg GetUserCharacterLinkParams) (UserCharacterLink, error) {
+	row := q.db.QueryRow(ctx, getUserCharacterLink, arg.CharacterGuid, arg.RealmID)
+	var i UserCharacterLink
+	err := row.Scan(
+		&i.ID,
+		&i.UserID,
+		&i.CharacterGuid,
+		&i.RealmID,
+		&i.IsPrimary,
+		&i.LinkedBy,
+		&i.CreatedAt,
+	)
+	return i, err
+}
+
+const getUserCharacterLinks = `-- name: GetUserCharacterLinks :many
+SELECT
+  ucl.id AS link_id,
+  ucl.user_id,
+  ucl.is_primary,
+  ucl.created_at AS linked_at,
+  gp.id AS character_guid,
+  gp.realm_id,
+  gp.name,
+  gp.class,
+  gp.race,
+  gp.gender,
+  gp.level,
+  COALESCE(wow_server_realms.name, 'Unknown') AS realm_name,
+  g.name AS guild_name
+FROM user_character_links ucl
+JOIN game_players gp ON gp.id = ucl.character_guid AND gp.realm_id = ucl.realm_id
+JOIN wow_server_realms ON wow_server_realms.id = ucl.realm_id
+LEFT JOIN guilds g ON g.id = gp.guild_id
+WHERE ucl.user_id = $1
+ORDER BY ucl.is_primary DESC, ucl.created_at ASC
+`
+
+type GetUserCharacterLinksRow struct {
+	LinkID        uuid.UUID          `db:"link_id" json:"link_id"`
+	UserID        uuid.UUID          `db:"user_id" json:"user_id"`
+	IsPrimary     bool               `db:"is_primary" json:"is_primary"`
+	LinkedAt      pgtype.Timestamptz `db:"linked_at" json:"linked_at"`
+	CharacterGuid guid.GUID          `db:"character_guid" json:"character_guid"`
+	RealmID       uuid.UUID          `db:"realm_id" json:"realm_id"`
+	Name          string             `db:"name" json:"name"`
+	Class         WowPlayableClass   `db:"class" json:"class"`
+	Race          WowPlayableRace    `db:"race" json:"race"`
+	Gender        WowPlayableGender  `db:"gender" json:"gender"`
+	Level         int16              `db:"level" json:"level"`
+	RealmName     string             `db:"realm_name" json:"realm_name"`
+	GuildName     pgtype.Text        `db:"guild_name" json:"guild_name"`
+}
+
+func (q *sqlQuerier) GetUserCharacterLinks(ctx context.Context, userID uuid.UUID) ([]GetUserCharacterLinksRow, error) {
+	rows, err := q.db.Query(ctx, getUserCharacterLinks, userID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []GetUserCharacterLinksRow
+	for rows.Next() {
+		var i GetUserCharacterLinksRow
+		if err := rows.Scan(
+			&i.LinkID,
+			&i.UserID,
+			&i.IsPrimary,
+			&i.LinkedAt,
+			&i.CharacterGuid,
+			&i.RealmID,
+			&i.Name,
+			&i.Class,
+			&i.Race,
+			&i.Gender,
+			&i.Level,
+			&i.RealmName,
+			&i.GuildName,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const insertUserCharacterLink = `-- name: InsertUserCharacterLink :one
+INSERT INTO user_character_links (user_id, character_guid, realm_id, linked_by)
+VALUES ($1, $2, $3, $4)
+RETURNING id, user_id, character_guid, realm_id, is_primary, linked_by, created_at
+`
+
+type InsertUserCharacterLinkParams struct {
+	UserID        uuid.UUID     `db:"user_id" json:"user_id"`
+	CharacterGuid guid.GUID     `db:"character_guid" json:"character_guid"`
+	RealmID       uuid.UUID     `db:"realm_id" json:"realm_id"`
+	LinkedBy      uuid.NullUUID `db:"linked_by" json:"linked_by"`
+}
+
+func (q *sqlQuerier) InsertUserCharacterLink(ctx context.Context, arg InsertUserCharacterLinkParams) (UserCharacterLink, error) {
+	row := q.db.QueryRow(ctx, insertUserCharacterLink,
+		arg.UserID,
+		arg.CharacterGuid,
+		arg.RealmID,
+		arg.LinkedBy,
+	)
+	var i UserCharacterLink
+	err := row.Scan(
+		&i.ID,
+		&i.UserID,
+		&i.CharacterGuid,
+		&i.RealmID,
+		&i.IsPrimary,
+		&i.LinkedBy,
+		&i.CreatedAt,
+	)
+	return i, err
+}
+
+const setPrimaryUserCharacter = `-- name: SetPrimaryUserCharacter :one
+UPDATE user_character_links
+SET is_primary = TRUE
+WHERE user_id = $1 AND character_guid = $2 AND realm_id = $3
+RETURNING id, user_id, character_guid, realm_id, is_primary, linked_by, created_at
+`
+
+type SetPrimaryUserCharacterParams struct {
+	UserID        uuid.UUID `db:"user_id" json:"user_id"`
+	CharacterGuid guid.GUID `db:"character_guid" json:"character_guid"`
+	RealmID       uuid.UUID `db:"realm_id" json:"realm_id"`
+}
+
+func (q *sqlQuerier) SetPrimaryUserCharacter(ctx context.Context, arg SetPrimaryUserCharacterParams) (UserCharacterLink, error) {
+	row := q.db.QueryRow(ctx, setPrimaryUserCharacter, arg.UserID, arg.CharacterGuid, arg.RealmID)
+	var i UserCharacterLink
+	err := row.Scan(
+		&i.ID,
+		&i.UserID,
+		&i.CharacterGuid,
+		&i.RealmID,
+		&i.IsPrimary,
+		&i.LinkedBy,
+		&i.CreatedAt,
+	)
+	return i, err
+}
+
+const unsetPrimaryUserCharacter = `-- name: UnsetPrimaryUserCharacter :exec
+UPDATE user_character_links
+SET is_primary = FALSE
+WHERE user_id = $1 AND is_primary
+`
+
+func (q *sqlQuerier) UnsetPrimaryUserCharacter(ctx context.Context, userID uuid.UUID) error {
+	_, err := q.db.Exec(ctx, unsetPrimaryUserCharacter, userID)
+	return err
+}
+
 const getUserPanelLayoutDefaults = `-- name: GetUserPanelLayoutDefaults :one
 SELECT
   default_desktop_layout_id,
