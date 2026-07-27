@@ -9,11 +9,11 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/Emyrk/chronicle/combatlog/parser/common/characters/period"
+	"github.com/Emyrk/chronicle/combatlog/parser/common/messages"
+	"github.com/Emyrk/chronicle/combatlog/parser/common/unitdb"
 	"github.com/Emyrk/chronicle/combatlog/parser/guid"
 	"github.com/Emyrk/chronicle/combatlog/parser/types/combatant"
 	"github.com/Emyrk/chronicle/combatlog/parser/types/unitinfo"
-	"github.com/Emyrk/chronicle/combatlog/parser/common/messages"
-	"github.com/Emyrk/chronicle/combatlog/parser/common/unitdb"
 )
 
 // makePlayerGUID builds a player GUID with the given ID.
@@ -337,6 +337,53 @@ func TestSpeedrunTracker_LevelRange_ViolatorDisqualifies(t *testing.T) {
 	require.Len(t, result.LevelRange.Violators, 1)
 	assert.Equal(t, "LowPlayer", result.LevelRange.Violators[0].PlayerName)
 	assert.Equal(t, int32(55), result.LevelRange.Violators[0].Level)
+}
+
+func TestSpeedrunTracker_LevelRange_UsesEngagedCombatantInfo(t *testing.T) {
+	t.Parallel()
+	units := newTestUnits()
+
+	boss := makeCreatureGUID(100, 1)
+	player := makePlayerGUID(1)
+	level := int32(70)
+
+	units.Info[boss] = unitinfo.Info{Guid: boss, Name: "Boss", CanCooperate: false}
+	units.Players[player] = combatant.Combatant{Guid: player, Name: "OverleveledPlayer", Level: &level}
+
+	engagement := NewEngagementTracker(units)
+	rules := SpeedrunRules{
+		Requirements: []SpeedrunRequirement{
+			{Name: "Boss", EntryIDs: []uint32{100}, Count: 1},
+		},
+		LevelRange: &LevelRangeRequirement{MinLevel: 0, MaxLevel: 60},
+	}
+	tracker := NewSpeedrunTracker(rules, units, engagement)
+
+	eid := uuid.New()
+	engagement.FightStarted(eid, msg(t0))
+	tracker.FightStarted(eid, msg(t0))
+
+	p := player
+	_ = engagement.ProcessMessage(true, eid, &messages.Damage{
+		MessageBase: messages.MessageBase{Timestamp: t0.Add(time.Second)},
+		Caster:      &p,
+		Target:      boss,
+		Amount:      100,
+	})
+
+	c := &stubChar{id: boss, active: false, endState: period.EndStateSlain, hasPeriod: true}
+	tracker.ActivityChange(msg(t0.Add(time.Minute)), c)
+
+	engagement.FightEnded(eid, msg(t0.Add(time.Minute)))
+	tracker.FightEnded(eid, msg(t0.Add(time.Minute)))
+
+	result := tracker.Result()
+	require.NotNil(t, result.LevelRange)
+	assert.False(t, result.LevelRange.Satisfied)
+	assert.False(t, result.Qualified, "an engaged player must use level data from COMBATANT_INFO")
+	require.Len(t, result.LevelRange.Violators, 1)
+	assert.Equal(t, "OverleveledPlayer", result.LevelRange.Violators[0].PlayerName)
+	assert.Equal(t, int32(70), result.LevelRange.Violators[0].Level)
 }
 
 func TestSpeedrunTracker_LevelRange_AFKPlayerNotChecked(t *testing.T) {

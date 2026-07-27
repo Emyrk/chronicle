@@ -169,7 +169,8 @@ func (t *SpeedrunTracker) Result() *SpeedrunResult {
 		Proof:          proof,
 	}
 
-	// Check level range against engaged players only.
+	// Check the level range against engaged players only. Player metadata can come
+	// from UNIT_INFO or COMBATANT_INFO depending on the log format, so consult both.
 	if t.rules.LevelRange != nil && t.units != nil && t.engagement != nil {
 		lr := &LevelRangeResult{
 			Requirement: *t.rules.LevelRange,
@@ -178,16 +179,31 @@ func (t *SpeedrunTracker) Result() *SpeedrunResult {
 		}
 		engagedPlayers := t.engagement.AllEngagedPlayers()
 		for gid := range engagedPlayers {
-			info, ok := t.units.Get(gid)
-			if !ok || !info.Guid.IsPlayer() {
+			if !gid.IsPlayer() {
 				continue
 			}
-			if info.Level == 0 || info.Level < t.rules.LevelRange.MinLevel || info.Level > t.rules.LevelRange.MaxLevel {
+
+			var playerName string
+			var level int32
+			if info, ok := t.units.Get(gid); ok {
+				playerName = info.Name
+				level = info.Level
+			}
+			if player, ok := t.units.GetPlayer(gid); ok {
+				if player.Name != "" {
+					playerName = player.Name
+				}
+				if player.Level != nil {
+					level = *player.Level
+				}
+			}
+
+			if level == 0 || level < t.rules.LevelRange.MinLevel || level > t.rules.LevelRange.MaxLevel {
 				lr.Satisfied = false
 				lr.Violators = append(lr.Violators, LevelViolation{
-					PlayerName: info.Name,
+					PlayerName: playerName,
 					PlayerGUID: gid,
-					Level:      info.Level,
+					Level:      level,
 				})
 			}
 		}
