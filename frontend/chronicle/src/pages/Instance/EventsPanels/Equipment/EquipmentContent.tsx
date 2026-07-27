@@ -174,6 +174,20 @@ const CLASS_NAME_TO_ID: Record<string, number> = {
   shaman: 7, mage: 8, warlock: 9, druid: 11,
 };
 
+/**
+ * Encode talent allocations as a talent-calculator build string.
+ * The `?build=` param uses the positional format: one digit per talent in
+ * tab-index order, tabs joined with dashes, trailing zeros trimmed — which is
+ * exactly the shape of `rankDigits`.
+ */
+function allocationsToBuildString(allocations: TalentAllocation[]): string {
+  const sections = allocations.map((a) => a.rankDigits.replace(/0+$/, ""));
+  while (sections.length > 0 && sections[sections.length - 1] === "") {
+    sections.pop();
+  }
+  return sections.join("-");
+}
+
 function PlayerTalentsView({
   player,
   datasetId,
@@ -200,13 +214,31 @@ function PlayerTalentsView({
     return <div className="text-sm text-muted-foreground p-4">No talent data available for this player.</div>;
   }
 
+  const build = allocationsToBuildString(allocations);
+  const builderUrl = `/talents/${player.heroClass.toLowerCase().replace(/\s+/g, "")}${
+    build ? `?build=${encodeURIComponent(build)}` : ""
+  }`;
+
   return (
-    <TalentTreeViewer
-      classId={classId}
-      allocations={allocations}
-      datasetId={datasetId}
-      compact
-    />
+    <div>
+      <div className="flex justify-end px-2 pt-2">
+        <a
+          href={builderUrl}
+          target="_blank"
+          rel="noopener noreferrer"
+          className="inline-flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground"
+        >
+          Open in talent builder
+          <ExternalLink className="h-3 w-3" />
+        </a>
+      </div>
+      <TalentTreeViewer
+        classId={classId}
+        allocations={allocations}
+        datasetId={datasetId}
+        compact
+      />
+    </div>
   );
 }
 
