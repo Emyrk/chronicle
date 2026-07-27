@@ -339,6 +339,58 @@ func TestSpeedrunTracker_LevelRange_ViolatorDisqualifies(t *testing.T) {
 	assert.Equal(t, int32(55), result.LevelRange.Violators[0].Level)
 }
 
+func TestSpeedrunTracker_LevelRange_IgnoresZeroGUID(t *testing.T) {
+	t.Parallel()
+	units := newTestUnits()
+
+	boss := makeCreatureGUID(100, 1)
+	player := makePlayerGUID(1)
+
+	units.Info[boss] = unitinfo.Info{Guid: boss, Name: "Boss", CanCooperate: false}
+	units.Info[player] = unitinfo.Info{Guid: player, Name: "Player", IsPlayer: true, CanCooperate: true, Level: 60}
+
+	engagement := NewEngagementTracker(units)
+	rules := SpeedrunRules{
+		Requirements: []SpeedrunRequirement{
+			{Name: "Boss", EntryIDs: []uint32{100}, Count: 1},
+		},
+		LevelRange: &LevelRangeRequirement{MinLevel: 0, MaxLevel: 60},
+	}
+	tracker := NewSpeedrunTracker(rules, units, engagement)
+
+	eid := uuid.New()
+	engagement.FightStarted(eid, msg(t0))
+	tracker.FightStarted(eid, msg(t0))
+
+	p := player
+	_ = engagement.ProcessMessage(true, eid, &messages.Damage{
+		MessageBase: messages.MessageBase{Timestamp: t0.Add(time.Second)},
+		Caster:      &p,
+		Target:      boss,
+		Amount:      100,
+	})
+
+	zero := guid.GUID(0)
+	_ = engagement.ProcessMessage(true, eid, &messages.Damage{
+		MessageBase: messages.MessageBase{Timestamp: t0.Add(2 * time.Second)},
+		Caster:      &zero,
+		Target:      player,
+		Amount:      100,
+	})
+
+	c := &stubChar{id: boss, active: false, endState: period.EndStateSlain, hasPeriod: true}
+	tracker.ActivityChange(msg(t0.Add(time.Minute)), c)
+
+	engagement.FightEnded(eid, msg(t0.Add(time.Minute)))
+	tracker.FightEnded(eid, msg(t0.Add(time.Minute)))
+
+	result := tracker.Result()
+	require.NotNil(t, result.LevelRange)
+	assert.True(t, result.LevelRange.Satisfied)
+	assert.True(t, result.Qualified)
+	assert.Empty(t, result.LevelRange.Violators)
+}
+
 func TestSpeedrunTracker_LevelRange_UsesEngagedCombatantInfo(t *testing.T) {
 	t.Parallel()
 	units := newTestUnits()

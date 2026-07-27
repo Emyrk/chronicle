@@ -179,7 +179,9 @@ func (t *SpeedrunTracker) Result() *SpeedrunResult {
 		}
 		engagedPlayers := t.engagement.AllEngagedPlayers()
 		for gid := range engagedPlayers {
-			if !gid.IsPlayer() {
+			// A zero GUID can represent unattributed damage, such as reflected
+			// Shadow Word: Death damage. It is not a player to level-check.
+			if gid.IsZero() || !gid.IsPlayer() {
 				continue
 			}
 
