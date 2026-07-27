@@ -382,6 +382,7 @@ export function AppearanceSettings() {
 export function LayoutBookSettings() {
   const navigate = useNavigate();
   const { data: session } = useSession();
+  const { data: siteConfig } = useSiteConfig();
   useInstanceDefaultsCache(!!session?.user_id);
   const { data: layoutsResponse } = useUserPanelLayouts(session?.user_id ?? "");
   const createLayout = useCreatePanelLayout();
@@ -709,10 +710,12 @@ export function LayoutBookSettings() {
                           className="h-7 w-7 transition-all hover:-translate-y-0.5 hover:border-sky-300 hover:bg-sky-500/25 hover:text-sky-100 hover:shadow-[0_0_0_1px_rgba(56,189,248,0.35)]"
                           title="Share layout"
                           onClick={async () => {
-                            const useShortHost = window.location.hostname !== "localhost";
-                            console.log(layout.code)
-                            const shareURL = layout.code && useShortHost
-                              ? `https://chrn.link/l/${layout.code}`
+                            // Mirrors the backend's LayoutShareURL: only use the
+                            // short link domain when this deployment has one
+                            // configured, otherwise fall back to a same-origin link.
+                            const shortLinkDomain = cleanShortLinkDomain(siteConfig?.short_link_domain);
+                            const shareURL = layout.code && shortLinkDomain
+                              ? `https://${shortLinkDomain}/l/${layout.code}`
                               : `${window.location.origin}/account/layout-lab?shared=${layout.id}`;
                             await navigator.clipboard.writeText(shareURL);
                             toast.success("Share link copied", { description: layout.title });
@@ -734,6 +737,13 @@ export function LayoutBookSettings() {
   );
 }
 
+
+// cleanShortLinkDomain strips any scheme prefix and trailing slash so the
+// share URL can safely prepend https:// (mirrors cleanDomain in api/share.go).
+function cleanShortLinkDomain(domain: string | undefined): string {
+  if (!domain) return "";
+  return domain.replace(/^https?:\/\//, "").replace(/\/$/, "");
+}
 
 function parseSimpleParsedInstances(output: unknown): { id: string; name: string; slug?: string; encounters?: { start_time: string }[] }[] {
   if (!output || typeof output !== "object") return [];
