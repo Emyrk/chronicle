@@ -160,6 +160,7 @@ var (
 			return &rankings.Rankings{
 				Speedrun: &rankings.SpeedrunRules{
 					Requirements: OnyxiasLairSpeedrunRequirements(fl),
+					LevelRange:   Level60Cap(fl),
 				},
 			}
 		},
@@ -183,6 +184,7 @@ var (
 			return &rankings.Rankings{
 				Speedrun: &rankings.SpeedrunRules{
 					Requirements: ZulGurubSpeedrunRequirements(fl),
+					LevelRange:   Level60Cap(fl),
 				},
 			}
 		},
@@ -259,10 +261,11 @@ var (
 		},
 		MapIDs:   []uint32{533},
 		Hostiles: FromMapFunc(NaxxramasHostiles),
-		FlavoredRankings: func(database.WoWFlavor) *rankings.Rankings {
+		FlavoredRankings: func(fl database.WoWFlavor) *rankings.Rankings {
 			return &rankings.Rankings{
 				Speedrun: &rankings.SpeedrunRules{
 					Requirements: NaxxramasSpeedrunRequirements(),
+					LevelRange:   Level60Cap(fl),
 				},
 			}
 		},

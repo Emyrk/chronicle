@@ -54,6 +54,7 @@ const (
 func AllFlavorTagValues() []FlavorTag {
 	return []FlavorTag{
 		FlavorVanilla,
+		FlavorTBC,
 		FlavorWrath,
 		FlavorTurtle,
 		FlavorKronos,

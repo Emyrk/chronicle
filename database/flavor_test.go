@@ -26,6 +26,18 @@ func TestWoWFlavorHas(t *testing.T) {
 	}
 }
 
+func TestAllFlavorTagValuesIncludesTBC(t *testing.T) {
+	t.Parallel()
+
+	for _, tag := range database.AllFlavorTagValues() {
+		if tag == database.FlavorTBC {
+			return
+		}
+	}
+
+	t.Fatal("AllFlavorTagValues() missing tbc")
+}
+
 // TestLogTypeFlavor pins the bootstrap LogType->flavor derivation.
 func TestLogTypeFlavor(t *testing.T) {
 	t.Parallel()
