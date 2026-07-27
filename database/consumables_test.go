@@ -100,9 +100,17 @@ func TestDerivedConsumablesAreDatasetScopedAndLinkBuffs(t *testing.T) {
 	assert.Equal(t, int32(200), defaultRows[0].BuffSpellID.Int32)
 	assert.Equal(t, "Default Buff", defaultRows[0].BuffSpellName.String)
 
+	defaultSummary, err := store.GetDatasetImportSummary(ctx, servicedataset.DefaultDatasetID)
+	require.NoError(t, err)
+	assert.Equal(t, int32(1), defaultSummary.ConsumablesCount)
+
 	otherRows, err := store.ListConsumablesByDataset(ctx, otherDataset.ID)
 	require.NoError(t, err)
 	require.Len(t, otherRows, 1)
 	assert.Equal(t, "Other Elixir", otherRows[0].ItemName)
 	assert.Equal(t, int32(400), otherRows[0].BuffSpellID.Int32)
+
+	otherSummary, err := store.GetDatasetImportSummary(ctx, otherDataset.ID)
+	require.NoError(t, err)
+	assert.Equal(t, int32(1), otherSummary.ConsumablesCount)
 }

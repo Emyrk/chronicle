@@ -974,6 +974,7 @@ export interface DatasetImportSummary {
   duration_modifiers_count: number;
   periodic_spells_count: number;
   desc_variables_count: number;
+  consumables_count: number;
   has_talents: boolean;
 }
 
