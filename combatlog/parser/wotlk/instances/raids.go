@@ -78,6 +78,22 @@ var ObsidianSanctumFactory = &instances.CommonFactory{
 	Hostiles:  instances.FromMap(ObsidianSanctumHostiles()),
 }
 
+var OnyxiaFactory = &instances.CommonFactory{
+	Name:      "Onyxia's Lair",
+	ZoneNames: []string{"onyxia's lair", "奥妮克希亚的巢穴"},
+	MapIDs:    []uint32{249},
+	Hostiles:  instances.OnyxiaHostiles,
+	FlavoredRankings: func(database.WoWFlavor) *rankings.Rankings {
+		return &rankings.Rankings{
+			Speedrun: &rankings.SpeedrunRules{
+				Requirements: []rankings.SpeedrunRequirement{
+					{Name: "Onyxia", EntryIDs: []uint32{10184}, Count: 1, Category: rankings.SpeedrunCategoryBosses},
+				},
+			},
+		}
+	},
+}
+
 // NaxxramasHostiles returns creature entry IDs for Naxxramas (WotLK).
 // Reuses the Vanilla Naxx hostile list, replacing Highlord Mograine with Baron Rivendare
 // for the Four Horsemen encounter.
