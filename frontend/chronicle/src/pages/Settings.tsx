@@ -10,6 +10,7 @@ import {
   useMyStorage,
   useSession,
   useSetPrimaryCharacter,
+  useUnlinkMyCharacter,
   type LinkedCharacter,
   useUserPanelLayouts,
   useCreatePanelLayout,
@@ -360,6 +361,7 @@ export function ProfileSettings() {
 export function CharacterSettings() {
   const { data: characters, isLoading } = useMyCharacters();
   const setPrimary = useSetPrimaryCharacter();
+  const unlink = useUnlinkMyCharacter();
 
   const handleSetPrimary = (character: LinkedCharacter) => {
     setPrimary.mutate(
@@ -367,6 +369,17 @@ export function CharacterSettings() {
       {
         onSuccess: () => toast.success(`${character.name} is now your primary character.`),
         onError: (error) => showRequestErrorToast("Failed to set primary character", error),
+      },
+    );
+  };
+
+  const handleUnlink = (character: LinkedCharacter) => {
+    if (!window.confirm(`Unlink ${character.name} from your account?`)) return;
+    unlink.mutate(
+      { realm_id: character.realm_id, character_guid: character.character_guid },
+      {
+        onSuccess: () => toast.success(`${character.name} has been unlinked.`),
+        onError: (error) => showRequestErrorToast("Failed to unlink character", error),
       },
     );
   };
@@ -417,16 +430,27 @@ export function CharacterSettings() {
                   {character.guild_name ? ` · <${character.guild_name}>` : ""}
                 </p>
               </div>
-              {!character.is_primary && (
+              <div className="flex items-center gap-2 shrink-0">
+                {!character.is_primary && (
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    disabled={setPrimary.isPending}
+                    onClick={() => handleSetPrimary(character)}
+                  >
+                    Set as primary
+                  </Button>
+                )}
                 <Button
-                  variant="outline"
+                  variant="ghost"
                   size="sm"
-                  disabled={setPrimary.isPending}
-                  onClick={() => handleSetPrimary(character)}
+                  className="text-muted-foreground hover:text-destructive"
+                  disabled={unlink.isPending}
+                  onClick={() => handleUnlink(character)}
                 >
-                  Set as primary
+                  Unlink
                 </Button>
-              )}
+              </div>
             </div>
           ))}
         </div>

@@ -95,6 +95,22 @@ func (api *API) AdminUnlinkUserCharacter(w http.ResponseWriter, r *http.Request)
 		return
 	}
 
+	api.unlinkCharacter(w, r, &userID)
+}
+
+// UnlinkMyCharacter removes a character link from the authenticated user's
+// own account. Authorization is the manage_link permission (owner or user
+// admin), not the admin middleware.
+func (api *API) UnlinkMyCharacter(w http.ResponseWriter, r *http.Request) {
+	api.unlinkCharacter(w, r, nil)
+}
+
+// unlinkCharacter deletes a character link after verifying the actor holds
+// manage_link on the character (owner + chronicle->admin_users per the zed
+// policy). If expectUserID is set, the link must belong to that user.
+func (api *API) unlinkCharacter(w http.ResponseWriter, r *http.Request, expectUserID *uuid.UUID) {
+	ctx := r.Context()
+
 	realmID, err := uuid.Parse(chi.URLParam(r, "realmID"))
 	if err != nil {
 		httpapi.Write(ctx, w, http.StatusBadRequest, chroniclesdk.Response{
@@ -111,8 +127,6 @@ func (api *API) AdminUnlinkUserCharacter(w http.ResponseWriter, r *http.Request)
 		return
 	}
 
-	// Verify the actor holds manage_link on the character
-	// (owner + chronicle->admin_users per the zed policy).
 	state := chronauth.AuthenticationState(r)
 	b := policy.New()
 	ok, err := api.Opts.Zed.CheckOne(ctx, nil, b.Armory_player(characterGUID).CanManage_link_User(b.User(state.Claims.Subject)))
@@ -138,7 +152,7 @@ func (api *API) AdminUnlinkUserCharacter(w http.ResponseWriter, r *http.Request)
 		})
 		return
 	}
-	if link.UserID != userID {
+	if expectUserID != nil && link.UserID != *expectUserID {
 		httpapi.Write(ctx, w, http.StatusNotFound, chroniclesdk.Response{
 			Message: "Character is not linked to this user",
 		})

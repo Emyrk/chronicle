@@ -500,6 +500,26 @@ export function useSetPrimaryCharacter() {
   });
 }
 
+export function useUnlinkMyCharacter() {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: async (character: { realm_id: string; character_guid: string }) => {
+      const response = await fetch(
+        `/api/v1/me/characters/${encodeURIComponent(character.realm_id)}/${encodeURIComponent(character.character_guid)}`,
+        { method: "DELETE", credentials: "include" },
+      );
+      if (!response.ok) {
+        const error = await response.json().catch(() => null);
+        throw buildAPIError("Failed to unlink character", error);
+      }
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["my-characters"] });
+    },
+  });
+}
+
 export function useMyStorage(options?: Omit<UseQueryOptions<UserStorageInfo>, "queryKey" | "queryFn">) {
   return useQuery({
     queryKey: ["my-storage"],
