@@ -289,6 +289,22 @@ CREATE TABLE datasets (
     CONSTRAINT datasets_slug_format CHECK ((slug ~ '^[a-z0-9][a-z0-9-]{1,48}[a-z0-9]$'::text))
 );
 
+CREATE TABLE dbc_affected_aura_duration_modifiers (
+    dataset_id uuid NOT NULL,
+    spell_id integer NOT NULL,
+    modifier_spell_id integer NOT NULL
+);
+
+CREATE TABLE dbc_affected_aura_durations (
+    dataset_id uuid NOT NULL,
+    spell_id integer NOT NULL,
+    spell_name text NOT NULL,
+    spell_class_set integer NOT NULL,
+    base_duration_ms integer NOT NULL,
+    max_duration_ms bigint NOT NULL,
+    deprecated boolean DEFAULT false NOT NULL
+);
+
 CREATE TABLE dbc_consumable_buffs (
     dataset_id uuid NOT NULL,
     item_id integer NOT NULL,
@@ -1544,6 +1560,12 @@ ALTER TABLE ONLY datasets
 ALTER TABLE ONLY datasets
     ADD CONSTRAINT datasets_slug_key UNIQUE (slug);
 
+ALTER TABLE ONLY dbc_affected_aura_duration_modifiers
+    ADD CONSTRAINT dbc_affected_aura_duration_modifiers_pkey PRIMARY KEY (dataset_id, spell_id, modifier_spell_id);
+
+ALTER TABLE ONLY dbc_affected_aura_durations
+    ADD CONSTRAINT dbc_affected_aura_durations_pkey PRIMARY KEY (dataset_id, spell_id);
+
 ALTER TABLE ONLY dbc_consumable_buffs
     ADD CONSTRAINT dbc_consumable_buffs_pkey PRIMARY KEY (dataset_id, item_id, spell_id);
 
@@ -1841,6 +1863,8 @@ ALTER TABLE ONLY wow_server_upload_keys
 ALTER TABLE ONLY wow_servers
     ADD CONSTRAINT wow_servers_pkey PRIMARY KEY (id);
 
+CREATE INDEX dbc_affected_aura_duration_modifiers_modifier_idx ON dbc_affected_aura_duration_modifiers USING btree (dataset_id, modifier_spell_id);
+
 CREATE INDEX dbc_consumable_buffs_spell_idx ON dbc_consumable_buffs USING btree (dataset_id, spell_id);
 
 CREATE UNIQUE INDEX files_unique_owner_hash ON log_file USING btree (owner, hash);
@@ -1983,6 +2007,15 @@ ALTER TABLE ONLY data_grants
 
 ALTER TABLE ONLY dataset_talent_trees
     ADD CONSTRAINT dataset_talent_trees_dataset_id_fkey FOREIGN KEY (dataset_id) REFERENCES datasets(id) ON DELETE CASCADE;
+
+ALTER TABLE ONLY dbc_affected_aura_duration_modifiers
+    ADD CONSTRAINT dbc_affected_aura_duration_mo_dataset_id_modifier_spell_id_fkey FOREIGN KEY (dataset_id, modifier_spell_id) REFERENCES dbc_duration_modifiers(dataset_id, spell_id) ON DELETE CASCADE;
+
+ALTER TABLE ONLY dbc_affected_aura_duration_modifiers
+    ADD CONSTRAINT dbc_affected_aura_duration_modifiers_dataset_id_spell_id_fkey FOREIGN KEY (dataset_id, spell_id) REFERENCES dbc_affected_aura_durations(dataset_id, spell_id) ON DELETE CASCADE;
+
+ALTER TABLE ONLY dbc_affected_aura_durations
+    ADD CONSTRAINT dbc_affected_aura_durations_dataset_id_fkey FOREIGN KEY (dataset_id) REFERENCES datasets(id) ON DELETE CASCADE;
 
 ALTER TABLE ONLY dbc_consumable_buffs
     ADD CONSTRAINT dbc_consumable_buffs_dataset_id_item_id_fkey FOREIGN KEY (dataset_id, item_id) REFERENCES dbc_consumables(dataset_id, item_id) ON DELETE CASCADE;

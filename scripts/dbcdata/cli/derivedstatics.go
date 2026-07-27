@@ -67,7 +67,7 @@ func DerivedStaticsCmd() *serpent.Command {
 			if err := generateDerivedExtraAttacks(wc, goDir, tsDir, server); err != nil {
 				return fmt.Errorf("generate extra attack spells: %w", err)
 			}
-			if err := generateDerivedDurationModifiers(wc, goDir, tsDir, server); err != nil {
+			if err := generateDerivedDurationModifiers(wc, goDir, server); err != nil {
 				return fmt.Errorf("generate duration modifiers: %w", err)
 			}
 			if err := generateClassSpells(wc, assetsDir); err != nil {
@@ -129,20 +129,11 @@ func generateClassSpells(wc *dbcdb.WoWClient, assetsDir string) error {
 	return writeJSON(filepath.Join(assetsDir, "class-spells.json"), data)
 }
 
-func generateDerivedDurationModifiers(wc *dbcdb.WoWClient, goDir, tsDir string, server string) error {
+func generateDerivedDurationModifiers(wc *dbcdb.WoWClient, goDir string, server string) error {
 	data, err := collectDurationModifiers(wc)
 	if err != nil {
 		return err
 	}
 
-	if err := writeTemplate(filepath.Join(goDir, "durationmodifiers.go"), durationModifiersGoTemplate, serverData{Server: server, Entries: data}, server); err != nil {
-		return err
-	}
-
-	affected, err := collectAffectedSpells(wc, data.Entries)
-	if err != nil {
-		return err
-	}
-
-	return writeTemplate(filepath.Join(tsDir, "DurationModifiers.ts"), durationModifiersTSTemplate, affected, server)
+	return writeTemplate(filepath.Join(goDir, "durationmodifiers.go"), durationModifiersGoTemplate, serverData{Server: server, Entries: data}, server)
 }

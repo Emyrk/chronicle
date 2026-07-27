@@ -19,6 +19,130 @@ var (
 	ErrBatchAlreadyClosed = errors.New("batch already closed")
 )
 
+const insertAffectedAuraDurationModifiers = `-- name: InsertAffectedAuraDurationModifiers :batchexec
+INSERT INTO dbc_affected_aura_duration_modifiers (
+    dataset_id,
+    spell_id,
+    modifier_spell_id
+)
+VALUES ($1, $2, $3)
+`
+
+type InsertAffectedAuraDurationModifiersBatchResults struct {
+	br     pgx.BatchResults
+	tot    int
+	closed bool
+}
+
+type InsertAffectedAuraDurationModifiersParams struct {
+	DatasetID       uuid.UUID `db:"dataset_id" json:"dataset_id"`
+	SpellID         int32     `db:"spell_id" json:"spell_id"`
+	ModifierSpellID int32     `db:"modifier_spell_id" json:"modifier_spell_id"`
+}
+
+func (q *sqlQuerier) InsertAffectedAuraDurationModifiers(ctx context.Context, arg []InsertAffectedAuraDurationModifiersParams) *InsertAffectedAuraDurationModifiersBatchResults {
+	batch := &pgx.Batch{}
+	for _, a := range arg {
+		vals := []interface{}{
+			a.DatasetID,
+			a.SpellID,
+			a.ModifierSpellID,
+		}
+		batch.Queue(insertAffectedAuraDurationModifiers, vals...)
+	}
+	br := q.db.SendBatch(ctx, batch)
+	return &InsertAffectedAuraDurationModifiersBatchResults{br, len(arg), false}
+}
+
+func (b *InsertAffectedAuraDurationModifiersBatchResults) Exec(f func(int, error)) {
+	defer b.br.Close()
+	for t := 0; t < b.tot; t++ {
+		if b.closed {
+			if f != nil {
+				f(t, ErrBatchAlreadyClosed)
+			}
+			continue
+		}
+		_, err := b.br.Exec()
+		if f != nil {
+			f(t, err)
+		}
+	}
+}
+
+func (b *InsertAffectedAuraDurationModifiersBatchResults) Close() error {
+	b.closed = true
+	return b.br.Close()
+}
+
+const insertAffectedAuraDurations = `-- name: InsertAffectedAuraDurations :batchexec
+INSERT INTO dbc_affected_aura_durations (
+    dataset_id,
+    spell_id,
+    spell_name,
+    spell_class_set,
+    base_duration_ms,
+    max_duration_ms,
+    deprecated
+)
+VALUES ($1, $2, $3, $4, $5, $6, $7)
+`
+
+type InsertAffectedAuraDurationsBatchResults struct {
+	br     pgx.BatchResults
+	tot    int
+	closed bool
+}
+
+type InsertAffectedAuraDurationsParams struct {
+	DatasetID      uuid.UUID `db:"dataset_id" json:"dataset_id"`
+	SpellID        int32     `db:"spell_id" json:"spell_id"`
+	SpellName      string    `db:"spell_name" json:"spell_name"`
+	SpellClassSet  int32     `db:"spell_class_set" json:"spell_class_set"`
+	BaseDurationMs int32     `db:"base_duration_ms" json:"base_duration_ms"`
+	MaxDurationMs  int64     `db:"max_duration_ms" json:"max_duration_ms"`
+	Deprecated     bool      `db:"deprecated" json:"deprecated"`
+}
+
+func (q *sqlQuerier) InsertAffectedAuraDurations(ctx context.Context, arg []InsertAffectedAuraDurationsParams) *InsertAffectedAuraDurationsBatchResults {
+	batch := &pgx.Batch{}
+	for _, a := range arg {
+		vals := []interface{}{
+			a.DatasetID,
+			a.SpellID,
+			a.SpellName,
+			a.SpellClassSet,
+			a.BaseDurationMs,
+			a.MaxDurationMs,
+			a.Deprecated,
+		}
+		batch.Queue(insertAffectedAuraDurations, vals...)
+	}
+	br := q.db.SendBatch(ctx, batch)
+	return &InsertAffectedAuraDurationsBatchResults{br, len(arg), false}
+}
+
+func (b *InsertAffectedAuraDurationsBatchResults) Exec(f func(int, error)) {
+	defer b.br.Close()
+	for t := 0; t < b.tot; t++ {
+		if b.closed {
+			if f != nil {
+				f(t, ErrBatchAlreadyClosed)
+			}
+			continue
+		}
+		_, err := b.br.Exec()
+		if f != nil {
+			f(t, err)
+		}
+	}
+}
+
+func (b *InsertAffectedAuraDurationsBatchResults) Close() error {
+	b.closed = true
+	return b.br.Close()
+}
+
 const insertEncounterCharacterFights = `-- name: InsertEncounterCharacterFights :batchexec
 INSERT INTO
   log_instance_encounter_hostiles (id, boss, encounter_id, periods)

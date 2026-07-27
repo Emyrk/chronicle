@@ -53,6 +53,7 @@ const DATA_TYPES: { label: string; key: keyof DatasetImportSummary; isBool?: boo
   { label: "Radii", key: "radii_count" },
   { label: "Focus Objects", key: "focus_objects_count" },
   // Derived data:
+  { label: "Affected Durations", key: "affected_aura_durations_count" },
   { label: "Consumables", key: "consumables_count" },
   { label: "Extra Attacks", key: "extra_attacks_count" },
   { label: "Duration Mods", key: "duration_modifiers_count" },

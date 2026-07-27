@@ -13,25 +13,19 @@ type DurationModifierSet struct {
 	ByClassBit map[int32]map[uint64][]int32 // SpellClassSet → bit → modifier IDs
 }
 
-// MaxAuraDuration returns the theoretical maximum duration for a spell,
-// assuming every possible duration modifier talent is active at max rank.
-// Returns the base MaxDuration for spells with no modifiers.
-// Returns -1ms for permanent auras, 0 for instant/no duration.
-func MaxAuraDuration(spell *Spell, mods *DurationModifierSet) time.Duration {
-	dur := spell.Duration
-	if dur.MaxDuration <= 0 {
-		return time.Duration(dur.MaxDuration) * time.Millisecond
-	}
+// DurationModifiersForSpell returns every duration modifier whose spell class
+// set and mask overlap the target spell. Modifier IDs are de-duplicated when
+// multiple class-mask bits match.
+func DurationModifiersForSpell(spell *Spell, mods *DurationModifierSet) []dbcmem.DurationModifier {
 	if mods == nil {
-		return time.Duration(dur.MaxDuration) * time.Millisecond
+		return nil
 	}
 
 	bitMap, ok := mods.ByClassBit[int32(spell.SpellClassSet)]
 	if !ok {
-		return time.Duration(dur.MaxDuration) * time.Millisecond
+		return nil
 	}
 
-	// Collect all matching modifiers via bit decomposition.
 	mask := uint64(spell.SpellClassMask)
 	seen := make(map[int32]bool)
 	var matched []dbcmem.DurationModifier
@@ -45,14 +39,37 @@ func MaxAuraDuration(spell *Spell, mods *DurationModifierSet) time.Duration {
 				continue
 			}
 			seen[id] = true
-			mod := mods.ByID[id]
-			if mod.Deprecated {
-				continue
-			}
-			matched = append(matched, mod)
+			matched = append(matched, mods.ByID[id])
 		}
 	}
+	return matched
+}
 
+// MaxAuraDuration returns the theoretical maximum duration for a spell,
+// assuming every possible duration modifier talent is active at max rank.
+// Returns the base MaxDuration for spells with no modifiers.
+// Returns -1ms for permanent auras, 0 for instant/no duration.
+func MaxAuraDuration(spell *Spell, mods *DurationModifierSet) time.Duration {
+	dur := spell.Duration
+	if dur.MaxDuration <= 0 {
+		return time.Duration(dur.MaxDuration) * time.Millisecond
+	}
+	if mods == nil {
+		return time.Duration(dur.MaxDuration) * time.Millisecond
+	}
+
+	matched := DurationModifiersForSpell(spell, mods)
+	if len(matched) == 0 {
+		return time.Duration(dur.MaxDuration) * time.Millisecond
+	}
+
+	active := matched[:0]
+	for _, mod := range matched {
+		if !mod.Deprecated {
+			active = append(active, mod)
+		}
+	}
+	matched = active
 	if len(matched) == 0 {
 		return time.Duration(dur.MaxDuration) * time.Millisecond
 	}

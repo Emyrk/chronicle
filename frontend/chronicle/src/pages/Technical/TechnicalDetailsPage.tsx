@@ -29,12 +29,6 @@ const TECHNICAL_LINKS: TechnicalLink[] = [
     icon: <Sparkles className="h-4 w-4" />,
   },
   {
-    title: "Aura Duration Modifiers",
-    description: "Spells whose duration can be modified by passive talents, with all applicable modifiers",
-    href: "/technical/aura-duration-modifiers",
-    icon: <Clock className="h-4 w-4" />,
-  },
-  {
     title: "Class Spells",
     description: "All spells grouped by player class (SpellClassSet from DBC)",
     href: "/technical/class-spells",
@@ -51,6 +45,12 @@ const TECHNICAL_LINKS: TechnicalLink[] = [
     description: "Consumable items and the buffs linked through their spell chains",
     href: "/technical/consumables",
     icon: <FlaskConical className="h-4 w-4" />,
+  },
+  {
+    title: "Aura Duration Modifiers",
+    description: "Dataset-generated spell durations and all applicable passive modifiers",
+    href: "/technical/aura-duration-modifiers",
+    icon: <Clock className="h-4 w-4" />,
   },
   {
     title: "Talent Trees",

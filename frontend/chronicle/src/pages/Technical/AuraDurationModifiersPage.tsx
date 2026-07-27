@@ -1,12 +1,75 @@
 import { useMemo, useState } from "react";
+import { useQuery } from "@tanstack/react-query";
 import { Link } from "react-router-dom";
 import { ArrowLeft, Clock, ExternalLink, Search } from "lucide-react";
 import { Card } from "@/components/ui/Card/Card";
 import { SpellIdTooltip } from "@/components/ui/SpellIdTooltip/SpellIdTooltip";
-import { AffectedSpells } from "@/constants/dbmem/DurationModifiers";
-import type { DurationModifierRef } from "@/constants/dbmem/DurationModifiers";
+import { useDatasetId } from "@/hooks/useDatasetId";
 
 type ViewMode = "by-spell" | "by-modifier";
+
+type DurationModifierRef = {
+  spellId: number;
+  name: string;
+  percent: number;
+  flat: number;
+  deprecated: boolean;
+};
+
+type AffectedSpell = {
+  id: number;
+  name: string;
+  spellClassSet: number;
+  baseDurationMs: number;
+  maxDurationMs: number;
+  deprecated: boolean;
+  modifiers: DurationModifierRef[];
+};
+
+type AffectedAuraDurationResponse = {
+  spell_id: number;
+  name: string;
+  spell_class_set: number;
+  base_duration_ms: number;
+  max_duration_ms: number;
+  deprecated: boolean;
+  modifiers: {
+    spell_id: number;
+    name: string;
+    percent: number;
+    flat: number;
+    deprecated: boolean;
+  }[];
+};
+
+function useAffectedAuraDurations() {
+  const datasetId = useDatasetId();
+  return useQuery({
+    queryKey: ["wowdb", "aura-duration-modifiers", datasetId ?? "default"],
+    queryFn: async () => {
+      const params = datasetId ? `?dataset_id=${encodeURIComponent(datasetId)}` : "";
+      const response = await fetch(`/api/v1/wowdb/aura-duration-modifiers${params}`);
+      if (!response.ok) throw new Error("Failed to fetch aura duration modifiers");
+      const data = (await response.json()) as AffectedAuraDurationResponse[];
+      return data.map<AffectedSpell>((spell) => ({
+        id: spell.spell_id,
+        name: spell.name,
+        spellClassSet: spell.spell_class_set,
+        baseDurationMs: spell.base_duration_ms,
+        maxDurationMs: spell.max_duration_ms,
+        deprecated: spell.deprecated,
+        modifiers: spell.modifiers.map((modifier) => ({
+          spellId: modifier.spell_id,
+          name: modifier.name,
+          percent: modifier.percent,
+          flat: modifier.flat,
+          deprecated: modifier.deprecated,
+        })),
+      }));
+    },
+    staleTime: 5 * 60 * 1000,
+  });
+}
 
 const CLASS_NAMES: Record<number, string> = {
   0: "Generic",
@@ -51,17 +114,17 @@ type ModifierWithTargets = DurationModifierRef & {
   targets: { id: number; name: string; spellClassSet: number; baseDurationMs: number }[];
 };
 
-function useModifierView() {
+function useModifierView(spells: AffectedSpell[]) {
   return useMemo(() => {
     const map = new Map<number, ModifierWithTargets>();
-    for (const [id, spell] of Object.entries(AffectedSpells)) {
+    for (const spell of spells) {
       for (const mod of spell.modifiers) {
         let entry = map.get(mod.spellId);
         if (!entry) {
           entry = { ...mod, targets: [] };
           map.set(mod.spellId, entry);
         }
-        entry.targets.push({ id: Number(id), name: spell.name, spellClassSet: spell.spellClassSet, baseDurationMs: spell.baseDurationMs });
+        entry.targets.push({ id: spell.id, name: spell.name, spellClassSet: spell.spellClassSet, baseDurationMs: spell.baseDurationMs });
       }
     }
     // Sort targets within each modifier
@@ -69,7 +132,7 @@ function useModifierView() {
       entry.targets.sort((a, b) => a.name.localeCompare(b.name) || a.id - b.id);
     }
     return [...map.values()].sort((a, b) => a.name.localeCompare(b.name) || a.spellId - b.spellId);
-  }, []);
+  }, [spells]);
 }
 
 export function AuraDurationModifiersPage() {
@@ -77,16 +140,10 @@ export function AuraDurationModifiersPage() {
   const [view, setView] = useState<ViewMode>("by-spell");
   const [expandedModifier, setExpandedModifier] = useState<number | null>(null);
   const [classFilter, setClassFilter] = useState<number | null>(null);
+  const { data, isLoading, error } = useAffectedAuraDurations();
 
   // By-spell data
-  const spells = useMemo(
-    () =>
-      Object.entries(AffectedSpells).map(([id, spell]) => ({
-        id: Number(id),
-        ...spell,
-      })),
-    []
-  );
+  const spells = useMemo(() => data ?? [], [data]);
 
   const filteredSpells = useMemo(() => {
     let result = spells;
@@ -114,7 +171,7 @@ export function AuraDurationModifiersPage() {
   }, [filteredSpells]);
 
   // By-modifier data
-  const modifiers = useModifierView();
+  const modifiers = useModifierView(spells);
 
   const filteredModifiers = useMemo(() => {
     let result = modifiers;
@@ -159,9 +216,9 @@ export function AuraDurationModifiersPage() {
       </div>
 
       <p className="text-xs text-muted-foreground mb-3">
-        {view === "by-spell"
-          ? "Spells whose duration can be extended by passive talents. Shows the base duration and all modifiers that can affect it."
-          : "Passive talents that modify spell durations. Click a modifier to see all spells it affects."}
+        Generated from the current tenant&apos;s spell and spell-duration dataset. {view === "by-spell"
+          ? "Shows each affected spell, its base and theoretical maximum duration, and every applicable modifier."
+          : "Shows passive duration modifiers and the spells they affect."}
       </p>
 
       <div className="flex gap-3 mb-3">
@@ -205,9 +262,17 @@ export function AuraDurationModifiersPage() {
       </div>
 
       <Card className="divide-y divide-border/30 max-h-[75vh] overflow-auto styled-scrollbar">
-        {view === "by-spell" ? (
+        {isLoading ? (
+          <div className="p-4 text-center text-sm text-muted-foreground">Loading aura duration modifiers...</div>
+        ) : error ? (
+          <div className="p-4 text-center text-sm text-destructive">Failed to load aura duration modifiers.</div>
+        ) : view === "by-spell" ? (
           sortedSpells.length === 0 ? (
-            <div className="p-4 text-center text-sm text-muted-foreground">No spells match your search.</div>
+            <div className="p-4 text-center text-sm text-muted-foreground">
+              {search || classFilter !== null
+                ? "No spells match your filters."
+                : "No affected aura durations are available for this dataset."}
+            </div>
           ) : (
             sortedSpells.map((spell) => (
               <div key={spell.id} className={`px-3 py-2 hover:bg-muted/50 transition-colors ${spell.deprecated ? "opacity-40" : ""}`}>
@@ -248,7 +313,11 @@ export function AuraDurationModifiersPage() {
           )
         ) : (
           filteredModifiers.length === 0 ? (
-            <div className="p-4 text-center text-sm text-muted-foreground">No modifiers match your search.</div>
+            <div className="p-4 text-center text-sm text-muted-foreground">
+              {search || classFilter !== null
+                ? "No modifiers match your filters."
+                : "No aura duration modifiers are available for this dataset."}
+            </div>
           ) : (
             filteredModifiers.map((mod) => {
               const isExpanded = expandedModifier === mod.spellId;

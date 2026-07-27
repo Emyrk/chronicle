@@ -245,6 +245,202 @@ func (q *sqlQuerier) UpsertGuild(ctx context.Context, arg UpsertGuildParams) (Gu
 	return i, err
 }
 
+const deleteAffectedAuraDurationsByDataset = `-- name: DeleteAffectedAuraDurationsByDataset :exec
+DELETE FROM dbc_affected_aura_durations WHERE dataset_id = $1
+`
+
+func (q *sqlQuerier) DeleteAffectedAuraDurationsByDataset(ctx context.Context, datasetID uuid.UUID) error {
+	_, err := q.db.Exec(ctx, deleteAffectedAuraDurationsByDataset, datasetID)
+	return err
+}
+
+const listAffectedAuraDurationCandidates = `-- name: ListAffectedAuraDurationCandidates :many
+SELECT
+    spell.spell_id,
+    spell.name,
+    spell.spell_class_set,
+    spell.spell_class_mask,
+    duration.max_duration AS base_duration_ms,
+    COALESCE(
+        spell.name LIKE '%[Deprecated]%' OR
+        spell.name LIKE 'zzOLD%' OR
+        spell.name LIKE 'Test %',
+        false
+    )::BOOLEAN AS deprecated
+FROM dbc_spells spell
+JOIN dbc_spell_durations duration
+  ON duration.dataset_id = spell.dataset_id
+ AND duration.id = spell.duration_index
+WHERE spell.dataset_id = $1
+  AND spell.spell_class_mask <> 0
+  AND EXISTS (
+      SELECT 1
+      FROM dbc_duration_modifiers modifier
+      WHERE modifier.dataset_id = spell.dataset_id
+        AND modifier.spell_class_set = spell.spell_class_set
+        AND (modifier.spell_class_mask & spell.spell_class_mask) <> 0
+  )
+ORDER BY spell.spell_id
+`
+
+type ListAffectedAuraDurationCandidatesRow struct {
+	SpellID        int32  `db:"spell_id" json:"spell_id"`
+	Name           string `db:"name" json:"name"`
+	SpellClassSet  int32  `db:"spell_class_set" json:"spell_class_set"`
+	SpellClassMask int64  `db:"spell_class_mask" json:"spell_class_mask"`
+	BaseDurationMs int32  `db:"base_duration_ms" json:"base_duration_ms"`
+	Deprecated     bool   `db:"deprecated" json:"deprecated"`
+}
+
+func (q *sqlQuerier) ListAffectedAuraDurationCandidates(ctx context.Context, datasetID uuid.UUID) ([]ListAffectedAuraDurationCandidatesRow, error) {
+	rows, err := q.db.Query(ctx, listAffectedAuraDurationCandidates, datasetID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListAffectedAuraDurationCandidatesRow
+	for rows.Next() {
+		var i ListAffectedAuraDurationCandidatesRow
+		if err := rows.Scan(
+			&i.SpellID,
+			&i.Name,
+			&i.SpellClassSet,
+			&i.SpellClassMask,
+			&i.BaseDurationMs,
+			&i.Deprecated,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listAffectedAuraDurationsByDataset = `-- name: ListAffectedAuraDurationsByDataset :many
+SELECT
+    affected.spell_id,
+    affected.spell_name,
+    affected.spell_class_set,
+    affected.base_duration_ms,
+    affected.max_duration_ms,
+    affected.deprecated,
+    modifier.spell_id AS modifier_spell_id,
+    modifier.name AS modifier_name,
+    modifier.percent AS modifier_percent,
+    modifier.flat AS modifier_flat,
+    modifier.deprecated AS modifier_deprecated
+FROM dbc_affected_aura_durations affected
+JOIN dbc_affected_aura_duration_modifiers affected_modifier
+  ON affected_modifier.dataset_id = affected.dataset_id
+ AND affected_modifier.spell_id = affected.spell_id
+JOIN dbc_duration_modifiers modifier
+  ON modifier.dataset_id = affected_modifier.dataset_id
+ AND modifier.spell_id = affected_modifier.modifier_spell_id
+WHERE affected.dataset_id = $1
+ORDER BY affected.spell_name, affected.spell_id, modifier.spell_id
+`
+
+type ListAffectedAuraDurationsByDatasetRow struct {
+	SpellID            int32  `db:"spell_id" json:"spell_id"`
+	SpellName          string `db:"spell_name" json:"spell_name"`
+	SpellClassSet      int32  `db:"spell_class_set" json:"spell_class_set"`
+	BaseDurationMs     int32  `db:"base_duration_ms" json:"base_duration_ms"`
+	MaxDurationMs      int64  `db:"max_duration_ms" json:"max_duration_ms"`
+	Deprecated         bool   `db:"deprecated" json:"deprecated"`
+	ModifierSpellID    int32  `db:"modifier_spell_id" json:"modifier_spell_id"`
+	ModifierName       string `db:"modifier_name" json:"modifier_name"`
+	ModifierPercent    int32  `db:"modifier_percent" json:"modifier_percent"`
+	ModifierFlat       int32  `db:"modifier_flat" json:"modifier_flat"`
+	ModifierDeprecated bool   `db:"modifier_deprecated" json:"modifier_deprecated"`
+}
+
+func (q *sqlQuerier) ListAffectedAuraDurationsByDataset(ctx context.Context, datasetID uuid.UUID) ([]ListAffectedAuraDurationsByDatasetRow, error) {
+	rows, err := q.db.Query(ctx, listAffectedAuraDurationsByDataset, datasetID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListAffectedAuraDurationsByDatasetRow
+	for rows.Next() {
+		var i ListAffectedAuraDurationsByDatasetRow
+		if err := rows.Scan(
+			&i.SpellID,
+			&i.SpellName,
+			&i.SpellClassSet,
+			&i.BaseDurationMs,
+			&i.MaxDurationMs,
+			&i.Deprecated,
+			&i.ModifierSpellID,
+			&i.ModifierName,
+			&i.ModifierPercent,
+			&i.ModifierFlat,
+			&i.ModifierDeprecated,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listAuraDurationModifiersForDerivation = `-- name: ListAuraDurationModifiersForDerivation :many
+SELECT
+    spell_id,
+    name,
+    percent,
+    flat,
+    deprecated,
+    spell_class_set,
+    spell_class_mask
+FROM dbc_duration_modifiers
+WHERE dataset_id = $1
+ORDER BY spell_id
+`
+
+type ListAuraDurationModifiersForDerivationRow struct {
+	SpellID        int32  `db:"spell_id" json:"spell_id"`
+	Name           string `db:"name" json:"name"`
+	Percent        int32  `db:"percent" json:"percent"`
+	Flat           int32  `db:"flat" json:"flat"`
+	Deprecated     bool   `db:"deprecated" json:"deprecated"`
+	SpellClassSet  int32  `db:"spell_class_set" json:"spell_class_set"`
+	SpellClassMask int64  `db:"spell_class_mask" json:"spell_class_mask"`
+}
+
+func (q *sqlQuerier) ListAuraDurationModifiersForDerivation(ctx context.Context, datasetID uuid.UUID) ([]ListAuraDurationModifiersForDerivationRow, error) {
+	rows, err := q.db.Query(ctx, listAuraDurationModifiersForDerivation, datasetID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListAuraDurationModifiersForDerivationRow
+	for rows.Next() {
+		var i ListAuraDurationModifiersForDerivationRow
+		if err := rows.Scan(
+			&i.SpellID,
+			&i.Name,
+			&i.Percent,
+			&i.Flat,
+			&i.Deprecated,
+			&i.SpellClassSet,
+			&i.SpellClassMask,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const getAppliedAuthzMigrations = `-- name: GetAppliedAuthzMigrations :many
 SELECT version FROM authz_schema_migrations ORDER BY version
 `
@@ -1145,31 +1341,33 @@ SELECT
     (SELECT COUNT(*) FROM dbc_duration_modifiers WHERE dataset_id = $1)::INT AS duration_modifiers_count,
     (SELECT COUNT(*) FROM dbc_periodic_spells WHERE dataset_id = $1)::INT AS periodic_spells_count,
     (SELECT COUNT(*) FROM dbc_spell_description_variables WHERE dataset_id = $1)::INT AS desc_variables_count,
+    (SELECT COUNT(*) FROM dbc_affected_aura_durations WHERE dataset_id = $1)::INT AS affected_aura_durations_count,
     (SELECT COUNT(*) FROM dbc_consumables WHERE dataset_id = $1)::INT AS consumables_count,
     (SELECT EXISTS(SELECT 1 FROM dataset_talent_trees tt WHERE tt.dataset_id = $1))::BOOL AS has_talents
 `
 
 type GetDatasetImportSummaryRow struct {
-	SpellsCount            int32 `db:"spells_count" json:"spells_count"`
-	CreaturesCount         int32 `db:"creatures_count" json:"creatures_count"`
-	ItemsCount             int32 `db:"items_count" json:"items_count"`
-	ItemDisplayCount       int32 `db:"item_display_count" json:"item_display_count"`
-	EnchantmentsCount      int32 `db:"enchantments_count" json:"enchantments_count"`
-	RandomPropertiesCount  int32 `db:"random_properties_count" json:"random_properties_count"`
-	ItemSetsCount          int32 `db:"item_sets_count" json:"item_sets_count"`
-	CastTimesCount         int32 `db:"cast_times_count" json:"cast_times_count"`
-	DurationsCount         int32 `db:"durations_count" json:"durations_count"`
-	RangesCount            int32 `db:"ranges_count" json:"ranges_count"`
-	IconsCount             int32 `db:"icons_count" json:"icons_count"`
-	CategoriesCount        int32 `db:"categories_count" json:"categories_count"`
-	RadiiCount             int32 `db:"radii_count" json:"radii_count"`
-	FocusObjectsCount      int32 `db:"focus_objects_count" json:"focus_objects_count"`
-	ExtraAttacksCount      int32 `db:"extra_attacks_count" json:"extra_attacks_count"`
-	DurationModifiersCount int32 `db:"duration_modifiers_count" json:"duration_modifiers_count"`
-	PeriodicSpellsCount    int32 `db:"periodic_spells_count" json:"periodic_spells_count"`
-	DescVariablesCount     int32 `db:"desc_variables_count" json:"desc_variables_count"`
-	ConsumablesCount       int32 `db:"consumables_count" json:"consumables_count"`
-	HasTalents             bool  `db:"has_talents" json:"has_talents"`
+	SpellsCount                int32 `db:"spells_count" json:"spells_count"`
+	CreaturesCount             int32 `db:"creatures_count" json:"creatures_count"`
+	ItemsCount                 int32 `db:"items_count" json:"items_count"`
+	ItemDisplayCount           int32 `db:"item_display_count" json:"item_display_count"`
+	EnchantmentsCount          int32 `db:"enchantments_count" json:"enchantments_count"`
+	RandomPropertiesCount      int32 `db:"random_properties_count" json:"random_properties_count"`
+	ItemSetsCount              int32 `db:"item_sets_count" json:"item_sets_count"`
+	CastTimesCount             int32 `db:"cast_times_count" json:"cast_times_count"`
+	DurationsCount             int32 `db:"durations_count" json:"durations_count"`
+	RangesCount                int32 `db:"ranges_count" json:"ranges_count"`
+	IconsCount                 int32 `db:"icons_count" json:"icons_count"`
+	CategoriesCount            int32 `db:"categories_count" json:"categories_count"`
+	RadiiCount                 int32 `db:"radii_count" json:"radii_count"`
+	FocusObjectsCount          int32 `db:"focus_objects_count" json:"focus_objects_count"`
+	ExtraAttacksCount          int32 `db:"extra_attacks_count" json:"extra_attacks_count"`
+	DurationModifiersCount     int32 `db:"duration_modifiers_count" json:"duration_modifiers_count"`
+	PeriodicSpellsCount        int32 `db:"periodic_spells_count" json:"periodic_spells_count"`
+	DescVariablesCount         int32 `db:"desc_variables_count" json:"desc_variables_count"`
+	AffectedAuraDurationsCount int32 `db:"affected_aura_durations_count" json:"affected_aura_durations_count"`
+	ConsumablesCount           int32 `db:"consumables_count" json:"consumables_count"`
+	HasTalents                 bool  `db:"has_talents" json:"has_talents"`
 }
 
 // Returns row counts for each per-dataset data table, plus whether talent
@@ -1196,6 +1394,7 @@ func (q *sqlQuerier) GetDatasetImportSummary(ctx context.Context, datasetID uuid
 		&i.DurationModifiersCount,
 		&i.PeriodicSpellsCount,
 		&i.DescVariablesCount,
+		&i.AffectedAuraDurationsCount,
 		&i.ConsumablesCount,
 		&i.HasTalents,
 	)

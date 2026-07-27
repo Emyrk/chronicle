@@ -109,6 +109,7 @@ func (s *Service) setupRoutes() {
 	s.router.Get("/spell-by-name/{name}", s.handleGetSpellByName)
 	s.router.Get("/periodic-spells", s.handleGetPeriodicSpells)
 	s.router.Get("/extra-attack-spells", s.handleGetExtraAttackSpells)
+	s.router.Get("/aura-duration-modifiers", s.handleGetAffectedAuraDurations)
 	s.router.Get("/consumables", s.handleGetConsumables)
 	s.router.Get("/talent-trees", s.handleGetTalentTrees)
 }
@@ -262,12 +263,6 @@ func (s *Service) handleGetExtraAttackSpells(w http.ResponseWriter, r *http.Requ
 	w.Header().Set("Content-Type", "application/json")
 	_ = json.NewEncoder(w).Encode(spells)
 }
-
-// TODO: DurationModifiers Technical page currently reads from compiled-in TS
-// constants (frontend/chronicle/src/constants/dbmem/{server}/DurationModifiers.ts).
-// Add a dataset-aware API endpoint here that serves the AffectedSpells
-// cross-reference from the dbc_duration_modifiers DB table, then update the
-// AuraDurationModifiersPage to fetch from the API instead.
 
 func (s *Service) handleGetTalentTrees(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()

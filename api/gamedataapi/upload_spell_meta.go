@@ -212,6 +212,17 @@ func (h *Handler) handleSpellDurationsUpload(ctx context.Context, w http.Respons
 		}
 	}
 
+	if err := h.deriveAffectedAuraDurations(ctx, datasetID); err != nil {
+		httpapi.Write(ctx, w, http.StatusInternalServerError, chroniclesdk.Response{
+			Message: "Spell durations imported but affected aura duration generation failed",
+			Detail:  err.Error(),
+		})
+		return
+	}
+	if h.wowDB != nil {
+		h.wowDB.InvalidateSpellCache(datasetID)
+	}
+
 	resp.Inserted = len(rows)
 	httpapi.Write(ctx, w, http.StatusOK, resp)
 }
