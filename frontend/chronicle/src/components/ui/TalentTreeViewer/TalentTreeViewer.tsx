@@ -671,10 +671,13 @@ export function TalentTreeViewer({
   const maxPoints = maxTalentPoints;
   const flavor = useMemo(() => ({ maxLevel, maxTalentPoints }), [maxLevel, maxTalentPoints]);
 
-  // Compute initial ranks from allocations or URL
+  // Compute initial ranks from allocations or URL.
+  // Allocations come from parsed combat logs (backend truth), so they are not
+  // capped at maxPoints — a TBC/wrath log would otherwise lose points when
+  // rendered with the vanilla default cap.
   const initialRanks = useMemo(() => {
     if (allocations && allocations.length > 0) {
-      return normalizeTalentRanks(tabTalentLists, allocationsToRanks(data.tabs, allocations), maxPoints);
+      return normalizeTalentRanks(tabTalentLists, allocationsToRanks(data.tabs, allocations));
     }
     return normalizeTalentRanks(tabTalentLists, decodeTalentBuild(searchParams.get(TALENT_BUILD_PARAM), tabTalentLists), maxPoints);
   }, [allocations, data.tabs, maxPoints, searchParams, tabTalentLists]);
@@ -688,8 +691,9 @@ export function TalentTreeViewer({
   // by user clicks via commitRanks(), so we can't simply derive them.
   useEffect(() => {
     if (allocations && allocations.length > 0) {
+      // Backend-provided allocations are not capped at maxPoints (see initialRanks).
       // eslint-disable-next-line react-hooks/set-state-in-effect -- legitimate prop→state sync; ranks are also mutated by user clicks
-      setRanks(normalizeTalentRanks(tabTalentLists, allocationsToRanks(data.tabs, allocations), maxPoints));
+      setRanks(normalizeTalentRanks(tabTalentLists, allocationsToRanks(data.tabs, allocations)));
     } else {
       setRanks(normalizeTalentRanks(tabTalentLists, decodeTalentBuild(searchParams.get(TALENT_BUILD_PARAM), tabTalentLists), maxPoints));
     }
