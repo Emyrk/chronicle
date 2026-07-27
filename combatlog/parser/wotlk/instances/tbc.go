@@ -4,7 +4,9 @@ import (
 	"github.com/Emyrk/chronicle/combatlog/parser/common/encounter"
 	"github.com/Emyrk/chronicle/combatlog/parser/common/identifier"
 	"github.com/Emyrk/chronicle/combatlog/parser/common/instances"
+	"github.com/Emyrk/chronicle/combatlog/parser/common/instances/rankings"
 	"github.com/Emyrk/chronicle/combatlog/parser/types"
+	"github.com/Emyrk/chronicle/database"
 )
 
 // MagtheridonsLairHostiles returns creature entry IDs for Magtheridon's Lair (map 544).
@@ -1075,6 +1077,9 @@ var GruulsLairFactory = &instances.CommonFactory{
 	ZoneNames: []string{"gruul's lair"},
 	MapIDs:    []uint32{565},
 	Hostiles:  instances.FromMap(GruulsLairHostiles()),
+	FlavoredRankings: func(database.WoWFlavor) *rankings.Rankings {
+		return GruulsLairSpeedrunRequirements()
+	},
 }
 
 // ZulAmanHostiles returns creature entry IDs for Zul'Aman (map 568).
