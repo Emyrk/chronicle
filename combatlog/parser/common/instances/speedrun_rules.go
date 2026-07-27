@@ -16,6 +16,17 @@ func Level60Cap(fl database.WoWFlavor) *rankings.LevelRangeRequirement {
 	return nil
 }
 
+func Level70Cap(fl database.WoWFlavor) *rankings.LevelRangeRequirement {
+	if fl.Has(database.FlavorWrath) {
+		return &rankings.LevelRangeRequirement{
+			MinLevel: 0,
+			MaxLevel: 70,
+		}
+	}
+
+	return nil
+}
+
 func RagefireChasmSpeedrunRequirements() *rankings.Rankings {
 	return &rankings.Rankings{
 		Speedrun: &rankings.SpeedrunRules{
@@ -251,6 +262,7 @@ func TimbermawHoldSpeedrunRequirements() []rankings.SpeedrunRequirement {
 		{Name: "Peroth'arn", EntryIDs: []uint32{60686}, Count: 1, Category: rankings.SpeedrunCategoryBosses},
 	}
 }
+
 // LowerTowerOfKarazhanSpeedrunRequirements returns the boss kills required for
 // a valid Lower Tower of Karazhan speedrun (10-man).
 func LowerTowerOfKarazhanSpeedrunRequirements() []rankings.SpeedrunRequirement {
@@ -278,4 +290,3 @@ func UpperTowerOfKarazhanSpeedrunRequirements() []rankings.SpeedrunRequirement {
 		{Name: "Kruul", EntryIDs: []uint32{59991}, Count: 1, Category: rankings.SpeedrunCategoryBosses},
 	}
 }
-

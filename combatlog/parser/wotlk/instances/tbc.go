@@ -1077,8 +1077,10 @@ var GruulsLairFactory = &instances.CommonFactory{
 	ZoneNames: []string{"gruul's lair"},
 	MapIDs:    []uint32{565},
 	Hostiles:  instances.FromMap(GruulsLairHostiles()),
-	FlavoredRankings: func(database.WoWFlavor) *rankings.Rankings {
-		return GruulsLairSpeedrunRequirements()
+	FlavoredRankings: func(fl database.WoWFlavor) *rankings.Rankings {
+		rules := GruulsLairSpeedrunRequirements()
+		rules.Speedrun.LevelRange = instances.Level70Cap(fl)
+		return rules
 	},
 }
 
