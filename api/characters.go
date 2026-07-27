@@ -15,6 +15,7 @@ import (
 	"github.com/Emyrk/chronicle/combatlog/parser/guid"
 	"github.com/Emyrk/chronicle/database"
 	"github.com/Emyrk/chronicle/database/authz"
+	"github.com/Emyrk/chronicle/database/authz/policy"
 )
 
 // AdminLinkUserCharacter links an in-game character to a user account.
@@ -106,6 +107,22 @@ func (api *API) AdminUnlinkUserCharacter(w http.ResponseWriter, r *http.Request)
 	if err != nil {
 		httpapi.Write(ctx, w, http.StatusBadRequest, chroniclesdk.Response{
 			Message: "Invalid character GUID",
+		})
+		return
+	}
+
+	// Verify the actor holds manage_link on the character
+	// (owner + chronicle->admin_users per the zed policy).
+	state := chronauth.AuthenticationState(r)
+	b := policy.New()
+	ok, err := api.Opts.Zed.CheckOne(ctx, nil, b.Armory_player(characterGUID).CanManage_link_User(b.User(state.Claims.Subject)))
+	if err != nil {
+		httpapi.InternalServerError(w, err)
+		return
+	}
+	if !ok {
+		httpapi.Write(ctx, w, http.StatusForbidden, chroniclesdk.Response{
+			Message: "You are not allowed to manage this character's link",
 		})
 		return
 	}
