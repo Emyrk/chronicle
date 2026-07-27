@@ -105,6 +105,51 @@ func (w *WorkerRefreshRankingsSummaries) Work(ctx context.Context, _ *river.Job[
 	return nil
 }
 
+// RefreshSummaryJobResult describes one tenant summary refresh job enqueued by
+// an administrative force refresh.
+type RefreshSummaryJobResult struct {
+	TenantID uuid.UUID
+	JobID    int64
+	JobState string
+}
+
+// EnqueueRankingsSummaryRefreshAllTenants bypasses the periodic dispatch
+// throttle by directly enqueueing the root and per-tenant refresh jobs.
+func EnqueueRankingsSummaryRefreshAllTenants(
+	ctx context.Context,
+	store database.Store,
+	queue *riverqueue.Queues,
+) ([]RefreshSummaryJobResult, error) {
+	tenants, err := store.ListTenants(ctx)
+	if err != nil {
+		return nil, err
+	}
+
+	tenantIDs := make([]uuid.UUID, 0, len(tenants)+1)
+	tenantIDs = append(tenantIDs, uuid.Nil)
+	for _, tenant := range tenants {
+		tenantIDs = append(tenantIDs, tenant.ID)
+	}
+
+	results := make([]RefreshSummaryJobResult, 0, len(tenantIDs))
+	for _, tenantID := range tenantIDs {
+		result, err := queue.Insert(ctx, ArgsRefreshRankingsSummaryTenant{
+			TenantID: tenantID,
+			Force:    true,
+		}, nil)
+		if err != nil {
+			return nil, err
+		}
+		results = append(results, RefreshSummaryJobResult{
+			TenantID: tenantID,
+			JobID:    result.Job.ID,
+			JobState: string(result.Job.State),
+		})
+	}
+
+	return results, nil
+}
+
 // ---------------------------------------------------------------------------
 // ArgsRefreshRankingsSummaryTenant — per-tenant worker.
 // Computes summaries for one tenant's realms.
@@ -114,6 +159,7 @@ const KindRefreshRankingsSummaryTenant = "refresh-rankings-summary-tenant"
 
 type ArgsRefreshRankingsSummaryTenant struct {
 	TenantID uuid.UUID `json:"tenant_id"`
+	Force    bool      `json:"force,omitempty"`
 }
 
 func (ArgsRefreshRankingsSummaryTenant) Kind() string { return KindRefreshRankingsSummaryTenant }
@@ -153,6 +199,19 @@ func (w *WorkerRefreshRankingsSummaryTenant) Work(ctx context.Context, job *rive
 		ctx = servicetenant.WithTenantID(ctx, tid)
 	}
 
+	// Prune before the row-count staleness guard. A reparse can remove the last
+	// rankings for one summary while leaving the tenant's total row count unchanged.
+	pruned, err := w.Store.PruneStaleRankingsInstanceSummaries(ctx, tid)
+	if err != nil {
+		return err
+	}
+	if pruned > 0 {
+		w.Logger.Info("pruned stale rankings summaries",
+			slog.String("tenant_id", tid.String()),
+			slog.Int64("count", pruned),
+		)
+	}
+
 	// Staleness guard: skip if row count hasn't changed AND query version
 	// matches. A query version mismatch forces a full recompute even when
 	// the underlying data hasn't changed.
@@ -164,7 +223,7 @@ func (w *WorkerRefreshRankingsSummaryTenant) Work(ctx context.Context, job *rive
 	if err != nil {
 		return err
 	}
-	if currentCount == lastSummary.LastRowCount && lastSummary.LastRowCount > 0 && lastSummary.QueryVersion >= rankingsQueryVersion {
+	if !job.Args.Force && currentCount == lastSummary.LastRowCount && lastSummary.LastRowCount > 0 && lastSummary.QueryVersion >= rankingsQueryVersion {
 		w.Logger.Info("rankings row count unchanged, skipping",
 			slog.String("tenant_id", tid.String()),
 			slog.Int64("row_count", currentCount),

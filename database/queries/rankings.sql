@@ -87,6 +87,19 @@ ON CONFLICT (instance_name, difficulty_name, max_players, tenant_id) DO UPDATE S
     query_version = EXCLUDED.query_version,
     updated_at = EXCLUDED.updated_at;
 
+-- name: PruneStaleRankingsInstanceSummaries :execrows
+-- Removes summary cards whose instance/difficulty/player-count combination no
+-- longer has any ranking rows visible to the current tenant context.
+DELETE FROM rankings_instance_summaries ris
+WHERE ris.tenant_id = @tenant_id
+  AND NOT EXISTS (
+    SELECT 1
+    FROM encounter_dps_rankings edr
+    WHERE edr.instance_name = ris.instance_name
+      AND edr.difficulty_name = ris.difficulty_name
+      AND edr.max_players = ris.max_players
+  );
+
 -- name: RankingsDistinctSummaryKeys :many
 -- Returns distinct (instance, difficulty, max_players) combos visible to the
 -- current tenant context (RLS on encounter_dps_rankings does the filtering).

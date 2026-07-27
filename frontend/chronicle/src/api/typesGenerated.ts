@@ -148,6 +148,24 @@ export interface AdminOutdatedInstancesResponse {
     readonly min_version: string;
 }
 
+// From chroniclesdk/rankings.go
+/**
+ * AdminRefreshRankingsJob describes one tenant summary refresh job.
+ */
+export interface AdminRefreshRankingsJob {
+    readonly tenant_id: string;
+    readonly job_id: number;
+    readonly job_state: string;
+}
+
+// From chroniclesdk/rankings.go
+/**
+ * AdminRefreshRankingsResponse is returned when summary refresh jobs are enqueued.
+ */
+export interface AdminRefreshRankingsResponse {
+    readonly jobs: readonly AdminRefreshRankingsJob[];
+}
+
 // From chroniclesdk/user.go
 /**
  * AdminSetUserRetentionRequest is the request body for setting a user's raw log retention.

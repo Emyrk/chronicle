@@ -233,6 +233,18 @@ type AdminTriggerSnapshotResponse struct {
 	// Jobs lists every enqueued job. For single-tenant requests this has one entry.
 	Jobs []AdminTriggerSnapshotJobResult `json:"jobs"`
 }
+// AdminRefreshRankingsJob describes one tenant summary refresh job.
+type AdminRefreshRankingsJob struct {
+	TenantID string `json:"tenant_id"`
+	JobID    int64  `json:"job_id"`
+	JobState string `json:"job_state"`
+}
+
+// AdminRefreshRankingsResponse is returned when summary refresh jobs are enqueued.
+type AdminRefreshRankingsResponse struct {
+	Jobs []AdminRefreshRankingsJob `json:"jobs"`
+}
+
 // AdminSnapshotSummary is a snapshot listed in the admin parsing tab.
 type AdminSnapshotSummary struct {
 	ID            uuid.UUID  `json:"id"`

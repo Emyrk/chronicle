@@ -246,6 +246,7 @@ func (api *API) Routes() chi.Router {
 
 				r.Route("/parses", func(r chi.Router) {
 					r.Use(httpmw.Can(api.Zed, policy.New().GlobalChronicle().CanAdmin_users_User))
+					r.Post("/rankings/refresh", api.AdminRefreshRankings)
 					r.Post("/snapshot", api.AdminTriggerParseSnapshot)
 					r.Get("/snapshots", api.AdminListSnapshots)
 					r.Post("/snapshots/delete", api.AdminBulkDeleteSnapshots)

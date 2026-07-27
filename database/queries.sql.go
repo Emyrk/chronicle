@@ -5780,6 +5780,28 @@ func (q *sqlQuerier) InsertEncounterDpsRanking(ctx context.Context, arg InsertEn
 	return err
 }
 
+const pruneStaleRankingsInstanceSummaries = `-- name: PruneStaleRankingsInstanceSummaries :execrows
+DELETE FROM rankings_instance_summaries ris
+WHERE ris.tenant_id = $1
+  AND NOT EXISTS (
+    SELECT 1
+    FROM encounter_dps_rankings edr
+    WHERE edr.instance_name = ris.instance_name
+      AND edr.difficulty_name = ris.difficulty_name
+      AND edr.max_players = ris.max_players
+  )
+`
+
+// Removes summary cards whose instance/difficulty/player-count combination no
+// longer has any ranking rows visible to the current tenant context.
+func (q *sqlQuerier) PruneStaleRankingsInstanceSummaries(ctx context.Context, tenantID uuid.UUID) (int64, error) {
+	result, err := q.db.Exec(ctx, pruneStaleRankingsInstanceSummaries, tenantID)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
+}
+
 const rankingsBoxPlotStats = `-- name: RankingsBoxPlotStats :many
 WITH deduped AS (
     SELECT DISTINCT ON (edr.player_guid, edr.encounter_name, COALESCE(li.duplicate_group_id, li.id))

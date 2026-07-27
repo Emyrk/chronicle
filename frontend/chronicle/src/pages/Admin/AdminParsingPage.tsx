@@ -1,10 +1,11 @@
 import { useState, useMemo, useCallback } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import type {
+  AdminRefreshRankingsResponse,
   AdminSnapshotSummary,
   AdminTriggerSnapshotResponse,
 } from "@/api/typesGenerated";
-import { Loader2, Camera, Trash2 } from "lucide-react";
+import { Loader2, Camera, RefreshCw, Trash2 } from "lucide-react";
 import { Card } from "@/components/ui/Card/Card";
 import { Button } from "@/components/ui/button";
 
@@ -96,6 +97,21 @@ export function AdminParsingPage() {
     },
   });
 
+  const refreshRankingsMutation = useMutation({
+    mutationFn: async () => {
+      const res = await fetch("/api/v1/admin/parses/rankings/refresh", {
+        method: "POST",
+      });
+      if (!res.ok) {
+        const body = await res.json().catch(() => ({}));
+        throw new Error(
+          (body as Record<string, string>).message ?? "Failed to refresh rankings",
+        );
+      }
+      return res.json() as Promise<AdminRefreshRankingsResponse>;
+    },
+  });
+
   const allSelected = useMemo(
     () =>
       !!snapshots && snapshots.length > 0 && snapshots.every((s) => selectedIds.has(s.id)),
@@ -143,6 +159,42 @@ export function AdminParsingPage() {
 
   return (
     <div className="space-y-4">
+      <Card className="p-4">
+        <div className="flex items-center justify-between gap-4">
+          <div>
+            <h3 className="font-semibold">Rankings Summaries</h3>
+            <p className="mt-1 text-sm text-muted-foreground">
+              Rebuild rankings summary cards for the root site and every tenant. This also
+              removes summaries that no longer have eligible ranking rows.
+            </p>
+          </div>
+          <Button
+            size="sm"
+            onClick={() => refreshRankingsMutation.mutate()}
+            disabled={refreshRankingsMutation.isPending}
+          >
+            {refreshRankingsMutation.isPending ? (
+              <Loader2 className="h-4 w-4 animate-spin mr-1" />
+            ) : (
+              <RefreshCw className="h-4 w-4 mr-1" />
+            )}
+            Force Refresh Rankings
+          </Button>
+        </div>
+        {refreshRankingsMutation.isSuccess && (
+          <p className="mt-3 text-sm text-green-500">
+            Enqueued {refreshRankingsMutation.data.jobs.length} rankings refresh job(s).
+          </p>
+        )}
+        {refreshRankingsMutation.isError && (
+          <p className="mt-3 text-sm text-red-500">
+            {refreshRankingsMutation.error instanceof Error
+              ? refreshRankingsMutation.error.message
+              : "Failed to refresh rankings"}
+          </p>
+        )}
+      </Card>
+
       <Card className="p-4">
         <h3 className="font-semibold mb-3">Create Parse Snapshot</h3>
         <p className="text-sm text-muted-foreground mb-4">

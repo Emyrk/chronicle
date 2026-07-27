@@ -340,6 +340,9 @@ type sqlcQuerier interface {
 	ListWorlds(ctx context.Context) ([]World, error)
 	MarkEmailVerified(ctx context.Context, userAuthID uuid.UUID) error
 	PruneParsedInstanceFromLogOutput(ctx context.Context, arg PruneParsedInstanceFromLogOutputParams) error
+	// Removes summary cards whose instance/difficulty/player-count combination no
+	// longer has any ranking rows visible to the current tenant context.
+	PruneStaleRankingsInstanceSummaries(ctx context.Context, tenantID uuid.UUID) (int64, error)
 	// Transition a pending snapshot to published. Idempotent on already-published.
 	PublishRankingSnapshot(ctx context.Context, id uuid.UUID) (RankingSnapshot, error)
 	// Returns box plot statistics (min, q1, median, q3, max, count) per class/spec.

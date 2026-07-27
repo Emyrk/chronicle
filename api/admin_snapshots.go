@@ -13,6 +13,7 @@ import (
 	"github.com/go-chi/chi/v5"
 	"github.com/google/uuid"
 )
+
 // AdminDeleteSnapshot removes a snapshot and its cascade-deleted members.
 // DELETE is idempotent: deleting a nonexistent ID is a no-op 200.
 //
@@ -196,6 +197,42 @@ func (api *API) AdminTriggerParseSnapshot(w http.ResponseWriter, r *http.Request
 			JobID:        result.Job.ID,
 			JobState:     string(result.Job.State),
 		}},
+	})
+}
+
+// AdminRefreshRankings enqueues summary refresh jobs for root and every tenant,
+// bypassing the periodic dispatch throttle.
+//
+//	POST /api/v1/admin/parses/rankings/refresh
+func (api *API) AdminRefreshRankings(w http.ResponseWriter, r *http.Request) {
+	ctx := r.Context()
+
+	results, err := servicerankings.EnqueueRankingsSummaryRefreshAllTenants(
+		ctx,
+		database.New(api.Opts.Pool),
+		api.Queues,
+	)
+	if err != nil {
+		httpapi.HandleResponseError(ctx, w, err, httpapi.APIError{
+			Response: chroniclesdk.Response{
+				Message: "Failed to enqueue rankings refresh",
+				Detail:  err.Error(),
+			},
+		})
+		return
+	}
+
+	jobs := make([]chroniclesdk.AdminRefreshRankingsJob, 0, len(results))
+	for _, result := range results {
+		jobs = append(jobs, chroniclesdk.AdminRefreshRankingsJob{
+			TenantID: result.TenantID.String(),
+			JobID:    result.JobID,
+			JobState: result.JobState,
+		})
+	}
+
+	httpapi.Write(ctx, w, http.StatusAccepted, chroniclesdk.AdminRefreshRankingsResponse{
+		Jobs: jobs,
 	})
 }
 
