@@ -210,12 +210,21 @@ func ImportCmd() *serpent.Command {
 			}
 
 			up := newUploader(apiURL, token, datasetID, mode)
+			var totalArts int
+			for _, p := range all {
+				totalArts += len(p.artifacts)
+			}
+			idx := 0
 			for _, p := range all {
 				for _, art := range p.artifacts {
+					idx++
+					_, _ = fmt.Fprintf(inv.Stdout, "[%d/%d] Uploading %s (%s, %s)...\n",
+						idx, totalArts, p.imp.Name(), art.Filename, formatSize(len(art.Data)))
 					if err := up.Upload(art); err != nil {
 						return fmt.Errorf("upload %s (%s): %w", p.imp.Name(), art.Filename, err)
 					}
-					_, _ = fmt.Fprintf(inv.Stdout, "Uploaded %s → %s\n", art.Filename, p.imp.Name())
+					_, _ = fmt.Fprintf(inv.Stdout, "[%d/%d] Uploaded %s → %s\n",
+						idx, totalArts, art.Filename, p.imp.Name())
 				}
 			}
 			return nil
@@ -261,3 +270,19 @@ func importerKeys() []string {
 	}
 	return keys
 }
+// formatSize returns a human-readable byte size (e.g. "1.2 MB", "340 KB").
+func formatSize(bytes int) string {
+	const (
+		kb = 1024
+		mb = 1024 * kb
+	)
+	switch {
+	case bytes >= mb:
+		return fmt.Sprintf("%.1f MB", float64(bytes)/float64(mb))
+	case bytes >= kb:
+		return fmt.Sprintf("%.1f KB", float64(bytes)/float64(kb))
+	default:
+		return fmt.Sprintf("%d B", bytes)
+	}
+}
+
