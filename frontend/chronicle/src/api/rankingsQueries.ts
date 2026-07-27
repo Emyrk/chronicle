@@ -134,13 +134,19 @@ export function useRankingsKillTimes(instanceName: string, period?: string) {
   });
 }
 
-export function useRankingsSuccessRates(instanceName: string, period?: string) {
+export function useRankingsSuccessRates(
+  instanceName: string,
+  period?: string,
+  opts?: { difficulty_names?: string; max_players?: number },
+) {
   const searchParams = new URLSearchParams();
   searchParams.set("instance_name", instanceName);
   if (period) searchParams.set("period", period);
+  if (opts?.difficulty_names) searchParams.set("difficulty_names", opts.difficulty_names);
+  if (opts?.max_players) searchParams.set("max_players", String(opts.max_players));
 
   return useQuery({
-    queryKey: ["rankings", "success-rates", instanceName, period],
+    queryKey: ["rankings", "success-rates", instanceName, period, opts],
     queryFn: () =>
       fetchJSON<RankingsSuccessRate[]>(
         `/api/v1/rankings/success-rates?${searchParams.toString()}`,

@@ -537,7 +537,9 @@ export function InstanceView({ instanceName }: InstanceViewProps) {
     return entries.map((e, i) => ({ ...e, rank: offset + i + 1 }))
   }, [killTimeLeaderboardData, page])
 
-  const { data: successRates = [] } = useRankingsSuccessRates(instanceName, periodParam)
+  const { data: successRates = [] } = useRankingsSuccessRates(instanceName, periodParam, {
+    difficulty_names: difficultyNamesParam,
+  })
 
   // ── Loading state ──────────────────────────────────────────────────
 

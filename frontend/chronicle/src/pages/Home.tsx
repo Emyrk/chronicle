@@ -635,10 +635,12 @@ function RaidSpotlight() {
   });
 
   // Success rates for the "Toughest Bosses" card. Only fetched when the card
-  // is shown (empty instance name disables the query). The endpoint has no
-  // difficulty/size filters, so this covers the whole raid.
+  // is shown (empty instance name disables the query). Follows the active
+  // board's difficulty/size toggles like the other spotlight cards.
   const { data: successRates } = useRankingsSuccessRates(
     showToughestBosses ? (spot?.name ?? "") : "",
+    undefined,
+    { difficulty_names: difficultyFilter, max_players: maxPlayersFilter },
   );
   const toughestBosses = useMemo(() => {
     if (!successRates) return [];

@@ -584,7 +584,7 @@ func (s *Service) handleKillTimeLeaderboard(w http.ResponseWriter, r *http.Reque
 
 // handleSuccessRates returns kill/wipe/total counts per encounter.
 //
-//	GET /success-rates?instance_name=Molten+Core&period=90d
+//	GET /success-rates?instance_name=Molten+Core&period=90d&difficulty_names=Heroic&max_players=25
 func (s *Service) handleSuccessRates(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 	q := r.URL.Query()
@@ -603,8 +603,10 @@ func (s *Service) handleSuccessRates(w http.ResponseWriter, r *http.Request) {
 	}
 
 	rows, err := s.store.RankingsSuccessRates(ctx, database.RankingsSuccessRatesParams{
-		InstanceName: instanceName,
-		SinceDays:    sinceDays,
+		InstanceName:     instanceName,
+		DifficultyNames:  splitCSV(q.Get("difficulty_names")),
+		FilterMaxPlayers: parseMaxPlayers(q.Get("max_players")),
+		SinceDays:        sinceDays,
 	})
 	if err != nil {
 		httpapi.HandleResponseError(ctx, w, err, httpapi.APIError{

@@ -534,6 +534,14 @@ WITH deduped AS (
     WHERE li.name = @instance_name
       AND lie.boss = true
       AND CASE
+          WHEN cardinality(@difficulty_names :: text[]) > 0 THEN li.difficulty_name = ANY(@difficulty_names :: text[])
+          ELSE true
+      END
+      AND CASE
+          WHEN @filter_max_players :: smallint > 0 THEN li.max_players = @filter_max_players
+          ELSE true
+      END
+      AND CASE
           WHEN @since_days :: bigint > 0 THEN lie.end_time >= now() - make_interval(days => @since_days::int)
           ELSE true
       END

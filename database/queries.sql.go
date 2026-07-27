@@ -6405,7 +6405,15 @@ WITH deduped AS (
     WHERE li.name = $1
       AND lie.boss = true
       AND CASE
-          WHEN $2 :: bigint > 0 THEN lie.end_time >= now() - make_interval(days => $2::int)
+          WHEN cardinality($2 :: text[]) > 0 THEN li.difficulty_name = ANY($2 :: text[])
+          ELSE true
+      END
+      AND CASE
+          WHEN $3 :: smallint > 0 THEN li.max_players = $3
+          ELSE true
+      END
+      AND CASE
+          WHEN $4 :: bigint > 0 THEN lie.end_time >= now() - make_interval(days => $4::int)
           ELSE true
       END
     ORDER BY lie.name, lie.kill_type, COALESCE(li.duplicate_group_id, li.id), lie.end_time DESC
@@ -6421,8 +6429,10 @@ ORDER BY (d.encounter_name = 'Trash'), d.encounter_name
 `
 
 type RankingsSuccessRatesParams struct {
-	InstanceName string `db:"instance_name" json:"instance_name"`
-	SinceDays    int64  `db:"since_days" json:"since_days"`
+	InstanceName     string   `db:"instance_name" json:"instance_name"`
+	DifficultyNames  []string `db:"difficulty_names" json:"difficulty_names"`
+	FilterMaxPlayers int16    `db:"filter_max_players" json:"filter_max_players"`
+	SinceDays        int64    `db:"since_days" json:"since_days"`
 }
 
 type RankingsSuccessRatesRow struct {
@@ -6435,7 +6445,12 @@ type RankingsSuccessRatesRow struct {
 // Kill/wipe/total counts per encounter name within an instance.
 // Deduplicates across duplicate log groups.
 func (q *sqlQuerier) RankingsSuccessRates(ctx context.Context, arg RankingsSuccessRatesParams) ([]RankingsSuccessRatesRow, error) {
-	rows, err := q.db.Query(ctx, rankingsSuccessRates, arg.InstanceName, arg.SinceDays)
+	rows, err := q.db.Query(ctx, rankingsSuccessRates,
+		arg.InstanceName,
+		arg.DifficultyNames,
+		arg.FilterMaxPlayers,
+		arg.SinceDays,
+	)
 	if err != nil {
 		return nil, err
 	}
