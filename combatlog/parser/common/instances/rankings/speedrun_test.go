@@ -9,8 +9,10 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/Emyrk/chronicle/combatlog/parser/common/characters/period"
-	"github.com/Emyrk/chronicle/combatlog/parser/guid"
+	"github.com/Emyrk/chronicle/combatlog/parser/common/identifier"
 	"github.com/Emyrk/chronicle/combatlog/parser/common/messages"
+	"github.com/Emyrk/chronicle/combatlog/parser/guid"
+	"github.com/Emyrk/chronicle/combatlog/parser/types"
 )
 
 // makeCreatureGUID builds a creature GUID with the given entry and spawn IDs.
@@ -40,13 +42,47 @@ func (s *stubChar) Died(string, messages.Message)       {}
 func (s *stubChar) Process(messages.Message) error      { return nil }
 func (s *stubChar) Periods() []period.Period            { return nil }
 func (s *stubChar) RecentlySlain(messages.Message) bool { return false }
-func (s *stubChar) LastEndState() period.EndState        { return period.EndStateNone }
+func (s *stubChar) LastEndState() period.EndState       { return period.EndStateNone }
 func (s *stubChar) SetPeriodHook(period.Hook)           {}
 func (s *stubChar) CurrentPeriod() (period.Period, bool) {
 	if !s.hasPeriod {
 		return period.Period{}, false
 	}
 	return period.Period{EndState: s.endState}, true
+}
+
+func slainCreature(entryID uint32, spawnID uint32) *stubChar {
+	return &stubChar{
+		id:        makeCreatureGUID(entryID, spawnID),
+		endState:  period.EndStateSlain,
+		hasPeriod: true,
+	}
+}
+
+func orderingTestIdentifier() *identifier.Identifier {
+	return identifier.NewIdentifier(map[uint32]identifier.Identity{
+		100: {Affiliation: types.AffiliationHostile},
+		200: {Affiliation: types.AffiliationHostile},
+		300: {Affiliation: types.AffiliationHostile, Boss: true},
+	})
+}
+
+func orderingTestRules() SpeedrunRules {
+	return SpeedrunRules{
+		Requirements: []SpeedrunRequirement{
+			{
+				Name:     "Giants",
+				EntryIDs: []uint32{100},
+				Count:    2,
+				Category: SpeedrunCategoryTrash,
+				Before: &SpeedrunRequirementBefore{
+					TotalKills: 6,
+					BossKills:  1,
+				},
+			},
+			{Name: "Boss", EntryIDs: []uint32{300}, Count: 1, Category: SpeedrunCategoryBosses},
+		},
+	}
 }
 
 func singleBossRules(name string, entryID uint32) SpeedrunRules {
@@ -59,7 +95,7 @@ func singleBossRules(name string, entryID uint32) SpeedrunRules {
 
 func TestSpeedrunTracker_ActivityChange_SlainSatisfiesRequirement(t *testing.T) {
 	t.Parallel()
-	tracker := NewSpeedrunTracker(singleBossRules("Boss", 100), nil, nil)
+	tracker := NewSpeedrunTracker(singleBossRules("Boss", 100), nil, nil, nil)
 
 	c := &stubChar{
 		id:        makeCreatureGUID(100, 1),
@@ -77,7 +113,7 @@ func TestSpeedrunTracker_ActivityChange_SlainSatisfiesRequirement(t *testing.T) 
 
 func TestSpeedrunTracker_ActivityChange_ResetDoesNotSatisfy(t *testing.T) {
 	t.Parallel()
-	tracker := NewSpeedrunTracker(singleBossRules("Boss", 100), nil, nil)
+	tracker := NewSpeedrunTracker(singleBossRules("Boss", 100), nil, nil, nil)
 
 	c := &stubChar{
 		id:        makeCreatureGUID(100, 1),
@@ -94,7 +130,7 @@ func TestSpeedrunTracker_ActivityChange_ResetDoesNotSatisfy(t *testing.T) {
 
 func TestSpeedrunTracker_ActivityChange_ActiveCharacterIgnored(t *testing.T) {
 	t.Parallel()
-	tracker := NewSpeedrunTracker(singleBossRules("Boss", 100), nil, nil)
+	tracker := NewSpeedrunTracker(singleBossRules("Boss", 100), nil, nil, nil)
 
 	c := &stubChar{
 		id:        makeCreatureGUID(100, 1),
@@ -109,7 +145,7 @@ func TestSpeedrunTracker_ActivityChange_ActiveCharacterIgnored(t *testing.T) {
 
 func TestSpeedrunTracker_ActivityChange_UntrackedEntryIgnored(t *testing.T) {
 	t.Parallel()
-	tracker := NewSpeedrunTracker(singleBossRules("Boss", 100), nil, nil)
+	tracker := NewSpeedrunTracker(singleBossRules("Boss", 100), nil, nil, nil)
 
 	c := &stubChar{
 		id:        makeCreatureGUID(999, 1),
@@ -129,7 +165,7 @@ func TestSpeedrunTracker_ActivityChange_DuplicateGUIDIgnored(t *testing.T) {
 			{Name: "Trolls", EntryIDs: []uint32{100}, Count: 2},
 		},
 	}
-	tracker := NewSpeedrunTracker(rules, nil, nil)
+	tracker := NewSpeedrunTracker(rules, nil, nil, nil)
 
 	c := &stubChar{
 		id:        makeCreatureGUID(100, 1),
@@ -151,7 +187,7 @@ func TestSpeedrunTracker_ActivityChange_CountNRequiresNDistinctGUIDs(t *testing.
 			{Name: "Trolls", EntryIDs: []uint32{100}, Count: 3},
 		},
 	}
-	tracker := NewSpeedrunTracker(rules, nil, nil)
+	tracker := NewSpeedrunTracker(rules, nil, nil, nil)
 
 	for i := uint32(1); i <= 3; i++ {
 		c := &stubChar{
@@ -175,7 +211,7 @@ func TestSpeedrunTracker_ActivityChange_MultipleEntryIDsSameRequirement(t *testi
 			{Name: "Trolls", EntryIDs: []uint32{100, 101}, Count: 2},
 		},
 	}
-	tracker := NewSpeedrunTracker(rules, nil, nil)
+	tracker := NewSpeedrunTracker(rules, nil, nil, nil)
 
 	c1 := &stubChar{id: makeCreatureGUID(100, 1), active: false, endState: period.EndStateSlain, hasPeriod: true}
 	c2 := &stubChar{id: makeCreatureGUID(101, 1), active: false, endState: period.EndStateSlain, hasPeriod: true}
@@ -188,9 +224,72 @@ func TestSpeedrunTracker_ActivityChange_MultipleEntryIDsSameRequirement(t *testi
 	require.Len(t, tracker.state[0].kills, 2)
 }
 
+func TestSpeedrunTracker_ActivityChange_BeforeAllowsCompletionOnTotalKillLimit(t *testing.T) {
+	t.Parallel()
+
+	tracker := NewSpeedrunTracker(orderingTestRules(), nil, nil, orderingTestIdentifier())
+	kills := []*stubChar{
+		slainCreature(200, 1),
+		slainCreature(100, 1),
+		slainCreature(200, 2),
+		slainCreature(200, 3),
+		slainCreature(200, 4),
+		slainCreature(100, 2),
+	}
+	for i, kill := range kills {
+		tracker.ActivityChange(msg(t0.Add(time.Duration(i)*time.Second)), kill)
+	}
+
+	assert.Equal(t, 6, tracker.totalKillCount)
+	assert.True(t, tracker.state[0].satisfied)
+	assert.False(t, tracker.state[0].expired)
+	require.Len(t, tracker.state[0].kills, 2)
+
+	tracker.ActivityChange(msg(t0.Add(6*time.Second)), slainCreature(300, 1))
+	assert.True(t, tracker.state[0].satisfied, "a completed deadline requirement stays satisfied")
+}
+
+func TestSpeedrunTracker_ActivityChange_BeforeExpiresAfterTotalKillLimit(t *testing.T) {
+	t.Parallel()
+
+	tracker := NewSpeedrunTracker(orderingTestRules(), nil, nil, orderingTestIdentifier())
+	kills := []*stubChar{
+		slainCreature(100, 1),
+		slainCreature(200, 1),
+		slainCreature(200, 2),
+		slainCreature(200, 3),
+		slainCreature(200, 4),
+		slainCreature(200, 5),
+		slainCreature(100, 2),
+	}
+	for i, kill := range kills {
+		tracker.ActivityChange(msg(t0.Add(time.Duration(i)*time.Second)), kill)
+	}
+
+	assert.Equal(t, 7, tracker.totalKillCount)
+	assert.False(t, tracker.state[0].satisfied)
+	assert.True(t, tracker.state[0].expired)
+	require.Len(t, tracker.state[0].kills, 1, "kills after the deadline must not count")
+}
+
+func TestSpeedrunTracker_ActivityChange_BeforeExpiresAtFirstBossKill(t *testing.T) {
+	t.Parallel()
+
+	tracker := NewSpeedrunTracker(orderingTestRules(), nil, nil, orderingTestIdentifier())
+	tracker.ActivityChange(msg(t0), slainCreature(100, 1))
+	tracker.ActivityChange(msg(t0.Add(time.Second)), slainCreature(300, 1))
+	tracker.ActivityChange(msg(t0.Add(2*time.Second)), slainCreature(100, 2))
+
+	assert.Equal(t, 1, tracker.bossKillCount)
+	assert.False(t, tracker.state[0].satisfied)
+	assert.True(t, tracker.state[0].expired)
+	require.Len(t, tracker.state[0].kills, 1, "kills after the first boss must not count")
+	assert.True(t, tracker.state[1].satisfied)
+}
+
 func TestSpeedrunTracker_FightStarted_RecordsFirstFightOnly(t *testing.T) {
 	t.Parallel()
-	tracker := NewSpeedrunTracker(singleBossRules("Boss", 100), nil, nil)
+	tracker := NewSpeedrunTracker(singleBossRules("Boss", 100), nil, nil, nil)
 
 	first := t0
 	second := t0.Add(5 * time.Minute)
@@ -209,7 +308,7 @@ func TestSpeedrunTracker_FightEnded_QualifiesOnlyWhenAllSatisfied(t *testing.T) 
 			{Name: "B", EntryIDs: []uint32{200}, Count: 1},
 		},
 	}
-	tracker := NewSpeedrunTracker(rules, nil, nil)
+	tracker := NewSpeedrunTracker(rules, nil, nil, nil)
 	tracker.FightStarted(uuid.New(), msg(t0))
 
 	// Kill first boss
@@ -234,7 +333,7 @@ func TestSpeedrunTracker_CompletedIgnoresSubsequentKills(t *testing.T) {
 			{Name: "Extra", EntryIDs: []uint32{200}, Count: 1},
 		},
 	}
-	tracker := NewSpeedrunTracker(rules, nil, nil)
+	tracker := NewSpeedrunTracker(rules, nil, nil, nil)
 	tracker.FightStarted(uuid.New(), msg(t0))
 
 	// Satisfy both
@@ -259,7 +358,7 @@ func TestSpeedrunTracker_Result_ProofForEveryRequirement(t *testing.T) {
 			{Name: "B", EntryIDs: []uint32{200}, Count: 1},
 		},
 	}
-	tracker := NewSpeedrunTracker(rules, nil, nil)
+	tracker := NewSpeedrunTracker(rules, nil, nil, nil)
 	tracker.FightStarted(uuid.New(), msg(t0))
 
 	// Only kill A
@@ -282,7 +381,7 @@ func TestSpeedrunTracker_Result_ProofForEveryRequirement(t *testing.T) {
 
 func TestSpeedrunTracker_Result_QualifiedRun(t *testing.T) {
 	t.Parallel()
-	tracker := NewSpeedrunTracker(singleBossRules("Boss", 100), nil, nil)
+	tracker := NewSpeedrunTracker(singleBossRules("Boss", 100), nil, nil, nil)
 
 	startTime := t0
 	endTime := t0.Add(30 * time.Minute)

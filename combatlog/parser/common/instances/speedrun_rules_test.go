@@ -3,9 +3,10 @@ package instances
 import (
 	"testing"
 
+	"github.com/stretchr/testify/require"
+
 	"github.com/Emyrk/chronicle/combatlog/parser/common/instances/rankings"
 	"github.com/Emyrk/chronicle/database"
-	"github.com/stretchr/testify/require"
 )
 
 func TestLevel60Cap(t *testing.T) {
@@ -55,6 +56,27 @@ func TestVanillaPlusScarletMonasterySpeedrunRequirements(t *testing.T) {
 		{Name: "Sally Whitemane", EntryIDs: []uint32{25228}, Count: 1, Category: rankings.SpeedrunCategoryBosses},
 		{Name: "Renault Mograine", EntryIDs: []uint32{25227}, Count: 1, Category: rankings.SpeedrunCategoryBosses},
 	}, rules.Speedrun.Requirements)
+}
+
+func TestMoltenCoreSpeedrunRequirements_MoltenGiantsBeforeDeadline(t *testing.T) {
+	t.Parallel()
+
+	requirements := MoltenCoreSpeedrunRequirements(database.WoWFlavor{database.FlavorVanilla})
+	var giants *rankings.SpeedrunRequirement
+	for i := range requirements {
+		if requirements[i].Name == "Molten Giants" {
+			giants = &requirements[i]
+			break
+		}
+	}
+
+	require.NotNil(t, giants)
+	require.Equal(t, []uint32{11658}, giants.EntryIDs)
+	require.Equal(t, 2, giants.Count)
+	require.Equal(t, rankings.SpeedrunCategoryTrash, giants.Category)
+	require.NotNil(t, giants.Before)
+	require.Equal(t, 6, giants.Before.TotalKills)
+	require.Equal(t, 1, giants.Before.BossKills)
 }
 
 func TestVanillaRaidLevel60Caps(t *testing.T) {

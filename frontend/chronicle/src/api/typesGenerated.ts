@@ -2428,6 +2428,16 @@ export interface SpeedrunRequirement {
     readonly entry_ids: readonly number[];
     readonly count: number;
     readonly category: string;
+    readonly before?: SpeedrunRequirementBefore;
+}
+
+// From chroniclesdk/log.go
+/**
+ * SpeedrunRequirementBefore limits when a requirement may be completed.
+ */
+export interface SpeedrunRequirementBefore {
+    readonly total_kills?: number;
+    readonly boss_kills?: number;
 }
 
 // From chroniclesdk/log.go

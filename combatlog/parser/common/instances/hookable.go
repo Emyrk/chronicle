@@ -161,7 +161,7 @@ func NewHookable(ctx context.Context, logger *slog.Logger, db *unitdb.Units, z z
 	if ip.Rankings != nil {
 		dpsTracker = rankings.NewDPSTracker(db)
 		if ip.Rankings.Speedrun != nil {
-			speedrunTracker = rankings.NewSpeedrunTracker(*ip.Rankings.Speedrun, db, engagementTracker)
+			speedrunTracker = rankings.NewSpeedrunTracker(*ip.Rankings.Speedrun, db, engagementTracker, ip.Idf)
 			chrs.RegisterHook(speedrunTracker)
 		}
 	}
@@ -300,7 +300,7 @@ func (h *Hookable) initDerivedRankings(flavor database.WoWFlavor, derivedRanking
 		}
 		h.derivedRankingRules[name] = r
 		if r.Speedrun != nil {
-			tracker := rankings.NewSpeedrunTracker(*r.Speedrun, h.units, h.engagementTracker)
+			tracker := rankings.NewSpeedrunTracker(*r.Speedrun, h.units, h.engagementTracker, h.Identifier)
 			h.Characters.RegisterHook(tracker)
 			h.hooks = append(h.hooks, tracker)
 			h.derivedSpeedrunTrackers[name] = tracker

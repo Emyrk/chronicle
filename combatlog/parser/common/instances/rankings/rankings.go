@@ -21,11 +21,21 @@ const (
 	SpeedrunCategoryTrash  SpeedrunRequirementCategory = "Trash"
 )
 
+// SpeedrunRequirementBefore limits when a requirement may be completed.
+// TotalKills is inclusive, so a value of 6 allows completion on the sixth
+// hostile kill. BossKills is exclusive, so a value of 1 requires completion
+// before the first boss kill.
+type SpeedrunRequirementBefore struct {
+	TotalKills int `json:"total_kills,omitempty"`
+	BossKills  int `json:"boss_kills,omitempty"`
+}
+
 type SpeedrunRequirement struct {
 	Name     string                      `json:"name"`
 	EntryIDs []uint32                    `json:"entry_ids"`
 	Count    int                         `json:"count"`
 	Category SpeedrunRequirementCategory `json:"category"`
+	Before   *SpeedrunRequirementBefore  `json:"before,omitempty"`
 }
 
 // LevelRangeRequirement constrains the player levels allowed in a qualifying speedrun.
@@ -92,7 +102,7 @@ type SpeedrunResult struct {
 // SpeedrunProofPayload is the JSON structure stored in the database proof column.
 // It wraps the proof array alongside optional level range data.
 type SpeedrunProofPayload struct {
-	Proof      []SpeedrunProof  `json:"proof"`
+	Proof      []SpeedrunProof   `json:"proof"`
 	LevelRange *LevelRangeResult `json:"level_range,omitempty"`
 }
 

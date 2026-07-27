@@ -256,7 +256,7 @@ func TestSpeedrunTracker_LevelRange_AllPlayersInRange(t *testing.T) {
 		},
 		LevelRange: &LevelRangeRequirement{MinLevel: 60, MaxLevel: 60},
 	}
-	tracker := NewSpeedrunTracker(rules, units, engagement)
+	tracker := NewSpeedrunTracker(rules, units, engagement, nil)
 
 	eid := uuid.New()
 
@@ -305,7 +305,7 @@ func TestSpeedrunTracker_LevelRange_ViolatorDisqualifies(t *testing.T) {
 		},
 		LevelRange: &LevelRangeRequirement{MinLevel: 60, MaxLevel: 60},
 	}
-	tracker := NewSpeedrunTracker(rules, units, engagement)
+	tracker := NewSpeedrunTracker(rules, units, engagement, nil)
 
 	eid := uuid.New()
 
@@ -356,7 +356,7 @@ func TestSpeedrunTracker_LevelRange_IgnoresZeroGUID(t *testing.T) {
 		},
 		LevelRange: &LevelRangeRequirement{MinLevel: 0, MaxLevel: 60},
 	}
-	tracker := NewSpeedrunTracker(rules, units, engagement)
+	tracker := NewSpeedrunTracker(rules, units, engagement, nil)
 
 	eid := uuid.New()
 	engagement.FightStarted(eid, msg(t0))
@@ -409,7 +409,7 @@ func TestSpeedrunTracker_LevelRange_UsesEngagedCombatantInfo(t *testing.T) {
 		},
 		LevelRange: &LevelRangeRequirement{MinLevel: 0, MaxLevel: 60},
 	}
-	tracker := NewSpeedrunTracker(rules, units, engagement)
+	tracker := NewSpeedrunTracker(rules, units, engagement, nil)
 
 	eid := uuid.New()
 	engagement.FightStarted(eid, msg(t0))
@@ -457,7 +457,7 @@ func TestSpeedrunTracker_LevelRange_AFKPlayerNotChecked(t *testing.T) {
 		},
 		LevelRange: &LevelRangeRequirement{MinLevel: 60, MaxLevel: 60},
 	}
-	tracker := NewSpeedrunTracker(rules, units, engagement)
+	tracker := NewSpeedrunTracker(rules, units, engagement, nil)
 
 	eid := uuid.New()
 
@@ -504,7 +504,7 @@ func TestSpeedrunTracker_LevelRange_MissingLevelDisqualifies(t *testing.T) {
 		},
 		LevelRange: &LevelRangeRequirement{MinLevel: 60, MaxLevel: 60},
 	}
-	tracker := NewSpeedrunTracker(rules, units, engagement)
+	tracker := NewSpeedrunTracker(rules, units, engagement, nil)
 
 	eid := uuid.New()
 
