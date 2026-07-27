@@ -765,6 +765,22 @@ type DatasetTalentTree struct {
 	UpdatedAt pgtype.Timestamptz `db:"updated_at" json:"updated_at"`
 }
 
+type DbcConsumable struct {
+	DatasetID    uuid.UUID `db:"dataset_id" json:"dataset_id"`
+	ItemID       int32     `db:"item_id" json:"item_id"`
+	ItemName     string    `db:"item_name" json:"item_name"`
+	ItemQuality  int32     `db:"item_quality" json:"item_quality"`
+	ItemIcon     string    `db:"item_icon" json:"item_icon"`
+	ItemSpellIds []int32   `db:"item_spell_ids" json:"item_spell_ids"`
+}
+
+type DbcConsumableBuff struct {
+	DatasetID uuid.UUID `db:"dataset_id" json:"dataset_id"`
+	ItemID    int32     `db:"item_id" json:"item_id"`
+	SpellID   int32     `db:"spell_id" json:"spell_id"`
+	SpellName string    `db:"spell_name" json:"spell_name"`
+}
+
 type DbcDurationModifier struct {
 	DatasetID      uuid.UUID `db:"dataset_id" json:"dataset_id"`
 	SpellID        int32     `db:"spell_id" json:"spell_id"`

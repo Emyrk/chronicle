@@ -804,6 +804,178 @@ func (q *sqlQuerier) UpdateWoWServerRealm(ctx context.Context, arg UpdateWoWServ
 	return i, err
 }
 
+const deleteConsumablesByDataset = `-- name: DeleteConsumablesByDataset :exec
+DELETE FROM dbc_consumables WHERE dataset_id = $1
+`
+
+func (q *sqlQuerier) DeleteConsumablesByDataset(ctx context.Context, datasetID uuid.UUID) error {
+	_, err := q.db.Exec(ctx, deleteConsumablesByDataset, datasetID)
+	return err
+}
+
+const insertDerivedConsumableBuffs = `-- name: InsertDerivedConsumableBuffs :execrows
+WITH RECURSIVE roots AS (
+    SELECT
+        c.dataset_id,
+        c.item_id,
+        root_spell_id
+    FROM dbc_consumables c
+    CROSS JOIN LATERAL unnest(c.item_spell_ids) AS root_spell_id
+    WHERE c.dataset_id = $1
+), spell_graph AS (
+    SELECT
+        r.dataset_id,
+        r.item_id,
+        r.root_spell_id,
+        r.root_spell_id AS spell_id,
+        ARRAY[r.root_spell_id]::int[] AS path
+    FROM roots r
+
+    UNION ALL
+
+    SELECT
+        graph.dataset_id,
+        graph.item_id,
+        graph.root_spell_id,
+        triggered.spell_id,
+        graph.path || triggered.spell_id
+    FROM spell_graph graph
+    JOIN dbc_spells spell
+      ON spell.dataset_id = graph.dataset_id
+     AND spell.spell_id = graph.spell_id
+    CROSS JOIN LATERAL unnest(ARRAY[
+        spell.effect_trigger_spell_0,
+        spell.effect_trigger_spell_1,
+        spell.effect_trigger_spell_2
+    ]) AS triggered(spell_id)
+    WHERE triggered.spell_id <> 0
+      AND NOT triggered.spell_id = ANY(graph.path)
+      AND cardinality(graph.path) < 8
+)
+INSERT INTO dbc_consumable_buffs (dataset_id, item_id, spell_id, spell_name)
+SELECT DISTINCT
+    graph.dataset_id,
+    graph.item_id,
+    spell.spell_id,
+    spell.name
+FROM spell_graph graph
+JOIN dbc_spells spell
+  ON spell.dataset_id = graph.dataset_id
+ AND spell.spell_id = graph.spell_id
+WHERE spell.effect_0 IN (6, 174)
+   OR spell.effect_1 IN (6, 174)
+   OR spell.effect_2 IN (6, 174)
+`
+
+func (q *sqlQuerier) InsertDerivedConsumableBuffs(ctx context.Context, datasetID uuid.UUID) (int64, error) {
+	result, err := q.db.Exec(ctx, insertDerivedConsumableBuffs, datasetID)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
+}
+
+const insertDerivedConsumables = `-- name: InsertDerivedConsumables :execrows
+INSERT INTO dbc_consumables (
+    dataset_id,
+    item_id,
+    item_name,
+    item_quality,
+    item_icon,
+    item_spell_ids
+)
+SELECT
+    wit.dataset_id,
+    wit.entry,
+    wit.name,
+    wit.quality,
+    COALESCE(NULLIF(wdi.icon, ''), dbi.inventory_icon ->> 0, '')::text,
+    ARRAY_REMOVE(ARRAY[
+        wit.spellid_1,
+        wit.spellid_2,
+        wit.spellid_3,
+        wit.spellid_4,
+        wit.spellid_5
+    ], 0)::int[]
+FROM world_item_template wit
+LEFT JOIN world_display_info wdi
+    ON wdi.dataset_id = wit.dataset_id AND wdi.id = wit.display_id
+LEFT JOIN dbc_item_display_info dbi
+    ON dbi.dataset_id = wit.dataset_id AND dbi.id = wit.display_id
+WHERE wit.dataset_id = $1
+  AND wit.class = 0
+  AND (
+      wit.spellid_1 <> 0 OR
+      wit.spellid_2 <> 0 OR
+      wit.spellid_3 <> 0 OR
+      wit.spellid_4 <> 0 OR
+      wit.spellid_5 <> 0
+  )
+`
+
+func (q *sqlQuerier) InsertDerivedConsumables(ctx context.Context, datasetID uuid.UUID) (int64, error) {
+	result, err := q.db.Exec(ctx, insertDerivedConsumables, datasetID)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
+}
+
+const listConsumablesByDataset = `-- name: ListConsumablesByDataset :many
+SELECT
+    c.item_id,
+    c.item_name,
+    c.item_quality,
+    c.item_icon,
+    c.item_spell_ids,
+    b.spell_id AS buff_spell_id,
+    b.spell_name AS buff_spell_name
+FROM dbc_consumables c
+LEFT JOIN dbc_consumable_buffs b
+  ON b.dataset_id = c.dataset_id
+ AND b.item_id = c.item_id
+WHERE c.dataset_id = $1
+ORDER BY c.item_name, c.item_id, b.spell_name, b.spell_id
+`
+
+type ListConsumablesByDatasetRow struct {
+	ItemID        int32       `db:"item_id" json:"item_id"`
+	ItemName      string      `db:"item_name" json:"item_name"`
+	ItemQuality   int32       `db:"item_quality" json:"item_quality"`
+	ItemIcon      string      `db:"item_icon" json:"item_icon"`
+	ItemSpellIds  []int32     `db:"item_spell_ids" json:"item_spell_ids"`
+	BuffSpellID   pgtype.Int4 `db:"buff_spell_id" json:"buff_spell_id"`
+	BuffSpellName pgtype.Text `db:"buff_spell_name" json:"buff_spell_name"`
+}
+
+func (q *sqlQuerier) ListConsumablesByDataset(ctx context.Context, datasetID uuid.UUID) ([]ListConsumablesByDatasetRow, error) {
+	rows, err := q.db.Query(ctx, listConsumablesByDataset, datasetID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListConsumablesByDatasetRow
+	for rows.Next() {
+		var i ListConsumablesByDatasetRow
+		if err := rows.Scan(
+			&i.ItemID,
+			&i.ItemName,
+			&i.ItemQuality,
+			&i.ItemIcon,
+			&i.ItemSpellIds,
+			&i.BuffSpellID,
+			&i.BuffSpellName,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const deleteDataGrant = `-- name: DeleteDataGrant :exec
 DELETE FROM data_grants
 WHERE user_id = $1 AND source = $2

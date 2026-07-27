@@ -387,6 +387,16 @@ func (h *Handler) importItemTemplateSQL(ctx context.Context, w http.ResponseWrit
 		}
 	}
 
+	if mode == "upsert" || mode == "insert" {
+		if err := h.deriveConsumables(ctx, datasetID); err != nil {
+			httpapi.Write(ctx, w, http.StatusInternalServerError, chroniclesdk.Response{
+				Message: "Items imported but consumable generation failed",
+				Detail:  err.Error(),
+			})
+			return
+		}
+	}
+
 	httpapi.Write(ctx, w, http.StatusOK, chroniclesdk.WDBUploadResponse{
 		Signature:   "item_template",
 		Version:     0,

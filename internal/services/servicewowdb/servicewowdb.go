@@ -11,6 +11,7 @@ import (
 
 	"github.com/Emyrk/chronicle/api/chroniclesdk"
 	"github.com/Emyrk/chronicle/api/httpapi"
+	"github.com/Emyrk/chronicle/database"
 	"github.com/Emyrk/chronicle/database/gamedb/chrondbc"
 	"github.com/Emyrk/chronicle/database/gamedb/talents"
 	"github.com/Emyrk/chronicle/internal/services/serviceauthz"
@@ -45,6 +46,7 @@ type Service struct {
 	spellDBCPath string
 
 	db     *gamedb.WoWDB
+	store  database.Store
 	router chi.Router
 }
 
@@ -91,6 +93,7 @@ func (s *Service) Start(ctx context.Context) error {
 		return err
 	}
 	s.db = db
+	s.store = store
 
 	s.router = chi.NewRouter()
 	s.setupRoutes()
@@ -106,6 +109,7 @@ func (s *Service) setupRoutes() {
 	s.router.Get("/spell-by-name/{name}", s.handleGetSpellByName)
 	s.router.Get("/periodic-spells", s.handleGetPeriodicSpells)
 	s.router.Get("/extra-attack-spells", s.handleGetExtraAttackSpells)
+	s.router.Get("/consumables", s.handleGetConsumables)
 	s.router.Get("/talent-trees", s.handleGetTalentTrees)
 }
 

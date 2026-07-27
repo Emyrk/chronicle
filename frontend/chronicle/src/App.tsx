@@ -48,6 +48,7 @@ import {
   ClassSpellsPage,
   TalentTreesPage,
   PetTargetingAbilitiesPage,
+  ConsumablesPage,
 } from "./pages/Technical"
 import {
   AccountLayout,
@@ -160,6 +161,7 @@ function App() {
         <Route path="/technical/class-spells" element={<ClassSpellsPage />} />
         <Route path="/technical/pet-targeting-abilities" element={<PetTargetingAbilitiesPage />} />
         <Route path="/technical/talent-trees" element={<TalentTreesPage />} />
+        <Route path="/technical/consumables" element={<ConsumablesPage />} />
         <Route path="/contact" element={<Contact />} />
         <Route path="/privacy" element={<Privacy />} />
         <Route path="/disclaimer" element={<Disclaimer />} />

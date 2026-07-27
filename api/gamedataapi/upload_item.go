@@ -128,6 +128,16 @@ func (h *Handler) handleItemUpload(ctx context.Context, w http.ResponseWriter, m
 		}
 	}
 
+	if mode == "upsert" || mode == "insert" {
+		if err := h.deriveConsumables(ctx, datasetID); err != nil {
+			httpapi.Write(ctx, w, http.StatusInternalServerError, chroniclesdk.Response{
+				Message: "Items imported but consumable generation failed",
+				Detail:  err.Error(),
+			})
+			return
+		}
+	}
+
 	httpapi.Write(ctx, w, http.StatusOK, chroniclesdk.WDBUploadResponse{
 		Signature:   wdbHeader.Signature.String(),
 		Version:     wdbHeader.Version,

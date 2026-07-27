@@ -70,6 +70,13 @@ func (h *Handler) handleSpellUpload(ctx context.Context, w http.ResponseWriter, 
 		})
 		return
 	}
+	if err := h.deriveConsumables(ctx, datasetID); err != nil {
+		httpapi.Write(ctx, w, http.StatusInternalServerError, chroniclesdk.Response{
+			Message: "Spells imported but consumable generation failed",
+			Detail:  err.Error(),
+		})
+		return
+	}
 
 	// Update dataset import metadata.
 	_, err = h.pool.Exec(ctx,

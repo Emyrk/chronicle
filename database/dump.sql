@@ -289,6 +289,22 @@ CREATE TABLE datasets (
     CONSTRAINT datasets_slug_format CHECK ((slug ~ '^[a-z0-9][a-z0-9-]{1,48}[a-z0-9]$'::text))
 );
 
+CREATE TABLE dbc_consumable_buffs (
+    dataset_id uuid NOT NULL,
+    item_id integer NOT NULL,
+    spell_id integer NOT NULL,
+    spell_name text NOT NULL
+);
+
+CREATE TABLE dbc_consumables (
+    dataset_id uuid NOT NULL,
+    item_id integer NOT NULL,
+    item_name text NOT NULL,
+    item_quality integer DEFAULT 0 NOT NULL,
+    item_icon text DEFAULT ''::text NOT NULL,
+    item_spell_ids integer[] DEFAULT '{}'::integer[] NOT NULL
+);
+
 CREATE TABLE dbc_duration_modifiers (
     dataset_id uuid NOT NULL,
     spell_id integer NOT NULL,
@@ -1518,6 +1534,12 @@ ALTER TABLE ONLY datasets
 ALTER TABLE ONLY datasets
     ADD CONSTRAINT datasets_slug_key UNIQUE (slug);
 
+ALTER TABLE ONLY dbc_consumable_buffs
+    ADD CONSTRAINT dbc_consumable_buffs_pkey PRIMARY KEY (dataset_id, item_id, spell_id);
+
+ALTER TABLE ONLY dbc_consumables
+    ADD CONSTRAINT dbc_consumables_pkey PRIMARY KEY (dataset_id, item_id);
+
 ALTER TABLE ONLY dbc_duration_modifiers
     ADD CONSTRAINT dbc_duration_modifiers_pkey PRIMARY KEY (dataset_id, spell_id);
 
@@ -1803,6 +1825,8 @@ ALTER TABLE ONLY wow_server_upload_keys
 ALTER TABLE ONLY wow_servers
     ADD CONSTRAINT wow_servers_pkey PRIMARY KEY (id);
 
+CREATE INDEX dbc_consumable_buffs_spell_idx ON dbc_consumable_buffs USING btree (dataset_id, spell_id);
+
 CREATE UNIQUE INDEX files_unique_owner_hash ON log_file USING btree (owner, hash);
 
 CREATE INDEX game_players_player_and_realm ON game_players USING btree (name, realm_id);
@@ -1939,6 +1963,12 @@ ALTER TABLE ONLY data_grants
 
 ALTER TABLE ONLY dataset_talent_trees
     ADD CONSTRAINT dataset_talent_trees_dataset_id_fkey FOREIGN KEY (dataset_id) REFERENCES datasets(id) ON DELETE CASCADE;
+
+ALTER TABLE ONLY dbc_consumable_buffs
+    ADD CONSTRAINT dbc_consumable_buffs_dataset_id_item_id_fkey FOREIGN KEY (dataset_id, item_id) REFERENCES dbc_consumables(dataset_id, item_id) ON DELETE CASCADE;
+
+ALTER TABLE ONLY dbc_consumables
+    ADD CONSTRAINT dbc_consumables_dataset_id_fkey FOREIGN KEY (dataset_id) REFERENCES datasets(id) ON DELETE CASCADE;
 
 ALTER TABLE ONLY dbc_duration_modifiers
     ADD CONSTRAINT dbc_duration_modifiers_dataset_id_fkey FOREIGN KEY (dataset_id) REFERENCES datasets(id) ON DELETE CASCADE;

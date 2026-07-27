@@ -1,5 +1,5 @@
 import { Link } from "react-router-dom";
-import { ArrowLeft, BookOpen, Clock, FileCode, PawPrint, ShieldAlert, Sparkles, Swords } from "lucide-react";
+import { ArrowLeft, BookOpen, Clock, FileCode, FlaskConical, PawPrint, ShieldAlert, Sparkles, Swords } from "lucide-react";
 import { Card } from "@/components/ui/Card/Card";
 
 interface TechnicalLink {
@@ -45,6 +45,12 @@ const TECHNICAL_LINKS: TechnicalLink[] = [
     description: "Spells with pet-targeting attributes from DBC (ImplicitTarget, Effect, Attrs)",
     href: "/technical/pet-targeting-abilities",
     icon: <PawPrint className="h-4 w-4" />,
+  },
+  {
+    title: "Consumables",
+    description: "Consumable items and the buffs linked through their spell chains",
+    href: "/technical/consumables",
+    icon: <FlaskConical className="h-4 w-4" />,
   },
   {
     title: "Talent Trees",
