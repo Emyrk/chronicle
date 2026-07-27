@@ -11,6 +11,7 @@ import {
   useRankingsInstances,
   useRankingsLeaderboard,
   useRankingsStats,
+  useRankingsSuccessRates,
 } from "@/api/rankingsQueries";
 import type {
   RankingsEntry,
@@ -452,6 +453,14 @@ function MobileSpotlight({
 function RaidSpotlight() {
   const isMobile = useIsMobile();
   const { data: instanceSummaries } = useRankingsInstances();
+  const { data: siteConfig } = useSiteConfig();
+
+  // Tenant parse scoring mode: "spec" (default), "class", or "disabled".
+  // When the tenant aggregates parses by class or disables them entirely, the
+  // per-spec box plots are misleading/unavailable — show the raid's toughest
+  // bosses by success rate instead.
+  const cohortMode = siteConfig?.tenant?.parse_config?.cohort_mode ?? "spec";
+  const showToughestBosses = cohortMode === "class" || cohortMode === "disabled";
 
   // One tab per raid; each raid keeps its per-(difficulty, size) boards so the
   // user can toggle between them.
@@ -624,6 +633,21 @@ function RaidSpotlight() {
     difficulty_names: difficultyFilter,
     max_players: maxPlayersFilter,
   });
+
+  // Success rates for the "Toughest Bosses" card. Only fetched when the card
+  // is shown (empty instance name disables the query). The endpoint has no
+  // difficulty/size filters, so this covers the whole raid.
+  const { data: successRates } = useRankingsSuccessRates(
+    showToughestBosses ? (spot?.name ?? "") : "",
+  );
+  const toughestBosses = useMemo(() => {
+    if (!successRates) return [];
+    return successRates
+      .filter((r) => r.total > 0)
+      .map((r) => ({ ...r, pct: (r.kills / r.total) * 100 }))
+      .sort((a, b) => a.pct - b.pct)
+      .slice(0, 6);
+  }, [successRates]);
 
   const topSpecs = useMemo(() => {
     if (!boxPlotStats) return [];
@@ -867,7 +891,48 @@ function RaidSpotlight() {
                 })}
             </div>
 
-            {/* Best parse by spec */}
+            {showToughestBosses ? (
+              /* Toughest bosses: lowest success rate first. Shown instead of
+                 the per-spec box plots when parses are class-aggregated or
+                 disabled for this tenant. */
+              <div className="rounded-lg border bg-muted/20 overflow-hidden">
+                <div className="flex items-center justify-between px-4 py-3 border-b bg-muted/40">
+                  <span className="text-sm font-semibold">Toughest Bosses</span>
+                  <Link
+                    to={`/leaderboards?instance=${encodeURIComponent(spot.name)}&metric=success`}
+                    className="text-xs text-primary hover:underline"
+                  >
+                    Full board →
+                  </Link>
+                </div>
+                <div className="px-4 py-3">
+                  {toughestBosses.length === 0 && (
+                    <div className="py-5 text-center text-sm text-muted-foreground">
+                      No boss attempts recorded yet.
+                    </div>
+                  )}
+                  {toughestBosses.map((b) => {
+                    const pct = Math.round(b.pct);
+                    return (
+                      <div key={b.encounter_name} className="flex items-center gap-2.5 py-1.5">
+                        <span className="w-27 text-xs truncate">{b.encounter_name}</span>
+                        {/* Success bar: green kill share over red wipe share. */}
+                        <div className="relative flex-1 h-3 rounded-xs bg-red-500/30 overflow-hidden">
+                          <div
+                            className="absolute inset-y-0 left-0 bg-green-500/70"
+                            style={{ width: `${pct}%` }}
+                          />
+                        </div>
+                        <span className="w-10 font-mono text-xs text-muted-foreground text-right">
+                          {pct}%
+                        </span>
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+            ) : (
+            /* Best parse by spec */
             <div className="rounded-lg border bg-muted/20 overflow-hidden">
               <div className="flex items-center justify-between px-4 py-3 border-b bg-muted/40">
                 <span className="text-sm font-semibold">Best typical parse by spec</span>
@@ -919,6 +984,7 @@ function RaidSpotlight() {
                 ))}
               </div>
             </div>
+            )}
           </div>
         </div>
       </div>
