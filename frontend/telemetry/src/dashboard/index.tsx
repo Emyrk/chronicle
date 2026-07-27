@@ -1,6 +1,6 @@
 import { Hono } from "hono";
 import { html } from "hono/html";
-import type { Env, DeploymentLatest, StoredReport } from "../types";
+import type { Env, DeploymentLatestWithHost, StoredReport } from "../types";
 
 const dashboard = new Hono<{ Bindings: Env }>();
 
@@ -33,12 +33,13 @@ dashboard.get("/internal", async (c) => {
     [
       db
         .prepare(
-          `SELECT dl.*, r.total_log_files, r.total_users as report_users, r.instances_by_zone
+          `SELECT dl.*, r.total_log_files, r.total_users as report_users, r.instances_by_zone,
+                  r.remote_ip, r.hostname, r.os, r.arch
            FROM deployment_latest dl
            JOIN telemetry_reports r ON r.id = dl.last_report_id
            ORDER BY dl.last_reported_at DESC`
         )
-        .all<DeploymentLatest & { total_log_files: number; report_users: number; instances_by_zone: string }>(),
+        .all<DeploymentLatestWithHost & { total_log_files: number; report_users: number; instances_by_zone: string }>(),
       db
         .prepare(
           `SELECT
@@ -246,6 +247,7 @@ dashboard.get("/internal", async (c) => {
                 <th class="sortable" data-col="version">Version</th>
                 <th class="sortable" data-col="server">Server</th>
                 <th>Access URL</th>
+                <th class="sortable" data-col="host">Host / IP</th>
                 <th class="sortable" data-col="users" data-type="num">Users</th>
                 <th class="sortable" data-col="logs" data-type="num">Log Files</th>
                 <th class="sortable" data-col="instances" data-type="num">Instances</th>
@@ -281,6 +283,12 @@ dashboard.get("/internal", async (c) => {
                         "—"
                       )}
                     </td>
+                    <td data-val={`${d.hostname || "~"}|${d.remote_ip || ""}`} title={d.os || d.arch ? `${d.os}/${d.arch}` : ""}>
+                      <div style="max-width: 160px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">{d.hostname || "—"}</div>
+                      {d.remote_ip && (
+                        <div class="mono text-muted" style="font-size: 11px;">{d.remote_ip}</div>
+                      )}
+                    </td>
                     <td data-val={d.report_users}>{d.report_users}</td>
                     <td data-val={d.total_log_files}>{d.total_log_files}</td>
                     <td data-val={d.total_instances}>{d.total_instances}</td>
@@ -295,7 +303,7 @@ dashboard.get("/internal", async (c) => {
               })}
               {deployments.length === 0 && (
                 <tr>
-                  <td colspan={9} class="text-muted" style="text-align: center; padding: 24px;">
+                  <td colspan={10} class="text-muted" style="text-align: center; padding: 24px;">
                     No telemetry reports received yet.
                   </td>
                 </tr>
@@ -546,6 +554,18 @@ dashboard.get("/internal/deployment/:id", async (c) => {
             <div class="meta-item">
               <div class="label">Remote IP</div>
               <div class="val mono">{latest.remote_ip || "—"}</div>
+            </div>
+            <div class="meta-item">
+              <div class="label">Hostname</div>
+              <div class="val mono" style="font-size: 13px; word-break: break-all;">
+                {latest.hostname || "—"}
+              </div>
+            </div>
+            <div class="meta-item">
+              <div class="label">OS / Arch</div>
+              <div class="val mono">
+                {latest.os || latest.arch ? `${latest.os}/${latest.arch}` : "—"}
+              </div>
             </div>
           </div>
         )}

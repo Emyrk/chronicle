@@ -35,10 +35,10 @@ ingest.post("/api/v1/telemetry/report", async (c) => {
     .prepare(
       `INSERT INTO telemetry_reports
         (deployment_id, deployment_created_at, version, git_commit, server_type,
-         access_url, uptime_seconds, started_at, total_users, total_log_files,
-         total_parsed_log_bytes, active_file_bytes, deleted_file_bytes,
-         instances_by_zone, remote_ip)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+         access_url, hostname, os, arch, uptime_seconds, started_at, total_users,
+         total_log_files, total_parsed_log_bytes, active_file_bytes,
+         deleted_file_bytes, instances_by_zone, remote_ip)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
     )
     .bind(
       report.deployment_id,
@@ -47,6 +47,9 @@ ingest.post("/api/v1/telemetry/report", async (c) => {
       report.git_commit ?? "",
       report.server_type ?? "",
       report.access_url ?? "",
+      report.hostname ?? "",
+      report.os ?? "",
+      report.arch ?? "",
       report.uptime_seconds ?? 0,
       report.started_at ?? null,
       report.total_users ?? 0,

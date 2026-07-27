@@ -1,26 +1,30 @@
 import { Hono } from "hono";
-import type { Env, DeploymentLatest, StoredReport } from "../types";
+import type { Env, DeploymentLatestWithHost, StoredReport } from "../types";
 
 const api = new Hono<{ Bindings: Env }>();
 
-// List all deployments (latest report per deployment).
+// List all deployments (latest report per deployment). Host metadata
+// (remote_ip, hostname, os, arch) comes from the latest report so it works
+// for rows ingested before those columns were tracked on the report.
 api.get("/internal/api/v1/deployments", async (c) => {
   const serverType = c.req.query("server_type");
   const db = c.env.DB;
 
-  let query = "SELECT * FROM deployment_latest";
+  let query = `SELECT dl.*, r.remote_ip, r.hostname, r.os, r.arch
+     FROM deployment_latest dl
+     JOIN telemetry_reports r ON r.id = dl.last_report_id`;
   const binds: string[] = [];
 
   if (serverType) {
-    query += " WHERE server_type = ?";
+    query += " WHERE dl.server_type = ?";
     binds.push(serverType);
   }
-  query += " ORDER BY last_reported_at DESC";
+  query += " ORDER BY dl.last_reported_at DESC";
 
   const { results } = await db
     .prepare(query)
     .bind(...binds)
-    .all<DeploymentLatest>();
+    .all<DeploymentLatestWithHost>();
 
   return c.json({ deployments: results ?? [] });
 });

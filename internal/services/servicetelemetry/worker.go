@@ -7,6 +7,8 @@ import (
 	"fmt"
 	"log/slog"
 	"net/http"
+	"os"
+	"runtime"
 	"time"
 
 	"github.com/Emyrk/chronicle/chronicle/riverqueue"
@@ -47,6 +49,9 @@ type TelemetryReport struct {
 	GitCommit           string           `json:"git_commit"`
 	ServerType          string           `json:"server_type"`
 	AccessURL           string           `json:"access_url"`
+	Hostname            string           `json:"hostname"`
+	OS                  string           `json:"os"`
+	Arch                string           `json:"arch"`
 	UptimeSeconds       int64            `json:"uptime_seconds"`
 	StartedAt           time.Time        `json:"started_at"`
 	TotalUsers          int64            `json:"total_users"`
@@ -156,6 +161,10 @@ func (w *Worker) collectReport(ctx context.Context, deploymentInfo database.Depl
 		logsByZone[row.ZoneName] = row.LogCount
 	}
 
+	// Hostname helps disambiguate deployments that leave access-url at its
+	// localhost default. Best-effort: an error just leaves it empty.
+	hostname, _ := os.Hostname()
+
 	return TelemetryReport{
 		DeploymentID:        deploymentInfo.ID.String(),
 		DeploymentCreatedAt: deploymentInfo.CreatedAt.Time,
@@ -163,6 +172,9 @@ func (w *Worker) collectReport(ctx context.Context, deploymentInfo database.Depl
 		GitCommit:           version.GitCommit,
 		ServerType:          services.ServerName,
 		AccessURL:           w.AccessURL,
+		Hostname:            hostname,
+		OS:                  runtime.GOOS,
+		Arch:                runtime.GOARCH,
 		UptimeSeconds:       int64(time.Since(w.startedAt).Seconds()),
 		StartedAt:           w.startedAt,
 		TotalUsers:          userCount,

@@ -6,6 +6,9 @@ export interface TelemetryReport {
   git_commit: string;
   server_type: string;
   access_url: string;
+  hostname: string;
+  os: string;
+  arch: string;
   uptime_seconds: number;
   started_at: string;
   total_users: number;
@@ -30,6 +33,17 @@ export interface DeploymentLatest {
   is_dev: number;
 }
 
+/**
+ * DeploymentLatest joined with host metadata from the latest report
+ * (telemetry_reports via last_report_id).
+ */
+export interface DeploymentLatestWithHost extends DeploymentLatest {
+  remote_ip: string;
+  hostname: string;
+  os: string;
+  arch: string;
+}
+
 export interface StoredReport {
   id: number;
   deployment_id: string;
@@ -38,6 +52,9 @@ export interface StoredReport {
   git_commit: string;
   server_type: string;
   access_url: string;
+  hostname: string;
+  os: string;
+  arch: string;
   uptime_seconds: number;
   started_at: string | null;
   total_users: number;
