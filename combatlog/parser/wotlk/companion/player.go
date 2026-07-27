@@ -201,17 +201,35 @@ func (p *Parser) parseGear(ts time.Time, pd *PlayerData, data string) ([]message
 	return []messages.Message{pd.toCombatantMessage(ts)}, nil
 }
 
-// parseTalents parses: T<activeGroup>,<numGroups>,<rankString1>,<rankString2>
-// Rank strings use '}' as tree separator.
+// parseTalents parses: T<activeGroup>,<numGroups>,<rankString1>[,<rankString2>,...]
+// Rank strings use '}' as tree separator and are listed in group order.
+// Stock WotLK dual spec has at most 2 groups, but some private servers allow
+// more, so any number of groups is accepted. activeGroup selects which group
+// is the player's current spec.
 func (p *Parser) parseTalents(ts time.Time, pd *PlayerData, data string) ([]messages.Message, error) {
-	parts := strings.SplitN(data, ",", 4)
+	parts := strings.Split(data, ",")
 	if len(parts) < 3 {
 		return nil, fmt.Errorf("talents: expected at least 3 fields, got %d", len(parts))
 	}
 
-	// parts[0] = activeGroup, parts[1] = numGroups
-	// parts[2] = rankString for the active spec (use this one)
-	rankStr := parts[2]
+	activeGroup, err := strconv.Atoi(parts[0])
+	if err != nil {
+		return nil, fmt.Errorf("talents: invalid activeGroup %q: %w", parts[0], err)
+	}
+	numGroups, err := strconv.Atoi(parts[1])
+	if err != nil {
+		return nil, fmt.Errorf("talents: invalid numGroups %q: %w", parts[1], err)
+	}
+	if activeGroup < 1 || activeGroup > numGroups {
+		return nil, fmt.Errorf("talents: activeGroup %d out of range (numGroups %d)", activeGroup, numGroups)
+	}
+
+	// Remaining parts are the per-group rank strings in group order.
+	rankStrings := parts[2:]
+	if activeGroup > len(rankStrings) {
+		return nil, fmt.Errorf("talents: activeGroup %d but only %d rank strings present", activeGroup, len(rankStrings))
+	}
+	rankStr := rankStrings[activeGroup-1]
 
 	talents, err := combatant.ParseTalents(rankStr)
 	if err != nil {

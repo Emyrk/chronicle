@@ -2,11 +2,9 @@ import { Link } from "react-router-dom";
 import { ArrowLeft, TreePine } from "lucide-react";
 import { useState, useMemo } from "react";
 import { useQuery } from "@tanstack/react-query";
-import {
-  TalentTreeViewerLegacy as TalentTreeViewer,
-  type TalentAllocation,
-} from "@/components/ui/TalentTreeViewer/TalentTreeViewer";
+import { TalentTreeViewerLegacy as TalentTreeViewer } from "@/components/ui/TalentTreeViewer/TalentTreeViewer";
 import { useDatasets, useSiteConfig } from "@/api/queries";
+import { parseTalentString } from "./talentParse";
 
 const CLASSES = [
   { id: 1, name: "Warrior" },
@@ -14,64 +12,27 @@ const CLASSES = [
   { id: 3, name: "Hunter" },
   { id: 4, name: "Rogue" },
   { id: 5, name: "Priest" },
+  { id: 6, name: "Death Knight" },
   { id: 7, name: "Shaman" },
   { id: 8, name: "Mage" },
   { id: 9, name: "Warlock" },
   { id: 11, name: "Druid" },
 ];
 
-// Minimal type for the /wowdb/talent-trees response
+// Minimal type for the /wowdb/talent-trees response – includes talent count per tab
+// so we can match WotLK companion rank strings (which lack tab names) by length.
 interface TalentTreeJSON {
   classes: Record<
     string,
-    { tabs: { name: string; orderIndex: number }[] }
+    { tabs: { name: string; orderIndex: number; talents: { id: number }[] }[] }
   >;
 }
 
 const EXAMPLE =
   "1713312000000|COMBATANT_TALENTS|0x00000000001A2B3C|Priests|Discipline;14;00503001500001|Holy;21;05230010500501|Shadow;0;00000000000000000";
 
-/**
- * Parse a COMBATANT_TALENTS log line into tab allocations.
- * Returns null if the string doesn't look valid.
- */
-function parseTalentString(
-  raw: string
-): { playerName: string; allocations: TalentAllocation[] } | null {
-  const trimmed = raw.trim();
-  if (!trimmed) return null;
-
-  // Split by pipe – accept with or without the COMBATANT_TALENTS prefix fields
-  const parts = trimmed.split("|");
-
-  // Find the three tab fields. Full format has 7 fields (timestamp, event, guid, name, tab1, tab2, tab3).
-  // Also support pasting just the three tab fields separated by pipes.
-  let tabFields: string[];
-  let playerName = "";
-
-  if (parts.length >= 7 && parts[1] === "COMBATANT_TALENTS") {
-    playerName = parts[3];
-    tabFields = parts.slice(4, 7);
-  } else if (parts.length === 3 && parts[0].includes(";")) {
-    // Just three tab strings
-    tabFields = parts;
-  } else {
-    return null;
-  }
-
-  const allocations: TalentAllocation[] = [];
-  for (const field of tabFields) {
-    const semi = field.split(";");
-    if (semi.length < 3) return null;
-    allocations.push({
-      tabName: semi[0],
-      pointsSpent: parseInt(semi[1], 10) || 0,
-      rankDigits: semi[2],
-    });
-  }
-
-  return { playerName, allocations };
-}
+const EXAMPLE_WOTLK =
+  "P0x0000000000000A3B;T2,2,50200000000000000000000000}005305101230213233115031051}5300202010000000000000000000,50100000000000000000000000}005305100000000000000000000}5000032500033330531115301301";
 
 export function TalentTreesPage() {
   const [input, setInput] = useState("");
@@ -113,15 +74,40 @@ export function TalentTreesPage() {
 
   const parsed = useMemo(() => parseTalentString(input), [input]);
 
-  // Detect class from the first tab name
+  // Which talent group to display. Defaults to the active group from the
+  // parsed message; the user can switch when multiple groups are present.
+  const [groupOverride, setGroupOverride] = useState<number | null>(null);
+  const selectedGroup = useMemo(() => {
+    if (!parsed) return 1;
+    const g = groupOverride ?? parsed.activeGroup;
+    return Math.min(Math.max(g, 1), parsed.groups.length);
+  }, [parsed, groupOverride]);
+  const allocations = parsed?.groups[selectedGroup - 1];
+
+  // Detect class from tab names (COMBATANT_TALENTS), or — for formats without
+  // tab names (WotLK companion) — by matching per-tab talent counts against
+  // each class's talent trees.
   const detectedClassId = useMemo(() => {
-    if (!parsed || tabToClass.size === 0) return null;
-    for (const alloc of parsed.allocations) {
+    if (!parsed || !allocations || !treeData) return null;
+
+    // By tab name
+    for (const alloc of allocations) {
       const cid = tabToClass.get(alloc.tabName.toLowerCase());
       if (cid) return cid;
     }
+
+    // By per-tab talent counts
+    const lengths = allocations.map((a) => a.rankDigits.length);
+    if (lengths.length !== 3) return null;
+    for (const [classId, data] of Object.entries(treeData.classes)) {
+      const tabs = [...data.tabs].sort((a, b) => a.orderIndex - b.orderIndex);
+      if (tabs.length !== 3) continue;
+      if (tabs.every((tab, i) => tab.talents.length === lengths[i])) {
+        return parseInt(classId, 10);
+      }
+    }
     return null;
-  }, [parsed, tabToClass]);
+  }, [parsed, allocations, tabToClass, treeData]);
 
   return (
     <div className="container mx-auto px-4 py-4 max-w-7xl">
@@ -158,47 +144,83 @@ export function TalentTreesPage() {
         )}
       </div>
 
-      {/* Input for COMBATANT_TALENTS string */}
+      {/* Input for a talent log line */}
       <div className="mb-6 flex flex-col gap-2">
         <label className="text-sm text-zinc-400">
           Paste a <code className="text-xs bg-zinc-800 px-1 py-0.5 rounded">COMBATANT_TALENTS</code> log line
+          or a WotLK companion <code className="text-xs bg-zinc-800 px-1 py-0.5 rounded">P&lt;guid&gt;;T…</code> message
         </label>
         <textarea
           value={input}
-          onChange={(e) => setInput(e.target.value)}
-          placeholder={EXAMPLE}
+          onChange={(e) => {
+            setInput(e.target.value);
+            setGroupOverride(null);
+          }}
+          placeholder={`${EXAMPLE}\n${EXAMPLE_WOTLK}`}
           spellCheck={false}
           className="w-full h-20 bg-zinc-900 border border-zinc-700 rounded-lg px-3 py-2 text-sm text-zinc-200 font-mono placeholder:text-zinc-600 focus:outline-none focus:border-zinc-500 resize-none"
         />
         {input && !parsed && (
           <p className="text-xs text-red-400">
-            Could not parse talent string. Expected format:{" "}
+            Could not parse talent string. Expected formats:{" "}
             <code className="text-[11px]">
               timestamp|COMBATANT_TALENTS|guid|name|Tab1;pts;ranks|Tab2;pts;ranks|Tab3;pts;ranks
+            </code>{" "}
+            or{" "}
+            <code className="text-[11px]">
+              P&lt;guid&gt;;T&lt;activeGroup&gt;,&lt;numGroups&gt;,&lt;tab1&#125;tab2&#125;tab3&gt;[,…]
             </code>
           </p>
         )}
-        {parsed && detectedClassId && (
+        {parsed && allocations && detectedClassId && (
           <p className="text-xs text-green-400">
-            Detected: {parsed.playerName ? <strong>{parsed.playerName}</strong> : null}{" "}
+            Detected: {parsed.playerName ? <strong>{parsed.playerName}</strong> : null}
+            {parsed.guid ? <code className="text-[11px]">{parsed.guid}</code> : null}{" "}
             {CLASSES.find((c) => c.id === detectedClassId)?.name ?? `Class ${detectedClassId}`}{" "}
-            ({parsed.allocations.map((a) => `${a.tabName} ${a.pointsSpent}`).join(" / ")})
+            ({allocations.map((a) => `${a.tabName || "Tab"} ${a.pointsSpent}`).join(" / ")})
           </p>
         )}
-        {parsed && !detectedClassId && treeData && (
+        {parsed && allocations && !detectedClassId && treeData && (
           <p className="text-xs text-amber-400">
-            Parsed {parsed.allocations.length} tabs but could not match a class.
-            Check tab names: {parsed.allocations.map((a) => a.tabName).join(", ")}
+            Parsed {allocations.length} tabs but could not match a class.
+            {allocations.some((a) => a.tabName)
+              ? ` Check tab names: ${allocations.map((a) => a.tabName).join(", ")}`
+              : ` Tab talent counts (${allocations.map((a) => a.rankDigits.length).join("/")}) did not match any class in this dataset.`}
           </p>
+        )}
+        {parsed && parsed.groups.length > 1 && (
+          <div className="flex items-center gap-2 text-xs text-zinc-400">
+            Talent group:
+            {parsed.groups.map((_, i) => {
+              const groupNum = i + 1;
+              const isActive = groupNum === parsed.activeGroup;
+              const isSelected = groupNum === selectedGroup;
+              return (
+                <button
+                  key={groupNum}
+                  type="button"
+                  onClick={() => setGroupOverride(groupNum)}
+                  className={`px-2 py-0.5 rounded border ${
+                    isSelected
+                      ? "border-zinc-400 text-zinc-100 bg-zinc-800"
+                      : "border-zinc-700 text-zinc-400 hover:text-zinc-200"
+                  }`}
+                >
+                  {groupNum}
+                  {isActive ? " (active)" : ""}
+                </button>
+              );
+            })}
+          </div>
         )}
       </div>
 
       {/* Parsed talent tree */}
-      {parsed && detectedClassId && (
+      {parsed && allocations && detectedClassId && (
         <div className="mb-8">
           <TalentTreeViewer
             classId={detectedClassId}
-            allocations={parsed.allocations}
+            allocations={allocations}
             datasetId={datasetId || undefined}
           />
         </div>

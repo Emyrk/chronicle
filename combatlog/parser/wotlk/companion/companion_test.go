@@ -322,6 +322,87 @@ func TestParsePlayer_Talents(t *testing.T) {
 	assert.Equal(t, uint8(0), c.Talents.Summary[2])
 }
 
+func TestParsePlayer_TalentsDualSpecActiveGroup2(t *testing.T) {
+	t.Parallel()
+	p := newTestParser()
+
+	// Group 1 (inactive) has points in tree 0; group 2 (active) has points in tree 1.
+	group1 := "50200000000000000000000000}005305101230213233115031051}5300202010000000000000000000"
+	group2 := "50100000000000000000000000}005305100000000000000000000}5000032500033330531115301301"
+	msg := `[6P0x0000000000000A3B;T2,2,` + group1 + `,` + group2 + `]`
+
+	msgs, err := p.Feed(testTS, msg)
+	require.NoError(t, err)
+	require.Len(t, msgs, 1)
+
+	c := msgs[0].(*messages.Combatant)
+	require.NotNil(t, c.Talents)
+	// Active group 2: "50100000000000000000000000" — sum is 5+1 = 6
+	assert.Equal(t, uint8(6), c.Talents.Summary[0])
+	// "005305100000000000000000000" — sum is 5+3+5+1 = 14
+	assert.Equal(t, uint8(14), c.Talents.Summary[1])
+	// "5000032500033330531115301301" — sum is 5+3+2+5+3+3+3+3+5+3+1+1+1+5+3+1+3+1 = 51
+	assert.Equal(t, uint8(51), c.Talents.Summary[2])
+}
+
+func TestParsePlayer_TalentsSingleSpec(t *testing.T) {
+	t.Parallel()
+	p := newTestParser()
+
+	talents := "05032001050000000000000000000}32000000000000000000000000000}00000000000000000000000000000"
+	msg := `[6P0x060000000008DCCC;T1,1,` + talents + `]`
+
+	msgs, err := p.Feed(testTS, msg)
+	require.NoError(t, err)
+	require.Len(t, msgs, 1)
+
+	c := msgs[0].(*messages.Combatant)
+	require.NotNil(t, c.Talents)
+	assert.Equal(t, uint8(16), c.Talents.Summary[0])
+	assert.Equal(t, uint8(5), c.Talents.Summary[1])
+	assert.Equal(t, uint8(0), c.Talents.Summary[2])
+}
+
+func TestParsePlayer_TalentsActiveGroupOutOfRange(t *testing.T) {
+	t.Parallel()
+	p := newTestParser()
+
+	talents := "05032001050000000000000000000}32000000000000000000000000000}00000000000000000000000000000"
+	// activeGroup 2 but numGroups 1 — invalid. Feed logs and drops bad
+	// messages, so we expect no messages rather than an error.
+	msg := `[6P0x060000000008DCCC;T2,1,` + talents + `]`
+
+	msgs, err := p.Feed(testTS, msg)
+	require.NoError(t, err)
+	require.Empty(t, msgs)
+}
+
+func TestParsePlayer_TalentsThreeSpecsActiveGroup3(t *testing.T) {
+	t.Parallel()
+	p := newTestParser()
+
+	// Stock WotLK caps at 2 talent groups, but some private servers allow
+	// more. Each group here has distinct sums so we can verify the correct
+	// (third) group was selected.
+	group1 := "50200000000000000000000000}005305101230213233115031051}5300202010000000000000000000"
+	group2 := "50100000000000000000000000}005305100000000000000000000}5000032500033330531115301301"
+	group3 := "12300000000000000000000000}440000000000000000000000000}0000000000000000000000000000"
+	msg := `[6P0x0000000000000A3B;T3,3,` + group1 + `,` + group2 + `,` + group3 + `]`
+
+	msgs, err := p.Feed(testTS, msg)
+	require.NoError(t, err)
+	require.Len(t, msgs, 1)
+
+	c := msgs[0].(*messages.Combatant)
+	require.NotNil(t, c.Talents)
+	// Active group 3: "12300000000000000000000000" — sum is 1+2+3 = 6
+	assert.Equal(t, uint8(6), c.Talents.Summary[0])
+	// "440000000000000000000000000" — sum is 4+4 = 8
+	assert.Equal(t, uint8(8), c.Talents.Summary[1])
+	// Tree 3 is all zeros
+	assert.Equal(t, uint8(0), c.Talents.Summary[2])
+}
+
 // --- Player Glyphs tests ---
 
 func TestParsePlayer_Glyphs(t *testing.T) {
