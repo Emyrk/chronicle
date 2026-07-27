@@ -91,8 +91,8 @@ export function ConsumablesPage() {
       </div>
 
       <p className="mb-4 text-xs text-muted-foreground">
-        Generated from the current tenant&apos;s item and spell dataset. Item spell chains are
-        followed to find buffs applied by each consumable.
+        Generated from the current tenant&apos;s item and spell dataset. Item spells are the root
+        spells attached to the item; their trigger chains are followed to find applied buffs.
       </p>
 
       <div className="mb-3 flex gap-3">
@@ -178,9 +178,14 @@ export function ConsumablesPage() {
                   <Link
                     key={spellId}
                     to={`/wowdb/spell/${spellId}`}
-                    className="rounded bg-muted px-1.5 py-0.5 font-mono text-[11px] text-muted-foreground hover:text-foreground"
+                    className="rounded bg-muted px-1.5 py-0.5 text-muted-foreground hover:text-foreground"
                   >
-                    {spellId}
+                    <SpellIdTooltip
+                      spellId={spellId}
+                      name={spellId.toString()}
+                      size={14}
+                      className="font-mono text-[11px]"
+                    />
                   </Link>
                 ))}
               </div>
