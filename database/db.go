@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"io"
 	"log/slog"
+	"strings"
 	"sync/atomic"
 	"time"
 
@@ -74,8 +75,30 @@ var PrepareConnFunc func(ctx context.Context, conn *pgx.Conn) error
 // If nil, no per-release cleanup is done.
 var ResetConnFunc func(conn *pgx.Conn)
 
+// PoolOption customizes the pgx pool configuration.
+type PoolOption func(*pgxpool.Config)
+
+// WithMaxConns caps the number of connections in the pool. A value of 0 or
+// less leaves the pgx default in place (max(4, numCPU)), which is shared by
+// the API and every background worker in the process. A pool_max_conns set
+// in the connection string takes precedence and is never overridden.
+func WithMaxConns(maxConns int32) PoolOption {
+	return func(cfg *pgxpool.Config) {
+		if maxConns <= 0 {
+			return
+		}
+		if cfg.ConnString() != "" && strings.Contains(cfg.ConnString(), "pool_max_conns") {
+			return
+		}
+		cfg.MaxConns = maxConns
+		if cfg.MinConns > maxConns {
+			cfg.MinConns = maxConns
+		}
+	}
+}
+
 // https://github.com/jackc/pgx/issues/288#issuecomment-901975396
-func PoolConfig(logger *slog.Logger, dbURL string) (*pgxpool.Config, func(), error) {
+func PoolConfig(logger *slog.Logger, dbURL string, opts ...PoolOption) (*pgxpool.Config, func(), error) {
 	if logger == nil {
 		logger = slog.New(slog.NewTextHandler(io.Discard, nil))
 		var _ = logger
@@ -83,6 +106,10 @@ func PoolConfig(logger *slog.Logger, dbURL string) (*pgxpool.Config, func(), err
 	cfg, err := pgxpool.ParseConfig(dbURL)
 	if err != nil {
 		return nil, nil, fmt.Errorf("parse postgres db url: %w", err)
+	}
+
+	for _, opt := range opts {
+		opt(cfg)
 	}
 
 	r := &registerTypes{}
@@ -151,13 +178,13 @@ func (r *registerTypes) RegisterTypes(ctx context.Context, conn *pgx.Conn) error
 	return nil
 }
 
-func NewPostgresDB(ctx context.Context, logger *slog.Logger, dbURL string) (*pgxpool.Pool, error) {
-	logger.Info("connecting to postgres database")
-
-	cfg, migDone, err := PoolConfig(logger, dbURL)
+func NewPostgresDB(ctx context.Context, logger *slog.Logger, dbURL string, opts ...PoolOption) (*pgxpool.Pool, error) {
+	cfg, migDone, err := PoolConfig(logger, dbURL, opts...)
 	if err != nil {
 		return nil, fmt.Errorf("parse postgres db url: %w", err)
 	}
+
+	logger.Info("connecting to postgres database", "max_conns", cfg.MaxConns)
 
 	pool, err := pgxpool.NewWithConfig(ctx, cfg)
 	if err != nil {

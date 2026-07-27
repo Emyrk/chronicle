@@ -36,9 +36,10 @@ func OnPGXPool() string {
 type Service struct {
 	broker *services.Services
 
-	pgURL string
-	pool  *pgxpool.Pool
-	ps    pubsub.Pubsub
+	pgURL    string
+	maxConns int64
+	pool     *pgxpool.Pool
+	ps       pubsub.Pubsub
 }
 
 func New(broker *services.Services) *Service {
@@ -65,7 +66,7 @@ func (s *Service) Start(ctx context.Context) error {
 		return err
 	}
 
-	pool, err := database.NewPostgresDB(ctx, logger, dbURL)
+	pool, err := database.NewPostgresDB(ctx, logger, dbURL, database.WithMaxConns(int32(s.maxConns)))
 	if err != nil {
 		return fmt.Errorf("connect to postgres db: %w", err)
 	}
@@ -107,6 +108,18 @@ func (s *Service) Options() serpent.OptionSet {
 			Env:         "CHRONICLE_POSTGRES_URL",
 			Default:     def,
 			Value:       serpent.StringOf(&s.pgURL),
+		},
+		{
+			Name: "Postgres Max Connections",
+			Description: "Maximum number of connections in the Postgres pool. " +
+				"The pool is shared by the API and all background workers, so this " +
+				"bounds the whole process. A pool_max_conns in the Postgres URL " +
+				"takes precedence. Set to 0 to use the pgx default.",
+			Required: false,
+			Flag:     "db-max-conns",
+			Env:      "CHRONICLE_DB_MAX_CONNS",
+			Default:  "20",
+			Value:    serpent.Int64Of(&s.maxConns),
 		},
 	}
 }
