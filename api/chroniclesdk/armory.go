@@ -25,6 +25,10 @@ type ArmoryPlayer struct {
 	// Frontends use it to fetch matching talent/spell data regardless of the
 	// tenant domain serving the request.
 	DatasetID uuid.UUID `json:"dataset_id"`
+	// IconBaseURL is the icon CDN base URL of the resolved dataset. Frontends
+	// use it to fetch icons matching the realm's game data instead of the
+	// compiled-in default.
+	IconBaseURL string `json:"icon_base_url,omitempty"`
 }
 
 // PlayerTalents represents a player's talent allocation across three trees.

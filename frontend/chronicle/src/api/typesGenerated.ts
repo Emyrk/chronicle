@@ -267,6 +267,12 @@ export interface ArmoryPlayer {
      * tenant domain serving the request.
      */
     readonly dataset_id: string;
+    /**
+     * IconBaseURL is the icon CDN base URL of the resolved dataset. Frontends
+     * use it to fetch icons matching the realm's game data instead of the
+     * compiled-in default.
+     */
+    readonly icon_base_url?: string;
 }
 
 // From chroniclesdk/armory.go

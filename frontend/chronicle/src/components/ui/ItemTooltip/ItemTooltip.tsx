@@ -1,6 +1,7 @@
 import { useMemo } from "react";
 import { Link } from "react-router-dom";
-import { iconUrl } from "@/config/iconUrl";
+import { iconUrl as buildIconUrl } from "@/config/iconUrl";
+import { useIconBaseUrl } from "@/hooks/useDatasetId";
 import { useQueries } from "@tanstack/react-query";
 import type { ItemTooltip as ItemTooltipData, ItemSpell } from "@/api/typesGenerated";
 import { useSpell } from "@/api/queries";
@@ -130,10 +131,6 @@ const SPELL_TRIGGER_TEXT: Record<number, string> = {
   2: "Chance on hit:",
 };
 
-function getItemIconUrl(icon: string): string {
-  return iconUrl(icon);
-}
-
 interface ItemTooltipProps {
   item: ItemTooltipData;
   className?: string;
@@ -152,8 +149,9 @@ interface ItemTooltipProps {
  * Designed to match the in-game tooltip appearance.
  */
 export function ItemTooltip({ item, className, includeReferenceLinks = false, showItemLevel = false, equippedItemIds, transmogName }: ItemTooltipProps) {
+  const iconBaseUrl = useIconBaseUrl();
   const qualityColor = QUALITY_COLORS[item.quality] ?? "text-white";
-  const iconUrl = getItemIconUrl(item.icon);
+  const iconUrl = buildIconUrl(item.icon, iconBaseUrl);
   const slotText = INVENTORY_TYPE_TEXT[item.inventory_type] ?? "";
   const subtypeText = ITEM_CLASS_TEXT[`${item.item_class}-${item.item_subclass}`] ?? "";
 

@@ -1,6 +1,7 @@
 import { Link } from "react-router-dom";
 import type { ArmoryPlayer } from "@/api/typesGenerated";
 import { iconUrl } from "@/config/iconUrl";
+import { useIconBaseUrl } from "@/hooks/useDatasetId";
 import { getClassColorVar } from "./types";
 
 export function formatClassLabel(cls: string): string {
@@ -18,13 +19,13 @@ interface CharacterHeaderProps {
   player: ArmoryPlayer;
 }
 
-function getRaceIconUrl(race: string, gender: string): string {
+function getRaceIconUrl(race: string, gender: string, iconBaseUrl?: string): string {
   const name = race === "Scourge" ? "forsaken" : race.toLowerCase().replace(" ", "");
   if (gender == "Female") {
-    return iconUrl(`inv_misc_head_${name}_02`);
+    return iconUrl(`inv_misc_head_${name}_02`, iconBaseUrl);
   }
 
-  return iconUrl(`race_${name}`);
+  return iconUrl(`race_${name}`, iconBaseUrl);
 }
 
 function getClassIconUrl(cls: string): string {
@@ -32,6 +33,7 @@ function getClassIconUrl(cls: string): string {
 }
 
 export function CharacterHeader({ player }: CharacterHeaderProps) {
+  const iconBaseUrl = useIconBaseUrl();
   const classColor = getClassColorVar(player.class);
   const updatedDate = new Date(player.updated_at).toLocaleDateString(undefined, {
     year: "numeric",
@@ -53,7 +55,7 @@ export function CharacterHeader({ player }: CharacterHeaderProps) {
       {/* Race icon — Name — Class icon */}
       <div className="flex items-center gap-3">
         <img
-          src={getRaceIconUrl(player.race, player.gender)}
+          src={getRaceIconUrl(player.race, player.gender, iconBaseUrl)}
           alt={raceLabel}
           className="w-8 h-8 rounded"
           onError={(e) => { e.currentTarget.style.display = "none"; }}

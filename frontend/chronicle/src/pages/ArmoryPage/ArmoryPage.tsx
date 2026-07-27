@@ -2,6 +2,7 @@ import { useParams, useSearchParams } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
 import { Shield, Calendar, Sparkles } from "lucide-react";
 import type { ArmoryPlayer } from "@/api/typesGenerated";
+import { DatasetProvider } from "@/hooks/useDatasetId";
 import { CharacterHeader } from "./CharacterHeader";
 import { GearDisplay } from "./GearDisplay";
 import { TalentsTab } from "./TalentsTab";
@@ -64,6 +65,7 @@ export function ArmoryPage() {
   }
 
   return (
+    <DatasetProvider datasetId={player.dataset_id} iconBaseUrl={player.icon_base_url}>
     <div className={`w-full py-8 px-4 grid gap-x-4 ${activeTab === "talents" ? "grid-cols-[1fr_minmax(0,72rem)_1fr]" : "grid-cols-[1fr_minmax(0,48rem)_1fr]"}`}>
       {/* Left placeholder column */}
       <div />
@@ -124,5 +126,6 @@ export function ArmoryPage() {
         </div>
       )}
     </div>
+    </DatasetProvider>
   );
 }

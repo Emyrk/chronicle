@@ -3,6 +3,7 @@ import { createPortal } from "react-dom";
 import { useSearchParams } from "react-router-dom";
 import { cn } from "@/lib/utils";
 import { iconUrl, talentBackgroundUrl } from "@/config/iconUrl";
+import { useIconBaseUrl } from "@/hooks/useDatasetId";
 import { useQueries, useQueryClient } from "@tanstack/react-query";
 import type { WoWSpell } from "@emyrk/wow-tooltip-renderer";
 import { resolveSpellDescription, getEnglishText, extractReferencedSpellIds } from "@emyrk/wow-tooltip-renderer";
@@ -236,6 +237,7 @@ function TalentButton({ talent, rank, locked, talents, ranks, onChange, readOnly
   readOnly: boolean;
   debug?: boolean;
 }) {
+  const iconBaseUrl = useIconBaseUrl();
   const maxed = rank >= talent.maxRank;
   const visualState = talentVisualState(rank, talent.maxRank, locked);
   const tooltipId = `talent-tooltip-${talent.id}`;
@@ -446,7 +448,7 @@ function TalentButton({ talent, rank, locked, talents, ranks, onChange, readOnly
         visualState === "maxed" && "talent-state-maxed border-amber-300 shadow-amber-400/25 ring-2 ring-amber-300/55 before:border before:border-amber-200/50 before:shadow-[0_0_14px_rgba(251,191,36,0.28)] hover:scale-105 hover:border-amber-200",
       )}
     >
-      <img src={iconUrl(talent.iconTexture)} alt="" className={cn("h-full w-full rounded object-cover", locked && "talent-locked-icon-readable grayscale opacity-70 contrast-110")} />
+      <img src={iconUrl(talent.iconTexture, iconBaseUrl)} alt="" className={cn("h-full w-full rounded object-cover", locked && "talent-locked-icon-readable grayscale opacity-70 contrast-110")} />
       {locked && <span className="talent-locked-icon-veil absolute inset-0 rounded bg-black/25" />}
       {maxed && <span className="pointer-events-none absolute inset-0 rounded bg-amber-300/10 shadow-[inset_0_0_12px_rgba(251,191,36,0.38)]" />}
       {visualState === "available" && <span className="pointer-events-none absolute inset-0 rounded bg-primary/10 shadow-[inset_0_0_10px_rgba(20,184,166,0.22)]" />}
@@ -495,11 +497,12 @@ function TalentTab({
   debug?: boolean;
   compact?: boolean;
 }) {
+  const iconBaseUrl = useIconBaseUrl();
   const points = useMemo(() => tab.talents.reduce((sum, talent) => sum + (ranks[talent.id] ?? 0), 0), [tab.talents, ranks]);
   const arrows = useMemo(() => prerequisiteArrows(tab.talents), [tab.talents]);
   const rows = useMemo(() => talentGridRows(tab.talents), [tab.talents]);
   const height = talentGridHeight(rows);
-  const backgroundUrl = talentBackgroundUrl(tab.backgroundFile);
+  const backgroundUrl = talentBackgroundUrl(tab.backgroundFile, iconBaseUrl);
   const [failedBackgroundUrl, setFailedBackgroundUrl] = useState<string | null>(null);
   const showBackground = isTalentBackgroundVisible(backgroundUrl, failedBackgroundUrl);
 
@@ -539,11 +542,11 @@ function TalentTab({
         <div className={cn("flex min-w-0 items-center", compact ? "gap-2" : "gap-3")}>
           {!compact && (
             <span className="rounded-lg border border-amber-300/35 bg-black/45 p-1 shadow-lg shadow-black/35">
-              <img src={iconUrl(tab.iconTexture)} alt="" className="h-10 w-10 rounded border border-primary/25 object-cover" />
+              <img src={iconUrl(tab.iconTexture, iconBaseUrl)} alt="" className="h-10 w-10 rounded border border-primary/25 object-cover" />
             </span>
           )}
           {compact && (
-            <img src={iconUrl(tab.iconTexture)} alt="" className="h-6 w-6 rounded border border-primary/25 object-cover" />
+            <img src={iconUrl(tab.iconTexture, iconBaseUrl)} alt="" className="h-6 w-6 rounded border border-primary/25 object-cover" />
           )}
           <div className="min-w-0">
             <h3 className={cn("truncate font-bold text-white", compact ? "text-xs" : "text-xl")}>{tab.name}</h3>

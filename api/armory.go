@@ -57,6 +57,9 @@ func (api *API) GetArmoryPlayer(w http.ResponseWriter, r *http.Request) {
 
 	out := db2sdk.ArmoryPlayer(player)
 	out.DatasetID = api.Opts.Dataset.ResolveDatasetForRealm(ctx, realmID)
+	if ds, err := api.Opts.Dataset.GetDataset(ctx, out.DatasetID); err == nil {
+		out.IconBaseURL = ds.IconBaseUrl
+	}
 	w.Header().Set(httpapi.DatasetHeader, out.DatasetID.String())
 	httpapi.Write(ctx, w, http.StatusOK, out)
 }

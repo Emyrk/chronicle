@@ -1,6 +1,7 @@
 import { useState, useCallback } from "react";
 import { AlertTriangle } from "lucide-react";
 import { iconUrl } from "@/config/iconUrl";
+import { useIconBaseUrl } from "@/hooks/useDatasetId";
 import { useItemTooltip } from "@/api/gamedata";
 import type { PlayerGear } from "@/api/typesGenerated";
 import { ItemTooltip } from "@/components/ui/ItemTooltip/ItemTooltip";
@@ -8,10 +9,6 @@ import { useIsMobile } from "@/hooks/useIsMobile";
 import { cn } from "@/lib/utils";
 import type { GearSlotDef } from "./types";
 import { getQualityBorderClass, getQualityTextClass } from "./types";
-
-function getItemIconUrl(icon: string): string {
-  return iconUrl(icon);
-}
 
 export type GearSlotSide = "left" | "right" | "bottom";
 
@@ -27,6 +24,7 @@ interface GearSlotProps {
 }
 
 export function GearSlot({ slotDef, item, side = "right", equippedItemIds, modelError }: GearSlotProps) {
+  const iconBaseUrl = useIconBaseUrl();
   const [hovered, setHovered] = useState(false);
   const [pinned, setPinned] = useState(false);
   const isMobile = useIsMobile();
@@ -109,7 +107,7 @@ export function GearSlot({ slotDef, item, side = "right", equippedItemIds, model
         >
           {!isEmpty && iconName ? (
             <img
-              src={getItemIconUrl(iconName)}
+              src={iconUrl(iconName, iconBaseUrl)}
               alt={displayName}
               className="w-full h-full object-cover"
               loading="lazy"
