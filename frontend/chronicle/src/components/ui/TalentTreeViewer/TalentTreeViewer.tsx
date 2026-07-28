@@ -236,7 +236,7 @@ function TalentPrereqArrows({ arrows, ranks, height, talents }: { arrows: Talent
 
 // ─── Talent button ────────────────────────────────────────────────
 
-function TalentButton({ talent, rank, locked, pointsExhausted, talents, ranks, onChange, readOnly, debug, mobile }: {
+function TalentButton({ talent, rank, locked, pointsExhausted, talents, ranks, onChange, readOnly, debug, mobile, quickActive, onActivate }: {
   talent: TalentEntry;
   rank: number;
   locked: boolean;
@@ -249,6 +249,10 @@ function TalentButton({ talent, rank, locked, pointsExhausted, talents, ranks, o
   debug?: boolean;
   /** Touch layout: show -/+ quick buttons while the talent is active. */
   mobile?: boolean;
+  /** Mobile: this talent is the last one tapped — keep its -/+ visible. */
+  quickActive?: boolean;
+  /** Mobile: mark this talent as the active one. */
+  onActivate?: () => void;
 }) {
   const iconBaseUrl = useIconBaseUrl();
   const maxed = rank >= talent.maxRank;
@@ -424,8 +428,9 @@ function TalentButton({ talent, rank, locked, pointsExhausted, talents, ranks, o
     />
   );
 
-  // Mobile quick actions: shown while the talent is active (tapped).
-  const showQuickButtons = Boolean(mobile && !readOnly && tooltipPosition);
+  // Mobile quick actions: pinned to the last talent tapped (not tied to the
+  // tooltip, which comes and goes with focus/blur and would flicker).
+  const showQuickButtons = Boolean(mobile && !readOnly && quickActive);
   const quickButtonClass = "pointer-events-auto absolute top-1/2 z-20 flex h-8 w-8 -translate-y-1/2 items-center justify-center rounded-full border text-base font-bold shadow-lg transition disabled:opacity-35";
 
   const talentButton = (
@@ -445,6 +450,7 @@ function TalentButton({ talent, rank, locked, pointsExhausted, talents, ranks, o
       onClick={(event) => {
         if (readOnly) return;
         showTooltip();
+        onActivate?.();
         if (event.shiftKey || event.metaKey) onChange(Math.max(0, rank - 1));
         else if (event.ctrlKey) onChange(talent.maxRank);
         else onChange(Math.min(talent.maxRank, rank + 1));
@@ -549,6 +555,8 @@ function TalentTab({
   pointsExhausted,
   buildLocked,
   mobile,
+  quickActiveTalentId,
+  onQuickActivate,
 }: {
   tab: TalentTabData;
   ranks: TalentRanks;
@@ -563,6 +571,10 @@ function TalentTab({
   buildLocked?: boolean;
   /** Touch layout: full-bleed card with an upscaled grid. */
   mobile?: boolean;
+  /** Mobile: id of the last talent tapped anywhere in the viewer. */
+  quickActiveTalentId?: number | null;
+  /** Mobile: mark a talent as the active one. */
+  onQuickActivate?: (talentId: number) => void;
 }) {
   const iconBaseUrl = useIconBaseUrl();
   const points = useMemo(() => tab.talents.reduce((sum, talent) => sum + (ranks[talent.id] ?? 0), 0), [tab.talents, ranks]);
@@ -718,6 +730,8 @@ function TalentTab({
                           readOnly={readOnly}
                           debug={debug}
                           mobile={mobile}
+                          quickActive={quickActiveTalentId === t.id}
+                          onActivate={mobile && onQuickActivate ? () => onQuickActivate(t.id) : undefined}
                           onChange={(rank) => onRankChange(t, rank)}
                         />
                       )}
@@ -821,6 +835,9 @@ export function TalentTreeViewer({
   }, [allocations, data.tabs, maxPoints, searchParams, tabTalentLists]);
 
   const [ranks, setRanks] = useState<TalentRanks>(initialRanks);
+  // Mobile: last talent tapped anywhere; its -/+ quick buttons stay visible
+  // until a different talent is tapped.
+  const [quickActiveTalentId, setQuickActiveTalentId] = useState<number | null>(null);
   const total = useMemo(() => totalTalentPoints(ranks), [ranks]);
   const requiredLevel = useMemo(() => calculateRequiredPlayerLevel(total, flavor), [flavor, total]);
 
@@ -996,6 +1013,8 @@ export function TalentTreeViewer({
             pointsExhausted={pointsExhausted}
             buildLocked={manuallyLocked}
             mobile={mobileLayout}
+            quickActiveTalentId={quickActiveTalentId}
+            onQuickActivate={setQuickActiveTalentId}
             // A locked build is frozen: no points may be added or removed.
             onRankChange={(talent, rank) => {
               if (manuallyLocked) {
