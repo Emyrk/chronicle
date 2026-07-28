@@ -510,7 +510,9 @@ function TalentButton({ talent, rank, locked, pointsExhausted, talents, ranks, o
       </span>
       {popularity && (
         <span className={cn(
-          "absolute -left-1 -top-1 z-10 rounded border px-1 text-[9px] font-bold leading-4 shadow-sm",
+          // Centered above the square (in the row gap) so it never covers
+          // the icon, and never wraps regardless of "100% (3.7)" width.
+          "absolute -top-2.5 left-1/2 z-10 -translate-x-1/2 whitespace-nowrap rounded border px-1 text-[9px] font-bold leading-[13px] shadow-sm",
           popularity.pct >= 80
             ? "border-amber-200/70 bg-amber-300 text-black"
             : popularity.pct >= 40
