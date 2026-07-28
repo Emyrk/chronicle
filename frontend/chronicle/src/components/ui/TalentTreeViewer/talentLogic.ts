@@ -297,6 +297,15 @@ export async function copyTalentBuildUrl(clipboard: BuildUrlClipboard | undefine
   await clipboard.writeText(canonicalTalentBuildUrl(href, ranks, tabs));
 }
 
+/** Per-tab point totals from a positional build string, e.g. "35003-0503" → "11/8". */
+export function buildPointsSummary(build: string): string {
+  if (!build) return "0";
+  return build
+    .split("-")
+    .map((section) => section.split("").reduce((sum, digit) => sum + (parseInt(digit, 10) || 0), 0))
+    .join("/");
+}
+
 // ─── Export filename ──────────────────────────────────────────────
 
 /**

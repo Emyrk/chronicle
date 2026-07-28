@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import type { TalentEntry } from "./talentLogic";
 import {
+  buildPointsSummary,
   calculateRequiredPlayerLevel,
   canUseTalent,
   canonicalTalentBuildUrl,
@@ -161,6 +162,15 @@ describe("TalentTreeViewer export filename", () => {
   it("replaces whitespace in spec names", () => {
     const feralTabs = [tab(0, "Feral Combat", [1])];
     expect(talentBuildExportName(feralTabs, { 1: 2 }, "Druid")).toBe("Feral-Combat_2");
+  });
+});
+
+describe("TalentTreeViewer build points summary", () => {
+  it("sums digits per dash-separated tab section", () => {
+    expect(buildPointsSummary("35003-0503")).toBe("11/8");
+    expect(buildPointsSummary("505")).toBe("10");
+    expect(buildPointsSummary("")).toBe("0");
+    expect(buildPointsSummary("0-0-55")).toBe("0/0/10");
   });
 });
 

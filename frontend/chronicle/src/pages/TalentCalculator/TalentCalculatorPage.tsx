@@ -4,6 +4,7 @@ import { cn } from "@/lib/utils";
 import { useSiteConfig } from "@/api/queries";
 import { TalentTreeViewer } from "@/components/ui/TalentTreeViewer/TalentTreeViewer";
 import { useTalentTrees } from "@/components/ui/TalentTreeViewer/useTalentTrees";
+import { MyBuildsDrawer } from "./MyBuildsDrawer";
 
 const CLASS_INFO: { id: number; name: string; slug: string }[] = [
   { id: 1, name: "Warrior", slug: "warrior" },
@@ -112,6 +113,7 @@ export function TalentCalculatorPage() {
           data={classTreeData}
           maxTalentPoints={maxTalentPoints}
           maxLevel={maxLevel}
+          extraActions={<MyBuildsDrawer classes={availableClasses} selectedClassId={selectedClassId} />}
         />
       ) : (
         <div className="text-zinc-500">Select a class above to get started.</div>

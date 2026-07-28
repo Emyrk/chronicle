@@ -30,6 +30,9 @@ import type {
   CreateUserPanelLayoutRequest as CreateUserPanelLayoutRequestGenerated,
   UpdateUserPanelLayoutRequest as UpdateUserPanelLayoutRequestGenerated,
   UserPanelLayout as UserPanelLayoutGenerated,
+  UserTalentBuild,
+  CreateUserTalentBuildRequest,
+  UpdateUserTalentBuildRequest,
   ActionBarSlotsResponse as ActionBarSlotsResponseGenerated,
   InstanceDefaultsResponse as InstanceDefaultsResponseGenerated,
   CreateShareRequest as CreateShareRequestGenerated,
@@ -2516,6 +2519,99 @@ export function useSyncServers(appId: string) {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["server-application"] });
       queryClient.invalidateQueries({ queryKey: ["azerothcore"] });
+    },
+  });
+}
+
+// ─── Saved talent builds ──────────────────────────────────────────
+
+export function useMyTalentBuilds(enabled = true) {
+  return useQuery({
+    queryKey: ["my-talent-builds"],
+    queryFn: async () => {
+      const response = await fetch("/api/v1/me/talent-builds", {
+        credentials: "include",
+      });
+      if (!response.ok)
+        throw buildAPIError(
+          "Failed to load talent builds",
+          await response.json().catch(() => null)
+        );
+      return response.json() as Promise<UserTalentBuild[]>;
+    },
+    enabled,
+    retry: false,
+  });
+}
+
+export function useCreateTalentBuild() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async (request: CreateUserTalentBuildRequest) => {
+      const response = await fetch("/api/v1/me/talent-builds", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(request),
+        credentials: "include",
+      });
+      if (!response.ok)
+        throw buildAPIError(
+          "Failed to save talent build",
+          await response.json().catch(() => null)
+        );
+      return response.json() as Promise<UserTalentBuild>;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["my-talent-builds"] });
+    },
+  });
+}
+
+export function useUpdateTalentBuild() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async ({
+      buildID,
+      request,
+    }: {
+      buildID: string;
+      request: UpdateUserTalentBuildRequest;
+    }) => {
+      const response = await fetch(`/api/v1/me/talent-builds/${buildID}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(request),
+        credentials: "include",
+      });
+      if (!response.ok)
+        throw buildAPIError(
+          "Failed to update talent build",
+          await response.json().catch(() => null)
+        );
+      return response.json() as Promise<UserTalentBuild>;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["my-talent-builds"] });
+    },
+  });
+}
+
+export function useDeleteTalentBuild() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async (buildID: string) => {
+      const response = await fetch(`/api/v1/me/talent-builds/${buildID}`, {
+        method: "DELETE",
+        credentials: "include",
+      });
+      if (!response.ok)
+        throw buildAPIError(
+          "Failed to delete talent build",
+          await response.json().catch(() => null)
+        );
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["my-talent-builds"] });
     },
   });
 }

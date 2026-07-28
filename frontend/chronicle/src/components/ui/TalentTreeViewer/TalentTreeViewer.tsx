@@ -78,6 +78,8 @@ export interface TalentTreeViewerProps {
   readOnly?: boolean;
   /** When true, renders a more compact layout suitable for panels with limited space. */
   compact?: boolean;
+  /** Extra controls pinned to the right of the summary bar (e.g. "My Builds"). */
+  extraActions?: React.ReactNode;
   className?: string;
 }
 
@@ -701,6 +703,7 @@ export function TalentTreeViewer({
   maxLevel = 60,
   readOnly = false,
   compact = false,
+  extraActions,
   className,
 }: TalentTreeViewerProps) {
   const [searchParams, setSearchParams] = useSearchParams();
@@ -870,10 +873,13 @@ export function TalentTreeViewer({
               </>
             )}
           </div>
-          {!readOnly && (
-            <p className="text-sm text-muted-foreground text-right">Click to add. Right-click or shift-click to remove. Ctrl-click to spend remaining points into a talent. Builds are stored in the URL.</p>
+          {extraActions && !readOnly && (
+            <div className="flex items-center gap-2">{extraActions}</div>
           )}
         </div>
+      )}
+      {!(readOnly && allocations) && !readOnly && (
+        <p className="text-sm text-muted-foreground">Click to add. Right-click or shift-click to remove. Ctrl-click to spend remaining points into a talent. Builds are stored in the URL.</p>
       )}
       <div ref={exportRef} className={tabGridClassName}>
         {data.tabs.map((tab) => (
