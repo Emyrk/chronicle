@@ -633,9 +633,9 @@ function TalentTab({
     : undefined;
 
   return (
-    <section className={cn(
+    <section id={mobile ? `talent-tree-${tab.id}` : undefined} className={cn(
       "talent-tree-card relative max-w-full self-start overflow-hidden rounded-lg border border-amber-400/20 bg-[radial-gradient(circle_at_top_left,rgba(20,184,166,0.14),transparent_32%),linear-gradient(180deg,rgba(120,83,38,0.16),rgba(9,9,11,0.58))] shadow-2xl shadow-black/30",
-      compact ? "p-2" : mobile ? "rounded-none border-x-0 px-0 py-3" : "p-4",
+      compact ? "p-2" : mobile ? "scroll-mt-12 rounded-none border-x-0 px-0 py-3" : "p-4",
     )} aria-label={`${tab.name} talent tree`}>
       {showBackground && backgroundUrl && (
         <img
@@ -765,6 +765,43 @@ function TalentTab({
   );
 }
 
+// ─── Mobile sticky tree tabs ──────────────────────────────────────
+
+/** Sticky chip bar on mobile: jump-scroll between the stacked trees. */
+function MobileTreeTabs({ tabs, ranks, visibleTabId, onJump }: {
+  tabs: TalentTabData[];
+  ranks: TalentRanks;
+  visibleTabId: number | null;
+  onJump: (tabId: number) => void;
+}) {
+  const iconBaseUrl = useIconBaseUrl();
+  return (
+    <div className="sticky top-0 z-40 -mx-4 flex gap-1 border-b border-white/10 bg-zinc-950/95 px-2 py-1.5 backdrop-blur">
+      {tabs.map((tab) => {
+        const points = tab.talents.reduce((sum, talent) => sum + (ranks[talent.id] ?? 0), 0);
+        const active = tab.id === visibleTabId;
+        return (
+          <button
+            key={tab.id}
+            type="button"
+            onClick={() => onJump(tab.id)}
+            className={cn(
+              "flex min-w-0 flex-1 items-center justify-center gap-1.5 rounded-md border px-2 py-1.5 text-xs font-bold transition",
+              active
+                ? "border-amber-300/60 bg-amber-400/15 text-amber-100"
+                : "border-transparent bg-zinc-900/60 text-zinc-400",
+            )}
+          >
+            <img src={iconUrl(tab.iconTexture, iconBaseUrl)} alt="" className="h-4 w-4 shrink-0 rounded" />
+            <span className="truncate">{tab.name}</span>
+            <span className={cn("shrink-0 tabular-nums", active ? "text-amber-200/90" : "text-zinc-500")}>{points}</span>
+          </button>
+        );
+      })}
+    </div>
+  );
+}
+
 // ─── Allocations → TalentRanks conversion ─────────────────────────
 
 function allocationsToRanks(tabs: TalentTabData[], allocations: TalentAllocation[]): TalentRanks {
@@ -856,6 +893,33 @@ export function TalentTreeViewer({
   // Mobile: last talent tapped anywhere; its -/+ quick buttons stay visible
   // until a different talent is tapped or the user taps elsewhere.
   const [quickActiveTalentId, setQuickActiveTalentId] = useState<number | null>(null);
+
+  // Mobile: which tree is currently on screen, for the sticky mini-tabs.
+  const [visibleTabId, setVisibleTabId] = useState<number | null>(null);
+  useEffect(() => {
+    if (!mobileLayout || typeof document === "undefined") return undefined;
+    const sections = data.tabs
+      .map((tab) => document.getElementById(`talent-tree-${tab.id}`))
+      .filter((el): el is HTMLElement => el !== null);
+    if (sections.length === 0) return undefined;
+    // Highlight the tree crossing the upper-middle band of the viewport.
+    const observer = new IntersectionObserver(
+      (entries) => {
+        for (const entry of entries) {
+          if (!entry.isIntersecting) continue;
+          const id = Number(entry.target.id.replace("talent-tree-", ""));
+          if (!Number.isNaN(id)) setVisibleTabId(id);
+        }
+      },
+      { rootMargin: "-15% 0px -65% 0px" },
+    );
+    sections.forEach((section) => observer.observe(section));
+    return () => observer.disconnect();
+  }, [data.tabs, mobileLayout]);
+
+  function jumpToTree(tabId: number) {
+    document.getElementById(`talent-tree-${tabId}`)?.scrollIntoView({ behavior: "smooth", block: "start" });
+  }
 
   // Clear the quick buttons when tapping outside any talent ("clear the context").
   useEffect(() => {
@@ -1043,6 +1107,8 @@ export function TalentTreeViewer({
             : "Click to add. Right-click or shift-click to remove. Ctrl-click to fill a talent, ctrl-right-click to empty it. Builds are stored in the URL."}
         </p>
       )}
+      {/* Mobile: sticky mini-tabs to jump between the stacked trees */}
+      {mobileLayout && <MobileTreeTabs tabs={data.tabs} ranks={ranks} visibleTabId={visibleTabId} onJump={jumpToTree} />}
       <div ref={exportRef} className={tabGridClassName}>
         {data.tabs.map((tab) => (
           <TalentTab
