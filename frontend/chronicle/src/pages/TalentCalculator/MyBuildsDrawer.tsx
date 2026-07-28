@@ -140,37 +140,59 @@ export function MyBuildsDrawer({
     });
   }
 
+  // When logged out the trigger stays tappable (a `disabled` button would
+  // swallow the click) but looks disabled and only shows a toast.
+  const loggedOut = !isLoading && !isAuthenticated;
+  const notifyLoginRequired = () => {
+    toast.error("You must be logged in", {
+      id: "talent-builds-login-required",
+      description: "Log in to save and load talent builds.",
+    });
+  };
+
   const trigger = floating ? (
     <button
       type="button"
-      disabled={isLoading || !isAuthenticated}
+      disabled={isLoading}
+      aria-disabled={loggedOut}
       aria-label="My Builds"
-      title={!isAuthenticated && !isLoading ? "Log in to save talent builds" : "My Builds"}
-      className="fixed bottom-8 left-8 z-50 flex h-14 w-14 items-center justify-center rounded-full border border-amber-300/50 bg-amber-400/90 text-black shadow-lg transition hover:bg-amber-300 disabled:cursor-not-allowed disabled:opacity-45"
+      title={loggedOut ? "Log in to save talent builds" : "My Builds"}
+      onClick={loggedOut ? notifyLoginRequired : undefined}
+      className={cn(
+        "fixed bottom-8 left-8 z-50 flex h-14 w-14 items-center justify-center rounded-full border border-amber-300/50 bg-amber-400/90 text-black shadow-lg transition hover:bg-amber-300 disabled:opacity-45",
+        loggedOut && "cursor-not-allowed opacity-45 hover:bg-amber-400/90",
+      )}
     >
       <BookMarked className="h-5 w-5" />
     </button>
   ) : (
     <button
       type="button"
-      disabled={isLoading || !isAuthenticated}
-      title={!isAuthenticated && !isLoading ? "Log in to save talent builds" : undefined}
-      className="inline-flex items-center gap-1.5 rounded-md border border-amber-300/40 bg-amber-400/10 px-2.5 py-1 text-sm font-bold text-amber-100 transition hover:border-amber-200/70 hover:bg-amber-400/20 disabled:cursor-not-allowed disabled:opacity-45"
+      disabled={isLoading}
+      aria-disabled={loggedOut}
+      title={loggedOut ? "Log in to save talent builds" : undefined}
+      onClick={loggedOut ? notifyLoginRequired : undefined}
+      className={cn(
+        "inline-flex items-center gap-1.5 rounded-md border border-amber-300/40 bg-amber-400/10 px-2.5 py-1 text-sm font-bold text-amber-100 transition hover:border-amber-200/70 hover:bg-amber-400/20 disabled:opacity-45",
+        loggedOut && "cursor-not-allowed opacity-45 hover:border-amber-300/40 hover:bg-amber-400/10",
+      )}
     >
       <BookMarked className="h-3.5 w-3.5" />
       My Builds
     </button>
   );
 
+  // Only wire the trigger to the sheet when authenticated; logged out it
+  // just shows the toast and must not open the drawer.
+  const wiredTrigger = isAuthenticated ? <SheetTrigger asChild>{trigger}</SheetTrigger> : trigger;
+
   return (
     <Sheet open={open} onOpenChange={setOpen}>
       {/* Floating trigger is portaled to body to avoid fixed-positioning issues
           inside transformed/overflow ancestors (same as the instance page FABs). */}
-      {floating && typeof document !== "undefined" ? (
-        createPortal(<SheetTrigger asChild>{trigger}</SheetTrigger>, document.body)
-      ) : (
-        <SheetTrigger asChild>{trigger}</SheetTrigger>
-      )}
+      {floating && typeof document !== "undefined"
+        ? createPortal(wiredTrigger, document.body)
+        : wiredTrigger}
       <SheetContent side="right" className="flex w-full flex-col gap-0 sm:max-w-md">
         <SheetHeader className="border-b border-white/10">
           <div className="flex items-center gap-3">

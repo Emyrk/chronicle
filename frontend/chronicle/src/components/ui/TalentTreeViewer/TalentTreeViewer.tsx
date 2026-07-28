@@ -432,6 +432,13 @@ function TalentButton({ talent, rank, locked, pointsExhausted, talents, ranks, o
   // tooltip, which comes and goes with focus/blur and would flicker).
   const showQuickButtons = Boolean(mobile && !readOnly && quickActive);
   const quickButtonClass = "pointer-events-auto flex h-6 w-9 items-center justify-center text-sm font-bold transition disabled:opacity-35";
+  // The tooltip prefers to open below the talent — the pill's default spot.
+  // When it does, flip the pill above the talent so it stays visible.
+  const tooltipIsBelow = Boolean(
+    tooltipPosition &&
+    buttonRef.current &&
+    tooltipPosition.top >= buttonRef.current.getBoundingClientRect().bottom,
+  );
 
   const talentButton = (
     <button
@@ -511,7 +518,10 @@ function TalentButton({ talent, rank, locked, pointsExhausted, talents, ranks, o
     <div ref={wrapperRef} data-talent-quick-zone="true" className="relative">
       {talentButton}
       {showQuickButtons && (
-        <div className="absolute -bottom-7 left-1/2 z-20 flex -translate-x-1/2 divide-x divide-zinc-700 overflow-hidden rounded-md border border-zinc-600 bg-zinc-950/95 shadow-lg">
+        <div className={cn(
+          "absolute left-1/2 z-20 flex -translate-x-1/2 divide-x divide-zinc-700 overflow-hidden rounded-md border border-zinc-600 bg-zinc-950/95 shadow-lg",
+          tooltipIsBelow ? "-top-7" : "-bottom-7",
+        )}>
           <button
             type="button"
             aria-label={`Remove point from ${talent.name}`}
