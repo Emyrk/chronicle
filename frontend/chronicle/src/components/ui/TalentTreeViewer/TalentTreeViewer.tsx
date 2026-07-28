@@ -1,7 +1,7 @@
 import { Fragment, useEffect, useMemo, useRef, useState } from "react";
 import { createPortal, flushSync } from "react-dom";
 import { useSearchParams } from "react-router-dom";
-import { ImageDown, Lock, LockOpen } from "lucide-react";
+import { ImageDown, Lock, LockOpen, Share2 } from "lucide-react";
 import { toCanvas } from "html-to-image";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
@@ -919,6 +919,7 @@ export function TalentTreeViewer({
   async function copyBuildLink() {
     if (typeof window === "undefined") return;
     await copyTalentBuildUrl(navigator.clipboard, window.location.href, ranks, tabTalentLists);
+    toast.success("Link copied to clipboard", { id: "talent-build-link-copied" });
   }
 
   const exportRef = useRef<HTMLDivElement>(null);
@@ -973,8 +974,17 @@ export function TalentTreeViewer({
             </div>
             {!readOnly && (
               <>
-                {/* Copy link and PNG export are desktop-only conveniences. */}
-                {!isMobile && (
+                {isMobile ? (
+                  /* Mobile: icon-only share button; PNG export stays desktop-only. */
+                  <button
+                    type="button"
+                    aria-label="Copy build link"
+                    className="rounded-md border border-primary/50 bg-primary/15 p-1.5 text-white hover:bg-primary/25"
+                    onClick={() => void copyBuildLink()}
+                  >
+                    <Share2 className="h-4 w-4" />
+                  </button>
+                ) : (
                   <>
                     <button type="button" className="rounded-md border border-primary/50 bg-primary/15 px-2.5 py-1 text-sm font-bold text-white hover:bg-primary/25" onClick={() => void copyBuildLink()}>
                       Copy link
