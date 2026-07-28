@@ -453,7 +453,11 @@ function TalentButton({ talent, rank, locked, pointsExhausted, talents, ranks, o
       onMouseEnter={showTooltip}
       onMouseLeave={hideTooltip}
       onFocus={showTooltip}
-      onBlur={hideTooltip}
+      onBlur={(event) => {
+        // Keep the tooltip open when focus moves to the -/+ quick buttons.
+        if (event.relatedTarget instanceof Node && wrapperRef.current?.contains(event.relatedTarget)) return;
+        hideTooltip();
+      }}
       onClick={(event) => {
         if (readOnly) return;
         showTooltip();
@@ -529,6 +533,7 @@ function TalentButton({ talent, rank, locked, pointsExhausted, talents, ranks, o
             className={cn(quickButtonClass, "text-red-300 active:bg-red-400/20")}
             onClick={(event) => {
               event.stopPropagation();
+              showTooltip();
               onChange(Math.max(0, rank - 1));
             }}
           >
@@ -541,6 +546,7 @@ function TalentButton({ talent, rank, locked, pointsExhausted, talents, ranks, o
             className={cn(quickButtonClass, "text-emerald-300 active:bg-emerald-400/20")}
             onClick={(event) => {
               event.stopPropagation();
+              showTooltip();
               onChange(Math.min(talent.maxRank, rank + 1));
             }}
           >
