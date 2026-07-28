@@ -508,7 +508,7 @@ function TalentButton({ talent, rank, locked, pointsExhausted, talents, ranks, o
   if (!mobile) return talentButton;
 
   return (
-    <div ref={wrapperRef} className="relative">
+    <div ref={wrapperRef} data-talent-quick-zone="true" className="relative">
       {talentButton}
       {showQuickButtons && (
         <>
@@ -836,8 +836,22 @@ export function TalentTreeViewer({
 
   const [ranks, setRanks] = useState<TalentRanks>(initialRanks);
   // Mobile: last talent tapped anywhere; its -/+ quick buttons stay visible
-  // until a different talent is tapped.
+  // until a different talent is tapped or the user taps elsewhere.
   const [quickActiveTalentId, setQuickActiveTalentId] = useState<number | null>(null);
+
+  // Clear the quick buttons when tapping outside any talent ("clear the context").
+  useEffect(() => {
+    if (quickActiveTalentId === null || typeof document === "undefined") return undefined;
+    const clearOnOutsideTap = (event: PointerEvent) => {
+      const target = event.target;
+      if (!(target instanceof Element)) return;
+      // Taps on a talent (or its -/+ buttons) are handled by the talent itself.
+      if (target.closest("[data-talent-quick-zone]")) return;
+      setQuickActiveTalentId(null);
+    };
+    document.addEventListener("pointerdown", clearOnOutsideTap);
+    return () => document.removeEventListener("pointerdown", clearOnOutsideTap);
+  }, [quickActiveTalentId]);
   const total = useMemo(() => totalTalentPoints(ranks), [ranks]);
   const requiredLevel = useMemo(() => calculateRequiredPlayerLevel(total, flavor), [flavor, total]);
 
