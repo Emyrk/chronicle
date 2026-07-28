@@ -431,7 +431,7 @@ function TalentButton({ talent, rank, locked, pointsExhausted, talents, ranks, o
   // Mobile quick actions: pinned to the last talent tapped (not tied to the
   // tooltip, which comes and goes with focus/blur and would flicker).
   const showQuickButtons = Boolean(mobile && !readOnly && quickActive);
-  const quickButtonClass = "pointer-events-auto absolute top-1/2 z-20 flex h-8 w-8 -translate-y-1/2 items-center justify-center rounded-full border text-base font-bold shadow-lg transition disabled:opacity-35";
+  const quickButtonClass = "pointer-events-auto flex h-6 w-9 items-center justify-center text-sm font-bold transition disabled:opacity-35";
 
   const talentButton = (
     <button
@@ -511,12 +511,12 @@ function TalentButton({ talent, rank, locked, pointsExhausted, talents, ranks, o
     <div ref={wrapperRef} data-talent-quick-zone="true" className="relative">
       {talentButton}
       {showQuickButtons && (
-        <>
+        <div className="absolute -bottom-7 left-1/2 z-20 flex -translate-x-1/2 divide-x divide-zinc-700 overflow-hidden rounded-md border border-zinc-600 bg-zinc-950/95 shadow-lg">
           <button
             type="button"
             aria-label={`Remove point from ${talent.name}`}
             disabled={rank === 0}
-            className={cn(quickButtonClass, "-left-3 border-red-400/60 bg-zinc-950/95 text-red-300")}
+            className={cn(quickButtonClass, "text-red-300 active:bg-red-400/20")}
             onClick={(event) => {
               event.stopPropagation();
               onChange(Math.max(0, rank - 1));
@@ -528,7 +528,7 @@ function TalentButton({ talent, rank, locked, pointsExhausted, talents, ranks, o
             type="button"
             aria-label={`Add point to ${talent.name}`}
             disabled={maxed || locked}
-            className={cn(quickButtonClass, "-right-3 border-emerald-400/60 bg-zinc-950/95 text-emerald-300")}
+            className={cn(quickButtonClass, "text-emerald-300 active:bg-emerald-400/20")}
             onClick={(event) => {
               event.stopPropagation();
               onChange(Math.min(talent.maxRank, rank + 1));
@@ -536,7 +536,7 @@ function TalentButton({ talent, rank, locked, pointsExhausted, talents, ranks, o
           >
             +
           </button>
-        </>
+        </div>
       )}
     </div>
   );
