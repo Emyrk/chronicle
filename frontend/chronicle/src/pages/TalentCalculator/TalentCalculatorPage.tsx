@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { Link, useParams, Navigate, useSearchParams } from "react-router-dom";
-import { ChevronLeft } from "lucide-react";
+import { ChevronLeft, EyeOff } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useIsMobile } from "@/hooks/useIsMobile";
 import { useSiteConfig } from "@/api/queries";
@@ -208,6 +208,16 @@ export function TalentCalculatorPage() {
           extraActions={
             !isMobile ? (
               <>
+                {popularity && (
+                  <button
+                    type="button"
+                    className="inline-flex items-center gap-1.5 rounded-md border border-zinc-600 bg-zinc-900/60 px-2.5 py-1 text-sm font-semibold text-zinc-300 transition hover:border-zinc-400 hover:text-white"
+                    onClick={() => setPopularity(null)}
+                  >
+                    <EyeOff className="h-3.5 w-3.5" />
+                    Hide popularity
+                  </button>
+                )}
                 {/* Top Builds is desktop-only by design. */}
                 <TopBuildsDrawer selectedClass={selectedClass} onShowAll={showPopularity} />
                 <MyBuildsDrawer classes={availableClasses} selectedClassId={selectedClassId} />
