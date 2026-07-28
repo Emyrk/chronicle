@@ -341,7 +341,10 @@
     scrollbar-gutter: stable;
   }
   html, body {
-    @apply overflow-x-hidden;
+    /* clip (not hidden): overflow-x-hidden creates a scroll container on
+       html/body, which silently breaks position:sticky everywhere. clip
+       gives the same horizontal clipping without that side effect. */
+    @apply overflow-x-clip;
   }
   body {
     @apply bg-background text-foreground;
