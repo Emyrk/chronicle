@@ -50,8 +50,8 @@ function MetricsContent() {
   const slowestPanel = rows.reduce((max, row) => (row.wallTimeMs > max.wallTimeMs ? row : max), rows[0]);
 
   return (
-    <div className="space-y-3 text-xs">
-      <div className="grid grid-cols-1 gap-2 sm:grid-cols-3">
+    <div className="flex h-full min-h-0 flex-col gap-3 text-xs">
+      <div className="grid shrink-0 grid-cols-1 gap-2 sm:grid-cols-3">
         <div className="rounded border bg-muted/30 px-2 py-1.5">
           <div className="text-[10px] uppercase tracking-wide text-muted-foreground">Total Events</div>
           <div className="font-mono text-sm text-foreground">{totalEvents.toLocaleString()}</div>
@@ -68,7 +68,7 @@ function MetricsContent() {
         </div>
       </div>
 
-      <div className="rounded border bg-muted/20 px-2 py-2 text-[11px] space-y-1">
+      <div className="shrink-0 space-y-1 rounded border bg-muted/20 px-2 py-2 text-[11px]">
         <div className="font-medium text-foreground">How to read these timings</div>
         <div className="text-muted-foreground">
           Worker time already includes Process + Serialize, so those columns overlap.
@@ -80,7 +80,7 @@ function MetricsContent() {
         </div>
       </div>
 
-      <div className="overflow-auto rounded border">
+      <div className="min-h-0 flex-1 overflow-auto rounded border">
         <table className="w-full min-w-[860px] border-collapse">
           <thead>
             <tr className="border-b bg-muted/40 text-left text-[10px] uppercase tracking-wide text-muted-foreground">
