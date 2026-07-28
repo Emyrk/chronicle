@@ -17,6 +17,7 @@ import {
   prerequisiteArrowPolylinePoints,
   prerequisiteArrows,
   rankDescriptionsForTooltip,
+  rankingsLayoutToBuild,
   resetTalentTabRanks,
   rowPointRequirement,
   searchParamsWithTalentBuild,
@@ -162,6 +163,21 @@ describe("TalentTreeViewer export filename", () => {
   it("replaces whitespace in spec names", () => {
     const feralTabs = [tab(0, "Feral Combat", [1])];
     expect(talentBuildExportName(feralTabs, { 1: 2 }, "Druid")).toBe("Feral-Combat_2");
+  });
+});
+
+describe("TalentTreeViewer rankings layout conversion", () => {
+  it("converts }-separated layouts to dash-separated builds with zeros trimmed", () => {
+    expect(rankingsLayoutToBuild("05230}30200}0000")).toBe("0523-302");
+    expect(rankingsLayoutToBuild("500}000}000")).toBe("5");
+    expect(rankingsLayoutToBuild("000}000}550")).toBe("--55");
+    expect(rankingsLayoutToBuild("")).toBe("");
+    expect(rankingsLayoutToBuild(null)).toBe("");
+    expect(rankingsLayoutToBuild(undefined)).toBe("");
+  });
+
+  it("round-trips through the points summary", () => {
+    expect(buildPointsSummary(rankingsLayoutToBuild("05230}30200}0000"))).toBe("10/5");
   });
 });
 

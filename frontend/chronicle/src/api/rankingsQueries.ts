@@ -22,11 +22,12 @@ async function fetchJSON<T>(url: string): Promise<T> {
   return response.json() as Promise<T>;
 }
 
-export function useRankingsInstances() {
+export function useRankingsInstances(enabled = true) {
   return useQuery({
     queryKey: ["rankings", "instances"],
     queryFn: () => fetchJSON<RankingsInstanceSummary[]>("/api/v1/rankings/instances"),
     staleTime: RANKINGS_STALE_TIME,
+    enabled,
   });
 }
 
@@ -56,7 +57,7 @@ export function useRankingsLeaderboard(params: {
   max_players?: number;
   limit?: number;
   offset?: number;
-}) {
+}, enabled = true) {
   const searchParams = new URLSearchParams();
   if (params.instance_names) searchParams.set("instance_names", params.instance_names);
   if (params.encounter_names) searchParams.set("encounter_names", params.encounter_names);
@@ -78,6 +79,7 @@ export function useRankingsLeaderboard(params: {
     queryFn: () =>
       fetchJSON<RankingsLeaderboardResponse>(`/api/v1/rankings/leaderboard${qs ? `?${qs}` : ""}`),
     staleTime: RANKINGS_STALE_TIME,
+    enabled,
   });
 }
 

@@ -1,0 +1,188 @@
+import { useMemo, useState } from "react";
+import { useSearchParams } from "react-router-dom";
+import { Trophy } from "lucide-react";
+import { toast } from "sonner";
+import { cn } from "@/lib/utils";
+import { useRankingsInstances, useRankingsLeaderboard } from "@/api/rankingsQueries";
+import type { RankingsEntry } from "@/api/typesGenerated";
+import {
+  Sheet,
+  SheetContent,
+  SheetDescription,
+  SheetHeader,
+  SheetTitle,
+  SheetTrigger,
+} from "@/components/ui/sheet";
+import {
+  TALENT_BUILD_PARAM,
+  buildPointsSummary,
+  rankingsLayoutToBuild,
+} from "@/components/ui/TalentTreeViewer/talentLogic";
+import { SPEC_BY_CLASS } from "@/pages/Rankings/classDisplay";
+import type { TalentClassInfo } from "./MyBuildsDrawer";
+
+/** "Death Knight" → "DEATHKNIGHT" (the SDK hero-class form the API expects). */
+function toApiClass(name: string): string {
+  return name.replace(/\s+/g, "").toUpperCase();
+}
+
+function formatDPS(dps: number): string {
+  return dps >= 1000 ? `${(dps / 1000).toFixed(1)}k` : Math.round(dps).toString();
+}
+
+export function TopBuildsDrawer({ selectedClass }: { selectedClass?: TalentClassInfo }) {
+  const [searchParams, setSearchParams] = useSearchParams();
+  const [open, setOpen] = useState(false);
+  const [instanceName, setInstanceName] = useState<string | null>(null);
+
+  const apiClass = selectedClass ? toApiClass(selectedClass.name) : "";
+  const specs = SPEC_BY_CLASS[apiClass] ?? [];
+  const [specIdx, setSpecIdx] = useState(0);
+  const spec = specs[Math.min(specIdx, specs.length - 1)] ?? "";
+
+  const instancesQuery = useRankingsInstances(open);
+  // Unique instance names, in API order. Default to the first raid.
+  const instanceNames = useMemo(() => {
+    const names: string[] = [];
+    for (const instance of instancesQuery.data ?? []) {
+      if (!names.includes(instance.instance_name)) names.push(instance.instance_name);
+    }
+    return names;
+  }, [instancesQuery.data]);
+  const activeInstance = instanceName ?? instanceNames[0] ?? "";
+
+  const leaderboardQuery = useRankingsLeaderboard(
+    {
+      instance_names: activeInstance,
+      class: apiClass,
+      spec,
+      hide_unknowns: true,
+      limit: 10,
+    },
+    open && Boolean(activeInstance && apiClass && spec),
+  );
+
+  function loadBuild(entry: RankingsEntry) {
+    const build = rankingsLayoutToBuild(entry.talent_layout);
+    if (!build) return;
+    const next = new URLSearchParams(searchParams);
+    next.set(TALENT_BUILD_PARAM, build);
+    setSearchParams(next, { replace: true });
+    setOpen(false);
+    toast.success(`Loaded ${entry.player_name}'s build`, {
+      description: `${spec} · ${buildPointsSummary(build)} · ${activeInstance}`,
+    });
+  }
+
+  if (!selectedClass) return null;
+
+  return (
+    <Sheet open={open} onOpenChange={setOpen}>
+      <SheetTrigger asChild>
+        <button
+          type="button"
+          className="inline-flex items-center gap-1.5 rounded-md border border-amber-300/40 bg-amber-400/10 px-2.5 py-1 text-sm font-bold text-amber-100 transition hover:border-amber-200/70 hover:bg-amber-400/20"
+        >
+          <Trophy className="h-3.5 w-3.5" />
+          Top Builds
+        </button>
+      </SheetTrigger>
+      <SheetContent side="right" className="flex w-full flex-col gap-0 sm:max-w-md">
+        <SheetHeader className="border-b border-white/10">
+          <div className="flex items-center gap-3">
+            <img
+              src={`/c/icons/class_${selectedClass.slug}.png`}
+              alt=""
+              className="h-9 w-9 shrink-0 rounded"
+              onError={(e) => { (e.target as HTMLImageElement).src = "/c/icons/class_unknown.png"; }}
+            />
+            <div className="min-w-0">
+              <SheetTitle>Top {selectedClass.name} builds</SheetTitle>
+              <SheetDescription>What the top-ranked players are using</SheetDescription>
+            </div>
+          </div>
+        </SheetHeader>
+
+        {/* Instance + spec selectors */}
+        <div className="space-y-3 border-b border-white/10 p-4">
+          <select
+            value={activeInstance}
+            onChange={(event) => setInstanceName(event.target.value)}
+            className="w-full rounded-md border border-zinc-700 bg-zinc-950/60 px-3 py-2 text-sm text-white focus:border-amber-300/60 focus:outline-none"
+          >
+            {instanceNames.map((name) => (
+              <option key={name} value={name}>{name}</option>
+            ))}
+          </select>
+          <div className="flex gap-1">
+            {specs.map((name, index) => (
+              <button
+                key={name}
+                type="button"
+                onClick={() => setSpecIdx(index)}
+                className={cn(
+                  "flex-1 truncate rounded-md border px-2 py-1.5 text-xs font-bold transition",
+                  name === spec
+                    ? "border-amber-300/60 bg-amber-400/15 text-amber-100"
+                    : "border-zinc-700/60 bg-zinc-900/40 text-zinc-400 hover:border-zinc-500 hover:text-white",
+                )}
+              >
+                {name}
+              </button>
+            ))}
+          </div>
+        </div>
+
+        {/* Top 10 list */}
+        <div className="flex-1 space-y-2 overflow-y-auto p-4">
+          {leaderboardQuery.isLoading || instancesQuery.isLoading ? (
+            <p className="text-sm text-zinc-500">Loading rankings…</p>
+          ) : leaderboardQuery.isError ? (
+            <p className="text-sm text-zinc-500">Unable to load rankings.</p>
+          ) : (leaderboardQuery.data?.entries.length ?? 0) === 0 ? (
+            <p className="text-sm text-zinc-500">
+              No ranked {spec} {selectedClass.name}s for {activeInstance} yet.
+            </p>
+          ) : (
+            leaderboardQuery.data?.entries.map((entry, index) => {
+              const build = rankingsLayoutToBuild(entry.talent_layout);
+              return (
+                <div
+                  key={`${entry.player_guid}-${index}`}
+                  className="flex items-center gap-3 rounded-lg border border-zinc-800 bg-zinc-950/60 p-3"
+                >
+                  <span className={cn(
+                    "w-6 shrink-0 text-center text-sm font-bold tabular-nums",
+                    index === 0 ? "text-amber-300" : index < 3 ? "text-amber-100/80" : "text-zinc-500",
+                  )}>
+                    {index + 1}
+                  </span>
+                  <div className="min-w-0 flex-1">
+                    <p className="truncate text-sm font-bold text-white">
+                      {entry.player_name}
+                      {entry.sub_spec && <span className="ml-1.5 font-medium text-zinc-400">{entry.sub_spec}</span>}
+                    </p>
+                    <p className="truncate text-xs text-zinc-400">
+                      {formatDPS(entry.dps)} DPS
+                      {build && <> · {buildPointsSummary(build)}</>}
+                      {entry.guild_name && <> · {entry.guild_name}</>}
+                    </p>
+                  </div>
+                  <button
+                    type="button"
+                    disabled={!build}
+                    title={build ? `Load ${entry.player_name}'s build into the calculator` : "No talent build detected for this ranking"}
+                    className="shrink-0 rounded-md border border-amber-300/60 bg-amber-400/15 px-2 py-1 text-xs font-bold text-amber-100 transition hover:bg-amber-400/25 disabled:cursor-not-allowed disabled:border-zinc-700 disabled:bg-transparent disabled:text-zinc-600"
+                    onClick={() => loadBuild(entry)}
+                  >
+                    Load
+                  </button>
+                </div>
+              );
+            })
+          )}
+        </div>
+      </SheetContent>
+    </Sheet>
+  );
+}

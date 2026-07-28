@@ -297,6 +297,23 @@ export async function copyTalentBuildUrl(clipboard: BuildUrlClipboard | undefine
   await clipboard.writeText(canonicalTalentBuildUrl(href, ranks, tabs));
 }
 
+/**
+ * Converts a rankings talent_layout ("05230}30200}0000", trees separated by
+ * '}') into the calculator's positional build format ("0523-302", dashes,
+ * trailing zeros trimmed). Returns "" for empty/absent layouts.
+ */
+export function rankingsLayoutToBuild(layout: string | null | undefined): string {
+  if (!layout) return "";
+  const sections = layout.split("}").map((section) => {
+    let last = section.length;
+    while (last > 0 && section[last - 1] === "0") last--;
+    return section.slice(0, last);
+  });
+  let lastTab = sections.length;
+  while (lastTab > 0 && sections[lastTab - 1] === "") lastTab--;
+  return sections.slice(0, lastTab).join("-");
+}
+
 /** Per-tab point totals from a positional build string, e.g. "35003-0503" → "11/8". */
 export function buildPointsSummary(build: string): string {
   if (!build) return "0";

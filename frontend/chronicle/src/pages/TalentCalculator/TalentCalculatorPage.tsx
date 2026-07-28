@@ -7,6 +7,7 @@ import { useSiteConfig } from "@/api/queries";
 import { TalentTreeViewer } from "@/components/ui/TalentTreeViewer/TalentTreeViewer";
 import { useTalentTrees } from "@/components/ui/TalentTreeViewer/useTalentTrees";
 import { MyBuildsDrawer } from "./MyBuildsDrawer";
+import { TopBuildsDrawer } from "./TopBuildsDrawer";
 
 const CLASS_INFO: { id: number; name: string; slug: string }[] = [
   { id: 1, name: "Warrior", slug: "warrior" },
@@ -182,7 +183,11 @@ export function TalentCalculatorPage() {
           mobileHeader={isMobile ? mobileHeader : undefined}
           extraActions={
             !isMobile ? (
-              <MyBuildsDrawer classes={availableClasses} selectedClassId={selectedClassId} />
+              <>
+                {/* Top Builds is desktop-only by design. */}
+                <TopBuildsDrawer selectedClass={selectedClass} />
+                <MyBuildsDrawer classes={availableClasses} selectedClassId={selectedClassId} />
+              </>
             ) : undefined
           }
         />
