@@ -1,5 +1,5 @@
 import { Fragment, useEffect, useMemo, useRef, useState } from "react";
-import { createPortal } from "react-dom";
+import { createPortal, flushSync } from "react-dom";
 import { useSearchParams } from "react-router-dom";
 import { ImageDown, Lock, LockOpen } from "lucide-react";
 import { toCanvas } from "html-to-image";
@@ -731,7 +731,10 @@ export function TalentTreeViewer({
   // to plan a level-20 build. Only meaningful in interactive mode.
   const manuallyLocked = !readOnly && !allocations && isTalentBuildLocked(searchParams);
   // Points are exhausted when the build is manually locked or all points are spent.
-  const pointsExhausted = !readOnly && !allocations && (manuallyLocked || total >= maxPoints);
+  // During PNG export we force exhausted=true so the image always shows the
+  // "locked" visual for unspent talents.
+  const [exportLock, setExportLock] = useState(false);
+  const pointsExhausted = !readOnly && !allocations && (exportLock || manuallyLocked || total >= maxPoints);
 
   // Sync ranks when external inputs (data, URL params, allocations) change.
   // This is a legitimate prop→state synchronization — ranks are also updated
@@ -779,7 +782,10 @@ export function TalentTreeViewer({
   async function exportAsPng() {
     const node = exportRef.current;
     if (!node || exporting) return;
-    setExporting(true);
+    // Force the "locked" visual on all unspent talents before capturing.
+    // flushSync ensures React commits the DOM update synchronously so
+    // toCanvas sees the grayed-out state.
+    flushSync(() => { setExporting(true); setExportLock(true); });
     try {
       const pixelRatio = 2;
       // Icons and backgrounds come from the icon CDN, which serves CORS
@@ -808,6 +814,7 @@ export function TalentTreeViewer({
       console.error("Talent tree PNG export failed", error);
     } finally {
       setExporting(false);
+      setExportLock(false);
     }
   }
 
