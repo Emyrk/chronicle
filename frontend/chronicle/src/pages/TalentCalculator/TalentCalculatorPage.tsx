@@ -66,6 +66,11 @@ export function TalentCalculatorPage() {
   const selectedClass = availableClasses.find((c) => c.slug === classSlug);
   const selectedClassId = selectedClass?.id;
 
+  // Top Builds relies on per-spec rankings. Hide it when this tenant's parse
+  // scoring is disabled or aggregates by class instead of spec.
+  const cohortMode = siteConfig?.tenant?.parse_config?.cohort_mode ?? "spec";
+  const topBuildsAvailable = cohortMode === "spec";
+
   const classTreeData = useMemo(() => {
     if (!talentData || !selectedClassId) return undefined;
     return talentData.classes?.[String(selectedClassId)];
@@ -217,7 +222,7 @@ export function TalentCalculatorPage() {
                   </button>
                 )}
                 {/* Top Builds is desktop-only by design. */}
-                <TopBuildsDrawer selectedClass={selectedClass} onShowAll={showPopularity} />
+                {topBuildsAvailable && <TopBuildsDrawer selectedClass={selectedClass} onShowAll={showPopularity} />}
                 <MyBuildsDrawer classes={availableClasses} selectedClassId={selectedClassId} />
               </>
             ) : undefined
