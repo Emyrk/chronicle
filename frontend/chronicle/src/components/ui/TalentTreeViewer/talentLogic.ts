@@ -74,6 +74,7 @@ export const TALENT_ROW_STRIDE = TALENT_CELL_HEIGHT + TALENT_GRID_GAP;
 export const TALENT_BUILD_PARAM = "build";
 export const TALENT_LOCK_PARAM = "lock";
 export const TALENT_POPULARITY_PARAM = "pop";
+export const TALENT_COMPARE_PARAM = "compare";
 export const TALENT_ARROW_SOURCE_CLEARANCE = 0;
 export const TALENT_ARROW_TARGET_CLEARANCE = 0;
 export const TALENT_ARROW_ELBOW_CLEARANCE = 14;
@@ -361,6 +362,32 @@ export function rankingsLayoutToBuild(layout: string | null | undefined): string
   let lastTab = sections.length;
   while (lastTab > 0 && sections[lastTab - 1] === "") lastTab--;
   return sections.slice(0, lastTab).join("-");
+}
+
+// ─── Build comparison (diff overlay) ──────────────────────────────
+
+export interface TalentDiff {
+  /** Rank in the current build. */
+  yours: number;
+  /** Rank in the compared build. */
+  theirs: number;
+  /** theirs - yours: positive = they have more points here. */
+  delta: number;
+}
+
+/**
+ * Per-talent diff between the current build and a compared build. Only
+ * talents where the ranks differ are present.
+ */
+export function computeBuildDiff(yours: TalentRanks, theirs: TalentRanks): Record<number, TalentDiff> {
+  const out: Record<number, TalentDiff> = {};
+  const ids = new Set([...Object.keys(yours), ...Object.keys(theirs)].map(Number));
+  for (const id of ids) {
+    const a = yours[id] ?? 0;
+    const b = theirs[id] ?? 0;
+    if (a !== b) out[id] = { yours: a, theirs: b, delta: b - a };
+  }
+  return out;
 }
 
 // ─── Build popularity (Top Builds "Show all") ─────────────────────

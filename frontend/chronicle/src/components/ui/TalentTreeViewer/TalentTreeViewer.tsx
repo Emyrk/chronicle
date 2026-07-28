@@ -13,6 +13,7 @@ import type { WoWSpell } from "@emyrk/wow-tooltip-renderer";
 import { resolveSpellDescription, getEnglishText, extractReferencedSpellIds } from "@emyrk/wow-tooltip-renderer";
 import {
   type ClassTalentData,
+  type TalentDiff,
   type TalentEntry,
   type TalentPopularity,
   type TalentPrereqArrow,
@@ -87,6 +88,8 @@ export interface TalentTreeViewerProps {
   mobileHeader?: React.ReactNode;
   /** Per-talent popularity badges (Top Builds "Show all" overlay). */
   popularity?: Record<number, TalentPopularity> | null;
+  /** Per-talent diff badges (compare overlay). Mutually exclusive with popularity. */
+  diff?: Record<number, TalentDiff> | null;
   className?: string;
 }
 
@@ -140,6 +143,7 @@ function TalentTooltipCard({
   loadingSpellDetails,
   lockReasons,
   popularity,
+  diff,
   id,
   className: tooltipClassName,
   position,
@@ -154,6 +158,7 @@ function TalentTooltipCard({
   loadingSpellDetails?: boolean;
   lockReasons: string[];
   popularity?: TalentPopularity;
+  diff?: TalentDiff;
   id: string;
   className: string;
   position?: TalentTooltipPosition;
@@ -172,6 +177,11 @@ function TalentTooltipCard({
       {popularity && (
         <span className="mt-2 block border-t border-amber-300/20 pt-2 text-amber-100/90">
           {popularity.pct}% of the top {popularity.sample} take this · avg {formatPopularityAvg(popularity.avg)} of {talent.maxRank} pts
+        </span>
+      )}
+      {diff && (
+        <span className="mt-2 block border-t border-amber-300/20 pt-2 text-amber-100/90">
+          Yours {diff.yours}/{talent.maxRank} · Theirs {diff.theirs}/{talent.maxRank}
         </span>
       )}
       {!hasRankSpecificDescription && <span className="mt-2 block text-zinc-300">{description}</span>}
@@ -249,7 +259,7 @@ function TalentPrereqArrows({ arrows, ranks, height, talents }: { arrows: Talent
 
 // ─── Talent button ────────────────────────────────────────────────
 
-function TalentButton({ talent, rank, locked, pointsExhausted, talents, ranks, onChange, readOnly, debug, mobile, quickActive, onActivate, popularity }: {
+function TalentButton({ talent, rank, locked, pointsExhausted, talents, ranks, onChange, readOnly, debug, mobile, quickActive, onActivate, popularity, diff }: {
   talent: TalentEntry;
   rank: number;
   locked: boolean;
@@ -268,6 +278,8 @@ function TalentButton({ talent, rank, locked, pointsExhausted, talents, ranks, o
   onActivate?: () => void;
   /** Popularity badge for the Top Builds "Show all" overlay. */
   popularity?: TalentPopularity;
+  /** Diff badge for the compare overlay. */
+  diff?: TalentDiff;
 }) {
   const iconBaseUrl = useIconBaseUrl();
   const maxed = rank >= talent.maxRank;
@@ -439,6 +451,7 @@ function TalentButton({ talent, rank, locked, pointsExhausted, talents, ranks, o
       loadingSpellDetails={loadingSpellDetails}
       lockReasons={lockReasons}
       popularity={popularity}
+      diff={diff}
       className={TALENT_TOOLTIP_CLASS_NAME}
       position={tooltipPosition}
     />
@@ -516,6 +529,17 @@ function TalentButton({ talent, rank, locked, pointsExhausted, talents, ranks, o
       )}>
         {rank}/{talent.maxRank}
       </span>
+      {diff && (
+        <span className={cn(
+          // Same slot as the popularity badge (mutually exclusive overlays).
+          "absolute -top-2.5 left-1/2 z-10 -translate-x-1/2 whitespace-nowrap rounded border px-1 text-[9px] font-bold leading-[13px] shadow-sm",
+          diff.delta > 0
+            ? "border-emerald-300/60 bg-emerald-900/95 text-emerald-200"
+            : "border-red-300/60 bg-red-950/95 text-red-200",
+        )}>
+          {diff.delta > 0 ? `+${diff.delta}` : diff.delta}
+        </span>
+      )}
       {popularity && (
         <>
           <span className={cn(
@@ -563,6 +587,7 @@ function TalentButton({ talent, rank, locked, pointsExhausted, talents, ranks, o
           loadingSpellDetails={loadingSpellDetails}
           lockReasons={lockReasons}
           popularity={popularity}
+          diff={diff}
           className={TALENT_TOOLTIP_SSR_CLASS_NAME}
         />
       ) : tooltipPosition ? createPortal(tooltip, document.body) : null}
@@ -627,6 +652,7 @@ function TalentTab({
   quickActiveTalentId,
   onQuickActivate,
   popularity,
+  diff,
 }: {
   tab: TalentTabData;
   ranks: TalentRanks;
@@ -647,6 +673,8 @@ function TalentTab({
   onQuickActivate?: (talentId: number) => void;
   /** Per-talent popularity badges (Top Builds "Show all" overlay). */
   popularity?: Record<number, TalentPopularity> | null;
+  /** Per-talent diff badges (compare overlay). */
+  diff?: Record<number, TalentDiff> | null;
 }) {
   const iconBaseUrl = useIconBaseUrl();
   const points = useMemo(() => tab.talents.reduce((sum, talent) => sum + (ranks[talent.id] ?? 0), 0), [tab.talents, ranks]);
@@ -805,6 +833,7 @@ function TalentTab({
                           quickActive={quickActiveTalentId === t.id}
                           onActivate={mobile && onQuickActivate ? () => onQuickActivate(t.id) : undefined}
                           popularity={popularity?.[t.id]}
+                          diff={diff?.[t.id]}
                           onChange={(rank) => onRankChange(t, rank)}
                         />
                       )}
@@ -918,6 +947,7 @@ export function TalentTreeViewer({
   extraActions,
   mobileHeader,
   popularity,
+  diff,
   className,
 }: TalentTreeViewerProps) {
   const isMobile = useIsMobile();
@@ -1152,6 +1182,7 @@ export function TalentTreeViewer({
               quickActiveTalentId={quickActiveTalentId}
               onQuickActivate={setQuickActiveTalentId}
               popularity={popularity}
+              diff={diff}
               onRankChange={(talent, rank) => {
                 if (manuallyLocked) {
                   notifyBuildLocked();
@@ -1266,6 +1297,7 @@ export function TalentTreeViewer({
             quickActiveTalentId={quickActiveTalentId}
             onQuickActivate={setQuickActiveTalentId}
             popularity={popularity}
+            diff={diff}
             // A locked build is frozen: no points may be added or removed.
             onRankChange={(talent, rank) => {
               if (manuallyLocked) {

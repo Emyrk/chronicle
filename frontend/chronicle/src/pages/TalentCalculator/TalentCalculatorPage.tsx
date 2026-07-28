@@ -1,16 +1,20 @@
 import { useMemo } from "react";
 import { Link, useParams, Navigate, useSearchParams } from "react-router-dom";
-import { ChevronLeft, EyeOff } from "lucide-react";
+import { ChevronLeft, EyeOff, X } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useIsMobile } from "@/hooks/useIsMobile";
 import { useSiteConfig } from "@/api/queries";
 import { useRankingsEncounters, useRankingsInstances, useRankingsLeaderboard } from "@/api/rankingsQueries";
 import { TalentTreeViewer } from "@/components/ui/TalentTreeViewer/TalentTreeViewer";
 import {
+  TALENT_BUILD_PARAM,
+  TALENT_COMPARE_PARAM,
   type TalentPopularity,
   type TalentPopularitySelection,
   aggregateTalentPopularity,
+  computeBuildDiff,
   decodeTalentBuild,
+  normalizeTalentRanks,
   rankingsLayoutToBuild,
   searchParamsWithTalentPopularity,
   talentPopularitySelection,
@@ -143,11 +147,34 @@ export function TalentCalculatorPage() {
   }, [classTreeData, popularityLeaderboardQuery.data, popularitySource]);
 
   function showPopularity(selection: TalentPopularitySelection) {
-    setSearchParams(searchParamsWithTalentPopularity(searchParams, selection), { replace: true });
+    // Mutually exclusive with the compare overlay (same badge real estate).
+    const next = searchParamsWithTalentPopularity(searchParams, selection);
+    next.delete(TALENT_COMPARE_PARAM);
+    setSearchParams(next, { replace: true });
   }
 
   function hidePopularity() {
     setSearchParams(searchParamsWithTalentPopularity(searchParams, null), { replace: true });
+  }
+
+  // Compare overlay: diff the current build against ?compare=<build>.
+  // URL-encoded so compare links can be shared (and opened on mobile, which
+  // has no compare entry point of its own).
+  const compareBuild = popularitySource ? null : searchParams.get(TALENT_COMPARE_PARAM);
+  const currentBuild = searchParams.get(TALENT_BUILD_PARAM);
+  const diff = useMemo(() => {
+    if (!compareBuild || !classTreeData) return null;
+    const tabs = classTreeData.tabs.map((tab) => tab.talents);
+    return computeBuildDiff(
+      normalizeTalentRanks(tabs, decodeTalentBuild(currentBuild, tabs), maxTalentPoints),
+      normalizeTalentRanks(tabs, decodeTalentBuild(compareBuild, tabs), maxTalentPoints),
+    );
+  }, [compareBuild, currentBuild, classTreeData, maxTalentPoints]);
+
+  function stopComparing() {
+    const next = new URLSearchParams(searchParams);
+    next.delete(TALENT_COMPARE_PARAM);
+    setSearchParams(next, { replace: true });
   }
 
   // Desktop defaults to the first available class when no slug is provided.
@@ -195,13 +222,26 @@ export function TalentCalculatorPage() {
           {selectedClass ? `${selectedClass.name} Talents` : "Talent Calculator"}
         </h1>
       </div>
-      <Link
-        to="/talents"
-        className="inline-flex shrink-0 items-center gap-1 rounded-md border border-amber-300/30 bg-zinc-950/60 px-2.5 py-1.5 text-sm text-amber-100/80 transition hover:border-amber-200/60 hover:text-white"
-      >
-        <ChevronLeft className="h-4 w-4" />
-        Classes
-      </Link>
+      <div className="flex shrink-0 items-center gap-2">
+        {diff && (
+          <button
+            type="button"
+            aria-label="Stop comparing builds"
+            className="inline-flex items-center gap-1 rounded-md border border-emerald-400/50 bg-emerald-500/10 px-2.5 py-1.5 text-sm font-semibold text-emerald-200"
+            onClick={stopComparing}
+          >
+            <X className="h-4 w-4" />
+            Comparing
+          </button>
+        )}
+        <Link
+          to="/talents"
+          className="inline-flex items-center gap-1 rounded-md border border-amber-300/30 bg-zinc-950/60 px-2.5 py-1.5 text-sm text-amber-100/80 transition hover:border-amber-200/60 hover:text-white"
+        >
+          <ChevronLeft className="h-4 w-4" />
+          Classes
+        </Link>
+      </div>
     </div>
   );
 
@@ -267,9 +307,21 @@ export function TalentCalculatorPage() {
           maxLevel={maxLevel}
           mobileHeader={isMobile ? mobileHeader : undefined}
           popularity={popularity}
+          diff={diff}
           extraActions={
             !isMobile ? (
               <>
+                {diff && (
+                  <button
+                    type="button"
+                    title="Stop comparing builds"
+                    className="inline-flex items-center gap-1.5 rounded-md border border-emerald-400/50 bg-emerald-500/10 px-2.5 py-1 text-sm font-semibold text-emerald-200 transition hover:border-emerald-300 hover:bg-emerald-500/20"
+                    onClick={stopComparing}
+                  >
+                    <X className="h-3.5 w-3.5" />
+                    Comparing
+                  </button>
+                )}
                 {popularity && (
                   <button
                     type="button"

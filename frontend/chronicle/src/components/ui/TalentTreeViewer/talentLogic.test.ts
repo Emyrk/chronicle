@@ -4,6 +4,7 @@ import {
   aggregateTalentPopularity,
   buildPointsSummary,
   calculateRequiredPlayerLevel,
+  computeBuildDiff,
   formatPopularityAvg,
   canUseTalent,
   canonicalTalentBuildUrl,
@@ -249,6 +250,24 @@ describe("TalentTreeViewer rankings layout conversion", () => {
 
   it("round-trips through the points summary", () => {
     expect(buildPointsSummary(rankingsLayoutToBuild("05230}30200}0000"))).toBe("10/5");
+  });
+});
+
+describe("TalentTreeViewer build diff", () => {
+  it("reports only differing talents with signed deltas", () => {
+    const diff = computeBuildDiff(
+      { 1: 5, 2: 3, 3: 1 },
+      { 1: 5, 2: 5, 4: 2 },
+    );
+    expect(diff[1]).toBeUndefined();
+    expect(diff[2]).toEqual({ yours: 3, theirs: 5, delta: 2 });
+    expect(diff[3]).toEqual({ yours: 1, theirs: 0, delta: -1 });
+    expect(diff[4]).toEqual({ yours: 0, theirs: 2, delta: 2 });
+  });
+
+  it("returns empty for identical or empty builds", () => {
+    expect(computeBuildDiff({}, {})).toEqual({});
+    expect(computeBuildDiff({ 1: 3 }, { 1: 3 })).toEqual({});
   });
 });
 

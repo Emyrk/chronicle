@@ -15,6 +15,8 @@ import {
 } from "@/components/ui/sheet";
 import {
   TALENT_BUILD_PARAM,
+  TALENT_COMPARE_PARAM,
+  TALENT_POPULARITY_PARAM,
   type TalentPopularitySelection,
   buildPointsSummary,
   rankingsLayoutToBuild,
@@ -115,10 +117,27 @@ export function TopBuildsDrawer({ selectedClass, onShowAll }: {
     if (!build) return;
     const next = new URLSearchParams(searchParams);
     next.set(TALENT_BUILD_PARAM, build);
+    // Loading a build replaces the current one — a live comparison against
+    // it would show an empty diff, so clear it.
+    next.delete(TALENT_COMPARE_PARAM);
     setSearchParams(next, { replace: true });
     setOpen(false);
     toast.success(`Loaded ${entry.player_name}'s build`, {
       description: `${spec} · ${buildPointsSummary(build)} · ${activeInstance}`,
+    });
+  }
+
+  function compareBuild(entry: RankingsEntry) {
+    const build = rankingsLayoutToBuild(entry.talent_layout);
+    if (!build) return;
+    const next = new URLSearchParams(searchParams);
+    next.set(TALENT_COMPARE_PARAM, build);
+    // Mutually exclusive with the popularity overlay.
+    next.delete(TALENT_POPULARITY_PARAM);
+    setSearchParams(next, { replace: true });
+    setOpen(false);
+    toast.success(`Comparing against ${entry.player_name}'s build`, {
+      description: "Green = points they have that you don't, red = yours they skip.",
     });
   }
 
@@ -247,6 +266,7 @@ export function TopBuildsDrawer({ selectedClass, onShowAll }: {
                       {entry.guild_name && <> · {entry.guild_name}</>}
                     </p>
                   </div>
+                  <div className="flex shrink-0 items-center gap-1.5">
                   <button
                     type="button"
                     disabled={!build}
@@ -256,6 +276,16 @@ export function TopBuildsDrawer({ selectedClass, onShowAll }: {
                   >
                     Load
                   </button>
+                  <button
+                    type="button"
+                    disabled={!build}
+                    title={build ? `Compare your current build against ${entry.player_name}'s` : "No talent build detected for this ranking"}
+                    className="rounded-md border border-emerald-400/50 bg-emerald-500/10 px-2 py-1 text-xs font-bold text-emerald-200 transition hover:bg-emerald-500/20 disabled:cursor-not-allowed disabled:border-zinc-700 disabled:bg-transparent disabled:text-zinc-600"
+                    onClick={() => compareBuild(entry)}
+                  >
+                    Compare
+                  </button>
+                  </div>
                 </div>
               );
             })}
