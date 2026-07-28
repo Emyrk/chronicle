@@ -741,14 +741,24 @@ export function TalentTreeViewer({
     try {
       // Icons and backgrounds come from the icon CDN, which serves CORS
       // headers, so html-to-image can inline them as data URLs.
+      // cache: "no-cache" forces revalidation — the browser may have cached
+      // these images from plain <img> loads (no Origin header), and reusing
+      // that cached response for a CORS fetch fails ("cache poisoning").
       const dataUrl = await toPng(node, {
         pixelRatio: 2,
         backgroundColor: "#09090b",
+        fetchRequestInit: { cache: "no-cache" },
+        // Transparent 1x1 pixel so a single unloadable icon doesn't abort
+        // the whole export.
+        imagePlaceholder:
+          "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNkYPhfDwAChwGA60e6kgAAAABJRU5ErkJggg==",
       });
       const link = document.createElement("a");
       link.download = `${data.name.toLowerCase().replace(/\s+/g, "-")}-talents-${total}pts.png`;
       link.href = dataUrl;
       link.click();
+    } catch (error) {
+      console.error("Talent tree PNG export failed", error);
     } finally {
       setExporting(false);
     }
