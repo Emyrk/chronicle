@@ -20,7 +20,7 @@ import (
 )
 
 const (
-	maxUserTalentBuilds    = 50
+	maxUserTalentBuilds    = 25
 	maxTalentBuildNameLen  = 64
 	maxTalentBuildValueLen = 512
 )

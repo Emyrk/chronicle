@@ -34,6 +34,9 @@ export interface TalentClassInfo {
   slug: string;
 }
 
+/** Keep in sync with maxUserTalentBuilds in api/talentbuilds.go. */
+const MAX_SAVED_BUILDS = 25;
+
 function userInitials(email: string): string {
   const local = email.split("@")[0] ?? "";
   return local.slice(0, 2).toUpperCase() || "?";
@@ -62,6 +65,7 @@ export function MyBuildsDrawer({
   const deleteBuild = useDeleteTalentBuild();
 
   const classByID = useMemo(() => new Map(classes.map((c) => [c.id, c])), [classes]);
+  const atBuildLimit = (buildsQuery.data?.length ?? 0) >= MAX_SAVED_BUILDS;
 
   // Current class first, then the rest (greyed out), newest first within each group.
   const sortedBuilds = useMemo(() => {
@@ -76,6 +80,10 @@ export function MyBuildsDrawer({
 
   function saveCurrent() {
     if (!name.trim() || !selectedClassId) return;
+    if (atBuildLimit) {
+      toast.error(`You can save at most ${MAX_SAVED_BUILDS} builds. Delete one to save another.`);
+      return;
+    }
     createBuild.mutate(
       {
         name: name.trim(),
@@ -183,7 +191,13 @@ export function MyBuildsDrawer({
               Save
             </button>
           </form>
-          {!currentBuild && <p className="mt-2 text-xs text-zinc-500">No points spent yet</p>}
+          {atBuildLimit ? (
+            <p className="mt-2 text-xs text-red-400">
+              Build limit reached ({MAX_SAVED_BUILDS}). Delete a build to save another.
+            </p>
+          ) : !currentBuild ? (
+            <p className="mt-2 text-xs text-zinc-500">No points spent yet</p>
+          ) : null}
         </div>
 
         {/* Build list */}
