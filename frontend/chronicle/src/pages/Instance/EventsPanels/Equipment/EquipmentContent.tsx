@@ -18,6 +18,11 @@ import {
 } from "@/components/ui/Tooltip/tooltip";
 import { Link } from "react-router-dom";
 import { TalentTreeViewerLegacy as TalentTreeViewer, type TalentAllocation } from "@/components/ui/TalentTreeViewer/TalentTreeViewer";
+import {
+  parseEquipmentPanelOption,
+  serializeEquipmentPanelOption,
+  type EquipmentSubTab,
+} from "./equipmentOptions";
 
 const SLOT_ORDER = [
   { index: 0, label: "Head" },
@@ -242,11 +247,16 @@ function PlayerTalentsView({
   );
 }
 
-type SubTab = "gear" | "talents";
-
 export function EquipmentContent(props: PanelRenderProps<EquipmentResult>) {
-  const { result, context } = props;
-  const [subTab, setSubTab] = useState<SubTab>("gear");
+  const { result, context, panelOption, setPanelOption } = props;
+  const persistedOption = useMemo(
+    () => parseEquipmentPanelOption(panelOption),
+    [panelOption],
+  );
+  const [localSubTab, setLocalSubTab] = useState<EquipmentSubTab>("gear");
+  const [localSelectedGuid, setLocalSelectedGuid] = useState<string | null>(null);
+  const subTab = setPanelOption ? (persistedOption.subTab ?? "gear") : localSubTab;
+  const selectedGuid = setPanelOption ? persistedOption.playerGuid : localSelectedGuid;
   const { cachedValue } = useCachedValue(
     result,
     (r) => !!r && r.players instanceof Map && r.players.size > 0,
@@ -260,7 +270,6 @@ export function EquipmentContent(props: PanelRenderProps<EquipmentResult>) {
     );
   }, [cachedValue]);
 
-  const [selectedGuid, setSelectedGuid] = useState<string | null>(null);
   const [dropdownOpen, setDropdownOpen] = useState(false);
   const [search, setSearch] = useState("");
   const searchRef = useRef<HTMLInputElement>(null);
@@ -280,14 +289,19 @@ export function EquipmentContent(props: PanelRenderProps<EquipmentResult>) {
     }
   }
 
-  const equippedItemIds = useMemo(() => {
-    if (!selected) return undefined;
-    const ids = new Set<number>();
-    for (const g of selected.gear) {
-      if (g.itemId > 0) ids.add(g.itemId);
-    }
-    return ids;
-  }, [selected]);
+  const selectPlayer = (guid: string) => {
+    setLocalSelectedGuid(guid);
+    setPanelOption?.(serializeEquipmentPanelOption(guid, subTab));
+  };
+
+  const selectSubTab = (tab: EquipmentSubTab) => {
+    setLocalSubTab(tab);
+    setPanelOption?.(serializeEquipmentPanelOption(selected?.guid ?? selectedGuid, tab));
+  };
+
+  const equippedItemIds = selected
+    ? new Set(selected.gear.filter((item) => item.itemId > 0).map((item) => item.itemId))
+    : undefined;
 
   if (!cachedValue || playerList.length === 0) {
     return (
@@ -324,7 +338,7 @@ export function EquipmentContent(props: PanelRenderProps<EquipmentResult>) {
                 setSearch={setSearch}
                 searchRef={searchRef}
                 selectedGuid={selected?.guid ?? null}
-                onSelect={(guid) => { setSelectedGuid(guid); setDropdownOpen(false); setSearch(""); }}
+                onSelect={(guid) => { selectPlayer(guid); setDropdownOpen(false); setSearch(""); }}
                 onClose={() => { setDropdownOpen(false); setSearch(""); }}
               />
             )}
@@ -353,7 +367,7 @@ export function EquipmentContent(props: PanelRenderProps<EquipmentResult>) {
           {(["gear", "talents"] as const).map((tab) => (
             <button
               key={tab}
-              onClick={() => setSubTab(tab)}
+              onClick={() => selectSubTab(tab)}
               className={cn(
                 "px-2 py-1 text-2xs font-medium border-b -mb-px transition-colors capitalize",
                 subTab === tab
