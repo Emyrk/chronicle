@@ -81,6 +81,8 @@ export interface TalentTreeViewerProps {
   compact?: boolean;
   /** Extra controls pinned to the right of the summary bar (e.g. "My Builds"). */
   extraActions?: React.ReactNode;
+  /** Mobile: page header content (title/back) composed into the summary card. */
+  mobileHeader?: React.ReactNode;
   className?: string;
 }
 
@@ -861,6 +863,7 @@ export function TalentTreeViewer({
   readOnly = false,
   compact = false,
   extraActions,
+  mobileHeader,
   className,
 }: TalentTreeViewerProps) {
   const isMobile = useIsMobile();
@@ -1029,6 +1032,87 @@ export function TalentTreeViewer({
     }
   }
 
+  // Mobile interactive layout: one calm card — page header on top, labeled
+  // stats + actions below (see design discussion in PR).
+  if (mobileLayout) {
+    return (
+      <div className={cn("space-y-2", className)}>
+        <div className="overflow-hidden rounded-lg border border-white/10 bg-zinc-950/60">
+          {mobileHeader && <div className="border-b border-white/10 p-4">{mobileHeader}</div>}
+          <div className="flex items-center gap-4 px-4 py-3">
+            <div>
+              <p className="text-[10px] font-semibold uppercase tracking-[0.16em] text-zinc-500">Level</p>
+              <p className="text-lg font-bold leading-tight text-white">{requiredLevel}</p>
+            </div>
+            <div className="h-8 w-px bg-white/10" />
+            {/* Points doubles as the lock toggle, like the desktop chip. */}
+            <button type="button" aria-pressed={manuallyLocked} onClick={toggleLock} className="text-left">
+              <p className="flex items-center gap-1 text-[10px] font-semibold uppercase tracking-[0.16em] text-zinc-500">
+                Points
+                {manuallyLocked ? <Lock className="h-3 w-3 text-amber-300" /> : <LockOpen className="h-3 w-3" />}
+              </p>
+              <p className="text-lg font-bold leading-tight">
+                <span className="text-amber-300">{total}</span>
+                <span className="text-zinc-500">/{maxPoints}</span>
+              </p>
+            </button>
+            <div className="ml-auto flex items-center gap-2">
+              <button
+                type="button"
+                className="inline-flex items-center gap-1.5 rounded-md border border-zinc-600 bg-zinc-900/60 px-3 py-1.5 text-sm font-semibold text-white transition hover:border-zinc-400"
+                onClick={() => void copyBuildLink()}
+              >
+                <Share2 className="h-3.5 w-3.5" />
+                Share
+              </button>
+              <button
+                type="button"
+                disabled={manuallyLocked}
+                className="rounded-md border border-zinc-700 px-3 py-1.5 text-sm font-semibold text-zinc-400 transition hover:border-red-400/60 hover:text-red-300 disabled:cursor-not-allowed disabled:opacity-45"
+                onClick={() => commitRanks({})}
+              >
+                Reset
+              </button>
+            </div>
+          </div>
+        </div>
+        <p className="text-xs text-muted-foreground">Tap to add, hold to remove points.</p>
+        <MobileTreeTabs tabs={data.tabs} ranks={ranks} visibleTabId={visibleTabId} onJump={jumpToTree} />
+        <div ref={exportRef} className={tabGridClassName}>
+          {data.tabs.map((tab) => (
+            <TalentTab
+              key={tab.id}
+              tab={tab}
+              ranks={ranks}
+              readOnly={readOnly}
+              compact={compact}
+              debug={searchParams.get("debug") === "true"}
+              pointsExhausted={pointsExhausted}
+              buildLocked={manuallyLocked}
+              mobile={mobileLayout}
+              quickActiveTalentId={quickActiveTalentId}
+              onQuickActivate={setQuickActiveTalentId}
+              onRankChange={(talent, rank) => {
+                if (manuallyLocked) {
+                  notifyBuildLocked();
+                  return;
+                }
+                commitRanks(updateTalentRank(talent, rank, tab.talents, ranks, { maxPoints }));
+              }}
+              onReset={() => {
+                if (manuallyLocked) {
+                  notifyBuildLocked();
+                  return;
+                }
+                commitRanks(resetTalentTabRanks(tabTalentLists, ranks, tab.talents, maxPoints));
+              }}
+            />
+          ))}
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className={cn("space-y-2", className)}>
       {/* Summary bar — hidden in readOnly mode with allocations */}
@@ -1041,7 +1125,7 @@ export function TalentTreeViewer({
             {!readOnly && (
               <>
                 {isMobile ? (
-                  /* Mobile: icon-only share button; PNG export stays desktop-only. */
+                  /* Mobile (readOnly-less non-mobileLayout fallback): icon-only share. */
                   <button
                     type="button"
                     aria-label="Copy build link"

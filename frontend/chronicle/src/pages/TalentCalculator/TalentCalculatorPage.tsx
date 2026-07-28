@@ -103,27 +103,47 @@ export function TalentCalculatorPage() {
     );
   }
 
+  // Mobile: the page header (title/back) is composed into the viewer's
+  // summary card to keep the top of the page calm.
+  const mobileHeader = (
+    <div>
+      <h1 className="text-2xl font-bold tracking-tight">Talent Calculator</h1>
+      <p className="mt-1 text-sm text-zinc-400">Plan and share class talent builds.</p>
+      <Link
+        to="/talents"
+        className="mt-3 inline-flex items-center gap-1.5 rounded-lg border border-zinc-700/60 bg-zinc-900/40 px-3 py-2 text-sm text-zinc-300 transition hover:border-zinc-500 hover:text-white"
+      >
+        <ChevronLeft className="h-4 w-4" />
+        Back to class select
+      </Link>
+    </div>
+  );
+
   return (
     <div className="container mx-auto px-4 py-4 max-w-7xl">
-      {/* Header */}
-      <div className="mb-3">
-        <h1 className="text-2xl font-bold tracking-tight">Talent Calculator</h1>
-        <p className="mt-1 text-sm text-zinc-400">
-          Plan and share class talent builds.
-        </p>
-      </div>
+      {/* Header — on mobile it lives inside the viewer card instead */}
+      {(!isMobile || !classTreeData) && (
+        <div className="mb-3">
+          <h1 className="text-2xl font-bold tracking-tight">Talent Calculator</h1>
+          <p className="mt-1 text-sm text-zinc-400">
+            Plan and share class talent builds.
+          </p>
+        </div>
+      )}
 
       {/* Class selector — desktop only; mobile uses the dedicated select screen */}
       {isMobile ? (
-        <div className="mb-3">
-          <Link
-            to="/talents"
-            className="inline-flex items-center gap-1.5 rounded-lg border border-zinc-700/60 bg-zinc-900/40 px-3 py-2 text-sm text-zinc-300 transition hover:border-zinc-500 hover:text-white"
-          >
-            <ChevronLeft className="h-4 w-4" />
-            Back to class select
-          </Link>
-        </div>
+        !classTreeData && (
+          <div className="mb-3">
+            <Link
+              to="/talents"
+              className="inline-flex items-center gap-1.5 rounded-lg border border-zinc-700/60 bg-zinc-900/40 px-3 py-2 text-sm text-zinc-300 transition hover:border-zinc-500 hover:text-white"
+            >
+              <ChevronLeft className="h-4 w-4" />
+              Back to class select
+            </Link>
+          </div>
+        )
       ) : (
         <div className="mb-3 flex flex-wrap gap-2">
           {availableClasses.map((cls) => (
@@ -159,6 +179,7 @@ export function TalentCalculatorPage() {
           data={classTreeData}
           maxTalentPoints={maxTalentPoints}
           maxLevel={maxLevel}
+          mobileHeader={isMobile ? mobileHeader : undefined}
           extraActions={
             !isMobile ? (
               <MyBuildsDrawer classes={availableClasses} selectedClassId={selectedClassId} />
