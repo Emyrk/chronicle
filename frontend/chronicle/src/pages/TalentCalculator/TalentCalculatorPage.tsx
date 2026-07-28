@@ -1,12 +1,11 @@
 import { useEffect, useMemo, useState } from "react";
-import { Link, useParams, Navigate, useSearchParams } from "react-router-dom";
+import { Link, useParams, Navigate } from "react-router-dom";
 import { ChevronLeft, EyeOff } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useIsMobile } from "@/hooks/useIsMobile";
 import { useSiteConfig } from "@/api/queries";
 import { TalentTreeViewer } from "@/components/ui/TalentTreeViewer/TalentTreeViewer";
 import {
-  TALENT_BUILD_PARAM,
   type TalentPopularity,
   aggregateTalentPopularity,
   decodeTalentBuild,
@@ -73,16 +72,15 @@ export function TalentCalculatorPage() {
   }, [talentData, selectedClassId]);
 
   const isMobile = useIsMobile();
-  const [searchParams] = useSearchParams();
 
   // Top Builds "Show all" overlay: per-talent popularity across the top-10.
-  // Cleared when the build changes (editing a talent or loading a build).
+  // Persists while editing talents (so it can guide the build); cleared on
+  // class change or via the "Hide popularity" button.
   const [popularity, setPopularity] = useState<Record<number, TalentPopularity> | null>(null);
-  const buildParam = searchParams.get(TALENT_BUILD_PARAM);
   useEffect(() => {
-    // eslint-disable-next-line react-hooks/set-state-in-effect -- intentional: any build/class change dismisses the overlay
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- intentional: the overlay belongs to one class's trees
     setPopularity(null);
-  }, [buildParam, classSlug]);
+  }, [classSlug]);
 
   function showPopularity(builds: string[]) {
     if (!classTreeData) return;
