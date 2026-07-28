@@ -1,4 +1,5 @@
 import { useMemo, useState } from "react";
+import { createPortal } from "react-dom";
 import { useNavigate, useSearchParams } from "react-router-dom";
 import { BookMarked, Save, X } from "lucide-react";
 import { toast } from "sonner";
@@ -45,9 +46,12 @@ function userInitials(email: string): string {
 export function MyBuildsDrawer({
   classes,
   selectedClassId,
+  floating = false,
 }: {
   classes: TalentClassInfo[];
   selectedClassId?: number;
+  /** Render the trigger as a floating action button (mobile). */
+  floating?: boolean;
 }) {
   const { isAuthenticated, isLoading } = useAuth();
   const { data: session } = useSession();
@@ -136,19 +140,37 @@ export function MyBuildsDrawer({
     });
   }
 
+  const trigger = floating ? (
+    <button
+      type="button"
+      disabled={isLoading || !isAuthenticated}
+      aria-label="My Builds"
+      title={!isAuthenticated && !isLoading ? "Log in to save talent builds" : "My Builds"}
+      className="fixed bottom-8 left-8 z-50 flex h-14 w-14 items-center justify-center rounded-full border border-amber-300/50 bg-amber-400/90 text-black shadow-lg transition hover:bg-amber-300 disabled:cursor-not-allowed disabled:opacity-45"
+    >
+      <BookMarked className="h-5 w-5" />
+    </button>
+  ) : (
+    <button
+      type="button"
+      disabled={isLoading || !isAuthenticated}
+      title={!isAuthenticated && !isLoading ? "Log in to save talent builds" : undefined}
+      className="inline-flex items-center gap-1.5 rounded-md border border-amber-300/40 bg-amber-400/10 px-2.5 py-1 text-sm font-bold text-amber-100 transition hover:border-amber-200/70 hover:bg-amber-400/20 disabled:cursor-not-allowed disabled:opacity-45"
+    >
+      <BookMarked className="h-3.5 w-3.5" />
+      My Builds
+    </button>
+  );
+
   return (
     <Sheet open={open} onOpenChange={setOpen}>
-      <SheetTrigger asChild>
-        <button
-          type="button"
-          disabled={isLoading || !isAuthenticated}
-          title={!isAuthenticated && !isLoading ? "Log in to save talent builds" : undefined}
-          className="inline-flex items-center gap-1.5 rounded-md border border-amber-300/40 bg-amber-400/10 px-2.5 py-1 text-sm font-bold text-amber-100 transition hover:border-amber-200/70 hover:bg-amber-400/20 disabled:cursor-not-allowed disabled:opacity-45"
-        >
-          <BookMarked className="h-3.5 w-3.5" />
-          My Builds
-        </button>
-      </SheetTrigger>
+      {/* Floating trigger is portaled to body to avoid fixed-positioning issues
+          inside transformed/overflow ancestors (same as the instance page FABs). */}
+      {floating && typeof document !== "undefined" ? (
+        createPortal(<SheetTrigger asChild>{trigger}</SheetTrigger>, document.body)
+      ) : (
+        <SheetTrigger asChild>{trigger}</SheetTrigger>
+      )}
       <SheetContent side="right" className="flex w-full flex-col gap-0 sm:max-w-md">
         <SheetHeader className="border-b border-white/10">
           <div className="flex items-center gap-3">

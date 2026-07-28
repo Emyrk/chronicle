@@ -7,6 +7,7 @@ import { toast } from "sonner";
 import { cn } from "@/lib/utils";
 import { iconUrl, talentBackgroundUrl } from "@/config/iconUrl";
 import { useIconBaseUrl } from "@/hooks/useDatasetId";
+import { useIsMobile } from "@/hooks/useIsMobile";
 import { useQueries, useQueryClient } from "@tanstack/react-query";
 import type { WoWSpell } from "@emyrk/wow-tooltip-renderer";
 import { resolveSpellDescription, getEnglishText, extractReferencedSpellIds } from "@emyrk/wow-tooltip-renderer";
@@ -706,6 +707,7 @@ export function TalentTreeViewer({
   extraActions,
   className,
 }: TalentTreeViewerProps) {
+  const isMobile = useIsMobile();
   const [searchParams, setSearchParams] = useSearchParams();
   const tabTalentLists = useMemo(() => data.tabs.map((tab) => tab.talents), [data.tabs]);
   const deepestTabRows = useMemo(() => Math.max(...data.tabs.map((tab) => talentGridRows(tab.talents)), 0), [data.tabs]);
@@ -832,19 +834,24 @@ export function TalentTreeViewer({
             </div>
             {!readOnly && (
               <>
-                <button type="button" className="rounded-md border border-primary/50 bg-primary/15 px-2.5 py-1 text-sm font-bold text-white hover:bg-primary/25" onClick={() => void copyBuildLink()}>
-                  Copy link
-                </button>
-                <button
-                  type="button"
-                  disabled={exporting}
-                  title="Download the talent trees as a PNG image"
-                  className="inline-flex items-center gap-1.5 rounded-md border border-primary/50 bg-primary/15 px-2.5 py-1 text-sm font-bold text-white hover:bg-primary/25 disabled:cursor-wait disabled:opacity-60"
-                  onClick={() => void exportAsPng()}
-                >
-                  <ImageDown className="h-3.5 w-3.5" />
-                  {exporting ? "Exporting…" : "Export PNG"}
-                </button>
+                {/* Copy link and PNG export are desktop-only conveniences. */}
+                {!isMobile && (
+                  <>
+                    <button type="button" className="rounded-md border border-primary/50 bg-primary/15 px-2.5 py-1 text-sm font-bold text-white hover:bg-primary/25" onClick={() => void copyBuildLink()}>
+                      Copy link
+                    </button>
+                    <button
+                      type="button"
+                      disabled={exporting}
+                      title="Download the talent trees as a PNG image"
+                      className="inline-flex items-center gap-1.5 rounded-md border border-primary/50 bg-primary/15 px-2.5 py-1 text-sm font-bold text-white hover:bg-primary/25 disabled:cursor-wait disabled:opacity-60"
+                      onClick={() => void exportAsPng()}
+                    >
+                      <ImageDown className="h-3.5 w-3.5" />
+                      {exporting ? "Exporting…" : "Export PNG"}
+                    </button>
+                  </>
+                )}
                 <button
                   type="button"
                   disabled={manuallyLocked}
@@ -879,7 +886,11 @@ export function TalentTreeViewer({
         </div>
       )}
       {!(readOnly && allocations) && !readOnly && (
-        <p className="text-sm text-muted-foreground">Click to add. Right-click or shift-click to remove. Ctrl-click to spend remaining points into a talent. Builds are stored in the URL.</p>
+        <p className="text-sm text-muted-foreground">
+          {isMobile
+            ? "Tap to add, hold to remove points."
+            : "Click to add. Right-click or shift-click to remove. Ctrl-click to spend remaining points into a talent. Builds are stored in the URL."}
+        </p>
       )}
       <div ref={exportRef} className={tabGridClassName}>
         {data.tabs.map((tab) => (
