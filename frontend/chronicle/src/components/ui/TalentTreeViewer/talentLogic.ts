@@ -247,10 +247,22 @@ export function normalizeTalentRanks(tabs: TalentEntry[][], rawRanks: TalentRank
   let ranks: TalentRanks = {};
   for (const talents of tabs) {
     const ordered = [...talents].sort((left, right) => left.tierID - right.tierID || left.columnIndex - right.columnIndex || left.id - right.id);
-    for (const talent of ordered) {
-      const requested = Math.min(rawRanks[talent.id] ?? 0, talent.maxRank);
-      for (let rank = 1; rank <= requested; rank += 1) {
-        ranks = updateTalentRank(talent, rank, talents, ranks, { maxPoints });
+    // Multi-pass replay: a prerequisite can sit in the same tier at a higher
+    // column (e.g. Turtle's Owlkin Frenzy ← Moonkin Form), so a single
+    // ordered pass would reject the dependent talent before its prereq is
+    // applied. Repeat until no talent gains a rank; each pass either makes
+    // progress or terminates, so this is bounded by total ranks.
+    let progressed = true;
+    while (progressed) {
+      progressed = false;
+      for (const talent of ordered) {
+        const requested = Math.min(rawRanks[talent.id] ?? 0, talent.maxRank);
+        for (let rank = (ranks[talent.id] ?? 0) + 1; rank <= requested; rank += 1) {
+          const next = updateTalentRank(talent, rank, talents, ranks, { maxPoints });
+          if (next === ranks) break;
+          ranks = next;
+          progressed = true;
+        }
       }
     }
   }

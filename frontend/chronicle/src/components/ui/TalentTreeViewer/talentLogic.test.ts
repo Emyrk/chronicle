@@ -168,6 +168,43 @@ describe("TalentTreeViewer export filename", () => {
   });
 });
 
+describe("TalentTreeViewer same-tier prerequisite normalization", () => {
+  // Mirrors Turtle's Owlkin Frenzy: the dependent talent sits in the same
+  // tier at a LOWER column than its prerequisite (Moonkin Form), so a
+  // single-pass replay in (tier, column) order would drop its points.
+  const filler = talent({ id: 900, tierID: 0, columnIndex: 0, maxRank: 5 });
+  const filler2 = talent({ id: 901, tierID: 0, columnIndex: 1, maxRank: 5 });
+  const filler3 = talent({ id: 902, tierID: 1, columnIndex: 0, maxRank: 5 });
+  const filler4 = talent({ id: 903, tierID: 2, columnIndex: 0, maxRank: 5 });
+  const filler5 = talent({ id: 904, tierID: 3, columnIndex: 0, maxRank: 5 });
+  const owlkin = talent({ id: 314, tierID: 4, columnIndex: 0, maxRank: 3, prereqTalent: [315] });
+  const moonkin = talent({ id: 315, tierID: 4, columnIndex: 1, maxRank: 1 });
+  const tabTalents = [filler, filler2, filler3, filler4, filler5, owlkin, moonkin];
+
+  it("keeps points in a talent whose same-tier prereq sorts after it", () => {
+    const raw = { 900: 5, 901: 5, 902: 5, 903: 5, 904: 5, 314: 2, 315: 1 };
+    const normalized = normalizeTalentRanks([tabTalents], raw, 51);
+    expect(normalized[314]).toBe(2);
+    expect(normalized[315]).toBe(1);
+    expect(totalTalentPoints(normalized)).toBe(28);
+  });
+
+  it("still drops the dependent talent when the prereq is missing", () => {
+    const raw = { 900: 5, 901: 5, 902: 5, 903: 5, 904: 5, 314: 2 };
+    const normalized = normalizeTalentRanks([tabTalents], raw, 51);
+    expect(normalized[314]).toBeUndefined();
+    expect(totalTalentPoints(normalized)).toBe(25);
+  });
+
+  it("round-trips through encode/decode without losing the dependent talent", () => {
+    const raw = { 900: 5, 901: 5, 902: 5, 903: 5, 904: 5, 314: 2, 315: 1 };
+    const normalized = normalizeTalentRanks([tabTalents], raw, 51);
+    const encoded = encodeTalentBuild(normalized, [tabTalents]);
+    const roundTripped = normalizeTalentRanks([tabTalents], decodeTalentBuild(encoded, [tabTalents]), 51);
+    expect(roundTripped).toEqual(normalized);
+  });
+});
+
 describe("TalentTreeViewer rankings layout conversion", () => {
   it("converts }-separated layouts to dash-separated builds with zeros trimmed", () => {
     expect(rankingsLayoutToBuild("05230}30200}0000")).toBe("0523-302");
