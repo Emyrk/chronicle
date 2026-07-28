@@ -8,6 +8,8 @@ import {
   decodeTalentBuild,
   encodeTalentBuild,
   isTalentBackgroundVisible,
+  isTalentBuildLocked,
+  lockedTalentReasons,
   mergeTalentRankDescriptions,
   normalizeTalentRanks,
   prerequisiteArrowPathData,
@@ -17,6 +19,7 @@ import {
   resetTalentTabRanks,
   rowPointRequirement,
   searchParamsWithTalentBuild,
+  searchParamsWithTalentLock,
   talentTooltipPosition,
   totalTalentPoints,
   updateTalentRank,
@@ -111,6 +114,53 @@ describe("TalentTreeViewer talent locking", () => {
 
     expect(updateTalentRank(second, 1, tabTalents, { 50: 5 }, { maxPoints: 5 })).toEqual({ 50: 5 });
     expect(updateTalentRank(second, 1, tabTalents, { 50: 4 }, { maxPoints: 5 })).toEqual({ 50: 4, 51: 1 });
+  });
+
+  it("clamps a max-rank dump to the remaining point budget", () => {
+    const first = talent({ id: 60, tierID: 0, columnIndex: 0, maxRank: 5 });
+    const second = talent({ id: 61, tierID: 0, columnIndex: 1, maxRank: 5 });
+    const tabTalents = [first, second];
+
+    // Ctrl-click asks for maxRank; only 4 points remain, so 4 are spent.
+    expect(updateTalentRank(second, 5, tabTalents, { 60: 2 }, { maxPoints: 6 })).toEqual({ 60: 2, 61: 4 });
+    // No points remaining: no-op.
+    expect(updateTalentRank(second, 5, tabTalents, { 60: 5 }, { maxPoints: 5 })).toEqual({ 60: 5 });
+    // Without a cap, a dump fills the talent to maxRank.
+    expect(updateTalentRank(second, 5, tabTalents, {})).toEqual({ 61: 5 });
+    // Decreases are unaffected by the budget clamp.
+    expect(updateTalentRank(first, 1, tabTalents, { 60: 5 }, { maxPoints: 5 })).toEqual({ 60: 1 });
+  });
+});
+
+describe("TalentTreeViewer build lock URL state", () => {
+  it("sets and clears the lock param while preserving other params", () => {
+    const locked = searchParamsWithTalentLock(new URLSearchParams("build=505"), true);
+    expect(locked.toString()).toBe("build=505&lock=1");
+    expect(isTalentBuildLocked(locked)).toBe(true);
+
+    const unlocked = searchParamsWithTalentLock(locked, false);
+    expect(unlocked.toString()).toBe("build=505");
+    expect(isTalentBuildLocked(unlocked)).toBe(false);
+  });
+
+  it("only treats lock=1 as locked", () => {
+    expect(isTalentBuildLocked(new URLSearchParams("lock=true"))).toBe(false);
+    expect(isTalentBuildLocked(new URLSearchParams(""))).toBe(false);
+    expect(isTalentBuildLocked(new URLSearchParams("lock=1"))).toBe(true);
+  });
+
+  it("reports exhausted points as a lock reason", () => {
+    const first = talent({ id: 70, tierID: 0, columnIndex: 0, maxRank: 5 });
+    const second = talent({ id: 71, tierID: 1, columnIndex: 0, maxRank: 5 });
+    const tabTalents = [first, second];
+
+    // Otherwise-usable talent locked only because no points remain.
+    expect(lockedTalentReasons(second, tabTalents, { 70: 5 }, true)).toEqual(["No talent points remaining."]);
+    // Exhausted points stack with row requirements.
+    expect(lockedTalentReasons(second, tabTalents, { 70: 3 }, true)).toEqual([
+      "No talent points remaining.",
+      "Spend 5 points in this tree to unlock this row.",
+    ]);
   });
 });
 

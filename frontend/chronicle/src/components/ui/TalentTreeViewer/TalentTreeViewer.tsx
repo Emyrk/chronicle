@@ -1,6 +1,7 @@
 import { Fragment, useEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { useSearchParams } from "react-router-dom";
+import { Lock, LockOpen } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { iconUrl, talentBackgroundUrl } from "@/config/iconUrl";
 import { useIconBaseUrl } from "@/hooks/useDatasetId";
@@ -28,6 +29,7 @@ import {
   copyTalentBuildUrl,
   decodeTalentBuild,
   isTalentBackgroundVisible,
+  isTalentBuildLocked,
   lockedTalentReasons,
   mergeTalentRankDescriptions,
   normalizeTalentRanks,
@@ -37,6 +39,7 @@ import {
   rankDescriptionsForTooltip,
   resetTalentTabRanks,
   searchParamsWithTalentBuild,
+  searchParamsWithTalentLock,
   talentDescription,
   talentGridHeight,
   talentGridRows,
@@ -227,10 +230,12 @@ function TalentPrereqArrows({ arrows, ranks, height, talents }: { arrows: Talent
 
 // ─── Talent button ────────────────────────────────────────────────
 
-function TalentButton({ talent, rank, locked, talents, ranks, onChange, readOnly, debug }: {
+function TalentButton({ talent, rank, locked, pointsExhausted, talents, ranks, onChange, readOnly, debug }: {
   talent: TalentEntry;
   rank: number;
   locked: boolean;
+  /** True when no more points can be spent (max reached or build locked). */
+  pointsExhausted?: boolean;
   talents: TalentEntry[];
   ranks: TalentRanks;
   onChange: (rank: number) => void;
@@ -339,7 +344,7 @@ function TalentButton({ talent, rank, locked, talents, ranks, onChange, readOnly
   const loadingSpellDetails = Boolean(
     tooltipPosition && talent.spellRanks.length > 0 && (rankSpellQueries.some((q) => q.isPending) || refQueries.some((q) => q.isPending))
   );
-  const lockReasons = locked ? lockedTalentReasons(talent, talents, ranks) : [];
+  const lockReasons = locked ? lockedTalentReasons(talent, talents, ranks, pointsExhausted) : [];
 
 
   const showTooltip = () => {
@@ -425,6 +430,7 @@ function TalentButton({ talent, rank, locked, talents, ranks, onChange, readOnly
         if (readOnly) return;
         showTooltip();
         if (event.shiftKey || event.metaKey) onChange(Math.max(0, rank - 1));
+        else if (event.ctrlKey) onChange(talent.maxRank);
         else onChange(Math.min(talent.maxRank, rank + 1));
       }}
       onContextMenu={(event) => {
@@ -488,6 +494,7 @@ function TalentTab({
   onReset,
   debug,
   compact,
+  pointsExhausted,
 }: {
   tab: TalentTabData;
   ranks: TalentRanks;
@@ -496,6 +503,8 @@ function TalentTab({
   onReset: () => void;
   debug?: boolean;
   compact?: boolean;
+  /** True when no more points can be spent (max reached or build locked). */
+  pointsExhausted?: boolean;
 }) {
   const iconBaseUrl = useIconBaseUrl();
   const points = useMemo(() => tab.talents.reduce((sum, talent) => sum + (ranks[talent.id] ?? 0), 0), [tab.talents, ranks]);
@@ -607,7 +616,8 @@ function TalentTab({
                         <TalentButton
                           talent={t}
                           rank={ranks[t.id] ?? 0}
-                          locked={(ranks[t.id] ?? 0) === 0 && !canUseTalent(t, tab.talents, ranks)}
+                          locked={(ranks[t.id] ?? 0) === 0 && (Boolean(pointsExhausted) || !canUseTalent(t, tab.talents, ranks))}
+                          pointsExhausted={pointsExhausted}
                           talents={tab.talents}
                           ranks={ranks}
                           readOnly={readOnly}
@@ -686,6 +696,12 @@ export function TalentTreeViewer({
   const total = useMemo(() => totalTalentPoints(ranks), [ranks]);
   const requiredLevel = useMemo(() => calculateRequiredPlayerLevel(total, flavor), [flavor, total]);
 
+  // Manual lock (stored in the URL): blacks out unspent talents early, e.g.
+  // to plan a level-20 build. Only meaningful in interactive mode.
+  const manuallyLocked = !readOnly && !allocations && isTalentBuildLocked(searchParams);
+  // Points are exhausted when the build is manually locked or all points are spent.
+  const pointsExhausted = !readOnly && !allocations && (manuallyLocked || total >= maxPoints);
+
   // Sync ranks when external inputs (data, URL params, allocations) change.
   // This is a legitimate prop→state synchronization — ranks are also updated
   // by user clicks via commitRanks(), so we can't simply derive them.
@@ -704,6 +720,10 @@ export function TalentTreeViewer({
     if (!readOnly && !allocations) {
       setSearchParams(searchParamsWithTalentBuild(searchParams, nextRanks, tabTalentLists), { replace: true });
     }
+  }
+
+  function toggleLock() {
+    setSearchParams(searchParamsWithTalentLock(searchParams, !manuallyLocked), { replace: true });
   }
 
   async function copyBuildLink() {
@@ -725,12 +745,28 @@ export function TalentTreeViewer({
                 <button type="button" className="rounded-md border border-primary/50 bg-primary/15 px-2.5 py-1 text-sm font-bold text-white hover:bg-primary/25" onClick={() => void copyBuildLink()}>
                   Copy link
                 </button>
-                <button type="button" className="rounded-md border border-red-500/50 bg-red-500/15 px-2.5 py-1 text-sm font-medium text-red-400 hover:bg-red-500/25 hover:text-red-300" onClick={() => commitRanks({})}>Reset {total}/{maxPoints}</button>
+                <button type="button" className="rounded-md border border-red-500/50 bg-red-500/15 px-2.5 py-1 text-sm font-medium text-red-400 hover:bg-red-500/25 hover:text-red-300" onClick={() => commitRanks({})}>Reset</button>
+                <button
+                  type="button"
+                  aria-pressed={manuallyLocked}
+                  aria-label={manuallyLocked ? "Unlock build" : "Lock build"}
+                  title={manuallyLocked ? "Unlock build to spend more points" : "Lock build at the current points"}
+                  className={cn(
+                    "inline-flex items-center gap-1.5 rounded-md border px-2.5 py-1 text-sm font-bold transition",
+                    manuallyLocked
+                      ? "border-amber-300/70 bg-amber-400/20 text-amber-100 hover:bg-amber-400/30"
+                      : "border-zinc-600/70 bg-zinc-900/50 text-zinc-300 hover:border-zinc-400 hover:text-white",
+                  )}
+                  onClick={toggleLock}
+                >
+                  {total}/{maxPoints}
+                  {manuallyLocked ? <Lock className="h-3.5 w-3.5" /> : <LockOpen className="h-3.5 w-3.5" />}
+                </button>
               </>
             )}
           </div>
           {!readOnly && (
-            <p className="text-sm text-muted-foreground text-right">Click to add. Right-click or shift-click to remove. Builds are stored in the URL.</p>
+            <p className="text-sm text-muted-foreground text-right">Click to add. Right-click or shift-click to remove. Ctrl-click to spend remaining points into a talent. Builds are stored in the URL.</p>
           )}
         </div>
       )}
@@ -743,7 +779,8 @@ export function TalentTreeViewer({
             readOnly={readOnly}
             compact={compact}
             debug={searchParams.get("debug") === "true"}
-            onRankChange={(talent, rank) => commitRanks(updateTalentRank(talent, rank, tab.talents, ranks, { maxPoints }))}
+            pointsExhausted={pointsExhausted}
+            onRankChange={(talent, rank) => commitRanks(updateTalentRank(talent, rank, tab.talents, ranks, { maxPoints: manuallyLocked ? total : maxPoints }))}
             onReset={() => commitRanks(resetTalentTabRanks(tabTalentLists, ranks, tab.talents, maxPoints))}
           />
         ))}
