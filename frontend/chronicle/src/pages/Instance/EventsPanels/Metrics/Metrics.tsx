@@ -80,7 +80,7 @@ function MetricsContent() {
         </div>
       </div>
 
-      <div className="min-h-0 flex-1 overflow-auto rounded border">
+      <div className="styled-scrollbar min-h-0 flex-1 overflow-auto rounded border">
         <table className="w-full min-w-[860px] border-collapse">
           <thead>
             <tr className="border-b bg-muted/40 text-left text-[10px] uppercase tracking-wide text-muted-foreground">
