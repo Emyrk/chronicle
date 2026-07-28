@@ -80,6 +80,7 @@ func VanillaCharacterFactories(flavor database.WoWFlavor) []characters.Character
 	if flavor.Has(database.FlavorVanillaPlus) {
 		cres = append(cres,
 			// SM (V+)
+			NewVanillaPlusMograineCharacter,
 			NewVanillaPlusSMSoul,
 			NewVanillaPlusSMSoulHunter,
 			NewVanillaPlusBrotherMicheal,
