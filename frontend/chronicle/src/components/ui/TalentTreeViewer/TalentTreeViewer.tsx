@@ -236,7 +236,7 @@ function TalentPrereqArrows({ arrows, ranks, height, talents }: { arrows: Talent
 
 // ─── Talent button ────────────────────────────────────────────────
 
-function TalentButton({ talent, rank, locked, pointsExhausted, talents, ranks, onChange, readOnly, debug }: {
+function TalentButton({ talent, rank, locked, pointsExhausted, talents, ranks, onChange, readOnly, debug, mobile }: {
   talent: TalentEntry;
   rank: number;
   locked: boolean;
@@ -247,12 +247,15 @@ function TalentButton({ talent, rank, locked, pointsExhausted, talents, ranks, o
   onChange: (rank: number) => void;
   readOnly: boolean;
   debug?: boolean;
+  /** Touch layout: show -/+ quick buttons while the talent is active. */
+  mobile?: boolean;
 }) {
   const iconBaseUrl = useIconBaseUrl();
   const maxed = rank >= talent.maxRank;
   const visualState = talentVisualState(rank, talent.maxRank, locked);
   const tooltipId = `talent-tooltip-${talent.id}`;
   const buttonRef = useRef<HTMLButtonElement>(null);
+  const wrapperRef = useRef<HTMLDivElement>(null);
   const [tooltipPosition, setTooltipPosition] = useState<TalentTooltipPosition | undefined>();
   const rankTexts = talentRankTexts(talent);
 
@@ -387,6 +390,9 @@ function TalentButton({ talent, rank, locked, pointsExhausted, talents, ranks, o
       const target = event.target;
       if (!(target instanceof Node)) return;
       if (buttonRef.current?.contains(target)) return;
+      // On mobile the -/+ quick buttons live in the wrapper next to the
+      // talent; taps on them must not dismiss the active state.
+      if (wrapperRef.current?.contains(target)) return;
       unpinAndHide();
     };
     const closeOnEscape = (event: KeyboardEvent) => {
@@ -418,7 +424,11 @@ function TalentButton({ talent, rank, locked, pointsExhausted, talents, ranks, o
     />
   );
 
-  return (
+  // Mobile quick actions: shown while the talent is active (tapped).
+  const showQuickButtons = Boolean(mobile && !readOnly && tooltipPosition);
+  const quickButtonClass = "pointer-events-auto absolute top-1/2 z-20 flex h-8 w-8 -translate-y-1/2 items-center justify-center rounded-full border text-base font-bold shadow-lg transition disabled:opacity-35";
+
+  const talentButton = (
     <button
       ref={buttonRef}
       type="button"
@@ -488,6 +498,42 @@ function TalentButton({ talent, rank, locked, pointsExhausted, talents, ranks, o
       ) : tooltipPosition ? createPortal(tooltip, document.body) : null}
     </button>
   );
+
+  if (!mobile) return talentButton;
+
+  return (
+    <div ref={wrapperRef} className="relative">
+      {talentButton}
+      {showQuickButtons && (
+        <>
+          <button
+            type="button"
+            aria-label={`Remove point from ${talent.name}`}
+            disabled={rank === 0}
+            className={cn(quickButtonClass, "-left-3 border-red-400/60 bg-zinc-950/95 text-red-300")}
+            onClick={(event) => {
+              event.stopPropagation();
+              onChange(Math.max(0, rank - 1));
+            }}
+          >
+            −
+          </button>
+          <button
+            type="button"
+            aria-label={`Add point to ${talent.name}`}
+            disabled={maxed || locked}
+            className={cn(quickButtonClass, "-right-3 border-emerald-400/60 bg-zinc-950/95 text-emerald-300")}
+            onClick={(event) => {
+              event.stopPropagation();
+              onChange(Math.min(talent.maxRank, rank + 1));
+            }}
+          >
+            +
+          </button>
+        </>
+      )}
+    </div>
+  );
 }
 
 // ─── Talent tab (single tree) ─────────────────────────────────────
@@ -502,6 +548,7 @@ function TalentTab({
   compact,
   pointsExhausted,
   buildLocked,
+  mobile,
 }: {
   tab: TalentTabData;
   ranks: TalentRanks;
@@ -514,6 +561,8 @@ function TalentTab({
   pointsExhausted?: boolean;
   /** True when the build is manually locked — all changes (add/remove) are blocked. */
   buildLocked?: boolean;
+  /** Touch layout: full-bleed card with an upscaled grid. */
+  mobile?: boolean;
 }) {
   const iconBaseUrl = useIconBaseUrl();
   const points = useMemo(() => tab.talents.reduce((sum, talent) => sum + (ranks[talent.id] ?? 0), 0), [tab.talents, ranks]);
@@ -535,10 +584,28 @@ function TalentTab({
     ? (height + TALENT_GRID_GAP * 2) * compactScale
     : undefined;
 
+  // On mobile, upscale the grid to fill the viewport width (same transform
+  // trick as compact, but scaling up). Track the viewport for rotations.
+  const [viewportWidth, setViewportWidth] = useState(() =>
+    typeof window === "undefined" ? 0 : window.innerWidth,
+  );
+  useEffect(() => {
+    if (!mobile || typeof window === "undefined") return undefined;
+    const onResize = () => setViewportWidth(window.innerWidth);
+    window.addEventListener("resize", onResize);
+    return () => window.removeEventListener("resize", onResize);
+  }, [mobile]);
+  // Side gutters keep the edge-column -/+ quick buttons from being cut off
+  // at the screen edges; cap the upscale so tablets don't get comical.
+  const mobileGutter = 16;
+  const mobileScale = mobile
+    ? Math.min(1.6, Math.max(1, (viewportWidth - mobileGutter * 2 - 8) / TALENT_GRID_WIDTH))
+    : undefined;
+
   return (
     <section className={cn(
       "talent-tree-card relative max-w-full self-start overflow-hidden rounded-lg border border-amber-400/20 bg-[radial-gradient(circle_at_top_left,rgba(20,184,166,0.14),transparent_32%),linear-gradient(180deg,rgba(120,83,38,0.16),rgba(9,9,11,0.58))] shadow-2xl shadow-black/30",
-      compact ? "p-2" : "p-4",
+      compact ? "p-2" : mobile ? "rounded-none border-x-0 px-0 py-3" : "p-4",
     )} aria-label={`${tab.name} talent tree`}>
       {showBackground && backgroundUrl && (
         <img
@@ -555,7 +622,7 @@ function TalentTab({
       <div className="absolute inset-x-0 top-0 h-px bg-gradient-to-r from-transparent via-amber-300/40 to-transparent" aria-hidden="true" />
       <div className={cn(
         "flex items-center justify-between rounded-lg border border-white/10 bg-black/30 shadow-inner shadow-black/30",
-        compact ? "mb-1.5 gap-2 p-1.5" : "mb-4 gap-3 p-2",
+        compact ? "mb-1.5 gap-2 p-1.5" : mobile ? "mx-2 mb-3 gap-3 p-2" : "mb-4 gap-3 p-2",
       )}>
         <div className={cn("flex min-w-0 items-center", compact ? "gap-2" : "gap-3")}>
           {!compact && (
@@ -585,13 +652,25 @@ function TalentTab({
       </div>
       <div className={cn(
         "overscroll-x-contain touch-manipulation sm:mx-0 sm:px-0",
-        compact ? "pb-1" : "-mx-4 overflow-x-auto px-4 pb-3",
+        compact ? "pb-1" : mobile ? "pb-2" : "-mx-4 overflow-x-auto px-4 pb-3",
       )} aria-label="Scrollable talent tree grid">
         <div
-          className={cn("relative mx-auto overflow-hidden", compact ? "rounded border border-white/5 bg-black/25" : "rounded-lg border border-white/5 bg-black/25 p-3")}
+          className={cn(
+            "relative mx-auto",
+            // Mobile stays overflow-visible so the -/+ quick buttons are not
+            // clipped at the grid edges.
+            compact ? "overflow-hidden rounded border border-white/5 bg-black/25" : mobile ? "bg-black/25 py-2" : "overflow-hidden rounded-lg border border-white/5 bg-black/25 p-3",
+          )}
           style={compact
             ? { width: `${scaledGridWidth}px`, height: `${scaledGridHeight}px` }
-            : { width: `${TALENT_GRID_WIDTH + TALENT_GRID_GAP * 2}px`, maxWidth: "100%" }
+            : mobile && mobileScale
+              ? {
+                  width: `${TALENT_GRID_WIDTH * mobileScale + mobileGutter * 2}px`,
+                  height: `${height * mobileScale + 16}px`,
+                  paddingLeft: `${mobileGutter}px`,
+                  paddingRight: `${mobileGutter}px`,
+                }
+              : { width: `${TALENT_GRID_WIDTH + TALENT_GRID_GAP * 2}px`, maxWidth: "100%" }
           }
         >
           <div
@@ -603,7 +682,14 @@ function TalentTab({
                   transform: `scale(${compactScale})`,
                   transformOrigin: "top left",
                 }
-              : { width: `${TALENT_GRID_WIDTH}px`, height: `${height}px` }
+              : mobile && mobileScale
+                ? {
+                    width: `${TALENT_GRID_WIDTH}px`,
+                    height: `${height}px`,
+                    transform: `scale(${mobileScale})`,
+                    transformOrigin: "top left",
+                  }
+                : { width: `${TALENT_GRID_WIDTH}px`, height: `${height}px` }
             }
           >
             <TalentPrereqArrows arrows={arrows} ranks={ranks} height={height} talents={tab.talents} />
@@ -631,6 +717,7 @@ function TalentTab({
                           ranks={ranks}
                           readOnly={readOnly}
                           debug={debug}
+                          mobile={mobile}
                           onChange={(rank) => onRankChange(t, rank)}
                         />
                       )}
@@ -711,9 +798,14 @@ export function TalentTreeViewer({
   const [searchParams, setSearchParams] = useSearchParams();
   const tabTalentLists = useMemo(() => data.tabs.map((tab) => tab.talents), [data.tabs]);
   const deepestTabRows = useMemo(() => Math.max(...data.tabs.map((tab) => talentGridRows(tab.talents)), 0), [data.tabs]);
+  // Interactive mobile layout breaks out of the page's px-4 gutter (-mx-4)
+  // so each tree card can use the whole screen width.
+  const mobileLayout = isMobile && !compact && !readOnly;
   const tabGridClassName = compact
     ? "grid min-w-0 gap-2 grid-cols-3"
-    : deepestTabRows > 7 ? "grid min-w-0 gap-4 xl:grid-cols-2 2xl:grid-cols-3" : "grid min-w-0 gap-4 xl:grid-cols-3";
+    : mobileLayout
+      ? "-mx-4 grid min-w-0 gap-3"
+      : deepestTabRows > 7 ? "grid min-w-0 gap-4 xl:grid-cols-2 2xl:grid-cols-3" : "grid min-w-0 gap-4 xl:grid-cols-3";
   const maxPoints = maxTalentPoints;
   const flavor = useMemo(() => ({ maxLevel, maxTalentPoints }), [maxLevel, maxTalentPoints]);
 
@@ -903,6 +995,7 @@ export function TalentTreeViewer({
             debug={searchParams.get("debug") === "true"}
             pointsExhausted={pointsExhausted}
             buildLocked={manuallyLocked}
+            mobile={mobileLayout}
             // A locked build is frozen: no points may be added or removed.
             onRankChange={(talent, rank) => {
               if (manuallyLocked) {
