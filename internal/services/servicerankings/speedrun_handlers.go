@@ -1,6 +1,7 @@
 package servicerankings
 
 import (
+	"context"
 	"net/http"
 	"strconv"
 
@@ -48,15 +49,21 @@ func (s *Service) handleSpeedrunLeaderboard(w http.ResponseWriter, r *http.Reque
 	filterDifficulty := r.URL.Query().Has("difficulty_name")
 	difficultyName := r.URL.Query().Get("difficulty_name")
 
-	rows, err := s.store.SpeedrunLeaderboard(ctx, database.SpeedrunLeaderboardParams{
-		InstanceName:     instanceName,
-		RealmNames:       realmNames,
-		MinPlayers:       minPlayers,
-		MaxPlayers:       maxPlayers,
-		GuildID:          guildID,
-		SinceDays:        sinceDays,
-		FilterDifficulty: filterDifficulty,
-		DifficultyName:   difficultyName,
+	err := s.responses.Serve(w, r, func(ctx context.Context) (any, error) {
+		rows, err := s.store.SpeedrunLeaderboard(ctx, database.SpeedrunLeaderboardParams{
+			InstanceName:     instanceName,
+			RealmNames:       realmNames,
+			MinPlayers:       minPlayers,
+			MaxPlayers:       maxPlayers,
+			GuildID:          guildID,
+			SinceDays:        sinceDays,
+			FilterDifficulty: filterDifficulty,
+			DifficultyName:   difficultyName,
+		})
+		if err != nil {
+			return nil, err
+		}
+		return slice.List(rows, db2sdk.SpeedrunLeaderboardEntry), nil
 	})
 	if err != nil {
 		httpapi.HandleResponseError(ctx, w, err, httpapi.APIError{
@@ -65,10 +72,7 @@ func (s *Service) handleSpeedrunLeaderboard(w http.ResponseWriter, r *http.Reque
 				Detail:  err.Error(),
 			},
 		})
-		return
 	}
-
-	httpapi.Write(ctx, w, http.StatusOK, slice.List(rows, db2sdk.SpeedrunLeaderboardEntry))
 }
 
 // handleSpeedrunInstances returns the list of (instance, difficulty) boards
@@ -223,11 +227,17 @@ func (s *Service) handleSpeedrunGuildClears(w http.ResponseWriter, r *http.Reque
 		}
 	}
 
-	rows, err := s.store.SpeedrunGuildClears(ctx, database.SpeedrunGuildClearsParams{
-		InstanceName:     instanceName,
-		FilterDifficulty: filterDifficulty,
-		DifficultyName:   difficultyName,
-		ResultLimit:      limit,
+	err := s.responses.Serve(w, r, func(ctx context.Context) (any, error) {
+		rows, err := s.store.SpeedrunGuildClears(ctx, database.SpeedrunGuildClearsParams{
+			InstanceName:     instanceName,
+			FilterDifficulty: filterDifficulty,
+			DifficultyName:   difficultyName,
+			ResultLimit:      limit,
+		})
+		if err != nil {
+			return nil, err
+		}
+		return slice.List(rows, db2sdk.SpeedrunGuildClearsEntry), nil
 	})
 	if err != nil {
 		httpapi.HandleResponseError(ctx, w, err, httpapi.APIError{
@@ -236,8 +246,5 @@ func (s *Service) handleSpeedrunGuildClears(w http.ResponseWriter, r *http.Reque
 				Detail:  err.Error(),
 			},
 		})
-		return
 	}
-
-	httpapi.Write(ctx, w, http.StatusOK, slice.List(rows, db2sdk.SpeedrunGuildClearsEntry))
 }

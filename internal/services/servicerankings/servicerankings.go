@@ -2,6 +2,7 @@ package servicerankings
 
 import (
 	"context"
+	"fmt"
 	"log/slog"
 	"net/http"
 	"strconv"
@@ -14,8 +15,11 @@ import (
 	types "github.com/Emyrk/chronicle/combatlog/parser/types"
 	"github.com/Emyrk/chronicle/database"
 	"github.com/Emyrk/chronicle/database/authz"
+	"github.com/Emyrk/chronicle/internal/httpcache"
+	"github.com/Emyrk/chronicle/internal/lrucache"
 	"github.com/Emyrk/chronicle/internal/services"
 	"github.com/Emyrk/chronicle/internal/services/serviceauthz"
+	"github.com/Emyrk/chronicle/internal/services/servicecache"
 	"github.com/Emyrk/chronicle/internal/services/servicechronicle"
 	"github.com/Emyrk/chronicle/internal/services/servicedbstore"
 	"github.com/Emyrk/chronicle/internal/services/servicelogger"
@@ -45,6 +49,11 @@ type Service struct {
 	store    *authz.Authz
 	registry *registry.Registry
 
+	// responses caches rendered JSON bodies for the public read-only
+	// endpoints below. These are the heaviest queries in the app and the
+	// homepage runs several of them on every visit.
+	responses *httpcache.Cache
+
 	// SummaryDispatchWorker fans out per-tenant refresh jobs.
 	SummaryDispatchWorker *WorkerRefreshRankingsSummaries
 	// SummaryTenantWorker refreshes summaries for a single tenant.
@@ -72,6 +81,7 @@ func (s *Service) DependsOn() []string {
 		serviceauthz.OnAuthz(),
 		servicedbstore.OnDatabaseStore(),
 		servicechronicle.OnChronicle(),
+		servicecache.OnCache(),
 	}
 }
 
@@ -105,6 +115,16 @@ func (s *Service) Start(_ context.Context) error {
 		Store:  store,
 		Logger: namedLogger,
 	}
+
+	responses, err := servicecache.NewLoadingCache[[]byte](servicecache.CacheService(s.broker), lrucache.Opts[string, []byte]{
+		Name:     "rankings_responses",
+		Capacity: 512,
+		TTL:      servicecache.TTLRankingsResponses,
+	})
+	if err != nil {
+		return fmt.Errorf("create rankings response cache: %w", err)
+	}
+	s.responses = httpcache.New(responses)
 
 	s.router = chi.NewRouter()
 	s.setupRoutes()
@@ -165,8 +185,37 @@ func (s *Service) setupRoutes() {
 func (s *Service) handleInstances(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 
-	tid := servicetenant.TenantIDFromContext(ctx)
-	rows, err := s.store.RankingsInstanceSummaries(ctx, tid)
+	err := s.responses.Serve(w, r, func(ctx context.Context) (any, error) {
+		tid := servicetenant.TenantIDFromContext(ctx)
+		rows, err := s.store.RankingsInstanceSummaries(ctx, tid)
+		if err != nil {
+			return nil, err
+		}
+
+		out := make([]chroniclesdk.RankingsInstanceSummary, 0, len(rows))
+		for _, row := range rows {
+			summary := chroniclesdk.RankingsInstanceSummary{
+				InstanceName:   row.InstanceName,
+				DifficultyName: row.DifficultyName,
+				MaxPlayers:     row.MaxPlayers,
+				TotalKills:     row.TotalKills,
+			}
+
+			// TopPlayers is JSONB ([]byte) from the summary table.
+			if len(row.TopPlayers) > 0 {
+				summary.TopPlayers = chroniclesdk.TopPlayersFromJSON(row.TopPlayers)
+				for i := range summary.TopPlayers {
+					summary.TopPlayers[i].PlayerClass = normalizeClassName(summary.TopPlayers[i].PlayerClass)
+				}
+			}
+			if summary.TopPlayers == nil {
+				summary.TopPlayers = []chroniclesdk.RankingsInstanceTopPlayer{}
+			}
+
+			out = append(out, summary)
+		}
+		return out, nil
+	})
 	if err != nil {
 		httpapi.HandleResponseError(ctx, w, err, httpapi.APIError{
 			Response: chroniclesdk.Response{
@@ -174,33 +223,7 @@ func (s *Service) handleInstances(w http.ResponseWriter, r *http.Request) {
 				Detail:  err.Error(),
 			},
 		})
-		return
 	}
-
-	out := make([]chroniclesdk.RankingsInstanceSummary, 0, len(rows))
-	for _, row := range rows {
-		summary := chroniclesdk.RankingsInstanceSummary{
-			InstanceName:   row.InstanceName,
-			DifficultyName: row.DifficultyName,
-			MaxPlayers:     row.MaxPlayers,
-			TotalKills:     row.TotalKills,
-		}
-
-		// TopPlayers is JSONB ([]byte) from the summary table.
-		if len(row.TopPlayers) > 0 {
-			summary.TopPlayers = chroniclesdk.TopPlayersFromJSON(row.TopPlayers)
-			for i := range summary.TopPlayers {
-				summary.TopPlayers[i].PlayerClass = normalizeClassName(summary.TopPlayers[i].PlayerClass)
-			}
-		}
-		if summary.TopPlayers == nil {
-			summary.TopPlayers = []chroniclesdk.RankingsInstanceTopPlayer{}
-		}
-
-		out = append(out, summary)
-	}
-
-	httpapi.Write(ctx, w, http.StatusOK, out)
 }
 
 // handleEncounters returns encounters available in rankings for one instance.
@@ -217,7 +240,22 @@ func (s *Service) handleEncounters(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	rows, err := s.store.RankingsEncounterList(ctx, instanceName)
+	err := s.responses.Serve(w, r, func(ctx context.Context) (any, error) {
+		rows, err := s.store.RankingsEncounterList(ctx, instanceName)
+		if err != nil {
+			return nil, err
+		}
+
+		out := make([]chroniclesdk.RankingsEncounterSummary, 0, len(rows))
+		for _, row := range rows {
+			out = append(out, chroniclesdk.RankingsEncounterSummary{
+				EncounterName: row.EncounterName,
+				TotalKills:    row.TotalKills,
+				TopDPS:        row.TopDps,
+			})
+		}
+		return out, nil
+	})
 	if err != nil {
 		httpapi.HandleResponseError(ctx, w, err, httpapi.APIError{
 			Response: chroniclesdk.Response{
@@ -225,19 +263,7 @@ func (s *Service) handleEncounters(w http.ResponseWriter, r *http.Request) {
 				Detail:  err.Error(),
 			},
 		})
-		return
 	}
-
-	out := make([]chroniclesdk.RankingsEncounterSummary, 0, len(rows))
-	for _, row := range rows {
-		out = append(out, chroniclesdk.RankingsEncounterSummary{
-			EncounterName: row.EncounterName,
-			TotalKills:    row.TotalKills,
-			TopDPS:        row.TopDps,
-		})
-	}
-
-	httpapi.Write(ctx, w, http.StatusOK, out)
 }
 
 // handleLeaderboard returns paginated DPS rankings with filters.
@@ -274,20 +300,67 @@ func (s *Service) handleLeaderboard(w http.ResponseWriter, r *http.Request) {
 		classParam = string(db2sdk.HeroClassToDB(types.HeroClasses(classParam)))
 	}
 
-	rows, err := s.store.RankingsLeaderboard(ctx, database.RankingsLeaderboardParams{
-		InstanceNames:    splitCSV(q.Get("instance_names")),
-		EncounterNames:   splitCSV(q.Get("encounter_names")),
-		DifficultyNames:  splitCSV(q.Get("difficulty_names")),
-		RealmNames:       splitCSV(q.Get("realm_names")),
-		Class:            classParam,
-		Spec:             q.Get("spec"),
-		Role:             q.Get("role"),
-		SinceDays:        sinceDays,
-		HideUnknowns:     q.Get("hide_unknowns") == "true",
-		Metric:           normalizeMetric(q.Get("metric")),
-		FilterMaxPlayers: parseMaxPlayers(q.Get("max_players")),
-		QueryLimit:       limit,
-		QueryOffset:      offset,
+	err := s.responses.Serve(w, r, func(ctx context.Context) (any, error) {
+		rows, err := s.store.RankingsLeaderboard(ctx, database.RankingsLeaderboardParams{
+			InstanceNames:    splitCSV(q.Get("instance_names")),
+			EncounterNames:   splitCSV(q.Get("encounter_names")),
+			DifficultyNames:  splitCSV(q.Get("difficulty_names")),
+			RealmNames:       splitCSV(q.Get("realm_names")),
+			Class:            classParam,
+			Spec:             q.Get("spec"),
+			Role:             q.Get("role"),
+			SinceDays:        sinceDays,
+			HideUnknowns:     q.Get("hide_unknowns") == "true",
+			Metric:           normalizeMetric(q.Get("metric")),
+			FilterMaxPlayers: parseMaxPlayers(q.Get("max_players")),
+			QueryLimit:       limit,
+			QueryOffset:      offset,
+		})
+		if err != nil {
+			return nil, err
+		}
+
+		var totalCount int64
+		entries := make([]chroniclesdk.RankingsEntry, 0, len(rows))
+		for _, row := range rows {
+			totalCount = row.TotalCount
+			entry := chroniclesdk.RankingsEntry{
+				EncounterName:  row.EncounterName,
+				InstanceName:   row.InstanceName,
+				PlayerGUID:     row.PlayerGuid,
+				PlayerName:     row.PlayerName,
+				PlayerClass:    normalizeClassName(row.PlayerClass),
+				PlayerSpec:     row.PlayerSpec,
+				PlayerRole:     row.PlayerRole,
+				PlayerLevel:    row.PlayerLevel,
+				DifficultyName: row.DifficultyName,
+				MaxPlayers:     row.MaxPlayers,
+				RealmID:        row.RealmID,
+				RealmName:      row.RealmName,
+				GuildName:      row.GuildName,
+				DamageDone:     row.DamageDone,
+				HealingDone:    row.HealingDone,
+				AbsorbedDone:   row.AbsorbedDone,
+				DurationSecs:   row.DurationSecs,
+				DPS:            row.Dps,
+				HPS:            row.Hps,
+				LogHashedSlug:  row.LogHashedSlug,
+				KilledAt:       row.KilledAt.Time,
+			}
+			if row.AvgIlvl > 0 {
+				v := row.AvgIlvl
+				entry.AvgIlvl = &v
+			}
+			if row.TalentSubSpec != "" {
+				entry.SubSpec = &row.TalentSubSpec
+			}
+			entries = append(entries, entry)
+		}
+
+		return chroniclesdk.RankingsLeaderboardResponse{
+			Entries:    entries,
+			TotalCount: totalCount,
+		}, nil
 	})
 	if err != nil {
 		httpapi.HandleResponseError(ctx, w, err, httpapi.APIError{
@@ -296,50 +369,7 @@ func (s *Service) handleLeaderboard(w http.ResponseWriter, r *http.Request) {
 				Detail:  err.Error(),
 			},
 		})
-		return
 	}
-
-	var totalCount int64
-	entries := make([]chroniclesdk.RankingsEntry, 0, len(rows))
-	for _, row := range rows {
-		totalCount = row.TotalCount
-		entry := chroniclesdk.RankingsEntry{
-			EncounterName:  row.EncounterName,
-			InstanceName:   row.InstanceName,
-			PlayerGUID:     row.PlayerGuid,
-			PlayerName:     row.PlayerName,
-			PlayerClass:    normalizeClassName(row.PlayerClass),
-			PlayerSpec:     row.PlayerSpec,
-			PlayerRole:     row.PlayerRole,
-			PlayerLevel:    row.PlayerLevel,
-			DifficultyName: row.DifficultyName,
-			MaxPlayers:     row.MaxPlayers,
-			RealmID:        row.RealmID,
-			RealmName:      row.RealmName,
-			GuildName:      row.GuildName,
-			DamageDone:     row.DamageDone,
-			HealingDone:    row.HealingDone,
-			AbsorbedDone:   row.AbsorbedDone,
-			DurationSecs:   row.DurationSecs,
-			DPS:            row.Dps,
-			HPS:            row.Hps,
-			LogHashedSlug:  row.LogHashedSlug,
-			KilledAt:       row.KilledAt.Time,
-		}
-		if row.AvgIlvl > 0 {
-			v := row.AvgIlvl
-			entry.AvgIlvl = &v
-		}
-		if row.TalentSubSpec != "" {
-			entry.SubSpec = &row.TalentSubSpec
-		}
-		entries = append(entries, entry)
-	}
-
-	httpapi.Write(ctx, w, http.StatusOK, chroniclesdk.RankingsLeaderboardResponse{
-		Entries:    entries,
-		TotalCount: totalCount,
-	})
 }
 
 // handleStats returns box plot statistics per class/spec.
@@ -354,16 +384,36 @@ func (s *Service) handleStats(w http.ResponseWriter, r *http.Request) {
 		sinceDays = periodToDays(v)
 	}
 
-	rows, err := s.store.RankingsBoxPlotStats(ctx, database.RankingsBoxPlotStatsParams{
-		InstanceNames:    splitCSV(q.Get("instance_names")),
-		EncounterNames:   splitCSV(q.Get("encounter_names")),
-		DifficultyNames:  splitCSV(q.Get("difficulty_names")),
-		RealmNames:       splitCSV(q.Get("realm_names")),
-		Role:             q.Get("role"),
-		SinceDays:        sinceDays,
-		Metric:           normalizeMetric(q.Get("metric")),
-		GroupByClass:     q.Get("group_by_class") == "true",
-		FilterMaxPlayers: parseMaxPlayers(q.Get("max_players")),
+	err := s.responses.Serve(w, r, func(ctx context.Context) (any, error) {
+		rows, err := s.store.RankingsBoxPlotStats(ctx, database.RankingsBoxPlotStatsParams{
+			InstanceNames:    splitCSV(q.Get("instance_names")),
+			EncounterNames:   splitCSV(q.Get("encounter_names")),
+			DifficultyNames:  splitCSV(q.Get("difficulty_names")),
+			RealmNames:       splitCSV(q.Get("realm_names")),
+			Role:             q.Get("role"),
+			SinceDays:        sinceDays,
+			Metric:           normalizeMetric(q.Get("metric")),
+			GroupByClass:     q.Get("group_by_class") == "true",
+			FilterMaxPlayers: parseMaxPlayers(q.Get("max_players")),
+		})
+		if err != nil {
+			return nil, err
+		}
+
+		out := make([]chroniclesdk.RankingsBoxPlotStats, 0, len(rows))
+		for _, row := range rows {
+			out = append(out, chroniclesdk.RankingsBoxPlotStats{
+				PlayerClass: normalizeClassName(row.PlayerClass),
+				PlayerSpec:  row.PlayerSpec,
+				MinDPS:      row.MinDps,
+				Q1DPS:       row.Q1Dps,
+				MedianDPS:   row.MedianDps,
+				Q3DPS:       row.Q3Dps,
+				MaxDPS:      row.MaxDps,
+				Count:       row.Count,
+			})
+		}
+		return out, nil
 	})
 	if err != nil {
 		httpapi.HandleResponseError(ctx, w, err, httpapi.APIError{
@@ -372,24 +422,7 @@ func (s *Service) handleStats(w http.ResponseWriter, r *http.Request) {
 				Detail:  err.Error(),
 			},
 		})
-		return
 	}
-
-	out := make([]chroniclesdk.RankingsBoxPlotStats, 0, len(rows))
-	for _, row := range rows {
-		out = append(out, chroniclesdk.RankingsBoxPlotStats{
-			PlayerClass: normalizeClassName(row.PlayerClass),
-			PlayerSpec:  row.PlayerSpec,
-			MinDPS:      row.MinDps,
-			Q1DPS:       row.Q1Dps,
-			MedianDPS:   row.MedianDps,
-			Q3DPS:       row.Q3Dps,
-			MaxDPS:      row.MaxDps,
-			Count:       row.Count,
-		})
-	}
-
-	httpapi.Write(ctx, w, http.StatusOK, out)
 }
 
 // handleRealms returns the list of realm names that have DPS ranking data.

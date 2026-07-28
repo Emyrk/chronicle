@@ -1,6 +1,7 @@
 package api
 
 import (
+	"context"
 	"net/http"
 
 	"github.com/Emyrk/chronicle/api/chroniclesdk"
@@ -18,7 +19,20 @@ import (
 func (api *API) SiteStats(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 
-	row, err := api.Opts.Zed.SiteStats(ctx)
+	w.Header().Set("Cache-Control", "public, max-age=1800")
+
+	err := api.siteStats.Serve(w, r, func(ctx context.Context) (any, error) {
+		row, err := api.Opts.Zed.SiteStats(ctx)
+		if err != nil {
+			return nil, err
+		}
+		return chroniclesdk.SiteStats{
+			LogsParsed:     row.LogsParsed,
+			PlayersTracked: row.PlayersTracked,
+			Guilds:         row.GuildCount,
+			BossKills:      row.BossKills,
+		}, nil
+	})
 	if err != nil {
 		httpapi.HandleResponseError(ctx, w, err, httpapi.APIError{
 			Response: chroniclesdk.Response{
@@ -26,14 +40,5 @@ func (api *API) SiteStats(w http.ResponseWriter, r *http.Request) {
 				Detail:  err.Error(),
 			},
 		})
-		return
 	}
-
-	w.Header().Set("Cache-Control", "public, max-age=1800")
-	httpapi.Write(ctx, w, http.StatusOK, chroniclesdk.SiteStats{
-		LogsParsed:     row.LogsParsed,
-		PlayersTracked: row.PlayersTracked,
-		Guilds:         row.GuildCount,
-		BossKills:      row.BossKills,
-	})
 }

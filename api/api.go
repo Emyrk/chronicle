@@ -29,6 +29,8 @@ import (
 	"github.com/Emyrk/chronicle/database/pubsub"
 	"github.com/Emyrk/chronicle/database/storage"
 	"github.com/Emyrk/chronicle/frontend"
+	"github.com/Emyrk/chronicle/internal/httpcache"
+	"github.com/Emyrk/chronicle/internal/lrucache"
 	"github.com/Emyrk/chronicle/internal/services/serviceapplication"
 	"github.com/Emyrk/chronicle/internal/services/servicecache"
 	"github.com/Emyrk/chronicle/internal/services/servicedataset"
@@ -93,6 +95,10 @@ type API struct {
 	Queues         *riverqueue.Queues
 	Zed            *authz.Authz
 	discoveryStats discoveryStatsCache
+
+	// siteStats caches the rendered /api/v1/stats body. The query is four
+	// unbounded COUNT(*)s and the homepage requests it on every visit.
+	siteStats *httpcache.Cache
 }
 
 func New(ctx context.Context, opts Options) (*API, error) {
@@ -134,14 +140,23 @@ func New(ctx context.Context, opts Options) (*API, error) {
 		return nil, err
 	}
 
-	return &API{
-		Opts:        &opts,
-		AppContext:  ctx,
-		Auth:        service,
-		Chronicle:   opts.Chronicle,
-		Queues:      opts.RiverQueue,
-		Zed:         opts.Zed,
+	siteStatsCache, err := servicecache.NewLoadingCache[[]byte](opts.CacheSvc, lrucache.Opts[string, []byte]{
+		Name:     "site_stats_responses",
+		Capacity: 64,
+		TTL:      servicecache.TTLSiteStats,
+	})
+	if err != nil {
+		return nil, err
+	}
 
+	return &API{
+		Opts:       &opts,
+		AppContext: ctx,
+		Auth:       service,
+		Chronicle:  opts.Chronicle,
+		Queues:     opts.RiverQueue,
+		Zed:        opts.Zed,
+		siteStats:  httpcache.New(siteStatsCache),
 	}, nil
 }
 

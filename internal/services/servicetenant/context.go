@@ -59,3 +59,10 @@ func isBypass(ctx context.Context) bool {
 	v, _ := ctx.Value(tenantBypassKey{}).(bool)
 	return v
 }
+
+// IsAdminBypass reports whether the context skips RLS tenant filtering.
+// Callers that cache query results per tenant must consult this: bypassed
+// results span every tenant and cannot be shared with tenant-scoped traffic.
+func IsAdminBypass(ctx context.Context) bool {
+	return isBypass(ctx)
+}
