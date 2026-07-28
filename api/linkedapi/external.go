@@ -1,0 +1,206 @@
+package linkedapi
+
+import (
+	"database/sql"
+	"errors"
+	"net/http"
+	"time"
+
+	"github.com/google/uuid"
+
+	"github.com/Emyrk/chronicle/api/chronauth"
+	"github.com/Emyrk/chronicle/api/chroniclesdk"
+	"github.com/Emyrk/chronicle/api/db2sdk"
+	"github.com/Emyrk/chronicle/api/httpapi"
+	"github.com/Emyrk/chronicle/database"
+	"github.com/Emyrk/chronicle/internal/services/servicetenant"
+	"github.com/Emyrk/chronicle/internal/services/zugzuglink"
+)
+
+// externalSyncCooldown is the minimum time between external verification
+// syncs per user per provider.
+const externalSyncCooldown = 5 * time.Minute
+
+// zugzugRealmName is the realm characters from zug-zug providers live on.
+// TODO: remove once the provider includes the realm in its response.
+const zugzugRealmName = "Eversong Wilds"
+
+// SyncExternal links the authenticated user's characters using the tenant's
+// external verification provider. The provider verifies players via Discord,
+// so the user must have a Discord identity on their account.
+func (h *Handler) SyncExternal(w http.ResponseWriter, r *http.Request) {
+	ctx := r.Context()
+	state := chronauth.AuthenticationState(r)
+	userID := state.Claims.Subject
+
+	tenant := servicetenant.TenantFromContext(ctx)
+	if tenant == nil {
+		httpapi.Write(ctx, w, http.StatusNotFound, chroniclesdk.Response{
+			Message: "External verification is not available here",
+		})
+		return
+	}
+	config := chroniclesdk.ParseExternalVerification(tenant.ExternalVerification)
+	if config == nil || config.Type != zugzuglink.Type {
+		httpapi.Write(ctx, w, http.StatusNotFound, chroniclesdk.Response{
+			Message: "External verification is not enabled for this site",
+		})
+		return
+	}
+	client := zugzuglink.New(config.URL, config.Secret)
+	source := client.Source()
+
+	// The provider identifies players by Discord ID.
+	authLink, err := h.zed.GetUserAuthLinkByUserIDAndProvider(ctx, database.GetUserAuthLinkByUserIDAndProviderParams{
+		UserID:   userID,
+		Provider: "discord",
+	})
+	if err != nil {
+		httpapi.HandleResponseError(ctx, w, err, httpapi.APIError{
+			Response: chroniclesdk.Response{Message: "Your account is not connected to Discord"},
+			Status:   http.StatusForbidden,
+		})
+		return
+	}
+
+	// Rate limit: once per cooldown per user per provider. The timestamp is
+	// recorded before the outbound request so failures also count, keeping a
+	// broken provider from being hammered.
+	sync, err := h.zed.GetExternalCharacterLinkSync(ctx, database.GetExternalCharacterLinkSyncParams{
+		UserID: userID,
+		Source: source,
+	})
+	if err == nil && time.Since(sync.LastSyncedAt.Time) < externalSyncCooldown {
+		retryIn := externalSyncCooldown - time.Since(sync.LastSyncedAt.Time)
+		w.Header().Set("Retry-After", retryIn.Round(time.Second).String())
+		httpapi.Write(ctx, w, http.StatusTooManyRequests, chroniclesdk.Response{
+			Message: "Please wait a few minutes before syncing again",
+		})
+		return
+	}
+	if err != nil && !errors.Is(err, sql.ErrNoRows) {
+		httpapi.InternalServerError(w, err)
+		return
+	}
+	if err := h.zed.UpsertExternalCharacterLinkSync(ctx, database.UpsertExternalCharacterLinkSyncParams{
+		UserID: userID,
+		Source: source,
+	}); err != nil {
+		httpapi.InternalServerError(w, err)
+		return
+	}
+
+	verification, err := client.FetchByDiscordID(ctx, authLink.LinkedID)
+	if err != nil {
+		httpapi.Write(ctx, w, http.StatusBadGateway, chroniclesdk.Response{
+			Message: "The verification provider could not be reached, try again later",
+			Detail:  err.Error(),
+		})
+		return
+	}
+
+	if !verification.Verified {
+		httpapi.Write(ctx, w, http.StatusOK, chroniclesdk.ExternalSyncResponse{
+			Verified:  false,
+			Linked:    []chroniclesdk.LinkedCharacter{},
+			Conflicts: []string{},
+			Unmatched: []string{},
+		})
+		return
+	}
+
+	realm, err := h.zed.GetWoWServerRealmByName(ctx, zugzugRealmName)
+	if err != nil {
+		httpapi.InternalServerError(w, err)
+		return
+	}
+
+	// Preserve the primary flag across the delete/re-add cycle.
+	deleted, err := h.zed.DeleteUserCharacterLinksByUserAndSource(ctx, database.DeleteUserCharacterLinksByUserAndSourceParams{
+		UserID:     userID,
+		LinkSource: source,
+	})
+	if err != nil {
+		httpapi.InternalServerError(w, err)
+		return
+	}
+	previousPrimary := map[string]bool{}
+	for _, link := range deleted {
+		if link.IsPrimary {
+			previousPrimary[link.CharacterGuid.String()] = true
+		}
+	}
+
+	resp := chroniclesdk.ExternalSyncResponse{
+		Verified:  true,
+		Linked:    []chroniclesdk.LinkedCharacter{},
+		Conflicts: []string{},
+		Unmatched: []string{},
+	}
+	for _, character := range verification.Characters {
+		// Match by name on the provider's realm. Names are the only identity
+		// the provider gives us; game_players is keyed by GUID.
+		player, err := h.zed.GetGamePlayerByGUID(ctx, database.GetGamePlayerByGUIDParams{
+			RealmID: realm.ID,
+			Name:    character.Name,
+		})
+		if errors.Is(err, sql.ErrNoRows) {
+			resp.Unmatched = append(resp.Unmatched, character.Name)
+			continue
+		}
+		if err != nil {
+			httpapi.InternalServerError(w, err)
+			return
+		}
+
+		_, err = h.zed.InsertUserCharacterLink(ctx, database.InsertUserCharacterLinkParams{
+			UserID:        userID,
+			CharacterGuid: player.ID,
+			RealmID:       realm.ID,
+			LinkedBy:      uuid.NullUUID{UUID: userID, Valid: true},
+			LinkSource:    source,
+		})
+		if database.IsUniqueViolation(err, database.UniqueUserCharacterLinksCharacterGuidRealmIDKey) {
+			existing, getErr := h.zed.GetUserCharacterLink(ctx, database.GetUserCharacterLinkParams{
+				CharacterGuid: player.ID,
+				RealmID:       realm.ID,
+			})
+			if getErr == nil && existing.UserID == userID {
+				// Already linked to this user (e.g. manually) — fine.
+				continue
+			}
+			resp.Conflicts = append(resp.Conflicts, character.Name)
+			continue
+		}
+		if err != nil {
+			httpapi.InternalServerError(w, err)
+			return
+		}
+
+		if previousPrimary[player.ID.String()] {
+			_, err := h.zed.SetPrimaryUserCharacter(ctx, database.SetPrimaryUserCharacterParams{
+				UserID:        userID,
+				CharacterGuid: player.ID,
+				RealmID:       realm.ID,
+			})
+			if err != nil && !errors.Is(err, sql.ErrNoRows) {
+				httpapi.InternalServerError(w, err)
+				return
+			}
+		}
+	}
+
+	// Return the fresh links joined with player data.
+	rows, err := h.zed.GetUserCharacterLinks(ctx, userID)
+	if err != nil {
+		httpapi.InternalServerError(w, err)
+		return
+	}
+	for _, row := range rows {
+		if row.LinkSource == source {
+			resp.Linked = append(resp.Linked, db2sdk.LinkedCharacter(row))
+		}
+	}
+
+	httpapi.Write(ctx, w, http.StatusOK, resp)
+}

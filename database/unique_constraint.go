@@ -38,6 +38,7 @@ const (
 	UniqueDeploymentInfoPkey                           UniqueConstraint = "deployment_info_pkey"                                // ALTER TABLE ONLY deployment_info ADD CONSTRAINT deployment_info_pkey PRIMARY KEY (id);
 	UniqueEncounterDpsRankingsEncounterIDPlayerGuidKey UniqueConstraint = "encounter_dps_rankings_encounter_id_player_guid_key" // ALTER TABLE ONLY encounter_dps_rankings ADD CONSTRAINT encounter_dps_rankings_encounter_id_player_guid_key UNIQUE (encounter_id, player_guid);
 	UniqueEncounterDpsRankingsPkey                     UniqueConstraint = "encounter_dps_rankings_pkey"                         // ALTER TABLE ONLY encounter_dps_rankings ADD CONSTRAINT encounter_dps_rankings_pkey PRIMARY KEY (id);
+	UniqueExternalCharacterLinkSyncsPkey               UniqueConstraint = "external_character_link_syncs_pkey"                  // ALTER TABLE ONLY external_character_link_syncs ADD CONSTRAINT external_character_link_syncs_pkey PRIMARY KEY (user_id, source);
 	UniqueGamePlayersPkey                              UniqueConstraint = "game_players_pkey"                                   // ALTER TABLE ONLY game_players ADD CONSTRAINT game_players_pkey PRIMARY KEY (id, realm_id);
 	UniqueGuildJoinRequestsGuildIDUserIDKey            UniqueConstraint = "guild_join_requests_guild_id_user_id_key"            // ALTER TABLE ONLY guild_join_requests ADD CONSTRAINT guild_join_requests_guild_id_user_id_key UNIQUE (guild_id, user_id);
 	UniqueGuildJoinRequestsPkey                        UniqueConstraint = "guild_join_requests_pkey"                            // ALTER TABLE ONLY guild_join_requests ADD CONSTRAINT guild_join_requests_pkey PRIMARY KEY (id);
@@ -129,5 +130,5 @@ const (
 	UniqueUserAuthsUniqueLinkedID                      UniqueConstraint = "user_auths_unique_linked_id"                         // CREATE UNIQUE INDEX user_auths_unique_linked_id ON user_auth_links USING btree (lower(linked_id), provider);
 	UniqueUserCharacterLinksOnePrimary                 UniqueConstraint = "user_character_links_one_primary"                    // CREATE UNIQUE INDEX user_character_links_one_primary ON user_character_links USING btree (user_id) WHERE is_primary;
 	UniqueUserPanelLayoutsUserTitleCiUidx              UniqueConstraint = "user_panel_layouts_user_title_ci_uidx"               // CREATE UNIQUE INDEX user_panel_layouts_user_title_ci_uidx ON user_panel_layouts USING btree (user_id, title_normalized) WHERE (user_id IS NOT NULL);
-	UniqueUserTalentBuildsUserNameCiUidx               UniqueConstraint = "user_talent_builds_user_name_ci_uidx"                // CREATE UNIQUE INDEX user_talent_builds_user_name_ci_uidx ON user_talent_builds USING btree (user_id, name_normalized);
+	UniqueUserTalentBuildsUserNameCiUidx               UniqueConstraint = "user_talent_builds_user_name_ci_uidx"                // CREATE UNIQUE INDEX user_talent_builds_user_name_ci_uidx ON user_talent_builds USING btree (user_id, tenant_id, name_normalized);
 )

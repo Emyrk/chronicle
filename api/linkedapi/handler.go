@@ -49,6 +49,8 @@ func (h *Handler) Routes() http.Handler {
 		r.Route("/me", func(r chi.Router) {
 			r.Get("/", h.ListMyCharacters)
 			r.Put("/primary", h.SetMyPrimaryCharacter)
+			// Sync links from the tenant's external verification provider.
+			r.Post("/external-sync", h.SyncExternal)
 			// Authorization is the manage_link permission (owner or user
 			// admin), checked in the handler.
 			r.Delete("/{realmID}/{characterGUID}", h.UnlinkMyCharacter)

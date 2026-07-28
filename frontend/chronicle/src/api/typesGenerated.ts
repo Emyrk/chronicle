@@ -710,6 +710,69 @@ export type EndState = "reset" | "slain" | "timeout";
 
 export const EndStates: EndState[] = ["reset", "slain", "timeout"];
 
+// From chroniclesdk/characters.go
+/**
+ * ExternalSyncResponse reports the outcome of syncing character links from
+ * an external verification provider.
+ */
+export interface ExternalSyncResponse {
+    /**
+     * Verified is false when the provider does not recognize the user's
+     * Discord identity as verified.
+     */
+    readonly verified: boolean;
+    /**
+     * Linked are the character links created by this sync.
+     */
+    readonly linked: readonly LinkedCharacter[];
+    /**
+     * Conflicts are character names that are already linked to a different
+     * account and require support intervention.
+     */
+    readonly conflicts: readonly string[];
+    /**
+     * Unmatched are character names the provider returned that Chronicle has
+     * never seen in a combat log, so they cannot be linked yet.
+     */
+    readonly unmatched: readonly string[];
+}
+
+// From chroniclesdk/tenant.go
+/**
+ * ExternalVerification configures an external verification provider for a
+ * tenant. Providers verify players out-of-band (e.g. via Discord) and expose
+ * an API Chronicle can use to link characters to accounts.
+ */
+export interface ExternalVerification {
+    /**
+     * Type of provider. Currently only "zug-zug".
+     */
+    readonly type: string;
+    /**
+     * URL is the provider's base URL, e.g. "https://ambershire.com".
+     */
+    readonly url: string;
+    /**
+     * Secret is the bearer token for the provider API. Write-only: it is
+     * stripped from all read responses.
+     */
+    readonly secret?: string;
+    /**
+     * InstructionsURL optionally points players at how to get verified.
+     */
+    readonly instructions_url?: string;
+}
+
+// From chroniclesdk/tenant.go
+/**
+ * ExternalVerificationPublic is the subset of ExternalVerification exposed
+ * in the site config.
+ */
+export interface ExternalVerificationPublic {
+    readonly type: string;
+    readonly instructions_url?: string;
+}
+
 // From chroniclesdk/log.go
 export type GUIDString = string;
 
@@ -1307,6 +1370,11 @@ export interface LinkedCharacter {
     readonly level: number;
     readonly guild_name?: string;
     readonly is_primary: boolean;
+    /**
+     * LinkSource is where the link came from: "manual" or an external
+     * provider source such as "zug-zug/<url>".
+     */
+    readonly link_source: string;
     readonly linked_at: string;
 }
 
@@ -2105,6 +2173,11 @@ export interface SiteConfig {
      * settings such as the talent calculator's max level.
      */
     readonly dataset_flavor: readonly string[];
+    /**
+     * ExternalVerification advertises the tenant's external character
+     * verification provider (never includes the URL or secret).
+     */
+    readonly external_verification?: ExternalVerificationPublic;
 }
 
 // From chroniclesdk/stats.go
@@ -2371,6 +2444,11 @@ export interface Tenant {
      * Empty means all formats are available.
      */
     readonly available_formats: readonly string[];
+    /**
+     * ExternalVerification is the tenant's external verification provider
+     * config. The secret is always stripped on reads.
+     */
+    readonly external_verification?: ExternalVerification;
     readonly created_at: string;
     readonly updated_at: string;
 }
@@ -2572,6 +2650,12 @@ export interface UpsertTenantRequest {
     readonly parse_config: ParseConfig | null;
     readonly default_format: string | null;
     readonly available_formats: readonly string[];
+    /**
+     * ExternalVerification updates the tenant's external verification
+     * provider. Omit to keep the existing config; send with an empty URL to
+     * disable.
+     */
+    readonly external_verification: ExternalVerification | null;
 }
 
 // From chroniclesdk/user.go

@@ -114,6 +114,65 @@ func TestUserCharacterLinks(t *testing.T) {
 		require.NoError(t, err)
 	})
 
+	t.Run("SourceResync", func(t *testing.T) {
+		userID := newUser(t, "source-user")
+		manual := newPlayer(t, "Manualtoon")
+		external := newPlayer(t, "Zugtoon")
+		source := "zug-zug/https://ambershire.com"
+
+		_, err := link(t, userID, manual)
+		require.NoError(t, err)
+		_, err = db.InsertUserCharacterLink(ctx, database.InsertUserCharacterLinkParams{
+			UserID:        userID,
+			CharacterGuid: external,
+			RealmID:       realm.ID,
+			LinkSource:    source,
+		})
+		require.NoError(t, err)
+
+		// Deleting by source removes only that source's links.
+		deleted, err := db.DeleteUserCharacterLinksByUserAndSource(ctx, database.DeleteUserCharacterLinksByUserAndSourceParams{
+			UserID:     userID,
+			LinkSource: source,
+		})
+		require.NoError(t, err)
+		require.Len(t, deleted, 1)
+		require.Equal(t, external, deleted[0].CharacterGuid)
+
+		rows, err := db.GetUserCharacterLinks(ctx, userID)
+		require.NoError(t, err)
+		require.Len(t, rows, 1)
+		require.Equal(t, "manual", rows[0].LinkSource)
+	})
+
+	t.Run("ExternalSyncRateLimit", func(t *testing.T) {
+		userID := newUser(t, "ratelimit-user")
+		source := "zug-zug/https://ambershire.com"
+
+		_, err := db.GetExternalCharacterLinkSync(ctx, database.GetExternalCharacterLinkSyncParams{
+			UserID: userID,
+			Source: source,
+		})
+		require.Error(t, err) // no row yet
+
+		require.NoError(t, db.UpsertExternalCharacterLinkSync(ctx, database.UpsertExternalCharacterLinkSyncParams{
+			UserID: userID,
+			Source: source,
+		}))
+		sync, err := db.GetExternalCharacterLinkSync(ctx, database.GetExternalCharacterLinkSyncParams{
+			UserID: userID,
+			Source: source,
+		})
+		require.NoError(t, err)
+		require.WithinDuration(t, time.Now(), sync.LastSyncedAt.Time, time.Minute)
+
+		// Upsert refreshes rather than errors.
+		require.NoError(t, db.UpsertExternalCharacterLinkSync(ctx, database.UpsertExternalCharacterLinkSyncParams{
+			UserID: userID,
+			Source: source,
+		}))
+	})
+
 	t.Run("SinglePrimary", func(t *testing.T) {
 		userID := newUser(t, "primary-user")
 		charA := newPlayer(t, "Maintoon")

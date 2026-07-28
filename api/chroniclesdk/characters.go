@@ -20,7 +20,10 @@ type LinkedCharacter struct {
 	Level         int32      `json:"level"`
 	GuildName     string     `json:"guild_name,omitempty"`
 	IsPrimary     bool       `json:"is_primary"`
-	LinkedAt      time.Time  `json:"linked_at"`
+	// LinkSource is where the link came from: "manual" or an external
+	// provider source such as "zug-zug/<url>".
+	LinkSource string    `json:"link_source"`
+	LinkedAt   time.Time `json:"linked_at"`
 }
 
 // CharacterLinkInfo describes who a character is linked to (admin view).
@@ -30,6 +33,22 @@ type CharacterLinkInfo struct {
 	CharacterGUID GUIDString `json:"character_guid"`
 	RealmID       uuid.UUID  `json:"realm_id"`
 	LinkedAt      time.Time  `json:"linked_at"`
+}
+
+// ExternalSyncResponse reports the outcome of syncing character links from
+// an external verification provider.
+type ExternalSyncResponse struct {
+	// Verified is false when the provider does not recognize the user's
+	// Discord identity as verified.
+	Verified bool `json:"verified"`
+	// Linked are the character links created by this sync.
+	Linked []LinkedCharacter `json:"linked"`
+	// Conflicts are character names that are already linked to a different
+	// account and require support intervention.
+	Conflicts []string `json:"conflicts"`
+	// Unmatched are character names the provider returned that Chronicle has
+	// never seen in a combat log, so they cannot be linked yet.
+	Unmatched []string `json:"unmatched"`
 }
 
 // LinkCharacterRequest links a character to a user account (admin only).

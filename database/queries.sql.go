@@ -9088,7 +9088,7 @@ func (q *sqlQuerier) DeleteTenant(ctx context.Context, id uuid.UUID) error {
 }
 
 const getTenantByID = `-- name: GetTenantByID :one
-SELECT id, slug, name, disable_client_upload, include_in_all, branding, created_at, updated_at, discoverable, default_dataset_id, default_format, available_formats, parse_config FROM tenants WHERE id = $1
+SELECT id, slug, name, disable_client_upload, include_in_all, branding, created_at, updated_at, discoverable, default_dataset_id, default_format, available_formats, parse_config, external_verification FROM tenants WHERE id = $1
 `
 
 func (q *sqlQuerier) GetTenantByID(ctx context.Context, id uuid.UUID) (Tenant, error) {
@@ -9108,13 +9108,14 @@ func (q *sqlQuerier) GetTenantByID(ctx context.Context, id uuid.UUID) (Tenant, e
 		&i.DefaultFormat,
 		&i.AvailableFormats,
 		&i.ParseConfig,
+		&i.ExternalVerification,
 	)
 	return i, err
 }
 
 const getTenantBySlug = `-- name: GetTenantBySlug :one
 
-SELECT id, slug, name, disable_client_upload, include_in_all, branding, created_at, updated_at, discoverable, default_dataset_id, default_format, available_formats, parse_config FROM tenants WHERE slug = $1
+SELECT id, slug, name, disable_client_upload, include_in_all, branding, created_at, updated_at, discoverable, default_dataset_id, default_format, available_formats, parse_config, external_verification FROM tenants WHERE slug = $1
 `
 
 // Tenant queries. These run with AdminBypass context since the tenants table
@@ -9136,27 +9137,29 @@ func (q *sqlQuerier) GetTenantBySlug(ctx context.Context, slug pgtype.Text) (Ten
 		&i.DefaultFormat,
 		&i.AvailableFormats,
 		&i.ParseConfig,
+		&i.ExternalVerification,
 	)
 	return i, err
 }
 
 const insertTenant = `-- name: InsertTenant :one
-INSERT INTO tenants (id, slug, name, disable_client_upload, include_in_all, branding, discoverable, default_format, available_formats, parse_config)
-VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
-RETURNING id, slug, name, disable_client_upload, include_in_all, branding, created_at, updated_at, discoverable, default_dataset_id, default_format, available_formats, parse_config
+INSERT INTO tenants (id, slug, name, disable_client_upload, include_in_all, branding, discoverable, default_format, available_formats, parse_config, external_verification)
+VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
+RETURNING id, slug, name, disable_client_upload, include_in_all, branding, created_at, updated_at, discoverable, default_dataset_id, default_format, available_formats, parse_config, external_verification
 `
 
 type InsertTenantParams struct {
-	ID                  uuid.UUID     `db:"id" json:"id"`
-	Slug                pgtype.Text   `db:"slug" json:"slug"`
-	Name                string        `db:"name" json:"name"`
-	DisableClientUpload bool          `db:"disable_client_upload" json:"disable_client_upload"`
-	IncludeInAll        bool          `db:"include_in_all" json:"include_in_all"`
-	Branding            []byte        `db:"branding" json:"branding"`
-	Discoverable        bool          `db:"discoverable" json:"discoverable"`
-	DefaultFormat       NullLogFormat `db:"default_format" json:"default_format"`
-	AvailableFormats    []string      `db:"available_formats" json:"available_formats"`
-	ParseConfig         []byte        `db:"parse_config" json:"parse_config"`
+	ID                   uuid.UUID     `db:"id" json:"id"`
+	Slug                 pgtype.Text   `db:"slug" json:"slug"`
+	Name                 string        `db:"name" json:"name"`
+	DisableClientUpload  bool          `db:"disable_client_upload" json:"disable_client_upload"`
+	IncludeInAll         bool          `db:"include_in_all" json:"include_in_all"`
+	Branding             []byte        `db:"branding" json:"branding"`
+	Discoverable         bool          `db:"discoverable" json:"discoverable"`
+	DefaultFormat        NullLogFormat `db:"default_format" json:"default_format"`
+	AvailableFormats     []string      `db:"available_formats" json:"available_formats"`
+	ParseConfig          []byte        `db:"parse_config" json:"parse_config"`
+	ExternalVerification []byte        `db:"external_verification" json:"external_verification"`
 }
 
 func (q *sqlQuerier) InsertTenant(ctx context.Context, arg InsertTenantParams) (Tenant, error) {
@@ -9171,6 +9174,7 @@ func (q *sqlQuerier) InsertTenant(ctx context.Context, arg InsertTenantParams) (
 		arg.DefaultFormat,
 		arg.AvailableFormats,
 		arg.ParseConfig,
+		arg.ExternalVerification,
 	)
 	var i Tenant
 	err := row.Scan(
@@ -9187,12 +9191,13 @@ func (q *sqlQuerier) InsertTenant(ctx context.Context, arg InsertTenantParams) (
 		&i.DefaultFormat,
 		&i.AvailableFormats,
 		&i.ParseConfig,
+		&i.ExternalVerification,
 	)
 	return i, err
 }
 
 const listTenants = `-- name: ListTenants :many
-SELECT id, slug, name, disable_client_upload, include_in_all, branding, created_at, updated_at, discoverable, default_dataset_id, default_format, available_formats, parse_config FROM tenants ORDER BY name
+SELECT id, slug, name, disable_client_upload, include_in_all, branding, created_at, updated_at, discoverable, default_dataset_id, default_format, available_formats, parse_config, external_verification FROM tenants ORDER BY name
 `
 
 func (q *sqlQuerier) ListTenants(ctx context.Context) ([]Tenant, error) {
@@ -9218,6 +9223,7 @@ func (q *sqlQuerier) ListTenants(ctx context.Context) ([]Tenant, error) {
 			&i.DefaultFormat,
 			&i.AvailableFormats,
 			&i.ParseConfig,
+			&i.ExternalVerification,
 		); err != nil {
 			return nil, err
 		}
@@ -9315,22 +9321,24 @@ UPDATE tenants SET
     default_format = COALESCE($7, default_format),
     available_formats = COALESCE($8, available_formats),
     parse_config = COALESCE($9, parse_config),
+    external_verification = COALESCE($10, external_verification),
     updated_at = now()
-WHERE id = $10
-RETURNING id, slug, name, disable_client_upload, include_in_all, branding, created_at, updated_at, discoverable, default_dataset_id, default_format, available_formats, parse_config
+WHERE id = $11
+RETURNING id, slug, name, disable_client_upload, include_in_all, branding, created_at, updated_at, discoverable, default_dataset_id, default_format, available_formats, parse_config, external_verification
 `
 
 type UpdateTenantParams struct {
-	Slug                pgtype.Text   `db:"slug" json:"slug"`
-	Name                pgtype.Text   `db:"name" json:"name"`
-	DisableClientUpload pgtype.Bool   `db:"disable_client_upload" json:"disable_client_upload"`
-	IncludeInAll        pgtype.Bool   `db:"include_in_all" json:"include_in_all"`
-	Branding            []byte        `db:"branding" json:"branding"`
-	Discoverable        pgtype.Bool   `db:"discoverable" json:"discoverable"`
-	DefaultFormat       NullLogFormat `db:"default_format" json:"default_format"`
-	AvailableFormats    []string      `db:"available_formats" json:"available_formats"`
-	ParseConfig         []byte        `db:"parse_config" json:"parse_config"`
-	ID                  uuid.UUID     `db:"id" json:"id"`
+	Slug                 pgtype.Text   `db:"slug" json:"slug"`
+	Name                 pgtype.Text   `db:"name" json:"name"`
+	DisableClientUpload  pgtype.Bool   `db:"disable_client_upload" json:"disable_client_upload"`
+	IncludeInAll         pgtype.Bool   `db:"include_in_all" json:"include_in_all"`
+	Branding             []byte        `db:"branding" json:"branding"`
+	Discoverable         pgtype.Bool   `db:"discoverable" json:"discoverable"`
+	DefaultFormat        NullLogFormat `db:"default_format" json:"default_format"`
+	AvailableFormats     []string      `db:"available_formats" json:"available_formats"`
+	ParseConfig          []byte        `db:"parse_config" json:"parse_config"`
+	ExternalVerification []byte        `db:"external_verification" json:"external_verification"`
+	ID                   uuid.UUID     `db:"id" json:"id"`
 }
 
 // Only non-null params are applied; NULL means "keep existing value".
@@ -9345,6 +9353,7 @@ func (q *sqlQuerier) UpdateTenant(ctx context.Context, arg UpdateTenantParams) (
 		arg.DefaultFormat,
 		arg.AvailableFormats,
 		arg.ParseConfig,
+		arg.ExternalVerification,
 		arg.ID,
 	)
 	var i Tenant
@@ -9362,6 +9371,7 @@ func (q *sqlQuerier) UpdateTenant(ctx context.Context, arg UpdateTenantParams) (
 		&i.DefaultFormat,
 		&i.AvailableFormats,
 		&i.ParseConfig,
+		&i.ExternalVerification,
 	)
 	return i, err
 }
@@ -9513,7 +9523,7 @@ func (q *sqlQuerier) UpsertUserActionBarSlots(ctx context.Context, arg UpsertUse
 const deleteUserCharacterLink = `-- name: DeleteUserCharacterLink :one
 DELETE FROM user_character_links
 WHERE character_guid = $1 AND realm_id = $2
-RETURNING id, user_id, character_guid, realm_id, is_primary, linked_by, created_at
+RETURNING id, user_id, character_guid, realm_id, is_primary, linked_by, created_at, link_source
 `
 
 type DeleteUserCharacterLinkParams struct {
@@ -9532,12 +9542,70 @@ func (q *sqlQuerier) DeleteUserCharacterLink(ctx context.Context, arg DeleteUser
 		&i.IsPrimary,
 		&i.LinkedBy,
 		&i.CreatedAt,
+		&i.LinkSource,
 	)
 	return i, err
 }
 
+const deleteUserCharacterLinksByUserAndSource = `-- name: DeleteUserCharacterLinksByUserAndSource :many
+DELETE FROM user_character_links
+WHERE user_id = $1 AND link_source = $2
+RETURNING id, user_id, character_guid, realm_id, is_primary, linked_by, created_at, link_source
+`
+
+type DeleteUserCharacterLinksByUserAndSourceParams struct {
+	UserID     uuid.UUID `db:"user_id" json:"user_id"`
+	LinkSource string    `db:"link_source" json:"link_source"`
+}
+
+func (q *sqlQuerier) DeleteUserCharacterLinksByUserAndSource(ctx context.Context, arg DeleteUserCharacterLinksByUserAndSourceParams) ([]UserCharacterLink, error) {
+	rows, err := q.db.Query(ctx, deleteUserCharacterLinksByUserAndSource, arg.UserID, arg.LinkSource)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []UserCharacterLink
+	for rows.Next() {
+		var i UserCharacterLink
+		if err := rows.Scan(
+			&i.ID,
+			&i.UserID,
+			&i.CharacterGuid,
+			&i.RealmID,
+			&i.IsPrimary,
+			&i.LinkedBy,
+			&i.CreatedAt,
+			&i.LinkSource,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const getExternalCharacterLinkSync = `-- name: GetExternalCharacterLinkSync :one
+SELECT user_id, source, last_synced_at FROM external_character_link_syncs
+WHERE user_id = $1 AND source = $2
+`
+
+type GetExternalCharacterLinkSyncParams struct {
+	UserID uuid.UUID `db:"user_id" json:"user_id"`
+	Source string    `db:"source" json:"source"`
+}
+
+func (q *sqlQuerier) GetExternalCharacterLinkSync(ctx context.Context, arg GetExternalCharacterLinkSyncParams) (ExternalCharacterLinkSync, error) {
+	row := q.db.QueryRow(ctx, getExternalCharacterLinkSync, arg.UserID, arg.Source)
+	var i ExternalCharacterLinkSync
+	err := row.Scan(&i.UserID, &i.Source, &i.LastSyncedAt)
+	return i, err
+}
+
 const getUserCharacterLink = `-- name: GetUserCharacterLink :one
-SELECT id, user_id, character_guid, realm_id, is_primary, linked_by, created_at FROM user_character_links
+SELECT id, user_id, character_guid, realm_id, is_primary, linked_by, created_at, link_source FROM user_character_links
 WHERE character_guid = $1 AND realm_id = $2
 `
 
@@ -9557,6 +9625,7 @@ func (q *sqlQuerier) GetUserCharacterLink(ctx context.Context, arg GetUserCharac
 		&i.IsPrimary,
 		&i.LinkedBy,
 		&i.CreatedAt,
+		&i.LinkSource,
 	)
 	return i, err
 }
@@ -9566,6 +9635,7 @@ SELECT
   ucl.id AS link_id,
   ucl.user_id,
   ucl.is_primary,
+  ucl.link_source,
   ucl.created_at AS linked_at,
   gp.id AS character_guid,
   gp.realm_id,
@@ -9588,6 +9658,7 @@ type GetUserCharacterLinksRow struct {
 	LinkID        uuid.UUID          `db:"link_id" json:"link_id"`
 	UserID        uuid.UUID          `db:"user_id" json:"user_id"`
 	IsPrimary     bool               `db:"is_primary" json:"is_primary"`
+	LinkSource    string             `db:"link_source" json:"link_source"`
 	LinkedAt      pgtype.Timestamptz `db:"linked_at" json:"linked_at"`
 	CharacterGuid guid.GUID          `db:"character_guid" json:"character_guid"`
 	RealmID       uuid.UUID          `db:"realm_id" json:"realm_id"`
@@ -9613,6 +9684,7 @@ func (q *sqlQuerier) GetUserCharacterLinks(ctx context.Context, userID uuid.UUID
 			&i.LinkID,
 			&i.UserID,
 			&i.IsPrimary,
+			&i.LinkSource,
 			&i.LinkedAt,
 			&i.CharacterGuid,
 			&i.RealmID,
@@ -9635,9 +9707,9 @@ func (q *sqlQuerier) GetUserCharacterLinks(ctx context.Context, userID uuid.UUID
 }
 
 const insertUserCharacterLink = `-- name: InsertUserCharacterLink :one
-INSERT INTO user_character_links (user_id, character_guid, realm_id, linked_by)
-VALUES ($1, $2, $3, $4)
-RETURNING id, user_id, character_guid, realm_id, is_primary, linked_by, created_at
+INSERT INTO user_character_links (user_id, character_guid, realm_id, linked_by, link_source)
+VALUES ($1, $2, $3, $4, COALESCE(NULLIF($5::text, ''), 'manual'))
+RETURNING id, user_id, character_guid, realm_id, is_primary, linked_by, created_at, link_source
 `
 
 type InsertUserCharacterLinkParams struct {
@@ -9645,6 +9717,7 @@ type InsertUserCharacterLinkParams struct {
 	CharacterGuid guid.GUID     `db:"character_guid" json:"character_guid"`
 	RealmID       uuid.UUID     `db:"realm_id" json:"realm_id"`
 	LinkedBy      uuid.NullUUID `db:"linked_by" json:"linked_by"`
+	LinkSource    string        `db:"link_source" json:"link_source"`
 }
 
 func (q *sqlQuerier) InsertUserCharacterLink(ctx context.Context, arg InsertUserCharacterLinkParams) (UserCharacterLink, error) {
@@ -9653,6 +9726,7 @@ func (q *sqlQuerier) InsertUserCharacterLink(ctx context.Context, arg InsertUser
 		arg.CharacterGuid,
 		arg.RealmID,
 		arg.LinkedBy,
+		arg.LinkSource,
 	)
 	var i UserCharacterLink
 	err := row.Scan(
@@ -9663,6 +9737,7 @@ func (q *sqlQuerier) InsertUserCharacterLink(ctx context.Context, arg InsertUser
 		&i.IsPrimary,
 		&i.LinkedBy,
 		&i.CreatedAt,
+		&i.LinkSource,
 	)
 	return i, err
 }
@@ -9671,7 +9746,7 @@ const setPrimaryUserCharacter = `-- name: SetPrimaryUserCharacter :one
 UPDATE user_character_links
 SET is_primary = TRUE
 WHERE user_id = $1 AND character_guid = $2 AND realm_id = $3
-RETURNING id, user_id, character_guid, realm_id, is_primary, linked_by, created_at
+RETURNING id, user_id, character_guid, realm_id, is_primary, linked_by, created_at, link_source
 `
 
 type SetPrimaryUserCharacterParams struct {
@@ -9691,6 +9766,7 @@ func (q *sqlQuerier) SetPrimaryUserCharacter(ctx context.Context, arg SetPrimary
 		&i.IsPrimary,
 		&i.LinkedBy,
 		&i.CreatedAt,
+		&i.LinkSource,
 	)
 	return i, err
 }
@@ -9703,6 +9779,22 @@ WHERE user_id = $1 AND is_primary
 
 func (q *sqlQuerier) UnsetPrimaryUserCharacter(ctx context.Context, userID uuid.UUID) error {
 	_, err := q.db.Exec(ctx, unsetPrimaryUserCharacter, userID)
+	return err
+}
+
+const upsertExternalCharacterLinkSync = `-- name: UpsertExternalCharacterLinkSync :exec
+INSERT INTO external_character_link_syncs (user_id, source, last_synced_at)
+VALUES ($1, $2, now())
+ON CONFLICT (user_id, source) DO UPDATE SET last_synced_at = now()
+`
+
+type UpsertExternalCharacterLinkSyncParams struct {
+	UserID uuid.UUID `db:"user_id" json:"user_id"`
+	Source string    `db:"source" json:"source"`
+}
+
+func (q *sqlQuerier) UpsertExternalCharacterLinkSync(ctx context.Context, arg UpsertExternalCharacterLinkSyncParams) error {
+	_, err := q.db.Exec(ctx, upsertExternalCharacterLinkSync, arg.UserID, arg.Source)
 	return err
 }
 
@@ -10462,6 +10554,36 @@ LIMIT 1
 
 func (q *sqlQuerier) GetUserAuthLinkByUserID(ctx context.Context, userID uuid.UUID) (UserAuthLink, error) {
 	row := q.db.QueryRow(ctx, getUserAuthLinkByUserID, userID)
+	var i UserAuthLink
+	err := row.Scan(
+		&i.ID,
+		&i.LinkedID,
+		&i.UserID,
+		&i.Provider,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+	)
+	return i, err
+}
+
+const getUserAuthLinkByUserIDAndProvider = `-- name: GetUserAuthLinkByUserIDAndProvider :one
+SELECT
+  id, linked_id, user_id, provider, created_at, updated_at
+FROM
+  user_auth_links
+WHERE
+  user_id = $1
+  AND provider = $2
+LIMIT 1
+`
+
+type GetUserAuthLinkByUserIDAndProviderParams struct {
+	UserID   uuid.UUID `db:"user_id" json:"user_id"`
+	Provider string    `db:"provider" json:"provider"`
+}
+
+func (q *sqlQuerier) GetUserAuthLinkByUserIDAndProvider(ctx context.Context, arg GetUserAuthLinkByUserIDAndProviderParams) (UserAuthLink, error) {
+	row := q.db.QueryRow(ctx, getUserAuthLinkByUserIDAndProvider, arg.UserID, arg.Provider)
 	var i UserAuthLink
 	err := row.Scan(
 		&i.ID,

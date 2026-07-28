@@ -189,6 +189,9 @@ type SiteConfig struct {
 	// dataset for this tenant. The frontend uses these to derive per-flavor
 	// settings such as the talent calculator's max level.
 	DatasetFlavor []string `json:"dataset_flavor"`
+	// ExternalVerification advertises the tenant's external character
+	// verification provider (never includes the URL or secret).
+	ExternalVerification *ExternalVerificationPublic `json:"external_verification,omitempty"`
 }
 
 // UpdateSiteConfigRequest allows partial updates to site configuration.

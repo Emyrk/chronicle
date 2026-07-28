@@ -84,6 +84,17 @@ WHERE
   user_id = $1
 LIMIT 1
 ;
+
+-- name: GetUserAuthLinkByUserIDAndProvider :one
+SELECT
+  *
+FROM
+  user_auth_links
+WHERE
+  user_id = $1
+  AND provider = $2
+LIMIT 1
+;
 -- name: GetUsersByIDs :many
 SELECT
   *

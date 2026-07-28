@@ -26,6 +26,7 @@ import type {
   SetPrimaryCharacterRequest as SetPrimaryCharacterRequestGenerated,
   CharacterLinkInfo as CharacterLinkInfoGenerated,
   LinkCharacterRequest as LinkCharacterRequestGenerated,
+  ExternalSyncResponse as ExternalSyncResponseGenerated,
   DataGrant as DataGrantGenerated,
   UpsertDataGrantRequest as UpsertDataGrantRequestGenerated,
   ListUserPanelLayoutsResponse as ListUserPanelLayoutsResponseGenerated,
@@ -96,6 +97,7 @@ export type LinkedCharacter = LinkedCharacterGenerated;
 export type SetPrimaryCharacterRequest = SetPrimaryCharacterRequestGenerated;
 export type CharacterLinkInfo = CharacterLinkInfoGenerated;
 export type LinkCharacterRequest = LinkCharacterRequestGenerated;
+export type ExternalSyncResponse = ExternalSyncResponseGenerated;
 export type DataGrant = DataGrantGenerated;
 export type UpsertDataGrantRequest = UpsertDataGrantRequestGenerated;
 export type ListUserPanelLayoutsResponse = ListUserPanelLayoutsResponseGenerated;
@@ -501,6 +503,27 @@ export function useSetPrimaryCharacter() {
         throw buildAPIError("Failed to set primary character", error);
       }
       return response.json() as Promise<LinkedCharacter[]>;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["my-characters"] });
+    },
+  });
+}
+
+export function useExternalCharacterSync() {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: async () => {
+      const response = await fetch("/api/v1/linked/me/external-sync", {
+        method: "POST",
+        credentials: "include",
+      });
+      if (!response.ok) {
+        const error = await response.json().catch(() => null);
+        throw buildAPIError("Failed to sync characters", error);
+      }
+      return response.json() as Promise<ExternalSyncResponse>;
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["my-characters"] });

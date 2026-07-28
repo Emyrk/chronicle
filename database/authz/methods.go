@@ -49,6 +49,27 @@ func (z *interceptor) DeleteUserCharacterLink(ctx context.Context, arg database.
 	return z.Store.DeleteUserCharacterLink(ctx, arg)
 }
 
+func (z *interceptor) DeleteUserCharacterLinksByUserAndSource(ctx context.Context, arg database.DeleteUserCharacterLinksByUserAndSourceParams) ([]database.UserCharacterLink, error) {
+	links, err := z.Store.DeleteUserCharacterLinksByUserAndSource(ctx, arg)
+	if err != nil {
+		return nil, err
+	}
+	if len(links) == 0 {
+		return links, nil
+	}
+
+	// Remove the owner relation for each deleted link.
+	b := policy.New()
+	for _, link := range links {
+		obj := b.Armory_player(link.CharacterGuid)
+		f := rel.NewFilter(obj.Object().Typ, obj.Object().ID, obj.RelationOwner())
+		if err := z.Delete(ctx, rel.NewPreconditionedFilter(f)); err != nil {
+			return nil, fmt.Errorf("delete authz relations: %w", err)
+		}
+	}
+	return links, nil
+}
+
 func (z *interceptor) DeleteAllParsedLogsByGroupID(ctx context.Context, id uuid.UUID) error {
 	return z.Store.DeleteAllParsedLogsByGroupID(ctx, id)
 }

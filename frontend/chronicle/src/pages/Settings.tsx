@@ -11,6 +11,7 @@ import {
   useSession,
   useSetPrimaryCharacter,
   useUnlinkMyCharacter,
+  useExternalCharacterSync,
   type LinkedCharacter,
   useUserPanelLayouts,
   useCreatePanelLayout,
@@ -358,6 +359,90 @@ export function ProfileSettings() {
   );
 }
 
+const EXTERNAL_SYNC_THROTTLE_KEY = "characters.external-sync.last";
+const EXTERNAL_SYNC_THROTTLE_MS = 5 * 60 * 1000;
+
+function ExternalVerificationCard() {
+  const { data: session } = useSession();
+  const { data: siteConfig } = useSiteConfig();
+  const syncMutation = useExternalCharacterSync();
+  const [throttledUntil, setThrottledUntil] = useState<number>(() => {
+    const last = Number(window.localStorage.getItem(EXTERNAL_SYNC_THROTTLE_KEY) ?? 0);
+    return last + EXTERNAL_SYNC_THROTTLE_MS;
+  });
+
+  const provider = siteConfig?.external_verification;
+  if (!provider) return null;
+
+  const isDiscord = session?.auth_provider === "discord";
+  const throttled = Date.now() < throttledUntil;
+
+  const handleSync = () => {
+    window.localStorage.setItem(EXTERNAL_SYNC_THROTTLE_KEY, String(Date.now()));
+    setThrottledUntil(Date.now() + EXTERNAL_SYNC_THROTTLE_MS);
+    syncMutation.mutate(undefined, {
+      onSuccess: (result) => {
+        if (!result.verified) {
+          toast.info("You are not verified yet.", {
+            description: provider.instructions_url
+              ? "Follow the instructions link to get verified, then try again."
+              : "Get verified with your community, then try again.",
+          });
+          return;
+        }
+        if (result.linked.length > 0) {
+          toast.success(`Linked ${result.linked.length} character${result.linked.length === 1 ? "" : "s"}: ${result.linked.map((c) => c.name).join(", ")}`);
+        } else if (result.conflicts.length === 0 && result.unmatched.length === 0) {
+          toast.info("No characters to link.");
+        }
+        for (const name of result.conflicts) {
+          toast.error(`${name} is already linked to another account. Ask for support in Discord.`);
+        }
+        if (result.unmatched.length > 0) {
+          toast.warning(`Not seen in any logs yet: ${result.unmatched.join(", ")}`, {
+            description: "These characters can be linked once they appear in an uploaded log.",
+          });
+        }
+      },
+      onError: (error) => showRequestErrorToast("Failed to sync characters", error),
+    });
+  };
+
+  return (
+    <div className="rounded-lg border p-4 space-y-3">
+      <h3 className="text-sm font-medium">Link characters via Zug Zug</h3>
+      <p className="text-sm text-muted-foreground">
+        Verified members can automatically link their characters using their Discord identity.
+        {provider.instructions_url && (
+          <>
+            {" "}
+            <a
+              href={provider.instructions_url}
+              target="_blank"
+              rel="noreferrer"
+              className="underline hover:text-foreground"
+            >
+              How do I get verified?
+            </a>
+          </>
+        )}
+      </p>
+      {!isDiscord ? (
+        <p className="text-sm text-yellow-500">Must be authenticated with Discord to link characters.</p>
+      ) : (
+        <Button
+          variant="outline"
+          size="sm"
+          disabled={syncMutation.isPending || throttled}
+          onClick={handleSync}
+        >
+          {syncMutation.isPending ? "Syncing..." : throttled ? "Synced recently — try again in a few minutes" : "Sync my characters"}
+        </Button>
+      )}
+    </div>
+  );
+}
+
 export function CharacterSettings() {
   const { data: characters, isLoading } = useMyCharacters();
   const setPrimary = useSetPrimaryCharacter();
@@ -390,6 +475,8 @@ export function CharacterSettings() {
         <h2 className="text-xl font-semibold">Characters</h2>
         <p className="text-muted-foreground">In-game characters linked to your account.</p>
       </div>
+
+      <ExternalVerificationCard />
 
       {isLoading ? (
         <p className="text-sm text-muted-foreground">Loading characters...</p>

@@ -725,6 +725,10 @@ func (a *API) AdminGetSiteConfig(w http.ResponseWriter, r *http.Request) {
 		resp.AvailableFormats = config.AvailableFormats
 	}
 
+	if t != nil {
+		resp.ExternalVerification = chroniclesdk.ParseExternalVerification(t.ExternalVerification).Public()
+	}
+
 	// Resolve the tenant's default dataset flavor so the frontend can
 	// derive per-flavor settings (e.g. talent calculator max level).
 	if t != nil && t.DefaultDatasetID.Valid {

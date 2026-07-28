@@ -26,9 +26,12 @@ type Tenant struct {
 	DefaultFormat *string `json:"default_format"`
 	// AvailableFormats restricts which log formats are valid for this tenant.
 	// Empty means all formats are available.
-	AvailableFormats []string  `json:"available_formats"`
-	CreatedAt        time.Time `json:"created_at"`
-	UpdatedAt        time.Time `json:"updated_at"`
+	AvailableFormats []string `json:"available_formats"`
+	// ExternalVerification is the tenant's external verification provider
+	// config. The secret is always stripped on reads.
+	ExternalVerification *ExternalVerification `json:"external_verification,omitempty"`
+	CreatedAt            time.Time             `json:"created_at"`
+	UpdatedAt            time.Time             `json:"updated_at"`
 }
 
 // ParseConfig holds tenant-level parse scoring settings, stored as JSONB.
@@ -86,6 +89,11 @@ func TenantFromDB(t database.Tenant) Tenant {
 			out.ParseConfig = &pc
 		}
 	}
+	if ev := ParseExternalVerification(t.ExternalVerification); ev != nil {
+		// Never expose the provider secret on reads.
+		ev.Secret = ""
+		out.ExternalVerification = ev
+	}
 	if t.DefaultDatasetID.Valid {
 		out.DefaultDatasetID = &t.DefaultDatasetID.UUID
 	}
@@ -97,6 +105,53 @@ func TenantFromDB(t database.Tenant) Tenant {
 		out.AvailableFormats = t.AvailableFormats
 	}
 	return out
+}
+
+// ParseExternalVerification unmarshals a tenant's raw external_verification
+// JSONB column. Returns nil when unset, null, or invalid. The result includes
+// the secret; strip it before returning data to clients.
+func ParseExternalVerification(data []byte) *ExternalVerification {
+	if len(data) == 0 {
+		return nil
+	}
+	var ev ExternalVerification
+	if err := json.Unmarshal(data, &ev); err != nil || ev.URL == "" {
+		return nil
+	}
+	return &ev
+}
+
+// ExternalVerification configures an external verification provider for a
+// tenant. Providers verify players out-of-band (e.g. via Discord) and expose
+// an API Chronicle can use to link characters to accounts.
+type ExternalVerification struct {
+	// Type of provider. Currently only "zug-zug".
+	Type string `json:"type"`
+	// URL is the provider's base URL, e.g. "https://ambershire.com".
+	URL string `json:"url"`
+	// Secret is the bearer token for the provider API. Write-only: it is
+	// stripped from all read responses.
+	Secret string `json:"secret,omitempty"`
+	// InstructionsURL optionally points players at how to get verified.
+	InstructionsURL string `json:"instructions_url,omitempty"`
+}
+
+// Public returns the provider info safe to expose to any visitor.
+func (e *ExternalVerification) Public() *ExternalVerificationPublic {
+	if e == nil {
+		return nil
+	}
+	return &ExternalVerificationPublic{
+		Type:            e.Type,
+		InstructionsURL: e.InstructionsURL,
+	}
+}
+
+// ExternalVerificationPublic is the subset of ExternalVerification exposed
+// in the site config.
+type ExternalVerificationPublic struct {
+	Type            string `json:"type"`
+	InstructionsURL string `json:"instructions_url,omitempty"`
 }
 
 // SetServerTenantRequest assigns or removes a tenant from a server.
@@ -127,6 +182,10 @@ type UpsertTenantRequest struct {
 	ParseConfig         *ParseConfig  `json:"parse_config"`
 	DefaultFormat    *string  `json:"default_format"`
 	AvailableFormats []string `json:"available_formats"`
+	// ExternalVerification updates the tenant's external verification
+	// provider. Omit to keep the existing config; send with an empty URL to
+	// disable.
+	ExternalVerification *ExternalVerification `json:"external_verification"`
 }
 
 // IsCreate returns true when the request should insert a new tenant.
@@ -147,6 +206,18 @@ func (r UpsertTenantRequest) marshalParseConfig() []byte {
 		return nil
 	}
 	b, _ := json.Marshal(r.ParseConfig)
+	return b
+}
+
+func (r UpsertTenantRequest) marshalExternalVerification() []byte {
+	if r.ExternalVerification == nil {
+		return nil
+	}
+	if r.ExternalVerification.URL == "" {
+		// Explicitly disable: store JSON null (non-nil so COALESCE applies).
+		return []byte("null")
+	}
+	b, _ := json.Marshal(r.ExternalVerification)
 	return b
 }
 
@@ -183,12 +254,13 @@ func (r UpsertTenantRequest) ToInsertParams() database.InsertTenantParams {
 	}
 
 	return database.InsertTenantParams{
-		ID:                  id,
-		Slug:                slug,
-		Name:                r.Name,
-		DisableClientUpload: disableUpload,
-		IncludeInAll:        includeInAll,
-		Discoverable:        discoverable,
+		ID:                   id,
+		Slug:                 slug,
+		Name:                 r.Name,
+		DisableClientUpload:  disableUpload,
+		IncludeInAll:         includeInAll,
+		Discoverable:         discoverable,
+		ExternalVerification: r.marshalExternalVerification(),
 		Branding:            r.marshalBranding(),
 		ParseConfig:         r.marshalParseConfig(),
 		DefaultFormat:    defaultFormat,
@@ -230,12 +302,13 @@ func (r UpsertTenantRequest) ToUpdateParams() database.UpdateTenantParams {
 	}
 
 	return database.UpdateTenantParams{
-		ID:                  r.ID.UUID,
-		Slug:                slug,
-		Name:                name,
-		DisableClientUpload: disableUpload,
-		IncludeInAll:        includeInAll,
-		Discoverable:        discoverable,
+		ID:                   r.ID.UUID,
+		Slug:                 slug,
+		Name:                 name,
+		DisableClientUpload:  disableUpload,
+		IncludeInAll:         includeInAll,
+		Discoverable:         discoverable,
+		ExternalVerification: r.marshalExternalVerification(),
 		Branding:            r.marshalBranding(),
 		ParseConfig:         r.marshalParseConfig(),
 		DefaultFormat:    defaultFormat,

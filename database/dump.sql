@@ -668,6 +668,12 @@ CREATE TABLE encounter_dps_rankings (
 
 ALTER TABLE ONLY encounter_dps_rankings FORCE ROW LEVEL SECURITY;
 
+CREATE TABLE external_character_link_syncs (
+    user_id uuid NOT NULL,
+    source text NOT NULL,
+    last_synced_at timestamp with time zone DEFAULT now() NOT NULL
+);
+
 CREATE TABLE game_players (
     id wow_guid NOT NULL,
     realm_id uuid NOT NULL,
@@ -885,6 +891,7 @@ CREATE TABLE tenants (
     default_format log_format,
     available_formats text[] DEFAULT '{}'::text[] NOT NULL,
     parse_config jsonb,
+    external_verification jsonb,
     CONSTRAINT tenants_slug_format CHECK (((slug IS NULL) OR (slug ~ '^[a-z0-9][a-z0-9-]{1,30}[a-z0-9]$'::text))),
     CONSTRAINT tenants_slug_reserved CHECK ((slug <> ALL (ARRAY['www'::text, 'api'::text, 'auth'::text, 'admin'::text, 'legacy'::text, 'app'::text, 'mail'::text, 'staging'::text])))
 );
@@ -1236,7 +1243,8 @@ CREATE TABLE user_character_links (
     realm_id uuid NOT NULL,
     is_primary boolean DEFAULT false NOT NULL,
     linked_by uuid,
-    created_at timestamp with time zone DEFAULT now() NOT NULL
+    created_at timestamp with time zone DEFAULT now() NOT NULL,
+    link_source text DEFAULT 'manual'::text NOT NULL
 );
 
 CREATE TABLE user_panel_layouts (
@@ -1650,6 +1658,9 @@ ALTER TABLE ONLY encounter_dps_rankings
 
 ALTER TABLE ONLY encounter_dps_rankings
     ADD CONSTRAINT encounter_dps_rankings_pkey PRIMARY KEY (id);
+
+ALTER TABLE ONLY external_character_link_syncs
+    ADD CONSTRAINT external_character_link_syncs_pkey PRIMARY KEY (user_id, source);
 
 ALTER TABLE ONLY game_players
     ADD CONSTRAINT game_players_pkey PRIMARY KEY (id, realm_id);
@@ -2114,6 +2125,9 @@ ALTER TABLE ONLY encounter_dps_rankings
 
 ALTER TABLE ONLY encounter_dps_rankings
     ADD CONSTRAINT encounter_dps_rankings_talent_build_id_fkey FOREIGN KEY (talent_build_id) REFERENCES talent_builds(id);
+
+ALTER TABLE ONLY external_character_link_syncs
+    ADD CONSTRAINT external_character_link_syncs_user_id_fkey FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE;
 
 ALTER TABLE ONLY game_players
     ADD CONSTRAINT game_players_guild_id_fkey FOREIGN KEY (guild_id) REFERENCES guilds(id) ON DELETE SET NULL;

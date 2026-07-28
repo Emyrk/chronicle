@@ -133,6 +133,11 @@ function TenantForm({ tenant, onDone }: { tenant?: Tenant; onDone: () => void })
   const [defaultFormat, setDefaultFormat] = useState(tenant?.default_format ?? "");
   const [availableFormats, setAvailableFormats] = useState<string[]>([...(tenant?.available_formats ?? [])]);
 
+  // External verification provider
+  const [verificationURL, setVerificationURL] = useState(tenant?.external_verification?.url ?? "");
+  const [verificationSecret, setVerificationSecret] = useState("");
+  const [verificationInstructions, setVerificationInstructions] = useState(tenant?.external_verification?.instructions_url ?? "");
+
   // Branding fields
   const [squareLogo, setSquareLogo] = useState(tenant?.branding?.square_logo ?? "");
   const [logoWide, setLogoWide] = useState(tenant?.branding?.logo_wide ?? "");
@@ -172,6 +177,13 @@ function TenantForm({ tenant, onDone }: { tenant?: Tenant; onDone: () => void })
         parse_config: { cohort_mode: parseMode || undefined },
         default_format: defaultFormat || null,
         available_formats: availableFormats,
+        // Empty URL disables; empty secret on update keeps the stored one.
+        external_verification: {
+          type: "zug-zug",
+          url: verificationURL.trim(),
+          secret: verificationSecret.trim() || undefined,
+          instructions_url: verificationInstructions.trim() || undefined,
+        },
       },
       { onSuccess: onDone },
     );
@@ -264,6 +276,32 @@ function TenantForm({ tenant, onDone }: { tenant?: Tenant; onDone: () => void })
             <p className="text-[10px] text-muted-foreground">None selected — all formats available.</p>
           )}
         </div>
+      </div>
+      <div className="pt-2 border-t space-y-2">
+        <p className="text-xs font-medium text-muted-foreground">External Verification (Zug Zug)</p>
+        <input
+          className={inputClass}
+          placeholder="Provider base URL (empty to disable), e.g. https://ambershire.com"
+          value={verificationURL}
+          onChange={(e) => setVerificationURL(e.target.value)}
+        />
+        <input
+          className={inputClass}
+          type="password"
+          placeholder={tenant?.external_verification?.url ? "Bearer secret (leave blank to keep current)" : "Bearer secret"}
+          value={verificationSecret}
+          onChange={(e) => setVerificationSecret(e.target.value)}
+          autoComplete="new-password"
+        />
+        <input
+          className={inputClass}
+          placeholder="Instructions URL (optional, shown to players)"
+          value={verificationInstructions}
+          onChange={(e) => setVerificationInstructions(e.target.value)}
+        />
+        <p className="text-[10px] text-muted-foreground">
+          Lets Discord-authenticated players link their verified characters via the provider's API.
+        </p>
       </div>
       <div className="pt-2 border-t space-y-2">
         <p className="text-xs font-medium text-muted-foreground">Branding</p>

@@ -604,6 +604,7 @@ func LinkedCharacter(row database.GetUserCharacterLinksRow) chroniclesdk.LinkedC
 		Level:         int32(row.Level),
 		GuildName:     row.GuildName.String,
 		IsPrimary:     row.IsPrimary,
+		LinkSource:    row.LinkSource,
 		LinkedAt:      row.LinkedAt.Time,
 	}
 }

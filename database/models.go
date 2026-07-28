@@ -1144,6 +1144,12 @@ type EncounterDpsRanking struct {
 	Hps            float64            `db:"hps" json:"hps"`
 }
 
+type ExternalCharacterLinkSync struct {
+	UserID       uuid.UUID          `db:"user_id" json:"user_id"`
+	Source       string             `db:"source" json:"source"`
+	LastSyncedAt pgtype.Timestamptz `db:"last_synced_at" json:"last_synced_at"`
+}
+
 type GamePlayer struct {
 	ID                  guid.GUID          `db:"id" json:"id"`
 	RealmID             uuid.UUID          `db:"realm_id" json:"realm_id"`
@@ -1601,19 +1607,20 @@ type TalentBuild struct {
 }
 
 type Tenant struct {
-	ID                  uuid.UUID          `db:"id" json:"id"`
-	Slug                pgtype.Text        `db:"slug" json:"slug"`
-	Name                string             `db:"name" json:"name"`
-	DisableClientUpload bool               `db:"disable_client_upload" json:"disable_client_upload"`
-	IncludeInAll        bool               `db:"include_in_all" json:"include_in_all"`
-	Branding            []byte             `db:"branding" json:"branding"`
-	CreatedAt           pgtype.Timestamptz `db:"created_at" json:"created_at"`
-	UpdatedAt           pgtype.Timestamptz `db:"updated_at" json:"updated_at"`
-	Discoverable        bool               `db:"discoverable" json:"discoverable"`
-	DefaultDatasetID    uuid.NullUUID      `db:"default_dataset_id" json:"default_dataset_id"`
-	DefaultFormat       NullLogFormat      `db:"default_format" json:"default_format"`
-	AvailableFormats    []string           `db:"available_formats" json:"available_formats"`
-	ParseConfig         []byte             `db:"parse_config" json:"parse_config"`
+	ID                   uuid.UUID          `db:"id" json:"id"`
+	Slug                 pgtype.Text        `db:"slug" json:"slug"`
+	Name                 string             `db:"name" json:"name"`
+	DisableClientUpload  bool               `db:"disable_client_upload" json:"disable_client_upload"`
+	IncludeInAll         bool               `db:"include_in_all" json:"include_in_all"`
+	Branding             []byte             `db:"branding" json:"branding"`
+	CreatedAt            pgtype.Timestamptz `db:"created_at" json:"created_at"`
+	UpdatedAt            pgtype.Timestamptz `db:"updated_at" json:"updated_at"`
+	Discoverable         bool               `db:"discoverable" json:"discoverable"`
+	DefaultDatasetID     uuid.NullUUID      `db:"default_dataset_id" json:"default_dataset_id"`
+	DefaultFormat        NullLogFormat      `db:"default_format" json:"default_format"`
+	AvailableFormats     []string           `db:"available_formats" json:"available_formats"`
+	ParseConfig          []byte             `db:"parse_config" json:"parse_config"`
+	ExternalVerification []byte             `db:"external_verification" json:"external_verification"`
 }
 
 type User struct {
@@ -1671,6 +1678,7 @@ type UserCharacterLink struct {
 	IsPrimary     bool               `db:"is_primary" json:"is_primary"`
 	LinkedBy      uuid.NullUUID      `db:"linked_by" json:"linked_by"`
 	CreatedAt     pgtype.Timestamptz `db:"created_at" json:"created_at"`
+	LinkSource    string             `db:"link_source" json:"link_source"`
 }
 
 type UserPanelLayout struct {

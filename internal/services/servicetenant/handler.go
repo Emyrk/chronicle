@@ -81,6 +81,18 @@ func (s *Service) Upsert(w http.ResponseWriter, r *http.Request) {
 		}
 		t, err = s.db.InsertTenant(ctx, req.ToInsertParams())
 	} else {
+		// Reads strip the external verification secret, so an update that
+		// omits it must preserve the stored secret rather than wipe it.
+		if req.ExternalVerification != nil && req.ExternalVerification.URL != "" && req.ExternalVerification.Secret == "" {
+			existing, getErr := s.db.GetTenantByID(ctx, req.ID.UUID)
+			if getErr != nil {
+				httpapi.InternalServerError(w, getErr)
+				return
+			}
+			if ev := chroniclesdk.ParseExternalVerification(existing.ExternalVerification); ev != nil {
+				req.ExternalVerification.Secret = ev.Secret
+			}
+		}
 		t, err = s.db.UpdateTenant(ctx, req.ToUpdateParams())
 	}
 	if err != nil {
