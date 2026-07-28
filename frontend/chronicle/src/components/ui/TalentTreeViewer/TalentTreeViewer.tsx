@@ -778,7 +778,7 @@ function MobileTreeTabs({ tabs, ranks, visibleTabId, onJump }: {
 }) {
   const iconBaseUrl = useIconBaseUrl();
   return (
-    <div className="sticky top-0 z-40 -mx-4 flex gap-1 border-b border-white/10 bg-zinc-950/95 px-2 py-1.5 backdrop-blur">
+    <div className="sticky top-0 z-40 -mx-4 flex gap-1 border-b border-amber-400/20 bg-zinc-950/95 px-2 py-1.5 backdrop-blur">
       {tabs.map((tab) => {
         const points = tab.talents.reduce((sum, talent) => sum + (ranks[talent.id] ?? 0), 0);
         const active = tab.id === visibleTabId;
@@ -1036,47 +1036,52 @@ export function TalentTreeViewer({
   // stats + actions below (see design discussion in PR).
   if (mobileLayout) {
     return (
-      <div className={cn("space-y-2", className)}>
-        <div className="overflow-hidden rounded-lg border border-white/10 bg-zinc-950/60">
-          {mobileHeader && <div className="border-b border-white/10 p-4">{mobileHeader}</div>}
-          <div className="flex items-center gap-4 px-4 py-3">
-            <div>
-              <p className="text-[10px] font-semibold uppercase tracking-[0.16em] text-zinc-500">Level</p>
-              <p className="text-lg font-bold leading-tight text-white">{requiredLevel}</p>
-            </div>
-            <div className="h-8 w-px bg-white/10" />
-            {/* Points doubles as the lock toggle, like the desktop chip. */}
-            <button type="button" aria-pressed={manuallyLocked} onClick={toggleLock} className="text-left">
-              <p className="flex items-center gap-1 text-[10px] font-semibold uppercase tracking-[0.16em] text-zinc-500">
-                Points
-                {manuallyLocked ? <Lock className="h-3 w-3 text-amber-300" /> : <LockOpen className="h-3 w-3" />}
-              </p>
-              <p className="text-lg font-bold leading-tight">
-                <span className="text-amber-300">{total}</span>
-                <span className="text-zinc-500">/{maxPoints}</span>
-              </p>
-            </button>
-            <div className="ml-auto flex items-center gap-2">
-              <button
-                type="button"
-                className="inline-flex items-center gap-1.5 rounded-md border border-zinc-600 bg-zinc-900/60 px-3 py-1.5 text-sm font-semibold text-white transition hover:border-zinc-400"
-                onClick={() => void copyBuildLink()}
-              >
-                <Share2 className="h-3.5 w-3.5" />
-                Share
+      <div className={cn("space-y-0", className)}>
+        {/* Header card shares the tree cards' full-bleed footprint and warm
+            gradient so the page reads as one continuous column. */}
+        <div className="relative -mx-4 overflow-hidden border-y border-amber-400/20 bg-[radial-gradient(circle_at_top_left,rgba(20,184,166,0.14),transparent_32%),linear-gradient(180deg,rgba(120,83,38,0.16),rgba(9,9,11,0.58))]">
+          <div className="pointer-events-none absolute inset-0 bg-black/45" aria-hidden="true" />
+          <div className="absolute inset-x-0 top-0 h-px bg-gradient-to-r from-transparent via-amber-300/40 to-transparent" aria-hidden="true" />
+          <div className="relative">
+            {mobileHeader && <div className="border-b border-white/10 p-4">{mobileHeader}</div>}
+            <div className="flex items-center gap-4 px-4 py-3">
+              <div>
+                <p className="text-[10px] font-semibold uppercase tracking-[0.16em] text-amber-100/60">Level</p>
+                <p className="text-lg font-bold leading-tight text-white">{requiredLevel}</p>
+              </div>
+              <div className="h-8 w-px bg-amber-200/15" />
+              {/* Points doubles as the lock toggle, like the desktop chip. */}
+              <button type="button" aria-pressed={manuallyLocked} onClick={toggleLock} className="text-left">
+                <p className="flex items-center gap-1 text-[10px] font-semibold uppercase tracking-[0.16em] text-amber-100/60">
+                  Points
+                  {manuallyLocked ? <Lock className="h-3 w-3 text-amber-300" /> : <LockOpen className="h-3 w-3" />}
+                </p>
+                <p className="text-lg font-bold leading-tight">
+                  <span className="text-amber-300">{total}</span>
+                  <span className="text-zinc-500">/{maxPoints}</span>
+                </p>
               </button>
-              <button
-                type="button"
-                disabled={manuallyLocked}
-                className="rounded-md border border-zinc-700 px-3 py-1.5 text-sm font-semibold text-zinc-400 transition hover:border-red-400/60 hover:text-red-300 disabled:cursor-not-allowed disabled:opacity-45"
-                onClick={() => commitRanks({})}
-              >
-                Reset
-              </button>
+              <div className="ml-auto flex items-center gap-2">
+                <button
+                  type="button"
+                  className="inline-flex items-center gap-1.5 rounded-md border border-amber-300/30 bg-zinc-950/60 px-3 py-1.5 text-sm font-semibold text-amber-100/90 transition hover:border-amber-200/60 hover:bg-amber-300/10 hover:text-white"
+                  onClick={() => void copyBuildLink()}
+                >
+                  <Share2 className="h-3.5 w-3.5" />
+                  Share
+                </button>
+                <button
+                  type="button"
+                  disabled={manuallyLocked}
+                  className="rounded-md border border-white/10 bg-zinc-950/40 px-3 py-1.5 text-sm font-semibold text-zinc-400 transition hover:border-red-400/60 hover:text-red-300 disabled:cursor-not-allowed disabled:opacity-45"
+                  onClick={() => commitRanks({})}
+                >
+                  Reset
+                </button>
+              </div>
             </div>
           </div>
         </div>
-        <p className="text-xs text-muted-foreground">Tap to add, hold to remove points.</p>
         <MobileTreeTabs tabs={data.tabs} ranks={ranks} visibleTabId={visibleTabId} onJump={jumpToTree} />
         <div ref={exportRef} className={tabGridClassName}>
           {data.tabs.map((tab) => (
@@ -1184,11 +1189,9 @@ export function TalentTreeViewer({
           )}
         </div>
       )}
-      {!(readOnly && allocations) && !readOnly && (
+      {!(readOnly && allocations) && !readOnly && !isMobile && (
         <p className="text-sm text-muted-foreground">
-          {isMobile
-            ? "Tap to add, hold to remove points."
-            : "Click to add. Right-click or shift-click to remove. Ctrl-click to fill a talent, ctrl-right-click to empty it. Builds are stored in the URL."}
+          Click to add. Right-click or shift-click to remove. Ctrl-click to fill a talent, ctrl-right-click to empty it. Builds are stored in the URL.
         </p>
       )}
       {/* Mobile: sticky mini-tabs to jump between the stacked trees */}

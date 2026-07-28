@@ -106,15 +106,18 @@ export function TalentCalculatorPage() {
   // Mobile: the page header (title/back) is composed into the viewer's
   // summary card to keep the top of the page calm.
   const mobileHeader = (
-    <div>
-      <h1 className="text-2xl font-bold tracking-tight">Talent Calculator</h1>
-      <p className="mt-1 text-sm text-zinc-400">Plan and share class talent builds.</p>
+    <div className="flex items-center justify-between gap-3">
+      <div className="min-w-0">
+        <h1 className="truncate text-lg font-bold tracking-tight">
+          {selectedClass ? `${selectedClass.name} Talents` : "Talent Calculator"}
+        </h1>
+      </div>
       <Link
         to="/talents"
-        className="mt-3 inline-flex items-center gap-1.5 rounded-lg border border-zinc-700/60 bg-zinc-900/40 px-3 py-2 text-sm text-zinc-300 transition hover:border-zinc-500 hover:text-white"
+        className="inline-flex shrink-0 items-center gap-1 rounded-md border border-amber-300/30 bg-zinc-950/60 px-2.5 py-1.5 text-sm text-amber-100/80 transition hover:border-amber-200/60 hover:text-white"
       >
         <ChevronLeft className="h-4 w-4" />
-        Back to class select
+        Classes
       </Link>
     </div>
   );
@@ -125,9 +128,6 @@ export function TalentCalculatorPage() {
       {(!isMobile || !classTreeData) && (
         <div className="mb-3">
           <h1 className="text-2xl font-bold tracking-tight">Talent Calculator</h1>
-          <p className="mt-1 text-sm text-zinc-400">
-            Plan and share class talent builds.
-          </p>
         </div>
       )}
 
