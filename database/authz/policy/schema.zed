@@ -98,13 +98,12 @@ definition layout {
   permission edit = owner + chronicle->admin_layouts
 }
 
+// Talent builds are always publicly viewable — no view permission needed.
+// Only mutations are gated.
 definition talent_build {
   relation chronicle: chronicle
   relation owner: user
-  // Set to user:* when the owner shares the build publicly.
-  relation public: user:*
 
-  permission view = owner + public + chronicle->administer
   permission edit = owner + chronicle->administer
   permission delete = owner + chronicle->administer
 }
