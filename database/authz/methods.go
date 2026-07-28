@@ -125,6 +125,43 @@ func (z *interceptor) CreateUserPanelLayout(ctx context.Context, arg database.Cr
 	return z.Store.CreateUserPanelLayout(ctx, arg)
 }
 
+func (z *interceptor) CreateUserTalentBuild(ctx context.Context, arg database.CreateUserTalentBuildParams) (database.UserTalentBuild, error) {
+	if arg.ID == uuid.Nil {
+		arg.ID = uuid.New()
+	}
+	if arg.UserID == uuid.Nil {
+		return database.UserTalentBuild{}, fmt.Errorf("create talent build missing user id")
+	}
+
+	b := policy.New()
+	b.Talent_build(arg.ID).
+		Owner(b.User(arg.UserID)).
+		Chronicle(b.GlobalChronicle())
+
+	_, err := z.Write(ctx, *b.Txn())
+	if err != nil {
+		return database.UserTalentBuild{}, err
+	}
+
+	return z.Store.CreateUserTalentBuild(ctx, arg)
+}
+
+func (z *interceptor) DeleteUserTalentBuildByID(ctx context.Context, arg database.DeleteUserTalentBuildByIDParams) (int64, error) {
+	// Delete the row first: the query filters by (id, user_id), so a
+	// non-owner delete is a no-op and must not remove authz relations.
+	deleted, err := z.Store.DeleteUserTalentBuildByID(ctx, arg)
+	if err != nil || deleted == 0 {
+		return deleted, err
+	}
+
+	obj := policy.New().Talent_build(arg.ID).Object()
+	f := rel.NewFilter(obj.Typ, obj.ID, "")
+	if err := z.Delete(ctx, rel.NewPreconditionedFilter(f)); err != nil {
+		return deleted, fmt.Errorf("delete authz relations: %w", err)
+	}
+	return deleted, nil
+}
+
 func (z *interceptor) DeleteUserPanelLayoutByID(ctx context.Context, id uuid.UUID) (int64, error) {
 	obj := policy.New().Layout(id).Object()
 	f := rel.NewFilter(obj.Typ, obj.ID, "")

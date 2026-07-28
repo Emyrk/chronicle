@@ -34,6 +34,7 @@ func TestUserTalentBuilds(t *testing.T) {
 	create := func(t *testing.T, userID uuid.UUID, name, build string) database.UserTalentBuild {
 		t.Helper()
 		row, err := db.CreateUserTalentBuild(ctx, database.CreateUserTalentBuildParams{
+			ID:      uuid.New(),
 			UserID:  userID,
 			Name:    name,
 			ClassID: 1,
@@ -67,13 +68,13 @@ func TestUserTalentBuilds(t *testing.T) {
 		create(t, userID, "Fury PvE", "30305")
 
 		_, err := db.CreateUserTalentBuild(ctx, database.CreateUserTalentBuildParams{
-			UserID: userID, Name: "fury pve", ClassID: 1, Build: "",
+			ID: uuid.New(), UserID: userID, Name: "fury pve", ClassID: 1, Build: "",
 		})
 		require.True(t, database.IsUniqueViolation(err, database.UniqueUserTalentBuildsUserNameCiUidx))
 
 		// Same name is fine for a different user.
 		_, err = db.CreateUserTalentBuild(ctx, database.CreateUserTalentBuildParams{
-			UserID: otherID, Name: "Fury PvE", ClassID: 1, Build: "",
+			ID: uuid.New(), UserID: otherID, Name: "Fury PvE", ClassID: 1, Build: "",
 		})
 		require.NoError(t, err)
 	})

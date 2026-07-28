@@ -1,6 +1,6 @@
 -- name: CreateUserTalentBuild :one
-INSERT INTO user_talent_builds (user_id, name, class_id, build, locked)
-VALUES ($1, $2, $3, $4, $5)
+INSERT INTO user_talent_builds (id, user_id, name, class_id, build, locked)
+VALUES ($1, $2, $3, $4, $5, $6)
 RETURNING *;
 
 -- name: ListUserTalentBuilds :many

@@ -10846,12 +10846,13 @@ func (q *sqlQuerier) CountUserTalentBuilds(ctx context.Context, userID uuid.UUID
 }
 
 const createUserTalentBuild = `-- name: CreateUserTalentBuild :one
-INSERT INTO user_talent_builds (user_id, name, class_id, build, locked)
-VALUES ($1, $2, $3, $4, $5)
+INSERT INTO user_talent_builds (id, user_id, name, class_id, build, locked)
+VALUES ($1, $2, $3, $4, $5, $6)
 RETURNING id, user_id, name, name_normalized, class_id, build, locked, created_at, updated_at
 `
 
 type CreateUserTalentBuildParams struct {
+	ID      uuid.UUID `db:"id" json:"id"`
 	UserID  uuid.UUID `db:"user_id" json:"user_id"`
 	Name    string    `db:"name" json:"name"`
 	ClassID int32     `db:"class_id" json:"class_id"`
@@ -10861,6 +10862,7 @@ type CreateUserTalentBuildParams struct {
 
 func (q *sqlQuerier) CreateUserTalentBuild(ctx context.Context, arg CreateUserTalentBuildParams) (UserTalentBuild, error) {
 	row := q.db.QueryRow(ctx, createUserTalentBuild,
+		arg.ID,
 		arg.UserID,
 		arg.Name,
 		arg.ClassID,
