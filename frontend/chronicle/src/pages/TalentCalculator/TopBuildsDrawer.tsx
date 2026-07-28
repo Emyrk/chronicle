@@ -26,6 +26,18 @@ function toApiClass(name: string): string {
   return name.replace(/\s+/g, "").toUpperCase();
 }
 
+/** Healing specs default to the HPS ranking; everything else to DPS. */
+const HEALER_SPECS: Record<string, readonly string[]> = {
+  PRIEST: ["Discipline", "Holy"],
+  PALADIN: ["Holy"],
+  DRUID: ["Restoration"],
+  SHAMAN: ["Restoration"],
+};
+
+function defaultMetricForSpec(apiClass: string, spec: string): "dps" | "hps" {
+  return HEALER_SPECS[apiClass]?.includes(spec) ? "hps" : "dps";
+}
+
 function formatDPS(dps: number): string {
   return dps >= 1000 ? `${(dps / 1000).toFixed(1)}k` : Math.round(dps).toString();
 }
@@ -44,6 +56,15 @@ export function TopBuildsDrawer({ selectedClass, onShowAll }: {
   const [specIdx, setSpecIdx] = useState(0);
   const spec = specs[Math.min(specIdx, specs.length - 1)] ?? "";
 
+  // Each spec has a hard-coded preferred ranking metric (healers → HPS);
+  // metricOverride holds a manual toggle away from it and resets on spec change.
+  const [metricOverride, setMetricOverride] = useState<"dps" | "hps" | null>(null);
+  const metric = metricOverride ?? defaultMetricForSpec(apiClass, spec);
+  function selectSpec(index: number) {
+    setSpecIdx(index);
+    setMetricOverride(null);
+  }
+
   const instancesQuery = useRankingsInstances(open);
   // Unique instance names, in API order. Default to the first raid.
   const instanceNames = useMemo(() => {
@@ -61,6 +82,7 @@ export function TopBuildsDrawer({ selectedClass, onShowAll }: {
       class: apiClass,
       spec,
       hide_unknowns: true,
+      metric,
       limit: 10,
     },
     open && Boolean(activeInstance && apiClass && spec),
@@ -121,21 +143,36 @@ export function TopBuildsDrawer({ selectedClass, onShowAll }: {
 
         {/* Instance + spec selectors */}
         <div className="space-y-3 border-b border-white/10 p-4">
-          <select
-            value={activeInstance}
-            onChange={(event) => setInstanceName(event.target.value)}
-            className="w-full rounded-md border border-zinc-700 bg-zinc-950/60 px-3 py-2 text-sm text-white focus:border-amber-300/60 focus:outline-none"
-          >
-            {instanceNames.map((name) => (
-              <option key={name} value={name}>{name}</option>
-            ))}
-          </select>
+          <div className="flex gap-2">
+            <select
+              value={activeInstance}
+              onChange={(event) => setInstanceName(event.target.value)}
+              className="min-w-0 flex-1 rounded-md border border-zinc-700 bg-zinc-950/60 px-3 py-2 text-sm text-white focus:border-amber-300/60 focus:outline-none"
+            >
+              {instanceNames.map((name) => (
+                <option key={name} value={name}>{name}</option>
+              ))}
+            </select>
+            <button
+              type="button"
+              title={`Ranked by ${metric.toUpperCase()} — click to rank by ${metric === "dps" ? "HPS" : "DPS"}`}
+              className={cn(
+                "shrink-0 rounded-md border px-3 py-2 text-sm font-bold uppercase transition",
+                metric === "hps"
+                  ? "border-emerald-300/60 bg-emerald-400/15 text-emerald-100 hover:bg-emerald-400/25"
+                  : "border-red-300/50 bg-red-400/10 text-red-100 hover:bg-red-400/20",
+              )}
+              onClick={() => setMetricOverride(metric === "dps" ? "hps" : "dps")}
+            >
+              {metric}
+            </button>
+          </div>
           <div className="flex gap-1">
             {specs.map((name, index) => (
               <button
                 key={name}
                 type="button"
-                onClick={() => setSpecIdx(index)}
+                onClick={() => selectSpec(index)}
                 className={cn(
                   "flex-1 truncate rounded-md border px-2 py-1.5 text-xs font-bold transition",
                   name === spec
@@ -195,7 +232,7 @@ export function TopBuildsDrawer({ selectedClass, onShowAll }: {
                       {entry.sub_spec && <span className="ml-1.5 font-medium text-zinc-400">{entry.sub_spec}</span>}
                     </p>
                     <p className="truncate text-xs text-zinc-400">
-                      {formatDPS(entry.dps)} DPS
+                      {formatDPS(metric === "hps" ? entry.hps : entry.dps)} {metric.toUpperCase()}
                       {build && <> · {buildPointsSummary(build)}</>}
                       {entry.guild_name && <> · {entry.guild_name}</>}
                     </p>
