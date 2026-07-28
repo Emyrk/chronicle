@@ -2,7 +2,7 @@ import { Fragment, useEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { useSearchParams } from "react-router-dom";
 import { ImageDown, Lock, LockOpen } from "lucide-react";
-import { toPng } from "html-to-image";
+import { toCanvas } from "html-to-image";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
 import { iconUrl, talentBackgroundUrl } from "@/config/iconUrl";
@@ -42,6 +42,7 @@ import {
   resetTalentTabRanks,
   searchParamsWithTalentBuild,
   searchParamsWithTalentLock,
+  talentBuildExportName,
   talentDescription,
   talentGridHeight,
   talentGridRows,
@@ -666,6 +667,31 @@ function allocationsToRanks(tabs: TalentTabData[], allocations: TalentAllocation
   return ranks;
 }
 
+// ─── PNG export watermark ─────────────────────────────────────────
+
+const EXPORT_LOGO_URL = "/c/chronicle/ChronicleLogoCenter.svg";
+const EXPORT_LOGO_HEIGHT = 32; // CSS pixels, scaled by pixelRatio
+const EXPORT_LOGO_MARGIN = 12;
+
+/** Draws the Chronicle logo in the bottom-right corner of the export canvas. */
+async function drawExportWatermark(canvas: HTMLCanvasElement, pixelRatio: number) {
+  const ctx = canvas.getContext("2d");
+  if (!ctx) return;
+  const logo = new Image();
+  logo.src = EXPORT_LOGO_URL;
+  try {
+    await logo.decode();
+  } catch {
+    return; // Logo failed to load — export without the watermark.
+  }
+  const height = EXPORT_LOGO_HEIGHT * pixelRatio;
+  const width = (logo.naturalWidth / logo.naturalHeight) * height;
+  const margin = EXPORT_LOGO_MARGIN * pixelRatio;
+  ctx.globalAlpha = 0.9;
+  ctx.drawImage(logo, canvas.width - width - margin, canvas.height - height - margin, width, height);
+  ctx.globalAlpha = 1;
+}
+
 // ─── Main component ───────────────────────────────────────────────
 
 export function TalentTreeViewer({
@@ -755,13 +781,14 @@ export function TalentTreeViewer({
     if (!node || exporting) return;
     setExporting(true);
     try {
+      const pixelRatio = 2;
       // Icons and backgrounds come from the icon CDN, which serves CORS
       // headers, so html-to-image can inline them as data URLs.
       // cache: "no-cache" forces revalidation — the browser may have cached
       // these images from plain <img> loads (no Origin header), and reusing
       // that cached response for a CORS fetch fails ("cache poisoning").
-      const dataUrl = await toPng(node, {
-        pixelRatio: 2,
+      const canvas = await toCanvas(node, {
+        pixelRatio,
         backgroundColor: "#09090b",
         fetchRequestInit: { cache: "no-cache" },
         // Transparent 1x1 pixel so a single unloadable icon doesn't abort
@@ -769,12 +796,13 @@ export function TalentTreeViewer({
         imagePlaceholder:
           "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNkYPhfDwAChwGA60e6kgAAAABJRU5ErkJggg==",
       });
+      await drawExportWatermark(canvas, pixelRatio);
       // data.name may be missing from the talent JSON; fall back to the
       // class-id lookup, then a generic label.
       const className = data.name ?? CLASS_NAMES[data.id] ?? "class";
       const link = document.createElement("a");
-      link.download = `${className.toLowerCase().replace(/\s+/g, "-")}-talents-${total}pts.png`;
-      link.href = dataUrl;
+      link.download = `${talentBuildExportName(data.tabs, ranks, className)}.png`;
+      link.href = canvas.toDataURL("image/png");
       link.click();
     } catch (error) {
       console.error("Talent tree PNG export failed", error);

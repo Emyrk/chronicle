@@ -20,6 +20,7 @@ import {
   rowPointRequirement,
   searchParamsWithTalentBuild,
   searchParamsWithTalentLock,
+  talentBuildExportName,
   talentTooltipPosition,
   totalTalentPoints,
   updateTalentRank,
@@ -129,6 +130,37 @@ describe("TalentTreeViewer talent locking", () => {
     expect(updateTalentRank(second, 5, tabTalents, {})).toEqual({ 61: 5 });
     // Decreases are unaffected by the budget clamp.
     expect(updateTalentRank(first, 1, tabTalents, { 60: 5 }, { maxPoints: 5 })).toEqual({ 60: 1 });
+  });
+});
+
+describe("TalentTreeViewer export filename", () => {
+  const tab = (id: number, name: string, talentIds: number[]) => ({
+    id,
+    name,
+    backgroundFile: "",
+    orderIndex: id,
+    iconTexture: "",
+    talents: talentIds.map((talentId) => talent({ id: talentId, tierID: 0, columnIndex: 0, maxRank: 5 })),
+  });
+  const tabs = [
+    tab(0, "Holy", [1, 2]),
+    tab(1, "Protection", [3, 4]),
+    tab(2, "Retribution", [5, 6]),
+  ];
+
+  it("names the file after the highest-point tab with per-tab point totals", () => {
+    expect(talentBuildExportName(tabs, { 3: 5, 4: 5, 5: 4 }, "Paladin")).toBe("Protection_0.10.4");
+    expect(talentBuildExportName(tabs, { 5: 5 }, "Paladin")).toBe("Retribution_0.0.5");
+  });
+
+  it("prefers the earlier tab on ties and falls back to the class name at zero points", () => {
+    expect(talentBuildExportName(tabs, { 1: 3, 5: 3 }, "Paladin")).toBe("Holy_3.0.3");
+    expect(talentBuildExportName(tabs, {}, "Paladin")).toBe("Paladin_0.0.0");
+  });
+
+  it("replaces whitespace in spec names", () => {
+    const feralTabs = [tab(0, "Feral Combat", [1])];
+    expect(talentBuildExportName(feralTabs, { 1: 2 }, "Druid")).toBe("Feral-Combat_2");
   });
 });
 

@@ -297,6 +297,22 @@ export async function copyTalentBuildUrl(clipboard: BuildUrlClipboard | undefine
   await clipboard.writeText(canonicalTalentBuildUrl(href, ranks, tabs));
 }
 
+// ─── Export filename ──────────────────────────────────────────────
+
+/**
+ * Filename for an exported build image: `<Spec>_<pts1>.<pts2>.<pts3>`,
+ * e.g. "Retribution_0.34.17". Spec is the tab with the most points
+ * (first tab wins ties); falls back to the given class name when no
+ * points are spent.
+ */
+export function talentBuildExportName(tabs: TalentTabData[], ranks: TalentRanks, fallbackName: string) {
+  const pointsPerTab = tabs.map((tab) => tab.talents.reduce((sum, talent) => sum + (ranks[talent.id] ?? 0), 0));
+  const maxPoints = Math.max(...pointsPerTab, 0);
+  const specTab = maxPoints > 0 ? tabs[pointsPerTab.indexOf(maxPoints)] : undefined;
+  const spec = (specTab?.name || fallbackName).replace(/\s+/g, "-");
+  return `${spec}_${pointsPerTab.join(".")}`;
+}
+
 // ─── Arrow path geometry ──────────────────────────────────────────
 
 function talentCenter(talent: Pick<TalentEntry, "tierID" | "columnIndex">) {
