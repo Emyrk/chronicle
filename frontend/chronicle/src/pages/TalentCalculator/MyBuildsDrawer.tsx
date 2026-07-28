@@ -134,6 +134,7 @@ export function MyBuildsDrawer({
   }
 
   function removeBuild(build: UserTalentBuild) {
+    if (!window.confirm(`Delete build "${build.name}"? This cannot be undone.`)) return;
     deleteBuild.mutate(build.id, {
       onSuccess: () => toast.success(`Deleted "${build.name}"`),
       onError: (err) => toast.error(toastError(err)),
