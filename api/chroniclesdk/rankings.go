@@ -9,10 +9,10 @@ import (
 
 // RankingsInstanceSummary is a summary of DPS rankings for a single instance.
 type RankingsInstanceSummary struct {
-	InstanceName   string                     `json:"instance_name"`
-	DifficultyName string                     `json:"difficulty_name"`
-	MaxPlayers     int16                      `json:"max_players"`
-	TotalKills     int64                      `json:"total_kills"`
+	InstanceName   string                      `json:"instance_name"`
+	DifficultyName string                      `json:"difficulty_name"`
+	MaxPlayers     int16                       `json:"max_players"`
+	TotalKills     int64                       `json:"total_kills"`
 	TopPlayers     []RankingsInstanceTopPlayer `json:"top_players"`
 }
 
@@ -33,30 +33,34 @@ type RankingsEncounterSummary struct {
 
 // RankingsEntry is a single row in the DPS rankings leaderboard.
 type RankingsEntry struct {
-	ID            uuid.UUID  `json:"id"`
-	EncounterName string     `json:"encounter_name"`
-	InstanceName  string     `json:"instance_name"`
-	PlayerGUID    string     `json:"player_guid"`
-	PlayerName    string     `json:"player_name"`
-	PlayerClass   string     `json:"player_class"`
-	PlayerSpec    string     `json:"player_spec"`
-	PlayerRole    string     `json:"player_role"`
-	PlayerLevel    int16      `json:"player_level"`
+	ID             uuid.UUID `json:"id"`
+	EncounterName  string    `json:"encounter_name"`
+	InstanceName   string    `json:"instance_name"`
+	PlayerGUID     string    `json:"player_guid"`
+	PlayerName     string    `json:"player_name"`
+	PlayerClass    string    `json:"player_class"`
+	PlayerSpec     string    `json:"player_spec"`
+	PlayerRole     string    `json:"player_role"`
+	PlayerLevel    int16     `json:"player_level"`
 	DifficultyName string    `json:"difficulty_name"`
 	MaxPlayers     int16     `json:"max_players"`
 	SubSpec        *string   `json:"sub_spec,omitempty"`
-	RealmID       uuid.UUID  `json:"realm_id"`
-	RealmName     string     `json:"realm_name"`
-	GuildName     string     `json:"guild_name"`
-	DamageDone    int64      `json:"damage_done"`
-	HealingDone   int64      `json:"healing_done"`
-	AbsorbedDone  int64      `json:"absorbed_done"`
-	DurationSecs  float64    `json:"duration_secs"`
-	DPS           float64    `json:"dps"`
-	HPS           float64    `json:"hps"`
-	AvgIlvl       *int16     `json:"avg_ilvl,omitempty"`
-	LogHashedSlug string     `json:"log_hashed_slug"`
-	KilledAt      time.Time  `json:"killed_at"`
+	// TalentLayout is the player's talent build detected from the combat
+	// log: one digit (rank) per talent per tree, trees separated by '}',
+	// e.g. "05230...}30200...}0000". Empty when no build was detected.
+	TalentLayout  *string   `json:"talent_layout,omitempty"`
+	RealmID       uuid.UUID `json:"realm_id"`
+	RealmName     string    `json:"realm_name"`
+	GuildName     string    `json:"guild_name"`
+	DamageDone    int64     `json:"damage_done"`
+	HealingDone   int64     `json:"healing_done"`
+	AbsorbedDone  int64     `json:"absorbed_done"`
+	DurationSecs  float64   `json:"duration_secs"`
+	DPS           float64   `json:"dps"`
+	HPS           float64   `json:"hps"`
+	AvgIlvl       *int16    `json:"avg_ilvl,omitempty"`
+	LogHashedSlug string    `json:"log_hashed_slug"`
+	KilledAt      time.Time `json:"killed_at"`
 }
 
 // RankingsLeaderboardResponse wraps leaderboard entries with total count for pagination.
@@ -131,6 +135,7 @@ func TopPlayersFromJSON(data json.RawMessage) []RankingsInstanceTopPlayer {
 	}
 	return players
 }
+
 // ── Instance Parses ──────────────────────────────────────────────────────
 
 // InstanceParsesResponse is the top-level response for the instance parses endpoint.
@@ -201,7 +206,6 @@ type InstanceParseAverage struct {
 	Selected     int     `json:"selected"`
 }
 
-
 // AdminTriggerSnapshotRequest is the request body for the admin parse snapshot trigger.
 type AdminTriggerSnapshotRequest struct {
 	// TenantID scopes the snapshot to a specific tenant. Empty = root/all-time scope.
@@ -233,6 +237,7 @@ type AdminTriggerSnapshotResponse struct {
 	// Jobs lists every enqueued job. For single-tenant requests this has one entry.
 	Jobs []AdminTriggerSnapshotJobResult `json:"jobs"`
 }
+
 // AdminRefreshRankingsJob describes one tenant summary refresh job.
 type AdminRefreshRankingsJob struct {
 	TenantID string `json:"tenant_id"`
@@ -275,13 +280,13 @@ type AdminBulkDeleteSnapshotsResponse struct {
 
 // SnapshotSummary is a published snapshot listed for the cohort viewer.
 type SnapshotSummary struct {
-	ID             uuid.UUID `json:"id"`
-	Cutoff         time.Time `json:"cutoff"`
-	LookbackDays   int32     `json:"lookback_days"`
-	CohortMode     string    `json:"cohort_mode"`
-	PolicyVersion  int16     `json:"policy_version"`
-	MemberCount    int64     `json:"member_count"`
-	PublishedAt    time.Time `json:"published_at"`
+	ID            uuid.UUID `json:"id"`
+	Cutoff        time.Time `json:"cutoff"`
+	LookbackDays  int32     `json:"lookback_days"`
+	CohortMode    string    `json:"cohort_mode"`
+	PolicyVersion int16     `json:"policy_version"`
+	MemberCount   int64     `json:"member_count"`
+	PublishedAt   time.Time `json:"published_at"`
 }
 
 // CohortBucket describes one available (encounter, class, spec, difficulty, max_players) combination.
@@ -319,4 +324,3 @@ type CohortDebugResponse struct {
 	Entries       []CohortDebugEntry `json:"entries"`
 	Buckets       []CohortBucket     `json:"buckets"`
 }
-

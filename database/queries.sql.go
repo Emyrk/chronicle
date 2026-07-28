@@ -6508,6 +6508,7 @@ WITH deduped AS (
         edr.log_hashed_slug,
         edr.killed_at,
         tb.sub_spec AS talent_sub_spec,
+        tb.talent_layout AS talent_layout,
         COALESCE(li.duplicate_group_id, li.id) AS run_id
     FROM encounter_dps_rankings edr
     JOIN log_instances li ON li.id = edr.instance_id
@@ -6587,7 +6588,8 @@ per_run AS (
         COALESCE(MAX(d.avg_ilvl), 0)::smallint AS avg_ilvl,
         ((array_agg(d.log_hashed_slug ORDER BY d.damage_done DESC))[1])::text AS log_hashed_slug,
         MAX(d.killed_at)::timestamptz AS killed_at,
-        COALESCE((array_agg(d.talent_sub_spec ORDER BY d.damage_done DESC))[1], '')::text AS talent_sub_spec
+        COALESCE((array_agg(d.talent_sub_spec ORDER BY d.damage_done DESC))[1], '')::text AS talent_sub_spec,
+        COALESCE((array_agg(d.talent_layout ORDER BY d.damage_done DESC))[1], '')::text AS talent_layout
     FROM deduped d
     JOIN realm_encounter_counts rec ON rec.realm_id = d.realm_id
     GROUP BY d.player_guid, d.run_id, rec.encounter_count
@@ -6618,12 +6620,13 @@ aggregated AS (
         pr.avg_ilvl,
         pr.log_hashed_slug,
         pr.killed_at,
-        pr.talent_sub_spec
+        pr.talent_sub_spec,
+        pr.talent_layout
     FROM per_run pr
     ORDER BY pr.player_guid, (CASE WHEN $1 :: text = 'hps' THEN pr.hps ELSE pr.dps END) DESC
 )
 SELECT
-    a.player_guid, a.player_name, a.player_class, a.player_spec, a.player_role, a.player_level, a.instance_name, a.encounter_name, a.difficulty_name, a.max_players, a.realm_id, a.realm_name, a.guild_name, a.damage_done, a.healing_done, a.absorbed_done, a.duration_secs, a.dps, a.hps, a.avg_ilvl, a.log_hashed_slug, a.killed_at, a.talent_sub_spec,
+    a.player_guid, a.player_name, a.player_class, a.player_spec, a.player_role, a.player_level, a.instance_name, a.encounter_name, a.difficulty_name, a.max_players, a.realm_id, a.realm_name, a.guild_name, a.damage_done, a.healing_done, a.absorbed_done, a.duration_secs, a.dps, a.hps, a.avg_ilvl, a.log_hashed_slug, a.killed_at, a.talent_sub_spec, a.talent_layout,
     COUNT(*) OVER() AS total_count
 FROM aggregated a
 WHERE (CASE WHEN $1 :: text = 'hps' THEN a.hps ELSE a.dps END) > 0
@@ -6672,6 +6675,7 @@ type RankingsLeaderboardRow struct {
 	LogHashedSlug  string             `db:"log_hashed_slug" json:"log_hashed_slug"`
 	KilledAt       pgtype.Timestamptz `db:"killed_at" json:"killed_at"`
 	TalentSubSpec  string             `db:"talent_sub_spec" json:"talent_sub_spec"`
+	TalentLayout   string             `db:"talent_layout" json:"talent_layout"`
 	TotalCount     int64              `db:"total_count" json:"total_count"`
 }
 
@@ -6732,6 +6736,7 @@ func (q *sqlQuerier) RankingsLeaderboard(ctx context.Context, arg RankingsLeader
 			&i.LogHashedSlug,
 			&i.KilledAt,
 			&i.TalentSubSpec,
+			&i.TalentLayout,
 			&i.TotalCount,
 		); err != nil {
 			return nil, err

@@ -333,6 +333,9 @@ func (s *Service) handleLeaderboard(w http.ResponseWriter, r *http.Request) {
 		if row.TalentSubSpec != "" {
 			entry.SubSpec = &row.TalentSubSpec
 		}
+		if row.TalentLayout != "" {
+			entry.TalentLayout = &row.TalentLayout
+		}
 		entries = append(entries, entry)
 	}
 

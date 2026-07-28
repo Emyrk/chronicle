@@ -1558,6 +1558,12 @@ export interface RankingsEntry {
     readonly difficulty_name: string;
     readonly max_players: number;
     readonly sub_spec?: string;
+    /**
+     * TalentLayout is the player's talent build detected from the combat
+     * log: one digit (rank) per talent per tree, trees separated by '}',
+     * e.g. "05230...}30200...}0000". Empty when no build was detected.
+     */
+    readonly talent_layout?: string;
     readonly realm_id: string;
     readonly realm_name: string;
     readonly guild_name: string;

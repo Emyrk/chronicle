@@ -178,6 +178,7 @@ WITH deduped AS (
         edr.log_hashed_slug,
         edr.killed_at,
         tb.sub_spec AS talent_sub_spec,
+        tb.talent_layout AS talent_layout,
         COALESCE(li.duplicate_group_id, li.id) AS run_id
     FROM encounter_dps_rankings edr
     JOIN log_instances li ON li.id = edr.instance_id
@@ -261,7 +262,8 @@ per_run AS (
         COALESCE(MAX(d.avg_ilvl), 0)::smallint AS avg_ilvl,
         ((array_agg(d.log_hashed_slug ORDER BY d.damage_done DESC))[1])::text AS log_hashed_slug,
         MAX(d.killed_at)::timestamptz AS killed_at,
-        COALESCE((array_agg(d.talent_sub_spec ORDER BY d.damage_done DESC))[1], '')::text AS talent_sub_spec
+        COALESCE((array_agg(d.talent_sub_spec ORDER BY d.damage_done DESC))[1], '')::text AS talent_sub_spec,
+        COALESCE((array_agg(d.talent_layout ORDER BY d.damage_done DESC))[1], '')::text AS talent_layout
     FROM deduped d
     JOIN realm_encounter_counts rec ON rec.realm_id = d.realm_id
     GROUP BY d.player_guid, d.run_id, rec.encounter_count
@@ -293,7 +295,8 @@ aggregated AS (
         pr.avg_ilvl,
         pr.log_hashed_slug,
         pr.killed_at,
-        pr.talent_sub_spec
+        pr.talent_sub_spec,
+        pr.talent_layout
     FROM per_run pr
     ORDER BY pr.player_guid, (CASE WHEN @metric :: text = 'hps' THEN pr.hps ELSE pr.dps END) DESC
 )
