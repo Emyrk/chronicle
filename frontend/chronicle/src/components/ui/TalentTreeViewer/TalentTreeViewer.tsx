@@ -3,6 +3,7 @@ import { createPortal } from "react-dom";
 import { useSearchParams } from "react-router-dom";
 import { ImageDown, Lock, LockOpen } from "lucide-react";
 import { toPng } from "html-to-image";
+import { toast } from "sonner";
 import { cn } from "@/lib/utils";
 import { iconUrl, talentBackgroundUrl } from "@/config/iconUrl";
 import { useIconBaseUrl } from "@/hooks/useDatasetId";
@@ -496,6 +497,7 @@ function TalentTab({
   debug,
   compact,
   pointsExhausted,
+  buildLocked,
 }: {
   tab: TalentTabData;
   ranks: TalentRanks;
@@ -506,6 +508,8 @@ function TalentTab({
   compact?: boolean;
   /** True when no more points can be spent (max reached or build locked). */
   pointsExhausted?: boolean;
+  /** True when the build is manually locked — all changes (add/remove) are blocked. */
+  buildLocked?: boolean;
 }) {
   const iconBaseUrl = useIconBaseUrl();
   const points = useMemo(() => tab.talents.reduce((sum, talent) => sum + (ranks[talent.id] ?? 0), 0), [tab.talents, ranks]);
@@ -568,7 +572,7 @@ function TalentTab({
             type="button"
             aria-label={`Reset ${tab.name} tree`}
             className="shrink-0 rounded-md border border-amber-300/30 bg-zinc-950/60 px-2.5 py-1.5 text-xs font-bold uppercase tracking-[0.16em] text-amber-100/80 transition hover:border-amber-200/60 hover:bg-amber-300/10 hover:text-white disabled:cursor-not-allowed disabled:opacity-45"
-            disabled={points === 0}
+            disabled={points === 0 || buildLocked}
             onClick={onReset}
           >
             Reset tree
@@ -727,6 +731,18 @@ export function TalentTreeViewer({
     setSearchParams(searchParamsWithTalentLock(searchParams, !manuallyLocked), { replace: true });
   }
 
+  function notifyBuildLocked() {
+    toast.warning("Talent build is locked", {
+      // Stable id so rapid clicking re-uses one toast instead of stacking.
+      id: "talent-build-locked",
+      description: "Unlock the build to add or remove talent points.",
+      action: {
+        label: "Unlock",
+        onClick: () => setSearchParams(searchParamsWithTalentLock(searchParams, false), { replace: true }),
+      },
+    });
+  }
+
   async function copyBuildLink() {
     if (typeof window === "undefined") return;
     await copyTalentBuildUrl(navigator.clipboard, window.location.href, ranks, tabTalentLists);
@@ -788,7 +804,15 @@ export function TalentTreeViewer({
                   <ImageDown className="h-3.5 w-3.5" />
                   {exporting ? "Exporting…" : "Export PNG"}
                 </button>
-                <button type="button" className="rounded-md border border-red-500/50 bg-red-500/15 px-2.5 py-1 text-sm font-medium text-red-400 hover:bg-red-500/25 hover:text-red-300" onClick={() => commitRanks({})}>Reset</button>
+                <button
+                  type="button"
+                  disabled={manuallyLocked}
+                  title={manuallyLocked ? "Unlock the build to reset" : undefined}
+                  className="rounded-md border border-red-500/50 bg-red-500/15 px-2.5 py-1 text-sm font-medium text-red-400 hover:bg-red-500/25 hover:text-red-300 disabled:cursor-not-allowed disabled:opacity-45 disabled:hover:bg-red-500/15 disabled:hover:text-red-400"
+                  onClick={() => commitRanks({})}
+                >
+                  Reset
+                </button>
                 <button
                   type="button"
                   aria-pressed={manuallyLocked}
@@ -823,8 +847,22 @@ export function TalentTreeViewer({
             compact={compact}
             debug={searchParams.get("debug") === "true"}
             pointsExhausted={pointsExhausted}
-            onRankChange={(talent, rank) => commitRanks(updateTalentRank(talent, rank, tab.talents, ranks, { maxPoints: manuallyLocked ? total : maxPoints }))}
-            onReset={() => commitRanks(resetTalentTabRanks(tabTalentLists, ranks, tab.talents, maxPoints))}
+            buildLocked={manuallyLocked}
+            // A locked build is frozen: no points may be added or removed.
+            onRankChange={(talent, rank) => {
+              if (manuallyLocked) {
+                notifyBuildLocked();
+                return;
+              }
+              commitRanks(updateTalentRank(talent, rank, tab.talents, ranks, { maxPoints }));
+            }}
+            onReset={() => {
+              if (manuallyLocked) {
+                notifyBuildLocked();
+                return;
+              }
+              commitRanks(resetTalentTabRanks(tabTalentLists, ranks, tab.talents, maxPoints));
+            }}
           />
         ))}
       </div>
