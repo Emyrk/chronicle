@@ -1,7 +1,7 @@
 export interface IncomingTimelineEvent {
   offsetMilli: number;
   eventIndex: number;
-  type: "damage" | "heal" | "absorbed" | "resource_change";
+  type: "damage" | "heal" | "absorbed" | "resource_change" | "aura_cast";
   amount: number;
   overheal?: number;
   absorbed?: number;

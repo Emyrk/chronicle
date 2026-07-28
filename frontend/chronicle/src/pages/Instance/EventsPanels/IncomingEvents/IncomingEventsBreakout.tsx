@@ -30,6 +30,7 @@ interface IncomingEventsBreakoutProps {
   anchorAbsoluteMilli: number;
   events: IncomingEventDisplay[];
   windowSeconds: number;
+  onWindowSecondsChange: (seconds: number) => void;
   sharedCursorMilli: number | null;
   onSharedCursorChange: (cursorMilli: number | null) => void;
   onClose: () => void;
@@ -52,6 +53,7 @@ export function IncomingEventsBreakout({
   anchorAbsoluteMilli,
   events,
   windowSeconds,
+  onWindowSecondsChange,
   sharedCursorMilli,
   onSharedCursorChange,
   onClose,
@@ -116,8 +118,8 @@ export function IncomingEventsBreakout({
   const classColor = `var(--color-class-${className.toLowerCase()})`;
 
   return (
-    <div className="mx-2 mb-2 overflow-hidden rounded border border-red-500/35 bg-[#111113] shadow-lg shadow-black/30">
-      <div className="flex items-center gap-2 border-b border-white/5 px-2.5 py-1.5">
+    <div className="overflow-hidden rounded border border-red-500/35 bg-[#111113] shadow-lg shadow-black/30">
+      <div className="flex items-center gap-2 border-b border-white/5 px-2.5 py-1.5" data-drag-handle>
         <span className="h-2 w-2 rounded-full shadow-[0_0_8px_currentColor]" style={{ color: classColor, backgroundColor: classColor }} />
         <span className="text-xs font-semibold" style={{ color: classColor }}>{unitName}</span>
         <span className="text-2xs uppercase tracking-widest text-muted-foreground">{className}</span>
@@ -132,6 +134,37 @@ export function IncomingEventsBreakout({
           <X className="h-3.5 w-3.5" />
         </button>
       </div>
+
+      {!collapsed && (
+        <div className="flex items-center gap-1.5 border-b border-white/5 bg-white/[0.01] px-3 py-1.5">
+          <span className="mr-1 text-[9px] uppercase tracking-widest text-muted-foreground">Window</span>
+          {[10, 15, 30, 45, 60].map((seconds) => (
+            <button
+              key={seconds}
+              type="button"
+              onClick={() => onWindowSecondsChange(seconds)}
+              className={cn(
+                "rounded border px-1.5 py-0.5 font-mono text-[9px]",
+                windowSeconds === seconds
+                  ? "border-amber-300/40 bg-amber-300/10 text-amber-200"
+                  : "border-white/10 bg-white/[0.03] text-muted-foreground hover:text-foreground",
+              )}
+            >
+              {seconds}s
+            </button>
+          ))}
+          <input
+            type="number"
+            min={5}
+            max={120}
+            value={windowSeconds}
+            onChange={(event) => onWindowSecondsChange(Number(event.target.value))}
+            className="ml-1 w-12 rounded border border-white/10 bg-[#191a1d] px-1.5 py-0.5 font-mono text-[9px] text-foreground"
+            aria-label="Incoming events history in seconds"
+          />
+          <span className="text-[9px] text-muted-foreground">seconds before death</span>
+        </div>
+      )}
 
       <div className="border-b border-white/5 bg-white/[0.015] px-3 py-2">
         <div className="mb-1.5 flex items-baseline gap-2">
