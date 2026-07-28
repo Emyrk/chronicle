@@ -73,6 +73,7 @@ export const TALENT_GRID_GAP = 16;
 export const TALENT_ROW_STRIDE = TALENT_CELL_HEIGHT + TALENT_GRID_GAP;
 export const TALENT_BUILD_PARAM = "build";
 export const TALENT_LOCK_PARAM = "lock";
+export const TALENT_POPULARITY_PARAM = "pop";
 export const TALENT_ARROW_SOURCE_CLEARANCE = 0;
 export const TALENT_ARROW_TARGET_CLEARANCE = 0;
 export const TALENT_ARROW_ELBOW_CLEARANCE = 14;
@@ -294,6 +295,38 @@ export function searchParamsWithTalentLock(params: URLSearchParams, locked: bool
   if (locked) next.set(TALENT_LOCK_PARAM, "1");
   else next.delete(TALENT_LOCK_PARAM);
   return next;
+}
+
+export interface TalentPopularitySelection {
+  instance: string;
+  spec: string;
+  metric: "dps" | "hps";
+}
+
+export function talentPopularitySlug(value: string) {
+  return value.toLowerCase().trim().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "");
+}
+
+export function searchParamsWithTalentPopularity(
+  params: URLSearchParams,
+  selection: TalentPopularitySelection | null,
+) {
+  const next = new URLSearchParams(params);
+  if (selection) {
+    next.set(
+      TALENT_POPULARITY_PARAM,
+      `${talentPopularitySlug(selection.instance)}.${talentPopularitySlug(selection.spec)}.${selection.metric}`,
+    );
+  } else {
+    next.delete(TALENT_POPULARITY_PARAM);
+  }
+  return next;
+}
+
+export function talentPopularitySelection(params: URLSearchParams): TalentPopularitySelection | null {
+  const [instance, spec, metric, ...extra] = (params.get(TALENT_POPULARITY_PARAM) ?? "").split(".");
+  if (!instance || !spec || extra.length > 0 || (metric !== "dps" && metric !== "hps")) return null;
+  return { instance, spec, metric };
 }
 
 export function isTalentBuildLocked(params: URLSearchParams) {

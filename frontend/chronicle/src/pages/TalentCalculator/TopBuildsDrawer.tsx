@@ -15,6 +15,7 @@ import {
 } from "@/components/ui/sheet";
 import {
   TALENT_BUILD_PARAM,
+  type TalentPopularitySelection,
   buildPointsSummary,
   rankingsLayoutToBuild,
 } from "@/components/ui/TalentTreeViewer/talentLogic";
@@ -44,8 +45,8 @@ function formatDPS(dps: number): string {
 
 export function TopBuildsDrawer({ selectedClass, onShowAll }: {
   selectedClass?: TalentClassInfo;
-  /** Called with the top-10 build strings to show the popularity overlay. */
-  onShowAll?: (builds: string[]) => void;
+  /** Called with the selected ranking cohort to show the popularity overlay. */
+  onShowAll?: (selection: TalentPopularitySelection) => void;
 }) {
   const [searchParams, setSearchParams] = useSearchParams();
   const [open, setOpen] = useState(false);
@@ -102,7 +103,7 @@ export function TopBuildsDrawer({ selectedClass, onShowAll }: {
       .map((entry) => rankingsLayoutToBuild(entry.talent_layout))
       .filter(Boolean);
     if (builds.length === 0 || !onShowAll) return;
-    onShowAll(builds);
+    onShowAll({ instance: activeInstance, spec, metric });
     setOpen(false);
     toast.success(`Showing talent popularity across ${builds.length} top ${spec} builds`, {
       description: "Use \"Hide popularity\" in the toolbar to dismiss it.",

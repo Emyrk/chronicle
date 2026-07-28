@@ -24,7 +24,9 @@ import {
   rowPointRequirement,
   searchParamsWithTalentBuild,
   searchParamsWithTalentLock,
+  searchParamsWithTalentPopularity,
   talentBuildExportName,
+  talentPopularitySelection,
   talentTooltipPosition,
   totalTalentPoints,
   updateTalentRank,
@@ -134,6 +136,36 @@ describe("TalentTreeViewer talent locking", () => {
     expect(updateTalentRank(second, 5, tabTalents, {})).toEqual({ 61: 5 });
     // Decreases are unaffected by the budget clamp.
     expect(updateTalentRank(first, 1, tabTalents, { 60: 5 }, { maxPoints: 5 })).toEqual({ 60: 1 });
+  });
+});
+
+describe("TalentTreeViewer popularity URL state", () => {
+  it("stores a compact instance, spec, and metric selection", () => {
+    const params = searchParamsWithTalentPopularity(
+      new URLSearchParams("build=505&foo=bar&pop=stale"),
+      { instance: "Molten Core", spec: "Fire", metric: "dps" },
+    );
+
+    expect(params.toString()).toBe("build=505&foo=bar&pop=molten-core.fire.dps");
+    expect(talentPopularitySelection(params)).toEqual({
+      instance: "molten-core",
+      spec: "fire",
+      metric: "dps",
+    });
+  });
+
+  it("clears popularity without dropping other query params", () => {
+    const params = new URLSearchParams("build=505&pop=molten-core.fire.dps");
+    const cleared = searchParamsWithTalentPopularity(params, null);
+
+    expect(cleared.toString()).toBe("build=505");
+    expect(talentPopularitySelection(cleared)).toBeNull();
+  });
+
+  it("ignores malformed popularity selections", () => {
+    expect(talentPopularitySelection(new URLSearchParams("pop=molten-core.fire"))).toBeNull();
+    expect(talentPopularitySelection(new URLSearchParams("pop=molten-core.fire.damage"))).toBeNull();
+    expect(talentPopularitySelection(new URLSearchParams("pop=molten-core.fire.dps.extra"))).toBeNull();
   });
 });
 

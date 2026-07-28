@@ -1,17 +1,24 @@
-import { useEffect, useMemo, useState } from "react";
-import { Link, useParams, Navigate } from "react-router-dom";
+import { useMemo } from "react";
+import { Link, useParams, Navigate, useSearchParams } from "react-router-dom";
 import { ChevronLeft, EyeOff } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useIsMobile } from "@/hooks/useIsMobile";
 import { useSiteConfig } from "@/api/queries";
+import { useRankingsEncounters, useRankingsInstances, useRankingsLeaderboard } from "@/api/rankingsQueries";
 import { TalentTreeViewer } from "@/components/ui/TalentTreeViewer/TalentTreeViewer";
 import {
   type TalentPopularity,
+  type TalentPopularitySelection,
   aggregateTalentPopularity,
   decodeTalentBuild,
+  rankingsLayoutToBuild,
+  searchParamsWithTalentPopularity,
+  talentPopularitySelection,
+  talentPopularitySlug,
 } from "@/components/ui/TalentTreeViewer/talentLogic";
 import { useTalentTrees } from "@/components/ui/TalentTreeViewer/useTalentTrees";
 import { DatasetProvider } from "@/hooks/useDatasetId";
+import { SPEC_BY_CLASS } from "@/pages/Rankings/classDisplay";
 import { MyBuildsDrawer } from "./MyBuildsDrawer";
 import { TopBuildsDrawer } from "./TopBuildsDrawer";
 
@@ -34,6 +41,10 @@ const CLASS_INFO: { id: number; name: string; slug: string }[] = [
  *   - tbc    → max level 70, 61 points, no Death Knight
  *   - else   → max level 60, 51 points, no Death Knight (vanilla)
  */
+function toApiClass(name: string): string {
+  return name.replace(/\s+/g, "").toUpperCase();
+}
+
 function talentConfigFromFlavor(flavor: readonly string[]): {
   maxLevel: number;
   maxTalentPoints: number;
@@ -50,6 +61,7 @@ function talentConfigFromFlavor(flavor: readonly string[]): {
 
 export function TalentCalculatorPage() {
   const { classSlug } = useParams<{ classSlug?: string }>();
+  const [searchParams, setSearchParams] = useSearchParams();
   const { data: talentData, isLoading, isError } = useTalentTrees();
   const { data: siteConfig } = useSiteConfig();
 
@@ -72,27 +84,70 @@ export function TalentCalculatorPage() {
   const cohortMode = siteConfig?.tenant?.parse_config?.cohort_mode ?? "spec";
   const topBuildsAvailable = cohortMode === "spec";
 
-  const classTreeData = useMemo(() => {
-    if (!talentData || !selectedClassId) return undefined;
-    return talentData.classes?.[String(selectedClassId)];
-  }, [talentData, selectedClassId]);
+  const classTreeData = talentData && selectedClassId
+    ? talentData.classes?.[String(selectedClassId)]
+    : undefined;
 
   const isMobile = useIsMobile();
 
-  // Top Builds "Show all" overlay: per-talent popularity across the top-10.
-  // Persists while editing talents (so it can guide the build); cleared on
-  // class change or via the "Hide popularity" button.
-  const [popularity, setPopularity] = useState<Record<number, TalentPopularity> | null>(null);
-  useEffect(() => {
-    // eslint-disable-next-line react-hooks/set-state-in-effect -- intentional: the overlay belongs to one class's trees
-    setPopularity(null);
-  }, [classSlug]);
+  // Top Builds "Show all" overlay: store the ranking cohort in a compact URL
+  // value, then reload its current top-10 builds when the page is opened.
+  const popularitySource = useMemo(() => talentPopularitySelection(searchParams), [searchParams]);
+  const apiClass = selectedClass ? toApiClass(selectedClass.name) : "";
+  const popularitySpec = (SPEC_BY_CLASS[apiClass] ?? []).find(
+    (spec) => talentPopularitySlug(spec) === popularitySource?.spec,
+  ) ?? "";
 
-  function showPopularity(builds: string[]) {
-    if (!classTreeData) return;
+  const popularityInstancesQuery = useRankingsInstances(Boolean(popularitySource));
+  const popularityInstance = useMemo(() => {
+    if (!popularitySource) return "";
+    return (popularityInstancesQuery.data ?? []).find(
+      (instance) => talentPopularitySlug(instance.instance_name) === popularitySource.instance,
+    )?.instance_name ?? "";
+  }, [popularityInstancesQuery.data, popularitySource]);
+
+  const popularityEncountersQuery = useRankingsEncounters(popularityInstance);
+  const popularityBossNames = useMemo(
+    () => (popularityEncountersQuery.data ?? [])
+      .map((encounter) => encounter.encounter_name)
+      .filter((name) => name !== "Trash"),
+    [popularityEncountersQuery.data],
+  );
+  const popularityLeaderboardQuery = useRankingsLeaderboard(
+    {
+      instance_names: popularityInstance,
+      encounter_names: popularityBossNames.join(","),
+      class: apiClass,
+      spec: popularitySpec,
+      hide_unknowns: true,
+      metric: popularitySource?.metric,
+      limit: 10,
+    },
+    Boolean(
+      popularitySource
+      && popularityInstance
+      && apiClass
+      && popularitySpec
+      && popularityBossNames.length > 0
+    ),
+  );
+
+  const popularity = useMemo<Record<number, TalentPopularity> | null>(() => {
+    if (!classTreeData || !popularitySource) return null;
+    const builds = (popularityLeaderboardQuery.data?.entries ?? [])
+      .map((entry) => rankingsLayoutToBuild(entry.talent_layout))
+      .filter(Boolean);
+    if (builds.length === 0) return null;
     const tabs = classTreeData.tabs.map((tab) => tab.talents);
-    const decoded = builds.map((build) => decodeTalentBuild(build, tabs));
-    setPopularity(aggregateTalentPopularity(decoded));
+    return aggregateTalentPopularity(builds.map((build) => decodeTalentBuild(build, tabs)));
+  }, [classTreeData, popularityLeaderboardQuery.data, popularitySource]);
+
+  function showPopularity(selection: TalentPopularitySelection) {
+    setSearchParams(searchParamsWithTalentPopularity(searchParams, selection), { replace: true });
+  }
+
+  function hidePopularity() {
+    setSearchParams(searchParamsWithTalentPopularity(searchParams, null), { replace: true });
   }
 
   // Desktop defaults to the first available class when no slug is provided.
@@ -219,7 +274,7 @@ export function TalentCalculatorPage() {
                   <button
                     type="button"
                     className="inline-flex items-center gap-1.5 rounded-md border border-zinc-600 bg-zinc-900/60 px-2.5 py-1 text-sm font-semibold text-zinc-300 transition hover:border-zinc-400 hover:text-white"
-                    onClick={() => setPopularity(null)}
+                    onClick={hidePopularity}
                   >
                     <EyeOff className="h-3.5 w-3.5" />
                     Hide popularity
