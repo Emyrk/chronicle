@@ -7,10 +7,12 @@ import (
 	"github.com/Emyrk/chronicle/combatlog/parser/common/characters"
 	"github.com/Emyrk/chronicle/combatlog/parser/common/characters/period"
 	"github.com/Emyrk/chronicle/combatlog/parser/common/identifier"
+	"github.com/Emyrk/chronicle/combatlog/parser/common/messages"
 	"github.com/Emyrk/chronicle/combatlog/parser/common/unitdb"
 	"github.com/Emyrk/chronicle/combatlog/parser/guid"
 	"github.com/Emyrk/chronicle/combatlog/parser/vanilla/creatures"
 	"github.com/Emyrk/chronicle/database"
+	"github.com/Emyrk/chronicle/database/gamedb/chrondbc"
 	"github.com/stretchr/testify/require"
 )
 
@@ -39,11 +41,27 @@ func TestVanillaPlusMograine_IgnoresPhaseOneDeath(t *testing.T) {
 	require.True(t, mograineChar.IsActive(), "phase-one death should not end Mograine's activity")
 	require.Equal(t, period.EndStateNone, mograineChar.LastEndState())
 
-	_, err = chars.Process(damage(base.Add(2*time.Second), player, whitemane))
+	// Whitemane's activity keeps Mograine alive even after the normal 60-second
+	// timeout would have elapsed.
+	_, err = chars.Process(damage(base.Add(70*time.Second), player, whitemane))
 	require.NoError(t, err)
-	_, err = chars.Process(damage(base.Add(5*time.Second), player, mograine))
+	_, err = chars.Process(damage(base.Add(140*time.Second), player, whitemane))
 	require.NoError(t, err)
-	_, err = chars.Process(slain(base.Add(6*time.Second), player, mograine))
+	require.True(t, mograineChar.IsActive(), "Whitemane activity should bridge the resurrection phase")
+
+	// Whitemane becoming active is not enough to transition Mograine. The
+	// explicit Scarlet Resurrection cast controls when normal death handling resumes.
+	_, err = chars.Process(damage(base.Add(141*time.Second), player, mograine))
+	require.NoError(t, err)
+	_, err = chars.Process(slain(base.Add(142*time.Second), player, mograine))
+	require.NoError(t, err)
+	require.True(t, mograineChar.IsActive(), "activity alone should not infer resurrection")
+
+	_, err = chars.Process(spellGo(base.Add(143*time.Second), whitemane, mograine, 9232))
+	require.NoError(t, err)
+	_, err = chars.Process(damage(base.Add(144*time.Second), player, mograine))
+	require.NoError(t, err)
+	_, err = chars.Process(slain(base.Add(145*time.Second), player, mograine))
 	require.NoError(t, err)
 
 	require.False(t, mograineChar.IsActive(), "post-resurrection death should end Mograine's activity")
@@ -109,4 +127,15 @@ func TestVanillaMograine_UsesDefaultDeathHandling(t *testing.T) {
 	require.True(t, ok)
 	require.False(t, mograineChar.IsActive(), "non-Vanilla+ flavors should not use the resurrection handler")
 	require.Equal(t, period.EndStateSlain, mograineChar.LastEndState())
+}
+
+func spellGo(ts time.Time, caster, target guid.GUID, spellID chrondbc.SpellID) *messages.SpellGo {
+	return &messages.SpellGo{
+		MessageBase: messages.Base(ts),
+		Caster:      caster,
+		Target:      &target,
+		SpellData: &chrondbc.Spell{
+			ID: spellID,
+		},
+	}
 }

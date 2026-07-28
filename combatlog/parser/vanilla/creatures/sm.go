@@ -15,7 +15,6 @@ const (
 
 type vanillaPlusMograineCharacter struct {
 	*characters.Common
-	all                  *characters.Characters
 	awaitingResurrection bool
 	resurrected          bool
 }
@@ -27,11 +26,23 @@ func NewVanillaPlusMograineCharacter(id guid.GUID, all *characters.Characters) (
 
 	return &vanillaPlusMograineCharacter{
 		Common: characters.NewCommonCharacter(id, all),
-		all:    all,
 	}, true
 }
 
 func (c *vanillaPlusMograineCharacter) Process(m messages.Message) error {
+	if c.awaitingResurrection && isVanillaPlusWhitemaneActivity(m) {
+		// Whitemane can spend longer than the normal inactivity timeout fighting
+		// before she resurrects Mograine. Keep his original period alive until the
+		// explicit resurrection cast joins phase one to phase three.
+		c.Bump("whitemane_activity_before_resurrection", m)
+	}
+
+	if c.awaitingResurrection && isVanillaPlusMograineResurrection(m) {
+		c.awaitingResurrection = false
+		c.resurrected = true
+		c.LastSlain = nil
+	}
+
 	if cur, ok := c.Activity.Current(); ok {
 		cur.HandleTimeout(m.Date())
 	}
@@ -52,29 +63,50 @@ func (c *vanillaPlusMograineCharacter) Died(reason string, m messages.Message) {
 }
 
 func (c *vanillaPlusMograineCharacter) Start(reason string, m messages.Message) {
-	if !c.IsActive() && !c.whitemaneActive() {
+	if !c.IsActive() {
 		// A wipe can reuse the same GUID on the next pull.
 		c.awaitingResurrection = false
 		c.resurrected = false
 		c.LastSlain = nil
 	}
 
-	if c.awaitingResurrection && c.whitemaneActive() {
-		c.awaitingResurrection = false
-		c.resurrected = true
-		c.LastSlain = nil
-	}
-
 	c.Common.Start(reason, m)
 }
 
-func (c *vanillaPlusMograineCharacter) whitemaneActive() bool {
-	for _, whitemane := range c.all.ByEntry[vanillaPlusWhitemane] {
-		if whitemane.IsActive() {
+func isVanillaPlusWhitemaneActivity(m messages.Message) bool {
+	switch m.(type) {
+	case *messages.Damage,
+		*messages.Heal,
+		*messages.ResourceChange,
+		*messages.Cast,
+		*messages.LegacyCast,
+		*messages.AuraCast,
+		*messages.Aura,
+		*messages.Interrupt,
+		*messages.SpellStart,
+		*messages.SpellGo,
+		*messages.SpellFail,
+		*messages.ExtraAttack:
+	default:
+		return false
+	}
+
+	for _, id := range m.Affects() {
+		if entry, ok := id.GetEntry(); ok && entry == vanillaPlusWhitemane {
 			return true
 		}
 	}
 	return false
+}
+
+func isVanillaPlusMograineResurrection(m messages.Message) bool {
+	spell, ok := m.(*messages.SpellGo)
+	if !ok || spell.SpellData == nil || spell.SpellData.ID != 9232 {
+		return false
+	}
+
+	entry, ok := spell.Caster.GetEntry()
+	return ok && entry == vanillaPlusWhitemane
 }
 
 func NewVanillaPlusSMSoul(id guid.GUID, all *characters.Characters) (characters.Character, bool) {
