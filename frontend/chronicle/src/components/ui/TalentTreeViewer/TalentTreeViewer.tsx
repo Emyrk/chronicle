@@ -531,14 +531,17 @@ function TalentButton({ talent, rank, locked, pointsExhausted, talents, ranks, o
             {popularity.pct}%
           </span>
           {/* Average-rank bars under the square: filled = avg points taken.
-              Always spans the full square width regardless of maxRank. */}
+              Always spans the full square width regardless of maxRank.
+              Amber when takers average a full fill, blue otherwise. */}
           <span aria-hidden="true" className="absolute -bottom-2 inset-x-0 z-10 flex gap-0.5">
             {Array.from({ length: talent.maxRank }).map((_, index) => (
               <span
                 key={index}
                 className={cn(
                   "h-1 flex-1 rounded-[1px]",
-                  index < Math.round(popularity.avg) ? "bg-amber-300" : "bg-zinc-700",
+                  index >= Math.round(popularity.avg)
+                    ? "bg-zinc-700"
+                    : popularity.avg >= talent.maxRank ? "bg-amber-300" : "bg-sky-400",
                 )}
               />
             ))}
