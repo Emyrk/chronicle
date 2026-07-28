@@ -3,7 +3,7 @@ import { useSearchParams } from "react-router-dom";
 import { Percent, Trophy } from "lucide-react";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
-import { useRankingsInstances, useRankingsLeaderboard } from "@/api/rankingsQueries";
+import { useRankingsEncounters, useRankingsInstances, useRankingsLeaderboard } from "@/api/rankingsQueries";
 import type { RankingsEntry } from "@/api/typesGenerated";
 import {
   Sheet,
@@ -76,16 +76,25 @@ export function TopBuildsDrawer({ selectedClass, onShowAll }: {
   }, [instancesQuery.data]);
   const activeInstance = instanceName ?? instanceNames[0] ?? "";
 
+  // Bosses only: 'Trash' is the conventional trash encounter name. The
+  // leaderboard API only supports inclusion lists, so pass every boss name.
+  const encountersQuery = useRankingsEncounters(open ? activeInstance : "");
+  const bossNames = useMemo(
+    () => (encountersQuery.data ?? []).map((e) => e.encounter_name).filter((name) => name !== "Trash"),
+    [encountersQuery.data],
+  );
+
   const leaderboardQuery = useRankingsLeaderboard(
     {
       instance_names: activeInstance,
+      encounter_names: bossNames.join(","),
       class: apiClass,
       spec,
       hide_unknowns: true,
       metric,
       limit: 10,
     },
-    open && Boolean(activeInstance && apiClass && spec),
+    open && Boolean(activeInstance && apiClass && spec) && bossNames.length > 0,
   );
 
   function showAll() {
@@ -188,9 +197,9 @@ export function TopBuildsDrawer({ selectedClass, onShowAll }: {
 
         {/* Top 10 list */}
         <div className="flex-1 space-y-2 overflow-y-auto p-4">
-          {leaderboardQuery.isLoading || instancesQuery.isLoading ? (
+          {leaderboardQuery.isLoading || instancesQuery.isLoading || encountersQuery.isLoading ? (
             <p className="text-sm text-zinc-500">Loading rankings…</p>
-          ) : leaderboardQuery.isError ? (
+          ) : leaderboardQuery.isError || encountersQuery.isError ? (
             <p className="text-sm text-zinc-500">Unable to load rankings.</p>
           ) : (leaderboardQuery.data?.entries.length ?? 0) === 0 ? (
             <p className="text-sm text-zinc-500">
