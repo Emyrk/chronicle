@@ -21,6 +21,15 @@ func RegisterNightmareOfUrsol(r *Registry) *Registry {
 	return r
 }
 
+func RegisterVanillaPlus(r *Registry) {
+	r.DeleteEntry("Scarlet Monastery")
+	r.DeleteEntry("Scarlet Monastery Graveyard")
+	r.DeleteEntry("Scarlet Monastery Library")
+	r.DeleteEntry("Scarlet Monastery Armory")
+	r.DeleteEntry("Scarlet Monastery Cathedral")
+	r.RegisterEntry(FromCommonFactory(instances.ScarletMonasteryArmoryVPRaid))
+}
+
 func RegisterClassicEncounters(r *Registry) {
 	// Register instances here as you add them
 	// 5 man

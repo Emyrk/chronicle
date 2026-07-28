@@ -69,8 +69,8 @@ var (
 	}
 
 	ScarletMonasteryArmoryVPRaid = &CommonFactory{
-		Name:      "Scarlet Monastery Raid",
-		ZoneNames: []string{"scarlet monastery (raid)"},
+		Name:      "Scarlet Monastery",
+		ZoneNames: []string{"scarlet monastery"},
 		Hostiles:  FromMap(VanillaPlusSMRaidHostiles()),
 	}
 
@@ -82,7 +82,8 @@ var (
 			"Scarlet Monastery Cathedral": {3976, 3977, 4542},
 			"Scarlet Monastery Library":   {3974, 61983, 6487},
 			"Scarlet Monastery Armory":    {3975},
-			"Gates of Scarlet Monastery":  {25221, 25222, 25243, 25245},
+			"Scarlet Monastery Graveyard": {3983, 4543},
+			//"Gates of Scarlet Monastery":  {25221, 25222, 25243, 25245},
 		}),
 		Hostiles: AllScarletMonestery,
 	}

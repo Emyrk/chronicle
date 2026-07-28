@@ -100,6 +100,10 @@ func RegistryForFlavor(logger *slog.Logger, flavor database.WoWFlavor) *Registry
 		RegisterNightmareOfUrsol(r)
 	}
 
+	if flavor.Has(database.FlavorVanillaPlus) {
+		RegisterVanillaPlus(r)
+	}
+
 	if flavor.Has(database.FlavorWrath) || flavor.Has(database.FlavorTBC) {
 		RegisterTBCEncounters(r)
 	}
