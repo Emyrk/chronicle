@@ -192,9 +192,9 @@ describe("TalentTreeViewer talent popularity aggregation", () => {
       { 2: 1, 3: 1 },
       { 1: 5 },
     ]);
-    expect(popularity[1]).toEqual({ pct: 80, avg: 4.5 });
-    expect(popularity[2]).toEqual({ pct: 40, avg: 1.5 });
-    expect(popularity[3]).toEqual({ pct: 40, avg: 1 });
+    expect(popularity[1]).toEqual({ pct: 80, avg: 4.5, sample: 5 });
+    expect(popularity[2]).toEqual({ pct: 40, avg: 1.5, sample: 5 });
+    expect(popularity[3]).toEqual({ pct: 40, avg: 1, sample: 5 });
     expect(popularity[4]).toBeUndefined();
   });
 

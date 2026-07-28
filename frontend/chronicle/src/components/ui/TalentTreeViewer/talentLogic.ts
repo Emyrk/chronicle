@@ -321,6 +321,8 @@ export interface TalentPopularity {
   pct: number;
   /** Average rank among builds that took the talent. */
   avg: number;
+  /** Number of builds aggregated (the "top N"). */
+  sample: number;
 }
 
 /**
@@ -345,6 +347,7 @@ export function aggregateTalentPopularity(builds: TalentRanks[]): Record<number,
     out[id] = {
       pct: Math.round((takers / builds.length) * 100),
       avg: points / takers,
+      sample: builds.length,
     };
   }
   return out;

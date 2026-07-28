@@ -139,6 +139,7 @@ function TalentTooltipCard({
   nextRankText,
   loadingSpellDetails,
   lockReasons,
+  popularity,
   id,
   className: tooltipClassName,
   position,
@@ -152,6 +153,7 @@ function TalentTooltipCard({
   nextRankText?: string;
   loadingSpellDetails?: boolean;
   lockReasons: string[];
+  popularity?: TalentPopularity;
   id: string;
   className: string;
   position?: TalentTooltipPosition;
@@ -167,6 +169,11 @@ function TalentTooltipCard({
     >
       <strong className="block text-sm text-white">{talent.name}</strong>
       <span className="mt-1 block font-semibold text-amber-200">Rank {rank}/{talent.maxRank}{locked ? " · Locked" : ""}</span>
+      {popularity && (
+        <span className="mt-2 block border-t border-amber-300/20 pt-2 text-amber-100/90">
+          {popularity.pct}% of the top {popularity.sample} take this · avg {formatPopularityAvg(popularity.avg)} of {talent.maxRank} pts
+        </span>
+      )}
       {!hasRankSpecificDescription && <span className="mt-2 block text-zinc-300">{description}</span>}
       {loadingSpellDetails && <span className="mt-2 block animate-pulse text-muted-foreground">Loading spell details…</span>}
       {rankDescriptionParts ? <TalentRankDescription parts={rankDescriptionParts} /> : (
@@ -431,6 +438,7 @@ function TalentButton({ talent, rank, locked, pointsExhausted, talents, ranks, o
       nextRankText={nextRankText}
       loadingSpellDetails={loadingSpellDetails}
       lockReasons={lockReasons}
+      popularity={popularity}
       className={TALENT_TOOLTIP_CLASS_NAME}
       position={tooltipPosition}
     />
@@ -509,18 +517,32 @@ function TalentButton({ talent, rank, locked, pointsExhausted, talents, ranks, o
         {rank}/{talent.maxRank}
       </span>
       {popularity && (
-        <span className={cn(
-          // Centered above the square (in the row gap) so it never covers
-          // the icon, and never wraps regardless of "100% (3.7)" width.
-          "absolute -top-2.5 left-1/2 z-10 -translate-x-1/2 whitespace-nowrap rounded border px-1 text-[9px] font-bold leading-[13px] shadow-sm",
-          popularity.pct >= 80
-            ? "border-amber-200/70 bg-amber-300 text-black"
-            : popularity.pct >= 40
-              ? "border-sky-300/60 bg-sky-900/95 text-sky-100"
-              : "border-zinc-500/70 bg-zinc-900/95 text-zinc-300",
-        )}>
-          {popularity.pct}%{popularity.avg < talent.maxRank ? ` (${formatPopularityAvg(popularity.avg)})` : ""}
-        </span>
+        <>
+          <span className={cn(
+            // Centered above the square (in the row gap) so it never covers
+            // the icon or wraps.
+            "absolute -top-2.5 left-1/2 z-10 -translate-x-1/2 whitespace-nowrap rounded border px-1 text-[9px] font-bold leading-[13px] shadow-sm",
+            popularity.pct >= 80
+              ? "border-amber-200/70 bg-amber-300 text-black"
+              : popularity.pct >= 40
+                ? "border-sky-300/60 bg-sky-900/95 text-sky-100"
+                : "border-zinc-500/70 bg-zinc-900/95 text-zinc-300",
+          )}>
+            {popularity.pct}%
+          </span>
+          {/* Average-rank bars under the square: filled = avg points taken. */}
+          <span aria-hidden="true" className="absolute -bottom-2 left-0 z-10 flex gap-0.5">
+            {Array.from({ length: talent.maxRank }).map((_, index) => (
+              <span
+                key={index}
+                className={cn(
+                  "h-1 w-1.5 rounded-[1px]",
+                  index < Math.round(popularity.avg) ? "bg-amber-300" : "bg-zinc-700",
+                )}
+              />
+            ))}
+          </span>
+        </>
       )}
       {typeof document === "undefined" ? (
         <TalentTooltipCard
@@ -534,6 +556,7 @@ function TalentButton({ talent, rank, locked, pointsExhausted, talents, ranks, o
           nextRankText={nextRankText}
           loadingSpellDetails={loadingSpellDetails}
           lockReasons={lockReasons}
+          popularity={popularity}
           className={TALENT_TOOLTIP_SSR_CLASS_NAME}
         />
       ) : tooltipPosition ? createPortal(tooltip, document.body) : null}
