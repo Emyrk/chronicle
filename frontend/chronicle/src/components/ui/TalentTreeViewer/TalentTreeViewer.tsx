@@ -14,6 +14,7 @@ import { resolveSpellDescription, getEnglishText, extractReferencedSpellIds } fr
 import {
   type ClassTalentData,
   type TalentEntry,
+  type TalentPopularity,
   type TalentPrereqArrow,
   type TalentRanks,
   type TalentRankDescriptionPart,
@@ -31,6 +32,7 @@ import {
   calculateRequiredPlayerLevel,
   copyTalentBuildUrl,
   decodeTalentBuild,
+  formatPopularityAvg,
   isTalentBackgroundVisible,
   isTalentBuildLocked,
   lockedTalentReasons,
@@ -83,6 +85,8 @@ export interface TalentTreeViewerProps {
   extraActions?: React.ReactNode;
   /** Mobile: page header content (title/back) composed into the summary card. */
   mobileHeader?: React.ReactNode;
+  /** Per-talent popularity badges (Top Builds "Show all" overlay). */
+  popularity?: Record<number, TalentPopularity> | null;
   className?: string;
 }
 
@@ -238,7 +242,7 @@ function TalentPrereqArrows({ arrows, ranks, height, talents }: { arrows: Talent
 
 // ─── Talent button ────────────────────────────────────────────────
 
-function TalentButton({ talent, rank, locked, pointsExhausted, talents, ranks, onChange, readOnly, debug, mobile, quickActive, onActivate }: {
+function TalentButton({ talent, rank, locked, pointsExhausted, talents, ranks, onChange, readOnly, debug, mobile, quickActive, onActivate, popularity }: {
   talent: TalentEntry;
   rank: number;
   locked: boolean;
@@ -255,6 +259,8 @@ function TalentButton({ talent, rank, locked, pointsExhausted, talents, ranks, o
   quickActive?: boolean;
   /** Mobile: mark this talent as the active one. */
   onActivate?: () => void;
+  /** Popularity badge for the Top Builds "Show all" overlay. */
+  popularity?: TalentPopularity;
 }) {
   const iconBaseUrl = useIconBaseUrl();
   const maxed = rank >= talent.maxRank;
@@ -502,6 +508,18 @@ function TalentButton({ talent, rank, locked, pointsExhausted, talents, ranks, o
       )}>
         {rank}/{talent.maxRank}
       </span>
+      {popularity && (
+        <span className={cn(
+          "absolute -left-1 -top-1 z-10 rounded border px-1 text-[9px] font-bold leading-4 shadow-sm",
+          popularity.pct >= 80
+            ? "border-amber-200/70 bg-amber-300 text-black"
+            : popularity.pct >= 40
+              ? "border-sky-300/60 bg-sky-900/95 text-sky-100"
+              : "border-zinc-500/70 bg-zinc-900/95 text-zinc-300",
+        )}>
+          {popularity.pct}%{popularity.avg < talent.maxRank ? ` (${formatPopularityAvg(popularity.avg)})` : ""}
+        </span>
+      )}
       {typeof document === "undefined" ? (
         <TalentTooltipCard
           id={tooltipId}
@@ -577,6 +595,7 @@ function TalentTab({
   mobile,
   quickActiveTalentId,
   onQuickActivate,
+  popularity,
 }: {
   tab: TalentTabData;
   ranks: TalentRanks;
@@ -595,6 +614,8 @@ function TalentTab({
   quickActiveTalentId?: number | null;
   /** Mobile: mark a talent as the active one. */
   onQuickActivate?: (talentId: number) => void;
+  /** Per-talent popularity badges (Top Builds "Show all" overlay). */
+  popularity?: Record<number, TalentPopularity> | null;
 }) {
   const iconBaseUrl = useIconBaseUrl();
   const points = useMemo(() => tab.talents.reduce((sum, talent) => sum + (ranks[talent.id] ?? 0), 0), [tab.talents, ranks]);
@@ -752,6 +773,7 @@ function TalentTab({
                           mobile={mobile}
                           quickActive={quickActiveTalentId === t.id}
                           onActivate={mobile && onQuickActivate ? () => onQuickActivate(t.id) : undefined}
+                          popularity={popularity?.[t.id]}
                           onChange={(rank) => onRankChange(t, rank)}
                         />
                       )}
@@ -864,6 +886,7 @@ export function TalentTreeViewer({
   compact = false,
   extraActions,
   mobileHeader,
+  popularity,
   className,
 }: TalentTreeViewerProps) {
   const isMobile = useIsMobile();
@@ -1097,6 +1120,7 @@ export function TalentTreeViewer({
               mobile={mobileLayout}
               quickActiveTalentId={quickActiveTalentId}
               onQuickActivate={setQuickActiveTalentId}
+              popularity={popularity}
               onRankChange={(talent, rank) => {
                 if (manuallyLocked) {
                   notifyBuildLocked();
@@ -1210,6 +1234,7 @@ export function TalentTreeViewer({
             mobile={mobileLayout}
             quickActiveTalentId={quickActiveTalentId}
             onQuickActivate={setQuickActiveTalentId}
+            popularity={popularity}
             // A locked build is frozen: no points may be added or removed.
             onRankChange={(talent, rank) => {
               if (manuallyLocked) {

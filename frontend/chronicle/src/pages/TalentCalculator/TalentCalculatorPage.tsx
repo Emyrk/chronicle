@@ -1,10 +1,16 @@
-import { useMemo } from "react";
-import { Link, useParams, Navigate } from "react-router-dom";
+import { useEffect, useMemo, useState } from "react";
+import { Link, useParams, Navigate, useSearchParams } from "react-router-dom";
 import { ChevronLeft } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useIsMobile } from "@/hooks/useIsMobile";
 import { useSiteConfig } from "@/api/queries";
 import { TalentTreeViewer } from "@/components/ui/TalentTreeViewer/TalentTreeViewer";
+import {
+  TALENT_BUILD_PARAM,
+  type TalentPopularity,
+  aggregateTalentPopularity,
+  decodeTalentBuild,
+} from "@/components/ui/TalentTreeViewer/talentLogic";
 import { useTalentTrees } from "@/components/ui/TalentTreeViewer/useTalentTrees";
 import { MyBuildsDrawer } from "./MyBuildsDrawer";
 import { TopBuildsDrawer } from "./TopBuildsDrawer";
@@ -67,6 +73,23 @@ export function TalentCalculatorPage() {
   }, [talentData, selectedClassId]);
 
   const isMobile = useIsMobile();
+  const [searchParams] = useSearchParams();
+
+  // Top Builds "Show all" overlay: per-talent popularity across the top-10.
+  // Cleared when the build changes (editing a talent or loading a build).
+  const [popularity, setPopularity] = useState<Record<number, TalentPopularity> | null>(null);
+  const buildParam = searchParams.get(TALENT_BUILD_PARAM);
+  useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- intentional: any build/class change dismisses the overlay
+    setPopularity(null);
+  }, [buildParam, classSlug]);
+
+  function showPopularity(builds: string[]) {
+    if (!classTreeData) return;
+    const tabs = classTreeData.tabs.map((tab) => tab.talents);
+    const decoded = builds.map((build) => decodeTalentBuild(build, tabs));
+    setPopularity(aggregateTalentPopularity(decoded));
+  }
 
   // Desktop defaults to the first available class when no slug is provided.
   // Mobile shows the class selector on its own instead.
@@ -181,11 +204,12 @@ export function TalentCalculatorPage() {
           maxTalentPoints={maxTalentPoints}
           maxLevel={maxLevel}
           mobileHeader={isMobile ? mobileHeader : undefined}
+          popularity={popularity}
           extraActions={
             !isMobile ? (
               <>
                 {/* Top Builds is desktop-only by design. */}
-                <TopBuildsDrawer selectedClass={selectedClass} />
+                <TopBuildsDrawer selectedClass={selectedClass} onShowAll={showPopularity} />
                 <MyBuildsDrawer classes={availableClasses} selectedClassId={selectedClassId} />
               </>
             ) : undefined

@@ -1,6 +1,6 @@
 import { useMemo, useState } from "react";
 import { useSearchParams } from "react-router-dom";
-import { Trophy } from "lucide-react";
+import { Percent, Trophy } from "lucide-react";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
 import { useRankingsInstances, useRankingsLeaderboard } from "@/api/rankingsQueries";
@@ -30,7 +30,11 @@ function formatDPS(dps: number): string {
   return dps >= 1000 ? `${(dps / 1000).toFixed(1)}k` : Math.round(dps).toString();
 }
 
-export function TopBuildsDrawer({ selectedClass }: { selectedClass?: TalentClassInfo }) {
+export function TopBuildsDrawer({ selectedClass, onShowAll }: {
+  selectedClass?: TalentClassInfo;
+  /** Called with the top-10 build strings to show the popularity overlay. */
+  onShowAll?: (builds: string[]) => void;
+}) {
   const [searchParams, setSearchParams] = useSearchParams();
   const [open, setOpen] = useState(false);
   const [instanceName, setInstanceName] = useState<string | null>(null);
@@ -61,6 +65,18 @@ export function TopBuildsDrawer({ selectedClass }: { selectedClass?: TalentClass
     },
     open && Boolean(activeInstance && apiClass && spec),
   );
+
+  function showAll() {
+    const builds = (leaderboardQuery.data?.entries ?? [])
+      .map((entry) => rankingsLayoutToBuild(entry.talent_layout))
+      .filter(Boolean);
+    if (builds.length === 0 || !onShowAll) return;
+    onShowAll(builds);
+    setOpen(false);
+    toast.success(`Showing talent popularity across ${builds.length} top ${spec} builds`, {
+      description: "Change any talent point to dismiss the overlay.",
+    });
+  }
 
   function loadBuild(entry: RankingsEntry) {
     const build = rankingsLayoutToBuild(entry.talent_layout);
@@ -144,7 +160,23 @@ export function TopBuildsDrawer({ selectedClass }: { selectedClass?: TalentClass
               No ranked {spec} {selectedClass.name}s for {activeInstance} yet.
             </p>
           ) : (
-            leaderboardQuery.data?.entries.map((entry, index) => {
+            <>
+            {onShowAll && (
+              <button
+                type="button"
+                onClick={showAll}
+                className="flex w-full items-center gap-3 rounded-lg border border-dashed border-amber-300/40 bg-amber-400/5 p-3 text-left transition hover:border-amber-200/70 hover:bg-amber-400/10"
+              >
+                <Percent className="h-5 w-5 shrink-0 text-amber-300" />
+                <span className="min-w-0 flex-1">
+                  <span className="block truncate text-sm font-bold text-amber-100">Show all</span>
+                  <span className="block truncate text-xs text-zinc-400">
+                    Overlay talent popularity across these builds
+                  </span>
+                </span>
+              </button>
+            )}
+            {leaderboardQuery.data?.entries.map((entry, index) => {
               const build = rankingsLayoutToBuild(entry.talent_layout);
               return (
                 <div
@@ -179,7 +211,8 @@ export function TopBuildsDrawer({ selectedClass }: { selectedClass?: TalentClass
                   </button>
                 </div>
               );
-            })
+            })}
+            </>
           )}
         </div>
       </SheetContent>

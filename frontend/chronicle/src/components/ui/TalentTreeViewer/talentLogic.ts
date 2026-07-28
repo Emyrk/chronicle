@@ -314,6 +314,48 @@ export function rankingsLayoutToBuild(layout: string | null | undefined): string
   return sections.slice(0, lastTab).join("-");
 }
 
+// ─── Build popularity (Top Builds "Show all") ─────────────────────
+
+export interface TalentPopularity {
+  /** Percent of builds with at least 1 point in this talent (0-100). */
+  pct: number;
+  /** Average rank among builds that took the talent. */
+  avg: number;
+}
+
+/**
+ * Aggregates multiple builds into per-talent popularity: what percent of
+ * the builds put at least one point in each talent, and the average rank
+ * among those that did.
+ */
+export function aggregateTalentPopularity(builds: TalentRanks[]): Record<number, TalentPopularity> {
+  const out: Record<number, TalentPopularity> = {};
+  if (builds.length === 0) return out;
+  const counts = new Map<number, { takers: number; points: number }>();
+  for (const build of builds) {
+    for (const [id, rank] of Object.entries(build)) {
+      if (rank <= 0) continue;
+      const entry = counts.get(Number(id)) ?? { takers: 0, points: 0 };
+      entry.takers += 1;
+      entry.points += rank;
+      counts.set(Number(id), entry);
+    }
+  }
+  for (const [id, { takers, points }] of counts) {
+    out[id] = {
+      pct: Math.round((takers / builds.length) * 100),
+      avg: points / takers,
+    };
+  }
+  return out;
+}
+
+/** "1" or "1.5" — trims the trailing .0 for whole averages. */
+export function formatPopularityAvg(avg: number): string {
+  const rounded = Math.round(avg * 10) / 10;
+  return Number.isInteger(rounded) ? String(rounded) : rounded.toFixed(1);
+}
+
 /** Per-tab point totals from a positional build string, e.g. "35003-0503" → "11/8". */
 export function buildPointsSummary(build: string): string {
   if (!build) return "0";

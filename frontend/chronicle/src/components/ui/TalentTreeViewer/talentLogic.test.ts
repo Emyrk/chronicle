@@ -1,8 +1,10 @@
 import { describe, expect, it } from "vitest";
 import type { TalentEntry } from "./talentLogic";
 import {
+  aggregateTalentPopularity,
   buildPointsSummary,
   calculateRequiredPlayerLevel,
+  formatPopularityAvg,
   canUseTalent,
   canonicalTalentBuildUrl,
   copyTalentBuildUrl,
@@ -178,6 +180,33 @@ describe("TalentTreeViewer rankings layout conversion", () => {
 
   it("round-trips through the points summary", () => {
     expect(buildPointsSummary(rankingsLayoutToBuild("05230}30200}0000"))).toBe("10/5");
+  });
+});
+
+describe("TalentTreeViewer talent popularity aggregation", () => {
+  it("computes percent of builds with points and average rank among takers", () => {
+    const popularity = aggregateTalentPopularity([
+      { 1: 5, 2: 2 },
+      { 1: 5 },
+      { 1: 3, 3: 1 },
+      { 2: 1, 3: 1 },
+      { 1: 5 },
+    ]);
+    expect(popularity[1]).toEqual({ pct: 80, avg: 4.5 });
+    expect(popularity[2]).toEqual({ pct: 40, avg: 1.5 });
+    expect(popularity[3]).toEqual({ pct: 40, avg: 1 });
+    expect(popularity[4]).toBeUndefined();
+  });
+
+  it("handles empty input and zero ranks", () => {
+    expect(aggregateTalentPopularity([])).toEqual({});
+    expect(aggregateTalentPopularity([{ 1: 0 }])).toEqual({});
+  });
+
+  it("formats averages without trailing .0", () => {
+    expect(formatPopularityAvg(1)).toBe("1");
+    expect(formatPopularityAvg(1.5)).toBe("1.5");
+    expect(formatPopularityAvg(4.6667)).toBe("4.7");
   });
 });
 
