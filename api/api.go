@@ -16,6 +16,7 @@ import (
 	"github.com/Emyrk/chronicle/api/guildapi"
 	"github.com/Emyrk/chronicle/api/httpapi"
 	"github.com/Emyrk/chronicle/api/httpmw"
+	"github.com/Emyrk/chronicle/api/linkedapi"
 	"github.com/Emyrk/chronicle/api/panellayoutapi"
 	"github.com/Emyrk/chronicle/api/retentionapi"
 	"github.com/Emyrk/chronicle/api/serviceazerothcore"
@@ -135,13 +136,12 @@ func New(ctx context.Context, opts Options) (*API, error) {
 	}
 
 	return &API{
-		Opts:        &opts,
-		AppContext:  ctx,
-		Auth:        service,
-		Chronicle:   opts.Chronicle,
-		Queues:      opts.RiverQueue,
-		Zed:         opts.Zed,
-
+		Opts:       &opts,
+		AppContext: ctx,
+		Auth:       service,
+		Chronicle:  opts.Chronicle,
+		Queues:     opts.RiverQueue,
+		Zed:        opts.Zed,
 	}, nil
 }
 
@@ -186,9 +186,7 @@ func (api *API) Routes() chi.Router {
 				r.Post("/authcheck", api.checkAuthorization)
 				r.Get("/me/storage", api.GetMyStorage)
 				r.Patch("/me/preferences", api.UpdateMyPreferences)
-				r.Get("/me/characters", api.ListMyCharacters)
-				r.Put("/me/characters/primary", api.SetMyPrimaryCharacter)
-				r.Delete("/me/characters/{realmID}/{characterGUID}", api.UnlinkMyCharacter)
+
 				r.Get("/me/talent-builds", api.ListMyTalentBuilds)
 				r.Post("/me/talent-builds", api.CreateMyTalentBuild)
 				r.Patch("/me/talent-builds/{buildID}", api.UpdateMyTalentBuild)
@@ -196,6 +194,8 @@ func (api *API) Routes() chi.Router {
 				r.Post("/share", api.CreateShare)
 			})
 			r.Mount("/panel-layout", panellayoutapi.New(api.Opts.Zed, api.Auth).Routes())
+			// Account↔character link management.
+			r.Mount("/linked", linkedapi.New(api.Opts.Zed, api.Auth).Routes())
 			gameDataHandler := gamedataapi.New(api.Opts.Zed, api.Auth, api.Opts.Pool, api.Opts.GameDB)
 			r.Mount("/game-data", gameDataHandler.Routes())
 			r.Mount("/azerothcore", serviceazerothcore.New(api.Opts.Logger, api.Opts.Zed, api.Auth, api.Chronicle).Routes())
@@ -230,16 +230,6 @@ func (api *API) Routes() chi.Router {
 					r.Get("/{userID}/grants", api.GetUserGrants)
 					r.Put("/{userID}/grants", api.UpsertUserGrant)
 					r.Delete("/{userID}/grants/{source}", api.DeleteUserGrant)
-					r.Get("/{userID}/characters", api.AdminListUserCharacters)
-					r.Post("/{userID}/characters", api.AdminLinkUserCharacter)
-					r.Delete("/{userID}/characters/{realmID}/{characterGUID}", api.AdminUnlinkUserCharacter)
-				})
-
-				r.Route("/characters", func(r chi.Router) {
-					r.Use(
-						httpmw.Can(api.Zed, policy.New().GlobalChronicle().CanAdmin_users_User),
-					)
-					r.Get("/{realmID}/{characterGUID}/link", api.AdminGetCharacterLink)
 				})
 
 				r.Route("/logs", func(r chi.Router) {

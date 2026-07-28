@@ -475,7 +475,7 @@ export function useMyCharacters(options?: Omit<UseQueryOptions<LinkedCharacter[]
   return useQuery({
     queryKey: ["my-characters"],
     queryFn: async () => {
-      const response = await fetch("/api/v1/me/characters", { credentials: "include" });
+      const response = await fetch("/api/v1/linked/me", { credentials: "include" });
       if (!response.ok) {
         throw new Error("Failed to fetch linked characters");
       }
@@ -490,7 +490,7 @@ export function useSetPrimaryCharacter() {
 
   return useMutation({
     mutationFn: async (request: SetPrimaryCharacterRequest) => {
-      const response = await fetch("/api/v1/me/characters/primary", {
+      const response = await fetch("/api/v1/linked/me/primary", {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(request),
@@ -514,7 +514,7 @@ export function useUnlinkMyCharacter() {
   return useMutation({
     mutationFn: async (character: { realm_id: string; character_guid: string }) => {
       const response = await fetch(
-        `/api/v1/me/characters/${encodeURIComponent(character.realm_id)}/${encodeURIComponent(character.character_guid)}`,
+        `/api/v1/linked/me/${encodeURIComponent(character.realm_id)}/${encodeURIComponent(character.character_guid)}`,
         { method: "DELETE", credentials: "include" },
       );
       if (!response.ok) {
@@ -532,7 +532,7 @@ export function useAdminUserCharacters(userId: string, options?: Omit<UseQueryOp
   return useQuery({
     queryKey: ["admin", "users", userId, "characters"],
     queryFn: async () => {
-      const response = await fetch(`/api/v1/admin/users/${encodeURIComponent(userId)}/characters`, {
+      const response = await fetch(`/api/v1/linked/users/${encodeURIComponent(userId)}`, {
         credentials: "include",
       });
       if (!response.ok) {
@@ -552,7 +552,7 @@ export function useAdminCharacterLink(
     queryKey: ["admin", "character-link", character.realm_id, character.character_guid],
     queryFn: async () => {
       const response = await fetch(
-        `/api/v1/admin/characters/${encodeURIComponent(character.realm_id!)}/${encodeURIComponent(character.character_guid!)}/link`,
+        `/api/v1/linked/characters/${encodeURIComponent(character.realm_id!)}/${encodeURIComponent(character.character_guid!)}`,
         { credentials: "include" },
       );
       if (response.status === 404) return null;
@@ -571,7 +571,7 @@ export function useAdminLinkCharacter() {
 
   return useMutation({
     mutationFn: async ({ userId, request }: { userId: string; request: LinkCharacterRequest }) => {
-      const response = await fetch(`/api/v1/admin/users/${encodeURIComponent(userId)}/characters`, {
+      const response = await fetch(`/api/v1/linked/users/${encodeURIComponent(userId)}`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(request),
@@ -604,7 +604,7 @@ export function useAdminUnlinkCharacter() {
       characterGuid: string;
     }) => {
       const response = await fetch(
-        `/api/v1/admin/users/${encodeURIComponent(userId)}/characters/${encodeURIComponent(realmId)}/${encodeURIComponent(characterGuid)}`,
+        `/api/v1/linked/users/${encodeURIComponent(userId)}/${encodeURIComponent(realmId)}/${encodeURIComponent(characterGuid)}`,
         { method: "DELETE", credentials: "include" },
       );
       if (!response.ok) {
