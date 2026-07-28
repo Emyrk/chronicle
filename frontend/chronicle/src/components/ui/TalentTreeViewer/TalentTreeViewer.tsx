@@ -769,8 +769,11 @@ export function TalentTreeViewer({
         imagePlaceholder:
           "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNkYPhfDwAChwGA60e6kgAAAABJRU5ErkJggg==",
       });
+      // data.name may be missing from the talent JSON; fall back to the
+      // class-id lookup, then a generic label.
+      const className = data.name ?? CLASS_NAMES[data.id] ?? "class";
       const link = document.createElement("a");
-      link.download = `${data.name.toLowerCase().replace(/\s+/g, "-")}-talents-${total}pts.png`;
+      link.download = `${className.toLowerCase().replace(/\s+/g, "-")}-talents-${total}pts.png`;
       link.href = dataUrl;
       link.click();
     } catch (error) {
