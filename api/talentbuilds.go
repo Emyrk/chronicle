@@ -16,6 +16,7 @@ import (
 	"github.com/Emyrk/chronicle/api/db2sdk"
 	"github.com/Emyrk/chronicle/api/httpapi"
 	"github.com/Emyrk/chronicle/database"
+	"github.com/Emyrk/chronicle/internal/services/servicetenant"
 )
 
 const (
@@ -60,7 +61,12 @@ func (api *API) ListMyTalentBuilds(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 	state := chronauth.AuthenticationState(r)
 
-	builds, err := api.Opts.Zed.ListUserTalentBuilds(ctx, state.Claims.Subject)
+	// Builds are tenant-scoped: only show the ones saved on the current
+	// tenant domain. uuid.Nil (the zero UUID) is the root domain.
+	builds, err := api.Opts.Zed.ListUserTalentBuilds(ctx, database.ListUserTalentBuildsParams{
+		UserID:   state.Claims.Subject,
+		TenantID: servicetenant.TenantIDFromContext(ctx),
+	})
 	if err != nil {
 		httpapi.InternalServerError(w, err)
 		return
@@ -94,7 +100,11 @@ func (api *API) CreateMyTalentBuild(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	count, err := api.Opts.Zed.CountUserTalentBuilds(ctx, userID)
+	tenantID := servicetenant.TenantIDFromContext(ctx)
+	count, err := api.Opts.Zed.CountUserTalentBuilds(ctx, database.CountUserTalentBuildsParams{
+		UserID:   userID,
+		TenantID: tenantID,
+	})
 	if err != nil {
 		httpapi.InternalServerError(w, err)
 		return
@@ -107,11 +117,12 @@ func (api *API) CreateMyTalentBuild(w http.ResponseWriter, r *http.Request) {
 	}
 
 	build, err := api.Opts.Zed.CreateUserTalentBuild(ctx, database.CreateUserTalentBuildParams{
-		UserID:  userID,
-		Name:    name,
-		ClassID: req.ClassID,
-		Build:   req.Build,
-		Locked:  req.Locked,
+		UserID:   userID,
+		TenantID: tenantID,
+		Name:     name,
+		ClassID:  req.ClassID,
+		Build:    req.Build,
+		Locked:   req.Locked,
 	})
 	if err != nil {
 		if database.IsUniqueViolation(err, database.UniqueUserTalentBuildsUserNameCiUidx) {
@@ -144,8 +155,9 @@ func (api *API) UpdateMyTalentBuild(w http.ResponseWriter, r *http.Request) {
 	}
 
 	params := database.UpdateUserTalentBuildByIDParams{
-		ID:     buildID,
-		UserID: state.Claims.Subject,
+		ID:       buildID,
+		UserID:   state.Claims.Subject,
+		TenantID: servicetenant.TenantIDFromContext(ctx),
 	}
 	if req.Name != nil {
 		name, ok := validateTalentBuildName(*req.Name)
@@ -203,8 +215,9 @@ func (api *API) DeleteMyTalentBuild(w http.ResponseWriter, r *http.Request) {
 	}
 
 	deleted, err := api.Opts.Zed.DeleteUserTalentBuildByID(ctx, database.DeleteUserTalentBuildByIDParams{
-		ID:     buildID,
-		UserID: state.Claims.Subject,
+		ID:       buildID,
+		UserID:   state.Claims.Subject,
+		TenantID: servicetenant.TenantIDFromContext(ctx),
 	})
 	if err != nil {
 		httpapi.InternalServerError(w, err)

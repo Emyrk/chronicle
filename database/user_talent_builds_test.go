@@ -31,18 +31,24 @@ func TestUserTalentBuilds(t *testing.T) {
 		return id
 	}
 
-	create := func(t *testing.T, userID uuid.UUID, name, build string) database.UserTalentBuild {
+	// uuid.Nil is the root domain (no tenant).
+	createOn := func(t *testing.T, userID, tenantID uuid.UUID, name, build string) database.UserTalentBuild {
 		t.Helper()
 		row, err := db.CreateUserTalentBuild(ctx, database.CreateUserTalentBuildParams{
-			ID:      uuid.New(),
-			UserID:  userID,
-			Name:    name,
-			ClassID: 1,
-			Build:   build,
-			Locked:  false,
+			ID:       uuid.New(),
+			UserID:   userID,
+			TenantID: tenantID,
+			Name:     name,
+			ClassID:  1,
+			Build:    build,
+			Locked:   false,
 		})
 		require.NoError(t, err)
 		return row
+	}
+	create := func(t *testing.T, userID uuid.UUID, name, build string) database.UserTalentBuild {
+		t.Helper()
+		return createOn(t, userID, uuid.Nil, name, build)
 	}
 
 	t.Run("CreateAndList", func(t *testing.T) {
@@ -50,16 +56,57 @@ func TestUserTalentBuilds(t *testing.T) {
 		first := create(t, userID, "Fury PvE", "30305-05")
 		second := create(t, userID, "Prot MT", "5-3005301")
 
-		builds, err := db.ListUserTalentBuilds(ctx, userID)
+		builds, err := db.ListUserTalentBuilds(ctx, database.ListUserTalentBuildsParams{UserID: userID})
 		require.NoError(t, err)
 		require.Len(t, builds, 2)
 		// Ordered by updated_at DESC — most recent first.
 		require.Equal(t, second.ID, builds[0].ID)
 		require.Equal(t, first.ID, builds[1].ID)
 
-		count, err := db.CountUserTalentBuilds(ctx, userID)
+		count, err := db.CountUserTalentBuilds(ctx, database.CountUserTalentBuildsParams{UserID: userID})
 		require.NoError(t, err)
 		require.EqualValues(t, 2, count)
+	})
+
+	t.Run("TenantScoped", func(t *testing.T) {
+		userID := newUser(t, "tb-tenant")
+		tenant, err := db.InsertTenant(ctx, database.InsertTenantParams{
+			ID:               uuid.New(),
+			Name:             "tb-tenant-a",
+			Slug:             pgtype.Text{String: "tb-tenant-a", Valid: true},
+			AvailableFormats: []string{},
+		})
+		require.NoError(t, err)
+
+		rootBuild := create(t, userID, "Root Build", "303")
+		tenantBuild := createOn(t, userID, tenant.ID, "Tenant Build", "505")
+
+		// The same name may exist on different tenants.
+		createOn(t, userID, tenant.ID, "Root Build", "1")
+
+		// Each domain only sees its own builds.
+		rootBuilds, err := db.ListUserTalentBuilds(ctx, database.ListUserTalentBuildsParams{UserID: userID})
+		require.NoError(t, err)
+		require.Len(t, rootBuilds, 1)
+		require.Equal(t, rootBuild.ID, rootBuilds[0].ID)
+
+		tenantBuilds, err := db.ListUserTalentBuilds(ctx, database.ListUserTalentBuildsParams{UserID: userID, TenantID: tenant.ID})
+		require.NoError(t, err)
+		require.Len(t, tenantBuilds, 2)
+
+		// Updates and deletes do not cross tenants.
+		_, err = db.UpdateUserTalentBuildByID(ctx, database.UpdateUserTalentBuildByIDParams{
+			ID:     tenantBuild.ID,
+			UserID: userID, // TenantID: uuid.Nil (root)
+			Name:   pgtype.Text{String: "hijack", Valid: true},
+		})
+		require.ErrorIs(t, err, pgx.ErrNoRows)
+
+		deleted, err := db.DeleteUserTalentBuildByID(ctx, database.DeleteUserTalentBuildByIDParams{
+			ID: tenantBuild.ID, UserID: userID, // TenantID: uuid.Nil (root)
+		})
+		require.NoError(t, err)
+		require.EqualValues(t, 0, deleted)
 	})
 
 	t.Run("NameUniquePerUserCaseInsensitive", func(t *testing.T) {
@@ -124,7 +171,7 @@ func TestUserTalentBuilds(t *testing.T) {
 		require.NoError(t, err)
 		require.EqualValues(t, 1, deleted)
 
-		builds, err := db.ListUserTalentBuilds(ctx, userID)
+		builds, err := db.ListUserTalentBuilds(ctx, database.ListUserTalentBuildsParams{UserID: userID})
 		require.NoError(t, err)
 		require.Empty(t, builds)
 	})

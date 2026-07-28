@@ -1706,6 +1706,7 @@ type UserStorageLimit struct {
 type UserTalentBuild struct {
 	ID             uuid.UUID          `db:"id" json:"id"`
 	UserID         uuid.UUID          `db:"user_id" json:"user_id"`
+	TenantID       uuid.UUID          `db:"tenant_id" json:"tenant_id"`
 	Name           string             `db:"name" json:"name"`
 	NameNormalized pgtype.Text        `db:"name_normalized" json:"name_normalized"`
 	ClassID        int32              `db:"class_id" json:"class_id"`

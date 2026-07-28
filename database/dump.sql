@@ -1270,6 +1270,7 @@ CREATE TABLE user_passwords (
 CREATE TABLE user_talent_builds (
     id uuid DEFAULT gen_random_uuid() NOT NULL,
     user_id uuid NOT NULL,
+    tenant_id uuid DEFAULT '00000000-0000-0000-0000-000000000000'::uuid NOT NULL,
     name text NOT NULL,
     name_normalized text GENERATED ALWAYS AS (lower(name)) STORED,
     class_id integer NOT NULL,
@@ -2002,9 +2003,9 @@ CREATE INDEX user_character_links_user_id ON user_character_links USING btree (u
 
 CREATE UNIQUE INDEX user_panel_layouts_user_title_ci_uidx ON user_panel_layouts USING btree (user_id, title_normalized) WHERE (user_id IS NOT NULL);
 
-CREATE INDEX user_talent_builds_user_id_idx ON user_talent_builds USING btree (user_id);
+CREATE UNIQUE INDEX user_talent_builds_user_name_ci_uidx ON user_talent_builds USING btree (user_id, tenant_id, name_normalized);
 
-CREATE UNIQUE INDEX user_talent_builds_user_name_ci_uidx ON user_talent_builds USING btree (user_id, name_normalized);
+CREATE INDEX user_talent_builds_user_tenant_idx ON user_talent_builds USING btree (user_id, tenant_id);
 
 CREATE TRIGGER trg_cleanup_after_soft_delete AFTER UPDATE OF user_id ON user_panel_layouts FOR EACH ROW WHEN ((new.user_id IS NULL)) EXECUTE FUNCTION cleanup_orphaned_layout();
 
