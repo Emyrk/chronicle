@@ -469,7 +469,9 @@ function TalentButton({ talent, rank, locked, pointsExhausted, talents, ranks, o
       onContextMenu={(event) => {
         if (readOnly) return;
         event.preventDefault();
-        onChange(Math.max(0, rank - 1));
+        // Ctrl+right-click removes all points from the talent.
+        if (event.ctrlKey) onChange(0);
+        else onChange(Math.max(0, rank - 1));
       }}
       onAuxClick={(event) => {
         if (!debug || event.button !== 1) return;
@@ -1038,7 +1040,7 @@ export function TalentTreeViewer({
         <p className="text-sm text-muted-foreground">
           {isMobile
             ? "Tap to add, hold to remove points."
-            : "Click to add. Right-click or shift-click to remove. Ctrl-click to spend remaining points into a talent. Builds are stored in the URL."}
+            : "Click to add. Right-click or shift-click to remove. Ctrl-click to fill a talent, ctrl-right-click to empty it. Builds are stored in the URL."}
         </p>
       )}
       <div ref={exportRef} className={tabGridClassName}>
