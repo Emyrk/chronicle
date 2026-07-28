@@ -72,7 +72,10 @@ func (api *API) ListMyTalentBuilds(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	httpapi.Write(ctx, w, http.StatusOK, db2sdk.UserTalentBuilds(builds))
+	httpapi.Write(ctx, w, http.StatusOK, chroniclesdk.ListUserTalentBuildsResponse{
+		Builds: db2sdk.UserTalentBuilds(builds),
+		Limit:  maxUserTalentBuilds,
+	})
 }
 
 // CreateMyTalentBuild saves a new talent build for the authenticated user.

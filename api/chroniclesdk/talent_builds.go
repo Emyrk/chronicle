@@ -18,6 +18,12 @@ type UserTalentBuild struct {
 	UpdatedAt time.Time `json:"updated_at"`
 }
 
+type ListUserTalentBuildsResponse struct {
+	Builds []UserTalentBuild `json:"builds"`
+	// Limit is the maximum number of builds a user may save (per tenant).
+	Limit int `json:"limit"`
+}
+
 type CreateUserTalentBuildRequest struct {
 	Name    string `json:"name"`
 	ClassID int32  `json:"class_id"`

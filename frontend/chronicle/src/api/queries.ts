@@ -31,6 +31,7 @@ import type {
   UpdateUserPanelLayoutRequest as UpdateUserPanelLayoutRequestGenerated,
   UserPanelLayout as UserPanelLayoutGenerated,
   UserTalentBuild,
+  ListUserTalentBuildsResponse,
   CreateUserTalentBuildRequest,
   UpdateUserTalentBuildRequest,
   ActionBarSlotsResponse as ActionBarSlotsResponseGenerated,
@@ -2537,7 +2538,7 @@ export function useMyTalentBuilds(enabled = true) {
           "Failed to load talent builds",
           await response.json().catch(() => null)
         );
-      return response.json() as Promise<UserTalentBuild[]>;
+      return response.json() as Promise<ListUserTalentBuildsResponse>;
     },
     enabled,
     retry: false,

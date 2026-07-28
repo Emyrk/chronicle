@@ -1312,6 +1312,15 @@ export interface ListUserPanelLayoutsResponse {
     readonly action_bar_slots: ActionBarSlotsResponse | null;
 }
 
+// From chroniclesdk/talent_builds.go
+export interface ListUserTalentBuildsResponse {
+    readonly builds: readonly UserTalentBuild[];
+    /**
+     * Limit is the maximum number of builds a user may save (per tenant).
+     */
+    readonly limit: number;
+}
+
 // From chroniclesdk/log.go
 /**
  * LogParseReport contains detailed timing breakdown for a log parse job.
