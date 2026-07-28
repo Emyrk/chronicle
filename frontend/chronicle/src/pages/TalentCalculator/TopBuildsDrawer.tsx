@@ -96,7 +96,7 @@ export function TopBuildsDrawer({ selectedClass, onShowAll }: {
     onShowAll(builds);
     setOpen(false);
     toast.success(`Showing talent popularity across ${builds.length} top ${spec} builds`, {
-      description: "Change any talent point to dismiss the overlay.",
+      description: "Use \"Hide popularity\" in the toolbar to dismiss it.",
     });
   }
 
