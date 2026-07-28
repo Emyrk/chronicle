@@ -12,6 +12,7 @@ import {
   type RequestError,
 } from "@/api/queries";
 import { useAuth } from "@/hooks/useAuth";
+import { useIsMobile } from "@/hooks/useIsMobile";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 
@@ -43,7 +44,7 @@ function UserPicker({
   }, [query, usersData]);
 
   return (
-    <div className="w-72 rounded-lg border bg-background p-3 space-y-2 text-left">
+    <div className="w-full space-y-2 text-left">
       <div className="flex items-center gap-2">
         <Input
           autoFocus
@@ -86,23 +87,28 @@ function UserPicker({
 }
 
 /**
- * Admin-only link/unlink controls shown on the armory page. Renders nothing
- * for non-admins.
+ * Admin-only link/unlink controls for the armory page, shown as a floating
+ * panel in the bottom-right corner. Desktop only; renders nothing for
+ * non-admins or on mobile.
  */
 export function AdminLinkControls({ player }: { player: ArmoryPlayer }) {
+  const isMobile = useIsMobile();
   const { isAuthenticated } = useAuth();
-  const { data: authz } = useAuthorizationCheck(ADMIN_CHECKS, { enabled: isAuthenticated });
+  const { data: authz } = useAuthorizationCheck(ADMIN_CHECKS, {
+    enabled: isAuthenticated && !isMobile,
+  });
   const isAdmin = authz?.admin_users ?? false;
 
   const { data: link, isLoading } = useAdminCharacterLink(
     { realm_id: player.realm_id, character_guid: player.id },
-    { enabled: isAdmin },
+    { enabled: isAdmin && !isMobile },
   );
   const linkMutation = useAdminLinkCharacter();
   const unlinkMutation = useAdminUnlinkCharacter();
   const [picking, setPicking] = useState(false);
+  const [collapsed, setCollapsed] = useState(false);
 
-  if (!isAdmin || isLoading) return null;
+  if (isMobile || !isAdmin || isLoading) return null;
 
   const handleUnlink = () => {
     if (!link) return;
@@ -129,47 +135,77 @@ export function AdminLinkControls({ player }: { player: ArmoryPlayer }) {
     );
   };
 
+  if (collapsed) {
+    return (
+      <div className="fixed bottom-4 right-4 z-40">
+        <Button
+          variant="outline"
+          size="icon"
+          className="h-10 w-10 rounded-full shadow-lg"
+          onClick={() => setCollapsed(false)}
+          aria-label="Show admin link controls"
+        >
+          <ShieldCheck className="h-4 w-4" />
+        </Button>
+      </div>
+    );
+  }
+
   return (
-    <div className="flex flex-col items-center gap-2 mt-2">
-      <div className="flex items-center gap-2 text-xs text-zinc-500">
-        <ShieldCheck className="h-3.5 w-3.5" />
+    <div className="fixed bottom-4 right-4 z-40 w-80 rounded-lg border bg-popover shadow-lg">
+      <div className="flex items-center justify-between px-3 py-2 border-b">
+        <div className="flex items-center gap-2 text-xs font-medium text-muted-foreground">
+          <ShieldCheck className="h-3.5 w-3.5" />
+          Admin · Character Link
+        </div>
+        <Button
+          variant="ghost"
+          size="icon"
+          className="h-6 w-6"
+          onClick={() => setCollapsed(true)}
+          aria-label="Collapse admin link controls"
+        >
+          <X className="h-3.5 w-3.5" />
+        </Button>
+      </div>
+
+      <div className="p-3 space-y-2">
         {link ? (
-          <>
-            <span>
-              Linked to{" "}
-              <Link to="/admin/users" className="text-zinc-300 hover:underline">
+          <div className="flex items-center justify-between gap-2">
+            <p className="text-sm min-w-0">
+              <span className="text-muted-foreground">{player.name} is linked to </span>
+              <Link to="/admin/users" className="font-medium hover:underline">
                 {link.username}
               </Link>
-            </span>
+            </p>
             <Button
               variant="ghost"
               size="sm"
-              className="h-6 px-2 text-xs text-muted-foreground hover:text-destructive"
+              className="h-7 px-2 text-xs text-muted-foreground hover:text-destructive shrink-0"
               disabled={unlinkMutation.isPending}
               onClick={handleUnlink}
             >
               <Link2Off className="h-3 w-3 mr-1" />
               Unlink
             </Button>
-          </>
-        ) : picking ? null : (
-          <>
-            <span>Not linked to an account</span>
+          </div>
+        ) : picking ? (
+          <UserPicker onPick={handlePick} onCancel={() => setPicking(false)} pending={linkMutation.isPending} />
+        ) : (
+          <div className="flex items-center justify-between gap-2">
+            <p className="text-sm text-muted-foreground">{player.name} is not linked to an account.</p>
             <Button
-              variant="ghost"
+              variant="outline"
               size="sm"
-              className="h-6 px-2 text-xs"
+              className="h-7 px-2 text-xs shrink-0"
               onClick={() => setPicking(true)}
             >
               <Link2 className="h-3 w-3 mr-1" />
-              Link to account
+              Link
             </Button>
-          </>
+          </div>
         )}
       </div>
-      {picking && !link && (
-        <UserPicker onPick={handlePick} onCancel={() => setPicking(false)} pending={linkMutation.isPending} />
-      )}
     </div>
   );
 }
