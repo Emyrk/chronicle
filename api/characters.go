@@ -83,6 +83,74 @@ func (api *API) AdminLinkUserCharacter(w http.ResponseWriter, r *http.Request) {
 	httpapi.Write(ctx, w, http.StatusCreated, linked)
 }
 
+// AdminListUserCharacters lists the characters linked to a user account.
+func (api *API) AdminListUserCharacters(w http.ResponseWriter, r *http.Request) {
+	ctx := r.Context()
+
+	userID, err := uuid.Parse(chi.URLParam(r, "userID"))
+	if err != nil {
+		httpapi.Write(ctx, w, http.StatusBadRequest, chroniclesdk.Response{
+			Message: "Invalid user ID",
+		})
+		return
+	}
+
+	rows, err := api.Opts.Zed.GetUserCharacterLinks(ctx, userID)
+	if err != nil {
+		httpapi.InternalServerError(w, err)
+		return
+	}
+	httpapi.Write(ctx, w, http.StatusOK, db2sdk.LinkedCharacters(rows))
+}
+
+// AdminGetCharacterLink returns the link (if any) for a character, including
+// the owning user's identity. 404 when the character is unlinked.
+func (api *API) AdminGetCharacterLink(w http.ResponseWriter, r *http.Request) {
+	ctx := r.Context()
+
+	realmID, err := uuid.Parse(chi.URLParam(r, "realmID"))
+	if err != nil {
+		httpapi.Write(ctx, w, http.StatusBadRequest, chroniclesdk.Response{
+			Message: "Invalid realm ID",
+		})
+		return
+	}
+
+	characterGUID, err := guid.FromString(chi.URLParam(r, "characterGUID"))
+	if err != nil {
+		httpapi.Write(ctx, w, http.StatusBadRequest, chroniclesdk.Response{
+			Message: "Invalid character GUID",
+		})
+		return
+	}
+
+	link, err := api.Opts.Zed.GetUserCharacterLink(ctx, database.GetUserCharacterLinkParams{
+		CharacterGuid: characterGUID,
+		RealmID:       realmID,
+	})
+	if err != nil {
+		httpapi.HandleResponseError(ctx, w, err, httpapi.APIError{
+			Response: chroniclesdk.Response{Message: "Character is not linked"},
+			Status:   http.StatusNotFound,
+		})
+		return
+	}
+
+	user, err := api.Opts.Zed.GetUserByID(ctx, link.UserID)
+	if err != nil {
+		httpapi.InternalServerError(w, err)
+		return
+	}
+
+	httpapi.Write(ctx, w, http.StatusOK, chroniclesdk.CharacterLinkInfo{
+		UserID:        link.UserID,
+		Username:      user.Username,
+		CharacterGUID: link.CharacterGuid,
+		RealmID:       link.RealmID,
+		LinkedAt:      link.CreatedAt.Time,
+	})
+}
+
 // AdminUnlinkUserCharacter removes a character link from a user account.
 func (api *API) AdminUnlinkUserCharacter(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()

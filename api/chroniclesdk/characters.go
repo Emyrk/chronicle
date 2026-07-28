@@ -23,6 +23,15 @@ type LinkedCharacter struct {
 	LinkedAt      time.Time  `json:"linked_at"`
 }
 
+// CharacterLinkInfo describes who a character is linked to (admin view).
+type CharacterLinkInfo struct {
+	UserID        uuid.UUID  `json:"user_id"`
+	Username      string     `json:"username"`
+	CharacterGUID GUIDString `json:"character_guid"`
+	RealmID       uuid.UUID  `json:"realm_id"`
+	LinkedAt      time.Time  `json:"linked_at"`
+}
+
 // LinkCharacterRequest links a character to a user account (admin only).
 type LinkCharacterRequest struct {
 	RealmID       uuid.UUID  `json:"realm_id"`

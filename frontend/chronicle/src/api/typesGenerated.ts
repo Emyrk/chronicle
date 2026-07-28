@@ -376,6 +376,18 @@ export interface CensusEntry {
     readonly count: number;
 }
 
+// From chroniclesdk/characters.go
+/**
+ * CharacterLinkInfo describes who a character is linked to (admin view).
+ */
+export interface CharacterLinkInfo {
+    readonly user_id: string;
+    readonly username: string;
+    readonly character_guid: string;
+    readonly realm_id: string;
+    readonly linked_at: string;
+}
+
 // From chroniclesdk/events.go
 export interface ChronicleEncounterEvents {
     readonly encounter_id: string;

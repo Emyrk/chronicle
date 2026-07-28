@@ -24,6 +24,8 @@ import type {
   UserStorageInfo as UserStorageInfoGenerated,
   LinkedCharacter as LinkedCharacterGenerated,
   SetPrimaryCharacterRequest as SetPrimaryCharacterRequestGenerated,
+  CharacterLinkInfo as CharacterLinkInfoGenerated,
+  LinkCharacterRequest as LinkCharacterRequestGenerated,
   DataGrant as DataGrantGenerated,
   UpsertDataGrantRequest as UpsertDataGrantRequestGenerated,
   ListUserPanelLayoutsResponse as ListUserPanelLayoutsResponseGenerated,
@@ -92,6 +94,8 @@ export type AuthorizationResponse = AuthorizationResponseGenerated;
 export type UserStorageInfo = UserStorageInfoGenerated;
 export type LinkedCharacter = LinkedCharacterGenerated;
 export type SetPrimaryCharacterRequest = SetPrimaryCharacterRequestGenerated;
+export type CharacterLinkInfo = CharacterLinkInfoGenerated;
+export type LinkCharacterRequest = LinkCharacterRequestGenerated;
 export type DataGrant = DataGrantGenerated;
 export type UpsertDataGrantRequest = UpsertDataGrantRequestGenerated;
 export type ListUserPanelLayoutsResponse = ListUserPanelLayoutsResponseGenerated;
@@ -519,6 +523,97 @@ export function useUnlinkMyCharacter() {
       }
     },
     onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["my-characters"] });
+    },
+  });
+}
+
+export function useAdminUserCharacters(userId: string, options?: Omit<UseQueryOptions<LinkedCharacter[]>, "queryKey" | "queryFn">) {
+  return useQuery({
+    queryKey: ["admin", "users", userId, "characters"],
+    queryFn: async () => {
+      const response = await fetch(`/api/v1/admin/users/${encodeURIComponent(userId)}/characters`, {
+        credentials: "include",
+      });
+      if (!response.ok) {
+        throw buildAPIError("Failed to fetch linked characters", await response.json().catch(() => null));
+      }
+      return response.json() as Promise<LinkedCharacter[]>;
+    },
+    ...options,
+  });
+}
+
+export function useAdminCharacterLink(
+  character: { realm_id?: string; character_guid?: string },
+  options?: Omit<UseQueryOptions<CharacterLinkInfo | null>, "queryKey" | "queryFn">,
+) {
+  return useQuery({
+    queryKey: ["admin", "character-link", character.realm_id, character.character_guid],
+    queryFn: async () => {
+      const response = await fetch(
+        `/api/v1/admin/characters/${encodeURIComponent(character.realm_id!)}/${encodeURIComponent(character.character_guid!)}/link`,
+        { credentials: "include" },
+      );
+      if (response.status === 404) return null;
+      if (!response.ok) {
+        throw buildAPIError("Failed to fetch character link", await response.json().catch(() => null));
+      }
+      return response.json() as Promise<CharacterLinkInfo>;
+    },
+    enabled: !!character.realm_id && !!character.character_guid,
+    ...options,
+  });
+}
+
+export function useAdminLinkCharacter() {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: async ({ userId, request }: { userId: string; request: LinkCharacterRequest }) => {
+      const response = await fetch(`/api/v1/admin/users/${encodeURIComponent(userId)}/characters`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(request),
+        credentials: "include",
+      });
+      if (!response.ok) {
+        throw buildAPIError("Failed to link character", await response.json().catch(() => null));
+      }
+      return response.json() as Promise<LinkedCharacter>;
+    },
+    onSuccess: (_data, vars) => {
+      queryClient.invalidateQueries({ queryKey: ["admin", "users", vars.userId, "characters"] });
+      queryClient.invalidateQueries({ queryKey: ["admin", "character-link"] });
+      queryClient.invalidateQueries({ queryKey: ["my-characters"] });
+    },
+  });
+}
+
+export function useAdminUnlinkCharacter() {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: async ({
+      userId,
+      realmId,
+      characterGuid,
+    }: {
+      userId: string;
+      realmId: string;
+      characterGuid: string;
+    }) => {
+      const response = await fetch(
+        `/api/v1/admin/users/${encodeURIComponent(userId)}/characters/${encodeURIComponent(realmId)}/${encodeURIComponent(characterGuid)}`,
+        { method: "DELETE", credentials: "include" },
+      );
+      if (!response.ok) {
+        throw buildAPIError("Failed to unlink character", await response.json().catch(() => null));
+      }
+    },
+    onSuccess: (_data, vars) => {
+      queryClient.invalidateQueries({ queryKey: ["admin", "users", vars.userId, "characters"] });
+      queryClient.invalidateQueries({ queryKey: ["admin", "character-link"] });
       queryClient.invalidateQueries({ queryKey: ["my-characters"] });
     },
   });

@@ -4,6 +4,7 @@ import { Shield, Calendar, Sparkles } from "lucide-react";
 import type { ArmoryPlayer } from "@/api/typesGenerated";
 import { DatasetProvider } from "@/hooks/useDatasetId";
 import { CharacterHeader } from "./CharacterHeader";
+import { AdminLinkControls } from "./AdminLinkControls";
 import { GearDisplay } from "./GearDisplay";
 import { TalentsTab } from "./TalentsTab";
 import { ActivityTab } from "./ActivityTab";
@@ -73,6 +74,7 @@ export function ArmoryPage() {
       {/* Center column */}
       <div>
         <CharacterHeader player={player} />
+        <AdminLinkControls player={player} />
 
         {/* Tab navigation */}
         <div className="mt-6 flex gap-1 border-b border-border">

@@ -9,6 +9,7 @@ import {
   type DataGrant,
 } from "@/api/queries";
 import { Card } from "@/components/ui/Card/Card";
+import { UserCharactersSection } from "./UserCharactersSection";
 import { Button } from "@/components/ui/button";
 import {
   Users,
@@ -266,6 +267,9 @@ function UserRow({ user }: UserRowProps) {
               </Button>
             </div>
           </div>
+
+          {/* Linked characters */}
+          <UserCharactersSection userId={user.id} enabled={expanded} />
 
           {/* Storage grants */}
           <div>

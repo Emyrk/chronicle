@@ -230,8 +230,16 @@ func (api *API) Routes() chi.Router {
 					r.Get("/{userID}/grants", api.GetUserGrants)
 					r.Put("/{userID}/grants", api.UpsertUserGrant)
 					r.Delete("/{userID}/grants/{source}", api.DeleteUserGrant)
+					r.Get("/{userID}/characters", api.AdminListUserCharacters)
 					r.Post("/{userID}/characters", api.AdminLinkUserCharacter)
 					r.Delete("/{userID}/characters/{realmID}/{characterGUID}", api.AdminUnlinkUserCharacter)
+				})
+
+				r.Route("/characters", func(r chi.Router) {
+					r.Use(
+						httpmw.Can(api.Zed, policy.New().GlobalChronicle().CanAdmin_users_User),
+					)
+					r.Get("/{realmID}/{characterGUID}/link", api.AdminGetCharacterLink)
 				})
 
 				r.Route("/logs", func(r chi.Router) {
