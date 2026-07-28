@@ -1,7 +1,8 @@
 import { Fragment, useEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { useSearchParams } from "react-router-dom";
-import { Lock, LockOpen } from "lucide-react";
+import { ImageDown, Lock, LockOpen } from "lucide-react";
+import { toPng } from "html-to-image";
 import { cn } from "@/lib/utils";
 import { iconUrl, talentBackgroundUrl } from "@/config/iconUrl";
 import { useIconBaseUrl } from "@/hooks/useDatasetId";
@@ -731,6 +732,28 @@ export function TalentTreeViewer({
     await copyTalentBuildUrl(navigator.clipboard, window.location.href, ranks, tabTalentLists);
   }
 
+  const exportRef = useRef<HTMLDivElement>(null);
+  const [exporting, setExporting] = useState(false);
+  async function exportAsPng() {
+    const node = exportRef.current;
+    if (!node || exporting) return;
+    setExporting(true);
+    try {
+      // Icons and backgrounds come from the icon CDN, which serves CORS
+      // headers, so html-to-image can inline them as data URLs.
+      const dataUrl = await toPng(node, {
+        pixelRatio: 2,
+        backgroundColor: "#09090b",
+      });
+      const link = document.createElement("a");
+      link.download = `${data.name.toLowerCase().replace(/\s+/g, "-")}-talents-${total}pts.png`;
+      link.href = dataUrl;
+      link.click();
+    } finally {
+      setExporting(false);
+    }
+  }
+
   return (
     <div className={cn("space-y-2", className)}>
       {/* Summary bar — hidden in readOnly mode with allocations */}
@@ -744,6 +767,16 @@ export function TalentTreeViewer({
               <>
                 <button type="button" className="rounded-md border border-primary/50 bg-primary/15 px-2.5 py-1 text-sm font-bold text-white hover:bg-primary/25" onClick={() => void copyBuildLink()}>
                   Copy link
+                </button>
+                <button
+                  type="button"
+                  disabled={exporting}
+                  title="Download the talent trees as a PNG image"
+                  className="inline-flex items-center gap-1.5 rounded-md border border-primary/50 bg-primary/15 px-2.5 py-1 text-sm font-bold text-white hover:bg-primary/25 disabled:cursor-wait disabled:opacity-60"
+                  onClick={() => void exportAsPng()}
+                >
+                  <ImageDown className="h-3.5 w-3.5" />
+                  {exporting ? "Exporting…" : "Export PNG"}
                 </button>
                 <button type="button" className="rounded-md border border-red-500/50 bg-red-500/15 px-2.5 py-1 text-sm font-medium text-red-400 hover:bg-red-500/25 hover:text-red-300" onClick={() => commitRanks({})}>Reset</button>
                 <button
@@ -770,7 +803,7 @@ export function TalentTreeViewer({
           )}
         </div>
       )}
-      <div className={tabGridClassName}>
+      <div ref={exportRef} className={tabGridClassName}>
         {data.tabs.map((tab) => (
           <TalentTab
             key={tab.id}

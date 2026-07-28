@@ -40,6 +40,7 @@
     "clsx": "^2.1.1",
     "codegenv1": "link:@bufbuild/protobuf/codegenv1",
     "date-fns": "^4.1.0",
+    "html-to-image": "^1.11.13",
     "lucide-react": "^0.562.0",
     "next-themes": "^0.4.6",
     "qrcode.react": "^4.2.0",
