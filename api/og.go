@@ -16,6 +16,7 @@ import (
 	"github.com/Emyrk/chronicle/database"
 	"github.com/Emyrk/chronicle/database/authz"
 	"github.com/Emyrk/chronicle/frontend"
+	"github.com/Emyrk/chronicle/internal/wowspec"
 )
 
 // OGRoutes returns the Open Graph route definitions for the frontend handler.
@@ -39,6 +40,120 @@ func (api *API) OGRoutes() []frontend.OGRoute {
 				return api.armoryOG(chi.URLParam(r, "realm"), chi.URLParam(r, "player"))
 			},
 		},
+		{
+			Pattern: "/talents",
+			Resolve: func(r *http.Request) *frontend.OGData {
+				return talentCalculatorOG(ogHost(r), "", "")
+			},
+		},
+		{
+			Pattern: "/talents/{class}",
+			Resolve: func(r *http.Request) *frontend.OGData {
+				return talentCalculatorOG(ogHost(r), chi.URLParam(r, "class"), r.URL.Query().Get("build"))
+			},
+		},
+	}
+}
+
+// talentClassSlugs maps calculator URL slugs to display and wowspec names.
+var talentClassSlugs = map[string]struct {
+	Display string
+	Spec    string // wowspec.InferSpec class key
+}{
+	"warrior":     {"Warrior", "WARRIOR"},
+	"paladin":     {"Paladin", "PALADIN"},
+	"hunter":      {"Hunter", "HUNTER"},
+	"rogue":       {"Rogue", "ROGUE"},
+	"priest":      {"Priest", "PRIEST"},
+	"shaman":      {"Shaman", "SHAMAN"},
+	"mage":        {"Mage", "MAGE"},
+	"warlock":     {"Warlock", "WARLOCK"},
+	"druid":       {"Druid", "DRUID"},
+	"deathknight": {"Death Knight", "DEATH_KNIGHT"},
+}
+
+// talentBuildSummary sums the digits of each dash-separated tab section of a
+// positional build string, e.g. "0532-31-55" → [10, 4, 10].
+func talentBuildSummary(build string) (summary [3]uint8, total int) {
+	for i, section := range strings.SplitN(build, "-", 3) {
+		var points int
+		for _, ch := range section {
+			if ch >= '0' && ch <= '9' {
+				points += int(ch - '0')
+			}
+		}
+		if points > 255 {
+			points = 255
+		}
+		summary[i] = uint8(points)
+		total += points
+	}
+	return summary, total
+}
+
+// ogHost returns the request host for og:url construction (keeping tenant
+// subdomains like capy.chronicleclassic.com), falling back to the canonical
+// domain when the Host header contains anything unexpected. The og:url meta
+// is rendered by text/template (no HTML escaping), so the host must be
+// strictly validated before echoing.
+func ogHost(r *http.Request) string {
+	host := strings.ToLower(r.Host)
+	for _, ch := range host {
+		if (ch < 'a' || ch > 'z') && (ch < '0' || ch > '9') && ch != '.' && ch != '-' && ch != ':' {
+			return "chronicleclassic.com"
+		}
+	}
+	if host == "" {
+		return "chronicleclassic.com"
+	}
+	return host
+}
+
+// sanitizeBuildParam keeps only the characters valid in a positional build
+// string (digits and dashes). The og:url meta is rendered by text/template
+// (no HTML escaping), so nothing user-controlled may pass through verbatim.
+func sanitizeBuildParam(build string) string {
+	var b strings.Builder
+	for _, ch := range build {
+		if (ch >= '0' && ch <= '9') || ch == '-' {
+			b.WriteRune(ch)
+		}
+	}
+	return b.String()
+}
+
+// talentCalculatorOG builds Open Graph metadata for talent calculator links.
+// classSlug and build may be empty ("/talents" landing page).
+func talentCalculatorOG(host, classSlug, build string) *frontend.OGData {
+	cls, ok := talentClassSlugs[strings.ToLower(classSlug)]
+	if !ok {
+		return &frontend.OGData{
+			Title:       "Talent Calculator",
+			Description: "Plan, share, and compare class talent builds.",
+			URL:         fmt.Sprintf("https://%s/talents", host),
+		}
+	}
+	build = sanitizeBuildParam(build)
+
+	classURL := fmt.Sprintf("https://%s/talents/%s", host, strings.ToLower(classSlug))
+	if build == "" {
+		return &frontend.OGData{
+			Title:       fmt.Sprintf("%s Talent Calculator", cls.Display),
+			Description: fmt.Sprintf("Plan and share %s talent builds.", cls.Display),
+			URL:         classURL,
+		}
+	}
+
+	summary, total := talentBuildSummary(build)
+	spec := wowspec.InferSpec(cls.Spec, summary)
+	title := fmt.Sprintf("%s %s (%d/%d/%d)", spec, cls.Display, summary[0], summary[1], summary[2])
+	if spec == "Unknown" {
+		title = fmt.Sprintf("%s (%d/%d/%d)", cls.Display, summary[0], summary[1], summary[2])
+	}
+	return &frontend.OGData{
+		Title:       title,
+		Description: fmt.Sprintf("A %d-point %s talent build. Open it in the talent calculator.", total, cls.Display),
+		URL:         fmt.Sprintf("%s?build=%s", classURL, build),
 	}
 }
 
