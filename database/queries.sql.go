@@ -10832,6 +10832,176 @@ func (q *sqlQuerier) UpdateUserRawLogRetentionHours(ctx context.Context, arg Upd
 	return i, err
 }
 
+const countUserTalentBuilds = `-- name: CountUserTalentBuilds :one
+SELECT COUNT(*)
+FROM user_talent_builds
+WHERE user_id = $1
+`
+
+func (q *sqlQuerier) CountUserTalentBuilds(ctx context.Context, userID uuid.UUID) (int64, error) {
+	row := q.db.QueryRow(ctx, countUserTalentBuilds, userID)
+	var count int64
+	err := row.Scan(&count)
+	return count, err
+}
+
+const createUserTalentBuild = `-- name: CreateUserTalentBuild :one
+INSERT INTO user_talent_builds (user_id, name, class_id, build, locked)
+VALUES ($1, $2, $3, $4, $5)
+RETURNING id, user_id, name, name_normalized, class_id, build, locked, created_at, updated_at
+`
+
+type CreateUserTalentBuildParams struct {
+	UserID  uuid.UUID `db:"user_id" json:"user_id"`
+	Name    string    `db:"name" json:"name"`
+	ClassID int32     `db:"class_id" json:"class_id"`
+	Build   string    `db:"build" json:"build"`
+	Locked  bool      `db:"locked" json:"locked"`
+}
+
+func (q *sqlQuerier) CreateUserTalentBuild(ctx context.Context, arg CreateUserTalentBuildParams) (UserTalentBuild, error) {
+	row := q.db.QueryRow(ctx, createUserTalentBuild,
+		arg.UserID,
+		arg.Name,
+		arg.ClassID,
+		arg.Build,
+		arg.Locked,
+	)
+	var i UserTalentBuild
+	err := row.Scan(
+		&i.ID,
+		&i.UserID,
+		&i.Name,
+		&i.NameNormalized,
+		&i.ClassID,
+		&i.Build,
+		&i.Locked,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+	)
+	return i, err
+}
+
+const deleteUserTalentBuildByID = `-- name: DeleteUserTalentBuildByID :execrows
+DELETE FROM user_talent_builds
+WHERE id = $1 AND user_id = $2
+`
+
+type DeleteUserTalentBuildByIDParams struct {
+	ID     uuid.UUID `db:"id" json:"id"`
+	UserID uuid.UUID `db:"user_id" json:"user_id"`
+}
+
+func (q *sqlQuerier) DeleteUserTalentBuildByID(ctx context.Context, arg DeleteUserTalentBuildByIDParams) (int64, error) {
+	result, err := q.db.Exec(ctx, deleteUserTalentBuildByID, arg.ID, arg.UserID)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
+}
+
+const getUserTalentBuildByID = `-- name: GetUserTalentBuildByID :one
+SELECT id, user_id, name, name_normalized, class_id, build, locked, created_at, updated_at
+FROM user_talent_builds
+WHERE id = $1
+`
+
+func (q *sqlQuerier) GetUserTalentBuildByID(ctx context.Context, id uuid.UUID) (UserTalentBuild, error) {
+	row := q.db.QueryRow(ctx, getUserTalentBuildByID, id)
+	var i UserTalentBuild
+	err := row.Scan(
+		&i.ID,
+		&i.UserID,
+		&i.Name,
+		&i.NameNormalized,
+		&i.ClassID,
+		&i.Build,
+		&i.Locked,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+	)
+	return i, err
+}
+
+const listUserTalentBuilds = `-- name: ListUserTalentBuilds :many
+SELECT id, user_id, name, name_normalized, class_id, build, locked, created_at, updated_at
+FROM user_talent_builds
+WHERE user_id = $1
+ORDER BY updated_at DESC
+`
+
+func (q *sqlQuerier) ListUserTalentBuilds(ctx context.Context, userID uuid.UUID) ([]UserTalentBuild, error) {
+	rows, err := q.db.Query(ctx, listUserTalentBuilds, userID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []UserTalentBuild
+	for rows.Next() {
+		var i UserTalentBuild
+		if err := rows.Scan(
+			&i.ID,
+			&i.UserID,
+			&i.Name,
+			&i.NameNormalized,
+			&i.ClassID,
+			&i.Build,
+			&i.Locked,
+			&i.CreatedAt,
+			&i.UpdatedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const updateUserTalentBuildByID = `-- name: UpdateUserTalentBuildByID :one
+UPDATE user_talent_builds
+SET
+  name = COALESCE($1, name),
+  build = COALESCE($2, build),
+  locked = COALESCE($3, locked),
+  updated_at = now()
+WHERE id = $4 AND user_id = $5
+RETURNING id, user_id, name, name_normalized, class_id, build, locked, created_at, updated_at
+`
+
+type UpdateUserTalentBuildByIDParams struct {
+	Name   pgtype.Text `db:"name" json:"name"`
+	Build  pgtype.Text `db:"build" json:"build"`
+	Locked pgtype.Bool `db:"locked" json:"locked"`
+	ID     uuid.UUID   `db:"id" json:"id"`
+	UserID uuid.UUID   `db:"user_id" json:"user_id"`
+}
+
+func (q *sqlQuerier) UpdateUserTalentBuildByID(ctx context.Context, arg UpdateUserTalentBuildByIDParams) (UserTalentBuild, error) {
+	row := q.db.QueryRow(ctx, updateUserTalentBuildByID,
+		arg.Name,
+		arg.Build,
+		arg.Locked,
+		arg.ID,
+		arg.UserID,
+	)
+	var i UserTalentBuild
+	err := row.Scan(
+		&i.ID,
+		&i.UserID,
+		&i.Name,
+		&i.NameNormalized,
+		&i.ClassID,
+		&i.Build,
+		&i.Locked,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+	)
+	return i, err
+}
+
 const deleteYoutubeVideoByInstanceOrSlug = `-- name: DeleteYoutubeVideoByInstanceOrSlug :exec
 DELETE FROM log_instance_youtube_timestamped
 WHERE log_instance_id = $1

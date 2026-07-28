@@ -1267,6 +1267,20 @@ CREATE TABLE user_passwords (
     reset_token_created_at timestamp with time zone
 );
 
+CREATE TABLE user_talent_builds (
+    id uuid DEFAULT gen_random_uuid() NOT NULL,
+    user_id uuid NOT NULL,
+    name text NOT NULL,
+    name_normalized text GENERATED ALWAYS AS (lower(name)) STORED,
+    class_id integer NOT NULL,
+    build text DEFAULT ''::text NOT NULL,
+    locked boolean DEFAULT false NOT NULL,
+    created_at timestamp with time zone DEFAULT now() NOT NULL,
+    updated_at timestamp with time zone DEFAULT now() NOT NULL,
+    CONSTRAINT user_talent_builds_build_length_chk CHECK ((char_length(build) <= 512)),
+    CONSTRAINT user_talent_builds_name_length_chk CHECK (((char_length(name) >= 1) AND (char_length(name) <= 64)))
+);
+
 CREATE TABLE user_tracked_layouts (
     id uuid DEFAULT gen_random_uuid() NOT NULL,
     user_id uuid NOT NULL,
@@ -1809,6 +1823,9 @@ ALTER TABLE ONLY user_panel_layouts
 ALTER TABLE ONLY user_passwords
     ADD CONSTRAINT user_passwords_pkey PRIMARY KEY (user_auth_id);
 
+ALTER TABLE ONLY user_talent_builds
+    ADD CONSTRAINT user_talent_builds_pkey PRIMARY KEY (id);
+
 ALTER TABLE ONLY user_tracked_layouts
     ADD CONSTRAINT user_tracked_layouts_pkey PRIMARY KEY (id);
 
@@ -1984,6 +2001,10 @@ CREATE UNIQUE INDEX user_character_links_one_primary ON user_character_links USI
 CREATE INDEX user_character_links_user_id ON user_character_links USING btree (user_id);
 
 CREATE UNIQUE INDEX user_panel_layouts_user_title_ci_uidx ON user_panel_layouts USING btree (user_id, title_normalized) WHERE (user_id IS NOT NULL);
+
+CREATE INDEX user_talent_builds_user_id_idx ON user_talent_builds USING btree (user_id);
+
+CREATE UNIQUE INDEX user_talent_builds_user_name_ci_uidx ON user_talent_builds USING btree (user_id, name_normalized);
 
 CREATE TRIGGER trg_cleanup_after_soft_delete AFTER UPDATE OF user_id ON user_panel_layouts FOR EACH ROW WHEN ((new.user_id IS NULL)) EXECUTE FUNCTION cleanup_orphaned_layout();
 
@@ -2253,6 +2274,9 @@ ALTER TABLE ONLY user_panel_layouts
 
 ALTER TABLE ONLY user_passwords
     ADD CONSTRAINT user_passwords_user_auth_id_fkey FOREIGN KEY (user_auth_id) REFERENCES user_auth_links(id) ON DELETE CASCADE;
+
+ALTER TABLE ONLY user_talent_builds
+    ADD CONSTRAINT user_talent_builds_user_id_fkey FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE;
 
 ALTER TABLE ONLY user_tracked_layouts
     ADD CONSTRAINT user_tracked_layouts_layout_id_fkey FOREIGN KEY (layout_id) REFERENCES user_panel_layouts(id) ON DELETE CASCADE;

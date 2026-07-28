@@ -14,6 +14,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/riverqueue/river/rivertype"
 )
+
 func nullUUIDPtr(n uuid.NullUUID) *uuid.UUID {
 	if !n.Valid {
 		return nil
@@ -35,7 +36,6 @@ func WoWServerRealm(r database.WowServerRealm) chroniclesdk.WoWServerRealm {
 		CreatedBy:   nullUUIDPtr(r.CreatedBy),
 	}
 }
-
 
 func User(user database.ChronicleUser, roles []string) chroniclesdk.User {
 	var dataLimitUpdated time.Time
@@ -127,16 +127,16 @@ func WoWInstanceWithGuild(instance database.LogInstance, dbG *database.Guild) ch
 		}
 	}
 	ret := chroniclesdk.WoWInstance{
-		ID:             instance.ID,
-		RealmID:        instance.RealmID,
-		LogGroupID:     instance.LogGroupID,
-		Name:           instance.Name,
-		Slug:           instance.HashedSlug.String,
-		Guild:          g,
-		Capabilities:   instance.Capabilities,
-		Versions:       map[string]string(instance.Versions),
-		RecorderName:   instance.RecorderName,
-		RecorderGUID:   instance.RecorderGuid,
+		ID:                instance.ID,
+		RealmID:           instance.RealmID,
+		LogGroupID:        instance.LogGroupID,
+		Name:              instance.Name,
+		Slug:              instance.HashedSlug.String,
+		Guild:             g,
+		Capabilities:      instance.Capabilities,
+		Versions:          map[string]string(instance.Versions),
+		RecorderName:      instance.RecorderName,
+		RecorderGUID:      instance.RecorderGuid,
 		DifficultyName:    instance.DifficultyName,
 		MaxPlayers:        int(instance.MaxPlayers),
 		DynamicDifficulty: int(instance.DynamicDifficulty),
@@ -163,16 +163,16 @@ func WoWInstance(instance database.LogInstancesGuild) chroniclesdk.WoWInstance {
 		}
 	}
 	ret := chroniclesdk.WoWInstance{
-		ID:             instance.ID,
-		RealmID:        instance.RealmID,
-		LogGroupID:     instance.LogGroupID,
-		Name:           instance.Name,
-		Slug:           instance.HashedSlug.String,
-		Guild:          g,
-		Capabilities:   instance.Capabilities,
-		Versions:       map[string]string(instance.Versions),
-		RecorderName:   instance.RecorderName,
-		RecorderGUID:   instance.RecorderGuid,
+		ID:                instance.ID,
+		RealmID:           instance.RealmID,
+		LogGroupID:        instance.LogGroupID,
+		Name:              instance.Name,
+		Slug:              instance.HashedSlug.String,
+		Guild:             g,
+		Capabilities:      instance.Capabilities,
+		Versions:          map[string]string(instance.Versions),
+		RecorderName:      instance.RecorderName,
+		RecorderGUID:      instance.RecorderGuid,
 		DifficultyName:    instance.DifficultyName,
 		MaxPlayers:        int(instance.MaxPlayers),
 		DynamicDifficulty: int(instance.DynamicDifficulty),
@@ -616,4 +616,22 @@ func LinkedCharacters(rows []database.GetUserCharacterLinksRow) []chroniclesdk.L
 	return out
 }
 
+func UserTalentBuild(row database.UserTalentBuild) chroniclesdk.UserTalentBuild {
+	return chroniclesdk.UserTalentBuild{
+		ID:        row.ID,
+		Name:      row.Name,
+		ClassID:   row.ClassID,
+		Build:     row.Build,
+		Locked:    row.Locked,
+		CreatedAt: row.CreatedAt.Time,
+		UpdatedAt: row.UpdatedAt.Time,
+	}
+}
 
+func UserTalentBuilds(rows []database.UserTalentBuild) []chroniclesdk.UserTalentBuild {
+	out := make([]chroniclesdk.UserTalentBuild, 0, len(rows))
+	for _, row := range rows {
+		out = append(out, UserTalentBuild(row))
+	}
+	return out
+}

@@ -1703,6 +1703,18 @@ type UserStorageLimit struct {
 	UpdatedAt       interface{} `db:"updated_at" json:"updated_at"`
 }
 
+type UserTalentBuild struct {
+	ID             uuid.UUID          `db:"id" json:"id"`
+	UserID         uuid.UUID          `db:"user_id" json:"user_id"`
+	Name           string             `db:"name" json:"name"`
+	NameNormalized pgtype.Text        `db:"name_normalized" json:"name_normalized"`
+	ClassID        int32              `db:"class_id" json:"class_id"`
+	Build          string             `db:"build" json:"build"`
+	Locked         bool               `db:"locked" json:"locked"`
+	CreatedAt      pgtype.Timestamptz `db:"created_at" json:"created_at"`
+	UpdatedAt      pgtype.Timestamptz `db:"updated_at" json:"updated_at"`
+}
+
 type UserTrackedLayout struct {
 	ID        uuid.UUID          `db:"id" json:"id"`
 	UserID    uuid.UUID          `db:"user_id" json:"user_id"`

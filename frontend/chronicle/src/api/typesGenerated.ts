@@ -517,6 +517,14 @@ export interface CreateUserPanelLayoutRequest {
     readonly payload: Record<string, string>;
 }
 
+// From chroniclesdk/talent_builds.go
+export interface CreateUserTalentBuildRequest {
+    readonly name: string;
+    readonly class_id: number;
+    readonly build: string;
+    readonly locked: boolean;
+}
+
 // From chroniclesdk/azerothcore.go
 export interface CreateWoWServerRealmRequest {
     readonly name: string;
@@ -2448,6 +2456,13 @@ export interface UpdateUserPanelLayoutRequest {
     readonly payload?: (Record<string, string>);
 }
 
+// From chroniclesdk/talent_builds.go
+export interface UpdateUserTalentBuildRequest {
+    readonly name?: string;
+    readonly build?: string;
+    readonly locked?: boolean;
+}
+
 // From chroniclesdk/azerothcore.go
 export interface UploadKey {
     readonly id: string;
@@ -2573,6 +2588,23 @@ export interface UserStorageInfo {
     readonly max_storage_bytes: number;
     readonly consumed_storage_bytes: number;
     readonly grants: readonly DataGrant[];
+}
+
+// From chroniclesdk/talent_builds.go
+/**
+ * UserTalentBuild is a saved talent calculator build owned by a user.
+ */
+export interface UserTalentBuild {
+    readonly id: string;
+    readonly name: string;
+    readonly class_id: number;
+    /**
+     * Build is the positional WoWHead-style build string, e.g. "35003-05032".
+     */
+    readonly build: string;
+    readonly locked: boolean;
+    readonly created_at: string;
+    readonly updated_at: string;
 }
 
 // From chroniclesdk/youtube.go

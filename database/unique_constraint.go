@@ -13,6 +13,8 @@ const (
 	UniqueDatasetTalentTreesPkey                       UniqueConstraint = "dataset_talent_trees_pkey"                           // ALTER TABLE ONLY dataset_talent_trees ADD CONSTRAINT dataset_talent_trees_pkey PRIMARY KEY (dataset_id);
 	UniqueDatasetsPkey                                 UniqueConstraint = "datasets_pkey"                                       // ALTER TABLE ONLY datasets ADD CONSTRAINT datasets_pkey PRIMARY KEY (id);
 	UniqueDatasetsSlugKey                              UniqueConstraint = "datasets_slug_key"                                   // ALTER TABLE ONLY datasets ADD CONSTRAINT datasets_slug_key UNIQUE (slug);
+	UniqueDbcAffectedAuraDurationModifiersPkey         UniqueConstraint = "dbc_affected_aura_duration_modifiers_pkey"           // ALTER TABLE ONLY dbc_affected_aura_duration_modifiers ADD CONSTRAINT dbc_affected_aura_duration_modifiers_pkey PRIMARY KEY (dataset_id, spell_id, modifier_spell_id);
+	UniqueDbcAffectedAuraDurationsPkey                 UniqueConstraint = "dbc_affected_aura_durations_pkey"                    // ALTER TABLE ONLY dbc_affected_aura_durations ADD CONSTRAINT dbc_affected_aura_durations_pkey PRIMARY KEY (dataset_id, spell_id);
 	UniqueDbcConsumableBuffsPkey                       UniqueConstraint = "dbc_consumable_buffs_pkey"                           // ALTER TABLE ONLY dbc_consumable_buffs ADD CONSTRAINT dbc_consumable_buffs_pkey PRIMARY KEY (dataset_id, item_id, spell_id);
 	UniqueDbcConsumablesPkey                           UniqueConstraint = "dbc_consumables_pkey"                                // ALTER TABLE ONLY dbc_consumables ADD CONSTRAINT dbc_consumables_pkey PRIMARY KEY (dataset_id, item_id);
 	UniqueDbcDurationModifiersPkey                     UniqueConstraint = "dbc_duration_modifiers_pkey"                         // ALTER TABLE ONLY dbc_duration_modifiers ADD CONSTRAINT dbc_duration_modifiers_pkey PRIMARY KEY (dataset_id, spell_id);
@@ -94,6 +96,7 @@ const (
 	UniqueUserPanelLayoutsCodeKey                      UniqueConstraint = "user_panel_layouts_code_key"                         // ALTER TABLE ONLY user_panel_layouts ADD CONSTRAINT user_panel_layouts_code_key UNIQUE (code);
 	UniqueUserPanelLayoutsPkey                         UniqueConstraint = "user_panel_layouts_pkey"                             // ALTER TABLE ONLY user_panel_layouts ADD CONSTRAINT user_panel_layouts_pkey PRIMARY KEY (id);
 	UniqueUserPasswordsPkey                            UniqueConstraint = "user_passwords_pkey"                                 // ALTER TABLE ONLY user_passwords ADD CONSTRAINT user_passwords_pkey PRIMARY KEY (user_auth_id);
+	UniqueUserTalentBuildsPkey                         UniqueConstraint = "user_talent_builds_pkey"                             // ALTER TABLE ONLY user_talent_builds ADD CONSTRAINT user_talent_builds_pkey PRIMARY KEY (id);
 	UniqueUserTrackedLayoutsPkey                       UniqueConstraint = "user_tracked_layouts_pkey"                           // ALTER TABLE ONLY user_tracked_layouts ADD CONSTRAINT user_tracked_layouts_pkey PRIMARY KEY (id);
 	UniqueUserTrackedLayoutsUnique                     UniqueConstraint = "user_tracked_layouts_unique"                         // ALTER TABLE ONLY user_tracked_layouts ADD CONSTRAINT user_tracked_layouts_unique UNIQUE (user_id, layout_id);
 	UniqueUsersPkey                                    UniqueConstraint = "users_pkey"                                          // ALTER TABLE ONLY users ADD CONSTRAINT users_pkey PRIMARY KEY (id);
@@ -126,4 +129,5 @@ const (
 	UniqueUserAuthsUniqueLinkedID                      UniqueConstraint = "user_auths_unique_linked_id"                         // CREATE UNIQUE INDEX user_auths_unique_linked_id ON user_auth_links USING btree (lower(linked_id), provider);
 	UniqueUserCharacterLinksOnePrimary                 UniqueConstraint = "user_character_links_one_primary"                    // CREATE UNIQUE INDEX user_character_links_one_primary ON user_character_links USING btree (user_id) WHERE is_primary;
 	UniqueUserPanelLayoutsUserTitleCiUidx              UniqueConstraint = "user_panel_layouts_user_title_ci_uidx"               // CREATE UNIQUE INDEX user_panel_layouts_user_title_ci_uidx ON user_panel_layouts USING btree (user_id, title_normalized) WHERE (user_id IS NOT NULL);
+	UniqueUserTalentBuildsUserNameCiUidx               UniqueConstraint = "user_talent_builds_user_name_ci_uidx"                // CREATE UNIQUE INDEX user_talent_builds_user_name_ci_uidx ON user_talent_builds USING btree (user_id, name_normalized);
 )

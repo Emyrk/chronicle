@@ -22,4 +22,6 @@ const (
 	CheckSiteConfigIDCheck              CheckConstraint = "site_config_id_check"                // site_config
 	CheckUserPanelLayoutsPayloadSizeChk CheckConstraint = "user_panel_layouts_payload_size_chk" // user_panel_layouts
 	CheckUserPanelLayoutsTitleFormatChk CheckConstraint = "user_panel_layouts_title_format_chk" // user_panel_layouts
+	CheckUserTalentBuildsBuildLengthChk CheckConstraint = "user_talent_builds_build_length_chk" // user_talent_builds
+	CheckUserTalentBuildsNameLengthChk  CheckConstraint = "user_talent_builds_name_length_chk"  // user_talent_builds
 )
