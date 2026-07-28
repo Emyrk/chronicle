@@ -11,6 +11,7 @@ import {
   decodeTalentBuild,
 } from "@/components/ui/TalentTreeViewer/talentLogic";
 import { useTalentTrees } from "@/components/ui/TalentTreeViewer/useTalentTrees";
+import { DatasetProvider } from "@/hooks/useDatasetId";
 import { MyBuildsDrawer } from "./MyBuildsDrawer";
 import { TopBuildsDrawer } from "./TopBuildsDrawer";
 
@@ -202,6 +203,9 @@ export function TalentCalculatorPage() {
       ) : isError ? (
         <div className="text-zinc-500">Unable to load talent data.</div>
       ) : classTreeData ? (
+        // Scope icon/spell lookups to the dataset the talent data resolved to
+        // (tenant-aware) instead of the compiled-in server default.
+        <DatasetProvider datasetId={talentData?.dataset_id} iconBaseUrl={talentData?.icon_base_url}>
         <TalentTreeViewer
           data={classTreeData}
           maxTalentPoints={maxTalentPoints}
@@ -228,6 +232,7 @@ export function TalentCalculatorPage() {
             ) : undefined
           }
         />
+        </DatasetProvider>
       ) : (
         <div className="text-zinc-500">Select a class above to get started.</div>
       )}

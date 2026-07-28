@@ -38,6 +38,10 @@ export interface ClassTalentData {
 
 export interface TalentTreeJSON {
   classes: Record<string, ClassTalentData>;
+  /** Resolved dataset for this data (tenant-aware). */
+  dataset_id?: string;
+  /** Icon CDN base for the resolved dataset. */
+  icon_base_url?: string;
 }
 
 export type TalentRanks = Record<number, number>;

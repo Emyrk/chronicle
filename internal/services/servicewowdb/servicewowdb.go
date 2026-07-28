@@ -292,8 +292,27 @@ func (s *Service) handleGetTalentTrees(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// Include the dataset's icon CDN base so the frontend loads icons from
+	// the resolved dataset instead of the compiled-in server default.
+	iconBaseURL := ""
+	if ds, dsErr := s.store.GetDataset(ctx, datasetID); dsErr == nil {
+		iconBaseURL = ds.IconBaseUrl
+	}
+
 	w.Header().Set("Cache-Control", "public, max-age=86400")
-	httpapi.Write(ctx, w, http.StatusOK, data)
+	httpapi.Write(ctx, w, http.StatusOK, talentTreesResponse{
+		TalentTreeData: data,
+		DatasetID:      datasetID,
+		IconBaseURL:    iconBaseURL,
+	})
+}
+
+// talentTreesResponse decorates the raw talent tree data with the resolved
+// dataset identity. Additive: existing consumers only read "classes".
+type talentTreesResponse struct {
+	*talents.TalentTreeData
+	DatasetID   uuid.UUID `json:"dataset_id"`
+	IconBaseURL string    `json:"icon_base_url,omitempty"`
 }
 
 func (s *Service) ServeHTTP(w http.ResponseWriter, r *http.Request) {
