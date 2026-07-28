@@ -75,18 +75,7 @@ func (c *vanillaPlusMograineCharacter) Start(reason string, m messages.Message) 
 
 func isVanillaPlusWhitemaneActivity(m messages.Message) bool {
 	switch m.(type) {
-	case *messages.Damage,
-		*messages.Heal,
-		*messages.ResourceChange,
-		*messages.Cast,
-		*messages.LegacyCast,
-		*messages.AuraCast,
-		*messages.Aura,
-		*messages.Interrupt,
-		*messages.SpellStart,
-		*messages.SpellGo,
-		*messages.SpellFail,
-		*messages.ExtraAttack:
+	case *messages.Damage, *messages.Heal:
 	default:
 		return false
 	}
