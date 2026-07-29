@@ -162,8 +162,11 @@ function DeathMarkers({
 
   if (markers.length === 0) return null;
 
+  // The slider thumb's center travels from thumbRadius to width - thumbRadius,
+  // not the full track width. Inset the marker container by half the native
+  // thumb width (~16px) on each side so markers align with the thumb position.
   return (
-    <div className="pointer-events-none absolute inset-x-0 -top-3 h-3">
+    <div className="pointer-events-none absolute -top-3 left-2 right-2 h-3">
       {markers.map((p, i) => (
         <Skull
           key={i}
