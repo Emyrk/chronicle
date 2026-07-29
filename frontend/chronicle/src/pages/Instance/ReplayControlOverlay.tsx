@@ -216,7 +216,8 @@ function SpeedChips({
 export function ReplayControlOverlay({ initialTimestamp }: ReplayControlOverlayProps) {
   const sync = useSyncModeContext();
   const [showDebug, setShowDebug] = useState(false);
-  const [collapsed, setCollapsed] = useState(false);
+  // Start compact; the chevron expands to the full panel.
+  const [collapsed, setCollapsed] = useState(true);
   const deaths = usePlayerDeathTimes();
 
   // Disable time controls when YouTube is driving the timestamp
