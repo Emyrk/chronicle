@@ -350,7 +350,7 @@ export function ReplayControlOverlay({ initialTimestamp }: ReplayControlOverlayP
   if (collapsed) {
     const miniBar = (
       <div className="fixed bottom-4 left-1/2 z-40 w-[52rem] max-w-[calc(100vw-2rem)] -translate-x-1/2">
-        <div className="flex items-center gap-3 rounded-lg border border-border bg-card/95 px-3 py-2 shadow-xl backdrop-blur">
+        <div className="animate-replay-pop flex items-center gap-3 rounded-lg border border-primary/40 bg-gradient-to-b from-primary-darker/30 to-black/60 px-3 py-2 shadow-xl backdrop-blur-md">
           {statusDot}
           {playPauseButton("h-8 w-8")}
           {restartButton("h-8 w-8")}
@@ -381,7 +381,7 @@ export function ReplayControlOverlay({ initialTimestamp }: ReplayControlOverlayP
 
   const content = (
     <div className="fixed bottom-4 left-1/2 z-40 w-[52rem] max-w-[calc(100vw-2rem)] -translate-x-1/2">
-      <div className="flex flex-col overflow-hidden rounded-lg border border-border bg-card/95 shadow-xl backdrop-blur">
+      <div className="animate-replay-pop flex flex-col overflow-hidden rounded-lg border border-primary/40 bg-gradient-to-b from-primary-darker/30 to-black/60 shadow-xl backdrop-blur-md">
         {/* Header */}
         <div className="flex items-center justify-between gap-2 border-b border-border bg-muted/50 px-4 py-2">
           <div className="flex items-center gap-2.5">

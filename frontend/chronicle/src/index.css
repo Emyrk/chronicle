@@ -99,6 +99,29 @@
   animation: pulse-ring 1.5s ease-out infinite;
 }
 
+/* One-shot entrance for the replay controls: slide up, overshoot, and flash a primary ring */
+@keyframes replay-pop {
+  0% {
+    opacity: 0;
+    transform: translateY(24px) scale(0.96);
+    box-shadow: 0 0 0 0 oklch(0.6521 0.1102 233.7748 / 0), 0 20px 25px -5px rgb(0 0 0 / 0.1), 0 8px 10px -6px rgb(0 0 0 / 0.1);
+  }
+  45% {
+    opacity: 1;
+    transform: translateY(-4px) scale(1.015);
+    box-shadow: 0 0 0 6px oklch(0.6521 0.1102 233.7748 / 0.45), 0 20px 25px -5px rgb(0 0 0 / 0.1), 0 8px 10px -6px rgb(0 0 0 / 0.1);
+  }
+  100% {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+    box-shadow: 0 0 0 18px oklch(0.6521 0.1102 233.7748 / 0), 0 20px 25px -5px rgb(0 0 0 / 0.1), 0 8px 10px -6px rgb(0 0 0 / 0.1);
+  }
+}
+
+.animate-replay-pop {
+  animation: replay-pop 0.55s cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+
 .magic-particles .particle {
   position: absolute;
   width: var(--size, 3px);
