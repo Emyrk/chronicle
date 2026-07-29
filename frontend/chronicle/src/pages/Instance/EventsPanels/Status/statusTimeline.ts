@@ -16,6 +16,7 @@ export interface StatusUnitSnapshot {
   effectiveHealing: number;
   absorbed: number;
   dead: boolean;
+  deadSinceMilli: number | null;
   activeCast: StatusTimelineEvent | null;
   recentActivity: StatusTimelineEvent[];
   incoming: StatusTimelineEvent[];
@@ -135,18 +136,25 @@ export function expireOverhealStripe(
   return state;
 }
 
-export function isStatusUnitDead(
+export function statusUnitDeadSince(
   orderedEvents: StatusTimelineEvent[],
   cursorMilli: number,
-): boolean {
+): number | null {
   for (let index = orderedEvents.length - 1; index >= 0; index--) {
     const event = orderedEvents[index];
     if (event.timestampMilli > cursorMilli) continue;
     // Until the parser exposes an authoritative resurrection event, any later
     // activity from or affecting the unit is evidence that it became active again.
-    return event.kind === "death";
+    return event.kind === "death" ? event.timestampMilli : null;
   }
-  return false;
+  return null;
+}
+
+export function isStatusUnitDead(
+  orderedEvents: StatusTimelineEvent[],
+  cursorMilli: number,
+): boolean {
+  return statusUnitDeadSince(orderedEvents, cursorMilli) !== null;
 }
 
 export function snapshotStatusUnit(
@@ -161,6 +169,7 @@ export function snapshotStatusUnit(
   const relativeHealthMessages = healthMessages(ordered, startMilli, cursorMilli);
   const health = calculateRelativeHealth(relativeHealthMessages);
   const relativeHealthState = expireOverhealStripe(health, relativeHealthMessages, ordered, cursorMilli);
+  const deadSinceMilli = statusUnitDeadSince(ordered, cursorMilli);
   const recentActivity = ordered.filter((event) => event.timestampMilli >= startMilli && event.timestampMilli <= cursorMilli);
   const incoming = ordered.filter((event) => event.timestampMilli > cursorMilli && event.timestampMilli <= endMilli);
 
@@ -173,7 +182,8 @@ export function snapshotStatusUnit(
     damage: health.damage,
     effectiveHealing: health.effectiveHealing,
     absorbed: health.prevented,
-    dead: isStatusUnitDead(ordered, cursorMilli),
+    dead: deadSinceMilli !== null,
+    deadSinceMilli,
     activeCast: findActiveCast(ordered, cursorMilli),
     recentActivity,
     incoming,

@@ -1,5 +1,5 @@
 import { useCallback, useMemo, useState } from "react";
-import { Activity, Heart, Minus, Plus, Shield, Skull } from "lucide-react";
+import { Activity, Crown, Heart, Minus, Plus, Shield, Skull } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { formatNumber } from "@/lib/format";
 import { RelativeHealthBar } from "@/components/ui/RelativeHealthBar/RelativeHealthBar";
@@ -10,6 +10,7 @@ import type { PanelRenderProps } from "../types";
 import { useSyncModeContextOptional } from "../../SyncModeContext";
 import { useInferredRoles } from "../Roles/useInferredRoles";
 import type { StatusResult, StatusTimelineEvent, StatusUnitKind } from "./status.processor";
+import { sortStatusEnemySnapshots, statusEnemyRowOpacity } from "./statusEnemies";
 import { sortStatusSnapshotsByRole } from "./statusRoles";
 import {
   STATUS_WAVEFORM_COLORS,
@@ -37,20 +38,30 @@ import {
   type StatusWindowPresetId,
 } from "./statusWindow";
 
-type StatusUnitMode = "players" | "pets" | "bosses" | "adds";
+type StatusUnitMode = "players" | "enemies";
 
 const UNIT_MODE_PREFIX = "u:";
+const HIDE_DEAD_TOKEN = "hide-dead";
 const UNIT_MODES: { value: StatusUnitMode; label: string }[] = [
   { value: "players", label: "Players" },
-  { value: "pets", label: "Pets" },
-  { value: "bosses", label: "Bosses" },
-  { value: "adds", label: "Adds" },
+  { value: "enemies", label: "Enemies" },
 ];
 
 function parseUnitMode(option: string | null | undefined): StatusUnitMode {
   const token = option?.split(",").find((value) => value.startsWith(UNIT_MODE_PREFIX));
   const value = token?.slice(UNIT_MODE_PREFIX.length);
-  return value === "pets" || value === "bosses" || value === "adds" ? value : "players";
+  // Preserve old shared URLs that used separate boss/add modes.
+  return value === "enemies" || value === "bosses" || value === "adds" ? "enemies" : "players";
+}
+
+function parseHideDead(option: string | null | undefined): boolean {
+  return option?.split(",").includes(HIDE_DEAD_TOKEN) ?? false;
+}
+
+function updateHideDead(option: string | null | undefined, hideDead: boolean): string | null {
+  const tokens = option?.split(",").filter((value) => value && value !== HIDE_DEAD_TOKEN) ?? [];
+  if (hideDead) tokens.push(HIDE_DEAD_TOKEN);
+  return tokens.length > 0 ? tokens.join(",") : null;
 }
 
 function updateUnitMode(option: string | null | undefined, mode: StatusUnitMode): string | null {
@@ -231,26 +242,27 @@ export function StatusContent(props: PanelRenderProps<StatusResult>) {
     ? statusCursorMilli(encounter, sync?.currentTimestamp ?? null, sync?.enabled ?? false)
     : null;
   const unitMode = parseUnitMode(panelOption);
+  const hideDead = parseHideDead(panelOption);
   const windowPreset = parseStatusWindow(panelOption);
   const enemyGroups = useMemo(() => {
     const selectedEncounter = encounter
       ? context.instance.encounters.find((candidate) => candidate.id === encounter.encounterId)
       : null;
     const bosses = new Set<string>();
-    const adds = new Set<string>();
+    const enemies = new Set<string>();
     for (const enemy of selectedEncounter?.enemies ?? []) {
-      (enemy.boss ? bosses : adds).add(enemy.id);
+      enemies.add(enemy.id);
+      if (enemy.boss) bosses.add(enemy.id);
     }
-    return { bosses, adds };
+    return { bosses, enemies };
   }, [context.instance.encounters, encounter]);
   const matchingUnits = useMemo(() => {
     if (!encounter) return [];
-    return Array.from(encounter.units.values()).filter((unit) => {
-      if (unitMode === "players") return unit.kind === "player";
-      if (unitMode === "pets") return unit.kind === "pet";
-      if (unitMode === "bosses") return enemyGroups.bosses.has(unit.unitId);
-      return enemyGroups.adds.has(unit.unitId);
-    });
+    return Array.from(encounter.units.values()).filter((unit) =>
+      unitMode === "players"
+        ? unit.kind === "player"
+        : enemyGroups.enemies.has(unit.unitId),
+    );
   }, [encounter, enemyGroups, unitMode]);
   const snapshots = useMemo(() => {
     if (cursorMilli === null) return [];
@@ -262,11 +274,20 @@ export function StatusContent(props: PanelRenderProps<StatusResult>) {
     ));
     return unitMode === "players"
       ? sortStatusSnapshotsByRole(matchingSnapshots, roles)
-      : matchingSnapshots.sort((a, b) => a.unit.name.localeCompare(b.unit.name));
-  }, [cursorMilli, matchingUnits, roles, unitMode, windowPreset]);
+      : sortStatusEnemySnapshots(matchingSnapshots, enemyGroups.bosses);
+  }, [cursorMilli, enemyGroups.bosses, matchingUnits, roles, unitMode, windowPreset]);
+  const displayRows = useMemo(() => {
+    if (cursorMilli === null) return [];
+    return snapshots.flatMap((snapshot) => {
+      const opacity = unitMode === "enemies"
+        ? statusEnemyRowOpacity(snapshot.deadSinceMilli, cursorMilli, hideDead)
+        : 1;
+      return opacity === null ? [] : [{ snapshot, opacity }];
+    });
+  }, [cursorMilli, hideDead, snapshots, unitMode]);
   const { waveformRows, waveformScaleStats } = useMemo(() => {
     const rows = new Map<string, StatusWaveformRow>();
-    for (const snapshot of snapshots) {
+    for (const { snapshot } of displayRows) {
       const activity = [...snapshot.recentActivity, ...snapshot.incoming];
       const events = statusWaveformEvents(activity);
       rows.set(snapshot.unit.unitId, {
@@ -281,7 +302,7 @@ export function StatusContent(props: PanelRenderProps<StatusResult>) {
         Array.from(rows.values(), (row) => row.scale.rowMax),
       ),
     };
-  }, [snapshots]);
+  }, [displayRows]);
   const focusedUnitId = parseFocus(panelOption);
   const [floatingBreakout, setFloatingBreakout] = useState<FloatingStatusBreakout | null>(null);
   const [density, setDensity] = useState<StatusDensity>(0);
@@ -315,6 +336,10 @@ export function StatusContent(props: PanelRenderProps<StatusResult>) {
     setPanelOption?.(updateUnitMode(panelOption, mode));
   }, [panelOption, setPanelOption]);
 
+  const toggleHideDead = useCallback(() => {
+    setPanelOption?.(updateHideDead(panelOption, !hideDead));
+  }, [hideDead, panelOption, setPanelOption]);
+
   const selectWindowPreset = useCallback((presetId: StatusWindowPresetId) => {
     setPanelOption?.(updateStatusWindow(panelOption, presetId));
   }, [panelOption, setPanelOption]);
@@ -338,6 +363,25 @@ export function StatusContent(props: PanelRenderProps<StatusResult>) {
             {mode.label}
           </button>
         ))}
+        {unitMode === "enemies" ? (
+          <button
+            type="button"
+            onClick={toggleHideDead}
+            aria-pressed={hideDead}
+            className={cn(
+              "ml-auto flex items-center gap-1.5 rounded border px-2 py-1 text-[10px] font-medium transition-colors",
+              hideDead
+                ? "border-red-400/35 bg-red-500/10 text-red-200"
+                : "border-border/60 text-muted-foreground hover:bg-muted/50 hover:text-foreground",
+            )}
+          >
+            <span className={cn(
+              "h-2 w-2 rounded-[2px] border",
+              hideDead ? "border-red-300 bg-red-400" : "border-muted-foreground/60",
+            )} />
+            Hide dead
+          </button>
+        ) : null}
       </div>
       <div className="grid grid-cols-[minmax(185px,0.8fr)_minmax(240px,1.15fr)_minmax(300px,1.6fr)] items-center gap-4 border-b border-border/40 px-5 py-1.5 text-[10px] uppercase tracking-[0.14em] text-muted-foreground">
         <span>Unit</span>
@@ -378,15 +422,19 @@ export function StatusContent(props: PanelRenderProps<StatusResult>) {
           </button>
         </span>
       </div>
-      {snapshots.length === 0 ? (
+      {displayRows.length === 0 ? (
         <div className="flex flex-1 flex-col items-center justify-center gap-2 px-6 text-center text-xs text-muted-foreground">
           <Activity className="h-5 w-5 opacity-50" />
-          <span>No {UNIT_MODES.find((mode) => mode.value === unitMode)?.label.toLowerCase()} matched this panel.</span>
+          <span>
+            {unitMode === "enemies" && hideDead && snapshots.length > 0
+              ? "No living enemies remain."
+              : `No ${UNIT_MODES.find((mode) => mode.value === unitMode)?.label.toLowerCase()} matched this panel.`}
+          </span>
           <span className="text-[10px]">Try another unit group or adjust the panel filters.</span>
         </div>
       ) : (
         <div className="styled-scrollbar min-h-0 flex-1 overflow-auto">
-          {snapshots.map((snapshot) => {
+          {displayRows.map(({ snapshot, opacity }) => {
             const unit = snapshot.unit;
             const waveform = waveformRows.get(unit.unitId)!;
             const role = unit.kind === "player" ? roles.get(unit.unitId)?.role : undefined;
@@ -397,15 +445,18 @@ export function StatusContent(props: PanelRenderProps<StatusResult>) {
                 type="button"
                 onClick={(event) => selectUnit(unit.unitId, event.currentTarget)}
                 className={cn(
-                  "grid w-full grid-cols-[minmax(185px,0.8fr)_minmax(240px,1.15fr)_minmax(300px,1.6fr)] items-center gap-4 border-b border-border/25 text-left transition-colors hover:bg-muted/20",
+                  "grid w-full grid-cols-[minmax(185px,0.8fr)_minmax(240px,1.15fr)_minmax(300px,1.6fr)] items-center gap-4 border-b border-border/25 text-left transition-[background-color,opacity] hover:bg-muted/20",
                   ROW_CLASSES[density],
                   snapshot.dead && "bg-black/35 hover:bg-black/30",
                   focusedUnitId === unit.unitId && "ring-1 ring-inset ring-amber-300/30",
                   focusedUnitId === unit.unitId && !snapshot.dead && "bg-amber-400/5",
                 )}
+                style={{ opacity }}
               >
                 <span className="flex min-w-0 items-center gap-2">
-                  {role === "tank" ? (
+                  {unitMode === "enemies" && enemyGroups.bosses.has(unit.unitId) ? (
+                    <Crown className="h-3.5 w-3.5 shrink-0 fill-red-500/25 text-red-400" aria-label="Boss" />
+                  ) : role === "tank" ? (
                     <Shield className="h-3 w-3 shrink-0 text-amber-500" aria-label="Tank" />
                   ) : role === "healer" ? (
                     <Heart className="h-3 w-3 shrink-0 text-emerald-500" aria-label="Healer" />
@@ -415,7 +466,9 @@ export function StatusContent(props: PanelRenderProps<StatusResult>) {
                   <span className={cn("truncate font-semibold", NAME_CLASSES[density])} style={{ color: classColor(unit.className, unit.kind) }}>{unit.name}</span>
                   {unit.kind !== "player" ? (
                     <span className="truncate text-[9px] uppercase tracking-[0.12em] text-muted-foreground">
-                      {kindLabel(unit.kind)}{ownerName ? ` · ${ownerName}` : ""}
+                      {unitMode === "enemies"
+                        ? (enemyGroups.bosses.has(unit.unitId) ? "Boss" : "Enemy")
+                        : kindLabel(unit.kind)}{ownerName ? ` · ${ownerName}` : ""}
                     </span>
                   ) : null}
                 </span>
