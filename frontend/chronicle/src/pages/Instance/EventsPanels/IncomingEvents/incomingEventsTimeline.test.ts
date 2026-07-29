@@ -68,15 +68,15 @@ describe("incoming events timeline", () => {
     expect(relativeCursorForFightOffset(fightCursor, 105_000, 30_000)).toBe(-25_000);
   });
 
-  it("hides a fight-offset cursor outside a death window's overlap", () => {
-    expect(relativeCursorForFightOffset(69_999, 100_000, 30_000)).toBeNull();
-    expect(relativeCursorForFightOffset(100_001, 100_000, 30_000)).toBeNull();
+  it("clamps a fight-offset cursor to the visible window edges", () => {
+    expect(relativeCursorForFightOffset(69_999, 100_000, 30_000)).toBe(-30_000);
+    expect(relativeCursorForFightOffset(100_001, 100_000, 30_000)).toBe(0);
     expect(relativeCursorForFightOffset(70_000, 100_000, 30_000)).toBe(-30_000);
     expect(relativeCursorForFightOffset(100_000, 100_000, 30_000)).toBe(0);
   });
 
-  it("maps absolute Sync playback onto each death window", () => {
-    expect(syncCursorForDeath(60_000, 100_000, 30_000)).toBeNull();
+  it("maps absolute Sync playback and clamps it to each death window", () => {
+    expect(syncCursorForDeath(60_000, 100_000, 30_000)).toBe(-30_000);
     expect(syncCursorForDeath(75_000, 100_000, 30_000)).toBe(-25_000);
     expect(syncCursorForDeath(100_000, 100_000, 30_000)).toBe(0);
     expect(syncCursorForDeath(120_000, 100_000, 30_000)).toBe(0);

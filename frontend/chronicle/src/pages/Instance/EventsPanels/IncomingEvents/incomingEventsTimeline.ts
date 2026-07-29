@@ -169,24 +169,21 @@ export function relativeHealthAtCursor<T extends IncomingTimelineEvent>(
 
 /**
  * Converts a shared encounter/fight offset into this breakout's death-relative
- * cursor. A cursor outside this death's visible history does not render.
+ * cursor. Times after death clamp to the top/end; times before the retained
+ * history clamp to the bottom/start.
  */
 export function relativeCursorForFightOffset(
   fightOffsetMilli: number,
   deathOffsetMilli: number,
   windowMilli: number,
-): number | null {
-  const relative = fightOffsetMilli - deathOffsetMilli;
-  if (relative < -windowMilli || relative > 0) return null;
-  return relative;
+): number {
+  return Math.max(-windowMilli, Math.min(0, fightOffsetMilli - deathOffsetMilli));
 }
 
 export function syncCursorForDeath(
   syncAbsoluteMilli: number,
   deathAbsoluteMilli: number,
   windowMilli: number,
-): number | null {
-  const relative = syncAbsoluteMilli - deathAbsoluteMilli;
-  if (relative < -windowMilli) return null;
-  return Math.min(0, relative);
+): number {
+  return Math.max(-windowMilli, Math.min(0, syncAbsoluteMilli - deathAbsoluteMilli));
 }
