@@ -35,7 +35,9 @@ import {
   selectStatusEncounter,
   snapshotStatusUnit,
   statusCursorMilli,
+  statusLifeStateSpans,
   statusUnitRelativeHealthBounds,
+  type StatusLifeTransition,
   type StatusUnitSnapshot,
 } from "./statusTimeline";
 import {
@@ -126,37 +128,49 @@ const NAME_CLASSES: Record<StatusDensity, string> = {
 
 interface StatusWaveformRow {
   events: StatusWaveformEvent[];
-  deaths: StatusTimelineEvent[];
+  lifeTransitions: StatusLifeTransition[];
   scale: StatusWaveformScale;
 }
 
 function ActivityLane({
-  dead,
   waveform,
   cursorMilli,
   windowPreset,
 }: {
-  dead: boolean;
   waveform: StatusWaveformRow;
   cursorMilli: number;
   windowPreset: StatusWindowPreset;
 }) {
   const laneWindowMilli = windowPreset.historyMilli + windowPreset.futureMilli;
   const startMilli = cursorMilli - windowPreset.historyMilli;
+  const endMilli = cursorMilli + windowPreset.futureMilli;
   const playheadPercent = windowPreset.historyMilli / laneWindowMilli * 100;
   const barWidth = statusWaveformBarWidth(windowPreset.historyMilli, windowPreset.futureMilli);
-  const { events, deaths, scale } = waveform;
+  const { events, lifeTransitions, scale } = waveform;
+  const lifeStateSpans = statusLifeStateSpans(lifeTransitions, startMilli, endMilli);
+  const visibleTransitions = lifeTransitions.filter(
+    (transition) => transition.timestampMilli >= startMilli && transition.timestampMilli <= endMilli,
+  );
 
   return (
-    <div
-      className={cn(
-        "relative h-[22px] overflow-hidden rounded-[1px] transition-colors",
-        dead ? "bg-black/45" : "bg-[rgba(255,255,255,0.022)]",
-      )}
-    >
-      <div className="absolute inset-x-0 top-1/2 h-px bg-white/[0.11]" />
+    <div className="relative h-[22px] overflow-hidden rounded-[1px] bg-[rgba(255,255,255,0.022)]">
+      {lifeStateSpans.map((span, index) => {
+        const left = statusWaveformPosition(span.startMilli, startMilli, laneWindowMilli);
+        const right = statusWaveformPosition(span.endMilli, startMilli, laneWindowMilli);
+        return (
+          <span
+            key={`${span.state}:${span.startMilli}:${index}`}
+            className={cn(
+              "pointer-events-none absolute inset-y-0",
+              span.state === "dead" ? "z-10 bg-black/75" : "z-[1] bg-emerald-400/[0.09]",
+            )}
+            style={{ left: `${left}%`, width: `${Math.max(0, right - left)}%` }}
+          />
+        );
+      })}
+      <div className="absolute inset-x-0 top-1/2 z-[2] h-px bg-white/[0.11]" />
       <div
-        className="absolute inset-y-0 z-10 w-px bg-amber-200/70"
+        className="absolute inset-y-0 z-30 w-px bg-amber-200/70"
         style={{ left: `${playheadPercent}%` }}
       />
       {events.map((event) => {
@@ -184,13 +198,19 @@ function ActivityLane({
           />
         );
       })}
-      {deaths.map((event) => (
+      {visibleTransitions.map((transition) => (
         <span
-          key={`${event.eventIndex}:${event.timestampMilli}:death`}
-          className="absolute inset-y-px z-20 w-0.5 rounded-[1px] bg-[#d4423f] opacity-95"
+          key={`${transition.eventIndex}:${transition.timestampMilli}:${transition.alive ? "revived" : "death"}`}
+          className={cn(
+            "absolute inset-y-px z-20 w-0.5 rounded-[1px] opacity-95",
+            transition.alive
+              ? "bg-emerald-400 shadow-[0_0_4px_rgba(52,211,153,0.55)]"
+              : "bg-[#d4423f] shadow-[0_0_4px_rgba(212,66,63,0.45)]",
+          )}
           style={{
-            left: `${statusWaveformPosition(event.timestampMilli, startMilli, laneWindowMilli)}%`,
+            left: `${statusWaveformPosition(transition.timestampMilli, startMilli, laneWindowMilli)}%`,
           }}
+          title={transition.alive ? "Revived" : "Died"}
         />
       ))}
     </div>
@@ -267,25 +287,19 @@ function RaidHealthSummary({
 
   return (
     <section
-      className="border-b border-border/40 bg-black/10 px-5 py-2"
-      aria-label="Estimated raid health timeline"
+      className="grid grid-cols-[minmax(185px,0.85fr)_minmax(190px,0.85fr)_minmax(320px,1.8fr)] items-center gap-4 border-b border-border/40 bg-black/10 px-5 py-2"
+      aria-label="Estimated raid durability timeline"
       title="Estimated from relative deficits and deaths. Players are assumed to begin at full health; deaths count as zero."
     >
-      <div className="mb-1.5 flex items-baseline gap-2">
+      <div className="flex min-w-0 flex-col gap-0.5">
         <span className="text-[9px] font-semibold uppercase tracking-[0.16em] text-muted-foreground">
-          Estimated raid health
+          Estimated raid durability
         </span>
-        <span className="font-mono text-xs font-semibold text-foreground">
-          {Math.round(current.percent)}%
-        </span>
-        <span className="text-[9px] text-muted-foreground">
-          {current.alive}/{current.total} active
-        </span>
-        <span className="ml-auto text-[9px] text-muted-foreground/70">
-          encounter estimate
+        <span className="text-[9px] text-muted-foreground/70">
+          {current.alive}/{current.total} active · encounter estimate
         </span>
       </div>
-      <div className="relative h-11 overflow-hidden rounded-sm border border-white/[0.07] bg-[#111316] px-1.5 pb-1 pt-1.5">
+      <div className="relative col-span-2 h-11 overflow-hidden border border-white/[0.07] bg-[#111316] px-1.5 pb-1 pt-1.5">
         <div className="absolute inset-x-0 top-1/2 border-t border-dashed border-white/[0.06]" />
         <div className="relative flex h-full items-end gap-px">
           {buckets.map((bucket, index) => {
@@ -299,7 +313,7 @@ function RaidHealthSummary({
                   isFuture && "opacity-25",
                 )}
                 style={{ height: `${Math.max(2, bucket.percent)}%` }}
-                title={`${Math.round(bucket.percent)}% estimated raid health`}
+                title="Estimated raid durability"
               />
             );
           })}
@@ -396,9 +410,20 @@ export function StatusContent(props: PanelRenderProps<StatusResult>) {
     for (const { snapshot } of displayRows) {
       const activity = [...snapshot.recentActivity, ...snapshot.incoming];
       const events = statusWaveformEvents(activity);
+      const sharedLifeTransitions = lifeTransitionsByPlayer?.get(snapshot.unit.unitId);
       rows.set(snapshot.unit.unitId, {
         events,
-        deaths: activity.filter((event) => event.kind === "death"),
+        lifeTransitions: sharedLifeTransitions?.map((transition) => ({
+          timestampMilli: transition.timestampMilli,
+          eventIndex: transition.eventIndex,
+          alive: transition.alive,
+        })) ?? activity
+          .filter((event) => event.kind === "death")
+          .map((event) => ({
+            timestampMilli: event.timestampMilli,
+            eventIndex: event.eventIndex,
+            alive: false,
+          })),
         scale: statusWaveformScale(events),
       });
     }
@@ -408,7 +433,7 @@ export function StatusContent(props: PanelRenderProps<StatusResult>) {
         Array.from(rows.values(), (row) => row.scale.rowMax),
       ),
     };
-  }, [displayRows]);
+  }, [displayRows, lifeTransitionsByPlayer]);
   const focusedUnitId = parseFocus(panelOption);
   const [floatingBreakout, setFloatingBreakout] = useState<FloatingStatusBreakout | null>(null);
   const [density, setDensity] = useState<StatusDensity>(0);
@@ -453,17 +478,23 @@ export function StatusContent(props: PanelRenderProps<StatusResult>) {
   return (
     <>
     <GenericPanel {...props}>
-      <div className="flex items-center gap-1 border-b border-border/40 px-5 py-1.5">
+      <div
+        role="tablist"
+        aria-label="Status units"
+        className="flex items-center gap-1 border-b border-border/40 px-5 py-1.5"
+      >
         {UNIT_MODES.map((mode) => (
           <button
             key={mode.value}
             type="button"
+            role="tab"
+            aria-selected={unitMode === mode.value}
             onClick={() => selectUnitMode(mode.value)}
             className={cn(
-              "rounded px-2.5 py-1 text-[10px] font-medium transition-colors",
+              "rounded-t border-b-2 px-2.5 py-1 text-[10px] font-medium transition-colors",
               unitMode === mode.value
-                ? "bg-muted text-foreground shadow-sm"
-                : "text-muted-foreground hover:bg-muted/50 hover:text-foreground",
+                ? "border-primary bg-muted/70 text-foreground"
+                : "border-transparent text-muted-foreground hover:border-border hover:bg-muted/50 hover:text-foreground",
             )}
           >
             {mode.label}
@@ -501,7 +532,6 @@ export function StatusContent(props: PanelRenderProps<StatusResult>) {
         <span>Unit</span>
         <span>Relative health change</span>
         <span className="flex items-center gap-2">
-          <span>Signed waveform</span>
           <select
             value={windowPreset.id}
             onChange={(event) => selectWindowPreset(event.target.value as StatusWindowPresetId)}
@@ -577,7 +607,16 @@ export function StatusContent(props: PanelRenderProps<StatusResult>) {
                   ) : (
                     <span className="h-2 w-2 shrink-0 rounded-full" style={{ backgroundColor: classColor(unit.className, unit.kind) }} />
                   )}
-                  <span className={cn("truncate font-semibold", NAME_CLASSES[density])} style={{ color: classColor(unit.className, unit.kind) }}>{unit.name}</span>
+                  <span
+                    className={cn(
+                      "truncate font-semibold transition-opacity",
+                      NAME_CLASSES[density],
+                      snapshot.dead && "line-through opacity-50",
+                    )}
+                    style={{ color: classColor(unit.className, unit.kind) }}
+                  >
+                    {unit.name}
+                  </span>
                   {unit.kind !== "player" ? (
                     <span className="truncate text-[9px] uppercase tracking-[0.12em] text-muted-foreground">
                       {unitMode === "enemies"
@@ -588,7 +627,6 @@ export function StatusContent(props: PanelRenderProps<StatusResult>) {
                 </span>
                 <RelativeChange snapshot={snapshot} density={density} />
                 <ActivityLane
-                  dead={snapshot.dead}
                   waveform={waveform}
                   cursorMilli={cursorMilli!}
                   windowPreset={windowPreset}

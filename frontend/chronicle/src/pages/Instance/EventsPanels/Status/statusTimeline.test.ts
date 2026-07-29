@@ -1,6 +1,13 @@
 import { describe, expect, it } from "vitest";
 import type { StatusEncounter, StatusTimelineEvent, StatusUnitTimeline } from "./status.processor";
-import { expireOverhealStripe, selectStatusEncounter, snapshotStatusUnit, statusCursorMilli, statusUnitRelativeHealthBounds } from "./statusTimeline";
+import {
+  expireOverhealStripe,
+  selectStatusEncounter,
+  snapshotStatusUnit,
+  statusCursorMilli,
+  statusLifeStateSpans,
+  statusUnitRelativeHealthBounds,
+} from "./statusTimeline";
 import { calculateRelativeHealth, type RelativeHealthMessage } from "@/components/ui/RelativeHealthBar/relativeHealth";
 
 function event(overrides: Partial<StatusTimelineEvent>): StatusTimelineEvent {
@@ -33,6 +40,28 @@ function unit(events: StatusTimelineEvent[]): StatusUnitTimeline {
 function encounter(id: string, startMilli: number, endMilli: number): StatusEncounter {
   return { encounterId: id, startMilli, endMilli, units: new Map() };
 }
+
+describe("statusLifeStateSpans", () => {
+  it("blacks out the timeline after death and marks the revived period", () => {
+    expect(statusLifeStateSpans([
+      { timestampMilli: 4_000, eventIndex: 1, alive: false },
+      { timestampMilli: 7_000, eventIndex: 2, alive: true },
+    ], 1_000, 10_000)).toEqual([
+      { startMilli: 4_000, endMilli: 7_000, state: "dead" },
+      { startMilli: 7_000, endMilli: 10_000, state: "revived" },
+    ]);
+  });
+
+  it("continues a death state that began before the visible window", () => {
+    expect(statusLifeStateSpans([
+      { timestampMilli: 500, eventIndex: 1, alive: false },
+      { timestampMilli: 4_000, eventIndex: 2, alive: true },
+    ], 1_000, 6_000)).toEqual([
+      { startMilli: 1_000, endMilli: 4_000, state: "dead" },
+      { startMilli: 4_000, endMilli: 6_000, state: "revived" },
+    ]);
+  });
+});
 
 describe("snapshotStatusUnit", () => {
   it("keeps post-cursor damage out of current state while exposing it as incoming", () => {

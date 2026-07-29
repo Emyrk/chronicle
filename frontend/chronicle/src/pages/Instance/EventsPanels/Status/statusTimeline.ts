@@ -13,6 +13,53 @@ export interface StatusRelativeHealthBounds {
   maximum: number;
 }
 
+export interface StatusLifeTransition {
+  timestampMilli: number;
+  eventIndex: number;
+  alive: boolean;
+}
+
+export interface StatusLifeStateSpan {
+  startMilli: number;
+  endMilli: number;
+  state: "dead" | "revived";
+}
+
+export function statusLifeStateSpans(
+  transitions: readonly StatusLifeTransition[],
+  startMilli: number,
+  endMilli: number,
+): StatusLifeStateSpan[] {
+  if (endMilli <= startMilli || transitions.length === 0) return [];
+
+  const ordered = [...transitions].sort(
+    (a, b) => a.timestampMilli - b.timestampMilli || a.eventIndex - b.eventIndex,
+  );
+  let currentState: StatusLifeStateSpan["state"] | null = null;
+  let spanStart = startMilli;
+
+  for (const transition of ordered) {
+    if (transition.timestampMilli > startMilli) break;
+    currentState = transition.alive ? "revived" : "dead";
+  }
+
+  const spans: StatusLifeStateSpan[] = [];
+  for (const transition of ordered) {
+    if (transition.timestampMilli <= startMilli) continue;
+    if (transition.timestampMilli >= endMilli) break;
+    if (currentState) {
+      spans.push({ startMilli: spanStart, endMilli: transition.timestampMilli, state: currentState });
+    }
+    currentState = transition.alive ? "revived" : "dead";
+    spanStart = transition.timestampMilli;
+  }
+
+  if (currentState && spanStart < endMilli) {
+    spans.push({ startMilli: spanStart, endMilli, state: currentState });
+  }
+  return spans;
+}
+
 export interface StatusUnitSnapshot {
   unit: StatusUnitTimeline;
   deficit: number;
