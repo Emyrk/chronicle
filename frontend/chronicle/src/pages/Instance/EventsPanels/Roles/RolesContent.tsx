@@ -313,7 +313,7 @@ export const RolesContent = ({ context }: RolesContentProps) => {
               <div>
                 <span className="text-red-400">Low DPS cutoff:</span>{" "}
                 <span className="text-foreground">{formatNumber(debug.lowDpsCutoff, 0)}</span>
-                <span className="text-muted-foreground/70"> dps ≤{debug.lowDpsZThreshold.toFixed(2)}σ</span>
+                <span className="text-muted-foreground/70"> damage ≤ bottom {(debug.lowDpsPercentile * 100).toFixed(1)}%</span>
               </div>
               <div>
                 <span className="text-emerald-500">High healing:</span>{" "}

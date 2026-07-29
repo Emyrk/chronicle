@@ -17,7 +17,7 @@ import { usePanelAggregation } from "../usePanelAggregation";
 const EMPTY_DEBUG: RoleDetectionDebug = {
   tankZThreshold: 0,
   healerZThreshold: 0,
-  lowDpsZThreshold: 0,
+  lowDpsPercentile: 0,
   healerHighZThreshold: 0,
   meanDamageTaken: 0,
   stdDevDamageTaken: 0,

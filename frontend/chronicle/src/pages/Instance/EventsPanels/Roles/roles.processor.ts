@@ -11,7 +11,7 @@
  *   - Healers spend GCDs healing, not DPSing, so they naturally have low damage output
  * DPS: Everyone else
  * 
- * Uses standard deviation method for outlier detection.
+ * Uses standard deviation outliers for tank/healing signals and a percentile for low damage.
  */
 
 /**
@@ -69,6 +69,21 @@ function zScore(value: number, avg: number, sd: number): number {
 }
 
 /**
+ * Calculate a percentile using linear interpolation between sorted values.
+ */
+function percentile(values: number[], fraction: number): number {
+  if (values.length === 0) return 0;
+
+  const sorted = [...values].sort((a, b) => a - b);
+  const position = (sorted.length - 1) * fraction;
+  const lowerIndex = Math.floor(position);
+  const upperIndex = Math.ceil(position);
+  const weight = position - lowerIndex;
+
+  return sorted[lowerIndex] + (sorted[upperIndex] - sorted[lowerIndex]) * weight;
+}
+
+/**
  * Debug info about thresholds used for role detection
  */
 export interface RoleDetectionDebug {
@@ -76,8 +91,8 @@ export interface RoleDetectionDebug {
   tankZThreshold: number;
   /** Z-score threshold for healer detection (healing done) */
   healerZThreshold: number;
-  /** Z-score threshold for low DPS detection (healers must be below this) */
-  lowDpsZThreshold: number;
+  /** Bottom fraction of damage dealers considered low DPS */
+  lowDpsPercentile: number;
   /** Z-score threshold for high healing (bypasses low DPS requirement) */
   healerHighZThreshold: number;
   meanDamageTaken: number;
@@ -112,18 +127,18 @@ const TANK_Z_THRESHOLD = 1.7;
 
 // Healer detection uses TWO criteria:
 // 1. Healing done above a lower threshold (since many healers in a raid skew the average)
-// 2. DPS below a threshold (healers spend GCDs healing, not DPSing)
+// 2. Damage done in the bottom percentile (healers spend GCDs healing, not DPSing)
 //    OR healing is very high (above HEALER_HIGH_Z_THRESHOLD), which bypasses DPS check
 const HEALER_Z_THRESHOLD = 0.3; // Above ~62nd percentile in healing
-const LOW_DPS_Z_THRESHOLD = -0.90; // Must be in bottom ~18.5% of DPS
+const LOW_DPS_PERCENTILE = 0.185;
 const HEALER_HIGH_Z_THRESHOLD = 1.5; // 93rd percentile in healing
 
 /**
  * Infer roles from damage taken, healing done, and damage done data.
  * 
- * Uses z-score (standard deviations from mean) to identify outliers.
+ * Uses z-scores for tank/healing outliers and a percentile for low damage.
  * - Tanks: high damage taken (outlier)
- * - Healers: meaningful healing AND low DPS (not just anyone who healed)
+ * - Healers: meaningful healing AND low damage (not just anyone who healed)
  * - DPS: everyone else
  */
 export function inferRoles(
@@ -144,7 +159,7 @@ export function inferRoles(
   const emptyDebug: RoleDetectionDebug = {
     tankZThreshold: TANK_Z_THRESHOLD,
     healerZThreshold: HEALER_Z_THRESHOLD,
-    lowDpsZThreshold: LOW_DPS_Z_THRESHOLD,
+    lowDpsPercentile: LOW_DPS_PERCENTILE,
     healerHighZThreshold: HEALER_HIGH_Z_THRESHOLD,
     meanDamageTaken: 0,
     stdDevDamageTaken: 0,
@@ -181,15 +196,16 @@ export function inferRoles(
   // Calculate actual cutoffs
   const tankCutoff = meanDT + TANK_Z_THRESHOLD * stdDT;
   const healerCutoff = meanHD + HEALER_Z_THRESHOLD * stdHD;
-  // Low DPS cutoff: healers must be BELOW this (negative z-score means below mean)
-  const lowDpsCutoff = meanDD + LOW_DPS_Z_THRESHOLD * stdDD;
+  // Damage done is strongly right-skewed, so use the observed percentile directly.
+  // A z-score cutoff can fall below zero and make the low-DPS branch impossible.
+  const lowDpsCutoff = percentile(ddValues, LOW_DPS_PERCENTILE);
   // High healing cutoff: above this, DPS is ignored for healer detection
   const healerHighCutoff = meanHD + HEALER_HIGH_Z_THRESHOLD * stdHD;
   
   const debug: RoleDetectionDebug = {
     tankZThreshold: TANK_Z_THRESHOLD,
     healerZThreshold: HEALER_Z_THRESHOLD,
-    lowDpsZThreshold: LOW_DPS_Z_THRESHOLD,
+    lowDpsPercentile: LOW_DPS_PERCENTILE,
     healerHighZThreshold: HEALER_HIGH_Z_THRESHOLD,
     meanDamageTaken: meanDT,
     stdDevDamageTaken: stdDT,
@@ -213,7 +229,6 @@ export function inferRoles(
     // Calculate z-scores
     const dtZScore = zScore(dt, meanDT, stdDT);
     const hdZScore = zScore(hd, meanHD, stdHD);
-    const ddZScore = zScore(dd, meanDD, stdDD);
     
     // Determine role
     let role: InferredRole = "dps";
@@ -225,7 +240,7 @@ export function inferRoles(
     // This handles raids with many healers - they'll all have low DPS
     // High healing bypasses DPS check for healers who also do some DPS
     const hasHealingAboveThreshold = hdZScore >= HEALER_Z_THRESHOLD && hd > 0;
-    const hasLowDps = ddZScore <= LOW_DPS_Z_THRESHOLD;
+    const hasLowDps = dd <= lowDpsCutoff;
     const hasVeryHighHealing = hdZScore >= HEALER_HIGH_Z_THRESHOLD;
     const isHealer = hasHealingAboveThreshold && (hasLowDps || hasVeryHighHealing);
     

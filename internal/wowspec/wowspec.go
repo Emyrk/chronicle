@@ -1,7 +1,10 @@
 // Package wowspec provides World of Warcraft talent specialization inference.
 package wowspec
 
-import "math"
+import (
+	"math"
+	"sort"
+)
 
 // specMap maps class name → [3]talent tree spec names (tree0, tree1, tree2).
 var specMap = map[string][3]string{
@@ -67,13 +70,13 @@ const (
 	RoleTank = "tank"
 )
 
-// Z-score thresholds for statistical role detection.
-// Must match frontend Roles.processor.ts thresholds exactly.
+// Role detection thresholds.
+// Must match frontend Roles/roles.processor.ts thresholds exactly.
 const (
 	TankZThreshold       = 1.7   // damage taken ≥ 1.7σ above mean
 	HealerZThreshold     = 0.3   // healing done ≥ 0.3σ above mean (~62nd percentile)
-	LowDPSZThreshold     = -0.90 // DPS ≤ -0.90σ (bottom ~18.5%)
-	HealerHighZThreshold = 1.5   // healing done ≥ 1.5σ bypasses DPS check (~93rd percentile)
+	LowDPSPercentile     = 0.185 // damage done in the bottom 18.5%
+	HealerHighZThreshold = 1.5   // healing done ≥ 1.5σ bypasses damage check (~93rd percentile)
 )
 
 // PlayerMetrics holds the three metrics needed for role inference.
@@ -105,9 +108,10 @@ func isDPSOnlySpec(class, spec string) bool {
 // InferRoles classifies each player's role using statistical outlier detection.
 // Returns a map of player ID → role string ("dps", "heal", "tank").
 //
-// Algorithm: compute mean+stddev across the raid for each metric, then:
-//   - Tank = damage taken z-score ≥ 1.5σ
-//   - Healer = healing (incl. absorbs) z-score ≥ 0.3σ AND (low DPS ≤ -0.90σ OR very high healing ≥ 1.5σ)
+// Algorithm: compute z-scores for damage taken and healing, plus the observed
+// low-damage percentile across the raid, then:
+//   - Tank = damage taken z-score ≥ 1.7σ
+//   - Healer = healing (incl. absorbs) z-score ≥ 0.3σ AND (damage in bottom 18.5% OR very high healing ≥ 1.5σ)
 //   - DPS = everyone else
 //
 // Priority: Tank > Healer > DPS.
@@ -132,7 +136,7 @@ func InferRoles[K comparable](players map[K]PlayerMetrics) map[K]string {
 
 	dtMean, dtStd := meanStdDev(dtValues)
 	hdMean, hdStd := meanStdDev(hdValues)
-	ddMean, ddStd := meanStdDev(ddValues)
+	lowDPSCutoff := percentile(ddValues, LowDPSPercentile)
 
 	for k, m := range players {
 		// Spec-based override: some specs are always DPS regardless of stats.
@@ -143,7 +147,6 @@ func InferRoles[K comparable](players map[K]PlayerMetrics) map[K]string {
 
 		dtZ := zScore(float64(m.DamageTaken), dtMean, dtStd)
 		hdZ := zScore(float64(m.HealingDone), hdMean, hdStd)
-		ddZ := zScore(float64(m.DamageDone), ddMean, ddStd)
 
 		isTank := dtZ >= TankZThreshold && m.DamageTaken > 0
 
@@ -155,7 +158,7 @@ func InferRoles[K comparable](players map[K]PlayerMetrics) map[K]string {
 		var isHealer bool
 		if m.HealingDone > 0 && m.HealingDone > m.DamageDone {
 			hasHealing := hdZ >= HealerZThreshold
-			hasLowDPS := ddZ <= LowDPSZThreshold
+			hasLowDPS := float64(m.DamageDone) <= lowDPSCutoff
 			hasHighHealing := hdZ >= HealerHighZThreshold
 			isHealer = hasHealing && (hasLowDPS || hasHighHealing)
 		}
@@ -190,6 +193,21 @@ func meanStdDev(values []float64) (float64, float64) {
 		sqDiffSum += d * d
 	}
 	return avg, math.Sqrt(sqDiffSum / float64(len(values)))
+}
+
+func percentile(values []float64, fraction float64) float64 {
+	if len(values) == 0 {
+		return 0
+	}
+
+	sorted := append([]float64(nil), values...)
+	sort.Float64s(sorted)
+	position := float64(len(sorted)-1) * fraction
+	lowerIndex := int(math.Floor(position))
+	upperIndex := int(math.Ceil(position))
+	weight := position - float64(lowerIndex)
+
+	return sorted[lowerIndex] + (sorted[upperIndex]-sorted[lowerIndex])*weight
 }
 
 func zScore(value, avg, sd float64) float64 {

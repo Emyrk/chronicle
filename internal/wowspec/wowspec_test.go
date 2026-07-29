@@ -106,6 +106,21 @@ func TestInferRoles(t *testing.T) {
 		require.Equal(t, "dps", roles["dps5"])
 	})
 
+	t.Run("skewed_damage_distribution", func(t *testing.T) {
+		t.Parallel()
+		players := map[string]wowspec.PlayerMetrics{
+			"healer":  {DamageDone: 5, HealingDone: 300},
+			"hybrid":  {DamageDone: 10, HealingDone: 280},
+			"support": {DamageDone: 20, HealingDone: 260},
+			"dps":     {DamageDone: 30},
+			"outlier": {DamageDone: 2000},
+		}
+
+		roles := wowspec.InferRoles(players)
+		require.Equal(t, wowspec.RoleHeal, roles["healer"])
+		require.Equal(t, wowspec.RoleDPS, roles["hybrid"])
+	})
+
 	t.Run("single_player", func(t *testing.T) {
 		t.Parallel()
 		players := map[string]wowspec.PlayerMetrics{
