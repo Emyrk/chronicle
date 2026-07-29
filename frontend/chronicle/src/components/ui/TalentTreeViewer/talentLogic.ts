@@ -144,6 +144,10 @@ export function talentTabPoints(tab: Pick<TalentTabData, "talents">, ranks: Tale
   return tab.talents.reduce((sum, talent) => sum + (ranks[talent.id] ?? 0), 0);
 }
 
+export function populatedTalentTabs<T extends Pick<TalentTabData, "talents">>(tabs: T[], ranks: TalentRanks) {
+  return tabs.filter((tab) => talentTabPoints(tab, ranks) > 0);
+}
+
 export function totalTalentPoints(ranks: TalentRanks) {
   return Object.values(ranks).reduce((sum, rank) => sum + rank, 0);
 }

@@ -19,6 +19,7 @@ import {
   prerequisiteArrowPathData,
   prerequisiteArrowPolylinePoints,
   prerequisiteArrows,
+  populatedTalentTabs,
   rankDescriptionsForTooltip,
   rankingsLayoutToBuild,
   resetTalentTabRanks,
@@ -182,6 +183,16 @@ describe("TalentTreeViewer tree point totals", () => {
 
     expect(talentTabPoints(tab, {})).toBe(0);
     expect(talentTabPoints(tab, { 70: 3, 71: 2, 999: 5 })).toBe(5);
+  });
+
+  it("returns populated trees together in their original order", () => {
+    const tabs = [
+      { id: 1, talents: [talent({ id: 80, tierID: 0, columnIndex: 0 })] },
+      { id: 2, talents: [talent({ id: 81, tierID: 0, columnIndex: 0 })] },
+      { id: 3, talents: [talent({ id: 82, tierID: 0, columnIndex: 0 })] },
+    ];
+
+    expect(populatedTalentTabs(tabs, { 80: 1, 82: 1 }).map((tab) => tab.id)).toEqual([1, 3]);
   });
 });
 

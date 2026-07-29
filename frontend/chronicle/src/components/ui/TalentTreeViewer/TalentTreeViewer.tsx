@@ -50,6 +50,7 @@ import {
   prerequisiteArrowPathData,
   prerequisiteArrowPolylinePoints,
   prerequisiteArrows,
+  populatedTalentTabs,
   rankDescriptionsForTooltip,
   resetTalentTabRanks,
   searchParamsWithTalentBuild,
@@ -727,7 +728,7 @@ function TalentTab({
     <section id={mobile ? `talent-tree-${tab.id}` : undefined} className={cn(
       "talent-tree-card relative max-w-full self-start overflow-hidden rounded-lg border border-amber-400/20 bg-[radial-gradient(circle_at_top_left,rgba(20,184,166,0.14),transparent_32%),linear-gradient(180deg,rgba(120,83,38,0.16),rgba(9,9,11,0.58))] shadow-2xl shadow-black/30",
       compact ? "p-2" : mobile ? "scroll-mt-12 rounded-none border-x-0 px-0 py-3" : "p-4",
-    )} aria-label={`${tab.name} talent tree`} data-empty-talent-tree={points === 0 ? "true" : undefined}>
+    )} aria-label={`${tab.name} talent tree`}>
       {showBackground && backgroundUrl && (
         <img
           src={backgroundUrl}
@@ -1086,6 +1087,14 @@ export function TalentTreeViewer({
   const exportRef = useRef<HTMLDivElement>(null);
   const [exporting, setExporting] = useState(false);
   const [hideEmptyTrees, setHideEmptyTrees] = useState(false);
+  const exportedTabs = exporting && hideEmptyTrees ? populatedTalentTabs(data.tabs, ranks) : data.tabs;
+  const exportGridStyle = exporting && hideEmptyTrees
+    ? {
+        gridTemplateColumns: `repeat(${exportedTabs.length}, minmax(0, 1fr))`,
+        width: "max-content",
+        maxWidth: "none",
+      }
+    : undefined;
   async function exportAsPng() {
     const node = exportRef.current;
     if (!node || exporting) return;
@@ -1103,9 +1112,6 @@ export function TalentTreeViewer({
       const canvas = await toCanvas(node, {
         pixelRatio,
         backgroundColor: "#09090b",
-        filter: hideEmptyTrees
-          ? (element) => !(element instanceof HTMLElement && element.dataset.emptyTalentTree === "true")
-          : undefined,
         fetchRequestInit: { cache: "no-cache" },
         // Transparent 1x1 pixel so a single unloadable icon doesn't abort
         // the whole export.
@@ -1179,8 +1185,8 @@ export function TalentTreeViewer({
           </div>
         </div>
         <MobileTreeTabs tabs={data.tabs} ranks={ranks} visibleTabId={visibleTabId} onJump={jumpToTree} />
-        <div ref={exportRef} className={tabGridClassName}>
-          {data.tabs.map((tab) => (
+        <div ref={exportRef} className={tabGridClassName} style={exportGridStyle}>
+          {exportedTabs.map((tab) => (
             <TalentTab
               key={tab.id}
               tab={tab}
@@ -1311,8 +1317,8 @@ export function TalentTreeViewer({
       )}
       {/* Mobile: sticky mini-tabs to jump between the stacked trees */}
       {mobileLayout && <MobileTreeTabs tabs={data.tabs} ranks={ranks} visibleTabId={visibleTabId} onJump={jumpToTree} />}
-      <div ref={exportRef} className={tabGridClassName}>
-        {data.tabs.map((tab) => (
+      <div ref={exportRef} className={tabGridClassName} style={exportGridStyle}>
+        {exportedTabs.map((tab) => (
           <TalentTab
             key={tab.id}
             tab={tab}
