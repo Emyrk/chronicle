@@ -14,6 +14,20 @@ type TrailerEntry struct {
 	HitType HitType
 }
 
+// AbsorbedAmount returns the damage prevented by absorb effects in the trailer.
+func (t Trailer) AbsorbedAmount() int64 {
+	var absorbed int64
+	for _, entry := range t {
+		if entry.Amount == nil {
+			continue
+		}
+		if entry.HitType.Has(HitTypePartialAbsorb) || entry.HitType.Has(HitTypeFullAbsorb) {
+			absorbed += int64(*entry.Amount)
+		}
+	}
+	return absorbed
+}
+
 // ParseTrailer parses a combat trailer string and returns a slice of trailer entries
 func ParseTrailer(trailer string) (Trailer, error) {
 	var result []TrailerEntry

@@ -4,6 +4,7 @@
 
 import type { DamageProcessorEvent, HealProcessorEvent, PanelProcessor, ProcessorContext, ResourceChangeProcessorEvent, CastProcessorEvent, CastAction, AuraProcessorEvent, AuraApplication, SlainProcessorEvent, SpellGoProcessorEvent, AuraCastProcessorEvent, ExtraAttackProcessorEvent, UnitClassificationProcessorEvent, CombatantInfoProcessorEvent, DispelProcessorEvent } from "../processorTypes";
 import type { StreamType } from "@/hooks/instanceEvents";
+import { hitTypeNames } from "@/lib/hittype/hittype";
 
 /**
  * A raw event with metadata for debugging
@@ -25,6 +26,12 @@ export interface ActivityEventInfo {
   name: string;
 }
 
+export interface DamageTrailerInfo {
+  amount: number;
+  hitType: number;
+  labels: string[];
+}
+
 export interface RawDebugEvent {
   index: number;
   offsetMilli: number;
@@ -39,6 +46,8 @@ export interface RawDebugEvent {
   amount: number;
   resourceType?: ResourceType; // For resource_change events
   extra?: string; // school/hitType info
+  // Damage mitigation and outcome trailers, such as absorbed, blocked, and resisted.
+  damageTrailers?: DamageTrailerInfo[];
   // Cast-specific fields
   castAction?: CastAction;
   spellId?: number;
@@ -357,9 +366,21 @@ export const allActivityProcessor: PanelProcessor<AllActivityDebugState, AllActi
       const rcEvent = event as ResourceChangeProcessorEvent;
       rawEvent.resourceType = rcEvent.resourceType as ResourceType;
       rawEvent.extra = rcEvent.direction;
-    } else if (streamType === "damage" || streamType === "heal") {
-      const dhEvent = event as DamageProcessorEvent | HealProcessorEvent;
-      rawEvent.extra = `school=${dhEvent.school} hit=${dhEvent.hitType}`;
+    } else if (streamType === "damage") {
+      const damageEvent = event as DamageProcessorEvent;
+      rawEvent.extra = `school=${damageEvent.school} hit=${damageEvent.hitType}`;
+      if (damageEvent.tailerCount > 0) {
+        rawEvent.damageTrailers = damageEvent.tailers
+          .slice(0, damageEvent.tailerCount)
+          .map((tailer) => ({
+            amount: tailer.amount,
+            hitType: tailer.hitType,
+            labels: hitTypeNames(tailer.hitType),
+          }));
+      }
+    } else if (streamType === "heal") {
+      const healEvent = event as HealProcessorEvent;
+      rawEvent.extra = `school=${healEvent.school} hit=${healEvent.hitType}`;
     } else if (streamType === "cast") {
       const castEvent = event as CastProcessorEvent;
       rawEvent.castAction = castEvent.action;

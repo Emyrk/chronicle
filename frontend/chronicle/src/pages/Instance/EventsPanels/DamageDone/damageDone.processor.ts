@@ -8,6 +8,7 @@ import { accumulateAbilityBreakout, accumulateAbilityBreakoutBySpellId, PERIODIC
 import { createGuidCache, type GuidCache } from "../processors/guidCache";
 import { extractGroupingFromPanelOption, extractPetModeFromPanelOption, resolveEntity } from "../processors/resolveEntity";
 import { applyAuraEvent, createAuraProcessorState, hasAura, type AuraProcessorState } from "../processors/auraProcessor";
+import { absorbedDamageFromTailers } from "../processors/damageTailers";
 import type { SelectedVulnerability } from "../VulnerabilityEffect/vulnerabilityConfig";
 
 // Re-export the shared type for backwards compatibility
@@ -242,8 +243,12 @@ export function createDamageDoneProcessor(
       const ownerName = entity.name;
       const ownerClass = entity.class;
 
-      // Effective amount excludes overkill (damage beyond the killing blow).
-      const effectiveAmount = event.amount - (event.overkill || 0);
+      // Damage absorbed by the target still depleted a shield, so include it in
+      // effective damage while retaining the absorbed portion for breakouts.
+      const rawEffectiveAmount = Math.max(0, event.amount - (event.overkill || 0));
+      const absorbedAmount = absorbedDamageFromTailers(event);
+      const effectiveAmount = rawEffectiveAmount + absorbedAmount;
+      const fullyAbsorbed = rawEffectiveAmount === 0 && absorbedAmount > 0;
 
       // Vulnerability decomposition (bonus + base). Defaults to no bonus.
       let baseAmount = effectiveAmount;
@@ -338,7 +343,16 @@ export function createDamageDoneProcessor(
           abilityName = abilityName + " (DoT)";
         }
 
-        accumulateAbilityBreakout(state.ByAbility, damageOwner, abilityName, effectiveAmount, event.hitType, event.amount);
+        accumulateAbilityBreakout(
+          state.ByAbility,
+          damageOwner,
+          abilityName,
+          effectiveAmount,
+          event.hitType,
+          effectiveAmount,
+          absorbedAmount,
+          fullyAbsorbed,
+        );
         // Use a composite key so periodic (DoT) events with the same spell ID as
         // direct damage (e.g. Immolate) get their own breakout row.
         const isPeriodicDmg = hasHitType(event.hitType, HitTypePeriodic);
@@ -350,7 +364,17 @@ export function createDamageDoneProcessor(
         // are instead shown from ByAbility which keys by name (unique per pet).
         const isPetMerged = casterHasOwner && grouping === "merged";
         if (breakoutSpellId != null && !isPetMerged) {
-          accumulateAbilityBreakoutBySpellId(state.ByAbilityBySpellId, damageOwner, breakoutSpellId, abilityName, effectiveAmount, event.hitType, event.amount);
+          accumulateAbilityBreakoutBySpellId(
+            state.ByAbilityBySpellId,
+            damageOwner,
+            breakoutSpellId,
+            abilityName,
+            effectiveAmount,
+            event.hitType,
+            effectiveAmount,
+            absorbedAmount,
+            fullyAbsorbed,
+          );
         }
         // Store spellId on the ByAbility entry for pet abilities so the breakout
         // can still show spell icons when pulling pet rows from ByAbility.

@@ -7,12 +7,12 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	"github.com/Emyrk/chronicle/combatlog/parser/common/messages"
+	"github.com/Emyrk/chronicle/combatlog/parser/common/unitdb"
 	"github.com/Emyrk/chronicle/combatlog/parser/guid"
 	"github.com/Emyrk/chronicle/combatlog/parser/types"
 	"github.com/Emyrk/chronicle/combatlog/parser/types/combatant"
 	"github.com/Emyrk/chronicle/combatlog/parser/types/unitinfo"
-	"github.com/Emyrk/chronicle/combatlog/parser/common/messages"
-	"github.com/Emyrk/chronicle/combatlog/parser/common/unitdb"
 )
 
 func setupDPSTracker() (*DPSTracker, *unitdb.Units) {
@@ -52,6 +52,43 @@ func TestDPSTracker_BasicDamage(t *testing.T) {
 	assert.Equal(t, int64(800), results[encID].Units[player].DamageDone)
 	assert.True(t, results[encID].Units[player].IsPlayer)
 	assert.Nil(t, results[encID].Units[player].OwnerGUID)
+}
+
+func TestDPSTracker_IncludesAbsorbedDamage(t *testing.T) {
+	t.Parallel()
+	tracker, units := setupDPSTracker()
+
+	player := makePlayerGUID(1)
+	boss := makeCreatureGUID(100, 1)
+	encID := uuid.New()
+
+	units.Info[player] = unitinfo.Info{Guid: player, Name: "Warrior", IsPlayer: true, CanCooperate: true}
+	units.Info[boss] = unitinfo.Info{Guid: boss, Name: "Boss", CanCooperate: false}
+
+	partialAbsorb := uint32(200)
+	fullAbsorb := uint32(500)
+	caster := player
+
+	tracker.FightStarted(encID, nil)
+	_ = tracker.ProcessMessage(true, encID, &messages.Damage{
+		Caster:  &caster,
+		Target:  boss,
+		Amount:  800,
+		HitType: types.HitTypeHit,
+		Trailer: types.Trailer{{Amount: &partialAbsorb, HitType: types.HitTypePartialAbsorb}},
+	})
+	_ = tracker.ProcessMessage(true, encID, &messages.Damage{
+		Caster:  &caster,
+		Target:  boss,
+		Amount:  0,
+		HitType: types.HitTypeFullAbsorb,
+		Trailer: types.Trailer{{Amount: &fullAbsorb, HitType: types.HitTypeFullAbsorb}},
+	})
+	tracker.FightEnded(encID, nil)
+
+	result := tracker.Result()[encID].Units[player]
+	require.NotNil(t, result)
+	assert.Equal(t, int64(1500), result.DamageDone)
 }
 
 func TestDPSTracker_HostileOnly(t *testing.T) {

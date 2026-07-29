@@ -23,11 +23,12 @@ function getAbilitiesForUnit(
     abilities.push({
       ...data,
       name: abilityName,
-      value: data.Total,
+      value: data.Total - (data.Absorbed || 0),
+      absorbed: data.Absorbed,
     });
   }
 
-  return abilities.sort((a, b) => b.value - a.value);
+  return abilities.sort((a, b) => (b.value + (b.absorbed || 0)) - (a.value + (a.absorbed || 0)));
 }
 
 /**
@@ -53,12 +54,13 @@ function getAbilitiesBySpellIdForUnit(
     abilities.push({
       ...data,
       name: data.spellName,
-      value: data.Total,
+      value: data.Total - (data.Absorbed || 0),
+      absorbed: data.Absorbed,
       spellId: realSpellId(compositeId),
     });
   }
 
-  return abilities.sort((a, b) => b.value - a.value);
+  return abilities.sort((a, b) => (b.value + (b.absorbed || 0)) - (a.value + (a.absorbed || 0)));
 }
 
 /**
@@ -230,7 +232,13 @@ export function useDamageDoneBreakout({
         if (byAbility) {
           for (const [name, data] of byAbility) {
             if (name.includes("(by pet")) {
-              abilities.push({ ...data, name, value: data.Total, spellId: data.spellId });
+              abilities.push({
+                ...data,
+                name,
+                value: data.Total - (data.Absorbed || 0),
+                absorbed: data.Absorbed,
+                spellId: data.spellId,
+              });
             }
           }
         }
@@ -246,6 +254,7 @@ export function useDamageDoneBreakout({
         ? abilities.map((a) => ({
             ...a,
             value: (a.value / durationMs) * 1000,
+            absorbed: a.absorbed !== undefined ? (a.absorbed / durationMs) * 1000 : undefined,
           }))
         : abilities;
 
@@ -272,6 +281,8 @@ export function useDamageDoneBreakout({
           pinned={pinned}
           activeTab={activeTab}
           onTabChange={setActiveTab}
+          showAbsorbed
+          absorbedIsAdditive
         />
       );
     },

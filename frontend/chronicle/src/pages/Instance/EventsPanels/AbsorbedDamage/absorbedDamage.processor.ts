@@ -8,7 +8,7 @@
 import type { DamageProcessorEvent, PanelProcessor, ProcessorContext } from "../processorTypes";
 import { isPlayerGuidFast } from "../processors/guidCache";
 import { resolveEntity, extractGroupingFromPanelOption, extractPetModeFromPanelOption } from "../processors/resolveEntity";
-import { hasHitType, HitTypePartialAbsorb, HitTypeFullAbsorb } from "@/lib/hittype/hittype";
+import { absorbedDamageFromTailers } from "../processors/damageTailers";
 
 /**
  * Per-player absorbed damage data.
@@ -51,14 +51,7 @@ export function createAbsorbedDamageProcessor(): PanelProcessor<AbsorbedDamageRe
       if (!targetID) return;
       if (!isPlayerGuidFast(targetID)) return;
 
-      // Sum absorbed amounts from tailers
-      let absorbed = 0;
-      for (let i = 0; i < event.tailerCount; i++) {
-        const t = event.tailers[i];
-        if (hasHitType(t.hitType, HitTypePartialAbsorb) || hasHitType(t.hitType, HitTypeFullAbsorb)) {
-          absorbed += t.amount;
-        }
-      }
+      const absorbed = absorbedDamageFromTailers(event);
       if (absorbed === 0) return;
 
       const grouping = extractGroupingFromPanelOption(context.panelOption);

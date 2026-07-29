@@ -44,13 +44,17 @@ export function updateHitTypeStats(stats: HitTypeStats, amount: number): void {
 }
 
 export interface DamageAbilityBreakout {
+  /** Effective damage, including damage absorbed by the target. */
   Total: number;
+  /** Portion of Total absorbed by the target. */
+  Absorbed?: number;
   Count: number;
   Crits: number;
   Hits: number;
   Misses: number;
 
   // These outcomes are not guaranteed to be present in every ability
+  Absorbs?: number;
   Dodges?: number;
   Parries?: number;
   FullResist?: number;
@@ -66,6 +70,7 @@ export interface DamageAbilityBreakout {
   CritStats?: HitTypeStats;     // Critical hits
   GlancingStats?: HitTypeStats; // Glancing blows
   CrushingStats?: HitTypeStats; // Crushing blows
+  AbsorbStats?: HitTypeStats;   // Fully absorbed hits
 
   /** Optional spell ID — set for pet abilities in merged mode so the breakout
    *  can still show spell icons even though they're excluded from ByAbilityBySpellId. */
@@ -87,14 +92,21 @@ export function updateAbilityBreakout(
   amount: number,
   hitType: number,
   _sourceName?: string,
-  /** Raw hit amount for min/avg/max stats (defaults to amount). */
+  /** Effective hit amount for min/avg/max stats (defaults to amount). */
   rawAmount?: number,
+  absorbedAmount = 0,
+  fullyAbsorbed = false,
 ): void {
   const hitAmount = rawAmount ?? amount;
   breakout.Total += amount;
+  breakout.Absorbed = (breakout.Absorbed || 0) + absorbedAmount;
   breakout.Count += 1;
   
-  if (hasHitType(hitType, HitTypeCrit)) {
+  if (fullyAbsorbed) {
+    breakout.Absorbs = (breakout.Absorbs || 0) + 1;
+    if (!breakout.AbsorbStats) breakout.AbsorbStats = createEmptyHitTypeStats();
+    updateHitTypeStats(breakout.AbsorbStats, hitAmount);
+  } else if (hasHitType(hitType, HitTypeCrit)) {
     breakout.Crits += 1;
     breakout.Hits += 1;
     // Track crit stats
@@ -146,13 +158,15 @@ export function accumulateAbilityBreakout(
   abilityName: string,
   amount: number,
   hitType: number,
-  /** Raw hit amount for min/avg/max stats (defaults to amount). */
+  /** Effective hit amount for min/avg/max stats (defaults to amount). */
   rawAmount?: number,
+  absorbedAmount = 0,
+  fullyAbsorbed = false,
 ): void {
   const unitBreakout = byAbilityMap.get(unitId) || new Map<string, DamageAbilityBreakout>();
   const abilityBreakout = unitBreakout.get(abilityName) || createEmptyAbilityBreakout();
   
-  updateAbilityBreakout(abilityBreakout, amount, hitType, abilityName, rawAmount);
+  updateAbilityBreakout(abilityBreakout, amount, hitType, abilityName, rawAmount, absorbedAmount, fullyAbsorbed);
   
   unitBreakout.set(abilityName, abilityBreakout);
   byAbilityMap.set(unitId, unitBreakout);
@@ -184,13 +198,15 @@ export function accumulateAbilityBreakoutBySpellId(
   spellName: string,
   amount: number,
   hitType: number,
-  /** Raw hit amount for min/avg/max stats (defaults to amount). */
+  /** Effective hit amount for min/avg/max stats (defaults to amount). */
   rawAmount?: number,
+  absorbedAmount = 0,
+  fullyAbsorbed = false,
 ): void {
   const unitBreakout = byAbilityMap.get(unitId) || new Map<number, SpellIdAbilityBreakout>();
   const abilityBreakout = unitBreakout.get(spellId) || createEmptySpellIdAbilityBreakout(spellName);
   
-  updateAbilityBreakout(abilityBreakout, amount, hitType, spellName, rawAmount);
+  updateAbilityBreakout(abilityBreakout, amount, hitType, spellName, rawAmount, absorbedAmount, fullyAbsorbed);
   
   unitBreakout.set(spellId, abilityBreakout);
   byAbilityMap.set(unitId, unitBreakout);

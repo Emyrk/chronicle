@@ -231,13 +231,18 @@ export const DamageDoneContent = (props: DamageDoneContentProps) => {
       if (!abilityData) return null;
 
       const perSec = props.perSecond && props.durationMs;
-      const rawTotal = abilityData.Total;
-      const displayTotal = perSec ? (rawTotal / props.durationMs) * 1000 : rawTotal;
+      const rawDamage = abilityData.Total - (abilityData.Absorbed || 0);
+      const displayRawDamage = perSec ? (rawDamage / props.durationMs) * 1000 : rawDamage;
+      const displayAbsorbed = perSec
+        ? ((abilityData.Absorbed || 0) / props.durationMs) * 1000
+        : abilityData.Absorbed;
+      const displayTotal = perSec ? (abilityData.Total / props.durationMs) * 1000 : abilityData.Total;
 
       const singleAbility: AbilityData[] = [{
         ...abilityData,
         name: abilityName,
-        value: displayTotal,
+        value: displayRawDamage,
+        absorbed: displayAbsorbed,
       }];
 
       return (
@@ -250,6 +255,8 @@ export const DamageDoneContent = (props: DamageDoneContentProps) => {
           pinned={pinned}
           activeTab="ability"
           onTabChange={() => {}}
+          showAbsorbed
+          absorbedIsAdditive
         />
       );
     },

@@ -3,6 +3,7 @@ import { createDamageDoneProcessor } from '../DamageDone/damageDone.processor';
 import { resolveSelectedVulnerability } from '../VulnerabilityEffect/vulnerabilityConfig';
 import type { VulnerabilitySpell } from '../VulnerabilityEffect/vulnerabilityDerive';
 import { AuraApplication, AuraState, type AuraProcessorEvent, type DamageProcessorEvent, type ProcessorContext, type SlainProcessorEvent } from '../processorTypes';
+import { HitTypeFullAbsorb, HitTypeHit, HitTypePartialAbsorb } from '@/lib/hittype/hittype';
 
 // Vulnerability effects are derived per-dataset from the spell lookup at runtime;
 // tests use a fixed config map that mirrors the Turtle-derived values, and inject
@@ -118,6 +119,48 @@ describe('damageDoneProcessor', () => {
     expect(playerData.playerName).toBe('TestPlayer');
     expect(playerData.className).toBe('WARRIOR');
     expect(playerData.target.get('0xF130000CE0000001')).toBe(1000);
+  });
+
+  it('includes partially absorbed damage in totals and hit statistics', () => {
+    const state = processor.createState();
+    const context = createContext();
+
+    processor.processEvent(state, createDamageEvent({
+      amount: 800,
+      hitType: HitTypeHit,
+      tailers: [{ amount: 200, hitType: HitTypePartialAbsorb }],
+      tailerCount: 1,
+    }), 'enc1', new Date(), 'damage', context);
+
+    const playerData = state.EncounterDamage.get('enc1')!.get('0x0000000000001234')!;
+    expect(playerData.target.get('0xF130000CE0000001')).toBe(1000);
+
+    const ability = state.ByAbility.get('0x0000000000001234')!.get('Mortal Strike')!;
+    expect(ability.Total).toBe(1000);
+    expect(ability.Absorbed).toBe(200);
+    expect(ability.HitStats).toEqual({ count: 1, total: 1000, min: 1000, max: 1000 });
+  });
+
+  it('counts fully absorbed damage as effective damage and an absorb outcome', () => {
+    const state = processor.createState();
+    const context = createContext();
+
+    processor.processEvent(state, createDamageEvent({
+      amount: 0,
+      hitType: HitTypeFullAbsorb,
+      tailers: [{ amount: 500, hitType: HitTypeFullAbsorb }],
+      tailerCount: 1,
+    }), 'enc1', new Date(), 'damage', context);
+
+    const playerData = state.EncounterDamage.get('enc1')!.get('0x0000000000001234')!;
+    expect(playerData.target.get('0xF130000CE0000001')).toBe(500);
+
+    const ability = state.ByAbility.get('0x0000000000001234')!.get('Mortal Strike')!;
+    expect(ability.Total).toBe(500);
+    expect(ability.Absorbed).toBe(500);
+    expect(ability.Absorbs).toBe(1);
+    expect(ability.Hits).toBe(0);
+    expect(ability.AbsorbStats).toEqual({ count: 1, total: 500, min: 500, max: 500 });
   });
 
   it('accumulates multiple damage events', () => {

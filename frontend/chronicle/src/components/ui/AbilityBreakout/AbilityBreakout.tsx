@@ -78,6 +78,7 @@ interface HitTypeColumn {
 /** All possible hit type columns in display order */
 const HIT_TYPE_COLUMNS: HitTypeColumn[] = [
   { key: 'Hits', label: 'H', fullName: 'Hits', description: 'Includes glancing, crushing, and crits' },
+  { key: 'Absorbs', label: 'A', fullName: 'Absorbs', description: 'Fully absorbed hits' },
   { key: 'Crits', label: 'C', fullName: 'Crits' },
   { key: 'Misses', label: 'M', fullName: 'Misses' },
   { key: 'Dodges', label: 'D', fullName: 'Dodges' },
@@ -92,7 +93,7 @@ const HIT_TYPE_COLUMNS: HitTypeColumn[] = [
 
 /** Min/max stats columns (only for damage-dealing hit types) */
 interface MinMaxColumn {
-  statsKey: 'HitStats' | 'CritStats' | 'GlancingStats' | 'CrushingStats'
+  statsKey: 'HitStats' | 'CritStats' | 'GlancingStats' | 'CrushingStats' | 'AbsorbStats'
   label: string
   fullName: string
 }
@@ -102,6 +103,7 @@ const MIN_MAX_COLUMNS: MinMaxColumn[] = [
   { statsKey: 'CritStats', label: 'Crit', fullName: 'Critical Hits' },
   { statsKey: 'GlancingStats', label: 'Glnc', fullName: 'Glancing Blows' },
   { statsKey: 'CrushingStats', label: 'Crsh', fullName: 'Crushing Blows' },
+  { statsKey: 'AbsorbStats', label: 'Abs', fullName: 'Fully Absorbed Hits' },
 ]
 
 /** Get the value of a hit type column from an ability */
@@ -152,10 +154,12 @@ function mergeAbilities(abilities: DamageAbilityBreakout[]): DamageAbilityBreako
   
   for (const ability of abilities) {
     merged.Total += ability.Total
+    merged.Absorbed = (merged.Absorbed || 0) + (ability.Absorbed || 0)
     merged.Count += ability.Count
     merged.Crits += ability.Crits
     merged.Hits += ability.Hits
     merged.Misses += ability.Misses
+    merged.Absorbs = (merged.Absorbs || 0) + (ability.Absorbs || 0)
     merged.Dodges = (merged.Dodges || 0) + (ability.Dodges || 0)
     merged.Parries = (merged.Parries || 0) + (ability.Parries || 0)
     merged.FullResist = (merged.FullResist || 0) + (ability.FullResist || 0)
@@ -172,6 +176,7 @@ function mergeAbilities(abilities: DamageAbilityBreakout[]): DamageAbilityBreako
   merged.CritStats = mergeHitTypeStats(abilities.map(a => a.CritStats))
   merged.GlancingStats = mergeHitTypeStats(abilities.map(a => a.GlancingStats))
   merged.CrushingStats = mergeHitTypeStats(abilities.map(a => a.CrushingStats))
+  merged.AbsorbStats = mergeHitTypeStats(abilities.map(a => a.AbsorbStats))
   
   return merged
 }
@@ -203,7 +208,7 @@ export interface AbilityData extends DamageAbilityBreakout{
   value: number
   /** Optional overheal value - displayed in a separate column with distinct styling */
   overheal?: number
-  /** Optional absorbed value - displayed in a separate column (heal absorbs from WotLK) */
+  /** Optional absorbed value displayed in a separate column. */
   absorbed?: number
   /** Optional subtitle displayed in muted text after the name (e.g., spell rank) */
   subtitle?: string
@@ -322,6 +327,8 @@ export interface AbilityTableProps {
   stackedLabel?: string
   /** Whether to show the absorbed column */
   showAbsorbed?: boolean
+  /** Whether absorbed damage is additive to value instead of a subset of it. */
+  absorbedIsAdditive?: boolean
 }
 
 /**
@@ -335,6 +342,7 @@ export function AbilityTable({
   showOverheal = false,
   stackedLabel = 'Overheal',
   showAbsorbed = false,
+  absorbedIsAdditive = false,
 }: AbilityTableProps) {
   const { hover, setHover, clearHover, selectedAbilities, toggleAbilitySelection, clearSelection } = useBreakoutHover()
   const [isExpanded, setIsExpanded] = useState(false)
@@ -344,10 +352,13 @@ export function AbilityTable({
     return <p className="text-xs p-2 text-muted-foreground">No ability breakdown available</p>
   }
 
-  // Filter out zero-damage abilities and sort by value descending
+  const effectiveValue = (ability: AbilityData) =>
+    ability.value + (absorbedIsAdditive ? (ability.absorbed ?? 0) : 0)
+
+  // Filter out zero-damage abilities and sort by effective contribution.
   const sorted = [...abilities]
     .filter(a => a.Total > 0 || (showOverheal && (a.overheal ?? 0) > 0))
-    .sort((a, b) => b.value - a.value)
+    .sort((a, b) => effectiveValue(b) - effectiveValue(a))
   
   // Check if any ability has overheal data
   const hasOverhealData = showOverheal && sorted.some(a => a.overheal !== undefined && a.overheal > 0)
@@ -367,6 +378,7 @@ export function AbilityTable({
     : sorted
   const mergedTotals = mergeAbilities(abilitiesToSum)
   const totalValueForSelection = abilitiesToSum.reduce((sum, a) => sum + a.value, 0)
+  const totalEffectiveValueForSelection = abilitiesToSum.reduce((sum, a) => sum + effectiveValue(a), 0)
   const totalOverhealForSelection = abilitiesToSum.reduce((sum, a) => sum + (a.overheal || 0), 0)
   const totalAbsorbedForSelection = abilitiesToSum.reduce((sum, a) => sum + (a.absorbed || 0), 0)
 
@@ -513,7 +525,7 @@ export function AbilityTable({
         <tbody>
           {sorted.map((ability) => {
             const critPercent = ability.Hits > 0 ? (ability.Crits / (ability.Count)) * 100 : 0
-            const valuePercent = totalValue > 0 ? (ability.value / totalValue) * 100 : 0
+            const valuePercent = totalValue > 0 ? (effectiveValue(ability) / totalValue) * 100 : 0
             const abilityKey = ability.key ?? ability.name
             const rowId = abilityKey
             const isSelected = selectedAbilities.has(ability.name)
@@ -574,8 +586,8 @@ export function AbilityTable({
                 })()}
                 {hasAbsorbedData && (() => {
                   const absorbedVal = ability.absorbed ?? 0;
-                  // absorbed is a subset of value (not additive), so percentage = absorbed/value
-                  const absorbedPct = ability.value > 0 ? (absorbedVal / ability.value) * 100 : 0;
+                  const absorbedBase = absorbedIsAdditive ? ability.value + absorbedVal : ability.value;
+                  const absorbedPct = absorbedBase > 0 ? (absorbedVal / absorbedBase) * 100 : 0;
                   return (
                     <HoverCell
                       rowId={rowId}
@@ -706,7 +718,7 @@ export function AbilityTable({
                 {totalValueForSelection.toLocaleString(undefined, { maximumFractionDigits: 1 })}
               </td>
               <td className="text-right py-1.5 px-2 font-mono text-muted-foreground">
-                {totalValue > 0 ? ((totalValueForSelection / totalValue) * 100).toFixed(1) : 0}%
+                {totalValue > 0 ? ((totalEffectiveValueForSelection / totalValue) * 100).toFixed(1) : 0}%
               </td>
               <td className="text-right py-1.5 px-2 font-mono">
                 {mergedTotals.Count}
@@ -916,6 +928,8 @@ export interface AbilityBreakoutProps {
   stackedLabel?: string
   /** Whether to show the absorbed column */
   showAbsorbed?: boolean
+  /** Whether absorbed damage is additive to value instead of a subset of it. */
+  absorbedIsAdditive?: boolean
 }
 
 function formatValue(value: number): string {
@@ -945,6 +959,7 @@ export function AbilityBreakout({
   showOverheal = false,
   stackedLabel = 'Overheal',
   showAbsorbed = false,
+  absorbedIsAdditive = false,
 }: AbilityBreakoutProps) {
   const [internalTab, setInternalTab] = useState<BreakoutTab>('ability')
   const [groupTargets, setGroupTargets] = useLocalStorage<boolean>(GROUP_TARGETS_STORAGE_KEY, false)
@@ -993,6 +1008,7 @@ export function AbilityBreakout({
           showOverheal={showOverheal}
           stackedLabel={stackedLabel}
           showAbsorbed={showAbsorbed}
+          absorbedIsAdditive={absorbedIsAdditive}
         />
       </div>
     )
@@ -1039,6 +1055,7 @@ export function AbilityBreakout({
           showOverheal={showOverheal}
           stackedLabel={stackedLabel}
           showAbsorbed={showAbsorbed}
+          absorbedIsAdditive={absorbedIsAdditive}
         />
       ) : (
         <TargetTable

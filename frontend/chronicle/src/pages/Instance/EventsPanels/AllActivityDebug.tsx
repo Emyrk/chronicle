@@ -197,6 +197,20 @@ const GEAR_SLOT_NAMES = [
   "Back", "Main Hand", "Off Hand", "Ranged", "Tabard",
 ];
 
+function trailerColor(labels: string[]): string {
+  if (labels.some((label) => label.includes("Absorb"))) return "text-sky-400";
+  if (labels.some((label) => label.includes("Block"))) return "text-amber-400";
+  if (labels.some((label) => label.includes("Resist"))) return "text-violet-400";
+  return "text-muted-foreground";
+}
+
+function trailerLabel(labels: string[]): string {
+  return labels
+    .map((label) => label.replace(/^Partial /, "").replace(/^Full /, ""))
+    .join("+")
+    .toLowerCase();
+}
+
 interface RawEventRowProps {
   event: RawDebugEvent;
   index: number;
@@ -222,6 +236,22 @@ function RawEventRow({ event, index, useRelativeTime = false, useLocalTime = fal
     <span className={cn("w-12 text-right shrink-0", amountColor)}>{event.amount.toLocaleString(undefined, {minimumFractionDigits: 0, maximumFractionDigits: 1})}</span>
   );
   
+  const trailerElement = event.damageTrailers && event.damageTrailers.length > 0 ? (
+    <span className="w-44 shrink-0 flex items-center gap-1 overflow-hidden">
+      {event.damageTrailers.map((trailer, trailerIndex) => (
+        <span
+          key={`${trailer.hitType}-${trailerIndex}`}
+          className={cn("text-[10px] font-medium whitespace-nowrap", trailerColor(trailer.labels))}
+          title={`${trailer.amount.toLocaleString()} ${trailer.labels.join(", ")} (hit type ${trailer.hitType})`}
+        >
+          {trailer.amount.toLocaleString()} {trailerLabel(trailer.labels)}
+        </span>
+      ))}
+    </span>
+  ) : (
+    <span className="w-44 shrink-0 text-muted-foreground/30">-</span>
+  );
+
   // ActivityEvent column - shows debug annotations when present
   // Activity types indicated by color: start (green), bump (yellow), end (orange), slain (red+skull)
   // Shows entity names only, comma-separated if multiple
@@ -282,6 +312,7 @@ function RawEventRow({ event, index, useRelativeTime = false, useLocalTime = fal
       ) : (
         amountElement
       )}
+      {trailerElement}
       {activityEventElement}
     </div>
   );
@@ -647,6 +678,7 @@ function AllActivityContent({
             <span className="shrink-0"></span>
             <span className="w-24 shrink-0">Target</span>
             <span className="w-12 text-right shrink-0">Amount</span>
+            <span className="w-44 shrink-0">Trailers</span>
             <Tooltip>
               <TooltipTrigger asChild>
                 <span className="w-36 shrink-0 cursor-help">Activity <span className="text-muted-foreground">ⓘ</span></span>

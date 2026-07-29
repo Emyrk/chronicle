@@ -5,11 +5,11 @@ import (
 
 	"github.com/google/uuid"
 
+	"github.com/Emyrk/chronicle/combatlog/parser/common/instances/instancehook"
+	"github.com/Emyrk/chronicle/combatlog/parser/common/messages"
+	"github.com/Emyrk/chronicle/combatlog/parser/common/unitdb"
 	"github.com/Emyrk/chronicle/combatlog/parser/guid"
 	"github.com/Emyrk/chronicle/combatlog/parser/types/combatant"
-	"github.com/Emyrk/chronicle/combatlog/parser/common/messages"
-	"github.com/Emyrk/chronicle/combatlog/parser/common/instances/instancehook"
-	"github.com/Emyrk/chronicle/combatlog/parser/common/unitdb"
 )
 
 var _ instancehook.Hook = (*DPSTracker)(nil)
@@ -80,7 +80,8 @@ func (t *DPSTracker) ProcessMessage(active bool, _ uuid.UUID, m messages.Message
 
 	switch msg := m.(type) {
 	case *messages.Damage:
-		if msg.Amount <= 0 {
+		effectiveDamage := int64(msg.Amount) + msg.Trailer.AbsorbedAmount()
+		if effectiveDamage <= 0 {
 			return nil
 		}
 
@@ -126,7 +127,7 @@ func (t *DPSTracker) ProcessMessage(active bool, _ uuid.UUID, m messages.Message
 		}
 
 		if targetCls.Affiliation == unitdb.AffiliationHostile {
-			t.damageDone[creditGUID] += int64(msg.Amount)
+			t.damageDone[creditGUID] += effectiveDamage
 		}
 
 	case *messages.Heal:
