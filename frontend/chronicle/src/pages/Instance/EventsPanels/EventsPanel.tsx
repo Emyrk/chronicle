@@ -401,6 +401,7 @@ export function EventsPanel({
   onFiltersChange,
 }: EventsPanelProps) {
   const isMobile = useIsMobile();
+  const inheritedPortalContainer = usePortalContainer();
   const rawPanel = PANELS[panelType];
 
   // Inject a default time_range controller filter for all panels that support filtering,
@@ -536,7 +537,8 @@ export function EventsPanel({
       return;
     }
 
-    const popup = openPanelPopup(window, effectivePanelId, popupTitle);
+    const ownerWindow = inheritedPortalContainer?.ownerDocument.defaultView ?? window;
+    const popup = openPanelPopup(ownerWindow, effectivePanelId, popupTitle);
     if (!popup) {
       toast.error("The panel popup was blocked. Allow popups for Chronicle and try again.");
       return;
@@ -545,7 +547,7 @@ export function EventsPanel({
     panelPopupRef.current = popup;
     setPanelPopup(popup);
     popup.window.focus();
-  }, [effectivePanelId, popupTitle]);
+  }, [effectivePanelId, inheritedPortalContainer, popupTitle]);
 
   useEffect(() => {
     if (!panelPopup) return;
@@ -998,8 +1000,7 @@ export function EventsPanel({
       />
   );
 
-  const panelPortalContainer = panelPopup?.container
-    ?? (typeof document === "undefined" ? null : document.body);
+  const panelPortalContainer = panelPopup?.container ?? inheritedPortalContainer;
 
   return (
     <PortalContainerProvider container={panelPortalContainer}>

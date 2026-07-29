@@ -15,6 +15,7 @@ import type { GridEditorItem } from "@/components/layout/GridLayoutEditor";
 import type { ActionBarSlotsResponse, ActivityPeriod, InstancePlayer } from "@/api/typesGenerated";
 import { PeriodMomentDisplay } from "@/components/PeriodMomentDisplay";
 import { Card } from "@/components/ui/Card/Card";
+import { PortalContainerProvider } from "@/components/ui/PortalContainerContext";
 import { Checkbox } from "@/components/ui/Checkbox/Checkbox";
 import { Button } from "@/components/ui/button";
 import {
@@ -59,6 +60,7 @@ import {
   DEFAULT_INSTANCE_PANEL_FILTERS,
 } from "./viewDefaults";
 import { PRESET_LAYOUTS, PRESET_LAYOUTS_BY_ID, DEFAULT_PRESET_ID } from "./presetLayouts";
+import { openLayoutPopup, syncPopupAppearance, type LayoutPopup } from "./EventsPanels/panelPopup";
 
 // ============================================================================
 // Encounter selector localStorage helpers (7-day expiry)
@@ -898,6 +900,194 @@ function normalizeLayoutItems(items: GridEditorItem[]): GridEditorItem[] {
   return orderLayoutItems(out);
 }
 
+interface LayoutSnapshot {
+  layoutItems: GridEditorItem[];
+  panelTypesById: Record<string, EventsPanelType>;
+  panelOptionsById: Record<string, string | null>;
+  panelFiltersById: Record<string, PanelFilter[]>;
+  activePresetId: string | null;
+}
+
+interface LayoutPopupSession extends LayoutPopup {
+  sessionId: number;
+  snapshot: LayoutSnapshot;
+}
+
+interface EventsPanelGridProps {
+  layoutItems: GridEditorItem[];
+  panelTypesById: Record<string, EventsPanelType>;
+  panelOptionsById: Record<string, string | null>;
+  seedFiltersByID: Record<string, PanelFilter[]>;
+  seedFiltersVersion: number;
+  durationMs: number;
+  context: PanelContext;
+  showHints: boolean;
+  isMobile: boolean;
+  onPanelTypeChange: (itemID: string, type: EventsPanelType) => void;
+  onPanelOptionChange: (itemID: string, option: string | null) => void;
+  onPanelFiltersChange: (itemID: string, filters: PanelFilter[]) => void;
+  onExplainerClick: (panelType: EventsPanelType) => void;
+}
+
+function EventsPanelGrid({
+  layoutItems,
+  panelTypesById,
+  panelOptionsById,
+  seedFiltersByID,
+  seedFiltersVersion,
+  durationMs,
+  context,
+  showHints,
+  isMobile,
+  onPanelTypeChange,
+  onPanelOptionChange,
+  onPanelFiltersChange,
+  onExplainerClick,
+}: EventsPanelGridProps) {
+  return (
+    <div
+      className="grid gap-3 grid-cols-1 sm:grid-cols-12"
+      style={{ gridAutoRows: `${PANEL_ROW_HEIGHT_PX}px` }}
+    >
+      {layoutItems.map((item, index) => {
+        const panelType = panelTypesById[item.id] ?? "empty";
+        return (
+          <div
+            key={item.id}
+            className="min-h-0"
+            style={{
+              gridColumn: isMobile ? "1 / -1" : `${item.x + 1} / span ${item.w}`,
+              gridRow: isMobile
+                ? `auto / span ${panelType === "timeline" && context.selectedEncounterIds.length > 1 ? 1 : item.h}`
+                : `${item.y + 1} / span ${item.h}`,
+            }}
+          >
+            <EventsPanel
+              panelType={panelType}
+              onPanelTypeChange={(nextType) => onPanelTypeChange(item.id, nextType)}
+              durationMs={durationMs}
+              context={context}
+              panelIndex={index}
+              panelId={item.id}
+              onExplainerClick={onExplainerClick}
+              showHints={showHints}
+              panelOption={panelOptionsById[item.id] ?? null}
+              onPanelOptionChange={(nextOption) => onPanelOptionChange(item.id, nextOption)}
+              seedFilters={seedFiltersByID[item.id]}
+              seedFiltersVersion={seedFiltersVersion}
+              onFiltersChange={(filters) => onPanelFiltersChange(item.id, filters)}
+            />
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
+interface PoppedOutLayoutContentProps {
+  session: LayoutPopupSession;
+  durationMs: number;
+  context: PanelContext;
+  showHints: boolean;
+  onExplainerClick: (panelType: EventsPanelType) => void;
+}
+
+function PoppedOutLayoutContent({
+  session,
+  durationMs,
+  context,
+  showHints,
+  onExplainerClick,
+}: PoppedOutLayoutContentProps) {
+  const [layoutItems, setLayoutItems] = useState(() => session.snapshot.layoutItems);
+  const [panelTypesById, setPanelTypesById] = useState(() => session.snapshot.panelTypesById);
+  const [panelOptionsById, setPanelOptionsById] = useState(() => session.snapshot.panelOptionsById);
+  const [seedFiltersById, setSeedFiltersById] = useState(() => session.snapshot.panelFiltersById);
+  const [seedFiltersVersion, setSeedFiltersVersion] = useState(1);
+  const [activePresetId, setActivePresetId] = useState(session.snapshot.activePresetId);
+
+
+  const applyPreset = useCallback((presetId: string) => {
+    const preset = PRESET_LAYOUTS_BY_ID[presetId];
+    if (!preset) return;
+
+    const items = orderLayoutItems(normalizeLayoutItems(preset.layoutItems));
+    setLayoutItems(items);
+    setPanelTypesById(Object.fromEntries(
+      items.map((item) => [item.id, preset.panelTypes[item.id] ?? "empty"]),
+    ));
+    setPanelOptionsById(Object.fromEntries(
+      items.map((item) => [item.id, preset.panelOptions[item.id] ?? null]),
+    ));
+    setSeedFiltersById({ ...preset.panelFilters });
+    setSeedFiltersVersion((version) => version + 1);
+    setActivePresetId(presetId);
+  }, []);
+
+  const handlePanelTypeChange = useCallback((itemID: string, type: EventsPanelType) => {
+    setPanelTypesById((previous) => ({ ...previous, [itemID]: type }));
+    setPanelOptionsById((previous) => ({ ...previous, [itemID]: null }));
+    const defaults = PANELS[type]?.defaultFilters ?? [];
+    setSeedFiltersById((previous) => ({ ...previous, [itemID]: defaults }));
+    setSeedFiltersVersion((version) => version + 1);
+    setActivePresetId(null);
+  }, []);
+
+  const handlePanelOptionChange = useCallback((itemID: string, option: string | null) => {
+    setPanelOptionsById((previous) => ({ ...previous, [itemID]: option }));
+    setActivePresetId(null);
+  }, []);
+
+  const handlePanelFiltersChange = useCallback(() => {
+    setActivePresetId(null);
+  }, []);
+
+  return (
+    <PortalContainerProvider container={session.container}>
+      <div className="min-h-screen bg-background text-foreground p-3">
+        <div className="sticky top-0 z-40 mb-3 border-b border-border bg-background/95 pb-2 pt-1 backdrop-blur">
+          <div className="flex gap-1 overflow-x-auto styled-scrollbar">
+            {PRESET_LAYOUTS.map((preset) => (
+              <button
+                key={preset.id}
+                type="button"
+                onClick={() => applyPreset(preset.id)}
+                className={cn(
+                  "px-3 py-1.5 text-sm font-medium rounded-md whitespace-nowrap transition-colors",
+                  activePresetId === preset.id
+                    ? "bg-primary text-primary-foreground"
+                    : "text-muted-foreground hover:text-foreground hover:bg-muted",
+                )}
+              >
+                {preset.label}
+              </button>
+            ))}
+          </div>
+        </div>
+        <PanelTimingProvider panelCount={layoutItems.length}>
+          <ChartDataRegistryProvider>
+            <EventsPanelGrid
+              layoutItems={layoutItems}
+              panelTypesById={panelTypesById}
+              panelOptionsById={panelOptionsById}
+              seedFiltersByID={seedFiltersById}
+              seedFiltersVersion={seedFiltersVersion}
+              durationMs={durationMs}
+              context={context}
+              showHints={showHints}
+              isMobile={false}
+              onPanelTypeChange={handlePanelTypeChange}
+              onPanelOptionChange={handlePanelOptionChange}
+              onPanelFiltersChange={handlePanelFiltersChange}
+              onExplainerClick={onExplainerClick}
+            />
+          </ChartDataRegistryProvider>
+        </PanelTimingProvider>
+      </div>
+    </PortalContainerProvider>
+  );
+}
+
 // ============================================================================
 // EncounterDetail component
 // ============================================================================
@@ -930,6 +1120,8 @@ interface EncounterDetailProps {
   activePresetId: string | null;
   /** Callback when user clicks a preset tab */
   onPresetChange: (presetId: string) => void;
+  /** Popup hosting the complete panel grid, when the layout is popped out. */
+  layoutPopup: LayoutPopupSession | null;
 }
 
 function EncounterDetail({
@@ -956,6 +1148,7 @@ function EncounterDetail({
   isMobile,
   activePresetId,
   onPresetChange,
+  layoutPopup,
 }: EncounterDetailProps) {
   const isSingle = encounters.length === 1;
   const encounter = encounters[0];
@@ -1520,45 +1713,36 @@ function EncounterDetail({
         <PanelTimingResetter encounters={encounters} />
 
         <ChartDataRegistryProvider>
-        <div
-          className="grid gap-3 grid-cols-1 sm:grid-cols-12"
-          style={{
-            gridAutoRows: `${PANEL_ROW_HEIGHT_PX}px`,
-          }}
-        >
-          {layoutItems.map((item, index) => {
-            const panelType = panelTypesById[item.id] ?? "empty";
-            return (
-              <div
-                key={item.id}
-                className="min-h-0"
-                style={{
-                  gridColumn: isMobile ? "1 / -1" : `${item.x + 1} / span ${item.w}`,
-                  gridRow: isMobile
-                    ? `auto / span ${panelType === "timeline" && selectedEncounterIDs.length > 1 ? 1 : item.h}`
-                    : `${item.y + 1} / span ${item.h}`,
-                }}
-              >
-                <EventsPanel
-                  panelType={panelType}
-                  onPanelTypeChange={(nextType) => onPanelTypeChange(item.id, nextType)}
-                  durationMs={totalDurationMs}
-                  context={panelContext}
-                  panelIndex={index}
-                  panelId={item.id}
-                  onExplainerClick={onExplainerClick}
-                  showHints={showHints}
-                  panelOption={panelOptionsById[item.id] ?? null}
-                  onPanelOptionChange={(nextOption) => onPanelOptionChange(item.id, nextOption)}
-                  seedFilters={seedFiltersByID[item.id]}
-                  seedFiltersVersion={seedFiltersVersion}
-                  onFiltersChange={(filters) => onPanelFiltersChange(item.id, filters)}
-                />
-              </div>
-            );
-          })}
-        </div>
+          <PortalContainerProvider container={typeof document === "undefined" ? null : document.body}>
+            <EventsPanelGrid
+              layoutItems={layoutItems}
+              panelTypesById={panelTypesById}
+              panelOptionsById={panelOptionsById}
+              seedFiltersByID={seedFiltersByID}
+              seedFiltersVersion={seedFiltersVersion}
+              durationMs={totalDurationMs}
+              context={panelContext}
+              showHints={showHints}
+              isMobile={isMobile}
+              onPanelTypeChange={onPanelTypeChange}
+              onPanelOptionChange={onPanelOptionChange}
+              onPanelFiltersChange={onPanelFiltersChange}
+              onExplainerClick={onExplainerClick}
+            />
+          </PortalContainerProvider>
         </ChartDataRegistryProvider>
+
+        {layoutPopup && createPortal(
+          <PoppedOutLayoutContent
+            key={layoutPopup.sessionId}
+            session={layoutPopup}
+            durationMs={totalDurationMs}
+            context={panelContext}
+            showHints={showHints}
+            onExplainerClick={onExplainerClick}
+          />,
+          layoutPopup.container,
+        )}
 
         <div className="mt-4 flex justify-end">
           <PanelTimingDisplay />
@@ -1696,6 +1880,9 @@ export function InstancePageView({
     [instance.encounters],
   );
 
+  const [layoutPopup, setLayoutPopup] = useState<LayoutPopupSession | null>(null);
+  const layoutPopupRef = useRef<LayoutPopupSession | null>(null);
+
   const [importedLayoutItems, setImportedLayoutItems] = useState<GridEditorItem[] | null>(null);
 
   const [activeLayoutId, setActiveLayoutId] = useState<string | null>(defaultLayoutId);
@@ -1726,6 +1913,12 @@ export function InstancePageView({
     }
 
     previousInstanceIDRef.current = instance.id;
+    const popup = layoutPopupRef.current;
+    layoutPopupRef.current = null;
+    if (popup && !popup.window.closed) {
+      popup.window.close();
+    }
+    setLayoutPopup(null);
     setViewState(createDefaultViewState());
     setImportedLayoutItems(null);
     setActiveLayoutId(defaultLayoutId);
@@ -1824,6 +2017,48 @@ export function InstancePageView({
     setSeedFiltersVersion((v) => v + 1);
     setPanelFiltersByID(preset.panelFilters);
     setActivePresetId(presetId);
+  }, []);
+
+  useEffect(() => {
+    if (!layoutPopup) return;
+
+    const popupWindow = layoutPopup.window;
+    const handlePopupClose = () => {
+      if (layoutPopupRef.current?.window === popupWindow) {
+        layoutPopupRef.current = null;
+        setLayoutPopup(null);
+      }
+    };
+    const syncAppearance = () => {
+      if (!popupWindow.closed) {
+        syncPopupAppearance(document, popupWindow.document);
+      }
+    };
+
+    syncAppearance();
+    popupWindow.addEventListener("beforeunload", handlePopupClose);
+    const appearanceObserver = new MutationObserver(syncAppearance);
+    appearanceObserver.observe(document.documentElement, {
+      attributes: true,
+      attributeFilter: ["class", "data-theme", "style"],
+    });
+    appearanceObserver.observe(document.body, {
+      attributes: true,
+      attributeFilter: ["class"],
+    });
+
+    return () => {
+      popupWindow.removeEventListener("beforeunload", handlePopupClose);
+      appearanceObserver.disconnect();
+    };
+  }, [layoutPopup]);
+
+  useEffect(() => () => {
+    const popup = layoutPopupRef.current;
+    layoutPopupRef.current = null;
+    if (popup && !popup.window.closed) {
+      popup.window.close();
+    }
   }, []);
 
   const clearEntitySelection = useCallback(() => {
@@ -1958,6 +2193,50 @@ export function InstancePageView({
       return { ...prev, [itemID]: filters };
     });
   }, []);
+
+  const popOutLayout = useCallback(() => {
+    const existing = layoutPopupRef.current;
+    if (existing && !existing.window.closed) {
+      existing.window.focus();
+      return;
+    }
+
+    const activeLayoutLabel = activePresetId
+      ? PRESET_LAYOUTS_BY_ID[activePresetId]?.label ?? "Layout"
+      : "Custom Layout";
+    const popup = openLayoutPopup(
+      window,
+      instance.id,
+      `${activeLayoutLabel} — ${instance.name} — Chronicle`,
+    );
+    if (!popup) {
+      toast.error("The layout popup was blocked. Allow popups for Chronicle and try again.");
+      return;
+    }
+
+    const session: LayoutPopupSession = {
+      ...popup,
+      sessionId: Date.now(),
+      snapshot: {
+        layoutItems: activeLayoutItems.map((item) => ({ ...item })),
+        panelTypesById: { ...panelTypesByID },
+        panelOptionsById: { ...panelOptionsByID },
+        panelFiltersById: structuredClone(panelFiltersByID),
+        activePresetId,
+      },
+    };
+    layoutPopupRef.current = session;
+    setLayoutPopup(session);
+    popup.window.focus();
+  }, [
+    activeLayoutItems,
+    activePresetId,
+    instance.id,
+    instance.name,
+    panelFiltersByID,
+    panelOptionsByID,
+    panelTypesByID,
+  ]);
 
   // Use URL state if present, otherwise default to all encounters
   const internalSelectedIds = useMemo(() => {
@@ -2126,7 +2405,8 @@ export function InstancePageView({
         return { ...prev, [itemID]: defaults };
       }
       if (!(itemID in prev)) return prev;
-      const { [itemID]: _, ...rest } = prev;
+      const rest = { ...prev };
+      delete rest[itemID];
       return rest;
     });
     setActivePresetId(null); // User customized panels – clear preset
@@ -2634,6 +2914,8 @@ export function InstancePageView({
               <InstanceMenu
                 onImportLayout={handleImportLayout}
                 onExportLayout={handleExportLayout}
+                onPopOutLayout={popOutLayout}
+                layoutPoppedOut={layoutPopup !== null}
                 onResetView={resetView}
                 onOpenTimeRange={onOpenTimeRange}
                 instanceId={instance.id}
@@ -2786,6 +3068,8 @@ export function InstancePageView({
               <InstanceMenu
                 onImportLayout={handleImportLayout}
                 onExportLayout={handleExportLayout}
+                onPopOutLayout={popOutLayout}
+                layoutPoppedOut={layoutPopup !== null}
                 onResetView={resetView}
                 onOpenTimeRange={onOpenTimeRange}
                 instanceId={instance.id}
@@ -2950,6 +3234,7 @@ export function InstancePageView({
             showHints={showHints}
             isMobile={isMobile}
             activePresetId={activePresetId}
+            layoutPopup={layoutPopup}
             onPresetChange={applyPreset}
           />
         ) : (

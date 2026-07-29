@@ -213,9 +213,19 @@ return portalContainer
 
 `PortalContainerProvider` is scoped around each `EventsPanel`. It targets the popup container while the panel is popped out and the main document body otherwise. Pointer listeners for draggable or resizable overlays must similarly use `portalContainer.ownerDocument`, and viewport calculations should use `portalContainer.ownerDocument.defaultView`.
 
-### Full-Layout Pop-Out Extension
+### Full-Layout Pop-Out
 
-The same portal approach can be applied above the individual panel level to move an entire preset or custom grid into one popup. The popup owner should wrap the grid once with `PortalContainerProvider`, while preserving the existing instance-level providers and layout state in the main React tree. Individual panel pop-outs inside a popped-out layout would need an explicit policy, such as disabling nested pop-outs or allowing a second popup per panel.
+The instance hamburger menu includes **Pop out layout** beside the import and export actions. It creates a second, independent layout initialized from the active preset or custom grid. The main page keeps its original layout, allowing a two-screen workflow such as Damage in the popup and Healing in the primary window.
+
+The popup and primary layout share analysis controls but own their panel configuration independently:
+
+- Encounter, player, enemy, Sync Mode, and time-range changes update both windows.
+- Each window has its own preset tabs and can switch among Summary, Damage, Healing, and the other presets without changing the other window.
+- Panel type, option, and filter changes remain local to the window where they were made.
+- Closing the popup with the native window close button removes only the secondary layout.
+- Selecting **Pop out layout** again while it is open focuses the existing popup.
+- The popup grid is wrapped with `PortalContainerProvider`, so panel breakouts, menus, and hover overlays stay in the correct window.
+- Individual panels may still be popped into another window from either layout.
 
 ## Adding a New Panel
 

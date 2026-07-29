@@ -6,17 +6,32 @@ export const PANEL_POPUP_FEATURES = [
   "scrollbars=yes",
 ].join(",");
 
+export const LAYOUT_POPUP_FEATURES = [
+  "popup=yes",
+  "width=1400",
+  "height=900",
+  "resizable=yes",
+  "scrollbars=yes",
+].join(",");
+
 export interface PanelPopup {
   window: Window;
   container: HTMLElement;
 }
+
+export type LayoutPopup = PanelPopup;
 
 export function panelPopupName(panelId: string): string {
   const safePanelId = panelId.replace(/[^a-zA-Z0-9_-]/g, "-");
   return `chronicle-panel-${safePanelId}`;
 }
 
-function copyStyles(source: Document, target: Document): void {
+function copyStyles(
+  source: Document,
+  target: Document,
+  rootId: string,
+  bodyOverflow: "hidden" | "auto",
+): void {
   const base = target.createElement("base");
   base.href = source.baseURI;
   target.head.appendChild(base);
@@ -32,12 +47,13 @@ function copyStyles(source: Document, target: Document): void {
 
   const popupStyles = target.createElement("style");
   popupStyles.textContent = `
-    html, body, #chronicle-panel-popup-root {
+    html, body, #${rootId} {
       width: 100%;
       height: 100%;
+      min-height: 100%;
       margin: 0;
     }
-    body { overflow: hidden; }
+    body { overflow: ${bodyOverflow}; }
   `;
   target.head.appendChild(popupStyles);
 }
@@ -56,28 +72,57 @@ export function syncPopupAppearance(source: Document, target: Document): void {
   }
 }
 
-export function openPanelPopup(
+function openPopup(
   ownerWindow: Window,
-  panelId: string,
+  name: string,
   title: string,
+  features: string,
+  rootId: string,
+  bodyOverflow: "hidden" | "auto",
 ): PanelPopup | null {
-  const popupWindow = ownerWindow.open(
-    "",
-    panelPopupName(panelId),
-    PANEL_POPUP_FEATURES,
-  );
+  const popupWindow = ownerWindow.open("", name, features);
   if (!popupWindow) return null;
 
   const popupDocument = popupWindow.document;
   popupDocument.head.replaceChildren();
   popupDocument.body.replaceChildren();
-  copyStyles(ownerWindow.document, popupDocument);
+  copyStyles(ownerWindow.document, popupDocument, rootId, bodyOverflow);
   syncPopupAppearance(ownerWindow.document, popupDocument);
   popupDocument.title = title;
 
   const container = popupDocument.createElement("div");
-  container.id = "chronicle-panel-popup-root";
+  container.id = rootId;
   popupDocument.body.appendChild(container);
 
   return { window: popupWindow, container };
+}
+
+export function openPanelPopup(
+  ownerWindow: Window,
+  panelId: string,
+  title: string,
+): PanelPopup | null {
+  return openPopup(
+    ownerWindow,
+    panelPopupName(panelId),
+    title,
+    PANEL_POPUP_FEATURES,
+    "chronicle-panel-popup-root",
+    "hidden",
+  );
+}
+
+export function openLayoutPopup(
+  ownerWindow: Window,
+  instanceId: string,
+  title: string,
+): LayoutPopup | null {
+  return openPopup(
+    ownerWindow,
+    `chronicle-layout-${instanceId}`,
+    title,
+    LAYOUT_POPUP_FEATURES,
+    "chronicle-layout-popup-root",
+    "auto",
+  );
 }

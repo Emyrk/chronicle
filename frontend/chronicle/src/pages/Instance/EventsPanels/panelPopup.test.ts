@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { PANEL_POPUP_FEATURES, panelPopupName } from "./panelPopup";
+import { LAYOUT_POPUP_FEATURES, PANEL_POPUP_FEATURES, panelPopupName } from "./panelPopup";
 
 describe("panelPopupName", () => {
   it("creates a stable window name for a panel", () => {
@@ -18,5 +18,14 @@ describe("PANEL_POPUP_FEATURES", () => {
     expect(PANEL_POPUP_FEATURES).toContain("width=900");
     expect(PANEL_POPUP_FEATURES).toContain("height=650");
     expect(PANEL_POPUP_FEATURES).toContain("resizable=yes");
+  });
+});
+
+describe("LAYOUT_POPUP_FEATURES", () => {
+  it("requests a larger resizable window for a complete grid", () => {
+    expect(LAYOUT_POPUP_FEATURES).toContain("popup=yes");
+    expect(LAYOUT_POPUP_FEATURES).toContain("width=1400");
+    expect(LAYOUT_POPUP_FEATURES).toContain("height=900");
+    expect(LAYOUT_POPUP_FEATURES).toContain("resizable=yes");
   });
 });

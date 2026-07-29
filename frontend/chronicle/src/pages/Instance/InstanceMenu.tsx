@@ -1,4 +1,4 @@
-import { Menu, FileText, Copy, Upload, Download, RotateCcw, LayoutGrid, Clock, Share2, Unlink } from "lucide-react";
+import { Menu, FileText, Copy, Upload, Download, RotateCcw, LayoutGrid, Clock, Share2, Unlink, ExternalLink } from "lucide-react";
 import { toast } from "sonner";
 import { Link } from "react-router-dom";
 import { Button } from "@/components/ui/button";
@@ -13,6 +13,8 @@ import {
 interface InstanceMenuProps {
   onImportLayout?: () => void;
   onExportLayout?: () => void;
+  onPopOutLayout?: () => void;
+  layoutPoppedOut?: boolean;
   onResetView?: () => void;
   onOpenTimeRange?: () => void;
   instanceId: string;
@@ -35,6 +37,8 @@ interface InstanceMenuProps {
 export function InstanceMenu({
   onImportLayout,
   onExportLayout,
+  onPopOutLayout,
+  layoutPoppedOut = false,
   onResetView,
   onOpenTimeRange,
   instanceId,
@@ -120,6 +124,12 @@ export function InstanceMenu({
           <DropdownMenuItem onClick={onExportLayout}>
             <Download className="h-4 w-4 mr-2" />
             Export Layout
+          </DropdownMenuItem>
+        )}
+        {onPopOutLayout && (
+          <DropdownMenuItem onClick={onPopOutLayout}>
+            <ExternalLink className="h-4 w-4 mr-2" />
+            {layoutPoppedOut ? "Focus popped-out layout" : "Pop out layout"}
           </DropdownMenuItem>
         )}
 
