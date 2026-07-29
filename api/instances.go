@@ -51,6 +51,7 @@ func (api *API) SupportedInstances(w http.ResponseWriter, r *http.Request) {
 			Comment:   d.Comment,
 			Fallback:  d.Fallback,
 			ZoneNames: d.ZoneNames,
+			BossCount: d.BossCount,
 			Bosses:    bosses,
 			Trash:     trash,
 		}

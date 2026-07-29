@@ -19,6 +19,10 @@ type InstanceFactory func(ctx context.Context, logger *slog.Logger, db *unitdb.U
 
 // Entry holds metadata and a factory for a single registered instance.
 type Entry struct {
+	// commonFactory preserves the source factory so registration can resolve
+	// flavor-dependent metadata against the registry's flavor.
+	commonFactory *instances.CommonFactory
+
 	// Name is the instance display name (e.g. "Deadmines").
 	Name string
 	// Comment is an optional note (e.g. "not fully implemented").
@@ -61,6 +65,7 @@ func FromFlavoredFactory(flavor database.WoWFlavor, f *instances.CommonFactory) 
 	}
 
 	entry := Entry{
+		commonFactory:  f,
 		Name:           f.Name,
 		MultiZone:      f.MultiZone,
 		Factory:        wrap(f.New),
@@ -148,6 +153,11 @@ func (r *Registry) SetFallback(fb *Registry) {
 
 // RegisterEntry adds an entry with full metadata to the registry.
 func (r *Registry) RegisterEntry(e Entry) {
+	if e.commonFactory != nil {
+		comment := e.Comment
+		e = FromFlavoredFactory(r.flavor, e.commonFactory)
+		e.Comment = comment
+	}
 	if _, exists := r.entries[e.Name]; exists {
 		panic(fmt.Sprintf("instance factory named %s already exists", e.Name))
 	}
@@ -265,8 +275,44 @@ type InstanceDetail struct {
 	Comment   string
 	Fallback  bool
 	ZoneNames []string
+	BossCount *int
 	Bosses    []InstanceDetailUnit
 	Trash     []InstanceDetailUnit
+}
+
+// speedrunBossCount returns the number of distinct boss encounters required by
+// the speedrun rules. Hostile encounter names collapse multi-unit encounters,
+// while the requirement name covers dynamically named encounters.
+func speedrunBossCount(entry *Entry) *int {
+	if entry.SpeedrunRules == nil {
+		return nil
+	}
+
+	encounters := make(map[string]struct{})
+	for _, requirement := range entry.SpeedrunRules.Requirements {
+		if requirement.Category != rankings.SpeedrunCategoryBosses {
+			continue
+		}
+
+		matchedEncounter := false
+		for _, entryID := range requirement.EntryIDs {
+			identity, ok := entry.HostileEntries[entryID]
+			if !ok || !identity.Boss || identity.EncounterName == "" {
+				continue
+			}
+			encounters[identity.EncounterName] = struct{}{}
+			matchedEncounter = true
+		}
+		if !matchedEncounter {
+			encounters[requirement.Name] = struct{}{}
+		}
+	}
+
+	if len(encounters) == 0 {
+		return nil
+	}
+	count := len(encounters)
+	return &count
 }
 
 // AllInstanceDetails returns enriched metadata for every registered instance,
@@ -302,6 +348,7 @@ func (r *Registry) AllInstanceDetails() []InstanceDetail {
 				Comment:   entry.Comment,
 				Fallback:  fallback,
 				ZoneNames: entry.ZoneNames,
+				BossCount: speedrunBossCount(entry),
 				Bosses:    bosses,
 				Trash:     trash,
 			})

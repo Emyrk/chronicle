@@ -12,6 +12,7 @@ type SupportedInstance struct {
 	Comment   string                  `json:"comment,omitempty"`
 	Fallback  bool                    `json:"fallback,omitempty"`
 	ZoneNames []string                `json:"zone_names,omitempty"`
+	BossCount *int                    `json:"boss_count,omitempty"`
 	Bosses    []SupportedInstanceUnit `json:"bosses,omitempty"`
 	Trash     []SupportedInstanceUnit `json:"trash,omitempty"`
 }
