@@ -78,16 +78,44 @@ func advanceOne(t *testing.T, p *Parser) messages.Message {
 	return msgs[0]
 }
 
+func advanceNonUnitMessages(t *testing.T, p *Parser) []messages.Message {
+	t.Helper()
+	msgs, err := p.Advance(context.Background())
+	require.NoError(t, err)
+
+	result := make([]messages.Message, 0, len(msgs))
+	for _, m := range msgs {
+		switch m.(type) {
+		case *messages.Unit, *messages.Combatant:
+			continue
+		}
+		result = append(result, m)
+	}
+	return result
+}
+
 func TestParseSpellAbsorbed_Melee(t *testing.T) {
 	t.Parallel()
 	// Melee variant: no damage spell prefix (PW:S absorbs a melee hit).
 	line := `1777166257180  SPELL_ABSORBED,0xF130002C36000022,"Ragefire Trogg",0x0,0x0000000000000001,"Chronicle",0x0,0x0000000000000001,"Chronicle",0x400,10901,"Power Word: Shield",0x2,11`
 
 	p := newTestParser(t, line)
-	msg := advanceOne(t, p)
+	msgs := advanceNonUnitMessages(t, p)
+	require.Len(t, msgs, 2)
 
-	sa, ok := msg.(*messages.Absorbed)
-	require.True(t, ok, "expected *messages.Absorbed, got %T", msg)
+	damage, ok := msgs[0].(*messages.Damage)
+	require.True(t, ok, "expected *messages.Damage, got %T", msgs[0])
+	assert.True(t, damage.IsSynthetic())
+	assert.Equal(t, int32(0), damage.Amount)
+	assert.Equal(t, types.HitTypeFullAbsorb, damage.HitType)
+	assert.Equal(t, types.PhysicalSchool, damage.School)
+	require.Len(t, damage.Trailer, 1)
+	require.NotNil(t, damage.Trailer[0].Amount)
+	assert.Equal(t, uint32(11), *damage.Trailer[0].Amount)
+	assert.Equal(t, types.HitTypeFullAbsorb, damage.Trailer[0].HitType)
+
+	sa, ok := msgs[1].(*messages.Absorbed)
+	require.True(t, ok, "expected *messages.Absorbed, got %T", msgs[1])
 
 	assert.Equal(t, guid.GUID(0xF130002C36000022), sa.Attacker)
 	assert.Equal(t, guid.GUID(0x0000000000000001), sa.Target)
@@ -105,10 +133,24 @@ func TestParseSpellAbsorbed_Spell(t *testing.T) {
 	line := `1777166257180  SPELL_ABSORBED,0xF130002C36000022,"Ragefire Trogg",0x0,0x0000000000000001,"Chronicle",0x0,12345,"Fireball",0x4,0x0000000000000001,"Chronicle",0x400,10901,"Power Word: Shield",0x2,50`
 
 	p := newTestParser(t, line)
-	msg := advanceOne(t, p)
+	msgs := advanceNonUnitMessages(t, p)
+	require.Len(t, msgs, 2)
 
-	sa, ok := msg.(*messages.Absorbed)
-	require.True(t, ok, "expected *messages.Absorbed, got %T", msg)
+	damage, ok := msgs[0].(*messages.Damage)
+	require.True(t, ok, "expected *messages.Damage, got %T", msgs[0])
+	assert.True(t, damage.IsSynthetic())
+	assert.Equal(t, int32(0), damage.Amount)
+	assert.Equal(t, types.HitTypeFullAbsorb, damage.HitType)
+	assert.Equal(t, types.School(0x4), damage.School)
+	require.NotNil(t, damage.SpellName)
+	assert.Equal(t, "Fireball", *damage.SpellName)
+	require.Len(t, damage.Trailer, 1)
+	require.NotNil(t, damage.Trailer[0].Amount)
+	assert.Equal(t, uint32(50), *damage.Trailer[0].Amount)
+	assert.Equal(t, types.HitTypeFullAbsorb, damage.Trailer[0].HitType)
+
+	sa, ok := msgs[1].(*messages.Absorbed)
+	require.True(t, ok, "expected *messages.Absorbed, got %T", msgs[1])
 
 	assert.Equal(t, guid.GUID(0xF130002C36000022), sa.Attacker)
 	assert.Equal(t, guid.GUID(0x0000000000000001), sa.Target)

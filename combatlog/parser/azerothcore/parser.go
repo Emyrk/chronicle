@@ -8,13 +8,13 @@ import (
 	"time"
 
 	"github.com/Emyrk/chronicle/combatlog/parser/azerothcore/synthetic"
+	"github.com/Emyrk/chronicle/combatlog/parser/common/messages"
 	"github.com/Emyrk/chronicle/combatlog/parser/types"
 	"github.com/Emyrk/chronicle/combatlog/parser/types/combatant"
 	"github.com/Emyrk/chronicle/combatlog/parser/types/realm"
 	"github.com/Emyrk/chronicle/combatlog/parser/types/unitinfo"
 	"github.com/Emyrk/chronicle/combatlog/parser/types/zone"
 	parservanilla "github.com/Emyrk/chronicle/combatlog/parser/vanilla"
-	"github.com/Emyrk/chronicle/combatlog/parser/common/messages"
 	"github.com/Emyrk/chronicle/combatlog/parser/wotlk"
 	"github.com/Emyrk/chronicle/database/gamedb"
 	"github.com/Emyrk/chronicle/database/gamedb/chrondbc"
@@ -440,11 +440,15 @@ func (p *Parser) parseSpellAbsorbed(ts time.Time, m *wotlk.Matched, _ string) ([
 
 	// Variant detection: 10 remaining = spell, 7 remaining = melee.
 	var dmgSpell *chrondbc.Spell
+	dmgSpellName := "Auto Attack"
+	dmgSchool := types.PhysicalSchool
 	if m.Remain() >= 10 {
 		dmgSpellID := m.Int32()
-		_ = m.String() // dmgSpellName
-		_ = m.School() // dmgSpellSchool
+		dmgSpellName = m.String()
+		dmgSchool = m.School()
 		dmgSpell = p.lookupSpell(chrondbc.SpellID(dmgSpellID))
+	} else {
+		dmgSpell = p.lookupSpell(chrondbc.SpellIDAutoAttack)
 	}
 
 	// Absorb caster (unit triplet).
@@ -466,8 +470,23 @@ func (p *Parser) parseSpellAbsorbed(ts time.Time, m *wotlk.Matched, _ string) ([
 	}
 
 	absorbSpell := p.lookupSpell(chrondbc.SpellID(absorbSpellID))
+	absorbAmount := uint32(amount)
 
 	return []messages.Message{
+		&messages.Damage{
+			MessageBase: messages.Base(ts, messages.WithSynthetic()),
+			SpellName:   ptr.Ref(dmgSpellName),
+			SpellData:   dmgSpell,
+			Caster:      ptr.Ref(srcGUID),
+			Target:      dstGUID,
+			HitType:     types.HitTypeFullAbsorb,
+			Amount:      0,
+			School:      dmgSchool,
+			Trailer: types.Trailer{{
+				Amount:  &absorbAmount,
+				HitType: types.HitTypeFullAbsorb,
+			}},
+		},
 		&messages.Absorbed{
 			MessageBase:  messages.Base(ts),
 			Attacker:     srcGUID,
