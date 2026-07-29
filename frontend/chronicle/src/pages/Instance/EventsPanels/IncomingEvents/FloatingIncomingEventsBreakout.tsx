@@ -137,7 +137,7 @@ export function FloatingIncomingEventsBreakout({
         onMouseDown={handleResizeMouseDown}
         onDoubleClick={() => setBodyHeight(DEFAULT_BREAKOUT_BODY_HEIGHT)}
         title="Drag to resize; double-click to reset"
-        aria-label="Resize death recap height"
+        aria-label="Resize event breakout height"
         data-breakout-resize-handle
       >
         <span className="h-px w-10 rounded-full bg-border transition-colors group-hover:bg-muted-foreground" />

@@ -643,6 +643,7 @@ const PANEL_CODES: Record<PanelType, string> = {
   // Charts
   timeline: 'tl',
   rotations: 'rot',
+  status: 'st',
   possession: 'pos',
   unit_lookup: 'ul',
   equipment: 'eq',

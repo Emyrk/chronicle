@@ -40,6 +40,7 @@ interface IncomingEventsBreakoutProps {
   sharedFightOffsetMilli: number | null;
   onSharedFightOffsetChange: (fightOffsetMilli: number | null) => void;
   onClose: () => void;
+  windowSuffix?: string;
 }
 
 function formatRelativeTime(milli: number): string {
@@ -98,6 +99,7 @@ export function IncomingEventsBreakout({
   sharedFightOffsetMilli,
   onSharedFightOffsetChange,
   onClose,
+  windowSuffix = "seconds before death",
 }: IncomingEventsBreakoutProps) {
   const [collapsed, setCollapsed] = useState(false);
   const viewportRef = useRef<HTMLDivElement>(null);
@@ -227,7 +229,7 @@ export function IncomingEventsBreakout({
             className="ml-1 w-12 rounded border border-white/10 bg-[#191a1d] px-1.5 py-0.5 font-mono text-[9px] text-foreground"
             aria-label="Incoming events history in seconds"
           />
-          <span className="text-[9px] text-muted-foreground">seconds before death</span>
+          <span className="text-[9px] text-muted-foreground">{windowSuffix}</span>
         </div>
       )}
 

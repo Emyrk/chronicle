@@ -5,25 +5,12 @@
  * rather than having its own processor.
  */
 
-import { useMemo } from "react";
 import { Shield, Heart, Swords, Loader2 } from "lucide-react";
 import type { PanelContext } from "../types";
-import { 
-  type PlayerRoleData,
-  type RoleSummary,
-  type RoleDetectionDebug,
-  type DamageTakenState,
-  type DamageDoneState,
-  type UnifiedHealingResult,
-  inferRoles, 
-  getRoleSummary 
-} from "../processors";
-import { usePanelAggregation } from "../usePanelAggregation";
-import { createDamageTakenPanel } from "../DamageTaken/DamageTaken";
-import { createHealingDonePanel } from "../HealingDone/HealingDone";
-import { createDamageDonePanel } from "../DamageDone/DamageDone";
+import { type PlayerRoleData } from "../processors";
 import { formatNumber } from "@/lib/format";
 import { ScrollArea } from "@/components/ui/ScrollArea/ScrollArea";
+import { useInferredRoles } from "./useInferredRoles";
 
 // WoW class colors (same as PlayerMetricChart)
 const CLASS_COLORS: Record<string, string> = {
@@ -240,173 +227,8 @@ export interface RolesContentProps {
   context: PanelContext;
 }
 
-interface RoleInferenceResult {
-  summary: RoleSummary;
-  debug: RoleDetectionDebug;
-}
-
 export const RolesContent = ({ context }: RolesContentProps) => {
-  // Role inference always uses complete encounter data. Clone the source panels with
-  // full-data Sync behavior so the moving Sync cursor cannot rebuild these results.
-  const damageTakenPanel = useMemo(
-    () => ({ ...createDamageTakenPanel("players"), syncDataMode: "full" as const }),
-    [],
-  );
-  const healingDonePanel = useMemo(
-    () => ({ ...createHealingDonePanel("players"), syncDataMode: "full" as const }),
-    [],
-  );
-  const damageDonePanel = useMemo(
-    () => ({ ...createDamageDonePanel("players"), syncDataMode: "full" as const }),
-    [],
-  );
-  
-  // Create a stable context that doesn't change when player/enemy selection changes
-  // This prevents reprocessing - only encounter changes should trigger reprocess
-  // Roles are computed across all players/enemies for the selected encounters
-  // Use string keys for stable comparison since arrays/objects are compared by reference
-  const encounterIdsKey = context.selectedEncounterIds.slice().sort().join(',');
-  const instanceId = context.instance.id;
-  
-  const stableContext = useMemo<PanelContext>(() => ({
-    instance: context.instance,
-    selectedEncounterIds: context.selectedEncounterIds,
-    entitySelection: {
-      enemyIds: new Set<string>(), // Always empty - enemy selection shouldn't affect processing
-      playerIds: new Set<string>(), // Always empty - player selection shouldn't affect processing
-    },
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }), [instanceId, encounterIdsKey]);
-  
-  const damageTakenAgg = usePanelAggregation<DamageTakenState>({
-    panel: damageTakenPanel,
-    context: stableContext,
-  });
-  
-  const healingDoneAgg = usePanelAggregation<UnifiedHealingResult>({
-    panel: healingDonePanel,
-    context: stableContext,
-  });
-  
-  const damageDoneAgg = usePanelAggregation<DamageDoneState>({
-    panel: damageDonePanel,
-    context: stableContext,
-  });
-
-  const loading = damageTakenAgg.loading || healingDoneAgg.loading || damageDoneAgg.loading;
-  const processing = damageTakenAgg.processing || healingDoneAgg.processing || damageDoneAgg.processing;
-  const error = damageTakenAgg.error || healingDoneAgg.error || damageDoneAgg.error;
-
-  // Aggregate damage taken from the processor result
-  const damageTakenMap = useMemo(() => {
-    const result = new Map<string, number>();
-    if (!damageTakenAgg.result) return result;
-    
-    for (const encounterId of context.selectedEncounterIds) {
-      const encounterData = damageTakenAgg.result.EncounterDamage.get(encounterId);
-      if (!encounterData) continue;
-      
-      for (const [playerId, data] of encounterData) {
-        // Sum damage from all sources
-        let totalDamage = 0;
-        for (const amount of data.source.values()) {
-          totalDamage += amount;
-        }
-        result.set(playerId, (result.get(playerId) || 0) + totalDamage);
-      }
-    }
-    return result;
-  }, [damageTakenAgg.result, context.selectedEncounterIds]);
-
-  // Aggregate healing done (including absorbs) from the processor result.
-  // Absorbs must be included so that absorb-heavy healers (e.g. Disc Priest)
-  // are correctly detected as healers by inferRoles().
-  const healingDoneMap = useMemo(() => {
-    const result = new Map<string, number>();
-    if (!healingDoneAgg.result) return result;
-    
-    for (const encounterId of context.selectedEncounterIds) {
-      const encounterData = healingDoneAgg.result.EncounterHealingByHealer.get(encounterId);
-      if (!encounterData) continue;
-      
-      for (const [playerId, data] of encounterData) {
-        result.set(playerId, (result.get(playerId) || 0) + data.effectiveTotal);
-      }
-    }
-
-    // Add absorb totals per player (tracked globally, not per-encounter)
-    for (const [playerId, abilityMap] of healingDoneAgg.result.HealerByAbilityAbsorbed) {
-      let totalAbsorbed = 0;
-      for (const amount of abilityMap.values()) {
-        totalAbsorbed += amount;
-      }
-      if (totalAbsorbed > 0) {
-        result.set(playerId, (result.get(playerId) || 0) + totalAbsorbed);
-      }
-    }
-
-    return result;
-  }, [healingDoneAgg.result, context.selectedEncounterIds]);
-
-  // Aggregate damage done from the processor result
-  const damageDoneMap = useMemo(() => {
-    const result = new Map<string, number>();
-    if (!damageDoneAgg.result) return result;
-    
-    for (const encounterId of context.selectedEncounterIds) {
-      const encounterData = damageDoneAgg.result.EncounterDamage.get(encounterId);
-      if (!encounterData) continue;
-      
-      for (const [playerId, data] of encounterData) {
-        // Sum damage to all targets
-        let totalDamage = 0;
-        for (const amount of data.target.values()) {
-          totalDamage += amount;
-        }
-        result.set(playerId, (result.get(playerId) || 0) + totalDamage);
-      }
-    }
-    return result;
-  }, [damageDoneAgg.result, context.selectedEncounterIds]);
-
-  // Infer roles from aggregated data
-  const { summary: roleSummary, debug } = useMemo((): RoleInferenceResult => {
-    const emptyDebug: RoleDetectionDebug = {
-      tankZThreshold: 0,
-      healerZThreshold: 0,
-      lowDpsZThreshold: 0,
-      healerHighZThreshold: 0,
-      meanDamageTaken: 0,
-      stdDevDamageTaken: 0,
-      meanHealingDone: 0,
-      stdDevHealingDone: 0,
-      meanDamageDone: 0,
-      stdDevDamageDone: 0,
-      tankCutoff: 0,
-      healerCutoff: 0,
-      lowDpsCutoff: 0,
-      healerHighCutoff: 0,
-    };
-    
-    if (damageTakenMap.size === 0 && healingDoneMap.size === 0 && damageDoneMap.size === 0) {
-      return { summary: { tanks: [], healers: [], dps: [] }, debug: emptyDebug };
-    }
-
-    // Build players map from context
-    const players: Record<string, { name: string; class: string }> = {};
-    for (const [guid, player] of Object.entries(context.instance.players || {})) {
-      players[guid] = { name: player.name, class: player.class };
-    }
-
-    const { roles, debug: inferDebug } = inferRoles(
-      damageTakenMap,
-      healingDoneMap,
-      damageDoneMap,
-      players
-    );
-
-    return { summary: getRoleSummary(roles), debug: inferDebug };
-  }, [damageTakenMap, healingDoneMap, damageDoneMap, context.instance.players]);
+  const { summary: roleSummary, debug, loading, processing, error } = useInferredRoles(context);
 
   // Compute totals for summary
   const totalPlayers = roleSummary.tanks.length + roleSummary.healers.length + roleSummary.dps.length;

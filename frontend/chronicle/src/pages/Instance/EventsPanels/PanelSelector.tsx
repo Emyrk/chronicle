@@ -36,6 +36,10 @@ const PANEL_CATEGORIES: PanelCategory[] = [
     items: ["healing_done", "healing_taken"],
   },
   {
+    label: "Replay",
+    items: ["status"],
+  },
+  {
     label: "Survivability",
     items: ["damage_taken", "enemy_damage_taken", "mitigation", "absorbed_damage", "resists"], // TODO: Add "avoidance" when spell school data is available
   },

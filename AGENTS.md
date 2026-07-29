@@ -394,6 +394,7 @@ Some paths are excluded from linting (see `.golangci.yml`):
 - **Indentation**: 2 spaces (see `.editorconfig`), except Makefile uses tabs
 - **Go**: Standard `gofmt` formatting; uses `goimports`
 - **Frontend**: ESLint configured in `frontend/chronicle/eslint.config.js`
+- **Scrollable UI**: Apply the shared `styled-scrollbar` class to user-facing scroll containers instead of leaving browser-default scrollbars.
 
 ## Commit and Pull Request Guidelines
 

@@ -24,6 +24,7 @@ import { auraUptimeProcessor } from "../AuraUptime/auraUptime.processor";
 import { comparisonProcessor } from "../ComparisonPanel/comparison.processor";
 import { timelineProcessor } from "../Timeline/timeline.processor";
 import { rotationsProcessor } from "../Rotations/rotations.processor";
+import { statusProcessor } from "../Status/status.processor";
 import { possessionProcessor } from "../PossessionPanel/possession.processor";
 import { unitLookupProcessor } from "../UnitLookup/unitLookup.processor";
 import { dispelProcessor } from "../Dispel/dispel.processor";
@@ -58,6 +59,7 @@ export { auraUptimeProcessor } from "../AuraUptime/auraUptime.processor";
 export { comparisonProcessor } from "../ComparisonPanel/comparison.processor";
 export { timelineProcessor } from "../Timeline/timeline.processor";
 export { rotationsProcessor } from "../Rotations/rotations.processor";
+export { statusProcessor } from "../Status/status.processor";
 export { possessionProcessor } from "../PossessionPanel/possession.processor";
 export { unitLookupProcessor } from "../UnitLookup/unitLookup.processor";
 export { dispelProcessor } from "../Dispel/dispel.processor";
@@ -88,6 +90,7 @@ export type { AuraUptimeResult, AuraData, TargetUptimeData, UptimeSegment } from
 export type { TimelineResult, TimelineSeriesMeta } from "../Timeline/timeline.processor";
 export type { TimelineSeriesConfig, AggregationType, TimelineSettings } from "../Timeline/timelineTypes";
 export type { RotationsResult, CastEntry, AuraSegment } from "../Rotations/rotations.processor";
+export type { StatusResult, StatusEncounter, StatusUnitTimeline, StatusTimelineEvent } from "../Status/status.processor";
 export type { DispelResult, DispelEntityData, DispelSpellData, DispelCategory, DispelLogEvent } from "../Dispel/dispel.processor";
 export type { InterruptResult, InterruptEntityData, InterruptSpellData, InterruptLogEvent } from "../Interrupt/interrupt.processor";
 export type { EquipmentResult, PlayerSnapshot } from "../Equipment/equipment.processor";
@@ -147,6 +150,8 @@ export const processorRegistry: Record<string, PanelProcessor<any, any>> = {
   comparison: comparisonProcessor,
   // Charts
   timeline: timelineProcessor,
+  // Replay
+  status: statusProcessor,
   // Rotations
   rotations: rotationsProcessor,
   // Possession timeline
