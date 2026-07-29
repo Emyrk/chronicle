@@ -163,8 +163,17 @@ export function GuildPageCanvas({
         const definition = getPanelDefinition(panel.panel_type);
         if (!definition) {
           return (
-            <div key={panel.id} className="bg-destructive/10 rounded-lg p-4">
-              Unknown panel type: {panel.panel_type}
+            <div key={panel.id} className="bg-destructive/10 rounded-lg p-4 flex items-center justify-between gap-2">
+              <span>Unknown panel type: {panel.panel_type}</span>
+              {isEditing && (
+                <button
+                  aria-label={`Delete unknown panel ${panel.panel_type}`}
+                  onClick={() => onPanelDelete?.(panel.id)}
+                  className="p-1 rounded hover:bg-destructive/20 text-destructive"
+                >
+                  <Trash2 className="h-4 w-4" />
+                </button>
+              )}
             </div>
           );
         }
