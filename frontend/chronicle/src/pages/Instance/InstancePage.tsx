@@ -8,6 +8,7 @@ import { DatasetProvider } from "@/hooks/useDatasetId";
 import type { ActivityPeriod, InstancePlayer, InstanceUnit, WoWEncounterWithHostiles, KillType } from "@/api/typesGenerated";
 import { Card } from "@/components/ui/Card/Card";
 import { Button } from "@/components/ui/button";
+import { cn } from "@/lib/utils";
 import { InstancePageView } from "./InstancePageView";
 import { YouTubeOverlay } from "./YouTubeOverlay";
 import { SyncModeProvider, useSyncModeContext } from "./SyncModeContext";
@@ -229,6 +230,8 @@ function InstancePageInner({
   // When pinned to the top, the replay controls no longer occupy the action
   // bar's space, so the spellbook can show again.
   const [replayPosition] = useReplayPosition();
+  // One-shot jiggle to acknowledge the Replay button was clicked.
+  const [replayJiggle, setReplayJiggle] = useState(false);
   
   // Update sync mode encounter bounds when selection changes
   useEffect(() => {
@@ -260,8 +263,12 @@ function InstancePageInner({
               <Button
                 variant={showReplayPanel || syncEnabled ? "default" : "outline"}
                 size="sm"
-                className="gap-1.5"
-                onClick={() => setShowReplayPanel((prev) => !prev)}
+                className={cn("gap-1.5", replayJiggle && "animate-button-jiggle")}
+                onClick={() => {
+                  setShowReplayPanel((prev) => !prev);
+                  setReplayJiggle(true);
+                }}
+                onAnimationEnd={() => setReplayJiggle(false)}
               >
                 <Timer className="h-4 w-4" />
                 Replay

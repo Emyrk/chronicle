@@ -122,6 +122,29 @@
   animation: replay-pop 0.55s cubic-bezier(0.22, 1, 0.36, 1) both;
 }
 
+/* Quick jiggle to acknowledge a button press (e.g. toggling replay) */
+@keyframes button-jiggle {
+  0%, 100% {
+    transform: rotate(0deg) scale(1);
+  }
+  20% {
+    transform: rotate(-6deg) scale(1.08);
+  }
+  40% {
+    transform: rotate(5deg) scale(1.06);
+  }
+  60% {
+    transform: rotate(-3deg) scale(1.03);
+  }
+  80% {
+    transform: rotate(2deg) scale(1.01);
+  }
+}
+
+.animate-button-jiggle {
+  animation: button-jiggle 0.4s ease-in-out;
+}
+
 .magic-particles .particle {
   position: absolute;
   width: var(--size, 3px);
