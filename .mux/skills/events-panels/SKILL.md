@@ -6,6 +6,8 @@ description: |
   Key architecture: processors are worker-safe pure TypeScript (NO React), panels are React wrappers.
   Processing runs in a Web Worker pool to keep UI responsive.
   Includes Focus feature: right-click player rows to drill into per-ability breakdown (URL-persisted).
+  Covers Sync mode aggregation policy (syncDataMode incremental vs full) and reusable
+  floating breakout components (IncomingEventsBreakout, RelativeHealthBar, shared fight-offset cursor).
 ---
 
 # Events Panels
@@ -306,6 +308,48 @@ import { accumulateAbilityBreakout, type DamageAbilityBreakout } from "../proces
 // In processEvent:
 accumulateAbilityBreakout(state.ByAbility, entityId, abilityName, amount, hitType);
 ```
+
+## Sync Mode & syncDataMode
+
+Sync mode replays an encounter against a moving absolute timestamp
+(`SyncModeContext.currentTimestamp`). By default, panels switch from worker
+processing to **main-thread incremental processing** that only aggregates
+events up to the Sync cursor — metrics grow as playback advances.
+
+Panels choose their policy via `PanelDefinition.syncDataMode`:
+
+| Mode | Aggregation during Sync | Duration during Sync | Use for |
+|------|------------------------|----------------------|---------|
+| `"incremental"` (default) | Main thread, up to the cursor | Elapsed playhead time | Metrics that should grow with playback (DPS, healing) |
+| `"full"` | Web Worker, complete encounter | Full encounter duration | Whole-encounter views (Death Log) where Sync is only a presentation cursor |
+
+Full-data panels read Sync timing themselves for presentation (cursors, playheads,
+row muting) via `useSyncModeContextOptional()`. Example: Death Log declares
+`syncDataMode: "full"` and mutes deaths ahead of the playhead with
+`isDeathAheadOfSyncCursor()` (`Deaths/deathLogSync.ts`) instead of changing its data.
+
+Key consequences of `"full"`:
+- The panel works when selected mid-playback (no incremental state to rebuild).
+- Applied filters keep running in the worker; only filter editing pauses during Sync.
+- `usesIncrementalSyncProcessing()` in `usePanelAggregation.ts` is the gate.
+
+## Reusable Breakout Components
+
+Floating per-player breakout boxes share these building blocks:
+
+| Component | Path | Purpose |
+|-----------|------|---------|
+| `BreakoutIdentity` | `components/ui/BreakoutPanel/` | Compact colored-dot + name + class header treatment |
+| `RelativeHealthBar` | `components/ui/RelativeHealthBar/` | Message-driven relative health/deficit bar (damage/healing/prevented messages) |
+| `IncomingEventsBreakout` | `EventsPanels/IncomingEvents/` | Incoming-event timeline with shared fight-offset cursor, configurable window |
+| `FloatingIncomingEventsBreakout` | `EventsPanels/IncomingEvents/` | Draggable, resizable portal wrapper (`data-drag-handle`, mobile modal) |
+| `EventTimelinePreview` | `EventsPanels/IncomingEvents/` | Narrow scrub gutter with colored event ticks |
+
+Shared-cursor rule: breakouts synchronize by **fight offset** (encounter time), not
+offset-to-anchor. Each box converts the shared offset to its local anchor-relative
+cursor with `relativeCursorForFightOffset()` and clamps to its window edges
+(`incomingEventsTimeline.ts`). During Sync, `syncCursorForDeath()` drives the cursor
+and manual scrubbing is disabled.
 
 ## Caching Behavior
 

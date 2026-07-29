@@ -53,6 +53,13 @@ processor.processEvent() — only receives matching events
 
 All paths relative to `frontend/chronicle/src/pages/Instance/EventsPanels/`.
 
+## Filters During Sync Mode
+
+Applied filters keep running while Sync mode is active — incremental main-thread
+processing and worker processing (for `syncDataMode: "full"` panels) both compile
+and apply them. Only **filter editing** is paused while Sync runs
+(`filteringSupported` in `EventsPanel.tsx` requires `!isSyncActive`).
+
 ## Core Types
 
 ```typescript
@@ -60,7 +67,8 @@ export type PanelFilterType =
   | "players" | "enemies"
   | "ability_name" | "ability_id"
   | "ability_school" | "ability_hittype"
-  | "source_type" | "target_type";
+  | "source_type" | "target_type"
+  | "time_range" | "event_value" | "event_type";
 
 export interface PanelFilter {
   type: PanelFilterType;
@@ -85,6 +93,22 @@ export type FilterPredicate = (event: ProcessorEvent, streamType?: string) => bo
 | `ability_hittype` | `string[]` toggles | Bitmask OR (hit/crit/miss/dodge/parry/etc) | `SegmentedToggle` |
 | `source_type` | Mixed options + custom | Entity classification (player/pet/enemy/object/custom) | `EntityTypeEditor` |
 | `target_type` | Mixed options + custom | Same as source_type | `EntityTypeEditor` |
+| `time_range` | `"start,end"` ms or `"controller"` | Global offset within range; `"controller"` resolves from TimeRangeContext | `TimeRangeEditor` |
+| `event_value` | `"<op>:<number>"` (e.g. `"!=:0"`, `">:1000"`) | Compares event amount; ops `>`, `>=`, `<`, `<=`, `=`, `!=` | `EventValueEditor` |
+| `event_type` | `string[]` toggles | Exact `event.type` match, OR'd | `SegmentedToggle` |
+
+### event_value semantics
+
+For **heal events**, `event_value` compares **effective healing** (`amount - overheal`),
+not the raw amount. A 500 heal that is 100% overheal has an event value of 0. This lets
+panels omit pure-overheal noise with a default like Death Log's:
+
+```typescript
+{ type: "event_value", value: "!=:0", applyTo: ["heal"] }
+```
+
+All other event types compare the raw `amount`. Events without an `amount` field never match.
+Empty or malformed values (e.g. `">:abc"`) compile to pass-through.
 
 ## Combinator Logic
 
