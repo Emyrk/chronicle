@@ -5,6 +5,14 @@ import { ImageDown, Lock, LockOpen, Share2 } from "lucide-react";
 import { toCanvas } from "html-to-image";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
+import {
+  DropdownMenu,
+  DropdownMenuCheckboxItem,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from "@/components/ui/DropdownMenu/DropdownMenu";
 import { iconUrl, talentBackgroundUrl } from "@/config/iconUrl";
 import { useIconBaseUrl } from "@/hooks/useDatasetId";
 import { useIsMobile } from "@/hooks/useIsMobile";
@@ -51,6 +59,7 @@ import {
   talentGridHeight,
   talentGridRows,
   talentRankTexts,
+  talentTabPoints,
   talentTooltipPosition,
   talentVisualState,
   totalTalentPoints,
@@ -677,7 +686,7 @@ function TalentTab({
   diff?: Record<number, TalentDiff> | null;
 }) {
   const iconBaseUrl = useIconBaseUrl();
-  const points = useMemo(() => tab.talents.reduce((sum, talent) => sum + (ranks[talent.id] ?? 0), 0), [tab.talents, ranks]);
+  const points = useMemo(() => talentTabPoints(tab, ranks), [tab, ranks]);
   const arrows = useMemo(() => prerequisiteArrows(tab.talents), [tab.talents]);
   const rows = useMemo(() => talentGridRows(tab.talents), [tab.talents]);
   const height = talentGridHeight(rows);
@@ -718,7 +727,7 @@ function TalentTab({
     <section id={mobile ? `talent-tree-${tab.id}` : undefined} className={cn(
       "talent-tree-card relative max-w-full self-start overflow-hidden rounded-lg border border-amber-400/20 bg-[radial-gradient(circle_at_top_left,rgba(20,184,166,0.14),transparent_32%),linear-gradient(180deg,rgba(120,83,38,0.16),rgba(9,9,11,0.58))] shadow-2xl shadow-black/30",
       compact ? "p-2" : mobile ? "scroll-mt-12 rounded-none border-x-0 px-0 py-3" : "p-4",
-    )} aria-label={`${tab.name} talent tree`}>
+    )} aria-label={`${tab.name} talent tree`} data-empty-talent-tree={points === 0 ? "true" : undefined}>
       {showBackground && backgroundUrl && (
         <img
           src={backgroundUrl}
@@ -1039,7 +1048,6 @@ export function TalentTreeViewer({
   useEffect(() => {
     if (allocations && allocations.length > 0) {
       // Backend-provided allocations are not capped at maxPoints (see initialRanks).
-      // eslint-disable-next-line react-hooks/set-state-in-effect -- legitimate prop→state sync; ranks are also mutated by user clicks
       setRanks(normalizeTalentRanks(tabTalentLists, allocationsToRanks(data.tabs, allocations)));
     } else {
       setRanks(normalizeTalentRanks(tabTalentLists, decodeTalentBuild(searchParams.get(TALENT_BUILD_PARAM), tabTalentLists), maxPoints));
@@ -1077,6 +1085,7 @@ export function TalentTreeViewer({
 
   const exportRef = useRef<HTMLDivElement>(null);
   const [exporting, setExporting] = useState(false);
+  const [hideEmptyTrees, setHideEmptyTrees] = useState(false);
   async function exportAsPng() {
     const node = exportRef.current;
     if (!node || exporting) return;
@@ -1094,6 +1103,9 @@ export function TalentTreeViewer({
       const canvas = await toCanvas(node, {
         pixelRatio,
         backgroundColor: "#09090b",
+        filter: hideEmptyTrees
+          ? (element) => !(element instanceof HTMLElement && element.dataset.emptyTalentTree === "true")
+          : undefined,
         fetchRequestInit: { cache: "no-cache" },
         // Transparent 1x1 pixel so a single unloadable icon doesn't abort
         // the whole export.
@@ -1230,16 +1242,33 @@ export function TalentTreeViewer({
                     <button type="button" className="rounded-md border border-primary/50 bg-primary/15 px-2.5 py-1 text-sm font-bold text-white hover:bg-primary/25" onClick={() => void copyBuildLink()}>
                       Copy link
                     </button>
-                    <button
-                      type="button"
-                      disabled={exporting}
-                      title="Download the talent trees as a PNG image"
-                      className="inline-flex items-center gap-1.5 rounded-md border border-primary/50 bg-primary/15 px-2.5 py-1 text-sm font-bold text-white hover:bg-primary/25 disabled:cursor-wait disabled:opacity-60"
-                      onClick={() => void exportAsPng()}
-                    >
-                      <ImageDown className="h-3.5 w-3.5" />
-                      {exporting ? "Exporting…" : "Export PNG"}
-                    </button>
+                    <DropdownMenu>
+                      <DropdownMenuTrigger asChild>
+                        <button
+                          type="button"
+                          disabled={exporting}
+                          title="Export the talent trees as a PNG image"
+                          className="inline-flex items-center gap-1.5 rounded-md border border-primary/50 bg-primary/15 px-2.5 py-1 text-sm font-bold text-white hover:bg-primary/25 disabled:cursor-wait disabled:opacity-60"
+                        >
+                          <ImageDown className="h-3.5 w-3.5" />
+                          {exporting ? "Exporting…" : "Export PNG"}
+                        </button>
+                      </DropdownMenuTrigger>
+                      <DropdownMenuContent align="start" className="w-48">
+                        <DropdownMenuCheckboxItem
+                          checked={hideEmptyTrees}
+                          disabled={total === 0}
+                          onCheckedChange={(checked) => setHideEmptyTrees(checked === true)}
+                        >
+                          Hide empty trees
+                        </DropdownMenuCheckboxItem>
+                        <DropdownMenuSeparator />
+                        <DropdownMenuItem onSelect={() => void exportAsPng()}>
+                          <ImageDown className="h-4 w-4" />
+                          Download PNG
+                        </DropdownMenuItem>
+                      </DropdownMenuContent>
+                    </DropdownMenu>
                   </>
                 )}
                 <button

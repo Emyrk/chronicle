@@ -140,6 +140,10 @@ function spentTalentsStillValid(talents: TalentEntry[], ranks: TalentRanks) {
   return talents.every((talent) => (ranks[talent.id] ?? 0) === 0 || canUseTalent(talent, talents, ranks));
 }
 
+export function talentTabPoints(tab: Pick<TalentTabData, "talents">, ranks: TalentRanks) {
+  return tab.talents.reduce((sum, talent) => sum + (ranks[talent.id] ?? 0), 0);
+}
+
 export function totalTalentPoints(ranks: TalentRanks) {
   return Object.values(ranks).reduce((sum, rank) => sum + rank, 0);
 }
@@ -453,7 +457,7 @@ export function buildPointsSummary(build: string): string {
  * points are spent.
  */
 export function talentBuildExportName(tabs: TalentTabData[], ranks: TalentRanks, fallbackName: string) {
-  const pointsPerTab = tabs.map((tab) => tab.talents.reduce((sum, talent) => sum + (ranks[talent.id] ?? 0), 0));
+  const pointsPerTab = tabs.map((tab) => talentTabPoints(tab, ranks));
   const maxPoints = Math.max(...pointsPerTab, 0);
   const specTab = maxPoints > 0 ? tabs[pointsPerTab.indexOf(maxPoints)] : undefined;
   const spec = (specTab?.name || fallbackName).replace(/\s+/g, "-");

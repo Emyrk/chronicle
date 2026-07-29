@@ -28,6 +28,7 @@ import {
   searchParamsWithTalentPopularity,
   talentBuildExportName,
   talentPopularitySelection,
+  talentTabPoints,
   talentTooltipPosition,
   totalTalentPoints,
   updateTalentRank,
@@ -167,6 +168,20 @@ describe("TalentTreeViewer popularity URL state", () => {
     expect(talentPopularitySelection(new URLSearchParams("pop=molten-core.fire"))).toBeNull();
     expect(talentPopularitySelection(new URLSearchParams("pop=molten-core.fire.damage"))).toBeNull();
     expect(talentPopularitySelection(new URLSearchParams("pop=molten-core.fire.dps.extra"))).toBeNull();
+  });
+});
+
+describe("TalentTreeViewer tree point totals", () => {
+  it("identifies empty and populated trees from their talent ranks", () => {
+    const tab = {
+      talents: [
+        talent({ id: 70, tierID: 0, columnIndex: 0, maxRank: 5 }),
+        talent({ id: 71, tierID: 0, columnIndex: 1, maxRank: 5 }),
+      ],
+    };
+
+    expect(talentTabPoints(tab, {})).toBe(0);
+    expect(talentTabPoints(tab, { 70: 3, 71: 2, 999: 5 })).toBe(5);
   });
 });
 
