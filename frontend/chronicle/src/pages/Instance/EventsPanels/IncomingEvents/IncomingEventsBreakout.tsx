@@ -2,6 +2,8 @@ import { useEffect, useMemo, useRef, useState, type MouseEvent } from "react";
 import { ChevronDown, ChevronUp, HeartPulse, Shield, Swords, X } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { SpellIdTooltip } from "@/components/ui/SpellIdTooltip/SpellIdTooltip";
+import { EventTimelinePreview } from "./EventTimelinePreview";
+import type { EventTimelinePreviewEvent } from "./eventTimelinePreview";
 import { RelativeHealthBar } from "@/components/ui/RelativeHealthBar/RelativeHealthBar";
 import { calculateRelativeHealth } from "@/components/ui/RelativeHealthBar/relativeHealth";
 import { useSyncModeContextOptional } from "../../SyncModeContext";
@@ -72,6 +74,21 @@ export function IncomingEventsBreakout({
   );
   const relativeTimes = useMemo(
     () => rows.map((event) => relativeEventTime(event.offsetMilli, anchorOffsetMilli)),
+    [rows, anchorOffsetMilli],
+  );
+
+  const previewEvents = useMemo<EventTimelinePreviewEvent[]>(
+    () => rows.map((entry) => ({
+      id: `${entry.eventIndex}:${entry.offsetMilli}:${entry.type}`,
+      relativeMilli: relativeEventTime(entry.offsetMilli, anchorOffsetMilli),
+      kind: entry.type === "damage"
+        ? "damage"
+        : entry.type === "absorbed"
+          ? "prevented"
+          : entry.type === "heal" || entry.type === "resource_change"
+            ? "healing"
+            : "other",
+    })),
     [rows, anchorOffsetMilli],
   );
 
@@ -218,10 +235,13 @@ export function IncomingEventsBreakout({
             <span>Time</span><span>Source</span><span>Ability</span><span>Amount</span>
           </div>
           <div
+            className="flex max-h-52"
+            onMouseLeave={() => { if (!sync?.enabled) onSharedFightOffsetChange(null); }}
+          >
+          <div
             ref={viewportRef}
             onMouseMove={handleMove}
-            onMouseLeave={() => { if (!sync?.enabled) onSharedFightOffsetChange(null); }}
-            className="relative max-h-52 overflow-y-auto styled-scrollbar"
+            className="relative min-w-0 flex-1 overflow-y-auto styled-scrollbar"
           >
             <div className="relative">
               {rows.map((entry) => {
@@ -254,6 +274,16 @@ export function IncomingEventsBreakout({
                 </div>
               )}
             </div>
+          </div>
+          <EventTimelinePreview
+            events={previewEvents}
+            windowMilli={windowMilli}
+            cursorMilli={cursorMilli}
+            disabled={sync?.enabled}
+            onCursorMilliChange={(relativeMilli) => {
+              onSharedFightOffsetChange(anchorOffsetMilli + relativeMilli);
+            }}
+          />
           </div>
           <div className="border-t border-white/5 px-3 py-1.5 font-mono text-[9px] text-muted-foreground">
             {rows.length} events · {windowSeconds}s window
