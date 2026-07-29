@@ -5,9 +5,9 @@ import (
 	"log/slog"
 	"time"
 
+	"github.com/Emyrk/chronicle/combatlog/parser/common/messages"
 	"github.com/Emyrk/chronicle/combatlog/parser/guid"
 	"github.com/Emyrk/chronicle/combatlog/parser/types"
-	"github.com/Emyrk/chronicle/combatlog/parser/common/messages"
 	"github.com/Emyrk/chronicle/combatlog/parser/wotlk/companion"
 	"github.com/Emyrk/chronicle/database/gamedb/chrondbc"
 	"github.com/Emyrk/chronicle/internal/ptr"
@@ -154,7 +154,7 @@ func (p *Parser) dispatch(ts time.Time, event string, m *Matched, raw string) ([
 	case "_INSTAKILL":
 		return p.suffixInstakill(ts, base, m)
 	case "_RESURRECT":
-		return messages.Unparsed(ts, raw), nil
+		return p.suffixResurrect(ts, base, spell, m)
 	default:
 		p.logger.Warn("Unparsed line", slog.String("line", raw))
 		return messages.Unparsed(ts, raw), nil
@@ -654,6 +654,25 @@ func (p *Parser) suffixCastSuccess(ts time.Time, base baseParams, spell *spellIn
 		SpellData:   spellData,
 		Caster:      base.sourceGUID,
 		Target:      targetPtr,
+	})
+}
+
+// suffixResurrect handles _RESURRECT (no additional suffix params).
+func (p *Parser) suffixResurrect(ts time.Time, base baseParams, spell *spellInfo, m *Matched) ([]messages.Message, error) {
+	if err := m.Error(); err != nil {
+		return nil, err
+	}
+
+	var spellData *chrondbc.Spell
+	if spell != nil {
+		spellData = p.lookupSpell(chrondbc.SpellID(spell.spellID), spell.spellName)
+	}
+
+	return set(&messages.Resurrection{
+		MessageBase: messages.Base(ts),
+		Source:      base.sourceGUID,
+		Target:      base.destGUID,
+		Spell:       spellData,
 	})
 }
 

@@ -32,6 +32,7 @@ func TestDetectResurrections(t *testing.T) {
 		require.Len(t, result, 2)
 		resurrection, ok := result[1].(*messages.Resurrection)
 		require.True(t, ok)
+		require.True(t, resurrection.IsSynthetic())
 		require.Equal(t, caster, resurrection.Source)
 		require.Equal(t, target, resurrection.Target)
 		require.Same(t, spell, resurrection.Spell)

@@ -27,7 +27,7 @@ func DetectResurrections(msgs []messages.Message) []messages.Message {
 		}
 
 		detected = append(detected, &messages.Resurrection{
-			MessageBase: messages.Base(spellGo.Date()),
+			MessageBase: messages.Base(spellGo.Date(), messages.WithSynthetic()),
 			Source:      spellGo.Caster,
 			Target:      target,
 			Spell:       spellGo.SpellData,
