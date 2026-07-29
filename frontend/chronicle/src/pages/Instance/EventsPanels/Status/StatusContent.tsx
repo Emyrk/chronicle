@@ -11,6 +11,7 @@ import { useSyncModeContextOptional } from "../../SyncModeContext";
 import { usePlayerLifeState } from "../usePlayerLifeState";
 import { useInferredRoles } from "../Roles/useInferredRoles";
 import type { StatusResult, StatusTimelineEvent, StatusUnitKind } from "./status.processor";
+import { parseStatusFocuses, STATUS_FOCUS_PREFIX, updateStatusFocuses } from "./statusFocus";
 import { sortStatusEnemySnapshots, statusEnemyRowOpacity } from "./statusEnemies";
 import {
   createStatusRaidHealthModel,
@@ -76,24 +77,12 @@ function updateHideDead(option: string | null | undefined, hideDead: boolean): s
 
 function updateUnitMode(option: string | null | undefined, mode: StatusUnitMode): string | null {
   const tokens = option?.split(",").filter((value) =>
-    value && !value.startsWith(UNIT_MODE_PREFIX) && !value.startsWith(FOCUS_PREFIX)
+    value && !value.startsWith(UNIT_MODE_PREFIX) && !value.startsWith(STATUS_FOCUS_PREFIX)
   ) ?? [];
   if (mode !== "players") tokens.push(`${UNIT_MODE_PREFIX}${mode}`);
   return tokens.length > 0 ? tokens.join(",") : null;
 }
 
-const FOCUS_PREFIX = "f:";
-
-function parseFocus(option: string | null | undefined): string | null {
-  const token = option?.split(",").find((value) => value.startsWith(FOCUS_PREFIX));
-  return token ? token.slice(FOCUS_PREFIX.length) : null;
-}
-
-function updateFocus(option: string | null | undefined, unitId: string | null): string | null {
-  const tokens = option?.split(",").filter((value) => value && !value.startsWith(FOCUS_PREFIX)) ?? [];
-  if (unitId) tokens.push(`${FOCUS_PREFIX}${unitId}`);
-  return tokens.length > 0 ? tokens.join(",") : null;
-}
 
 function classColor(className: string, kind: StatusUnitKind): string {
   if (kind === "unit") return "var(--color-destructive)";
@@ -434,35 +423,39 @@ export function StatusContent(props: PanelRenderProps<StatusResult>) {
       ),
     };
   }, [displayRows, lifeTransitionsByPlayer]);
-  const focusedUnitId = parseFocus(panelOption);
-  const [floatingBreakout, setFloatingBreakout] = useState<FloatingStatusBreakout | null>(null);
+  const [floatingBreakouts, setFloatingBreakouts] = useState<Map<string, FloatingStatusBreakout>>(() => new Map());
+  const focusedUnitIds = useMemo(() => {
+    const focused = parseStatusFocuses(panelOption);
+    for (const unitId of floatingBreakouts.keys()) focused.add(unitId);
+    return focused;
+  }, [floatingBreakouts, panelOption]);
   const [density, setDensity] = useState<StatusDensity>(0);
   const [windowSeconds, setWindowSeconds] = useState(30);
   const [sharedFightOffsetMilli, setSharedFightOffsetMilli] = useState<number | null>(null);
-  const breakoutUnit = floatingBreakout && encounter
-    ? encounter.units.get(floatingBreakout.unitId) ?? null
-    : null;
-  const breakoutEvents = useMemo(
-    () => breakoutUnit?.events.map(toIncomingEvent).filter((event): event is IncomingEventDisplay => event !== null) ?? [],
-    [breakoutUnit],
-  );
 
   const selectUnit = useCallback((unitId: string, target: HTMLElement) => {
     const rect = target.getBoundingClientRect();
-    const x = Math.max(8, Math.min(rect.right + 8, window.innerWidth - 640));
-    const y = Math.max(8, Math.min(rect.top, window.innerHeight - 520));
-    setFloatingBreakout({ unitId, initialPosition: { x, y } });
-    setPanelOption?.(updateFocus(panelOption, unitId));
-  }, [panelOption, setPanelOption]);
+    const cascadeOffset = floatingBreakouts.size * 18;
+    const x = Math.max(8, Math.min(rect.right + 8 + cascadeOffset, window.innerWidth - 640));
+    const y = Math.max(8, Math.min(rect.top + cascadeOffset, window.innerHeight - 520));
+    const next = new Map(floatingBreakouts);
+    const existing = next.get(unitId);
+    next.delete(unitId);
+    next.set(unitId, existing ?? { unitId, initialPosition: { x, y } });
+    setFloatingBreakouts(next);
+    setPanelOption?.(updateStatusFocuses(panelOption, next.keys()));
+  }, [floatingBreakouts, panelOption, setPanelOption]);
 
-  const closeBreakout = useCallback(() => {
-    setFloatingBreakout(null);
-    setSharedFightOffsetMilli(null);
-    setPanelOption?.(updateFocus(panelOption, null));
-  }, [panelOption, setPanelOption]);
+  const closeBreakout = useCallback((unitId: string) => {
+    const next = new Map(floatingBreakouts);
+    next.delete(unitId);
+    setFloatingBreakouts(next);
+    if (next.size === 0) setSharedFightOffsetMilli(null);
+    setPanelOption?.(updateStatusFocuses(panelOption, next.keys()));
+  }, [floatingBreakouts, panelOption, setPanelOption]);
 
   const selectUnitMode = useCallback((mode: StatusUnitMode) => {
-    setFloatingBreakout(null);
+    setFloatingBreakouts(new Map());
     setSharedFightOffsetMilli(null);
     setPanelOption?.(updateUnitMode(panelOption, mode));
   }, [panelOption, setPanelOption]);
@@ -592,8 +585,8 @@ export function StatusContent(props: PanelRenderProps<StatusResult>) {
                   "grid w-full grid-cols-[minmax(185px,0.85fr)_minmax(190px,0.85fr)_minmax(320px,1.8fr)] items-center gap-4 border-b border-border/25 text-left transition-[background-color,opacity] hover:bg-muted/20",
                   ROW_CLASSES[density],
                   snapshot.dead && "bg-black/35 hover:bg-black/30",
-                  focusedUnitId === unit.unitId && "ring-1 ring-inset ring-amber-300/30",
-                  focusedUnitId === unit.unitId && !snapshot.dead && "bg-amber-400/5",
+                  focusedUnitIds.has(unit.unitId) && "ring-1 ring-inset ring-amber-300/30",
+                  focusedUnitIds.has(unit.unitId) && !snapshot.dead && "bg-amber-400/5",
                 )}
                 style={{ opacity }}
               >
@@ -652,26 +645,37 @@ export function StatusContent(props: PanelRenderProps<StatusResult>) {
         <span>{windowPreset.label}</span>
       </div>
     </GenericPanel>
-    {floatingBreakout && breakoutUnit && encounter && cursorMilli !== null ? (
-      <FloatingIncomingEventsBreakout
-        initialPosition={floatingBreakout.initialPosition}
-        onClose={closeBreakout}
-      >
-        <IncomingEventsBreakout
-          unitName={breakoutUnit.name}
-          className={breakoutUnit.className}
-          anchorOffsetMilli={cursorMilli - encounter.startMilli}
-          anchorAbsoluteMilli={cursorMilli}
-          events={breakoutEvents}
-          windowSeconds={windowSeconds}
-          onWindowSecondsChange={setWindowSeconds}
-          sharedFightOffsetMilli={sharedFightOffsetMilli}
-          onSharedFightOffsetChange={setSharedFightOffsetMilli}
-          onClose={closeBreakout}
-          windowSuffix="seconds before playhead"
-        />
-      </FloatingIncomingEventsBreakout>
-    ) : null}
+    {encounter && cursorMilli !== null ? Array.from(floatingBreakouts.entries()).map(([
+      unitId,
+      floatingBreakout,
+    ]) => {
+      const breakoutUnit = encounter.units.get(unitId);
+      if (!breakoutUnit) return null;
+      const breakoutEvents = breakoutUnit.events
+        .map(toIncomingEvent)
+        .filter((event): event is IncomingEventDisplay => event !== null);
+      return (
+        <FloatingIncomingEventsBreakout
+          key={unitId}
+          initialPosition={floatingBreakout.initialPosition}
+          onClose={() => closeBreakout(unitId)}
+        >
+          <IncomingEventsBreakout
+            unitName={breakoutUnit.name}
+            className={breakoutUnit.className}
+            anchorOffsetMilli={cursorMilli - encounter.startMilli}
+            anchorAbsoluteMilli={cursorMilli}
+            events={breakoutEvents}
+            windowSeconds={windowSeconds}
+            onWindowSecondsChange={setWindowSeconds}
+            sharedFightOffsetMilli={sharedFightOffsetMilli}
+            onSharedFightOffsetChange={setSharedFightOffsetMilli}
+            onClose={() => closeBreakout(unitId)}
+            windowSuffix="seconds before playhead"
+          />
+        </FloatingIncomingEventsBreakout>
+      );
+    }) : null}
     </>
   );
 }
