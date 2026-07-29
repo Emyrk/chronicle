@@ -157,6 +157,18 @@ export function resolveAggregationResultForPanel<TResult>(
   return aggregationState.panelId === panelId ? aggregationState.result : createState();
 }
 
+/**
+ * Whether a panel should switch to main-thread incremental processing while
+ * Sync is active. Panels that declare syncDataMode "full" always aggregate the
+ * complete encounter in the worker; Sync only drives their presentation timing.
+ */
+export function usesIncrementalSyncProcessing(
+  syncEnabled: boolean,
+  syncDataMode: "incremental" | "full" | undefined,
+): boolean {
+  return syncEnabled && syncDataMode !== "full";
+}
+
 export function usePanelAggregation<TResult>(
   options: UsePanelAggregationOptions<TResult>
 ): UsePanelAggregationResult<TResult> {
@@ -272,9 +284,13 @@ export function usePanelAggregation<TResult>(
     [panelContextKey, mergedFilters],
   );
 
-  // Check if we're in sync mode
-  const isSyncMode = syncMode?.enabled ?? false;
-  const syncTimestamp = syncMode?.currentTimestamp ?? null;
+  // Check if we're in sync mode. Full-data panels stay in worker mode and read
+  // Sync timing themselves, so aggregation ignores the Sync timestamp entirely.
+  const isSyncMode = usesIncrementalSyncProcessing(
+    syncMode?.enabled ?? false,
+    panel.syncDataMode,
+  );
+  const syncTimestamp = isSyncMode ? syncMode?.currentTimestamp ?? null : null;
   
   // Throttle sync timestamp changes to limit processing frequency while still updating during playback
   const [throttledSyncTimestamp, setThrottledSyncTimestamp] = useState<Date | null>(null);

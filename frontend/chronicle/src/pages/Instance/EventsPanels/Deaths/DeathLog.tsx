@@ -20,6 +20,9 @@ export function createDeathLogPanel(): PanelDefinition<DeathsResult, any> {
     icon: <ScrollText className="h-4 w-4" />,
     checkboxLabel: "Encounter offset",
     supportsFiltering: true,
+    // The death list describes the whole encounter. Sync supplies only
+    // presentation timing (cursor + row muting), never the data boundary.
+    syncDataMode: "full",
     defaultFilters: [
       { type: "time_range" as const, value: "controller", applyTo: ["slain", "damage", "heal", "resource_change", "absorbed", "aura_cast"] },
       { type: "event_value" as const, value: "!=:0", applyTo: ["heal"] },

@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { resolveAggregationResultForPanel } from "./usePanelAggregation";
+import { resolveAggregationResultForPanel, usesIncrementalSyncProcessing } from "./usePanelAggregation";
 
 describe("resolveAggregationResultForPanel", () => {
   it("returns cached result when panel id matches", () => {
@@ -22,5 +22,21 @@ describe("resolveAggregationResultForPanel", () => {
     );
 
     expect(result).toEqual({ marker: "damage_taken" });
+  });
+});
+
+describe("usesIncrementalSyncProcessing", () => {
+  it("keeps incremental panels on main-thread sync processing", () => {
+    expect(usesIncrementalSyncProcessing(true, undefined)).toBe(true);
+    expect(usesIncrementalSyncProcessing(true, "incremental")).toBe(true);
+  });
+
+  it("keeps full-data panels in worker mode during Sync", () => {
+    expect(usesIncrementalSyncProcessing(true, "full")).toBe(false);
+  });
+
+  it("never uses sync processing when Sync is disabled", () => {
+    expect(usesIncrementalSyncProcessing(false, undefined)).toBe(false);
+    expect(usesIncrementalSyncProcessing(false, "full")).toBe(false);
   });
 });

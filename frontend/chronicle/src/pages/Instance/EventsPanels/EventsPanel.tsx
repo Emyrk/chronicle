@@ -451,6 +451,8 @@ export function EventsPanel({
   const customFilters = useMemo(() => (panelContext?.filters as PanelFilter[] | undefined) ?? null, [panelContext]);
   const syncMode = useSyncModeContextOptional();
   const isSyncActive = syncMode?.enabled === true;
+  // Applied filters keep working during Sync (full-data panels still run them in
+  // the worker); only editing is paused while playback drives the panels.
   const filteringSupported = panel.supportsFiltering === true && !isSyncActive;
   const fixedFilters = panel.fixedFilters ?? [];
   const userFilters = customFilters ?? [];
@@ -709,14 +711,21 @@ export function EventsPanel({
   usePanelTiming(`panel-${panelIndex}`, isDone);
 
   const effectiveDurationMs = useMemo(() => {
-    if (syncMode?.enabled && syncMode.currentTimestamp && syncMode.encounterBounds) {
+    // Full-data panels aggregate the whole encounter even during Sync, so they
+    // keep the full duration; elapsed time would skew their per-second values.
+    if (
+      syncMode?.enabled &&
+      panel.syncDataMode !== "full" &&
+      syncMode.currentTimestamp &&
+      syncMode.encounterBounds
+    ) {
       const elapsedMs =
         syncMode.currentTimestamp.getTime() - syncMode.encounterBounds.start.getTime();
       return Math.max(elapsedMs, 1);
     }
 
     return durationMs;
-  }, [syncMode?.enabled, syncMode?.currentTimestamp, syncMode?.encounterBounds, durationMs]);
+  }, [syncMode?.enabled, syncMode?.currentTimestamp, syncMode?.encounterBounds, durationMs, panel.syncDataMode]);
 
   return (
     <BreakoutHoverProvider>

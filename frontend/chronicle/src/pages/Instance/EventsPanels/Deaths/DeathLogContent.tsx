@@ -2,7 +2,7 @@
  * DeathLogContent - Chronological list of player and enemy deaths with timestamps
  */
 
-import React, { useMemo, useCallback, useRef, useState } from "react";
+import React, { useMemo, useCallback, useState } from "react";
 import { User, Skull, ChevronRight, ChevronDown, ExternalLink } from "lucide-react";
 import { GenericPanel } from "../GenericPanel";
 import { ScrollArea } from "@/components/ui/ScrollArea/ScrollArea";
@@ -14,13 +14,7 @@ import { IncomingEventsBreakout } from "../IncomingEvents/IncomingEventsBreakout
 import { FloatingIncomingEventsBreakout } from "../IncomingEvents/FloatingIncomingEventsBreakout";
 import { useCachedValue } from "@/hooks/useCachedValue";
 import { useSyncModeContextOptional } from "../../SyncModeContext";
-import {
-  deathLogDataContextKey,
-  hasDeathLogEvents,
-  isDeathAheadOfSyncCursor,
-  selectDeathLogDisplayResult,
-  type DeathLogSnapshot,
-} from "./deathLogSync";
+import { hasDeathLogEvents, isDeathAheadOfSyncCursor } from "./deathLogSync";
 import { cn } from "@/lib/utils";
 import { hitTypeNames, HitTypeCrit } from "@/lib/hittype/hittype";
 
@@ -112,9 +106,6 @@ interface FloatingDeathRecap {
 export const DeathLogContent = (props: DeathLogContentProps) => {
   const { result, context, loading, processing, checkboxChecked, panelOption, setPanelOption } = props;
   const syncMode = useSyncModeContextOptional();
-  const panelContextVersion = String(props.panelContextVersion ?? "");
-  const dataContextKey = deathLogDataContextKey(panelContextVersion, panelOption);
-  const completeSnapshotRef = useRef<DeathLogSnapshot | null>(null);
   const [mode, setModeLocal] = useState<DeathMode>(() => extractDeathMode(panelOption));
   const [expandedIndex, setExpandedIndex] = useState<number | null>(null);
   const [floatingRecaps, setFloatingRecaps] = useState<Map<string, FloatingDeathRecap>>(() => new Map());
@@ -176,40 +167,24 @@ export const DeathLogContent = (props: DeathLogContentProps) => {
     context.onSelectEncounters?.([encounterId]);
   }, [context]);
 
+  // Death Log declares syncDataMode "full", so this result always comes from the
+  // worker with complete encounter data — even while Sync playback is running.
   const { cachedValue: cachedResult, hasCache: hasData } = useCachedValue(
     result,
     hasDeathLogEvents,
     [props.panelContextVersion]
   );
 
-  // Sync processing incrementally rebuilds processor state. Death Log is different:
-  // its rows describe the whole encounter, so retain the last complete worker result
-  // and let only cursors/row emphasis react to the Sync timestamp.
-  /* eslint-disable react-hooks/refs */
-  if (!syncMode?.enabled && hasData) {
-    completeSnapshotRef.current = {
-      dataContextKey,
-      result: cachedResult,
-    };
-  }
-  const displayResult = selectDeathLogDisplayResult(
-    cachedResult,
-    completeSnapshotRef.current,
-    dataContextKey,
-  );
-  /* eslint-enable react-hooks/refs */
-  const hasDisplayData = hasDeathLogEvents(displayResult);
-
   const sortedDeaths = useMemo(
-    () => getSortedDeathEvents(context.selectedEncounterIds, displayResult, mode),
-    [context.selectedEncounterIds, displayResult, mode],
+    () => getSortedDeathEvents(context.selectedEncounterIds, cachedResult, mode),
+    [context.selectedEncounterIds, cachedResult, mode],
   );
 
-  // Once we have a complete display result, never flash loading/empty Sync states.
+  // Once we have cached data, never show loading/processing states
   const effectiveProps = {
     ...props,
-    loading: hasDisplayData ? false : props.loading,
-    processing: hasDisplayData ? false : props.processing,
+    loading: hasData ? false : props.loading,
+    processing: hasData ? false : props.processing,
   };
 
   return (

@@ -96,6 +96,21 @@ export interface PanelDefinition<TResult, TEvent extends ProcessorEvent = Proces
    * EventsPanel will skip calling usePanelAggregation and pass only context to render.
    */
   selfManagesAggregation?: boolean;
+
+  /**
+   * How this panel's data behaves while Sync mode is active.
+   *
+   * - "incremental" (default): main-thread processing rebuilds results up to the
+   *   Sync timestamp, so metrics grow as playback advances.
+   * - "full": the panel always aggregates the complete encounter in the Web
+   *   Worker, even during Sync. Sync only supplies presentation timing
+   *   (cursors, playheads, row emphasis) that the panel reads itself.
+   *
+   * Full-data panels keep working when added mid-playback, keep their full
+   * encounter duration, and keep applied filters; only filter editing is
+   * paused while Sync runs.
+   */
+  syncDataMode?: "incremental" | "full";
   
   /** If true, shows a warning indicator that this panel is experimental */
   underConstruction?: boolean;
