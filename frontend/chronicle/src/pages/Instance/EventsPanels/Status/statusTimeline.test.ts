@@ -64,9 +64,32 @@ describe("snapshotStatusUnit", () => {
   });
 
   it("marks a unit dead only after the cursor reaches its death", () => {
-    const death = event({ timestampMilli: 6_000, kind: "death" });
+    const death = event({ timestampMilli: 6_000, eventIndex: 1, kind: "death" });
     expect(snapshotStatusUnit(unit([death]), 5_000).dead).toBe(false);
     expect(snapshotStatusUnit(unit([death]), 6_000).dead).toBe(true);
+  });
+
+  it("marks a dead unit active again when later activity indicates a revival", () => {
+    const death = event({ timestampMilli: 6_000, eventIndex: 1, kind: "death" });
+    const revivedActivity = event({ timestampMilli: 8_000, eventIndex: 2, kind: "heal", amount: 500 });
+    const timeline = unit([death, revivedActivity]);
+
+    expect(snapshotStatusUnit(timeline, 7_000).dead).toBe(true);
+    expect(snapshotStatusUnit(timeline, 8_000).dead).toBe(false);
+  });
+
+  it("uses event ordering to detect same-timestamp revival activity", () => {
+    const death = event({ timestampMilli: 6_000, eventIndex: 1, kind: "death" });
+    const revivedActivity = event({ timestampMilli: 6_000, eventIndex: 2, kind: "cast", amount: 0 });
+
+    expect(snapshotStatusUnit(unit([revivedActivity, death]), 6_000).dead).toBe(false);
+  });
+
+  it("does not revive a unit from future activity before the cursor reaches it", () => {
+    const death = event({ timestampMilli: 6_000, eventIndex: 1, kind: "death" });
+    const futureActivity = event({ timestampMilli: 8_000, eventIndex: 2, kind: "damage", amount: 100 });
+
+    expect(snapshotStatusUnit(unit([death, futureActivity]), 7_999).dead).toBe(true);
   });
 });
 

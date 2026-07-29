@@ -118,7 +118,12 @@ function ActivityLane({
   const deaths = [...snapshot.recentActivity, ...snapshot.incoming].filter((event) => event.kind === "death");
 
   return (
-    <div className="relative h-[22px] overflow-hidden rounded-[1px] bg-[rgba(255,255,255,0.022)]">
+    <div
+      className={cn(
+        "relative h-[22px] overflow-hidden rounded-[1px] transition-colors",
+        snapshot.dead ? "bg-black/45" : "bg-[rgba(255,255,255,0.022)]",
+      )}
+    >
       <div className="absolute inset-x-0 top-1/2 h-px bg-white/[0.11]" />
       <div
         className="absolute inset-y-0 z-10 w-px bg-amber-200/70"
@@ -357,7 +362,9 @@ export function StatusContent(props: PanelRenderProps<StatusResult>) {
                 className={cn(
                   "grid w-full grid-cols-[minmax(185px,0.8fr)_minmax(240px,1.15fr)_minmax(300px,1.6fr)] items-center gap-4 border-b border-border/25 text-left transition-colors hover:bg-muted/20",
                   ROW_CLASSES[density],
-                  focusedUnitId === unit.unitId && "bg-amber-400/5 ring-1 ring-inset ring-amber-300/30",
+                  snapshot.dead && "bg-black/35 hover:bg-black/30",
+                  focusedUnitId === unit.unitId && "ring-1 ring-inset ring-amber-300/30",
+                  focusedUnitId === unit.unitId && !snapshot.dead && "bg-amber-400/5",
                 )}
               >
                 <span className="flex min-w-0 items-center gap-2">

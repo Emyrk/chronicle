@@ -135,6 +135,20 @@ export function expireOverhealStripe(
   return state;
 }
 
+export function isStatusUnitDead(
+  orderedEvents: StatusTimelineEvent[],
+  cursorMilli: number,
+): boolean {
+  for (let index = orderedEvents.length - 1; index >= 0; index--) {
+    const event = orderedEvents[index];
+    if (event.timestampMilli > cursorMilli) continue;
+    // Until the parser exposes an authoritative resurrection event, any later
+    // activity from or affecting the unit is evidence that it became active again.
+    return event.kind === "death";
+  }
+  return false;
+}
+
 export function snapshotStatusUnit(
   unit: StatusUnitTimeline,
   cursorMilli: number,
@@ -149,7 +163,6 @@ export function snapshotStatusUnit(
   const relativeHealthState = expireOverhealStripe(health, relativeHealthMessages, ordered, cursorMilli);
   const recentActivity = ordered.filter((event) => event.timestampMilli >= startMilli && event.timestampMilli <= cursorMilli);
   const incoming = ordered.filter((event) => event.timestampMilli > cursorMilli && event.timestampMilli <= endMilli);
-  const lastDeath = ordered.filter((event) => event.kind === "death" && event.timestampMilli <= cursorMilli).at(-1);
 
   return {
     unit,
@@ -160,7 +173,7 @@ export function snapshotStatusUnit(
     damage: health.damage,
     effectiveHealing: health.effectiveHealing,
     absorbed: health.prevented,
-    dead: lastDeath !== undefined,
+    dead: isStatusUnitDead(ordered, cursorMilli),
     activeCast: findActiveCast(ordered, cursorMilli),
     recentActivity,
     incoming,
