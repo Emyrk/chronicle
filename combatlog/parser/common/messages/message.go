@@ -449,6 +449,18 @@ func (a AuraCast) Affects() []guid.GUID {
 }
 func (*AuraCast) isMessage() {}
 
+// AuraTransition preserves parser evidence that cannot be represented by the
+// broad added/removed/modified state alone.
+type AuraTransition uint8
+
+const (
+	AuraTransitionUnknown AuraTransition = iota
+	AuraTransitionApplied
+	AuraTransitionRefreshed
+	AuraTransitionStackChanged
+	AuraTransitionRemoved
+)
+
 type Aura struct {
 	MessageBase
 	// IsBuff is false if it is a debuff
@@ -464,6 +476,7 @@ type Aura struct {
 	// Application
 	// Deprecated: Use State
 	Application types.AuraApplication
+	Transition  AuraTransition
 	State       types.AuraState
 }
 

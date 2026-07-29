@@ -130,17 +130,15 @@ func (p *Parser) dispatch(ts time.Time, event string, m *Matched, raw string) ([
 	case "_EXTRA_ATTACKS":
 		return p.suffixExtraAttacks(ts, base, spell, m)
 	case "_AURA_APPLIED":
-		return p.suffixAura(ts, base, spell, types.AuraStateAdded, m)
+		return p.suffixAura(ts, base, spell, types.AuraStateAdded, messages.AuraTransitionApplied, m)
 	case "_AURA_REMOVED":
-		return p.suffixAura(ts, base, spell, types.AuraStateRemoved, m)
+		return p.suffixAura(ts, base, spell, types.AuraStateRemoved, messages.AuraTransitionRemoved, m)
 	case "_AURA_REFRESH":
-		return p.suffixAura(ts, base, spell, types.AuraStateModified, m)
-	case "_AURA_APPLIED_DOSE":
-		return p.suffixAuraDose(ts, base, spell, types.AuraStateAdded, m)
-	case "_AURA_REMOVED_DOSE":
-		return p.suffixAuraDose(ts, base, spell, types.AuraStateRemoved, m)
+		return p.suffixAura(ts, base, spell, types.AuraStateModified, messages.AuraTransitionRefreshed, m)
+	case "_AURA_APPLIED_DOSE", "_AURA_REMOVED_DOSE":
+		return p.suffixAuraDose(ts, base, spell, m)
 	case "_AURA_BROKEN":
-		return p.suffixAura(ts, base, spell, types.AuraStateRemoved, m)
+		return p.suffixAura(ts, base, spell, types.AuraStateRemoved, messages.AuraTransitionRemoved, m)
 	case "_AURA_BROKEN_SPELL":
 		return p.suffixAuraBrokenSpell(ts, base, spell, m)
 	case "_CAST_START":
@@ -478,7 +476,7 @@ func (p *Parser) suffixExtraAttacks(ts time.Time, base baseParams, spell *spellI
 }
 
 // suffixAura handles _AURA_APPLIED, _AURA_REMOVED, _AURA_REFRESH, _AURA_BROKEN: auraType
-func (p *Parser) suffixAura(ts time.Time, base baseParams, spell *spellInfo, state types.AuraState, m *Matched) ([]messages.Message, error) {
+func (p *Parser) suffixAura(ts time.Time, base baseParams, spell *spellInfo, state types.AuraState, transition messages.AuraTransition, m *Matched) ([]messages.Message, error) {
 	auraType := m.String() // "BUFF" or "DEBUFF"
 
 	if err := m.Error(); err != nil {
@@ -514,12 +512,13 @@ func (p *Parser) suffixAura(ts time.Time, base baseParams, spell *spellInfo, sta
 		SpellData:   spellData,
 		Amount:      amt,
 		State:       state,
+		Transition:  transition,
 	}
 
 	// Emit an AuraCast alongside the Aura on application so downstream
 	// consumers (possession, enslave demon, etc.) get the same signal they
 	// get from vanilla logs.
-	if state == types.AuraStateAdded && spellData != nil {
+	if transition == messages.AuraTransitionApplied && spellData != nil {
 		dest := base.destGUID
 		return []messages.Message{
 			auraMsg,
@@ -536,7 +535,7 @@ func (p *Parser) suffixAura(ts time.Time, base baseParams, spell *spellInfo, sta
 }
 
 // suffixAuraDose handles _AURA_APPLIED_DOSE and _AURA_REMOVED_DOSE: auraType, amount
-func (p *Parser) suffixAuraDose(ts time.Time, base baseParams, spell *spellInfo, state types.AuraState, m *Matched) ([]messages.Message, error) {
+func (p *Parser) suffixAuraDose(ts time.Time, base baseParams, spell *spellInfo, m *Matched) ([]messages.Message, error) {
 	auraType := m.String() // "BUFF" or "DEBUFF"
 	amount := m.Int32()
 
@@ -566,7 +565,8 @@ func (p *Parser) suffixAuraDose(ts time.Time, base baseParams, spell *spellInfo,
 		SpellName:   spellName,
 		SpellData:   spellData,
 		Amount:      amount,
-		State:       state,
+		State:       types.AuraStateModified,
+		Transition:  messages.AuraTransitionStackChanged,
 	})
 }
 

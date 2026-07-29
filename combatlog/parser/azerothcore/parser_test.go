@@ -51,6 +51,12 @@ func (stubSpellDB) PeriodicSpells(_ context.Context) (map[int32]dbcmem.PeriodicS
 	return nil, nil
 }
 
+type auraSpellDB struct{ stubSpellDB }
+
+func (auraSpellDB) Spell(_ context.Context, id chrondbc.SpellID) (*chrondbc.Spell, error) {
+	return &chrondbc.Spell{ID: id, Duration: dbcmem.SpellDuration{MaxDuration: 30_000}}, nil
+}
+
 func newTestParser(t *testing.T, logData string) *Parser {
 	t.Helper()
 	p, err := New(context.Background(), slog.Default(), strings.NewReader(logData), stubSpellDB{}, nil)
@@ -92,6 +98,44 @@ func advanceNonUnitMessages(t *testing.T, p *Parser) []messages.Message {
 		result = append(result, m)
 	}
 	return result
+}
+
+func TestServerAuraRefreshAndDoseTransitions(t *testing.T) {
+	t.Parallel()
+	tests := []struct {
+		name       string
+		event      string
+		suffix     string
+		transition messages.AuraTransition
+		stacks     int32
+	}{
+		{name: "refresh", event: "SPELL_AURA_REFRESH", suffix: "BUFF", transition: messages.AuraTransitionRefreshed, stacks: 1},
+		{name: "applied dose", event: "SPELL_AURA_APPLIED_DOSE", suffix: "BUFF,2", transition: messages.AuraTransitionStackChanged, stacks: 2},
+		{name: "removed dose", event: "SPELL_AURA_REMOVED_DOSE", suffix: "BUFF,1", transition: messages.AuraTransitionStackChanged, stacks: 1},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			line := fmt.Sprintf("1777166257180  %s,0x0000000000000001,\"Chronicle\",0x400,0x0000000000000002,\"Target\",0x400,10901,\"Power Word: Shield\",0x2,%s", tt.event, tt.suffix)
+			p, err := New(context.Background(), slog.Default(), strings.NewReader(line), auraSpellDB{}, auraSpellDB{})
+			require.NoError(t, err)
+			msgs := advanceNonUnitMessages(t, p)
+
+			var aura *messages.Aura
+			for _, msg := range msgs {
+				if typed, ok := msg.(*messages.Aura); ok {
+					aura = typed
+				}
+				_, isAuraCast := msg.(*messages.AuraCast)
+				assert.False(t, isAuraCast, "refresh and dose events must not synthesize AuraCast")
+			}
+			require.NotNil(t, aura)
+			assert.Equal(t, tt.transition, aura.Transition)
+			assert.Equal(t, types.AuraStateModified, aura.State)
+			assert.Equal(t, tt.stacks, aura.Amount)
+		})
+	}
 }
 
 func TestParseSpellAbsorbed_Melee(t *testing.T) {

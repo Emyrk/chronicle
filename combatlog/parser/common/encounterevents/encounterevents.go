@@ -63,6 +63,12 @@ func New(verbose bool) *EncounterEventsInProgress {
 	}
 }
 
+// SetStart establishes the encounter time origin before hooks emit projected
+// events. Calls after the first event has been processed are ignored.
+func (e *EncounterEventsInProgress) SetStart(start time.Time) {
+	e.setFirsts(start)
+}
+
 func (e *EncounterEventsInProgress) Finalize(merge *Events, encounterID uuid.UUID) error {
 	damagePayload, err := e.Damage.Finalize(encounterID)
 	if err != nil {

@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/Emyrk/chronicle/combatlog/parseoptions"
+	"github.com/Emyrk/chronicle/combatlog/parser/common/auras"
 	"github.com/Emyrk/chronicle/combatlog/parser/common/instances"
 	"github.com/Emyrk/chronicle/combatlog/parser/common/messages"
 	"github.com/Emyrk/chronicle/combatlog/parser/common/registry"
@@ -55,6 +56,10 @@ type State struct {
 	// Friendly/Foe/Relationships, etc.
 	Units *unitdb.Units
 
+	// Auras is the parse-wide aura tracker. It processes every aura message
+	// once and persists across zone/instance switches.
+	Auras *auras.Tracking
+
 	instanceResolver InstanceResolver
 	verbose          bool
 	timings          *timingAccumulator
@@ -67,6 +72,7 @@ func NewWithInstanceResolver(ctx context.Context, logger *slog.Logger, res Insta
 		CurrentZone:      zoner.NewLocation(),
 		instanceResolver: res,
 		Instances:        make([]*instances.Hookable, 0),
+		Auras:            auras.New(nil), // nil mods: no dataset modifier plumbing available yet
 		verbose:          parseoptions.IsVerbose(ctx),
 		timings: newTimingAccumulator(
 			"encounter_state.total",
@@ -94,6 +100,9 @@ func (s *State) Process(m messages.Message) error {
 	if err != nil {
 		return fmt.Errorf("units process: %w", err)
 	}
+
+	// Process aura messages at the parse level (once, before instance hooks).
+	s.Auras.Process(m)
 
 	switch typed := m.(type) {
 	case *messages.Realm:
@@ -123,6 +132,12 @@ func (s *State) Process(m messages.Message) error {
 		}
 	}
 	return nil
+}
+
+// Finalize performs parse-level cleanup. Call once after all messages have been
+// processed and all instances have been finalized.
+func (s *State) Finalize() {
+	s.Auras.Finalize()
 }
 
 func (s *State) DetailedTimes() map[string]time.Duration {
@@ -193,6 +208,9 @@ func (s *State) matchOrCreateInstance(z messages.Zone, requireDifficultyMatch bo
 			if s.CurrentVersions != nil {
 				s.CurrentInstance.SetVersions(s.CurrentVersions.Versions, s.CurrentVersions.Player)
 			}
+			// Attach a projection adapter so the instance can project
+			// parse-wide aura state into encounter event streams.
+			s.CurrentInstance.AttachAuraProjection(s.Auras)
 			s.logger.Info("Matched new instance",
 				slog.String("name", s.CurrentInstance.Name()),
 			)

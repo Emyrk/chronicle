@@ -104,6 +104,8 @@ func ParseV2Cmd() *serpent.Command {
 				}
 			}
 
+			output.Finalize()
+
 			consumerLog := logger.With("component", "consumers")
 			for k, v := range c.Times() {
 				consumerLog = consumerLog.With(slog.String(k+"_duration", v.String()))
@@ -182,6 +184,8 @@ func ParseCmd() *serpent.Command {
 					fmt.Println(e.NamedString(output.Units))
 				}
 			}
+
+			output.Finalize()
 
 			consumerLog := logger.With("component", "consumers")
 			for k, v := range c.Times() {

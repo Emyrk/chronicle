@@ -84,6 +84,12 @@ func (w *WorkerLogParse) parseCombatLog(
 		encountersState = encounters.New(ctx, logLogger, reg)
 	}
 
+	durationModifiers, err := gameDB.DurationModifiers(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("load aura duration modifiers: %w", err)
+	}
+	encountersState.Auras.SetDurationModifiers(durationModifiers)
+
 	// Seed the realm from the pre-scan so instances created before the
 	// parser hits a REALM_INFO message already have realm context.
 	if preRealmName != "" {

@@ -564,6 +564,9 @@ func (w *WorkerLogParse) Work(ctx context.Context, job *river.Job[ArgsLogParse])
 		metrics.encountersParsed.Add(float64(len(finalized.Encounters)))
 	}
 
+	// Finalize parse-wide state (aura tracker, etc.) after all instances.
+	encountersState.Finalize()
+
 	// Record aggregate timing
 	report.FinalizeDuration = chroniclesdk.DurationFrom(totalFinalizeDuration)
 	report.DBInsertDuration = chroniclesdk.DurationFrom(totalDBInsertDuration)

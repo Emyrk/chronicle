@@ -154,6 +154,8 @@ func (w *WorkerRegressionSnapshot) Work(ctx context.Context, job *river.Job[Args
 		instanceNames = append(instanceNames, inst.Name())
 	}
 
+	encountersState.Finalize()
+
 	jsonBytes, err := regression.BuildSnapshotJSON(finalized, instanceNames)
 	if err != nil {
 		return fmt.Errorf("build snapshot JSON: %w", err)
