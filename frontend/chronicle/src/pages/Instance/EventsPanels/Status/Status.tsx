@@ -11,6 +11,7 @@ export function createStatusPanel(): PanelDefinition<StatusResult, StatusProcess
     icon: <Activity className="h-4 w-4" />,
     syncDataMode: "full",
     supportsFiltering: true,
+    underConstruction: true,
     render: (props: PanelRenderProps<StatusResult>) => <StatusContent {...props} />,
   };
 }
