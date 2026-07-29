@@ -3,6 +3,7 @@ import type { StatusTimelineEvent } from "./status.processor";
 import {
   statusWaveformBarHeight,
   statusWaveformBarOpacity,
+  statusWaveformBarWidth,
   statusWaveformEvents,
   statusWaveformPosition,
   statusWaveformScale,
@@ -40,6 +41,7 @@ describe("Status signed waveform", () => {
       event(index % 2 === 0 ? "damage" : "heal", index + 1),
     ));
     expect(statusWaveformScale(events)).toEqual({
+      rowMedian: 10.5,
       rowMax: 20,
       highMagnitudeThreshold: 17,
     });
@@ -59,15 +61,26 @@ describe("Status signed waveform", () => {
     expect(statusWaveformScaleSummary([0])).toBeNull();
   });
 
-  it("compresses magnitudes into the three to ten pixel half-height", () => {
-    expect(statusWaveformBarHeight(1, 10_000)).toBe(3);
-    expect(statusWaveformBarHeight(1_000, 10_000)).toBe(4);
-    expect(statusWaveformBarHeight(10_000, 10_000)).toBe(10);
+  it("compresses values below the median and emphasizes values near the max", () => {
+    expect(statusWaveformBarHeight(1, 1_000, 10_000)).toBe(3);
+    expect(statusWaveformBarHeight(500, 1_000, 10_000)).toBe(3);
+    expect(statusWaveformBarHeight(1_000, 1_000, 10_000)).toBe(4);
+    expect(statusWaveformBarHeight(5_500, 1_000, 10_000)).toBe(6);
+    expect(statusWaveformBarHeight(9_000, 1_000, 10_000)).toBe(9);
+    expect(statusWaveformBarHeight(10_000, 1_000, 10_000)).toBe(10);
   });
 
-  it("uses only two opacity tiers", () => {
-    expect(statusWaveformBarOpacity(84, 85)).toBe(0.72);
-    expect(statusWaveformBarOpacity(85, 85)).toBe(0.95);
+  it("keeps two magnitude tiers and fades past events by age", () => {
+    expect(statusWaveformBarOpacity(84, 85, 10_000, 10_000, 2_000)).toBe(0.72);
+    expect(statusWaveformBarOpacity(85, 85, 10_000, 10_000, 2_000)).toBe(0.95);
+    expect(statusWaveformBarOpacity(85, 85, 9_000, 10_000, 2_000)).toBeCloseTo(0.372, 2);
+    expect(statusWaveformBarOpacity(85, 85, 8_000, 10_000, 2_000)).toBe(0);
+  });
+
+  it("widens bars only for the tight ten-second window", () => {
+    expect(statusWaveformBarWidth(2_000, 8_000)).toBe(3);
+    expect(statusWaveformBarWidth(5_000, 20_000)).toBe(2);
+    expect(statusWaveformBarWidth(10_000, 40_000)).toBe(2);
   });
 
   it("clamps positions before the left edge and just inside the right edge", () => {

@@ -15,6 +15,7 @@ import {
   STATUS_WAVEFORM_COLORS,
   statusWaveformBarHeight,
   statusWaveformBarOpacity,
+  statusWaveformBarWidth,
   statusWaveformEvents,
   statusWaveformPosition,
   statusWaveformScale,
@@ -124,6 +125,7 @@ function ActivityLane({
   const laneWindowMilli = windowPreset.historyMilli + windowPreset.futureMilli;
   const startMilli = cursorMilli - windowPreset.historyMilli;
   const playheadPercent = windowPreset.historyMilli / laneWindowMilli * 100;
+  const barWidth = statusWaveformBarWidth(windowPreset.historyMilli, windowPreset.futureMilli);
   const { events, deaths, scale } = waveform;
 
   return (
@@ -139,19 +141,26 @@ function ActivityLane({
         style={{ left: `${playheadPercent}%` }}
       />
       {events.map((event) => {
-        const height = statusWaveformBarHeight(event.amount, scale.rowMax);
+        const height = statusWaveformBarHeight(event.amount, scale.rowMedian, scale.rowMax);
         const isDamage = event.kind === "damage";
         return (
           <span
             key={`${event.eventIndex}:${event.timestampMilli}:${event.kind}`}
-            className="absolute w-0.5 rounded-[1px]"
+            className="absolute rounded-[1px]"
             style={{
               left: `${statusWaveformPosition(event.timestampMilli, startMilli, laneWindowMilli)}%`,
+              width: `${barWidth}px`,
               top: isDamage ? "50%" : undefined,
               bottom: isDamage ? undefined : "50%",
               height: `${height}px`,
               backgroundColor: STATUS_WAVEFORM_COLORS[event.kind],
-              opacity: statusWaveformBarOpacity(event.amount, scale.highMagnitudeThreshold),
+              opacity: statusWaveformBarOpacity(
+                event.amount,
+                scale.highMagnitudeThreshold,
+                event.timestampMilli,
+                cursorMilli,
+                windowPreset.historyMilli,
+              ),
             }}
           />
         );

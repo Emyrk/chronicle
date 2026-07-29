@@ -11,6 +11,7 @@ export type StatusWaveformEvent = StatusTimelineEvent & {
 };
 
 export interface StatusWaveformScale {
+  rowMedian: number;
   rowMax: number;
   highMagnitudeThreshold: number;
 }
@@ -23,10 +24,17 @@ export function statusWaveformEvents(events: StatusTimelineEvent[]): StatusWavef
 }
 
 export function statusWaveformScale(events: StatusWaveformEvent[]): StatusWaveformScale {
-  if (events.length === 0) return { rowMax: 0, highMagnitudeThreshold: Infinity };
+  if (events.length === 0) {
+    return { rowMedian: 0, rowMax: 0, highMagnitudeThreshold: Infinity };
+  }
   const amounts = events.map((event) => event.amount).sort((a, b) => a - b);
+  const middle = Math.floor(amounts.length / 2);
+  const rowMedian = amounts.length % 2 === 0
+    ? (amounts[middle - 1] + amounts[middle]) / 2
+    : amounts[middle];
   const thresholdIndex = Math.ceil(amounts.length * 0.85) - 1;
   return {
+    rowMedian,
     rowMax: amounts[amounts.length - 1],
     highMagnitudeThreshold: amounts[Math.max(0, thresholdIndex)],
   };
@@ -52,13 +60,39 @@ export function statusWaveformScaleSummary(rowMaxes: number[]): StatusWaveformSc
   };
 }
 
-export function statusWaveformBarHeight(amount: number, rowMax: number): number {
+export function statusWaveformBarHeight(
+  amount: number,
+  rowMedian: number,
+  rowMax: number,
+): number {
   if (amount <= 0 || rowMax <= 0) return 3;
-  return Math.max(3, Math.round(10 * Math.pow(Math.min(1, amount / rowMax), 0.45)));
+  if (rowMedian <= 0 || rowMedian >= rowMax) {
+    return amount >= rowMax ? 10 : 3;
+  }
+  if (amount <= rowMedian) {
+    const belowMedian = Math.max(0, Math.min(1, amount / rowMedian));
+    return 3 + Math.round(belowMedian ** 2);
+  }
+  const aboveMedian = Math.max(0, Math.min(1, (amount - rowMedian) / (rowMax - rowMedian)));
+  return 4 + Math.round(6 * aboveMedian ** 1.7);
 }
 
-export function statusWaveformBarOpacity(amount: number, highMagnitudeThreshold: number): number {
-  return amount >= highMagnitudeThreshold ? 0.95 : 0.72;
+export function statusWaveformBarOpacity(
+  amount: number,
+  highMagnitudeThreshold: number,
+  timestampMilli: number,
+  cursorMilli: number,
+  historyMilli: number,
+): number {
+  const magnitudeOpacity = amount >= highMagnitudeThreshold ? 0.95 : 0.72;
+  if (timestampMilli >= cursorMilli) return magnitudeOpacity;
+  if (historyMilli <= 0) return 0;
+  const recency = Math.max(0, Math.min(1, 1 - (cursorMilli - timestampMilli) / historyMilli));
+  return magnitudeOpacity * recency ** 1.35;
+}
+
+export function statusWaveformBarWidth(historyMilli: number, futureMilli: number): number {
+  return historyMilli + futureMilli <= 10_000 ? 3 : 2;
 }
 
 export function statusWaveformPosition(
