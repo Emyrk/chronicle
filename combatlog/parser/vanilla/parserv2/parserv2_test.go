@@ -12,14 +12,20 @@ import (
 
 	"github.com/Emyrk/chronicle/combatlog/parser/guid"
 	"github.com/Emyrk/chronicle/combatlog/parser/types"
+	"github.com/Emyrk/chronicle/combatlog/parser/types/combatant"
 	"github.com/Emyrk/chronicle/combatlog/parser/types/realm"
 	"github.com/Emyrk/chronicle/combatlog/parser/types/unitinfo"
 	"github.com/Emyrk/chronicle/combatlog/parser/types/zone"
 	"github.com/Emyrk/chronicle/combatlog/parser/common/messages"
+	"github.com/Emyrk/chronicle/database"
 	"github.com/Emyrk/chronicle/database/gamedb"
 	"github.com/Emyrk/chronicle/database/gamedb/chrondbc"
+	"github.com/Emyrk/chronicle/database/gamedb/chrondbc/dbcmem"
+	"github.com/Emyrk/chronicle/database/gamedb/talents"
 	"github.com/Emyrk/chronicle/internal/ptr"
 	"github.com/Emyrk/chronicle/internal/services"
+	"github.com/Gophercraft/core/i18n"
+	"github.com/google/uuid"
 	"github.com/google/go-cmp/cmp"
 	"github.com/google/go-cmp/cmp/cmpopts"
 	"github.com/rs/zerolog"
@@ -375,13 +381,22 @@ func TestParserMessages(t *testing.T) {
 		// ResourceChange from the pre-mitigation damage. Here the damage was
 		// fully absorbed by a shield (458 absorbed, 0 dealt) — 458 / 0.5 =
 		// 916 mana was still burned.
+		//
+		// Uses a stub GameDB instead of the real Spell.dbc so the test works
+		// regardless of build tags (the azerothcore DBC has different spell
+		// data for this ID).
 		ctx := context.Background()
 		zerologLogger := zerolog.New(zerolog.ConsoleWriter{Out: os.Stderr})
 		logger := slog.New(slogzerolog.Option{Level: slog.LevelDebug, Logger: &zerologLogger}.NewZerologHandler())
 
+		manaBurnSpell := manaBurnSpell()
+		db := &stubGameDB{spells: map[chrondbc.SpellID]*chrondbc.Spell{
+			10876: manaBurnSpell,
+		}}
+
 		p, err := New(ctx, logger,
 			strings.NewReader("1784050453916|SPELL_DMG|0xF130006287017F8B|0x000000000001D795|10876|0|458,0,0|0|5|62,0,0,0"),
-			testSpellDB(t), nil)
+			db, nil)
 		require.NoError(t, err)
 		msgs, err := p.Advance(ctx)
 		require.NoError(t, err)
@@ -414,4 +429,57 @@ func TestParserMessages(t *testing.T) {
 	// 		wowDB,
 	// 	)
 	// })
+}
+
+// stubGameDB is a minimal gamedb.GameDB for tests that need specific spell data
+// without loading a real Spell.dbc (which varies by build tag / server).
+type stubGameDB struct {
+	spells map[chrondbc.SpellID]*chrondbc.Spell
+}
+
+func (s *stubGameDB) Spell(_ context.Context, id chrondbc.SpellID) (*chrondbc.Spell, error) {
+	if sp, ok := s.spells[id]; ok {
+		return sp, nil
+	}
+	return nil, chrondbc.SpellNotFound(id)
+}
+
+func (s *stubGameDB) SpellsByName(context.Context, string) ([]*chrondbc.Spell, error) {
+	return nil, nil
+}
+
+func (s *stubGameDB) ResolveGear(_ []combatant.GearItem) {}
+
+func (s *stubGameDB) Creature(int32) (*database.WorldCreatureTemplate, bool) {
+	return nil, false
+}
+
+func (s *stubGameDB) TalentTrees(context.Context, uuid.UUID) (*talents.TalentTreeData, error) {
+	return nil, nil
+}
+
+func (s *stubGameDB) ExtraAttackSpell(context.Context, int32) (dbcmem.ExtraAttackSpell, bool) {
+	return dbcmem.ExtraAttackSpell{}, false
+}
+
+func (s *stubGameDB) DurationModifiers(context.Context) (*chrondbc.DurationModifierSet, error) {
+	return &chrondbc.DurationModifierSet{}, nil
+}
+
+func (s *stubGameDB) PeriodicSpells(context.Context) (map[int32]dbcmem.PeriodicSpell, error) {
+	return nil, nil
+}
+
+// manaBurnSpell returns a hand-crafted Mana Burn Rank 5 (ID 10876) with the
+// fields required by powerBurnResourceChange: EffectPowerBurn in effect slot 0,
+// EffectAmplitude 0.5, and EffectMiscValue 0 (mana).
+func manaBurnSpell() *chrondbc.Spell {
+	sp := &chrondbc.Spell{
+		ID: 10876,
+	}
+	sp.Name_lang = i18n.Text{i18n.English: "Mana Burn"}
+	sp.Effect = [3]chrondbc.Effect{chrondbc.EffectPowerBurn, 0, 0}
+	sp.EffectAmplitude = [3]float32{0.5, 0, 0}
+	sp.EffectMiscValue = [3]int32{0, 0, 0} // 0 = mana
+	return sp
 }
