@@ -71,7 +71,7 @@ func VanillaPlusScarletMonasterySpeedrunRequirements() *rankings.Rankings {
 	return &rankings.Rankings{
 		Speedrun: &rankings.SpeedrunRules{
 			Requirements: []rankings.SpeedrunRequirement{
-				{Name: "Loksey", EntryIDs: []uint32{25259, 25225}, Count: 1, Category: rankings.SpeedrunCategoryBosses},
+				{Name: "Loksey", EntryIDs: []uint32{25225}, Count: 1, Category: rankings.SpeedrunCategoryBosses},
 				{Name: "Brother Michael", EntryIDs: []uint32{25221}, Count: 1, Category: rankings.SpeedrunCategoryBosses},
 				{Name: "Brigitte Abbendis", EntryIDs: []uint32{25229}, Count: 1, Category: rankings.SpeedrunCategoryBosses},
 				{Name: "Fairbanks", EntryIDs: []uint32{25222}, Count: 1, Category: rankings.SpeedrunCategoryBosses},
