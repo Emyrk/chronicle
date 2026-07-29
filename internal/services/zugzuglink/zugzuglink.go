@@ -45,20 +45,31 @@ type Character struct {
 	Level int    `json:"level"`
 	// Guild is the guild name, or empty when the provider returns `false`.
 	Guild string `json:"guild"`
+	// RealmKey is the provider's realm slug, e.g. "eversong-wilds" for the
+	// realm named "Eversong Wilds".
+	RealmKey string `json:"realmKey"`
+}
+
+// RealmName converts the provider's realm key ("eversong-wilds") into a
+// realm name suitable for a case-insensitive lookup ("eversong wilds").
+func (c Character) RealmName() string {
+	return strings.ReplaceAll(c.RealmKey, "-", " ")
 }
 
 // UnmarshalJSON handles the provider's `"guild": string | false` quirk.
 func (c *Character) UnmarshalJSON(data []byte) error {
 	var raw struct {
-		Name  string          `json:"name"`
-		Level int             `json:"level"`
-		Guild json.RawMessage `json:"guild"`
+		Name     string          `json:"name"`
+		Level    int             `json:"level"`
+		Guild    json.RawMessage `json:"guild"`
+		RealmKey string          `json:"realmKey"`
 	}
 	if err := json.Unmarshal(data, &raw); err != nil {
 		return err
 	}
 	c.Name = raw.Name
 	c.Level = raw.Level
+	c.RealmKey = raw.RealmKey
 	c.Guild = ""
 	if len(raw.Guild) > 0 && raw.Guild[0] == '"' {
 		var g string

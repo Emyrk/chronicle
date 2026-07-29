@@ -203,6 +203,10 @@ type UpdateSiteConfigRequest struct {
 	Discoverable        *bool     `json:"discoverable,omitempty"`
 	DefaultFormat       *string   `json:"default_format,omitempty"`
 	AvailableFormats    []string  `json:"available_formats,omitempty"`
+	// ExternalVerification updates the deployment's external verification
+	// provider. Omit to keep the existing config; send with an empty URL to
+	// disable. A blank secret on update preserves the stored secret.
+	ExternalVerification *ExternalVerification `json:"external_verification,omitempty"`
 }
 
 // SetUserRolesRequest is the request body for setting a user's Chronicle roles.

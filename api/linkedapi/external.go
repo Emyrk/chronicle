@@ -13,17 +13,12 @@ import (
 	"github.com/Emyrk/chronicle/api/db2sdk"
 	"github.com/Emyrk/chronicle/api/httpapi"
 	"github.com/Emyrk/chronicle/database"
-	"github.com/Emyrk/chronicle/internal/services/servicetenant"
 	"github.com/Emyrk/chronicle/internal/services/zugzuglink"
 )
 
 // externalSyncCooldown is the minimum time between external verification
 // syncs per user per provider.
 const externalSyncCooldown = 5 * time.Minute
-
-// zugzugRealmName is the realm characters from zug-zug providers live on.
-// TODO: remove once the provider includes the realm in its response.
-const zugzugRealmName = "Eversong Wilds"
 
 // SyncExternal links the authenticated user's characters using the tenant's
 // external verification provider. The provider verifies players via Discord,
@@ -33,14 +28,12 @@ func (h *Handler) SyncExternal(w http.ResponseWriter, r *http.Request) {
 	state := chronauth.AuthenticationState(r)
 	userID := state.Claims.Subject
 
-	tenant := servicetenant.TenantFromContext(ctx)
-	if tenant == nil {
-		httpapi.Write(ctx, w, http.StatusNotFound, chroniclesdk.Response{
-			Message: "External verification is not available here",
-		})
+	siteConfig, err := h.zed.GetSiteConfig(ctx)
+	if err != nil {
+		httpapi.InternalServerError(w, err)
 		return
 	}
-	config := chroniclesdk.ParseExternalVerification(tenant.ExternalVerification)
+	config := chroniclesdk.ParseExternalVerification(siteConfig.ExternalVerification)
 	if config == nil || config.Type != zugzuglink.Type {
 		httpapi.Write(ctx, w, http.StatusNotFound, chroniclesdk.Response{
 			Message: "External verification is not enabled for this site",
@@ -109,12 +102,6 @@ func (h *Handler) SyncExternal(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	realm, err := h.zed.GetWoWServerRealmByName(ctx, zugzugRealmName)
-	if err != nil {
-		httpapi.InternalServerError(w, err)
-		return
-	}
-
 	// Preserve the primary flag across the delete/re-add cycle.
 	deleted, err := h.zed.DeleteUserCharacterLinksByUserAndSource(ctx, database.DeleteUserCharacterLinksByUserAndSourceParams{
 		UserID:     userID,
@@ -137,11 +124,29 @@ func (h *Handler) SyncExternal(w http.ResponseWriter, r *http.Request) {
 		Conflicts: []string{},
 		Unmatched: []string{},
 	}
+	// Resolve each character's realm from the provider's realmKey, caching
+	// lookups since most characters share a realm.
+	realms := map[string]uuid.UUID{}
 	for _, character := range verification.Characters {
-		// Match by name on the provider's realm. Names are the only identity
-		// the provider gives us; game_players is keyed by GUID.
+		realmID, ok := realms[character.RealmKey]
+		if !ok {
+			realm, err := h.zed.GetWoWServerRealmByName(ctx, character.RealmName())
+			if errors.Is(err, sql.ErrNoRows) {
+				resp.Unmatched = append(resp.Unmatched, character.Name)
+				continue
+			}
+			if err != nil {
+				httpapi.InternalServerError(w, err)
+				return
+			}
+			realmID = realm.ID
+			realms[character.RealmKey] = realmID
+		}
+
+		// Match by name on the character's realm. Names are the only
+		// identity the provider gives us; game_players is keyed by GUID.
 		player, err := h.zed.GetGamePlayerByGUID(ctx, database.GetGamePlayerByGUIDParams{
-			RealmID: realm.ID,
+			RealmID: realmID,
 			Name:    character.Name,
 		})
 		if errors.Is(err, sql.ErrNoRows) {
@@ -156,14 +161,14 @@ func (h *Handler) SyncExternal(w http.ResponseWriter, r *http.Request) {
 		_, err = h.zed.InsertUserCharacterLink(ctx, database.InsertUserCharacterLinkParams{
 			UserID:        userID,
 			CharacterGuid: player.ID,
-			RealmID:       realm.ID,
+			RealmID:       realmID,
 			LinkedBy:      uuid.NullUUID{UUID: userID, Valid: true},
 			LinkSource:    source,
 		})
 		if database.IsUniqueViolation(err, database.UniqueUserCharacterLinksCharacterGuidRealmIDKey) {
 			existing, getErr := h.zed.GetUserCharacterLink(ctx, database.GetUserCharacterLinkParams{
 				CharacterGuid: player.ID,
-				RealmID:       realm.ID,
+				RealmID:       realmID,
 			})
 			if getErr == nil && existing.UserID == userID {
 				// Already linked to this user (e.g. manually) — fine.
@@ -181,7 +186,7 @@ func (h *Handler) SyncExternal(w http.ResponseWriter, r *http.Request) {
 			_, err := h.zed.SetPrimaryUserCharacter(ctx, database.SetPrimaryUserCharacterParams{
 				UserID:        userID,
 				CharacterGuid: player.ID,
-				RealmID:       realm.ID,
+				RealmID:       realmID,
 			})
 			if err != nil && !errors.Is(err, sql.ErrNoRows) {
 				httpapi.InternalServerError(w, err)

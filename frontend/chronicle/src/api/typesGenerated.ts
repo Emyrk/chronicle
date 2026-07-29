@@ -2444,11 +2444,6 @@ export interface Tenant {
      * Empty means all formats are available.
      */
     readonly available_formats: readonly string[];
-    /**
-     * ExternalVerification is the tenant's external verification provider
-     * config. The secret is always stripped on reads.
-     */
-    readonly external_verification?: ExternalVerification;
     readonly created_at: string;
     readonly updated_at: string;
 }
@@ -2546,6 +2541,12 @@ export interface UpdateSiteConfigRequest {
     readonly discoverable?: boolean;
     readonly default_format?: string;
     readonly available_formats?: readonly string[];
+    /**
+     * ExternalVerification updates the deployment's external verification
+     * provider. Omit to keep the existing config; send with an empty URL to
+     * disable. A blank secret on update preserves the stored secret.
+     */
+    readonly external_verification?: ExternalVerification;
 }
 
 // From chroniclesdk/guild_page.go
@@ -2650,12 +2651,6 @@ export interface UpsertTenantRequest {
     readonly parse_config: ParseConfig | null;
     readonly default_format: string | null;
     readonly available_formats: readonly string[];
-    /**
-     * ExternalVerification updates the tenant's external verification
-     * provider. Omit to keep the existing config; send with an empty URL to
-     * disable.
-     */
-    readonly external_verification: ExternalVerification | null;
 }
 
 // From chroniclesdk/user.go

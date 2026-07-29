@@ -19,14 +19,16 @@ func TestUnmarshalGuildQuirk(t *testing.T) {
 	err := json.Unmarshal([]byte(`{
 		"verified": true,
 		"characters": [
-			{"name": "Holycows", "level": 60, "guild": "Zug Zug"},
-			{"name": "Taco", "level": 42, "guild": false}
+			{"name": "Holycows", "level": 60, "guild": "Zug Zug", "realmKey": "eversong-wilds"},
+			{"name": "Taco", "level": 42, "guild": false, "realmKey": "eversong-wilds"}
 		]
 	}`), &resp)
 	require.NoError(t, err)
 	require.True(t, resp.Verified)
 	require.Len(t, resp.Characters, 2)
 	require.Equal(t, "Zug Zug", resp.Characters[0].Guild)
+	require.Equal(t, "eversong-wilds", resp.Characters[0].RealmKey)
+	require.Equal(t, "eversong wilds", resp.Characters[0].RealmName())
 	require.Equal(t, "", resp.Characters[1].Guild)
 	require.Equal(t, 42, resp.Characters[1].Level)
 }

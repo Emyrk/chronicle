@@ -8382,7 +8382,7 @@ func (q *sqlQuerier) GetSharedViewByInstanceAndHash(ctx context.Context, arg Get
 }
 
 const getSiteConfig = `-- name: GetSiteConfig :one
-SELECT id, signups_enabled, updated_at, branding, discoverable, default_format, available_formats, client_uploads_disabled, parse_config FROM site_config WHERE id = TRUE
+SELECT id, signups_enabled, updated_at, branding, discoverable, default_format, available_formats, client_uploads_disabled, parse_config, external_verification FROM site_config WHERE id = TRUE
 `
 
 func (q *sqlQuerier) GetSiteConfig(ctx context.Context) (SiteConfig, error) {
@@ -8398,6 +8398,7 @@ func (q *sqlQuerier) GetSiteConfig(ctx context.Context) (SiteConfig, error) {
 		&i.AvailableFormats,
 		&i.ClientUploadsDisabled,
 		&i.ParseConfig,
+		&i.ExternalVerification,
 	)
 	return i, err
 }
@@ -8410,9 +8411,10 @@ UPDATE site_config SET
     default_format = COALESCE($4, default_format),
     available_formats = COALESCE($5, available_formats),
     client_uploads_disabled = COALESCE($6, client_uploads_disabled),
+    external_verification = COALESCE($7, external_verification),
     updated_at = now()
 WHERE id = TRUE
-RETURNING id, signups_enabled, updated_at, branding, discoverable, default_format, available_formats, client_uploads_disabled, parse_config
+RETURNING id, signups_enabled, updated_at, branding, discoverable, default_format, available_formats, client_uploads_disabled, parse_config, external_verification
 `
 
 type UpdateSiteConfigParams struct {
@@ -8422,6 +8424,7 @@ type UpdateSiteConfigParams struct {
 	DefaultFormat         NullLogFormat `db:"default_format" json:"default_format"`
 	AvailableFormats      []string      `db:"available_formats" json:"available_formats"`
 	ClientUploadsDisabled pgtype.Bool   `db:"client_uploads_disabled" json:"client_uploads_disabled"`
+	ExternalVerification  []byte        `db:"external_verification" json:"external_verification"`
 }
 
 func (q *sqlQuerier) UpdateSiteConfig(ctx context.Context, arg UpdateSiteConfigParams) (SiteConfig, error) {
@@ -8432,6 +8435,7 @@ func (q *sqlQuerier) UpdateSiteConfig(ctx context.Context, arg UpdateSiteConfigP
 		arg.DefaultFormat,
 		arg.AvailableFormats,
 		arg.ClientUploadsDisabled,
+		arg.ExternalVerification,
 	)
 	var i SiteConfig
 	err := row.Scan(
@@ -8444,6 +8448,7 @@ func (q *sqlQuerier) UpdateSiteConfig(ctx context.Context, arg UpdateSiteConfigP
 		&i.AvailableFormats,
 		&i.ClientUploadsDisabled,
 		&i.ParseConfig,
+		&i.ExternalVerification,
 	)
 	return i, err
 }
@@ -9088,7 +9093,7 @@ func (q *sqlQuerier) DeleteTenant(ctx context.Context, id uuid.UUID) error {
 }
 
 const getTenantByID = `-- name: GetTenantByID :one
-SELECT id, slug, name, disable_client_upload, include_in_all, branding, created_at, updated_at, discoverable, default_dataset_id, default_format, available_formats, parse_config, external_verification FROM tenants WHERE id = $1
+SELECT id, slug, name, disable_client_upload, include_in_all, branding, created_at, updated_at, discoverable, default_dataset_id, default_format, available_formats, parse_config FROM tenants WHERE id = $1
 `
 
 func (q *sqlQuerier) GetTenantByID(ctx context.Context, id uuid.UUID) (Tenant, error) {
@@ -9108,14 +9113,13 @@ func (q *sqlQuerier) GetTenantByID(ctx context.Context, id uuid.UUID) (Tenant, e
 		&i.DefaultFormat,
 		&i.AvailableFormats,
 		&i.ParseConfig,
-		&i.ExternalVerification,
 	)
 	return i, err
 }
 
 const getTenantBySlug = `-- name: GetTenantBySlug :one
 
-SELECT id, slug, name, disable_client_upload, include_in_all, branding, created_at, updated_at, discoverable, default_dataset_id, default_format, available_formats, parse_config, external_verification FROM tenants WHERE slug = $1
+SELECT id, slug, name, disable_client_upload, include_in_all, branding, created_at, updated_at, discoverable, default_dataset_id, default_format, available_formats, parse_config FROM tenants WHERE slug = $1
 `
 
 // Tenant queries. These run with AdminBypass context since the tenants table
@@ -9137,29 +9141,27 @@ func (q *sqlQuerier) GetTenantBySlug(ctx context.Context, slug pgtype.Text) (Ten
 		&i.DefaultFormat,
 		&i.AvailableFormats,
 		&i.ParseConfig,
-		&i.ExternalVerification,
 	)
 	return i, err
 }
 
 const insertTenant = `-- name: InsertTenant :one
-INSERT INTO tenants (id, slug, name, disable_client_upload, include_in_all, branding, discoverable, default_format, available_formats, parse_config, external_verification)
-VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
-RETURNING id, slug, name, disable_client_upload, include_in_all, branding, created_at, updated_at, discoverable, default_dataset_id, default_format, available_formats, parse_config, external_verification
+INSERT INTO tenants (id, slug, name, disable_client_upload, include_in_all, branding, discoverable, default_format, available_formats, parse_config)
+VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
+RETURNING id, slug, name, disable_client_upload, include_in_all, branding, created_at, updated_at, discoverable, default_dataset_id, default_format, available_formats, parse_config
 `
 
 type InsertTenantParams struct {
-	ID                   uuid.UUID     `db:"id" json:"id"`
-	Slug                 pgtype.Text   `db:"slug" json:"slug"`
-	Name                 string        `db:"name" json:"name"`
-	DisableClientUpload  bool          `db:"disable_client_upload" json:"disable_client_upload"`
-	IncludeInAll         bool          `db:"include_in_all" json:"include_in_all"`
-	Branding             []byte        `db:"branding" json:"branding"`
-	Discoverable         bool          `db:"discoverable" json:"discoverable"`
-	DefaultFormat        NullLogFormat `db:"default_format" json:"default_format"`
-	AvailableFormats     []string      `db:"available_formats" json:"available_formats"`
-	ParseConfig          []byte        `db:"parse_config" json:"parse_config"`
-	ExternalVerification []byte        `db:"external_verification" json:"external_verification"`
+	ID                  uuid.UUID     `db:"id" json:"id"`
+	Slug                pgtype.Text   `db:"slug" json:"slug"`
+	Name                string        `db:"name" json:"name"`
+	DisableClientUpload bool          `db:"disable_client_upload" json:"disable_client_upload"`
+	IncludeInAll        bool          `db:"include_in_all" json:"include_in_all"`
+	Branding            []byte        `db:"branding" json:"branding"`
+	Discoverable        bool          `db:"discoverable" json:"discoverable"`
+	DefaultFormat       NullLogFormat `db:"default_format" json:"default_format"`
+	AvailableFormats    []string      `db:"available_formats" json:"available_formats"`
+	ParseConfig         []byte        `db:"parse_config" json:"parse_config"`
 }
 
 func (q *sqlQuerier) InsertTenant(ctx context.Context, arg InsertTenantParams) (Tenant, error) {
@@ -9174,7 +9176,6 @@ func (q *sqlQuerier) InsertTenant(ctx context.Context, arg InsertTenantParams) (
 		arg.DefaultFormat,
 		arg.AvailableFormats,
 		arg.ParseConfig,
-		arg.ExternalVerification,
 	)
 	var i Tenant
 	err := row.Scan(
@@ -9191,13 +9192,12 @@ func (q *sqlQuerier) InsertTenant(ctx context.Context, arg InsertTenantParams) (
 		&i.DefaultFormat,
 		&i.AvailableFormats,
 		&i.ParseConfig,
-		&i.ExternalVerification,
 	)
 	return i, err
 }
 
 const listTenants = `-- name: ListTenants :many
-SELECT id, slug, name, disable_client_upload, include_in_all, branding, created_at, updated_at, discoverable, default_dataset_id, default_format, available_formats, parse_config, external_verification FROM tenants ORDER BY name
+SELECT id, slug, name, disable_client_upload, include_in_all, branding, created_at, updated_at, discoverable, default_dataset_id, default_format, available_formats, parse_config FROM tenants ORDER BY name
 `
 
 func (q *sqlQuerier) ListTenants(ctx context.Context) ([]Tenant, error) {
@@ -9223,7 +9223,6 @@ func (q *sqlQuerier) ListTenants(ctx context.Context) ([]Tenant, error) {
 			&i.DefaultFormat,
 			&i.AvailableFormats,
 			&i.ParseConfig,
-			&i.ExternalVerification,
 		); err != nil {
 			return nil, err
 		}
@@ -9321,24 +9320,22 @@ UPDATE tenants SET
     default_format = COALESCE($7, default_format),
     available_formats = COALESCE($8, available_formats),
     parse_config = COALESCE($9, parse_config),
-    external_verification = COALESCE($10, external_verification),
     updated_at = now()
-WHERE id = $11
-RETURNING id, slug, name, disable_client_upload, include_in_all, branding, created_at, updated_at, discoverable, default_dataset_id, default_format, available_formats, parse_config, external_verification
+WHERE id = $10
+RETURNING id, slug, name, disable_client_upload, include_in_all, branding, created_at, updated_at, discoverable, default_dataset_id, default_format, available_formats, parse_config
 `
 
 type UpdateTenantParams struct {
-	Slug                 pgtype.Text   `db:"slug" json:"slug"`
-	Name                 pgtype.Text   `db:"name" json:"name"`
-	DisableClientUpload  pgtype.Bool   `db:"disable_client_upload" json:"disable_client_upload"`
-	IncludeInAll         pgtype.Bool   `db:"include_in_all" json:"include_in_all"`
-	Branding             []byte        `db:"branding" json:"branding"`
-	Discoverable         pgtype.Bool   `db:"discoverable" json:"discoverable"`
-	DefaultFormat        NullLogFormat `db:"default_format" json:"default_format"`
-	AvailableFormats     []string      `db:"available_formats" json:"available_formats"`
-	ParseConfig          []byte        `db:"parse_config" json:"parse_config"`
-	ExternalVerification []byte        `db:"external_verification" json:"external_verification"`
-	ID                   uuid.UUID     `db:"id" json:"id"`
+	Slug                pgtype.Text   `db:"slug" json:"slug"`
+	Name                pgtype.Text   `db:"name" json:"name"`
+	DisableClientUpload pgtype.Bool   `db:"disable_client_upload" json:"disable_client_upload"`
+	IncludeInAll        pgtype.Bool   `db:"include_in_all" json:"include_in_all"`
+	Branding            []byte        `db:"branding" json:"branding"`
+	Discoverable        pgtype.Bool   `db:"discoverable" json:"discoverable"`
+	DefaultFormat       NullLogFormat `db:"default_format" json:"default_format"`
+	AvailableFormats    []string      `db:"available_formats" json:"available_formats"`
+	ParseConfig         []byte        `db:"parse_config" json:"parse_config"`
+	ID                  uuid.UUID     `db:"id" json:"id"`
 }
 
 // Only non-null params are applied; NULL means "keep existing value".
@@ -9353,7 +9350,6 @@ func (q *sqlQuerier) UpdateTenant(ctx context.Context, arg UpdateTenantParams) (
 		arg.DefaultFormat,
 		arg.AvailableFormats,
 		arg.ParseConfig,
-		arg.ExternalVerification,
 		arg.ID,
 	)
 	var i Tenant
@@ -9371,7 +9367,6 @@ func (q *sqlQuerier) UpdateTenant(ctx context.Context, arg UpdateTenantParams) (
 		&i.DefaultFormat,
 		&i.AvailableFormats,
 		&i.ParseConfig,
-		&i.ExternalVerification,
 	)
 	return i, err
 }

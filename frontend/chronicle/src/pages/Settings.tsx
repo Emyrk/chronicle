@@ -366,20 +366,29 @@ function ExternalVerificationCard() {
   const { data: session } = useSession();
   const { data: siteConfig } = useSiteConfig();
   const syncMutation = useExternalCharacterSync();
-  const [throttledUntil, setThrottledUntil] = useState<number>(() => {
-    const last = Number(window.localStorage.getItem(EXTERNAL_SYNC_THROTTLE_KEY) ?? 0);
-    return last + EXTERNAL_SYNC_THROTTLE_MS;
-  });
+  // Client-side throttle: checked in the click handler (localStorage), with
+  // component state only to disable the button. The server enforces the
+  // real rate limit.
+  const [throttled, setThrottled] = useState(false);
 
   const provider = siteConfig?.external_verification;
   if (!provider) return null;
 
   const isDiscord = session?.auth_provider === "discord";
-  const throttled = Date.now() < throttledUntil;
 
   const handleSync = () => {
-    window.localStorage.setItem(EXTERNAL_SYNC_THROTTLE_KEY, String(Date.now()));
-    setThrottledUntil(Date.now() + EXTERNAL_SYNC_THROTTLE_MS);
+    const at = Date.now();
+    const last = Number(window.localStorage.getItem(EXTERNAL_SYNC_THROTTLE_KEY) ?? 0);
+    const remaining = last + EXTERNAL_SYNC_THROTTLE_MS - at;
+    if (remaining > 0) {
+      setThrottled(true);
+      window.setTimeout(() => setThrottled(false), remaining);
+      toast.info("Synced recently — try again in a few minutes.");
+      return;
+    }
+    window.localStorage.setItem(EXTERNAL_SYNC_THROTTLE_KEY, String(at));
+    setThrottled(true);
+    window.setTimeout(() => setThrottled(false), EXTERNAL_SYNC_THROTTLE_MS);
     syncMutation.mutate(undefined, {
       onSuccess: (result) => {
         if (!result.verified) {

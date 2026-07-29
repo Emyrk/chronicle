@@ -11,12 +11,12 @@ import (
 
 // Tenant is the SDK type exposed to the frontend.
 type Tenant struct {
-	ID                  uuid.UUID  `json:"id"`
-	Slug                *string    `json:"slug"`
-	Name                string     `json:"name"`
-	DisableClientUpload bool       `json:"disable_client_upload"`
-	IncludeInAll        bool       `json:"include_in_all"`
-	Discoverable        bool       `json:"discoverable"`
+	ID                  uuid.UUID    `json:"id"`
+	Slug                *string      `json:"slug"`
+	Name                string       `json:"name"`
+	DisableClientUpload bool         `json:"disable_client_upload"`
+	IncludeInAll        bool         `json:"include_in_all"`
+	Discoverable        bool         `json:"discoverable"`
 	Branding            *Branding    `json:"branding"`
 	ParseConfig         *ParseConfig `json:"parse_config"`
 	DefaultDatasetID    *uuid.UUID   `json:"default_dataset_id"`
@@ -26,12 +26,9 @@ type Tenant struct {
 	DefaultFormat *string `json:"default_format"`
 	// AvailableFormats restricts which log formats are valid for this tenant.
 	// Empty means all formats are available.
-	AvailableFormats []string `json:"available_formats"`
-	// ExternalVerification is the tenant's external verification provider
-	// config. The secret is always stripped on reads.
-	ExternalVerification *ExternalVerification `json:"external_verification,omitempty"`
-	CreatedAt            time.Time             `json:"created_at"`
-	UpdatedAt            time.Time             `json:"updated_at"`
+	AvailableFormats []string  `json:"available_formats"`
+	CreatedAt        time.Time `json:"created_at"`
+	UpdatedAt        time.Time `json:"updated_at"`
 }
 
 // ParseConfig holds tenant-level parse scoring settings, stored as JSONB.
@@ -52,15 +49,15 @@ type ParseConfig struct {
 
 // Branding holds the visual identity for a tenant subdomain or the primary domain.
 type Branding struct {
-	SquareLogo       string   `json:"square_logo,omitempty"`
-	LogoWide         string   `json:"logo_wide,omitempty"`
-	Favicon          string   `json:"favicon,omitempty"`
-	DisplayName      string   `json:"display_name,omitempty"`
-	Tagline          string   `json:"tagline,omitempty"`
-	Description      string   `json:"description,omitempty"`
-	BackgroundBanner string   `json:"background_banner,omitempty"`
-	Tags  []string          `json:"tags,omitempty"`
-	Theme map[string]string `json:"theme,omitempty"` // CSS color overrides keyed by knob name (hex "#RRGGBB")
+	SquareLogo       string            `json:"square_logo,omitempty"`
+	LogoWide         string            `json:"logo_wide,omitempty"`
+	Favicon          string            `json:"favicon,omitempty"`
+	DisplayName      string            `json:"display_name,omitempty"`
+	Tagline          string            `json:"tagline,omitempty"`
+	Description      string            `json:"description,omitempty"`
+	BackgroundBanner string            `json:"background_banner,omitempty"`
+	Tags             []string          `json:"tags,omitempty"`
+	Theme            map[string]string `json:"theme,omitempty"` // CSS color overrides keyed by knob name (hex "#RRGGBB")
 }
 
 // TenantFromDB converts a database.Tenant to the SDK type.
@@ -89,11 +86,7 @@ func TenantFromDB(t database.Tenant) Tenant {
 			out.ParseConfig = &pc
 		}
 	}
-	if ev := ParseExternalVerification(t.ExternalVerification); ev != nil {
-		// Never expose the provider secret on reads.
-		ev.Secret = ""
-		out.ExternalVerification = ev
-	}
+
 	if t.DefaultDatasetID.Valid {
 		out.DefaultDatasetID = &t.DefaultDatasetID.UUID
 	}
@@ -180,12 +173,8 @@ type UpsertTenantRequest struct {
 	Discoverable        *bool         `json:"discoverable"`
 	Branding            *Branding     `json:"branding"`
 	ParseConfig         *ParseConfig  `json:"parse_config"`
-	DefaultFormat    *string  `json:"default_format"`
-	AvailableFormats []string `json:"available_formats"`
-	// ExternalVerification updates the tenant's external verification
-	// provider. Omit to keep the existing config; send with an empty URL to
-	// disable.
-	ExternalVerification *ExternalVerification `json:"external_verification"`
+	DefaultFormat       *string       `json:"default_format"`
+	AvailableFormats    []string      `json:"available_formats"`
 }
 
 // IsCreate returns true when the request should insert a new tenant.
@@ -206,18 +195,6 @@ func (r UpsertTenantRequest) marshalParseConfig() []byte {
 		return nil
 	}
 	b, _ := json.Marshal(r.ParseConfig)
-	return b
-}
-
-func (r UpsertTenantRequest) marshalExternalVerification() []byte {
-	if r.ExternalVerification == nil {
-		return nil
-	}
-	if r.ExternalVerification.URL == "" {
-		// Explicitly disable: store JSON null (non-nil so COALESCE applies).
-		return []byte("null")
-	}
-	b, _ := json.Marshal(r.ExternalVerification)
 	return b
 }
 
@@ -254,17 +231,16 @@ func (r UpsertTenantRequest) ToInsertParams() database.InsertTenantParams {
 	}
 
 	return database.InsertTenantParams{
-		ID:                   id,
-		Slug:                 slug,
-		Name:                 r.Name,
-		DisableClientUpload:  disableUpload,
-		IncludeInAll:         includeInAll,
-		Discoverable:         discoverable,
-		ExternalVerification: r.marshalExternalVerification(),
+		ID:                  id,
+		Slug:                slug,
+		Name:                r.Name,
+		DisableClientUpload: disableUpload,
+		IncludeInAll:        includeInAll,
+		Discoverable:        discoverable,
 		Branding:            r.marshalBranding(),
 		ParseConfig:         r.marshalParseConfig(),
-		DefaultFormat:    defaultFormat,
-		AvailableFormats: r.AvailableFormats,
+		DefaultFormat:       defaultFormat,
+		AvailableFormats:    r.AvailableFormats,
 	}
 }
 
@@ -302,16 +278,15 @@ func (r UpsertTenantRequest) ToUpdateParams() database.UpdateTenantParams {
 	}
 
 	return database.UpdateTenantParams{
-		ID:                   r.ID.UUID,
-		Slug:                 slug,
-		Name:                 name,
-		DisableClientUpload:  disableUpload,
-		IncludeInAll:         includeInAll,
-		Discoverable:         discoverable,
-		ExternalVerification: r.marshalExternalVerification(),
+		ID:                  r.ID.UUID,
+		Slug:                slug,
+		Name:                name,
+		DisableClientUpload: disableUpload,
+		IncludeInAll:        includeInAll,
+		Discoverable:        discoverable,
 		Branding:            r.marshalBranding(),
 		ParseConfig:         r.marshalParseConfig(),
-		DefaultFormat:    defaultFormat,
-		AvailableFormats: r.AvailableFormats,
+		DefaultFormat:       defaultFormat,
+		AvailableFormats:    r.AvailableFormats,
 	}
 }

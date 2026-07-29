@@ -1,8 +1,118 @@
 import { useState, useEffect } from "react";
+import { toast } from "sonner";
 import { useSiteConfig, useUpdateSiteConfig } from "@/api/queries";
+import { Input } from "@/components/ui/input";
 import { Loader2, Check, X } from "lucide-react";
 import { Card } from "@/components/ui/Card/Card";
 import { Button } from "@/components/ui/button";
+
+function ExternalVerificationSection() {
+  const { data: config } = useSiteConfig();
+  const updateConfig = useUpdateSiteConfig();
+  const [editing, setEditing] = useState(false);
+  const [url, setUrl] = useState("");
+  const [secret, setSecret] = useState("");
+  const [instructionsUrl, setInstructionsUrl] = useState("");
+
+  const configured = !!config?.external_verification;
+
+  const handleSave = (disable: boolean) => {
+    updateConfig.mutate(
+      {
+        external_verification: disable
+          ? { type: "zug-zug", url: "" }
+          : {
+              type: "zug-zug",
+              url: url.trim(),
+              // Blank secret preserves the stored one on the server.
+              secret: secret.trim() || undefined,
+              instructions_url: instructionsUrl.trim() || undefined,
+            },
+      },
+      {
+        onSuccess: () => {
+          toast.success(disable ? "External verification disabled." : "External verification saved.");
+          setEditing(false);
+          setSecret("");
+        },
+        onError: () => toast.error("Failed to update external verification."),
+      },
+    );
+  };
+
+  return (
+    <div className="space-y-2">
+      <div className="flex items-center justify-between">
+        <div>
+          <p className="font-medium">External Verification (Zug Zug)</p>
+          <p className="text-sm text-muted-foreground">
+            Lets Discord-authenticated players link their verified characters via a community
+            provider's API. {configured ? "Currently configured." : "Not configured."}
+          </p>
+        </div>
+        {!editing && (
+          <div className="flex items-center gap-2">
+            {configured && (
+              <Button
+                variant="ghost"
+                size="sm"
+                className="text-muted-foreground hover:text-destructive"
+                disabled={updateConfig.isPending}
+                onClick={() => handleSave(true)}
+              >
+                Disable
+              </Button>
+            )}
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => {
+                setUrl("");
+                setSecret("");
+                setInstructionsUrl(config?.external_verification?.instructions_url ?? "");
+                setEditing(true);
+              }}
+            >
+              {configured ? "Edit" : "Configure"}
+            </Button>
+          </div>
+        )}
+      </div>
+      {editing && (
+        <div className="rounded-lg border p-3 space-y-2">
+          <Input
+            placeholder="Provider base URL, e.g. https://ambershire.com"
+            value={url}
+            onChange={(e) => setUrl(e.target.value)}
+            className="h-8"
+          />
+          <Input
+            type="password"
+            placeholder={configured ? "Bearer secret (leave blank to keep current)" : "Bearer secret"}
+            value={secret}
+            onChange={(e) => setSecret(e.target.value)}
+            autoComplete="new-password"
+            className="h-8"
+          />
+          <Input
+            placeholder="Instructions URL (optional, shown to players)"
+            value={instructionsUrl}
+            onChange={(e) => setInstructionsUrl(e.target.value)}
+            className="h-8"
+          />
+          <div className="flex gap-2">
+            <Button size="sm" disabled={updateConfig.isPending || !url.trim()} onClick={() => handleSave(false)}>
+              Save
+            </Button>
+            <Button variant="ghost" size="sm" onClick={() => setEditing(false)}>
+              Cancel
+            </Button>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
 import { ThemeEditor } from "@/components/ThemeEditor/ThemeEditor";
 import { LOG_FORMAT_OPTIONS } from "@/config/serverCapabilities";
 
@@ -140,6 +250,7 @@ export function AdminSiteSettingsPage() {
             )}
           </Button>
         </div>
+        <ExternalVerificationSection />
         <div className="flex items-center justify-between">
           <div>
             <p className="font-medium">Client Uploads</p>
