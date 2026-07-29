@@ -2,6 +2,7 @@ package parserv2
 
 import (
 	"context"
+	"fmt"
 	"log/slog"
 	"os"
 	"path/filepath"
@@ -12,20 +13,66 @@ import (
 
 	"github.com/Emyrk/chronicle/combatlog/parser/guid"
 	"github.com/Emyrk/chronicle/combatlog/parser/types"
+	"github.com/Emyrk/chronicle/combatlog/parser/types/combatant"
 	"github.com/Emyrk/chronicle/combatlog/parser/types/realm"
 	"github.com/Emyrk/chronicle/combatlog/parser/types/unitinfo"
 	"github.com/Emyrk/chronicle/combatlog/parser/types/zone"
 	"github.com/Emyrk/chronicle/combatlog/parser/common/messages"
+	"github.com/Emyrk/chronicle/database"
 	"github.com/Emyrk/chronicle/database/gamedb"
 	"github.com/Emyrk/chronicle/database/gamedb/chrondbc"
+	"github.com/Emyrk/chronicle/database/gamedb/chrondbc/dbcmem"
+	"github.com/Emyrk/chronicle/database/gamedb/talents"
 	"github.com/Emyrk/chronicle/internal/ptr"
 	"github.com/Emyrk/chronicle/internal/services"
+	"github.com/Gophercraft/core/i18n"
+	"github.com/google/uuid"
 	"github.com/google/go-cmp/cmp"
 	"github.com/google/go-cmp/cmp/cmpopts"
 	"github.com/rs/zerolog"
 	slogzerolog "github.com/samber/slog-zerolog/v2"
 	"github.com/stretchr/testify/require"
 )
+
+var _ gamedb.GameDB = fakeSpellDB{}
+
+// fakeSpellDB serves hand-built spells, independent of the server build tag's
+// Spell.dbc contents.
+type fakeSpellDB struct {
+	spells map[chrondbc.SpellID]*chrondbc.Spell
+}
+
+func (f fakeSpellDB) Spell(_ context.Context, id chrondbc.SpellID) (*chrondbc.Spell, error) {
+	s, ok := f.spells[id]
+	if !ok {
+		return nil, fmt.Errorf("spell with ID %d not found", id)
+	}
+	return s, nil
+}
+
+func (fakeSpellDB) SpellsByName(_ context.Context, _ string) ([]*chrondbc.Spell, error) {
+	return nil, fmt.Errorf("not implemented")
+}
+
+func (fakeSpellDB) ResolveGear([]combatant.GearItem) {}
+
+func (fakeSpellDB) Creature(int32) (*database.WorldCreatureTemplate, bool) { return nil, false }
+
+func (fakeSpellDB) TalentTrees(_ context.Context, _ uuid.UUID) (*talents.TalentTreeData, error) {
+	return nil, fmt.Errorf("not implemented")
+}
+
+func (fakeSpellDB) ExtraAttackSpell(_ context.Context, _ int32) (dbcmem.ExtraAttackSpell, bool) {
+	return dbcmem.ExtraAttackSpell{}, false
+}
+
+func (fakeSpellDB) DurationModifiers(_ context.Context) (*chrondbc.DurationModifierSet, error) {
+	return nil, nil
+}
+
+func (fakeSpellDB) PeriodicSpells(_ context.Context) (map[int32]dbcmem.PeriodicSpell, error) {
+	return nil, nil
+}
 
 // testSpellDB creates a WoWDB from the server-specific Spell.dbc for testing.
 // Skips the test if the file doesn't exist (allows tests to run without it).
@@ -375,13 +422,24 @@ func TestParserMessages(t *testing.T) {
 		// ResourceChange from the pre-mitigation damage. Here the damage was
 		// fully absorbed by a shield (458 absorbed, 0 dealt) — 458 / 0.5 =
 		// 916 mana was still burned.
+		//
+		// A fake spell DB is used because CI runs with a server build tag
+		// whose Spell.dbc does not contain the 1.12 Mana Burn spell ID.
 		ctx := context.Background()
 		zerologLogger := zerolog.New(zerolog.ConsoleWriter{Out: os.Stderr})
 		logger := slog.New(slogzerolog.Option{Level: slog.LevelDebug, Logger: &zerologLogger}.NewZerologHandler())
 
+		manaBurn := &chrondbc.Spell{
+			ID:              10876,
+			Name_lang:       i18n.Text{i18n.English: "Mana Burn"},
+			Effect:          [3]chrondbc.Effect{chrondbc.EffectPowerBurn, 0, 0},
+			EffectAmplitude: [3]float32{0.5, 0, 0},
+			// EffectMiscValue[0] = 0 = Mana
+		}
+
 		p, err := New(ctx, logger,
 			strings.NewReader("1784050453916|SPELL_DMG|0xF130006287017F8B|0x000000000001D795|10876|0|458,0,0|0|5|62,0,0,0"),
-			testSpellDB(t), nil)
+			fakeSpellDB{spells: map[chrondbc.SpellID]*chrondbc.Spell{10876: manaBurn}}, nil)
 		require.NoError(t, err)
 		msgs, err := p.Advance(ctx)
 		require.NoError(t, err)
