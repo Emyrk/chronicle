@@ -1,6 +1,10 @@
-import { useCallback, useEffect, useRef, useState, type ReactNode } from "react";
+import { useCallback, useEffect, useRef, useState, type CSSProperties, type ReactNode } from "react";
 import { createPortal } from "react-dom";
 import { useIsMobile } from "@/hooks/useIsMobile";
+import {
+  clampBreakoutBodyHeight,
+  DEFAULT_BREAKOUT_BODY_HEIGHT,
+} from "./floatingIncomingEventsBreakout";
 
 interface FloatingIncomingEventsBreakoutProps {
   initialPosition: { x: number; y: number };
@@ -16,7 +20,10 @@ export function FloatingIncomingEventsBreakout({
   const isMobile = useIsMobile();
   const [position, setPosition] = useState(initialPosition);
   const [isDragging, setIsDragging] = useState(false);
+  const [isResizing, setIsResizing] = useState(false);
+  const [bodyHeight, setBodyHeight] = useState(DEFAULT_BREAKOUT_BODY_HEIGHT);
   const dragStartRef = useRef<{ x: number; y: number; posX: number; posY: number } | null>(null);
+  const resizeStartRef = useRef<{ y: number; height: number } | null>(null);
 
   const handleMouseDown = useCallback((event: React.MouseEvent) => {
     const target = event.target as HTMLElement;
@@ -35,6 +42,14 @@ export function FloatingIncomingEventsBreakout({
       posY: position.y,
     };
   }, [isMobile, position]);
+
+  const handleResizeMouseDown = useCallback((event: React.MouseEvent) => {
+    if (isMobile) return;
+    event.preventDefault();
+    event.stopPropagation();
+    setIsResizing(true);
+    resizeStartRef.current = { y: event.clientY, height: bodyHeight };
+  }, [bodyHeight, isMobile]);
 
   useEffect(() => {
     if (!isDragging) return;
@@ -59,6 +74,36 @@ export function FloatingIncomingEventsBreakout({
     };
   }, [isDragging]);
 
+  useEffect(() => {
+    if (!isResizing) return;
+
+    const handleMouseMove = (event: MouseEvent) => {
+      if (!resizeStartRef.current) return;
+      setBodyHeight(clampBreakoutBodyHeight(
+        resizeStartRef.current.height + event.clientY - resizeStartRef.current.y,
+        window.innerHeight - position.y,
+      ));
+    };
+    const handleMouseUp = () => {
+      setIsResizing(false);
+      resizeStartRef.current = null;
+    };
+
+    document.addEventListener("mousemove", handleMouseMove);
+    document.addEventListener("mouseup", handleMouseUp);
+    return () => {
+      document.removeEventListener("mousemove", handleMouseMove);
+      document.removeEventListener("mouseup", handleMouseUp);
+    };
+  }, [isResizing, position.y]);
+
+  const breakoutStyle = {
+    left: position.x,
+    top: position.y,
+    cursor: isDragging ? "grabbing" : "default",
+    "--incoming-events-body-height": `${bodyHeight}px`,
+  } as CSSProperties;
+
   if (isMobile) {
     return createPortal(
       <>
@@ -75,14 +120,20 @@ export function FloatingIncomingEventsBreakout({
     <div
       data-breakout-panel
       className="fixed z-[200] w-[min(620px,90vw)]"
-      style={{
-        left: position.x,
-        top: position.y,
-        cursor: isDragging ? "grabbing" : "default",
-      }}
+      style={breakoutStyle}
       onMouseDown={handleMouseDown}
     >
       {children}
+      <div
+        className="group absolute -bottom-1 left-0 right-0 flex h-3 cursor-ns-resize items-center justify-center"
+        onMouseDown={handleResizeMouseDown}
+        onDoubleClick={() => setBodyHeight(DEFAULT_BREAKOUT_BODY_HEIGHT)}
+        title="Drag to resize; double-click to reset"
+        aria-label="Resize death recap height"
+        data-breakout-resize-handle
+      >
+        <span className="h-px w-10 rounded-full bg-border transition-colors group-hover:bg-muted-foreground" />
+      </div>
     </div>,
     document.body,
   );

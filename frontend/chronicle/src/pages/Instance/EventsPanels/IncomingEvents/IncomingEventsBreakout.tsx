@@ -217,7 +217,8 @@ export function IncomingEventsBreakout({
             <span>Time</span><span>Source</span><span>Ability</span><span>Amount</span>
           </div>
           <div
-            className="flex max-h-52"
+            className="flex"
+            style={{ height: "var(--incoming-events-body-height, 13rem)" }}
             onMouseLeave={() => { if (!sync?.enabled) onSharedFightOffsetChange(null); }}
           >
           <div
