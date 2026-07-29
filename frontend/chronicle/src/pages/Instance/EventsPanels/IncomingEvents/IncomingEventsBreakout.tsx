@@ -6,6 +6,7 @@ import { RelativeHealthBar } from "@/components/ui/RelativeHealthBar/RelativeHea
 import { calculateRelativeHealth } from "@/components/ui/RelativeHealthBar/relativeHealth";
 import { useSyncModeContextOptional } from "../../SyncModeContext";
 import {
+  relativeCursorForFightOffset,
   relativeEventTime,
   relativeHealthMessagesAtCursor,
   syncCursorForDeath,
@@ -33,8 +34,8 @@ interface IncomingEventsBreakoutProps {
   events: IncomingEventDisplay[];
   windowSeconds: number;
   onWindowSecondsChange: (seconds: number) => void;
-  sharedCursorMilli: number | null;
-  onSharedCursorChange: (cursorMilli: number | null) => void;
+  sharedFightOffsetMilli: number | null;
+  onSharedFightOffsetChange: (fightOffsetMilli: number | null) => void;
   onClose: () => void;
 }
 
@@ -56,8 +57,8 @@ export function IncomingEventsBreakout({
   events,
   windowSeconds,
   onWindowSecondsChange,
-  sharedCursorMilli,
-  onSharedCursorChange,
+  sharedFightOffsetMilli,
+  onSharedFightOffsetChange,
   onClose,
 }: IncomingEventsBreakoutProps) {
   const [collapsed, setCollapsed] = useState(false);
@@ -77,7 +78,10 @@ export function IncomingEventsBreakout({
   const syncCursor = sync?.enabled && sync.currentTimestamp
     ? syncCursorForDeath(sync.currentTimestamp.getTime(), anchorAbsoluteMilli, windowMilli)
     : null;
-  const cursorMilli = sync?.enabled ? syncCursor : sharedCursorMilli;
+  const hoverCursor = sharedFightOffsetMilli === null
+    ? null
+    : relativeCursorForFightOffset(sharedFightOffsetMilli, anchorOffsetMilli, windowMilli);
+  const cursorMilli = sync?.enabled ? syncCursor : hoverCursor;
   const healthMessages = useMemo(
     () => relativeHealthMessagesAtCursor(
       events,
@@ -112,12 +116,13 @@ export function IncomingEventsBreakout({
     const viewport = viewportRef.current;
     if (!viewport) return;
     const rect = viewport.getBoundingClientRect();
-    onSharedCursorChange(timeAtTimelineY(
+    const relativeCursor = timeAtTimelineY(
       relativeTimes,
       event.clientY - rect.top + viewport.scrollTop,
       ROW_HEIGHT,
       windowMilli,
-    ));
+    );
+    onSharedFightOffsetChange(anchorOffsetMilli + relativeCursor);
   };
 
   const classColor = `var(--color-class-${className.toLowerCase()})`;
@@ -215,7 +220,7 @@ export function IncomingEventsBreakout({
           <div
             ref={viewportRef}
             onMouseMove={handleMove}
-            onMouseLeave={() => { if (!sync?.enabled) onSharedCursorChange(null); }}
+            onMouseLeave={() => { if (!sync?.enabled) onSharedFightOffsetChange(null); }}
             className="relative max-h-52 overflow-y-auto styled-scrollbar"
           >
             <div className="relative">

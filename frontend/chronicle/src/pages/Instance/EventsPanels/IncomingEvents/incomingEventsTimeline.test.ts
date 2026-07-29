@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   compareIncomingEventsNewestFirst,
+  relativeCursorForFightOffset,
   relativeHealthAtCursor,
   syncCursorForDeath,
   timeAtTimelineY,
@@ -59,6 +60,19 @@ describe("incoming events timeline", () => {
       prevented: 3_000,
       overhealing: 3_000,
     });
+  });
+
+  it("syncs death breakouts by fight offset instead of time before death", () => {
+    const fightCursor = 80_000;
+    expect(relativeCursorForFightOffset(fightCursor, 100_000, 30_000)).toBe(-20_000);
+    expect(relativeCursorForFightOffset(fightCursor, 105_000, 30_000)).toBe(-25_000);
+  });
+
+  it("hides a fight-offset cursor outside a death window's overlap", () => {
+    expect(relativeCursorForFightOffset(69_999, 100_000, 30_000)).toBeNull();
+    expect(relativeCursorForFightOffset(100_001, 100_000, 30_000)).toBeNull();
+    expect(relativeCursorForFightOffset(70_000, 100_000, 30_000)).toBe(-30_000);
+    expect(relativeCursorForFightOffset(100_000, 100_000, 30_000)).toBe(0);
   });
 
   it("maps absolute Sync playback onto each death window", () => {

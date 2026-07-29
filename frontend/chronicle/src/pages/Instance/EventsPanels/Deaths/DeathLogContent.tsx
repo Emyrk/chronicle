@@ -106,7 +106,7 @@ export const DeathLogContent = (props: DeathLogContentProps) => {
   const [mode, setModeLocal] = useState<DeathMode>(() => extractDeathMode(panelOption));
   const [expandedIndex, setExpandedIndex] = useState<number | null>(null);
   const [floatingRecaps, setFloatingRecaps] = useState<Map<string, FloatingDeathRecap>>(() => new Map());
-  const [sharedCursorMilli, setSharedCursorMilli] = useState<number | null>(null);
+  const [sharedFightOffsetMilli, setSharedFightOffsetMilli] = useState<number | null>(null);
   const [windowSeconds, setWindowSecondsLocal] = useState(() => extractWindowSeconds(panelOption));
 
   const setMode = useCallback((next: DeathMode) => {
@@ -122,7 +122,6 @@ export const DeathLogContent = (props: DeathLogContentProps) => {
   const setWindowSeconds = useCallback((value: number) => {
     const next = Math.max(5, Math.min(120, Math.round(value || 30)));
     setWindowSecondsLocal(next);
-    setSharedCursorMilli((cursor) => cursor === null ? null : Math.max(-next * 1000, cursor));
     if (setPanelOption) {
       const existing = (panelOption ?? "")
         .split(",")
@@ -385,8 +384,8 @@ export const DeathLogContent = (props: DeathLogContentProps) => {
           events={death.recap}
           windowSeconds={windowSeconds}
           onWindowSecondsChange={setWindowSeconds}
-          sharedCursorMilli={sharedCursorMilli}
-          onSharedCursorChange={setSharedCursorMilli}
+          sharedFightOffsetMilli={sharedFightOffsetMilli}
+          onSharedFightOffsetChange={setSharedFightOffsetMilli}
           onClose={() => closeFloatingRecap(key)}
         />
       </FloatingIncomingEventsBreakout>
