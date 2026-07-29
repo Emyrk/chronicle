@@ -28,6 +28,7 @@ import {
   selectStatusEncounter,
   snapshotStatusUnit,
   statusCursorMilli,
+  statusUnitRelativeHealthBounds,
   type StatusUnitSnapshot,
 } from "./statusTimeline";
 import {
@@ -195,6 +196,7 @@ function RelativeChange({ snapshot, density }: { snapshot: StatusUnitSnapshot; d
       <RelativeHealthBar
         messages={snapshot.relativeHealthMessages}
         state={snapshot.relativeHealthState}
+        bounds={snapshot.relativeHealthBounds}
         className={cn("[&>div:last-child]:hidden", density === 0 ? "[&>div:first-child]:h-4" : density === 1 ? "[&>div:first-child]:h-5" : "[&>div:first-child]:h-6")}
       />
       {snapshot.dead ? (
@@ -264,6 +266,10 @@ export function StatusContent(props: PanelRenderProps<StatusResult>) {
         : enemyGroups.enemies.has(unit.unitId),
     );
   }, [encounter, enemyGroups, unitMode]);
+  const relativeHealthBounds = useMemo(
+    () => new Map(matchingUnits.map((unit) => [unit.unitId, statusUnitRelativeHealthBounds(unit)])),
+    [matchingUnits],
+  );
   const snapshots = useMemo(() => {
     if (cursorMilli === null) return [];
     const matchingSnapshots = matchingUnits.map((unit) => snapshotStatusUnit(
@@ -271,11 +277,12 @@ export function StatusContent(props: PanelRenderProps<StatusResult>) {
       cursorMilli,
       windowPreset.historyMilli,
       windowPreset.futureMilli,
+      relativeHealthBounds.get(unit.unitId),
     ));
     return unitMode === "players"
       ? sortStatusSnapshotsByRole(matchingSnapshots, roles)
       : sortStatusEnemySnapshots(matchingSnapshots, enemyGroups.bosses);
-  }, [cursorMilli, enemyGroups.bosses, matchingUnits, roles, unitMode, windowPreset]);
+  }, [cursorMilli, enemyGroups.bosses, matchingUnits, relativeHealthBounds, roles, unitMode, windowPreset]);
   const displayRows = useMemo(() => {
     if (cursorMilli === null) return [];
     return snapshots.flatMap((snapshot) => {

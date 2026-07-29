@@ -17,6 +17,7 @@ function snapshot(unitId: string, name: string): StatusUnitSnapshot {
       overhealing: 0,
       lastTransition: null,
     },
+    relativeHealthBounds: { minimum: 0, maximum: 0 },
     relativeHealthMessages: [],
     damage: 0,
     effectiveHealing: 0,

@@ -48,6 +48,22 @@ describe("snapshotStatusUnit", () => {
     expect(snapshot.incomingDamage).toBe(900);
   });
 
+  it("keeps encounter-wide health bounds static as the cursor moves", () => {
+    const timeline = unit([
+      event({ timestampMilli: 1_000, eventIndex: 1, kind: "damage", amount: 100 }),
+      event({ timestampMilli: 2_000, eventIndex: 2, kind: "heal", amount: 250, overheal: 50 }),
+      event({ timestampMilli: 3_000, eventIndex: 3, kind: "damage", amount: 50 }),
+    ]);
+
+    const early = snapshotStatusUnit(timeline, 1_500, 500);
+    const late = snapshotStatusUnit(timeline, 3_500, 500);
+
+    expect(early.relativeHealthState.current).toBe(-100);
+    expect(late.relativeHealthState.current).toBe(50);
+    expect(early.relativeHealthBounds).toEqual({ minimum: -100, maximum: 100 });
+    expect(late.relativeHealthBounds).toEqual(early.relativeHealthBounds);
+  });
+
   it("finds an active cast and cancels it when a matching completion arrives", () => {
     const start = event({
       timestampMilli: 4_000,

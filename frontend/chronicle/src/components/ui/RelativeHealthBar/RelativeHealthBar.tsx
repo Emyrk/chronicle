@@ -6,10 +6,16 @@ import {
   type RelativeHealthState,
 } from "./relativeHealth";
 
+export interface RelativeHealthBounds {
+  minimum: number;
+  maximum: number;
+}
+
 interface RelativeHealthBarProps {
   messages: RelativeHealthMessage[];
   className?: string;
   state?: RelativeHealthState;
+  bounds?: RelativeHealthBounds;
 }
 
 function segmentStyle(from: number, to: number, toPercent: (value: number) => number) {
@@ -26,9 +32,13 @@ function formatSigned(value: number): string {
   return `${value > 0 ? "+" : "−"}${Math.abs(Math.round(value)).toLocaleString()}`;
 }
 
-export function RelativeHealthBar({ messages, className, state: suppliedState }: RelativeHealthBarProps) {
-  const calculatedState = useMemo(() => calculateRelativeHealth(messages), [messages]);
-  const state = suppliedState ?? calculatedState;
+export function RelativeHealthBar({ messages, className, state: suppliedState, bounds }: RelativeHealthBarProps) {
+  const state = useMemo(
+    () => suppliedState ?? calculateRelativeHealth(messages),
+    [messages, suppliedState],
+  );
+  const minimum = bounds?.minimum ?? state.minimum;
+  const maximum = bounds?.maximum ?? state.maximum;
   const transition = state.lastTransition;
   const overhealEnd = transition?.kind === "healing"
     ? transition.to + transition.overheal
@@ -38,10 +48,9 @@ export function RelativeHealthBar({ messages, className, state: suppliedState }:
     : state.current;
   const scale = Math.max(
     1,
-    Math.abs(state.minimum),
-    Math.abs(state.maximum),
-    Math.abs(overhealEnd),
-    Math.abs(unpreventedEnd),
+    Math.abs(minimum),
+    Math.abs(maximum),
+    ...(bounds ? [] : [Math.abs(overhealEnd), Math.abs(unpreventedEnd)]),
   ) * 1.08;
   const toPercent = (value: number) => 50 + (value / scale) * 50;
   const currentColor = state.current < 0 ? "bg-red-500/55" : "bg-green-500/50";
@@ -106,14 +115,14 @@ export function RelativeHealthBar({ messages, className, state: suppliedState }:
         <div className="absolute bottom-0 left-1/2 top-0 w-px -translate-x-1/2 bg-white/55" data-zero-marker />
         <div
           className="absolute bottom-0 top-0 w-0.5 -translate-x-1/2 bg-red-300/80"
-          style={{ left: `${toPercent(state.minimum)}%` }}
-          title={`Minimum ${formatSigned(state.minimum)}`}
+          style={{ left: `${toPercent(minimum)}%` }}
+          title={`Minimum ${formatSigned(minimum)}`}
           data-minimum-marker
         />
         <div
           className="absolute bottom-0 top-0 w-0.5 -translate-x-1/2 bg-green-300/80"
-          style={{ left: `${toPercent(state.maximum)}%` }}
-          title={`Maximum ${formatSigned(state.maximum)}`}
+          style={{ left: `${toPercent(maximum)}%` }}
+          title={`Maximum ${formatSigned(maximum)}`}
           data-maximum-marker
         />
         <div
@@ -125,11 +134,11 @@ export function RelativeHealthBar({ messages, className, state: suppliedState }:
       </div>
 
       <div className="flex items-center font-mono text-[9px] text-muted-foreground">
-        <span className="text-red-300/80">min {formatSigned(state.minimum)}</span>
+        <span className="text-red-300/80">min {formatSigned(minimum)}</span>
         <span className="mx-auto text-foreground/75">
           {state.current < 0 ? "deficit" : state.current > 0 ? "surplus" : "baseline"} {formatSigned(state.current)}
         </span>
-        <span className="text-green-300/80">max {formatSigned(state.maximum)}</span>
+        <span className="text-green-300/80">max {formatSigned(maximum)}</span>
       </div>
     </div>
   );

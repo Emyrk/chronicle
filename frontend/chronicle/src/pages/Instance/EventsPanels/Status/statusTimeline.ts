@@ -6,11 +6,17 @@ export const STATUS_HISTORY_MILLI = DEFAULT_STATUS_WINDOW.historyMilli;
 export const STATUS_FUTURE_MILLI = DEFAULT_STATUS_WINDOW.futureMilli;
 export const OVERHEAL_EXPIRE_MILLI = 1_000;
 
+export interface StatusRelativeHealthBounds {
+  minimum: number;
+  maximum: number;
+}
+
 export interface StatusUnitSnapshot {
   unit: StatusUnitTimeline;
   deficit: number;
   netChange: number;
   relativeHealthState: RelativeHealthState;
+  relativeHealthBounds: StatusRelativeHealthBounds;
   relativeHealthMessages: RelativeHealthMessage[];
   damage: number;
   effectiveHealing: number;
@@ -64,6 +70,11 @@ function healthMessages(events: StatusTimelineEvent[], startMilli: number, curso
     if (event.kind === "absorbed") return [{ ...common, kind: "prevented", amount: event.amount }];
     return [];
   });
+}
+
+export function statusUnitRelativeHealthBounds(unit: StatusUnitTimeline): StatusRelativeHealthBounds {
+  const state = calculateRelativeHealth(healthMessages(unit.events, Number.NEGATIVE_INFINITY, Number.POSITIVE_INFINITY));
+  return { minimum: state.minimum, maximum: state.maximum };
 }
 
 function findActiveCast(events: StatusTimelineEvent[], cursorMilli: number): StatusTimelineEvent | null {
@@ -162,11 +173,14 @@ export function snapshotStatusUnit(
   cursorMilli: number,
   historyMilli = STATUS_HISTORY_MILLI,
   futureMilli = STATUS_FUTURE_MILLI,
+  relativeHealthBounds = statusUnitRelativeHealthBounds(unit),
 ): StatusUnitSnapshot {
   const ordered = [...unit.events].sort(compareStatusEvents);
   const startMilli = cursorMilli - historyMilli;
   const endMilli = cursorMilli + futureMilli;
-  const relativeHealthMessages = healthMessages(ordered, startMilli, cursorMilli);
+  // Keep relative health in encounter coordinates so the current position and
+  // the encounter-wide extrema remain comparable as the visible window moves.
+  const relativeHealthMessages = healthMessages(ordered, Number.NEGATIVE_INFINITY, cursorMilli);
   const health = calculateRelativeHealth(relativeHealthMessages);
   const relativeHealthState = expireOverhealStripe(health, relativeHealthMessages, ordered, cursorMilli);
   const deadSinceMilli = statusUnitDeadSince(ordered, cursorMilli);
@@ -178,6 +192,7 @@ export function snapshotStatusUnit(
     deficit: Math.max(0, -health.current),
     netChange: health.current,
     relativeHealthState,
+    relativeHealthBounds,
     relativeHealthMessages,
     damage: health.damage,
     effectiveHealing: health.effectiveHealing,
