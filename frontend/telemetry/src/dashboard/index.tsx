@@ -239,6 +239,10 @@ dashboard.get("/internal", async (c) => {
               <input type="checkbox" id="show-dev" style="accent-color: #5F8FA6;" />
               Show dev
             </label>
+            <label style="display: flex; align-items: center; gap: 6px; font-size: 12px; color: #888; cursor: pointer;">
+              <input type="checkbox" id="show-inactive" style="accent-color: #5F8FA6;" />
+              Show inactive (&gt;7d)
+            </label>
           </div>
           <table id="deployments-table">
             <thead>
@@ -318,6 +322,7 @@ dashboard.get("/internal", async (c) => {
           const tbody = table.querySelector('tbody');
           const omitLH = document.getElementById('omit-localhost');
           const showDev = document.getElementById('show-dev');
+          const showInactive = document.getElementById('show-inactive');
           let sortCol = null, sortAsc = true;
 
           // Sort
@@ -347,11 +352,13 @@ dashboard.get("/internal", async (c) => {
           function updateView() {
             const hideLH = omitLH.checked;
             const hideDev = !showDev.checked;
+            const hideInactive = !showInactive.checked;
             let total = 0, active = 0, users = 0, logs = 0;
             tbody.querySelectorAll('tr').forEach(r => {
               const isLH = r.dataset.localhost === '1';
               const isDev = r.dataset.dev === '1';
-              const hidden = (hideLH && isLH) || (hideDev && isDev);
+              const isInactive = r.dataset.active === '0';
+              const hidden = (hideLH && isLH) || (hideDev && isDev) || (hideInactive && isInactive);
               r.style.display = hidden ? 'none' : '';
               if (hidden) return;
               total++;
@@ -366,7 +373,8 @@ dashboard.get("/internal", async (c) => {
           }
           omitLH.addEventListener('change', updateView);
           showDev.addEventListener('change', updateView);
-          // Hide dev rows by default on load
+          showInactive.addEventListener('change', updateView);
+          // Hide dev and inactive rows by default on load
           updateView();
 
           // Dropdown menus
