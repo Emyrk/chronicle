@@ -27,14 +27,32 @@ import {
   ChevronRight,
   RotateCcw,
   Skull,
+  ArrowUpToLine,
+  ArrowDownToLine,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import { useInstanceEventsContext } from "@/hooks/instanceEvents";
+import { useLocalStorage } from "@/hooks/useLocalStorage";
 import { createStreamCursor } from "@/api/protodecode/decode";
 import { SlainSchema, type Slain } from "@/api/proto/chronicle_pb";
 import { isPlayerGuidFast } from "./EventsPanels/processors/guidCache";
 import { useSyncModeContext } from "./SyncModeContext";
+
+export type ReplayPosition = "top" | "bottom";
+
+/** localStorage key for the pinned position of the replay controls. */
+export const REPLAY_POSITION_STORAGE_KEY = "replay-controls-position";
+
+/**
+ * Read the user's preferred replay-controls position.
+ * Shared with InstancePage, which allows the action bar (spellbook) back
+ * when the controls are pinned to the top and no longer occupy its space.
+ */
+// eslint-disable-next-line react-refresh/only-export-components
+export function useReplayPosition() {
+  return useLocalStorage<ReplayPosition>(REPLAY_POSITION_STORAGE_KEY, "bottom");
+}
 
 interface ReplayControlOverlayProps {
   /** Initial timestamp to start at (usually encounter start) */
@@ -213,6 +231,7 @@ export function ReplayControlOverlay({ initialTimestamp }: ReplayControlOverlayP
   const [showDebug, setShowDebug] = useState(false);
   // Start compact; the chevron expands to the full panel.
   const [collapsed, setCollapsed] = useState(true);
+  const [position, setPosition] = useReplayPosition();
   const deaths = usePlayerDeathTimes();
 
   // Disable time controls when YouTube is driving the timestamp
@@ -346,10 +365,28 @@ export function ReplayControlOverlay({ initialTimestamp }: ReplayControlOverlayP
     </div>
   );
 
+  const pinnedTop = position === "top";
+  const containerClass = cn(
+    "fixed left-1/2 z-40 w-[52rem] max-w-[calc(100vw-2rem)] -translate-x-1/2",
+    pinnedTop ? "top-4" : "bottom-4"
+  );
+
+  const pinButton = (extraClass: string) => (
+    <Button
+      variant="ghost"
+      size="icon"
+      className={extraClass}
+      onClick={() => setPosition(pinnedTop ? "bottom" : "top")}
+      title={pinnedTop ? "Pin to bottom" : "Pin to top"}
+    >
+      {pinnedTop ? <ArrowDownToLine className="h-4 w-4" /> : <ArrowUpToLine className="h-4 w-4" />}
+    </Button>
+  );
+
   // Collapsed mini-bar
   if (collapsed) {
     const miniBar = (
-      <div className="fixed bottom-4 left-1/2 z-40 w-[52rem] max-w-[calc(100vw-2rem)] -translate-x-1/2">
+      <div className={containerClass}>
         <div className="animate-replay-pop flex items-center gap-3 rounded-lg border border-primary/40 bg-gradient-to-b from-primary-darker/30 to-black/60 px-3 py-2 shadow-xl backdrop-blur-md">
           {statusDot}
           {playPauseButton("h-8 w-8")}
@@ -364,6 +401,7 @@ export function ReplayControlOverlay({ initialTimestamp }: ReplayControlOverlayP
             disabled={controlsDisabled}
             size="sm"
           />
+          {pinButton("h-8 w-8")}
           <Button
             variant="ghost"
             size="icon"
@@ -371,7 +409,7 @@ export function ReplayControlOverlay({ initialTimestamp }: ReplayControlOverlayP
             onClick={() => setCollapsed(false)}
             title="Expand replay controls"
           >
-            <ChevronUp className="h-4 w-4" />
+            {pinnedTop ? <ChevronDown className="h-4 w-4" /> : <ChevronUp className="h-4 w-4" />}
           </Button>
         </div>
       </div>
@@ -380,7 +418,7 @@ export function ReplayControlOverlay({ initialTimestamp }: ReplayControlOverlayP
   }
 
   const content = (
-    <div className="fixed bottom-4 left-1/2 z-40 w-[52rem] max-w-[calc(100vw-2rem)] -translate-x-1/2">
+    <div className={containerClass}>
       <div className="animate-replay-pop flex flex-col overflow-hidden rounded-lg border border-primary/40 bg-gradient-to-b from-primary-darker/30 to-black/60 shadow-xl backdrop-blur-md">
         {/* Header */}
         <div className="flex items-center justify-between gap-2 border-b border-border bg-muted/50 px-4 py-2">
@@ -390,6 +428,7 @@ export function ReplayControlOverlay({ initialTimestamp }: ReplayControlOverlayP
           </div>
           <div className="flex items-center gap-3">
             <span className="text-xs text-muted-foreground">{statusText}</span>
+            {pinButton("h-6 w-6")}
             <Button
               variant="ghost"
               size="icon"
@@ -397,7 +436,7 @@ export function ReplayControlOverlay({ initialTimestamp }: ReplayControlOverlayP
               onClick={() => setCollapsed(true)}
               title="Collapse replay controls"
             >
-              <ChevronDown className="h-4 w-4" />
+              {pinnedTop ? <ChevronUp className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />}
             </Button>
           </div>
         </div>

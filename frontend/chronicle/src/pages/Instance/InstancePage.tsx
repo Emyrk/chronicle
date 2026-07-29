@@ -11,7 +11,7 @@ import { Button } from "@/components/ui/button";
 import { InstancePageView } from "./InstancePageView";
 import { YouTubeOverlay } from "./YouTubeOverlay";
 import { SyncModeProvider, useSyncModeContext } from "./SyncModeContext";
-import { ReplayControlOverlay } from "./ReplayControlOverlay";
+import { ReplayControlOverlay, useReplayPosition } from "./ReplayControlOverlay";
 import { useIsMobile } from "@/hooks/useIsMobile";
 import { TimeRangeProvider } from "./TimeRangeContext";
 import { TimeRangeController } from "./TimeRangeController";
@@ -226,6 +226,9 @@ function InstancePageInner({
   const isMobile = useIsMobile();
   // Replay is disabled on mobile - never show the panel there
   const replayPanelVisible = showReplayPanel && !isMobile;
+  // When pinned to the top, the replay controls no longer occupy the action
+  // bar's space, so the spellbook can show again.
+  const [replayPosition] = useReplayPosition();
   
   // Update sync mode encounter bounds when selection changes
   useEffect(() => {
@@ -249,7 +252,7 @@ function InstancePageInner({
         canAdminLogs={canAdminLogs}
         duplicateGroupId={duplicateGroupId}
         onOpenTimeRange={() => setShowTimeRange(true)}
-        suppressActionBar={replayPanelVisible}
+        suppressActionBar={replayPanelVisible && replayPosition === "bottom"}
         youtubeButton={
           <div className="flex gap-1.5">
             {/* Replay button (desktop only - replay is disabled on mobile) */}
