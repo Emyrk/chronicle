@@ -22,6 +22,9 @@ export function createResourceRegenPanel(): PanelDefinition<ResourceRegenResult,
     supportsFiltering: true,
     defaultFilters: [
       { type: "time_range" as const, value: "controller" },
+      // Default to player targets (matches previous behavior). Users can edit
+      // this filter to also see resource gains for pets and enemies.
+      { type: "target_type" as const, value: "selected_players" },
     ],
     
     render: (props: PanelRenderProps<ResourceRegenResult>) => {

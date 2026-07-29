@@ -6,6 +6,7 @@
 
 import type { PanelProcessor, ProcessorContext, ResourceChangeProcessorEvent } from "../processorTypes";
 import type { StreamType } from "@/hooks/instanceEvents";
+import { resolveEntity } from "../processors/resolveEntity";
 
 /**
  * Resource types from WoW combat log
@@ -107,18 +108,11 @@ export const resourceRegenProcessor: PanelProcessor<ResourceRegenResult, Resourc
     }
     const encounterData = state.encounterData.get(encounterID)!;
 
-    // Get target player info
-    const targetPlayer = context.players[event.target];
-    if (!targetPlayer) {
-      // Skip non-player targets (pets, etc.)
-      return;
-    }
-
-    // Filter by selected players if any are selected
-    const { entitySelection } = context;
-    if (entitySelection.playerIds.size > 0 && !entitySelection.playerIds.has(event.target)) {
-      return;
-    }
+    // Entity filtering (players vs pets/enemies) is handled by panel filters —
+    // the panel ships a default `target_type: "selected_players"` filter, which
+    // users can edit to include pets/enemies. Resolve display info for any
+    // entity type so those show up when the filter allows them.
+    const targetEntity = resolveEntity(event.target, context, "default", "individual");
 
     // Get resource type from event
     const resourceType = event.resourceType as ResourceType;
@@ -136,7 +130,7 @@ export const resourceRegenProcessor: PanelProcessor<ResourceRegenResult, Resourc
     if (!playerResources.has(resourceType)) {
       playerResources.set(
         resourceType,
-        createPlayerResourceData(event.target, targetPlayer.name, targetPlayer.class)
+        createPlayerResourceData(event.target, targetEntity.name, targetEntity.class)
       );
     }
     const resourceData = playerResources.get(resourceType)!;
@@ -173,8 +167,10 @@ export const resourceRegenProcessor: PanelProcessor<ResourceRegenResult, Resourc
     }
 
     // Update source breakdown (who provided the resource)
-    const sourcePlayer = context.players[event.caster];
-    const sourceName = sourcePlayer?.name || event.caster || "Self";
+    const sourceName = context.players[event.caster]?.name
+      || context.units?.[event.caster]?.name
+      || event.caster
+      || "Self";
     if (isGain) {
       resourceData.bySource.set(
         sourceName,
