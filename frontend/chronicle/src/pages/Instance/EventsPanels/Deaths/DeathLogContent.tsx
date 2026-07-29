@@ -15,6 +15,7 @@ import { FloatingIncomingEventsBreakout } from "../IncomingEvents/FloatingIncomi
 import { useCachedValue } from "@/hooks/useCachedValue";
 import { useSyncModeContextOptional } from "../../SyncModeContext";
 import {
+  deathLogDataContextKey,
   hasDeathLogEvents,
   isDeathAheadOfSyncCursor,
   selectDeathLogDisplayResult,
@@ -112,6 +113,7 @@ export const DeathLogContent = (props: DeathLogContentProps) => {
   const { result, context, loading, processing, checkboxChecked, panelOption, setPanelOption } = props;
   const syncMode = useSyncModeContextOptional();
   const panelContextVersion = String(props.panelContextVersion ?? "");
+  const dataContextKey = deathLogDataContextKey(panelContextVersion, panelOption);
   const completeSnapshotRef = useRef<DeathLogSnapshot | null>(null);
   const [mode, setModeLocal] = useState<DeathMode>(() => extractDeathMode(panelOption));
   const [expandedIndex, setExpandedIndex] = useState<number | null>(null);
@@ -186,15 +188,14 @@ export const DeathLogContent = (props: DeathLogContentProps) => {
   /* eslint-disable react-hooks/refs */
   if (!syncMode?.enabled && hasData) {
     completeSnapshotRef.current = {
-      panelContextVersion,
+      dataContextKey,
       result: cachedResult,
     };
   }
   const displayResult = selectDeathLogDisplayResult(
     cachedResult,
     completeSnapshotRef.current,
-    syncMode?.enabled === true,
-    panelContextVersion,
+    dataContextKey,
   );
   /* eslint-enable react-hooks/refs */
   const hasDisplayData = hasDeathLogEvents(displayResult);
