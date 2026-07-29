@@ -1,9 +1,6 @@
+import type { PlayerLifeTransition } from "../processors/playerLifeState.processor";
 import type { StatusTimelineEvent, StatusUnitTimeline } from "./status.processor";
-import {
-  compareStatusEvents,
-  isStatusRevivalEvidence,
-  RELATIVE_HEALTH_DEATH_RESET_MILLI,
-} from "./statusTimeline";
+import { compareStatusEvents, RELATIVE_HEALTH_DEATH_RESET_MILLI } from "./statusTimeline";
 
 export interface StatusRaidHealthPoint {
   timestampMilli: number;
@@ -60,6 +57,29 @@ function healthDelta(event: StatusTimelineEvent): number {
   if (event.kind === "damage") return -Math.max(0, event.amount);
   if (event.kind === "heal") return Math.max(0, event.amount - Math.max(0, event.overheal ?? 0));
   return 0;
+}
+
+function unitWithLifeTransitions(
+  unit: StatusUnitTimeline,
+  transitions?: readonly PlayerLifeTransition[],
+): StatusUnitTimeline {
+  if (!transitions) return unit;
+  const healthEvents = unit.events.filter((event) =>
+    event.kind === "damage" || event.kind === "heal" || event.kind === "absorbed",
+  );
+  const lifeEvents: StatusTimelineEvent[] = transitions.map((transition) => ({
+    timestampMilli: transition.timestampMilli,
+    offsetMilli: transition.offsetMilli,
+    eventIndex: transition.eventIndex,
+    kind: transition.alive ? "cast" : "death",
+    amount: 0,
+    spellId: null,
+    label: transition.reason,
+    sourceId: transition.playerId,
+    sourceName: unit.name,
+    targetId: transition.playerId,
+  }));
+  return { ...unit, events: [...healthEvents, ...lifeEvents] };
 }
 
 function capacityObservation(unit: StatusUnitTimeline): UnitCapacityObservation {
@@ -157,7 +177,7 @@ function createUnitTrack(
     if (event.kind === "death") {
       deadSinceMilli = event.timestampMilli;
       pendingDeathDeltas.set(`${event.timestampMilli}:${event.eventIndex}`, 0);
-    } else if (deadSinceMilli !== null && isStatusRevivalEvidence(event, deadSinceMilli)) {
+    } else if (deadSinceMilli !== null && event.kind === "cast") {
       deadSinceMilli = null;
     }
     appendPoint(event.timestampMilli);
@@ -166,8 +186,15 @@ function createUnitTrack(
   return { unitId: observation.unit.unitId, estimatedHealthPool, points };
 }
 
-export function createStatusRaidHealthModel(units: StatusUnitTimeline[]): StatusRaidHealthModel {
-  const observations = units.map(capacityObservation);
+export function createStatusRaidHealthModel(
+  units: StatusUnitTimeline[],
+  lifeTransitionsByPlayer?: ReadonlyMap<string, readonly PlayerLifeTransition[]>,
+): StatusRaidHealthModel {
+  const normalizedUnits = units.map((unit) => unitWithLifeTransitions(
+    unit,
+    lifeTransitionsByPlayer?.get(unit.unitId),
+  ));
+  const observations = normalizedUnits.map(capacityObservation);
   const representativeHealthPool = representativePool(observations);
   const tracks = observations.map((observation) => {
     const deathAnchoredPool = observation.deathDeficits.length > 0

@@ -8,6 +8,7 @@ import { IncomingEventsBreakout, type IncomingEventDisplay } from "../IncomingEv
 import { GenericPanel } from "../GenericPanel";
 import type { PanelRenderProps } from "../types";
 import { useSyncModeContextOptional } from "../../SyncModeContext";
+import { usePlayerLifeState } from "../usePlayerLifeState";
 import { useInferredRoles } from "../Roles/useInferredRoles";
 import type { StatusResult, StatusTimelineEvent, StatusUnitKind } from "./status.processor";
 import { sortStatusEnemySnapshots, statusEnemyRowOpacity } from "./statusEnemies";
@@ -315,6 +316,7 @@ function RaidHealthSummary({
 export function StatusContent(props: PanelRenderProps<StatusResult>) {
   const { result, context, panelOption, setPanelOption } = props;
   const sync = useSyncModeContextOptional();
+  const playerLife = usePlayerLifeState(context);
   const { roles } = useInferredRoles(context);
   const encounter = useMemo(
     () => selectStatusEncounter(result.encounters, context.selectedEncounterIds, sync?.currentTimestamp?.getTime() ?? null),
@@ -338,11 +340,19 @@ export function StatusContent(props: PanelRenderProps<StatusResult>) {
     }
     return { bosses, enemies };
   }, [context.instance.encounters, encounter]);
+  const lifeTransitionsByPlayer = useMemo(() => {
+    if (!encounter || playerLife.loading || playerLife.error) return undefined;
+    return new Map(Object.keys(context.instance.players ?? {}).map((playerId) => [
+      playerId,
+      playerLife.state.transitions(encounter.encounterId, playerId),
+    ]));
+  }, [context.instance.players, encounter, playerLife.error, playerLife.loading, playerLife.state]);
   const raidHealthModel = useMemo(() => createStatusRaidHealthModel(
     encounter
       ? Array.from(encounter.units.values()).filter((unit) => unit.kind === "player")
       : [],
-  ), [encounter]);
+    lifeTransitionsByPlayer,
+  ), [encounter, lifeTransitionsByPlayer]);
   const matchingUnits = useMemo(() => {
     if (!encounter) return [];
     return Array.from(encounter.units.values()).filter((unit) =>
@@ -352,8 +362,11 @@ export function StatusContent(props: PanelRenderProps<StatusResult>) {
     );
   }, [encounter, enemyGroups, unitMode]);
   const relativeHealthBounds = useMemo(
-    () => new Map(matchingUnits.map((unit) => [unit.unitId, statusUnitRelativeHealthBounds(unit)])),
-    [matchingUnits],
+    () => new Map(matchingUnits.map((unit) => [
+      unit.unitId,
+      statusUnitRelativeHealthBounds(unit, lifeTransitionsByPlayer?.get(unit.unitId)),
+    ])),
+    [lifeTransitionsByPlayer, matchingUnits],
   );
   const snapshots = useMemo(() => {
     if (cursorMilli === null) return [];
@@ -363,11 +376,12 @@ export function StatusContent(props: PanelRenderProps<StatusResult>) {
       windowPreset.historyMilli,
       windowPreset.futureMilli,
       relativeHealthBounds.get(unit.unitId),
+      lifeTransitionsByPlayer?.get(unit.unitId),
     ));
     return unitMode === "players"
       ? sortStatusSnapshotsByRole(matchingSnapshots, roles)
       : sortStatusEnemySnapshots(matchingSnapshots, enemyGroups.bosses);
-  }, [cursorMilli, enemyGroups.bosses, matchingUnits, relativeHealthBounds, roles, unitMode, windowPreset]);
+  }, [cursorMilli, enemyGroups.bosses, lifeTransitionsByPlayer, matchingUnits, relativeHealthBounds, roles, unitMode, windowPreset]);
   const displayRows = useMemo(() => {
     if (cursorMilli === null) return [];
     return snapshots.flatMap((snapshot) => {

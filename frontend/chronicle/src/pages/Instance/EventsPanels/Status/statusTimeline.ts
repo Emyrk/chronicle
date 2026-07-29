@@ -1,4 +1,5 @@
 import { calculateRelativeHealth, type RelativeHealthMessage, type RelativeHealthState } from "@/components/ui/RelativeHealthBar/relativeHealth";
+import type { PlayerLifeTransition } from "../processors/playerLifeState.processor";
 import type { StatusEncounter, StatusTimelineEvent, StatusUnitTimeline } from "./status.processor";
 import { DEFAULT_STATUS_WINDOW } from "./statusWindow";
 
@@ -78,11 +79,32 @@ function healthMessages(events: StatusTimelineEvent[], startMilli: number, curso
   });
 }
 
-export function statusUnitRelativeHealthBounds(unit: StatusUnitTimeline): StatusRelativeHealthBounds {
-  const ordered = [...unit.events].sort(compareStatusEvents);
+function deathBoundaries(
+  unit: StatusUnitTimeline,
+  lifeTransitions?: readonly PlayerLifeTransition[],
+): Array<{ timestampMilli: number; eventIndex: number }> {
+  if (lifeTransitions) {
+    return lifeTransitions
+      .filter((transition) => !transition.alive)
+      .map((transition) => ({ timestampMilli: transition.timestampMilli, eventIndex: transition.eventIndex }));
+  }
+  return unit.events
+    .filter((event) => event.kind === "death")
+    .map((event) => ({ timestampMilli: event.timestampMilli, eventIndex: event.eventIndex }));
+}
+
+export function statusUnitRelativeHealthBounds(
+  unit: StatusUnitTimeline,
+  lifeTransitions?: readonly PlayerLifeTransition[],
+): StatusRelativeHealthBounds {
+  const healthEvents = unit.events.filter((event) => healthMessage(event) !== null).sort(compareStatusEvents);
+  const deaths = deathBoundaries(unit, lifeTransitions).sort(
+    (a, b) => a.timestampMilli - b.timestampMilli || a.eventIndex - b.eventIndex,
+  );
   let segment: RelativeHealthMessage[] = [];
   let minimum = 0;
   let maximum = 0;
+  let deathIndex = 0;
 
   const includeSegment = () => {
     const state = calculateRelativeHealth(segment);
@@ -91,10 +113,15 @@ export function statusUnitRelativeHealthBounds(unit: StatusUnitTimeline): Status
     segment = [];
   };
 
-  for (const event of ordered) {
-    if (event.kind === "death") {
+  for (const event of healthEvents) {
+    while (
+      deathIndex < deaths.length
+      && (deaths[deathIndex].timestampMilli < event.timestampMilli
+        || (deaths[deathIndex].timestampMilli === event.timestampMilli
+          && deaths[deathIndex].eventIndex < event.eventIndex))
+    ) {
       includeSegment();
-      continue;
+      deathIndex++;
     }
     const message = healthMessage(event);
     if (message) segment.push(message);
@@ -105,15 +132,20 @@ export function statusUnitRelativeHealthBounds(unit: StatusUnitTimeline): Status
 }
 
 function relativeHealthEventsAtCursor(
+  unit: StatusUnitTimeline,
   orderedEvents: StatusTimelineEvent[],
   cursorMilli: number,
+  lifeTransitions?: readonly PlayerLifeTransition[],
 ): StatusTimelineEvent[] {
   const resetBeforeMilli = cursorMilli - RELATIVE_HEALTH_DEATH_RESET_MILLI;
-  const resetDeath = [...orderedEvents].reverse().find(
-    (event) => event.kind === "death" && event.timestampMilli <= resetBeforeMilli,
+  const resetDeath = deathBoundaries(unit, lifeTransitions).reverse().find(
+    (death) => death.timestampMilli <= resetBeforeMilli,
   );
   if (!resetDeath) return orderedEvents;
-  return orderedEvents.filter((event) => compareStatusEvents(event, resetDeath) > 0);
+  return orderedEvents.filter((event) =>
+    event.timestampMilli > resetDeath.timestampMilli
+    || (event.timestampMilli === resetDeath.timestampMilli && event.eventIndex > resetDeath.eventIndex),
+  );
 }
 
 function findActiveCast(events: StatusTimelineEvent[], cursorMilli: number): StatusTimelineEvent | null {
@@ -186,17 +218,6 @@ export function expireOverhealStripe(
   return state;
 }
 
-export function isStatusRevivalEvidence(
-  event: StatusTimelineEvent,
-  deadSinceMilli: number,
-): boolean {
-  if (event.timestampMilli - deadSinceMilli < RELATIVE_HEALTH_DEATH_RESET_MILLI) return false;
-  // Incoming damage and lingering heals commonly arrive after a slain event and
-  // are not evidence of a resurrection. A later player-initiated cast is the
-  // strongest signal currently available in Status data that the unit is active.
-  return event.kind === "cast_start" || event.kind === "cast" || event.kind === "cast_fail";
-}
-
 export function statusUnitDeadSince(
   orderedEvents: StatusTimelineEvent[],
   cursorMilli: number,
@@ -206,7 +227,11 @@ export function statusUnitDeadSince(
     if (event.timestampMilli > cursorMilli) break;
     if (event.kind === "death") {
       deadSinceMilli = event.timestampMilli;
-    } else if (deadSinceMilli !== null && isStatusRevivalEvidence(event, deadSinceMilli)) {
+    } else if (
+      deadSinceMilli !== null
+      && event.timestampMilli - deadSinceMilli > RELATIVE_HEALTH_DEATH_RESET_MILLI
+      && (event.kind === "cast_start" || event.kind === "cast" || event.kind === "cast_fail")
+    ) {
       deadSinceMilli = null;
     }
   }
@@ -226,17 +251,23 @@ export function snapshotStatusUnit(
   historyMilli = STATUS_HISTORY_MILLI,
   futureMilli = STATUS_FUTURE_MILLI,
   relativeHealthBounds = statusUnitRelativeHealthBounds(unit),
+  lifeTransitions?: readonly PlayerLifeTransition[],
 ): StatusUnitSnapshot {
   const ordered = [...unit.events].sort(compareStatusEvents);
   const startMilli = cursorMilli - historyMilli;
   const endMilli = cursorMilli + futureMilli;
   // Keep each life in encounter coordinates, then start a new relative-health
   // segment one second after death. Encounter-wide bounds include every segment.
-  const healthEvents = relativeHealthEventsAtCursor(ordered, cursorMilli);
+  const healthEvents = relativeHealthEventsAtCursor(unit, ordered, cursorMilli, lifeTransitions);
   const relativeHealthMessages = healthMessages(healthEvents, Number.NEGATIVE_INFINITY, cursorMilli);
   const health = calculateRelativeHealth(relativeHealthMessages);
   const relativeHealthState = expireOverhealStripe(health, relativeHealthMessages, ordered, cursorMilli);
-  const deadSinceMilli = statusUnitDeadSince(ordered, cursorMilli);
+  const lastLifeTransition = lifeTransitions
+    ? [...lifeTransitions].reverse().find((transition) => transition.timestampMilli <= cursorMilli) ?? null
+    : null;
+  const deadSinceMilli = lifeTransitions
+    ? lastLifeTransition && !lastLifeTransition.alive ? lastLifeTransition.timestampMilli : null
+    : statusUnitDeadSince(ordered, cursorMilli);
   const recentActivity = ordered.filter((event) => event.timestampMilli >= startMilli && event.timestampMilli <= cursorMilli);
   const incoming = ordered.filter((event) => event.timestampMilli > cursorMilli && event.timestampMilli <= endMilli);
 

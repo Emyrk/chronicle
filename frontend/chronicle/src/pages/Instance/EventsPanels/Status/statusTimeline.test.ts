@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { StatusEncounter, StatusTimelineEvent, StatusUnitTimeline } from "./status.processor";
-import { expireOverhealStripe, selectStatusEncounter, snapshotStatusUnit, statusCursorMilli } from "./statusTimeline";
+import { expireOverhealStripe, selectStatusEncounter, snapshotStatusUnit, statusCursorMilli, statusUnitRelativeHealthBounds } from "./statusTimeline";
 import { calculateRelativeHealth, type RelativeHealthMessage } from "@/components/ui/RelativeHealthBar/relativeHealth";
 
 function event(overrides: Partial<StatusTimelineEvent>): StatusTimelineEvent {
@@ -104,6 +104,39 @@ describe("snapshotStatusUnit", () => {
     expect(beforeReset.relativeHealthBounds).toEqual({ minimum: -1_000, maximum: 1_500 });
     expect(afterReset.relativeHealthBounds).toEqual(beforeReset.relativeHealthBounds);
     expect(afterReset.relativeHealthState.current).toBe(1_500);
+  });
+
+  it("uses shared life transitions when panel events omit death and resurrection", () => {
+    const timeline = unit([
+      event({ timestampMilli: 1_000, eventIndex: 1, kind: "damage", amount: 500 }),
+      event({ timestampMilli: 4_000, eventIndex: 4, kind: "heal", amount: 200 }),
+    ]);
+    const transitions = [
+      {
+        encounterId: "encounter",
+        playerId: "unit",
+        timestampMilli: 2_000,
+        offsetMilli: 2_000,
+        eventIndex: 2,
+        alive: false,
+        reason: "slain" as const,
+      },
+      {
+        encounterId: "encounter",
+        playerId: "unit",
+        timestampMilli: 3_500,
+        offsetMilli: 3_500,
+        eventIndex: 3,
+        alive: true,
+        reason: "ressurection" as const,
+      },
+    ];
+    const bounds = statusUnitRelativeHealthBounds(timeline, transitions);
+
+    expect(snapshotStatusUnit(timeline, 2_500, undefined, undefined, bounds, transitions).dead).toBe(true);
+    const revived = snapshotStatusUnit(timeline, 4_000, undefined, undefined, bounds, transitions);
+    expect(revived.dead).toBe(false);
+    expect(revived.relativeHealthState.current).toBe(200);
   });
 
   it("marks a unit dead only after the cursor reaches its death", () => {

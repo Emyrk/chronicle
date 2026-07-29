@@ -81,6 +81,37 @@ describe("Status raid health estimate", () => {
     expect(statusRaidHealthAt(model, 3_000)).toEqual({ percent: 100, alive: 1, total: 1 });
   });
 
+  it("uses shared life transitions when filtered unit events omit slain and resurrection", () => {
+    const timeline = unit("one", [
+      event({ timestampMilli: 1_000, eventIndex: 1, kind: "damage", amount: 500 }),
+      event({ timestampMilli: 4_000, eventIndex: 4, kind: "heal", amount: 500 }),
+    ]);
+    const transitions = new Map([["one", [
+      {
+        encounterId: "encounter",
+        playerId: "one",
+        timestampMilli: 2_000,
+        offsetMilli: 2_000,
+        eventIndex: 2,
+        alive: false,
+        reason: "slain" as const,
+      },
+      {
+        encounterId: "encounter",
+        playerId: "one",
+        timestampMilli: 3_000,
+        offsetMilli: 3_000,
+        eventIndex: 3,
+        alive: true,
+        reason: "ressurection" as const,
+      },
+    ]]]);
+    const model = createStatusRaidHealthModel([timeline], transitions);
+
+    expect(statusRaidHealthAt(model, 2_500)).toEqual({ percent: 0, alive: 0, total: 1 });
+    expect(statusRaidHealthAt(model, 4_000)).toEqual({ percent: 100, alive: 1, total: 1 });
+  });
+
   it("shows healing recovery after a raid-wide dip", () => {
     const model = createStatusRaidHealthModel([
       unit("one", [

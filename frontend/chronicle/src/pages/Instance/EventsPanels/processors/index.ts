@@ -35,6 +35,7 @@ import { absorbedDamageProcessor } from "../AbsorbedDamage/absorbedDamage.proces
 import { resistsProcessor } from "../ResistsPanel/resists.processor";
 import { guildsProcessor } from "../Guilds/guilds.processor";
 import { companionStatsProcessor } from "../CompanionStats/companionStats.processor";
+import { playerLifeStateProcessor } from "./playerLifeState.processor";
 import { pullsAndCleanupProcessor } from "../PullsAndCleanup/pullsAndCleanup.processor";
 
 // Export individual processors
@@ -107,6 +108,13 @@ export { inferRoles, getRoleSummary } from "../Roles/roles.processor";
 export { accumulateAbilityBreakout, createEmptyAbilityBreakout, updateAbilityBreakout, type DamageAbilityBreakout } from "./abilityBreakout";
 export { createAuraProcessorState, applyAuraEvent, applySlainEvent, hasAura, getAuraStacks, type AuraProcessorState, type AuraRef } from "./auraProcessor";
 
+export {
+  playerLifeStateProcessor,
+  PlayerLifeStateIndex,
+  type PlayerLifeStateResult,
+  type PlayerLifeTransition,
+} from "./playerLifeState.processor";
+
 export { isResourceChangeEvent, isHealingEvent, isDamageEvent } from "./events";
 
 /**
@@ -114,6 +122,7 @@ export { isResourceChangeEvent, isHealingEvent, isDamageEvent } from "./events";
  */
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 export const processorRegistry: Record<string, PanelProcessor<any, any>> = {
+  player_life_state: playerLifeStateProcessor,
   damage_done: damageDoneProcessor,
   vulnerability_effect: vulnerabilityEffectProcessor,
   damage_done_enemies: enemyDamageDoneProcessor,
