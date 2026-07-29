@@ -65,6 +65,27 @@ func DeadminesSpeedrunRequirements() *rankings.Rankings {
 	}
 }
 
+// VanillaPlusScarletMonasterySpeedrunRequirements returns the boss kills
+// required for a valid Vanilla Plus Scarlet Monastery raid speedrun.
+func VanillaPlusScarletMonasterySpeedrunRequirements() *rankings.Rankings {
+	return &rankings.Rankings{
+		Speedrun: &rankings.SpeedrunRules{
+			Requirements: []rankings.SpeedrunRequirement{
+				{Name: "Loksey", EntryIDs: []uint32{25259, 25225}, Count: 1, Category: rankings.SpeedrunCategoryBosses},
+				{Name: "Brother Michael", EntryIDs: []uint32{25221}, Count: 1, Category: rankings.SpeedrunCategoryBosses},
+				{Name: "Brigitte Abbendis", EntryIDs: []uint32{25229}, Count: 1, Category: rankings.SpeedrunCategoryBosses},
+				{Name: "Fairbanks", EntryIDs: []uint32{25222}, Count: 1, Category: rankings.SpeedrunCategoryBosses},
+				{Name: "Beltheris", EntryIDs: []uint32{25243}, Count: 1, Category: rankings.SpeedrunCategoryBosses},
+				{Name: "Doan", EntryIDs: []uint32{25223}, Count: 1, Category: rankings.SpeedrunCategoryBosses},
+				{Name: "Vishas", EntryIDs: []uint32{25224}, Count: 1, Category: rankings.SpeedrunCategoryBosses},
+				{Name: "Herod", EntryIDs: []uint32{25226}, Count: 1, Category: rankings.SpeedrunCategoryBosses},
+				{Name: "Sally Whitemane", EntryIDs: []uint32{25228}, Count: 1, Category: rankings.SpeedrunCategoryBosses},
+				{Name: "Renault Mograine", EntryIDs: []uint32{25227}, Count: 1, Category: rankings.SpeedrunCategoryBosses},
+			},
+		},
+	}
+}
+
 // MoltenCoreSpeedrunRequirements returns the 10 boss kills required for a
 // valid Molten Core speedrun.
 func MoltenCoreSpeedrunRequirements(fl database.WoWFlavor) []rankings.SpeedrunRequirement {

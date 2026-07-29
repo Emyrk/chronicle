@@ -72,6 +72,9 @@ var (
 		Name:      "Scarlet Monastery",
 		ZoneNames: []string{"scarlet monastery"},
 		Hostiles:  FromMap(VanillaPlusSMRaidHostiles()),
+		FlavoredRankings: func(database.WoWFlavor) *rankings.Rankings {
+			return VanillaPlusScarletMonasterySpeedrunRequirements()
+		},
 	}
 
 	AllScarletMonasteryFactory = &CommonFactory{
