@@ -2,7 +2,7 @@
 
 ## Overview
 
-Sync Mode is a feature that synchronizes EventsPanel data display with video playback or manual timestamp control. Instead of showing aggregated data for entire encounters, it shows data **up to a specific point in time**, allowing users to see how damage/healing/etc. accumulated as the fight progressed.
+Sync Mode synchronizes EventsPanel presentation with video playback or manual timestamp control. Most panels aggregate events **up to a specific point in time**, allowing users to see how damage, healing, and other metrics accumulated as the fight progressed. Panels that require whole-encounter context can instead keep their complete result and use the Sync timestamp only for presentation, such as cursors, playheads, or row emphasis.
 
 ### Use Cases
 
@@ -32,46 +32,61 @@ Sync Mode is a feature that synchronizes EventsPanel data display with video pla
 └─────────────────────────────────────────────────────────────────────┘
 ```
 
-## Processing Modes
+## Processing Policies
 
-EventsPanels support two processing modes, selected automatically based on sync state:
+Each panel selects its aggregation behavior during Sync through `PanelDefinition.syncDataMode`:
 
-### 1. Worker Mode (Default)
+| Policy | Aggregation during Sync | Duration during Sync | Intended use |
+|--------|-------------------------|----------------------|--------------|
+| `"incremental"` (default) | Main-thread processing up to `currentTimestamp` | Elapsed playhead time | Metrics that should grow as playback advances |
+| `"full"` | Web Worker processing for the complete encounter | Full encounter duration | Whole-encounter views where Sync controls presentation only |
 
-- Uses Web Worker for background processing
-- Processes **all events** in selected encounters
-- Result is cached until context changes
-- Best for: Static views, initial page load
+Outside Sync, both policies use the Web Worker to process all events in the selected encounters. During Sync, `usePanelAggregation` calls `usesIncrementalSyncProcessing()` to choose the route. Full-data panels read `SyncModeContext.currentTimestamp` directly when they need presentation timing.
 
-### 2. Sync Mode (When enabled)
-
-- Uses **main thread** incremental processing
-- Processes events **up to currentTimestamp**
-- Supports pause/resume without reprocessing
-- Best for: Video sync, timeline scrubbing
+Applied panel filters remain active in both policies. Filter editing is paused while Sync is enabled. A full-data panel keeps its complete filtered result, including when it is added mid-playback.
 
 ```
-┌─────────────────────────────────────────────────────────────────┐
-│                    usePanelAggregation                          │
-│                                                                  │
-│  syncMode.enabled?                                              │
-│       │                                                          │
-│       ├── false ──► Worker Mode ──► Web Worker ──► Full result  │
-│       │                                                          │
-│       └── true ───► Sync Mode ───► Main Thread ──► Partial      │
-│                         │            Processor      result      │
-│                         │                                        │
-│                         ▼                                        │
-│              processIncrementally()                             │
-│              - Resume from previous state                        │
-│              - Stop at currentTimestamp                          │
-│              - Return state for next resume                      │
-└─────────────────────────────────────────────────────────────────┘
+┌────────────────────────────────────────────────────────────────────┐
+│                     usePanelAggregation                            │
+│                                                                    │
+│  syncMode.enabled?                                                │
+│       │                                                            │
+│       ├── false ─────────► Web Worker ─────────► Full result       │
+│       │                                                            │
+│       └── true ──► panel.syncDataMode?                             │
+│                         │                                          │
+│                         ├── "incremental" / undefined              │
+│                         │      └─► Main Thread ─► Partial result    │
+│                         │          processIncrementally()           │
+│                         │          - Resume previous state          │
+│                         │          - Stop at currentTimestamp       │
+│                         │                                          │
+│                         └── "full"                                 │
+│                                └─► Web Worker ─► Full result        │
+│                                    Sync timestamp is presentation   │
+│                                    state owned by the panel         │
+└────────────────────────────────────────────────────────────────────┘
 ```
+
+### Incremental Policy
+
+- Processes events up to `currentTimestamp` on the main thread
+- Supports forward pause and resume without reprocessing prior events
+- Rebuilds from the start after seeking backward
+- Uses elapsed playhead time for per-second calculations
+
+### Full-Data Policy
+
+- Processes the complete encounter in the Web Worker while Sync is active
+- Does not reaggregate on each Sync timestamp update
+- Uses full encounter duration for per-second calculations
+- Requires the panel renderer to interpret Sync timing itself
+
+Death Log is the first full-data panel. Its rows describe the whole encounter, so future deaths remain in the result and render muted until the playhead reaches them.
 
 ## Incremental Processing
 
-The key innovation is **incremental processing with precise resume**. This allows advancing through time without reprocessing all events from the start.
+This section applies only to panels using the default `"incremental"` policy. Incremental processing uses precise resume state so advancing through time does not reprocess all events from the start.
 
 ### State Tracking
 
@@ -177,49 +192,44 @@ return {
 
 ### Video Sync Flow
 
+The video overlay converts playback time to combat-log time and updates `SyncModeContext.currentTimestamp`. The panel policy determines what happens next:
+
 ```
-YouTubeOverlay                SyncModeContext              usePanelAggregation
-     │                              │                              │
-     │ video.getCurrentTime()       │                              │
-     │─────────────────────────────►│                              │
-     │                              │                              │
-     │ videoTimeToCombatLogTime()   │                              │
-     │         ┌────────────────────┤                              │
-     │         │ Interpolate using  │                              │
-     │         │ sync points        │                              │
-     │         └────────────────────┤                              │
-     │                              │                              │
-     │ setTimestamp(combatLogTime)  │                              │
-     │─────────────────────────────►│ currentTimestamp updated     │
-     │                              │─────────────────────────────►│
-     │                              │                              │
-     │                              │        throttledSyncTimestamp│
-     │                              │◄─────────────────────────────│
-     │                              │                              │
-     │                              │     processIncrementally()   │
-     │                              │─────────────────────────────►│
-     │                              │                              │
-     │                              │            result            │
-     │                              │◄─────────────────────────────│
-     │                              │                              │
-     │                              │         Panel re-renders     │
+YouTubeOverlay              SyncModeContext             EventsPanel
+     │                            │                           │
+     │ video playback time       │                           │
+     │───────────────────────────►│                           │
+     │                            │                           │
+     │ combat-log timestamp      │                           │
+     │───────────────────────────►│ currentTimestamp updated  │
+     │                            │──────────────────────────►│
+     │                            │                           │
+     │                            │    ┌──────────────────────┴─────────────┐
+     │                            │    │ incremental: throttle timestamp,   │
+     │                            │    │ process new events on main thread  │
+     │                            │    ├────────────────────────────────────┤
+     │                            │    │ full: keep worker result, use the  │
+     │                            │    │ timestamp during panel rendering   │
+     │                            │    └────────────────────────────────────┘
 ```
 
 ### Manual Control Flow
 
+Manual controls update the same context timestamp. Incremental panels reaggregate through `usePanelAggregation`; full-data panels re-render their Sync presentation without reaggregating.
+
 ```
-SyncControlOverlay          SyncModeContext              usePanelAggregation
-     │                              │                              │
-     │ User clicks +1s              │                              │
-     │─────────────────────────────►│                              │
-     │                              │                              │
-     │ step(1000)                   │                              │
-     │         ┌────────────────────┤                              │
-     │         │ currentTimestamp   │                              │
-     │         │ += 1000ms          │                              │
-     │         └────────────────────┤                              │
-     │                              │ (same flow as above)         │
-     │                              │─────────────────────────────►│
+SyncControlOverlay          SyncModeContext             EventsPanel
+     │                            │                           │
+     │ User clicks +1s           │                           │
+     │───────────────────────────►│                           │
+     │                            │                           │
+     │ step(1000)                │                           │
+     │         ┌──────────────────┤                           │
+     │         │ currentTimestamp │                           │
+     │         │ += 1000ms        │                           │
+     │         └──────────────────┤                           │
+     │                            │ currentTimestamp updated  │
+     │                            │──────────────────────────►│
 ```
 
 ## Component Reference
@@ -270,10 +280,10 @@ processIncrementally<TResult>(options: {
 ### usePanelAggregation (`usePanelAggregation.ts`)
 
 Hook that orchestrates processing:
-- Detects sync mode from context
-- Routes to worker or main-thread processor
+- Reads Sync state and the panel's `syncDataMode` policy
+- Routes full-data panels to the worker and incremental panels to the main-thread processor
 - Manages incremental state between renders
-- Throttles timestamp updates
+- Throttles timestamp updates only for incremental processing
 
 ### useCachedValue (`useCachedValue.ts`)
 
@@ -302,7 +312,7 @@ Caching hook with sync mode awareness:
 
 4. **Backward playback**: Currently seeking backward requires full reprocessing. Could cache checkpoints.
 
-5. **Worker-based sync mode**: Move incremental processing to worker to avoid main thread blocking
+5. **Worker-based incremental processing**: Move the incremental Sync path to a worker to avoid main-thread blocking
 
 ## Experimental Status
 
