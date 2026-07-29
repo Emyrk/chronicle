@@ -132,6 +132,13 @@ export interface SlainProcessorEvent extends EventMeta {
   attribution: AttributionDamage | null;  // The damage that caused the death
 }
 
+export interface ResurrectionProcessorEvent extends EventMeta {
+  type: "ressurection";
+  source: string;
+  target: string;
+  spell: { id: number; name: string };
+}
+
 /**
  * Cast action constants matching CastAction proto
  */
@@ -336,7 +343,7 @@ export interface CompanionStatsProcessorEvent extends EventMeta {
   buckets: number[];  // [10] landed chunk counts per minute (index 0 = current minute)
 }
 
-export type ProcessorEvent = DamageProcessorEvent | HealProcessorEvent | ResourceChangeProcessorEvent | ExtraAttackProcessorEvent | SlainProcessorEvent | CastProcessorEvent | AuraProcessorEvent | SpellGoProcessorEvent | AuraCastProcessorEvent | SpellStartProcessorEvent | SpellFailProcessorEvent | UnitClassificationProcessorEvent | CombatantInfoProcessorEvent | DispelProcessorEvent | InterruptProcessorEvent | AbsorbedProcessorEvent | CompanionStatsProcessorEvent;
+export type ProcessorEvent = DamageProcessorEvent | HealProcessorEvent | ResourceChangeProcessorEvent | ExtraAttackProcessorEvent | SlainProcessorEvent | ResurrectionProcessorEvent | CastProcessorEvent | AuraProcessorEvent | SpellGoProcessorEvent | AuraCastProcessorEvent | SpellStartProcessorEvent | SpellFailProcessorEvent | UnitClassificationProcessorEvent | CombatantInfoProcessorEvent | DispelProcessorEvent | InterruptProcessorEvent | AbsorbedProcessorEvent | CompanionStatsProcessorEvent;
 
 /**
  * Selection state for filtering entities (serializable for worker transport).

@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { HitTypePartialAbsorb, HitTypePartialBlock, HitTypePartialResist } from "@/lib/hittype/hittype";
-import type { DamageProcessorEvent, ProcessorContext } from "../processorTypes";
+import type { DamageProcessorEvent, ProcessorContext, ResurrectionProcessorEvent } from "../processorTypes";
 import { allActivityProcessor } from "./allActivityDebug.processor";
 
 function createContext(): ProcessorContext {
@@ -63,5 +63,38 @@ describe("allActivityProcessor", () => {
       { amount: 100, hitType: HitTypePartialBlock, labels: ["Partial Block"] },
       { amount: 50, hitType: HitTypePartialResist, labels: ["Partial Resist"] },
     ]);
+  });
+
+  it("captures resurrection source, target, and spell details", () => {
+    const state = allActivityProcessor.createState();
+    const event: ResurrectionProcessorEvent = {
+      type: "ressurection",
+      index: 8,
+      offsetMilli: 2500,
+      source: "player",
+      target: "doan",
+      spell: { id: 48949, name: "Redemption" },
+      activity: [],
+      activityCount: 0,
+    };
+
+    allActivityProcessor.processEvent(
+      state,
+      event,
+      "encounter",
+      new Date("2026-07-14T17:41:42.709Z"),
+      "ressurection",
+      createContext(),
+    );
+
+    expect(state.rawEventsByStream.ressurection[0]).toMatchObject({
+      caster: "player",
+      casterName: "Sathite",
+      target: "doan",
+      targetName: "Doan",
+      sourceName: "Redemption",
+      spellId: 48949,
+      extra: "resurrected",
+    });
   });
 });

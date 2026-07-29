@@ -1,5 +1,7 @@
+import { create, toBinary } from '@bufbuild/protobuf';
+import { EventMetaSchema, ResurrectionSchema, SpellDataSchema } from '@/api/proto/chronicle_pb';
 import { describe, it, expect } from 'vitest';
-import { readVarint, readVarint64, parseAllHeaders } from './decode';
+import { FastResurrectionCursor, readVarint, readVarint64, parseAllHeaders } from './decode';
 
 describe('readVarint', () => {
   it('reads single-byte varints', () => {
@@ -69,6 +71,32 @@ describe('readVarint64', () => {
     // More than 10 bytes with continuation bits
     const data = new Uint8Array([0x80, 0x80, 0x80, 0x80, 0x80, 0x80, 0x80, 0x80, 0x80, 0x80, 0x80]);
     expect(() => readVarint64(data, 0)).toThrow('Varint too long');
+  });
+});
+
+describe('FastResurrectionCursor', () => {
+  it('decodes source, target, and spell', () => {
+    const message = create(ResurrectionSchema, {
+      meta: create(EventMetaSchema, { index: 12, offsetMilli: 3456n }),
+      source: '0xSOURCE',
+      target: '0xTARGET',
+      spell: create(SpellDataSchema, { id: 48949, name: 'Redemption' }),
+    });
+    const encoded = toBinary(ResurrectionSchema, message);
+    const messageData = new Uint8Array([...encodeVarint(encoded.length), ...encoded]);
+    const payload = buildPayload('encounter', 1706000000000n, 1, messageData.length, messageData);
+
+    const cursor = new FastResurrectionCursor(payload);
+    const decoded = cursor.next();
+
+    expect(decoded).toMatchObject({
+      type: 'ressurection',
+      index: 12,
+      offsetMilli: 3456,
+      source: '0xSOURCE',
+      target: '0xTARGET',
+      spell: { id: 48949, name: 'Redemption' },
+    });
   });
 });
 

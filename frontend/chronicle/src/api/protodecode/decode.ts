@@ -1606,6 +1606,227 @@ export class FastSlainCursor {
 }
 
 // ============================================================================
+// Resurrection Decoder
+// ============================================================================
+
+export interface ReusableResurrectionSpell {
+  id: number;
+  name: string;
+}
+
+export interface ReusableResurrection {
+  type: "ressurection";
+  index: number;
+  offsetMilli: number;
+  source: string;
+  target: string;
+  spell: ReusableResurrectionSpell;
+  activity: ReusableActivityEntry[];
+  activityCount: number;
+}
+
+export class ResurrectionDecoder {
+  private readonly textDecoder = sharedTextDecoder;
+  private readonly reusableSpell: ReusableResurrectionSpell = { id: 0, name: "" };
+
+  readonly message: ReusableResurrection = {
+    type: "ressurection",
+    index: 0,
+    offsetMilli: 0,
+    source: "",
+    target: "",
+    spell: this.reusableSpell,
+    activity: [],
+    activityCount: 0,
+  };
+
+  decode(data: Uint8Array, offset: number, length: number): ReusableResurrection {
+    const end = offset + length;
+    const msg = this.message;
+    msg.index = 0;
+    msg.offsetMilli = 0;
+    msg.source = "";
+    msg.target = "";
+    msg.spell.id = 0;
+    msg.spell.name = "";
+    msg.activityCount = 0;
+
+    while (offset < end) {
+      const tag = data[offset++];
+      const fieldNumber = tag >> 3;
+      const wireType = tag & 0x7;
+
+      if (wireType === 2) {
+        const { value: len, bytesRead } = readVarintFast(data, offset);
+        offset += bytesRead;
+
+        if (fieldNumber === 1) {
+          const metaEnd = offset + len;
+          while (offset < metaEnd) {
+            const metaTag = data[offset++];
+            const metaField = metaTag >> 3;
+            const metaWire = metaTag & 0x7;
+            if (metaWire === 0) {
+              const decoded = readVarintFast(data, offset);
+              offset += decoded.bytesRead;
+              if (metaField === 1) msg.index = decoded.value;
+              else if (metaField === 2) msg.offsetMilli = decoded.value;
+            } else if (metaWire === 2 && metaField === 3) {
+              const decoded = readVarintFast(data, offset);
+              offset += decoded.bytesRead;
+              if (msg.activityCount >= msg.activity.length) {
+                msg.activity.push({ guid: "", eventType: "" });
+              }
+              const entry = msg.activity[msg.activityCount];
+              entry.guid = "";
+              entry.eventType = "";
+              const activityEnd = offset + decoded.value;
+              while (offset < activityEnd) {
+                const activityTag = data[offset++];
+                const activityField = activityTag >> 3;
+                const activityWire = activityTag & 0x7;
+                if (activityWire !== 2) {
+                  const skipped = readVarintFast(data, offset);
+                  offset += skipped.bytesRead;
+                  continue;
+                }
+                const text = readVarintFast(data, offset);
+                offset += text.bytesRead;
+                const value = this.textDecoder.decode(data.subarray(offset, offset + text.value));
+                if (activityField === 1) entry.guid = value;
+                else if (activityField === 2) entry.eventType = value;
+                offset += text.value;
+              }
+              msg.activityCount++;
+            } else {
+              offset = skipField(data, offset, metaWire);
+            }
+          }
+        } else if (fieldNumber === 2) {
+          msg.source = this.textDecoder.decode(data.subarray(offset, offset + len));
+          offset += len;
+        } else if (fieldNumber === 3) {
+          msg.target = this.textDecoder.decode(data.subarray(offset, offset + len));
+          offset += len;
+        } else if (fieldNumber === 4) {
+          const spellEnd = offset + len;
+          while (offset < spellEnd) {
+            const spellTag = data[offset++];
+            const spellField = spellTag >> 3;
+            const spellWire = spellTag & 0x7;
+            if (spellWire === 0) {
+              const decoded = readVarintFast(data, offset);
+              offset += decoded.bytesRead;
+              if (spellField === 1) msg.spell.id = decoded.value;
+            } else if (spellWire === 2) {
+              const decoded = readVarintFast(data, offset);
+              offset += decoded.bytesRead;
+              if (spellField === 2) {
+                msg.spell.name = this.textDecoder.decode(data.subarray(offset, offset + decoded.value));
+              }
+              offset += decoded.value;
+            } else {
+              offset = skipField(data, offset, spellWire);
+            }
+          }
+        } else {
+          offset += len;
+        }
+      } else {
+        offset = skipField(data, offset, wireType);
+      }
+    }
+
+    return msg;
+  }
+}
+
+function skipField(data: Uint8Array, offset: number, wireType: number): number {
+  if (wireType === 0) return offset + readVarintFast(data, offset).bytesRead;
+  if (wireType === 1) return offset + 8;
+  if (wireType === 2) {
+    const decoded = readVarintFast(data, offset);
+    return offset + decoded.bytesRead + decoded.value;
+  }
+  if (wireType === 5) return offset + 4;
+  throw new Error(`Unsupported protobuf wire type: ${wireType}`);
+}
+
+export class FastResurrectionCursor {
+  private readonly data: Uint8Array;
+  private readonly decoder = new ResurrectionDecoder();
+  private offset = 0;
+  private _currentHeader: PayloadHeader | null = null;
+  private _messagesReadInEncounter = 0;
+  private _bytesProcessed = 0;
+
+  constructor(data: Uint8Array) {
+    this.data = data;
+    this._loadNextEncounterHeader();
+  }
+
+  get currentHeader(): PayloadHeader | null { return this._currentHeader; }
+  get hasMoreInEncounter(): boolean {
+    return this._currentHeader !== null && this._messagesReadInEncounter < this._currentHeader.count;
+  }
+  get bytesProcessed(): number { return this._bytesProcessed; }
+  get bytesTotal(): number { return this.data.length; }
+
+  next(): ReusableResurrection | null {
+    if (!this.hasMoreInEncounter) return null;
+    const decoded = readVarint(this.data, this.offset);
+    const msgStart = this.offset + decoded.bytesRead;
+    const msg = this.decoder.decode(this.data, msgStart, decoded.value);
+    this.offset = msgStart + decoded.value;
+    this._bytesProcessed += decoded.bytesRead + decoded.value;
+    this._messagesReadInEncounter++;
+    return msg;
+  }
+
+  nextEncounter(): boolean {
+    while (this.hasMoreInEncounter) this.next();
+    return this._loadNextEncounterHeader();
+  }
+
+  skipEncounter(): boolean {
+    if (!this._currentHeader) return false;
+    if (this._messagesReadInEncounter > 0) return this.nextEncounter();
+    this.offset += this._currentHeader.dataLength;
+    this._bytesProcessed += this._currentHeader.dataLength;
+    this._currentHeader = null;
+    this._messagesReadInEncounter = 0;
+    return this._loadNextEncounterHeader();
+  }
+
+  private _loadNextEncounterHeader(): boolean {
+    if (this.offset >= this.data.length) {
+      this._currentHeader = null;
+      return false;
+    }
+    const startOffset = this.offset;
+    const encounterLength = readVarint(this.data, this.offset);
+    this.offset += encounterLength.bytesRead;
+    const encounterID = sharedTextDecoder.decode(this.data.subarray(this.offset, this.offset + encounterLength.value));
+    this.offset += encounterLength.value;
+    const timestamp = readVarint64(this.data, this.offset);
+    this.offset += timestamp.bytesRead;
+    const count = readVarint(this.data, this.offset);
+    this.offset += count.bytesRead;
+    const dataLength = readVarint(this.data, this.offset);
+    this.offset += dataLength.bytesRead;
+    this._currentHeader = {
+      encounterID,
+      firstTimestamp: new Date(Number(timestamp.value)),
+      count: count.value,
+      dataLength: dataLength.value,
+    };
+    this._messagesReadInEncounter = 0;
+    this._bytesProcessed += this.offset - startOffset;
+    return true;
+  }
+}
+
+// ============================================================================
 // Cast Decoder (for spell casts, channels, etc.)
 // ============================================================================
 

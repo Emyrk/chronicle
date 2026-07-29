@@ -2,7 +2,7 @@
  * All Activity Debug processor - stores raw events for debugging stream interleaving
  */
 
-import type { DamageProcessorEvent, HealProcessorEvent, PanelProcessor, ProcessorContext, ResourceChangeProcessorEvent, CastProcessorEvent, CastAction, AuraProcessorEvent, AuraApplication, SlainProcessorEvent, SpellGoProcessorEvent, AuraCastProcessorEvent, ExtraAttackProcessorEvent, UnitClassificationProcessorEvent, CombatantInfoProcessorEvent, DispelProcessorEvent } from "../processorTypes";
+import type { DamageProcessorEvent, HealProcessorEvent, PanelProcessor, ProcessorContext, ResourceChangeProcessorEvent, CastProcessorEvent, CastAction, AuraProcessorEvent, AuraApplication, SlainProcessorEvent, ResurrectionProcessorEvent, SpellGoProcessorEvent, AuraCastProcessorEvent, ExtraAttackProcessorEvent, UnitClassificationProcessorEvent, CombatantInfoProcessorEvent, DispelProcessorEvent } from "../processorTypes";
 import type { StreamType } from "@/hooks/instanceEvents";
 import { hitTypeNames } from "@/lib/hittype/hittype";
 
@@ -89,14 +89,14 @@ export interface AllActivityDebugState {
 }
 
 // This processor handles damage, heal, resource_change, cast, aura, slain, spell_go, and aura_cast events
-type AllActivityEvent = DamageProcessorEvent | HealProcessorEvent | ResourceChangeProcessorEvent | CastProcessorEvent | AuraProcessorEvent | SlainProcessorEvent | SpellGoProcessorEvent | AuraCastProcessorEvent | ExtraAttackProcessorEvent | UnitClassificationProcessorEvent | CombatantInfoProcessorEvent | DispelProcessorEvent;
+type AllActivityEvent = DamageProcessorEvent | HealProcessorEvent | ResourceChangeProcessorEvent | CastProcessorEvent | AuraProcessorEvent | SlainProcessorEvent | ResurrectionProcessorEvent | SpellGoProcessorEvent | AuraCastProcessorEvent | ExtraAttackProcessorEvent | UnitClassificationProcessorEvent | CombatantInfoProcessorEvent | DispelProcessorEvent;
 
 // Default page size if no pagination specified
 const DEFAULT_PAGE_SIZE = 100;
 
 export const allActivityProcessor: PanelProcessor<AllActivityDebugState, AllActivityEvent> = {
   id: "all_activity",
-  streams: ["damage", "heal", "resource_change", "aura", "slain", "spell_go", "spell_start", "aura_cast", "extra_attack", "unit_classification", "combatant_info", "dispel"],
+  streams: ["damage", "heal", "resource_change", "aura", "slain", "ressurection", "spell_go", "spell_start", "aura_cast", "extra_attack", "unit_classification", "combatant_info", "dispel"],
   
   createState: () => ({
     counts: new Map<string, number>(),
@@ -153,7 +153,7 @@ export const allActivityProcessor: PanelProcessor<AllActivityDebugState, AllActi
     const { entitySelection } = context;
     // Aura events only have target, cast events have caster but may not have target.
     // Combatant info events use "guid" instead of caster/target.
-    const eventCaster = "caster" in event ? event.caster : ("guid" in event ? event.guid : "");
+    const eventCaster = "caster" in event ? event.caster : ("source" in event ? event.source : ("guid" in event ? event.guid : ""));
     const eventTarget = "target" in event ? event.target : ("guid" in event ? event.guid : "");
     if (entitySelection.playerIds.size > 0) {
       if(!(entitySelection.playerIds.has(eventCaster) || (eventTarget && entitySelection.playerIds.has(eventTarget)))) {
@@ -191,6 +191,9 @@ export const allActivityProcessor: PanelProcessor<AllActivityDebugState, AllActi
       } else if (streamType === "slain") {
         const slainEvent = event as SlainProcessorEvent;
         abilityName = slainEvent.attribution?.sourceName ?? "";
+      } else if (streamType === "ressurection") {
+        const resurrectionEvent = event as ResurrectionProcessorEvent;
+        abilityName = resurrectionEvent.spell.name;
       } else if (streamType === "spell_go") {
         const spellGoEvent = event as SpellGoProcessorEvent;
         abilityName = spellGoEvent.spell.name;
@@ -293,6 +296,10 @@ export const allActivityProcessor: PanelProcessor<AllActivityDebugState, AllActi
       const castEvent = event as CastProcessorEvent;
       sourceName = castEvent.spell.name;
       amount = 0; // Casts don't have an amount
+    } else if (streamType === "ressurection") {
+      const resurrectionEvent = event as ResurrectionProcessorEvent;
+      sourceName = resurrectionEvent.spell.name;
+      amount = 0;
     } else if (streamType === "spell_go") {
       const spellGoEvent = event as SpellGoProcessorEvent;
       sourceName = spellGoEvent.spell.name;
@@ -406,6 +413,10 @@ export const allActivityProcessor: PanelProcessor<AllActivityDebugState, AllActi
       } else {
         rawEvent.extra = "died";
       }
+    } else if (streamType === "ressurection") {
+      const resurrectionEvent = event as ResurrectionProcessorEvent;
+      rawEvent.spellId = resurrectionEvent.spell.id;
+      rawEvent.extra = "resurrected";
     } else if (streamType === "spell_go") {
       const spellGoEvent = event as SpellGoProcessorEvent;
       rawEvent.spellId = spellGoEvent.spell.id;

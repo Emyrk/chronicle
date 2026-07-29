@@ -517,6 +517,7 @@ function AllActivityContent({
     ...rawEventsByStream.resource_change,
     ...rawEventsByStream.cast,
     ...rawEventsByStream.aura,
+    ...rawEventsByStream.ressurection,
     ...rawEventsByStream.slain,
     ...rawEventsByStream.spell_go,
     ...rawEventsByStream.aura_cast,
@@ -544,7 +545,7 @@ function AllActivityContent({
       <div className="flex items-center gap-2 mb-2 flex-wrap">
         <span className="text-xs text-muted-foreground">Streams:</span>
         {([
-          "damage", "heal", "resource_change", "extra_attack", "slain",
+          "damage", "heal", "resource_change", "extra_attack", "slain", "ressurection",
           "aura", "aura_cast",
           "spell_start", "spell_go", "spell_fail",
           "unit_classification", "combatant_info", "dispel"
