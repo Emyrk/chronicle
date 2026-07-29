@@ -416,8 +416,13 @@ const FILTER_COMPILERS: Record<PanelFilterType, FilterCompiler> = {
       () => true;
 
     return (event) => {
-      const amount = "amount" in event && typeof event.amount === "number" ? event.amount : null;
-      return amount !== null && cmp(amount);
+      if (!("amount" in event) || typeof event.amount !== "number") return false;
+      // Heal event value means effective healing. This lets panels omit pure
+      // overheal while still preserving the raw amount for display.
+      const amount = event.type === "heal"
+        ? Math.max(0, event.amount - event.overheal)
+        : event.amount;
+      return cmp(amount);
     };
   },
 };

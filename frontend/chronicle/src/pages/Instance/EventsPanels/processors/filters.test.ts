@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import type { DamageProcessorEvent, ProcessorContext } from "../processorTypes";
+import type { DamageProcessorEvent, HealProcessorEvent, ProcessorContext, ProcessorEvent } from "../processorTypes";
 import { evaluateFilters, compileFilters, type PanelFilter } from "./filters";
 
 function createContext(overrides: Partial<ProcessorContext> = {}): ProcessorContext {
@@ -38,6 +38,28 @@ function createDamageEvent(overrides: Partial<DamageProcessorEvent> = {}): Damag
     tailers: [],
     tailerCount: 0,
     spellId: 133,
+    ...overrides,
+  };
+}
+
+function createHealEvent(overrides: Partial<HealProcessorEvent> = {}): HealProcessorEvent {
+  return {
+    type: "heal",
+    index: 0,
+    offsetMilli: 0,
+    globalOffsetMilli: 0,
+    activity: [],
+    activityCount: 0,
+    spellAttackOutcome: null,
+    caster: "0x0000000000000001",
+    sourceName: "Flash Heal",
+    target: "0x0000000000000001",
+    hitType: 1,
+    amount: 100,
+    overheal: 0,
+    absorbed: 0,
+    school: 3,
+    spellId: 2061,
     ...overrides,
   };
 }
@@ -245,7 +267,7 @@ describe("evaluateFilters", () => {
     const filters: PanelFilter[] = [
       { type: "ability_hittype", value: ["crit"] },
     ];
-    const event = { type: "cast" as const, index: 0, offsetMilli: 0, activity: [], activityCount: 0 } as any;
+    const event = { type: "cast" as const, index: 0, offsetMilli: 0, activity: [], activityCount: 0 } as unknown as ProcessorEvent;
     expect(evaluateFilters(filters, event, createContext())).toBe(false);
   });
 
@@ -346,6 +368,13 @@ describe("event_value filter", () => {
     const filters: PanelFilter[] = [{ type: "event_value", value: "!=:0" }];
     expect(evaluateFilters(filters, createDamageEvent({ amount: 0 }), createContext())).toBe(false);
     expect(evaluateFilters(filters, createDamageEvent({ amount: 500 }), createContext())).toBe(true);
+  });
+
+  it("uses effective healing for heal event values", () => {
+    const filters: PanelFilter[] = [{ type: "event_value", value: "!=:0", applyTo: ["heal"] }];
+    expect(evaluateFilters(filters, createHealEvent({ amount: 500, overheal: 500 }), createContext())).toBe(false);
+    expect(evaluateFilters(filters, createHealEvent({ amount: 500, overheal: 499 }), createContext())).toBe(true);
+    expect(evaluateFilters(filters, createDamageEvent({ amount: 0 }), createContext())).toBe(true);
   });
 
   it("supports negation", () => {

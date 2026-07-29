@@ -19,8 +19,10 @@ export function createDeathLogPanel(): PanelDefinition<DeathsResult, any> {
     label: "Death Log",
     icon: <ScrollText className="h-4 w-4" />,
     checkboxLabel: "Encounter offset",
+    supportsFiltering: true,
     defaultFilters: [
       { type: "time_range" as const, value: "controller", applyTo: ["slain", "damage", "heal", "resource_change", "absorbed", "aura_cast"] },
+      { type: "event_value" as const, value: "!=:0", applyTo: ["heal"] },
     ],
 
     render: (props: PanelRenderProps<DeathsResult>) => {
