@@ -1,3 +1,8 @@
+import {
+  calculateRelativeHealth,
+  type RelativeHealthMessage,
+} from "@/components/ui/RelativeHealthBar/relativeHealth";
+
 export interface IncomingTimelineEvent {
   offsetMilli: number;
   eventIndex: number;
@@ -80,51 +85,85 @@ export function timelineYForTime(
   return relativeTimesNewestFirst.length * rowHeight;
 }
 
-export function relativeHealthAtCursor<T extends IncomingTimelineEvent>(
+export function relativeHealthMessagesAtCursor<T extends IncomingTimelineEvent>(
   events: T[],
   anchorOffsetMilli: number,
   windowMilli: number,
   cursorRelativeMilli: number,
-): RelativeHealthSnapshot {
+): RelativeHealthMessage[] {
   const cursorOffset = anchorOffsetMilli + Math.max(-windowMilli, Math.min(0, cursorRelativeMilli));
   const cutoff = anchorOffsetMilli - windowMilli;
-  let damage = 0;
-  let effectiveHealing = 0;
-  let prevented = 0;
-  let overhealing = 0;
-  const includedEvents = events.filter((event) => event.offsetMilli >= cutoff && event.offsetMilli <= cursorOffset);
+  const includedEvents = events.filter(
+    (event) => event.offsetMilli >= cutoff && event.offsetMilli <= cursorOffset,
+  );
   const attachedAbsorbs = new Set(
     includedEvents
       .filter((event) => event.type === "damage" && event.absorbed)
       .map((event) => `${event.eventIndex}:${event.offsetMilli}`),
   );
 
-  for (const event of includedEvents) {
+  return includedEvents.flatMap((event): RelativeHealthMessage[] => {
+    const id = `${event.eventIndex}:${event.offsetMilli}:${event.type}`;
     if (event.type === "damage") {
-      damage += event.amount;
-      if (event.absorbed) {
-        prevented += event.absorbed;
-        attachedAbsorbs.add(`${event.eventIndex}:${event.offsetMilli}`);
-      }
-    } else if (event.type === "heal") {
-      const over = event.overheal ?? 0;
-      effectiveHealing += Math.max(0, event.amount - over);
-      overhealing += over;
-    } else if (event.type === "resource_change") {
-      effectiveHealing += Math.max(0, event.amount);
-    } else if (event.type === "absorbed") {
-      // The absorbed stream can mirror mitigation attached to the damage event.
-      // Combat-log index + timestamp identifies that same source line.
-      if (!attachedAbsorbs.has(`${event.eventIndex}:${event.offsetMilli}`)) prevented += event.amount;
+      return [{
+        id,
+        timestamp: event.offsetMilli,
+        sequence: event.eventIndex,
+        kind: "damage",
+        amount: event.amount,
+        prevented: event.absorbed ?? 0,
+      }];
     }
-  }
+    if (event.type === "heal") {
+      return [{
+        id,
+        timestamp: event.offsetMilli,
+        sequence: event.eventIndex,
+        kind: "healing",
+        amount: event.amount,
+        overheal: event.overheal ?? 0,
+      }];
+    }
+    if (event.type === "resource_change") {
+      return [{
+        id,
+        timestamp: event.offsetMilli,
+        sequence: event.eventIndex,
+        kind: "healing",
+        amount: Math.max(0, event.amount),
+      }];
+    }
+    if (
+      event.type === "absorbed"
+      && !attachedAbsorbs.has(`${event.eventIndex}:${event.offsetMilli}`)
+    ) {
+      return [{
+        id,
+        timestamp: event.offsetMilli,
+        sequence: event.eventIndex,
+        kind: "prevented",
+        amount: event.amount,
+      }];
+    }
+    return [];
+  });
+}
 
+export function relativeHealthAtCursor<T extends IncomingTimelineEvent>(
+  events: T[],
+  anchorOffsetMilli: number,
+  windowMilli: number,
+  cursorRelativeMilli: number,
+): RelativeHealthSnapshot {
+  const state = calculateRelativeHealth(
+    relativeHealthMessagesAtCursor(events, anchorOffsetMilli, windowMilli, cursorRelativeMilli),
+  );
   return {
-    deficit: Math.max(0, damage - prevented - effectiveHealing),
-    damage,
-    effectiveHealing,
-    prevented,
-    overhealing,
+    deficit: Math.max(0, -state.current),
+    damage: state.damage,
+    effectiveHealing: state.effectiveHealing,
+    prevented: state.prevented,
+    overhealing: state.overhealing,
   };
 }
 

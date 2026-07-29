@@ -2,10 +2,12 @@ import { useEffect, useMemo, useRef, useState, type MouseEvent } from "react";
 import { ChevronDown, ChevronUp, HeartPulse, Shield, Swords, X } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { SpellIdTooltip } from "@/components/ui/SpellIdTooltip/SpellIdTooltip";
+import { RelativeHealthBar } from "@/components/ui/RelativeHealthBar/RelativeHealthBar";
+import { calculateRelativeHealth } from "@/components/ui/RelativeHealthBar/relativeHealth";
 import { useSyncModeContextOptional } from "../../SyncModeContext";
 import {
   relativeEventTime,
-  relativeHealthAtCursor,
+  relativeHealthMessagesAtCursor,
   syncCursorForDeath,
   timeAtTimelineY,
   timelineYForTime,
@@ -76,10 +78,16 @@ export function IncomingEventsBreakout({
     ? syncCursorForDeath(sync.currentTimestamp.getTime(), anchorAbsoluteMilli, windowMilli)
     : null;
   const cursorMilli = sync?.enabled ? syncCursor : sharedCursorMilli;
-  const snapshot = useMemo(
-    () => relativeHealthAtCursor(events, anchorOffsetMilli, windowMilli, cursorMilli ?? -windowMilli),
+  const healthMessages = useMemo(
+    () => relativeHealthMessagesAtCursor(
+      events,
+      anchorOffsetMilli,
+      windowMilli,
+      cursorMilli ?? -windowMilli,
+    ),
     [events, anchorOffsetMilli, windowMilli, cursorMilli],
   );
+  const healthState = useMemo(() => calculateRelativeHealth(healthMessages), [healthMessages]);
   const cursorY = cursorMilli === null
     ? null
     : timelineYForTime(relativeTimes, cursorMilli, ROW_HEIGHT, windowMilli);
@@ -112,9 +120,6 @@ export function IncomingEventsBreakout({
     ));
   };
 
-  const healthScale = Math.max(snapshot.damage, snapshot.effectiveHealing, snapshot.deficit, 1);
-  const deficitWidth = Math.min(50, (snapshot.deficit / healthScale) * 50);
-  const healingWidth = Math.min(50, (snapshot.effectiveHealing / healthScale) * 50);
   const classColor = `var(--color-class-${className.toLowerCase()})`;
 
   return (
@@ -171,19 +176,13 @@ export function IncomingEventsBreakout({
           <span className="text-2xs uppercase tracking-widest text-muted-foreground">Relative health change</span>
           <span className="text-[9px] text-muted-foreground/60">not actual health · max HP unknown</span>
           <div className="flex-1" />
-          <span className="font-mono text-2xs text-red-300">deficit {snapshot.deficit.toLocaleString()}</span>
         </div>
-        <div className="relative h-5 overflow-hidden rounded-sm border border-white/5 bg-[#17181b]">
-          <div className="absolute bottom-0 right-1/2 top-0 bg-red-500/45" style={{ width: `${deficitWidth}%` }} />
-          <div className="absolute bottom-0 left-1/2 top-0 bg-green-500/35" style={{ width: `${healingWidth}%` }} />
-          {snapshot.prevented > 0 && <div className="absolute bottom-0 right-1/2 top-0 w-1 bg-blue-400 shadow-[0_0_8px_#60a5fa]" />}
-          <div className="absolute bottom-0 left-1/2 top-0 w-px bg-white" />
-        </div>
+        <RelativeHealthBar messages={healthMessages} state={healthState} />
         <div className="mt-1.5 flex gap-4 font-mono text-2xs">
-          <span className="text-red-300"><Swords className="mr-1 inline h-3 w-3" />{snapshot.damage.toLocaleString()}</span>
-          <span className="text-green-300"><HeartPulse className="mr-1 inline h-3 w-3" />{snapshot.effectiveHealing.toLocaleString()}</span>
-          <span className="text-blue-300"><Shield className="mr-1 inline h-3 w-3" />{snapshot.prevented.toLocaleString()} prevented</span>
-          {snapshot.overhealing > 0 && <span className="text-amber-300/70">+{snapshot.overhealing.toLocaleString()} overheal</span>}
+          <span className="text-red-300"><Swords className="mr-1 inline h-3 w-3" />{healthState.damage.toLocaleString()}</span>
+          <span className="text-green-300"><HeartPulse className="mr-1 inline h-3 w-3" />{healthState.effectiveHealing.toLocaleString()}</span>
+          <span className="text-blue-300"><Shield className="mr-1 inline h-3 w-3" />{healthState.prevented.toLocaleString()} prevented</span>
+          {healthState.overhealing > 0 && <span className="text-green-200/45">+{healthState.overhealing.toLocaleString()} overheal</span>}
         </div>
       </div>
 

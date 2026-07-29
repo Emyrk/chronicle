@@ -53,7 +53,7 @@ describe("incoming events timeline", () => {
       event({ offsetMilli: 90_000, eventIndex: 3, type: "heal", amount: 7_000, overheal: 3_000 }),
     ];
     expect(relativeHealthAtCursor(events, 100_000, 30_000, 0)).toEqual({
-      deficit: 3_000,
+      deficit: 6_000,
       damage: 10_000,
       effectiveHealing: 4_000,
       prevented: 3_000,
