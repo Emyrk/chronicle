@@ -17,6 +17,7 @@ describe("RelativeHealthBar", () => {
     expect(markup).toContain("data-maximum-marker");
     expect(markup).toContain("data-current-marker");
     expect(markup).toContain("data-transition-range");
+    expect(markup).toContain('data-transition-head="right"');
     expect(markup).toContain("data-overheal-range");
     expect(markup).toContain("deficit −10");
   });
@@ -27,6 +28,7 @@ describe("RelativeHealthBar", () => {
     );
 
     expect(markup).toContain("data-prevented-range");
+    expect(markup).toContain('data-transition-head="left"');
     expect(markup).toContain("deficit −100");
   });
 });

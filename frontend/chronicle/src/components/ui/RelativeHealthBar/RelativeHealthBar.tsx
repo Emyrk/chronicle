@@ -88,6 +88,20 @@ export function RelativeHealthBar({ messages, className, state: suppliedState }:
           />
         )}
 
+        {/* Arrowhead at the landed position shows which way the latest value moved. */}
+        {transition && transition.from !== transition.to && (
+          <div
+            className={cn(
+              "pointer-events-none absolute top-1/2 z-10 h-0 w-0 -translate-y-1/2",
+              transition.kind === "damage"
+                ? "-translate-x-full border-y-[4px] border-r-[6px] border-y-transparent border-r-red-300"
+                : "border-y-[4px] border-l-[6px] border-y-transparent border-l-green-300",
+            )}
+            style={{ left: `${toPercent(transition.to)}%` }}
+            data-transition-head={transition.kind === "damage" ? "left" : "right"}
+          />
+        )}
+
         {/* Relative zero, extrema endcaps, and current position. */}
         <div className="absolute bottom-0 left-1/2 top-0 w-px -translate-x-1/2 bg-white/55" data-zero-marker />
         <div
