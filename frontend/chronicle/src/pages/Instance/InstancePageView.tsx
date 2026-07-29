@@ -1052,16 +1052,6 @@ function PoppedOutLayoutContent({
     }
   }, []);
 
-  const resetToInitialLayout = useCallback(() => {
-    setLayoutItems(session.snapshot.layoutItems.map((item) => ({ ...item })));
-    setPanelTypesById({ ...session.snapshot.panelTypesById });
-    setPanelOptionsById({ ...session.snapshot.panelOptionsById });
-    setSeedFiltersById(structuredClone(session.snapshot.panelFiltersById));
-    setSeedFiltersVersion((version) => version + 1);
-    setActivePresetId(session.snapshot.activePresetId);
-    toast.success("Cast layout", { description: "Reset popped-out layout" });
-  }, [session.snapshot]);
-
   const layoutsById = useMemo(
     () => new Map(layouts.map((layout) => [layout.id, layout])),
     [layouts],
@@ -1109,32 +1099,22 @@ function PoppedOutLayoutContent({
     <PortalContainerProvider container={session.container}>
       <div className="min-h-screen bg-background text-foreground p-3">
         <div className="sticky top-0 z-40 mb-3 border-b border-border bg-background/95 pb-2 pt-1 backdrop-blur">
-          <div className="flex flex-wrap items-center justify-between gap-2">
-            <div className="flex min-w-0 gap-1 overflow-x-auto styled-scrollbar">
-              {PRESET_LAYOUTS.map((preset) => (
-                <button
-                  key={preset.id}
-                  type="button"
-                  onClick={() => applyPreset(preset.id)}
-                  className={cn(
-                    "px-3 py-1.5 text-sm font-medium rounded-md whitespace-nowrap transition-colors",
-                    activePresetId === preset.id
-                      ? "bg-primary text-primary-foreground"
-                      : "text-muted-foreground hover:text-foreground hover:bg-muted",
-                  )}
-                >
-                  {preset.label}
-                </button>
-              ))}
-            </div>
-            {layouts.length > 0 && (
-              <InstanceActionBar
-                slots={actionBarSlots}
-                layouts={layouts}
-                onCast={castLayout}
-                onResetToDefault={resetToInitialLayout}
-              />
-            )}
+          <div className="flex gap-1 overflow-x-auto styled-scrollbar">
+            {PRESET_LAYOUTS.map((preset) => (
+              <button
+                key={preset.id}
+                type="button"
+                onClick={() => applyPreset(preset.id)}
+                className={cn(
+                  "px-3 py-1.5 text-sm font-medium rounded-md whitespace-nowrap transition-colors",
+                  activePresetId === preset.id
+                    ? "bg-primary text-primary-foreground"
+                    : "text-muted-foreground hover:text-foreground hover:bg-muted",
+                )}
+              >
+                {preset.label}
+              </button>
+            ))}
           </div>
         </div>
         <PanelTimingProvider panelCount={layoutItems.length}>
