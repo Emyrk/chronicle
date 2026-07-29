@@ -63,13 +63,13 @@ export function IncomingEventAmount({ entry }: { entry: IncomingEventDisplay }) 
         <span>-{effective.toLocaleString()}</span>
         {entry.absorbed ? (
           <span className="inline-flex items-center text-blue-300" data-absorbed-amount>
-            <Shield className="mr-px inline h-2.5 w-2.5" />
+            <Shield className="mr-px h-2.5 w-2.5 -translate-y-px" />
             {entry.absorbed.toLocaleString()}
           </span>
         ) : null}
         {entry.blocked ? (
           <span className="inline-flex items-center text-amber-300" data-blocked-amount>
-            <ShieldBan className="mr-px inline h-2.5 w-2.5" />
+            <ShieldBan className="mr-px h-2.5 w-2.5 -translate-y-px" />
             {entry.blocked.toLocaleString()}
           </span>
         ) : null}
