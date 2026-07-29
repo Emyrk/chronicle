@@ -3,7 +3,6 @@ import { Activity, Heart, Minus, Plus, Shield, Skull } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { formatNumber } from "@/lib/format";
 import { RelativeHealthBar } from "@/components/ui/RelativeHealthBar/RelativeHealthBar";
-import { HintTooltip, TooltipContent, TooltipTrigger } from "@/components/ui/Tooltip/tooltip";
 import { FloatingIncomingEventsBreakout } from "../IncomingEvents/FloatingIncomingEventsBreakout";
 import { IncomingEventsBreakout, type IncomingEventDisplay } from "../IncomingEvents/IncomingEventsBreakout";
 import { GenericPanel } from "../GenericPanel";
@@ -11,8 +10,15 @@ import type { PanelRenderProps } from "../types";
 import { useSyncModeContextOptional } from "../../SyncModeContext";
 import { useInferredRoles } from "../Roles/useInferredRoles";
 import type { StatusResult, StatusTimelineEvent, StatusUnitKind } from "./status.processor";
-import { cachedStatusAmplitudeBaseline, statusEventOpacity, statusMarkerAmplitude } from "./statusAmplitude";
 import { sortStatusSnapshotsByRole } from "./statusRoles";
+import {
+  STATUS_WAVEFORM_COLORS,
+  statusWaveformBarHeight,
+  statusWaveformBarOpacity,
+  statusWaveformEvents,
+  statusWaveformPosition,
+  statusWaveformScale,
+} from "./statusWaveform";
 import {
   selectStatusEncounter,
   snapshotStatusUnit,
@@ -81,30 +87,6 @@ function formatDelta(value: number): string {
   return `${value > 0 ? "+" : "−"}${formatNumber(Math.abs(value))}`;
 }
 
-function eventColor(event: StatusTimelineEvent): string {
-  switch (event.kind) {
-    case "damage":
-    case "death":
-      return "bg-red-500";
-    case "heal":
-      return "bg-emerald-400";
-    case "absorbed":
-      return "bg-sky-400";
-    case "cast_fail":
-      return "bg-zinc-500";
-    case "cast_start":
-      return "bg-amber-300";
-    case "cast":
-      return "bg-violet-400";
-  }
-}
-
-function eventTitle(event: StatusTimelineEvent, cursorMilli: number): string {
-  const relativeSeconds = (event.timestampMilli - cursorMilli) / 1000;
-  const amount = event.amount > 0 ? ` · ${formatNumber(event.amount)}` : "";
-  return `${relativeSeconds > 0 ? "+" : ""}${relativeSeconds.toFixed(1)}s · ${event.label}${amount}`;
-}
-
 type StatusDensity = 0 | 1 | 2;
 
 const ROW_CLASSES: Record<StatusDensity, string> = {
@@ -119,163 +101,56 @@ const NAME_CLASSES: Record<StatusDensity, string> = {
   2: "text-sm",
 };
 
-const BAR_HEIGHT_CLASSES: Record<StatusDensity, string> = {
-  0: "h-4",
-  1: "h-5",
-  2: "h-6",
-};
-
-function DamageEventTooltip({ event, targetName }: { event: StatusTimelineEvent; targetName: string }) {
-  return (
-    <TooltipContent
-      side="top"
-      sideOffset={6}
-      hideArrow
-      className="min-w-52 border border-border bg-card px-3 py-2 text-card-foreground shadow-xl"
-    >
-      <div className="mb-1.5 flex items-baseline justify-between gap-4 border-b border-border/60 pb-1.5">
-        <span className="font-semibold text-foreground">{event.label}</span>
-        {event.spellId !== null ? (
-          <span className="font-mono text-[9px] text-muted-foreground">#{event.spellId}</span>
-        ) : null}
-      </div>
-      <dl className="grid grid-cols-[auto_1fr] gap-x-3 gap-y-1 text-[10px]">
-        <dt className="text-muted-foreground">Caster</dt>
-        <dd className="text-right font-medium text-foreground">{event.sourceName || "Unknown"}</dd>
-        <dt className="text-muted-foreground">Target</dt>
-        <dd className="text-right font-medium text-foreground">{targetName}</dd>
-        <dt className="text-muted-foreground">Damage</dt>
-        <dd className="text-right font-mono font-semibold text-red-400">{formatNumber(event.amount)}</dd>
-      </dl>
-    </TooltipContent>
-  );
-}
-
-function DeathEventMarker({
-  event,
-  targetName,
-  left,
-  cursorMilli,
-  opacity,
-}: {
-  event: StatusTimelineEvent;
-  targetName: string;
-  left: number;
-  cursorMilli: number;
-  opacity: number;
-}) {
-  return (
-    <HintTooltip delayDuration={75}>
-      <TooltipTrigger asChild>
-        <span
-          className="absolute inset-y-0 z-30 w-4 -translate-x-1/2 cursor-default"
-          style={{
-            left: `${Math.max(0, Math.min(100, left))}%`,
-            opacity,
-          }}
-          aria-label={eventTitle(event, cursorMilli)}
-        >
-          <span className="absolute inset-y-0 left-1/2 w-0.5 -translate-x-1/2 bg-red-500 shadow-[0_0_6px_rgba(239,68,68,0.9)]" />
-          <span className="absolute left-1/2 top-1/2 flex h-4 w-4 -translate-x-1/2 -translate-y-1/2 items-center justify-center rounded-full border border-red-300/80 bg-red-950 text-red-200 shadow-[0_0_8px_rgba(239,68,68,0.85)] transition-transform hover:scale-125">
-            <Skull className="h-2.5 w-2.5" />
-          </span>
-        </span>
-      </TooltipTrigger>
-      <TooltipContent
-        side="top"
-        sideOffset={6}
-        hideArrow
-        className="min-w-52 border border-red-500/40 bg-card px-3 py-2 text-card-foreground shadow-xl"
-      >
-        <div className="mb-1.5 flex items-center gap-2 border-b border-red-500/30 pb-1.5 font-semibold text-red-300">
-          <Skull className="h-3.5 w-3.5" />
-          {targetName} died
-        </div>
-        <dl className="grid grid-cols-[auto_1fr] gap-x-3 gap-y-1 text-[10px]">
-          <dt className="text-muted-foreground">Killed by</dt>
-          <dd className="text-right font-medium text-foreground">{event.sourceName || "Unknown"}</dd>
-          <dt className="text-muted-foreground">Final hit</dt>
-          <dd className="text-right font-medium text-foreground">{event.label}</dd>
-          {event.amount > 0 ? (
-            <>
-              <dt className="text-muted-foreground">Damage</dt>
-              <dd className="text-right font-mono font-semibold text-red-400">{formatNumber(event.amount)}</dd>
-            </>
-          ) : null}
-        </dl>
-      </TooltipContent>
-    </HintTooltip>
-  );
-}
-
 function ActivityLane({
   snapshot,
   cursorMilli,
-  density,
   windowPreset,
-  amplitudeBaseline,
 }: {
   snapshot: StatusUnitSnapshot;
   cursorMilli: number;
-  density: StatusDensity;
   windowPreset: StatusWindowPreset;
-  amplitudeBaseline: number;
 }) {
-  const visible = [...snapshot.recentActivity, ...snapshot.incoming].filter(
-    (event) => event.kind === "damage" || event.kind === "heal" || event.kind === "absorbed" || event.kind === "death",
-  );
   const laneWindowMilli = windowPreset.historyMilli + windowPreset.futureMilli;
   const startMilli = cursorMilli - windowPreset.historyMilli;
   const playheadPercent = windowPreset.historyMilli / laneWindowMilli * 100;
+  const events = statusWaveformEvents([...snapshot.recentActivity, ...snapshot.incoming]);
+  const scale = statusWaveformScale(events);
+  const deaths = [...snapshot.recentActivity, ...snapshot.incoming].filter((event) => event.kind === "death");
+
   return (
-    <div className={cn("relative overflow-hidden border border-border/30 bg-black/15", BAR_HEIGHT_CLASSES[density])}>
-      <div className="absolute inset-y-0 z-10 w-px bg-amber-200/70" style={{ left: `${playheadPercent}%` }} />
-      {visible.map((event) => {
-        const left = ((event.timestampMilli - startMilli) / laneWindowMilli) * 100;
-        const opacity = statusEventOpacity(
-          event.timestampMilli,
-          cursorMilli,
-          windowPreset.historyMilli,
-        );
-        if (event.kind === "death") {
-          return (
-            <DeathEventMarker
-              key={`${event.eventIndex}:${event.timestampMilli}:${event.kind}`}
-              event={event}
-              targetName={snapshot.unit.name}
-              left={left}
-              cursorMilli={cursorMilli}
-              opacity={opacity}
-            />
-          );
-        }
-        const amplitude = statusMarkerAmplitude(event.kind, event.amount, amplitudeBaseline);
-        const laneHeight = density === 0 ? 10 : 12;
-        const marker = (
+    <div className="relative h-[22px] overflow-hidden rounded-[1px] bg-[rgba(255,255,255,0.022)]">
+      <div className="absolute inset-x-0 top-1/2 h-px bg-white/[0.11]" />
+      <div
+        className="absolute inset-y-0 z-10 w-px bg-amber-200/70"
+        style={{ left: `${playheadPercent}%` }}
+      />
+      {events.map((event) => {
+        const height = statusWaveformBarHeight(event.amount, scale.rowMax);
+        const isDamage = event.kind === "damage";
+        return (
           <span
             key={`${event.eventIndex}:${event.timestampMilli}:${event.kind}`}
-            className={cn(
-              "absolute top-1/2 -translate-x-1/2 -translate-y-1/2 rounded-[1px] border-0 shadow-none ring-0 transition-[filter,transform] hover:z-20 hover:brightness-125",
-              amplitude.color === null && eventColor(event),
-            )}
+            className="absolute w-0.5 rounded-[1px]"
             style={{
-              left: `${Math.max(0, Math.min(100, left))}%`,
-              width: `${amplitude.width}px`,
-              height: `${laneHeight * amplitude.heightScale}px`,
-              backgroundColor: amplitude.color ?? undefined,
-              opacity,
+              left: `${statusWaveformPosition(event.timestampMilli, startMilli, laneWindowMilli)}%`,
+              top: isDamage ? "50%" : undefined,
+              bottom: isDamage ? undefined : "50%",
+              height: `${height}px`,
+              backgroundColor: STATUS_WAVEFORM_COLORS[event.kind],
+              opacity: statusWaveformBarOpacity(event.amount, scale.highMagnitudeThreshold),
             }}
-            title={event.kind === "damage" ? undefined : eventTitle(event, cursorMilli)}
-            aria-label={eventTitle(event, cursorMilli)}
           />
         );
-        return event.kind === "damage" ? (
-          <HintTooltip key={`${event.eventIndex}:${event.timestampMilli}:${event.kind}`} delayDuration={75}>
-            <TooltipTrigger asChild>{marker}</TooltipTrigger>
-            <DamageEventTooltip event={event} targetName={snapshot.unit.name} />
-          </HintTooltip>
-        ) : marker;
       })}
+      {deaths.map((event) => (
+        <span
+          key={`${event.eventIndex}:${event.timestampMilli}:death`}
+          className="absolute inset-y-px z-20 w-0.5 rounded-[1px] bg-[#d4423f] opacity-95"
+          style={{
+            left: `${statusWaveformPosition(event.timestampMilli, startMilli, laneWindowMilli)}%`,
+          }}
+        />
+      ))}
     </div>
   );
 }
@@ -354,12 +229,6 @@ export function StatusContent(props: PanelRenderProps<StatusResult>) {
       return enemyGroups.adds.has(unit.unitId);
     });
   }, [encounter, enemyGroups, unitMode]);
-  const amplitudeBaseline = useMemo(
-    () => encounter
-      ? cachedStatusAmplitudeBaseline(encounter, unitMode, matchingUnits)
-      : 1,
-    [encounter, matchingUnits, unitMode],
-  );
   const snapshots = useMemo(() => {
     if (cursorMilli === null) return [];
     const matchingSnapshots = matchingUnits.map((unit) => snapshotStatusUnit(
@@ -433,7 +302,7 @@ export function StatusContent(props: PanelRenderProps<StatusResult>) {
         <span>Unit</span>
         <span>Relative health change</span>
         <span className="flex items-center gap-2">
-          <span>Health events</span>
+          <span>Signed waveform</span>
           <select
             value={windowPreset.id}
             onChange={(event) => selectWindowPreset(event.target.value as StatusWindowPresetId)}
@@ -510,9 +379,7 @@ export function StatusContent(props: PanelRenderProps<StatusResult>) {
                 <ActivityLane
                   snapshot={snapshot}
                   cursorMilli={cursorMilli!}
-                  density={density}
                   windowPreset={windowPreset}
-                  amplitudeBaseline={amplitudeBaseline}
                 />
               </button>
             );
