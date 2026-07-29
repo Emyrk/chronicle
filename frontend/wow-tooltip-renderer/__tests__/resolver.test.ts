@@ -51,6 +51,17 @@ describe("resolveSpellDescription — variable types", () => {
     );
   });
 
+  it("$h and $h1 proc chance", () => {
+    const spell = makeSpell({ proc_chance: 45 });
+    expect(resolveSpellDescription(spell, "Gives you a $h% chance.")).toBe(
+      "Gives you a 45% chance.",
+    );
+    // Setup (14071) / Unbridled Wrath (12322) use the indexed form $h1.
+    expect(resolveSpellDescription(spell, "Gives you a $h1% chance.")).toBe(
+      "Gives you a 45% chance.",
+    );
+  });
+
   it("$*N;s1 multiply and $/N;s1 divide", () => {
     const spell = makeSpell({ effect_base_points: [100, 0, 0] });
     expect(resolveSpellDescription(spell, "$*8;s1 damage")).toBe("800 damage");

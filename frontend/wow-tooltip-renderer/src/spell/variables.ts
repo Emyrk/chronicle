@@ -66,6 +66,12 @@ export function resolveVariable(
 
       case "f": // Max stacks (not always per-effect, but sometimes used)
         return String(spell.cumulative_aura || 0);
+
+      case "h": // Proc chance (spell-level, index ignored)
+        return String(spell.proc_chance || 0);
+
+      case "n": // Proc charges (spell-level, index ignored)
+        return String(spell.proc_charges || 1);
     }
   }
 

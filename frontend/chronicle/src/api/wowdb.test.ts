@@ -94,8 +94,8 @@ const expectedByServer: Record<string, Record<string, string>> = {
     "709_aura": "Drains 29 health each second to the caster.",
     "11712": "Curses the target with agony, causing 780 Shadow damage over 24 sec.  This damage is dealt slowly at first, and builds up as the Curse reaches its full duration.  Only one Curse per Warlock can be active on any one target.",
     "11712_aura": "780 Shadow damage over 24 sec.",
-    // Unbridled Wrath — $h1 (proc chance) not yet resolved
-    "12322": "Gives you a $h1% chance to generate an additional Rage point when you deal melee damage with a weapon.",
+    // Unbridled Wrath — $h1 resolves to proc_chance
+    "12322": "Gives you a 8% chance to generate an additional Rage point when you deal melee damage with a weapon.",
     "16454": "Blasts a target for 60 Fire damage and increases damage done to target by Fire damage by 10 for 30 sec.",
     "21973": "-0.1 sec to the casting time of your Flash Heal spell.",
   },
@@ -364,8 +364,8 @@ describe("no raw placeholders in resolved descriptions", () => {
     { pattern: /\$[dD]\b/g, label: "duration ($d)" },
     { pattern: /\$[tT]\d/g, label: "tick interval ($t1)" },
     { pattern: /\$[aA]\d/g, label: "radius ($a1)" },
-    { pattern: /\$[nN]\b/g, label: "proc charges ($n)" },
-    { pattern: /\$[hH]\b/g, label: "proc chance ($h)" },
+    { pattern: /\$[nN]\d?\b/g, label: "proc charges ($n, $n1)" },
+    { pattern: /\$[hH]\d?\b/g, label: "proc chance ($h, $h1)" },
     { pattern: /\$[xX]\d/g, label: "chain targets ($x1)" },
     { pattern: /\$[bB]\d/g, label: "combo points ($b1)" },
     { pattern: /\$l[^:]+:[^;]+;/g, label: "pluralization ($l...;)" },
