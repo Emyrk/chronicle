@@ -26,7 +26,7 @@ Sync Mode synchronizes EventsPanel presentation with video playback or manual ti
 │              ┌───────────────┼───────────────┐                      │
 │              ▼               ▼               ▼                      │
 │  ┌──────────────────┐ ┌─────────────┐ ┌──────────────────┐         │
-│  │ SyncControlOverlay│ │YouTubeOverlay│ │  EventsPanels    │         │
+│  │ReplayControlOvrly │ │YouTubeOverlay│ │  EventsPanels    │         │
 │  │ (manual controls) │ │(video sync)  │ │                  │         │
 │  └──────────────────┘ └─────────────┘ └──────────────────┘         │
 └─────────────────────────────────────────────────────────────────────┘
@@ -218,7 +218,7 @@ YouTubeOverlay              SyncModeContext             EventsPanel
 Manual controls update the same context timestamp. Incremental panels reaggregate through `usePanelAggregation`; full-data panels re-render their Sync presentation without reaggregating.
 
 ```
-SyncControlOverlay          SyncModeContext             EventsPanel
+ReplayControlOverlay        SyncModeContext             EventsPanel
      │                            │                           │
      │ User clicks +1s           │                           │
      │───────────────────────────►│                           │
@@ -253,10 +253,10 @@ Provides global sync state and controls:
 | `play()` / `pause()` | Control auto-playback |
 | `step(deltaMs)` | Move forward/backward |
 
-### SyncControlOverlay (`SyncControlOverlay.tsx`)
+### ReplayControlOverlay (`ReplayControlOverlay.tsx`)
 
-Floating control panel with:
-- Enable/disable toggle
+Floating "Replay Controls" panel (shown while the Replay toolbar button is active; enables replay mode on open) with:
+- Collapsible mini-bar mode
 - Current timestamp display
 - Progress slider
 - Play/pause, step ±100ms, step ±1s

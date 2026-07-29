@@ -11,7 +11,8 @@ import { Button } from "@/components/ui/button";
 import { InstancePageView } from "./InstancePageView";
 import { YouTubeOverlay } from "./YouTubeOverlay";
 import { SyncModeProvider, useSyncModeContext } from "./SyncModeContext";
-import { SyncControlOverlay } from "./SyncControlOverlay";
+import { ReplayControlOverlay } from "./ReplayControlOverlay";
+import { useIsMobile } from "@/hooks/useIsMobile";
 import { TimeRangeProvider } from "./TimeRangeContext";
 import { TimeRangeController } from "./TimeRangeController";
 import { useTenantGate } from "./TenantGate";
@@ -219,9 +220,12 @@ function InstancePageInner({
   duplicateGroupId?: string;
 }) {
   const [showYoutube, setShowYoutube] = useState(false);
-  const [showSyncPanel, setShowSyncPanel] = useState(false);
+  const [showReplayPanel, setShowReplayPanel] = useState(false);
   const [showTimeRange, setShowTimeRange] = useState(false);
   const { setEncounterBounds, enabled: syncEnabled } = useSyncModeContext();
+  const isMobile = useIsMobile();
+  // Replay is disabled on mobile - never show the panel there
+  const replayPanelVisible = showReplayPanel && !isMobile;
   
   // Update sync mode encounter bounds when selection changes
   useEffect(() => {
@@ -245,18 +249,21 @@ function InstancePageInner({
         canAdminLogs={canAdminLogs}
         duplicateGroupId={duplicateGroupId}
         onOpenTimeRange={() => setShowTimeRange(true)}
+        suppressActionBar={replayPanelVisible}
         youtubeButton={
           <div className="flex gap-1.5">
-            {/* Sync button */}
-            <Button
-              variant={syncEnabled ? "default" : "outline"}
-              size="sm"
-              className="gap-1.5"
-              onClick={() => setShowSyncPanel(true)}
-            >
-              <Timer className="h-4 w-4" />
-              Sync
-            </Button>
+            {/* Replay button (desktop only - replay is disabled on mobile) */}
+            {!isMobile && (
+              <Button
+                variant={showReplayPanel || syncEnabled ? "default" : "outline"}
+                size="sm"
+                className="gap-1.5"
+                onClick={() => setShowReplayPanel((prev) => !prev)}
+              >
+                <Timer className="h-4 w-4" />
+                Replay
+              </Button>
+            )}
             {/* YouTube button - only if video available */}
             {youtubeData?.url && (
               <Button
@@ -272,9 +279,8 @@ function InstancePageInner({
           </div>
         }
       />
-      {showSyncPanel && (
-        <SyncControlOverlay 
-          onClose={() => setShowSyncPanel(false)}
+      {replayPanelVisible && (
+        <ReplayControlOverlay
           initialTimestamp={selectedEncounterTimes.start ? new Date(selectedEncounterTimes.start) : undefined}
         />
       )}
