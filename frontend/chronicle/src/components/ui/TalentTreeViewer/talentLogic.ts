@@ -470,16 +470,16 @@ export function talentBuildExportName(tabs: TalentTabData[], ranks: TalentRanks,
 
 // ─── Arrow path geometry ──────────────────────────────────────────
 
-function talentCenter(talent: Pick<TalentEntry, "tierID" | "columnIndex">) {
+function talentCenter(talent: Pick<TalentEntry, "tierID" | "columnIndex">, buttonSize = TALENT_BUTTON_SIZE) {
   return {
-    x: talent.columnIndex * (TALENT_CELL_WIDTH + TALENT_GRID_GAP) + TALENT_BUTTON_SIZE / 2,
-    y: talent.tierID * TALENT_ROW_STRIDE + TALENT_BUTTON_SIZE / 2,
+    x: talent.columnIndex * (TALENT_CELL_WIDTH + TALENT_GRID_GAP) + buttonSize / 2,
+    y: talent.tierID * TALENT_ROW_STRIDE + buttonSize / 2,
   };
 }
 
-function talentButtonBounds(talent: Pick<TalentEntry, "tierID" | "columnIndex">) {
-  const center = talentCenter(talent);
-  const buttonEdge = TALENT_BUTTON_SIZE / 2;
+function talentButtonBounds(talent: Pick<TalentEntry, "tierID" | "columnIndex">, buttonSize: number) {
+  const center = talentCenter(talent, buttonSize);
+  const buttonEdge = buttonSize / 2;
   return {
     left: center.x - buttonEdge,
     right: center.x + buttonEdge,
@@ -488,15 +488,27 @@ function talentButtonBounds(talent: Pick<TalentEntry, "tierID" | "columnIndex">)
   };
 }
 
-function verticalSegmentCrossesTalent(x: number, startY: number, endY: number, talent: Pick<TalentEntry, "tierID" | "columnIndex">) {
-  const bounds = talentButtonBounds(talent);
+function verticalSegmentCrossesTalent(
+  x: number,
+  startY: number,
+  endY: number,
+  talent: Pick<TalentEntry, "tierID" | "columnIndex">,
+  buttonSize: number,
+) {
+  const bounds = talentButtonBounds(talent, buttonSize);
   const top = Math.min(startY, endY);
   const bottom = Math.max(startY, endY);
   return x >= bounds.left && x <= bounds.right && bottom >= bounds.top && top <= bounds.bottom;
 }
 
-function horizontalSegmentCrossesTalent(y: number, startX: number, endX: number, talent: Pick<TalentEntry, "tierID" | "columnIndex">) {
-  const bounds = talentButtonBounds(talent);
+function horizontalSegmentCrossesTalent(
+  y: number,
+  startX: number,
+  endX: number,
+  talent: Pick<TalentEntry, "tierID" | "columnIndex">,
+  buttonSize: number,
+) {
+  const bounds = talentButtonBounds(talent, buttonSize);
   const left = Math.min(startX, endX);
   const right = Math.max(startX, endX);
   return y >= bounds.top && y <= bounds.bottom && right >= bounds.left && left <= bounds.right;
@@ -506,10 +518,11 @@ export function prerequisiteArrowPolylinePoints(
   from: Pick<TalentEntry, "tierID" | "columnIndex">,
   to: Pick<TalentEntry, "tierID" | "columnIndex">,
   talents: Array<Pick<TalentEntry, "id" | "tierID" | "columnIndex">> = [],
+  buttonSize = TALENT_BUTTON_SIZE,
 ) {
-  const fromPoint = talentCenter(from);
-  const toPoint = talentCenter(to);
-  const buttonEdge = TALENT_BUTTON_SIZE / 2;
+  const fromPoint = talentCenter(from, buttonSize);
+  const toPoint = talentCenter(to, buttonSize);
+  const buttonEdge = buttonSize / 2;
 
   if (from.tierID === to.tierID) {
     const direction = toPoint.x >= fromPoint.x ? 1 : -1;
@@ -529,8 +542,8 @@ export function prerequisiteArrowPolylinePoints(
 
   // Horizontal-first: exit from the side of source, go horizontal to target's column, then down.
   const startX = fromPoint.x + direction * (buttonEdge + TALENT_ARROW_SOURCE_CLEARANCE);
-  const hBlockers = others.filter((t) => horizontalSegmentCrossesTalent(fromPoint.y, startX, toPoint.x, t));
-  const vBlockers = others.filter((t) => verticalSegmentCrossesTalent(toPoint.x, fromPoint.y, endY, t));
+  const hBlockers = others.filter((t) => horizontalSegmentCrossesTalent(fromPoint.y, startX, toPoint.x, t, buttonSize));
+  const vBlockers = others.filter((t) => verticalSegmentCrossesTalent(toPoint.x, fromPoint.y, endY, t, buttonSize));
 
   if (hBlockers.length === 0 && vBlockers.length === 0) {
     return `${startX},${fromPoint.y} ${toPoint.x},${fromPoint.y} ${toPoint.x},${endY}`;
@@ -539,15 +552,15 @@ export function prerequisiteArrowPolylinePoints(
   // Fallback: exit bottom, go down near target row, then horizontal, then down to target.
   const startY = fromPoint.y + buttonEdge + TALENT_ARROW_SOURCE_CLEARANCE;
   const elbowY = endY > startY ? endY - TALENT_ARROW_ELBOW_CLEARANCE : startY + TALENT_ARROW_ELBOW_CLEARANCE;
-  const downBlockers = others.filter((t) => verticalSegmentCrossesTalent(fromPoint.x, startY, elbowY, t));
+  const downBlockers = others.filter((t) => verticalSegmentCrossesTalent(fromPoint.x, startY, elbowY, t, buttonSize));
   if (downBlockers.length === 0) {
     return `${fromPoint.x},${startY} ${fromPoint.x},${elbowY} ${toPoint.x},${elbowY} ${toPoint.x},${endY}`;
   }
 
   // Detour: route around vertical blockers.
   const detourX = direction > 0
-    ? Math.max(...downBlockers.map((t) => talentButtonBounds(t).right)) + TALENT_ARROW_ELBOW_CLEARANCE + TALENT_ARROW_SOURCE_CLEARANCE
-    : Math.min(...downBlockers.map((t) => talentButtonBounds(t).left)) - TALENT_ARROW_ELBOW_CLEARANCE - TALENT_ARROW_SOURCE_CLEARANCE;
+    ? Math.max(...downBlockers.map((t) => talentButtonBounds(t, buttonSize).right)) + TALENT_ARROW_ELBOW_CLEARANCE + TALENT_ARROW_SOURCE_CLEARANCE
+    : Math.min(...downBlockers.map((t) => talentButtonBounds(t, buttonSize).left)) - TALENT_ARROW_ELBOW_CLEARANCE - TALENT_ARROW_SOURCE_CLEARANCE;
   return `${fromPoint.x},${startY} ${detourX},${startY} ${detourX},${elbowY} ${toPoint.x},${elbowY} ${toPoint.x},${endY}`;
 }
 

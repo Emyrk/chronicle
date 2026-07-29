@@ -214,7 +214,7 @@ function TalentTooltipCard({
 
 // ─── Prerequisite arrows SVG ──────────────────────────────────────
 
-function TalentPrereqArrows({ arrows, ranks, height, talents }: { arrows: TalentPrereqArrow[]; ranks: TalentRanks; height: number; talents: TalentEntry[] }) {
+function TalentPrereqArrows({ arrows, ranks, height, talents, buttonSize }: { arrows: TalentPrereqArrow[]; ranks: TalentRanks; height: number; talents: TalentEntry[]; buttonSize: number }) {
   if (arrows.length === 0) return null;
 
   return (
@@ -238,7 +238,7 @@ function TalentPrereqArrows({ arrows, ranks, height, talents }: { arrows: Talent
         const active = (ranks[from.id] ?? 0) >= requiredRank;
         const strokeClass = active ? "stroke-[#d8b35f]/85 drop-shadow-[0_0_4px_rgba(216,179,95,0.35)]" : "stroke-[#6d5a3f]/45";
         const marker = active ? "url(#talent-prereq-arrow-active)" : "url(#talent-prereq-arrow-inactive)";
-        const points = prerequisiteArrowPolylinePoints(from, to, talents);
+        const points = prerequisiteArrowPolylinePoints(from, to, talents, buttonSize);
         const pathData = prerequisiteArrowPathData(points);
 
         return (
@@ -521,7 +521,8 @@ function TalentButton({ talent, rank, locked, pointsExhausted, talents, ranks, o
         if (spellId != null) void navigator.clipboard.writeText(String(spellId));
       }}
       className={cn(
-        "group relative h-11 w-11 rounded-sm border bg-zinc-950 shadow-lg transition before:absolute before:-inset-0.5 before:rounded-sm before:content-['']",
+        "group relative rounded-sm border bg-zinc-950 shadow-lg transition before:absolute before:-inset-0.5 before:rounded-sm before:content-['']",
+        mobile ? "h-11 w-11" : "h-12 w-12",
         visualState === "locked" && "talent-state-locked cursor-not-allowed border-zinc-700 opacity-75 before:bg-black/10",
         visualState === "available" && "talent-state-available border-primary/70 shadow-primary/20 before:border before:border-primary/35 hover:scale-105 hover:border-primary hover:shadow-primary/30",
         visualState === "selected" && "talent-state-selected border-emerald-300/80 shadow-emerald-500/20 ring-1 ring-emerald-300/45 before:border before:border-emerald-300/35 hover:scale-105 hover:border-emerald-200",
@@ -814,7 +815,7 @@ function TalentTab({
                 : { width: `${TALENT_GRID_WIDTH}px`, height: `${height}px` }
             }
           >
-            <TalentPrereqArrows arrows={arrows} ranks={ranks} height={height} talents={tab.talents} />
+            <TalentPrereqArrows arrows={arrows} ranks={ranks} height={height} talents={tab.talents} buttonSize={mobile ? 44 : 48} />
             <div
               className="relative z-10 grid justify-items-center"
               style={{
