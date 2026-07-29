@@ -1,11 +1,14 @@
+import { useMemo, useState } from "react";
 import { useParams, Link } from "react-router-dom";
+import { toast } from "sonner";
 import {
   useGuildRoster, useGuildPage, useGuildJoinRequests,
   useAcceptJoinRequest, useDenyJoinRequest,
-  useUpdateGuildMemberRole, useRemoveGuildMember,
+  useAddGuildMember, useUpdateGuildMemberRole, useRemoveGuildMember,
+  useAdminUsers, useAuthorizationCheck,
 } from "@/api/queries";
-import type { GuildJoinRequest, GuildRosterMember } from "@/api/queries";
-import { ArrowLeft, Shield, Crown, Users, UserPlus, Check, X, Trash2, ChevronDown } from "lucide-react";
+import type { GuildJoinRequest, GuildRosterMember, RequestError } from "@/api/queries";
+import { ArrowLeft, Shield, Crown, Users, UserPlus, Check, X, Trash2, ChevronDown, Loader2, Search } from "lucide-react";
 import { GuildPageHeader, GuildActionsMenu } from "./components";
 import { Button } from "@/components/ui/button";
 import {
@@ -15,11 +18,19 @@ import {
   DropdownMenuItem,
 } from "@/components/ui/DropdownMenu/DropdownMenu";
 
+import { Input } from "@/components/ui/input";
+import { filterAddableGuildUsers } from "./guildRoster.utils";
+
+const CHRONICLE_ADMIN_CHECKS = { admin: "chronicle:chronicle#admin_users" };
+
 export function GuildRoster() {
   const { guildId } = useParams<{ guildId: string }>();
   const { data: pageConfig } = useGuildPage(guildId);
   const { data: members, isLoading, error } = useGuildRoster(guildId);
   const canAdmin = pageConfig?.guild.can_edit ?? false;
+  const { data: adminAuthz } = useAuthorizationCheck(CHRONICLE_ADMIN_CHECKS);
+  const isChronicleAdmin = adminAuthz?.admin ?? false;
+  const [showAddMember, setShowAddMember] = useState(false);
   const { data: joinRequests } = useGuildJoinRequests(canAdmin ? guildId : undefined);
 
   if (isLoading) {
@@ -65,7 +76,7 @@ export function GuildRoster() {
           <GuildPageHeader guild={pageConfig.guild} theme={pageConfig.theme} />
         </>
       )}
-      <div className="flex items-center gap-3 mb-6">
+      <div className="flex flex-wrap items-center gap-3 mb-6">
         <Link
           to={`/g/${guildId}`}
           className="text-muted-foreground hover:text-foreground transition-colors"
@@ -79,7 +90,26 @@ export function GuildRoster() {
         <span className="text-muted-foreground text-sm">
           ({sorted.length})
         </span>
+        {isChronicleAdmin && (
+          <Button
+            variant="outline"
+            size="sm"
+            className="ml-auto"
+            onClick={() => setShowAddMember((visible) => !visible)}
+          >
+            {showAddMember ? <X className="h-4 w-4 mr-2" /> : <UserPlus className="h-4 w-4 mr-2" />}
+            {showAddMember ? "Cancel" : "Force Add Member"}
+          </Button>
+        )}
       </div>
+
+      {showAddMember && isChronicleAdmin && guildId && (
+        <AddMemberPanel
+          guildId={guildId}
+          members={members ?? []}
+          onAdded={() => setShowAddMember(false)}
+        />
+      )}
 
       {/* Pending Join Requests (admin only) */}
       {canAdmin && joinRequests && joinRequests.length > 0 && (
@@ -116,6 +146,100 @@ export function GuildRoster() {
         </div>
       )}
     </div>
+  );
+}
+
+function AddMemberPanel({
+  guildId,
+  members,
+  onAdded,
+}: {
+  guildId: string;
+  members: readonly GuildRosterMember[];
+  onAdded: () => void;
+}) {
+  const [query, setQuery] = useState("");
+  const { data: usersData, isLoading, error } = useAdminUsers();
+  const addMember = useAddGuildMember(guildId);
+  const matches = useMemo(
+    () => filterAddableGuildUsers(usersData?.users ?? [], members, query),
+    [members, query, usersData?.users],
+  );
+
+  const handleAdd = (userId: string, username: string) => {
+    addMember.mutate(userId, {
+      onSuccess: () => {
+        toast.success(`${username} added to the guild.`);
+        onAdded();
+      },
+      onError: (mutationError) => {
+        const requestError = mutationError as RequestError;
+        toast.error(requestError?.message || `Failed to add ${username}.`);
+      },
+    });
+  };
+
+  return (
+    <section className="mb-6 rounded-lg border border-amber-500/40 bg-amber-500/5 p-4">
+      <div className="mb-3">
+        <h2 className="font-semibold flex items-center gap-2">
+          <Shield className="h-4 w-4 text-amber-500" />
+          Force Add Chronicle User
+        </h2>
+        <p className="text-sm text-muted-foreground mt-1">
+          This bypasses the normal join request flow. New users are added as regular members.
+        </p>
+      </div>
+      <div className="relative">
+        <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+        <Input
+          autoFocus
+          value={query}
+          onChange={(event) => setQuery(event.target.value)}
+          placeholder="Search by username, email, or user ID..."
+          className="pl-9"
+        />
+      </div>
+      <div className="mt-3">
+        {isLoading ? (
+          <div className="flex items-center gap-2 py-2 text-sm text-muted-foreground">
+            <Loader2 className="h-4 w-4 animate-spin" />
+            Loading Chronicle users...
+          </div>
+        ) : error ? (
+          <p className="py-2 text-sm text-destructive">Unable to load Chronicle users.</p>
+        ) : matches.length > 0 ? (
+          <div className="max-h-64 overflow-y-auto rounded-md border border-border divide-y divide-border bg-background">
+            {matches.map((user) => (
+              <div key={user.id} className="flex items-center justify-between gap-3 px-3 py-2">
+                <div className="min-w-0">
+                  <p className="font-medium truncate">{user.username}</p>
+                  <p className="text-xs text-muted-foreground truncate">{user.email || user.id}</p>
+                </div>
+                <Button
+                  size="sm"
+                  disabled={addMember.isPending}
+                  onClick={() => handleAdd(user.id, user.username)}
+                >
+                  {addMember.isPending ? (
+                    <Loader2 className="h-4 w-4 animate-spin" />
+                  ) : (
+                    <UserPlus className="h-4 w-4 mr-1.5" />
+                  )}
+                  Add
+                </Button>
+              </div>
+            ))}
+          </div>
+        ) : (
+          <p className="py-2 text-sm text-muted-foreground">
+            {query.trim().length < 2
+              ? "Type at least 2 characters to search."
+              : "No users outside this guild match your search."}
+          </p>
+        )}
+      </div>
+    </section>
   );
 }
 

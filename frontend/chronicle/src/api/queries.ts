@@ -1619,6 +1619,27 @@ export function useDenyJoinRequest(guildId: string | undefined) {
   });
 }
 
+export function useAddGuildMember(guildId: string | undefined) {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async (userId: string) => {
+      const response = await fetch(`/api/v1/guilds/${guildId}/members/`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ user_id: userId }),
+        credentials: "include",
+      });
+      if (!response.ok) {
+        const error = await response.json().catch(() => null);
+        throw buildAPIError("Failed to add guild member", error);
+      }
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["guild-roster", guildId] });
+    },
+  });
+}
+
 export function useUpdateGuildMemberRole(guildId: string | undefined) {
   const queryClient = useQueryClient();
   return useMutation({
