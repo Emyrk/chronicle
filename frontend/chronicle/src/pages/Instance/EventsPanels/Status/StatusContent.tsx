@@ -11,7 +11,7 @@ import type { PanelRenderProps } from "../types";
 import { useSyncModeContextOptional } from "../../SyncModeContext";
 import { useInferredRoles } from "../Roles/useInferredRoles";
 import type { StatusResult, StatusTimelineEvent, StatusUnitKind } from "./status.processor";
-import { statusAmplitudeBaseline, statusEventOpacity, statusMarkerAmplitude } from "./statusAmplitude";
+import { cachedStatusAmplitudeBaseline, statusEventOpacity, statusMarkerAmplitude } from "./statusAmplitude";
 import { sortStatusSnapshotsByRole } from "./statusRoles";
 import {
   selectStatusEncounter,
@@ -345,32 +345,33 @@ export function StatusContent(props: PanelRenderProps<StatusResult>) {
     }
     return { bosses, adds };
   }, [context.instance.encounters, encounter]);
+  const matchingUnits = useMemo(() => {
+    if (!encounter) return [];
+    return Array.from(encounter.units.values()).filter((unit) => {
+      if (unitMode === "players") return unit.kind === "player";
+      if (unitMode === "pets") return unit.kind === "pet";
+      if (unitMode === "bosses") return enemyGroups.bosses.has(unit.unitId);
+      return enemyGroups.adds.has(unit.unitId);
+    });
+  }, [encounter, enemyGroups, unitMode]);
+  const amplitudeBaseline = useMemo(
+    () => encounter
+      ? cachedStatusAmplitudeBaseline(encounter, unitMode, matchingUnits)
+      : 1,
+    [encounter, matchingUnits, unitMode],
+  );
   const snapshots = useMemo(() => {
-    if (!encounter || cursorMilli === null) return [];
-    const matchingSnapshots = Array.from(encounter.units.values())
-      .filter((unit) => {
-        if (unitMode === "players") return unit.kind === "player";
-        if (unitMode === "pets") return unit.kind === "pet";
-        if (unitMode === "bosses") return enemyGroups.bosses.has(unit.unitId);
-        return enemyGroups.adds.has(unit.unitId);
-      })
-      .map((unit) => snapshotStatusUnit(
-        unit,
-        cursorMilli,
-        windowPreset.historyMilli,
-        windowPreset.futureMilli,
-      ));
+    if (cursorMilli === null) return [];
+    const matchingSnapshots = matchingUnits.map((unit) => snapshotStatusUnit(
+      unit,
+      cursorMilli,
+      windowPreset.historyMilli,
+      windowPreset.futureMilli,
+    ));
     return unitMode === "players"
       ? sortStatusSnapshotsByRole(matchingSnapshots, roles)
       : matchingSnapshots.sort((a, b) => a.unit.name.localeCompare(b.unit.name));
-  }, [encounter, cursorMilli, enemyGroups, roles, unitMode, windowPreset]);
-  const amplitudeBaseline = useMemo(
-    () => statusAmplitudeBaseline(snapshots.flatMap((snapshot) => [
-      ...snapshot.recentActivity,
-      ...snapshot.incoming,
-    ])),
-    [snapshots],
-  );
+  }, [cursorMilli, matchingUnits, roles, unitMode, windowPreset]);
   const focusedUnitId = parseFocus(panelOption);
   const [floatingBreakout, setFloatingBreakout] = useState<FloatingStatusBreakout | null>(null);
   const [density, setDensity] = useState<StatusDensity>(0);

@@ -1,4 +1,11 @@
-import type { StatusEventKind, StatusTimelineEvent } from "./status.processor";
+import type {
+  StatusEncounter,
+  StatusEventKind,
+  StatusTimelineEvent,
+  StatusUnitTimeline,
+} from "./status.processor";
+
+const encounterBaselineCache = new WeakMap<StatusEncounter, Map<string, number>>();
 
 export interface StatusMarkerAmplitude {
   intensity: number;
@@ -8,7 +15,7 @@ export interface StatusMarkerAmplitude {
 }
 
 /**
- * Uses the median visible damage/healing event as a version-independent baseline.
+ * Uses the median damage/healing event as a version-independent baseline.
  * A median hit or heal lands in the middle of the visual range, while the
  * logarithmic scale keeps unusually large events distinct without letting one
  * outlier flatten every other marker.
@@ -23,6 +30,27 @@ export function statusAmplitudeBaseline(events: StatusTimelineEvent[]): number {
   return amounts.length % 2 === 0
     ? (amounts[middle - 1] + amounts[middle]) / 2
     : amounts[middle];
+}
+
+export function cachedStatusAmplitudeBaseline(
+  encounter: StatusEncounter,
+  cacheKey: string,
+  units: Iterable<StatusUnitTimeline>,
+): number {
+  let encounterCache = encounterBaselineCache.get(encounter);
+  if (!encounterCache) {
+    encounterCache = new Map();
+    encounterBaselineCache.set(encounter, encounterCache);
+  }
+
+  const cached = encounterCache.get(cacheKey);
+  if (cached !== undefined) return cached;
+
+  const events: StatusTimelineEvent[] = [];
+  for (const unit of units) events.push(...unit.events);
+  const baseline = statusAmplitudeBaseline(events);
+  encounterCache.set(cacheKey, baseline);
+  return baseline;
 }
 
 export function statusEventOpacity(

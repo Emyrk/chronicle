@@ -1,6 +1,11 @@
 import { describe, expect, it } from "vitest";
-import type { StatusTimelineEvent } from "./status.processor";
-import { statusAmplitudeBaseline, statusEventOpacity, statusMarkerAmplitude } from "./statusAmplitude";
+import type { StatusEncounter, StatusTimelineEvent, StatusUnitTimeline } from "./status.processor";
+import {
+  cachedStatusAmplitudeBaseline,
+  statusAmplitudeBaseline,
+  statusEventOpacity,
+  statusMarkerAmplitude,
+} from "./statusAmplitude";
 
 function event(kind: "damage" | "heal" | "absorbed", amount: number): StatusTimelineEvent {
   return {
@@ -17,8 +22,28 @@ function event(kind: "damage" | "heal" | "absorbed", amount: number): StatusTime
   };
 }
 
+function unit(unitId: string, events: StatusTimelineEvent[]): StatusUnitTimeline {
+  return {
+    unitId,
+    name: unitId,
+    className: "WARRIOR",
+    kind: "player",
+    ownerId: null,
+    events,
+  };
+}
+
+function encounter(units: StatusUnitTimeline[]): StatusEncounter {
+  return {
+    encounterId: "encounter",
+    startMilli: 0,
+    endMilli: 10_000,
+    units: new Map(units.map((statusUnit) => [statusUnit.unitId, statusUnit])),
+  };
+}
+
 describe("Status event amplitudes", () => {
-  it("uses the median visible damage and healing amount as the baseline", () => {
+  it("uses the median damage and healing amount as the baseline", () => {
     expect(statusAmplitudeBaseline([
       event("damage", 100),
       event("heal", 1_000),
@@ -29,6 +54,20 @@ describe("Status event amplitudes", () => {
       event("damage", 100),
       event("heal", 300),
     ])).toBe(200);
+  });
+
+  it("caches one full-encounter baseline per unit group", () => {
+    const player = unit("player", [
+      event("damage", 100),
+      event("heal", 300),
+    ]);
+    const selectedEncounter = encounter([player]);
+
+    expect(cachedStatusAmplitudeBaseline(selectedEncounter, "players", [player])).toBe(200);
+
+    player.events.push(event("damage", 10_000));
+    expect(cachedStatusAmplitudeBaseline(selectedEncounter, "players", [player])).toBe(200);
+    expect(cachedStatusAmplitudeBaseline(selectedEncounter, "pets", [player])).toBe(300);
   });
 
   it("maps the median to the middle and clamps extreme marker sizes", () => {
