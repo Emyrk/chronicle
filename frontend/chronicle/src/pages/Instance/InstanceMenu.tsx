@@ -126,19 +126,18 @@ export function InstanceMenu({
             Export Layout
           </DropdownMenuItem>
         )}
-        {onPopOutLayout && (
-          <DropdownMenuItem onClick={onPopOutLayout}>
-            <ExternalLink className="h-4 w-4 mr-2" />
-            {layoutPoppedOut ? "Focus popped-out layout" : "Pop out layout"}
-          </DropdownMenuItem>
-        )}
-
         {layoutLabUrl && (
           <DropdownMenuItem asChild>
             <a href={layoutLabUrl} target="_blank" rel="noopener noreferrer">
               <LayoutGrid className="h-4 w-4 mr-2" />
               View layout
             </a>
+          </DropdownMenuItem>
+        )}
+        {onPopOutLayout && (
+          <DropdownMenuItem onClick={onPopOutLayout}>
+            <ExternalLink className="h-4 w-4 mr-2" />
+            {layoutPoppedOut ? "Focus popped-out layout" : "Pop out layout"}
           </DropdownMenuItem>
         )}
         <DropdownMenuSeparator />

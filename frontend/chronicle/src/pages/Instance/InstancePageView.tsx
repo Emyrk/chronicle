@@ -989,6 +989,8 @@ interface PoppedOutLayoutContentProps {
   durationMs: number;
   context: PanelContext;
   showHints: boolean;
+  actionBarSlots: LayoutActionBarSlots;
+  layouts: readonly UserPanelLayout[];
   onExplainerClick: (panelType: EventsPanelType) => void;
 }
 
@@ -997,6 +999,8 @@ function PoppedOutLayoutContent({
   durationMs,
   context,
   showHints,
+  actionBarSlots,
+  layouts,
   onExplainerClick,
 }: PoppedOutLayoutContentProps) {
   const [layoutItems, setLayoutItems] = useState(() => session.snapshot.layoutItems);
@@ -1024,6 +1028,65 @@ function PoppedOutLayoutContent({
     setActivePresetId(presetId);
   }, []);
 
+  const castLayout = useCallback((layout: UserPanelLayout) => {
+    try {
+      const parsed = parsePanelLayout(layout);
+      const items = orderLayoutItems(normalizeLayoutItems(parsed.items));
+      setLayoutItems(items);
+      setPanelTypesById(Object.fromEntries(
+        items.map((item) => {
+          const candidate = parsed.panelTypesById[item.id] ?? "empty";
+          return [item.id, candidate in PANELS ? candidate : "empty"];
+        }),
+      ));
+      setPanelOptionsById(Object.fromEntries(
+        items.map((item) => [item.id, parsed.panelOptionsById?.[item.id] ?? null]),
+      ));
+      const filters = parsed.panelFiltersById ?? {};
+      setSeedFiltersById({ ...filters });
+      setSeedFiltersVersion((version) => version + 1);
+      setActivePresetId(null);
+      toast.success("Cast layout", { description: layout.title });
+    } catch {
+      toast.error("Failed to cast layout", { description: "Layout payload is invalid." });
+    }
+  }, []);
+
+  const resetToInitialLayout = useCallback(() => {
+    setLayoutItems(session.snapshot.layoutItems.map((item) => ({ ...item })));
+    setPanelTypesById({ ...session.snapshot.panelTypesById });
+    setPanelOptionsById({ ...session.snapshot.panelOptionsById });
+    setSeedFiltersById(structuredClone(session.snapshot.panelFiltersById));
+    setSeedFiltersVersion((version) => version + 1);
+    setActivePresetId(session.snapshot.activePresetId);
+    toast.success("Cast layout", { description: "Reset popped-out layout" });
+  }, [session.snapshot]);
+
+  const layoutsById = useMemo(
+    () => new Map(layouts.map((layout) => [layout.id, layout])),
+    [layouts],
+  );
+
+  useEffect(() => {
+    const popupWindow = session.window;
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.defaultPrevented || event.metaKey || event.ctrlKey || event.altKey) return;
+      const target = event.target as HTMLElement | null;
+      if (target?.closest("input, textarea, select, [contenteditable='true']")) return;
+      if (event.key < "0" || event.key > "9") return;
+
+      const layoutId = actionBarSlots[event.key as keyof LayoutActionBarSlots];
+      const layout = layoutId ? layoutsById.get(layoutId) : null;
+      if (!layout) return;
+
+      event.preventDefault();
+      castLayout(layout);
+    };
+
+    popupWindow.addEventListener("keydown", handleKeyDown);
+    return () => popupWindow.removeEventListener("keydown", handleKeyDown);
+  }, [actionBarSlots, castLayout, layoutsById, session.window]);
+
   const handlePanelTypeChange = useCallback((itemID: string, type: EventsPanelType) => {
     setPanelTypesById((previous) => ({ ...previous, [itemID]: type }));
     setPanelOptionsById((previous) => ({ ...previous, [itemID]: null }));
@@ -1046,22 +1109,32 @@ function PoppedOutLayoutContent({
     <PortalContainerProvider container={session.container}>
       <div className="min-h-screen bg-background text-foreground p-3">
         <div className="sticky top-0 z-40 mb-3 border-b border-border bg-background/95 pb-2 pt-1 backdrop-blur">
-          <div className="flex gap-1 overflow-x-auto styled-scrollbar">
-            {PRESET_LAYOUTS.map((preset) => (
-              <button
-                key={preset.id}
-                type="button"
-                onClick={() => applyPreset(preset.id)}
-                className={cn(
-                  "px-3 py-1.5 text-sm font-medium rounded-md whitespace-nowrap transition-colors",
-                  activePresetId === preset.id
-                    ? "bg-primary text-primary-foreground"
-                    : "text-muted-foreground hover:text-foreground hover:bg-muted",
-                )}
-              >
-                {preset.label}
-              </button>
-            ))}
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <div className="flex min-w-0 gap-1 overflow-x-auto styled-scrollbar">
+              {PRESET_LAYOUTS.map((preset) => (
+                <button
+                  key={preset.id}
+                  type="button"
+                  onClick={() => applyPreset(preset.id)}
+                  className={cn(
+                    "px-3 py-1.5 text-sm font-medium rounded-md whitespace-nowrap transition-colors",
+                    activePresetId === preset.id
+                      ? "bg-primary text-primary-foreground"
+                      : "text-muted-foreground hover:text-foreground hover:bg-muted",
+                  )}
+                >
+                  {preset.label}
+                </button>
+              ))}
+            </div>
+            {layouts.length > 0 && (
+              <InstanceActionBar
+                slots={actionBarSlots}
+                layouts={layouts}
+                onCast={castLayout}
+                onResetToDefault={resetToInitialLayout}
+              />
+            )}
           </div>
         </div>
         <PanelTimingProvider panelCount={layoutItems.length}>
@@ -1122,6 +1195,8 @@ interface EncounterDetailProps {
   onPresetChange: (presetId: string) => void;
   /** Popup hosting the complete panel grid, when the layout is popped out. */
   layoutPopup: LayoutPopupSession | null;
+  actionBarSlots: LayoutActionBarSlots;
+  layouts: readonly UserPanelLayout[];
 }
 
 function EncounterDetail({
@@ -1149,6 +1224,8 @@ function EncounterDetail({
   activePresetId,
   onPresetChange,
   layoutPopup,
+  actionBarSlots,
+  layouts,
 }: EncounterDetailProps) {
   const isSingle = encounters.length === 1;
   const encounter = encounters[0];
@@ -1739,6 +1816,8 @@ function EncounterDetail({
             durationMs={totalDurationMs}
             context={panelContext}
             showHints={showHints}
+            actionBarSlots={actionBarSlots}
+            layouts={layouts}
             onExplainerClick={onExplainerClick}
           />,
           layoutPopup.container,
@@ -3235,6 +3314,8 @@ export function InstancePageView({
             isMobile={isMobile}
             activePresetId={activePresetId}
             layoutPopup={layoutPopup}
+            actionBarSlots={actionBarSlots}
+            layouts={instanceDefaults?.action_bar_layouts ?? []}
             onPresetChange={applyPreset}
           />
         ) : (

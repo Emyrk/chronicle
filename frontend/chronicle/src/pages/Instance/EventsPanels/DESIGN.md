@@ -221,6 +221,7 @@ The popup and primary layout share analysis controls but own their panel configu
 
 - Encounter, player, enemy, Sync Mode, and time-range changes update both windows.
 - Each window has its own preset tabs and can switch among Summary, Damage, Healing, and the other presets without changing the other window.
+- The popped-out toolbar includes the user's layout action bar, so saved layouts can be cast by clicking a slot or pressing its numeric hotkey while the popup has focus.
 - Panel type, option, and filter changes remain local to the window where they were made.
 - Closing the popup with the native window close button removes only the secondary layout.
 - Selecting **Pop out layout** again while it is open focuses the existing popup.
