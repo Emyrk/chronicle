@@ -135,7 +135,7 @@ export function InstanceMenu({
           </DropdownMenuItem>
         )}
         {onPopOutLayout && (
-          <DropdownMenuItem onClick={onPopOutLayout}>
+          <DropdownMenuItem onClick={onPopOutLayout} disabled={isMobile}>
             <ExternalLink className="h-4 w-4 mr-2" />
             {layoutPoppedOut ? "Focus popped-out layout" : "Pop out layout"}
           </DropdownMenuItem>

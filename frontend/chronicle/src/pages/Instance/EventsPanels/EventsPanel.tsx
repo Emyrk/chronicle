@@ -852,7 +852,10 @@ export function EventsPanel({
                       <ClipboardPaste className="h-3.5 w-3.5 mr-2" />
                       Paste
                     </DropdownMenuItem>
-                    <DropdownMenuItem onClick={panelPopup ? dockPanel : popOutPanel}>
+                    <DropdownMenuItem
+                      onClick={panelPopup ? dockPanel : popOutPanel}
+                      disabled={isMobile}
+                    >
                       {panelPopup ? (
                         <Undo2 className="h-3.5 w-3.5 mr-2" />
                       ) : (
