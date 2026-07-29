@@ -32,7 +32,9 @@ export function selectDeathLogDisplayResult(
   snapshot: DeathLogSnapshot | null,
   dataContextKey: string,
 ): DeathsResult {
-  return snapshot?.dataContextKey === dataContextKey ? snapshot.result : liveResult;
+  return snapshot !== null && snapshot.dataContextKey === dataContextKey
+    ? snapshot.result
+    : liveResult;
 }
 
 export function isDeathAheadOfSyncCursor(

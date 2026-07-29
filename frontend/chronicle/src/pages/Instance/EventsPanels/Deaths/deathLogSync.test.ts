@@ -16,6 +16,12 @@ function resultWithDeaths(count: number): DeathsResult {
 }
 
 describe("Death Log Sync display", () => {
+  it("uses the live result when no complete snapshot exists", () => {
+    const live = resultWithDeaths(0);
+
+    expect(selectDeathLogDisplayResult(live, null, "")).toBe(live);
+  });
+
   it("keeps the complete encounter snapshot while Sync advances", () => {
     const complete = resultWithDeaths(3);
     const incremental = resultWithDeaths(1);
