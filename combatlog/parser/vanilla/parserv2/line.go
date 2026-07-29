@@ -270,7 +270,12 @@ func (m *Matched) HeroGender() types.HeroGender {
 }
 
 func (m *Matched) PowerType() types.Resource {
-	ty := m.Int32()
+	return PowerTypeResource(m.Int32())
+}
+
+// PowerTypeResource maps a numeric power type (as found in log lines and
+// spell effect misc values) to a types.Resource.
+func PowerTypeResource(ty int32) types.Resource {
 	switch ty {
 	case 0:
 		return types.ResourceMana

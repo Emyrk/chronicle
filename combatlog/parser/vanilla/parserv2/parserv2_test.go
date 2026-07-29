@@ -366,6 +366,44 @@ func TestParserMessages(t *testing.T) {
 		)
 	})
 
+	t.Run("ManaBurn", func(t *testing.T) {
+		t.Parallel()
+
+		// Mana Burn (SPELL_EFFECT_POWER_BURN, effect 62) drains the target's
+		// mana and deals proportional damage. The server never logs the mana
+		// drained, so the parser synthesizes a ResourceChange from the
+		// pre-mitigation damage. Here the damage was fully absorbed by a
+		// shield (458 absorbed, 0 dealt) — 458 mana was still burned.
+		ctx := context.Background()
+		zerologLogger := zerolog.New(zerolog.ConsoleWriter{Out: os.Stderr})
+		logger := slog.New(slogzerolog.Option{Level: slog.LevelDebug, Logger: &zerologLogger}.NewZerologHandler())
+
+		p, err := New(ctx, logger,
+			strings.NewReader("1784050453916|SPELL_DMG|0xF130006287017F8B|0x000000000001D795|10876|0|458,0,0|0|5|62,0,0,0"),
+			testSpellDB(t), nil)
+		require.NoError(t, err)
+		msgs, err := p.Advance(ctx)
+		require.NoError(t, err)
+		require.Len(t, msgs, 2, "expected Damage + synthetic ResourceChange")
+
+		dmg, ok := msgs[0].(*messages.Damage)
+		require.True(t, ok, "expected *messages.Damage, got %T", msgs[0])
+		require.Equal(t, int32(0), dmg.Amount)
+		require.Equal(t, types.Trailer{
+			{Amount: ptr.Ref(uint32(458)), HitType: types.HitTypePartialAbsorb},
+		}, dmg.Trailer)
+
+		rc, ok := msgs[1].(*messages.ResourceChange)
+		require.True(t, ok, "expected *messages.ResourceChange, got %T", msgs[1])
+		require.True(t, rc.IsSynthetic())
+		require.Equal(t, guid.GUID(0xF130006287017F8B), rc.Target)
+		require.Equal(t, ptr.Ref(guid.GUID(0x000000000001D795)), rc.Caster)
+		require.Equal(t, int32(458), rc.Amount)
+		require.Equal(t, types.ResourceMana, rc.Resource)
+		require.Equal(t, types.ChangeDirectionLoss, rc.Direction)
+		require.Equal(t, ptr.Ref("Mana Burn"), rc.SpellName)
+	})
+
 	// Add more test cases:
 	// t.Run("Heal", func(t *testing.T) {
 	// 	t.Parallel()
