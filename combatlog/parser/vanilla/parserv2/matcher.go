@@ -814,7 +814,7 @@ func (p *Parser) spell_dmg(ctx context.Context, ts time.Time, m *Matched) ([]mes
 	// ENERGIZE line for the drained power — the SPELL_DMG line only carries
 	// the damage component. Synthesize a ResourceChange so the drain is
 	// visible in resource tracking.
-	if rc := powerBurnResourceChange(ts, spell, caster, target, amount, mitigated, effects); rc != nil {
+	if rc := powerBurnResourceChange(ts, spell, caster, target, amount, mitigated, effects, hit.Has(types.HitTypeCrit)); rc != nil {
 		msgs = append(msgs, rc)
 	}
 
@@ -825,9 +825,13 @@ func (p *Parser) spell_dmg(ctx context.Context, ts time.Time, m *Matched) ([]mes
 // produced by SPELL_EFFECT_POWER_BURN (62) or SPELL_AURA_POWER_BURN_MANA (162).
 //
 // Each point of power burned deals damage multiplied by the effect's damage
-// multiplier (EffectChainAmplitude), so the power drained is recovered from
-// the pre-mitigation damage: (amount + absorbed + blocked + resisted) / multiplier.
-// Example line (Mana Burn fully absorbed by a shield, 458 mana burned):
+// multiplier (EffectAmplitude, e.g. 0.5 for Mana Burn rank 5: "for each mana
+// drained in this way, the target takes 0.5 Shadow damage"), so the power
+// drained is recovered from the pre-mitigation damage:
+// (amount + absorbed + blocked + resisted) / multiplier.
+// The damage component can crit (1.5x for spells) but the drain does not, so
+// crits are divided back out.
+// Example line (Mana Burn rank 5 fully absorbed by a shield, 916 mana burned):
 //
 //	1784050453916|SPELL_DMG|0xF130006287017F8B|0x000000000001D795|10876|0|458,0,0|0|5|62,0,0,0
 //
@@ -840,6 +844,7 @@ func powerBurnResourceChange(
 	amount int32,
 	mitigated []int32,
 	effects []int32,
+	crit bool,
 ) messages.Message {
 	// The logged effect order does not always match the DBC effect order, so
 	// detect the power burn from the log, then look up the DBC effect index
@@ -865,13 +870,16 @@ func powerBurnResourceChange(
 		return nil
 	}
 
-	multiplier := spell.EffectChainAmplitude[effIdx]
+	multiplier := float64(spell.EffectAmplitude[effIdx])
 	if multiplier <= 0 {
 		multiplier = 1
 	}
+	if crit {
+		multiplier *= 1.5
+	}
 
 	preMitigation := amount + mitigated[0] + mitigated[1] + mitigated[2]
-	burned := int32(float64(preMitigation)/float64(multiplier) + 0.5)
+	burned := int32(float64(preMitigation)/multiplier + 0.5)
 	if burned <= 0 {
 		return nil
 	}

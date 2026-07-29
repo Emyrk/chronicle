@@ -370,10 +370,11 @@ func TestParserMessages(t *testing.T) {
 		t.Parallel()
 
 		// Mana Burn (SPELL_EFFECT_POWER_BURN, effect 62) drains the target's
-		// mana and deals proportional damage. The server never logs the mana
-		// drained, so the parser synthesizes a ResourceChange from the
-		// pre-mitigation damage. Here the damage was fully absorbed by a
-		// shield (458 absorbed, 0 dealt) — 458 mana was still burned.
+		// mana and deals 0.5 damage per mana drained (EffectAmplitude). The
+		// server never logs the mana drained, so the parser synthesizes a
+		// ResourceChange from the pre-mitigation damage. Here the damage was
+		// fully absorbed by a shield (458 absorbed, 0 dealt) — 458 / 0.5 =
+		// 916 mana was still burned.
 		ctx := context.Background()
 		zerologLogger := zerolog.New(zerolog.ConsoleWriter{Out: os.Stderr})
 		logger := slog.New(slogzerolog.Option{Level: slog.LevelDebug, Logger: &zerologLogger}.NewZerologHandler())
@@ -398,7 +399,7 @@ func TestParserMessages(t *testing.T) {
 		require.True(t, rc.IsSynthetic())
 		require.Equal(t, guid.GUID(0xF130006287017F8B), rc.Target)
 		require.Equal(t, ptr.Ref(guid.GUID(0x000000000001D795)), rc.Caster)
-		require.Equal(t, int32(458), rc.Amount)
+		require.Equal(t, int32(916), rc.Amount)
 		require.Equal(t, types.ResourceMana, rc.Resource)
 		require.Equal(t, types.ChangeDirectionLoss, rc.Direction)
 		require.Equal(t, ptr.Ref("Mana Burn"), rc.SpellName)
