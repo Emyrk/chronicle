@@ -5,7 +5,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type MouseEvent } from "react";
 import ReactDOM from "react-dom";
 import { useLocalStorage } from "@/hooks/useLocalStorage";
-import { HelpCircle, Construction, Filter, EllipsisVertical, Copy, ClipboardPaste } from "lucide-react";
+import { HelpCircle, Construction, Filter, EllipsisVertical, Copy, ClipboardPaste, ExternalLink, Undo2 } from "lucide-react";
 import { toast } from "sonner";
 import {
   DropdownMenu,
@@ -14,6 +14,8 @@ import {
   DropdownMenuItem,
 } from "@/components/ui/DropdownMenu/DropdownMenu";
 import { Button } from "@/components/ui/button";
+import { Card } from "@/components/ui/Card/Card";
+import { PortalContainerProvider, usePortalContainer } from "@/components/ui/PortalContainerContext";
 import { BreakoutHoverProvider } from "@/components/ui/AbilityBreakout";
 import { Switch } from "@/components/ui/Switch/Switch";
 import { HintTooltip, TooltipTrigger, TooltipContent } from "@/components/ui/Tooltip/tooltip";
@@ -29,6 +31,7 @@ import { PanelSelector } from "./PanelSelector";
 import { hasExplainer } from "./explainers";
 import type { PlayerMetricChartData } from "@/components/ui/PlayerMetricChart/PlayerMetricChart";
 import { useChartDataActions } from "./ChartDataRegistry";
+import { openPanelPopup, syncPopupAppearance, type PanelPopup } from "./panelPopup";
 
 // Import panel definitions
 import { createDamageDonePanel } from "./DamageDone/DamageDone";
@@ -75,7 +78,7 @@ import { createPullsAndCleanupPanel } from "./PullsAndCleanup/PullsAndCleanup";
 // Registry of all available panels
 // Using `any` here to allow different result types per panel.
 // Type safety is maintained within each panel definition.
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
+// eslint-disable-next-line @typescript-eslint/no-explicit-any, react-refresh/only-export-components
 export const PANELS: Record<string, PanelDefinition<any, any>> = {
   damage_done: createDamageDonePanel("players"),
   vulnerability_effect: createVulnerabilityEffectPanel(),
@@ -273,19 +276,26 @@ function FilterContextMenu({
   onClose: () => void;
   hasCustomFilters: boolean;
 }) {
+  const portalContainer = usePortalContainer();
+  const portalDocument = portalContainer?.ownerDocument;
+  const portalWindow = portalDocument?.defaultView;
+
   useEffect(() => {
+    if (!portalDocument || !portalWindow) return;
     const handler = () => onClose();
     // Defer so the opening contextmenu event doesn't immediately close the menu
-    const frame = requestAnimationFrame(() => {
-      document.addEventListener("click", handler);
-      document.addEventListener("contextmenu", handler);
+    const frame = portalWindow.requestAnimationFrame(() => {
+      portalDocument.addEventListener("click", handler);
+      portalDocument.addEventListener("contextmenu", handler);
     });
     return () => {
-      cancelAnimationFrame(frame);
-      document.removeEventListener("click", handler);
-      document.removeEventListener("contextmenu", handler);
+      portalWindow.cancelAnimationFrame(frame);
+      portalDocument.removeEventListener("click", handler);
+      portalDocument.removeEventListener("contextmenu", handler);
     };
-  }, [onClose]);
+  }, [onClose, portalDocument, portalWindow]);
+
+  if (!portalContainer) return null;
 
   return ReactDOM.createPortal(
     <div
@@ -307,7 +317,7 @@ function FilterContextMenu({
         </button>
       )}
     </div>,
-    document.body,
+    portalContainer,
   );
 }
 
@@ -455,7 +465,7 @@ export function EventsPanel({
   // the worker); only editing is paused while playback drives the panels.
   const filteringSupported = panel.supportsFiltering === true && !isSyncActive;
   const fixedFilters = panel.fixedFilters ?? [];
-  const userFilters = customFilters ?? [];
+  const userFilters = useMemo(() => customFilters ?? [], [customFilters]);
 
   const hasCustomFilters = filteringSupported && customFilters !== null &&
     JSON.stringify(customFilters) !== JSON.stringify(panel.defaultFilters ?? []);
@@ -506,6 +516,80 @@ export function EventsPanel({
 
   const effectivePanelId = panelId ?? `panel-${panelIndex}`;
 
+  const [panelPopup, setPanelPopup] = useState<PanelPopup | null>(null);
+  const panelPopupRef = useRef<PanelPopup | null>(null);
+  const popupTitle = `${customTitle || panel.label} — Chronicle`;
+
+  const dockPanel = useCallback(() => {
+    const popup = panelPopupRef.current;
+    panelPopupRef.current = null;
+    setPanelPopup(null);
+    if (popup && !popup.window.closed) {
+      popup.window.close();
+    }
+  }, []);
+
+  const popOutPanel = useCallback(() => {
+    const existing = panelPopupRef.current;
+    if (existing && !existing.window.closed) {
+      existing.window.focus();
+      return;
+    }
+
+    const popup = openPanelPopup(window, effectivePanelId, popupTitle);
+    if (!popup) {
+      toast.error("The panel popup was blocked. Allow popups for Chronicle and try again.");
+      return;
+    }
+
+    panelPopupRef.current = popup;
+    setPanelPopup(popup);
+    popup.window.focus();
+  }, [effectivePanelId, popupTitle]);
+
+  useEffect(() => {
+    if (!panelPopup) return;
+
+    const popupWindow = panelPopup.window;
+    const handlePopupClose = () => {
+      if (panelPopupRef.current?.window === popupWindow) {
+        panelPopupRef.current = null;
+        setPanelPopup(null);
+      }
+    };
+    const syncAppearance = () => {
+      if (!popupWindow.closed) {
+        syncPopupAppearance(document, popupWindow.document);
+        popupWindow.document.title = popupTitle;
+      }
+    };
+
+    syncAppearance();
+    popupWindow.addEventListener("beforeunload", handlePopupClose);
+    const appearanceObserver = new MutationObserver(syncAppearance);
+    appearanceObserver.observe(document.documentElement, {
+      attributes: true,
+      attributeFilter: ["class", "data-theme", "style"],
+    });
+    appearanceObserver.observe(document.body, {
+      attributes: true,
+      attributeFilter: ["class"],
+    });
+
+    return () => {
+      popupWindow.removeEventListener("beforeunload", handlePopupClose);
+      appearanceObserver.disconnect();
+    };
+  }, [panelPopup, popupTitle]);
+
+  useEffect(() => () => {
+    const popup = panelPopupRef.current;
+    panelPopupRef.current = null;
+    if (popup && !popup.window.closed) {
+      popup.window.close();
+    }
+  }, []);
+
   const registerChartData = useCallback(
     (data: PlayerMetricChartData[]) => {
       chartRegister({
@@ -536,7 +620,8 @@ export function EventsPanel({
     setPanelContext((previous) => {
       const base = previous ?? {};
       if (filters.length === 0) {
-        const { filters: _filters, ...rest } = base;
+        const rest = { ...base };
+        delete rest.filters;
         return Object.keys(rest).length > 0 ? rest : null;
       }
       return { ...base, filters };
@@ -727,8 +812,7 @@ export function EventsPanel({
     return durationMs;
   }, [syncMode?.enabled, syncMode?.currentTimestamp, syncMode?.encounterBounds, durationMs, panel.syncDataMode]);
 
-  return (
-    <BreakoutHoverProvider>
+  const renderedPanel = (
       <PanelCard
         flipped={flipped}
         onMouseDown={onPanelMouseDown}
@@ -762,6 +846,14 @@ export function EventsPanel({
                     <DropdownMenuItem onClick={handlePastePanel}>
                       <ClipboardPaste className="h-3.5 w-3.5 mr-2" />
                       Paste
+                    </DropdownMenuItem>
+                    <DropdownMenuItem onClick={panelPopup ? dockPanel : popOutPanel}>
+                      {panelPopup ? (
+                        <Undo2 className="h-3.5 w-3.5 mr-2" />
+                      ) : (
+                        <ExternalLink className="h-3.5 w-3.5 mr-2" />
+                      )}
+                      {panelPopup ? "Dock panel" : "Pop out"}
                     </DropdownMenuItem>
                   </DropdownMenuContent>
                 </DropdownMenu>
@@ -904,6 +996,43 @@ export function EventsPanel({
           />
         )}
       />
-    </BreakoutHoverProvider>
+  );
+
+  const panelPortalContainer = panelPopup?.container
+    ?? (typeof document === "undefined" ? null : document.body);
+
+  return (
+    <PortalContainerProvider container={panelPortalContainer}>
+      <BreakoutHoverProvider>
+        {panelPopup ? (
+        <>
+          <Card className="h-full mb-0 p-4 flex items-center justify-center text-center gap-3">
+            <ExternalLink className="h-6 w-6 text-muted-foreground" />
+            <div>
+              <p className="text-sm font-medium">{customTitle || panel.label} is popped out</p>
+              <p className="text-xs text-muted-foreground mt-1">
+                It remains synced with this window.
+              </p>
+            </div>
+            <div className="flex gap-2">
+              <Button size="sm" variant="outline" onClick={() => panelPopup.window.focus()}>
+                Focus window
+              </Button>
+              <Button size="sm" onClick={dockPanel}>
+                <Undo2 className="h-3.5 w-3.5 mr-1.5" />
+                Dock panel
+              </Button>
+            </div>
+          </Card>
+          {ReactDOM.createPortal(
+            <div className="h-full bg-background text-foreground p-2">
+              {renderedPanel}
+            </div>,
+            panelPopup.container,
+          )}
+        </>
+        ) : renderedPanel}
+      </BreakoutHoverProvider>
+    </PortalContainerProvider>
   );
 }

@@ -3,8 +3,10 @@ import { useEffect } from "react"
 import { Focus, ExternalLink } from "lucide-react"
 import { Link } from "react-router-dom"
 import type { Instance } from "@/pages/Instance/InstancePage"
+import { usePortalContainer } from "@/components/ui/PortalContainerContext"
 
 /** Build an armory URL for a player GUID, or undefined if not a known player or no realm. */
+// eslint-disable-next-line react-refresh/only-export-components
 export function getArmoryUrl(instance: Instance, playerId: string): string | undefined {
   const player = instance.players?.[playerId]
   if (!player || !instance.realm) return undefined
@@ -23,19 +25,26 @@ export interface RowContextMenuProps {
 }
 
 export function RowContextMenu({ position, playerName, onFocus, onClose, armoryUrl, hideFocus }: RowContextMenuProps) {
+  const portalContainer = usePortalContainer()
+  const portalDocument = portalContainer?.ownerDocument
+  const portalWindow = portalDocument?.defaultView
+
   useEffect(() => {
+    if (!portalDocument || !portalWindow) return
     const handler = () => onClose()
     // Defer listener setup so the triggering click event doesn't immediately close the menu
-    const frame = requestAnimationFrame(() => {
-      document.addEventListener("click", handler)
+    const frame = portalWindow.requestAnimationFrame(() => {
+      portalDocument.addEventListener("click", handler)
     })
     return () => {
-      cancelAnimationFrame(frame)
-      document.removeEventListener("click", handler)
+      portalWindow.cancelAnimationFrame(frame)
+      portalDocument.removeEventListener("click", handler)
     }
-  }, [onClose])
+  }, [onClose, portalDocument, portalWindow])
 
   const btnClass = "flex w-full items-center gap-2 rounded-sm px-2 py-1.5 text-xs hover:bg-accent hover:text-accent-foreground cursor-pointer"
+
+  if (!portalContainer) return null
 
   return createPortal(
     <div
@@ -63,6 +72,6 @@ export function RowContextMenu({ position, playerName, onFocus, onClose, armoryU
         </Link>
       )}
     </div>,
-    document.body,
+    portalContainer,
   )
 }

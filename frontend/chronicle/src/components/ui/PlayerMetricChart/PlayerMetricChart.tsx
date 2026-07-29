@@ -11,6 +11,7 @@ import { useMouse } from '@/hooks/useMouse';
 import { useIsMobile } from '@/hooks/useIsMobile';
 import { cn } from '@/lib/utils';
 import { BreakoutIdentity } from '@/components/ui/BreakoutPanel/BreakoutIdentity';
+import { usePortalContainer } from '@/components/ui/PortalContainerContext';
 import { X, GripHorizontal } from 'lucide-react';
 
 /* eslint-disable react-refresh/only-export-components */
@@ -229,6 +230,8 @@ interface DraggablePinnedTooltipProps {
 
 function DraggablePinnedTooltip({ player, initialPosition, onClose, panelTitle, breakout }: DraggablePinnedTooltipProps) {
   const isMobile = useIsMobile()
+  const portalContainer = usePortalContainer()
+  const portalDocument = portalContainer?.ownerDocument
   const [position, setPosition] = useState(initialPosition)
   const [isDragging, setIsDragging] = useState(false)
   const dragStartRef = useRef<{ x: number; y: number; posX: number; posY: number } | null>(null)
@@ -267,13 +270,16 @@ function DraggablePinnedTooltip({ player, initialPosition, onClose, panelTitle, 
       dragStartRef.current = null
     }
 
-    document.addEventListener('mousemove', handleMouseMove)
-    document.addEventListener('mouseup', handleMouseUp)
+    if (!portalDocument) return
+    portalDocument.addEventListener('mousemove', handleMouseMove)
+    portalDocument.addEventListener('mouseup', handleMouseUp)
     return () => {
-      document.removeEventListener('mousemove', handleMouseMove)
-      document.removeEventListener('mouseup', handleMouseUp)
+      portalDocument.removeEventListener('mousemove', handleMouseMove)
+      portalDocument.removeEventListener('mouseup', handleMouseUp)
     }
-  }, [isDragging])
+  }, [isDragging, portalDocument])
+
+  if (!portalContainer) return null
 
   // Mobile: centered modal
   if (isMobile) {
@@ -313,7 +319,7 @@ function DraggablePinnedTooltip({ player, initialPosition, onClose, panelTitle, 
           </div>
         </div>
       </>,
-      document.body
+      portalContainer
     )
   }
 
@@ -358,7 +364,7 @@ function DraggablePinnedTooltip({ player, initialPosition, onClose, panelTitle, 
         {breakout?.(player.playerID, true)}
       </div>
     </div>,
-    document.body
+    portalContainer
   )
 }
 

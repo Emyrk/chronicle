@@ -10,6 +10,7 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties } from "react";
 import { createPortal } from "react-dom";
+import { usePortalContainer } from "@/components/ui/PortalContainerContext";
 import { GripHorizontal, X } from "lucide-react";
 import type { PlayerMetricChartData } from "@/components/ui/PlayerMetricChart/PlayerMetricChart";
 import { ScrollArea } from "@/components/ui/ScrollArea/ScrollArea";
@@ -446,6 +447,8 @@ function DraggableComparisonBreakout({
   title,
 }: DraggableComparisonBreakoutProps) {
   const isMobile = useIsMobile();
+  const portalContainer = usePortalContainer();
+  const portalDocument = portalContainer?.ownerDocument;
   const [position, setPosition] = useState(initialPosition);
   const [isDragging, setIsDragging] = useState(false);
   const dragStartRef = useRef<{ x: number; y: number; posX: number; posY: number } | null>(null);
@@ -484,13 +487,16 @@ function DraggableComparisonBreakout({
       dragStartRef.current = null;
     };
 
-    document.addEventListener("mousemove", handleMouseMove);
-    document.addEventListener("mouseup", handleMouseUp);
+    if (!portalDocument) return;
+    portalDocument.addEventListener("mousemove", handleMouseMove);
+    portalDocument.addEventListener("mouseup", handleMouseUp);
     return () => {
-      document.removeEventListener("mousemove", handleMouseMove);
-      document.removeEventListener("mouseup", handleMouseUp);
+      portalDocument.removeEventListener("mousemove", handleMouseMove);
+      portalDocument.removeEventListener("mouseup", handleMouseUp);
     };
-  }, [isDragging]);
+  }, [isDragging, portalDocument]);
+
+  if (!portalContainer) return null;
 
   // Mobile: centered modal
   if (isMobile) {
@@ -515,7 +521,7 @@ function DraggableComparisonBreakout({
           </div>
         </div>
       </>,
-      document.body,
+      portalContainer,
     );
   }
 
@@ -551,7 +557,7 @@ function DraggableComparisonBreakout({
       </div>
       <div>{children}</div>
     </div>,
-    document.body,
+    portalContainer,
   );
 }
 

@@ -6,6 +6,7 @@ import { useBreakoutHover, getCellHighlight, type BreakoutHoverState } from './B
 import { ChevronRight, ChevronLeft } from 'lucide-react'
 import { SpellIdTooltip } from '@/components/ui/SpellIdTooltip'
 import { useLocalStorage } from '@/hooks/useLocalStorage'
+import { usePortalContainer } from '@/components/ui/PortalContainerContext'
 
 // ============================================================================
 // CSS Tooltip with Portal (escapes overflow containers)
@@ -21,6 +22,7 @@ function CssTooltip({ children, content, className }: CssTooltipProps) {
   const [show, setShow] = useState(false)
   const [position, setPosition] = useState({ x: 0, y: 0 })
   const triggerRef = useRef<HTMLSpanElement>(null)
+  const portalContainer = usePortalContainer()
   
   useEffect(() => {
     if (show && triggerRef.current) {
@@ -42,7 +44,7 @@ function CssTooltip({ children, content, className }: CssTooltipProps) {
       >
         {children}
       </span>
-      {show && createPortal(
+      {show && portalContainer && createPortal(
         <div
           className="pointer-events-none fixed z-[9999] px-2 py-1 rounded bg-foreground text-background text-xs whitespace-nowrap"
           style={{
@@ -53,7 +55,7 @@ function CssTooltip({ children, content, className }: CssTooltipProps) {
         >
           {content}
         </div>,
-        document.body
+        portalContainer
       )}
     </>
   )

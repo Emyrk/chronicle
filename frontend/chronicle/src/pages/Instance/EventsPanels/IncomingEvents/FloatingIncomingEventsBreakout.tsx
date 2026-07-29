@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState, type CSSProperties, type ReactNode } from "react";
 import { createPortal } from "react-dom";
 import { useIsMobile } from "@/hooks/useIsMobile";
+import { usePortalContainer } from "@/components/ui/PortalContainerContext";
 import {
   clampBreakoutBodyHeight,
   DEFAULT_BREAKOUT_BODY_HEIGHT,
@@ -18,6 +19,9 @@ export function FloatingIncomingEventsBreakout({
   children,
 }: FloatingIncomingEventsBreakoutProps) {
   const isMobile = useIsMobile();
+  const portalContainer = usePortalContainer();
+  const portalDocument = portalContainer?.ownerDocument;
+  const portalWindow = portalDocument?.defaultView;
   const [position, setPosition] = useState(initialPosition);
   const [isDragging, setIsDragging] = useState(false);
   const [isResizing, setIsResizing] = useState(false);
@@ -66,13 +70,14 @@ export function FloatingIncomingEventsBreakout({
       dragStartRef.current = null;
     };
 
-    document.addEventListener("mousemove", handleMouseMove);
-    document.addEventListener("mouseup", handleMouseUp);
+    if (!portalDocument) return;
+    portalDocument.addEventListener("mousemove", handleMouseMove);
+    portalDocument.addEventListener("mouseup", handleMouseUp);
     return () => {
-      document.removeEventListener("mousemove", handleMouseMove);
-      document.removeEventListener("mouseup", handleMouseUp);
+      portalDocument.removeEventListener("mousemove", handleMouseMove);
+      portalDocument.removeEventListener("mouseup", handleMouseUp);
     };
-  }, [isDragging]);
+  }, [isDragging, portalDocument]);
 
   useEffect(() => {
     if (!isResizing) return;
@@ -81,7 +86,7 @@ export function FloatingIncomingEventsBreakout({
       if (!resizeStartRef.current) return;
       setBodyHeight(clampBreakoutBodyHeight(
         resizeStartRef.current.height + event.clientY - resizeStartRef.current.y,
-        window.innerHeight - position.y,
+        (portalWindow?.innerHeight ?? 0) - position.y,
       ));
     };
     const handleMouseUp = () => {
@@ -89,13 +94,14 @@ export function FloatingIncomingEventsBreakout({
       resizeStartRef.current = null;
     };
 
-    document.addEventListener("mousemove", handleMouseMove);
-    document.addEventListener("mouseup", handleMouseUp);
+    if (!portalDocument) return;
+    portalDocument.addEventListener("mousemove", handleMouseMove);
+    portalDocument.addEventListener("mouseup", handleMouseUp);
     return () => {
-      document.removeEventListener("mousemove", handleMouseMove);
-      document.removeEventListener("mouseup", handleMouseUp);
+      portalDocument.removeEventListener("mousemove", handleMouseMove);
+      portalDocument.removeEventListener("mouseup", handleMouseUp);
     };
-  }, [isResizing, position.y]);
+  }, [isResizing, position.y, portalDocument, portalWindow]);
 
   const breakoutStyle = {
     left: position.x,
@@ -103,6 +109,8 @@ export function FloatingIncomingEventsBreakout({
     cursor: isDragging ? "grabbing" : "default",
     "--incoming-events-body-height": `${bodyHeight}px`,
   } as CSSProperties;
+
+  if (!portalContainer) return null;
 
   if (isMobile) {
     return createPortal(
@@ -112,7 +120,7 @@ export function FloatingIncomingEventsBreakout({
           {children}
         </div>
       </>,
-      document.body,
+      portalContainer,
     );
   }
 
@@ -135,6 +143,6 @@ export function FloatingIncomingEventsBreakout({
         <span className="h-px w-10 rounded-full bg-border transition-colors group-hover:bg-muted-foreground" />
       </div>
     </div>,
-    document.body,
+    portalContainer,
   );
 }

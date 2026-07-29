@@ -186,6 +186,37 @@ interface EventMeta {
    - Hook deserializes result (Map reconstruction)
 3. **panel.render()** displays the result on main thread
 
+## Panel Pop-Out Windows
+
+Any `EventsPanel` can be moved into a separate browser window from the panel menu. The panel is rendered into the popup with a React portal rather than mounting a second application. This keeps the popup in the original React tree, so panel state, filters, encounter selection, Sync Mode, data caches, and worker results remain shared with the main window.
+
+`panelPopup.ts` owns popup creation and copies the current document styles and theme into the new document. `EventsPanel.tsx` owns the popup lifecycle:
+
+- The original grid slot becomes a placeholder with focus and dock controls.
+- Closing the native popup window docks the panel back into its original slot.
+- Removing the panel or leaving the owning view closes its popup.
+- Browsers may retain security-controlled window chrome such as the address bar; application code cannot reliably remove it.
+
+### Overlay Portal Targets
+
+Components rendered inside a popped-out panel must not portal directly to the global `document.body`. Doing so places tooltips, menus, and breakout boxes back in the main window.
+
+Use `usePortalContainer()` for custom portals, or a shared UI primitive that already consumes it:
+
+```tsx
+const portalContainer = usePortalContainer();
+
+return portalContainer
+  ? createPortal(<PanelOverlay />, portalContainer)
+  : null;
+```
+
+`PortalContainerProvider` is scoped around each `EventsPanel`. It targets the popup container while the panel is popped out and the main document body otherwise. Pointer listeners for draggable or resizable overlays must similarly use `portalContainer.ownerDocument`, and viewport calculations should use `portalContainer.ownerDocument.defaultView`.
+
+### Full-Layout Pop-Out Extension
+
+The same portal approach can be applied above the individual panel level to move an entire preset or custom grid into one popup. The popup owner should wrap the grid once with `PortalContainerProvider`, while preserving the existing instance-level providers and layout state in the main React tree. Individual panel pop-outs inside a popped-out layout would need an explicit policy, such as disabling nested pop-outs or allowing a second popup per panel.
+
 ## Adding a New Panel
 
 Panels are split into two files: a **processor** (worker-safe) and a **React wrapper**.
