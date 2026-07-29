@@ -26,9 +26,11 @@ type Tenant struct {
 	DefaultFormat *string `json:"default_format"`
 	// AvailableFormats restricts which log formats are valid for this tenant.
 	// Empty means all formats are available.
-	AvailableFormats []string  `json:"available_formats"`
-	CreatedAt        time.Time `json:"created_at"`
-	UpdatedAt        time.Time `json:"updated_at"`
+	AvailableFormats []string `json:"available_formats"`
+	// ExternalLinking is the tenant's external character linking visibility.
+	ExternalLinking *ExternalLinking `json:"external_linking,omitempty"`
+	CreatedAt       time.Time        `json:"created_at"`
+	UpdatedAt       time.Time        `json:"updated_at"`
 }
 
 // ParseConfig holds tenant-level parse scoring settings, stored as JSONB.
@@ -86,6 +88,7 @@ func TenantFromDB(t database.Tenant) Tenant {
 			out.ParseConfig = &pc
 		}
 	}
+	out.ExternalLinking = ParseExternalLinking(t.ExternalLinking)
 
 	if t.DefaultDatasetID.Valid {
 		out.DefaultDatasetID = &t.DefaultDatasetID.UUID
@@ -98,6 +101,30 @@ func TenantFromDB(t database.Tenant) Tenant {
 		out.AvailableFormats = t.AvailableFormats
 	}
 	return out
+}
+
+// ExternalLinking is a tenant's visibility settings for external character
+// linking. The provider itself is deployment-level (env vars); tenants opt
+// in to showing the linking UI.
+type ExternalLinking struct {
+	// Show enables the external linking card on the account characters page.
+	Show bool `json:"show"`
+	// Callout is an optional message shown alongside the linking card, e.g.
+	// "Linking is only supported for members of the guild Zug Zug".
+	Callout string `json:"callout,omitempty"`
+}
+
+// ParseExternalLinking unmarshals a tenant's raw external_linking JSONB
+// column. Returns nil when unset, null, or invalid.
+func ParseExternalLinking(data []byte) *ExternalLinking {
+	if len(data) == 0 {
+		return nil
+	}
+	var el ExternalLinking
+	if err := json.Unmarshal(data, &el); err != nil {
+		return nil
+	}
+	return &el
 }
 
 // ExternalVerification configures the deployment's external verification
@@ -127,10 +154,13 @@ func (e *ExternalVerification) Public() *ExternalVerificationPublic {
 }
 
 // ExternalVerificationPublic is the subset of ExternalVerification exposed
-// in the site config.
+// in the site config, combined with the tenant's visibility settings.
 type ExternalVerificationPublic struct {
 	Type            string `json:"type"`
 	InstructionsURL string `json:"instructions_url,omitempty"`
+	// Callout is the tenant's optional message shown alongside the linking
+	// card, e.g. "Linking is only supported for members of the guild Zug Zug".
+	Callout string `json:"callout,omitempty"`
 }
 
 // SetServerTenantRequest assigns or removes a tenant from a server.
@@ -161,6 +191,9 @@ type UpsertTenantRequest struct {
 	ParseConfig         *ParseConfig  `json:"parse_config"`
 	DefaultFormat       *string       `json:"default_format"`
 	AvailableFormats    []string      `json:"available_formats"`
+	// ExternalLinking updates the tenant's external character linking
+	// visibility. Omit to keep the existing value.
+	ExternalLinking *ExternalLinking `json:"external_linking,omitempty"`
 }
 
 // IsCreate returns true when the request should insert a new tenant.
@@ -181,6 +214,14 @@ func (r UpsertTenantRequest) marshalParseConfig() []byte {
 		return nil
 	}
 	b, _ := json.Marshal(r.ParseConfig)
+	return b
+}
+
+func (r UpsertTenantRequest) marshalExternalLinking() []byte {
+	if r.ExternalLinking == nil {
+		return nil
+	}
+	b, _ := json.Marshal(r.ExternalLinking)
 	return b
 }
 
@@ -225,6 +266,7 @@ func (r UpsertTenantRequest) ToInsertParams() database.InsertTenantParams {
 		Discoverable:        discoverable,
 		Branding:            r.marshalBranding(),
 		ParseConfig:         r.marshalParseConfig(),
+		ExternalLinking:     r.marshalExternalLinking(),
 		DefaultFormat:       defaultFormat,
 		AvailableFormats:    r.AvailableFormats,
 	}
@@ -272,6 +314,7 @@ func (r UpsertTenantRequest) ToUpdateParams() database.UpdateTenantParams {
 		Discoverable:        discoverable,
 		Branding:            r.marshalBranding(),
 		ParseConfig:         r.marshalParseConfig(),
+		ExternalLinking:     r.marshalExternalLinking(),
 		DefaultFormat:       defaultFormat,
 		AvailableFormats:    r.AvailableFormats,
 	}

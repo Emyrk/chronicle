@@ -710,6 +710,24 @@ export type EndState = "reset" | "slain" | "timeout";
 
 export const EndStates: EndState[] = ["reset", "slain", "timeout"];
 
+// From chroniclesdk/tenant.go
+/**
+ * ExternalLinking is a tenant's visibility settings for external character
+ * linking. The provider itself is deployment-level (env vars); tenants opt
+ * in to showing the linking UI.
+ */
+export interface ExternalLinking {
+    /**
+     * Show enables the external linking card on the account characters page.
+     */
+    readonly show: boolean;
+    /**
+     * Callout is an optional message shown alongside the linking card, e.g.
+     * "Linking is only supported for members of the guild Zug Zug".
+     */
+    readonly callout?: string;
+}
+
 // From chroniclesdk/characters.go
 /**
  * ExternalSyncResponse reports the outcome of syncing character links from
@@ -755,11 +773,16 @@ export interface ExternalVerification {
 // From chroniclesdk/tenant.go
 /**
  * ExternalVerificationPublic is the subset of ExternalVerification exposed
- * in the site config.
+ * in the site config, combined with the tenant's visibility settings.
  */
 export interface ExternalVerificationPublic {
     readonly type: string;
     readonly instructions_url?: string;
+    /**
+     * Callout is the tenant's optional message shown alongside the linking
+     * card, e.g. "Linking is only supported for members of the guild Zug Zug".
+     */
+    readonly callout?: string;
 }
 
 // From chroniclesdk/log.go
@@ -2433,6 +2456,10 @@ export interface Tenant {
      * Empty means all formats are available.
      */
     readonly available_formats: readonly string[];
+    /**
+     * ExternalLinking is the tenant's external character linking visibility.
+     */
+    readonly external_linking?: ExternalLinking;
     readonly created_at: string;
     readonly updated_at: string;
 }
@@ -2634,6 +2661,11 @@ export interface UpsertTenantRequest {
     readonly parse_config: ParseConfig | null;
     readonly default_format: string | null;
     readonly available_formats: readonly string[];
+    /**
+     * ExternalLinking updates the tenant's external character linking
+     * visibility. Omit to keep the existing value.
+     */
+    readonly external_linking?: ExternalLinking;
 }
 
 // From chroniclesdk/user.go

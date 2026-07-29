@@ -133,6 +133,10 @@ function TenantForm({ tenant, onDone }: { tenant?: Tenant; onDone: () => void })
   const [defaultFormat, setDefaultFormat] = useState(tenant?.default_format ?? "");
   const [availableFormats, setAvailableFormats] = useState<string[]>([...(tenant?.available_formats ?? [])]);
 
+  // External character linking visibility
+  const [showExternalLinking, setShowExternalLinking] = useState(tenant?.external_linking?.show ?? false);
+  const [externalLinkingCallout, setExternalLinkingCallout] = useState(tenant?.external_linking?.callout ?? "");
+
   // Branding fields
   const [squareLogo, setSquareLogo] = useState(tenant?.branding?.square_logo ?? "");
   const [logoWide, setLogoWide] = useState(tenant?.branding?.logo_wide ?? "");
@@ -172,6 +176,10 @@ function TenantForm({ tenant, onDone }: { tenant?: Tenant; onDone: () => void })
         parse_config: { cohort_mode: parseMode || undefined },
         default_format: defaultFormat || null,
         available_formats: availableFormats,
+        external_linking: {
+          show: showExternalLinking,
+          callout: externalLinkingCallout.trim() || undefined,
+        },
       },
       { onSuccess: onDone },
     );
@@ -264,6 +272,22 @@ function TenantForm({ tenant, onDone }: { tenant?: Tenant; onDone: () => void })
             <p className="text-[10px] text-muted-foreground">None selected — all formats available.</p>
           )}
         </div>
+      </div>
+      <div className="pt-2 border-t space-y-2">
+        <p className="text-xs font-medium text-muted-foreground">External Character Linking</p>
+        <label className="flex items-center gap-2 text-sm">
+          <input type="checkbox" checked={showExternalLinking} onChange={(e) => setShowExternalLinking(e.target.checked)} />
+          Show external linking on the account characters page
+        </label>
+        <input
+          className={inputClass}
+          placeholder='Callout (optional), e.g. Linking is only supported for members of the guild "Zug Zug"'
+          value={externalLinkingCallout}
+          onChange={(e) => setExternalLinkingCallout(e.target.value)}
+        />
+        <p className="text-[10px] text-muted-foreground">
+          Only takes effect when the deployment has an external verification provider configured.
+        </p>
       </div>
       <div className="pt-2 border-t space-y-2">
         <p className="text-xs font-medium text-muted-foreground">Branding</p>

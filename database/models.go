@@ -1621,6 +1621,7 @@ type Tenant struct {
 	DefaultFormat       NullLogFormat      `db:"default_format" json:"default_format"`
 	AvailableFormats    []string           `db:"available_formats" json:"available_formats"`
 	ParseConfig         []byte             `db:"parse_config" json:"parse_config"`
+	ExternalLinking     []byte             `db:"external_linking" json:"external_linking"`
 }
 
 type User struct {

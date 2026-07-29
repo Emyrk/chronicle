@@ -1,3 +1,9 @@
+-- Per-tenant visibility settings for external character linking. The
+-- provider itself is deployment-level (env vars); tenants opt in to showing
+-- the linking UI and may add a callout message, e.g. "linking is only
+-- supported for members of the guild Zug Zug".
+ALTER TABLE tenants ADD COLUMN external_linking jsonb;
+
 -- Where a character link came from: 'manual' (admin/self managed) or an
 -- external provider source like 'zug-zug/<url>'. Re-syncing an external
 -- source deletes all links from that source and re-adds them, so different

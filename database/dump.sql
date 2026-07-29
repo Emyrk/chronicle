@@ -892,6 +892,7 @@ CREATE TABLE tenants (
     default_format log_format,
     available_formats text[] DEFAULT '{}'::text[] NOT NULL,
     parse_config jsonb,
+    external_linking jsonb,
     CONSTRAINT tenants_slug_format CHECK (((slug IS NULL) OR (slug ~ '^[a-z0-9][a-z0-9-]{1,30}[a-z0-9]$'::text))),
     CONSTRAINT tenants_slug_reserved CHECK ((slug <> ALL (ARRAY['www'::text, 'api'::text, 'auth'::text, 'admin'::text, 'legacy'::text, 'app'::text, 'mail'::text, 'staging'::text])))
 );

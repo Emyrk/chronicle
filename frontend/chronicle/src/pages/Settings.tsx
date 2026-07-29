@@ -419,9 +419,21 @@ function ExternalVerificationCard() {
     });
   };
 
+  const providerName = provider.type === "zug-zug" ? 'the Guild "Zug Zug"' : null;
+
   return (
     <div className="rounded-lg border p-4 space-y-3">
-      <h3 className="text-sm font-medium">Link characters via Zug Zug</h3>
+      <h3 className="text-sm font-medium">
+        {providerName ? `Link characters via ${providerName}` : "Link characters"}
+      </h3>
+      {providerName && (
+        <p className="text-sm text-muted-foreground">Character linking is provided by {providerName}.</p>
+      )}
+      {provider.callout && (
+        <p className="text-sm rounded-md border border-yellow-500/30 bg-yellow-500/10 px-3 py-2 text-yellow-500">
+          {provider.callout}
+        </p>
+      )}
       <p className="text-sm text-muted-foreground">
         Verified members can automatically link their characters using their Discord identity.
         {provider.instructions_url && (
