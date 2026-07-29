@@ -1148,6 +1148,7 @@ type ExternalCharacterLinkSync struct {
 	UserID       uuid.UUID          `db:"user_id" json:"user_id"`
 	Source       string             `db:"source" json:"source"`
 	LastSyncedAt pgtype.Timestamptz `db:"last_synced_at" json:"last_synced_at"`
+	LastResponse []byte             `db:"last_response" json:"last_response"`
 }
 
 type GamePlayer struct {

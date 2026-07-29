@@ -171,6 +171,31 @@ func TestUserCharacterLinks(t *testing.T) {
 			UserID: userID,
 			Source: source,
 		}))
+
+		// The last response payload is cached and cleared on the next upsert.
+		payload := []byte(`{"verified":true,"unmatched":["Ghost"]}`)
+		require.NoError(t, db.UpdateExternalCharacterLinkSyncResponse(ctx, database.UpdateExternalCharacterLinkSyncResponseParams{
+			UserID:       userID,
+			Source:       source,
+			LastResponse: payload,
+		}))
+		sync, err = db.GetExternalCharacterLinkSync(ctx, database.GetExternalCharacterLinkSyncParams{
+			UserID: userID,
+			Source: source,
+		})
+		require.NoError(t, err)
+		require.JSONEq(t, string(payload), string(sync.LastResponse))
+
+		require.NoError(t, db.UpsertExternalCharacterLinkSync(ctx, database.UpsertExternalCharacterLinkSyncParams{
+			UserID: userID,
+			Source: source,
+		}))
+		sync, err = db.GetExternalCharacterLinkSync(ctx, database.GetExternalCharacterLinkSyncParams{
+			UserID: userID,
+			Source: source,
+		})
+		require.NoError(t, err)
+		require.Empty(t, sync.LastResponse)
 	})
 
 	t.Run("SinglePrimary", func(t *testing.T) {

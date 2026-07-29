@@ -12,6 +12,7 @@ import {
   useSetPrimaryCharacter,
   useUnlinkMyCharacter,
   useExternalCharacterSync,
+  useExternalSyncStatus,
   type LinkedCharacter,
   useUserPanelLayouts,
   useCreatePanelLayout,
@@ -366,6 +367,7 @@ function ExternalVerificationCard() {
   const { data: session } = useSession();
   const { data: siteConfig } = useSiteConfig();
   const syncMutation = useExternalCharacterSync();
+  const { data: lastSync } = useExternalSyncStatus({ enabled: !!siteConfig?.external_verification });
   // Client-side throttle: checked in the click handler (localStorage), with
   // component state only to disable the button. The server enforces the
   // real rate limit.
@@ -447,6 +449,26 @@ function ExternalVerificationCard() {
         >
           {syncMutation.isPending ? "Syncing..." : throttled ? "Synced recently — try again in a few minutes" : "Sync my characters"}
         </Button>
+      )}
+
+      {lastSync && (
+        <div className="space-y-1.5 border-t pt-3">
+          <p className="text-xs text-muted-foreground">
+            Last sync {new Date(lastSync.synced_at).toLocaleString()}
+            {!lastSync.verified && " — not verified with the provider"}
+          </p>
+          {lastSync.unmatched.length > 0 && (
+            <p className="text-xs text-yellow-500">
+              Characters failed to link as they do not exist in Chronicle yet:{" "}
+              {lastSync.unmatched.join(", ")}. They can be linked once they appear in an uploaded log.
+            </p>
+          )}
+          {lastSync.conflicts.length > 0 && (
+            <p className="text-xs text-destructive">
+              Already linked to another account: {lastSync.conflicts.join(", ")}. Ask for support in Discord.
+            </p>
+          )}
+        </div>
       )}
     </div>
   );

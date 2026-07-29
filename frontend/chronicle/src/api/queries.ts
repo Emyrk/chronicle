@@ -525,9 +525,26 @@ export function useExternalCharacterSync() {
       }
       return response.json() as Promise<ExternalSyncResponse>;
     },
-    onSuccess: () => {
+    onSuccess: (result) => {
       queryClient.invalidateQueries({ queryKey: ["my-characters"] });
+      queryClient.setQueryData(["external-sync-status"], result);
     },
+  });
+}
+
+export function useExternalSyncStatus(options?: Omit<UseQueryOptions<ExternalSyncResponse | null>, "queryKey" | "queryFn">) {
+  return useQuery({
+    queryKey: ["external-sync-status"],
+    queryFn: async () => {
+      const response = await fetch("/api/v1/linked/me/external-sync", { credentials: "include" });
+      // 204: never synced; 404: provider disabled.
+      if (response.status === 204 || response.status === 404) return null;
+      if (!response.ok) {
+        throw new Error("Failed to fetch sync status");
+      }
+      return response.json() as Promise<ExternalSyncResponse>;
+    },
+    ...options,
   });
 }
 

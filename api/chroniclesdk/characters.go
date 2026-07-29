@@ -36,8 +36,11 @@ type CharacterLinkInfo struct {
 }
 
 // ExternalSyncResponse reports the outcome of syncing character links from
-// an external verification provider.
+// an external verification provider. The most recent response is cached
+// per user so the UI can keep showing why characters failed to link.
 type ExternalSyncResponse struct {
+	// SyncedAt is when this sync ran.
+	SyncedAt time.Time `json:"synced_at"`
 	// Verified is false when the provider does not recognize the user's
 	// Discord identity as verified.
 	Verified bool `json:"verified"`

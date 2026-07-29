@@ -671,7 +671,8 @@ ALTER TABLE ONLY encounter_dps_rankings FORCE ROW LEVEL SECURITY;
 CREATE TABLE external_character_link_syncs (
     user_id uuid NOT NULL,
     source text NOT NULL,
-    last_synced_at timestamp with time zone DEFAULT now() NOT NULL
+    last_synced_at timestamp with time zone DEFAULT now() NOT NULL,
+    last_response jsonb
 );
 
 CREATE TABLE game_players (

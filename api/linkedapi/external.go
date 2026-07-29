@@ -1,7 +1,9 @@
 package linkedapi
 
 import (
+	"context"
 	"database/sql"
+	"encoding/json"
 	"errors"
 	"net/http"
 	"time"
@@ -88,12 +90,15 @@ func (h *Handler) SyncExternal(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if !verification.Verified {
-		httpapi.Write(ctx, w, http.StatusOK, chroniclesdk.ExternalSyncResponse{
+		resp := chroniclesdk.ExternalSyncResponse{
+			SyncedAt:  time.Now(),
 			Verified:  false,
 			Linked:    []chroniclesdk.LinkedCharacter{},
 			Conflicts: []string{},
 			Unmatched: []string{},
-		})
+		}
+		h.storeSyncResponse(ctx, userID, source, resp)
+		httpapi.Write(ctx, w, http.StatusOK, resp)
 		return
 	}
 
@@ -114,6 +119,7 @@ func (h *Handler) SyncExternal(w http.ResponseWriter, r *http.Request) {
 	}
 
 	resp := chroniclesdk.ExternalSyncResponse{
+		SyncedAt:  time.Now(),
 		Verified:  true,
 		Linked:    []chroniclesdk.LinkedCharacter{},
 		Conflicts: []string{},
@@ -202,5 +208,57 @@ func (h *Handler) SyncExternal(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
+	h.storeSyncResponse(ctx, userID, source, resp)
+	httpapi.Write(ctx, w, http.StatusOK, resp)
+}
+
+// storeSyncResponse caches the sync outcome so GetExternalSyncStatus can keep
+// showing conflicts/unmatched characters. Best effort: failures only log via
+// the response staying empty, never fail the sync itself.
+func (h *Handler) storeSyncResponse(ctx context.Context, userID uuid.UUID, source string, resp chroniclesdk.ExternalSyncResponse) {
+	payload, err := json.Marshal(resp)
+	if err != nil {
+		return
+	}
+	_ = h.zed.UpdateExternalCharacterLinkSyncResponse(ctx, database.UpdateExternalCharacterLinkSyncResponseParams{
+		UserID:       userID,
+		Source:       source,
+		LastResponse: payload,
+	})
+}
+
+// GetExternalSyncStatus returns the cached result of the user's most recent
+// external sync, or 204 when the user has never synced (or the last sync
+// failed before producing a result).
+func (h *Handler) GetExternalSyncStatus(w http.ResponseWriter, r *http.Request) {
+	ctx := r.Context()
+	state := chronauth.AuthenticationState(r)
+
+	config := h.externalVerification
+	if config == nil {
+		httpapi.Write(ctx, w, http.StatusNotFound, chroniclesdk.Response{
+			Message: "External verification is not enabled for this site",
+		})
+		return
+	}
+
+	sync, err := h.zed.GetExternalCharacterLinkSync(ctx, database.GetExternalCharacterLinkSyncParams{
+		UserID: state.Claims.Subject,
+		Source: zugzuglink.Source(config.URL),
+	})
+	if errors.Is(err, sql.ErrNoRows) || (err == nil && len(sync.LastResponse) == 0) {
+		w.WriteHeader(http.StatusNoContent)
+		return
+	}
+	if err != nil {
+		httpapi.InternalServerError(w, err)
+		return
+	}
+
+	var resp chroniclesdk.ExternalSyncResponse
+	if err := json.Unmarshal(sync.LastResponse, &resp); err != nil {
+		w.WriteHeader(http.StatusNoContent)
+		return
+	}
 	httpapi.Write(ctx, w, http.StatusOK, resp)
 }

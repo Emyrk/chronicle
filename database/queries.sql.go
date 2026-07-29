@@ -9578,7 +9578,7 @@ func (q *sqlQuerier) DeleteUserCharacterLinksByUserAndSource(ctx context.Context
 }
 
 const getExternalCharacterLinkSync = `-- name: GetExternalCharacterLinkSync :one
-SELECT user_id, source, last_synced_at FROM external_character_link_syncs
+SELECT user_id, source, last_synced_at, last_response FROM external_character_link_syncs
 WHERE user_id = $1 AND source = $2
 `
 
@@ -9590,7 +9590,12 @@ type GetExternalCharacterLinkSyncParams struct {
 func (q *sqlQuerier) GetExternalCharacterLinkSync(ctx context.Context, arg GetExternalCharacterLinkSyncParams) (ExternalCharacterLinkSync, error) {
 	row := q.db.QueryRow(ctx, getExternalCharacterLinkSync, arg.UserID, arg.Source)
 	var i ExternalCharacterLinkSync
-	err := row.Scan(&i.UserID, &i.Source, &i.LastSyncedAt)
+	err := row.Scan(
+		&i.UserID,
+		&i.Source,
+		&i.LastSyncedAt,
+		&i.LastResponse,
+	)
 	return i, err
 }
 
@@ -9772,10 +9777,27 @@ func (q *sqlQuerier) UnsetPrimaryUserCharacter(ctx context.Context, userID uuid.
 	return err
 }
 
+const updateExternalCharacterLinkSyncResponse = `-- name: UpdateExternalCharacterLinkSyncResponse :exec
+UPDATE external_character_link_syncs
+SET last_response = $3
+WHERE user_id = $1 AND source = $2
+`
+
+type UpdateExternalCharacterLinkSyncResponseParams struct {
+	UserID       uuid.UUID `db:"user_id" json:"user_id"`
+	Source       string    `db:"source" json:"source"`
+	LastResponse []byte    `db:"last_response" json:"last_response"`
+}
+
+func (q *sqlQuerier) UpdateExternalCharacterLinkSyncResponse(ctx context.Context, arg UpdateExternalCharacterLinkSyncResponseParams) error {
+	_, err := q.db.Exec(ctx, updateExternalCharacterLinkSyncResponse, arg.UserID, arg.Source, arg.LastResponse)
+	return err
+}
+
 const upsertExternalCharacterLinkSync = `-- name: UpsertExternalCharacterLinkSync :exec
-INSERT INTO external_character_link_syncs (user_id, source, last_synced_at)
-VALUES ($1, $2, now())
-ON CONFLICT (user_id, source) DO UPDATE SET last_synced_at = now()
+INSERT INTO external_character_link_syncs (user_id, source, last_synced_at, last_response)
+VALUES ($1, $2, now(), NULL)
+ON CONFLICT (user_id, source) DO UPDATE SET last_synced_at = now(), last_response = NULL
 `
 
 type UpsertExternalCharacterLinkSyncParams struct {
@@ -9783,6 +9805,8 @@ type UpsertExternalCharacterLinkSyncParams struct {
 	Source string    `db:"source" json:"source"`
 }
 
+// Refreshes the rate-limit timestamp. Clears the cached response: it is
+// stale once a new sync starts, and stays NULL if the sync fails.
 func (q *sqlQuerier) UpsertExternalCharacterLinkSync(ctx context.Context, arg UpsertExternalCharacterLinkSyncParams) error {
 	_, err := q.db.Exec(ctx, upsertExternalCharacterLinkSync, arg.UserID, arg.Source)
 	return err

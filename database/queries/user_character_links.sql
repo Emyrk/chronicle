@@ -13,9 +13,16 @@ SELECT * FROM external_character_link_syncs
 WHERE user_id = $1 AND source = $2;
 
 -- name: UpsertExternalCharacterLinkSync :exec
-INSERT INTO external_character_link_syncs (user_id, source, last_synced_at)
-VALUES ($1, $2, now())
-ON CONFLICT (user_id, source) DO UPDATE SET last_synced_at = now();
+-- Refreshes the rate-limit timestamp. Clears the cached response: it is
+-- stale once a new sync starts, and stays NULL if the sync fails.
+INSERT INTO external_character_link_syncs (user_id, source, last_synced_at, last_response)
+VALUES ($1, $2, now(), NULL)
+ON CONFLICT (user_id, source) DO UPDATE SET last_synced_at = now(), last_response = NULL;
+
+-- name: UpdateExternalCharacterLinkSyncResponse :exec
+UPDATE external_character_link_syncs
+SET last_response = $3
+WHERE user_id = $1 AND source = $2;
 
 -- name: DeleteUserCharacterLink :one
 DELETE FROM user_character_links
