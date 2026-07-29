@@ -3,6 +3,13 @@ import GridLayout, { type LayoutItem } from "react-grid-layout";
 import { GripVertical } from "lucide-react";
 import "react-grid-layout/css/styles.css";
 import { cn } from "@/lib/utils";
+import { GridEdgeResizeControls } from "./GridEdgeResizeControls";
+import {
+  gridItemChanged,
+  resizeGridItemFromEdge,
+  type GridResizeDelta,
+  type GridResizeEdge,
+} from "./gridEdgeResize";
 
 export interface GridEditorItem {
   id: string;
@@ -98,6 +105,33 @@ export function GridLayoutEditor({
     onItemsChange(next);
   };
 
+  const resizeItemFromEdge = (
+    itemId: string,
+    edge: GridResizeEdge,
+    delta: GridResizeDelta,
+  ) => {
+    const layoutItem = layout.find((entry) => entry.i === itemId);
+    if (!layoutItem) return;
+
+    const resized = resizeGridItemFromEdge(layoutItem, edge, delta, cols);
+    if (!gridItemChanged(layoutItem, resized)) return;
+    commitLayout(layout.map((entry) => (entry.i === itemId ? resized : entry)));
+    onResizeStop?.();
+  };
+
+  const canResizeItemFromEdge = (
+    itemId: string,
+    edge: GridResizeEdge,
+    delta: GridResizeDelta,
+  ) => {
+    const layoutItem = layout.find((entry) => entry.i === itemId);
+    if (!layoutItem) return false;
+    return gridItemChanged(
+      layoutItem,
+      resizeGridItemFromEdge(layoutItem, edge, delta, cols),
+    );
+  };
+
   return (
     <div ref={containerRef} className={cn("w-full", className)}>
       <GridLayout
@@ -126,10 +160,17 @@ export function GridLayoutEditor({
           <div
             key={item.id}
             className={cn(
-              "bg-card border border-border rounded-lg overflow-hidden shadow-sm relative",
+              "group/resize-panel relative overflow-hidden rounded-lg border border-border bg-card shadow-sm",
               pulseFirstResizeHandle && index === 0 && "grid-layout-editor-pulse-resize",
             )}
           >
+            {editable && (
+              <GridEdgeResizeControls
+                label={item.title}
+                onResize={(edge, delta) => resizeItemFromEdge(item.id, edge, delta)}
+                canResize={(edge, delta) => canResizeItemFromEdge(item.id, edge, delta)}
+              />
+            )}
             {showItemHeader ? (
               <div className="flex items-center gap-2 px-3 py-2 border-b border-border bg-muted/30">
                 {editable && (

@@ -18,6 +18,8 @@ interface LogsCalendarProps {
   onMonthChange: (date: Date) => void;
   dayContent: (date: Date) => React.ReactNode;
   headerRight?: React.ReactNode;
+  density?: "default" | "compact";
+  fillHeight?: boolean;
 }
 
 function useIsSmallScreen(): boolean {
@@ -27,7 +29,6 @@ function useIsSmallScreen(): boolean {
   useEffect(() => {
     const mql = window.matchMedia("(max-width: 639px)");
     const handler = (e: MediaQueryListEvent) => setIsSmall(e.matches);
-    setIsSmall(mql.matches);
     mql.addEventListener("change", handler);
     return () => mql.removeEventListener("change", handler);
   }, []);
@@ -39,8 +40,11 @@ export function LogsCalendar({
   onMonthChange,
   dayContent,
   headerRight,
+  density = "default",
+  fillHeight = false,
 }: LogsCalendarProps) {
   const isSmall = useIsSmallScreen();
+  const compact = density === "compact";
   const weeks = getCalendarWeeks(month);
 
   if (isSmall) {
@@ -55,18 +59,18 @@ export function LogsCalendar({
   }
 
   return (
-    <div className="w-full">
+    <div className={fillHeight ? "flex h-full w-full min-h-0 flex-col" : "w-full"}>
       {/* Header */}
-      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between mb-4">
+      <div className={`flex flex-col sm:flex-row sm:items-center sm:justify-between ${compact ? "mb-1 gap-1" : "mb-4 gap-3"}`}>
         <div className="flex items-center gap-2">
-          <h2 className="text-lg font-semibold">
+          <h2 className={compact ? "text-sm font-semibold" : "text-lg font-semibold"}>
             {format(month, "MMMM yyyy")}
           </h2>
           <div className="flex items-center">
             <Button
               variant="ghost"
               size="icon"
-              className="h-8 w-8"
+              className={compact ? "h-6 w-6" : "h-8 w-8"}
               onClick={() => onMonthChange(subMonths(month, 1))}
             >
               <ChevronLeft className="h-4 w-4" />
@@ -74,7 +78,7 @@ export function LogsCalendar({
             <Button
               variant="ghost"
               size="icon"
-              className="h-8 w-8"
+              className={compact ? "h-6 w-6" : "h-8 w-8"}
               onClick={() => onMonthChange(addMonths(month, 1))}
             >
               <ChevronRight className="h-4 w-4" />
@@ -85,14 +89,14 @@ export function LogsCalendar({
       </div>
 
       {/* Calendar grid - horizontal scroll on mobile */}
-      <div className="overflow-x-auto -mx-4 px-4 sm:mx-0 sm:px-0">
-        <div className="border border-border rounded-lg overflow-hidden min-w-[500px] sm:min-w-0">
+      <div className={`overflow-x-auto -mx-4 px-4 sm:mx-0 sm:px-0 ${fillHeight ? "min-h-0 flex-1" : ""}`}>
+        <div className={`border border-border rounded-lg overflow-hidden min-w-[500px] sm:min-w-0 ${fillHeight ? "flex h-full min-h-0 flex-col" : ""}`}>
           {/* Day names header */}
           <div className="grid grid-cols-7 bg-muted/50">
             {DAY_NAMES.map((day) => (
               <div
                 key={day}
-                className="py-2 text-center text-xs font-medium text-muted-foreground border-b border-border"
+                className={`${compact ? "py-1 text-[10px]" : "py-2 text-xs"} text-center font-medium text-muted-foreground border-b border-border`}
               >
                 {day}
               </div>
@@ -101,7 +105,7 @@ export function LogsCalendar({
 
           {/* Weeks */}
           {weeks.map((week, weekIndex) => (
-            <div key={weekIndex} className="grid grid-cols-7">
+            <div key={weekIndex} className={`grid grid-cols-7 ${fillHeight ? "min-h-0 flex-1" : ""}`}>
               {week.map((date, dayIndex) => {
                 const inCurrentMonth = isSameMonth(date, month);
                 const today = isToday(date);
@@ -110,7 +114,7 @@ export function LogsCalendar({
                   <div
                     key={dayIndex}
                     className={`
-                      min-h-[80px] sm:min-h-[100px] p-1 sm:p-1.5 border-b border-r border-border last:border-r-0
+                      ${compact ? "min-h-[48px] p-1" : "min-h-[80px] sm:min-h-[100px] p-1 sm:p-1.5"} border-b border-r border-border last:border-r-0
                       ${!inCurrentMonth ? "bg-muted/30" : ""}
                       ${today ? "bg-primary/5" : ""}
                     `}
@@ -119,7 +123,7 @@ export function LogsCalendar({
                     <div className="flex items-center justify-between mb-1">
                       <span
                         className={`
-                          text-xs sm:text-sm font-medium
+                          ${compact ? "text-[10px]" : "text-xs sm:text-sm"} font-medium
                           ${!inCurrentMonth ? "text-muted-foreground/50" : ""}
                           ${today ? "text-primary font-bold" : ""}
                         `}
@@ -127,7 +131,7 @@ export function LogsCalendar({
                         {format(date, "d")}
                       </span>
                       {today && (
-                        <span className="text-[10px] sm:text-xs text-primary font-medium">
+                        <span className={`${compact ? "text-[9px]" : "text-[10px] sm:text-xs"} text-primary font-medium`}>
                           Today
                         </span>
                       )}

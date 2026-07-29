@@ -1,3 +1,4 @@
+/* eslint-disable react-refresh/only-export-components -- Panel registry files export a definition alongside their render components. */
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { Link } from "react-router-dom";
 import { CalendarDays, AlertCircle, ChevronDown, ChevronUp, Copy } from "lucide-react";
@@ -31,7 +32,13 @@ function groupByDate(instances: RecentInstance[]): Record<string, RecentInstance
 }
 
 // Compact card for a single instance (or duplicate group) inside a calendar day cell
-function InstanceDayCard({ group }: { group: RecentInstance[] }) {
+function InstanceDayCard({
+  group,
+  compact,
+}: {
+  group: RecentInstance[];
+  compact: boolean;
+}) {
   const [imageError, setImageError] = useState(false);
   const [showModal, setShowModal] = useState(false);
   const instance = group[0];
@@ -43,7 +50,7 @@ function InstanceDayCard({ group }: { group: RecentInstance[] }) {
     : `/instances/${instance.id}`;
 
   const card = (
-    <div className="relative h-8 sm:h-10 rounded overflow-hidden group cursor-pointer transition-all hover:scale-[1.02] hover:shadow-md">
+    <div className={`relative overflow-hidden rounded group cursor-pointer transition-all hover:scale-[1.02] hover:shadow-md ${compact ? "h-6" : "h-8 sm:h-10"}`}>
       <div className="absolute inset-0 bg-gradient-to-br from-slate-700 to-slate-800" />
       {!imageError && (
         <img
@@ -56,9 +63,15 @@ function InstanceDayCard({ group }: { group: RecentInstance[] }) {
       )}
       <div className="absolute inset-0 bg-gradient-to-r from-black/70 via-black/50 to-black/40" />
       <div className="relative z-10 h-full flex items-center px-1.5">
-        <span className="text-[10px] sm:text-xs font-medium text-white truncate drop-shadow-lg group-hover:text-amber-300 transition-colors">
-          <span className="sm:hidden">{abbrev}</span>
-          <span className="hidden sm:inline">{instance.name}</span>
+        <span className={`${compact ? "text-[9px]" : "text-[10px] sm:text-xs"} font-medium text-white truncate drop-shadow-lg group-hover:text-amber-300 transition-colors`}>
+          {compact ? (
+            abbrev
+          ) : (
+            <>
+              <span className="sm:hidden">{abbrev}</span>
+              <span className="hidden sm:inline">{instance.name}</span>
+            </>
+          )}
         </span>
         {isDuplicate && (
           <span className="ml-auto flex items-center gap-0.5 text-[9px] text-white/70 bg-black/50 px-1 py-0.5 rounded flex-shrink-0">
@@ -89,26 +102,32 @@ function InstanceDayCard({ group }: { group: RecentInstance[] }) {
   return <Link to={instanceUrl} className="block">{card}</Link>;
 }
 
-function ExpandableDayCell({ instances }: { instances: RecentInstance[] }) {
+function ExpandableDayCell({
+  instances,
+  compact,
+}: {
+  instances: RecentInstance[];
+  compact: boolean;
+}) {
   const [expanded, setExpanded] = useState(false);
-  const MAX_SHOWN = 3;
+  const maxShown = compact ? 1 : 3;
 
   const groups = useMemo(() => groupDuplicateInstances(instances), [instances]);
 
   if (groups.length === 0) return null;
 
-  const shown = expanded ? groups : groups.slice(0, MAX_SHOWN);
-  const remaining = groups.length - MAX_SHOWN;
+  const shown = expanded ? groups : groups.slice(0, maxShown);
+  const remaining = groups.length - maxShown;
 
   return (
     <>
       {shown.map((group) => (
-        <InstanceDayCard key={group[0].id} group={group} />
+        <InstanceDayCard key={group[0].id} group={group} compact={compact} />
       ))}
-      {groups.length > MAX_SHOWN && (
+      {groups.length > maxShown && (
         <button
           onClick={() => setExpanded(!expanded)}
-          className="w-full text-[10px] text-muted-foreground hover:text-foreground bg-muted/50 hover:bg-muted px-1.5 py-1 rounded text-center transition-colors flex items-center justify-center gap-0.5"
+          className={`w-full text-muted-foreground hover:text-foreground bg-muted/50 hover:bg-muted rounded text-center transition-colors flex items-center justify-center gap-0.5 ${compact ? "text-[9px] px-1 py-0.5" : "text-[10px] px-1.5 py-1"}`}
         >
           {expanded ? (
             <>
@@ -127,11 +146,13 @@ function ExpandableDayCell({ instances }: { instances: RecentInstance[] }) {
   );
 }
 
-function CalendarContent({ config, guild }: GuildPanelRenderProps<CalendarConfig>) {
+function CalendarContent({ config, guild, position }: GuildPanelRenderProps<CalendarConfig>) {
   const [month, setMonth] = useState(() => new Date());
   const [instances, setInstances] = useState<RecentInstance[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+
+  const compact = position.h <= 5;
 
   const category = config.category || "all";
   const hasVideo = config.hasVideo === "with";
@@ -174,9 +195,9 @@ function CalendarContent({ config, guild }: GuildPanelRenderProps<CalendarConfig
       const dayInstances = byDate[key];
       if (!dayInstances || dayInstances.length === 0) return null;
 
-      return <ExpandableDayCell instances={dayInstances} />;
+      return <ExpandableDayCell instances={dayInstances} compact={compact} />;
     },
-    [byDate]
+    [byDate, compact]
   );
 
   if (loading) {
@@ -197,11 +218,13 @@ function CalendarContent({ config, guild }: GuildPanelRenderProps<CalendarConfig
   }
 
   return (
-    <div className="p-1">
+    <div className="h-full min-h-0 p-1">
       <LogsCalendar
         month={month}
         onMonthChange={setMonth}
         dayContent={dayContent}
+        density={compact ? "compact" : "default"}
+        fillHeight
       />
     </div>
   );

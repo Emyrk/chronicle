@@ -2,6 +2,7 @@ import type { GuildPanelDefinition } from "./types";
 import { RecentRaidsPanel } from "./RecentRaids";
 import { MarkdownPanel } from "./Markdown";
 import { CalendarPanel } from "./Calendar";
+import { CompactCalendarPanel } from "./CompactCalendar";
 import { RaidClearsPanel } from "./RaidClears";
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -16,6 +17,7 @@ export const PANEL_REGISTRY: Record<string, AnyPanelDefinition> = {
   markdown: MarkdownPanel,
   // leaderboard: LeaderboardPanel,
   calendar: CalendarPanel,
+  compact_calendar: CompactCalendarPanel,
   raid_clears: RaidClearsPanel,
 };
 

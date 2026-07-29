@@ -6,6 +6,13 @@ import { getPanelDefinition } from "../panels/registry";
 import { getPanelStyle } from "./PanelConfigModal";
 import { GripVertical, Settings, Trash2, Monitor, Smartphone } from "lucide-react";
 import { useIsMobile } from "@/hooks/useIsMobile";
+import { GridEdgeResizeControls } from "@/components/layout/GridEdgeResizeControls";
+import {
+  gridItemChanged,
+  resizeGridItemFromEdge,
+  type GridResizeDelta,
+  type GridResizeEdge,
+} from "@/components/layout/gridEdgeResize";
 
 // Small visibility badge for panel header
 function VisibilityBadge({ visibility }: { visibility: DeviceVisibility | undefined }) {
@@ -113,20 +120,45 @@ export function GuildPageCanvas({
           y: p.position.y,
           w: p.position.w,
           h: p.position.h,
-          minW: definition?.minSize?.w ?? 2,
-          minH: definition?.minSize?.h ?? 1,
-          maxW: definition?.maxSize?.w ?? 12,
-          maxH: definition?.maxSize?.h ?? 8,
+          minW: definition?.minSize?.w,
+          minH: definition?.minSize?.h,
+          maxW: definition?.maxSize?.w,
+          maxH: definition?.maxSize?.h,
         };
       });
     },
     [panels, isMobile]
   );
 
-  const handleLayoutChange = (newLayout: readonly LayoutItem[]) => {
-    // Don't save mobile layout changes
+  const commitLayout = (newLayout: readonly LayoutItem[]) => {
+    // Don't save mobile layout changes. Committing only when interaction stops
+    // also prevents controlled-layout rerenders from pulling the item away
+    // from the pointer mid-drag or mid-resize.
     if (isMobile) return;
     onLayoutChange?.([...newLayout]);
+  };
+
+  const resizePanelFromEdge = (
+    panelId: string,
+    edge: GridResizeEdge,
+    delta: GridResizeDelta,
+  ) => {
+    const item = layout.find((entry) => entry.i === panelId);
+    if (!item) return;
+
+    const resized = resizeGridItemFromEdge(item, edge, delta, cols);
+    if (!gridItemChanged(item, resized)) return;
+    commitLayout(layout.map((entry) => (entry.i === panelId ? resized : entry)));
+  };
+
+  const canResizePanelFromEdge = (
+    panelId: string,
+    edge: GridResizeEdge,
+    delta: GridResizeDelta,
+  ) => {
+    const item = layout.find((entry) => entry.i === panelId);
+    if (!item) return false;
+    return gridItemChanged(item, resizeGridItemFromEdge(item, edge, delta, cols));
   };
 
   if (panels.length === 0) {
@@ -149,6 +181,7 @@ export function GuildPageCanvas({
         gridConfig={{
           cols,
           rowHeight,
+          containerPadding: [0, 0],
         }}
         dragConfig={{
           handle: ".drag-handle",
@@ -157,22 +190,30 @@ export function GuildPageCanvas({
         resizeConfig={{
           enabled: isEditing && !isMobile,
         }}
-        onLayoutChange={handleLayoutChange}
+        onDragStop={commitLayout}
+        onResizeStop={commitLayout}
       >
       {panels.map((panel) => {
         const definition = getPanelDefinition(panel.panel_type);
         if (!definition) {
           return (
-            <div key={panel.id} className="bg-destructive/10 rounded-lg p-4 flex items-center justify-between gap-2">
+            <div key={panel.id} className="group/resize-panel relative flex items-center justify-between gap-2 rounded-lg bg-destructive/10 p-4">
               <span>Unknown panel type: {panel.panel_type}</span>
               {isEditing && (
-                <button
-                  aria-label={`Delete unknown panel ${panel.panel_type}`}
-                  onClick={() => onPanelDelete?.(panel.id)}
-                  className="p-1 rounded hover:bg-destructive/20 text-destructive"
-                >
-                  <Trash2 className="h-4 w-4" />
-                </button>
+                <>
+                  <button
+                    aria-label={`Delete unknown panel ${panel.panel_type}`}
+                    onClick={() => onPanelDelete?.(panel.id)}
+                    className="rounded p-1 text-destructive hover:bg-destructive/20"
+                  >
+                    <Trash2 className="h-4 w-4" />
+                  </button>
+                  <GridEdgeResizeControls
+                    label={`unknown panel ${panel.panel_type}`}
+                    onResize={(edge, delta) => resizePanelFromEdge(panel.id, edge, delta)}
+                    canResize={(edge, delta) => canResizePanelFromEdge(panel.id, edge, delta)}
+                  />
+                </>
               )}
             </div>
           );
@@ -194,7 +235,7 @@ export function GuildPageCanvas({
         return (
           <div
             key={panel.id}
-            className={`${bgClass} rounded-lg overflow-hidden shadow-sm relative ${isEditing && style.background === "transparent" ? "border border-dashed border-muted-foreground/30" : "border border-border"}`}
+            className={`group/resize-panel ${bgClass} relative overflow-hidden rounded-lg shadow-sm ${isEditing && style.background === "transparent" ? "border border-dashed border-muted-foreground/30" : "border border-border"}`}
             style={bgStyle}
           >
             {showHeader && (
@@ -246,6 +287,13 @@ export function GuildPageCanvas({
                   <Trash2 className="h-3 w-3" />
                 </button>
               </div>
+            )}
+            {isEditing && (
+              <GridEdgeResizeControls
+                label={panelLabel}
+                onResize={(edge, delta) => resizePanelFromEdge(panel.id, edge, delta)}
+                canResize={(edge, delta) => canResizePanelFromEdge(panel.id, edge, delta)}
+              />
             )}
             <div
               className="p-3 overflow-auto styled-scrollbar"
