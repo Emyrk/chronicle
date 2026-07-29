@@ -131,9 +131,15 @@ export function getInstanceConfig(name: string): InstanceConfig | undefined {
   return canonical ? INSTANCE_CONFIG[canonical] : undefined;
 }
 
-export function getInstanceCategory(name: string): InstanceCategory {
+export function getInstanceCategory(
+  name: string,
+  flavor: readonly string[] = [],
+): InstanceCategory {
   const canonical = resolveInstanceName(name);
   if (!canonical) return "unknown";
+  if (canonical === "Scarlet Monastery" && flavor.includes("vanillaplus")) {
+    return "raid";
+  }
   return INSTANCE_CONFIG[canonical].category ?? "dungeon";
 }
 

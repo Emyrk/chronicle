@@ -4,7 +4,8 @@ import { Popover as PopoverPrimitive } from "radix-ui";
 import { Card } from "@/components/ui/Card/Card";
 import { Button } from "@/components/ui/button";
 
-import { useSupportedInstances, useRealms } from "@/api/queries";
+import { useSupportedInstances, useRealms, useSiteConfig } from "@/api/queries";
+import { serverCapabilities } from "@/config/serverCapabilities";
 import { useUrlState, serializers } from "@/hooks/useUrlState";
 import {
   getInstanceCategory,
@@ -126,6 +127,10 @@ export function RecentRaids() {
 
   const { data: supportedInstances } = useSupportedInstances();
   const { data: realms } = useRealms();
+  const { data: siteConfig } = useSiteConfig();
+  const instanceFlavor = siteConfig?.dataset_flavor?.length
+    ? siteConfig.dataset_flavor
+    : serverCapabilities.defaultFlavor;
 
   const [rawCategory, setRawCategory] = useUrlState("cat", "all", serializers.string);
   const [selectedInstances, setSelectedInstances] = useUrlState("inst", [], serializers.stringArray);
@@ -165,8 +170,10 @@ export function RecentRaids() {
       return instanceOptions;
     }
 
-    return instanceOptions.filter((name) => getInstanceCategory(name) === category);
-  }, [category, instanceOptions]);
+    return instanceOptions.filter(
+      (name) => getInstanceCategory(name, instanceFlavor) === category,
+    );
+  }, [category, instanceFlavor, instanceOptions]);
 
   const selectedInstancesValid = useMemo(
     () => stableSelectedInstances.filter((name) => instanceOptions.includes(name)),
