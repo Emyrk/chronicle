@@ -9,6 +9,7 @@ export interface IncomingTimelineEvent {
   type: "damage" | "heal" | "absorbed" | "resource_change" | "aura_cast";
   amount: number;
   overheal?: number;
+  blocked?: number;
   absorbed?: number;
 }
 

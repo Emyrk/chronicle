@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState, type MouseEvent } from "react";
-import { ChevronDown, ChevronUp, GripHorizontal, HeartPulse, Shield, Swords, X } from "lucide-react";
+import { ChevronDown, ChevronUp, GripHorizontal, HeartPulse, Shield, ShieldBan, Swords, X } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { SpellIdTooltip } from "@/components/ui/SpellIdTooltip/SpellIdTooltip";
 import { EventTimelinePreview } from "./EventTimelinePreview";
@@ -50,6 +50,41 @@ function eventColors(type: IncomingEventDisplay["type"]): string {
   if (type === "damage") return "bg-red-500/10 text-red-300";
   if (type === "absorbed") return "bg-blue-500/10 text-blue-300";
   return "bg-green-500/10 text-green-300";
+}
+
+export function IncomingEventAmount({ entry }: { entry: IncomingEventDisplay }) {
+  const effective = entry.type === "heal"
+    ? Math.max(0, entry.amount - (entry.overheal ?? 0))
+    : entry.amount;
+
+  if (entry.type === "damage") {
+    return (
+      <span className="inline-flex items-center justify-end gap-1.5 font-mono">
+        <span>-{effective.toLocaleString()}</span>
+        {entry.absorbed ? (
+          <span className="inline-flex items-center text-blue-300" data-absorbed-amount>
+            <Shield className="mr-px inline h-2.5 w-2.5" />
+            {entry.absorbed.toLocaleString()}
+          </span>
+        ) : null}
+        {entry.blocked ? (
+          <span className="inline-flex items-center text-amber-300" data-blocked-amount>
+            <ShieldBan className="mr-px inline h-2.5 w-2.5" />
+            {entry.blocked.toLocaleString()}
+          </span>
+        ) : null}
+      </span>
+    );
+  }
+
+  return (
+    <span className="font-mono">
+      {entry.type === "absorbed" ? "◇" : "+"}{effective.toLocaleString()}
+      {entry.type === "heal" && entry.overheal ? (
+        <span className="ml-1 text-amber-300/70">+{entry.overheal.toLocaleString()}</span>
+      ) : null}
+    </span>
+  );
 }
 
 export function IncomingEventsBreakout({
@@ -227,26 +262,20 @@ export function IncomingEventsBreakout({
             className="relative min-w-0 flex-1 overflow-y-auto styled-scrollbar"
           >
             <div className="relative">
-              {rows.map((entry) => {
-                const effective = entry.type === "heal" ? Math.max(0, entry.amount - (entry.overheal ?? 0)) : entry.amount;
-                return (
-                  <div
-                    key={`${entry.eventIndex}-${entry.offsetMilli}-${entry.type}`}
-                    className={cn("grid grid-cols-[58px_120px_1fr_auto] items-center border-b border-white/[0.035] px-3 text-2xs", eventColors(entry.type))}
-                    style={{ height: ROW_HEIGHT }}
-                  >
-                    <span className="font-mono text-muted-foreground">{formatRelativeTime(relativeEventTime(entry.offsetMilli, anchorOffsetMilli))}</span>
-                    <span className="truncate pr-2">{entry.casterName}</span>
-                    <span className="truncate pr-2">
-                      <SpellIdTooltip spellId={entry.type === "absorbed" ? entry.absorbSpellId ?? null : entry.spellId} name={entry.type === "absorbed" ? entry.absorbSpellName || entry.sourceName : entry.sourceName} size={13} />
-                    </span>
-                    <span className="font-mono">
-                      {entry.type === "damage" ? "-" : entry.type === "absorbed" ? "◇" : "+"}{effective.toLocaleString()}
-                      {entry.type === "heal" && entry.overheal ? <span className="ml-1 text-amber-300/70">+{entry.overheal.toLocaleString()}</span> : null}
-                    </span>
-                  </div>
-                );
-              })}
+              {rows.map((entry) => (
+                <div
+                  key={`${entry.eventIndex}-${entry.offsetMilli}-${entry.type}`}
+                  className={cn("grid grid-cols-[58px_120px_1fr_auto] items-center border-b border-white/[0.035] px-3 text-2xs", eventColors(entry.type))}
+                  style={{ height: ROW_HEIGHT }}
+                >
+                  <span className="font-mono text-muted-foreground">{formatRelativeTime(relativeEventTime(entry.offsetMilli, anchorOffsetMilli))}</span>
+                  <span className="truncate pr-2">{entry.casterName}</span>
+                  <span className="truncate pr-2">
+                    <SpellIdTooltip spellId={entry.type === "absorbed" ? entry.absorbSpellId ?? null : entry.spellId} name={entry.type === "absorbed" ? entry.absorbSpellName || entry.sourceName : entry.sourceName} size={13} />
+                  </span>
+                  <IncomingEventAmount entry={entry} />
+                </div>
+              ))}
               {cursorY !== null && (
                 <div className="pointer-events-none absolute left-0 right-0 z-10" style={{ top: cursorY }}>
                   <div className="ml-10 h-0.5 bg-gradient-to-r from-amber-200 to-amber-200/20 shadow-[0_0_8px_rgba(253,230,138,.55)]" />
