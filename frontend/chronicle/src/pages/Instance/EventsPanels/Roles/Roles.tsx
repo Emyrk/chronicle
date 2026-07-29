@@ -26,6 +26,8 @@ export function createRolesPanel(): PanelDefinition<any, any> {
     id: "roles",
     label: "Roles",
     icon: <Users className="h-4 w-4" />,
+    selfManagesAggregation: true,
+    syncDataMode: "full",
     
     render: (props) => {
       // RolesContent handles its own data fetching

@@ -19,7 +19,9 @@ import {
   getRoleSummary 
 } from "../processors";
 import { usePanelAggregation } from "../usePanelAggregation";
-import { PANELS } from "../EventsPanel";
+import { createDamageTakenPanel } from "../DamageTaken/DamageTaken";
+import { createHealingDonePanel } from "../HealingDone/HealingDone";
+import { createDamageDonePanel } from "../DamageDone/DamageDone";
 import { formatNumber } from "@/lib/format";
 import { ScrollArea } from "@/components/ui/ScrollArea/ScrollArea";
 
@@ -244,10 +246,20 @@ interface RoleInferenceResult {
 }
 
 export const RolesContent = ({ context }: RolesContentProps) => {
-  // Reuse existing processors for damage taken, healing done, and damage done
-  const damageTakenPanel = PANELS.damage_taken;
-  const healingDonePanel = PANELS.healing_done;
-  const damageDonePanel = PANELS.damage_done;
+  // Role inference always uses complete encounter data. Clone the source panels with
+  // full-data Sync behavior so the moving Sync cursor cannot rebuild these results.
+  const damageTakenPanel = useMemo(
+    () => ({ ...createDamageTakenPanel("players"), syncDataMode: "full" as const }),
+    [],
+  );
+  const healingDonePanel = useMemo(
+    () => ({ ...createHealingDonePanel("players"), syncDataMode: "full" as const }),
+    [],
+  );
+  const damageDonePanel = useMemo(
+    () => ({ ...createDamageDonePanel("players"), syncDataMode: "full" as const }),
+    [],
+  );
   
   // Create a stable context that doesn't change when player/enemy selection changes
   // This prevents reprocessing - only encounter changes should trigger reprocess
