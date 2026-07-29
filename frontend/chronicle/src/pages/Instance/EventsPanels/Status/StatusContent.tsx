@@ -11,6 +11,12 @@ import { useSyncModeContextOptional } from "../../SyncModeContext";
 import { useInferredRoles } from "../Roles/useInferredRoles";
 import type { StatusResult, StatusTimelineEvent, StatusUnitKind } from "./status.processor";
 import { sortStatusEnemySnapshots, statusEnemyRowOpacity } from "./statusEnemies";
+import {
+  createStatusRaidHealthModel,
+  statusRaidHealthAt,
+  statusRaidHealthTimeline,
+  type StatusRaidHealthModel,
+} from "./statusRaidHealth";
 import { sortStatusSnapshotsByRole } from "./statusRoles";
 import {
   STATUS_WAVEFORM_COLORS,
@@ -233,6 +239,79 @@ function toIncomingEvent(event: StatusTimelineEvent): IncomingEventDisplay | nul
   };
 }
 
+function raidHealthColor(percent: number): string {
+  if (percent < 25) return "bg-red-500/75";
+  if (percent < 55) return "bg-amber-500/55";
+  return "bg-emerald-500/50";
+}
+
+function RaidHealthSummary({
+  model,
+  startMilli,
+  endMilli,
+  cursorMilli,
+}: {
+  model: StatusRaidHealthModel;
+  startMilli: number;
+  endMilli: number;
+  cursorMilli: number;
+}) {
+  const buckets = useMemo(
+    () => statusRaidHealthTimeline(model, startMilli, endMilli, 96),
+    [endMilli, model, startMilli],
+  );
+  const current = statusRaidHealthAt(model, cursorMilli);
+  const duration = Math.max(1, endMilli - startMilli);
+  const cursorPercent = Math.max(0, Math.min(100, (cursorMilli - startMilli) / duration * 100));
+
+  return (
+    <section
+      className="border-b border-border/40 bg-black/10 px-5 py-2"
+      aria-label="Estimated raid health timeline"
+      title="Estimated from relative deficits and deaths. Players are assumed to begin at full health; deaths count as zero."
+    >
+      <div className="mb-1.5 flex items-baseline gap-2">
+        <span className="text-[9px] font-semibold uppercase tracking-[0.16em] text-muted-foreground">
+          Estimated raid health
+        </span>
+        <span className="font-mono text-xs font-semibold text-foreground">
+          {Math.round(current.percent)}%
+        </span>
+        <span className="text-[9px] text-muted-foreground">
+          {current.alive}/{current.total} active
+        </span>
+        <span className="ml-auto text-[9px] text-muted-foreground/70">
+          encounter estimate
+        </span>
+      </div>
+      <div className="relative h-11 overflow-hidden rounded-sm border border-white/[0.07] bg-[#111316] px-1.5 pb-1 pt-1.5">
+        <div className="absolute inset-x-0 top-1/2 border-t border-dashed border-white/[0.06]" />
+        <div className="relative flex h-full items-end gap-px">
+          {buckets.map((bucket, index) => {
+            const isFuture = bucket.startMilli > cursorMilli;
+            return (
+              <span
+                key={`${bucket.startMilli}:${index}`}
+                className={cn(
+                  "min-w-0 flex-1 rounded-t-[1px] transition-[height,opacity]",
+                  raidHealthColor(bucket.percent),
+                  isFuture && "opacity-25",
+                )}
+                style={{ height: `${Math.max(2, bucket.percent)}%` }}
+                title={`${Math.round(bucket.percent)}% estimated raid health`}
+              />
+            );
+          })}
+        </div>
+        <div
+          className="pointer-events-none absolute inset-y-0 z-10 w-px bg-white/80 shadow-[0_0_5px_rgba(255,255,255,.55)]"
+          style={{ left: `${cursorPercent}%` }}
+        />
+      </div>
+    </section>
+  );
+}
+
 export function StatusContent(props: PanelRenderProps<StatusResult>) {
   const { result, context, panelOption, setPanelOption } = props;
   const sync = useSyncModeContextOptional();
@@ -259,6 +338,11 @@ export function StatusContent(props: PanelRenderProps<StatusResult>) {
     }
     return { bosses, enemies };
   }, [context.instance.encounters, encounter]);
+  const raidHealthModel = useMemo(() => createStatusRaidHealthModel(
+    encounter
+      ? Array.from(encounter.units.values()).filter((unit) => unit.kind === "player")
+      : [],
+  ), [encounter]);
   const matchingUnits = useMemo(() => {
     if (!encounter) return [];
     return Array.from(encounter.units.values()).filter((unit) =>
@@ -391,6 +475,14 @@ export function StatusContent(props: PanelRenderProps<StatusResult>) {
           </button>
         ) : null}
       </div>
+      {encounter && cursorMilli !== null && raidHealthModel.unitCount > 0 ? (
+        <RaidHealthSummary
+          model={raidHealthModel}
+          startMilli={encounter.startMilli}
+          endMilli={encounter.endMilli}
+          cursorMilli={cursorMilli}
+        />
+      ) : null}
       <div className="grid grid-cols-[minmax(185px,0.85fr)_minmax(190px,0.85fr)_minmax(320px,1.8fr)] items-center gap-4 border-b border-border/40 px-5 py-1.5 text-[10px] uppercase tracking-[0.14em] text-muted-foreground">
         <span>Unit</span>
         <span>Relative health change</span>
