@@ -186,18 +186,31 @@ export function expireOverhealStripe(
   return state;
 }
 
+export function isStatusRevivalEvidence(
+  event: StatusTimelineEvent,
+  deadSinceMilli: number,
+): boolean {
+  if (event.timestampMilli - deadSinceMilli < RELATIVE_HEALTH_DEATH_RESET_MILLI) return false;
+  // Incoming damage and lingering heals commonly arrive after a slain event and
+  // are not evidence of a resurrection. A later player-initiated cast is the
+  // strongest signal currently available in Status data that the unit is active.
+  return event.kind === "cast_start" || event.kind === "cast" || event.kind === "cast_fail";
+}
+
 export function statusUnitDeadSince(
   orderedEvents: StatusTimelineEvent[],
   cursorMilli: number,
 ): number | null {
-  for (let index = orderedEvents.length - 1; index >= 0; index--) {
-    const event = orderedEvents[index];
-    if (event.timestampMilli > cursorMilli) continue;
-    // Until the parser exposes an authoritative resurrection event, any later
-    // activity from or affecting the unit is evidence that it became active again.
-    return event.kind === "death" ? event.timestampMilli : null;
+  let deadSinceMilli: number | null = null;
+  for (const event of orderedEvents) {
+    if (event.timestampMilli > cursorMilli) break;
+    if (event.kind === "death") {
+      deadSinceMilli = event.timestampMilli;
+    } else if (deadSinceMilli !== null && isStatusRevivalEvidence(event, deadSinceMilli)) {
+      deadSinceMilli = null;
+    }
   }
-  return null;
+  return deadSinceMilli;
 }
 
 export function isStatusUnitDead(

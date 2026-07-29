@@ -115,20 +115,25 @@ describe("snapshotStatusUnit", () => {
     });
   });
 
-  it("marks a dead unit active again when later activity indicates a revival", () => {
+  it("marks a dead unit active again when a later cast indicates a revival", () => {
     const death = event({ timestampMilli: 6_000, eventIndex: 1, kind: "death" });
-    const revivedActivity = event({ timestampMilli: 8_000, eventIndex: 2, kind: "heal", amount: 500 });
+    const revivedActivity = event({ timestampMilli: 8_000, eventIndex: 2, kind: "cast", amount: 0 });
     const timeline = unit([death, revivedActivity]);
 
     expect(snapshotStatusUnit(timeline, 7_000).deadSinceMilli).toBe(6_000);
     expect(snapshotStatusUnit(timeline, 8_000).deadSinceMilli).toBeNull();
   });
 
-  it("uses event ordering to detect same-timestamp revival activity", () => {
+  it("ignores post-death damage, lingering heals, and immediate casts", () => {
     const death = event({ timestampMilli: 6_000, eventIndex: 1, kind: "death" });
-    const revivedActivity = event({ timestampMilli: 6_000, eventIndex: 2, kind: "cast", amount: 0 });
+    const trailingDamage = event({ timestampMilli: 6_001, eventIndex: 2, kind: "damage", amount: 100 });
+    const lingeringHeal = event({ timestampMilli: 8_000, eventIndex: 3, kind: "heal", amount: 500 });
+    const immediateCast = event({ timestampMilli: 6_002, eventIndex: 4, kind: "cast", amount: 0 });
 
-    expect(snapshotStatusUnit(unit([revivedActivity, death]), 6_000).dead).toBe(false);
+    expect(snapshotStatusUnit(unit([death, trailingDamage, lingeringHeal, immediateCast]), 9_000)).toMatchObject({
+      dead: true,
+      deadSinceMilli: 6_000,
+    });
   });
 
   it("does not revive a unit from future activity before the cursor reaches it", () => {

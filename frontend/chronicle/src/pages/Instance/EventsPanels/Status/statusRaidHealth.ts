@@ -1,5 +1,9 @@
 import type { StatusTimelineEvent, StatusUnitTimeline } from "./status.processor";
-import { compareStatusEvents, RELATIVE_HEALTH_DEATH_RESET_MILLI } from "./statusTimeline";
+import {
+  compareStatusEvents,
+  isStatusRevivalEvidence,
+  RELATIVE_HEALTH_DEATH_RESET_MILLI,
+} from "./statusTimeline";
 
 export interface StatusRaidHealthPoint {
   timestampMilli: number;
@@ -122,11 +126,12 @@ function createUnitTrack(
   );
 
   let current = 0;
-  let dead = false;
+  let deadSinceMilli: number | null = null;
   const pendingDeathDeltas = new Map<string, number>();
   const points: StatusRaidHealthPoint[] = [];
 
   const appendPoint = (timestampMilli: number) => {
+    const dead = deadSinceMilli !== null;
     const point = { timestampMilli, fraction: healthFraction(current, dead, estimatedHealthPool), dead };
     const previous = points[points.length - 1];
     if (previous?.timestampMilli === timestampMilli) points[points.length - 1] = point;
@@ -150,10 +155,10 @@ function createUnitTrack(
       pendingDeathDeltas.set(key, (pendingDeathDeltas.get(key) ?? 0) + delta);
     }
     if (event.kind === "death") {
-      dead = true;
+      deadSinceMilli = event.timestampMilli;
       pendingDeathDeltas.set(`${event.timestampMilli}:${event.eventIndex}`, 0);
-    } else {
-      dead = false;
+    } else if (deadSinceMilli !== null && isStatusRevivalEvidence(event, deadSinceMilli)) {
+      deadSinceMilli = null;
     }
     appendPoint(event.timestampMilli);
   }

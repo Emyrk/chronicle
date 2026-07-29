@@ -57,6 +57,30 @@ describe("Status raid health estimate", () => {
     expect(statusRaidHealthAt(model, 2_000)).toEqual({ percent: 0, alive: 0, total: 2 });
   });
 
+  it("keeps players dead through trailing damage and lingering healing", () => {
+    const model = createStatusRaidHealthModel([
+      unit("one", [
+        event({ timestampMilli: 1_000, eventIndex: 1, kind: "death" }),
+        event({ timestampMilli: 1_001, eventIndex: 2, kind: "damage", amount: 100 }),
+        event({ timestampMilli: 5_000, eventIndex: 3, kind: "heal", amount: 500 }),
+      ]),
+    ]);
+
+    expect(statusRaidHealthAt(model, 6_000)).toEqual({ percent: 0, alive: 0, total: 1 });
+  });
+
+  it("restores an active player after a later cast", () => {
+    const model = createStatusRaidHealthModel([
+      unit("one", [
+        event({ timestampMilli: 1_000, eventIndex: 1, kind: "death" }),
+        event({ timestampMilli: 3_000, eventIndex: 2, kind: "cast" }),
+      ]),
+    ]);
+
+    expect(statusRaidHealthAt(model, 2_000)).toEqual({ percent: 0, alive: 0, total: 1 });
+    expect(statusRaidHealthAt(model, 3_000)).toEqual({ percent: 100, alive: 1, total: 1 });
+  });
+
   it("shows healing recovery after a raid-wide dip", () => {
     const model = createStatusRaidHealthModel([
       unit("one", [
