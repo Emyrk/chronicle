@@ -10,6 +10,7 @@ import { ScrollArea } from "@/components/ui/ScrollArea/ScrollArea";
 import { useMouse } from '@/hooks/useMouse';
 import { useIsMobile } from '@/hooks/useIsMobile';
 import { cn } from '@/lib/utils';
+import { BreakoutIdentity } from '@/components/ui/BreakoutPanel/BreakoutIdentity';
 import { X, GripHorizontal } from 'lucide-react';
 
 /* eslint-disable react-refresh/only-export-components */
@@ -234,8 +235,9 @@ function DraggablePinnedTooltip({ player, initialPosition, onClose, panelTitle, 
   const tooltipRef = useRef<HTMLDivElement>(null)
 
   const handleMouseDown = useCallback((e: React.MouseEvent) => {
-    // Only start drag from the header area, and not on mobile
-    if (!isMobile && (e.target as HTMLElement).closest('[data-drag-handle]')) {
+    const target = e.target as HTMLElement
+    // Only start drag from non-interactive header space, and not on mobile
+    if (!isMobile && target.closest('[data-drag-handle]') && !target.closest('button, input, select, a')) {
       e.preventDefault()
       setIsDragging(true)
       dragStartRef.current = {
@@ -284,31 +286,22 @@ function DraggablePinnedTooltip({ player, initialPosition, onClose, panelTitle, 
         />
         {/* Modal - centered */}
         <div
-          className="fixed inset-x-2 top-1/2 -translate-y-1/2 z-[200] flex flex-col bg-background rounded-lg max-h-[85vh] shadow-xl"
-          style={{ border: `2px solid color-mix(in oklch, ${player.color} 50%, transparent)` }}
+          className="fixed inset-x-2 top-1/2 z-[200] flex max-h-[85vh] -translate-y-1/2 flex-col rounded-lg bg-popover text-foreground shadow-xl"
+          style={{ border: `1px solid color-mix(in oklch, ${player.color} 60%, transparent)` }}
         >
           {/* Header */}
-          <div 
-            className="flex items-center gap-2 p-4 border-b border-border shrink-0"
-          >
-            <span 
-              className="w-3 h-3 rounded-full flex-shrink-0"
-              style={{ backgroundColor: player.color }}
-            />
-            <span className="font-medium">{player.playerName}</span>
-            <span className="text-muted-foreground text-xs">
-              {player.className}
-            </span>
+          <div className="flex shrink-0 items-center gap-2 border-b border-border px-2.5 py-1.5">
+            <BreakoutIdentity color={player.color} name={player.playerName} className={player.className} />
             {panelTitle && (
-              <span className="text-xs text-muted-foreground border-l border-border pl-2 ml-auto">
+              <span className="ml-auto border-l border-border pl-2 text-2xs text-muted-foreground">
                 {panelTitle}
               </span>
             )}
             <button
               onClick={onClose}
-              className={cn("p-2 rounded bg-destructive/5 text-destructive/75 hover:bg-destructive/25 hover:text-destructive cursor-pointer transition-colors", !panelTitle && "ml-auto")}
+              className={cn("rounded p-0.5 text-destructive/75 hover:bg-destructive/15 hover:text-destructive cursor-pointer transition-colors", !panelTitle && "ml-auto")}
             >
-              <X className="h-5 w-5" />
+              <X className="h-3.5 w-3.5" />
             </button>
           </div>
           {/* Content - scrollable both directions */}
@@ -329,32 +322,25 @@ function DraggablePinnedTooltip({ player, initialPosition, onClose, panelTitle, 
     <div
       ref={tooltipRef}
       data-breakout-panel
-      className="bg-popover text-foreground border-3 border-solid fixed z-[200] min-w-[340px] max-w-[90vw] rounded-md shadow-md"
+      className="fixed z-[200] min-w-[340px] max-w-[90vw] rounded-md bg-popover text-foreground shadow-md"
       style={{
         left: position.x,
         top: position.y,
         cursor: isDragging ? 'grabbing' : 'default',
-        border: `2px solid color-mix(in oklch, ${player.color} 50%, transparent)`,
+        border: `1px solid color-mix(in oklch, ${player.color} 60%, transparent)`,
       }}
       onMouseDown={handleMouseDown}
     >
       {/* Header with drag handle and close button */}
-      <div 
-        className="flex items-center gap-2 p-3 border-b border-border"
+      <div
+        className="flex items-center gap-2 border-b border-border px-2.5 py-1.5"
         data-drag-handle
         style={{ cursor: isDragging ? 'grabbing' : 'grab' }}
       >
-        <GripHorizontal className="h-4 w-4 flex-shrink-0" />
-        <span 
-          className="w-3 h-3 rounded-full flex-shrink-0"
-          style={{ backgroundColor: player.color }}
-        />
-        <span className="font-medium">{player.playerName}</span>
-        <span className="text-muted-foreground text-xs">
-          {player.className}
-        </span>
+        <GripHorizontal className="h-3 w-3 shrink-0 text-muted-foreground" />
+        <BreakoutIdentity color={player.color} name={player.playerName} className={player.className} />
         {panelTitle && (
-          <span className="text-xs text-muted-foreground border-l border-border pl-2 ml-auto">
+          <span className="ml-auto border-l border-border pl-2 text-2xs text-muted-foreground">
             {panelTitle}
           </span>
         )}
@@ -363,9 +349,9 @@ function DraggablePinnedTooltip({ player, initialPosition, onClose, panelTitle, 
             e.stopPropagation()
             onClose()
           }}
-          className={cn("p-1 rounded bg-destructive/5 text-destructive/75 hover:bg-destructive/25 hover:text-destructive cursor-pointer transition-colors", !panelTitle && "ml-auto")}
+          className={cn("rounded p-0.5 text-destructive/75 hover:bg-destructive/15 hover:text-destructive cursor-pointer transition-colors", !panelTitle && "ml-auto")}
         >
-          <X className="h-4 w-4" />
+          <X className="h-3.5 w-3.5" />
         </button>
       </div>
       <div>

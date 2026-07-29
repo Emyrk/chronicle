@@ -1,9 +1,10 @@
 import { useEffect, useMemo, useRef, useState, type MouseEvent } from "react";
-import { ChevronDown, ChevronUp, HeartPulse, Shield, Swords, X } from "lucide-react";
+import { ChevronDown, ChevronUp, GripHorizontal, HeartPulse, Shield, Swords, X } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { SpellIdTooltip } from "@/components/ui/SpellIdTooltip/SpellIdTooltip";
 import { EventTimelinePreview } from "./EventTimelinePreview";
 import type { EventTimelinePreviewEvent } from "./eventTimelinePreview";
+import { BreakoutIdentity } from "@/components/ui/BreakoutPanel/BreakoutIdentity";
 import { RelativeHealthBar } from "@/components/ui/RelativeHealthBar/RelativeHealthBar";
 import { calculateRelativeHealth } from "@/components/ui/RelativeHealthBar/relativeHealth";
 import { useSyncModeContextOptional } from "../../SyncModeContext";
@@ -145,11 +146,13 @@ export function IncomingEventsBreakout({
   const classColor = `var(--color-class-${className.toLowerCase()})`;
 
   return (
-    <div className="overflow-hidden rounded border border-red-500/35 bg-[#111113] shadow-lg shadow-black/30">
-      <div className="flex items-center gap-2 border-b border-white/5 px-2.5 py-1.5" data-drag-handle>
-        <span className="h-2 w-2 rounded-full shadow-[0_0_8px_currentColor]" style={{ color: classColor, backgroundColor: classColor }} />
-        <span className="text-xs font-semibold" style={{ color: classColor }}>{unitName}</span>
-        <span className="text-2xs uppercase tracking-widest text-muted-foreground">{className}</span>
+    <div
+      className="overflow-hidden rounded bg-popover text-foreground shadow-lg shadow-black/30"
+      style={{ border: `1px solid color-mix(in oklch, ${classColor} 60%, transparent)` }}
+    >
+      <div className="flex items-center gap-2 border-b border-border px-2.5 py-1.5" data-drag-handle>
+        <GripHorizontal className="h-3 w-3 shrink-0 text-muted-foreground" />
+        <BreakoutIdentity color={classColor} name={unitName} className={className} />
         <div className="flex-1" />
         <span className="font-mono text-2xs text-amber-200/80">
           {cursorMilli === null ? (sync?.enabled ? "waiting for window" : "hover to compare") : `${formatRelativeTime(cursorMilli)} ${sync?.enabled ? "playhead" : "cursor"}`}
