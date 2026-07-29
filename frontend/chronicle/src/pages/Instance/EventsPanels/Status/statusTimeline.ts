@@ -5,6 +5,7 @@ import { DEFAULT_STATUS_WINDOW } from "./statusWindow";
 export const STATUS_HISTORY_MILLI = DEFAULT_STATUS_WINDOW.historyMilli;
 export const STATUS_FUTURE_MILLI = DEFAULT_STATUS_WINDOW.futureMilli;
 export const OVERHEAL_EXPIRE_MILLI = 1_000;
+export const RELATIVE_HEALTH_DEATH_RESET_MILLI = 1_000;
 
 export interface StatusRelativeHealthBounds {
   minimum: number;
@@ -57,24 +58,62 @@ export function statusCursorMilli(encounter: StatusEncounter, syncTimestamp: Dat
   return encounter.endMilli;
 }
 
+function healthMessage(event: StatusTimelineEvent): RelativeHealthMessage | null {
+  const common = {
+    id: `${event.eventIndex}:${event.timestampMilli}:${event.kind}`,
+    timestamp: event.timestampMilli,
+    sequence: event.eventIndex,
+  };
+  if (event.kind === "damage") return { ...common, kind: "damage", amount: event.amount };
+  if (event.kind === "heal") return { ...common, kind: "healing", amount: event.amount, overheal: event.overheal };
+  if (event.kind === "absorbed") return { ...common, kind: "prevented", amount: event.amount };
+  return null;
+}
+
 function healthMessages(events: StatusTimelineEvent[], startMilli: number, cursorMilli: number): RelativeHealthMessage[] {
   return events.flatMap((event): RelativeHealthMessage[] => {
     if (event.timestampMilli < startMilli || event.timestampMilli > cursorMilli) return [];
-    const common = {
-      id: `${event.eventIndex}:${event.timestampMilli}:${event.kind}`,
-      timestamp: event.timestampMilli,
-      sequence: event.eventIndex,
-    };
-    if (event.kind === "damage") return [{ ...common, kind: "damage", amount: event.amount }];
-    if (event.kind === "heal") return [{ ...common, kind: "healing", amount: event.amount, overheal: event.overheal }];
-    if (event.kind === "absorbed") return [{ ...common, kind: "prevented", amount: event.amount }];
-    return [];
+    const message = healthMessage(event);
+    return message ? [message] : [];
   });
 }
 
 export function statusUnitRelativeHealthBounds(unit: StatusUnitTimeline): StatusRelativeHealthBounds {
-  const state = calculateRelativeHealth(healthMessages(unit.events, Number.NEGATIVE_INFINITY, Number.POSITIVE_INFINITY));
-  return { minimum: state.minimum, maximum: state.maximum };
+  const ordered = [...unit.events].sort(compareStatusEvents);
+  let segment: RelativeHealthMessage[] = [];
+  let minimum = 0;
+  let maximum = 0;
+
+  const includeSegment = () => {
+    const state = calculateRelativeHealth(segment);
+    minimum = Math.min(minimum, state.minimum);
+    maximum = Math.max(maximum, state.maximum);
+    segment = [];
+  };
+
+  for (const event of ordered) {
+    if (event.kind === "death") {
+      includeSegment();
+      continue;
+    }
+    const message = healthMessage(event);
+    if (message) segment.push(message);
+  }
+  includeSegment();
+
+  return { minimum, maximum };
+}
+
+function relativeHealthEventsAtCursor(
+  orderedEvents: StatusTimelineEvent[],
+  cursorMilli: number,
+): StatusTimelineEvent[] {
+  const resetBeforeMilli = cursorMilli - RELATIVE_HEALTH_DEATH_RESET_MILLI;
+  const resetDeath = [...orderedEvents].reverse().find(
+    (event) => event.kind === "death" && event.timestampMilli <= resetBeforeMilli,
+  );
+  if (!resetDeath) return orderedEvents;
+  return orderedEvents.filter((event) => compareStatusEvents(event, resetDeath) > 0);
 }
 
 function findActiveCast(events: StatusTimelineEvent[], cursorMilli: number): StatusTimelineEvent | null {
@@ -178,9 +217,10 @@ export function snapshotStatusUnit(
   const ordered = [...unit.events].sort(compareStatusEvents);
   const startMilli = cursorMilli - historyMilli;
   const endMilli = cursorMilli + futureMilli;
-  // Keep relative health in encounter coordinates so the current position and
-  // the encounter-wide extrema remain comparable as the visible window moves.
-  const relativeHealthMessages = healthMessages(ordered, Number.NEGATIVE_INFINITY, cursorMilli);
+  // Keep each life in encounter coordinates, then start a new relative-health
+  // segment one second after death. Encounter-wide bounds include every segment.
+  const healthEvents = relativeHealthEventsAtCursor(ordered, cursorMilli);
+  const relativeHealthMessages = healthMessages(healthEvents, Number.NEGATIVE_INFINITY, cursorMilli);
   const health = calculateRelativeHealth(relativeHealthMessages);
   const relativeHealthState = expireOverhealStripe(health, relativeHealthMessages, ordered, cursorMilli);
   const deadSinceMilli = statusUnitDeadSince(ordered, cursorMilli);

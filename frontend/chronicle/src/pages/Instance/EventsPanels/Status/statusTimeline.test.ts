@@ -79,6 +79,33 @@ describe("snapshotStatusUnit", () => {
     expect(snapshotStatusUnit(unit([start, completed]), 5_000).activeCast).toBeNull();
   });
 
+  it("resets relative health one second after death", () => {
+    const timeline = unit([
+      event({ timestampMilli: 1_000, eventIndex: 1, kind: "damage", amount: 500 }),
+      event({ timestampMilli: 2_000, eventIndex: 2, kind: "death" }),
+      event({ timestampMilli: 3_500, eventIndex: 3, kind: "damage", amount: 100 }),
+    ]);
+
+    expect(snapshotStatusUnit(timeline, 2_999).relativeHealthState.current).toBe(-500);
+    expect(snapshotStatusUnit(timeline, 3_000).relativeHealthState.current).toBe(0);
+    expect(snapshotStatusUnit(timeline, 3_500).relativeHealthState.current).toBe(-100);
+  });
+
+  it("calculates static encounter bounds across death-reset segments", () => {
+    const timeline = unit([
+      event({ timestampMilli: 1_000, eventIndex: 1, kind: "damage", amount: 1_000 }),
+      event({ timestampMilli: 2_000, eventIndex: 2, kind: "death" }),
+      event({ timestampMilli: 4_000, eventIndex: 3, kind: "heal", amount: 1_500 }),
+    ]);
+
+    const beforeReset = snapshotStatusUnit(timeline, 2_500);
+    const afterReset = snapshotStatusUnit(timeline, 4_000);
+
+    expect(beforeReset.relativeHealthBounds).toEqual({ minimum: -1_000, maximum: 1_500 });
+    expect(afterReset.relativeHealthBounds).toEqual(beforeReset.relativeHealthBounds);
+    expect(afterReset.relativeHealthState.current).toBe(1_500);
+  });
+
   it("marks a unit dead only after the cursor reaches its death", () => {
     const death = event({ timestampMilli: 6_000, eventIndex: 1, kind: "death" });
     expect(snapshotStatusUnit(unit([death]), 5_000).deadSinceMilli).toBeNull();

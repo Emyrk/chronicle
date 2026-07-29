@@ -36,6 +36,14 @@ describe("RelativeHealthBar", () => {
     expect(markup).toContain("max +500");
   });
 
+  it("supports shifting the zero baseline to favor deficit space", () => {
+    const markup = renderToStaticMarkup(
+      <RelativeHealthBar messages={[messages[0]]} zeroPercent={68} />,
+    );
+
+    expect(markup).toContain('style="left:68%"');
+  });
+
   it("renders prevented damage as an avoided leftward range", () => {
     const markup = renderToStaticMarkup(
       <RelativeHealthBar messages={[messages[0]]} />,

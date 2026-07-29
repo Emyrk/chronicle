@@ -197,6 +197,7 @@ function RelativeChange({ snapshot, density }: { snapshot: StatusUnitSnapshot; d
         messages={snapshot.relativeHealthMessages}
         state={snapshot.relativeHealthState}
         bounds={snapshot.relativeHealthBounds}
+        zeroPercent={68}
         className={cn("[&>div:last-child]:hidden", density === 0 ? "[&>div:first-child]:h-4" : density === 1 ? "[&>div:first-child]:h-5" : "[&>div:first-child]:h-6")}
       />
       {snapshot.dead ? (
@@ -390,7 +391,7 @@ export function StatusContent(props: PanelRenderProps<StatusResult>) {
           </button>
         ) : null}
       </div>
-      <div className="grid grid-cols-[minmax(185px,0.8fr)_minmax(240px,1.15fr)_minmax(300px,1.6fr)] items-center gap-4 border-b border-border/40 px-5 py-1.5 text-[10px] uppercase tracking-[0.14em] text-muted-foreground">
+      <div className="grid grid-cols-[minmax(185px,0.85fr)_minmax(190px,0.85fr)_minmax(320px,1.8fr)] items-center gap-4 border-b border-border/40 px-5 py-1.5 text-[10px] uppercase tracking-[0.14em] text-muted-foreground">
         <span>Unit</span>
         <span>Relative health change</span>
         <span className="flex items-center gap-2">
@@ -452,7 +453,7 @@ export function StatusContent(props: PanelRenderProps<StatusResult>) {
                 type="button"
                 onClick={(event) => selectUnit(unit.unitId, event.currentTarget)}
                 className={cn(
-                  "grid w-full grid-cols-[minmax(185px,0.8fr)_minmax(240px,1.15fr)_minmax(300px,1.6fr)] items-center gap-4 border-b border-border/25 text-left transition-[background-color,opacity] hover:bg-muted/20",
+                  "grid w-full grid-cols-[minmax(185px,0.85fr)_minmax(190px,0.85fr)_minmax(320px,1.8fr)] items-center gap-4 border-b border-border/25 text-left transition-[background-color,opacity] hover:bg-muted/20",
                   ROW_CLASSES[density],
                   snapshot.dead && "bg-black/35 hover:bg-black/30",
                   focusedUnitId === unit.unitId && "ring-1 ring-inset ring-amber-300/30",
