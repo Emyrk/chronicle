@@ -1643,6 +1643,7 @@ export interface ReusableResurrection {
   spell: ReusableResurrectionSpell;
   activity: ReusableActivityEntry[];
   activityCount: number;
+  isSynthetic: boolean;
 }
 
 export class ResurrectionDecoder {
@@ -1658,6 +1659,7 @@ export class ResurrectionDecoder {
     spell: this.reusableSpell,
     activity: [],
     activityCount: 0,
+    isSynthetic: false,
   };
 
   decode(data: Uint8Array, offset: number, length: number): ReusableResurrection {
@@ -1670,6 +1672,7 @@ export class ResurrectionDecoder {
     msg.spell.id = 0;
     msg.spell.name = "";
     msg.activityCount = 0;
+    msg.isSynthetic = false;
 
     while (offset < end) {
       const tag = data[offset++];
@@ -1691,6 +1694,7 @@ export class ResurrectionDecoder {
               offset += decoded.bytesRead;
               if (metaField === 1) msg.index = decoded.value;
               else if (metaField === 2) msg.offsetMilli = decoded.value;
+              else if (metaField === 4) msg.isSynthetic = decoded.value !== 0;
             } else if (metaWire === 2 && metaField === 3) {
               const decoded = readVarintFast(data, offset);
               offset += decoded.bytesRead;

@@ -37,6 +37,7 @@ function createAuraEvent(overrides: Partial<AuraProcessorEvent> = {}): AuraProce
     state: AuraState.Added,
     activity: [],
     activityCount: 0,
+    isSynthetic: false,
     spellAttackOutcome: null,
     ...overrides,
   };

@@ -29,6 +29,7 @@ function slain(offsetMilli = 1_000): SlainProcessorEvent {
   return {
     type: "slain", index: 1, offsetMilli, target: PLAYER, caster: ENEMY, attribution: null,
     activity: [], activityCount: 0,
+    isSynthetic: false,
   };
 }
 
@@ -42,12 +43,14 @@ function resurrection(offsetMilli = 3_000): ResurrectionProcessorEvent {
     spell: { id: 20484, name: "Rebirth" },
     activity: [],
     activityCount: 0,
+    isSynthetic: false,
   };
 }
 
 function damage(offsetMilli: number, hitType = HitTypeHit): DamageProcessorEvent {
   return {
     type: "damage", index: 3, offsetMilli, activity: [], activityCount: 0,
+    isSynthetic: false,
     caster: PLAYER, sourceName: "Smite", target: ENEMY, hitType, amount: 100,
     school: 3, tailers: [], tailerCount: 0, spellId: 585,
     spellAttackOutcome: null, overkill: 0,
@@ -57,6 +60,7 @@ function damage(offsetMilli: number, hitType = HitTypeHit): DamageProcessorEvent
 function heal(offsetMilli: number, hitType = HitTypeHit): HealProcessorEvent {
   return {
     type: "heal", index: 4, offsetMilli, activity: [], activityCount: 0,
+    isSynthetic: false,
     caster: PLAYER, sourceName: "Heal", target: OTHER, hitType, amount: 100,
     overheal: 0, absorbed: 0, school: 3, spellId: 2054,
     spellAttackOutcome: null,

@@ -42,6 +42,7 @@ describe('healingProcessor pet/object caster support', () => {
       spellAttackOutcome: null,
       activity: [],
       activityCount: 0,
+      isSynthetic: false,
       ...overrides,
     };
   }

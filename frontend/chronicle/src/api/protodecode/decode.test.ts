@@ -77,7 +77,7 @@ describe('readVarint64', () => {
 describe('FastResurrectionCursor', () => {
   it('decodes source, target, and spell', () => {
     const message = create(ResurrectionSchema, {
-      meta: create(EventMetaSchema, { index: 12, offsetMilli: 3456n }),
+      meta: create(EventMetaSchema, { index: 12, offsetMilli: 3456n, isSynthetic: true }),
       source: '0xSOURCE',
       target: '0xTARGET',
       spell: create(SpellDataSchema, { id: 48949, name: 'Redemption' }),
@@ -96,6 +96,7 @@ describe('FastResurrectionCursor', () => {
       source: '0xSOURCE',
       target: '0xTARGET',
       spell: { id: 48949, name: 'Redemption' },
+      isSynthetic: true,
     });
   });
 });

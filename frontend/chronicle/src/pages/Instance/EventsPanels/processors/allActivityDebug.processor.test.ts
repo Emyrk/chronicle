@@ -38,6 +38,7 @@ function createDamageEvent(): DamageProcessorEvent {
     tailerCount: 3,
     activity: [],
     activityCount: 0,
+    isSynthetic: false,
     spellId: 10414,
     spellAttackOutcome: null,
     overkill: 0,
@@ -76,6 +77,7 @@ describe("allActivityProcessor", () => {
       spell: { id: 48949, name: "Redemption" },
       activity: [],
       activityCount: 0,
+      isSynthetic: false,
     };
 
     allActivityProcessor.processEvent(

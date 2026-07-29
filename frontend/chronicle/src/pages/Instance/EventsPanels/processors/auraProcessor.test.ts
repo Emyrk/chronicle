@@ -15,6 +15,7 @@ function createAuraEvent(overrides: Partial<AuraProcessorEvent> = {}): AuraProce
     state: AuraState.Added,
     activity: [],
     activityCount: 0,
+    isSynthetic: false,
     spellAttackOutcome: null,
     ...overrides,
   };
@@ -30,6 +31,7 @@ function createSlainEvent(overrides: Partial<SlainProcessorEvent> = {}): SlainPr
     attribution: null,
     activity: [],
     activityCount: 0,
+    isSynthetic: false,
     ...overrides,
   };
 }

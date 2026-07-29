@@ -37,6 +37,7 @@ describe('enemyDamageTakenProcessor', () => {
       tailerCount: 0,
       activity: [],
       activityCount: 0,
+      isSynthetic: false,
       spellId: null,
       spellAttackOutcome: null,
       overkill: 0,

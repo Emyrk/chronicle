@@ -36,6 +36,7 @@ function createDamageEvent(overrides: Partial<DamageProcessorEvent> = {}): Damag
     tailerCount: 0,
     activity: [],
     activityCount: 0,
+    isSynthetic: false,
     spellId: 51099,
     spellAttackOutcome: AttackOutcomeHit | AttackOutcomeCrit | AttackOutcomeResist,
     overkill: 0,

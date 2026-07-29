@@ -27,6 +27,7 @@ function createDamageEvent(overrides: Partial<DamageProcessorEvent> = {}): Damag
     globalOffsetMilli: 0,
     activity: [],
     activityCount: 0,
+    isSynthetic: false,
     spellAttackOutcome: null,
     overkill: 0,
     caster: "0x0000000000000001",
@@ -50,6 +51,7 @@ function createHealEvent(overrides: Partial<HealProcessorEvent> = {}): HealProce
     globalOffsetMilli: 0,
     activity: [],
     activityCount: 0,
+    isSynthetic: false,
     spellAttackOutcome: null,
     caster: "0x0000000000000001",
     sourceName: "Flash Heal",
@@ -267,7 +269,7 @@ describe("evaluateFilters", () => {
     const filters: PanelFilter[] = [
       { type: "ability_hittype", value: ["crit"] },
     ];
-    const event = { type: "cast" as const, index: 0, offsetMilli: 0, activity: [], activityCount: 0 } as unknown as ProcessorEvent;
+    const event = { type: "cast" as const, index: 0, offsetMilli: 0, activity: [], activityCount: 0, isSynthetic: false } as unknown as ProcessorEvent;
     expect(evaluateFilters(filters, event, createContext())).toBe(false);
   });
 
