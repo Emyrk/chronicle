@@ -21,3 +21,38 @@ func TestWrathRegistryReplacesClassicOnyxia(t *testing.T) {
 	require.Nil(t, wrath.SpeedrunRules.LevelRange)
 	require.Equal(t, []uint32{10184}, wrath.SpeedrunRules.Requirements[0].EntryIDs)
 }
+
+func TestInstanceDetailsBossCount(t *testing.T) {
+	t.Parallel()
+
+	for _, tc := range []struct {
+		name      string
+		flavor    database.WoWFlavor
+		instance  string
+		bossCount *int
+	}{
+		{name: "vanilla onyxia", flavor: database.WoWFlavor{database.FlavorVanilla}, instance: "Onyxia's Lair", bossCount: intPtr(1)},
+		{name: "turtle onyxia", flavor: database.WoWFlavor{database.FlavorTurtle}, instance: "Onyxia's Lair", bossCount: intPtr(2)},
+		{name: "epoch onyxia", flavor: database.WoWFlavor{database.FlavorEpoch}, instance: "Onyxia's Lair", bossCount: intPtr(3)},
+		{name: "naxxramas groups multi-unit encounters", flavor: database.WoWFlavor{database.FlavorVanilla}, instance: "Naxxramas", bossCount: intPtr(15)},
+		{name: "gruul groups council members", flavor: database.WoWFlavor{database.FlavorTBC}, instance: "Gruul's Lair", bossCount: intPtr(2)},
+		{name: "instance without speedrun rules", flavor: database.WoWFlavor{database.FlavorVanilla}, instance: "Shadowfang Keep"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+
+			reg := RegistryForFlavor(nil, tc.flavor)
+			for _, detail := range reg.AllInstanceDetails() {
+				if detail.Name == tc.instance {
+					require.Equal(t, tc.bossCount, detail.BossCount)
+					return
+				}
+			}
+			t.Fatalf("instance %q not found", tc.instance)
+		})
+	}
+}
+
+func intPtr(value int) *int {
+	return &value
+}

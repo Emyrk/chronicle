@@ -134,7 +134,7 @@ function InstanceDetailModal({ instance, onClose }: InstanceDetailModalProps) {
             <div>
               <h3 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground mb-2 flex items-center gap-1.5">
                 <Skull className="h-3.5 w-3.5" />
-                Bosses ({bosses.length})
+                Boss Units
               </h3>
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-0.5">
                 {bosses.map((boss) => (
@@ -190,8 +190,7 @@ interface InstanceCardProps {
 function InstanceCard({ instance, onClick }: InstanceCardProps) {
   const [imageError, setImageError] = useState(false);
   const bg = getInstanceBackground(instance.name);
-  const config = getInstanceConfig(instance.name);
-  const bossCount = instance.bosses?.length ?? config?.bossCount ?? 0;
+  const bossCount = instance.boss_count;
 
   return (
     <button
@@ -234,7 +233,7 @@ function InstanceCard({ instance, onClick }: InstanceCardProps) {
           )}
         </div>
         <div className="flex items-center gap-2">
-          {bossCount > 0 && (
+          {bossCount != null && bossCount > 0 && (
             <span className="flex items-center gap-1 text-[10px] text-white/70 bg-black/40 px-1.5 py-0.5 rounded">
               <Skull className="h-3 w-3" />
               {bossCount} {bossCount === 1 ? "boss" : "bosses"}

@@ -673,16 +673,43 @@ export function useAuthProviders(options?: Omit<UseQueryOptions<string[]>, "quer
   });
 }
 
+const supportedInstancesCacheTime = 1000 * 60 * 60 * 24;
+
+function supportedInstancesQueryKey() {
+  return ["supportedInstances", window.location.host] as const;
+}
+
+async function fetchSupportedInstances(): Promise<SupportedInstance[]> {
+  const response = await fetch("/api/v1/raidlogs/supported");
+  if (!response.ok) throw new Error("Failed to fetch supported instances");
+  return response.json() as Promise<SupportedInstance[]>;
+}
+
 export function useSupportedInstances(options?: Omit<UseQueryOptions<SupportedInstance[]>, "queryKey" | "queryFn">) {
   return useQuery({
-    queryKey: ["supportedInstances"],
-    queryFn: async () => {
-      const response = await fetch("/api/v1/raidlogs/supported");
-      if (!response.ok) throw new Error("Failed to fetch supported instances");
-      return response.json() as Promise<SupportedInstance[]>;
-    },
-    staleTime: 1000 * 60 * 60, // Cache for 1 hour - this data rarely changes
+    queryKey: supportedInstancesQueryKey(),
+    queryFn: fetchSupportedInstances,
+    staleTime: supportedInstancesCacheTime,
+    gcTime: supportedInstancesCacheTime,
     ...options,
+  });
+}
+
+function selectSupportedInstanceBossCounts(instances: SupportedInstance[]) {
+  return new Map(
+    instances.flatMap((instance) =>
+      instance.boss_count == null ? [] : [[instance.name, instance.boss_count] as const],
+    ),
+  );
+}
+
+export function useSupportedInstanceBossCounts() {
+  return useQuery({
+    queryKey: supportedInstancesQueryKey(),
+    queryFn: fetchSupportedInstances,
+    staleTime: supportedInstancesCacheTime,
+    gcTime: supportedInstancesCacheTime,
+    select: selectSupportedInstanceBossCounts,
   });
 }
 

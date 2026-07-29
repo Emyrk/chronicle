@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { Link } from "react-router-dom";
-import { Clock, Users, CheckCircle, XCircle, Youtube } from "lucide-react";
+import { Clock, Users, CheckCircle, XCircle, Youtube, Swords } from "lucide-react";
 import type { RecentInstance } from "@/api/typesGenerated";
 import { getInstanceBackground } from "@/pages/Logs/utils/instanceImages";
 import { HeroicBadge } from "@/components/HeroicBadge";
@@ -33,19 +33,17 @@ function formatRelativeTime(date: Date): string {
 
 interface RaidCardProps {
   instance: RecentInstance;
+  bossCount?: number;
 }
 
-export function RaidCard({ instance }: RaidCardProps) {
+export function RaidCard({ instance, bossCount }: RaidCardProps) {
   const [imageError, setImageError] = useState(false);
   const [isHovered, setIsHovered] = useState(false);
   const firstEncounterAt = new Date(instance.first_encounter_time);
   const backgroundImage = getInstanceBackground(instance.name);
   
-  // Use static boss count if configured, otherwise fall back to API value
-  // const config = getInstanceConfig(instance.name);
-  // const displayBossCount = config?.bossCount ?? instance.boss_count;
-  // const isFullClear = instance.boss_kills === displayBossCount && displayBossCount > 0;
-  
+  const isFullClear = bossCount != null && instance.boss_kills === bossCount;
+
   // Build instance URL - prefer slug if available
   const instanceUrl = instance.slug 
     ? `/instances/${instance.slug}` 
@@ -191,19 +189,21 @@ export function RaidCard({ instance }: RaidCardProps) {
           </div>
 
           {/* Boss progress */}
-          {/* <div className="flex items-center gap-2 mb-2">
-            <div className={`flex items-center gap-1.5 px-2 py-1 rounded ${
-              isFullClear 
-                ? "bg-green-500/30 text-green-300" 
-                : "bg-black/40 text-white/90"
-            }`}>
-              <Swords className="h-3.5 w-3.5" />
-              <span className="text-sm font-semibold">
-                {instance.boss_kills}/{displayBossCount}
-              </span>
-              {isFullClear && <CheckCircle className="h-3.5 w-3.5" />}
+          {bossCount != null && (
+            <div className="flex items-center gap-2 mb-2">
+              <div className={`flex items-center gap-1.5 px-2 py-1 rounded ${
+                isFullClear
+                  ? "bg-green-500/30 text-green-300"
+                  : "bg-black/40 text-white/90"
+              }`}>
+                <Swords className="h-3.5 w-3.5" />
+                <span className="text-sm font-semibold">
+                  {instance.boss_kills}/{bossCount}
+                </span>
+                {isFullClear && <CheckCircle className="h-3.5 w-3.5" />}
+              </div>
             </div>
-          </div> */}
+          )}
 
           {/* Encounter tags (optional, show first few) */}
           {instance.encounters && instance.encounters.length > 0 && (

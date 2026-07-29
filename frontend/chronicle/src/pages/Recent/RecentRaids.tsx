@@ -4,7 +4,7 @@ import { Popover as PopoverPrimitive } from "radix-ui";
 import { Card } from "@/components/ui/Card/Card";
 import { Button } from "@/components/ui/button";
 
-import { useSupportedInstances, useRealms, useSiteConfig } from "@/api/queries";
+import { useSupportedInstanceBossCounts, useSupportedInstances, useRealms, useSiteConfig } from "@/api/queries";
 import { serverCapabilities } from "@/config/serverCapabilities";
 import { useUrlState, serializers } from "@/hooks/useUrlState";
 import {
@@ -126,6 +126,7 @@ export function RecentRaids() {
   const [hasMore, setHasMore] = useState(false);
 
   const { data: supportedInstances } = useSupportedInstances();
+  const { data: bossCounts } = useSupportedInstanceBossCounts();
   const { data: realms } = useRealms();
   const { data: siteConfig } = useSiteConfig();
   const instanceFlavor = siteConfig?.dataset_flavor?.length
@@ -436,7 +437,11 @@ export function RecentRaids() {
           <>
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
               {instances.map((instance) => (
-                <RaidCard key={instance.id} instance={instance} />
+                <RaidCard
+                  key={instance.id}
+                  instance={instance}
+                  bossCount={bossCounts?.get(instance.name)}
+                />
               ))}
             </div>
 

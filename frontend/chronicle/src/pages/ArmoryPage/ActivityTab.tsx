@@ -23,6 +23,7 @@ import {
 import { groupDuplicateInstances } from "@/utils/groupDuplicates";
 import { isHeroic } from "@/lib/wowUtils";
 import { DuplicateInstanceModal } from "@/components/DuplicateInstanceModal";
+import { useSupportedInstanceBossCounts } from "@/api/queries";
 
 interface ActivityTabProps {
   player: ArmoryPlayer;
@@ -53,6 +54,7 @@ export function ActivityTab({ player }: ActivityTabProps) {
   const start = useMemo(() => subMonths(startOfMonth(month), 1), [month]);
   const end = useMemo(() => addMonths(endOfMonth(month), 1), [month]);
 
+  const { data: bossCounts } = useSupportedInstanceBossCounts();
   const { data, isLoading } = useQuery({
     queryKey: [
       "armory-activity",
@@ -90,7 +92,11 @@ export function ActivityTab({ player }: ActivityTabProps) {
     return (
       <>
         {groups.map((group) => (
-          <ActivityDayCard key={group[0].id} group={group} />
+          <ActivityDayCard
+            key={group[0].id}
+            group={group}
+            bossCount={bossCounts?.get(group[0].name)}
+          />
         ))}
       </>
     );
@@ -121,7 +127,7 @@ export function ActivityTab({ player }: ActivityTabProps) {
   );
 }
 
-function ActivityDayCard({ group }: { group: RecentInstance[] }) {
+function ActivityDayCard({ group, bossCount }: { group: RecentInstance[]; bossCount?: number }) {
   const [showModal, setShowModal] = useState(false);
   const instance = group[0];
   const isDuplicate = group.length > 1;
@@ -130,10 +136,9 @@ function ActivityDayCard({ group }: { group: RecentInstance[] }) {
     : `/instances/${instance.id}`;
   const abbrev = getInstanceAbbrev(instance.name);
   const duration = formatDuration(instance.duration_ms);
-  const bossProgress =
-    instance.boss_count > 0
-      ? `${instance.boss_kills}/${instance.boss_count}`
-      : null;
+  const bossProgress = bossCount != null
+    ? `${instance.boss_kills}/${bossCount}`
+    : null;
 
   const card = (
     <div className="relative h-10 sm:h-12 rounded overflow-hidden group cursor-pointer transition-all hover:scale-[1.02] hover:shadow-md">

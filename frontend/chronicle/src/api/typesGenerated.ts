@@ -2319,6 +2319,7 @@ export interface SupportedInstance {
     readonly comment?: string;
     readonly fallback?: boolean;
     readonly zone_names?: readonly string[];
+    readonly boss_count?: number;
     readonly bosses?: readonly SupportedInstanceUnit[];
     readonly trash?: readonly SupportedInstanceUnit[];
 }
