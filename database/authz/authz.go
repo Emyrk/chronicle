@@ -96,8 +96,11 @@ func (z *Authz) wrap(tx database.Store) *AuthzTX {
 		relations: rel.Txn{},
 	}
 
+	// The interceptor's Authorizer is the AuthzTX itself, so relation writes
+	// made through intercepted Store methods are recorded in relations and
+	// reverted when the transaction fails.
 	spiceTx.interceptor = &interceptor{
-		Authorizer: z,
+		Authorizer: spiceTx,
 		Store:      tx,
 	}
 

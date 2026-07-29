@@ -15,6 +15,7 @@ import (
 	"github.com/Emyrk/chronicle/api/db2sdk"
 	"github.com/Emyrk/chronicle/api/httpapi"
 	"github.com/Emyrk/chronicle/database"
+	"github.com/Emyrk/chronicle/database/authz"
 	"github.com/Emyrk/chronicle/internal/services/zugzuglink"
 )
 
@@ -102,22 +103,6 @@ func (h *Handler) SyncExternal(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Preserve the primary flag across the delete/re-add cycle.
-	deleted, err := h.zed.DeleteUserCharacterLinksByUserAndSource(ctx, database.DeleteUserCharacterLinksByUserAndSourceParams{
-		UserID:     userID,
-		LinkSource: source,
-	})
-	if err != nil {
-		httpapi.InternalServerError(w, err)
-		return
-	}
-	previousPrimary := map[string]bool{}
-	for _, link := range deleted {
-		if link.IsPrimary {
-			previousPrimary[link.CharacterGuid.String()] = true
-		}
-	}
-
 	resp := chroniclesdk.ExternalSyncResponse{
 		SyncedAt:  time.Now(),
 		Verified:  true,
@@ -125,87 +110,112 @@ func (h *Handler) SyncExternal(w http.ResponseWriter, r *http.Request) {
 		Conflicts: []string{},
 		Unmatched: []string{},
 	}
-	// Resolve each character's realm from the provider's realmKey, caching
-	// lookups since most characters share a realm.
-	realms := map[string]uuid.UUID{}
-	for _, character := range verification.Characters {
-		realmID, ok := realms[character.RealmKey]
-		if !ok {
-			realm, err := h.zed.GetWoWServerRealmByName(ctx, character.RealmName())
+
+	// Replace this source's links atomically: the delete and re-inserts
+	// happen in one transaction, so a failure part-way never leaves the
+	// user with half their characters unlinked.
+	err = h.zed.InTx(ctx, func(tx *authz.AuthzTX) error {
+		// Preserve the primary flag across the delete/re-add cycle.
+		deleted, err := tx.DeleteUserCharacterLinksByUserAndSource(ctx, database.DeleteUserCharacterLinksByUserAndSourceParams{
+			UserID:     userID,
+			LinkSource: source,
+		})
+		if err != nil {
+			return err
+		}
+		previousPrimary := map[string]bool{}
+		for _, link := range deleted {
+			if link.IsPrimary {
+				previousPrimary[link.CharacterGuid.String()] = true
+			}
+		}
+
+		// Resolve each character's realm from the provider's realmKey,
+		// caching lookups since most characters share a realm.
+		realms := map[string]uuid.UUID{}
+		for _, character := range verification.Characters {
+			realmID, ok := realms[character.RealmKey]
+			if !ok {
+				realm, err := tx.GetWoWServerRealmByName(ctx, character.RealmName())
+				if errors.Is(err, sql.ErrNoRows) {
+					resp.Unmatched = append(resp.Unmatched, character.Name)
+					continue
+				}
+				if err != nil {
+					return err
+				}
+				realmID = realm.ID
+				realms[character.RealmKey] = realmID
+			}
+
+			// Match by name on the character's realm. Names are the only
+			// identity the provider gives us; game_players is keyed by GUID.
+			player, err := tx.GetGamePlayerByGUID(ctx, database.GetGamePlayerByGUIDParams{
+				RealmID: realmID,
+				Name:    character.Name,
+			})
 			if errors.Is(err, sql.ErrNoRows) {
 				resp.Unmatched = append(resp.Unmatched, character.Name)
 				continue
 			}
 			if err != nil {
-				httpapi.InternalServerError(w, err)
-				return
+				return err
 			}
-			realmID = realm.ID
-			realms[character.RealmKey] = realmID
-		}
 
-		// Match by name on the character's realm. Names are the only
-		// identity the provider gives us; game_players is keyed by GUID.
-		player, err := h.zed.GetGamePlayerByGUID(ctx, database.GetGamePlayerByGUIDParams{
-			RealmID: realmID,
-			Name:    character.Name,
-		})
-		if errors.Is(err, sql.ErrNoRows) {
-			resp.Unmatched = append(resp.Unmatched, character.Name)
-			continue
-		}
-		if err != nil {
-			httpapi.InternalServerError(w, err)
-			return
-		}
-
-		_, err = h.zed.InsertUserCharacterLink(ctx, database.InsertUserCharacterLinkParams{
-			UserID:        userID,
-			CharacterGuid: player.ID,
-			RealmID:       realmID,
-			LinkedBy:      uuid.NullUUID{UUID: userID, Valid: true},
-			LinkSource:    source,
-		})
-		if database.IsUniqueViolation(err, database.UniqueUserCharacterLinksCharacterGuidRealmIDKey) {
-			existing, getErr := h.zed.GetUserCharacterLink(ctx, database.GetUserCharacterLinkParams{
+			// Check for an existing link up front: a unique-violation error
+			// would abort the whole transaction.
+			existing, err := tx.GetUserCharacterLink(ctx, database.GetUserCharacterLinkParams{
 				CharacterGuid: player.ID,
 				RealmID:       realmID,
 			})
-			if getErr == nil && existing.UserID == userID {
-				// Already linked to this user (e.g. manually) — fine.
+			if err == nil {
+				if existing.UserID == userID {
+					// Already linked to this user (e.g. manually) — fine.
+					continue
+				}
+				resp.Conflicts = append(resp.Conflicts, character.Name)
 				continue
 			}
-			resp.Conflicts = append(resp.Conflicts, character.Name)
-			continue
-		}
-		if err != nil {
-			httpapi.InternalServerError(w, err)
-			return
-		}
+			if !errors.Is(err, sql.ErrNoRows) {
+				return err
+			}
 
-		if previousPrimary[player.ID.String()] {
-			_, err := h.zed.SetPrimaryUserCharacter(ctx, database.SetPrimaryUserCharacterParams{
+			if _, err := tx.InsertUserCharacterLink(ctx, database.InsertUserCharacterLinkParams{
 				UserID:        userID,
 				CharacterGuid: player.ID,
 				RealmID:       realmID,
-			})
-			if err != nil && !errors.Is(err, sql.ErrNoRows) {
-				httpapi.InternalServerError(w, err)
-				return
+				LinkedBy:      uuid.NullUUID{UUID: userID, Valid: true},
+				LinkSource:    source,
+			}); err != nil {
+				return err
+			}
+
+			if previousPrimary[player.ID.String()] {
+				if _, err := tx.SetPrimaryUserCharacter(ctx, database.SetPrimaryUserCharacterParams{
+					UserID:        userID,
+					CharacterGuid: player.ID,
+					RealmID:       realmID,
+				}); err != nil && !errors.Is(err, sql.ErrNoRows) {
+					return err
+				}
 			}
 		}
-	}
 
-	// Return the fresh links joined with player data.
-	rows, err := h.zed.GetUserCharacterLinks(ctx, userID)
+		// Return the fresh links joined with player data.
+		rows, err := tx.GetUserCharacterLinks(ctx, userID)
+		if err != nil {
+			return err
+		}
+		for _, row := range rows {
+			if row.LinkSource == source {
+				resp.Linked = append(resp.Linked, db2sdk.LinkedCharacter(row))
+			}
+		}
+		return nil
+	}, nil)
 	if err != nil {
 		httpapi.InternalServerError(w, err)
 		return
-	}
-	for _, row := range rows {
-		if row.LinkSource == source {
-			resp.Linked = append(resp.Linked, db2sdk.LinkedCharacter(row))
-		}
 	}
 
 	h.storeSyncResponse(ctx, userID, source, resp)
