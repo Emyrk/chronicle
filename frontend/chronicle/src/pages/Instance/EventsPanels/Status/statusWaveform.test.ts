@@ -6,6 +6,7 @@ import {
   statusWaveformEvents,
   statusWaveformPosition,
   statusWaveformScale,
+  statusWaveformScaleSummary,
 } from "./statusWaveform";
 
 function event(kind: StatusTimelineEvent["kind"], amount: number): StatusTimelineEvent {
@@ -42,6 +43,20 @@ describe("Status signed waveform", () => {
       rowMax: 20,
       highMagnitudeThreshold: 17,
     });
+  });
+
+  it("summarizes the per-row maximum scales", () => {
+    expect(statusWaveformScaleSummary([0, 100, 1_000, 10_000])).toEqual({
+      min: 100,
+      median: 1_000,
+      max: 10_000,
+    });
+    expect(statusWaveformScaleSummary([100, 300])).toEqual({
+      min: 100,
+      median: 200,
+      max: 300,
+    });
+    expect(statusWaveformScaleSummary([0])).toBeNull();
   });
 
   it("compresses magnitudes into the three to ten pixel half-height", () => {

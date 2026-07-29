@@ -18,6 +18,9 @@ import {
   statusWaveformEvents,
   statusWaveformPosition,
   statusWaveformScale,
+  statusWaveformScaleSummary,
+  type StatusWaveformEvent,
+  type StatusWaveformScale,
 } from "./statusWaveform";
 import {
   selectStatusEncounter,
@@ -101,27 +104,33 @@ const NAME_CLASSES: Record<StatusDensity, string> = {
   2: "text-sm",
 };
 
+interface StatusWaveformRow {
+  events: StatusWaveformEvent[];
+  deaths: StatusTimelineEvent[];
+  scale: StatusWaveformScale;
+}
+
 function ActivityLane({
-  snapshot,
+  dead,
+  waveform,
   cursorMilli,
   windowPreset,
 }: {
-  snapshot: StatusUnitSnapshot;
+  dead: boolean;
+  waveform: StatusWaveformRow;
   cursorMilli: number;
   windowPreset: StatusWindowPreset;
 }) {
   const laneWindowMilli = windowPreset.historyMilli + windowPreset.futureMilli;
   const startMilli = cursorMilli - windowPreset.historyMilli;
   const playheadPercent = windowPreset.historyMilli / laneWindowMilli * 100;
-  const events = statusWaveformEvents([...snapshot.recentActivity, ...snapshot.incoming]);
-  const scale = statusWaveformScale(events);
-  const deaths = [...snapshot.recentActivity, ...snapshot.incoming].filter((event) => event.kind === "death");
+  const { events, deaths, scale } = waveform;
 
   return (
     <div
       className={cn(
         "relative h-[22px] overflow-hidden rounded-[1px] transition-colors",
-        snapshot.dead ? "bg-black/45" : "bg-[rgba(255,255,255,0.022)]",
+        dead ? "bg-black/45" : "bg-[rgba(255,255,255,0.022)]",
       )}
     >
       <div className="absolute inset-x-0 top-1/2 h-px bg-white/[0.11]" />
@@ -246,6 +255,24 @@ export function StatusContent(props: PanelRenderProps<StatusResult>) {
       ? sortStatusSnapshotsByRole(matchingSnapshots, roles)
       : matchingSnapshots.sort((a, b) => a.unit.name.localeCompare(b.unit.name));
   }, [cursorMilli, matchingUnits, roles, unitMode, windowPreset]);
+  const { waveformRows, waveformScaleStats } = useMemo(() => {
+    const rows = new Map<string, StatusWaveformRow>();
+    for (const snapshot of snapshots) {
+      const activity = [...snapshot.recentActivity, ...snapshot.incoming];
+      const events = statusWaveformEvents(activity);
+      rows.set(snapshot.unit.unitId, {
+        events,
+        deaths: activity.filter((event) => event.kind === "death"),
+        scale: statusWaveformScale(events),
+      });
+    }
+    return {
+      waveformRows: rows,
+      waveformScaleStats: statusWaveformScaleSummary(
+        Array.from(rows.values(), (row) => row.scale.rowMax),
+      ),
+    };
+  }, [snapshots]);
   const focusedUnitId = parseFocus(panelOption);
   const [floatingBreakout, setFloatingBreakout] = useState<FloatingStatusBreakout | null>(null);
   const [density, setDensity] = useState<StatusDensity>(0);
@@ -352,6 +379,7 @@ export function StatusContent(props: PanelRenderProps<StatusResult>) {
         <div className="styled-scrollbar min-h-0 flex-1 overflow-auto">
           {snapshots.map((snapshot) => {
             const unit = snapshot.unit;
+            const waveform = waveformRows.get(unit.unitId)!;
             const role = unit.kind === "player" ? roles.get(unit.unitId)?.role : undefined;
             const ownerName = unit.ownerId ? context.instance.players?.[unit.ownerId]?.name : null;
             return (
@@ -384,7 +412,8 @@ export function StatusContent(props: PanelRenderProps<StatusResult>) {
                 </span>
                 <RelativeChange snapshot={snapshot} density={density} />
                 <ActivityLane
-                  snapshot={snapshot}
+                  dead={snapshot.dead}
+                  waveform={waveform}
                   cursorMilli={cursorMilli!}
                   windowPreset={windowPreset}
                 />
@@ -398,7 +427,15 @@ export function StatusContent(props: PanelRenderProps<StatusResult>) {
         <span><i className="mr-1 inline-block h-1.5 w-1.5 rounded-full bg-emerald-400" />healing taken</span>
         <span><i className="mr-1 inline-block h-1.5 w-1.5 rounded-full bg-sky-400" />absorbed</span>
         <span className="flex items-center gap-1 text-red-300"><Skull className="h-2.5 w-2.5" />death</span>
-        <span className="ml-auto">{windowPreset.label}</span>
+        {waveformScaleStats ? (
+          <span
+            className="ml-auto font-mono text-[8px] text-muted-foreground/80"
+            title="Distribution of the largest visible health event in each populated row"
+          >
+            row scale min {formatNumber(waveformScaleStats.min)} · median {formatNumber(waveformScaleStats.median)} · max {formatNumber(waveformScaleStats.max)}
+          </span>
+        ) : <span className="ml-auto" />}
+        <span>{windowPreset.label}</span>
       </div>
     </GenericPanel>
     {floatingBreakout && breakoutUnit && encounter && cursorMilli !== null ? (

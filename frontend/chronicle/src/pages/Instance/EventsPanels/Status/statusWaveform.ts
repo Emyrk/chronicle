@@ -23,12 +23,32 @@ export function statusWaveformEvents(events: StatusTimelineEvent[]): StatusWavef
 }
 
 export function statusWaveformScale(events: StatusWaveformEvent[]): StatusWaveformScale {
-  if (events.length === 0) return { rowMax: 1, highMagnitudeThreshold: Infinity };
+  if (events.length === 0) return { rowMax: 0, highMagnitudeThreshold: Infinity };
   const amounts = events.map((event) => event.amount).sort((a, b) => a - b);
   const thresholdIndex = Math.ceil(amounts.length * 0.85) - 1;
   return {
     rowMax: amounts[amounts.length - 1],
     highMagnitudeThreshold: amounts[Math.max(0, thresholdIndex)],
+  };
+}
+
+export interface StatusWaveformScaleSummary {
+  min: number;
+  median: number;
+  max: number;
+}
+
+export function statusWaveformScaleSummary(rowMaxes: number[]): StatusWaveformScaleSummary | null {
+  const values = rowMaxes.filter((value) => value > 0).sort((a, b) => a - b);
+  if (values.length === 0) return null;
+  const middle = Math.floor(values.length / 2);
+  const median = values.length % 2 === 0
+    ? (values[middle - 1] + values[middle]) / 2
+    : values[middle];
+  return {
+    min: values[0],
+    median,
+    max: values[values.length - 1],
   };
 }
 
