@@ -2483,13 +2483,11 @@ export function InstancePageView({
         return;
       }
 
-      // Never open the spellbook while it is suppressed (replay overlay
-      // occupies the same space).
-      if (suppressActionBar) {
-        return;
+      // Still allow casting layouts while the action bar is suppressed
+      // (replay overlay occupies the same space), just don't pop it up.
+      if (!suppressActionBar) {
+        setActionBarOpen(true);
       }
-
-      setActionBarOpen(true);
       const layoutID = actionBarSlots[event.key as keyof LayoutActionBarSlots];
       if (!layoutID) {
         return;
