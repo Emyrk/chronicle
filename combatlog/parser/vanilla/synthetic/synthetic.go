@@ -81,6 +81,8 @@ func (s *Synthetic) ProcessMessages(msgs []messages.Message) ([]messages.Message
 	msgs = s.extraAttack.ProcessMessage(msgs)
 	s.extraAttackDur += time.Since(now)
 
+	msgs = DetectResurrections(msgs)
+
 	now = time.Now()
 	msgs = s.demons.ProcessMessages(msgs)
 	s.demonsDur += time.Since(now)

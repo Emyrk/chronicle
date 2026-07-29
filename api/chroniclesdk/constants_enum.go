@@ -208,6 +208,8 @@ const (
 	WoWEventTypeExtraAttack WoWEventType = "extra_attack"
 	// WoWEventTypeSlain is a WoWEventType of type slain.
 	WoWEventTypeSlain WoWEventType = "slain"
+	// WoWEventTypeRessurection is a WoWEventType of type ressurection.
+	WoWEventTypeRessurection WoWEventType = "ressurection"
 	// WoWEventTypeCast is a WoWEventType of type cast.
 	WoWEventTypeCast WoWEventType = "cast"
 	// WoWEventTypeAura is a WoWEventType of type aura.
@@ -244,6 +246,7 @@ func WoWEventTypeValues() []WoWEventType {
 		WoWEventTypeResourceChange,
 		WoWEventTypeExtraAttack,
 		WoWEventTypeSlain,
+		WoWEventTypeRessurection,
 		WoWEventTypeCast,
 		WoWEventTypeAura,
 		WoWEventTypeSpellGo,
@@ -277,6 +280,7 @@ var _WoWEventTypeValue = map[string]WoWEventType{
 	"resource_change":     WoWEventTypeResourceChange,
 	"extra_attack":        WoWEventTypeExtraAttack,
 	"slain":               WoWEventTypeSlain,
+	"ressurection":        WoWEventTypeRessurection,
 	"cast":                WoWEventTypeCast,
 	"aura":                WoWEventTypeAura,
 	"spell_go":            WoWEventTypeSpellGo,

@@ -113,6 +113,15 @@ func Slain(from time.Time, idx int32, ea *messages.Slain) *chronicleproto.Slain 
 	}
 }
 
+func Resurrection(from time.Time, idx int32, resurrection *messages.Resurrection) *chronicleproto.Resurrection {
+	return &chronicleproto.Resurrection{
+		Meta:   EventMeta(from, idx, resurrection),
+		Source: resurrection.Source.String(),
+		Target: resurrection.Target.String(),
+		Spell:  SpellData(resurrection.Spell),
+	}
+}
+
 func SpellGo(from time.Time, idx int32, ca *messages.SpellGo) *chronicleproto.SpellGo {
 	var target *string
 	if ca.Target != nil {

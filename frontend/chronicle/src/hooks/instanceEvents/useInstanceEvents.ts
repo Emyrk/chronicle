@@ -1,7 +1,7 @@
 import { useEffect, useState, useRef } from "react";
 import { useInstanceEventsContext } from "./InstanceEventsContext";
 import { createStreamCursor, FastDamageCursor, type StreamCursor } from "@/api/protodecode/decode";
-import { DamageSchema, ExtraAttackSchema, HealSchema, ResourceChangeSchema, SlainSchema, CastSchema, AuraSchema, SpellGoSchema, SpellStartSchema, SpellFailSchema, AuraCastSchema, DispelSchema, InterruptSchema, UnitClassificationSchema, AbsorbedSchema, CompanionStatsSchema } from "@/api/proto/chronicle_pb";
+import { DamageSchema, ExtraAttackSchema, HealSchema, ResourceChangeSchema, SlainSchema, ResurrectionSchema, CastSchema, AuraSchema, SpellGoSchema, SpellStartSchema, SpellFailSchema, AuraCastSchema, DispelSchema, InterruptSchema, UnitClassificationSchema, AbsorbedSchema, CompanionStatsSchema } from "@/api/proto/chronicle_pb";
 import type { DescMessage } from "@bufbuild/protobuf";
 import type {
   StreamType,
@@ -26,6 +26,8 @@ function getSchemaForType(type: StreamType): DescMessage {
       return ResourceChangeSchema;
     case "slain":
       return SlainSchema;
+    case "ressurection":
+      return ResurrectionSchema;
     case "cast":
       return CastSchema;
     case "aura":

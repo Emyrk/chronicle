@@ -11,15 +11,16 @@ import (
 )
 
 type Events struct {
-	Damage         []byte
-	Healing        []byte
-	ResourceChange []byte
-	ExtraAttack    []byte
-	Slain          []byte
-	Cast           []byte
-	Aura           []byte
-	SpellGo        []byte
-	SpellStart     []byte
+	Damage             []byte
+	Healing            []byte
+	ResourceChange     []byte
+	ExtraAttack        []byte
+	Slain              []byte
+	Resurrection       []byte
+	Cast               []byte
+	Aura               []byte
+	SpellGo            []byte
+	SpellStart         []byte
 	SpellFail          []byte
 	AuraCasts          []byte
 	UnitClassification []byte
@@ -32,16 +33,17 @@ type Events struct {
 
 func NewEvents() *Events {
 	return &Events{
-		Damage:         make([]byte, 0),
-		Healing:        make([]byte, 0),
-		ResourceChange: make([]byte, 0),
-		ExtraAttack:    make([]byte, 0),
-		Slain:          make([]byte, 0),
-		Cast:           make([]byte, 0),
-		Aura:           make([]byte, 0),
-		SpellGo:        make([]byte, 0),
-		SpellStart:     make([]byte, 0),
-		SpellFail:      make([]byte, 0),
+		Damage:             make([]byte, 0),
+		Healing:            make([]byte, 0),
+		ResourceChange:     make([]byte, 0),
+		ExtraAttack:        make([]byte, 0),
+		Slain:              make([]byte, 0),
+		Resurrection:       make([]byte, 0),
+		Cast:               make([]byte, 0),
+		Aura:               make([]byte, 0),
+		SpellGo:            make([]byte, 0),
+		SpellStart:         make([]byte, 0),
+		SpellFail:          make([]byte, 0),
 		AuraCasts:          make([]byte, 0),
 		UnitClassification: make([]byte, 0),
 		CombatantInfo:      make([]byte, 0),
@@ -81,6 +83,12 @@ func (e *Events) Insert(ctx context.Context, db database.Store, instanceID uuid.
 		return fmt.Errorf("gzip resource change events: %w", err)
 	}
 	e.Slain = nil
+
+	resurrection, err := gzipData(e.Resurrection)
+	if err != nil {
+		return fmt.Errorf("gzip resurrection events: %w", err)
+	}
+	e.Resurrection = nil
 
 	casts, err := gzipData(e.Cast)
 	if err != nil {
@@ -176,6 +184,11 @@ func (e *Events) Insert(ctx context.Context, db database.Store, instanceID uuid.
 			InstanceID: instanceID,
 			Type:       database.LogInstanceEventTypeSlain,
 			Events:     slain,
+		},
+		{
+			InstanceID: instanceID,
+			Type:       database.LogInstanceEventTypeRessurection,
+			Events:     resurrection,
 		},
 		{
 			InstanceID: instanceID,

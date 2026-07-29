@@ -20,6 +20,7 @@ type EncounterEvents struct {
 	ResourceChange *Builder[*messages.ResourceChange, *chronicleproto.ResourceChange]
 	ExtraAttack    *Builder[*messages.ExtraAttack, *chronicleproto.ExtraAttack]
 	Slain          *Builder[*messages.Slain, *chronicleproto.Slain]
+	Resurrection   *Builder[*messages.Resurrection, *chronicleproto.Resurrection]
 	// Casts is deprecated to SpellStart/SpellGo/SpellFail, but we still want to support it for older logs.
 	//nolint: staticcheck
 	Casts              *Builder[*messages.Cast, *chronicleproto.Cast]
@@ -45,6 +46,7 @@ func New(verbose bool) *EncounterEventsInProgress {
 		ResourceChange: NewBuilder[*messages.ResourceChange, *chronicleproto.ResourceChange](),
 		ExtraAttack:    NewBuilder[*messages.ExtraAttack, *chronicleproto.ExtraAttack](),
 		Slain:          NewBuilder[*messages.Slain, *chronicleproto.Slain](),
+		Resurrection:   NewBuilder[*messages.Resurrection, *chronicleproto.Resurrection](),
 		//nolint: staticcheck
 		Casts:              NewBuilder[*messages.Cast, *chronicleproto.Cast](),
 		Aura:               NewBuilder[*messages.Aura, *chronicleproto.Aura](),
@@ -85,6 +87,11 @@ func (e *EncounterEventsInProgress) Finalize(merge *Events, encounterID uuid.UUI
 	slain, err := e.Slain.Finalize(encounterID)
 	if err != nil {
 		return fmt.Errorf("finalizing slain events: %w", err)
+	}
+
+	resurrection, err := e.Resurrection.Finalize(encounterID)
+	if err != nil {
+		return fmt.Errorf("finalizing resurrection events: %w", err)
 	}
 
 	casts, err := e.Casts.Finalize(encounterID)
@@ -152,6 +159,7 @@ func (e *EncounterEventsInProgress) Finalize(merge *Events, encounterID uuid.UUI
 	merge.ResourceChange = append(merge.ResourceChange, rcPayload...)
 	merge.ExtraAttack = append(merge.ExtraAttack, extraAttack...)
 	merge.Slain = append(merge.Slain, slain...)
+	merge.Resurrection = append(merge.Resurrection, resurrection...)
 	merge.Cast = append(merge.Cast, casts...)
 	merge.Aura = append(merge.Aura, auras...)
 	merge.SpellGo = append(merge.SpellGo, spellGo...)
@@ -199,6 +207,11 @@ func (e *EncounterEventsInProgress) Process(m messages.Message) error {
 		err := AddToBuilder(e.Slain, ty, e.nextIndex(), types2proto.Slain)
 		if err != nil {
 			return fmt.Errorf("slain proto: %w", err)
+		}
+	case *messages.Resurrection:
+		err := AddToBuilder(e.Resurrection, ty, e.nextIndex(), types2proto.Resurrection)
+		if err != nil {
+			return fmt.Errorf("resurrection proto: %w", err)
 		}
 	case *messages.Cast:
 		err := AddToBuilder(e.Casts, ty, e.nextIndex(), types2proto.Cast)
@@ -274,6 +287,7 @@ func (e *EncounterEventsInProgress) setFirsts(t time.Time) {
 	e.ResourceChange.SetZero(e.first)
 	e.ExtraAttack.SetZero(e.first)
 	e.Slain.SetZero(e.first)
+	e.Resurrection.SetZero(e.first)
 	e.Casts.SetZero(e.first)
 	e.Aura.SetZero(e.first)
 	e.SpellGo.SetZero(e.first)

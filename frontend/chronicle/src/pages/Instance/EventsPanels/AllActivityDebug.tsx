@@ -4,7 +4,7 @@
 
 import { useState, useMemo, useCallback, useRef, useEffect } from "react";
 import { Link } from "react-router-dom";
-import { Skull, Swords, Heart, Zap, Wand2, Sparkles, ChevronLeft, ChevronRight, ChevronsLeft, ChevronsRight, Search, X, Crosshair, Play, CircleX, Bubbles, WandSparkles, CircleFadingPlus, UserCheck, Ban, Shield } from "lucide-react";
+import { Skull, Swords, Heart, Zap, Wand2, Sparkles, ChevronLeft, ChevronRight, ChevronsLeft, ChevronsRight, Search, X, Crosshair, Play, CircleX, Bubbles, WandSparkles, CircleFadingPlus, UserCheck, Ban, Shield, HeartPulse } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { formatNumber } from "@/lib/format";
 import { ScrollArea, ScrollBar } from "@/components/ui/ScrollArea/ScrollArea";
@@ -30,6 +30,7 @@ const STREAM_CONFIG: Record<StreamType, { icon: React.ElementType; color: string
   heal: { icon: Heart, color: "text-green-500", label: "Healing" },
   resource_change: { icon: Zap, color: "text-yellow-500", label: "Resource" },
   extra_attack: { icon: CircleFadingPlus, color: "text-orange-500", label: "Extra Attack" },
+  ressurection: { icon: HeartPulse, color: "text-emerald-400", label: "Resurrection" },
   slain: { icon: Skull, color: "text-gray-500", label: "Slain" },
   aura: { icon: Sparkles, color: "text-cyan-500", label: "Aura" },
   spell_go: { icon: Crosshair, color: "text-amber-500", label: "Spell Go" },
@@ -51,6 +52,7 @@ const DEFAULT_ENABLED_STREAMS = new Set<StreamType>(["damage", "heal", "resource
 
 const STREAM_CODES: Record<StreamType, string> = {
   damage: "d", heal: "h", resource_change: "r", cast: "c",
+  ressurection: "z",
   aura: "a", slain: "x", spell_go: "g", aura_cast: "u", spell_start: "ss", spell_fail: "sf",
   extra_attack: "e",
   unit_classification: "uc",
@@ -490,12 +492,12 @@ function AllActivityContent({
 }: AllActivityContentProps) {
   
   // Default state during loading
-  const emptyByStream = { damage: [], heal: [], resource_change: [], extra_attack: [], slain: [], cast: [], aura: [], spell_go: [], aura_cast: [], spell_start: [], spell_fail: [], unit_classification: [], combatant_info: [], dispel: [] };
+  const emptyByStream = { damage: [], heal: [], resource_change: [], extra_attack: [], slain: [], ressurection: [], cast: [], aura: [], spell_go: [], aura_cast: [], spell_start: [], spell_fail: [], unit_classification: [], combatant_info: [], dispel: [] };
   const emptyEncounters = new Map<string, EncounterMeta>();
   const safeResult = result ?? {
     counts: new Map<string, number>(),
     rawEventsByStream: emptyByStream,
-    streamCounts: { damage: 0, heal: 0, resource_change: 0, extra_attack: 0, slain: 0, cast: 0, aura: 0, spell_go: 0, aura_cast: 0, spell_start: 0, spell_fail: 0, unit_classification: 0, combatant_info: 0, dispel: 0, interrupt: 0, absorbed: 0, companion_stats: 0 },
+    streamCounts: { damage: 0, heal: 0, resource_change: 0, extra_attack: 0, slain: 0, ressurection: 0, cast: 0, aura: 0, spell_go: 0, aura_cast: 0, spell_start: 0, spell_fail: 0, unit_classification: 0, combatant_info: 0, dispel: 0, interrupt: 0, absorbed: 0, companion_stats: 0 },
     encounters: emptyEncounters,
     totalProcessed: 0,
     eventsSkipped: 0,

@@ -82,6 +82,7 @@ func (s *Synthetic) ProcessMessages(msgs []messages.Message) ([]messages.Message
 	}
 
 	s.slain.ProcessMessages(msgs)
+	msgs = synthetic.DetectResurrections(msgs)
 	msgs = s.possession.ProcessMessages(msgs)
 
 	now = time.Now()

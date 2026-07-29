@@ -21,6 +21,7 @@ const FIXTURE_URLS: Record<StreamType, string> = {
   heal: healFixture,
   resource_change: resourceChangeFixture,
   slain: slainFixture,
+  ressurection: "", // No fixture for ressurection yet
   cast: castFixture,
   aura: auraFixture,
   extra_attack: extraAttackFixture,

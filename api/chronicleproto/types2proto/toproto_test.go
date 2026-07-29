@@ -17,6 +17,24 @@ func arcaneSpell() *chrondbc.Spell {
 	return &chrondbc.Spell{School: chrondbc.SchoolArcane}
 }
 
+func TestResurrection(t *testing.T) {
+	t.Parallel()
+
+	ts := time.UnixMilli(1000)
+	spell := &chrondbc.Spell{ID: 2006}
+	got := Resurrection(ts, 3, &messages.Resurrection{
+		MessageBase: messages.Base(ts),
+		Source:      guid.GUID(1),
+		Target:      guid.GUID(2),
+		Spell:       spell,
+	})
+
+	require.Equal(t, guid.GUID(1).String(), got.Source)
+	require.Equal(t, guid.GUID(2).String(), got.Target)
+	require.Equal(t, int32(2006), got.Spell.Id)
+	require.Equal(t, int32(3), got.Meta.Index)
+}
+
 func TestDamageSchoolBackfill(t *testing.T) {
 	t.Parallel()
 

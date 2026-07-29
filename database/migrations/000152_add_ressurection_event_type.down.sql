@@ -1,0 +1,2 @@
+-- PostgreSQL does not support removing enum values.
+-- The 'ressurection' value will remain but be unused.

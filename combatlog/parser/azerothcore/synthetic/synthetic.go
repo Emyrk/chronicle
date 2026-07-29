@@ -1,11 +1,12 @@
 package synthetic
 
 import (
-  "context"
-  "log/slog"
+	"context"
+	"log/slog"
 
-  "github.com/Emyrk/chronicle/combatlog/parser/common/messages"
-  "github.com/Emyrk/chronicle/database/gamedb"
+	"github.com/Emyrk/chronicle/combatlog/parser/common/messages"
+	vanillasynthetic "github.com/Emyrk/chronicle/combatlog/parser/vanilla/synthetic"
+	"github.com/Emyrk/chronicle/database/gamedb"
 )
 
 // Synthetic processes the raw combat log events, and occasionally will insert
@@ -24,5 +25,5 @@ func New(ctx context.Context, logger *slog.Logger, wowDB gamedb.GameDB) *Synthet
 }
 
 func (s *Synthetic) ProcessMessages(msgs []messages.Message) ([]messages.Message, error) {
-	return msgs, nil
+	return vanillasynthetic.DetectResurrections(msgs), nil
 }

@@ -473,7 +473,7 @@ func (a Aura) Affects() []guid.GUID {
 	}
 	return []guid.GUID{a.Target}
 }
-func (*Aura) isMessage()            {}
+func (*Aura) isMessage() {}
 
 type Interrupt struct {
 	MessageBase
@@ -566,6 +566,16 @@ func (c SpellGo) Affects() []guid.GUID {
 	return ids
 }
 func (*SpellGo) isMessage() {}
+
+type Resurrection struct {
+	MessageBase
+	Source guid.GUID
+	Target guid.GUID
+	Spell  *chrondbc.Spell
+}
+
+func (r Resurrection) Affects() []guid.GUID { return []guid.GUID{r.Source, r.Target} }
+func (*Resurrection) isMessage()            {}
 
 // ExtraAttack is a bit strange, but it's a unique message that triggers when extra
 // white attacks are granted via some proc.
