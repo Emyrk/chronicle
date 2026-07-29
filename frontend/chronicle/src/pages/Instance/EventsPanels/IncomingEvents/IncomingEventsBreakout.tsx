@@ -208,27 +208,6 @@ export function IncomingEventsBreakout({
         </div>
       </div>
 
-      {collapsed && (
-        <div className="max-h-20 overflow-y-auto border-t border-white/5 px-3 py-1.5 styled-scrollbar">
-          {rows
-            .filter((entry) => cursorMilli !== null && relativeEventTime(entry.offsetMilli, anchorOffsetMilli) <= cursorMilli)
-            .slice(0, 8)
-            .reverse()
-            .map((entry, index, visible) => (
-              <div
-                key={`ticker-${entry.eventIndex}-${entry.offsetMilli}-${entry.type}`}
-                className="flex items-center gap-2 truncate font-mono text-[9px] leading-4"
-                style={{ opacity: Math.max(0.25, (index + 2) / (visible.length + 1)) }}
-              >
-                <span className="w-10 shrink-0 text-muted-foreground">{formatRelativeTime(relativeEventTime(entry.offsetMilli, anchorOffsetMilli))}</span>
-                <span className={cn("truncate", entry.type === "damage" ? "text-red-300" : entry.type === "absorbed" ? "text-blue-300" : "text-green-300")}>
-                  {entry.casterName} · {entry.type === "absorbed" ? entry.absorbSpellName || entry.sourceName : entry.sourceName}
-                </span>
-              </div>
-            ))}
-        </div>
-      )}
-
       {!collapsed && (
         <>
           <div className="grid grid-cols-[58px_120px_1fr_auto] border-b border-white/5 px-3 py-1 text-[9px] text-muted-foreground/70">
