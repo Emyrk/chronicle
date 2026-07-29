@@ -397,6 +397,30 @@ func TestProjection_PullStartAuraNotDuplicated(t *testing.T) {
 		"should not project when first real message is an apply for the same aura")
 }
 
+func TestProjection_FirstRealRemovalCancelsSyntheticExpiry(t *testing.T) {
+	t.Parallel()
+	tr := auras.New(nil)
+	tr.Process(makeAuraMsg(t0, testUnit, testSpell, types.AuraStateAdded, 1, false))
+
+	var emitted []*messages.Aura
+	projection := auras.NewProjection(tr)
+	projection.SetEmit(func(msg *messages.Aura) { emitted = append(emitted, msg) })
+	projection.FightStarted(uuid.Nil, &messages.Damage{MessageBase: messages.Base(t0.Add(5 * time.Second))})
+
+	// The first real event removes the pre-pull aura. Projection still emits the
+	// initial state immediately before that real removal, but must relinquish
+	// synthetic expiry ownership for the aura.
+	removal := makeAuraMsg(t0.Add(6*time.Second), testUnit, testSpell, types.AuraStateRemoved, 0, false)
+	require.NoError(t, projection.ProcessMessage(true, uuid.Nil, removal))
+	require.Len(t, emitted, 1, "should project the aura before its real removal")
+	assert.Equal(t, types.AuraStateAdded, emitted[0].State)
+
+	require.NoError(t, projection.ProcessMessage(true, uuid.Nil, &messages.Damage{
+		MessageBase: messages.Base(t0.Add(35 * time.Second)),
+	}))
+	assert.Len(t, emitted, 1, "first-event removal must cancel synthetic expiry")
+}
+
 func TestProjection_SyntheticExpiryEmitted(t *testing.T) {
 	t.Parallel()
 	tr := auras.New(nil)

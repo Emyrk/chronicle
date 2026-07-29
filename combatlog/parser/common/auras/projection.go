@@ -86,7 +86,6 @@ func (p *Projection) ProcessMessage(active bool, _ uuid.UUID, m messages.Message
 	if p.pendingProjection {
 		p.emitProjection(m)
 		p.pendingProjection = false
-		return nil
 	}
 
 	// Real aura evidence is authoritative. Cancel inferred expiry ownership
