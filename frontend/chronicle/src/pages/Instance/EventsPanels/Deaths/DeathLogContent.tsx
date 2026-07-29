@@ -2,7 +2,7 @@
  * DeathLogContent - Chronological list of player and enemy deaths with timestamps
  */
 
-import React, { useMemo, useCallback, useState } from "react";
+import React, { useMemo, useCallback, useRef, useState } from "react";
 import { User, Skull, ChevronRight, ChevronDown, ExternalLink } from "lucide-react";
 import { GenericPanel } from "../GenericPanel";
 import { ScrollArea } from "@/components/ui/ScrollArea/ScrollArea";
@@ -13,6 +13,13 @@ import { DeathRecap } from "./DeathRecap";
 import { IncomingEventsBreakout } from "../IncomingEvents/IncomingEventsBreakout";
 import { FloatingIncomingEventsBreakout } from "../IncomingEvents/FloatingIncomingEventsBreakout";
 import { useCachedValue } from "@/hooks/useCachedValue";
+import { useSyncModeContextOptional } from "../../SyncModeContext";
+import {
+  hasDeathLogEvents,
+  isDeathAheadOfSyncCursor,
+  selectDeathLogDisplayResult,
+  type DeathLogSnapshot,
+} from "./deathLogSync";
 import { cn } from "@/lib/utils";
 import { hitTypeNames, HitTypeCrit } from "@/lib/hittype/hittype";
 
@@ -103,6 +110,9 @@ interface FloatingDeathRecap {
 
 export const DeathLogContent = (props: DeathLogContentProps) => {
   const { result, context, loading, processing, checkboxChecked, panelOption, setPanelOption } = props;
+  const syncMode = useSyncModeContextOptional();
+  const panelContextVersion = String(props.panelContextVersion ?? "");
+  const completeSnapshotRef = useRef<DeathLogSnapshot | null>(null);
   const [mode, setModeLocal] = useState<DeathMode>(() => extractDeathMode(panelOption));
   const [expandedIndex, setExpandedIndex] = useState<number | null>(null);
   const [floatingRecaps, setFloatingRecaps] = useState<Map<string, FloatingDeathRecap>>(() => new Map());
@@ -166,20 +176,39 @@ export const DeathLogContent = (props: DeathLogContentProps) => {
 
   const { cachedValue: cachedResult, hasCache: hasData } = useCachedValue(
     result,
-    (r) => r.DeathEvents.length > 0 || r.EnemyDeathEvents.length > 0,
+    hasDeathLogEvents,
     [props.panelContextVersion]
   );
 
-  const sortedDeaths = useMemo(() => {
-    if (!cachedResult) return [];
-    return getSortedDeathEvents(context.selectedEncounterIds, cachedResult, mode);
-  }, [context.selectedEncounterIds, cachedResult, mode]);
+  // Sync processing incrementally rebuilds processor state. Death Log is different:
+  // its rows describe the whole encounter, so retain the last complete worker result
+  // and let only cursors/row emphasis react to the Sync timestamp.
+  /* eslint-disable react-hooks/refs */
+  if (!syncMode?.enabled && hasData) {
+    completeSnapshotRef.current = {
+      panelContextVersion,
+      result: cachedResult,
+    };
+  }
+  const displayResult = selectDeathLogDisplayResult(
+    cachedResult,
+    completeSnapshotRef.current,
+    syncMode?.enabled === true,
+    panelContextVersion,
+  );
+  /* eslint-enable react-hooks/refs */
+  const hasDisplayData = hasDeathLogEvents(displayResult);
 
-  // Once we have cached data, never show loading/processing states
+  const sortedDeaths = useMemo(
+    () => getSortedDeathEvents(context.selectedEncounterIds, displayResult, mode),
+    [context.selectedEncounterIds, displayResult, mode],
+  );
+
+  // Once we have a complete display result, never flash loading/empty Sync states.
   const effectiveProps = {
     ...props,
-    loading: hasData ? false : props.loading,
-    processing: hasData ? false : props.processing,
+    loading: hasDisplayData ? false : props.loading,
+    processing: hasDisplayData ? false : props.processing,
   };
 
   return (
@@ -251,6 +280,11 @@ export const DeathLogContent = (props: DeathLogContentProps) => {
                 const prevDeath = index > 0 ? sortedDeaths[index - 1] : null;
                 const isNewEncounter = prevDeath && prevDeath.encounterID !== death.encounterID;
                 const isExpanded = expandedIndex === index;
+                const isPendingSyncDeath = isDeathAheadOfSyncCursor(
+                  death,
+                  syncMode?.enabled === true,
+                  syncMode?.currentTimestamp ?? null,
+                );
                 const rowKey = `${death.encounterID}:${death.playerID}:${death.offsetMilli}:${index}`;
                 return (
                   <React.Fragment key={rowKey}>
@@ -258,9 +292,11 @@ export const DeathLogContent = (props: DeathLogContentProps) => {
                       className={cn(
                         "border-b border-border/10 hover:bg-muted/50 cursor-pointer",
                         isNewEncounter && "border-t-2 border-t-border",
-                        isExpanded && "bg-muted/30 border-b-0"
+                        isExpanded && "bg-muted/30 border-b-0",
+                        isPendingSyncDeath && "opacity-35 saturate-50"
                       )}
                       data-death-row={index === 0 ? true : undefined}
+                      data-sync-pending={isPendingSyncDeath || undefined}
                       onClick={() => setExpandedIndex(isExpanded ? null : index)}
                     >
                       <td className="py-1 px-1 text-muted-foreground w-5">
@@ -352,7 +388,7 @@ export const DeathLogContent = (props: DeathLogContentProps) => {
                       </td>
                     </tr>
                     {isExpanded && (
-                      <tr className="border-b border-border/10">
+                      <tr className={cn("border-b border-border/10", isPendingSyncDeath && "opacity-35 saturate-50")}>
                         <td colSpan={5} className="p-0 pb-1">
                           <DeathRecap
                             recap={death.recap.filter((entry) => entry.offsetMilli >= death.offsetMilli - 10_000)}
