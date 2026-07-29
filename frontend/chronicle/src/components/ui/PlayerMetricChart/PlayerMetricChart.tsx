@@ -290,7 +290,7 @@ function DraggablePinnedTooltip({ player, initialPosition, onClose, panelTitle, 
           style={{ border: `1px solid color-mix(in oklch, ${player.color} 60%, transparent)` }}
         >
           {/* Header */}
-          <div className="flex shrink-0 items-center gap-2 border-b border-border px-2.5 py-1.5">
+          <div className="flex shrink-0 items-center gap-2 border-b border-border bg-background/45 px-2.5 py-1.5">
             <BreakoutIdentity color={player.color} name={player.playerName} className={player.className} />
             {panelTitle && (
               <span className="ml-auto border-l border-border pl-2 text-2xs text-muted-foreground">
@@ -333,7 +333,7 @@ function DraggablePinnedTooltip({ player, initialPosition, onClose, panelTitle, 
     >
       {/* Header with drag handle and close button */}
       <div
-        className="flex items-center gap-2 border-b border-border px-2.5 py-1.5"
+        className="flex items-center gap-2 border-b border-border bg-background/45 px-2.5 py-1.5"
         data-drag-handle
         style={{ cursor: isDragging ? 'grabbing' : 'grab' }}
       >
