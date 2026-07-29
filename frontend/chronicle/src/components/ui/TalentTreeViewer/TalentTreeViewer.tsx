@@ -5,9 +5,9 @@ import { ImageDown, Lock, LockOpen, Share2 } from "lucide-react";
 import { toCanvas } from "html-to-image";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
+import { Checkbox } from "@/components/ui/Checkbox/Checkbox";
 import {
   DropdownMenu,
-  DropdownMenuCheckboxItem,
   DropdownMenuContent,
   DropdownMenuItem,
   DropdownMenuSeparator,
@@ -1261,13 +1261,16 @@ export function TalentTreeViewer({
                         </button>
                       </DropdownMenuTrigger>
                       <DropdownMenuContent align="start" className="w-48">
-                        <DropdownMenuCheckboxItem
-                          checked={hideEmptyTrees}
+                        <DropdownMenuItem
                           disabled={total === 0}
-                          onCheckedChange={(checked) => setHideEmptyTrees(checked === true)}
+                          onSelect={(event) => {
+                            event.preventDefault();
+                            setHideEmptyTrees((checked) => !checked);
+                          }}
                         >
+                          <Checkbox checked={hideEmptyTrees} className="pointer-events-none" />
                           Hide empty trees
-                        </DropdownMenuCheckboxItem>
+                        </DropdownMenuItem>
                         <DropdownMenuSeparator />
                         <DropdownMenuItem onSelect={() => void exportAsPng()}>
                           <ImageDown className="h-4 w-4" />
