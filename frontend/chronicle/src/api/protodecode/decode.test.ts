@@ -1,7 +1,7 @@
 import { create, toBinary } from '@bufbuild/protobuf';
 import { EventMetaSchema, ResurrectionSchema, SpellDataSchema } from '@/api/proto/chronicle_pb';
 import { describe, it, expect } from 'vitest';
-import { FastResurrectionCursor, readVarint, readVarint64, parseAllHeaders } from './decode';
+import { AuraDecoder, FastResurrectionCursor, readVarint, readVarint64, parseAllHeaders } from './decode';
 
 describe('readVarint', () => {
   it('reads single-byte varints', () => {
@@ -97,6 +97,17 @@ describe('FastResurrectionCursor', () => {
       target: '0xTARGET',
       spell: { id: 48949, name: 'Redemption' },
     });
+  });
+});
+
+describe('AuraDecoder synthetic metadata', () => {
+  it('decodes and resets EventMeta.is_synthetic', () => {
+    const decoder = new AuraDecoder();
+    const syntheticAura = new Uint8Array([0x0a, 0x02, 0x20, 0x01]);
+    expect(decoder.decode(syntheticAura, 0, syntheticAura.length).isSynthetic).toBe(true);
+
+    const emptyAura = new Uint8Array([]);
+    expect(decoder.decode(emptyAura, 0, emptyAura.length).isSynthetic).toBe(false);
   });
 });
 

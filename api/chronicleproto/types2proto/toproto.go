@@ -18,6 +18,7 @@ func EventMeta(from time.Time, idx int32, msg messages.Message) *chronicleproto.
 	meta := &chronicleproto.EventMeta{
 		Index:       idx,
 		OffsetMilli: msg.Date().UnixMilli() - from.UnixMilli(),
+		IsSynthetic: msg.IsSynthetic(),
 	}
 	for gid, actType := range msg.Activity() {
 		meta.Activity = append(meta.Activity, &chronicleproto.ActivityEntry{

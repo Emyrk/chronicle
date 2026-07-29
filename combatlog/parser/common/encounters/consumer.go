@@ -101,9 +101,6 @@ func (s *State) Process(m messages.Message) error {
 		return fmt.Errorf("units process: %w", err)
 	}
 
-	// Process aura messages at the parse level (once, before instance hooks).
-	s.Auras.Process(m)
-
 	switch typed := m.(type) {
 	case *messages.Realm:
 		s.CurrentRealm = &typed.Info
@@ -123,6 +120,9 @@ func (s *State) Process(m messages.Message) error {
 		//s.Slain(typed)
 	}
 
+	// Process instance hooks BEFORE updating canonical aura state so that
+	// projection sees the pre-message tracker snapshot. This ensures the
+	// pull-starting message's aura is not duplicated by projection.
 	if s.CurrentInstance != nil {
 		instanceStart := time.Now()
 		err := s.CurrentInstance.Process(m)
@@ -131,6 +131,12 @@ func (s *State) Process(m messages.Message) error {
 			return fmt.Errorf("instance process: %w", err)
 		}
 	}
+
+	// Process aura messages at the parse level (once, after instance hooks).
+	// This ordering ensures projection captures the pre-message canonical
+	// snapshot while still maintaining parse-wide aura tracking.
+	s.Auras.Process(m)
+
 	return nil
 }
 

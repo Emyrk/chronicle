@@ -349,19 +349,173 @@ func TestTracking_RemoveUnknownDoesNotNotify(t *testing.T) {
 	assert.Equal(t, auras.NotifyAdded, c.notifs[0].Type)
 }
 
-func TestProjection_UsesEncounterStart(t *testing.T) {
+func TestProjection_WaitsForFirstRealMessage(t *testing.T) {
 	t.Parallel()
 	tr := auras.New(nil)
 	tr.Process(makeAuraMsg(t0, testUnit, testSpell, types.AuraStateAdded, 1, false))
-	start := t0.Add(10 * time.Second)
+
 	var projected []*messages.Aura
-	projection := auras.NewProjection(tr, func() time.Time { return start })
+	projection := auras.NewProjection(tr)
 	projection.SetEmit(func(msg *messages.Aura) { projected = append(projected, msg) })
 
-	projection.FightStarted(uuid.Nil, makeAuraMsg(start.Add(time.Second), testUnit, testSpell2, types.AuraStateAdded, 1, false))
+	fightStartMsg := makeAuraMsg(t0.Add(10*time.Second), testUnit, testSpell2, types.AuraStateAdded, 1, false)
+	projection.FightStarted(uuid.Nil, fightStartMsg)
+
+	// No projection yet — still pending until first non-synthetic ProcessMessage.
+	assert.Empty(t, projected, "should not project on FightStarted alone")
+
+	// First real message triggers projection at that message's timestamp.
+	realMsg := &messages.Damage{MessageBase: messages.Base(t0.Add(12 * time.Second))}
+	err := projection.ProcessMessage(true, uuid.Nil, realMsg)
+	require.NoError(t, err)
 
 	require.Len(t, projected, 1)
-	assert.Equal(t, start, projected[0].Date())
+	assert.Equal(t, t0.Add(12*time.Second), projected[0].Date(),
+		"projected aura should use first real message timestamp")
+	assert.True(t, projected[0].IsSynthetic())
+}
+
+func TestProjection_PullStartAuraNotDuplicated(t *testing.T) {
+	t.Parallel()
+	tr := auras.New(nil)
+	tr.Process(makeAuraMsg(t0, testUnit, testSpell, types.AuraStateAdded, 1, false))
+
+	var projected []*messages.Aura
+	projection := auras.NewProjection(tr)
+	projection.SetEmit(func(msg *messages.Aura) { projected = append(projected, msg) })
+
+	// FightStarted triggers pending.
+	projection.FightStarted(uuid.Nil, &messages.Damage{MessageBase: messages.Base(t0.Add(10 * time.Second))})
+
+	// First real message is an aura apply for the same target+spell that's tracked.
+	pullAura := makeAuraMsg(t0.Add(10*time.Second), testUnit, testSpell, types.AuraStateAdded, 1, false)
+	err := projection.ProcessMessage(true, uuid.Nil, pullAura)
+	require.NoError(t, err)
+
+	// Should NOT project — the pull-starting message IS the apply for this aura.
+	assert.Empty(t, projected,
+		"should not project when first real message is an apply for the same aura")
+}
+
+func TestProjection_SyntheticExpiryEmitted(t *testing.T) {
+	t.Parallel()
+	tr := auras.New(nil)
+	// testSpell has 30s duration from t0, so MaxExistsUntil = t0+30s
+	tr.Process(makeAuraMsg(t0, testUnit, testSpell, types.AuraStateAdded, 1, false))
+
+	var emitted []*messages.Aura
+	projection := auras.NewProjection(tr)
+	projection.SetEmit(func(msg *messages.Aura) { emitted = append(emitted, msg) })
+
+	// Start fight at t0+5s.
+	projection.FightStarted(uuid.Nil, &messages.Damage{MessageBase: messages.Base(t0.Add(5 * time.Second))})
+	// First real message at t0+6s triggers projection.
+	err := projection.ProcessMessage(true, uuid.Nil, &messages.Damage{MessageBase: messages.Base(t0.Add(6 * time.Second))})
+	require.NoError(t, err)
+	require.Len(t, emitted, 1, "should project one aura")
+
+	// Next real message at t0+35s (past 30s expiry).
+	err = projection.ProcessMessage(true, uuid.Nil, &messages.Damage{MessageBase: messages.Base(t0.Add(35 * time.Second))})
+	require.NoError(t, err)
+	require.Len(t, emitted, 2, "should emit synthetic removal")
+	assert.Equal(t, types.AuraStateRemoved, emitted[1].State)
+	assert.Equal(t, t0.Add(30*time.Second), emitted[1].Date(),
+		"synthetic removal should be at exact expiry time")
+	assert.True(t, emitted[1].IsSynthetic())
+}
+
+func TestProjection_RealEvidenceCancelsSyntheticExpiry(t *testing.T) {
+	t.Parallel()
+	tr := auras.New(nil)
+	tr.Process(makeAuraMsg(t0, testUnit, testSpell, types.AuraStateAdded, 1, false))
+
+	var emitted []*messages.Aura
+	projection := auras.NewProjection(tr)
+	projection.SetEmit(func(msg *messages.Aura) { emitted = append(emitted, msg) })
+
+	// Start fight and project.
+	projection.FightStarted(uuid.Nil, &messages.Damage{MessageBase: messages.Base(t0.Add(5 * time.Second))})
+	err := projection.ProcessMessage(true, uuid.Nil, &messages.Damage{MessageBase: messages.Base(t0.Add(6 * time.Second))})
+	require.NoError(t, err)
+	require.Len(t, emitted, 1)
+
+	// Real aura refresh at t0+15s cancels synthetic expiry.
+	refresh := makeAuraMsg(t0.Add(15*time.Second), testUnit, testSpell, types.AuraStateAdded, 1, false)
+	err = projection.ProcessMessage(true, uuid.Nil, refresh)
+	require.NoError(t, err)
+
+	// Later message past original expiry — no synthetic removal.
+	err = projection.ProcessMessage(true, uuid.Nil, &messages.Damage{MessageBase: messages.Base(t0.Add(35 * time.Second))})
+	require.NoError(t, err)
+	assert.Len(t, emitted, 1, "no synthetic removal after real evidence")
+}
+
+func TestProjection_LateRealEvidenceWinsOverSyntheticExpiry(t *testing.T) {
+	t.Parallel()
+	tr := auras.New(nil)
+	tr.Process(makeAuraMsg(t0, testUnit, testSpell, types.AuraStateAdded, 1, false))
+
+	var emitted []*messages.Aura
+	projection := auras.NewProjection(tr)
+	projection.SetEmit(func(msg *messages.Aura) { emitted = append(emitted, msg) })
+	projection.FightStarted(uuid.Nil, &messages.Damage{MessageBase: messages.Base(t0.Add(5 * time.Second))})
+	require.NoError(t, projection.ProcessMessage(true, uuid.Nil, &messages.Damage{MessageBase: messages.Base(t0.Add(6 * time.Second))}))
+	require.Len(t, emitted, 1)
+
+	// Even though this refresh arrives after the prior inferred expiry, real
+	// combat-log evidence is authoritative and suppresses a synthetic fade.
+	refresh := makeAuraMsg(t0.Add(35*time.Second), testUnit, testSpell, types.AuraStateModified, 1, false)
+	refresh.Transition = messages.AuraTransitionRefreshed
+	require.NoError(t, projection.ProcessMessage(true, uuid.Nil, refresh))
+	assert.Len(t, emitted, 1, "late real evidence must suppress inferred expiry")
+}
+
+func TestProjection_InCombatAuraNoSyntheticExpiry(t *testing.T) {
+	t.Parallel()
+	tr := auras.New(nil)
+	// No pre-pull auras.
+
+	var emitted []*messages.Aura
+	projection := auras.NewProjection(tr)
+	projection.SetEmit(func(msg *messages.Aura) { emitted = append(emitted, msg) })
+
+	projection.FightStarted(uuid.Nil, &messages.Damage{MessageBase: messages.Base(t0)})
+	err := projection.ProcessMessage(true, uuid.Nil, &messages.Damage{MessageBase: messages.Base(t0)})
+	require.NoError(t, err)
+	assert.Empty(t, emitted, "no projections when no pre-pull auras")
+
+	// Aura applied in combat through real message — should never get synthetic expiry.
+	// (The projection doesn't track in-combat auras, only projected pre-pull ones.)
+	inCombatAura := makeAuraMsg(t0.Add(5*time.Second), testUnit, testSpell, types.AuraStateAdded, 1, false)
+	err = projection.ProcessMessage(true, uuid.Nil, inCombatAura)
+	require.NoError(t, err)
+
+	// Past expiry — no synthetic removal.
+	err = projection.ProcessMessage(true, uuid.Nil, &messages.Damage{MessageBase: messages.Base(t0.Add(35 * time.Second))})
+	require.NoError(t, err)
+	assert.Empty(t, emitted, "in-combat auras should never get synthetic expiry")
+}
+
+func TestProjection_ClearsStateOnFightEnd(t *testing.T) {
+	t.Parallel()
+	tr := auras.New(nil)
+	tr.Process(makeAuraMsg(t0, testUnit, testSpell, types.AuraStateAdded, 1, false))
+
+	var emitted []*messages.Aura
+	projection := auras.NewProjection(tr)
+	projection.SetEmit(func(msg *messages.Aura) { emitted = append(emitted, msg) })
+
+	projection.FightStarted(uuid.Nil, &messages.Damage{MessageBase: messages.Base(t0.Add(5 * time.Second))})
+	err := projection.ProcessMessage(true, uuid.Nil, &messages.Damage{MessageBase: messages.Base(t0.Add(6 * time.Second))})
+	require.NoError(t, err)
+	require.Len(t, emitted, 1)
+
+	projection.FightEnded(uuid.Nil, &messages.Damage{MessageBase: messages.Base(t0.Add(20 * time.Second))})
+
+	// After fight end, a later real message should not emit synthetic expiry.
+	err = projection.ProcessMessage(false, uuid.Nil, &messages.Damage{MessageBase: messages.Base(t0.Add(35 * time.Second))})
+	require.NoError(t, err)
+	assert.Len(t, emitted, 1, "no synthetic expiry after fight end")
 }
 
 func TestTracking_NonAuraMessageIgnored(t *testing.T) {

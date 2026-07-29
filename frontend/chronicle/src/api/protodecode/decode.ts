@@ -252,6 +252,7 @@ export interface ReusableDamage {
   tailerCount: number;  // Actual number of tailers (tailers array may have extra capacity)
   activity: ReusableActivityEntry[];
   activityCount: number;  // Actual number of activity entries
+  isSynthetic: boolean;
   spellId: number | null; // From SpellData field 10
   spellAttackOutcome: number | null; // From SpellData field 3 (AttackOutcome bitmask)
   overkill: number;
@@ -280,6 +281,7 @@ export class DamageDecoder {
     tailerCount: 0,
     activity: [],
     activityCount: 0,
+    isSynthetic: false,
     spellId: null,
     spellAttackOutcome: null,
     overkill: 0,
@@ -304,6 +306,7 @@ export class DamageDecoder {
     msg.school = 0;
     msg.tailerCount = 0;
     msg.activityCount = 0;
+    msg.isSynthetic = false;
     msg.spellId = null;
     msg.spellAttackOutcome = null;
     msg.overkill = 0;
@@ -340,6 +343,7 @@ export class DamageDecoder {
               offset += bytesRead;
               if (metaField === 1) msg.index = value;
               else if (metaField === 2) msg.offsetMilli = value;
+              else if (metaField === 4) msg.isSynthetic = value !== 0;
             } else if (metaWire === 2 && metaField === 3) {
               // ActivityEntry - decode nested repeated message
               const { value: actLen, bytesRead: actLenBytes } = readVarintFast(data, offset);
@@ -448,6 +452,7 @@ export interface ReusableHeal {
   school: number;
   activity: ReusableActivityEntry[];
   activityCount: number;
+  isSynthetic: boolean;
   spellId: number | null; // From SpellData field 8
   spellAttackOutcome: number | null; // From SpellData field 3 (AttackOutcome bitmask)
   overheal: number;
@@ -486,6 +491,7 @@ export class HealDecoder {
     absorbed: 0,
     activity: [],
     activityCount: 0,
+    isSynthetic: false,
     spellId: null,
     spellAttackOutcome: null,
   };
@@ -508,6 +514,7 @@ export class HealDecoder {
     msg.amount = 0;
     msg.school = 0;
     msg.activityCount = 0;
+    msg.isSynthetic = false;
     msg.spellId = null;
     msg.spellAttackOutcome = null;
     msg.overheal = 0;
@@ -546,6 +553,7 @@ export class HealDecoder {
               offset += bytesRead;
               if (metaField === 1) msg.index = value;
               else if (metaField === 2) msg.offsetMilli = value;
+              else if (metaField === 4) msg.isSynthetic = value !== 0;
             } else if (metaWire === 2 && metaField === 3) {
               // ActivityEntry - decode nested repeated message
               const { value: actLen, bytesRead: actLenBytes } = readVarintFast(data, offset);
@@ -759,6 +767,7 @@ export interface ReusableResourceChange {
   overResource: number;
   activity: ReusableActivityEntry[];
   activityCount: number;
+  isSynthetic: boolean;
 }
 
 /**
@@ -791,6 +800,7 @@ export class ResourceChangeDecoder {
     overResource: 0,
     activity: [],
     activityCount: 0,
+    isSynthetic: false,
   };
   
   /**
@@ -812,6 +822,7 @@ export class ResourceChangeDecoder {
     msg.direction = "";
     msg.overResource = 0;
     msg.activityCount = 0;
+    msg.isSynthetic = false;
     
     while (offset < end) {
       const tag = data[offset++];
@@ -843,6 +854,7 @@ export class ResourceChangeDecoder {
               offset += bytesRead;
               if (metaField === 1) msg.index = value;
               else if (metaField === 2) msg.offsetMilli = value;
+              else if (metaField === 4) msg.isSynthetic = value !== 0;
             } else if (metaWire === 2 && metaField === 3) {
               // ActivityEntry - decode nested repeated message
               const { value: actLen, bytesRead: actLenBytes } = readVarintFast(data, offset);
@@ -1038,6 +1050,7 @@ export interface ReusableExtraAttack {
   sourceName: string;
   activity: ReusableActivityEntry[];
   activityCount: number;
+  isSynthetic: boolean;
 }
 
 /**
@@ -1063,6 +1076,7 @@ export class ExtraAttackDecoder {
     sourceName: "",
     activity: [],
     activityCount: 0,
+    isSynthetic: false,
   };
   
   /**
@@ -1080,6 +1094,7 @@ export class ExtraAttackDecoder {
     msg.amount = 0;
     msg.sourceName = "";
     msg.activityCount = 0;
+    msg.isSynthetic = false;
     
     while (offset < end) {
       const tag = data[offset++];
@@ -1104,6 +1119,7 @@ export class ExtraAttackDecoder {
               offset += bytesRead;
               if (metaField === 1) msg.index = value;
               else if (metaField === 2) msg.offsetMilli = value;
+              else if (metaField === 4) msg.isSynthetic = value !== 0;
             } else if (metaWire === 2 && metaField === 3) {
               // ActivityEntry - decode nested repeated message
               const { value: actLen, bytesRead: actLenBytes } = readVarintFast(data, offset);
@@ -1308,6 +1324,7 @@ export interface ReusableSlain {
   attribution: ReusableAttributionDamage | null;
   activity: ReusableActivityEntry[];
   activityCount: number;
+  isSynthetic: boolean;
 }
 
 /**
@@ -1350,6 +1367,7 @@ export class SlainDecoder {
     attribution: null,
     activity: [],
     activityCount: 0,
+    isSynthetic: false,
   };
   
   /**
@@ -1367,6 +1385,7 @@ export class SlainDecoder {
     msg.caster = "";
     msg.attribution = null;
     msg.activityCount = 0;
+    msg.isSynthetic = false;
     
     while (offset < end) {
       const tag = data[offset++];
@@ -1391,6 +1410,7 @@ export class SlainDecoder {
               offset += bytesRead;
               if (metaField === 1) msg.index = value;
               else if (metaField === 2) msg.offsetMilli = value;
+              else if (metaField === 4) msg.isSynthetic = value !== 0;
             } else if (metaWire === 2 && metaField === 3) {
               // ActivityEntry - decode nested repeated message
               const { value: actLen, bytesRead: actLenBytes } = readVarintFast(data, offset);
@@ -1862,6 +1882,7 @@ export interface ReusableCast {
   spell: ReusableSpell;
   activity: ReusableActivityEntry[];
   activityCount: number;
+  isSynthetic: boolean;
 }
 
 /**
@@ -1900,6 +1921,7 @@ export class CastDecoder {
     spell: this.reusableSpell,
     activity: [],
     activityCount: 0,
+    isSynthetic: false,
   };
   
   /**
@@ -1921,6 +1943,7 @@ export class CastDecoder {
     spell.id = 0;
     spell.rank = null;
     msg.activityCount = 0;
+    msg.isSynthetic = false;
     
     while (offset < end) {
       const tag = data[offset++];
@@ -1945,6 +1968,7 @@ export class CastDecoder {
               offset += bytesRead;
               if (metaField === 1) msg.index = value;
               else if (metaField === 2) msg.offsetMilli = value;
+              else if (metaField === 4) msg.isSynthetic = value !== 0;
             } else if (metaWire === 2 && metaField === 3) {
               // ActivityEntry - decode nested repeated message
               const { value: actLen, bytesRead: actLenBytes } = readVarintFast(data, offset);
@@ -2189,6 +2213,7 @@ export interface ReusableAura {
   state: AuraState;
   activity: ReusableActivityEntry[];
   activityCount: number;
+  isSynthetic: boolean;
 }
 
 /**
@@ -2219,6 +2244,7 @@ export class AuraDecoder {
     state: AuraState.Unknown,
     activity: [],
     activityCount: 0,
+    isSynthetic: false,
   };
   
   /**
@@ -2240,6 +2266,7 @@ export class AuraDecoder {
     msg.application = AuraApplication.Unknown;
     msg.state = AuraState.Unknown;
     msg.activityCount = 0;
+    msg.isSynthetic = false;
     
     while (offset < end) {
       const tag = data[offset++];
@@ -2272,6 +2299,7 @@ export class AuraDecoder {
               offset += bytesRead;
               if (metaField === 1) msg.index = value;
               else if (metaField === 2) msg.offsetMilli = value;
+              else if (metaField === 4) msg.isSynthetic = value !== 0;
             } else if (metaWire === 2 && metaField === 3) {
               // ActivityEntry - decode nested repeated message
               const { value: actLen, bytesRead: actLenBytes } = readVarintFast(data, offset);
@@ -2500,6 +2528,7 @@ export interface ReusableAuraCast {
   effectAuraName: number;
   activity: ReusableActivityEntry[];
   activityCount: number;
+  isSynthetic: boolean;
 }
 
 /**
@@ -2543,6 +2572,7 @@ export class AuraCastDecoder {
     effectAuraName: 0,
     activity: [],
     activityCount: 0,
+    isSynthetic: false,
   };
   
   /**
@@ -2569,6 +2599,7 @@ export class AuraCastDecoder {
     msg.capStatus = 0;
     msg.effectAuraName = 0;
     msg.activityCount = 0;
+    msg.isSynthetic = false;
     
     while (offset < end) {
       const tag = data[offset++];
@@ -2593,6 +2624,7 @@ export class AuraCastDecoder {
               offset += bytesRead;
               if (metaField === 1) msg.index = value;
               else if (metaField === 2) msg.offsetMilli = value;
+              else if (metaField === 4) msg.isSynthetic = value !== 0;
             } else if (metaWire === 2 && metaField === 3) {
               // ActivityEntry - decode nested repeated message
               const { value: actLen, bytesRead: actLenBytes } = readVarintFast(data, offset);
@@ -2827,6 +2859,7 @@ export interface ReusableSpellGo {
   corpseOwner: string | null;
   activity: ReusableActivityEntry[];
   activityCount: number;
+  isSynthetic: boolean;
 }
 
 /**
@@ -2866,6 +2899,7 @@ export class SpellGoDecoder {
     corpseOwner: null,
     activity: [],
     activityCount: 0,
+    isSynthetic: false,
   };
   
   /**
@@ -2890,6 +2924,7 @@ export class SpellGoDecoder {
     msg.itemId = null;
     msg.corpseOwner = null;
     msg.activityCount = 0;
+    msg.isSynthetic = false;
     
     while (offset < end) {
       const tag = data[offset++];
@@ -2914,6 +2949,7 @@ export class SpellGoDecoder {
               offset += bytesRead;
               if (metaField === 1) msg.index = value;
               else if (metaField === 2) msg.offsetMilli = value;
+              else if (metaField === 4) msg.isSynthetic = value !== 0;
             } else if (metaWire === 2 && metaField === 3) {
               // ActivityEntry - decode nested repeated message
               const { value: actLen, bytesRead: actLenBytes } = readVarintFast(data, offset);
@@ -3150,6 +3186,7 @@ export interface ReusableSpellStart {
   spellType: number;
   activity: ReusableActivityEntry[];
   activityCount: number;
+  isSynthetic: boolean;
 }
 
 /**
@@ -3191,6 +3228,7 @@ export class SpellStartDecoder {
     spellType: 0,
     activity: [],
     activityCount: 0,
+    isSynthetic: false,
   };
   
   /**
@@ -3216,6 +3254,7 @@ export class SpellStartDecoder {
     msg.channelTimeMilli = 0;
     msg.spellType = 0;
     msg.activityCount = 0;
+    msg.isSynthetic = false;
     
     while (offset < end) {
       const tag = data[offset++];
@@ -3240,6 +3279,7 @@ export class SpellStartDecoder {
               offset += bytesRead;
               if (metaField === 1) msg.index = value;
               else if (metaField === 2) msg.offsetMilli = value;
+              else if (metaField === 4) msg.isSynthetic = value !== 0;
             } else if (metaWire === 2 && metaField === 3) {
               // ActivityEntry - decode nested repeated message
               const { value: actLen, bytesRead: actLenBytes } = readVarintFast(data, offset);
@@ -3470,6 +3510,7 @@ export interface ReusableSpellFail {
   failedByServer: boolean;
   activity: ReusableActivityEntry[];
   activityCount: number;
+  isSynthetic: boolean;
 }
 
 /**
@@ -3501,6 +3542,7 @@ export class SpellFailDecoder {
     failedByServer: false,
     activity: [],
     activityCount: 0,
+    isSynthetic: false,
   };
   
   /**
@@ -3521,6 +3563,7 @@ export class SpellFailDecoder {
     spell.attackOutcome = null;
     msg.failedByServer = false;
     msg.activityCount = 0;
+    msg.isSynthetic = false;
     
     while (offset < end) {
       const tag = data[offset++];
@@ -3545,6 +3588,7 @@ export class SpellFailDecoder {
               offset += bytesRead;
               if (metaField === 1) msg.index = value;
               else if (metaField === 2) msg.offsetMilli = value;
+              else if (metaField === 4) msg.isSynthetic = value !== 0;
             } else if (metaWire === 2 && metaField === 3) {
               // ActivityEntry - decode nested repeated message
               const { value: actLen, bytesRead: actLenBytes } = readVarintFast(data, offset);
@@ -3743,6 +3787,7 @@ export interface ReusableUnitClassification {
   spellId: number;
   activity: ReusableActivityEntry[];
   activityCount: number;
+  isSynthetic: boolean;
 }
 
 /**
@@ -3773,6 +3818,7 @@ export class UnitClassificationDecoder {
     spellId: 0,
     activity: [],
     activityCount: 0,
+    isSynthetic: false,
   };
   
   /**
@@ -3793,6 +3839,7 @@ export class UnitClassificationDecoder {
     msg.controller = null;
     msg.spellId = 0;
     msg.activityCount = 0;
+    msg.isSynthetic = false;
     
     while (offset < end) {
       const tag = data[offset++];
@@ -3817,6 +3864,7 @@ export class UnitClassificationDecoder {
               offset += bytesRead;
               if (metaField === 1) msg.index = value;
               else if (metaField === 2) msg.offsetMilli = value;
+              else if (metaField === 4) msg.isSynthetic = value !== 0;
             } else if (metaWire === 2 && metaField === 3) {
               // ActivityEntry - decode nested repeated message
               const { value: actLen, bytesRead: actLenBytes } = readVarintFast(data, offset);
@@ -4004,6 +4052,7 @@ export interface ReusableDispel {
   dispelType: DispelType;
   activity: ReusableActivityEntry[];
   activityCount: number;
+  isSynthetic: boolean;
 }
 
 /**
@@ -4032,6 +4081,7 @@ export class DispelDecoder {
     dispelType: DispelType.None,
     activity: [],
     activityCount: 0,
+    isSynthetic: false,
   };
   
   decode(data: Uint8Array, offset: number, length: number): ReusableDispel {
@@ -4048,6 +4098,7 @@ export class DispelDecoder {
     msg.spellAttackOutcome = null;
     msg.dispelType = DispelType.None;
     msg.activityCount = 0;
+    msg.isSynthetic = false;
     
     while (offset < end) {
       const tag = data[offset++];
@@ -4072,6 +4123,7 @@ export class DispelDecoder {
               offset += bytesRead;
               if (metaField === 1) msg.index = value;
               else if (metaField === 2) msg.offsetMilli = value;
+              else if (metaField === 4) msg.isSynthetic = value !== 0;
             } else if (metaWire === 2 && metaField === 3) {
               // ActivityEntry
               const { value: actLen, bytesRead: actLenBytes } = readVarintFast(data, offset);
@@ -4282,6 +4334,7 @@ export interface ReusableInterrupt {
   extraSchool: InterruptSchool;
   activity: ReusableActivityEntry[];
   activityCount: number;
+  isSynthetic: boolean;
 }
 
 /**
@@ -4310,6 +4363,7 @@ export class InterruptDecoder {
     extraSchool: InterruptSchool.Unknown,
     activity: [],
     activityCount: 0,
+    isSynthetic: false,
   };
 
   decode(data: Uint8Array, offset: number, length: number): ReusableInterrupt {
@@ -4325,6 +4379,7 @@ export class InterruptDecoder {
     msg.extraSpellId = 0;
     msg.extraSchool = InterruptSchool.Unknown;
     msg.activityCount = 0;
+    msg.isSynthetic = false;
 
     while (offset < end) {
       const tag = data[offset++];
@@ -4349,6 +4404,7 @@ export class InterruptDecoder {
               offset += bytesRead;
               if (metaField === 1) msg.index = value;
               else if (metaField === 2) msg.offsetMilli = value;
+              else if (metaField === 4) msg.isSynthetic = value !== 0;
             } else if (metaWire === 2 && metaField === 3) {
               // ActivityEntry
               const { value: actLen, bytesRead: actLenBytes } = readVarintFast(data, offset);
@@ -4537,6 +4593,7 @@ export interface ReusableAbsorbed {
   estimated: boolean;
   activity: ReusableActivityEntry[];
   activityCount: number;
+  isSynthetic: boolean;
 }
 
 /**
@@ -4573,6 +4630,7 @@ export class AbsorbedDecoder {
     estimated: false,
     activity: [],
     activityCount: 0,
+    isSynthetic: false,
   };
 
   decode(data: Uint8Array, offset: number, length: number): ReusableAbsorbed {
@@ -4593,6 +4651,7 @@ export class AbsorbedDecoder {
     msg.amount = 0;
     msg.estimated = false;
     msg.activityCount = 0;
+    msg.isSynthetic = false;
 
     while (offset < end) {
       const tag = data[offset++];
@@ -4617,6 +4676,7 @@ export class AbsorbedDecoder {
               offset += bytesRead;
               if (metaField === 1) msg.index = value;
               else if (metaField === 2) msg.offsetMilli = value;
+              else if (metaField === 4) msg.isSynthetic = value !== 0;
             } else if (metaWire === 2 && metaField === 3) {
               // ActivityEntry
               const { value: actLen, bytesRead: actLenBytes } = readVarintFast(data, offset);
@@ -4854,6 +4914,7 @@ export interface ReusableCombatantInfo {
   talents: ReusableCombatantTalents | null;
   activity: ReusableActivityEntry[];
   activityCount: number;
+  isSynthetic: boolean;
 }
 
 /**
@@ -4889,6 +4950,7 @@ export class CombatantInfoDecoder {
     talents: null,
     activity: [],
     activityCount: 0,
+    isSynthetic: false,
   };
 
   decode(data: Uint8Array, offset: number, length: number): ReusableCombatantInfo {
@@ -4907,6 +4969,7 @@ export class CombatantInfoDecoder {
     msg.gearCount = 0;
     msg.talents = null;
     msg.activityCount = 0;
+    msg.isSynthetic = false;
 
     while (offset < end) {
       const tag = data[offset++];
@@ -4931,6 +4994,7 @@ export class CombatantInfoDecoder {
               offset += bytesRead;
               if (metaField === 1) msg.index = value;
               else if (metaField === 2) msg.offsetMilli = value;
+              else if (metaField === 4) msg.isSynthetic = value !== 0;
             } else if (metaWire === 2 && metaField === 3) {
               const { value: actLen, bytesRead: actLenBytes } = readVarintFast(data, offset);
               offset += actLenBytes;

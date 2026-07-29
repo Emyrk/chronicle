@@ -284,6 +284,22 @@ func (t *Tracking) Finalize() {
 
 // --- Projection helpers ---
 
+// SnapshotAll returns a deep copy of all tracked aura state. The caller owns
+// the returned map and may read it without holding any lock. This is used by
+// Projection to capture pre-message canonical state.
+func (t *Tracking) SnapshotAll() map[guid.GUID]map[chrondbc.SpellID]*AuraState {
+	result := make(map[guid.GUID]map[chrondbc.SpellID]*AuraState, len(t.units))
+	for unit, spells := range t.units {
+		snap := make(map[chrondbc.SpellID]*AuraState, len(spells))
+		for id, state := range spells {
+			copy := *state
+			snap[id] = &copy
+		}
+		result[unit] = snap
+	}
+	return result
+}
+
 // ProjectAllAuras returns synthetic aura "added" messages for every tracked
 // aura, timestamped at ts. The caller owns these messages and may inject them
 // into an encounter event stream. This does NOT mutate shared state.

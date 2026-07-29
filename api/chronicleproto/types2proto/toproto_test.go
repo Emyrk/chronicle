@@ -116,3 +116,34 @@ func TestAbsorbedSchoolBackfill(t *testing.T) {
 	})
 	require.Equal(t, chronicleproto.School_Arcane, got.AbsorbSchool)
 }
+
+func TestEventMetaSyntheticRoundTrip(t *testing.T) {
+	t.Parallel()
+	ts := time.UnixMilli(5000)
+
+	t.Run("SyntheticTrue", func(t *testing.T) {
+		t.Parallel()
+		msg := &messages.Aura{
+			MessageBase: messages.Base(ts, messages.WithSynthetic()),
+			Target:      guid.GUID(1),
+			SpellData:   &chrondbc.Spell{ID: 1},
+			SpellName:   "Test",
+			State:       types.AuraStateAdded,
+		}
+		meta := EventMeta(ts, 0, msg)
+		require.True(t, meta.IsSynthetic, "synthetic message should produce IsSynthetic=true")
+	})
+
+	t.Run("NonSyntheticFalse", func(t *testing.T) {
+		t.Parallel()
+		msg := &messages.Aura{
+			MessageBase: messages.Base(ts),
+			Target:      guid.GUID(1),
+			SpellData:   &chrondbc.Spell{ID: 1},
+			SpellName:   "Test",
+			State:       types.AuraStateAdded,
+		}
+		meta := EventMeta(ts, 0, msg)
+		require.False(t, meta.IsSynthetic, "non-synthetic message should produce IsSynthetic=false")
+	})
+}

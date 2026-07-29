@@ -58,6 +58,9 @@ message EventMeta {
   int32 index = 1;
   int64 offsetMilli = 2;
   repeated ActivityEntry activity = 3;
+  // True when this event was synthetically generated (e.g. projected pre-pull
+  // aura), not sourced from the original combat log.
+  bool is_synthetic = 4;
 }
 
 message Heal {

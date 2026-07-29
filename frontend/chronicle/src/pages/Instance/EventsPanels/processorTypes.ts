@@ -34,6 +34,8 @@ interface EventMeta {
   /** Activity tracking entries from encounter period detection */
   activity: ActivityEntry[];
   activityCount: number;
+  /** True when this event was synthetically generated (e.g. projected pre-pull aura). */
+  isSynthetic: boolean;
 }
 
 /**

@@ -234,14 +234,10 @@ func (h *Hookable) AddHook(hook instancehook.Hook) {
 
 // AttachAuraProjection creates and registers an aura projection adapter that
 // references the shared parse-wide tracker. The adapter projects active auras
-// into encounter event streams on FightStarted and forwards death notifications.
+// into encounter event streams on the first real message after FightStarted,
+// manages synthetic expiry, and forwards death notifications.
 func (h *Hookable) AttachAuraProjection(tracker *auras.Tracking) {
-	proj := auras.NewProjection(tracker, func() time.Time {
-		if h.currentFight == nil || h.currentFight.Start == nil {
-			return time.Time{}
-		}
-		return h.currentFight.Start.Timestamp.Date()
-	})
+	proj := auras.NewProjection(tracker)
 	proj.SetEmit(func(evt *messages.Aura) {
 		if h.currentFight != nil && h.currentFight.active() {
 			err := h.currentFight.Events.Process(evt)
@@ -443,8 +439,6 @@ func (h *Hookable) FightDetectionHandler(m messages.Message) (func() error, erro
 	}
 
 	if !wasActive && h.currentFight.active() {
-		// Establish the real encounter origin before hooks project pre-pull state.
-		h.currentFight.Events.SetStart(h.currentFight.Start.Timestamp.Date())
 		for _, hook := range h.hooks {
 			hook.FightStarted(h.currentFight.EncounterID, m)
 		}

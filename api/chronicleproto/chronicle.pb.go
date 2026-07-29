@@ -473,10 +473,13 @@ func (x *ActivityEntry) GetEventType() string {
 }
 
 type EventMeta struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	Index         int32                  `protobuf:"varint,1,opt,name=index,proto3" json:"index,omitempty"`
-	OffsetMilli   int64                  `protobuf:"varint,2,opt,name=offsetMilli,proto3" json:"offsetMilli,omitempty"`
-	Activity      []*ActivityEntry       `protobuf:"bytes,3,rep,name=activity,proto3" json:"activity,omitempty"`
+	state       protoimpl.MessageState `protogen:"open.v1"`
+	Index       int32                  `protobuf:"varint,1,opt,name=index,proto3" json:"index,omitempty"`
+	OffsetMilli int64                  `protobuf:"varint,2,opt,name=offsetMilli,proto3" json:"offsetMilli,omitempty"`
+	Activity    []*ActivityEntry       `protobuf:"bytes,3,rep,name=activity,proto3" json:"activity,omitempty"`
+	// True when this event was synthetically generated (e.g. projected pre-pull
+	// aura), not sourced from the original combat log.
+	IsSynthetic   bool `protobuf:"varint,4,opt,name=is_synthetic,json=isSynthetic,proto3" json:"is_synthetic,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -530,6 +533,13 @@ func (x *EventMeta) GetActivity() []*ActivityEntry {
 		return x.Activity
 	}
 	return nil
+}
+
+func (x *EventMeta) GetIsSynthetic() bool {
+	if x != nil {
+		return x.IsSynthetic
+	}
+	return false
 }
 
 type Heal struct {
@@ -2374,11 +2384,12 @@ const file_chronicle_proto_rawDesc = "" +
 	"\a_amount\"A\n" +
 	"\rActivityEntry\x12\x12\n" +
 	"\x04guid\x18\x01 \x01(\tR\x04guid\x12\x1c\n" +
-	"\teventType\x18\x02 \x01(\tR\teventType\"~\n" +
+	"\teventType\x18\x02 \x01(\tR\teventType\"\xa1\x01\n" +
 	"\tEventMeta\x12\x14\n" +
 	"\x05index\x18\x01 \x01(\x05R\x05index\x12 \n" +
 	"\voffsetMilli\x18\x02 \x01(\x03R\voffsetMilli\x129\n" +
-	"\bactivity\x18\x03 \x03(\v2\x1d.chronicleproto.ActivityEntryR\bactivity\"\xeb\x02\n" +
+	"\bactivity\x18\x03 \x03(\v2\x1d.chronicleproto.ActivityEntryR\bactivity\x12!\n" +
+	"\fis_synthetic\x18\x04 \x01(\bR\visSynthetic\"\xeb\x02\n" +
 	"\x04Heal\x12-\n" +
 	"\x04meta\x18\x01 \x01(\v2\x19.chronicleproto.EventMetaR\x04meta\x12\x16\n" +
 	"\x06caster\x18\x03 \x01(\tR\x06caster\x12\x16\n" +
