@@ -28,6 +28,7 @@ import {
   RotateCcw,
   Skull,
 } from "lucide-react";
+import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import { useInstanceEventsContext } from "@/hooks/instanceEvents";
 import { createStreamCursor } from "@/api/protodecode/decode";
@@ -178,10 +179,6 @@ function DeathMarkers({
   );
 }
 
-/** Shared transport-button styling (dark chip look). */
-const chipButton =
-  "inline-flex items-center justify-center rounded-md border border-zinc-700/80 bg-zinc-800/80 text-zinc-200 transition-colors hover:bg-zinc-700/80 disabled:opacity-40 disabled:pointer-events-none";
-
 function SpeedChips({
   value,
   onChange,
@@ -194,23 +191,18 @@ function SpeedChips({
   size?: "sm" | "md";
 }) {
   return (
-    <div className="flex gap-1.5">
+    <div className="flex gap-1">
       {SPEEDS.map((speed) => (
-        <button
+        <Button
           key={speed}
-          type="button"
+          variant={value === speed ? "default" : "outline"}
+          size="sm"
+          className={cn("font-mono", size === "sm" ? "h-7 px-2 text-[11px]" : "h-7 px-2.5 text-xs")}
           onClick={() => onChange(speed)}
           disabled={disabled}
-          className={cn(
-            "rounded-md font-mono transition-colors disabled:opacity-40 disabled:pointer-events-none",
-            size === "sm" ? "px-2 py-1 text-[11px]" : "px-2.5 py-1 text-xs",
-            value === speed
-              ? "bg-amber-300 text-zinc-900 font-semibold"
-              : "border border-zinc-700/80 bg-zinc-800/80 text-zinc-300 hover:bg-zinc-700/80"
-          )}
         >
           {speed}x
-        </button>
+        </Button>
       ))}
     </div>
   );
@@ -307,33 +299,35 @@ export function ReplayControlOverlay({ initialTimestamp }: ReplayControlOverlayP
     <span
       className={cn(
         "h-2.5 w-2.5 shrink-0 rounded-full",
-        sync.isPlaying ? "bg-red-500 animate-pulse" : "bg-zinc-600"
+        sync.isPlaying ? "bg-red-500 animate-pulse" : "bg-muted-foreground/40"
       )}
     />
   );
 
   const playPauseButton = (extraClass: string) => (
-    <button
-      type="button"
-      className={cn(chipButton, extraClass)}
+    <Button
+      variant="outline"
+      size="icon"
+      className={extraClass}
       onClick={() => (sync.isPlaying ? sync.pause() : sync.play())}
       disabled={controlsDisabled}
       title={sync.isPlaying ? "Pause" : "Play"}
     >
       {sync.isPlaying ? <Pause className="h-4 w-4" /> : <Play className="h-4 w-4" />}
-    </button>
+    </Button>
   );
 
   const restartButton = (extraClass: string) => (
-    <button
-      type="button"
-      className={cn(chipButton, extraClass)}
+    <Button
+      variant="outline"
+      size="icon"
+      className={extraClass}
       onClick={handleRestart}
       disabled={controlsDisabled}
       title="Restart from beginning"
     >
       <RotateCcw className="h-4 w-4" />
-    </button>
+    </Button>
   );
 
   const scrubber = (extraClass?: string) => (
@@ -347,7 +341,7 @@ export function ReplayControlOverlay({ initialTimestamp }: ReplayControlOverlayP
         step={0.1}
         onChange={(e) => handleSliderChange(parseFloat(e.target.value))}
         disabled={controlsDisabled || !sync.encounterBounds}
-        className="w-full cursor-pointer accent-amber-300 disabled:cursor-default"
+        className="w-full cursor-pointer accent-primary disabled:cursor-default"
       />
     </div>
   );
@@ -356,11 +350,11 @@ export function ReplayControlOverlay({ initialTimestamp }: ReplayControlOverlayP
   if (collapsed) {
     const miniBar = (
       <div className="fixed bottom-4 left-1/2 z-40 w-[52rem] max-w-[calc(100vw-2rem)] -translate-x-1/2">
-        <div className="flex items-center gap-3 rounded-xl border border-zinc-800 bg-zinc-950/95 px-3 py-2 shadow-2xl backdrop-blur">
+        <div className="flex items-center gap-3 rounded-lg border border-border bg-card/95 px-3 py-2 shadow-xl backdrop-blur">
           {statusDot}
           {playPauseButton("h-8 w-8")}
           {restartButton("h-8 w-8")}
-          <span className="font-mono text-sm tabular-nums text-amber-300">
+          <span className="font-mono text-sm tabular-nums text-primary">
             {formatClockShort(elapsed)}
           </span>
           {scrubber("min-w-0 flex-1")}
@@ -370,14 +364,15 @@ export function ReplayControlOverlay({ initialTimestamp }: ReplayControlOverlayP
             disabled={controlsDisabled}
             size="sm"
           />
-          <button
-            type="button"
-            className={cn(chipButton, "h-8 w-8")}
+          <Button
+            variant="ghost"
+            size="icon"
+            className="h-8 w-8"
             onClick={() => setCollapsed(false)}
             title="Expand replay controls"
           >
             <ChevronUp className="h-4 w-4" />
-          </button>
+          </Button>
         </div>
       </div>
     );
@@ -386,50 +381,47 @@ export function ReplayControlOverlay({ initialTimestamp }: ReplayControlOverlayP
 
   const content = (
     <div className="fixed bottom-4 left-1/2 z-40 w-[52rem] max-w-[calc(100vw-2rem)] -translate-x-1/2">
-      <div className="flex flex-col overflow-hidden rounded-xl border border-zinc-800 bg-zinc-950/95 text-zinc-200 shadow-2xl backdrop-blur">
+      <div className="flex flex-col overflow-hidden rounded-lg border border-border bg-card/95 shadow-xl backdrop-blur">
         {/* Header */}
-        <div className="flex items-center justify-between gap-2 px-4 py-3">
+        <div className="flex items-center justify-between gap-2 border-b border-border bg-muted/50 px-4 py-2">
           <div className="flex items-center gap-2.5">
             {statusDot}
-            <span className="text-sm font-semibold text-zinc-100">Replay Controls</span>
+            <span className="text-sm font-medium">Replay Controls</span>
           </div>
           <div className="flex items-center gap-3">
-            <span className="font-mono text-xs text-zinc-500">{statusText}</span>
-            <button
-              type="button"
-              className={cn(chipButton, "h-7 w-7")}
+            <span className="text-xs text-muted-foreground">{statusText}</span>
+            <Button
+              variant="ghost"
+              size="icon"
+              className="h-6 w-6"
               onClick={() => setCollapsed(true)}
               title="Collapse replay controls"
             >
               <ChevronDown className="h-4 w-4" />
-            </button>
+            </Button>
           </div>
         </div>
 
         {/* Time readouts */}
-        <div className="flex items-end justify-between gap-4 px-4">
+        <div className="flex items-end justify-between gap-4 px-4 pt-3">
           <div>
-            <div className="text-[10px] font-medium uppercase tracking-[0.2em] text-zinc-500">
-              Current Time (UTC)
-            </div>
-            <div className="font-mono text-2xl tabular-nums text-amber-300">
+            <div className="text-xs text-muted-foreground">Current Time (UTC)</div>
+            <div className="font-mono text-2xl tabular-nums text-primary">
               {formatTimestamp(sync.currentTimestamp)}
             </div>
           </div>
           <div className="text-right">
-            <div className="text-[10px] font-medium uppercase tracking-[0.2em] text-zinc-500">
-              Encounter Clock
-            </div>
+            <div className="text-xs text-muted-foreground">Encounter Clock</div>
             <div className="font-mono text-lg tabular-nums">
-              <span className="text-zinc-100">{formatClockShort(elapsed)}</span>
-              <span className="text-zinc-600"> / {formatClockFull(totalDuration)}</span>
+              <span>{formatClockShort(elapsed)}</span>
+              <span className="text-muted-foreground"> / {formatClockFull(totalDuration)}</span>
             </div>
           </div>
         </div>
 
         {/* Scrubber */}
         <div className="px-4 pb-1 pt-2">
-          <div className="mb-1 flex justify-between font-mono text-[11px] text-zinc-500">
+          <div className="mb-1 flex justify-between font-mono text-[11px] text-muted-foreground">
             <span>{formatElapsedLabel(elapsed)}</span>
             <span>{formatClockFull(totalDuration)}</span>
           </div>
@@ -440,67 +432,69 @@ export function ReplayControlOverlay({ initialTimestamp }: ReplayControlOverlayP
         <div className="flex items-center gap-2 px-4 py-3">
           {playPauseButton("h-9 w-9")}
           {restartButton("h-9 w-9")}
-          <div className="mx-1 h-6 w-px bg-zinc-800" />
-          <button
-            type="button"
-            className={cn(chipButton, "h-9 w-10")}
+          <div className="mx-1 h-6 w-px bg-border" />
+          <Button
+            variant="outline"
+            size="icon"
+            className="h-9 w-10"
             onClick={handleRestart}
             disabled={controlsDisabled}
             title="Jump to start"
           >
             <SkipBack className="h-4 w-4" />
-          </button>
-          <button
-            type="button"
-            className={cn(chipButton, "h-9 flex-1 px-3 font-mono text-xs")}
+          </Button>
+          <Button
+            variant="outline"
+            className="h-9 flex-1 px-3 font-mono text-xs"
             onClick={() => sync.step(-1000)}
             disabled={controlsDisabled}
             title="Step back 1 second"
           >
             −1s
-          </button>
-          <button
-            type="button"
-            className={cn(chipButton, "h-9 flex-1 px-3 font-mono text-xs")}
+          </Button>
+          <Button
+            variant="outline"
+            className="h-9 flex-1 px-3 font-mono text-xs"
             onClick={() => sync.step(-100)}
             disabled={controlsDisabled}
             title="Step back 100ms"
           >
             −100ms
-          </button>
-          <button
-            type="button"
-            className={cn(chipButton, "h-9 flex-1 px-3 font-mono text-xs")}
+          </Button>
+          <Button
+            variant="outline"
+            className="h-9 flex-1 px-3 font-mono text-xs"
             onClick={() => sync.step(100)}
             disabled={controlsDisabled}
             title="Step forward 100ms"
           >
             +100ms
-          </button>
-          <button
-            type="button"
-            className={cn(chipButton, "h-9 flex-1 px-3 font-mono text-xs")}
+          </Button>
+          <Button
+            variant="outline"
+            className="h-9 flex-1 px-3 font-mono text-xs"
             onClick={() => sync.step(1000)}
             disabled={controlsDisabled}
             title="Step forward 1 second"
           >
             +1s
-          </button>
-          <button
-            type="button"
-            className={cn(chipButton, "h-9 w-10")}
+          </Button>
+          <Button
+            variant="outline"
+            size="icon"
+            className="h-9 w-10"
             onClick={handleJumpToEnd}
             disabled={controlsDisabled}
             title="Jump to end"
           >
             <SkipForward className="h-4 w-4" />
-          </button>
+          </Button>
         </div>
 
         {/* Speed */}
-        <div className="flex items-center gap-2.5 border-t border-zinc-800/80 px-4 py-3">
-          <Clock className="h-4 w-4 text-zinc-500" />
-          <span className="text-sm text-zinc-400">Speed:</span>
+        <div className="flex items-center gap-2.5 border-t border-border px-4 py-3">
+          <Clock className="h-4 w-4 text-muted-foreground" />
+          <span className="text-sm text-muted-foreground">Speed:</span>
           <SpeedChips
             value={sync.playbackSpeed}
             onChange={sync.setPlaybackSpeed}
@@ -509,44 +503,44 @@ export function ReplayControlOverlay({ initialTimestamp }: ReplayControlOverlayP
         </div>
 
         {/* Debug */}
-        <div className="border-t border-zinc-800/80 px-4 py-2.5">
+        <div className="border-t border-border px-4 py-2.5">
           <button
             type="button"
             onClick={() => setShowDebug(!showDebug)}
-            className="flex w-full items-center gap-1.5 text-sm text-zinc-400 transition-colors hover:text-zinc-200"
+            className="flex w-full items-center gap-1.5 text-sm text-muted-foreground transition-colors hover:text-foreground"
           >
             <ChevronRight className={cn("h-3.5 w-3.5 transition-transform", showDebug && "rotate-90")} />
             Debug Info
           </button>
           {showDebug && (
-            <div className="mt-2 space-y-1 rounded-md bg-zinc-900/80 p-2 font-mono text-xs">
+            <div className="mt-2 space-y-1 rounded-md bg-muted/50 p-2 font-mono text-xs">
               <div className="flex justify-between">
-                <span className="text-zinc-500">Events processed:</span>
+                <span className="text-muted-foreground">Events processed:</span>
                 <span>{formatNumber(sync.metrics.processedCount)}</span>
               </div>
               <div className="flex justify-between">
-                <span className="text-zinc-500">Processing rate:</span>
+                <span className="text-muted-foreground">Processing rate:</span>
                 <span>{formatNumber(sync.metrics.eventsPerSecond)}/s</span>
               </div>
               <div className="flex justify-between">
-                <span className="text-zinc-500">Last update:</span>
+                <span className="text-muted-foreground">Last update:</span>
                 <span>{sync.metrics.lastUpdateMs.toFixed(1)}ms</span>
               </div>
               <div className="flex justify-between">
-                <span className="text-zinc-500">Status:</span>
-                <span className={sync.enabled ? "text-green-500" : "text-zinc-500"}>
+                <span className="text-muted-foreground">Status:</span>
+                <span className={sync.enabled ? "text-green-500" : "text-muted-foreground"}>
                   {sync.enabled ? (sync.isPlaying ? "Playing" : "Paused") : "Disabled"}
                 </span>
               </div>
               {sync.encounterBounds && (
                 <>
-                  <div className="my-1 border-t border-zinc-800" />
+                  <div className="my-1 border-t border-border" />
                   <div className="flex justify-between">
-                    <span className="text-zinc-500">Encounter start:</span>
+                    <span className="text-muted-foreground">Encounter start:</span>
                     <span>{formatTimestamp(sync.encounterBounds.start)}</span>
                   </div>
                   <div className="flex justify-between">
-                    <span className="text-zinc-500">Encounter end:</span>
+                    <span className="text-muted-foreground">Encounter end:</span>
                     <span>{formatTimestamp(sync.encounterBounds.end)}</span>
                   </div>
                 </>
