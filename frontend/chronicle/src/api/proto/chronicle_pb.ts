@@ -11,7 +11,7 @@ import type { Message } from "@bufbuild/protobuf";
  * Describes the file chronicle.proto.
  */
 export const file_chronicle: GenFile = /*@__PURE__*/
-  fileDesc("Cg9jaHJvbmljbGUucHJvdG8SDmNocm9uaWNsZXByb3RvIj0KCVNwZWxsRGF0YRIKCgJpZBgBIAEoBRIMCgRuYW1lGAIgASgJEhYKDmF0dGFja19vdXRjb21lGAMgASgNIjkKBlRhaWxlchITCgZhbW91bnQYASABKA1IAIgBARIPCgdoaXRUeXBlGAIgASgNQgkKB19hbW91bnQiMAoNQWN0aXZpdHlFbnRyeRIMCgRndWlkGAEgASgJEhEKCWV2ZW50VHlwZRgCIAEoCSJ2CglFdmVudE1ldGESDQoFaW5kZXgYASABKAUSEwoLb2Zmc2V0TWlsbGkYAiABKAMSLwoIYWN0aXZpdHkYAyADKAsyHS5jaHJvbmljbGVwcm90by5BY3Rpdml0eUVudHJ5EhQKDGlzX3N5bnRoZXRpYxgEIAEoCCKRAgoESGVhbBInCgRtZXRhGAEgASgLMhkuY2hyb25pY2xlcHJvdG8uRXZlbnRNZXRhEg4KBmNhc3RlchgDIAEoCRIOCgZ0YXJnZXQYBCABKAkSEgoKc291cmNlTmFtZRgFIAEoCRIOCgZhbW91bnQYBiABKAUSDwoHaGl0VHlwZRgHIAEoDRIxCglzcGVsbERhdGEYCCABKAsyGS5jaHJvbmljbGVwcm90by5TcGVsbERhdGFIAIgBARImCgZzY2hvb2wYCSABKA4yFi5jaHJvbmljbGVwcm90by5TY2hvb2wSEAoIb3ZlcmhlYWwYCiABKAUSEAoIYWJzb3JiZWQYCyABKAVCDAoKX3NwZWxsRGF0YSK6AgoGRGFtYWdlEicKBG1ldGEYASABKAsyGS5jaHJvbmljbGVwcm90by5FdmVudE1ldGESEwoGY2FzdGVyGAMgASgJSACIAQESEgoKc291cmNlTmFtZRgEIAEoCRIOCgZ0YXJnZXQYBSABKAkSDwoHaGl0VHlwZRgGIAEoDRIOCgZhbW91bnQYByABKAUSJgoGc2Nob29sGAggASgOMhYuY2hyb25pY2xlcHJvdG8uU2Nob29sEicKB3RhaWxlcnMYCSADKAsyFi5jaHJvbmljbGVwcm90by5UYWlsZXISMQoJc3BlbGxEYXRhGAogASgLMhkuY2hyb25pY2xlcHJvdG8uU3BlbGxEYXRhSAGIAQESEAoIb3ZlcmtpbGwYCyABKAVCCQoHX2Nhc3RlckIMCgpfc3BlbGxEYXRhIqECCg5SZXNvdXJjZUNoYW5nZRInCgRtZXRhGAEgASgLMhkuY2hyb25pY2xlcHJvdG8uRXZlbnRNZXRhEg4KBnRhcmdldBgDIAEoCRIOCgZhbW91bnQYBCABKAUSFAoMcmVzb3VyY2VUeXBlGAUgASgJEhMKBmNhc3RlchgGIAEoCUgAiAEBEhcKCnNvdXJjZU5hbWUYByABKAlIAYgBARIRCglkaXJlY3Rpb24YCCABKAkSMQoJc3BlbGxEYXRhGAkgASgLMhkuY2hyb25pY2xlcHJvdG8uU3BlbGxEYXRhSAKIAQESFAoMb3ZlclJlc291cmNlGAogASgFQgkKB19jYXN0ZXJCDQoLX3NvdXJjZU5hbWVCDAoKX3NwZWxsRGF0YSKrAQoLRXh0cmFBdHRhY2sSJwoEbWV0YRgBIAEoCzIZLmNocm9uaWNsZXByb3RvLkV2ZW50TWV0YRIOCgZ0YXJnZXQYAiABKAkSDgoGYW1vdW50GAMgASgFEhIKCnNvdXJjZU5hbWUYBSABKAkSMQoJc3BlbGxEYXRhGAYgASgLMhkuY2hyb25pY2xlcHJvdG8uU3BlbGxEYXRhSACIAQFCDAoKX3NwZWxsRGF0YSKiAQoFU2xhaW4SJwoEbWV0YRgBIAEoCzIZLmNocm9uaWNsZXByb3RvLkV2ZW50TWV0YRIOCgZ0YXJnZXQYAiABKAkSEwoGY2FzdGVyGAMgASgJSACIAQESMAoLYXR0cmlidXRpb24YBCABKAsyFi5jaHJvbmljbGVwcm90by5EYW1hZ2VIAYgBAUIJCgdfY2FzdGVyQg4KDF9hdHRyaWJ1dGlvbiKBAQoMUmVzdXJyZWN0aW9uEicKBG1ldGEYASABKAsyGS5jaHJvbmljbGVwcm90by5FdmVudE1ldGESDgoGc291cmNlGAIgASgJEg4KBnRhcmdldBgDIAEoCRIoCgVzcGVsbBgEIAEoCzIZLmNocm9uaWNsZXByb3RvLlNwZWxsRGF0YSI9CgVTcGVsbBIMCgRuYW1lGAEgASgJEgoKAmlkGAIgASgFEhEKBHJhbmsYAyABKAVIAIgBAUIHCgVfcmFuayKxAQoEQ2FzdBInCgRtZXRhGAEgASgLMhkuY2hyb25pY2xlcHJvdG8uRXZlbnRNZXRhEg4KBmNhc3RlchgCIAEoCRIqCgZhY3Rpb24YAyABKA4yGi5jaHJvbmljbGVwcm90by5DYXN0QWN0aW9uEhMKBnRhcmdldBgEIAEoCUgAiAEBEiQKBXNwZWxsGAUgASgLMhUuY2hyb25pY2xlcHJvdG8uU3BlbGxCCQoHX3RhcmdldCKaAgoEQXVyYRInCgRtZXRhGAEgASgLMhkuY2hyb25pY2xlcHJvdG8uRXZlbnRNZXRhEg4KBnRhcmdldBgCIAEoCRIRCglzcGVsbE5hbWUYAyABKAkSFQoNY3VycmVudEFtb3VudBgEIAEoBRI0CgthcHBsaWNhdGlvbhgFIAEoDjIfLmNocm9uaWNsZXByb3RvLkF1cmFBcHBsaWNhdGlvbhIoCgVzdGF0ZRgGIAEoDjIZLmNocm9uaWNsZXByb3RvLkF1cmFTdGF0ZRIxCglzcGVsbERhdGEYByABKAsyGS5jaHJvbmljbGVwcm90by5TcGVsbERhdGFIAIgBARIOCgZpc0J1ZmYYCCABKAhCDAoKX3NwZWxsRGF0YSKIAgoIQXVyYUNhc3QSJwoEbWV0YRgBIAEoCzIZLmNocm9uaWNsZXByb3RvLkV2ZW50TWV0YRIoCgVzcGVsbBgCIAEoCzIZLmNocm9uaWNsZXByb3RvLlNwZWxsRGF0YRIOCgZjYXN0ZXIYAyABKAkSEwoGdGFyZ2V0GAQgASgJSACIAQESDgoGZWZmZWN0GAUgASgFEhEKCWFtcGxpdHVkZRgGIAEoBRIXCg9lZmZlY3RNaXNjVmFsdWUYByABKAUSEgoKZHVyYXRpb25NUxgIIAEoBRIRCgljYXBTdGF0dXMYCSABKAUSFgoOZWZmZWN0QXVyYU5hbWUYCiABKAVCCQoHX3RhcmdldCKXAgoHU3BlbGxHbxInCgRtZXRhGAEgASgLMhkuY2hyb25pY2xlcHJvdG8uRXZlbnRNZXRhEhMKBml0ZW1JRBgCIAEoBUgAiAEBEjEKCXNwZWxsRGF0YRgDIAEoCzIZLmNocm9uaWNsZXByb3RvLlNwZWxsRGF0YUgBiAEBEg4KBmNhc3RlchgEIAEoCRITCgZ0YXJnZXQYBSABKAlIAogBARIPCgdudW1IaXRzGAYgASgFEhEKCW51bU1pc3NlcxgHIAEoBRIYCgtjb3Jwc2VPd25lchgIIAEoCUgDiAEBQgkKB19pdGVtSURCDAoKX3NwZWxsRGF0YUIJCgdfdGFyZ2V0Qg4KDF9jb3Jwc2VPd25lckoECAkQCiKdAgoKU3BlbGxTdGFydBInCgRtZXRhGAEgASgLMhkuY2hyb25pY2xlcHJvdG8uRXZlbnRNZXRhEhMKBml0ZW1JRBgCIAEoBUgAiAEBEjEKCXNwZWxsRGF0YRgDIAEoCzIZLmNocm9uaWNsZXByb3RvLlNwZWxsRGF0YUgBiAEBEg4KBmNhc3RlchgEIAEoCRITCgZ0YXJnZXQYBSABKAlIAogBARIRCgljYXN0RmxhZ3MYBiABKAUSFQoNY2FzdFRpbWVNaWxsaRgHIAEoBRIYChBjaGFubmVsVGltZU1pbGxpGAggASgFEhEKCXNwZWxsVHlwZRgJIAEoBUIJCgdfaXRlbUlEQgwKCl9zcGVsbERhdGFCCQoHX3RhcmdldCKcAQoJU3BlbGxGYWlsEicKBG1ldGEYASABKAsyGS5jaHJvbmljbGVwcm90by5FdmVudE1ldGESDgoGY2FzdGVyGAIgASgJEjEKCXNwZWxsRGF0YRgDIAEoCzIZLmNocm9uaWNsZXByb3RvLlNwZWxsRGF0YUgAiAEBEhUKDWZhaWxlZEJ5U2V2ZXIYBCABKAhCDAoKX3NwZWxsRGF0YSLLAQoSVW5pdENsYXNzaWZpY2F0aW9uEicKBG1ldGEYASABKAsyGS5jaHJvbmljbGVwcm90by5FdmVudE1ldGESDgoGdGFyZ2V0GAIgASgJEhAKCHVuaXRUeXBlGAMgASgFEhMKC2FmZmlsaWF0aW9uGAQgASgFEhIKBW93bmVyGAUgASgJSACIAQESFwoKY29udHJvbGxlchgGIAEoCUgBiAEBEg8KB3NwZWxsSWQYByABKAVCCAoGX293bmVyQg0KC19jb250cm9sbGVyIsIBCgZEaXNwZWwSJwoEbWV0YRgBIAEoCzIZLmNocm9uaWNsZXByb3RvLkV2ZW50TWV0YRIOCgZjYXN0ZXIYAiABKAkSDgoGdGFyZ2V0GAMgASgJEjEKCXNwZWxsRGF0YRgEIAEoCzIZLmNocm9uaWNsZXByb3RvLlNwZWxsRGF0YUgAiAEBEi4KCmRpc3BlbFR5cGUYBSABKA4yGi5jaHJvbmljbGVwcm90by5EaXNwZWxUeXBlQgwKCl9zcGVsbERhdGEioAIKDUNvbWJhdGFudEluZm8SJwoEbWV0YRgBIAEoCzIZLmNocm9uaWNsZXByb3RvLkV2ZW50TWV0YRIMCgRndWlkGAIgASgJEgwKBG5hbWUYAyABKAkSEQoJaGVyb0NsYXNzGAQgASgJEgwKBHJhY2UYBSABKAkSDgoGZ2VuZGVyGAYgASgFEhYKCWd1aWxkTmFtZRgHIAEoCUgAiAEBEi8KBGdlYXIYCCADKAsyIS5jaHJvbmljbGVwcm90by5Db21iYXRhbnRHZWFyU2xvdBI2Cgd0YWxlbnRzGAkgASgLMiAuY2hyb25pY2xlcHJvdG8uQ29tYmF0YW50VGFsZW50c0gBiAEBQgwKCl9ndWlsZE5hbWVCCgoIX3RhbGVudHMirgEKCUludGVycnVwdBInCgRtZXRhGAEgASgLMhkuY2hyb25pY2xlcHJvdG8uRXZlbnRNZXRhEg4KBmNhc3RlchgCIAEoCRIOCgZ0YXJnZXQYAyABKAkSEgoKc3BlbGxfbmFtZRgEIAEoCRIWCg5leHRyYV9zcGVsbF9pZBgFIAEoBRIsCgxleHRyYV9zY2hvb2wYBiABKA4yFi5jaHJvbmljbGVwcm90by5TY2hvb2wi0AIKCEFic29yYmVkEicKBG1ldGEYASABKAsyGS5jaHJvbmljbGVwcm90by5FdmVudE1ldGESEAoIYXR0YWNrZXIYAiABKAkSDgoGdGFyZ2V0GAMgASgJEjcKD2RhbWFnZVNwZWxsRGF0YRgEIAEoCzIZLmNocm9uaWNsZXByb3RvLlNwZWxsRGF0YUgAiAEBEg4KBmNhc3RlchgFIAEoCRI3Cg9hYnNvcmJTcGVsbERhdGEYBiABKAsyGS5jaHJvbmljbGVwcm90by5TcGVsbERhdGFIAYgBARIsCgxhYnNvcmJTY2hvb2wYByABKA4yFi5jaHJvbmljbGVwcm90by5TY2hvb2wSDgoGYW1vdW50GAggASgFEhEKCWVzdGltYXRlZBgJIAEoCEISChBfZGFtYWdlU3BlbGxEYXRhQhIKEF9hYnNvcmJTcGVsbERhdGEigQEKEUNvbWJhdGFudEdlYXJTbG90Eg4KBml0ZW1JZBgBIAEoBRIWCgllbmNoYW50SWQYAiABKAVIAIgBARIfChJ0ZW1wb3JhcnlFbmNoYW50SWQYAyABKAVIAYgBAUIMCgpfZW5jaGFudElkQhUKE190ZW1wb3JhcnlFbmNoYW50SWQiMgoQQ29tYmF0YW50VGFsZW50cxIPCgdzdW1tYXJ5GAEgAygFEg0KBXRyZWVzGAIgAygJIlkKDkNvbXBhbmlvblN0YXRzEicKBG1ldGEYASABKAsyGS5jaHJvbmljbGVwcm90by5FdmVudE1ldGESDQoFZGlydHkYAiABKAUSDwoHYnVja2V0cxgDIAMoBSpwCgZTY2hvb2wSCwoHVW5rbm93bhAAEggKBE5vbmUQARIMCghQaHlzaWNhbBACEggKBEhvbHkQAxIICgRGaXJlEAQSCgoGTmF0dXJlEAUSCQoFRnJvc3QQBhIKCgZTaGFkb3cQBxIKCgZBcmNhbmUQCCp0CgpDYXN0QWN0aW9uEhEKDUFjdGlvblVua25vd24QABIPCgtBY3Rpb25DYXN0cxABEhYKEkFjdGlvbkJlZ2luc1RvQ2FzdBACEhIKDkFjdGlvbkNoYW5uZWxzEAMSFgoSQWN0aW9uRmFpbHNDYXN0aW5nEAQqbQoPQXVyYUFwcGxpY2F0aW9uEhYKEkFwcGxpY2F0aW9uVW5rbm93bhAAEhQKEEFwcGxpY2F0aW9uR2FpbnMQARIUChBBcHBsaWNhdGlvbkZhZGVzEAISFgoSQXBwbGljYXRpb25SZW1vdmVkEAMqUgoJQXVyYVN0YXRlEhAKDFN0YXRlVW5rbm93bhAAEg4KClN0YXRlQWRkZWQQARIQCgxTdGF0ZVJlbW92ZWQQAhIRCg1TdGF0ZU1vZGlmaWVkEAMqqgEKCkRpc3BlbFR5cGUSEgoORGlzcGVsVHlwZU5vbmUQABITCg9EaXNwZWxUeXBlTWFnaWMQARITCg9EaXNwZWxUeXBlQ3Vyc2UQAhIVChFEaXNwZWxUeXBlRGlzZWFzZRADEhQKEERpc3BlbFR5cGVQb2lzb24QBBIVChFEaXNwZWxUeXBlU3RlYWx0aBAFEhoKFkRpc3BlbFR5cGVJbnZpc2liaWxpdHkQBkIvWi1naXRodWIuY29tL0VteXJrL2Nocm9uaWNsZS9hcGkvY2hyb25pY2xlcHJvdG9iBnByb3RvMw");
+  fileDesc("Cg9jaHJvbmljbGUucHJvdG8SDmNocm9uaWNsZXByb3RvIj0KCVNwZWxsRGF0YRIKCgJpZBgBIAEoBRIMCgRuYW1lGAIgASgJEhYKDmF0dGFja19vdXRjb21lGAMgASgNIjkKBlRhaWxlchITCgZhbW91bnQYASABKA1IAIgBARIPCgdoaXRUeXBlGAIgASgNQgkKB19hbW91bnQiMAoNQWN0aXZpdHlFbnRyeRIMCgRndWlkGAEgASgJEhEKCWV2ZW50VHlwZRgCIAEoCSJ2CglFdmVudE1ldGESDQoFaW5kZXgYASABKAUSEwoLb2Zmc2V0TWlsbGkYAiABKAMSLwoIYWN0aXZpdHkYAyADKAsyHS5jaHJvbmljbGVwcm90by5BY3Rpdml0eUVudHJ5EhQKDGlzX3N5bnRoZXRpYxgEIAEoCCKRAgoESGVhbBInCgRtZXRhGAEgASgLMhkuY2hyb25pY2xlcHJvdG8uRXZlbnRNZXRhEg4KBmNhc3RlchgDIAEoCRIOCgZ0YXJnZXQYBCABKAkSEgoKc291cmNlTmFtZRgFIAEoCRIOCgZhbW91bnQYBiABKAUSDwoHaGl0VHlwZRgHIAEoDRIxCglzcGVsbERhdGEYCCABKAsyGS5jaHJvbmljbGVwcm90by5TcGVsbERhdGFIAIgBARImCgZzY2hvb2wYCSABKA4yFi5jaHJvbmljbGVwcm90by5TY2hvb2wSEAoIb3ZlcmhlYWwYCiABKAUSEAoIYWJzb3JiZWQYCyABKAVCDAoKX3NwZWxsRGF0YSK6AgoGRGFtYWdlEicKBG1ldGEYASABKAsyGS5jaHJvbmljbGVwcm90by5FdmVudE1ldGESEwoGY2FzdGVyGAMgASgJSACIAQESEgoKc291cmNlTmFtZRgEIAEoCRIOCgZ0YXJnZXQYBSABKAkSDwoHaGl0VHlwZRgGIAEoDRIOCgZhbW91bnQYByABKAUSJgoGc2Nob29sGAggASgOMhYuY2hyb25pY2xlcHJvdG8uU2Nob29sEicKB3RhaWxlcnMYCSADKAsyFi5jaHJvbmljbGVwcm90by5UYWlsZXISMQoJc3BlbGxEYXRhGAogASgLMhkuY2hyb25pY2xlcHJvdG8uU3BlbGxEYXRhSAGIAQESEAoIb3ZlcmtpbGwYCyABKAVCCQoHX2Nhc3RlckIMCgpfc3BlbGxEYXRhIqECCg5SZXNvdXJjZUNoYW5nZRInCgRtZXRhGAEgASgLMhkuY2hyb25pY2xlcHJvdG8uRXZlbnRNZXRhEg4KBnRhcmdldBgDIAEoCRIOCgZhbW91bnQYBCABKAUSFAoMcmVzb3VyY2VUeXBlGAUgASgJEhMKBmNhc3RlchgGIAEoCUgAiAEBEhcKCnNvdXJjZU5hbWUYByABKAlIAYgBARIRCglkaXJlY3Rpb24YCCABKAkSMQoJc3BlbGxEYXRhGAkgASgLMhkuY2hyb25pY2xlcHJvdG8uU3BlbGxEYXRhSAKIAQESFAoMb3ZlclJlc291cmNlGAogASgFQgkKB19jYXN0ZXJCDQoLX3NvdXJjZU5hbWVCDAoKX3NwZWxsRGF0YSKrAQoLRXh0cmFBdHRhY2sSJwoEbWV0YRgBIAEoCzIZLmNocm9uaWNsZXByb3RvLkV2ZW50TWV0YRIOCgZ0YXJnZXQYAiABKAkSDgoGYW1vdW50GAMgASgFEhIKCnNvdXJjZU5hbWUYBSABKAkSMQoJc3BlbGxEYXRhGAYgASgLMhkuY2hyb25pY2xlcHJvdG8uU3BlbGxEYXRhSACIAQFCDAoKX3NwZWxsRGF0YSKiAQoFU2xhaW4SJwoEbWV0YRgBIAEoCzIZLmNocm9uaWNsZXByb3RvLkV2ZW50TWV0YRIOCgZ0YXJnZXQYAiABKAkSEwoGY2FzdGVyGAMgASgJSACIAQESMAoLYXR0cmlidXRpb24YBCABKAsyFi5jaHJvbmljbGVwcm90by5EYW1hZ2VIAYgBAUIJCgdfY2FzdGVyQg4KDF9hdHRyaWJ1dGlvbiKBAQoMUmVzdXJyZWN0aW9uEicKBG1ldGEYASABKAsyGS5jaHJvbmljbGVwcm90by5FdmVudE1ldGESDgoGc291cmNlGAIgASgJEg4KBnRhcmdldBgDIAEoCRIoCgVzcGVsbBgEIAEoCzIZLmNocm9uaWNsZXByb3RvLlNwZWxsRGF0YSI9CgVTcGVsbBIMCgRuYW1lGAEgASgJEgoKAmlkGAIgASgFEhEKBHJhbmsYAyABKAVIAIgBAUIHCgVfcmFuayKxAQoEQ2FzdBInCgRtZXRhGAEgASgLMhkuY2hyb25pY2xlcHJvdG8uRXZlbnRNZXRhEg4KBmNhc3RlchgCIAEoCRIqCgZhY3Rpb24YAyABKA4yGi5jaHJvbmljbGVwcm90by5DYXN0QWN0aW9uEhMKBnRhcmdldBgEIAEoCUgAiAEBEiQKBXNwZWxsGAUgASgLMhUuY2hyb25pY2xlcHJvdG8uU3BlbGxCCQoHX3RhcmdldCKaAgoEQXVyYRInCgRtZXRhGAEgASgLMhkuY2hyb25pY2xlcHJvdG8uRXZlbnRNZXRhEg4KBnRhcmdldBgCIAEoCRIRCglzcGVsbE5hbWUYAyABKAkSFQoNY3VycmVudEFtb3VudBgEIAEoBRI0CgthcHBsaWNhdGlvbhgFIAEoDjIfLmNocm9uaWNsZXByb3RvLkF1cmFBcHBsaWNhdGlvbhIoCgVzdGF0ZRgGIAEoDjIZLmNocm9uaWNsZXByb3RvLkF1cmFTdGF0ZRIxCglzcGVsbERhdGEYByABKAsyGS5jaHJvbmljbGVwcm90by5TcGVsbERhdGFIAIgBARIOCgZpc0J1ZmYYCCABKAhCDAoKX3NwZWxsRGF0YSKIAgoIQXVyYUNhc3QSJwoEbWV0YRgBIAEoCzIZLmNocm9uaWNsZXByb3RvLkV2ZW50TWV0YRIoCgVzcGVsbBgCIAEoCzIZLmNocm9uaWNsZXByb3RvLlNwZWxsRGF0YRIOCgZjYXN0ZXIYAyABKAkSEwoGdGFyZ2V0GAQgASgJSACIAQESDgoGZWZmZWN0GAUgASgFEhEKCWFtcGxpdHVkZRgGIAEoBRIXCg9lZmZlY3RNaXNjVmFsdWUYByABKAUSEgoKZHVyYXRpb25NUxgIIAEoBRIRCgljYXBTdGF0dXMYCSABKAUSFgoOZWZmZWN0QXVyYU5hbWUYCiABKAVCCQoHX3RhcmdldCKXAgoHU3BlbGxHbxInCgRtZXRhGAEgASgLMhkuY2hyb25pY2xlcHJvdG8uRXZlbnRNZXRhEhMKBml0ZW1JRBgCIAEoBUgAiAEBEjEKCXNwZWxsRGF0YRgDIAEoCzIZLmNocm9uaWNsZXByb3RvLlNwZWxsRGF0YUgBiAEBEg4KBmNhc3RlchgEIAEoCRITCgZ0YXJnZXQYBSABKAlIAogBARIPCgdudW1IaXRzGAYgASgFEhEKCW51bU1pc3NlcxgHIAEoBRIYCgtjb3Jwc2VPd25lchgIIAEoCUgDiAEBQgkKB19pdGVtSURCDAoKX3NwZWxsRGF0YUIJCgdfdGFyZ2V0Qg4KDF9jb3Jwc2VPd25lckoECAkQCiKdAgoKU3BlbGxTdGFydBInCgRtZXRhGAEgASgLMhkuY2hyb25pY2xlcHJvdG8uRXZlbnRNZXRhEhMKBml0ZW1JRBgCIAEoBUgAiAEBEjEKCXNwZWxsRGF0YRgDIAEoCzIZLmNocm9uaWNsZXByb3RvLlNwZWxsRGF0YUgBiAEBEg4KBmNhc3RlchgEIAEoCRITCgZ0YXJnZXQYBSABKAlIAogBARIRCgljYXN0RmxhZ3MYBiABKAUSFQoNY2FzdFRpbWVNaWxsaRgHIAEoBRIYChBjaGFubmVsVGltZU1pbGxpGAggASgFEhEKCXNwZWxsVHlwZRgJIAEoBUIJCgdfaXRlbUlEQgwKCl9zcGVsbERhdGFCCQoHX3RhcmdldCKcAQoJU3BlbGxGYWlsEicKBG1ldGEYASABKAsyGS5jaHJvbmljbGVwcm90by5FdmVudE1ldGESDgoGY2FzdGVyGAIgASgJEjEKCXNwZWxsRGF0YRgDIAEoCzIZLmNocm9uaWNsZXByb3RvLlNwZWxsRGF0YUgAiAEBEhUKDWZhaWxlZEJ5U2V2ZXIYBCABKAhCDAoKX3NwZWxsRGF0YSLLAQoSVW5pdENsYXNzaWZpY2F0aW9uEicKBG1ldGEYASABKAsyGS5jaHJvbmljbGVwcm90by5FdmVudE1ldGESDgoGdGFyZ2V0GAIgASgJEhAKCHVuaXRUeXBlGAMgASgFEhMKC2FmZmlsaWF0aW9uGAQgASgFEhIKBW93bmVyGAUgASgJSACIAQESFwoKY29udHJvbGxlchgGIAEoCUgBiAEBEg8KB3NwZWxsSWQYByABKAVCCAoGX293bmVyQg0KC19jb250cm9sbGVyIsIBCgZEaXNwZWwSJwoEbWV0YRgBIAEoCzIZLmNocm9uaWNsZXByb3RvLkV2ZW50TWV0YRIOCgZjYXN0ZXIYAiABKAkSDgoGdGFyZ2V0GAMgASgJEjEKCXNwZWxsRGF0YRgEIAEoCzIZLmNocm9uaWNsZXByb3RvLlNwZWxsRGF0YUgAiAEBEi4KCmRpc3BlbFR5cGUYBSABKA4yGi5jaHJvbmljbGVwcm90by5EaXNwZWxUeXBlQgwKCl9zcGVsbERhdGEioAIKDUNvbWJhdGFudEluZm8SJwoEbWV0YRgBIAEoCzIZLmNocm9uaWNsZXByb3RvLkV2ZW50TWV0YRIMCgRndWlkGAIgASgJEgwKBG5hbWUYAyABKAkSEQoJaGVyb0NsYXNzGAQgASgJEgwKBHJhY2UYBSABKAkSDgoGZ2VuZGVyGAYgASgFEhYKCWd1aWxkTmFtZRgHIAEoCUgAiAEBEi8KBGdlYXIYCCADKAsyIS5jaHJvbmljbGVwcm90by5Db21iYXRhbnRHZWFyU2xvdBI2Cgd0YWxlbnRzGAkgASgLMiAuY2hyb25pY2xlcHJvdG8uQ29tYmF0YW50VGFsZW50c0gBiAEBQgwKCl9ndWlsZE5hbWVCCgoIX3RhbGVudHMirgEKCUludGVycnVwdBInCgRtZXRhGAEgASgLMhkuY2hyb25pY2xlcHJvdG8uRXZlbnRNZXRhEg4KBmNhc3RlchgCIAEoCRIOCgZ0YXJnZXQYAyABKAkSEgoKc3BlbGxfbmFtZRgEIAEoCRIWCg5leHRyYV9zcGVsbF9pZBgFIAEoBRIsCgxleHRyYV9zY2hvb2wYBiABKA4yFi5jaHJvbmljbGVwcm90by5TY2hvb2wi0AIKCEFic29yYmVkEicKBG1ldGEYASABKAsyGS5jaHJvbmljbGVwcm90by5FdmVudE1ldGESEAoIYXR0YWNrZXIYAiABKAkSDgoGdGFyZ2V0GAMgASgJEjcKD2RhbWFnZVNwZWxsRGF0YRgEIAEoCzIZLmNocm9uaWNsZXByb3RvLlNwZWxsRGF0YUgAiAEBEg4KBmNhc3RlchgFIAEoCRI3Cg9hYnNvcmJTcGVsbERhdGEYBiABKAsyGS5jaHJvbmljbGVwcm90by5TcGVsbERhdGFIAYgBARIsCgxhYnNvcmJTY2hvb2wYByABKA4yFi5jaHJvbmljbGVwcm90by5TY2hvb2wSDgoGYW1vdW50GAggASgFEhEKCWVzdGltYXRlZBgJIAEoCEISChBfZGFtYWdlU3BlbGxEYXRhQhIKEF9hYnNvcmJTcGVsbERhdGEigQQKB0NvbnN1bWUSJwoEbWV0YRgBIAEoCzIZLmNocm9uaWNsZXByb3RvLkV2ZW50TWV0YRIRCgljb25zdW1lSWQYAiABKAkSEgoKZXZpZGVuY2VJZBgDIAEoCRIOCgZwbGF5ZXIYBCABKAkSEwoGaXRlbUlkGAUgASgFSACIAQESGAoQY2FuZGlkYXRlSXRlbUlkcxgGIAMoBRIxCglzcGVsbERhdGEYByABKAsyGS5jaHJvbmljbGVwcm90by5TcGVsbERhdGFIAYgBARIqCgRraW5kGAggASgOMhwuY2hyb25pY2xlcHJvdG8uRXZpZGVuY2VLaW5kEjYKCmNvbmZpZGVuY2UYCSABKA4yIi5jaHJvbmljbGVwcm90by5FdmlkZW5jZUNvbmZpZGVuY2USIAoTY29uc3VtZWRBdFVuaXhNaWxsaRgKIAEoA0gCiAEBEhsKE29ic2VydmVkQXRVbml4TWlsbGkYCyABKAMSEwoGYW1vdW50GAwgASgFSAOIAQESGQoMcmVzb3VyY2VUeXBlGA0gASgJSASIAQESFAoMaXNQcm9qZWN0aW9uGA4gASgIQgkKB19pdGVtSWRCDAoKX3NwZWxsRGF0YUIWChRfY29uc3VtZWRBdFVuaXhNaWxsaUIJCgdfYW1vdW50Qg8KDV9yZXNvdXJjZVR5cGUigQEKEUNvbWJhdGFudEdlYXJTbG90Eg4KBml0ZW1JZBgBIAEoBRIWCgllbmNoYW50SWQYAiABKAVIAIgBARIfChJ0ZW1wb3JhcnlFbmNoYW50SWQYAyABKAVIAYgBAUIMCgpfZW5jaGFudElkQhUKE190ZW1wb3JhcnlFbmNoYW50SWQiMgoQQ29tYmF0YW50VGFsZW50cxIPCgdzdW1tYXJ5GAEgAygFEg0KBXRyZWVzGAIgAygJIlkKDkNvbXBhbmlvblN0YXRzEicKBG1ldGEYASABKAsyGS5jaHJvbmljbGVwcm90by5FdmVudE1ldGESDQoFZGlydHkYAiABKAUSDwoHYnVja2V0cxgDIAMoBSpwCgZTY2hvb2wSCwoHVW5rbm93bhAAEggKBE5vbmUQARIMCghQaHlzaWNhbBACEggKBEhvbHkQAxIICgRGaXJlEAQSCgoGTmF0dXJlEAUSCQoFRnJvc3QQBhIKCgZTaGFkb3cQBxIKCgZBcmNhbmUQCCp0CgpDYXN0QWN0aW9uEhEKDUFjdGlvblVua25vd24QABIPCgtBY3Rpb25DYXN0cxABEhYKEkFjdGlvbkJlZ2luc1RvQ2FzdBACEhIKDkFjdGlvbkNoYW5uZWxzEAMSFgoSQWN0aW9uRmFpbHNDYXN0aW5nEAQqbQoPQXVyYUFwcGxpY2F0aW9uEhYKEkFwcGxpY2F0aW9uVW5rbm93bhAAEhQKEEFwcGxpY2F0aW9uR2FpbnMQARIUChBBcHBsaWNhdGlvbkZhZGVzEAISFgoSQXBwbGljYXRpb25SZW1vdmVkEAMqUgoJQXVyYVN0YXRlEhAKDFN0YXRlVW5rbm93bhAAEg4KClN0YXRlQWRkZWQQARIQCgxTdGF0ZVJlbW92ZWQQAhIRCg1TdGF0ZU1vZGlmaWVkEAMqqgEKCkRpc3BlbFR5cGUSEgoORGlzcGVsVHlwZU5vbmUQABITCg9EaXNwZWxUeXBlTWFnaWMQARITCg9EaXNwZWxUeXBlQ3Vyc2UQAhIVChFEaXNwZWxUeXBlRGlzZWFzZRADEhQKEERpc3BlbFR5cGVQb2lzb24QBBIVChFEaXNwZWxUeXBlU3RlYWx0aBAFEhoKFkRpc3BlbFR5cGVJbnZpc2liaWxpdHkQBirLAQoMRXZpZGVuY2VLaW5kEhMKD0V2aWRlbmNlVW5rbm93bhAAEhYKEkV2aWRlbmNlRGlyZWN0SXRlbRABEhAKDEV2aWRlbmNlQ2FzdBACEhAKDEV2aWRlbmNlQXVyYRADEhAKDEV2aWRlbmNlSGVhbBAEEhQKEEV2aWRlbmNlUmVzb3VyY2UQBRISCg5FdmlkZW5jZURhbWFnZRAGEhgKFEV2aWRlbmNlQWN0aXZlQXRQdWxsEAcSFAoQRXZpZGVuY2VDb29sZG93bhAIKo8BChJFdmlkZW5jZUNvbmZpZGVuY2USFQoRQ29uZmlkZW5jZVVua25vd24QABIUChBDb25maWRlbmNlRGlyZWN0EAESGwoXQ29uZmlkZW5jZUVmZmVjdERlcml2ZWQQAhIXChNDb25maWRlbmNlQW1iaWd1b3VzEAMSFgoSQ29uZmlkZW5jZUluZmVycmVkEARCL1otZ2l0aHViLmNvbS9FbXlyay9jaHJvbmljbGUvYXBpL2Nocm9uaWNsZXByb3RvYgZwcm90bzM");
 
 /**
  * @generated from message chronicleproto.SpellData
@@ -979,6 +979,112 @@ export const AbsorbedSchema: GenMessage<Absorbed> = /*@__PURE__*/
   messageDesc(file_chronicle, 21);
 
 /**
+ * Consume records a single piece of evidence that a player consumed an item.
+ * Multiple evidence events with the same consume_id describe the same
+ * physical use observed from different angles.
+ *
+ * @generated from message chronicleproto.Consume
+ */
+export type Consume = Message<"chronicleproto.Consume"> & {
+  /**
+   * @generated from field: chronicleproto.EventMeta meta = 1;
+   */
+  meta?: EventMeta;
+
+  /**
+   * groups evidence for one physical use
+   *
+   * @generated from field: string consumeId = 2;
+   */
+  consumeId: string;
+
+  /**
+   * unique observation identifier
+   *
+   * @generated from field: string evidenceId = 3;
+   */
+  evidenceId: string;
+
+  /**
+   * player GUID
+   *
+   * @generated from field: string player = 4;
+   */
+  player: string;
+
+  /**
+   * item ID when known
+   *
+   * @generated from field: optional int32 itemId = 5;
+   */
+  itemId?: number;
+
+  /**
+   * possible items when ambiguous
+   *
+   * @generated from field: repeated int32 candidateItemIds = 6;
+   */
+  candidateItemIds: number[];
+
+  /**
+   * @generated from field: optional chronicleproto.SpellData spellData = 7;
+   */
+  spellData?: SpellData;
+
+  /**
+   * @generated from field: chronicleproto.EvidenceKind kind = 8;
+   */
+  kind: EvidenceKind;
+
+  /**
+   * @generated from field: chronicleproto.EvidenceConfidence confidence = 9;
+   */
+  confidence: EvidenceConfidence;
+
+  /**
+   * when the item was consumed
+   *
+   * @generated from field: optional int64 consumedAtUnixMilli = 10;
+   */
+  consumedAtUnixMilli?: bigint;
+
+  /**
+   * when the observation occurred
+   *
+   * @generated from field: int64 observedAtUnixMilli = 11;
+   */
+  observedAtUnixMilli: bigint;
+
+  /**
+   * heal/resource/damage amount
+   *
+   * @generated from field: optional int32 amount = 12;
+   */
+  amount?: number;
+
+  /**
+   * resource type string (matches ResourceChange.resourceType)
+   *
+   * @generated from field: optional string resourceType = 13;
+   */
+  resourceType?: string;
+
+  /**
+   * true when projected from prior encounter
+   *
+   * @generated from field: bool isProjection = 14;
+   */
+  isProjection: boolean;
+};
+
+/**
+ * Describes the message chronicleproto.Consume.
+ * Use `create(ConsumeSchema)` to create a new message.
+ */
+export const ConsumeSchema: GenMessage<Consume> = /*@__PURE__*/
+  messageDesc(file_chronicle, 22);
+
+/**
  * @generated from message chronicleproto.CombatantGearSlot
  */
 export type CombatantGearSlot = Message<"chronicleproto.CombatantGearSlot"> & {
@@ -1003,7 +1109,7 @@ export type CombatantGearSlot = Message<"chronicleproto.CombatantGearSlot"> & {
  * Use `create(CombatantGearSlotSchema)` to create a new message.
  */
 export const CombatantGearSlotSchema: GenMessage<CombatantGearSlot> = /*@__PURE__*/
-  messageDesc(file_chronicle, 22);
+  messageDesc(file_chronicle, 23);
 
 /**
  * @generated from message chronicleproto.CombatantTalents
@@ -1029,7 +1135,7 @@ export type CombatantTalents = Message<"chronicleproto.CombatantTalents"> & {
  * Use `create(CombatantTalentsSchema)` to create a new message.
  */
 export const CombatantTalentsSchema: GenMessage<CombatantTalents> = /*@__PURE__*/
-  messageDesc(file_chronicle, 23);
+  messageDesc(file_chronicle, 24);
 
 /**
  * CompanionStats carries relay health diagnostics from the
@@ -1064,7 +1170,7 @@ export type CompanionStats = Message<"chronicleproto.CompanionStats"> & {
  * Use `create(CompanionStatsSchema)` to create a new message.
  */
 export const CompanionStatsSchema: GenMessage<CompanionStats> = /*@__PURE__*/
-  messageDesc(file_chronicle, 24);
+  messageDesc(file_chronicle, 25);
 
 /**
  * @generated from enum chronicleproto.School
@@ -1265,4 +1371,124 @@ export enum DispelType {
  */
 export const DispelTypeSchema: GenEnum<DispelType> = /*@__PURE__*/
   enumDesc(file_chronicle, 4);
+
+/**
+ * EvidenceKind describes how consume evidence was observed.
+ *
+ * @generated from enum chronicleproto.EvidenceKind
+ */
+export enum EvidenceKind {
+  /**
+   * @generated from enum value: EvidenceUnknown = 0;
+   */
+  EvidenceUnknown = 0,
+
+  /**
+   * SpellGo with itemID
+   *
+   * @generated from enum value: EvidenceDirectItem = 1;
+   */
+  EvidenceDirectItem = 1,
+
+  /**
+   * spell cast matching a consumable
+   *
+   * @generated from enum value: EvidenceCast = 2;
+   */
+  EvidenceCast = 2,
+
+  /**
+   * buff/debuff gain from a consumable
+   *
+   * @generated from enum value: EvidenceAura = 3;
+   */
+  EvidenceAura = 3,
+
+  /**
+   * heal event from a consumable
+   *
+   * @generated from enum value: EvidenceHeal = 4;
+   */
+  EvidenceHeal = 4,
+
+  /**
+   * resource gain (mana/rage potion)
+   *
+   * @generated from enum value: EvidenceResource = 5;
+   */
+  EvidenceResource = 5,
+
+  /**
+   * damage event from a consumable (sapper, etc)
+   *
+   * @generated from enum value: EvidenceDamage = 6;
+   */
+  EvidenceDamage = 6,
+
+  /**
+   * pre-pull aura projected into encounter
+   *
+   * @generated from enum value: EvidenceActiveAtPull = 7;
+   */
+  EvidenceActiveAtPull = 7,
+
+  /**
+   * inferred from cooldown window
+   *
+   * @generated from enum value: EvidenceCooldown = 8;
+   */
+  EvidenceCooldown = 8,
+}
+
+/**
+ * Describes the enum chronicleproto.EvidenceKind.
+ */
+export const EvidenceKindSchema: GenEnum<EvidenceKind> = /*@__PURE__*/
+  enumDesc(file_chronicle, 5);
+
+/**
+ * EvidenceConfidence describes how certain we are about the evidence.
+ *
+ * @generated from enum chronicleproto.EvidenceConfidence
+ */
+export enum EvidenceConfidence {
+  /**
+   * @generated from enum value: ConfidenceUnknown = 0;
+   */
+  ConfidenceUnknown = 0,
+
+  /**
+   * authoritative (item ID present)
+   *
+   * @generated from enum value: ConfidenceDirect = 1;
+   */
+  ConfidenceDirect = 1,
+
+  /**
+   * from known spell effect
+   *
+   * @generated from enum value: ConfidenceEffectDerived = 2;
+   */
+  ConfidenceEffectDerived = 2,
+
+  /**
+   * multiple possible items
+   *
+   * @generated from enum value: ConfidenceAmbiguous = 3;
+   */
+  ConfidenceAmbiguous = 3,
+
+  /**
+   * cooldown/timing heuristic
+   *
+   * @generated from enum value: ConfidenceInferred = 4;
+   */
+  ConfidenceInferred = 4,
+}
+
+/**
+ * Describes the enum chronicleproto.EvidenceConfidence.
+ */
+export const EvidenceConfidenceSchema: GenEnum<EvidenceConfidence> = /*@__PURE__*/
+  enumDesc(file_chronicle, 6);
 

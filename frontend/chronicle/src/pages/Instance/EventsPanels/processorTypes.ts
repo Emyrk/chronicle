@@ -345,7 +345,49 @@ export interface CompanionStatsProcessorEvent extends EventMeta {
   buckets: number[];  // [10] landed chunk counts per minute (index 0 = current minute)
 }
 
-export type ProcessorEvent = DamageProcessorEvent | HealProcessorEvent | ResourceChangeProcessorEvent | ExtraAttackProcessorEvent | SlainProcessorEvent | ResurrectionProcessorEvent | CastProcessorEvent | AuraProcessorEvent | SpellGoProcessorEvent | AuraCastProcessorEvent | SpellStartProcessorEvent | SpellFailProcessorEvent | UnitClassificationProcessorEvent | CombatantInfoProcessorEvent | DispelProcessorEvent | InterruptProcessorEvent | AbsorbedProcessorEvent | CompanionStatsProcessorEvent;
+/**
+ * Evidence kind describing how consume evidence was observed.
+ */
+export type EvidenceKind =
+  | 0  // Unknown
+  | 1  // DirectItem (SpellGo with itemID)
+  | 2  // Cast
+  | 3  // Aura
+  | 4  // Heal
+  | 5  // Resource
+  | 6  // Damage
+  | 7  // ActiveAtPull (pre-pull aura projected into encounter)
+  | 8; // Cooldown
+
+/**
+ * Evidence confidence level.
+ */
+export type EvidenceConfidence =
+  | 0  // Unknown
+  | 1  // Direct (authoritative, item ID present)
+  | 2  // EffectDerived (from known spell effect)
+  | 3  // Ambiguous (multiple possible items)
+  | 4; // Inferred (cooldown/timing heuristic)
+
+export interface ConsumeProcessorEvent extends EventMeta {
+  type: "consume";
+  consumeId: string;
+  evidenceId: string;
+  player: string;
+  itemId: number | null;
+  candidateItemIds: number[];
+  spellId: number | null;
+  spellName: string | null;
+  kind: EvidenceKind;
+  confidence: EvidenceConfidence;
+  consumedAtUnixMilli: number | null;
+  observedAtUnixMilli: number;
+  amount: number | null;
+  resourceType: string | null;
+  isProjection: boolean;
+}
+
+export type ProcessorEvent = DamageProcessorEvent | HealProcessorEvent | ResourceChangeProcessorEvent | ExtraAttackProcessorEvent | SlainProcessorEvent | ResurrectionProcessorEvent | CastProcessorEvent | AuraProcessorEvent | SpellGoProcessorEvent | AuraCastProcessorEvent | SpellStartProcessorEvent | SpellFailProcessorEvent | UnitClassificationProcessorEvent | CombatantInfoProcessorEvent | DispelProcessorEvent | InterruptProcessorEvent | AbsorbedProcessorEvent | CompanionStatsProcessorEvent | ConsumeProcessorEvent;
 
 /**
  * Selection state for filtering entities (serializable for worker transport).

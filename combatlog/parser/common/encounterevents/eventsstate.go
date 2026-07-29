@@ -29,6 +29,7 @@ type Events struct {
 	Interrupt          []byte
 	Absorbed           []byte
 	CompanionStats     []byte
+	Consume    []byte
 }
 
 func NewEvents() *Events {
@@ -51,6 +52,7 @@ func NewEvents() *Events {
 		Interrupt:          make([]byte, 0),
 		Absorbed:           make([]byte, 0),
 		CompanionStats:     make([]byte, 0),
+		Consume:    make([]byte, 0),
 	}
 }
 
@@ -159,6 +161,12 @@ func (e *Events) Insert(ctx context.Context, db database.Store, instanceID uuid.
 	}
 	e.CompanionStats = nil
 
+	consumePayload, err := gzipData(e.Consume)
+	if err != nil {
+		return fmt.Errorf("gzip consume events: %w", err)
+	}
+	e.Consume = nil
+
 	res := db.InsertLogInstanceEvents(ctx, []database.InsertLogInstanceEventsParams{
 		{
 			InstanceID: instanceID,
@@ -249,6 +257,11 @@ func (e *Events) Insert(ctx context.Context, db database.Store, instanceID uuid.
 			InstanceID: instanceID,
 			Type:       database.LogInstanceEventTypeCompanionStats,
 			Events:     companionStatsPayload,
+		},
+		{
+			InstanceID: instanceID,
+			Type:       database.LogInstanceEventTypeConsume,
+			Events:     consumePayload,
 		},
 	})
 	if err := res.Close(); err != nil {

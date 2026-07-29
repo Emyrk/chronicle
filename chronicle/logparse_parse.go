@@ -1,34 +1,34 @@
 package chronicle
 
 import (
-  "bytes"
-  "compress/gzip"
-  "context"
-  "errors"
-  "fmt"
-  "io"
-  "log/slog"
-  "time"
+	"bytes"
+	"compress/gzip"
+	"context"
+	"errors"
+	"fmt"
+	"io"
+	"log/slog"
+	"time"
 
-  "github.com/Emyrk/chronicle/api/chroniclesdk"
-  "github.com/Emyrk/chronicle/combatlog/consumers"
-  "github.com/Emyrk/chronicle/combatlog/parser/azerothcore"
-  azencounters "github.com/Emyrk/chronicle/combatlog/parser/azerothcore/encounters"
-  "github.com/Emyrk/chronicle/combatlog/parser/common/creatures"
-  "github.com/Emyrk/chronicle/combatlog/parser/common/encounters"
-  "github.com/Emyrk/chronicle/combatlog/parser/common/registry"
-  "github.com/Emyrk/chronicle/combatlog/parser/logfile"
-  "github.com/Emyrk/chronicle/combatlog/parser/sorter"
-  "github.com/Emyrk/chronicle/combatlog/parser/types/realm"
-  "github.com/Emyrk/chronicle/combatlog/parser/types/realmclock"
-  "github.com/Emyrk/chronicle/combatlog/parser/vanilla"
-  "github.com/Emyrk/chronicle/combatlog/parser/vanilla/parserv2"
-  "github.com/Emyrk/chronicle/combatlog/parser/wotlk"
-  "github.com/Emyrk/chronicle/database"
-  "github.com/Emyrk/chronicle/database/gamedb"
-  "github.com/Emyrk/chronicle/database/gamedb/chrondbc"
-  "github.com/Emyrk/chronicle/internal/leveledlog"
-  "github.com/google/uuid"
+	"github.com/Emyrk/chronicle/api/chroniclesdk"
+	"github.com/Emyrk/chronicle/combatlog/consumers"
+	"github.com/Emyrk/chronicle/combatlog/parser/azerothcore"
+	azencounters "github.com/Emyrk/chronicle/combatlog/parser/azerothcore/encounters"
+	"github.com/Emyrk/chronicle/combatlog/parser/common/creatures"
+	"github.com/Emyrk/chronicle/combatlog/parser/common/encounters"
+	"github.com/Emyrk/chronicle/combatlog/parser/common/registry"
+	"github.com/Emyrk/chronicle/combatlog/parser/logfile"
+	"github.com/Emyrk/chronicle/combatlog/parser/sorter"
+	"github.com/Emyrk/chronicle/combatlog/parser/types/realm"
+	"github.com/Emyrk/chronicle/combatlog/parser/types/realmclock"
+	"github.com/Emyrk/chronicle/combatlog/parser/vanilla"
+	"github.com/Emyrk/chronicle/combatlog/parser/vanilla/parserv2"
+	"github.com/Emyrk/chronicle/combatlog/parser/wotlk"
+	"github.com/Emyrk/chronicle/database"
+	"github.com/Emyrk/chronicle/database/gamedb"
+	"github.com/Emyrk/chronicle/database/gamedb/chrondbc"
+	"github.com/Emyrk/chronicle/internal/leveledlog"
+	"github.com/google/uuid"
 )
 
 // parseResult holds everything produced by the parse phase that the
@@ -89,6 +89,17 @@ func (w *WorkerLogParse) parseCombatLog(
 		return nil, fmt.Errorf("load aura duration modifiers: %w", err)
 	}
 	encountersState.Auras.SetDurationModifiers(durationModifiers)
+
+	type consumableCatalogFetcher interface {
+		Consumables(context.Context) (*chrondbc.ConsumableCatalog, error)
+	}
+	if fetcher, ok := gameDB.(consumableCatalogFetcher); ok {
+		consumableCatalog, err := fetcher.Consumables(ctx)
+		if err != nil {
+			return nil, fmt.Errorf("load consumable catalog: %w", err)
+		}
+		encountersState.ConsumeTracker.SetCatalog(consumableCatalog)
+	}
 
 	// Seed the realm from the pre-scan so instances created before the
 	// parser hits a REALM_INFO message already have realm context.

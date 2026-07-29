@@ -42,7 +42,8 @@ CREATE TYPE log_instance_event_type AS ENUM (
     'interrupt',
     'absorbed',
     'companion_stats',
-    'ressurection'
+    'ressurection',
+    'consume'
 );
 
 CREATE TYPE log_type AS ENUM (

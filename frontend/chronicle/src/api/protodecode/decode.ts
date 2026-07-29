@@ -5601,6 +5601,373 @@ export class FastDamageCursor {
   }
 }
 
+
+// ============================================================================
+// Consume decoder + cursor
+// ============================================================================
+
+export interface ReusableConsumeSpell {
+  id: number;
+  name: string;
+}
+
+/**
+ * Reusable Consume message object
+ */
+export interface ReusableConsume {
+  type: "consume";
+  index: number;
+  offsetMilli: number;
+  consumeId: string;
+  evidenceId: string;
+  player: string;
+  itemId: number | null;
+  candidateItemIds: number[];
+  candidateItemIdsCount: number;
+  spell: ReusableConsumeSpell;
+  kind: number;        // EvidenceKind enum
+  confidence: number;  // EvidenceConfidence enum
+  consumedAtUnixMilli: number | null;
+  observedAtUnixMilli: number;
+  amount: number | null;
+  resourceType: string | null;
+  isProjection: boolean;
+  activity: ReusableActivityEntry[];
+  activityCount: number;
+  isSynthetic: boolean;
+}
+
+/**
+ * Zero-allocation Consume decoder.
+ *
+ * Consume proto field numbers:
+ *   1: meta (EventMeta)
+ *   2: consumeId (string)
+ *   3: evidenceId (string)
+ *   4: player (string)
+ *   5: itemId (optional int32)
+ *   6: candidateItemIds (repeated int32, packed)
+ *   7: spellData (SpellData)
+ *   8: kind (EvidenceKind enum)
+ *   9: confidence (EvidenceConfidence enum)
+ *   10: consumedAtUnixMilli (optional int64)
+ *   11: observedAtUnixMilli (int64)
+ *   12: amount (optional int32)
+ *   13: resourceType (optional string)
+ *   14: isProjection (bool)
+ */
+function readInt64Number(data: Uint8Array, offset: number): { value: number; bytesRead: number } {
+  const decoded = readVarint64(data, offset);
+  return {
+    value: Number(BigInt.asIntN(64, decoded.value)),
+    bytesRead: decoded.bytesRead,
+  };
+}
+
+export class ConsumeDecoder {
+  private readonly textDecoder = sharedTextDecoder;
+
+  private readonly reusableSpell: ReusableConsumeSpell = {
+    id: 0,
+    name: "",
+  };
+
+  readonly message: ReusableConsume = {
+    type: "consume",
+    index: 0,
+    offsetMilli: 0,
+    consumeId: "",
+    evidenceId: "",
+    player: "",
+    itemId: null,
+    candidateItemIds: [],
+    candidateItemIdsCount: 0,
+    spell: this.reusableSpell,
+    kind: 0,
+    confidence: 0,
+    consumedAtUnixMilli: null,
+    observedAtUnixMilli: 0,
+    amount: null,
+    resourceType: null,
+    isProjection: false,
+    activity: [],
+    activityCount: 0,
+    isSynthetic: false,
+  };
+
+  decode(data: Uint8Array, offset: number, length: number): ReusableConsume {
+    const end = offset + length;
+    const msg = this.message;
+    const spell = this.reusableSpell;
+
+    // Reset fields
+    msg.index = 0;
+    msg.offsetMilli = 0;
+    msg.consumeId = "";
+    msg.evidenceId = "";
+    msg.player = "";
+    msg.itemId = null;
+    msg.candidateItemIdsCount = 0;
+    spell.id = 0;
+    spell.name = "";
+    msg.kind = 0;
+    msg.confidence = 0;
+    msg.consumedAtUnixMilli = null;
+    msg.observedAtUnixMilli = 0;
+    msg.amount = null;
+    msg.resourceType = null;
+    msg.isProjection = false;
+    msg.activityCount = 0;
+    msg.isSynthetic = false;
+
+    while (offset < end) {
+      const tag = data[offset++];
+      const fieldNumber = tag >> 3;
+      const wireType = tag & 0x7;
+
+      if (wireType === 2) {
+        // Length-delimited
+        const { value: len, bytesRead } = readVarintFast(data, offset);
+        offset += bytesRead;
+
+        if (fieldNumber === 1) {
+          // EventMeta - decode nested
+          const metaEnd = offset + len;
+          while (offset < metaEnd) {
+            const metaTag = data[offset++];
+            const metaField = metaTag >> 3;
+            const metaWire = metaTag & 0x7;
+
+            if (metaWire === 0) {
+              if (metaField === 2) {
+                const { value, bytesRead } = readInt64Number(data, offset);
+                offset += bytesRead;
+                msg.offsetMilli = value;
+              } else {
+                const { value, bytesRead } = readVarintFast(data, offset);
+                offset += bytesRead;
+                if (metaField === 1) msg.index = value;
+                else if (metaField === 4) msg.isSynthetic = value !== 0;
+              }
+            } else if (metaWire === 2 && metaField === 3) {
+              // ActivityEntry - decode nested repeated message
+              const { value: actLen, bytesRead: actLenBytes } = readVarintFast(data, offset);
+              offset += actLenBytes;
+
+              if (msg.activityCount >= msg.activity.length) {
+                msg.activity.push({ guid: "", eventType: "" });
+              }
+              const entry = msg.activity[msg.activityCount];
+              entry.guid = "";
+              entry.eventType = "";
+
+              const actEnd = offset + actLen;
+              while (offset < actEnd) {
+                const actTag = data[offset++];
+                const actField = actTag >> 3;
+                const actWire = actTag & 0x7;
+
+                if (actWire === 2) {
+                  const { value: sLen, bytesRead: sLenBytes } = readVarintFast(data, offset);
+                  offset += sLenBytes;
+                  if (actField === 1) entry.guid = this.textDecoder.decode(data.subarray(offset, offset + sLen));
+                  else if (actField === 2) entry.eventType = this.textDecoder.decode(data.subarray(offset, offset + sLen));
+                  offset += sLen;
+                }
+              }
+              msg.activityCount++;
+            }
+          }
+        } else if (fieldNumber === 2) {
+          msg.consumeId = this.textDecoder.decode(data.subarray(offset, offset + len));
+          offset += len;
+        } else if (fieldNumber === 3) {
+          msg.evidenceId = this.textDecoder.decode(data.subarray(offset, offset + len));
+          offset += len;
+        } else if (fieldNumber === 4) {
+          msg.player = this.textDecoder.decode(data.subarray(offset, offset + len));
+          offset += len;
+        } else if (fieldNumber === 6) {
+          // Packed repeated int32 - candidateItemIds
+          const packedEnd = offset + len;
+          while (offset < packedEnd) {
+            const { value, bytesRead } = readVarintFast(data, offset);
+            offset += bytesRead;
+            if (msg.candidateItemIdsCount >= msg.candidateItemIds.length) {
+              msg.candidateItemIds.push(0);
+            }
+            msg.candidateItemIds[msg.candidateItemIdsCount] = value;
+            msg.candidateItemIdsCount++;
+          }
+        } else if (fieldNumber === 7) {
+          // SpellData - decode nested (1=id, 2=name)
+          const spellEnd = offset + len;
+          while (offset < spellEnd) {
+            const spellTag = data[offset++];
+            const spellField = spellTag >> 3;
+            const spellWire = spellTag & 0x7;
+
+            if (spellWire === 0) {
+              const { value, bytesRead } = readVarintFast(data, offset);
+              offset += bytesRead;
+              if (spellField === 1) spell.id = value;
+            } else if (spellWire === 2) {
+              const { value: spellLen, bytesRead } = readVarintFast(data, offset);
+              offset += bytesRead;
+              if (spellField === 2) {
+                spell.name = this.textDecoder.decode(data.subarray(offset, offset + spellLen));
+              }
+              offset += spellLen;
+            }
+          }
+        } else if (fieldNumber === 13) {
+          // resourceType (optional string)
+          msg.resourceType = this.textDecoder.decode(data.subarray(offset, offset + len));
+          offset += len;
+        } else {
+          offset += len;
+        }
+      } else if (wireType === 0) {
+        // int64 timestamps need the full varint width; the remaining fields fit
+        // in 32 bits and use the faster decoder.
+        if (fieldNumber === 10 || fieldNumber === 11) {
+          const { value, bytesRead } = readInt64Number(data, offset);
+          offset += bytesRead;
+          if (fieldNumber === 10) msg.consumedAtUnixMilli = value;
+          else msg.observedAtUnixMilli = value;
+          continue;
+        }
+
+        const { value, bytesRead } = readVarintFast(data, offset);
+        offset += bytesRead;
+        if (fieldNumber === 5) msg.itemId = value;
+        else if (fieldNumber === 6) {
+          // Non-packed repeated int32 (individual element)
+          if (msg.candidateItemIdsCount >= msg.candidateItemIds.length) {
+            msg.candidateItemIds.push(0);
+          }
+          msg.candidateItemIds[msg.candidateItemIdsCount] = value;
+          msg.candidateItemIdsCount++;
+        }
+        else if (fieldNumber === 8) msg.kind = value;
+        else if (fieldNumber === 9) msg.confidence = value;
+        else if (fieldNumber === 12) msg.amount = value;
+        else if (fieldNumber === 14) msg.isProjection = value !== 0;
+      }
+    }
+
+    return msg;
+  }
+}
+
+/**
+ * Fast cursor for Consume events with zero-allocation decoding.
+ */
+export class FastConsumeCursor {
+  private readonly data: Uint8Array;
+  private readonly decoder = new ConsumeDecoder();
+  private offset: number = 0;
+
+  private _currentHeader: PayloadHeader | null = null;
+  private _messagesReadInEncounter: number = 0;
+  private _bytesProcessed: number = 0;
+
+  constructor(data: Uint8Array) {
+    this.data = data;
+    this._loadNextEncounterHeader();
+  }
+
+  get currentHeader(): PayloadHeader | null {
+    return this._currentHeader;
+  }
+
+  get hasMoreInEncounter(): boolean {
+    if (!this._currentHeader) return false;
+    return this._messagesReadInEncounter < this._currentHeader.count;
+  }
+
+  get bytesProcessed(): number {
+    return this._bytesProcessed;
+  }
+
+  get bytesTotal(): number {
+    return this.data.length;
+  }
+
+  next(): ReusableConsume | null {
+    if (!this.hasMoreInEncounter) return null;
+
+    const { value: length, bytesRead } = readVarint(this.data, this.offset);
+    const msgStart = this.offset + bytesRead;
+
+    const msg = this.decoder.decode(this.data, msgStart, length);
+
+    this.offset = msgStart + length;
+    this._bytesProcessed += bytesRead + length;
+    this._messagesReadInEncounter++;
+
+    return msg;
+  }
+
+  nextEncounter(): boolean {
+    while (this.hasMoreInEncounter) {
+      this.next();
+    }
+    return this._loadNextEncounterHeader();
+  }
+
+  skipEncounter(): boolean {
+    if (!this._currentHeader) return false;
+    if (this._messagesReadInEncounter > 0) {
+      return this.nextEncounter();
+    }
+    this.offset += this._currentHeader.dataLength;
+    this._bytesProcessed += this._currentHeader.dataLength;
+    this._currentHeader = null;
+    this._messagesReadInEncounter = 0;
+    return this._loadNextEncounterHeader();
+  }
+
+  private _loadNextEncounterHeader(): boolean {
+    if (this.offset >= this.data.length) {
+      this._currentHeader = null;
+      return false;
+    }
+
+    const startOffset = this.offset;
+
+    // Read encounterID
+    const { value: strLen, bytesRead: strLenBytes } = readVarint(this.data, this.offset);
+    this.offset += strLenBytes;
+    const encounterID = sharedTextDecoder.decode(this.data.subarray(this.offset, this.offset + strLen));
+    this.offset += strLen;
+
+    // Read timestamp
+    const { value: timestampMs, bytesRead: tsBytes } = readVarint64(this.data, this.offset);
+    this.offset += tsBytes;
+
+    // Read count
+    const { value: count, bytesRead: countBytes } = readVarint(this.data, this.offset);
+    this.offset += countBytes;
+
+    // Read dataLength
+    const { value: dataLength, bytesRead: dlBytes } = readVarint(this.data, this.offset);
+    this.offset += dlBytes;
+
+    this._currentHeader = {
+      encounterID,
+      firstTimestamp: new Date(Number(timestampMs)),
+      count,
+      dataLength,
+      headerLength: (this.offset - startOffset),
+    };
+    this._messagesReadInEncounter = 0;
+    this._bytesProcessed += (this.offset - startOffset);
+
+    return true;
+  }
+}
+
 // ============================================================================
 // Header parsing (for encounter discovery)
 // ============================================================================

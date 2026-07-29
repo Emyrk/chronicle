@@ -35,6 +35,41 @@ func TestResurrection(t *testing.T) {
 	require.Equal(t, int32(3), got.Meta.Index)
 }
 
+func TestConsume(t *testing.T) {
+	t.Parallel()
+
+	ts := time.UnixMilli(1706000000123)
+	consumedAt := ts.Add(-time.Second).UnixMilli()
+	amount := int32(45)
+	resourceType := "Rage"
+	itemID := int32(13442)
+	got := Consume(ts, 7, &messages.Consume{
+		MessageBase:      messages.Base(ts, messages.WithSynthetic()),
+		ConsumeID:        "consume-a",
+		EvidenceID:       "evidence-aura",
+		Player:           guid.GUID(1),
+		ItemID:           &itemID,
+		CandidateItemIDs: []int32{13442, 13443},
+		SpellData:        &chrondbc.Spell{ID: 17528},
+		Kind:             messages.EvidenceKindResource,
+		Confidence:       messages.ConfidenceAmbiguous,
+		ConsumedAtUnixMs: &consumedAt,
+		ObservedAtUnixMs: ts.UnixMilli(),
+		Amount:           &amount,
+		ResourceType:     &resourceType,
+		IsProjection:     true,
+	})
+
+	require.Equal(t, "consume-a", got.ConsumeId)
+	require.Equal(t, "evidence-aura", got.EvidenceId)
+	require.Equal(t, &resourceType, got.ResourceType)
+	require.Equal(t, &consumedAt, got.ConsumedAtUnixMilli)
+	require.Equal(t, []int32{13442, 13443}, got.CandidateItemIds)
+	require.True(t, got.IsProjection)
+	require.True(t, got.Meta.IsSynthetic)
+	require.Equal(t, int32(7), got.Meta.Index)
+}
+
 func TestDamageSchoolBackfill(t *testing.T) {
 	t.Parallel()
 

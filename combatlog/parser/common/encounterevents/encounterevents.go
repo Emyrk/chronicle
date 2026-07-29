@@ -35,6 +35,7 @@ type EncounterEvents struct {
 	Interrupt          *Builder[*messages.Interrupt, *chronicleproto.Interrupt]
 	Absorbed           *Builder[*messages.Absorbed, *chronicleproto.Absorbed]
 	CompanionStats     *Builder[*messages.CompanionStats, *chronicleproto.CompanionStats]
+	Consume    *Builder[*messages.Consume, *chronicleproto.Consume]
 	cnter              int32
 }
 
@@ -60,6 +61,7 @@ func New(verbose bool) *EncounterEventsInProgress {
 		Interrupt:          NewBuilder[*messages.Interrupt, *chronicleproto.Interrupt](),
 		Absorbed:           NewBuilder[*messages.Absorbed, *chronicleproto.Absorbed](),
 		CompanionStats:     NewBuilder[*messages.CompanionStats, *chronicleproto.CompanionStats](),
+		Consume:    NewBuilder[*messages.Consume, *chronicleproto.Consume](),
 	}
 }
 
@@ -154,6 +156,11 @@ func (e *EncounterEventsInProgress) Finalize(merge *Events, encounterID uuid.UUI
 		return fmt.Errorf("finalizing companion stats events: %w", err)
 	}
 
+	consume, err := e.Consume.Finalize(encounterID)
+	if err != nil {
+		return fmt.Errorf("finalizing consume events: %w", err)
+	}
+
 	merge.Damage = append(merge.Damage, damagePayload...)
 	merge.Healing = append(merge.Healing, healPayload...)
 	merge.ResourceChange = append(merge.ResourceChange, rcPayload...)
@@ -172,6 +179,7 @@ func (e *EncounterEventsInProgress) Finalize(merge *Events, encounterID uuid.UUI
 	merge.Interrupt = append(merge.Interrupt, interrupt...)
 	merge.Absorbed = append(merge.Absorbed, absorbed...)
 	merge.CompanionStats = append(merge.CompanionStats, companionStats...)
+	merge.Consume = append(merge.Consume, consume...)
 
 	return nil
 }
@@ -273,6 +281,11 @@ func (e *EncounterEventsInProgress) Process(m messages.Message) error {
 		if err != nil {
 			return fmt.Errorf("companion stats proto: %w", err)
 		}
+	case *messages.Consume:
+		err := AddToBuilder(e.Consume, ty, e.nextIndex(), types2proto.Consume)
+		if err != nil {
+			return fmt.Errorf("consume proto: %w", err)
+		}
 	}
 	return nil
 }
@@ -300,6 +313,7 @@ func (e *EncounterEventsInProgress) setFirsts(t time.Time) {
 	e.Interrupt.SetZero(e.first)
 	e.Absorbed.SetZero(e.first)
 	e.CompanionStats.SetZero(e.first)
+	e.Consume.SetZero(e.first)
 }
 
 func (e *EncounterEventsInProgress) nextIndex() int32 {

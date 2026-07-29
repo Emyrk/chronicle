@@ -1,7 +1,7 @@
 import { create, toBinary } from '@bufbuild/protobuf';
-import { EventMetaSchema, ResurrectionSchema, SpellDataSchema } from '@/api/proto/chronicle_pb';
+import { ConsumeSchema, EventMetaSchema, EvidenceConfidence, EvidenceKind, ResurrectionSchema, SpellDataSchema } from '@/api/proto/chronicle_pb';
 import { describe, it, expect } from 'vitest';
-import { AuraDecoder, FastResurrectionCursor, readVarint, readVarint64, parseAllHeaders } from './decode';
+import { AuraDecoder, FastConsumeCursor, FastResurrectionCursor, readVarint, readVarint64, parseAllHeaders } from './decode';
 
 describe('readVarint', () => {
   it('reads single-byte varints', () => {
@@ -97,6 +97,52 @@ describe('FastResurrectionCursor', () => {
       target: '0xTARGET',
       spell: { id: 48949, name: 'Redemption' },
       isSynthetic: true,
+    });
+  });
+});
+
+describe('FastConsumeCursor', () => {
+  it('decodes stable IDs, optional timestamps, amount, and resource type', () => {
+    const message = create(ConsumeSchema, {
+      meta: create(EventMetaSchema, { index: 21, offsetMilli: -1500n, isSynthetic: true }),
+      consumeId: 'consume-a',
+      evidenceId: 'evidence-resource',
+      player: '0xPLAYER',
+      itemId: 13442,
+      candidateItemIds: [13442, 13443],
+      spellData: create(SpellDataSchema, { id: 17528, name: 'Mighty Rage' }),
+      kind: EvidenceKind.EvidenceResource,
+      confidence: EvidenceConfidence.ConfidenceAmbiguous,
+      consumedAtUnixMilli: 1705999999000n,
+      observedAtUnixMilli: 1706000000000n,
+      amount: 45,
+      resourceType: 'Rage',
+      isProjection: true,
+    });
+    const encoded = toBinary(ConsumeSchema, message);
+    const messageData = new Uint8Array([...encodeVarint(encoded.length), ...encoded]);
+    const payload = buildPayload('encounter', 1706000000000n, 1, messageData.length, messageData);
+
+    const decoded = new FastConsumeCursor(payload).next();
+
+    expect(decoded).toMatchObject({
+      type: 'consume',
+      index: 21,
+      offsetMilli: -1500,
+      isSynthetic: true,
+      consumeId: 'consume-a',
+      evidenceId: 'evidence-resource',
+      player: '0xPLAYER',
+      itemId: 13442,
+      candidateItemIds: [13442, 13443],
+      spell: { id: 17528, name: 'Mighty Rage' },
+      kind: EvidenceKind.EvidenceResource,
+      confidence: EvidenceConfidence.ConfidenceAmbiguous,
+      consumedAtUnixMilli: 1705999999000,
+      observedAtUnixMilli: 1706000000000,
+      amount: 45,
+      resourceType: 'Rage',
+      isProjection: true,
     });
   });
 });

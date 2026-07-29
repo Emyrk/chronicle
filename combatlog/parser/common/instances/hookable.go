@@ -12,6 +12,7 @@ import (
 	"github.com/Emyrk/chronicle/combatlog/parser/common/auras"
 	"github.com/Emyrk/chronicle/combatlog/parser/common/characters"
 	"github.com/Emyrk/chronicle/combatlog/parser/common/characters/period"
+	"github.com/Emyrk/chronicle/combatlog/parser/common/consumeevidence"
 	"github.com/Emyrk/chronicle/combatlog/parser/common/encounter"
 	"github.com/Emyrk/chronicle/combatlog/parser/common/encounterevents"
 	"github.com/Emyrk/chronicle/combatlog/parser/common/identifier"
@@ -250,6 +251,22 @@ func (h *Hookable) AttachAuraProjection(tracker *auras.Tracking) {
 	h.Auras = tracker
 	// Prepend so projection events are emitted before hooks that might read them.
 	h.hooks = append([]instancehook.Hook{proj}, h.hooks...)
+}
+
+// AttachConsumeCollector creates and registers a consume evidence collector
+// that reads from the shared parse-wide Tracker and emits evidence into this
+// instance's fight event stream.
+func (h *Hookable) AttachConsumeCollector(auraTracker *auras.Tracking, shared *consumeevidence.Tracker) {
+	col := consumeevidence.NewCollector(auraTracker, shared)
+	col.SetEmit(func(evt *messages.Consume) {
+		if h.currentFight != nil && h.currentFight.active() {
+			err := h.currentFight.Events.Process(evt)
+			if err != nil {
+				h.logger.Error("processing consume event in ongoing fight", slog.String("error", err.Error()))
+			}
+		}
+	})
+	h.hooks = append(h.hooks, col)
 }
 
 // initDerivedRankings creates a SpeedrunTracker for each sub-instance defined

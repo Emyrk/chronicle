@@ -9,6 +9,7 @@ import (
 
 	"github.com/Emyrk/chronicle/combatlog/parseoptions"
 	"github.com/Emyrk/chronicle/combatlog/parser/common/auras"
+	"github.com/Emyrk/chronicle/combatlog/parser/common/consumeevidence"
 	"github.com/Emyrk/chronicle/combatlog/parser/common/instances"
 	"github.com/Emyrk/chronicle/combatlog/parser/common/messages"
 	"github.com/Emyrk/chronicle/combatlog/parser/common/registry"
@@ -60,6 +61,11 @@ type State struct {
 	// once and persists across zone/instance switches.
 	Auras *auras.Tracking
 
+	// ConsumeTracker is the parse-wide consumable evidence tracker. It
+	// records direct item-use and aura episodes for every message and is
+	// shared by all per-instance Collectors.
+	ConsumeTracker *consumeevidence.Tracker
+
 	instanceResolver InstanceResolver
 	verbose          bool
 	timings          *timingAccumulator
@@ -73,6 +79,7 @@ func NewWithInstanceResolver(ctx context.Context, logger *slog.Logger, res Insta
 		instanceResolver: res,
 		Instances:        make([]*instances.Hookable, 0),
 		Auras:            auras.New(nil), // nil mods: no dataset modifier plumbing available yet
+		ConsumeTracker:   consumeevidence.NewTracker(nil),
 		verbose:          parseoptions.IsVerbose(ctx),
 		timings: newTimingAccumulator(
 			"encounter_state.total",
@@ -131,6 +138,11 @@ func (s *State) Process(m messages.Message) error {
 			return fmt.Errorf("instance process: %w", err)
 		}
 	}
+
+	// Process consume evidence at the parse level (once, after instance hooks).
+	// This records direct item-use and aura episodes parse-wide so every
+	// per-instance Collector can read shared state.
+	s.ConsumeTracker.Process(m)
 
 	// Process aura messages at the parse level (once, after instance hooks).
 	// This ordering ensures projection captures the pre-message canonical
@@ -217,6 +229,9 @@ func (s *State) matchOrCreateInstance(z messages.Zone, requireDifficultyMatch bo
 			// Attach a projection adapter so the instance can project
 			// parse-wide aura state into encounter event streams.
 			s.CurrentInstance.AttachAuraProjection(s.Auras)
+			// Attach consume collector for item-use and
+			// pre-pull buff evidence.
+			s.CurrentInstance.AttachConsumeCollector(s.Auras, s.ConsumeTracker)
 			s.logger.Info("Matched new instance",
 				slog.String("name", s.CurrentInstance.Name()),
 			)

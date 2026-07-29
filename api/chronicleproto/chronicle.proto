@@ -257,6 +257,48 @@ message Absorbed {
 }
 
 
+// EvidenceKind describes how consume evidence was observed.
+enum EvidenceKind {
+  EvidenceUnknown = 0;
+  EvidenceDirectItem = 1;      // SpellGo with itemID
+  EvidenceCast = 2;            // spell cast matching a consumable
+  EvidenceAura = 3;            // buff/debuff gain from a consumable
+  EvidenceHeal = 4;            // heal event from a consumable
+  EvidenceResource = 5;        // resource gain (mana/rage potion)
+  EvidenceDamage = 6;          // damage event from a consumable (sapper, etc)
+  EvidenceActiveAtPull = 7;    // pre-pull aura projected into encounter
+  EvidenceCooldown = 8;        // inferred from cooldown window
+}
+
+// EvidenceConfidence describes how certain we are about the evidence.
+enum EvidenceConfidence {
+  ConfidenceUnknown = 0;
+  ConfidenceDirect = 1;        // authoritative (item ID present)
+  ConfidenceEffectDerived = 2; // from known spell effect
+  ConfidenceAmbiguous = 3;     // multiple possible items
+  ConfidenceInferred = 4;      // cooldown/timing heuristic
+}
+
+// Consume records a single piece of evidence that a player consumed an item.
+// Multiple evidence events with the same consume_id describe the same
+// physical use observed from different angles.
+message Consume {
+  EventMeta meta = 1;
+  string consumeId = 2;             // groups evidence for one physical use
+  string evidenceId = 3;            // unique observation identifier
+  string player = 4;                // player GUID
+  optional int32 itemId = 5;        // item ID when known
+  repeated int32 candidateItemIds = 6; // possible items when ambiguous
+  optional SpellData spellData = 7;
+  EvidenceKind kind = 8;
+  EvidenceConfidence confidence = 9;
+  optional int64 consumedAtUnixMilli = 10;  // when the item was consumed
+  int64 observedAtUnixMilli = 11;           // when the observation occurred
+  optional int32 amount = 12;              // heal/resource/damage amount
+  optional string resourceType = 13;       // resource type string (matches ResourceChange.resourceType)
+  bool isProjection = 14;                  // true when projected from prior encounter
+}
+
 message CombatantGearSlot {
   int32 itemId = 1;
   optional int32 enchantId = 2;

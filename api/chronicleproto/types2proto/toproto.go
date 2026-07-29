@@ -456,3 +456,32 @@ func CompanionStats(from time.Time, idx int32, msg *messages.CompanionStats) *ch
 		Buckets: buckets,
 	}
 }
+
+// Consume converts a Consume parser message to its proto representation.
+func Consume(from time.Time, idx int32, ev *messages.Consume) *chronicleproto.Consume {
+	out := &chronicleproto.Consume{
+		Meta:                EventMeta(from, idx, ev),
+		ConsumeId:           ev.ConsumeID,
+		EvidenceId:          ev.EvidenceID,
+		Player:              ev.Player.String(),
+		CandidateItemIds:    ev.CandidateItemIDs,
+		SpellData:           SpellData(ev.SpellData),
+		Kind:                chronicleproto.EvidenceKind(ev.Kind),
+		Confidence:          chronicleproto.EvidenceConfidence(ev.Confidence),
+		ObservedAtUnixMilli: ev.ObservedAtUnixMs,
+		IsProjection:        ev.IsProjection,
+	}
+	if ev.ItemID != nil {
+		out.ItemId = ev.ItemID
+	}
+	if ev.ConsumedAtUnixMs != nil {
+		out.ConsumedAtUnixMilli = ev.ConsumedAtUnixMs
+	}
+	if ev.Amount != nil {
+		out.Amount = ev.Amount
+	}
+	if ev.ResourceType != nil {
+		out.ResourceType = ev.ResourceType
+	}
+	return out
+}

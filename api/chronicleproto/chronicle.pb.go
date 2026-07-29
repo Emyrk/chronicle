@@ -308,6 +308,130 @@ func (DispelType) EnumDescriptor() ([]byte, []int) {
 	return file_chronicle_proto_rawDescGZIP(), []int{4}
 }
 
+// EvidenceKind describes how consume evidence was observed.
+type EvidenceKind int32
+
+const (
+	EvidenceKind_EvidenceUnknown      EvidenceKind = 0
+	EvidenceKind_EvidenceDirectItem   EvidenceKind = 1 // SpellGo with itemID
+	EvidenceKind_EvidenceCast         EvidenceKind = 2 // spell cast matching a consumable
+	EvidenceKind_EvidenceAura         EvidenceKind = 3 // buff/debuff gain from a consumable
+	EvidenceKind_EvidenceHeal         EvidenceKind = 4 // heal event from a consumable
+	EvidenceKind_EvidenceResource     EvidenceKind = 5 // resource gain (mana/rage potion)
+	EvidenceKind_EvidenceDamage       EvidenceKind = 6 // damage event from a consumable (sapper, etc)
+	EvidenceKind_EvidenceActiveAtPull EvidenceKind = 7 // pre-pull aura projected into encounter
+	EvidenceKind_EvidenceCooldown     EvidenceKind = 8 // inferred from cooldown window
+)
+
+// Enum value maps for EvidenceKind.
+var (
+	EvidenceKind_name = map[int32]string{
+		0: "EvidenceUnknown",
+		1: "EvidenceDirectItem",
+		2: "EvidenceCast",
+		3: "EvidenceAura",
+		4: "EvidenceHeal",
+		5: "EvidenceResource",
+		6: "EvidenceDamage",
+		7: "EvidenceActiveAtPull",
+		8: "EvidenceCooldown",
+	}
+	EvidenceKind_value = map[string]int32{
+		"EvidenceUnknown":      0,
+		"EvidenceDirectItem":   1,
+		"EvidenceCast":         2,
+		"EvidenceAura":         3,
+		"EvidenceHeal":         4,
+		"EvidenceResource":     5,
+		"EvidenceDamage":       6,
+		"EvidenceActiveAtPull": 7,
+		"EvidenceCooldown":     8,
+	}
+)
+
+func (x EvidenceKind) Enum() *EvidenceKind {
+	p := new(EvidenceKind)
+	*p = x
+	return p
+}
+
+func (x EvidenceKind) String() string {
+	return protoimpl.X.EnumStringOf(x.Descriptor(), protoreflect.EnumNumber(x))
+}
+
+func (EvidenceKind) Descriptor() protoreflect.EnumDescriptor {
+	return file_chronicle_proto_enumTypes[5].Descriptor()
+}
+
+func (EvidenceKind) Type() protoreflect.EnumType {
+	return &file_chronicle_proto_enumTypes[5]
+}
+
+func (x EvidenceKind) Number() protoreflect.EnumNumber {
+	return protoreflect.EnumNumber(x)
+}
+
+// Deprecated: Use EvidenceKind.Descriptor instead.
+func (EvidenceKind) EnumDescriptor() ([]byte, []int) {
+	return file_chronicle_proto_rawDescGZIP(), []int{5}
+}
+
+// EvidenceConfidence describes how certain we are about the evidence.
+type EvidenceConfidence int32
+
+const (
+	EvidenceConfidence_ConfidenceUnknown       EvidenceConfidence = 0
+	EvidenceConfidence_ConfidenceDirect        EvidenceConfidence = 1 // authoritative (item ID present)
+	EvidenceConfidence_ConfidenceEffectDerived EvidenceConfidence = 2 // from known spell effect
+	EvidenceConfidence_ConfidenceAmbiguous     EvidenceConfidence = 3 // multiple possible items
+	EvidenceConfidence_ConfidenceInferred      EvidenceConfidence = 4 // cooldown/timing heuristic
+)
+
+// Enum value maps for EvidenceConfidence.
+var (
+	EvidenceConfidence_name = map[int32]string{
+		0: "ConfidenceUnknown",
+		1: "ConfidenceDirect",
+		2: "ConfidenceEffectDerived",
+		3: "ConfidenceAmbiguous",
+		4: "ConfidenceInferred",
+	}
+	EvidenceConfidence_value = map[string]int32{
+		"ConfidenceUnknown":       0,
+		"ConfidenceDirect":        1,
+		"ConfidenceEffectDerived": 2,
+		"ConfidenceAmbiguous":     3,
+		"ConfidenceInferred":      4,
+	}
+)
+
+func (x EvidenceConfidence) Enum() *EvidenceConfidence {
+	p := new(EvidenceConfidence)
+	*p = x
+	return p
+}
+
+func (x EvidenceConfidence) String() string {
+	return protoimpl.X.EnumStringOf(x.Descriptor(), protoreflect.EnumNumber(x))
+}
+
+func (EvidenceConfidence) Descriptor() protoreflect.EnumDescriptor {
+	return file_chronicle_proto_enumTypes[6].Descriptor()
+}
+
+func (EvidenceConfidence) Type() protoreflect.EnumType {
+	return &file_chronicle_proto_enumTypes[6]
+}
+
+func (x EvidenceConfidence) Number() protoreflect.EnumNumber {
+	return protoreflect.EnumNumber(x)
+}
+
+// Deprecated: Use EvidenceConfidence.Descriptor instead.
+func (EvidenceConfidence) EnumDescriptor() ([]byte, []int) {
+	return file_chronicle_proto_rawDescGZIP(), []int{6}
+}
+
 type SpellData struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	Id            int32                  `protobuf:"varint,1,opt,name=id,proto3" json:"id,omitempty"`
@@ -2194,6 +2318,157 @@ func (x *Absorbed) GetEstimated() bool {
 	return false
 }
 
+// Consume records a single piece of evidence that a player consumed an item.
+// Multiple evidence events with the same consume_id describe the same
+// physical use observed from different angles.
+type Consume struct {
+	state               protoimpl.MessageState `protogen:"open.v1"`
+	Meta                *EventMeta             `protobuf:"bytes,1,opt,name=meta,proto3" json:"meta,omitempty"`
+	ConsumeId           string                 `protobuf:"bytes,2,opt,name=consumeId,proto3" json:"consumeId,omitempty"`                       // groups evidence for one physical use
+	EvidenceId          string                 `protobuf:"bytes,3,opt,name=evidenceId,proto3" json:"evidenceId,omitempty"`                     // unique observation identifier
+	Player              string                 `protobuf:"bytes,4,opt,name=player,proto3" json:"player,omitempty"`                             // player GUID
+	ItemId              *int32                 `protobuf:"varint,5,opt,name=itemId,proto3,oneof" json:"itemId,omitempty"`                      // item ID when known
+	CandidateItemIds    []int32                `protobuf:"varint,6,rep,packed,name=candidateItemIds,proto3" json:"candidateItemIds,omitempty"` // possible items when ambiguous
+	SpellData           *SpellData             `protobuf:"bytes,7,opt,name=spellData,proto3,oneof" json:"spellData,omitempty"`
+	Kind                EvidenceKind           `protobuf:"varint,8,opt,name=kind,proto3,enum=chronicleproto.EvidenceKind" json:"kind,omitempty"`
+	Confidence          EvidenceConfidence     `protobuf:"varint,9,opt,name=confidence,proto3,enum=chronicleproto.EvidenceConfidence" json:"confidence,omitempty"`
+	ConsumedAtUnixMilli *int64                 `protobuf:"varint,10,opt,name=consumedAtUnixMilli,proto3,oneof" json:"consumedAtUnixMilli,omitempty"` // when the item was consumed
+	ObservedAtUnixMilli int64                  `protobuf:"varint,11,opt,name=observedAtUnixMilli,proto3" json:"observedAtUnixMilli,omitempty"`       // when the observation occurred
+	Amount              *int32                 `protobuf:"varint,12,opt,name=amount,proto3,oneof" json:"amount,omitempty"`                           // heal/resource/damage amount
+	ResourceType        *string                `protobuf:"bytes,13,opt,name=resourceType,proto3,oneof" json:"resourceType,omitempty"`                // resource type string (matches ResourceChange.resourceType)
+	IsProjection        bool                   `protobuf:"varint,14,opt,name=isProjection,proto3" json:"isProjection,omitempty"`                     // true when projected from prior encounter
+	unknownFields       protoimpl.UnknownFields
+	sizeCache           protoimpl.SizeCache
+}
+
+func (x *Consume) Reset() {
+	*x = Consume{}
+	mi := &file_chronicle_proto_msgTypes[22]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *Consume) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*Consume) ProtoMessage() {}
+
+func (x *Consume) ProtoReflect() protoreflect.Message {
+	mi := &file_chronicle_proto_msgTypes[22]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use Consume.ProtoReflect.Descriptor instead.
+func (*Consume) Descriptor() ([]byte, []int) {
+	return file_chronicle_proto_rawDescGZIP(), []int{22}
+}
+
+func (x *Consume) GetMeta() *EventMeta {
+	if x != nil {
+		return x.Meta
+	}
+	return nil
+}
+
+func (x *Consume) GetConsumeId() string {
+	if x != nil {
+		return x.ConsumeId
+	}
+	return ""
+}
+
+func (x *Consume) GetEvidenceId() string {
+	if x != nil {
+		return x.EvidenceId
+	}
+	return ""
+}
+
+func (x *Consume) GetPlayer() string {
+	if x != nil {
+		return x.Player
+	}
+	return ""
+}
+
+func (x *Consume) GetItemId() int32 {
+	if x != nil && x.ItemId != nil {
+		return *x.ItemId
+	}
+	return 0
+}
+
+func (x *Consume) GetCandidateItemIds() []int32 {
+	if x != nil {
+		return x.CandidateItemIds
+	}
+	return nil
+}
+
+func (x *Consume) GetSpellData() *SpellData {
+	if x != nil {
+		return x.SpellData
+	}
+	return nil
+}
+
+func (x *Consume) GetKind() EvidenceKind {
+	if x != nil {
+		return x.Kind
+	}
+	return EvidenceKind_EvidenceUnknown
+}
+
+func (x *Consume) GetConfidence() EvidenceConfidence {
+	if x != nil {
+		return x.Confidence
+	}
+	return EvidenceConfidence_ConfidenceUnknown
+}
+
+func (x *Consume) GetConsumedAtUnixMilli() int64 {
+	if x != nil && x.ConsumedAtUnixMilli != nil {
+		return *x.ConsumedAtUnixMilli
+	}
+	return 0
+}
+
+func (x *Consume) GetObservedAtUnixMilli() int64 {
+	if x != nil {
+		return x.ObservedAtUnixMilli
+	}
+	return 0
+}
+
+func (x *Consume) GetAmount() int32 {
+	if x != nil && x.Amount != nil {
+		return *x.Amount
+	}
+	return 0
+}
+
+func (x *Consume) GetResourceType() string {
+	if x != nil && x.ResourceType != nil {
+		return *x.ResourceType
+	}
+	return ""
+}
+
+func (x *Consume) GetIsProjection() bool {
+	if x != nil {
+		return x.IsProjection
+	}
+	return false
+}
+
 type CombatantGearSlot struct {
 	state              protoimpl.MessageState `protogen:"open.v1"`
 	ItemId             int32                  `protobuf:"varint,1,opt,name=itemId,proto3" json:"itemId,omitempty"`
@@ -2205,7 +2480,7 @@ type CombatantGearSlot struct {
 
 func (x *CombatantGearSlot) Reset() {
 	*x = CombatantGearSlot{}
-	mi := &file_chronicle_proto_msgTypes[22]
+	mi := &file_chronicle_proto_msgTypes[23]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2217,7 +2492,7 @@ func (x *CombatantGearSlot) String() string {
 func (*CombatantGearSlot) ProtoMessage() {}
 
 func (x *CombatantGearSlot) ProtoReflect() protoreflect.Message {
-	mi := &file_chronicle_proto_msgTypes[22]
+	mi := &file_chronicle_proto_msgTypes[23]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2230,7 +2505,7 @@ func (x *CombatantGearSlot) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use CombatantGearSlot.ProtoReflect.Descriptor instead.
 func (*CombatantGearSlot) Descriptor() ([]byte, []int) {
-	return file_chronicle_proto_rawDescGZIP(), []int{22}
+	return file_chronicle_proto_rawDescGZIP(), []int{23}
 }
 
 func (x *CombatantGearSlot) GetItemId() int32 {
@@ -2264,7 +2539,7 @@ type CombatantTalents struct {
 
 func (x *CombatantTalents) Reset() {
 	*x = CombatantTalents{}
-	mi := &file_chronicle_proto_msgTypes[23]
+	mi := &file_chronicle_proto_msgTypes[24]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2276,7 +2551,7 @@ func (x *CombatantTalents) String() string {
 func (*CombatantTalents) ProtoMessage() {}
 
 func (x *CombatantTalents) ProtoReflect() protoreflect.Message {
-	mi := &file_chronicle_proto_msgTypes[23]
+	mi := &file_chronicle_proto_msgTypes[24]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2289,7 +2564,7 @@ func (x *CombatantTalents) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use CombatantTalents.ProtoReflect.Descriptor instead.
 func (*CombatantTalents) Descriptor() ([]byte, []int) {
-	return file_chronicle_proto_rawDescGZIP(), []int{23}
+	return file_chronicle_proto_rawDescGZIP(), []int{24}
 }
 
 func (x *CombatantTalents) GetSummary() []int32 {
@@ -2320,7 +2595,7 @@ type CompanionStats struct {
 
 func (x *CompanionStats) Reset() {
 	*x = CompanionStats{}
-	mi := &file_chronicle_proto_msgTypes[24]
+	mi := &file_chronicle_proto_msgTypes[25]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2332,7 +2607,7 @@ func (x *CompanionStats) String() string {
 func (*CompanionStats) ProtoMessage() {}
 
 func (x *CompanionStats) ProtoReflect() protoreflect.Message {
-	mi := &file_chronicle_proto_msgTypes[24]
+	mi := &file_chronicle_proto_msgTypes[25]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2345,7 +2620,7 @@ func (x *CompanionStats) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use CompanionStats.ProtoReflect.Descriptor instead.
 func (*CompanionStats) Descriptor() ([]byte, []int) {
-	return file_chronicle_proto_rawDescGZIP(), []int{24}
+	return file_chronicle_proto_rawDescGZIP(), []int{25}
 }
 
 func (x *CompanionStats) GetMeta() *EventMeta {
@@ -2592,7 +2867,33 @@ const file_chronicle_proto_rawDesc = "" +
 	"\x06amount\x18\b \x01(\x05R\x06amount\x12\x1c\n" +
 	"\testimated\x18\t \x01(\bR\testimatedB\x12\n" +
 	"\x10_damageSpellDataB\x12\n" +
-	"\x10_absorbSpellData\"\xa8\x01\n" +
+	"\x10_absorbSpellData\"\xab\x05\n" +
+	"\aConsume\x12-\n" +
+	"\x04meta\x18\x01 \x01(\v2\x19.chronicleproto.EventMetaR\x04meta\x12\x1c\n" +
+	"\tconsumeId\x18\x02 \x01(\tR\tconsumeId\x12\x1e\n" +
+	"\n" +
+	"evidenceId\x18\x03 \x01(\tR\n" +
+	"evidenceId\x12\x16\n" +
+	"\x06player\x18\x04 \x01(\tR\x06player\x12\x1b\n" +
+	"\x06itemId\x18\x05 \x01(\x05H\x00R\x06itemId\x88\x01\x01\x12*\n" +
+	"\x10candidateItemIds\x18\x06 \x03(\x05R\x10candidateItemIds\x12<\n" +
+	"\tspellData\x18\a \x01(\v2\x19.chronicleproto.SpellDataH\x01R\tspellData\x88\x01\x01\x120\n" +
+	"\x04kind\x18\b \x01(\x0e2\x1c.chronicleproto.EvidenceKindR\x04kind\x12B\n" +
+	"\n" +
+	"confidence\x18\t \x01(\x0e2\".chronicleproto.EvidenceConfidenceR\n" +
+	"confidence\x125\n" +
+	"\x13consumedAtUnixMilli\x18\n" +
+	" \x01(\x03H\x02R\x13consumedAtUnixMilli\x88\x01\x01\x120\n" +
+	"\x13observedAtUnixMilli\x18\v \x01(\x03R\x13observedAtUnixMilli\x12\x1b\n" +
+	"\x06amount\x18\f \x01(\x05H\x03R\x06amount\x88\x01\x01\x12'\n" +
+	"\fresourceType\x18\r \x01(\tH\x04R\fresourceType\x88\x01\x01\x12\"\n" +
+	"\fisProjection\x18\x0e \x01(\bR\fisProjectionB\t\n" +
+	"\a_itemIdB\f\n" +
+	"\n" +
+	"_spellDataB\x16\n" +
+	"\x14_consumedAtUnixMilliB\t\n" +
+	"\a_amountB\x0f\n" +
+	"\r_resourceType\"\xa8\x01\n" +
 	"\x11CombatantGearSlot\x12\x16\n" +
 	"\x06itemId\x18\x01 \x01(\x05R\x06itemId\x12!\n" +
 	"\tenchantId\x18\x02 \x01(\x05H\x00R\tenchantId\x88\x01\x01\x123\n" +
@@ -2646,7 +2947,23 @@ const file_chronicle_proto_rawDesc = "" +
 	"\x11DispelTypeDisease\x10\x03\x12\x14\n" +
 	"\x10DispelTypePoison\x10\x04\x12\x15\n" +
 	"\x11DispelTypeStealth\x10\x05\x12\x1a\n" +
-	"\x16DispelTypeInvisibility\x10\x06B/Z-github.com/Emyrk/chronicle/api/chronicleprotob\x06proto3"
+	"\x16DispelTypeInvisibility\x10\x06*\xcb\x01\n" +
+	"\fEvidenceKind\x12\x13\n" +
+	"\x0fEvidenceUnknown\x10\x00\x12\x16\n" +
+	"\x12EvidenceDirectItem\x10\x01\x12\x10\n" +
+	"\fEvidenceCast\x10\x02\x12\x10\n" +
+	"\fEvidenceAura\x10\x03\x12\x10\n" +
+	"\fEvidenceHeal\x10\x04\x12\x14\n" +
+	"\x10EvidenceResource\x10\x05\x12\x12\n" +
+	"\x0eEvidenceDamage\x10\x06\x12\x18\n" +
+	"\x14EvidenceActiveAtPull\x10\a\x12\x14\n" +
+	"\x10EvidenceCooldown\x10\b*\x8f\x01\n" +
+	"\x12EvidenceConfidence\x12\x15\n" +
+	"\x11ConfidenceUnknown\x10\x00\x12\x14\n" +
+	"\x10ConfidenceDirect\x10\x01\x12\x1b\n" +
+	"\x17ConfidenceEffectDerived\x10\x02\x12\x17\n" +
+	"\x13ConfidenceAmbiguous\x10\x03\x12\x16\n" +
+	"\x12ConfidenceInferred\x10\x04B/Z-github.com/Emyrk/chronicle/api/chronicleprotob\x06proto3"
 
 var (
 	file_chronicle_proto_rawDescOnce sync.Once
@@ -2660,91 +2977,98 @@ func file_chronicle_proto_rawDescGZIP() []byte {
 	return file_chronicle_proto_rawDescData
 }
 
-var file_chronicle_proto_enumTypes = make([]protoimpl.EnumInfo, 5)
-var file_chronicle_proto_msgTypes = make([]protoimpl.MessageInfo, 25)
+var file_chronicle_proto_enumTypes = make([]protoimpl.EnumInfo, 7)
+var file_chronicle_proto_msgTypes = make([]protoimpl.MessageInfo, 26)
 var file_chronicle_proto_goTypes = []any{
 	(School)(0),                // 0: chronicleproto.School
 	(CastAction)(0),            // 1: chronicleproto.CastAction
 	(AuraApplication)(0),       // 2: chronicleproto.AuraApplication
 	(AuraState)(0),             // 3: chronicleproto.AuraState
 	(DispelType)(0),            // 4: chronicleproto.DispelType
-	(*SpellData)(nil),          // 5: chronicleproto.SpellData
-	(*Tailer)(nil),             // 6: chronicleproto.Tailer
-	(*ActivityEntry)(nil),      // 7: chronicleproto.ActivityEntry
-	(*EventMeta)(nil),          // 8: chronicleproto.EventMeta
-	(*Heal)(nil),               // 9: chronicleproto.Heal
-	(*Damage)(nil),             // 10: chronicleproto.Damage
-	(*ResourceChange)(nil),     // 11: chronicleproto.ResourceChange
-	(*ExtraAttack)(nil),        // 12: chronicleproto.ExtraAttack
-	(*Slain)(nil),              // 13: chronicleproto.Slain
-	(*Resurrection)(nil),       // 14: chronicleproto.Resurrection
-	(*Spell)(nil),              // 15: chronicleproto.Spell
-	(*Cast)(nil),               // 16: chronicleproto.Cast
-	(*Aura)(nil),               // 17: chronicleproto.Aura
-	(*AuraCast)(nil),           // 18: chronicleproto.AuraCast
-	(*SpellGo)(nil),            // 19: chronicleproto.SpellGo
-	(*SpellStart)(nil),         // 20: chronicleproto.SpellStart
-	(*SpellFail)(nil),          // 21: chronicleproto.SpellFail
-	(*UnitClassification)(nil), // 22: chronicleproto.UnitClassification
-	(*Dispel)(nil),             // 23: chronicleproto.Dispel
-	(*CombatantInfo)(nil),      // 24: chronicleproto.CombatantInfo
-	(*Interrupt)(nil),          // 25: chronicleproto.Interrupt
-	(*Absorbed)(nil),           // 26: chronicleproto.Absorbed
-	(*CombatantGearSlot)(nil),  // 27: chronicleproto.CombatantGearSlot
-	(*CombatantTalents)(nil),   // 28: chronicleproto.CombatantTalents
-	(*CompanionStats)(nil),     // 29: chronicleproto.CompanionStats
+	(EvidenceKind)(0),          // 5: chronicleproto.EvidenceKind
+	(EvidenceConfidence)(0),    // 6: chronicleproto.EvidenceConfidence
+	(*SpellData)(nil),          // 7: chronicleproto.SpellData
+	(*Tailer)(nil),             // 8: chronicleproto.Tailer
+	(*ActivityEntry)(nil),      // 9: chronicleproto.ActivityEntry
+	(*EventMeta)(nil),          // 10: chronicleproto.EventMeta
+	(*Heal)(nil),               // 11: chronicleproto.Heal
+	(*Damage)(nil),             // 12: chronicleproto.Damage
+	(*ResourceChange)(nil),     // 13: chronicleproto.ResourceChange
+	(*ExtraAttack)(nil),        // 14: chronicleproto.ExtraAttack
+	(*Slain)(nil),              // 15: chronicleproto.Slain
+	(*Resurrection)(nil),       // 16: chronicleproto.Resurrection
+	(*Spell)(nil),              // 17: chronicleproto.Spell
+	(*Cast)(nil),               // 18: chronicleproto.Cast
+	(*Aura)(nil),               // 19: chronicleproto.Aura
+	(*AuraCast)(nil),           // 20: chronicleproto.AuraCast
+	(*SpellGo)(nil),            // 21: chronicleproto.SpellGo
+	(*SpellStart)(nil),         // 22: chronicleproto.SpellStart
+	(*SpellFail)(nil),          // 23: chronicleproto.SpellFail
+	(*UnitClassification)(nil), // 24: chronicleproto.UnitClassification
+	(*Dispel)(nil),             // 25: chronicleproto.Dispel
+	(*CombatantInfo)(nil),      // 26: chronicleproto.CombatantInfo
+	(*Interrupt)(nil),          // 27: chronicleproto.Interrupt
+	(*Absorbed)(nil),           // 28: chronicleproto.Absorbed
+	(*Consume)(nil),            // 29: chronicleproto.Consume
+	(*CombatantGearSlot)(nil),  // 30: chronicleproto.CombatantGearSlot
+	(*CombatantTalents)(nil),   // 31: chronicleproto.CombatantTalents
+	(*CompanionStats)(nil),     // 32: chronicleproto.CompanionStats
 }
 var file_chronicle_proto_depIdxs = []int32{
-	7,  // 0: chronicleproto.EventMeta.activity:type_name -> chronicleproto.ActivityEntry
-	8,  // 1: chronicleproto.Heal.meta:type_name -> chronicleproto.EventMeta
-	5,  // 2: chronicleproto.Heal.spellData:type_name -> chronicleproto.SpellData
+	9,  // 0: chronicleproto.EventMeta.activity:type_name -> chronicleproto.ActivityEntry
+	10, // 1: chronicleproto.Heal.meta:type_name -> chronicleproto.EventMeta
+	7,  // 2: chronicleproto.Heal.spellData:type_name -> chronicleproto.SpellData
 	0,  // 3: chronicleproto.Heal.school:type_name -> chronicleproto.School
-	8,  // 4: chronicleproto.Damage.meta:type_name -> chronicleproto.EventMeta
+	10, // 4: chronicleproto.Damage.meta:type_name -> chronicleproto.EventMeta
 	0,  // 5: chronicleproto.Damage.school:type_name -> chronicleproto.School
-	6,  // 6: chronicleproto.Damage.tailers:type_name -> chronicleproto.Tailer
-	5,  // 7: chronicleproto.Damage.spellData:type_name -> chronicleproto.SpellData
-	8,  // 8: chronicleproto.ResourceChange.meta:type_name -> chronicleproto.EventMeta
-	5,  // 9: chronicleproto.ResourceChange.spellData:type_name -> chronicleproto.SpellData
-	8,  // 10: chronicleproto.ExtraAttack.meta:type_name -> chronicleproto.EventMeta
-	5,  // 11: chronicleproto.ExtraAttack.spellData:type_name -> chronicleproto.SpellData
-	8,  // 12: chronicleproto.Slain.meta:type_name -> chronicleproto.EventMeta
-	10, // 13: chronicleproto.Slain.attribution:type_name -> chronicleproto.Damage
-	8,  // 14: chronicleproto.Resurrection.meta:type_name -> chronicleproto.EventMeta
-	5,  // 15: chronicleproto.Resurrection.spell:type_name -> chronicleproto.SpellData
-	8,  // 16: chronicleproto.Cast.meta:type_name -> chronicleproto.EventMeta
+	8,  // 6: chronicleproto.Damage.tailers:type_name -> chronicleproto.Tailer
+	7,  // 7: chronicleproto.Damage.spellData:type_name -> chronicleproto.SpellData
+	10, // 8: chronicleproto.ResourceChange.meta:type_name -> chronicleproto.EventMeta
+	7,  // 9: chronicleproto.ResourceChange.spellData:type_name -> chronicleproto.SpellData
+	10, // 10: chronicleproto.ExtraAttack.meta:type_name -> chronicleproto.EventMeta
+	7,  // 11: chronicleproto.ExtraAttack.spellData:type_name -> chronicleproto.SpellData
+	10, // 12: chronicleproto.Slain.meta:type_name -> chronicleproto.EventMeta
+	12, // 13: chronicleproto.Slain.attribution:type_name -> chronicleproto.Damage
+	10, // 14: chronicleproto.Resurrection.meta:type_name -> chronicleproto.EventMeta
+	7,  // 15: chronicleproto.Resurrection.spell:type_name -> chronicleproto.SpellData
+	10, // 16: chronicleproto.Cast.meta:type_name -> chronicleproto.EventMeta
 	1,  // 17: chronicleproto.Cast.action:type_name -> chronicleproto.CastAction
-	15, // 18: chronicleproto.Cast.spell:type_name -> chronicleproto.Spell
-	8,  // 19: chronicleproto.Aura.meta:type_name -> chronicleproto.EventMeta
+	17, // 18: chronicleproto.Cast.spell:type_name -> chronicleproto.Spell
+	10, // 19: chronicleproto.Aura.meta:type_name -> chronicleproto.EventMeta
 	2,  // 20: chronicleproto.Aura.application:type_name -> chronicleproto.AuraApplication
 	3,  // 21: chronicleproto.Aura.state:type_name -> chronicleproto.AuraState
-	5,  // 22: chronicleproto.Aura.spellData:type_name -> chronicleproto.SpellData
-	8,  // 23: chronicleproto.AuraCast.meta:type_name -> chronicleproto.EventMeta
-	5,  // 24: chronicleproto.AuraCast.spell:type_name -> chronicleproto.SpellData
-	8,  // 25: chronicleproto.SpellGo.meta:type_name -> chronicleproto.EventMeta
-	5,  // 26: chronicleproto.SpellGo.spellData:type_name -> chronicleproto.SpellData
-	8,  // 27: chronicleproto.SpellStart.meta:type_name -> chronicleproto.EventMeta
-	5,  // 28: chronicleproto.SpellStart.spellData:type_name -> chronicleproto.SpellData
-	8,  // 29: chronicleproto.SpellFail.meta:type_name -> chronicleproto.EventMeta
-	5,  // 30: chronicleproto.SpellFail.spellData:type_name -> chronicleproto.SpellData
-	8,  // 31: chronicleproto.UnitClassification.meta:type_name -> chronicleproto.EventMeta
-	8,  // 32: chronicleproto.Dispel.meta:type_name -> chronicleproto.EventMeta
-	5,  // 33: chronicleproto.Dispel.spellData:type_name -> chronicleproto.SpellData
+	7,  // 22: chronicleproto.Aura.spellData:type_name -> chronicleproto.SpellData
+	10, // 23: chronicleproto.AuraCast.meta:type_name -> chronicleproto.EventMeta
+	7,  // 24: chronicleproto.AuraCast.spell:type_name -> chronicleproto.SpellData
+	10, // 25: chronicleproto.SpellGo.meta:type_name -> chronicleproto.EventMeta
+	7,  // 26: chronicleproto.SpellGo.spellData:type_name -> chronicleproto.SpellData
+	10, // 27: chronicleproto.SpellStart.meta:type_name -> chronicleproto.EventMeta
+	7,  // 28: chronicleproto.SpellStart.spellData:type_name -> chronicleproto.SpellData
+	10, // 29: chronicleproto.SpellFail.meta:type_name -> chronicleproto.EventMeta
+	7,  // 30: chronicleproto.SpellFail.spellData:type_name -> chronicleproto.SpellData
+	10, // 31: chronicleproto.UnitClassification.meta:type_name -> chronicleproto.EventMeta
+	10, // 32: chronicleproto.Dispel.meta:type_name -> chronicleproto.EventMeta
+	7,  // 33: chronicleproto.Dispel.spellData:type_name -> chronicleproto.SpellData
 	4,  // 34: chronicleproto.Dispel.dispelType:type_name -> chronicleproto.DispelType
-	8,  // 35: chronicleproto.CombatantInfo.meta:type_name -> chronicleproto.EventMeta
-	27, // 36: chronicleproto.CombatantInfo.gear:type_name -> chronicleproto.CombatantGearSlot
-	28, // 37: chronicleproto.CombatantInfo.talents:type_name -> chronicleproto.CombatantTalents
-	8,  // 38: chronicleproto.Interrupt.meta:type_name -> chronicleproto.EventMeta
+	10, // 35: chronicleproto.CombatantInfo.meta:type_name -> chronicleproto.EventMeta
+	30, // 36: chronicleproto.CombatantInfo.gear:type_name -> chronicleproto.CombatantGearSlot
+	31, // 37: chronicleproto.CombatantInfo.talents:type_name -> chronicleproto.CombatantTalents
+	10, // 38: chronicleproto.Interrupt.meta:type_name -> chronicleproto.EventMeta
 	0,  // 39: chronicleproto.Interrupt.extra_school:type_name -> chronicleproto.School
-	8,  // 40: chronicleproto.Absorbed.meta:type_name -> chronicleproto.EventMeta
-	5,  // 41: chronicleproto.Absorbed.damageSpellData:type_name -> chronicleproto.SpellData
-	5,  // 42: chronicleproto.Absorbed.absorbSpellData:type_name -> chronicleproto.SpellData
+	10, // 40: chronicleproto.Absorbed.meta:type_name -> chronicleproto.EventMeta
+	7,  // 41: chronicleproto.Absorbed.damageSpellData:type_name -> chronicleproto.SpellData
+	7,  // 42: chronicleproto.Absorbed.absorbSpellData:type_name -> chronicleproto.SpellData
 	0,  // 43: chronicleproto.Absorbed.absorbSchool:type_name -> chronicleproto.School
-	8,  // 44: chronicleproto.CompanionStats.meta:type_name -> chronicleproto.EventMeta
-	45, // [45:45] is the sub-list for method output_type
-	45, // [45:45] is the sub-list for method input_type
-	45, // [45:45] is the sub-list for extension type_name
-	45, // [45:45] is the sub-list for extension extendee
-	0,  // [0:45] is the sub-list for field type_name
+	10, // 44: chronicleproto.Consume.meta:type_name -> chronicleproto.EventMeta
+	7,  // 45: chronicleproto.Consume.spellData:type_name -> chronicleproto.SpellData
+	5,  // 46: chronicleproto.Consume.kind:type_name -> chronicleproto.EvidenceKind
+	6,  // 47: chronicleproto.Consume.confidence:type_name -> chronicleproto.EvidenceConfidence
+	10, // 48: chronicleproto.CompanionStats.meta:type_name -> chronicleproto.EventMeta
+	49, // [49:49] is the sub-list for method output_type
+	49, // [49:49] is the sub-list for method input_type
+	49, // [49:49] is the sub-list for extension type_name
+	49, // [49:49] is the sub-list for extension extendee
+	0,  // [0:49] is the sub-list for field type_name
 }
 
 func init() { file_chronicle_proto_init() }
@@ -2770,13 +3094,14 @@ func file_chronicle_proto_init() {
 	file_chronicle_proto_msgTypes[19].OneofWrappers = []any{}
 	file_chronicle_proto_msgTypes[21].OneofWrappers = []any{}
 	file_chronicle_proto_msgTypes[22].OneofWrappers = []any{}
+	file_chronicle_proto_msgTypes[23].OneofWrappers = []any{}
 	type x struct{}
 	out := protoimpl.TypeBuilder{
 		File: protoimpl.DescBuilder{
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_chronicle_proto_rawDesc), len(file_chronicle_proto_rawDesc)),
-			NumEnums:      5,
-			NumMessages:   25,
+			NumEnums:      7,
+			NumMessages:   26,
 			NumExtensions: 0,
 			NumServices:   0,
 		},
