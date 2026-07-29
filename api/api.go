@@ -67,6 +67,10 @@ type Options struct {
 	ShortLinkDomain string
 	// ClientUploadsDisabled disables client-side log uploads (for servers using server-side logging).
 	ClientUploadsDisabled bool
+	// ExternalVerification enables the external character verification
+	// provider (e.g. zug-zug). Configured via environment variables; nil
+	// when disabled.
+	ExternalVerification *chroniclesdk.ExternalVerification
 	DevOAuth              bool
 	Discord               chronauth.DiscordOAuth
 	SecretPEM             []byte // Used for JWTs
@@ -195,7 +199,7 @@ func (api *API) Routes() chi.Router {
 			})
 			r.Mount("/panel-layout", panellayoutapi.New(api.Opts.Zed, api.Auth).Routes())
 			// Account↔character link management.
-			r.Mount("/linked", linkedapi.New(api.Opts.Zed, api.Auth).Routes())
+			r.Mount("/linked", linkedapi.New(api.Opts.Zed, api.Auth, api.Opts.ExternalVerification).Routes())
 			gameDataHandler := gamedataapi.New(api.Opts.Zed, api.Auth, api.Opts.Pool, api.Opts.GameDB)
 			r.Mount("/game-data", gameDataHandler.Routes())
 			r.Mount("/azerothcore", serviceazerothcore.New(api.Opts.Logger, api.Opts.Zed, api.Auth, api.Chronicle).Routes())

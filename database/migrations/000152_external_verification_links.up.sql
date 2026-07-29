@@ -1,7 +1,3 @@
--- Deployment-wide external verification provider config (type, url, secret,
--- instructions_url). The secret is never exposed through the SDK.
-ALTER TABLE site_config ADD COLUMN external_verification jsonb;
-
 -- Where a character link came from: 'manual' (admin/self managed) or an
 -- external provider source like 'zug-zug/<url>'. Re-syncing an external
 -- source deletes all links from that source and re-adds them, so different

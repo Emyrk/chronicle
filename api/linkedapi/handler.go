@@ -25,10 +25,13 @@ import (
 type Handler struct {
 	zed  *authz.Authz
 	auth *chronauth.Service
+	// externalVerification is the deployment's external verification
+	// provider config (nil when disabled).
+	externalVerification *chroniclesdk.ExternalVerification
 }
 
-func New(zed *authz.Authz, auth *chronauth.Service) *Handler {
-	return &Handler{zed: zed, auth: auth}
+func New(zed *authz.Authz, auth *chronauth.Service, externalVerification *chroniclesdk.ExternalVerification) *Handler {
+	return &Handler{zed: zed, auth: auth, externalVerification: externalVerification}
 }
 
 // Routes returns the router for the linked service, mounted at /linked.

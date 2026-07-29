@@ -725,7 +725,7 @@ func (a *API) AdminGetSiteConfig(w http.ResponseWriter, r *http.Request) {
 		resp.AvailableFormats = config.AvailableFormats
 	}
 
-	resp.ExternalVerification = chroniclesdk.ParseExternalVerification(config.ExternalVerification).Public()
+	resp.ExternalVerification = a.Opts.ExternalVerification.Public()
 
 	// Resolve the tenant's default dataset flavor so the frontend can
 	// derive per-flavor settings (e.g. talent calculator max level).
@@ -767,28 +767,6 @@ func (a *API) AdminUpdateSiteConfig(w http.ResponseWriter, r *http.Request) {
 	if req.DisableClientUpload != nil {
 		params.ClientUploadsDisabled = pgtype.Bool{Bool: *req.DisableClientUpload, Valid: true}
 	}
-	if req.ExternalVerification != nil {
-		if req.ExternalVerification.URL == "" {
-			// Explicitly disable: store JSON null (non-nil so COALESCE applies).
-			params.ExternalVerification = []byte("null")
-		} else {
-			// Reads strip the secret, so a blank secret on update must
-			// preserve the stored one rather than wipe it.
-			if req.ExternalVerification.Secret == "" {
-				current, getErr := a.Opts.Zed.GetSiteConfig(ctx)
-				if getErr != nil {
-					httpapi.InternalServerError(w, getErr)
-					return
-				}
-				if ev := chroniclesdk.ParseExternalVerification(current.ExternalVerification); ev != nil {
-					req.ExternalVerification.Secret = ev.Secret
-				}
-			}
-			b, _ := json.Marshal(req.ExternalVerification)
-			params.ExternalVerification = b
-		}
-	}
-
 	t := servicetenant.TenantFromContext(ctx)
 
 	config, err := a.Opts.Zed.UpdateSiteConfig(ctx, params)

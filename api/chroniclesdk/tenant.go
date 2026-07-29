@@ -100,33 +100,19 @@ func TenantFromDB(t database.Tenant) Tenant {
 	return out
 }
 
-// ParseExternalVerification unmarshals a tenant's raw external_verification
-// JSONB column. Returns nil when unset, null, or invalid. The result includes
-// the secret; strip it before returning data to clients.
-func ParseExternalVerification(data []byte) *ExternalVerification {
-	if len(data) == 0 {
-		return nil
-	}
-	var ev ExternalVerification
-	if err := json.Unmarshal(data, &ev); err != nil || ev.URL == "" {
-		return nil
-	}
-	return &ev
-}
-
-// ExternalVerification configures an external verification provider for a
-// tenant. Providers verify players out-of-band (e.g. via Discord) and expose
-// an API Chronicle can use to link characters to accounts.
+// ExternalVerification configures the deployment's external verification
+// provider (from environment variables, never stored or exposed). Providers
+// verify players out-of-band (e.g. via Discord) and expose an API Chronicle
+// can use to link characters to accounts.
 type ExternalVerification struct {
 	// Type of provider. Currently only "zug-zug".
-	Type string `json:"type"`
+	Type string `json:"-"`
 	// URL is the provider's base URL, e.g. "https://ambershire.com".
-	URL string `json:"url"`
-	// Secret is the bearer token for the provider API. Write-only: it is
-	// stripped from all read responses.
-	Secret string `json:"secret,omitempty"`
+	URL string `json:"-"`
+	// Secret is the bearer token for the provider API.
+	Secret string `json:"-"`
 	// InstructionsURL optionally points players at how to get verified.
-	InstructionsURL string `json:"instructions_url,omitempty"`
+	InstructionsURL string `json:"-"`
 }
 
 // Public returns the provider info safe to expose to any visitor.

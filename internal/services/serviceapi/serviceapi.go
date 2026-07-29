@@ -13,6 +13,7 @@ import (
 	"github.com/Emyrk/chronicle/api"
 	"github.com/Emyrk/chronicle/api/chronauth"
 	"github.com/Emyrk/chronicle/api/chronauth/authkeys"
+	"github.com/Emyrk/chronicle/api/chroniclesdk"
 	"github.com/Emyrk/chronicle/internal/services"
 	"github.com/Emyrk/chronicle/internal/services/serviceaccessurl"
 	"github.com/Emyrk/chronicle/internal/services/serviceapplication"
@@ -33,6 +34,7 @@ import (
 	"github.com/Emyrk/chronicle/internal/services/servicestorage"
 	"github.com/Emyrk/chronicle/internal/services/servicetenant"
 	"github.com/Emyrk/chronicle/internal/services/servicewowdb"
+	"github.com/Emyrk/chronicle/internal/services/zugzuglink"
 
 	"github.com/coder/serpent"
 )
@@ -58,6 +60,9 @@ type Service struct {
 	ocrURL                *url.URL
 	shortLinkDomain       string
 	clientUploadsDisabled bool
+	zugzugURL             string
+	zugzugSecret          string
+	zugzugInstructionsURL string
 	discordAuth           chronauth.DiscordOAuth
 	app                   *api.API
 	closeListener         func()
@@ -191,6 +196,7 @@ func (s *Service) Start(ctx context.Context) error {
 		AccessURL:             au,
 		ShortLinkDomain:       s.shortLinkDomain,
 		ClientUploadsDisabled: s.clientUploadsDisabled,
+		ExternalVerification:  s.externalVerification(),
 		DevOAuth:              s.devAuth,
 		Discord:               s.discordAuth,
 		SecretPEM:             decodedSecret,
@@ -214,6 +220,20 @@ func (s *Service) Start(ctx context.Context) error {
 func (s *Service) Close(_ context.Context) error {
 	defer s.closeListener()
 	return s.app.Close()
+}
+
+// externalVerification builds the zug-zug provider config from the env
+// options. The feature is on when both the secret and URL are set.
+func (s *Service) externalVerification() *chroniclesdk.ExternalVerification {
+	if s.zugzugSecret == "" || s.zugzugURL == "" {
+		return nil
+	}
+	return &chroniclesdk.ExternalVerification{
+		Type:            zugzuglink.Type,
+		URL:             s.zugzugURL,
+		Secret:          s.zugzugSecret,
+		InstructionsURL: s.zugzugInstructionsURL,
+	}
 }
 
 func (s *Service) Options() serpent.OptionSet {
@@ -288,6 +308,33 @@ func (s *Service) Options() serpent.OptionSet {
 			Env:         "CHRONICLE_CLIENT_UPLOADS_DISABLED",
 			Default:     "false",
 			Value:       serpent.BoolOf(&s.clientUploadsDisabled),
+		},
+		{
+			Name:        "ZugZug Verification URL",
+			Description: "Base URL of the zug-zug external verification provider (e.g. https://ambershire.com). Enables character linking via the provider when set together with the secret.",
+			Required:    false,
+			Flag:        "zugzug-url",
+			Env:         "CHRONICLE_ZUGZUG_URL",
+			Default:     "",
+			Value:       serpent.StringOf(&s.zugzugURL),
+		},
+		{
+			Name:        "ZugZug Verification Secret",
+			Description: "Bearer token for the zug-zug external verification provider API.",
+			Required:    false,
+			Flag:        "zugzug-secret",
+			Env:         "CHRONICLE_ZUGZUG_SECRET",
+			Default:     "",
+			Value:       serpent.StringOf(&s.zugzugSecret),
+		},
+		{
+			Name:        "ZugZug Verification Instructions URL",
+			Description: "Optional link shown to players explaining how to get verified with the provider.",
+			Required:    false,
+			Flag:        "zugzug-instructions-url",
+			Env:         "CHRONICLE_ZUGZUG_INSTRUCTIONS_URL",
+			Default:     "",
+			Value:       serpent.StringOf(&s.zugzugInstructionsURL),
 		},
 		{
 			Name:        "Internal OCR URL",

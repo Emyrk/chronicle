@@ -1186,7 +1186,6 @@ CREATE TABLE site_config (
     available_formats text[] DEFAULT '{}'::text[] NOT NULL,
     client_uploads_disabled boolean DEFAULT false NOT NULL,
     parse_config jsonb,
-    external_verification jsonb,
     CONSTRAINT site_config_id_check CHECK (id)
 );
 

@@ -739,28 +739,12 @@ export interface ExternalSyncResponse {
 
 // From chroniclesdk/tenant.go
 /**
- * ExternalVerification configures an external verification provider for a
- * tenant. Providers verify players out-of-band (e.g. via Discord) and expose
- * an API Chronicle can use to link characters to accounts.
+ * ExternalVerification configures the deployment's external verification
+ * provider (from environment variables, never stored or exposed). Providers
+ * verify players out-of-band (e.g. via Discord) and expose an API Chronicle
+ * can use to link characters to accounts.
  */
 export interface ExternalVerification {
-    /**
-     * Type of provider. Currently only "zug-zug".
-     */
-    readonly type: string;
-    /**
-     * URL is the provider's base URL, e.g. "https://ambershire.com".
-     */
-    readonly url: string;
-    /**
-     * Secret is the bearer token for the provider API. Write-only: it is
-     * stripped from all read responses.
-     */
-    readonly secret?: string;
-    /**
-     * InstructionsURL optionally points players at how to get verified.
-     */
-    readonly instructions_url?: string;
 }
 
 // From chroniclesdk/tenant.go
@@ -2541,12 +2525,6 @@ export interface UpdateSiteConfigRequest {
     readonly discoverable?: boolean;
     readonly default_format?: string;
     readonly available_formats?: readonly string[];
-    /**
-     * ExternalVerification updates the deployment's external verification
-     * provider. Omit to keep the existing config; send with an empty URL to
-     * disable. A blank secret on update preserves the stored secret.
-     */
-    readonly external_verification?: ExternalVerification;
 }
 
 // From chroniclesdk/guild_page.go

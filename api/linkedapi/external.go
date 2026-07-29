@@ -28,12 +28,7 @@ func (h *Handler) SyncExternal(w http.ResponseWriter, r *http.Request) {
 	state := chronauth.AuthenticationState(r)
 	userID := state.Claims.Subject
 
-	siteConfig, err := h.zed.GetSiteConfig(ctx)
-	if err != nil {
-		httpapi.InternalServerError(w, err)
-		return
-	}
-	config := chroniclesdk.ParseExternalVerification(siteConfig.ExternalVerification)
+	config := h.externalVerification
 	if config == nil || config.Type != zugzuglink.Type {
 		httpapi.Write(ctx, w, http.StatusNotFound, chroniclesdk.Response{
 			Message: "External verification is not enabled for this site",
