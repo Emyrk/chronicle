@@ -7,7 +7,6 @@ import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/Card/Card";
 import { PortalContainerProvider, usePortalContainer } from "@/components/ui/PortalContainerContext";
 import { cn } from "@/lib/utils";
-import { PANELS } from "../EventsPanel";
 import { PanelFilterEditor } from "../PanelFilterEditor";
 import type { PanelFilter } from "../processors/filters";
 import { openPanelPopup, syncPopupAppearance, type PanelPopup } from "../panelPopup";
@@ -269,7 +268,7 @@ function StripSelector({ value, onChange }: { value: StripType; onChange: (value
   const [open, setOpen] = useState(false);
   const selected = STRIPS[value];
   return (
-    <div className="relative">
+    <div className="relative" onMouseLeave={() => setOpen(false)}>
       <button type="button" onClick={() => setOpen((current) => !current)} className="flex items-center gap-1 text-xs font-medium">
         {selected.icon}{selected.label}<ChevronDown className="h-3 w-3" />
       </button>
@@ -281,12 +280,9 @@ function StripSelector({ value, onChange }: { value: StripType; onChange: (value
               {definition.icon}{definition.label}
             </button>
           ))}
-          <div className="mt-1 border-t px-2 py-1 text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">Panels</div>
-          {Object.entries(PANELS).filter(([, panel]) => !panel.hidden).map(([panelType, panel]) => (
-            <div key={panelType} className="flex cursor-not-allowed items-center gap-2 px-2 py-1 text-xs text-muted-foreground/45" title={`${panel.label} does not support being in strips`}>
-              {panel.icon}<span className="truncate">{panel.label}</span><span className="ml-auto text-[9px]">Panel only</span>
-            </div>
-          ))}
+          <div className="mt-1 border-t px-2 py-2 text-center text-[10px] text-muted-foreground">
+            Only strips supported here
+          </div>
         </div>
       ) : null}
     </div>

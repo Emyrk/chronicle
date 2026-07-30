@@ -7,7 +7,6 @@ import { useSearchParams } from "react-router-dom";
 import { ChevronDown, ChevronRight, Leaf, Scale, Search, Sword, Toolbox, User } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { ScrollArea } from "@/components/ui/ScrollArea/ScrollArea";
-import { STRIPS } from "./Strips/strips";
 import { PANELS, type EventsPanelType } from "./EventsPanel";
 
 interface PanelOption {
@@ -438,35 +437,22 @@ export function PanelSelector({ value, onChange, className }: PanelSelectorProps
                 )
               ) : (
                 // Category tree (recursive)
-                <>
-                  {PANEL_CATEGORIES.map((category) => (
-                    <CategoryNode
-                      key={category.label}
-                      category={category}
-                      path={category.label}
-                      expandedPaths={expandedPaths}
-                      onToggle={toggleExpanded}
-                      selectedValue={value}
-                      onSelect={handleSelect}
-                      isPanelVisible={isPanelVisible}
-                    />
-                  ))}
-                  <div className="mt-1 border-t pt-1">
-                    <div className="px-2 py-1 text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">Strips</div>
-                    {Object.values(STRIPS).map((strip) => (
-                      <div
-                        key={strip.id}
-                        className="flex cursor-not-allowed items-center gap-2 px-2 py-1.5 text-sm text-muted-foreground/45"
-                        title={`${strip.label} does not support being in panels`}
-                      >
-                        {strip.icon}
-                        <span className="truncate">{strip.label}</span>
-                        <span className="ml-auto text-[9px]">Strip only</span>
-                      </div>
-                    ))}
-                  </div>
-                </>
+                PANEL_CATEGORIES.map((category) => (
+                  <CategoryNode
+                    key={category.label}
+                    category={category}
+                    path={category.label}
+                    expandedPaths={expandedPaths}
+                    onToggle={toggleExpanded}
+                    selectedValue={value}
+                    onSelect={handleSelect}
+                    isPanelVisible={isPanelVisible}
+                  />
+                ))
               )}
+              <div className="mt-1 border-t px-2 py-2 text-center text-[10px] text-muted-foreground">
+                Only panels supported here
+              </div>
             </div>
           </ScrollArea>
         </div>
