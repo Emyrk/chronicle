@@ -1,8 +1,7 @@
 /* eslint-disable react-refresh/only-export-components -- strip definitions and their renderers are intentionally colocated */
-import { Activity, Swords } from "lucide-react";
+import { Activity } from "lucide-react";
 import { useMemo } from "react";
 import { cn } from "@/lib/utils";
-import { formatNumber } from "@/lib/format";
 import { useSyncModeContextOptional } from "../../SyncModeContext";
 import { usePlayerLifeState } from "../usePlayerLifeState";
 import { statusProcessor, type StatusResult } from "../Status/status.processor";
@@ -11,12 +10,7 @@ import {
   statusRaidHealthTimeline,
 } from "../Status/statusRaidHealth";
 import { selectStatusEncounter } from "../Status/statusTimeline";
-import type { PanelFilter } from "../processors/filters";
-import {
-  totalDamageBuckets,
-  totalDamageDoneStripProcessor,
-  type TotalDamageDoneResult,
-} from "./totalDamageDone.processor";
+import { stripReplayProgress } from "./stripReplay";
 import type { StripDefinition, StripRenderProps, StripType } from "./types";
 
 const HORIZONTAL_ONLY = ["horizontal"] as const;
@@ -57,6 +51,11 @@ function RaidDurabilityStrip({ result, context }: StripRenderProps<StatusResult>
     return <StripEmpty label="Estimated raid durability" />;
   }
 
+  const replayProgress = stripReplayProgress(
+    sync?.enabled ?? false,
+    sync?.currentTimestamp ?? null,
+    sync?.encounterBounds ?? null,
+  );
   const buckets = statusRaidHealthTimeline(model, encounter.startMilli, encounter.endMilli, 96);
 
   return (
@@ -66,26 +65,7 @@ function RaidDurabilityStrip({ result, context }: StripRenderProps<StatusResult>
         colors={buckets.map((bucket) => raidHealthColor(bucket.percent))}
         max={100}
         title={(index) => `${Math.round(buckets[index]?.percent ?? 0)}% estimated durability`}
-        className="h-full"
-      />
-    </div>
-  );
-}
-
-function TotalDamageDoneStrip({ result, context }: StripRenderProps<TotalDamageDoneResult>) {
-  const buckets = useMemo(
-    () => totalDamageBuckets(result, context.selectedEncounterIds, 96),
-    [context.selectedEncounterIds, result],
-  );
-  const max = Math.max(1, ...buckets.map((bucket) => bucket.amount));
-
-  return (
-    <div className="h-full min-h-0 p-2">
-      <StripBars
-        values={buckets.map((bucket) => bucket.amount)}
-        colors={buckets.map(() => "bg-blue-500/70")}
-        max={max}
-        title={(index) => `${formatNumber(buckets[index]?.amount ?? 0)} damage`}
+        replayProgress={replayProgress}
         className="h-full"
       />
     </div>
@@ -128,34 +108,45 @@ function StripBars({
   max,
   title,
   className,
+  replayProgress,
 }: {
   values: number[];
   colors: string[];
   max: number;
   title: (index: number) => string;
   className?: string;
+  replayProgress?: number | null;
 }) {
   return (
     <div className={cn("relative h-10 overflow-hidden border border-white/[0.07] bg-[#111316] px-1.5 pb-1 pt-1.5", className)}>
       <div className="absolute inset-x-0 top-1/2 border-t border-dashed border-white/[0.06]" />
       <div className="relative flex h-full items-end gap-px">
-        {values.map((value, index) => (
-          <span
-            key={index}
-            className={cn("min-w-0 flex-1 rounded-t-[1px]", colors[index])}
-            style={{ height: `${Math.max(2, value / Math.max(1, max) * 100)}%` }}
-            title={title(index)}
-          />
-        ))}
+        {values.map((value, index) => {
+          const isFuture = replayProgress !== null && replayProgress !== undefined
+            && (index + 0.5) / Math.max(1, values.length) > replayProgress;
+          return (
+            <span
+              key={index}
+              className={cn(
+                "min-w-0 flex-1 rounded-t-[1px] transition-opacity",
+                colors[index],
+                isFuture && "opacity-25",
+              )}
+              style={{ height: `${Math.max(2, value / Math.max(1, max) * 100)}%` }}
+              title={title(index)}
+            />
+          );
+        })}
       </div>
+      {replayProgress !== null && replayProgress !== undefined ? (
+        <div
+          className="pointer-events-none absolute inset-y-0 z-10 w-px bg-white/80 shadow-[0_0_5px_rgba(255,255,255,.55)]"
+          style={{ left: `${replayProgress * 100}%` }}
+        />
+      ) : null}
     </div>
   );
 }
-
-const damageFilters: PanelFilter[] = [
-  { type: "source_type", value: ["player", "pet"], applyTo: ["damage"] },
-  { type: "target_type", value: ["player", "pet"], negate: true, applyTo: ["damage"] },
-];
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 export const STRIPS: Record<StripType, StripDefinition<any, any>> = {
@@ -169,17 +160,6 @@ export const STRIPS: Record<StripType, StripDefinition<any, any>> = {
     defaultOrientation: "horizontal",
     size: DEFAULT_SIZE,
     render: (props) => <RaidDurabilityStrip {...props} />,
-  },
-  total_damage_done: {
-    ...totalDamageDoneStripProcessor,
-    label: "Total Damage Done",
-    icon: <Swords className="h-4 w-4" />,
-    supportsFiltering: true,
-    fixedFilters: damageFilters,
-    supportedOrientations: HORIZONTAL_ONLY,
-    defaultOrientation: "horizontal",
-    size: DEFAULT_SIZE,
-    render: (props) => <TotalDamageDoneStrip {...props} />,
   },
 };
 
