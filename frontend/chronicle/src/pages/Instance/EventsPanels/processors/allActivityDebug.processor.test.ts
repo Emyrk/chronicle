@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { HitTypeCrushing, HitTypeFullResist, HitTypeGlancing, HitTypeImmune, HitTypePartialAbsorb, HitTypePartialBlock, HitTypePartialResist } from "@/lib/hittype/hittype";
-import type { ConsumeProcessorEvent, DamageProcessorEvent, ExtraAttackProcessorEvent, ProcessorContext, ResourceChangeProcessorEvent, ResurrectionProcessorEvent, SlainProcessorEvent, SpellStartProcessorEvent } from "../processorTypes";
+import type { ConsumeProcessorEvent, DamageProcessorEvent, ExtraAttackProcessorEvent, ProcessorContext, ResourceChangeProcessorEvent, ResurrectionProcessorEvent, SlainProcessorEvent, SpellStartProcessorEvent, UnitClassificationProcessorEvent } from "../processorTypes";
 import { allActivityProcessor } from "./allActivityDebug.processor";
 
 function createContext(): ProcessorContext {
@@ -237,6 +237,39 @@ describe("allActivityProcessor", () => {
     expect(state.rawEventsByStream.slain[0]).toMatchObject({
       extra: "attribution unavailable",
       flags: ["NO ATTRIB"],
+    });
+  });
+
+  it("flags possessed unit classifications", () => {
+    const state = allActivityProcessor.createState();
+    const event: UnitClassificationProcessorEvent = {
+      type: "unit_classification",
+      index: 12,
+      offsetMilli: 3000,
+      target: "doan",
+      unitType: 2,
+      affiliation: 2,
+      owner: null,
+      controller: "player",
+      spellId: 605,
+      activity: [],
+      activityCount: 0,
+      isSynthetic: false,
+    };
+
+    allActivityProcessor.processEvent(
+      state,
+      event,
+      "encounter",
+      new Date("2026-07-14T17:41:42.709Z"),
+      "unit_classification",
+      createContext(),
+    );
+
+    expect(state.rawEventsByStream.unit_classification[0]).toMatchObject({
+      caster: "player",
+      casterName: "Sathite",
+      flags: ["POSSESSED"],
     });
   });
 

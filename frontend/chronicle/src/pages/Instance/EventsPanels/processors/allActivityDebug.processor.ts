@@ -620,6 +620,7 @@ export const allActivityProcessor: PanelProcessor<AllActivityDebugState, AllActi
         rawEvent.casterName = context.players[ucEvent.controller]?.name
           ?? context.units?.[ucEvent.controller]?.name
           ?? ucEvent.controller;
+        rawEvent.flags?.push("POSSESSED");
       }
       const affiliationNames = ["Unknown", "Friendly", "Hostile", "Neutral"];
       const unitTypeNames = ["Unknown", "Player", "Creature", "Object", "Vehicle"];
