@@ -74,6 +74,11 @@ export function aggregateConsumablesTotal(uses: Iterable<ConsumableUse>): Player
   return [...players.entries()].map(([playerId, data]) => ({
     playerId,
     total: data.total,
-    consumes: [...data.consumes.values()].sort((a, b) => b.count - a.count || a.key.localeCompare(b.key)),
+    consumes: [...data.consumes.values()].sort((a, b) => {
+      const aPossible = a.candidateItemIds.length > 1;
+      const bPossible = b.candidateItemIds.length > 1;
+      if (aPossible !== bPossible) return aPossible ? 1 : -1;
+      return b.count - a.count || a.key.localeCompare(b.key);
+    }),
   }));
 }

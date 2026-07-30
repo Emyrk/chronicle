@@ -183,10 +183,15 @@ export function ConsumablesTotalContent(props: ConsumablesTotalContentProps) {
                 </tr>
               </thead>
               <tbody>
-                {rows.map((row) => {
+                {rows.map((row, rowIndex) => {
                   const player = context.instance.players?.[row.playerId];
                   return (
-                    <tr key={row.playerId} className="border-b border-border/20 align-top hover:bg-muted/30">
+                    <tr
+                      key={row.playerId}
+                      className={rowIndex % 2 === 0
+                        ? "border-b border-border/20 align-top bg-muted/10 hover:bg-muted/30"
+                        : "border-b border-border/20 align-top bg-muted/25 hover:bg-muted/40"}
+                    >
                       <td className="px-2 py-2 font-medium">
                         <span style={{ color: `var(--color-class-${(player?.class ?? "unknown").toLowerCase()})` }}>
                           {player?.name ?? row.playerId}

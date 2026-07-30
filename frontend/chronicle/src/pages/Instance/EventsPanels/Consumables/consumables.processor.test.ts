@@ -230,6 +230,18 @@ describe("consumablesProcessor", () => {
     ]);
   });
 
+  it("sorts possible item groups after definite items regardless of count", () => {
+    const state = process([
+      consumeEvent({ consumeId: "known", evidenceId: "known", itemId: 13444 }),
+      consumeEvent({ consumeId: "possible-1", evidenceId: "possible-1", candidateItemIds: [1, 2], candidateItemIdsCount: 2 }),
+      consumeEvent({ consumeId: "possible-2", evidenceId: "possible-2", candidateItemIds: [1, 2], candidateItemIdsCount: 2 }),
+    ]);
+
+    const consumes = aggregateConsumablesTotal(state.uses.values())[0].consumes;
+    expect(consumes.map((consume) => consume.key)).toEqual(["item:13444", "candidates:1,2"]);
+    expect(consumes[1].count).toBe(2);
+  });
+
   it("groups a single candidate with the known item and keeps ambiguous candidates separate", () => {
     const state = process([
       consumeEvent({ consumeId: "item-1", evidenceId: "item-1", candidateItemIds: [13444], candidateItemIdsCount: 1 }),
