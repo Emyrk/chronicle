@@ -6,6 +6,7 @@ import type { StripOrientation } from "@/components/layout/GridLayoutEditor";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/Card/Card";
 import { PortalContainerProvider, usePortalContainer } from "@/components/ui/PortalContainerContext";
+import { useIsMobile } from "@/hooks/useIsMobile";
 import { cn } from "@/lib/utils";
 import { PanelFilterEditor } from "../PanelFilterEditor";
 import type { PanelFilter } from "../processors/filters";
@@ -64,6 +65,7 @@ export function Strip({
   seedFiltersVersion,
   onFiltersChange,
 }: StripProps) {
+  const isMobile = useIsMobile();
   const strip = STRIPS[stripType];
   const optionTokens = useMemo(() => parseOptionTokens(panelOption), [panelOption]);
   const borderColor = optionValue(optionTokens, "bc:");
@@ -114,6 +116,7 @@ export function Strip({
   }, []);
 
   const popOutEditor = useCallback(() => {
+    if (isMobile) return;
     const existing = popupRef.current;
     if (existing && !existing.window.closed) {
       existing.window.focus();
@@ -128,7 +131,7 @@ export function Strip({
     popupRef.current = next;
     setPopup(next);
     next.window.focus();
-  }, [inheritedPortalContainer, strip.label, stripId]);
+  }, [inheritedPortalContainer, isMobile, strip.label, stripId]);
 
   useEffect(() => {
     if (!popup) return;
@@ -184,13 +187,14 @@ export function Strip({
         className="group/strip relative h-full min-h-0 overflow-visible rounded-md border border-border/70 bg-card"
         style={borderColor ? { borderColor } : undefined}
         onMouseDown={(event) => {
-          if (event.shiftKey && event.button === 0) {
+          if (!isMobile && event.shiftKey && event.button === 0) {
             event.preventDefault();
             popOutEditor();
           }
         }}
       >
         {renderedStrip}
+        {!isMobile ? (
         <div className="pointer-events-none absolute inset-x-3 top-2 z-30 flex items-center justify-between gap-2 opacity-0 transition-opacity group-hover/strip:opacity-100 group-focus-within/strip:opacity-100">
           <div className="pointer-events-auto flex min-w-0 items-center gap-2 drop-shadow-[0_1px_2px_rgba(0,0,0,0.9)]">
             {customTitle ? <span className="truncate text-xs font-medium">{customTitle}</span> : null}
@@ -220,6 +224,7 @@ export function Strip({
             </Button>
           </div>
         </div>
+        ) : null}
         {popup ? (
           <>
             <div className="absolute inset-0 z-20 flex items-center justify-center bg-card/90 text-center backdrop-blur-sm">
