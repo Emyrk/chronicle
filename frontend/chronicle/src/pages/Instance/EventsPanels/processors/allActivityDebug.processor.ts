@@ -2,7 +2,7 @@
  * All Activity Debug processor - stores raw events for debugging stream interleaving
  */
 
-import type { DamageProcessorEvent, HealProcessorEvent, PanelProcessor, ProcessorContext, ResourceChangeProcessorEvent, CastProcessorEvent, CastAction, AuraProcessorEvent, AuraApplication, SlainProcessorEvent, ResurrectionProcessorEvent, SpellGoProcessorEvent, AuraCastProcessorEvent, ExtraAttackProcessorEvent, UnitClassificationProcessorEvent, CombatantInfoProcessorEvent, DispelProcessorEvent, ConsumeProcessorEvent } from "../processorTypes";
+import type { DamageProcessorEvent, HealProcessorEvent, PanelProcessor, ProcessorContext, ResourceChangeProcessorEvent, CastProcessorEvent, CastAction, AuraProcessorEvent, AuraApplication, SlainProcessorEvent, ResurrectionProcessorEvent, SpellGoProcessorEvent, AuraCastProcessorEvent, SpellStartProcessorEvent, ExtraAttackProcessorEvent, UnitClassificationProcessorEvent, CombatantInfoProcessorEvent, DispelProcessorEvent, ConsumeProcessorEvent } from "../processorTypes";
 import type { StreamType } from "@/hooks/instanceEvents";
 import { hitTypeNames } from "@/lib/hittype/hittype";
 
@@ -89,7 +89,7 @@ export interface AllActivityDebugState {
 }
 
 // This processor handles every stream exposed by the debug panel.
-type AllActivityEvent = DamageProcessorEvent | HealProcessorEvent | ResourceChangeProcessorEvent | CastProcessorEvent | AuraProcessorEvent | SlainProcessorEvent | ResurrectionProcessorEvent | SpellGoProcessorEvent | AuraCastProcessorEvent | ExtraAttackProcessorEvent | UnitClassificationProcessorEvent | CombatantInfoProcessorEvent | DispelProcessorEvent | ConsumeProcessorEvent;
+type AllActivityEvent = DamageProcessorEvent | HealProcessorEvent | ResourceChangeProcessorEvent | CastProcessorEvent | AuraProcessorEvent | SlainProcessorEvent | ResurrectionProcessorEvent | SpellGoProcessorEvent | AuraCastProcessorEvent | SpellStartProcessorEvent | ExtraAttackProcessorEvent | UnitClassificationProcessorEvent | CombatantInfoProcessorEvent | DispelProcessorEvent | ConsumeProcessorEvent;
 
 // Default page size if no pagination specified
 const DEFAULT_PAGE_SIZE = 100;
@@ -200,6 +200,9 @@ export const allActivityProcessor: PanelProcessor<AllActivityDebugState, AllActi
       } else if (streamType === "aura_cast") {
         const auraCastEvent = event as AuraCastProcessorEvent;
         abilityName = auraCastEvent.spell.name;
+      } else if (streamType === "spell_start") {
+        const spellStartEvent = event as SpellStartProcessorEvent;
+        abilityName = spellStartEvent.spell.name;
       } else if (streamType === "extra_attack") {
         const extraEvent = event as ExtraAttackProcessorEvent;
         abilityName = extraEvent.sourceName;
@@ -319,6 +322,10 @@ export const allActivityProcessor: PanelProcessor<AllActivityDebugState, AllActi
       const auraCastEvent = event as AuraCastProcessorEvent;
       sourceName = auraCastEvent.spell.name;
       amount = auraCastEvent.durationMS; // Show duration as the "amount"
+    } else if (streamType === "spell_start") {
+      const spellStartEvent = event as SpellStartProcessorEvent;
+      sourceName = spellStartEvent.spell.name;
+      amount = 0;
     } else if (streamType === "extra_attack") {
       const extraEvent = event as ExtraAttackProcessorEvent;
       sourceName = extraEvent.sourceName;
@@ -438,6 +445,15 @@ export const allActivityProcessor: PanelProcessor<AllActivityDebugState, AllActi
       rawEvent.extra = ampSec 
         ? `dur=${durationSec}s tick=${ampSec}s` 
         : `dur=${durationSec}s`;
+    } else if (streamType === "spell_start") {
+      const spellStartEvent = event as SpellStartProcessorEvent;
+      rawEvent.spellId = spellStartEvent.spell.id;
+      const timing = spellStartEvent.channelTimeMilli > 0
+        ? `channel=${spellStartEvent.channelTimeMilli}ms`
+        : `cast=${spellStartEvent.castTimeMilli}ms`;
+      rawEvent.extra = spellStartEvent.itemId
+        ? `${timing} item=${spellStartEvent.itemId}`
+        : timing;
     } else if (streamType === "extra_attack") {
       const extraEvent = event as ExtraAttackProcessorEvent;
       rawEvent.extra = `extra attacks=${extraEvent.amount}`;

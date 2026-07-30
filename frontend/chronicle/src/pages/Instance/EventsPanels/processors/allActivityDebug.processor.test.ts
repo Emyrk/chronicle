@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { HitTypePartialAbsorb, HitTypePartialBlock, HitTypePartialResist } from "@/lib/hittype/hittype";
-import type { ConsumeProcessorEvent, DamageProcessorEvent, ProcessorContext, ResurrectionProcessorEvent } from "../processorTypes";
+import type { ConsumeProcessorEvent, DamageProcessorEvent, ProcessorContext, ResurrectionProcessorEvent, SpellStartProcessorEvent } from "../processorTypes";
 import { allActivityProcessor } from "./allActivityDebug.processor";
 
 function createContext(): ProcessorContext {
@@ -97,6 +97,49 @@ describe("allActivityProcessor", () => {
       sourceName: "Redemption",
       spellId: 48949,
       extra: "resurrected",
+    });
+  });
+
+  it("captures spell start messages and spell details", () => {
+    const state = allActivityProcessor.createState();
+    const event: SpellStartProcessorEvent = {
+      type: "spell_start",
+      index: 9,
+      offsetMilli: 3000,
+      caster: "player",
+      target: "doan",
+      spell: { id: 25364, name: "Frostbolt" },
+      itemId: null,
+      castFlags: 0,
+      castTimeMilli: 2500,
+      channelTimeMilli: 0,
+      spellType: 0,
+      activity: [],
+      activityCount: 0,
+      isSynthetic: false,
+    };
+    const context = createContext();
+    context.pagination = { offset: 0, limit: 100, abilityFilter: "frost" };
+
+    allActivityProcessor.processEvent(
+      state,
+      event,
+      "encounter",
+      new Date("2026-07-14T17:41:42.709Z"),
+      "spell_start",
+      context,
+    );
+
+    expect(state.streamCounts.spell_start).toBe(1);
+    expect(state.rawEventsByStream.spell_start[0]).toMatchObject({
+      caster: "player",
+      casterName: "Sathite",
+      target: "doan",
+      targetName: "Doan",
+      sourceName: "Frostbolt",
+      amount: 0,
+      spellId: 25364,
+      extra: "cast=2500ms",
     });
   });
 
