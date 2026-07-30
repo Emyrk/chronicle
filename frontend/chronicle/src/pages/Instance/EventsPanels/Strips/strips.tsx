@@ -171,7 +171,6 @@ export const STRIPS: Record<StripType, StripDefinition<any, any>> = {
     label: "Raid Durability",
     icon: <Activity className="h-4 w-4" />,
     syncDataMode: "full",
-    supportsFiltering: true,
     supportedOrientations: HORIZONTAL_ONLY,
     defaultOrientation: "horizontal",
     size: DEFAULT_SIZE,
