@@ -403,10 +403,10 @@ function RawEventRow({ event, index, useRelativeTime = false, useLocalTime = fal
             className="styled-scrollbar z-50 max-h-[70vh] w-[560px] max-w-[calc(100vw-2rem)] overflow-auto rounded-md border border-border/80 bg-card px-4 py-3 text-left text-card-foreground shadow-2xl outline-none"
             hideArrow
           >
-          <div className="mb-3 flex items-start gap-3">
-            <span className={cn("mt-0.5 font-mono text-[10px] font-bold tracking-[0.08em]", config.color)}>
+          <div className="mb-3">
+            <div className={cn("mb-1.5 font-mono text-[10px] font-bold tracking-[0.08em]", config.color)}>
               {config.label.toUpperCase()}
-            </span>
+            </div>
             <p className="text-xs text-foreground">
               <span className="font-medium text-orange-300">{event.casterName || "Unknown source"}</span>
               <span className="text-muted-foreground"> → </span>
