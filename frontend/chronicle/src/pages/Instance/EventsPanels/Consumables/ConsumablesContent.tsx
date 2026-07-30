@@ -3,19 +3,17 @@
  * evidence details, styled after DispelLogContent.
  */
 
-import { useCallback, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Link } from "react-router-dom";
 import { ChevronDown, ChevronRight, HelpCircle, Hourglass } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { iconUrl } from "@/config/iconUrl";
 import { useIconBaseUrl } from "@/hooks/useDatasetId";
 import { ScrollArea } from "@/components/ui/ScrollArea/ScrollArea";
-import { useSpell } from "@/api/queries";
-import { useDatasetId } from "@/hooks/useDatasetId";
 import { useItemTooltip } from "@/api/gamedata";
 import { ItemTooltip } from "@/components/ui/ItemTooltip/ItemTooltip";
 import { getQualityBorderClass, getQualityTextClass } from "../../../ArmoryPage/types";
-import { SpellIconWithTooltip } from "@/components/ui/SpellIconWithTooltip";
+import { SpellIdTooltip } from "@/components/ui/SpellIdTooltip/SpellIdTooltip";
 import { GenericPanel } from "../GenericPanel";
 import type { PanelRenderProps } from "../types";
 import {
@@ -84,34 +82,46 @@ function ConfidenceBadge({ use }: { use: ConsumableUse }) {
   );
 }
 
-/** Inline spell icon + name for a consumable log row. */
+/** Inline spell icon + name for a consumable log row. Lazy-loads spell data
+ * only when scrolled into view (SpellIdTooltip uses IntersectionObserver). */
 function SpellCell({ spellId, name }: { spellId: number | null; name: string }) {
-  const datasetId = useDatasetId();
-  const { data: spell } = useSpell(
-    spellId != null && spellId > 0 ? String(spellId) : "",
-    datasetId,
-    { enabled: spellId != null && spellId > 0 },
-  );
-
   return (
     <span className="inline-flex items-center gap-1">
-      {spell ? (
-        <SpellIconWithTooltip spell={spell} size={14}>
-          {name}
-        </SpellIconWithTooltip>
-      ) : (
-        name
-      )}
+      <SpellIdTooltip spellId={spellId != null && spellId > 0 ? spellId : null} name={name} size={14} />
     </span>
   );
 }
 
+/** Fetch-gating visibility hook: true once the element scrolls into view. */
+function useInView<T extends Element>(): [React.RefObject<T | null>, boolean] {
+  const ref = useRef<T>(null);
+  const [inView, setInView] = useState(false);
+
+  useEffect(() => {
+    if (!ref.current || inView) return;
+    const observer = new IntersectionObserver(
+      ([entry]) => {
+        if (entry.isIntersecting) {
+          setInView(true);
+          observer.disconnect();
+        }
+      },
+      { rootMargin: "50px" },
+    );
+    observer.observe(ref.current);
+    return () => observer.disconnect();
+  }, [inView]);
+
+  return [ref, inView];
+}
+
 /** Item icon + name with a full item tooltip on hover. Optionally links to the
- * item's wowdb page. */
+ * item's wowdb page. Item data loads only when scrolled into view. */
 function ItemCell({ itemId, link }: { itemId: number; link?: boolean }) {
   const iconBaseUrl = useIconBaseUrl();
   const [hovered, setHovered] = useState(false);
-  const tooltip = useItemTooltip(itemId > 0 ? { itemId } : null);
+  const [inViewRef, inView] = useInView<HTMLSpanElement>();
+  const tooltip = useItemTooltip(inView && itemId > 0 ? { itemId } : null);
 
   const quality = tooltip.data?.quality ?? 0;
   const icon = tooltip.data?.icon;
@@ -119,7 +129,7 @@ function ItemCell({ itemId, link }: { itemId: number; link?: boolean }) {
 
   const body = (
     <>
-      <span className={cn(
+      <span ref={inViewRef} className={cn(
         "w-4.5 h-4.5 shrink-0 rounded border bg-zinc-900/80 flex items-center justify-center overflow-hidden",
         getQualityBorderClass(quality),
       )}>
