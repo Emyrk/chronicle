@@ -203,12 +203,12 @@ describe("consumablesProcessor", () => {
     expect(consumablesTotalProcessor.processEvent).toBe(consumablesProcessor.processEvent);
   });
 
-  it("groups physical uses into per-player spell counts", () => {
+  it("groups physical uses into per-player item counts", () => {
     const state = process([
-      consumeEvent({ consumeId: "flask-1", evidenceId: "flask-1", player: "p1", spell: { id: 17626, name: "Flask of the Titans" } }),
-      consumeEvent({ consumeId: "flask-2", evidenceId: "flask-2", player: "p1", spell: { id: 17626, name: "Flask of the Titans" } }),
-      consumeEvent({ consumeId: "pot-1", evidenceId: "pot-1", player: "p1", spell: { id: 17531, name: "Major Mana Potion" } }),
-      consumeEvent({ consumeId: "flask-3", evidenceId: "flask-3", player: "p2", spell: { id: 17626, name: "Flask of the Titans" } }),
+      consumeEvent({ consumeId: "flask-1", evidenceId: "flask-1", player: "p1", itemId: 13510, spell: { id: 17626, name: "Flask of the Titans" } }),
+      consumeEvent({ consumeId: "flask-2", evidenceId: "flask-2", player: "p1", itemId: 13510, spell: { id: 17626, name: "Flask of the Titans" } }),
+      consumeEvent({ consumeId: "pot-1", evidenceId: "pot-1", player: "p1", itemId: 13444, spell: { id: 17531, name: "Major Mana Potion" } }),
+      consumeEvent({ consumeId: "flask-3", evidenceId: "flask-3", player: "p2", itemId: 13510, spell: { id: 17626, name: "Flask of the Titans" } }),
     ]);
 
     expect(aggregateConsumablesTotal(state.uses.values())).toEqual([
@@ -216,28 +216,52 @@ describe("consumablesProcessor", () => {
         playerId: "p1",
         total: 3,
         consumes: [
-          { key: "spell:17626", count: 2, spellId: 17626, itemId: null, name: "Flask of the Titans" },
-          { key: "spell:17531", count: 1, spellId: 17531, itemId: null, name: "Major Mana Potion" },
+          { key: "item:13510", count: 2, itemId: 13510, candidateItemIds: [], possibleSources: [] },
+          { key: "item:13444", count: 1, itemId: 13444, candidateItemIds: [], possibleSources: [] },
         ],
       },
       {
         playerId: "p2",
         total: 1,
         consumes: [
-          { key: "spell:17626", count: 1, spellId: 17626, itemId: null, name: "Flask of the Titans" },
+          { key: "item:13510", count: 1, itemId: 13510, candidateItemIds: [], possibleSources: [] },
         ],
       },
     ]);
   });
 
-  it("groups item-only uses by a single known candidate item", () => {
+  it("groups a single candidate with the known item and keeps ambiguous candidates separate", () => {
     const state = process([
       consumeEvent({ consumeId: "item-1", evidenceId: "item-1", candidateItemIds: [13444], candidateItemIdsCount: 1 }),
       consumeEvent({ consumeId: "item-2", evidenceId: "item-2", itemId: 13444 }),
+      consumeEvent({
+        consumeId: "item-3",
+        evidenceId: "item-3",
+        candidateItemIds: [2, 1],
+        candidateItemIdsCount: 2,
+        spell: { id: 17626, name: "Flask of the Titans" },
+        kind: 3,
+        confidence: 3,
+      }),
     ]);
 
     expect(aggregateConsumablesTotal(state.uses.values())[0].consumes).toEqual([
-      { key: "item:13444", count: 2, spellId: null, itemId: 13444, name: "Item 13444" },
+      { key: "item:13444", count: 2, itemId: 13444, candidateItemIds: [], possibleSources: [] },
+      {
+        key: "candidates:1,2",
+        count: 1,
+        itemId: null,
+        candidateItemIds: [1, 2],
+        possibleSources: [
+          {
+            consumeId: "item-3",
+            spellId: 17626,
+            spellName: "Flask of the Titans",
+            kinds: [3],
+            bestConfidence: 3,
+          },
+        ],
+      },
     ]);
   });
 });

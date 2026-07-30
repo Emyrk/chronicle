@@ -118,7 +118,7 @@ function useInView<T extends Element>(): [React.RefObject<T | null>, boolean] {
 
 /** Item icon + name with a full item tooltip on hover. Optionally links to the
  * item's wowdb page. Item data loads only when scrolled into view. */
-function ItemCell({ itemId, link }: { itemId: number; link?: boolean }) {
+export function ItemCell({ itemId, link }: { itemId: number; link?: boolean }) {
   const iconBaseUrl = useIconBaseUrl();
   const [hovered, setHovered] = useState(false);
   const [inViewRef, inView] = useInView<HTMLSpanElement>();

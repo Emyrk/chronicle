@@ -1,11 +1,19 @@
-import { consumableDisplayName, type ConsumableUse } from "./consumables.processor";
+import type { ConsumableUse } from "./consumables.processor";
+
+export interface PossibleConsumeSource {
+  consumeId: string;
+  spellId: number | null;
+  spellName: string;
+  kinds: number[];
+  bestConfidence: number;
+}
 
 export interface ConsumableCount {
   key: string;
   count: number;
-  spellId: number | null;
   itemId: number | null;
-  name: string;
+  candidateItemIds: number[];
+  possibleSources: PossibleConsumeSource[];
 }
 
 export interface PlayerConsumablesTotal {
@@ -14,14 +22,22 @@ export interface PlayerConsumablesTotal {
   consumes: ConsumableCount[];
 }
 
-function consumeKey(use: ConsumableUse): string {
-  if (use.spellId !== null) return `spell:${use.spellId}`;
-  if (use.itemId !== null) return `item:${use.itemId}`;
-  if (use.candidateItemIds.length === 1) return `item:${use.candidateItemIds[0]}`;
-  return `name:${consumableDisplayName(use)}`;
+function itemIdentity(use: ConsumableUse): { key: string; itemId: number | null; candidateItemIds: number[] } {
+  if (use.itemId !== null) {
+    return { key: `item:${use.itemId}`, itemId: use.itemId, candidateItemIds: [] };
+  }
+
+  const candidateItemIds = [...use.candidateItemIds].sort((a, b) => a - b);
+  if (candidateItemIds.length === 1) {
+    return { key: `item:${candidateItemIds[0]}`, itemId: candidateItemIds[0], candidateItemIds: [] };
+  }
+  if (candidateItemIds.length > 1) {
+    return { key: `candidates:${candidateItemIds.join(",")}`, itemId: null, candidateItemIds };
+  }
+  return { key: "unknown-item", itemId: null, candidateItemIds: [] };
 }
 
-/** Groups physical consume uses by player, then by known spell/item identity. */
+/** Groups physical consume uses by player, then by consumable item identity. */
 export function aggregateConsumablesTotal(uses: Iterable<ConsumableUse>): PlayerConsumablesTotal[] {
   const players = new Map<string, { total: number; consumes: Map<string, ConsumableCount> }>();
 
@@ -33,25 +49,31 @@ export function aggregateConsumablesTotal(uses: Iterable<ConsumableUse>): Player
     }
 
     player.total += 1;
-    const key = consumeKey(use);
-    const existing = player.consumes.get(key);
+    const identity = itemIdentity(use);
+    const existing = player.consumes.get(identity.key);
+    const source: PossibleConsumeSource = {
+      consumeId: use.consumeId,
+      spellId: use.spellId,
+      spellName: use.spellName,
+      kinds: [...use.kinds],
+      bestConfidence: use.bestConfidence,
+    };
     if (existing) {
       existing.count += 1;
+      if (identity.candidateItemIds.length > 1) existing.possibleSources.push(source);
       continue;
     }
 
-    player.consumes.set(key, {
-      key,
+    player.consumes.set(identity.key, {
+      ...identity,
       count: 1,
-      spellId: use.spellId,
-      itemId: use.itemId ?? (use.candidateItemIds.length === 1 ? use.candidateItemIds[0] : null),
-      name: consumableDisplayName(use),
+      possibleSources: identity.candidateItemIds.length > 1 ? [source] : [],
     });
   }
 
   return [...players.entries()].map(([playerId, data]) => ({
     playerId,
     total: data.total,
-    consumes: [...data.consumes.values()].sort((a, b) => b.count - a.count || a.name.localeCompare(b.name)),
+    consumes: [...data.consumes.values()].sort((a, b) => b.count - a.count || a.key.localeCompare(b.key)),
   }));
 }

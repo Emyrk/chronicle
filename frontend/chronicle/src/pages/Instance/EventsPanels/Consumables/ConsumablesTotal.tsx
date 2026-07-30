@@ -1,37 +1,134 @@
-import { FlaskConical } from "lucide-react";
-import { Link } from "react-router-dom";
+import { useState } from "react";
+import { FlaskConical, HelpCircle, X } from "lucide-react";
 import { ScrollArea } from "@/components/ui/ScrollArea/ScrollArea";
 import { SpellIdTooltip } from "@/components/ui/SpellIdTooltip/SpellIdTooltip";
 import { useCachedValue } from "@/hooks/useCachedValue";
 import { GenericPanel } from "../GenericPanel";
+import { FloatingIncomingEventsBreakout } from "../IncomingEvents/FloatingIncomingEventsBreakout";
 import type { PanelDefinition, PanelRenderProps } from "../types";
 import {
+  CONFIDENCE_LABELS,
   consumablesTotalProcessor,
+  EVIDENCE_KIND_LABELS,
   type ConsumablesResult,
 } from "./consumables.processor";
+import { ItemCell } from "./ConsumablesContent";
 import { aggregateConsumablesTotal, type ConsumableCount } from "./consumablesTotal";
 
-function ConsumeCount({ consume }: { consume: ConsumableCount }) {
-  const content = (
-    <span className="inline-flex items-center gap-1.5 rounded border border-border/60 bg-muted/30 px-2 py-1">
-      <SpellIdTooltip spellId={consume.spellId} name={consume.name} size={18} />
-      <span className="font-semibold text-foreground">x{consume.count}</span>
-      {consume.spellId !== null && (
-        <span className="font-mono text-2xs text-muted-foreground">#{consume.spellId}</span>
-      )}
-    </span>
-  );
+interface PossibleBreakoutState {
+  key: string;
+  consume: ConsumableCount;
+  initialPosition: { x: number; y: number };
+}
 
-  if (consume.spellId === null) return content;
+function ConsumeCount({
+  consume,
+  onOpenPossible,
+}: {
+  consume: ConsumableCount;
+  onOpenPossible: (consume: ConsumableCount, target: HTMLElement) => void;
+}) {
+  if (consume.itemId !== null) {
+    return (
+      <span className="inline-flex min-h-7 items-center gap-1.5 rounded border border-border/60 bg-muted/30 px-2 py-1 leading-none">
+        <ItemCell itemId={consume.itemId} link />
+        <span className="inline-flex self-stretch items-center font-semibold leading-none text-foreground">x{consume.count}</span>
+        <span className="inline-flex self-stretch items-center font-mono text-2xs leading-none text-muted-foreground">
+          #{consume.itemId}
+        </span>
+      </span>
+    );
+  }
+
+  if (consume.candidateItemIds.length > 0) {
+    return (
+      <button
+        type="button"
+        onClick={(event) => onOpenPossible(consume, event.currentTarget)}
+        className="inline-flex min-h-7 items-center gap-1.5 rounded border border-amber-500/25 bg-amber-500/10 px-2 py-1 leading-none text-amber-200 transition-colors hover:border-amber-400/50 hover:bg-amber-500/15"
+        title="Show possible items and why Chronicle could not identify one item"
+      >
+        <HelpCircle className="h-3.5 w-3.5" />
+        <span>Possible</span>
+        <span className="inline-flex self-stretch items-center font-semibold leading-none">x{consume.count}</span>
+      </button>
+    );
+  }
 
   return (
-    <Link
-      to={`/wowdb/spell/${consume.spellId}`}
-      className="hover:border-foreground/30 hover:brightness-110"
-      title={`Open spell ${consume.spellId}`}
-    >
-      {content}
-    </Link>
+    <span className="inline-flex min-h-7 items-center gap-1.5 rounded border border-border/60 bg-muted/30 px-2 py-1 leading-none">
+      <span className="text-muted-foreground">Unknown item</span>
+      <span className="inline-flex self-stretch items-center font-semibold leading-none text-foreground">x{consume.count}</span>
+    </span>
+  );
+}
+
+function PossibleItemsBreakout({ consume, onClose }: { consume: ConsumableCount; onClose: () => void }) {
+  return (
+    <div className="overflow-hidden rounded-lg border border-amber-500/25 bg-card shadow-2xl">
+      <div className="flex cursor-grab items-center gap-2 border-b border-border bg-muted/30 px-3 py-2" data-drag-handle>
+        <HelpCircle className="h-4 w-4 text-amber-400" />
+        <div className="min-w-0 flex-1">
+          <div className="text-sm font-semibold">Possible consumables</div>
+          <div className="text-2xs text-muted-foreground">
+            {consume.count} use{consume.count === 1 ? "" : "s"}, {consume.candidateItemIds.length} matching items
+          </div>
+        </div>
+        <button
+          type="button"
+          onClick={onClose}
+          className="rounded p-1 text-muted-foreground hover:bg-muted hover:text-foreground"
+          aria-label="Close possible consumables"
+        >
+          <X className="h-4 w-4" />
+        </button>
+      </div>
+
+      <div className="max-h-[var(--incoming-events-body-height)] space-y-4 overflow-y-auto p-3 styled-scrollbar">
+        <section>
+          <h4 className="mb-2 text-2xs font-semibold uppercase tracking-wider text-muted-foreground">Possible items</h4>
+          <div className="grid gap-1.5 sm:grid-cols-2">
+            {consume.candidateItemIds.map((itemId) => (
+              <div key={itemId} className="flex items-center justify-between gap-3 rounded border border-border/60 bg-muted/20 px-2 py-1.5">
+                <ItemCell itemId={itemId} link />
+                <span className="shrink-0 font-mono text-2xs text-muted-foreground">#{itemId}</span>
+              </div>
+            ))}
+          </div>
+        </section>
+
+        <section>
+          <h4 className="mb-2 text-2xs font-semibold uppercase tracking-wider text-muted-foreground">Why these are possible</h4>
+          <div className="space-y-1.5">
+            {consume.possibleSources.map((source) => (
+              <div key={source.consumeId} className="rounded border border-border/60 bg-muted/20 px-2.5 py-2">
+                <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
+                  <SpellIdTooltip
+                    spellId={source.spellId}
+                    name={source.spellName || "Unknown effect"}
+                    size={16}
+                    className="font-medium"
+                  />
+                  {source.spellId !== null && (
+                    <span className="font-mono text-2xs text-muted-foreground">spell #{source.spellId}</span>
+                  )}
+                </div>
+                <div className="mt-1 flex flex-wrap gap-1 text-2xs text-muted-foreground">
+                  {source.kinds.map((kind) => (
+                    <span key={kind} className="rounded bg-muted px-1.5 py-0.5">
+                      {EVIDENCE_KIND_LABELS[kind] ?? `Evidence ${kind}`}
+                    </span>
+                  ))}
+                  <span className="rounded bg-muted px-1.5 py-0.5">
+                    {CONFIDENCE_LABELS[source.bestConfidence] ?? "Unknown confidence"}
+                  </span>
+                </div>
+              </div>
+            ))}
+          </div>
+        </section>
+      </div>
+    </div>
   );
 }
 
@@ -44,6 +141,16 @@ export function ConsumablesTotalContent(props: ConsumablesTotalContentProps) {
     (value) => !!value && value.uses instanceof Map && value.uses.size > 0,
     [props.panelContextVersion],
   );
+
+  const [possibleBreakout, setPossibleBreakout] = useState<PossibleBreakoutState | null>(null);
+
+  const openPossibleBreakout = (consume: ConsumableCount, target: HTMLElement) => {
+    const rect = target.getBoundingClientRect();
+    const view = target.ownerDocument.defaultView;
+    const x = Math.max(8, Math.min(rect.right + 8, (view?.innerWidth ?? 640) - 628));
+    const y = Math.max(8, Math.min(rect.top, (view?.innerHeight ?? 480) - 160));
+    setPossibleBreakout({ key: consume.key, consume, initialPosition: { x, y } });
+  };
 
   const rows = aggregateConsumablesTotal(cachedResult?.uses.values() ?? []);
   rows.sort((a, b) => {
@@ -59,47 +166,65 @@ export function ConsumablesTotalContent(props: ConsumablesTotalContentProps) {
   };
 
   return (
-    <GenericPanel {...effectiveProps}>
-      {rows.length === 0 ? (
-        <div className="py-4 text-center text-xs text-muted-foreground">
-          {loading ? "Loading..." : "No consumable uses recorded"}
-        </div>
-      ) : (
-        <ScrollArea className="h-full min-h-0">
-          <table className="w-full text-xs">
-            <thead className="sticky top-0 z-10 bg-card">
-              <tr className="border-b border-border text-muted-foreground">
-                <th className="w-40 px-2 py-1.5 text-left font-medium">Player</th>
-                <th className="w-14 px-2 py-1.5 text-right font-medium">Total</th>
-                <th className="px-2 py-1.5 text-left font-medium">Consumes</th>
-              </tr>
-            </thead>
-            <tbody>
-              {rows.map((row) => {
-                const player = context.instance.players?.[row.playerId];
-                return (
-                  <tr key={row.playerId} className="border-b border-border/20 align-top hover:bg-muted/30">
-                    <td className="px-2 py-2 font-medium">
-                      <span style={{ color: `var(--color-class-${(player?.class ?? "unknown").toLowerCase()})` }}>
-                        {player?.name ?? row.playerId}
-                      </span>
-                    </td>
-                    <td className="px-2 py-2 text-right font-semibold tabular-nums">{row.total}</td>
-                    <td className="px-2 py-1.5">
-                      <div className="flex flex-wrap gap-1.5">
-                        {row.consumes.map((consume) => (
-                          <ConsumeCount key={consume.key} consume={consume} />
-                        ))}
-                      </div>
-                    </td>
-                  </tr>
-                );
-              })}
-            </tbody>
-          </table>
-        </ScrollArea>
+    <>
+      <GenericPanel {...effectiveProps}>
+        {rows.length === 0 ? (
+          <div className="py-4 text-center text-xs text-muted-foreground">
+            {loading ? "Loading..." : "No consumable uses recorded"}
+          </div>
+        ) : (
+          <ScrollArea className="h-full min-h-0">
+            <table className="w-full text-xs">
+              <thead className="sticky top-0 z-10 bg-card">
+                <tr className="border-b border-border text-muted-foreground">
+                  <th className="w-40 px-2 py-1.5 text-left font-medium">Player</th>
+                  <th className="w-14 px-2 py-1.5 text-right font-medium">Total</th>
+                  <th className="px-2 py-1.5 text-left font-medium">Consumes</th>
+                </tr>
+              </thead>
+              <tbody>
+                {rows.map((row) => {
+                  const player = context.instance.players?.[row.playerId];
+                  return (
+                    <tr key={row.playerId} className="border-b border-border/20 align-top hover:bg-muted/30">
+                      <td className="px-2 py-2 font-medium">
+                        <span style={{ color: `var(--color-class-${(player?.class ?? "unknown").toLowerCase()})` }}>
+                          {player?.name ?? row.playerId}
+                        </span>
+                      </td>
+                      <td className="px-2 py-2 text-right font-semibold tabular-nums">{row.total}</td>
+                      <td className="px-2 py-1.5">
+                        <div className="flex flex-wrap gap-1.5">
+                          {row.consumes.map((consume) => (
+                            <ConsumeCount
+                              key={consume.key}
+                              consume={consume}
+                              onOpenPossible={openPossibleBreakout}
+                            />
+                          ))}
+                        </div>
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </ScrollArea>
+        )}
+      </GenericPanel>
+      {possibleBreakout && (
+        <FloatingIncomingEventsBreakout
+          key={possibleBreakout.key}
+          initialPosition={possibleBreakout.initialPosition}
+          onClose={() => setPossibleBreakout(null)}
+        >
+          <PossibleItemsBreakout
+            consume={possibleBreakout.consume}
+            onClose={() => setPossibleBreakout(null)}
+          />
+        </FloatingIncomingEventsBreakout>
       )}
-    </GenericPanel>
+    </>
   );
 }
 
