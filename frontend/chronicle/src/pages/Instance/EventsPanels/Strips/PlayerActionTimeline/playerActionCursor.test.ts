@@ -3,7 +3,10 @@ import {
   buildPlayerActions,
   selectPlayerActionWindow,
 } from "./playerActionCursor";
-import type { PlayerActionEvent } from "./playerActionTimeline.processor";
+import type {
+  PlayerActionEffect,
+  PlayerActionEvent,
+} from "./playerActionTimeline.processor";
 
 function actionEvent(overrides: Partial<PlayerActionEvent>): PlayerActionEvent {
   return {
@@ -15,6 +18,20 @@ function actionEvent(overrides: Partial<PlayerActionEvent>): PlayerActionEvent {
     eventType: "spell_go",
     castTimeMilli: 0,
     channelTimeMilli: 0,
+    ...overrides,
+  };
+}
+
+function effect(overrides: Partial<PlayerActionEffect>): PlayerActionEffect {
+  return {
+    eventIndex: 10,
+    offsetMilli: 0,
+    spellId: 1,
+    spellName: "Test Spell",
+    target: "target",
+    effectType: "damage",
+    amount: 100,
+    periodic: false,
     ...overrides,
   };
 }
@@ -31,7 +48,7 @@ describe("buildPlayerActions", () => {
     expect(actions[0]).toMatchObject({
       spellName: "Test Spell",
       startMilli: 1_000,
-      endMilli: 2_500,
+      launchMilli: 2_500,
       durationMilli: 1_500,
       outcome: "completed",
     });
@@ -43,17 +60,46 @@ describe("buildPlayerActions", () => {
     });
   });
 
+  it("correlates the first matching direct effect as the spell impact", () => {
+    const [action] = buildPlayerActions([
+      actionEvent({ eventIndex: 0, offsetMilli: 1_000, eventType: "spell_start", castTimeMilli: 1_500 }),
+      actionEvent({ eventIndex: 1, offsetMilli: 2_500, eventType: "spell_go" }),
+    ], [
+      effect({ eventIndex: 10, offsetMilli: 2_750, periodic: true }),
+      effect({ eventIndex: 11, offsetMilli: 3_100, target: "target" }),
+    ]);
+
+    expect(action).toMatchObject({
+      launchMilli: 2_500,
+      impactMilli: 3_100,
+      impactTarget: "target",
+    });
+  });
+
   it("marks a matched failed cast as failed", () => {
     const [action] = buildPlayerActions([
       actionEvent({ eventIndex: 0, offsetMilli: 4_000, eventType: "spell_start", castTimeMilli: 2_000 }),
       actionEvent({ eventIndex: 1, offsetMilli: 4_700, eventType: "spell_fail" }),
     ]);
 
-    expect(action).toMatchObject({ endMilli: 4_700, outcome: "failed" });
+    expect(action).toMatchObject({ launchMilli: 4_700, outcome: "failed" });
   });
 });
 
 describe("selectPlayerActionWindow", () => {
+  it("selects a launched spell as in flight until its matched impact", () => {
+    const actions = buildPlayerActions([
+      actionEvent({ eventIndex: 0, offsetMilli: 1_000, eventType: "spell_start", castTimeMilli: 1_000 }),
+      actionEvent({ eventIndex: 1, offsetMilli: 2_000, eventType: "spell_go" }),
+    ], [effect({ offsetMilli: 2_600 })]);
+
+    const window = selectPlayerActionWindow(actions, 2_300);
+
+    expect(window.activeAction).toBeNull();
+    expect(window.inFlightAction?.spellName).toBe("Test Spell");
+    expect(window.focusAction).toBe(window.inFlightAction);
+  });
+
   it("selects an active cast and clips visible actions to the cursor window", () => {
     const actions = buildPlayerActions([
       actionEvent({ eventIndex: 0, offsetMilli: 10_000, eventType: "spell_start", castTimeMilli: 2_000 }),

@@ -13,7 +13,7 @@ describe("strip registration", () => {
     expect(isStripType("player_action_timeline")).toBe(true);
     expect(STRIPS.player_action_timeline.id).toBe("player_action_timeline_strip");
     expect(STRIPS.player_action_timeline.label).toBe("Player Action Timeline");
-    expect(STRIPS.player_action_timeline.streams).toEqual(["spell_go", "spell_start", "spell_fail"]);
+    expect(STRIPS.player_action_timeline.streams).toEqual(["spell_go", "spell_start", "spell_fail", "damage", "heal"]);
     expect(STRIPS.player_action_timeline.syncDataMode).toBe("full");
     expect(STRIPS.player_action_timeline.supportedOrientations).toEqual(["horizontal"]);
   });
