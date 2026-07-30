@@ -72,26 +72,23 @@ function RaidDurabilityStrip({ result, context }: StripRenderProps<StatusResult>
   );
 }
 
-function TotalDamageDoneStrip({ result, context, durationMs }: StripRenderProps<TotalDamageDoneResult>) {
+function TotalDamageDoneStrip({ result, context }: StripRenderProps<TotalDamageDoneResult>) {
   const buckets = useMemo(
     () => totalDamageBuckets(result, context.selectedEncounterIds, 96),
     [context.selectedEncounterIds, result],
   );
   const max = Math.max(1, ...buckets.map((bucket) => bucket.amount));
-  const dps = result.total / Math.max(1, durationMs / 1000);
 
   return (
-    <StripFrame
-      label="Total Damage Done"
-      summary={`${formatNumber(result.total)} total · ${formatNumber(dps, 1)}/s`}
-    >
+    <div className="h-full min-h-0 p-2">
       <StripBars
         values={buckets.map((bucket) => bucket.amount)}
         colors={buckets.map(() => "bg-blue-500/70")}
         max={max}
         title={(index) => `${formatNumber(buckets[index]?.amount ?? 0)} damage`}
+        className="h-full"
       />
-    </StripFrame>
+    </div>
   );
 }
 
