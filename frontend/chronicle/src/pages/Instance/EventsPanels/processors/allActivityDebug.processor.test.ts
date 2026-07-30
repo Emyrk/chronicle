@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { HitTypeFullResist, HitTypeImmune, HitTypePartialAbsorb, HitTypePartialBlock, HitTypePartialResist } from "@/lib/hittype/hittype";
+import { HitTypeCrushing, HitTypeFullResist, HitTypeGlancing, HitTypeImmune, HitTypePartialAbsorb, HitTypePartialBlock, HitTypePartialResist } from "@/lib/hittype/hittype";
 import type { ConsumeProcessorEvent, DamageProcessorEvent, ProcessorContext, ResurrectionProcessorEvent, SpellStartProcessorEvent } from "../processorTypes";
 import { allActivityProcessor } from "./allActivityDebug.processor";
 
@@ -82,6 +82,23 @@ describe("allActivityProcessor", () => {
     );
 
     expect(state.rawEventsByStream.damage[0].flags).toEqual(["IMMUNE", "FULL RESIST"]);
+  });
+
+  it("flags glancing and crushing damage", () => {
+    const state = allActivityProcessor.createState();
+    const event = createDamageEvent();
+    event.hitType = HitTypeGlancing | HitTypeCrushing;
+
+    allActivityProcessor.processEvent(
+      state,
+      event,
+      "encounter",
+      new Date("2026-07-14T17:41:42.709Z"),
+      "damage",
+      createContext(),
+    );
+
+    expect(state.rawEventsByStream.damage[0].flags).toEqual(["GLANCING", "CRUSHING"]);
   });
 
   it("captures resurrection source, target, and spell details", () => {

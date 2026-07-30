@@ -437,6 +437,8 @@ export const allActivityProcessor: PanelProcessor<AllActivityDebugState, AllActi
       }
       rawEvent.extra = detail.join(" · ");
       if (outcomes.includes("Crit")) rawEvent.flags?.push("CRIT");
+      if (outcomes.includes("Glancing")) rawEvent.flags?.push("GLANCING");
+      if (outcomes.includes("Crushing")) rawEvent.flags?.push("CRUSHING");
       if (outcomes.includes("Miss")) rawEvent.flags?.push("MISS");
       if (outcomes.includes("Immune")) rawEvent.flags?.push("IMMUNE");
       if (outcomes.includes("Full Resist")) rawEvent.flags?.push("FULL RESIST");

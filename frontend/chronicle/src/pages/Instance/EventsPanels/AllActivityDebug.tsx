@@ -10,7 +10,7 @@ import { formatNumber } from "@/lib/format";
 import { ScrollArea, ScrollBar } from "@/components/ui/ScrollArea/ScrollArea";
 import { SCHOOL_TEXT_COLORS } from "@/components/SpellSchoolBadge";
 import { SpellIdTooltip } from "@/components/ui/SpellIdTooltip";
-import { Tooltip, TooltipTrigger, TooltipContent } from "@/components/ui/Tooltip/tooltip";
+import { Tooltip, TooltipTrigger, TooltipContent, TooltipProvider } from "@/components/ui/Tooltip/tooltip";
 import type { PanelDefinition, PanelRenderProps, PanelContext } from "./types";
 import { allActivityProcessor, type AllActivityState, type RawDebugEvent, type EncounterMeta, type ResourceType } from "./processors";
 import { ALL_ACTIVITY_STREAMS, STREAM_TYPE_CODES, collectAllActivityEvents, eventDetail, eventValue } from "./allActivityEvents";
@@ -206,7 +206,7 @@ const GEAR_SLOT_NAMES = [
   "Back", "Main Hand", "Off Hand", "Ranged", "Tabard",
 ];
 
-const EVENT_ROW_COLUMNS = "30px 68px 108px 116px minmax(140px, 1fr) 116px 64px minmax(170px, 1.2fr) 132px 116px";
+const EVENT_ROW_COLUMNS = "30px 68px 108px 116px 180px 116px 64px minmax(170px, 1fr) 132px 116px";
 
 const FLAG_STYLES: Record<string, string> = {
   SYNTHETIC: "border-violet-400/25 bg-violet-400/10 text-violet-300",
@@ -215,6 +215,8 @@ const FLAG_STYLES: Record<string, string> = {
   OVERHEAL: "border-green-400/25 bg-green-400/10 text-green-300",
   ABSORB: "border-sky-400/25 bg-sky-400/10 text-sky-300",
   CRIT: "border-amber-400/25 bg-amber-400/10 text-amber-300",
+  GLANCING: "border-cyan-400/25 bg-cyan-400/10 text-cyan-300",
+  CRUSHING: "border-orange-400/25 bg-orange-400/10 text-orange-300",
   MISS: "border-zinc-400/25 bg-zinc-400/10 text-zinc-300",
   IMMUNE: "border-fuchsia-400/25 bg-fuchsia-400/10 text-fuchsia-300",
   "FULL RESIST": "border-violet-400/25 bg-violet-400/10 text-violet-300",
@@ -286,20 +288,23 @@ function RawEventRow({ event, index, useRelativeTime = false, useLocalTime = fal
   ];
 
   return (
-    <div className={cn("group", event.isSynthetic && "border-l-2 border-l-violet-400")}>
-      <div
-        role="button"
-        tabIndex={0}
-        aria-expanded={expanded}
-        onClick={() => setExpanded((value) => !value)}
-        onKeyDown={(keyboardEvent) => {
-          if (keyboardEvent.key === "Enter" || keyboardEvent.key === " ") {
-            keyboardEvent.preventDefault();
-            setExpanded((value) => !value);
-          } else if (keyboardEvent.key === "Escape") {
-            setExpanded(false);
-          }
-        }}
+    <TooltipProvider disableHoverableContent={false}>
+      <Tooltip open={expanded}>
+        <div className={cn("group", event.isSynthetic && "border-l-2 border-l-violet-400")}>
+          <TooltipTrigger asChild>
+          <div
+            role="button"
+            tabIndex={0}
+            aria-expanded={expanded}
+            onClick={() => setExpanded((value) => !value)}
+            onKeyDown={(keyboardEvent) => {
+              if (keyboardEvent.key === "Enter" || keyboardEvent.key === " ") {
+                keyboardEvent.preventDefault();
+                setExpanded(true);
+              } else if (keyboardEvent.key === "Escape") {
+                setExpanded(false);
+              }
+            }}
         className={cn(
           "grid min-h-5 items-center border-b border-border/25 font-mono text-[10px] leading-3 outline-none transition-colors",
           index % 2 === 0 ? "bg-background/30" : "bg-muted/[0.12]",
@@ -386,10 +391,18 @@ function RawEventRow({ event, index, useRelativeTime = false, useLocalTime = fal
             </span>
           )) : <span className="text-muted-foreground/30">—</span>}
         </span>
-      </div>
+          </div>
+          </TooltipTrigger>
 
-      {expanded && (
-        <div className="border-b border-border/60 bg-background/70 px-4 py-3 shadow-inner">
+          <TooltipContent
+            side="bottom"
+            align="start"
+            sideOffset={2}
+            collisionPadding={12}
+            onPointerLeave={() => setExpanded(false)}
+            className="styled-scrollbar z-50 max-h-[70vh] w-[560px] max-w-[calc(100vw-2rem)] overflow-auto rounded-md border border-border/80 bg-card px-4 py-3 text-left text-card-foreground shadow-2xl outline-none"
+            hideArrow
+          >
           <div className="mb-3 flex items-start gap-3">
             <span className={cn("mt-0.5 font-mono text-[10px] font-bold tracking-[0.08em]", config.color)}>
               {config.label.toUpperCase()}
@@ -443,9 +456,10 @@ function RawEventRow({ event, index, useRelativeTime = false, useLocalTime = fal
               </div>
             </details>
           ) : null}
+          </TooltipContent>
         </div>
-      )}
-    </div>
+      </Tooltip>
+    </TooltipProvider>
   );
 }
 
