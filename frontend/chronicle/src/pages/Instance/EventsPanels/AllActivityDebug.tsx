@@ -431,10 +431,19 @@ function RawEventRow({ event, index, useRelativeTime = false, useLocalTime = fal
             sideOffset={2}
             collisionPadding={12}
             onPointerLeave={() => setExpanded(false)}
-            className="styled-scrollbar z-50 max-h-[70vh] w-[560px] max-w-[calc(100vw-2rem)] overflow-auto rounded-md border-2 border-primary/60 bg-card px-4 py-3 text-left text-card-foreground shadow-[0_12px_36px_rgba(0,0,0,0.75),0_0_0_1px_rgba(255,255,255,0.08)] ring-1 ring-black/80 outline-none"
+            className="styled-scrollbar relative z-50 max-h-[70vh] w-[560px] max-w-[calc(100vw-2rem)] overflow-auto rounded-md border-2 border-primary/60 bg-card px-4 py-3 text-left text-card-foreground shadow-[0_12px_36px_rgba(0,0,0,0.75),0_0_0_1px_rgba(255,255,255,0.08)] ring-1 ring-black/80 outline-none"
             hideArrow
           >
-          <div className="mb-3">
+          <button
+            type="button"
+            aria-label="Close event details"
+            title="Close"
+            onClick={() => setExpanded(false)}
+            className="absolute right-2 top-2 rounded-sm p-1 text-muted-foreground transition-colors hover:bg-muted hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+          >
+            <X className="h-4 w-4" />
+          </button>
+          <div className="mb-3 pr-7">
             <div className={cn("mb-1.5 font-mono text-[10px] font-bold tracking-[0.08em]", config.color)}>
               {config.label.toUpperCase()}
             </div>
