@@ -10,6 +10,11 @@ import {
   statusRaidHealthTimeline,
 } from "../Status/statusRaidHealth";
 import { selectStatusEncounter } from "../Status/statusTimeline";
+import {
+  SHOW_STRIP_TITLE_TOKEN,
+  stripOptionEnabled,
+  stripOptionValue,
+} from "./stripOptions";
 import { stripReplayProgress } from "./stripReplay";
 import type { StripDefinition, StripRenderProps, StripType } from "./types";
 
@@ -28,7 +33,7 @@ function raidHealthColor(percent: number): string {
   return "bg-emerald-500/60";
 }
 
-function RaidDurabilityStrip({ result, context }: StripRenderProps<StatusResult>) {
+function RaidDurabilityStrip({ result, context, panelOption }: StripRenderProps<StatusResult>) {
   const sync = useSyncModeContextOptional();
   const playerLife = usePlayerLifeState(context);
   const encounter = useMemo(
@@ -51,6 +56,8 @@ function RaidDurabilityStrip({ result, context }: StripRenderProps<StatusResult>
     return <StripEmpty label="Estimated raid durability" />;
   }
 
+  const showTitle = stripOptionEnabled(panelOption, SHOW_STRIP_TITLE_TOKEN);
+  const title = stripOptionValue(panelOption, "t:") ?? "Raid Durability";
   const replayProgress = stripReplayProgress(
     sync?.enabled ?? false,
     sync?.currentTimestamp ?? null,
@@ -60,6 +67,11 @@ function RaidDurabilityStrip({ result, context }: StripRenderProps<StatusResult>
 
   return (
     <div className="h-full min-h-0 p-2">
+      {showTitle ? (
+        <div className="pointer-events-none absolute bottom-3 left-4 z-20 text-[10px] font-semibold uppercase tracking-[0.14em] text-white/90 drop-shadow-[0_1px_2px_rgba(0,0,0,0.95)]">
+          {title}
+        </div>
+      ) : null}
       <StripBars
         values={buckets.map((bucket) => bucket.percent)}
         colors={buckets.map((bucket) => raidHealthColor(bucket.percent))}

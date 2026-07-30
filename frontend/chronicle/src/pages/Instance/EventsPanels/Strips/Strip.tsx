@@ -5,6 +5,7 @@ import { toast } from "sonner";
 import type { StripOrientation } from "@/components/layout/GridLayoutEditor";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/Card/Card";
+import { Switch } from "@/components/ui/Switch/Switch";
 import { PortalContainerProvider, usePortalContainer } from "@/components/ui/PortalContainerContext";
 import { useIsMobile } from "@/hooks/useIsMobile";
 import { cn } from "@/lib/utils";
@@ -14,11 +15,13 @@ import { openPanelPopup, syncPopupAppearance, type PanelPopup } from "../panelPo
 import type { PanelContext, PanelDefinition } from "../types";
 import { usePanelAggregation } from "../usePanelAggregation";
 import { STRIPS } from "./strips";
+import {
+  SHOW_STRIP_TITLE_TOKEN,
+  parseStripOptionTokens,
+  stripOptionEnabled,
+  updateStripOptionFlag,
+} from "./stripOptions";
 import type { StripDefinition, StripType } from "./types";
-
-function parseOptionTokens(option: string | null | undefined): string[] {
-  return option?.split(",").map((token) => token.trim()).filter(Boolean) ?? [];
-}
 
 function optionValue(tokens: string[], prefix: string): string | null {
   const token = tokens.find((candidate) => candidate.startsWith(prefix));
@@ -67,9 +70,10 @@ export function Strip({
 }: StripProps) {
   const isMobile = useIsMobile();
   const strip = STRIPS[stripType];
-  const optionTokens = useMemo(() => parseOptionTokens(panelOption), [panelOption]);
+  const optionTokens = useMemo(() => parseStripOptionTokens(panelOption), [panelOption]);
   const borderColor = optionValue(optionTokens, "bc:");
   const customTitle = optionValue(optionTokens, "t:");
+  const showTitle = stripOptionEnabled(panelOption, SHOW_STRIP_TITLE_TOKEN);
   const inheritedPortalContainer = usePortalContainer();
   const [filters, setFiltersState] = useState<PanelFilter[]>(() => seedFilters ?? strip.defaultFilters ?? []);
   const [popup, setPopup] = useState<PanelPopup | null>(null);
@@ -107,6 +111,10 @@ export function Strip({
   const setCustomTitle = useCallback((title: string | null) => {
     onPanelOptionChange?.(updateOptionMeta(optionTokens, borderColor, title));
   }, [borderColor, onPanelOptionChange, optionTokens]);
+
+  const setShowTitle = useCallback((enabled: boolean) => {
+    onPanelOptionChange?.(updateStripOptionFlag(panelOption, SHOW_STRIP_TITLE_TOKEN, enabled));
+  }, [onPanelOptionChange, panelOption]);
 
   const dockStrip = useCallback(() => {
     const current = popupRef.current;
@@ -175,6 +183,7 @@ export function Strip({
     checkboxChecked: false,
     context,
     orientation,
+    panelOption,
     panelContext,
     panelIndex: stripIndex,
     panelId: stripId,
@@ -240,20 +249,36 @@ export function Strip({
               <div className="grid h-full grid-rows-[120px_1fr] gap-3 bg-background p-3 text-foreground">
                 <Card className="relative mb-0 overflow-hidden p-0">{renderedStrip}</Card>
                 <Card className="mb-0 min-h-0 overflow-auto p-4 styled-scrollbar">
-                  <PanelFilterEditor
-                    panelLabel={strip.label}
-                    panelIcon={strip.icon}
-                    fixedFilters={strip.fixedFilters ?? []}
-                    filters={filters}
-                    onChange={setFilters}
-                    onReset={() => setFilters(strip.defaultFilters ?? [])}
-                    onClose={dockStrip}
-                    filteringSupported={strip.supportsFiltering === true}
-                    borderColor={borderColor}
-                    onBorderColorChange={onPanelOptionChange ? setBorderColor : undefined}
-                    customTitle={customTitle}
-                    onCustomTitleChange={onPanelOptionChange ? setCustomTitle : undefined}
-                  />
+                  <div className="flex h-full min-h-0 flex-col gap-4">
+                    <div className="flex items-center justify-between rounded-md border border-border/70 bg-muted/20 px-3 py-2">
+                      <div>
+                        <div className="text-sm font-medium">Show title</div>
+                        <div className="text-xs text-muted-foreground">Display Raid Durability over the strip.</div>
+                      </div>
+                      <Switch
+                        size="sm"
+                        checked={showTitle}
+                        onCheckedChange={setShowTitle}
+                        disabled={!onPanelOptionChange}
+                      />
+                    </div>
+                    <div className="min-h-0 flex-1">
+                      <PanelFilterEditor
+                        panelLabel={strip.label}
+                        panelIcon={strip.icon}
+                        fixedFilters={strip.fixedFilters ?? []}
+                        filters={filters}
+                        onChange={setFilters}
+                        onReset={() => setFilters(strip.defaultFilters ?? [])}
+                        onClose={dockStrip}
+                        filteringSupported={strip.supportsFiltering === true}
+                        borderColor={borderColor}
+                        onBorderColorChange={onPanelOptionChange ? setBorderColor : undefined}
+                        customTitle={customTitle}
+                        onCustomTitleChange={onPanelOptionChange ? setCustomTitle : undefined}
+                      />
+                    </div>
+                  </div>
                 </Card>
               </div>,
               popup.container,
