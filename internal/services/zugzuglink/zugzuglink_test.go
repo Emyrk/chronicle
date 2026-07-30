@@ -8,29 +8,34 @@ import (
 
 	"github.com/stretchr/testify/require"
 
+	"github.com/Emyrk/chronicle/combatlog/parser/guid"
 	"github.com/Emyrk/chronicle/internal/services/zugzuglink"
 	"github.com/Emyrk/chronicle/internal/testutil"
 )
 
-func TestUnmarshalGuildQuirk(t *testing.T) {
+func TestUnmarshalCharacterQuirks(t *testing.T) {
 	t.Parallel()
 
 	var resp zugzuglink.Response
 	err := json.Unmarshal([]byte(`{
 		"verified": true,
 		"characters": [
-			{"name": "Holycows", "level": 60, "guild": "Zug Zug", "realmKey": "eversong-wilds"},
-			{"name": "Taco", "level": 42, "guild": false, "realmKey": "eversong-wilds"}
+			{"name": "Axm", "level": 22, "guild": "Zug Zug", "realmKey": "chromiecraft", "gameId": "575928"},
+			{"name": "Taco", "level": 42, "guild": false, "realmKey": "eversong-wilds", "gameId": false},
+			{"name": "Holycows", "level": 60, "guild": "Zug Zug", "realmKey": "eversong-wilds", "gameId": ""}
 		]
 	}`), &resp)
 	require.NoError(t, err)
 	require.True(t, resp.Verified)
-	require.Len(t, resp.Characters, 2)
+	require.Len(t, resp.Characters, 3)
 	require.Equal(t, "Zug Zug", resp.Characters[0].Guild)
-	require.Equal(t, "eversong-wilds", resp.Characters[0].RealmKey)
-	require.Equal(t, "eversong wilds", resp.Characters[0].RealmName())
+	require.Equal(t, "chromiecraft", resp.Characters[0].RealmKey)
+	require.Equal(t, "chromiecraft", resp.Characters[0].RealmName())
+	require.Equal(t, guid.GUID(0x000000000008C9B8), resp.Characters[0].GameID)
 	require.Equal(t, "", resp.Characters[1].Guild)
 	require.Equal(t, 42, resp.Characters[1].Level)
+	require.True(t, resp.Characters[1].GameID.IsZero())
+	require.True(t, resp.Characters[2].GameID.IsZero())
 }
 
 func TestSource(t *testing.T) {

@@ -18,8 +18,11 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"strconv"
 	"strings"
 	"time"
+
+	"github.com/Emyrk/chronicle/combatlog/parser/guid"
 )
 
 // Type is the external verification provider type implemented by this
@@ -48,6 +51,9 @@ type Character struct {
 	// RealmKey is the provider's realm slug, e.g. "eversong-wilds" for the
 	// realm named "Eversong Wilds".
 	RealmKey string `json:"realmKey"`
+	// GameID is the character's uint32 player GUID, or zero when the provider
+	// omits it or returns an empty string or false.
+	GameID guid.GUID `json:"gameId"`
 }
 
 // RealmName converts the provider's realm key ("eversong-wilds") into a
@@ -56,13 +62,14 @@ func (c Character) RealmName() string {
 	return strings.ReplaceAll(c.RealmKey, "-", " ")
 }
 
-// UnmarshalJSON handles the provider's `"guild": string | false` quirk.
+// UnmarshalJSON handles the provider's string-or-false quirks.
 func (c *Character) UnmarshalJSON(data []byte) error {
 	var raw struct {
 		Name     string          `json:"name"`
 		Level    int             `json:"level"`
 		Guild    json.RawMessage `json:"guild"`
 		RealmKey string          `json:"realmKey"`
+		GameID   json.RawMessage `json:"gameId"`
 	}
 	if err := json.Unmarshal(data, &raw); err != nil {
 		return err
@@ -71,6 +78,7 @@ func (c *Character) UnmarshalJSON(data []byte) error {
 	c.Level = raw.Level
 	c.RealmKey = raw.RealmKey
 	c.Guild = ""
+	c.GameID = 0
 	if len(raw.Guild) > 0 && raw.Guild[0] == '"' {
 		var g string
 		if err := json.Unmarshal(raw.Guild, &g); err != nil {
@@ -78,6 +86,24 @@ func (c *Character) UnmarshalJSON(data []byte) error {
 		}
 		c.Guild = g
 	}
+
+	gameID := strings.TrimSpace(string(raw.GameID))
+	if gameID == "" || gameID == "false" || gameID == "null" {
+		return nil
+	}
+	if gameID[0] == '"' {
+		if err := json.Unmarshal(raw.GameID, &gameID); err != nil {
+			return err
+		}
+	}
+	if gameID == "" {
+		return nil
+	}
+	value, err := strconv.ParseUint(gameID, 10, 32)
+	if err != nil {
+		return fmt.Errorf("parse gameId %q: %w", gameID, err)
+	}
+	c.GameID = guid.GUID(value)
 	return nil
 }
 

@@ -12,7 +12,6 @@ import (
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgtype"
 
-	"github.com/Emyrk/chronicle/combatlog/parser/guid"
 	"github.com/Emyrk/chronicle/database"
 	"github.com/Emyrk/chronicle/database/authz"
 	"github.com/Emyrk/chronicle/frontend"
@@ -270,10 +269,7 @@ func (api *API) armoryOG(realm, player string) *frontend.OGData {
 		realmID = r.ID
 	}
 
-	var identifier guid.GUID
-	if g, parseErr := guid.FromString(player); parseErr == nil {
-		identifier = g
-	}
+	identifier := parseArmoryPlayerGUID(player)
 
 	p, err := db.GetGamePlayerByGUID(ctx, database.GetGamePlayerByGUIDParams{
 		RealmID:    realmID,

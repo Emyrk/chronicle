@@ -148,11 +148,16 @@ func (h *Handler) SyncExternal(w http.ResponseWriter, r *http.Request) {
 				realms[character.RealmKey] = realmID
 			}
 
-			// Match by name on the character's realm. Names are the only
-			// identity the provider gives us; game_players is keyed by GUID.
+			// Prefer the provider's GUID when available. Only fall back to the
+			// character name when the provider omitted the GUID.
+			lookupName := ""
+			if character.GameID.IsZero() {
+				lookupName = character.Name
+			}
 			player, err := tx.GetGamePlayerByGUID(ctx, database.GetGamePlayerByGUIDParams{
-				RealmID: realmID,
-				Name:    character.Name,
+				RealmID:    realmID,
+				Identifier: character.GameID,
+				Name:       lookupName,
 			})
 			if errors.Is(err, sql.ErrNoRows) {
 				resp.Unmatched = append(resp.Unmatched, character.Name)

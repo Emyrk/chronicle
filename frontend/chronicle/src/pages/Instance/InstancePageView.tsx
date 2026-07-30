@@ -1718,7 +1718,7 @@ function EncounterDetail({
                                     </div>
                                     {instance.realm && (
                                       <Link
-                                        to={`/armory/${encodeURIComponent(instance.realm)}/${encodeURIComponent(player.name)}`}
+                                        to={`/armory/${encodeURIComponent(instance.realm)}/${encodeURIComponent(player.guid)}`}
                                         className="text-xs text-primary hover:underline flex items-center gap-1"
                                         onClick={(e) => e.stopPropagation()}
                                       >

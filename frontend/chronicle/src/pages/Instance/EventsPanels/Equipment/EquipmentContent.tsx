@@ -351,7 +351,7 @@ export function EquipmentContent(props: PanelRenderProps<EquipmentResult>) {
               {selected.guildName && ` · <${selected.guildName}>`}
               {context.instance.realm && (
                 <Link
-                  to={`/armory/${encodeURIComponent(context.instance.realm)}/${encodeURIComponent(selected.name)}`}
+                  to={`/armory/${encodeURIComponent(context.instance.realm)}/${encodeURIComponent(selected.guid)}`}
                   className="inline-flex items-center gap-0.5 text-blue-400 hover:text-blue-300"
                   target="_blank"
                 >

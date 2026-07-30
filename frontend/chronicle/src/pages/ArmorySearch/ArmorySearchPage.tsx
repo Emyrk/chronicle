@@ -258,7 +258,7 @@ function PlayerRow({ player }: { player: ArmorySearchResult }) {
     <tr className="hover:bg-primary-darker/40 transition-colors">
       <td className="px-4 py-2.5">
         <Link
-          to={`/armory/${encodeURIComponent(player.realm_name)}/${encodeURIComponent(player.name)}`}
+          to={`/armory/${encodeURIComponent(player.realm_name)}/${encodeURIComponent(player.id)}`}
           className="font-medium hover:underline"
           style={{ color: classColor }}
         >

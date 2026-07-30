@@ -15,6 +15,16 @@ import (
 	"github.com/Emyrk/chronicle/database"
 )
 
+func parseArmoryPlayerGUID(player string) guid.GUID {
+	if id, err := guid.FromString(player); err == nil {
+		return id
+	}
+	if id, err := strconv.ParseUint(player, 10, 32); err == nil {
+		return guid.GUID(id)
+	}
+	return 0
+}
+
 func (api *API) GetArmoryPlayer(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 	realmParam := chi.URLParam(r, "realm")
@@ -33,12 +43,8 @@ func (api *API) GetArmoryPlayer(w http.ResponseWriter, r *http.Request) {
 		realmID = realm.ID
 	}
 
-	// Resolve player: try GUID parse for the identifier field,
-	// and always pass the raw string as the name fallback.
-	var identifier guid.GUID
-	if g, parseErr := guid.FromString(playerParam); parseErr == nil {
-		identifier = g
-	}
+	// Resolve player by canonical GUID, decimal uint32 game ID, or name.
+	identifier := parseArmoryPlayerGUID(playerParam)
 
 	player, err := api.Opts.Zed.GetGamePlayerByGUID(ctx, database.GetGamePlayerByGUIDParams{
 		RealmID:    realmID,

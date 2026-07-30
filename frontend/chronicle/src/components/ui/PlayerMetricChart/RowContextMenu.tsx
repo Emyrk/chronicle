@@ -10,7 +10,7 @@ import { usePortalContainer } from "@/components/ui/PortalContainerContext"
 export function getArmoryUrl(instance: Instance, playerId: string): string | undefined {
   const player = instance.players?.[playerId]
   if (!player || !instance.realm) return undefined
-  return `/armory/${encodeURIComponent(instance.realm)}/${encodeURIComponent(player.name)}`
+  return `/armory/${encodeURIComponent(instance.realm)}/${encodeURIComponent(playerId)}`
 }
 
 export interface RowContextMenuProps {
