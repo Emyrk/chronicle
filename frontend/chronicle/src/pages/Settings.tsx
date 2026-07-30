@@ -1940,7 +1940,17 @@ export function LayoutLabSettings() {
         ) : isLoading ? (
           <div className="p-6 text-sm text-muted-foreground">Loading instance data…</div>
         ) : error || !instance || !context ? (
-          <div className="p-6 text-sm text-destructive">Failed to load the referenced instance.</div>
+          <div className="flex items-center gap-3 p-6">
+            <span className="text-sm text-destructive">Failed to load the referenced instance.</span>
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              onClick={() => setInstanceReference("")}
+            >
+              Change reference
+            </Button>
+          </div>
         ) : (
           <InstanceEventsProvider instanceId={instance.id}>
             <PanelTimingProvider panelCount={items.length}>
