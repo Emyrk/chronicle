@@ -304,6 +304,30 @@ function backfillStartDuration(
   }
 }
 
+/**
+ * Check whether a "complete" or "fail" entry already exists for a given start.
+ * Used to decide whether a synthetic completion needs to be inserted.
+ */
+function hasTerminal(casts: readonly HealerCastEntry[], start: HealerCastEntry): boolean {
+  for (let i = casts.length - 1; i >= 0; i--) {
+    const c = casts[i];
+    if (c.timestampMilli < start.timestampMilli) break;
+    if ((c.kind === "complete" || c.kind === "fail") && c.spellId === start.spellId) return true;
+  }
+  return false;
+}
+
+/**
+ * Find the most recent start entry for a spell.
+ */
+function findLastStart(casts: readonly HealerCastEntry[], spellId: number | null): HealerCastEntry | null {
+  for (let i = casts.length - 1; i >= 0; i--) {
+    const c = casts[i];
+    if (c.kind === "start" && c.spellId === spellId) return c;
+  }
+  return null;
+}
+
 export const healerCastsProcessor: PanelProcessor<HealerCastsResult, HealerCastEvent> = {
   id: "healer_casts",
   streams: ["spell_start", "spell_go", "spell_fail", "heal"] as StreamType[],
@@ -336,6 +360,32 @@ export const healerCastsProcessor: PanelProcessor<HealerCastsResult, HealerCastE
       // Backfill a zero-duration start for this spell from the heal timestamp.
       // This covers cases where no spell_go event exists (e.g. some WotLK logs).
       backfillStartDuration(casts, event.spellId, timestampMilli);
+
+      // When the start has no target (WotLK SPELL_CAST_START omits it) and no
+      // completion event exists, infer both from the first heal that lands:
+      // 1. Set the target on the start so the UI can show who was healed.
+      // 2. Synthesize a "complete" entry so castImpact picks up the heals.
+      const matchedStart = findLastStart(casts, event.spellId);
+      if (matchedStart) {
+        if (!matchedStart.targetId) {
+          matchedStart.targetId = event.target;
+        }
+        if (!hasTerminal(casts, matchedStart)) {
+          casts.push({
+            timestampMilli,
+            eventIndex: event.index,
+            spellId: event.spellId,
+            spellName: event.sourceName || "Healing",
+            targetId: event.target,
+            durationMilli: 0,
+            kind: "complete",
+            amount: 0,
+            overheal: 0,
+            absorbed: 0,
+          });
+        }
+      }
+
       casts.push({
         timestampMilli,
         eventIndex: event.index,

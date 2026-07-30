@@ -364,15 +364,16 @@ describe("healerCastsProcessor", () => {
     expect(casts?.[0]).toMatchObject({ kind: "start", durationMilli: 0 });
   });
 
-  it("backfills zero-duration starts from a heal event when no spell_go exists", () => {
-    // WotLK scenario: SPELL_CAST_START → SPELL_HEAL (no SPELL_CAST_SUCCESS)
+  it("backfills duration, target, and synthesizes completion from heal when no spell_go exists", () => {
+    // WotLK scenario: SPELL_CAST_START (no target) → SPELL_HEAL (no SPELL_CAST_SUCCESS)
     const state = healerCastsProcessor.createState();
     const firstTimestamp = new Date("2026-07-30T00:00:00Z");
     const ctx = context();
 
+    // spell_start with no target (WotLK style)
     healerCastsProcessor.processEvent(
       state,
-      start({ castTimeMilli: 0 }),
+      start({ castTimeMilli: 0, target: "" }),
       "encounter-1", firstTimestamp, "spell_start", ctx,
     );
     // No spell_go — just the heal landing
@@ -387,7 +388,64 @@ describe("healerCastsProcessor", () => {
     expect(casts?.[0]).toMatchObject({
       kind: "start",
       durationMilli: 1_300,
+      targetId: TARGET, // inferred from heal
     });
+    // Synthetic completion inserted before the heal
+    expect(casts?.[1]).toMatchObject({ kind: "complete", spellId: 2060 });
+    // Original heal entry
+    expect(casts?.[2]).toMatchObject({ kind: "heal", amount: 2_000 });
+  });
+
+  it("shows impact from heal-inferred completion at cursor end", () => {
+    // Verify that healerCastStateAt picks up the synthetic completion + impact
+    const state = healerCastsProcessor.createState();
+    const firstTimestamp = new Date("2026-07-30T00:00:00Z");
+    const ctx = context();
+
+    healerCastsProcessor.processEvent(
+      state,
+      start({ castTimeMilli: 0, target: "" }),
+      "encounter-1", firstTimestamp, "spell_start", ctx,
+    );
+    healerCastsProcessor.processEvent(
+      state,
+      heal({ offsetMilli: 2_300, amount: 10_000, overheal: 1_000 }),
+      "encounter-1", firstTimestamp, "heal", ctx,
+    );
+
+    const casts = state.encounters.get("encounter-1")?.castsByPlayer.get(HEALER) ?? [];
+    // At cursor just after completion — should show completed with impact
+    const castState = healerCastStateAt(casts, firstTimestamp.getTime() + 2_400);
+    expect(castState.status).toBe("completed");
+    expect(castState.impact).toMatchObject({
+      effective: 9_000,
+      overheal: 1_000,
+      targetIds: [TARGET],
+    });
+  });
+
+  it("does not synthesize a second completion when spell_go already exists", () => {
+    const state = healerCastsProcessor.createState();
+    const firstTimestamp = new Date("2026-07-30T00:00:00Z");
+    const ctx = context();
+
+    healerCastsProcessor.processEvent(
+      state, start({ castTimeMilli: 0 }),
+      "encounter-1", firstTimestamp, "spell_start", ctx,
+    );
+    healerCastsProcessor.processEvent(
+      state, complete(),
+      "encounter-1", firstTimestamp, "spell_go", ctx,
+    );
+    healerCastsProcessor.processEvent(
+      state, heal({ offsetMilli: 3_500 }),
+      "encounter-1", firstTimestamp, "heal", ctx,
+    );
+
+    const casts = state.encounters.get("encounter-1")?.castsByPlayer.get(HEALER);
+    const completions = casts?.filter(c => c.kind === "complete");
+    // Only the real spell_go completion, no synthetic one
+    expect(completions).toHaveLength(1);
   });
   it("ignores non-player casters and unselected encounters", () => {
     const state = healerCastsProcessor.createState();
