@@ -16,6 +16,7 @@ export function createConsumablesPanel(): PanelDefinition<ConsumablesResult, any
     ...consumablesProcessor,
     label: "Consumables",
     icon: <FlaskConical className="h-4 w-4" />,
+    underConstruction: true,
 
     render: (props: PanelRenderProps<ConsumablesResult>) => {
       return <ConsumablesContent {...props} />;
