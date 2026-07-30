@@ -336,9 +336,17 @@ export const healerCastsProcessor: PanelProcessor<HealerCastsResult, HealerCastE
     // zero-duration start.  WotLK logs don't include cast time in
     // SPELL_CAST_START, so the only way to know the actual (talented/hasted)
     // cast duration is by measuring start→go or start→fail.
+    //
+    // Guard: only backfill if no other "start" event (any spell) sits between
+    // the candidate and this event.  An intervening start means the candidate
+    // was implicitly cancelled (player began a new cast), so it should stay
+    // at duration 0 rather than spanning across unrelated casts.
     if (kind !== "start") {
       for (let i = casts.length - 1; i >= 0; i--) {
         const prev = casts[i];
+        // Any intervening start (even a different spell) means the candidate
+        // was implicitly cancelled — stop searching.
+        if (prev.kind === "start" && prev.spellId !== event.spell.id) break;
         if (prev.kind === "start" && prev.spellId === event.spell.id && prev.durationMilli === 0) {
           prev.durationMilli = timestampMilli - prev.timestampMilli;
           break;

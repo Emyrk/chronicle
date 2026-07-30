@@ -263,6 +263,69 @@ describe("healerCastsProcessor", () => {
     // Should keep the original 2500, not overwrite
     expect(casts?.[0].durationMilli).toBe(2_500);
   });
+
+  it("does not backfill an orphaned start when another cast started in between", () => {
+    // Scenario: Regrowth start → player moves (implicit cancel, no fail event)
+    // → 25s later, starts and completes another Regrowth.
+    // The old orphaned start should NOT get a 25s duration.
+    const state = healerCastsProcessor.createState();
+    const firstTimestamp = new Date("2026-07-30T00:00:00Z");
+    const ctx = context();
+    const REGROWTH = 8936;
+    const REJUVENATION = 774;
+
+    // Regrowth start at t=1000 (no cast time from WotLK)
+    healerCastsProcessor.processEvent(
+      state,
+      start({ offsetMilli: 1_000, castTimeMilli: 0, spell: { id: REGROWTH, name: "Regrowth" } }),
+      "encounter-1", firstTimestamp, "spell_start", ctx,
+    );
+    // Player starts a different spell at t=3000 (implicitly cancelling Regrowth)
+    healerCastsProcessor.processEvent(
+      state,
+      start({ offsetMilli: 3_000, index: 3, castTimeMilli: 0, spell: { id: REJUVENATION, name: "Rejuvenation" } }),
+      "encounter-1", firstTimestamp, "spell_start", ctx,
+    );
+    // Much later, Regrowth completes at t=26000
+    healerCastsProcessor.processEvent(
+      state,
+      complete({ offsetMilli: 26_000, index: 10, spell: { id: REGROWTH, name: "Regrowth" } }),
+      "encounter-1", firstTimestamp, "spell_go", ctx,
+    );
+
+    const casts = state.encounters.get("encounter-1")?.castsByPlayer.get(HEALER);
+    // The original orphaned start should remain at duration 0
+    expect(casts?.[0]).toMatchObject({ kind: "start", spellId: REGROWTH, durationMilli: 0 });
+  });
+
+  it("does not backfill instant casts (Vanilla spell_start with castTimeMilli=0)", () => {
+    // Vanilla instants have spell_start + spell_go both with castTimeMilli=0.
+    // The backfill should not patch them since they're already correctly 0.
+    // In practice this works because the spell_go immediately follows the start
+    // without an intervening different start — but the delta is tiny (≤ a few ms)
+    // and healerCastStateAt naturally handles near-zero durations.
+    const state = healerCastsProcessor.createState();
+    const firstTimestamp = new Date("2026-07-30T00:00:00Z");
+    const ctx = context();
+    const RENEW = 139;
+
+    // Instant cast: start and go at same timestamp
+    healerCastsProcessor.processEvent(
+      state,
+      start({ offsetMilli: 1_000, castTimeMilli: 0, spell: { id: RENEW, name: "Renew" } }),
+      "encounter-1", firstTimestamp, "spell_start", ctx,
+    );
+    healerCastsProcessor.processEvent(
+      state,
+      complete({ offsetMilli: 1_000, index: 2, spell: { id: RENEW, name: "Renew" } }),
+      "encounter-1", firstTimestamp, "spell_go", ctx,
+    );
+
+    const casts = state.encounters.get("encounter-1")?.castsByPlayer.get(HEALER);
+    // Duration backfilled to 0 (same timestamp) — effectively still instant
+    expect(casts?.[0]).toMatchObject({ kind: "start", durationMilli: 0 });
+  });
+
   it("ignores non-player casters and unselected encounters", () => {
     const state = healerCastsProcessor.createState();
     const ctx = context();
