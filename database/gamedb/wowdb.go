@@ -83,6 +83,7 @@ type WoWDB struct {
 	spellFile *os.File
 	datasetID uuid.UUID
 	pool      *pgxpool.Pool // For DB-backed derived data queries; nil = fallback to compiled-in globals.
+	store     database.Store
 
 	spells          *spells.Fetcher
 	itemFetcher     *itemFetcher
@@ -126,11 +127,17 @@ func New(ctx context.Context, opts Options) (*WoWDB, error) {
 		Capacity: 64, Name: "periodic_spells", TTL: servicecache.TTLPeriodicSpells,
 	})
 
+	var store database.Store
+	if opts.Pool != nil {
+		store = database.New(opts.Pool)
+	}
+
 	return &WoWDB{
 		ctx:             ctx,
 		spellFile:       sf,
 		datasetID:       opts.DatasetID,
 		pool:            opts.Pool,
+		store:           store,
 		spells:          spellFetcher,
 		itemFetcher:     newItemFetcher(ctx, opts.DB, opts.CacheSvc, 400),
 		creatureFetcher: newCreatureFetcher(ctx, opts.DB, opts.CacheSvc, 500),
@@ -231,11 +238,11 @@ func (w *WoWDB) durationModifiers(ctx context.Context, datasetID uuid.UUID) (*ch
 }
 
 func (w *WoWDB) consumables(ctx context.Context, datasetID uuid.UUID) (*chrondbc.ConsumableCatalog, error) {
-	if w.pool == nil {
+	if w.store == nil {
 		return nil, nil
 	}
 
-	rows, err := database.New(w.pool).ListConsumablesByDataset(ctx, datasetID)
+	rows, err := w.store.ListConsumablesByDataset(ctx, datasetID)
 	if err != nil {
 		return nil, fmt.Errorf("list consumable catalog: %w", err)
 	}

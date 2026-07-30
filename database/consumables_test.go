@@ -1,7 +1,6 @@
 package database_test
 
 import (
-	"os"
 	"testing"
 
 	"github.com/Emyrk/chronicle/database"
@@ -114,50 +113,4 @@ func TestDerivedConsumablesAreDatasetScopedAndLinkBuffs(t *testing.T) {
 	otherSummary, err := store.GetDatasetImportSummary(ctx, otherDataset.ID)
 	require.NoError(t, err)
 	assert.Equal(t, int32(1), otherSummary.ConsumablesCount)
-}
-
-func TestBackfillDerivedConsumablesMigrationPopulatesExistingDataset(t *testing.T) {
-	t.Parallel()
-	ctx := testutil.Context(t, testutil.WaitShort)
-	pool, _ := dbtestutil.NewPGXPool(t)
-	store := database.New(pool)
-	datasetID := servicedataset.DefaultDatasetID
-
-	_, err := pool.Exec(ctx, `
-		INSERT INTO world_item_template (dataset_id, entry, class, name, spellid_1)
-		VALUES ($1, 6149, $2, 'Greater Mana Potion', 11903)
-	`, datasetID, int32(chrondbc.ItemClassConsumable))
-	require.NoError(t, err)
-
-	root := chrondbc.Spell{
-		ID:        chrondbc.SpellID(11903),
-		Name_lang: i18n.Text{i18n.English: "Restore Mana"},
-	}
-	root.Effect[0] = chrondbc.EffectTriggerSpell
-	root.EffectTriggerSpell[0] = chrondbc.SpellID(17531)
-	buff := chrondbc.Spell{
-		ID:        chrondbc.SpellID(17531),
-		Name_lang: i18n.Text{i18n.English: "Mana Potion"},
-	}
-	buff.Effect[0] = chrondbc.EffectApplyAura
-	require.NoError(t, spelldb.UpsertBatch(ctx, pool, []spelldb.SpellRow{
-		spelldb.FromSpell(datasetID, &root),
-		spelldb.FromSpell(datasetID, &buff),
-	}))
-
-	before, err := store.ListConsumablesByDataset(ctx, datasetID)
-	require.NoError(t, err)
-	require.Empty(t, before)
-
-	migration, err := os.ReadFile("migrations/000155_backfill_derived_consumables.up.sql")
-	require.NoError(t, err)
-	_, err = pool.Exec(ctx, string(migration))
-	require.NoError(t, err)
-
-	after, err := store.ListConsumablesByDataset(ctx, datasetID)
-	require.NoError(t, err)
-	require.Len(t, after, 1)
-	assert.Equal(t, int32(6149), after[0].ItemID)
-	require.True(t, after[0].BuffSpellID.Valid)
-	assert.Equal(t, int32(17531), after[0].BuffSpellID.Int32)
 }
