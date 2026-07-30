@@ -2,7 +2,7 @@
  * All Activity Debug processor - stores raw events for debugging stream interleaving
  */
 
-import type { DamageProcessorEvent, HealProcessorEvent, PanelProcessor, ProcessorContext, ResourceChangeProcessorEvent, CastProcessorEvent, CastAction, AuraProcessorEvent, AuraApplication, SlainProcessorEvent, ResurrectionProcessorEvent, SpellGoProcessorEvent, AuraCastProcessorEvent, SpellStartProcessorEvent, ExtraAttackProcessorEvent, UnitClassificationProcessorEvent, CombatantInfoProcessorEvent, DispelProcessorEvent, ConsumeProcessorEvent } from "../processorTypes";
+import type { AbsorbedProcessorEvent, AuraApplication, AuraCastProcessorEvent, AuraProcessorEvent, CastAction, CastProcessorEvent, CombatantInfoProcessorEvent, ConsumeProcessorEvent, DamageProcessorEvent, DispelProcessorEvent, ExtraAttackProcessorEvent, HealProcessorEvent, InterruptProcessorEvent, PanelProcessor, ProcessorContext, ResourceChangeProcessorEvent, ResurrectionProcessorEvent, SlainProcessorEvent, SpellFailProcessorEvent, SpellGoProcessorEvent, SpellStartProcessorEvent, UnitClassificationProcessorEvent } from "../processorTypes";
 import type { StreamType } from "@/hooks/instanceEvents";
 import { hitTypeNames } from "@/lib/hittype/hittype";
 
@@ -59,8 +59,13 @@ export interface RawDebugEvent {
   // Debug annotations (when WithDebug is enabled during reparse)
   // Can have multiple activity entries per event
   activityEvents?: ActivityEventInfo[];
-  // Combatant info gear (for hover tooltip)
+  // Combatant info gear (shown in the expanded row)
   gear?: { itemId: number; enchantId: number | null; temporaryEnchantId: number | null }[];
+  /** Diagnostic state that deserves a compact flag in the timeline. */
+  flags?: string[];
+  /** Additional actors or identifiers that do not fit the source/action/target columns. */
+  details?: { label: string; value: string }[];
+  isSynthetic: boolean;
 }
 
 /**
@@ -89,14 +94,24 @@ export interface AllActivityDebugState {
 }
 
 // This processor handles every stream exposed by the debug panel.
-type AllActivityEvent = DamageProcessorEvent | HealProcessorEvent | ResourceChangeProcessorEvent | CastProcessorEvent | AuraProcessorEvent | SlainProcessorEvent | ResurrectionProcessorEvent | SpellGoProcessorEvent | AuraCastProcessorEvent | SpellStartProcessorEvent | ExtraAttackProcessorEvent | UnitClassificationProcessorEvent | CombatantInfoProcessorEvent | DispelProcessorEvent | ConsumeProcessorEvent;
+type AllActivityEvent = DamageProcessorEvent | HealProcessorEvent | ResourceChangeProcessorEvent | CastProcessorEvent | AuraProcessorEvent | SlainProcessorEvent | ResurrectionProcessorEvent | SpellGoProcessorEvent | AuraCastProcessorEvent | SpellStartProcessorEvent | SpellFailProcessorEvent | ExtraAttackProcessorEvent | UnitClassificationProcessorEvent | CombatantInfoProcessorEvent | DispelProcessorEvent | InterruptProcessorEvent | AbsorbedProcessorEvent | ConsumeProcessorEvent;
+
+const SCHOOL_NAMES = ["Unknown", "None", "Physical", "Holy", "Fire", "Nature", "Frost", "Shadow", "Arcane"];
+
+function schoolName(school: number): string {
+  return SCHOOL_NAMES[school] ?? `School ${school}`;
+}
+
+function outcomeLabels(hitType: number): string[] {
+  return hitTypeNames(hitType).filter((label) => label !== "None");
+}
 
 // Default page size if no pagination specified
 const DEFAULT_PAGE_SIZE = 100;
 
 export const allActivityProcessor: PanelProcessor<AllActivityDebugState, AllActivityEvent> = {
   id: "all_activity",
-  streams: ["damage", "heal", "resource_change", "aura", "slain", "ressurection", "spell_go", "spell_start", "aura_cast", "extra_attack", "unit_classification", "combatant_info", "dispel", "consume"],
+  streams: ["damage", "heal", "resource_change", "cast", "aura", "slain", "ressurection", "spell_go", "spell_start", "spell_fail", "aura_cast", "extra_attack", "unit_classification", "combatant_info", "dispel", "interrupt", "absorbed", "consume"],
   
   createState: () => ({
     counts: new Map<string, number>(),
@@ -153,7 +168,7 @@ export const allActivityProcessor: PanelProcessor<AllActivityDebugState, AllActi
     const { entitySelection } = context;
     // Aura events only have target, cast events have caster but may not have target.
     // Combatant info events use "guid" instead of caster/target.
-    const eventCaster = "caster" in event ? event.caster : ("source" in event ? event.source : ("guid" in event ? event.guid : ("player" in event ? event.player : "")));
+    const eventCaster = "attacker" in event ? event.attacker : ("caster" in event ? event.caster : ("source" in event ? event.source : ("guid" in event ? event.guid : ("player" in event ? event.player : ""))));
     const eventTarget = "target" in event ? event.target : ("guid" in event ? event.guid : "");
     if (entitySelection.playerIds.size > 0) {
       if(!(entitySelection.playerIds.has(eventCaster) || (eventTarget && entitySelection.playerIds.has(eventTarget)))) {
@@ -203,6 +218,14 @@ export const allActivityProcessor: PanelProcessor<AllActivityDebugState, AllActi
       } else if (streamType === "spell_start") {
         const spellStartEvent = event as SpellStartProcessorEvent;
         abilityName = spellStartEvent.spell.name;
+      } else if (streamType === "spell_fail") {
+        const spellFailEvent = event as SpellFailProcessorEvent;
+        abilityName = spellFailEvent.spell.name;
+      } else if (streamType === "interrupt") {
+        abilityName = (event as InterruptProcessorEvent).spellName;
+      } else if (streamType === "absorbed") {
+        const absorbedEvent = event as AbsorbedProcessorEvent;
+        abilityName = absorbedEvent.absorbSpellName ?? absorbedEvent.damageSpellName ?? "Absorbed";
       } else if (streamType === "extra_attack") {
         const extraEvent = event as ExtraAttackProcessorEvent;
         abilityName = extraEvent.sourceName;
@@ -326,6 +349,18 @@ export const allActivityProcessor: PanelProcessor<AllActivityDebugState, AllActi
       const spellStartEvent = event as SpellStartProcessorEvent;
       sourceName = spellStartEvent.spell.name;
       amount = 0;
+    } else if (streamType === "spell_fail") {
+      const spellFailEvent = event as SpellFailProcessorEvent;
+      sourceName = spellFailEvent.spell.name;
+      amount = 0;
+    } else if (streamType === "interrupt") {
+      const interruptEvent = event as InterruptProcessorEvent;
+      sourceName = interruptEvent.spellName;
+      amount = 0;
+    } else if (streamType === "absorbed") {
+      const absorbedEvent = event as AbsorbedProcessorEvent;
+      sourceName = absorbedEvent.absorbSpellName ?? "Absorb";
+      amount = absorbedEvent.amount;
     } else if (streamType === "extra_attack") {
       const extraEvent = event as ExtraAttackProcessorEvent;
       sourceName = extraEvent.sourceName;
@@ -382,6 +417,8 @@ export const allActivityProcessor: PanelProcessor<AllActivityDebugState, AllActi
       targetName,
       amount,
       activityEvents,
+      flags: event.isSynthetic ? ["SYNTHETIC"] : [],
+      isSynthetic: event.isSynthetic,
     };
     
     // Add stream-specific info based on streamType
@@ -391,7 +428,15 @@ export const allActivityProcessor: PanelProcessor<AllActivityDebugState, AllActi
       rawEvent.extra = rcEvent.direction;
     } else if (streamType === "damage") {
       const damageEvent = event as DamageProcessorEvent;
-      rawEvent.extra = `school=${damageEvent.school} hit=${damageEvent.hitType}`;
+      const outcomes = outcomeLabels(damageEvent.hitType);
+      const detail = [...outcomes, schoolName(damageEvent.school)];
+      if (damageEvent.overkill > 0) {
+        detail.push(`${damageEvent.overkill.toLocaleString()} overkill`);
+        rawEvent.flags?.push("OVERKILL");
+      }
+      rawEvent.extra = detail.join(" · ");
+      if (outcomes.includes("Crit")) rawEvent.flags?.push("CRIT");
+      if (outcomes.includes("Miss")) rawEvent.flags?.push("MISS");
       if (damageEvent.tailerCount > 0) {
         rawEvent.damageTrailers = damageEvent.tailers
           .slice(0, damageEvent.tailerCount)
@@ -403,7 +448,18 @@ export const allActivityProcessor: PanelProcessor<AllActivityDebugState, AllActi
       }
     } else if (streamType === "heal") {
       const healEvent = event as HealProcessorEvent;
-      rawEvent.extra = `school=${healEvent.school} hit=${healEvent.hitType}`;
+      const outcomes = outcomeLabels(healEvent.hitType);
+      const detail = [...outcomes, schoolName(healEvent.school)];
+      if (healEvent.overheal > 0) {
+        detail.push(`${healEvent.overheal.toLocaleString()} overheal`);
+        rawEvent.flags?.push("OVERHEAL");
+      }
+      if (healEvent.absorbed > 0) {
+        detail.push(`${healEvent.absorbed.toLocaleString()} absorbed`);
+        rawEvent.flags?.push("ABSORB");
+      }
+      rawEvent.extra = detail.join(" · ");
+      if (outcomes.includes("Crit")) rawEvent.flags?.push("CRIT");
     } else if (streamType === "cast") {
       const castEvent = event as CastProcessorEvent;
       rawEvent.castAction = castEvent.action;
@@ -423,9 +479,10 @@ export const allActivityProcessor: PanelProcessor<AllActivityDebugState, AllActi
       const slainEvent = event as SlainProcessorEvent;
       // Show death info in extra field
       if (slainEvent.attribution) {
-        rawEvent.extra = `killed by ${slainEvent.attribution.sourceName} (${slainEvent.attribution.amount})`;
+        rawEvent.extra = `${outcomeLabels(slainEvent.attribution.hitType).join(" · ")} · ${schoolName(slainEvent.attribution.school)}`;
       } else {
-        rawEvent.extra = "died";
+        rawEvent.extra = "attribution unavailable · caster empty";
+        rawEvent.flags?.push("NO ATTRIB");
       }
     } else if (streamType === "ressurection") {
       const resurrectionEvent = event as ResurrectionProcessorEvent;
@@ -454,6 +511,34 @@ export const allActivityProcessor: PanelProcessor<AllActivityDebugState, AllActi
       rawEvent.extra = spellStartEvent.itemId
         ? `${timing} item=${spellStartEvent.itemId}`
         : timing;
+      if (spellStartEvent.itemId) rawEvent.flags?.push("ITEM");
+    } else if (streamType === "spell_fail") {
+      const spellFailEvent = event as SpellFailProcessorEvent;
+      rawEvent.spellId = spellFailEvent.spell.id;
+      rawEvent.extra = spellFailEvent.failedByServer ? "failed by server" : "cast failed";
+      if (spellFailEvent.failedByServer) rawEvent.flags?.push("SERVER");
+    } else if (streamType === "interrupt") {
+      const interruptEvent = event as InterruptProcessorEvent;
+      rawEvent.spellId = interruptEvent.extraSpellId || undefined;
+      rawEvent.extra = `interrupted · school=${interruptEvent.extraSchool}`;
+    } else if (streamType === "absorbed") {
+      const absorbedEvent = event as AbsorbedProcessorEvent;
+      const shieldCasterName = context.players[absorbedEvent.caster]?.name
+        ?? context.units?.[absorbedEvent.caster]?.name
+        ?? absorbedEvent.caster;
+      rawEvent.caster = absorbedEvent.attacker;
+      rawEvent.casterName = context.players[absorbedEvent.attacker]?.name
+        ?? context.units?.[absorbedEvent.attacker]?.name
+        ?? absorbedEvent.attacker;
+      rawEvent.spellId = absorbedEvent.absorbSpellId ?? undefined;
+      rawEvent.extra = `${absorbedEvent.damageSpellName ?? "Melee"} absorbed by ${absorbedEvent.absorbSpellName ?? "shield"}`;
+      rawEvent.details = [
+        { label: "Shield caster", value: shieldCasterName || "Unknown" },
+        { label: "Shield caster GUID", value: absorbedEvent.caster || "—" },
+        { label: "Damage spell", value: absorbedEvent.damageSpellName ?? "Melee" },
+        { label: "Absorb school", value: String(absorbedEvent.absorbSchool) },
+      ];
+      if (absorbedEvent.estimated) rawEvent.flags?.push("ESTIMATED");
     } else if (streamType === "extra_attack") {
       const extraEvent = event as ExtraAttackProcessorEvent;
       rawEvent.extra = `extra attacks=${extraEvent.amount}`;
@@ -472,11 +557,18 @@ export const allActivityProcessor: PanelProcessor<AllActivityDebugState, AllActi
         `consume=${consumeEvent.consumeId}`,
         `evidence=${consumeEvent.evidenceId}`,
       ];
-      if (consumeEvent.itemId) details.push(`item=${consumeEvent.itemId}`);
+      if (consumeEvent.itemId) {
+        details.push(`item=${consumeEvent.itemId}`);
+        rawEvent.flags?.push("ITEM");
+      }
       if (consumeEvent.candidateItemIdsCount > 0) details.push(`candidates=${consumeEvent.candidateItemIds.slice(0, consumeEvent.candidateItemIdsCount).join("|")}`);
       if (consumeEvent.resourceType) details.push(`resource=${consumeEvent.resourceType}`);
-      if (consumeEvent.isProjection) details.push("projection");
-      rawEvent.extra = details.join(" ");
+      if (consumeEvent.confidence === 3) rawEvent.flags?.push("AMBIGUOUS");
+      if (consumeEvent.isProjection) {
+        details.push("projection");
+        rawEvent.flags?.push("PROJECTED");
+      }
+      rawEvent.extra = details.join(" · ");
       rawEvent.spellId = consumeEvent.spell.id || undefined;
     } else if (streamType === "unit_classification") {
       const ucEvent = event as UnitClassificationProcessorEvent;

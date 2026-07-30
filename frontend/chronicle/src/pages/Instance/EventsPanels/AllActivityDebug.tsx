@@ -11,7 +11,7 @@ import { ScrollArea, ScrollBar } from "@/components/ui/ScrollArea/ScrollArea";
 import { Tooltip, TooltipTrigger, TooltipContent } from "@/components/ui/Tooltip/tooltip";
 import type { PanelDefinition, PanelRenderProps, PanelContext } from "./types";
 import { allActivityProcessor, type AllActivityState, type RawDebugEvent, type EncounterMeta, type ResourceType } from "./processors";
-import { collectAllActivityEvents } from "./allActivityEvents";
+import { ALL_ACTIVITY_STREAMS, STREAM_TYPE_CODES, collectAllActivityEvents, eventDetail, eventValue } from "./allActivityEvents";
 import type { StreamType } from "@/hooks/instanceEvents";
 import { usePanelAggregation } from "./usePanelAggregation";
 
@@ -204,19 +204,29 @@ const GEAR_SLOT_NAMES = [
   "Back", "Main Hand", "Off Hand", "Ranged", "Tabard",
 ];
 
-function trailerColor(labels: string[]): string {
-  if (labels.some((label) => label.includes("Absorb"))) return "text-sky-400";
-  if (labels.some((label) => label.includes("Block"))) return "text-amber-400";
-  if (labels.some((label) => label.includes("Resist"))) return "text-violet-400";
-  return "text-muted-foreground";
-}
+const EVENT_ROW_COLUMNS = "42px 64px 116px 132px minmax(150px, 1fr) 132px 72px minmax(190px, 1.2fr) 150px 132px";
 
-function trailerLabel(labels: string[]): string {
-  return labels
-    .map((label) => label.replace(/^Partial /, "").replace(/^Full /, ""))
-    .join("+")
-    .toLowerCase();
-}
+const FLAG_STYLES: Record<string, string> = {
+  SYNTHETIC: "border-violet-400/25 bg-violet-400/10 text-violet-300",
+  ESTIMATED: "border-sky-400/25 bg-sky-400/10 text-sky-300",
+  OVERKILL: "border-red-400/25 bg-red-400/10 text-red-300",
+  OVERHEAL: "border-green-400/25 bg-green-400/10 text-green-300",
+  ABSORB: "border-sky-400/25 bg-sky-400/10 text-sky-300",
+  CRIT: "border-amber-400/25 bg-amber-400/10 text-amber-300",
+  MISS: "border-zinc-400/25 bg-zinc-400/10 text-zinc-300",
+  SERVER: "border-red-400/25 bg-red-400/10 text-red-300",
+  ITEM: "border-fuchsia-400/25 bg-fuchsia-400/10 text-fuchsia-300",
+  PROJECTED: "border-violet-400/25 bg-violet-400/10 text-violet-300",
+  AMBIGUOUS: "border-orange-400/25 bg-orange-400/10 text-orange-300",
+  "NO ATTRIB": "border-orange-400/25 bg-orange-400/10 text-orange-300",
+};
+
+const ACTIVITY_STYLES: Record<string, string> = {
+  start: "border-green-400/25 bg-green-400/10 text-green-300",
+  bump: "border-yellow-400/25 bg-yellow-400/10 text-yellow-300",
+  end: "border-orange-400/25 bg-orange-400/10 text-orange-300",
+  slain: "border-red-400/25 bg-red-400/10 text-red-300",
+};
 
 interface RawEventRowProps {
   event: RawDebugEvent;
@@ -226,124 +236,175 @@ interface RawEventRowProps {
 }
 
 function RawEventRow({ event, index, useRelativeTime = false, useLocalTime = false }: RawEventRowProps) {
+  const [expanded, setExpanded] = useState(false);
   const config = STREAM_CONFIG[event.streamType];
-  const Icon = config.icon;
-  
-  // Format timestamp: relative offset or absolute time (UTC by default, local if toggled)
-  const timeStr = useRelativeTime 
+  const timeStr = useRelativeTime
     ? formatRelativeTime(event.offsetMilli)
     : formatTimestamp(event.dateMilli, useLocalTime);
-  
-  // Determine amount color: use resource-specific color for resource_change, stream color otherwise
-  const amountColor = event.resourceType 
-    ? RESOURCE_COLORS[event.resourceType] 
-    : config.color;
-  
-  const amountElement = (
-    <span className={cn("w-12 text-right shrink-0", amountColor)}>{event.amount.toLocaleString(undefined, {minimumFractionDigits: 0, maximumFractionDigits: 1})}</span>
-  );
-  
-  const trailerElement = event.damageTrailers && event.damageTrailers.length > 0 ? (
-    <span className="w-44 shrink-0 flex items-center gap-1 overflow-hidden">
-      {event.damageTrailers.map((trailer, trailerIndex) => (
-        <span
-          key={`${trailer.hitType}-${trailerIndex}`}
-          className={cn("text-[10px] font-medium whitespace-nowrap", trailerColor(trailer.labels))}
-          title={`${trailer.amount.toLocaleString()} ${trailer.labels.join(", ")} (hit type ${trailer.hitType})`}
-        >
-          {trailer.amount.toLocaleString()} {trailerLabel(trailer.labels)}
-        </span>
-      ))}
-    </span>
-  ) : (
-    <span className="w-44 shrink-0 text-muted-foreground/30">-</span>
-  );
+  const amountColor = event.resourceType ? RESOURCE_COLORS[event.resourceType] : config.color;
+  const details = [
+    { label: "Stream", value: event.streamType },
+    { label: "Encounter", value: event.encounterID },
+    { label: "Event index", value: String(event.index) },
+    { label: "Offset", value: `${event.offsetMilli.toLocaleString()} ms` },
+    { label: "Source GUID", value: event.caster || "—" },
+    { label: "Target GUID", value: event.target || "—" },
+    { label: "Spell ID", value: event.spellId ? String(event.spellId) : "—" },
+    { label: "Detail", value: eventDetail(event) },
+    ...(event.details ?? []),
+  ];
 
-  // ActivityEvent column - shows debug annotations when present
-  // Activity types indicated by color: start (green), bump (yellow), end (orange), slain (red+skull)
-  // Shows entity names only, comma-separated if multiple
-  const activityEventElement = event.activityEvents && event.activityEvents.length > 0 ? (
-    <span className="w-36 shrink-0 text-[10px] truncate flex items-center gap-1">
-      {event.activityEvents.map((activity, i) => (
-        <span
-          key={i}
-          className={cn(
-            "font-semibold",
-            activity.type === "start" && "text-green-400",
-            activity.type === "bump" && "text-yellow-400",
-            activity.type === "end" && "text-orange-400",
-            activity.type === "slain" && "text-red-500",
+  return (
+    <div className={cn("group", event.isSynthetic && "border-l-2 border-l-violet-400")}>
+      <div
+        role="button"
+        tabIndex={0}
+        aria-expanded={expanded}
+        onClick={() => setExpanded((value) => !value)}
+        onKeyDown={(keyboardEvent) => {
+          if (keyboardEvent.key === "Enter" || keyboardEvent.key === " ") {
+            keyboardEvent.preventDefault();
+            setExpanded((value) => !value);
+          } else if (keyboardEvent.key === "Escape") {
+            setExpanded(false);
+          }
+        }}
+        className={cn(
+          "grid min-h-7 items-center border-b border-border/30 font-mono text-[11px] leading-4 outline-none transition-colors",
+          "hover:bg-muted/35 focus-visible:bg-muted/40 focus-visible:ring-1 focus-visible:ring-inset focus-visible:ring-primary/70",
+          expanded && "bg-muted/30",
+        )}
+        style={{ gridTemplateColumns: EVENT_ROW_COLUMNS }}
+      >
+        <span className="pr-2 text-right text-muted-foreground/70">{index}</span>
+        <span className="flex min-w-0 items-center gap-1.5 px-1" title={config.label}>
+          <span className={cn("h-1.5 w-1.5 shrink-0 rounded-[1px] bg-current", config.color)} />
+          <span className={cn("truncate text-[9px] font-bold tracking-[0.06em]", config.color)}>
+            {STREAM_TYPE_CODES[event.streamType]}
+          </span>
+        </span>
+        <span className="truncate px-2 text-foreground/80">{timeStr}</span>
+        <span className="truncate px-2 text-orange-300" title={event.caster || undefined}>
+          {event.casterName || "—"}
+        </span>
+        <span className="min-w-0 truncate px-2">
+          {event.spellId ? (
+            <Link
+              to={`/wowdb/spell/${event.spellId}`}
+              className="text-blue-400 hover:text-blue-300"
+              title={event.sourceName}
+              onClick={(clickEvent) => clickEvent.stopPropagation()}
+            >
+              {event.sourceName || "—"}
+            </Link>
+          ) : (
+            <span className="text-blue-400" title={event.sourceName}>{event.sourceName || "—"}</span>
           )}
-          title={`${activity.type}: ${activity.name} (${activity.guid})`}
-        >
-          {activity.type === "slain" && "💀"}{activity.name}{i < event.activityEvents!.length - 1 && ","}
         </span>
-      ))}
-    </span>
-  ) : (
-    <span className="w-36 shrink-0 text-muted-foreground/30">-</span>
-  );
-  
-  const rowContent = (
-    <div className="flex items-center gap-2 text-xs font-mono py-0.5 border-b border-border/30 hover:bg-muted/30">
-      <span className="text-muted-foreground w-6 text-right shrink-0">{index}</span>
-      <Icon className={cn("h-3 w-3 shrink-0", config.color)} />
-      <span className="text-muted-foreground w-22 shrink-0">{timeStr}</span>
-      <span className="text-orange-400 w-24 shrink-0 truncate" title={event.caster}>{event.casterName || "-"}</span>
-      {event.spellId ? (
-        <Link
-          to={`/wowdb/spell/${event.spellId}`}
-          className="text-blue-400 hover:text-blue-300 w-24 shrink-0 truncate"
-          title={event.sourceName}
-          onClick={(e) => e.stopPropagation()}
+        <span
+          className={cn(
+            "truncate px-2",
+            event.affiliation === 1 ? "text-green-400" :
+            event.affiliation === 2 ? "text-red-400" :
+            event.affiliation === 3 ? "text-yellow-400" : "text-purple-300",
+          )}
+          title={event.target ?? undefined}
         >
-          {event.sourceName}
-        </Link>
-      ) : (
-        <span className="text-blue-400 w-24 shrink-0 truncate" title={event.sourceName}>
-          {event.sourceName}
+          {event.targetName || "—"}
         </span>
-      )}
-      <span className="text-muted-foreground shrink-0">→</span>
-      <span className={cn("w-24 shrink-0 truncate",
-        event.affiliation === 1 ? "text-green-400" :
-        event.affiliation === 2 ? "text-red-400" :
-        event.affiliation === 3 ? "text-yellow-400" :
-        "text-purple-400"
-      )} title={event.target ?? undefined}>{event.targetName}</span>
-      {event.extra ? (
-        <Tooltip>
-          <TooltipTrigger asChild>{amountElement}</TooltipTrigger>
-          <TooltipContent side="top">{event.extra}</TooltipContent>
-        </Tooltip>
-      ) : (
-        amountElement
-      )}
-      {trailerElement}
-      {activityEventElement}
-    </div>
-  );
+        <span className={cn("px-2 text-right font-semibold tabular-nums", amountColor)}>
+          {eventValue(event)}
+        </span>
+        <span className="truncate px-2 text-muted-foreground" title={eventDetail(event)}>
+          {eventDetail(event)}
+        </span>
+        <span className="flex min-w-0 gap-1 overflow-hidden px-2">
+          {event.flags?.length ? event.flags.map((flag) => (
+            <span
+              key={flag}
+              className={cn(
+                "shrink-0 rounded-sm border px-1 py-0.5 text-[8px] font-bold leading-none tracking-[0.04em]",
+                FLAG_STYLES[flag] ?? "border-border bg-muted text-muted-foreground",
+              )}
+            >
+              {flag}
+            </span>
+          )) : <span className="text-muted-foreground/30">—</span>}
+        </span>
+        <span className="flex min-w-0 gap-1 overflow-hidden px-2">
+          {event.activityEvents?.length ? event.activityEvents.map((activity, activityIndex) => (
+            <span
+              key={`${activity.guid}-${activity.type}-${activityIndex}`}
+              title={`${activity.type}: ${activity.name} (${activity.guid})`}
+              className={cn(
+                "shrink-0 rounded-sm border px-1 py-0.5 text-[8px] font-bold leading-none tracking-[0.04em]",
+                ACTIVITY_STYLES[activity.type],
+              )}
+            >
+              {activity.type}
+            </span>
+          )) : <span className="text-muted-foreground/30">—</span>}
+        </span>
+      </div>
 
-  if (event.gear && event.gear.length > 0) {
-    return (
-      <Tooltip>
-        <TooltipTrigger asChild>{rowContent}</TooltipTrigger>
-        <TooltipContent side="bottom" className="max-w-xs">
-          <div className="text-xs font-mono space-y-0.5">
-            <div className="font-semibold text-sky-400 mb-1">{event.casterName} — Equipment</div>
-            {event.gear.map((g, i) => (
-              <div key={i} className={cn("flex justify-between gap-3", g.itemId === 0 && "text-muted-foreground/40")}>
-                <span className="text-muted-foreground">{GEAR_SLOT_NAMES[i] ?? `Slot ${i}`}</span>
-                <span>{g.itemId > 0 ? g.itemId : "—"}{g.enchantId ? ` (ench: ${g.enchantId})` : ""}</span>
+      {expanded && (
+        <div className="border-b border-border/60 bg-background/70 px-4 py-3 shadow-inner">
+          <div className="mb-3 flex items-start gap-3">
+            <span className={cn("mt-0.5 font-mono text-[10px] font-bold tracking-[0.08em]", config.color)}>
+              {config.label.toUpperCase()}
+            </span>
+            <p className="text-xs text-foreground">
+              <span className="font-medium text-orange-300">{event.casterName || "Unknown source"}</span>
+              <span className="text-muted-foreground"> → </span>
+              <span className="font-medium text-blue-400">{event.sourceName || config.label}</span>
+              {event.targetName && <><span className="text-muted-foreground"> → </span><span className="font-medium text-purple-300">{event.targetName}</span></>}
+              <span className="text-muted-foreground"> · {eventDetail(event)}</span>
+            </p>
+          </div>
+
+          <div className="grid max-w-4xl grid-cols-[132px_minmax(0,1fr)] gap-x-4 font-mono text-[10px] leading-5">
+            {details.map((detail) => (
+              <div key={`${detail.label}-${detail.value}`} className="contents">
+                <span className="truncate text-muted-foreground">{detail.label}</span>
+                <span className="break-all text-foreground/85">{detail.value}</span>
               </div>
             ))}
           </div>
-        </TooltipContent>
-      </Tooltip>
-    );
-  }
 
-  return rowContent;
+          {event.activityEvents?.length ? (
+            <div className="mt-3 max-w-4xl rounded border border-teal-400/20 bg-teal-400/5 px-3 py-2">
+              <div className="mb-1 font-mono text-[9px] font-semibold tracking-[0.08em] text-teal-300">
+                ACTIVITY · {event.activityEvents.length}
+              </div>
+              {event.activityEvents.map((activity, activityIndex) => (
+                <div key={`${activity.guid}-${activityIndex}`} className="grid grid-cols-[52px_150px_minmax(0,1fr)] font-mono text-[10px] leading-5">
+                  <span className={cn("font-semibold", ACTIVITY_STYLES[activity.type]?.split(" ").find((value) => value.startsWith("text-")))}>{activity.type}</span>
+                  <span className="truncate text-foreground/85">{activity.name}</span>
+                  <span className="truncate text-muted-foreground">{activity.guid}</span>
+                </div>
+              ))}
+            </div>
+          ) : null}
+
+          {event.gear?.length ? (
+            <details className="mt-3 max-w-4xl">
+              <summary className="cursor-pointer font-mono text-[10px] text-sky-300">Equipment · {event.gear.length} slots</summary>
+              <div className="mt-2 grid grid-cols-2 gap-x-6 gap-y-1 font-mono text-[10px]">
+                {event.gear.map((gear, gearIndex) => (
+                  <div key={`${gear.itemId}-${gearIndex}`} className="flex justify-between gap-3 border-b border-border/30 py-0.5">
+                    <span className="text-muted-foreground">{GEAR_SLOT_NAMES[gearIndex] ?? `Slot ${gearIndex}`}</span>
+                    <span className={cn(gear.itemId === 0 && "text-muted-foreground/40")}>
+                      {gear.itemId || "—"}{gear.enchantId ? ` · enchant ${gear.enchantId}` : ""}
+                    </span>
+                  </div>
+                ))}
+              </div>
+            </details>
+          ) : null}
+        </div>
+      )}
+    </div>
+  );
 }
 
 // ============================================================================
@@ -535,12 +596,7 @@ function AllActivityContent({
       {/* Stream toggles and ability filter */}
       <div className="flex items-center gap-2 mb-2 flex-wrap">
         <span className="text-xs text-muted-foreground">Streams:</span>
-        {([
-          "damage", "heal", "resource_change", "extra_attack", "slain", "ressurection",
-          "aura", "aura_cast",
-          "spell_start", "spell_go", "spell_fail", "consume",
-          "unit_classification", "combatant_info", "dispel"
-        ] as StreamType[]).map((stream) => (
+        {ALL_ACTIVITY_STREAMS.map((stream) => (
           <StreamToggle
             key={stream}
             streamType={stream}
@@ -654,35 +710,38 @@ function AllActivityContent({
       
       {/* Raw events list */}
       <ScrollArea className="flex-1 min-h-0 border rounded">
-        <div className="p-1 min-w-max">
+        <div className="min-w-[1290px] p-1">
           {/* Header */}
-          <div className="flex items-center gap-2 text-[10px] font-medium text-muted-foreground py-1 border-b sticky top-0 bg-background">
-            <span className="w-6 text-right shrink-0">#</span>
-            <span className="w-3 shrink-0"></span>
+          <div
+            className="sticky top-0 z-10 grid items-center border-b border-border bg-background py-1.5 font-mono text-[9px] font-semibold uppercase tracking-[0.06em] text-muted-foreground"
+            style={{ gridTemplateColumns: EVENT_ROW_COLUMNS }}
+          >
+            <span className="pr-2 text-right">#</span>
+            <span className="px-1">Type</span>
             <button
               type="button"
               onClick={() => onToggleLocalTime?.()}
-              className="w-24 shrink-0 text-left hover:text-foreground transition-colors cursor-pointer"
+              className="cursor-pointer px-2 text-left transition-colors hover:text-foreground"
               title={useLocalTime ? "Click to show UTC time" : "Click to show local time"}
             >
               Time {useRelativeTime ? "" : useLocalTime ? "(local)" : "(UTC)"}
             </button>
-            <span className="w-24 shrink-0">Caster</span>
-            <span className="w-24 shrink-0">Ability</span>
-            <span className="shrink-0"></span>
-            <span className="w-24 shrink-0">Target</span>
-            <span className="w-12 text-right shrink-0">Amount</span>
-            <span className="w-44 shrink-0">Trailers</span>
+            <span className="px-2">Source</span>
+            <span className="px-2">Action / Ability</span>
+            <span className="px-2">Target</span>
+            <span className="px-2 text-right">Value</span>
+            <span className="px-2">Outcome / Detail</span>
+            <span className="px-2">Flags</span>
             <Tooltip>
               <TooltipTrigger asChild>
-                <span className="w-36 shrink-0 cursor-help">Activity <span className="text-muted-foreground">ⓘ</span></span>
+                <span className="cursor-help px-2">Activity ⓘ</span>
               </TooltipTrigger>
               <TooltipContent side="bottom" className="text-xs">
                 <div className="space-y-1">
-                  <div><span className="text-green-400 font-semibold">■</span> start - period began</div>
-                  <div><span className="text-yellow-400 font-semibold">■</span> bump - timer extended</div>
-                  <div><span className="text-orange-400 font-semibold">■</span> end - period ended</div>
-                  <div><span className="text-red-500 font-semibold">■</span> 💀 slain - unit died</div>
+                  <div><span className="font-semibold text-green-400">■</span> start, period began</div>
+                  <div><span className="font-semibold text-yellow-400">■</span> bump, timer extended</div>
+                  <div><span className="font-semibold text-orange-400">■</span> end, period ended</div>
+                  <div><span className="font-semibold text-red-500">■</span> slain, unit died</div>
                 </div>
               </TooltipContent>
             </Tooltip>

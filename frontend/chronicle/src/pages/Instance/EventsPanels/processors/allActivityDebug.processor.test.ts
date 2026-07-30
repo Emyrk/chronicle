@@ -184,7 +184,8 @@ describe("allActivityProcessor", () => {
       sourceName: "Major Mana Potion",
       amount: 1800,
       spellId: 24361,
-      extra: "kind=Active at Pull confidence=Effect Derived consume=consume-123 evidence=evidence-456 item=13444 candidates=13444|20002 resource=Mana projection",
+      extra: "kind=Active at Pull · confidence=Effect Derived · consume=consume-123 · evidence=evidence-456 · item=13444 · candidates=13444|20002 · resource=Mana · projection",
+      flags: ["SYNTHETIC", "ITEM", "PROJECTED"],
     });
   });
 });

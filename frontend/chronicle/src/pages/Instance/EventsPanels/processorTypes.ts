@@ -338,6 +338,7 @@ export interface AbsorbedProcessorEvent extends EventMeta {
   absorbSpellName: string | null;
   absorbSchool: number;          // School of the absorb spell
   amount: number;                // Damage absorbed
+  estimated: boolean;            // Attribution was inferred rather than reported directly
 }
 
 export interface CompanionStatsProcessorEvent extends EventMeta {
