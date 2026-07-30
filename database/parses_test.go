@@ -53,6 +53,7 @@ type rankingOpts struct {
 	hps            float64
 	killedAt       time.Time
 	isBoss         bool
+	instanceID     uuid.UUID
 	dupGroupID     *uuid.UUID
 }
 
@@ -77,7 +78,10 @@ func insertRankingRow(t *testing.T, pool *pgxpool.Pool, store database.Store, re
 	err = store.InsertParsedLogGroup(ctx, logGroupID)
 	require.NoError(t, err)
 
-	instanceID := uuid.New()
+	instanceID := opts.instanceID
+	if instanceID == uuid.Nil {
+		instanceID = uuid.New()
+	}
 	_, err = store.InsertInstance(ctx, database.InsertInstanceParams{
 		ID: instanceID, RealmID: realmID, LogGroupID: logGroupID,
 		Name: opts.instanceName, Capabilities: []string{},
@@ -630,22 +634,22 @@ func TestCohortAllKills(t *testing.T) {
 		killedAt: baseTime, isBoss: true,
 	})
 
-	// Player Z has two uploads of the SAME kill (duplicate group) — only the
-	// best copy should appear.
+	// Player Z has two uploads of the SAME kill (duplicate group). Only the
+	// canonical copy should appear, even though it is inserted first.
 	dupGroup := uuid.New()
 	insertRankingRow(t, pool, store, realmID, rankingOpts{
 		encounterName: "Ragnaros-AllKills", instanceName: "Molten Core",
 		playerGUID: "P-Z", playerClass: "Warrior", playerSpec: "Fury",
 		difficultyName: "Normal", maxPlayers: 40,
-		damageDone: 99000, durationSecs: 300, dps: 330,
+		damageDone: 105000, durationSecs: 300, dps: 350,
 		killedAt: baseTime, isBoss: true,
-		dupGroupID: &dupGroup,
+		instanceID: dupGroup, dupGroupID: &dupGroup,
 	})
 	insertRankingRow(t, pool, store, realmID, rankingOpts{
 		encounterName: "Ragnaros-AllKills", instanceName: "Molten Core",
 		playerGUID: "P-Z", playerClass: "Warrior", playerSpec: "Fury",
 		difficultyName: "Normal", maxPlayers: 40,
-		damageDone: 105000, durationSecs: 300, dps: 350,
+		damageDone: 99000, durationSecs: 300, dps: 330,
 		killedAt: baseTime, isBoss: true,
 		dupGroupID: &dupGroup,
 	})
@@ -674,7 +678,7 @@ func TestCohortAllKills(t *testing.T) {
 	})
 	require.NoError(t, err)
 
-	// Expect 4 rows: P-X(500), P-X(400), P-Y(450), P-Z(350 best dup copy).
+	// Expect 4 rows: P-X(500), P-X(400), P-Y(450), P-Z(350 canonical copy).
 	// NOT 3 (best-per-player) and NOT 5 (both dup copies).
 	assert.Len(t, cohort, 4, "all-kills cohort: 2 from P-X + 1 from P-Y + 1 from P-Z (dup collapsed)")
 
