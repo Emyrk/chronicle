@@ -23,6 +23,7 @@ import { metricsProcessor } from "../Metrics/metrics.processor";
 import { auraUptimeProcessor } from "../AuraUptime/auraUptime.processor";
 import { comparisonProcessor } from "../ComparisonPanel/comparison.processor";
 import { timelineProcessor } from "../Timeline/timeline.processor";
+import { playerActionTimelineProcessor } from "../Strips/PlayerActionTimeline/playerActionTimeline.processor";
 import { rotationsProcessor } from "../Rotations/rotations.processor";
 import { statusProcessor } from "../Status/status.processor";
 import { healerCastsProcessor } from "../HealerCasts/healerCasts.processor";
@@ -61,6 +62,7 @@ export { metricsProcessor } from "../Metrics/metrics.processor";
 export { auraUptimeProcessor } from "../AuraUptime/auraUptime.processor";
 export { comparisonProcessor } from "../ComparisonPanel/comparison.processor";
 export { timelineProcessor } from "../Timeline/timeline.processor";
+export { playerActionTimelineProcessor } from "../Strips/PlayerActionTimeline/playerActionTimeline.processor";
 export { rotationsProcessor } from "../Rotations/rotations.processor";
 export { statusProcessor } from "../Status/status.processor";
 export { healerCastsProcessor } from "../HealerCasts/healerCasts.processor";
@@ -170,6 +172,7 @@ export const processorRegistry: Record<string, PanelProcessor<any, any>> = {
   // Replay
   status: statusProcessor,
   healer_casts: healerCastsProcessor,
+  player_action_timeline_strip: playerActionTimelineProcessor,
   replay_strip: { ...emptyProcessor, id: "replay_strip" },
   raid_durability_strip: { ...statusProcessor, id: "raid_durability_strip" },
   // Rotations

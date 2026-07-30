@@ -1,5 +1,5 @@
 /* eslint-disable react-refresh/only-export-components -- strip definitions and their renderers are intentionally colocated */
-import { Activity, Timer } from "lucide-react";
+import { Activity, ListVideo, Timer } from "lucide-react";
 import { useMemo } from "react";
 import { cn } from "@/lib/utils";
 import { ReplayTransportBar, usePlayerDeathTimes } from "../../ReplayControlOverlay";
@@ -13,6 +13,11 @@ import {
   statusRaidHealthTimeline,
 } from "../Status/statusRaidHealth";
 import { selectStatusEncounter, statusCursorMilli } from "../Status/statusTimeline";
+import { PlayerActionTimeline } from "./PlayerActionTimeline/PlayerActionTimeline";
+import {
+  playerActionTimelineProcessor,
+  type PlayerActionTimelineResult,
+} from "./PlayerActionTimeline/playerActionTimeline.processor";
 import {
   stripOptionValue,
   stripTitleMode,
@@ -202,6 +207,22 @@ export const STRIPS: Record<StripType, StripDefinition<any, any>> = {
     defaultOrientation: "horizontal",
     size: DEFAULT_SIZE,
     render: () => <ReplayStrip />,
+  },
+  player_action_timeline: {
+    ...playerActionTimelineProcessor,
+    label: "Player Action Timeline",
+    icon: <ListVideo className="h-4 w-4" />,
+    syncDataMode: "full",
+    supportedOrientations: HORIZONTAL_ONLY,
+    defaultOrientation: "horizontal",
+    size: {
+      minLength: 8,
+      preferredLength: 12,
+      minThickness: 1,
+      preferredThickness: 1,
+      maxThickness: 2,
+    },
+    render: (props: StripRenderProps<PlayerActionTimelineResult>) => <PlayerActionTimeline {...props} />,
   },
   raid_durability: {
     ...statusProcessor,
