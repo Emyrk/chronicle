@@ -204,7 +204,7 @@ const GEAR_SLOT_NAMES = [
   "Back", "Main Hand", "Off Hand", "Ranged", "Tabard",
 ];
 
-const EVENT_ROW_COLUMNS = "42px 64px 116px 132px minmax(150px, 1fr) 132px 72px minmax(190px, 1.2fr) 150px 132px";
+const EVENT_ROW_COLUMNS = "32px 72px 116px 132px minmax(150px, 1fr) 132px 72px minmax(190px, 1.2fr) 150px 132px";
 
 const FLAG_STYLES: Record<string, string> = {
   SYNTHETIC: "border-violet-400/25 bg-violet-400/10 text-violet-300",
@@ -238,6 +238,7 @@ interface RawEventRowProps {
 function RawEventRow({ event, index, useRelativeTime = false, useLocalTime = false }: RawEventRowProps) {
   const [expanded, setExpanded] = useState(false);
   const config = STREAM_CONFIG[event.streamType];
+  const Icon = config.icon;
   const timeStr = useRelativeTime
     ? formatRelativeTime(event.offsetMilli)
     : formatTimestamp(event.dateMilli, useLocalTime);
@@ -276,9 +277,9 @@ function RawEventRow({ event, index, useRelativeTime = false, useLocalTime = fal
         )}
         style={{ gridTemplateColumns: EVENT_ROW_COLUMNS }}
       >
-        <span className="pr-2 text-right text-muted-foreground/70">{index}</span>
+        <span className="pr-1 text-right text-muted-foreground/70">{index}</span>
         <span className="flex min-w-0 items-center gap-1.5 px-1" title={config.label}>
-          <span className={cn("h-1.5 w-1.5 shrink-0 rounded-[1px] bg-current", config.color)} />
+          <Icon className={cn("h-3 w-3 shrink-0", config.color)} />
           <span className={cn("truncate text-[9px] font-bold tracking-[0.06em]", config.color)}>
             {STREAM_TYPE_CODES[event.streamType]}
           </span>
@@ -716,7 +717,7 @@ function AllActivityContent({
             className="sticky top-0 z-10 grid items-center border-b border-border bg-background py-1.5 font-mono text-[9px] font-semibold uppercase tracking-[0.06em] text-muted-foreground"
             style={{ gridTemplateColumns: EVENT_ROW_COLUMNS }}
           >
-            <span className="pr-2 text-right">#</span>
+            <span className="pr-1 text-right">#</span>
             <span className="px-1">Type</span>
             <button
               type="button"
