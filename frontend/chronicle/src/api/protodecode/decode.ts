@@ -1070,6 +1070,8 @@ export interface ReusableExtraAttack {
   target: string;
   amount: number;
   sourceName: string;
+  spellId: number | null;
+  spellAttackOutcome: number | null;
   activity: ReusableActivityEntry[];
   activityCount: number;
   isSynthetic: boolean;
@@ -1083,6 +1085,7 @@ export interface ReusableExtraAttack {
  *   2: target (string)
  *   3: amount (int32)
  *   5: sourceName (string)
+ *   6: spellData (SpellData) - nested: 1=id, 2=name, 3=attack_outcome
  */
 export class ExtraAttackDecoder {
   // Use shared TextDecoder for better memory efficiency
@@ -1096,6 +1099,8 @@ export class ExtraAttackDecoder {
     target: "",
     amount: 0,
     sourceName: "",
+    spellId: null,
+    spellAttackOutcome: null,
     activity: [],
     activityCount: 0,
     isSynthetic: false,
@@ -1115,6 +1120,8 @@ export class ExtraAttackDecoder {
     msg.target = "";
     msg.amount = 0;
     msg.sourceName = "";
+    msg.spellId = null;
+    msg.spellAttackOutcome = null;
     msg.activityCount = 0;
     msg.isSynthetic = false;
     
@@ -1177,6 +1184,22 @@ export class ExtraAttackDecoder {
         } else if (fieldNumber === 5) {
           msg.sourceName = this.textDecoder.decode(data.subarray(offset, offset + len));
           offset += len;
+        } else if (fieldNumber === 6) {
+          const spellEnd = offset + len;
+          while (offset < spellEnd) {
+            const spellTag = data[offset++];
+            const spellField = spellTag >> 3;
+            const spellWire = spellTag & 0x7;
+            if (spellWire === 0) {
+              const { value, bytesRead } = readVarintFast(data, offset);
+              offset += bytesRead;
+              if (spellField === 1) msg.spellId = value;
+              else if (spellField === 3) msg.spellAttackOutcome = value;
+            } else if (spellWire === 2) {
+              const { value: spellLen, bytesRead } = readVarintFast(data, offset);
+              offset += bytesRead + spellLen;
+            }
+          }
         } else {
           offset += len;
         }

@@ -580,6 +580,7 @@ export const allActivityProcessor: PanelProcessor<AllActivityDebugState, AllActi
       if (absorbedEvent.estimated) rawEvent.flags?.push("ESTIMATED");
     } else if (streamType === "extra_attack") {
       const extraEvent = event as ExtraAttackProcessorEvent;
+      rawEvent.spellId = extraEvent.spellId ?? undefined;
       rawEvent.extra = `extra attacks=${extraEvent.amount}`;
     } else if (streamType === "dispel") {
       const dispelEvent = event as DispelProcessorEvent;

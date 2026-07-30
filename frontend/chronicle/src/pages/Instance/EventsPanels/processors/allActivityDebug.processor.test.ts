@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { HitTypeCrushing, HitTypeFullResist, HitTypeGlancing, HitTypeImmune, HitTypePartialAbsorb, HitTypePartialBlock, HitTypePartialResist } from "@/lib/hittype/hittype";
-import type { ConsumeProcessorEvent, DamageProcessorEvent, ProcessorContext, ResourceChangeProcessorEvent, ResurrectionProcessorEvent, SpellStartProcessorEvent } from "../processorTypes";
+import type { ConsumeProcessorEvent, DamageProcessorEvent, ExtraAttackProcessorEvent, ProcessorContext, ResourceChangeProcessorEvent, ResurrectionProcessorEvent, SpellStartProcessorEvent } from "../processorTypes";
 import { allActivityProcessor } from "./allActivityDebug.processor";
 
 function createContext(): ProcessorContext {
@@ -103,6 +103,38 @@ describe("allActivityProcessor", () => {
     );
 
     expect(state.rawEventsByStream.damage[0].flags).toEqual(["GLANCING", "CRUSHING"]);
+  });
+
+  it("captures extra-attack spell details", () => {
+    const state = allActivityProcessor.createState();
+    const event: ExtraAttackProcessorEvent = {
+      type: "extra_attack",
+      index: 9,
+      offsetMilli: 2250,
+      target: "player",
+      amount: 2,
+      sourceName: "Windfury Attack",
+      spellId: 25504,
+      spellAttackOutcome: null,
+      activity: [],
+      activityCount: 0,
+      isSynthetic: false,
+    };
+
+    allActivityProcessor.processEvent(
+      state,
+      event,
+      "encounter",
+      new Date("2026-07-14T17:41:42.709Z"),
+      "extra_attack",
+      createContext(),
+    );
+
+    expect(state.rawEventsByStream.extra_attack[0]).toMatchObject({
+      sourceName: "Windfury Attack",
+      spellId: 25504,
+      extra: "extra attacks=2",
+    });
   });
 
   it("captures resource type, waste, flag, and spell details", () => {

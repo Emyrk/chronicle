@@ -111,6 +111,8 @@ export interface ExtraAttackProcessorEvent extends EventMeta {
   target: string;  // The player who gained extra attacks
   amount: number;  // Number of extra attacks granted
   sourceName: string;  // Name of the ability that granted extra attacks
+  spellId: number | null;
+  spellAttackOutcome: number | null;
 }
 
 /**
