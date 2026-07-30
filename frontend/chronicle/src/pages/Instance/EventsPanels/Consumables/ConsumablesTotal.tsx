@@ -1,5 +1,7 @@
-import { useState } from "react";
-import { FlaskConical, HelpCircle, X } from "lucide-react";
+import { useMemo, useState } from "react";
+import { useQueries } from "@tanstack/react-query";
+import { FlaskConical, HelpCircle, Search, X } from "lucide-react";
+import { fetchItemTooltip } from "@/api/gamedata";
 import { ScrollArea } from "@/components/ui/ScrollArea/ScrollArea";
 import { SpellIdTooltip } from "@/components/ui/SpellIdTooltip/SpellIdTooltip";
 import { useCachedValue } from "@/hooks/useCachedValue";
@@ -13,7 +15,11 @@ import {
   type ConsumablesResult,
 } from "./consumables.processor";
 import { ItemCell } from "./ConsumablesContent";
-import { aggregateConsumablesTotal, type ConsumableCount } from "./consumablesTotal";
+import {
+  aggregateConsumablesTotal,
+  filterConsumablesTotal,
+  type ConsumableCount,
+} from "./consumablesTotal";
 
 interface PossibleBreakoutState {
   key: string;
@@ -89,9 +95,9 @@ function PossibleItemsBreakout({ consume, onClose }: { consume: ConsumableCount;
           <h4 className="mb-2 text-2xs font-semibold uppercase tracking-wider text-muted-foreground">Possible items</h4>
           <div className="grid gap-1.5 sm:grid-cols-2">
             {consume.candidateItemIds.map((itemId) => (
-              <div key={itemId} className="flex items-center justify-between gap-3 rounded border border-border/60 bg-muted/20 px-2 py-1.5">
-                <ItemCell itemId={itemId} link />
-                <span className="shrink-0 font-mono text-2xs text-muted-foreground">#{itemId}</span>
+              <div key={itemId} className="flex items-center justify-between gap-2 rounded border border-border/60 bg-muted/20 px-2 py-1 text-xs">
+                <ItemCell itemId={itemId} link compact />
+                <span className="shrink-0 font-mono text-[9px] text-muted-foreground">#{itemId}</span>
               </div>
             ))}
           </div>
@@ -100,14 +106,14 @@ function PossibleItemsBreakout({ consume, onClose }: { consume: ConsumableCount;
         <section>
           <h4 className="mb-2 text-2xs font-semibold uppercase tracking-wider text-muted-foreground">Why these are possible</h4>
           <div className="space-y-1.5">
-            {consume.possibleSources.map((source) => (
-              <div key={source.consumeId} className="rounded border border-border/60 bg-muted/20 px-2.5 py-2">
+            {consume.sources.map((source) => (
+              <div key={source.consumeId} className="rounded border border-border/60 bg-muted/20 px-2 py-1.5 text-xs">
                 <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
                   <SpellIdTooltip
                     spellId={source.spellId}
                     name={source.spellName || "Unknown effect"}
-                    size={16}
-                    className="font-medium"
+                    size={13}
+                    className="font-medium text-xs"
                   />
                   {source.spellId !== null && (
                     <span className="font-mono text-2xs text-muted-foreground">spell #{source.spellId}</span>
@@ -143,6 +149,7 @@ export function ConsumablesTotalContent(props: ConsumablesTotalContentProps) {
   );
 
   const [possibleBreakout, setPossibleBreakout] = useState<PossibleBreakoutState | null>(null);
+  const [filter, setFilter] = useState("");
 
   const openPossibleBreakout = (consume: ConsumableCount, target: HTMLElement) => {
     const rect = target.getBoundingClientRect();
@@ -152,12 +159,36 @@ export function ConsumablesTotalContent(props: ConsumablesTotalContentProps) {
     setPossibleBreakout({ key: consume.key, consume, initialPosition: { x, y } });
   };
 
-  const rows = aggregateConsumablesTotal(cachedResult?.uses.values() ?? []);
-  rows.sort((a, b) => {
-    const aName = context.instance.players?.[a.playerId]?.name ?? a.playerId;
-    const bName = context.instance.players?.[b.playerId]?.name ?? b.playerId;
-    return aName.localeCompare(bName);
+  const rows = useMemo(() => {
+    const aggregated = aggregateConsumablesTotal(cachedResult?.uses.values() ?? []);
+    aggregated.sort((a, b) => {
+      const aName = context.instance.players?.[a.playerId]?.name ?? a.playerId;
+      const bName = context.instance.players?.[b.playerId]?.name ?? b.playerId;
+      return aName.localeCompare(bName);
+    });
+    return aggregated;
+  }, [cachedResult, context.instance.players]);
+
+  const itemIds = useMemo(() => [...new Set(rows.flatMap((row) =>
+    row.consumes.flatMap((consume) => consume.itemId !== null ? [consume.itemId] : consume.candidateItemIds),
+  ))], [rows]);
+  const itemQueries = useQueries({
+    queries: itemIds.map((itemId) => ({
+      queryKey: ["item-tooltip", itemId, undefined, undefined],
+      queryFn: () => fetchItemTooltip({ itemId }),
+      enabled: filter.trim().length > 0,
+      staleTime: 5 * 60 * 1000,
+      retry: false,
+    })),
   });
+  const itemNames = new Map<number, string>();
+  itemIds.forEach((itemId, index) => {
+    const name = itemQueries[index]?.data?.name;
+    if (name) itemNames.set(itemId, name);
+  });
+  const filteredRows = filterConsumablesTotal(rows, filter, itemNames);
+  const itemNamesLoading = filter.trim().length > 0
+    && itemQueries.some((query) => query.isPending || query.isFetching);
 
   const effectiveProps = {
     ...props,
@@ -168,54 +199,82 @@ export function ConsumablesTotalContent(props: ConsumablesTotalContentProps) {
   return (
     <>
       <GenericPanel {...effectiveProps}>
-        {rows.length === 0 ? (
-          <div className="py-4 text-center text-xs text-muted-foreground">
-            {loading ? "Loading..." : "No consumable uses recorded"}
-          </div>
-        ) : (
-          <ScrollArea className="h-full min-h-0">
-            <table className="w-full text-xs">
-              <thead className="sticky top-0 z-10 bg-card">
-                <tr className="border-b border-border text-muted-foreground">
-                  <th className="w-40 px-2 py-1.5 text-left font-medium">Player</th>
-                  <th className="w-14 px-2 py-1.5 text-right font-medium">Total</th>
-                  <th className="px-2 py-1.5 text-left font-medium">Consumes</th>
-                </tr>
-              </thead>
-              <tbody>
-                {rows.map((row, rowIndex) => {
-                  const player = context.instance.players?.[row.playerId];
-                  return (
-                    <tr
-                      key={row.playerId}
-                      className={rowIndex % 2 === 0
-                        ? "border-b border-border/20 align-top bg-muted/10 hover:bg-muted/30"
-                        : "border-b border-border/20 align-top bg-muted/25 hover:bg-muted/40"}
-                    >
-                      <td className="px-2 py-2 font-medium">
-                        <span style={{ color: `var(--color-class-${(player?.class ?? "unknown").toLowerCase()})` }}>
-                          {player?.name ?? row.playerId}
-                        </span>
-                      </td>
-                      <td className="px-2 py-2 text-right font-semibold tabular-nums">{row.total}</td>
-                      <td className="px-2 py-1.5">
-                        <div className="flex flex-wrap gap-1.5">
-                          {row.consumes.map((consume) => (
-                            <ConsumeCount
-                              key={consume.key}
-                              consume={consume}
-                              onOpenPossible={openPossibleBreakout}
-                            />
-                          ))}
-                        </div>
-                      </td>
-                    </tr>
-                  );
-                })}
-              </tbody>
-            </table>
-          </ScrollArea>
-        )}
+        <div className="flex h-full min-h-0 flex-col gap-2">
+          <label className="relative block shrink-0">
+            <Search className="pointer-events-none absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-muted-foreground" />
+            <input
+              type="search"
+              value={filter}
+              onChange={(event) => setFilter(event.target.value)}
+              placeholder="Filter items or effects..."
+              aria-label="Filter consumables by item or effect"
+              className="h-8 w-full rounded border border-border bg-background/70 pl-8 pr-8 text-xs outline-none transition-colors placeholder:text-muted-foreground focus:border-ring"
+            />
+            {filter && (
+              <button
+                type="button"
+                onClick={() => setFilter("")}
+                className="absolute right-1.5 top-1/2 -translate-y-1/2 rounded p-1 text-muted-foreground hover:bg-muted hover:text-foreground"
+                aria-label="Clear consumables filter"
+              >
+                <X className="h-3 w-3" />
+              </button>
+            )}
+          </label>
+
+          {rows.length === 0 ? (
+            <div className="py-4 text-center text-xs text-muted-foreground">
+              {loading ? "Loading..." : "No consumable uses recorded"}
+            </div>
+          ) : filteredRows.length === 0 ? (
+            <div className="py-4 text-center text-xs text-muted-foreground">
+              {itemNamesLoading ? "Searching item names..." : <>No items or effects match “{filter}”</>}
+            </div>
+          ) : (
+            <ScrollArea className="min-h-0 flex-1">
+              <table className="w-full text-xs">
+                <thead className="sticky top-0 z-10 bg-card">
+                  <tr className="border-b border-border text-muted-foreground">
+                    <th className="w-40 px-2 py-1.5 text-left font-medium">Player</th>
+                    <th className="w-14 px-2 py-1.5 text-right font-medium">Total</th>
+                    <th className="px-2 py-1.5 text-left font-medium">Consumes</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {filteredRows.map((row, rowIndex) => {
+                    const player = context.instance.players?.[row.playerId];
+                    return (
+                      <tr
+                        key={row.playerId}
+                        className={rowIndex % 2 === 0
+                          ? "border-b border-border/20 align-top bg-muted/10 hover:bg-muted/30"
+                          : "border-b border-border/20 align-top bg-muted/25 hover:bg-muted/40"}
+                      >
+                        <td className="px-2 py-2 font-medium">
+                          <span style={{ color: `var(--color-class-${(player?.class ?? "unknown").toLowerCase()})` }}>
+                            {player?.name ?? row.playerId}
+                          </span>
+                        </td>
+                        <td className="px-2 py-2 text-right font-semibold tabular-nums">{row.total}</td>
+                        <td className="px-2 py-1.5">
+                          <div className="flex flex-wrap gap-1.5">
+                            {row.consumes.map((consume) => (
+                              <ConsumeCount
+                                key={consume.key}
+                                consume={consume}
+                                onOpenPossible={openPossibleBreakout}
+                              />
+                            ))}
+                          </div>
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </ScrollArea>
+          )}
+        </div>
       </GenericPanel>
       {possibleBreakout && (
         <FloatingIncomingEventsBreakout

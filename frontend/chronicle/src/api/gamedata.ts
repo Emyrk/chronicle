@@ -7,7 +7,7 @@ export interface FetchItemTooltipParams {
   enchant?: number;
 }
 
-async function fetchItemTooltip({ itemId, randomProperty, enchant }: FetchItemTooltipParams): Promise<ItemTooltip> {
+export async function fetchItemTooltip({ itemId, randomProperty, enchant }: FetchItemTooltipParams): Promise<ItemTooltip> {
   const params = new URLSearchParams();
   if (randomProperty) params.set("random_property", randomProperty.toString());
   if (enchant) params.set("enchant", enchant.toString());

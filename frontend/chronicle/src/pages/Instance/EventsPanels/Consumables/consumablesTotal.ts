@@ -13,13 +13,52 @@ export interface ConsumableCount {
   count: number;
   itemId: number | null;
   candidateItemIds: number[];
-  possibleSources: PossibleConsumeSource[];
+  sources: PossibleConsumeSource[];
 }
 
 export interface PlayerConsumablesTotal {
   playerId: string;
   total: number;
   consumes: ConsumableCount[];
+}
+
+/** Case-insensitive fuzzy subsequence match. */
+export function fuzzyConsumableMatch(query: string, values: Iterable<string>): boolean {
+  const needle = query.toLocaleLowerCase().replace(/\s+/g, "");
+  if (!needle) return true;
+
+  for (const value of values) {
+    const haystack = value.toLocaleLowerCase().replace(/\s+/g, "");
+    let needleIndex = 0;
+    for (let i = 0; i < haystack.length && needleIndex < needle.length; i += 1) {
+      if (haystack[i] === needle[needleIndex]) needleIndex += 1;
+    }
+    if (needleIndex === needle.length) return true;
+  }
+  return false;
+}
+
+export function filterConsumablesTotal(
+  rows: PlayerConsumablesTotal[],
+  query: string,
+  itemNames: ReadonlyMap<number, string>,
+): PlayerConsumablesTotal[] {
+  if (!query.trim()) return rows;
+
+  return rows.flatMap((row) => {
+    const consumes = row.consumes.filter((consume) => {
+      const itemIds = consume.itemId !== null ? [consume.itemId] : consume.candidateItemIds;
+      const searchable = [
+        ...itemIds.flatMap((itemId) => [itemNames.get(itemId) ?? "", itemId.toString()]),
+        ...consume.sources.flatMap((source) => [source.spellName, source.spellId?.toString() ?? ""]),
+      ];
+      return fuzzyConsumableMatch(query, searchable);
+    });
+
+    return consumes.length > 0
+      ? [{ ...row, total: consumes.reduce((total, consume) => total + consume.count, 0), consumes }]
+      : [];
+  });
 }
 
 function itemIdentity(use: ConsumableUse): { key: string; itemId: number | null; candidateItemIds: number[] } {
@@ -60,14 +99,14 @@ export function aggregateConsumablesTotal(uses: Iterable<ConsumableUse>): Player
     };
     if (existing) {
       existing.count += 1;
-      if (identity.candidateItemIds.length > 1) existing.possibleSources.push(source);
+      existing.sources.push(source);
       continue;
     }
 
     player.consumes.set(identity.key, {
       ...identity,
       count: 1,
-      possibleSources: identity.candidateItemIds.length > 1 ? [source] : [],
+      sources: [source],
     });
   }
 

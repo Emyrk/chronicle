@@ -118,7 +118,7 @@ function useInView<T extends Element>(): [React.RefObject<T | null>, boolean] {
 
 /** Item icon + name with a full item tooltip on hover. Optionally links to the
  * item's wowdb page. Item data loads only when scrolled into view. */
-export function ItemCell({ itemId, link }: { itemId: number; link?: boolean }) {
+export function ItemCell({ itemId, link, compact = false }: { itemId: number; link?: boolean; compact?: boolean }) {
   const iconBaseUrl = useIconBaseUrl();
   const [hovered, setHovered] = useState(false);
   const [inViewRef, inView] = useInView<HTMLSpanElement>();
@@ -131,7 +131,9 @@ export function ItemCell({ itemId, link }: { itemId: number; link?: boolean }) {
   const body = (
     <>
       <span ref={inViewRef} className={cn(
-        "w-4.5 h-4.5 shrink-0 rounded border bg-zinc-900/80 flex items-center justify-center overflow-hidden",
+        compact
+          ? "w-3.5 h-3.5 shrink-0 rounded border bg-zinc-900/80 flex items-center justify-center overflow-hidden"
+          : "w-4.5 h-4.5 shrink-0 rounded border bg-zinc-900/80 flex items-center justify-center overflow-hidden",
         getQualityBorderClass(quality),
       )}>
         {icon ? (
@@ -151,7 +153,7 @@ export function ItemCell({ itemId, link }: { itemId: number; link?: boolean }) {
     </>
   );
 
-  const className = "relative inline-flex items-center gap-1.5";
+  const className = cn("relative inline-flex items-center", compact ? "gap-1 text-xs" : "gap-1.5");
   if (link) {
     return (
       <Link

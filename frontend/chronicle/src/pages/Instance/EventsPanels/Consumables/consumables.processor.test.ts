@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import type { ConsumeProcessorEvent, ProcessorContext } from "../processorTypes";
 import { consumableDisplayName, consumablesProcessor, consumablesTotalProcessor } from "./consumables.processor";
-import { aggregateConsumablesTotal } from "./consumablesTotal";
+import { aggregateConsumablesTotal, filterConsumablesTotal, fuzzyConsumableMatch } from "./consumablesTotal";
 
 function createContext(overrides?: Partial<ProcessorContext>): ProcessorContext {
   return {
@@ -211,20 +211,20 @@ describe("consumablesProcessor", () => {
       consumeEvent({ consumeId: "flask-3", evidenceId: "flask-3", player: "p2", itemId: 13510, spell: { id: 17626, name: "Flask of the Titans" } }),
     ]);
 
-    expect(aggregateConsumablesTotal(state.uses.values())).toEqual([
+    expect(aggregateConsumablesTotal(state.uses.values())).toMatchObject([
       {
         playerId: "p1",
         total: 3,
         consumes: [
-          { key: "item:13510", count: 2, itemId: 13510, candidateItemIds: [], possibleSources: [] },
-          { key: "item:13444", count: 1, itemId: 13444, candidateItemIds: [], possibleSources: [] },
+          { key: "item:13510", count: 2, itemId: 13510, candidateItemIds: [] },
+          { key: "item:13444", count: 1, itemId: 13444, candidateItemIds: [] },
         ],
       },
       {
         playerId: "p2",
         total: 1,
         consumes: [
-          { key: "item:13510", count: 1, itemId: 13510, candidateItemIds: [], possibleSources: [] },
+          { key: "item:13510", count: 1, itemId: 13510, candidateItemIds: [] },
         ],
       },
     ]);
@@ -257,14 +257,14 @@ describe("consumablesProcessor", () => {
       }),
     ]);
 
-    expect(aggregateConsumablesTotal(state.uses.values())[0].consumes).toEqual([
-      { key: "item:13444", count: 2, itemId: 13444, candidateItemIds: [], possibleSources: [] },
+    expect(aggregateConsumablesTotal(state.uses.values())[0].consumes).toMatchObject([
+      { key: "item:13444", count: 2, itemId: 13444, candidateItemIds: [] },
       {
         key: "candidates:1,2",
         count: 1,
         itemId: null,
         candidateItemIds: [1, 2],
-        possibleSources: [
+        sources: [
           {
             consumeId: "item-3",
             spellId: 17626,
@@ -275,5 +275,50 @@ describe("consumablesProcessor", () => {
         ],
       },
     ]);
+  });
+
+  it("fuzzy matches case-insensitively and allows non-contiguous letters", () => {
+    expect(fuzzyConsumableMatch("fOtT", ["Flask of the Titans"])).toBe(true);
+    expect(fuzzyConsumableMatch("mana", ["Major Mana Potion"])).toBe(true);
+    expect(fuzzyConsumableMatch("rage", ["Major Mana Potion"])).toBe(false);
+  });
+
+  it("filters definite and possible consumes by item names and effect names", () => {
+    const state = process([
+      consumeEvent({
+        consumeId: "flask",
+        evidenceId: "flask",
+        player: "p1",
+        itemId: 13510,
+        spell: { id: 17626, name: "Flask of the Titans" },
+      }),
+      consumeEvent({
+        consumeId: "food",
+        evidenceId: "food",
+        player: "p1",
+        candidateItemIds: [13724, 20224, 20225],
+        candidateItemIdsCount: 3,
+        spell: { id: 25695, name: "Food" },
+        kind: 7,
+        confidence: 3,
+      }),
+    ]);
+    const rows = aggregateConsumablesTotal(state.uses.values());
+    const itemNames = new Map([
+      [13510, "Flask of the Titans"],
+      [13724, "Enriched Manna Biscuit"],
+      [20224, "Defiler's Enriched Ration"],
+      [20225, "Highlander's Enriched Ration"],
+    ]);
+
+    expect(filterConsumablesTotal(rows, "manna", itemNames)[0].consumes.map((consume) => consume.key))
+      .toEqual(["candidates:13724,20224,20225"]);
+    expect(filterConsumablesTotal(rows, "FOOD", itemNames)[0].consumes.map((consume) => consume.key))
+      .toEqual(["candidates:13724,20224,20225"]);
+    expect(filterConsumablesTotal(rows, "titan", itemNames)[0]).toMatchObject({
+      total: 1,
+      consumes: [{ key: "item:13510" }],
+    });
+    expect(filterConsumablesTotal(rows, "missing", itemNames)).toEqual([]);
   });
 });
