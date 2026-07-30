@@ -4,6 +4,7 @@
  */
 
 import { useCallback, useMemo, useState } from "react";
+import { Link } from "react-router-dom";
 import { ChevronDown, ChevronRight, HelpCircle, Hourglass } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { iconUrl } from "@/config/iconUrl";
@@ -105,8 +106,9 @@ function SpellCell({ spellId, name }: { spellId: number | null; name: string }) 
   );
 }
 
-/** Item icon + name with a full item tooltip on hover. */
-function ItemCell({ itemId, ambiguous }: { itemId: number; ambiguous?: boolean }) {
+/** Item icon + name with a full item tooltip on hover. Optionally links to the
+ * item's wowdb page. */
+function ItemCell({ itemId, link }: { itemId: number; link?: boolean }) {
   const iconBaseUrl = useIconBaseUrl();
   const [hovered, setHovered] = useState(false);
   const tooltip = useItemTooltip(itemId > 0 ? { itemId } : null);
@@ -115,12 +117,8 @@ function ItemCell({ itemId, ambiguous }: { itemId: number; ambiguous?: boolean }
   const icon = tooltip.data?.icon;
   const name = tooltip.data?.name ?? `Item ${itemId}`;
 
-  return (
-    <span
-      className="relative inline-flex items-center gap-1.5"
-      onMouseEnter={() => setHovered(true)}
-      onMouseLeave={() => setHovered(false)}
-    >
+  const body = (
+    <>
       <span className={cn(
         "w-4.5 h-4.5 shrink-0 rounded border bg-zinc-900/80 flex items-center justify-center overflow-hidden",
         getQualityBorderClass(quality),
@@ -131,31 +129,45 @@ function ItemCell({ itemId, ambiguous }: { itemId: number; ambiguous?: boolean }
           <HelpCircle className="w-3 h-3 text-zinc-500" />
         )}
       </span>
-      <span className={cn("truncate", getQualityTextClass(quality))}>
+      <span className={cn("truncate", getQualityTextClass(quality), link && "hover:underline")}>
         {name}
-        {ambiguous && <span className="text-muted-foreground">?</span>}
       </span>
       {hovered && tooltip.data && (
         <div className="fixed inset-0 z-50 flex items-center justify-center -translate-y-[15%] pointer-events-none">
           <ItemTooltip item={tooltip.data} />
         </div>
       )}
+    </>
+  );
+
+  const className = "relative inline-flex items-center gap-1.5";
+  if (link) {
+    return (
+      <Link
+        to={`/wowdb/item?id=${itemId}`}
+        className={className}
+        onClick={(e) => e.stopPropagation()}
+        onMouseEnter={() => setHovered(true)}
+        onMouseLeave={() => setHovered(false)}
+      >
+        {body}
+      </Link>
+    );
+  }
+  return (
+    <span className={className} onMouseEnter={() => setHovered(true)} onMouseLeave={() => setHovered(false)}>
+      {body}
     </span>
   );
 }
 
-/** Item column: known item, ambiguous candidates, or a dash. */
+/** Item column: known item, candidate count when ambiguous, or a dash. */
 function ItemsCell({ use }: { use: ConsumableUse }) {
   if (use.itemId !== null) return <ItemCell itemId={use.itemId} />;
   if (use.candidateItemIds.length > 0) {
     return (
-      <span className="inline-flex items-center gap-2">
-        {use.candidateItemIds.slice(0, 3).map((id) => (
-          <ItemCell key={id} itemId={id} ambiguous />
-        ))}
-        {use.candidateItemIds.length > 3 && (
-          <span className="text-muted-foreground text-2xs">+{use.candidateItemIds.length - 3}</span>
-        )}
+      <span className="text-muted-foreground" title="Expand the row to see all candidate items">
+        {use.candidateItemIds.length} possible items
       </span>
     );
   }
@@ -181,14 +193,38 @@ function AurasCell({ use }: { use: ConsumableUse }) {
 function EvidenceDetails({ use, encounterNames }: { use: ConsumableUse; encounterNames: Map<string, string> }) {
   return (
     <div className="px-8 py-2 text-2xs space-y-2 bg-muted/20">
-      <div className="grid grid-cols-2 gap-x-6 gap-y-0.5 max-w-md">
+      <div className="grid grid-cols-2 gap-x-6 gap-y-1 max-w-lg items-center">
         <span className="text-muted-foreground">Consume ID</span>
         <span className="font-mono">{use.consumeId}</span>
-        <span className="text-muted-foreground">Item</span>
-        <span className="font-mono">
-          {use.itemId ?? (use.candidateItemIds.length > 0 ? use.candidateItemIds.join(", ") : "unknown")}
-          {use.candidateItemIds.length > 1 && " (candidates)"}
+        <span className="text-muted-foreground self-start pt-0.5">
+          {use.itemId !== null ? "Item" : use.candidateItemIds.length > 0 ? "Candidate items" : "Item"}
         </span>
+        <span className="flex flex-wrap items-center gap-x-3 gap-y-1">
+          {use.itemId !== null ? (
+            <ItemCell itemId={use.itemId} link />
+          ) : use.candidateItemIds.length > 0 ? (
+            use.candidateItemIds.map((id) => <ItemCell key={id} itemId={id} link />)
+          ) : (
+            <span className="text-muted-foreground/60">unknown</span>
+          )}
+        </span>
+        {use.auraSpells.length > 0 && (
+          <>
+            <span className="text-muted-foreground self-start pt-0.5">Aura</span>
+            <span className="flex flex-wrap items-center gap-x-3 gap-y-1">
+              {use.auraSpells.map((spell) => (
+                <Link
+                  key={spell.id}
+                  to={`/wowdb/spell/${spell.id}`}
+                  onClick={(e) => e.stopPropagation()}
+                  className="hover:underline"
+                >
+                  <SpellCell spellId={spell.id} name={spell.name || `Spell ${spell.id}`} />
+                </Link>
+              ))}
+            </span>
+          </>
+        )}
         <span className="text-muted-foreground">Consumed at</span>
         <span className="font-mono">
           {use.consumedAtUnixMilli !== null ? formatTimestamp(use.consumedAtUnixMilli) : "not observed"}
