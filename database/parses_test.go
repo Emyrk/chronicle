@@ -556,8 +556,8 @@ func TestSnapshotDedupe(t *testing.T) {
 
 	dupGroup := uuid.New()
 
-	// Same player, same boss, two uploads in same duplicate group.
-	// Upload 1: 400 DPS
+	// Same player, same boss, two uploads in the same duplicate group.
+	// Upload 1: 400 DPS, non-canonical.
 	insertRankingRow(t, pool, store, realmID, rankingOpts{
 		encounterName: "Ragnaros", instanceName: "Molten Core",
 		playerGUID: "P-DUP", playerClass: "Warrior", playerSpec: "Fury",
@@ -566,14 +566,14 @@ func TestSnapshotDedupe(t *testing.T) {
 		killedAt: baseTime, isBoss: true,
 		dupGroupID: &dupGroup,
 	})
-	// Upload 2: 450 DPS (better) — should be kept.
+	// Upload 2: 450 DPS, canonical because its instance ID anchors the group.
 	insertRankingRow(t, pool, store, realmID, rankingOpts{
 		encounterName: "Ragnaros", instanceName: "Molten Core",
 		playerGUID: "P-DUP", playerClass: "Warrior", playerSpec: "Fury",
 		difficultyName: "Normal", maxPlayers: 40,
 		damageDone: 135000, durationSecs: 300, dps: 450,
 		killedAt: baseTime, isBoss: true,
-		dupGroupID: &dupGroup,
+		instanceID: dupGroup, dupGroupID: &dupGroup,
 	})
 
 	ctx := testutil.Context(t, testutil.WaitMedium)
@@ -590,7 +590,7 @@ func TestSnapshotDedupe(t *testing.T) {
 	err = store.BatchInsertSnapshotMembersFromRankings(ctx, snapshot.ID)
 	require.NoError(t, err)
 
-	// Should have exactly 1 member for P-DUP (best DPS from duplicate group).
+	// Should have exactly 1 member for P-DUP from the canonical instance.
 	members, err := store.ListSnapshotMembersByPlayerGUID(ctx, database.ListSnapshotMembersByPlayerGUIDParams{
 		SnapshotID: snapshot.ID,
 		PlayerGuid: "P-DUP",
@@ -598,7 +598,7 @@ func TestSnapshotDedupe(t *testing.T) {
 	require.NoError(t, err)
 	assert.Len(t, members, 1, "duplicate group should collapse to 1 member")
 	if len(members) > 0 {
-		assert.Equal(t, 450.0, members[0].Dps, "should keep the better DPS")
+		assert.Equal(t, 450.0, members[0].Dps, "should keep the canonical upload")
 	}
 }
 
