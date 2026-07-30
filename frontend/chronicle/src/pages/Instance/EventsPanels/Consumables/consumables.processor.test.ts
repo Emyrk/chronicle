@@ -164,6 +164,27 @@ describe("consumablesProcessor", () => {
     expect(state.uses.get("use-1")!.candidateItemIds).toEqual([1, 2]);
   });
 
+  it("records every deduplicated observation for the detail view", () => {
+    const state = process([
+      consumeEvent({ consumeId: "u", evidenceId: "e1", kind: 1, confidence: 1, itemId: 5 }),
+      consumeEvent({ consumeId: "u", evidenceId: "e2", kind: 3, confidence: 2, amount: 1200, resourceType: "Mana" }),
+      consumeEvent({ consumeId: "u", evidenceId: "e2", kind: 3, confidence: 2, isProjection: true }),
+    ]);
+    const use = state.uses.get("u")!;
+    expect(use.observations).toHaveLength(2);
+    expect(use.observations[1].amount).toBe(1200);
+    expect(use.observations[1].resourceType).toBe("Mana");
+  });
+
+  it("prefers the consumed timestamp for display time", () => {
+    const state = process([
+      consumeEvent({ consumeId: "u", evidenceId: "e1", kind: 7, confidence: 2, observedAtUnixMilli: 1700000100000 }),
+      consumeEvent({ consumeId: "u", evidenceId: "e2", kind: 1, confidence: 1, itemId: 5, consumedAtUnixMilli: 1699999990000 }),
+    ]);
+    const use = state.uses.get("u")!;
+    expect(use.dateMilli).toBe(1699999990000);
+  });
+
   it("derives display names with sensible fallbacks", () => {
     const base = process([consumeEvent({ spell: { id: 1, name: "Flask of the Titans" } })]).uses.get("use-1")!;
     expect(consumableDisplayName(base)).toBe("Flask of the Titans");

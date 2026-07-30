@@ -20,6 +20,18 @@ export function confidenceRank(confidence: number): number {
   return confidence === 0 ? 5 : confidence;
 }
 
+/** One evidence observation merged into a use (for the expandable detail view). */
+export interface ConsumableObservation {
+  evidenceId: string;
+  kind: number;
+  confidence: number;
+  isProjection: boolean;
+  encounterID: string;
+  observedAtUnixMilli: number;
+  amount: number | null;
+  resourceType: string | null;
+}
+
 /**
  * One physical consumable use, merged from every evidence observation that
  * shares its consumeId.
@@ -41,6 +53,14 @@ export interface ConsumableUse {
   activeAtPullOnly: boolean;
   observedAtUnixMilli: number;
   consumedAtUnixMilli: number | null;
+  /** Encounter where evidence for this use was first seen. */
+  encounterID: string;
+  /** Millis of the first evidence relative to its encounter start. */
+  offsetMilli: number;
+  /** Absolute display time: consumed time when known, else first observation. */
+  dateMilli: number;
+  /** Every deduplicated observation, in arrival order. */
+  observations: ConsumableObservation[];
 }
 
 export interface ConsumablesResult {
@@ -51,6 +71,28 @@ export interface ConsumablesResult {
   /** Diagnostics: consumeIds with no item ID and no candidates. */
   unknownUseIds: Map<string, boolean>;
 }
+
+/** EvidenceKind enum value -> display label. */
+export const EVIDENCE_KIND_LABELS: Record<number, string> = {
+  0: "Unknown",
+  1: "Direct Item",
+  2: "Cast",
+  3: "Aura",
+  4: "Heal",
+  5: "Resource",
+  6: "Damage",
+  7: "Active at Pull",
+  8: "Cooldown",
+};
+
+/** EvidenceConfidence enum value -> display label. */
+export const CONFIDENCE_LABELS: Record<number, string> = {
+  0: "Unknown",
+  1: "Direct",
+  2: "Effect",
+  3: "Ambiguous",
+  4: "Inferred",
+};
 
 /** Display name for a use: spell name, else item placeholder. */
 export function consumableDisplayName(use: ConsumableUse): string {
@@ -74,7 +116,7 @@ export const consumablesProcessor: PanelProcessor<ConsumablesResult, ConsumeProc
     state: ConsumablesResult,
     event: ConsumeProcessorEvent,
     encounterID: string,
-    _firstTimestamp: Date,
+    firstTimestamp: Date,
     _streamType,
     context: ProcessorContext,
   ) => {
@@ -110,9 +152,24 @@ export const consumablesProcessor: PanelProcessor<ConsumablesResult, ConsumeProc
         activeAtPullOnly: true,
         observedAtUnixMilli: event.observedAtUnixMilli,
         consumedAtUnixMilli: null,
+        encounterID,
+        offsetMilli: event.offsetMilli,
+        dateMilli: event.consumedAtUnixMilli ?? event.observedAtUnixMilli,
+        observations: [],
       };
       state.uses.set(event.consumeId, use);
     }
+
+    use.observations.push({
+      evidenceId: event.evidenceId,
+      kind: event.kind,
+      confidence: event.confidence,
+      isProjection: event.isProjection,
+      encounterID,
+      observedAtUnixMilli: event.observedAtUnixMilli,
+      amount: event.amount,
+      resourceType: event.resourceType,
+    });
 
     // Merge this observation into the use record, preferring stronger data.
     if (use.itemId === null && itemId !== null) use.itemId = itemId;
@@ -129,6 +186,8 @@ export const consumablesProcessor: PanelProcessor<ConsumablesResult, ConsumeProc
     if (kind !== 7) use.activeAtPullOnly = false;
     if (use.consumedAtUnixMilli === null && event.consumedAtUnixMilli !== null) {
       use.consumedAtUnixMilli = event.consumedAtUnixMilli;
+      use.dateMilli = event.consumedAtUnixMilli;
+      use.offsetMilli = event.consumedAtUnixMilli - firstTimestamp.getTime();
     }
     if (event.observedAtUnixMilli < use.observedAtUnixMilli) {
       use.observedAtUnixMilli = event.observedAtUnixMilli;

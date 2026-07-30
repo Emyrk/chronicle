@@ -1,8 +1,9 @@
 /**
- * Consumables panel - per-player physical consumable use counts.
+ * Consumables Log panel - chronological list of physical consumable uses.
  *
  * Counts distinct consumeIds from the backend consume evidence stream after
- * deduplicating projected observations by evidenceId (#198).
+ * deduplicating projected observations by evidenceId (#198). Each row expands
+ * to show the evidence observations behind the use.
  */
 
 import { FlaskConical } from "lucide-react";
@@ -14,8 +15,9 @@ import { ConsumablesContent } from "./ConsumablesContent";
 export function createConsumablesPanel(): PanelDefinition<ConsumablesResult, any> {
   return {
     ...consumablesProcessor,
-    label: "Consumables",
+    label: "Consumables Log",
     icon: <FlaskConical className="h-4 w-4" />,
+    checkboxLabel: "Encounter offset",
     underConstruction: true,
 
     render: (props: PanelRenderProps<ConsumablesResult>) => {
