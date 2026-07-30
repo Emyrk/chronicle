@@ -24,6 +24,7 @@ import {
   type ConsumablesResult,
 } from "./consumables.processor";
 import { useCachedValue } from "@/hooks/useCachedValue";
+import { buildConsumablesTokens, parseConsumablesTokens } from "./consumablesTokens";
 
 // ============================================================================
 // Helpers
@@ -305,9 +306,20 @@ function PrePullToggle({ enabled, onToggle }: { enabled: boolean; onToggle: () =
 type ConsumablesContentProps = PanelRenderProps<ConsumablesResult>;
 
 export const ConsumablesContent = (props: ConsumablesContentProps) => {
-  const { result, context, loading, checkboxChecked } = props;
+  const { result, context, loading, checkboxChecked, panelOption, setPanelOption } = props;
   const [expanded, setExpanded] = useState<Set<string>>(new Set());
-  const [showPrePull, setShowPrePull] = useState(true);
+  // Initialize from the persisted panelOption (mount-only).
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  const initial = useMemo(() => parseConsumablesTokens(panelOption), []);
+  const [showPrePull, setShowPrePull] = useState(initial.showPrePull);
+
+  const togglePrePull = useCallback(() => {
+    setShowPrePull((prev) => {
+      const next = !prev;
+      setPanelOption?.(buildConsumablesTokens(panelOption, next));
+      return next;
+    });
+  }, [panelOption, setPanelOption]);
 
   const toggleExpanded = useCallback((consumeId: string) => {
     setExpanded((prev) => {
@@ -364,7 +376,7 @@ export const ConsumablesContent = (props: ConsumablesContentProps) => {
               </span>
             )}
           </div>
-          <PrePullToggle enabled={showPrePull} onToggle={() => setShowPrePull((prev) => !prev)} />
+          <PrePullToggle enabled={showPrePull} onToggle={togglePrePull} />
         </div>
 
         {sortedUses.length === 0 ? (
