@@ -266,9 +266,27 @@ function StripMessage({ children }: { children: React.ReactNode }) {
 
 function StripSelector({ value, onChange }: { value: StripType; onChange: (value: StripType) => void }) {
   const [open, setOpen] = useState(false);
+  const closeTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const selected = STRIPS[value];
+
+  const cancelClose = () => {
+    if (closeTimer.current === null) return;
+    clearTimeout(closeTimer.current);
+    closeTimer.current = null;
+  };
+
+  const scheduleClose = () => {
+    cancelClose();
+    closeTimer.current = setTimeout(() => {
+      setOpen(false);
+      closeTimer.current = null;
+    }, 250);
+  };
+
+  useEffect(() => cancelClose, []);
+
   return (
-    <div className="relative" onMouseLeave={() => setOpen(false)}>
+    <div className="relative" onMouseEnter={cancelClose} onMouseLeave={scheduleClose}>
       <button type="button" onClick={() => setOpen((current) => !current)} className="flex items-center gap-1 text-xs font-medium">
         {selected.icon}{selected.label}<ChevronDown className="h-3 w-3" />
       </button>
@@ -281,7 +299,7 @@ function StripSelector({ value, onChange }: { value: StripType; onChange: (value
             </button>
           ))}
           <div className="mt-1 border-t px-2 py-2 text-center text-[10px] text-muted-foreground">
-            Only strips supported here
+            Panels not supported here
           </div>
         </div>
       ) : null}

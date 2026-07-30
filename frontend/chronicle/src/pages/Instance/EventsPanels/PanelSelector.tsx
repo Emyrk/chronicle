@@ -451,7 +451,7 @@ export function PanelSelector({ value, onChange, className }: PanelSelectorProps
                 ))
               )}
               <div className="mt-1 border-t px-2 py-2 text-center text-[10px] text-muted-foreground">
-                Only panels supported here
+                Strips not supported here
               </div>
             </div>
           </ScrollArea>
