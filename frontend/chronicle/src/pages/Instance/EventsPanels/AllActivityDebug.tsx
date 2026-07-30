@@ -11,6 +11,7 @@ import { ScrollArea, ScrollBar } from "@/components/ui/ScrollArea/ScrollArea";
 import { Tooltip, TooltipTrigger, TooltipContent } from "@/components/ui/Tooltip/tooltip";
 import type { PanelDefinition, PanelRenderProps, PanelContext } from "./types";
 import { allActivityProcessor, type AllActivityState, type RawDebugEvent, type EncounterMeta, type ResourceType } from "./processors";
+import { collectAllActivityEvents } from "./allActivityEvents";
 import type { StreamType } from "@/hooks/instanceEvents";
 import { usePanelAggregation } from "./usePanelAggregation";
 
@@ -515,22 +516,7 @@ function AllActivityContent({
   
   // Merge all captured events (processor already filtered by enabled streams)
   const rawEventsByStream = safeResult.rawEventsByStream ?? emptyByStream;
-  const allCapturedEvents = [
-    ...rawEventsByStream.damage,
-    ...rawEventsByStream.heal,
-    ...rawEventsByStream.resource_change,
-    ...rawEventsByStream.cast,
-    ...rawEventsByStream.aura,
-    ...rawEventsByStream.ressurection,
-    ...rawEventsByStream.slain,
-    ...rawEventsByStream.spell_go,
-    ...rawEventsByStream.aura_cast,
-    ...rawEventsByStream.extra_attack,
-    ...rawEventsByStream.unit_classification,
-    ...rawEventsByStream.combatant_info,
-    ...rawEventsByStream.dispel,
-    ...rawEventsByStream.consume,
-  ];
+  const allCapturedEvents = collectAllActivityEvents(rawEventsByStream);
   
   // Sort by encounter first, then by index within encounter to reconstruct true event order
   const sortedEvents = allCapturedEvents.sort((a, b) => {
