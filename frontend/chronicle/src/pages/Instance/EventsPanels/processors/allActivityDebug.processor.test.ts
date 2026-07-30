@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { HitTypeCrushing, HitTypeFullResist, HitTypeGlancing, HitTypeImmune, HitTypePartialAbsorb, HitTypePartialBlock, HitTypePartialResist } from "@/lib/hittype/hittype";
-import type { ConsumeProcessorEvent, DamageProcessorEvent, ProcessorContext, ResurrectionProcessorEvent, SpellStartProcessorEvent } from "../processorTypes";
+import type { ConsumeProcessorEvent, DamageProcessorEvent, ProcessorContext, ResourceChangeProcessorEvent, ResurrectionProcessorEvent, SpellStartProcessorEvent } from "../processorTypes";
 import { allActivityProcessor } from "./allActivityDebug.processor";
 
 function createContext(): ProcessorContext {
@@ -59,6 +59,10 @@ describe("allActivityProcessor", () => {
     );
 
     const event = state.rawEventsByStream.damage[0];
+    expect(event.sourceClass).toBe("SHAMAN");
+    expect(event.sourceIsEnemy).toBeUndefined();
+    expect(event.targetClass).toBeUndefined();
+    expect(event.targetIsEnemy).toBe(true);
     expect(event.spellId).toBe(10414);
     expect(event.damageTrailers).toEqual([
       { amount: 200, hitType: HitTypePartialAbsorb, labels: ["Partial Absorb"] },
@@ -99,6 +103,43 @@ describe("allActivityProcessor", () => {
     );
 
     expect(state.rawEventsByStream.damage[0].flags).toEqual(["GLANCING", "CRUSHING"]);
+  });
+
+  it("captures resource type, waste, flag, and spell details", () => {
+    const state = allActivityProcessor.createState();
+    const event: ResourceChangeProcessorEvent = {
+      type: "resource_change",
+      index: 8,
+      offsetMilli: 2000,
+      caster: "player",
+      sourceName: "Mana Tide Totem",
+      target: "player",
+      amount: 120,
+      overResource: 20,
+      resourceType: "Mana",
+      direction: "Gain",
+      spellId: 16190,
+      spellAttackOutcome: null,
+      activity: [],
+      activityCount: 0,
+      isSynthetic: false,
+    };
+
+    allActivityProcessor.processEvent(
+      state,
+      event,
+      "encounter",
+      new Date("2026-07-14T17:41:42.709Z"),
+      "resource_change",
+      createContext(),
+    );
+
+    expect(state.rawEventsByStream.resource_change[0]).toMatchObject({
+      resourceType: "Mana",
+      spellId: 16190,
+      extra: "Gain · Mana · 20 wasted",
+      flags: ["MANA"],
+    });
   });
 
   it("captures resurrection source, target, and spell details", () => {

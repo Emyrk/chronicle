@@ -32,6 +32,11 @@ export interface DamageTrailerInfo {
   labels: string[];
 }
 
+export interface DebugEntityPresentation {
+  className?: string;
+  isEnemy?: boolean;
+}
+
 export interface RawDebugEvent {
   index: number;
   offsetMilli: number;
@@ -40,8 +45,12 @@ export interface RawDebugEvent {
   streamType: StreamType;
   caster: string;
   casterName: string;
+  sourceClass?: string;
+  sourceIsEnemy?: boolean;
   sourceName: string;
   target: string | null;
+  targetClass?: string;
+  targetIsEnemy?: boolean;
   targetName: string;
   amount: number;
   resourceType?: ResourceType; // For resource_change events
@@ -104,6 +113,17 @@ function schoolName(school: number): string {
 
 function outcomeLabels(hitType: number): string[] {
   return hitTypeNames(hitType).filter((label) => label !== "None");
+}
+
+function entityPresentation(guid: string | null, context: ProcessorContext): DebugEntityPresentation {
+  if (!guid) return {};
+  const player = context.players[guid];
+  if (player) return { className: player.class };
+
+  const unit = context.units?.[guid];
+  if (!unit) return {};
+  const isPlayerPet = context.unitState?.isPlayerPet(guid) ?? (unit.owner ? Boolean(context.players[unit.owner]) : false);
+  return { isEnemy: !isPlayerPet };
 }
 
 // Default page size if no pagination specified
@@ -404,6 +424,9 @@ export const allActivityProcessor: PanelProcessor<AllActivityDebugState, AllActi
       }
     }
     
+    const sourcePresentation = entityPresentation(eventCaster, context);
+    const targetPresentation = entityPresentation(eventTarget, context);
+
     const rawEvent: RawDebugEvent = {
       index: event.index,
       offsetMilli: event.offsetMilli,
@@ -411,9 +434,13 @@ export const allActivityProcessor: PanelProcessor<AllActivityDebugState, AllActi
       encounterID,
       streamType,
       caster: eventCaster,
+      sourceClass: sourcePresentation.className,
+      sourceIsEnemy: sourcePresentation.isEnemy,
       casterName,
       sourceName,
       target: eventTarget,
+      targetClass: targetPresentation.className,
+      targetIsEnemy: targetPresentation.isEnemy,
       targetName,
       amount,
       activityEvents,
@@ -425,7 +452,12 @@ export const allActivityProcessor: PanelProcessor<AllActivityDebugState, AllActi
     if (streamType === "resource_change") {
       const rcEvent = event as ResourceChangeProcessorEvent;
       rawEvent.resourceType = rcEvent.resourceType as ResourceType;
-      rawEvent.extra = rcEvent.direction;
+      rawEvent.spellId = rcEvent.spellId ?? undefined;
+      const resourceType = rcEvent.resourceType || "Unknown";
+      const detail = [rcEvent.direction, resourceType];
+      if (rcEvent.overResource > 0) detail.push(`${rcEvent.overResource.toLocaleString()} wasted`);
+      rawEvent.extra = detail.filter(Boolean).join(" · ");
+      rawEvent.flags?.push(resourceType.toUpperCase());
     } else if (streamType === "damage") {
       const damageEvent = event as DamageProcessorEvent;
       rawEvent.spellId = damageEvent.spellId ?? undefined;

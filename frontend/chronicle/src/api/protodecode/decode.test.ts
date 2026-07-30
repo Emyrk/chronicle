@@ -1,7 +1,7 @@
 import { create, toBinary } from '@bufbuild/protobuf';
-import { ConsumeSchema, EventMetaSchema, EvidenceConfidence, EvidenceKind, ResurrectionSchema, SpellDataSchema } from '@/api/proto/chronicle_pb';
+import { ConsumeSchema, EventMetaSchema, EvidenceConfidence, EvidenceKind, ResourceChangeSchema, ResurrectionSchema, SpellDataSchema } from '@/api/proto/chronicle_pb';
 import { describe, it, expect } from 'vitest';
-import { AuraDecoder, FastConsumeCursor, FastResurrectionCursor, readVarint, readVarint64, parseAllHeaders } from './decode';
+import { AuraDecoder, FastConsumeCursor, FastResourceChangeCursor, FastResurrectionCursor, readVarint, readVarint64, parseAllHeaders } from './decode';
 
 describe('readVarint', () => {
   it('reads single-byte varints', () => {
@@ -71,6 +71,35 @@ describe('readVarint64', () => {
     // More than 10 bytes with continuation bits
     const data = new Uint8Array([0x80, 0x80, 0x80, 0x80, 0x80, 0x80, 0x80, 0x80, 0x80, 0x80, 0x80]);
     expect(() => readVarint64(data, 0)).toThrow('Varint too long');
+  });
+});
+
+describe('FastResourceChangeCursor', () => {
+  it('decodes resource spell data', () => {
+    const message = create(ResourceChangeSchema, {
+      meta: create(EventMetaSchema, { index: 9, offsetMilli: 2500n }),
+      caster: '0xSOURCE',
+      target: '0xTARGET',
+      sourceName: 'Mana Tide Totem',
+      amount: 120,
+      overResource: 20,
+      resourceType: 'Mana',
+      direction: 'Gain',
+      spellData: create(SpellDataSchema, { id: 16190, name: 'Mana Tide Totem', attackOutcome: 7 }),
+    });
+    const encoded = toBinary(ResourceChangeSchema, message);
+    const messageData = new Uint8Array([...encodeVarint(encoded.length), ...encoded]);
+    const payload = buildPayload('encounter', 1706000000000n, 1, messageData.length, messageData);
+
+    const cursor = new FastResourceChangeCursor(payload);
+
+    expect(cursor.next()).toMatchObject({
+      type: 'resource_change',
+      sourceName: 'Mana Tide Totem',
+      resourceType: 'Mana',
+      spellId: 16190,
+      spellAttackOutcome: 7,
+    });
   });
 });
 

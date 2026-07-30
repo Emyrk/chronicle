@@ -208,7 +208,32 @@ const GEAR_SLOT_NAMES = [
 
 const EVENT_ROW_COLUMNS = "30px 68px 108px 116px 180px 116px 64px minmax(170px, 1fr) 132px 116px";
 
+const CLASS_TEXT_COLORS: Record<string, string> = {
+  WARRIOR: "text-class-warrior",
+  PRIEST: "text-class-priest",
+  ROGUE: "text-class-rogue",
+  MAGE: "text-class-mage",
+  DRUID: "text-class-druid",
+  HUNTER: "text-class-hunter",
+  WARLOCK: "text-class-warlock",
+  PALADIN: "text-class-paladin",
+  SHAMAN: "text-class-shaman",
+  DEATHKNIGHT: "text-class-deathknight",
+};
+
+function entityTextColor(className?: string, isEnemy?: boolean, fallback = "text-muted-foreground"): string {
+  if (className) return CLASS_TEXT_COLORS[className.toUpperCase()] ?? fallback;
+  if (isEnemy) return "text-red-400";
+  return fallback;
+}
+
 const FLAG_STYLES: Record<string, string> = {
+  HEALTH: "border-green-400/25 bg-green-400/10 text-green-300",
+  MANA: "border-blue-400/25 bg-blue-400/10 text-blue-300",
+  RAGE: "border-red-400/25 bg-red-400/10 text-red-300",
+  ENERGY: "border-yellow-400/25 bg-yellow-400/10 text-yellow-300",
+  FOCUS: "border-orange-400/25 bg-orange-400/10 text-orange-300",
+  HAPPINESS: "border-pink-400/25 bg-pink-400/10 text-pink-300",
   SYNTHETIC: "border-violet-400/25 bg-violet-400/10 text-violet-300",
   ESTIMATED: "border-sky-400/25 bg-sky-400/10 text-sky-300",
   OVERKILL: "border-red-400/25 bg-red-400/10 text-red-300",
@@ -238,7 +263,8 @@ function EventDetailText({ detail }: { detail: string }) {
   return detail.split(" · ").map((part, index) => {
     const normalized = part.toLowerCase();
     const schoolStyle = SCHOOL_TEXT_COLORS[part];
-    const style = schoolStyle
+    const resourceType = Object.keys(RESOURCE_COLORS).find((type) => type.toLowerCase() === normalized) as ResourceType | undefined;
+    const style = (resourceType ? RESOURCE_COLORS[resourceType] : schoolStyle)
       ?? (normalized.includes("absorb")
         ? "text-sky-400"
         : normalized.includes("block")
@@ -321,7 +347,10 @@ function RawEventRow({ event, index, useRelativeTime = false, useLocalTime = fal
           </span>
         </span>
         <span className="truncate px-1.5 text-foreground/80">{timeStr}</span>
-        <span className="truncate px-1.5 text-orange-300" title={event.caster || undefined}>
+        <span
+          className={cn("truncate px-1.5", entityTextColor(event.sourceClass, event.sourceIsEnemy, "text-orange-300"))}
+          title={event.caster || undefined}
+        >
           {event.casterName || "—"}
         </span>
         <span className="min-w-0 truncate px-1.5">
@@ -345,9 +374,11 @@ function RawEventRow({ event, index, useRelativeTime = false, useLocalTime = fal
         <span
           className={cn(
             "flex min-w-0 items-center gap-1 px-1.5",
-            event.affiliation === 1 ? "text-green-400" :
-            event.affiliation === 2 ? "text-red-400" :
-            event.affiliation === 3 ? "text-yellow-400" : "text-purple-300",
+            entityTextColor(
+              event.targetClass,
+              event.targetIsEnemy || event.affiliation === 2,
+              event.affiliation === 1 ? "text-green-400" : event.affiliation === 3 ? "text-yellow-400" : "text-purple-300",
+            ),
           )}
           title={event.target ?? undefined}
         >
@@ -408,10 +439,12 @@ function RawEventRow({ event, index, useRelativeTime = false, useLocalTime = fal
               {config.label.toUpperCase()}
             </div>
             <p className="text-xs text-foreground">
-              <span className="font-medium text-orange-300">{event.casterName || "Unknown source"}</span>
+              <span className={cn("font-medium", entityTextColor(event.sourceClass, event.sourceIsEnemy, "text-orange-300"))}>
+                {event.casterName || "Unknown source"}
+              </span>
               <span className="text-muted-foreground"> → </span>
               <span className="font-medium text-blue-400">{event.sourceName || config.label}</span>
-              {event.targetName && <><span className="text-muted-foreground"> → </span><span className="font-medium text-purple-300">{event.targetName}</span></>}
+              {event.targetName && <><span className="text-muted-foreground"> → </span><span className={cn("font-medium", entityTextColor(event.targetClass, event.targetIsEnemy, "text-purple-300"))}>{event.targetName}</span></>}
               <span className="text-muted-foreground"> · </span>
               <EventDetailText detail={eventDetail(event)} />
             </p>

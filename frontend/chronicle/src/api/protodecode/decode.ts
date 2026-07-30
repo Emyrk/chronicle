@@ -764,6 +764,8 @@ export interface ReusableResourceChange {
   amount: number;
   resourceType: string;
   direction: string;
+  spellId: number | null;
+  spellAttackOutcome: number | null;
   overResource: number;
   activity: ReusableActivityEntry[];
   activityCount: number;
@@ -797,6 +799,8 @@ export class ResourceChangeDecoder {
     amount: 0,
     resourceType: "",
     direction: "",
+    spellId: null,
+    spellAttackOutcome: null,
     overResource: 0,
     activity: [],
     activityCount: 0,
@@ -820,6 +824,8 @@ export class ResourceChangeDecoder {
     msg.amount = 0;
     msg.resourceType = "";
     msg.direction = "";
+    msg.spellId = null;
+    msg.spellAttackOutcome = null;
     msg.overResource = 0;
     msg.activityCount = 0;
     msg.isSynthetic = false;
@@ -899,6 +905,22 @@ export class ResourceChangeDecoder {
         } else if (fieldNumber === 8) {
           msg.direction = this.textDecoder.decode(data.subarray(offset, offset + len));
           offset += len;
+        } else if (fieldNumber === 9) {
+          const spellEnd = offset + len;
+          while (offset < spellEnd) {
+            const spellTag = data[offset++];
+            const spellField = spellTag >> 3;
+            const spellWire = spellTag & 0x7;
+            if (spellWire === 0) {
+              const { value, bytesRead } = readVarintFast(data, offset);
+              offset += bytesRead;
+              if (spellField === 1) msg.spellId = value;
+              else if (spellField === 3) msg.spellAttackOutcome = value;
+            } else if (spellWire === 2) {
+              const { value: spellLen, bytesRead } = readVarintFast(data, offset);
+              offset += bytesRead + spellLen;
+            }
+          }
         } else {
           offset += len;
         }

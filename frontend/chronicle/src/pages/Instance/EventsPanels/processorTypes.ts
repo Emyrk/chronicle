@@ -97,6 +97,8 @@ export interface ResourceChangeProcessorEvent extends EventMeta {
   amount: number;
   overResource: number;
   resourceType: string;
+  spellId: number | null;
+  spellAttackOutcome: number | null;
   direction: string;
 }
 
