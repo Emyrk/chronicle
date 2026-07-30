@@ -227,8 +227,11 @@ function compileEntityTypeFilter(
   };
 
   return (event) => {
-    if (!(field in event)) return false;
-    const guid = (event as unknown as Record<string, unknown>)[field];
+    let guid = (event as unknown as Record<string, unknown>)[field];
+    // Consume events attribute the acting entity as `player` instead of `caster`.
+    if (field === "caster" && (guid === undefined || guid === "") && "player" in event) {
+      guid = (event as unknown as Record<string, unknown>).player;
+    }
     if (typeof guid !== "string" || !guid) return wantNone;
 
     // Helper: check if a GUID is a player using unitState (temporal) or fallback

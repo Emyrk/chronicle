@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import type { DamageProcessorEvent, HealProcessorEvent, ProcessorContext, ProcessorEvent } from "../processorTypes";
+import type { ConsumeProcessorEvent, DamageProcessorEvent, HealProcessorEvent, ProcessorContext, ProcessorEvent } from "../processorTypes";
 import { evaluateFilters, compileFilters, type PanelFilter } from "./filters";
 
 function createContext(overrides: Partial<ProcessorContext> = {}): ProcessorContext {
@@ -66,7 +66,44 @@ function createHealEvent(overrides: Partial<HealProcessorEvent> = {}): HealProce
   };
 }
 
+function createConsumeEvent(overrides: Partial<ConsumeProcessorEvent> = {}): ConsumeProcessorEvent {
+  return {
+    type: "consume",
+    index: 0,
+    offsetMilli: 0,
+    globalOffsetMilli: 0,
+    activity: [],
+    activityCount: 0,
+    isSynthetic: false,
+    consumeId: "use-1",
+    evidenceId: "ev-1",
+    player: "0x0000000000000001",
+    itemId: null,
+    candidateItemIds: [],
+    candidateItemIdsCount: 0,
+    spell: { id: 0, name: "" },
+    kind: 1,
+    confidence: 1,
+    consumedAtUnixMilli: null,
+    observedAtUnixMilli: 0,
+    amount: null,
+    resourceType: null,
+    isProjection: false,
+    ...overrides,
+  };
+}
+
 describe("evaluateFilters", () => {
+  it("source_type resolves the consume player field", () => {
+    const filters: PanelFilter[] = [{ type: "source_type", value: "player" }];
+    // Player consume passes.
+    expect(evaluateFilters(filters, createConsumeEvent(), createContext())).toBe(true);
+    // NPC consume (creature GUID) is rejected.
+    expect(
+      evaluateFilters(filters, createConsumeEvent({ player: "0xF130000000000001" }), createContext()),
+    ).toBe(false);
+  });
+
   it("passes when no filters are provided", () => {
     expect(evaluateFilters([], createDamageEvent(), createContext())).toBe(true);
   });

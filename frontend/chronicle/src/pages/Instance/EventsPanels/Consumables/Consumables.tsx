@@ -19,6 +19,11 @@ export function createConsumablesPanel(): PanelDefinition<ConsumablesResult, any
     icon: <FlaskConical className="h-4 w-4" />,
     checkboxLabel: "Encounter offset",
     underConstruction: true,
+    supportsFiltering: true,
+    defaultFilters: [
+      // Non-players (e.g. NPCs drinking potions) are excluded by default.
+      { type: "source_type" as const, value: ["player"], applyTo: ["consume"] },
+    ],
 
     render: (props: PanelRenderProps<ConsumablesResult>) => {
       return <ConsumablesContent {...props} />;
