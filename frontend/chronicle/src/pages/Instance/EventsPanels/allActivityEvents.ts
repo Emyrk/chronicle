@@ -3,7 +3,7 @@ import type { AllActivityState, RawDebugEvent } from "./processors";
 
 export const ALL_ACTIVITY_STREAMS: StreamType[] = [
   "damage", "heal", "resource_change", "extra_attack", "slain", "ressurection",
-  "cast", "aura", "spell_go", "aura_cast", "spell_start", "spell_fail",
+  "aura", "spell_go", "aura_cast", "spell_start", "spell_fail",
   "unit_classification", "combatant_info", "dispel", "interrupt", "absorbed", "consume",
 ];
 

@@ -20,6 +20,17 @@ function spellEvent(streamType: "spell_start" | "spell_fail"): RawDebugEvent {
 }
 
 describe("collectAllActivityEvents", () => {
+  it("excludes the deprecated cast stream", () => {
+    const state = allActivityProcessor.createState();
+    const castEvent: RawDebugEvent = {
+      ...spellEvent("spell_start"),
+      streamType: "cast",
+    };
+    state.rawEventsByStream.cast.push(castEvent);
+
+    expect(collectAllActivityEvents(state.rawEventsByStream)).toEqual([]);
+  });
+
   it("includes spell start and spell fail rows", () => {
     const state = allActivityProcessor.createState();
     const spellStart = spellEvent("spell_start");

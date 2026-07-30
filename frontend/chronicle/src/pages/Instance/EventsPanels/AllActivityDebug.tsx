@@ -36,8 +36,8 @@ const STREAM_CONFIG: Record<StreamType, { icon: React.ElementType; color: string
   ressurection: { icon: HeartPulse, color: "text-emerald-400", label: "Resurrection", description: "Players or units restored to life by a resurrection spell." },
   slain: { icon: Skull, color: "text-gray-500", label: "Slain", description: "Unit deaths and the final-damage attribution when available." },
   aura: { icon: Sparkles, color: "text-cyan-500", label: "Aura", description: "Buff and debuff applications, removals, and stack changes." },
-  spell_go: { icon: Crosshair, color: "text-amber-500", label: "Spell Go", description: "Completed spell executions with target hit and miss counts." },
-  aura_cast: { icon: WandSparkles, color: "text-teal-500", label: "Aura Cast", description: "Aura casts with duration and periodic tick timing." },
+  spell_go: { icon: Crosshair, color: "text-amber-500", label: "Spell Go", description: "Finish of a Spell Start, including target hit and miss counts." },
+  aura_cast: { icon: WandSparkles, color: "text-teal-500", label: "Aura Cast", description: "Mirrors Auras, with duration and periodic tick timing." },
   spell_start: { icon: Play, color: "text-lime-500", label: "Spell Start", description: "The beginning of a spell cast or channel." },
   spell_fail: { icon: CircleX, color: "text-red-400", label: "Spell Fail", description: "Spell casts that failed or were rejected by the server." },
   unit_classification: { icon: Search, color: "text-indigo-500", label: "Classification", description: "Unit type, affiliation, ownership, and possession changes." },
@@ -52,7 +52,7 @@ const STREAM_CONFIG: Record<StreamType, { icon: React.ElementType; color: string
 };
 // --- Panel option encode/decode helpers for state persistence ---
 
-const DEFAULT_ENABLED_STREAMS = new Set<StreamType>(["damage", "heal", "slain"]);
+const DEFAULT_ENABLED_STREAMS = new Set<StreamType>(["damage", "heal", "slain", "ressurection"]);
 
 const STREAM_CODES: Record<StreamType, string> = {
   damage: "d", heal: "h", resource_change: "r", cast: "c",
@@ -70,7 +70,7 @@ const STREAM_CODES: Record<StreamType, string> = {
 const CODE_TO_STREAM = Object.fromEntries(
   Object.entries(STREAM_CODES).map(([k, v]) => [v, k as StreamType]),
 ) as Record<string, StreamType>;
-const DEFAULT_STREAM_CODE = "dhx"; // sorted code for DEFAULT_ENABLED_STREAMS
+const DEFAULT_STREAM_CODE = "dhxz"; // sorted code for DEFAULT_ENABLED_STREAMS
 
 function encodeStreams(streams: Set<StreamType>): string {
   return [...streams].map((s) => STREAM_CODES[s]).sort().join("");
@@ -79,7 +79,7 @@ function decodeStreams(code: string): Set<StreamType> {
   const set = new Set<StreamType>();
   for (const ch of code) {
     const s = CODE_TO_STREAM[ch];
-    if (s) set.add(s);
+    if (s && ALL_ACTIVITY_STREAMS.includes(s)) set.add(s);
   }
   return set.size > 0 ? set : new Set(DEFAULT_ENABLED_STREAMS);
 }
