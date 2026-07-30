@@ -80,7 +80,7 @@ function RaidDurabilityStrip({ result, context, panelOption }: StripRenderProps<
 
   if (titleMode === "large") {
     return (
-      <div className="grid h-full min-h-0 grid-cols-[minmax(180px,0.9fr)_minmax(320px,4fr)] items-center gap-4 px-5 py-2">
+      <div className="grid h-full min-h-0 grid-cols-[minmax(150px,220px)_minmax(0,1fr)] items-center gap-2 px-5 py-2">
         <div className="flex min-w-0 flex-col gap-0.5">
           <span className="truncate text-[9px] font-semibold uppercase tracking-[0.16em] text-muted-foreground">
             {title}
@@ -124,7 +124,7 @@ function StripFrame({
   children: React.ReactNode;
 }) {
   return (
-    <div className="grid h-full min-h-0 grid-cols-[minmax(180px,0.9fr)_minmax(320px,4fr)] items-center gap-4 px-5 py-2">
+    <div className="grid h-full min-h-0 grid-cols-[minmax(150px,220px)_minmax(0,1fr)] items-center gap-2 px-5 py-2">
       <div className="flex min-w-0 flex-col gap-0.5">
         <span className="truncate text-[9px] font-semibold uppercase tracking-[0.16em] text-muted-foreground">
           {label}
