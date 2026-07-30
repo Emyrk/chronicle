@@ -299,9 +299,10 @@ function RawEventRow({ event, index, useRelativeTime = false, useLocalTime = fal
           }
         }}
         className={cn(
-          "grid min-h-7 items-center border-b border-border/30 font-mono text-[11px] leading-4 outline-none transition-colors",
-          "hover:bg-muted/35 focus-visible:bg-muted/40 focus-visible:ring-1 focus-visible:ring-inset focus-visible:ring-primary/70",
-          expanded && "bg-muted/30",
+          "grid min-h-5 items-center border-b border-border/25 font-mono text-[10px] leading-3 outline-none transition-colors",
+          index % 2 === 0 ? "bg-background/30" : "bg-muted/[0.12]",
+          "hover:bg-muted/40 focus-visible:bg-muted/45 focus-visible:ring-1 focus-visible:ring-inset focus-visible:ring-primary/70",
+          expanded && "bg-muted/35",
         )}
         style={{ gridTemplateColumns: EVENT_ROW_COLUMNS }}
       >
@@ -356,7 +357,7 @@ function RawEventRow({ event, index, useRelativeTime = false, useLocalTime = fal
             <span
               key={flag}
               className={cn(
-                "shrink-0 rounded-sm border px-1 py-0.5 text-[8px] font-bold leading-none tracking-[0.04em]",
+                "shrink-0 rounded-sm border px-1 py-px text-[8px] font-bold leading-none tracking-[0.04em]",
                 FLAG_STYLES[flag] ?? "border-border bg-muted text-muted-foreground",
               )}
             >
@@ -370,7 +371,7 @@ function RawEventRow({ event, index, useRelativeTime = false, useLocalTime = fal
               key={`${activity.guid}-${activity.type}-${activityIndex}`}
               title={`${activity.type}: ${activity.name} (${activity.guid})`}
               className={cn(
-                "shrink-0 rounded-sm border px-1 py-0.5 text-[8px] font-bold leading-none tracking-[0.04em]",
+                "shrink-0 rounded-sm border px-1 py-px text-[8px] font-bold leading-none tracking-[0.04em]",
                 ACTIVITY_STYLES[activity.type],
               )}
             >
@@ -747,7 +748,7 @@ function AllActivityContent({
         <div className="min-w-[1080px] p-1">
           {/* Header */}
           <div
-            className="sticky top-0 z-10 grid items-center border-b border-border bg-background py-1.5 font-mono text-[9px] font-semibold uppercase tracking-[0.06em] text-muted-foreground"
+            className="sticky top-0 z-10 grid items-center border-b border-border bg-background py-1 font-mono text-[9px] font-semibold uppercase tracking-[0.06em] text-muted-foreground"
             style={{ gridTemplateColumns: EVENT_ROW_COLUMNS }}
           >
             <span className="pr-1 text-right">#</span>
@@ -801,7 +802,7 @@ function AllActivityContent({
                 return (
                   <div key={`${event.encounterID}-${event.streamType}-${event.index}`}>
                     {showHeader && (
-                      <div className="flex items-center gap-2 text-[10px] font-semibold text-cyan-400 py-1 mt-1 border-t border-cyan-400/30 bg-cyan-400/5">
+                      <div className="flex items-center gap-2 border-y border-cyan-400/20 bg-cyan-400/5 py-0.5 text-[9px] font-semibold text-cyan-400">
                         <span className="px-1">📍 Encounter: {event.encounterID.slice(0, 8)}... @ {timestamp}</span>
                       </div>
                     )}
