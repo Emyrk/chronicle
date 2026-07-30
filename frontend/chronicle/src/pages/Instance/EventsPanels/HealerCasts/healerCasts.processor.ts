@@ -282,6 +282,28 @@ function getEncounter(
   return encounter;
 }
 
+/**
+ * Walk backwards through a player's cast list and backfill a zero-duration
+ * start for the given spell.  Only the most recent matching start is patched.
+ * If a same-spell start with a non-zero duration is found first, we stop
+ * (it was already filled).  If a same-spell start is found that was already
+ * superseded by a later same-spell start (re-cast), we stop at the later one.
+ */
+function backfillStartDuration(
+  casts: HealerCastEntry[],
+  spellId: number | null,
+  completionMilli: number,
+): void {
+  for (let i = casts.length - 1; i >= 0; i--) {
+    const prev = casts[i];
+    if (prev.kind !== "start" || prev.spellId !== spellId) continue;
+    if (prev.durationMilli === 0) {
+      prev.durationMilli = completionMilli - prev.timestampMilli;
+    }
+    break;
+  }
+}
+
 export const healerCastsProcessor: PanelProcessor<HealerCastsResult, HealerCastEvent> = {
   id: "healer_casts",
   streams: ["spell_start", "spell_go", "spell_fail", "heal"] as StreamType[],
@@ -311,6 +333,9 @@ export const healerCastsProcessor: PanelProcessor<HealerCastsResult, HealerCastE
     }
 
     if (event.type === "heal") {
+      // Backfill a zero-duration start for this spell from the heal timestamp.
+      // This covers cases where no spell_go event exists (e.g. some WotLK logs).
+      backfillStartDuration(casts, event.spellId, timestampMilli);
       casts.push({
         timestampMilli,
         eventIndex: event.index,
@@ -336,20 +361,8 @@ export const healerCastsProcessor: PanelProcessor<HealerCastsResult, HealerCastE
     // zero-duration start.  WotLK logs don't include cast time in
     // SPELL_CAST_START, so the only way to know the actual (talented/hasted)
     // cast duration is by measuring start→go or start→fail.
-    //
-    // Only break on a same-spell start — that means the player re-started the
-    // same cast (the earlier one was cancelled).  Different-spell starts are
-    // skipped because healers weave instants (Holy Shock, Judgement, etc.)
-    // between casted heals without cancelling them.
     if (kind !== "start") {
-      for (let i = casts.length - 1; i >= 0; i--) {
-        const prev = casts[i];
-        if (prev.kind !== "start" || prev.spellId !== event.spell.id) continue;
-        if (prev.durationMilli === 0) {
-          prev.durationMilli = timestampMilli - prev.timestampMilli;
-        }
-        break;
-      }
+      backfillStartDuration(casts, event.spell.id, timestampMilli);
     }
 
     casts.push({

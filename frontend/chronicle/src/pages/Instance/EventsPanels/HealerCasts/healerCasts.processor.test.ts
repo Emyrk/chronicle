@@ -364,6 +364,31 @@ describe("healerCastsProcessor", () => {
     expect(casts?.[0]).toMatchObject({ kind: "start", durationMilli: 0 });
   });
 
+  it("backfills zero-duration starts from a heal event when no spell_go exists", () => {
+    // WotLK scenario: SPELL_CAST_START → SPELL_HEAL (no SPELL_CAST_SUCCESS)
+    const state = healerCastsProcessor.createState();
+    const firstTimestamp = new Date("2026-07-30T00:00:00Z");
+    const ctx = context();
+
+    healerCastsProcessor.processEvent(
+      state,
+      start({ castTimeMilli: 0 }),
+      "encounter-1", firstTimestamp, "spell_start", ctx,
+    );
+    // No spell_go — just the heal landing
+    healerCastsProcessor.processEvent(
+      state,
+      heal({ offsetMilli: 2_300 }),
+      "encounter-1", firstTimestamp, "heal", ctx,
+    );
+
+    const casts = state.encounters.get("encounter-1")?.castsByPlayer.get(HEALER);
+    // Duration backfilled from heal timestamp (2300 - 1000 = 1300)
+    expect(casts?.[0]).toMatchObject({
+      kind: "start",
+      durationMilli: 1_300,
+    });
+  });
   it("ignores non-player casters and unselected encounters", () => {
     const state = healerCastsProcessor.createState();
     const ctx = context();
