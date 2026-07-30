@@ -36,10 +36,6 @@ const PANEL_CATEGORIES: PanelCategory[] = [
     items: ["healing_done", "healing_taken"],
   },
   {
-    label: "Replay",
-    items: ["status", "healer_casts"],
-  },
-  {
     label: "Survivability",
     items: ["damage_taken", "enemy_damage_taken", "mitigation", "absorbed_damage", "resists"], // TODO: Add "avoidance" when spell school data is available
   },
@@ -80,6 +76,10 @@ const PANEL_CATEGORIES: PanelCategory[] = [
         icon: <Scale className="h-4 w-4" />,
       },
     ],
+  },
+  {
+    label: "Replay",
+    items: ["status", "healer_casts"],
   },
   {
     label: "Utility",
