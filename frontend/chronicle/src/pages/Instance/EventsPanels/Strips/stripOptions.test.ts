@@ -1,22 +1,30 @@
 import { describe, expect, it } from "vitest";
 import {
-  SHOW_STRIP_TITLE_TOKEN,
-  stripOptionEnabled,
-  updateStripOptionFlag,
+  stripTitleMode,
+  updateStripTitleMode,
 } from "./stripOptions";
 
-describe("strip title option", () => {
-  it("defaults to hidden", () => {
-    expect(stripOptionEnabled(null, SHOW_STRIP_TITLE_TOKEN)).toBe(false);
+describe("strip title mode", () => {
+  it("defaults to none", () => {
+    expect(stripTitleMode(null)).toBe("none");
   });
 
-  it("adds the title token while preserving other options", () => {
-    expect(updateStripOptionFlag("bc:#ef4444", SHOW_STRIP_TITLE_TOKEN, true))
-      .toBe("bc:#ef4444,show-title");
+  it("persists a title mode while preserving other options", () => {
+    expect(updateStripTitleMode("bc:#ef4444", "large"))
+      .toBe("bc:#ef4444,title-mode:large");
   });
 
-  it("removes only the title token", () => {
-    expect(updateStripOptionFlag("show-title,t:Custom", SHOW_STRIP_TITLE_TOKEN, false))
+  it("replaces an existing title mode", () => {
+    expect(updateStripTitleMode("title-mode:large,t:Custom", "overlay"))
+      .toBe("t:Custom,title-mode:overlay");
+  });
+
+  it("removes title mode tokens when set to none", () => {
+    expect(updateStripTitleMode("title-mode:overlay,t:Custom", "none"))
       .toBe("t:Custom");
+  });
+
+  it("reads the legacy show-title token as overlay", () => {
+    expect(stripTitleMode("show-title")).toBe("overlay");
   });
 });

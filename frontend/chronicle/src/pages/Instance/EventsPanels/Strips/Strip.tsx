@@ -5,7 +5,6 @@ import { toast } from "sonner";
 import type { StripOrientation } from "@/components/layout/GridLayoutEditor";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/Card/Card";
-import { Switch } from "@/components/ui/Switch/Switch";
 import { PortalContainerProvider, usePortalContainer } from "@/components/ui/PortalContainerContext";
 import { useIsMobile } from "@/hooks/useIsMobile";
 import { cn } from "@/lib/utils";
@@ -16,10 +15,10 @@ import type { PanelContext, PanelDefinition } from "../types";
 import { usePanelAggregation } from "../usePanelAggregation";
 import { STRIPS } from "./strips";
 import {
-  SHOW_STRIP_TITLE_TOKEN,
   parseStripOptionTokens,
-  stripOptionEnabled,
-  updateStripOptionFlag,
+  stripTitleMode,
+  updateStripTitleMode,
+  type StripTitleMode,
 } from "./stripOptions";
 import type { StripDefinition, StripType } from "./types";
 
@@ -73,7 +72,7 @@ export function Strip({
   const optionTokens = useMemo(() => parseStripOptionTokens(panelOption), [panelOption]);
   const borderColor = optionValue(optionTokens, "bc:");
   const customTitle = optionValue(optionTokens, "t:");
-  const showTitle = stripOptionEnabled(panelOption, SHOW_STRIP_TITLE_TOKEN);
+  const titleMode = stripTitleMode(panelOption);
   const inheritedPortalContainer = usePortalContainer();
   const [filters, setFiltersState] = useState<PanelFilter[]>(() => seedFilters ?? strip.defaultFilters ?? []);
   const [popup, setPopup] = useState<PanelPopup | null>(null);
@@ -112,8 +111,8 @@ export function Strip({
     onPanelOptionChange?.(updateOptionMeta(optionTokens, borderColor, title));
   }, [borderColor, onPanelOptionChange, optionTokens]);
 
-  const setShowTitle = useCallback((enabled: boolean) => {
-    onPanelOptionChange?.(updateStripOptionFlag(panelOption, SHOW_STRIP_TITLE_TOKEN, enabled));
+  const setTitleMode = useCallback((mode: StripTitleMode) => {
+    onPanelOptionChange?.(updateStripTitleMode(panelOption, mode));
   }, [onPanelOptionChange, panelOption]);
 
   const dockStrip = useCallback(() => {
@@ -250,17 +249,29 @@ export function Strip({
                 <Card className="relative mb-0 overflow-hidden p-0">{renderedStrip}</Card>
                 <Card className="mb-0 min-h-0 overflow-auto p-4 styled-scrollbar">
                   <div className="flex h-full min-h-0 flex-col gap-4">
-                    <div className="flex items-center justify-between rounded-md border border-border/70 bg-muted/20 px-3 py-2">
-                      <div>
-                        <div className="text-sm font-medium">Show title</div>
-                        <div className="text-xs text-muted-foreground">Display Raid Durability over the strip.</div>
+                    <div className="rounded-md border border-border/70 bg-muted/20 px-3 py-3">
+                      <div className="mb-2">
+                        <div className="text-sm font-medium">Title</div>
+                        <div className="text-xs text-muted-foreground">Choose how the strip title is displayed.</div>
                       </div>
-                      <Switch
-                        size="sm"
-                        checked={showTitle}
-                        onCheckedChange={setShowTitle}
-                        disabled={!onPanelOptionChange}
-                      />
+                      <div className="grid grid-cols-3 gap-1 rounded-md bg-background/70 p-1">
+                        {(["overlay", "large", "none"] as StripTitleMode[]).map((mode) => (
+                          <button
+                            key={mode}
+                            type="button"
+                            onClick={() => setTitleMode(mode)}
+                            disabled={!onPanelOptionChange}
+                            className={cn(
+                              "rounded px-2 py-1.5 text-xs font-medium capitalize transition-colors",
+                              titleMode === mode
+                                ? "bg-primary text-primary-foreground"
+                                : "text-muted-foreground hover:bg-muted hover:text-foreground",
+                            )}
+                          >
+                            {mode}
+                          </button>
+                        ))}
+                      </div>
                     </div>
                     <div className="min-h-0 flex-1">
                       <PanelFilterEditor

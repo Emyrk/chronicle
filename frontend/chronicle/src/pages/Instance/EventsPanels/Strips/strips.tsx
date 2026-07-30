@@ -7,13 +7,13 @@ import { usePlayerLifeState } from "../usePlayerLifeState";
 import { statusProcessor, type StatusResult } from "../Status/status.processor";
 import {
   createStatusRaidHealthModel,
+  statusRaidHealthAt,
   statusRaidHealthTimeline,
 } from "../Status/statusRaidHealth";
-import { selectStatusEncounter } from "../Status/statusTimeline";
+import { selectStatusEncounter, statusCursorMilli } from "../Status/statusTimeline";
 import {
-  SHOW_STRIP_TITLE_TOKEN,
-  stripOptionEnabled,
   stripOptionValue,
+  stripTitleMode,
 } from "./stripOptions";
 import { stripReplayProgress } from "./stripReplay";
 import type { StripDefinition, StripRenderProps, StripType } from "./types";
@@ -56,8 +56,10 @@ function RaidDurabilityStrip({ result, context, panelOption }: StripRenderProps<
     return <StripEmpty label="Estimated raid durability" />;
   }
 
-  const showTitle = stripOptionEnabled(panelOption, SHOW_STRIP_TITLE_TOKEN);
+  const titleMode = stripTitleMode(panelOption);
   const title = stripOptionValue(panelOption, "t:") ?? "Raid Durability";
+  const cursorMilli = statusCursorMilli(encounter, sync?.currentTimestamp ?? null, sync?.enabled ?? false);
+  const current = statusRaidHealthAt(model, cursorMilli);
   const replayProgress = stripReplayProgress(
     sync?.enabled ?? false,
     sync?.currentTimestamp ?? null,
@@ -65,21 +67,41 @@ function RaidDurabilityStrip({ result, context, panelOption }: StripRenderProps<
   );
   const buckets = statusRaidHealthTimeline(model, encounter.startMilli, encounter.endMilli, 96);
 
+  const bars = (
+    <StripBars
+      values={buckets.map((bucket) => bucket.percent)}
+      colors={buckets.map((bucket) => raidHealthColor(bucket.percent))}
+      max={100}
+      title={(index) => `${Math.round(buckets[index]?.percent ?? 0)}% estimated durability`}
+      replayProgress={replayProgress}
+      className="h-full"
+    />
+  );
+
+  if (titleMode === "large") {
+    return (
+      <div className="grid h-full min-h-0 grid-cols-[minmax(180px,0.9fr)_minmax(320px,4fr)] items-center gap-4 px-5 py-2">
+        <div className="flex min-w-0 flex-col gap-0.5">
+          <span className="truncate text-[9px] font-semibold uppercase tracking-[0.16em] text-muted-foreground">
+            {title}
+          </span>
+          <span className="truncate text-[9px] text-muted-foreground/70">
+            {current.alive}/{current.total} active · encounter estimate
+          </span>
+        </div>
+        {bars}
+      </div>
+    );
+  }
+
   return (
-    <div className="h-full min-h-0 p-2">
-      {showTitle ? (
+    <div className="relative h-full min-h-0 p-2">
+      {titleMode === "overlay" ? (
         <div className="pointer-events-none absolute bottom-3 left-4 z-20 text-[10px] font-semibold uppercase tracking-[0.14em] text-white/90 drop-shadow-[0_1px_2px_rgba(0,0,0,0.95)]">
           {title}
         </div>
       ) : null}
-      <StripBars
-        values={buckets.map((bucket) => bucket.percent)}
-        colors={buckets.map((bucket) => raidHealthColor(bucket.percent))}
-        max={100}
-        title={(index) => `${Math.round(buckets[index]?.percent ?? 0)}% estimated durability`}
-        replayProgress={replayProgress}
-        className="h-full"
-      />
+      {bars}
     </div>
   );
 }
