@@ -4,11 +4,16 @@
  */
 
 import { useCallback, useMemo, useState } from "react";
-import { ChevronDown, ChevronRight } from "lucide-react";
+import { ChevronDown, ChevronRight, HelpCircle, Hourglass } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { iconUrl } from "@/config/iconUrl";
+import { useIconBaseUrl } from "@/hooks/useDatasetId";
 import { ScrollArea } from "@/components/ui/ScrollArea/ScrollArea";
 import { useSpell } from "@/api/queries";
 import { useDatasetId } from "@/hooks/useDatasetId";
+import { useItemTooltip } from "@/api/gamedata";
+import { ItemTooltip } from "@/components/ui/ItemTooltip/ItemTooltip";
+import { getQualityBorderClass, getQualityTextClass } from "../../../ArmoryPage/types";
 import { SpellIconWithTooltip } from "@/components/ui/SpellIconWithTooltip";
 import { GenericPanel } from "../GenericPanel";
 import type { PanelRenderProps } from "../types";
@@ -100,6 +105,75 @@ function SpellCell({ spellId, name }: { spellId: number | null; name: string }) 
   );
 }
 
+/** Item icon + name with a full item tooltip on hover. */
+function ItemCell({ itemId, ambiguous }: { itemId: number; ambiguous?: boolean }) {
+  const iconBaseUrl = useIconBaseUrl();
+  const [hovered, setHovered] = useState(false);
+  const tooltip = useItemTooltip(itemId > 0 ? { itemId } : null);
+
+  const quality = tooltip.data?.quality ?? 0;
+  const icon = tooltip.data?.icon;
+  const name = tooltip.data?.name ?? `Item ${itemId}`;
+
+  return (
+    <span
+      className="relative inline-flex items-center gap-1.5"
+      onMouseEnter={() => setHovered(true)}
+      onMouseLeave={() => setHovered(false)}
+    >
+      <span className={cn(
+        "w-4.5 h-4.5 shrink-0 rounded border bg-zinc-900/80 flex items-center justify-center overflow-hidden",
+        getQualityBorderClass(quality),
+      )}>
+        {icon ? (
+          <img src={iconUrl(icon, iconBaseUrl)} alt={name} className="w-full h-full object-cover" loading="lazy" />
+        ) : (
+          <HelpCircle className="w-3 h-3 text-zinc-500" />
+        )}
+      </span>
+      <span className={cn("truncate", getQualityTextClass(quality))}>
+        {name}
+        {ambiguous && <span className="text-muted-foreground">?</span>}
+      </span>
+      {hovered && tooltip.data && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center -translate-y-[15%] pointer-events-none">
+          <ItemTooltip item={tooltip.data} />
+        </div>
+      )}
+    </span>
+  );
+}
+
+/** Item column: known item, ambiguous candidates, or a dash. */
+function ItemsCell({ use }: { use: ConsumableUse }) {
+  if (use.itemId !== null) return <ItemCell itemId={use.itemId} />;
+  if (use.candidateItemIds.length > 0) {
+    return (
+      <span className="inline-flex items-center gap-2">
+        {use.candidateItemIds.slice(0, 3).map((id) => (
+          <ItemCell key={id} itemId={id} ambiguous />
+        ))}
+        {use.candidateItemIds.length > 3 && (
+          <span className="text-muted-foreground text-2xs">+{use.candidateItemIds.length - 3}</span>
+        )}
+      </span>
+    );
+  }
+  return <span className="text-muted-foreground/40">-</span>;
+}
+
+/** Aura column: every buff spell observed for the use, icon + tooltip each. */
+function AurasCell({ use }: { use: ConsumableUse }) {
+  if (use.auraSpells.length === 0) return <span className="text-muted-foreground/40">-</span>;
+  return (
+    <span className="inline-flex items-center gap-2">
+      {use.auraSpells.map((spell) => (
+        <SpellCell key={spell.id} spellId={spell.id} name={spell.name || `Spell ${spell.id}`} />
+      ))}
+    </span>
+  );
+}
+
 // ============================================================================
 // Expanded evidence details
 // ============================================================================
@@ -157,11 +231,35 @@ function EvidenceDetails({ use, encounterNames }: { use: ConsumableUse; encounte
 // Content
 // ============================================================================
 
+// ============================================================================
+// Pre-pull toggle
+// ============================================================================
+
+function PrePullToggle({ enabled, onToggle }: { enabled: boolean; onToggle: () => void }) {
+  return (
+    <button
+      type="button"
+      onClick={onToggle}
+      className={cn(
+        "flex items-center gap-1 px-2 py-1 rounded text-xs font-medium transition-all cursor-pointer border",
+        enabled
+          ? "bg-sky-500/15 border-sky-400 text-sky-400"
+          : "bg-red-500/10 border-red-500/60 text-red-400 line-through",
+      )}
+      title={enabled ? "Hide uses only seen active at pull" : "Show uses only seen active at pull"}
+    >
+      <Hourglass className="h-3 w-3" />
+      <span className="hidden sm:inline">Pre-Pull</span>
+    </button>
+  );
+}
+
 type ConsumablesContentProps = PanelRenderProps<ConsumablesResult>;
 
 export const ConsumablesContent = (props: ConsumablesContentProps) => {
   const { result, context, loading, checkboxChecked } = props;
   const [expanded, setExpanded] = useState<Set<string>>(new Set());
+  const [showPrePull, setShowPrePull] = useState(true);
 
   const toggleExpanded = useCallback((consumeId: string) => {
     setExpanded((prev) => {
@@ -195,8 +293,10 @@ export const ConsumablesContent = (props: ConsumablesContentProps) => {
 
   const sortedUses = useMemo(() => {
     if (!cachedResult) return [];
-    return [...cachedResult.uses.values()].sort((a, b) => a.dateMilli - b.dateMilli);
-  }, [cachedResult]);
+    return [...cachedResult.uses.values()]
+      .filter((use) => showPrePull || !use.activeAtPullOnly)
+      .sort((a, b) => a.dateMilli - b.dateMilli);
+  }, [cachedResult, showPrePull]);
 
   const effectiveProps = {
     ...props,
@@ -216,6 +316,7 @@ export const ConsumablesContent = (props: ConsumablesContentProps) => {
               </span>
             )}
           </div>
+          <PrePullToggle enabled={showPrePull} onToggle={() => setShowPrePull((prev) => !prev)} />
         </div>
 
         {sortedUses.length === 0 ? (
@@ -231,7 +332,8 @@ export const ConsumablesContent = (props: ConsumablesContentProps) => {
                   <th className="text-left py-1.5 px-2 font-medium w-16">Time</th>
                   <th className="text-left py-1.5 px-2 font-medium">Encounter</th>
                   <th className="text-left py-1.5 px-2 font-medium">Player</th>
-                  <th className="text-left py-1.5 px-2 font-medium">Consumable</th>
+                  <th className="text-left py-1.5 px-2 font-medium">Item</th>
+                  <th className="text-left py-1.5 px-2 font-medium">Aura</th>
                   <th className="text-left py-1.5 px-2 font-medium w-20">Source</th>
                 </tr>
               </thead>
@@ -274,8 +376,11 @@ export const ConsumablesContent = (props: ConsumablesContentProps) => {
                           {player?.name ?? use.player}
                         </span>
                       </td>
-                      <td className="py-1 px-2 max-w-[160px] truncate" title={consumableDisplayName(use)}>
-                        <SpellCell spellId={use.spellId} name={consumableDisplayName(use)} />
+                      <td className="py-1 px-2 max-w-[180px]" title={consumableDisplayName(use)}>
+                        <ItemsCell use={use} />
+                      </td>
+                      <td className="py-1 px-2 max-w-[180px]">
+                        <AurasCell use={use} />
                       </td>
                       <td className="py-1 px-2">
                         <ConfidenceBadge use={use} />
@@ -283,7 +388,7 @@ export const ConsumablesContent = (props: ConsumablesContentProps) => {
                     </tr>,
                     isExpanded ? (
                       <tr key={`${use.consumeId}-details`} className="border-b border-border/10">
-                        <td colSpan={6} className="p-0">
+                        <td colSpan={7} className="p-0">
                           <EvidenceDetails use={use} encounterNames={encounterNames} />
                         </td>
                       </tr>

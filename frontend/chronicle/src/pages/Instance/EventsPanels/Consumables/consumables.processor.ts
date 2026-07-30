@@ -53,6 +53,8 @@ export interface ConsumableUse {
   activeAtPullOnly: boolean;
   observedAtUnixMilli: number;
   consumedAtUnixMilli: number | null;
+  /** Buff spells observed for this use (aura / active-at-pull evidence). */
+  auraSpells: { id: number; name: string }[];
   /** Encounter where evidence for this use was first seen. */
   encounterID: string;
   /** Millis of the first evidence relative to its encounter start. */
@@ -152,6 +154,7 @@ export const consumablesProcessor: PanelProcessor<ConsumablesResult, ConsumeProc
         activeAtPullOnly: true,
         observedAtUnixMilli: event.observedAtUnixMilli,
         consumedAtUnixMilli: null,
+        auraSpells: [],
         encounterID,
         offsetMilli: event.offsetMilli,
         dateMilli: event.consumedAtUnixMilli ?? event.observedAtUnixMilli,
@@ -184,6 +187,10 @@ export const consumablesProcessor: PanelProcessor<ConsumablesResult, ConsumeProc
     if (!use.kinds.includes(kind)) use.kinds.push(kind);
     // EvidenceKind 7 = ActiveAtPull. Any other kind proves a real observation.
     if (kind !== 7) use.activeAtPullOnly = false;
+    // Aura (3) and active-at-pull (7) evidence carries the buff spell.
+    if ((kind === 3 || kind === 7) && spellId !== null && !use.auraSpells.some((s) => s.id === spellId)) {
+      use.auraSpells.push({ id: spellId, name: spellName });
+    }
     if (use.consumedAtUnixMilli === null && event.consumedAtUnixMilli !== null) {
       use.consumedAtUnixMilli = event.consumedAtUnixMilli;
       use.dateMilli = event.consumedAtUnixMilli;
