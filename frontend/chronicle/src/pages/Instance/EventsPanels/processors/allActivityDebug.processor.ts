@@ -428,6 +428,7 @@ export const allActivityProcessor: PanelProcessor<AllActivityDebugState, AllActi
       rawEvent.extra = rcEvent.direction;
     } else if (streamType === "damage") {
       const damageEvent = event as DamageProcessorEvent;
+      rawEvent.spellId = damageEvent.spellId ?? undefined;
       const outcomes = outcomeLabels(damageEvent.hitType);
       const detail = [...outcomes, schoolName(damageEvent.school)];
       if (damageEvent.overkill > 0) {
@@ -437,6 +438,8 @@ export const allActivityProcessor: PanelProcessor<AllActivityDebugState, AllActi
       rawEvent.extra = detail.join(" · ");
       if (outcomes.includes("Crit")) rawEvent.flags?.push("CRIT");
       if (outcomes.includes("Miss")) rawEvent.flags?.push("MISS");
+      if (outcomes.includes("Immune")) rawEvent.flags?.push("IMMUNE");
+      if (outcomes.includes("Full Resist")) rawEvent.flags?.push("FULL RESIST");
       if (damageEvent.tailerCount > 0) {
         rawEvent.damageTrailers = damageEvent.tailers
           .slice(0, damageEvent.tailerCount)
@@ -448,6 +451,7 @@ export const allActivityProcessor: PanelProcessor<AllActivityDebugState, AllActi
       }
     } else if (streamType === "heal") {
       const healEvent = event as HealProcessorEvent;
+      rawEvent.spellId = healEvent.spellId ?? undefined;
       const outcomes = outcomeLabels(healEvent.hitType);
       const detail = [...outcomes, schoolName(healEvent.school)];
       if (healEvent.overheal > 0) {
@@ -470,6 +474,7 @@ export const allActivityProcessor: PanelProcessor<AllActivityDebugState, AllActi
       rawEvent.extra = actionNames[castEvent.action] || "Unknown";
     } else if (streamType === "aura") {
       const auraEvent = event as AuraProcessorEvent;
+      rawEvent.spellId = auraEvent.spellId ?? undefined;
       rawEvent.auraApplication = auraEvent.application;
       // Show aura state in extra field (state is the preferred field)
       const stateNames = ["Unknown", "Added", "Removed", "Modified"];

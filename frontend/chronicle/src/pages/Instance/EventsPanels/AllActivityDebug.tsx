@@ -216,6 +216,8 @@ const FLAG_STYLES: Record<string, string> = {
   ABSORB: "border-sky-400/25 bg-sky-400/10 text-sky-300",
   CRIT: "border-amber-400/25 bg-amber-400/10 text-amber-300",
   MISS: "border-zinc-400/25 bg-zinc-400/10 text-zinc-300",
+  IMMUNE: "border-fuchsia-400/25 bg-fuchsia-400/10 text-fuchsia-300",
+  "FULL RESIST": "border-violet-400/25 bg-violet-400/10 text-violet-300",
   SERVER: "border-red-400/25 bg-red-400/10 text-red-300",
   ITEM: "border-fuchsia-400/25 bg-fuchsia-400/10 text-fuchsia-300",
   PROJECTED: "border-violet-400/25 bg-violet-400/10 text-violet-300",
@@ -328,6 +330,7 @@ function RawEventRow({ event, index, useRelativeTime = false, useLocalTime = fal
                 spellId={event.spellId}
                 name={event.sourceName || "—"}
                 size={14}
+                loadOnHover
                 showIcon={false}
               />
             </Link>
@@ -337,14 +340,19 @@ function RawEventRow({ event, index, useRelativeTime = false, useLocalTime = fal
         </span>
         <span
           className={cn(
-            "truncate px-1.5",
+            "flex min-w-0 items-center gap-1 px-1.5",
             event.affiliation === 1 ? "text-green-400" :
             event.affiliation === 2 ? "text-red-400" :
             event.affiliation === 3 ? "text-yellow-400" : "text-purple-300",
           )}
           title={event.target ?? undefined}
         >
-          {event.targetName || "—"}
+          {event.targetName ? (
+            <>
+              <span className="shrink-0 font-bold text-foreground/70">→</span>
+              <span className="truncate">{event.targetName}</span>
+            </>
+          ) : "—"}
         </span>
         <span className={cn("px-1.5 text-right font-semibold tabular-nums", amountColor)}>
           {eventValue(event)}

@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { HitTypePartialAbsorb, HitTypePartialBlock, HitTypePartialResist } from "@/lib/hittype/hittype";
+import { HitTypeFullResist, HitTypeImmune, HitTypePartialAbsorb, HitTypePartialBlock, HitTypePartialResist } from "@/lib/hittype/hittype";
 import type { ConsumeProcessorEvent, DamageProcessorEvent, ProcessorContext, ResurrectionProcessorEvent, SpellStartProcessorEvent } from "../processorTypes";
 import { allActivityProcessor } from "./allActivityDebug.processor";
 
@@ -59,11 +59,29 @@ describe("allActivityProcessor", () => {
     );
 
     const event = state.rawEventsByStream.damage[0];
+    expect(event.spellId).toBe(10414);
     expect(event.damageTrailers).toEqual([
       { amount: 200, hitType: HitTypePartialAbsorb, labels: ["Partial Absorb"] },
       { amount: 100, hitType: HitTypePartialBlock, labels: ["Partial Block"] },
       { amount: 50, hitType: HitTypePartialResist, labels: ["Partial Resist"] },
     ]);
+  });
+
+  it("flags immune and fully resisted damage", () => {
+    const state = allActivityProcessor.createState();
+    const event = createDamageEvent();
+    event.hitType = HitTypeImmune | HitTypeFullResist;
+
+    allActivityProcessor.processEvent(
+      state,
+      event,
+      "encounter",
+      new Date("2026-07-14T17:41:42.709Z"),
+      "damage",
+      createContext(),
+    );
+
+    expect(state.rawEventsByStream.damage[0].flags).toEqual(["IMMUNE", "FULL RESIST"]);
   });
 
   it("captures resurrection source, target, and spell details", () => {
