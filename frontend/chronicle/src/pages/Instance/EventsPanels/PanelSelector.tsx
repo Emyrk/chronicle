@@ -41,7 +41,7 @@ const PANEL_CATEGORIES: PanelCategory[] = [
   },
   {
     label: "Resources",
-    items: ["extra_attacks", "resource_regen"],
+    items: ["extra_attacks", "resource_regen", "consumables"],
   },
   {
     label: "Deaths",

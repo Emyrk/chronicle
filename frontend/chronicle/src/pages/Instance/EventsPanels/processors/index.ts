@@ -33,6 +33,7 @@ import { interruptProcessor } from "../Interrupt/interrupt.processor";
 import { equipmentProcessor } from "../Equipment/equipment.processor";
 import { lootProcessor } from "../LootPanel/loot.processor";
 import { absorbedDamageProcessor } from "../AbsorbedDamage/absorbedDamage.processor";
+import { consumablesProcessor } from "../Consumables/consumables.processor";
 import { resistsProcessor } from "../ResistsPanel/resists.processor";
 import { guildsProcessor } from "../Guilds/guilds.processor";
 import { companionStatsProcessor } from "../CompanionStats/companionStats.processor";
@@ -68,6 +69,8 @@ export { unitLookupProcessor } from "../UnitLookup/unitLookup.processor";
 export { dispelProcessor } from "../Dispel/dispel.processor";
 export { interruptProcessor } from "../Interrupt/interrupt.processor";
 export { equipmentProcessor } from "../Equipment/equipment.processor";
+export { consumablesProcessor } from "../Consumables/consumables.processor";
+export type { ConsumablesResult, ConsumableUse } from "../Consumables/consumables.processor";
 export { lootProcessor } from "../LootPanel/loot.processor";
 export { absorbedDamageProcessor } from "../AbsorbedDamage/absorbedDamage.processor";
 export { resistsProcessor } from "../ResistsPanel/resists.processor";
@@ -137,6 +140,7 @@ export const processorRegistry: Record<string, PanelProcessor<any, any>> = {
   healing_done: unifiedHealingProcessor,
   healing_taken: unifiedHealingProcessor, // Same processor, different view
   extra_attacks: extraAttacksProcessor,
+  consumables: consumablesProcessor,
   deaths: deathsProcessor,
   death_log: deathsProcessor, // Same processor, different view
   all_activity: allActivityProcessor,

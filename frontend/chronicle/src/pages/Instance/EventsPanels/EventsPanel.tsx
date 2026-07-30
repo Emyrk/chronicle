@@ -39,6 +39,7 @@ import { createVulnerabilityEffectPanel } from "./VulnerabilityEffect/Vulnerabil
 import { createDamageTakenPanel } from "./DamageTaken/DamageTaken";
 import { createHealingDonePanel } from "./HealingDone/HealingDone";
 import { createExtraAttacksPanel } from "./ExtraAttacks/ExtraAttacks";
+import { createConsumablesPanel } from "./Consumables/Consumables";
 import { createHealingTakenPanel } from "./HealingTaken/HealingTaken";
 import { createDeathsPanel } from "./Deaths/Deaths";
 import { createDeathLogPanel } from "./Deaths/DeathLog";
@@ -92,6 +93,7 @@ export const PANELS: Record<string, PanelDefinition<any, any>> = {
   healing_done: createHealingDonePanel("players"),
   healing_taken: createHealingTakenPanel("players"),
   extra_attacks: createExtraAttacksPanel(),
+  consumables: createConsumablesPanel(),
   deaths: createDeathsPanel(),
   death_log: createDeathLogPanel(),
   mitigation: createMitigationPanel(),
