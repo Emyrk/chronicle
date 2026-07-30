@@ -4,7 +4,10 @@ import (
 	"testing"
 	"time"
 
+	"github.com/Emyrk/chronicle/database"
+	"github.com/Emyrk/chronicle/database/dbtestutil"
 	"github.com/Emyrk/chronicle/database/gamedb/chrondbc"
+	"github.com/Emyrk/chronicle/internal/testutil"
 	"github.com/Gophercraft/core/i18n"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -69,4 +72,32 @@ func TestCooldownSpellFromSpell(t *testing.T) {
 		_, ok := cooldownSpellFromSpell(passive)
 		assert.False(t, ok)
 	})
+}
+
+func TestCooldownDatasetImportSummary(t *testing.T) {
+	t.Parallel()
+	ctx := testutil.Context(t, testutil.WaitShort)
+	pool, _ := dbtestutil.NewPGXPool(t)
+	store := database.New(pool)
+
+	dataset, err := store.InsertDataset(ctx, database.InsertDatasetParams{
+		Name:          "Cooldown Summary",
+		Slug:          "cooldown-summary",
+		WowVersion:    "1.12.1",
+		BuildVersion:  5875,
+		DefaultFlavor: []string{},
+		IconBaseUrl:   "",
+	})
+	require.NoError(t, err)
+
+	_, err = pool.Exec(ctx, `
+		INSERT INTO dbc_cooldown_spells (
+			dataset_id, spell_id, name, recovery_time_ms, spell_class_set
+		) VALUES ($1, 871, 'Shield Wall', 1800000, 4)
+	`, dataset.ID)
+	require.NoError(t, err)
+
+	summary, err := store.GetDatasetImportSummary(ctx, dataset.ID)
+	require.NoError(t, err)
+	assert.Equal(t, int32(1), summary.CooldownsCount)
 }

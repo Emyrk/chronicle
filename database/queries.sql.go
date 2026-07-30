@@ -1389,6 +1389,7 @@ SELECT
     (SELECT COUNT(*) FROM dbc_extra_attack_spells WHERE dataset_id = $1)::INT AS extra_attacks_count,
     (SELECT COUNT(*) FROM dbc_duration_modifiers WHERE dataset_id = $1)::INT AS duration_modifiers_count,
     (SELECT COUNT(*) FROM dbc_periodic_spells WHERE dataset_id = $1)::INT AS periodic_spells_count,
+    (SELECT COUNT(*) FROM dbc_cooldown_spells WHERE dataset_id = $1)::INT AS cooldowns_count,
     (SELECT COUNT(*) FROM dbc_spell_description_variables WHERE dataset_id = $1)::INT AS desc_variables_count,
     (SELECT COUNT(*) FROM dbc_affected_aura_durations WHERE dataset_id = $1)::INT AS affected_aura_durations_count,
     (SELECT COUNT(*) FROM dbc_consumables WHERE dataset_id = $1)::INT AS consumables_count,
@@ -1413,6 +1414,7 @@ type GetDatasetImportSummaryRow struct {
 	ExtraAttacksCount          int32 `db:"extra_attacks_count" json:"extra_attacks_count"`
 	DurationModifiersCount     int32 `db:"duration_modifiers_count" json:"duration_modifiers_count"`
 	PeriodicSpellsCount        int32 `db:"periodic_spells_count" json:"periodic_spells_count"`
+	CooldownsCount             int32 `db:"cooldowns_count" json:"cooldowns_count"`
 	DescVariablesCount         int32 `db:"desc_variables_count" json:"desc_variables_count"`
 	AffectedAuraDurationsCount int32 `db:"affected_aura_durations_count" json:"affected_aura_durations_count"`
 	ConsumablesCount           int32 `db:"consumables_count" json:"consumables_count"`
@@ -1442,6 +1444,7 @@ func (q *sqlQuerier) GetDatasetImportSummary(ctx context.Context, datasetID uuid
 		&i.ExtraAttacksCount,
 		&i.DurationModifiersCount,
 		&i.PeriodicSpellsCount,
+		&i.CooldownsCount,
 		&i.DescVariablesCount,
 		&i.AffectedAuraDurationsCount,
 		&i.ConsumablesCount,

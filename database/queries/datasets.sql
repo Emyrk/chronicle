@@ -88,6 +88,7 @@ SELECT
     (SELECT COUNT(*) FROM dbc_extra_attack_spells WHERE dataset_id = $1)::INT AS extra_attacks_count,
     (SELECT COUNT(*) FROM dbc_duration_modifiers WHERE dataset_id = $1)::INT AS duration_modifiers_count,
     (SELECT COUNT(*) FROM dbc_periodic_spells WHERE dataset_id = $1)::INT AS periodic_spells_count,
+    (SELECT COUNT(*) FROM dbc_cooldown_spells WHERE dataset_id = $1)::INT AS cooldowns_count,
     (SELECT COUNT(*) FROM dbc_spell_description_variables WHERE dataset_id = $1)::INT AS desc_variables_count,
     (SELECT COUNT(*) FROM dbc_affected_aura_durations WHERE dataset_id = $1)::INT AS affected_aura_durations_count,
     (SELECT COUNT(*) FROM dbc_consumables WHERE dataset_id = $1)::INT AS consumables_count,
