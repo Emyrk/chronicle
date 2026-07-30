@@ -62,6 +62,12 @@ describe("collectAllActivityEvents", () => {
     expect(eventValue(event)).toBe("1,842");
   });
 
+  it("uses a dash for aura-cast values because duration is in the detail", () => {
+    const event = { ...spellEvent("spell_start"), streamType: "aura_cast" as const, amount: 12_000 };
+
+    expect(eventValue(event)).toBe("-");
+  });
+
   it("uses an em dash when a message has no useful primary value", () => {
     expect(eventValue(spellEvent("spell_start"))).toBe("—");
   });

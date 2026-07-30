@@ -53,6 +53,7 @@ export function eventDetail(event: RawDebugEvent): string {
 }
 
 export function eventValue(event: RawDebugEvent): string {
+  if (event.streamType === "aura_cast") return "-";
   const hasPrimaryValue = !["cast", "spell_start", "spell_fail", "ressurection", "dispel", "interrupt", "unit_classification"].includes(event.streamType);
   return hasPrimaryValue ? event.amount.toLocaleString(undefined, { maximumFractionDigits: 1 }) : "—";
 }
