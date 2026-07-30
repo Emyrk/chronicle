@@ -29,7 +29,7 @@ type Events struct {
 	Interrupt          []byte
 	Absorbed           []byte
 	CompanionStats     []byte
-	Consume    []byte
+	Consume            []byte
 }
 
 func NewEvents() *Events {
@@ -52,7 +52,7 @@ func NewEvents() *Events {
 		Interrupt:          make([]byte, 0),
 		Absorbed:           make([]byte, 0),
 		CompanionStats:     make([]byte, 0),
-		Consume:    make([]byte, 0),
+		Consume:            make([]byte, 0),
 	}
 }
 

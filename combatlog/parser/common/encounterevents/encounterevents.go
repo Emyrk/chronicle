@@ -35,7 +35,7 @@ type EncounterEvents struct {
 	Interrupt          *Builder[*messages.Interrupt, *chronicleproto.Interrupt]
 	Absorbed           *Builder[*messages.Absorbed, *chronicleproto.Absorbed]
 	CompanionStats     *Builder[*messages.CompanionStats, *chronicleproto.CompanionStats]
-	Consume    *Builder[*messages.Consume, *chronicleproto.Consume]
+	Consume            *Builder[*messages.Consume, *chronicleproto.Consume]
 	cnter              int32
 }
 
@@ -61,7 +61,7 @@ func New(verbose bool) *EncounterEventsInProgress {
 		Interrupt:          NewBuilder[*messages.Interrupt, *chronicleproto.Interrupt](),
 		Absorbed:           NewBuilder[*messages.Absorbed, *chronicleproto.Absorbed](),
 		CompanionStats:     NewBuilder[*messages.CompanionStats, *chronicleproto.CompanionStats](),
-		Consume:    NewBuilder[*messages.Consume, *chronicleproto.Consume](),
+		Consume:            NewBuilder[*messages.Consume, *chronicleproto.Consume](),
 	}
 }
 

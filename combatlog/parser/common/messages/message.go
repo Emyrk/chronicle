@@ -635,24 +635,23 @@ const (
 // use observed from different angles.
 type Consume struct {
 	MessageBase
-	ConsumeID          string             // groups evidence for one physical use
-	EvidenceID         string             // unique observation identifier
-	Player             guid.GUID          // player GUID
-	ItemID             *int32             // item ID when known
-	CandidateItemIDs   []int32            // possible items when ambiguous
-	SpellData          *chrondbc.Spell    // spell data if available
-	Kind               EvidenceKind       // how this evidence was observed
-	Confidence         EvidenceConfidence // how certain we are
-	ConsumedAtUnixMs   *int64             // when the item was consumed (optional)
-	ObservedAtUnixMs   int64              // when the observation occurred
-	Amount             *int32             // heal/resource/damage amount
-	ResourceType       *string            // resource type string (matches ResourceChange)
-	IsProjection       bool               // true when projected from prior encounter
+	ConsumeID        string             // groups evidence for one physical use
+	EvidenceID       string             // unique observation identifier
+	Player           guid.GUID          // player GUID
+	ItemID           *int32             // item ID when known
+	CandidateItemIDs []int32            // possible items when ambiguous
+	SpellData        *chrondbc.Spell    // spell data if available
+	Kind             EvidenceKind       // how this evidence was observed
+	Confidence       EvidenceConfidence // how certain we are
+	ConsumedAtUnixMs *int64             // when the item was consumed (optional)
+	ObservedAtUnixMs int64              // when the observation occurred
+	Amount           *int32             // heal/resource/damage amount
+	ResourceType     *string            // resource type string (matches ResourceChange)
+	IsProjection     bool               // true when projected from prior encounter
 }
 
 func (c Consume) Affects() []guid.GUID { return []guid.GUID{c.Player} }
 func (*Consume) isMessage()            {}
-
 
 type Timeout struct {
 	MessageBase

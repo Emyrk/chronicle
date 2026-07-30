@@ -292,8 +292,8 @@ message Consume {
   optional SpellData spellData = 7;
   EvidenceKind kind = 8;
   EvidenceConfidence confidence = 9;
-  optional int64 consumedAtUnixMilli = 10;  // when the item was consumed
-  int64 observedAtUnixMilli = 11;           // when the observation occurred
+  optional int64 consumedAtUnixMilli = 10; // when the item was consumed
+  int64 observedAtUnixMilli = 11;          // when the observation occurred
   optional int32 amount = 12;              // heal/resource/damage amount
   optional string resourceType = 13;       // resource type string (matches ResourceChange.resourceType)
   bool isProjection = 14;                  // true when projected from prior encounter
