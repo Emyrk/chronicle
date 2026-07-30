@@ -226,7 +226,7 @@ export const PRESET_LAYOUTS: PresetLayout[] = [
       "panel-8": "leaderboard",
     },
     panelOptions: {
-      "panel-6": "s:dghr",
+      "panel-6": "s:dhx",
     },
     panelFilters: {
       "panel-6": [{ type: "time_range", value: "controller" }],
