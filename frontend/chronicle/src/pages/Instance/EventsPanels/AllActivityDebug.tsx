@@ -189,10 +189,12 @@ function formatTimestamp(absoluteMilli: number, useLocalTime: boolean = false): 
 function formatRelativeTime(offsetMilli: number): string {
   const sign = offsetMilli >= 0 ? "+" : "-";
   const absOffset = Math.abs(offsetMilli);
-  const totalSeconds = absOffset / 1000;
-  const minutes = Math.floor(totalSeconds / 60);
-  const seconds = (totalSeconds % 60).toFixed(1);
-  return `${sign}${minutes}:${seconds.padStart(4, "0")}`;
+  // Round to tenths of a second first, then split into minutes:seconds
+  // to avoid .toFixed(1) rounding 59.96… up to "60.0".
+  const totalTenths = Math.round(absOffset / 100);
+  const minutes = Math.floor(totalTenths / 600);
+  const seconds = (totalTenths % 600) / 10;
+  return `${sign}${minutes}:${seconds.toFixed(1).padStart(4, "0")}`;
 }
 
 const GEAR_SLOT_NAMES = [
