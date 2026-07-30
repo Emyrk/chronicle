@@ -171,10 +171,12 @@ function ItemCell({ itemId, link }: { itemId: number; link?: boolean }) {
   );
 }
 
-/** Item column: known item, candidate count when ambiguous, or a dash. */
+/** Item column: known item, candidate count when ambiguous, or a dash. A
+ * single candidate is unambiguous even without a direct-use observation. */
 function ItemsCell({ use }: { use: ConsumableUse }) {
   if (use.itemId !== null) return <ItemCell itemId={use.itemId} />;
-  if (use.candidateItemIds.length > 0) {
+  if (use.candidateItemIds.length === 1) return <ItemCell itemId={use.candidateItemIds[0]} />;
+  if (use.candidateItemIds.length > 1) {
     return (
       <span className="text-muted-foreground" title="Expand the row to see all candidate items">
         {use.candidateItemIds.length} possible items
