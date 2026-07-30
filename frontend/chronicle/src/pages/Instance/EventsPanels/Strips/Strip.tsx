@@ -182,7 +182,7 @@ export function Strip({
   return (
     <PortalContainerProvider container={popup?.container ?? inheritedPortalContainer}>
       <div
-        className="group/strip relative h-full min-h-0 overflow-hidden rounded-md border border-border/70 bg-card"
+        className="group/strip relative h-full min-h-0 overflow-visible rounded-md border border-border/70 bg-card"
         style={borderColor ? { borderColor } : undefined}
         onMouseDown={(event) => {
           if (event.shiftKey && event.button === 0) {
