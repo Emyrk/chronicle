@@ -192,8 +192,8 @@ export function Strip({
         }}
       >
         {renderedStrip}
-        <div className="absolute inset-x-0 top-0 z-30 flex items-center justify-between gap-2 border-b border-border/70 bg-card/95 px-3 py-1 opacity-0 shadow-sm backdrop-blur transition-opacity group-hover/strip:opacity-100 group-focus-within/strip:opacity-100">
-          <div className="flex min-w-0 items-center gap-2">
+        <div className="pointer-events-none absolute inset-x-3 top-2 z-30 flex items-center justify-between gap-2 opacity-0 transition-opacity group-hover/strip:opacity-100 group-focus-within/strip:opacity-100">
+          <div className="pointer-events-auto flex min-w-0 items-center gap-2 drop-shadow-[0_1px_2px_rgba(0,0,0,0.9)]">
             {customTitle ? <span className="truncate text-xs font-medium">{customTitle}</span> : null}
             {onStripTypeChange ? (
               <span className={customTitle ? "text-muted-foreground" : undefined}>
@@ -203,7 +203,7 @@ export function Strip({
               <span className="flex items-center gap-1.5 text-xs font-medium">{strip.icon}{strip.label}</span>
             )}
           </div>
-          <div className="flex items-center gap-1">
+          <div className="pointer-events-auto flex items-center gap-1 drop-shadow-[0_1px_2px_rgba(0,0,0,0.9)]">
             <Button
               type="button"
               variant="ghost"
