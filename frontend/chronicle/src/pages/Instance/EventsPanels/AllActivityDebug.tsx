@@ -206,7 +206,7 @@ const GEAR_SLOT_NAMES = [
   "Back", "Main Hand", "Off Hand", "Ranged", "Tabard",
 ];
 
-const EVENT_ROW_COLUMNS = "30px 68px 108px 116px 180px 116px 64px minmax(170px, 1fr) 132px 116px";
+const EVENT_ROW_COLUMNS = "30px 68px 108px 128px 152px 140px 64px minmax(170px, 1fr) 132px 116px";
 
 const CLASS_TEXT_COLORS: Record<string, string> = {
   WARRIOR: "text-class-warrior",

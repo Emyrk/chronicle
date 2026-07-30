@@ -1355,6 +1355,8 @@ export interface ReusableAttributionDamage {
   hitType: number;
   amount: number;
   school: number;
+  spellId: number | null;
+  spellAttackOutcome: number | null;
 }
 
 /**
@@ -1388,6 +1390,7 @@ export interface ReusableSlain {
  *   6: hitType (uint32)
  *   7: amount (int32)
  *   8: school (School enum)
+ *   10: spellData (SpellData) - nested: 1=id, 2=name, 3=attack_outcome
  */
 export class SlainDecoder {
   // Use shared TextDecoder for better memory efficiency
@@ -1400,6 +1403,8 @@ export class SlainDecoder {
     hitType: 0,
     amount: 0,
     school: 0,
+    spellId: null,
+    spellAttackOutcome: null,
   };
   
   /** Reusable message - mutated on each decode */
@@ -1499,6 +1504,8 @@ export class SlainDecoder {
           attr.hitType = 0;
           attr.amount = 0;
           attr.school = 0;
+          attr.spellId = null;
+          attr.spellAttackOutcome = null;
           
           const attrEnd = offset + len;
           while (offset < attrEnd) {
@@ -1519,11 +1526,30 @@ export class SlainDecoder {
               offset += bytesRead;
               if (attrField === 3) {
                 attr.caster = this.textDecoder.decode(data.subarray(offset, offset + attrLen));
+                offset += attrLen;
               } else if (attrField === 4) {
                 attr.sourceName = this.textDecoder.decode(data.subarray(offset, offset + attrLen));
+                offset += attrLen;
+              } else if (attrField === 10) {
+                const spellEnd = offset + attrLen;
+                while (offset < spellEnd) {
+                  const spellTag = data[offset++];
+                  const spellField = spellTag >> 3;
+                  const spellWire = spellTag & 0x7;
+                  if (spellWire === 0) {
+                    const { value, bytesRead } = readVarintFast(data, offset);
+                    offset += bytesRead;
+                    if (spellField === 1) attr.spellId = value;
+                    else if (spellField === 3) attr.spellAttackOutcome = value;
+                  } else if (spellWire === 2) {
+                    const { value: spellLen, bytesRead } = readVarintFast(data, offset);
+                    offset += bytesRead + spellLen;
+                  }
+                }
+              } else {
+                // Skip field 5 (target) and field 1 (meta) - not needed for attribution
+                offset += attrLen;
               }
-              // Skip field 5 (target) and field 1 (meta) - not needed for attribution
-              offset += attrLen;
             }
           }
           msg.attribution = attr;

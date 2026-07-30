@@ -125,6 +125,8 @@ export interface AttributionDamage {
   hitType: number;
   amount: number;
   school: number;
+  spellId?: number | null;
+  spellAttackOutcome?: number | null;
 }
 
 /**

@@ -518,9 +518,10 @@ export const allActivityProcessor: PanelProcessor<AllActivityDebugState, AllActi
       const slainEvent = event as SlainProcessorEvent;
       // Show death info in extra field
       if (slainEvent.attribution) {
+        rawEvent.spellId = slainEvent.attribution.spellId ?? undefined;
         rawEvent.extra = `${outcomeLabels(slainEvent.attribution.hitType).join(" · ")} · ${schoolName(slainEvent.attribution.school)}`;
       } else {
-        rawEvent.extra = "attribution unavailable · caster empty";
+        rawEvent.extra = "attribution unavailable";
         rawEvent.flags?.push("NO ATTRIB");
       }
     } else if (streamType === "ressurection") {

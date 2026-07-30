@@ -1,7 +1,7 @@
 import { create, toBinary } from '@bufbuild/protobuf';
-import { ConsumeSchema, EventMetaSchema, EvidenceConfidence, EvidenceKind, ExtraAttackSchema, ResourceChangeSchema, ResurrectionSchema, SpellDataSchema } from '@/api/proto/chronicle_pb';
+import { ConsumeSchema, DamageSchema, EventMetaSchema, EvidenceConfidence, EvidenceKind, ExtraAttackSchema, ResourceChangeSchema, ResurrectionSchema, SlainSchema, SpellDataSchema } from '@/api/proto/chronicle_pb';
 import { describe, it, expect } from 'vitest';
-import { AuraDecoder, FastConsumeCursor, FastExtraAttackCursor, FastResourceChangeCursor, FastResurrectionCursor, readVarint, readVarint64, parseAllHeaders } from './decode';
+import { AuraDecoder, FastConsumeCursor, FastExtraAttackCursor, FastResourceChangeCursor, FastResurrectionCursor, FastSlainCursor, readVarint, readVarint64, parseAllHeaders } from './decode';
 
 describe('readVarint', () => {
   it('reads single-byte varints', () => {
@@ -123,6 +123,39 @@ describe('FastResourceChangeCursor', () => {
       resourceType: 'Mana',
       spellId: 16190,
       spellAttackOutcome: 7,
+    });
+  });
+});
+
+describe('FastSlainCursor', () => {
+  it('decodes attribution spell data', () => {
+    const attribution = create(DamageSchema, {
+      caster: '0xSOURCE',
+      sourceName: 'Shadow Bolt',
+      target: '0xTARGET',
+      amount: 900,
+      school: 6,
+      spellData: create(SpellDataSchema, { id: 11659, name: 'Shadow Bolt', attackOutcome: 7 }),
+    });
+    const message = create(SlainSchema, {
+      meta: create(EventMetaSchema, { index: 11, offsetMilli: 3000n }),
+      target: '0xTARGET',
+      caster: '0xSOURCE',
+      attribution,
+    });
+    const encoded = toBinary(SlainSchema, message);
+    const messageData = new Uint8Array([...encodeVarint(encoded.length), ...encoded]);
+    const payload = buildPayload('encounter', 1706000000000n, 1, messageData.length, messageData);
+
+    const cursor = new FastSlainCursor(payload);
+
+    expect(cursor.next()).toMatchObject({
+      type: 'slain',
+      attribution: {
+        sourceName: 'Shadow Bolt',
+        spellId: 11659,
+        spellAttackOutcome: 7,
+      },
     });
   });
 });

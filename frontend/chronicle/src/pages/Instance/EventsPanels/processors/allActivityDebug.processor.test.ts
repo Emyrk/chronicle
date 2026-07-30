@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { HitTypeCrushing, HitTypeFullResist, HitTypeGlancing, HitTypeImmune, HitTypePartialAbsorb, HitTypePartialBlock, HitTypePartialResist } from "@/lib/hittype/hittype";
-import type { ConsumeProcessorEvent, DamageProcessorEvent, ExtraAttackProcessorEvent, ProcessorContext, ResourceChangeProcessorEvent, ResurrectionProcessorEvent, SpellStartProcessorEvent } from "../processorTypes";
+import type { ConsumeProcessorEvent, DamageProcessorEvent, ExtraAttackProcessorEvent, ProcessorContext, ResourceChangeProcessorEvent, ResurrectionProcessorEvent, SlainProcessorEvent, SpellStartProcessorEvent } from "../processorTypes";
 import { allActivityProcessor } from "./allActivityDebug.processor";
 
 function createContext(): ProcessorContext {
@@ -171,6 +171,72 @@ describe("allActivityProcessor", () => {
       spellId: 16190,
       extra: "Gain · Mana · 20 wasted",
       flags: ["MANA"],
+    });
+  });
+
+  it("captures slain attribution spell details", () => {
+    const state = allActivityProcessor.createState();
+    const event: SlainProcessorEvent = {
+      type: "slain",
+      index: 10,
+      offsetMilli: 2500,
+      target: "player",
+      caster: "doan",
+      attribution: {
+        caster: "doan",
+        sourceName: "Shadow Bolt",
+        hitType: 0,
+        amount: 900,
+        school: 6,
+        spellId: 11659,
+        spellAttackOutcome: null,
+      },
+      activity: [],
+      activityCount: 0,
+      isSynthetic: false,
+    };
+
+    allActivityProcessor.processEvent(
+      state,
+      event,
+      "encounter",
+      new Date("2026-07-14T17:41:42.709Z"),
+      "slain",
+      createContext(),
+    );
+
+    expect(state.rawEventsByStream.slain[0]).toMatchObject({
+      sourceName: "Shadow Bolt",
+      spellId: 11659,
+    });
+  });
+
+  it("uses a concise message when slain attribution is unavailable", () => {
+    const state = allActivityProcessor.createState();
+    const event: SlainProcessorEvent = {
+      type: "slain",
+      index: 11,
+      offsetMilli: 2750,
+      target: "player",
+      caster: "",
+      attribution: null,
+      activity: [],
+      activityCount: 0,
+      isSynthetic: false,
+    };
+
+    allActivityProcessor.processEvent(
+      state,
+      event,
+      "encounter",
+      new Date("2026-07-14T17:41:42.709Z"),
+      "slain",
+      createContext(),
+    );
+
+    expect(state.rawEventsByStream.slain[0]).toMatchObject({
+      extra: "attribution unavailable",
+      flags: ["NO ATTRIB"],
     });
   });
 
