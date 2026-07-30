@@ -8,10 +8,9 @@ import { usePlayerLifeState } from "../usePlayerLifeState";
 import { statusProcessor, type StatusResult } from "../Status/status.processor";
 import {
   createStatusRaidHealthModel,
-  statusRaidHealthAt,
   statusRaidHealthTimeline,
 } from "../Status/statusRaidHealth";
-import { selectStatusEncounter, statusCursorMilli } from "../Status/statusTimeline";
+import { selectStatusEncounter } from "../Status/statusTimeline";
 import type { PanelFilter } from "../processors/filters";
 import {
   totalDamageBuckets,
@@ -58,22 +57,18 @@ function RaidDurabilityStrip({ result, context }: StripRenderProps<StatusResult>
     return <StripEmpty label="Estimated raid durability" />;
   }
 
-  const cursorMilli = statusCursorMilli(encounter, sync?.currentTimestamp ?? null, sync?.enabled ?? false);
-  const current = statusRaidHealthAt(model, cursorMilli);
   const buckets = statusRaidHealthTimeline(model, encounter.startMilli, encounter.endMilli, 96);
 
   return (
-    <StripFrame
-      label="Estimated raid durability"
-      summary={`${current.alive}/${current.total} active · encounter estimate`}
-    >
+    <div className="h-full min-h-0 p-2">
       <StripBars
         values={buckets.map((bucket) => bucket.percent)}
         colors={buckets.map((bucket) => raidHealthColor(bucket.percent))}
         max={100}
         title={(index) => `${Math.round(buckets[index]?.percent ?? 0)}% estimated durability`}
+        className="h-full"
       />
-    </StripFrame>
+    </div>
   );
 }
 
@@ -135,14 +130,16 @@ function StripBars({
   colors,
   max,
   title,
+  className,
 }: {
   values: number[];
   colors: string[];
   max: number;
   title: (index: number) => string;
+  className?: string;
 }) {
   return (
-    <div className="relative h-10 overflow-hidden border border-white/[0.07] bg-[#111316] px-1.5 pb-1 pt-1.5">
+    <div className={cn("relative h-10 overflow-hidden border border-white/[0.07] bg-[#111316] px-1.5 pb-1 pt-1.5", className)}>
       <div className="absolute inset-x-0 top-1/2 border-t border-dashed border-white/[0.06]" />
       <div className="relative flex h-full items-end gap-px">
         {values.map((value, index) => (
