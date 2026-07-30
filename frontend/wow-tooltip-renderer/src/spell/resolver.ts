@@ -15,9 +15,12 @@ import { evaluateArithmetic } from "./arithmetic.js";
 // the previous five sequential regex passes). The grammar:
 //
 //   template = (literal | escape)*
-//   escape   = '$' (arithMod | inlineExpr | crossRef | plural | gender | localVar)
+//   escape   = '$' (arithMod | inlineExpr | conditional | crossRef | plural |
+//                    gender | descVar | localVar)
 //   arithMod = ('*' | '/') DIGITS ';' varRef          -- $*8;s1, $/1000;s1
 //   inlineExpr = '{' (literal | escape)* '}'           -- ${$m1*3}, ${5*$AR*0.01}
+//   conditional = '?s' DIGITS '[' template ']' '[' template ']'
+//                                                         -- $?s123[known][unknown]
 //   crossRef = DIGITS varRef                           -- $23455s1  (optionally -$...)
 //   plural   = 'l' TEXT ':' TEXT ';'                   -- $lpoint:points;  (lowercase l only)
 //   gender   = ('g'|'G') TEXT ':' TEXT ';'             -- $ghe:she;
@@ -35,11 +38,13 @@ import { evaluateArithmetic } from "./arithmetic.js";
 //     diagnosis); a preceding '-' is preserved in that case.
 //   - Inline expressions resolve their inner variables first, then evaluate; if
 //     evaluation fails the (partially resolved) `${...}` text is kept verbatim.
+//   - Spell-known conditionals use the unknown branch because tooltip rendering
+//     has no character spellbook context.
 
 // Arithmetic modifiers: $*N;var or $/N;var, with optional cross-spell ref: $/10;23690s1
 const RE_ARITH_MUL = /^\$\*(\d+);(\d+)?([a-zA-Z])(\d)?/;
 const RE_ARITH_DIV = /^\$\/(\d+);(\d+)?([a-zA-Z])(\d)?/;
-const RE_INLINE = /^\$\{([^}]+)\}/;
+const RE_CONDITIONAL = /^\$\?s\d+/;
 const RE_CROSSREF = /^\$(\d+)([a-zA-Z])(\d)?/;
 const RE_PLURAL = /^\$l([^:]+):([^;]+);/; // lowercase $l only
 const RE_GENDER = /^\$g([^:]+):([^;]+);/i; // $g / $G
@@ -48,6 +53,56 @@ const RE_LOCALVAR = /^\$([a-zA-Z])(\d)?/;
 
 // Last run of digits in a string, used to update the pluralization anchor.
 const RE_LAST_NUMBER = /(\d+)(?![\s\S]*\d)/;
+
+interface ParsedSection {
+  content: string;
+  end: number;
+}
+
+function parseBalancedSection(
+  input: string,
+  start: number,
+  open: string,
+  close: string,
+): ParsedSection | null {
+  if (input[start] !== open) return null;
+
+  let depth = 1;
+  for (let i = start + 1; i < input.length; i++) {
+    if (input[i] === open) depth++;
+    if (input[i] !== close) continue;
+
+    depth--;
+    if (depth === 0) {
+      return { content: input.slice(start + 1, i), end: i + 1 };
+    }
+  }
+
+  return null;
+}
+
+function parseInlineExpression(input: string): ParsedSection | null {
+  if (!input.startsWith("${")) return null;
+  return parseBalancedSection(input, 1, "{", "}");
+}
+
+interface ParsedConditional {
+  whenFalse: string;
+  end: number;
+}
+
+function parseConditional(input: string): ParsedConditional | null {
+  const match = RE_CONDITIONAL.exec(input);
+  if (!match) return null;
+
+  const whenTrue = parseBalancedSection(input, match[0].length, "[", "]");
+  if (!whenTrue) return null;
+
+  const whenFalse = parseBalancedSection(input, whenTrue.end, "[", "]");
+  if (!whenFalse) return null;
+
+  return { whenFalse: whenFalse.content, end: whenFalse.end };
+}
 
 function applyArith(
   spell: WoWSpell,
@@ -163,17 +218,35 @@ export function resolveSpellDescription(
       continue;
     }
 
-    // ${expr} — inline arithmetic (resolve inner variables first, then evaluate)
-    if ((m = RE_INLINE.exec(rest))) {
+    // $?sNNNN[known][unknown] — runtime spell-known conditional. Tooltip
+    // rendering has no character spellbook, so resolve the unknown branch.
+    const conditional = parseConditional(rest);
+    if (conditional) {
+      append(
+        resolveSpellDescription(
+          spell,
+          conditional.whenFalse,
+          referencedSpells,
+          forLevel,
+        ),
+      );
+      i += conditional.end;
+      continue;
+    }
+
+    // ${expr} — inline arithmetic (resolve inner variables first, then evaluate).
+    // Expressions may contain nested ${...} description-variable expansions.
+    const inline = parseInlineExpression(rest);
+    if (inline) {
       const inner = resolveSpellDescription(
         spell,
-        m[1],
+        inline.content,
         referencedSpells,
         forLevel,
       );
       const evaluated = evaluateArithmetic(inner);
       append(evaluated !== null ? String(evaluated) : `\${${inner}}`);
-      i += m[0].length;
+      i += inline.end;
       continue;
     }
 

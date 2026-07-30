@@ -112,6 +112,34 @@ describe("resolveSpellDescription — variable types", () => {
   });
 });
 
+describe("resolveSpellDescription — description variables", () => {
+  it("resolves Lifebloom's nested Genesis talent multiplier", () => {
+    const lifebloom = makeSpell({
+      id: 48451,
+      effect_base_points: [52, 775, 0],
+      duration: { ID: 165, Duration: 7000, DurationPerLevel: 0, MaxDuration: 7000 },
+      cumulative_aura: 3,
+      description_variables: [
+        "$genesis1=$?s57810[${1+0.01*$57810m1}][${1}]",
+        "$genesis2=$?s57811[${1+0.01*$57811m1}][${$<genesis1>}]",
+        "$genesis3=$?s57812[${1+0.01*$57812m1}][${$<genesis2>}]",
+        "$genesis4=$?s57813[${1+0.01*$57813m1}][${$<genesis3>}]",
+        "$genesis5=$?s57814[${1+0.01*$57814m1}][${$<genesis4>}]",
+        "$mult=${$<genesis5>}",
+      ].join("\r\n"),
+    });
+
+    expect(
+      resolveSpellDescription(
+        lifebloom,
+        "Heals the target for ${$m1*7*$<mult>} over $d. When Lifebloom completes its duration or is dispelled, the target instantly heals themself for $s2. This effect can stack up to $u times.",
+      ),
+    ).toBe(
+      "Heals the target for 364 over 7 sec. When Lifebloom completes its duration or is dispelled, the target instantly heals themself for 775. This effect can stack up to 3 times.",
+    );
+  });
+});
+
 describe("resolveSpellDescription — cross-spell references", () => {
   it("resolves $NNNNs1 from the referenced spell map", () => {
     const target = makeSpell({ id: 100, effect_base_points: [0, 0, 0] });
