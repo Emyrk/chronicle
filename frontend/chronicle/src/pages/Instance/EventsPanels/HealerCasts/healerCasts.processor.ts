@@ -337,20 +337,18 @@ export const healerCastsProcessor: PanelProcessor<HealerCastsResult, HealerCastE
     // SPELL_CAST_START, so the only way to know the actual (talented/hasted)
     // cast duration is by measuring start→go or start→fail.
     //
-    // Guard: only backfill if no other "start" event (any spell) sits between
-    // the candidate and this event.  An intervening start means the candidate
-    // was implicitly cancelled (player began a new cast), so it should stay
-    // at duration 0 rather than spanning across unrelated casts.
+    // Only break on a same-spell start — that means the player re-started the
+    // same cast (the earlier one was cancelled).  Different-spell starts are
+    // skipped because healers weave instants (Holy Shock, Judgement, etc.)
+    // between casted heals without cancelling them.
     if (kind !== "start") {
       for (let i = casts.length - 1; i >= 0; i--) {
         const prev = casts[i];
-        // Any intervening start (even a different spell) means the candidate
-        // was implicitly cancelled — stop searching.
-        if (prev.kind === "start" && prev.spellId !== event.spell.id) break;
-        if (prev.kind === "start" && prev.spellId === event.spell.id && prev.durationMilli === 0) {
+        if (prev.kind !== "start" || prev.spellId !== event.spell.id) continue;
+        if (prev.durationMilli === 0) {
           prev.durationMilli = timestampMilli - prev.timestampMilli;
-          break;
         }
+        break;
       }
     }
 

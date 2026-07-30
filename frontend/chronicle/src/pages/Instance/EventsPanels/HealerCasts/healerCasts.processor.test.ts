@@ -264,15 +264,14 @@ describe("healerCastsProcessor", () => {
     expect(casts?.[0].durationMilli).toBe(2_500);
   });
 
-  it("does not backfill an orphaned start when another cast started in between", () => {
+  it("does not backfill an orphaned start when the same spell was re-started", () => {
     // Scenario: Regrowth start → player moves (implicit cancel, no fail event)
-    // → 25s later, starts and completes another Regrowth.
-    // The old orphaned start should NOT get a 25s duration.
+    // → starts Regrowth again → completes.
+    // The old orphaned start should NOT get backfilled.
     const state = healerCastsProcessor.createState();
     const firstTimestamp = new Date("2026-07-30T00:00:00Z");
     const ctx = context();
     const REGROWTH = 8936;
-    const REJUVENATION = 774;
 
     // Regrowth start at t=1000 (no cast time from WotLK)
     healerCastsProcessor.processEvent(
@@ -280,22 +279,61 @@ describe("healerCastsProcessor", () => {
       start({ offsetMilli: 1_000, castTimeMilli: 0, spell: { id: REGROWTH, name: "Regrowth" } }),
       "encounter-1", firstTimestamp, "spell_start", ctx,
     );
-    // Player starts a different spell at t=3000 (implicitly cancelling Regrowth)
+    // Player re-starts Regrowth at t=3000 (implicitly cancelled first one)
     healerCastsProcessor.processEvent(
       state,
-      start({ offsetMilli: 3_000, index: 3, castTimeMilli: 0, spell: { id: REJUVENATION, name: "Rejuvenation" } }),
+      start({ offsetMilli: 3_000, index: 3, castTimeMilli: 0, spell: { id: REGROWTH, name: "Regrowth" } }),
       "encounter-1", firstTimestamp, "spell_start", ctx,
     );
-    // Much later, Regrowth completes at t=26000
+    // Regrowth completes at t=5000 — should only match the second start
     healerCastsProcessor.processEvent(
       state,
-      complete({ offsetMilli: 26_000, index: 10, spell: { id: REGROWTH, name: "Regrowth" } }),
+      complete({ offsetMilli: 5_000, index: 10, spell: { id: REGROWTH, name: "Regrowth" } }),
       "encounter-1", firstTimestamp, "spell_go", ctx,
     );
 
     const casts = state.encounters.get("encounter-1")?.castsByPlayer.get(HEALER);
-    // The original orphaned start should remain at duration 0
+    // First orphaned start stays at 0
     expect(casts?.[0]).toMatchObject({ kind: "start", spellId: REGROWTH, durationMilli: 0 });
+    // Second start gets backfilled (5000 - 3000 = 2000)
+    expect(casts?.[1]).toMatchObject({ kind: "start", spellId: REGROWTH, durationMilli: 2_000 });
+  });
+
+  it("backfills across intervening instant casts of different spells", () => {
+    // Holy Light start → Holy Shock (instant, different spell) → Holy Light go
+    // The Holy Shock start should NOT block the backfill.
+    const state = healerCastsProcessor.createState();
+    const firstTimestamp = new Date("2026-07-30T00:00:00Z");
+    const ctx = context();
+    const HOLY_LIGHT = 635;
+    const HOLY_SHOCK = 20473;
+
+    healerCastsProcessor.processEvent(
+      state,
+      start({ offsetMilli: 1_000, castTimeMilli: 0, spell: { id: HOLY_LIGHT, name: "Holy Light" } }),
+      "encounter-1", firstTimestamp, "spell_start", ctx,
+    );
+    // Instant Holy Shock woven mid-cast
+    healerCastsProcessor.processEvent(
+      state,
+      start({ offsetMilli: 1_500, index: 2, castTimeMilli: 0, spell: { id: HOLY_SHOCK, name: "Holy Shock" } }),
+      "encounter-1", firstTimestamp, "spell_start", ctx,
+    );
+    healerCastsProcessor.processEvent(
+      state,
+      complete({ offsetMilli: 1_500, index: 3, spell: { id: HOLY_SHOCK, name: "Holy Shock" } }),
+      "encounter-1", firstTimestamp, "spell_go", ctx,
+    );
+    // Holy Light completes
+    healerCastsProcessor.processEvent(
+      state,
+      complete({ offsetMilli: 3_500, index: 4, spell: { id: HOLY_LIGHT, name: "Holy Light" } }),
+      "encounter-1", firstTimestamp, "spell_go", ctx,
+    );
+
+    const casts = state.encounters.get("encounter-1")?.castsByPlayer.get(HEALER);
+    // Holy Light start should be backfilled (3500 - 1000 = 2500)
+    expect(casts?.[0]).toMatchObject({ kind: "start", spellId: HOLY_LIGHT, durationMilli: 2_500 });
   });
 
   it("does not backfill instant casts (Vanilla spell_start with castTimeMilli=0)", () => {
