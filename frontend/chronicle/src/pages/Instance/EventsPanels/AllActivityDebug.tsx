@@ -8,6 +8,8 @@ import { Skull, Swords, Heart, Zap, Wand2, Sparkles, ChevronLeft, ChevronRight, 
 import { cn } from "@/lib/utils";
 import { formatNumber } from "@/lib/format";
 import { ScrollArea, ScrollBar } from "@/components/ui/ScrollArea/ScrollArea";
+import { SCHOOL_TEXT_COLORS } from "@/components/SpellSchoolBadge";
+import { SpellIdTooltip } from "@/components/ui/SpellIdTooltip";
 import { Tooltip, TooltipTrigger, TooltipContent } from "@/components/ui/Tooltip/tooltip";
 import type { PanelDefinition, PanelRenderProps, PanelContext } from "./types";
 import { allActivityProcessor, type AllActivityState, type RawDebugEvent, type EncounterMeta, type ResourceType } from "./processors";
@@ -231,17 +233,19 @@ const ACTIVITY_STYLES: Record<string, string> = {
 function EventDetailText({ detail }: { detail: string }) {
   return detail.split(" · ").map((part, index) => {
     const normalized = part.toLowerCase();
-    const style = normalized.includes("absorb")
-      ? "text-sky-400"
-      : normalized.includes("block")
-        ? "text-amber-400"
-        : normalized.includes("resist")
-          ? "text-violet-400"
-          : normalized.includes("immune")
-            ? "text-fuchsia-400"
-            : normalized.includes("crit")
-              ? "font-bold text-foreground"
-              : "text-muted-foreground";
+    const schoolStyle = SCHOOL_TEXT_COLORS[part];
+    const style = schoolStyle
+      ?? (normalized.includes("absorb")
+        ? "text-sky-400"
+        : normalized.includes("block")
+          ? "text-amber-400"
+          : normalized.includes("resist")
+            ? "text-violet-400"
+            : normalized.includes("immune")
+              ? "text-fuchsia-400"
+              : normalized.includes("crit")
+                ? "font-bold text-foreground"
+                : "text-muted-foreground");
 
     return (
       <span key={`${part}-${index}`}>
@@ -317,10 +321,14 @@ function RawEventRow({ event, index, useRelativeTime = false, useLocalTime = fal
             <Link
               to={`/wowdb/spell/${event.spellId}`}
               className="text-blue-400 hover:text-blue-300"
-              title={event.sourceName}
               onClick={(clickEvent) => clickEvent.stopPropagation()}
             >
-              {event.sourceName || "—"}
+              <SpellIdTooltip
+                spellId={event.spellId}
+                name={event.sourceName || "—"}
+                size={14}
+                showIcon={false}
+              />
             </Link>
           ) : (
             <span className="text-blue-400" title={event.sourceName}>{event.sourceName || "—"}</span>

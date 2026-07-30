@@ -10,6 +10,8 @@ interface SpellIdTooltipProps {
   name: string;
   /** Icon size in pixels. Defaults to 16. */
   size?: number;
+  /** Whether to render the spell icon. Defaults to true. */
+  showIcon?: boolean;
   /** Additional class name for the wrapper */
   className?: string;
 }
@@ -25,6 +27,7 @@ export function SpellIdTooltip({
   spellId, 
   name, 
   size = 16,
+  showIcon = true,
   className,
 }: SpellIdTooltipProps) {
   const ref = useRef<HTMLSpanElement>(null);
@@ -67,7 +70,8 @@ export function SpellIdTooltip({
       {spell ? (
         <SpellIconWithTooltip 
           spell={spell} 
-          size={size} 
+          size={size}
+          showIcon={showIcon}
           showTooltip
         >
           {name}
