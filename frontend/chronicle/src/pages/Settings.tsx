@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { Link, Outlet, useLocation, useNavigate, useSearchParams } from "react-router-dom";
-import { ICON_LIST_URL } from "@/config/iconUrl";
+import { iconListUrl } from "@/config/iconUrl";
 import { toast } from "sonner";
 import { HardDrive, Clock, LayoutTemplate, Download, Upload, Plus, Trash2, BookOpenText, Save, Pencil, Trash, Share2, ChevronLeft, ChevronRight, Copy, Eye, Monitor, Smartphone, Menu, X, User, Swords, Star } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
@@ -35,6 +35,7 @@ import { GridLayoutEditor, type GridEditorItem } from "@/components/layout/GridL
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { InstanceEventsProvider } from "@/hooks/instanceEvents";
+import { DatasetProvider, useTenantDatasetScope } from "@/hooks/useDatasetId";
 import { useIsMobile } from "@/hooks/useIsMobile";
 import { useInstanceDefaultsCache } from "@/hooks/useInstanceDefaultsCache";
 import { EventsPanel, type EventsPanelType } from "@/pages/Instance/EventsPanels";
@@ -1154,6 +1155,19 @@ function buildPanelTypesById(items: GridEditorItem[], panels: EventsPanelType[])
 }
 
 export function LayoutLabSettings() {
+  const tenantDatasetScope = useTenantDatasetScope();
+
+  return (
+    <DatasetProvider
+      datasetId={tenantDatasetScope.datasetId}
+      iconBaseUrl={tenantDatasetScope.iconBaseUrl}
+    >
+      <LayoutLabSettingsContent iconBaseUrl={tenantDatasetScope.iconBaseUrl} />
+    </DatasetProvider>
+  );
+}
+
+function LayoutLabSettingsContent({ iconBaseUrl }: { iconBaseUrl?: string }) {
   const [searchParams] = useSearchParams();
   const editingLayoutID = searchParams.get("layoutId");
   const sharedLayoutID = searchParams.get("shared");
@@ -1310,7 +1324,7 @@ export function LayoutLabSettings() {
   }, [instance, selectedEncounterIds]);
 
   useEffect(() => {
-    void fetch(ICON_LIST_URL)
+    void fetch(iconListUrl(iconBaseUrl))
       .then((res) => (res.ok ? res.json() : Promise.reject(new Error("failed"))))
       .then((data: unknown) => {
         if (Array.isArray(data)) {
@@ -1327,7 +1341,7 @@ export function LayoutLabSettings() {
         setIconOptions([]);
       })
       .catch(() => setIconOptions([]));
-  }, []);
+  }, [iconBaseUrl]);
 
   useEffect(() => {
     if (!activeLayout) return;
@@ -1644,7 +1658,10 @@ export function LayoutLabSettings() {
           <label className="text-xs text-muted-foreground">Title</label>
           <div className="flex items-center gap-2">
             <img
-              src={getSpellIconUrl({ ID: 1, TextureFilename: metaIcon || "INV_Misc_Book_09" })}
+              src={getSpellIconUrl(
+                { ID: 1, TextureFilename: metaIcon || "INV_Misc_Book_09" },
+                iconBaseUrl,
+              )}
               alt=""
               className="h-8 w-8 rounded border border-border"
             />
@@ -1749,7 +1766,11 @@ export function LayoutLabSettings() {
                     disabled={readOnly}
                     className={`h-9 w-9 rounded border p-0.5 ${metaIcon === icon ? "border-primary bg-primary/10" : "border-border hover:border-primary/60"}`}
                   >
-                    <img src={getSpellIconUrl({ ID: 1, TextureFilename: icon })} alt="" className="h-full w-full rounded object-cover" />
+                    <img
+                      src={getSpellIconUrl({ ID: 1, TextureFilename: icon }, iconBaseUrl)}
+                      alt=""
+                      className="h-full w-full rounded object-cover"
+                    />
                   </button>
                 ))}
               </div>

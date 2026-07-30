@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { useSearchParams, Link } from "react-router-dom";
 import { useItemTooltip } from "@/api/gamedata";
+import { DatasetProvider, useTenantDatasetScope } from "@/hooks/useDatasetId";
 import { ItemTooltip } from "@/components/ui/ItemTooltip";
 
 /**
@@ -10,6 +11,7 @@ import { ItemTooltip } from "@/components/ui/ItemTooltip";
  * URL: /wowdb/item?id=12345&random_property=454&enchant=2566
  */
 export function ItemPage() {
+  const tenantDatasetScope = useTenantDatasetScope();
   const [searchParams, setSearchParams] = useSearchParams();
   const [itemIdInput, setItemIdInput] = useState(searchParams.get("id") ?? "");
   const [rpInput, setRpInput] = useState(searchParams.get("random_property") ?? "");
@@ -114,7 +116,14 @@ export function ItemPage() {
             {error instanceof Error ? error.message : "Failed to load item"}
           </div>
         )}
-        {item && <ItemTooltip item={item} includeReferenceLinks showItemLevel />}
+        {item && (
+          <DatasetProvider
+            datasetId={tenantDatasetScope.datasetId}
+            iconBaseUrl={tenantDatasetScope.iconBaseUrl}
+          >
+            <ItemTooltip item={item} includeReferenceLinks showItemLevel />
+          </DatasetProvider>
+        )}
       </div>
     </div>
   );

@@ -1,9 +1,9 @@
+/* eslint-disable react-refresh/only-export-components -- Context provider and its hooks are intentionally colocated. */
 import { createContext, useContext, useMemo } from "react";
+import { useDatasets, useSiteConfig } from "@/api/queries";
+import { resolveTenantDatasetScope, type DatasetScope } from "./datasetScope";
 
-interface DatasetContextValue {
-  datasetId: string | undefined;
-  iconBaseUrl: string | undefined;
-}
+type DatasetContextValue = DatasetScope;
 
 const DatasetContext = createContext<DatasetContextValue>({
   datasetId: undefined,
@@ -25,6 +25,18 @@ export function DatasetProvider({
     [datasetId, iconBaseUrl],
   );
   return <DatasetContext.Provider value={value}>{children}</DatasetContext.Provider>;
+}
+
+/** Resolves the current tenant's default dataset and icon CDN URL. */
+export function useTenantDatasetScope(): DatasetContextValue {
+  const { data: siteConfig } = useSiteConfig();
+  const { data: datasets } = useDatasets();
+  const defaultDatasetId = siteConfig?.tenant?.default_dataset_id;
+
+  return useMemo(
+    () => resolveTenantDatasetScope(defaultDatasetId, datasets),
+    [defaultDatasetId, datasets],
+  );
 }
 
 /** Returns the dataset_id from the nearest DatasetProvider, or undefined. */

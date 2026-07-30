@@ -21,5 +21,10 @@ export function talentBackgroundUrl(name: string, baseUrl?: string): string {
   return `${base}/talent-backgrounds/${name.toLowerCase()}.webp`;
 }
 
-/** URL for the icon list manifest */
-export const ICON_LIST_URL = `${ICON_BASE_URL}/icon-list.json`;
+/** URL for the icon list manifest. */
+export function iconListUrl(baseUrl?: string): string {
+  const base = baseUrl || ICON_BASE_URL;
+  return `${base}/icon-list.json`;
+}
+
+export const ICON_LIST_URL = iconListUrl();
