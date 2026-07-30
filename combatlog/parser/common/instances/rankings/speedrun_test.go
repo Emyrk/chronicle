@@ -9,8 +9,8 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/Emyrk/chronicle/combatlog/parser/common/characters/period"
-	"github.com/Emyrk/chronicle/combatlog/parser/guid"
 	"github.com/Emyrk/chronicle/combatlog/parser/common/messages"
+	"github.com/Emyrk/chronicle/combatlog/parser/guid"
 )
 
 // makeCreatureGUID builds a creature GUID with the given entry and spawn IDs.
@@ -40,7 +40,7 @@ func (s *stubChar) Died(string, messages.Message)       {}
 func (s *stubChar) Process(messages.Message) error      { return nil }
 func (s *stubChar) Periods() []period.Period            { return nil }
 func (s *stubChar) RecentlySlain(messages.Message) bool { return false }
-func (s *stubChar) LastEndState() period.EndState        { return period.EndStateNone }
+func (s *stubChar) LastEndState() period.EndState       { return period.EndStateNone }
 func (s *stubChar) SetPeriodHook(period.Hook)           {}
 func (s *stubChar) CurrentPeriod() (period.Period, bool) {
 	if !s.hasPeriod {
@@ -249,6 +249,18 @@ func TestSpeedrunTracker_CompletedIgnoresSubsequentKills(t *testing.T) {
 	tracker.ActivityChange(msg(t0.Add(5*time.Minute)), c3)
 
 	assert.Len(t, tracker.state[0].kills, 1, "completed tracker should ignore new kills")
+}
+
+func TestSpeedrunTracker_ReentryGap(t *testing.T) {
+	t.Parallel()
+
+	raid := NewSpeedrunTracker(singleBossRules("Boss", 100), nil, nil)
+	assert.Equal(t, DefaultReentryGap, raid.ReentryGap())
+
+	dungeonRules := singleBossRules("Boss", 100)
+	dungeonRules.ReentryGap = DungeonReentryGap
+	dungeon := NewSpeedrunTracker(dungeonRules, nil, nil)
+	assert.Equal(t, DungeonReentryGap, dungeon.ReentryGap())
 }
 
 func TestSpeedrunTracker_Result_ProofForEveryRequirement(t *testing.T) {

@@ -35,9 +35,17 @@ type LevelRangeRequirement struct {
 }
 
 // SpeedrunRules defines all requirements for a valid speedrun.
+const (
+	DefaultReentryGap = 24 * time.Hour
+	DungeonReentryGap = 15 * time.Minute
+)
+
 type SpeedrunRules struct {
 	Requirements []SpeedrunRequirement  `json:"requirements"`
 	LevelRange   *LevelRangeRequirement `json:"level_range,omitempty"`
+	// ReentryGap controls when a completed run can be split from a later entry
+	// into the same zone. Zero uses DefaultReentryGap.
+	ReentryGap time.Duration `json:"-"`
 }
 
 // Rankings holds all rule sets for an instance.
@@ -92,7 +100,7 @@ type SpeedrunResult struct {
 // SpeedrunProofPayload is the JSON structure stored in the database proof column.
 // It wraps the proof array alongside optional level range data.
 type SpeedrunProofPayload struct {
-	Proof      []SpeedrunProof  `json:"proof"`
+	Proof      []SpeedrunProof   `json:"proof"`
 	LevelRange *LevelRangeResult `json:"level_range,omitempty"`
 }
 

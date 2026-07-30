@@ -144,6 +144,20 @@ func (t *SpeedrunTracker) FightEnded(_ uuid.UUID, m messages.Message) {
 
 func (t *SpeedrunTracker) Finalize(_ context.Context) error { return nil }
 
+// CompletedAt returns the completion timestamp and whether the run completed.
+func (t *SpeedrunTracker) CompletedAt() (time.Time, bool) {
+	return t.completionTime, t.completed
+}
+
+// ReentryGap returns the inactivity gap required before a later entry starts a
+// new run. Raids default to 24 hours; dungeon rules opt into a shorter gap.
+func (t *SpeedrunTracker) ReentryGap() time.Duration {
+	if t.rules.ReentryGap > 0 {
+		return t.rules.ReentryGap
+	}
+	return DefaultReentryGap
+}
+
 // --- Output ---
 
 // Result builds the SpeedrunResult with proof for every requirement.

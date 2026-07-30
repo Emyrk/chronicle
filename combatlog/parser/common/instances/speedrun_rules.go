@@ -30,6 +30,7 @@ func Level70Cap(fl database.WoWFlavor) *rankings.LevelRangeRequirement {
 func RagefireChasmSpeedrunRequirements() *rankings.Rankings {
 	return &rankings.Rankings{
 		Speedrun: &rankings.SpeedrunRules{
+			ReentryGap: rankings.DungeonReentryGap,
 			Requirements: []rankings.SpeedrunRequirement{
 				{Name: "Taragaman the Hungerer", EntryIDs: []uint32{11520}, Count: 1, Category: rankings.SpeedrunCategoryBosses},
 				{Name: "Jergosh the Invoker", EntryIDs: []uint32{11518}, Count: 1, Category: rankings.SpeedrunCategoryBosses},
@@ -63,6 +64,7 @@ func DeadminesSpeedrunRequirements(fl database.WoWFlavor) *rankings.Rankings {
 
 	return &rankings.Rankings{
 		Speedrun: &rankings.SpeedrunRules{
+			ReentryGap:   rankings.DungeonReentryGap,
 			Requirements: requirements,
 			LevelRange: &rankings.LevelRangeRequirement{
 				MinLevel: 0,

@@ -174,7 +174,11 @@ func (s *State) Zone(z messages.Zone) {
 	result := s.CurrentZone.Process(z)
 	switch result {
 	case zone.NoChange:
-		return
+		// Concatenated logs can re-enter the same zone with the same instance ID.
+		// Split only after the completed run has been inactive for its configured gap.
+		if s.CurrentInstance == nil || !s.CurrentInstance.ShouldStartNewRun(z.Seen) {
+			return
+		}
 	case zone.InfoUpdated:
 		// Late-arriving difficulty info: propagate to current instance without
 		// creating a new hookable.
@@ -211,6 +215,9 @@ func (s *State) matchOrCreateInstance(z messages.Zone, requireDifficultyMatch bo
 			continue
 		}
 		if requireDifficultyMatch && !inst.CurrentZone.DifficultyEquals(z.Zone) {
+			continue
+		}
+		if inst.ShouldStartNewRun(z.Seen) {
 			continue
 		}
 		s.CurrentInstance = inst
