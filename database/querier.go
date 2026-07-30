@@ -17,7 +17,7 @@ type sqlcQuerier interface {
 	AssignWorldToServer(ctx context.Context, arg AssignWorldToServerParams) error
 	// Populate a pending snapshot's members from eligible encounter_dps_rankings rows.
 	// Boss kills only (encounter_id IS NOT NULL), deduplicated by duplicate group
-	// keeping the best DPS copy, bounded by the snapshot's cutoff and optional window_start.
+	// using one representative instance per duplicate group, bounded by the snapshot's cutoff and optional window_start.
 	// Note: parser/addon version requirement values are stored on the snapshot for
 	// documentation; log_instances does not carry numeric version columns yet, so
 	// version filtering is the caller's responsibility if needed.

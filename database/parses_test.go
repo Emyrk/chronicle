@@ -138,6 +138,84 @@ func insertRankingRow(t *testing.T, pool *pgxpool.Pool, store database.Store, re
 	require.NoError(t, err)
 }
 
+func TestRankingsLeaderboardUsesSingleDuplicateInstance(t *testing.T) {
+	t.Parallel()
+
+	_, store, realmID := setupParsesTest(t)
+	ctx := testutil.Context(t, testutil.WaitMedium)
+
+	userID := uuid.New()
+	_, err := store.InsertUser(ctx, database.InsertUserParams{
+		ID: userID, Username: "u-" + userID.String()[:8],
+	})
+	require.NoError(t, err)
+
+	logGroupID := uuid.New()
+	baseTime := time.Date(2026, 7, 26, 18, 0, 0, 0, time.UTC)
+	_, err = store.InsertWoWLogGroup(ctx, database.InsertWoWLogGroupParams{
+		ID: logGroupID, Owner: userID, LogType: database.LogTypeV1,
+		CreatedAt: database.Timestamptz(baseTime), UpdatedAt: database.Timestamptz(baseTime),
+	})
+	require.NoError(t, err)
+	require.NoError(t, store.InsertParsedLogGroup(ctx, logGroupID))
+
+	canonicalID := uuid.New()
+	duplicateID := uuid.New()
+	for _, instanceID := range []uuid.UUID{canonicalID, duplicateID} {
+		_, err = store.InsertInstance(ctx, database.InsertInstanceParams{
+			ID: instanceID, RealmID: realmID, LogGroupID: logGroupID,
+			Name: "Molten Core", Capabilities: []string{},
+		})
+		require.NoError(t, err)
+	}
+	require.NoError(t, store.SetDuplicateGroupIDs(ctx, database.SetDuplicateGroupIDsParams{
+		DuplicateGroupID: uuid.NullUUID{UUID: canonicalID, Valid: true},
+		Ids:              []uuid.UUID{canonicalID, duplicateID},
+	}))
+
+	insertEncounterRanking := func(instanceID uuid.UUID, encounterName string, healing int64, killedAt time.Time) {
+		t.Helper()
+		encounterID := uuid.New()
+		_, err := store.InsertEncounter(ctx, database.InsertEncounterParams{
+			ID: encounterID, InstanceID: instanceID, Name: encounterName,
+			KillType: database.KillTypeClean, Remaining: guid.GUIDs{}, Boss: true,
+			StartTime: database.Timestamptz(killedAt.Add(-10 * time.Second)),
+			EndTime:   database.Timestamptz(killedAt),
+		})
+		require.NoError(t, err)
+
+		hps := float64(healing) / 10
+		require.NoError(t, store.InsertEncounterDpsRanking(ctx, database.InsertEncounterDpsRankingParams{
+			EncounterID: uuid.NullUUID{UUID: encounterID, Valid: true},
+			InstanceID:  instanceID, EncounterName: encounterName, InstanceName: "Molten Core",
+			PlayerGuid: "P-HEALER", PlayerName: "Healer", PlayerClass: "PRIEST",
+			PlayerSpec: "Holy", PlayerRole: "heal", PlayerLevel: 60,
+			DifficultyName: "", MaxPlayers: 40, RealmID: realmID, RealmName: "test-realm",
+			HealingDone: healing, DurationSecs: 10, Hps: hps,
+			KilledAt: database.Timestamptz(killedAt), LogHashedSlug: instanceID.String(),
+		}))
+	}
+
+	// The canonical upload has the internally consistent run. The duplicate has
+	// higher per-encounter HPS, which previously won each DISTINCT ON independently.
+	insertEncounterRanking(canonicalID, "Lucifron", 100, baseTime)
+	insertEncounterRanking(canonicalID, "Magmadar", 100, baseTime.Add(time.Minute))
+	insertEncounterRanking(duplicateID, "Lucifron", 900, baseTime)
+	insertEncounterRanking(duplicateID, "Magmadar", 900, baseTime.Add(time.Minute))
+
+	rows, err := store.RankingsLeaderboard(ctx, database.RankingsLeaderboardParams{
+		Metric: "hps", QueryLimit: 10,
+		InstanceNames:  []string{"Molten Core"},
+		EncounterNames: []string{"Lucifron", "Magmadar"},
+	})
+	require.NoError(t, err)
+	require.Len(t, rows, 1)
+	assert.Equal(t, canonicalID.String(), rows[0].LogHashedSlug)
+	assert.Equal(t, int64(200), rows[0].HealingDone)
+	assert.Equal(t, 20.0, rows[0].DurationSecs)
+	assert.Equal(t, 10.0, rows[0].Hps)
+}
+
 func TestRankingSnapshots(t *testing.T) {
 	t.Parallel()
 
@@ -688,7 +766,7 @@ func TestSnapshotMetricNeutralMembership(t *testing.T) {
 	})
 }
 
-func TestSnapshotDedupeDeterministic(t *testing.T) {
+func TestSnapshotDedupeSingleRepresentative(t *testing.T) {
 	t.Parallel()
 
 	pool, store, realmID := setupParsesTest(t)
@@ -696,9 +774,10 @@ func TestSnapshotDedupeDeterministic(t *testing.T) {
 
 	dupGroup := uuid.New()
 
-	// Two copies of the same kill with different DPS/HPS ordering:
+	// Two copies of the same kill with different HPS. The representative
+	// instance is selected once for the duplicate group, rather than per metric.
 	// Copy 1: 400 DPS, 200 HPS
-	// Copy 2: 400 DPS, 250 HPS (same DPS, higher HPS — should be kept)
+	// Copy 2: 400 DPS, 250 HPS
 	insertRankingRow(t, pool, store, realmID, rankingOpts{
 		encounterName: "Ragnaros-DetDup", instanceName: "Molten Core",
 		playerGUID: "P-DDUP", playerClass: "Paladin", playerSpec: "Retribution",
@@ -736,6 +815,5 @@ func TestSnapshotDedupeDeterministic(t *testing.T) {
 	})
 	require.NoError(t, err)
 	require.Len(t, members, 1, "duplicate group should collapse to 1 member")
-	// With ORDER BY dps DESC, hps DESC the copy with higher HPS wins as tiebreak.
-	assert.Equal(t, 250.0, members[0].Hps, "should keep copy with higher HPS as tiebreak")
+	assert.Contains(t, []float64{200, 250}, members[0].Hps, "should keep exactly one whole duplicate instance")
 }

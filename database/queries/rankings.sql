@@ -11,14 +11,24 @@ ORDER BY instance_name, difficulty_name, max_players;
 -- (instance, difficulty, max_players, tenant) combo.
 -- The caller sets tenant context so RLS on encounter_dps_rankings
 -- scopes to the correct realms automatically.
-WITH deduped AS (
-    SELECT DISTINCT ON (edr.player_guid, edr.encounter_name, COALESCE(li.duplicate_group_id, li.id))
+WITH representative_instances AS (
+    SELECT DISTINCT ON (COALESCE(li.duplicate_group_id, li.id))
+        li.id,
+        COALESCE(li.duplicate_group_id, li.id) AS run_id
+    FROM log_instances li
+    ORDER BY COALESCE(li.duplicate_group_id, li.id),
+        (li.id = li.duplicate_group_id) DESC NULLS LAST,
+        li.start_time ASC,
+        li.id ASC
+),
+deduped AS (
+    SELECT DISTINCT ON (edr.player_guid, edr.encounter_name, ri.run_id)
         edr.player_guid, edr.player_name, edr.realm_name,
         edr.player_class, edr.encounter_name,
         edr.damage_done, edr.duration_secs, edr.dps,
-        COALESCE(li.duplicate_group_id, li.id) AS run_id
+        ri.run_id
     FROM encounter_dps_rankings edr
-    JOIN log_instances li ON li.id = edr.instance_id
+    JOIN representative_instances ri ON ri.id = edr.instance_id
     JOIN wow_server_realms wsr ON wsr.id = edr.realm_id
     WHERE edr.instance_name = @instance_name
       AND edr.difficulty_name = @difficulty_name
@@ -26,7 +36,7 @@ WITH deduped AS (
       AND edr.dps > 0
       -- Boss encounters only: trash is excluded from the top-3 preview by default.
       AND edr.encounter_name <> 'Trash'
-    ORDER BY edr.player_guid, edr.encounter_name, COALESCE(li.duplicate_group_id, li.id), edr.dps DESC
+    ORDER BY edr.player_guid, edr.encounter_name, ri.run_id, edr.dps DESC
 ),
 instance_encounter_count AS (
     SELECT COUNT(DISTINCT d.encounter_name) AS cnt FROM deduped d
@@ -132,14 +142,24 @@ WHERE tenant_id = @tenant_id;
 
 -- name: RankingsEncounterList :many
 -- Returns encounters available in rankings for a given instance.
-WITH deduped AS (
-    SELECT DISTINCT ON (edr.player_guid, edr.encounter_name, COALESCE(li.duplicate_group_id, li.id))
+WITH representative_instances AS (
+    SELECT DISTINCT ON (COALESCE(li.duplicate_group_id, li.id))
+        li.id,
+        COALESCE(li.duplicate_group_id, li.id) AS run_id
+    FROM log_instances li
+    ORDER BY COALESCE(li.duplicate_group_id, li.id),
+        (li.id = li.duplicate_group_id) DESC NULLS LAST,
+        li.start_time ASC,
+        li.id ASC
+),
+deduped AS (
+    SELECT DISTINCT ON (edr.player_guid, edr.encounter_name, ri.run_id)
         edr.*
     FROM encounter_dps_rankings edr
-    JOIN log_instances li ON li.id = edr.instance_id
+    JOIN representative_instances ri ON ri.id = edr.instance_id
     JOIN wow_server_realms wsr ON wsr.id = edr.realm_id
     WHERE edr.instance_name = @instance_name
-    ORDER BY edr.player_guid, edr.encounter_name, COALESCE(li.duplicate_group_id, li.id), edr.dps DESC
+    ORDER BY edr.player_guid, edr.encounter_name, ri.run_id, edr.dps DESC
 )
 SELECT
     d.encounter_name,
@@ -155,8 +175,18 @@ ORDER BY (d.encounter_name = 'Trash'), d.encounter_name;
 -- Within a run, damage and duration are summed across encounters to get run DPS.
 -- Each player appears once with their highest-DPS run.
 -- Deduplicates by (player, encounter, duplicate_group) before aggregating.
-WITH deduped AS (
-    SELECT DISTINCT ON (edr.player_guid, edr.encounter_name, COALESCE(li.duplicate_group_id, li.id))
+WITH representative_instances AS (
+    SELECT DISTINCT ON (COALESCE(li.duplicate_group_id, li.id))
+        li.id,
+        COALESCE(li.duplicate_group_id, li.id) AS run_id
+    FROM log_instances li
+    ORDER BY COALESCE(li.duplicate_group_id, li.id),
+        (li.id = li.duplicate_group_id) DESC NULLS LAST,
+        li.start_time ASC,
+        li.id ASC
+),
+deduped AS (
+    SELECT DISTINCT ON (edr.player_guid, edr.encounter_name, ri.run_id)
         edr.player_guid,
         edr.player_name,
         edr.player_class,
@@ -179,9 +209,9 @@ WITH deduped AS (
         edr.killed_at,
         tb.sub_spec AS talent_sub_spec,
         tb.talent_layout AS talent_layout,
-        COALESCE(li.duplicate_group_id, li.id) AS run_id
+        ri.run_id
     FROM encounter_dps_rankings edr
-    JOIN log_instances li ON li.id = edr.instance_id
+    JOIN representative_instances ri ON ri.id = edr.instance_id
     JOIN wow_server_realms wsr ON wsr.id = edr.realm_id
     LEFT JOIN talent_builds tb ON tb.id = edr.talent_build_id
     WHERE CASE
@@ -225,7 +255,7 @@ WITH deduped AS (
         ELSE true
     END
     AND (CASE WHEN @metric :: text = 'hps' THEN edr.hps ELSE edr.dps END) > 0
-    ORDER BY edr.player_guid, edr.encounter_name, COALESCE(li.duplicate_group_id, li.id),
+    ORDER BY edr.player_guid, edr.encounter_name, ri.run_id,
         (CASE WHEN @metric :: text = 'hps' THEN edr.hps ELSE edr.dps END) DESC
 ),
 -- Encounter counts are computed per realm: different realms (servers) can
@@ -313,8 +343,18 @@ OFFSET @query_offset::bigint;
 -- Returns box plot statistics (min, q1, median, q3, max, count) per class/spec.
 -- DPS is aggregated per run (sum damage / sum duration across encounters in one
 -- instance run), so each run is one data point. Matches leaderboard aggregation.
-WITH deduped AS (
-    SELECT DISTINCT ON (edr.player_guid, edr.encounter_name, COALESCE(li.duplicate_group_id, li.id))
+WITH representative_instances AS (
+    SELECT DISTINCT ON (COALESCE(li.duplicate_group_id, li.id))
+        li.id,
+        COALESCE(li.duplicate_group_id, li.id) AS run_id
+    FROM log_instances li
+    ORDER BY COALESCE(li.duplicate_group_id, li.id),
+        (li.id = li.duplicate_group_id) DESC NULLS LAST,
+        li.start_time ASC,
+        li.id ASC
+),
+deduped AS (
+    SELECT DISTINCT ON (edr.player_guid, edr.encounter_name, ri.run_id)
         edr.player_guid,
         edr.encounter_name,
         edr.player_class,
@@ -324,9 +364,9 @@ WITH deduped AS (
         edr.healing_done,
         edr.absorbed_done,
         edr.duration_secs,
-        COALESCE(li.duplicate_group_id, li.id) AS run_id
+        ri.run_id
     FROM encounter_dps_rankings edr
-    JOIN log_instances li ON li.id = edr.instance_id
+    JOIN representative_instances ri ON ri.id = edr.instance_id
     JOIN wow_server_realms wsr ON wsr.id = edr.realm_id
     WHERE CASE
         WHEN cardinality(@instance_names :: text[]) > 0 THEN edr.instance_name = ANY(@instance_names :: text[])
@@ -356,7 +396,7 @@ WITH deduped AS (
         WHEN @filter_max_players :: smallint > 0 THEN edr.max_players = @filter_max_players
         ELSE true
     END
-    ORDER BY edr.player_guid, edr.encounter_name, COALESCE(li.duplicate_group_id, li.id),
+    ORDER BY edr.player_guid, edr.encounter_name, ri.run_id,
         (CASE WHEN @metric :: text = 'hps' THEN edr.hps ELSE edr.dps END) DESC
 ),
 -- Encounter counts are computed per realm: different realms (servers) can

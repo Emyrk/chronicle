@@ -4713,15 +4713,25 @@ func (q *sqlQuerier) SetDuplicateGroupIDs(ctx context.Context, arg SetDuplicateG
 }
 
 const batchInsertSnapshotMembersFromRankings = `-- name: BatchInsertSnapshotMembersFromRankings :exec
-WITH snapshot AS (
+WITH representative_instances AS (
+    SELECT DISTINCT ON (COALESCE(li.duplicate_group_id, li.id))
+        li.id,
+        COALESCE(li.duplicate_group_id, li.id) AS run_id
+    FROM log_instances li
+    ORDER BY COALESCE(li.duplicate_group_id, li.id),
+        (li.id = li.duplicate_group_id) DESC NULLS LAST,
+        li.start_time ASC,
+        li.id ASC
+),
+snapshot AS (
     SELECT id, cutoff, window_start
     FROM ranking_snapshots WHERE id = $1
 ),
 eligible AS (
-    SELECT DISTINCT ON (edr.player_guid, edr.encounter_name, COALESCE(li.duplicate_group_id, li.id))
+    SELECT DISTINCT ON (edr.player_guid, edr.encounter_name, ri.run_id)
         edr.id AS ranking_id,
         edr.instance_id,
-        COALESCE(li.duplicate_group_id, li.id) AS run_id,
+        ri.run_id,
         edr.instance_name,
         edr.encounter_name,
         edr.player_guid,
@@ -4738,7 +4748,7 @@ eligible AS (
         edr.dps,
         edr.hps
     FROM encounter_dps_rankings edr
-    JOIN log_instances li ON li.id = edr.instance_id
+    JOIN representative_instances ri ON ri.id = edr.instance_id
     CROSS JOIN snapshot s
     WHERE edr.encounter_id IS NOT NULL      -- boss kills only
       AND (edr.dps > 0 OR edr.hps > 0)     -- metric-neutral: include healers with zero damage
@@ -4746,10 +4756,10 @@ eligible AS (
       -- Exclusive upper bound: data strictly before the snapshot cutoff (00:00 UTC boundary).
       AND edr.killed_at < s.cutoff
       AND (s.window_start IS NULL OR edr.killed_at >= s.window_start)
-    -- Duplicate-group collapse: copies of the same kill are near-identical, so
-    -- DPS DESC with HPS DESC tiebreak picks one deterministic representative.
+    -- Duplicate-group collapse uses one whole representative instance, preventing
+    -- a synthetic run assembled from different uploads encounter by encounter.
     ORDER BY edr.player_guid, edr.encounter_name,
-             COALESCE(li.duplicate_group_id, li.id),
+             ri.run_id,
              edr.dps DESC, edr.hps DESC
 )
 INSERT INTO ranking_snapshot_members (
@@ -4775,7 +4785,7 @@ ON CONFLICT (snapshot_id, ranking_id) DO NOTHING
 
 // Populate a pending snapshot's members from eligible encounter_dps_rankings rows.
 // Boss kills only (encounter_id IS NOT NULL), deduplicated by duplicate group
-// keeping the best DPS copy, bounded by the snapshot's cutoff and optional window_start.
+// using one representative instance per duplicate group, bounded by the snapshot's cutoff and optional window_start.
 // Note: parser/addon version requirement values are stored on the snapshot for
 // documentation; log_instances does not carry numeric version columns yet, so
 // version filtering is the caller's responsibility if needed.
@@ -6002,8 +6012,18 @@ func (q *sqlQuerier) PruneStaleRankingsInstanceSummaries(ctx context.Context, te
 }
 
 const rankingsBoxPlotStats = `-- name: RankingsBoxPlotStats :many
-WITH deduped AS (
-    SELECT DISTINCT ON (edr.player_guid, edr.encounter_name, COALESCE(li.duplicate_group_id, li.id))
+WITH representative_instances AS (
+    SELECT DISTINCT ON (COALESCE(li.duplicate_group_id, li.id))
+        li.id,
+        COALESCE(li.duplicate_group_id, li.id) AS run_id
+    FROM log_instances li
+    ORDER BY COALESCE(li.duplicate_group_id, li.id),
+        (li.id = li.duplicate_group_id) DESC NULLS LAST,
+        li.start_time ASC,
+        li.id ASC
+),
+deduped AS (
+    SELECT DISTINCT ON (edr.player_guid, edr.encounter_name, ri.run_id)
         edr.player_guid,
         edr.encounter_name,
         edr.player_class,
@@ -6013,9 +6033,9 @@ WITH deduped AS (
         edr.healing_done,
         edr.absorbed_done,
         edr.duration_secs,
-        COALESCE(li.duplicate_group_id, li.id) AS run_id
+        ri.run_id
     FROM encounter_dps_rankings edr
-    JOIN log_instances li ON li.id = edr.instance_id
+    JOIN representative_instances ri ON ri.id = edr.instance_id
     JOIN wow_server_realms wsr ON wsr.id = edr.realm_id
     WHERE CASE
         WHEN cardinality($2 :: text[]) > 0 THEN edr.instance_name = ANY($2 :: text[])
@@ -6045,7 +6065,7 @@ WITH deduped AS (
         WHEN $8 :: smallint > 0 THEN edr.max_players = $8
         ELSE true
     END
-    ORDER BY edr.player_guid, edr.encounter_name, COALESCE(li.duplicate_group_id, li.id),
+    ORDER BY edr.player_guid, edr.encounter_name, ri.run_id,
         (CASE WHEN $9 :: text = 'hps' THEN edr.hps ELSE edr.dps END) DESC
 ),
 realm_encounter_counts AS (
@@ -6203,14 +6223,24 @@ func (q *sqlQuerier) RankingsDistinctSummaryKeys(ctx context.Context) ([]Ranking
 }
 
 const rankingsEncounterList = `-- name: RankingsEncounterList :many
-WITH deduped AS (
-    SELECT DISTINCT ON (edr.player_guid, edr.encounter_name, COALESCE(li.duplicate_group_id, li.id))
+WITH representative_instances AS (
+    SELECT DISTINCT ON (COALESCE(li.duplicate_group_id, li.id))
+        li.id,
+        COALESCE(li.duplicate_group_id, li.id) AS run_id
+    FROM log_instances li
+    ORDER BY COALESCE(li.duplicate_group_id, li.id),
+        (li.id = li.duplicate_group_id) DESC NULLS LAST,
+        li.start_time ASC,
+        li.id ASC
+),
+deduped AS (
+    SELECT DISTINCT ON (edr.player_guid, edr.encounter_name, ri.run_id)
         edr.id, edr.encounter_id, edr.instance_id, edr.encounter_name, edr.instance_name, edr.player_guid, edr.player_name, edr.player_class, edr.player_spec, edr.player_role, edr.player_level, edr.talent_build_id, edr.difficulty_name, edr.max_players, edr.realm_id, edr.realm_name, edr.guild_id, edr.guild_name, edr.damage_done, edr.duration_secs, edr.dps, edr.avg_ilvl, edr.log_hashed_slug, edr.killed_at, edr.created_at, edr.healing_done, edr.absorbed_done, edr.hps
     FROM encounter_dps_rankings edr
-    JOIN log_instances li ON li.id = edr.instance_id
+    JOIN representative_instances ri ON ri.id = edr.instance_id
     JOIN wow_server_realms wsr ON wsr.id = edr.realm_id
     WHERE edr.instance_name = $1
-    ORDER BY edr.player_guid, edr.encounter_name, COALESCE(li.duplicate_group_id, li.id), edr.dps DESC
+    ORDER BY edr.player_guid, edr.encounter_name, ri.run_id, edr.dps DESC
 )
 SELECT
     d.encounter_name,
@@ -6485,8 +6515,18 @@ func (q *sqlQuerier) RankingsKillTimeStats(ctx context.Context, arg RankingsKill
 }
 
 const rankingsLeaderboard = `-- name: RankingsLeaderboard :many
-WITH deduped AS (
-    SELECT DISTINCT ON (edr.player_guid, edr.encounter_name, COALESCE(li.duplicate_group_id, li.id))
+WITH representative_instances AS (
+    SELECT DISTINCT ON (COALESCE(li.duplicate_group_id, li.id))
+        li.id,
+        COALESCE(li.duplicate_group_id, li.id) AS run_id
+    FROM log_instances li
+    ORDER BY COALESCE(li.duplicate_group_id, li.id),
+        (li.id = li.duplicate_group_id) DESC NULLS LAST,
+        li.start_time ASC,
+        li.id ASC
+),
+deduped AS (
+    SELECT DISTINCT ON (edr.player_guid, edr.encounter_name, ri.run_id)
         edr.player_guid,
         edr.player_name,
         edr.player_class,
@@ -6509,9 +6549,9 @@ WITH deduped AS (
         edr.killed_at,
         tb.sub_spec AS talent_sub_spec,
         tb.talent_layout AS talent_layout,
-        COALESCE(li.duplicate_group_id, li.id) AS run_id
+        ri.run_id
     FROM encounter_dps_rankings edr
-    JOIN log_instances li ON li.id = edr.instance_id
+    JOIN representative_instances ri ON ri.id = edr.instance_id
     JOIN wow_server_realms wsr ON wsr.id = edr.realm_id
     LEFT JOIN talent_builds tb ON tb.id = edr.talent_build_id
     WHERE CASE
@@ -6555,7 +6595,7 @@ WITH deduped AS (
         ELSE true
     END
     AND (CASE WHEN $1 :: text = 'hps' THEN edr.hps ELSE edr.dps END) > 0
-    ORDER BY edr.player_guid, edr.encounter_name, COALESCE(li.duplicate_group_id, li.id),
+    ORDER BY edr.player_guid, edr.encounter_name, ri.run_id,
         (CASE WHEN $1 :: text = 'hps' THEN edr.hps ELSE edr.dps END) DESC
 ),
 realm_encounter_counts AS (
@@ -6914,14 +6954,24 @@ func (q *sqlQuerier) RankingsSummaryMaxUpdatedAt(ctx context.Context, tenantID u
 }
 
 const upsertRankingsInstanceSummary = `-- name: UpsertRankingsInstanceSummary :exec
-WITH deduped AS (
-    SELECT DISTINCT ON (edr.player_guid, edr.encounter_name, COALESCE(li.duplicate_group_id, li.id))
+WITH representative_instances AS (
+    SELECT DISTINCT ON (COALESCE(li.duplicate_group_id, li.id))
+        li.id,
+        COALESCE(li.duplicate_group_id, li.id) AS run_id
+    FROM log_instances li
+    ORDER BY COALESCE(li.duplicate_group_id, li.id),
+        (li.id = li.duplicate_group_id) DESC NULLS LAST,
+        li.start_time ASC,
+        li.id ASC
+),
+deduped AS (
+    SELECT DISTINCT ON (edr.player_guid, edr.encounter_name, ri.run_id)
         edr.player_guid, edr.player_name, edr.realm_name,
         edr.player_class, edr.encounter_name,
         edr.damage_done, edr.duration_secs, edr.dps,
-        COALESCE(li.duplicate_group_id, li.id) AS run_id
+        ri.run_id
     FROM encounter_dps_rankings edr
-    JOIN log_instances li ON li.id = edr.instance_id
+    JOIN representative_instances ri ON ri.id = edr.instance_id
     JOIN wow_server_realms wsr ON wsr.id = edr.realm_id
     WHERE edr.instance_name = $1
       AND edr.difficulty_name = $2
@@ -6929,7 +6979,7 @@ WITH deduped AS (
       AND edr.dps > 0
       -- Boss encounters only: trash is excluded from the top-3 preview by default.
       AND edr.encounter_name <> 'Trash'
-    ORDER BY edr.player_guid, edr.encounter_name, COALESCE(li.duplicate_group_id, li.id), edr.dps DESC
+    ORDER BY edr.player_guid, edr.encounter_name, ri.run_id, edr.dps DESC
 ),
 instance_encounter_count AS (
     SELECT COUNT(DISTINCT d.encounter_name) AS cnt FROM deduped d

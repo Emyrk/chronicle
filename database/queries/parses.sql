@@ -42,19 +42,29 @@ INSERT INTO ranking_snapshot_members (
 -- name: BatchInsertSnapshotMembersFromRankings :exec
 -- Populate a pending snapshot's members from eligible encounter_dps_rankings rows.
 -- Boss kills only (encounter_id IS NOT NULL), deduplicated by duplicate group
--- keeping the best DPS copy, bounded by the snapshot's cutoff and optional window_start.
+-- using one representative instance per duplicate group, bounded by the snapshot's cutoff and optional window_start.
 -- Note: parser/addon version requirement values are stored on the snapshot for
 -- documentation; log_instances does not carry numeric version columns yet, so
 -- version filtering is the caller's responsibility if needed.
-WITH snapshot AS (
+WITH representative_instances AS (
+    SELECT DISTINCT ON (COALESCE(li.duplicate_group_id, li.id))
+        li.id,
+        COALESCE(li.duplicate_group_id, li.id) AS run_id
+    FROM log_instances li
+    ORDER BY COALESCE(li.duplicate_group_id, li.id),
+        (li.id = li.duplicate_group_id) DESC NULLS LAST,
+        li.start_time ASC,
+        li.id ASC
+),
+snapshot AS (
     SELECT id, cutoff, window_start
     FROM ranking_snapshots WHERE id = @snapshot_id
 ),
 eligible AS (
-    SELECT DISTINCT ON (edr.player_guid, edr.encounter_name, COALESCE(li.duplicate_group_id, li.id))
+    SELECT DISTINCT ON (edr.player_guid, edr.encounter_name, ri.run_id)
         edr.id AS ranking_id,
         edr.instance_id,
-        COALESCE(li.duplicate_group_id, li.id) AS run_id,
+        ri.run_id,
         edr.instance_name,
         edr.encounter_name,
         edr.player_guid,
@@ -71,7 +81,7 @@ eligible AS (
         edr.dps,
         edr.hps
     FROM encounter_dps_rankings edr
-    JOIN log_instances li ON li.id = edr.instance_id
+    JOIN representative_instances ri ON ri.id = edr.instance_id
     CROSS JOIN snapshot s
     WHERE edr.encounter_id IS NOT NULL      -- boss kills only
       AND (edr.dps > 0 OR edr.hps > 0)     -- metric-neutral: include healers with zero damage
@@ -79,10 +89,10 @@ eligible AS (
       -- Exclusive upper bound: data strictly before the snapshot cutoff (00:00 UTC boundary).
       AND edr.killed_at < s.cutoff
       AND (s.window_start IS NULL OR edr.killed_at >= s.window_start)
-    -- Duplicate-group collapse: copies of the same kill are near-identical, so
-    -- DPS DESC with HPS DESC tiebreak picks one deterministic representative.
+    -- Duplicate-group collapse uses one whole representative instance, preventing
+    -- a synthetic run assembled from different uploads encounter by encounter.
     ORDER BY edr.player_guid, edr.encounter_name,
-             COALESCE(li.duplicate_group_id, li.id),
+             ri.run_id,
              edr.dps DESC, edr.hps DESC
 )
 INSERT INTO ranking_snapshot_members (
