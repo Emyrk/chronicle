@@ -39,6 +39,7 @@ import { guildsProcessor } from "../Guilds/guilds.processor";
 import { companionStatsProcessor } from "../CompanionStats/companionStats.processor";
 import { playerLifeStateProcessor } from "./playerLifeState.processor";
 import { pullsAndCleanupProcessor } from "../PullsAndCleanup/pullsAndCleanup.processor";
+import { totalDamageDoneStripProcessor } from "../Strips/totalDamageDone.processor";
 
 // Export individual processors
 export { damageDoneProcessor, vulnerabilityEffectProcessor, enemyDamageDoneProcessor, petDamageDoneProcessor, friendlyFireProcessor } from "../DamageDone/damageDone.processor";
@@ -169,6 +170,8 @@ export const processorRegistry: Record<string, PanelProcessor<any, any>> = {
   // Replay
   status: statusProcessor,
   healer_casts: healerCastsProcessor,
+  raid_durability_strip: { ...statusProcessor, id: "raid_durability_strip" },
+  total_damage_done_strip: totalDamageDoneStripProcessor,
   // Rotations
   rotations: rotationsProcessor,
   // Possession timeline

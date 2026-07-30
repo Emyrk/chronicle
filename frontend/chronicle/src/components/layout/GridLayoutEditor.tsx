@@ -11,6 +11,9 @@ import {
   type GridResizeEdge,
 } from "./gridEdgeResize";
 
+export type LayoutItemKind = "panel" | "strip";
+export type StripOrientation = "horizontal" | "vertical";
+
 export interface GridEditorItem {
   id: string;
   title: string;
@@ -18,6 +21,12 @@ export interface GridEditorItem {
   y: number;
   w: number;
   h: number;
+  /** Legacy items omit kind and are treated as panels. */
+  kind?: LayoutItemKind;
+  /** Strip visualization ID. Present only when kind is "strip". */
+  stripType?: string;
+  /** Persisted now so vertical strips can be introduced without a schema change. */
+  orientation?: StripOrientation;
   minW?: number;
   minH?: number;
   maxW?: number;

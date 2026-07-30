@@ -36,6 +36,8 @@ import type { Instance, Encounter, EnemyUnit } from "./InstancePage";
 import { EventsPanel, type EventsPanelType, type PanelContext, type EntitySelection } from "./EventsPanels";
 import type { PanelFilter } from "./EventsPanels/processors/filters";
 import { PANELS } from "./EventsPanels/EventsPanel";
+import { Strip } from "./EventsPanels/Strips/Strip";
+import { isStripType } from "./EventsPanels/Strips/strips";
 import { PanelTimingProvider, PanelTimingDisplay, PanelTimingResetter } from "./EventsPanels/PanelTimingContext";
 import { ChartDataRegistryProvider } from "./EventsPanels/ChartDataRegistry";
 import { PanelExplainerView } from "./PanelExplainer";
@@ -851,18 +853,23 @@ function orderLayoutItems(items: GridEditorItem[]): GridEditorItem[] {
 
 function normalizeLayoutItems(items: GridEditorItem[]): GridEditorItem[] {
   const normalized = items.map((item) => {
-    const w = Math.max(4, Math.min(item.w, GRID_COLS));
-    const h = Math.max(4, item.h);
+    const isStrip = item.kind === "strip";
+    const minW = item.minW ?? (isStrip ? 1 : 4);
+    const minH = item.minH ?? (isStrip ? 1 : 4);
+    const w = Math.max(minW, Math.min(item.w, GRID_COLS));
+    const h = Math.max(minH, item.h);
     const x = Math.max(0, Math.min(item.x, GRID_COLS - w));
     const y = Math.max(0, item.y);
     return {
       ...item,
+      kind: isStrip ? "strip" as const : "panel" as const,
+      ...(isStrip ? { orientation: item.orientation ?? "horizontal" as const } : {}),
       x,
       y,
       w,
       h,
-      minW: item.minW ?? 4,
-      minH: item.minH ?? 4,
+      minW,
+      minH,
       maxW: item.maxW ?? GRID_COLS,
       maxH: item.maxH ?? 20,
     };
@@ -951,6 +958,8 @@ function EventsPanelGrid({
     >
       {layoutItems.map((item, index) => {
         const panelType = panelTypesById[item.id] ?? "empty";
+        const stripType = item.kind === "strip" && isStripType(item.stripType) ? item.stripType : null;
+        const isStrip = stripType !== null;
         return (
           <div
             key={item.id}
@@ -958,25 +967,36 @@ function EventsPanelGrid({
             style={{
               gridColumn: isMobile ? "1 / -1" : `${item.x + 1} / span ${item.w}`,
               gridRow: isMobile
-                ? `auto / span ${panelType === "timeline" && context.selectedEncounterIds.length > 1 ? 1 : item.h}`
+                ? `auto / span ${!isStrip && panelType === "timeline" && context.selectedEncounterIds.length > 1 ? 1 : item.h}`
                 : `${item.y + 1} / span ${item.h}`,
             }}
           >
-            <EventsPanel
-              panelType={panelType}
-              onPanelTypeChange={(nextType) => onPanelTypeChange(item.id, nextType)}
-              durationMs={durationMs}
-              context={context}
-              panelIndex={index}
-              panelId={item.id}
-              onExplainerClick={onExplainerClick}
-              showHints={showHints}
-              panelOption={panelOptionsById[item.id] ?? null}
-              onPanelOptionChange={(nextOption) => onPanelOptionChange(item.id, nextOption)}
-              seedFilters={seedFiltersByID[item.id]}
-              seedFiltersVersion={seedFiltersVersion}
-              onFiltersChange={(filters) => onPanelFiltersChange(item.id, filters)}
-            />
+            {isStrip ? (
+              <Strip
+                stripType={stripType}
+                orientation={item.orientation ?? "horizontal"}
+                durationMs={durationMs}
+                context={context}
+                stripIndex={index}
+                stripId={item.id}
+              />
+            ) : (
+              <EventsPanel
+                panelType={panelType}
+                onPanelTypeChange={(nextType) => onPanelTypeChange(item.id, nextType)}
+                durationMs={durationMs}
+                context={context}
+                panelIndex={index}
+                panelId={item.id}
+                onExplainerClick={onExplainerClick}
+                showHints={showHints}
+                panelOption={panelOptionsById[item.id] ?? null}
+                onPanelOptionChange={(nextOption) => onPanelOptionChange(item.id, nextOption)}
+                seedFilters={seedFiltersByID[item.id]}
+                seedFiltersVersion={seedFiltersVersion}
+                onFiltersChange={(filters) => onPanelFiltersChange(item.id, filters)}
+              />
+            )}
           </div>
         );
       })}

@@ -39,6 +39,9 @@ import { useIsMobile } from "@/hooks/useIsMobile";
 import { useInstanceDefaultsCache } from "@/hooks/useInstanceDefaultsCache";
 import { EventsPanel, type EventsPanelType } from "@/pages/Instance/EventsPanels";
 import { PANELS } from "@/pages/Instance/EventsPanels/EventsPanel";
+import { Strip } from "@/pages/Instance/EventsPanels/Strips/Strip";
+import { STRIPS, isStripType } from "@/pages/Instance/EventsPanels/Strips/strips";
+import { resolveStripSize, type StripType } from "@/pages/Instance/EventsPanels/Strips/types";
 import type { PanelContext } from "@/pages/Instance/EventsPanels/types";
 import type { PanelFilter } from "@/pages/Instance/EventsPanels/processors/filters";
 import type { Instance } from "@/pages/Instance/InstancePage";
@@ -1086,6 +1089,7 @@ function LivePanelTile({
   context,
   durationMs,
   onPanelTypeChange,
+  onStripTypeChange,
   onPanelOptionChange,
   seedFilters,
   seedFiltersVersion,
@@ -1097,11 +1101,27 @@ function LivePanelTile({
   context: PanelContext;
   durationMs: number;
   onPanelTypeChange: (next: EventsPanelType) => void;
+  onStripTypeChange: (next: StripType) => void;
   onPanelOptionChange: (option: string | null) => void;
   seedFilters?: PanelFilter[];
   seedFiltersVersion?: number;
   onFiltersChange?: (filters: PanelFilter[]) => void;
 }) {
+  if (item.kind === "strip" && isStripType(item.stripType)) {
+    return (
+      <Strip
+        stripType={item.stripType}
+        orientation={item.orientation ?? "horizontal"}
+        durationMs={durationMs}
+        context={context}
+        stripIndex={Number(item.id.replace("strip-", "")) - 1}
+        stripId={item.id}
+        editable
+        onStripTypeChange={onStripTypeChange}
+      />
+    );
+  }
+
   return (
     <EventsPanel
       panelType={panelType}
@@ -1393,7 +1413,8 @@ export function LayoutLabSettings() {
       if (defaults && defaults.length > 0) {
         return { ...prev, [itemId]: defaults };
       }
-      const { [itemId]: _, ...rest } = prev;
+      const rest = { ...prev };
+      delete rest[itemId];
       return rest;
     });
     setItems((prev) =>
@@ -1408,6 +1429,28 @@ export function LayoutLabSettings() {
     );
   };
 
+  const handleStripTypeChange = (itemId: string, nextType: StripType) => {
+    if (readOnly) return;
+    const definition = STRIPS[nextType];
+    setItems((prev) => prev.map((item) => {
+      if (item.id !== itemId || item.kind !== "strip") return item;
+      const orientation = item.orientation ?? definition.defaultOrientation;
+      const size = resolveStripSize(definition.size, orientation);
+      return {
+        ...item,
+        title: definition.label,
+        stripType: nextType,
+        orientation,
+        minW: size.minW,
+        minH: size.minH,
+        maxW: size.maxW,
+        maxH: size.maxH,
+        w: Math.max(item.w, size.minW),
+        h: Math.max(item.h, size.minH),
+      };
+    }));
+  };
+
   const handleRemovePanel = (itemId: string) => {
     if (readOnly) return;
     setItems((prev) => prev.filter((item) => item.id !== itemId));
@@ -1416,7 +1459,11 @@ export function LayoutLabSettings() {
       delete next[itemId];
       return next;
     });
-    setPanelFiltersById((prev) => { const { [itemId]: _, ...rest } = prev; return rest; });
+    setPanelFiltersById((prev) => {
+      const next = { ...prev };
+      delete next[itemId];
+      return next;
+    });
     setPanelOptionsById((prev) => {
       const next = { ...prev };
       delete next[itemId];
@@ -1452,6 +1499,38 @@ export function LayoutLabSettings() {
     ]);
     setPanelTypesById((prev) => ({ ...prev, [newId]: newType }));
     setPanelOptionsById((prev) => ({ ...prev, [newId]: null }));
+  };
+
+  const handleAddStrip = () => {
+    if (readOnly || items.length >= MAX_PANELS) return;
+    const nextIndex = items.reduce((max, item) => {
+      const match = item.id.match(/^strip-(\d+)$/);
+      return Math.max(max, match ? Number(match[1]) : 0);
+    }, 0) + 1;
+    const stripType: StripType = "raid_durability";
+    const definition = STRIPS[stripType];
+    const orientation = definition.defaultOrientation;
+    const size = resolveStripSize(definition.size, orientation);
+    const maxY = items.reduce((max, item) => Math.max(max, item.y + item.h), 0);
+
+    setItems((prev) => [
+      ...prev,
+      {
+        id: `strip-${nextIndex}`,
+        kind: "strip",
+        stripType,
+        orientation,
+        title: definition.label,
+        x: 0,
+        y: maxY,
+        w: size.preferredW,
+        h: size.preferredH,
+        minW: size.minW,
+        minH: size.minH,
+        maxW: size.maxW,
+        maxH: size.maxH,
+      },
+    ]);
   };
 
   const handlePanelOptionChange = (itemId: string, option: string | null) => {
@@ -1754,6 +1833,16 @@ export function LayoutLabSettings() {
                   <Plus className="h-4 w-4" />
                   Add panel
                 </Button>
+                <Button
+                  type="button"
+                  variant="outline"
+                  onClick={handleAddStrip}
+                  className="gap-1.5"
+                  disabled={readOnly || items.length >= MAX_PANELS}
+                >
+                  <Plus className="h-4 w-4" />
+                  Add strip
+                </Button>
                 <span className="text-xs text-muted-foreground">Panels: {items.length} / {MAX_PANELS}</span>
               </div>
             ) : <div />}
@@ -1876,6 +1965,7 @@ export function LayoutLabSettings() {
                         context={context}
                         durationMs={durationMs}
                         onPanelTypeChange={(next) => handlePanelTypeChange(item.id, next)}
+                        onStripTypeChange={(next) => handleStripTypeChange(item.id, next)}
                         onPanelOptionChange={(option) => handlePanelOptionChange(item.id, option)}
                         seedFilters={seedFiltersById[item.id]}
                         seedFiltersVersion={seedFiltersVersion}
