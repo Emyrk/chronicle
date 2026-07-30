@@ -166,7 +166,7 @@ function deserializeContext(ctx: SerializableProcessorContext): ProcessorContext
 /**
  * Create a cursor for a stream type.
  */
-function createCursor(type: StreamType, data: Uint8Array): PeekableCursor {
+function createCursor(type: StreamType, data: Uint8Array): PeekableCursor | null {
   const cursor = type === "damage"
     ? new FastDamageCursor(data)
     : type === "heal"
@@ -204,7 +204,7 @@ function createCursor(type: StreamType, data: Uint8Array): PeekableCursor {
     : null;
 
   if (!cursor) {
-    throw new Error(`Unsupported stream type in sync mode: ${type}`);
+    return null;
   }
 
   return {
@@ -426,6 +426,10 @@ export async function processIncrementally<TResult>(
     const cachedStream = streams.get(streamType);
     if (cachedStream) {
       const cursor = createCursor(streamType, cachedStream.data);
+      // Some streams are not supported by incremental sync processing yet.
+      // Ignore them so their processor state remains at its initial value (for
+      // example, the All Activity stream count remains 0).
+      if (!cursor) continue;
       
       // Skip entire encounters that are either:
       // 1. Not in the selected encounter list (user hasn't selected them)
