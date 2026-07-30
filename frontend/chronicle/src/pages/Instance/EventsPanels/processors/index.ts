@@ -170,6 +170,7 @@ export const processorRegistry: Record<string, PanelProcessor<any, any>> = {
   // Replay
   status: statusProcessor,
   healer_casts: healerCastsProcessor,
+  replay_strip: { ...emptyProcessor, id: "replay_strip" },
   raid_durability_strip: { ...statusProcessor, id: "raid_durability_strip" },
   // Rotations
   rotations: rotationsProcessor,

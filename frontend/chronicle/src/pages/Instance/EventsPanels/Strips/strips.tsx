@@ -1,9 +1,11 @@
 /* eslint-disable react-refresh/only-export-components -- strip definitions and their renderers are intentionally colocated */
-import { Activity } from "lucide-react";
+import { Activity, Timer } from "lucide-react";
 import { useMemo } from "react";
 import { cn } from "@/lib/utils";
+import { ReplayTransportBar, usePlayerDeathTimes } from "../../ReplayControlOverlay";
 import { useSyncModeContextOptional } from "../../SyncModeContext";
 import { usePlayerLifeState } from "../usePlayerLifeState";
+import { emptyProcessor } from "../Empty/empty.processor";
 import { statusProcessor, type StatusResult } from "../Status/status.processor";
 import {
   createStatusRaidHealthModel,
@@ -31,6 +33,12 @@ function raidHealthColor(percent: number): string {
   if (percent < 25) return "bg-red-500/80";
   if (percent < 55) return "bg-amber-500/65";
   return "bg-emerald-500/60";
+}
+
+function ReplayStrip() {
+  const deaths = usePlayerDeathTimes();
+
+  return <ReplayTransportBar deaths={deaths} />;
 }
 
 function RaidDurabilityStrip({ result, context, panelOption }: StripRenderProps<StatusResult>) {
@@ -184,6 +192,17 @@ function StripBars({
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 export const STRIPS: Record<StripType, StripDefinition<any, any>> = {
+  replay: {
+    ...emptyProcessor,
+    id: "replay_strip",
+    label: "Replay",
+    icon: <Timer className="h-4 w-4" />,
+    syncDataMode: "full",
+    supportedOrientations: HORIZONTAL_ONLY,
+    defaultOrientation: "horizontal",
+    size: DEFAULT_SIZE,
+    render: () => <ReplayStrip />,
+  },
   raid_durability: {
     ...statusProcessor,
     id: "raid_durability_strip",

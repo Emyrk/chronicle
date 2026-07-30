@@ -2,7 +2,7 @@ import type { StripOrientation } from "@/components/layout/GridLayoutEditor";
 import type { PanelDefinition, PanelRenderProps } from "../types";
 import type { ProcessorEvent } from "../processorTypes";
 
-export type StripType = "raid_durability";
+export type StripType = "replay" | "raid_durability";
 
 export interface StripSizeProfile {
   minLength: number;

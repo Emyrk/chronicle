@@ -37,7 +37,7 @@ import { useLocalStorage } from "@/hooks/useLocalStorage";
 import { createStreamCursor } from "@/api/protodecode/decode";
 import { SlainSchema, type Slain } from "@/api/proto/chronicle_pb";
 import { isPlayerGuidFast } from "./EventsPanels/processors/guidCache";
-import { useSyncModeContext } from "./SyncModeContext";
+import { useSyncModeContext, useSyncModeContextOptional } from "./SyncModeContext";
 
 export type ReplayPosition = "top" | "bottom";
 
@@ -120,7 +120,8 @@ const SPEEDS = [0.25, 0.5, 1, 2, 4];
  * Load the timestamps of player deaths from the slain stream.
  * Used to render skull markers on the scrubber track.
  */
-function usePlayerDeathTimes(): Date[] {
+// eslint-disable-next-line react-refresh/only-export-components
+export function usePlayerDeathTimes(): Date[] {
   const context = useInstanceEventsContext();
   const [deaths, setDeaths] = useState<Date[]>([]);
 
@@ -226,6 +227,185 @@ function SpeedChips({
   );
 }
 
+export interface ReplayTransportBarProps {
+  initialTimestamp?: Date;
+  deaths: Date[];
+  actions?: React.ReactNode;
+  className?: string;
+}
+
+/** Compact replay transport shared by the floating overlay and replay strips. */
+export function ReplayTransportBar({
+  initialTimestamp,
+  deaths,
+  actions,
+  className,
+}: ReplayTransportBarProps) {
+  const sync = useSyncModeContextOptional();
+  const youtubeActive = sync?.externalDriver === "youtube";
+  const controlsDisabled = !sync?.enabled || youtubeActive;
+
+  const progress = useMemo(() => {
+    if (!sync?.encounterBounds || !sync.currentTimestamp) return 0;
+    const start = sync.encounterBounds.start.getTime();
+    const duration = sync.encounterBounds.end.getTime() - start;
+    if (duration <= 0) return 0;
+    return Math.max(0, Math.min(100, ((sync.currentTimestamp.getTime() - start) / duration) * 100));
+  }, [sync]);
+
+  const elapsed = useMemo(() => {
+    if (!sync?.encounterBounds || !sync.currentTimestamp) return 0;
+    return Math.max(0, sync.currentTimestamp.getTime() - sync.encounterBounds.start.getTime());
+  }, [sync]);
+
+  if (!sync) {
+    return (
+      <div className={cn(
+        "relative h-full min-h-[3.5rem] overflow-hidden bg-gradient-to-b from-primary-darker/30 to-black/60",
+        className,
+      )}>
+        <div className="pointer-events-none flex h-full min-w-0 items-center gap-3 px-3 py-2 grayscale opacity-35">
+          <span className="h-2.5 w-2.5 shrink-0 rounded-full bg-muted-foreground/40" />
+          <Button variant="outline" size="icon" className="h-8 w-8 shrink-0" disabled>
+            <Play className="h-4 w-4" />
+          </Button>
+          <Button variant="outline" size="icon" className="h-8 w-8 shrink-0" disabled>
+            <RotateCcw className="h-4 w-4" />
+          </Button>
+          <span className="w-[4.5rem] shrink-0 font-mono text-sm tabular-nums text-primary">0:00.0</span>
+          <input type="range" value={0} readOnly disabled className="min-w-16 flex-1" aria-label="Replay position" />
+          <SpeedChips value={1} onChange={() => undefined} disabled size="sm" />
+          {actions}
+        </div>
+        <div className="absolute inset-0 flex items-center justify-center bg-muted/65 backdrop-blur-[1px]">
+          <Button type="button" size="sm" className="gap-1.5 shadow-lg" disabled title="Replay is available on instance pages">
+            <Play className="h-4 w-4" />
+            Enable Replay
+          </Button>
+        </div>
+      </div>
+    );
+  }
+
+  const handleEnable = () => {
+    sync.enable();
+    const timestamp = initialTimestamp ?? sync.encounterBounds?.start;
+    if (timestamp) sync.setTimestamp(timestamp);
+  };
+
+  const handleRestart = () => {
+    const timestamp = sync.encounterBounds?.start ?? initialTimestamp;
+    if (timestamp) sync.setTimestamp(timestamp);
+  };
+
+  const handleSliderChange = (percent: number) => {
+    if (!sync.encounterBounds) return;
+    const start = sync.encounterBounds.start.getTime();
+    const duration = sync.encounterBounds.end.getTime() - start;
+    sync.setTimestamp(new Date(start + (duration * percent) / 100));
+  };
+
+  return (
+    <div
+      className={cn(
+        "relative h-full min-h-[3.5rem] overflow-hidden bg-gradient-to-b from-primary-darker/30 to-black/60",
+        className,
+      )}
+    >
+      <div
+        className={cn(
+          "flex h-full min-w-0 items-center gap-3 px-3 py-2 transition-[filter,opacity]",
+          !sync.enabled && "pointer-events-none grayscale opacity-35",
+        )}
+        aria-hidden={!sync.enabled}
+      >
+        <span
+          className={cn(
+            "h-2.5 w-2.5 shrink-0 rounded-full",
+            sync.isPlaying ? "animate-pulse bg-red-500" : "bg-muted-foreground/40",
+          )}
+        />
+        <Button
+          variant="outline"
+          size="icon"
+          className="h-8 w-8 shrink-0"
+          onClick={() => (sync.isPlaying ? sync.pause() : sync.play())}
+          disabled={controlsDisabled}
+          title={sync.isPlaying ? "Pause" : "Play"}
+        >
+          {sync.isPlaying ? <Pause className="h-4 w-4" /> : <Play className="h-4 w-4" />}
+        </Button>
+        <Button
+          variant="outline"
+          size="icon"
+          className="h-8 w-8 shrink-0"
+          onClick={handleRestart}
+          disabled={controlsDisabled}
+          title="Restart from beginning"
+        >
+          <RotateCcw className="h-4 w-4" />
+        </Button>
+        <span className="w-[4.5rem] shrink-0 font-mono text-sm tabular-nums text-primary">
+          {formatClockShort(elapsed)}
+        </span>
+        <div className="relative min-w-16 flex-1">
+          <DeathMarkers deaths={deaths} bounds={sync.encounterBounds} />
+          <input
+            type="range"
+            value={progress}
+            min={0}
+            max={100}
+            step={0.1}
+            onChange={(event) => handleSliderChange(Number(event.target.value))}
+            disabled={controlsDisabled || !sync.encounterBounds}
+            className="w-full cursor-pointer accent-primary disabled:cursor-default"
+            aria-label="Replay position"
+          />
+        </div>
+        <SpeedChips
+          value={sync.playbackSpeed}
+          onChange={sync.setPlaybackSpeed}
+          disabled={controlsDisabled}
+          size="sm"
+        />
+        {sync.enabled && !youtubeActive ? (
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            className="h-7 shrink-0 px-2.5 text-xs"
+            onClick={sync.disable}
+          >
+            Disable Replay
+          </Button>
+        ) : null}
+        {actions}
+      </div>
+
+      {!sync.enabled ? (
+        <div className="absolute inset-0 flex items-center justify-center bg-muted/65 backdrop-blur-[1px]">
+          <Button
+            type="button"
+            size="sm"
+            className="gap-1.5 shadow-lg"
+            onClick={handleEnable}
+            disabled={!initialTimestamp && !sync.encounterBounds}
+          >
+            <Play className="h-4 w-4" />
+            Enable Replay
+          </Button>
+        </div>
+      ) : null}
+
+      {youtubeActive ? (
+        <div className="pointer-events-none absolute inset-x-0 bottom-0 bg-black/55 py-0.5 text-center text-[10px] text-muted-foreground">
+          Video is controlling replay
+        </div>
+      ) : null}
+    </div>
+  );
+}
+
 export function ReplayControlOverlay({ initialTimestamp }: ReplayControlOverlayProps) {
   const sync = useSyncModeContext();
   const [showDebug, setShowDebug] = useState(false);
@@ -242,6 +422,7 @@ export function ReplayControlOverlay({ initialTimestamp }: ReplayControlOverlayP
   // mount/unmount effect doesn't re-run as context values change.
   const syncRef = useRef(sync);
   const initialTimestampRef = useRef(initialTimestamp);
+  const enabledByOverlayRef = useRef(false);
   useEffect(() => {
     syncRef.current = sync;
     initialTimestampRef.current = initialTimestamp;
@@ -250,6 +431,7 @@ export function ReplayControlOverlay({ initialTimestamp }: ReplayControlOverlayP
   useEffect(() => {
     const s = syncRef.current;
     if (!s.enabled) {
+      enabledByOverlayRef.current = true;
       s.enable();
       const initial = initialTimestampRef.current ?? s.encounterBounds?.start;
       if (initial) {
@@ -257,8 +439,9 @@ export function ReplayControlOverlay({ initialTimestamp }: ReplayControlOverlayP
       }
     }
     return () => {
-      // Leave replay mode running if an external driver (YouTube) owns it.
-      if (syncRef.current.externalDriver === "none") {
+      // Only tear replay down when this overlay enabled it. If an inline replay
+      // strip was already active, closing the floating controls must not stop it.
+      if (enabledByOverlayRef.current && syncRef.current.externalDriver === "none") {
         syncRef.current.disable();
       }
     };
@@ -387,31 +570,25 @@ export function ReplayControlOverlay({ initialTimestamp }: ReplayControlOverlayP
   if (collapsed) {
     const miniBar = (
       <div className={containerClass}>
-        <div className="animate-replay-pop flex items-center gap-3 rounded-lg border border-primary/40 bg-gradient-to-b from-primary-darker/30 to-black/60 px-3 py-2 shadow-xl backdrop-blur-md">
-          {statusDot}
-          {playPauseButton("h-8 w-8")}
-          {restartButton("h-8 w-8")}
-          <span className="font-mono text-sm tabular-nums text-primary">
-            {formatClockShort(elapsed)}
-          </span>
-          {scrubber("min-w-0 flex-1")}
-          <SpeedChips
-            value={sync.playbackSpeed}
-            onChange={sync.setPlaybackSpeed}
-            disabled={controlsDisabled}
-            size="sm"
-          />
-          {pinButton("h-8 w-8")}
-          <Button
-            variant="ghost"
-            size="icon"
-            className="h-8 w-8"
-            onClick={() => setCollapsed(false)}
-            title="Expand replay controls"
-          >
-            {pinnedTop ? <ChevronDown className="h-4 w-4" /> : <ChevronUp className="h-4 w-4" />}
-          </Button>
-        </div>
+        <ReplayTransportBar
+          initialTimestamp={initialTimestamp}
+          deaths={deaths}
+          className="animate-replay-pop rounded-lg border border-primary/40 shadow-xl backdrop-blur-md"
+          actions={(
+            <>
+              {pinButton("h-8 w-8 shrink-0")}
+              <Button
+                variant="ghost"
+                size="icon"
+                className="h-8 w-8 shrink-0"
+                onClick={() => setCollapsed(false)}
+                title="Expand replay controls"
+              >
+                {pinnedTop ? <ChevronDown className="h-4 w-4" /> : <ChevronUp className="h-4 w-4" />}
+              </Button>
+            </>
+          )}
+        />
       </div>
     );
     return createPortal(miniBar, document.body);
