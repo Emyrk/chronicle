@@ -331,7 +331,6 @@ function RawEventRow({ event, index, useRelativeTime = false, useLocalTime = fal
                 name={event.sourceName || "—"}
                 size={14}
                 loadOnHover
-                showIcon={false}
               />
             </Link>
           ) : (

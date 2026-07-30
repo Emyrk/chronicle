@@ -18,8 +18,6 @@ interface SpellIconWithTooltipProps {
   size?: number;
   /** Additional classes for the icon image */
   className?: string;
-  /** Whether to render the spell icon. Defaults to true. */
-  showIcon?: boolean;
   /** Whether to show the tooltip. Defaults to true. */
   showTooltip?: boolean;
   /** Show detailed tooltip with duration and aura effects. Defaults to false. */
@@ -42,7 +40,6 @@ export function SpellIconWithTooltip({
   locale = "0",
   size = 24,
   className,
-  showIcon = true,
   showTooltip = true,
   detailed = false,
   children,
@@ -51,7 +48,7 @@ export function SpellIconWithTooltip({
   const iconBaseUrl = useIconBaseUrl();
   const iconUrl = getSpellIconUrl(spell.spell_icon, iconBaseUrl);
 
-  const icon = showIcon && iconUrl ? (
+  const icon = iconUrl ? (
     <img
       src={iconUrl}
       alt=""

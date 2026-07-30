@@ -12,9 +12,7 @@ interface SpellIdTooltipProps {
   name: string;
   /** Icon size in pixels. Defaults to 16. */
   size?: number;
-  /** Whether to render the spell icon. Defaults to true. */
-  showIcon?: boolean;
-  /** Fetch spell data only after the tooltip is opened. Defaults to false. */
+  /** Fetch spell data only after the tooltip is opened and render a text-only trigger. Defaults to false. */
   loadOnHover?: boolean;
   /** Additional class name for the wrapper */
   className?: string;
@@ -31,7 +29,6 @@ export function SpellIdTooltip({
   spellId, 
   name, 
   size = 16,
-  showIcon = true,
   loadOnHover = false,
   className,
 }: SpellIdTooltipProps) {
@@ -96,7 +93,6 @@ export function SpellIdTooltip({
         <SpellIconWithTooltip 
           spell={spell} 
           size={size}
-          showIcon={showIcon}
           showTooltip
         >
           {name}
