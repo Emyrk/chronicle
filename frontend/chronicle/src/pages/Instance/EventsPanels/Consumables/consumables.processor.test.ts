@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import type { ConsumeProcessorEvent, ProcessorContext } from "../processorTypes";
-import { consumableDisplayName, consumablesProcessor } from "./consumables.processor";
+import { consumableDisplayName, consumablesProcessor, consumablesTotalProcessor } from "./consumables.processor";
+import { aggregateConsumablesTotal } from "./consumablesTotal";
 
 function createContext(overrides?: Partial<ProcessorContext>): ProcessorContext {
   return {
@@ -194,5 +195,49 @@ describe("consumablesProcessor", () => {
 
     const unknown = process([consumeEvent({})]).uses.get("use-1")!;
     expect(consumableDisplayName(unknown)).toBe("Unknown Consumable");
+  });
+
+  it("exposes the same aggregation under the totals panel ID", () => {
+    expect(consumablesTotalProcessor.id).toBe("consumables_total");
+    expect(consumablesTotalProcessor.streams).toEqual(["consume"]);
+    expect(consumablesTotalProcessor.processEvent).toBe(consumablesProcessor.processEvent);
+  });
+
+  it("groups physical uses into per-player spell counts", () => {
+    const state = process([
+      consumeEvent({ consumeId: "flask-1", evidenceId: "flask-1", player: "p1", spell: { id: 17626, name: "Flask of the Titans" } }),
+      consumeEvent({ consumeId: "flask-2", evidenceId: "flask-2", player: "p1", spell: { id: 17626, name: "Flask of the Titans" } }),
+      consumeEvent({ consumeId: "pot-1", evidenceId: "pot-1", player: "p1", spell: { id: 17531, name: "Major Mana Potion" } }),
+      consumeEvent({ consumeId: "flask-3", evidenceId: "flask-3", player: "p2", spell: { id: 17626, name: "Flask of the Titans" } }),
+    ]);
+
+    expect(aggregateConsumablesTotal(state.uses.values())).toEqual([
+      {
+        playerId: "p1",
+        total: 3,
+        consumes: [
+          { key: "spell:17626", count: 2, spellId: 17626, itemId: null, name: "Flask of the Titans" },
+          { key: "spell:17531", count: 1, spellId: 17531, itemId: null, name: "Major Mana Potion" },
+        ],
+      },
+      {
+        playerId: "p2",
+        total: 1,
+        consumes: [
+          { key: "spell:17626", count: 1, spellId: 17626, itemId: null, name: "Flask of the Titans" },
+        ],
+      },
+    ]);
+  });
+
+  it("groups item-only uses by a single known candidate item", () => {
+    const state = process([
+      consumeEvent({ consumeId: "item-1", evidenceId: "item-1", candidateItemIds: [13444], candidateItemIdsCount: 1 }),
+      consumeEvent({ consumeId: "item-2", evidenceId: "item-2", itemId: 13444 }),
+    ]);
+
+    expect(aggregateConsumablesTotal(state.uses.values())[0].consumes).toEqual([
+      { key: "item:13444", count: 2, spellId: null, itemId: 13444, name: "Item 13444" },
+    ]);
   });
 });

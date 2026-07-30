@@ -104,15 +104,17 @@ export function consumableDisplayName(use: ConsumableUse): string {
   return "Unknown Consumable";
 }
 
+const createConsumablesState = (): ConsumablesResult => ({
+  seenEvidence: new Map(),
+  uses: new Map(),
+  unknownUseIds: new Map(),
+});
+
 export const consumablesProcessor: PanelProcessor<ConsumablesResult, ConsumeProcessorEvent> = {
   id: "consumables",
   streams: ["consume"],
 
-  createState: (): ConsumablesResult => ({
-    seenEvidence: new Map(),
-    uses: new Map(),
-    unknownUseIds: new Map(),
-  }),
+  createState: createConsumablesState,
 
   processEvent: (
     state: ConsumablesResult,
@@ -207,4 +209,11 @@ export const consumablesProcessor: PanelProcessor<ConsumablesResult, ConsumeProc
       state.unknownUseIds.delete(use.consumeId);
     }
   },
+};
+
+/** Same consume aggregation, exposed under the totals panel's worker ID. */
+export const consumablesTotalProcessor: PanelProcessor<ConsumablesResult, ConsumeProcessorEvent> = {
+  ...consumablesProcessor,
+  id: "consumables_total",
+  createState: createConsumablesState,
 };
