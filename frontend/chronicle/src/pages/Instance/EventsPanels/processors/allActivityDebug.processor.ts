@@ -2,7 +2,7 @@
  * All Activity Debug processor - stores raw events for debugging stream interleaving
  */
 
-import type { DamageProcessorEvent, HealProcessorEvent, PanelProcessor, ProcessorContext, ResourceChangeProcessorEvent, CastProcessorEvent, CastAction, AuraProcessorEvent, AuraApplication, SlainProcessorEvent, ResurrectionProcessorEvent, SpellGoProcessorEvent, AuraCastProcessorEvent, ExtraAttackProcessorEvent, UnitClassificationProcessorEvent, CombatantInfoProcessorEvent, DispelProcessorEvent } from "../processorTypes";
+import type { DamageProcessorEvent, HealProcessorEvent, PanelProcessor, ProcessorContext, ResourceChangeProcessorEvent, CastProcessorEvent, CastAction, AuraProcessorEvent, AuraApplication, SlainProcessorEvent, ResurrectionProcessorEvent, SpellGoProcessorEvent, AuraCastProcessorEvent, ExtraAttackProcessorEvent, UnitClassificationProcessorEvent, CombatantInfoProcessorEvent, DispelProcessorEvent, ConsumeProcessorEvent } from "../processorTypes";
 import type { StreamType } from "@/hooks/instanceEvents";
 import { hitTypeNames } from "@/lib/hittype/hittype";
 
@@ -88,15 +88,15 @@ export interface AllActivityDebugState {
   eventsCaptured: number;
 }
 
-// This processor handles damage, heal, resource_change, cast, aura, slain, spell_go, and aura_cast events
-type AllActivityEvent = DamageProcessorEvent | HealProcessorEvent | ResourceChangeProcessorEvent | CastProcessorEvent | AuraProcessorEvent | SlainProcessorEvent | ResurrectionProcessorEvent | SpellGoProcessorEvent | AuraCastProcessorEvent | ExtraAttackProcessorEvent | UnitClassificationProcessorEvent | CombatantInfoProcessorEvent | DispelProcessorEvent;
+// This processor handles every stream exposed by the debug panel.
+type AllActivityEvent = DamageProcessorEvent | HealProcessorEvent | ResourceChangeProcessorEvent | CastProcessorEvent | AuraProcessorEvent | SlainProcessorEvent | ResurrectionProcessorEvent | SpellGoProcessorEvent | AuraCastProcessorEvent | ExtraAttackProcessorEvent | UnitClassificationProcessorEvent | CombatantInfoProcessorEvent | DispelProcessorEvent | ConsumeProcessorEvent;
 
 // Default page size if no pagination specified
 const DEFAULT_PAGE_SIZE = 100;
 
 export const allActivityProcessor: PanelProcessor<AllActivityDebugState, AllActivityEvent> = {
   id: "all_activity",
-  streams: ["damage", "heal", "resource_change", "aura", "slain", "ressurection", "spell_go", "spell_start", "aura_cast", "extra_attack", "unit_classification", "combatant_info", "dispel"],
+  streams: ["damage", "heal", "resource_change", "aura", "slain", "ressurection", "spell_go", "spell_start", "aura_cast", "extra_attack", "unit_classification", "combatant_info", "dispel", "consume"],
   
   createState: () => ({
     counts: new Map<string, number>(),
@@ -110,7 +110,7 @@ export const allActivityProcessor: PanelProcessor<AllActivityDebugState, AllActi
       cast: [],
       aura: [],
       spell_go: [],
-      aura_cast: [], spell_start: [], spell_fail: [], unit_classification: [], combatant_info: [], dispel: [], interrupt: [], absorbed: [], companion_stats: [],
+      aura_cast: [], spell_start: [], spell_fail: [], unit_classification: [], combatant_info: [], dispel: [], interrupt: [], absorbed: [], companion_stats: [], consume: [],
     },
     streamCounts: {
       damage: 0,
@@ -122,7 +122,7 @@ export const allActivityProcessor: PanelProcessor<AllActivityDebugState, AllActi
       cast: 0,
       aura: 0,
       spell_go: 0,
-      aura_cast: 0, spell_start: 0, spell_fail: 0, unit_classification: 0, combatant_info: 0, dispel: 0, interrupt: 0, absorbed: 0, companion_stats: 0,
+      aura_cast: 0, spell_start: 0, spell_fail: 0, unit_classification: 0, combatant_info: 0, dispel: 0, interrupt: 0, absorbed: 0, companion_stats: 0, consume: 0,
     },
     encounters: new Map<string, EncounterMeta>(),
     totalProcessed: 0,
@@ -153,7 +153,7 @@ export const allActivityProcessor: PanelProcessor<AllActivityDebugState, AllActi
     const { entitySelection } = context;
     // Aura events only have target, cast events have caster but may not have target.
     // Combatant info events use "guid" instead of caster/target.
-    const eventCaster = "caster" in event ? event.caster : ("source" in event ? event.source : ("guid" in event ? event.guid : ""));
+    const eventCaster = "caster" in event ? event.caster : ("source" in event ? event.source : ("guid" in event ? event.guid : ("player" in event ? event.player : "")));
     const eventTarget = "target" in event ? event.target : ("guid" in event ? event.guid : "");
     if (entitySelection.playerIds.size > 0) {
       if(!(entitySelection.playerIds.has(eventCaster) || (eventTarget && entitySelection.playerIds.has(eventTarget)))) {
@@ -209,6 +209,9 @@ export const allActivityProcessor: PanelProcessor<AllActivityDebugState, AllActi
         abilityName = "Combatant Info";
       } else if (streamType === "dispel") {
         abilityName = "Dispel";
+      } else if (streamType === "consume") {
+        const consumeEvent = event as ConsumeProcessorEvent;
+        abilityName = consumeEvent.spell.name || (consumeEvent.itemId ? `Item ${consumeEvent.itemId}` : "Consume");
       } else {
         const regularEvent = event as DamageProcessorEvent | HealProcessorEvent | ResourceChangeProcessorEvent;
         abilityName = regularEvent.sourceName;
@@ -330,6 +333,10 @@ export const allActivityProcessor: PanelProcessor<AllActivityDebugState, AllActi
     } else if (streamType === "dispel") {
       sourceName = "Dispel";
       amount = 0;
+    } else if (streamType === "consume") {
+      const consumeEvent = event as ConsumeProcessorEvent;
+      sourceName = consumeEvent.spell.name || (consumeEvent.itemId ? `Item ${consumeEvent.itemId}` : "Consume");
+      amount = consumeEvent.amount ?? 0;
     } else {
       const regularEvent = event as DamageProcessorEvent | HealProcessorEvent | ResourceChangeProcessorEvent;
       sourceName = regularEvent.sourceName;
@@ -439,6 +446,22 @@ export const allActivityProcessor: PanelProcessor<AllActivityDebugState, AllActi
       const dispelTypeNames = ["None", "Magic", "Curse", "Disease", "Poison", "Stealth", "Invisibility"];
       rawEvent.extra = `type=${dispelTypeNames[dispelEvent.dispelType] || "Unknown"}`;
       if (dispelEvent.spellId) rawEvent.spellId = dispelEvent.spellId;
+    } else if (streamType === "consume") {
+      const consumeEvent = event as ConsumeProcessorEvent;
+      const kindNames = ["Unknown", "Direct Item", "Cast", "Aura", "Heal", "Resource", "Damage", "Active at Pull", "Cooldown"];
+      const confidenceNames = ["Unknown", "Direct", "Effect Derived", "Ambiguous", "Inferred"];
+      const details = [
+        `kind=${kindNames[consumeEvent.kind] ?? "Unknown"}`,
+        `confidence=${confidenceNames[consumeEvent.confidence] ?? "Unknown"}`,
+        `consume=${consumeEvent.consumeId}`,
+        `evidence=${consumeEvent.evidenceId}`,
+      ];
+      if (consumeEvent.itemId) details.push(`item=${consumeEvent.itemId}`);
+      if (consumeEvent.candidateItemIdsCount > 0) details.push(`candidates=${consumeEvent.candidateItemIds.slice(0, consumeEvent.candidateItemIdsCount).join("|")}`);
+      if (consumeEvent.resourceType) details.push(`resource=${consumeEvent.resourceType}`);
+      if (consumeEvent.isProjection) details.push("projection");
+      rawEvent.extra = details.join(" ");
+      rawEvent.spellId = consumeEvent.spell.id || undefined;
     } else if (streamType === "unit_classification") {
       const ucEvent = event as UnitClassificationProcessorEvent;
       rawEvent.affiliation = ucEvent.affiliation;

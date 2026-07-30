@@ -5625,8 +5625,8 @@ export interface ReusableConsume {
   candidateItemIds: number[];
   candidateItemIdsCount: number;
   spell: ReusableConsumeSpell;
-  kind: number;        // EvidenceKind enum
-  confidence: number;  // EvidenceConfidence enum
+  kind: 0 | 1 | 2 | 3 | 4 | 5 | 6 | 7 | 8; // EvidenceKind enum
+  confidence: 0 | 1 | 2 | 3 | 4;          // EvidenceConfidence enum
   consumedAtUnixMilli: number | null;
   observedAtUnixMilli: number;
   amount: number | null;
@@ -5849,8 +5849,8 @@ export class ConsumeDecoder {
           msg.candidateItemIds[msg.candidateItemIdsCount] = value;
           msg.candidateItemIdsCount++;
         }
-        else if (fieldNumber === 8) msg.kind = value;
-        else if (fieldNumber === 9) msg.confidence = value;
+        else if (fieldNumber === 8) msg.kind = value as ReusableConsume["kind"];
+        else if (fieldNumber === 9) msg.confidence = value as ReusableConsume["confidence"];
         else if (fieldNumber === 12) msg.amount = value;
         else if (fieldNumber === 14) msg.isProjection = value !== 0;
       }
@@ -5959,7 +5959,6 @@ export class FastConsumeCursor {
       firstTimestamp: new Date(Number(timestampMs)),
       count,
       dataLength,
-      headerLength: (this.offset - startOffset),
     };
     this._messagesReadInEncounter = 0;
     this._bytesProcessed += (this.offset - startOffset);

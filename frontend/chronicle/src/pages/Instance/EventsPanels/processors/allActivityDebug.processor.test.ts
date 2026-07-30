@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { HitTypePartialAbsorb, HitTypePartialBlock, HitTypePartialResist } from "@/lib/hittype/hittype";
-import type { DamageProcessorEvent, ProcessorContext, ResurrectionProcessorEvent } from "../processorTypes";
+import type { ConsumeProcessorEvent, DamageProcessorEvent, ProcessorContext, ResurrectionProcessorEvent } from "../processorTypes";
 import { allActivityProcessor } from "./allActivityDebug.processor";
 
 function createContext(): ProcessorContext {
@@ -97,6 +97,51 @@ describe("allActivityProcessor", () => {
       sourceName: "Redemption",
       spellId: 48949,
       extra: "resurrected",
+    });
+  });
+
+  it("captures consume identity and evidence details", () => {
+    const state = allActivityProcessor.createState();
+    const event: ConsumeProcessorEvent = {
+      type: "consume",
+      index: 9,
+      offsetMilli: -1500,
+      consumeId: "consume-123",
+      evidenceId: "evidence-456",
+      player: "player",
+      itemId: 13444,
+      candidateItemIds: [13444, 20002],
+      candidateItemIdsCount: 2,
+      spell: { id: 24361, name: "Major Mana Potion" },
+      kind: 7,
+      confidence: 2,
+      consumedAtUnixMilli: null,
+      observedAtUnixMilli: 1785250000000,
+      amount: 1800,
+      resourceType: "Mana",
+      isProjection: true,
+      activity: [],
+      activityCount: 0,
+      isSynthetic: true,
+    };
+
+    allActivityProcessor.processEvent(
+      state,
+      event,
+      "encounter",
+      new Date("2026-07-14T17:41:42.709Z"),
+      "consume",
+      createContext(),
+    );
+
+    expect(state.streamCounts.consume).toBe(1);
+    expect(state.rawEventsByStream.consume[0]).toMatchObject({
+      caster: "player",
+      casterName: "Sathite",
+      sourceName: "Major Mana Potion",
+      amount: 1800,
+      spellId: 24361,
+      extra: "kind=Active at Pull confidence=Effect Derived consume=consume-123 evidence=evidence-456 item=13444 candidates=13444|20002 resource=Mana projection",
     });
   });
 });

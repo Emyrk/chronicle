@@ -4,7 +4,7 @@
 
 import { useState, useMemo, useCallback, useRef, useEffect } from "react";
 import { Link } from "react-router-dom";
-import { Skull, Swords, Heart, Zap, Wand2, Sparkles, ChevronLeft, ChevronRight, ChevronsLeft, ChevronsRight, Search, X, Crosshair, Play, CircleX, Bubbles, WandSparkles, CircleFadingPlus, UserCheck, Ban, Shield, HeartPulse } from "lucide-react";
+import { Skull, Swords, Heart, Zap, Wand2, Sparkles, ChevronLeft, ChevronRight, ChevronsLeft, ChevronsRight, Search, X, Crosshair, Play, CircleX, Bubbles, WandSparkles, CircleFadingPlus, UserCheck, Ban, Shield, HeartPulse, FlaskConical } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { formatNumber } from "@/lib/format";
 import { ScrollArea, ScrollBar } from "@/components/ui/ScrollArea/ScrollArea";
@@ -43,12 +43,13 @@ const STREAM_CONFIG: Record<StreamType, { icon: React.ElementType; color: string
   interrupt: { icon: Ban, color: "text-rose-400", label: "Interrupt" },
   absorbed: { icon: Shield, color: "text-sky-400", label: "Absorbed" },
   companion_stats: { icon: Shield, color: "text-teal-400", label: "Companion Stats" },
+  consume: { icon: FlaskConical, color: "text-fuchsia-400", label: "Consume" },
 
   cast: { icon: Wand2, color: "text-purple-500", label: "Cast" },
 };
 // --- Panel option encode/decode helpers for state persistence ---
 
-const DEFAULT_ENABLED_STREAMS = new Set<StreamType>(["damage", "heal", "resource_change", "spell_go"]);
+const DEFAULT_ENABLED_STREAMS = new Set<StreamType>(["damage", "heal", "resource_change", "spell_go", "consume"]);
 
 const STREAM_CODES: Record<StreamType, string> = {
   damage: "d", heal: "h", resource_change: "r", cast: "c",
@@ -61,11 +62,12 @@ const STREAM_CODES: Record<StreamType, string> = {
   interrupt: "int",
   absorbed: "ab",
   companion_stats: "cs",
+  consume: "q",
 };
 const CODE_TO_STREAM = Object.fromEntries(
   Object.entries(STREAM_CODES).map(([k, v]) => [v, k as StreamType]),
 ) as Record<string, StreamType>;
-const DEFAULT_STREAM_CODE = "dhrg"; // sorted code for DEFAULT_ENABLED_STREAMS
+const DEFAULT_STREAM_CODE = "dghqr"; // sorted code for DEFAULT_ENABLED_STREAMS
 
 function encodeStreams(streams: Set<StreamType>): string {
   return [...streams].map((s) => STREAM_CODES[s]).sort().join("");
@@ -492,12 +494,12 @@ function AllActivityContent({
 }: AllActivityContentProps) {
   
   // Default state during loading
-  const emptyByStream = { damage: [], heal: [], resource_change: [], extra_attack: [], slain: [], ressurection: [], cast: [], aura: [], spell_go: [], aura_cast: [], spell_start: [], spell_fail: [], unit_classification: [], combatant_info: [], dispel: [] };
+  const emptyByStream = { damage: [], heal: [], resource_change: [], extra_attack: [], slain: [], ressurection: [], cast: [], aura: [], spell_go: [], aura_cast: [], spell_start: [], spell_fail: [], unit_classification: [], combatant_info: [], dispel: [], interrupt: [], absorbed: [], companion_stats: [], consume: [] };
   const emptyEncounters = new Map<string, EncounterMeta>();
   const safeResult = result ?? {
     counts: new Map<string, number>(),
     rawEventsByStream: emptyByStream,
-    streamCounts: { damage: 0, heal: 0, resource_change: 0, extra_attack: 0, slain: 0, ressurection: 0, cast: 0, aura: 0, spell_go: 0, aura_cast: 0, spell_start: 0, spell_fail: 0, unit_classification: 0, combatant_info: 0, dispel: 0, interrupt: 0, absorbed: 0, companion_stats: 0 },
+    streamCounts: { damage: 0, heal: 0, resource_change: 0, extra_attack: 0, slain: 0, ressurection: 0, cast: 0, aura: 0, spell_go: 0, aura_cast: 0, spell_start: 0, spell_fail: 0, unit_classification: 0, combatant_info: 0, dispel: 0, interrupt: 0, absorbed: 0, companion_stats: 0, consume: 0 },
     encounters: emptyEncounters,
     totalProcessed: 0,
     eventsSkipped: 0,
@@ -525,6 +527,7 @@ function AllActivityContent({
     ...rawEventsByStream.unit_classification,
     ...rawEventsByStream.combatant_info,
     ...rawEventsByStream.dispel,
+    ...rawEventsByStream.consume,
   ];
   
   // Sort by encounter first, then by index within encounter to reconstruct true event order
@@ -547,7 +550,7 @@ function AllActivityContent({
         {([
           "damage", "heal", "resource_change", "extra_attack", "slain", "ressurection",
           "aura", "aura_cast",
-          "spell_start", "spell_go", "spell_fail",
+          "spell_start", "spell_go", "spell_fail", "consume",
           "unit_classification", "combatant_info", "dispel"
         ] as StreamType[]).map((stream) => (
           <StreamToggle
