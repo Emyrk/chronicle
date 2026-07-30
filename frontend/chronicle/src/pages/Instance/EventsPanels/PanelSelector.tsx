@@ -37,7 +37,7 @@ const PANEL_CATEGORIES: PanelCategory[] = [
   },
   {
     label: "Replay",
-    items: ["status"],
+    items: ["status", "healer_casts"],
   },
   {
     label: "Survivability",

@@ -644,6 +644,7 @@ const PANEL_CODES: Record<PanelType, string> = {
   timeline: 'tl',
   rotations: 'rot',
   status: 'st',
+  healer_casts: 'hc',
   possession: 'pos',
   unit_lookup: 'ul',
   equipment: 'eq',

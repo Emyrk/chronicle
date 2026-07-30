@@ -276,7 +276,7 @@ function RaidHealthSummary({
 
   return (
     <section
-      className="grid grid-cols-[minmax(185px,0.85fr)_minmax(190px,0.85fr)_minmax(320px,1.8fr)] items-center gap-4 border-b border-border/40 bg-black/10 px-5 py-2"
+      className="grid grid-cols-[minmax(155px,0.7fr)_minmax(190px,0.85fr)_minmax(320px,1.8fr)] items-center gap-3 border-b border-border/40 bg-black/10 px-5 py-2"
       aria-label="Estimated raid durability timeline"
       title="Estimated from relative deficits and deaths. Players are assumed to begin at full health; deaths count as zero."
     >
@@ -521,7 +521,7 @@ export function StatusContent(props: PanelRenderProps<StatusResult>) {
           cursorMilli={cursorMilli}
         />
       ) : null}
-      <div className="grid grid-cols-[minmax(185px,0.85fr)_minmax(190px,0.85fr)_minmax(320px,1.8fr)] items-center gap-4 border-b border-border/40 px-5 py-1.5 text-[10px] uppercase tracking-[0.14em] text-muted-foreground">
+      <div className="grid grid-cols-[minmax(155px,0.7fr)_minmax(190px,0.85fr)_minmax(320px,1.8fr)] items-center gap-3 border-b border-border/40 px-5 py-1.5 text-[10px] uppercase tracking-[0.14em] text-muted-foreground">
         <span>Unit</span>
         <span>Relative health change</span>
         <span className="flex items-center gap-2">
@@ -582,7 +582,7 @@ export function StatusContent(props: PanelRenderProps<StatusResult>) {
                 type="button"
                 onClick={(event) => selectUnit(unit.unitId, event.currentTarget)}
                 className={cn(
-                  "grid w-full grid-cols-[minmax(185px,0.85fr)_minmax(190px,0.85fr)_minmax(320px,1.8fr)] items-center gap-4 border-b border-border/25 text-left transition-[background-color,opacity] hover:bg-muted/20",
+                  "grid w-full grid-cols-[minmax(155px,0.7fr)_minmax(190px,0.85fr)_minmax(320px,1.8fr)] items-center gap-3 border-b border-border/25 text-left transition-[background-color,opacity] hover:bg-muted/20",
                   ROW_CLASSES[density],
                   snapshot.dead && "bg-black/35 hover:bg-black/30",
                   focusedUnitIds.has(unit.unitId) && "ring-1 ring-inset ring-amber-300/30",
