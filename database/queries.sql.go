@@ -1172,6 +1172,55 @@ func (q *sqlQuerier) ListConsumablesByDataset(ctx context.Context, datasetID uui
 	return items, nil
 }
 
+const listCooldownSpellsByDataset = `-- name: ListCooldownSpellsByDataset :many
+SELECT
+    spell_id,
+    name,
+    name_subtext,
+    recovery_time_ms,
+    category_recovery_time_ms,
+    spell_class_set
+FROM dbc_cooldown_spells
+WHERE dataset_id = $1
+ORDER BY spell_class_set, name, spell_id
+`
+
+type ListCooldownSpellsByDatasetRow struct {
+	SpellID                int32  `db:"spell_id" json:"spell_id"`
+	Name                   string `db:"name" json:"name"`
+	NameSubtext            string `db:"name_subtext" json:"name_subtext"`
+	RecoveryTimeMs         int64  `db:"recovery_time_ms" json:"recovery_time_ms"`
+	CategoryRecoveryTimeMs int64  `db:"category_recovery_time_ms" json:"category_recovery_time_ms"`
+	SpellClassSet          int32  `db:"spell_class_set" json:"spell_class_set"`
+}
+
+func (q *sqlQuerier) ListCooldownSpellsByDataset(ctx context.Context, datasetID uuid.UUID) ([]ListCooldownSpellsByDatasetRow, error) {
+	rows, err := q.db.Query(ctx, listCooldownSpellsByDataset, datasetID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListCooldownSpellsByDatasetRow
+	for rows.Next() {
+		var i ListCooldownSpellsByDatasetRow
+		if err := rows.Scan(
+			&i.SpellID,
+			&i.Name,
+			&i.NameSubtext,
+			&i.RecoveryTimeMs,
+			&i.CategoryRecoveryTimeMs,
+			&i.SpellClassSet,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const deleteDataGrant = `-- name: DeleteDataGrant :exec
 DELETE FROM data_grants
 WHERE user_id = $1 AND source = $2

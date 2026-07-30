@@ -309,6 +309,7 @@ type sqlcQuerier interface {
 	ListAllWoWServerRealms(ctx context.Context) ([]WowServerRealm, error)
 	ListAuraDurationModifiersForDerivation(ctx context.Context, datasetID uuid.UUID) ([]ListAuraDurationModifiersForDerivationRow, error)
 	ListConsumablesByDataset(ctx context.Context, datasetID uuid.UUID) ([]ListConsumablesByDatasetRow, error)
+	ListCooldownSpellsByDataset(ctx context.Context, datasetID uuid.UUID) ([]ListCooldownSpellsByDatasetRow, error)
 	ListDatasets(ctx context.Context) ([]Dataset, error)
 	// Return distinct (encounter_name, player_class, player_spec, difficulty_name, max_players)
 	// combinations available in a snapshot, for driving filter dropdowns.

@@ -109,6 +109,7 @@ func (s *Service) setupRoutes() {
 	s.router.Get("/spell-by-name/{name}", s.handleGetSpellByName)
 	s.router.Get("/periodic-spells", s.handleGetPeriodicSpells)
 	s.router.Get("/extra-attack-spells", s.handleGetExtraAttackSpells)
+	s.router.Get("/cooldown-spells", s.handleGetCooldownSpells)
 	s.router.Get("/aura-duration-modifiers", s.handleGetAffectedAuraDurations)
 	s.router.Get("/consumables", s.handleGetConsumables)
 	s.router.Get("/talent-trees", s.handleGetTalentTrees)
