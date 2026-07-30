@@ -228,6 +228,30 @@ const ACTIVITY_STYLES: Record<string, string> = {
   slain: "border-red-400/25 bg-red-400/10 text-red-300",
 };
 
+function EventDetailText({ detail }: { detail: string }) {
+  return detail.split(" · ").map((part, index) => {
+    const normalized = part.toLowerCase();
+    const style = normalized.includes("absorb")
+      ? "text-sky-400"
+      : normalized.includes("block")
+        ? "text-amber-400"
+        : normalized.includes("resist")
+          ? "text-violet-400"
+          : normalized.includes("immune")
+            ? "text-fuchsia-400"
+            : normalized.includes("crit")
+              ? "font-bold text-foreground"
+              : "text-muted-foreground";
+
+    return (
+      <span key={`${part}-${index}`}>
+        {index > 0 && <span className="text-muted-foreground/60"> · </span>}
+        <span className={style}>{part}</span>
+      </span>
+    );
+  });
+}
+
 interface RawEventRowProps {
   event: RawDebugEvent;
   index: number;
@@ -316,8 +340,8 @@ function RawEventRow({ event, index, useRelativeTime = false, useLocalTime = fal
         <span className={cn("px-2 text-right font-semibold tabular-nums", amountColor)}>
           {eventValue(event)}
         </span>
-        <span className="truncate px-2 text-muted-foreground" title={eventDetail(event)}>
-          {eventDetail(event)}
+        <span className="truncate px-2 whitespace-nowrap" title={eventDetail(event)}>
+          <EventDetailText detail={eventDetail(event)} />
         </span>
         <span className="flex min-w-0 gap-1 overflow-hidden px-2">
           {event.flags?.length ? event.flags.map((flag) => (
@@ -359,7 +383,8 @@ function RawEventRow({ event, index, useRelativeTime = false, useLocalTime = fal
               <span className="text-muted-foreground"> → </span>
               <span className="font-medium text-blue-400">{event.sourceName || config.label}</span>
               {event.targetName && <><span className="text-muted-foreground"> → </span><span className="font-medium text-purple-300">{event.targetName}</span></>}
-              <span className="text-muted-foreground"> · {eventDetail(event)}</span>
+              <span className="text-muted-foreground"> · </span>
+              <EventDetailText detail={eventDetail(event)} />
             </p>
           </div>
 
