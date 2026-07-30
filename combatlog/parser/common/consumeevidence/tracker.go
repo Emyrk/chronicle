@@ -129,7 +129,9 @@ func (t *Tracker) FindDirectEpisode(player guid.GUID, spellID chrondbc.SpellID, 
 }
 
 // FindAuraEpisode finds a previously recorded aura episode for the given
-// player, spell, and application time.
+// player, spell, and application time. This scans all aura episodes, which is
+// acceptable because a parse currently records at most low hundreds of them;
+// callers should not move it onto a per-message hot path without indexing.
 func (t *Tracker) FindAuraEpisode(player guid.GUID, spellID chrondbc.SpellID, appliedAt time.Time) *auraEpisode {
 	for i := len(t.auraEpisodes) - 1; i >= 0; i-- {
 		ep := &t.auraEpisodes[i]
@@ -143,7 +145,8 @@ func (t *Tracker) FindAuraEpisode(player guid.GUID, spellID chrondbc.SpellID, ap
 }
 
 // FindDirectEpisodeByConsumeID returns the direct observation correlated to an
-// aura episode, if one exists.
+// aura episode, if one exists. Like FindAuraEpisode, this assumes the episode
+// collection remains small and is only called during encounter projection.
 func (t *Tracker) FindDirectEpisodeByConsumeID(consumeID string) *directEpisode {
 	for i := len(t.directEpisodes) - 1; i >= 0; i-- {
 		if t.directEpisodes[i].consumeID == consumeID {
@@ -162,35 +165,45 @@ func (t *Tracker) DirectEpisodeCount() int {
 
 // StableConsumeID produces a deterministic consume ID from the key components.
 func StableConsumeID(kind string, player guid.GUID, spell *chrondbc.Spell, itemID *int32, ts time.Time) string {
-	h := sha256.New()
-	h.Write([]byte(kind))
-	h.Write([]byte(player.String()))
+	spellID := ""
 	if spell != nil {
-		h.Write([]byte(strconv.Itoa(int(spell.ID))))
+		spellID = strconv.Itoa(int(spell.ID))
 	}
+	itemIDString := ""
 	if itemID != nil {
-		h.Write([]byte(strconv.Itoa(int(*itemID))))
+		itemIDString = strconv.Itoa(int(*itemID))
 	}
-	h.Write([]byte(strconv.FormatInt(ts.UnixMilli(), 10)))
-	return hex.EncodeToString(h.Sum(nil))[:16]
+	return stableID(
+		kind,
+		player.String(),
+		spellID,
+		itemIDString,
+		strconv.FormatInt(ts.UnixMilli(), 10),
+	)
 }
 
 // StableAuraConsumeID produces a deterministic consume ID for an aura-derived
 // episode.
 func StableAuraConsumeID(player guid.GUID, spellID chrondbc.SpellID, appliedAt time.Time) string {
-	h := sha256.New()
-	h.Write([]byte("aura"))
-	h.Write([]byte(player.String()))
-	h.Write([]byte(strconv.Itoa(int(spellID))))
-	h.Write([]byte(strconv.FormatInt(appliedAt.UnixMilli(), 10)))
-	return hex.EncodeToString(h.Sum(nil))[:16]
+	return stableID(
+		"aura",
+		player.String(),
+		strconv.Itoa(int(spellID)),
+		strconv.FormatInt(appliedAt.UnixMilli(), 10),
+	)
 }
 
 // StableEvidenceID produces a deterministic evidence ID from the consume ID
 // and the observation kind.
 func StableEvidenceID(consumeID string, observationKind string) string {
+	return stableID(consumeID, observationKind)
+}
+
+func stableID(parts ...string) string {
 	h := sha256.New()
-	h.Write([]byte(consumeID))
-	h.Write([]byte(observationKind))
+	for _, part := range parts {
+		h.Write([]byte(part))
+		h.Write([]byte{0})
+	}
 	return hex.EncodeToString(h.Sum(nil))[:16]
 }

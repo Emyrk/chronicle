@@ -341,6 +341,57 @@ func TestDirectAndAuraSharedConsumeID(t *testing.T) {
 	assert.Equal(t, messages.ConfidenceDirect, auraEv.Confidence)
 }
 
+func TestProjectionOrderIsDeterministic(t *testing.T) {
+	t.Parallel()
+
+	playerA := guid.GUID(0x100)
+	playerB := guid.GUID(0x200)
+	spellA := chrondbc.SpellID(100)
+	spellB := chrondbc.SpellID(200)
+	appliedAt := time.Date(2024, 1, 1, 11, 59, 50, 0, time.UTC)
+	pullTime := time.Date(2024, 1, 1, 12, 0, 0, 0, time.UTC)
+	cat := &testCatalog{
+		items: map[int32]bool{},
+		buffs: map[chrondbc.SpellID][]int32{
+			spellA: {1000},
+			spellB: {2000},
+		},
+	}
+	col := newCollector(auras.New(nil), cat)
+	emitted := collectEmitted(col)
+	col.snapshot = map[guid.GUID]map[chrondbc.SpellID]*auras.AuraState{
+		playerB: {
+			spellB: {Buff: true, AppliedAt: appliedAt, SpellID: spellB, Spell: testSpell(spellB)},
+			spellA: {Buff: true, AppliedAt: appliedAt, SpellID: spellA, Spell: testSpell(spellA)},
+		},
+		playerA: {
+			spellB: {Buff: true, AppliedAt: appliedAt, SpellID: spellB, Spell: testSpell(spellB)},
+			spellA: {Buff: true, AppliedAt: appliedAt, SpellID: spellA, Spell: testSpell(spellA)},
+		},
+	}
+
+	col.emitProjection(pullTime)
+
+	require.Len(t, *emitted, 4)
+	assert.Equal(t, []struct {
+		player  guid.GUID
+		spellID chrondbc.SpellID
+	}{
+		{player: playerA, spellID: spellA},
+		{player: playerA, spellID: spellB},
+		{player: playerB, spellID: spellA},
+		{player: playerB, spellID: spellB},
+	}, []struct {
+		player  guid.GUID
+		spellID chrondbc.SpellID
+	}{
+		{player: (*emitted)[0].Player, spellID: (*emitted)[0].SpellData.ID},
+		{player: (*emitted)[1].Player, spellID: (*emitted)[1].SpellData.ID},
+		{player: (*emitted)[2].Player, spellID: (*emitted)[2].SpellData.ID},
+		{player: (*emitted)[3].Player, spellID: (*emitted)[3].SpellData.ID},
+	})
+}
+
 // TestOptionalConsumedAtTime verifies that active-at-pull projections have nil
 // ConsumedAtUnixMs since the actual use time is unknown.
 func TestOptionalConsumedAtTime(t *testing.T) {
@@ -374,6 +425,12 @@ func TestOptionalConsumedAtTime(t *testing.T) {
 	require.Len(t, *emitted, 1)
 	assert.Nil(t, (*emitted)[0].ConsumedAtUnixMs,
 		"active-at-pull evidence should have nil ConsumedAtUnixMs since actual consume time is unknown")
+}
+
+func TestStableIDSeparatesFields(t *testing.T) {
+	t.Parallel()
+
+	assert.NotEqual(t, stableID("ab", "c"), stableID("a", "bc"))
 }
 
 func TestConsumeIDDeterministic(t *testing.T) {

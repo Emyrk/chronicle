@@ -79,8 +79,10 @@ func NewWithInstanceResolver(ctx context.Context, logger *slog.Logger, res Insta
 		instanceResolver: res,
 		Instances:        make([]*instances.Hookable, 0),
 		Auras:            auras.New(nil), // nil mods: no dataset modifier plumbing available yet
-		ConsumeTracker:   consumeevidence.NewTracker(nil),
-		verbose:          parseoptions.IsVerbose(ctx),
+		// Parsing setup installs the dataset catalog before the first message is
+		// processed. A nil catalog is retained here for lightweight parser tests.
+		ConsumeTracker: consumeevidence.NewTracker(nil),
+		verbose:        parseoptions.IsVerbose(ctx),
 		timings: newTimingAccumulator(
 			"encounter_state.total",
 			"encounter_state.zone",

@@ -24,6 +24,7 @@ package consumeevidence
 
 import (
 	"context"
+	"sort"
 	"time"
 
 	"github.com/Emyrk/chronicle/combatlog/parser/common/auras"
@@ -242,11 +243,29 @@ func (c *Collector) emitProjection(ts time.Time) {
 
 	tsMilli := ts.UnixMilli()
 
-	for unitGUID, spells := range c.snapshot {
+	unitGUIDs := make([]guid.GUID, 0, len(c.snapshot))
+	for unitGUID := range c.snapshot {
+		unitGUIDs = append(unitGUIDs, unitGUID)
+	}
+	sort.Slice(unitGUIDs, func(i, j int) bool {
+		return unitGUIDs[i].String() < unitGUIDs[j].String()
+	})
+
+	for _, unitGUID := range unitGUIDs {
 		if !unitGUID.IsPlayer() {
 			continue
 		}
-		for spellID, aura := range spells {
+		spells := c.snapshot[unitGUID]
+		spellIDs := make([]chrondbc.SpellID, 0, len(spells))
+		for spellID := range spells {
+			spellIDs = append(spellIDs, spellID)
+		}
+		sort.Slice(spellIDs, func(i, j int) bool {
+			return spellIDs[i] < spellIDs[j]
+		})
+
+		for _, spellID := range spellIDs {
+			aura := spells[spellID]
 			if !aura.Buff {
 				continue
 			}
