@@ -249,7 +249,15 @@ func (w *WoWDB) consumables(ctx context.Context, datasetID uuid.UUID) (*chrondbc
 
 	itemSet := make(map[int32]struct{})
 	itemsBySpell := make(map[chrondbc.SpellID][]int32)
+	itemsByDirectSpell := make(map[chrondbc.SpellID][]int32)
 	for _, row := range rows {
+		if _, seen := itemSet[row.ItemID]; !seen {
+			// Rows repeat per buff spell; record the direct use spells once.
+			for _, spellID := range row.ItemSpellIds {
+				sid := chrondbc.SpellID(spellID)
+				itemsByDirectSpell[sid] = append(itemsByDirectSpell[sid], row.ItemID)
+			}
+		}
 		itemSet[row.ItemID] = struct{}{}
 		if row.BuffSpellID.Valid {
 			spellID := chrondbc.SpellID(row.BuffSpellID.Int32)
@@ -261,7 +269,7 @@ func (w *WoWDB) consumables(ctx context.Context, datasetID uuid.UUID) (*chrondbc
 	for itemID := range itemSet {
 		itemIDs = append(itemIDs, itemID)
 	}
-	return chrondbc.NewConsumableCatalog(itemIDs, itemsBySpell), nil
+	return chrondbc.NewConsumableCatalogWithDirectSpells(itemIDs, itemsBySpell, itemsByDirectSpell), nil
 }
 
 func (w *WoWDB) periodicSpells_(ctx context.Context, datasetID uuid.UUID) (map[int32]dbcmem.PeriodicSpell, error) {

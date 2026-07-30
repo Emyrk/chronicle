@@ -11,7 +11,7 @@ Aggregation across encounters must first deduplicate by `evidence_id`, then coun
 | Item-backed use | `SpellGo` with `item_id` | `DIRECT_ITEM` | caster and exact item | direct |
 | Known consumable buff gain | added buff aura whose spell is in the dataset catalog | `AURA` | target and exact or candidate items | direct when correlated to a recent direct use, otherwise effect-derived or ambiguous |
 | Consumable effect active at pull | parse-wide active aura snapshot | `ACTIVE_AT_PULL` | target and exact or candidate items | effect-derived |
-| Healing effect | `Heal` | `HEAL` | not emitted yet | future fixture refinement |
+| Healing effect | self-`Heal` whose spell is a consumable use spell | `HEAL` | caster and exact or candidate items | direct when correlated to a recent direct use, otherwise effect-derived or ambiguous |
 | Mana or rage gain | `ResourceChange` | `RESOURCE` | not emitted yet; schema retains `amount` and `resource_type` | future fixture refinement |
 | Explosive or on-hit damage | `Damage` | `DAMAGE` | not emitted yet | future fixture refinement |
 | Cooldown-only observation | inferred hit window | `COOLDOWN` | not emitted yet | inferred |
@@ -24,4 +24,4 @@ A new aura application has new episode provenance and therefore a new `consume_i
 
 ## Known limits
 
-The first implementation recognizes item-backed `SpellGo` records and dataset-catalog buff auras. Heal, resource, damage, cast-only, amount-band, and cooldown inference remain explicit future evidence sources. Native logs can omit direct uses, and one effect spell can map to multiple items; ambiguous candidates must not be silently collapsed.
+The implementation recognizes item-backed `SpellGo` records, dataset-catalog buff auras, and self-heals from consumable use spells (healing potions apply no aura, so heal lines are their only native evidence). Resource, damage, cast-only, amount-band, and cooldown inference remain explicit future evidence sources. Native logs can omit direct uses, and one effect spell can map to multiple items; ambiguous candidates must not be silently collapsed.

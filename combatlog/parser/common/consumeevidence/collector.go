@@ -45,6 +45,9 @@ type ConsumableCatalog interface {
 	// IsConsumableBuff returns true if spellID is a known consumable buff.
 	// When true, candidateItemIDs contains the item IDs that can produce it.
 	IsConsumableBuff(spellID chrondbc.SpellID) (candidateItemIDs []int32, ok bool)
+	// IsConsumableDirectSpell returns true if spellID is a consumable item's
+	// own use spell. Potion heal lines reference these spells directly.
+	IsConsumableDirectSpell(spellID chrondbc.SpellID) (candidateItemIDs []int32, ok bool)
 }
 
 // directEpisode records a parse-wide direct item-use event so that later aura
@@ -124,7 +127,74 @@ func (c *Collector) ProcessMessage(active bool, _ uuid.UUID, m messages.Message)
 		c.emitAuraEvidence(auraMsg)
 	}
 
+	// Emit heal evidence for self-heals from known consumable use spells
+	// (healing potions produce no aura; native logs may omit the item use).
+	if healMsg, ok := m.(*messages.Heal); ok {
+		c.emitHealEvidence(healMsg)
+	}
+
 	return nil
+}
+
+// emitHealEvidence emits a heal-derived Consume event when a self-heal's spell
+// is a known consumable use spell (e.g. "Healing Potion").
+func (c *Collector) emitHealEvidence(healMsg *messages.Heal) {
+	if healMsg.SpellData == nil || healMsg.Caster != healMsg.Target {
+		return
+	}
+	spellID := healMsg.SpellData.ID
+	catalog := c.shared.Catalog()
+	if catalog == nil {
+		return
+	}
+	candidateItems, ok := catalog.IsConsumableDirectSpell(chrondbc.SpellID(spellID))
+	if !ok {
+		return
+	}
+
+	ts := healMsg.Date()
+	tsMilli := ts.UnixMilli()
+
+	// Correlate with a direct item-use episode (SuperWoW logs record both the
+	// item use and the heal) so the pair shares one consume ID.
+	consumeID := ""
+	confidence := messages.ConfidenceEffectDerived
+	if len(candidateItems) > 1 {
+		confidence = messages.ConfidenceAmbiguous
+	}
+	var itemID *int32
+	if ep := c.shared.FindDirectEpisode(healMsg.Caster, spellID, candidateItems, ts); ep != nil {
+		consumeID = ep.consumeID
+		confidence = messages.ConfidenceDirect
+		itemID = &ep.itemID
+		candidateItems = nil
+	} else {
+		consumeID = StableConsumeID("heal", healMsg.Caster, healMsg.SpellData, nil, ts)
+	}
+
+	evidenceID := StableEvidenceID(consumeID, "heal")
+
+	if c.isDuplicateEvidence(evidenceID) {
+		return
+	}
+
+	amount := healMsg.Amount + healMsg.Overheal
+	resourceType := "Health"
+	c.emit(&messages.Consume{
+		MessageBase:      messages.Base(ts),
+		ConsumeID:        consumeID,
+		EvidenceID:       evidenceID,
+		Player:           healMsg.Caster,
+		ItemID:           itemID,
+		CandidateItemIDs: candidateItems,
+		SpellData:        healMsg.SpellData,
+		Kind:             messages.EvidenceKindHeal,
+		Confidence:       confidence,
+		ConsumedAtUnixMs: &tsMilli,
+		ObservedAtUnixMs: tsMilli,
+		Amount:           &amount,
+		ResourceType:     &resourceType,
+	})
 }
 
 // emitDirectEvidence emits a direct item Consume event.

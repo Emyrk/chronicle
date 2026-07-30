@@ -16,8 +16,9 @@ import (
 
 // testCatalog is a minimal ConsumableCatalog for testing.
 type testCatalog struct {
-	items map[int32]bool
-	buffs map[chrondbc.SpellID][]int32
+	items        map[int32]bool
+	buffs        map[chrondbc.SpellID][]int32
+	directSpells map[chrondbc.SpellID][]int32
 }
 
 func (c *testCatalog) IsConsumableItem(itemID int32) bool {
@@ -26,6 +27,11 @@ func (c *testCatalog) IsConsumableItem(itemID int32) bool {
 
 func (c *testCatalog) IsConsumableBuff(spellID chrondbc.SpellID) ([]int32, bool) {
 	ids, ok := c.buffs[spellID]
+	return ids, ok
+}
+
+func (c *testCatalog) IsConsumableDirectSpell(spellID chrondbc.SpellID) ([]int32, bool) {
+	ids, ok := c.directSpells[spellID]
 	return ids, ok
 }
 
@@ -38,6 +44,10 @@ func newTestCatalog() *testCatalog {
 		buffs: map[chrondbc.SpellID][]int32{
 			17624: {13510}, // Flask of the Titans → Flask item
 			17538: {13461}, // Greater Stoneshield → item 13461
+		},
+		directSpells: map[chrondbc.SpellID][]int32{
+			17534: {13446},        // Healing Potion (Major) → Major Healing Potion
+			11730: {3928, 918123}, // ambiguous heal spell → two items
 		},
 	}
 }
@@ -142,6 +152,152 @@ func TestSpellGoWithoutItemIDNoEvidence(t *testing.T) {
 	}
 	require.NoError(t, col.ProcessMessage(true, eid, spellGo))
 	assert.Empty(t, *emitted)
+}
+
+// TestHealEvidence verifies heal-derived evidence for potions without auras.
+func TestHealEvidence(t *testing.T) {
+	t.Parallel()
+
+	col := newCollector(auras.New(nil), newTestCatalog())
+	emitted := collectEmitted(col)
+
+	player := testPlayerGUID()
+	ts := time.Date(2024, 1, 1, 12, 0, 0, 0, time.UTC)
+	eid := uuid.New()
+
+	col.FightStarted(eid, &messages.Damage{MessageBase: messages.Base(ts)})
+	require.NoError(t, col.ProcessMessage(true, eid, &messages.Damage{MessageBase: messages.Base(ts)}))
+
+	require.NoError(t, col.ProcessMessage(true, eid, &messages.Heal{
+		MessageBase: messages.Base(ts),
+		Caster:      player,
+		Target:      player,
+		SpellName:   "Healing Potion",
+		SpellData:   testSpell(17534),
+		Amount:      1400,
+		Overheal:    100,
+	}))
+
+	require.Len(t, *emitted, 1)
+	ev := (*emitted)[0]
+	assert.Equal(t, messages.EvidenceKindHeal, ev.Kind)
+	assert.Equal(t, messages.ConfidenceEffectDerived, ev.Confidence)
+	assert.Equal(t, []int32{13446}, ev.CandidateItemIDs)
+	require.NotNil(t, ev.Amount)
+	assert.Equal(t, int32(1500), *ev.Amount)
+	require.NotNil(t, ev.ResourceType)
+	assert.Equal(t, "Health", *ev.ResourceType)
+	require.NotNil(t, ev.ConsumedAtUnixMs)
+}
+
+// TestHealEvidenceIgnoresOtherHeals verifies non-consumable and non-self heals
+// are not treated as consume evidence.
+func TestHealEvidenceIgnoresOtherHeals(t *testing.T) {
+	t.Parallel()
+
+	col := newCollector(auras.New(nil), newTestCatalog())
+	emitted := collectEmitted(col)
+
+	player := testPlayerGUID()
+	other := guid.GUID(0x999)
+	ts := time.Date(2024, 1, 1, 12, 0, 0, 0, time.UTC)
+	eid := uuid.New()
+
+	col.FightStarted(eid, &messages.Damage{MessageBase: messages.Base(ts)})
+	require.NoError(t, col.ProcessMessage(true, eid, &messages.Damage{MessageBase: messages.Base(ts)}))
+
+	// Regular healing spell, not a consumable use spell.
+	require.NoError(t, col.ProcessMessage(true, eid, &messages.Heal{
+		MessageBase: messages.Base(ts),
+		Caster:      player,
+		Target:      player,
+		SpellData:   testSpell(2050), // Lesser Heal
+		Amount:      300,
+	}))
+	// Consumable heal spell, but cast on someone else (not a self-use).
+	require.NoError(t, col.ProcessMessage(true, eid, &messages.Heal{
+		MessageBase: messages.Base(ts),
+		Caster:      player,
+		Target:      other,
+		SpellData:   testSpell(17534),
+		Amount:      1400,
+	}))
+
+	assert.Empty(t, *emitted)
+}
+
+// TestHealEvidenceCorrelatesWithDirectUse verifies a SuperWoW-style pair of
+// item use + heal shares one consume ID.
+func TestHealEvidenceCorrelatesWithDirectUse(t *testing.T) {
+	t.Parallel()
+
+	cat := newTestCatalog()
+	cat.items[13446] = true
+	trk, col := newTrackerAndCollector(auras.New(nil), cat)
+	emitted := collectEmitted(col)
+
+	player := testPlayerGUID()
+	ts := time.Date(2024, 1, 1, 12, 0, 0, 0, time.UTC)
+	eid := uuid.New()
+	itemID := int32(13446)
+
+	col.FightStarted(eid, &messages.Damage{MessageBase: messages.Base(ts)})
+	require.NoError(t, col.ProcessMessage(true, eid, &messages.Damage{MessageBase: messages.Base(ts)}))
+
+	spellGo := &messages.SpellGo{
+		MessageBase: messages.Base(ts),
+		ItemID:      &itemID,
+		Caster:      player,
+		SpellData:   testSpell(17534),
+	}
+	trk.Process(spellGo)
+	require.NoError(t, col.ProcessMessage(true, eid, spellGo))
+
+	require.NoError(t, col.ProcessMessage(true, eid, &messages.Heal{
+		MessageBase: messages.Base(ts.Add(500 * time.Millisecond)),
+		Caster:      player,
+		Target:      player,
+		SpellData:   testSpell(17534),
+		Amount:      1400,
+	}))
+
+	require.Len(t, *emitted, 2)
+	direct, heal := (*emitted)[0], (*emitted)[1]
+	assert.Equal(t, messages.EvidenceKindDirectItem, direct.Kind)
+	assert.Equal(t, messages.EvidenceKindHeal, heal.Kind)
+	assert.Equal(t, direct.ConsumeID, heal.ConsumeID, "item use + heal is one physical use")
+	assert.NotEqual(t, direct.EvidenceID, heal.EvidenceID)
+	assert.Equal(t, messages.ConfidenceDirect, heal.Confidence)
+	require.NotNil(t, heal.ItemID)
+	assert.Equal(t, itemID, *heal.ItemID)
+}
+
+// TestHealEvidenceAmbiguousCandidates verifies multiple candidate items lower
+// confidence to ambiguous.
+func TestHealEvidenceAmbiguousCandidates(t *testing.T) {
+	t.Parallel()
+
+	col := newCollector(auras.New(nil), newTestCatalog())
+	emitted := collectEmitted(col)
+
+	player := testPlayerGUID()
+	ts := time.Date(2024, 1, 1, 12, 0, 0, 0, time.UTC)
+	eid := uuid.New()
+
+	col.FightStarted(eid, &messages.Damage{MessageBase: messages.Base(ts)})
+	require.NoError(t, col.ProcessMessage(true, eid, &messages.Damage{MessageBase: messages.Base(ts)}))
+
+	require.NoError(t, col.ProcessMessage(true, eid, &messages.Heal{
+		MessageBase: messages.Base(ts),
+		Caster:      player,
+		Target:      player,
+		SpellData:   testSpell(11730),
+		Amount:      500,
+	}))
+
+	require.Len(t, *emitted, 1)
+	assert.Equal(t, messages.ConfidenceAmbiguous, (*emitted)[0].Confidence)
+	assert.Equal(t, []int32{3928, 918123}, (*emitted)[0].CandidateItemIDs)
 }
 
 // TestNonConsumableBuffIgnored verifies that active buffs not in the catalog
