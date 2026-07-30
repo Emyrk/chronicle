@@ -447,6 +447,55 @@ describe("healerCastsProcessor", () => {
     // Only the real spell_go completion, no synthetic one
     expect(completions).toHaveLength(1);
   });
+  it("aggregates Chain Heal bounces landing at the same timestamp", () => {
+    const state = healerCastsProcessor.createState();
+    const firstTimestamp = new Date("2026-07-30T00:00:00Z");
+    const ctx = context();
+    const CHAIN_HEAL = 1064;
+    const TARGET_2 = "0x0000000000000003";
+    const TARGET_3 = "0x0000000000000004";
+
+    // spell_start with no target (WotLK)
+    healerCastsProcessor.processEvent(
+      state,
+      start({ castTimeMilli: 0, target: "", spell: { id: CHAIN_HEAL, name: "Chain Heal" } }),
+      "encounter-1", firstTimestamp, "spell_start", ctx,
+    );
+    // 3 bounces land at the same millisecond
+    healerCastsProcessor.processEvent(
+      state,
+      heal({ offsetMilli: 2_500, index: 2, spellId: CHAIN_HEAL, sourceName: "Chain Heal", target: TARGET, amount: 5_000, overheal: 0 }),
+      "encounter-1", firstTimestamp, "heal", ctx,
+    );
+    healerCastsProcessor.processEvent(
+      state,
+      heal({ offsetMilli: 2_500, index: 3, spellId: CHAIN_HEAL, sourceName: "Chain Heal", target: TARGET_2, amount: 3_000, overheal: 500 }),
+      "encounter-1", firstTimestamp, "heal", ctx,
+    );
+    healerCastsProcessor.processEvent(
+      state,
+      heal({ offsetMilli: 2_500, index: 4, spellId: CHAIN_HEAL, sourceName: "Chain Heal", target: TARGET_3, amount: 1_500, overheal: 200 }),
+      "encounter-1", firstTimestamp, "heal", ctx,
+    );
+
+    const casts = state.encounters.get("encounter-1")?.castsByPlayer.get(HEALER) ?? [];
+    // Should have: start, synthetic complete, heal, heal, heal
+    expect(casts.filter(c => c.kind === "complete")).toHaveLength(1);
+
+    // Evaluate at cursor just after completion
+    const castState = healerCastStateAt(casts, firstTimestamp.getTime() + 2_600);
+    expect(castState.status).toBe("completed");
+    expect(castState.impact).not.toBeNull();
+    // All 3 targets
+    expect(castState.impact!.targetIds).toHaveLength(3);
+    expect(castState.impact!.targetIds).toContain(TARGET);
+    expect(castState.impact!.targetIds).toContain(TARGET_2);
+    expect(castState.impact!.targetIds).toContain(TARGET_3);
+    // Summed healing: 5000 + 3000 + 1500 = 9500 total, 500 + 200 = 700 overheal
+    expect(castState.impact!.effective).toBe(8_800); // 9500 - 700
+    expect(castState.impact!.overheal).toBe(700);
+  });
+
   it("ignores non-player casters and unselected encounters", () => {
     const state = healerCastsProcessor.createState();
     const ctx = context();
