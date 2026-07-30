@@ -28,27 +28,27 @@ const RESOURCE_COLORS: Record<ResourceType, string> = {
 };
 
 // Stream type configurations
-const STREAM_CONFIG: Record<StreamType, { icon: React.ElementType; color: string; label: string }> = {
-  damage: { icon: Swords, color: "text-red-500", label: "Damage" },
-  heal: { icon: Heart, color: "text-green-500", label: "Healing" },
-  resource_change: { icon: Zap, color: "text-yellow-500", label: "Resource" },
-  extra_attack: { icon: CircleFadingPlus, color: "text-orange-500", label: "Extra Attack" },
-  ressurection: { icon: HeartPulse, color: "text-emerald-400", label: "Resurrection" },
-  slain: { icon: Skull, color: "text-gray-500", label: "Slain" },
-  aura: { icon: Sparkles, color: "text-cyan-500", label: "Aura" },
-  spell_go: { icon: Crosshair, color: "text-amber-500", label: "Spell Go" },
-  aura_cast: { icon: WandSparkles, color: "text-teal-500", label: "Aura Cast" },
-  spell_start: { icon: Play, color: "text-lime-500", label: "Spell Start" },
-  spell_fail: { icon: CircleX, color: "text-red-400", label: "Spell Fail" },
-  unit_classification: { icon: Search, color: "text-indigo-500", label: "Classification" },
-  combatant_info: { icon: UserCheck, color: "text-sky-400", label: "Combatant Info" },
-  dispel: { icon: Bubbles, color: "text-violet-400", label: "Dispel" },
-  interrupt: { icon: Ban, color: "text-rose-400", label: "Interrupt" },
-  absorbed: { icon: Shield, color: "text-sky-400", label: "Absorbed" },
-  companion_stats: { icon: Shield, color: "text-teal-400", label: "Companion Stats" },
-  consume: { icon: FlaskConical, color: "text-fuchsia-400", label: "Consume" },
+const STREAM_CONFIG: Record<StreamType, { icon: React.ElementType; color: string; label: string; description: string }> = {
+  damage: { icon: Swords, color: "text-red-500", label: "Damage", description: "Damage dealt, including hit outcomes, schools, and mitigation." },
+  heal: { icon: Heart, color: "text-green-500", label: "Healing", description: "Healing received, including critical heals and overhealing." },
+  resource_change: { icon: Zap, color: "text-yellow-500", label: "Resource", description: "Health, mana, rage, energy, and other resource gains or losses." },
+  extra_attack: { icon: CircleFadingPlus, color: "text-orange-500", label: "Extra Attack", description: "Additional attacks granted by effects such as Windfury." },
+  ressurection: { icon: HeartPulse, color: "text-emerald-400", label: "Resurrection", description: "Players or units restored to life by a resurrection spell." },
+  slain: { icon: Skull, color: "text-gray-500", label: "Slain", description: "Unit deaths and the final-damage attribution when available." },
+  aura: { icon: Sparkles, color: "text-cyan-500", label: "Aura", description: "Buff and debuff applications, removals, and stack changes." },
+  spell_go: { icon: Crosshair, color: "text-amber-500", label: "Spell Go", description: "Completed spell executions with target hit and miss counts." },
+  aura_cast: { icon: WandSparkles, color: "text-teal-500", label: "Aura Cast", description: "Aura casts with duration and periodic tick timing." },
+  spell_start: { icon: Play, color: "text-lime-500", label: "Spell Start", description: "The beginning of a spell cast or channel." },
+  spell_fail: { icon: CircleX, color: "text-red-400", label: "Spell Fail", description: "Spell casts that failed or were rejected by the server." },
+  unit_classification: { icon: Search, color: "text-indigo-500", label: "Classification", description: "Unit type, affiliation, ownership, and possession changes." },
+  combatant_info: { icon: UserCheck, color: "text-sky-400", label: "Combatant Info", description: "Player identity, talents, equipment, guild, and character metadata." },
+  dispel: { icon: Bubbles, color: "text-violet-400", label: "Dispel", description: "Auras removed by dispels and the dispel type used." },
+  interrupt: { icon: Ban, color: "text-rose-400", label: "Interrupt", description: "Spell casts stopped by an interrupting ability." },
+  absorbed: { icon: Shield, color: "text-sky-400", label: "Absorbed", description: "Damage prevented by shields and other absorb effects." },
+  companion_stats: { icon: Shield, color: "text-teal-400", label: "Companion Stats", description: "Stat snapshots reported for pets and other companions." },
+  consume: { icon: FlaskConical, color: "text-fuchsia-400", label: "Consume", description: "Consumable use inferred from items, spells, auras, or combat effects." },
 
-  cast: { icon: Wand2, color: "text-purple-500", label: "Cast" },
+  cast: { icon: Wand2, color: "text-purple-500", label: "Cast", description: "General spell cast actions and their selected targets." },
 };
 // --- Panel option encode/decode helpers for state persistence ---
 
@@ -150,22 +150,43 @@ interface StreamToggleProps {
 function StreamToggle({ streamType, enabled, count, onToggle }: StreamToggleProps) {
   const config = STREAM_CONFIG[streamType];
   const Icon = config.icon;
+  const formattedCount = formatNumber(count);
   
   return (
-    <button
-      type="button"
-      onClick={onToggle}
-      className={cn(
-        "flex items-center gap-1 px-2 py-1 rounded text-xs transition-all cursor-pointer",
-        enabled 
-          ? `${config.color} bg-muted` 
-          : "text-muted-foreground/50 hover:text-muted-foreground"
-      )}
-      title={`${config.label}: ${formatNumber(count)} events`}
-    >
-      <Icon className="h-3.5 w-3.5" />
-      <span className={cn("font-mono", !enabled && "line-through")}>{formatNumber(count)}</span>
-    </button>
+    <Tooltip>
+      <TooltipTrigger asChild>
+        <button
+          type="button"
+          onClick={onToggle}
+          aria-label={`${enabled ? "Disable" : "Enable"} ${config.label} stream (${formattedCount} events)`}
+          className={cn(
+            "group flex cursor-pointer items-center gap-1 rounded px-2 py-1 text-xs ring-1 ring-transparent transition-all hover:bg-muted/80 hover:ring-border focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/70",
+            enabled
+              ? `${config.color} bg-muted`
+              : "text-muted-foreground/50 hover:text-muted-foreground"
+          )}
+        >
+          <Icon className="h-3.5 w-3.5 transition-transform group-hover:scale-110" />
+          <span className={cn("font-mono", !enabled && "line-through")}>{formattedCount}</span>
+        </button>
+      </TooltipTrigger>
+      <TooltipContent
+        side="bottom"
+        sideOffset={6}
+        className="max-w-64 border border-border bg-popover px-3 py-2.5 text-left text-popover-foreground shadow-xl"
+        hideArrow
+      >
+        <div className="flex items-center gap-2">
+          <Icon className={cn("h-4 w-4 shrink-0", config.color)} />
+          <span className="font-semibold">{config.label}</span>
+          <span className="ml-auto font-mono text-muted-foreground">{formattedCount}</span>
+        </div>
+        <p className="mt-1.5 leading-relaxed text-muted-foreground">{config.description}</p>
+        <p className="mt-1.5 text-[10px] font-medium uppercase tracking-wide text-muted-foreground/70">
+          Click to {enabled ? "hide" : "show"} this stream
+        </p>
+      </TooltipContent>
+    </Tooltip>
   );
 }
 
@@ -695,15 +716,17 @@ function AllActivityContent({
       {/* Stream toggles and ability filter */}
       <div className="flex items-center gap-2 mb-2 flex-wrap">
         <span className="text-xs text-muted-foreground">Streams:</span>
-        {ALL_ACTIVITY_STREAMS.map((stream) => (
-          <StreamToggle
-            key={stream}
-            streamType={stream}
-            enabled={enabledStreams.has(stream)}
-            count={safeResult.streamCounts[stream]}
-            onToggle={() => onToggleStream(stream)}
-          />
-        ))}
+        <TooltipProvider delayDuration={200} skipDelayDuration={100}>
+          {ALL_ACTIVITY_STREAMS.map((stream) => (
+            <StreamToggle
+              key={stream}
+              streamType={stream}
+              enabled={enabledStreams.has(stream)}
+              count={safeResult.streamCounts[stream]}
+              onToggle={() => onToggleStream(stream)}
+            />
+          ))}
+        </TooltipProvider>
         
         {/* Source filter input */}
         <div className="flex items-center gap-1 ml-2">
