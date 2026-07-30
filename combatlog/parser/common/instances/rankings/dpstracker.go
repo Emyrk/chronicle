@@ -131,23 +131,39 @@ func (t *DPSTracker) ProcessMessage(active bool, _ uuid.UUID, m messages.Message
 		}
 
 	case *messages.Heal:
-		// Only count effective healing (subtract overheal).
+		// Match the Healing Done panel: only count effective healing to players
+		// and player-owned pets. Healing friendly NPCs is not rankable healing.
+		if !t.isPlayerOrPlayerOwned(msg.Target) {
+			return nil
+		}
 		effective := int64(msg.Amount) - int64(msg.Overheal)
 		if effective > 0 {
 			t.healingDone[msg.Caster] += effective
 		}
 
 	case *messages.Absorbed:
-		// Credit absorbed damage to the shield caster (e.g., PW:Shield priest).
-		// Like the Heal handler, this intentionally credits msg.Caster directly
-		// without player/pet classification: absorb shields are player-cast, and
-		// logparse only persists rankings for units classified as players anyway.
+		// Match the Healing Done panel: only count damage prevented on players
+		// and player-owned pets, credited to the shield caster.
+		if !t.isPlayerOrPlayerOwned(msg.Target) {
+			return nil
+		}
 		if msg.Amount > 0 && !msg.Caster.IsZero() {
 			t.absorbDone[msg.Caster] += int64(msg.Amount)
 		}
 	}
 
 	return nil
+}
+
+func (t *DPSTracker) isPlayerOrPlayerOwned(unitGUID guid.GUID) bool {
+	cls := t.units.Classify(unitGUID)
+	if cls.Type == unitdb.UnitTypePlayer {
+		return true
+	}
+	if !cls.Relation.HasOwner() {
+		return false
+	}
+	return t.units.Classify(*cls.Relation.Owner).Type == unitdb.UnitTypePlayer
 }
 
 func (t *DPSTracker) FightEnded(encounterID uuid.UUID, _ messages.Message) {

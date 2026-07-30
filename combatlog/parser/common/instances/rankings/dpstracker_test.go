@@ -192,6 +192,50 @@ func TestDPSTracker_EffectiveHealing(t *testing.T) {
 	assert.Equal(t, int64(400), results[encID].Units[healer].HealingDone)
 }
 
+func TestDPSTracker_HealingTargetsMatchHealingDonePanel(t *testing.T) {
+	t.Parallel()
+	tracker, units := setupDPSTracker()
+
+	healer := makePlayerGUID(1)
+	playerTarget := makePlayerGUID(2)
+	petTarget := makePetGUID(300, 1)
+	friendlyNPC := makeCreatureGUID(200, 1)
+	encID := uuid.New()
+
+	units.Info[healer] = unitinfo.Info{Guid: healer, Name: "Priest", IsPlayer: true, CanCooperate: true}
+	units.Info[playerTarget] = unitinfo.Info{Guid: playerTarget, Name: "Tank", IsPlayer: true, CanCooperate: true}
+	units.Info[petTarget] = unitinfo.Info{Guid: petTarget, Name: "Pet", CanCooperate: true, Owner: &playerTarget}
+	units.Info[friendlyNPC] = unitinfo.Info{Guid: friendlyNPC, Name: "Friendly NPC", CanCooperate: true}
+
+	tracker.FightStarted(encID, nil)
+
+	_ = tracker.ProcessMessage(true, encID, &messages.Heal{
+		Caster: healer, Target: playerTarget, Amount: 100,
+	})
+	_ = tracker.ProcessMessage(true, encID, &messages.Heal{
+		Caster: healer, Target: petTarget, Amount: 200,
+	})
+	_ = tracker.ProcessMessage(true, encID, &messages.Heal{
+		Caster: healer, Target: friendlyNPC, Amount: 400,
+	})
+	_ = tracker.ProcessMessage(true, encID, &messages.Absorbed{
+		Target: playerTarget, Caster: healer, Amount: 50,
+	})
+	_ = tracker.ProcessMessage(true, encID, &messages.Absorbed{
+		Target: petTarget, Caster: healer, Amount: 75,
+	})
+	_ = tracker.ProcessMessage(true, encID, &messages.Absorbed{
+		Target: friendlyNPC, Caster: healer, Amount: 125,
+	})
+
+	tracker.FightEnded(encID, nil)
+
+	stats := tracker.Result()[encID].Units[healer]
+	require.NotNil(t, stats)
+	assert.Equal(t, int64(300), stats.HealingDone)
+	assert.Equal(t, int64(125), stats.HealingAbsorbed)
+}
+
 func TestDPSTracker_AbsorbAttribution(t *testing.T) {
 	t.Parallel()
 	tracker, units := setupDPSTracker()
