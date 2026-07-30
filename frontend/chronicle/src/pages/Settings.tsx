@@ -1116,8 +1116,12 @@ function LivePanelTile({
         context={context}
         stripIndex={Number(item.id.replace("strip-", "")) - 1}
         stripId={item.id}
-        editable
         onStripTypeChange={onStripTypeChange}
+        panelOption={panelOption}
+        onPanelOptionChange={onPanelOptionChange}
+        seedFilters={seedFilters}
+        seedFiltersVersion={seedFiltersVersion}
+        onFiltersChange={onFiltersChange}
       />
     );
   }
@@ -1432,6 +1436,10 @@ export function LayoutLabSettings() {
   const handleStripTypeChange = (itemId: string, nextType: StripType) => {
     if (readOnly) return;
     const definition = STRIPS[nextType];
+    const defaults = definition.defaultFilters ?? [];
+    setPanelFiltersById((prev) => ({ ...prev, [itemId]: defaults }));
+    setSeedFiltersById((prev) => ({ ...prev, [itemId]: defaults }));
+    setSeedFiltersVersion((version) => version + 1);
     setItems((prev) => prev.map((item) => {
       if (item.id !== itemId || item.kind !== "strip") return item;
       const orientation = item.orientation ?? definition.defaultOrientation;

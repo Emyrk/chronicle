@@ -37,7 +37,8 @@ import { EventsPanel, type EventsPanelType, type PanelContext, type EntitySelect
 import type { PanelFilter } from "./EventsPanels/processors/filters";
 import { PANELS } from "./EventsPanels/EventsPanel";
 import { Strip } from "./EventsPanels/Strips/Strip";
-import { isStripType } from "./EventsPanels/Strips/strips";
+import { STRIPS, isStripType } from "./EventsPanels/Strips/strips";
+import type { StripType } from "./EventsPanels/Strips/types";
 import { PanelTimingProvider, PanelTimingDisplay, PanelTimingResetter } from "./EventsPanels/PanelTimingContext";
 import { ChartDataRegistryProvider } from "./EventsPanels/ChartDataRegistry";
 import { PanelExplainerView } from "./PanelExplainer";
@@ -931,6 +932,7 @@ interface EventsPanelGridProps {
   showHints: boolean;
   isMobile: boolean;
   onPanelTypeChange: (itemID: string, type: EventsPanelType) => void;
+  onStripTypeChange: (itemID: string, type: StripType) => void;
   onPanelOptionChange: (itemID: string, option: string | null) => void;
   onPanelFiltersChange: (itemID: string, filters: PanelFilter[]) => void;
   onExplainerClick: (panelType: EventsPanelType) => void;
@@ -947,6 +949,7 @@ function EventsPanelGrid({
   showHints,
   isMobile,
   onPanelTypeChange,
+  onStripTypeChange,
   onPanelOptionChange,
   onPanelFiltersChange,
   onExplainerClick,
@@ -979,6 +982,12 @@ function EventsPanelGrid({
                 context={context}
                 stripIndex={index}
                 stripId={item.id}
+                onStripTypeChange={(nextType) => onStripTypeChange(item.id, nextType)}
+                panelOption={panelOptionsById[item.id] ?? null}
+                onPanelOptionChange={(nextOption) => onPanelOptionChange(item.id, nextOption)}
+                seedFilters={seedFiltersByID[item.id]}
+                seedFiltersVersion={seedFiltersVersion}
+                onFiltersChange={(filters) => onPanelFiltersChange(item.id, filters)}
               />
             ) : (
               <EventsPanel
@@ -1106,6 +1115,17 @@ function PoppedOutLayoutContent({
     setActivePresetId(null);
   }, []);
 
+  const handleStripTypeChange = useCallback((itemID: string, type: StripType) => {
+    setLayoutItems((previous) => previous.map((item) =>
+      item.id === itemID && item.kind === "strip"
+        ? { ...item, stripType: type, title: STRIPS[type].label }
+        : item,
+    ));
+    setSeedFiltersById((previous) => ({ ...previous, [itemID]: STRIPS[type].defaultFilters ?? [] }));
+    setSeedFiltersVersion((version) => version + 1);
+    setActivePresetId(null);
+  }, []);
+
   const handlePanelOptionChange = useCallback((itemID: string, option: string | null) => {
     setPanelOptionsById((previous) => ({ ...previous, [itemID]: option }));
     setActivePresetId(null);
@@ -1150,6 +1170,7 @@ function PoppedOutLayoutContent({
               showHints={showHints}
               isMobile={false}
               onPanelTypeChange={handlePanelTypeChange}
+              onStripTypeChange={handleStripTypeChange}
               onPanelOptionChange={handlePanelOptionChange}
               onPanelFiltersChange={handlePanelFiltersChange}
               onExplainerClick={onExplainerClick}
@@ -1176,6 +1197,7 @@ interface EncounterDetailProps {
   seedFiltersByID: Record<string, PanelFilter[]>;
   seedFiltersVersion: number;
   onPanelTypeChange: (itemID: string, type: EventsPanelType) => void;
+  onStripTypeChange: (itemID: string, type: StripType) => void;
   onPanelOptionChange: (itemID: string, option: string | null) => void;
   onPanelFiltersChange: (itemID: string, filters: PanelFilter[]) => void;
   onToggleEnemy: (enemyId: string) => void;
@@ -1210,6 +1232,7 @@ function EncounterDetail({
   seedFiltersByID,
   seedFiltersVersion,
   onPanelTypeChange,
+  onStripTypeChange,
   onPanelOptionChange,
   onPanelFiltersChange,
   onToggleEnemy,
@@ -1802,6 +1825,7 @@ function EncounterDetail({
               showHints={showHints}
               isMobile={isMobile}
               onPanelTypeChange={onPanelTypeChange}
+              onStripTypeChange={onStripTypeChange}
               onPanelOptionChange={onPanelOptionChange}
               onPanelFiltersChange={onPanelFiltersChange}
               onExplainerClick={onExplainerClick}
@@ -2493,6 +2517,19 @@ export function InstancePageView({
     });
     setActivePresetId(null); // User customized panels – clear preset
   }, [activeLayoutItems, setPanelType]);
+
+  const handleStripTypeChangeByID = useCallback((itemID: string, type: StripType) => {
+    setImportedLayoutItems((previous) => (previous ?? activeLayoutItems).map((item) =>
+      item.id === itemID && item.kind === "strip"
+        ? { ...item, stripType: type, title: STRIPS[type].label }
+        : item,
+    ));
+    const defaults = STRIPS[type].defaultFilters ?? [];
+    setPanelFiltersByID((previous) => ({ ...previous, [itemID]: defaults }));
+    setSeedFiltersByID((previous) => ({ ...previous, [itemID]: defaults }));
+    setSeedFiltersVersion((version) => version + 1);
+    setActivePresetId(null);
+  }, [activeLayoutItems]);
 
   const handlePanelOptionChangeByID = useCallback((itemID: string, option: string | null) => {
     const idx = activeLayoutItems.findIndex((item) => item.id === itemID);
@@ -3308,6 +3345,7 @@ export function InstancePageView({
             seedFiltersByID={seedFiltersByID}
             seedFiltersVersion={seedFiltersVersion}
             onPanelTypeChange={handlePanelTypeChangeByID}
+            onStripTypeChange={handleStripTypeChangeByID}
             onPanelOptionChange={handlePanelOptionChangeByID}
             onPanelFiltersChange={handlePanelFiltersChange}
             onToggleEnemy={toggleEnemySelection}
