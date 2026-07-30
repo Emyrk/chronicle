@@ -52,7 +52,7 @@ const STREAM_CONFIG: Record<StreamType, { icon: React.ElementType; color: string
 };
 // --- Panel option encode/decode helpers for state persistence ---
 
-const DEFAULT_ENABLED_STREAMS = new Set<StreamType>(["damage", "heal", "resource_change", "spell_go", "consume"]);
+const DEFAULT_ENABLED_STREAMS = new Set<StreamType>(["damage", "heal", "slain"]);
 
 const STREAM_CODES: Record<StreamType, string> = {
   damage: "d", heal: "h", resource_change: "r", cast: "c",
@@ -70,7 +70,7 @@ const STREAM_CODES: Record<StreamType, string> = {
 const CODE_TO_STREAM = Object.fromEntries(
   Object.entries(STREAM_CODES).map(([k, v]) => [v, k as StreamType]),
 ) as Record<string, StreamType>;
-const DEFAULT_STREAM_CODE = "dghqr"; // sorted code for DEFAULT_ENABLED_STREAMS
+const DEFAULT_STREAM_CODE = "dhx"; // sorted code for DEFAULT_ENABLED_STREAMS
 
 function encodeStreams(streams: Set<StreamType>): string {
   return [...streams].map((s) => STREAM_CODES[s]).sort().join("");
