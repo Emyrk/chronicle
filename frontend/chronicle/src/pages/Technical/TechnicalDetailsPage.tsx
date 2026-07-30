@@ -1,5 +1,5 @@
 import { Link } from "react-router-dom";
-import { ArrowLeft, BookOpen, Clock, FileCode, FlaskConical, PawPrint, ShieldAlert, Sparkles, Swords } from "lucide-react";
+import { ArrowLeft, BookOpen, Clock, FileCode, FlaskConical, PawPrint, ShieldAlert, Sparkles, Swords, TimerReset } from "lucide-react";
 import { Card } from "@/components/ui/Card/Card";
 
 interface TechnicalLink {
@@ -45,6 +45,12 @@ const TECHNICAL_LINKS: TechnicalLink[] = [
     description: "Consumable items and the buffs linked through their spell chains",
     href: "/technical/consumables",
     icon: <FlaskConical className="h-4 w-4" />,
+  },
+  {
+    title: "Cooldowns",
+    description: "Player cooldowns generated per dataset and grouped by class",
+    href: "/technical/cooldowns",
+    icon: <TimerReset className="h-4 w-4" />,
   },
   {
     title: "Aura Duration Modifiers",

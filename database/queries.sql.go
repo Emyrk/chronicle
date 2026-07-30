@@ -1172,6 +1172,55 @@ func (q *sqlQuerier) ListConsumablesByDataset(ctx context.Context, datasetID uui
 	return items, nil
 }
 
+const listCooldownSpellsByDataset = `-- name: ListCooldownSpellsByDataset :many
+SELECT
+    spell_id,
+    name,
+    name_subtext,
+    recovery_time_ms,
+    category_recovery_time_ms,
+    spell_class_set
+FROM dbc_cooldown_spells
+WHERE dataset_id = $1
+ORDER BY spell_class_set, name, spell_id
+`
+
+type ListCooldownSpellsByDatasetRow struct {
+	SpellID                int32  `db:"spell_id" json:"spell_id"`
+	Name                   string `db:"name" json:"name"`
+	NameSubtext            string `db:"name_subtext" json:"name_subtext"`
+	RecoveryTimeMs         int64  `db:"recovery_time_ms" json:"recovery_time_ms"`
+	CategoryRecoveryTimeMs int64  `db:"category_recovery_time_ms" json:"category_recovery_time_ms"`
+	SpellClassSet          int32  `db:"spell_class_set" json:"spell_class_set"`
+}
+
+func (q *sqlQuerier) ListCooldownSpellsByDataset(ctx context.Context, datasetID uuid.UUID) ([]ListCooldownSpellsByDatasetRow, error) {
+	rows, err := q.db.Query(ctx, listCooldownSpellsByDataset, datasetID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListCooldownSpellsByDatasetRow
+	for rows.Next() {
+		var i ListCooldownSpellsByDatasetRow
+		if err := rows.Scan(
+			&i.SpellID,
+			&i.Name,
+			&i.NameSubtext,
+			&i.RecoveryTimeMs,
+			&i.CategoryRecoveryTimeMs,
+			&i.SpellClassSet,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const deleteDataGrant = `-- name: DeleteDataGrant :exec
 DELETE FROM data_grants
 WHERE user_id = $1 AND source = $2
@@ -1340,6 +1389,7 @@ SELECT
     (SELECT COUNT(*) FROM dbc_extra_attack_spells WHERE dataset_id = $1)::INT AS extra_attacks_count,
     (SELECT COUNT(*) FROM dbc_duration_modifiers WHERE dataset_id = $1)::INT AS duration_modifiers_count,
     (SELECT COUNT(*) FROM dbc_periodic_spells WHERE dataset_id = $1)::INT AS periodic_spells_count,
+    (SELECT COUNT(*) FROM dbc_cooldown_spells WHERE dataset_id = $1)::INT AS cooldowns_count,
     (SELECT COUNT(*) FROM dbc_spell_description_variables WHERE dataset_id = $1)::INT AS desc_variables_count,
     (SELECT COUNT(*) FROM dbc_affected_aura_durations WHERE dataset_id = $1)::INT AS affected_aura_durations_count,
     (SELECT COUNT(*) FROM dbc_consumables WHERE dataset_id = $1)::INT AS consumables_count,
@@ -1364,6 +1414,7 @@ type GetDatasetImportSummaryRow struct {
 	ExtraAttacksCount          int32 `db:"extra_attacks_count" json:"extra_attacks_count"`
 	DurationModifiersCount     int32 `db:"duration_modifiers_count" json:"duration_modifiers_count"`
 	PeriodicSpellsCount        int32 `db:"periodic_spells_count" json:"periodic_spells_count"`
+	CooldownsCount             int32 `db:"cooldowns_count" json:"cooldowns_count"`
 	DescVariablesCount         int32 `db:"desc_variables_count" json:"desc_variables_count"`
 	AffectedAuraDurationsCount int32 `db:"affected_aura_durations_count" json:"affected_aura_durations_count"`
 	ConsumablesCount           int32 `db:"consumables_count" json:"consumables_count"`
@@ -1393,6 +1444,7 @@ func (q *sqlQuerier) GetDatasetImportSummary(ctx context.Context, datasetID uuid
 		&i.ExtraAttacksCount,
 		&i.DurationModifiersCount,
 		&i.PeriodicSpellsCount,
+		&i.CooldownsCount,
 		&i.DescVariablesCount,
 		&i.AffectedAuraDurationsCount,
 		&i.ConsumablesCount,

@@ -49,6 +49,7 @@ import {
   TalentTreesPage,
   PetTargetingAbilitiesPage,
   ConsumablesPage,
+  CooldownSpellsPage,
 } from "./pages/Technical"
 import {
   AccountLayout,
@@ -163,6 +164,7 @@ function App() {
         <Route path="/technical/pet-targeting-abilities" element={<PetTargetingAbilitiesPage />} />
         <Route path="/technical/talent-trees" element={<TalentTreesPage />} />
         <Route path="/technical/consumables" element={<ConsumablesPage />} />
+        <Route path="/technical/cooldowns" element={<CooldownSpellsPage />} />
         <Route path="/contact" element={<Contact />} />
         <Route path="/privacy" element={<Privacy />} />
         <Route path="/disclaimer" element={<Disclaimer />} />

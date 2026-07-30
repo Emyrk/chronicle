@@ -9,8 +9,8 @@ import (
 	"github.com/jackc/pgx/v5"
 )
 
-// deriveSpellMetadata analyses imported spells and populates the 3 derived
-// tables: dbc_extra_attack_spells, dbc_duration_modifiers, dbc_periodic_spells.
+// deriveSpellMetadata analyses imported spells and populates the derived spell
+// metadata tables used by the parser and technical pages.
 func (h *Handler) deriveSpellMetadata(ctx context.Context, datasetID uuid.UUID, spellDBC *chrondbc.SpellsDBC) error {
 	type extraAttackRow struct {
 		SpellID         int32
@@ -35,10 +35,16 @@ func (h *Handler) deriveSpellMetadata(ctx context.Context, datasetID uuid.UUID, 
 	var extraAttacks []extraAttackRow
 	var durationMods []durationModRow
 	var periodics []periodicRow
+	var cooldowns []cooldownSpellRow
 
 	err := spellDBC.Range(func(spell *chrondbc.Spell) bool {
 		if spell == nil {
 			return true
+		}
+
+		// --- Major player cooldowns ---
+		if cooldown, ok := cooldownSpellFromSpell(spell); ok {
+			cooldowns = append(cooldowns, cooldown)
 		}
 
 		// --- Extra attacks ---
@@ -120,6 +126,7 @@ func (h *Handler) deriveSpellMetadata(ctx context.Context, datasetID uuid.UUID, 
 		"dbc_extra_attack_spells",
 		"dbc_duration_modifiers",
 		"dbc_periodic_spells",
+		"dbc_cooldown_spells",
 	} {
 		if _, err := h.pool.Exec(ctx, fmt.Sprintf(`DELETE FROM %s WHERE dataset_id = $1`, table), datasetID); err != nil {
 			return fmt.Errorf("clear %s: %w", table, err)
@@ -182,6 +189,25 @@ func (h *Handler) deriveSpellMetadata(ctx context.Context, datasetID uuid.UUID, 
 	if batch.Len() > 0 {
 		if err := flushBatch(ctx, h.pool, batch); err != nil {
 			return fmt.Errorf("insert periodic spells (final): %w", err)
+		}
+	}
+
+	// Insert major player cooldowns.
+	batch = &pgx.Batch{}
+	for _, r := range cooldowns {
+		batch.Queue(`INSERT INTO dbc_cooldown_spells (dataset_id, spell_id, name, name_subtext, recovery_time_ms, category_recovery_time_ms, spell_class_set) VALUES ($1,$2,$3,$4,$5,$6,$7)`,
+			datasetID, r.SpellID, r.Name, r.NameSubtext, r.RecoveryTimeMS, r.CategoryRecoveryTimeMS, r.SpellClassSet,
+		)
+		if batch.Len() >= batchSize {
+			if err := flushBatch(ctx, h.pool, batch); err != nil {
+				return fmt.Errorf("insert cooldown spells: %w", err)
+			}
+			batch = &pgx.Batch{}
+		}
+	}
+	if batch.Len() > 0 {
+		if err := flushBatch(ctx, h.pool, batch); err != nil {
+			return fmt.Errorf("insert cooldown spells (final): %w", err)
 		}
 	}
 

@@ -1200,6 +1200,7 @@ export interface DatasetImportSummary {
   extra_attacks_count: number;
   duration_modifiers_count: number;
   periodic_spells_count: number;
+  cooldowns_count: number;
   desc_variables_count: number;
   affected_aura_durations_count: number;
   consumables_count: number;

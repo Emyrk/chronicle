@@ -323,6 +323,16 @@ CREATE TABLE dbc_consumables (
     item_spell_ids integer[] DEFAULT '{}'::integer[] NOT NULL
 );
 
+CREATE TABLE dbc_cooldown_spells (
+    dataset_id uuid NOT NULL,
+    spell_id integer NOT NULL,
+    name text NOT NULL,
+    name_subtext text DEFAULT ''::text NOT NULL,
+    recovery_time_ms bigint DEFAULT 0 NOT NULL,
+    category_recovery_time_ms bigint DEFAULT 0 NOT NULL,
+    spell_class_set integer NOT NULL
+);
+
 CREATE TABLE dbc_duration_modifiers (
     dataset_id uuid NOT NULL,
     spell_id integer NOT NULL,
@@ -1598,6 +1608,9 @@ ALTER TABLE ONLY dbc_consumable_buffs
 ALTER TABLE ONLY dbc_consumables
     ADD CONSTRAINT dbc_consumables_pkey PRIMARY KEY (dataset_id, item_id);
 
+ALTER TABLE ONLY dbc_cooldown_spells
+    ADD CONSTRAINT dbc_cooldown_spells_pkey PRIMARY KEY (dataset_id, spell_id);
+
 ALTER TABLE ONLY dbc_duration_modifiers
     ADD CONSTRAINT dbc_duration_modifiers_pkey PRIMARY KEY (dataset_id, spell_id);
 
@@ -1905,6 +1918,8 @@ CREATE INDEX game_players_player_and_realm ON game_players USING btree (name, re
 
 CREATE INDEX idx_data_grants_user_id ON data_grants USING btree (user_id);
 
+CREATE INDEX idx_dbc_cooldown_spells_class ON dbc_cooldown_spells USING btree (dataset_id, spell_class_set);
+
 CREATE INDEX idx_dbc_spells_name ON dbc_spells USING btree (dataset_id, name);
 
 CREATE INDEX idx_edr_class_spec ON encounter_dps_rankings USING btree (player_class, player_spec);
@@ -2058,6 +2073,9 @@ ALTER TABLE ONLY dbc_consumable_buffs
 
 ALTER TABLE ONLY dbc_consumables
     ADD CONSTRAINT dbc_consumables_dataset_id_fkey FOREIGN KEY (dataset_id) REFERENCES datasets(id) ON DELETE CASCADE;
+
+ALTER TABLE ONLY dbc_cooldown_spells
+    ADD CONSTRAINT dbc_cooldown_spells_dataset_id_fkey FOREIGN KEY (dataset_id) REFERENCES datasets(id) ON DELETE CASCADE;
 
 ALTER TABLE ONLY dbc_duration_modifiers
     ADD CONSTRAINT dbc_duration_modifiers_dataset_id_fkey FOREIGN KEY (dataset_id) REFERENCES datasets(id) ON DELETE CASCADE;
