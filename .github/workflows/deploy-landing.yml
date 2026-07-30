@@ -5,6 +5,7 @@ on:
     branches: [main]
     paths:
       - "frontend/landing/**"
+      - ".github/workflows/deploy-landing.yml"
   workflow_dispatch:
 
 permissions:
