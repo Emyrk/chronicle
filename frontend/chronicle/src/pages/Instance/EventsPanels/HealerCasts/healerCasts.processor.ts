@@ -326,6 +326,26 @@ export const healerCastsProcessor: PanelProcessor<HealerCastsResult, HealerCastE
       return;
     }
 
+    const kind = event.type === "spell_start"
+      ? "start"
+      : event.type === "spell_go"
+        ? "complete"
+        : "fail";
+
+    // When a cast completes or fails, backfill the duration on a matching
+    // zero-duration start.  WotLK logs don't include cast time in
+    // SPELL_CAST_START, so the only way to know the actual (talented/hasted)
+    // cast duration is by measuring start→go or start→fail.
+    if (kind !== "start") {
+      for (let i = casts.length - 1; i >= 0; i--) {
+        const prev = casts[i];
+        if (prev.kind === "start" && prev.spellId === event.spell.id && prev.durationMilli === 0) {
+          prev.durationMilli = timestampMilli - prev.timestampMilli;
+          break;
+        }
+      }
+    }
+
     casts.push({
       timestampMilli,
       eventIndex: event.index,
@@ -335,11 +355,7 @@ export const healerCastsProcessor: PanelProcessor<HealerCastsResult, HealerCastE
       durationMilli: event.type === "spell_start"
         ? Math.max(event.castTimeMilli, event.channelTimeMilli, 0)
         : 0,
-      kind: event.type === "spell_start"
-        ? "start"
-        : event.type === "spell_go"
-          ? "complete"
-          : "fail",
+      kind,
       amount: 0,
       overheal: 0,
       absorbed: 0,

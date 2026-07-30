@@ -193,6 +193,76 @@ describe("healerCastsProcessor", () => {
     expect(casts?.[1].kind).toBe("complete");
   });
 
+  it("backfills zero-duration starts from the matching spell_go timestamp", () => {
+    const state = healerCastsProcessor.createState();
+    const firstTimestamp = new Date("2026-07-30T00:00:00Z");
+    const ctx = context();
+
+    // WotLK-style: castTimeMilli is 0 because the log line doesn't include it
+    healerCastsProcessor.processEvent(
+      state,
+      start({ castTimeMilli: 0 }),
+      "encounter-1", firstTimestamp, "spell_start", ctx,
+    );
+    healerCastsProcessor.processEvent(
+      state,
+      complete(),
+      "encounter-1", firstTimestamp, "spell_go", ctx,
+    );
+
+    const casts = state.encounters.get("encounter-1")?.castsByPlayer.get(HEALER);
+    expect(casts).toHaveLength(2);
+    // Duration should be inferred from start→go delta (3500 - 1000 = 2500)
+    expect(casts?.[0]).toMatchObject({
+      kind: "start",
+      durationMilli: 2_500,
+    });
+  });
+
+  it("backfills zero-duration starts from the matching spell_fail timestamp", () => {
+    const state = healerCastsProcessor.createState();
+    const firstTimestamp = new Date("2026-07-30T00:00:00Z");
+    const ctx = context();
+
+    healerCastsProcessor.processEvent(
+      state,
+      start({ castTimeMilli: 0 }),
+      "encounter-1", firstTimestamp, "spell_start", ctx,
+    );
+    healerCastsProcessor.processEvent(
+      state,
+      fail(),
+      "encounter-1", firstTimestamp, "spell_fail", ctx,
+    );
+
+    const casts = state.encounters.get("encounter-1")?.castsByPlayer.get(HEALER);
+    expect(casts?.[0]).toMatchObject({
+      kind: "start",
+      durationMilli: 1_000, // fail at 2000 - start at 1000
+    });
+  });
+
+  it("does not overwrite a start that already has cast time data", () => {
+    const state = healerCastsProcessor.createState();
+    const firstTimestamp = new Date("2026-07-30T00:00:00Z");
+    const ctx = context();
+
+    // Vanilla-style: castTimeMilli is provided
+    healerCastsProcessor.processEvent(
+      state,
+      start({ castTimeMilli: 2_500 }),
+      "encounter-1", firstTimestamp, "spell_start", ctx,
+    );
+    healerCastsProcessor.processEvent(
+      state,
+      complete(),
+      "encounter-1", firstTimestamp, "spell_go", ctx,
+    );
+
+    const casts = state.encounters.get("encounter-1")?.castsByPlayer.get(HEALER);
+    // Should keep the original 2500, not overwrite
+    expect(casts?.[0].durationMilli).toBe(2_500);
+  });
   it("ignores non-player casters and unselected encounters", () => {
     const state = healerCastsProcessor.createState();
     const ctx = context();
