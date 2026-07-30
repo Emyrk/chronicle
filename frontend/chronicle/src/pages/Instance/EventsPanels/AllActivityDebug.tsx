@@ -204,7 +204,7 @@ const GEAR_SLOT_NAMES = [
   "Back", "Main Hand", "Off Hand", "Ranged", "Tabard",
 ];
 
-const EVENT_ROW_COLUMNS = "32px 72px 116px 132px minmax(150px, 1fr) 132px 72px minmax(190px, 1.2fr) 150px 132px";
+const EVENT_ROW_COLUMNS = "30px 68px 108px 116px minmax(140px, 1fr) 116px 64px minmax(170px, 1.2fr) 132px 116px";
 
 const FLAG_STYLES: Record<string, string> = {
   SYNTHETIC: "border-violet-400/25 bg-violet-400/10 text-violet-300",
@@ -302,17 +302,17 @@ function RawEventRow({ event, index, useRelativeTime = false, useLocalTime = fal
         style={{ gridTemplateColumns: EVENT_ROW_COLUMNS }}
       >
         <span className="pr-1 text-right text-muted-foreground/70">{index}</span>
-        <span className="flex min-w-0 items-center gap-1.5 px-1" title={config.label}>
+        <span className="flex min-w-0 items-center gap-1 px-1" title={config.label}>
           <Icon className={cn("h-3 w-3 shrink-0", config.color)} />
           <span className={cn("truncate text-[9px] font-bold tracking-[0.06em]", config.color)}>
             {STREAM_TYPE_CODES[event.streamType]}
           </span>
         </span>
-        <span className="truncate px-2 text-foreground/80">{timeStr}</span>
-        <span className="truncate px-2 text-orange-300" title={event.caster || undefined}>
+        <span className="truncate px-1.5 text-foreground/80">{timeStr}</span>
+        <span className="truncate px-1.5 text-orange-300" title={event.caster || undefined}>
           {event.casterName || "—"}
         </span>
-        <span className="min-w-0 truncate px-2">
+        <span className="min-w-0 truncate px-1.5">
           {event.spellId ? (
             <Link
               to={`/wowdb/spell/${event.spellId}`}
@@ -328,7 +328,7 @@ function RawEventRow({ event, index, useRelativeTime = false, useLocalTime = fal
         </span>
         <span
           className={cn(
-            "truncate px-2",
+            "truncate px-1.5",
             event.affiliation === 1 ? "text-green-400" :
             event.affiliation === 2 ? "text-red-400" :
             event.affiliation === 3 ? "text-yellow-400" : "text-purple-300",
@@ -337,13 +337,13 @@ function RawEventRow({ event, index, useRelativeTime = false, useLocalTime = fal
         >
           {event.targetName || "—"}
         </span>
-        <span className={cn("px-2 text-right font-semibold tabular-nums", amountColor)}>
+        <span className={cn("px-1.5 text-right font-semibold tabular-nums", amountColor)}>
           {eventValue(event)}
         </span>
-        <span className="truncate px-2 whitespace-nowrap" title={eventDetail(event)}>
+        <span className="truncate whitespace-nowrap px-1.5" title={eventDetail(event)}>
           <EventDetailText detail={eventDetail(event)} />
         </span>
-        <span className="flex min-w-0 gap-1 overflow-hidden px-2">
+        <span className="flex min-w-0 gap-1 overflow-hidden px-1.5">
           {event.flags?.length ? event.flags.map((flag) => (
             <span
               key={flag}
@@ -356,7 +356,7 @@ function RawEventRow({ event, index, useRelativeTime = false, useLocalTime = fal
             </span>
           )) : <span className="text-muted-foreground/30">—</span>}
         </span>
-        <span className="flex min-w-0 gap-1 overflow-hidden px-2">
+        <span className="flex min-w-0 gap-1 overflow-hidden px-1.5">
           {event.activityEvents?.length ? event.activityEvents.map((activity, activityIndex) => (
             <span
               key={`${activity.guid}-${activity.type}-${activityIndex}`}
@@ -736,7 +736,7 @@ function AllActivityContent({
       
       {/* Raw events list */}
       <ScrollArea className="flex-1 min-h-0 border rounded">
-        <div className="min-w-[1290px] p-1">
+        <div className="min-w-[1080px] p-1">
           {/* Header */}
           <div
             className="sticky top-0 z-10 grid items-center border-b border-border bg-background py-1.5 font-mono text-[9px] font-semibold uppercase tracking-[0.06em] text-muted-foreground"
@@ -747,20 +747,20 @@ function AllActivityContent({
             <button
               type="button"
               onClick={() => onToggleLocalTime?.()}
-              className="cursor-pointer px-2 text-left transition-colors hover:text-foreground"
+              className="cursor-pointer px-1.5 text-left transition-colors hover:text-foreground"
               title={useLocalTime ? "Click to show UTC time" : "Click to show local time"}
             >
               Time {useRelativeTime ? "" : useLocalTime ? "(local)" : "(UTC)"}
             </button>
-            <span className="px-2">Source</span>
-            <span className="px-2">Action / Ability</span>
-            <span className="px-2">Target</span>
-            <span className="px-2 text-right">Value</span>
-            <span className="px-2">Outcome / Detail</span>
-            <span className="px-2">Flags</span>
+            <span className="px-1.5">Source</span>
+            <span className="px-1.5">Action / Ability</span>
+            <span className="px-1.5">Target</span>
+            <span className="px-1.5 text-right">Value</span>
+            <span className="px-1.5">Outcome / Detail</span>
+            <span className="px-1.5">Flags</span>
             <Tooltip>
               <TooltipTrigger asChild>
-                <span className="cursor-help px-2">Activity ⓘ</span>
+                <span className="cursor-help px-1.5">Activity ⓘ</span>
               </TooltipTrigger>
               <TooltipContent side="bottom" className="text-xs">
                 <div className="space-y-1">
