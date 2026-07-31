@@ -10,13 +10,18 @@ import { Tooltip, TooltipTrigger, TooltipContent } from "@/components/ui/Tooltip
 import type { PanelRenderProps } from "../types";
 import type { DeathsResult, DeathEvent } from "./deaths.processor";
 import { DeathRecap } from "./DeathRecap";
-import { IncomingEventsBreakout } from "../IncomingEvents/IncomingEventsBreakout";
+import {
+  IncomingEventsBreakout,
+  type IncomingEventsWindow,
+} from "../IncomingEvents/IncomingEventsBreakout";
 import { FloatingIncomingEventsBreakout } from "../IncomingEvents/FloatingIncomingEventsBreakout";
 import { useCachedValue } from "@/hooks/useCachedValue";
 import { useSyncModeContextOptional } from "../../SyncModeContext";
 import { hasDeathLogEvents, isDeathAheadOfSyncCursor } from "./deathLogSync";
 import { cn } from "@/lib/utils";
 import { hitTypeNames, HitTypeCrit } from "@/lib/hittype/hittype";
+
+import { extractDeathWindow, normalizeDeathWindow, updateDeathWindow } from "./deathBreakoutWindow";
 
 type DeathMode = "players" | "enemies";
 
@@ -92,12 +97,6 @@ function extractDeathMode(panelOption: string | null | undefined): DeathMode {
   return val === "enemies" ? "enemies" : "players";
 }
 
-function extractWindowSeconds(panelOption: string | null | undefined): number {
-  const token = panelOption?.split(",").find((value) => value.trim().startsWith("w:"));
-  const parsed = Number(token?.slice(2));
-  return Number.isFinite(parsed) ? Math.max(5, Math.min(120, Math.round(parsed))) : 30;
-}
-
 interface FloatingDeathRecap {
   death: DeathEvent;
   initialPosition: { x: number; y: number };
@@ -110,7 +109,7 @@ export const DeathLogContent = (props: DeathLogContentProps) => {
   const [expandedIndex, setExpandedIndex] = useState<number | null>(null);
   const [floatingRecaps, setFloatingRecaps] = useState<Map<string, FloatingDeathRecap>>(() => new Map());
   const [sharedFightOffsetMilli, setSharedFightOffsetMilli] = useState<number | null>(null);
-  const [windowSeconds, setWindowSecondsLocal] = useState(() => extractWindowSeconds(panelOption));
+  const [breakoutWindow, setBreakoutWindowLocal] = useState<IncomingEventsWindow>(() => extractDeathWindow(panelOption));
 
   const setMode = useCallback((next: DeathMode) => {
     setModeLocal(next);
@@ -122,16 +121,10 @@ export const DeathLogContent = (props: DeathLogContentProps) => {
     }
   }, [panelOption, setPanelOption]);
 
-  const setWindowSeconds = useCallback((value: number) => {
-    const next = Math.max(5, Math.min(120, Math.round(value || 30)));
-    setWindowSecondsLocal(next);
-    if (setPanelOption) {
-      const existing = (panelOption ?? "")
-        .split(",")
-        .filter((token) => token.trim() && !token.trim().startsWith("w:"));
-      existing.push(`w:${next}`);
-      setPanelOption(existing.join(","));
-    }
+  const setBreakoutWindow = useCallback((window: IncomingEventsWindow) => {
+    const next = normalizeDeathWindow(window);
+    setBreakoutWindowLocal(next);
+    if (setPanelOption) setPanelOption(updateDeathWindow(panelOption, next));
   }, [panelOption, setPanelOption]);
 
   const openFloatingRecap = useCallback((key: string, death: DeathEvent, target: HTMLElement) => {
@@ -394,8 +387,8 @@ export const DeathLogContent = (props: DeathLogContentProps) => {
           anchorOffsetMilli={death.offsetMilli}
           anchorAbsoluteMilli={death.dateMilli}
           events={death.recap}
-          windowSeconds={windowSeconds}
-          onWindowSecondsChange={setWindowSeconds}
+          window={breakoutWindow}
+          onWindowChange={setBreakoutWindow}
           sharedFightOffsetMilli={sharedFightOffsetMilli}
           onSharedFightOffsetChange={setSharedFightOffsetMilli}
           onClose={() => closeFloatingRecap(key)}

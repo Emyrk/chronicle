@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   compareIncomingEventsNewestFirst,
+  incomingEventsWindowMilli,
   relativeCursorForFightOffset,
   relativeHealthAtCursor,
   syncCursorForDeath,
@@ -35,6 +36,30 @@ describe("incoming events timeline", () => {
       event({ offsetMilli: 100_001, eventIndex: 5 }),
     ];
     expect(visibleIncomingEvents(events, 100_000, 30_000).map((item) => item.offsetMilli)).toEqual([100_000, 85_000, 70_000]);
+  });
+
+  it("derives an All window from the oldest supplied event before the anchor", () => {
+    const events = [
+      event({ offsetMilli: 25_000, eventIndex: 1 }),
+      event({ offsetMilli: 70_000, eventIndex: 2 }),
+      event({ offsetMilli: 110_000, eventIndex: 3 }),
+    ];
+
+    const windowMilli = incomingEventsWindowMilli("all", events, 100_000);
+
+    expect(windowMilli).toBe(75_000);
+    expect(visibleIncomingEvents(events, 100_000, windowMilli).map((item) => item.offsetMilli)).toEqual([70_000, 25_000]);
+    expect(timelineYForTime([-30_000, -75_000], -75_000, 28, windowMilli)).toBe(56);
+  });
+
+  it("keeps All window math finite for empty and zero-duration histories", () => {
+    expect(incomingEventsWindowMilli("all", [], 100_000)).toBe(1);
+    expect(incomingEventsWindowMilli("all", [event({ offsetMilli: 100_000 })], 100_000)).toBe(1);
+    expect(Number.isFinite(timeAtTimelineY([], 10, 28, incomingEventsWindowMilli("all", [], 100_000)))).toBe(true);
+  });
+
+  it("converts numeric window selections to milliseconds", () => {
+    expect(incomingEventsWindowMilli(30, [], 100_000)).toBe(30_000);
   });
 
   it("round-trips a cursor between event rows without snapping", () => {

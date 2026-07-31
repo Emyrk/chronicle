@@ -4,7 +4,11 @@ import { cn } from "@/lib/utils";
 import { formatNumber } from "@/lib/format";
 import { RelativeHealthBar } from "@/components/ui/RelativeHealthBar/RelativeHealthBar";
 import { FloatingIncomingEventsBreakout } from "../IncomingEvents/FloatingIncomingEventsBreakout";
-import { IncomingEventsBreakout, type IncomingEventDisplay } from "../IncomingEvents/IncomingEventsBreakout";
+import {
+  IncomingEventsBreakout,
+  type IncomingEventDisplay,
+  type IncomingEventsWindow,
+} from "../IncomingEvents/IncomingEventsBreakout";
 import { GenericPanel } from "../GenericPanel";
 import type { PanelRenderProps } from "../types";
 import { useSyncModeContextOptional } from "../../SyncModeContext";
@@ -41,6 +45,7 @@ import {
   type StatusLifeTransition,
   type StatusUnitSnapshot,
 } from "./statusTimeline";
+import { STATUS_BREAKOUT_DEFAULT_WINDOW } from "./statusBreakoutWindow";
 import {
   STATUS_WINDOW_PRESETS,
   parseStatusWindow,
@@ -430,7 +435,7 @@ export function StatusContent(props: PanelRenderProps<StatusResult>) {
     return focused;
   }, [floatingBreakouts, panelOption]);
   const [density, setDensity] = useState<StatusDensity>(0);
-  const [windowSeconds, setWindowSeconds] = useState(30);
+  const [breakoutWindow, setBreakoutWindow] = useState<IncomingEventsWindow>(STATUS_BREAKOUT_DEFAULT_WINDOW);
   const [sharedFightOffsetMilli, setSharedFightOffsetMilli] = useState<number | null>(null);
 
   const selectUnit = useCallback((unitId: string, target: HTMLElement) => {
@@ -666,8 +671,8 @@ export function StatusContent(props: PanelRenderProps<StatusResult>) {
             anchorOffsetMilli={cursorMilli - encounter.startMilli}
             anchorAbsoluteMilli={cursorMilli}
             events={breakoutEvents}
-            windowSeconds={windowSeconds}
-            onWindowSecondsChange={setWindowSeconds}
+            window={breakoutWindow}
+            onWindowChange={setBreakoutWindow}
             sharedFightOffsetMilli={sharedFightOffsetMilli}
             onSharedFightOffsetChange={setSharedFightOffsetMilli}
             onClose={() => closeBreakout(unitId)}

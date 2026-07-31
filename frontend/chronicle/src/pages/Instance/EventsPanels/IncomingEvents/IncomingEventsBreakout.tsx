@@ -9,6 +9,7 @@ import { RelativeHealthBar } from "@/components/ui/RelativeHealthBar/RelativeHea
 import { calculateRelativeHealth } from "@/components/ui/RelativeHealthBar/relativeHealth";
 import { useSyncModeContextOptional } from "../../SyncModeContext";
 import {
+  incomingEventsWindowMilli,
   relativeCursorForFightOffset,
   relativeEventTime,
   relativeHealthMessagesAtCursor,
@@ -16,8 +17,11 @@ import {
   timeAtTimelineY,
   timelineYForTime,
   visibleIncomingEvents,
+  type IncomingEventsWindow,
   type IncomingTimelineEvent,
 } from "./incomingEventsTimeline";
+
+export type { IncomingEventsWindow } from "./incomingEventsTimeline";
 
 const ROW_HEIGHT = 28;
 
@@ -29,14 +33,14 @@ export interface IncomingEventDisplay extends IncomingTimelineEvent {
   absorbSpellId?: number | null;
 }
 
-interface IncomingEventsBreakoutProps {
+export interface IncomingEventsBreakoutProps {
   unitName: string;
   className: string;
   anchorOffsetMilli: number;
   anchorAbsoluteMilli: number;
   events: IncomingEventDisplay[];
-  windowSeconds: number;
-  onWindowSecondsChange: (seconds: number) => void;
+  window: IncomingEventsWindow;
+  onWindowChange: (window: IncomingEventsWindow) => void;
   sharedFightOffsetMilli: number | null;
   onSharedFightOffsetChange: (fightOffsetMilli: number | null) => void;
   onClose: () => void;
@@ -94,8 +98,8 @@ export function IncomingEventsBreakout({
   anchorOffsetMilli,
   anchorAbsoluteMilli,
   events,
-  windowSeconds,
-  onWindowSecondsChange,
+  window,
+  onWindowChange,
   sharedFightOffsetMilli,
   onSharedFightOffsetChange,
   onClose,
@@ -104,7 +108,10 @@ export function IncomingEventsBreakout({
   const [collapsed, setCollapsed] = useState(false);
   const viewportRef = useRef<HTMLDivElement>(null);
   const sync = useSyncModeContextOptional();
-  const windowMilli = windowSeconds * 1000;
+  const windowMilli = useMemo(
+    () => incomingEventsWindowMilli(window, events, anchorOffsetMilli),
+    [window, events, anchorOffsetMilli],
+  );
 
   const rows = useMemo(
     () => visibleIncomingEvents(events, anchorOffsetMilli, windowMilli),
@@ -209,10 +216,10 @@ export function IncomingEventsBreakout({
             <button
               key={seconds}
               type="button"
-              onClick={() => onWindowSecondsChange(seconds)}
+              onClick={() => onWindowChange(seconds)}
               className={cn(
                 "rounded border px-1.5 py-0.5 font-mono text-[9px]",
-                windowSeconds === seconds
+                window === seconds
                   ? "border-amber-300/40 bg-amber-300/10 text-amber-200"
                   : "border-white/10 bg-white/[0.03] text-muted-foreground hover:text-foreground",
               )}
@@ -220,16 +227,32 @@ export function IncomingEventsBreakout({
               {seconds}s
             </button>
           ))}
+          <button
+            type="button"
+            onClick={() => onWindowChange("all")}
+            className={cn(
+              "rounded border px-1.5 py-0.5 font-mono text-[9px]",
+              window === "all"
+                ? "border-amber-300/40 bg-amber-300/10 text-amber-200"
+                : "border-white/10 bg-white/[0.03] text-muted-foreground hover:text-foreground",
+            )}
+          >
+            All
+          </button>
           <input
             type="number"
             min={5}
             max={120}
-            value={windowSeconds}
-            onChange={(event) => onWindowSecondsChange(Number(event.target.value))}
-            className="ml-1 w-12 rounded border border-white/10 bg-[#191a1d] px-1.5 py-0.5 font-mono text-[9px] text-foreground"
+            value={window === "all" ? "" : window}
+            disabled={window === "all"}
+            onChange={(event) => {
+              const seconds = Number(event.target.value);
+              if (Number.isFinite(seconds) && seconds > 0) onWindowChange(seconds);
+            }}
+            className="ml-1 w-12 rounded border border-white/10 bg-[#191a1d] px-1.5 py-0.5 font-mono text-[9px] text-foreground disabled:cursor-not-allowed disabled:opacity-40"
             aria-label="Incoming events history in seconds"
           />
-          <span className="text-[9px] text-muted-foreground">{windowSuffix}</span>
+          {window !== "all" && <span className="text-[9px] text-muted-foreground">{windowSuffix}</span>}
         </div>
       )}
 
@@ -300,7 +323,7 @@ export function IncomingEventsBreakout({
           />
           </div>
           <div className="border-t border-white/5 px-3 py-1.5 font-mono text-[9px] text-muted-foreground">
-            {rows.length} events · {windowSeconds}s window
+            {rows.length} events · {window === "all" ? "All available history" : `${window}s window`}
           </div>
         </>
       )}

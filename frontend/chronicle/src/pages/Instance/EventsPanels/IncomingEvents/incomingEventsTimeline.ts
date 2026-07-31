@@ -3,6 +3,10 @@ import {
   type RelativeHealthMessage,
 } from "@/components/ui/RelativeHealthBar/relativeHealth";
 
+export type IncomingEventsWindow = number | "all";
+
+const MIN_WINDOW_MILLI = 1;
+
 export interface IncomingTimelineEvent {
   offsetMilli: number;
   eventIndex: number;
@@ -28,6 +32,22 @@ export function compareIncomingEventsNewestFirst(a: IncomingTimelineEvent, b: In
 
 export function relativeEventTime(eventOffsetMilli: number, anchorOffsetMilli: number): number {
   return eventOffsetMilli - anchorOffsetMilli;
+}
+
+export function incomingEventsWindowMilli<T extends IncomingTimelineEvent>(
+  window: IncomingEventsWindow,
+  events: T[],
+  anchorOffsetMilli: number,
+): number {
+  if (window !== "all") return Math.max(MIN_WINDOW_MILLI, window * 1000);
+
+  let oldestOffsetMilli = anchorOffsetMilli;
+  for (const event of events) {
+    if (event.offsetMilli <= anchorOffsetMilli) {
+      oldestOffsetMilli = Math.min(oldestOffsetMilli, event.offsetMilli);
+    }
+  }
+  return Math.max(MIN_WINDOW_MILLI, anchorOffsetMilli - oldestOffsetMilli);
 }
 
 export function visibleIncomingEvents<T extends IncomingTimelineEvent>(
