@@ -13,6 +13,13 @@ import { cn } from '@/lib/utils';
 import { BreakoutIdentity } from '@/components/ui/BreakoutPanel/BreakoutIdentity';
 import { usePortalContainer } from '@/components/ui/PortalContainerContext';
 import { X, GripHorizontal } from 'lucide-react';
+import {
+  createPlayerMetricChartModel,
+  type PlayerMetricChartData,
+  type PlayerMetricChartRow,
+} from './PlayerMetricChartModel';
+
+export type { PlayerMetricChartData } from './PlayerMetricChartModel';
 
 /* eslint-disable react-refresh/only-export-components */
 // Re-export types from BreakdownContent for backwards compatibility
@@ -36,18 +43,6 @@ export interface ParsePillData {
   color: string;
   /** Tooltip content rendered on hover. */
   tooltipContent: ReactNode;
-}
-
-export interface PlayerMetricChartData {
-  playerID: string
-  playerName: string
-  className: string
-  specialization: string
-  value: number
-  // stackValue is used for over healing.
-  stackedValue?: number
-  // dimmed reduces visual prominence (used for filtering)
-  dimmed?: boolean
 }
 
 /**
@@ -86,6 +81,8 @@ interface PlayerMetricChartProps extends React.ComponentProps<"div"> {
   valueSuffix?: string
   /** Parse pill data keyed by playerID. When provided, shows a colored score pill on each matching row. */
   parsePills?: Map<string, ParsePillData>
+  /** Animate bar geometry changes. Disable for high-frequency replay updates. */
+  animateValues?: boolean
 }
 
 export function PlayerMetricChart({
@@ -103,6 +100,7 @@ export function PlayerMetricChart({
   onRowCtrlClick,
   valueSuffix,
   parsePills,
+  animateValues = true,
   // Exclude dir from divProps to avoid type conflict with ScrollArea
   dir: _dir,
   ...divProps
@@ -111,46 +109,10 @@ export function PlayerMetricChart({
   // Track which rows have pinned tooltips (multiple allowed)
   const [pinnedPlayerIds, setPinnedPlayerIds] = useState<Set<string>>(new Set())
 
-  const computedData = useMemo(() => {
-    return data.map((item) => ({
-      ...item,
-      value: perSecond ? (item.value / duration_millis!) * 1000 : item.value,
-      stackedValue: item.stackedValue ? (perSecond ? (item.stackedValue / duration_millis!) * 1000 : item.stackedValue) : undefined,
-    }))
-  }, [data, perSecond, duration_millis])
-
-
-  const summedValue = useMemo(() => {
-    const sum = computedData.reduce((sum, item) => sum + item.value, 0)
-    // Avoid division by zero - return 1 if sum is 0
-    return sum || 1
-  }, [computedData])
-
-  // Scale chart so the max effective value takes 75% width, leaving room for stacked
-  const maximumValue = useMemo(() => {
-    if (computedData.length === 0) return 1 // Avoid Math.max on empty array
-    const maxEffective = Math.max(...computedData.map((item) => item.value))
-    // Scale so max effective is 75% of chart, leaving 25% for stacked values
-    // Avoid division by zero - return 1 if maxEffective is 0
-    return maxEffective ? maxEffective / 0.75 : 1
-  }, [computedData])
-
-  // Sort by value descending and calculate percentages
-  // Dimmed items are sorted to the bottom
-  const chartData = useMemo(() => {
-    const sorted = [...computedData].sort((a, b) => {
-      // Non-dimmed items come first
-      if (a.dimmed !== b.dimmed) {
-        return a.dimmed ? 1 : -1;
-      }
-      return b.value - a.value;
-    })
-    return sorted.map((item, index) => ({
-      ...item,
-      rank: index + 1,
-      color: `var(--color-class-${item.className.toLowerCase()})`,
-    }))
-  }, [computedData])
+  const { chartData, maximumValue, summedValue } = useMemo(
+    () => createPlayerMetricChartModel(data, perSecond, duration_millis),
+    [data, perSecond, duration_millis],
+  )
 
   const handleTogglePin = (playerId: string) => {
     setPinnedPlayerIds(prev => {
@@ -190,6 +152,7 @@ export function PlayerMetricChart({
             isFirstRow={index === 0}
             onCtrlClick={onRowCtrlClick ? (e) => onRowCtrlClick(player.playerID, e) : undefined}
             parsePill={parsePills?.get(player.playerID)}
+            animateValues={animateValues}
           />
         })}
       </div>
@@ -198,7 +161,7 @@ export function PlayerMetricChart({
 }
 
 export interface PlayerMetricRowProps {
-  player: PlayerMetricChartData & {color:string, rank:number, dimmed?: boolean}
+  player: PlayerMetricChartRow
   rowHeight: number
   maximumValue: number
   summedValue: number
@@ -217,6 +180,7 @@ export interface PlayerMetricRowProps {
   onCtrlClick?: (event: React.MouseEvent) => void
   /** Optional parse score pill to show at the bar's right edge */
   parsePill?: ParsePillData
+  animateValues?: boolean
 }
 
 // Draggable pinned tooltip component
@@ -385,6 +349,7 @@ export function PlayerMetricRow({
   isFirstRow = false,
   onCtrlClick: onCtrlClickProp,
   parsePill,
+  animateValues = true,
 }: PlayerMetricRowProps) {
   const { ref, x, y } = useMouse<HTMLDivElement>();
   const rowRef = useRef<HTMLDivElement>(null)
@@ -527,7 +492,7 @@ export function PlayerMetricRow({
           width: `${(player.value / maximumValue) * 100}%`,
           background: `linear-gradient(to right, oklch(0 0 0 / 0.3), oklch(0 0 0 / 0.15)), ${player.color}`,
           opacity: 0.85,
-          transition: 'width 0.3s ease',
+          transition: animateValues ? 'width 0.3s ease' : 'none',
         }}
       />
       
@@ -553,7 +518,7 @@ export function PlayerMetricRow({
                 width: `${displayWidth}%`,
                 background: player.color,
                 opacity: 0.35,
-                transition: 'width 0.3s ease',
+                transition: animateValues ? 'left 0.3s ease, width 0.3s ease' : 'none',
               }}
               title={isOverflowing ? `${stackedLabel} extends beyond chart` : undefined}
             />
@@ -689,7 +654,7 @@ export function PlayerMetricRow({
 
         {/* Percentage */}
         <span
-          className='text-xs'
+          className='text-xs tabular-nums'
           style={{
             width: '50px',
             textAlign: 'right',
@@ -707,7 +672,7 @@ export function PlayerMetricRow({
           const stackedPct = totalWithStacked > 0 ? (player.stackedValue / totalWithStacked) * 100 : 0;
           return (
             <span
-              className='text-2xs'
+              className='text-2xs tabular-nums'
               style={{
                 width: '50px',
                 textAlign: 'right',
@@ -784,7 +749,7 @@ export function PlayerMetricRow({
 )
 }
 
-function formatValue(type: ChartType, player: PlayerMetricChartData, suffix?: string, decimals: number = 1) {
+function formatValue(type: ChartType, player: PlayerMetricChartRow, suffix?: string, decimals: number = 1) {
   const styles: React.CSSProperties = {
     fontWeight: 600,
     // color: 'oklch(0.985 0 0)',
@@ -792,7 +757,10 @@ function formatValue(type: ChartType, player: PlayerMetricChartData, suffix?: st
     padding: '2px 8px',
     borderRadius: '4px',
     marginRight: '12px',
+    minWidth: '88px',
+    textAlign: 'right',
     fontFamily: 'var(--font-mono)',
+    fontVariantNumeric: 'tabular-nums',
   }
 
   switch (type) {
@@ -811,12 +779,12 @@ function formatValue(type: ChartType, player: PlayerMetricChartData, suffix?: st
     // case 'damage':
     default:
       return (<span
-        className='text-xs'
+        className='text-xs tabular-nums'
         style={{
           ...styles
         }}
       >
-        {player.value.toLocaleString(undefined, {
+        {player.displayValue.toLocaleString(undefined, {
           minimumFractionDigits: decimals,
           maximumFractionDigits: decimals,
         })}{suffix}

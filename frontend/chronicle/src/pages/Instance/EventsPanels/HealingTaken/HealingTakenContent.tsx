@@ -12,6 +12,7 @@ import { useHealingTakenBreakout } from "./HealingTakenBreakout";
 import { formatNumber } from "@/lib/format";
 import { cn } from "@/lib/utils";
 import { Tooltip, TooltipContent, TooltipTrigger, TooltipProvider } from "@/components/ui/Tooltip/tooltip";
+import { useSyncModeContextOptional } from "../../SyncModeContext";
 
 /**
  * View modes for healing display
@@ -101,6 +102,7 @@ interface HealingTakenContentProps extends PanelRenderProps<UnifiedHealingResult
 export const HealingTakenContent = (props: HealingTakenContentProps) => {
   const { targetType = "players" } = props;
   const { result, context, panelOption, setPanelOption } = props;
+  const syncMode = useSyncModeContextOptional();
 
   // Derive viewMode, showRanks, and focus from URL-persisted panelOption
   const { viewMode, showRanks, focusedPlayerId } = useMemo(() => {
@@ -359,6 +361,7 @@ export const HealingTakenContent = (props: HealingTakenContentProps) => {
           panelTitle="Ability Breakdown"
           duration_millis={props.durationMs}
           perSecond={props.perSecond}
+          animateValues={!syncMode?.enabled}
           breakout={focusedBreakout}
           disableInteractions={props.context.renderMode === "layout_lab"}
         />
@@ -369,6 +372,7 @@ export const HealingTakenContent = (props: HealingTakenContentProps) => {
           panelTitle={viewMode === "overheal" ? "Overhealing Received" : "Healing Taken"}
           duration_millis={props.durationMs}
           perSecond={props.perSecond}
+          animateValues={!syncMode?.enabled}
           breakout={breakout}
           onRowCtrlClick={handleRowCtrlClick}
           disableInteractions={props.context.renderMode === "layout_lab"}

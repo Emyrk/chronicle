@@ -6,6 +6,7 @@ import type { PanelContext } from "../types";
 import type { HealingViewMode } from "./HealingDoneContent";
 import type { WoWSpell } from "@/api/wowdb";
 import { realSpellId } from "../processors/abilityBreakout";
+import { getBreakoutProgressLabel } from "../breakoutProgress";
 
 /**
  * Resolve a unit name from context, formatting pets as "{Owner}'s Pet {PetName}".
@@ -372,15 +373,15 @@ export function useHealingDoneBreakout({
       const setActiveTab = (tab: BreakoutTab) => {
         setTabByPlayer(prev => new Map(prev).set(playerID, tab));
       };
-      if (loading || processing) {
-        return (
-          <div className="p-4 flex items-center justify-center text-xs text-muted-foreground min-w-[300px] min-h-[200px]">
-            {loading ? "Loading..." : "Processing..."}
-          </div>
-        );
-      }
-      
       if (!result) {
+        const progressLabel = getBreakoutProgressLabel(false, loading, processing);
+        if (progressLabel) {
+          return (
+            <div className="p-4 flex items-center justify-center text-xs text-muted-foreground min-w-[300px] min-h-[200px]">
+              {progressLabel}
+            </div>
+          );
+        }
         return (
           <p className="text-xs p-2 text-background/60">No breakdown available</p>
         );
@@ -422,6 +423,19 @@ export function useHealingDoneBreakout({
       
       const targets = getTargetsForUnit(result, playerID, context, viewMode);
       const totalValue = getTotalForUnit(result, playerID, viewMode);
+
+      const progressLabel = getBreakoutProgressLabel(
+        abilities.length > 0 || targets.length > 0 || totalValue > 0,
+        loading,
+        processing,
+      );
+      if (progressLabel) {
+        return (
+          <div className="p-4 flex items-center justify-center text-xs text-muted-foreground min-w-[300px] min-h-[200px]">
+            {progressLabel}
+          </div>
+        );
+      }
 
       // Convert to per-second if needed
       const displayAbilities = perSecond && durationMs

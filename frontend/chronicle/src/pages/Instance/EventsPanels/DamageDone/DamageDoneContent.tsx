@@ -13,6 +13,7 @@ import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/comp
 import { ChevronLeft, Layers } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useParsePills } from "../parsePills";
+import { useSyncModeContextOptional } from "../../SyncModeContext";
 
 // ── Panel option encoding ──
 // panelOption is a comma-separated string of tokens stored in the URL.
@@ -103,6 +104,7 @@ interface DamageDoneContentProps extends PanelRenderProps<DamageDoneResult> {
 export const DamageDoneContent = (props: DamageDoneContentProps) => {
   const { sourceType = "players" } = props;
   const { result, context, panelOption, setPanelOption } = props;
+  const syncMode = useSyncModeContextOptional();
   const [showRanks, setShowRanks] = useState(true);
 
   // Derive focus, grouping, and pet mode from the URL-persisted panelOption tokens
@@ -422,6 +424,7 @@ export const DamageDoneContent = (props: DamageDoneContentProps) => {
           panelTitle="Ability Breakdown"
           duration_millis={props.durationMs}
           perSecond={props.perSecond}
+          animateValues={!syncMode?.enabled}
           breakout={focusedBreakout}
           disableInteractions={props.context.renderMode === "layout_lab"}
         />
@@ -432,6 +435,7 @@ export const DamageDoneContent = (props: DamageDoneContentProps) => {
           panelTitle="Damage Done"
           duration_millis={props.durationMs}
           perSecond={props.perSecond}
+          animateValues={!syncMode?.enabled}
           breakout={breakout}
           onRowCtrlClick={handleRowCtrlClick}
           disableInteractions={props.context.renderMode === "layout_lab"}
