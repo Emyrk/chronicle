@@ -22,6 +22,13 @@ function formatDelta(deltaMs: number): string {
   return `${sign}${formatClearDuration(Math.abs(deltaMs))}`;
 }
 
+const AXIS_MIN_PERCENT = -50;
+const AXIS_MAX_PERCENT = 100;
+
+function relativeToMedian(value: number, median: number): number {
+  return ((value - median) / median) * 100;
+}
+
 function Distribution({
   summary,
   primaryDurationMs,
@@ -29,45 +36,56 @@ function Distribution({
   summary: EncounterKillTimeSummary;
   primaryDurationMs: number;
 }) {
-  const extent = Math.max(summary.max - summary.min, 1);
-  const position = (value: number) => {
-    const normalized = (value - summary.min) / extent;
-    return `${6 + Math.min(1, Math.max(0, normalized)) * 88}%`;
+  const positionForRelative = (relative: number) => {
+    const clamped = Math.min(AXIS_MAX_PERCENT, Math.max(AXIS_MIN_PERCENT, relative));
+    return `${((clamped - AXIS_MIN_PERCENT) / (AXIS_MAX_PERCENT - AXIS_MIN_PERCENT)) * 100}%`;
   };
+  const position = (value: number) => positionForRelative(relativeToMedian(value, summary.median));
+  const primaryRelative = relativeToMedian(primaryDurationMs, summary.median);
+  const primaryBeyondAxis = primaryRelative < AXIS_MIN_PERCENT || primaryRelative > AXIS_MAX_PERCENT;
 
   return (
-    <div className="relative h-10 w-full min-w-0">
-      <div className="absolute inset-x-[6%] top-3 h-2 rounded-sm bg-muted/45" />
+    <div className="relative h-7 w-full min-w-0">
+      {[-50, 0, 50, 100].map((tick) => (
+        <div
+          key={tick}
+          className={cn(
+            "absolute inset-y-0 w-px bg-border/25",
+            tick === 0 && "bg-muted-foreground/35",
+          )}
+          style={{ left: positionForRelative(tick) }}
+        />
+      ))}
+      <div className="absolute inset-x-0 top-1/2 h-px -translate-y-1/2 bg-border/60" />
       {summary.count > 1 ? (
         <>
           <div
-            className="absolute top-[15px] h-px bg-amber-200/45"
+            className="absolute top-1/2 h-px -translate-y-1/2 bg-muted-foreground/35"
             style={{ left: position(summary.min), width: `calc(${position(summary.max)} - ${position(summary.min)})` }}
           />
           <div
-            className="absolute top-1.5 h-3 rounded-sm border border-amber-200/50 bg-amber-200/75"
+            className="absolute top-1/2 h-3 -translate-y-1/2 rounded-sm border border-muted-foreground/30 bg-muted-foreground/45"
             style={{ left: position(summary.q1), width: `calc(${position(summary.q3)} - ${position(summary.q1)})` }}
           />
-          <div className="absolute top-2 h-3 w-px bg-amber-100/70" style={{ left: position(summary.min) }} />
-          <div className="absolute top-2 h-3 w-px bg-amber-100/70" style={{ left: position(summary.max) }} />
         </>
       ) : null}
-      <div
-        className="absolute top-1 h-5 w-px bg-amber-50"
-        style={{ left: position(summary.median) }}
-      />
-      <div
-        className="absolute top-0 h-7 w-[3px] -translate-x-1/2 rounded-full bg-white shadow-[0_0_8px_2px_rgba(255,255,255,0.55)]"
-        style={{ left: position(primaryDurationMs) }}
-      >
-        <span className="absolute left-1/2 top-0 size-2 -translate-x-1/2 -translate-y-1/2 rotate-45 rounded-[1px] border border-background bg-white" />
-      </div>
-      <span className="absolute bottom-0 left-[6%] -translate-x-1/2 font-mono text-[9px] text-muted-foreground/70">
-        {formatClearDuration(summary.min)}
-      </span>
-      <span className="absolute bottom-0 left-[94%] -translate-x-1/2 font-mono text-[9px] text-muted-foreground/70">
-        {formatClearDuration(summary.max)}
-      </span>
+      <div className="absolute top-0.5 bottom-0.5 w-0.5 bg-muted-foreground/70" style={{ left: position(summary.median) }} />
+      {primaryBeyondAxis ? (
+        <div
+          className={cn(
+            "absolute top-1/2 -translate-y-1/2 font-mono text-sm font-bold tracking-[-0.2em] text-orange-400",
+            primaryRelative < AXIS_MIN_PERCENT ? "left-0" : "right-0",
+          )}
+          title={`Your time is ${primaryRelative > 0 ? "+" : ""}${Math.round(primaryRelative)}% from median`}
+        >
+          {primaryRelative < AXIS_MIN_PERCENT ? "‹‹‹" : "›››"}
+        </div>
+      ) : (
+        <div
+          className="absolute top-1/2 size-3 -translate-x-1/2 -translate-y-1/2 rotate-45 border border-orange-200 bg-orange-500 shadow-[0_0_0_2px_rgba(0,0,0,0.8)]"
+          style={{ left: position(primaryDurationMs) }}
+        />
+      )}
     </div>
   );
 }
@@ -116,17 +134,24 @@ export function EncounterKillTimesPanel({
 
   return (
     <Card className="overflow-hidden border-border/80 bg-card/75 shadow-sm">
-      <div className="flex min-h-12 items-center justify-between gap-4 border-b px-5 py-3">
+      <div className="flex min-h-12 flex-wrap items-center justify-between gap-x-4 gap-y-2 border-b px-5 py-3">
         <div className="flex min-w-0 items-baseline gap-2.5">
           <h2 className="truncate text-sm font-semibold">Encounter breakdown</h2>
-          <span className="shrink-0 text-[11px] text-muted-foreground">Kill time per boss</span>
+          <span className="shrink-0 text-[11px] text-muted-foreground">Kill time vs comparison median</span>
         </div>
-        <div className="flex items-center gap-3 text-[11px] text-muted-foreground">
+        <div className="flex flex-wrap items-center gap-3 text-[10px] text-muted-foreground">
           <span className="flex items-center gap-1.5 text-foreground/90">
-            <span className="h-3.5 w-[3px] rounded-full bg-white shadow-[0_0_5px_rgba(255,255,255,0.7)]" />
+            <span className="size-2.5 rotate-45 border border-orange-200 bg-orange-500" />
             Your time
           </span>
-          <span>Compared to median</span>
+          <span className="flex items-center gap-1.5">
+            <span className="h-2 w-5 rounded-sm bg-muted-foreground/45" />
+            Comparison spread
+          </span>
+          <span className="flex items-center gap-1.5">
+            <span className="font-mono font-bold tracking-[-0.2em] text-orange-400">›››</span>
+            Beyond axis
+          </span>
         </div>
       </div>
 
@@ -149,49 +174,70 @@ export function EncounterKillTimesPanel({
         </div>
       ) : (
         <TooltipProvider>
-          <div className="space-y-1 px-5 py-3">
+          <div className="px-5 py-3">
+            <div className="grid grid-cols-[2.5rem_minmax(6rem,9rem)_minmax(7rem,1fr)_2.75rem_2.75rem_3rem] items-end gap-2 border-b border-border/40 px-1 pb-2 text-[9px] uppercase tracking-[0.14em] text-muted-foreground/60">
+              <span />
+              <span />
+              <div className="relative h-4 font-mono normal-case tracking-normal">
+                {[-50, 0, 50, 100].map((tick) => (
+                  <span
+                    key={tick}
+                    className={cn(
+                      "absolute",
+                      tick === AXIS_MIN_PERCENT ? "" : tick === AXIS_MAX_PERCENT ? "-translate-x-full" : "-translate-x-1/2",
+                    )}
+                    style={{ left: `${((tick - AXIS_MIN_PERCENT) / (AXIS_MAX_PERCENT - AXIS_MIN_PERCENT)) * 100}%` }}
+                  >
+                    {tick > 0 ? `+${tick}%` : `${tick}%`}
+                  </span>
+                ))}
+              </div>
+              <span className="text-right">Yours</span>
+              <span className="text-right">Median</span>
+              <span className="text-right">Delta</span>
+            </div>
             {rows.map(({ encounterName, primarySummary, comparisonSummary }) => {
               const primaryDurationMs = primarySummary.median;
               const delta = primaryDurationMs - comparisonSummary.median;
+              const deltaPercent = relativeToMedian(primaryDurationMs, comparisonSummary.median);
               const percentile = killTimePercentile(primaryDurationMs, comparisonSummary.values);
               const spread = comparisonSummary.q3 - comparisonSummary.q1;
               return (
                 <Tooltip key={encounterName}>
                   <TooltipTrigger asChild>
-                    <div className="cursor-default rounded px-1 py-2 transition-colors hover:bg-muted/20">
-                      <div className="flex min-w-0 items-center gap-2">
-                        <span
-                          className={cn(
-                            "min-w-9 rounded border px-1.5 py-0.5 text-center font-mono text-[10px] font-bold",
-                            percentile === null && "border-zinc-400/30 bg-zinc-400/10 text-zinc-500",
-                            percentile !== null && parseColor(percentile),
-                            percentile !== null && parseBgColor(percentile),
-                            percentile !== null && parseBorderColor(percentile),
-                          )}
-                        >
-                          {percentile === null ? "—" : `P${percentile}`}
-                        </span>
-                        <span className="min-w-0 flex-1 truncate text-xs font-medium text-foreground" title={encounterName}>
-                          {encounterName}
-                        </span>
-                        <div className="flex items-baseline gap-3 text-right font-mono text-xs">
-                          <span className="font-semibold text-white">{formatClearDuration(primaryDurationMs)}</span>
-                          <span className={cn(
-                            "w-11 font-semibold",
-                            delta < 0 && "text-emerald-400",
-                            delta > 0 && "text-rose-400",
-                            delta === 0 && "text-muted-foreground",
-                          )}>
-                            {formatDelta(delta)}
-                          </span>
-                        </div>
-                      </div>
-                      <div className="mt-1 w-full">
-                        <Distribution
-                          summary={comparisonSummary}
-                          primaryDurationMs={primaryDurationMs}
-                        />
-                      </div>
+                    <div className="grid cursor-default grid-cols-[2.5rem_minmax(6rem,9rem)_minmax(7rem,1fr)_2.75rem_2.75rem_3rem] items-center gap-2 border-b border-border/30 px-1 py-2 last:border-b-0 hover:bg-muted/20">
+                      <span
+                        className={cn(
+                          "rounded border px-1 py-0.5 text-center font-mono text-[10px] font-bold",
+                          percentile === null && "border-zinc-400/30 bg-zinc-400/10 text-zinc-500",
+                          percentile !== null && parseColor(percentile),
+                          percentile !== null && parseBgColor(percentile),
+                          percentile !== null && parseBorderColor(percentile),
+                        )}
+                      >
+                        {percentile === null ? "—" : `P${percentile}`}
+                      </span>
+                      <span className="truncate text-xs font-medium text-foreground" title={encounterName}>
+                        {encounterName}
+                      </span>
+                      <Distribution summary={comparisonSummary} primaryDurationMs={primaryDurationMs} />
+                      <span className="text-right font-mono text-xs font-semibold text-white">
+                        {formatClearDuration(primaryDurationMs)}
+                      </span>
+                      <span className="text-right font-mono text-xs text-muted-foreground">
+                        {formatClearDuration(comparisonSummary.median)}
+                      </span>
+                      <span
+                        className={cn(
+                          "text-right font-mono text-xs font-semibold",
+                          deltaPercent < 0 && "text-emerald-400",
+                          deltaPercent > 0 && "text-rose-400",
+                          deltaPercent === 0 && "text-muted-foreground",
+                        )}
+                        title={formatDelta(delta)}
+                      >
+                        {deltaPercent > 0 ? "+" : ""}{Math.round(deltaPercent)}%
+                      </span>
                     </div>
                   </TooltipTrigger>
                   <TooltipContent
@@ -208,6 +254,8 @@ export function EncounterKillTimesPanel({
                     </div>
                     <div className="space-y-1 text-xs">
                       <TimeStatLine label="Your time" value={formatClearDuration(primaryDurationMs)} highlight />
+                      <TimeStatLine label="Median delta" value={`${formatDelta(delta)} · ${deltaPercent > 0 ? "+" : ""}${Math.round(deltaPercent)}%`} />
+                      <div className="my-1 border-t border-white/5" />
                       <TimeStatLine label="Fastest" value={formatClearDuration(comparisonSummary.min)} />
                       <TimeStatLine label="Top 25%" value={formatClearDuration(comparisonSummary.q1)} />
                       <TimeStatLine label="Typical" value={formatClearDuration(comparisonSummary.median)} />
