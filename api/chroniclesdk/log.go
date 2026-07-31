@@ -313,15 +313,21 @@ type SpeedrunLevelRangeResult struct {
 
 // SpeedrunResult is the outcome of evaluating speedrun rules against an instance.
 type SpeedrunResult struct {
-	Qualified         bool                      `json:"qualified"`
-	StartTime         time.Time                 `json:"start_time"`
-	CompletionTime    time.Time                 `json:"completion_time"`
-	DurationMs        int64                     `json:"duration_ms"`
-	Proof             []SpeedrunProof           `json:"proof"`
-	VersionStatus     *SpeedrunVersionStatus    `json:"version_status,omitempty"`
-	LevelRange        *SpeedrunLevelRangeResult `json:"level_range,omitempty"`
-	DataSourceStatus  *SpeedrunDataSourceStatus `json:"data_source,omitempty"`
-	DpsRankingsStatus *DpsRankingsStatus        `json:"dps_rankings,omitempty"`
+	Qualified          bool                      `json:"qualified"`
+	StartTime          time.Time                 `json:"start_time"`
+	CompletionTime     time.Time                 `json:"completion_time"`
+	DurationMs         int64                     `json:"duration_ms"`
+	Proof              []SpeedrunProof           `json:"proof"`
+	VersionStatus      *SpeedrunVersionStatus    `json:"version_status,omitempty"`
+	LevelRange         *SpeedrunLevelRangeResult `json:"level_range,omitempty"`
+	DataSourceStatus   *SpeedrunDataSourceStatus `json:"data_source,omitempty"`
+	DpsRankingsStatus  *DpsRankingsStatus        `json:"dps_rankings,omitempty"`
+	EncounterKillTimes []EncounterKillTime       `json:"encounter_kill_times"`
+}
+
+type EncounterKillTime struct {
+	EncounterName string `json:"encounter_name"`
+	DurationMs    int64  `json:"duration_ms"`
 }
 
 type InstanceOverviewMetrics struct {
@@ -385,6 +391,7 @@ type SpeedrunCohortRun struct {
 	GuildID               *uuid.UUID               `json:"guild_id,omitempty"`
 	GuildName             string                   `json:"guild_name,omitempty"`
 	Overview              *InstanceOverviewMetrics `json:"overview,omitempty"`
+	EncounterKillTimes    []EncounterKillTime      `json:"encounter_kill_times"`
 }
 
 // DpsRankingsStatus reports whether DPS rankings were recorded for this instance.

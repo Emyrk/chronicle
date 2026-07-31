@@ -280,6 +280,17 @@ func InstanceOverviewMetrics(row database.InstanceOverviewMetric) chroniclesdk.I
 	}
 }
 
+func EncounterKillTimes(rows []database.GetInstanceEncounterKillTimesRow) []chroniclesdk.EncounterKillTime {
+	killTimes := make([]chroniclesdk.EncounterKillTime, 0, len(rows))
+	for _, row := range rows {
+		killTimes = append(killTimes, chroniclesdk.EncounterKillTime{
+			EncounterName: row.EncounterName,
+			DurationMs:    row.DurationMs,
+		})
+	}
+	return killTimes
+}
+
 func SpeedrunCohortRun(row database.InstanceSpeedrunCohortRow) chroniclesdk.SpeedrunCohortRun {
 	var payload chroniclesdk.SpeedrunProofPayload
 	if err := json.Unmarshal(row.Proof, &payload); err != nil || payload.Proof == nil {
@@ -293,6 +304,9 @@ func SpeedrunCohortRun(row database.InstanceSpeedrunCohortRow) chroniclesdk.Spee
 		}
 	}
 
+	var encounterKillTimes []chroniclesdk.EncounterKillTime
+	_ = json.Unmarshal([]byte(row.EncounterKillTimesJson), &encounterKillTimes)
+
 	run := chroniclesdk.SpeedrunCohortRun{
 		InstanceID:            row.InstanceID,
 		Slug:                  row.HashedSlug.String,
@@ -302,6 +316,7 @@ func SpeedrunCohortRun(row database.InstanceSpeedrunCohortRow) chroniclesdk.Spee
 		RequirementsSatisfied: satisfied,
 		RequirementsTotal:     len(payload.Proof),
 		GuildName:             row.GuildName,
+		EncounterKillTimes:    encounterKillTimes,
 	}
 	if row.GuildID.Valid {
 		run.GuildID = &row.GuildID.UUID

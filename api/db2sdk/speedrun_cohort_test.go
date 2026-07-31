@@ -29,15 +29,16 @@ func TestSpeedrunCohortRun(t *testing.T) {
 	duration := completedAt.Sub(startedAt).Milliseconds()
 
 	run := SpeedrunCohortRun(database.InstanceSpeedrunCohortRow{
-		InstanceID:     uuid.New(),
-		HashedSlug:     pgtype.Text{String: "raid-slug", Valid: true},
-		StartTime:      pgtype.Timestamptz{Time: startedAt, Valid: true},
-		CompletionTime: pgtype.Timestamptz{Time: completedAt, Valid: true},
-		DurationMs:     duration,
-		Qualified:      true,
-		Proof:          proof,
-		GuildID:        uuid.NullUUID{UUID: guildID, Valid: true},
-		GuildName:      "Example Guild",
+		InstanceID:             uuid.New(),
+		HashedSlug:             pgtype.Text{String: "raid-slug", Valid: true},
+		StartTime:              pgtype.Timestamptz{Time: startedAt, Valid: true},
+		CompletionTime:         pgtype.Timestamptz{Time: completedAt, Valid: true},
+		DurationMs:             duration,
+		Qualified:              true,
+		Proof:                  proof,
+		GuildID:                uuid.NullUUID{UUID: guildID, Valid: true},
+		GuildName:              "Example Guild",
+		EncounterKillTimesJson: `[{"encounter_name":"Lucifron","duration_ms":184000}]`,
 	})
 
 	require.Equal(t, "raid-slug", run.Slug)
@@ -48,6 +49,10 @@ func TestSpeedrunCohortRun(t *testing.T) {
 	require.Equal(t, duration, *run.DurationMs)
 	require.Equal(t, completedAt, *run.CompletionTime)
 	require.Equal(t, guildID, *run.GuildID)
+	require.Equal(t, []chroniclesdk.EncounterKillTime{{
+		EncounterName: "Lucifron",
+		DurationMs:    184_000,
+	}}, run.EncounterKillTimes)
 }
 
 func TestInstanceOverviewMetrics(t *testing.T) {

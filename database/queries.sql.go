@@ -8682,6 +8682,43 @@ func (q *sqlQuerier) SiteStats(ctx context.Context) (SiteStatsRow, error) {
 	return i, err
 }
 
+const getInstanceEncounterKillTimes = `-- name: GetInstanceEncounterKillTimes :many
+SELECT
+    lie.name AS encounter_name,
+    (EXTRACT(EPOCH FROM (lie.end_time - lie.start_time)) * 1000)::bigint AS duration_ms
+FROM log_instance_encounters lie
+WHERE lie.instance_id = $1
+  AND lie.boss = true
+  AND lie.kill_type = 'clean'
+  AND lie.end_time > lie.start_time
+ORDER BY lie.start_time
+`
+
+type GetInstanceEncounterKillTimesRow struct {
+	EncounterName string `db:"encounter_name" json:"encounter_name"`
+	DurationMs    int64  `db:"duration_ms" json:"duration_ms"`
+}
+
+func (q *sqlQuerier) GetInstanceEncounterKillTimes(ctx context.Context, instanceID uuid.UUID) ([]GetInstanceEncounterKillTimesRow, error) {
+	rows, err := q.db.Query(ctx, getInstanceEncounterKillTimes, instanceID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []GetInstanceEncounterKillTimesRow
+	for rows.Next() {
+		var i GetInstanceEncounterKillTimesRow
+		if err := rows.Scan(&i.EncounterName, &i.DurationMs); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const getInstanceSpeedrun = `-- name: GetInstanceSpeedrun :one
 SELECT sr.instance_id, sr.instance_name, sr.realm_id, sr.guild_id, sr.qualified, sr.start_time, sr.completion_time, sr.duration_ms, sr.proof, sr.created_at, sr.addon_version, sr.parser_version_num, sr.addon_version_num, li.capabilities
 FROM instance_speedruns sr
@@ -8876,7 +8913,18 @@ deduped AS (
         iom.encounter_span_duration_ms,
         iom.total_combat_duration_ms,
         iom.total_boss_duration_ms,
-        iom.metrics_version
+        iom.metrics_version,
+        COALESCE((
+            SELECT jsonb_agg(jsonb_build_object(
+                'encounter_name', lie.name,
+                'duration_ms', (EXTRACT(EPOCH FROM (lie.end_time - lie.start_time)) * 1000)::bigint
+            ) ORDER BY lie.start_time)
+            FROM log_instance_encounters lie
+            WHERE lie.instance_id = sr.instance_id
+              AND lie.boss = true
+              AND lie.kill_type = 'clean'
+              AND lie.end_time > lie.start_time
+        ), '[]'::jsonb)::text AS encounter_kill_times_json
     FROM anchor a
     JOIN instance_speedruns sr ON sr.instance_name = a.name
     JOIN log_instances li ON li.id = sr.instance_id
@@ -8903,7 +8951,7 @@ deduped AS (
         sr.duration_ms ASC,
         sr.start_time DESC
 )
-SELECT instance_id, hashed_slug, start_time, completion_time, duration_ms, qualified, proof, guild_id, guild_name, requirements_complete, player_deaths, wipe_count, top_incoming_damage_abilities, encounter_span_duration_ms, total_combat_duration_ms, total_boss_duration_ms, metrics_version
+SELECT instance_id, hashed_slug, start_time, completion_time, duration_ms, qualified, proof, guild_id, guild_name, requirements_complete, player_deaths, wipe_count, top_incoming_damage_abilities, encounter_span_duration_ms, total_combat_duration_ms, total_boss_duration_ms, metrics_version, encounter_kill_times_json
 FROM deduped
 ORDER BY start_time DESC
 `
@@ -8933,6 +8981,7 @@ type InstanceSpeedrunCohortRow struct {
 	TotalCombatDurationMs      pgtype.Int8        `db:"total_combat_duration_ms" json:"total_combat_duration_ms"`
 	TotalBossDurationMs        pgtype.Int8        `db:"total_boss_duration_ms" json:"total_boss_duration_ms"`
 	MetricsVersion             pgtype.Int4        `db:"metrics_version" json:"metrics_version"`
+	EncounterKillTimesJson     string             `db:"encounter_kill_times_json" json:"encounter_kill_times_json"`
 }
 
 // Returns rankings-backed runs comparable to an anchor instance. Cohorts match
@@ -8971,6 +9020,7 @@ func (q *sqlQuerier) InstanceSpeedrunCohort(ctx context.Context, arg InstanceSpe
 			&i.TotalCombatDurationMs,
 			&i.TotalBossDurationMs,
 			&i.MetricsVersion,
+			&i.EncounterKillTimesJson,
 		); err != nil {
 			return nil, err
 		}

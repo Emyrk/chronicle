@@ -73,6 +73,7 @@ export function useSpeedrunPopulation(selection: PopulationSelection | undefined
             requirements_satisfied: proof.filter((requirement) => requirement.satisfied).length,
             requirements_total: proof.length,
             overview,
+            encounter_kill_times: speedrun?.encounter_kill_times ?? [],
           }],
         };
       }

@@ -24,6 +24,7 @@ function run({
     qualified,
     requirements_satisfied: complete ? 1 : 0,
     requirements_total: 1,
+    encounter_kill_times: [],
     overview: deaths === undefined || wipes === undefined ? undefined : {
       requirements_complete: complete,
       player_deaths: deaths,

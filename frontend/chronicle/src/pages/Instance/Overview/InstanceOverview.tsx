@@ -1,6 +1,7 @@
 import { useSearchParams } from "react-router-dom";
 import type { Instance } from "../InstancePage";
 import { RaidSummaryStrip } from "./RaidSummaryStrip";
+import { EncounterKillTimesPanel } from "./EncounterKillTimesPanel";
 import {
   parsePopulationSelection,
   serializePopulationSelection,
@@ -31,6 +32,7 @@ export function InstanceOverview({ instance }: { instance: Instance }) {
         fixedAnchorInstanceId={instance.id}
         onComparisonChange={setComparison}
       />
+      <EncounterKillTimesPanel primary={primary} comparison={comparison} />
     </section>
   );
 }

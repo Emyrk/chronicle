@@ -118,6 +118,7 @@ type sqlcQuerier interface {
 	// Guild Settings
 	GetGuildSettings(ctx context.Context, guildID uuid.UUID) (GuildSetting, error)
 	GetInstanceEncounterCharacterFights(ctx context.Context, instanceID uuid.UUID) ([]LogInstanceEncounterHostile, error)
+	GetInstanceEncounterKillTimes(ctx context.Context, instanceID uuid.UUID) ([]GetInstanceEncounterKillTimesRow, error)
 	GetInstanceLoot(ctx context.Context, arg GetInstanceLootParams) ([]GetInstanceLootRow, error)
 	GetInstanceOverviewMetrics(ctx context.Context, arg GetInstanceOverviewMetricsParams) (InstanceOverviewMetric, error)
 	GetInstanceSpeedrun(ctx context.Context, instanceID uuid.UUID) (GetInstanceSpeedrunRow, error)

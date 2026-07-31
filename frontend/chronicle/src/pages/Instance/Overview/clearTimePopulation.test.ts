@@ -12,6 +12,7 @@ function run(durationMs: number | undefined, qualified = true): SpeedrunCohortRu
     qualified,
     requirements_satisfied: durationMs !== undefined ? 1 : 0,
     requirements_total: 1,
+    encounter_kill_times: [],
   };
 }
 

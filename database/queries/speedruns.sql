@@ -11,6 +11,17 @@ FROM instance_speedruns sr
 JOIN log_instances li ON li.id = sr.instance_id
 WHERE sr.instance_id = $1;
 
+-- name: GetInstanceEncounterKillTimes :many
+SELECT
+    lie.name AS encounter_name,
+    (EXTRACT(EPOCH FROM (lie.end_time - lie.start_time)) * 1000)::bigint AS duration_ms
+FROM log_instance_encounters lie
+WHERE lie.instance_id = $1
+  AND lie.boss = true
+  AND lie.kill_type = 'clean'
+  AND lie.end_time > lie.start_time
+ORDER BY lie.start_time;
+
 -- name: InstanceSpeedrunCohort :many
 -- Returns rankings-backed runs comparable to an anchor instance. Cohorts match
 -- instance name, difficulty, and declared maximum raid size, use a historical
@@ -47,7 +58,18 @@ deduped AS (
         iom.encounter_span_duration_ms,
         iom.total_combat_duration_ms,
         iom.total_boss_duration_ms,
-        iom.metrics_version
+        iom.metrics_version,
+        COALESCE((
+            SELECT jsonb_agg(jsonb_build_object(
+                'encounter_name', lie.name,
+                'duration_ms', (EXTRACT(EPOCH FROM (lie.end_time - lie.start_time)) * 1000)::bigint
+            ) ORDER BY lie.start_time)
+            FROM log_instance_encounters lie
+            WHERE lie.instance_id = sr.instance_id
+              AND lie.boss = true
+              AND lie.kill_type = 'clean'
+              AND lie.end_time > lie.start_time
+        ), '[]'::jsonb)::text AS encounter_kill_times_json
     FROM anchor a
     JOIN instance_speedruns sr ON sr.instance_name = a.name
     JOIN log_instances li ON li.id = sr.instance_id

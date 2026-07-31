@@ -706,6 +706,12 @@ export interface DuplicateInstance {
 export type Duration = number;
 
 // From chroniclesdk/log.go
+export interface EncounterKillTime {
+    readonly encounter_name: string;
+    readonly duration_ms: number;
+}
+
+// From chroniclesdk/log.go
 export type EndState = "reset" | "slain" | "timeout";
 
 export const EndStates: EndState[] = ["reset", "slain", "timeout"];
@@ -2293,6 +2299,7 @@ export interface SpeedrunCohortRun {
     readonly guild_id?: string;
     readonly guild_name?: string;
     readonly overview?: InstanceOverviewMetrics;
+    readonly encounter_kill_times: readonly EncounterKillTime[];
 }
 
 // From chroniclesdk/log.go
@@ -2437,6 +2444,7 @@ export interface SpeedrunResult {
     readonly level_range?: SpeedrunLevelRangeResult;
     readonly data_source?: SpeedrunDataSourceStatus;
     readonly dps_rankings?: DpsRankingsStatus;
+    readonly encounter_kill_times: readonly EncounterKillTime[];
 }
 
 // From chroniclesdk/log.go

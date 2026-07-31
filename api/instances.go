@@ -181,6 +181,12 @@ func (api *API) InstanceSpeedrun(w http.ResponseWriter, r *http.Request) {
 	}
 
 	result := db2sdk.SpeedrunResult(sr)
+	killTimes, err := api.Opts.Zed.GetInstanceEncounterKillTimes(ctx, inst.ID)
+	if err != nil {
+		httpapi.InternalServerError(w, err)
+		return
+	}
+	result.EncounterKillTimes = db2sdk.EncounterKillTimes(killTimes)
 
 	// Attach version qualification status if requirements exist.
 	req, err := api.Opts.Zed.GetLeaderboardVersionRequirements(ctx, sr.InstanceName)
