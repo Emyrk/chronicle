@@ -22,8 +22,9 @@ function formatDelta(deltaMs: number): string {
   return `${sign}${formatClearDuration(Math.abs(deltaMs))}`;
 }
 
-const AXIS_MIN_PERCENT = -50;
+const AXIS_MIN_PERCENT = -100;
 const AXIS_MAX_PERCENT = 100;
+const AXIS_TICKS = [-100, -50, 0, 50, 100];
 
 function relativeToMedian(value: number, median: number): number {
   return ((value - median) / median) * 100;
@@ -46,7 +47,7 @@ function Distribution({
 
   return (
     <div className="relative h-7 w-full min-w-0">
-      {[-50, 0, 50, 100].map((tick) => (
+      {AXIS_TICKS.map((tick) => (
         <div
           key={tick}
           className={cn(
@@ -179,7 +180,7 @@ export function EncounterKillTimesPanel({
               <span />
               <span />
               <div className="relative h-4 font-mono normal-case tracking-normal">
-                {[-50, 0, 50, 100].map((tick) => (
+                {AXIS_TICKS.map((tick) => (
                   <span
                     key={tick}
                     className={cn(
