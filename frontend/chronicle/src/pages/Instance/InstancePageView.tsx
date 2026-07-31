@@ -48,7 +48,7 @@ import { InstanceHelpSheet } from "@/components/HelpSheet";
 import { ENCOUNTER_TIPS, ENTITY_TIPS, CLASS_TOGGLE_TIPS } from "@/constants/tips";
 import { InstanceMenu } from "./InstanceMenu";
 import { InstanceViewModeSwitch } from "./InstanceViewMode";
-import { parseInstanceViewMode, withInstanceViewMode, type InstanceViewMode } from "./instanceViewModeState";
+import { isInstanceOverviewEnabled, parseInstanceViewMode, withInstanceViewMode, type InstanceViewMode } from "./instanceViewModeState";
 import { InstanceOverview } from "./Overview/InstanceOverview";
 
 import { HeroicBadge } from "@/components/HeroicBadge";
@@ -1898,8 +1898,9 @@ export function InstancePageView({
 
   // URL state for explainer mode (simple ?explain=panel_type)
   const [searchParams, setSearchParams] = useSearchParams();
+  const overviewEnabled = isInstanceOverviewEnabled(supportsOverview, searchParams.get("debug"));
   const requestedViewMode = parseInstanceViewMode(searchParams.get("view"));
-  const viewMode: InstanceViewMode = supportsOverview ? requestedViewMode : "encounters";
+  const viewMode: InstanceViewMode = overviewEnabled ? requestedViewMode : "encounters";
   const isEncounterView = viewMode === "encounters";
   const setViewMode = useCallback((mode: InstanceViewMode) => {
     setSearchParams(prev => {
@@ -3058,7 +3059,7 @@ export function InstancePageView({
                   )}
                 </div>
               )}
-              {supportsOverview && <InstanceViewModeSwitch value={viewMode} onChange={setViewMode} />}
+              {overviewEnabled && <InstanceViewModeSwitch value={viewMode} onChange={setViewMode} />}
             </div>
           )}
           {isMobile && (
@@ -3077,8 +3078,8 @@ export function InstancePageView({
                 duplicateGroupId={duplicateGroupId}
                 canAdminLogs={canAdminLogs}
                 isMobile={isMobile}
-                viewMode={supportsOverview ? viewMode : undefined}
-                onViewModeChange={supportsOverview ? setViewMode : undefined}
+                viewMode={overviewEnabled ? viewMode : undefined}
+                onViewModeChange={overviewEnabled ? setViewMode : undefined}
                 isLoggedIn={isLoggedIn}
                 onShareWithLayout={() => { void handleShareView(); }}
                 onShareWithoutLayout={() => { void handleShareWithoutLayout(); }}

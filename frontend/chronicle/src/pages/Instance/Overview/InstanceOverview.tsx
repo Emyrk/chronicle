@@ -1,6 +1,5 @@
 import { useSearchParams } from "react-router-dom";
 import type { Instance } from "../InstancePage";
-import { ClearTimePanel } from "./ClearTimePanel";
 import { RaidSummaryStrip } from "./RaidSummaryStrip";
 import {
   parsePopulationSelection,
@@ -32,8 +31,6 @@ export function InstanceOverview({ instance }: { instance: Instance }) {
         fixedAnchorInstanceId={instance.id}
         onComparisonChange={setComparison}
       />
-
-      <ClearTimePanel primary={primary} comparison={comparison} />
     </section>
   );
 }

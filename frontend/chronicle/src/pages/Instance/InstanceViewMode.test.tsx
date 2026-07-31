@@ -1,7 +1,7 @@
 import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it } from "vitest";
 import { InstanceViewModeSwitch } from "./InstanceViewMode";
-import { parseInstanceViewMode, withInstanceViewMode } from "./instanceViewModeState";
+import { isInstanceOverviewEnabled, parseInstanceViewMode, withInstanceViewMode } from "./instanceViewModeState";
 
 describe("parseInstanceViewMode", () => {
   it("keeps encounters as the absent and invalid default", () => {
@@ -11,6 +11,15 @@ describe("parseInstanceViewMode", () => {
 
   it("accepts the overview URL mode", () => {
     expect(parseInstanceViewMode("overview")).toBe("overview");
+  });
+});
+
+describe("isInstanceOverviewEnabled", () => {
+  it("requires both page support and debug=true", () => {
+    expect(isInstanceOverviewEnabled(true, "true")).toBe(true);
+    expect(isInstanceOverviewEnabled(true, null)).toBe(false);
+    expect(isInstanceOverviewEnabled(true, "1")).toBe(false);
+    expect(isInstanceOverviewEnabled(false, "true")).toBe(false);
   });
 });
 
