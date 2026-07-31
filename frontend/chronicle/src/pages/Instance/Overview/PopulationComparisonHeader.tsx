@@ -107,6 +107,7 @@ function PopulationSelector({
 export function PopulationComparisonHeader({
   primary,
   comparison,
+  heading,
   showPrimary = false,
   comparisonEligible = true,
   eligibilityLoading = false,
@@ -115,20 +116,26 @@ export function PopulationComparisonHeader({
 }: {
   primary?: string;
   comparison?: string;
+  heading?: string;
   showPrimary?: boolean;
   comparisonEligible?: boolean;
   eligibilityLoading?: boolean;
   onPrimaryChange?: (instanceID?: string) => void;
   onComparisonChange?: (instanceID?: string) => void;
 }) {
-  if (!showPrimary && !eligibilityLoading && !comparisonEligible) return null;
+  if (!heading && !showPrimary && !eligibilityLoading && !comparisonEligible) return null;
 
   return (
-    <Card className="mb-4 p-4">
+    <Card className="mb-4 p-4 sm:pr-6">
       <div className={cn(
         "flex flex-col gap-3 sm:flex-row sm:items-end",
-        !showPrimary && "sm:justify-end",
+        !showPrimary && "sm:justify-between",
       )}>
+        {heading && (
+          <div className="flex min-h-9 items-center">
+            <h2 className="text-lg font-semibold">{heading}</h2>
+          </div>
+        )}
         {showPrimary && (
           <PopulationSelector
             label="Primary population"
