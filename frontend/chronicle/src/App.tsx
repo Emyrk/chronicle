@@ -13,6 +13,7 @@ import { Upload } from "./pages/Upload/Upload"
 import { LogsList } from "./pages/Logs/LogsList"
 import { LogDetail, LogDetailByHash } from "./pages/Logs/LogDetail"
 import { InstancePage } from "./pages/Instance/InstancePage"
+import { PopulationComparisonPage } from "./pages/Instance/Overview/PopulationComparisonPage"
 import { SharedViewRedirect } from "./pages/SharedViewRedirect"
 import { RecentRaids } from "./pages/Recent/RecentRaids"
 import { ProtoDecode } from "./pages/Debug/ProtoDecode"
@@ -108,6 +109,7 @@ function App() {
         <Route path="/logs" element={<LogsList />} />
         <Route path="/logs/:logId" element={<LogDetail />} />
         <Route path="/logs/file/:fileHash" element={<LogDetailByHash />} />
+        <Route path="/instances/compare" element={<PopulationComparisonPage />} />
         <Route path="/instances/:instanceId" element={<InstancePage />} />
         <Route path="/s/:code" element={<SharedViewRedirect />} />
         <Route path="/guilds" element={<GuildSearchPage />} />
