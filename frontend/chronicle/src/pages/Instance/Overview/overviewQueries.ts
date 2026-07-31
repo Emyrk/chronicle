@@ -48,24 +48,30 @@ export function useSpeedrunPopulation(selection: PopulationSelection | undefined
           fetch(`${instanceURL}/speedrun`),
           fetch(`${instanceURL}/overview`),
         ]);
-        if (!speedrunResponse.ok) throw new Error("This raid does not have speedrun data");
-        const speedrun = await speedrunResponse.json() as SpeedrunResult;
+        if (!speedrunResponse.ok && !overviewResponse.ok) {
+          throw new Error("This raid does not have Overview data");
+        }
+        const speedrun = speedrunResponse.ok
+          ? await speedrunResponse.json() as SpeedrunResult
+          : undefined;
         const overview = overviewResponse.ok
           ? await overviewResponse.json() as InstanceOverviewMetrics
           : undefined;
+        const proof = speedrun?.proof ?? [];
         return {
           label: `Raid ${selection.instanceId}`,
           selection,
           runs: [{
             instance_id: selection.instanceId,
             slug: selection.instanceId,
-            start_time: speedrun.start_time,
-            completion_time: speedrun.completion_time || undefined,
-            duration_ms: speedrun.duration_ms > 0 ? speedrun.duration_ms : undefined,
-            requirements_complete: speedrun.proof.length > 0 && speedrun.proof.every((proof) => proof.satisfied),
-            qualified: speedrun.qualified,
-            requirements_satisfied: speedrun.proof.filter((proof) => proof.satisfied).length,
-            requirements_total: speedrun.proof.length,
+            start_time: speedrun?.start_time ?? "",
+            completion_time: speedrun?.completion_time || undefined,
+            duration_ms: speedrun && speedrun.duration_ms > 0 ? speedrun.duration_ms : undefined,
+            requirements_complete: overview?.requirements_complete
+              ?? (proof.length > 0 && proof.every((requirement) => requirement.satisfied)),
+            qualified: speedrun?.qualified ?? false,
+            requirements_satisfied: proof.filter((requirement) => requirement.satisfied).length,
+            requirements_total: proof.length,
             overview,
           }],
         };

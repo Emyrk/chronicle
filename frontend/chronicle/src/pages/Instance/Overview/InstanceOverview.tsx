@@ -1,8 +1,7 @@
 import { useSearchParams } from "react-router-dom";
 import type { Instance } from "../InstancePage";
-import { PopulationComparisonHeader } from "./PopulationComparisonHeader";
 import { ClearTimePanel } from "./ClearTimePanel";
-import { useSpeedrunPopulation } from "./overviewQueries";
+import { RaidSummaryStrip } from "./RaidSummaryStrip";
 import {
   parsePopulationSelection,
   serializePopulationSelection,
@@ -14,27 +13,24 @@ export function InstanceOverview({ instance }: { instance: Instance }) {
   const comparison = parsePopulationSelection(searchParams.get("comparison"), instance.id);
 
   const primary = { kind: "instance", instanceId: instance.id } as const;
-  const primaryQuery = useSpeedrunPopulation(primary);
+  const setComparison = (selection: PopulationSelection | undefined) => {
+    setSearchParams((previous) => {
+      const next = new URLSearchParams(previous);
+      const serialized = serializePopulationSelection(selection, instance.id);
+      if (serialized) next.set("comparison", serialized);
+      else next.delete("comparison");
+      return next;
+    }, { replace: true });
+  };
 
   return (
     <section className="min-w-0 flex-1" aria-label="Instance overview">
-      <PopulationComparisonHeader
-        heading="Instance Overview"
-        description="A summary of this instance run."
+      <RaidSummaryStrip
+        primary={primary}
         comparison={comparison}
-        comparisonEligible={primaryQuery.data !== undefined}
-        eligibilityLoading={primaryQuery.isLoading}
         guildAvailable={Boolean(instance.guild)}
         fixedAnchorInstanceId={instance.id}
-        onComparisonChange={(selection: PopulationSelection | undefined) => {
-          setSearchParams((previous) => {
-            const next = new URLSearchParams(previous);
-            const serialized = serializePopulationSelection(selection, instance.id);
-            if (serialized) next.set("comparison", serialized);
-            else next.delete("comparison");
-            return next;
-          }, { replace: true });
-        }}
+        onComparisonChange={setComparison}
       />
 
       <ClearTimePanel primary={primary} comparison={comparison} />

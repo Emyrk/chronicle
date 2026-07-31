@@ -27,10 +27,11 @@ interface PopulationSelectorProps {
   guildAvailable?: boolean;
   fixedAnchorInstanceId?: string;
   className?: string;
+  compact?: boolean;
   onChange?: (selection?: PopulationSelection) => void;
 }
 
-function PopulationSelector({
+export function PopulationSelector({
   label,
   value,
   allowNone = false,
@@ -38,6 +39,7 @@ function PopulationSelector({
   guildAvailable = true,
   fixedAnchorInstanceId,
   className,
+  compact = false,
   onChange,
 }: PopulationSelectorProps) {
   const buttonLabel = value
@@ -72,18 +74,23 @@ function PopulationSelector({
   };
 
   return (
-    <div className={cn("min-w-0 flex-1", className)}>
-      <p className="mb-1.5 text-[11px] font-semibold uppercase tracking-[0.12em] text-muted-foreground">
-        {label}
-      </p>
+    <div className={cn(compact ? "shrink-0" : "min-w-0 flex-1", className)}>
+      {!compact && (
+        <p className="mb-1.5 text-[11px] font-semibold uppercase tracking-[0.12em] text-muted-foreground">
+          {label}
+        </p>
+      )}
       <DropdownMenu modal={false}>
         <DropdownMenuTrigger asChild>
           <Button
             variant="outline"
-            className="w-full justify-between gap-3 bg-background/50 sm:min-w-52"
+            className={cn(
+              "justify-between gap-3 bg-background/50",
+              compact ? "h-8 w-auto px-3 text-xs" : "w-full sm:min-w-52",
+            )}
             disabled={disabled}
           >
-            <span className="truncate">{buttonLabel}</span>
+            <span className="truncate">{compact ? "Change" : buttonLabel}</span>
             {disabled ? (
               <Loader2 className="h-3.5 w-3.5 shrink-0 animate-spin text-muted-foreground" />
             ) : (
