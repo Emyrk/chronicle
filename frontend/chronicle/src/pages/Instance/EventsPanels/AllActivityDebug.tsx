@@ -34,7 +34,7 @@ const STREAM_CONFIG: Record<StreamType, { icon: React.ElementType; color: string
   resource_change: { icon: Zap, color: "text-yellow-500", label: "Resource", description: "Health, mana, rage, energy, and other resource gains or losses." },
   extra_attack: { icon: CircleFadingPlus, color: "text-orange-500", label: "Extra Attack", description: "Additional attacks granted by effects such as Windfury." },
   ressurection: { icon: HeartPulse, color: "text-emerald-400", label: "Resurrection", description: "Players or units restored to life by a resurrection spell." },
-  slain: { icon: Skull, color: "text-gray-500", label: "Slain", description: "Unit deaths and the final-damage attribution when available." },
+  slain: { icon: Skull, color: "text-pink-400", label: "Slain", description: "Unit deaths and the final-damage attribution when available." },
   aura: { icon: Sparkles, color: "text-cyan-500", label: "Aura", description: "Buff and debuff applications, removals, and stack changes." },
   spell_go: { icon: Crosshair, color: "text-amber-500", label: "Spell Go", description: "Finish of a Spell Start, including target hit and miss counts." },
   aura_cast: { icon: WandSparkles, color: "text-teal-500", label: "Aura Cast", description: "Mirrors Auras, with duration and periodic tick timing." },
