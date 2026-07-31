@@ -4,9 +4,15 @@ import { PopulationComparisonHeader } from "./PopulationComparisonHeader";
 
 describe("PopulationComparisonHeader", () => {
   it("shows only the comparison selector for a fixed primary instance", () => {
-    const markup = renderToStaticMarkup(<PopulationComparisonHeader heading="Overview" />);
+    const markup = renderToStaticMarkup(
+      <PopulationComparisonHeader
+        heading="Instance Overview"
+        description="A summary of this instance run."
+      />,
+    );
 
-    expect(markup).toContain("Overview");
+    expect(markup).toContain("Instance Overview");
+    expect(markup).toContain("A summary of this instance run.");
     expect(markup).toContain("Compare against");
     expect(markup).toContain("No comparison");
     expect(markup).not.toContain("Primary population");
@@ -30,10 +36,10 @@ describe("PopulationComparisonHeader", () => {
 
   it("keeps the instance Overview heading when comparisons are unavailable", () => {
     const markup = renderToStaticMarkup(
-      <PopulationComparisonHeader heading="Overview" comparisonEligible={false} />,
+      <PopulationComparisonHeader heading="Instance Overview" comparisonEligible={false} />,
     );
 
-    expect(markup).toContain("Overview");
+    expect(markup).toContain("Instance Overview");
     expect(markup).not.toContain("Compare against");
   });
 });

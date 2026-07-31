@@ -108,6 +108,7 @@ export function PopulationComparisonHeader({
   primary,
   comparison,
   heading,
+  description,
   showPrimary = false,
   comparisonEligible = true,
   eligibilityLoading = false,
@@ -117,6 +118,7 @@ export function PopulationComparisonHeader({
   primary?: string;
   comparison?: string;
   heading?: string;
+  description?: string;
   showPrimary?: boolean;
   comparisonEligible?: boolean;
   eligibilityLoading?: boolean;
@@ -132,8 +134,11 @@ export function PopulationComparisonHeader({
         !showPrimary && "sm:justify-between",
       )}>
         {heading && (
-          <div className="flex min-h-9 items-center">
+          <div className="flex min-h-9 flex-col justify-center">
             <h2 className="text-lg font-semibold">{heading}</h2>
+            {description && (
+              <p className="mt-0.5 text-sm text-muted-foreground">{description}</p>
+            )}
           </div>
         )}
         {showPrimary && (

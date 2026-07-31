@@ -24,7 +24,8 @@ export function InstanceOverview({ instance }: { instance: Instance }) {
   return (
     <section className="min-w-0 flex-1" aria-label="Instance overview">
       <PopulationComparisonHeader
-        heading="Overview"
+        heading="Instance Overview"
+        description="A summary of this instance run."
         comparison={comparison}
         comparisonEligible={speedrun !== null && speedrun !== undefined}
         eligibilityLoading={isLoading}
