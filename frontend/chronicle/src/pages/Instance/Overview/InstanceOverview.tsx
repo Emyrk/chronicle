@@ -32,7 +32,9 @@ export function InstanceOverview({ instance }: { instance: Instance }) {
         fixedAnchorInstanceId={instance.id}
         onComparisonChange={setComparison}
       />
-      <EncounterKillTimesPanel primary={primary} comparison={comparison} />
+      <div className="grid gap-4 lg:grid-cols-2">
+        <EncounterKillTimesPanel primary={primary} comparison={comparison} />
+      </div>
     </section>
   );
 }

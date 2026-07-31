@@ -2,6 +2,7 @@ import { Loader2 } from "lucide-react";
 import { Card } from "@/components/ui/Card/Card";
 import { cn } from "@/lib/utils";
 import { formatClearDuration } from "@/pages/GuildPage/panels/clearTimeUtils";
+import { parseBgColor, parseBorderColor, parseColor } from "../parseColors";
 import type { PopulationSelection } from "./populationSelectionState";
 import { useSpeedrunPopulation } from "./overviewQueries";
 import {
@@ -27,7 +28,7 @@ function Distribution({
   const position = (value: number) => `${Math.min(100, Math.max(0, value / scaleMax * 100))}%`;
 
   return (
-    <div className="relative h-5 min-w-24">
+    <div className="relative h-7 min-w-24">
       <div className="absolute inset-x-0 top-1/2 h-2 -translate-y-1/2 rounded-sm bg-muted/45" />
       {summary.count > 1 ? (
         <>
@@ -47,10 +48,12 @@ function Distribution({
         title={`Median ${formatClearDuration(summary.median)}`}
       />
       <div
-        className="absolute top-1/2 h-4 w-0.5 -translate-x-1/2 -translate-y-1/2 rounded-full bg-white shadow-[0_0_4px_rgba(255,255,255,0.65)]"
+        className="absolute top-1/2 h-6 w-[3px] -translate-x-1/2 -translate-y-1/2 rounded-full bg-white shadow-[0_0_8px_2px_rgba(255,255,255,0.55)]"
         style={{ left: position(primaryDurationMs) }}
-        title={`This raid ${formatClearDuration(primaryDurationMs)}`}
-      />
+        title={`Your time ${formatClearDuration(primaryDurationMs)}`}
+      >
+        <span className="absolute left-1/2 top-0 size-2 -translate-x-1/2 -translate-y-1/2 rotate-45 rounded-[1px] border border-background bg-white" />
+      </div>
     </div>
   );
 }
@@ -81,7 +84,13 @@ export function EncounterKillTimesPanel({
           <h2 className="truncate text-sm font-semibold">Encounter breakdown</h2>
           <span className="shrink-0 text-[11px] text-muted-foreground">Kill time per boss</span>
         </div>
-        <span className="text-[11px] text-muted-foreground">Compared to median</span>
+        <div className="flex items-center gap-3 text-[11px] text-muted-foreground">
+          <span className="flex items-center gap-1.5 text-foreground/90">
+            <span className="h-3.5 w-[3px] rounded-full bg-white shadow-[0_0_5px_rgba(255,255,255,0.7)]" />
+            Your time
+          </span>
+          <span>Compared to median</span>
+        </div>
       </div>
 
       {!comparison ? (
@@ -136,7 +145,12 @@ export function EncounterKillTimesPanel({
                     </span>
                     {percentile !== null && (
                       <span
-                        className="hidden w-8 rounded bg-muted/50 px-1 py-0.5 text-center text-[10px] text-muted-foreground md:inline"
+                        className={cn(
+                          "hidden min-w-9 rounded border px-1.5 py-0.5 text-center text-[10px] font-bold md:inline",
+                          parseColor(percentile),
+                          parseBgColor(percentile),
+                          parseBorderColor(percentile),
+                        )}
                         title={`${percentile}th percentile for kill speed among ${comparisonSummary.count} comparable raids`}
                       >
                         P{percentile}
