@@ -1,6 +1,6 @@
 export type PopulationSelection =
   | { kind: "instance"; instanceId: string }
-  | { kind: "cohort"; scope: "server" | "guild"; anchorInstanceId: string; lookbackDays: number };
+  | { kind: "cohort"; scope: "server" | "realm" | "guild"; anchorInstanceId: string; lookbackDays: number };
 
 export function parseInstanceURL(value: string): string | null {
   try {
@@ -19,7 +19,7 @@ export function parsePopulationSelection(
   fixedAnchorInstanceId?: string,
 ): PopulationSelection | undefined {
   if (!value) return undefined;
-  if (value === "server" || value === "guild") {
+  if (value === "server" || value === "realm" || value === "guild") {
     return fixedAnchorInstanceId
       ? { kind: "cohort", scope: value, anchorInstanceId: fixedAnchorInstanceId, lookbackDays: 60 }
       : undefined;
@@ -32,7 +32,7 @@ export function parsePopulationSelection(
   const id = decodeURIComponent(value.slice(separator + 1));
   if (!id) return undefined;
   if (kind === "instance") return { kind: "instance", instanceId: id };
-  if (kind === "server" || kind === "guild") {
+  if (kind === "server" || kind === "realm" || kind === "guild") {
     return { kind: "cohort", scope: kind, anchorInstanceId: id, lookbackDays: 60 };
   }
   return undefined;
@@ -50,5 +50,6 @@ export function serializePopulationSelection(
 
 export function formatPopulationSelection(selection: PopulationSelection): string {
   if (selection.kind === "instance") return `Raid ${selection.instanceId}`;
-  return `${selection.scope === "server" ? "Server" : "Guild"} cohort · ${selection.lookbackDays} days`;
+  const scopeLabel = selection.scope === "server" ? "Server" : selection.scope === "realm" ? "Realm" : "Guild";
+  return `${scopeLabel} cohort · ${selection.lookbackDays} days`;
 }

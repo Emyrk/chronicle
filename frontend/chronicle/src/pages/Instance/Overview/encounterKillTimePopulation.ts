@@ -59,3 +59,9 @@ export function killTimePercentile(durationMs: number, sortedValues: readonly nu
   const atLeastAsSlow = sortedValues.filter((value) => value >= durationMs).length;
   return Math.round((atLeastAsSlow / sortedValues.length) * 100);
 }
+
+export function averageKillTimePercentile(percentiles: readonly (number | null)[]): number | null {
+  const available = percentiles.filter((percentile): percentile is number => percentile !== null);
+  if (available.length === 0) return null;
+  return Math.round(available.reduce((sum, percentile) => sum + percentile, 0) / available.length);
+}

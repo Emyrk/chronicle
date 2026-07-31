@@ -227,9 +227,9 @@ func (api *API) InstanceSpeedrunCohort(w http.ResponseWriter, r *http.Request) {
 	inst := httpmw.Instance(ctx)
 
 	scope := chroniclesdk.SpeedrunCohortScope(r.URL.Query().Get("scope"))
-	if scope != chroniclesdk.SpeedrunCohortScopeServer && scope != chroniclesdk.SpeedrunCohortScopeGuild {
+	if scope != chroniclesdk.SpeedrunCohortScopeServer && scope != chroniclesdk.SpeedrunCohortScopeRealm && scope != chroniclesdk.SpeedrunCohortScopeGuild {
 		httpapi.Write(ctx, w, http.StatusBadRequest, chroniclesdk.Response{
-			Message: "Scope must be server or guild",
+			Message: "Scope must be server, realm, or guild",
 		})
 		return
 	}
@@ -284,7 +284,10 @@ func (api *API) InstanceSpeedrunCohort(w http.ResponseWriter, r *http.Request) {
 
 	label := inst.ServerName.String
 	var guildID *uuid.UUID
-	if scope == chroniclesdk.SpeedrunCohortScopeGuild {
+	switch scope {
+	case chroniclesdk.SpeedrunCohortScopeRealm:
+		label = inst.RealmName
+	case chroniclesdk.SpeedrunCohortScopeGuild:
 		label = inst.GuildName.String
 		guildID = &inst.GuildID.UUID
 	}

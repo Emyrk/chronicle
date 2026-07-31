@@ -2303,9 +2303,9 @@ export interface SpeedrunCohortRun {
 }
 
 // From chroniclesdk/log.go
-export type SpeedrunCohortScope = "guild" | "server";
+export type SpeedrunCohortScope = "guild" | "realm" | "server";
 
-export const SpeedrunCohortScopes: SpeedrunCohortScope[] = ["guild", "server"];
+export const SpeedrunCohortScopes: SpeedrunCohortScope[] = ["guild", "realm", "server"];
 
 // From chroniclesdk/log.go
 /**

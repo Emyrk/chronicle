@@ -8890,6 +8890,7 @@ WITH anchor AS (
         li.max_players,
         li.start_time,
         li.guild_id,
+        li.realm_id,
         wsr.server_id
     FROM log_instances li
     JOIN wow_server_realms wsr ON wsr.id = li.realm_id
@@ -8942,6 +8943,7 @@ deduped AS (
       AND sr.addon_version_num >= COALESCE(lvr.min_addon_version_num, 0)
       AND CASE
           WHEN $4 :: text = 'guild' THEN a.guild_id IS NOT NULL AND sr.guild_id = a.guild_id
+          WHEN $4 :: text = 'realm' THEN sr.realm_id = a.realm_id
           ELSE wsr.server_id = a.server_id
       END
     ORDER BY
@@ -8986,8 +8988,8 @@ type InstanceSpeedrunCohortRow struct {
 
 // Returns rankings-backed runs comparable to an anchor instance. Cohorts match
 // instance name, difficulty, and declared maximum raid size, use a historical
-// window ending at the anchor start time, and stay within the anchor's server
-// or guild. Duplicate uploads are collapsed without reducing to one run per guild.
+// window ending at the anchor start time, and stay within the anchor's server,
+// realm, or guild. Duplicate uploads are collapsed without reducing to one run per guild.
 func (q *sqlQuerier) InstanceSpeedrunCohort(ctx context.Context, arg InstanceSpeedrunCohortParams) ([]InstanceSpeedrunCohortRow, error) {
 	rows, err := q.db.Query(ctx, instanceSpeedrunCohort,
 		arg.InstanceID,

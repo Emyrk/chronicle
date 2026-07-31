@@ -65,7 +65,7 @@ export function PopulationSelector({
     if (instanceID) onChange?.({ kind: "instance", instanceId: instanceID });
   };
 
-  const selectCohort = (scope: "server" | "guild") => {
+  const selectCohort = (scope: "server" | "realm" | "guild") => {
     const anchorInstanceId = fixedAnchorInstanceId
       ?? requestAnchorInstance(`Paste an instance URL from the ${scope} population`);
     if (!anchorInstanceId) return;
@@ -117,6 +117,10 @@ export function PopulationSelector({
             </DropdownMenuRadioItem>
             <DropdownMenuRadioItem value="server" onSelect={() => selectCohort("server")}>
               Server cohort
+              <DropdownMenuShortcut>60 days</DropdownMenuShortcut>
+            </DropdownMenuRadioItem>
+            <DropdownMenuRadioItem value="realm" onSelect={() => selectCohort("realm")}>
+              Realm cohort
               <DropdownMenuShortcut>60 days</DropdownMenuShortcut>
             </DropdownMenuRadioItem>
             <DropdownMenuRadioItem

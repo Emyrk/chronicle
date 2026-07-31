@@ -353,6 +353,7 @@ type SpeedrunCohortScope string
 
 const (
 	SpeedrunCohortScopeServer SpeedrunCohortScope = "server"
+	SpeedrunCohortScopeRealm  SpeedrunCohortScope = "realm"
 	SpeedrunCohortScopeGuild  SpeedrunCohortScope = "guild"
 )
 

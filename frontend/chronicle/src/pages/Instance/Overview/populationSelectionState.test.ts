@@ -19,13 +19,15 @@ describe("parseInstanceURL", () => {
 });
 
 describe("population selection state", () => {
-  it("round-trips instance, server, and guild populations", () => {
+  it("round-trips instance, server, realm, and guild populations", () => {
     const instance = { kind: "instance", instanceId: "raid-123" } as const;
     const server = { kind: "cohort", scope: "server", anchorInstanceId: "raid-123", lookbackDays: 60 } as const;
+    const realm = { kind: "cohort", scope: "realm", anchorInstanceId: "raid-123", lookbackDays: 60 } as const;
     const guild = { kind: "cohort", scope: "guild", anchorInstanceId: "raid-123", lookbackDays: 60 } as const;
 
     expect(parsePopulationSelection(serializePopulationSelection(instance)!)).toEqual(instance);
     expect(parsePopulationSelection(serializePopulationSelection(server)!)).toEqual(server);
+    expect(parsePopulationSelection(serializePopulationSelection(realm)!)).toEqual(realm);
     expect(parsePopulationSelection(serializePopulationSelection(guild)!)).toEqual(guild);
   });
 
@@ -34,6 +36,12 @@ describe("population selection state", () => {
       { kind: "cohort", scope: "server", anchorInstanceId: "raid-123", lookbackDays: 60 },
       "raid-123",
     )).toBe("server");
+    expect(parsePopulationSelection("realm", "raid-123")).toEqual({
+      kind: "cohort",
+      scope: "realm",
+      anchorInstanceId: "raid-123",
+      lookbackDays: 60,
+    });
     expect(parsePopulationSelection("guild", "raid-123")).toEqual({
       kind: "cohort",
       scope: "guild",
@@ -44,6 +52,12 @@ describe("population selection state", () => {
 
   it("labels unresolved populations without fetching full instances", () => {
     expect(formatPopulationSelection({ kind: "instance", instanceId: "raid-123" })).toBe("Raid raid-123");
+    expect(formatPopulationSelection({
+      kind: "cohort",
+      scope: "realm",
+      anchorInstanceId: "raid-123",
+      lookbackDays: 60,
+    })).toBe("Realm cohort · 60 days");
     expect(formatPopulationSelection({
       kind: "cohort",
       scope: "server",

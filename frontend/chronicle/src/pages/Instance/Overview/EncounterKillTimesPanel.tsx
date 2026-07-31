@@ -12,6 +12,7 @@ import { parseBgColor, parseBorderColor, parseColor } from "../parseColors";
 import type { PopulationSelection } from "./populationSelectionState";
 import { useSpeedrunPopulation } from "./overviewQueries";
 import {
+  averageKillTimePercentile,
   killTimePercentile,
   summarizeEncounterKillTimes,
   type EncounterKillTimeSummary,
@@ -74,7 +75,7 @@ function Distribution({
       {primaryBeyondAxis ? (
         <div
           className={cn(
-            "absolute top-1/2 -translate-y-1/2 font-mono text-sm font-bold tracking-[-0.2em] text-orange-400",
+            "absolute top-1/2 -translate-y-1/2 font-mono text-sm font-bold tracking-[-0.2em] text-primary drop-shadow-[0_0_4px_color-mix(in_oklab,var(--primary)_55%,transparent)]",
             primaryRelative < AXIS_MIN_PERCENT ? "left-0" : "right-0",
           )}
           title={`Your time is ${primaryRelative > 0 ? "+" : ""}${Math.round(primaryRelative)}% from median`}
@@ -83,7 +84,7 @@ function Distribution({
         </div>
       ) : (
         <div
-          className="absolute top-1/2 size-3 -translate-x-1/2 -translate-y-1/2 rotate-45 border border-orange-200 bg-orange-500 shadow-[0_0_0_2px_rgba(0,0,0,0.8)]"
+          className="absolute top-1/2 size-2.5 -translate-x-1/2 -translate-y-1/2 rotate-45 border border-primary-foreground/70 bg-primary shadow-[0_0_0_2px_rgba(0,0,0,0.85),0_0_5px_color-mix(in_oklab,var(--primary)_55%,transparent)]"
           style={{ left: position(primaryDurationMs) }}
         />
       )}
@@ -128,21 +129,41 @@ export function EncounterKillTimesPanel({
   const comparisonSummaries = summarizeEncounterKillTimes(comparisonQuery.data?.runs ?? []);
   const rows = [...primarySummaries].flatMap(([encounterName, primarySummary]) => {
     const comparisonSummary = comparisonSummaries.get(encounterName);
-    return comparisonSummary ? [{ encounterName, primarySummary, comparisonSummary }] : [];
+    if (!comparisonSummary) return [];
+    return [{
+      encounterName,
+      primarySummary,
+      comparisonSummary,
+      percentile: killTimePercentile(primarySummary.median, comparisonSummary.values),
+    }];
   });
+  const averageParse = averageKillTimePercentile(rows.map((row) => row.percentile));
   const loading = primaryQuery.isLoading || comparisonQuery.isLoading;
   const error = primaryQuery.error ?? comparisonQuery.error;
 
   return (
     <Card className="overflow-hidden border-border/80 bg-card/75 shadow-sm">
       <div className="flex min-h-12 flex-wrap items-center justify-between gap-x-4 gap-y-2 border-b px-5 py-3">
-        <div className="flex min-w-0 items-baseline gap-2.5">
+        <div className="flex min-w-0 flex-wrap items-center gap-2.5">
           <h2 className="truncate text-sm font-semibold">Encounter breakdown</h2>
           <span className="shrink-0 text-[11px] text-muted-foreground">Kill time vs comparison median</span>
+          {averageParse !== null && (
+            <span
+              className={cn(
+                "flex items-center gap-1.5 rounded border px-2 py-0.5 text-[10px]",
+                parseBgColor(averageParse),
+                parseBorderColor(averageParse),
+              )}
+              title={`Arithmetic mean of ${rows.filter((row) => row.percentile !== null).length} encounter parse scores`}
+            >
+              <span className="text-muted-foreground">Avg Parse</span>
+              <span className={cn("font-mono font-bold", parseColor(averageParse))}>{averageParse}</span>
+            </span>
+          )}
         </div>
         <div className="flex flex-wrap items-center gap-3 text-[10px] text-muted-foreground">
           <span className="flex items-center gap-1.5 text-foreground/90">
-            <span className="size-2.5 rotate-45 border border-orange-200 bg-orange-500" />
+            <span className="size-2 rotate-45 border border-primary-foreground/70 bg-primary shadow-[0_0_4px_color-mix(in_oklab,var(--primary)_55%,transparent)]" />
             Your time
           </span>
           <span className="flex items-center gap-1.5">
@@ -150,7 +171,7 @@ export function EncounterKillTimesPanel({
             Comparison spread
           </span>
           <span className="flex items-center gap-1.5">
-            <span className="font-mono font-bold tracking-[-0.2em] text-orange-400">›››</span>
+            <span className="font-mono font-bold tracking-[-0.2em] text-primary">›››</span>
             Beyond axis
           </span>
         </div>
@@ -197,11 +218,10 @@ export function EncounterKillTimesPanel({
               <span className="text-right">Median</span>
               <span className="text-right">Delta</span>
             </div>
-            {rows.map(({ encounterName, primarySummary, comparisonSummary }) => {
+            {rows.map(({ encounterName, primarySummary, comparisonSummary, percentile }) => {
               const primaryDurationMs = primarySummary.median;
               const delta = primaryDurationMs - comparisonSummary.median;
               const deltaPercent = relativeToMedian(primaryDurationMs, comparisonSummary.median);
-              const percentile = killTimePercentile(primaryDurationMs, comparisonSummary.values);
               const spread = comparisonSummary.q3 - comparisonSummary.q1;
               return (
                 <Tooltip key={encounterName}>
