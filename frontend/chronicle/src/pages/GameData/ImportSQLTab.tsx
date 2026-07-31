@@ -5,6 +5,7 @@ import { Card } from "@/components/ui/Card/Card";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/Alert/Alert";
 import { DatasetSelect } from "./DatasetSelect";
 import { DEFAULT_DATASET_ID } from "@/api/queries";
+import { formatStorageBytes } from "@/utils/storage";
 
 interface FieldDiff {
   field: string;
@@ -260,7 +261,7 @@ export function ImportSQLTab() {
                 <FileText className="h-8 w-8 mx-auto text-primary" />
                 <p className="text-sm font-medium">{file.name}</p>
                 <p className="text-xs text-muted-foreground">
-                  {(file.size / 1024 / 1024).toFixed(2)} MB
+                  {formatStorageBytes(file.size)}
                 </p>
               </div>
             ) : (

@@ -8,6 +8,26 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 )
 
+const (
+	DiscordMemberSource       = "discord-member"
+	DiscordMemberStorageBytes = 75_000_000
+)
+
+const DiscordMemberGrantDuration = 14 * 24 * time.Hour
+
+func DiscordMemberStorageGrant(user uuid.UUID, checkedAt time.Time) database.UpsertDataGrantParams {
+	return database.UpsertDataGrantParams{
+		UserID:       user,
+		Source:       DiscordMemberSource,
+		StorageBytes: DiscordMemberStorageBytes,
+		Description: pgtype.Text{
+			String: "Discord server membership",
+			Valid:  true,
+		},
+		ExpiresAt: database.Timestamptz(checkedAt.Add(DiscordMemberGrantDuration)),
+	}
+}
+
 func SupportStorageGrant(user uuid.UUID) database.UpsertDataGrantParams {
 	return database.UpsertDataGrantParams{
 		UserID:       user,

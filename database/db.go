@@ -222,6 +222,22 @@ func New(sdb *pgxpool.Pool) Store {
 	}
 }
 
+// PGXTx returns the pgx transaction backing a Store callback passed to InTx.
+// It is intended for libraries, such as River, that must commit their writes
+// atomically with generated application queries.
+func PGXTx(store Store) (pgx.Tx, bool) {
+	q, ok := store.(*sqlQuerier)
+	if !ok {
+		return nil, false
+	}
+
+	tx, ok := q.db.(*pgxpool.Tx)
+	if !ok {
+		return nil, false
+	}
+	return tx, true
+}
+
 func (q *sqlQuerier) Close() error {
 	q.sdb.Close()
 	return nil

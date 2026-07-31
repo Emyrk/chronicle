@@ -14,14 +14,7 @@ import { Card } from "@/components/ui/Card/Card";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/Checkbox/Checkbox";
 import { toast } from "sonner";
-
-function formatBytes(bytes: number): string {
-  if (bytes === 0) return "0 B";
-  const k = 1024;
-  const sizes = ["B", "KB", "MB", "GB"];
-  const i = Math.floor(Math.log(bytes) / Math.log(k));
-  return `${parseFloat((bytes / Math.pow(k, i)).toFixed(1))} ${sizes[i]}`;
-}
+import { formatStorageBytes } from "@/utils/storage";
 
 interface LogRowProps {
   log: AdminLog;
@@ -60,7 +53,7 @@ function LogRow({ log, selected, onToggleSelected }: LogRowProps) {
           </span>
         )}
         <span className="text-xs text-muted-foreground tabular-nums w-16 text-right">
-          {formatBytes(log.size_bytes)}
+          {formatStorageBytes(log.size_bytes)}
         </span>
         <span className="text-xs text-muted-foreground w-24 text-right">
           {new Date(log.created_at).toLocaleDateString(undefined, { month: "short", day: "numeric", year: "numeric" })}

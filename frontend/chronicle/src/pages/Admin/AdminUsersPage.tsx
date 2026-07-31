@@ -11,6 +11,7 @@ import {
 import { Card } from "@/components/ui/Card/Card";
 import { UserCharactersSection } from "./UserCharactersSection";
 import { Button } from "@/components/ui/button";
+import { formatStorageBytes } from "@/utils/storage";
 import {
   Users,
   Search,
@@ -31,14 +32,6 @@ import {
   Check,
   ExternalLink,
 } from "lucide-react";
-
-function formatBytes(bytes: number): string {
-  if (bytes === 0) return "0 B";
-  const k = 1024;
-  const sizes = ["B", "KB", "MB", "GB", "TB"];
-  const i = Math.floor(Math.log(bytes) / Math.log(k));
-  return `${parseFloat((bytes / Math.pow(k, i)).toFixed(2))} ${sizes[i]}`;
-}
 
 const ROLE_CONFIG: Record<string, { icon: React.ReactNode; label: string; className: string }> = {
   technical_admin: {
@@ -80,6 +73,7 @@ const SOURCE_LABELS: Record<string, string> = {
   "beta-tester": "Beta Tester",
   promotion: "Promotion",
   gift: "Gift",
+  "discord-member": "Discord Server Member",
 };
 
 function formatSource(source: string): string {
@@ -138,7 +132,7 @@ function GrantRow({ grant, userId }: { grant: DataGrant; userId: string }) {
         )}
       </div>
       <div className="flex items-center gap-2">
-        <span className="text-sm font-medium">{formatBytes(grant.storage_bytes)}</span>
+        <span className="text-sm font-medium">{formatStorageBytes(grant.storage_bytes)}</span>
         <button
           onClick={handleDelete}
           disabled={deleteMutation.isPending}
@@ -214,8 +208,8 @@ function UserRow({ user }: UserRowProps) {
               />
             </div>
             <div className="flex justify-between text-[10px] text-muted-foreground mt-0.5">
-              <span>{formatBytes(user.consumed_storage_bytes)}</span>
-              <span>{formatBytes(user.max_storage_bytes)}</span>
+              <span>{formatStorageBytes(user.consumed_storage_bytes)}</span>
+              <span>{formatStorageBytes(user.max_storage_bytes)}</span>
             </div>
           </div>
         </div>

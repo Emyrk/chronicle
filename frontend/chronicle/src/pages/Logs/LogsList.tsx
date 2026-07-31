@@ -6,6 +6,7 @@ import { LogIn, Loader2, Upload as UploadIcon, HardDrive, HelpCircle } from "luc
 import { Card } from "@/components/ui/Card/Card";
 import { Button } from "@/components/ui/button";
 import { useAuth } from "@/hooks/useAuth";
+import { formatStorageBytes } from "@/utils/storage";
 import { useAuthorizationCheck, useLogGroups, useSession, useSiteConfig, type WoWLogGroup } from "@/api/queries";
 import { LogsCalendar } from "./components/LogsCalendar";
 import { CalendarDayContent } from "./components/CalendarDayContent";
@@ -15,14 +16,6 @@ import {
   getUniqueInstanceNames,
   dateKey,
 } from "./utils/calendarUtils";
-
-function formatBytes(bytes: number): string {
-  if (bytes === 0) return "0 B";
-  const k = 1024;
-  const sizes = ["B", "KB", "MB", "GB"];
-  const i = Math.floor(Math.log(bytes) / Math.log(k));
-  return `${parseFloat((bytes / Math.pow(k, i)).toFixed(2))} ${sizes[i]}`;
-}
 
 function StorageUsageCard({ consumed, max }: { consumed: number; max: number }) {
   const percentage = max > 0 ? Math.min((consumed / max) * 100, 100) : 0;
@@ -39,7 +32,7 @@ function StorageUsageCard({ consumed, max }: { consumed: number; max: number }) 
               Storage Usage
             </Link>
             <Link to="/account/storage" className="text-sm text-muted-foreground hover:text-foreground">
-              {formatBytes(consumed)} / {formatBytes(max)}
+              {formatStorageBytes(consumed)} / {formatStorageBytes(max)}
             </Link>
           </div>
           <div className="h-2 bg-secondary rounded-full overflow-hidden">

@@ -7,6 +7,7 @@ import (
 
 	"github.com/Emyrk/chronicle/chronicle/retention"
 	"github.com/Emyrk/chronicle/chronicle/riverqueue"
+	"github.com/Emyrk/chronicle/chroniclebot"
 	"github.com/Emyrk/chronicle/internal/services"
 	"github.com/Emyrk/chronicle/internal/services/servicebot"
 	"github.com/Emyrk/chronicle/internal/services/servicechronicle"
@@ -87,8 +88,22 @@ func (s *Service) Start(ctx context.Context) error {
 	riverqueue.AddWorker(q, chron.NewWorkerLogParse())
 	riverqueue.AddWorker(q, chron.NewWorkerReLogParse())
 	riverqueue.AddWorker(q, chron.NewWorkerRegressionSnapshot())
-	riverqueue.AddWorker(q, bot.NewWorkerSyncDiscordUser())
-	riverqueue.AddWorker(q, bot.NewWorkerNotifyApplication())
+	if !bot.Disabled() {
+		bot.SetQueue(q)
+		riverqueue.AddWorker(q, bot.NewWorkerSyncDiscordUser())
+		riverqueue.AddWorker(q, bot.NewWorkerNotifyApplication())
+		riverqueue.AddWorker(q, bot.NewWorkerDispatchDiscordMembershipGrantChecks())
+		riverqueue.AddWorker(q, bot.NewWorkerCheckDiscordMembershipGrant())
+		q.AddPeriodicJob(
+			river.NewPeriodicJob(
+				river.PeriodicInterval(time.Hour),
+				func() (river.JobArgs, *river.InsertOpts) {
+					return chroniclebot.ArgsDispatchDiscordMembershipGrantChecks{}, nil
+				},
+				&river.PeriodicJobOpts{RunOnStart: true},
+			),
+		)
+	}
 
 	// Register retention workers and periodic job.
 	ret := serviceretention.RetentionService(s.broker)
@@ -173,7 +188,6 @@ func (s *Service) Start(ctx context.Context) error {
 
 	s.Queues = q
 	chron.SetQueue(s.Queues)
-	bot.SetQueue(s.Queues)
 	return nil
 }
 

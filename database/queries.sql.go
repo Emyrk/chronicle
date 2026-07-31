@@ -1710,6 +1710,599 @@ func (q *sqlQuerier) UpsertDatasetTalentTrees(ctx context.Context, arg UpsertDat
 	return err
 }
 
+const activateDiscordMembershipGrantCheckOnLogin = `-- name: ActivateDiscordMembershipGrantCheckOnLogin :one
+INSERT INTO discord_membership_grant_checks (
+  user_id,
+  next_check_at,
+  claim_token,
+  claim_expires_at
+)
+VALUES (
+  $1,
+  $2::TIMESTAMPTZ,
+  gen_random_uuid(),
+  $2::TIMESTAMPTZ + INTERVAL '24 hours'
+)
+ON CONFLICT (user_id) DO UPDATE SET
+  suspended_until_login = FALSE,
+  last_error = NULL,
+  claim_token = gen_random_uuid(),
+  claim_expires_at = $2::TIMESTAMPTZ + INTERVAL '24 hours',
+  updated_at = $2::TIMESTAMPTZ
+WHERE discord_membership_grant_checks.suspended_until_login = TRUE
+  AND (
+    discord_membership_grant_checks.claim_token IS NULL
+    OR discord_membership_grant_checks.claim_expires_at <= $2::TIMESTAMPTZ
+  )
+RETURNING user_id, claim_token, next_check_at
+`
+
+type ActivateDiscordMembershipGrantCheckOnLoginParams struct {
+	UserID    uuid.UUID          `db:"user_id" json:"user_id"`
+	CheckTime pgtype.Timestamptz `db:"check_time" json:"check_time"`
+}
+
+type ActivateDiscordMembershipGrantCheckOnLoginRow struct {
+	UserID      uuid.UUID          `db:"user_id" json:"user_id"`
+	ClaimToken  uuid.NullUUID      `db:"claim_token" json:"claim_token"`
+	NextCheckAt pgtype.Timestamptz `db:"next_check_at" json:"next_check_at"`
+}
+
+func (q *sqlQuerier) ActivateDiscordMembershipGrantCheckOnLogin(ctx context.Context, arg ActivateDiscordMembershipGrantCheckOnLoginParams) (ActivateDiscordMembershipGrantCheckOnLoginRow, error) {
+	row := q.db.QueryRow(ctx, activateDiscordMembershipGrantCheckOnLogin, arg.UserID, arg.CheckTime)
+	var i ActivateDiscordMembershipGrantCheckOnLoginRow
+	err := row.Scan(&i.UserID, &i.ClaimToken, &i.NextCheckAt)
+	return i, err
+}
+
+const claimDueDiscordMembershipGrantChecks = `-- name: ClaimDueDiscordMembershipGrantChecks :many
+WITH candidates AS (
+  SELECT checks.user_id, checks.next_check_at
+  FROM discord_membership_grant_checks AS checks
+  WHERE checks.next_check_at <= $1::TIMESTAMPTZ
+    AND checks.suspended_until_login = FALSE
+    AND (checks.claim_token IS NULL OR checks.claim_expires_at <= $1::TIMESTAMPTZ)
+    AND EXISTS (
+      SELECT 1
+      FROM user_auth_links AS links
+      WHERE links.user_id = checks.user_id
+        AND links.provider = 'discord'
+    )
+  ORDER BY checks.next_check_at, checks.user_id
+  FOR UPDATE SKIP LOCKED
+  LIMIT $2
+)
+UPDATE discord_membership_grant_checks AS checks
+SET
+  claim_token = gen_random_uuid(),
+  claim_expires_at = $1::TIMESTAMPTZ + INTERVAL '24 hours',
+  updated_at = $1::TIMESTAMPTZ
+FROM candidates
+WHERE checks.user_id = candidates.user_id
+RETURNING checks.user_id, checks.claim_token, candidates.next_check_at
+`
+
+type ClaimDueDiscordMembershipGrantChecksParams struct {
+	CheckTime  pgtype.Timestamptz `db:"check_time" json:"check_time"`
+	LimitCount int32              `db:"limit_count" json:"limit_count"`
+}
+
+type ClaimDueDiscordMembershipGrantChecksRow struct {
+	UserID      uuid.UUID          `db:"user_id" json:"user_id"`
+	ClaimToken  uuid.NullUUID      `db:"claim_token" json:"claim_token"`
+	NextCheckAt pgtype.Timestamptz `db:"next_check_at" json:"next_check_at"`
+}
+
+func (q *sqlQuerier) ClaimDueDiscordMembershipGrantChecks(ctx context.Context, arg ClaimDueDiscordMembershipGrantChecksParams) ([]ClaimDueDiscordMembershipGrantChecksRow, error) {
+	rows, err := q.db.Query(ctx, claimDueDiscordMembershipGrantChecks, arg.CheckTime, arg.LimitCount)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ClaimDueDiscordMembershipGrantChecksRow
+	for rows.Next() {
+		var i ClaimDueDiscordMembershipGrantChecksRow
+		if err := rows.Scan(&i.UserID, &i.ClaimToken, &i.NextCheckAt); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const clearDiscordMembershipGrantCheckClaim = `-- name: ClearDiscordMembershipGrantCheckClaim :execrows
+UPDATE discord_membership_grant_checks
+SET
+  claim_token = NULL,
+  claim_expires_at = NULL,
+  updated_at = $1::TIMESTAMPTZ
+WHERE user_id = $2
+  AND claim_token = $3
+`
+
+type ClearDiscordMembershipGrantCheckClaimParams struct {
+	CheckTime  pgtype.Timestamptz `db:"check_time" json:"check_time"`
+	UserID     uuid.UUID          `db:"user_id" json:"user_id"`
+	ClaimToken uuid.NullUUID      `db:"claim_token" json:"claim_token"`
+}
+
+func (q *sqlQuerier) ClearDiscordMembershipGrantCheckClaim(ctx context.Context, arg ClearDiscordMembershipGrantCheckClaimParams) (int64, error) {
+	result, err := q.db.Exec(ctx, clearDiscordMembershipGrantCheckClaim, arg.CheckTime, arg.UserID, arg.ClaimToken)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
+}
+
+const completeDiscordMembershipGrantCheckError = `-- name: CompleteDiscordMembershipGrantCheckError :one
+UPDATE discord_membership_grant_checks
+SET
+  last_attempt_at = $1::TIMESTAMPTZ,
+  last_outcome = 'error',
+  last_error = $2,
+  suspended_until_login = TRUE,
+  claim_token = NULL,
+  claim_expires_at = NULL,
+  updated_at = $1::TIMESTAMPTZ
+WHERE user_id = $3
+  AND claim_token = $4
+RETURNING user_id, next_check_at, last_attempt_at, last_success_at, is_member, last_outcome, last_error, suspended_until_login, claim_token, claim_expires_at, created_at, updated_at
+`
+
+type CompleteDiscordMembershipGrantCheckErrorParams struct {
+	CheckedAt  pgtype.Timestamptz `db:"checked_at" json:"checked_at"`
+	LastError  pgtype.Text        `db:"last_error" json:"last_error"`
+	UserID     uuid.UUID          `db:"user_id" json:"user_id"`
+	ClaimToken uuid.NullUUID      `db:"claim_token" json:"claim_token"`
+}
+
+func (q *sqlQuerier) CompleteDiscordMembershipGrantCheckError(ctx context.Context, arg CompleteDiscordMembershipGrantCheckErrorParams) (DiscordMembershipGrantCheck, error) {
+	row := q.db.QueryRow(ctx, completeDiscordMembershipGrantCheckError,
+		arg.CheckedAt,
+		arg.LastError,
+		arg.UserID,
+		arg.ClaimToken,
+	)
+	var i DiscordMembershipGrantCheck
+	err := row.Scan(
+		&i.UserID,
+		&i.NextCheckAt,
+		&i.LastAttemptAt,
+		&i.LastSuccessAt,
+		&i.IsMember,
+		&i.LastOutcome,
+		&i.LastError,
+		&i.SuspendedUntilLogin,
+		&i.ClaimToken,
+		&i.ClaimExpiresAt,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+	)
+	return i, err
+}
+
+const completeDiscordMembershipGrantCheckMember = `-- name: CompleteDiscordMembershipGrantCheckMember :one
+UPDATE discord_membership_grant_checks
+SET
+  next_check_at = $1::TIMESTAMPTZ + INTERVAL '7 days',
+  last_attempt_at = $1::TIMESTAMPTZ,
+  last_success_at = $1::TIMESTAMPTZ,
+  is_member = TRUE,
+  last_outcome = 'member',
+  last_error = NULL,
+  suspended_until_login = FALSE,
+  claim_token = NULL,
+  claim_expires_at = NULL,
+  updated_at = $1::TIMESTAMPTZ
+WHERE user_id = $2
+  AND claim_token = $3
+RETURNING user_id, next_check_at, last_attempt_at, last_success_at, is_member, last_outcome, last_error, suspended_until_login, claim_token, claim_expires_at, created_at, updated_at
+`
+
+type CompleteDiscordMembershipGrantCheckMemberParams struct {
+	CheckedAt  pgtype.Timestamptz `db:"checked_at" json:"checked_at"`
+	UserID     uuid.UUID          `db:"user_id" json:"user_id"`
+	ClaimToken uuid.NullUUID      `db:"claim_token" json:"claim_token"`
+}
+
+func (q *sqlQuerier) CompleteDiscordMembershipGrantCheckMember(ctx context.Context, arg CompleteDiscordMembershipGrantCheckMemberParams) (DiscordMembershipGrantCheck, error) {
+	row := q.db.QueryRow(ctx, completeDiscordMembershipGrantCheckMember, arg.CheckedAt, arg.UserID, arg.ClaimToken)
+	var i DiscordMembershipGrantCheck
+	err := row.Scan(
+		&i.UserID,
+		&i.NextCheckAt,
+		&i.LastAttemptAt,
+		&i.LastSuccessAt,
+		&i.IsMember,
+		&i.LastOutcome,
+		&i.LastError,
+		&i.SuspendedUntilLogin,
+		&i.ClaimToken,
+		&i.ClaimExpiresAt,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+	)
+	return i, err
+}
+
+const completeDiscordMembershipGrantCheckNonMember = `-- name: CompleteDiscordMembershipGrantCheckNonMember :one
+UPDATE discord_membership_grant_checks
+SET
+  next_check_at = $1::TIMESTAMPTZ + INTERVAL '7 days',
+  last_attempt_at = $1::TIMESTAMPTZ,
+  last_success_at = $1::TIMESTAMPTZ,
+  is_member = FALSE,
+  last_outcome = 'non_member',
+  last_error = NULL,
+  suspended_until_login = FALSE,
+  claim_token = NULL,
+  claim_expires_at = NULL,
+  updated_at = $1::TIMESTAMPTZ
+WHERE user_id = $2
+  AND claim_token = $3
+RETURNING user_id, next_check_at, last_attempt_at, last_success_at, is_member, last_outcome, last_error, suspended_until_login, claim_token, claim_expires_at, created_at, updated_at
+`
+
+type CompleteDiscordMembershipGrantCheckNonMemberParams struct {
+	CheckedAt  pgtype.Timestamptz `db:"checked_at" json:"checked_at"`
+	UserID     uuid.UUID          `db:"user_id" json:"user_id"`
+	ClaimToken uuid.NullUUID      `db:"claim_token" json:"claim_token"`
+}
+
+func (q *sqlQuerier) CompleteDiscordMembershipGrantCheckNonMember(ctx context.Context, arg CompleteDiscordMembershipGrantCheckNonMemberParams) (DiscordMembershipGrantCheck, error) {
+	row := q.db.QueryRow(ctx, completeDiscordMembershipGrantCheckNonMember, arg.CheckedAt, arg.UserID, arg.ClaimToken)
+	var i DiscordMembershipGrantCheck
+	err := row.Scan(
+		&i.UserID,
+		&i.NextCheckAt,
+		&i.LastAttemptAt,
+		&i.LastSuccessAt,
+		&i.IsMember,
+		&i.LastOutcome,
+		&i.LastError,
+		&i.SuspendedUntilLogin,
+		&i.ClaimToken,
+		&i.ClaimExpiresAt,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+	)
+	return i, err
+}
+
+const deleteDiscordMembershipGrantCheck = `-- name: DeleteDiscordMembershipGrantCheck :exec
+DELETE FROM discord_membership_grant_checks
+WHERE user_id = $1
+`
+
+func (q *sqlQuerier) DeleteDiscordMembershipGrantCheck(ctx context.Context, userID uuid.UUID) error {
+	_, err := q.db.Exec(ctx, deleteDiscordMembershipGrantCheck, userID)
+	return err
+}
+
+const getDiscordMembershipGrantCheckClaim = `-- name: GetDiscordMembershipGrantCheckClaim :one
+SELECT checks.user_id, checks.next_check_at, checks.last_attempt_at, checks.last_success_at, checks.is_member, checks.last_outcome, checks.last_error, checks.suspended_until_login, checks.claim_token, checks.claim_expires_at, checks.created_at, checks.updated_at
+FROM discord_membership_grant_checks AS checks
+WHERE checks.user_id = $1
+  AND checks.claim_token = $2
+  AND checks.claim_expires_at > $3::TIMESTAMPTZ
+`
+
+type GetDiscordMembershipGrantCheckClaimParams struct {
+	UserID     uuid.UUID          `db:"user_id" json:"user_id"`
+	ClaimToken uuid.NullUUID      `db:"claim_token" json:"claim_token"`
+	CheckTime  pgtype.Timestamptz `db:"check_time" json:"check_time"`
+}
+
+func (q *sqlQuerier) GetDiscordMembershipGrantCheckClaim(ctx context.Context, arg GetDiscordMembershipGrantCheckClaimParams) (DiscordMembershipGrantCheck, error) {
+	row := q.db.QueryRow(ctx, getDiscordMembershipGrantCheckClaim, arg.UserID, arg.ClaimToken, arg.CheckTime)
+	var i DiscordMembershipGrantCheck
+	err := row.Scan(
+		&i.UserID,
+		&i.NextCheckAt,
+		&i.LastAttemptAt,
+		&i.LastSuccessAt,
+		&i.IsMember,
+		&i.LastOutcome,
+		&i.LastError,
+		&i.SuspendedUntilLogin,
+		&i.ClaimToken,
+		&i.ClaimExpiresAt,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+	)
+	return i, err
+}
+
+const insertDiscordMembershipGrantCheck = `-- name: InsertDiscordMembershipGrantCheck :one
+INSERT INTO discord_membership_grant_checks (user_id, next_check_at)
+VALUES ($1, $2)
+ON CONFLICT (user_id) DO NOTHING
+RETURNING user_id, next_check_at, last_attempt_at, last_success_at, is_member, last_outcome, last_error, suspended_until_login, claim_token, claim_expires_at, created_at, updated_at
+`
+
+type InsertDiscordMembershipGrantCheckParams struct {
+	UserID      uuid.UUID          `db:"user_id" json:"user_id"`
+	NextCheckAt pgtype.Timestamptz `db:"next_check_at" json:"next_check_at"`
+}
+
+func (q *sqlQuerier) InsertDiscordMembershipGrantCheck(ctx context.Context, arg InsertDiscordMembershipGrantCheckParams) (DiscordMembershipGrantCheck, error) {
+	row := q.db.QueryRow(ctx, insertDiscordMembershipGrantCheck, arg.UserID, arg.NextCheckAt)
+	var i DiscordMembershipGrantCheck
+	err := row.Scan(
+		&i.UserID,
+		&i.NextCheckAt,
+		&i.LastAttemptAt,
+		&i.LastSuccessAt,
+		&i.IsMember,
+		&i.LastOutcome,
+		&i.LastError,
+		&i.SuspendedUntilLogin,
+		&i.ClaimToken,
+		&i.ClaimExpiresAt,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+	)
+	return i, err
+}
+
+const reactivateDiscordMembershipGrantCheck = `-- name: ReactivateDiscordMembershipGrantCheck :one
+UPDATE discord_membership_grant_checks
+SET
+  suspended_until_login = FALSE,
+  last_error = NULL,
+  claim_token = gen_random_uuid(),
+  claim_expires_at = $1::TIMESTAMPTZ + INTERVAL '24 hours',
+  updated_at = $1::TIMESTAMPTZ
+WHERE user_id = $2
+  AND suspended_until_login = TRUE
+RETURNING user_id, claim_token, next_check_at
+`
+
+type ReactivateDiscordMembershipGrantCheckParams struct {
+	CheckTime pgtype.Timestamptz `db:"check_time" json:"check_time"`
+	UserID    uuid.UUID          `db:"user_id" json:"user_id"`
+}
+
+type ReactivateDiscordMembershipGrantCheckRow struct {
+	UserID      uuid.UUID          `db:"user_id" json:"user_id"`
+	ClaimToken  uuid.NullUUID      `db:"claim_token" json:"claim_token"`
+	NextCheckAt pgtype.Timestamptz `db:"next_check_at" json:"next_check_at"`
+}
+
+func (q *sqlQuerier) ReactivateDiscordMembershipGrantCheck(ctx context.Context, arg ReactivateDiscordMembershipGrantCheckParams) (ReactivateDiscordMembershipGrantCheckRow, error) {
+	row := q.db.QueryRow(ctx, reactivateDiscordMembershipGrantCheck, arg.CheckTime, arg.UserID)
+	var i ReactivateDiscordMembershipGrantCheckRow
+	err := row.Scan(&i.UserID, &i.ClaimToken, &i.NextCheckAt)
+	return i, err
+}
+
+const repairDiscordMembershipGrantChecks = `-- name: RepairDiscordMembershipGrantChecks :many
+WITH missing AS (
+  SELECT DISTINCT links.user_id
+  FROM user_auth_links AS links
+  LEFT JOIN discord_membership_grant_checks AS checks ON checks.user_id = links.user_id
+  WHERE links.provider = 'discord'
+    AND checks.user_id IS NULL
+  ORDER BY links.user_id
+  LIMIT $2
+)
+INSERT INTO discord_membership_grant_checks (user_id, next_check_at)
+SELECT
+  user_id,
+  $1::TIMESTAMPTZ
+    + ((('x' || SUBSTRING(MD5(user_id::TEXT), 1, 8))::BIT(32)::BIGINT % 604800) * INTERVAL '1 second')
+FROM missing
+ON CONFLICT (user_id) DO NOTHING
+RETURNING user_id, next_check_at, last_attempt_at, last_success_at, is_member, last_outcome, last_error, suspended_until_login, claim_token, claim_expires_at, created_at, updated_at
+`
+
+type RepairDiscordMembershipGrantChecksParams struct {
+	CheckTime  pgtype.Timestamptz `db:"check_time" json:"check_time"`
+	LimitCount int32              `db:"limit_count" json:"limit_count"`
+}
+
+func (q *sqlQuerier) RepairDiscordMembershipGrantChecks(ctx context.Context, arg RepairDiscordMembershipGrantChecksParams) ([]DiscordMembershipGrantCheck, error) {
+	rows, err := q.db.Query(ctx, repairDiscordMembershipGrantChecks, arg.CheckTime, arg.LimitCount)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []DiscordMembershipGrantCheck
+	for rows.Next() {
+		var i DiscordMembershipGrantCheck
+		if err := rows.Scan(
+			&i.UserID,
+			&i.NextCheckAt,
+			&i.LastAttemptAt,
+			&i.LastSuccessAt,
+			&i.IsMember,
+			&i.LastOutcome,
+			&i.LastError,
+			&i.SuspendedUntilLogin,
+			&i.ClaimToken,
+			&i.ClaimExpiresAt,
+			&i.CreatedAt,
+			&i.UpdatedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const upsertDiscordMembershipGrantCheckError = `-- name: UpsertDiscordMembershipGrantCheckError :one
+INSERT INTO discord_membership_grant_checks (
+  user_id,
+  next_check_at,
+  last_attempt_at,
+  last_outcome,
+  last_error,
+  suspended_until_login
+)
+VALUES (
+  $1,
+  $2::TIMESTAMPTZ,
+  $2::TIMESTAMPTZ,
+  'error',
+  $3,
+  TRUE
+)
+ON CONFLICT (user_id) DO UPDATE SET
+  last_attempt_at = EXCLUDED.last_attempt_at,
+  last_outcome = 'error',
+  last_error = EXCLUDED.last_error,
+  suspended_until_login = TRUE,
+  claim_token = NULL,
+  claim_expires_at = NULL,
+  updated_at = EXCLUDED.last_attempt_at
+RETURNING user_id, next_check_at, last_attempt_at, last_success_at, is_member, last_outcome, last_error, suspended_until_login, claim_token, claim_expires_at, created_at, updated_at
+`
+
+type UpsertDiscordMembershipGrantCheckErrorParams struct {
+	UserID    uuid.UUID          `db:"user_id" json:"user_id"`
+	CheckedAt pgtype.Timestamptz `db:"checked_at" json:"checked_at"`
+	LastError pgtype.Text        `db:"last_error" json:"last_error"`
+}
+
+func (q *sqlQuerier) UpsertDiscordMembershipGrantCheckError(ctx context.Context, arg UpsertDiscordMembershipGrantCheckErrorParams) (DiscordMembershipGrantCheck, error) {
+	row := q.db.QueryRow(ctx, upsertDiscordMembershipGrantCheckError, arg.UserID, arg.CheckedAt, arg.LastError)
+	var i DiscordMembershipGrantCheck
+	err := row.Scan(
+		&i.UserID,
+		&i.NextCheckAt,
+		&i.LastAttemptAt,
+		&i.LastSuccessAt,
+		&i.IsMember,
+		&i.LastOutcome,
+		&i.LastError,
+		&i.SuspendedUntilLogin,
+		&i.ClaimToken,
+		&i.ClaimExpiresAt,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+	)
+	return i, err
+}
+
+const upsertDiscordMembershipGrantCheckMember = `-- name: UpsertDiscordMembershipGrantCheckMember :one
+INSERT INTO discord_membership_grant_checks (
+  user_id,
+  next_check_at,
+  last_attempt_at,
+  last_success_at,
+  is_member,
+  last_outcome
+)
+VALUES (
+  $1,
+  $2::TIMESTAMPTZ + INTERVAL '7 days',
+  $2::TIMESTAMPTZ,
+  $2::TIMESTAMPTZ,
+  TRUE,
+  'member'
+)
+ON CONFLICT (user_id) DO UPDATE SET
+  next_check_at = EXCLUDED.next_check_at,
+  last_attempt_at = EXCLUDED.last_attempt_at,
+  last_success_at = EXCLUDED.last_success_at,
+  is_member = TRUE,
+  last_outcome = 'member',
+  last_error = NULL,
+  suspended_until_login = FALSE,
+  claim_token = NULL,
+  claim_expires_at = NULL,
+  updated_at = EXCLUDED.last_attempt_at
+RETURNING user_id, next_check_at, last_attempt_at, last_success_at, is_member, last_outcome, last_error, suspended_until_login, claim_token, claim_expires_at, created_at, updated_at
+`
+
+type UpsertDiscordMembershipGrantCheckMemberParams struct {
+	UserID    uuid.UUID          `db:"user_id" json:"user_id"`
+	CheckedAt pgtype.Timestamptz `db:"checked_at" json:"checked_at"`
+}
+
+func (q *sqlQuerier) UpsertDiscordMembershipGrantCheckMember(ctx context.Context, arg UpsertDiscordMembershipGrantCheckMemberParams) (DiscordMembershipGrantCheck, error) {
+	row := q.db.QueryRow(ctx, upsertDiscordMembershipGrantCheckMember, arg.UserID, arg.CheckedAt)
+	var i DiscordMembershipGrantCheck
+	err := row.Scan(
+		&i.UserID,
+		&i.NextCheckAt,
+		&i.LastAttemptAt,
+		&i.LastSuccessAt,
+		&i.IsMember,
+		&i.LastOutcome,
+		&i.LastError,
+		&i.SuspendedUntilLogin,
+		&i.ClaimToken,
+		&i.ClaimExpiresAt,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+	)
+	return i, err
+}
+
+const upsertDiscordMembershipGrantCheckNonMember = `-- name: UpsertDiscordMembershipGrantCheckNonMember :one
+INSERT INTO discord_membership_grant_checks (
+  user_id,
+  next_check_at,
+  last_attempt_at,
+  last_success_at,
+  is_member,
+  last_outcome
+)
+VALUES (
+  $1,
+  $2::TIMESTAMPTZ + INTERVAL '7 days',
+  $2::TIMESTAMPTZ,
+  $2::TIMESTAMPTZ,
+  FALSE,
+  'non_member'
+)
+ON CONFLICT (user_id) DO UPDATE SET
+  next_check_at = EXCLUDED.next_check_at,
+  last_attempt_at = EXCLUDED.last_attempt_at,
+  last_success_at = EXCLUDED.last_success_at,
+  is_member = FALSE,
+  last_outcome = 'non_member',
+  last_error = NULL,
+  suspended_until_login = FALSE,
+  claim_token = NULL,
+  claim_expires_at = NULL,
+  updated_at = EXCLUDED.last_attempt_at
+RETURNING user_id, next_check_at, last_attempt_at, last_success_at, is_member, last_outcome, last_error, suspended_until_login, claim_token, claim_expires_at, created_at, updated_at
+`
+
+type UpsertDiscordMembershipGrantCheckNonMemberParams struct {
+	UserID    uuid.UUID          `db:"user_id" json:"user_id"`
+	CheckedAt pgtype.Timestamptz `db:"checked_at" json:"checked_at"`
+}
+
+func (q *sqlQuerier) UpsertDiscordMembershipGrantCheckNonMember(ctx context.Context, arg UpsertDiscordMembershipGrantCheckNonMemberParams) (DiscordMembershipGrantCheck, error) {
+	row := q.db.QueryRow(ctx, upsertDiscordMembershipGrantCheckNonMember, arg.UserID, arg.CheckedAt)
+	var i DiscordMembershipGrantCheck
+	err := row.Scan(
+		&i.UserID,
+		&i.NextCheckAt,
+		&i.LastAttemptAt,
+		&i.LastSuccessAt,
+		&i.IsMember,
+		&i.LastOutcome,
+		&i.LastError,
+		&i.SuspendedUntilLogin,
+		&i.ClaimToken,
+		&i.ClaimExpiresAt,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+	)
+	return i, err
+}
+
 const instanceEvent = `-- name: InstanceEvent :one
 SELECT
   log_instance_events.instance_id, log_instance_events.type, log_instance_events.events

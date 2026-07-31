@@ -56,11 +56,12 @@ func (s *Service) Start(ctx context.Context) error {
 	zed := serviceauthz.Authz(s.broker)
 
 	bot, err := chroniclebot.New(ctx, logger, chroniclebot.Config{
-		Token:    s.cfg.Token,
-		GuildID:  s.cfg.GuildID,
-		Disabled: s.cfg.Disabled,
-		DB:       db,
-		Zed:      zed,
+		Token:                        s.cfg.Token,
+		GuildID:                      s.cfg.GuildID,
+		Disabled:                     s.cfg.Disabled,
+		MembershipGrantChecksPerHour: s.cfg.MembershipGrantChecksPerHour,
+		DB:                           db,
+		Zed:                          zed,
 	})
 	if err != nil {
 		return fmt.Errorf("create chronicle bot: %w", err)
@@ -86,6 +87,15 @@ func (s *Service) Close(_ context.Context) error {
 func (s *Service) Options() serpent.OptionSet {
 	return serpent.OptionSet{
 		{
+			Name:        "Disable Discord bot",
+			Description: "Disable the Discord bot and bot-dependent background jobs.",
+			Required:    false,
+			Flag:        "disable-discord-bot",
+			Env:         "CHRONICLE_DISCORD_BOT_DISABLE",
+			Default:     "false",
+			Value:       serpent.BoolOf(&s.cfg.Disabled),
+		},
+		{
 			Name:        "Discord bot token",
 			Description: "Address to serve the api on.",
 			Required:    false,
@@ -93,6 +103,15 @@ func (s *Service) Options() serpent.OptionSet {
 			Env:         "CHRONICLE_DISCORD_BOT_TOKEN",
 			Default:     "",
 			Value:       serpent.StringOf(&s.cfg.Token),
+		},
+		{
+			Name:        "Discord membership checks per hour",
+			Description: "Maximum number of scheduled Discord membership grant checks claimed per hour.",
+			Required:    false,
+			Flag:        "discord-membership-checks-per-hour",
+			Env:         "CHRONICLE_DISCORD_MEMBERSHIP_CHECKS_PER_HOUR",
+			Default:     "100",
+			Value:       serpent.Int64Of(&s.cfg.MembershipGrantChecksPerHour),
 		},
 		{
 			Name:        "Discord Chronicle GuildID",

@@ -11,6 +11,7 @@ import (
 	"github.com/Emyrk/chronicle/database"
 	"github.com/Emyrk/chronicle/database/authz"
 	"github.com/bwmarrin/discordgo"
+	"github.com/jackc/pgx/v5"
 	"github.com/riverqueue/river"
 	"github.com/riverqueue/river/rivertype"
 )
@@ -20,10 +21,11 @@ type Config struct {
 	// Token is the bot token from Discord Developer Portal.
 	Token string
 	// GuildID is your Discord server ID. If empty, commands are registered globally.
-	GuildID  string
-	Disabled bool
-	DB       database.Store
-	Zed      *authz.Authz
+	GuildID                      string
+	Disabled                     bool
+	MembershipGrantChecksPerHour int64
+	DB                           database.Store
+	Zed                          *authz.Authz
 }
 
 // Bot represents a Discord bot instance.
@@ -43,7 +45,7 @@ type Bot struct {
 // New creates a new Discord bot instance.
 // Call Open() to connect to Discord.
 func New(ctx context.Context, logger *slog.Logger, config Config) (*Bot, error) {
-	if config.Token == "" {
+	if config.Disabled || config.Token == "" {
 		logger.Info("discord bot is disabled, skipping initialization")
 		return &Bot{
 			logger:   logger.With(slog.String("component", "discord-bot")),
@@ -105,6 +107,7 @@ func (b *Bot) ChronicleGuildID() string {
 // Satisfied by *riverqueue.Queues (via river.Client).
 type JobInserter interface {
 	Insert(ctx context.Context, args river.JobArgs, opts *river.InsertOpts) (*rivertype.JobInsertResult, error)
+	InsertManyTx(ctx context.Context, tx pgx.Tx, params []river.InsertManyParams) ([]*rivertype.JobInsertResult, error)
 }
 
 // SetQueue configures the River queue for async job processing.

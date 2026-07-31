@@ -9,6 +9,7 @@ import {
 } from "@/api/queries";
 import { Card } from "@/components/ui/Card/Card";
 import { Button } from "@/components/ui/button";
+import { bytesToMegabytes, formatStorageBytes, megabytesToBytes } from "@/utils/storage";
 import {
   HardDrive,
   Plus,
@@ -23,22 +24,6 @@ import {
   Clock,
 } from "lucide-react";
 
-function formatBytes(bytes: number): string {
-  if (bytes === 0) return "0 B";
-  const k = 1024;
-  const sizes = ["B", "KB", "MB", "GB", "TB"];
-  const i = Math.floor(Math.log(bytes) / Math.log(k));
-  return `${parseFloat((bytes / Math.pow(k, i)).toFixed(2))} ${sizes[i]}`;
-}
-
-function bytesToMB(bytes: number): number {
-  return Math.round(bytes / (1024 * 1024));
-}
-
-function mbToBytes(mb: number): number {
-  return mb * 1024 * 1024;
-}
-
 const SOURCE_LABELS: Record<string, string> = {
   base: "Base Allocation",
   support: "Supporter Bonus",
@@ -46,6 +31,7 @@ const SOURCE_LABELS: Record<string, string> = {
   "beta-tester": "Beta Tester Reward",
   promotion: "Promotional Bonus",
   gift: "Gift",
+  "discord-member": "Discord Server Member",
 };
 
 const PRESET_SOURCES = [
@@ -117,7 +103,7 @@ function AddGrantForm({ userId, existingSources, onClose }: AddGrantFormProps) {
     await upsertMutation.mutateAsync({
       userId,
       source: effectiveSource,
-      storageBytes: mbToBytes(parseInt(storageMB, 10) || 0),
+      storageBytes: megabytesToBytes(parseInt(storageMB, 10) || 0),
       description: description || undefined,
       expiresAt,
     });
@@ -263,7 +249,7 @@ function formatExpirationDate(dateStr: string): string {
 
 function GrantRow({ grant, userId }: GrantRowProps) {
   const [editing, setEditing] = useState(false);
-  const [storageMB, setStorageMB] = useState(bytesToMB(grant.storage_bytes).toString());
+  const [storageMB, setStorageMB] = useState(bytesToMegabytes(grant.storage_bytes).toString());
   const [expiresAt, setExpiresAt] = useState(grant.expires_at || "");
   const upsertMutation = useUpsertUserGrant();
   const deleteMutation = useDeleteUserGrant();
@@ -276,7 +262,7 @@ function GrantRow({ grant, userId }: GrantRowProps) {
     await upsertMutation.mutateAsync({
       userId,
       source: grant.source,
-      storageBytes: mbToBytes(parseInt(storageMB, 10) || 0),
+      storageBytes: megabytesToBytes(parseInt(storageMB, 10) || 0),
       description: grant.description || undefined,
       expiresAt: expiresAt || undefined,
     });
@@ -387,7 +373,7 @@ function GrantRow({ grant, userId }: GrantRowProps) {
               onClick={() => setEditing(true)}
               className="text-sm font-medium hover:underline"
             >
-              {formatBytes(grant.storage_bytes)}
+              {formatStorageBytes(grant.storage_bytes)}
             </button>
             <Button
               size="sm"
@@ -456,8 +442,8 @@ function UserGrantsRow({ user }: UserGrantsRowProps) {
               />
             </div>
             <div className="flex justify-between text-xs text-muted-foreground mt-0.5">
-              <span>{formatBytes(user.consumed_storage_bytes)}</span>
-              <span>{formatBytes(user.max_storage_bytes)}</span>
+              <span>{formatStorageBytes(user.consumed_storage_bytes)}</span>
+              <span>{formatStorageBytes(user.max_storage_bytes)}</span>
             </div>
           </div>
         </div>

@@ -35,6 +35,7 @@ import {
 import { Card } from "@/components/ui/Card/Card";
 import { Button } from "@/components/ui/button";
 import { toast } from "sonner";
+import { bytesToMegabytes, formatStorageBytes, megabytesToBytes } from "@/utils/storage";
 
 // ---------------------------------------------------------------------------
 // Constants
@@ -60,22 +61,6 @@ type SortOrder = "asc" | "desc";
 // ---------------------------------------------------------------------------
 // Helpers
 // ---------------------------------------------------------------------------
-
-function formatBytes(bytes: number): string {
-  if (bytes === 0) return "0 B";
-  const k = 1024;
-  const sizes = ["B", "KB", "MB", "GB"];
-  const i = Math.floor(Math.log(bytes) / Math.log(k));
-  return `${parseFloat((bytes / Math.pow(k, i)).toFixed(1))} ${sizes[i]}`;
-}
-
-function bytesToMB(bytes: number): number {
-  return Math.round(bytes / (1024 * 1024));
-}
-
-function mbToBytes(mb: number): number {
-  return mb * 1024 * 1024;
-}
 
 function storagePct(user: User): number {
   return user.max_storage_bytes > 0
@@ -116,7 +101,7 @@ interface StorageBarProps {
 
 function StorageBar({ consumed, max, onEditLimit, isSaving }: StorageBarProps) {
   const [editing, setEditing] = useState(false);
-  const [inputValue, setInputValue] = useState(bytesToMB(max).toString());
+  const [inputValue, setInputValue] = useState(bytesToMegabytes(max).toString());
   const percentage = max > 0 ? Math.min((consumed / max) * 100, 100) : 0;
   const isNearLimit = percentage >= 80;
   const isAtLimit = percentage >= 100;
@@ -124,7 +109,7 @@ function StorageBar({ consumed, max, onEditLimit, isSaving }: StorageBarProps) {
   const handleSave = () => {
     const mbValue = parseInt(inputValue, 10);
     if (!isNaN(mbValue) && mbValue >= 0 && onEditLimit) {
-      onEditLimit(mbToBytes(mbValue));
+      onEditLimit(megabytesToBytes(mbValue));
     }
     setEditing(false);
   };
@@ -133,7 +118,7 @@ function StorageBar({ consumed, max, onEditLimit, isSaving }: StorageBarProps) {
     if (e.key === "Enter") handleSave();
     else if (e.key === "Escape") {
       setEditing(false);
-      setInputValue(bytesToMB(max).toString());
+      setInputValue(bytesToMegabytes(max).toString());
     }
   };
 
@@ -150,7 +135,7 @@ function StorageBar({ consumed, max, onEditLimit, isSaving }: StorageBarProps) {
           />
         </div>
         <div className="flex justify-between items-center text-[10px] text-muted-foreground mt-0.5">
-          <span>{formatBytes(consumed)}</span>
+          <span>{formatStorageBytes(consumed)}</span>
           {editing ? (
             <div className="flex items-center gap-1">
               <input
@@ -175,13 +160,13 @@ function StorageBar({ consumed, max, onEditLimit, isSaving }: StorageBarProps) {
           ) : (
             <button
               onClick={() => {
-                setInputValue(bytesToMB(max).toString());
+                setInputValue(bytesToMegabytes(max).toString());
                 setEditing(true);
               }}
               className="flex items-center gap-1 hover:text-foreground"
               title="Click to edit limit"
             >
-              <span>{formatBytes(max)}</span>
+              <span>{formatStorageBytes(max)}</span>
               {onEditLimit && <Pencil className="h-2.5 w-2.5" />}
             </button>
           )}
@@ -752,14 +737,14 @@ export function AdminUsersOverview() {
     }
 
     // Storage used
-    const usedMin = filters.storageUsedMin ? mbToBytes(parseFloat(filters.storageUsedMin)) : null;
-    const usedMax = filters.storageUsedMax ? mbToBytes(parseFloat(filters.storageUsedMax)) : null;
+    const usedMin = filters.storageUsedMin ? megabytesToBytes(parseFloat(filters.storageUsedMin)) : null;
+    const usedMax = filters.storageUsedMax ? megabytesToBytes(parseFloat(filters.storageUsedMax)) : null;
     if (usedMin !== null) users = users.filter((u) => u.consumed_storage_bytes >= usedMin);
     if (usedMax !== null) users = users.filter((u) => u.consumed_storage_bytes <= usedMax);
 
     // Storage limit
-    const limMin = filters.storageLimitMin ? mbToBytes(parseFloat(filters.storageLimitMin)) : null;
-    const limMax = filters.storageLimitMax ? mbToBytes(parseFloat(filters.storageLimitMax)) : null;
+    const limMin = filters.storageLimitMin ? megabytesToBytes(parseFloat(filters.storageLimitMin)) : null;
+    const limMax = filters.storageLimitMax ? megabytesToBytes(parseFloat(filters.storageLimitMax)) : null;
     if (limMin !== null) users = users.filter((u) => u.max_storage_bytes >= limMin);
     if (limMax !== null) users = users.filter((u) => u.max_storage_bytes <= limMax);
 

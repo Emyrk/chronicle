@@ -117,6 +117,15 @@ func (s *Service) Signup(w http.ResponseWriter, r *http.Request, user goth.User)
 		return session, false
 	}
 
+	if provider.Name() == "discord" && s.Bot != nil {
+		if err := s.Bot.ReactivateMembershipGrantCheckOnLogin(ctx, session.UserID); err != nil {
+			s.logger.Warn("reactivate discord membership grant check after login",
+				slog.String("user_id", session.UserID.String()),
+				slog.String("error", err.Error()),
+			)
+		}
+	}
+
 	return session, true
 }
 
