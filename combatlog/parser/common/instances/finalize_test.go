@@ -31,12 +31,16 @@ type finalizeLifecycleHook struct {
 	instancehook.BaseHook
 	calls        []string
 	timeoutCount int
+	cancel       context.CancelFunc
 }
 
 func (h *finalizeLifecycleHook) ProcessMessage(_ bool, _ uuid.UUID, m messages.Message) error {
 	if _, ok := m.(*messages.Timeout); ok {
 		h.timeoutCount++
 		h.calls = append(h.calls, "timeout")
+		if h.cancel != nil {
+			h.cancel()
+		}
 	}
 	return nil
 }
@@ -366,6 +370,38 @@ func TestHookableFinalize_DrainRunsNormalLifecycleOnce(t *testing.T) {
 	require.Equal(t, 1, countCall(hook.calls, "fight-ended"))
 	require.Equal(t, 1, countCall(hook.calls, "finalize"))
 	require.ErrorContains(t, h.Process(messages.TimedOut(base.Add(time.Hour))), "after instance finalization started")
+}
+
+func TestHookableFinalize_DrainHonorsCanceledContext(t *testing.T) {
+	t.Parallel()
+
+	base := time.Date(2026, time.January, 1, 0, 0, 0, 0, time.UTC)
+	hook := &finalizeLifecycleHook{}
+	h := newFinalizeTestHookable(t, hook)
+	_, _ = startFinalizeTestFight(t, h, base)
+
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+
+	result, err := h.Finalize(ctx)
+	require.Nil(t, result)
+	require.ErrorIs(t, err, context.Canceled)
+	require.Zero(t, hook.timeoutCount)
+}
+
+func TestHookableFinalize_DrainStopsWhenContextCanceled(t *testing.T) {
+	t.Parallel()
+
+	base := time.Date(2026, time.January, 1, 0, 0, 0, 0, time.UTC)
+	ctx, cancel := context.WithCancel(context.Background())
+	hook := &finalizeLifecycleHook{cancel: cancel}
+	h := newFinalizeTestHookable(t, hook)
+	_, _ = startFinalizeTestFight(t, h, base)
+
+	result, err := h.Finalize(ctx)
+	require.Nil(t, result)
+	require.ErrorIs(t, err, context.Canceled)
+	require.Equal(t, 1, hook.timeoutCount)
 }
 
 func TestHookableFinalize_DoesNotTickCompletedFight(t *testing.T) {

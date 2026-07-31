@@ -624,7 +624,10 @@ func (h *Hookable) fightEncounter(fight encounter.Fight) (encounter.Encounter, e
 	}, nil
 }
 
-func (h *Hookable) drainOpenFight() error {
+func (h *Hookable) drainOpenFight(ctx context.Context) error {
+	if err := ctx.Err(); err != nil {
+		return err
+	}
 	if h.currentFight == nil || !h.currentFight.active() {
 		return nil
 	}
@@ -635,6 +638,9 @@ func (h *Hookable) drainOpenFight() error {
 	start := h.lastProcessedAt
 	terminal := start.Add(finalizeTickHorizon)
 	for now := start.Add(finalizeTickInterval); !now.After(terminal); now = now.Add(finalizeTickInterval) {
+		if err := ctx.Err(); err != nil {
+			return err
+		}
 		if err := h.process(messages.TimedOut(now)); err != nil {
 			return fmt.Errorf("processing finalization tick at %s: %w", now, err)
 		}
@@ -675,7 +681,7 @@ func (h *Hookable) Finalize(ctx context.Context) (*FinalizedInstance, error) {
 		h.finalized = true
 	}()
 
-	if err := h.drainOpenFight(); err != nil {
+	if err := h.drainOpenFight(ctx); err != nil {
 		return nil, fmt.Errorf("draining open fight: %w", err)
 	}
 
