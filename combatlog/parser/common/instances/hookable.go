@@ -40,6 +40,9 @@ const (
 	timingsProcessOngoingFightProcess = "ongoing_fight_process_events"
 	timingsFinalizeFight              = "finalize_fight"
 	timingsHooks                      = "hooks"
+
+	finalizeTickInterval = 2 * time.Second
+	finalizeTickHorizon  = 5 * time.Minute
 )
 
 type Hookable struct {
@@ -75,6 +78,9 @@ type Hookable struct {
 	currentFight    *ongoingFight
 	events          *encounterevents.Events
 	completedFights []encounter.Fight
+	lastProcessedAt time.Time
+	finalizing      bool
+	finalized       bool
 
 	// finalized references
 	g            *armory.Tracker
@@ -332,7 +338,14 @@ func (h *Hookable) UpdateZoneDifficulty(z zone.Zone) {
 	h.CurrentZone.SubZone = z.SubZone
 }
 
-func (h *Hookable) Process(m messages.Message) (finalError error) {
+func (h *Hookable) Process(m messages.Message) error {
+	if h.finalizing || h.finalized {
+		return fmt.Errorf("cannot process message after instance finalization started")
+	}
+	return h.process(m)
+}
+
+func (h *Hookable) process(m messages.Message) (finalError error) {
 	err := h.units.ProcessMessage(m)
 	if err != nil {
 		return fmt.Errorf("processing unit message: %w", err)
@@ -357,6 +370,8 @@ func (h *Hookable) Process(m messages.Message) (finalError error) {
 	if err != nil {
 		return fmt.Errorf("process characters: %w", err)
 	}
+
+	h.lastProcessedAt = m.Date()
 
 	if actChange {
 		// Only need to update the fight detection if there is a change in character activity.
@@ -609,22 +624,60 @@ func (h *Hookable) fightEncounter(fight encounter.Fight) (encounter.Encounter, e
 	}, nil
 }
 
-func (h *Hookable) Finalize(ctx context.Context) (*FinalizedInstance, error) {
-	if h.currentFight != nil && h.currentFight.active() {
-		if len(h.currentFight.ActiveHostiles) > 0 {
-			h.logger.Error("hostiles remaining in finalized instance", slog.Int("cnt", len(h.currentFight.ActiveHostiles)))
+func (h *Hookable) drainOpenFight() error {
+	if h.currentFight == nil || !h.currentFight.active() {
+		return nil
+	}
+	if h.lastProcessedAt.IsZero() {
+		return fmt.Errorf("cannot drain active fight without a last processed timestamp")
+	}
+
+	start := h.lastProcessedAt
+	terminal := start.Add(finalizeTickHorizon)
+	for now := start.Add(finalizeTickInterval); !now.After(terminal); now = now.Add(finalizeTickInterval) {
+		if err := h.process(messages.TimedOut(now)); err != nil {
+			return fmt.Errorf("processing finalization tick at %s: %w", now, err)
+		}
+		if h.currentFight == nil || !h.currentFight.active() {
+			return nil
 		}
 	}
 
-	// TODO: What about any ongoing fight? Do we finalize it? Do we discard it? Do we error?
-	//if false && c.currentFight != nil {
-	//  // TODO: We need to end any ongoing fight with what timestamp?
-	//  // Finalize any current fight that hasn't been completed yet
-	//  err := c.finalizeFight()
-	//  if err != nil {
-	//    return nil, fmt.Errorf("finalizing ongoing fight: %w", err)
-	//  }
-	//}
+	activeHostiles := make([]string, 0, len(h.currentFight.ActiveHostiles))
+	for id := range h.currentFight.ActiveHostiles {
+		char, ok := h.Characters.Get(id)
+		if ok && char.IsActive() {
+			activeHostiles = append(activeHostiles, id.String())
+		}
+	}
+	slices.Sort(activeHostiles)
+
+	logger := h.logger
+	if logger == nil {
+		logger = slog.Default()
+	}
+	logger.Error("fight remained active after finalization ticks",
+		slog.String("instance", h.Name()),
+		slog.Time("start", start),
+		slog.Time("terminal", terminal),
+		slog.Any("active_hostiles", activeHostiles),
+	)
+	return nil
+}
+
+func (h *Hookable) Finalize(ctx context.Context) (*FinalizedInstance, error) {
+	if h.finalizing || h.finalized {
+		return nil, fmt.Errorf("instance finalization already started")
+	}
+	h.finalizing = true
+	defer func() {
+		h.finalizing = false
+		h.finalized = true
+	}()
+
+	if err := h.drainOpenFight(); err != nil {
+		return nil, fmt.Errorf("draining open fight: %w", err)
+	}
 
 	encounters := make([]encounter.Encounter, 0, len(h.completedFights))
 	for _, fight := range h.completedFights {
