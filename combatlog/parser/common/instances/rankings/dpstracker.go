@@ -5,6 +5,7 @@ import (
 
 	"github.com/google/uuid"
 
+	"github.com/Emyrk/chronicle/combatlog/parser/common/instances/combatmetrics"
 	"github.com/Emyrk/chronicle/combatlog/parser/common/instances/instancehook"
 	"github.com/Emyrk/chronicle/combatlog/parser/common/messages"
 	"github.com/Emyrk/chronicle/combatlog/parser/common/unitdb"
@@ -80,7 +81,7 @@ func (t *DPSTracker) ProcessMessage(active bool, _ uuid.UUID, m messages.Message
 
 	switch msg := m.(type) {
 	case *messages.Damage:
-		effectiveDamage := int64(msg.Amount) + msg.Trailer.AbsorbedAmount()
+		effectiveDamage := combatmetrics.EffectiveDamage(msg)
 		if effectiveDamage <= 0 {
 			return nil
 		}
@@ -133,7 +134,7 @@ func (t *DPSTracker) ProcessMessage(active bool, _ uuid.UUID, m messages.Message
 	case *messages.Heal:
 		// Match the Healing Done panel: only count effective healing to players
 		// and player-owned pets. Healing friendly NPCs is not rankable healing.
-		if !t.isPlayerOrPlayerOwned(msg.Target) {
+		if !combatmetrics.IsPlayerOrPlayerOwned(t.units, msg.Target) {
 			return nil
 		}
 		effective := int64(msg.Amount) - int64(msg.Overheal)
@@ -144,7 +145,7 @@ func (t *DPSTracker) ProcessMessage(active bool, _ uuid.UUID, m messages.Message
 	case *messages.Absorbed:
 		// Match the Healing Done panel: only count damage prevented on players
 		// and player-owned pets, credited to the shield caster.
-		if !t.isPlayerOrPlayerOwned(msg.Target) {
+		if !combatmetrics.IsPlayerOrPlayerOwned(t.units, msg.Target) {
 			return nil
 		}
 		if msg.Amount > 0 && !msg.Caster.IsZero() {
@@ -153,17 +154,6 @@ func (t *DPSTracker) ProcessMessage(active bool, _ uuid.UUID, m messages.Message
 	}
 
 	return nil
-}
-
-func (t *DPSTracker) isPlayerOrPlayerOwned(unitGUID guid.GUID) bool {
-	cls := t.units.Classify(unitGUID)
-	if cls.Type == unitdb.UnitTypePlayer {
-		return true
-	}
-	if !cls.Relation.HasOwner() {
-		return false
-	}
-	return t.units.Classify(*cls.Relation.Owner).Type == unitdb.UnitTypePlayer
 }
 
 func (t *DPSTracker) FightEnded(encounterID uuid.UUID, _ messages.Message) {

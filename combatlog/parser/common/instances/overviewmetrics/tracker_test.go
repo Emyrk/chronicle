@@ -9,6 +9,7 @@ import (
 	"github.com/Emyrk/chronicle/combatlog/parser/common/messages"
 	"github.com/Emyrk/chronicle/combatlog/parser/common/unitdb"
 	"github.com/Emyrk/chronicle/combatlog/parser/guid"
+	"github.com/Emyrk/chronicle/combatlog/parser/types"
 	"github.com/Emyrk/chronicle/combatlog/parser/types/unitinfo"
 	"github.com/Emyrk/chronicle/database/gamedb/chrondbc"
 )
@@ -49,6 +50,39 @@ func TestTrackerAggregatesIncomingDamageToPlayersAndPets(t *testing.T) {
 	require.Equal(t, int64(2), abilities[0].Hits)
 	require.Equal(t, int32(12345), *abilities[0].SpellID)
 	require.Equal(t, "Shadow Bolt", abilities[0].Name)
+}
+
+func TestTrackerIncludesAbsorbedIncomingDamage(t *testing.T) {
+	t.Parallel()
+
+	units := unitdb.New()
+	player := guid.GUID(1)
+	units.Info[player] = unitinfo.Info{Guid: player, Name: "Player", IsPlayer: true, CanCooperate: true}
+	tracker := NewTracker(units)
+	spellName := "Shadow Bolt"
+	spell := &chrondbc.Spell{ID: 12345}
+	partialAbsorb := uint32(200)
+	fullAbsorb := uint32(500)
+
+	require.NoError(t, tracker.ProcessMessage(true, uuid.New(), &messages.Damage{
+		Target:    player,
+		Amount:    800,
+		SpellName: &spellName,
+		SpellData: spell,
+		Trailer:   types.Trailer{{Amount: &partialAbsorb, HitType: types.HitTypePartialAbsorb}},
+	}))
+	require.NoError(t, tracker.ProcessMessage(true, uuid.New(), &messages.Damage{
+		Target:    player,
+		Amount:    0,
+		SpellName: &spellName,
+		SpellData: spell,
+		Trailer:   types.Trailer{{Amount: &fullAbsorb, HitType: types.HitTypeFullAbsorb}},
+	}))
+
+	abilities := tracker.Result()
+	require.Len(t, abilities, 1)
+	require.Equal(t, int64(1500), abilities[0].Damage)
+	require.Equal(t, int64(2), abilities[0].Hits)
 }
 
 func TestTrackerKeepsTopTenAbilities(t *testing.T) {

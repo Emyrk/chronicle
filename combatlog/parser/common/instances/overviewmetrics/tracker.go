@@ -6,10 +6,10 @@ import (
 
 	"github.com/google/uuid"
 
+	"github.com/Emyrk/chronicle/combatlog/parser/common/instances/combatmetrics"
 	"github.com/Emyrk/chronicle/combatlog/parser/common/instances/instancehook"
 	"github.com/Emyrk/chronicle/combatlog/parser/common/messages"
 	"github.com/Emyrk/chronicle/combatlog/parser/common/unitdb"
-	"github.com/Emyrk/chronicle/combatlog/parser/guid"
 )
 
 const DeadliestAbilityLimit = 10
@@ -47,7 +47,11 @@ func (t *Tracker) ProcessMessage(active bool, _ uuid.UUID, m messages.Message) e
 	}
 
 	msg, ok := m.(*messages.Damage)
-	if !ok || msg.Amount <= 0 || !t.isPlayerOrPlayerOwned(msg.Target) {
+	if !ok || !combatmetrics.IsPlayerOrPlayerOwned(t.units, msg.Target) {
+		return nil
+	}
+	effectiveDamage := combatmetrics.EffectiveDamage(msg)
+	if effectiveDamage <= 0 {
 		return nil
 	}
 
@@ -57,7 +61,7 @@ func (t *Tracker) ProcessMessage(active bool, _ uuid.UUID, m messages.Message) e
 		current = &ability
 		t.abilities[key] = current
 	}
-	current.Damage += int64(msg.Amount)
+	current.Damage += effectiveDamage
 	current.Hits++
 	return nil
 }
@@ -85,17 +89,6 @@ func (t *Tracker) Result() []DeadliestAbility {
 		abilities = abilities[:DeadliestAbilityLimit]
 	}
 	return abilities
-}
-
-func (t *Tracker) isPlayerOrPlayerOwned(unitGUID guid.GUID) bool {
-	cls := t.units.Classify(unitGUID)
-	if cls.Type == unitdb.UnitTypePlayer {
-		return true
-	}
-	if !cls.Relation.HasOwner() {
-		return false
-	}
-	return t.units.Classify(*cls.Relation.Owner).Type == unitdb.UnitTypePlayer
 }
 
 func deadliestAbility(msg *messages.Damage) (abilityKey, DeadliestAbility) {
