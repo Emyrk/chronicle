@@ -2,7 +2,7 @@ import { Loader2 } from "lucide-react";
 import { Card } from "@/components/ui/Card/Card";
 import { cn } from "@/lib/utils";
 import { formatClearDuration } from "@/pages/GuildPage/panels/clearTimeUtils";
-import { PopulationSelector } from "./PopulationComparisonHeader";
+import { PopulationSelector } from "./PopulationSelector";
 import { useSpeedrunPopulation } from "./overviewQueries";
 import type { PopulationSelection } from "./populationSelectionState";
 import { summarizeComparisonRaids, summarizePrimaryRaid } from "./raidSummary";
