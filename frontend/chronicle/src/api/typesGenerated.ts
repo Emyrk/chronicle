@@ -976,6 +976,18 @@ export interface InstanceLoot {
     readonly icon: string;
 }
 
+// From chroniclesdk/log.go
+export interface InstanceOverviewMetrics {
+    readonly complete: boolean | null;
+    readonly player_deaths: number;
+    readonly wipe_count: number;
+    readonly deadliest_abilities: readonly OverviewDeadliestAbility[];
+    readonly total_duration_ms: number;
+    readonly total_combat_duration_ms: number;
+    readonly total_boss_duration_ms: number;
+    readonly metrics_version: number;
+}
+
 // From chroniclesdk/rankings.go
 /**
  * InstanceParseAverage is the average parse across multiple bosses.
@@ -1504,6 +1516,15 @@ export interface ModificationRequest {
  */
 export interface ModifyApplicationAdminRequest {
     readonly user_id: string;
+}
+
+// From chroniclesdk/log.go
+export interface OverviewDeadliestAbility {
+    readonly spell_id?: number;
+    readonly name: string;
+    readonly damage: number;
+    readonly hits: number;
+    readonly environment_type?: string;
 }
 
 // From chroniclesdk/tenant.go
@@ -2268,6 +2289,7 @@ export interface SpeedrunCohortRun {
     readonly requirements_total: number;
     readonly guild_id?: string;
     readonly guild_name?: string;
+    readonly overview?: InstanceOverviewMetrics;
 }
 
 // From chroniclesdk/log.go

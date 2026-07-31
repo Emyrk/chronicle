@@ -149,6 +149,21 @@ func (api *API) Instance(w http.ResponseWriter, r *http.Request) {
 	httpapi.Write(ctx, w, http.StatusOK, out)
 }
 
+func (api *API) InstanceOverviewMetrics(w http.ResponseWriter, r *http.Request) {
+	ctx := r.Context()
+	inst := httpmw.Instance(ctx)
+
+	metrics, err := api.Opts.Zed.GetInstanceOverviewMetrics(ctx, inst.ID)
+	if err != nil {
+		httpapi.Write(ctx, w, http.StatusNotFound, chroniclesdk.Response{
+			Message: "No overview metrics for this instance",
+		})
+		return
+	}
+
+	httpapi.Write(ctx, w, http.StatusOK, db2sdk.InstanceOverviewMetrics(metrics))
+}
+
 func (api *API) InstanceSpeedrun(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 	inst := httpmw.Instance(ctx)

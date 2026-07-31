@@ -253,6 +253,33 @@ func SpeedrunResult(sr database.GetInstanceSpeedrunRow) *chroniclesdk.SpeedrunRe
 	return result
 }
 
+func InstanceOverviewMetrics(row database.InstanceOverviewMetric) chroniclesdk.InstanceOverviewMetrics {
+	var complete *bool
+	if row.Complete.Valid {
+		complete = &row.Complete.Bool
+	}
+	abilities := make([]chroniclesdk.OverviewDeadliestAbility, 0, len(row.DeadliestAbilities))
+	for _, ability := range row.DeadliestAbilities {
+		abilities = append(abilities, chroniclesdk.OverviewDeadliestAbility{
+			SpellID:         ability.SpellID,
+			Name:            ability.Name,
+			Damage:          ability.Damage,
+			Hits:            ability.Hits,
+			EnvironmentType: ability.EnvironmentType,
+		})
+	}
+	return chroniclesdk.InstanceOverviewMetrics{
+		Complete:              complete,
+		PlayerDeaths:          row.PlayerDeaths,
+		WipeCount:             row.WipeCount,
+		DeadliestAbilities:    abilities,
+		TotalDurationMs:       row.TotalDurationMs,
+		TotalCombatDurationMs: row.TotalCombatDurationMs,
+		TotalBossDurationMs:   row.TotalBossDurationMs,
+		MetricsVersion:        row.MetricsVersion,
+	}
+}
+
 func SpeedrunCohortRun(row database.InstanceSpeedrunCohortRow) chroniclesdk.SpeedrunCohortRun {
 	var payload chroniclesdk.SpeedrunProofPayload
 	if err := json.Unmarshal(row.Proof, &payload); err != nil || payload.Proof == nil {
@@ -286,6 +313,24 @@ func SpeedrunCohortRun(row database.InstanceSpeedrunCohortRow) chroniclesdk.Spee
 	if !row.CompletionTime.Time.IsZero() {
 		completion := row.CompletionTime.Time
 		run.CompletionTime = &completion
+	}
+	if row.MetricsVersion.Valid {
+		var abilities []chroniclesdk.OverviewDeadliestAbility
+		_ = json.Unmarshal(row.DeadliestAbilities, &abilities)
+		var complete *bool
+		if row.Complete.Valid {
+			complete = &row.Complete.Bool
+		}
+		run.Overview = &chroniclesdk.InstanceOverviewMetrics{
+			Complete:              complete,
+			PlayerDeaths:          row.PlayerDeaths.Int32,
+			WipeCount:             row.WipeCount.Int32,
+			DeadliestAbilities:    abilities,
+			TotalDurationMs:       row.TotalDurationMs.Int64,
+			TotalCombatDurationMs: row.TotalCombatDurationMs.Int64,
+			TotalBossDurationMs:   row.TotalBossDurationMs.Int64,
+			MetricsVersion:        row.MetricsVersion.Int32,
+		}
 	}
 	return run
 }

@@ -1,5 +1,6 @@
 import { useQuery } from "@tanstack/react-query";
 import type {
+  InstanceOverviewMetrics,
   SpeedrunCohortResponse,
   SpeedrunCohortRun,
   SpeedrunResult,
@@ -35,11 +36,16 @@ export function useSpeedrunPopulation(selection: PopulationSelection | undefined
       if (!selection) throw new Error("No population selected");
 
       if (selection.kind === "instance") {
-        const response = await fetch(
-          `/api/v1/raidlogs/instances/${encodeURIComponent(selection.instanceId)}/speedrun`,
-        );
-        if (!response.ok) throw new Error("This raid does not have speedrun data");
-        const speedrun = await response.json() as SpeedrunResult;
+        const instanceURL = `/api/v1/raidlogs/instances/${encodeURIComponent(selection.instanceId)}`;
+        const [speedrunResponse, overviewResponse] = await Promise.all([
+          fetch(`${instanceURL}/speedrun`),
+          fetch(`${instanceURL}/overview`),
+        ]);
+        if (!speedrunResponse.ok) throw new Error("This raid does not have speedrun data");
+        const speedrun = await speedrunResponse.json() as SpeedrunResult;
+        const overview = overviewResponse.ok
+          ? await overviewResponse.json() as InstanceOverviewMetrics
+          : undefined;
         return {
           label: `Raid ${selection.instanceId}`,
           selection,
@@ -53,6 +59,7 @@ export function useSpeedrunPopulation(selection: PopulationSelection | undefined
             qualified: speedrun.qualified,
             requirements_satisfied: speedrun.proof.filter((proof) => proof.satisfied).length,
             requirements_total: speedrun.proof.length,
+            overview,
           }],
         };
       }

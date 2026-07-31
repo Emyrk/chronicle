@@ -17,6 +17,7 @@ import (
 	"github.com/Emyrk/chronicle/combatlog/parser/common/encounterevents"
 	"github.com/Emyrk/chronicle/combatlog/parser/common/identifier"
 	"github.com/Emyrk/chronicle/combatlog/parser/common/instances/instancehook"
+	"github.com/Emyrk/chronicle/combatlog/parser/common/instances/overviewmetrics"
 	"github.com/Emyrk/chronicle/combatlog/parser/common/instances/rankings"
 	"github.com/Emyrk/chronicle/combatlog/parser/common/loot"
 	"github.com/Emyrk/chronicle/combatlog/parser/common/messages"
@@ -62,6 +63,7 @@ type Hookable struct {
 	recorderGUID      *guid.GUID          // recording player GUID from HEADER
 	hooks             []instancehook.Hook // TODO: unroll?
 	engagementTracker *rankings.EngagementTracker
+	overviewTracker   *overviewmetrics.Tracker
 	speedrunTracker   *rankings.SpeedrunTracker
 	dpsTracker        *rankings.DPSTracker
 	rankingRules      *rankings.Rankings
@@ -152,6 +154,7 @@ func NewHookable(ctx context.Context, logger *slog.Logger, db *unitdb.Units, z z
 	chrs.RegisterHook(cie)
 
 	engagementTracker := rankings.NewEngagementTracker(db)
+	overviewTracker := overviewmetrics.NewTracker(db)
 
 	var dpsTracker *rankings.DPSTracker
 	var speedrunTracker *rankings.SpeedrunTracker
@@ -171,6 +174,7 @@ func NewHookable(ctx context.Context, logger *slog.Logger, db *unitdb.Units, z z
 		cie,
 		lootTracking,
 		engagementTracker,
+		overviewTracker,
 	}...)
 	switch format {
 	case database.LogFormat112aCcAddon, database.LogFormat112aSuperwowAddon:
@@ -206,6 +210,7 @@ func NewHookable(ctx context.Context, logger *slog.Logger, db *unitdb.Units, z z
 		lootTracking:      lootTracking,
 		hooks:             hooks,
 		engagementTracker: engagementTracker,
+		overviewTracker:   overviewTracker,
 		speedrunTracker:   speedrunTracker,
 		dpsTracker:        dpsTracker,
 		rankingRules:      ip.Rankings,
@@ -730,6 +735,16 @@ func (h *Hookable) Finalize(ctx context.Context) (*FinalizedInstance, error) {
 		}
 	}
 
+	var speedrunResult *rankings.SpeedrunResult
+	if rankingsResult != nil {
+		speedrunResult = rankingsResult.Speedrun
+	}
+	var deadliestAbilities []overviewmetrics.DeadliestAbility
+	if h.overviewTracker != nil {
+		deadliestAbilities = h.overviewTracker.Result()
+	}
+	overview := overviewmetrics.Summarize(encounters, deadliestAbilities, speedrunResult)
+
 	return &FinalizedInstance{
 		Realm:        h.realm,
 		Versions:     h.versions,
@@ -740,6 +755,7 @@ func (h *Hookable) Finalize(ctx context.Context) (*FinalizedInstance, error) {
 		Loot:         h.lootTracking,
 		Participants: h.p,
 		Rankings:     rankingsResult,
+		Overview:     overview,
 		RankingRules: activeRankingRules,
 		UnknownUnits: h.resolveUnknownUnits(),
 

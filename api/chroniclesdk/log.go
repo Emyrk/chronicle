@@ -324,6 +324,25 @@ type SpeedrunResult struct {
 	DpsRankingsStatus *DpsRankingsStatus        `json:"dps_rankings,omitempty"`
 }
 
+type InstanceOverviewMetrics struct {
+	Complete              *bool                      `json:"complete"`
+	PlayerDeaths          int32                      `json:"player_deaths"`
+	WipeCount             int32                      `json:"wipe_count"`
+	DeadliestAbilities    []OverviewDeadliestAbility `json:"deadliest_abilities"`
+	TotalDurationMs       int64                      `json:"total_duration_ms"`
+	TotalCombatDurationMs int64                      `json:"total_combat_duration_ms"`
+	TotalBossDurationMs   int64                      `json:"total_boss_duration_ms"`
+	MetricsVersion        int32                      `json:"metrics_version"`
+}
+
+type OverviewDeadliestAbility struct {
+	SpellID         *int32 `json:"spell_id,omitempty"`
+	Name            string `json:"name"`
+	Damage          int64  `json:"damage"`
+	Hits            int64  `json:"hits"`
+	EnvironmentType string `json:"environment_type,omitempty"`
+}
+
 type SpeedrunCohortScope string
 
 const (
@@ -351,17 +370,18 @@ type SpeedrunCohortDefinition struct {
 }
 
 type SpeedrunCohortRun struct {
-	InstanceID            uuid.UUID  `json:"instance_id"`
-	Slug                  string     `json:"slug"`
-	StartTime             time.Time  `json:"start_time"`
-	CompletionTime        *time.Time `json:"completion_time,omitempty"`
-	DurationMs            *int64     `json:"duration_ms,omitempty"`
-	Completed             bool       `json:"completed"`
-	Qualified             bool       `json:"qualified"`
-	RequirementsSatisfied int        `json:"requirements_satisfied"`
-	RequirementsTotal     int        `json:"requirements_total"`
-	GuildID               *uuid.UUID `json:"guild_id,omitempty"`
-	GuildName             string     `json:"guild_name,omitempty"`
+	InstanceID            uuid.UUID                `json:"instance_id"`
+	Slug                  string                   `json:"slug"`
+	StartTime             time.Time                `json:"start_time"`
+	CompletionTime        *time.Time               `json:"completion_time,omitempty"`
+	DurationMs            *int64                   `json:"duration_ms,omitempty"`
+	Completed             bool                     `json:"completed"`
+	Qualified             bool                     `json:"qualified"`
+	RequirementsSatisfied int                      `json:"requirements_satisfied"`
+	RequirementsTotal     int                      `json:"requirements_total"`
+	GuildID               *uuid.UUID               `json:"guild_id,omitempty"`
+	GuildName             string                   `json:"guild_name,omitempty"`
+	Overview              *InstanceOverviewMetrics `json:"overview,omitempty"`
 }
 
 // DpsRankingsStatus reports whether DPS rankings were recorded for this instance.

@@ -444,6 +444,7 @@ func (api *API) Routes() chi.Router {
 
 								r.Get("/youtube", api.GetInstanceYoutube)
 								r.Get("/loot", api.GetInstanceLoot)
+								r.Get("/overview", api.InstanceOverviewMetrics)
 								r.Get("/speedrun", api.InstanceSpeedrun)
 								r.Get("/speedrun/cohort", api.InstanceSpeedrunCohort)
 								r.Get("/duplicates", api.ListDuplicateInstances)

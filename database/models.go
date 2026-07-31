@@ -1251,6 +1251,20 @@ type InstanceLoot struct {
 	Quantity     int32              `db:"quantity" json:"quantity"`
 }
 
+type InstanceOverviewMetric struct {
+	InstanceID            uuid.UUID                  `db:"instance_id" json:"instance_id"`
+	Complete              pgtype.Bool                `db:"complete" json:"complete"`
+	PlayerDeaths          int32                      `db:"player_deaths" json:"player_deaths"`
+	WipeCount             int32                      `db:"wipe_count" json:"wipe_count"`
+	DeadliestAbilities    []OverviewDeadliestAbility `db:"deadliest_abilities" json:"deadliest_abilities"`
+	TotalDurationMs       int64                      `db:"total_duration_ms" json:"total_duration_ms"`
+	TotalCombatDurationMs int64                      `db:"total_combat_duration_ms" json:"total_combat_duration_ms"`
+	TotalBossDurationMs   int64                      `db:"total_boss_duration_ms" json:"total_boss_duration_ms"`
+	MetricsVersion        int32                      `db:"metrics_version" json:"metrics_version"`
+	CreatedAt             pgtype.Timestamptz         `db:"created_at" json:"created_at"`
+	UpdatedAt             pgtype.Timestamptz         `db:"updated_at" json:"updated_at"`
+}
+
 type InstanceSpeedrun struct {
 	InstanceID       uuid.UUID          `db:"instance_id" json:"instance_id"`
 	InstanceName     string             `db:"instance_name" json:"instance_name"`

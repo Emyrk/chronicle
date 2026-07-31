@@ -8,6 +8,7 @@ import (
 	"github.com/Emyrk/chronicle/combatlog/parser/common/armory"
 	"github.com/Emyrk/chronicle/combatlog/parser/common/encounter"
 	"github.com/Emyrk/chronicle/combatlog/parser/common/identifier"
+	"github.com/Emyrk/chronicle/combatlog/parser/common/instances/overviewmetrics"
 	"github.com/Emyrk/chronicle/combatlog/parser/common/instances/rankings"
 	"github.com/Emyrk/chronicle/combatlog/parser/common/loot"
 	"github.com/Emyrk/chronicle/combatlog/parser/common/participants"
@@ -33,6 +34,7 @@ type FinalizedInstance struct {
 	Loot         *loot.LootTracker
 	Participants *participants.Tracker
 	Rankings     *rankings.RankingsResult
+	Overview     overviewmetrics.Summary
 	// RankingRules carries the eligibility rules (level range, etc.) for this instance.
 	// Nil if this instance has no ranking configuration.
 	RankingRules *rankings.Rankings
@@ -50,10 +52,10 @@ type CommonFactory struct {
 	// DerivedRankings maps derived instance names to their ranking configuration.
 	// When set alongside DerivedName, each sub-instance gets its own independent
 	// speedrun tracker. Keys must match the names used in DerivedName.
-	DerivedRankings map[string]func(database.WoWFlavor) *rankings.Rankings
-	ZoneNames       []string
-	MapIDs          []uint32
-	Hostiles        func(flavor database.WoWFlavor) *identifier.Identifier
+	DerivedRankings  map[string]func(database.WoWFlavor) *rankings.Rankings
+	ZoneNames        []string
+	MapIDs           []uint32
+	Hostiles         func(flavor database.WoWFlavor) *identifier.Identifier
 	FlavoredRankings func(flavor database.WoWFlavor) *rankings.Rankings
 }
 
