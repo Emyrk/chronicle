@@ -2233,6 +2233,49 @@ export interface SocketBonus {
 }
 
 // From chroniclesdk/log.go
+export interface SpeedrunCohortDefinition {
+    readonly scope: SpeedrunCohortScope;
+    readonly label: string;
+    readonly instance_name: string;
+    readonly difficulty_name: string;
+    readonly max_players: number;
+    readonly lookback_days: number;
+    readonly window_start: string;
+    readonly window_end: string;
+    readonly guild_id?: string;
+}
+
+// From chroniclesdk/log.go
+/**
+ * SpeedrunCohortResponse contains lightweight rankings-backed observations
+ * comparable to one anchor instance. It never includes full instance data.
+ */
+export interface SpeedrunCohortResponse {
+    readonly cohort: SpeedrunCohortDefinition;
+    readonly runs: readonly SpeedrunCohortRun[];
+}
+
+// From chroniclesdk/log.go
+export interface SpeedrunCohortRun {
+    readonly instance_id: string;
+    readonly slug: string;
+    readonly start_time: string;
+    readonly completion_time?: string;
+    readonly duration_ms?: number;
+    readonly completed: boolean;
+    readonly qualified: boolean;
+    readonly requirements_satisfied: number;
+    readonly requirements_total: number;
+    readonly guild_id?: string;
+    readonly guild_name?: string;
+}
+
+// From chroniclesdk/log.go
+export type SpeedrunCohortScope = "guild" | "server";
+
+export const SpeedrunCohortScopes: SpeedrunCohortScope[] = ["guild", "server"];
+
+// From chroniclesdk/log.go
 /**
  * SpeedrunDataSourceStatus reports whether the instance has a valid data source
  * (server-side capability or addon version) required for speedrun eligibility.
@@ -2862,9 +2905,9 @@ export type WoWEnvironmentType = "drowning" | "fall" | "fatigue" | "fire" | "lav
 export const WoWEnvironmentTypes: WoWEnvironmentType[] = ["drowning", "fall", "fatigue", "fire", "lava", "slime"];
 
 // From chroniclesdk/constants.go
-export type WoWEventType = "absorbed" | "aura" | "aura_cast" | "cast" | "combatant_info" | "companion_stats" | "damage" | "dispel" | "extra_attack" | "heal" | "interrupt" | "resource_change" | "ressurection" | "slain" | "spell_fail" | "spell_go" | "spell_start" | "unit_classification";
+export type WoWEventType = "absorbed" | "aura" | "aura_cast" | "cast" | "combatant_info" | "companion_stats" | "consume" | "damage" | "dispel" | "extra_attack" | "heal" | "interrupt" | "resource_change" | "ressurection" | "slain" | "spell_fail" | "spell_go" | "spell_start" | "unit_classification";
 
-export const WoWEventTypes: WoWEventType[] = ["absorbed", "aura", "aura_cast", "cast", "combatant_info", "companion_stats", "damage", "dispel", "extra_attack", "heal", "interrupt", "resource_change", "ressurection", "slain", "spell_fail", "spell_go", "spell_start", "unit_classification"];
+export const WoWEventTypes: WoWEventType[] = ["absorbed", "aura", "aura_cast", "cast", "combatant_info", "companion_stats", "consume", "damage", "dispel", "extra_attack", "heal", "interrupt", "resource_change", "ressurection", "slain", "spell_fail", "spell_go", "spell_start", "unit_classification"];
 
 // From types/constants.go
 export type WoWHeroClasses = "DEATHKNIGHT" | "DRUID" | "HUNTER" | "MAGE" | "PALADIN" | "PRIEST" | "ROGUE" | "SHAMAN" | "UNKNOWN" | "WARLOCK" | "WARRIOR";

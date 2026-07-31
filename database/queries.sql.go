@@ -8752,6 +8752,111 @@ func (q *sqlQuerier) InsertInstanceSpeedrun(ctx context.Context, arg InsertInsta
 	return err
 }
 
+const instanceSpeedrunCohort = `-- name: InstanceSpeedrunCohort :many
+WITH anchor AS (
+    SELECT
+        li.id,
+        li.name,
+        li.difficulty_name,
+        li.max_players,
+        li.start_time,
+        li.guild_id,
+        wsr.server_id
+    FROM log_instances li
+    JOIN wow_server_realms wsr ON wsr.id = li.realm_id
+    WHERE li.id = $1
+),
+deduped AS (
+    SELECT DISTINCT ON (COALESCE(li.duplicate_group_id, li.id))
+        sr.instance_id,
+        li.hashed_slug,
+        sr.start_time,
+        sr.completion_time,
+        sr.duration_ms,
+        sr.qualified,
+        sr.proof,
+        sr.guild_id,
+        COALESCE(g.name, '')::text AS guild_name
+    FROM anchor a
+    JOIN instance_speedruns sr ON sr.instance_name = a.name
+    JOIN log_instances li ON li.id = sr.instance_id
+    JOIN wow_server_realms wsr ON wsr.id = sr.realm_id
+    LEFT JOIN guilds g ON g.id = sr.guild_id
+    LEFT JOIN leaderboard_version_requirements lvr ON lvr.instance_name = sr.instance_name
+    WHERE li.difficulty_name = a.difficulty_name
+      AND li.max_players = a.max_players
+      AND sr.start_time >= a.start_time - make_interval(days => $2::int)
+      AND sr.start_time <= a.start_time
+      AND sr.parser_version_num >= COALESCE(lvr.min_parser_version_num, 0)
+      AND sr.addon_version_num >= COALESCE(lvr.min_addon_version_num, 0)
+      AND CASE
+          WHEN $3 :: text = 'guild' THEN a.guild_id IS NOT NULL AND sr.guild_id = a.guild_id
+          ELSE wsr.server_id = a.server_id
+      END
+    ORDER BY
+        COALESCE(li.duplicate_group_id, li.id),
+        sr.qualified DESC,
+        (sr.duration_ms > 0) DESC,
+        sr.duration_ms ASC,
+        sr.start_time DESC
+)
+SELECT instance_id, hashed_slug, start_time, completion_time, duration_ms, qualified, proof, guild_id, guild_name
+FROM deduped
+ORDER BY start_time DESC
+`
+
+type InstanceSpeedrunCohortParams struct {
+	InstanceID   uuid.UUID `db:"instance_id" json:"instance_id"`
+	LookbackDays int32     `db:"lookback_days" json:"lookback_days"`
+	Scope        string    `db:"scope" json:"scope"`
+}
+
+type InstanceSpeedrunCohortRow struct {
+	InstanceID     uuid.UUID          `db:"instance_id" json:"instance_id"`
+	HashedSlug     pgtype.Text        `db:"hashed_slug" json:"hashed_slug"`
+	StartTime      pgtype.Timestamptz `db:"start_time" json:"start_time"`
+	CompletionTime pgtype.Timestamptz `db:"completion_time" json:"completion_time"`
+	DurationMs     int64              `db:"duration_ms" json:"duration_ms"`
+	Qualified      bool               `db:"qualified" json:"qualified"`
+	Proof          []byte             `db:"proof" json:"proof"`
+	GuildID        uuid.NullUUID      `db:"guild_id" json:"guild_id"`
+	GuildName      string             `db:"guild_name" json:"guild_name"`
+}
+
+// Returns rankings-backed runs comparable to an anchor instance. Cohorts match
+// instance name, difficulty, and declared maximum raid size, use a historical
+// window ending at the anchor start time, and stay within the anchor's server
+// or guild. Duplicate uploads are collapsed without reducing to one run per guild.
+func (q *sqlQuerier) InstanceSpeedrunCohort(ctx context.Context, arg InstanceSpeedrunCohortParams) ([]InstanceSpeedrunCohortRow, error) {
+	rows, err := q.db.Query(ctx, instanceSpeedrunCohort, arg.InstanceID, arg.LookbackDays, arg.Scope)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []InstanceSpeedrunCohortRow
+	for rows.Next() {
+		var i InstanceSpeedrunCohortRow
+		if err := rows.Scan(
+			&i.InstanceID,
+			&i.HashedSlug,
+			&i.StartTime,
+			&i.CompletionTime,
+			&i.DurationMs,
+			&i.Qualified,
+			&i.Proof,
+			&i.GuildID,
+			&i.GuildName,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const speedrunDifficulties = `-- name: SpeedrunDifficulties :many
 SELECT DISTINCT li.difficulty_name
 FROM instance_speedruns sr

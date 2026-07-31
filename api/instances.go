@@ -4,6 +4,7 @@ import (
 	"errors"
 	"net/http"
 	"slices"
+	"strconv"
 	"time"
 
 	"github.com/Emyrk/chronicle/api/chroniclesdk"
@@ -194,6 +195,82 @@ func (api *API) InstanceSpeedrun(w http.ResponseWriter, r *http.Request) {
 	}
 
 	httpapi.Write(ctx, w, http.StatusOK, result)
+}
+
+func (api *API) InstanceSpeedrunCohort(w http.ResponseWriter, r *http.Request) {
+	ctx := r.Context()
+	inst := httpmw.Instance(ctx)
+
+	scope := chroniclesdk.SpeedrunCohortScope(r.URL.Query().Get("scope"))
+	if scope != chroniclesdk.SpeedrunCohortScopeServer && scope != chroniclesdk.SpeedrunCohortScopeGuild {
+		httpapi.Write(ctx, w, http.StatusBadRequest, chroniclesdk.Response{
+			Message: "Scope must be server or guild",
+		})
+		return
+	}
+	if scope == chroniclesdk.SpeedrunCohortScopeGuild && !inst.GuildID.Valid {
+		httpapi.Write(ctx, w, http.StatusBadRequest, chroniclesdk.Response{
+			Message: "This instance is not associated with a guild",
+		})
+		return
+	}
+
+	lookbackDays := int32(60)
+	if raw := r.URL.Query().Get("lookback_days"); raw != "" {
+		parsed, err := strconv.ParseInt(raw, 10, 32)
+		if err != nil || parsed < 1 || parsed > 3650 {
+			httpapi.Write(ctx, w, http.StatusBadRequest, chroniclesdk.Response{
+				Message: "Lookback days must be between 1 and 3650",
+			})
+			return
+		}
+		lookbackDays = int32(parsed)
+	}
+
+	if _, err := api.Opts.Zed.GetInstanceSpeedrun(ctx, inst.ID); err != nil {
+		httpapi.Write(ctx, w, http.StatusNotFound, chroniclesdk.Response{
+			Message: "No speedrun data for this instance",
+		})
+		return
+	}
+
+	rows, err := api.Opts.Zed.InstanceSpeedrunCohort(ctx, database.InstanceSpeedrunCohortParams{
+		InstanceID:   inst.ID,
+		LookbackDays: lookbackDays,
+		Scope:        string(scope),
+	})
+	if err != nil {
+		httpapi.InternalServerError(w, err)
+		return
+	}
+
+	runs := make([]chroniclesdk.SpeedrunCohortRun, 0, len(rows))
+	for _, row := range rows {
+		runs = append(runs, db2sdk.SpeedrunCohortRun(row))
+	}
+
+	label := inst.ServerName.String
+	var guildID *uuid.UUID
+	if scope == chroniclesdk.SpeedrunCohortScopeGuild {
+		label = inst.GuildName.String
+		guildID = &inst.GuildID.UUID
+	}
+
+	windowEnd := inst.StartTime.Time
+	httpapi.Write(ctx, w, http.StatusOK, chroniclesdk.SpeedrunCohortResponse{
+		Cohort: chroniclesdk.SpeedrunCohortDefinition{
+			Scope:          scope,
+			Label:          label,
+			InstanceName:   inst.Name,
+			DifficultyName: inst.DifficultyName,
+			MaxPlayers:     inst.MaxPlayers,
+			LookbackDays:   lookbackDays,
+			WindowStart:    windowEnd.AddDate(0, 0, -int(lookbackDays)),
+			WindowEnd:      windowEnd,
+			GuildID:        guildID,
+		},
+		Runs: runs,
+	})
 }
 
 func (api *API) PostInstanceYoutube(w http.ResponseWriter, r *http.Request) {

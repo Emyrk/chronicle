@@ -253,6 +253,43 @@ func SpeedrunResult(sr database.GetInstanceSpeedrunRow) *chroniclesdk.SpeedrunRe
 	return result
 }
 
+func SpeedrunCohortRun(row database.InstanceSpeedrunCohortRow) chroniclesdk.SpeedrunCohortRun {
+	var payload chroniclesdk.SpeedrunProofPayload
+	if err := json.Unmarshal(row.Proof, &payload); err != nil || payload.Proof == nil {
+		_ = json.Unmarshal(row.Proof, &payload.Proof)
+	}
+
+	satisfied := 0
+	for _, proof := range payload.Proof {
+		if proof.Satisfied {
+			satisfied++
+		}
+	}
+
+	run := chroniclesdk.SpeedrunCohortRun{
+		InstanceID:            row.InstanceID,
+		Slug:                  row.HashedSlug.String,
+		StartTime:             row.StartTime.Time,
+		Completed:             len(payload.Proof) > 0 && satisfied == len(payload.Proof),
+		Qualified:             row.Qualified,
+		RequirementsSatisfied: satisfied,
+		RequirementsTotal:     len(payload.Proof),
+		GuildName:             row.GuildName,
+	}
+	if row.GuildID.Valid {
+		run.GuildID = &row.GuildID.UUID
+	}
+	if row.DurationMs > 0 {
+		duration := row.DurationMs
+		run.DurationMs = &duration
+	}
+	if !row.CompletionTime.Time.IsZero() {
+		completion := row.CompletionTime.Time
+		run.CompletionTime = &completion
+	}
+	return run
+}
+
 // SpeedrunLeaderboardEntry converts a database leaderboard row to an SDK entry.
 func SpeedrunLeaderboardEntry(row database.SpeedrunLeaderboardRow) chroniclesdk.SpeedrunLeaderboardEntry {
 	entry := chroniclesdk.SpeedrunLeaderboardEntry{

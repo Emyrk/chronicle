@@ -69,13 +69,13 @@ type Guild struct {
 }
 
 type WoWInstance struct {
-	ID                uuid.UUID         `json:"id"`
-	RealmID           uuid.UUID         `json:"realm_id"`
+	ID      uuid.UUID `json:"id"`
+	RealmID uuid.UUID `json:"realm_id"`
 	// DatasetID is the resolved game-data dataset for this instance's realm.
 	// Frontends use it to fetch matching talent/spell data regardless of the
 	// tenant domain serving the request. Only populated on the detail endpoint.
-	DatasetID         uuid.UUID         `json:"dataset_id,omitempty"`
-	IconBaseURL       string            `json:"icon_base_url,omitempty"`
+	DatasetID   uuid.UUID `json:"dataset_id,omitempty"`
+	IconBaseURL string    `json:"icon_base_url,omitempty"`
 	// Format is the log group's parse format (e.g. "1.12a-cc-addon").
 	// Flavor is the server-mechanics tag set. Both come from the log group and
 	// are only populated on the detail endpoint.
@@ -300,7 +300,7 @@ type SpeedrunLevelViolation struct {
 // SpeedrunProofPayload is the JSON structure stored in the database proof column.
 // It wraps the proof array alongside optional level range data.
 type SpeedrunProofPayload struct {
-	Proof      []SpeedrunProof        `json:"proof"`
+	Proof      []SpeedrunProof           `json:"proof"`
 	LevelRange *SpeedrunLevelRangeResult `json:"level_range,omitempty"`
 }
 
@@ -313,15 +313,55 @@ type SpeedrunLevelRangeResult struct {
 
 // SpeedrunResult is the outcome of evaluating speedrun rules against an instance.
 type SpeedrunResult struct {
-	Qualified      bool                      `json:"qualified"`
-	StartTime      time.Time                 `json:"start_time"`
-	CompletionTime time.Time                 `json:"completion_time"`
-	DurationMs     int64                     `json:"duration_ms"`
-	Proof          []SpeedrunProof           `json:"proof"`
-	VersionStatus    *SpeedrunVersionStatus      `json:"version_status,omitempty"`
-	LevelRange       *SpeedrunLevelRangeResult   `json:"level_range,omitempty"`
-	DataSourceStatus  *SpeedrunDataSourceStatus   `json:"data_source,omitempty"`
-	DpsRankingsStatus *DpsRankingsStatus          `json:"dps_rankings,omitempty"`
+	Qualified         bool                      `json:"qualified"`
+	StartTime         time.Time                 `json:"start_time"`
+	CompletionTime    time.Time                 `json:"completion_time"`
+	DurationMs        int64                     `json:"duration_ms"`
+	Proof             []SpeedrunProof           `json:"proof"`
+	VersionStatus     *SpeedrunVersionStatus    `json:"version_status,omitempty"`
+	LevelRange        *SpeedrunLevelRangeResult `json:"level_range,omitempty"`
+	DataSourceStatus  *SpeedrunDataSourceStatus `json:"data_source,omitempty"`
+	DpsRankingsStatus *DpsRankingsStatus        `json:"dps_rankings,omitempty"`
+}
+
+type SpeedrunCohortScope string
+
+const (
+	SpeedrunCohortScopeServer SpeedrunCohortScope = "server"
+	SpeedrunCohortScopeGuild  SpeedrunCohortScope = "guild"
+)
+
+// SpeedrunCohortResponse contains lightweight rankings-backed observations
+// comparable to one anchor instance. It never includes full instance data.
+type SpeedrunCohortResponse struct {
+	Cohort SpeedrunCohortDefinition `json:"cohort"`
+	Runs   []SpeedrunCohortRun      `json:"runs"`
+}
+
+type SpeedrunCohortDefinition struct {
+	Scope          SpeedrunCohortScope `json:"scope"`
+	Label          string              `json:"label"`
+	InstanceName   string              `json:"instance_name"`
+	DifficultyName string              `json:"difficulty_name"`
+	MaxPlayers     int32               `json:"max_players"`
+	LookbackDays   int32               `json:"lookback_days"`
+	WindowStart    time.Time           `json:"window_start"`
+	WindowEnd      time.Time           `json:"window_end"`
+	GuildID        *uuid.UUID          `json:"guild_id,omitempty"`
+}
+
+type SpeedrunCohortRun struct {
+	InstanceID            uuid.UUID  `json:"instance_id"`
+	Slug                  string     `json:"slug"`
+	StartTime             time.Time  `json:"start_time"`
+	CompletionTime        *time.Time `json:"completion_time,omitempty"`
+	DurationMs            *int64     `json:"duration_ms,omitempty"`
+	Completed             bool       `json:"completed"`
+	Qualified             bool       `json:"qualified"`
+	RequirementsSatisfied int        `json:"requirements_satisfied"`
+	RequirementsTotal     int        `json:"requirements_total"`
+	GuildID               *uuid.UUID `json:"guild_id,omitempty"`
+	GuildName             string     `json:"guild_name,omitempty"`
 }
 
 // DpsRankingsStatus reports whether DPS rankings were recorded for this instance.

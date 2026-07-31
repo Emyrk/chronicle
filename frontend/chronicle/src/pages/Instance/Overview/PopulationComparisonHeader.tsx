@@ -3,7 +3,11 @@ import { toast } from "sonner";
 import { Card } from "@/components/ui/Card/Card";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
-import { formatInstancePopulation, parseInstanceURL } from "./populationSelectionState";
+import {
+  formatPopulationSelection,
+  parseInstanceURL,
+  type PopulationSelection,
+} from "./populationSelectionState";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -17,11 +21,13 @@ import {
 
 interface PopulationSelectorProps {
   label: string;
-  value?: string;
+  value?: PopulationSelection;
   allowNone?: boolean;
   disabled?: boolean;
+  guildAvailable?: boolean;
+  fixedAnchorInstanceId?: string;
   className?: string;
-  onChange?: (instanceID?: string) => void;
+  onChange?: (selection?: PopulationSelection) => void;
 }
 
 function PopulationSelector({
@@ -29,24 +35,40 @@ function PopulationSelector({
   value,
   allowNone = false,
   disabled = false,
+  guildAvailable = true,
+  fixedAnchorInstanceId,
   className,
   onChange,
 }: PopulationSelectorProps) {
-  const buttonLabel = value ?? (allowNone ? "No comparison" : "Select population");
+  const buttonLabel = value
+    ? formatPopulationSelection(value)
+    : allowNone ? "No comparison" : "Select population";
 
-  const selectInstanceURL = () => {
-    const raw = window.prompt("Paste a Chronicle instance URL");
-    if (!raw) return;
+  const requestAnchorInstance = (prompt: string): string | null => {
+    const raw = window.prompt(prompt);
+    if (!raw) return null;
 
     const instanceID = parseInstanceURL(raw);
     if (!instanceID) {
       toast.error("Invalid instance URL", {
         description: "Use a Chronicle URL with the path /instances/<id>.",
       });
-      return;
+      return null;
     }
 
-    onChange?.(instanceID);
+    return instanceID;
+  };
+
+  const selectInstanceURL = () => {
+    const instanceID = requestAnchorInstance("Paste a Chronicle instance URL");
+    if (instanceID) onChange?.({ kind: "instance", instanceId: instanceID });
+  };
+
+  const selectCohort = (scope: "server" | "guild") => {
+    const anchorInstanceId = fixedAnchorInstanceId
+      ?? requestAnchorInstance(`Paste an instance URL from the ${scope} population`);
+    if (!anchorInstanceId) return;
+    onChange?.({ kind: "cohort", scope, anchorInstanceId, lookbackDays: 60 });
   };
 
   return (
@@ -70,7 +92,7 @@ function PopulationSelector({
           </Button>
         </DropdownMenuTrigger>
         <DropdownMenuContent align="start" className="w-72">
-          <DropdownMenuRadioGroup value={value ? "selected" : allowNone ? "none" : ""}>
+          <DropdownMenuRadioGroup value={value?.kind === "cohort" ? value.scope : value ? "instance" : allowNone ? "none" : ""}>
             {allowNone && (
               <DropdownMenuRadioItem value="none" onSelect={() => onChange?.(undefined)}>
                 No comparison
@@ -87,17 +109,20 @@ function PopulationSelector({
             >
               Specific raid URL
             </DropdownMenuRadioItem>
-            <DropdownMenuRadioItem value="server" disabled>
+            <DropdownMenuRadioItem value="server" onSelect={() => selectCohort("server")}>
               Server cohort
               <DropdownMenuShortcut>60 days</DropdownMenuShortcut>
             </DropdownMenuRadioItem>
-            <DropdownMenuRadioItem value="guild" disabled>
-              Guild or team cohort
+            <DropdownMenuRadioItem
+              value="guild"
+              disabled={!guildAvailable}
+              onSelect={() => selectCohort("guild")}
+            >
+              Guild cohort
+              <DropdownMenuShortcut>60 days</DropdownMenuShortcut>
             </DropdownMenuRadioItem>
           </DropdownMenuRadioGroup>
-          <p className="px-2 py-1.5 text-[11px] leading-4 text-muted-foreground">
-            Population configuration will be connected to rankings data in the next phase.
-          </p>
+
         </DropdownMenuContent>
       </DropdownMenu>
     </div>
@@ -112,18 +137,22 @@ export function PopulationComparisonHeader({
   showPrimary = false,
   comparisonEligible = true,
   eligibilityLoading = false,
+  guildAvailable = true,
+  fixedAnchorInstanceId,
   onPrimaryChange,
   onComparisonChange,
 }: {
-  primary?: string;
-  comparison?: string;
+  primary?: PopulationSelection;
+  comparison?: PopulationSelection;
   heading?: string;
   description?: string;
   showPrimary?: boolean;
   comparisonEligible?: boolean;
   eligibilityLoading?: boolean;
-  onPrimaryChange?: (instanceID?: string) => void;
-  onComparisonChange?: (instanceID?: string) => void;
+  guildAvailable?: boolean;
+  fixedAnchorInstanceId?: string;
+  onPrimaryChange?: (selection?: PopulationSelection) => void;
+  onComparisonChange?: (selection?: PopulationSelection) => void;
 }) {
   if (!heading && !showPrimary && !eligibilityLoading && !comparisonEligible) return null;
 
@@ -144,7 +173,7 @@ export function PopulationComparisonHeader({
         {showPrimary && (
           <PopulationSelector
             label="Primary population"
-            value={primary ? formatInstancePopulation(primary) : undefined}
+            value={primary}
             onChange={onPrimaryChange}
           />
         )}
@@ -156,9 +185,11 @@ export function PopulationComparisonHeader({
         {(comparisonEligible || eligibilityLoading || showPrimary) && (
           <PopulationSelector
             label="Compare against"
-            value={comparison ? formatInstancePopulation(comparison) : undefined}
+            value={comparison}
             allowNone
             disabled={eligibilityLoading}
+            guildAvailable={guildAvailable}
+            fixedAnchorInstanceId={fixedAnchorInstanceId}
             className={showPrimary ? undefined : "sm:max-w-sm sm:flex-none"}
             onChange={onComparisonChange}
           />
