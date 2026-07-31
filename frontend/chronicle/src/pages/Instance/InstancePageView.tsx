@@ -47,6 +47,9 @@ import { InstanceActionBar } from "@/components/InstanceActionBar/InstanceAction
 import { InstanceHelpSheet } from "@/components/HelpSheet";
 import { ENCOUNTER_TIPS, ENTITY_TIPS, CLASS_TOGGLE_TIPS } from "@/constants/tips";
 import { InstanceMenu } from "./InstanceMenu";
+import { InstanceViewModeSwitch } from "./InstanceViewMode";
+import { parseInstanceViewMode, withInstanceViewMode, type InstanceViewMode } from "./instanceViewModeState";
+import { InstanceOverview } from "./Overview/InstanceOverview";
 
 import { HeroicBadge } from "@/components/HeroicBadge";
 import { isHeroic } from "@/lib/wowUtils";
@@ -1875,6 +1878,8 @@ export interface InstancePageViewProps {
   duplicateGroupId?: string;
   /** Hide the action bar (spellbook) - e.g. while the replay overlay occupies the same space */
   suppressActionBar?: boolean;
+  /** Enable the real Instance page's Encounters/Overview mode switch. */
+  supportsOverview?: boolean;
 }
 
 export function InstancePageView({
@@ -1887,11 +1892,27 @@ export function InstancePageView({
   canAdminLogs,
   duplicateGroupId,
   suppressActionBar,
+  supportsOverview = false,
 }: InstancePageViewProps) {
   const timeRange = useTimeRangeContextOptional();
 
   // URL state for explainer mode (simple ?explain=panel_type)
   const [searchParams, setSearchParams] = useSearchParams();
+  const requestedViewMode = parseInstanceViewMode(searchParams.get("view"));
+  const viewMode: InstanceViewMode = supportsOverview ? requestedViewMode : "encounters";
+  const isEncounterView = viewMode === "encounters";
+  const setViewMode = useCallback((mode: InstanceViewMode) => {
+    setSearchParams(prev => {
+      const next = new URLSearchParams(prev);
+      if (mode === "overview") {
+        next.set("view", "overview");
+      } else {
+        next.delete("view");
+      }
+      return next;
+    }, { replace: true });
+  }, [setSearchParams]);
+
   const explainerPanelType = searchParams.get("explain") as EventsPanelType | null;
   
   // URL state for help panel (?help=1)
@@ -2800,15 +2821,19 @@ export function InstancePageView({
         instance_id: instance.id,
         payload: payload as unknown as Record<string, string>,
       });
-      await navigator.clipboard.writeText(result.url);
-      toast.success("Share link copied", { description: result.url });
+      const url = withInstanceViewMode(result.url, viewMode);
+      await navigator.clipboard.writeText(url);
+      toast.success("Share link copied", { description: url });
     } catch {
       toast.error("Failed to create share link");
     }
-  }, [buildSharedViewPayload, createShare, instance.id]);
+  }, [buildSharedViewPayload, createShare, instance.id, viewMode]);
 
   const handleShareWithoutLayout = useCallback(async () => {
-    const url = `${window.location.origin}/instances/${instance.slug || instance.id}`;
+    const url = withInstanceViewMode(
+      `${window.location.origin}/instances/${instance.slug || instance.id}`,
+      viewMode,
+    );
 
     try {
       await navigator.clipboard.writeText(url);
@@ -2816,7 +2841,7 @@ export function InstancePageView({
     } catch {
       toast.error("Failed to copy link");
     }
-  }, [instance.slug, instance.id]);
+  }, [instance.slug, instance.id, viewMode]);
 
 
   const castResetToDefault = useCallback(() => {
@@ -3023,30 +3048,37 @@ export function InstancePageView({
               <DuplicatesBadge instanceId={instance.id} duplicateGroupId={duplicateGroupId} />
             )}
           </h1>
-          {!isMobile && instance.maxPlayers != null && instance.maxPlayers > 0 && (
-            <div className="flex items-center gap-1.5 shrink-0 mt-1">
-              <span className="text-sm text-muted-foreground font-medium">{instance.maxPlayers} Player</span>
-              {heroic && (
-                <HeroicBadge />
+          {!isMobile && (
+            <div className="flex shrink-0 items-center gap-3">
+              {instance.maxPlayers != null && instance.maxPlayers > 0 && (
+                <div className="flex items-center gap-1.5">
+                  <span className="text-sm text-muted-foreground font-medium">{instance.maxPlayers} Player</span>
+                  {heroic && (
+                    <HeroicBadge />
+                  )}
+                </div>
               )}
+              {supportsOverview && <InstanceViewModeSwitch value={viewMode} onChange={setViewMode} />}
             </div>
           )}
           {isMobile && (
             <div className="flex flex-col items-end gap-2 shrink-0">
               <div className="flex items-center gap-2">
               <InstanceMenu
-                onImportLayout={handleImportLayout}
-                onExportLayout={handleExportLayout}
-                onPopOutLayout={popOutLayout}
-                layoutPoppedOut={layoutPopup !== null}
-                onResetView={resetView}
-                onOpenTimeRange={onOpenTimeRange}
+                onImportLayout={isEncounterView ? handleImportLayout : undefined}
+                onExportLayout={isEncounterView ? handleExportLayout : undefined}
+                onPopOutLayout={isEncounterView ? popOutLayout : undefined}
+                layoutPoppedOut={isEncounterView && layoutPopup !== null}
+                onResetView={isEncounterView ? resetView : undefined}
+                onOpenTimeRange={isEncounterView ? onOpenTimeRange : undefined}
                 instanceId={instance.id}
                 logDetailUrl={logDetailUrl}
-                layoutLabUrl={activeLayoutId ? `/account/layout-lab?layoutId=${activeLayoutId}` : undefined}
+                layoutLabUrl={isEncounterView && activeLayoutId ? `/account/layout-lab?layoutId=${activeLayoutId}` : undefined}
                 duplicateGroupId={duplicateGroupId}
                 canAdminLogs={canAdminLogs}
                 isMobile={isMobile}
+                viewMode={supportsOverview ? viewMode : undefined}
+                onViewModeChange={supportsOverview ? setViewMode : undefined}
                 isLoggedIn={isLoggedIn}
                 onShareWithLayout={() => { void handleShareView(); }}
                 onShareWithoutLayout={() => { void handleShareWithoutLayout(); }}
@@ -3162,7 +3194,7 @@ export function InstancePageView({
                   </DropdownMenuItem>
                 </DropdownMenuContent>
               </DropdownMenu>
-              {youtubeButton}
+              {isEncounterView && youtubeButton}
               {showHints && (
                 <>
                   <div className="relative">
@@ -3189,15 +3221,15 @@ export function InstancePageView({
                 </>
               )}
               <InstanceMenu
-                onImportLayout={handleImportLayout}
-                onExportLayout={handleExportLayout}
-                onPopOutLayout={popOutLayout}
-                layoutPoppedOut={layoutPopup !== null}
-                onResetView={resetView}
-                onOpenTimeRange={onOpenTimeRange}
+                onImportLayout={isEncounterView ? handleImportLayout : undefined}
+                onExportLayout={isEncounterView ? handleExportLayout : undefined}
+                onPopOutLayout={isEncounterView ? popOutLayout : undefined}
+                layoutPoppedOut={isEncounterView && layoutPopup !== null}
+                onResetView={isEncounterView ? resetView : undefined}
+                onOpenTimeRange={isEncounterView ? onOpenTimeRange : undefined}
                 instanceId={instance.id}
                 logDetailUrl={logDetailUrl}
-                layoutLabUrl={activeLayoutId ? `/account/layout-lab?layoutId=${activeLayoutId}` : undefined}
+                layoutLabUrl={isEncounterView && activeLayoutId ? `/account/layout-lab?layoutId=${activeLayoutId}` : undefined}
                 duplicateGroupId={duplicateGroupId}
                 canAdminLogs={canAdminLogs}
               />
@@ -3249,7 +3281,7 @@ export function InstancePageView({
         </div>
       )}
 
-      {actionBarOpen && !suppressActionBar && (
+      {isEncounterView && actionBarOpen && !suppressActionBar && (
         <div className="fixed bottom-5 left-0 right-0 z-[80] flex justify-center px-2 sm:left-1/2 sm:right-auto sm:w-auto sm:-translate-x-1/2 sm:px-0">
           <div className="inline-flex max-w-full flex-col items-center gap-2">
             {!isMobile && (
@@ -3283,8 +3315,8 @@ export function InstancePageView({
         </div>
       )}
 
-      {/* Main content: sidebar + detail */}
-      <div className="flex gap-6 relative">
+      {isEncounterView ? (
+        <div className="flex gap-6 relative">
         {/* Mobile backdrop */}
         {isMobile && sidebarOpen && (
           <div 
@@ -3370,8 +3402,12 @@ export function InstancePageView({
         )}
       </div>
 
+      ) : (
+        <InstanceOverview instance={instance} />
+      )}
+
       {/* Mobile: FAB toggle button - portaled to body to avoid fixed positioning issues */}
-      {isMobile && createPortal(
+      {isEncounterView && isMobile && createPortal(
         <Button
           variant="default"
           size="icon"
@@ -3388,7 +3424,7 @@ export function InstancePageView({
       )}
 
       {/* Mobile: spellbook FAB to toggle action bar (logged-in users only) */}
-      {isMobile && isLoggedIn && createPortal(
+      {isEncounterView && isMobile && isLoggedIn && createPortal(
         <Button
           variant="default"
           size="icon"

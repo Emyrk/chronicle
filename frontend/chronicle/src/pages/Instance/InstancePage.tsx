@@ -256,6 +256,7 @@ function InstancePageInner({
         duplicateGroupId={duplicateGroupId}
         onOpenTimeRange={() => setShowTimeRange(true)}
         suppressActionBar={replayPanelVisible && replayPosition === "bottom"}
+        supportsOverview
         youtubeButton={
           <div className="flex gap-1.5">
             {/* Replay button (desktop only - replay is disabled on mobile) */}

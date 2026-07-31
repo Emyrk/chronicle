@@ -1,7 +1,8 @@
-import { Menu, FileText, Copy, Upload, Download, RotateCcw, LayoutGrid, Clock, Share2, Unlink, ExternalLink } from "lucide-react";
+import { Menu, FileText, Copy, Upload, Download, RotateCcw, LayoutGrid, Clock, Share2, Unlink, ExternalLink, BarChart3, Check, List } from "lucide-react";
 import { toast } from "sonner";
 import { Link } from "react-router-dom";
 import { Button } from "@/components/ui/button";
+import type { InstanceViewMode } from "./instanceViewModeState";
 import {
   DropdownMenu,
   DropdownMenuTrigger,
@@ -20,8 +21,10 @@ interface InstanceMenuProps {
   instanceId: string;
   logDetailUrl?: string;
   layoutLabUrl?: string;
-  /** Mobile-only props: show share/help/video inside the menu */
+  /** Mobile-only props: show view selection and share actions inside the menu */
   isMobile?: boolean;
+  viewMode?: InstanceViewMode;
+  onViewModeChange?: (mode: InstanceViewMode) => void;
   isLoggedIn?: boolean;
   onShareWithLayout?: () => void;
   onShareWithoutLayout?: () => void;
@@ -45,6 +48,8 @@ export function InstanceMenu({
   logDetailUrl,
   layoutLabUrl,
   isMobile,
+  viewMode,
+  onViewModeChange,
   isLoggedIn,
   onShareWithLayout,
   onShareWithoutLayout,
@@ -81,6 +86,22 @@ export function InstanceMenu({
         </Button>
       </DropdownMenuTrigger>
       <DropdownMenuContent align="end">
+        {isMobile && viewMode && onViewModeChange && (
+          <>
+            <DropdownMenuLabel className="text-xs text-muted-foreground">View</DropdownMenuLabel>
+            <DropdownMenuItem onClick={() => onViewModeChange("encounters")}>
+              <List className="h-4 w-4 mr-2" />
+              Encounters
+              {viewMode === "encounters" && <Check className="ml-auto h-4 w-4" />}
+            </DropdownMenuItem>
+            <DropdownMenuItem onClick={() => onViewModeChange("overview")}>
+              <BarChart3 className="h-4 w-4 mr-2" />
+              Overview
+              {viewMode === "overview" && <Check className="ml-auto h-4 w-4" />}
+            </DropdownMenuItem>
+            <DropdownMenuSeparator />
+          </>
+        )}
         {isMobile && onShareWithLayout && (
           <>
             <DropdownMenuLabel className="text-xs text-muted-foreground">Share</DropdownMenuLabel>
