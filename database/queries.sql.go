@@ -3543,21 +3543,27 @@ func (q *sqlQuerier) GetInstanceLoot(ctx context.Context, arg GetInstanceLootPar
 }
 
 const getInstanceOverviewMetrics = `-- name: GetInstanceOverviewMetrics :one
-SELECT instance_id, complete, player_deaths, wipe_count, deadliest_abilities, total_duration_ms, total_combat_duration_ms, total_boss_duration_ms, metrics_version, created_at, updated_at
+SELECT instance_id, requirements_complete, player_deaths, wipe_count, top_incoming_damage_abilities, encounter_span_duration_ms, total_combat_duration_ms, total_boss_duration_ms, metrics_version, created_at, updated_at
 FROM instance_overview_metrics
 WHERE instance_id = $1
+  AND metrics_version = $2
 `
 
-func (q *sqlQuerier) GetInstanceOverviewMetrics(ctx context.Context, instanceID uuid.UUID) (InstanceOverviewMetric, error) {
-	row := q.db.QueryRow(ctx, getInstanceOverviewMetrics, instanceID)
+type GetInstanceOverviewMetricsParams struct {
+	InstanceID     uuid.UUID `db:"instance_id" json:"instance_id"`
+	MetricsVersion int32     `db:"metrics_version" json:"metrics_version"`
+}
+
+func (q *sqlQuerier) GetInstanceOverviewMetrics(ctx context.Context, arg GetInstanceOverviewMetricsParams) (InstanceOverviewMetric, error) {
+	row := q.db.QueryRow(ctx, getInstanceOverviewMetrics, arg.InstanceID, arg.MetricsVersion)
 	var i InstanceOverviewMetric
 	err := row.Scan(
 		&i.InstanceID,
-		&i.Complete,
+		&i.RequirementsComplete,
 		&i.PlayerDeaths,
 		&i.WipeCount,
-		&i.DeadliestAbilities,
-		&i.TotalDurationMs,
+		&i.TopIncomingDamageAbilities,
+		&i.EncounterSpanDurationMs,
 		&i.TotalCombatDurationMs,
 		&i.TotalBossDurationMs,
 		&i.MetricsVersion,
@@ -3570,11 +3576,11 @@ func (q *sqlQuerier) GetInstanceOverviewMetrics(ctx context.Context, instanceID 
 const upsertInstanceOverviewMetrics = `-- name: UpsertInstanceOverviewMetrics :exec
 INSERT INTO instance_overview_metrics (
     instance_id,
-    complete,
+    requirements_complete,
     player_deaths,
     wipe_count,
-    deadliest_abilities,
-    total_duration_ms,
+    top_incoming_damage_abilities,
+    encounter_span_duration_ms,
     total_combat_duration_ms,
     total_boss_duration_ms,
     metrics_version
@@ -3590,11 +3596,11 @@ INSERT INTO instance_overview_metrics (
     $9
 )
 ON CONFLICT (instance_id) DO UPDATE SET
-    complete = EXCLUDED.complete,
+    requirements_complete = EXCLUDED.requirements_complete,
     player_deaths = EXCLUDED.player_deaths,
     wipe_count = EXCLUDED.wipe_count,
-    deadliest_abilities = EXCLUDED.deadliest_abilities,
-    total_duration_ms = EXCLUDED.total_duration_ms,
+    top_incoming_damage_abilities = EXCLUDED.top_incoming_damage_abilities,
+    encounter_span_duration_ms = EXCLUDED.encounter_span_duration_ms,
     total_combat_duration_ms = EXCLUDED.total_combat_duration_ms,
     total_boss_duration_ms = EXCLUDED.total_boss_duration_ms,
     metrics_version = EXCLUDED.metrics_version,
@@ -3602,25 +3608,25 @@ ON CONFLICT (instance_id) DO UPDATE SET
 `
 
 type UpsertInstanceOverviewMetricsParams struct {
-	InstanceID            uuid.UUID                  `db:"instance_id" json:"instance_id"`
-	Complete              pgtype.Bool                `db:"complete" json:"complete"`
-	PlayerDeaths          int32                      `db:"player_deaths" json:"player_deaths"`
-	WipeCount             int32                      `db:"wipe_count" json:"wipe_count"`
-	DeadliestAbilities    []OverviewDeadliestAbility `db:"deadliest_abilities" json:"deadliest_abilities"`
-	TotalDurationMs       int64                      `db:"total_duration_ms" json:"total_duration_ms"`
-	TotalCombatDurationMs int64                      `db:"total_combat_duration_ms" json:"total_combat_duration_ms"`
-	TotalBossDurationMs   int64                      `db:"total_boss_duration_ms" json:"total_boss_duration_ms"`
-	MetricsVersion        int32                      `db:"metrics_version" json:"metrics_version"`
+	InstanceID                 uuid.UUID                       `db:"instance_id" json:"instance_id"`
+	RequirementsComplete       pgtype.Bool                     `db:"requirements_complete" json:"requirements_complete"`
+	PlayerDeaths               int32                           `db:"player_deaths" json:"player_deaths"`
+	WipeCount                  int32                           `db:"wipe_count" json:"wipe_count"`
+	TopIncomingDamageAbilities []OverviewIncomingDamageAbility `db:"top_incoming_damage_abilities" json:"top_incoming_damage_abilities"`
+	EncounterSpanDurationMs    int64                           `db:"encounter_span_duration_ms" json:"encounter_span_duration_ms"`
+	TotalCombatDurationMs      int64                           `db:"total_combat_duration_ms" json:"total_combat_duration_ms"`
+	TotalBossDurationMs        int64                           `db:"total_boss_duration_ms" json:"total_boss_duration_ms"`
+	MetricsVersion             int32                           `db:"metrics_version" json:"metrics_version"`
 }
 
 func (q *sqlQuerier) UpsertInstanceOverviewMetrics(ctx context.Context, arg UpsertInstanceOverviewMetricsParams) error {
 	_, err := q.db.Exec(ctx, upsertInstanceOverviewMetrics,
 		arg.InstanceID,
-		arg.Complete,
+		arg.RequirementsComplete,
 		arg.PlayerDeaths,
 		arg.WipeCount,
-		arg.DeadliestAbilities,
-		arg.TotalDurationMs,
+		arg.TopIncomingDamageAbilities,
+		arg.EncounterSpanDurationMs,
 		arg.TotalCombatDurationMs,
 		arg.TotalBossDurationMs,
 		arg.MetricsVersion,
@@ -8863,11 +8869,11 @@ deduped AS (
         sr.proof,
         sr.guild_id,
         COALESCE(g.name, '')::text AS guild_name,
-        iom.complete,
+        iom.requirements_complete,
         iom.player_deaths,
         iom.wipe_count,
-        iom.deadliest_abilities,
-        iom.total_duration_ms,
+        iom.top_incoming_damage_abilities,
+        iom.encounter_span_duration_ms,
         iom.total_combat_duration_ms,
         iom.total_boss_duration_ms,
         iom.metrics_version
@@ -8876,16 +8882,18 @@ deduped AS (
     JOIN log_instances li ON li.id = sr.instance_id
     JOIN wow_server_realms wsr ON wsr.id = sr.realm_id
     LEFT JOIN guilds g ON g.id = sr.guild_id
-    LEFT JOIN instance_overview_metrics iom ON iom.instance_id = sr.instance_id
+    LEFT JOIN instance_overview_metrics iom
+      ON iom.instance_id = sr.instance_id
+     AND iom.metrics_version = $2
     LEFT JOIN leaderboard_version_requirements lvr ON lvr.instance_name = sr.instance_name
     WHERE li.difficulty_name = a.difficulty_name
       AND li.max_players = a.max_players
-      AND sr.start_time >= a.start_time - make_interval(days => $2::int)
+      AND sr.start_time >= a.start_time - make_interval(days => $3::int)
       AND sr.start_time <= a.start_time
       AND sr.parser_version_num >= COALESCE(lvr.min_parser_version_num, 0)
       AND sr.addon_version_num >= COALESCE(lvr.min_addon_version_num, 0)
       AND CASE
-          WHEN $3 :: text = 'guild' THEN a.guild_id IS NOT NULL AND sr.guild_id = a.guild_id
+          WHEN $4 :: text = 'guild' THEN a.guild_id IS NOT NULL AND sr.guild_id = a.guild_id
           ELSE wsr.server_id = a.server_id
       END
     ORDER BY
@@ -8895,35 +8903,36 @@ deduped AS (
         sr.duration_ms ASC,
         sr.start_time DESC
 )
-SELECT instance_id, hashed_slug, start_time, completion_time, duration_ms, qualified, proof, guild_id, guild_name, complete, player_deaths, wipe_count, deadliest_abilities, total_duration_ms, total_combat_duration_ms, total_boss_duration_ms, metrics_version
+SELECT instance_id, hashed_slug, start_time, completion_time, duration_ms, qualified, proof, guild_id, guild_name, requirements_complete, player_deaths, wipe_count, top_incoming_damage_abilities, encounter_span_duration_ms, total_combat_duration_ms, total_boss_duration_ms, metrics_version
 FROM deduped
 ORDER BY start_time DESC
 `
 
 type InstanceSpeedrunCohortParams struct {
-	InstanceID   uuid.UUID `db:"instance_id" json:"instance_id"`
-	LookbackDays int32     `db:"lookback_days" json:"lookback_days"`
-	Scope        string    `db:"scope" json:"scope"`
+	InstanceID     uuid.UUID `db:"instance_id" json:"instance_id"`
+	MetricsVersion int32     `db:"metrics_version" json:"metrics_version"`
+	LookbackDays   int32     `db:"lookback_days" json:"lookback_days"`
+	Scope          string    `db:"scope" json:"scope"`
 }
 
 type InstanceSpeedrunCohortRow struct {
-	InstanceID            uuid.UUID          `db:"instance_id" json:"instance_id"`
-	HashedSlug            pgtype.Text        `db:"hashed_slug" json:"hashed_slug"`
-	StartTime             pgtype.Timestamptz `db:"start_time" json:"start_time"`
-	CompletionTime        pgtype.Timestamptz `db:"completion_time" json:"completion_time"`
-	DurationMs            int64              `db:"duration_ms" json:"duration_ms"`
-	Qualified             bool               `db:"qualified" json:"qualified"`
-	Proof                 []byte             `db:"proof" json:"proof"`
-	GuildID               uuid.NullUUID      `db:"guild_id" json:"guild_id"`
-	GuildName             string             `db:"guild_name" json:"guild_name"`
-	Complete              pgtype.Bool        `db:"complete" json:"complete"`
-	PlayerDeaths          pgtype.Int4        `db:"player_deaths" json:"player_deaths"`
-	WipeCount             pgtype.Int4        `db:"wipe_count" json:"wipe_count"`
-	DeadliestAbilities    []byte             `db:"deadliest_abilities" json:"deadliest_abilities"`
-	TotalDurationMs       pgtype.Int8        `db:"total_duration_ms" json:"total_duration_ms"`
-	TotalCombatDurationMs pgtype.Int8        `db:"total_combat_duration_ms" json:"total_combat_duration_ms"`
-	TotalBossDurationMs   pgtype.Int8        `db:"total_boss_duration_ms" json:"total_boss_duration_ms"`
-	MetricsVersion        pgtype.Int4        `db:"metrics_version" json:"metrics_version"`
+	InstanceID                 uuid.UUID          `db:"instance_id" json:"instance_id"`
+	HashedSlug                 pgtype.Text        `db:"hashed_slug" json:"hashed_slug"`
+	StartTime                  pgtype.Timestamptz `db:"start_time" json:"start_time"`
+	CompletionTime             pgtype.Timestamptz `db:"completion_time" json:"completion_time"`
+	DurationMs                 int64              `db:"duration_ms" json:"duration_ms"`
+	Qualified                  bool               `db:"qualified" json:"qualified"`
+	Proof                      []byte             `db:"proof" json:"proof"`
+	GuildID                    uuid.NullUUID      `db:"guild_id" json:"guild_id"`
+	GuildName                  string             `db:"guild_name" json:"guild_name"`
+	RequirementsComplete       pgtype.Bool        `db:"requirements_complete" json:"requirements_complete"`
+	PlayerDeaths               pgtype.Int4        `db:"player_deaths" json:"player_deaths"`
+	WipeCount                  pgtype.Int4        `db:"wipe_count" json:"wipe_count"`
+	TopIncomingDamageAbilities []byte             `db:"top_incoming_damage_abilities" json:"top_incoming_damage_abilities"`
+	EncounterSpanDurationMs    pgtype.Int8        `db:"encounter_span_duration_ms" json:"encounter_span_duration_ms"`
+	TotalCombatDurationMs      pgtype.Int8        `db:"total_combat_duration_ms" json:"total_combat_duration_ms"`
+	TotalBossDurationMs        pgtype.Int8        `db:"total_boss_duration_ms" json:"total_boss_duration_ms"`
+	MetricsVersion             pgtype.Int4        `db:"metrics_version" json:"metrics_version"`
 }
 
 // Returns rankings-backed runs comparable to an anchor instance. Cohorts match
@@ -8931,7 +8940,12 @@ type InstanceSpeedrunCohortRow struct {
 // window ending at the anchor start time, and stay within the anchor's server
 // or guild. Duplicate uploads are collapsed without reducing to one run per guild.
 func (q *sqlQuerier) InstanceSpeedrunCohort(ctx context.Context, arg InstanceSpeedrunCohortParams) ([]InstanceSpeedrunCohortRow, error) {
-	rows, err := q.db.Query(ctx, instanceSpeedrunCohort, arg.InstanceID, arg.LookbackDays, arg.Scope)
+	rows, err := q.db.Query(ctx, instanceSpeedrunCohort,
+		arg.InstanceID,
+		arg.MetricsVersion,
+		arg.LookbackDays,
+		arg.Scope,
+	)
 	if err != nil {
 		return nil, err
 	}
@@ -8949,11 +8963,11 @@ func (q *sqlQuerier) InstanceSpeedrunCohort(ctx context.Context, arg InstanceSpe
 			&i.Proof,
 			&i.GuildID,
 			&i.GuildName,
-			&i.Complete,
+			&i.RequirementsComplete,
 			&i.PlayerDeaths,
 			&i.WipeCount,
-			&i.DeadliestAbilities,
-			&i.TotalDurationMs,
+			&i.TopIncomingDamageAbilities,
+			&i.EncounterSpanDurationMs,
 			&i.TotalCombatDurationMs,
 			&i.TotalBossDurationMs,
 			&i.MetricsVersion,

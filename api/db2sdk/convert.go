@@ -254,13 +254,13 @@ func SpeedrunResult(sr database.GetInstanceSpeedrunRow) *chroniclesdk.SpeedrunRe
 }
 
 func InstanceOverviewMetrics(row database.InstanceOverviewMetric) chroniclesdk.InstanceOverviewMetrics {
-	var complete *bool
-	if row.Complete.Valid {
-		complete = &row.Complete.Bool
+	var requirementsComplete *bool
+	if row.RequirementsComplete.Valid {
+		requirementsComplete = &row.RequirementsComplete.Bool
 	}
-	abilities := make([]chroniclesdk.OverviewDeadliestAbility, 0, len(row.DeadliestAbilities))
-	for _, ability := range row.DeadliestAbilities {
-		abilities = append(abilities, chroniclesdk.OverviewDeadliestAbility{
+	abilities := make([]chroniclesdk.OverviewIncomingDamageAbility, 0, len(row.TopIncomingDamageAbilities))
+	for _, ability := range row.TopIncomingDamageAbilities {
+		abilities = append(abilities, chroniclesdk.OverviewIncomingDamageAbility{
 			SpellID:         ability.SpellID,
 			Name:            ability.Name,
 			Damage:          ability.Damage,
@@ -269,14 +269,14 @@ func InstanceOverviewMetrics(row database.InstanceOverviewMetric) chroniclesdk.I
 		})
 	}
 	return chroniclesdk.InstanceOverviewMetrics{
-		Complete:              complete,
-		PlayerDeaths:          row.PlayerDeaths,
-		WipeCount:             row.WipeCount,
-		DeadliestAbilities:    abilities,
-		TotalDurationMs:       row.TotalDurationMs,
-		TotalCombatDurationMs: row.TotalCombatDurationMs,
-		TotalBossDurationMs:   row.TotalBossDurationMs,
-		MetricsVersion:        row.MetricsVersion,
+		RequirementsComplete:       requirementsComplete,
+		PlayerDeaths:               row.PlayerDeaths,
+		WipeCount:                  row.WipeCount,
+		TopIncomingDamageAbilities: abilities,
+		EncounterSpanDurationMs:    row.EncounterSpanDurationMs,
+		TotalCombatDurationMs:      row.TotalCombatDurationMs,
+		TotalBossDurationMs:        row.TotalBossDurationMs,
+		MetricsVersion:             row.MetricsVersion,
 	}
 }
 
@@ -297,7 +297,7 @@ func SpeedrunCohortRun(row database.InstanceSpeedrunCohortRow) chroniclesdk.Spee
 		InstanceID:            row.InstanceID,
 		Slug:                  row.HashedSlug.String,
 		StartTime:             row.StartTime.Time,
-		Completed:             len(payload.Proof) > 0 && satisfied == len(payload.Proof),
+		RequirementsComplete:  len(payload.Proof) > 0 && satisfied == len(payload.Proof),
 		Qualified:             row.Qualified,
 		RequirementsSatisfied: satisfied,
 		RequirementsTotal:     len(payload.Proof),
@@ -315,21 +315,21 @@ func SpeedrunCohortRun(row database.InstanceSpeedrunCohortRow) chroniclesdk.Spee
 		run.CompletionTime = &completion
 	}
 	if row.MetricsVersion.Valid {
-		var abilities []chroniclesdk.OverviewDeadliestAbility
-		_ = json.Unmarshal(row.DeadliestAbilities, &abilities)
-		var complete *bool
-		if row.Complete.Valid {
-			complete = &row.Complete.Bool
+		var abilities []chroniclesdk.OverviewIncomingDamageAbility
+		_ = json.Unmarshal(row.TopIncomingDamageAbilities, &abilities)
+		var requirementsComplete *bool
+		if row.RequirementsComplete.Valid {
+			requirementsComplete = &row.RequirementsComplete.Bool
 		}
 		run.Overview = &chroniclesdk.InstanceOverviewMetrics{
-			Complete:              complete,
-			PlayerDeaths:          row.PlayerDeaths.Int32,
-			WipeCount:             row.WipeCount.Int32,
-			DeadliestAbilities:    abilities,
-			TotalDurationMs:       row.TotalDurationMs.Int64,
-			TotalCombatDurationMs: row.TotalCombatDurationMs.Int64,
-			TotalBossDurationMs:   row.TotalBossDurationMs.Int64,
-			MetricsVersion:        row.MetricsVersion.Int32,
+			RequirementsComplete:       requirementsComplete,
+			PlayerDeaths:               row.PlayerDeaths.Int32,
+			WipeCount:                  row.WipeCount.Int32,
+			TopIncomingDamageAbilities: abilities,
+			EncounterSpanDurationMs:    row.EncounterSpanDurationMs.Int64,
+			TotalCombatDurationMs:      row.TotalCombatDurationMs.Int64,
+			TotalBossDurationMs:        row.TotalBossDurationMs.Int64,
+			MetricsVersion:             row.MetricsVersion.Int32,
 		}
 	}
 	return run

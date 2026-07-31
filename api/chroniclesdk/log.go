@@ -325,17 +325,17 @@ type SpeedrunResult struct {
 }
 
 type InstanceOverviewMetrics struct {
-	Complete              *bool                      `json:"complete"`
-	PlayerDeaths          int32                      `json:"player_deaths"`
-	WipeCount             int32                      `json:"wipe_count"`
-	DeadliestAbilities    []OverviewDeadliestAbility `json:"deadliest_abilities"`
-	TotalDurationMs       int64                      `json:"total_duration_ms"`
-	TotalCombatDurationMs int64                      `json:"total_combat_duration_ms"`
-	TotalBossDurationMs   int64                      `json:"total_boss_duration_ms"`
-	MetricsVersion        int32                      `json:"metrics_version"`
+	RequirementsComplete       *bool                           `json:"requirements_complete"`
+	PlayerDeaths               int32                           `json:"player_deaths"`
+	WipeCount                  int32                           `json:"wipe_count"`
+	TopIncomingDamageAbilities []OverviewIncomingDamageAbility `json:"top_incoming_damage_abilities"`
+	EncounterSpanDurationMs    int64                           `json:"encounter_span_duration_ms"`
+	TotalCombatDurationMs      int64                           `json:"total_combat_duration_ms"`
+	TotalBossDurationMs        int64                           `json:"total_boss_duration_ms"`
+	MetricsVersion             int32                           `json:"metrics_version"`
 }
 
-type OverviewDeadliestAbility struct {
+type OverviewIncomingDamageAbility struct {
 	SpellID         *int32 `json:"spell_id,omitempty"`
 	Name            string `json:"name"`
 	Damage          int64  `json:"damage"`
@@ -358,15 +358,18 @@ type SpeedrunCohortResponse struct {
 }
 
 type SpeedrunCohortDefinition struct {
-	Scope          SpeedrunCohortScope `json:"scope"`
-	Label          string              `json:"label"`
-	InstanceName   string              `json:"instance_name"`
-	DifficultyName string              `json:"difficulty_name"`
-	MaxPlayers     int32               `json:"max_players"`
-	LookbackDays   int32               `json:"lookback_days"`
-	WindowStart    time.Time           `json:"window_start"`
-	WindowEnd      time.Time           `json:"window_end"`
-	GuildID        *uuid.UUID          `json:"guild_id,omitempty"`
+	Scope                   SpeedrunCohortScope `json:"scope"`
+	Label                   string              `json:"label"`
+	InstanceName            string              `json:"instance_name"`
+	DifficultyName          string              `json:"difficulty_name"`
+	MaxPlayers              int32               `json:"max_players"`
+	LookbackDays            int32               `json:"lookback_days"`
+	WindowStart             time.Time           `json:"window_start"`
+	WindowEnd               time.Time           `json:"window_end"`
+	EligibleRuns            int                 `json:"eligible_runs"`
+	RunsWithOverviewMetrics int                 `json:"runs_with_overview_metrics"`
+	OverviewMetricsVersion  int32               `json:"overview_metrics_version"`
+	GuildID                 *uuid.UUID          `json:"guild_id,omitempty"`
 }
 
 type SpeedrunCohortRun struct {
@@ -375,7 +378,7 @@ type SpeedrunCohortRun struct {
 	StartTime             time.Time                `json:"start_time"`
 	CompletionTime        *time.Time               `json:"completion_time,omitempty"`
 	DurationMs            *int64                   `json:"duration_ms,omitempty"`
-	Completed             bool                     `json:"completed"`
+	RequirementsComplete  bool                     `json:"requirements_complete"`
 	Qualified             bool                     `json:"qualified"`
 	RequirementsSatisfied int                      `json:"requirements_satisfied"`
 	RequirementsTotal     int                      `json:"requirements_total"`

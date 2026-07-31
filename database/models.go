@@ -1252,17 +1252,17 @@ type InstanceLoot struct {
 }
 
 type InstanceOverviewMetric struct {
-	InstanceID            uuid.UUID                  `db:"instance_id" json:"instance_id"`
-	Complete              pgtype.Bool                `db:"complete" json:"complete"`
-	PlayerDeaths          int32                      `db:"player_deaths" json:"player_deaths"`
-	WipeCount             int32                      `db:"wipe_count" json:"wipe_count"`
-	DeadliestAbilities    []OverviewDeadliestAbility `db:"deadliest_abilities" json:"deadliest_abilities"`
-	TotalDurationMs       int64                      `db:"total_duration_ms" json:"total_duration_ms"`
-	TotalCombatDurationMs int64                      `db:"total_combat_duration_ms" json:"total_combat_duration_ms"`
-	TotalBossDurationMs   int64                      `db:"total_boss_duration_ms" json:"total_boss_duration_ms"`
-	MetricsVersion        int32                      `db:"metrics_version" json:"metrics_version"`
-	CreatedAt             pgtype.Timestamptz         `db:"created_at" json:"created_at"`
-	UpdatedAt             pgtype.Timestamptz         `db:"updated_at" json:"updated_at"`
+	InstanceID                 uuid.UUID                       `db:"instance_id" json:"instance_id"`
+	RequirementsComplete       pgtype.Bool                     `db:"requirements_complete" json:"requirements_complete"`
+	PlayerDeaths               int32                           `db:"player_deaths" json:"player_deaths"`
+	WipeCount                  int32                           `db:"wipe_count" json:"wipe_count"`
+	TopIncomingDamageAbilities []OverviewIncomingDamageAbility `db:"top_incoming_damage_abilities" json:"top_incoming_damage_abilities"`
+	EncounterSpanDurationMs    int64                           `db:"encounter_span_duration_ms" json:"encounter_span_duration_ms"`
+	TotalCombatDurationMs      int64                           `db:"total_combat_duration_ms" json:"total_combat_duration_ms"`
+	TotalBossDurationMs        int64                           `db:"total_boss_duration_ms" json:"total_boss_duration_ms"`
+	MetricsVersion             int32                           `db:"metrics_version" json:"metrics_version"`
+	CreatedAt                  pgtype.Timestamptz              `db:"created_at" json:"created_at"`
+	UpdatedAt                  pgtype.Timestamptz              `db:"updated_at" json:"updated_at"`
 }
 
 type InstanceSpeedrun struct {

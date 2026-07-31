@@ -40,11 +40,11 @@ deduped AS (
         sr.proof,
         sr.guild_id,
         COALESCE(g.name, '')::text AS guild_name,
-        iom.complete,
+        iom.requirements_complete,
         iom.player_deaths,
         iom.wipe_count,
-        iom.deadliest_abilities,
-        iom.total_duration_ms,
+        iom.top_incoming_damage_abilities,
+        iom.encounter_span_duration_ms,
         iom.total_combat_duration_ms,
         iom.total_boss_duration_ms,
         iom.metrics_version
@@ -53,7 +53,9 @@ deduped AS (
     JOIN log_instances li ON li.id = sr.instance_id
     JOIN wow_server_realms wsr ON wsr.id = sr.realm_id
     LEFT JOIN guilds g ON g.id = sr.guild_id
-    LEFT JOIN instance_overview_metrics iom ON iom.instance_id = sr.instance_id
+    LEFT JOIN instance_overview_metrics iom
+      ON iom.instance_id = sr.instance_id
+     AND iom.metrics_version = @metrics_version
     LEFT JOIN leaderboard_version_requirements lvr ON lvr.instance_name = sr.instance_name
     WHERE li.difficulty_name = a.difficulty_name
       AND li.max_players = a.max_players

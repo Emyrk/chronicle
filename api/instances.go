@@ -14,6 +14,7 @@ import (
 	"github.com/Emyrk/chronicle/database"
 	"github.com/Emyrk/chronicle/database/authz"
 	"github.com/Emyrk/chronicle/database/authz/policy"
+	overviewmetricsversion "github.com/Emyrk/chronicle/internal/overviewmetrics"
 	"github.com/Emyrk/chronicle/internal/services/servicetenant"
 	"github.com/Emyrk/chronicle/internal/slice"
 	"github.com/authzed/gochugaru/rel"
@@ -153,7 +154,10 @@ func (api *API) InstanceOverviewMetrics(w http.ResponseWriter, r *http.Request) 
 	ctx := r.Context()
 	inst := httpmw.Instance(ctx)
 
-	metrics, err := api.Opts.Zed.GetInstanceOverviewMetrics(ctx, inst.ID)
+	metrics, err := api.Opts.Zed.GetInstanceOverviewMetrics(ctx, database.GetInstanceOverviewMetricsParams{
+		InstanceID:     inst.ID,
+		MetricsVersion: overviewmetricsversion.CurrentVersion,
+	})
 	if err != nil {
 		httpapi.Write(ctx, w, http.StatusNotFound, chroniclesdk.Response{
 			Message: "No overview metrics for this instance",
@@ -250,9 +254,10 @@ func (api *API) InstanceSpeedrunCohort(w http.ResponseWriter, r *http.Request) {
 	}
 
 	rows, err := api.Opts.Zed.InstanceSpeedrunCohort(ctx, database.InstanceSpeedrunCohortParams{
-		InstanceID:   inst.ID,
-		LookbackDays: lookbackDays,
-		Scope:        string(scope),
+		InstanceID:     inst.ID,
+		LookbackDays:   lookbackDays,
+		Scope:          string(scope),
+		MetricsVersion: overviewmetricsversion.CurrentVersion,
 	})
 	if err != nil {
 		httpapi.InternalServerError(w, err)
@@ -262,6 +267,13 @@ func (api *API) InstanceSpeedrunCohort(w http.ResponseWriter, r *http.Request) {
 	runs := make([]chroniclesdk.SpeedrunCohortRun, 0, len(rows))
 	for _, row := range rows {
 		runs = append(runs, db2sdk.SpeedrunCohortRun(row))
+	}
+
+	runsWithOverviewMetrics := 0
+	for _, run := range runs {
+		if run.Overview != nil {
+			runsWithOverviewMetrics++
+		}
 	}
 
 	label := inst.ServerName.String
@@ -274,15 +286,18 @@ func (api *API) InstanceSpeedrunCohort(w http.ResponseWriter, r *http.Request) {
 	windowEnd := inst.StartTime.Time
 	httpapi.Write(ctx, w, http.StatusOK, chroniclesdk.SpeedrunCohortResponse{
 		Cohort: chroniclesdk.SpeedrunCohortDefinition{
-			Scope:          scope,
-			Label:          label,
-			InstanceName:   inst.Name,
-			DifficultyName: inst.DifficultyName,
-			MaxPlayers:     inst.MaxPlayers,
-			LookbackDays:   lookbackDays,
-			WindowStart:    windowEnd.AddDate(0, 0, -int(lookbackDays)),
-			WindowEnd:      windowEnd,
-			GuildID:        guildID,
+			Scope:                   scope,
+			Label:                   label,
+			InstanceName:            inst.Name,
+			DifficultyName:          inst.DifficultyName,
+			MaxPlayers:              inst.MaxPlayers,
+			LookbackDays:            lookbackDays,
+			WindowStart:             windowEnd.AddDate(0, 0, -int(lookbackDays)),
+			WindowEnd:               windowEnd,
+			EligibleRuns:            len(runs),
+			RunsWithOverviewMetrics: runsWithOverviewMetrics,
+			OverviewMetricsVersion:  overviewmetricsversion.CurrentVersion,
+			GuildID:                 guildID,
 		},
 		Runs: runs,
 	})

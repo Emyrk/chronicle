@@ -3,7 +3,7 @@ import { Card } from "@/components/ui/Card/Card";
 import { formatClearDuration } from "@/pages/GuildPage/panels/clearTimeUtils";
 import type { PopulationSelection } from "./populationSelectionState";
 import { summarizeClearTimes, type ClearTimeSummary } from "./clearTimePopulation";
-import { useSpeedrunPopulation } from "./overviewQueries";
+import { useSpeedrunPopulation, type OverviewMetricsCoverage } from "./overviewQueries";
 
 function BoxPlot({
   summary,
@@ -54,12 +54,14 @@ function PopulationRow({
   scaleMin,
   scaleMax,
   primary,
+  overviewCoverage,
 }: {
   label: string;
   summary: ClearTimeSummary | null;
   scaleMin: number;
   scaleMax: number;
   primary: boolean;
+  overviewCoverage?: OverviewMetricsCoverage;
 }) {
   return (
     <div className="grid gap-2 border-t py-3 first:border-t-0 sm:grid-cols-[minmax(10rem,0.7fr)_minmax(14rem,1.5fr)_auto] sm:items-center">
@@ -68,6 +70,11 @@ function PopulationRow({
         <p className="text-xs text-muted-foreground">
           {summary ? `${summary.count} qualified ${summary.count === 1 ? "raid" : "raids"}` : "No qualified clears"}
         </p>
+        {overviewCoverage && (
+          <p className="text-[11px] text-muted-foreground">
+            Overview data: {overviewCoverage.runsWithMetrics}/{overviewCoverage.eligibleRuns} runs · v{overviewCoverage.metricsVersion}
+          </p>
+        )}
       </div>
       {summary ? (
         <BoxPlot
@@ -130,6 +137,7 @@ export function ClearTimePanel({
               summary={primarySummary}
               scaleMin={scaleMin}
               scaleMax={scaleMax}
+              overviewCoverage={primaryQuery.data?.overviewCoverage}
               primary
             />
             {comparison && (
@@ -138,6 +146,7 @@ export function ClearTimePanel({
                 summary={comparisonSummary}
                 scaleMin={scaleMin}
                 scaleMax={scaleMax}
+                overviewCoverage={comparisonQuery.data?.overviewCoverage}
                 primary={false}
               />
             )}

@@ -119,7 +119,7 @@ type sqlcQuerier interface {
 	GetGuildSettings(ctx context.Context, guildID uuid.UUID) (GuildSetting, error)
 	GetInstanceEncounterCharacterFights(ctx context.Context, instanceID uuid.UUID) ([]LogInstanceEncounterHostile, error)
 	GetInstanceLoot(ctx context.Context, arg GetInstanceLootParams) ([]GetInstanceLootRow, error)
-	GetInstanceOverviewMetrics(ctx context.Context, instanceID uuid.UUID) (InstanceOverviewMetric, error)
+	GetInstanceOverviewMetrics(ctx context.Context, arg GetInstanceOverviewMetricsParams) (InstanceOverviewMetric, error)
 	GetInstanceSpeedrun(ctx context.Context, instanceID uuid.UUID) (GetInstanceSpeedrunRow, error)
 	GetInstanceYoutubeData(ctx context.Context, arg GetInstanceYoutubeDataParams) (LogInstanceYoutubeTimestamped, error)
 	GetInstancesByLogGroupID(ctx context.Context, logGroupID uuid.UUID) ([]LogInstancesGuild, error)

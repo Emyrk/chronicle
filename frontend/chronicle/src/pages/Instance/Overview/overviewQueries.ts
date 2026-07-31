@@ -7,11 +7,18 @@ import type {
 } from "@/api/typesGenerated";
 import type { PopulationSelection } from "./populationSelectionState";
 
+export interface OverviewMetricsCoverage {
+  eligibleRuns: number;
+  runsWithMetrics: number;
+  metricsVersion: number;
+}
+
 export interface ResolvedSpeedrunPopulation {
   label: string;
   selection: PopulationSelection;
   runs: readonly SpeedrunCohortRun[];
   windowStart?: string;
+  overviewCoverage?: OverviewMetricsCoverage;
   windowEnd?: string;
 }
 
@@ -55,7 +62,7 @@ export function useSpeedrunPopulation(selection: PopulationSelection | undefined
             start_time: speedrun.start_time,
             completion_time: speedrun.completion_time || undefined,
             duration_ms: speedrun.duration_ms > 0 ? speedrun.duration_ms : undefined,
-            completed: speedrun.proof.length > 0 && speedrun.proof.every((proof) => proof.satisfied),
+            requirements_complete: speedrun.proof.length > 0 && speedrun.proof.every((proof) => proof.satisfied),
             qualified: speedrun.qualified,
             requirements_satisfied: speedrun.proof.filter((proof) => proof.satisfied).length,
             requirements_total: speedrun.proof.length,
@@ -78,6 +85,11 @@ export function useSpeedrunPopulation(selection: PopulationSelection | undefined
         selection,
         runs: cohort.runs,
         windowStart: cohort.cohort.window_start,
+        overviewCoverage: {
+          eligibleRuns: cohort.cohort.eligible_runs,
+          runsWithMetrics: cohort.cohort.runs_with_overview_metrics,
+          metricsVersion: cohort.cohort.overview_metrics_version,
+        },
         windowEnd: cohort.cohort.window_end,
       };
     },

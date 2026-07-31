@@ -26,9 +26,9 @@ sql:
           - db_type: "wow_log_group_files"
             go_type:
               type: "[]LogFile"
-          - column: "instance_overview_metrics.deadliest_abilities"
+          - column: "instance_overview_metrics.top_incoming_damage_abilities"
             go_type:
-              type: "[]OverviewDeadliestAbility"
+              type: "[]OverviewIncomingDamageAbility"
           - column: "log_instance_encounter_damage_unit_summary.damage_done_abilities"
             go_type:
               type: "map[guid.GUID]map[string]Ability"

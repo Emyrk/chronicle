@@ -6,19 +6,18 @@ import (
 
 	"github.com/Emyrk/chronicle/combatlog/parser/common/encounter"
 	"github.com/Emyrk/chronicle/combatlog/parser/common/instances/rankings"
+	overviewmetricsversion "github.com/Emyrk/chronicle/internal/overviewmetrics"
 )
 
-const MetricsVersion int32 = 1
-
 type Summary struct {
-	Complete            *bool
-	PlayerDeaths        int32
-	WipeCount           int32
-	DeadliestAbilities  []DeadliestAbility
-	TotalDuration       time.Duration
-	TotalCombatDuration time.Duration
-	TotalBossDuration   time.Duration
-	MetricsVersion      int32
+	RequirementsComplete       *bool
+	PlayerDeaths               int32
+	WipeCount                  int32
+	TopIncomingDamageAbilities []DeadliestAbility
+	EncounterSpanDuration      time.Duration
+	TotalCombatDuration        time.Duration
+	TotalBossDuration          time.Duration
+	MetricsVersion             int32
 }
 
 type combatInterval struct {
@@ -59,18 +58,18 @@ func Summarize(encounters []encounter.Encounter, abilities []DeadliestAbility, s
 	}
 
 	return Summary{
-		Complete:            completionStatus(speedrun),
-		PlayerDeaths:        playerDeaths,
-		WipeCount:           wipeCount,
-		DeadliestAbilities:  abilities,
-		TotalDuration:       totalDuration,
-		TotalCombatDuration: unionDuration(allIntervals),
-		TotalBossDuration:   unionDuration(bossIntervals),
-		MetricsVersion:      MetricsVersion,
+		RequirementsComplete:       requirementsCompletionStatus(speedrun),
+		PlayerDeaths:               playerDeaths,
+		WipeCount:                  wipeCount,
+		TopIncomingDamageAbilities: abilities,
+		EncounterSpanDuration:      totalDuration,
+		TotalCombatDuration:        unionDuration(allIntervals),
+		TotalBossDuration:          unionDuration(bossIntervals),
+		MetricsVersion:             overviewmetricsversion.CurrentVersion,
 	}
 }
 
-func completionStatus(speedrun *rankings.SpeedrunResult) *bool {
+func requirementsCompletionStatus(speedrun *rankings.SpeedrunResult) *bool {
 	if speedrun == nil || len(speedrun.Proof) == 0 {
 		return nil
 	}

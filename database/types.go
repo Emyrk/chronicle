@@ -41,7 +41,7 @@ func (t SlimLogFile) Value() (driver.Value, error) {
 	return json.Marshal(t)
 }
 
-type OverviewDeadliestAbility struct {
+type OverviewIncomingDamageAbility struct {
 	SpellID         *int32 `json:"spell_id,omitempty"`
 	Name            string `json:"name"`
 	Damage          int64  `json:"damage"`

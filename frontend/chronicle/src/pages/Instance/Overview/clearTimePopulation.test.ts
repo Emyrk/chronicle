@@ -8,7 +8,7 @@ function run(durationMs: number | undefined, qualified = true): SpeedrunCohortRu
     slug: "raid",
     start_time: "2026-07-01T00:00:00Z",
     duration_ms: durationMs,
-    completed: durationMs !== undefined,
+    requirements_complete: durationMs !== undefined,
     qualified,
     requirements_satisfied: durationMs !== undefined ? 1 : 0,
     requirements_total: 1,

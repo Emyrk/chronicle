@@ -978,11 +978,11 @@ export interface InstanceLoot {
 
 // From chroniclesdk/log.go
 export interface InstanceOverviewMetrics {
-    readonly complete: boolean | null;
+    readonly requirements_complete: boolean | null;
     readonly player_deaths: number;
     readonly wipe_count: number;
-    readonly deadliest_abilities: readonly OverviewDeadliestAbility[];
-    readonly total_duration_ms: number;
+    readonly top_incoming_damage_abilities: readonly OverviewIncomingDamageAbility[];
+    readonly encounter_span_duration_ms: number;
     readonly total_combat_duration_ms: number;
     readonly total_boss_duration_ms: number;
     readonly metrics_version: number;
@@ -1519,7 +1519,7 @@ export interface ModifyApplicationAdminRequest {
 }
 
 // From chroniclesdk/log.go
-export interface OverviewDeadliestAbility {
+export interface OverviewIncomingDamageAbility {
     readonly spell_id?: number;
     readonly name: string;
     readonly damage: number;
@@ -2263,6 +2263,9 @@ export interface SpeedrunCohortDefinition {
     readonly lookback_days: number;
     readonly window_start: string;
     readonly window_end: string;
+    readonly eligible_runs: number;
+    readonly runs_with_overview_metrics: number;
+    readonly overview_metrics_version: number;
     readonly guild_id?: string;
 }
 
@@ -2283,7 +2286,7 @@ export interface SpeedrunCohortRun {
     readonly start_time: string;
     readonly completion_time?: string;
     readonly duration_ms?: number;
-    readonly completed: boolean;
+    readonly requirements_complete: boolean;
     readonly qualified: boolean;
     readonly requirements_satisfied: number;
     readonly requirements_total: number;
