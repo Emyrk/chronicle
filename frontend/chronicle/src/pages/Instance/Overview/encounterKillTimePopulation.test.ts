@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import type { SpeedrunCohortRun } from "@/api/typesGenerated";
 import {
   averageKillTimePercentile,
+  buildEncounterKillTimeComparisonRows,
   killTimePercentile,
   summarizeEncounterKillTimes,
 } from "./encounterKillTimePopulation";
@@ -48,6 +49,23 @@ describe("summarizeEncounterKillTimes", () => {
     ]);
 
     expect(summaries.get("Lucifron")?.values).toEqual([90_000]);
+  });
+});
+
+describe("buildEncounterKillTimeComparisonRows", () => {
+  it("keeps comparison bosses that are missing from the primary raid", () => {
+    const primary = summarizeEncounterKillTimes([run([["Lucifron", 100_000]])]);
+    const comparison = summarizeEncounterKillTimes([
+      run([["Lucifron", 120_000], ["Magmadar", 180_000]]),
+    ]);
+
+    const rows = buildEncounterKillTimeComparisonRows(primary, comparison);
+
+    expect(rows).toHaveLength(2);
+    expect(rows.find((row) => row.encounterName === "Magmadar")).toMatchObject({
+      primarySummary: null,
+      percentile: null,
+    });
   });
 });
 

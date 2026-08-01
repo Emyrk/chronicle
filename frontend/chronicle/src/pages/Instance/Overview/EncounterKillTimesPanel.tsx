@@ -14,7 +14,7 @@ import type { PopulationSelection } from "./populationSelectionState";
 import { useSpeedrunPopulation } from "./overviewQueries";
 import {
   averageKillTimePercentile,
-  killTimePercentile,
+  buildEncounterKillTimeComparisonRows,
   summarizeEncounterKillTimes,
   type EncounterKillTimeSummary,
 } from "./encounterKillTimePopulation";
@@ -37,15 +37,18 @@ function Distribution({
   primaryDurationMs,
 }: {
   summary: EncounterKillTimeSummary;
-  primaryDurationMs: number;
+  primaryDurationMs: number | null;
 }) {
   const positionForRelative = (relative: number) => {
     const clamped = Math.min(AXIS_MAX_PERCENT, Math.max(AXIS_MIN_PERCENT, relative));
     return `${((clamped - AXIS_MIN_PERCENT) / (AXIS_MAX_PERCENT - AXIS_MIN_PERCENT)) * 100}%`;
   };
   const position = (value: number) => positionForRelative(relativeToMedian(value, summary.median));
-  const primaryRelative = relativeToMedian(primaryDurationMs, summary.median);
-  const primaryBeyondAxis = primaryRelative < AXIS_MIN_PERCENT || primaryRelative > AXIS_MAX_PERCENT;
+  const primaryRelative = primaryDurationMs === null
+    ? null
+    : relativeToMedian(primaryDurationMs, summary.median);
+  const primaryBeyondAxis = primaryRelative !== null
+    && (primaryRelative < AXIS_MIN_PERCENT || primaryRelative > AXIS_MAX_PERCENT);
 
   return (
     <div className="relative h-7 w-full min-w-0">
@@ -73,7 +76,7 @@ function Distribution({
         </>
       ) : null}
       <div className="absolute top-0.5 bottom-0.5 w-0.5 bg-muted-foreground/70" style={{ left: position(summary.median) }} />
-      {primaryBeyondAxis ? (
+      {primaryRelative === null ? null : primaryBeyondAxis ? (
         <div
           className={cn(
             "absolute top-1/2 -translate-y-1/2 font-mono text-sm font-bold tracking-[-0.2em] text-primary drop-shadow-[0_0_4px_color-mix(in_oklab,var(--primary)_55%,transparent)]",
@@ -85,7 +88,7 @@ function Distribution({
       ) : (
         <div
           className="absolute top-1/2 size-2.5 -translate-x-1/2 -translate-y-1/2 rotate-45 border border-primary-foreground/70 bg-primary shadow-[0_0_0_2px_rgba(0,0,0,0.85),0_0_5px_color-mix(in_oklab,var(--primary)_55%,transparent)]"
-          style={{ left: position(primaryDurationMs) }}
+          style={{ left: position(primaryDurationMs as number) }}
         />
       )}
     </div>
@@ -105,9 +108,11 @@ function parseBadgeClasses(percentile: number | null): string {
 function EncounterRowTooltip({
   children,
   content,
+  missing = false,
 }: {
   children: ReactNode;
   content: ReactNode;
+  missing?: boolean;
 }) {
   const [cursor, setCursor] = useState({ x: 0, y: 0 });
 
@@ -115,7 +120,10 @@ function EncounterRowTooltip({
     <Tooltip>
       <TooltipTrigger asChild>
         <div
-          className="grid cursor-default grid-cols-[2.5rem_minmax(6rem,9rem)_minmax(7rem,1fr)_2.75rem_2.75rem_3rem] items-center gap-2 border-b border-border/30 px-1 py-2 last:border-b-0 hover:bg-muted/20"
+          className={cn(
+            "grid cursor-default grid-cols-[2.5rem_minmax(6rem,9rem)_minmax(7rem,1fr)_2.75rem_2.75rem_3rem] items-center gap-2 border-b border-border/30 px-1 py-2 last:border-b-0 hover:bg-muted/20",
+            missing && "bg-muted/5 text-muted-foreground hover:bg-muted/15",
+          )}
           onMouseMove={(event) => {
             const rect = event.currentTarget.getBoundingClientRect();
             setCursor({
@@ -177,16 +185,7 @@ export function EncounterKillTimesPanel({
   const comparisonQuery = useSpeedrunPopulation(comparison);
   const primarySummaries = summarizeEncounterKillTimes(primaryQuery.data?.runs ?? []);
   const comparisonSummaries = summarizeEncounterKillTimes(comparisonQuery.data?.runs ?? []);
-  const rows = [...primarySummaries].flatMap(([encounterName, primarySummary]) => {
-    const comparisonSummary = comparisonSummaries.get(encounterName);
-    if (!comparisonSummary) return [];
-    return [{
-      encounterName,
-      primarySummary,
-      comparisonSummary,
-      percentile: killTimePercentile(primarySummary.median, comparisonSummary.values),
-    }];
-  });
+  const rows = buildEncounterKillTimeComparisonRows(primarySummaries, comparisonSummaries);
   const averageParse = averageKillTimePercentile(rows.map((row) => row.percentile));
   const specificRaidComparison = comparison?.kind === "instance";
   const loading = primaryQuery.isLoading || comparisonQuery.isLoading;
@@ -274,13 +273,19 @@ export function EncounterKillTimesPanel({
               <span className="text-right">Delta</span>
             </div>
             {rows.map(({ encounterName, primarySummary, comparisonSummary, percentile }) => {
-              const primaryDurationMs = primarySummary.median;
-              const delta = primaryDurationMs - comparisonSummary.median;
-              const deltaPercent = relativeToMedian(primaryDurationMs, comparisonSummary.median);
+              const primaryDurationMs = primarySummary?.median ?? null;
+              const missing = primaryDurationMs === null;
+              const delta = primaryDurationMs === null
+                ? null
+                : primaryDurationMs - comparisonSummary.median;
+              const deltaPercent = primaryDurationMs === null
+                ? null
+                : relativeToMedian(primaryDurationMs, comparisonSummary.median);
               const spread = comparisonSummary.q3 - comparisonSummary.q1;
               return (
                 <EncounterRowTooltip
                   key={encounterName}
+                  missing={missing}
                   content={(
                     <>
                       <div className="mb-2.5 flex items-center justify-between gap-3">
@@ -289,7 +294,11 @@ export function EncounterKillTimesPanel({
                           {comparisonSummary.count.toLocaleString()} kills
                         </span>
                       </div>
-                      {percentile !== null ? (
+                      {missing ? (
+                        <p className="mb-2 rounded-md border border-border/50 bg-muted/20 px-2 py-1.5 text-[11px] leading-snug text-muted-foreground">
+                          No clean kill was recorded for this raid, so no parse is available.
+                        </p>
+                      ) : percentile !== null ? (
                         <p className="mb-2 flex items-center gap-1.5 text-[11px] text-muted-foreground">
                           <span className={parseBadgeClasses(percentile)}>{percentile}</span>
                           <span>means faster than or equal to {percentile}% of comparable kills.</span>
@@ -300,11 +309,17 @@ export function EncounterKillTimesPanel({
                         </p>
                       )}
                       <div className="space-y-1 text-xs">
-                        <TimeStatLine label="Your time" value={formatClearDuration(primaryDurationMs)} highlight />
                         <TimeStatLine
-                          label={specificRaidComparison ? "Raid delta" : "Median delta"}
-                          value={`${formatDelta(delta)} · ${deltaPercent > 0 ? "+" : ""}${Math.round(deltaPercent)}%`}
+                          label="Your time"
+                          value={primaryDurationMs === null ? "Missing" : formatClearDuration(primaryDurationMs)}
+                          highlight={!missing}
                         />
+                        {delta !== null && deltaPercent !== null && (
+                          <TimeStatLine
+                            label={specificRaidComparison ? "Raid delta" : "Median delta"}
+                            value={`${formatDelta(delta)} · ${deltaPercent > 0 ? "+" : ""}${Math.round(deltaPercent)}%`}
+                          />
+                        )}
                         <div className="my-1 border-t border-white/5" />
                         <TimeStatLine label="Fastest" value={formatClearDuration(comparisonSummary.min)} />
                         <TimeStatLine label="Top 25%" value={formatClearDuration(comparisonSummary.q1)} />
@@ -328,15 +343,21 @@ export function EncounterKillTimesPanel({
                   <span className={parseBadgeClasses(percentile)}>
                     {percentile === null ? "—" : percentile}
                   </span>
-                  <span className="truncate text-xs font-medium text-foreground">
+                  <span className={cn(
+                    "truncate text-xs font-medium",
+                    missing ? "text-muted-foreground" : "text-foreground",
+                  )}>
                     {encounterName}
                   </span>
                   <Distribution
                     summary={comparisonSummary}
                     primaryDurationMs={primaryDurationMs}
                   />
-                  <span className="text-right font-mono text-xs font-semibold text-white">
-                    {formatClearDuration(primaryDurationMs)}
+                  <span className={cn(
+                    "text-right font-mono text-xs font-semibold",
+                    missing ? "text-muted-foreground/60" : "text-white",
+                  )}>
+                    {primaryDurationMs === null ? "Missing" : formatClearDuration(primaryDurationMs)}
                   </span>
                   <span className="text-right font-mono text-xs text-muted-foreground">
                     {formatClearDuration(comparisonSummary.median)}
@@ -344,12 +365,15 @@ export function EncounterKillTimesPanel({
                   <span
                     className={cn(
                       "text-right font-mono text-xs font-semibold",
-                      deltaPercent < 0 && "text-emerald-400",
-                      deltaPercent > 0 && "text-rose-400",
+                      deltaPercent === null && "text-muted-foreground/40",
+                      deltaPercent !== null && deltaPercent < 0 && "text-emerald-400",
+                      deltaPercent !== null && deltaPercent > 0 && "text-rose-400",
                       deltaPercent === 0 && "text-muted-foreground",
                     )}
                   >
-                    {deltaPercent > 0 ? "+" : ""}{Math.round(deltaPercent)}%
+                    {deltaPercent === null
+                      ? "—"
+                      : `${deltaPercent > 0 ? "+" : ""}${Math.round(deltaPercent)}%`}
                   </span>
                 </EncounterRowTooltip>
               );

@@ -53,6 +53,31 @@ export function summarizeEncounterKillTimes(
   }));
 }
 
+export interface EncounterKillTimeComparisonRow {
+  encounterName: string;
+  primarySummary: EncounterKillTimeSummary | null;
+  comparisonSummary: EncounterKillTimeSummary;
+  percentile: number | null;
+}
+
+/** Builds rows from the comparison population so bosses missing from the primary raid remain visible. */
+export function buildEncounterKillTimeComparisonRows(
+  primarySummaries: ReadonlyMap<string, EncounterKillTimeSummary>,
+  comparisonSummaries: ReadonlyMap<string, EncounterKillTimeSummary>,
+): EncounterKillTimeComparisonRow[] {
+  return [...comparisonSummaries].map(([encounterName, comparisonSummary]) => {
+    const primarySummary = primarySummaries.get(encounterName) ?? null;
+    return {
+      encounterName,
+      primarySummary,
+      comparisonSummary,
+      percentile: primarySummary
+        ? killTimePercentile(primarySummary.median, comparisonSummary.values)
+        : null,
+    };
+  });
+}
+
 /** Returns an inclusive 0-100 percentile where faster kill times score higher. */
 export function killTimePercentile(durationMs: number, sortedValues: readonly number[]): number | null {
   if (sortedValues.length < 5) return null;
