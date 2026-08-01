@@ -246,14 +246,9 @@ export function EncounterKillTimesPanel({
                     </p>
                     <p className="mt-1 text-[11px] leading-relaxed text-muted-foreground">
                       {incompleteAverage
-                        ? `${killedBossCount} of ${rows.length} comparable bosses were killed. Missing bosses are excluded from the average.`
-                        : `Arithmetic mean of ${availableParseCount} encounter parse scores.`}
+                        ? `${killedBossCount}/${rows.length} bosses killed. Missing bosses excluded.`
+                        : `Average of ${availableParseCount} encounter parse scores.`}
                     </p>
-                    {incompleteAverage && (
-                      <p className="mt-1 text-[10px] text-muted-foreground/70">
-                        {availableParseCount} encounter {availableParseCount === 1 ? "parse contributes" : "parses contribute"} to this score.
-                      </p>
-                    )}
                   </div>
                 </div>
               </TooltipContent>
