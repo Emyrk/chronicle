@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { SpeedrunCohortRun } from "@/api/typesGenerated";
-import { summarizeClearTimes } from "./clearTimePopulation";
+import { clearTimeParse, summarizeClearTimes } from "./clearTimePopulation";
 
 function run(durationMs: number | undefined, qualified = true): SpeedrunCohortRun {
   return {
@@ -35,5 +35,21 @@ describe("summarizeClearTimes", () => {
 
   it("returns null without qualified clear times", () => {
     expect(summarizeClearTimes([run(undefined), run(1_000, false)])).toBeNull();
+  });
+});
+
+describe("clearTimeParse", () => {
+  it("scores faster qualified speedrun clears higher", () => {
+    const cohort = [run(1_000), run(2_000), run(3_000), run(4_000), run(5_000)];
+    expect(clearTimeParse(run(1_000), cohort)).toBe(100);
+    expect(clearTimeParse(run(3_000), cohort)).toBe(60);
+    expect(clearTimeParse(run(6_000), cohort)).toBe(0);
+  });
+
+  it("requires a qualified primary and five qualified comparison clears", () => {
+    expect(clearTimeParse(run(1_000, false), [run(1_000), run(2_000), run(3_000), run(4_000), run(5_000)]))
+      .toBeNull();
+    expect(clearTimeParse(run(1_000), [run(1_000), run(2_000), run(3_000), run(4_000)]))
+      .toBeNull();
   });
 });

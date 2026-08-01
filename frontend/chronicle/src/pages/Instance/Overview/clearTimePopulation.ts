@@ -37,3 +37,17 @@ export function summarizeClearTimes(runs: readonly SpeedrunCohortRun[]): ClearTi
     max: values[values.length - 1],
   };
 }
+
+/** Returns an inclusive 0-100 parse where faster qualified clear times score higher. */
+export function clearTimeParse(
+  primaryRun: SpeedrunCohortRun | undefined,
+  comparisonRuns: readonly SpeedrunCohortRun[],
+): number | null {
+  if (!primaryRun?.qualified || primaryRun.duration_ms === undefined || primaryRun.duration_ms <= 0) return null;
+  const durations = comparisonRuns
+    .filter((run) => run.qualified && run.duration_ms !== undefined && run.duration_ms > 0)
+    .map((run) => run.duration_ms as number);
+  if (durations.length < 5) return null;
+  const atLeastAsSlow = durations.filter((duration) => duration >= primaryRun.duration_ms!).length;
+  return Math.round((atLeastAsSlow / durations.length) * 100);
+}

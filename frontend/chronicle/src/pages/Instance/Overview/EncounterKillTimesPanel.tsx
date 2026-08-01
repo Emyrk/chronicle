@@ -34,9 +34,11 @@ function relativeToMedian(value: number, median: number): number {
 function Distribution({
   summary,
   primaryDurationMs,
+  baselineLabel,
 }: {
   summary: EncounterKillTimeSummary;
   primaryDurationMs: number;
+  baselineLabel: string;
 }) {
   const positionForRelative = (relative: number) => {
     const clamped = Math.min(AXIS_MAX_PERCENT, Math.max(AXIS_MIN_PERCENT, relative));
@@ -78,7 +80,7 @@ function Distribution({
             "absolute top-1/2 -translate-y-1/2 font-mono text-sm font-bold tracking-[-0.2em] text-primary drop-shadow-[0_0_4px_color-mix(in_oklab,var(--primary)_55%,transparent)]",
             primaryRelative < AXIS_MIN_PERCENT ? "left-0" : "right-0",
           )}
-          title={`Your time is ${primaryRelative > 0 ? "+" : ""}${Math.round(primaryRelative)}% from median`}
+          title={`Your time is ${primaryRelative > 0 ? "+" : ""}${Math.round(primaryRelative)}% from ${baselineLabel.toLowerCase()}`}
         >
           {primaryRelative < AXIS_MIN_PERCENT ? "‹‹‹" : "›››"}
         </div>
@@ -89,6 +91,16 @@ function Distribution({
         />
       )}
     </div>
+  );
+}
+
+function parseBadgeClasses(percentile: number | null): string {
+  return cn(
+    "rounded border px-1 py-0.5 text-center font-mono text-[10px] font-bold",
+    percentile === null && "border-zinc-400/30 bg-zinc-400/10 text-zinc-500",
+    percentile !== null && parseColor(percentile),
+    percentile !== null && parseBgColor(percentile),
+    percentile !== null && parseBorderColor(percentile),
   );
 }
 
@@ -138,6 +150,8 @@ export function EncounterKillTimesPanel({
     }];
   });
   const averageParse = averageKillTimePercentile(rows.map((row) => row.percentile));
+  const specificRaidComparison = comparison?.kind === "instance";
+  const baselineLabel = specificRaidComparison ? "Other raid" : "Median";
   const loading = primaryQuery.isLoading || comparisonQuery.isLoading;
   const error = primaryQuery.error ?? comparisonQuery.error;
 
@@ -147,7 +161,9 @@ export function EncounterKillTimesPanel({
         <div className="flex min-w-0 items-center gap-2.5">
           <div className="min-w-0">
             <h2 className="truncate text-sm font-semibold">Encounter breakdown</h2>
-            <p className="mt-0.5 text-[11px] leading-none text-muted-foreground">Kill time vs comparison median</p>
+            <p className="mt-0.5 text-[11px] leading-none text-muted-foreground">
+              {specificRaidComparison ? "Kill time vs comparison raid" : "Kill time vs comparison median"}
+            </p>
           </div>
           {averageParse !== null && (
             <span
@@ -170,7 +186,7 @@ export function EncounterKillTimesPanel({
           </span>
           <span className="flex items-center gap-1.5">
             <span className="h-2 w-5 rounded-sm bg-muted-foreground/45" />
-            Comparison spread
+            {specificRaidComparison ? "Comparison time" : "Comparison spread"}
           </span>
           <span className="flex items-center gap-1.5">
             <span className="font-mono font-bold tracking-[-0.2em] text-primary">›››</span>
@@ -217,7 +233,7 @@ export function EncounterKillTimesPanel({
                 ))}
               </div>
               <span className="text-right">Yours</span>
-              <span className="text-right">Median</span>
+              <span className="text-right">{specificRaidComparison ? "Other" : "Median"}</span>
               <span className="text-right">Delta</span>
             </div>
             {rows.map(({ encounterName, primarySummary, comparisonSummary, percentile }) => {
@@ -226,83 +242,90 @@ export function EncounterKillTimesPanel({
               const deltaPercent = relativeToMedian(primaryDurationMs, comparisonSummary.median);
               const spread = comparisonSummary.q3 - comparisonSummary.q1;
               return (
-                <Tooltip key={encounterName}>
-                  <TooltipTrigger asChild>
-                    <div className="grid cursor-default grid-cols-[2.5rem_minmax(6rem,9rem)_minmax(7rem,1fr)_2.75rem_2.75rem_3rem] items-center gap-2 border-b border-border/30 px-1 py-2 last:border-b-0 hover:bg-muted/20">
-                      <span
-                        className={cn(
-                          "rounded border px-1 py-0.5 text-center font-mono text-[10px] font-bold",
-                          percentile === null && "border-zinc-400/30 bg-zinc-400/10 text-zinc-500",
-                          percentile !== null && parseColor(percentile),
-                          percentile !== null && parseBgColor(percentile),
-                          percentile !== null && parseBorderColor(percentile),
-                        )}
-                        title={percentile === null
-                          ? "Parse unavailable: fewer than 5 comparable kills"
-                          : `Kill-time parse ${percentile}: faster than or equal to ${percentile}% of comparable kills`}
-                      >
+                <div
+                  key={encounterName}
+                  className="grid cursor-default grid-cols-[2.5rem_minmax(6rem,9rem)_minmax(7rem,1fr)_2.75rem_2.75rem_3rem] items-center gap-2 border-b border-border/30 px-1 py-2 last:border-b-0 hover:bg-muted/20"
+                >
+                  <Tooltip>
+                    <TooltipTrigger asChild>
+                      <span className={parseBadgeClasses(percentile)}>
                         {percentile === null ? "—" : percentile}
                       </span>
-                      <span className="truncate text-xs font-medium text-foreground" title={encounterName}>
-                        {encounterName}
-                      </span>
-                      <Distribution summary={comparisonSummary} primaryDurationMs={primaryDurationMs} />
-                      <span className="text-right font-mono text-xs font-semibold text-white">
-                        {formatClearDuration(primaryDurationMs)}
-                      </span>
-                      <span className="text-right font-mono text-xs text-muted-foreground">
-                        {formatClearDuration(comparisonSummary.median)}
-                      </span>
-                      <span
-                        className={cn(
-                          "text-right font-mono text-xs font-semibold",
-                          deltaPercent < 0 && "text-emerald-400",
-                          deltaPercent > 0 && "text-rose-400",
-                          deltaPercent === 0 && "text-muted-foreground",
-                        )}
-                        title={formatDelta(delta)}
-                      >
-                        {deltaPercent > 0 ? "+" : ""}{Math.round(deltaPercent)}%
-                      </span>
-                    </div>
-                  </TooltipTrigger>
-                  <TooltipContent
-                    side="top"
-                    sideOffset={6}
-                    hideArrow
-                    className="w-60 rounded-lg border border-white/10 bg-popover p-3 text-foreground shadow-lg"
-                  >
-                    <div className="mb-2.5 flex items-center justify-between gap-3">
-                      <span className="truncate text-xs font-semibold">{encounterName}</span>
-                      <span className="shrink-0 text-[10px] text-muted-foreground">
-                        {comparisonSummary.count.toLocaleString()} kills
-                      </span>
-                    </div>
-                    {percentile !== null && (
-                      <p className="mb-2 text-[11px] text-muted-foreground">
-                        Parse <span className={cn("font-mono font-bold", parseColor(percentile))}>{percentile}</span>
-                        {" "}means this kill was faster than or equal to {percentile}% of comparable kills.
-                      </p>
-                    )}
-                    <div className="space-y-1 text-xs">
-                      <TimeStatLine label="Your time" value={formatClearDuration(primaryDurationMs)} highlight />
-                      <TimeStatLine label="Median delta" value={`${formatDelta(delta)} · ${deltaPercent > 0 ? "+" : ""}${Math.round(deltaPercent)}%`} />
-                      <div className="my-1 border-t border-white/5" />
-                      <TimeStatLine label="Fastest" value={formatClearDuration(comparisonSummary.min)} />
-                      <TimeStatLine label="Top 25%" value={formatClearDuration(comparisonSummary.q1)} />
-                      <TimeStatLine label="Typical" value={formatClearDuration(comparisonSummary.median)} />
-                      <TimeStatLine label="Bottom 25%" value={formatClearDuration(comparisonSummary.q3)} />
-                      <TimeStatLine label="Slowest" value={formatClearDuration(comparisonSummary.max)} />
-                      <div className="mt-1 border-t border-white/5 pt-1">
-                        <TimeStatLine
-                          label="Spread"
-                          description="IQR (Q3 − Q1)"
-                          value={formatClearDuration(spread)}
-                        />
+                    </TooltipTrigger>
+                    <TooltipContent
+                      side="top"
+                      align="start"
+                      sideOffset={6}
+                      hideArrow
+                      className="w-60 rounded-lg border border-white/10 bg-popover p-3 text-foreground shadow-lg"
+                    >
+                      <div className="mb-2.5 flex items-center justify-between gap-3">
+                        <span className="truncate text-xs font-semibold">{encounterName}</span>
+                        <span className="shrink-0 text-[10px] text-muted-foreground">
+                          {comparisonSummary.count.toLocaleString()} kills
+                        </span>
                       </div>
-                    </div>
-                  </TooltipContent>
-                </Tooltip>
+                      {percentile !== null ? (
+                        <p className="mb-2 flex items-center gap-1.5 text-[11px] text-muted-foreground">
+                          <span className={parseBadgeClasses(percentile)}>{percentile}</span>
+                          <span>means faster than or equal to {percentile}% of comparable kills.</span>
+                        </p>
+                      ) : (
+                        <p className="mb-2 text-[11px] text-muted-foreground">
+                          Parse unavailable: fewer than 5 comparable kills.
+                        </p>
+                      )}
+                      <div className="space-y-1 text-xs">
+                        <TimeStatLine label="Your time" value={formatClearDuration(primaryDurationMs)} highlight />
+                        <TimeStatLine
+                          label={specificRaidComparison ? "Raid delta" : "Median delta"}
+                          value={`${formatDelta(delta)} · ${deltaPercent > 0 ? "+" : ""}${Math.round(deltaPercent)}%`}
+                        />
+                        <div className="my-1 border-t border-white/5" />
+                        <TimeStatLine label="Fastest" value={formatClearDuration(comparisonSummary.min)} />
+                        <TimeStatLine label="Top 25%" value={formatClearDuration(comparisonSummary.q1)} />
+                        <TimeStatLine
+                          label={specificRaidComparison ? "Other raid" : "Typical"}
+                          value={formatClearDuration(comparisonSummary.median)}
+                        />
+                        <TimeStatLine label="Bottom 25%" value={formatClearDuration(comparisonSummary.q3)} />
+                        <TimeStatLine label="Slowest" value={formatClearDuration(comparisonSummary.max)} />
+                        <div className="mt-1 border-t border-white/5 pt-1">
+                          <TimeStatLine
+                            label="Spread"
+                            description="IQR (Q3 − Q1)"
+                            value={formatClearDuration(spread)}
+                          />
+                        </div>
+                      </div>
+                    </TooltipContent>
+                  </Tooltip>
+                  <span className="truncate text-xs font-medium text-foreground" title={encounterName}>
+                    {encounterName}
+                  </span>
+                  <Distribution
+                    summary={comparisonSummary}
+                    primaryDurationMs={primaryDurationMs}
+                    baselineLabel={baselineLabel}
+                  />
+                  <span className="text-right font-mono text-xs font-semibold text-white">
+                    {formatClearDuration(primaryDurationMs)}
+                  </span>
+                  <span className="text-right font-mono text-xs text-muted-foreground">
+                    {formatClearDuration(comparisonSummary.median)}
+                  </span>
+                  <span
+                    className={cn(
+                      "text-right font-mono text-xs font-semibold",
+                      deltaPercent < 0 && "text-emerald-400",
+                      deltaPercent > 0 && "text-rose-400",
+                      deltaPercent === 0 && "text-muted-foreground",
+                    )}
+                    title={formatDelta(delta)}
+                  >
+                    {deltaPercent > 0 ? "+" : ""}{Math.round(deltaPercent)}%
+                  </span>
+                </div>
               );
             })}
           </div>

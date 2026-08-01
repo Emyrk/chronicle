@@ -2,10 +2,12 @@ import { Loader2 } from "lucide-react";
 import { Card } from "@/components/ui/Card/Card";
 import { cn } from "@/lib/utils";
 import { formatClearDuration } from "@/pages/GuildPage/panels/clearTimeUtils";
+import { parseBgColor, parseBorderColor, parseColor } from "../parseColors";
 import { PopulationSelector } from "./PopulationSelector";
 import { useSpeedrunPopulation } from "./overviewQueries";
 import type { PopulationSelection } from "./populationSelectionState";
 import { summarizeComparisonRaids, summarizePrimaryRaid } from "./raidSummary";
+import { clearTimeParse } from "./clearTimePopulation";
 
 interface MetricCellProps {
   label: string;
@@ -13,6 +15,7 @@ interface MetricCellProps {
   comparisonValue: number | null;
   formatValue: (value: number) => string;
   formatDelta: (value: number) => string;
+  parseScore?: number | null;
 }
 
 function MetricCell({
@@ -21,12 +24,28 @@ function MetricCell({
   comparisonValue,
   formatValue,
   formatDelta,
+  parseScore,
 }: MetricCellProps) {
   const delta = value !== null && comparisonValue !== null ? value - comparisonValue : null;
 
   return (
     <div className="min-w-0 border-t px-5 py-4 sm:border-l sm:border-t-0 sm:first:border-l-0">
-      <p className="text-xs text-muted-foreground">{label}</p>
+      <div className="flex items-center gap-2">
+        <p className="text-xs text-muted-foreground">{label}</p>
+        {parseScore !== null && parseScore !== undefined && (
+          <span
+            className={cn(
+              "rounded border px-1.5 py-0.5 font-mono text-[10px] font-bold",
+              parseColor(parseScore),
+              parseBgColor(parseScore),
+              parseBorderColor(parseScore),
+            )}
+            title={`Clear-time parse ${parseScore}: faster than or equal to ${parseScore}% of qualified comparison clears`}
+          >
+            {parseScore}
+          </span>
+        )}
+      </div>
       <div className="mt-1 flex min-w-0 items-baseline gap-2">
         <span className="truncate font-mono text-2xl font-semibold tracking-tight text-foreground">
           {value === null ? "—" : formatValue(value)}
@@ -65,8 +84,12 @@ export function RaidSummaryStrip({
   const primaryQuery = useSpeedrunPopulation(primary);
   const comparisonQuery = useSpeedrunPopulation(comparison);
   const primarySummary = summarizePrimaryRaid(primaryQuery.data?.runs[0]);
+  const comparisonRuns = comparisonQuery.data?.runs ?? [];
   const comparisonSummary = comparison
-    ? summarizeComparisonRaids(comparisonQuery.data?.runs ?? [])
+    ? summarizeComparisonRaids(comparisonRuns)
+    : null;
+  const clearTimeParseScore = comparison
+    ? clearTimeParse(primaryQuery.data?.runs[0], comparisonRuns)
     : null;
   const loading = primaryQuery.isLoading || comparisonQuery.isLoading;
   const error = primaryQuery.error ?? comparisonQuery.error;
@@ -116,6 +139,7 @@ export function RaidSummaryStrip({
             comparisonValue={comparisonSummary?.clearTimeMs ?? null}
             formatValue={formatClearDuration}
             formatDelta={formatDurationDelta}
+            parseScore={clearTimeParseScore}
           />
           <MetricCell
             label="Deaths"
