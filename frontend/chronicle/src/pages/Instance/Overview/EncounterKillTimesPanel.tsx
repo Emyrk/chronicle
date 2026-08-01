@@ -187,6 +187,9 @@ export function EncounterKillTimesPanel({
   const comparisonSummaries = summarizeEncounterKillTimes(comparisonQuery.data?.runs ?? []);
   const rows = buildEncounterKillTimeComparisonRows(primarySummaries, comparisonSummaries);
   const averageParse = averageKillTimePercentile(rows.map((row) => row.percentile));
+  const killedBossCount = rows.filter((row) => row.primarySummary !== null).length;
+  const availableParseCount = rows.filter((row) => row.percentile !== null).length;
+  const incompleteAverage = killedBossCount < rows.length;
   const specificRaidComparison = comparison?.kind === "instance";
   const loading = primaryQuery.isLoading || comparisonQuery.isLoading;
   const error = primaryQuery.error ?? comparisonQuery.error;
@@ -201,17 +204,32 @@ export function EncounterKillTimesPanel({
               {specificRaidComparison ? "Kill time vs comparison raid" : "Kill time vs comparison median"}
             </p>
           </div>
-          {averageParse !== null && (
+          {(averageParse !== null || incompleteAverage) && (
             <span
               className={cn(
                 "flex items-center gap-1.5 rounded border px-2 py-0.5 text-[10px]",
-                parseBgColor(averageParse),
-                parseBorderColor(averageParse),
+                averageParse === null && "border-zinc-400/30 bg-zinc-400/10",
+                averageParse !== null && parseBgColor(averageParse),
+                averageParse !== null && parseBorderColor(averageParse),
               )}
-              title={`Arithmetic mean of ${rows.filter((row) => row.percentile !== null).length} encounter parse scores`}
+              title={incompleteAverage
+                ? `Incomplete average: ${killedBossCount} of ${rows.length} comparable bosses killed. Missing bosses are excluded; ${availableParseCount} encounter parses are available.`
+                : `Arithmetic mean of ${availableParseCount} encounter parse scores`}
             >
-              <span className="text-muted-foreground">Avg Parse</span>
-              <span className={cn("font-mono font-bold", parseColor(averageParse))}>{averageParse}</span>
+              <span className={cn("text-muted-foreground", incompleteAverage && "text-amber-400/90")}>
+                {incompleteAverage ? "Incomplete Avg" : "Avg Parse"}
+              </span>
+              <span className={cn(
+                "font-mono font-bold",
+                averageParse === null ? "text-zinc-500" : parseColor(averageParse),
+              )}>
+                {averageParse ?? "—"}
+              </span>
+              {incompleteAverage && (
+                <span className="border-l border-current/20 pl-1.5 font-mono text-muted-foreground">
+                  {killedBossCount}/{rows.length}
+                </span>
+              )}
             </span>
           )}
         </div>
