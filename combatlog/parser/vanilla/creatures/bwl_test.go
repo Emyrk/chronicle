@@ -84,10 +84,63 @@ func TestRazorgoreEggs_VanillaPlus_KillsAddsAt30(t *testing.T) {
 	}
 }
 
-// TestRazorgoreEggs_NonVanillaPlus_NoKill verifies that on non-VanillaPlus
-// flavors the egg mechanic does not fire and the adds remain active while the
-// boss is active.
-func TestRazorgoreEggs_NonVanillaPlus_NoKill(t *testing.T) {
+// TestRazorgoreEggs_NightmareOfUrsol_KillsAddsAt20 verifies that Nightmare of
+// Ursol's shorter phase 1 marks the adds as killed after 20 destroyed eggs.
+func TestRazorgoreEggs_NightmareOfUrsol_KillsAddsAt20(t *testing.T) {
+	t.Parallel()
+
+	flavor := database.WoWFlavor{database.FlavorVanilla, database.FlavorNightmareOfUrsol}
+	chars := characters.NewCharacters(unitdb.New(),
+		creatures.VanillaCharacterFactories(flavor),
+		identifier.NewIdentifier(map[uint32]identifier.Identity{}))
+
+	player := guid.GUID(0x1)
+	razor := creatureGUID(razorgoreEntry, 0x1)
+	legionnaire := creatureGUID(blackwingLegionnaire, 0x2)
+	mage := creatureGUID(blackwingMage, 0x3)
+	dragonspawn := creatureGUID(deathTalonDragonspawn, 0x4)
+
+	base := time.Date(2026, time.January, 1, 0, 0, 0, 0, time.UTC)
+
+	for i, add := range []guid.GUID{legionnaire, mage, dragonspawn} {
+		_, err := chars.Process(damage(base.Add(time.Duration(i)*time.Second), player, add))
+		require.NoError(t, err)
+	}
+
+	for i := 0; i < 19; i++ {
+		ts := base.Add(time.Duration(10+i) * time.Second)
+		_, err := chars.Process(eggCast(ts, razor, destroyEggSpellID))
+		require.NoError(t, err)
+	}
+
+	for _, id := range []guid.GUID{legionnaire, mage, dragonspawn} {
+		add, ok := chars.Get(id)
+		require.True(t, ok)
+		require.True(t, add.IsActive(), "add should remain active after 19 eggs")
+	}
+
+	_, err := chars.Process(eggCast(base.Add(29*time.Second), razor, destroyEggSpellID))
+	require.NoError(t, err)
+
+	for name, id := range map[string]guid.GUID{
+		"Blackwing Legionnaire":   legionnaire,
+		"Blackwing Mage":          mage,
+		"Death Talon Dragonspawn": dragonspawn,
+	} {
+		add, ok := chars.Get(id)
+		require.True(t, ok, "%s should exist", name)
+		require.False(t, add.IsActive(), "%s should be killed after 20 eggs", name)
+		periods := add.Periods()
+		require.Len(t, periods, 1, "%s should have one activity period", name)
+		require.Equal(t, period.EndStateSlain, periods[0].EndState, "%s should be slain", name)
+		require.Equal(t, "razorgore_eggs_destroyed", periods[0].End.Reason, "%s end reason", name)
+	}
+}
+
+// TestRazorgoreEggs_UnsupportedFlavor_NoKill verifies that without an egg
+// threshold the mechanic does not fire and the adds remain active while the boss
+// is active.
+func TestRazorgoreEggs_UnsupportedFlavor_NoKill(t *testing.T) {
 	t.Parallel()
 
 	flavor := database.WoWFlavor{database.FlavorVanilla}

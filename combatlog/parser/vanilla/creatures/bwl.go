@@ -63,7 +63,13 @@ func NewBlackwingMarksman(flavor database.WoWFlavor) func(id guid.GUID, all *cha
 }
 
 func NewRazorgore(flavor database.WoWFlavor) func(id guid.GUID, all *characters.Characters) (characters.Character, bool) {
-	eggMechanic := flavor.Has(database.FlavorVanillaPlus)
+	eggThreshold := 0
+	switch {
+	case flavor.Has(database.FlavorNightmareOfUrsol):
+		eggThreshold = 20
+	case flavor.Has(database.FlavorVanillaPlus):
+		eggThreshold = 30
+	}
 	return func(id guid.GUID, all *characters.Characters) (characters.Character, bool) {
 		if entry, ok := id.GetEntry(); !ok || entry != 12435 {
 			return nil, false
@@ -71,7 +77,7 @@ func NewRazorgore(flavor database.WoWFlavor) func(id guid.GUID, all *characters.
 
 		base := characters.NewCommonCharacter(id, all)
 		base.SetRecentlySlainDuration(time.Second * 30)
-		c := &razorgore{Common: base, all: all, eggMechanic: eggMechanic}
+		c := &razorgore{Common: base, all: all, eggThreshold: eggThreshold}
 		return characters.NewAdsGoWithBossCustomCharacter(c, all, 12435,
 			12420,
 			12416,
@@ -84,10 +90,10 @@ func NewRazorgore(flavor database.WoWFlavor) func(id guid.GUID, all *characters.
 
 type razorgore struct {
 	*characters.Common
-	all         *characters.Characters
-	eggMechanic bool
-	eggCount    int
-	adsGone     bool
+	all          *characters.Characters
+	eggThreshold int
+	eggCount     int
+	adsGone      bool
 }
 
 func (c *razorgore) Process(m messages.Message) error {
@@ -98,11 +104,11 @@ func (c *razorgore) Process(m messages.Message) error {
 		if ty.SpellData.ID == 19873 || ty.SpellData.ID == 22425 {
 			ty.MarkActivityStart("Razorgore destroying eggs", c.ID())
 		}
-		// V+: after 30 "Destroy Egg" (19873) casts the phase-1 adds run away, so
-		// count them as killed.
-		if c.eggMechanic && !c.adsGone && ty.SpellData.ID == 19873 {
+		// After the flavor-specific number of "Destroy Egg" (19873) casts, the
+		// phase-1 adds run away, so count them as killed.
+		if c.eggThreshold > 0 && !c.adsGone && ty.SpellData.ID == 19873 {
 			c.eggCount++
-			if c.eggCount >= 30 {
+			if c.eggCount >= c.eggThreshold {
 				c.killEggAds(m)
 				c.adsGone = true
 			}
@@ -120,7 +126,7 @@ func (c *razorgore) Process(m messages.Message) error {
 }
 
 // killEggAds marks the phase-1 adds as killed. In the real fight they run away
-// once 30 eggs are destroyed; we model that as a death.
+// once the flavor-specific egg threshold is reached; we model that as a death.
 func (c *razorgore) killEggAds(m messages.Message) {
 	for _, entry := range []uint32{
 		12416, // Blackwing Legionnaire
