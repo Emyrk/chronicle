@@ -1,7 +1,8 @@
 import { useState, type ReactNode } from "react";
-import { Loader2 } from "lucide-react";
+import { Loader2, TriangleAlert } from "lucide-react";
 import { Card } from "@/components/ui/Card/Card";
 import {
+  HintTooltip,
   Tooltip,
   TooltipContent,
   TooltipProvider,
@@ -205,32 +206,58 @@ export function EncounterKillTimesPanel({
             </p>
           </div>
           {(averageParse !== null || incompleteAverage) && (
-            <span
-              className={cn(
-                "flex items-center gap-1.5 rounded border px-2 py-0.5 text-[10px]",
-                averageParse === null && "border-zinc-400/30 bg-zinc-400/10",
-                averageParse !== null && parseBgColor(averageParse),
-                averageParse !== null && parseBorderColor(averageParse),
-              )}
-              title={incompleteAverage
-                ? `Incomplete average: ${killedBossCount} of ${rows.length} comparable bosses killed. Missing bosses are excluded; ${availableParseCount} encounter parses are available.`
-                : `Arithmetic mean of ${availableParseCount} encounter parse scores`}
-            >
-              <span className={cn("text-muted-foreground", incompleteAverage && "text-amber-400/90")}>
-                {incompleteAverage ? "Incomplete Avg" : "Avg Parse"}
-              </span>
-              <span className={cn(
-                "font-mono font-bold",
-                averageParse === null ? "text-zinc-500" : parseColor(averageParse),
-              )}>
-                {averageParse ?? "—"}
-              </span>
-              {incompleteAverage && (
-                <span className="border-l border-current/20 pl-1.5 font-mono text-muted-foreground">
-                  {killedBossCount}/{rows.length}
-                </span>
-              )}
-            </span>
+            <HintTooltip>
+              <TooltipTrigger asChild>
+                <button
+                  type="button"
+                  className={cn(
+                    "flex cursor-help items-center gap-1.5 rounded border px-2 py-0.5 text-[10px] transition hover:brightness-125",
+                    "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/60",
+                    averageParse === null && "border-zinc-400/30 bg-zinc-400/10",
+                    averageParse !== null && parseBgColor(averageParse),
+                    averageParse !== null && parseBorderColor(averageParse),
+                  )}
+                  aria-label={incompleteAverage ? "Incomplete average parse details" : "Average parse details"}
+                >
+                  <span className="text-muted-foreground">Avg Parse</span>
+                  <span className={cn(
+                    "font-mono font-bold",
+                    averageParse === null ? "text-zinc-500" : parseColor(averageParse),
+                  )}>
+                    {averageParse ?? "—"}
+                  </span>
+                  {incompleteAverage && (
+                    <TriangleAlert className="size-3 text-amber-400" aria-hidden />
+                  )}
+                </button>
+              </TooltipTrigger>
+              <TooltipContent
+                side="top"
+                align="start"
+                sideOffset={6}
+                hideArrow
+                className="w-64 rounded-lg border border-white/10 bg-popover p-3 text-foreground shadow-lg"
+              >
+                <div className="flex items-start gap-2">
+                  {incompleteAverage && <TriangleAlert className="mt-0.5 size-3.5 shrink-0 text-amber-400" />}
+                  <div>
+                    <p className="text-xs font-semibold">
+                      {incompleteAverage ? "Incomplete average parse" : "Average encounter parse"}
+                    </p>
+                    <p className="mt-1 text-[11px] leading-relaxed text-muted-foreground">
+                      {incompleteAverage
+                        ? `${killedBossCount} of ${rows.length} comparable bosses were killed. Missing bosses are excluded from the average.`
+                        : `Arithmetic mean of ${availableParseCount} encounter parse scores.`}
+                    </p>
+                    {incompleteAverage && (
+                      <p className="mt-1 text-[10px] text-muted-foreground/70">
+                        {availableParseCount} encounter {availableParseCount === 1 ? "parse contributes" : "parses contribute"} to this score.
+                      </p>
+                    )}
+                  </div>
+                </div>
+              </TooltipContent>
+            </HintTooltip>
           )}
         </div>
         <div className="flex flex-wrap items-center gap-3 text-[10px] text-muted-foreground">
