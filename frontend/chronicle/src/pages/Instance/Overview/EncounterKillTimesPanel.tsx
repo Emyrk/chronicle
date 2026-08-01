@@ -235,8 +235,11 @@ export function EncounterKillTimesPanel({
                           percentile !== null && parseBgColor(percentile),
                           percentile !== null && parseBorderColor(percentile),
                         )}
+                        title={percentile === null
+                          ? "Parse unavailable: fewer than 5 comparable kills"
+                          : `Kill-time parse ${percentile}: faster than or equal to ${percentile}% of comparable kills`}
                       >
-                        {percentile === null ? "—" : `P${percentile}`}
+                        {percentile === null ? "—" : percentile}
                       </span>
                       <span className="truncate text-xs font-medium text-foreground" title={encounterName}>
                         {encounterName}
@@ -273,6 +276,12 @@ export function EncounterKillTimesPanel({
                         {comparisonSummary.count.toLocaleString()} kills
                       </span>
                     </div>
+                    {percentile !== null && (
+                      <p className="mb-2 text-[11px] text-muted-foreground">
+                        Parse <span className={cn("font-mono font-bold", parseColor(percentile))}>{percentile}</span>
+                        {" "}means this kill was faster than or equal to {percentile}% of comparable kills.
+                      </p>
+                    )}
                     <div className="space-y-1 text-xs">
                       <TimeStatLine label="Your time" value={formatClearDuration(primaryDurationMs)} highlight />
                       <TimeStatLine label="Median delta" value={`${formatDelta(delta)} · ${deltaPercent > 0 ? "+" : ""}${Math.round(deltaPercent)}%`} />
