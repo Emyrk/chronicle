@@ -144,9 +144,11 @@ export function EncounterKillTimesPanel({
   return (
     <Card className="overflow-hidden border-border/80 bg-card/75 shadow-sm">
       <div className="flex min-h-12 flex-wrap items-center justify-between gap-x-4 gap-y-2 border-b px-5 py-3">
-        <div className="flex min-w-0 flex-wrap items-center gap-2.5">
-          <h2 className="truncate text-sm font-semibold">Encounter breakdown</h2>
-          <span className="shrink-0 text-[11px] text-muted-foreground">Kill time vs comparison median</span>
+        <div className="flex min-w-0 items-center gap-2.5">
+          <div className="min-w-0">
+            <h2 className="truncate text-sm font-semibold">Encounter breakdown</h2>
+            <p className="mt-0.5 text-[11px] leading-none text-muted-foreground">Kill time vs comparison median</p>
+          </div>
           {averageParse !== null && (
             <span
               className={cn(
@@ -196,8 +198,8 @@ export function EncounterKillTimesPanel({
         </div>
       ) : (
         <TooltipProvider>
-          <div className="px-5 py-3">
-            <div className="grid grid-cols-[2.5rem_minmax(6rem,9rem)_minmax(7rem,1fr)_2.75rem_2.75rem_3rem] items-end gap-2 border-b border-border/40 px-1 pb-2 text-[9px] uppercase tracking-[0.14em] text-muted-foreground/60">
+          <div className="px-5 pb-3 pt-1.5">
+            <div className="grid grid-cols-[2.5rem_minmax(6rem,9rem)_minmax(7rem,1fr)_2.75rem_2.75rem_3rem] items-end gap-2 border-b border-border/40 px-1 pb-1.5 text-[9px] uppercase tracking-[0.14em] text-muted-foreground/60">
               <span />
               <span />
               <div className="relative h-4 font-mono normal-case tracking-normal">
