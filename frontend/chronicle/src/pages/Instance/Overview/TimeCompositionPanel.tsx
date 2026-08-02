@@ -249,7 +249,7 @@ export function TimeCompositionPanel({
     : null;
 
   return (
-    <Card className="overflow-hidden border-border/80 bg-card/75 shadow-sm lg:col-span-2">
+    <Card className="overflow-hidden border-border/80 bg-card/75 shadow-sm">
       <div className="flex min-h-16 flex-wrap items-center justify-between gap-3 border-b px-6 py-4">
         <div>
           <h2 className="text-sm font-semibold">Raid time breakdown</h2>
