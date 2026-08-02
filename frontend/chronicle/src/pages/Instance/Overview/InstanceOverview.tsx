@@ -2,6 +2,7 @@ import { useSearchParams } from "react-router-dom";
 import type { Instance } from "../InstancePage";
 import { RaidSummaryStrip } from "./RaidSummaryStrip";
 import { EncounterKillTimesPanel } from "./EncounterKillTimesPanel";
+import { TimeCompositionPanel } from "./TimeCompositionPanel";
 import {
   parsePopulationSelection,
   serializePopulationSelection,
@@ -32,8 +33,9 @@ export function InstanceOverview({ instance }: { instance: Instance }) {
         fixedAnchorInstanceId={instance.id}
         onComparisonChange={setComparison}
       />
-      <div className="grid gap-4 lg:grid-cols-2">
+      <div className="grid items-start gap-4 lg:grid-cols-2">
         <EncounterKillTimesPanel primary={primary} comparison={comparison} />
+        <TimeCompositionPanel primary={primary} comparison={comparison} />
       </div>
     </section>
   );
