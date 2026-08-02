@@ -15,11 +15,9 @@ describe("parseInstanceViewMode", () => {
 });
 
 describe("isInstanceOverviewEnabled", () => {
-  it("requires both page support and debug=true", () => {
-    expect(isInstanceOverviewEnabled(true, "true")).toBe(true);
-    expect(isInstanceOverviewEnabled(true, null)).toBe(false);
-    expect(isInstanceOverviewEnabled(true, "1")).toBe(false);
-    expect(isInstanceOverviewEnabled(false, "true")).toBe(false);
+  it("depends only on whether the page supports Overview", () => {
+    expect(isInstanceOverviewEnabled(true)).toBe(true);
+    expect(isInstanceOverviewEnabled(false)).toBe(false);
   });
 });
 
@@ -44,5 +42,6 @@ describe("InstanceViewModeSwitch", () => {
     expect(markup.indexOf("Encounters")).toBeLessThan(markup.indexOf("Overview"));
     expect(markup).toContain('aria-pressed="false"');
     expect(markup).toContain('aria-pressed="true"');
+    expect(markup).toContain("Beta");
   });
 });

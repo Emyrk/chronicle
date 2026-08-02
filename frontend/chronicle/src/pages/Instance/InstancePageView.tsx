@@ -1898,7 +1898,7 @@ export function InstancePageView({
 
   // URL state for explainer mode (simple ?explain=panel_type)
   const [searchParams, setSearchParams] = useSearchParams();
-  const overviewEnabled = isInstanceOverviewEnabled(supportsOverview, searchParams.get("debug"));
+  const overviewEnabled = isInstanceOverviewEnabled(supportsOverview);
   const requestedViewMode = parseInstanceViewMode(searchParams.get("view"));
   const viewMode: InstanceViewMode = overviewEnabled ? requestedViewMode : "encounters";
   const isEncounterView = viewMode === "encounters";

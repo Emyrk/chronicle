@@ -45,6 +45,9 @@ export function InstanceViewModeSwitch({
       >
         <BarChart3 className="h-3.5 w-3.5" />
         Overview
+        <span className="rounded-sm border border-amber-400/35 bg-amber-400/10 px-1 py-px text-[8px] font-bold uppercase tracking-wider text-amber-400">
+          Beta
+        </span>
       </Button>
     </div>
   );

@@ -4,8 +4,8 @@ export function parseInstanceViewMode(value: string | null): InstanceViewMode {
   return value === "overview" ? "overview" : "encounters";
 }
 
-export function isInstanceOverviewEnabled(supportsOverview: boolean, debugValue: string | null): boolean {
-  return supportsOverview && debugValue === "true";
+export function isInstanceOverviewEnabled(supportsOverview: boolean): boolean {
+  return supportsOverview;
 }
 
 export function withInstanceViewMode(url: string, mode: InstanceViewMode): string {

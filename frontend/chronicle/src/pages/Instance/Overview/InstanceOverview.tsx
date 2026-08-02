@@ -1,3 +1,4 @@
+import { FlaskConical } from "lucide-react";
 import { useSearchParams } from "react-router-dom";
 import type { Instance } from "../InstancePage";
 import { RaidSummaryStrip } from "./RaidSummaryStrip";
@@ -26,6 +27,15 @@ export function InstanceOverview({ instance }: { instance: Instance }) {
 
   return (
     <section className="min-w-0 flex-1" aria-label="Instance overview">
+      <div className="mb-4 flex items-center gap-3 rounded-lg border border-amber-400/25 bg-amber-400/[0.06] px-4 py-2.5 text-amber-100">
+        <FlaskConical className="size-4 shrink-0 text-amber-400" aria-hidden />
+        <div className="min-w-0 text-xs">
+          <span className="font-semibold text-amber-300">Overview Beta</span>
+          <span className="ml-2 text-muted-foreground">
+            This page is actively being developed. Metrics and presentation may change.
+          </span>
+        </div>
+      </div>
       <RaidSummaryStrip
         primary={primary}
         comparison={comparison}

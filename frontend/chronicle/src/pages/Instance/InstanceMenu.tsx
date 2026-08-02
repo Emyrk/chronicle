@@ -97,6 +97,9 @@ export function InstanceMenu({
             <DropdownMenuItem onClick={() => onViewModeChange("overview")}>
               <BarChart3 className="h-4 w-4 mr-2" />
               Overview
+              <span className="ml-1 rounded-sm border border-amber-400/35 bg-amber-400/10 px-1 py-px text-[8px] font-bold uppercase tracking-wider text-amber-400">
+                Beta
+              </span>
               {viewMode === "overview" && <Check className="ml-auto h-4 w-4" />}
             </DropdownMenuItem>
             <DropdownMenuSeparator />
