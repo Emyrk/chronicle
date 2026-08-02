@@ -219,7 +219,7 @@ export function RaidSummaryStrip({
   const coverage = comparisonQuery.data?.overviewCoverage;
 
   return (
-    <Card className="mb-4 overflow-hidden border-border/80 bg-card/75 shadow-sm">
+    <Card className="mb-4 gap-0 overflow-hidden border-border/80 bg-card/75 py-0 shadow-sm">
       <div className="flex min-h-12 items-center justify-between gap-4 border-b px-5 py-3">
         <div className="flex min-w-0 items-baseline gap-2.5">
           <h2 className="truncate text-sm font-semibold">Raid summary</h2>
