@@ -89,7 +89,7 @@ export function PopulationSelector({
             )}
             disabled={disabled}
           >
-            <span className="truncate">{compact ? "Change" : buttonLabel}</span>
+            <span className="truncate">{buttonLabel}</span>
             {disabled ? (
               <Loader2 className="h-3.5 w-3.5 shrink-0 animate-spin text-muted-foreground" />
             ) : (
