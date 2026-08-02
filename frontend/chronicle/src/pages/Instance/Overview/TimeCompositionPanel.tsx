@@ -229,7 +229,7 @@ function ComponentCard({
             )}
           </span>
         </div>
-        <div className="mt-3 flex items-baseline gap-2">
+        <div className="mt-1.5 flex items-baseline gap-2">
           <span className={cn(
             "font-mono text-2xl font-bold tracking-tight",
             primaryValue === null ? "text-muted-foreground/50" : "text-foreground",
