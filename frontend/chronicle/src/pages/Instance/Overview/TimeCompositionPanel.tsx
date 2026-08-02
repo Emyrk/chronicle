@@ -245,6 +245,9 @@ export function TimeCompositionPanel({
   const totalDelta = primaryComposition && comparisonValues
     ? primaryComposition.total - comparisonValues.total
     : null;
+  const totalDeltaPercent = totalDelta !== null && comparisonValues.total > 0
+    ? Math.round((Math.abs(totalDelta) / comparisonValues.total) * 100)
+    : null;
 
   return (
     <Card className="gap-0 overflow-hidden border-border/80 bg-card/75 py-0 shadow-sm">
@@ -291,16 +294,28 @@ export function TimeCompositionPanel({
                   <span className="text-xs font-semibold text-foreground">This raid</span>
                   <span className="text-[10px] text-muted-foreground">encounter span</span>
                 </div>
-                <div className="flex items-baseline gap-2">
+                <div className="flex items-center gap-2.5">
                   <span className="font-mono text-lg font-bold text-foreground">
                     {primaryComposition ? formatClearDuration(primaryComposition.total) : "Missing"}
                   </span>
-                  {totalDelta !== null && (
-                    <span className={cn(
-                      "font-mono text-[10px] font-semibold",
-                      totalDelta < 0 ? "text-emerald-400" : totalDelta > 0 ? "text-rose-400" : "text-muted-foreground",
-                    )}>
-                      {formatDelta(totalDelta)} vs {comparisonLabel.toLowerCase()}
+                  {totalDelta !== null && totalDeltaPercent !== null && (
+                    <span
+                      className={cn(
+                        "flex items-baseline gap-1 rounded-md border px-2 py-1 font-mono",
+                        totalDelta < 0 && "border-emerald-400/25 bg-emerald-400/10 text-emerald-400",
+                        totalDelta > 0 && "border-rose-400/25 bg-rose-400/10 text-rose-400",
+                        totalDelta === 0 && "border-border bg-muted/20 text-muted-foreground",
+                      )}
+                      title={`${formatDelta(totalDelta)} compared with ${comparisonLabel.toLowerCase()}`}
+                    >
+                      <strong className="text-xs">
+                        {totalDelta === 0
+                          ? "Same pace"
+                          : `${totalDeltaPercent}% ${totalDelta < 0 ? "faster" : "slower"}`}
+                      </strong>
+                      {totalDelta !== 0 && (
+                        <span className="text-[9px] opacity-75">{formatDelta(totalDelta)}</span>
+                      )}
                     </span>
                   )}
                 </div>
