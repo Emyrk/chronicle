@@ -9,7 +9,6 @@ import {
 import { cn } from "@/lib/utils";
 import { formatClearDuration } from "@/pages/GuildPage/panels/clearTimeUtils";
 import { parseBgColor, parseBorderColor, parseColor } from "../parseColors";
-import { PopulationSelector } from "./PopulationSelector";
 import { useSpeedrunPopulation } from "./overviewQueries";
 import type { PopulationSelection } from "./populationSelectionState";
 import { summarizeComparisonRaids, summarizePrimaryRaid } from "./raidSummary";
@@ -190,15 +189,9 @@ function MetricCell({
 export function RaidSummaryStrip({
   primary,
   comparison,
-  guildAvailable,
-  fixedAnchorInstanceId,
-  onComparisonChange,
 }: {
   primary: PopulationSelection;
   comparison?: PopulationSelection;
-  guildAvailable: boolean;
-  fixedAnchorInstanceId: string;
-  onComparisonChange: (selection?: PopulationSelection) => void;
 }) {
   const primaryQuery = useSpeedrunPopulation(primary);
   const comparisonQuery = useSpeedrunPopulation(comparison);
@@ -220,7 +213,7 @@ export function RaidSummaryStrip({
 
   return (
     <Card className="mb-4 gap-0 overflow-hidden border-border/80 bg-card/75 py-0 shadow-sm">
-      <div className="flex min-h-12 items-center justify-between gap-4 border-b px-5 py-3">
+      <div className="flex min-h-12 items-center border-b px-5 py-3">
         <div className="flex min-w-0 items-baseline gap-2.5">
           <h2 className="truncate text-sm font-semibold">Raid summary</h2>
           <span className="shrink-0 text-[11px] text-muted-foreground">Whole instance</span>
@@ -233,16 +226,6 @@ export function RaidSummaryStrip({
             </span>
           )}
         </div>
-        <PopulationSelector
-          label="Compare against"
-          value={comparison}
-          allowNone
-          compact
-          disabled={primaryQuery.isLoading}
-          guildAvailable={guildAvailable}
-          fixedAnchorInstanceId={fixedAnchorInstanceId}
-          onChange={onComparisonChange}
-        />
       </div>
 
       {loading ? (
