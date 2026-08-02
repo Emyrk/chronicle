@@ -30,7 +30,7 @@ func TestDiscordMembershipGrantChecks(t *testing.T) {
 	require.NoError(t, err)
 	require.Len(t, grants, 1)
 	require.Equal(t, "base", grants[0].Source)
-	require.Equal(t, int64(150_000_000), grants[0].StorageBytes)
+	require.Equal(t, int64(100_000_000), grants[0].StorageBytes)
 
 	_, err = db.InsertUserAuth(ctx, database.InsertUserAuthParams{
 		ID:       uuid.New(),
@@ -98,5 +98,5 @@ func TestDiscordMembershipGrantChecks(t *testing.T) {
 
 	user, err := db.GetUserByID(ctx, userID)
 	require.NoError(t, err)
-	require.Equal(t, int64(225_000_000), user.MaxStorageBytes)
+	require.Equal(t, int64(175_000_000), user.MaxStorageBytes)
 }

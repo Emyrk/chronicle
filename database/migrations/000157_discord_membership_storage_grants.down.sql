@@ -11,7 +11,7 @@ BEGIN
 END;
 $$ LANGUAGE plpgsql;
 
--- Base grants raised by the up migration cannot be safely distinguished from
+-- Base grants changed by the up migration cannot be safely distinguished from
 -- grants that already had the same value, so their previous values are not restored.
 
 COMMIT;

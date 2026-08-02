@@ -4,15 +4,17 @@ CREATE OR REPLACE FUNCTION insert_default_data_grant()
 RETURNS TRIGGER AS $$
 BEGIN
   INSERT INTO data_grants (user_id, source, storage_bytes, description)
-  VALUES (NEW.id, 'base', 150000000, 'Default storage allocation');
+  VALUES (NEW.id, 'base', 100000000, 'Default storage allocation');
   RETURN NEW;
 END;
 $$ LANGUAGE plpgsql;
 
-UPDATE data_grants
-SET storage_bytes = 150000000
-WHERE source = 'base'
-  AND storage_bytes < 150000000;
+UPDATE data_grants AS grants
+SET storage_bytes = 100000000
+FROM chronicle_users AS users
+WHERE grants.user_id = users.id
+  AND grants.source = 'base'
+  AND users.consumed_storage_bytes < 150000000;
 
 CREATE TABLE discord_membership_grant_checks (
   user_id UUID PRIMARY KEY REFERENCES users(id) ON DELETE CASCADE,
