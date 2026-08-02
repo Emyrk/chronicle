@@ -46,7 +46,7 @@ const COMPONENTS: ReadonlyArray<{
   {
     key: "idle",
     label: "Idle",
-    description: "Gaps between encounters, including recovery, buffs, and breaks.",
+    description: "Gaps between encounters.",
     barClass: "bg-stone-500",
     mutedBarClass: "bg-stone-500/35",
     textClass: "text-stone-400",
