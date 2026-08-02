@@ -29,7 +29,20 @@ LEFT JOIN world_display_info wdi
 LEFT JOIN dbc_item_display_info dbi
     ON dbi.dataset_id = wit.dataset_id AND dbi.id = wit.display_id
 WHERE wit.dataset_id = @dataset_id
-  AND wit.class = 0
+  AND (
+      wit.class = 0
+      OR (
+          wit.inventory_type = 0
+          AND wit.stackable > 1
+          AND (
+              (wit.spellid_1 <> 0 AND wit.spelltrigger_1 = 0) OR
+              (wit.spellid_2 <> 0 AND wit.spelltrigger_2 = 0) OR
+              (wit.spellid_3 <> 0 AND wit.spelltrigger_3 = 0) OR
+              (wit.spellid_4 <> 0 AND wit.spelltrigger_4 = 0) OR
+              (wit.spellid_5 <> 0 AND wit.spelltrigger_5 = 0)
+          )
+      )
+  )
   AND (
       wit.spellid_1 <> 0 OR
       wit.spellid_2 <> 0 OR
