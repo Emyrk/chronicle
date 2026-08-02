@@ -189,6 +189,9 @@ function ComponentCard({
   comparisonLabel: string;
 }) {
   const delta = primaryValue === null ? null : primaryValue - summary.median;
+  const deltaPercent = delta !== null && summary.median > 0
+    ? Math.round((Math.abs(delta) / summary.median) * 100)
+    : null;
 
   return (
     <SegmentTooltip
@@ -203,14 +206,26 @@ function ComponentCard({
             <span className={cn("size-2.5 rounded-sm", component.barClass)} />
             {component.label}
           </span>
-          <span className={cn(
-            "font-mono text-xs font-semibold",
-            delta === null && "text-muted-foreground/50",
-            delta !== null && delta < 0 && "text-emerald-400",
-            delta !== null && delta > 0 && "text-amber-400",
-            delta === 0 && "text-muted-foreground",
-          )}>
-            {delta === null ? "—" : formatDelta(delta)}
+          <span
+            className={cn(
+              "flex items-baseline gap-1 font-mono font-semibold",
+              delta === null && "text-muted-foreground/50",
+              delta !== null && delta < 0 && "text-emerald-400",
+              delta !== null && delta > 0 && "text-amber-400",
+              delta === 0 && "text-muted-foreground",
+            )}
+            title={delta === null ? undefined : `${formatDelta(delta)} compared with ${comparisonLabel.toLowerCase()}`}
+          >
+            <span className="text-xs">
+              {delta === null || deltaPercent === null
+                ? "—"
+                : delta === 0
+                  ? "Same"
+                  : `${deltaPercent}% ${delta < 0 ? "faster" : "slower"}`}
+            </span>
+            {delta !== null && delta !== 0 && (
+              <span className="text-[9px] opacity-70">{formatDelta(delta)}</span>
+            )}
           </span>
         </div>
         <div className="mt-3 flex items-baseline gap-2">
