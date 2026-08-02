@@ -5,6 +5,10 @@ import { fetchItemTooltip } from "@/api/gamedata";
 import { ScrollArea } from "@/components/ui/ScrollArea/ScrollArea";
 import { SpellIdTooltip } from "@/components/ui/SpellIdTooltip/SpellIdTooltip";
 import { useCachedValue } from "@/hooks/useCachedValue";
+import { useDatasetId } from "@/hooks/useDatasetId";
+import { useConsumableDisambiguations } from "@/api/queries";
+import type { ConsumableDisambiguation } from "@/api/typesGenerated";
+import { buildConsumableDisambiguationMap, resolveConsumableUse } from "./consumableDisambiguation";
 import { GenericPanel } from "../GenericPanel";
 import { FloatingIncomingEventsBreakout } from "../IncomingEvents/FloatingIncomingEventsBreakout";
 import type { PanelDefinition, PanelRenderProps } from "../types";
@@ -159,15 +163,20 @@ export function ConsumablesTotalContent(props: ConsumablesTotalContentProps) {
     setPossibleBreakout({ key: consume.key, consume, initialPosition: { x, y } });
   };
 
+  const datasetId = useDatasetId();
+  const { data: disambiguations } = useConsumableDisambiguations(datasetId);
+  const disambiguationMap = useMemo(() => buildConsumableDisambiguationMap(disambiguations as ConsumableDisambiguation[] | undefined), [disambiguations]);
+
   const rows = useMemo(() => {
-    const aggregated = aggregateConsumablesTotal(cachedResult?.uses.values() ?? []);
+    const uses = [...(cachedResult?.uses.values() ?? [])].map((use) => resolveConsumableUse(use, disambiguationMap));
+    const aggregated = aggregateConsumablesTotal(uses);
     aggregated.sort((a, b) => {
       const aName = context.instance.players?.[a.playerId]?.name ?? a.playerId;
       const bName = context.instance.players?.[b.playerId]?.name ?? b.playerId;
       return aName.localeCompare(bName);
     });
     return aggregated;
-  }, [cachedResult, context.instance.players]);
+  }, [cachedResult, context.instance.players, disambiguationMap]);
 
   const itemIds = useMemo(() => [...new Set(rows.flatMap((row) =>
     row.consumes.flatMap((consume) => consume.itemId !== null ? [consume.itemId] : consume.candidateItemIds),

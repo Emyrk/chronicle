@@ -243,6 +243,8 @@ func (z *Authz) SetUserChronicleRoles(ctx context.Context, userID uuid.UUID, rol
 			gChron.Is_admin_queues(usr)
 		case "admin_game_data":
 			gChron.Is_admin_game_data(usr)
+		case "manage_consumables":
+			gChron.Manage_consumables(usr)
 		case "admin_raid_requirements":
 			gChron.Is_admin_raid_requirements(usr)
 		default:
@@ -308,4 +310,3 @@ func (z *Authz) RemoveTenantApplicationAdmin(ctx context.Context, applicationID,
 	f.WithSubjectFilter("user", userID.String(), "")
 	return z.Delete(ctx, rel.NewPreconditionedFilter(f))
 }
-

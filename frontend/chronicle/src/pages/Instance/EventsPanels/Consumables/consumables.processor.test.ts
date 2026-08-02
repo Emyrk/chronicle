@@ -54,6 +54,74 @@ function process(events: ConsumeProcessorEvent[], context = createContext()) {
   return state;
 }
 
+describe("consumable disambiguation", () => {
+  it("resolves a matching buff candidate and preserves direct evidence", async () => {
+    const { buildConsumableDisambiguationMap, resolveConsumableUse } = await import("./consumableDisambiguation");
+    const ambiguous = process([
+      consumeEvent({
+        kind: 3,
+        spell: { id: 123, name: "Shared Buff" },
+        candidateItemIds: [10, 20],
+        candidateItemIdsCount: 2,
+      }),
+    ]).uses.get("use-1")!;
+    const mappings = buildConsumableDisambiguationMap([
+      { effect_kind: "buff", spell_id: 123, item_id: 20 },
+    ]);
+
+    expect(resolveConsumableUse(ambiguous, mappings).itemId).toBe(20);
+    expect(ambiguous.itemId).toBeNull();
+    expect(ambiguous.candidateItemIds).toEqual([10, 20]);
+
+    const direct = { ...ambiguous, itemId: 10 };
+    expect(resolveConsumableUse(direct, mappings).itemId).toBe(10);
+  });
+
+  it("rejects stale and wrong-domain mappings", async () => {
+    const { buildConsumableDisambiguationMap, resolveConsumableUse } = await import("./consumableDisambiguation");
+    const use = process([
+      consumeEvent({
+        kind: 4,
+        spell: { id: 456, name: "Shared Heal" },
+        candidateItemIds: [30, 40],
+        candidateItemIdsCount: 2,
+      }),
+    ]).uses.get("use-1")!;
+
+    expect(use.candidateEffectKind).toBe("direct");
+    expect(use.candidateSpellId).toBe(456);
+    expect(resolveConsumableUse(use, buildConsumableDisambiguationMap([
+      { effect_kind: "buff", spell_id: 456, item_id: 40 },
+    ])).itemId).toBeNull();
+    expect(resolveConsumableUse(use, buildConsumableDisambiguationMap([
+      { effect_kind: "direct", spell_id: 456, item_id: 99 },
+    ])).itemId).toBeNull();
+  });
+
+  it("groups a mapped ambiguous use with the selected item", async () => {
+    const { buildConsumableDisambiguationMap, resolveConsumableUse } = await import("./consumableDisambiguation");
+    const state = process([
+      consumeEvent({ consumeId: "direct", evidenceId: "direct", itemId: 20 }),
+      consumeEvent({
+        consumeId: "ambiguous",
+        evidenceId: "ambiguous",
+        kind: 3,
+        spell: { id: 123, name: "Shared Buff" },
+        candidateItemIds: [10, 20],
+        candidateItemIdsCount: 2,
+      }),
+    ]);
+    const mappings = buildConsumableDisambiguationMap([
+      { effect_kind: "buff", spell_id: 123, item_id: 20 },
+    ]);
+    const uses = [...state.uses.values()].map((use) => resolveConsumableUse(use, mappings));
+
+    expect(aggregateConsumablesTotal(uses)[0].consumes).toMatchObject([
+      { key: "item:20", itemId: 20, count: 2 },
+    ]);
+  });
+});
+
 describe("consumablesProcessor", () => {
   it("counts one use from a single direct observation", () => {
     const state = process([

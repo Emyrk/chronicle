@@ -2906,3 +2906,64 @@ export function useDeleteTalentBuild() {
     },
   });
 }
+
+export function useConsumableDisambiguations(datasetId: string | undefined) {
+  return useQuery({
+    queryKey: ["consumable-disambiguations", datasetId, "runtime"],
+    queryFn: async () => {
+      const response = await fetch(`/api/v1/wowdb/consumable-disambiguations?dataset_id=${datasetId}`);
+      if (!response.ok) throw new Error("Failed to fetch consumable disambiguations");
+      return response.json() as Promise<import("./typesGenerated").ConsumableDisambiguation[]>;
+    },
+    enabled: !!datasetId,
+  });
+}
+
+export function useConsumableEffectPolicies(datasetId: string | undefined, enabled = true) {
+  return useQuery({
+    queryKey: ["consumable-disambiguations", datasetId, "admin"],
+    queryFn: async () => {
+      const response = await fetch(`/api/v1/game-data/datasets/${datasetId}/consumable-disambiguations`);
+      if (!response.ok) throw new Error("Failed to fetch consumable effect policies");
+      return response.json() as Promise<import("./typesGenerated").ConsumableEffectPolicy[]>;
+    },
+    enabled: enabled && !!datasetId,
+  });
+}
+
+export function useSetConsumableDisambiguation() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async ({ datasetId, effectKind, spellId, itemId }: { datasetId: string; effectKind: import("./typesGenerated").ConsumableEffectKind; spellId: number; itemId: number }) => {
+      const response = await fetch(`/api/v1/game-data/datasets/${datasetId}/consumable-disambiguations/${effectKind}/${spellId}`, {
+        method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ item_id: itemId }),
+      });
+      if (!response.ok) { const body = await response.json().catch(() => null); throw new Error(body?.message ?? `Failed to save mapping (${response.status})`); }
+      return response.json() as Promise<import("./typesGenerated").ConsumableEffectPolicy>;
+    },
+    onSuccess: (_data, variables) => queryClient.invalidateQueries({ queryKey: ["consumable-disambiguations", variables.datasetId] }),
+  });
+}
+
+export function useIgnoreConsumableEffect() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async ({ datasetId, effectKind, spellId }: { datasetId: string; effectKind: import("./typesGenerated").ConsumableEffectKind; spellId: number }) => {
+      const response = await fetch(`/api/v1/game-data/datasets/${datasetId}/consumable-disambiguations/${effectKind}/${spellId}/ignore`, { method: "PUT" });
+      if (!response.ok) { const body = await response.json().catch(() => null); throw new Error(body?.message ?? `Failed to ignore effect (${response.status})`); }
+      return response.json() as Promise<import("./typesGenerated").ConsumableEffectPolicy>;
+    },
+    onSuccess: (_data, variables) => queryClient.invalidateQueries({ queryKey: ["consumable-disambiguations", variables.datasetId] }),
+  });
+}
+
+export function useDeleteConsumableDisambiguation() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async ({ datasetId, effectKind, spellId }: { datasetId: string; effectKind: import("./typesGenerated").ConsumableEffectKind; spellId: number }) => {
+      const response = await fetch(`/api/v1/game-data/datasets/${datasetId}/consumable-disambiguations/${effectKind}/${spellId}`, { method: "DELETE" });
+      if (!response.ok) { const body = await response.json().catch(() => null); throw new Error(body?.message ?? `Failed to reset mapping (${response.status})`); }
+    },
+    onSuccess: (_data, variables) => queryClient.invalidateQueries({ queryKey: ["consumable-disambiguations", variables.datasetId] }),
+  });
+}

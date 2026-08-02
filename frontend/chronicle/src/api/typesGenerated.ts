@@ -600,6 +600,26 @@ export interface CohortDebugResponse {
     readonly buckets: readonly CohortBucket[];
 }
 
+// From chroniclesdk/consumables.go
+export interface ConsumableDisambiguation {
+    readonly effect_kind: ConsumableEffectKind;
+    readonly spell_id: number;
+    readonly item_id: number;
+}
+
+// From chroniclesdk/consumables.go
+export type ConsumableEffectKind = "buff" | "direct";
+
+export const ConsumableEffectKinds: ConsumableEffectKind[] = ["buff", "direct"];
+
+// From chroniclesdk/consumables.go
+export interface ConsumableEffectPolicy {
+    readonly effect_kind: ConsumableEffectKind;
+    readonly spell_id: number;
+    readonly item_id?: number;
+    readonly ignored: boolean;
+}
+
 // From chroniclesdk/server_application.go
 export interface CorePayload {
     readonly name: string;
@@ -2381,6 +2401,11 @@ export interface Session {
      * AuthProvider is the provider used for the current session (e.g. "discord", "password").
      */
     readonly auth_provider: string;
+}
+
+// From chroniclesdk/consumables.go
+export interface SetConsumableDisambiguationRequest {
+    readonly item_id: number;
 }
 
 // From chroniclesdk/tenant.go

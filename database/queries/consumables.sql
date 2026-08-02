@@ -150,3 +150,69 @@ LEFT JOIN dbc_consumable_buffs b
  AND b.item_id = c.item_id
 WHERE c.dataset_id = @dataset_id
 ORDER BY c.item_name, c.item_id, b.spell_name, b.spell_id;
+
+-- name: UpsertConsumableDisambiguationIfCandidate :one
+INSERT INTO dataset_consumable_disambiguations (dataset_id, effect_kind, spell_id, item_id, ignored)
+SELECT @dataset_id, @effect_kind, @spell_id, @item_id, FALSE
+WHERE (
+    @effect_kind = 'buff'
+    AND EXISTS (
+        SELECT 1 FROM dbc_consumable_buffs b
+        WHERE b.dataset_id = @dataset_id
+          AND b.spell_id = @spell_id
+          AND b.item_id = @item_id
+    )
+) OR (
+    @effect_kind = 'direct'
+    AND EXISTS (
+        SELECT 1 FROM dbc_consumables c
+        WHERE c.dataset_id = @dataset_id
+          AND c.item_id = @item_id
+          AND @spell_id = ANY(c.item_spell_ids)
+    )
+)
+ON CONFLICT (dataset_id, effect_kind, spell_id) DO UPDATE
+SET item_id = EXCLUDED.item_id, ignored = FALSE, updated_at = now()
+RETURNING effect_kind, spell_id, item_id;
+
+-- name: IgnoreConsumableEffectIfCandidate :one
+INSERT INTO dataset_consumable_disambiguations (dataset_id, effect_kind, spell_id, item_id, ignored)
+SELECT @dataset_id, @effect_kind, @spell_id, NULL, TRUE
+WHERE (
+    @effect_kind = 'buff'
+    AND EXISTS (
+        SELECT 1 FROM dbc_consumable_buffs b
+        WHERE b.dataset_id = @dataset_id
+          AND b.spell_id = @spell_id
+    )
+) OR (
+    @effect_kind = 'direct'
+    AND EXISTS (
+        SELECT 1 FROM dbc_consumables c
+        WHERE c.dataset_id = @dataset_id
+          AND @spell_id = ANY(c.item_spell_ids)
+    )
+)
+ON CONFLICT (dataset_id, effect_kind, spell_id) DO UPDATE
+SET item_id = NULL, ignored = TRUE, updated_at = now()
+RETURNING effect_kind, spell_id, ignored;
+
+-- name: DeleteConsumableDisambiguation :exec
+DELETE FROM dataset_consumable_disambiguations
+WHERE dataset_id = @dataset_id
+  AND effect_kind = @effect_kind
+  AND spell_id = @spell_id;
+
+-- name: ListConsumableEffectPoliciesByDataset :many
+SELECT effect_kind, spell_id, item_id, ignored
+FROM dataset_consumable_disambiguations
+WHERE dataset_id = @dataset_id
+ORDER BY effect_kind, spell_id;
+
+-- name: ListConsumableDisambiguationsByDataset :many
+SELECT effect_kind, spell_id, item_id
+FROM dataset_consumable_disambiguations
+WHERE dataset_id = @dataset_id
+  AND ignored = FALSE
+  AND item_id IS NOT NULL
+ORDER BY effect_kind, spell_id;

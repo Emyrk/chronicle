@@ -53,6 +53,7 @@ type sqlcQuerier interface {
 	CreateUserTalentBuild(ctx context.Context, arg CreateUserTalentBuildParams) (UserTalentBuild, error)
 	DeleteAffectedAuraDurationsByDataset(ctx context.Context, datasetID uuid.UUID) error
 	DeleteAllParsedLogsByGroupID(ctx context.Context, id uuid.UUID) error
+	DeleteConsumableDisambiguation(ctx context.Context, arg DeleteConsumableDisambiguationParams) error
 	DeleteConsumablesByDataset(ctx context.Context, datasetID uuid.UUID) error
 	DeleteDataGrant(ctx context.Context, arg DeleteDataGrantParams) error
 	DeleteDataset(ctx context.Context, id uuid.UUID) error
@@ -377,6 +378,7 @@ type sqlcQuerier interface {
 	// cannot fill the whole board.
 	GuildTopParses(ctx context.Context, arg GuildTopParsesParams) ([]GuildTopParsesRow, error)
 	HasInstanceDpsRankings(ctx context.Context, instanceID uuid.UUID) (bool, error)
+	IgnoreConsumableEffectIfCandidate(ctx context.Context, arg IgnoreConsumableEffectIfCandidateParams) (IgnoreConsumableEffectIfCandidateRow, error)
 	InsertAffectedAuraDurationModifiers(ctx context.Context, arg []InsertAffectedAuraDurationModifiersParams) *InsertAffectedAuraDurationModifiersBatchResults
 	InsertAffectedAuraDurations(ctx context.Context, arg []InsertAffectedAuraDurationsParams) *InsertAffectedAuraDurationsBatchResults
 	InsertDataset(ctx context.Context, arg InsertDatasetParams) (Dataset, error)
@@ -455,6 +457,8 @@ type sqlcQuerier interface {
 	ListAllWoWLogGroupsWithOwnerPaginated(ctx context.Context, arg ListAllWoWLogGroupsWithOwnerPaginatedParams) ([]ListAllWoWLogGroupsWithOwnerPaginatedRow, error)
 	ListAllWoWServerRealms(ctx context.Context) ([]WowServerRealm, error)
 	ListAuraDurationModifiersForDerivation(ctx context.Context, datasetID uuid.UUID) ([]ListAuraDurationModifiersForDerivationRow, error)
+	ListConsumableDisambiguationsByDataset(ctx context.Context, datasetID uuid.UUID) ([]ListConsumableDisambiguationsByDatasetRow, error)
+	ListConsumableEffectPoliciesByDataset(ctx context.Context, datasetID uuid.UUID) ([]ListConsumableEffectPoliciesByDatasetRow, error)
 	ListConsumablesByDataset(ctx context.Context, datasetID uuid.UUID) ([]ListConsumablesByDatasetRow, error)
 	ListCooldownSpellsByDataset(ctx context.Context, datasetID uuid.UUID) ([]ListCooldownSpellsByDatasetRow, error)
 	ListDatasets(ctx context.Context) ([]Dataset, error)
@@ -685,6 +689,7 @@ type sqlcQuerier interface {
 	UpdateWoWLogGroupLogType(ctx context.Context, arg UpdateWoWLogGroupLogTypeParams) error
 	UpdateWoWServer(ctx context.Context, arg UpdateWoWServerParams) (WowServer, error)
 	UpdateWoWServerRealm(ctx context.Context, arg UpdateWoWServerRealmParams) (WowServerRealm, error)
+	UpsertConsumableDisambiguationIfCandidate(ctx context.Context, arg UpsertConsumableDisambiguationIfCandidateParams) (UpsertConsumableDisambiguationIfCandidateRow, error)
 	UpsertDataGrant(ctx context.Context, arg UpsertDataGrantParams) (DataGrant, error)
 	UpsertDatasetTalentTrees(ctx context.Context, arg UpsertDatasetTalentTreesParams) error
 	// Refreshes the rate-limit timestamp. Clears the cached response: it is

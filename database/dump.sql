@@ -269,6 +269,18 @@ CREATE VIEW chronicle_users AS
           WHERE (log_file.storage_deleted_at IS NULL)
           GROUP BY log_file.owner) lf ON ((lf.owner = u.id)));
 
+CREATE TABLE dataset_consumable_disambiguations (
+    dataset_id uuid NOT NULL,
+    effect_kind text NOT NULL,
+    spell_id integer NOT NULL,
+    item_id integer,
+    ignored boolean DEFAULT false NOT NULL,
+    created_at timestamp with time zone DEFAULT now() NOT NULL,
+    updated_at timestamp with time zone DEFAULT now() NOT NULL,
+    CONSTRAINT dataset_consumable_disambiguations_check CHECK (((ignored AND (item_id IS NULL)) OR ((NOT ignored) AND (item_id IS NOT NULL)))),
+    CONSTRAINT dataset_consumable_disambiguations_effect_kind_check CHECK ((effect_kind = ANY (ARRAY['buff'::text, 'direct'::text])))
+);
+
 CREATE TABLE dataset_talent_trees (
     dataset_id uuid NOT NULL,
     data jsonb NOT NULL,
@@ -1709,6 +1721,9 @@ ALTER TABLE ONLY data_grants
 ALTER TABLE ONLY data_grants
     ADD CONSTRAINT data_grants_user_id_source_key UNIQUE (user_id, source);
 
+ALTER TABLE ONLY dataset_consumable_disambiguations
+    ADD CONSTRAINT dataset_consumable_disambiguations_pkey PRIMARY KEY (dataset_id, effect_kind, spell_id);
+
 ALTER TABLE ONLY dataset_talent_trees
     ADD CONSTRAINT dataset_talent_trees_pkey PRIMARY KEY (dataset_id);
 
@@ -2267,6 +2282,9 @@ ALTER TABLE ONLY application_modification_requests
 
 ALTER TABLE ONLY data_grants
     ADD CONSTRAINT data_grants_user_id_fkey FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE;
+
+ALTER TABLE ONLY dataset_consumable_disambiguations
+    ADD CONSTRAINT dataset_consumable_disambiguations_dataset_id_fkey FOREIGN KEY (dataset_id) REFERENCES datasets(id) ON DELETE CASCADE;
 
 ALTER TABLE ONLY dataset_talent_trees
     ADD CONSTRAINT dataset_talent_trees_dataset_id_fkey FOREIGN KEY (dataset_id) REFERENCES datasets(id) ON DELETE CASCADE;

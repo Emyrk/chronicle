@@ -11,6 +11,7 @@ import (
 	"github.com/Emyrk/chronicle/internal/testutil"
 	"github.com/Gophercraft/core/i18n"
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -145,6 +146,47 @@ func TestDerivedConsumablesAreDatasetScopedAndLinkBuffs(t *testing.T) {
 	require.Len(t, otherRows, 1)
 	assert.Equal(t, "Other Elixir", otherRows[0].ItemName)
 	assert.Equal(t, int32(400), otherRows[0].BuffSpellID.Int32)
+
+	canonical, err := store.UpsertConsumableDisambiguationIfCandidate(ctx, database.UpsertConsumableDisambiguationIfCandidateParams{
+		DatasetID:  servicedataset.DefaultDatasetID,
+		EffectKind: "buff",
+		SpellID:    200,
+		ItemID:     pgtype.Int4{Int32: 1000, Valid: true},
+	})
+	require.NoError(t, err)
+	assert.Equal(t, int32(1000), canonical.ItemID.Int32)
+
+	runtimeMappings, err := store.ListConsumableDisambiguationsByDataset(ctx, servicedataset.DefaultDatasetID)
+	require.NoError(t, err)
+	require.Len(t, runtimeMappings, 1)
+	assert.Equal(t, int32(1000), runtimeMappings[0].ItemID.Int32)
+
+	ignored, err := store.IgnoreConsumableEffectIfCandidate(ctx, database.IgnoreConsumableEffectIfCandidateParams{
+		DatasetID:  servicedataset.DefaultDatasetID,
+		EffectKind: "buff",
+		SpellID:    200,
+	})
+	require.NoError(t, err)
+	assert.True(t, ignored.Ignored)
+
+	policies, err := store.ListConsumableEffectPoliciesByDataset(ctx, servicedataset.DefaultDatasetID)
+	require.NoError(t, err)
+	require.Len(t, policies, 1)
+	assert.True(t, policies[0].Ignored)
+	assert.False(t, policies[0].ItemID.Valid)
+
+	runtimeMappings, err = store.ListConsumableDisambiguationsByDataset(ctx, servicedataset.DefaultDatasetID)
+	require.NoError(t, err)
+	assert.Empty(t, runtimeMappings)
+
+	require.NoError(t, store.DeleteConsumableDisambiguation(ctx, database.DeleteConsumableDisambiguationParams{
+		DatasetID:  servicedataset.DefaultDatasetID,
+		EffectKind: "buff",
+		SpellID:    200,
+	}))
+	policies, err = store.ListConsumableEffectPoliciesByDataset(ctx, servicedataset.DefaultDatasetID)
+	require.NoError(t, err)
+	assert.Empty(t, policies)
 
 	otherSummary, err := store.GetDatasetImportSummary(ctx, otherDataset.ID)
 	require.NoError(t, err)

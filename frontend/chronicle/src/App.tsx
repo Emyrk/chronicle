@@ -193,6 +193,7 @@ function App() {
         <Route path="/game-data" element={<GameDataLayout />}>
           <Route index element={<Navigate to="/game-data/datasets" replace />} />
           <Route path="datasets" element={<DatasetsTab />} />
+          <Route path="consumables" element={<Navigate to="/technical/consumables" replace />} />
           <Route path="wdb" element={<WDBTab />} />
           <Route path="import-sql" element={<ImportSQLTab />} />
           <Route path="dbc" element={<DBCTab />} />

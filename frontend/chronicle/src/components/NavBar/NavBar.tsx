@@ -34,6 +34,7 @@ export function NavBar() {
     admin: "chronicle:chronicle#admin_users",
     adminAuthz: "chronicle:chronicle#administer_authz",
     adminWorldData: "chronicle:chronicle#admin_world_data",
+    manageConsumables: "chronicle:chronicle#admin_consumables",
     canAdminSomeServer: "lookup:wow_server#administer",
     adminServers: "chronicle:chronicle#admin_servers",
     adminLogs: "chronicle:chronicle#admin_logs",
@@ -44,6 +45,7 @@ export function NavBar() {
   const isAdmin = authz?.admin ?? false;
   const canAdminAuthz = authz?.adminAuthz ?? false;
   const canAdminWorldData = authz?.adminWorldData ?? false;
+  const canManageConsumables = authz?.manageConsumables ?? false;
   const canManageServers = (authz?.canAdminSomeServer ?? false) || (authz?.adminServers ?? false);
   const hasAdminLogs = authz?.adminLogs ?? false;
 
@@ -59,6 +61,7 @@ export function NavBar() {
     ...(uploadsEnabled ? [{ title: "Upload", href: "/upload", icon: Upload } as NavItem] : []),
     ...(isAdmin ? [{ title: "Admin", href: "/admin", icon: Shield } as NavItem] : []),
     ...(canAdminWorldData ? [{ title: "Game Data", href: "/game-data", icon: Database } as NavItem] : []),
+    ...(!canAdminWorldData && canManageConsumables ? [{ title: "Consumables", href: "/technical/consumables", icon: Database } as NavItem] : []),
     ...(canManageServers ? [{ title: "Servers", href: "/servers", icon: Server } as NavItem] : []),
     ...(canAdminAuthz ? [{ title: "Saffron", href: "/saffron", icon: Key, external: true } as NavItem] : []),
     { title: "Settings", href: "/account/settings", icon: Settings },

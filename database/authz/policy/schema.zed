@@ -22,6 +22,7 @@ definition chronicle {
   relation is_admin_users: user
   relation is_admin_queues: user
   relation is_admin_game_data: user
+  relation manage_consumables: user
   relation is_admin_raid_requirements: user
 
 
@@ -44,6 +45,7 @@ definition chronicle {
   permission upload_log = upload_capable + administer + supporter + chronicle_guild_member + chronicle_member
   permission create_layout = chronicle_guild_member + chronicle_member
   permission admin_world_data = technical_admin + is_admin_game_data
+  permission admin_consumables = administer + manage_consumables
 
   permission admin_servers = technical_admin
 

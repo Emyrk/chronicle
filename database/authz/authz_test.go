@@ -4,7 +4,10 @@ import (
 	"context"
 	"testing"
 
+	"github.com/Emyrk/chronicle/database/authz/policy"
+	"github.com/google/uuid"
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 
 	"github.com/Emyrk/chronicle/database/authz"
 	"github.com/Emyrk/chronicle/internal/services/serviceauthz"
@@ -22,6 +25,38 @@ func TestAuthz(t *testing.T) {
 
 	var _, _, _ = logger, authz, ctx
 
+}
+
+func TestManageConsumablesRole(t *testing.T) {
+	t.Parallel()
+
+	broker := testservices.Authz(t)
+	zed := serviceauthz.Authz(broker)
+	ctx := testutil.Context(t, testutil.WaitLong)
+
+	for _, tc := range []struct {
+		name  string
+		roles []string
+	}{
+		{name: "dedicated role", roles: []string{"manage_consumables"}},
+		{name: "admin", roles: []string{"admin"}},
+		{name: "technical admin", roles: []string{"technical_admin"}},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			userID := uuid.New()
+			require.NoError(t, zed.SetUserChronicleRoles(ctx, userID, tc.roles))
+
+			canManage, err := zed.CheckOne(ctx, nil, policy.New().GlobalChronicle().CanAdmin_consumables_User(policy.New().User(userID)))
+			require.NoError(t, err)
+			require.True(t, canManage)
+		})
+	}
+
+	dedicatedUserID := uuid.New()
+	require.NoError(t, zed.SetUserChronicleRoles(ctx, dedicatedUserID, []string{"manage_consumables"}))
+	canManageWorldData, err := zed.CheckOne(ctx, nil, policy.New().GlobalChronicle().CanAdmin_world_data_User(policy.New().User(dedicatedUserID)))
+	require.NoError(t, err)
+	require.False(t, canManageWorldData)
 }
 
 func TestInTx_NilWrapped(t *testing.T) {

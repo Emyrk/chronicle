@@ -8,7 +8,10 @@ import { Link } from "react-router-dom";
 import { ChevronDown, ChevronRight, HelpCircle, Hourglass } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { iconUrl } from "@/config/iconUrl";
-import { useIconBaseUrl } from "@/hooks/useDatasetId";
+import { useDatasetId, useIconBaseUrl } from "@/hooks/useDatasetId";
+import { useConsumableDisambiguations } from "@/api/queries";
+import type { ConsumableDisambiguation } from "@/api/typesGenerated";
+import { buildConsumableDisambiguationMap, resolveConsumableUse } from "./consumableDisambiguation";
 import { ScrollArea } from "@/components/ui/ScrollArea/ScrollArea";
 import { useItemTooltip } from "@/api/gamedata";
 import { ItemTooltip } from "@/components/ui/ItemTooltip/ItemTooltip";
@@ -353,12 +356,17 @@ export const ConsumablesContent = (props: ConsumablesContentProps) => {
     [props.panelContextVersion],
   );
 
+  const datasetId = useDatasetId();
+  const { data: disambiguations } = useConsumableDisambiguations(datasetId);
+  const disambiguationMap = useMemo(() => buildConsumableDisambiguationMap(disambiguations as ConsumableDisambiguation[] | undefined), [disambiguations]);
+
   const sortedUses = useMemo(() => {
     if (!cachedResult) return [];
     return [...cachedResult.uses.values()]
+      .map((use) => resolveConsumableUse(use, disambiguationMap))
       .filter((use) => showPrePull || !use.activeAtPullOnly)
       .sort((a, b) => a.dateMilli - b.dateMilli);
-  }, [cachedResult, showPrePull]);
+  }, [cachedResult, showPrePull, disambiguationMap]);
 
   const effectiveProps = {
     ...props,

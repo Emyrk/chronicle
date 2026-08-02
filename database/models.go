@@ -765,6 +765,16 @@ type Dataset struct {
 	IconBaseUrl      string             `db:"icon_base_url" json:"icon_base_url"`
 }
 
+type DatasetConsumableDisambiguation struct {
+	DatasetID  uuid.UUID          `db:"dataset_id" json:"dataset_id"`
+	EffectKind string             `db:"effect_kind" json:"effect_kind"`
+	SpellID    int32              `db:"spell_id" json:"spell_id"`
+	ItemID     pgtype.Int4        `db:"item_id" json:"item_id"`
+	Ignored    bool               `db:"ignored" json:"ignored"`
+	CreatedAt  pgtype.Timestamptz `db:"created_at" json:"created_at"`
+	UpdatedAt  pgtype.Timestamptz `db:"updated_at" json:"updated_at"`
+}
+
 type DatasetTalentTree struct {
 	DatasetID uuid.UUID          `db:"dataset_id" json:"dataset_id"`
 	Data      []byte             `db:"data" json:"data"`

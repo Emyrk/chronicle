@@ -112,6 +112,7 @@ func (s *Service) setupRoutes() {
 	s.router.Get("/cooldown-spells", s.handleGetCooldownSpells)
 	s.router.Get("/aura-duration-modifiers", s.handleGetAffectedAuraDurations)
 	s.router.Get("/consumables", s.handleGetConsumables)
+	s.router.Get("/consumable-disambiguations", s.handleGetConsumableDisambiguations)
 	s.router.Get("/talent-trees", s.handleGetTalentTrees)
 }
 

@@ -1,12 +1,23 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState, type MouseEvent } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { Link } from "react-router-dom";
-import { ArrowLeft, ExternalLink, FlaskConical, Search, Sparkles } from "lucide-react";
+import { ArrowLeft, Check, ExternalLink, FlaskConical, RotateCcw, Search, ShieldCheck, Sparkles, EyeOff } from "lucide-react";
 import { Card } from "@/components/ui/Card/Card";
 import { SpellIdTooltip } from "@/components/ui/SpellIdTooltip/SpellIdTooltip";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { iconUrl } from "@/config/iconUrl";
 import { useDatasetId, useIconBaseUrl } from "@/hooks/useDatasetId";
+
+import { useAuth } from "@/hooks/useAuth";
+import {
+  useAuthorizationCheck,
+  useConsumableEffectPolicies,
+  useDeleteConsumableDisambiguation,
+  useIgnoreConsumableEffect,
+  useSetConsumableDisambiguation,
+} from "@/api/queries";
+import type { ConsumableEffectKind, ConsumableEffectPolicy } from "@/api/typesGenerated";
+import { toast } from "sonner";
 
 interface ConsumableBuff {
   id: number;
@@ -55,6 +66,116 @@ interface BuffGroup extends ConsumableBuff {
 interface SpellcastGroup {
   spellId: number;
   items: ConsumableEntry[];
+}
+
+interface EffectMenuState {
+  x: number;
+  y: number;
+  effectKind: ConsumableEffectKind;
+  spellId: number;
+  spellName: string;
+  items: ConsumableEntry[];
+}
+
+function effectKey(effectKind: ConsumableEffectKind, spellId: number): string {
+  return `${effectKind}:${spellId}`;
+}
+
+function EffectStatus({ policy, ambiguous }: { policy?: ConsumableEffectPolicy; ambiguous: boolean }) {
+  if (policy?.ignored) {
+    return <span className="rounded-full border border-zinc-500/30 bg-zinc-500/10 px-2 py-0.5 text-[10px] font-medium text-zinc-400">Ignored</span>;
+  }
+  if (policy?.item_id !== undefined) {
+    return <span className="rounded-full border border-emerald-500/30 bg-emerald-500/10 px-2 py-0.5 text-[10px] font-medium text-emerald-400">Canonical #{policy.item_id}</span>;
+  }
+  if (ambiguous) {
+    return <span className="rounded-full border border-amber-500/30 bg-amber-500/10 px-2 py-0.5 text-[10px] font-medium text-amber-300">Ambiguous</span>;
+  }
+  return null;
+}
+
+function ConsumableEffectMenu({
+  menu,
+  policy,
+  pending,
+  onCanonical,
+  onReset,
+  onIgnore,
+  onClose,
+}: {
+  menu: EffectMenuState;
+  policy?: ConsumableEffectPolicy;
+  pending: boolean;
+  onCanonical: (itemId: number) => void;
+  onReset: () => void;
+  onIgnore: () => void;
+  onClose: () => void;
+}) {
+  useEffect(() => {
+    const close = () => onClose();
+    window.addEventListener("click", close);
+    window.addEventListener("blur", close);
+    return () => {
+      window.removeEventListener("click", close);
+      window.removeEventListener("blur", close);
+    };
+  }, [onClose]);
+
+  return (
+    <div
+      className="fixed z-[100] w-80 overflow-hidden rounded-lg border border-border bg-popover text-popover-foreground shadow-2xl"
+      style={{ left: Math.min(menu.x, window.innerWidth - 336), top: Math.min(menu.y, window.innerHeight - 360) }}
+      onClick={(event) => event.stopPropagation()}
+    >
+      <div className="border-b border-border bg-muted/35 px-3 py-2.5">
+        <div className="text-xs font-semibold">{menu.spellName || `Spell ${menu.spellId}`}</div>
+        <div className="mt-0.5 font-mono text-[10px] text-muted-foreground">
+          {menu.effectKind === "buff" ? "Buff / aura" : "Spellcast"} · #{menu.spellId}
+        </div>
+      </div>
+      <div className="p-1.5">
+        <div className="px-2 pb-1 pt-1 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
+          Mark canonical
+        </div>
+        <div className="max-h-48 overflow-y-auto styled-scrollbar">
+          {menu.items.map((item) => (
+            <button
+              key={item.item_id}
+              type="button"
+              disabled={pending}
+              onClick={() => onCanonical(item.item_id)}
+              className="flex w-full items-center justify-between gap-3 rounded-md px-2 py-2 text-left text-xs hover:bg-accent disabled:opacity-50"
+            >
+              <span className="truncate">{item.item_name}</span>
+              <span className="flex shrink-0 items-center gap-1 font-mono text-[10px] text-muted-foreground">
+                {policy?.item_id === item.item_id && <Check className="h-3 w-3 text-emerald-400" />}
+                #{item.item_id}
+              </span>
+            </button>
+          ))}
+        </div>
+        <div className="my-1.5 border-t border-border" />
+        <button
+          type="button"
+          disabled={pending || !policy}
+          onClick={onReset}
+          className="flex w-full items-center gap-2 rounded-md px-2 py-2 text-left text-xs hover:bg-accent disabled:opacity-40"
+        >
+          <RotateCcw className="h-3.5 w-3.5" />
+          Reset canonical
+        </button>
+        <button
+          type="button"
+          disabled={pending || policy?.ignored}
+          onClick={onIgnore}
+          className="flex w-full items-center gap-2 rounded-md px-2 py-2 text-left text-xs text-muted-foreground hover:bg-accent hover:text-foreground disabled:opacity-40"
+        >
+          <EyeOff className="h-3.5 w-3.5" />
+          Ignore
+        </button>
+      </div>
+    </div>
+  );
 }
 
 function matchesItem(consumable: ConsumableEntry, query: string): boolean {
@@ -130,7 +251,27 @@ function SpellReference({ spellId, name }: { spellId: number; name?: string }) {
 export function ConsumablesPage() {
   const [search, setSearch] = useState("");
   const [view, setView] = useState<ViewMode>("item");
+  const [showAmbiguous, setShowAmbiguous] = useState(false);
+  const [showIgnored, setShowIgnored] = useState(false);
+  const [effectMenu, setEffectMenu] = useState<EffectMenuState | null>(null);
   const iconBaseUrl = useIconBaseUrl();
+  const datasetId = useDatasetId();
+  const { isAuthenticated } = useAuth();
+  const consumablesAuthzCheck = useMemo(() => ({ manageConsumables: "chronicle:chronicle#admin_consumables" }), []);
+  const worldDataAuthzCheck = useMemo(() => ({ adminWorldData: "chronicle:chronicle#admin_world_data" }), []);
+  const { data: consumablesAuthorization } = useAuthorizationCheck(consumablesAuthzCheck, { enabled: isAuthenticated });
+  const { data: worldDataAuthorization } = useAuthorizationCheck(worldDataAuthzCheck, { enabled: isAuthenticated });
+  const canManageConsumables = (consumablesAuthorization?.manageConsumables ?? false)
+    || (worldDataAuthorization?.adminWorldData ?? false);
+  const { data: policies } = useConsumableEffectPolicies(datasetId, canManageConsumables);
+  const policyMap = useMemo(
+    () => new Map((policies ?? []).map((policy) => [effectKey(policy.effect_kind, policy.spell_id), policy])),
+    [policies],
+  );
+  const saveCanonical = useSetConsumableDisambiguation();
+  const resetCanonical = useDeleteConsumableDisambiguation();
+  const ignoreEffect = useIgnoreConsumableEffect();
+  const policyPending = saveCanonical.isPending || resetCanonical.isPending || ignoreEffect.isPending;
   const { data, isLoading, error } = useConsumables();
   const consumables = useMemo(() => data ?? [], [data]);
 
@@ -169,29 +310,70 @@ export function ConsumablesPage() {
     () => (query ? consumables.filter((item) => matchesItem(item, query)) : consumables),
     [consumables, query],
   );
-  const filteredBuffs = useMemo(
-    () =>
-      query
-        ? buffGroups.filter(
-            (buff) =>
-              buff.name.toLowerCase().includes(query) ||
-              buff.id.toString().includes(query) ||
-              buff.items.some((item) => matchesItem(item, query)),
-          )
-        : buffGroups,
-    [buffGroups, query],
-  );
-  const filteredSpellcasts = useMemo(
-    () =>
-      query
-        ? spellcastGroups.filter(
-            (spellcast) =>
-              spellcast.spellId.toString().includes(query) ||
-              spellcast.items.some((item) => matchesItem(item, query)),
-          )
-        : spellcastGroups,
-    [query, spellcastGroups],
-  );
+  const filteredBuffs = buffGroups.filter((buff) => {
+    const policy = policyMap.get(effectKey("buff", buff.id));
+    if (canManageConsumables && policy?.ignored && !showIgnored) return false;
+    const unresolvedAmbiguity = buff.items.length > 1 && !policy?.ignored && policy?.item_id === undefined;
+    if (canManageConsumables && showAmbiguous && !unresolvedAmbiguity) return false;
+    return !query
+      || buff.name.toLowerCase().includes(query)
+      || buff.id.toString().includes(query)
+      || buff.items.some((item) => matchesItem(item, query));
+  });
+  const filteredSpellcasts = spellcastGroups.filter((spellcast) => {
+    const policy = policyMap.get(effectKey("direct", spellcast.spellId));
+    if (canManageConsumables && policy?.ignored && !showIgnored) return false;
+    const unresolvedAmbiguity = spellcast.items.length > 1 && !policy?.ignored && policy?.item_id === undefined;
+    if (canManageConsumables && showAmbiguous && !unresolvedAmbiguity) return false;
+    return !query
+      || spellcast.spellId.toString().includes(query)
+      || spellcast.items.some((item) => matchesItem(item, query));
+  });
+
+  const openEffectMenu = (
+    event: MouseEvent<HTMLElement>,
+    effectKind: ConsumableEffectKind,
+    spellId: number,
+    spellName: string,
+    items: ConsumableEntry[],
+  ) => {
+    if (!canManageConsumables) return;
+    event.preventDefault();
+    setEffectMenu({ x: event.clientX, y: event.clientY, effectKind, spellId, spellName, items });
+  };
+
+  const closeEffectMenu = () => setEffectMenu(null);
+  const selectedPolicy = effectMenu ? policyMap.get(effectKey(effectMenu.effectKind, effectMenu.spellId)) : undefined;
+  const handleCanonical = (itemId: number) => {
+    if (!effectMenu || !datasetId) return;
+    saveCanonical.mutate(
+      { datasetId, effectKind: effectMenu.effectKind, spellId: effectMenu.spellId, itemId },
+      {
+        onSuccess: () => { toast.success("Canonical consumable updated"); closeEffectMenu(); },
+        onError: (mutationError) => toast.error(mutationError.message),
+      },
+    );
+  };
+  const handleReset = () => {
+    if (!effectMenu || !datasetId) return;
+    resetCanonical.mutate(
+      { datasetId, effectKind: effectMenu.effectKind, spellId: effectMenu.spellId },
+      {
+        onSuccess: () => { toast.success("Canonical consumable reset"); closeEffectMenu(); },
+        onError: (mutationError) => toast.error(mutationError.message),
+      },
+    );
+  };
+  const handleIgnore = () => {
+    if (!effectMenu || !datasetId) return;
+    ignoreEffect.mutate(
+      { datasetId, effectKind: effectMenu.effectKind, spellId: effectMenu.spellId },
+      {
+        onSuccess: () => { toast.success("Consumable effect ignored"); closeEffectMenu(); },
+        onError: (mutationError) => toast.error(mutationError.message),
+      },
+    );
+  };
 
   const visibleCount =
     view === "item"
@@ -230,6 +412,35 @@ export function ConsumablesPage() {
         followed to find applied buffs. A combat-log item ID remains stronger evidence than the
         spell alone.
       </p>
+
+      {canManageConsumables && (
+        <div className="mb-4 flex flex-wrap items-center justify-between gap-3 rounded-lg border border-sky-500/20 bg-sky-500/[0.06] px-3 py-2.5">
+          <div className="flex items-center gap-2 text-xs text-sky-100">
+            <ShieldCheck className="h-4 w-4 text-sky-400" />
+            <span><strong>Consumable manager:</strong> right-click a buff or spellcast row to set its canonical item.</span>
+          </div>
+          <div className="flex items-center gap-2">
+            <label className="flex cursor-pointer items-center gap-2 rounded-md border border-border/70 bg-background/60 px-2.5 py-1.5 text-xs">
+              <input
+                type="checkbox"
+                checked={showAmbiguous}
+                onChange={(event) => setShowAmbiguous(event.target.checked)}
+                className="accent-amber-500"
+              />
+              Show only ambiguous
+            </label>
+            <label className="flex cursor-pointer items-center gap-2 rounded-md border border-border/70 bg-background/60 px-2.5 py-1.5 text-xs">
+              <input
+                type="checkbox"
+                checked={showIgnored}
+                onChange={(event) => setShowIgnored(event.target.checked)}
+                className="accent-zinc-500"
+              />
+              Show ignored
+            </label>
+          </div>
+        </div>
+      )}
 
       <Tabs value={view} onValueChange={(value) => setView(value as ViewMode)}>
         <div className="mb-3 flex flex-wrap items-center gap-3">
@@ -297,28 +508,34 @@ export function ConsumablesPage() {
               <span>Consumable items</span>
             </div>
             {renderState(isLoading, error, filteredBuffs.length, "buffs", () =>
-              filteredBuffs.map((buff) => (
-                <div
-                  key={buff.id}
-                  className="grid grid-cols-[80px_minmax(240px,0.8fr)_minmax(0,1.8fr)] items-start px-3 py-2.5 hover:bg-muted/35"
-                >
-                  <span className="pt-1 font-mono text-xs text-muted-foreground">{buff.id}</span>
-                  <div className="flex items-center gap-1.5">
-                    <Sparkles className="h-3.5 w-3.5 text-primary" />
-                    <SpellReference spellId={buff.id} name={buff.name} />
+              filteredBuffs.map((buff) => {
+                const policy = policyMap.get(effectKey("buff", buff.id));
+                return (
+                  <div
+                    key={buff.id}
+                    onContextMenu={(event) => openEffectMenu(event, "buff", buff.id, buff.name, buff.items)}
+                    title={canManageConsumables ? "Right-click to manage the canonical item" : undefined}
+                    className={`grid grid-cols-[80px_minmax(240px,0.8fr)_minmax(0,1.8fr)] items-start px-3 py-2.5 hover:bg-muted/35 ${policy?.ignored ? "opacity-55" : ""}`}
+                  >
+                    <span className="pt-1 font-mono text-xs text-muted-foreground">{buff.id}</span>
+                    <div className="flex flex-wrap items-center gap-1.5">
+                      <Sparkles className="h-3.5 w-3.5 text-primary" />
+                      <SpellReference spellId={buff.id} name={buff.name} />
+                      {canManageConsumables && <EffectStatus policy={policy} ambiguous={buff.items.length > 1} />}
+                    </div>
+                    <div className="flex flex-wrap gap-1.5">
+                      {buff.items.map((item) => (
+                        <div
+                          key={item.item_id}
+                          className={policy?.item_id === item.item_id ? "rounded-md ring-1 ring-emerald-400/60" : ""}
+                        >
+                          <ItemReference consumable={item} iconBaseUrl={iconBaseUrl} compact />
+                        </div>
+                      ))}
+                    </div>
                   </div>
-                  <div className="flex flex-wrap gap-1.5">
-                    {buff.items.map((item) => (
-                      <ItemReference
-                        key={item.item_id}
-                        consumable={item}
-                        iconBaseUrl={iconBaseUrl}
-                        compact
-                      />
-                    ))}
-                  </div>
-                </div>
-              )),
+                );
+              }),
             )}
           </Card>
         )}
@@ -333,6 +550,7 @@ export function ConsumablesPage() {
             </div>
             {renderState(isLoading, error, filteredSpellcasts.length, "spellcasts", () =>
               filteredSpellcasts.map((spellcast) => {
+                const policy = policyMap.get(effectKey("direct", spellcast.spellId));
                 const buffs = Array.from(
                   new Map(
                     spellcast.items.flatMap((item) => item.buffs).map((buff) => [buff.id, buff]),
@@ -341,20 +559,25 @@ export function ConsumablesPage() {
                 return (
                   <div
                     key={spellcast.spellId}
-                    className="grid grid-cols-[80px_minmax(220px,0.8fr)_minmax(0,1.3fr)_minmax(240px,1fr)] items-start px-3 py-2.5 hover:bg-muted/35"
+                    onContextMenu={(event) => openEffectMenu(event, "direct", spellcast.spellId, `Spell ${spellcast.spellId}`, spellcast.items)}
+                    title={canManageConsumables ? "Right-click to manage the canonical item" : undefined}
+                    className={`grid grid-cols-[80px_minmax(220px,0.8fr)_minmax(0,1.3fr)_minmax(240px,1fr)] items-start px-3 py-2.5 hover:bg-muted/35 ${policy?.ignored ? "opacity-55" : ""}`}
                   >
                     <span className="pt-1 font-mono text-xs text-muted-foreground">
                       {spellcast.spellId}
                     </span>
-                    <SpellReference spellId={spellcast.spellId} />
+                    <div className="flex flex-wrap items-center gap-1.5">
+                      <SpellReference spellId={spellcast.spellId} />
+                      {canManageConsumables && <EffectStatus policy={policy} ambiguous={spellcast.items.length > 1} />}
+                    </div>
                     <div className="flex flex-wrap gap-1.5 pr-3">
                       {spellcast.items.map((item) => (
-                        <ItemReference
+                        <div
                           key={item.item_id}
-                          consumable={item}
-                          iconBaseUrl={iconBaseUrl}
-                          compact
-                        />
+                          className={policy?.item_id === item.item_id ? "rounded-md ring-1 ring-emerald-400/60" : ""}
+                        >
+                          <ItemReference consumable={item} iconBaseUrl={iconBaseUrl} compact />
+                        </div>
                       ))}
                     </div>
                     <div className="flex flex-wrap gap-1">
@@ -373,6 +596,17 @@ export function ConsumablesPage() {
           </Card>
         )}
       </Tabs>
+      {effectMenu && (
+        <ConsumableEffectMenu
+          menu={effectMenu}
+          policy={selectedPolicy}
+          pending={policyPending}
+          onCanonical={handleCanonical}
+          onReset={handleReset}
+          onIgnore={handleIgnore}
+          onClose={closeEffectMenu}
+        />
+      )}
     </div>
   );
 }

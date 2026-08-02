@@ -1061,6 +1061,24 @@ func (q *sqlQuerier) UpdateWoWServerRealm(ctx context.Context, arg UpdateWoWServ
 	return i, err
 }
 
+const deleteConsumableDisambiguation = `-- name: DeleteConsumableDisambiguation :exec
+DELETE FROM dataset_consumable_disambiguations
+WHERE dataset_id = $1
+  AND effect_kind = $2
+  AND spell_id = $3
+`
+
+type DeleteConsumableDisambiguationParams struct {
+	DatasetID  uuid.UUID `db:"dataset_id" json:"dataset_id"`
+	EffectKind string    `db:"effect_kind" json:"effect_kind"`
+	SpellID    int32     `db:"spell_id" json:"spell_id"`
+}
+
+func (q *sqlQuerier) DeleteConsumableDisambiguation(ctx context.Context, arg DeleteConsumableDisambiguationParams) error {
+	_, err := q.db.Exec(ctx, deleteConsumableDisambiguation, arg.DatasetID, arg.EffectKind, arg.SpellID)
+	return err
+}
+
 const deleteConsumablesByDataset = `-- name: DeleteConsumablesByDataset :exec
 DELETE FROM dbc_consumables WHERE dataset_id = $1
 `
@@ -1068,6 +1086,48 @@ DELETE FROM dbc_consumables WHERE dataset_id = $1
 func (q *sqlQuerier) DeleteConsumablesByDataset(ctx context.Context, datasetID uuid.UUID) error {
 	_, err := q.db.Exec(ctx, deleteConsumablesByDataset, datasetID)
 	return err
+}
+
+const ignoreConsumableEffectIfCandidate = `-- name: IgnoreConsumableEffectIfCandidate :one
+INSERT INTO dataset_consumable_disambiguations (dataset_id, effect_kind, spell_id, item_id, ignored)
+SELECT $1, $2, $3, NULL, TRUE
+WHERE (
+    $2 = 'buff'
+    AND EXISTS (
+        SELECT 1 FROM dbc_consumable_buffs b
+        WHERE b.dataset_id = $1
+          AND b.spell_id = $3
+    )
+) OR (
+    $2 = 'direct'
+    AND EXISTS (
+        SELECT 1 FROM dbc_consumables c
+        WHERE c.dataset_id = $1
+          AND $3 = ANY(c.item_spell_ids)
+    )
+)
+ON CONFLICT (dataset_id, effect_kind, spell_id) DO UPDATE
+SET item_id = NULL, ignored = TRUE, updated_at = now()
+RETURNING effect_kind, spell_id, ignored
+`
+
+type IgnoreConsumableEffectIfCandidateParams struct {
+	DatasetID  uuid.UUID `db:"dataset_id" json:"dataset_id"`
+	EffectKind string    `db:"effect_kind" json:"effect_kind"`
+	SpellID    int32     `db:"spell_id" json:"spell_id"`
+}
+
+type IgnoreConsumableEffectIfCandidateRow struct {
+	EffectKind string `db:"effect_kind" json:"effect_kind"`
+	SpellID    int32  `db:"spell_id" json:"spell_id"`
+	Ignored    bool   `db:"ignored" json:"ignored"`
+}
+
+func (q *sqlQuerier) IgnoreConsumableEffectIfCandidate(ctx context.Context, arg IgnoreConsumableEffectIfCandidateParams) (IgnoreConsumableEffectIfCandidateRow, error) {
+	row := q.db.QueryRow(ctx, ignoreConsumableEffectIfCandidate, arg.DatasetID, arg.EffectKind, arg.SpellID)
+	var i IgnoreConsumableEffectIfCandidateRow
+	err := row.Scan(&i.EffectKind, &i.SpellID, &i.Ignored)
+	return i, err
 }
 
 const insertDerivedConsumableBuffs = `-- name: InsertDerivedConsumableBuffs :execrows
@@ -1222,6 +1282,80 @@ func (q *sqlQuerier) InsertDerivedConsumables(ctx context.Context, datasetID uui
 	return result.RowsAffected(), nil
 }
 
+const listConsumableDisambiguationsByDataset = `-- name: ListConsumableDisambiguationsByDataset :many
+SELECT effect_kind, spell_id, item_id
+FROM dataset_consumable_disambiguations
+WHERE dataset_id = $1
+  AND ignored = FALSE
+  AND item_id IS NOT NULL
+ORDER BY effect_kind, spell_id
+`
+
+type ListConsumableDisambiguationsByDatasetRow struct {
+	EffectKind string      `db:"effect_kind" json:"effect_kind"`
+	SpellID    int32       `db:"spell_id" json:"spell_id"`
+	ItemID     pgtype.Int4 `db:"item_id" json:"item_id"`
+}
+
+func (q *sqlQuerier) ListConsumableDisambiguationsByDataset(ctx context.Context, datasetID uuid.UUID) ([]ListConsumableDisambiguationsByDatasetRow, error) {
+	rows, err := q.db.Query(ctx, listConsumableDisambiguationsByDataset, datasetID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListConsumableDisambiguationsByDatasetRow
+	for rows.Next() {
+		var i ListConsumableDisambiguationsByDatasetRow
+		if err := rows.Scan(&i.EffectKind, &i.SpellID, &i.ItemID); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listConsumableEffectPoliciesByDataset = `-- name: ListConsumableEffectPoliciesByDataset :many
+SELECT effect_kind, spell_id, item_id, ignored
+FROM dataset_consumable_disambiguations
+WHERE dataset_id = $1
+ORDER BY effect_kind, spell_id
+`
+
+type ListConsumableEffectPoliciesByDatasetRow struct {
+	EffectKind string      `db:"effect_kind" json:"effect_kind"`
+	SpellID    int32       `db:"spell_id" json:"spell_id"`
+	ItemID     pgtype.Int4 `db:"item_id" json:"item_id"`
+	Ignored    bool        `db:"ignored" json:"ignored"`
+}
+
+func (q *sqlQuerier) ListConsumableEffectPoliciesByDataset(ctx context.Context, datasetID uuid.UUID) ([]ListConsumableEffectPoliciesByDatasetRow, error) {
+	rows, err := q.db.Query(ctx, listConsumableEffectPoliciesByDataset, datasetID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListConsumableEffectPoliciesByDatasetRow
+	for rows.Next() {
+		var i ListConsumableEffectPoliciesByDatasetRow
+		if err := rows.Scan(
+			&i.EffectKind,
+			&i.SpellID,
+			&i.ItemID,
+			&i.Ignored,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const listConsumablesByDataset = `-- name: ListConsumablesByDataset :many
 SELECT
     c.item_id,
@@ -1275,6 +1409,56 @@ func (q *sqlQuerier) ListConsumablesByDataset(ctx context.Context, datasetID uui
 		return nil, err
 	}
 	return items, nil
+}
+
+const upsertConsumableDisambiguationIfCandidate = `-- name: UpsertConsumableDisambiguationIfCandidate :one
+INSERT INTO dataset_consumable_disambiguations (dataset_id, effect_kind, spell_id, item_id, ignored)
+SELECT $1, $2, $3, $4, FALSE
+WHERE (
+    $2 = 'buff'
+    AND EXISTS (
+        SELECT 1 FROM dbc_consumable_buffs b
+        WHERE b.dataset_id = $1
+          AND b.spell_id = $3
+          AND b.item_id = $4
+    )
+) OR (
+    $2 = 'direct'
+    AND EXISTS (
+        SELECT 1 FROM dbc_consumables c
+        WHERE c.dataset_id = $1
+          AND c.item_id = $4
+          AND $3 = ANY(c.item_spell_ids)
+    )
+)
+ON CONFLICT (dataset_id, effect_kind, spell_id) DO UPDATE
+SET item_id = EXCLUDED.item_id, ignored = FALSE, updated_at = now()
+RETURNING effect_kind, spell_id, item_id
+`
+
+type UpsertConsumableDisambiguationIfCandidateParams struct {
+	DatasetID  uuid.UUID   `db:"dataset_id" json:"dataset_id"`
+	EffectKind string      `db:"effect_kind" json:"effect_kind"`
+	SpellID    int32       `db:"spell_id" json:"spell_id"`
+	ItemID     pgtype.Int4 `db:"item_id" json:"item_id"`
+}
+
+type UpsertConsumableDisambiguationIfCandidateRow struct {
+	EffectKind string      `db:"effect_kind" json:"effect_kind"`
+	SpellID    int32       `db:"spell_id" json:"spell_id"`
+	ItemID     pgtype.Int4 `db:"item_id" json:"item_id"`
+}
+
+func (q *sqlQuerier) UpsertConsumableDisambiguationIfCandidate(ctx context.Context, arg UpsertConsumableDisambiguationIfCandidateParams) (UpsertConsumableDisambiguationIfCandidateRow, error) {
+	row := q.db.QueryRow(ctx, upsertConsumableDisambiguationIfCandidate,
+		arg.DatasetID,
+		arg.EffectKind,
+		arg.SpellID,
+		arg.ItemID,
+	)
+	var i UpsertConsumableDisambiguationIfCandidateRow
+	err := row.Scan(&i.EffectKind, &i.SpellID, &i.ItemID)
+	return i, err
 }
 
 const listCooldownSpellsByDataset = `-- name: ListCooldownSpellsByDataset :many

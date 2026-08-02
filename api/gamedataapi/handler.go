@@ -55,21 +55,66 @@ func datasetIDFromQuery(ctx context.Context, w http.ResponseWriter, r *http.Requ
 	return servicedataset.DefaultDatasetID, true
 }
 
+func (h *Handler) canManageConsumables(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		ctx := r.Context()
+		actor, ok := authz.ActorFromContext(ctx)
+		if !ok {
+			httpapi.Forbidden(w, nil)
+			return
+		}
+
+		// Check the established world-data permission first so technical admins
+		// can manage consumables even while a development SpiceDB instance is
+		// still running the schema from before admin_consumables was introduced.
+		canManageWorldData, err := h.zed.CheckOne(ctx, nil, policy.New().GlobalChronicle().CanAdmin_world_data_User(actor))
+		if err != nil {
+			httpapi.InternalServerError(w, err)
+			return
+		}
+		if canManageWorldData {
+			next.ServeHTTP(w, r)
+			return
+		}
+
+		canManageConsumables, err := h.zed.CheckOne(ctx, nil, policy.New().GlobalChronicle().CanAdmin_consumables_User(actor))
+		if err != nil {
+			httpapi.InternalServerError(w, err)
+			return
+		}
+		if !canManageConsumables {
+			httpapi.Forbidden(w, nil)
+			return
+		}
+
+		next.ServeHTTP(w, r)
+	})
+}
+
 func (h *Handler) Routes() http.Handler {
 	r := chi.NewRouter()
-	r.Use(
-		h.auth.Authenticated(false),
-		httpmw.Can(h.zed, policy.New().GlobalChronicle().CanAdmin_world_data_User),
-	)
-	r.Post("/wdb/upload", h.UploadWDB)
-	r.Post("/sql/import", h.ImportSQL)
-	r.Post("/sql/import-url", h.ImportSQLFromURL)
-	r.Post("/dbc/upload", h.UploadDBC)
-	r.Put("/datasets/{datasetID}/talent-trees", h.UploadTalentTrees)
+	r.Use(h.auth.Authenticated(false))
 
-	// World <-> Server assignment
-	r.Post("/worlds/{worldID}/servers/{serverID}", h.AssignWorldToServer)
-	r.Delete("/worlds/{worldID}/servers/{serverID}", h.UnassignWorldFromServer)
+	r.Group(func(r chi.Router) {
+		r.Use(httpmw.Can(h.zed, policy.New().GlobalChronicle().CanAdmin_world_data_User))
+		r.Post("/wdb/upload", h.UploadWDB)
+		r.Post("/sql/import", h.ImportSQL)
+		r.Post("/sql/import-url", h.ImportSQLFromURL)
+		r.Post("/dbc/upload", h.UploadDBC)
+		r.Put("/datasets/{datasetID}/talent-trees", h.UploadTalentTrees)
+
+		// World <-> Server assignment
+		r.Post("/worlds/{worldID}/servers/{serverID}", h.AssignWorldToServer)
+		r.Delete("/worlds/{worldID}/servers/{serverID}", h.UnassignWorldFromServer)
+	})
+
+	r.Group(func(r chi.Router) {
+		r.Use(h.canManageConsumables)
+		r.Get("/datasets/{datasetID}/consumable-disambiguations", h.ListConsumableEffectPolicies)
+		r.Put("/datasets/{datasetID}/consumable-disambiguations/{effectKind}/{spellID}", h.SetConsumableDisambiguation)
+		r.Put("/datasets/{datasetID}/consumable-disambiguations/{effectKind}/{spellID}/ignore", h.IgnoreConsumableEffect)
+		r.Delete("/datasets/{datasetID}/consumable-disambiguations/{effectKind}/{spellID}", h.DeleteConsumableDisambiguation)
+	})
 
 	return r
 }
