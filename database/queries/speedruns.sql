@@ -18,7 +18,7 @@ SELECT
 FROM log_instance_encounters lie
 WHERE lie.instance_id = $1
   AND lie.boss = true
-  AND lie.kill_type = 'clean'
+  AND lie.kill_type IN ('clean', 'partial')
   AND lie.end_time > lie.start_time
 ORDER BY lie.start_time;
 
@@ -68,7 +68,7 @@ deduped AS (
             FROM log_instance_encounters lie
             WHERE lie.instance_id = sr.instance_id
               AND lie.boss = true
-              AND lie.kill_type = 'clean'
+              AND lie.kill_type IN ('clean', 'partial')
               AND lie.end_time > lie.start_time
         ), '[]'::jsonb)::text AS encounter_kill_times_json
     FROM anchor a
