@@ -196,7 +196,7 @@ export function EncounterKillTimesPanel({
   const error = primaryQuery.error ?? comparisonQuery.error;
 
   return (
-    <Card className="overflow-hidden border-border/80 bg-card/75 shadow-sm">
+    <Card className="gap-0 overflow-hidden border-border/80 bg-card/75 py-0 shadow-sm">
       <div className="flex min-h-12 flex-wrap items-center justify-between gap-x-4 gap-y-2 border-b px-5 py-3">
         <div className="flex min-w-0 items-center gap-2.5">
           <div className="min-w-0">
