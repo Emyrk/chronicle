@@ -10,6 +10,7 @@ import { cn } from "@/lib/utils";
 import { formatClearDuration } from "@/pages/GuildPage/panels/clearTimeUtils";
 import { useSpeedrunPopulation } from "./overviewQueries";
 import type { PopulationSelection } from "./populationSelectionState";
+import { relativeDurationLabel } from "./timeCompositionComparison";
 import {
   summarizeTimeCompositions,
   timeComposition,
@@ -182,11 +183,13 @@ function ComponentCard({
   primaryValue,
   summary,
   comparisonLabel,
+  requirementsComplete,
 }: {
   component: (typeof COMPONENTS)[number];
   primaryValue: number | null;
   summary: TimeCompositionSummary;
   comparisonLabel: string;
+  requirementsComplete: boolean;
 }) {
   const delta = primaryValue === null ? null : primaryValue - summary.median;
   const deltaPercent = delta !== null && summary.median > 0
@@ -210,17 +213,16 @@ function ComponentCard({
             className={cn(
               "flex flex-col items-end font-mono font-semibold leading-none",
               delta === null && "text-muted-foreground/50",
-              delta !== null && delta < 0 && "text-emerald-400",
-              delta !== null && delta > 0 && "text-amber-400",
+              delta !== null && delta !== 0 && !requirementsComplete && "text-muted-foreground",
+              delta !== null && delta < 0 && requirementsComplete && "text-emerald-400",
+              delta !== null && delta > 0 && requirementsComplete && "text-amber-400",
               delta === 0 && "text-muted-foreground",
             )}
           >
             <span className="text-xs">
               {delta === null || deltaPercent === null
                 ? "—"
-                : delta === 0
-                  ? "Same"
-                  : `${deltaPercent}% ${delta < 0 ? "faster" : "slower"}`}
+                : relativeDurationLabel(delta, deltaPercent, requirementsComplete, "component")}
             </span>
             {delta !== null && delta !== 0 && (
               <span className="mt-1 text-[9px] font-medium text-muted-foreground">
@@ -255,7 +257,9 @@ export function TimeCompositionPanel({
 }) {
   const primaryQuery = useSpeedrunPopulation(primary);
   const comparisonQuery = useSpeedrunPopulation(comparison);
-  const primaryComposition = timeComposition(primaryQuery.data?.runs[0]);
+  const primaryRun = primaryQuery.data?.runs[0];
+  const primaryComposition = timeComposition(primaryRun);
+  const requirementsComplete = primaryRun?.requirements_complete ?? false;
   const comparisonSummaries = summarizeTimeCompositions(comparisonQuery.data?.runs ?? []);
   const comparisonValues = comparisonSummaries ? comparisonComposition(comparisonSummaries) : null;
   const specificRaidComparison = comparison?.kind === "instance";
@@ -323,16 +327,15 @@ export function TimeCompositionPanel({
                     <span
                       className={cn(
                         "flex items-baseline gap-1 rounded-md border px-2 py-1 font-mono",
-                        totalDelta < 0 && "border-emerald-400/25 bg-emerald-400/10 text-emerald-400",
-                        totalDelta > 0 && "border-rose-400/25 bg-rose-400/10 text-rose-400",
-                        totalDelta === 0 && "border-border bg-muted/20 text-muted-foreground",
+                        !requirementsComplete && "border-border bg-muted/20 text-muted-foreground",
+                        requirementsComplete && totalDelta < 0 && "border-emerald-400/25 bg-emerald-400/10 text-emerald-400",
+                        requirementsComplete && totalDelta > 0 && "border-rose-400/25 bg-rose-400/10 text-rose-400",
+                        requirementsComplete && totalDelta === 0 && "border-border bg-muted/20 text-muted-foreground",
                       )}
                       title={`${formatDelta(totalDelta)} compared with ${comparisonLabel.toLowerCase()}`}
                     >
                       <strong className="text-xs">
-                        {totalDelta === 0
-                          ? "Same pace"
-                          : `${totalDeltaPercent}% ${totalDelta < 0 ? "faster" : "slower"}`}
+                        {relativeDurationLabel(totalDelta, totalDeltaPercent, requirementsComplete, "total")}
                       </strong>
                       {totalDelta !== 0 && (
                         <span className="text-[9px] opacity-75">{formatDelta(totalDelta)}</span>
@@ -385,6 +388,7 @@ export function TimeCompositionPanel({
                   primaryValue={primaryComposition?.[component.key] ?? null}
                   summary={comparisonSummaries[component.key]}
                   comparisonLabel={comparisonLabel}
+                  requirementsComplete={requirementsComplete}
                 />
               ))}
             </div>
