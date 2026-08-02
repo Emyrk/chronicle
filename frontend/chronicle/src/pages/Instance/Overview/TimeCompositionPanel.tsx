@@ -239,8 +239,6 @@ export function TimeCompositionPanel({
   const comparisonValues = comparisonSummaries ? comparisonComposition(comparisonSummaries) : null;
   const specificRaidComparison = comparison?.kind === "instance";
   const comparisonLabel = specificRaidComparison ? "Other raid" : "Median";
-  const coverage = comparisonQuery.data?.overviewCoverage;
-  const incompleteCoverage = coverage && coverage.runsWithMetrics < coverage.eligibleRuns;
   const loading = primaryQuery.isLoading || comparisonQuery.isLoading;
   const error = primaryQuery.error ?? comparisonQuery.error;
   const scaleMax = Math.max(primaryComposition?.total ?? 0, comparisonValues?.total ?? 0, 1);
@@ -255,14 +253,6 @@ export function TimeCompositionPanel({
           <h2 className="text-sm font-semibold">Raid time breakdown</h2>
           <p className="mt-0.5 text-[11px] leading-none text-muted-foreground">
             Boss, trash, and idle time
-            {incompleteCoverage && (
-              <span
-                className="ml-2 text-amber-400/90"
-                title={`Overview timing data is available for ${coverage.runsWithMetrics} of ${coverage.eligibleRuns} eligible raids`}
-              >
-                {coverage.runsWithMetrics}/{coverage.eligibleRuns} with data
-              </span>
-            )}
           </p>
         </div>
         <div className="flex items-center gap-4 text-[10px] text-muted-foreground">

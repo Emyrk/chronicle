@@ -229,7 +229,7 @@ export function RaidSummaryStrip({
               className="hidden truncate text-[11px] text-amber-400/80 md:inline"
               title={`Overview metrics v${coverage.metricsVersion}: ${coverage.runsWithMetrics} of ${coverage.eligibleRuns} eligible raids`}
             >
-              {coverage.runsWithMetrics}/{coverage.eligibleRuns} with Overview data
+              {coverage.runsWithMetrics}/{coverage.eligibleRuns} with data
             </span>
           )}
         </div>
