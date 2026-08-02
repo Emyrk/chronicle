@@ -6,18 +6,15 @@ export function relativeDurationLabel(
   requirementsComplete: boolean,
   context: RelativeDurationContext,
 ): string {
+  if (!requirementsComplete) {
+    if (context === "total") return "Partial raid";
+    if (deltaMs === 0) return "Same time";
+    return deltaMs < 0 ? "Less time" : "More time";
+  }
+
   if (deltaMs === 0) {
-    if (context === "component") return "Same";
-    return requirementsComplete ? "Same pace" : "Same duration";
+    return context === "total" ? "Same pace" : "Same";
   }
 
-  if (requirementsComplete) {
-    return `${deltaPercent}% ${deltaMs < 0 ? "faster" : "slower"}`;
-  }
-
-  if (context === "total") {
-    return `${deltaPercent}% ${deltaMs < 0 ? "shorter" : "longer"}`;
-  }
-
-  return `${deltaPercent}% ${deltaMs < 0 ? "less time" : "more time"}`;
+  return `${deltaPercent}% ${deltaMs < 0 ? "faster" : "slower"}`;
 }

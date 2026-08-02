@@ -8,11 +8,11 @@ describe("relativeDurationLabel", () => {
     expect(relativeDurationLabel(0, 0, true, "total")).toBe("Same pace");
   });
 
-  it("uses neutral duration language for partial raids", () => {
-    expect(relativeDurationLabel(-10_000, 20, false, "total")).toBe("20% shorter");
-    expect(relativeDurationLabel(10_000, 20, false, "total")).toBe("20% longer");
-    expect(relativeDurationLabel(-10_000, 20, false, "component")).toBe("20% less time");
-    expect(relativeDurationLabel(10_000, 20, false, "component")).toBe("20% more time");
-    expect(relativeDurationLabel(0, 0, false, "total")).toBe("Same duration");
+  it("omits percentage judgments for partial raids", () => {
+    expect(relativeDurationLabel(-10_000, 20, false, "total")).toBe("Partial raid");
+    expect(relativeDurationLabel(10_000, 20, false, "total")).toBe("Partial raid");
+    expect(relativeDurationLabel(-10_000, 20, false, "component")).toBe("Less time");
+    expect(relativeDurationLabel(10_000, 20, false, "component")).toBe("More time");
+    expect(relativeDurationLabel(0, 0, false, "component")).toBe("Same time");
   });
 });
