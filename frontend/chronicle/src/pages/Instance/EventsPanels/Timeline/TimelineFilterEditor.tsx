@@ -278,6 +278,22 @@ function SettingsTab({
 }) {
   return (
     <div className="space-y-3">
+      {/* Background metric */}
+      <label className="flex items-center gap-2">
+        <span className="text-xs text-muted-foreground shrink-0">Background:</span>
+        <select
+          className="min-w-40 rounded-md border border-zinc-700 bg-zinc-900 px-2 py-1 text-xs text-foreground focus:border-zinc-500 focus:outline-none"
+          value={settings.background}
+          onChange={(event) => onSettingsChange({
+            ...settings,
+            background: event.target.value === "raid_durability" ? "raid_durability" : "none",
+          })}
+        >
+          <option value="none">None</option>
+          <option value="raid_durability">Raid Durability</option>
+        </select>
+      </label>
+
       {/* Bin size */}
       <div className="flex items-center gap-2">
         <span className="text-xs text-muted-foreground shrink-0">Window:</span>

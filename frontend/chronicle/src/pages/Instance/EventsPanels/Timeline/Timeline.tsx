@@ -16,9 +16,18 @@ interface ColoredSeries extends LineSeries {
   color: string;
 }
 import type { PanelDefinition, PanelRenderProps } from "../types";
+import { usePanelAggregation } from "../usePanelAggregation";
+import { usePlayerLifeState } from "../usePlayerLifeState";
+import {
+  statusProcessor,
+  type StatusProcessorEvent,
+  type StatusResult,
+} from "../Status/status.processor";
+import { createStatusRaidHealthModel } from "../Status/statusRaidHealth";
 import { timelineProcessor, type TimelineResult, type TimelineSeriesMeta } from "./timeline.processor";
 import { applyAggregation } from "./aggregations";
 import { TimelineFilterEditor } from "./TimelineFilterEditor";
+import { createTimelineRaidDurabilityBars } from "./timelineRaidDurability";
 import { getSeriesConfigs, getTimelineSettings, hydrateFromPanelOption, serializeTimelineConfig } from "./timelineTypes";
 
 import { useTimeRangeContextOptional } from "../../TimeRangeContext";
@@ -96,6 +105,14 @@ type D3ScaleLinear = ((v: number) => number) & { invert: (px: number) => number 
 const CHART_MARGIN_DESKTOP = { top: 10, right: 20, bottom: 36, left: 50 } as const;
 const CHART_MARGIN_MOBILE = { top: 10, right: 8, bottom: 30, left: 36 } as const;
 
+const TIMELINE_DURABILITY_PANEL: PanelDefinition<StatusResult, StatusProcessorEvent> = {
+  ...statusProcessor,
+  label: "Raid Durability Background",
+  icon: null,
+  syncDataMode: "full",
+  render: () => null,
+};
+
 function TimelineContent({ result, durationMs, panelContext: pc, panelOption, setPanelContext, setPanelOption, context }: PanelRenderProps<TimelineResult>) {
   const isMobile = useIsMobile();
   const CHART_MARGIN = isMobile ? CHART_MARGIN_MOBILE : CHART_MARGIN_DESKTOP;
@@ -110,6 +127,16 @@ function TimelineContent({ result, durationMs, panelContext: pc, panelOption, se
     const settings = getTimelineSettings(pc);
     return new Set(settings.hiddenSeries ?? []);
   });
+
+  const timelineSettings = useMemo(() => getTimelineSettings(pc), [pc]);
+  const durabilitySelected = timelineSettings.background === "raid_durability";
+  const durabilityEnabled = durabilitySelected && context.selectedEncounterIds.length === 1;
+  const durabilityAggregation = usePanelAggregation<StatusResult>({
+    panel: TIMELINE_DURABILITY_PANEL,
+    context,
+    enabled: durabilityEnabled,
+  });
+  const playerLife = usePlayerLifeState(context, durabilityEnabled);
 
   // Hydrate panelContext + hiddenSeries from saved panelOption on first render
   const hydrated = useRef(false);
@@ -151,6 +178,32 @@ function TimelineContent({ result, durationMs, panelContext: pc, panelOption, se
   const totalBins = durationMs > 0
     ? Math.ceil(durationMs / result.binMs)
     : result.binCount;
+
+  const durabilityEncounter = useMemo(() => {
+    if (!durabilityEnabled) return null;
+    return durabilityAggregation.result.encounters.get(context.selectedEncounterIds[0]) ?? null;
+  }, [context.selectedEncounterIds, durabilityAggregation.result.encounters, durabilityEnabled]);
+  const durabilityLifeTransitions = useMemo(() => {
+    if (!durabilityEncounter || playerLife.loading || playerLife.error) return undefined;
+    return new Map(Object.keys(context.instance.players ?? {}).map((playerId) => [
+      playerId,
+      playerLife.state.transitions(durabilityEncounter.encounterId, playerId),
+    ]));
+  }, [context.instance.players, durabilityEncounter, playerLife.error, playerLife.loading, playerLife.state]);
+  const durabilityModel = useMemo(() => createStatusRaidHealthModel(
+    durabilityEncounter
+      ? Array.from(durabilityEncounter.units.values()).filter((unit) => unit.kind === "player")
+      : [],
+    durabilityLifeTransitions,
+  ), [durabilityEncounter, durabilityLifeTransitions]);
+  const durabilityBars = useMemo(() => {
+    if (!durabilityEncounter || durabilityModel.unitCount === 0) return [];
+    return createTimelineRaidDurabilityBars(
+      durabilityModel,
+      durabilityEncounter.startMilli,
+      totalSec * 1000,
+    );
+  }, [durabilityEncounter, durabilityModel, totalSec]);
 
   // Convert processor result → nivo series, applying per-series aggregation.
   // Filters out stale series that no longer exist in config (e.g., after deletion).
@@ -279,6 +332,48 @@ function TimelineContent({ result, durationMs, panelContext: pc, panelOption, se
   const dragCurrentSec = drag?.currentSec ?? 0;
   const dragActive = drag?.active ?? false;
 
+  const durabilityLayer = useCallback(
+    ({ innerHeight, innerWidth, xScale }: LineCustomSvgLayerProps<ColoredSeries>) => {
+      if (durabilityBars.length === 0) return null;
+      const scale = xScale as unknown as D3ScaleLinear;
+
+      return (
+        <g aria-label="Estimated raid durability background">
+          {durabilityBars.map((bar, index) => {
+            const x1 = scale(bar.startSec);
+            const x2 = scale(bar.endSec);
+            const height = Math.max(1, innerHeight * bar.percent / 100);
+            return (
+              <rect
+                key={index}
+                x={x1}
+                y={innerHeight - height}
+                width={Math.max(0, x2 - x1 - 1)}
+                height={height}
+                fill={bar.color}
+                fillOpacity={0.18}
+              >
+                <title>{`${Math.round(bar.percent)}% estimated raid durability`}</title>
+              </rect>
+            );
+          })}
+          <text
+            x={innerWidth - 6}
+            y={innerHeight - 6}
+            textAnchor="end"
+            fill="rgba(161, 161, 170, 0.8)"
+            fontSize={9}
+            fontWeight={600}
+            letterSpacing="0.08em"
+          >
+            RAID DURABILITY
+          </text>
+        </g>
+      );
+    },
+    [durabilityBars],
+  );
+
   const overlayLayer = useCallback(
     ({ innerHeight, xScale }: LineCustomSvgLayerProps<ColoredSeries>) => {
       // Capture the scale so mouse handlers can use xScale.invert()
@@ -337,9 +432,19 @@ function TimelineContent({ result, durationMs, panelContext: pc, panelOption, se
   }
 
   if (visibleData.length === 0 && data.length === 0) {
+    const durabilityNeedsSingleEncounter = durabilitySelected && context.selectedEncounterIds.length > 1;
     return (
-      <div className="text-center py-8 text-muted-foreground text-sm">
-        No data for selected encounters
+      <div className="flex h-full flex-col items-center justify-center gap-1 px-4 text-center">
+        <span className="text-sm text-muted-foreground">
+          {durabilityNeedsSingleEncounter
+            ? "Raid Durability requires a single selected encounter"
+            : "No data for selected encounter"}
+        </span>
+        {durabilityNeedsSingleEncounter ? (
+          <span className="text-xs text-muted-foreground/60">
+            Select one encounter or set Background to None.
+          </span>
+        ) : null}
       </div>
     );
   }
@@ -390,6 +495,7 @@ function TimelineContent({ result, durationMs, panelContext: pc, panelOption, se
         enableSlices={drag?.active ? false : "x"}
         sliceTooltip={(props) => <TimelineSliceTooltip {...props} seriesMeta={result.seriesMeta} />}
         layers={[
+          durabilityLayer,
           "grid",
           "markers",
           "axes",
@@ -435,7 +541,7 @@ function TimelineContent({ result, durationMs, panelContext: pc, panelOption, se
         <button
           type="button"
           onClick={() => timeRange?.reset()}
-          className="absolute top-1 left-14 text-[10px] text-zinc-500 hover:text-zinc-300 cursor-pointer select-none transition-colors"
+          className="absolute top-1 left-14 rounded border border-red-500/30 bg-red-950/40 px-1.5 py-0.5 text-[10px] font-semibold text-red-400 hover:border-red-400/50 hover:bg-red-950/60 hover:text-red-300 cursor-pointer select-none transition-colors"
         >
           Reset Selection
         </button>

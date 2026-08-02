@@ -100,7 +100,10 @@ function loadPlayerLifeState(
  * first mounted consumer starts processing; later consumers reuse the cached
  * result and raw streams from InstanceEventsContext.
  */
-export function usePlayerLifeState(context: PanelContext): PlayerLifeStateSnapshot {
+export function usePlayerLifeState(
+  context: PanelContext,
+  enabled = true,
+): PlayerLifeStateSnapshot {
   const events = useInstanceEventsContext();
   const instanceId = context.instance.id;
   const entry = cacheEntry(instanceId);
@@ -109,11 +112,11 @@ export function usePlayerLifeState(context: PanelContext): PlayerLifeStateSnapsh
   useEffect(() => {
     const listener = () => rerender((version) => version + 1);
     entry.listeners.add(listener);
-    loadPlayerLifeState(entry, context, events.fetchStream);
+    if (enabled) loadPlayerLifeState(entry, context, events.fetchStream);
     return () => {
       entry.listeners.delete(listener);
     };
-  }, [context, entry, events.fetchStream]);
+  }, [context, enabled, entry, events.fetchStream]);
 
   return entry.snapshot;
 }

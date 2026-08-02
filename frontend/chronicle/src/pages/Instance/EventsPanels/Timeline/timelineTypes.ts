@@ -40,10 +40,14 @@ export interface TimelineSeriesConfig {
  */
 export type AggregationType = "sum" | "rolling_avg" | "per_second" | "cumulative";
 
+export type TimelineBackground = "none" | "raid_durability";
+
 /** General timeline settings (not per-series). */
 export interface TimelineSettings {
   /** Bucket width in ms */
   binMs: number;
+  /** Optional metric rendered behind the line series */
+  background: TimelineBackground;
   /** Series IDs hidden via legend toggle */
   hiddenSeries?: string[];
 }
@@ -83,7 +87,7 @@ export function createDefaultSeries(
 }
 
 export function getDefaultSettings(): TimelineSettings {
-  return { binMs: DEFAULT_BIN_MS };
+  return { binMs: DEFAULT_BIN_MS, background: "none" };
 }
 
 /**
@@ -105,11 +109,17 @@ export function getSeriesConfigs(panelContext: Record<string, unknown> | null | 
   return FALLBACK_SERIES_CONFIG;
 }
 
-/** Extract settings from panelContext. */
+/** Extract settings from panelContext, filling defaults for older saved configs. */
 export function getTimelineSettings(panelContext: Record<string, unknown> | null | undefined): TimelineSettings {
+  const defaults = getDefaultSettings();
   const raw = panelContext?.timelineSettings;
-  if (raw && typeof raw === "object" && "binMs" in raw) return raw as TimelineSettings;
-  return getDefaultSettings();
+  if (!raw || typeof raw !== "object" || !("binMs" in raw)) return defaults;
+  const settings = raw as Partial<TimelineSettings>;
+  return {
+    ...defaults,
+    ...settings,
+    background: settings.background === "raid_durability" ? "raid_durability" : "none",
+  };
 }
 
 // ── Persistence via panelOption ─────────────────────────────────────────────
