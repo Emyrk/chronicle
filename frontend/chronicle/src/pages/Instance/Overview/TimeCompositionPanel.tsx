@@ -82,12 +82,13 @@ function SegmentTooltip({
   children,
 }: {
   component: (typeof COMPONENTS)[number];
-  primaryValue: number | null;
+  primaryValue?: number | null;
   summary: TimeCompositionSummary;
   comparisonLabel: string;
   children: React.ReactNode;
 }) {
-  const delta = primaryValue === null ? null : primaryValue - summary.median;
+  const showPrimaryComparison = primaryValue !== undefined;
+  const delta = typeof primaryValue === "number" ? primaryValue - summary.median : null;
 
   return (
     <Tooltip>
@@ -108,9 +109,13 @@ function SegmentTooltip({
           </span>
         </div>
         <div className="space-y-1 text-xs">
-          <StatLine label="Your time" value={primaryValue === null ? "Missing" : formatClearDuration(primaryValue)} />
-          {delta !== null && <StatLine label={`${comparisonLabel} delta`} value={formatDelta(delta)} />}
-          <div className="my-1 border-t border-white/5" />
+          {showPrimaryComparison && (
+            <>
+              <StatLine label="Your time" value={primaryValue === null ? "Missing" : formatClearDuration(primaryValue)} />
+              {delta !== null && <StatLine label={`${comparisonLabel} delta`} value={formatDelta(delta)} />}
+              <div className="my-1 border-t border-white/5" />
+            </>
+          )}
           <StatLine label="Fastest" value={formatClearDuration(summary.min)} />
           <StatLine label="Top 25%" value={formatClearDuration(summary.q1)} />
           <StatLine label={comparisonLabel} value={formatClearDuration(summary.median)} />
@@ -147,7 +152,7 @@ function StackedBar({
           <SegmentTooltip
             key={component.key}
             component={component}
-            primaryValue={primary ? value : null}
+            primaryValue={primary ? value : undefined}
             summary={summaries[component.key]}
             comparisonLabel={comparisonLabel}
           >
