@@ -208,13 +208,12 @@ function ComponentCard({
           </span>
           <span
             className={cn(
-              "flex items-baseline gap-1 font-mono font-semibold",
+              "flex flex-col items-end font-mono font-semibold leading-none",
               delta === null && "text-muted-foreground/50",
               delta !== null && delta < 0 && "text-emerald-400",
               delta !== null && delta > 0 && "text-amber-400",
               delta === 0 && "text-muted-foreground",
             )}
-            title={delta === null ? undefined : `${formatDelta(delta)} compared with ${comparisonLabel.toLowerCase()}`}
           >
             <span className="text-xs">
               {delta === null || deltaPercent === null
@@ -224,7 +223,9 @@ function ComponentCard({
                   : `${deltaPercent}% ${delta < 0 ? "faster" : "slower"}`}
             </span>
             {delta !== null && delta !== 0 && (
-              <span className="text-[9px] opacity-70">{formatDelta(delta)}</span>
+              <span className="mt-1 text-[9px] font-medium text-muted-foreground">
+                {formatDelta(delta)} vs {comparisonLabel.toLowerCase()}
+              </span>
             )}
           </span>
         </div>
@@ -265,7 +266,7 @@ export function TimeCompositionPanel({
   const totalDelta = primaryComposition && comparisonValues
     ? primaryComposition.total - comparisonValues.total
     : null;
-  const totalDeltaPercent = totalDelta !== null && comparisonValues.total > 0
+  const totalDeltaPercent = totalDelta !== null && comparisonValues && comparisonValues.total > 0
     ? Math.round((Math.abs(totalDelta) / comparisonValues.total) * 100)
     : null;
 
