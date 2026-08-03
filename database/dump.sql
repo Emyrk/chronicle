@@ -1233,6 +1233,48 @@ CREATE TABLE talent_builds (
     created_at timestamp with time zone DEFAULT now() NOT NULL
 );
 
+CREATE TABLE time_parse_boss_kill_members (
+    id uuid DEFAULT gen_random_uuid() NOT NULL,
+    snapshot_id uuid NOT NULL,
+    instance_id uuid NOT NULL,
+    run_id uuid NOT NULL,
+    instance_name text NOT NULL,
+    encounter_name text NOT NULL,
+    difficulty_name text DEFAULT ''::text NOT NULL,
+    max_players smallint DEFAULT 0 NOT NULL,
+    duration_ms bigint NOT NULL,
+    killed_at timestamp with time zone NOT NULL
+);
+
+CREATE TABLE time_parse_clear_time_members (
+    id uuid DEFAULT gen_random_uuid() NOT NULL,
+    snapshot_id uuid NOT NULL,
+    instance_id uuid NOT NULL,
+    run_id uuid NOT NULL,
+    instance_name text NOT NULL,
+    difficulty_name text DEFAULT ''::text NOT NULL,
+    max_players smallint DEFAULT 0 NOT NULL,
+    duration_ms bigint NOT NULL,
+    start_time timestamp with time zone NOT NULL
+);
+
+CREATE TABLE time_parse_snapshots (
+    id uuid DEFAULT gen_random_uuid() NOT NULL,
+    tenant_id uuid DEFAULT '00000000-0000-0000-0000-000000000000'::uuid NOT NULL,
+    cutoff timestamp with time zone NOT NULL,
+    window_start timestamp with time zone,
+    lookback_days integer DEFAULT 0 NOT NULL,
+    policy_version smallint DEFAULT 1 NOT NULL,
+    query_version smallint DEFAULT 1 NOT NULL,
+    status text DEFAULT 'pending'::text NOT NULL,
+    created_at timestamp with time zone DEFAULT now() NOT NULL,
+    published_at timestamp with time zone,
+    source_row_count bigint DEFAULT 0 NOT NULL,
+    source_watermark timestamp with time zone,
+    CONSTRAINT time_parse_snapshots_check CHECK (((status <> 'published'::text) OR (published_at IS NOT NULL))),
+    CONSTRAINT time_parse_snapshots_status_check CHECK ((status = ANY (ARRAY['pending'::text, 'published'::text])))
+);
+
 CREATE TABLE user_action_bar_slots (
     user_id uuid NOT NULL,
     slot_1 uuid,
@@ -1851,6 +1893,21 @@ ALTER TABLE ONLY tenants
 ALTER TABLE ONLY tenants
     ADD CONSTRAINT tenants_slug_key UNIQUE (slug);
 
+ALTER TABLE ONLY time_parse_boss_kill_members
+    ADD CONSTRAINT time_parse_boss_kill_members_pkey PRIMARY KEY (id);
+
+ALTER TABLE ONLY time_parse_boss_kill_members
+    ADD CONSTRAINT time_parse_boss_kill_members_snapshot_id_instance_id_encoun_key UNIQUE (snapshot_id, instance_id, encounter_name);
+
+ALTER TABLE ONLY time_parse_clear_time_members
+    ADD CONSTRAINT time_parse_clear_time_members_pkey PRIMARY KEY (id);
+
+ALTER TABLE ONLY time_parse_clear_time_members
+    ADD CONSTRAINT time_parse_clear_time_members_snapshot_id_instance_id_key UNIQUE (snapshot_id, instance_id);
+
+ALTER TABLE ONLY time_parse_snapshots
+    ADD CONSTRAINT time_parse_snapshots_pkey PRIMARY KEY (id);
+
 ALTER TABLE ONLY user_action_bar_slots
     ADD CONSTRAINT user_action_bar_slots_pkey PRIMARY KEY (user_id);
 
@@ -2016,6 +2073,14 @@ CREATE INDEX idx_tb_sub_spec ON talent_builds USING btree (sub_spec) WHERE (sub_
 
 CREATE UNIQUE INDEX idx_tenants_name_unique ON tenants USING btree (lower(name));
 
+CREATE INDEX idx_tpbkm_cohort ON time_parse_boss_kill_members USING btree (snapshot_id, instance_name, encounter_name, difficulty_name, max_players);
+
+CREATE INDEX idx_tpctm_cohort ON time_parse_clear_time_members USING btree (snapshot_id, instance_name, difficulty_name, max_players);
+
+CREATE INDEX idx_tps_tenant_lookback ON time_parse_snapshots USING btree (tenant_id, lookback_days, published_at DESC NULLS LAST);
+
+CREATE INDEX idx_tps_tenant_status ON time_parse_snapshots USING btree (tenant_id, status);
+
 CREATE INDEX idx_upload_keys_realm ON wow_server_upload_keys USING btree (realm_id);
 
 CREATE INDEX idx_user_panel_layouts_code ON user_panel_layouts USING btree (code);
@@ -2049,6 +2114,8 @@ CREATE INDEX river_job_prioritized_fetching_index ON river_job USING btree (stat
 CREATE INDEX river_job_state_and_finalized_at_index ON river_job USING btree (state, finalized_at) WHERE (finalized_at IS NOT NULL);
 
 CREATE UNIQUE INDEX river_job_unique_idx ON river_job USING btree (unique_key) WHERE ((unique_key IS NOT NULL) AND (unique_states IS NOT NULL) AND river_job_state_in_bitmask(unique_states, state));
+
+CREATE UNIQUE INDEX time_parse_snapshots_published_key_idx ON time_parse_snapshots USING btree (tenant_id, cutoff, lookback_days, policy_version, query_version) WHERE (status = 'published'::text);
 
 CREATE UNIQUE INDEX user_auths_unique_linked_id ON user_auth_links USING btree (lower(linked_id), provider);
 
@@ -2309,6 +2376,12 @@ ALTER TABLE ONLY shared_views
 
 ALTER TABLE ONLY tenants
     ADD CONSTRAINT tenants_default_dataset_id_fkey FOREIGN KEY (default_dataset_id) REFERENCES datasets(id);
+
+ALTER TABLE ONLY time_parse_boss_kill_members
+    ADD CONSTRAINT time_parse_boss_kill_members_snapshot_id_fkey FOREIGN KEY (snapshot_id) REFERENCES time_parse_snapshots(id) ON DELETE CASCADE;
+
+ALTER TABLE ONLY time_parse_clear_time_members
+    ADD CONSTRAINT time_parse_clear_time_members_snapshot_id_fkey FOREIGN KEY (snapshot_id) REFERENCES time_parse_snapshots(id) ON DELETE CASCADE;
 
 ALTER TABLE ONLY user_action_bar_slots
     ADD CONSTRAINT user_action_bar_slots_user_id_fkey FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE;

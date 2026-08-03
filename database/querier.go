@@ -22,6 +22,15 @@ type sqlcQuerier interface {
 	// documentation; log_instances does not carry numeric version columns yet, so
 	// version filtering is the caller's responsibility if needed.
 	BatchInsertSnapshotMembersFromRankings(ctx context.Context, snapshotID uuid.UUID) error
+	// Populate boss-kill members from eligible encounter kill times.
+	// Clean boss kills from cohort-eligible runs (partial or complete).
+	// Duplicate groups collapsed per encounter to fastest.
+	BatchInsertTimeParseSnapshotBossKillMembers(ctx context.Context, snapshotID uuid.UUID) error
+	// Populate clear-time members from eligible instance speedruns.
+	// Qualified complete runs only (duration_ms > 0). Duplicate groups collapsed
+	// to one representative instance (deterministic: canonical instance first,
+	// then earliest start, then smallest UUID).
+	BatchInsertTimeParseSnapshotClearTimeMembers(ctx context.Context, snapshotID uuid.UUID) error
 	BulkUpsertGuildPagePanels(ctx context.Context, dollar_1 []byte) error
 	// JOINs wow_server_realms so RLS tenant filtering cascades.
 	CensusPlayerCounts(ctx context.Context, arg CensusPlayerCountsParams) ([]CensusPlayerCountsRow, error)
@@ -32,6 +41,8 @@ type sqlcQuerier interface {
 	CountGuilds(ctx context.Context, dollar_1 string) (int64, error)
 	// Return the number of members in a snapshot.
 	CountSnapshotMembers(ctx context.Context, snapshotID uuid.UUID) (int64, error)
+	CountTimeParseSnapshotBossKillMembers(ctx context.Context, snapshotID uuid.UUID) (int64, error)
+	CountTimeParseSnapshotClearTimeMembers(ctx context.Context, snapshotID uuid.UUID) (int64, error)
 	CountUserAuthLinks(ctx context.Context) (int64, error)
 	CountUserPanelLayoutsTotal(ctx context.Context, userID uuid.NullUUID) (int32, error)
 	CountUserTalentBuilds(ctx context.Context, arg CountUserTalentBuildsParams) (int64, error)
@@ -68,6 +79,8 @@ type sqlcQuerier interface {
 	DeleteRetentionPolicy(ctx context.Context, id uuid.UUID) error
 	DeleteRetentionRule(ctx context.Context, id uuid.UUID) error
 	DeleteTenant(ctx context.Context, id uuid.UUID) error
+	// Delete a time-parse snapshot by ID. Members are cascade-deleted.
+	DeleteTimeParseSnapshot(ctx context.Context, id uuid.UUID) error
 	DeleteUploadKey(ctx context.Context, id uuid.UUID) error
 	DeleteUserCharacterLink(ctx context.Context, arg DeleteUserCharacterLinkParams) (UserCharacterLink, error)
 	DeleteUserCharacterLinksByUserAndSource(ctx context.Context, arg DeleteUserCharacterLinksByUserAndSourceParams) ([]UserCharacterLink, error)
@@ -152,9 +165,18 @@ type sqlcQuerier interface {
 	// Return the most recently published snapshot matching the full key dimensions
 	// used by the staleness guard (tenant, lookback, cohort_mode, policy_version, query_version).
 	GetLatestPublishedSnapshotForGuard(ctx context.Context, arg GetLatestPublishedSnapshotForGuardParams) (RankingSnapshot, error)
+	// Most recently published time-parse snapshot for a tenant+lookback+versions.
+	GetLatestPublishedTimeParseSnapshot(ctx context.Context, arg GetLatestPublishedTimeParseSnapshotParams) (TimeParseSnapshot, error)
+	// Latest published time-parse snapshot whose cutoff <= given timestamp.
+	// Used for canonical parse resolution (day-of-raid snapshot).
+	GetLatestPublishedTimeParseSnapshotBefore(ctx context.Context, arg GetLatestPublishedTimeParseSnapshotBeforeParams) (TimeParseSnapshot, error)
+	// Most recently published snapshot matching the full key dimensions (staleness guard).
+	GetLatestPublishedTimeParseSnapshotForGuard(ctx context.Context, arg GetLatestPublishedTimeParseSnapshotForGuardParams) (TimeParseSnapshot, error)
 	GetLatestRegressionSnapshot(ctx context.Context, fixtureID uuid.UUID) (RegressionSnapshot, error)
 	GetLeaderboardVersionRequirements(ctx context.Context, instanceName string) (LeaderboardVersionRequirement, error)
 	GetLogFile(ctx context.Context, id uuid.UUID) (LogFile, error)
+	// Return the instance name, difficulty, and max_players for time-parse scoring.
+	GetLogInstanceForTimeParse(ctx context.Context, id uuid.UUID) (GetLogInstanceForTimeParseRow, error)
 	// Return the start_time for a log instance. Used by the parses handler
 	// to resolve which snapshot cutoff applies to the instance.
 	GetLogInstanceStartTime(ctx context.Context, id uuid.UUID) (pgtype.Timestamptz, error)
@@ -164,6 +186,9 @@ type sqlcQuerier interface {
 	// Check if a published snapshot already exists for this exact cutoff+key.
 	// Used by the idempotency guard (one snapshot per day per key).
 	GetPublishedSnapshotForCutoff(ctx context.Context, arg GetPublishedSnapshotForCutoffParams) (RankingSnapshot, error)
+	// Check if a published time-parse snapshot exists for this exact cutoff+key.
+	// Used by the idempotency guard.
+	GetPublishedTimeParseSnapshotForCutoff(ctx context.Context, arg GetPublishedTimeParseSnapshotForCutoffParams) (TimeParseSnapshot, error)
 	GetRankingSnapshot(ctx context.Context, id uuid.UUID) (RankingSnapshot, error)
 	// Returns all realm IDs that have an applicable retention policy
 	// (either directly or through their server).
@@ -212,6 +237,18 @@ type sqlcQuerier interface {
 	// Tenant queries. These run with AdminBypass context since the tenants table
 	// itself is not behind RLS (only wow_servers/wow_server_realms are).
 	GetTenantBySlug(ctx context.Context, slug pgtype.Text) (Tenant, error)
+	// All boss-kill durations for an (instance_name, encounter, difficulty, max_players) bucket.
+	// Used to score a specific boss kill time against the population.
+	GetTimeParseSnapshotBossKillCohort(ctx context.Context, arg GetTimeParseSnapshotBossKillCohortParams) ([]int64, error)
+	// All clear-time durations for an (instance_name, difficulty, max_players) bucket.
+	// Used to score a specific run's clear time against the population.
+	GetTimeParseSnapshotClearTimeCohort(ctx context.Context, arg GetTimeParseSnapshotClearTimeCohortParams) ([]int64, error)
+	// Compute a combined source fingerprint covering both clear-time eligible
+	// speedruns and boss-kill eligible encounters. Changes in either source
+	// break the staleness guard so new boss encounters or reparses trigger
+	// publication.
+	// IMPORTANT: keep WHERE clauses in sync with the corresponding BatchInsert queries.
+	GetTimeParseSnapshotSourceStats(ctx context.Context, arg GetTimeParseSnapshotSourceStatsParams) (GetTimeParseSnapshotSourceStatsRow, error)
 	GetUploadKey(ctx context.Context, id uuid.UUID) (WowServerUploadKey, error)
 	GetUploadKeyByHash(ctx context.Context, secretHash string) (GetUploadKeyByHashRow, error)
 	GetUserActionBarSlots(ctx context.Context, userID uuid.UUID) (GetUserActionBarSlotsRow, error)
@@ -281,6 +318,8 @@ type sqlcQuerier interface {
 	InsertServerUploadMeta(ctx context.Context, arg InsertServerUploadMetaParams) error
 	InsertStampedYoutubeVideo(ctx context.Context, arg InsertStampedYoutubeVideoParams) error
 	InsertTenant(ctx context.Context, arg InsertTenantParams) (Tenant, error)
+	// Create a new pending time-parse snapshot for a tenant+lookback.
+	InsertTimeParseSnapshot(ctx context.Context, arg InsertTimeParseSnapshotParams) (TimeParseSnapshot, error)
 	// Upload Keys
 	InsertUploadKey(ctx context.Context, arg InsertUploadKeyParams) (WowServerUploadKey, error)
 	InsertUser(ctx context.Context, arg InsertUserParams) (User, error)
@@ -371,6 +410,8 @@ type sqlcQuerier interface {
 	PruneStaleRankingsInstanceSummaries(ctx context.Context, tenantID uuid.UUID) (int64, error)
 	// Transition a pending snapshot to published. Idempotent on already-published.
 	PublishRankingSnapshot(ctx context.Context, id uuid.UUID) (RankingSnapshot, error)
+	// Transition a pending time-parse snapshot to published. Idempotent on already-published.
+	PublishTimeParseSnapshot(ctx context.Context, id uuid.UUID) (TimeParseSnapshot, error)
 	// Returns box plot statistics (min, q1, median, q3, max, count) per class/spec.
 	// DPS is aggregated per run (sum damage / sum duration across encounters in one
 	// instance run), so each run is one data point. Matches leaderboard aggregation.

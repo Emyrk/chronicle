@@ -6,22 +6,29 @@ type CheckConstraint string
 
 // CheckConstraint enums.
 const (
-	CheckDatasetsSlugFormat             CheckConstraint = "datasets_slug_format"                // datasets
-	CheckTenantsSlugFormat              CheckConstraint = "tenants_slug_format"                 // tenants
-	CheckTenantsSlugReserved            CheckConstraint = "tenants_slug_reserved"               // tenants
-	CheckRetentionPoliciesScope         CheckConstraint = "retention_policies_scope"            // retention_policies
-	CheckRetentionRulesActionCheck      CheckConstraint = "retention_rules_action_check"        // retention_rules
-	CheckFinalizedOrFinalizedAtNull     CheckConstraint = "finalized_or_finalized_at_null"      // river_job
-	CheckKindLength                     CheckConstraint = "kind_length"                         // river_job
-	CheckMaxAttemptsIsPositive          CheckConstraint = "max_attempts_is_positive"            // river_job
-	CheckPriorityInRange                CheckConstraint = "priority_in_range"                   // river_job
-	CheckQueueLength                    CheckConstraint = "queue_length"                        // river_job
-	CheckLineLength                     CheckConstraint = "line_length"                         // river_migration
-	CheckVersionGte1                    CheckConstraint = "version_gte_1"                       // river_migration
-	CheckSharedViewsPayloadMax10Kb      CheckConstraint = "shared_views_payload_max_10kb"       // shared_views
-	CheckSiteConfigIDCheck              CheckConstraint = "site_config_id_check"                // site_config
-	CheckUserPanelLayoutsPayloadSizeChk CheckConstraint = "user_panel_layouts_payload_size_chk" // user_panel_layouts
-	CheckUserPanelLayoutsTitleFormatChk CheckConstraint = "user_panel_layouts_title_format_chk" // user_panel_layouts
-	CheckUserTalentBuildsBuildLengthChk CheckConstraint = "user_talent_builds_build_length_chk" // user_talent_builds
-	CheckUserTalentBuildsNameLengthChk  CheckConstraint = "user_talent_builds_name_length_chk"  // user_talent_builds
+	CheckDatasetsSlugFormat                               CheckConstraint = "datasets_slug_format"                                  // datasets
+	CheckInstanceOverviewMetricsBossDurationNonnegative   CheckConstraint = "instance_overview_metrics_boss_duration_nonnegative"   // instance_overview_metrics
+	CheckInstanceOverviewMetricsBossWithinCombat          CheckConstraint = "instance_overview_metrics_boss_within_combat"          // instance_overview_metrics
+	CheckInstanceOverviewMetricsCombatDurationNonnegative CheckConstraint = "instance_overview_metrics_combat_duration_nonnegative" // instance_overview_metrics
+	CheckInstanceOverviewMetricsCombatWithinTotal         CheckConstraint = "instance_overview_metrics_combat_within_total"         // instance_overview_metrics
+	CheckInstanceOverviewMetricsEncounterSpanNonnegative  CheckConstraint = "instance_overview_metrics_encounter_span_nonnegative"  // instance_overview_metrics
+	CheckInstanceOverviewMetricsPlayerDeathsNonnegative   CheckConstraint = "instance_overview_metrics_player_deaths_nonnegative"   // instance_overview_metrics
+	CheckInstanceOverviewMetricsWipeCountNonnegative      CheckConstraint = "instance_overview_metrics_wipe_count_nonnegative"      // instance_overview_metrics
+	CheckTenantsSlugFormat                                CheckConstraint = "tenants_slug_format"                                   // tenants
+	CheckTenantsSlugReserved                              CheckConstraint = "tenants_slug_reserved"                                 // tenants
+	CheckRetentionPoliciesScope                           CheckConstraint = "retention_policies_scope"                              // retention_policies
+	CheckRetentionRulesActionCheck                        CheckConstraint = "retention_rules_action_check"                          // retention_rules
+	CheckFinalizedOrFinalizedAtNull                       CheckConstraint = "finalized_or_finalized_at_null"                        // river_job
+	CheckKindLength                                       CheckConstraint = "kind_length"                                           // river_job
+	CheckMaxAttemptsIsPositive                            CheckConstraint = "max_attempts_is_positive"                              // river_job
+	CheckPriorityInRange                                  CheckConstraint = "priority_in_range"                                     // river_job
+	CheckQueueLength                                      CheckConstraint = "queue_length"                                          // river_job
+	CheckLineLength                                       CheckConstraint = "line_length"                                           // river_migration
+	CheckVersionGte1                                      CheckConstraint = "version_gte_1"                                         // river_migration
+	CheckSharedViewsPayloadMax10Kb                        CheckConstraint = "shared_views_payload_max_10kb"                         // shared_views
+	CheckSiteConfigIDCheck                                CheckConstraint = "site_config_id_check"                                  // site_config
+	CheckUserPanelLayoutsPayloadSizeChk                   CheckConstraint = "user_panel_layouts_payload_size_chk"                   // user_panel_layouts
+	CheckUserPanelLayoutsTitleFormatChk                   CheckConstraint = "user_panel_layouts_title_format_chk"                   // user_panel_layouts
+	CheckUserTalentBuildsBuildLengthChk                   CheckConstraint = "user_talent_builds_build_length_chk"                   // user_talent_builds
+	CheckUserTalentBuildsNameLengthChk                    CheckConstraint = "user_talent_builds_name_length_chk"                    // user_talent_builds
 )

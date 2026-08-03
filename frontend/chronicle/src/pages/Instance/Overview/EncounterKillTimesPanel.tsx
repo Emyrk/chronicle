@@ -12,9 +12,8 @@ import { cn } from "@/lib/utils";
 import { formatClearDuration } from "@/pages/GuildPage/panels/clearTimeUtils";
 import { parseBgColor, parseBorderColor, parseColor } from "../parseColors";
 import type { PopulationSelection } from "./populationSelectionState";
-import { useSpeedrunPopulation } from "./overviewQueries";
+import { useInstanceTimeParses, useSpeedrunPopulation } from "./overviewQueries";
 import {
-  averageKillTimePercentile,
   buildEncounterKillTimeComparisonRows,
   summarizeEncounterKillTimes,
   type EncounterKillTimeSummary,
@@ -184,10 +183,15 @@ export function EncounterKillTimesPanel({
 }) {
   const primaryQuery = useSpeedrunPopulation(primary);
   const comparisonQuery = useSpeedrunPopulation(comparison);
+  const primaryInstanceId = primary.kind === "instance" ? primary.instanceId : undefined;
+  const timeParsesQuery = useInstanceTimeParses(primaryInstanceId);
   const primarySummaries = summarizeEncounterKillTimes(primaryQuery.data?.runs ?? []);
   const comparisonSummaries = summarizeEncounterKillTimes(comparisonQuery.data?.runs ?? []);
   const rows = buildEncounterKillTimeComparisonRows(primarySummaries, comparisonSummaries);
-  const averageParse = averageKillTimePercentile(rows.map((row) => row.percentile));
+  // Average boss parse comes exclusively from the snapshot API — no client-side fallback.
+  const averageParse = timeParsesQuery.data?.available && timeParsesQuery.data.average_boss_kill_parse
+    ? timeParsesQuery.data.average_boss_kill_parse.display_score
+    : null;
   const killedBossCount = rows.filter((row) => row.primarySummary !== null).length;
   const availableParseCount = rows.filter((row) => row.percentile !== null).length;
   const incompleteAverage = killedBossCount < rows.length;

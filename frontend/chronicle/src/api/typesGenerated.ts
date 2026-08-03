@@ -350,6 +350,20 @@ export interface AzerothCorePingResponse {
     readonly status: string;
 }
 
+// From chroniclesdk/time_parses.go
+/**
+ * BossKillTimeParse is a per-boss kill-time parse.
+ */
+export interface BossKillTimeParse {
+    readonly encounter_name: string;
+    readonly duration_ms: number;
+    readonly precise_score: number;
+    readonly display_score: number;
+    readonly rank: number;
+    readonly sample_size: number;
+    readonly status: string;
+}
+
 // From chroniclesdk/tenant.go
 /**
  * Branding holds the visual identity for a tenant subdomain or the primary domain.
@@ -1109,6 +1123,39 @@ export interface InstanceReport {
      * UnknownUnits maps creature entry IDs not in the hostiles map to name and hit count.
      */
     readonly unknown_units?: Record<number, UnknownUnit>;
+}
+
+// From chroniclesdk/time_parses.go
+/**
+ * InstanceTimeParsesResponse contains time-based parse scores for a specific
+ * instance, scoring clear time and per-boss kill times against an immutable
+ * population snapshot.
+ */
+export interface InstanceTimeParsesResponse {
+    readonly available: boolean;
+    readonly reason?: string;
+    readonly snapshot_id: string;
+    readonly cutoff: string;
+    readonly lookback_days: number;
+    /**
+     * PolicyVersion and QueryVersion identify the scoring semantics used.
+     */
+    readonly policy_version: number;
+    readonly query_version: number;
+    /**
+     * ClearTime is the instance's clear-time parse against the population.
+     * Nil when the instance has no qualified clear.
+     */
+    readonly clear_time?: TimeParseScore;
+    /**
+     * BossKillTimes contains per-boss kill-time parses.
+     */
+    readonly boss_kill_times: readonly BossKillTimeParse[];
+    /**
+     * AverageBossKillParse is the arithmetic mean of available per-boss
+     * precise scores. Nil when no bosses are scored.
+     */
+    readonly average_boss_kill_parse?: TimeParseAverage;
 }
 
 // From chroniclesdk/log.go
@@ -2543,6 +2590,30 @@ export interface Tenant {
 // From chroniclesdk/server_application.go
 export interface ThemePayload {
     readonly theme: Record<string, string>;
+}
+
+// From chroniclesdk/time_parses.go
+/**
+ * TimeParseAverage is the average across per-boss time parses.
+ */
+export interface TimeParseAverage {
+    readonly precise_score: number;
+    readonly display_score: number;
+    readonly killed: number;
+    readonly selected: number;
+}
+
+// From chroniclesdk/time_parses.go
+/**
+ * TimeParseScore is a single time-based parse result.
+ */
+export interface TimeParseScore {
+    readonly duration_ms: number;
+    readonly precise_score: number;
+    readonly display_score: number;
+    readonly rank: number;
+    readonly sample_size: number;
+    readonly status: string;
 }
 
 // From chroniclesdk/user.go

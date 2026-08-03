@@ -54,6 +54,11 @@ type Service struct {
 	SnapshotDispatchWorker *WorkerPublishParseSnapshots
 	// SnapshotTenantWorker publishes a snapshot for a single tenant+lookback.
 	SnapshotTenantWorker *WorkerPublishParseSnapshotTenant
+
+	// TimeParseSnapshotDispatchWorker fans out per-tenant time-parse snapshot jobs.
+	TimeParseSnapshotDispatchWorker *WorkerPublishTimeParseSnapshots
+	// TimeParseSnapshotTenantWorker publishes a time-parse snapshot for a single tenant+lookback.
+	TimeParseSnapshotTenantWorker *WorkerPublishTimeParseSnapshotTenant
 }
 
 func New(broker *services.Services) *Service {
@@ -106,6 +111,16 @@ func (s *Service) Start(_ context.Context) error {
 		Logger: namedLogger,
 	}
 
+	s.TimeParseSnapshotDispatchWorker = &WorkerPublishTimeParseSnapshots{
+		Store:  store,
+		Logger: namedLogger,
+		// Queue is set by serviceriver after queue creation.
+	}
+	s.TimeParseSnapshotTenantWorker = &WorkerPublishTimeParseSnapshotTenant{
+		Store:  store,
+		Logger: namedLogger,
+	}
+
 	s.router = chi.NewRouter()
 	s.setupRoutes()
 
@@ -145,6 +160,7 @@ func (s *Service) setupRoutes() {
 
 	// Instance parses
 	s.router.Get("/instances/{instanceID}/parses", s.handleInstanceParses)
+	s.router.Get("/instances/{instanceID}/time-parses", s.handleInstanceTimeParses)
 
 	// Cohort viewer (debugging/transparency)
 	s.router.Get("/snapshots", s.handleListSnapshots)
