@@ -42,6 +42,7 @@ import type { StripType } from "./EventsPanels/Strips/types";
 import { PanelTimingProvider, PanelTimingDisplay, PanelTimingResetter } from "./EventsPanels/PanelTimingContext";
 import { ChartDataRegistryProvider } from "./EventsPanels/ChartDataRegistry";
 import { PanelExplainerView } from "./PanelExplainer";
+import { DamageDoneExplainView, isDamageDoneExplainType } from "./EventsPanels/DamageDone/Explain";
 import { RandomTip } from "@/components/RandomTip";
 import { InstanceActionBar } from "@/components/InstanceActionBar/InstanceActionBar";
 import { InstanceHelpSheet } from "@/components/HelpSheet";
@@ -3006,6 +3007,17 @@ export function InstancePageView({
   
   // If explainer mode is active on desktop, show only the explainer view
   if (explainerPanelType && !isMobile) {
+    // Damage Done panels get the rich explain page with live aggregation
+    if (isDamageDoneExplainType(explainerPanelType)) {
+      return (
+        <DamageDoneExplainView
+          panelType={explainerPanelType}
+          context={explainerPanelContext}
+          durationMs={totalDurationMs}
+          onExit={handleExplainerExit}
+        />
+      );
+    }
     return (
       <PanelExplainerView
         panelType={explainerPanelType}

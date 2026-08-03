@@ -5,6 +5,10 @@
  * "See example" renders the production DamageDoneContent with deterministic
  * curated fixture data. Returning to live data restores the panel without
  * mutating URL state, selections, or filters.
+ *
+ * Live aggregation: runs usePanelAggregation internally with the damage_done
+ * panel definition so it receives real DamageDoneResult from the worker
+ * pipeline — no duplicated processing, no DOM inference.
  */
 
 import { useState, useMemo, useCallback } from "react";
@@ -16,6 +20,8 @@ import { cn } from "@/lib/utils";
 import type { DamageDoneResult } from "../damageDone.processor";
 import { DamageDoneContent } from "../DamageDoneContent";
 import type { PanelContext, PanelRenderProps } from "../../types";
+import { PANELS } from "../../EventsPanel";
+import { usePanelAggregation } from "../../usePanelAggregation";
 
 import {
   deriveCapabilities,
@@ -31,32 +37,40 @@ import { GlossaryTermInline } from "./Glossary";
 export type ExplainDataMode = "live" | "example";
 
 export interface DamageDoneExplainViewProps {
-  /** Live panel result (may be null during loading). */
-  liveResult: DamageDoneResult | null;
-  /** Live panel context. */
-  liveContext: PanelContext;
-  /** Live panel duration in ms. */
-  liveDurationMs: number;
-  /** Live perSecond toggle state. */
-  livePerSecond: boolean;
+  /** Which damage panel variant is being explained. */
+  panelType: string;
+  /** Live panel context (instance, selections, encounters). */
+  context: PanelContext;
+  /** Duration of selected encounters in ms. */
+  durationMs: number;
   /** Exit the Explain page. */
   onExit: () => void;
 }
 
 export function DamageDoneExplainView({
-  liveResult,
-  liveContext,
-  liveDurationMs,
-  livePerSecond,
+  panelType,
+  context,
+  durationMs,
   onExit,
 }: DamageDoneExplainViewProps) {
   const [dataMode, setDataMode] = useState<ExplainDataMode>("live");
   const [activeLesson, setActiveLesson] = useState<LessonId | null>(null);
 
+  // Run the real aggregation pipeline for the damage_done panel.
+  // This reuses the existing worker pool and stream caching — no duplication.
+  const panel = PANELS[panelType] ?? PANELS["damage_done"];
+  const aggregation = usePanelAggregation<DamageDoneResult>({
+    panel,
+    context,
+  });
+
+  const liveResult: DamageDoneResult | null =
+    aggregation.loading ? null : aggregation.result;
+
   // Derive capabilities from live result
   const capabilities = useMemo(
-    () => deriveCapabilities(liveResult, liveDurationMs),
-    [liveResult, liveDurationMs],
+    () => deriveCapabilities(liveResult, durationMs),
+    [liveResult, durationMs],
   );
 
   // Resolve lesson states
@@ -76,21 +90,20 @@ export function DamageDoneExplainView({
     if (dataMode === "example") {
       return exampleProps;
     }
-    // Live mode
-    if (!liveResult) return null;
+    // Live mode — pass through real aggregation state
     return {
-      result: liveResult,
-      totalEvents: 0,
-      processingTimeMs: null,
-      durationMs: liveDurationMs,
-      perSecond: livePerSecond,
-      checkboxChecked: livePerSecond,
-      loading: false,
-      processing: false,
-      error: null,
-      context: liveContext,
+      result: aggregation.result,
+      totalEvents: aggregation.totalEvents,
+      processingTimeMs: aggregation.processingTimeMs,
+      durationMs,
+      perSecond: false,
+      checkboxChecked: false,
+      loading: aggregation.loading,
+      processing: aggregation.processing,
+      error: aggregation.error,
+      context,
     };
-  }, [dataMode, liveResult, liveDurationMs, livePerSecond, liveContext, exampleProps]);
+  }, [dataMode, aggregation, durationMs, context, exampleProps]);
 
   const handleSeeExample = useCallback((lessonId: LessonId) => {
     setDataMode("example");
