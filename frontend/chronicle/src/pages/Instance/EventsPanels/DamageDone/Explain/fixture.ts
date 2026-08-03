@@ -1,0 +1,358 @@
+/**
+ * Deterministic curated fixture data for the Damage Done Explain example mode.
+ *
+ * Supports ALL lessons: multiple players/classes, abilities with detailed
+ * hit stats (min/avg/max), targets, rank-separated spell IDs, and focus data.
+ *
+ * Uses hardcoded values — no API calls, no randomness, no 404 risk.
+ */
+
+import type { DamageDoneResult, DamageDoneData } from "../damageDone.processor";
+import type { DamageAbilityBreakout, HitTypeStats, SpellIdAbilityBreakout } from "../../processors/abilityBreakout";
+import { createGuidCache } from "../../processors/guidCache";
+import type { PanelContext, EntitySelection } from "../../types";
+import type { Instance } from "../../../InstancePage";
+import type { PanelRenderProps } from "../../types";
+import { PERIODIC_SPELL_ID_OFFSET } from "../../processors/abilityBreakout";
+
+// ── Player GUIDs ──
+const PLAYER_MAGE = "0x000000000000A001";
+const PLAYER_WARRIOR = "0x000000000000A002";
+const PLAYER_ROGUE = "0x000000000000A003";
+const PLAYER_WARLOCK = "0x000000000000A004";
+const PLAYER_HUNTER = "0x000000000000A005";
+
+// ── Enemy GUIDs ──
+const ENEMY_BOSS = "0x000000000000B001";
+const ENEMY_ADD = "0x000000000000B002";
+
+// ── Encounter IDs ──
+const ENCOUNTER_ID = "example-enc-001";
+
+// ── Helpers ──
+function makeHitStats(count: number, total: number, min: number, max: number): HitTypeStats {
+  return { count, total, min, max };
+}
+
+function makeAbilityBreakout(opts: {
+  total: number;
+  count: number;
+  crits: number;
+  hits: number;
+  misses?: number;
+  hitStats?: HitTypeStats;
+  critStats?: HitTypeStats;
+  glancingStats?: HitTypeStats;
+  absorbed?: number;
+  dodges?: number;
+  parries?: number;
+  glancing?: number;
+}): DamageAbilityBreakout {
+  return {
+    Total: opts.total,
+    Count: opts.count,
+    Crits: opts.crits,
+    Hits: opts.hits,
+    Misses: opts.misses ?? 0,
+    HitStats: opts.hitStats,
+    CritStats: opts.critStats,
+    GlancingStats: opts.glancingStats,
+    Absorbed: opts.absorbed,
+    Dodges: opts.dodges,
+    Parries: opts.parries,
+    Glancing: opts.glancing,
+  };
+}
+
+function makeSpellIdBreakout(
+  spellName: string,
+  breakout: DamageAbilityBreakout,
+): SpellIdAbilityBreakout {
+  return { ...breakout, spellName };
+}
+
+// ── Player data ──
+function makePlayerData(id: string, name: string, className: string, totalDamage: number): DamageDoneData {
+  return {
+    playerID: id,
+    playerName: name,
+    className,
+    specialization: "",
+    target: new Map([[ENEMY_BOSS, Math.round(totalDamage * 0.7)], [ENEMY_ADD, Math.round(totalDamage * 0.3)]]),
+  };
+}
+
+// ── Build the fixture result ──
+function buildFixtureResult(): DamageDoneResult {
+  // Encounter damage
+  const encounterDamage = new Map<string, Map<string, DamageDoneData>>();
+  const unitDamage = new Map<string, DamageDoneData>();
+  unitDamage.set(PLAYER_MAGE, makePlayerData(PLAYER_MAGE, "Frostweaver", "Mage", 245000));
+  unitDamage.set(PLAYER_WARRIOR, makePlayerData(PLAYER_WARRIOR, "Steelbreaker", "Warrior", 198000));
+  unitDamage.set(PLAYER_ROGUE, makePlayerData(PLAYER_ROGUE, "Shadowstep", "Rogue", 215000));
+  unitDamage.set(PLAYER_WARLOCK, makePlayerData(PLAYER_WARLOCK, "Darkbinder", "Warlock", 230000));
+  unitDamage.set(PLAYER_HUNTER, makePlayerData(PLAYER_HUNTER, "Eagleeye", "Hunter", 175000));
+  encounterDamage.set(ENCOUNTER_ID, unitDamage);
+
+  // By ability
+  const byAbility = new Map<string, Map<string, DamageAbilityBreakout>>();
+
+  // Mage abilities
+  const mageAbilities = new Map<string, DamageAbilityBreakout>();
+  mageAbilities.set("Frostbolt", makeAbilityBreakout({
+    total: 145000, count: 80, crits: 24, hits: 52, misses: 4,
+    hitStats: makeHitStats(52, 94000, 1200, 2400),
+    critStats: makeHitStats(24, 51000, 1800, 3600),
+  }));
+  mageAbilities.set("Ice Lance", makeAbilityBreakout({
+    total: 55000, count: 40, crits: 12, hits: 26, misses: 2,
+    hitStats: makeHitStats(26, 26000, 800, 1200),
+    critStats: makeHitStats(12, 29000, 2000, 3000),
+  }));
+  mageAbilities.set("Cone of Cold", makeAbilityBreakout({
+    total: 45000, count: 15, crits: 5, hits: 10,
+    hitStats: makeHitStats(10, 25000, 2000, 3200),
+    critStats: makeHitStats(5, 20000, 3500, 5000),
+  }));
+  byAbility.set(PLAYER_MAGE, mageAbilities);
+
+  // Warrior abilities
+  const warriorAbilities = new Map<string, DamageAbilityBreakout>();
+  warriorAbilities.set("Heroic Strike", makeAbilityBreakout({
+    total: 85000, count: 60, crits: 15, hits: 40, misses: 3, glancing: 2,
+    hitStats: makeHitStats(40, 56000, 1000, 1800),
+    critStats: makeHitStats(15, 27000, 1500, 2500),
+    glancingStats: makeHitStats(2, 2000, 800, 1200),
+  }));
+  warriorAbilities.set("Execute", makeAbilityBreakout({
+    total: 68000, count: 12, crits: 6, hits: 5, misses: 1,
+    hitStats: makeHitStats(5, 25000, 4200, 5800),
+    critStats: makeHitStats(6, 42000, 6000, 8200),
+  }));
+  warriorAbilities.set("Whirlwind", makeAbilityBreakout({
+    total: 45000, count: 30, crits: 8, hits: 20, dodges: 2,
+    hitStats: makeHitStats(20, 28000, 1100, 1700),
+    critStats: makeHitStats(8, 17000, 1800, 2600),
+  }));
+  byAbility.set(PLAYER_WARRIOR, warriorAbilities);
+
+  // Rogue abilities
+  const rogueAbilities = new Map<string, DamageAbilityBreakout>();
+  rogueAbilities.set("Sinister Strike", makeAbilityBreakout({
+    total: 95000, count: 65, crits: 20, hits: 42, misses: 3,
+    hitStats: makeHitStats(42, 58000, 1100, 1700),
+    critStats: makeHitStats(20, 37000, 1500, 2400),
+  }));
+  rogueAbilities.set("Eviscerate", makeAbilityBreakout({
+    total: 72000, count: 18, crits: 7, hits: 11,
+    hitStats: makeHitStats(11, 38000, 2800, 4200),
+    critStats: makeHitStats(7, 34000, 4000, 6200),
+  }));
+  rogueAbilities.set("Blade Flurry", makeAbilityBreakout({
+    total: 48000, count: 25, crits: 6, hits: 19,
+    hitStats: makeHitStats(19, 30000, 1200, 2000),
+    critStats: makeHitStats(6, 18000, 2500, 3800),
+  }));
+  byAbility.set(PLAYER_ROGUE, rogueAbilities);
+
+  // Warlock abilities
+  const warlockAbilities = new Map<string, DamageAbilityBreakout>();
+  warlockAbilities.set("Shadow Bolt", makeAbilityBreakout({
+    total: 130000, count: 55, crits: 18, hits: 34, misses: 3,
+    hitStats: makeHitStats(34, 74000, 1800, 2800),
+    critStats: makeHitStats(18, 56000, 2700, 4200),
+  }));
+  warlockAbilities.set("Corruption", makeAbilityBreakout({
+    total: 60000, count: 45, crits: 0, hits: 45,
+    hitStats: makeHitStats(45, 60000, 1100, 1500),
+  }));
+  warlockAbilities.set("Immolate", makeAbilityBreakout({
+    total: 40000, count: 30, crits: 8, hits: 22,
+    hitStats: makeHitStats(22, 24000, 900, 1300),
+    critStats: makeHitStats(8, 16000, 1600, 2400),
+  }));
+  byAbility.set(PLAYER_WARLOCK, warlockAbilities);
+
+  // Hunter abilities
+  const hunterAbilities = new Map<string, DamageAbilityBreakout>();
+  hunterAbilities.set("Aimed Shot", makeAbilityBreakout({
+    total: 85000, count: 25, crits: 10, hits: 14, misses: 1,
+    hitStats: makeHitStats(14, 42000, 2500, 3800),
+    critStats: makeHitStats(10, 43000, 3600, 5200),
+  }));
+  hunterAbilities.set("Auto Shot", makeAbilityBreakout({
+    total: 55000, count: 50, crits: 12, hits: 35, glancing: 3,
+    hitStats: makeHitStats(35, 35000, 800, 1200),
+    critStats: makeHitStats(12, 18000, 1200, 1800),
+    glancingStats: makeHitStats(3, 2000, 550, 750),
+  }));
+  hunterAbilities.set("Multi-Shot", makeAbilityBreakout({
+    total: 35000, count: 15, crits: 4, hits: 11,
+    hitStats: makeHitStats(11, 22000, 1500, 2500),
+    critStats: makeHitStats(4, 13000, 2800, 3800),
+  }));
+  byAbility.set(PLAYER_HUNTER, hunterAbilities);
+
+  // By ability by spell ID (for spell ranks)
+  const byAbilityBySpellId = new Map<string, Map<number, SpellIdAbilityBreakout>>();
+  
+  // Mage: Frostbolt Rank 11 (spellId 25304) and Rank 4 (spellId 837)
+  const mageSpells = new Map<number, SpellIdAbilityBreakout>();
+  mageSpells.set(25304, makeSpellIdBreakout("Frostbolt", makeAbilityBreakout({
+    total: 138000, count: 72, crits: 22, hits: 48, misses: 2,
+    hitStats: makeHitStats(48, 90000, 1400, 2400),
+    critStats: makeHitStats(22, 48000, 1800, 3600),
+  })));
+  mageSpells.set(837, makeSpellIdBreakout("Frostbolt", makeAbilityBreakout({
+    total: 7000, count: 8, crits: 2, hits: 4, misses: 2,
+    hitStats: makeHitStats(4, 4000, 600, 1200),
+    critStats: makeHitStats(2, 3000, 1200, 1800),
+  })));
+  mageSpells.set(12557, makeSpellIdBreakout("Ice Lance", makeAbilityBreakout({
+    total: 55000, count: 40, crits: 12, hits: 26, misses: 2,
+    hitStats: makeHitStats(26, 26000, 800, 1200),
+    critStats: makeHitStats(12, 29000, 2000, 3000),
+  })));
+  mageSpells.set(10159, makeSpellIdBreakout("Cone of Cold", makeAbilityBreakout({
+    total: 45000, count: 15, crits: 5, hits: 10,
+    hitStats: makeHitStats(10, 25000, 2000, 3200),
+    critStats: makeHitStats(5, 20000, 3500, 5000),
+  })));
+  byAbilityBySpellId.set(PLAYER_MAGE, mageSpells);
+
+  // Warlock: Corruption (direct) + Corruption (periodic with offset)
+  const warlockSpells = new Map<number, SpellIdAbilityBreakout>();
+  warlockSpells.set(25311, makeSpellIdBreakout("Shadow Bolt", makeAbilityBreakout({
+    total: 130000, count: 55, crits: 18, hits: 34, misses: 3,
+    hitStats: makeHitStats(34, 74000, 1800, 2800),
+    critStats: makeHitStats(18, 56000, 2700, 4200),
+  })));
+  warlockSpells.set(25311 + PERIODIC_SPELL_ID_OFFSET, makeSpellIdBreakout("Corruption", makeAbilityBreakout({
+    total: 60000, count: 45, crits: 0, hits: 45,
+    hitStats: makeHitStats(45, 60000, 1100, 1500),
+  })));
+  warlockSpells.set(25309, makeSpellIdBreakout("Immolate", makeAbilityBreakout({
+    total: 40000, count: 30, crits: 8, hits: 22,
+    hitStats: makeHitStats(22, 24000, 900, 1300),
+    critStats: makeHitStats(8, 16000, 1600, 2400),
+  })));
+  byAbilityBySpellId.set(PLAYER_WARLOCK, warlockSpells);
+
+  // By target
+  const byTarget = new Map<string, Map<string, number>>();
+  for (const [playerId, data] of unitDamage) {
+    byTarget.set(playerId, new Map(data.target));
+  }
+
+  return {
+    EncounterDamage: encounterDamage,
+    ByAbility: byAbility,
+    ByAbilityBySpellId: byAbilityBySpellId,
+    ByTarget: byTarget,
+    // Vulnerability tracking — empty for fixture
+    EncounterVulnerabilityBonus: new Map(),
+    EncounterVulnerabilityBase: new Map(),
+    VulnerabilityByAbilityBonus: new Map(),
+    VulnerabilityByAbilityBase: new Map(),
+    VulnerabilityByAbilityBySpellIdBonus: new Map(),
+    VulnerabilityByAbilityBySpellIdBase: new Map(),
+    VulnerabilityByTargetBonus: new Map(),
+    VulnerabilityByTargetBase: new Map(),
+    GuidCache: createGuidCache(),
+    AuraState: { activeByEncounter: new Map() },
+    _damageEventsWithSunderArmor: 0,
+  };
+}
+
+// ── Singleton fixture (created once, reused) ──
+
+let _fixtureResult: DamageDoneResult | null = null;
+
+/** Get the deterministic curated fixture DamageDoneResult. */
+export function getFixtureResult(): DamageDoneResult {
+  if (!_fixtureResult) {
+    _fixtureResult = buildFixtureResult();
+  }
+  return _fixtureResult;
+}
+
+/** Fixture encounter ID. */
+export { ENCOUNTER_ID as FIXTURE_ENCOUNTER_ID };
+
+/** Fixture duration in ms (120 seconds — a typical boss fight). */
+export const FIXTURE_DURATION_MS = 120_000;
+
+/** Build a minimal Instance for the fixture context. */
+export function getFixtureInstance(): Instance {
+  return {
+    id: "example-instance",
+    name: "Example Raid",
+    startTime: "2024-01-01T00:00:00Z",
+    encounters: [
+      {
+        id: ENCOUNTER_ID,
+        name: "Example Boss",
+        boss: true,
+        kill_type: "kill",
+        start_time: "2024-01-01T00:00:00Z",
+        end_time: "2024-01-01T00:02:00Z",
+        enemies: [
+          { guid: ENEMY_BOSS, name: "Example Boss" },
+          { guid: ENEMY_ADD, name: "Boss Add" },
+        ],
+      },
+    ],
+    players: {
+      [PLAYER_MAGE]: { name: "Frostweaver", class: "Mage", race: "Human", level: 60 },
+      [PLAYER_WARRIOR]: { name: "Steelbreaker", class: "Warrior", race: "Orc", level: 60 },
+      [PLAYER_ROGUE]: { name: "Shadowstep", class: "Rogue", race: "NightElf", level: 60 },
+      [PLAYER_WARLOCK]: { name: "Darkbinder", class: "Warlock", race: "Undead", level: 60 },
+      [PLAYER_HUNTER]: { name: "Eagleeye", class: "Hunter", race: "Dwarf", level: 60 },
+    },
+    units: {
+      [ENEMY_BOSS]: { name: "Example Boss", owner: null, entry: 1 },
+      [ENEMY_ADD]: { name: "Boss Add", owner: null, entry: 2 },
+    },
+    capabilities: [],
+  };
+}
+
+/** Build a PanelContext for the fixture data. */
+export function getFixturePanelContext(): PanelContext {
+  const instance = getFixtureInstance();
+  const entitySelection: EntitySelection = {
+    enemyIds: new Set(),
+    playerIds: new Set(),
+  };
+
+  return {
+    instance,
+    selectedEncounterIds: [ENCOUNTER_ID],
+    entitySelection,
+  };
+}
+
+/** Build PanelRenderProps for the fixture data. */
+export function getFixtureRenderProps(): PanelRenderProps<DamageDoneResult> {
+  return {
+    result: getFixtureResult(),
+    totalEvents: 500,
+    processingTimeMs: 0,
+    durationMs: FIXTURE_DURATION_MS,
+    perSecond: false,
+    checkboxChecked: false,
+    loading: false,
+    processing: false,
+    error: null,
+    context: getFixturePanelContext(),
+  };
+}
+
+/** Deterministic parse-pill data keyed by player GUID for the fixture. */
+export const FIXTURE_PARSE_PILLS: Record<string, { score: number; color: string; label: string }> = {
+  [PLAYER_MAGE]: { score: 95, color: "#e268a8", label: "95" },
+  [PLAYER_WARRIOR]: { score: 72, color: "#1eff00", label: "72" },
+  [PLAYER_ROGUE]: { score: 84, color: "#0070dd", label: "84" },
+  [PLAYER_WARLOCK]: { score: 90, color: "#a335ee", label: "90" },
+  [PLAYER_HUNTER]: { score: 55, color: "#1eff00", label: "55" },
+};
