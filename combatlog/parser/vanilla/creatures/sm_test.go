@@ -70,6 +70,45 @@ func TestVanillaPlusMograine_IgnoresPhaseOneDeath(t *testing.T) {
 	require.Equal(t, period.EndStateSlain, periods[0].EndState)
 }
 
+func TestVanillaPlusMograine_InfersResurrectionFromOffensiveActivity(t *testing.T) {
+	t.Parallel()
+
+	flavor := database.WoWFlavor{database.FlavorVanilla, database.FlavorVanillaPlus}
+	chars := characters.NewCharacters(
+		unitdb.New(),
+		creatures.VanillaCharacterFactories(flavor),
+		identifier.NewIdentifier(map[uint32]identifier.Identity{}),
+	)
+
+	player := guid.GUID(0x1)
+	mograine := creatureGUID(25227, 0x1)
+	whitemane := creatureGUID(25228, 0x2)
+	base := time.Date(2026, time.January, 1, 0, 0, 0, 0, time.UTC)
+
+	_, err := chars.Process(damage(base, player, mograine))
+	require.NoError(t, err)
+	_, err = chars.Process(slain(base.Add(time.Second), player, mograine))
+	require.NoError(t, err)
+	_, err = chars.Process(damage(base.Add(70*time.Second), player, whitemane))
+	require.NoError(t, err)
+
+	// Some Vanilla+ logs omit Whitemane's Scarlet Resurrection cast. Mograine
+	// dealing direct damage still proves that he returned for the final phase.
+	_, err = chars.Process(damage(base.Add(71*time.Second), mograine, player))
+	require.NoError(t, err)
+	_, err = chars.Process(slain(base.Add(72*time.Second), player, whitemane))
+	require.NoError(t, err)
+	_, err = chars.Process(slain(base.Add(73*time.Second), player, mograine))
+	require.NoError(t, err)
+
+	mograineChar, ok := chars.Get(mograine)
+	require.True(t, ok)
+	require.False(t, mograineChar.IsActive(), "post-resurrection death should end Mograine's activity")
+	periods := mograineChar.Periods()
+	require.Len(t, periods, 1)
+	require.Equal(t, period.EndStateSlain, periods[0].EndState)
+}
+
 func TestVanillaPlusMograine_ResetsAfterWipe(t *testing.T) {
 	t.Parallel()
 

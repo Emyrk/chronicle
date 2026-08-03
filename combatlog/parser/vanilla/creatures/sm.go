@@ -37,7 +37,9 @@ func (c *vanillaPlusMograineCharacter) Process(m messages.Message) error {
 		c.Bump("whitemane_activity_before_resurrection", m)
 	}
 
-	if c.awaitingResurrection && isVanillaPlusMograineResurrection(m) {
+	if c.awaitingResurrection && (isVanillaPlusMograineResurrection(m) || isVanillaPlusMograineOffensiveActivity(m)) {
+		// Some Vanilla+ logs omit Scarlet Resurrection. Direct damage sourced
+		// from Mograine still proves he has returned for the final phase.
 		c.awaitingResurrection = false
 		c.resurrected = true
 		c.LastSlain = nil
@@ -86,6 +88,16 @@ func isVanillaPlusWhitemaneActivity(m messages.Message) bool {
 		}
 	}
 	return false
+}
+
+func isVanillaPlusMograineOffensiveActivity(m messages.Message) bool {
+	damage, ok := m.(*messages.Damage)
+	if !ok || damage.Caster == nil || !damage.RequiresActive() {
+		return false
+	}
+
+	entry, ok := damage.Caster.GetEntry()
+	return ok && entry == vanillaPlusMograine
 }
 
 func isVanillaPlusMograineResurrection(m messages.Message) bool {
