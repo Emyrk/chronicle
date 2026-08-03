@@ -79,6 +79,7 @@ import { DatasetsTab } from "./pages/GameData/DatasetsTab"
 import { LeaderboardsPage, LeaderboardRedirect, RankingsRedirect } from "./pages/Leaderboards/LeaderboardsPage"
 import { CensusPage } from "./pages/Census/CensusPage"
 import { Layout } from "./components/Layout/Layout"
+import { TenantDatasetLayout } from "./components/Layout/TenantDatasetLayout"
 
 // Backend-handled paths that should bypass React Router
 const BACKEND_PATHS = ["/saffron", "/river", "/api", "/auth"]
@@ -144,29 +145,33 @@ function App() {
           <Route path="keys" element={<UploadKeysPage />} />
           <Route path="retention" element={<RetentionPage />} />
         </Route>
-        <Route path="/wowdb" element={<WoWDBLayout />}>
-          <Route index element={<ItemExplorerPage />} />
-          <Route path="items" element={<ItemExplorerPage />} />
-          <Route path="spells" element={<SpellExplorerPage />} />
-          <Route path="creatures" element={<CreatureExplorerPage />} />
-          <Route path="sets" element={<ItemSetExplorerPage />} />
-          <Route path="set" element={<ItemSetDetailPage />} />
-          <Route path="item" element={<ItemPage />} />
+        <Route element={<TenantDatasetLayout />}>
+          <Route path="/wowdb" element={<WoWDBLayout />}>
+            <Route index element={<ItemExplorerPage />} />
+            <Route path="items" element={<ItemExplorerPage />} />
+            <Route path="spells" element={<SpellExplorerPage />} />
+            <Route path="creatures" element={<CreatureExplorerPage />} />
+            <Route path="sets" element={<ItemSetExplorerPage />} />
+            <Route path="set" element={<ItemSetDetailPage />} />
+            <Route path="item" element={<ItemPage />} />
+          </Route>
+          <Route path="/wowdb/spell" element={<SpellPage />} />
+          <Route path="/wowdb/spell/:spellId" element={<SpellPage />} />
+          <Route path="/wowdb/spell-by-name" element={<SpellByNamePage />} />
+          <Route path="/wowdb/spell-by-name/:name" element={<SpellByNamePage />} />
         </Route>
-        <Route path="/wowdb/spell" element={<SpellPage />} />
-        <Route path="/wowdb/spell/:spellId" element={<SpellPage />} />
-        <Route path="/wowdb/spell-by-name" element={<SpellByNamePage />} />
-        <Route path="/wowdb/spell-by-name/:name" element={<SpellByNamePage />} />
-        <Route path="/technical" element={<TechnicalDetailsPage />} />
-        <Route path="/technical/extra-attack-spells" element={<ExtraAttackSpellsPage />} />
-        <Route path="/technical/vulnerability-spells" element={<VulnerabilitySpellsPage />} />
-        <Route path="/technical/periodic-spells" element={<PeriodicSpellsPage />} />
-        <Route path="/technical/aura-duration-modifiers" element={<AuraDurationModifiersPage />} />
-        <Route path="/technical/class-spells" element={<ClassSpellsPage />} />
-        <Route path="/technical/pet-targeting-abilities" element={<PetTargetingAbilitiesPage />} />
-        <Route path="/technical/talent-trees" element={<TalentTreesPage />} />
-        <Route path="/technical/consumables" element={<ConsumablesPage />} />
-        <Route path="/technical/cooldowns" element={<CooldownSpellsPage />} />
+        <Route path="/technical" element={<TenantDatasetLayout />}>
+          <Route index element={<TechnicalDetailsPage />} />
+          <Route path="extra-attack-spells" element={<ExtraAttackSpellsPage />} />
+          <Route path="vulnerability-spells" element={<VulnerabilitySpellsPage />} />
+          <Route path="periodic-spells" element={<PeriodicSpellsPage />} />
+          <Route path="aura-duration-modifiers" element={<AuraDurationModifiersPage />} />
+          <Route path="class-spells" element={<ClassSpellsPage />} />
+          <Route path="pet-targeting-abilities" element={<PetTargetingAbilitiesPage />} />
+          <Route path="talent-trees" element={<TalentTreesPage />} />
+          <Route path="consumables" element={<ConsumablesPage />} />
+          <Route path="cooldowns" element={<CooldownSpellsPage />} />
+        </Route>
         <Route path="/contact" element={<Contact />} />
         <Route path="/privacy" element={<Privacy />} />
         <Route path="/disclaimer" element={<Disclaimer />} />

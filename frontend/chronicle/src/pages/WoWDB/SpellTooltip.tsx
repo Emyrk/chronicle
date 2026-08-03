@@ -12,6 +12,7 @@ import {
   extractReferencedSpellIds,
 } from "@/api/wowdb";
 import { SpellSchoolText } from "@/components/SpellSchoolBadge";
+import { useIconBaseUrl } from "@/hooks/useDatasetId";
 
 interface SpellTooltipProps {
   spell: WoWSpell;
@@ -21,11 +22,12 @@ interface SpellTooltipProps {
 }
 
 export function SpellTooltip({ spell, locale = "0", detailed = false }: SpellTooltipProps) {
+  const iconBaseUrl = useIconBaseUrl();
   const name = getLocalizedText(spell.name, locale);
   const rank = getLocalizedText(spell.subtext, locale);
   const descriptionTemplate = getLocalizedText(spell.description, locale);
   const auraDescTemplate = getLocalizedText(spell.aura_description, locale);
-  const iconUrl = getSpellIconUrl(spell.spell_icon);
+  const iconUrl = getSpellIconUrl(spell.spell_icon, iconBaseUrl);
   const cooldown = formatCooldown(spell);
   // schoolColor handled by SpellSchoolText component
 
