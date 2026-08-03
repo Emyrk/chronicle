@@ -162,7 +162,7 @@ export const LESSONS: LessonMeta[] = [
   {
     id: "focus",
     title: "Focus Mode",
-    description: "Right-click a player row and choose Focus to see their per-ability chart with full breakouts.",
+    description: "Ctrl+click (Cmd+click on Mac) a player row and choose Focus to see their per-ability chart with full breakouts.",
   },
 ];
 

@@ -356,3 +356,45 @@ export const FIXTURE_PARSE_PILLS: Record<string, { score: number; color: string;
   [PLAYER_WARLOCK]: { score: 90, color: "#a335ee", label: "90" },
   [PLAYER_HUNTER]: { score: 55, color: "#1eff00", label: "55" },
 };
+
+/**
+ * Build a Map<string, ParsePillData> for use as parsePillsOverride.
+ * Renders deterministic pills without any API call.
+ */
+export function getFixtureParsePillsMap(): Map<string, import("@/components/ui/PlayerMetricChart/PlayerMetricChart").ParsePillData> {
+  const pills = new Map<string, import("@/components/ui/PlayerMetricChart/PlayerMetricChart").ParsePillData>();
+  for (const [guid, data] of Object.entries(FIXTURE_PARSE_PILLS)) {
+    pills.set(guid, {
+      displayScore: data.score,
+      color: data.color,
+      tooltipContent: null, // No tooltip needed for example
+    });
+  }
+  return pills;
+}
+
+/**
+ * Deterministic spell data override for rank display without API calls.
+ * Maps real spell IDs to minimal WoWSpell objects with subtext for rank labels.
+ */
+export function getFixtureSpellDataMap(): Map<number, import("@/api/wowdb").WoWSpell> {
+  const map = new Map<number, import("@/api/wowdb").WoWSpell>();
+  // Minimal WoWSpell shape — only subtext is used by the breakout for rank labels
+  const makeSpell = (name: string, rank?: string): import("@/api/wowdb").WoWSpell => ({
+    id: 0,
+    name: { "0": name },
+    subtext: rank ? { "0": rank } : undefined,
+  }) as unknown as import("@/api/wowdb").WoWSpell;
+
+  // Mage spells
+  map.set(25304, makeSpell("Frostbolt", "Rank 11"));
+  map.set(837, makeSpell("Frostbolt", "Rank 4"));
+  map.set(12557, makeSpell("Ice Lance"));
+  map.set(10159, makeSpell("Cone of Cold", "Rank 5"));
+
+  // Warlock spells
+  map.set(25311, makeSpell("Shadow Bolt", "Rank 10"));
+  map.set(25309, makeSpell("Immolate", "Rank 8"));
+
+  return map;
+}

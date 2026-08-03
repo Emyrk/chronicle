@@ -1,13 +1,15 @@
 /**
- * Tests for fixture data correctness and isolation.
+ * Tests for fixture data correctness, isolation, and deterministic overrides.
  */
 
-import { describe, it, expect } from "vitest";
+import { describe, it, expect, vi } from "vitest";
 import {
   getFixtureResult,
   getFixtureRenderProps,
   getFixturePanelContext,
   getFixtureInstance,
+  getFixtureParsePillsMap,
+  getFixtureSpellDataMap,
   FIXTURE_DURATION_MS,
   FIXTURE_ENCOUNTER_ID,
   FIXTURE_PARSE_PILLS,
@@ -99,5 +101,83 @@ describe("data-mode isolation", () => {
     expect(ctx.onSelectEncounters).toBeUndefined();
     expect(ctx.onTogglePlayer).toBeUndefined();
     expect(ctx.onTogglePlayers).toBeUndefined();
+  });
+});
+
+describe("example parse pills (deterministic, no fetch)", () => {
+  it("getFixtureParsePillsMap returns a Map with entries for all 5 fixture players", () => {
+    const pills = getFixtureParsePillsMap();
+    expect(pills).toBeInstanceOf(Map);
+    expect(pills.size).toBe(5);
+  });
+
+  it("each pill has displayScore and color", () => {
+    const pills = getFixtureParsePillsMap();
+    for (const [, pill] of pills) {
+      expect(typeof pill.displayScore).toBe("number");
+      expect(pill.displayScore).toBeGreaterThan(0);
+      expect(pill.displayScore).toBeLessThanOrEqual(100);
+      expect(typeof pill.color).toBe("string");
+      expect(pill.color).toMatch(/^#[0-9a-fA-F]{6}$/);
+    }
+  });
+
+  it("pill GUIDs match fixture player GUIDs", () => {
+    const pills = getFixtureParsePillsMap();
+    const result = getFixtureResult();
+    const enc = result.EncounterDamage.get(FIXTURE_ENCOUNTER_ID)!;
+    for (const playerId of enc.keys()) {
+      expect(pills.has(playerId), `Missing pill for ${playerId}`).toBe(true);
+    }
+  });
+
+  it("building pills requires no fetch call", () => {
+    const fetchSpy = vi.spyOn(globalThis, "fetch");
+    getFixtureParsePillsMap();
+    expect(fetchSpy).not.toHaveBeenCalled();
+    fetchSpy.mockRestore();
+  });
+});
+
+describe("example spell data (deterministic, no fetch)", () => {
+  it("getFixtureSpellDataMap returns a Map with spell entries", () => {
+    const spells = getFixtureSpellDataMap();
+    expect(spells).toBeInstanceOf(Map);
+    expect(spells.size).toBeGreaterThanOrEqual(4);
+  });
+
+  it("includes both Frostbolt ranks", () => {
+    const spells = getFixtureSpellDataMap();
+    const fb11 = spells.get(25304);
+    const fb4 = spells.get(837);
+    expect(fb11).toBeDefined();
+    expect(fb4).toBeDefined();
+    // Check rank subtexts
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    expect((fb11 as any).subtext?.["0"]).toBe("Rank 11");
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    expect((fb4 as any).subtext?.["0"]).toBe("Rank 4");
+  });
+
+  it("building spell data requires no fetch call", () => {
+    const fetchSpy = vi.spyOn(globalThis, "fetch");
+    getFixtureSpellDataMap();
+    expect(fetchSpy).not.toHaveBeenCalled();
+    fetchSpy.mockRestore();
+  });
+});
+
+describe("explainer-local state isolation", () => {
+  it("fixture render props do not include setPanelOption (no URL mutation)", () => {
+    const props = getFixtureRenderProps();
+    // The raw fixture props should not include URL-mutating callbacks
+    expect(props.setPanelOption).toBeUndefined();
+    expect(props.panelOption).toBeUndefined();
+  });
+
+  it("fixture render props are not pre-set to perSecond mode", () => {
+    const props = getFixtureRenderProps();
+    expect(props.perSecond).toBe(false);
+    expect(props.checkboxChecked).toBe(false);
   });
 });

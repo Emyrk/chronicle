@@ -141,6 +141,8 @@ export interface UseDamageDoneBreakoutOptions {
   processing?: boolean;
   /** When true, shows spells by rank (spell ID) instead of combined by name */
   showRanks?: boolean;
+  /** When provided, bypasses spell API queries and uses this map directly (keyed by real spell ID). */
+  spellDataOverride?: Map<number, WoWSpell>;
 }
 
 /**
@@ -156,17 +158,18 @@ export function useDamageDoneBreakout({
   loading = false,
   processing = false,
   showRanks = false,
+  spellDataOverride,
 }: UseDamageDoneBreakoutOptions) {
   // Track tab selection per player so it persists across reloads
   const [tabByPlayer, setTabByPlayer] = useState<Map<string, BreakoutTab>>(new Map());
   
   // Collect all spell IDs for fetching spell data when showRanks is enabled
   const spellIds = useMemo(() => {
-    if (!showRanks) return [];
+    if (!showRanks || spellDataOverride) return [];
     return getAllSpellIds(result);
-  }, [result, showRanks]);
+  }, [result, showRanks, spellDataOverride]);
   
-  // Fetch spell data for all spell IDs (only when showRanks is true)
+  // Fetch spell data for all spell IDs (only when showRanks is true and no override)
   const spellQueries = useQueries({
     queries: spellIds.map((id) => ({
       queryKey: ["wowdb", "spell", id.toString()],
@@ -177,12 +180,13 @@ export function useDamageDoneBreakout({
       },
       staleTime: Infinity, // DBC data never changes
       retry: false,
-      enabled: showRanks,
+      enabled: showRanks && !spellDataOverride,
     })),
   });
   
-  // Build spell data lookup map
+  // Build spell data lookup map (use override if provided)
   const spellDataMap = useMemo(() => {
+    if (spellDataOverride) return spellDataOverride;
     const map = new Map<number, WoWSpell>();
     spellQueries.forEach((query, index) => {
       if (query.data) {
@@ -190,7 +194,7 @@ export function useDamageDoneBreakout({
       }
     });
     return map;
-  }, [spellQueries, spellIds]);
+  }, [spellQueries, spellIds, spellDataOverride]);
   
   const breakout = useCallback(
     (playerID: string, pinned: boolean) => {

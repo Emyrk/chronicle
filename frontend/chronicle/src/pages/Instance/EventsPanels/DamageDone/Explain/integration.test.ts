@@ -1,11 +1,17 @@
 /**
- * Integration tests for Damage Done Explain view routing and live capability path.
+ * Integration tests for Damage Done Explain view routing, live capability
+ * callback, and fixture determinism.
  */
 
-import { describe, it, expect } from "vitest";
+import { describe, it, expect, vi } from "vitest";
 import { isDamageDoneExplainType } from "./routing";
 import { deriveCapabilities, resolveLessonState, LESSONS } from "./capabilities";
-import { getFixtureResult, FIXTURE_DURATION_MS } from "./fixture";
+import {
+  getFixtureResult,
+  getFixtureParsePillsMap,
+  getFixtureSpellDataMap,
+  FIXTURE_DURATION_MS,
+} from "./fixture";
 
 describe("isDamageDoneExplainType", () => {
   it("returns true for damage_done", () => {
@@ -66,9 +72,6 @@ describe("live capability callback path", () => {
   });
 
   it("InstancePageView routing: damage_done types bypass PanelExplainerView", () => {
-    // This test verifies the routing logic used in InstancePageView.
-    // The actual rendering requires browser context, but we can verify
-    // the predicate that gates the routing decision.
     const damagePanels = ["damage_done", "enemy_damage_done"];
     const otherPanels = [
       "healing_done", "sunder", "damage_taken", "enemy_damage_taken",
@@ -81,5 +84,19 @@ describe("live capability callback path", () => {
     for (const pt of otherPanels) {
       expect(isDamageDoneExplainType(pt), `${pt} should use legacy PanelExplainerView`).toBe(false);
     }
+  });
+});
+
+describe("fixture display requires zero network calls", () => {
+  it("building all fixture data for example mode makes no fetch calls", () => {
+    const fetchSpy = vi.spyOn(globalThis, "fetch");
+
+    // Exercise every fixture data builder
+    getFixtureResult();
+    getFixtureParsePillsMap();
+    getFixtureSpellDataMap();
+
+    expect(fetchSpy).not.toHaveBeenCalled();
+    fetchSpy.mockRestore();
   });
 });

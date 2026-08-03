@@ -3,18 +3,24 @@
  *
  * Shows a lesson list with three states (available / limited / example-required).
  * "See example" renders the production DamageDoneContent with deterministic
- * curated fixture data. Returning to live data restores the panel without
- * mutating URL state, selections, or filters.
+ * curated fixture data, including parse pills and spell rank data — no network
+ * calls. Returning to live data restores the panel without mutating URL state,
+ * selections, or filters.
  *
  * Live aggregation: runs usePanelAggregation internally with the damage_done
  * panel definition so it receives real DamageDoneResult from the worker
  * pipeline — no duplicated processing, no DOM inference.
+ *
+ * The embedded panel wrapper owns local perSecond, showRanks, and panelOption
+ * state so DPS/Ranks/Focus lessons are fully demonstrable. These never touch
+ * the user's URL.
  */
 
 import { useState, useMemo, useCallback } from "react";
-import { ArrowLeft, BookOpen, Lightbulb, Play, Eye, ChevronRight, FlaskConical } from "lucide-react";
+import { ArrowLeft, BookOpen, Lightbulb, Play, Eye, ChevronRight, FlaskConical, Info } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/Card/Card";
+import { Switch } from "@/components/ui/Switch/Switch";
 import { cn } from "@/lib/utils";
 
 import type { DamageDoneResult } from "../damageDone.processor";
@@ -30,7 +36,11 @@ import {
   type LessonId,
   type LessonState,
 } from "./capabilities";
-import { getFixtureRenderProps } from "./fixture";
+import {
+  getFixtureRenderProps,
+  getFixtureParsePillsMap,
+  getFixtureSpellDataMap,
+} from "./fixture";
 import { GlossaryTermInline } from "./Glossary";
 
 /** Data-mode: live vs example */
@@ -47,6 +57,28 @@ export interface DamageDoneExplainViewProps {
   onExit: () => void;
 }
 
+// ── Lesson instructions ──
+// Shown adjacent to the panel when a lesson is active.
+
+const LESSON_INSTRUCTIONS: Record<LessonId, string> = {
+  "reading-chart":
+    "Look at the horizontal bars below. Each bar represents a player, colour-coded by class. Longer bars = more damage.",
+  "dps-vs-total":
+    "Toggle the Per Second switch in the panel header to switch between total damage and DPS.",
+  "parse-scores":
+    "Notice the coloured number pills on each player row. These are parse scores — higher is better, and the colour shifts from green → blue → purple → orange → pink.",
+  "breakout-box":
+    "Click any player row to open the Breakout Box showing their ability and target breakdown.",
+  "abilities-vs-targets":
+    "Inside the Breakout Box, switch between the 'By Ability' and 'By Target' tabs.",
+  "detailed-results":
+    "In the Breakout Box, click 'More detail' on an ability, then click the ↕ button to see min/avg/max for each hit type.",
+  "spell-ranks":
+    "Toggle the Ranks button in the panel header to separate abilities by spell rank (e.g. Frostbolt Rank 4 vs Rank 11).",
+  "focus":
+    "Ctrl+click (Cmd+click on Mac) a player row, then choose Focus to see their per-ability chart with full breakouts.",
+};
+
 export function DamageDoneExplainView({
   panelType,
   context,
@@ -55,6 +87,10 @@ export function DamageDoneExplainView({
 }: DamageDoneExplainViewProps) {
   const [dataMode, setDataMode] = useState<ExplainDataMode>("live");
   const [activeLesson, setActiveLesson] = useState<LessonId | null>(null);
+
+  // ── Explainer-local panel state (never touches URL) ──
+  const [localPerSecond, setLocalPerSecond] = useState(false);
+  const [localPanelOption, setLocalPanelOption] = useState<string | null>(null);
 
   // Run the real aggregation pipeline for the damage_done panel.
   // This reuses the existing worker pool and stream caching — no duplication.
@@ -82,43 +118,60 @@ export function DamageDoneExplainView({
     return states;
   }, [capabilities]);
 
-  // Example mode render props (only created when needed)
+  // ── Example-mode overrides ──
   const exampleProps = useMemo(() => getFixtureRenderProps(), []);
+  const exampleParsePills = useMemo(() => getFixtureParsePillsMap(), []);
+  const exampleSpellData = useMemo(() => getFixtureSpellDataMap(), []);
 
-  // Build props for the currently active data mode
-  const activeRenderProps: PanelRenderProps<DamageDoneResult> | null = useMemo(() => {
+  // Build render props for active data mode, using explainer-local state
+  const activeRenderProps: PanelRenderProps<DamageDoneResult> = useMemo(() => {
     if (dataMode === "example") {
-      return exampleProps;
+      return {
+        ...exampleProps,
+        perSecond: localPerSecond,
+        checkboxChecked: localPerSecond,
+        panelOption: localPanelOption,
+        setPanelOption: setLocalPanelOption,
+      };
     }
-    // Live mode — pass through real aggregation state
+    // Live mode
     return {
       result: aggregation.result,
       totalEvents: aggregation.totalEvents,
       processingTimeMs: aggregation.processingTimeMs,
       durationMs,
-      perSecond: false,
-      checkboxChecked: false,
+      perSecond: localPerSecond,
+      checkboxChecked: localPerSecond,
       loading: aggregation.loading,
       processing: aggregation.processing,
       error: aggregation.error,
       context,
+      panelOption: localPanelOption,
+      setPanelOption: setLocalPanelOption,
     };
-  }, [dataMode, aggregation, durationMs, context, exampleProps]);
+  }, [dataMode, aggregation, durationMs, context, exampleProps, localPerSecond, localPanelOption]);
 
   const handleSeeExample = useCallback((lessonId: LessonId) => {
     setDataMode("example");
     setActiveLesson(lessonId);
+    // Reset explainer-local state for clean example
+    setLocalPanelOption(null);
+    setLocalPerSecond(false);
   }, []);
 
   const handleReturnToLive = useCallback(() => {
     setDataMode("live");
     setActiveLesson(null);
+    setLocalPanelOption(null);
+    setLocalPerSecond(false);
   }, []);
 
   const handleTryIt = useCallback((lessonId: LessonId) => {
     setDataMode("live");
     setActiveLesson(lessonId);
   }, []);
+
+  const isExample = dataMode === "example";
 
   return (
     <div className="min-h-screen bg-background" data-testid="damage-done-explain-view">
@@ -133,7 +186,7 @@ export function DamageDoneExplainView({
             <BookOpen className="h-5 w-5 text-muted-foreground" />
             <span>Understanding Damage Done</span>
           </h1>
-          <div className="w-[140px]" /> {/* Spacer for centering */}
+          <div className="w-[140px]" />
         </div>
       </div>
 
@@ -153,7 +206,7 @@ export function DamageDoneExplainView({
         </Card>
 
         {/* Data mode indicator */}
-        {dataMode === "example" && (
+        {isExample && (
           <div
             className="flex items-center justify-between px-4 py-3 rounded-lg border border-amber-500/30 bg-amber-500/10"
             data-testid="example-data-banner"
@@ -196,12 +249,25 @@ export function DamageDoneExplainView({
           </CardContent>
         </Card>
 
-        {/* Live/Example Panel */}
-        {activeRenderProps && (
-          <Card>
-            <CardHeader className="pb-2">
-              <CardTitle className="text-base flex items-center gap-2">
-                {dataMode === "example" ? (
+        {/* Active lesson instruction */}
+        {activeLesson && (
+          <div
+            className="flex items-start gap-3 px-4 py-3 rounded-lg border border-primary/30 bg-primary/5"
+            data-testid="lesson-instruction"
+          >
+            <Info className="h-4 w-4 mt-0.5 shrink-0 text-primary" />
+            <p className="text-sm text-foreground">
+              {LESSON_INSTRUCTIONS[activeLesson]}
+            </p>
+          </div>
+        )}
+
+        {/* Panel with explainer-local header controls */}
+        <Card>
+          <CardHeader className="pb-2">
+            <CardTitle className="text-base flex items-center justify-between">
+              <span className="flex items-center gap-2">
+                {isExample ? (
                   <>
                     <FlaskConical className="h-4 w-4 text-amber-500" />
                     Example — Damage Done
@@ -212,18 +278,32 @@ export function DamageDoneExplainView({
                     Live — Damage Done
                   </>
                 )}
-              </CardTitle>
-            </CardHeader>
-            <CardContent>
-              <div className="h-[400px]" data-testid="explain-panel-container">
-                <DamageDoneContent
-                  {...activeRenderProps}
-                  sourceType="players"
+              </span>
+              {/* Explainer-local Per Second toggle */}
+              <div className="flex items-center gap-2" data-explainer-per-second>
+                <label htmlFor="explain-per-second" className="text-xs text-muted-foreground cursor-pointer">
+                  Per Second
+                </label>
+                <Switch
+                  id="explain-per-second"
+                  checked={localPerSecond}
+                  onCheckedChange={setLocalPerSecond}
+                  data-testid="explain-per-second-toggle"
                 />
               </div>
-            </CardContent>
-          </Card>
-        )}
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="min-h-[400px] styled-scrollbar" data-testid="explain-panel-container">
+              <DamageDoneContent
+                {...activeRenderProps}
+                sourceType="players"
+                parsePillsOverride={isExample ? exampleParsePills : undefined}
+                spellDataOverride={isExample ? exampleSpellData : undefined}
+              />
+            </div>
+          </CardContent>
+        </Card>
       </div>
     </div>
   );
