@@ -79,12 +79,12 @@ func TestDerivedConsumablesAreDatasetScopedAndLinkBuffs(t *testing.T) {
 	_, err = pool.Exec(ctx, `
 		INSERT INTO world_item_template (
 			dataset_id, entry, class, name, inventory_type, stackable,
-			spellid_1, spelltrigger_1
+			spellid_1, spelltrigger_1, spellid_2, spelltrigger_2
 		) VALUES
-			($1, 1002, $2, 'Quest-class Consumable', 0, 20, 100, 0),
-			($1, 1003, $3, 'Reusable Trinket', 12, 1, 100, 0),
-			($1, 1004, $2, 'Quest Activator', 0, 1, 100, 0),
-			($1, 1005, $2, 'Triggered Quest Item', 0, 20, 100, 1)
+			($1, 1002, $2, 'Quest-class Consumable', 0, 20, 100, 0, 999, 1),
+			($1, 1003, $3, 'Reusable Trinket', 12, 1, 100, 0, 0, 0),
+			($1, 1004, $2, 'Quest Activator', 0, 1, 100, 0, 0, 0),
+			($1, 1005, $2, 'Triggered Quest Item', 0, 20, 100, 1, 0, 0)
 	`, defaultID, int32(chrondbc.ItemClassQuest), int32(chrondbc.ItemClassArmor))
 	require.NoError(t, err)
 
