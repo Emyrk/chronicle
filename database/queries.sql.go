@@ -1103,13 +1103,32 @@ WHERE wit.dataset_id = $1
       wit.class = 0
       OR (
           wit.inventory_type = 0
-          AND wit.stackable > 1
           AND (
               (wit.spellid_1 <> 0 AND wit.spelltrigger_1 = 0) OR
               (wit.spellid_2 <> 0 AND wit.spelltrigger_2 = 0) OR
               (wit.spellid_3 <> 0 AND wit.spelltrigger_3 = 0) OR
               (wit.spellid_4 <> 0 AND wit.spelltrigger_4 = 0) OR
               (wit.spellid_5 <> 0 AND wit.spelltrigger_5 = 0)
+          )
+          AND (
+              wit.stackable > 1
+              OR EXISTS (
+                  SELECT 1
+                  FROM dbc_spells spell
+                  WHERE spell.dataset_id = wit.dataset_id
+                    AND (
+                        (spell.spell_id = wit.spellid_1 AND wit.spelltrigger_1 = 0) OR
+                        (spell.spell_id = wit.spellid_2 AND wit.spelltrigger_2 = 0) OR
+                        (spell.spell_id = wit.spellid_3 AND wit.spelltrigger_3 = 0) OR
+                        (spell.spell_id = wit.spellid_4 AND wit.spelltrigger_4 = 0) OR
+                        (spell.spell_id = wit.spellid_5 AND wit.spelltrigger_5 = 0)
+                    )
+                    AND (
+                        spell.effect_0 IN (6, 174) OR
+                        spell.effect_1 IN (6, 174) OR
+                        spell.effect_2 IN (6, 174)
+                    )
+              )
           )
       )
   )

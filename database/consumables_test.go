@@ -74,8 +74,10 @@ func TestDerivedConsumablesAreDatasetScopedAndLinkBuffs(t *testing.T) {
 	insertSpells(otherID, 300, 400, "Other Buff")
 
 	// Some physical consumables, such as Jujus, are classified as quest
-	// items. Include stackable, non-equippable on-use items, but exclude
-	// reusable equipment and non-stackable quest activators.
+	// items. Include stackable, non-equippable on-use items and non-stackable
+	// items whose use spell directly applies an aura. Exclude reusable equipment,
+	// non-stackable quest activators that only trigger another spell, and non-use
+	// spell triggers.
 	_, err = pool.Exec(ctx, `
 		INSERT INTO world_item_template (
 			dataset_id, entry, class, name, inventory_type, stackable,
@@ -84,7 +86,8 @@ func TestDerivedConsumablesAreDatasetScopedAndLinkBuffs(t *testing.T) {
 			($1, 1002, $2, 'Quest-class Consumable', 0, 20, 100, 0, 999, 1),
 			($1, 1003, $3, 'Reusable Trinket', 12, 1, 100, 0, 0, 0),
 			($1, 1004, $2, 'Quest Activator', 0, 1, 100, 0, 0, 0),
-			($1, 1005, $2, 'Triggered Quest Item', 0, 20, 100, 1, 0, 0)
+			($1, 1005, $2, 'Triggered Quest Item', 0, 20, 100, 1, 0, 0),
+			($1, 1006, $2, 'Non-stackable Consumable', 0, 1, 200, 0, 0, 0)
 	`, defaultID, int32(chrondbc.ItemClassQuest), int32(chrondbc.ItemClassArmor))
 	require.NoError(t, err)
 
@@ -107,21 +110,25 @@ func TestDerivedConsumablesAreDatasetScopedAndLinkBuffs(t *testing.T) {
 
 	defaultRows, err := store.ListConsumablesByDataset(ctx, servicedataset.DefaultDatasetID)
 	require.NoError(t, err)
-	require.Len(t, defaultRows, 2)
+	require.Len(t, defaultRows, 3)
 	assert.Equal(t, int32(1000), defaultRows[0].ItemID)
 	assert.Equal(t, "Default Elixir", defaultRows[0].ItemName)
 	assert.Equal(t, []int32{100}, defaultRows[0].ItemSpellIds)
 	require.True(t, defaultRows[0].BuffSpellID.Valid)
 	assert.Equal(t, int32(200), defaultRows[0].BuffSpellID.Int32)
 	assert.Equal(t, "Default Buff", defaultRows[0].BuffSpellName.String)
-	assert.Equal(t, int32(1002), defaultRows[1].ItemID)
-	assert.Equal(t, "Quest-class Consumable", defaultRows[1].ItemName)
-	assert.Equal(t, []int32{100}, defaultRows[1].ItemSpellIds)
+	assert.Equal(t, int32(1006), defaultRows[1].ItemID)
+	assert.Equal(t, "Non-stackable Consumable", defaultRows[1].ItemName)
+	assert.Equal(t, []int32{200}, defaultRows[1].ItemSpellIds)
 	assert.Equal(t, int32(200), defaultRows[1].BuffSpellID.Int32)
+	assert.Equal(t, int32(1002), defaultRows[2].ItemID)
+	assert.Equal(t, "Quest-class Consumable", defaultRows[2].ItemName)
+	assert.Equal(t, []int32{100}, defaultRows[2].ItemSpellIds)
+	assert.Equal(t, int32(200), defaultRows[2].BuffSpellID.Int32)
 
 	defaultSummary, err := store.GetDatasetImportSummary(ctx, servicedataset.DefaultDatasetID)
 	require.NoError(t, err)
-	assert.Equal(t, int32(2), defaultSummary.ConsumablesCount)
+	assert.Equal(t, int32(3), defaultSummary.ConsumablesCount)
 
 	otherRows, err := store.ListConsumablesByDataset(ctx, otherDataset.ID)
 	require.NoError(t, err)
