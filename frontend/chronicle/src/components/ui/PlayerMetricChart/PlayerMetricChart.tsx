@@ -757,7 +757,6 @@ function formatValue(type: ChartType, player: PlayerMetricChartRow, suffix?: str
     padding: '2px 8px',
     borderRadius: '4px',
     marginRight: '12px',
-    minWidth: '88px',
     textAlign: 'right',
     fontFamily: 'var(--font-mono)',
     fontVariantNumeric: 'tabular-nums',

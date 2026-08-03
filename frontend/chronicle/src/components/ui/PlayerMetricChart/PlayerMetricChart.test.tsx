@@ -44,6 +44,12 @@ describe("PlayerMetricRow", () => {
     expect(markup).toContain("transition:left 0.3s ease, width 0.3s ease");
   });
 
+  it("sizes the metric badge to its value without a fixed minimum width", () => {
+    const markup = renderRow(false);
+
+    expect(markup).not.toContain("min-width:88px");
+  });
+
   it("renders the display value instead of the raw geometry value", () => {
     const markup = renderRow(false);
 
