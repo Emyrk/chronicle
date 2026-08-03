@@ -17,6 +17,17 @@ Agent Skills is an open specification (Apache 2.0) for extending AI agent capabi
 | [wow-encounter-detection](./wow-encounter-detection/) | Adding raid/dungeon support, boss-specific logic |
 | [river-job-queue](./river-job-queue/) | Background job processing for log parsing |
 | [frontend-data-flow](./frontend-data-flow/) | Frontend data fetching, React Query, protobuf decoding |
+| [remotion-best-practices](./remotion-best-practices/) | Routing Remotion work to the appropriate specialized skill |
+| [remotion-captions](./remotion-captions/) | Transcribing, displaying, and animating captions |
+| [remotion-create](./remotion-create/) | Creating a Remotion project or video composition |
+| [remotion-docs](./remotion-docs/) | Finding current Remotion documentation |
+| [remotion-interactivity](./remotion-interactivity/) | Structuring Remotion markup for Studio interactivity |
+| [remotion-maps](./remotion-maps/) | Creating animated maps with Remotion |
+| [remotion-markup](./remotion-markup/) | Applying Remotion content, animation, and effects practices |
+| [remotion-multimedia](./remotion-multimedia/) | Inspecting audio and video with Mediabunny |
+| [remotion-render](./remotion-render/) | Rendering and exporting Remotion videos |
+| [remotion-saas](./remotion-saas/) | Building applications backed by Remotion |
+| [remotion-upgrade](./remotion-upgrade/) | Upgrading Remotion and related packages |
 
 ## Compatibility
 
