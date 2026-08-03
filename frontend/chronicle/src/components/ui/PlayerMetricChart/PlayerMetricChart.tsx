@@ -81,6 +81,10 @@ interface PlayerMetricChartProps extends React.ComponentProps<"div"> {
   valueSuffix?: string
   /** Parse pill data keyed by playerID. When provided, shows a colored score pill on each matching row. */
   parsePills?: Map<string, ParsePillData>
+  /** Initial pinned breakout positions, primarily for stories, screenshots, and guided demos. */
+  initialPinnedPositions?: ReadonlyMap<string, { x: number; y: number }>
+  /** Base URL for class icon assets. Defaults to the Chronicle application path. */
+  classIconBasePath?: string
   /** Animate bar geometry changes. Disable for high-frequency replay updates. */
   animateValues?: boolean
 }
@@ -100,6 +104,8 @@ export function PlayerMetricChart({
   onRowCtrlClick,
   valueSuffix,
   parsePills,
+  initialPinnedPositions,
+  classIconBasePath = '/c/icons',
   animateValues = true,
   // Exclude dir from divProps to avoid type conflict with ScrollArea
   dir: _dir,
@@ -107,7 +113,9 @@ export function PlayerMetricChart({
 }: PlayerMetricChartProps) {
   void _dir;
   // Track which rows have pinned tooltips (multiple allowed)
-  const [pinnedPlayerIds, setPinnedPlayerIds] = useState<Set<string>>(new Set())
+  const [pinnedPlayerIds, setPinnedPlayerIds] = useState<Set<string>>(
+    () => new Set(initialPinnedPositions?.keys() ?? []),
+  )
 
   const { chartData, maximumValue, summedValue } = useMemo(
     () => createPlayerMetricChartModel(data, perSecond, duration_millis),
@@ -145,6 +153,7 @@ export function PlayerMetricChart({
             suffix={valueSuffix ?? (perSecond ? '/s' : '')}
             decimals={perSecond ? 1 : 0}
             isPinned={pinnedPlayerIds.has(player.playerID)}
+            initialPinnedPosition={initialPinnedPositions?.get(player.playerID)}
             onTogglePin={() => handleTogglePin(player.playerID)}
             panelTitle={panelTitle}
             breakout={disableInteractions ? undefined : breakout}
@@ -152,6 +161,7 @@ export function PlayerMetricChart({
             isFirstRow={index === 0}
             onCtrlClick={onRowCtrlClick ? (e) => onRowCtrlClick(player.playerID, e) : undefined}
             parsePill={parsePills?.get(player.playerID)}
+            classIconBasePath={classIconBasePath}
             animateValues={animateValues}
           />
         })}
@@ -170,6 +180,7 @@ export interface PlayerMetricRowProps {
   suffix?: string
   decimals?: number
   isPinned?: boolean
+  initialPinnedPosition?: { x: number; y: number }
   onTogglePin?: () => void
   panelTitle?: string
   breakout?: BreakoutFn
@@ -180,6 +191,7 @@ export interface PlayerMetricRowProps {
   onCtrlClick?: (event: React.MouseEvent) => void
   /** Optional parse score pill to show at the bar's right edge */
   parsePill?: ParsePillData
+  classIconBasePath?: string
   animateValues?: boolean
 }
 
@@ -342,6 +354,7 @@ export function PlayerMetricRow({
   suffix,
   decimals,
   isPinned = false,
+  initialPinnedPosition,
   onTogglePin,
   panelTitle,
   breakout,
@@ -349,12 +362,15 @@ export function PlayerMetricRow({
   isFirstRow = false,
   onCtrlClick: onCtrlClickProp,
   parsePill,
+  classIconBasePath = '/c/icons',
   animateValues = true,
 }: PlayerMetricRowProps) {
   const { ref, x, y } = useMouse<HTMLDivElement>();
   const rowRef = useRef<HTMLDivElement>(null)
   const isDimmed = player.dimmed ?? false;
-  const [pinnedPosition, setPinnedPosition] = useState<{ x: number; y: number } | null>(null)
+  const [pinnedPosition, setPinnedPosition] = useState<{ x: number; y: number } | null>(
+    initialPinnedPosition ?? null,
+  )
   const [tooltipOpen, setTooltipOpen] = useState(false)
   
   const handleClick = useCallback((e: React.MouseEvent) => {
@@ -594,7 +610,7 @@ export function PlayerMetricRow({
         {/* Icon */}
         <img
           // src={`/c/icons/spec_${player.className.toLowerCase()}_${player.specialization.toLowerCase().replace(/\s+/g, '')}.png`}
-          src={`/c/icons/class_${player.className.toLowerCase()}.png`}
+          src={`${classIconBasePath}/class_${player.className.toLowerCase()}.png`}
           alt={player.specialization}
           style={{
             width: '20px',
@@ -605,8 +621,8 @@ export function PlayerMetricRow({
           onError={(e) => {
             // Fallback to class icon if spec icon not found, then to unknown
             const target = e.currentTarget;
-            const classIcon = `/c/icons/class_${player.className.toLowerCase()}.png`;
-            const unknownIcon = '/c/icons/class_unknown.png';
+            const classIcon = `${classIconBasePath}/class_${player.className.toLowerCase()}.png`;
+            const unknownIcon = `${classIconBasePath}/class_unknown.png`;
             if (target.src.endsWith(unknownIcon)) {
               // Already at fallback, hide the image
               target.style.display = 'none';

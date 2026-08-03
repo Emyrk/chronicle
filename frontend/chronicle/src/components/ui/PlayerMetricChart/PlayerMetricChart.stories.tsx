@@ -1,6 +1,7 @@
 import { useState, useCallback } from 'react'
 import type { Meta, StoryObj } from '@storybook/react-vite'
 import { PlayerMetricChart, type PlayerMetricChartData, type AbilityBreakdown, AbilityBreakdownTable } from './PlayerMetricChart'
+import { PlayerMetricChartAbilityBreakdownDemo } from './PlayerMetricChart.demo'
 
 const meta = {
   title: 'UI/PlayerMetricChart',
@@ -315,7 +316,8 @@ export const WithAbilityBreakdown: Story = {
     
     // Create breakout function that returns AbilityBreakdownTable
     // pinned parameter available if we want different content for pinned vs hover
-    const breakout = useCallback((playerID: string, _pinned: boolean) => {
+    const breakout = useCallback((playerID: string, pinned: boolean) => {
+      void pinned
       const data = abilityDataByPlayer[playerID]
       if (!data) {
         return <p className="text-xs p-2 text-background/60">No breakdown available</p>
@@ -359,4 +361,14 @@ export const WithAbilityBreakdown: Story = {
       </div>
     )
   },
+}
+
+
+/** Shared by Storybook and the Remotion tutorial to exercise the real chart and breakout components. */
+export const DamageDoneBreakoutDemo: Story = {
+  args: {
+    data: [],
+    type: 'damage',
+  },
+  render: () => <PlayerMetricChartAbilityBreakdownDemo />,
 }
