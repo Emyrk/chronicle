@@ -287,24 +287,44 @@ function LessonTargetOverlay({
     const measure = () => {
       const cRect = container.getBoundingClientRect();
       const els = container.querySelectorAll(`[data-lesson-target="${lessonId}"]`);
-      setMeasured({
-        lessonId,
-        boxes: [...els].map((el) => {
-          const r = el.getBoundingClientRect();
-          return {
-            left: r.left - cRect.left - 4,
-            top: r.top - cRect.top - 4,
-            width: r.width + 8,
-            height: r.height + 8,
-          };
-        }),
-      });
+      const boxes: Array<{ left: number; top: number; width: number; height: number }> = [];
+      for (const el of els) {
+        const r = el.getBoundingClientRect();
+        let left = r.left - 4;
+        let top = r.top - 4;
+        let right = r.right + 4;
+        let bottom = r.bottom + 4;
+        // Clip against every scroll/overflow ancestor so targets scrolled out
+        // of an inner viewport (e.g. chart rows) don't paint over the chrome.
+        for (let node = el.parentElement; node && node !== container; node = node.parentElement) {
+          const cs = getComputedStyle(node);
+          if (/(auto|scroll|hidden)/.test(cs.overflowX + cs.overflowY)) {
+            const nr = node.getBoundingClientRect();
+            left = Math.max(left, nr.left);
+            top = Math.max(top, nr.top);
+            right = Math.min(right, nr.right);
+            bottom = Math.min(bottom, nr.bottom);
+          }
+        }
+        // Fully (or nearly fully) hidden targets get no box at all.
+        if (right - left < 12 || bottom - top < 10) continue;
+        boxes.push({
+          left: left - cRect.left,
+          top: top - cRect.top,
+          width: right - left,
+          height: bottom - top,
+        });
+      }
+      setMeasured({ lessonId, boxes });
     };
     const raf = requestAnimationFrame(measure);
     window.addEventListener("resize", measure);
+    // Capture-phase: inner scroll areas (the chart) re-measure too.
+    container.addEventListener("scroll", measure, true);
     return () => {
       cancelAnimationFrame(raf);
       window.removeEventListener("resize", measure);
+      container.removeEventListener("scroll", measure, true);
     };
   }, [containerRef, lessonId]);
 
