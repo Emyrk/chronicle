@@ -14,27 +14,4 @@ export const sunderExplainer: PanelExplainer = {
     "Toggle 'Show targets' to see time-to-5-stacks per target",
     "Click a target row to see the detailed cast/affliction timeline",
   ],
-
-  breakoutsOpen: 0,
-
-  walkthrough: [
-    {
-      id: "view-warriors",
-      instruction: "This shows each warrior's effective sunders (counted toward first 5 stacks) vs total casts",
-      waitFor: "hover",
-      highlightSelector: "[data-sunder-warriors]",
-    },
-    {
-      id: "toggle-targets",
-      instruction: "Check 'Show targets' to see time-to-5-stacks per target",
-      waitFor: "click",
-      highlightSelector: "[data-per-second-toggle]",
-    },
-    {
-      id: "view-targets",
-      instruction: "Click a target row to see the detailed timeline of casts and afflictions",
-      waitFor: "click",
-      highlightSelector: "[data-sunder-target-row]",
-    },
-  ],
 };

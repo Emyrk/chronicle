@@ -16,27 +16,4 @@ export const rolesExplainer: PanelExplainer = {
     "Selected players filter all other panels - great for comparing healers",
     "Hybrid classes may show different roles on different fights",
   ],
-
-  breakoutsOpen: 0, // Roles panel has its own display
-
-  walkthrough: [
-    {
-      id: "view-summary",
-      instruction: "This summary shows the total player count broken down by role",
-      waitFor: "hover",
-      highlightSelector: "[data-roles-summary]",
-    },
-    {
-      id: "view-role-groups",
-      instruction: "Players are grouped by role. Clicking a role will select all players in that role.",
-      waitFor: "hover",
-      highlightSelector: "[data-roles-groups]",
-    },
-    {
-      id: "view-debug",
-      instruction: "Click here to see how roles were detected (based on damage taken, healing done, and DPS)",
-      waitFor: "click",
-      highlightSelector: "[data-roles-debug-toggle]",
-    },
-  ],
 };

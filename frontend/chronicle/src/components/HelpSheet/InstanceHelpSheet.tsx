@@ -153,7 +153,7 @@ const FEATURE_MAP: FeatureCategory[] = [
         id: "panel-explainer",
         label: "Panel Help (?)",
         selector: "[data-help-panel-explainer]",
-        description: "Click for a detailed explanation and interactive walkthrough of the panel.",
+        description: "Click for a detailed explanation and video lessons for the panel.",
       },
     ],
   },

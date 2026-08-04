@@ -16,6 +16,4 @@ export const pullsAndCleanupExplainer: PanelExplainer = {
     "Select specific encounters to see only the gaps between them",
     "Each gap bar shows a breakdown of combat vs idle time",
   ],
-
-  breakoutsOpen: 0,
 };

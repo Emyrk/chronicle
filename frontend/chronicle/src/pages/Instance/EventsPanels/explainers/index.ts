@@ -10,7 +10,7 @@ import type { EventsPanelType } from "../EventsPanel";
 
 // Import explainers from panel directories
 // These will be added as panels get their explainers
-import { damageDoneExplainer } from "../DamageDone/DamageDone.explainer";
+import { damageDoneExplainer } from "../DamageDone/explain";
 import { healingDoneExplainer } from "../HealingDone/HealingDone.explainer";
 import { sunderExplainer } from "../Sunder/Sunder.explainer";
 import { damageTakenExplainer } from "../DamageTaken/DamageTaken.explainer";
@@ -24,7 +24,7 @@ import { pullsAndCleanupExplainer } from "../PullsAndCleanup/PullsAndCleanup.exp
  * The ? button only appears for panels in this registry.
  */
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
-export const PANEL_EXPLAINERS: Partial<Record<EventsPanelType, PanelExplainer<any>>> = {
+export const PANEL_EXPLAINERS: Partial<Record<EventsPanelType, PanelExplainer<any, any>>> = {
   damage_done: damageDoneExplainer,
   enemy_damage_done: damageDoneExplainer, // Same explainer, different context
   healing_done: healingDoneExplainer,
