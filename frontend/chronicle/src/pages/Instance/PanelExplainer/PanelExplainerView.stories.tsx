@@ -60,3 +60,8 @@ export const PinBreakoutLesson: Story = {
 export const BreakoutTourLesson: Story = {
   parameters: { routerEntries: ["/?lesson=breakout-tour"] },
 };
+
+/** Deep-linked spell-ranks lesson — the Ranks toggle splitting a breakout. */
+export const SpellRanksLesson: Story = {
+  parameters: { routerEntries: ["/?lesson=spell-ranks"] },
+};

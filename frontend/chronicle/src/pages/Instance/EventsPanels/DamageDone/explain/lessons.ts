@@ -143,10 +143,37 @@ const breakoutTour: L = {
   },
 };
 
+const spellRanks: L = {
+  id: "spell-ranks",
+  title: "Split abilities by rank",
+  group: "essentials",
+  description: (caps) =>
+    caps.hasSpellRanks
+      ? "Your log has spells cast at more than one rank to split out."
+      : "No multi-rank spells in this selection — learn on the example raid.",
+  deriveState: (caps) =>
+    caps.hasSpellRanks && caps.hasAbilityBreakout ? "available" : "example-required",
+  instruction:
+    "Flip the 'Ranks' toggle above the chart — ability breakouts split each spell into the ranks it was cast at, so downranking shows up as separate rows.",
+  bullets: [
+    "With Ranks off, every rank of a spell merges into one row",
+    "'Ranks' splits each spell by cast rank, with the rank as a subtitle",
+    "Spot downranking at a glance",
+  ],
+  video: {
+    load: () => import("./videos/SpellRanks.video"),
+    durationInFrames: 380,
+    fps: 30,
+    width: 1280,
+    height: 720,
+  },
+};
+
 export const DAMAGE_DONE_LESSONS: L[] = [
   readChart,
   totalVsDps,
   parseScores,
   pinBreakout,
   breakoutTour,
+  spellRanks,
 ];

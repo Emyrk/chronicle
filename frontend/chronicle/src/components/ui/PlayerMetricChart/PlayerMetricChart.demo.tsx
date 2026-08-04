@@ -39,8 +39,8 @@ const abilities: Record<string, AbilityBreakdown[]> = {
   ],
   'player-3': [
     { name: 'Fireball', totalDamage: 58_000, hitCount: 31, critCount: 12, missCount: 3, dodgeCount: 0, immuneCount: 0, parryCount: 0, otherCount: 0 },
-    { name: 'Ignite', totalDamage: 27_000, hitCount: 26, critCount: 0, missCount: 0, dodgeCount: 0, immuneCount: 0, parryCount: 0, otherCount: 0 },
     { name: 'Fire Blast', totalDamage: 20_000, hitCount: 12, critCount: 5, missCount: 1, dodgeCount: 0, immuneCount: 0, parryCount: 0, otherCount: 0 },
+    { name: 'Ignite', totalDamage: 15_000, hitCount: 18, critCount: 0, missCount: 0, dodgeCount: 0, immuneCount: 0, parryCount: 0, otherCount: 0 },
   ],
   'player-4': [
     { name: 'Shadow Bolt', totalDamage: 48_000, hitCount: 30, critCount: 9, missCount: 3, dodgeCount: 0, immuneCount: 0, parryCount: 0, otherCount: 0 },
@@ -62,8 +62,22 @@ export interface DemoBreakoutDetail {
   tab?: BreakoutTab
 }
 
+/**
+ * Rank-split view of a player's abilities (what the Ranks toggle shows).
+ * Rows sum to the merged rows above; subtitles mirror the app's rank subtext.
+ * Only Blazewing needs one — the ranks lesson video pins that breakout.
+ */
+const RANKED_ABILITIES: Record<string, Array<AbilityBreakdown & { subtitle?: string }>> = {
+  'player-3': [
+    { name: 'Fireball', subtitle: 'Rank 12', totalDamage: 36_000, hitCount: 19, critCount: 8, missCount: 2, dodgeCount: 0, immuneCount: 0, parryCount: 0, otherCount: 0 },
+    { name: 'Fireball', subtitle: 'Rank 11', totalDamage: 22_000, hitCount: 12, critCount: 4, missCount: 1, dodgeCount: 0, immuneCount: 0, parryCount: 0, otherCount: 0 },
+    { name: 'Fire Blast', subtitle: 'Rank 7', totalDamage: 20_000, hitCount: 12, critCount: 5, missCount: 1, dodgeCount: 0, immuneCount: 0, parryCount: 0, otherCount: 0 },
+    { name: 'Ignite', totalDamage: 15_000, hitCount: 18, critCount: 0, missCount: 0, dodgeCount: 0, immuneCount: 0, parryCount: 0, otherCount: 0 },
+  ],
+}
+
 /** Upgrade a simple demo ability into the rich AbilityData the tabbed breakout renders. */
-function toAbilityData(a: AbilityBreakdown): AbilityData {
+function toAbilityData(a: AbilityBreakdown & { subtitle?: string }): AbilityData {
   const count =
     a.hitCount + a.critCount + a.missCount + a.dodgeCount + a.immuneCount + a.parryCount + a.otherCount
   // Crits hit for ~2x, so per-hit averages fall out of the total deterministically.
@@ -80,6 +94,8 @@ function toAbilityData(a: AbilityBreakdown): AbilityData {
       : undefined
   return {
     name: a.name,
+    key: a.subtitle ? `${a.name} ${a.subtitle}` : a.name,
+    subtitle: a.subtitle,
     value: a.totalDamage,
     Total: a.totalDamage,
     Count: count,
@@ -118,6 +134,7 @@ export function PlayerMetricChartAbilityBreakdownDemo({
   perSecond,
   parsePills,
   breakoutDetail,
+  showRanks = true,
 }: {
   /**
    * Controlled pinned breakouts: playerID → position (portal-container
@@ -135,6 +152,11 @@ export function PlayerMetricChartAbilityBreakdownDemo({
    * (More detail / min-avg-max / By Target) with this controlled state.
    */
   breakoutDetail?: DemoBreakoutDetail
+  /**
+   * The header's Ranks toggle (defaults on, like the app). When off, full
+   * breakouts merge rank-split abilities into one row per name.
+   */
+  showRanks?: boolean
 }) {
   const pinnedKey = pinnedPlayers ? [...pinnedPlayers.keys()].sort().join(',') : 'unpinned'
 
@@ -142,9 +164,10 @@ export function PlayerMetricChartAbilityBreakdownDemo({
     const playerAbilities = abilities[playerID] ?? []
     const totalValue = players.find((player) => player.playerID === playerID)?.value ?? 0
     if (breakoutDetail) {
+      const source = (showRanks && RANKED_ABILITIES[playerID]) || playerAbilities
       return (
         <AbilityBreakout
-          abilities={playerAbilities.map(toAbilityData)}
+          abilities={source.map(toAbilityData)}
           targets={toTargets(playerID, playerAbilities, totalValue)}
           totalValue={totalValue}
           valueLabel="Damage"
@@ -162,7 +185,7 @@ export function PlayerMetricChartAbilityBreakdownDemo({
         durationMillis={durationMillis}
       />
     )
-  }, [breakoutDetail])
+  }, [breakoutDetail, showRanks])
 
   const total = players.reduce((sum, p) => sum + p.value, 0)
   const displayTotal = perSecond
@@ -201,7 +224,14 @@ export function PlayerMetricChartAbilityBreakdownDemo({
             {perSecond ? '/s' : ''}
           </span>
         </div>
-        <div className="flex items-center gap-1 rounded border border-[color:var(--tertiary)]/30 bg-[color:var(--tertiary)]/20 px-2 py-0.5 text-2xs text-[color:var(--tertiary)]">
+        <div
+          className={
+            showRanks
+              ? 'flex items-center gap-1 rounded border border-[color:var(--tertiary)]/30 bg-[color:var(--tertiary)]/20 px-2 py-0.5 text-2xs text-[color:var(--tertiary)]'
+              : 'flex items-center gap-1 rounded bg-muted/50 px-2 py-0.5 text-2xs text-muted-foreground'
+          }
+          data-demo-ranks
+        >
           <Layers className="h-3 w-3" />
           Ranks
         </div>
