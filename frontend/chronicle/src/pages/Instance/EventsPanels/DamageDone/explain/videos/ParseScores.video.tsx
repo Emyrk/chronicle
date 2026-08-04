@@ -1,19 +1,22 @@
 /**
- * Lesson video: understand parse scores — pills appear on the demo chart,
- * then the color scale sweeps from grey to gold. 300 frames @ 30fps, 1280x720.
+ * Lesson video: understand parse scores — pills appear on the demo chart
+ * (one row deliberately has none), the color scale sweeps grey to gold, then
+ * the pill-less row is called out. 300 frames @ 30fps, 1280x720.
  */
 
 import { interpolate, spring, useCurrentFrame, useVideoConfig } from "remotion";
 import type { ParsePillData } from "@/components/ui/PlayerMetricChart/PlayerMetricChart";
 import { PlayerMetricChartAbilityBreakdownDemo } from "@/components/ui/PlayerMetricChart/PlayerMetricChart.demo";
 import { clamp } from "./animation";
-import { StepCaption, VideoHeader, VideoStage } from "./shared";
+import { RegionHighlight, StepCaption, VideoHeader, VideoStage } from "./shared";
 
+const YELLOW = "var(--color-class-rogue)";
+
+// Afflicted (player-4) has no pill on purpose — the video explains why.
 const DEMO_PILLS = new Map<string, ParsePillData>([
   ["player-1", { displayScore: 99, color: "#e5cc80", tooltipContent: null }],
   ["player-2", { displayScore: 92, color: "#ff8000", tooltipContent: null }],
   ["player-3", { displayScore: 78, color: "#a335ee", tooltipContent: null }],
-  ["player-4", { displayScore: 55, color: "#0070dd", tooltipContent: null }],
   ["player-5", { displayScore: 31, color: "#1eff00", tooltipContent: null }],
 ]);
 
@@ -27,12 +30,16 @@ const SCALE: Array<[label: string, color: string]> = [
   ["100", "#e5cc80"],
 ];
 
+const MISSING_FRAME = 210;
+
 export default function ParseScoresVideo() {
   const frame = useCurrentFrame();
   const { fps } = useVideoConfig();
   const entrance = spring({ frame, fps, config: { damping: 200 }, durationInFrames: 28 });
   const pillsIn = frame >= 45;
+  const missingBeat = frame >= MISSING_FRAME;
   const legendIn = interpolate(frame, [110, 125], [0, 1], clamp);
+  const missingIn = interpolate(frame, [MISSING_FRAME, MISSING_FRAME + 12], [0, 1], clamp);
   const captionOpacity = interpolate(frame, [8, 18, 280, 294], [0, 1, 1, 0], clamp);
 
   return (
@@ -71,12 +78,25 @@ export default function ParseScoresVideo() {
         })}
       </aside>
 
+      {/* Call out the pill-less Afflicted row (row 4, bar end). */}
+      <div style={{ opacity: missingIn }}>
+        <RegionHighlight left={330} top={305} width={90} height={34} color={YELLOW} />
+        <div
+          className="absolute rounded-md border bg-card px-2.5 py-1 font-mono text-[11px]"
+          style={{ left: 702, top: 312, borderColor: YELLOW, color: YELLOW, zIndex: 210 }}
+        >
+          Not enough data for this spec
+        </div>
+      </div>
+
       <StepCaption
-        step={pillsIn ? 2 : 1}
+        step={missingBeat ? 3 : pillsIn ? 2 : 1}
         text={
-          pillsIn
-            ? "Grey to gold — each pill scores against same-spec kills of this boss"
-            : "Pills appear next to each player once parses are available"
+          missingBeat
+            ? "No pill? Not enough data for this spec yet"
+            : pillsIn
+              ? "Grey to gold — each pill scores against same-spec kills of this boss"
+              : "Pills appear next to each player once parses are available"
         }
         opacity={captionOpacity}
       />

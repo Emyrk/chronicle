@@ -78,6 +78,7 @@ const parseScores: L = {
     "Pills appear next to each player once parses are available",
     "Each pill scores against same-spec kills of this boss",
     "Grey and white are below average; green and blue solid; purple and orange strong; gold is rank-1",
+    "No pill means there isn't enough data for that spec yet",
   ],
   video: {
     load: () => import("./videos/ParseScores.video"),
