@@ -20,8 +20,8 @@ import { Cursor, LessonIntro, StepCaption, VideoHeader, VideoStage } from "./sha
 // Measured cursor targets (stage coordinates).
 const FILTER_ICON = { x: 262, y: 152 };
 const EDIT_FILTERS_ROW = { x: 338, y: 178 };
-const INPUT_BOX = { x: 250, y: 279 };
-const BACK_BTN = { x: 653, y: 195 };
+const INPUT_BOX = { x: 250, y: 239 };
+const BACK_BTN = { x: 653, y: 155 };
 
 const TYPED_NAME = "Auto Attack";
 

@@ -287,7 +287,8 @@ export function PlayerMetricChartAbilityBreakdownDemo({
 
   return (
     <section className="relative flex h-[430px] w-[620px] flex-col overflow-hidden rounded-lg border border-border bg-card text-card-foreground shadow-xl">
-      {/* Mirrors the real EventsPanel header chrome. */}
+      {/* Mirrors the real EventsPanel header chrome (the flip side has none). */}
+      {filterStage !== 'editor' && (
       <header className="flex h-10 shrink-0 items-center gap-2 border-b border-border px-3">
         <Swords className="h-4 w-4" />
         <span className="text-sm font-medium">Damage Done</span>
@@ -310,6 +311,7 @@ export function PlayerMetricChartAbilityBreakdownDemo({
           </div>
         </div>
       </header>
+      )}
       {filterStage === 'editor' ? (
         <DemoFilterEditor state={filterEditor} />
       ) : (
