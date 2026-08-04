@@ -12,7 +12,8 @@ import type { Lesson, LessonState, LessonVideo } from "./types";
 
 /**
  * Available lessons carry no badge — teachable-from-your-data is the normal
- * case. Only the exception states are called out.
+ * case. Only the exception states are called out. (Example mode is hidden for
+ * now: example-required lessons are greyed and open in live mode anyway.)
  */
 const STATE_PILL: Record<LessonState, { label: string; className: string } | null> = {
   available: null,
@@ -21,7 +22,7 @@ const STATE_PILL: Record<LessonState, { label: string; className: string } | nul
     className: "border-class-rogue/45 text-class-rogue",
   },
   "example-required": {
-    label: "EXAMPLE DATA",
+    label: "NOT IN LIVE DATA",
     className: "border-border text-muted-foreground",
   },
 };
@@ -172,7 +173,7 @@ function LessonRow<TCaps>({
 }) {
   const state = lesson.deriveState(caps);
   const pill = STATE_PILL[state];
-  const exampleForced = lesson.exampleOnly || state === "example-required";
+  const dimmed = lesson.exampleOnly || state === "example-required";
   const rowRef = useRef<HTMLDivElement>(null);
 
   // Reverse link: when a panel region lights this lesson up, bring it into view.
@@ -180,8 +181,8 @@ function LessonRow<TCaps>({
     if (highlighted) rowRef.current?.scrollIntoView({ block: "nearest", behavior: "smooth" });
   }, [highlighted]);
 
-  const open = () =>
-    onSelect({ lessonId: lesson.id, mode: exampleForced ? "example" : "live" });
+  // Example mode is hidden for now — every lesson opens against live data.
+  const open = () => onSelect({ lessonId: lesson.id, mode: "live" });
 
   return (
     <div
@@ -203,6 +204,7 @@ function LessonRow<TCaps>({
         "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
         selected && "border-primary/40 bg-primary/[0.07] hover:bg-primary/10",
         highlighted && "border-primary/60 bg-primary/[0.09] ring-1 ring-primary/40",
+        dimmed && !selected && !highlighted && "opacity-65 hover:opacity-90",
       )}
     >
       {selected && <span className="absolute inset-y-0 left-0 w-[3px] bg-primary" />}
@@ -228,14 +230,7 @@ function LessonRow<TCaps>({
 
       <span className="flex min-w-0 flex-1 flex-col gap-1">
         <span className="flex flex-wrap items-center gap-[7px]">
-          <span
-            className={cn(
-              "text-[13px] font-semibold tracking-tight",
-              state === "example-required" && !selected && "text-foreground/80",
-            )}
-          >
-            {lesson.title}
-          </span>
+          <span className="text-[13px] font-semibold tracking-tight">{lesson.title}</span>
           {pill && (
             <span
               className={cn(
@@ -250,21 +245,11 @@ function LessonRow<TCaps>({
         <span className="line-clamp-2 text-[11.5px] leading-snug text-muted-foreground">
           {lesson.description(caps)}
         </span>
-        <span className="mt-1 flex items-center gap-3 font-mono text-[10px] uppercase tracking-[0.1em] text-muted-foreground/70">
-          {lesson.video && <span>{formatSeconds(videoSeconds(lesson.video))} video</span>}
-          {state === "limited" && (
-            <button
-              type="button"
-              onClick={(e) => {
-                e.stopPropagation();
-                onSelect({ lessonId: lesson.id, mode: "example" });
-              }}
-              className="tracking-[0.1em] text-primary/80 underline-offset-2 hover:text-primary hover:underline"
-            >
-              richer example →
-            </button>
-          )}
-        </span>
+        {lesson.video && (
+          <span className="mt-1 font-mono text-[10px] uppercase tracking-[0.1em] text-muted-foreground/70">
+            {formatSeconds(videoSeconds(lesson.video))} video
+          </span>
+        )}
       </span>
     </div>
   );

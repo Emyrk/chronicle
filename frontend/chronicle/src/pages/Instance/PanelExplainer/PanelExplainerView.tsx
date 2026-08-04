@@ -171,12 +171,10 @@ function LessonShell<TResult, TCaps>({
     [setSearchParams],
   );
 
-  // Example-forced lessons (exampleOnly, or the live data can't teach them)
-  // always render in example mode — derived, so deep links work without effects.
-  const exampleForced =
-    !!selectedLesson &&
-    (selectedLesson.exampleOnly || selectedLesson.deriveState(caps) === "example-required");
-  const effectiveMode = exampleForced ? "example" : mode;
+  // Example mode is hidden from user flows for now (the example panel needs
+  // work) — lessons always render against live data. `initialMode: "example"`
+  // remains a storybook/testing escape hatch.
+  const effectiveMode = initialMode === "example" ? mode : "live";
 
   const returnToLive = useCallback(() => {
     // Leaving example mode on an example-forced lesson also closes the lesson.

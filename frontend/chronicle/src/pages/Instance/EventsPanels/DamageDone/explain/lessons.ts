@@ -70,7 +70,7 @@ const parseScores: L = {
   description: (caps) =>
     caps.hasParses
       ? "Colored pills score each player against everyone else who fought this boss with the same spec."
-      : "No parse data for this selection yet — learn on the example raid.",
+      : "No parse data for this selection yet.",
   deriveState: (caps) => (caps.hasParses ? "available" : "example-required"),
   instruction:
     "The scale climbs grey, green, blue, purple, orange, then pink at 99 — gold is a perfect 100. Hover a pill for the cohort.",
@@ -122,7 +122,7 @@ const breakoutTour: L = {
   description: (caps) =>
     caps.hasDetailedStats && caps.hasTargetBreakout
       ? "More detail, min/avg/max, and the By Target tab inside a breakout."
-      : "Your selection is missing detailed hit stats — learn on the example raid.",
+      : "Your selection is missing detailed hit stats.",
   deriveState: (caps) =>
     caps.hasAbilityBreakout && caps.hasTargetBreakout && caps.hasDetailedStats
       ? "available"
@@ -150,7 +150,7 @@ const spellRanks: L = {
   description: (caps) =>
     caps.hasSpellRanks
       ? "Your log has spells cast at more than one rank to split out."
-      : "No multi-rank spells in this selection — learn on the example raid.",
+      : "No multi-rank spells in this selection.",
   deriveState: (caps) =>
     caps.hasSpellRanks && caps.hasAbilityBreakout ? "available" : "example-required",
   instruction:
