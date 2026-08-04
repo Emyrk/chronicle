@@ -8,7 +8,7 @@
  * disabled so remotion scrubbing is deterministic.
  */
 
-import { ChevronDown, HelpCircle, MoreVertical, Plus, Settings, TrendingUp } from 'lucide-react'
+import { ChevronDown, Filter, HelpCircle, MoreVertical, Plus, Settings, TrendingUp } from 'lucide-react'
 import { Line, type LineSeries } from '@nivo/line'
 import { applyAggregation, AGGREGATIONS } from './aggregations'
 import type { AggregationType } from './timelineTypes'
@@ -40,6 +40,7 @@ export function TimelineDemo({
   timeRange,
   tooltipSec,
   durability,
+  filterMenu,
 }: {
   /** Series to plot (aggregation applied via the panel's real registry). */
   series?: DemoTimelineSeries[]
@@ -53,6 +54,8 @@ export function TimelineDemo({
   tooltipSec?: number
   /** Render the raid-durability background bars. */
   durability?: boolean
+  /** Show the filter icon's context menu (Edit filters flips the panel). */
+  filterMenu?: boolean
 }) {
   const data: ColoredSeries[] = series
     .filter((s) => !hiddenSeries.includes(s.id))
@@ -89,8 +92,24 @@ export function TimelineDemo({
         <span className="text-sm font-medium">Line Chart</span>
         <ChevronDown className="h-3.5 w-3.5 text-muted-foreground" />
         <MoreVertical className="h-3.5 w-3.5 text-muted-foreground" />
+        <span className="text-muted-foreground" data-demo-filter>
+          <Filter className="h-3.5 w-3.5" />
+        </span>
         <HelpCircle className="h-3.5 w-3.5 text-muted-foreground" />
       </header>
+      {/* The filter icon's context menu (Edit filters flips the panel). */}
+      {filterMenu && (
+        <div
+          className="absolute z-20 w-[150px] rounded-md border border-border bg-popover p-1 shadow-md"
+          style={{ left: 176, top: 26 }}
+          data-demo-filter-menu
+        >
+          <div className="rounded bg-muted/60 px-2 py-1.5 text-xs" data-demo-edit-filters>
+            Edit filters
+          </div>
+          <div className="rounded px-2 py-1.5 text-xs text-muted-foreground">Reset to default</div>
+        </div>
+      )}
 
       <div className="relative min-h-0 flex-1" style={{ cursor: 'crosshair' }}>
         <Line
@@ -302,7 +321,9 @@ export function TimelineEditorDemo({
           </h4>
           <div className="flex items-center gap-2">
             <span className="rounded-md px-3 py-1.5 text-xs font-medium">Reset</span>
-            <span className="rounded-md px-3 py-1.5 text-xs font-medium">Back</span>
+            <span className="rounded-md px-3 py-1.5 text-xs font-medium" data-demo-editor-close>
+              Back
+            </span>
           </div>
         </div>
         {/* Tab strip: ⚙ | Series 1 | (Series 2) | + */}
