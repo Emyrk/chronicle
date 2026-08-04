@@ -5,7 +5,7 @@ import {
   timelinePreviewTimeAtY,
   type EventTimelinePreviewEvent,
   type EventTimelinePreviewKind,
-} from "./eventTimelinePreview";
+} from "./eventTimelinePreview.ts";
 
 interface EventTimelinePreviewProps {
   events: EventTimelinePreviewEvent[];

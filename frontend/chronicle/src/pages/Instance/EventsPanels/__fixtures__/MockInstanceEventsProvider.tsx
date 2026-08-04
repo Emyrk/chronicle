@@ -105,7 +105,11 @@ export function MockInstanceEventsProvider({
       try {
         const fixtureUrl = FIXTURE_URLS[type];
         if (!fixtureUrl) {
-          throw new Error(`No fixture available for stream type: ${type}`);
+          // No fixture recorded for this stream yet — serve an empty stream
+          // so panels render their no-data state instead of an error.
+          const empty: CachedStream = { data: new Uint8Array(0), headers: [] };
+          cacheRef.current.set(type, empty);
+          return empty;
         }
 
         const response = await fetch(fixtureUrl);

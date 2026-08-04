@@ -6,6 +6,7 @@
  */
 
 import type { WorkerRequest, WorkerResponse } from "./processorTypes";
+import { processWorkerRequest } from "./panelRequestProcessor";
 
 interface WorkerSlot {
   worker: Worker;
@@ -27,6 +28,10 @@ const detectedConcurrency = typeof navigator !== "undefined" && Number.isFinite(
 const WORKER_POOL_SIZE = Math.max(1, Math.min(detectedConcurrency, MAX_POOL_SIZE));
 
 let poolInitialized = false;
+// Module workers can't be constructed everywhere the panels run (the compiled
+// design-system bundle has no worker asset to point at). When construction
+// fails, requests process on the main thread via the same shared pipeline.
+let mainThreadMode = false;
 let workerSlots: WorkerSlot[] = [];
 let requestQueue: QueuedRequest[] = [];
 
@@ -35,15 +40,24 @@ function createWorker(): Worker {
 }
 
 function initializePool(): void {
-  if (poolInitialized) {
+  if (poolInitialized || mainThreadMode) {
     return;
   }
 
-  workerSlots = Array.from({ length: WORKER_POOL_SIZE }, () => ({
-    worker: createWorker(),
-    busy: false,
-  }));
+  const slots: WorkerSlot[] = [];
+  try {
+    for (let i = 0; i < WORKER_POOL_SIZE; i++) {
+      slots.push({ worker: createWorker(), busy: false });
+    }
+  } catch {
+    for (const slot of slots) {
+      slot.worker.terminate();
+    }
+    mainThreadMode = true;
+    return;
+  }
 
+  workerSlots = slots;
   poolInitialized = true;
 }
 
@@ -119,6 +133,14 @@ function runRequest(slot: WorkerSlot, queued: QueuedRequest): void {
  */
 export function executeRequest(request: WorkerRequest): Promise<WorkerResponse> {
   initializePool();
+
+  if (mainThreadMode) {
+    // Yield a tick so callers can paint their loading state before the
+    // synchronous processing runs.
+    return new Promise((resolve) => {
+      setTimeout(() => resolve(processWorkerRequest(request)), 0);
+    });
+  }
 
   return new Promise((resolve, reject) => {
     requestQueue.push({

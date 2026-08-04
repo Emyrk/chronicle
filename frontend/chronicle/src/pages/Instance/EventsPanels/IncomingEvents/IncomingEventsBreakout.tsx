@@ -3,7 +3,7 @@ import { ChevronDown, ChevronUp, GripHorizontal, HeartPulse, Shield, ShieldBan, 
 import { cn } from "@/lib/utils";
 import { SpellIdTooltip } from "@/components/ui/SpellIdTooltip/SpellIdTooltip";
 import { EventTimelinePreview } from "./EventTimelinePreview";
-import type { EventTimelinePreviewEvent } from "./eventTimelinePreview";
+import type { EventTimelinePreviewEvent } from "./eventTimelinePreview.ts";
 import { BreakoutIdentity } from "@/components/ui/BreakoutPanel/BreakoutIdentity";
 import { RelativeHealthBar } from "@/components/ui/RelativeHealthBar/RelativeHealthBar";
 import { calculateRelativeHealth } from "@/components/ui/RelativeHealthBar/relativeHealth";
