@@ -1,6 +1,11 @@
 import { describe, expect, it } from "vitest";
 import { LESSONS } from "./capabilities";
-import { LESSON_GUIDES } from "./lessonGuides";
+import {
+  formatLessonCountdown,
+  getLessonCountdownProgress,
+  LESSON_GUIDES,
+  LESSON_STEP_DURATION_MS,
+} from "./lessonGuides";
 
 describe("LESSON_GUIDES", () => {
   it("provides a concise guided sequence for every lesson", () => {
@@ -34,6 +39,17 @@ describe("LESSON_GUIDES", () => {
       "outcomes",
       "minmax",
     ]);
+  });
+
+  it("formats and clamps the lesson countdown indicator", () => {
+    expect(formatLessonCountdown(LESSON_STEP_DURATION_MS)).toBe("4.5s");
+    expect(formatLessonCountdown(1_234)).toBe("1.2s");
+    expect(formatLessonCountdown(-20)).toBe("0.0s");
+
+    expect(getLessonCountdownProgress(LESSON_STEP_DURATION_MS)).toBe(100);
+    expect(getLessonCountdownProgress(LESSON_STEP_DURATION_MS / 2)).toBe(50);
+    expect(getLessonCountdownProgress(-1)).toBe(0);
+    expect(getLessonCountdownProgress(LESSON_STEP_DURATION_MS * 2)).toBe(100);
   });
 
   it("does not ask the player to perform panel interactions", () => {

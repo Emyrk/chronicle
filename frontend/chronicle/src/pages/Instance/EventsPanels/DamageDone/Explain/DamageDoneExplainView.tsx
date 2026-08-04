@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   ArrowLeft,
   ArrowRight,
@@ -9,6 +9,7 @@ import {
   Play,
   RotateCcw,
   Sparkles,
+  Timer,
   X,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -37,6 +38,8 @@ import {
   getFixtureSpellDataMap,
 } from "./fixture";
 import {
+  formatLessonCountdown,
+  getLessonCountdownProgress,
   LESSON_GUIDES,
   LESSON_STEP_DURATION_MS,
   type GuideTarget,
@@ -72,6 +75,8 @@ export function DamageDoneExplainView({
   const [activeLesson, setActiveLesson] = useState<LessonId | null>(null);
   const [stepIndex, setStepIndex] = useState(0);
   const [isPlaying, setIsPlaying] = useState(false);
+  const [remainingMs, setRemainingMs] = useState(LESSON_STEP_DURATION_MS);
+  const remainingMsRef = useRef(LESSON_STEP_DURATION_MS);
   const [localPerSecond, setLocalPerSecond] = useState(false);
   const [localPanelOption, setLocalPanelOption] = useState<string | null>(null);
   const [showRanks, setShowRanks] = useState(true);
@@ -153,16 +158,33 @@ export function DamageDoneExplainView({
     setShowRanks(true);
   }, []);
 
+  const resetCountdown = useCallback(() => {
+    remainingMsRef.current = LESSON_STEP_DURATION_MS;
+    setRemainingMs(LESSON_STEP_DURATION_MS);
+  }, []);
+
   useEffect(() => {
     if (!activeLesson || !isPlaying || activeSteps.length === 0) return;
-    const timeout = window.setTimeout(() => {
+
+    const deadline = performance.now() + remainingMsRef.current;
+    const interval = window.setInterval(() => {
+      const nextRemainingMs = Math.max(0, deadline - performance.now());
+      remainingMsRef.current = nextRemainingMs;
+      setRemainingMs(nextRemainingMs);
+
+      if (nextRemainingMs > 0) return;
+      window.clearInterval(interval);
+
       if (stepIndex < activeSteps.length - 1) {
+        remainingMsRef.current = LESSON_STEP_DURATION_MS;
+        setRemainingMs(LESSON_STEP_DURATION_MS);
         setStepIndex((current) => current + 1);
       } else {
         setIsPlaying(false);
       }
-    }, LESSON_STEP_DURATION_MS);
-    return () => window.clearTimeout(timeout);
+    }, 100);
+
+    return () => window.clearInterval(interval);
   }, [activeLesson, activeSteps.length, isPlaying, stepIndex]);
 
   const selectLesson = useCallback((lessonId: LessonId, state: LessonState) => {
@@ -170,29 +192,36 @@ export function DamageDoneExplainView({
       setDataMode("example");
     }
     resetPanelDemoState();
+    resetCountdown();
     setActiveLesson(lessonId);
     setStepIndex(0);
     setIsPlaying(true);
-  }, [dataMode, resetPanelDemoState]);
+  }, [dataMode, resetCountdown, resetPanelDemoState]);
 
   const changeDataMode = useCallback((mode: ExplainDataMode) => {
     setDataMode(mode);
     resetPanelDemoState();
+    resetCountdown();
     setStepIndex(0);
     setIsPlaying(!!activeLesson);
-  }, [activeLesson, resetPanelDemoState]);
+  }, [activeLesson, resetCountdown, resetPanelDemoState]);
 
   const closeLesson = useCallback(() => {
     setActiveLesson(null);
     setStepIndex(0);
     setIsPlaying(false);
+    resetCountdown();
     resetPanelDemoState();
-  }, [resetPanelDemoState]);
+  }, [resetCountdown, resetPanelDemoState]);
 
   const replayLesson = useCallback(() => {
+    resetCountdown();
     setStepIndex(0);
     setIsPlaying(true);
-  }, []);
+  }, [resetCountdown]);
+
+  const countdownLabel = formatLessonCountdown(remainingMs);
+  const countdownProgress = getLessonCountdownProgress(remainingMs);
 
   return (
     <div className="min-h-screen bg-background" data-testid="damage-done-explain-view">
@@ -285,7 +314,7 @@ export function DamageDoneExplainView({
                 className="overflow-hidden rounded-xl border border-[color:var(--tertiary)]/25 bg-card shadow-sm"
                 data-testid="lesson-guide"
               >
-                <div className="flex items-center gap-3 border-b bg-[color:var(--tertiary)]/5 px-4 py-2.5">
+                <div className="relative flex items-center gap-3 border-b bg-[color:var(--tertiary)]/5 px-4 py-2.5">
                   <div className="grid h-7 w-7 shrink-0 place-items-center rounded-md bg-[color:var(--tertiary)]/15 text-[color:var(--tertiary)]">
                     <Sparkles className="h-3.5 w-3.5" />
                   </div>
@@ -308,9 +337,34 @@ export function DamageDoneExplainView({
                       />
                     ))}
                   </div>
+                  <div
+                    className="flex min-w-[104px] items-center justify-center gap-1.5 rounded-md border border-[color:var(--tertiary)]/20 bg-background/65 px-2 py-1 font-mono text-2xs tabular-nums"
+                    role="timer"
+                    aria-label={isPlaying ? `${countdownLabel} until the next step` : `${countdownLabel} remaining while paused`}
+                    data-testid="lesson-countdown"
+                  >
+                    <Timer className="h-3 w-3 text-[color:var(--tertiary)]" />
+                    <span className="text-muted-foreground">
+                      {isPlaying ? (stepIndex === activeSteps.length - 1 ? "Ends" : "Next") : remainingMs > 0 ? "Paused" : "Done"}
+                    </span>
+                    <span className="font-semibold text-foreground">{countdownLabel}</span>
+                  </div>
                   <Button variant="ghost" size="icon" onClick={closeLesson} aria-label="Close lesson" className="h-7 w-7">
                     <X className="h-3.5 w-3.5" />
                   </Button>
+                  <div
+                    className="absolute inset-x-0 bottom-0 h-0.5 overflow-hidden bg-[color:var(--tertiary)]/10"
+                    role="progressbar"
+                    aria-label="Time remaining in this lesson step"
+                    aria-valuemin={0}
+                    aria-valuemax={100}
+                    aria-valuenow={Math.round(countdownProgress)}
+                  >
+                    <div
+                      className="h-full bg-[color:var(--tertiary)] transition-[width] duration-100 ease-linear"
+                      style={{ width: `${countdownProgress}%` }}
+                    />
+                  </div>
                 </div>
 
                 <div className="grid gap-4 px-4 py-4 md:grid-cols-[minmax(0,1fr)_auto] md:items-end">

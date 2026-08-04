@@ -28,6 +28,14 @@ export interface LessonGuideStep {
 
 export const LESSON_STEP_DURATION_MS = 4_500;
 
+export function formatLessonCountdown(remainingMs: number): string {
+  return `${(Math.max(0, remainingMs) / 1000).toFixed(1)}s`;
+}
+
+export function getLessonCountdownProgress(remainingMs: number): number {
+  return Math.min(100, Math.max(0, (remainingMs / LESSON_STEP_DURATION_MS) * 100));
+}
+
 export const LESSON_GUIDES: Record<LessonId, LessonGuideStep[]> = {
   "reading-chart": [
     {
