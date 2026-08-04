@@ -106,12 +106,13 @@ const healerBreakout: L = {
     "Click a healer's row to pin their breakout — every heal shows its overheal share, and the 'Healed' tab breaks the same healing down by target.",
   bullets: [
     "Every heal shows how much of it overflowed as overheal",
+    "Absorbed is healing that was eaten by a heal-absorb effect",
     "'Healed' shows who your healing landed on",
     "Per-target overheal reveals who soaks it",
   ],
   video: {
     load: () => import("./videos/HealerBreakout.video"),
-    durationInFrames: 470,
+    durationInFrames: 530,
     fps: 30,
     width: 1280,
     height: 720,

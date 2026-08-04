@@ -20,6 +20,8 @@ interface HealAbility {
   overheal: number
   casts: number
   crits: number
+  /** Healing eaten by heal-absorb effects (sky-blue Absorbed column). */
+  absorbed?: number
 }
 
 interface HealTarget {
@@ -49,8 +51,8 @@ const HEALERS: Healer[] = [
     effective: 128_000,
     overheal: 22_000,
     abilities: [
-      { name: 'Greater Heal', effective: 62_000, overheal: 9_000, casts: 40, crits: 9 },
-      { name: 'Flash Heal', effective: 38_000, overheal: 6_000, casts: 46, crits: 10 },
+      { name: 'Greater Heal', effective: 62_000, overheal: 9_000, casts: 40, crits: 9, absorbed: 8_000 },
+      { name: 'Flash Heal', effective: 38_000, overheal: 6_000, casts: 46, crits: 10, absorbed: 3_000 },
       { name: 'Renew', effective: 20_000, overheal: 5_000, casts: 90, crits: 0 },
       { name: 'Prayer of Healing', effective: 8_000, overheal: 2_000, casts: 12, crits: 2 },
     ],
@@ -159,6 +161,7 @@ function toAbilityData(a: HealAbility, mode: DemoHealingViewMode): AbilityData {
     name: a.name,
     value,
     overheal: mode === 'effective' ? a.overheal : undefined,
+    absorbed: mode !== 'overheal' ? a.absorbed : undefined,
     Total: value,
     Count: a.casts,
     Hits: a.casts,
@@ -211,6 +214,7 @@ export function PlayerMetricChartHealingDemo({
           targetTabLabel={viewMode === 'overheal' ? 'Overhealed' : 'Healed'}
           showHits={false}
           showOverheal={viewMode === 'effective'}
+          showAbsorbed={viewMode !== 'overheal'}
           activeTab={breakoutTab}
           onTabChange={() => {}}
         />
