@@ -1852,10 +1852,10 @@ ALTER TABLE ONLY log_instances
     ADD CONSTRAINT log_instances_pkey PRIMARY KEY (id);
 
 ALTER TABLE ONLY parse_score_receipts
-    ADD CONSTRAINT parse_score_receipts_instance_id_snapshot_id_key UNIQUE (instance_id, snapshot_id);
+    ADD CONSTRAINT parse_score_receipts_pkey PRIMARY KEY (id);
 
 ALTER TABLE ONLY parse_score_receipts
-    ADD CONSTRAINT parse_score_receipts_pkey PRIMARY KEY (id);
+    ADD CONSTRAINT parse_score_receipts_tenant_id_instance_id_snapshot_id_look_key UNIQUE (tenant_id, instance_id, snapshot_id, lookback_days, policy_version, query_version);
 
 ALTER TABLE ONLY parse_score_results
     ADD CONSTRAINT parse_score_results_pkey PRIMARY KEY (id);
@@ -2101,11 +2101,11 @@ CREATE UNIQUE INDEX idx_mod_requests_pending ON application_modification_request
 
 CREATE INDEX idx_psr_dedup ON parse_score_results USING btree (run_id, encounter_name, player_guid, snapshot_id, metric);
 
-CREATE INDEX idx_psr_instance ON parse_score_results USING btree (instance_id);
-
 CREATE INDEX idx_psr_player ON parse_score_results USING btree (tenant_id, player_guid, metric, killed_at DESC NULLS LAST);
 
 CREATE INDEX idx_psr_snapshot ON parse_score_results USING btree (snapshot_id);
+
+CREATE INDEX idx_psr_tenant_instance ON parse_score_results USING btree (tenant_id, instance_id);
 
 CREATE INDEX idx_psreceipt_instance ON parse_score_receipts USING btree (instance_id);
 
@@ -2401,7 +2401,13 @@ ALTER TABLE ONLY parse_score_receipts
     ADD CONSTRAINT parse_score_receipts_snapshot_id_fkey FOREIGN KEY (snapshot_id) REFERENCES ranking_snapshots(id) ON DELETE CASCADE;
 
 ALTER TABLE ONLY parse_score_results
+    ADD CONSTRAINT parse_score_results_guild_id_fkey FOREIGN KEY (guild_id) REFERENCES guilds(id) ON DELETE SET NULL;
+
+ALTER TABLE ONLY parse_score_results
     ADD CONSTRAINT parse_score_results_instance_id_fkey FOREIGN KEY (instance_id) REFERENCES log_instances(id) ON DELETE CASCADE;
+
+ALTER TABLE ONLY parse_score_results
+    ADD CONSTRAINT parse_score_results_log_group_id_fkey FOREIGN KEY (log_group_id) REFERENCES wow_log_groups(id) ON DELETE SET NULL;
 
 ALTER TABLE ONLY parse_score_results
     ADD CONSTRAINT parse_score_results_snapshot_id_fkey FOREIGN KEY (snapshot_id) REFERENCES ranking_snapshots(id) ON DELETE CASCADE;

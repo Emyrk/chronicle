@@ -4889,13 +4889,20 @@ func (q *sqlQuerier) SetDuplicateGroupIDs(ctx context.Context, arg SetDuplicateG
 	return err
 }
 
-const deleteParseScoreResultsForInstance = `-- name: DeleteParseScoreResultsForInstance :exec
-DELETE FROM parse_score_results WHERE instance_id = $1
+const deleteParseScoreResultsForTenantInstance = `-- name: DeleteParseScoreResultsForTenantInstance :exec
+DELETE FROM parse_score_results
+WHERE tenant_id = $1 AND instance_id = $2
 `
 
-// Remove all parse score results for an instance (before re-computation).
-func (q *sqlQuerier) DeleteParseScoreResultsForInstance(ctx context.Context, instanceID uuid.UUID) error {
-	_, err := q.db.Exec(ctx, deleteParseScoreResultsForInstance, instanceID)
+type DeleteParseScoreResultsForTenantInstanceParams struct {
+	TenantID   uuid.UUID `db:"tenant_id" json:"tenant_id"`
+	InstanceID uuid.UUID `db:"instance_id" json:"instance_id"`
+}
+
+// Remove parse score results for a tenant+instance (before re-computation).
+// Scoped to tenant_id so one tenant's recompute cannot erase another's projections.
+func (q *sqlQuerier) DeleteParseScoreResultsForTenantInstance(ctx context.Context, arg DeleteParseScoreResultsForTenantInstanceParams) error {
+	_, err := q.db.Exec(ctx, deleteParseScoreResultsForTenantInstance, arg.TenantID, arg.InstanceID)
 	return err
 }
 
@@ -5178,6 +5185,108 @@ func (q *sqlQuerier) GetParseScoreResultsForInstance(ctx context.Context, instan
 	return items, nil
 }
 
+const getScoringSnapshotBefore = `-- name: GetScoringSnapshotBefore :one
+SELECT id, tenant_id, cutoff, window_start, lookback_days, cohort_mode, policy_version, query_version, min_parser_version_num, min_addon_version_num, status, created_at, published_at, source_row_count, source_watermark
+FROM ranking_snapshots
+WHERE tenant_id = $1
+  AND lookback_days = $2
+  AND status = 'published'
+  AND cutoff <= $3
+  AND policy_version = $4
+  AND query_version = $5
+ORDER BY cutoff DESC
+LIMIT 1
+`
+
+type GetScoringSnapshotBeforeParams struct {
+	TenantID      uuid.UUID          `db:"tenant_id" json:"tenant_id"`
+	LookbackDays  int32              `db:"lookback_days" json:"lookback_days"`
+	Before        pgtype.Timestamptz `db:"before" json:"before"`
+	PolicyVersion int16              `db:"policy_version" json:"policy_version"`
+	QueryVersion  int16              `db:"query_version" json:"query_version"`
+}
+
+// Return the latest published snapshot whose cutoff <= the given timestamp,
+// matching the current policy_version and query_version.
+// This prevents an incompatible newer snapshot from hiding a compatible older one.
+func (q *sqlQuerier) GetScoringSnapshotBefore(ctx context.Context, arg GetScoringSnapshotBeforeParams) (RankingSnapshot, error) {
+	row := q.db.QueryRow(ctx, getScoringSnapshotBefore,
+		arg.TenantID,
+		arg.LookbackDays,
+		arg.Before,
+		arg.PolicyVersion,
+		arg.QueryVersion,
+	)
+	var i RankingSnapshot
+	err := row.Scan(
+		&i.ID,
+		&i.TenantID,
+		&i.Cutoff,
+		&i.WindowStart,
+		&i.LookbackDays,
+		&i.CohortMode,
+		&i.PolicyVersion,
+		&i.QueryVersion,
+		&i.MinParserVersionNum,
+		&i.MinAddonVersionNum,
+		&i.Status,
+		&i.CreatedAt,
+		&i.PublishedAt,
+		&i.SourceRowCount,
+		&i.SourceWatermark,
+	)
+	return i, err
+}
+
+const getScoringSnapshotLatest = `-- name: GetScoringSnapshotLatest :one
+SELECT id, tenant_id, cutoff, window_start, lookback_days, cohort_mode, policy_version, query_version, min_parser_version_num, min_addon_version_num, status, created_at, published_at, source_row_count, source_watermark
+FROM ranking_snapshots
+WHERE tenant_id = $1
+  AND lookback_days = $2
+  AND status = 'published'
+  AND policy_version = $3
+  AND query_version = $4
+ORDER BY published_at DESC
+LIMIT 1
+`
+
+type GetScoringSnapshotLatestParams struct {
+	TenantID      uuid.UUID `db:"tenant_id" json:"tenant_id"`
+	LookbackDays  int32     `db:"lookback_days" json:"lookback_days"`
+	PolicyVersion int16     `db:"policy_version" json:"policy_version"`
+	QueryVersion  int16     `db:"query_version" json:"query_version"`
+}
+
+// Return the latest published snapshot matching the current policy_version and
+// query_version. Used when instance has no start_time.
+func (q *sqlQuerier) GetScoringSnapshotLatest(ctx context.Context, arg GetScoringSnapshotLatestParams) (RankingSnapshot, error) {
+	row := q.db.QueryRow(ctx, getScoringSnapshotLatest,
+		arg.TenantID,
+		arg.LookbackDays,
+		arg.PolicyVersion,
+		arg.QueryVersion,
+	)
+	var i RankingSnapshot
+	err := row.Scan(
+		&i.ID,
+		&i.TenantID,
+		&i.Cutoff,
+		&i.WindowStart,
+		&i.LookbackDays,
+		&i.CohortMode,
+		&i.PolicyVersion,
+		&i.QueryVersion,
+		&i.MinParserVersionNum,
+		&i.MinAddonVersionNum,
+		&i.Status,
+		&i.CreatedAt,
+		&i.PublishedAt,
+		&i.SourceRowCount,
+		&i.SourceWatermark,
+	)
+	return i, err
+}
+
 const insertParseScoreReceipt = `-- name: InsertParseScoreReceipt :one
 INSERT INTO parse_score_receipts (
     tenant_id, instance_id, snapshot_id,
@@ -5188,10 +5297,7 @@ INSERT INTO parse_score_receipts (
     $4, $5, $6,
     $7, $8, now()
 )
-ON CONFLICT (instance_id, snapshot_id) DO UPDATE SET
-    policy_version = EXCLUDED.policy_version,
-    query_version  = EXCLUDED.query_version,
-    lookback_days  = EXCLUDED.lookback_days,
+ON CONFLICT (tenant_id, instance_id, snapshot_id, lookback_days, policy_version, query_version) DO UPDATE SET
     source_count   = EXCLUDED.source_count,
     result_count   = EXCLUDED.result_count,
     computed_at    = now()
@@ -5210,7 +5316,8 @@ type InsertParseScoreReceiptParams struct {
 }
 
 // Insert a successful computation receipt. Receipt existence = fully committed success.
-// On conflict (same instance+snapshot), update counts to reflect re-computation.
+// On conflict (same tenant+instance+snapshot+lookback+policy+query), update counts
+// to reflect re-computation (idempotent upsert).
 func (q *sqlQuerier) InsertParseScoreReceipt(ctx context.Context, arg InsertParseScoreReceiptParams) (ParseScoreReceipt, error) {
 	row := q.db.QueryRow(ctx, insertParseScoreReceipt,
 		arg.TenantID,
@@ -5380,6 +5487,107 @@ func (q *sqlQuerier) ListInstancesMissingParseReceipt(ctx context.Context, arg L
 			&i.MaxPlayers,
 			&i.LogGroupID,
 			&i.GuildID,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listInstancesMissingParseReceiptWithSnapshot = `-- name: ListInstancesMissingParseReceiptWithSnapshot :many
+SELECT
+    edr.instance_id,
+    li.start_time,
+    COALESCE(li.duplicate_group_id, li.id) AS run_id,
+    li.name AS instance_name,
+    li.difficulty_name,
+    li.max_players,
+    li.log_group_id,
+    li.guild_id,
+    snap.id AS snapshot_id
+FROM (
+    SELECT DISTINCT edr2.instance_id
+    FROM encounter_dps_rankings edr2
+    WHERE edr2.encounter_id IS NOT NULL
+      AND (edr2.dps > 0 OR edr2.hps > 0)
+      AND NOT EXISTS (
+          SELECT 1 FROM parse_score_receipts psr
+          WHERE psr.instance_id = edr2.instance_id
+            AND psr.policy_version = $1
+            AND psr.query_version = $2
+      )
+    LIMIT $3
+) edr
+JOIN log_instances li ON li.id = edr.instance_id
+JOIN LATERAL (
+    SELECT rs.id
+    FROM ranking_snapshots rs
+    WHERE rs.tenant_id = $4
+      AND rs.lookback_days = $5
+      AND rs.status = 'published'
+      AND rs.policy_version = $1
+      AND rs.query_version = $2
+      AND (li.start_time IS NULL OR rs.cutoff <= li.start_time)
+    ORDER BY rs.cutoff DESC
+    LIMIT 1
+) snap ON true
+ORDER BY li.start_time DESC NULLS LAST
+`
+
+type ListInstancesMissingParseReceiptWithSnapshotParams struct {
+	PolicyVersion int16     `db:"policy_version" json:"policy_version"`
+	QueryVersion  int16     `db:"query_version" json:"query_version"`
+	MaxRows       int32     `db:"max_rows" json:"max_rows"`
+	TenantID      uuid.UUID `db:"tenant_id" json:"tenant_id"`
+	LookbackDays  int32     `db:"lookback_days" json:"lookback_days"`
+}
+
+type ListInstancesMissingParseReceiptWithSnapshotRow struct {
+	InstanceID     uuid.UUID          `db:"instance_id" json:"instance_id"`
+	StartTime      pgtype.Timestamptz `db:"start_time" json:"start_time"`
+	RunID          uuid.UUID          `db:"run_id" json:"run_id"`
+	InstanceName   string             `db:"instance_name" json:"instance_name"`
+	DifficultyName string             `db:"difficulty_name" json:"difficulty_name"`
+	MaxPlayers     int32              `db:"max_players" json:"max_players"`
+	LogGroupID     uuid.UUID          `db:"log_group_id" json:"log_group_id"`
+	GuildID        uuid.NullUUID      `db:"guild_id" json:"guild_id"`
+	SnapshotID     uuid.UUID          `db:"snapshot_id" json:"snapshot_id"`
+}
+
+// Repair query: for each instance with ranking data but no receipt matching
+// the current policy/query version, resolve its canonical historical snapshot
+// (latest published snapshot with cutoff <= instance start, matching versions).
+// Instances without an eligible snapshot are excluded (not re-enqueued).
+// Returns at most @max_rows rows for bounded batch processing.
+func (q *sqlQuerier) ListInstancesMissingParseReceiptWithSnapshot(ctx context.Context, arg ListInstancesMissingParseReceiptWithSnapshotParams) ([]ListInstancesMissingParseReceiptWithSnapshotRow, error) {
+	rows, err := q.db.Query(ctx, listInstancesMissingParseReceiptWithSnapshot,
+		arg.PolicyVersion,
+		arg.QueryVersion,
+		arg.MaxRows,
+		arg.TenantID,
+		arg.LookbackDays,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListInstancesMissingParseReceiptWithSnapshotRow
+	for rows.Next() {
+		var i ListInstancesMissingParseReceiptWithSnapshotRow
+		if err := rows.Scan(
+			&i.InstanceID,
+			&i.StartTime,
+			&i.RunID,
+			&i.InstanceName,
+			&i.DifficultyName,
+			&i.MaxPlayers,
+			&i.LogGroupID,
+			&i.GuildID,
+			&i.SnapshotID,
 		); err != nil {
 			return nil, err
 		}

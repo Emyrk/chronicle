@@ -66,8 +66,9 @@ type sqlcQuerier interface {
 	DeleteLogInstanceByIDAndGroup(ctx context.Context, arg DeleteLogInstanceByIDAndGroupParams) (uuid.UUID, error)
 	DeleteLogInstancesByIDs(ctx context.Context, ids []uuid.UUID) (int64, error)
 	DeleteModificationRequest(ctx context.Context, id uuid.UUID) error
-	// Remove all parse score results for an instance (before re-computation).
-	DeleteParseScoreResultsForInstance(ctx context.Context, instanceID uuid.UUID) error
+	// Remove parse score results for a tenant+instance (before re-computation).
+	// Scoped to tenant_id so one tenant's recompute cannot erase another's projections.
+	DeleteParseScoreResultsForTenantInstance(ctx context.Context, arg DeleteParseScoreResultsForTenantInstanceParams) error
 	// Delete a snapshot by ID. Members are cascade-deleted via the FK
 	// ranking_snapshot_members.snapshot_id → ranking_snapshots.id ON DELETE CASCADE
 	// (migration 000143). Deleting a day's snapshot makes raids from that day
@@ -222,6 +223,13 @@ type sqlcQuerier interface {
 	// Returns the realm-specific policy if it exists, otherwise the server-level policy.
 	GetRetentionPolicyForRealm(ctx context.Context, realmID uuid.NullUUID) (RetentionPolicy, error)
 	GetRetentionRulesByPolicy(ctx context.Context, policyID uuid.UUID) ([]RetentionRule, error)
+	// Return the latest published snapshot whose cutoff <= the given timestamp,
+	// matching the current policy_version and query_version.
+	// This prevents an incompatible newer snapshot from hiding a compatible older one.
+	GetScoringSnapshotBefore(ctx context.Context, arg GetScoringSnapshotBeforeParams) (RankingSnapshot, error)
+	// Return the latest published snapshot matching the current policy_version and
+	// query_version. Used when instance has no start_time.
+	GetScoringSnapshotLatest(ctx context.Context, arg GetScoringSnapshotLatestParams) (RankingSnapshot, error)
 	GetServerApplicationByID(ctx context.Context, id uuid.UUID) (GetServerApplicationByIDRow, error)
 	GetServerUploadMetaRealmID(ctx context.Context, logGroupID uuid.UUID) (uuid.NullUUID, error)
 	GetServersForWorld(ctx context.Context, worldID uuid.UUID) ([]WowServer, error)
@@ -336,7 +344,8 @@ type sqlcQuerier interface {
 	// Modification Requests
 	InsertModificationRequest(ctx context.Context, arg InsertModificationRequestParams) (ApplicationModificationRequest, error)
 	// Insert a successful computation receipt. Receipt existence = fully committed success.
-	// On conflict (same instance+snapshot), update counts to reflect re-computation.
+	// On conflict (same tenant+instance+snapshot+lookback+policy+query), update counts
+	// to reflect re-computation (idempotent upsert).
 	InsertParseScoreReceipt(ctx context.Context, arg InsertParseScoreReceiptParams) (ParseScoreReceipt, error)
 	// Persist a single parse score result for an instance+encounter+player+metric.
 	// No unique constraint: duplicate uploads are collapsed at read time via run_id DISTINCT ON.
@@ -414,6 +423,12 @@ type sqlcQuerier interface {
 	// old instances, snapshot deletion/rebuild, and policy/query changes.
 	// Returns at most @max_rows rows for bounded batch processing.
 	ListInstancesMissingParseReceipt(ctx context.Context, arg ListInstancesMissingParseReceiptParams) ([]ListInstancesMissingParseReceiptRow, error)
+	// Repair query: for each instance with ranking data but no receipt matching
+	// the current policy/query version, resolve its canonical historical snapshot
+	// (latest published snapshot with cutoff <= instance start, matching versions).
+	// Instances without an eligible snapshot are excluded (not re-enqueued).
+	// Returns at most @max_rows rows for bounded batch processing.
+	ListInstancesMissingParseReceiptWithSnapshot(ctx context.Context, arg ListInstancesMissingParseReceiptWithSnapshotParams) ([]ListInstancesMissingParseReceiptWithSnapshotRow, error)
 	ListLeaderboardVersionRequirements(ctx context.Context) ([]LeaderboardVersionRequirement, error)
 	ListModificationRequestsByApplicationID(ctx context.Context, applicationID uuid.UUID) ([]ApplicationModificationRequest, error)
 	// Return published snapshots for a tenant, most recent first.

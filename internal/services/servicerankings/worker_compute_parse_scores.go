@@ -23,10 +23,10 @@ import (
 // RetryDelays defines the bounded retry schedule for missing-snapshot retries.
 // Attempt 0 = immediate, then +24h, +48h (72h total), +7d (10d total).
 var RetryDelays = []time.Duration{
-	0,                   // attempt 0: immediate
-	24 * time.Hour,      // attempt 1: +24h
-	48 * time.Hour,      // attempt 2: +48h (72h total)
-	7 * 24 * time.Hour,  // attempt 3: +7d (10d total)
+	0,                  // attempt 0: immediate
+	24 * time.Hour,     // attempt 1: +24h
+	48 * time.Hour,     // attempt 2: +48h (72h total)
+	7 * 24 * time.Hour, // attempt 3: +7d (10d total)
 }
 
 // MaxParseScoreAttempts is the number of scheduled attempts before we stop.
@@ -70,18 +70,24 @@ func (w *WorkerComputeParseScores) Work(ctx context.Context, job *river.Job[pars
 	}
 
 	// Resolve the canonical historical snapshot: latest published cutoff
-	// <= instance start for this tenant and default lookback.
+	// <= instance start for this tenant, default lookback, AND matching
+	// current policy/query version. Version filtering is done in SQL so
+	// an incompatible newer snapshot cannot hide a compatible older one.
 	var snapshot database.RankingSnapshot
 	if inst.StartTime.Valid {
-		snapshot, err = w.Store.GetLatestPublishedSnapshotBefore(ctx, database.GetLatestPublishedSnapshotBeforeParams{
-			TenantID:     tenantID,
-			LookbackDays: int32(parsepolicy.DefaultLookbackDays),
-			Before:       inst.StartTime,
+		snapshot, err = w.Store.GetScoringSnapshotBefore(ctx, database.GetScoringSnapshotBeforeParams{
+			TenantID:      tenantID,
+			LookbackDays:  int32(parsepolicy.DefaultLookbackDays),
+			Before:        inst.StartTime,
+			PolicyVersion: int16(parsepolicy.PolicyVersion),
+			QueryVersion:  int16(QueryVersion),
 		})
 	} else {
-		snapshot, err = w.Store.GetLatestPublishedSnapshot(ctx, database.GetLatestPublishedSnapshotParams{
-			TenantID:     tenantID,
-			LookbackDays: int32(parsepolicy.DefaultLookbackDays),
+		snapshot, err = w.Store.GetScoringSnapshotLatest(ctx, database.GetScoringSnapshotLatestParams{
+			TenantID:      tenantID,
+			LookbackDays:  int32(parsepolicy.DefaultLookbackDays),
+			PolicyVersion: int16(parsepolicy.PolicyVersion),
+			QueryVersion:  int16(QueryVersion),
 		})
 	}
 	if err != nil {
@@ -89,18 +95,6 @@ func (w *WorkerComputeParseScores) Work(ctx context.Context, job *river.Job[pars
 			return w.handleNoSnapshot(ctx, logger, instanceID, tenantID, attempt)
 		}
 		return fmt.Errorf("resolve snapshot: %w", err)
-	}
-
-	// Filter: snapshot must match current policy/query version.
-	if snapshot.PolicyVersion != int16(parsepolicy.PolicyVersion) ||
-		snapshot.QueryVersion != int16(QueryVersion) {
-		logger.Info("snapshot version mismatch, treating as no snapshot",
-			slog.Int("snapshot_policy", int(snapshot.PolicyVersion)),
-			slog.Int("want_policy", parsepolicy.PolicyVersion),
-			slog.Int("snapshot_query", int(snapshot.QueryVersion)),
-			slog.Int("want_query", QueryVersion),
-		)
-		return w.handleNoSnapshot(ctx, logger, instanceID, tenantID, attempt)
 	}
 
 	// Load the instance's ranking rows from encounter_dps_rankings.
@@ -131,11 +125,6 @@ func (w *WorkerComputeParseScores) Work(ctx context.Context, job *river.Job[pars
 		}, nil)
 	}
 
-	// Delete any previous results for this instance (re-computation on re-upload).
-	if err := w.Store.DeleteParseScoreResultsForInstance(ctx, instanceID); err != nil {
-		return fmt.Errorf("delete old results: %w", err)
-	}
-
 	snapshotCohortMode := parsepolicy.CohortMode(snapshot.CohortMode)
 
 	// Compute and persist scores per encounter, per player, for BOTH DPS and HPS.
@@ -148,8 +137,19 @@ func (w *WorkerComputeParseScores) Work(ctx context.Context, job *river.Job[pars
 	logGroupID := uuid.NullUUID{UUID: inst.LogGroupID, Valid: inst.LogGroupID != uuid.Nil}
 	guildID := inst.GuildID
 
-	// Atomic transaction: all result inserts + receipt must commit together.
+	// Atomic transaction: delete old results + insert new results + receipt.
+	// Delete is scoped to (tenant_id, instance_id) so one tenant cannot
+	// erase another's projections.
 	txErr := w.Store.InTx(ctx, func(tx database.Store) error {
+		// Delete previous results for this tenant+instance inside the
+		// transaction so replacement is atomic.
+		if dErr := tx.DeleteParseScoreResultsForTenantInstance(ctx, database.DeleteParseScoreResultsForTenantInstanceParams{
+			TenantID:   tenantID,
+			InstanceID: instanceID,
+		}); dErr != nil {
+			return fmt.Errorf("delete old results: %w", dErr)
+		}
+
 		for _, r := range rankings {
 			// Score both DPS and HPS for each ranking row.
 			type metricEntry struct {
@@ -399,22 +399,17 @@ func (w *WorkerRepairParseScores) Work(ctx context.Context, job *river.Job[ArgsR
 	ctx = servicetenant.AdminBypass(ctx)
 	tenantID := job.Args.TenantID
 
-	// Resolve the current canonical snapshot for repair.
-	snapshot, err := w.Store.GetLatestPublishedSnapshot(ctx, database.GetLatestPublishedSnapshotParams{
-		TenantID:     tenantID,
-		LookbackDays: int32(parsepolicy.DefaultLookbackDays),
-	})
-	if err != nil {
-		if errors.Is(err, pgx.ErrNoRows) {
-			w.Logger.Debug("no published snapshot available for repair")
-			return nil
-		}
-		return fmt.Errorf("resolve snapshot for repair: %w", err)
+	if w.Queue == nil {
+		w.Logger.Warn("no queue available for repair dispatcher")
+		return nil
 	}
 
-	// Find instances with ranking data but no receipt for this snapshot+version.
-	missing, err := w.Store.ListInstancesMissingParseReceipt(ctx, database.ListInstancesMissingParseReceiptParams{
-		SnapshotID:    snapshot.ID,
+	// Per-instance canonical repair: resolve each instance's historical
+	// snapshot via LATERAL join in SQL. Instances without an eligible
+	// snapshot are excluded (not re-enqueued), preserving bounded retry stop.
+	missing, err := w.Store.ListInstancesMissingParseReceiptWithSnapshot(ctx, database.ListInstancesMissingParseReceiptWithSnapshotParams{
+		TenantID:      tenantID,
+		LookbackDays:  int32(parsepolicy.DefaultLookbackDays),
 		PolicyVersion: int16(parsepolicy.PolicyVersion),
 		QueryVersion:  int16(QueryVersion),
 		MaxRows:       100,
@@ -448,7 +443,6 @@ func (w *WorkerRepairParseScores) Work(ctx context.Context, job *river.Job[ArgsR
 	w.Logger.Info("repair dispatcher completed",
 		slog.Int("missing", len(missing)),
 		slog.Int("enqueued", enqueued),
-		slog.String("snapshot_id", snapshot.ID.String()),
 	)
 
 	return nil

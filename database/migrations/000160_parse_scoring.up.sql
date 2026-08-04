@@ -18,8 +18,8 @@ CREATE TABLE parse_score_results (
     instance_id       UUID NOT NULL REFERENCES log_instances(id) ON DELETE CASCADE,
     run_id            UUID NOT NULL,          -- COALESCE(duplicate_group_id, instance_id)
     snapshot_id       UUID NOT NULL REFERENCES ranking_snapshots(id) ON DELETE CASCADE,
-    log_group_id      UUID,                   -- source identity for history
-    guild_id          UUID,                   -- guild-at-raid-time
+    log_group_id      UUID REFERENCES wow_log_groups(id) ON DELETE SET NULL,
+    guild_id          UUID REFERENCES guilds(id) ON DELETE SET NULL,
     encounter_name    TEXT NOT NULL,
     player_guid       TEXT NOT NULL,
     player_name       TEXT NOT NULL DEFAULT '',
@@ -51,8 +51,8 @@ CREATE INDEX idx_psr_player ON parse_score_results
 -- Cascade path from snapshot deletion.
 CREATE INDEX idx_psr_snapshot ON parse_score_results (snapshot_id);
 
--- Instance lookup.
-CREATE INDEX idx_psr_instance ON parse_score_results (instance_id);
+-- Instance lookup (tenant-scoped for deletion during recompute).
+CREATE INDEX idx_psr_tenant_instance ON parse_score_results (tenant_id, instance_id);
 
 -- parse_score_receipts: one row per successfully-committed scoring run.
 -- Receipt existence = fully committed success. No pending/failed state.
@@ -71,7 +71,7 @@ CREATE TABLE parse_score_receipts (
     result_count      INT NOT NULL DEFAULT 0,  -- score results written
     computed_at       TIMESTAMPTZ NOT NULL DEFAULT now(),
     created_at        TIMESTAMPTZ NOT NULL DEFAULT now(),
-    UNIQUE (instance_id, snapshot_id)
+    UNIQUE (tenant_id, instance_id, snapshot_id, lookback_days, policy_version, query_version)
 );
 
 -- Repair dispatcher: find instances with rankings but no matching receipt.

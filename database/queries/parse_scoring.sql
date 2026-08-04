@@ -15,7 +15,8 @@ INSERT INTO parse_score_results (
 
 -- name: InsertParseScoreReceipt :one
 -- Insert a successful computation receipt. Receipt existence = fully committed success.
--- On conflict (same instance+snapshot), update counts to reflect re-computation.
+-- On conflict (same tenant+instance+snapshot+lookback+policy+query), update counts
+-- to reflect re-computation (idempotent upsert).
 INSERT INTO parse_score_receipts (
     tenant_id, instance_id, snapshot_id,
     policy_version, query_version, lookback_days,
@@ -25,10 +26,7 @@ INSERT INTO parse_score_receipts (
     @policy_version, @query_version, @lookback_days,
     @source_count, @result_count, now()
 )
-ON CONFLICT (instance_id, snapshot_id) DO UPDATE SET
-    policy_version = EXCLUDED.policy_version,
-    query_version  = EXCLUDED.query_version,
-    lookback_days  = EXCLUDED.lookback_days,
+ON CONFLICT (tenant_id, instance_id, snapshot_id, lookback_days, policy_version, query_version) DO UPDATE SET
     source_count   = EXCLUDED.source_count,
     result_count   = EXCLUDED.result_count,
     computed_at    = now()
@@ -83,9 +81,11 @@ WHERE psr.instance_id = @instance_id
 ORDER BY psr.run_id, psr.encounter_name, psr.player_guid, psr.snapshot_id, psr.metric,
          psr.created_at DESC;
 
--- name: DeleteParseScoreResultsForInstance :exec
--- Remove all parse score results for an instance (before re-computation).
-DELETE FROM parse_score_results WHERE instance_id = @instance_id;
+-- name: DeleteParseScoreResultsForTenantInstance :exec
+-- Remove parse score results for a tenant+instance (before re-computation).
+-- Scoped to tenant_id so one tenant's recompute cannot erase another's projections.
+DELETE FROM parse_score_results
+WHERE tenant_id = @tenant_id AND instance_id = @instance_id;
 
 -- name: GetCharacterParseHistory :many
 -- Character history: ALL deduplicated parses over the lookback window.
@@ -120,6 +120,78 @@ WHERE psr.tenant_id = @tenant_id
   AND psr.status IN ('ok', 'low_confidence')
   AND psr.killed_at >= @since
 ORDER BY psr.run_id, psr.encounter_name, psr.snapshot_id, psr.precise_score DESC;
+
+-- name: GetScoringSnapshotBefore :one
+-- Return the latest published snapshot whose cutoff <= the given timestamp,
+-- matching the current policy_version and query_version.
+-- This prevents an incompatible newer snapshot from hiding a compatible older one.
+SELECT *
+FROM ranking_snapshots
+WHERE tenant_id = @tenant_id
+  AND lookback_days = @lookback_days
+  AND status = 'published'
+  AND cutoff <= @before
+  AND policy_version = @policy_version
+  AND query_version = @query_version
+ORDER BY cutoff DESC
+LIMIT 1;
+
+-- name: GetScoringSnapshotLatest :one
+-- Return the latest published snapshot matching the current policy_version and
+-- query_version. Used when instance has no start_time.
+SELECT *
+FROM ranking_snapshots
+WHERE tenant_id = @tenant_id
+  AND lookback_days = @lookback_days
+  AND status = 'published'
+  AND policy_version = @policy_version
+  AND query_version = @query_version
+ORDER BY published_at DESC
+LIMIT 1;
+
+-- name: ListInstancesMissingParseReceiptWithSnapshot :many
+-- Repair query: for each instance with ranking data but no receipt matching
+-- the current policy/query version, resolve its canonical historical snapshot
+-- (latest published snapshot with cutoff <= instance start, matching versions).
+-- Instances without an eligible snapshot are excluded (not re-enqueued).
+-- Returns at most @max_rows rows for bounded batch processing.
+SELECT
+    edr.instance_id,
+    li.start_time,
+    COALESCE(li.duplicate_group_id, li.id) AS run_id,
+    li.name AS instance_name,
+    li.difficulty_name,
+    li.max_players,
+    li.log_group_id,
+    li.guild_id,
+    snap.id AS snapshot_id
+FROM (
+    SELECT DISTINCT edr2.instance_id
+    FROM encounter_dps_rankings edr2
+    WHERE edr2.encounter_id IS NOT NULL
+      AND (edr2.dps > 0 OR edr2.hps > 0)
+      AND NOT EXISTS (
+          SELECT 1 FROM parse_score_receipts psr
+          WHERE psr.instance_id = edr2.instance_id
+            AND psr.policy_version = @policy_version
+            AND psr.query_version = @query_version
+      )
+    LIMIT @max_rows
+) edr
+JOIN log_instances li ON li.id = edr.instance_id
+JOIN LATERAL (
+    SELECT rs.id
+    FROM ranking_snapshots rs
+    WHERE rs.tenant_id = @tenant_id
+      AND rs.lookback_days = @lookback_days
+      AND rs.status = 'published'
+      AND rs.policy_version = @policy_version
+      AND rs.query_version = @query_version
+      AND (li.start_time IS NULL OR rs.cutoff <= li.start_time)
+    ORDER BY rs.cutoff DESC
+    LIMIT 1
+) snap ON true
+ORDER BY li.start_time DESC NULLS LAST;
 
 -- name: GetLogInstanceForScoring :one
 -- Fetch instance metadata needed for parse scoring.
