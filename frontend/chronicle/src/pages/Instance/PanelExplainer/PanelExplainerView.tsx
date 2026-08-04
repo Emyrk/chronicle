@@ -274,21 +274,22 @@ function LessonTargetOverlay({
   containerRef: React.RefObject<HTMLDivElement | null>;
   lessonId: string | null;
 }) {
-  const [boxes, setBoxes] = useState<
-    Array<{ left: number; top: number; width: number; height: number }>
-  >([]);
+  // Keyed by lesson id: a stale entry (different lesson, or hover ended)
+  // simply doesn't render, so the effect never needs to clear state.
+  const [measured, setMeasured] = useState<{
+    lessonId: string;
+    boxes: Array<{ left: number; top: number; width: number; height: number }>;
+  } | null>(null);
 
   useEffect(() => {
     const container = containerRef.current;
-    if (!container || !lessonId) {
-      setBoxes([]);
-      return;
-    }
+    if (!container || !lessonId) return;
     const measure = () => {
       const cRect = container.getBoundingClientRect();
       const els = container.querySelectorAll(`[data-lesson-target="${lessonId}"]`);
-      setBoxes(
-        [...els].map((el) => {
+      setMeasured({
+        lessonId,
+        boxes: [...els].map((el) => {
           const r = el.getBoundingClientRect();
           return {
             left: r.left - cRect.left - 4,
@@ -297,7 +298,7 @@ function LessonTargetOverlay({
             height: r.height + 8,
           };
         }),
-      );
+      });
     };
     const raf = requestAnimationFrame(measure);
     window.addEventListener("resize", measure);
@@ -307,6 +308,7 @@ function LessonTargetOverlay({
     };
   }, [containerRef, lessonId]);
 
+  const boxes = measured?.lessonId === lessonId ? measured.boxes : [];
   if (boxes.length === 0) return null;
 
   return (
