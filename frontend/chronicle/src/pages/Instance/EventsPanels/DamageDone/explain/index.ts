@@ -4,11 +4,18 @@
  */
 
 import { createElement } from "react";
+import type { PanelContext } from "../../types";
 import type { PanelExplainer } from "../../../PanelExplainer/types";
 import type { DamageDoneResult } from "../damageDone.processor";
 import { deriveCapabilities, type DamageDoneCapabilities } from "./capabilities";
 import { ExampleDamageDonePanel } from "./ExampleDamageDonePanel";
 import { DAMAGE_DONE_LESSONS } from "./lessons";
+import { useParseAvailability } from "./useParseAvailability";
+
+/** Live-query extras merged over the pure capability derivation. */
+function useDamageDoneLiveExtras(context: PanelContext): Partial<DamageDoneCapabilities> {
+  return { hasParses: useParseAvailability(context) };
+}
 
 export const damageDoneExplainer: PanelExplainer<DamageDoneResult, DamageDoneCapabilities> = {
   summary:
@@ -27,6 +34,7 @@ export const damageDoneExplainer: PanelExplainer<DamageDoneResult, DamageDoneCap
   lessonSet: {
     deriveCapabilities,
     lessons: DAMAGE_DONE_LESSONS,
+    useLiveCapabilityExtras: useDamageDoneLiveExtras,
     renderExample: () => createElement(ExampleDamageDonePanel),
   },
 };

@@ -32,6 +32,11 @@ export interface DamageDoneCapabilities {
   hasMultipleEncounters: boolean;
   /** Pet units contributed damage */
   hasPets: boolean;
+  /**
+   * Parse data exists for the selection. Always false here — filled in live
+   * by useParseAvailability (it needs a query the pure derivation can't run).
+   */
+  hasParses: boolean;
 }
 
 /** Derive capabilities from a live DamageDoneResult. */
@@ -50,6 +55,7 @@ export function deriveCapabilities(
     hasDuration: durationMs > 0,
     hasMultipleEncounters: (instance?.encounters?.length ?? 0) > 1,
     hasPets: false,
+    hasParses: false,
   };
 
   if (!result) return empty;

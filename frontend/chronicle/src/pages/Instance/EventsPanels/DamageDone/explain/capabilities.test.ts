@@ -44,6 +44,7 @@ describe("deriveCapabilities", () => {
       hasDuration: true,
       hasMultipleEncounters: true,
       hasPets: false,
+      hasParses: false,
     });
   });
 

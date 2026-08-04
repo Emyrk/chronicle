@@ -8,6 +8,7 @@
  */
 
 import type { ComponentType, ReactNode } from "react";
+import type { PanelContext } from "../EventsPanels/types";
 import type { Instance } from "../InstancePage";
 
 /**
@@ -71,6 +72,12 @@ export interface LessonSet<TResult, TCaps> {
     instance: Instance | null,
   ) => TCaps;
   lessons: Lesson<TCaps>[];
+  /**
+   * Optional hook for capabilities that need live queries (e.g. parse
+   * availability). Merged over deriveCapabilities' result. Must be a stable
+   * hook for the lifetime of the explainer mount.
+   */
+  useLiveCapabilityExtras?: (context: PanelContext) => Partial<TCaps>;
   /** Renders the production panel content on deterministic fixture data. */
   renderExample: () => ReactNode;
 }

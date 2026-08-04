@@ -84,6 +84,11 @@ export function PanelExplainerView({
   );
 }
 
+const NO_EXTRAS = {};
+function useNoLiveExtras(): Record<string, never> {
+  return NO_EXTRAS;
+}
+
 /** Full learning shell for panels with authored lessons. */
 function LessonShell<TResult, TCaps>({
   panelType,
@@ -114,9 +119,17 @@ function LessonShell<TResult, TCaps>({
     panelIndex: 0,
   });
 
+  // Live-query capability extras (e.g. parse availability). The hook is
+  // stable per mount — the shell remounts when panelType changes.
+  const useLiveExtras = lessonSet.useLiveCapabilityExtras ?? useNoLiveExtras;
+  const liveExtras = useLiveExtras(context);
+
   const caps = useMemo(
-    () => lessonSet.deriveCapabilities(aggregation.result ?? null, durationMs, context.instance),
-    [lessonSet, aggregation.result, durationMs, context.instance],
+    () => ({
+      ...lessonSet.deriveCapabilities(aggregation.result ?? null, durationMs, context.instance),
+      ...liveExtras,
+    }),
+    [lessonSet, aggregation.result, durationMs, context.instance, liveExtras],
   );
 
   const lessonParam = searchParams.get("lesson");

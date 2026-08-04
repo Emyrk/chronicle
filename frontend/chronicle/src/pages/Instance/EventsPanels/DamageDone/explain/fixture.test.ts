@@ -25,6 +25,7 @@ describe("damage done fixture", () => {
       hasDuration: true,
       hasMultipleEncounters: false,
       hasPets: true,
+      hasParses: false,
     });
   });
 

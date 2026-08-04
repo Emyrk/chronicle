@@ -68,10 +68,11 @@ const parseScores: L = {
   id: "parse-scores",
   title: "Understand parse scores",
   group: "essentials",
-  description: () =>
-    "Colored pills score each player against everyone else who fought this boss with the same spec.",
-  deriveState: () => "example-required",
-  exampleOnly: true,
+  description: (caps) =>
+    caps.hasParses
+      ? "Colored pills score each player against everyone else who fought this boss with the same spec."
+      : "No parse data for this selection yet — learn on the example raid.",
+  deriveState: (caps) => (caps.hasParses ? "available" : "example-required"),
   instruction:
     "The scale climbs grey, green, blue, purple, orange, then pink at 99 — gold is a perfect 100. Hover a pill for the cohort.",
   bullets: [
