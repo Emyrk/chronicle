@@ -52,4 +52,5 @@ COPY --from=backend /chronicle/bin/chronicled ./
 COPY assets/ ./assets/
 
 RUN chmod +x ./chronicled
-ENTRYPOINT ["./chronicled", "server"]
+ENTRYPOINT ["./chronicled"]
+CMD ["server"]

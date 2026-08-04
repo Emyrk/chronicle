@@ -38,8 +38,9 @@ type entry struct {
 // Fetcher looks up spells by (datasetID, spellID) with LRU caching.
 // It checks the database first, then falls back to the compiled-in DBC file.
 type Fetcher struct {
-	pool   *pgxpool.Pool // nil = DB lookups disabled (tests, CLI)
-	dbc    *chrondbc.SpellsDBC
+	pool   *pgxpool.Pool       // nil = DB lookups disabled (tests, CLI)
+	dbc    *chrondbc.SpellsDBC // nil in DB-only mode.
+	dbOnly bool                // When true, DBC fallback is disabled entirely.
 	cache  *lrucache.Cache[spellKey, entry]
 	custom map[chrondbc.SpellID]chrondbc.Spell
 
@@ -78,6 +79,33 @@ func NewFetcher(ctx context.Context, pool *pgxpool.Pool, dbc *chrondbc.SpellsDBC
 	return f
 }
 
+// NewFetcherDBOnly creates a Fetcher that uses only the database for spell
+// lookups. No compiled-in DBC fallback is used. Custom spells still work.
+// Pool must be non-nil.
+func NewFetcherDBOnly(ctx context.Context, pool *pgxpool.Pool, custom map[chrondbc.SpellID]chrondbc.Spell, cacheSvc *servicecache.Service, cacheSize int) *Fetcher {
+	_ = ctx // keep signature consistent
+	cache, _ := servicecache.NewCache(cacheSvc, lrucache.Opts[spellKey, entry]{
+		Name:      "spells",
+		Capacity:  cacheSize,
+		TTL:       servicecache.TTLSpells,
+		DatasetOf: func(k spellKey) string { return k.DatasetID.String() },
+	})
+	hasDB, _ := servicecache.NewCache(cacheSvc, lrucache.Opts[uuid.UUID, bool]{
+		Name:     "spells_has_db",
+		Capacity: 64,
+		TTL:      servicecache.TTLSpellsHasDB,
+	})
+	return &Fetcher{
+		pool:        pool,
+		dbc:         nil,
+		dbOnly:      true,
+		cache:       cache,
+		hasDBSpells: hasDB,
+		custom:      custom,
+	}
+	// No background name loading — no DBC to index.
+}
+
 // Spell returns the spell for the given dataset + ID.
 //
 // Resolution: custom → cache → DB (if dataset has imported spells) →
@@ -97,8 +125,8 @@ func (f *Fetcher) Spell(ctx context.Context, datasetID uuid.UUID, id chrondbc.Sp
 		return e.Spell, e.Error
 	}
 
-	if f.pool != nil && f.datasetHasDBSpells(ctx, datasetID) {
-		// Dataset has imported spells — DB is authoritative.
+	if f.pool != nil && (f.dbOnly || f.datasetHasDBSpells(ctx, datasetID)) {
+		// Dataset has imported spells (or DB-only mode) — DB is authoritative.
 		row, err := spelldb.GetSpell(ctx, f.pool, datasetID, int32(id))
 		if err == nil {
 			sp := row.ToSpell()
@@ -106,6 +134,13 @@ func (f *Fetcher) Spell(ctx context.Context, datasetID uuid.UUID, id chrondbc.Sp
 			return &sp, nil
 		}
 		// DB miss = not found for this dataset. Negative-cache it.
+		notFound := chrondbc.SpellNotFound(id)
+		f.cache.Add(key, entry{Error: notFound})
+		return nil, notFound
+	}
+
+	if f.dbOnly {
+		// DB-only mode with no pool — cannot look up spells.
 		notFound := chrondbc.SpellNotFound(id)
 		f.cache.Add(key, entry{Error: notFound})
 		return nil, notFound
@@ -147,7 +182,7 @@ func (f *Fetcher) datasetHasDBSpells(ctx context.Context, datasetID uuid.UUID) b
 // If the dataset has DB-backed spells, queries dbc_spells directly.
 // Otherwise falls back to the compiled-in DBC name index + Spell() lookups.
 func (f *Fetcher) SpellsByName(ctx context.Context, datasetID uuid.UUID, name string) ([]*chrondbc.Spell, error) {
-	if f.pool != nil && f.datasetHasDBSpells(ctx, datasetID) {
+	if f.pool != nil && (f.dbOnly || f.datasetHasDBSpells(ctx, datasetID)) {
 		rows, err := spelldb.GetSpellsByName(ctx, f.pool, datasetID, name)
 		if err != nil {
 			return nil, fmt.Errorf("db spell name lookup: %w", err)
@@ -191,8 +226,12 @@ func (f *Fetcher) InvalidateDataset(datasetID uuid.UUID) {
 }
 
 // RangeSpells iterates all spells in the compiled-in DBC, calling fn for each.
-// Return false from the callback to stop early.
+// Return false from the callback to stop early. Returns nil immediately if no
+// DBC is loaded (DB-only mode).
 func (f *Fetcher) RangeSpells(fn func(*chrondbc.Spell) bool) error {
+	if f.dbc == nil {
+		return nil
+	}
 	return f.dbc.Range(func(sp *chrondbc.Spell) bool {
 		if sp == nil {
 			return true
@@ -202,11 +241,18 @@ func (f *Fetcher) RangeSpells(fn func(*chrondbc.Spell) bool) error {
 }
 
 // TotalSpells returns the number of spells in the compiled-in DBC.
+// Returns 0 if no DBC is loaded (DB-only mode).
 func (f *Fetcher) TotalSpells() int {
+	if f.dbc == nil {
+		return 0
+	}
 	return f.dbc.Len()
 }
 
 func (f *Fetcher) loadNames(_ context.Context) {
+	if f.dbc == nil {
+		return
+	}
 	names := make(map[string][]int32, f.dbc.Len())
 	_ = f.dbc.Range(func(cursor *chrondbc.Spell) bool {
 		names[cursor.Name()] = append(names[cursor.Name()], int32(cursor.ID))

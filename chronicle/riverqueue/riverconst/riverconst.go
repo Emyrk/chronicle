@@ -7,6 +7,7 @@ const (
 	QueueDiscordSync = "discord-sync"
 	QueueRetention   = "retention"
 	QueueRankings    = "rankings"
+	QueueResync      = "resync"
 )
 
 const (

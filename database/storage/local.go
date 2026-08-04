@@ -27,6 +27,15 @@ func NewLocalStorage() (*LocalStorage, error) {
 	return &LocalStorage{basePath: basePath}, nil
 }
 
+// NewLocalStorageAt creates a LocalStorage rooted at the given directory.
+// Unlike NewLocalStorage it does not assume $HOME/.chronicle/storage.
+func NewLocalStorageAt(basePath string) (*LocalStorage, error) {
+	if err := os.MkdirAll(basePath, 0755); err != nil {
+		return nil, fmt.Errorf("create storage dir: %w", err)
+	}
+	return &LocalStorage{basePath: basePath}, nil
+}
+
 func (l *LocalStorage) bucketPath(bucketId string) string {
 	return filepath.Join(l.basePath, bucketId)
 }

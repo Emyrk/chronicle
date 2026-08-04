@@ -24,6 +24,7 @@ const (
 	QueueDiscordSync = riverconst.QueueDiscordSync
 	QueueRetention   = riverconst.QueueRetention
 	QueueRankings    = riverconst.QueueRankings
+	QueueResync      = riverconst.QueueResync
 	PriorityHighest  = riverconst.PriorityHighest
 	PriorityHigh     = riverconst.PriorityHigh
 	PriorityDefault  = riverconst.PriorityDefault

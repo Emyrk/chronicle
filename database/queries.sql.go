@@ -9848,6 +9848,74 @@ func (q *sqlQuerier) UpdateRegressionFixtureNote(ctx context.Context, arg Update
 	return err
 }
 
+const resyncCandidateLogGroups = `-- name: ResyncCandidateLogGroups :many
+SELECT DISTINCT
+  wlg.id,
+  wlg.owner,
+  wlg.log_type,
+  wlg.format,
+  wlg.flavor,
+  wlg.created_at,
+  li.parser_version,
+  li.name AS instance_name,
+  li.realm_id
+FROM wow_log_groups wlg
+JOIN parsed_log_group plg ON plg.id = wlg.id
+JOIN log_instances li ON li.log_group_id = wlg.id
+WHERE EXISTS(
+    SELECT 1 FROM log_file lf
+    WHERE lf.wow_log_id = wlg.id
+    AND lf.storage_deleted_at IS NULL
+  )
+ORDER BY wlg.created_at ASC
+`
+
+type ResyncCandidateLogGroupsRow struct {
+	ID            uuid.UUID          `db:"id" json:"id"`
+	Owner         uuid.UUID          `db:"owner" json:"owner"`
+	LogType       LogType            `db:"log_type" json:"log_type"`
+	Format        NullLogFormat      `db:"format" json:"format"`
+	Flavor        []string           `db:"flavor" json:"flavor"`
+	CreatedAt     pgtype.Timestamptz `db:"created_at" json:"created_at"`
+	ParserVersion string             `db:"parser_version" json:"parser_version"`
+	InstanceName  string             `db:"instance_name" json:"instance_name"`
+	RealmID       uuid.UUID          `db:"realm_id" json:"realm_id"`
+}
+
+// Returns log groups that have been parsed and still have raw files on storage.
+// Filtering by parser version is done in Go using semverenc for full
+// major.minor.patch comparison. The caller deduplicates rows by log group and
+// applies its own distinct log-group limit.
+func (q *sqlQuerier) ResyncCandidateLogGroups(ctx context.Context) ([]ResyncCandidateLogGroupsRow, error) {
+	rows, err := q.db.Query(ctx, resyncCandidateLogGroups)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ResyncCandidateLogGroupsRow
+	for rows.Next() {
+		var i ResyncCandidateLogGroupsRow
+		if err := rows.Scan(
+			&i.ID,
+			&i.Owner,
+			&i.LogType,
+			&i.Format,
+			&i.Flavor,
+			&i.CreatedAt,
+			&i.ParserVersion,
+			&i.InstanceName,
+			&i.RealmID,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const deleteLogInstancesByIDs = `-- name: DeleteLogInstancesByIDs :execrows
 DELETE FROM log_instances
 WHERE id = ANY($1::uuid[])

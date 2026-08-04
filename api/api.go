@@ -177,6 +177,7 @@ func (api *API) Routes() chi.Router {
 		r.Group(func(r chi.Router) {
 			// Not browser-only
 			r.Get("/discovery", api.Discovery)
+			r.Get("/parser-version", api.ParserVersion)
 		})
 
 		r.Group(func(r chi.Router) {

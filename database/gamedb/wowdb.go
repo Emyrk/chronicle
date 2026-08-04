@@ -73,6 +73,12 @@ type Options struct {
 	DatasetID     uuid.UUID     // Default dataset for item/creature lookups.
 	Talents       talents.TalentFetcher
 	CacheSvc      *servicecache.Service // Centralized cache service; all caches register here.
+
+	// DatabaseSpellsOnly, when true, constructs a WoWDB that does not
+	// require or open a Spell.dbc file. All spell lookups go through the
+	// database; DBC fallback is disabled. Used by the resync CLI where
+	// spells must come from the realm-resolved dataset in PostgreSQL.
+	DatabaseSpellsOnly bool
 }
 
 // WoWDB holds all game data sources used during parsing and API serving.
@@ -80,10 +86,11 @@ type Options struct {
 // lookups to a specific dataset while sharing the same underlying caches.
 type WoWDB struct {
 	ctx       context.Context
-	spellFile *os.File
+	spellFile *os.File // nil when DatabaseSpellsOnly is true.
 	datasetID uuid.UUID
 	pool      *pgxpool.Pool // For DB-backed derived data queries; nil = fallback to compiled-in globals.
 	store     database.Store
+	dbOnly    bool // When true, no DBC fallback for derived data.
 
 	spells          *spells.Fetcher
 	itemFetcher     *itemFetcher
@@ -98,25 +105,10 @@ type WoWDB struct {
 
 // New creates a WoWDB. The spell DBC file is opened and held for the lifetime
 // of the returned value; call [WoWDB.Close] to release it.
+//
+// When [Options.DatabaseSpellsOnly] is true, no DBC file is opened and all
+// spell lookups go through the database. Pool must be non-nil in this mode.
 func New(ctx context.Context, opts Options) (*WoWDB, error) {
-	build := services.ServerBuild
-	if dbcdb.SpellBuildOverride != 0 {
-		build = dbcdb.SpellBuildOverride
-	}
-	dbInst := dbc.NewDB(build)
-	sf, err := os.Open(opts.SpellsDBCPath)
-	if err != nil {
-		return nil, err
-	}
-
-	v, err := dbInst.Open("Spell", sf)
-	if err != nil {
-		return nil, err
-	}
-
-	spDBC := chrondbc.NewSpells(v)
-	spellFetcher := spells.NewFetcher(ctx, opts.Pool, spDBC, customSpells, opts.CacheSvc, 1000)
-
 	eaCache, _ := servicecache.NewCache(opts.CacheSvc, lrucache.Opts[uuid.UUID, map[int32]dbcmem.ExtraAttackSpell]{
 		Capacity: 64, Name: "extra_attacks", TTL: servicecache.TTLExtraAttacks,
 	})
@@ -132,12 +124,45 @@ func New(ctx context.Context, opts Options) (*WoWDB, error) {
 		store = database.New(opts.Pool)
 	}
 
+	dbOnly := opts.DatabaseSpellsOnly
+
+	var spellFetcher *spells.Fetcher
+	var sf *os.File
+
+	if dbOnly {
+		// DB-only mode: no DBC file, no DBC fallback.
+		if opts.Pool == nil {
+			return nil, fmt.Errorf("DatabaseSpellsOnly requires a non-nil Pool")
+		}
+		spellFetcher = spells.NewFetcherDBOnly(ctx, opts.Pool, customSpells, opts.CacheSvc, 1000)
+	} else {
+		build := services.ServerBuild
+		if dbcdb.SpellBuildOverride != 0 {
+			build = dbcdb.SpellBuildOverride
+		}
+		dbInst := dbc.NewDB(build)
+		var err error
+		sf, err = os.Open(opts.SpellsDBCPath)
+		if err != nil {
+			return nil, err
+		}
+
+		v, err := dbInst.Open("Spell", sf)
+		if err != nil {
+			return nil, err
+		}
+
+		spDBC := chrondbc.NewSpells(v)
+		spellFetcher = spells.NewFetcher(ctx, opts.Pool, spDBC, customSpells, opts.CacheSvc, 1000)
+	}
+
 	return &WoWDB{
 		ctx:             ctx,
-		spellFile:       sf,
+		spellFile:       sf, // nil in DB-only mode
 		datasetID:       opts.DatasetID,
 		pool:            opts.Pool,
 		store:           store,
+		dbOnly:          dbOnly,
 		spells:          spellFetcher,
 		itemFetcher:     newItemFetcher(ctx, opts.DB, opts.CacheSvc, 400),
 		creatureFetcher: newCreatureFetcher(ctx, opts.DB, opts.CacheSvc, 500),
@@ -304,6 +329,10 @@ func (w *WoWDB) loadExtraAttacks(ctx context.Context, datasetID uuid.UUID) map[i
 			}
 		}
 	}
+	if w.dbOnly {
+		// DB-only mode: return empty map, no compiled-in fallback.
+		return nil
+	}
 	// Fallback to compiled-in globals.
 	return dbcmem.ExtraAttackSpells
 }
@@ -341,6 +370,13 @@ func (w *WoWDB) loadDurationModifiers(ctx context.Context, datasetID uuid.UUID) 
 			}
 		}
 	}
+	if w.dbOnly {
+		// DB-only mode: return empty set, no compiled-in fallback.
+		return &chrondbc.DurationModifierSet{
+			ByID:       make(map[int32]dbcmem.DurationModifier),
+			ByClassBit: make(map[int32]map[uint64][]int32),
+		}
+	}
 	// Fallback to compiled-in globals.
 	return &chrondbc.DurationModifierSet{
 		ByID:       dbcmem.DurationModifiers,
@@ -367,6 +403,10 @@ func (w *WoWDB) loadPeriodicSpells(ctx context.Context, datasetID uuid.UUID) map
 				return m
 			}
 		}
+	}
+	if w.dbOnly {
+		// DB-only mode: return empty map, no compiled-in fallback.
+		return nil
 	}
 	// Fallback to compiled-in globals.
 	return dbcmem.PeriodicSpells
@@ -396,8 +436,28 @@ func (w *WoWDB) InvalidatePeriodicSpells(datasetID uuid.UUID) {
 }
 
 func (w *WoWDB) Close() error {
-	_ = w.spellFile.Close()
+	if w.spellFile != nil {
+		_ = w.spellFile.Close()
+	}
 	return nil
+}
+
+// DatasetHasDBSpells reports whether the given dataset has imported spells in
+// the dbc_spells table. Used by resync to validate that DB-only spell mode
+// will work before deleting parsed data.
+func (w *WoWDB) DatasetHasDBSpells(ctx context.Context, datasetID uuid.UUID) (bool, error) {
+	if w.pool == nil {
+		return false, fmt.Errorf("no database pool configured")
+	}
+	var has bool
+	err := w.pool.QueryRow(ctx,
+		`SELECT EXISTS(SELECT 1 FROM dbc_spells WHERE dataset_id = $1)`,
+		datasetID,
+	).Scan(&has)
+	if err != nil {
+		return false, fmt.Errorf("check dataset spells: %w", err)
+	}
+	return has, nil
 }
 
 // ScopedGameDB routes item/creature lookups to a specific dataset while sharing

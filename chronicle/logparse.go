@@ -143,17 +143,24 @@ func (w *WorkerLogParse) Work(ctx context.Context, job *river.Job[ArgsLogParse])
 		jobResult = "failure"
 		return fmt.Errorf("fetch log group: %w", err)
 	}
-	// Resolve the parse metadata, preferring the persisted format/flavor
-	// columns and falling back to deriving from the legacy log type (rows
-	// predating the columns).
+	// ── Resolve format & flavor ─────────────────────────────────────────
+	//
+	// Format resolution:
+	//   1. wow_log_groups.format column (when Valid) is authoritative.
+	//   2. Falls back to LogType.Format() for legacy rows predating the column.
+	//
+	// Flavor resolution:
+	//   1. wow_log_groups.flavor column (when non-empty) is authoritative.
+	//   2. Falls back to the realm-resolved dataset's default_flavor
+	//      (seeded from the compiled-in server identity).
+	//   3. When the fallback is used, the resolved flavor is persisted back
+	//      to wow_log_groups.flavor so subsequent reparses use the correct
+	//      value without re-resolving.
 	lg := logGroup.WoWLogGroup
 	logFormat := lg.LogType.Format()
 	if lg.Format.Valid {
 		logFormat = lg.Format.LogFormat
 	}
-	// Resolve flavor: prefer the persisted column on the log group, then
-	// fall back to dataset resolution (below) which returns the dataset's
-	// default_flavor (seeded from the compiled-in server identity).
 	var flavor database.WoWFlavor
 	explicitFlavor := len(lg.Flavor) > 0
 	if explicitFlavor {
@@ -400,7 +407,7 @@ func (w *WorkerLogParse) Work(ctx context.Context, job *river.Job[ArgsLogParse])
 				Versions:          database.VersionsMap(finalized.Versions),
 				RecorderName:      recorderName,
 				RecorderGuid:      recorderGUID,
-				ParserVersion:     version.GitTag + "+" + version.GitCommit,
+				ParserVersion:     version.ExactParserVersion(),
 				DifficultyName:    inst.CurrentZone.DifficultyName,
 				MaxPlayers:        int32(inst.CurrentZone.MaxPlayers),
 				DynamicDifficulty: int32(inst.CurrentZone.DynamicDifficulty),
@@ -541,7 +548,7 @@ func (w *WorkerLogParse) Work(ctx context.Context, job *river.Job[ArgsLogParse])
 				if finalized.Versions != nil {
 					addonVersion = finalized.Versions["addon"]
 				}
-				parserVer := version.GitTag + "+" + version.GitCommit
+				parserVer := version.ExactParserVersion()
 
 				// Data source rule: require server-side capability or addon version
 				// for a speedrun to be eligible.
