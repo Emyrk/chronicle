@@ -22,6 +22,10 @@ import LegendToggleVideo from "../../../frontend/chronicle/src/pages/Instance/Ev
 import AggregationsVideo from "../../../frontend/chronicle/src/pages/Instance/EventsPanels/Timeline/explain/videos/Aggregations.video";
 import EditSeriesVideo from "../../../frontend/chronicle/src/pages/Instance/EventsPanels/Timeline/explain/videos/EditSeries.video";
 import RaidDurabilityVideo from "../../../frontend/chronicle/src/pages/Instance/EventsPanels/Timeline/explain/videos/RaidDurability.video";
+import ReadDeathLogVideo from "../../../frontend/chronicle/src/pages/Instance/EventsPanels/Deaths/explain/videos/ReadDeathLog.video";
+import DeathRecapExpandVideo from "../../../frontend/chronicle/src/pages/Instance/EventsPanels/Deaths/explain/videos/DeathRecapExpand.video";
+import FloatingRecapVideo from "../../../frontend/chronicle/src/pages/Instance/EventsPanels/Deaths/explain/videos/FloatingRecap.video";
+import HealthBarAnatomyVideo from "../../../frontend/chronicle/src/pages/Instance/EventsPanels/Deaths/explain/videos/HealthBarAnatomy.video";
 
 /**
  * Studio registration for the in-app explainer lesson compositions.
@@ -115,6 +119,12 @@ export const RemotionRoot: React.FC = () => {
         <Composition id="Aggregations" component={AggregationsVideo} durationInFrames={530} fps={30} width={1280} height={720} />
         <Composition id="EditSeries" component={EditSeriesVideo} durationInFrames={530} fps={30} width={1280} height={720} />
         <Composition id="RaidDurability" component={RaidDurabilityVideo} durationInFrames={530} fps={30} width={1280} height={720} />
+      </Folder>
+      <Folder name="DeathLogLessons">
+        <Composition id="ReadDeathLog" component={ReadDeathLogVideo} durationInFrames={410} fps={30} width={1280} height={720} />
+        <Composition id="DeathRecapExpand" component={DeathRecapExpandVideo} durationInFrames={470} fps={30} width={1280} height={720} />
+        <Composition id="FloatingRecap" component={FloatingRecapVideo} durationInFrames={530} fps={30} width={1280} height={720} />
+        <Composition id="HealthBarAnatomy" component={HealthBarAnatomyVideo} durationInFrames={530} fps={30} width={1280} height={720} />
       </Folder>
     </>
   );

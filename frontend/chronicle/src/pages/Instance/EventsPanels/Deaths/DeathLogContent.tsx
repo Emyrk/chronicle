@@ -265,6 +265,7 @@ export const DeathLogContent = (props: DeathLogContentProps) => {
                         isPendingSyncDeath && "opacity-35 saturate-50"
                       )}
                       data-death-row={index === 0 ? true : undefined}
+                      data-lesson-target="death-recap"
                       data-sync-pending={isPendingSyncDeath || undefined}
                       onClick={() => setExpandedIndex(isExpanded ? null : index)}
                     >
@@ -348,6 +349,7 @@ export const DeathLogContent = (props: DeathLogContentProps) => {
                               openFloatingRecap(rowKey, death, event.currentTarget);
                             }}
                             className="shrink-0 rounded p-1 text-muted-foreground hover:bg-muted hover:text-foreground"
+                            data-lesson-target="floating-recap"
                             title="Open floating death recap"
                             aria-label={`Open floating death recap for ${death.playerName}`}
                           >

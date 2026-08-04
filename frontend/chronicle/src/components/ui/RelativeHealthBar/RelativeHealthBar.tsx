@@ -74,7 +74,7 @@ export function RelativeHealthBar({
   const transitionColor = transition?.kind === "damage" ? "bg-red-300" : "bg-green-300";
 
   return (
-    <div className={cn("space-y-1", className)} data-relative-health-bar>
+    <div className={cn("space-y-1", className)} data-relative-health-bar data-lesson-target="health-bar">
       <div className="relative h-6 overflow-hidden rounded-sm border border-white/10 bg-[#17181b]">
         {/* Net change from the relative zero baseline to the current position. */}
         {state.current !== 0 && (

@@ -1,5 +1,6 @@
 import type { Meta, StoryObj } from "@storybook/react-vite";
 import { MemoryRouter } from "react-router-dom";
+import { TooltipProvider } from "@/components/ui/Tooltip/tooltip";
 import { MockInstanceEventsProvider } from "../EventsPanels/__fixtures__/MockInstanceEventsProvider";
 import {
   FIXTURE_DURATION_MS,
@@ -14,9 +15,11 @@ const meta: Meta<typeof PanelExplainerView> = {
   decorators: [
     (Story, context) => (
       <MemoryRouter initialEntries={(context.parameters.routerEntries as string[]) ?? ["/"]}>
-        <MockInstanceEventsProvider>
-          <Story />
-        </MockInstanceEventsProvider>
+        <TooltipProvider>
+          <MockInstanceEventsProvider>
+            <Story />
+          </MockInstanceEventsProvider>
+        </TooltipProvider>
       </MemoryRouter>
     ),
   ],
@@ -120,6 +123,26 @@ export const TimelineEditSeriesLesson: Story = {
 export const TimelineDurabilityLesson: Story = {
   args: { panelType: "timeline" },
   parameters: { routerEntries: ["/?lesson=durability"] },
+};
+
+export const DeathLogReadLesson: Story = {
+  args: { panelType: "death_log" },
+  parameters: { routerEntries: ["/?lesson=read-log"] },
+};
+
+export const DeathLogRecapLesson: Story = {
+  args: { panelType: "death_log" },
+  parameters: { routerEntries: ["/?lesson=death-recap"] },
+};
+
+export const DeathLogFloatingLesson: Story = {
+  args: { panelType: "death_log" },
+  parameters: { routerEntries: ["/?lesson=floating-recap"] },
+};
+
+export const DeathLogHealthBarLesson: Story = {
+  args: { panelType: "death_log" },
+  parameters: { routerEntries: ["/?lesson=health-bar"] },
 };
 
 /** Deep-linked video lesson — exercises the lazy Remotion player. */

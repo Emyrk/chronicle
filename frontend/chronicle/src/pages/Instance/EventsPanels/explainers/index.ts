@@ -13,6 +13,7 @@ import type { EventsPanelType } from "../EventsPanel";
 import { damageDoneExplainer } from "../DamageDone/explain";
 import { healingDoneExplainer } from "../HealingDone/explain";
 import { timelineExplainer } from "../Timeline/explain";
+import { deathLogExplainer } from "../Deaths/explain";
 import { sunderExplainer } from "../Sunder/Sunder.explainer";
 import { damageTakenExplainer } from "../DamageTaken/DamageTaken.explainer";
 import { rolesExplainer } from "../Roles/Roles.explainer";
@@ -30,6 +31,7 @@ export const PANEL_EXPLAINERS: Partial<Record<EventsPanelType, PanelExplainer<an
   enemy_damage_done: damageDoneExplainer, // Same explainer, different context
   healing_done: healingDoneExplainer,
   timeline: timelineExplainer,
+  death_log: deathLogExplainer,
   sunder: sunderExplainer,
   damage_taken: damageTakenExplainer,
   enemy_damage_taken: damageTakenExplainer, // Same explainer, different context
