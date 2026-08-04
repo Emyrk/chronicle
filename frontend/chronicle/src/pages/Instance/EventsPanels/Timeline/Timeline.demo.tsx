@@ -294,6 +294,9 @@ export function TimelineEditorDemo({
   newAggregation,
   newColor,
   tab0Aggregation = 'sum',
+  settingsTab = false,
+  background = 'none',
+  backgroundMenuOpen = false,
 }: {
   /** 0 = Series 1, 1 = the new Series 2 (when it exists). */
   activeTab?: number
@@ -303,6 +306,12 @@ export function TimelineEditorDemo({
   newColor?: string
   /** The Damage tab's selected aggregation (the aggregations lesson flips it). */
   tab0Aggregation?: AggregationType
+  /** Show the ⚙ Settings tab instead of a series form. */
+  settingsTab?: boolean
+  /** The Background setting's current value. */
+  background?: 'none' | 'raid_durability'
+  /** Whether the Background dropdown menu is open. */
+  backgroundMenuOpen?: boolean
 }) {
   const STREAMS = ['damage', 'heal', 'resource_change', 'cast']
   const COLORS = ['#ef4444', '#3b82f6', '#22c55e', '#eab308', '#a855f7']
@@ -328,16 +337,62 @@ export function TimelineEditorDemo({
         </div>
         {/* Tab strip: ⚙ | Series 1 | (Series 2) | + */}
         <div className="flex items-center border-b border-border">
-          <span className="px-2 py-1.5 text-muted-foreground">
+          <span className={settingsTab ? 'border-b-2 border-primary px-2 py-1.5 text-foreground' : 'px-2 py-1.5 text-muted-foreground'}>
             <Settings className="h-3.5 w-3.5" />
           </span>
-          <span className={tabClass(activeTab === 0)}>Damage</span>
+          <span className={tabClass(!settingsTab && activeTab === 0)}>Damage</span>
           {hasNewSeries && <span className={tabClass(activeTab === 1)}>Series 2</span>}
           <span className="px-2 py-1.5 text-muted-foreground" data-demo-add-series>
             <Plus className="h-3.5 w-3.5" />
           </span>
         </div>
-        {/* Series form */}
+        {settingsTab ? (
+          /* Settings form (mirrors the real editor's Settings tab). */
+          <div className="relative flex flex-col gap-3 text-xs">
+            <div className="flex items-center gap-2">
+              <span className="shrink-0 text-muted-foreground">Background:</span>
+              <span
+                className="min-w-40 rounded-md border border-zinc-700 bg-zinc-900 px-2 py-1 text-foreground"
+                data-demo-bg-select
+              >
+                {background === 'raid_durability' ? 'Raid Durability' : 'None'}
+              </span>
+            </div>
+            <div className="flex items-center gap-2">
+              <span className="shrink-0 text-muted-foreground">Window:</span>
+              <div className="flex items-center gap-0.5 rounded-md bg-muted/50 p-0.5">
+                {['1s', '2s', '5s', '10s'].map((w, i) => (
+                  <span
+                    key={w}
+                    className={
+                      i === 0
+                        ? 'rounded bg-background px-2 py-0.5 text-2xs text-foreground shadow-sm'
+                        : 'rounded px-2 py-0.5 text-2xs text-muted-foreground'
+                    }
+                  >
+                    {w}
+                  </span>
+                ))}
+              </div>
+            </div>
+            {backgroundMenuOpen && (
+              <div
+                className="absolute z-20 w-40 rounded-md border border-zinc-700 bg-zinc-900 py-1 shadow-lg"
+                style={{ left: 88, top: 26 }}
+              >
+                <div className={background === 'none' ? 'bg-muted/60 px-2 py-1 text-foreground' : 'px-2 py-1 text-muted-foreground'}>
+                  None
+                </div>
+                <div
+                  className={background === 'raid_durability' ? 'bg-muted/60 px-2 py-1 text-foreground' : 'px-2 py-1 text-muted-foreground'}
+                  data-demo-bg-option
+                >
+                  Raid Durability
+                </div>
+              </div>
+            )}
+          </div>
+        ) : (
         <div className="flex flex-col gap-3 text-xs">
           <div className="flex items-center gap-2">
             <span className="w-20 shrink-0 text-muted-foreground">Name</span>
@@ -408,6 +463,7 @@ export function TimelineEditorDemo({
             comparison you want.
           </p>
         </div>
+        )}
       </div>
       <footer className="flex h-8 shrink-0 items-center border-t border-border px-3 font-mono text-2xs text-muted-foreground">
         <span>52.4K events (612.1K/s)</span>
