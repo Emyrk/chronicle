@@ -67,13 +67,15 @@ const STEPS: Array<{ from: number; caption: ReactNode; regions: Region[] }> = [
     from: 275,
     caption: (
       <>
-        The number is <span style={{ color: BLUE }}>effective healing</span>; the percent is
-        their share of the total
+        <span style={{ color: BLUE }}>Effective healing</span> and its share of the total — the{" "}
+        <span style={{ color: YELLOW }}>yellow percent</span> is how much of their healing was
+        overheal
       </>
     ),
     regions: [
       { left: 498, top: 208, width: 80, height: 164, color: BLUE },
       { left: 572, top: 208, width: 68, height: 164, color: BLUE },
+      { left: 622, top: 208, width: 56, height: 164, color: YELLOW },
     ],
   },
 ];
@@ -90,7 +92,7 @@ export default function ReadHealingChartVideo() {
           "Bars are effective healing by healer",
           "The pale tail on a bar is overheal",
           "Stripes mean it ran off the chart",
-          "Values and their share of the total",
+          "Values, shares, and overheal percent",
         ]}
       />
     </VideoStage>

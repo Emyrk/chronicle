@@ -28,6 +28,7 @@ const readChart: L = {
     "The pale tail on a bar is overheal — healing that overflowed",
     "A striped end cap means the overheal ran off the chart",
     "The number is effective healing; the percent is their share of the total",
+    "The yellow percent is how much of that healer's healing was overheal",
   ],
   video: {
     load: () => import("./videos/ReadHealingChart.video"),
