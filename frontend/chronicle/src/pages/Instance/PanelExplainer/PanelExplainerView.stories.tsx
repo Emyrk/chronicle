@@ -12,8 +12,8 @@ const meta: Meta<typeof PanelExplainerView> = {
   component: PanelExplainerView,
   parameters: { layout: "fullscreen" },
   decorators: [
-    (Story) => (
-      <MemoryRouter>
+    (Story, context) => (
+      <MemoryRouter initialEntries={(context.parameters.routerEntries as string[]) ?? ["/"]}>
         <MockInstanceEventsProvider>
           <Story />
         </MockInstanceEventsProvider>
@@ -49,4 +49,9 @@ export const LiveModeEmpty: Story = {};
 /** Fallback summary/tips shell for a panel without a lesson set. */
 export const FallbackPanel: Story = {
   args: { panelType: "healing_done" },
+};
+
+/** Deep-linked video lesson — exercises the lazy Remotion player. */
+export const PinBreakoutLesson: Story = {
+  parameters: { routerEntries: ["/?lesson=pin-breakout"] },
 };

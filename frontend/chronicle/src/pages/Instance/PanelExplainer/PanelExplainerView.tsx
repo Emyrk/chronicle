@@ -21,6 +21,7 @@ import type { PanelContext } from "../EventsPanels/types";
 import { usePanelAggregation } from "../EventsPanels/usePanelAggregation";
 import { EmbeddedLivePanel } from "./EmbeddedLivePanel";
 import { ExplainerTopBar } from "./ExplainerTopBar";
+import { LessonPlayer } from "./LessonPlayer";
 import { LessonSidebar, type LessonSelection } from "./LessonSidebar";
 import type { Lesson, LessonSet, PanelExplainer } from "./types";
 
@@ -246,7 +247,7 @@ function LessonHeaderCard<TCaps>({
           <X className="h-3.5 w-3.5" />
         </button>
       </div>
-      {/* Video player lands here for lessons with compositions. */}
+      {lesson.video && <LessonPlayer video={lesson.video} lessonId={lesson.id} />}
       <p className="max-w-[78ch] text-[12.5px] leading-relaxed text-pretty">
         {lesson.instruction}
       </p>

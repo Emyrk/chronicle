@@ -64,6 +64,13 @@ const pinBreakout: L = {
   deriveState: (caps) => (caps.hasAbilityBreakout ? "available" : "example-required"),
   instruction:
     "Click a player row to open their breakout, pin it to keep it open, then open a second player to compare rotations side by side.",
+  video: {
+    load: () => import("./videos/PinBreakout.video"),
+    durationInFrames: 240,
+    fps: 30,
+    width: 1280,
+    height: 720,
+  },
 };
 
 // ── Deeper analysis ──
