@@ -1,3 +1,4 @@
+import type { AbilityDetailMode, BreakoutTab } from "@/components/ui/AbilityBreakout";
 import type { LessonId } from "./capabilities";
 
 export type GuideTarget =
@@ -8,12 +9,24 @@ export type GuideTarget =
   | "ranks"
   | "focus";
 
+export interface LessonDemoState {
+  perSecond?: boolean;
+  focus?: boolean;
+  showRanks?: boolean;
+  breakout?: {
+    tab: BreakoutTab;
+    detailMode: AbilityDetailMode;
+  };
+}
+
 export interface LessonGuideStep {
   title: string;
   body: string;
   target: GuideTarget;
-  instruction?: string;
+  demo?: LessonDemoState;
 }
+
+export const LESSON_STEP_DURATION_MS = 4_500;
 
 export const LESSON_GUIDES: Record<LessonId, LessonGuideStep[]> = {
   "reading-chart": [
@@ -29,32 +42,34 @@ export const LESSON_GUIDES: Record<LessonId, LessonGuideStep[]> = {
     },
     {
       title: "Compare contribution",
-      body: "Longer bars mean a larger share of the group's damage. Use the values for exact comparisons.",
+      body: "Longer bars mean a larger share of the group's damage. The values provide the exact comparison.",
       target: "chart",
     },
   ],
   "dps-vs-total": [
     {
       title: "Total damage",
-      body: "Total damage answers: who contributed the most damage over the selected time window?",
+      body: "The panel starts with total damage, which shows who contributed the most over the selected time window.",
       target: "per-second",
+      demo: { perSecond: false },
     },
     {
-      title: "Switch to DPS",
-      body: "Per Second normalizes damage by duration. The tour has switched the real panel to DPS for you.",
+      title: "Damage per second",
+      body: "The tour now switches the real panel to DPS, normalizing every value by encounter duration.",
       target: "per-second",
-      instruction: "Toggle Per Second yourself to compare both views.",
+      demo: { perSecond: true },
     },
     {
-      title: "Choose the useful view",
-      body: "Use total damage for overall contribution and DPS when comparing attempts with different durations.",
+      title: "Compare the views",
+      body: "Total damage measures overall contribution. DPS is better for comparing attempts with different durations.",
       target: "chart",
+      demo: { perSecond: false },
     },
   ],
   "parse-scores": [
     {
       title: "Find the score pill",
-      body: "The coloured number beside a player is their parse score for the same boss and specialization.",
+      body: "The highlighted coloured numbers compare each player with the same boss and specialization.",
       target: "parse-scores",
     },
     {
@@ -64,100 +79,116 @@ export const LESSON_GUIDES: Record<LessonId, LessonGuideStep[]> = {
     },
     {
       title: "Use it as context",
-      body: "A parse is a comparison, not a diagnosis. Check fight strategy, assignment, gear, and duration before judging it.",
+      body: "A parse is a comparison, not a diagnosis. Strategy, assignments, gear, and duration still matter.",
       target: "parse-scores",
     },
   ],
   "breakout-box": [
     {
       title: "Inspect a player",
-      body: "Hover a player row to preview their ability and target breakdown without leaving the chart.",
+      body: "The tour automatically opens the first player's real Breakout Box over the chart.",
       target: "breakout",
-      instruction: "Hover any row in the real panel below.",
+      demo: { breakout: { tab: "ability", detailMode: "summary" } },
     },
     {
-      title: "Pin the breakout",
-      body: "Click the row to pin the Breakout Box. A pinned box stays open and can be moved while you compare players.",
+      title: "Keep the breakdown open",
+      body: "A pinned breakout stays visible while the underlying player chart remains available for comparison.",
       target: "breakout",
-      instruction: "Click a row to pin it, then drag the breakout by its header.",
+      demo: { breakout: { tab: "ability", detailMode: "summary" } },
     },
     {
-      title: "Close when finished",
-      body: "Use the close button on a pinned breakout to return to an uncluttered chart.",
-      target: "breakout",
+      title: "Return to the chart",
+      body: "The tour closes the breakout automatically, restoring an unobstructed player ranking.",
+      target: "chart",
     },
   ],
   "abilities-vs-targets": [
     {
-      title: "Open a breakout",
-      body: "Hover or click a player row. The Breakout Box opens with that player's damage breakdown.",
+      title: "Open the breakdown",
+      body: "The tour opens a real player breakout and starts with their ability contribution.",
       target: "breakout",
-      instruction: "Open a player row in the panel below.",
+      demo: { breakout: { tab: "ability", detailMode: "summary" } },
     },
     {
       title: "By Ability",
-      body: "This view answers which spells, attacks, or effects produced the player's damage.",
+      body: "This view shows which spells, attacks, and effects produced the player's damage.",
       target: "breakout",
+      demo: { breakout: { tab: "ability", detailMode: "summary" } },
     },
     {
       title: "By Target",
-      body: "Switch to By Target to see where the damage went and whether priority enemies received enough attention.",
+      body: "The tour switches the same breakout to targets, revealing where the player's damage went.",
       target: "breakout",
-      instruction: "Choose the By Target tab inside the open breakout.",
+      demo: { breakout: { tab: "target", detailMode: "summary" } },
     },
   ],
   "detailed-results": [
     {
-      title: "Open an ability breakdown",
-      body: "Start from a player's Breakout Box, then expand an ability to inspect its outcomes.",
+      title: "Start with the summary",
+      body: "The compact ability table shows total damage, contribution, cast count, hits, and critical rate.",
       target: "breakout",
-      instruction: "Open a player row, then expand an ability.",
+      demo: { breakout: { tab: "ability", detailMode: "summary" } },
     },
     {
-      title: "Read hit outcomes",
-      body: "Normal hits, critical hits, glancing blows, misses, dodges, and parries explain how the total was produced.",
+      title: "Reveal hit outcomes",
+      body: "The tour expands the table to show normal hits, critical hits, misses, dodges, and other outcomes.",
       target: "breakout",
+      demo: { breakout: { tab: "ability", detailMode: "outcomes" } },
     },
     {
       title: "Inspect the range",
-      body: "Min, average, and max values help separate damage consistency from occasional high rolls.",
+      body: "The tour switches to minimum, average, and maximum values for each available hit type.",
       target: "breakout",
+      demo: { breakout: { tab: "ability", detailMode: "minmax" } },
     },
   ],
   "spell-ranks": [
     {
       title: "Combined abilities",
-      body: "With Ranks off, casts with the same spell name are grouped into one ability total.",
+      body: "Ranks begin disabled, so casts with the same spell name are grouped into one ability total.",
       target: "ranks",
+      demo: {
+        showRanks: false,
+        breakout: { tab: "ability", detailMode: "summary" },
+      },
     },
     {
       title: "Separate spell ranks",
-      body: "The tour has enabled Ranks on the real panel. Open a breakout to see each spell rank separately.",
+      body: "The tour enables Ranks and rebuilds the same breakout with each spell rank on its own row.",
       target: "ranks",
-      instruction: "Toggle Ranks to compare the grouped and separated views.",
+      demo: {
+        showRanks: true,
+        breakout: { tab: "ability", detailMode: "summary" },
+      },
     },
     {
       title: "Spot down-ranking",
-      body: "Unexpected lower-rank casts may reveal a mistake—or an intentional mana-saving choice worth discussing.",
+      body: "Lower-rank rows can reveal a mistake or an intentional mana-saving choice worth discussing.",
       target: "breakout",
+      demo: {
+        showRanks: true,
+        breakout: { tab: "ability", detailMode: "summary" },
+      },
     },
   ],
   focus: [
     {
-      title: "Choose a player",
-      body: "Focus turns the player ranking into an ability chart for one player.",
+      title: "Start with the raid",
+      body: "Focus begins from the complete player ranking so the change in perspective is clear.",
       target: "focus",
-      instruction: "Ctrl+click a row (Cmd+click on Mac), then choose Focus.",
+      demo: { focus: false },
     },
     {
-      title: "Read the focused chart",
-      body: "The tour has focused the first player using the real panel state. Each row is now one of their abilities.",
+      title: "Focus one player",
+      body: "The tour automatically replaces the ranking with the first player's per-ability chart.",
       target: "focus",
+      demo: { focus: true },
     },
     {
       title: "Return to the raid",
-      body: "Use Back above the ability chart, or press Escape, to restore the full player ranking.",
+      body: "The tour exits Focus and restores the full player ranking automatically.",
       target: "focus",
+      demo: { focus: false },
     },
   ],
 };

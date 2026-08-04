@@ -18,14 +18,30 @@ describe("LESSON_GUIDES", () => {
   });
 
   it("drives real panel controls for stateful lessons", () => {
-    expect(LESSON_GUIDES["dps-vs-total"][1].target).toBe("per-second");
-    expect(LESSON_GUIDES["spell-ranks"][1].target).toBe("ranks");
-    expect(LESSON_GUIDES.focus[1].target).toBe("focus");
+    expect(LESSON_GUIDES["dps-vs-total"].map((step) => step.demo?.perSecond)).toEqual([false, true, false]);
+    expect(LESSON_GUIDES["spell-ranks"].map((step) => step.demo?.showRanks)).toEqual([false, true, true]);
+    expect(LESSON_GUIDES.focus.map((step) => step.demo?.focus)).toEqual([false, true, false]);
   });
 
-  it("gives hands-on instructions for interactive panel features", () => {
-    expect(LESSON_GUIDES["breakout-box"].some((step) => step.instruction)).toBe(true);
-    expect(LESSON_GUIDES["abilities-vs-targets"].some((step) => step.instruction)).toBe(true);
-    expect(LESSON_GUIDES["detailed-results"].some((step) => step.instruction)).toBe(true);
+  it("automatically demonstrates breakout tabs and details", () => {
+    expect(LESSON_GUIDES["abilities-vs-targets"].map((step) => step.demo?.breakout?.tab)).toEqual([
+      "ability",
+      "ability",
+      "target",
+    ]);
+    expect(LESSON_GUIDES["detailed-results"].map((step) => step.demo?.breakout?.detailMode)).toEqual([
+      "summary",
+      "outcomes",
+      "minmax",
+    ]);
+  });
+
+  it("does not ask the player to perform panel interactions", () => {
+    const manualPhrases = /click|hover|toggle|choose|open .* yourself|press escape/i;
+    for (const steps of Object.values(LESSON_GUIDES)) {
+      for (const step of steps) {
+        expect(step.body).not.toMatch(manualPhrases);
+      }
+    }
   });
 });

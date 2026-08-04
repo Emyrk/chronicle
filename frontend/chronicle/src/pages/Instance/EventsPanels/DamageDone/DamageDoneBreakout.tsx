@@ -1,6 +1,12 @@
 import { useCallback, useMemo, useState } from "react";
 import { useQueries } from "@tanstack/react-query";
-import { AbilityBreakout, type AbilityData, type TargetData, type BreakoutTab } from "@/components/ui/AbilityBreakout";
+import {
+  AbilityBreakout,
+  type AbilityData,
+  type AbilityDetailMode,
+  type TargetData,
+  type BreakoutTab,
+} from "@/components/ui/AbilityBreakout";
 import type { DamageDoneResult } from "./damageDone.processor";
 import type { PanelContext } from "../types";
 import type { WoWSpell } from "@/api/wowdb";
@@ -143,6 +149,10 @@ export interface UseDamageDoneBreakoutOptions {
   showRanks?: boolean;
   /** When provided, bypasses spell API queries and uses this map directly (keyed by real spell ID). */
   spellDataOverride?: Map<number, WoWSpell>;
+  /** Controlled tab used by guided demonstrations. */
+  tabOverride?: BreakoutTab;
+  /** Controlled detail mode used by guided demonstrations. */
+  detailModeOverride?: AbilityDetailMode;
 }
 
 /**
@@ -159,6 +169,8 @@ export function useDamageDoneBreakout({
   processing = false,
   showRanks = false,
   spellDataOverride,
+  tabOverride,
+  detailModeOverride,
 }: UseDamageDoneBreakoutOptions) {
   // Track tab selection per player so it persists across reloads
   const [tabByPlayer, setTabByPlayer] = useState<Map<string, BreakoutTab>>(new Map());
@@ -198,9 +210,9 @@ export function useDamageDoneBreakout({
   
   const breakout = useCallback(
     (playerID: string, pinned: boolean) => {
-      const activeTab = tabByPlayer.get(playerID) ?? 'ability';
+      const activeTab = tabOverride ?? tabByPlayer.get(playerID) ?? 'ability';
       const setActiveTab = (tab: BreakoutTab) => {
-        setTabByPlayer(prev => new Map(prev).set(playerID, tab));
+        if (!tabOverride) setTabByPlayer(prev => new Map(prev).set(playerID, tab));
       };
       if (!result) {
         const progressLabel = getBreakoutProgressLabel(false, loading, processing);
@@ -228,6 +240,7 @@ export function useDamageDoneBreakout({
             ...a, 
             key: `spell-${a.spellId}-${a.name}`,  // Unique key (name includes HoT/DoT suffix)
             spellId: a.spellId,  // Pass spellId for icon/tooltip
+            spellOverride: spellData,
             subtitle: rank || undefined,
           };
         });
@@ -301,10 +314,11 @@ export function useDamageDoneBreakout({
           onTabChange={setActiveTab}
           showAbsorbed
           absorbedIsAdditive
+          detailMode={detailModeOverride}
         />
       );
     },
-    [result, context, valueLabel, perSecond, durationMs, loading, processing, tabByPlayer, showRanks, spellDataMap]
+    [result, context, valueLabel, perSecond, durationMs, loading, processing, tabByPlayer, showRanks, spellDataMap, tabOverride, detailModeOverride]
   );
 
   return breakout;

@@ -8,6 +8,7 @@ export {
   type AbilityData,
   type TargetData,
   type BreakoutTab,
+  type AbilityDetailMode,
 } from './AbilityBreakout'
 
 export {

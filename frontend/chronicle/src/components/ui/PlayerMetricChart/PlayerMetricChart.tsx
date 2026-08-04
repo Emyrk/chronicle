@@ -81,8 +81,10 @@ interface PlayerMetricChartProps extends React.ComponentProps<"div"> {
   valueSuffix?: string
   /** Parse pill data keyed by playerID. When provided, shows a colored score pill on each matching row. */
   parsePills?: Map<string, ParsePillData>
-  /** Initial pinned breakout positions, primarily for stories, screenshots, and guided demos. */
+  /** Initial pinned breakout positions, primarily for stories and screenshots. */
   initialPinnedPositions?: ReadonlyMap<string, { x: number; y: number }>
+  /** Controlled pinned breakouts used by guided demonstrations. */
+  pinnedPositionsOverride?: ReadonlyMap<string, { x: number; y: number }>
   /** Base URL for class icon assets. Defaults to the Chronicle application path. */
   classIconBasePath?: string
   /** Animate bar geometry changes. Disable for high-frequency replay updates. */
@@ -105,6 +107,7 @@ export function PlayerMetricChart({
   valueSuffix,
   parsePills,
   initialPinnedPositions,
+  pinnedPositionsOverride,
   classIconBasePath = '/c/icons',
   animateValues = true,
   // Exclude dir from divProps to avoid type conflict with ScrollArea
@@ -121,6 +124,10 @@ export function PlayerMetricChart({
     () => createPlayerMetricChartModel(data, perSecond, duration_millis),
     [data, perSecond, duration_millis],
   )
+  const effectivePinnedPlayerIds = pinnedPositionsOverride
+    ? new Set(pinnedPositionsOverride.keys())
+    : pinnedPlayerIds
+  const effectivePinnedPositions = pinnedPositionsOverride ?? initialPinnedPositions
 
   const handleTogglePin = (playerId: string) => {
     setPinnedPlayerIds(prev => {
@@ -152,9 +159,9 @@ export function PlayerMetricChart({
             type={type}
             suffix={valueSuffix ?? (perSecond ? '/s' : '')}
             decimals={perSecond ? 1 : 0}
-            isPinned={pinnedPlayerIds.has(player.playerID)}
-            initialPinnedPosition={initialPinnedPositions?.get(player.playerID)}
-            onTogglePin={() => handleTogglePin(player.playerID)}
+            isPinned={effectivePinnedPlayerIds.has(player.playerID)}
+            initialPinnedPosition={effectivePinnedPositions?.get(player.playerID)}
+            onTogglePin={pinnedPositionsOverride ? undefined : () => handleTogglePin(player.playerID)}
             panelTitle={panelTitle}
             breakout={disableInteractions ? undefined : breakout}
             stackedLabel={stackedLabel}
@@ -372,6 +379,7 @@ export function PlayerMetricRow({
     initialPinnedPosition ?? null,
   )
   const [tooltipOpen, setTooltipOpen] = useState(false)
+  const effectivePinnedPosition = initialPinnedPosition ?? pinnedPosition
   
   const handleClick = useCallback((e: React.MouseEvent) => {
     e.preventDefault()
@@ -752,10 +760,10 @@ export function PlayerMetricRow({
     </TooltipProvider>
     
     {/* Pinned draggable tooltip */}
-    {isPinned && pinnedPosition && (
+    {isPinned && effectivePinnedPosition && (
       <DraggablePinnedTooltip
         player={player}
-        initialPosition={pinnedPosition}
+        initialPosition={effectivePinnedPosition}
         onClose={handleClose}
         panelTitle={panelTitle}
         breakout={breakout}

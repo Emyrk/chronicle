@@ -1,12 +1,12 @@
-import { useCallback, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import {
   ArrowLeft,
   ArrowRight,
   BookOpen,
-  Check,
   ChevronRight,
   FlaskConical,
-  MousePointer2,
+  Pause,
+  Play,
   RotateCcw,
   Sparkles,
   X,
@@ -36,7 +36,11 @@ import {
   getFixtureParsePillsMap,
   getFixtureSpellDataMap,
 } from "./fixture";
-import { LESSON_GUIDES, type GuideTarget } from "./lessonGuides";
+import {
+  LESSON_GUIDES,
+  LESSON_STEP_DURATION_MS,
+  type GuideTarget,
+} from "./lessonGuides";
 
 export type ExplainDataMode = "live" | "example";
 
@@ -67,6 +71,7 @@ export function DamageDoneExplainView({
   const [dataMode, setDataMode] = useState<ExplainDataMode>(initialDataMode);
   const [activeLesson, setActiveLesson] = useState<LessonId | null>(null);
   const [stepIndex, setStepIndex] = useState(0);
+  const [isPlaying, setIsPlaying] = useState(false);
   const [localPerSecond, setLocalPerSecond] = useState(false);
   const [localPanelOption, setLocalPanelOption] = useState<string | null>(null);
   const [showRanks, setShowRanks] = useState(true);
@@ -129,6 +134,18 @@ export function DamageDoneExplainView({
   const activeStep = activeSteps[stepIndex] ?? null;
   const activeTarget: GuideTarget | null = activeStep?.target ?? null;
   const activeResult = activeRenderProps.result;
+  const activePlayerId = firstPlayerId(activeResult);
+  const activeDemo = activeStep?.demo;
+  const effectivePerSecond = activeDemo?.perSecond ?? localPerSecond;
+  const effectiveShowRanks = activeDemo?.showRanks ?? showRanks;
+  const effectivePanelOption = activeLesson
+    ? activeDemo?.focus && activePlayerId
+      ? `f:${activePlayerId}`
+      : null
+    : localPanelOption;
+  const demoBreakout = activeDemo?.breakout && activePlayerId
+    ? { playerId: activePlayerId, ...activeDemo.breakout }
+    : undefined;
 
   const resetPanelDemoState = useCallback(() => {
     setLocalPerSecond(false);
@@ -136,21 +153,17 @@ export function DamageDoneExplainView({
     setShowRanks(true);
   }, []);
 
-  // Advancing a lesson updates explainer-local state on the real panel.
-  // These controls never mutate the instance URL or saved panel settings.
-  const goToLessonStep = useCallback((lessonId: LessonId, nextIndex: number) => {
-    setStepIndex(nextIndex);
-    if (lessonId === "dps-vs-total") {
-      setLocalPerSecond(nextIndex >= 1);
-    }
-    if (lessonId === "spell-ranks") {
-      setShowRanks(nextIndex >= 1);
-    }
-    if (lessonId === "focus") {
-      const playerId = firstPlayerId(activeResult);
-      setLocalPanelOption(nextIndex >= 1 && playerId ? `f:${playerId}` : null);
-    }
-  }, [activeResult]);
+  useEffect(() => {
+    if (!activeLesson || !isPlaying || activeSteps.length === 0) return;
+    const timeout = window.setTimeout(() => {
+      if (stepIndex < activeSteps.length - 1) {
+        setStepIndex((current) => current + 1);
+      } else {
+        setIsPlaying(false);
+      }
+    }, LESSON_STEP_DURATION_MS);
+    return () => window.clearTimeout(timeout);
+  }, [activeLesson, activeSteps.length, isPlaying, stepIndex]);
 
   const selectLesson = useCallback((lessonId: LessonId, state: LessonState) => {
     if (dataMode === "live" && state === "example-required") {
@@ -159,25 +172,27 @@ export function DamageDoneExplainView({
     resetPanelDemoState();
     setActiveLesson(lessonId);
     setStepIndex(0);
-    if (lessonId === "spell-ranks") {
-      setShowRanks(false);
-    }
+    setIsPlaying(true);
   }, [dataMode, resetPanelDemoState]);
 
   const changeDataMode = useCallback((mode: ExplainDataMode) => {
     setDataMode(mode);
     resetPanelDemoState();
     setStepIndex(0);
-    if (activeLesson === "spell-ranks") {
-      setShowRanks(false);
-    }
+    setIsPlaying(!!activeLesson);
   }, [activeLesson, resetPanelDemoState]);
 
   const closeLesson = useCallback(() => {
     setActiveLesson(null);
     setStepIndex(0);
+    setIsPlaying(false);
     resetPanelDemoState();
   }, [resetPanelDemoState]);
+
+  const replayLesson = useCallback(() => {
+    setStepIndex(0);
+    setIsPlaying(true);
+  }, []);
 
   return (
     <div className="min-h-screen bg-background" data-testid="damage-done-explain-view">
@@ -229,10 +244,10 @@ export function DamageDoneExplainView({
             <div className="mb-3 rounded-lg border border-[color:var(--tertiary)]/20 bg-[color:var(--tertiary)]/5 p-3">
               <div className="mb-1 flex items-center gap-2 text-xs font-semibold">
                 <Sparkles className="h-3.5 w-3.5 text-[color:var(--tertiary)]" />
-                Learn by doing
+                Watch it happen
               </div>
               <p className="text-2xs leading-relaxed text-muted-foreground">
-                Pick a lesson, move through its steps, and interact with the same panel you use for analysis.
+                Pick a lesson and the tour will operate the real panel automatically from start to finish.
               </p>
             </div>
 
@@ -272,7 +287,7 @@ export function DamageDoneExplainView({
               >
                 <div className="flex items-center gap-3 border-b bg-[color:var(--tertiary)]/5 px-4 py-2.5">
                   <div className="grid h-7 w-7 shrink-0 place-items-center rounded-md bg-[color:var(--tertiary)]/15 text-[color:var(--tertiary)]">
-                    <MousePointer2 className="h-3.5 w-3.5" />
+                    <Sparkles className="h-3.5 w-3.5" />
                   </div>
                   <div className="min-w-0">
                     <p className="truncate text-xs font-semibold">{activeLessonMeta.title}</p>
@@ -302,32 +317,25 @@ export function DamageDoneExplainView({
                   <div>
                     <h2 className="mb-1 text-base font-semibold tracking-tight">{activeStep.title}</h2>
                     <p className="max-w-3xl text-sm leading-relaxed text-muted-foreground">{activeStep.body}</p>
-                    {activeStep.instruction && (
-                      <p className="mt-2 flex items-center gap-2 text-xs font-medium text-foreground">
-                        <MousePointer2 className="h-3.5 w-3.5 text-[color:var(--tertiary)]" />
-                        {activeStep.instruction}
-                      </p>
-                    )}
+                    <p className="mt-2 text-2xs font-medium uppercase tracking-[0.12em] text-[color:var(--tertiary)]">
+                      {isPlaying ? "Demonstrating automatically" : "Demonstration complete"}
+                    </p>
                   </div>
                   <div className="flex items-center justify-end gap-2">
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      onClick={() => activeLesson && goToLessonStep(activeLesson, Math.max(0, stepIndex - 1))}
-                      disabled={stepIndex === 0}
-                    >
-                      <ArrowLeft className="mr-1.5 h-3.5 w-3.5" />
-                      Previous
-                    </Button>
-                    {stepIndex < activeSteps.length - 1 ? (
-                      <Button size="sm" onClick={() => activeLesson && goToLessonStep(activeLesson, stepIndex + 1)}>
-                        Next
-                        <ArrowRight className="ml-1.5 h-3.5 w-3.5" />
+                    {isPlaying ? (
+                      <Button variant="outline" size="sm" onClick={() => setIsPlaying(false)}>
+                        <Pause className="mr-1.5 h-3.5 w-3.5" />
+                        Pause
+                      </Button>
+                    ) : stepIndex === activeSteps.length - 1 ? (
+                      <Button variant="outline" size="sm" onClick={replayLesson}>
+                        <RotateCcw className="mr-1.5 h-3.5 w-3.5" />
+                        Replay
                       </Button>
                     ) : (
-                      <Button size="sm" onClick={closeLesson}>
-                        <Check className="mr-1.5 h-3.5 w-3.5" />
-                        Done
+                      <Button variant="outline" size="sm" onClick={() => setIsPlaying(true)}>
+                        <Play className="mr-1.5 h-3.5 w-3.5" />
+                        Resume
                       </Button>
                     )}
                   </div>
@@ -358,7 +366,7 @@ export function DamageDoneExplainView({
                     )}
                   </div>
                   <p className="text-2xs text-muted-foreground">
-                    {isExample ? "Curated data for trying every lesson" : "Using your current encounter selection"}
+                    {isExample ? "Curated data for demonstrating every lesson" : "Using your current encounter selection"}
                   </p>
                 </div>
                 <div
@@ -373,12 +381,13 @@ export function DamageDoneExplainView({
                   </label>
                   <Switch
                     id="explain-per-second"
-                    checked={localPerSecond}
+                    checked={effectivePerSecond}
                     onCheckedChange={setLocalPerSecond}
+                    disabled={!!activeLesson}
                     data-testid="explain-per-second-toggle"
                   />
                 </div>
-                {(localPerSecond || localPanelOption || !showRanks) && (
+                {!activeLesson && (localPerSecond || localPanelOption || !showRanks) && (
                   <Button variant="ghost" size="sm" onClick={resetPanelDemoState} className="h-8 gap-1.5 text-xs">
                     <RotateCcw className="h-3.5 w-3.5" />
                     Reset panel
@@ -395,12 +404,16 @@ export function DamageDoneExplainView({
                 >
                   <DamageDoneContent
                     {...activeRenderProps}
+                    perSecond={effectivePerSecond}
+                    checkboxChecked={effectivePerSecond}
+                    panelOption={effectivePanelOption}
                     sourceType={panelType === "enemy_damage_done" ? "enemies" : "players"}
                     parsePillsOverride={isExample ? exampleParsePills : undefined}
                     spellDataOverride={isExample ? exampleSpellData : undefined}
-                    showRanksOverride={showRanks}
+                    showRanksOverride={effectiveShowRanks}
                     onShowRanksChange={setShowRanks}
                     explainTarget={activeTarget}
+                    demoBreakout={demoBreakout}
                   />
                 </div>
               </CardContent>

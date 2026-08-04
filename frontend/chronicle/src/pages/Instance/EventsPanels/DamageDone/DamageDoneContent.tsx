@@ -1,7 +1,12 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { PlayerMetricChart, type PlayerMetricChartData } from "@/components/ui/PlayerMetricChart/PlayerMetricChart";
 import { RowContextMenu, getArmoryUrl } from "@/components/ui/PlayerMetricChart/RowContextMenu";
-import { AbilityBreakout, type AbilityData } from "@/components/ui/AbilityBreakout";
+import {
+  AbilityBreakout,
+  type AbilityData,
+  type AbilityDetailMode,
+  type BreakoutTab,
+} from "@/components/ui/AbilityBreakout";
 import { GenericPanel } from "../GenericPanel";
 import type { EntitySelection, PanelRenderProps } from "../types";
 import type { DamageDoneResult, DamageSourceType } from "./damageDone.processor";
@@ -109,6 +114,12 @@ interface DamageDoneContentProps extends PanelRenderProps<DamageDoneResult> {
   onShowRanksChange?: (showRanks: boolean) => void;
   /** Highlights the relevant real control while the explainer is active. */
   explainTarget?: "chart" | "per-second" | "parse-scores" | "breakout" | "ranks" | "focus";
+  /** Automatically opens and configures a real breakout for guided demonstrations. */
+  demoBreakout?: {
+    playerId: string;
+    tab: BreakoutTab;
+    detailMode: AbilityDetailMode;
+  };
 }
 
 export const DamageDoneContent = (props: DamageDoneContentProps) => {
@@ -183,7 +194,14 @@ export const DamageDoneContent = (props: DamageDoneContentProps) => {
     processing: props.processing,
     showRanks,
     spellDataOverride: props.spellDataOverride,
+    tabOverride: props.demoBreakout?.tab,
+    detailModeOverride: props.demoBreakout?.detailMode,
   });
+
+  const demoPinnedPositions = useMemo(() => {
+    if (!props.demoBreakout) return undefined;
+    return new Map([[props.demoBreakout.playerId, { x: 520, y: 390 }]]);
+  }, [props.demoBreakout]);
 
   // ── Parse pills ──
   const liveParsePills = useParsePills({
@@ -461,6 +479,7 @@ export const DamageDoneContent = (props: DamageDoneContentProps) => {
           onRowCtrlClick={handleRowCtrlClick}
           disableInteractions={props.context.renderMode === "layout_lab"}
           parsePills={parsePills}
+          pinnedPositionsOverride={demoPinnedPositions}
         />
       )}
 

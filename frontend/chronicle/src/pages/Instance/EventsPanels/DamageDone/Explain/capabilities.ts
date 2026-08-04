@@ -136,7 +136,7 @@ export const LESSONS: LessonMeta[] = [
   {
     id: "dps-vs-total",
     title: "DPS vs Total Damage",
-    description: "Toggle Per Second to switch between total damage dealt and damage per second (DPS).",
+    description: "Watch the panel switch between total damage and damage per second (DPS).",
     category: "essentials",
   },
   {
@@ -148,31 +148,31 @@ export const LESSONS: LessonMeta[] = [
   {
     id: "breakout-box",
     title: "The Breakout Box",
-    description: "Click a player row to open a detailed breakdown of their damage by ability or target.",
+    description: "Watch a player's detailed damage breakdown open by ability and target.",
     category: "essentials",
   },
   {
     id: "abilities-vs-targets",
     title: "Abilities vs Targets",
-    description: "Switch between 'By Ability' and 'By Target' tabs inside the Breakout Box.",
+    description: "See the Breakout Box move from 'By Ability' to 'By Target' automatically.",
     category: "deeper",
   },
   {
     id: "detailed-results",
     title: "Detailed Hit Results",
-    description: "Expand ability rows to see hit types (normal, crit, glancing) with min/avg/max values.",
+    description: "See hit outcomes expand, then change to min/avg/max values automatically.",
     category: "deeper",
   },
   {
     id: "spell-ranks",
     title: "Spell Ranks",
-    description: "Toggle Ranks to separate abilities by spell rank — useful for spotting down-ranked casts.",
+    description: "Watch abilities separate by spell rank to reveal down-ranked casts.",
     category: "deeper",
   },
   {
     id: "focus",
     title: "Focus Mode",
-    description: "Ctrl+click (Cmd+click on Mac) a player row and choose Focus to see their per-ability chart with full breakouts.",
+    description: "Watch the raid ranking transform into one player's per-ability Focus chart.",
     category: "deeper",
   },
 ];

@@ -4,6 +4,7 @@ import { useDatasetId } from "@/hooks/useDatasetId";
 import { SpellTooltip } from "@/pages/WoWDB/SpellTooltip";
 import { Tooltip, TooltipContent, TooltipTrigger } from "../Tooltip/tooltip";
 import { SpellIconWithTooltip } from "../SpellIconWithTooltip";
+import type { WoWSpell } from "@/api/wowdb";
 
 interface SpellIdTooltipProps {
   /** Spell ID to look up. If null, just shows the name as plain text. */
@@ -14,6 +15,8 @@ interface SpellIdTooltipProps {
   size?: number;
   /** Fetch spell data only after the tooltip is opened and render a text-only trigger. Defaults to false. */
   loadOnHover?: boolean;
+  /** Deterministic spell metadata supplied by stories or guided demos. */
+  spellOverride?: WoWSpell;
   /** Additional class name for the wrapper */
   className?: string;
 }
@@ -30,6 +33,7 @@ export function SpellIdTooltip({
   name, 
   size = 16,
   loadOnHover = false,
+  spellOverride,
   className,
 }: SpellIdTooltipProps) {
   const ref = useRef<HTMLSpanElement>(null);
@@ -60,8 +64,9 @@ export function SpellIdTooltip({
   const { data: spell } = useSpell(
     spellId?.toString() ?? "",
     datasetId,
-    { enabled: spellId != null && (loadOnHover ? tooltipRequested : isVisible) },
+    { enabled: !spellOverride && spellId != null && (loadOnHover ? tooltipRequested : isVisible) },
   );
+  const effectiveSpell = spellOverride ?? spell;
 
   // No spell ID - render plain text
   if (spellId == null) {
@@ -81,7 +86,7 @@ export function SpellIdTooltip({
           className="z-[10000] border-0 bg-transparent p-0"
           hideArrow
         >
-          {spell ? <SpellTooltip spell={spell} /> : <span className="rounded bg-popover px-2 py-1 text-xs text-popover-foreground">Loading…</span>}
+          {effectiveSpell ? <SpellTooltip spell={effectiveSpell} /> : <span className="rounded bg-popover px-2 py-1 text-xs text-popover-foreground">Loading…</span>}
         </TooltipContent>
       </Tooltip>
     );
@@ -89,9 +94,9 @@ export function SpellIdTooltip({
 
   return (
     <span ref={ref} className={className}>
-      {spell ? (
+      {effectiveSpell ? (
         <SpellIconWithTooltip 
-          spell={spell} 
+          spell={effectiveSpell}
           size={size}
           showTooltip
         >
