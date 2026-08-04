@@ -6,6 +6,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/Emyrk/chronicle/combatlog/parser/guid"
 	"github.com/Emyrk/chronicle/database"
 	"github.com/Emyrk/chronicle/database/dbtestutil"
 	"github.com/Emyrk/chronicle/internal/parsepolicy"
@@ -88,7 +89,10 @@ func TestWorkerComputeParseScores_WithSnapshot(t *testing.T) {
 	conn.Release()
 
 	// Create a published snapshot.
-	cutoff := time.Now().Add(time.Hour) // In the future so instance is before cutoff.
+	// Snapshot cutoff must be:
+	// 1. <= instance start_time (now-2h) for canonical historical resolution
+	// 2. > cohort kill times (now-4h) so cohort members are included
+	cutoff := time.Now().Add(-150 * time.Minute) // -2.5h, clearly before instance start (-2h)
 	snapshot, err := store.InsertRankingSnapshot(ctx, database.InsertRankingSnapshotParams{
 		TenantID:       uuid.Nil,
 		Cutoff:         pgtype.Timestamptz{Time: cutoff, Valid: true},
@@ -103,62 +107,55 @@ func TestWorkerComputeParseScores_WithSnapshot(t *testing.T) {
 	snapshot, err = store.PublishRankingSnapshot(ctx, snapshot.ID)
 	require.NoError(t, err)
 
-	// Insert ranking rows for the instance and cohort members.
-	// The instance's own ranking + several other instances for cohort data.
 	now := time.Now()
 
-	// First insert the test instance's ranking.
-	err = store.InsertEncounterDpsRanking(ctx, database.InsertEncounterDpsRankingParams{
-		EncounterID:   uuid.NullUUID{UUID: uuid.New(), Valid: true},
-		InstanceID:    f.instanceID,
-		EncounterName: "Ragnaros",
-		InstanceName:  "Molten Core",
-		PlayerGuid:    "Player-1234-0001",
-		PlayerName:    "TestPlayer",
-		PlayerClass:   "WARRIOR",
-		PlayerSpec:    "Fury",
-		PlayerRole:    "dps",
-		RealmID:       f.realmID,
-		RealmName:     "test-realm",
-		DamageDone:    100000,
-		DurationSecs:  100,
-		Dps:           1000.0,
-		KilledAt:      pgtype.Timestamptz{Time: now.Add(-time.Hour), Valid: true},
-	})
-	require.NoError(t, err)
-
-	// Insert 10 other instances' rankings to build a cohort.
-	for i := range 10 {
-		otherInstID := uuid.New()
-		// Use raw pool exec for cohort instances (reuse existing log_group).
-		otherConn, acqErr := pool.Acquire(ctx)
-		require.NoError(t, acqErr)
-		_, err = otherConn.Exec(ctx,
-			`INSERT INTO log_instances (id, realm_id, log_group_id, name, capabilities, start_time)
-			 SELECT $1, $2, (SELECT id FROM wow_log_groups LIMIT 1), $3, '{}', $4`,
-			otherInstID, f.realmID, "Molten Core", now.Add(-3*time.Hour))
-		otherConn.Release()
-		if err != nil {
-			continue // Skip if FK fails.
-		}
-		err = store.InsertEncounterDpsRanking(ctx, database.InsertEncounterDpsRankingParams{
-			EncounterID:   uuid.NullUUID{UUID: uuid.New(), Valid: true},
-			InstanceID:    otherInstID,
+	// Helper to insert an encounter + ranking row.
+	insertRanking := func(instID uuid.UUID, playerGUID, playerName string, dps float64, killedAt time.Time) {
+		encID := uuid.New()
+		_, iErr := store.InsertEncounter(ctx, database.InsertEncounterParams{
+			ID: encID, InstanceID: instID, Name: "Ragnaros",
+			KillType: database.KillTypeClean, Boss: true,
+			Remaining: guid.GUIDs{},
+			StartTime: pgtype.Timestamptz{Time: killedAt.Add(-time.Minute), Valid: true},
+			EndTime:   pgtype.Timestamptz{Time: killedAt, Valid: true},
+		})
+		require.NoError(t, iErr)
+		iErr = store.InsertEncounterDpsRanking(ctx, database.InsertEncounterDpsRankingParams{
+			EncounterID:   uuid.NullUUID{UUID: encID, Valid: true},
+			InstanceID:    instID,
 			EncounterName: "Ragnaros",
 			InstanceName:  "Molten Core",
-			PlayerGuid:    fmt.Sprintf("Player-1234-%04d", i+10),
-			PlayerName:    fmt.Sprintf("CohortPlayer%d", i),
+			PlayerGuid:    playerGUID,
+			PlayerName:    playerName,
 			PlayerClass:   "WARRIOR",
 			PlayerSpec:    "Fury",
 			PlayerRole:    "dps",
 			RealmID:       f.realmID,
 			RealmName:     "test-realm",
-			DamageDone:    int64(50000 + i*10000),
+			DamageDone:    int64(dps * 100),
 			DurationSecs:  100,
-			Dps:           float64(500 + i*100),
-			KilledAt:      pgtype.Timestamptz{Time: now.Add(-2 * time.Hour), Valid: true},
+			Dps:           dps,
+			KilledAt:      pgtype.Timestamptz{Time: killedAt, Valid: true},
 		})
+		require.NoError(t, iErr)
+	}
+
+	// Insert the test instance's ranking.
+	insertRanking(f.instanceID, "Player-1234-0001", "TestPlayer", 1000.0, now.Add(-time.Hour))
+
+	// Insert 10 other instances' rankings for cohort data.
+	for i := range 10 {
+		otherInstID := uuid.New()
+		otherConn, acqErr := pool.Acquire(ctx)
+		require.NoError(t, acqErr)
+		_, err = otherConn.Exec(ctx,
+			`INSERT INTO log_instances (id, realm_id, log_group_id, name, capabilities, start_time)
+			 SELECT $1, $2, (SELECT id FROM wow_log_groups LIMIT 1), $3, '{}', $4`,
+			otherInstID, f.realmID, "Molten Core", now.Add(-5*time.Hour))
+		otherConn.Release()
 		require.NoError(t, err)
+		insertRanking(otherInstID, fmt.Sprintf("Player-1234-%04d", i+10),
+			fmt.Sprintf("CohortPlayer%d", i), float64(500+i*100), now.Add(-4*time.Hour))
 	}
 
 	// Populate snapshot from rankings.

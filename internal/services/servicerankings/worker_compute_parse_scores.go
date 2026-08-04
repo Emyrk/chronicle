@@ -265,6 +265,10 @@ func (w *WorkerComputeParseScores) handleNoSnapshot(
 	})
 
 	// Enqueue a follow-up job scheduled at the delay time.
+	if w.Queue == nil {
+		logger.Warn("no queue available, cannot schedule retry")
+		return nil
+	}
 	_, err := w.Queue.Insert(ctx, ArgsComputeParseScores{
 		InstanceID: instanceID,
 		TenantID:   tenantID,
