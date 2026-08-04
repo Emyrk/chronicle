@@ -71,16 +71,20 @@ export function LessonSidebar<TCaps>({
           />
         ))}
 
-        <GroupHeading className="pt-3.5">Deeper analysis</GroupHeading>
-        {deeper.map((lesson) => (
-          <LessonRow
-            key={lesson.id}
-            lesson={lesson}
-            caps={caps}
-            selected={lesson.id === selectedLessonId}
-            onSelect={onSelect}
-          />
-        ))}
+        {deeper.length > 0 && (
+          <>
+            <GroupHeading className="pt-3.5">Deeper analysis</GroupHeading>
+            {deeper.map((lesson) => (
+              <LessonRow
+                key={lesson.id}
+                lesson={lesson}
+                caps={caps}
+                selected={lesson.id === selectedLessonId}
+                onSelect={onSelect}
+              />
+            ))}
+          </>
+        )}
 
         {more.length > 0 && (
           <>
