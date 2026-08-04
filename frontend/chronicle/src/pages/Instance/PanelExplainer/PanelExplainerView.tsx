@@ -27,6 +27,9 @@ import type { Lesson, LessonSet, PanelExplainer } from "./types";
 export interface PanelExplainerViewProps {
   /** The panel type being explained */
   panelType: EventsPanelType;
+  /** The source panel's option string (series config, toggles, …) so the
+   *  live panel matches what the user was looking at. */
+  panelOption?: string | null;
   /** Panel context for rendering the live panel */
   context: PanelContext;
   /** Duration in ms for per-second calculations */
@@ -39,6 +42,7 @@ export interface PanelExplainerViewProps {
 
 export function PanelExplainerView({
   panelType,
+  panelOption,
   context,
   durationMs,
   onExit,
@@ -63,6 +67,7 @@ export function PanelExplainerView({
     return (
       <LessonShell
         panelType={panelType}
+        panelOption={panelOption}
         explainer={explainer}
         lessonSet={explainer.lessonSet}
         context={context}
@@ -76,6 +81,7 @@ export function PanelExplainerView({
   return (
     <FallbackExplainer
       panelType={panelType}
+      panelOption={panelOption}
       explainer={explainer}
       context={context}
       durationMs={durationMs}
@@ -92,6 +98,7 @@ function useNoLiveExtras(): Record<string, never> {
 /** Full learning shell for panels with authored lessons. */
 function LessonShell<TResult, TCaps>({
   panelType,
+  panelOption,
   explainer,
   lessonSet,
   context,
@@ -100,6 +107,7 @@ function LessonShell<TResult, TCaps>({
   initialMode,
 }: {
   panelType: EventsPanelType;
+  panelOption?: string | null;
   explainer: PanelExplainer<TResult, TCaps>;
   lessonSet: LessonSet<TResult, TCaps>;
   context: PanelContext;
@@ -241,13 +249,15 @@ function LessonShell<TResult, TCaps>({
               lessonSet.renderExample()
             ) : (
               <div className="h-full rounded-lg border border-border bg-card p-2">
-                {/* The REAL panel, exactly as it renders on the instance page. */}
+                {/* The REAL panel, exactly as it renders on the instance page —
+                    including the configuration it was opened from. */}
                 <EventsPanel
                   panelType={panelType}
                   onPanelTypeChange={() => {}}
                   durationMs={durationMs}
                   context={context}
                   panelIndex={0}
+                  panelOption={panelOption}
                 />
               </div>
             )}
@@ -433,12 +443,14 @@ function IntroCard({ summary }: { summary: string }) {
 /** Simple summary/tips layout for panels without a lesson set. */
 function FallbackExplainer({
   panelType,
+  panelOption,
   explainer,
   context,
   durationMs,
   onExit,
 }: {
   panelType: EventsPanelType;
+  panelOption?: string | null;
   explainer: PanelExplainer;
   context: PanelContext;
   durationMs: number;
@@ -476,6 +488,7 @@ function FallbackExplainer({
             durationMs={durationMs}
             context={context}
             panelIndex={0}
+            panelOption={panelOption}
           />
         </div>
 
