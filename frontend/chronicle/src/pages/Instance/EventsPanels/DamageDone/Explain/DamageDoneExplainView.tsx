@@ -38,7 +38,8 @@ import {
   getFixtureSpellDataMap,
 } from "./fixture";
 import { GlossaryTermInline } from "./Glossary";
-import { LESSON_COMPOSITIONS } from "./compositions";
+import { ExplainWalkthrough } from "./compositions";
+import { LESSON_TIMINGS } from "./compositions";
 
 /** Data-mode: live vs example */
 export type ExplainDataMode = "live" | "example";
@@ -59,28 +60,6 @@ export interface DamageDoneExplainViewProps {
    */
   initialDataMode?: ExplainDataMode;
 }
-
-// ── Lesson instructions ──
-// Shown adjacent to the panel when a lesson is active.
-
-const LESSON_INSTRUCTIONS: Record<LessonId, string> = {
-  "reading-chart":
-    "Look at the horizontal bars below. Each bar represents a player, colour-coded by class. Longer bars = more damage.",
-  "dps-vs-total":
-    "Toggle the Per Second switch in the panel header to switch between total damage and DPS.",
-  "parse-scores":
-    "Notice the coloured number pills on each player row. These are parse scores — higher is better, and the colour shifts from green → blue → purple → orange → pink.",
-  "breakout-box":
-    "Click any player row to open the Breakout Box showing their ability and target breakdown.",
-  "abilities-vs-targets":
-    "Inside the Breakout Box, switch between the 'By Ability' and 'By Target' tabs.",
-  "detailed-results":
-    "In the Breakout Box, click 'More detail' on an ability, then click the ↕ button to see min/avg/max for each hit type.",
-  "spell-ranks":
-    "Toggle the Ranks button in the panel header to separate abilities by spell rank (e.g. Frostbolt Rank 4 vs Rank 11).",
-  "focus":
-    "Ctrl+click (Cmd+click on Mac) a player row, then choose Focus to see their per-ability chart with full breakouts.",
-};
 
 export function DamageDoneExplainView({
   panelType,
@@ -184,9 +163,8 @@ export function DamageDoneExplainView({
 
   const isExample = dataMode === "example";
 
-  // Active lesson composition for the Remotion Player
-  const activeLessonConfig = activeLesson ? LESSON_COMPOSITIONS[activeLesson] : null;
-  const activeLessonMeta = activeLesson ? LESSONS.find((l) => l.id === activeLesson) : null;
+  // Active lesson timing for the Remotion Player
+  const activeLessonTiming = activeLesson ? LESSON_TIMINGS[activeLesson] : null;
 
   return (
     <div className="min-h-screen bg-background" data-testid="damage-done-explain-view">
@@ -261,25 +239,34 @@ export function DamageDoneExplainView({
 
         {/* ── Main content area ── */}
         <main className="flex-1 overflow-y-auto styled-scrollbar">
-          <div className="max-w-4xl mx-auto px-6 py-6 space-y-5">
+          <div className="max-w-4xl mx-auto px-6 py-6 space-y-4">
 
-            {/* Remotion Player — walkthrough video for active lesson */}
-            {activeLessonConfig && activeLessonMeta && (
+            {activeLesson && activeLessonTiming ? (
+              /* ── Lesson active: Remotion Player replaces the panel ── */
               <Card>
-                <CardContent className="pt-4 pb-3">
-                  <div className="flex items-center gap-2 mb-3">
-                    <Info className="h-3.5 w-3.5 text-primary shrink-0" />
-                    <p className="text-sm font-medium">{activeLessonMeta.title}</p>
-                    <span className="text-xs text-muted-foreground">— {LESSON_INSTRUCTIONS[activeLesson!]}</span>
-                  </div>
+                <div className="flex items-center justify-between px-4 pt-3 pb-1">
+                  <span className="text-sm font-medium flex items-center gap-2">
+                    <Info className="h-3.5 w-3.5 text-primary" />
+                    {LESSONS.find((l) => l.id === activeLesson)?.title}
+                  </span>
+                  <Button
+                    size="sm"
+                    variant="ghost"
+                    className="text-xs"
+                    onClick={() => setActiveLesson(null)}
+                  >
+                    Exit lesson
+                  </Button>
+                </div>
+                <CardContent className="pt-1 pb-3">
                   <div className="rounded-lg overflow-hidden border bg-background" data-testid="lesson-player">
                     <Player
-                      component={activeLessonConfig.component}
-                      inputProps={activeLessonConfig.needsTitle ? { title: activeLessonMeta.title } : {}}
-                      durationInFrames={activeLessonConfig.durationInFrames}
+                      component={ExplainWalkthrough}
+                      inputProps={{ steps: activeLessonTiming.steps }}
+                      durationInFrames={activeLessonTiming.durationInFrames}
                       compositionWidth={640}
-                      compositionHeight={280}
-                      fps={activeLessonConfig.fps}
+                      compositionHeight={400}
+                      fps={activeLessonTiming.fps}
                       style={{ width: "100%" }}
                       controls
                       loop
@@ -288,48 +275,46 @@ export function DamageDoneExplainView({
                   </div>
                 </CardContent>
               </Card>
-            )}
-
-            {/* Example data banner */}
-            {isExample && (
-              <div
-                className="flex items-center gap-2 px-3 py-2 rounded-md border border-amber-500/30 bg-amber-500/10 text-xs"
-                data-testid="example-data-banner"
-              >
-                <FlaskConical className="h-3.5 w-3.5 text-amber-400 shrink-0" />
-                <span className="text-amber-200 font-medium">Example data — try the interactions below</span>
-              </div>
-            )}
-
-            {/* Live / Example panel */}
-            <Card>
-              <div className="flex items-center justify-between px-4 pt-3 pb-1">
-                <span className="text-sm text-muted-foreground font-medium">
-                  {isExample ? "Example — Damage Done" : "Damage Done"}
-                </span>
-                <div className="flex items-center gap-2" data-explainer-per-second>
-                  <label htmlFor="explain-per-second" className="text-xs text-muted-foreground cursor-pointer">
-                    Per Second
-                  </label>
-                  <Switch
-                    id="explain-per-second"
-                    checked={localPerSecond}
-                    onCheckedChange={setLocalPerSecond}
-                    data-testid="explain-per-second-toggle"
-                  />
+            ) : (
+              /* ── No lesson active: show the live/example panel ── */
+              <Card>
+                {isExample && (
+                  <div
+                    className="flex items-center gap-2 mx-4 mt-3 px-3 py-1.5 rounded-md border border-amber-500/30 bg-amber-500/10 text-xs"
+                    data-testid="example-data-banner"
+                  >
+                    <FlaskConical className="h-3.5 w-3.5 text-amber-400 shrink-0" />
+                    <span className="text-amber-200 font-medium">Example data — select a lesson to start the walkthrough</span>
+                  </div>
+                )}
+                <div className="flex items-center justify-between px-4 pt-3 pb-1">
+                  <span className="text-sm text-muted-foreground font-medium">
+                    {isExample ? "Example — Damage Done" : "Damage Done"}
+                  </span>
+                  <div className="flex items-center gap-2" data-explainer-per-second>
+                    <label htmlFor="explain-per-second" className="text-xs text-muted-foreground cursor-pointer">
+                      Per Second
+                    </label>
+                    <Switch
+                      id="explain-per-second"
+                      checked={localPerSecond}
+                      onCheckedChange={setLocalPerSecond}
+                      data-testid="explain-per-second-toggle"
+                    />
+                  </div>
                 </div>
-              </div>
-              <CardContent className="pt-0">
-                <div className="styled-scrollbar" data-testid="explain-panel-container">
-                  <DamageDoneContent
-                    {...activeRenderProps}
-                    sourceType="players"
-                    parsePillsOverride={isExample ? exampleParsePills : undefined}
-                    spellDataOverride={isExample ? exampleSpellData : undefined}
-                  />
-                </div>
-              </CardContent>
-            </Card>
+                <CardContent className="pt-0">
+                  <div className="styled-scrollbar" data-testid="explain-panel-container">
+                    <DamageDoneContent
+                      {...activeRenderProps}
+                      sourceType="players"
+                      parsePillsOverride={isExample ? exampleParsePills : undefined}
+                      spellDataOverride={isExample ? exampleSpellData : undefined}
+                    />
+                  </div>
+                </CardContent>
+              </Card>
+            )}
           </div>
         </main>
       </div>
