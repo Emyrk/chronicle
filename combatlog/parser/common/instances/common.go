@@ -50,12 +50,9 @@ type CommonFactory struct {
 	// the zone event. It runs when the Hookable is created, before fights are parsed.
 	NameFromZone func(context.Context, zone.Zone, database.WoWFlavor) string
 
-	// DerivedName allows changing the name dynamically based on the fight data.
-	// If 2 or more instances share the same zone.
-	DerivedName *MultiInstanceZone
-	// FlavoredDerivedName creates a per-instance derived name resolver for the
-	// selected flavor. It takes precedence over DerivedName when configured.
-	FlavoredDerivedName func(database.WoWFlavor) *MultiInstanceZone
+	// DerivedName creates a per-instance resolver that can change the name
+	// dynamically based on fight data and the selected flavor.
+	DerivedName func(database.WoWFlavor) *MultiInstanceZone
 	// DerivedRankings maps derived instance names to their ranking configuration.
 	// When set alongside DerivedName, each sub-instance gets its own independent
 	// speedrun tracker. Keys must match the names used in DerivedName.
@@ -85,10 +82,8 @@ func (f *CommonFactory) MatchZone(z zone.Zone) bool {
 // New handles all the extra hooks
 func (f *CommonFactory) New(ctx context.Context, logger *slog.Logger, db *unitdb.Units, z zone.Zone, flavor database.WoWFlavor) *Hookable {
 	h := f.NewHookable(ctx, logger, db, z, flavor)
-	if f.FlavoredDerivedName != nil {
-		h.derivedName = f.FlavoredDerivedName(flavor)
-	} else if f.DerivedName != nil {
-		h.derivedName = f.DerivedName
+	if f.DerivedName != nil {
+		h.derivedName = f.DerivedName(flavor)
 	}
 	if f.DerivedRankings != nil {
 		h.initDerivedRankings(flavor, f.DerivedRankings)

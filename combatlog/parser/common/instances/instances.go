@@ -81,27 +81,31 @@ var (
 		MultiZone: true,
 		Name:      "Scarlet Monastery",
 		ZoneNames: []string{"scarlet monastery"},
-		DerivedName: NewMultiInstanceZone(map[string][]uint32{
-			"Scarlet Monastery Cathedral": {3976, 3977, 4542},
-			"Scarlet Monastery Library":   {3974, 61983, 6487},
-			"Scarlet Monastery Armory":    {3975},
-			"Scarlet Monastery Graveyard": {3983, 4543},
-			//"Gates of Scarlet Monastery":  {25221, 25222, 25243, 25245},
-		}),
+		DerivedName: func(database.WoWFlavor) *MultiInstanceZone {
+			return NewMultiInstanceZone(map[string][]uint32{
+				"Scarlet Monastery Cathedral": {3976, 3977, 4542},
+				"Scarlet Monastery Library":   {3974, 61983, 6487},
+				"Scarlet Monastery Armory":    {3975},
+				"Scarlet Monastery Graveyard": {3983, 4543},
+				//"Gates of Scarlet Monastery":  {25221, 25222, 25243, 25245},
+			})
+		},
 		Hostiles: AllScarletMonestery,
 	}
 
 	BlackrockSpireFactory = &CommonFactory{
 		Name: "Blackrock Spire",
-		DerivedName: NewMultiInstanceZone(map[string][]uint32{
-			"Upper Blackrock Spire": {
-				10363, // "General Drakkisath"
-				10430, // The Beast
-				10339, // Gyth
-				10429, // Warchief Rend Blackhand
-				9816,  // "Pyroguard Emberseer"
-			},
-		}),
+		DerivedName: func(database.WoWFlavor) *MultiInstanceZone {
+			return NewMultiInstanceZone(map[string][]uint32{
+				"Upper Blackrock Spire": {
+					10363, // "General Drakkisath"
+					10430, // The Beast
+					10339, // Gyth
+					10429, // Warchief Rend Blackhand
+					9816,  // "Pyroguard Emberseer"
+				},
+			})
+		},
 		ZoneNames: []string{"blackrock spire",
 			"黑石塔",   // Blackrock Spire
 			"黑石塔下层", // Lower
@@ -127,10 +131,12 @@ var (
 
 	TowerOfKarazhanFactory = &CommonFactory{
 		Name: "Tower of Karazhan",
-		DerivedName: NewMultiInstanceZone(map[string][]uint32{
-			"Lower Tower of Karazhan": {61222, 61221, 61224, 61223, 61225},
-			"Upper Tower of Karazhan": {61939, 61951, 59961, 93333, 61946, 61958, 59967, 59981, 59991},
-		}),
+		DerivedName: func(database.WoWFlavor) *MultiInstanceZone {
+			return NewMultiInstanceZone(map[string][]uint32{
+				"Lower Tower of Karazhan": {61222, 61221, 61224, 61223, 61225},
+				"Upper Tower of Karazhan": {61939, 61951, 59961, 93333, 61946, 61958, 59967, 59981, 59991},
+			})
+		},
 		DerivedRankings: map[string]func(database.WoWFlavor) *rankings.Rankings{
 			"Lower Tower of Karazhan": func(database.WoWFlavor) *rankings.Rankings {
 				return &rankings.Rankings{

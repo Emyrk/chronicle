@@ -140,12 +140,12 @@ func onyxiaDerivedName(fl database.WoWFlavor) *instances.MultiInstanceZone {
 }
 
 var OnyxiaFactory = &instances.CommonFactory{
-	Name:                "Onyxia's Lair",
-	NameFromZone:        onyxiaZoneName,
-	FlavoredDerivedName: onyxiaDerivedName,
-	ZoneNames:           []string{"onyxia's lair", "奥妮克希亚的巢穴"},
-	MapIDs:              []uint32{249},
-	Hostiles:            instances.OnyxiaHostiles,
+	Name:         "Onyxia's Lair",
+	NameFromZone: onyxiaZoneName,
+	DerivedName:  onyxiaDerivedName,
+	ZoneNames:    []string{"onyxia's lair", "奥妮克希亚的巢穴"},
+	MapIDs:       []uint32{249},
+	Hostiles:     instances.OnyxiaHostiles,
 	FlavoredRankings: func(fl database.WoWFlavor) *rankings.Rankings {
 		if fl.Has(database.FlavorAzerothcoreProgression) {
 			return nil
