@@ -109,7 +109,7 @@ const pinBreakout: L = {
   ],
   video: {
     load: () => import("./videos/PinBreakout.video"),
-    durationInFrames: 240,
+    durationInFrames: 420,
     fps: 30,
     width: 1280,
     height: 720,

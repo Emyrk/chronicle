@@ -19,7 +19,7 @@ export const RemotionRoot: React.FC = () => {
       <Composition
         id="PinBreakout"
         component={PinBreakoutVideo}
-        durationInFrames={240}
+        durationInFrames={420}
         fps={30}
         width={1280}
         height={720}

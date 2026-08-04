@@ -1,4 +1,4 @@
-import { useCallback, useMemo } from 'react'
+import { useCallback } from 'react'
 import { ChevronDown, Filter, HelpCircle, Layers, MoreVertical, Swords } from 'lucide-react'
 import {
   AbilityBreakdownTable,
@@ -49,27 +49,24 @@ const abilities: Record<string, AbilityBreakdown[]> = {
 }
 
 export function PlayerMetricChartAbilityBreakdownDemo({
-  pinnedPlayerId,
-  pinnedPosition,
+  pinnedPlayers,
   classIconBasePath,
   perSecond,
   parsePills,
 }: {
-  pinnedPlayerId?: string
-  /** Where the pinned breakout opens (portal-container coordinates). */
-  pinnedPosition?: { x: number; y: number }
+  /**
+   * Controlled pinned breakouts: playerID → position (portal-container
+   * coordinates). Positions may animate frame-to-frame (scripted demos);
+   * adding/removing players remounts the chart to (un)pin them.
+   */
+  pinnedPlayers?: ReadonlyMap<string, { x: number; y: number }>
   classIconBasePath?: string
   /** Show DPS values instead of totals (drives the explainer videos). */
   perSecond?: boolean
   /** Deterministic parse pills keyed by playerID (drives the explainer videos). */
   parsePills?: Map<string, ParsePillData>
 }) {
-  const initialPinnedPositions = useMemo(
-    () => pinnedPlayerId
-      ? new Map([[pinnedPlayerId, pinnedPosition ?? { x: 720, y: 170 }]])
-      : undefined,
-    [pinnedPlayerId, pinnedPosition],
-  )
+  const pinnedKey = pinnedPlayers ? [...pinnedPlayers.keys()].sort().join(',') : 'unpinned'
 
   const breakout = useCallback((playerID: string) => {
     const playerAbilities = abilities[playerID] ?? []
@@ -78,7 +75,6 @@ export function PlayerMetricChartAbilityBreakdownDemo({
       <AbilityBreakdownTable
         abilities={playerAbilities}
         totalValue={totalValue}
-        invertedColors
         durationMillis={durationMillis}
       />
     )
@@ -127,13 +123,14 @@ export function PlayerMetricChartAbilityBreakdownDemo({
         </div>
       </div>
       <PlayerMetricChart
-        key={pinnedPlayerId ?? 'unpinned'}
+        key={pinnedKey}
         data={players}
         type="damage"
         duration_millis={durationMillis}
         panelTitle="Damage Done"
         breakout={breakout}
-        initialPinnedPositions={initialPinnedPositions}
+        initialPinnedPositions={pinnedPlayers}
+        pinnedPositionsOverride={pinnedPlayers}
         classIconBasePath={classIconBasePath}
         perSecond={perSecond}
         parsePills={parsePills}

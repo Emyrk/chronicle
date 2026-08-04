@@ -1,9 +1,9 @@
 /**
- * Lesson video: open and pin a player breakout.
+ * Lesson video: open and pin player breakouts.
  *
- * Ported from videos/damage-done-breakout/src/Composition.tsx — a scripted
- * cursor tracks to a player row, clicks, and the real breakout pins.
- * 240 frames @ 30fps, 1280x720.
+ * A scripted cursor pins the Afflicted breakout, pins a second one for
+ * Ragesmash, then drags the second by its header to a new spot.
+ * 420 frames @ 30fps, 1280x720.
  */
 
 import { interpolate, spring, useCurrentFrame, useVideoConfig } from "remotion";
@@ -11,17 +11,63 @@ import { PlayerMetricChartAbilityBreakdownDemo } from "@/components/ui/PlayerMet
 import { clamp, entranceEasing } from "./animation";
 import { Cursor, StepCaption, VideoHeader, VideoStage } from "./shared";
 
+// Rows sit at y=211+32*i once the entrance settles; Afflicted is row 4,
+// Ragesmash row 2. Breakouts are ~340 wide.
+const PIN_1_FRAME = 112; // Afflicted pinned
+const PIN_2_FRAME = 196; // Ragesmash pinned
+const DRAG_START = 250;
+const DRAG_END = 320;
+
+const POS_1 = { x: 716, y: 96 };
+const POS_2_FROM = { x: 780, y: 260 };
+const POS_2_TO = { x: 880, y: 430 };
+
 export default function PinBreakoutVideo() {
   const frame = useCurrentFrame();
   const { fps } = useVideoConfig();
-  const pinned = frame >= 112;
   const entrance = spring({ frame, fps, config: { damping: 200 }, durationInFrames: 28 });
-  // Cursor lands on the Afflicted row (#4): rows sit at y=211+32*i, x 77-687
-  // once the entrance settles (measured against the real render).
-  const cursorX = interpolate(frame, [20, 92], [1110, 440], { ...clamp, easing: entranceEasing });
-  const cursorY = interpolate(frame, [20, 92], [590, 314], { ...clamp, easing: entranceEasing });
-  const clickPulse = interpolate(frame, [100, 106, 116], [0, 1, 0], clamp);
-  const instructionOpacity = interpolate(frame, [8, 18, 218, 232], [0, 1, 1, 0], clamp);
+
+  // ── Cursor choreography ──
+  // 1) travel to Afflicted (row 4), click at ~104
+  // 2) travel to Ragesmash (row 2), click at ~188
+  // 3) travel to breakout 2's header, hold, drag it down-right
+  const cursorX = interpolate(
+    frame,
+    [20, 92, 130, 176, 216, 246, DRAG_START, DRAG_END],
+    [1110, 440, 440, 350, 350, POS_2_FROM.x + 24, POS_2_FROM.x + 24, POS_2_TO.x + 24],
+    { ...clamp, easing: entranceEasing },
+  );
+  const cursorY = interpolate(
+    frame,
+    [20, 92, 130, 176, 216, 246, DRAG_START, DRAG_END],
+    [590, 296, 296, 232, 232, POS_2_FROM.y + 12, POS_2_FROM.y + 12, POS_2_TO.y + 12],
+    { ...clamp, easing: entranceEasing },
+  );
+  const clickPulse1 = interpolate(frame, [100, 106, 116], [0, 1, 0], clamp);
+  const clickPulse2 = interpolate(frame, [184, 190, 200], [0, 1, 0], clamp);
+  const grabPulse = interpolate(
+    frame,
+    [DRAG_START - 6, DRAG_START, DRAG_END, DRAG_END + 10],
+    [0, 1, 1, 0],
+    clamp,
+  );
+  const clickPulse = Math.max(clickPulse1, clickPulse2, grabPulse * 0.6);
+
+  // ── Pinned breakouts (controlled positions; #2 follows the drag) ──
+  const pos2X = interpolate(frame, [DRAG_START, DRAG_END], [POS_2_FROM.x, POS_2_TO.x], {
+    ...clamp,
+    easing: entranceEasing,
+  });
+  const pos2Y = interpolate(frame, [DRAG_START, DRAG_END], [POS_2_FROM.y, POS_2_TO.y], {
+    ...clamp,
+    easing: entranceEasing,
+  });
+  const pinnedPlayers = new Map<string, { x: number; y: number }>();
+  if (frame >= PIN_1_FRAME) pinnedPlayers.set("player-4", POS_1);
+  if (frame >= PIN_2_FRAME) pinnedPlayers.set("player-2", { x: pos2X, y: pos2Y });
+
+  const captionOpacity = interpolate(frame, [8, 18, 398, 412], [0, 1, 1, 0], clamp);
+  const step = frame >= DRAG_START ? 3 : frame >= PIN_2_FRAME ? 2 : 1;
 
   return (
     <VideoStage>
@@ -32,8 +78,7 @@ export default function PinBreakoutVideo() {
         style={{ opacity: entrance, translate: `0 ${interpolate(entrance, [0, 1], [24, 0])}px` }}
       >
         <PlayerMetricChartAbilityBreakdownDemo
-          pinnedPlayerId={pinned ? "player-4" : undefined}
-          pinnedPosition={{ x: 636, y: 140 }}
+          pinnedPlayers={pinnedPlayers.size > 0 ? pinnedPlayers : undefined}
           classIconBasePath="/c/icons"
         />
       </main>
@@ -41,13 +86,15 @@ export default function PinBreakoutVideo() {
       <Cursor x={cursorX} y={cursorY} clicking={clickPulse} />
 
       <StepCaption
-        step={pinned ? 2 : 1}
+        step={step}
         text={
-          pinned
-            ? "The real breakout is now pinned and draggable"
-            : "Click a player row to pin its ability breakout"
+          step === 3
+            ? "Drag a breakout by its header to arrange your workspace"
+            : step === 2
+              ? "Open a second breakout to compare rotations"
+              : "Click a player row to pin its ability breakout"
         }
-        opacity={instructionOpacity}
+        opacity={captionOpacity}
       />
     </VideoStage>
   );

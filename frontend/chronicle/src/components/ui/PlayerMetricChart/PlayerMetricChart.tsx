@@ -83,6 +83,8 @@ interface PlayerMetricChartProps extends React.ComponentProps<"div"> {
   parsePills?: Map<string, ParsePillData>
   /** Initial pinned breakout positions, primarily for stories, screenshots, and guided demos. */
   initialPinnedPositions?: ReadonlyMap<string, { x: number; y: number }>
+  /** Controlled pinned-breakout positions (e.g. scripted demos); overrides drag state. */
+  pinnedPositionsOverride?: ReadonlyMap<string, { x: number; y: number }>
   /** Base URL for class icon assets. Defaults to the Chronicle application path. */
   classIconBasePath?: string
   /** Animate bar geometry changes. Disable for high-frequency replay updates. */
@@ -105,6 +107,7 @@ export function PlayerMetricChart({
   valueSuffix,
   parsePills,
   initialPinnedPositions,
+  pinnedPositionsOverride,
   classIconBasePath = '/c/icons',
   animateValues = true,
   // Exclude dir from divProps to avoid type conflict with ScrollArea
@@ -154,6 +157,7 @@ export function PlayerMetricChart({
             decimals={perSecond ? 1 : 0}
             isPinned={pinnedPlayerIds.has(player.playerID)}
             initialPinnedPosition={initialPinnedPositions?.get(player.playerID)}
+            pinnedPositionOverride={pinnedPositionsOverride?.get(player.playerID)}
             onTogglePin={() => handleTogglePin(player.playerID)}
             panelTitle={panelTitle}
             breakout={disableInteractions ? undefined : breakout}
@@ -181,6 +185,8 @@ export interface PlayerMetricRowProps {
   decimals?: number
   isPinned?: boolean
   initialPinnedPosition?: { x: number; y: number }
+  /** Controlled breakout position; overrides internal drag state. */
+  pinnedPositionOverride?: { x: number; y: number }
   onTogglePin?: () => void
   panelTitle?: string
   breakout?: BreakoutFn
@@ -199,12 +205,14 @@ export interface PlayerMetricRowProps {
 interface DraggablePinnedTooltipProps {
   player: PlayerMetricChartData & { color: string }
   initialPosition: { x: number; y: number }
+  /** Controlled position; overrides internal drag state while set. */
+  positionOverride?: { x: number; y: number }
   onClose: () => void
   panelTitle?: string
   breakout?: BreakoutFn
 }
 
-function DraggablePinnedTooltip({ player, initialPosition, onClose, panelTitle, breakout }: DraggablePinnedTooltipProps) {
+function DraggablePinnedTooltip({ player, initialPosition, positionOverride, onClose, panelTitle, breakout }: DraggablePinnedTooltipProps) {
   const isMobile = useIsMobile()
   const portalContainer = usePortalContainer()
   const portalDocument = portalContainer?.ownerDocument
@@ -306,8 +314,8 @@ function DraggablePinnedTooltip({ player, initialPosition, onClose, panelTitle, 
       data-breakout-panel
       className="fixed z-[200] min-w-[340px] max-w-[90vw] rounded-md bg-popover text-foreground shadow-md"
       style={{
-        left: position.x,
-        top: position.y,
+        left: (positionOverride ?? position).x,
+        top: (positionOverride ?? position).y,
         cursor: isDragging ? 'grabbing' : 'default',
         border: `1px solid color-mix(in oklch, ${player.color} 60%, transparent)`,
       }}
@@ -355,6 +363,7 @@ export function PlayerMetricRow({
   decimals,
   isPinned = false,
   initialPinnedPosition,
+  pinnedPositionOverride,
   onTogglePin,
   panelTitle,
   breakout,
@@ -756,6 +765,7 @@ export function PlayerMetricRow({
       <DraggablePinnedTooltip
         player={player}
         initialPosition={pinnedPosition}
+        positionOverride={pinnedPositionOverride}
         onClose={handleClose}
         panelTitle={panelTitle}
         breakout={breakout}
