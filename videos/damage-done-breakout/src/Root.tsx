@@ -112,7 +112,7 @@ export const RemotionRoot: React.FC = () => {
         <Composition id="ReadLineChart" component={ReadLineChartVideo} durationInFrames={350} fps={30} width={1280} height={720} />
         <Composition id="TimeRangeSelect" component={TimeRangeSelectVideo} durationInFrames={470} fps={30} width={1280} height={720} />
         <Composition id="LegendToggle" component={LegendToggleVideo} durationInFrames={380} fps={30} width={1280} height={720} />
-        <Composition id="Aggregations" component={AggregationsVideo} durationInFrames={470} fps={30} width={1280} height={720} />
+        <Composition id="Aggregations" component={AggregationsVideo} durationInFrames={530} fps={30} width={1280} height={720} />
         <Composition id="EditSeries" component={EditSeriesVideo} durationInFrames={530} fps={30} width={1280} height={720} />
         <Composition id="RaidDurability" component={RaidDurabilityVideo} durationInFrames={380} fps={30} width={1280} height={720} />
       </Folder>

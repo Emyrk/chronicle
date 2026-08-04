@@ -99,7 +99,7 @@ const aggregations: L = {
   ],
   video: {
     load: () => import("./videos/Aggregations.video"),
-    durationInFrames: 470,
+    durationInFrames: 530,
     fps: 30,
     width: 1280,
     height: 720,

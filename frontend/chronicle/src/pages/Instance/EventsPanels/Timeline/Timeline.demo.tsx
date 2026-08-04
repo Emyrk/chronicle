@@ -274,6 +274,7 @@ export function TimelineEditorDemo({
   newStream,
   newAggregation,
   newColor,
+  tab0Aggregation = 'sum',
 }: {
   /** 0 = Series 1, 1 = the new Series 2 (when it exists). */
   activeTab?: number
@@ -281,6 +282,8 @@ export function TimelineEditorDemo({
   newStream?: string
   newAggregation?: AggregationType
   newColor?: string
+  /** The Damage tab's selected aggregation (the aggregations lesson flips it). */
+  tab0Aggregation?: AggregationType
 }) {
   const STREAMS = ['damage', 'heal', 'resource_change', 'cast']
   const COLORS = ['#ef4444', '#3b82f6', '#22c55e', '#eab308', '#a855f7']
@@ -346,7 +349,7 @@ export function TimelineEditorDemo({
             <span className="w-20 shrink-0 text-muted-foreground">Aggregation</span>
             <div className="flex gap-1" data-demo-aggs>
               {(Object.keys(AGGREGATIONS) as AggregationType[]).map((agg) => {
-                const selected = activeTab === 1 ? newAggregation === agg : agg === 'sum'
+                const selected = activeTab === 1 ? newAggregation === agg : agg === tab0Aggregation
                 return (
                   <span
                     key={agg}
