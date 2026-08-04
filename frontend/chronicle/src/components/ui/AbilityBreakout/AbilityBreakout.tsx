@@ -67,7 +67,7 @@ function CssTooltip({ children, content, className }: CssTooltipProps) {
 // ============================================================================
 
 /** Expanded view modes */
-type ExpandedViewMode = 'count' | 'percent' | 'minmax'
+export type ExpandedViewMode = 'count' | 'percent' | 'minmax'
 
 /** Hit type column definition for expanded view */
 interface HitTypeColumn {
@@ -331,13 +331,17 @@ export interface AbilityTableProps {
   showAbsorbed?: boolean
   /** Whether absorbed damage is additive to value instead of a subset of it. */
   absorbedIsAdditive?: boolean
+  /** Controlled "More detail" expansion (optional - defaults to internal state) */
+  expanded?: boolean
+  /** Controlled expanded view mode (optional - defaults to internal state) */
+  expandedViewMode?: ExpandedViewMode
 }
 
 /**
  * Table showing ability-by-ability breakdown.
  */
-export function AbilityTable({ 
-  abilities, 
+export function AbilityTable({
+  abilities,
   totalValue,
   valueLabel = 'Value',
   showHits = true,
@@ -345,10 +349,14 @@ export function AbilityTable({
   stackedLabel = 'Overheal',
   showAbsorbed = false,
   absorbedIsAdditive = false,
+  expanded: controlledExpanded,
+  expandedViewMode: controlledViewMode,
 }: AbilityTableProps) {
   const { hover, setHover, clearHover, selectedAbilities, toggleAbilitySelection, clearSelection } = useBreakoutHover()
-  const [isExpanded, setIsExpanded] = useState(false)
-  const [viewMode, setViewMode] = useState<ExpandedViewMode>('percent')
+  const [internalExpanded, setInternalExpanded] = useState(false)
+  const [internalViewMode, setViewMode] = useState<ExpandedViewMode>('percent')
+  const isExpanded = controlledExpanded ?? internalExpanded
+  const viewMode = controlledViewMode ?? internalViewMode
   
   if (!abilities || abilities.length === 0) {
     return <p className="text-xs p-2 text-muted-foreground">No ability breakdown available</p>
@@ -449,7 +457,7 @@ export function AbilityTable({
           </>
         )}
         <button
-          onClick={() => setIsExpanded(!isExpanded)}
+          onClick={() => setInternalExpanded(!isExpanded)}
           className="text-muted-foreground hover:text-foreground p-0.5"
           title={isExpanded ? "Collapse hit breakdown" : "Expand hit breakdown"}
           data-more-detail={!isExpanded ? true : undefined}
@@ -932,6 +940,10 @@ export interface AbilityBreakoutProps {
   showAbsorbed?: boolean
   /** Whether absorbed damage is additive to value instead of a subset of it. */
   absorbedIsAdditive?: boolean
+  /** Controlled "More detail" expansion (optional - defaults to internal state) */
+  expanded?: boolean
+  /** Controlled expanded view mode (optional - defaults to internal state) */
+  expandedViewMode?: ExpandedViewMode
 }
 
 function formatValue(value: number): string {
@@ -962,6 +974,8 @@ export function AbilityBreakout({
   stackedLabel = 'Overheal',
   showAbsorbed = false,
   absorbedIsAdditive = false,
+  expanded,
+  expandedViewMode,
 }: AbilityBreakoutProps) {
   const [internalTab, setInternalTab] = useState<BreakoutTab>('ability')
   const [groupTargets, setGroupTargets] = useLocalStorage<boolean>(GROUP_TARGETS_STORAGE_KEY, false)
@@ -1011,6 +1025,8 @@ export function AbilityBreakout({
           stackedLabel={stackedLabel}
           showAbsorbed={showAbsorbed}
           absorbedIsAdditive={absorbedIsAdditive}
+          expanded={expanded}
+          expandedViewMode={expandedViewMode}
         />
       </div>
     )
@@ -1058,6 +1074,8 @@ export function AbilityBreakout({
           stackedLabel={stackedLabel}
           showAbsorbed={showAbsorbed}
           absorbedIsAdditive={absorbedIsAdditive}
+          expanded={expanded}
+          expandedViewMode={expandedViewMode}
         />
       ) : (
         <TargetTable

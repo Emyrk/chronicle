@@ -5,6 +5,7 @@ import PinBreakoutVideo from "../../../frontend/chronicle/src/pages/Instance/Eve
 import ReadChartVideo from "../../../frontend/chronicle/src/pages/Instance/EventsPanels/DamageDone/explain/videos/ReadChart.video";
 import TotalVsDpsVideo from "../../../frontend/chronicle/src/pages/Instance/EventsPanels/DamageDone/explain/videos/TotalVsDps.video";
 import ParseScoresVideo from "../../../frontend/chronicle/src/pages/Instance/EventsPanels/DamageDone/explain/videos/ParseScores.video";
+import BreakoutTourVideo from "../../../frontend/chronicle/src/pages/Instance/EventsPanels/DamageDone/explain/videos/BreakoutTour.video";
 
 /**
  * Studio registration for the in-app explainer lesson compositions.
@@ -44,6 +45,14 @@ export const RemotionRoot: React.FC = () => {
         id="ParseScores"
         component={ParseScoresVideo}
         durationInFrames={300}
+        fps={30}
+        width={1280}
+        height={720}
+      />
+      <Composition
+        id="BreakoutTour"
+        component={BreakoutTourVideo}
+        durationInFrames={420}
         fps={30}
         width={1280}
         height={720}

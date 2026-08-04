@@ -8,6 +8,7 @@ export {
   type AbilityData,
   type TargetData,
   type BreakoutTab,
+  type ExpandedViewMode,
 } from './AbilityBreakout'
 
 export {

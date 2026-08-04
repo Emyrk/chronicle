@@ -1,6 +1,13 @@
 import { useCallback } from 'react'
 import { ChevronDown, Filter, HelpCircle, Layers, MoreVertical, Swords } from 'lucide-react'
 import {
+  AbilityBreakout,
+  type AbilityData,
+  type BreakoutTab,
+  type ExpandedViewMode,
+  type TargetData,
+} from '@/components/ui/AbilityBreakout'
+import {
   AbilityBreakdownTable,
   PlayerMetricChart,
   type AbilityBreakdown,
@@ -48,11 +55,69 @@ const abilities: Record<string, AbilityBreakdown[]> = {
   ],
 }
 
+/** Detailed-breakout state for the full tabbed AbilityBreakout (drives the explainer videos). */
+export interface DemoBreakoutDetail {
+  expanded?: boolean
+  viewMode?: ExpandedViewMode
+  tab?: BreakoutTab
+}
+
+/** Upgrade a simple demo ability into the rich AbilityData the tabbed breakout renders. */
+function toAbilityData(a: AbilityBreakdown): AbilityData {
+  const count =
+    a.hitCount + a.critCount + a.missCount + a.dodgeCount + a.immuneCount + a.parryCount + a.otherCount
+  // Crits hit for ~2x, so per-hit averages fall out of the total deterministically.
+  const weight = a.hitCount + 2 * a.critCount
+  const perHit = weight > 0 ? a.totalDamage / weight : 0
+  const stats = (n: number, avg: number) =>
+    n > 0
+      ? {
+          count: n,
+          total: Math.round(n * avg),
+          min: Math.round(avg * 0.72),
+          max: Math.round(avg * 1.31),
+        }
+      : undefined
+  return {
+    name: a.name,
+    value: a.totalDamage,
+    Total: a.totalDamage,
+    Count: count,
+    Hits: a.hitCount,
+    Crits: a.critCount,
+    Misses: a.missCount,
+    Dodges: a.dodgeCount,
+    Parries: a.parryCount,
+    Immunes: a.immuneCount,
+    HitStats: stats(a.hitCount, perHit),
+    CritStats: stats(a.critCount, perHit * 2),
+  }
+}
+
+const TARGET_SHARES = [
+  { targetName: 'Ragnaros', share: 0.71 },
+  { targetName: 'Son of Flame', share: 0.21 },
+  { targetName: 'Lava Spawn', share: 0.08 },
+]
+
+function toTargets(playerID: string, playerAbilities: AbilityBreakdown[], total: number): TargetData[] {
+  const hits = playerAbilities.reduce((sum, a) => sum + a.hitCount, 0)
+  const crits = playerAbilities.reduce((sum, a) => sum + a.critCount, 0)
+  return TARGET_SHARES.map((t, i) => ({
+    targetId: `${playerID}-target-${i}`,
+    targetName: t.targetName,
+    value: Math.round(total * t.share),
+    hitCount: Math.round(hits * t.share),
+    critCount: Math.round(crits * t.share),
+  }))
+}
+
 export function PlayerMetricChartAbilityBreakdownDemo({
   pinnedPlayers,
   classIconBasePath,
   perSecond,
   parsePills,
+  breakoutDetail,
 }: {
   /**
    * Controlled pinned breakouts: playerID → position (portal-container
@@ -65,12 +130,31 @@ export function PlayerMetricChartAbilityBreakdownDemo({
   perSecond?: boolean
   /** Deterministic parse pills keyed by playerID (drives the explainer videos). */
   parsePills?: Map<string, ParsePillData>
+  /**
+   * When set, pinned breakouts render the full tabbed AbilityBreakout
+   * (More detail / min-avg-max / By Target) with this controlled state.
+   */
+  breakoutDetail?: DemoBreakoutDetail
 }) {
   const pinnedKey = pinnedPlayers ? [...pinnedPlayers.keys()].sort().join(',') : 'unpinned'
 
   const breakout = useCallback((playerID: string) => {
     const playerAbilities = abilities[playerID] ?? []
     const totalValue = players.find((player) => player.playerID === playerID)?.value ?? 0
+    if (breakoutDetail) {
+      return (
+        <AbilityBreakout
+          abilities={playerAbilities.map(toAbilityData)}
+          targets={toTargets(playerID, playerAbilities, totalValue)}
+          totalValue={totalValue}
+          valueLabel="Damage"
+          activeTab={breakoutDetail.tab ?? 'ability'}
+          onTabChange={() => {}}
+          expanded={breakoutDetail.expanded ?? false}
+          expandedViewMode={breakoutDetail.viewMode ?? 'percent'}
+        />
+      )
+    }
     return (
       <AbilityBreakdownTable
         abilities={playerAbilities}
@@ -78,7 +162,7 @@ export function PlayerMetricChartAbilityBreakdownDemo({
         durationMillis={durationMillis}
       />
     )
-  }, [])
+  }, [breakoutDetail])
 
   const total = players.reduce((sum, p) => sum + p.value, 0)
   const displayTotal = perSecond

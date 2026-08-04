@@ -55,3 +55,8 @@ export const FallbackPanel: Story = {
 export const PinBreakoutLesson: Story = {
   parameters: { routerEntries: ["/?lesson=pin-breakout"] },
 };
+
+/** Deep-linked breakout tour — the full tabbed AbilityBreakout in a video. */
+export const BreakoutTourLesson: Story = {
+  parameters: { routerEntries: ["/?lesson=breakout-tour"] },
+};

@@ -115,9 +115,38 @@ const pinBreakout: L = {
   },
 };
 
+const breakoutTour: L = {
+  id: "breakout-tour",
+  title: "Tour the breakout panel",
+  group: "essentials",
+  description: (caps) =>
+    caps.hasDetailedStats && caps.hasTargetBreakout
+      ? "More detail, min/avg/max, and the By Target tab inside a breakout."
+      : "Your selection is missing detailed hit stats — learn on the example raid.",
+  deriveState: (caps) =>
+    caps.hasAbilityBreakout && caps.hasTargetBreakout && caps.hasDetailedStats
+      ? "available"
+      : "example-required",
+  instruction:
+    "Open a breakout, click 'More detail' to expand the hit types, flip the ↕ toggle for min/avg/max, then switch to 'By Target' to see where the damage went.",
+  bullets: [
+    "'More detail' expands every hit type — hits, crits, misses, dodges, and more",
+    "The ↕ toggle shows min / avg / max damage per hit type",
+    "'By Target' breaks the same damage down by who it hit",
+  ],
+  video: {
+    load: () => import("./videos/BreakoutTour.video"),
+    durationInFrames: 420,
+    fps: 30,
+    width: 1280,
+    height: 720,
+  },
+};
+
 export const DAMAGE_DONE_LESSONS: L[] = [
   readChart,
   totalVsDps,
   parseScores,
   pinBreakout,
+  breakoutTour,
 ];
