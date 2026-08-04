@@ -70,7 +70,7 @@ export const RemotionRoot: React.FC = () => {
       <Composition
         id="Filters"
         component={FiltersVideo}
-        durationInFrames={440}
+        durationInFrames={500}
         fps={30}
         width={1280}
         height={720}

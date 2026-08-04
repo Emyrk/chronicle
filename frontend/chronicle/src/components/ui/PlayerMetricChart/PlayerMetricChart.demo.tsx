@@ -88,8 +88,20 @@ const FILTERED_PLAYERS: PlayerMetricChartData[] = [
   { playerID: 'player-2', playerName: 'Ragesmash', className: 'Warrior', specialization: 'Fury', value: 35_000 },
 ]
 
-/** Static mock of the PanelFilterEditor flip side (one ability-name filter). */
-function DemoFilterEditor() {
+/** Frame-driven state of the mock editor's ability-name chip input. */
+export interface DemoFilterEditorState {
+  /** Characters typed so far (empty = untouched input showing its placeholder). */
+  typed: string
+  /** Whether Enter has committed the typed name as a chip. */
+  chip: boolean
+  /** Caret visibility (frame-driven blink while the input is focused). */
+  caret: boolean
+  /** 0..1 opacity of the "↵ Enter" keycap hint shown as Enter is pressed. */
+  enterFlash?: number
+}
+
+/** Mock of the PanelFilterEditor flip side — one ability-name chip input. */
+function DemoFilterEditor({ state }: { state?: DemoFilterEditorState }) {
   return (
     <div className="flex min-h-0 flex-1 flex-col gap-3 px-3 pb-2 pt-2" data-demo-filter-editor>
       <div className="flex items-center justify-between">
@@ -106,11 +118,34 @@ function DemoFilterEditor() {
         <span className="flex-1 border-b border-zinc-700 px-1 py-0.5 text-sm">Damage Done</span>
       </div>
       <div className="flex items-center gap-2 rounded border border-zinc-700/60 bg-zinc-800/40 px-2 py-1.5">
-        <span className="rounded bg-muted px-2 py-1 text-xs">Ability Name</span>
-        <span className="flex-1 rounded border border-border bg-background px-2 py-1 font-mono text-xs">
-          Auto Attack
-        </span>
-        <X className="h-3 w-3 text-muted-foreground" />
+        <span className="shrink-0 rounded bg-muted px-2 py-1 text-xs">Ability Name</span>
+        {/* Mirrors AbilityNameEditor's chip input. */}
+        <div
+          className="flex min-h-[28px] flex-1 flex-wrap items-center gap-1 rounded border border-input bg-background/60 px-1 py-0.5"
+          data-demo-filter-input
+        >
+          {state?.chip && (
+            <span className="inline-flex items-center gap-0.5 rounded bg-primary/20 px-1.5 py-0.5 text-xs font-medium text-primary">
+              Auto Attack
+              <span className="ml-0.5 leading-none">×</span>
+            </span>
+          )}
+          {!state?.chip && state?.typed && <span className="py-0.5 text-xs">{state.typed}</span>}
+          {state?.caret && <span className="h-3.5 w-px bg-foreground" />}
+          {!state?.chip && !state?.typed && (
+            <span className="py-0.5 text-xs text-muted-foreground">ability name, press Enter</span>
+          )}
+          {state?.chip && <span className="py-0.5 text-xs text-muted-foreground">add more…</span>}
+        </div>
+        {(state?.enterFlash ?? 0) > 0 && (
+          <span
+            className="shrink-0 rounded border border-border bg-muted px-1.5 py-0.5 font-mono text-[10px]"
+            style={{ opacity: state?.enterFlash }}
+          >
+            ↵ Enter
+          </span>
+        )}
+        <X className="h-3 w-3 shrink-0 text-muted-foreground" />
       </div>
       <button type="button" className="self-start text-xs text-muted-foreground">
         + Add filter
@@ -182,6 +217,7 @@ export function PlayerMetricChartAbilityBreakdownDemo({
   breakoutDetail,
   showRanks = true,
   filterStage = 'idle',
+  filterEditor,
 }: {
   /**
    * Controlled pinned breakouts: playerID → position (portal-container
@@ -206,6 +242,8 @@ export function PlayerMetricChartAbilityBreakdownDemo({
   showRanks?: boolean
   /** Drives the filter lesson video: context menu → editor → filtered chart. */
   filterStage?: DemoFilterStage
+  /** Typing/chip state of the editor's ability-name input (editor stage only). */
+  filterEditor?: DemoFilterEditorState
 }) {
   const pinnedKey = pinnedPlayers ? [...pinnedPlayers.keys()].sort().join(',') : 'unpinned'
 
@@ -269,7 +307,7 @@ export function PlayerMetricChartAbilityBreakdownDemo({
         </div>
       </header>
       {filterStage === 'editor' ? (
-        <DemoFilterEditor />
+        <DemoFilterEditor state={filterEditor} />
       ) : (
         <>
           {/* Mirrors DamageDoneContent's Total / Ranks row. */}
