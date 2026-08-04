@@ -1,0 +1,52 @@
+import type { Meta, StoryObj } from "@storybook/react-vite";
+import { MemoryRouter } from "react-router-dom";
+import { MockInstanceEventsProvider } from "../EventsPanels/__fixtures__/MockInstanceEventsProvider";
+import {
+  FIXTURE_DURATION_MS,
+  getFixturePanelContext,
+} from "../EventsPanels/DamageDone/explain/fixture";
+import { PanelExplainerView } from "./PanelExplainerView";
+
+const meta: Meta<typeof PanelExplainerView> = {
+  title: "Instance/PanelExplainer",
+  component: PanelExplainerView,
+  parameters: { layout: "fullscreen" },
+  decorators: [
+    (Story) => (
+      <MemoryRouter>
+        <MockInstanceEventsProvider>
+          <Story />
+        </MockInstanceEventsProvider>
+      </MemoryRouter>
+    ),
+  ],
+  args: {
+    panelType: "damage_done",
+    context: getFixturePanelContext(),
+    durationMs: FIXTURE_DURATION_MS,
+    onExit: () => {},
+  },
+};
+
+export default meta;
+type Story = StoryObj<typeof PanelExplainerView>;
+
+/**
+ * The full lesson shell in example mode — fixture data, no API calls.
+ * (Live mode in Storybook would try to fetch event streams.)
+ */
+export const ExampleMode: Story = {
+  args: { initialMode: "example" },
+};
+
+/**
+ * The lesson shell in live mode: the aggregation has no streams to fetch in
+ * Storybook, so the live panel shows its loading/empty state — the sidebar
+ * still derives capability states (mostly example-required).
+ */
+export const LiveModeEmpty: Story = {};
+
+/** Fallback summary/tips shell for a panel without a lesson set. */
+export const FallbackPanel: Story = {
+  args: { panelType: "healing_done" },
+};

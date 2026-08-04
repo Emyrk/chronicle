@@ -1,21 +1,28 @@
 /**
  * PanelExplainerView — full-page learning mode for a single panel.
  *
- * Panels with a LessonSet get the full shell (lesson sidebar + video player +
- * live panel — built in subsequent commits); panels with only summary/tips get
- * the simple fallback layout below.
+ * Panels with a LessonSet get the full shell: lesson sidebar (capability-aware
+ * states), a lesson area (video where authored), and the live panel below so
+ * users can immediately try what they watched. Panels with only summary/tips
+ * get the simple fallback layout.
  *
  * Mobile: this view is not shown on mobile — tooltips are used instead.
  */
 
-import { ArrowLeft, BookOpen, Lightbulb } from "lucide-react";
+import { ArrowLeft, BookOpen, FlaskConical, Lightbulb, X } from "lucide-react";
+import { useCallback, useEffect, useMemo, useState } from "react";
+import { useSearchParams } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/Card/Card";
+import { EventsPanel } from "../EventsPanels";
 import { PANELS, type EventsPanelType } from "../EventsPanels/EventsPanel";
 import { getExplainer } from "../EventsPanels/explainers";
-import { EventsPanel } from "../EventsPanels";
 import type { PanelContext } from "../EventsPanels/types";
-import type { PanelExplainer } from "./types";
+import { usePanelAggregation } from "../EventsPanels/usePanelAggregation";
+import { EmbeddedLivePanel } from "./EmbeddedLivePanel";
+import { ExplainerTopBar } from "./ExplainerTopBar";
+import { LessonSidebar, type LessonSelection } from "./LessonSidebar";
+import type { Lesson, LessonSet, PanelExplainer } from "./types";
 
 export interface PanelExplainerViewProps {
   /** The panel type being explained */
@@ -26,6 +33,8 @@ export interface PanelExplainerViewProps {
   durationMs: number;
   /** Callback to exit explainer mode */
   onExit: () => void;
+  /** Storybook/testing only: start in this data mode. */
+  initialMode?: "live" | "example";
 }
 
 export function PanelExplainerView({
@@ -33,6 +42,7 @@ export function PanelExplainerView({
   context,
   durationMs,
   onExit,
+  initialMode,
 }: PanelExplainerViewProps) {
   const explainer = getExplainer(panelType);
 
@@ -44,10 +54,22 @@ export function PanelExplainerView({
           <ArrowLeft className="h-4 w-4 mr-2" />
           Back
         </Button>
-        <p className="mt-4 text-muted-foreground">
-          No explainer available for this panel.
-        </p>
+        <p className="mt-4 text-muted-foreground">No explainer available for this panel.</p>
       </div>
+    );
+  }
+
+  if (explainer.lessonSet) {
+    return (
+      <LessonShell
+        panelType={panelType}
+        explainer={explainer}
+        lessonSet={explainer.lessonSet}
+        context={context}
+        durationMs={durationMs}
+        onExit={onExit}
+        initialMode={initialMode}
+      />
     );
   }
 
@@ -62,9 +84,192 @@ export function PanelExplainerView({
   );
 }
 
-/**
- * Simple summary/tips layout for panels without a lesson set.
- */
+/** Full learning shell for panels with authored lessons. */
+function LessonShell<TResult, TCaps>({
+  panelType,
+  explainer,
+  lessonSet,
+  context,
+  durationMs,
+  onExit,
+  initialMode,
+}: {
+  panelType: EventsPanelType;
+  explainer: PanelExplainer<TResult, TCaps>;
+  lessonSet: LessonSet<TResult, TCaps>;
+  context: PanelContext;
+  durationMs: number;
+  onExit: () => void;
+  initialMode?: "live" | "example";
+}) {
+  const panel = PANELS[panelType];
+  const [searchParams, setSearchParams] = useSearchParams();
+  const [mode, setMode] = useState<"live" | "example">(initialMode ?? "live");
+
+  // Live aggregation feeds both capabilities and the embedded panel.
+  const aggregation = usePanelAggregation<TResult>({
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    panel: panel as any,
+    context,
+    panelIndex: 0,
+  });
+
+  const caps = useMemo(
+    () => lessonSet.deriveCapabilities(aggregation.result ?? null, durationMs, context.instance),
+    [lessonSet, aggregation.result, durationMs, context.instance],
+  );
+
+  const lessonParam = searchParams.get("lesson");
+  const selectedLesson: Lesson<TCaps> | null = useMemo(
+    () => lessonSet.lessons.find((l) => l.id === lessonParam) ?? null,
+    [lessonSet, lessonParam],
+  );
+
+  const selectLesson = useCallback(
+    (selection: LessonSelection | null) => {
+      setSearchParams(
+        (prev) => {
+          const next = new URLSearchParams(prev);
+          if (selection) next.set("lesson", selection.lessonId);
+          else next.delete("lesson");
+          return next;
+        },
+        { replace: true },
+      );
+      if (selection) setMode(selection.mode);
+    },
+    [setSearchParams],
+  );
+
+  // A deep-linked example-only lesson must open in example mode.
+  useEffect(() => {
+    if (!selectedLesson) return;
+    if (selectedLesson.exampleOnly || selectedLesson.deriveState(caps) === "example-required") {
+      setMode("example");
+    }
+  }, [selectedLesson, caps]);
+
+  return (
+    <div className="flex h-screen flex-col overflow-hidden bg-background text-foreground">
+      <ExplainerTopBar
+        panelLabel={panel?.label ?? panelType}
+        panelIcon={panel?.icon}
+        instanceName={context.instance?.name}
+        encounterCount={context.selectedEncounterIds.length}
+        onExit={onExit}
+      />
+      <div className="flex min-h-0 flex-1">
+        <LessonSidebar
+          panelLabel={panel?.label ?? panelType}
+          lessons={lessonSet.lessons}
+          caps={caps}
+          selectedLessonId={selectedLesson?.id ?? null}
+          onSelect={selectLesson}
+        />
+        <div className="flex min-w-0 flex-1 flex-col gap-3.5 overflow-y-auto px-5 pb-6 pt-5">
+          {mode === "example" && (
+            <ExampleModeBanner onReturn={() => setMode("live")} />
+          )}
+
+          {selectedLesson ? (
+            <LessonHeaderCard
+              lesson={selectedLesson}
+              mode={mode}
+              onClose={() => selectLesson(null)}
+            />
+          ) : (
+            <IntroCard summary={explainer.summary} />
+          )}
+
+          <div className="h-[560px] flex-shrink-0">
+            {mode === "example" ? (
+              lessonSet.renderExample()
+            ) : (
+              <EmbeddedLivePanel
+                panelType={panelType}
+                aggregation={aggregation}
+                context={context}
+                durationMs={durationMs}
+              />
+            )}
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function ExampleModeBanner({ onReturn }: { onReturn: () => void }) {
+  return (
+    <div className="flex flex-shrink-0 items-start gap-3 rounded-lg border border-class-rogue/40 bg-class-rogue/10 px-3.5 py-3">
+      <span className="mt-px flex flex-shrink-0 items-center gap-1.5 rounded-full bg-class-rogue px-2 py-0.5 font-mono text-[9.5px] tracking-[0.08em] text-background">
+        <FlaskConical className="h-3 w-3" />
+        EXAMPLE DATA
+      </span>
+      <p className="min-w-0 flex-1 text-[12.5px] leading-normal text-pretty">
+        Showing a sample raid built to demonstrate this feature. Your encounter selection,
+        filters, and panel configuration have not changed.
+      </p>
+      <button
+        type="button"
+        onClick={onReturn}
+        className="flex-shrink-0 rounded-sm border border-border bg-secondary px-2.5 py-1 text-[11.5px] font-medium text-secondary-foreground hover:bg-accent hover:text-accent-foreground"
+      >
+        Return to your data
+      </button>
+    </div>
+  );
+}
+
+function LessonHeaderCard<TCaps>({
+  lesson,
+  mode,
+  onClose,
+}: {
+  lesson: Lesson<TCaps>;
+  mode: "live" | "example";
+  onClose: () => void;
+}) {
+  return (
+    <div className="flex flex-shrink-0 flex-col gap-1.5 rounded-lg border border-border bg-popover px-4 py-3">
+      <div className="flex items-center gap-2.5">
+        <span className="text-[13px] font-semibold">{lesson.title}</span>
+        <span className="ml-auto font-mono text-[10.5px] text-muted-foreground">
+          {mode === "example" ? "example data" : "your data"}
+        </span>
+        <button
+          type="button"
+          onClick={onClose}
+          aria-label="Close lesson"
+          className="px-1 text-muted-foreground hover:text-foreground"
+        >
+          <X className="h-3.5 w-3.5" />
+        </button>
+      </div>
+      {/* Video player lands here for lessons with compositions. */}
+      <p className="max-w-[78ch] text-[12.5px] leading-relaxed text-pretty">
+        {lesson.instruction}
+      </p>
+    </div>
+  );
+}
+
+function IntroCard({ summary }: { summary: string }) {
+  return (
+    <div className="flex flex-shrink-0 items-start gap-3 rounded-lg border border-border bg-card px-4 py-3.5">
+      <BookOpen className="mt-px h-[15px] w-[15px] flex-shrink-0 text-muted-foreground" />
+      <div>
+        <p className="mb-1 text-[12.5px]">{summary}</p>
+        <p className="text-[11.5px] text-muted-foreground">
+          Pick a lesson on the left to walk through it here. The panel stays live the whole
+          time.
+        </p>
+      </div>
+    </div>
+  );
+}
+
+/** Simple summary/tips layout for panels without a lesson set. */
 function FallbackExplainer({
   panelType,
   explainer,
@@ -82,18 +287,13 @@ function FallbackExplainer({
 
   return (
     <div className="min-h-screen bg-background">
-      <div className="sticky top-0 z-10 flex h-[52px] items-center gap-3 border-b border-border bg-card px-4">
-        <Button variant="ghost" size="sm" onClick={onExit}>
-          <ArrowLeft className="h-4 w-4 mr-2" />
-          Exit Explainer
-        </Button>
-        <div className="h-5 w-px bg-border" />
-        <div className="flex items-center gap-2">
-          {panel?.icon}
-          <span className="font-wow text-[15px]">{panel?.label ?? panelType}</span>
-          <span className="font-mono text-[11px] text-muted-foreground">Explainer</span>
-        </div>
-      </div>
+      <ExplainerTopBar
+        panelLabel={panel?.label ?? panelType}
+        panelIcon={panel?.icon}
+        instanceName={context.instance?.name}
+        encounterCount={context.selectedEncounterIds.length}
+        onExit={onExit}
+      />
 
       <div className="mx-auto flex max-w-4xl flex-col gap-4 p-6">
         <Card>

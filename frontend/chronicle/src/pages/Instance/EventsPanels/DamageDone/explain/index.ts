@@ -1,11 +1,16 @@
 /**
- * Damage Done explainer — summary/tips plus the full lesson set (capabilities,
- * lessons, example fixture). The lesson set is wired in as content lands.
+ * Damage Done explainer — summary/tips plus the full lesson set
+ * (capability derivation, lessons, example fixture).
  */
 
+import { createElement } from "react";
 import type { PanelExplainer } from "../../../PanelExplainer/types";
+import type { DamageDoneResult } from "../damageDone.processor";
+import { deriveCapabilities, type DamageDoneCapabilities } from "./capabilities";
+import { ExampleDamageDonePanel } from "./ExampleDamageDonePanel";
+import { DAMAGE_DONE_LESSONS } from "./lessons";
 
-export const damageDoneExplainer: PanelExplainer = {
+export const damageDoneExplainer: PanelExplainer<DamageDoneResult, DamageDoneCapabilities> = {
   summary:
     "Shows total damage dealt by each player (or enemy) during the selected encounters. " +
     "Useful for comparing DPS performance and identifying top contributors.",
@@ -18,4 +23,10 @@ export const damageDoneExplainer: PanelExplainer = {
     "You can open more than 1 breakout panel!",
     "Click 'By Target' to see the damage breakdown by target instead of by ability",
   ],
+
+  lessonSet: {
+    deriveCapabilities,
+    lessons: DAMAGE_DONE_LESSONS,
+    renderExample: () => createElement(ExampleDamageDonePanel),
+  },
 };

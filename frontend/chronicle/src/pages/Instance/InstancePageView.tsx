@@ -1939,6 +1939,7 @@ export function InstancePageView({
   const handleExplainerExit = useCallback(() => {
     setSearchParams(prev => {
       prev.delete("explain");
+      prev.delete("lesson");
       return prev;
     });
   }, [setSearchParams]);
