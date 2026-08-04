@@ -379,7 +379,7 @@ export interface EventsPanelProps {
   /** Stable layout item ID (e.g. "panel-1") */
   panelId?: string;
   /** Callback when user clicks the explainer button (? icon) */
-  onExplainerClick?: (panelType: EventsPanelType) => void;
+  onExplainerClick?: (panelType: EventsPanelType, panelOption?: string | null) => void;
   /** Whether to show helpful hints (explainer button). Defaults to true. */
   showHints?: boolean;
   /** Panel-specific option (e.g., selected aura name) */
@@ -907,7 +907,7 @@ export function EventsPanel({
                         variant="ghost"
                         size="sm"
                         className="h-6 w-6 p-0 text-muted-foreground hover:text-foreground"
-                        onClick={() => onExplainerClick(panelType)}
+                        onClick={() => onExplainerClick(panelType, panelOption)}
                         data-help-panel-explainer
                       >
                         <HelpCircle className="h-3.5 w-3.5" />
