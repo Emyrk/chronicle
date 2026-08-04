@@ -8,12 +8,6 @@ import { useState } from "react";
 import { cn } from "@/lib/utils";
 import type { Lesson, LessonState } from "./types";
 
-const STATE_DOT: Record<LessonState, { glyph: string; className: string }> = {
-  available: { glyph: "●", className: "text-class-hunter" },
-  limited: { glyph: "◐", className: "text-class-rogue" },
-  "example-required": { glyph: "○", className: "text-muted-foreground opacity-70" },
-};
-
 const STATE_PILL: Record<LessonState, { label: string; className: string }> = {
   available: {
     label: "IN YOUR DATA",
@@ -149,7 +143,6 @@ function LessonRow<TCaps>({
   onSelect: (selection: LessonSelection) => void;
 }) {
   const state = lesson.deriveState(caps);
-  const dot = STATE_DOT[state];
   const pill = STATE_PILL[state];
   const exampleForced = lesson.exampleOnly || state === "example-required";
   const primaryLabel = lesson.video ? "Watch" : "Read";
@@ -161,9 +154,6 @@ function LessonRow<TCaps>({
         selected && "bg-muted/60",
       )}
     >
-      <span className={cn("w-3 flex-shrink-0 text-xs leading-[18px]", dot.className)}>
-        {dot.glyph}
-      </span>
       <div className="flex min-w-0 flex-1 flex-col gap-1">
         <div className="flex flex-wrap items-center gap-[7px]">
           <span
