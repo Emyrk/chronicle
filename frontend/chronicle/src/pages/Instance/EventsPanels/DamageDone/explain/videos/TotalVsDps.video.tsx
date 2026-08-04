@@ -15,10 +15,10 @@ function ToggleHighlight({ highlight }: { highlight: number }) {
     <div
       className="absolute rounded-lg"
       style={{
-        left: 555,
-        top: 195,
-        width: 130,
-        height: 34,
+        left: 565,
+        top: 138,
+        width: 122,
+        height: 30,
         boxShadow: `0 0 0 ${highlight * 2}px var(--color-class-rogue)`,
         zIndex: 205,
       }}
@@ -34,8 +34,8 @@ export default function TotalVsDpsVideo() {
   const entrance = spring({ frame, fps, config: { damping: 200 }, durationInFrames: 28 });
   const perSecond = frame >= TOGGLE_FRAME;
 
-  const cursorX = interpolate(frame, [25, 100], [1080, 655], { ...clamp, easing: entranceEasing });
-  const cursorY = interpolate(frame, [25, 100], [560, 208], { ...clamp, easing: entranceEasing });
+  const cursorX = interpolate(frame, [25, 100], [1080, 614], { ...clamp, easing: entranceEasing });
+  const cursorY = interpolate(frame, [25, 100], [560, 148], { ...clamp, easing: entranceEasing });
   const clickPulse = interpolate(frame, [108, 116, 128], [0, 1, 0], clamp);
   const toggleHighlight = interpolate(frame, [96, 108, 150, 165], [0, 1, 1, 0], clamp);
   const captionOpacity = interpolate(frame, [8, 18, 250, 264], [0, 1, 1, 0], clamp);
@@ -45,7 +45,7 @@ export default function TotalVsDpsVideo() {
       <VideoHeader title="Total damage versus DPS" entrance={entrance} />
 
       <main
-        className="absolute left-[72px] top-[192px]"
+        className="absolute left-[72px] top-[132px]"
         style={{ opacity: entrance, translate: `0 ${interpolate(entrance, [0, 1], [24, 0])}px` }}
       >
         <PlayerMetricChartAbilityBreakdownDemo classIconBasePath="/c/icons" perSecond={perSecond} />
