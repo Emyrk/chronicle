@@ -84,6 +84,7 @@ func NewRazorgore(flavor database.WoWFlavor) func(id guid.GUID, all *characters.
 			12422,
 			50142,
 			52153,
+			52153,
 		), true
 	}
 }
