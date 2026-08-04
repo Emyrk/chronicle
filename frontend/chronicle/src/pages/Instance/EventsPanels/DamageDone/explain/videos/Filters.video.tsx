@@ -3,8 +3,8 @@
  *
  * A scripted cursor clicks the header's filter icon, opens the filter menu,
  * flips to the filter editor, clicks the ability-name input, types
- * "Auto Attack", presses Enter (the name commits as a chip), then closes the
- * editor — the chart narrows to auto-attack damage and the icon turns green.
+ * "Auto Attack", presses Enter (the name commits as a chip), then clicks
+ * "Back" — the chart narrows to auto-attack damage and the icon turns green.
  * 500 frames @ 30fps, 1280x720 (50-frame intro + 450 of content).
  */
 
@@ -20,8 +20,8 @@ import { Cursor, LessonIntro, StepCaption, VideoHeader, VideoStage } from "./sha
 // Measured cursor targets (stage coordinates).
 const FILTER_ICON = { x: 262, y: 152 };
 const EDIT_FILTERS_ROW = { x: 338, y: 178 };
-const INPUT_BOX = { x: 250, y: 271 };
-const EDITOR_CLOSE = { x: 672, y: 191 };
+const INPUT_BOX = { x: 250, y: 279 };
+const BACK_BTN = { x: 653, y: 195 };
 
 const TYPED_NAME = "Auto Attack";
 
@@ -31,7 +31,7 @@ const INPUT_FRAME = 195; // ability-name input clicked (caret appears)
 const TYPE_START = 205; // typing begins…
 const TYPE_END = 260; // …last character lands
 const ENTER_FRAME = 275; // Enter pressed → chip commits
-const APPLY_FRAME = 345; // editor closed → filtered chart
+const APPLY_FRAME = 345; // "Back" clicked → filtered chart
 
 export default function FiltersVideo() {
   return (
@@ -82,17 +82,17 @@ function Content() {
     ),
   };
 
-  // Cursor: filter icon → Edit filters → input box → editor close → drift clear.
+  // Cursor: filter icon → Edit filters → input box → Back button → drift clear.
   const cursorX = interpolate(
     frame,
     [26, 80, 100, 136, 160, 190, ENTER_FRAME + 25, ENTER_FRAME + 60, APPLY_FRAME + 20, APPLY_FRAME + 70],
-    [1140, FILTER_ICON.x, FILTER_ICON.x, EDIT_FILTERS_ROW.x, EDIT_FILTERS_ROW.x, INPUT_BOX.x, INPUT_BOX.x, EDITOR_CLOSE.x, EDITOR_CLOSE.x, 1010],
+    [1140, FILTER_ICON.x, FILTER_ICON.x, EDIT_FILTERS_ROW.x, EDIT_FILTERS_ROW.x, INPUT_BOX.x, INPUT_BOX.x, BACK_BTN.x, BACK_BTN.x, 1010],
     { ...clamp, easing: entranceEasing },
   );
   const cursorY = interpolate(
     frame,
     [26, 80, 100, 136, 160, 190, ENTER_FRAME + 25, ENTER_FRAME + 60, APPLY_FRAME + 20, APPLY_FRAME + 70],
-    [600, FILTER_ICON.y, FILTER_ICON.y, EDIT_FILTERS_ROW.y, EDIT_FILTERS_ROW.y, INPUT_BOX.y, INPUT_BOX.y, EDITOR_CLOSE.y, EDITOR_CLOSE.y, 500],
+    [600, FILTER_ICON.y, FILTER_ICON.y, EDIT_FILTERS_ROW.y, EDIT_FILTERS_ROW.y, INPUT_BOX.y, INPUT_BOX.y, BACK_BTN.y, BACK_BTN.y, 500],
     { ...clamp, easing: entranceEasing },
   );
   const click1 = interpolate(frame, [MENU_FRAME - 4, MENU_FRAME, MENU_FRAME + 10], [0, 1, 0], clamp);

@@ -109,9 +109,13 @@ function DemoFilterEditor({ state }: { state?: DemoFilterEditorState }) {
           <Swords className="h-4 w-4" />
           Damage Done
         </h4>
-        <span data-demo-editor-close>
-          <X className="h-3.5 w-3.5 text-muted-foreground" />
-        </span>
+        {/* Mirrors the editor's ghost Reset/Back buttons. */}
+        <div className="flex items-center gap-2">
+          <span className="rounded-md px-3 py-1.5 text-xs font-medium">Reset</span>
+          <span className="rounded-md px-3 py-1.5 text-xs font-medium" data-demo-editor-close>
+            Back
+          </span>
+        </div>
       </div>
       <div className="flex items-center gap-2">
         <span className="shrink-0 text-xs text-muted-foreground">Title:</span>
