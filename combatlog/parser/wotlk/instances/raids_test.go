@@ -18,6 +18,11 @@ func TestOnyxiaZoneName(t *testing.T) {
 
 	azerothcoreClient := parsectx.WithType(context.Background(), database.LogTypeAzerothcoreClientside)
 	azerothcoreFlavor := database.WoWFlavor{database.FlavorWrath, database.FlavorAzerothcore}
+	progressionFlavor := database.WoWFlavor{
+		database.FlavorWrath,
+		database.FlavorAzerothcore,
+		database.FlavorAzerothcoreProgression,
+	}
 
 	tests := []struct {
 		name   string
@@ -27,9 +32,9 @@ func TestOnyxiaZoneName(t *testing.T) {
 		want   string
 	}{
 		{
-			name:   "level 60 raid without size metadata",
+			name:   "progression level 60 raid without size metadata",
 			ctx:    azerothcoreClient,
-			flavor: azerothcoreFlavor,
+			flavor: progressionFlavor,
 			zone: zone.Zone{
 				Name:            "onyxia's lair",
 				InstanceType:    "raid",
@@ -38,9 +43,9 @@ func TestOnyxiaZoneName(t *testing.T) {
 			want: "Onyxia Classic",
 		},
 		{
-			name:   "level 80 10 player raid",
+			name:   "progression level 80 10 player raid",
 			ctx:    azerothcoreClient,
-			flavor: azerothcoreFlavor,
+			flavor: progressionFlavor,
 			zone: zone.Zone{
 				Name:            "onyxia's lair",
 				InstanceType:    "raid",
@@ -51,9 +56,9 @@ func TestOnyxiaZoneName(t *testing.T) {
 			want: "Onyxia's Lair",
 		},
 		{
-			name:   "level 80 25 player raid",
+			name:   "progression level 80 25 player raid",
 			ctx:    azerothcoreClient,
-			flavor: azerothcoreFlavor,
+			flavor: progressionFlavor,
 			zone: zone.Zone{
 				Name:            "onyxia's lair",
 				InstanceType:    "raid",
@@ -64,9 +69,20 @@ func TestOnyxiaZoneName(t *testing.T) {
 			want: "Onyxia's Lair",
 		},
 		{
-			name:   "server-side AzerothCore without companion metadata",
-			ctx:    parsectx.WithType(context.Background(), database.LogTypeAzerothcore),
+			name:   "standard AzerothCore level 60 metadata remains unchanged",
+			ctx:    azerothcoreClient,
 			flavor: azerothcoreFlavor,
+			zone: zone.Zone{
+				Name:            "onyxia's lair",
+				InstanceType:    "raid",
+				DifficultyIndex: 3,
+			},
+			want: "Onyxia's Lair",
+		},
+		{
+			name:   "progression server-side log without companion metadata",
+			ctx:    parsectx.WithType(context.Background(), database.LogTypeAzerothcore),
+			flavor: progressionFlavor,
 			zone: zone.Zone{
 				Name:         "Onyxia's Lair",
 				MapID:        249,

@@ -26,16 +26,18 @@ func TestWoWFlavorHas(t *testing.T) {
 	}
 }
 
-func TestAllFlavorTagValuesIncludesTBC(t *testing.T) {
+func TestAllFlavorTagValuesIncludesKnownTags(t *testing.T) {
 	t.Parallel()
 
-	for _, tag := range database.AllFlavorTagValues() {
-		if tag == database.FlavorTBC {
-			return
+	all := database.WoWFlavor(database.AllFlavorTagValues())
+	for _, tag := range []database.FlavorTag{
+		database.FlavorTBC,
+		database.FlavorAzerothcoreProgression,
+	} {
+		if !all.Has(tag) {
+			t.Errorf("AllFlavorTagValues() missing %q", tag)
 		}
 	}
-
-	t.Fatal("AllFlavorTagValues() missing tbc")
 }
 
 // TestLogTypeFlavor pins the bootstrap LogType->flavor derivation.

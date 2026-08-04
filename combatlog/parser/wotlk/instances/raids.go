@@ -83,7 +83,7 @@ var ObsidianSanctumFactory = &instances.CommonFactory{
 }
 
 func onyxiaZoneName(ctx context.Context, z zone.Zone, fl database.WoWFlavor) string {
-	if !fl.Has(database.FlavorAzerothcore) {
+	if !fl.Has(database.FlavorAzerothcoreProgression) {
 		return "Onyxia's Lair"
 	}
 	format, ok := parsectx.Format(ctx)
@@ -91,9 +91,9 @@ func onyxiaZoneName(ctx context.Context, z zone.Zone, fl database.WoWFlavor) str
 		return "Onyxia's Lair"
 	}
 
-	// AzerothCore servers can expose both the level 60 and level 80 versions of
-	// Onyxia on the same client and zone name. The companion reports 10/25-player
-	// metadata for the WotLK raid, while the classic raid has no size metadata.
+	// AzerothCore progression servers can expose both the level 60 and level 80
+	// versions of Onyxia on the same client and zone name. The companion reports
+	// 10/25-player metadata for the WotLK raid, while the classic raid has none.
 	if z.InstanceType == "raid" && z.DifficultyName == "" && z.MaxPlayers == 0 {
 		return "Onyxia Classic"
 	}
