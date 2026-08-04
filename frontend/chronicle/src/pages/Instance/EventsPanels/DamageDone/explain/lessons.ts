@@ -50,9 +50,9 @@ const totalVsDps: L = {
     return "example-required";
   },
   instruction:
-    "Toggle 'Per second' above the chart. Totals reward time spent alive; per-second rewards throughput.",
+    "Toggle 'Per second' above the chart — DPS is total damage divided by the total duration of the encounters.",
   bullets: [
-    "Totals reward time spent alive; per-second rewards throughput",
+    "DPS is total damage divided by the total duration of the encounters",
     "Flip 'Per second' in the panel header — same order, new numbers",
   ],
   video: {

@@ -116,7 +116,7 @@ export default function TotalVsDpsVideo() {
               <span style={{ color: YELLOW }}>totals</span> on the right
             </>
           ) : (
-            "Totals reward time alive; per-second rewards throughput"
+            "DPS is total damage divided by the total duration of the encounters"
           )
         }
         opacity={captionOpacity}
