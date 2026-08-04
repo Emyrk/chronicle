@@ -15,6 +15,8 @@ export type ParseMetric = "dps" | "hps";
 interface ParsePillsOptions {
   /** Which metric to fetch parses for. */
   metric: ParseMetric;
+  /** Disable the query when deterministic pills are supplied by a preview/demo. */
+  enabled?: boolean;
   /** The panel render props — used for context, instance, hasCustomFilters. */
   props: Pick<PanelRenderProps<unknown>, "context" | "hasCustomFilters">;
   /** Whether the source type is "players" (pills only make sense for players). */
@@ -170,6 +172,7 @@ function buildParsePill(
  */
 export function useParsePills({
   metric,
+  enabled = true,
   props,
   isPlayerSource,
   isFocused,
@@ -194,6 +197,7 @@ export function useParsePills({
     !!timeRange?.enabled && (timeRange.startOffsetMs != null || timeRange.endOffsetMs != null);
   const enemySelected = context.entitySelection.enemyIds.size > 0;
   const showParsePills =
+    enabled &&
     isPlayerSource &&
     !props.hasCustomFilters &&
     !isFocused &&

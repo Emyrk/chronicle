@@ -20,7 +20,10 @@ function MockEventsProvider({ children }: { children: ReactNode }) {
   const value = useMemo(() => ({
     instanceId: "example-instance",
     getStream: () => null,
-    fetchStream: () => Promise.resolve({} as CachedStream),
+    fetchStream: () => Promise.resolve({
+      data: new Uint8Array(),
+      headers: [],
+    } satisfies CachedStream),
     isFetching: () => false,
   }), []);
 

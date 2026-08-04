@@ -103,13 +103,24 @@ interface DamageDoneContentProps extends PanelRenderProps<DamageDoneResult> {
   parsePillsOverride?: Map<string, import("@/components/ui/PlayerMetricChart/PlayerMetricChart").ParsePillData>;
   /** When provided, bypasses spell API queries in the breakout (keyed by spell ID). */
   spellDataOverride?: Map<number, import("@/api/wowdb").WoWSpell>;
+  /** Optional controlled rank state used by guided demos. */
+  showRanksOverride?: boolean;
+  /** Receives rank changes when showRanksOverride is controlled. */
+  onShowRanksChange?: (showRanks: boolean) => void;
+  /** Highlights the relevant real control while the explainer is active. */
+  explainTarget?: "chart" | "per-second" | "parse-scores" | "breakout" | "ranks" | "focus";
 }
 
 export const DamageDoneContent = (props: DamageDoneContentProps) => {
-  const { sourceType = "players" } = props;
+  const { sourceType = "players", onShowRanksChange } = props;
   const { result, context, panelOption, setPanelOption } = props;
   const syncMode = useSyncModeContextOptional();
-  const [showRanks, setShowRanks] = useState(true);
+  const [internalShowRanks, setInternalShowRanks] = useState(true);
+  const showRanks = props.showRanksOverride ?? internalShowRanks;
+  const setShowRanks = useCallback((next: boolean) => {
+    setInternalShowRanks(next);
+    onShowRanksChange?.(next);
+  }, [onShowRanksChange]);
 
   // Derive focus, grouping, and pet mode from the URL-persisted panelOption tokens
   const focusedPlayerId = useMemo(() => parseFocusFromOption(panelOption), [panelOption]);
@@ -177,6 +188,7 @@ export const DamageDoneContent = (props: DamageDoneContentProps) => {
   // ── Parse pills ──
   const liveParsePills = useParsePills({
     metric: "dps",
+    enabled: !props.parsePillsOverride,
     props,
     isPlayerSource: sourceType === "players",
     isFocused: !!focusedPlayerId,
@@ -308,11 +320,13 @@ export const DamageDoneContent = (props: DamageDoneContentProps) => {
                   type="button"
                   onClick={() => setShowRanks(!showRanks)}
                   className={cn(
-                    "flex items-center gap-1 px-2 py-0.5 text-2xs rounded transition-colors cursor-pointer",
+                    "flex items-center gap-1 px-2 py-0.5 text-2xs rounded transition-all cursor-pointer",
                     showRanks
                       ? "bg-[color:var(--tertiary)]/20 text-[color:var(--tertiary)] border border-[color:var(--tertiary)]/30"
-                      : "bg-muted/50 text-muted-foreground hover:text-foreground"
+                      : "bg-muted/50 text-muted-foreground hover:text-foreground",
+                    props.explainTarget === "ranks" && "ring-2 ring-[color:var(--tertiary)]/35 ring-offset-2 ring-offset-background",
                   )}
+                  data-explain-target="ranks"
                 >
                   <Layers className="h-3 w-3" />
                   Ranks
