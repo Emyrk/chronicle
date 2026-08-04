@@ -1,12 +1,11 @@
 /**
  * Lesson sidebar: the grouped, capability-aware lesson list, styled as a
  * course playlist — numbered rows whose thumb becomes a play button on
- * hover. Clicking a row selects it; limited rows keep a secondary
- * "richer example" action.
+ * hover. Clicking a row selects it.
  */
 
-import { ChevronDown, Play } from "lucide-react";
-import { useEffect, useRef, useState } from "react";
+import { Play } from "lucide-react";
+import { useEffect, useRef } from "react";
 import { cn } from "@/lib/utils";
 import type { Lesson, LessonState, LessonVideo } from "./types";
 
@@ -61,11 +60,8 @@ export function LessonSidebar<TCaps>({
   /** Lesson lit up because its panel region is hovered (reverse link). */
   highlightedLessonId?: string | null;
 }) {
-  const [moreExpanded, setMoreExpanded] = useState(false);
-
   const essentials = lessons.filter((l) => l.group === "essentials");
-  const deeper = lessons.filter((l) => l.group === "deeper");
-  const more = lessons.filter((l) => l.group === "more");
+  const advanced = lessons.filter((l) => l.group === "advanced");
 
   const videoCount = lessons.filter((l) => l.video).length;
   const totalSeconds = lessons.reduce(
@@ -104,30 +100,10 @@ export function LessonSidebar<TCaps>({
         <GroupHeading>Essentials</GroupHeading>
         {essentials.map((lesson, i) => row(lesson, i + 1))}
 
-        {deeper.length > 0 && (
+        {advanced.length > 0 && (
           <>
-            <GroupHeading className="pt-3.5">Deeper analysis</GroupHeading>
-            {deeper.map((lesson, i) => row(lesson, essentials.length + i + 1))}
-          </>
-        )}
-
-        {more.length > 0 && (
-          <>
-            <button
-              type="button"
-              onClick={() => setMoreExpanded((v) => !v)}
-              className="mt-4 flex items-center gap-2 border-t border-border px-2 py-2.5 text-xs text-muted-foreground hover:text-foreground"
-            >
-              <ChevronDown
-                className={cn("h-3.5 w-3.5 transition-transform", moreExpanded && "rotate-180")}
-              />
-              <span>More topics</span>
-              <span className="font-mono text-[10.5px] opacity-70">{more.length}</span>
-            </button>
-            {moreExpanded &&
-              more.map((lesson, i) =>
-                row(lesson, essentials.length + deeper.length + i + 1),
-              )}
+            <GroupHeading className="pt-3.5">Advanced</GroupHeading>
+            {advanced.map((lesson, i) => row(lesson, essentials.length + i + 1))}
           </>
         )}
       </div>

@@ -172,7 +172,7 @@ const spellRanks: L = {
 const filters: L = {
   id: "filters",
   title: "Filter what a panel counts",
-  group: "essentials",
+  group: "advanced",
   description: () =>
     "Narrow any panel by ability, school, hit type, source, target, or time range.",
   deriveState: () => "available",
@@ -195,7 +195,7 @@ const filters: L = {
 const compareAbilities: L = {
   id: "compare-abilities",
   title: "Compare two players' abilities",
-  group: "essentials",
+  group: "advanced",
   description: (caps) =>
     caps.hasFocusTarget
       ? "Shared hover and selection across breakouts — compare rotations head to head."
@@ -219,12 +219,14 @@ const compareAbilities: L = {
 };
 
 export const DAMAGE_DONE_LESSONS: L[] = [
+  // Essentials
   readChart,
   totalVsDps,
   parseScores,
   pinBreakout,
   breakoutTour,
-  compareAbilities,
   spellRanks,
+  // Advanced
+  compareAbilities,
   filters,
 ];

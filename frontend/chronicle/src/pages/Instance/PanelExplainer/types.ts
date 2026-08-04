@@ -20,8 +20,8 @@ import type { Instance } from "../InstancePage";
  */
 export type LessonState = "available" | "limited" | "example-required";
 
-/** Sidebar grouping. "more" lessons sit behind the collapsible "More topics". */
-export type LessonGroup = "essentials" | "deeper" | "more";
+/** Sidebar grouping. */
+export type LessonGroup = "essentials" | "advanced";
 
 /**
  * A lesson's video: a Remotion composition compiled into the app and played
