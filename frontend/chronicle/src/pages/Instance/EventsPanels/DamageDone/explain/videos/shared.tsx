@@ -7,7 +7,8 @@
 
 import { useState, type ReactNode } from "react";
 import { AbsoluteFill, interpolate, useCurrentFrame, useVideoConfig } from "remotion";
-import { clamp } from "./animation";
+import { Play } from "lucide-react";
+import { clamp, INTRO_FRAMES } from "./animation";
 import { PortalContainerProvider } from "@/components/ui/PortalContainerContext";
 
 /**
@@ -120,6 +121,49 @@ export function StepCaption({
       </div>
       <p className="text-[30px] font-bold tracking-tight">{text}</p>
     </div>
+  );
+}
+
+/**
+ * Opening title card: fully opaque at frame 0 so the paused player preview
+ * shows the lesson's title and contents instead of a blank stage. Holds until
+ * INTRO_FRAMES, fading out over the last 14 frames while the demo content
+ * (mounted in a <Sequence from={INTRO_FRAMES - 10}>) enters underneath.
+ */
+export function LessonIntro({ title, bullets }: { title: string; bullets: ReactNode[] }) {
+  const frame = useCurrentFrame();
+  const fade = interpolate(frame, [INTRO_FRAMES - 14, INTRO_FRAMES], [1, 0], clamp);
+  return (
+    <AbsoluteFill
+      className="bg-background"
+      style={{
+        opacity: fade,
+        translate: `0 ${interpolate(fade, [0, 1], [-14, 0])}px`,
+        zIndex: 230,
+      }}
+    >
+      <div className="absolute inset-0 bg-[radial-gradient(circle_at_78%_22%,color-mix(in_oklch,var(--primary)_12%,transparent),transparent_38%)]" />
+      <div className="absolute left-[72px] top-[128px]">
+        <p className="text-sm font-bold uppercase tracking-[0.2em] text-primary">
+          Chronicle quick tip
+        </p>
+        <h1 className="font-wow mt-1 text-[52px] font-bold tracking-tight">{title}</h1>
+        <div className="mt-9 flex flex-col gap-5">
+          {bullets.map((bullet, i) => (
+            <div key={i} className="flex items-center gap-4">
+              <div className="grid h-10 w-10 flex-shrink-0 place-items-center rounded-full bg-primary text-lg font-bold text-primary-foreground shadow-lg">
+                {i + 1}
+              </div>
+              <p className="text-[26px] font-medium tracking-tight text-foreground">{bullet}</p>
+            </div>
+          ))}
+        </div>
+        <p className="mt-11 flex items-center gap-2 text-[15px] text-muted-foreground">
+          <Play className="h-4 w-4" fill="currentColor" />
+          Press play to watch
+        </p>
+      </div>
+    </AbsoluteFill>
   );
 }
 

@@ -20,7 +20,7 @@ export const RemotionRoot: React.FC = () => {
       <Composition
         id="PinBreakout"
         component={PinBreakoutVideo}
-        durationInFrames={420}
+        durationInFrames={470}
         fps={30}
         width={1280}
         height={720}
@@ -28,7 +28,7 @@ export const RemotionRoot: React.FC = () => {
       <Composition
         id="ReadChart"
         component={ReadChartVideo}
-        durationInFrames={300}
+        durationInFrames={350}
         fps={30}
         width={1280}
         height={720}
@@ -36,7 +36,7 @@ export const RemotionRoot: React.FC = () => {
       <Composition
         id="TotalVsDps"
         component={TotalVsDpsVideo}
-        durationInFrames={270}
+        durationInFrames={320}
         fps={30}
         width={1280}
         height={720}
@@ -44,7 +44,7 @@ export const RemotionRoot: React.FC = () => {
       <Composition
         id="ParseScores"
         component={ParseScoresVideo}
-        durationInFrames={300}
+        durationInFrames={350}
         fps={30}
         width={1280}
         height={720}
@@ -52,7 +52,7 @@ export const RemotionRoot: React.FC = () => {
       <Composition
         id="BreakoutTour"
         component={BreakoutTourVideo}
-        durationInFrames={420}
+        durationInFrames={470}
         fps={30}
         width={1280}
         height={720}

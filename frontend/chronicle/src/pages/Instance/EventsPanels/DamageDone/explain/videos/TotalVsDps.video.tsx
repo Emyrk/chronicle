@@ -2,13 +2,13 @@
  * Lesson video: total damage versus DPS — a scripted cursor flips the
  * Per Second toggle; the value column is boxed before and after, and a
  * "Before" snapshot of the totals appears on the right for comparison.
- * 270 frames @ 30fps, 1280x720.
+ * 320 frames @ 30fps, 1280x720 (50-frame intro card + 270 frames of content).
  */
 
-import { interpolate, spring, useCurrentFrame, useVideoConfig } from "remotion";
+import { interpolate, Sequence, spring, useCurrentFrame, useVideoConfig } from "remotion";
 import { PlayerMetricChartAbilityBreakdownDemo } from "@/components/ui/PlayerMetricChart/PlayerMetricChart.demo";
-import { clamp, entranceEasing } from "./animation";
-import { Cursor, RegionHighlight, StepCaption, VideoHeader, VideoStage } from "./shared";
+import { clamp, entranceEasing, INTRO_FRAMES } from "./animation";
+import { Cursor, LessonIntro, RegionHighlight, StepCaption, VideoHeader, VideoStage } from "./shared";
 
 const YELLOW = "var(--color-class-rogue)";
 const BLUE = "var(--color-class-shaman)";
@@ -57,6 +57,23 @@ function BeforeSnapshot({ appear }: { appear: number }) {
 }
 
 export default function TotalVsDpsVideo() {
+  return (
+    <VideoStage>
+      <Sequence from={INTRO_FRAMES - 10}>
+        <Content />
+      </Sequence>
+      <LessonIntro
+        title="Total damage versus DPS"
+        bullets={[
+          "DPS is damage divided by encounter duration",
+          "Flip 'Per second' — same order, new numbers",
+        ]}
+      />
+    </VideoStage>
+  );
+}
+
+function Content() {
   const frame = useCurrentFrame();
   const { fps } = useVideoConfig();
   const entrance = spring({ frame, fps, config: { damping: 200 }, durationInFrames: 28 });
@@ -73,7 +90,7 @@ export default function TotalVsDpsVideo() {
   const afterIn = interpolate(frame, [130, 144], [0, 1], clamp);
 
   return (
-    <VideoStage>
+    <>
       <VideoHeader title="Total damage versus DPS" entrance={entrance} />
 
       <main
@@ -121,6 +138,6 @@ export default function TotalVsDpsVideo() {
         }
         opacity={captionOpacity}
       />
-    </VideoStage>
+    </>
   );
 }

@@ -3,13 +3,13 @@
  *
  * A scripted cursor pins the Afflicted breakout, pins a second one for
  * Ragesmash, then drags the second by its header to a new spot.
- * 420 frames @ 30fps, 1280x720.
+ * 470 frames @ 30fps, 1280x720 (50-frame intro card + 420 frames of content).
  */
 
-import { interpolate, spring, useCurrentFrame, useVideoConfig } from "remotion";
+import { interpolate, Sequence, spring, useCurrentFrame, useVideoConfig } from "remotion";
 import { PlayerMetricChartAbilityBreakdownDemo } from "@/components/ui/PlayerMetricChart/PlayerMetricChart.demo";
-import { clamp, entranceEasing } from "./animation";
-import { Cursor, StepCaption, VideoHeader, VideoStage } from "./shared";
+import { clamp, entranceEasing, INTRO_FRAMES } from "./animation";
+import { Cursor, LessonIntro, StepCaption, VideoHeader, VideoStage } from "./shared";
 
 // Rows sit at y=211+32*i once the entrance settles; Afflicted is row 4,
 // Ragesmash row 2. Breakouts are ~340 wide.
@@ -23,6 +23,24 @@ const POS_2_FROM = { x: 780, y: 260 };
 const POS_2_TO = { x: 880, y: 430 };
 
 export default function PinBreakoutVideo() {
+  return (
+    <VideoStage>
+      <Sequence from={INTRO_FRAMES - 10}>
+        <Content />
+      </Sequence>
+      <LessonIntro
+        title="Open and pin a player breakout"
+        bullets={[
+          "Click a player row to pin its breakout",
+          "Open a second player to compare rotations",
+          "Drag a breakout by its header to arrange",
+        ]}
+      />
+    </VideoStage>
+  );
+}
+
+function Content() {
   const frame = useCurrentFrame();
   const { fps } = useVideoConfig();
   const entrance = spring({ frame, fps, config: { damping: 200 }, durationInFrames: 28 });
@@ -70,7 +88,7 @@ export default function PinBreakoutVideo() {
   const step = frame >= DRAG_START ? 3 : frame >= PIN_2_FRAME ? 2 : 1;
 
   return (
-    <VideoStage>
+    <>
       <VideoHeader title="Open a Damage Done breakout" entrance={entrance} />
 
       <main
@@ -96,6 +114,6 @@ export default function PinBreakoutVideo() {
         }
         opacity={captionOpacity}
       />
-    </VideoStage>
+    </>
   );
 }

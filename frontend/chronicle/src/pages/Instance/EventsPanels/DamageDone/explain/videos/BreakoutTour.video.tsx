@@ -3,14 +3,14 @@
  *
  * Shadowmeld's breakout starts pinned; a scripted cursor expands "More
  * detail", flips the min/avg/max toggle, then switches to the By Target tab.
- * 420 frames @ 30fps, 1280x720.
+ * 470 frames @ 30fps, 1280x720 (50-frame intro card + 420 frames of content).
  */
 
-import { interpolate, spring, useCurrentFrame, useVideoConfig } from "remotion";
+import { interpolate, Sequence, spring, useCurrentFrame, useVideoConfig } from "remotion";
 import type { DemoBreakoutDetail } from "@/components/ui/PlayerMetricChart/PlayerMetricChart.demo";
 import { PlayerMetricChartAbilityBreakdownDemo } from "@/components/ui/PlayerMetricChart/PlayerMetricChart.demo";
-import { clamp, entranceEasing } from "./animation";
-import { Cursor, StepCaption, VideoHeader, VideoStage } from "./shared";
+import { clamp, entranceEasing, INTRO_FRAMES } from "./animation";
+import { Cursor, LessonIntro, StepCaption, VideoHeader, VideoStage } from "./shared";
 
 // Shadowmeld's breakout pins as the entrance settles, to the right of the chart.
 const BREAKOUT_POS = { x: 706, y: 96 };
@@ -27,6 +27,24 @@ const MINMAX_FRAME = 206; // min/avg/max toggle clicked
 const TARGET_FRAME = 316; // "By Target" tab clicked
 
 export default function BreakoutTourVideo() {
+  return (
+    <VideoStage>
+      <Sequence from={INTRO_FRAMES - 10}>
+        <Content />
+      </Sequence>
+      <LessonIntro
+        title="Inside the breakout panel"
+        bullets={[
+          "'More detail' expands every hit type",
+          "The ↕ toggle shows min / avg / max",
+          "'By Target' shows who the damage hit",
+        ]}
+      />
+    </VideoStage>
+  );
+}
+
+function Content() {
   const frame = useCurrentFrame();
   const { fps } = useVideoConfig();
   const entrance = spring({ frame, fps, config: { damping: 200 }, durationInFrames: 28 });
@@ -63,7 +81,7 @@ export default function BreakoutTourVideo() {
   const step = frame >= TARGET_FRAME ? 3 : frame >= MINMAX_FRAME ? 2 : 1;
 
   return (
-    <VideoStage>
+    <>
       <VideoHeader title="Inside the breakout panel" entrance={entrance} />
 
       <main
@@ -90,6 +108,6 @@ export default function BreakoutTourVideo() {
         }
         opacity={captionOpacity}
       />
-    </VideoStage>
+    </>
   );
 }

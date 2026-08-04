@@ -1,15 +1,16 @@
 /**
  * Lesson video: understand parse scores — pills appear on the demo chart
  * (one row deliberately has none), the color scale sweeps grey to gold, then
- * the pill-less row is called out. 300 frames @ 30fps, 1280x720.
+ * the pill-less row is called out. 350 frames @ 30fps, 1280x720
+ * (50-frame intro card + 300 frames of content).
  */
 
-import { interpolate, spring, useCurrentFrame, useVideoConfig } from "remotion";
+import { interpolate, Sequence, spring, useCurrentFrame, useVideoConfig } from "remotion";
 import type { ParsePillData } from "@/components/ui/PlayerMetricChart/PlayerMetricChart";
 import { PlayerMetricChartAbilityBreakdownDemo } from "@/components/ui/PlayerMetricChart/PlayerMetricChart.demo";
 import { parseHexColor } from "@/pages/Instance/parseColors";
-import { clamp } from "./animation";
-import { RegionHighlight, StepCaption, VideoHeader, VideoStage } from "./shared";
+import { clamp, INTRO_FRAMES } from "./animation";
+import { LessonIntro, RegionHighlight, StepCaption, VideoHeader, VideoStage } from "./shared";
 
 const YELLOW = "var(--color-class-rogue)";
 
@@ -41,6 +42,24 @@ const SCALE: Array<[label: string, score: number]> = [
 const MISSING_FRAME = 210;
 
 export default function ParseScoresVideo() {
+  return (
+    <VideoStage>
+      <Sequence from={INTRO_FRAMES - 10}>
+        <Content />
+      </Sequence>
+      <LessonIntro
+        title="Understand parse scores"
+        bullets={[
+          "Pills score you against same-spec kills",
+          "The scale climbs grey to gold",
+          "No pill means not enough data yet",
+        ]}
+      />
+    </VideoStage>
+  );
+}
+
+function Content() {
   const frame = useCurrentFrame();
   const { fps } = useVideoConfig();
   const entrance = spring({ frame, fps, config: { damping: 200 }, durationInFrames: 28 });
@@ -51,7 +70,7 @@ export default function ParseScoresVideo() {
   const captionOpacity = interpolate(frame, [8, 18, 280, 294], [0, 1, 1, 0], clamp);
 
   return (
-    <VideoStage>
+    <>
       <VideoHeader title="Understand parse scores" entrance={entrance} />
 
       <main
@@ -108,6 +127,6 @@ export default function ParseScoresVideo() {
         }
         opacity={captionOpacity}
       />
-    </VideoStage>
+    </>
   );
 }

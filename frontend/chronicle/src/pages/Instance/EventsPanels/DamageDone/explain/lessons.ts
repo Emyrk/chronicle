@@ -28,7 +28,7 @@ const readChart: L = {
   ],
   video: {
     load: () => import("./videos/ReadChart.video"),
-    durationInFrames: 300,
+    durationInFrames: 350,
     fps: 30,
     width: 1280,
     height: 720,
@@ -56,7 +56,7 @@ const totalVsDps: L = {
   ],
   video: {
     load: () => import("./videos/TotalVsDps.video"),
-    durationInFrames: 270,
+    durationInFrames: 320,
     fps: 30,
     width: 1280,
     height: 720,
@@ -83,7 +83,7 @@ const parseScores: L = {
   learnMore: { href: "/parsing", label: "Read more about how parses work" },
   video: {
     load: () => import("./videos/ParseScores.video"),
-    durationInFrames: 300,
+    durationInFrames: 350,
     fps: 30,
     width: 1280,
     height: 720,
@@ -108,7 +108,7 @@ const pinBreakout: L = {
   ],
   video: {
     load: () => import("./videos/PinBreakout.video"),
-    durationInFrames: 420,
+    durationInFrames: 470,
     fps: 30,
     width: 1280,
     height: 720,
@@ -136,7 +136,7 @@ const breakoutTour: L = {
   ],
   video: {
     load: () => import("./videos/BreakoutTour.video"),
-    durationInFrames: 420,
+    durationInFrames: 470,
     fps: 30,
     width: 1280,
     height: 720,

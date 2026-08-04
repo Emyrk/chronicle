@@ -1,12 +1,14 @@
 /**
  * Lesson video: read the damage chart — sequenced callouts over the demo
- * chart (rows, values, percentages). 300 frames @ 30fps, 1280x720.
+ * chart (rows, values, percentages). 350 frames @ 30fps, 1280x720
+ * (50-frame intro card + 300 frames of content).
  */
 
 import type { ReactNode } from "react";
 import { interpolate, Sequence, spring, useCurrentFrame, useVideoConfig } from "remotion";
 import { PlayerMetricChartAbilityBreakdownDemo } from "@/components/ui/PlayerMetricChart/PlayerMetricChart.demo";
-import { RegionHighlight, StepCaption, VideoHeader, VideoStage } from "./shared";
+import { INTRO_FRAMES } from "./animation";
+import { LessonIntro, RegionHighlight, StepCaption, VideoHeader, VideoStage } from "./shared";
 
 const YELLOW = "var(--color-class-rogue)";
 const BLUE = "var(--color-class-shaman)";
@@ -48,12 +50,30 @@ const STEPS: Array<{ from: number; caption: ReactNode; regions: Region[] }> = [
 ];
 
 export default function ReadChartVideo() {
+  return (
+    <VideoStage>
+      <Sequence from={INTRO_FRAMES - 10}>
+        <Content />
+      </Sequence>
+      <LessonIntro
+        title="Read the damage chart"
+        bullets={[
+          "Bars are players, colored by class",
+          "Values and their share of the total",
+          "Rows are ranked by damage",
+        ]}
+      />
+    </VideoStage>
+  );
+}
+
+function Content() {
   const frame = useCurrentFrame();
   const { fps } = useVideoConfig();
   const entrance = spring({ frame, fps, config: { damping: 200 }, durationInFrames: 28 });
 
   return (
-    <VideoStage>
+    <>
       <VideoHeader title="Read the damage chart" entrance={entrance} />
 
       <main
@@ -74,6 +94,6 @@ export default function ReadChartVideo() {
           </Sequence>
         );
       })}
-    </VideoStage>
+    </>
   );
 }
