@@ -1,25 +1,19 @@
 /**
- * DamageDoneExplainView — Rich Damage Done Explain page.
+ * DamageDoneExplainView — Sidebar + Remotion Player explain page.
  *
- * Shows a lesson list with three states (available / limited / example-required).
- * "See example" renders the production DamageDoneContent with deterministic
- * curated fixture data, including parse pills and spell rank data — no network
- * calls. Returning to live data restores the panel without mutating URL state,
- * selections, or filters.
+ * Left sidebar: lesson list grouped by category.
+ * Right main area: Remotion Player walkthrough for the active lesson,
+ * plus the live/example DamageDoneContent panel below.
  *
- * Live aggregation: runs usePanelAggregation internally with the damage_done
- * panel definition so it receives real DamageDoneResult from the worker
- * pipeline — no duplicated processing, no DOM inference.
- *
- * The embedded panel wrapper owns local perSecond, showRanks, and panelOption
- * state so DPS/Ranks/Focus lessons are fully demonstrable. These never touch
- * the user's URL.
+ * Remotion compositions are embedded via @remotion/player — no pre-rendered
+ * videos, always matches the current UI style.
  */
 
 import { useState, useMemo, useCallback } from "react";
-import { ArrowLeft, BookOpen, Lightbulb, ChevronRight, FlaskConical, Info, MousePointerClick } from "lucide-react";
+import { Player } from "@remotion/player";
+import { ArrowLeft, BookOpen, ChevronRight, FlaskConical, Info } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/Card/Card";
+import { Card, CardContent } from "@/components/ui/Card/Card";
 import { Switch } from "@/components/ui/Switch/Switch";
 import { cn } from "@/lib/utils";
 
@@ -44,6 +38,7 @@ import {
   getFixtureSpellDataMap,
 } from "./fixture";
 import { GlossaryTermInline } from "./Glossary";
+import { LESSON_COMPOSITIONS } from "./compositions";
 
 /** Data-mode: live vs example */
 export type ExplainDataMode = "live" | "example";
@@ -189,148 +184,154 @@ export function DamageDoneExplainView({
 
   const isExample = dataMode === "example";
 
+  // Active lesson composition for the Remotion Player
+  const activeLessonConfig = activeLesson ? LESSON_COMPOSITIONS[activeLesson] : null;
+  const activeLessonMeta = activeLesson ? LESSONS.find((l) => l.id === activeLesson) : null;
+
   return (
     <div className="min-h-screen bg-background" data-testid="damage-done-explain-view">
       {/* Header */}
       <div className="border-b bg-card/50 backdrop-blur-sm sticky top-0 z-10">
-        <div className="max-w-5xl mx-auto px-6 py-4 flex items-center justify-between">
+        <div className="px-6 py-3 flex items-center justify-between">
           <Button variant="ghost" onClick={onExit} className="gap-2">
             <ArrowLeft className="h-4 w-4" />
-            Exit Explainer
+            Back
           </Button>
-          <h1 className="text-lg font-semibold flex items-center gap-2">
-            <BookOpen className="h-5 w-5 text-muted-foreground" />
+          <h1 className="text-base font-semibold flex items-center gap-2">
+            <BookOpen className="h-4 w-4 text-muted-foreground" />
             <span>Understanding Damage Done</span>
           </h1>
-          <div className="w-[140px]" />
+          {/* Data mode switch */}
+          {isExample ? (
+            <Button size="sm" variant="outline" onClick={handleReturnToLive} className="gap-1.5" data-testid="return-to-live-btn">
+              <FlaskConical className="h-3 w-3 text-amber-500" />
+              Return to your data
+            </Button>
+          ) : (
+            <div className="w-[160px]" />
+          )}
         </div>
       </div>
 
-      <div className="max-w-5xl mx-auto px-6 py-8 space-y-8">
-        {/* Introduction */}
-        <Card>
-          <CardContent className="pt-6">
-            <p className="text-muted-foreground leading-relaxed">
-              The Damage Done <GlossaryTermInline termKey="panel" /> shows total damage dealt by each
-              player during selected encounters. Use it to compare DPS, identify top contributors,
-              and drill into ability breakdowns via the{" "}
-              <GlossaryTermInline termKey="breakoutBox" />.{" "}
-              <GlossaryTermInline termKey="filters">Filters</GlossaryTermInline> narrow the data,
-              and <GlossaryTermInline termKey="focus" /> lets you drill into one player.
+      {/* Sidebar + Main layout */}
+      <div className="flex h-[calc(100vh-49px)]">
+        {/* ── Left sidebar: lessons ── */}
+        <aside className="w-72 shrink-0 border-r bg-card/30 overflow-y-auto styled-scrollbar" data-testid="lesson-sidebar">
+          {/* Intro */}
+          <div className="px-4 pt-4 pb-3 border-b border-border/40">
+            <p className="text-xs text-muted-foreground leading-relaxed">
+              The <GlossaryTermInline termKey="panel">panel</GlossaryTermInline> shows damage dealt per player.
+              Select a lesson to watch its walkthrough and try it in the{" "}
+              {isExample ? "example" : "live"} panel.
             </p>
-          </CardContent>
-        </Card>
-
-        {/* Data mode indicator */}
-        {isExample && (
-          <div
-            className="flex items-center justify-between px-4 py-3 rounded-lg border border-amber-500/30 bg-amber-500/10"
-            data-testid="example-data-banner"
-          >
-            <div className="flex items-center gap-2 text-amber-200">
-              <FlaskConical className="h-4 w-4" />
-              <span className="text-sm font-medium">Viewing example data</span>
-            </div>
-            <Button size="sm" variant="outline" onClick={handleReturnToLive} data-testid="return-to-live-btn">
-              Return to your data
-            </Button>
           </div>
-        )}
 
-        {/* Lesson List — grouped by category */}
-        <Card>
-          <CardHeader className="pb-2">
-            <CardTitle className="flex items-center gap-2 text-base">
-              <Lightbulb className="h-4 w-4 text-amber-500" />
-              Lessons
-            </CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div data-testid="lesson-list">
-              {(["essentials", "deeper"] as LessonCategory[]).map((cat) => {
-                const catLessons = LESSONS.filter((l) => l.category === cat);
-                return (
-                  <div key={cat} className={cn(cat === "deeper" && "mt-4 pt-3 border-t border-border/50")}>
-                    <h3 className="text-2xs font-semibold uppercase tracking-wider text-muted-foreground mb-1 px-3" data-testid={`lesson-category-${cat}`}>
-                      {CATEGORY_LABELS[cat]}
-                    </h3>
-                    <ul className="space-y-0.5">
-                      {catLessons.map((lesson) => {
-                        const state = lessonStates.get(lesson.id) ?? "example-required";
-                        const isActive = activeLesson === lesson.id;
-                        return (
-                          <LessonRow
-                            key={lesson.id}
-                            lesson={lesson}
-                            state={state}
-                            isActive={isActive}
-                            isExampleMode={isExample}
-                            onTryIt={() => handleTryIt(lesson.id)}
-                            onSeeExample={() => handleSeeExample(lesson.id)}
-                            onShowMe={() => handleShowMe(lesson.id)}
-                          />
-                        );
-                      })}
-                    </ul>
+          {/* Lesson list grouped by category */}
+          <nav className="p-2" data-testid="lesson-list">
+            {(["essentials", "deeper"] as LessonCategory[]).map((cat) => {
+              const catLessons = LESSONS.filter((l) => l.category === cat);
+              return (
+                <div key={cat} className={cn(cat === "deeper" && "mt-3 pt-2 border-t border-border/40")}>
+                  <h3 className="text-2xs font-semibold uppercase tracking-wider text-muted-foreground mb-1 px-2" data-testid={`lesson-category-${cat}`}>
+                    {CATEGORY_LABELS[cat]}
+                  </h3>
+                  <ul className="space-y-0.5">
+                    {catLessons.map((lesson) => {
+                      const state = lessonStates.get(lesson.id) ?? "example-required";
+                      const isActive = activeLesson === lesson.id;
+                      return (
+                        <LessonRow
+                          key={lesson.id}
+                          lesson={lesson}
+                          state={state}
+                          isActive={isActive}
+                          isExampleMode={isExample}
+                          onTryIt={() => handleTryIt(lesson.id)}
+                          onSeeExample={() => handleSeeExample(lesson.id)}
+                          onShowMe={() => handleShowMe(lesson.id)}
+                        />
+                      );
+                    })}
+                  </ul>
+                </div>
+              );
+            })}
+          </nav>
+        </aside>
+
+        {/* ── Main content area ── */}
+        <main className="flex-1 overflow-y-auto styled-scrollbar">
+          <div className="max-w-4xl mx-auto px-6 py-6 space-y-5">
+
+            {/* Remotion Player — walkthrough video for active lesson */}
+            {activeLessonConfig && activeLessonMeta && (
+              <Card>
+                <CardContent className="pt-4 pb-3">
+                  <div className="flex items-center gap-2 mb-3">
+                    <Info className="h-3.5 w-3.5 text-primary shrink-0" />
+                    <p className="text-sm font-medium">{activeLessonMeta.title}</p>
+                    <span className="text-xs text-muted-foreground">— {LESSON_INSTRUCTIONS[activeLesson!]}</span>
                   </div>
-                );
-              })}
-            </div>
-          </CardContent>
-        </Card>
+                  <div className="rounded-lg overflow-hidden border bg-background" data-testid="lesson-player">
+                    <Player
+                      component={activeLessonConfig.component}
+                      inputProps={activeLessonConfig.needsTitle ? { title: activeLessonMeta.title } : {}}
+                      durationInFrames={activeLessonConfig.durationInFrames}
+                      compositionWidth={640}
+                      compositionHeight={280}
+                      fps={activeLessonConfig.fps}
+                      style={{ width: "100%" }}
+                      controls
+                      loop
+                      autoPlay
+                    />
+                  </div>
+                </CardContent>
+              </Card>
+            )}
 
-        {/* Panel with explainer-local header controls */}
-        <Card>
-          {/* Active lesson instruction — pinned inside the panel card */}
-          {activeLesson && (
-            <div
-              className="flex items-start gap-3 mx-6 mt-4 px-3 py-2.5 rounded-md border border-primary/30 bg-primary/5"
-              data-testid="lesson-instruction"
-            >
-              <Info className="h-3.5 w-3.5 mt-0.5 shrink-0 text-primary" />
-              <p className="text-xs text-foreground leading-relaxed">
-                {LESSON_INSTRUCTIONS[activeLesson]}
-              </p>
-            </div>
-          )}
-
-          <CardHeader className="pb-2">
-            <CardTitle className="text-base flex items-center justify-between">
-              <span className="flex items-center gap-2">
-                {isExample ? (
-                  <>
-                    <FlaskConical className="h-4 w-4 text-amber-500" />
-                    Example — Damage Done
-                  </>
-                ) : (
-                  <span className="text-muted-foreground text-sm font-normal">Damage Done</span>
-                )}
-              </span>
-              {/* Explainer-local Per Second toggle */}
-              <div className="flex items-center gap-2" data-explainer-per-second>
-                <label htmlFor="explain-per-second" className="text-xs text-muted-foreground cursor-pointer">
-                  Per Second
-                </label>
-                <Switch
-                  id="explain-per-second"
-                  checked={localPerSecond}
-                  onCheckedChange={setLocalPerSecond}
-                  data-testid="explain-per-second-toggle"
-                />
+            {/* Example data banner */}
+            {isExample && (
+              <div
+                className="flex items-center gap-2 px-3 py-2 rounded-md border border-amber-500/30 bg-amber-500/10 text-xs"
+                data-testid="example-data-banner"
+              >
+                <FlaskConical className="h-3.5 w-3.5 text-amber-400 shrink-0" />
+                <span className="text-amber-200 font-medium">Example data — try the interactions below</span>
               </div>
-            </CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="styled-scrollbar" data-testid="explain-panel-container">
-              <DamageDoneContent
-                {...activeRenderProps}
-                sourceType="players"
-                parsePillsOverride={isExample ? exampleParsePills : undefined}
-                spellDataOverride={isExample ? exampleSpellData : undefined}
-              />
-            </div>
-          </CardContent>
-        </Card>
+            )}
+
+            {/* Live / Example panel */}
+            <Card>
+              <div className="flex items-center justify-between px-4 pt-3 pb-1">
+                <span className="text-sm text-muted-foreground font-medium">
+                  {isExample ? "Example — Damage Done" : "Damage Done"}
+                </span>
+                <div className="flex items-center gap-2" data-explainer-per-second>
+                  <label htmlFor="explain-per-second" className="text-xs text-muted-foreground cursor-pointer">
+                    Per Second
+                  </label>
+                  <Switch
+                    id="explain-per-second"
+                    checked={localPerSecond}
+                    onCheckedChange={setLocalPerSecond}
+                    data-testid="explain-per-second-toggle"
+                  />
+                </div>
+              </div>
+              <CardContent className="pt-0">
+                <div className="styled-scrollbar" data-testid="explain-panel-container">
+                  <DamageDoneContent
+                    {...activeRenderProps}
+                    sourceType="players"
+                    parsePillsOverride={isExample ? exampleParsePills : undefined}
+                    spellDataOverride={isExample ? exampleSpellData : undefined}
+                  />
+                </div>
+              </CardContent>
+            </Card>
+          </div>
+        </main>
       </div>
     </div>
   );
@@ -353,65 +354,34 @@ interface LessonRowProps {
 function LessonRow({ lesson, state, isActive, isExampleMode, onTryIt, onSeeExample, onShowMe }: LessonRowProps) {
   const isMuted = state === "example-required" && !isExampleMode;
 
-  // In example mode, all lessons use "Show me" (just activates the lesson
-  // without switching data mode). In live mode, use state-dependent actions.
-  const renderActions = () => {
+  // Single click handler: in example mode just select, in live mode
+  // switch to example for example-required or select for available.
+  const handleClick = () => {
     if (isExampleMode) {
-      return (
-        <Button size="sm" variant={isActive ? "default" : "ghost"} className="h-7 text-xs gap-1" onClick={onShowMe}>
-          <MousePointerClick className="h-3 w-3" />
-          {isActive ? "Active" : "Show me"}
-        </Button>
-      );
-    }
-    // Live mode actions based on capability state
-    switch (state) {
-      case "available":
-        return (
-          <Button size="sm" variant={isActive ? "default" : "ghost"} className="h-7 text-xs gap-1" onClick={onTryIt}>
-            <MousePointerClick className="h-3 w-3" />
-            {isActive ? "Active" : "Try it"}
-          </Button>
-        );
-      case "limited":
-        return (
-          <>
-            <Button size="sm" variant={isActive ? "default" : "ghost"} className="h-7 text-xs gap-1" onClick={onTryIt}>
-              <MousePointerClick className="h-3 w-3" />
-              {isActive ? "Active" : "Try it"}
-            </Button>
-            <Button size="sm" variant="outline" className="h-7 text-xs gap-1" onClick={onSeeExample}>
-              See richer example
-            </Button>
-          </>
-        );
-      case "example-required":
-        return (
-          <Button size="sm" variant="outline" className="h-7 text-xs gap-1" onClick={onSeeExample}>
-            See example
-          </Button>
-        );
+      onShowMe();
+    } else if (state === "example-required") {
+      onSeeExample();
+    } else {
+      onTryIt();
     }
   };
 
   return (
     <li
       className={cn(
-        "flex items-start gap-3 py-2.5 px-3 rounded-lg transition-colors",
-        isActive && "bg-accent/50 ring-1 ring-accent",
+        "flex items-center gap-2 py-2 px-2 rounded-md cursor-pointer transition-colors",
+        isActive ? "bg-accent/60 text-accent-foreground" : "hover:bg-accent/30",
         isMuted && !isActive && "opacity-50",
       )}
       data-testid={`lesson-${lesson.id}`}
       data-lesson-state={state}
+      onClick={handleClick}
+      role="button"
+      tabIndex={0}
+      onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); handleClick(); } }}
     >
-      <ChevronRight className={cn("h-4 w-4 mt-0.5 shrink-0 transition-transform", isActive ? "text-primary rotate-90" : "text-muted-foreground")} />
-      <div className="flex-1 min-w-0">
-        <div className="font-medium text-sm">{lesson.title}</div>
-        <p className="text-xs text-muted-foreground mt-0.5 leading-relaxed">{lesson.description}</p>
-      </div>
-      <div className="flex items-center gap-1.5 shrink-0">
-        {renderActions()}
-      </div>
+      <ChevronRight className={cn("h-3.5 w-3.5 shrink-0 transition-transform", isActive ? "text-primary rotate-90" : "text-muted-foreground")} />
+      <span className={cn("text-sm truncate", isActive && "font-medium")}>{lesson.title}</span>
     </li>
   );
 }
