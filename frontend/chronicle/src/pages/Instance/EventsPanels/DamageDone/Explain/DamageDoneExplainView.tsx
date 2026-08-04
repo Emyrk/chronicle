@@ -55,6 +55,12 @@ export interface DamageDoneExplainViewProps {
   durationMs: number;
   /** Exit the Explain page. */
   onExit: () => void;
+  /**
+   * Initial data mode. Defaults to "live" (production behavior).
+   * Set to "example" to start in example mode — useful for Storybook
+   * or when no live event streams are available.
+   */
+  initialDataMode?: ExplainDataMode;
 }
 
 // ── Lesson instructions ──
@@ -84,8 +90,9 @@ export function DamageDoneExplainView({
   context,
   durationMs,
   onExit,
+  initialDataMode = "live",
 }: DamageDoneExplainViewProps) {
-  const [dataMode, setDataMode] = useState<ExplainDataMode>("live");
+  const [dataMode, setDataMode] = useState<ExplainDataMode>(initialDataMode);
   const [activeLesson, setActiveLesson] = useState<LessonId | null>(null);
 
   // ── Explainer-local panel state (never touches URL) ──
@@ -94,10 +101,12 @@ export function DamageDoneExplainView({
 
   // Run the real aggregation pipeline for the damage_done panel.
   // This reuses the existing worker pool and stream caching — no duplication.
+  // Disabled when in example mode to avoid requiring InstanceEventsProvider streams.
   const panel = PANELS[panelType] ?? PANELS["damage_done"];
   const aggregation = usePanelAggregation<DamageDoneResult>({
     panel,
     context,
+    enabled: dataMode !== "example",
   });
 
   const liveResult: DamageDoneResult | null =
