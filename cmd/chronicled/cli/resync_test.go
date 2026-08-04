@@ -18,7 +18,6 @@ func TestResyncCmd_Help(t *testing.T) {
 	var (
 		foundTargetVersion bool
 		foundExecute       bool
-		foundResume        bool
 		foundWorkers       bool
 		foundLimit         bool
 		foundPGURL         bool
@@ -35,10 +34,6 @@ func TestResyncCmd_Help(t *testing.T) {
 			require.NotEmpty(t, opt.Default, "--target-version should have a default")
 		case "execute":
 			foundExecute = true
-		case "resume":
-			foundResume = true
-			require.False(t, opt.Required, "--resume should not be required")
-			require.Equal(t, "false", opt.Default)
 		case "workers":
 			foundWorkers = true
 		case "limit":
@@ -57,13 +52,22 @@ func TestResyncCmd_Help(t *testing.T) {
 	}
 	require.True(t, foundTargetVersion, "missing --target-version flag")
 	require.True(t, foundExecute, "missing --execute flag")
-	require.True(t, foundResume, "missing --resume flag")
 	require.True(t, foundWorkers, "missing --workers flag")
 	require.True(t, foundLimit, "missing --limit flag")
 	require.True(t, foundPGURL, "missing --postgres-url flag")
 	require.True(t, foundRemoteURL, "missing --remote-url flag")
 	require.True(t, foundStorageType, "missing --storage-type flag")
 	require.True(t, foundStoragePath, "missing --storage-path flag")
+}
+
+func TestResyncCmd_AutoResumeDocumented(t *testing.T) {
+	t.Parallel()
+
+	cmd := cli.ResyncCmd()
+	require.Contains(t, cmd.Long, "automatically")
+	for _, opt := range cmd.Options {
+		require.NotEqual(t, "resume", opt.Flag, "queue resume should happen automatically at daemon startup")
+	}
 }
 
 func TestResyncCmd_RootRegistration(t *testing.T) {

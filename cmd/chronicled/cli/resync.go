@@ -2,6 +2,7 @@ package cli
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"log/slog"
 	"os"
@@ -39,7 +40,6 @@ import (
 func ResyncCmd() *serpent.Command {
 	var (
 		execute       bool
-		resume        bool
 		workers       int64
 		limit         int64
 		targetVersion string
@@ -64,13 +64,6 @@ func ResyncCmd() *serpent.Command {
 			Flag:        "execute",
 			Default:     "false",
 			Value:       serpent.BoolOf(&execute),
-		},
-		{
-			Name:        "Resume",
-			Description: "Resume a previously paused resync queue. Required in non-TTY mode after a failure paused the queue. Without this flag, if the queue is already paused the command exits immediately with instructions.",
-			Flag:        "resume",
-			Default:     "false",
-			Value:       serpent.BoolOf(&resume),
 		},
 		{
 			Name:        "Workers",
@@ -180,17 +173,14 @@ resync jobs on a dedicated River queue and display progress.
 Fail-pause behavior (--execute):
   On the first job failure (discarded/cancelled), the resync queue is paused in
   PostgreSQL. Already-running parses finish safely; no new jobs are started.
-  
+
   TTY mode:  The TUI shows a PAUSED state with the error. Press 'r' to resume
              the queue and continue processing. A second failure pauses again.
              Press 'q' to quit (the queue stays paused for next run).
-  
-  Non-TTY:   The queue is paused, running jobs drain to completion, then the
-             process exits nonzero. Rerun with --resume to explicitly resume.
 
-  --resume:  Explicitly calls QueueResume before processing. Without --resume,
-             if the queue is already paused from a previous failure, the command
-             exits immediately with instructions.`,
+  Non-TTY:   The queue is paused, running jobs drain to completion, then the
+             process exits nonzero. Starting the resync daemon again automatically
+             resumes the persistent queue after preflight validation.`,
 		Options: options,
 		Handler: func(i *serpent.Invocation) error {
 			ctx, cancel := context.WithCancel(i.Context())
@@ -333,25 +323,6 @@ Fail-pause behavior (--execute):
 				return fmt.Errorf("create river client: %w", err)
 			}
 
-			// Handle --resume: explicitly resume a previously paused queue.
-			if resume {
-				if err := riverClient.QueueResume(ctx, riverconst.QueueResync, nil); err != nil {
-					return fmt.Errorf("resume queue: %w", err)
-				}
-				logger.Info("resumed paused resync queue")
-			} else {
-				// Fail fast if queue is already paused from a previous run.
-				q, err := riverClient.QueueGet(ctx, riverconst.QueueResync)
-				if err == nil && q.PausedAt != nil {
-					return fmt.Errorf(
-						"resync queue is paused (since %s) from a previous failure; "+
-							"pass --resume to explicitly resume, or investigate the failure first",
-						q.PausedAt.Format(time.RFC3339),
-					)
-				}
-				// ErrNotFound is fine — queue doesn't exist yet.
-			}
-
 			// Enqueue one resync job per candidate log group.
 			jobIDs := make(map[int64]uuid.UUID, len(groups))
 			for _, g := range groups {
@@ -361,6 +332,14 @@ Fail-pause behavior (--execute):
 				}
 				jobIDs[res.Job.ID] = g.ID
 			}
+
+			// Starting the resync daemon always resumes the persistent queue. This
+			// happens after all preflight checks and job insertion, but before workers
+			// begin claiming jobs.
+			if err := riverClient.QueueResume(ctx, riverconst.QueueResync, nil); err != nil && !errors.Is(err, rivertype.ErrNotFound) {
+				return fmt.Errorf("auto-resume resync queue: %w", err)
+			}
+			logger.Info("resync queue ready", "auto_resumed", true)
 
 			// Start the River client to begin processing jobs.
 			if err := riverClient.Start(ctx); err != nil {
@@ -456,7 +435,7 @@ func runActiveTUI(ctx context.Context, client *river.Client[pgx.Tx], groups []re
 // runActivePlain prints plain-text progress for non-TTY environments.
 // On the first failure it pauses the queue, waits for already-running jobs
 // to reach terminal state, then exits nonzero with instructions to rerun
-// using --resume.
+// by starting the resync daemon again, which automatically resumes the queue.
 func runActivePlain(ctx context.Context, i *serpent.Invocation, client *river.Client[pgx.Tx], groups []resynccandidate.Group, jobIDs map[int64]uuid.UUID) error {
 	fmt.Fprintf(i.Stdout, "Executing resync for %d log group(s)...\n", len(groups))
 
@@ -514,8 +493,8 @@ func runActivePlain(ctx context.Context, i *serpent.Invocation, client *river.Cl
 			}
 		}
 		if paused && running == 0 {
-			fmt.Fprintf(i.Stderr, "\nThe resync queue is PAUSED. To retry and resume, rerun with --resume:\n")
-			fmt.Fprintf(i.Stderr, "  chronicled resync --execute --resume [...other flags]\n\n")
+			fmt.Fprintf(i.Stderr, "\nThe resync queue is PAUSED. Restart the resync daemon after investigating the failure; startup auto-resumes the queue:\n")
+			fmt.Fprintf(i.Stderr, "  chronicled resync --execute [...other flags]\n\n")
 			return fmt.Errorf("resync paused after %d failure(s); %d job(s) remain queued", failed, len(pending))
 		}
 	}
@@ -523,8 +502,8 @@ func runActivePlain(ctx context.Context, i *serpent.Invocation, client *river.Cl
 	fmt.Fprintf(i.Stdout, "\nResync complete: %d succeeded, %d failed out of %d total.\n", completed, failed, len(jobIDs))
 	if failed > 0 {
 		if paused {
-			fmt.Fprintf(i.Stderr, "\nThe resync queue is now PAUSED. To resume, rerun with --resume:\n")
-			fmt.Fprintf(i.Stderr, "  chronicled resync --execute --resume [...other flags]\n\n")
+			fmt.Fprintf(i.Stderr, "\nThe resync queue is now PAUSED. Restart the resync daemon after investigating the failure; startup auto-resumes the queue:\n")
+			fmt.Fprintf(i.Stderr, "  chronicled resync --execute [...other flags]\n\n")
 		}
 		return fmt.Errorf("%d log group(s) failed to resync", failed)
 	}
