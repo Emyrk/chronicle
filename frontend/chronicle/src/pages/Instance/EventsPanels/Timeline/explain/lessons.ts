@@ -134,18 +134,19 @@ const durability: L = {
   title: "Raid durability background",
   group: "advanced",
   description: () =>
-    "A background that shades how healthy the raid was at every moment.",
+    "A background that shades the raid's total health pool at every moment.",
   deriveState: () => "available",
   instruction:
-    "Set Background to 'Raid Durability' in the panel's back-side settings — bars behind the lines shade from green to red as the raid takes losses. Works with a single selected encounter.",
+    "Set Background to 'Raid Durability' in the panel's back-side Settings tab — bars behind the lines track the raid's combined health pool. Tall green bars mean everyone is at full health; shorter, redder bars mean the pool is low and/or players have died. Works with a single selected encounter.",
   bullets: [
-    "Background bars estimate raid health at every moment",
-    "Green fades to red as players drop",
+    "Background bars track the raid's combined health pool",
+    "Tall green bars: everyone is at full health",
+    "Shorter, redder bars: the pool is low and/or players have died",
     "Requires a single selected encounter",
   ],
   video: {
     load: () => import("./videos/RaidDurability.video"),
-    durationInFrames: 380,
+    durationInFrames: 530,
     fps: 30,
     width: 1280,
     height: 720,
