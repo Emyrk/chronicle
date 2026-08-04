@@ -51,6 +51,8 @@ export interface Lesson<TCaps> {
   /** When present, shown as a bullet list instead of the instruction —
    * typically recapping the video's points. */
   bullets?: string[];
+  /** Optional in-app link for further reading (react-router path). */
+  learnMore?: { href: string; label: string };
   /** Absent = text-only lesson (sidebar action reads "Read", not "Watch"). */
   video?: LessonVideo;
   /** Lesson only makes sense on curated example data (e.g. parse scores). */

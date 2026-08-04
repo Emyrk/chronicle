@@ -80,6 +80,7 @@ const parseScores: L = {
     "Grey and white are below average; green and blue solid; purple and orange strong; gold is rank-1",
     "No pill means there isn't enough data for that spec yet",
   ],
+  learnMore: { href: "/parsing", label: "Read more about how parses work" },
   video: {
     load: () => import("./videos/ParseScores.video"),
     durationInFrames: 300,

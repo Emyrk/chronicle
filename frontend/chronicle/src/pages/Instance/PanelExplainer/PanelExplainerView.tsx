@@ -9,9 +9,9 @@
  * Mobile: this view is not shown on mobile — tooltips are used instead.
  */
 
-import { ArrowLeft, BookOpen, FlaskConical, Lightbulb, X } from "lucide-react";
+import { ArrowLeft, ArrowRight, BookOpen, FlaskConical, Lightbulb, X } from "lucide-react";
 import { useCallback, useMemo, useState } from "react";
-import { useSearchParams } from "react-router-dom";
+import { Link, useSearchParams } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/Card/Card";
 import { EventsPanel } from "../EventsPanels";
@@ -281,6 +281,16 @@ function LessonHeaderCard<TCaps>({
         <p className="max-w-[78ch] text-[12.5px] leading-relaxed text-pretty">
           {lesson.instruction}
         </p>
+      )}
+      {lesson.learnMore && (
+        <Link
+          to={lesson.learnMore.href}
+          className="flex w-fit items-center gap-1.5 text-[12px] font-medium text-primary hover:text-foreground"
+        >
+          <BookOpen className="h-3.5 w-3.5" />
+          {lesson.learnMore.label}
+          <ArrowRight className="h-3 w-3" />
+        </Link>
       )}
     </div>
   );
