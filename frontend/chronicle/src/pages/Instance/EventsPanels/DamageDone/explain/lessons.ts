@@ -73,11 +73,11 @@ const parseScores: L = {
   deriveState: () => "example-required",
   exampleOnly: true,
   instruction:
-    "Grey and white are below average, green and blue are solid, purple and orange are strong, gold is a rank-1 parse. Hover a pill for the cohort.",
+    "The scale climbs grey, green, blue, purple, orange, then pink at 99 — gold is a perfect 100. Hover a pill for the cohort.",
   bullets: [
     "Pills appear next to each player once parses are available",
     "Each pill scores against same-spec kills of this boss",
-    "Grey and white are below average; green and blue solid; purple and orange strong; gold is rank-1",
+    "The scale climbs grey → green → blue → purple → orange → pink; gold is a perfect 100",
     "No pill means there isn't enough data for that spec yet",
   ],
   learnMore: { href: "/parsing", label: "Read more about how parses work" },

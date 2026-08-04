@@ -7,27 +7,35 @@
 import { interpolate, spring, useCurrentFrame, useVideoConfig } from "remotion";
 import type { ParsePillData } from "@/components/ui/PlayerMetricChart/PlayerMetricChart";
 import { PlayerMetricChartAbilityBreakdownDemo } from "@/components/ui/PlayerMetricChart/PlayerMetricChart.demo";
+import { parseHexColor } from "@/pages/Instance/parseColors";
 import { clamp } from "./animation";
 import { RegionHighlight, StepCaption, VideoHeader, VideoStage } from "./shared";
 
 const YELLOW = "var(--color-class-rogue)";
 
+const pill = (score: number): ParsePillData => ({
+  displayScore: score,
+  color: parseHexColor(score),
+  tooltipContent: null,
+});
+
 // Afflicted (player-4) has no pill on purpose — the video explains why.
 const DEMO_PILLS = new Map<string, ParsePillData>([
-  ["player-1", { displayScore: 99, color: "#e5cc80", tooltipContent: null }],
-  ["player-2", { displayScore: 92, color: "#ff8000", tooltipContent: null }],
-  ["player-3", { displayScore: 78, color: "#a335ee", tooltipContent: null }],
-  ["player-5", { displayScore: 31, color: "#1eff00", tooltipContent: null }],
+  ["player-1", pill(100)],
+  ["player-2", pill(96)],
+  ["player-3", pill(62)],
+  ["player-5", pill(31)],
 ]);
 
-const SCALE: Array<[label: string, color: string]> = [
-  ["0–24", "#9d9d9d"],
-  ["25–49", "#ffffff"],
-  ["50–74", "#1eff00"],
-  ["75–94", "#0070dd"],
-  ["95–98", "#a335ee"],
-  ["99", "#ff8000"],
-  ["100", "#e5cc80"],
+// The app's real scale — colors come from parseColors.ts so they never drift.
+const SCALE: Array<[label: string, score: number]> = [
+  ["0–24", 0],
+  ["25–49", 25],
+  ["50–74", 50],
+  ["75–94", 75],
+  ["95–98", 95],
+  ["99", 99],
+  ["100", 100],
 ];
 
 const MISSING_FRAME = 210;
@@ -61,14 +69,14 @@ export default function ParseScoresVideo() {
         style={{ opacity: legendIn, translate: `0 ${interpolate(legendIn, [0, 1], [14, 0])}px`, zIndex: 205 }}
       >
         <p className="text-[13px] font-semibold">The parse color scale</p>
-        {SCALE.map(([label, color], i) => {
+        {SCALE.map(([label, score], i) => {
           // Sweep the legend rows one by one.
           const rowIn = interpolate(frame, [130 + i * 14, 142 + i * 14], [0, 1], clamp);
           return (
             <div key={label} className="flex items-center gap-2.5" style={{ opacity: rowIn }}>
               <span
                 className="inline-block h-4 w-9 rounded-full text-center font-mono text-[10px] leading-4"
-                style={{ background: color, color: "#111" }}
+                style={{ background: parseHexColor(score), color: "#111" }}
               >
                 {label.split("–")[0]}
               </span>
@@ -83,7 +91,7 @@ export default function ParseScoresVideo() {
         <RegionHighlight left={330} top={305} width={90} height={34} color={YELLOW} />
         <div
           className="absolute rounded-md border bg-card px-2.5 py-1 font-mono text-[11px]"
-          style={{ left: 702, top: 312, borderColor: YELLOW, color: YELLOW, zIndex: 210 }}
+          style={{ left: 330, top: 376, borderColor: YELLOW, color: YELLOW, zIndex: 210 }}
         >
           Not enough data for this spec
         </div>

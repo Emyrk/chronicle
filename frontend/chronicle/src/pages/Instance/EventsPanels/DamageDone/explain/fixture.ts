@@ -10,6 +10,7 @@
 
 import type { WoWSpell } from "@/api/wowdb";
 import type { ParsePillData } from "@/components/ui/PlayerMetricChart/PlayerMetricChart";
+import { parseHexColor } from "@/pages/Instance/parseColors";
 import type { Instance } from "../../../InstancePage";
 import type {
   DamageAbilityBreakout,
@@ -495,32 +496,33 @@ export function getFixtureRenderProps(): PanelRenderProps<DamageDoneResult> {
   };
 }
 
-/** Deterministic parse-pill data keyed by player GUID for the fixture. */
-const FIXTURE_PARSE_PILLS: Record<string, { score: number; color: string }> = {
-  [PLAYER_MAGE]: { score: 99, color: "#e5cc80" },
-  [PLAYER_WARLOCK]: { score: 94, color: "#ff8000" },
-  [PLAYER_ROGUE]: { score: 88, color: "#a335ee" },
-  [PLAYER_WARRIOR]: { score: 81, color: "#0070dd" },
-  [PLAYER_HUNTER]: { score: 74, color: "#0070dd" },
-  [PLAYER_MAGE_2]: { score: 66, color: "#1eff00" },
-  [PLAYER_SHAMAN]: { score: 58, color: "#1eff00" },
-  [PLAYER_ROGUE_2]: { score: 47, color: "#ffffff" },
-  [PLAYER_DRUID]: { score: 39, color: "#ffffff" },
-  [PLAYER_WARRIOR_2]: { score: 24, color: "#9d9d9d" },
-  [PLAYER_PALADIN]: { score: 15, color: "#9d9d9d" },
-  [PLAYER_PRIEST]: { score: 8, color: "#9d9d9d" },
+/** Deterministic parse scores keyed by player GUID for the fixture. */
+const FIXTURE_PARSE_SCORES: Record<string, number> = {
+  [PLAYER_MAGE]: 100,
+  [PLAYER_WARLOCK]: 99,
+  [PLAYER_ROGUE]: 96,
+  [PLAYER_WARRIOR]: 88,
+  [PLAYER_HUNTER]: 81,
+  [PLAYER_MAGE_2]: 66,
+  [PLAYER_SHAMAN]: 58,
+  [PLAYER_ROGUE_2]: 47,
+  [PLAYER_DRUID]: 39,
+  [PLAYER_WARRIOR_2]: 24,
+  [PLAYER_PALADIN]: 15,
+  [PLAYER_PRIEST]: 8,
 };
 
 /**
  * Build a Map<string, ParsePillData> for use as parsePillsOverride.
- * Renders deterministic pills without any API call.
+ * Renders deterministic pills without any API call; colors come from the
+ * app's own parseHexColor scale.
  */
 export function getFixtureParsePillsMap(): Map<string, ParsePillData> {
   const pills = new Map<string, ParsePillData>();
-  for (const [guid, data] of Object.entries(FIXTURE_PARSE_PILLS)) {
+  for (const [guid, score] of Object.entries(FIXTURE_PARSE_SCORES)) {
     pills.set(guid, {
-      displayScore: data.score,
-      color: data.color,
+      displayScore: score,
+      color: parseHexColor(score),
       tooltipContent: null,
     });
   }
