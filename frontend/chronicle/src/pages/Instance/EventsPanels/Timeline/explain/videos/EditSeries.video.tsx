@@ -25,9 +25,9 @@ import {
 // Measured targets (stage coordinates).
 const FILTER_ICON = { x: 237, y: 152 };
 const EDIT_FILTERS_ROW = { x: 324, y: 178 };
-const ADD_TAB = { x: 270, y: 218 };
-const HEAL_STREAM = { x: 257, y: 297 };
-const GREEN_SWATCH = { x: 231, y: 368 };
+const ADD_TAB = { x: 201, y: 196 };
+const HEAL_STREAM = { x: 259, y: 274 };
+const GREEN_SWATCH = { x: 235, y: 344 };
 const BACK_BTN = { x: 653, y: 155 };
 
 const MENU_FRAME = 75; // filter icon clicked → context menu
