@@ -21,6 +21,7 @@ import (
 
 // timeParsesQuerier is the database subset used by the time-parses handler.
 type timeParsesQuerier interface {
+	InstanceBySlug(ctx context.Context, hashedSlug pgtype.Text) (database.LogInstancesGuild, error)
 	GetLatestPublishedTimeParseSnapshot(ctx context.Context, arg database.GetLatestPublishedTimeParseSnapshotParams) (database.TimeParseSnapshot, error)
 	GetLatestPublishedTimeParseSnapshotBefore(ctx context.Context, arg database.GetLatestPublishedTimeParseSnapshotBeforeParams) (database.TimeParseSnapshot, error)
 	GetLogInstanceStartTime(ctx context.Context, id uuid.UUID) (pgtype.Timestamptz, error)
@@ -46,10 +47,15 @@ func handleInstanceTimeParsesWithStore(store timeParsesQuerier, logger *slog.Log
 	instanceIDStr := chi.URLParam(r, "instanceID")
 	instanceID, err := uuid.Parse(instanceIDStr)
 	if err != nil {
-		httpapi.Write(ctx, w, http.StatusBadRequest, chroniclesdk.Response{
-			Message: "Invalid instance ID",
-		})
-		return
+		// Not a UUID — try resolving as a hashed slug.
+		inst, slugErr := store.InstanceBySlug(ctx, pgtype.Text{String: instanceIDStr, Valid: true})
+		if slugErr != nil {
+			httpapi.Write(ctx, w, http.StatusNotFound, chroniclesdk.Response{
+				Message: "Instance not found",
+			})
+			return
+		}
+		instanceID = inst.ID
 	}
 
 	// Parse period (lookback days).
