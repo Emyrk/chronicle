@@ -58,7 +58,7 @@ export function GlossaryTermInline({ termKey, children }: GlossaryTermInlineProp
         aria-expanded={open}
         aria-label={`${term.term}: ${term.definition}`}
         data-testid={`glossary-term-${termKey}`}
-        className="font-bold underline decoration-dotted decoration-muted-foreground/50 cursor-pointer hover:text-primary transition-colors"
+        className="font-semibold text-foreground border-b border-dashed border-muted-foreground/40 cursor-pointer hover:border-primary hover:text-primary transition-colors"
         onClick={handleClick}
         onKeyDown={handleKeyDown}
       >

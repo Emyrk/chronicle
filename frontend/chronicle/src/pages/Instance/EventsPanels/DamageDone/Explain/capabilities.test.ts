@@ -150,4 +150,18 @@ describe("resolveLessonState", () => {
       expect(["available", "limited", "example-required"]).toContain(state);
     }
   });
+
+  it("every lesson has a valid category", () => {
+    for (const lesson of LESSONS) {
+      expect(["essentials", "deeper"]).toContain(lesson.category);
+    }
+  });
+
+  it("essentials category has 4 lessons", () => {
+    expect(LESSONS.filter((l) => l.category === "essentials")).toHaveLength(4);
+  });
+
+  it("deeper category has 4 lessons", () => {
+    expect(LESSONS.filter((l) => l.category === "deeper")).toHaveLength(4);
+  });
 });

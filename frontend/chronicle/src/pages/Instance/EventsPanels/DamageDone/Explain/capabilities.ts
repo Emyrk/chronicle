@@ -116,10 +116,13 @@ export type LessonId =
   | "spell-ranks"
   | "focus";
 
+export type LessonCategory = "essentials" | "deeper";
+
 export interface LessonMeta {
   id: LessonId;
   title: string;
   description: string;
+  category: LessonCategory;
 }
 
 /** Ordered list of lessons. */
@@ -128,43 +131,57 @@ export const LESSONS: LessonMeta[] = [
     id: "reading-chart",
     title: "Reading the Chart",
     description: "Understand the player damage bars — names, class colours, and relative sizing.",
+    category: "essentials",
   },
   {
     id: "dps-vs-total",
     title: "DPS vs Total Damage",
     description: "Toggle Per Second to switch between total damage dealt and damage per second (DPS).",
+    category: "essentials",
   },
   {
     id: "parse-scores",
     title: "Parse Scores",
     description: "Coloured pills beside each player show how their performance compares to the community.",
+    category: "essentials",
   },
   {
     id: "breakout-box",
     title: "The Breakout Box",
     description: "Click a player row to open a detailed breakdown of their damage by ability or target.",
+    category: "essentials",
   },
   {
     id: "abilities-vs-targets",
     title: "Abilities vs Targets",
     description: "Switch between 'By Ability' and 'By Target' tabs inside the Breakout Box.",
+    category: "deeper",
   },
   {
     id: "detailed-results",
     title: "Detailed Hit Results",
     description: "Expand ability rows to see hit types (normal, crit, glancing) with min/avg/max values.",
+    category: "deeper",
   },
   {
     id: "spell-ranks",
     title: "Spell Ranks",
     description: "Toggle Ranks to separate abilities by spell rank — useful for spotting down-ranked casts.",
+    category: "deeper",
   },
   {
     id: "focus",
     title: "Focus Mode",
     description: "Ctrl+click (Cmd+click on Mac) a player row and choose Focus to see their per-ability chart with full breakouts.",
+    category: "deeper",
   },
 ];
+
+/** Category display labels. */
+export const CATEGORY_LABELS: Record<LessonCategory, string> = {
+  essentials: "Essentials",
+  deeper: "Going Deeper",
+};
 
 /** Resolve the lesson state given the current live capabilities. */
 export function resolveLessonState(
