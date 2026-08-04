@@ -22,6 +22,13 @@ const readChart: L = {
   deriveState: (caps) => (caps.hasMultiplePlayers ? "available" : "limited"),
   instruction:
     "Each bar is one player: length is their share of raid damage, the number is the value, and the percentage is their contribution to the total.",
+  video: {
+    load: () => import("./videos/ReadChart.video"),
+    durationInFrames: 300,
+    fps: 30,
+    width: 1280,
+    height: 720,
+  },
 };
 
 const totalVsDps: L = {
@@ -39,6 +46,13 @@ const totalVsDps: L = {
   },
   instruction:
     "Toggle 'Per second' above the chart. Totals reward time spent alive; per-second rewards throughput.",
+  video: {
+    load: () => import("./videos/TotalVsDps.video"),
+    durationInFrames: 270,
+    fps: 30,
+    width: 1280,
+    height: 720,
+  },
 };
 
 const parseScores: L = {
@@ -51,6 +65,13 @@ const parseScores: L = {
   exampleOnly: true,
   instruction:
     "Grey and white are below average, green and blue are solid, purple and orange are strong, gold is a rank-1 parse. Hover a pill for the cohort.",
+  video: {
+    load: () => import("./videos/ParseScores.video"),
+    durationInFrames: 300,
+    fps: 30,
+    width: 1280,
+    height: 720,
+  },
 };
 
 const pinBreakout: L = {

@@ -3,6 +3,7 @@ import {
   AbilityBreakdownTable,
   PlayerMetricChart,
   type AbilityBreakdown,
+  type ParsePillData,
   type PlayerMetricChartData,
 } from './PlayerMetricChart'
 
@@ -49,9 +50,15 @@ const abilities: Record<string, AbilityBreakdown[]> = {
 export function PlayerMetricChartAbilityBreakdownDemo({
   pinnedPlayerId,
   classIconBasePath,
+  perSecond,
+  parsePills,
 }: {
   pinnedPlayerId?: string
   classIconBasePath?: string
+  /** Show DPS values instead of totals (drives the explainer videos). */
+  perSecond?: boolean
+  /** Deterministic parse pills keyed by playerID (drives the explainer videos). */
+  parsePills?: Map<string, ParsePillData>
 }) {
   const initialPinnedPositions = useMemo(
     () => pinnedPlayerId ? new Map([[pinnedPlayerId, { x: 720, y: 170 }]]) : undefined,
@@ -79,7 +86,7 @@ export function PlayerMetricChartAbilityBreakdownDemo({
           <p className="text-2xs text-muted-foreground">Nefarian · 3:30</p>
         </div>
         <div className="ml-auto rounded-md border border-border bg-muted/35 px-2.5 py-1 text-xs text-muted-foreground">
-          Total Damage
+          {perSecond ? 'DPS' : 'Total Damage'}
         </div>
       </header>
       <PlayerMetricChart
@@ -91,6 +98,8 @@ export function PlayerMetricChartAbilityBreakdownDemo({
         breakout={breakout}
         initialPinnedPositions={initialPinnedPositions}
         classIconBasePath={classIconBasePath}
+        perSecond={perSecond}
+        parsePills={parsePills}
         className="min-h-0 flex-1"
       />
       <footer className="flex h-10 shrink-0 items-center border-t border-border px-4 text-xs text-muted-foreground">

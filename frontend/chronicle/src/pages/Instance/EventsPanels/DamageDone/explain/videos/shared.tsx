@@ -5,16 +5,7 @@
  * interpolate/spring on useCurrentFrame() — never CSS transitions/animations.
  */
 
-import { Easing, interpolate } from "remotion";
-
-/** Clamp both ends — the default for every interpolate() in lesson videos. */
-export const clamp = {
-  extrapolateLeft: "clamp" as const,
-  extrapolateRight: "clamp" as const,
-};
-
-/** Standard entrance easing (remotion-markup guidance). */
-export const entranceEasing = Easing.bezier(0.16, 1, 0.3, 1);
+import { interpolate } from "remotion";
 
 /** Scripted cursor with a click pulse (0..1). */
 export function Cursor({ x, y, clicking }: { x: number; y: number; clicking: number }) {

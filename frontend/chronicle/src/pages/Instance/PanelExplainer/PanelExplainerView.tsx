@@ -10,7 +10,7 @@
  */
 
 import { ArrowLeft, BookOpen, FlaskConical, Lightbulb, X } from "lucide-react";
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useMemo, useState } from "react";
 import { useSearchParams } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/Card/Card";
@@ -142,13 +142,25 @@ function LessonShell<TResult, TCaps>({
     [setSearchParams],
   );
 
-  // A deep-linked example-only lesson must open in example mode.
-  useEffect(() => {
-    if (!selectedLesson) return;
-    if (selectedLesson.exampleOnly || selectedLesson.deriveState(caps) === "example-required") {
-      setMode("example");
-    }
-  }, [selectedLesson, caps]);
+  // Example-forced lessons (exampleOnly, or the live data can't teach them)
+  // always render in example mode — derived, so deep links work without effects.
+  const exampleForced =
+    !!selectedLesson &&
+    (selectedLesson.exampleOnly || selectedLesson.deriveState(caps) === "example-required");
+  const effectiveMode = exampleForced ? "example" : mode;
+
+  const returnToLive = useCallback(() => {
+    // Leaving example mode on an example-forced lesson also closes the lesson.
+    setSearchParams(
+      (prev) => {
+        const next = new URLSearchParams(prev);
+        next.delete("lesson");
+        return next;
+      },
+      { replace: true },
+    );
+    setMode("live");
+  }, [setSearchParams]);
 
   return (
     <div className="flex h-screen flex-col overflow-hidden bg-background text-foreground">
@@ -168,14 +180,14 @@ function LessonShell<TResult, TCaps>({
           onSelect={selectLesson}
         />
         <div className="flex min-w-0 flex-1 flex-col gap-3.5 overflow-y-auto px-5 pb-6 pt-5">
-          {mode === "example" && (
-            <ExampleModeBanner onReturn={() => setMode("live")} />
+          {effectiveMode === "example" && (
+            <ExampleModeBanner onReturn={returnToLive} />
           )}
 
           {selectedLesson ? (
             <LessonHeaderCard
               lesson={selectedLesson}
-              mode={mode}
+              mode={effectiveMode}
               onClose={() => selectLesson(null)}
             />
           ) : (
@@ -183,7 +195,7 @@ function LessonShell<TResult, TCaps>({
           )}
 
           <div className="h-[560px] flex-shrink-0">
-            {mode === "example" ? (
+            {effectiveMode === "example" ? (
               lessonSet.renderExample()
             ) : (
               <EmbeddedLivePanel

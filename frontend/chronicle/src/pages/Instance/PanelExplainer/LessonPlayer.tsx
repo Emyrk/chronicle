@@ -14,19 +14,24 @@ const RemotionPlayer = lazy(() =>
 );
 
 export function LessonPlayer({ video, lessonId }: { video: LessonVideo; lessonId: string }) {
-  const [composition, setComposition] = useState<ComponentType | null>(null);
+  // Keyed by the video object: a stale entry simply renders the skeleton, so
+  // no synchronous reset is needed when the lesson changes.
+  const [loaded, setLoaded] = useState<{
+    video: LessonVideo;
+    component: ComponentType;
+  } | null>(null);
 
   useEffect(() => {
     let cancelled = false;
-    setComposition(null);
     video.load().then((m) => {
-      if (!cancelled) setComposition(() => m.default);
+      if (!cancelled) setLoaded({ video, component: m.default });
     });
     return () => {
       cancelled = true;
     };
-    // Reload when the lesson (and therefore the video module) changes.
   }, [video, lessonId]);
+
+  const composition = loaded?.video === video ? loaded.component : null;
 
   return (
     <div className="w-full max-w-[960px]">

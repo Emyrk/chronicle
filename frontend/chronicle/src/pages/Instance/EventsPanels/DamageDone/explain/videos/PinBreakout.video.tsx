@@ -8,7 +8,8 @@
 
 import { AbsoluteFill, interpolate, spring, useCurrentFrame, useVideoConfig } from "remotion";
 import { PlayerMetricChartAbilityBreakdownDemo } from "@/components/ui/PlayerMetricChart/PlayerMetricChart.demo";
-import { clamp, Cursor, entranceEasing, StepCaption, VideoHeader } from "./shared";
+import { clamp, entranceEasing } from "./animation";
+import { Cursor, StepCaption, VideoHeader } from "./shared";
 
 export default function PinBreakoutVideo() {
   const frame = useCurrentFrame();
@@ -21,7 +22,7 @@ export default function PinBreakoutVideo() {
   const instructionOpacity = interpolate(frame, [8, 18, 218, 232], [0, 1, 1, 0], clamp);
 
   return (
-    <AbsoluteFill className="dark overflow-hidden bg-background text-foreground">
+    <AbsoluteFill className="dark pointer-events-none select-none overflow-hidden bg-background text-foreground">
       <div className="absolute inset-0 bg-[radial-gradient(circle_at_78%_22%,color-mix(in_oklch,var(--primary)_12%,transparent),transparent_38%)]" />
       <VideoHeader title="Open a Damage Done breakout" entrance={entrance} />
 
