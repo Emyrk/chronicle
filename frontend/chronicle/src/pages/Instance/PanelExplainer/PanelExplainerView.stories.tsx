@@ -70,3 +70,8 @@ export const SpellRanksLesson: Story = {
 export const FiltersLesson: Story = {
   parameters: { routerEntries: ["/?lesson=filters"] },
 };
+
+/** Deep-linked compare lesson — shared hover/selection across two breakouts. */
+export const CompareAbilitiesLesson: Story = {
+  parameters: { routerEntries: ["/?lesson=compare-abilities"] },
+};

@@ -710,7 +710,7 @@ export function AbilityTable({
           </tbody>
           {/* Footer row with totals */}
           <tfoot className="sticky bottom-0 bg-popover border-t border-border">
-            <tr className="font-medium">
+            <tr className="font-medium" data-lesson-target="compare-abilities">
               <td className="py-1.5 px-2 text-muted-foreground">
                 {hasSelection ? `Total (${selectedAbilities.size})` : 'Total'}
               </td>

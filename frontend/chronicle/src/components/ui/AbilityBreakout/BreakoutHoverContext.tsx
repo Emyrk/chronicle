@@ -25,9 +25,21 @@ interface BreakoutHoverContextValue {
 
 const BreakoutHoverContext = createContext<BreakoutHoverContextValue | null>(null);
 
-export function BreakoutHoverProvider({ children }: { children: ReactNode }) {
-  const [hover, setHoverState] = useState<BreakoutHoverState>({ rowId: null, columnId: null });
-  const [selectedAbilities, setSelectedAbilities] = useState<Set<string>>(new Set());
+export function BreakoutHoverProvider({
+  children,
+  hover: controlledHover,
+  selectedAbilities: controlledSelection,
+}: {
+  children: ReactNode;
+  /** Controlled hover state (optional - defaults to internal state) */
+  hover?: BreakoutHoverState;
+  /** Controlled selection (optional - defaults to internal state) */
+  selectedAbilities?: Set<string>;
+}) {
+  const [internalHover, setHoverState] = useState<BreakoutHoverState>({ rowId: null, columnId: null });
+  const [internalSelection, setSelectedAbilities] = useState<Set<string>>(new Set());
+  const hover = controlledHover ?? internalHover;
+  const selectedAbilities = controlledSelection ?? internalSelection;
 
   const setHover = useCallback((state: BreakoutHoverState) => {
     setHoverState(state);

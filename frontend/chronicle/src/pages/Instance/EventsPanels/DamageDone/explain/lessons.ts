@@ -192,12 +192,39 @@ const filters: L = {
   },
 };
 
+const compareAbilities: L = {
+  id: "compare-abilities",
+  title: "Compare two players' abilities",
+  group: "essentials",
+  description: (caps) =>
+    caps.hasFocusTarget
+      ? "Shared hover and selection across breakouts — compare rotations head to head."
+      : "Needs at least two players with breakout data.",
+  deriveState: (caps) =>
+    caps.hasAbilityBreakout && caps.hasFocusTarget ? "available" : "example-required",
+  instruction:
+    "Pin two players of the same class, hover an ability to highlight it in every open breakout, and click rows to select them — each footer totals exactly the selected abilities.",
+  bullets: [
+    "Pin two players of the same class side by side",
+    "Hovering an ability row highlights it in every open breakout",
+    "Click rows to select — footers total exactly those abilities",
+  ],
+  video: {
+    load: () => import("./videos/CompareAbilities.video"),
+    durationInFrames: 470,
+    fps: 30,
+    width: 1280,
+    height: 720,
+  },
+};
+
 export const DAMAGE_DONE_LESSONS: L[] = [
   readChart,
   totalVsDps,
   parseScores,
   pinBreakout,
   breakoutTour,
+  compareAbilities,
   spellRanks,
   filters,
 ];
