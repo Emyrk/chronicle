@@ -15,6 +15,7 @@ import (
 	"github.com/Emyrk/chronicle/api/chroniclesdk"
 	"github.com/Emyrk/chronicle/api/db2sdk"
 	"github.com/Emyrk/chronicle/chronicle/riverqueue"
+	"github.com/Emyrk/chronicle/chronicle/riverqueue/parseargs"
 	"github.com/Emyrk/chronicle/combatlog/parseoptions"
 	"github.com/Emyrk/chronicle/combatlog/parser/common/characters/period"
 	"github.com/Emyrk/chronicle/combatlog/parser/common/creatures"
@@ -51,22 +52,8 @@ const (
 	MinimumCombatTimeForRankings = 3
 )
 
-// ArgsComputeParseScores is a local mirror of servicerankings.ArgsComputeParseScores
-// to avoid circular imports. The Kind() must match exactly.
-type ArgsComputeParseScores struct {
-	InstanceID uuid.UUID `json:"instance_id"`
-	TenantID   uuid.UUID `json:"tenant_id"`
-	Attempt    int       `json:"attempt"`
-}
-
-func (ArgsComputeParseScores) Kind() string { return "compute-parse-scores" }
-
-func (ArgsComputeParseScores) InsertOpts() river.InsertOpts {
-	return river.InsertOpts{
-		Queue:    riverqueue.QueueRankings,
-		Priority: riverqueue.PriorityLow,
-	}
-}
+// parseScoreArgs is imported from the shared parseargs package, eliminating
+// the previous circular mirror that had divergent InsertOpts/UniqueOpts.
 
 type OutputLogParse struct {
 	InstanceFailures map[string]string
@@ -620,13 +607,19 @@ func (w *WorkerLogParse) Work(ctx context.Context, job *river.Job[ArgsLogParse])
 	}
 
 	// Enqueue parse score computation for each successfully parsed instance.
-	// Fire-and-forget: scoring failure doesn't fail the parse.
+	// Fire-and-forget: scoring failure doesn't fail the parse, but log errors.
 	if w.parent.queue != nil {
 		for _, inst := range jobOut.Instances {
-			_, _ = w.parent.queue.Insert(ctx, ArgsComputeParseScores{
+			_, enqErr := w.parent.queue.Insert(ctx, parseargs.ArgsComputeParseScores{
 				InstanceID: inst.ID,
 				TenantID:   job.Args.TenantID,
 			}, nil)
+			if enqErr != nil {
+				w.parent.logger.Error("failed to enqueue parse score computation",
+					slog.String("instance_id", inst.ID.String()),
+					slog.Any("error", enqErr),
+				)
+			}
 		}
 	}
 

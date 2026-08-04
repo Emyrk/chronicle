@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/Emyrk/chronicle/chronicle/riverqueue"
+	"github.com/Emyrk/chronicle/chronicle/riverqueue/parseargs"
 	"github.com/Emyrk/chronicle/chronicle/riverqueue/riverconst"
 	"github.com/Emyrk/chronicle/database"
 	"github.com/Emyrk/chronicle/internal/parsepolicy"
@@ -19,63 +20,33 @@ import (
 	"github.com/riverqueue/river/rivertype"
 )
 
-// ---------------------------------------------------------------------------
-// ArgsComputeParseScores — per-instance parse score computation job.
-// Enqueued after a parse transaction commits.
-// ---------------------------------------------------------------------------
-
-const KindComputeParseScores = "compute-parse-scores"
-
-type ArgsComputeParseScores struct {
-	InstanceID uuid.UUID `json:"instance_id"`
-	TenantID   uuid.UUID `json:"tenant_id"`
-	// Attempt tracks the retry iteration for bounded retry scheduling.
-	// 0 = initial, 1 = +24h, 2 = +48h (72h total), 3 = +7d (10d total).
-	Attempt int `json:"attempt"`
-}
-
-func (ArgsComputeParseScores) Kind() string { return KindComputeParseScores }
-
-func (ArgsComputeParseScores) InsertOpts() river.InsertOpts {
-	return river.InsertOpts{
-		Queue:       riverconst.QueueRankings,
-		Priority:    riverconst.PriorityLow,
-		MaxAttempts: 3, // transient retries by River
-		UniqueOpts: river.UniqueOpts{
-			ByArgs: true,
-			ByState: []rivertype.JobState{
-				rivertype.JobStateScheduled,
-				rivertype.JobStatePending,
-				rivertype.JobStateAvailable,
-				rivertype.JobStateRunning,
-			},
-		},
-	}
-}
-
-// retryDelays defines the bounded retry schedule for missing-snapshot retries.
+// RetryDelays defines the bounded retry schedule for missing-snapshot retries.
 // Attempt 0 = immediate, then +24h, +48h (72h total), +7d (10d total).
-var retryDelays = []time.Duration{
-	0,              // attempt 0: immediate
-	24 * time.Hour, // attempt 1: +24h
-	48 * time.Hour, // attempt 2: +48h (72h total)
-	7 * 24 * time.Hour, // attempt 3: +7d (10d total)
+var RetryDelays = []time.Duration{
+	0,                   // attempt 0: immediate
+	24 * time.Hour,      // attempt 1: +24h
+	48 * time.Hour,      // attempt 2: +48h (72h total)
+	7 * 24 * time.Hour,  // attempt 3: +7d (10d total)
 }
 
-// maxParseScoreAttempts is the number of scheduled attempts before we stop.
-// Must match len(retryDelays).
-const maxParseScoreAttempts = 4
+// MaxParseScoreAttempts is the number of scheduled attempts before we stop.
+const MaxParseScoreAttempts = 4
+
+// QueryVersion is bumped when the SQL query semantics change (e.g. cohort
+// selection, snapshot membership filters). This is separate from PolicyVersion
+// which tracks scoring algorithm changes.
+const QueryVersion = 1
 
 // WorkerComputeParseScores computes and persists parse scores for a single instance.
 type WorkerComputeParseScores struct {
-	river.WorkerDefaults[ArgsComputeParseScores]
+	river.WorkerDefaults[parseargs.ArgsComputeParseScores]
 
 	Store  database.Store
 	Queue  *riverqueue.Queues
 	Logger *slog.Logger
 }
 
-func (w *WorkerComputeParseScores) Work(ctx context.Context, job *river.Job[ArgsComputeParseScores]) error {
+func (w *WorkerComputeParseScores) Work(ctx context.Context, job *river.Job[parseargs.ArgsComputeParseScores]) error {
 	ctx = servicetenant.AdminBypass(ctx)
 
 	instanceID := job.Args.InstanceID
@@ -98,7 +69,8 @@ func (w *WorkerComputeParseScores) Work(ctx context.Context, job *river.Job[Args
 		return fmt.Errorf("get instance: %w", err)
 	}
 
-	// Resolve the canonical historical snapshot.
+	// Resolve the canonical historical snapshot: latest published cutoff
+	// <= instance start for this tenant and default lookback.
 	var snapshot database.RankingSnapshot
 	if inst.StartTime.Valid {
 		snapshot, err = w.Store.GetLatestPublishedSnapshotBefore(ctx, database.GetLatestPublishedSnapshotBeforeParams{
@@ -119,19 +91,44 @@ func (w *WorkerComputeParseScores) Work(ctx context.Context, job *river.Job[Args
 		return fmt.Errorf("resolve snapshot: %w", err)
 	}
 
+	// Filter: snapshot must match current policy/query version.
+	if snapshot.PolicyVersion != int16(parsepolicy.PolicyVersion) ||
+		snapshot.QueryVersion != int16(QueryVersion) {
+		logger.Info("snapshot version mismatch, treating as no snapshot",
+			slog.Int("snapshot_policy", int(snapshot.PolicyVersion)),
+			slog.Int("want_policy", parsepolicy.PolicyVersion),
+			slog.Int("snapshot_query", int(snapshot.QueryVersion)),
+			slog.Int("want_query", QueryVersion),
+		)
+		return w.handleNoSnapshot(ctx, logger, instanceID, tenantID, attempt)
+	}
+
 	// Load the instance's ranking rows from encounter_dps_rankings.
 	rankings, err := w.Store.ListRankingsForInstance(ctx, instanceID)
 	if err != nil {
 		return fmt.Errorf("list rankings: %w", err)
 	}
 
-	if len(rankings) == 0 {
-		logger.Debug("no rankings for instance, marking completed")
-		_ = w.Store.UpdateParseScoreReceiptCompleted(ctx, database.UpdateParseScoreReceiptCompletedParams{
-			SnapshotID: uuid.NullUUID{UUID: snapshot.ID, Valid: true},
-			InstanceID: instanceID,
-		})
-		return nil
+	sourceCount := len(rankings)
+
+	if sourceCount == 0 {
+		logger.Debug("no rankings for instance, writing empty receipt")
+		// Atomic: empty receipt in a transaction.
+		return w.Store.InTx(ctx, func(tx database.Store) error {
+			if _, err := tx.InsertParseScoreReceipt(ctx, database.InsertParseScoreReceiptParams{
+				TenantID:      tenantID,
+				InstanceID:    instanceID,
+				SnapshotID:    snapshot.ID,
+				PolicyVersion: int16(parsepolicy.PolicyVersion),
+				QueryVersion:  int16(QueryVersion),
+				LookbackDays:  int16(parsepolicy.DefaultLookbackDays),
+				SourceCount:   0,
+				ResultCount:   0,
+			}); err != nil {
+				return fmt.Errorf("insert empty receipt: %w", err)
+			}
+			return nil
+		}, nil)
 	}
 
 	// Delete any previous results for this instance (re-computation on re-upload).
@@ -141,96 +138,165 @@ func (w *WorkerComputeParseScores) Work(ctx context.Context, job *river.Job[Args
 
 	snapshotCohortMode := parsepolicy.CohortMode(snapshot.CohortMode)
 
-	// Compute and persist scores per encounter, per player, for DPS metric.
-	cohortCache := make(map[string][]float64)
+	// Compute and persist scores per encounter, per player, for BOTH DPS and HPS.
+	// Separate cohort cache keys per metric.
+	dpsCohortCache := make(map[string][]float64)
+	hpsCohortCache := make(map[string][]float64)
 	var scored int
 
-	for _, r := range rankings {
-		// Determine metric value.
-		metricValue := r.Dps
-		metric := "dps"
-		if metricValue <= 0 {
-			continue
-		}
+	// Build identity fields for results.
+	logGroupID := uuid.NullUUID{UUID: inst.LogGroupID, Valid: inst.LogGroupID != uuid.Nil}
+	guildID := inst.GuildID
 
-		// Build cohort key.
-		var playerSpec pgtype.Text
-		if snapshotCohortMode == parsepolicy.CohortModeSpec {
-			playerSpec = pgtype.Text{String: r.PlayerSpec, Valid: true}
-		}
-
-		bucketKey := fmt.Sprintf("%s|%s|%d|%s|%s",
-			r.EncounterName, r.DifficultyName, r.MaxPlayers,
-			r.PlayerClass, playerSpec.String)
-
-		cohort, cached := cohortCache[bucketKey]
-		if !cached {
-			cohortRows, cErr := w.Store.GetSnapshotCohortValues(ctx, database.GetSnapshotCohortValuesParams{
-				Metric:         metric,
-				SnapshotID:     snapshot.ID,
-				EncounterName:  r.EncounterName,
-				DifficultyName: r.DifficultyName,
-				MaxPlayers:     r.MaxPlayers,
-				PlayerClass:    r.PlayerClass,
-				PlayerSpec:     playerSpec,
-			})
-			if cErr != nil {
-				logger.Error("failed to load cohort",
-					"encounter", r.EncounterName,
-					"error", cErr,
-				)
-				continue
+	// Atomic transaction: all result inserts + receipt must commit together.
+	txErr := w.Store.InTx(ctx, func(tx database.Store) error {
+		for _, r := range rankings {
+			// Score both DPS and HPS for each ranking row.
+			type metricEntry struct {
+				metric string
+				value  float64
+				cache  map[string][]float64
 			}
-			cohort = make([]float64, 0, len(cohortRows))
-			for _, cr := range cohortRows {
-				if v, ok := toFloat64(cr.MetricValue); ok && v > 0 {
-					cohort = append(cohort, v)
+			metrics := []metricEntry{
+				{"dps", r.Dps, dpsCohortCache},
+				{"hps", r.Hps, hpsCohortCache},
+			}
+
+			for _, m := range metrics {
+				if m.value <= 0 {
+					continue
 				}
+
+				// Build cohort key (separate per metric).
+				var playerSpec pgtype.Text
+				if snapshotCohortMode == parsepolicy.CohortModeSpec {
+					playerSpec = pgtype.Text{String: r.PlayerSpec, Valid: true}
+				}
+
+				bucketKey := fmt.Sprintf("%s|%s|%d|%s|%s",
+					r.EncounterName, r.DifficultyName, r.MaxPlayers,
+					r.PlayerClass, playerSpec.String)
+
+				cohort, cached := m.cache[bucketKey]
+				if !cached {
+					cohortRows, cErr := w.Store.GetSnapshotCohortValues(ctx, database.GetSnapshotCohortValuesParams{
+						Metric:         m.metric,
+						SnapshotID:     snapshot.ID,
+						EncounterName:  r.EncounterName,
+						DifficultyName: r.DifficultyName,
+						MaxPlayers:     r.MaxPlayers,
+						PlayerClass:    r.PlayerClass,
+						PlayerSpec:     playerSpec,
+					})
+					if cErr != nil {
+						logger.Error("failed to load cohort",
+							"encounter", r.EncounterName,
+							"metric", m.metric,
+							"error", cErr,
+						)
+						continue
+					}
+					cohort = make([]float64, 0, len(cohortRows))
+					for _, cr := range cohortRows {
+						if v, ok := toFloat64(cr.MetricValue); ok && v > 0 {
+							cohort = append(cohort, v)
+						}
+					}
+					m.cache[bucketKey] = cohort
+				}
+
+				scoreResult, ok := parsepolicy.Score(cohort, m.value)
+				status := string(scoreResult.Status)
+				if !ok {
+					// Persist sample_too_small for complete accounting.
+					if scoreResult.Status == parsepolicy.StatusSampleTooSmall {
+						if iErr := tx.InsertParseScoreResult(ctx, database.InsertParseScoreResultParams{
+							TenantID:       tenantID,
+							InstanceID:     instanceID,
+							RunID:          inst.RunID,
+							SnapshotID:     snapshot.ID,
+							LogGroupID:     logGroupID,
+							GuildID:        guildID,
+							EncounterName:  r.EncounterName,
+							PlayerGuid:     r.PlayerGuid,
+							PlayerName:     r.PlayerName,
+							PlayerClass:    r.PlayerClass,
+							PlayerSpec:     r.PlayerSpec,
+							PlayerRole:     r.PlayerRole,
+							Metric:         m.metric,
+							MetricValue:    m.value,
+							PreciseScore:   0,
+							DisplayScore:   0,
+							Rank:           0,
+							SampleSize:     int32(scoreResult.SampleSize),
+							Status:         status,
+							InstanceName:   inst.InstanceName,
+							DifficultyName: inst.DifficultyName,
+							MaxPlayers:     int16(inst.MaxPlayers),
+							KilledAt:       r.KilledAt,
+						}); iErr != nil {
+							return fmt.Errorf("insert sample_too_small result: %w", iErr)
+						}
+						scored++
+					}
+					continue
+				}
+
+				if iErr := tx.InsertParseScoreResult(ctx, database.InsertParseScoreResultParams{
+					TenantID:       tenantID,
+					InstanceID:     instanceID,
+					RunID:          inst.RunID,
+					SnapshotID:     snapshot.ID,
+					LogGroupID:     logGroupID,
+					GuildID:        guildID,
+					EncounterName:  r.EncounterName,
+					PlayerGuid:     r.PlayerGuid,
+					PlayerName:     r.PlayerName,
+					PlayerClass:    r.PlayerClass,
+					PlayerSpec:     r.PlayerSpec,
+					PlayerRole:     r.PlayerRole,
+					Metric:         m.metric,
+					MetricValue:    m.value,
+					PreciseScore:   scoreResult.PreciseScore,
+					DisplayScore:   int16(scoreResult.DisplayScore),
+					Rank:           int32(scoreResult.Rank),
+					SampleSize:     int32(scoreResult.SampleSize),
+					Status:         status,
+					InstanceName:   inst.InstanceName,
+					DifficultyName: inst.DifficultyName,
+					MaxPlayers:     int16(inst.MaxPlayers),
+					KilledAt:       r.KilledAt,
+				}); iErr != nil {
+					return fmt.Errorf("insert score result: %w", iErr)
+				}
+				scored++
 			}
-			cohortCache[bucketKey] = cohort
 		}
 
-		scoreResult, ok := parsepolicy.Score(cohort, metricValue)
-		if !ok {
-			continue
-		}
-
-		if err := w.Store.InsertParseScoreResult(ctx, database.InsertParseScoreResultParams{
+		// Receipt inside the same transaction: atomic with results.
+		if _, rErr := tx.InsertParseScoreReceipt(ctx, database.InsertParseScoreReceiptParams{
 			TenantID:      tenantID,
 			InstanceID:    instanceID,
-			RunID:         inst.RunID,
 			SnapshotID:    snapshot.ID,
-			EncounterName: r.EncounterName,
-			PlayerGuid:    r.PlayerGuid,
-			PlayerName:    r.PlayerName,
-			PlayerClass:   r.PlayerClass,
-			PlayerSpec:    r.PlayerSpec,
-			PlayerRole:    r.PlayerRole,
-			Metric:        metric,
-			MetricValue:   metricValue,
-			PreciseScore:  scoreResult.PreciseScore,
-			DisplayScore:  int16(scoreResult.DisplayScore),
-			Rank:          int32(scoreResult.Rank),
-			SampleSize:    int32(scoreResult.SampleSize),
-			Status:        string(scoreResult.Status),
-			InstanceName:  inst.InstanceName,
-			DifficultyName: inst.DifficultyName,
-			MaxPlayers:    int16(inst.MaxPlayers),
-			KilledAt:      r.KilledAt,
-		}); err != nil {
-			return fmt.Errorf("insert score result: %w", err)
+			PolicyVersion: int16(parsepolicy.PolicyVersion),
+			QueryVersion:  int16(QueryVersion),
+			LookbackDays:  int16(parsepolicy.DefaultLookbackDays),
+			SourceCount:   int32(sourceCount),
+			ResultCount:   int32(scored),
+		}); rErr != nil {
+			return fmt.Errorf("insert receipt: %w", rErr)
 		}
-		scored++
+
+		return nil
+	}, nil)
+
+	if txErr != nil {
+		return fmt.Errorf("scoring transaction: %w", txErr)
 	}
 
-	// Mark receipt as completed.
-	_ = w.Store.UpdateParseScoreReceiptCompleted(ctx, database.UpdateParseScoreReceiptCompletedParams{
-		SnapshotID: uuid.NullUUID{UUID: snapshot.ID, Valid: true},
-		InstanceID: instanceID,
-	})
-
 	logger.Info("computed parse scores",
-		slog.Int("scored", scored),
+		slog.Int("source_count", sourceCount),
+		slog.Int("result_count", scored),
 		slog.String("snapshot_id", snapshot.ID.String()),
 	)
 
@@ -238,7 +304,8 @@ func (w *WorkerComputeParseScores) Work(ctx context.Context, job *river.Job[Args
 }
 
 // handleNoSnapshot handles the case when no published snapshot exists yet.
-// It schedules a retry job if within the bounded retry limit, or marks failed.
+// It schedules a retry job if within the bounded retry limit.
+// No receipt is created — only successful completions produce receipts.
 func (w *WorkerComputeParseScores) handleNoSnapshot(
 	ctx context.Context,
 	logger *slog.Logger,
@@ -246,30 +313,24 @@ func (w *WorkerComputeParseScores) handleNoSnapshot(
 	attempt int,
 ) error {
 	nextAttempt := attempt + 1
-	if nextAttempt >= maxParseScoreAttempts {
-		logger.Warn("exhausted retry attempts, marking failed")
-		_ = w.Store.UpdateParseScoreReceiptFailed(ctx, database.UpdateParseScoreReceiptFailedParams{
-			InstanceID:   instanceID,
-			ErrorMessage: pgtype.Text{String: "no snapshot available after all retries", Valid: true},
-		})
+	if nextAttempt >= MaxParseScoreAttempts {
+		logger.Warn("exhausted retry attempts for missing snapshot, stopping retry chain",
+			slog.Int("total_attempts", nextAttempt),
+		)
+		// No receipt created. Daily repair will re-enqueue only when
+		// an eligible snapshot becomes available.
 		return nil
 	}
 
-	delay := retryDelays[nextAttempt]
+	delay := RetryDelays[nextAttempt]
 	nextTime := time.Now().Add(delay)
-
-	_ = w.Store.UpdateParseScoreReceiptNoSnapshot(ctx, database.UpdateParseScoreReceiptNoSnapshotParams{
-		InstanceID:    instanceID,
-		NextAttemptAt: pgtype.Timestamptz{Time: nextTime, Valid: true},
-		ErrorMessage:  pgtype.Text{String: "no published snapshot available", Valid: true},
-	})
 
 	// Enqueue a follow-up job scheduled at the delay time.
 	if w.Queue == nil {
 		logger.Warn("no queue available, cannot schedule retry")
 		return nil
 	}
-	_, err := w.Queue.Insert(ctx, ArgsComputeParseScores{
+	_, err := w.Queue.Insert(ctx, parseargs.ArgsComputeParseScores{
 		InstanceID: instanceID,
 		TenantID:   tenantID,
 		Attempt:    nextAttempt,
@@ -277,7 +338,12 @@ func (w *WorkerComputeParseScores) handleNoSnapshot(
 		ScheduledAt: nextTime,
 	})
 	if err != nil {
-		return fmt.Errorf("enqueue retry: %w", err)
+		logger.Error("failed to enqueue retry job",
+			"error", err,
+			"next_attempt", nextAttempt,
+		)
+		// Don't fail the job — daily repair will catch it.
+		return nil
 	}
 
 	logger.Info("no snapshot available, scheduled retry",
@@ -290,12 +356,16 @@ func (w *WorkerComputeParseScores) handleNoSnapshot(
 
 // ---------------------------------------------------------------------------
 // ArgsRepairParseScores — daily bounded repair dispatcher.
-// Finds receipts that need retry and re-enqueues compute jobs.
+// Finds ALL eligible instances missing a matching successful receipt,
+// including instances with no receipt at all, old instances, snapshot
+// deletion/rebuild, and policy/query changes.
 // ---------------------------------------------------------------------------
 
 const KindRepairParseScores = "repair-parse-scores"
 
-type ArgsRepairParseScores struct{}
+type ArgsRepairParseScores struct {
+	TenantID uuid.UUID `json:"tenant_id"`
+}
 
 func (ArgsRepairParseScores) Kind() string { return KindRepairParseScores }
 
@@ -305,6 +375,7 @@ func (ArgsRepairParseScores) InsertOpts() river.InsertOpts {
 		Priority:    riverconst.PriorityLow,
 		MaxAttempts: 3,
 		UniqueOpts: river.UniqueOpts{
+			ByArgs: true,
 			ByState: []rivertype.JobState{
 				rivertype.JobStateScheduled,
 				rivertype.JobStatePending,
@@ -315,7 +386,7 @@ func (ArgsRepairParseScores) InsertOpts() river.InsertOpts {
 	}
 }
 
-// WorkerRepairParseScores scans for receipts that need retry and re-enqueues jobs.
+// WorkerRepairParseScores finds instances missing receipts and re-enqueues jobs.
 type WorkerRepairParseScores struct {
 	river.WorkerDefaults[ArgsRepairParseScores]
 
@@ -324,30 +395,50 @@ type WorkerRepairParseScores struct {
 	Logger *slog.Logger
 }
 
-func (w *WorkerRepairParseScores) Work(ctx context.Context, _ *river.Job[ArgsRepairParseScores]) error {
+func (w *WorkerRepairParseScores) Work(ctx context.Context, job *river.Job[ArgsRepairParseScores]) error {
 	ctx = servicetenant.AdminBypass(ctx)
+	tenantID := job.Args.TenantID
 
-	receipts, err := w.Store.ListParseScoreReceiptsForRetry(ctx, 100)
+	// Resolve the current canonical snapshot for repair.
+	snapshot, err := w.Store.GetLatestPublishedSnapshot(ctx, database.GetLatestPublishedSnapshotParams{
+		TenantID:     tenantID,
+		LookbackDays: int32(parsepolicy.DefaultLookbackDays),
+	})
 	if err != nil {
-		return fmt.Errorf("list receipts for retry: %w", err)
+		if errors.Is(err, pgx.ErrNoRows) {
+			w.Logger.Debug("no published snapshot available for repair")
+			return nil
+		}
+		return fmt.Errorf("resolve snapshot for repair: %w", err)
 	}
 
-	if len(receipts) == 0 {
-		w.Logger.Debug("no parse score receipts need repair")
+	// Find instances with ranking data but no receipt for this snapshot+version.
+	missing, err := w.Store.ListInstancesMissingParseReceipt(ctx, database.ListInstancesMissingParseReceiptParams{
+		SnapshotID:    snapshot.ID,
+		PolicyVersion: int16(parsepolicy.PolicyVersion),
+		QueryVersion:  int16(QueryVersion),
+		MaxRows:       100,
+	})
+	if err != nil {
+		return fmt.Errorf("list missing receipts: %w", err)
+	}
+
+	if len(missing) == 0 {
+		w.Logger.Debug("no instances need parse score repair")
 		return nil
 	}
 
 	var enqueued int
-	for _, r := range receipts {
-		_, err := w.Queue.Insert(ctx, ArgsComputeParseScores{
-			InstanceID: r.InstanceID,
-			TenantID:   r.TenantID,
-			Attempt:    int(r.Attempt),
+	for _, m := range missing {
+		_, iErr := w.Queue.Insert(ctx, parseargs.ArgsComputeParseScores{
+			InstanceID: m.InstanceID,
+			TenantID:   tenantID,
+			Attempt:    0, // Fresh attempt — repair found an eligible snapshot.
 		}, nil)
-		if err != nil {
+		if iErr != nil {
 			w.Logger.Error("failed to enqueue repair job",
-				"instance_id", r.InstanceID.String(),
-				"error", err,
+				"instance_id", m.InstanceID.String(),
+				"error", iErr,
 			)
 			continue
 		}
@@ -355,8 +446,9 @@ func (w *WorkerRepairParseScores) Work(ctx context.Context, _ *river.Job[ArgsRep
 	}
 
 	w.Logger.Info("repair dispatcher completed",
-		slog.Int("found", len(receipts)),
+		slog.Int("missing", len(missing)),
 		slog.Int("enqueued", enqueued),
+		slog.String("snapshot_id", snapshot.ID.String()),
 	)
 
 	return nil

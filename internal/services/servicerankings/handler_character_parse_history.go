@@ -14,11 +14,15 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 )
 
-// handleCharacterParseHistory returns a character's parse history over the
-// last 60 days, with a derived Score from the best 3 parse percentiles per
-// encounter.
+// handleCharacterParseHistory returns ALL deduplicated parses over the last
+// 60 days, with a derived Score computed as:
 //
-//	GET /rankings/characters/{playerGUID}/parses?metric=dps
+//  1. Group parses by (instance_name, encounter_name)
+//  2. Within each group, take the best 3 parse scores
+//  3. Average each group's best 3
+//  4. Average all group averages → final Score
+//
+// GET /rankings/characters/{playerGUID}/parses?metric=dps
 func (s *Service) handleCharacterParseHistory(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 	q := r.URL.Query()
@@ -37,7 +41,7 @@ func (s *Service) handleCharacterParseHistory(w http.ResponseWriter, r *http.Req
 	}
 
 	tid := servicetenant.TenantIDFromContext(ctx)
-	since := time.Now().AddDate(0, 0, -60)
+	since := time.Now().AddDate(0, 0, -int(parsepolicy.DefaultLookbackDays))
 
 	rows, err := s.store.GetCharacterParseHistory(ctx, database.GetCharacterParseHistoryParams{
 		TenantID:   tid,
@@ -59,78 +63,48 @@ func (s *Service) handleCharacterParseHistory(w http.ResponseWriter, r *http.Req
 		httpapi.Write(ctx, w, http.StatusOK, chroniclesdk.CharacterParseHistoryResponse{
 			PlayerGUID: playerGUID,
 			Metric:     metric,
-			Encounters: []chroniclesdk.CharacterEncounterBest{},
+			Parses:     []chroniclesdk.CharacterParse{},
 		})
 		return
 	}
 
-	// Group by encounter and take the best parse per encounter.
-	type encounterBest struct {
-		row database.GetCharacterParseHistoryRow
-	}
-	bestByEncounter := make(map[string]*encounterBest)
+	// Return ALL parses — not just best per encounter.
+	parses := make([]chroniclesdk.CharacterParse, 0, len(rows))
 	for _, row := range rows {
-		existing, ok := bestByEncounter[row.EncounterName]
-		if !ok || row.PreciseScore > existing.row.PreciseScore {
-			bestByEncounter[row.EncounterName] = &encounterBest{row: row}
-		}
-	}
-
-	// Build encounter list and collect best scores for Score derivation.
-	encounters := make([]chroniclesdk.CharacterEncounterBest, 0, len(bestByEncounter))
-	var bestScores []float64
-
-	for _, eb := range bestByEncounter {
-		r := eb.row
 		var killedAt time.Time
-		if r.KilledAt.Valid {
-			killedAt = r.KilledAt.Time
+		if row.KilledAt.Valid {
+			killedAt = row.KilledAt.Time
 		}
-		encounters = append(encounters, chroniclesdk.CharacterEncounterBest{
-			EncounterName:  r.EncounterName,
-			InstanceName:   r.InstanceName,
-			DifficultyName: r.DifficultyName,
-			MaxPlayers:     r.MaxPlayers,
-			InstanceID:     r.InstanceID,
-			SnapshotID:     r.SnapshotID,
-			Metric:         r.Metric,
-			MetricValue:    r.MetricValue,
-			PreciseScore:   r.PreciseScore,
-			DisplayScore:   int(r.DisplayScore),
-			Rank:           int(r.Rank),
-			SampleSize:     int(r.SampleSize),
-			Status:         r.Status,
+		parses = append(parses, chroniclesdk.CharacterParse{
+			EncounterName:  row.EncounterName,
+			InstanceName:   row.InstanceName,
+			DifficultyName: row.DifficultyName,
+			MaxPlayers:     row.MaxPlayers,
+			InstanceID:     row.InstanceID,
+			SnapshotID:     row.SnapshotID,
+			RunID:          row.RunID,
+			Metric:         row.Metric,
+			MetricValue:    row.MetricValue,
+			PreciseScore:   row.PreciseScore,
+			DisplayScore:   int(row.DisplayScore),
+			Rank:           int(row.Rank),
+			SampleSize:     int(row.SampleSize),
+			Status:         row.Status,
 			KilledAt:       killedAt,
 		})
-		bestScores = append(bestScores, r.PreciseScore)
 	}
 
-	// Sort encounters by name for stable output.
-	sort.Slice(encounters, func(i, j int) bool {
-		return encounters[i].EncounterName < encounters[j].EncounterName
+	// Sort parses by encounter name, then by score descending.
+	sort.Slice(parses, func(i, j int) bool {
+		if parses[i].EncounterName != parses[j].EncounterName {
+			return parses[i].EncounterName < parses[j].EncounterName
+		}
+		return parses[i].PreciseScore > parses[j].PreciseScore
 	})
 
-	// Derive 60-day Score: average of best 3 parse percentiles.
-	var score *chroniclesdk.CharacterScore
-	if len(bestScores) > 0 {
-		sort.Float64s(bestScores)
-		// Take best 3 (highest scores).
-		n := len(bestScores)
-		top := 3
-		if top > n {
-			top = n
-		}
-		sum := 0.0
-		for i := n - top; i < n; i++ {
-			sum += bestScores[i]
-		}
-		avg := sum / float64(top)
-		score = &chroniclesdk.CharacterScore{
-			Value:        avg,
-			DisplayValue: parsepolicy.RoundDisplay(avg),
-			NumParses:    n,
-		}
-	}
+	// Derive Score: group by (instance_name, encounter_name), best 3 per group,
+	// average each group, average groups.
+	score := ComputeCharacterScore(parses)
 
 	// Use first row's player info.
 	first := rows[0]
@@ -141,10 +115,67 @@ func (s *Service) handleCharacterParseHistory(w http.ResponseWriter, r *http.Req
 		PlayerSpec:  first.PlayerSpec,
 		Metric:      metric,
 		Score:       score,
-		Encounters:  encounters,
+		Parses:      parses,
 	}
 
 	httpapi.Write(ctx, w, http.StatusOK, resp)
+}
+
+// ComputeCharacterScore derives the 60-day Score from a list of parses.
+// Algorithm:
+//  1. Group by (instance_name, encounter_name)
+//  2. Within each group, take the best 3 parse scores
+//  3. Average each group's best 3
+//  4. Average all group averages → final Score
+//
+// Exported for testing.
+func ComputeCharacterScore(parses []chroniclesdk.CharacterParse) *chroniclesdk.CharacterScore {
+	if len(parses) == 0 {
+		return nil
+	}
+
+	// Group by (instance_name, encounter_name).
+	type groupKey struct {
+		instanceName  string
+		encounterName string
+	}
+	groups := make(map[groupKey][]float64)
+	for _, p := range parses {
+		key := groupKey{instanceName: p.InstanceName, encounterName: p.EncounterName}
+		groups[key] = append(groups[key], p.PreciseScore)
+	}
+
+	// For each group: sort descending, take best 3, average.
+	var groupAverages []float64
+	totalParses := 0
+	for _, scores := range groups {
+		sort.Float64s(scores) // ascending
+		n := len(scores)
+		top := 3
+		if top > n {
+			top = n
+		}
+		sum := 0.0
+		for i := n - top; i < n; i++ {
+			sum += scores[i]
+		}
+		groupAverages = append(groupAverages, sum/float64(top))
+		totalParses += n
+	}
+
+	// Average all group averages.
+	sum := 0.0
+	for _, g := range groupAverages {
+		sum += g
+	}
+	avg := sum / float64(len(groupAverages))
+
+	return &chroniclesdk.CharacterScore{
+		Value:           avg,
+		DisplayValue:    parsepolicy.RoundDisplay(avg),
+		NumParses:       totalParses,
+		EncounterGroups: len(groupAverages),
+	}
 }
 
 // splitCSV, normalizeClassName, and toFloat64 are defined in handler_instance_parses.go.

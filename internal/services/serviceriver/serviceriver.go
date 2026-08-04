@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"github.com/Emyrk/chronicle/chronicle/retention"
+	"github.com/google/uuid"
 	"github.com/Emyrk/chronicle/chronicle/riverqueue"
 	"github.com/Emyrk/chronicle/internal/services"
 	"github.com/Emyrk/chronicle/internal/services/servicebot"
@@ -182,11 +183,14 @@ func (s *Service) Start(ctx context.Context) error {
 		),
 	)
 	// Daily bounded repair dispatcher for parse score receipts.
+	// Finds ALL eligible instances missing a matching receipt.
 	q.AddPeriodicJob(
 		river.NewPeriodicJob(
 			river.PeriodicInterval(24*time.Hour),
 			func() (river.JobArgs, *river.InsertOpts) {
-				return servicerankings.ArgsRepairParseScores{}, nil
+				return servicerankings.ArgsRepairParseScores{
+					TenantID: uuid.Nil, // default tenant
+				}, nil
 			},
 			&river.PeriodicJobOpts{RunOnStart: false},
 		),

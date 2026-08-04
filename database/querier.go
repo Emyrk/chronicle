@@ -103,9 +103,10 @@ type sqlcQuerier interface {
 	// instance_id, instance_name, and realm_id.
 	FindMatchingServerUpload(ctx context.Context, arg FindMatchingServerUploadParams) (WoWLogGroup, error)
 	GetAppliedAuthzMigrations(ctx context.Context) ([]int32, error)
-	// Character history: best parse per encounter from recent instances (60-day window).
-	// Deduplicated by run_id; returns best 3 per encounter for Score calculation.
-	// The caller uses these rows to derive the 60-day Score.
+	// Character history: ALL deduplicated parses over the lookback window.
+	// Returns every (run_id, encounter) parse — not just one best per encounter.
+	// The caller groups by (instance_name, encounter_name), takes best 3 per group,
+	// averages each group, then averages groups for the Score.
 	GetCharacterParseHistory(ctx context.Context, arg GetCharacterParseHistoryParams) ([]GetCharacterParseHistoryRow, error)
 	GetCreatureTemplatesByEntries(ctx context.Context, arg GetCreatureTemplatesByEntriesParams) ([]WorldCreatureTemplate, error)
 	GetDBCItemDisplayInfoByID(ctx context.Context, arg GetDBCItemDisplayInfoByIDParams) (DbcItemDisplayInfo, error)
@@ -187,8 +188,7 @@ type sqlcQuerier interface {
 	GetLatestRegressionSnapshot(ctx context.Context, fixtureID uuid.UUID) (RegressionSnapshot, error)
 	GetLeaderboardVersionRequirements(ctx context.Context, instanceName string) (LeaderboardVersionRequirement, error)
 	GetLogFile(ctx context.Context, id uuid.UUID) (LogFile, error)
-	// Fetch instance metadata needed for parse scoring (duplicate_group, start_time).
-	// Tenant ID comes from job args, not the DB.
+	// Fetch instance metadata needed for parse scoring.
 	GetLogInstanceForScoring(ctx context.Context, id uuid.UUID) (GetLogInstanceForScoringRow, error)
 	// Return the instance name, difficulty, and max_players for time-parse scoring.
 	GetLogInstanceForTimeParse(ctx context.Context, id uuid.UUID) (GetLogInstanceForTimeParseRow, error)
@@ -198,10 +198,12 @@ type sqlcQuerier interface {
 	GetModificationRequestByID(ctx context.Context, id uuid.UUID) (ApplicationModificationRequest, error)
 	GetPanelLayoutByCode(ctx context.Context, code pgtype.Text) (GetPanelLayoutByCodeRow, error)
 	GetPanelLayoutByID(ctx context.Context, id uuid.UUID) (GetPanelLayoutByIDRow, error)
-	// Get a receipt by instance ID.
-	GetParseScoreReceipt(ctx context.Context, instanceID uuid.UUID) (ParseScoreReceipt, error)
+	// Get receipt by instance + snapshot.
+	GetParseScoreReceipt(ctx context.Context, arg GetParseScoreReceiptParams) (ParseScoreReceipt, error)
+	// Get all receipts for an instance (any snapshot).
+	GetParseScoreReceiptForInstance(ctx context.Context, instanceID uuid.UUID) ([]ParseScoreReceipt, error)
 	// Read deduplicated parse score results for an instance.
-	// Uses DISTINCT ON (run_id, encounter, player, metric) to collapse duplicate uploads.
+	// Uses DISTINCT ON (run_id, encounter, player, snapshot, metric) to collapse duplicate uploads.
 	GetParseScoreResultsForInstance(ctx context.Context, instanceID uuid.UUID) ([]ParseScoreResult, error)
 	// Check if a published snapshot already exists for this exact cutoff+key.
 	// Used by the idempotency guard (one snapshot per day per key).
@@ -333,7 +335,11 @@ type sqlcQuerier interface {
 	InsertLogInstanceEvents(ctx context.Context, arg []InsertLogInstanceEventsParams) *InsertLogInstanceEventsBatchResults
 	// Modification Requests
 	InsertModificationRequest(ctx context.Context, arg InsertModificationRequestParams) (ApplicationModificationRequest, error)
+	// Insert a successful computation receipt. Receipt existence = fully committed success.
+	// On conflict (same instance+snapshot), update counts to reflect re-computation.
+	InsertParseScoreReceipt(ctx context.Context, arg InsertParseScoreReceiptParams) (ParseScoreReceipt, error)
 	// Persist a single parse score result for an instance+encounter+player+metric.
+	// No unique constraint: duplicate uploads are collapsed at read time via run_id DISTINCT ON.
 	InsertParseScoreResult(ctx context.Context, arg InsertParseScoreResultParams) error
 	InsertParsedLogGroup(ctx context.Context, id uuid.UUID) error
 	// Create a new pending snapshot for a tenant+lookback.
@@ -403,11 +409,13 @@ type sqlcQuerier interface {
 	ListInstancesByDuplicateGroup(ctx context.Context, duplicateGroupID uuid.NullUUID) ([]ListInstancesByDuplicateGroupRow, error)
 	ListInstancesByParserVersion(ctx context.Context, parserVersion string) ([]ListInstancesByParserVersionRow, error)
 	ListInstancesByTimeRange(ctx context.Context, arg ListInstancesByTimeRangeParams) ([]ListInstancesByTimeRangeRow, error)
+	// Repair query: find instances that have ranking data (boss kills) but lack
+	// a receipt for the given snapshot. This catches instances with no receipt at all,
+	// old instances, snapshot deletion/rebuild, and policy/query changes.
+	// Returns at most @max_rows rows for bounded batch processing.
+	ListInstancesMissingParseReceipt(ctx context.Context, arg ListInstancesMissingParseReceiptParams) ([]ListInstancesMissingParseReceiptRow, error)
 	ListLeaderboardVersionRequirements(ctx context.Context) ([]LeaderboardVersionRequirement, error)
 	ListModificationRequestsByApplicationID(ctx context.Context, applicationID uuid.UUID) ([]ApplicationModificationRequest, error)
-	// Find receipts ready for retry (bounded repair dispatcher).
-	// Returns pending/no_snapshot receipts whose next_attempt_at has passed.
-	ListParseScoreReceiptsForRetry(ctx context.Context, maxRows int32) ([]ParseScoreReceipt, error)
 	// Return published snapshots for a tenant, most recent first.
 	ListPublishedSnapshots(ctx context.Context, tenantID uuid.UUID) ([]ListPublishedSnapshotsRow, error)
 	// Load ranking rows for a specific instance directly from encounter_dps_rankings.
@@ -577,12 +585,6 @@ type sqlcQuerier interface {
 	UpdateLogFileAfterAppend(ctx context.Context, arg UpdateLogFileAfterAppendParams) error
 	UpdateModificationRequestPayload(ctx context.Context, arg UpdateModificationRequestPayloadParams) error
 	UpdateModificationRequestStatus(ctx context.Context, arg UpdateModificationRequestStatusParams) error
-	// Mark a receipt as completed after successful computation.
-	UpdateParseScoreReceiptCompleted(ctx context.Context, arg UpdateParseScoreReceiptCompletedParams) error
-	// Mark a receipt as permanently failed (exhausted retries).
-	UpdateParseScoreReceiptFailed(ctx context.Context, arg UpdateParseScoreReceiptFailedParams) error
-	// Mark a receipt as no_snapshot with next retry time.
-	UpdateParseScoreReceiptNoSnapshot(ctx context.Context, arg UpdateParseScoreReceiptNoSnapshotParams) error
 	UpdateRegressionFixtureNote(ctx context.Context, arg UpdateRegressionFixtureNoteParams) error
 	UpdateRetentionPolicyStats(ctx context.Context, arg UpdateRetentionPolicyStatsParams) error
 	UpdateSiteConfig(ctx context.Context, arg UpdateSiteConfigParams) (SiteConfig, error)
@@ -614,9 +616,6 @@ type sqlcQuerier interface {
 	UpsertGuildSettings(ctx context.Context, arg UpsertGuildSettingsParams) (GuildSetting, error)
 	UpsertInstanceOverviewMetrics(ctx context.Context, arg UpsertInstanceOverviewMetricsParams) error
 	UpsertLeaderboardVersionRequirements(ctx context.Context, arg UpsertLeaderboardVersionRequirementsParams) (LeaderboardVersionRequirement, error)
-	// Create or update a computation receipt for an instance.
-	// On conflict (re-upload), resets to pending for re-computation.
-	UpsertParseScoreReceipt(ctx context.Context, arg UpsertParseScoreReceiptParams) (ParseScoreReceipt, error)
 	UpsertPendingModificationRequest(ctx context.Context, arg UpsertPendingModificationRequestParams) (ApplicationModificationRequest, error)
 	UpsertPlayers(ctx context.Context, arg []UpsertPlayersParams) *UpsertPlayersBatchResults
 	// Recompute and upsert the rankings summary for a single

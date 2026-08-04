@@ -1428,13 +1428,13 @@ type ParseScoreReceipt struct {
 	ID            uuid.UUID          `db:"id" json:"id"`
 	TenantID      uuid.UUID          `db:"tenant_id" json:"tenant_id"`
 	InstanceID    uuid.UUID          `db:"instance_id" json:"instance_id"`
-	SnapshotID    uuid.NullUUID      `db:"snapshot_id" json:"snapshot_id"`
-	Status        string             `db:"status" json:"status"`
-	Attempt       int32              `db:"attempt" json:"attempt"`
-	LastAttemptAt pgtype.Timestamptz `db:"last_attempt_at" json:"last_attempt_at"`
-	NextAttemptAt pgtype.Timestamptz `db:"next_attempt_at" json:"next_attempt_at"`
-	CompletedAt   pgtype.Timestamptz `db:"completed_at" json:"completed_at"`
-	ErrorMessage  pgtype.Text        `db:"error_message" json:"error_message"`
+	SnapshotID    uuid.UUID          `db:"snapshot_id" json:"snapshot_id"`
+	PolicyVersion int16              `db:"policy_version" json:"policy_version"`
+	QueryVersion  int16              `db:"query_version" json:"query_version"`
+	LookbackDays  int16              `db:"lookback_days" json:"lookback_days"`
+	SourceCount   int32              `db:"source_count" json:"source_count"`
+	ResultCount   int32              `db:"result_count" json:"result_count"`
+	ComputedAt    pgtype.Timestamptz `db:"computed_at" json:"computed_at"`
 	CreatedAt     pgtype.Timestamptz `db:"created_at" json:"created_at"`
 }
 
@@ -1444,6 +1444,8 @@ type ParseScoreResult struct {
 	InstanceID     uuid.UUID          `db:"instance_id" json:"instance_id"`
 	RunID          uuid.UUID          `db:"run_id" json:"run_id"`
 	SnapshotID     uuid.UUID          `db:"snapshot_id" json:"snapshot_id"`
+	LogGroupID     uuid.NullUUID      `db:"log_group_id" json:"log_group_id"`
+	GuildID        uuid.NullUUID      `db:"guild_id" json:"guild_id"`
 	EncounterName  string             `db:"encounter_name" json:"encounter_name"`
 	PlayerGuid     string             `db:"player_guid" json:"player_guid"`
 	PlayerName     string             `db:"player_name" json:"player_name"`

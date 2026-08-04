@@ -4900,7 +4900,7 @@ func (q *sqlQuerier) DeleteParseScoreResultsForInstance(ctx context.Context, ins
 }
 
 const getCharacterParseHistory = `-- name: GetCharacterParseHistory :many
-SELECT DISTINCT ON (psr.run_id, psr.encounter_name)
+SELECT DISTINCT ON (psr.run_id, psr.encounter_name, psr.snapshot_id)
     psr.id,
     psr.instance_id,
     psr.run_id,
@@ -4927,7 +4927,7 @@ WHERE psr.tenant_id = $1
   AND psr.metric = $3
   AND psr.status IN ('ok', 'low_confidence')
   AND psr.killed_at >= $4
-ORDER BY psr.run_id, psr.encounter_name, psr.precise_score DESC
+ORDER BY psr.run_id, psr.encounter_name, psr.snapshot_id, psr.precise_score DESC
 `
 
 type GetCharacterParseHistoryParams struct {
@@ -4960,9 +4960,10 @@ type GetCharacterParseHistoryRow struct {
 	PlayerRole     string             `db:"player_role" json:"player_role"`
 }
 
-// Character history: best parse per encounter from recent instances (60-day window).
-// Deduplicated by run_id; returns best 3 per encounter for Score calculation.
-// The caller uses these rows to derive the 60-day Score.
+// Character history: ALL deduplicated parses over the lookback window.
+// Returns every (run_id, encounter) parse — not just one best per encounter.
+// The caller groups by (instance_name, encounter_name), takes best 3 per group,
+// averages each group, then averages groups for the Score.
 func (q *sqlQuerier) GetCharacterParseHistory(ctx context.Context, arg GetCharacterParseHistoryParams) ([]GetCharacterParseHistoryRow, error) {
 	rows, err := q.db.Query(ctx, getCharacterParseHistory,
 		arg.TenantID,
@@ -5016,7 +5017,9 @@ SELECT
     li.start_time,
     li.name AS instance_name,
     li.difficulty_name,
-    li.max_players
+    li.max_players,
+    li.log_group_id,
+    li.guild_id
 FROM log_instances li
 WHERE li.id = $1
 `
@@ -5028,10 +5031,11 @@ type GetLogInstanceForScoringRow struct {
 	InstanceName   string             `db:"instance_name" json:"instance_name"`
 	DifficultyName string             `db:"difficulty_name" json:"difficulty_name"`
 	MaxPlayers     int32              `db:"max_players" json:"max_players"`
+	LogGroupID     uuid.UUID          `db:"log_group_id" json:"log_group_id"`
+	GuildID        uuid.NullUUID      `db:"guild_id" json:"guild_id"`
 }
 
-// Fetch instance metadata needed for parse scoring (duplicate_group, start_time).
-// Tenant ID comes from job args, not the DB.
+// Fetch instance metadata needed for parse scoring.
 func (q *sqlQuerier) GetLogInstanceForScoring(ctx context.Context, id uuid.UUID) (GetLogInstanceForScoringRow, error) {
 	row := q.db.QueryRow(ctx, getLogInstanceForScoring, id)
 	var i GetLogInstanceForScoringRow
@@ -5042,45 +5046,92 @@ func (q *sqlQuerier) GetLogInstanceForScoring(ctx context.Context, id uuid.UUID)
 		&i.InstanceName,
 		&i.DifficultyName,
 		&i.MaxPlayers,
+		&i.LogGroupID,
+		&i.GuildID,
 	)
 	return i, err
 }
 
 const getParseScoreReceipt = `-- name: GetParseScoreReceipt :one
-SELECT id, tenant_id, instance_id, snapshot_id, status, attempt, last_attempt_at, next_attempt_at, completed_at, error_message, created_at FROM parse_score_receipts WHERE instance_id = $1
+SELECT id, tenant_id, instance_id, snapshot_id, policy_version, query_version, lookback_days, source_count, result_count, computed_at, created_at FROM parse_score_receipts
+WHERE instance_id = $1 AND snapshot_id = $2
 `
 
-// Get a receipt by instance ID.
-func (q *sqlQuerier) GetParseScoreReceipt(ctx context.Context, instanceID uuid.UUID) (ParseScoreReceipt, error) {
-	row := q.db.QueryRow(ctx, getParseScoreReceipt, instanceID)
+type GetParseScoreReceiptParams struct {
+	InstanceID uuid.UUID `db:"instance_id" json:"instance_id"`
+	SnapshotID uuid.UUID `db:"snapshot_id" json:"snapshot_id"`
+}
+
+// Get receipt by instance + snapshot.
+func (q *sqlQuerier) GetParseScoreReceipt(ctx context.Context, arg GetParseScoreReceiptParams) (ParseScoreReceipt, error) {
+	row := q.db.QueryRow(ctx, getParseScoreReceipt, arg.InstanceID, arg.SnapshotID)
 	var i ParseScoreReceipt
 	err := row.Scan(
 		&i.ID,
 		&i.TenantID,
 		&i.InstanceID,
 		&i.SnapshotID,
-		&i.Status,
-		&i.Attempt,
-		&i.LastAttemptAt,
-		&i.NextAttemptAt,
-		&i.CompletedAt,
-		&i.ErrorMessage,
+		&i.PolicyVersion,
+		&i.QueryVersion,
+		&i.LookbackDays,
+		&i.SourceCount,
+		&i.ResultCount,
+		&i.ComputedAt,
 		&i.CreatedAt,
 	)
 	return i, err
 }
 
+const getParseScoreReceiptForInstance = `-- name: GetParseScoreReceiptForInstance :many
+SELECT id, tenant_id, instance_id, snapshot_id, policy_version, query_version, lookback_days, source_count, result_count, computed_at, created_at FROM parse_score_receipts
+WHERE instance_id = $1
+ORDER BY computed_at DESC
+`
+
+// Get all receipts for an instance (any snapshot).
+func (q *sqlQuerier) GetParseScoreReceiptForInstance(ctx context.Context, instanceID uuid.UUID) ([]ParseScoreReceipt, error) {
+	rows, err := q.db.Query(ctx, getParseScoreReceiptForInstance, instanceID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ParseScoreReceipt
+	for rows.Next() {
+		var i ParseScoreReceipt
+		if err := rows.Scan(
+			&i.ID,
+			&i.TenantID,
+			&i.InstanceID,
+			&i.SnapshotID,
+			&i.PolicyVersion,
+			&i.QueryVersion,
+			&i.LookbackDays,
+			&i.SourceCount,
+			&i.ResultCount,
+			&i.ComputedAt,
+			&i.CreatedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const getParseScoreResultsForInstance = `-- name: GetParseScoreResultsForInstance :many
-SELECT DISTINCT ON (psr.run_id, psr.encounter_name, psr.player_guid, psr.metric)
-    psr.id, psr.tenant_id, psr.instance_id, psr.run_id, psr.snapshot_id, psr.encounter_name, psr.player_guid, psr.player_name, psr.player_class, psr.player_spec, psr.player_role, psr.metric, psr.metric_value, psr.precise_score, psr.display_score, psr.rank, psr.sample_size, psr.status, psr.instance_name, psr.difficulty_name, psr.max_players, psr.killed_at, psr.created_at
+SELECT DISTINCT ON (psr.run_id, psr.encounter_name, psr.player_guid, psr.snapshot_id, psr.metric)
+    psr.id, psr.tenant_id, psr.instance_id, psr.run_id, psr.snapshot_id, psr.log_group_id, psr.guild_id, psr.encounter_name, psr.player_guid, psr.player_name, psr.player_class, psr.player_spec, psr.player_role, psr.metric, psr.metric_value, psr.precise_score, psr.display_score, psr.rank, psr.sample_size, psr.status, psr.instance_name, psr.difficulty_name, psr.max_players, psr.killed_at, psr.created_at
 FROM parse_score_results psr
 WHERE psr.instance_id = $1
-ORDER BY psr.run_id, psr.encounter_name, psr.player_guid, psr.metric,
+ORDER BY psr.run_id, psr.encounter_name, psr.player_guid, psr.snapshot_id, psr.metric,
          psr.created_at DESC
 `
 
 // Read deduplicated parse score results for an instance.
-// Uses DISTINCT ON (run_id, encounter, player, metric) to collapse duplicate uploads.
+// Uses DISTINCT ON (run_id, encounter, player, snapshot, metric) to collapse duplicate uploads.
 func (q *sqlQuerier) GetParseScoreResultsForInstance(ctx context.Context, instanceID uuid.UUID) ([]ParseScoreResult, error) {
 	rows, err := q.db.Query(ctx, getParseScoreResultsForInstance, instanceID)
 	if err != nil {
@@ -5096,6 +5147,8 @@ func (q *sqlQuerier) GetParseScoreResultsForInstance(ctx context.Context, instan
 			&i.InstanceID,
 			&i.RunID,
 			&i.SnapshotID,
+			&i.LogGroupID,
+			&i.GuildID,
 			&i.EncounterName,
 			&i.PlayerGuid,
 			&i.PlayerName,
@@ -5125,17 +5178,78 @@ func (q *sqlQuerier) GetParseScoreResultsForInstance(ctx context.Context, instan
 	return items, nil
 }
 
+const insertParseScoreReceipt = `-- name: InsertParseScoreReceipt :one
+INSERT INTO parse_score_receipts (
+    tenant_id, instance_id, snapshot_id,
+    policy_version, query_version, lookback_days,
+    source_count, result_count, computed_at
+) VALUES (
+    $1, $2, $3,
+    $4, $5, $6,
+    $7, $8, now()
+)
+ON CONFLICT (instance_id, snapshot_id) DO UPDATE SET
+    policy_version = EXCLUDED.policy_version,
+    query_version  = EXCLUDED.query_version,
+    lookback_days  = EXCLUDED.lookback_days,
+    source_count   = EXCLUDED.source_count,
+    result_count   = EXCLUDED.result_count,
+    computed_at    = now()
+RETURNING id, tenant_id, instance_id, snapshot_id, policy_version, query_version, lookback_days, source_count, result_count, computed_at, created_at
+`
+
+type InsertParseScoreReceiptParams struct {
+	TenantID      uuid.UUID `db:"tenant_id" json:"tenant_id"`
+	InstanceID    uuid.UUID `db:"instance_id" json:"instance_id"`
+	SnapshotID    uuid.UUID `db:"snapshot_id" json:"snapshot_id"`
+	PolicyVersion int16     `db:"policy_version" json:"policy_version"`
+	QueryVersion  int16     `db:"query_version" json:"query_version"`
+	LookbackDays  int16     `db:"lookback_days" json:"lookback_days"`
+	SourceCount   int32     `db:"source_count" json:"source_count"`
+	ResultCount   int32     `db:"result_count" json:"result_count"`
+}
+
+// Insert a successful computation receipt. Receipt existence = fully committed success.
+// On conflict (same instance+snapshot), update counts to reflect re-computation.
+func (q *sqlQuerier) InsertParseScoreReceipt(ctx context.Context, arg InsertParseScoreReceiptParams) (ParseScoreReceipt, error) {
+	row := q.db.QueryRow(ctx, insertParseScoreReceipt,
+		arg.TenantID,
+		arg.InstanceID,
+		arg.SnapshotID,
+		arg.PolicyVersion,
+		arg.QueryVersion,
+		arg.LookbackDays,
+		arg.SourceCount,
+		arg.ResultCount,
+	)
+	var i ParseScoreReceipt
+	err := row.Scan(
+		&i.ID,
+		&i.TenantID,
+		&i.InstanceID,
+		&i.SnapshotID,
+		&i.PolicyVersion,
+		&i.QueryVersion,
+		&i.LookbackDays,
+		&i.SourceCount,
+		&i.ResultCount,
+		&i.ComputedAt,
+		&i.CreatedAt,
+	)
+	return i, err
+}
+
 const insertParseScoreResult = `-- name: InsertParseScoreResult :exec
 INSERT INTO parse_score_results (
-    tenant_id, instance_id, run_id, snapshot_id,
+    tenant_id, instance_id, run_id, snapshot_id, log_group_id, guild_id,
     encounter_name, player_guid, player_name, player_class, player_spec, player_role,
     metric, metric_value, precise_score, display_score, rank, sample_size, status,
     instance_name, difficulty_name, max_players, killed_at
 ) VALUES (
-    $1, $2, $3, $4,
-    $5, $6, $7, $8, $9, $10,
-    $11, $12, $13, $14, $15, $16, $17,
-    $18, $19, $20, $21
+    $1, $2, $3, $4, $5, $6,
+    $7, $8, $9, $10, $11, $12,
+    $13, $14, $15, $16, $17, $18, $19,
+    $20, $21, $22, $23
 )
 `
 
@@ -5144,6 +5258,8 @@ type InsertParseScoreResultParams struct {
 	InstanceID     uuid.UUID          `db:"instance_id" json:"instance_id"`
 	RunID          uuid.UUID          `db:"run_id" json:"run_id"`
 	SnapshotID     uuid.UUID          `db:"snapshot_id" json:"snapshot_id"`
+	LogGroupID     uuid.NullUUID      `db:"log_group_id" json:"log_group_id"`
+	GuildID        uuid.NullUUID      `db:"guild_id" json:"guild_id"`
 	EncounterName  string             `db:"encounter_name" json:"encounter_name"`
 	PlayerGuid     string             `db:"player_guid" json:"player_guid"`
 	PlayerName     string             `db:"player_name" json:"player_name"`
@@ -5164,12 +5280,15 @@ type InsertParseScoreResultParams struct {
 }
 
 // Persist a single parse score result for an instance+encounter+player+metric.
+// No unique constraint: duplicate uploads are collapsed at read time via run_id DISTINCT ON.
 func (q *sqlQuerier) InsertParseScoreResult(ctx context.Context, arg InsertParseScoreResultParams) error {
 	_, err := q.db.Exec(ctx, insertParseScoreResult,
 		arg.TenantID,
 		arg.InstanceID,
 		arg.RunID,
 		arg.SnapshotID,
+		arg.LogGroupID,
+		arg.GuildID,
 		arg.EncounterName,
 		arg.PlayerGuid,
 		arg.PlayerName,
@@ -5191,37 +5310,76 @@ func (q *sqlQuerier) InsertParseScoreResult(ctx context.Context, arg InsertParse
 	return err
 }
 
-const listParseScoreReceiptsForRetry = `-- name: ListParseScoreReceiptsForRetry :many
-SELECT id, tenant_id, instance_id, snapshot_id, status, attempt, last_attempt_at, next_attempt_at, completed_at, error_message, created_at FROM parse_score_receipts
-WHERE status IN ('pending', 'no_snapshot')
-  AND next_attempt_at <= now()
-ORDER BY next_attempt_at ASC
-LIMIT $1
+const listInstancesMissingParseReceipt = `-- name: ListInstancesMissingParseReceipt :many
+SELECT DISTINCT
+    edr.instance_id,
+    li.start_time,
+    COALESCE(li.duplicate_group_id, li.id) AS run_id,
+    li.name AS instance_name,
+    li.difficulty_name,
+    li.max_players,
+    li.log_group_id,
+    li.guild_id
+FROM encounter_dps_rankings edr
+JOIN log_instances li ON li.id = edr.instance_id
+WHERE edr.encounter_id IS NOT NULL
+  AND (edr.dps > 0 OR edr.hps > 0)
+  AND NOT EXISTS (
+      SELECT 1 FROM parse_score_receipts psr
+      WHERE psr.instance_id = edr.instance_id
+        AND psr.snapshot_id = $1
+        AND psr.policy_version = $2
+        AND psr.query_version = $3
+  )
+ORDER BY li.start_time DESC NULLS LAST
+LIMIT $4
 `
 
-// Find receipts ready for retry (bounded repair dispatcher).
-// Returns pending/no_snapshot receipts whose next_attempt_at has passed.
-func (q *sqlQuerier) ListParseScoreReceiptsForRetry(ctx context.Context, maxRows int32) ([]ParseScoreReceipt, error) {
-	rows, err := q.db.Query(ctx, listParseScoreReceiptsForRetry, maxRows)
+type ListInstancesMissingParseReceiptParams struct {
+	SnapshotID    uuid.UUID `db:"snapshot_id" json:"snapshot_id"`
+	PolicyVersion int16     `db:"policy_version" json:"policy_version"`
+	QueryVersion  int16     `db:"query_version" json:"query_version"`
+	MaxRows       int32     `db:"max_rows" json:"max_rows"`
+}
+
+type ListInstancesMissingParseReceiptRow struct {
+	InstanceID     uuid.UUID          `db:"instance_id" json:"instance_id"`
+	StartTime      pgtype.Timestamptz `db:"start_time" json:"start_time"`
+	RunID          uuid.UUID          `db:"run_id" json:"run_id"`
+	InstanceName   string             `db:"instance_name" json:"instance_name"`
+	DifficultyName string             `db:"difficulty_name" json:"difficulty_name"`
+	MaxPlayers     int32              `db:"max_players" json:"max_players"`
+	LogGroupID     uuid.UUID          `db:"log_group_id" json:"log_group_id"`
+	GuildID        uuid.NullUUID      `db:"guild_id" json:"guild_id"`
+}
+
+// Repair query: find instances that have ranking data (boss kills) but lack
+// a receipt for the given snapshot. This catches instances with no receipt at all,
+// old instances, snapshot deletion/rebuild, and policy/query changes.
+// Returns at most @max_rows rows for bounded batch processing.
+func (q *sqlQuerier) ListInstancesMissingParseReceipt(ctx context.Context, arg ListInstancesMissingParseReceiptParams) ([]ListInstancesMissingParseReceiptRow, error) {
+	rows, err := q.db.Query(ctx, listInstancesMissingParseReceipt,
+		arg.SnapshotID,
+		arg.PolicyVersion,
+		arg.QueryVersion,
+		arg.MaxRows,
+	)
 	if err != nil {
 		return nil, err
 	}
 	defer rows.Close()
-	var items []ParseScoreReceipt
+	var items []ListInstancesMissingParseReceiptRow
 	for rows.Next() {
-		var i ParseScoreReceipt
+		var i ListInstancesMissingParseReceiptRow
 		if err := rows.Scan(
-			&i.ID,
-			&i.TenantID,
 			&i.InstanceID,
-			&i.SnapshotID,
-			&i.Status,
-			&i.Attempt,
-			&i.LastAttemptAt,
-			&i.NextAttemptAt,
-			&i.CompletedAt,
-			&i.ErrorMessage,
-			&i.CreatedAt,
+			&i.StartTime,
+			&i.RunID,
+			&i.InstanceName,
+			&i.DifficultyName,
+			&i.MaxPlayers,
+			&i.LogGroupID,
+			&i.GuildID,
 		); err != nil {
 			return nil, err
 		}
@@ -5231,113 +5389,6 @@ func (q *sqlQuerier) ListParseScoreReceiptsForRetry(ctx context.Context, maxRows
 		return nil, err
 	}
 	return items, nil
-}
-
-const updateParseScoreReceiptCompleted = `-- name: UpdateParseScoreReceiptCompleted :exec
-UPDATE parse_score_receipts
-SET status = 'completed',
-    snapshot_id = $1,
-    attempt = attempt + 1,
-    last_attempt_at = now(),
-    completed_at = now(),
-    next_attempt_at = NULL,
-    error_message = NULL
-WHERE instance_id = $2
-`
-
-type UpdateParseScoreReceiptCompletedParams struct {
-	SnapshotID uuid.NullUUID `db:"snapshot_id" json:"snapshot_id"`
-	InstanceID uuid.UUID     `db:"instance_id" json:"instance_id"`
-}
-
-// Mark a receipt as completed after successful computation.
-func (q *sqlQuerier) UpdateParseScoreReceiptCompleted(ctx context.Context, arg UpdateParseScoreReceiptCompletedParams) error {
-	_, err := q.db.Exec(ctx, updateParseScoreReceiptCompleted, arg.SnapshotID, arg.InstanceID)
-	return err
-}
-
-const updateParseScoreReceiptFailed = `-- name: UpdateParseScoreReceiptFailed :exec
-UPDATE parse_score_receipts
-SET status = 'failed',
-    attempt = attempt + 1,
-    last_attempt_at = now(),
-    next_attempt_at = NULL,
-    error_message = $1
-WHERE instance_id = $2
-`
-
-type UpdateParseScoreReceiptFailedParams struct {
-	ErrorMessage pgtype.Text `db:"error_message" json:"error_message"`
-	InstanceID   uuid.UUID   `db:"instance_id" json:"instance_id"`
-}
-
-// Mark a receipt as permanently failed (exhausted retries).
-func (q *sqlQuerier) UpdateParseScoreReceiptFailed(ctx context.Context, arg UpdateParseScoreReceiptFailedParams) error {
-	_, err := q.db.Exec(ctx, updateParseScoreReceiptFailed, arg.ErrorMessage, arg.InstanceID)
-	return err
-}
-
-const updateParseScoreReceiptNoSnapshot = `-- name: UpdateParseScoreReceiptNoSnapshot :exec
-UPDATE parse_score_receipts
-SET status = 'no_snapshot',
-    attempt = attempt + 1,
-    last_attempt_at = now(),
-    next_attempt_at = $1,
-    error_message = $2
-WHERE instance_id = $3
-`
-
-type UpdateParseScoreReceiptNoSnapshotParams struct {
-	NextAttemptAt pgtype.Timestamptz `db:"next_attempt_at" json:"next_attempt_at"`
-	ErrorMessage  pgtype.Text        `db:"error_message" json:"error_message"`
-	InstanceID    uuid.UUID          `db:"instance_id" json:"instance_id"`
-}
-
-// Mark a receipt as no_snapshot with next retry time.
-func (q *sqlQuerier) UpdateParseScoreReceiptNoSnapshot(ctx context.Context, arg UpdateParseScoreReceiptNoSnapshotParams) error {
-	_, err := q.db.Exec(ctx, updateParseScoreReceiptNoSnapshot, arg.NextAttemptAt, arg.ErrorMessage, arg.InstanceID)
-	return err
-}
-
-const upsertParseScoreReceipt = `-- name: UpsertParseScoreReceipt :one
-INSERT INTO parse_score_receipts (
-    tenant_id, instance_id, status, attempt, next_attempt_at
-) VALUES (
-    $1, $2, 'pending', 0, now()
-)
-ON CONFLICT (instance_id) DO UPDATE SET
-    status = 'pending',
-    attempt = 0,
-    next_attempt_at = now(),
-    completed_at = NULL,
-    error_message = NULL
-RETURNING id, tenant_id, instance_id, snapshot_id, status, attempt, last_attempt_at, next_attempt_at, completed_at, error_message, created_at
-`
-
-type UpsertParseScoreReceiptParams struct {
-	TenantID   uuid.UUID `db:"tenant_id" json:"tenant_id"`
-	InstanceID uuid.UUID `db:"instance_id" json:"instance_id"`
-}
-
-// Create or update a computation receipt for an instance.
-// On conflict (re-upload), resets to pending for re-computation.
-func (q *sqlQuerier) UpsertParseScoreReceipt(ctx context.Context, arg UpsertParseScoreReceiptParams) (ParseScoreReceipt, error) {
-	row := q.db.QueryRow(ctx, upsertParseScoreReceipt, arg.TenantID, arg.InstanceID)
-	var i ParseScoreReceipt
-	err := row.Scan(
-		&i.ID,
-		&i.TenantID,
-		&i.InstanceID,
-		&i.SnapshotID,
-		&i.Status,
-		&i.Attempt,
-		&i.LastAttemptAt,
-		&i.NextAttemptAt,
-		&i.CompletedAt,
-		&i.ErrorMessage,
-		&i.CreatedAt,
-	)
-	return i, err
 }
 
 const batchInsertSnapshotMembersFromRankings = `-- name: BatchInsertSnapshotMembersFromRankings :exec

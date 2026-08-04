@@ -413,27 +413,6 @@ export interface CensusEntry {
     readonly count: number;
 }
 
-// From chroniclesdk/parse_scores.go
-/**
- * CharacterEncounterBest is the best parse for a specific encounter.
- */
-export interface CharacterEncounterBest {
-    readonly encounter_name: string;
-    readonly instance_name: string;
-    readonly difficulty_name: string;
-    readonly max_players: number;
-    readonly instance_id: string;
-    readonly snapshot_id: string;
-    readonly metric: string;
-    readonly metric_value: number;
-    readonly precise_score: number;
-    readonly display_score: number;
-    readonly rank: number;
-    readonly sample_size: number;
-    readonly status: string;
-    readonly killed_at: string;
-}
-
 // From chroniclesdk/characters.go
 /**
  * CharacterLinkInfo describes who a character is linked to (admin view).
@@ -448,7 +427,30 @@ export interface CharacterLinkInfo {
 
 // From chroniclesdk/parse_scores.go
 /**
+ * CharacterParse is a single deduplicated parse result for a character.
+ */
+export interface CharacterParse {
+    readonly encounter_name: string;
+    readonly instance_name: string;
+    readonly difficulty_name: string;
+    readonly max_players: number;
+    readonly instance_id: string;
+    readonly snapshot_id: string;
+    readonly run_id: string;
+    readonly metric: string;
+    readonly metric_value: number;
+    readonly precise_score: number;
+    readonly display_score: number;
+    readonly rank: number;
+    readonly sample_size: number;
+    readonly status: string;
+    readonly killed_at: string;
+}
+
+// From chroniclesdk/parse_scores.go
+/**
  * CharacterParseHistoryResponse is the response for the character parse history endpoint.
+ * Returns ALL deduplicated parses over the lookback window, not just best per encounter.
  */
 export interface CharacterParseHistoryResponse {
     readonly player_guid: string;
@@ -457,18 +459,20 @@ export interface CharacterParseHistoryResponse {
     readonly player_spec: string;
     readonly metric: string;
     readonly score?: CharacterScore;
-    readonly encounters: readonly CharacterEncounterBest[];
+    readonly parses: readonly CharacterParse[];
 }
 
 // From chroniclesdk/parse_scores.go
 /**
- * CharacterScore is the derived 60-day Score from best 3 parse percentiles
- * per instance+encounter.
+ * CharacterScore is the derived Score from best 3 parse scores per
+ * (instance_name, encounter_name) group, averaged per group, then averaged
+ * across groups.
  */
 export interface CharacterScore {
     readonly value: number;
     readonly display_value: number;
     readonly num_parses: number;
+    readonly encounter_groups: number;
 }
 
 // From chroniclesdk/events.go

@@ -1001,15 +1001,14 @@ CREATE TABLE parse_score_receipts (
     id uuid DEFAULT gen_random_uuid() NOT NULL,
     tenant_id uuid DEFAULT '00000000-0000-0000-0000-000000000000'::uuid NOT NULL,
     instance_id uuid NOT NULL,
-    snapshot_id uuid,
-    status text DEFAULT 'pending'::text NOT NULL,
-    attempt integer DEFAULT 0 NOT NULL,
-    last_attempt_at timestamp with time zone,
-    next_attempt_at timestamp with time zone,
-    completed_at timestamp with time zone,
-    error_message text,
-    created_at timestamp with time zone DEFAULT now() NOT NULL,
-    CONSTRAINT parse_score_receipts_status_check CHECK ((status = ANY (ARRAY['pending'::text, 'completed'::text, 'no_snapshot'::text, 'failed'::text])))
+    snapshot_id uuid NOT NULL,
+    policy_version smallint DEFAULT 1 NOT NULL,
+    query_version smallint DEFAULT 1 NOT NULL,
+    lookback_days smallint DEFAULT 60 NOT NULL,
+    source_count integer DEFAULT 0 NOT NULL,
+    result_count integer DEFAULT 0 NOT NULL,
+    computed_at timestamp with time zone DEFAULT now() NOT NULL,
+    created_at timestamp with time zone DEFAULT now() NOT NULL
 );
 
 CREATE TABLE parse_score_results (
@@ -1018,6 +1017,8 @@ CREATE TABLE parse_score_results (
     instance_id uuid NOT NULL,
     run_id uuid NOT NULL,
     snapshot_id uuid NOT NULL,
+    log_group_id uuid,
+    guild_id uuid,
     encounter_name text NOT NULL,
     player_guid text NOT NULL,
     player_name text DEFAULT ''::text NOT NULL,
@@ -1851,7 +1852,7 @@ ALTER TABLE ONLY log_instances
     ADD CONSTRAINT log_instances_pkey PRIMARY KEY (id);
 
 ALTER TABLE ONLY parse_score_receipts
-    ADD CONSTRAINT parse_score_receipts_instance_id_key UNIQUE (instance_id);
+    ADD CONSTRAINT parse_score_receipts_instance_id_snapshot_id_key UNIQUE (instance_id, snapshot_id);
 
 ALTER TABLE ONLY parse_score_receipts
     ADD CONSTRAINT parse_score_receipts_pkey PRIMARY KEY (id);
@@ -2102,11 +2103,13 @@ CREATE INDEX idx_psr_dedup ON parse_score_results USING btree (run_id, encounter
 
 CREATE INDEX idx_psr_instance ON parse_score_results USING btree (instance_id);
 
-CREATE INDEX idx_psr_player ON parse_score_results USING btree (tenant_id, player_guid, killed_at DESC NULLS LAST);
+CREATE INDEX idx_psr_player ON parse_score_results USING btree (tenant_id, player_guid, metric, killed_at DESC NULLS LAST);
 
 CREATE INDEX idx_psr_snapshot ON parse_score_results USING btree (snapshot_id);
 
-CREATE INDEX idx_psreceipt_retry ON parse_score_receipts USING btree (status, next_attempt_at) WHERE (status = ANY (ARRAY['pending'::text, 'no_snapshot'::text]));
+CREATE INDEX idx_psreceipt_instance ON parse_score_receipts USING btree (instance_id);
+
+CREATE INDEX idx_psreceipt_snapshot ON parse_score_receipts USING btree (snapshot_id);
 
 CREATE INDEX idx_psreceipt_tenant ON parse_score_receipts USING btree (tenant_id);
 
@@ -2392,7 +2395,13 @@ ALTER TABLE ONLY log_instances
     ADD CONSTRAINT log_instances_realm_id_fkey FOREIGN KEY (realm_id) REFERENCES wow_server_realms(id);
 
 ALTER TABLE ONLY parse_score_receipts
+    ADD CONSTRAINT parse_score_receipts_instance_id_fkey FOREIGN KEY (instance_id) REFERENCES log_instances(id) ON DELETE CASCADE;
+
+ALTER TABLE ONLY parse_score_receipts
     ADD CONSTRAINT parse_score_receipts_snapshot_id_fkey FOREIGN KEY (snapshot_id) REFERENCES ranking_snapshots(id) ON DELETE CASCADE;
+
+ALTER TABLE ONLY parse_score_results
+    ADD CONSTRAINT parse_score_results_instance_id_fkey FOREIGN KEY (instance_id) REFERENCES log_instances(id) ON DELETE CASCADE;
 
 ALTER TABLE ONLY parse_score_results
     ADD CONSTRAINT parse_score_results_snapshot_id_fkey FOREIGN KEY (snapshot_id) REFERENCES ranking_snapshots(id) ON DELETE CASCADE;
