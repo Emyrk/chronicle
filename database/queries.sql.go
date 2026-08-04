@@ -9983,6 +9983,16 @@ func (q *sqlQuerier) DeleteTimeParseSnapshot(ctx context.Context, id uuid.UUID) 
 	return err
 }
 
+const deleteTimeParseSnapshots = `-- name: DeleteTimeParseSnapshots :exec
+DELETE FROM time_parse_snapshots WHERE id = ANY($1::uuid[])
+`
+
+// Bulk-delete time-parse snapshots by IDs. Members are cascade-deleted via FK.
+func (q *sqlQuerier) DeleteTimeParseSnapshots(ctx context.Context, ids []uuid.UUID) error {
+	_, err := q.db.Exec(ctx, deleteTimeParseSnapshots, ids)
+	return err
+}
+
 const getLatestPublishedTimeParseSnapshot = `-- name: GetLatestPublishedTimeParseSnapshot :one
 SELECT id, tenant_id, cutoff, window_start, lookback_days, policy_version, query_version, status, created_at, published_at, source_row_count, source_watermark, source_fingerprint
 FROM time_parse_snapshots
@@ -10426,6 +10436,76 @@ func (q *sqlQuerier) InsertTimeParseSnapshot(ctx context.Context, arg InsertTime
 		&i.SourceFingerprint,
 	)
 	return i, err
+}
+
+const listAllTimeParseSnapshots = `-- name: ListAllTimeParseSnapshots :many
+SELECT tps.id, tps.tenant_id, tps.cutoff, tps.window_start, tps.lookback_days, tps.policy_version, tps.query_version, tps.status, tps.created_at, tps.published_at, tps.source_row_count, tps.source_watermark, tps.source_fingerprint,
+       (SELECT COUNT(*) FROM time_parse_clear_time_members WHERE snapshot_id = tps.id) AS clear_member_count,
+       (SELECT COUNT(*) FROM time_parse_boss_kill_members WHERE snapshot_id = tps.id) AS boss_member_count,
+       t.name AS tenant_name
+FROM time_parse_snapshots tps
+LEFT JOIN tenants t ON t.id = tps.tenant_id
+ORDER BY tps.created_at DESC
+LIMIT 100
+`
+
+type ListAllTimeParseSnapshotsRow struct {
+	ID                uuid.UUID          `db:"id" json:"id"`
+	TenantID          uuid.UUID          `db:"tenant_id" json:"tenant_id"`
+	Cutoff            pgtype.Timestamptz `db:"cutoff" json:"cutoff"`
+	WindowStart       pgtype.Timestamptz `db:"window_start" json:"window_start"`
+	LookbackDays      int32              `db:"lookback_days" json:"lookback_days"`
+	PolicyVersion     int16              `db:"policy_version" json:"policy_version"`
+	QueryVersion      int16              `db:"query_version" json:"query_version"`
+	Status            string             `db:"status" json:"status"`
+	CreatedAt         pgtype.Timestamptz `db:"created_at" json:"created_at"`
+	PublishedAt       pgtype.Timestamptz `db:"published_at" json:"published_at"`
+	SourceRowCount    int64              `db:"source_row_count" json:"source_row_count"`
+	SourceWatermark   pgtype.Timestamptz `db:"source_watermark" json:"source_watermark"`
+	SourceFingerprint int64              `db:"source_fingerprint" json:"source_fingerprint"`
+	ClearMemberCount  int64              `db:"clear_member_count" json:"clear_member_count"`
+	BossMemberCount   int64              `db:"boss_member_count" json:"boss_member_count"`
+	TenantName        pgtype.Text        `db:"tenant_name" json:"tenant_name"`
+}
+
+// Admin view: list all time-parse snapshots across tenants, most recent first.
+// LEFT JOINs tenants to surface the tenant name (NULL for root scope).
+// Includes separate clear-time and boss-kill member counts.
+func (q *sqlQuerier) ListAllTimeParseSnapshots(ctx context.Context) ([]ListAllTimeParseSnapshotsRow, error) {
+	rows, err := q.db.Query(ctx, listAllTimeParseSnapshots)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListAllTimeParseSnapshotsRow
+	for rows.Next() {
+		var i ListAllTimeParseSnapshotsRow
+		if err := rows.Scan(
+			&i.ID,
+			&i.TenantID,
+			&i.Cutoff,
+			&i.WindowStart,
+			&i.LookbackDays,
+			&i.PolicyVersion,
+			&i.QueryVersion,
+			&i.Status,
+			&i.CreatedAt,
+			&i.PublishedAt,
+			&i.SourceRowCount,
+			&i.SourceWatermark,
+			&i.SourceFingerprint,
+			&i.ClearMemberCount,
+			&i.BossMemberCount,
+			&i.TenantName,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
 }
 
 const publishTimeParseSnapshot = `-- name: PublishTimeParseSnapshot :one

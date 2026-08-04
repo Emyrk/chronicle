@@ -81,6 +81,8 @@ type sqlcQuerier interface {
 	DeleteTenant(ctx context.Context, id uuid.UUID) error
 	// Delete a time-parse snapshot by ID. Members are cascade-deleted.
 	DeleteTimeParseSnapshot(ctx context.Context, id uuid.UUID) error
+	// Bulk-delete time-parse snapshots by IDs. Members are cascade-deleted via FK.
+	DeleteTimeParseSnapshots(ctx context.Context, ids []uuid.UUID) error
 	DeleteUploadKey(ctx context.Context, id uuid.UUID) error
 	DeleteUserCharacterLink(ctx context.Context, arg DeleteUserCharacterLinkParams) (UserCharacterLink, error)
 	DeleteUserCharacterLinksByUserAndSource(ctx context.Context, arg DeleteUserCharacterLinksByUserAndSourceParams) ([]UserCharacterLink, error)
@@ -360,6 +362,10 @@ type sqlcQuerier interface {
 	// Admin view: list all snapshots across tenants, most recent first.
 	// LEFT JOINs tenants to surface the tenant name (NULL for root scope).
 	ListAllSnapshots(ctx context.Context) ([]ListAllSnapshotsRow, error)
+	// Admin view: list all time-parse snapshots across tenants, most recent first.
+	// LEFT JOINs tenants to surface the tenant name (NULL for root scope).
+	// Includes separate clear-time and boss-kill member counts.
+	ListAllTimeParseSnapshots(ctx context.Context) ([]ListAllTimeParseSnapshotsRow, error)
 	ListAllUsers(ctx context.Context) ([]ChronicleUser, error)
 	ListAllWoWLogGroupsWithOwner(ctx context.Context) ([]ListAllWoWLogGroupsWithOwnerRow, error)
 	ListAllWoWLogGroupsWithOwnerPaginated(ctx context.Context, arg ListAllWoWLogGroupsWithOwnerPaginatedParams) ([]ListAllWoWLogGroupsWithOwnerPaginatedRow, error)

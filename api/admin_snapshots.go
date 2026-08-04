@@ -14,6 +14,243 @@ import (
 	"github.com/google/uuid"
 )
 
+// ── Time-Parse Snapshot Admin ────────────────────────────────────────────
+
+// AdminListTimeParseSnapshots returns all time-parse snapshots across tenants.
+//
+//	GET /api/v1/admin/parses/time-parse-snapshots
+func (api *API) AdminListTimeParseSnapshots(w http.ResponseWriter, r *http.Request) {
+	ctx := r.Context()
+
+	store := database.New(api.Opts.Pool)
+	rows, err := store.ListAllTimeParseSnapshots(ctx)
+	if err != nil {
+		httpapi.HandleResponseError(ctx, w, err, httpapi.APIError{
+			Response: chroniclesdk.Response{
+				Message: "Failed to list time-parse snapshots",
+				Detail:  err.Error(),
+			},
+		})
+		return
+	}
+
+	out := make([]chroniclesdk.AdminTimeParseSnapshotSummary, 0, len(rows))
+	for _, row := range rows {
+		tenantName := "Root"
+		if row.TenantName.Valid {
+			tenantName = row.TenantName.String
+		}
+		s := chroniclesdk.AdminTimeParseSnapshotSummary{
+			ID:                row.ID,
+			TenantID:          row.TenantID,
+			TenantName:        tenantName,
+			LookbackDays:      row.LookbackDays,
+			PolicyVersion:     row.PolicyVersion,
+			QueryVersion:      row.QueryVersion,
+			ClearMemberCount:  row.ClearMemberCount,
+			BossMemberCount:   row.BossMemberCount,
+			Status:            row.Status,
+			SourceRowCount:    row.SourceRowCount,
+			SourceFingerprint: row.SourceFingerprint,
+		}
+		if row.Cutoff.Valid {
+			s.Cutoff = row.Cutoff.Time
+		}
+		if row.WindowStart.Valid {
+			s.WindowStart = &row.WindowStart.Time
+		}
+		if row.SourceWatermark.Valid {
+			s.SourceWatermark = &row.SourceWatermark.Time
+		}
+		if row.PublishedAt.Valid {
+			s.PublishedAt = &row.PublishedAt.Time
+		}
+		s.CreatedAt = row.CreatedAt.Time
+		out = append(out, s)
+	}
+
+	httpapi.Write(ctx, w, http.StatusOK, out)
+}
+
+// AdminDeleteTimeParseSnapshot removes a time-parse snapshot and its
+// cascade-deleted members. DELETE is idempotent.
+//
+//	DELETE /api/v1/admin/parses/time-parse-snapshots/{snapshotID}
+func (api *API) AdminDeleteTimeParseSnapshot(w http.ResponseWriter, r *http.Request) {
+	ctx := r.Context()
+
+	snapshotID, err := uuid.Parse(chi.URLParam(r, "snapshotID"))
+	if err != nil {
+		httpapi.Write(ctx, w, http.StatusBadRequest, chroniclesdk.Response{
+			Message: "Invalid snapshot ID",
+			Detail:  err.Error(),
+		})
+		return
+	}
+
+	store := database.New(api.Opts.Pool)
+	if err := store.DeleteTimeParseSnapshot(ctx, snapshotID); err != nil {
+		httpapi.HandleResponseError(ctx, w, err, httpapi.APIError{
+			Response: chroniclesdk.Response{
+				Message: "Failed to delete time-parse snapshot",
+				Detail:  err.Error(),
+			},
+		})
+		return
+	}
+
+	httpapi.Write(ctx, w, http.StatusOK, chroniclesdk.Response{
+		Message: "Time-parse snapshot deleted",
+	})
+}
+
+// AdminBulkDeleteTimeParseSnapshots removes multiple time-parse snapshots.
+// Members are cascade-deleted via FK. Nonexistent IDs are silently ignored.
+//
+//	POST /api/v1/admin/parses/time-parse-snapshots/delete
+func (api *API) AdminBulkDeleteTimeParseSnapshots(w http.ResponseWriter, r *http.Request) {
+	ctx := r.Context()
+
+	var req chroniclesdk.AdminBulkDeleteSnapshotsRequest
+	if !httpapi.Read(ctx, w, r, &req) {
+		return
+	}
+
+	if len(req.IDs) == 0 {
+		httpapi.Write(ctx, w, http.StatusBadRequest, chroniclesdk.Response{
+			Message: "No snapshot IDs provided",
+		})
+		return
+	}
+
+	store := database.New(api.Opts.Pool)
+	if err := store.DeleteTimeParseSnapshots(ctx, req.IDs); err != nil {
+		httpapi.HandleResponseError(ctx, w, err, httpapi.APIError{
+			Response: chroniclesdk.Response{
+				Message: "Failed to delete time-parse snapshots",
+				Detail:  err.Error(),
+			},
+		})
+		return
+	}
+
+	httpapi.Write(ctx, w, http.StatusOK, chroniclesdk.AdminBulkDeleteSnapshotsResponse{
+		Deleted: len(req.IDs),
+	})
+}
+
+// AdminTriggerTimeParseSnapshot enqueues time-parse snapshot publication jobs.
+// Reuses the same request/response types as DPS/HPS snapshots.
+//
+//	POST /api/v1/admin/parses/time-parse-snapshot
+func (api *API) AdminTriggerTimeParseSnapshot(w http.ResponseWriter, r *http.Request) {
+	ctx := r.Context()
+
+	var req chroniclesdk.AdminTriggerSnapshotRequest
+	if !httpapi.Read(ctx, w, r, &req) {
+		return
+	}
+
+	var tenantID uuid.UUID
+	if req.TenantID != "" {
+		parsed, err := uuid.Parse(req.TenantID)
+		if err != nil {
+			httpapi.Write(ctx, w, http.StatusBadRequest, chroniclesdk.Response{
+				Message: "Invalid tenant_id",
+				Detail:  err.Error(),
+			})
+			return
+		}
+		tenantID = parsed
+	}
+
+	day := time.Now().UTC()
+	if req.Day != "" {
+		parsed, err := time.Parse("2006-01-02", req.Day)
+		if err != nil {
+			httpapi.Write(ctx, w, http.StatusBadRequest, chroniclesdk.Response{
+				Message: "Invalid day format, expected YYYY-MM-DD",
+				Detail:  err.Error(),
+			})
+			return
+		}
+		day = parsed
+	}
+
+	switch req.LookbackDays {
+	case 0, 30, 60, 90, 180:
+	default:
+		httpapi.Write(ctx, w, http.StatusBadRequest, chroniclesdk.Response{
+			Message: "Invalid lookback_days",
+			Detail:  fmt.Sprintf("must be one of: 0 (all-time), 30, 60, 90, 180; got %d", req.LookbackDays),
+		})
+		return
+	}
+
+	if req.AllTenants && req.TenantID == "" {
+		store := database.New(api.Opts.Pool)
+		results, err := servicerankings.EnqueueTimeParseSnapshotBackfillAllTenants(
+			ctx,
+			store,
+			api.Queues,
+			day,
+			req.LookbackDays,
+			int16(parsepolicy.PolicyVersion),
+		)
+		if err != nil {
+			httpapi.HandleResponseError(ctx, w, err, httpapi.APIError{
+				Response: chroniclesdk.Response{
+					Message: "Failed to enqueue all-tenants time-parse snapshot backfill",
+					Detail:  err.Error(),
+				},
+			})
+			return
+		}
+
+		jobs := make([]chroniclesdk.AdminTriggerSnapshotJobResult, 0, len(results))
+		for _, r := range results {
+			jobs = append(jobs, chroniclesdk.AdminTriggerSnapshotJobResult{
+				TenantID:     r.TenantID.String(),
+				LookbackDays: r.LookbackDays,
+				JobID:        r.JobID,
+				JobState:     r.JobState,
+			})
+		}
+
+		httpapi.Write(ctx, w, http.StatusAccepted, chroniclesdk.AdminTriggerSnapshotResponse{
+			Jobs: jobs,
+		})
+		return
+	}
+
+	result, err := servicerankings.EnqueueTimeParseSnapshotBackfill(
+		ctx,
+		api.Queues,
+		tenantID,
+		day,
+		req.LookbackDays,
+		int16(parsepolicy.PolicyVersion),
+	)
+	if err != nil {
+		httpapi.HandleResponseError(ctx, w, err, httpapi.APIError{
+			Response: chroniclesdk.Response{
+				Message: "Failed to enqueue time-parse snapshot publication",
+				Detail:  err.Error(),
+			},
+		})
+		return
+	}
+
+	httpapi.Write(ctx, w, http.StatusAccepted, chroniclesdk.AdminTriggerSnapshotResponse{
+		Jobs: []chroniclesdk.AdminTriggerSnapshotJobResult{{
+			TenantID:     tenantID.String(),
+			LookbackDays: req.LookbackDays,
+			JobID:        result.Job.ID,
+			JobState:     string(result.Job.State),
+		}},
+	})
+}
+
 // AdminDeleteSnapshot removes a snapshot and its cascade-deleted members.
 // DELETE is idempotent: deleting a nonexistent ID is a no-op 200.
 //

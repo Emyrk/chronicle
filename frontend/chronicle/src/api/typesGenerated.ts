@@ -199,6 +199,29 @@ export interface AdminSnapshotSummary {
 
 // From chroniclesdk/rankings.go
 /**
+ * AdminTimeParseSnapshotSummary is a time-parse snapshot listed in the admin tab.
+ */
+export interface AdminTimeParseSnapshotSummary {
+    readonly id: string;
+    readonly tenant_id: string;
+    readonly tenant_name: string;
+    readonly cutoff: string;
+    readonly window_start: string | null;
+    readonly lookback_days: number;
+    readonly policy_version: number;
+    readonly query_version: number;
+    readonly clear_member_count: number;
+    readonly boss_member_count: number;
+    readonly status: string;
+    readonly source_row_count: number;
+    readonly source_watermark: string | null;
+    readonly source_fingerprint: number;
+    readonly published_at: string | null;
+    readonly created_at: string;
+}
+
+// From chroniclesdk/rankings.go
+/**
  * AdminTriggerSnapshotJobResult describes a single enqueued snapshot job.
  */
 export interface AdminTriggerSnapshotJobResult {

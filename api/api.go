@@ -262,6 +262,12 @@ func (api *API) Routes() chi.Router {
 					r.Get("/snapshots", api.AdminListSnapshots)
 					r.Post("/snapshots/delete", api.AdminBulkDeleteSnapshots)
 					r.Delete("/snapshots/{snapshotID}", api.AdminDeleteSnapshot)
+
+					// Time-parse snapshot admin
+					r.Post("/time-parse-snapshot", api.AdminTriggerTimeParseSnapshot)
+					r.Get("/time-parse-snapshots", api.AdminListTimeParseSnapshots)
+					r.Post("/time-parse-snapshots/delete", api.AdminBulkDeleteTimeParseSnapshots)
+					r.Delete("/time-parse-snapshots/{snapshotID}", api.AdminDeleteTimeParseSnapshot)
 				})
 
 				// Tenant management — routes owned by servicetenant

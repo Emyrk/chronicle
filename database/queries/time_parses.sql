@@ -275,6 +275,22 @@ WHERE tpbkm.snapshot_id = @snapshot_id
 -- name: DeleteTimeParseSnapshot :exec
 -- Delete a time-parse snapshot by ID. Members are cascade-deleted.
 DELETE FROM time_parse_snapshots WHERE id = @id;
+-- name: DeleteTimeParseSnapshots :exec
+-- Bulk-delete time-parse snapshots by IDs. Members are cascade-deleted via FK.
+DELETE FROM time_parse_snapshots WHERE id = ANY(@ids::uuid[]);
+
+-- name: ListAllTimeParseSnapshots :many
+-- Admin view: list all time-parse snapshots across tenants, most recent first.
+-- LEFT JOINs tenants to surface the tenant name (NULL for root scope).
+-- Includes separate clear-time and boss-kill member counts.
+SELECT tps.*,
+       (SELECT COUNT(*) FROM time_parse_clear_time_members WHERE snapshot_id = tps.id) AS clear_member_count,
+       (SELECT COUNT(*) FROM time_parse_boss_kill_members WHERE snapshot_id = tps.id) AS boss_member_count,
+       t.name AS tenant_name
+FROM time_parse_snapshots tps
+LEFT JOIN tenants t ON t.id = tps.tenant_id
+ORDER BY tps.created_at DESC
+LIMIT 100;
 
 -- name: GetLogInstanceForTimeParse :one
 -- Return the instance name, difficulty, and max_players for time-parse scoring.

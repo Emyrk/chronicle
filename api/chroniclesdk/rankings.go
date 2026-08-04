@@ -275,6 +275,25 @@ type AdminBulkDeleteSnapshotsRequest struct {
 type AdminBulkDeleteSnapshotsResponse struct {
 	Deleted int `json:"deleted"`
 }
+// AdminTimeParseSnapshotSummary is a time-parse snapshot listed in the admin tab.
+type AdminTimeParseSnapshotSummary struct {
+	ID                uuid.UUID  `json:"id"`
+	TenantID          uuid.UUID  `json:"tenant_id"`
+	TenantName        string     `json:"tenant_name"`
+	Cutoff            time.Time  `json:"cutoff"`
+	WindowStart       *time.Time `json:"window_start"`
+	LookbackDays      int32      `json:"lookback_days"`
+	PolicyVersion     int16      `json:"policy_version"`
+	QueryVersion      int16      `json:"query_version"`
+	ClearMemberCount  int64      `json:"clear_member_count"`
+	BossMemberCount   int64      `json:"boss_member_count"`
+	Status            string     `json:"status"`
+	SourceRowCount    int64      `json:"source_row_count"`
+	SourceWatermark   *time.Time `json:"source_watermark"`
+	SourceFingerprint int64      `json:"source_fingerprint"`
+	PublishedAt       *time.Time `json:"published_at"`
+	CreatedAt         time.Time  `json:"created_at"`
+}
 
 // ── Cohort Viewer (debugging) ────────────────────────────────────────────
 

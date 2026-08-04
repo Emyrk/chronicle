@@ -9,6 +9,7 @@ import (
 	"github.com/Emyrk/chronicle/chronicle/riverqueue"
 	"github.com/Emyrk/chronicle/chronicle/riverqueue/riverconst"
 	"github.com/Emyrk/chronicle/database"
+	"github.com/Emyrk/chronicle/internal/parsepolicy"
 	"github.com/Emyrk/chronicle/internal/services/servicetenant"
 	"github.com/Emyrk/chronicle/internal/timeparsepolicy"
 	"github.com/google/uuid"
@@ -317,4 +318,92 @@ func (w *WorkerPublishTimeParseSnapshotTenant) Work(ctx context.Context, job *ri
 	})
 
 	return nil
+}
+
+// ---------------------------------------------------------------------------
+// Admin backfill entry points for time-parse snapshots.
+// ---------------------------------------------------------------------------
+
+// EnqueueTimeParseSnapshotBackfill enqueues a per-tenant time-parse snapshot
+// publication job. day is truncated to 00:00 UTC; the job will no-op if a
+// snapshot for that cutoff already exists.
+// When day is not today, AdminBackfill is set so the staleness guard is skipped.
+func EnqueueTimeParseSnapshotBackfill(
+	ctx context.Context,
+	queue *riverqueue.Queues,
+	tenantID uuid.UUID,
+	day time.Time,
+	lookbackDays int32,
+	policyVersion int16,
+) (*rivertype.JobInsertResult, error) {
+	cutoff := truncateToUTCMidnight(day)
+	adminBackfill := cutoff.Before(todayUTCMidnight())
+	return queue.Insert(ctx, ArgsPublishTimeParseSnapshotTenant{
+		TenantID:      tenantID,
+		Cutoff:        cutoff,
+		LookbackDays:  lookbackDays,
+		PolicyVersion: policyVersion,
+		AdminBackfill: adminBackfill,
+	}, nil)
+}
+
+// EnqueueTimeParseSnapshotBackfillAllTenants enumerates root + all non-disabled
+// tenants and enqueues one time-parse backfill job per tenant per lookback
+// window, matching the dispatch worker's logic.
+func EnqueueTimeParseSnapshotBackfillAllTenants(
+	ctx context.Context,
+	store database.Store,
+	queue *riverqueue.Queues,
+	day time.Time,
+	defaultLookbackDays int32,
+	policyVersion int16,
+) ([]BackfillJobResult, error) {
+	tenants, err := store.ListTenants(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("list tenants: %w", err)
+	}
+
+	type tenantEntry struct {
+		id          uuid.UUID
+		parseConfig []byte
+	}
+	entries := make([]tenantEntry, 0, len(tenants)+1)
+	entries = append(entries, tenantEntry{id: uuid.Nil}) // root scope
+	for _, t := range tenants {
+		entries = append(entries, tenantEntry{id: t.ID, parseConfig: t.ParseConfig})
+	}
+
+	cutoff := truncateToUTCMidnight(day)
+	adminBackfill := cutoff.Before(todayUTCMidnight())
+
+	var results []BackfillJobResult
+	for _, te := range entries {
+		if isParseDisabled(te.parseConfig) {
+			continue
+		}
+		lookbacks := resolveLookbackDays(te.parseConfig)
+		if len(lookbacks) == 1 && lookbacks[0] == parsepolicy.DefaultLookbackDays && defaultLookbackDays != 0 {
+			lookbacks = []parsepolicy.LookbackDays{parsepolicy.LookbackDays(defaultLookbackDays)}
+		}
+		for _, lb := range lookbacks {
+			res, err := queue.Insert(ctx, ArgsPublishTimeParseSnapshotTenant{
+				TenantID:      te.id,
+				Cutoff:        cutoff,
+				LookbackDays:  int32(lb),
+				PolicyVersion: policyVersion,
+				AdminBackfill: adminBackfill,
+			}, nil)
+			if err != nil {
+				return nil, fmt.Errorf("enqueue tenant %s lookback %d: %w", te.id, lb, err)
+			}
+			results = append(results, BackfillJobResult{
+				TenantID:     te.id,
+				LookbackDays: int32(lb),
+				JobID:        res.Job.ID,
+				JobState:     string(res.Job.State),
+			})
+		}
+	}
+
+	return results, nil
 }
