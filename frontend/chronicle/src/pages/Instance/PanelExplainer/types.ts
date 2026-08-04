@@ -48,6 +48,9 @@ export interface Lesson<TCaps> {
   deriveState: (caps: TCaps) => LessonState;
   /** "Try it now" guidance shown with the lesson (and under the video). */
   instruction: string;
+  /** When present, shown as a bullet list instead of the instruction —
+   * typically recapping the video's points. */
+  bullets?: string[];
   /** Absent = text-only lesson (sidebar action reads "Read", not "Watch"). */
   video?: LessonVideo;
   /** Lesson only makes sense on curated example data (e.g. parse scores). */

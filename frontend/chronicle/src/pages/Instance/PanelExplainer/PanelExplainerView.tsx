@@ -263,9 +263,17 @@ function LessonHeaderCard<TCaps>({
         </button>
       </div>
       {lesson.video && <LessonPlayer video={lesson.video} lessonId={lesson.id} />}
-      <p className="max-w-[78ch] text-[12.5px] leading-relaxed text-pretty">
-        {lesson.instruction}
-      </p>
+      {lesson.bullets ? (
+        <ul className="max-w-[78ch] list-disc space-y-0.5 pl-5 text-[12.5px] leading-relaxed text-pretty">
+          {lesson.bullets.map((bullet) => (
+            <li key={bullet}>{bullet}</li>
+          ))}
+        </ul>
+      ) : (
+        <p className="max-w-[78ch] text-[12.5px] leading-relaxed text-pretty">
+          {lesson.instruction}
+        </p>
+      )}
     </div>
   );
 }

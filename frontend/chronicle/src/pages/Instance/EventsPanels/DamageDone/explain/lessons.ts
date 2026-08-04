@@ -22,6 +22,11 @@ const readChart: L = {
   deriveState: (caps) => (caps.hasMultiplePlayers ? "available" : "limited"),
   instruction:
     "Each bar is one player: length is their share of raid damage, the number is the value, and the percentage is their contribution to the total.",
+  bullets: [
+    "Each bar is one player, colored by class — longer bar, larger share",
+    "The number is the value; the percent is their share of the total",
+    "Rows are ranked — #1 is your top damage source",
+  ],
   video: {
     load: () => import("./videos/ReadChart.video"),
     durationInFrames: 300,
@@ -46,6 +51,10 @@ const totalVsDps: L = {
   },
   instruction:
     "Toggle 'Per second' above the chart. Totals reward time spent alive; per-second rewards throughput.",
+  bullets: [
+    "Totals reward time spent alive; per-second rewards throughput",
+    "Flip 'Per second' in the panel header — same order, new numbers",
+  ],
   video: {
     load: () => import("./videos/TotalVsDps.video"),
     durationInFrames: 270,
@@ -65,6 +74,11 @@ const parseScores: L = {
   exampleOnly: true,
   instruction:
     "Grey and white are below average, green and blue are solid, purple and orange are strong, gold is a rank-1 parse. Hover a pill for the cohort.",
+  bullets: [
+    "Pills appear next to each player once parses are available",
+    "Each pill scores against same-spec kills of this boss",
+    "Grey and white are below average; green and blue solid; purple and orange strong; gold is rank-1",
+  ],
   video: {
     load: () => import("./videos/ParseScores.video"),
     durationInFrames: 300,
@@ -85,6 +99,11 @@ const pinBreakout: L = {
   deriveState: (caps) => (caps.hasAbilityBreakout ? "available" : "example-required"),
   instruction:
     "Click a player row to open their breakout, pin it to keep it open, then open a second player to compare rotations side by side.",
+  bullets: [
+    "Click a player row to pin its ability breakout",
+    "Pinned breakouts stay open and are draggable",
+    "Open a second player to compare rotations side by side",
+  ],
   video: {
     load: () => import("./videos/PinBreakout.video"),
     durationInFrames: 240,
