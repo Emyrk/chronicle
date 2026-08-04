@@ -87,6 +87,35 @@ describe("live capability callback path", () => {
   });
 });
 
+describe("real panel type regression", () => {
+  // The real Damage Done panel uses panelType "damage_done" as its PANELS
+  // registry key. When the user clicks ?, InstancePageView sets
+  // ?explain=damage_done in the URL. This test verifies the exact token
+  // used by the real panel routes to the new DamageDoneExplainView.
+  it("exact URL token 'damage_done' selects new explain view", () => {
+    expect(isDamageDoneExplainType("damage_done")).toBe(true);
+  });
+
+  it("exact URL token 'enemy_damage_done' selects new explain view", () => {
+    expect(isDamageDoneExplainType("enemy_damage_done")).toBe(true);
+  });
+
+  // Verify all other explainer panel types still go to the old generic view
+  const OTHER_EXPLAINER_PANELS = [
+    "healing_done",
+    "sunder",
+    "damage_taken",
+    "enemy_damage_taken",
+    "roles",
+    "pulls_and_cleanup",
+  ];
+  for (const panelType of OTHER_EXPLAINER_PANELS) {
+    it(`'${panelType}' uses legacy generic explainer (not new view)`, () => {
+      expect(isDamageDoneExplainType(panelType)).toBe(false);
+    });
+  }
+});
+
 describe("fixture display requires zero network calls", () => {
   it("building all fixture data for example mode makes no fetch calls", () => {
     const fetchSpy = vi.spyOn(globalThis, "fetch");
