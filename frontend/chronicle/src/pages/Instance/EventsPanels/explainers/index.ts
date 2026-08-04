@@ -11,7 +11,7 @@ import type { EventsPanelType } from "../EventsPanel";
 // Import explainers from panel directories
 // These will be added as panels get their explainers
 import { damageDoneExplainer } from "../DamageDone/explain";
-import { healingDoneExplainer } from "../HealingDone/HealingDone.explainer";
+import { healingDoneExplainer } from "../HealingDone/explain";
 import { sunderExplainer } from "../Sunder/Sunder.explainer";
 import { damageTakenExplainer } from "../DamageTaken/DamageTaken.explainer";
 import { rolesExplainer } from "../Roles/Roles.explainer";

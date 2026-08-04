@@ -14,8 +14,8 @@ import type {
   DemoFilterStage,
 } from "@/components/ui/PlayerMetricChart/PlayerMetricChart.demo";
 import { PlayerMetricChartAbilityBreakdownDemo } from "@/components/ui/PlayerMetricChart/PlayerMetricChart.demo";
-import { clamp, entranceEasing, INTRO_FRAMES } from "./animation";
-import { Cursor, LessonIntro, StepCaption, VideoHeader, VideoStage } from "./shared";
+import { clamp, entranceEasing, INTRO_FRAMES } from "@/pages/Instance/PanelExplainer/videos/animation";
+import { Cursor, LessonIntro, StepCaption, VideoHeader, VideoStage } from "@/pages/Instance/PanelExplainer/videos/shared";
 
 // Measured cursor targets (stage coordinates).
 const FILTER_ICON = { x: 262, y: 152 };

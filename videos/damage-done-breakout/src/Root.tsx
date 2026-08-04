@@ -9,6 +9,10 @@ import BreakoutTourVideo from "../../../frontend/chronicle/src/pages/Instance/Ev
 import SpellRanksVideo from "../../../frontend/chronicle/src/pages/Instance/EventsPanels/DamageDone/explain/videos/SpellRanks.video";
 import FiltersVideo from "../../../frontend/chronicle/src/pages/Instance/EventsPanels/DamageDone/explain/videos/Filters.video";
 import CompareAbilitiesVideo from "../../../frontend/chronicle/src/pages/Instance/EventsPanels/DamageDone/explain/videos/CompareAbilities.video";
+import ReadHealingChartVideo from "../../../frontend/chronicle/src/pages/Instance/EventsPanels/HealingDone/explain/videos/ReadHealingChart.video";
+import HealingModesVideo from "../../../frontend/chronicle/src/pages/Instance/EventsPanels/HealingDone/explain/videos/HealingModes.video";
+import TotalVsHpsVideo from "../../../frontend/chronicle/src/pages/Instance/EventsPanels/HealingDone/explain/videos/TotalVsHps.video";
+import HealerBreakoutVideo from "../../../frontend/chronicle/src/pages/Instance/EventsPanels/HealingDone/explain/videos/HealerBreakout.video";
 
 /**
  * Studio registration for the in-app explainer lesson compositions.
@@ -19,6 +23,7 @@ import CompareAbilitiesVideo from "../../../frontend/chronicle/src/pages/Instanc
  */
 export const RemotionRoot: React.FC = () => {
   return (
+    <>
     <Folder name="DamageDoneLessons">
       <Composition
         id="PinBreakout"
@@ -85,5 +90,12 @@ export const RemotionRoot: React.FC = () => {
         height={720}
       />
     </Folder>
+      <Folder name="HealingDoneLessons">
+        <Composition id="ReadHealingChart" component={ReadHealingChartVideo} durationInFrames={350} fps={30} width={1280} height={720} />
+        <Composition id="HealingModes" component={HealingModesVideo} durationInFrames={440} fps={30} width={1280} height={720} />
+        <Composition id="TotalVsHps" component={TotalVsHpsVideo} durationInFrames={320} fps={30} width={1280} height={720} />
+        <Composition id="HealerBreakout" component={HealerBreakoutVideo} durationInFrames={470} fps={30} width={1280} height={720} />
+      </Folder>
+    </>
   );
 };

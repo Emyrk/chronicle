@@ -8,8 +8,8 @@
 
 import { interpolate, Sequence, spring, useCurrentFrame, useVideoConfig } from "remotion";
 import { PlayerMetricChartAbilityBreakdownDemo } from "@/components/ui/PlayerMetricChart/PlayerMetricChart.demo";
-import { clamp, entranceEasing, INTRO_FRAMES } from "./animation";
-import { Cursor, LessonIntro, StepCaption, VideoHeader, VideoStage } from "./shared";
+import { clamp, entranceEasing, INTRO_FRAMES } from "@/pages/Instance/PanelExplainer/videos/animation";
+import { Cursor, LessonIntro, StepCaption, VideoHeader, VideoStage } from "@/pages/Instance/PanelExplainer/videos/shared";
 
 // Rows sit at y=211+32*i once the entrance settles; Afflicted is row 4,
 // Ragesmash row 2. Breakouts are ~340 wide.

@@ -9,8 +9,8 @@ import { interpolate, Sequence, spring, useCurrentFrame, useVideoConfig } from "
 import type { ParsePillData } from "@/components/ui/PlayerMetricChart/PlayerMetricChart";
 import { PlayerMetricChartAbilityBreakdownDemo } from "@/components/ui/PlayerMetricChart/PlayerMetricChart.demo";
 import { parseHexColor } from "@/pages/Instance/parseColors";
-import { clamp, INTRO_FRAMES } from "./animation";
-import { LessonIntro, RegionHighlight, StepCaption, VideoHeader, VideoStage } from "./shared";
+import { clamp, INTRO_FRAMES } from "@/pages/Instance/PanelExplainer/videos/animation";
+import { LessonIntro, RegionHighlight, StepCaption, VideoHeader, VideoStage } from "@/pages/Instance/PanelExplainer/videos/shared";
 
 const YELLOW = "var(--color-class-rogue)";
 

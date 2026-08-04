@@ -7,8 +7,8 @@
 
 import { interpolate, Sequence, spring, useCurrentFrame, useVideoConfig } from "remotion";
 import { PlayerMetricChartAbilityBreakdownDemo } from "@/components/ui/PlayerMetricChart/PlayerMetricChart.demo";
-import { clamp, entranceEasing, INTRO_FRAMES } from "./animation";
-import { Cursor, LessonIntro, RegionHighlight, StepCaption, VideoHeader, VideoStage } from "./shared";
+import { clamp, entranceEasing, INTRO_FRAMES } from "@/pages/Instance/PanelExplainer/videos/animation";
+import { Cursor, LessonIntro, RegionHighlight, StepCaption, VideoHeader, VideoStage } from "@/pages/Instance/PanelExplainer/videos/shared";
 
 const YELLOW = "var(--color-class-rogue)";
 const BLUE = "var(--color-class-shaman)";

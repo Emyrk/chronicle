@@ -340,9 +340,10 @@ export const HealingDoneContent = (props: HealingDoneContentProps) => {
           </TooltipProvider>
           
           {/* View mode toggle */}
-          <div 
+          <div
             className="flex items-center gap-0.5 bg-muted/50 rounded-md p-0.5"
             data-healing-view-toggle
+            data-lesson-target="healing-modes"
           >
             {(["effective", "overheal", "total"] as HealingViewMode[]).map((mode) => (
               <button

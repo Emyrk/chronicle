@@ -48,7 +48,33 @@ export const LiveModeEmpty: Story = {};
 
 /** Fallback summary/tips shell for a panel without a lesson set. */
 export const FallbackPanel: Story = {
+  args: { panelType: "damage_taken" },
+};
+
+/** Healing Done lesson shell (live mode, no data in stories). */
+export const HealingDoneLessons: Story = {
   args: { panelType: "healing_done" },
+};
+
+/** Deep-linked healing lessons for probe verification. */
+export const HealingChartLesson: Story = {
+  args: { panelType: "healing_done" },
+  parameters: { routerEntries: ["/?lesson=read-chart"] },
+};
+
+export const HealingModesLesson: Story = {
+  args: { panelType: "healing_done" },
+  parameters: { routerEntries: ["/?lesson=healing-modes"] },
+};
+
+export const HealerBreakoutLesson: Story = {
+  args: { panelType: "healing_done" },
+  parameters: { routerEntries: ["/?lesson=breakout-tour"] },
+};
+
+export const TotalVsHpsLesson: Story = {
+  args: { panelType: "healing_done" },
+  parameters: { routerEntries: ["/?lesson=total-vs-dps"] },
 };
 
 /** Deep-linked video lesson — exercises the lazy Remotion player. */
