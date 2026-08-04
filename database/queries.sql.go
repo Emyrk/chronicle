@@ -9984,7 +9984,7 @@ func (q *sqlQuerier) DeleteTimeParseSnapshot(ctx context.Context, id uuid.UUID) 
 }
 
 const getLatestPublishedTimeParseSnapshot = `-- name: GetLatestPublishedTimeParseSnapshot :one
-SELECT id, tenant_id, cutoff, window_start, lookback_days, policy_version, query_version, status, created_at, published_at, source_row_count, source_watermark
+SELECT id, tenant_id, cutoff, window_start, lookback_days, policy_version, query_version, status, created_at, published_at, source_row_count, source_watermark, source_fingerprint
 FROM time_parse_snapshots
 WHERE tenant_id = $1
   AND lookback_days = $2
@@ -10024,12 +10024,13 @@ func (q *sqlQuerier) GetLatestPublishedTimeParseSnapshot(ctx context.Context, ar
 		&i.PublishedAt,
 		&i.SourceRowCount,
 		&i.SourceWatermark,
+		&i.SourceFingerprint,
 	)
 	return i, err
 }
 
 const getLatestPublishedTimeParseSnapshotBefore = `-- name: GetLatestPublishedTimeParseSnapshotBefore :one
-SELECT id, tenant_id, cutoff, window_start, lookback_days, policy_version, query_version, status, created_at, published_at, source_row_count, source_watermark
+SELECT id, tenant_id, cutoff, window_start, lookback_days, policy_version, query_version, status, created_at, published_at, source_row_count, source_watermark, source_fingerprint
 FROM time_parse_snapshots
 WHERE tenant_id = $1
   AND lookback_days = $2
@@ -10073,12 +10074,13 @@ func (q *sqlQuerier) GetLatestPublishedTimeParseSnapshotBefore(ctx context.Conte
 		&i.PublishedAt,
 		&i.SourceRowCount,
 		&i.SourceWatermark,
+		&i.SourceFingerprint,
 	)
 	return i, err
 }
 
 const getLatestPublishedTimeParseSnapshotForGuard = `-- name: GetLatestPublishedTimeParseSnapshotForGuard :one
-SELECT id, tenant_id, cutoff, window_start, lookback_days, policy_version, query_version, status, created_at, published_at, source_row_count, source_watermark
+SELECT id, tenant_id, cutoff, window_start, lookback_days, policy_version, query_version, status, created_at, published_at, source_row_count, source_watermark, source_fingerprint
 FROM time_parse_snapshots
 WHERE tenant_id = $1
   AND lookback_days = $2
@@ -10118,6 +10120,7 @@ func (q *sqlQuerier) GetLatestPublishedTimeParseSnapshotForGuard(ctx context.Con
 		&i.PublishedAt,
 		&i.SourceRowCount,
 		&i.SourceWatermark,
+		&i.SourceFingerprint,
 	)
 	return i, err
 }
@@ -10143,7 +10146,7 @@ func (q *sqlQuerier) GetLogInstanceForTimeParse(ctx context.Context, id uuid.UUI
 }
 
 const getPublishedTimeParseSnapshotForCutoff = `-- name: GetPublishedTimeParseSnapshotForCutoff :one
-SELECT id, tenant_id, cutoff, window_start, lookback_days, policy_version, query_version, status, created_at, published_at, source_row_count, source_watermark
+SELECT id, tenant_id, cutoff, window_start, lookback_days, policy_version, query_version, status, created_at, published_at, source_row_count, source_watermark, source_fingerprint
 FROM time_parse_snapshots
 WHERE tenant_id = $1
   AND lookback_days = $2
@@ -10186,6 +10189,7 @@ func (q *sqlQuerier) GetPublishedTimeParseSnapshotForCutoff(ctx context.Context,
 		&i.PublishedAt,
 		&i.SourceRowCount,
 		&i.SourceWatermark,
+		&i.SourceFingerprint,
 	)
 	return i, err
 }
@@ -10285,7 +10289,18 @@ const getTimeParseSnapshotSourceStats = `-- name: GetTimeParseSnapshotSourceStat
 WITH clear_stats AS (
     SELECT
         COUNT(*)::bigint AS cnt,
-        MAX(sr.start_time)::timestamptz AS wm
+        MAX(sr.start_time)::timestamptz AS wm,
+        COALESCE(bit_xor(hashtextextended(
+            sr.instance_id::text || '|' ||
+            COALESCE(li.duplicate_group_id, li.id)::text || '|' ||
+            sr.qualified::text || '|' ||
+            sr.duration_ms::text || '|' ||
+            sr.instance_name || '|' ||
+            li.difficulty_name || '|' ||
+            li.max_players::text || '|' ||
+            sr.start_time::text,
+            0
+        )), 0)::bigint AS fp
     FROM instance_speedruns sr
     JOIN log_instances li ON li.id = sr.instance_id
     WHERE sr.qualified = true
@@ -10296,7 +10311,20 @@ WITH clear_stats AS (
 boss_stats AS (
     SELECT
         COUNT(*)::bigint AS cnt,
-        MAX(lie.end_time)::timestamptz AS wm
+        MAX(lie.end_time)::timestamptz AS wm,
+        COALESCE(bit_xor(hashtextextended(
+            lie.instance_id::text || '|' ||
+            COALESCE(li.duplicate_group_id, li.id)::text || '|' ||
+            lie.name || '|' ||
+            lie.kill_type::text || '|' ||
+            lie.boss::text || '|' ||
+            lie.start_time::text || '|' ||
+            lie.end_time::text || '|' ||
+            sr.instance_name || '|' ||
+            li.difficulty_name || '|' ||
+            li.max_players::text,
+            1
+        )), 0)::bigint AS fp
     FROM log_instance_encounters lie
     JOIN log_instances li ON li.id = lie.instance_id
     JOIN instance_speedruns sr ON sr.instance_id = lie.instance_id
@@ -10309,7 +10337,8 @@ boss_stats AS (
 )
 SELECT
     (COALESCE(c.cnt, 0) + COALESCE(b.cnt, 0))::bigint AS row_count,
-    GREATEST(c.wm, b.wm)::timestamptz AS watermark
+    GREATEST(c.wm, b.wm)::timestamptz AS watermark,
+    (c.fp # b.fp)::bigint AS fingerprint
 FROM clear_stats c, boss_stats b
 `
 
@@ -10319,19 +10348,25 @@ type GetTimeParseSnapshotSourceStatsParams struct {
 }
 
 type GetTimeParseSnapshotSourceStatsRow struct {
-	RowCount  int64              `db:"row_count" json:"row_count"`
-	Watermark pgtype.Timestamptz `db:"watermark" json:"watermark"`
+	RowCount    int64              `db:"row_count" json:"row_count"`
+	Watermark   pgtype.Timestamptz `db:"watermark" json:"watermark"`
+	Fingerprint int64              `db:"fingerprint" json:"fingerprint"`
 }
 
 // Compute a combined source fingerprint covering both clear-time eligible
 // speedruns and boss-kill eligible encounters. Changes in either source
 // break the staleness guard so new boss encounters or reparses trigger
 // publication.
+// The fingerprint uses bit_xor(hashtextextended(...)) over all columns that
+// affect membership, cohort identity, duration, dedup, and qualification.
+// Empty populations produce fingerprint = 0 (COALESCE of NULL bit_xor).
+// Clear and boss fingerprints are combined with XOR using different seeds
+// so identical content in both populations does not cancel out.
 // IMPORTANT: keep WHERE clauses in sync with the corresponding BatchInsert queries.
 func (q *sqlQuerier) GetTimeParseSnapshotSourceStats(ctx context.Context, arg GetTimeParseSnapshotSourceStatsParams) (GetTimeParseSnapshotSourceStatsRow, error) {
 	row := q.db.QueryRow(ctx, getTimeParseSnapshotSourceStats, arg.Cutoff, arg.WindowStart)
 	var i GetTimeParseSnapshotSourceStatsRow
-	err := row.Scan(&i.RowCount, &i.Watermark)
+	err := row.Scan(&i.RowCount, &i.Watermark, &i.Fingerprint)
 	return i, err
 }
 
@@ -10339,23 +10374,24 @@ const insertTimeParseSnapshot = `-- name: InsertTimeParseSnapshot :one
 INSERT INTO time_parse_snapshots (
     tenant_id, cutoff, window_start, lookback_days,
     policy_version, query_version, status,
-    source_row_count, source_watermark
+    source_row_count, source_watermark, source_fingerprint
 ) VALUES (
     $1, $2, $3, $4,
     $5, $6, 'pending',
-    $7, $8
-) RETURNING id, tenant_id, cutoff, window_start, lookback_days, policy_version, query_version, status, created_at, published_at, source_row_count, source_watermark
+    $7, $8, $9
+) RETURNING id, tenant_id, cutoff, window_start, lookback_days, policy_version, query_version, status, created_at, published_at, source_row_count, source_watermark, source_fingerprint
 `
 
 type InsertTimeParseSnapshotParams struct {
-	TenantID        uuid.UUID          `db:"tenant_id" json:"tenant_id"`
-	Cutoff          pgtype.Timestamptz `db:"cutoff" json:"cutoff"`
-	WindowStart     pgtype.Timestamptz `db:"window_start" json:"window_start"`
-	LookbackDays    int32              `db:"lookback_days" json:"lookback_days"`
-	PolicyVersion   int16              `db:"policy_version" json:"policy_version"`
-	QueryVersion    int16              `db:"query_version" json:"query_version"`
-	SourceRowCount  int64              `db:"source_row_count" json:"source_row_count"`
-	SourceWatermark pgtype.Timestamptz `db:"source_watermark" json:"source_watermark"`
+	TenantID          uuid.UUID          `db:"tenant_id" json:"tenant_id"`
+	Cutoff            pgtype.Timestamptz `db:"cutoff" json:"cutoff"`
+	WindowStart       pgtype.Timestamptz `db:"window_start" json:"window_start"`
+	LookbackDays      int32              `db:"lookback_days" json:"lookback_days"`
+	PolicyVersion     int16              `db:"policy_version" json:"policy_version"`
+	QueryVersion      int16              `db:"query_version" json:"query_version"`
+	SourceRowCount    int64              `db:"source_row_count" json:"source_row_count"`
+	SourceWatermark   pgtype.Timestamptz `db:"source_watermark" json:"source_watermark"`
+	SourceFingerprint int64              `db:"source_fingerprint" json:"source_fingerprint"`
 }
 
 // Create a new pending time-parse snapshot for a tenant+lookback.
@@ -10369,6 +10405,7 @@ func (q *sqlQuerier) InsertTimeParseSnapshot(ctx context.Context, arg InsertTime
 		arg.QueryVersion,
 		arg.SourceRowCount,
 		arg.SourceWatermark,
+		arg.SourceFingerprint,
 	)
 	var i TimeParseSnapshot
 	err := row.Scan(
@@ -10384,6 +10421,7 @@ func (q *sqlQuerier) InsertTimeParseSnapshot(ctx context.Context, arg InsertTime
 		&i.PublishedAt,
 		&i.SourceRowCount,
 		&i.SourceWatermark,
+		&i.SourceFingerprint,
 	)
 	return i, err
 }
@@ -10392,7 +10430,7 @@ const publishTimeParseSnapshot = `-- name: PublishTimeParseSnapshot :one
 UPDATE time_parse_snapshots
 SET status = 'published', published_at = now()
 WHERE id = $1 AND status IN ('pending', 'published')
-RETURNING id, tenant_id, cutoff, window_start, lookback_days, policy_version, query_version, status, created_at, published_at, source_row_count, source_watermark
+RETURNING id, tenant_id, cutoff, window_start, lookback_days, policy_version, query_version, status, created_at, published_at, source_row_count, source_watermark, source_fingerprint
 `
 
 // Transition a pending time-parse snapshot to published. Idempotent on already-published.
@@ -10412,6 +10450,7 @@ func (q *sqlQuerier) PublishTimeParseSnapshot(ctx context.Context, id uuid.UUID)
 		&i.PublishedAt,
 		&i.SourceRowCount,
 		&i.SourceWatermark,
+		&i.SourceFingerprint,
 	)
 	return i, err
 }

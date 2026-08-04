@@ -251,6 +251,11 @@ type sqlcQuerier interface {
 	// speedruns and boss-kill eligible encounters. Changes in either source
 	// break the staleness guard so new boss encounters or reparses trigger
 	// publication.
+	// The fingerprint uses bit_xor(hashtextextended(...)) over all columns that
+	// affect membership, cohort identity, duration, dedup, and qualification.
+	// Empty populations produce fingerprint = 0 (COALESCE of NULL bit_xor).
+	// Clear and boss fingerprints are combined with XOR using different seeds
+	// so identical content in both populations does not cancel out.
 	// IMPORTANT: keep WHERE clauses in sync with the corresponding BatchInsert queries.
 	GetTimeParseSnapshotSourceStats(ctx context.Context, arg GetTimeParseSnapshotSourceStatsParams) (GetTimeParseSnapshotSourceStatsRow, error)
 	GetUploadKey(ctx context.Context, id uuid.UUID) (WowServerUploadKey, error)

@@ -3,11 +3,11 @@
 INSERT INTO time_parse_snapshots (
     tenant_id, cutoff, window_start, lookback_days,
     policy_version, query_version, status,
-    source_row_count, source_watermark
+    source_row_count, source_watermark, source_fingerprint
 ) VALUES (
     @tenant_id, @cutoff, @window_start, @lookback_days,
     @policy_version, @query_version, 'pending',
-    @source_row_count, @source_watermark
+    @source_row_count, @source_watermark, @source_fingerprint
 ) RETURNING *;
 
 -- name: PublishTimeParseSnapshot :one
@@ -186,11 +186,27 @@ SELECT COUNT(*) FROM time_parse_boss_kill_members WHERE snapshot_id = @snapshot_
 -- speedruns and boss-kill eligible encounters. Changes in either source
 -- break the staleness guard so new boss encounters or reparses trigger
 -- publication.
+-- The fingerprint uses bit_xor(hashtextextended(...)) over all columns that
+-- affect membership, cohort identity, duration, dedup, and qualification.
+-- Empty populations produce fingerprint = 0 (COALESCE of NULL bit_xor).
+-- Clear and boss fingerprints are combined with XOR using different seeds
+-- so identical content in both populations does not cancel out.
 -- IMPORTANT: keep WHERE clauses in sync with the corresponding BatchInsert queries.
 WITH clear_stats AS (
     SELECT
         COUNT(*)::bigint AS cnt,
-        MAX(sr.start_time)::timestamptz AS wm
+        MAX(sr.start_time)::timestamptz AS wm,
+        COALESCE(bit_xor(hashtextextended(
+            sr.instance_id::text || '|' ||
+            COALESCE(li.duplicate_group_id, li.id)::text || '|' ||
+            sr.qualified::text || '|' ||
+            sr.duration_ms::text || '|' ||
+            sr.instance_name || '|' ||
+            li.difficulty_name || '|' ||
+            li.max_players::text || '|' ||
+            sr.start_time::text,
+            0
+        )), 0)::bigint AS fp
     FROM instance_speedruns sr
     JOIN log_instances li ON li.id = sr.instance_id
     WHERE sr.qualified = true
@@ -201,7 +217,20 @@ WITH clear_stats AS (
 boss_stats AS (
     SELECT
         COUNT(*)::bigint AS cnt,
-        MAX(lie.end_time)::timestamptz AS wm
+        MAX(lie.end_time)::timestamptz AS wm,
+        COALESCE(bit_xor(hashtextextended(
+            lie.instance_id::text || '|' ||
+            COALESCE(li.duplicate_group_id, li.id)::text || '|' ||
+            lie.name || '|' ||
+            lie.kill_type::text || '|' ||
+            lie.boss::text || '|' ||
+            lie.start_time::text || '|' ||
+            lie.end_time::text || '|' ||
+            sr.instance_name || '|' ||
+            li.difficulty_name || '|' ||
+            li.max_players::text,
+            1
+        )), 0)::bigint AS fp
     FROM log_instance_encounters lie
     JOIN log_instances li ON li.id = lie.instance_id
     JOIN instance_speedruns sr ON sr.instance_id = lie.instance_id
@@ -214,7 +243,8 @@ boss_stats AS (
 )
 SELECT
     (COALESCE(c.cnt, 0) + COALESCE(b.cnt, 0))::bigint AS row_count,
-    GREATEST(c.wm, b.wm)::timestamptz AS watermark
+    GREATEST(c.wm, b.wm)::timestamptz AS watermark,
+    (c.fp # b.fp)::bigint AS fingerprint
 FROM clear_stats c, boss_stats b;
 
 -- name: GetTimeParseSnapshotClearTimeCohort :many

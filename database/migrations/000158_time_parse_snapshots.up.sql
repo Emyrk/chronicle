@@ -1,3 +1,14 @@
+-- Polyfill: bit_xor(bigint) aggregate for PostgreSQL < 14.
+-- PG 14+ has this built-in; the DO block catches the duplicate_function error.
+DO $$ BEGIN
+    CREATE AGGREGATE bit_xor(bigint) (
+        SFUNC = int8xor,
+        STYPE = bigint
+    );
+EXCEPTION WHEN duplicate_function THEN
+    NULL;
+END $$;
+
 -- Time-parse snapshot tables for immutable clear-time and boss-kill-time scoring.
 -- Mirrors the ranking_snapshots lifecycle pattern (pending → published) but
 -- stores time metrics (durations in milliseconds) instead of DPS/HPS.
@@ -27,6 +38,7 @@ CREATE TABLE time_parse_snapshots (
     published_at      TIMESTAMPTZ,
     source_row_count  BIGINT NOT NULL DEFAULT 0,
     source_watermark  TIMESTAMPTZ,
+    source_fingerprint BIGINT NOT NULL DEFAULT 0,
     -- published_at must be set when status is 'published'.
     CHECK (status != 'published' OR published_at IS NOT NULL)
 );

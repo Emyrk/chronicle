@@ -459,6 +459,108 @@ func TestWorkerPublishTimeParseSnapshotTenant(t *testing.T) {
 		assert.Equal(t, int64(6), bossCount2, "new boss source should be included")
 	})
 
+	// StalenessOnReparseDurationChange proves that the content fingerprint
+	// detects a reparse-like duration change even when row_count and
+	// gameplay watermark (max start_time) remain identical.
+	//
+	// Scenario: 5 qualified speedruns are published, then one run's
+	// duration_ms is updated in-place (simulating a reparse that corrects
+	// the clear time). The staleness guard must detect the fingerprint
+	// change and publish a new snapshot.
+	t.Run("StalenessOnReparseDurationChange", func(t *testing.T) {
+		t.Parallel()
+		pool, store, realmID := setupTimeParseTest(t)
+		ctx := testutil.Context(t, testutil.WaitMedium)
+
+		baseTime := time.Date(2024, 6, 1, 12, 0, 0, 0, time.UTC)
+		cutoff := time.Date(2024, 6, 3, 0, 0, 0, 0, time.UTC)
+
+		// Insert 5 qualified runs. All start times are before the cutoff.
+		var firstInstanceID uuid.UUID
+		for i := 0; i < 5; i++ {
+			st := baseTime.Add(time.Duration(i) * time.Hour)
+			id := insertTimeParseInstance(t, pool, store, realmID, timeParseInstanceOpts{
+				instanceName: "Molten Core", difficultyName: "Normal", maxPlayers: 40,
+				qualified: true, durationMs: 600000 + int64(i*10000),
+				startTime: st,
+			})
+			if i == 0 {
+				firstInstanceID = id
+			}
+		}
+
+		// First publication.
+		worker := &servicerankings.WorkerPublishTimeParseSnapshotTenant{
+			Store:  store,
+			Logger: slog.Default(),
+		}
+		job1 := &river.Job[servicerankings.ArgsPublishTimeParseSnapshotTenant]{
+			Args: servicerankings.ArgsPublishTimeParseSnapshotTenant{
+				TenantID:      uuid.Nil,
+				Cutoff:        cutoff,
+				LookbackDays:  0,
+				PolicyVersion: int16(timeparsepolicy.PolicyVersion),
+			},
+		}
+		err := worker.Work(ctx, job1)
+		require.NoError(t, err)
+
+		snap1, err := store.GetLatestPublishedTimeParseSnapshot(ctx, database.GetLatestPublishedTimeParseSnapshotParams{
+			TenantID: uuid.Nil, LookbackDays: 0,
+			PolicyVersion: int16(timeparsepolicy.PolicyVersion), QueryVersion: 1,
+		})
+		require.NoError(t, err)
+		clearCount1, err := store.CountTimeParseSnapshotClearTimeMembers(ctx, snap1.ID)
+		require.NoError(t, err)
+		assert.Equal(t, int64(5), clearCount1)
+
+		// Simulate a reparse: update the first instance's duration in-place.
+		// Row count and max(start_time) watermark stay identical.
+		conn, err := pool.Acquire(ctx)
+		require.NoError(t, err)
+		_, err = conn.Exec(ctx,
+			"UPDATE instance_speedruns SET duration_ms = $1 WHERE instance_id = $2",
+			555000, firstInstanceID)
+		require.NoError(t, err)
+		conn.Release()
+
+		// Second publication with a different cutoff.
+		cutoff2 := time.Date(2024, 6, 4, 0, 0, 0, 0, time.UTC)
+		job2 := &river.Job[servicerankings.ArgsPublishTimeParseSnapshotTenant]{
+			Args: servicerankings.ArgsPublishTimeParseSnapshotTenant{
+				TenantID:      uuid.Nil,
+				Cutoff:        cutoff2,
+				LookbackDays:  0,
+				PolicyVersion: int16(timeparsepolicy.PolicyVersion),
+			},
+		}
+		err = worker.Work(ctx, job2)
+		require.NoError(t, err)
+
+		snap2, err := store.GetLatestPublishedTimeParseSnapshot(ctx, database.GetLatestPublishedTimeParseSnapshotParams{
+			TenantID: uuid.Nil, LookbackDays: 0,
+			PolicyVersion: int16(timeparsepolicy.PolicyVersion), QueryVersion: 1,
+		})
+		require.NoError(t, err)
+		assert.NotEqual(t, snap1.ID, snap2.ID,
+			"fingerprint must detect duration change even when row_count and watermark are unchanged")
+
+		// The new snapshot should reflect the updated duration.
+		cohort, err := store.GetTimeParseSnapshotClearTimeCohort(ctx, database.GetTimeParseSnapshotClearTimeCohortParams{
+			SnapshotID: snap2.ID, InstanceName: "Molten Core",
+			DifficultyName: "Normal", MaxPlayers: 40,
+		})
+		require.NoError(t, err)
+		require.Len(t, cohort, 5)
+		has555 := false
+		for _, d := range cohort {
+			if d == 555000 {
+				has555 = true
+			}
+		}
+		assert.True(t, has555, "updated duration (555000) should appear in the new snapshot")
+	})
+
 	t.Run("HistoricalSelection", func(t *testing.T) {
 		t.Parallel()
 		pool, store, realmID := setupTimeParseTest(t)

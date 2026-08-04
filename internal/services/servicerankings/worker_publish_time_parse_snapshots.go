@@ -220,6 +220,9 @@ func (w *WorkerPublishTimeParseSnapshotTenant) Work(ctx context.Context, job *ri
 	}
 
 	// Staleness guard: skip if source data unchanged.
+	// The fingerprint is the primary signal; row_count and watermark are
+	// kept for diagnostics but a fingerprint match alone is sufficient to
+	// skip re-publication.
 	if !args.AdminBackfill {
 		prev, prevErr := w.Store.GetLatestPublishedTimeParseSnapshotForGuard(ctx, database.GetLatestPublishedTimeParseSnapshotForGuardParams{
 			TenantID:      args.TenantID,
@@ -227,23 +230,21 @@ func (w *WorkerPublishTimeParseSnapshotTenant) Work(ctx context.Context, job *ri
 			PolicyVersion: args.PolicyVersion,
 			QueryVersion:  timeParseSnapshotQueryVersion,
 		})
-		if prevErr == nil {
-			watermarkMatch := prev.SourceWatermark.Valid == sourceStats.Watermark.Valid &&
-				(!prev.SourceWatermark.Valid || prev.SourceWatermark.Time.Equal(sourceStats.Watermark.Time))
-			if prev.SourceRowCount == sourceStats.RowCount && watermarkMatch {
-				w.Logger.Debug("skipping unchanged time-parse snapshot",
-					slog.String("tenant_id", args.TenantID.String()),
-					slog.Int("lookback_days", int(args.LookbackDays)),
-					slog.Int64("source_row_count", sourceStats.RowCount),
-				)
-				_ = river.RecordOutput(ctx, map[string]any{
-					"tenant_id":        args.TenantID.String(),
-					"skipped":          true,
-					"reason":           "unchanged",
-					"source_row_count": sourceStats.RowCount,
-				})
-				return nil
-			}
+		if prevErr == nil && prev.SourceFingerprint == sourceStats.Fingerprint {
+			w.Logger.Debug("skipping unchanged time-parse snapshot",
+				slog.String("tenant_id", args.TenantID.String()),
+				slog.Int("lookback_days", int(args.LookbackDays)),
+				slog.Int64("source_row_count", sourceStats.RowCount),
+				slog.Int64("source_fingerprint", sourceStats.Fingerprint),
+			)
+			_ = river.RecordOutput(ctx, map[string]any{
+				"tenant_id":          args.TenantID.String(),
+				"skipped":            true,
+				"reason":             "unchanged",
+				"source_row_count":   sourceStats.RowCount,
+				"source_fingerprint": sourceStats.Fingerprint,
+			})
+			return nil
 		}
 	}
 
@@ -251,14 +252,15 @@ func (w *WorkerPublishTimeParseSnapshotTenant) Work(ctx context.Context, job *ri
 	txErr := w.Store.InTx(ctx, func(tx database.Store) error {
 		// 1. Create pending snapshot.
 		snap, err := tx.InsertTimeParseSnapshot(ctx, database.InsertTimeParseSnapshotParams{
-			TenantID:       args.TenantID,
-			Cutoff:         cutoff,
-			WindowStart:    windowStart,
-			LookbackDays:   args.LookbackDays,
-			PolicyVersion:  args.PolicyVersion,
-			QueryVersion:   timeParseSnapshotQueryVersion,
-			SourceRowCount: sourceStats.RowCount,
-			SourceWatermark: sourceStats.Watermark,
+			TenantID:          args.TenantID,
+			Cutoff:            cutoff,
+			WindowStart:       windowStart,
+			LookbackDays:      args.LookbackDays,
+			PolicyVersion:     args.PolicyVersion,
+			QueryVersion:      timeParseSnapshotQueryVersion,
+			SourceRowCount:    sourceStats.RowCount,
+			SourceWatermark:   sourceStats.Watermark,
+			SourceFingerprint: sourceStats.Fingerprint,
 		})
 		if err != nil {
 			return fmt.Errorf("insert time-parse snapshot: %w", err)
