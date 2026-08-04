@@ -48,8 +48,8 @@ function RegionHighlight({ left, top, width, height, color = YELLOW }: Region) {
 const STEPS: Array<{ from: number; caption: ReactNode; regions: Region[] }> = [
   {
     from: 20,
-    caption: "Each bar is one player — longer bar, larger share",
-    regions: [{ left: 72, top: 206, width: 420, height: 170 }],
+    caption: "Each bar is one player, colored by class — longer bar, larger share",
+    regions: [{ left: 72, top: 206, width: 472, height: 170 }],
   },
   {
     from: 115,
