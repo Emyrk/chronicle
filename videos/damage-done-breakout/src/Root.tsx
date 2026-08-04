@@ -16,6 +16,12 @@ import HealerBreakoutVideo from "../../../frontend/chronicle/src/pages/Instance/
 import HealingRanksVideo from "../../../frontend/chronicle/src/pages/Instance/EventsPanels/HealingDone/explain/videos/HealingRanks.video";
 import CompareHealersVideo from "../../../frontend/chronicle/src/pages/Instance/EventsPanels/HealingDone/explain/videos/CompareHealers.video";
 import HealingFiltersVideo from "../../../frontend/chronicle/src/pages/Instance/EventsPanels/HealingDone/explain/videos/HealingFilters.video";
+import ReadLineChartVideo from "../../../frontend/chronicle/src/pages/Instance/EventsPanels/Timeline/explain/videos/ReadLineChart.video";
+import TimeRangeSelectVideo from "../../../frontend/chronicle/src/pages/Instance/EventsPanels/Timeline/explain/videos/TimeRangeSelect.video";
+import LegendToggleVideo from "../../../frontend/chronicle/src/pages/Instance/EventsPanels/Timeline/explain/videos/LegendToggle.video";
+import AggregationsVideo from "../../../frontend/chronicle/src/pages/Instance/EventsPanels/Timeline/explain/videos/Aggregations.video";
+import EditSeriesVideo from "../../../frontend/chronicle/src/pages/Instance/EventsPanels/Timeline/explain/videos/EditSeries.video";
+import RaidDurabilityVideo from "../../../frontend/chronicle/src/pages/Instance/EventsPanels/Timeline/explain/videos/RaidDurability.video";
 
 /**
  * Studio registration for the in-app explainer lesson compositions.
@@ -101,6 +107,14 @@ export const RemotionRoot: React.FC = () => {
         <Composition id="HealingRanks" component={HealingRanksVideo} durationInFrames={380} fps={30} width={1280} height={720} />
         <Composition id="CompareHealers" component={CompareHealersVideo} durationInFrames={470} fps={30} width={1280} height={720} />
         <Composition id="HealingFilters" component={HealingFiltersVideo} durationInFrames={500} fps={30} width={1280} height={720} />
+      </Folder>
+      <Folder name="TimelineLessons">
+        <Composition id="ReadLineChart" component={ReadLineChartVideo} durationInFrames={350} fps={30} width={1280} height={720} />
+        <Composition id="TimeRangeSelect" component={TimeRangeSelectVideo} durationInFrames={470} fps={30} width={1280} height={720} />
+        <Composition id="LegendToggle" component={LegendToggleVideo} durationInFrames={380} fps={30} width={1280} height={720} />
+        <Composition id="Aggregations" component={AggregationsVideo} durationInFrames={470} fps={30} width={1280} height={720} />
+        <Composition id="EditSeries" component={EditSeriesVideo} durationInFrames={530} fps={30} width={1280} height={720} />
+        <Composition id="RaidDurability" component={RaidDurabilityVideo} durationInFrames={380} fps={30} width={1280} height={720} />
       </Folder>
     </>
   );
