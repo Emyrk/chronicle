@@ -6,8 +6,7 @@
 import type { ReactNode } from "react";
 import { interpolate, Sequence, spring, useCurrentFrame, useVideoConfig } from "remotion";
 import { PlayerMetricChartAbilityBreakdownDemo } from "@/components/ui/PlayerMetricChart/PlayerMetricChart.demo";
-import { clamp } from "./animation";
-import { StepCaption, VideoHeader, VideoStage } from "./shared";
+import { RegionHighlight, StepCaption, VideoHeader, VideoStage } from "./shared";
 
 const YELLOW = "var(--color-class-rogue)";
 const BLUE = "var(--color-class-shaman)";
@@ -18,29 +17,6 @@ interface Region {
   width: number;
   height: number;
   color?: string;
-}
-
-/** Pulsing highlight ring over a chart region (frame-driven, no CSS animation). */
-function RegionHighlight({ left, top, width, height, color = YELLOW }: Region) {
-  const frame = useCurrentFrame();
-  const { fps } = useVideoConfig();
-  // Local frame inside the Sequence — pulse twice per second.
-  const pulse = 0.5 + 0.5 * Math.sin((frame / fps) * Math.PI * 2);
-  const appear = interpolate(frame, [0, 8], [0, 1], clamp);
-  return (
-    <div
-      className="absolute rounded-md border-2"
-      style={{
-        left,
-        top,
-        width,
-        height,
-        borderColor: color,
-        opacity: appear * interpolate(pulse, [0, 1], [0.45, 1]),
-        zIndex: 210,
-      }}
-    />
-  );
 }
 
 // Regions measured against the settled render: rows at y=211+32*i, x 77-687;
