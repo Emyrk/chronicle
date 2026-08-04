@@ -84,18 +84,18 @@ const legend: L = {
 
 const aggregations: L = {
   id: "aggregations",
-  title: "Sum, rolling average, cumulative",
+  title: "Rolling avg, per second, cumulative",
   group: "advanced",
   description: () =>
-    "The same data, three shapes — smooth spikes or climb to the fight total.",
+    "The same data, three shapes — smooth the trend, rate it, or climb to the total.",
   deriveState: () => "available",
   instruction:
-    "Each series has an aggregation, set on the panel's back: Sum per bucket, a rolling average that smooths spikes, per-second rates, or a cumulative climb to the total.",
+    "Open the filter menu and click 'Edit filters' to flip the panel — each series has an aggregation: a rolling average that smooths spikes, per-second rates, or a cumulative climb to the total.",
   bullets: [
-    "Sum shows the total per one-second bucket — spiky but exact",
+    "'Edit filters' in the filter menu flips the panel to the editor",
     "Rolling average smooths the spikes to show the trend",
+    "Per second turns buckets into rates",
     "Cumulative climbs to the fight total",
-    "Set per series in the panel's back-side editor",
   ],
   video: {
     load: () => import("./videos/Aggregations.video"),
