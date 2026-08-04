@@ -49,11 +49,14 @@ const abilities: Record<string, AbilityBreakdown[]> = {
 
 export function PlayerMetricChartAbilityBreakdownDemo({
   pinnedPlayerId,
+  pinnedPosition,
   classIconBasePath,
   perSecond,
   parsePills,
 }: {
   pinnedPlayerId?: string
+  /** Where the pinned breakout opens (portal-container coordinates). */
+  pinnedPosition?: { x: number; y: number }
   classIconBasePath?: string
   /** Show DPS values instead of totals (drives the explainer videos). */
   perSecond?: boolean
@@ -61,8 +64,10 @@ export function PlayerMetricChartAbilityBreakdownDemo({
   parsePills?: Map<string, ParsePillData>
 }) {
   const initialPinnedPositions = useMemo(
-    () => pinnedPlayerId ? new Map([[pinnedPlayerId, { x: 720, y: 170 }]]) : undefined,
-    [pinnedPlayerId],
+    () => pinnedPlayerId
+      ? new Map([[pinnedPlayerId, pinnedPosition ?? { x: 720, y: 170 }]])
+      : undefined,
+    [pinnedPlayerId, pinnedPosition],
   )
 
   const breakout = useCallback((playerID: string) => {

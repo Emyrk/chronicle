@@ -3,11 +3,11 @@
  * then the color scale sweeps from grey to gold. 300 frames @ 30fps, 1280x720.
  */
 
-import { AbsoluteFill, interpolate, spring, useCurrentFrame, useVideoConfig } from "remotion";
+import { interpolate, spring, useCurrentFrame, useVideoConfig } from "remotion";
 import type { ParsePillData } from "@/components/ui/PlayerMetricChart/PlayerMetricChart";
 import { PlayerMetricChartAbilityBreakdownDemo } from "@/components/ui/PlayerMetricChart/PlayerMetricChart.demo";
 import { clamp } from "./animation";
-import { StepCaption, VideoHeader } from "./shared";
+import { StepCaption, VideoHeader, VideoStage } from "./shared";
 
 const DEMO_PILLS = new Map<string, ParsePillData>([
   ["player-1", { displayScore: 99, color: "#e5cc80", tooltipContent: null }],
@@ -36,8 +36,7 @@ export default function ParseScoresVideo() {
   const captionOpacity = interpolate(frame, [8, 18, 280, 294], [0, 1, 1, 0], clamp);
 
   return (
-    <AbsoluteFill className="dark pointer-events-none select-none overflow-hidden bg-background text-foreground">
-      <div className="absolute inset-0 bg-[radial-gradient(circle_at_78%_22%,color-mix(in_oklch,var(--primary)_12%,transparent),transparent_38%)]" />
+    <VideoStage>
       <VideoHeader title="Understand parse scores" entrance={entrance} />
 
       <main
@@ -81,6 +80,6 @@ export default function ParseScoresVideo() {
         }
         opacity={captionOpacity}
       />
-    </AbsoluteFill>
+    </VideoStage>
   );
 }

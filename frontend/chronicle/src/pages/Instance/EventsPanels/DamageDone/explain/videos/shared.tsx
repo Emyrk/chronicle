@@ -5,7 +5,27 @@
  * interpolate/spring on useCurrentFrame() — never CSS transitions/animations.
  */
 
-import { interpolate } from "remotion";
+import { useState, type ReactNode } from "react";
+import { AbsoluteFill, interpolate } from "remotion";
+import { PortalContainerProvider } from "@/components/ui/PortalContainerContext";
+
+/**
+ * Composition root: dark stage, non-interactive content, and — crucially —
+ * a LOCAL portal container so floating app UI (pinned breakouts) renders
+ * inside the video frame instead of escaping to the page's portal root.
+ */
+export function VideoStage({ children }: { children: ReactNode }) {
+  const [stage, setStage] = useState<HTMLDivElement | null>(null);
+  return (
+    <AbsoluteFill
+      ref={setStage}
+      className="dark pointer-events-none select-none overflow-hidden bg-background text-foreground"
+    >
+      <div className="absolute inset-0 bg-[radial-gradient(circle_at_78%_22%,color-mix(in_oklch,var(--primary)_12%,transparent),transparent_38%)]" />
+      <PortalContainerProvider container={stage}>{children}</PortalContainerProvider>
+    </AbsoluteFill>
+  );
+}
 
 /** Scripted cursor with a click pulse (0..1). */
 export function Cursor({ x, y, clicking }: { x: number; y: number; clicking: number }) {
@@ -54,7 +74,7 @@ export function StepCaption({
   opacity: number;
 }) {
   return (
-    <div className="absolute bottom-12 left-[72px] flex items-center gap-4" style={{ opacity }}>
+    <div className="absolute bottom-20 left-[72px] flex items-center gap-4" style={{ opacity }}>
       <div className="grid h-12 w-12 flex-shrink-0 place-items-center rounded-full bg-primary text-xl font-bold text-primary-foreground shadow-lg">
         {step}
       </div>

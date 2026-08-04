@@ -6,24 +6,25 @@
  * 240 frames @ 30fps, 1280x720.
  */
 
-import { AbsoluteFill, interpolate, spring, useCurrentFrame, useVideoConfig } from "remotion";
+import { interpolate, spring, useCurrentFrame, useVideoConfig } from "remotion";
 import { PlayerMetricChartAbilityBreakdownDemo } from "@/components/ui/PlayerMetricChart/PlayerMetricChart.demo";
 import { clamp, entranceEasing } from "./animation";
-import { Cursor, StepCaption, VideoHeader } from "./shared";
+import { Cursor, StepCaption, VideoHeader, VideoStage } from "./shared";
 
 export default function PinBreakoutVideo() {
   const frame = useCurrentFrame();
   const { fps } = useVideoConfig();
   const pinned = frame >= 112;
   const entrance = spring({ frame, fps, config: { damping: 200 }, durationInFrames: 28 });
-  const cursorX = interpolate(frame, [20, 92], [1110, 540], { ...clamp, easing: entranceEasing });
-  const cursorY = interpolate(frame, [20, 92], [590, 342], { ...clamp, easing: entranceEasing });
+  // Cursor lands on the Afflicted row (#4): rows sit at y=193+32*i, x 77-687
+  // once the entrance settles (measured against the real render).
+  const cursorX = interpolate(frame, [20, 92], [1110, 440], { ...clamp, easing: entranceEasing });
+  const cursorY = interpolate(frame, [20, 92], [590, 296], { ...clamp, easing: entranceEasing });
   const clickPulse = interpolate(frame, [100, 106, 116], [0, 1, 0], clamp);
   const instructionOpacity = interpolate(frame, [8, 18, 218, 232], [0, 1, 1, 0], clamp);
 
   return (
-    <AbsoluteFill className="dark pointer-events-none select-none overflow-hidden bg-background text-foreground">
-      <div className="absolute inset-0 bg-[radial-gradient(circle_at_78%_22%,color-mix(in_oklch,var(--primary)_12%,transparent),transparent_38%)]" />
+    <VideoStage>
       <VideoHeader title="Open a Damage Done breakout" entrance={entrance} />
 
       <main
@@ -32,6 +33,7 @@ export default function PinBreakoutVideo() {
       >
         <PlayerMetricChartAbilityBreakdownDemo
           pinnedPlayerId={pinned ? "player-4" : undefined}
+          pinnedPosition={{ x: 636, y: 140 }}
           classIconBasePath="/c/icons"
         />
       </main>
@@ -47,6 +49,6 @@ export default function PinBreakoutVideo() {
         }
         opacity={instructionOpacity}
       />
-    </AbsoluteFill>
+    </VideoStage>
   );
 }

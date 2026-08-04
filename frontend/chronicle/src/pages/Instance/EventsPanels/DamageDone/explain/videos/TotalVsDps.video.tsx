@@ -4,10 +4,10 @@
  * 270 frames @ 30fps, 1280x720.
  */
 
-import { AbsoluteFill, interpolate, spring, useCurrentFrame, useVideoConfig } from "remotion";
+import { interpolate, spring, useCurrentFrame, useVideoConfig } from "remotion";
 import { PlayerMetricChartAbilityBreakdownDemo } from "@/components/ui/PlayerMetricChart/PlayerMetricChart.demo";
 import { clamp, entranceEasing } from "./animation";
-import { Cursor, StepCaption, VideoHeader } from "./shared";
+import { Cursor, StepCaption, VideoHeader, VideoStage } from "./shared";
 
 /** The mock Per Second toggle the cursor interacts with. */
 function PerSecondToggle({ on, highlight }: { on: boolean; highlight: number }) {
@@ -38,15 +38,14 @@ export default function TotalVsDpsVideo() {
   const entrance = spring({ frame, fps, config: { damping: 200 }, durationInFrames: 28 });
   const perSecond = frame >= TOGGLE_FRAME;
 
-  const cursorX = interpolate(frame, [25, 100], [1080, 640], { ...clamp, easing: entranceEasing });
-  const cursorY = interpolate(frame, [25, 100], [560, 168], { ...clamp, easing: entranceEasing });
+  const cursorX = interpolate(frame, [25, 100], [1080, 660], { ...clamp, easing: entranceEasing });
+  const cursorY = interpolate(frame, [25, 100], [560, 162], { ...clamp, easing: entranceEasing });
   const clickPulse = interpolate(frame, [108, 116, 128], [0, 1, 0], clamp);
   const toggleHighlight = interpolate(frame, [96, 108, 150, 165], [0, 1, 1, 0], clamp);
   const captionOpacity = interpolate(frame, [8, 18, 250, 264], [0, 1, 1, 0], clamp);
 
   return (
-    <AbsoluteFill className="dark pointer-events-none select-none overflow-hidden bg-background text-foreground">
-      <div className="absolute inset-0 bg-[radial-gradient(circle_at_78%_22%,color-mix(in_oklch,var(--primary)_12%,transparent),transparent_38%)]" />
+    <VideoStage>
       <VideoHeader title="Total damage versus DPS" entrance={entrance} />
 
       <main
@@ -68,6 +67,6 @@ export default function TotalVsDpsVideo() {
         }
         opacity={captionOpacity}
       />
-    </AbsoluteFill>
+    </VideoStage>
   );
 }
