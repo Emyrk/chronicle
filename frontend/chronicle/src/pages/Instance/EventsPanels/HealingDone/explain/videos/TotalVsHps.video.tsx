@@ -66,10 +66,10 @@ function Content() {
 
       {/* Value column: totals (yellow) before the flip, /s values (blue) after. */}
       <div style={{ opacity: beforeBoxOpacity }}>
-        <RegionHighlight left={502} top={208} width={78} height={164} color={YELLOW} />
+        <RegionHighlight left={498} top={208} width={70} height={164} color={YELLOW} />
       </div>
       <div style={{ opacity: afterIn }}>
-        <RegionHighlight left={495} top={208} width={88} height={164} color={BLUE} />
+        <RegionHighlight left={492} top={208} width={76} height={164} color={BLUE} />
       </div>
 
       {/* Ring around the header's Per second toggle while the cursor works it. */}

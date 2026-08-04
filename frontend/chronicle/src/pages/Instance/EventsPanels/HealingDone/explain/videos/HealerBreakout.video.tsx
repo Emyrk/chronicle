@@ -28,7 +28,7 @@ const PINNED_PLAYERS = new Map([["healer-1", BREAKOUT_POS]]);
 const PIN_FRAME = 20;
 
 // Measured geometry (cursor target and column highlight boxes).
-const OVERHEAL_COL = { left: 830, top: 178, width: 110, height: 170 };
+const OVERHEAL_COL = { left: 816, top: 180, width: 100, height: 165 };
 const HEALED_TAB = { x: 790, y: 141 };
 const TARGET_OVERHEAL_COL = { left: 896, top: 180, width: 88, height: 155 };
 
