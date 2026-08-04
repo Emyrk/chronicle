@@ -193,6 +193,14 @@ function LessonShell<TResult, TCaps>({
             <IntroCard summary={explainer.summary} />
           )}
 
+          <div className="mt-1 flex flex-shrink-0 items-center gap-3">
+            <span className="text-[13px] font-semibold">Try it yourself</span>
+            <span className="font-mono text-[10px] tracking-[0.08em] text-muted-foreground">
+              {effectiveMode === "example" ? "EXAMPLE DATA" : "LIVE DATA"}
+            </span>
+            <div className="h-px flex-1 bg-border" />
+          </div>
+
           <div className="h-[560px] flex-shrink-0">
             {effectiveMode === "example" ? (
               lessonSet.renderExample()
