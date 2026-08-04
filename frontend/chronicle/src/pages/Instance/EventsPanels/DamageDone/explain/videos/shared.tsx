@@ -70,7 +70,7 @@ export function StepCaption({
   opacity,
 }: {
   step: number;
-  text: string;
+  text: ReactNode;
   opacity: number;
 }) {
   return (
