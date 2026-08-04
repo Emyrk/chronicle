@@ -17,6 +17,7 @@ Agent Skills is an open specification (Apache 2.0) for extending AI agent capabi
 | [wow-encounter-detection](./wow-encounter-detection/) | Adding raid/dungeon support, boss-specific logic |
 | [river-job-queue](./river-job-queue/) | Background job processing for log parsing |
 | [frontend-data-flow](./frontend-data-flow/) | Frontend data fetching, React Query, protobuf decoding |
+| [panel-explainer](./panel-explainer/) | Building/maintaining `?explain=` lesson pages and their Remotion lesson videos |
 | [remotion-best-practices](./remotion-best-practices/) | Routing Remotion work to the appropriate specialized skill |
 | [remotion-captions](./remotion-captions/) | Transcribing, displaying, and animating captions |
 | [remotion-create](./remotion-create/) | Creating a Remotion project or video composition |
