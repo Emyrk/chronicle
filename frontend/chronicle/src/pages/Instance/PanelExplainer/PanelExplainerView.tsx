@@ -19,7 +19,6 @@ import { PANELS, type EventsPanelType } from "../EventsPanels/EventsPanel";
 import { getExplainer } from "../EventsPanels/explainers";
 import type { PanelContext } from "../EventsPanels/types";
 import { usePanelAggregation } from "../EventsPanels/usePanelAggregation";
-import { EmbeddedLivePanel } from "./EmbeddedLivePanel";
 import { ExplainerTopBar } from "./ExplainerTopBar";
 import { LessonPlayer } from "./LessonPlayer";
 import { LessonSidebar, type LessonSelection } from "./LessonSidebar";
@@ -198,12 +197,16 @@ function LessonShell<TResult, TCaps>({
             {effectiveMode === "example" ? (
               lessonSet.renderExample()
             ) : (
-              <EmbeddedLivePanel
-                panelType={panelType}
-                aggregation={aggregation}
-                context={context}
-                durationMs={durationMs}
-              />
+              <div className="h-full rounded-lg border border-border bg-card p-2">
+                {/* The REAL panel, exactly as it renders on the instance page. */}
+                <EventsPanel
+                  panelType={panelType}
+                  onPanelTypeChange={() => {}}
+                  durationMs={durationMs}
+                  context={context}
+                  panelIndex={0}
+                />
+              </div>
             )}
           </div>
         </div>

@@ -9,24 +9,20 @@ import { PlayerMetricChartAbilityBreakdownDemo } from "@/components/ui/PlayerMet
 import { clamp, entranceEasing } from "./animation";
 import { Cursor, StepCaption, VideoHeader, VideoStage } from "./shared";
 
-/** The mock Per Second toggle the cursor interacts with. */
-function PerSecondToggle({ on, highlight }: { on: boolean; highlight: number }) {
+/** Pulsing ring over the demo header's Per second toggle. */
+function ToggleHighlight({ highlight }: { highlight: number }) {
   return (
     <div
-      className="absolute left-[540px] top-[152px] flex items-center gap-2 rounded-md border border-border bg-card px-3 py-1.5"
-      style={{ zIndex: 205, boxShadow: `0 0 0 ${highlight * 2}px var(--color-class-rogue)` }}
-    >
-      <span className="text-[13px] text-muted-foreground">Per second</span>
-      <div
-        className="h-[18px] w-[34px] rounded-full border border-border"
-        style={{ background: on ? "var(--primary)" : "var(--muted)" }}
-      >
-        <div
-          className="h-[14px] w-[14px] rounded-full bg-foreground"
-          style={{ translate: `${on ? 17 : 2}px 1px` }}
-        />
-      </div>
-    </div>
+      className="absolute rounded-lg"
+      style={{
+        left: 555,
+        top: 195,
+        width: 130,
+        height: 34,
+        boxShadow: `0 0 0 ${highlight * 2}px var(--color-class-rogue)`,
+        zIndex: 205,
+      }}
+    />
   );
 }
 
@@ -38,8 +34,8 @@ export default function TotalVsDpsVideo() {
   const entrance = spring({ frame, fps, config: { damping: 200 }, durationInFrames: 28 });
   const perSecond = frame >= TOGGLE_FRAME;
 
-  const cursorX = interpolate(frame, [25, 100], [1080, 660], { ...clamp, easing: entranceEasing });
-  const cursorY = interpolate(frame, [25, 100], [560, 162], { ...clamp, easing: entranceEasing });
+  const cursorX = interpolate(frame, [25, 100], [1080, 655], { ...clamp, easing: entranceEasing });
+  const cursorY = interpolate(frame, [25, 100], [560, 208], { ...clamp, easing: entranceEasing });
   const clickPulse = interpolate(frame, [108, 116, 128], [0, 1, 0], clamp);
   const toggleHighlight = interpolate(frame, [96, 108, 150, 165], [0, 1, 1, 0], clamp);
   const captionOpacity = interpolate(frame, [8, 18, 250, 264], [0, 1, 1, 0], clamp);
@@ -55,7 +51,7 @@ export default function TotalVsDpsVideo() {
         <PlayerMetricChartAbilityBreakdownDemo classIconBasePath="/c/icons" perSecond={perSecond} />
       </main>
 
-      <PerSecondToggle on={perSecond} highlight={toggleHighlight} />
+      <ToggleHighlight highlight={toggleHighlight} />
       <Cursor x={cursorX} y={cursorY} clicking={clickPulse} />
 
       <StepCaption

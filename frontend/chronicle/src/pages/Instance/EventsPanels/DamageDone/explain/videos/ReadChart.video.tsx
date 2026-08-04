@@ -40,22 +40,22 @@ function RegionHighlight({
   );
 }
 
-// Regions measured against the settled render: rows at y=193+32*i, x 77-687.
+// Regions measured against the settled render: rows at y=211+32*i, x 77-687.
 const STEPS: Array<{ from: number; caption: string; region: { left: number; top: number; width: number; height: number } }> = [
   {
     from: 20,
     caption: "Each bar is one player — longer bar, larger share",
-    region: { left: 72, top: 188, width: 420, height: 170 },
+    region: { left: 72, top: 206, width: 420, height: 170 },
   },
   {
     from: 115,
     caption: "The number is the value; the percent is their share of the total",
-    region: { left: 488, top: 188, width: 204, height: 170 },
+    region: { left: 488, top: 206, width: 204, height: 170 },
   },
   {
     from: 210,
     caption: "Rows are ranked — #1 is your top damage source",
-    region: { left: 72, top: 188, width: 120, height: 40 },
+    region: { left: 72, top: 206, width: 120, height: 40 },
   },
 ];
 

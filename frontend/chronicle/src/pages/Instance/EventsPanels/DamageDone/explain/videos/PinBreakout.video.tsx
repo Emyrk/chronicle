@@ -16,10 +16,10 @@ export default function PinBreakoutVideo() {
   const { fps } = useVideoConfig();
   const pinned = frame >= 112;
   const entrance = spring({ frame, fps, config: { damping: 200 }, durationInFrames: 28 });
-  // Cursor lands on the Afflicted row (#4): rows sit at y=193+32*i, x 77-687
+  // Cursor lands on the Afflicted row (#4): rows sit at y=211+32*i, x 77-687
   // once the entrance settles (measured against the real render).
   const cursorX = interpolate(frame, [20, 92], [1110, 440], { ...clamp, easing: entranceEasing });
-  const cursorY = interpolate(frame, [20, 92], [590, 296], { ...clamp, easing: entranceEasing });
+  const cursorY = interpolate(frame, [20, 92], [590, 314], { ...clamp, easing: entranceEasing });
   const clickPulse = interpolate(frame, [100, 106, 116], [0, 1, 0], clamp);
   const instructionOpacity = interpolate(frame, [8, 18, 218, 232], [0, 1, 1, 0], clamp);
 

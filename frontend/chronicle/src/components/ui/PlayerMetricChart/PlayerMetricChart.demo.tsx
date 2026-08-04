@@ -1,4 +1,5 @@
 import { useCallback, useMemo } from 'react'
+import { ChevronDown, Filter, HelpCircle, Layers, MoreVertical, Swords } from 'lucide-react'
 import {
   AbilityBreakdownTable,
   PlayerMetricChart,
@@ -83,17 +84,48 @@ export function PlayerMetricChartAbilityBreakdownDemo({
     )
   }, [])
 
+  const total = players.reduce((sum, p) => sum + p.value, 0)
+  const displayTotal = perSecond
+    ? `${(total / (durationMillis / 1000)).toFixed(1)}`
+    : `${(total / 1000).toFixed(1)}K`
+
   return (
     <section className="flex h-[430px] w-[620px] flex-col overflow-hidden rounded-lg border border-border bg-card text-card-foreground shadow-xl">
-      <header className="flex h-14 shrink-0 items-center border-b border-border bg-background/45 px-4">
-        <div>
-          <h2 className="font-display text-lg font-bold tracking-wide text-foreground">Damage Done</h2>
-          <p className="text-2xs text-muted-foreground">Nefarian · 3:30</p>
-        </div>
-        <div className="ml-auto rounded-md border border-border bg-muted/35 px-2.5 py-1 text-xs text-muted-foreground">
-          {perSecond ? 'DPS' : 'Total Damage'}
+      {/* Mirrors the real EventsPanel header chrome. */}
+      <header className="flex h-10 shrink-0 items-center gap-2 border-b border-border px-3">
+        <Swords className="h-4 w-4" />
+        <span className="text-sm font-medium">Damage Done</span>
+        <ChevronDown className="h-3.5 w-3.5 text-muted-foreground" />
+        <MoreVertical className="h-3.5 w-3.5 text-muted-foreground" />
+        <Filter className="h-3.5 w-3.5 text-muted-foreground" />
+        <HelpCircle className="h-3.5 w-3.5 text-muted-foreground" />
+        <div className="ml-auto flex items-center gap-2" data-demo-per-second>
+          <span className="text-xs text-muted-foreground">Per second</span>
+          <div
+            className="h-[18px] w-[34px] rounded-full border border-border"
+            style={{ background: perSecond ? 'var(--primary)' : 'var(--muted)' }}
+          >
+            <div
+              className="h-[14px] w-[14px] rounded-full bg-foreground"
+              style={{ translate: `${perSecond ? 17 : 2}px 1px` }}
+            />
+          </div>
         </div>
       </header>
+      {/* Mirrors DamageDoneContent's Total / Ranks row. */}
+      <div className="flex shrink-0 items-center justify-between px-3 pb-1 pt-2">
+        <div className="text-xs text-muted-foreground">
+          Total:{' '}
+          <span className="font-medium font-mono text-foreground">
+            {displayTotal}
+            {perSecond ? '/s' : ''}
+          </span>
+        </div>
+        <div className="flex items-center gap-1 rounded border border-[color:var(--tertiary)]/30 bg-[color:var(--tertiary)]/20 px-2 py-0.5 text-2xs text-[color:var(--tertiary)]">
+          <Layers className="h-3 w-3" />
+          Ranks
+        </div>
+      </div>
       <PlayerMetricChart
         key={pinnedPlayerId ?? 'unpinned'}
         data={players}
@@ -107,9 +139,10 @@ export function PlayerMetricChartAbilityBreakdownDemo({
         parsePills={parsePills}
         className="min-h-0 flex-1"
       />
-      <footer className="flex h-10 shrink-0 items-center border-t border-border px-4 text-xs text-muted-foreground">
-        <span>Total raid damage</span>
-        <span className="ml-auto font-mono font-semibold text-foreground">548,000</span>
+      {/* Mirrors the GenericPanel footer diagnostics. */}
+      <footer className="flex h-8 shrink-0 items-center border-t border-border px-3 font-mono text-2xs text-muted-foreground">
+        <span>48.9K events (688.2K/s)</span>
+        <span className="ml-auto text-chart-1">71ms</span>
       </footer>
     </section>
   )
