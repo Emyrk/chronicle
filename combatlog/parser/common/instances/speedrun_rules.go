@@ -164,7 +164,7 @@ func OnyxiasLairSpeedrunRequirements(flavor database.WoWFlavor) []rankings.Speed
 	base := []rankings.SpeedrunRequirement{
 		{Name: "Onyxia", EntryIDs: []uint32{10184, 45133}, Count: 1, Category: rankings.SpeedrunCategoryBosses},
 	}
-	if flavor.Has(database.FlavorOctoWoW, database.FlavorTurtle, database.FlavorNightmareOfUrsol) {
+	if flavor.Has(database.FlavorNightmareOfUrsol) {
 		base = append(base, []rankings.SpeedrunRequirement{
 			{Name: "Broodcommander Axelus", EntryIDs: []uint32{49018}, Count: 1, Category: rankings.SpeedrunCategoryBosses},
 		}...)
