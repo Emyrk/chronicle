@@ -47,9 +47,26 @@ import (
 )
 
 const (
-	KindLogParse                 = "log-parse"
+	KindLogParse                = "log-parse"
 	MinimumCombatTimeForRankings = 3
 )
+
+// ArgsComputeParseScores is a local mirror of servicerankings.ArgsComputeParseScores
+// to avoid circular imports. The Kind() must match exactly.
+type ArgsComputeParseScores struct {
+	InstanceID uuid.UUID `json:"instance_id"`
+	TenantID   uuid.UUID `json:"tenant_id"`
+	Attempt    int       `json:"attempt"`
+}
+
+func (ArgsComputeParseScores) Kind() string { return "compute-parse-scores" }
+
+func (ArgsComputeParseScores) InsertOpts() river.InsertOpts {
+	return river.InsertOpts{
+		Queue:    riverqueue.QueueRankings,
+		Priority: riverqueue.PriorityLow,
+	}
+}
 
 type OutputLogParse struct {
 	InstanceFailures map[string]string
@@ -600,6 +617,17 @@ func (w *WorkerLogParse) Work(ctx context.Context, job *river.Job[ArgsLogParse])
 		}
 
 		metrics.encountersParsed.Add(float64(len(finalized.Encounters)))
+	}
+
+	// Enqueue parse score computation for each successfully parsed instance.
+	// Fire-and-forget: scoring failure doesn't fail the parse.
+	if w.parent.queue != nil {
+		for _, inst := range jobOut.Instances {
+			_, _ = w.parent.queue.Insert(ctx, ArgsComputeParseScores{
+				InstanceID: inst.ID,
+				TenantID:   job.Args.TenantID,
+			}, nil)
+		}
 	}
 
 	// Finalize parse-wide state (aura tracker, etc.) after all instances.

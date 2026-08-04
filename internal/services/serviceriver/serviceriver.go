@@ -147,6 +147,10 @@ func (s *Service) Start(ctx context.Context) error {
 	rank.TimeParseSnapshotDispatchWorker.Queue = q
 	riverqueue.AddWorker(q, rank.TimeParseSnapshotDispatchWorker)
 	riverqueue.AddWorker(q, rank.TimeParseSnapshotTenantWorker)
+	rank.ComputeParseScoresWorker.Queue = q
+	riverqueue.AddWorker(q, rank.ComputeParseScoresWorker)
+	rank.RepairParseScoresWorker.Queue = q
+	riverqueue.AddWorker(q, rank.RepairParseScoresWorker)
 	q.AddQueue(riverqueue.QueueRankings, river.QueueConfig{
 		MaxWorkers: 1,
 	})
@@ -175,6 +179,16 @@ func (s *Service) Start(ctx context.Context) error {
 				return servicerankings.ArgsPublishTimeParseSnapshots{}, nil
 			},
 			&river.PeriodicJobOpts{RunOnStart: true},
+		),
+	)
+	// Daily bounded repair dispatcher for parse score receipts.
+	q.AddPeriodicJob(
+		river.NewPeriodicJob(
+			river.PeriodicInterval(24*time.Hour),
+			func() (river.JobArgs, *river.InsertOpts) {
+				return servicerankings.ArgsRepairParseScores{}, nil
+			},
+			&river.PeriodicJobOpts{RunOnStart: false},
 		),
 	)
 
