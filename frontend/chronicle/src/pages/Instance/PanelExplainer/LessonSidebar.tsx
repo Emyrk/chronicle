@@ -59,7 +59,7 @@ export function LessonSidebar<TCaps>({
         </p>
       </div>
 
-      <div className="flex flex-col gap-1 px-2.5 pb-7 pt-3.5">
+      <div className="flex flex-col gap-2 px-2.5 pb-7 pt-3.5">
         <GroupHeading>Essentials</GroupHeading>
         {essentials.map((lesson) => (
           <LessonRow
@@ -150,8 +150,8 @@ function LessonRow<TCaps>({
   return (
     <div
       className={cn(
-        "flex gap-2.5 rounded-md px-2 py-2 hover:bg-muted/60",
-        selected && "bg-muted/60",
+        "flex gap-2.5 rounded-md border border-border/60 bg-muted/20 px-3 py-2.5 hover:border-border hover:bg-muted/40",
+        selected && "border-primary/50 bg-muted/40",
       )}
     >
       <div className="flex min-w-0 flex-1 flex-col gap-1">
