@@ -46,6 +46,10 @@ type CommonFactory struct {
 	Name      string
 	MultiZone bool
 
+	// NameFromZone allows changing the instance name from metadata available on
+	// the zone event. It runs when the Hookable is created, before fights are parsed.
+	NameFromZone func(context.Context, zone.Zone, database.WoWFlavor) string
+
 	// DerivedName allows changing the name dynamically based on the fight data.
 	// If 2 or more instances share the same zone.
 	DerivedName *MultiInstanceZone

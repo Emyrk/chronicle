@@ -1,10 +1,14 @@
 package instances
 
 import (
+	"context"
+
 	"github.com/Emyrk/chronicle/combatlog/parser/common/identifier"
 	"github.com/Emyrk/chronicle/combatlog/parser/common/instances"
 	"github.com/Emyrk/chronicle/combatlog/parser/common/instances/rankings"
+	"github.com/Emyrk/chronicle/combatlog/parser/common/parsectx"
 	"github.com/Emyrk/chronicle/combatlog/parser/types"
+	"github.com/Emyrk/chronicle/combatlog/parser/types/zone"
 	"github.com/Emyrk/chronicle/database"
 )
 
@@ -78,11 +82,30 @@ var ObsidianSanctumFactory = &instances.CommonFactory{
 	Hostiles:  instances.FromMap(ObsidianSanctumHostiles()),
 }
 
+func onyxiaZoneName(ctx context.Context, z zone.Zone, fl database.WoWFlavor) string {
+	if !fl.Has(database.FlavorAzerothcore) {
+		return "Onyxia's Lair"
+	}
+	format, ok := parsectx.Format(ctx)
+	if !ok || format != database.LogFormat335aCcAddon {
+		return "Onyxia's Lair"
+	}
+
+	// AzerothCore servers can expose both the level 60 and level 80 versions of
+	// Onyxia on the same client and zone name. The companion reports 10/25-player
+	// metadata for the WotLK raid, while the classic raid has no size metadata.
+	if z.InstanceType == "raid" && z.DifficultyName == "" && z.MaxPlayers == 0 {
+		return "Onyxia Classic"
+	}
+	return "Onyxia's Lair"
+}
+
 var OnyxiaFactory = &instances.CommonFactory{
-	Name:      "Onyxia's Lair",
-	ZoneNames: []string{"onyxia's lair", "奥妮克希亚的巢穴"},
-	MapIDs:    []uint32{249},
-	Hostiles:  instances.OnyxiaHostiles,
+	Name:         "Onyxia's Lair",
+	NameFromZone: onyxiaZoneName,
+	ZoneNames:    []string{"onyxia's lair", "奥妮克希亚的巢穴"},
+	MapIDs:       []uint32{249},
+	Hostiles:     instances.OnyxiaHostiles,
 	FlavoredRankings: func(fl database.WoWFlavor) *rankings.Rankings {
 		trash := []rankings.SpeedrunRequirement{
 			{Name: "Onyxian Warder", EntryIDs: []uint32{12129}, Count: 3, Category: rankings.SpeedrunCategoryTrash},

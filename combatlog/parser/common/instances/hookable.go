@@ -103,8 +103,12 @@ func (f *CommonFactory) NewHookable(ctx context.Context, logger *slog.Logger, db
 	if f.FlavoredRankings != nil {
 		r = f.FlavoredRankings(flavor)
 	}
+	name := f.Name
+	if f.NameFromZone != nil {
+		name = f.NameFromZone(ctx, z, flavor)
+	}
 	return NewHookable(ctx, logger, db, z, InstanceParams{
-		Name:        f.Name,
+		Name:        name,
 		MatchesZone: f.MatchZone,
 		Idf:         f.Hostiles(flavor),
 		Rankings:    r,
