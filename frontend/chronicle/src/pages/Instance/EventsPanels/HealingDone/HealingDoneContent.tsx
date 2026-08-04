@@ -321,6 +321,7 @@ export const HealingDoneContent = (props: HealingDoneContentProps) => {
               <TooltipTrigger asChild>
                 <button
                   type="button"
+                  data-lesson-target="spell-ranks"
                   onClick={() => updatePanelOption(viewMode, !showRanks)}
                   className={cn(
                     "flex items-center gap-1 px-2 py-0.5 text-2xs rounded transition-colors cursor-pointer",

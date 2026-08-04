@@ -7,6 +7,12 @@ import {
   type BreakoutTab,
   type TargetData,
 } from '@/components/ui/AbilityBreakout'
+import {
+  DemoFilterEditor,
+  type DemoBreakoutHover,
+  type DemoFilterEditorState,
+  type DemoFilterStage,
+} from './PlayerMetricChart.demo'
 import { PlayerMetricChart, type PlayerMetricChartData } from './PlayerMetricChart'
 
 const durationMillis = 210_000
@@ -22,6 +28,8 @@ interface HealAbility {
   crits: number
   /** Healing eaten by heal-absorb effects (sky-blue Absorbed column). */
   absorbed?: number
+  /** Rank subtitle shown when the Ranks toggle splits spells. */
+  subtitle?: string
 }
 
 interface HealTarget {
@@ -51,10 +59,10 @@ const HEALERS: Healer[] = [
     effective: 128_000,
     overheal: 22_000,
     abilities: [
-      { name: 'Greater Heal', effective: 62_000, overheal: 9_000, casts: 40, crits: 9, absorbed: 8_000 },
-      { name: 'Flash Heal', effective: 38_000, overheal: 6_000, casts: 46, crits: 10, absorbed: 3_000 },
-      { name: 'Renew', effective: 20_000, overheal: 5_000, casts: 90, crits: 0 },
-      { name: 'Prayer of Healing', effective: 8_000, overheal: 2_000, casts: 12, crits: 2 },
+      { name: 'Flash Heal', effective: 70_000, overheal: 10_000, casts: 78, crits: 17, absorbed: 8_000 },
+      { name: 'Greater Heal', effective: 28_000, overheal: 5_000, casts: 18, crits: 4, absorbed: 3_000 },
+      { name: 'Renew', effective: 18_000, overheal: 5_000, casts: 84, crits: 0 },
+      { name: 'Prayer of Healing', effective: 12_000, overheal: 2_000, casts: 14, crits: 2 },
     ],
     targets: [
       { targetName: 'Brickwall', effective: 58_000, overheal: 9_000, count: 64 },
@@ -140,6 +148,26 @@ const HEALERS: Healer[] = [
   },
 ]
 
+/**
+ * Rank-split view of Lightmender's heals (what the Ranks toggle shows).
+ * Rows sum to the merged rows; subtitles mirror the app's rank subtext.
+ */
+const RANKED_HEALS: Record<string, HealAbility[]> = {
+  'healer-1': [
+    { name: 'Flash Heal', subtitle: 'Rank 7', effective: 40_000, overheal: 6_000, casts: 42, crits: 10, absorbed: 5_000 },
+    { name: 'Flash Heal', subtitle: 'Rank 4', effective: 30_000, overheal: 4_000, casts: 36, crits: 7, absorbed: 3_000 },
+    { name: 'Greater Heal', subtitle: 'Rank 5', effective: 28_000, overheal: 5_000, casts: 18, crits: 4, absorbed: 3_000 },
+    { name: 'Renew', subtitle: 'Rank 10', effective: 18_000, overheal: 5_000, casts: 84, crits: 0 },
+    { name: 'Prayer of Healing', subtitle: 'Rank 3', effective: 12_000, overheal: 2_000, casts: 14, crits: 2 },
+  ],
+}
+
+/** What survives an "Ability Name: Rejuvenation" filter — the two Druids. */
+const FILTERED_HEALERS: PlayerMetricChartData[] = [
+  { playerID: 'healer-2', playerName: 'Treesong', className: 'Druid', specialization: 'Restoration', value: 48_000, stackedValue: 38_000 },
+  { playerID: 'healer-5', playerName: 'Glowmoss', className: 'Druid', specialization: 'Restoration', value: 38_000, stackedValue: 18_000 },
+]
+
 function healerValue(h: Healer, mode: DemoHealingViewMode): number {
   return mode === 'overheal' ? h.overheal : mode === 'total' ? h.effective + h.overheal : h.effective
 }
@@ -159,6 +187,8 @@ function toAbilityData(a: HealAbility, mode: DemoHealingViewMode): AbilityData {
   const value = mode === 'overheal' ? a.overheal : mode === 'total' ? a.effective + a.overheal : a.effective
   return {
     name: a.name,
+    key: a.subtitle ? `${a.name} ${a.subtitle}` : a.name,
+    subtitle: a.subtitle,
     value,
     overheal: mode === 'effective' ? a.overheal : undefined,
     absorbed: mode !== 'overheal' ? a.absorbed : undefined,
@@ -188,6 +218,10 @@ export function PlayerMetricChartHealingDemo({
   perSecond,
   viewMode = 'effective',
   breakoutTab = 'ability',
+  showRanks = false,
+  breakoutHover,
+  filterStage = 'idle',
+  filterEditor,
 }: {
   /** Controlled pinned breakouts: playerID → portal-container position. */
   pinnedPlayers?: ReadonlyMap<string, { x: number; y: number }>
@@ -198,6 +232,14 @@ export function PlayerMetricChartHealingDemo({
   viewMode?: DemoHealingViewMode
   /** Controlled breakout tab (By Ability / Healed) for scripted videos. */
   breakoutTab?: BreakoutTab
+  /** The header's Ranks toggle — splits spells by cast rank in breakouts. */
+  showRanks?: boolean
+  /** Controlled cross-breakout hover/selection (drives the compare video). */
+  breakoutHover?: DemoBreakoutHover
+  /** Drives the filter lesson video: context menu → editor → filtered chart. */
+  filterStage?: DemoFilterStage
+  /** Typing/chip state of the editor's ability-name input (editor stage only). */
+  filterEditor?: DemoFilterEditorState
 }) {
   const pinnedKey = pinnedPlayers ? [...pinnedPlayers.keys()].sort().join(',') : 'unpinned'
 
@@ -205,9 +247,10 @@ export function PlayerMetricChartHealingDemo({
     (playerID: string) => {
       const healer = HEALERS.find((h) => h.playerID === playerID)
       if (!healer) return null
+      const source = (showRanks && RANKED_HEALS[playerID]) || healer.abilities
       return (
         <AbilityBreakout
-          abilities={healer.abilities.map((a) => toAbilityData(a, viewMode))}
+          abilities={source.map((a) => toAbilityData(a, viewMode))}
           targets={healer.targets.map((t, i) => toTargetData(playerID, t, i, viewMode))}
           totalValue={healerValue(healer, viewMode)}
           valueLabel={viewMode === 'overheal' ? 'Overheal' : viewMode === 'total' ? 'Total' : 'Effective'}
@@ -220,10 +263,11 @@ export function PlayerMetricChartHealingDemo({
         />
       )
     },
-    [viewMode, breakoutTab],
+    [viewMode, breakoutTab, showRanks],
   )
 
-  const chartData = toChartData(viewMode)
+  const filtered = filterStage === 'filtered'
+  const chartData = filtered ? FILTERED_HEALERS : toChartData(viewMode)
   const total = chartData.reduce((sum, p) => sum + p.value, 0)
   const overhealTotal = HEALERS.reduce((sum, h) => sum + h.overheal, 0)
   const overhealPercent =
@@ -234,13 +278,14 @@ export function PlayerMetricChartHealingDemo({
 
   return (
     <section className="relative flex h-[430px] w-[620px] flex-col overflow-hidden rounded-lg border border-border bg-card text-card-foreground shadow-xl">
-      {/* Mirrors the real EventsPanel header chrome. */}
+      {/* Mirrors the real EventsPanel header chrome (the flip side has none). */}
+      {filterStage !== 'editor' && (
       <header className="flex h-10 shrink-0 items-center gap-2 border-b border-border px-3">
         <Heart className="h-4 w-4" />
         <span className="text-sm font-medium">Healing Done</span>
         <ChevronDown className="h-3.5 w-3.5 text-muted-foreground" />
         <MoreVertical className="h-3.5 w-3.5 text-muted-foreground" />
-        <span className="text-muted-foreground">
+        <span className={filtered ? 'text-emerald-500' : 'text-muted-foreground'} data-demo-filter>
           <Filter className="h-3.5 w-3.5" />
         </span>
         <HelpCircle className="h-3.5 w-3.5 text-muted-foreground" />
@@ -257,6 +302,16 @@ export function PlayerMetricChartHealingDemo({
           </div>
         </div>
       </header>
+      )}
+      {filterStage === 'editor' ? (
+        <DemoFilterEditor
+          state={filterEditor}
+          icon={<Heart className="h-4 w-4" />}
+          label="Healing Done"
+          chipLabel="Rejuvenation"
+        />
+      ) : (
+        <>
       {/* Mirrors HealingDoneContent's Total / Ranks / view-mode row. */}
       <div className="flex shrink-0 items-center justify-between px-3 pb-1 pt-2">
         <div className="text-xs text-muted-foreground">
@@ -272,7 +327,14 @@ export function PlayerMetricChartHealingDemo({
           )}
         </div>
         <div className="flex items-center gap-2">
-          <div className="flex items-center gap-1 rounded border border-[color:var(--tertiary)]/30 bg-[color:var(--tertiary)]/20 px-2 py-0.5 text-2xs text-[color:var(--tertiary)]">
+          <div
+            className={
+              showRanks
+                ? 'flex items-center gap-1 rounded border border-[color:var(--tertiary)]/30 bg-[color:var(--tertiary)]/20 px-2 py-0.5 text-2xs text-[color:var(--tertiary)]'
+                : 'flex items-center gap-1 rounded bg-muted/50 px-2 py-0.5 text-2xs text-muted-foreground'
+            }
+            data-demo-ranks
+          >
             <Layers className="h-3 w-3" />
             Ranks
           </div>
@@ -294,9 +356,14 @@ export function PlayerMetricChartHealingDemo({
         </div>
       </div>
       {/* Shared across every pinned breakout, like the real EventsPanel. */}
-      <BreakoutHoverProvider>
+      <BreakoutHoverProvider
+        hover={
+          breakoutHover ? { rowId: breakoutHover.rowId ?? null, columnId: null } : undefined
+        }
+        selectedAbilities={breakoutHover ? new Set(breakoutHover.selected) : undefined}
+      >
         <PlayerMetricChart
-          key={`${pinnedKey}-${viewMode}`}
+          key={`${pinnedKey}-${viewMode}${filtered ? '-filtered' : ''}`}
           data={chartData}
           type="healing"
           duration_millis={durationMillis}
@@ -309,6 +376,21 @@ export function PlayerMetricChartHealingDemo({
           className="min-h-0 flex-1"
         />
       </BreakoutHoverProvider>
+        </>
+      )}
+      {/* The filter icon's context menu (Edit filters / Reset to default). */}
+      {filterStage === 'menu' && (
+        <div
+          className="absolute z-20 w-[150px] rounded-md border border-border bg-popover p-1 shadow-md"
+          style={{ left: 190, top: 26 }}
+          data-demo-filter-menu
+        >
+          <div className="rounded bg-muted/60 px-2 py-1.5 text-xs" data-demo-edit-filters>
+            Edit filters
+          </div>
+          <div className="rounded px-2 py-1.5 text-xs text-muted-foreground">Reset to default</div>
+        </div>
+      )}
       {/* Mirrors the GenericPanel footer diagnostics. */}
       <footer className="flex h-8 shrink-0 items-center border-t border-border px-3 font-mono text-2xs text-muted-foreground">
         <span>31.2K events (445.7K/s)</span>

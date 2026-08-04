@@ -1,0 +1,120 @@
+/**
+ * Lesson video: split heals by spell rank.
+ *
+ * Lightmender's breakout starts pinned with Ranks off — one merged Flash
+ * Heal row. A scripted cursor flips the Ranks toggle and the row splits
+ * into Rank 7 / Rank 4 with subtitles.
+ * 380 frames @ 30fps, 1280x720 (50-frame intro card + 330 frames of content).
+ */
+
+import { interpolate, Sequence, spring, useCurrentFrame, useVideoConfig } from "remotion";
+import { PlayerMetricChartHealingDemo } from "@/components/ui/PlayerMetricChart/PlayerMetricChartHealing.demo";
+import { clamp, entranceEasing, INTRO_FRAMES } from "@/pages/Instance/PanelExplainer/videos/animation";
+import {
+  Cursor,
+  LessonIntro,
+  RegionHighlight,
+  StepCaption,
+  VideoHeader,
+  VideoStage,
+} from "@/pages/Instance/PanelExplainer/videos/shared";
+
+const YELLOW = "var(--color-class-rogue)";
+const BLUE = "var(--color-class-shaman)";
+
+// Lightmender's breakout pins as the entrance settles, right of the chart.
+const BREAKOUT_POS = { x: 706, y: 96 };
+const PINNED_PLAYERS = new Map([["healer-1", BREAKOUT_POS]]);
+const PIN_FRAME = 20;
+
+// Measured geometry (cursor target and row highlight boxes).
+const RANKS_CHIP = { x: 478, y: 193 };
+const MERGED_ROW = { left: 705, top: 209, width: 526, height: 29 };
+const RANK_ROWS = { left: 705, top: 209, width: 556, height: 55 };
+
+const RANKS_FRAME = 150; // Ranks toggle clicked
+
+export default function HealingRanksVideo() {
+  return (
+    <VideoStage>
+      <Sequence from={INTRO_FRAMES - 10}>
+        <Content />
+      </Sequence>
+      <LessonIntro
+        title="Split heals by rank"
+        bullets={[
+          "Heals normally merge every rank",
+          "'Ranks' splits each spell by cast rank",
+          "Spot downranked casts at a glance",
+        ]}
+      />
+    </VideoStage>
+  );
+}
+
+function Content() {
+  const frame = useCurrentFrame();
+  const { fps } = useVideoConfig();
+  const entrance = spring({ frame, fps, config: { damping: 200 }, durationInFrames: 28 });
+  const showRanks = frame >= RANKS_FRAME;
+
+  const cursorX = interpolate(frame, [26, 110], [1140, RANKS_CHIP.x], {
+    ...clamp,
+    easing: entranceEasing,
+  });
+  const cursorY = interpolate(frame, [26, 110], [600, RANKS_CHIP.y], {
+    ...clamp,
+    easing: entranceEasing,
+  });
+  const clickPulse = interpolate(frame, [RANKS_FRAME - 4, RANKS_FRAME, RANKS_FRAME + 10], [0, 1, 0], clamp);
+
+  const mergedBoxIn = interpolate(frame, [40, 52, RANKS_FRAME - 8, RANKS_FRAME], [0, 1, 1, 0], clamp);
+  const rankBoxIn = interpolate(frame, [RANKS_FRAME + 16, RANKS_FRAME + 30], [0, 1], clamp);
+  const captionOpacity = interpolate(frame, [8, 18, 316, 330], [0, 1, 1, 0], clamp);
+
+  return (
+    <>
+      <VideoHeader title="Split heals by rank" entrance={entrance} />
+
+      <main
+        className="absolute left-[72px] top-[132px]"
+        style={{ opacity: entrance, translate: `0 ${interpolate(entrance, [0, 1], [24, 0])}px` }}
+      >
+        <PlayerMetricChartHealingDemo
+          pinnedPlayers={frame >= PIN_FRAME ? PINNED_PLAYERS : undefined}
+          showRanks={showRanks}
+          classIconBasePath="/c/icons"
+        />
+      </main>
+
+      {/* One merged Flash Heal row before the flip… */}
+      <div style={{ opacity: mergedBoxIn }}>
+        <RegionHighlight {...MERGED_ROW} color={YELLOW} />
+      </div>
+      {/* …two rank rows with subtitles after. */}
+      <div style={{ opacity: rankBoxIn }}>
+        <RegionHighlight {...RANK_ROWS} color={BLUE} />
+      </div>
+
+      <Cursor x={cursorX} y={cursorY} clicking={clickPulse} />
+
+      <StepCaption
+        step={showRanks ? 2 : 1}
+        text={
+          showRanks ? (
+            <>
+              <span style={{ color: BLUE }}>Rank 7 and Rank 4</span> split out — spot downranked
+              casts at a glance
+            </>
+          ) : (
+            <>
+              With Ranks off, <span style={{ color: YELLOW }}>every Flash Heal rank merges</span>{" "}
+              into one row
+            </>
+          )
+        }
+        opacity={captionOpacity}
+      />
+    </>
+  );
+}

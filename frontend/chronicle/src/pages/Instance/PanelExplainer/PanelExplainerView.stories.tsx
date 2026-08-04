@@ -77,6 +77,21 @@ export const TotalVsHpsLesson: Story = {
   parameters: { routerEntries: ["/?lesson=total-vs-dps"] },
 };
 
+export const HealingRanksLesson: Story = {
+  args: { panelType: "healing_done" },
+  parameters: { routerEntries: ["/?lesson=spell-ranks"] },
+};
+
+export const CompareHealersLesson: Story = {
+  args: { panelType: "healing_done" },
+  parameters: { routerEntries: ["/?lesson=compare-abilities"] },
+};
+
+export const HealingFiltersLesson: Story = {
+  args: { panelType: "healing_done" },
+  parameters: { routerEntries: ["/?lesson=filters"] },
+};
+
 /** Deep-linked video lesson — exercises the lazy Remotion player. */
 export const PinBreakoutLesson: Story = {
   parameters: { routerEntries: ["/?lesson=pin-breakout"] },

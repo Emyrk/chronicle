@@ -147,12 +147,9 @@ const spellRanks: L = {
   id: "spell-ranks",
   title: "Split abilities by rank",
   group: "essentials",
-  description: (caps) =>
-    caps.hasSpellRanks
-      ? "Your log has spells cast at more than one rank to split out."
-      : "No multi-rank spells in this selection.",
-  deriveState: (caps) =>
-    caps.hasSpellRanks && caps.hasAbilityBreakout ? "available" : "example-required",
+  description: () => "Split each spell into the ranks it was cast at.",
+  // The Ranks toggle always works, downranking or not.
+  deriveState: () => "available",
   instruction:
     "Flip the 'Ranks' toggle above the chart — ability breakouts split each spell into the ranks it was cast at, so downranking shows up as separate rows.",
   bullets: [

@@ -119,9 +119,88 @@ const healerBreakout: L = {
   },
 };
 
+const spellRanks: L = {
+  id: "spell-ranks",
+  title: "Split heals by rank",
+  group: "essentials",
+  description: () => "Split each heal into the ranks it was cast at.",
+  // The Ranks toggle always works, downranking or not.
+  deriveState: () => "available",
+  instruction:
+    "Flip the 'Ranks' toggle above the chart — breakouts split each heal into the ranks it was cast at, so downranked casts show up as separate rows.",
+  bullets: [
+    "With Ranks off, every rank of a heal merges into one row",
+    "'Ranks' splits each heal by cast rank, with the rank as a subtitle",
+    "Spot downranked casts at a glance",
+  ],
+  video: {
+    load: () => import("./videos/HealingRanks.video"),
+    durationInFrames: 380,
+    fps: 30,
+    width: 1280,
+    height: 720,
+  },
+};
+
+// ── Advanced ──
+
+const compareHealers: L = {
+  id: "compare-abilities",
+  title: "Compare two healers' spells",
+  group: "advanced",
+  description: (caps) =>
+    caps.hasMultipleHealers
+      ? "Shared hover and selection across breakouts — compare healers head to head."
+      : "Needs at least two healers with breakout data.",
+  deriveState: (caps) =>
+    caps.hasAbilityBreakout && caps.hasMultipleHealers ? "available" : "example-required",
+  instruction:
+    "Pin two healers of the same class, hover a heal to highlight it in every open breakout, and click rows to select them — each footer totals exactly the selected heals.",
+  bullets: [
+    "Pin two healers of the same class side by side",
+    "Hovering a heal row highlights it in every open breakout",
+    "Click rows to select — footers total exactly those heals",
+  ],
+  video: {
+    load: () => import("./videos/CompareHealers.video"),
+    durationInFrames: 470,
+    fps: 30,
+    width: 1280,
+    height: 720,
+  },
+};
+
+const filters: L = {
+  id: "filters",
+  title: "Filter what the panel counts",
+  group: "advanced",
+  description: () =>
+    "Narrow the panel by ability, school, hit type, source, target, or time range.",
+  deriveState: () => "available",
+  instruction:
+    "Click the filter icon in the panel header, choose 'Edit filters', and add a filter — the chart updates live and the icon turns green while filters are active.",
+  bullets: [
+    "The filter icon in the panel header opens the filter menu",
+    "Filter by ability, school, source, target, or time range",
+    "Filters apply live — the icon turns green while they're active",
+  ],
+  video: {
+    load: () => import("./videos/HealingFilters.video"),
+    durationInFrames: 500,
+    fps: 30,
+    width: 1280,
+    height: 720,
+  },
+};
+
 export const HEALING_DONE_LESSONS: L[] = [
+  // Essentials
   readChart,
   healingModes,
   totalVsHps,
   healerBreakout,
+  spellRanks,
+  // Advanced
+  compareHealers,
+  filters,
 ];
