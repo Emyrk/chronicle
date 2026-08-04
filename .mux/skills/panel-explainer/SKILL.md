@@ -180,7 +180,9 @@ lesson row (`closest('[data-lesson-target]')` on mouseover).
 When adding a lesson: tag its UI with the lesson's id (one attribute per element; several
 elements may share an id — all get boxed). Missing targets degrade to "no boxes", so
 conditional UI (breakout tabs, parse pills) is fine. Tag REAL components, not the demo —
-the example panel renders real components and inherits the tags.
+the example panel renders real components and inherits the tags. The overlay clips each
+box against the target's overflow ancestors and re-measures on inner scrolls, so targets
+inside scroll areas (chart rows) need no special handling.
 
 ## Registration Checklist (new lesson)
 
