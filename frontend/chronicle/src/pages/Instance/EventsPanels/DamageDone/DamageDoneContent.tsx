@@ -99,6 +99,10 @@ function aggregateForEncounters(
 
 interface DamageDoneContentProps extends PanelRenderProps<DamageDoneResult> {
   sourceType?: DamageSourceType;
+  /** When provided, bypasses useParsePills and uses these pills directly. */
+  parsePillsOverride?: Map<string, import("@/components/ui/PlayerMetricChart/PlayerMetricChart").ParsePillData>;
+  /** When provided, bypasses spell API queries in the breakout (keyed by spell ID). */
+  spellDataOverride?: Map<number, import("@/api/wowdb").WoWSpell>;
 }
 
 export const DamageDoneContent = (props: DamageDoneContentProps) => {
@@ -167,15 +171,18 @@ export const DamageDoneContent = (props: DamageDoneContentProps) => {
     loading: props.loading,
     processing: props.processing,
     showRanks,
+    spellDataOverride: props.spellDataOverride,
   });
 
   // ── Parse pills ──
-  const parsePills = useParsePills({
+  const liveParsePills = useParsePills({
     metric: "dps",
     props,
     isPlayerSource: sourceType === "players",
     isFocused: !!focusedPlayerId,
   });
+  // Use override if provided (e.g. in explainer example mode)
+  const parsePills = props.parsePillsOverride ?? liveParsePills;
 
   // ── Focus feature: Ctrl+click a player row to show per-ability view ──
 
