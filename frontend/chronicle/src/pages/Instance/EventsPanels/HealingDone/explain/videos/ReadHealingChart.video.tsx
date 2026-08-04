@@ -43,7 +43,12 @@ const STEPS: Array<{ from: number; caption: ReactNode; regions: Region[] }> = [
       </>
     ),
     regions: [
-      { left: 402, top: 240, width: 80, height: 34, color: YELLOW },
+      // Every overheal tail, measured from the rendered stacked segments.
+      { left: 531, top: 210, width: 85, height: 36, color: YELLOW },
+      { left: 474, top: 242, width: 152, height: 36, color: YELLOW },
+      { left: 445, top: 274, width: 71, height: 36, color: YELLOW },
+      { left: 417, top: 306, width: 39, height: 36, color: YELLOW },
+      { left: 338, top: 338, width: 114, height: 36, color: YELLOW },
       { left: 156, top: 182, width: 130, height: 20, color: YELLOW },
     ],
   },
