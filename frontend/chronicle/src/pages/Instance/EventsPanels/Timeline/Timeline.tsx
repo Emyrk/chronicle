@@ -453,6 +453,7 @@ function TimelineContent({ result, durationMs, panelContext: pc, panelOption, se
     <div
       className="relative w-full h-full"
       style={{ cursor: "crosshair" }}
+      data-lesson-target="time-range"
       ref={containerRef}
       onMouseDown={handleMouseDown}
       onMouseMove={handleMouseMove}
@@ -507,7 +508,7 @@ function TimelineContent({ result, durationMs, panelContext: pc, panelOption, se
       />
 
       {/* Clickable legend — click to toggle series visibility */}
-      <div className="absolute top-2 right-2 flex flex-col gap-0.5 select-none">
+      <div className="absolute top-2 right-2 flex flex-col gap-0.5 select-none" data-lesson-target="legend">
         {legendData.map((item) => (
           <button
             key={String(item.id)}

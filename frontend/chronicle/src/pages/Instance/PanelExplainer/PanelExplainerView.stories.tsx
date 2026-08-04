@@ -92,6 +92,36 @@ export const HealingFiltersLesson: Story = {
   parameters: { routerEntries: ["/?lesson=filters"] },
 };
 
+export const TimelineReadLesson: Story = {
+  args: { panelType: "timeline" },
+  parameters: { routerEntries: ["/?lesson=read-chart"] },
+};
+
+export const TimelineRangeLesson: Story = {
+  args: { panelType: "timeline" },
+  parameters: { routerEntries: ["/?lesson=time-range"] },
+};
+
+export const TimelineLegendLesson: Story = {
+  args: { panelType: "timeline" },
+  parameters: { routerEntries: ["/?lesson=legend"] },
+};
+
+export const TimelineAggregationsLesson: Story = {
+  args: { panelType: "timeline" },
+  parameters: { routerEntries: ["/?lesson=aggregations"] },
+};
+
+export const TimelineEditSeriesLesson: Story = {
+  args: { panelType: "timeline" },
+  parameters: { routerEntries: ["/?lesson=edit-series"] },
+};
+
+export const TimelineDurabilityLesson: Story = {
+  args: { panelType: "timeline" },
+  parameters: { routerEntries: ["/?lesson=durability"] },
+};
+
 /** Deep-linked video lesson — exercises the lazy Remotion player. */
 export const PinBreakoutLesson: Story = {
   parameters: { routerEntries: ["/?lesson=pin-breakout"] },
