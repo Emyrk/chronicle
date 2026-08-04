@@ -47,10 +47,11 @@ type WorkerComputeParseScores struct {
 }
 
 func (w *WorkerComputeParseScores) Work(ctx context.Context, job *river.Job[parseargs.ArgsComputeParseScores]) error {
-	ctx = servicetenant.AdminBypass(ctx)
-
 	instanceID := job.Args.InstanceID
 	tenantID := job.Args.TenantID
+	if tenantID != uuid.Nil {
+		ctx = servicetenant.WithTenantID(ctx, tenantID)
+	}
 	attempt := job.Args.Attempt
 
 	logger := w.Logger.With(
@@ -355,6 +356,80 @@ func (w *WorkerComputeParseScores) handleNoSnapshot(
 }
 
 // ---------------------------------------------------------------------------
+// ArgsDispatchParseScoreRepairs — daily tenant fan-out.
+// ---------------------------------------------------------------------------
+
+const KindDispatchParseScoreRepairs = "dispatch-parse-score-repairs"
+
+type ArgsDispatchParseScoreRepairs struct{}
+
+func (ArgsDispatchParseScoreRepairs) Kind() string { return KindDispatchParseScoreRepairs }
+
+func (ArgsDispatchParseScoreRepairs) InsertOpts() river.InsertOpts {
+	return river.InsertOpts{
+		Queue:       riverconst.QueueRankings,
+		Priority:    riverconst.PriorityLow,
+		MaxAttempts: 3,
+		UniqueOpts: river.UniqueOpts{
+			ByState: []rivertype.JobState{
+				rivertype.JobStateScheduled,
+				rivertype.JobStatePending,
+				rivertype.JobStateAvailable,
+				rivertype.JobStateRunning,
+			},
+		},
+	}
+}
+
+type WorkerDispatchParseScoreRepairs struct {
+	river.WorkerDefaults[ArgsDispatchParseScoreRepairs]
+
+	Store  database.Store
+	Queue  *riverqueue.Queues
+	Logger *slog.Logger
+}
+
+func (w *WorkerDispatchParseScoreRepairs) Work(ctx context.Context, _ *river.Job[ArgsDispatchParseScoreRepairs]) error {
+	ctx = servicetenant.AdminBypass(ctx)
+	if w.Queue == nil {
+		w.Logger.Warn("no queue available for parse score repair fan-out")
+		return nil
+	}
+
+	tenants, err := w.Store.ListTenants(ctx)
+	if err != nil {
+		return fmt.Errorf("list tenants for parse score repair: %w", err)
+	}
+
+	tenantIDs := make([]uuid.UUID, 0, len(tenants)+1)
+	tenantIDs = append(tenantIDs, uuid.Nil)
+	for _, tenant := range tenants {
+		if isParseDisabled(tenant.ParseConfig) {
+			continue
+		}
+		tenantIDs = append(tenantIDs, tenant.ID)
+	}
+
+	enqueued := 0
+	for _, tenantID := range tenantIDs {
+		if _, err := w.Queue.Insert(ctx, ArgsRepairParseScores{TenantID: tenantID}, nil); err != nil {
+			w.Logger.Error("failed to enqueue tenant parse score repair",
+				slog.String("tenant_id", tenantID.String()),
+				slog.String("error", err.Error()),
+			)
+			continue
+		}
+		enqueued++
+	}
+
+	_ = river.RecordOutput(ctx, map[string]any{
+		"tenants":  len(tenantIDs),
+		"enqueued": enqueued,
+	})
+	return nil
+}
+
+// ---------------------------------------------------------------------------
 // ArgsRepairParseScores — daily bounded repair dispatcher.
 // Finds ALL eligible instances missing a matching successful receipt,
 // including instances with no receipt at all, old instances, snapshot
@@ -396,8 +471,10 @@ type WorkerRepairParseScores struct {
 }
 
 func (w *WorkerRepairParseScores) Work(ctx context.Context, job *river.Job[ArgsRepairParseScores]) error {
-	ctx = servicetenant.AdminBypass(ctx)
 	tenantID := job.Args.TenantID
+	if tenantID != uuid.Nil {
+		ctx = servicetenant.WithTenantID(ctx, tenantID)
+	}
 
 	if w.Queue == nil {
 		w.Logger.Warn("no queue available for repair dispatcher")

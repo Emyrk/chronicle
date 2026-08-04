@@ -150,13 +150,14 @@ ORDER BY published_at DESC
 LIMIT 1;
 
 -- name: ListInstancesMissingParseReceiptWithSnapshot :many
--- Repair query: for each instance with ranking data but no receipt matching
--- the current policy/query version, resolve its canonical historical snapshot
--- (latest published snapshot with cutoff <= instance start, matching versions).
--- Instances without an eligible snapshot are excluded (not re-enqueued).
--- Returns at most @max_rows rows for bounded batch processing.
+-- Repair query: resolve each visible instance's canonical historical snapshot,
+-- then return instances that lack a successful receipt for that exact tenant,
+-- snapshot, lookback, policy, and query contract. RLS on
+-- encounter_dps_rankings scopes candidates to the worker's tenant context.
+-- Instances without an eligible snapshot are excluded, so daily repair does
+-- not restart exhausted missing-snapshot retry chains.
 SELECT
-    edr.instance_id,
+    candidates.instance_id,
     li.start_time,
     COALESCE(li.duplicate_group_id, li.id) AS run_id,
     li.name AS instance_name,
@@ -166,19 +167,12 @@ SELECT
     li.guild_id,
     snap.id AS snapshot_id
 FROM (
-    SELECT DISTINCT edr2.instance_id
-    FROM encounter_dps_rankings edr2
-    WHERE edr2.encounter_id IS NOT NULL
-      AND (edr2.dps > 0 OR edr2.hps > 0)
-      AND NOT EXISTS (
-          SELECT 1 FROM parse_score_receipts psr
-          WHERE psr.instance_id = edr2.instance_id
-            AND psr.policy_version = @policy_version
-            AND psr.query_version = @query_version
-      )
-    LIMIT @max_rows
-) edr
-JOIN log_instances li ON li.id = edr.instance_id
+    SELECT DISTINCT edr.instance_id
+    FROM encounter_dps_rankings edr
+    WHERE edr.encounter_id IS NOT NULL
+      AND (edr.dps > 0 OR edr.hps > 0)
+) candidates
+JOIN log_instances li ON li.id = candidates.instance_id
 JOIN LATERAL (
     SELECT rs.id
     FROM ranking_snapshots rs
@@ -191,7 +185,18 @@ JOIN LATERAL (
     ORDER BY rs.cutoff DESC
     LIMIT 1
 ) snap ON true
-ORDER BY li.start_time DESC NULLS LAST;
+WHERE NOT EXISTS (
+    SELECT 1
+    FROM parse_score_receipts receipt
+    WHERE receipt.tenant_id = @tenant_id
+      AND receipt.instance_id = candidates.instance_id
+      AND receipt.snapshot_id = snap.id
+      AND receipt.lookback_days = @lookback_days
+      AND receipt.policy_version = @policy_version
+      AND receipt.query_version = @query_version
+)
+ORDER BY li.start_time DESC NULLS LAST
+LIMIT @max_rows;
 
 -- name: GetLogInstanceForScoring :one
 -- Fetch instance metadata needed for parse scoring.

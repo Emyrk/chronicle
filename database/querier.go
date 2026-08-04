@@ -423,11 +423,12 @@ type sqlcQuerier interface {
 	// old instances, snapshot deletion/rebuild, and policy/query changes.
 	// Returns at most @max_rows rows for bounded batch processing.
 	ListInstancesMissingParseReceipt(ctx context.Context, arg ListInstancesMissingParseReceiptParams) ([]ListInstancesMissingParseReceiptRow, error)
-	// Repair query: for each instance with ranking data but no receipt matching
-	// the current policy/query version, resolve its canonical historical snapshot
-	// (latest published snapshot with cutoff <= instance start, matching versions).
-	// Instances without an eligible snapshot are excluded (not re-enqueued).
-	// Returns at most @max_rows rows for bounded batch processing.
+	// Repair query: resolve each visible instance's canonical historical snapshot,
+	// then return instances that lack a successful receipt for that exact tenant,
+	// snapshot, lookback, policy, and query contract. RLS on
+	// encounter_dps_rankings scopes candidates to the worker's tenant context.
+	// Instances without an eligible snapshot are excluded, so daily repair does
+	// not restart exhausted missing-snapshot retry chains.
 	ListInstancesMissingParseReceiptWithSnapshot(ctx context.Context, arg ListInstancesMissingParseReceiptWithSnapshotParams) ([]ListInstancesMissingParseReceiptWithSnapshotRow, error)
 	ListLeaderboardVersionRequirements(ctx context.Context) ([]LeaderboardVersionRequirement, error)
 	ListModificationRequestsByApplicationID(ctx context.Context, applicationID uuid.UUID) ([]ApplicationModificationRequest, error)

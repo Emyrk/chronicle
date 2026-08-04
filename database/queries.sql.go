@@ -5500,7 +5500,7 @@ func (q *sqlQuerier) ListInstancesMissingParseReceipt(ctx context.Context, arg L
 
 const listInstancesMissingParseReceiptWithSnapshot = `-- name: ListInstancesMissingParseReceiptWithSnapshot :many
 SELECT
-    edr.instance_id,
+    candidates.instance_id,
     li.start_time,
     COALESCE(li.duplicate_group_id, li.id) AS run_id,
     li.name AS instance_name,
@@ -5510,40 +5510,44 @@ SELECT
     li.guild_id,
     snap.id AS snapshot_id
 FROM (
-    SELECT DISTINCT edr2.instance_id
-    FROM encounter_dps_rankings edr2
-    WHERE edr2.encounter_id IS NOT NULL
-      AND (edr2.dps > 0 OR edr2.hps > 0)
-      AND NOT EXISTS (
-          SELECT 1 FROM parse_score_receipts psr
-          WHERE psr.instance_id = edr2.instance_id
-            AND psr.policy_version = $1
-            AND psr.query_version = $2
-      )
-    LIMIT $3
-) edr
-JOIN log_instances li ON li.id = edr.instance_id
+    SELECT DISTINCT edr.instance_id
+    FROM encounter_dps_rankings edr
+    WHERE edr.encounter_id IS NOT NULL
+      AND (edr.dps > 0 OR edr.hps > 0)
+) candidates
+JOIN log_instances li ON li.id = candidates.instance_id
 JOIN LATERAL (
     SELECT rs.id
     FROM ranking_snapshots rs
-    WHERE rs.tenant_id = $4
-      AND rs.lookback_days = $5
+    WHERE rs.tenant_id = $1
+      AND rs.lookback_days = $2
       AND rs.status = 'published'
-      AND rs.policy_version = $1
-      AND rs.query_version = $2
+      AND rs.policy_version = $3
+      AND rs.query_version = $4
       AND (li.start_time IS NULL OR rs.cutoff <= li.start_time)
     ORDER BY rs.cutoff DESC
     LIMIT 1
 ) snap ON true
+WHERE NOT EXISTS (
+    SELECT 1
+    FROM parse_score_receipts receipt
+    WHERE receipt.tenant_id = $1
+      AND receipt.instance_id = candidates.instance_id
+      AND receipt.snapshot_id = snap.id
+      AND receipt.lookback_days = $2
+      AND receipt.policy_version = $3
+      AND receipt.query_version = $4
+)
 ORDER BY li.start_time DESC NULLS LAST
+LIMIT $5
 `
 
 type ListInstancesMissingParseReceiptWithSnapshotParams struct {
+	TenantID      uuid.UUID `db:"tenant_id" json:"tenant_id"`
+	LookbackDays  int32     `db:"lookback_days" json:"lookback_days"`
 	PolicyVersion int16     `db:"policy_version" json:"policy_version"`
 	QueryVersion  int16     `db:"query_version" json:"query_version"`
 	MaxRows       int32     `db:"max_rows" json:"max_rows"`
-	TenantID      uuid.UUID `db:"tenant_id" json:"tenant_id"`
-	LookbackDays  int32     `db:"lookback_days" json:"lookback_days"`
 }
 
 type ListInstancesMissingParseReceiptWithSnapshotRow struct {
@@ -5558,18 +5562,19 @@ type ListInstancesMissingParseReceiptWithSnapshotRow struct {
 	SnapshotID     uuid.UUID          `db:"snapshot_id" json:"snapshot_id"`
 }
 
-// Repair query: for each instance with ranking data but no receipt matching
-// the current policy/query version, resolve its canonical historical snapshot
-// (latest published snapshot with cutoff <= instance start, matching versions).
-// Instances without an eligible snapshot are excluded (not re-enqueued).
-// Returns at most @max_rows rows for bounded batch processing.
+// Repair query: resolve each visible instance's canonical historical snapshot,
+// then return instances that lack a successful receipt for that exact tenant,
+// snapshot, lookback, policy, and query contract. RLS on
+// encounter_dps_rankings scopes candidates to the worker's tenant context.
+// Instances without an eligible snapshot are excluded, so daily repair does
+// not restart exhausted missing-snapshot retry chains.
 func (q *sqlQuerier) ListInstancesMissingParseReceiptWithSnapshot(ctx context.Context, arg ListInstancesMissingParseReceiptWithSnapshotParams) ([]ListInstancesMissingParseReceiptWithSnapshotRow, error) {
 	rows, err := q.db.Query(ctx, listInstancesMissingParseReceiptWithSnapshot,
+		arg.TenantID,
+		arg.LookbackDays,
 		arg.PolicyVersion,
 		arg.QueryVersion,
 		arg.MaxRows,
-		arg.TenantID,
-		arg.LookbackDays,
 	)
 	if err != nil {
 		return nil, err

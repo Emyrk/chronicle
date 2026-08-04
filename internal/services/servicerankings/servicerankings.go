@@ -62,7 +62,9 @@ type Service struct {
 
 	// ComputeParseScoresWorker computes and persists per-instance parse scores.
 	ComputeParseScoresWorker *WorkerComputeParseScores
-	// RepairParseScoresWorker dispatches bounded retry jobs for missing scores.
+	// RepairDispatchWorker fans daily repairs out across root and tenant scopes.
+	RepairDispatchWorker *WorkerDispatchParseScoreRepairs
+	// RepairParseScoresWorker dispatches bounded repair jobs for one tenant.
 	RepairParseScoresWorker *WorkerRepairParseScores
 }
 
@@ -127,6 +129,11 @@ func (s *Service) Start(_ context.Context) error {
 	}
 
 	s.ComputeParseScoresWorker = &WorkerComputeParseScores{
+		Store:  store,
+		Logger: namedLogger,
+		// Queue is set by serviceriver after queue creation.
+	}
+	s.RepairDispatchWorker = &WorkerDispatchParseScoreRepairs{
 		Store:  store,
 		Logger: namedLogger,
 		// Queue is set by serviceriver after queue creation.
