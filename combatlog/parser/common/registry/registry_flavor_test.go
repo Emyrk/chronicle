@@ -22,6 +22,28 @@ func TestWrathRegistryReplacesClassicOnyxia(t *testing.T) {
 	require.Equal(t, []uint32{10184}, wrath.SpeedrunRules.Requirements[0].EntryIDs)
 }
 
+func TestProgressionOnyxiaHasSeparateSpeedrunRules(t *testing.T) {
+	t.Parallel()
+
+	flavor := database.WoWFlavor{
+		database.FlavorWrath,
+		database.FlavorAzerothcore,
+		database.FlavorAzerothcoreProgression,
+	}
+	rules := RegistryForFlavor(nil, flavor).SpeedrunRules()
+
+	classic := rules["Onyxia Classic"]
+	require.NotNil(t, classic)
+	require.Equal(t, []uint32{10184}, classic.Requirements[0].EntryIDs)
+	require.NotNil(t, classic.LevelRange)
+	require.Equal(t, int32(60), classic.LevelRange.MaxLevel)
+
+	wrath := rules["Onyxia's Lair"]
+	require.NotNil(t, wrath)
+	require.Equal(t, []uint32{10184}, wrath.Requirements[0].EntryIDs)
+	require.Nil(t, wrath.LevelRange)
+}
+
 func TestInstanceDetailsBossCount(t *testing.T) {
 	t.Parallel()
 
