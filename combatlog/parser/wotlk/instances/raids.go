@@ -101,8 +101,14 @@ func onyxiaZoneName(ctx context.Context, z zone.Zone, fl database.WoWFlavor) str
 }
 
 func onyxiaRankings(fl database.WoWFlavor, classic bool) *rankings.Rankings {
+	onyxiaEntry := uint32(10184)
+	warderEntry := uint32(12129)
+	if classic {
+		onyxiaEntry = 301000
+		warderEntry = 301002
+	}
 	trash := []rankings.SpeedrunRequirement{
-		{Name: "Onyxian Warder", EntryIDs: []uint32{12129}, Count: 3, Category: rankings.SpeedrunCategoryTrash},
+		{Name: "Onyxian Warder", EntryIDs: []uint32{warderEntry}, Count: 3, Category: rankings.SpeedrunCategoryTrash},
 	}
 	if fl.Has(database.FlavorNightmareOfUrsol) {
 		// TODO: Should figure this out.
@@ -114,7 +120,7 @@ func onyxiaRankings(fl database.WoWFlavor, classic bool) *rankings.Rankings {
 
 	rules := &rankings.SpeedrunRules{
 		Requirements: append([]rankings.SpeedrunRequirement{
-			{Name: "Onyxia", EntryIDs: []uint32{10184}, Count: 1, Category: rankings.SpeedrunCategoryBosses},
+			{Name: "Onyxia", EntryIDs: []uint32{onyxiaEntry}, Count: 1, Category: rankings.SpeedrunCategoryBosses},
 		}, trash...),
 	}
 	if classic {
@@ -123,12 +129,23 @@ func onyxiaRankings(fl database.WoWFlavor, classic bool) *rankings.Rankings {
 	return &rankings.Rankings{Speedrun: rules}
 }
 
+func onyxiaDerivedName(fl database.WoWFlavor) *instances.MultiInstanceZone {
+	if !fl.Has(database.FlavorAzerothcoreProgression) {
+		return nil
+	}
+	return instances.NewMultiInstanceZone(map[string][]uint32{
+		"Onyxia Classic": {301000, 301001, 301002},
+		"Onyxia's Lair":  {10184},
+	})
+}
+
 var OnyxiaFactory = &instances.CommonFactory{
-	Name:         "Onyxia's Lair",
-	NameFromZone: onyxiaZoneName,
-	ZoneNames:    []string{"onyxia's lair", "奥妮克希亚的巢穴"},
-	MapIDs:       []uint32{249},
-	Hostiles:     instances.OnyxiaHostiles,
+	Name:                "Onyxia's Lair",
+	NameFromZone:        onyxiaZoneName,
+	FlavoredDerivedName: onyxiaDerivedName,
+	ZoneNames:           []string{"onyxia's lair", "奥妮克希亚的巢穴"},
+	MapIDs:              []uint32{249},
+	Hostiles:            instances.OnyxiaHostiles,
 	FlavoredRankings: func(fl database.WoWFlavor) *rankings.Rankings {
 		if fl.Has(database.FlavorAzerothcoreProgression) {
 			return nil

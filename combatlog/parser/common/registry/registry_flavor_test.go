@@ -34,7 +34,8 @@ func TestProgressionOnyxiaHasSeparateSpeedrunRules(t *testing.T) {
 
 	classic := rules["Onyxia Classic"]
 	require.NotNil(t, classic)
-	require.Equal(t, []uint32{10184}, classic.Requirements[0].EntryIDs)
+	require.Equal(t, []uint32{301000}, classic.Requirements[0].EntryIDs)
+	require.Equal(t, []uint32{301002}, classic.Requirements[1].EntryIDs)
 	require.NotNil(t, classic.LevelRange)
 	require.Equal(t, int32(60), classic.LevelRange.MaxLevel)
 
