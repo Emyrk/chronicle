@@ -91,12 +91,8 @@ export function LessonSidebar<TCaps>({
         <h1 className="mb-1.5 text-[17px] font-semibold tracking-tight">
           Learn {panelLabel}
         </h1>
-        <p className="text-xs leading-relaxed text-muted-foreground text-pretty">
-          Each lesson is checked against the log you have open. Where your data can
-          teach it, you practice on your own raid.
-        </p>
         {videoCount > 0 && (
-          <p className="mt-2.5 font-mono text-[10px] uppercase tracking-[0.12em] text-muted-foreground/70">
+          <p className="font-mono text-[10px] uppercase tracking-[0.12em] text-muted-foreground/70">
             {videoCount} video {videoCount === 1 ? "lesson" : "lessons"} ·{" "}
             {formatSeconds(totalSeconds)} total
           </p>
