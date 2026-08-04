@@ -110,3 +110,12 @@ research/.other
 research/core
 research/talents.md
 research/nampower-original.dll
+
+# design-sync (claude.ai/design) — transient state; durable inputs in .design-sync/ are committed
+.design-sync/sb-reference/
+.design-sync/sb-reference-build.log
+.design-sync/learnings/
+.design-sync/.cache/
+.design-sync/node_modules
+.ds-sync/
+ds-bundle/

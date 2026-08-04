@@ -1,0 +1,17 @@
+  .ds-build-meta.json: 27 components (storybook)
+  _ds_bundle.js: 3474 KB, syntax OK
+  _ds_bundle.js header: window.Chronicle, 27 components, 1 inlined externals
+  _ds_sync.json: 27 render hash(es), anchor matches the bundle
+  _ds_sync.json render hashes match disk (27 recomputed)
+  styles.css: 2 @import(s), all resolve
+  _ds_bundle.css: 285 KB
+  tokens: 438 defined, 312 referenced (3 missing, below threshold)
+  [FONT_REMOTE] "Inter", "Roboto Mono", "Libre Baskerville" (--font-serif) — a remote font-host @import is present; assuming it serves these at runtime
+  components/: 27 previews, 27 .prompt.md
+  (.d.ts parse check skipped — typescript not in node_modules)
+  window.Chronicle: 114 exports (27 fn + 0 compound)
+! [RENDER_THIN] components/components/Tooltip/Tooltip.html: variants render identically — author .design-sync/previews/Tooltip.tsx — owned files win over generated ones
+  render check: 27/27 previews render cleanly (screenshots in _screenshots/)
+  contact sheets: 2 sheet(s) → _screenshots/contact-sheet-1.png … contact-sheet-2.png
+
+✓ bundle is complete (1 warning(s) — review above, non-blocking)

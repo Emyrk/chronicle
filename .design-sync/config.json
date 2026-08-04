@@ -1,0 +1,95 @@
+{
+  "projectId": "5bf8f800-a2c5-44bb-8e3e-c96f5e5f5915",
+  "shape": "storybook",
+  "storybookConfigDir": "frontend/chronicle/.storybook",
+  "storybookStatic": ".design-sync/sb-reference",
+  "pkg": "chronicle",
+  "entry": "frontend/chronicle/design-sync.entry.ts",
+  "tsconfig": "tsconfig.app.json",
+  "readmeHeader": ".design-sync/conventions.md",
+  "provider": { "component": "DsProvider" },
+  "storyImports": {
+    "shim": [
+      "react-router-dom",
+      "src/hooks/instanceEvents",
+      "src/components/ui/button",
+      "src/components/ui/input",
+      "src/components/ui/label",
+      "src/components/ui/Tooltip/tooltip",
+      "src/components/ui/NavigationMenu/navigation-menu",
+      "src/components/ui/Sonner/Sonner"
+    ],
+    "loaders": { ".bin": "dataurl" }
+  },
+  "overrides": {
+    "LogsListView": {
+      "skip": [
+        "pages-logs-logslist--empty",
+        "pages-logs-logslist--with-logs",
+        "pages-logs-logslist--single-log",
+        "pages-logs-logslist--with-parsed-instances",
+        "pages-logs-logslist--no-parsed-output"
+      ]
+    },
+    "UploadView": {
+      "skip": [
+        "pages-upload--authenticated",
+        "pages-upload--with-files-selected",
+        "pages-upload--upload-in-progress",
+        "pages-upload--upload-failed"
+      ]
+    },
+    "Checkbox": { "skip": ["ui-checkbox--should-toggle-check"] },
+    "Switch": { "skip": ["ui-switch--should-toggle"] },
+    "Toaster": {
+      "skip": [
+        "components-sonner--should-show-toast",
+        "components-sonner--should-close-toast"
+      ]
+    },
+    "NavBar": {
+      "skip": ["components-navbar--loading", "components-navbar--logged-in"]
+    },
+    "Layout": { "skip": ["components-layout--logged-in"] },
+    "RecentRaids": {
+      "skip": [
+        "pages-recentraids--default",
+        "pages-recentraids--slow-network",
+        "pages-recentraids--empty",
+        "pages-recentraids--molten-core-only",
+        "pages-recentraids--filtered-by-url",
+        "pages-recentraids--small-dataset",
+        "pages-recentraids--single-item",
+        "pages-recentraids--mixed-content",
+        "pages-recentraids--mostly-wipes",
+        "pages-recentraids--all-full-clears",
+        "pages-recentraids--speed-runs"
+      ]
+    },
+    "EventsPanel": { "cardMode": "column" },
+    "Card": { "cardMode": "column" },
+    "Input": {
+      "cardMode": "column",
+      "skip": ["components-input--should-enter-text"]
+    },
+    "ParticleEffect": { "cardMode": "column" },
+    "Login": {
+      "cardMode": "column",
+      "skip": ["pages-login--loading", "pages-login--multiple-providers"]
+    },
+    "Collapsible": {
+      "cardMode": "column",
+      "skip": ["ui-collapsible--should-open-close"]
+    },
+    "PlayerMetricChart": { "cardMode": "column" },
+    "SpellTooltip": { "cardMode": "column" }
+  },
+  "titleMap": {
+    "Sonner": "Toaster",
+    "LogDetail": "LogDetailView",
+    "LogsList": "LogsListView",
+    "Upload": "UploadView",
+    "ParticleEffects": "ParticleEffect",
+    "Color": null
+  }
+}

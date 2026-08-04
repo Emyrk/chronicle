@@ -1,0 +1,29 @@
+» chronicle@0.0.0 → ./ds-bundle (window.Chronicle)
+  react@19.2.3 has no UMD — bundling via esbuild
+[DETECT] shape=storybook (explicit --storybook-static)
+  source shape: storybook (from cfg.shape)
+  entry: ../design-sync.entry.ts
+  [DTS] parsed 2 .d.ts files from /home/steven/go/src/github.com/Emyrk/chronicle/frontend/chronicle
+  storybook-static: 221 entries → 27 components
+  story sources: 199/199 stories paired to module exports
+  bundle: 3467 KB
+  inlined npm packages: 1
+  (decorator auto-detect skipped — cfg.provider is set)
+[CSS_FROM_STORYBOOK] _ds_bundle.css was missing — replaced with ../.design-sync/sb-reference/assets/iframe-DUVZ_UwC.css (285 KB).
+[CSS_ASSETS] 3 relative url() ref(s) in the fallback CSS won't resolve post-upload (fonts are copied separately via extractFonts; images will 404): ../c/fonts/FrizQuadrata-Regular.woff2, ../c/fonts/FrizQuadrataTurtle.otf, ../c/fonts/FrizQuadrata-Bold.woff2
+  fonts: 2 @font-face rule(s) → fonts/
+  exported PascalCase symbols: 105; bundle export list: 114
+  27/27 storybook components are public exports
+  components: 27
+  (excluded 0 enum/type/context/hook exports; 27 components)
+  docs: 0/27 components matched
+  (preview override: BlockingDialog)
+  (preview override: TenantBanner)
+  previews: 25 generated → .design-sync/.cache/previews/ (2 user-owned)
+  [DTS] 20/27 components
+  [DTS] 27/27 components
+  _ds_bundle.css fonts: 4 url(s) rewritten to fonts/
+  styles.css: 2 @import(s) (incl. _ds_bundle.css — component styles ship to designs via this closure)
+  readmeHeader: stitching .design-sync/conventions.md
+  _ds_sync.json: 27 render hash(es) + source key(s) (verification anchor)
+✓ wrote ./ds-bundle: _ds_bundle.js + styles.css + 27 component previews

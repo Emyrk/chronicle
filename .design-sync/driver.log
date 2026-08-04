@@ -1,0 +1,129 @@
+» chronicle@0.0.0 → /home/steven/go/src/github.com/Emyrk/chronicle/ds-bundle (window.Chronicle)
+  react@19.2.3 has no UMD — bundling via esbuild
+[DETECT] shape=storybook (explicit --storybook-static)
+  source shape: storybook (from cfg.shape)
+  entry: ../design-sync.entry.ts
+  [DTS] parsed 2 .d.ts files from /home/steven/go/src/github.com/Emyrk/chronicle/frontend/chronicle
+  storybook-static: 221 entries → 27 components
+  story sources: 199/199 stories paired to module exports
+  bundle: 3484 KB
+  inlined npm packages: 1
+  (decorator auto-detect skipped — cfg.provider is set)
+[CSS_FROM_STORYBOOK] _ds_bundle.css was missing — replaced with ../.design-sync/sb-reference/assets/iframe-DUVZ_UwC.css (285 KB).
+[CSS_ASSETS] 3 relative url() ref(s) in the fallback CSS won't resolve post-upload (fonts are copied separately via extractFonts; images will 404): ../c/fonts/FrizQuadrata-Regular.woff2, ../c/fonts/FrizQuadrataTurtle.otf, ../c/fonts/FrizQuadrata-Bold.woff2
+  fonts: 2 @font-face rule(s) → fonts/
+  exported PascalCase symbols: 105; bundle export list: 114
+  27/27 storybook components are public exports
+  components: 27
+  (excluded 0 enum/type/context/hook exports; 27 components)
+  docs: 0/27 components matched
+  (preview override: BlockingDialog)
+  (preview override: TenantBanner)
+  previews: 25 generated → .design-sync/.cache/previews/ (2 user-owned)
+  [DTS] 20/27 components
+  [DTS] 27/27 components
+  _ds_bundle.css fonts: 4 url(s) rewritten to fonts/
+  styles.css: 2 @import(s) (incl. _ds_bundle.css — component styles ship to designs via this closure)
+  readmeHeader: stitching .design-sync/conventions.md
+  _ds_sync.json: 27 render hash(es) + source key(s) (verification anchor)
+✓ wrote /home/steven/go/src/github.com/Emyrk/chronicle/ds-bundle: _ds_bundle.js + styles.css + 27 component previews
+verify: 26 verified-by-upload (skip capture/grade), 1 changed, 0 new, 0 removed [keyed on sourceKeys]
+upload: 1 component(s), 0 delete(s), bundle (+ _ds_sync.json last)
+→ /home/steven/go/src/github.com/Emyrk/chronicle/ds-bundle/.sync-diff.json
+  .ds-build-meta.json: 27 components (storybook)
+  _ds_bundle.js: 3491 KB, syntax OK
+  _ds_bundle.js header: window.Chronicle, 27 components, 1 inlined externals
+  _ds_sync.json: 27 render hash(es), anchor matches the bundle
+  _ds_sync.json render hashes match disk (27 recomputed)
+  styles.css: 2 @import(s), all resolve
+  _ds_bundle.css: 285 KB
+  tokens: 438 defined, 312 referenced (3 missing, below threshold)
+  [FONT_REMOTE] "Inter", "Roboto Mono", "Libre Baskerville" (--font-serif) — a remote font-host @import is present; assuming it serves these at runtime
+  components/: 27 previews, 27 .prompt.md
+  (.d.ts parse check skipped — typescript not in node_modules)
+  window.Chronicle: 114 exports (27 fn + 0 compound)
+! [RENDER_THIN] components/components/Tooltip/Tooltip.html: variants render identically — author .design-sync/previews/Tooltip.tsx — owned files win over generated ones
+  render check: 27/27 previews render cleanly (screenshots in _screenshots/)
+  contact sheets: 2 sheet(s) → _screenshots/contact-sheet-1.png … contact-sheet-2.png
+
+✓ bundle is complete (1 warning(s) — review above, non-blocking)
+↻ [COMPARE] EventsPanel: sources unchanged & fully graded — carried forward (--force to recapture)
+
+compare: 1 component(s) — 1 carried forward unchanged, 0 captured, 0 with factual failures, 0 awaiting your grade
+Grade from the true images: Read each _screenshots/compare/<group>__<Name>.png sheet (raw/ PNGs are the full-res authority), then Write the verdicts to .design-sync/.cache/compare/<Name>.grade.json (a recapture clears the old grade — its contract changed).
+{
+  "version": 2,
+  "ok": true,
+  "shape": "storybook",
+  "anchor": "ok",
+  "learningsUnmerged": [],
+  "stages": {
+    "build": {
+      "ok": true,
+      "exit": 0,
+      "skipped": null
+    },
+    "diff": {
+      "ok": true,
+      "exit": 0,
+      "skipped": null
+    },
+    "validate": {
+      "ok": true,
+      "exit": 0,
+      "skipped": null
+    },
+    "capture": {
+      "ok": true,
+      "exit": 0,
+      "skipped": null
+    }
+  },
+  "verification": {
+    "unchanged": [
+      "Alert",
+      "BlockingDialog",
+      "Button",
+      "Card",
+      "Checkbox",
+      "Collapsible",
+      "DropdownMenu",
+      "Input",
+      "Layout",
+      "LogDetailView",
+      "Login",
+      "LogsListView",
+      "NavBar",
+      "NavigationMenu",
+      "ParticleEffect",
+      "PlayerMetricChart",
+      "RaidCard",
+      "RecentRaids",
+      "ScrollArea",
+      "SpellTooltip",
+      "Switch",
+      "Table",
+      "TenantBanner",
+      "Toaster",
+      "Tooltip",
+      "UploadView"
+    ],
+    "changed": [
+      "EventsPanel"
+    ],
+    "added": [],
+    "removed": [],
+    "pendingGrade": [],
+    "canary": null
+  },
+  "upload": {
+    "any": true,
+    "components": [
+      "EventsPanel"
+    ],
+    "deletePaths": [],
+    "bundle": true,
+    "styling": false,
+    "aux": false
+  }
+}
