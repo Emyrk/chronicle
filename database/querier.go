@@ -488,9 +488,9 @@ type sqlcQuerier interface {
 	// query returns no rows); in both cases the caller falls back to the
 	// compiled-in default dataset.
 	ResolveDatasetByRealm(ctx context.Context, id uuid.UUID) (uuid.NullUUID, error)
-	// Resolves the dataset for a realm and returns the dataset's default_flavor.
-	// Uses the same precedence as ResolveDatasetByRealm, then joins to the
-	// datasets table to fetch the flavor tags.
+	// Resolves the dataset for a realm and returns its default flavor plus the
+	// tenant's additive flavor tags. Dataset selection uses the same precedence as
+	// ResolveDatasetByRealm; tenant tags augment rather than replace dataset tags.
 	ResolveDatasetWithFlavorByRealm(ctx context.Context, id uuid.UUID) (ResolveDatasetWithFlavorByRealmRow, error)
 	SearchCreatureTemplates(ctx context.Context, arg SearchCreatureTemplatesParams) ([]SearchCreatureTemplatesRow, error)
 	SearchGamePlayers(ctx context.Context, arg SearchGamePlayersParams) ([]SearchGamePlayersRow, error)

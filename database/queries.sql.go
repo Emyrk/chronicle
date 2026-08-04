@@ -1628,7 +1628,7 @@ func (q *sqlQuerier) ResolveDatasetByRealm(ctx context.Context, id uuid.UUID) (u
 }
 
 const resolveDatasetWithFlavorByRealm = `-- name: ResolveDatasetWithFlavorByRealm :one
-SELECT d.id AS dataset_id, d.default_flavor
+SELECT d.id AS dataset_id, d.default_flavor, COALESCE(t.additional_flavor, '{}')::text[] AS additional_flavor
 FROM wow_server_realms r
 JOIN wow_servers s ON s.id = r.server_id
 LEFT JOIN tenants t ON t.id = s.tenant_id
@@ -1637,17 +1637,18 @@ WHERE r.id = $1
 `
 
 type ResolveDatasetWithFlavorByRealmRow struct {
-	DatasetID     uuid.UUID `db:"dataset_id" json:"dataset_id"`
-	DefaultFlavor []string  `db:"default_flavor" json:"default_flavor"`
+	DatasetID        uuid.UUID `db:"dataset_id" json:"dataset_id"`
+	DefaultFlavor    []string  `db:"default_flavor" json:"default_flavor"`
+	AdditionalFlavor []string  `db:"additional_flavor" json:"additional_flavor"`
 }
 
-// Resolves the dataset for a realm and returns the dataset's default_flavor.
-// Uses the same precedence as ResolveDatasetByRealm, then joins to the
-// datasets table to fetch the flavor tags.
+// Resolves the dataset for a realm and returns its default flavor plus the
+// tenant's additive flavor tags. Dataset selection uses the same precedence as
+// ResolveDatasetByRealm; tenant tags augment rather than replace dataset tags.
 func (q *sqlQuerier) ResolveDatasetWithFlavorByRealm(ctx context.Context, id uuid.UUID) (ResolveDatasetWithFlavorByRealmRow, error) {
 	row := q.db.QueryRow(ctx, resolveDatasetWithFlavorByRealm, id)
 	var i ResolveDatasetWithFlavorByRealmRow
-	err := row.Scan(&i.DatasetID, &i.DefaultFlavor)
+	err := row.Scan(&i.DatasetID, &i.DefaultFlavor, &i.AdditionalFlavor)
 	return i, err
 }
 
@@ -9544,7 +9545,7 @@ func (q *sqlQuerier) DeleteTenant(ctx context.Context, id uuid.UUID) error {
 }
 
 const getTenantByID = `-- name: GetTenantByID :one
-SELECT id, slug, name, disable_client_upload, include_in_all, branding, created_at, updated_at, discoverable, default_dataset_id, default_format, available_formats, parse_config, external_linking FROM tenants WHERE id = $1
+SELECT id, slug, name, disable_client_upload, include_in_all, branding, created_at, updated_at, discoverable, default_dataset_id, default_format, available_formats, parse_config, external_linking, additional_flavor FROM tenants WHERE id = $1
 `
 
 func (q *sqlQuerier) GetTenantByID(ctx context.Context, id uuid.UUID) (Tenant, error) {
@@ -9565,13 +9566,14 @@ func (q *sqlQuerier) GetTenantByID(ctx context.Context, id uuid.UUID) (Tenant, e
 		&i.AvailableFormats,
 		&i.ParseConfig,
 		&i.ExternalLinking,
+		&i.AdditionalFlavor,
 	)
 	return i, err
 }
 
 const getTenantBySlug = `-- name: GetTenantBySlug :one
 
-SELECT id, slug, name, disable_client_upload, include_in_all, branding, created_at, updated_at, discoverable, default_dataset_id, default_format, available_formats, parse_config, external_linking FROM tenants WHERE slug = $1
+SELECT id, slug, name, disable_client_upload, include_in_all, branding, created_at, updated_at, discoverable, default_dataset_id, default_format, available_formats, parse_config, external_linking, additional_flavor FROM tenants WHERE slug = $1
 `
 
 // Tenant queries. These run with AdminBypass context since the tenants table
@@ -9594,14 +9596,15 @@ func (q *sqlQuerier) GetTenantBySlug(ctx context.Context, slug pgtype.Text) (Ten
 		&i.AvailableFormats,
 		&i.ParseConfig,
 		&i.ExternalLinking,
+		&i.AdditionalFlavor,
 	)
 	return i, err
 }
 
 const insertTenant = `-- name: InsertTenant :one
-INSERT INTO tenants (id, slug, name, disable_client_upload, include_in_all, branding, discoverable, default_format, available_formats, parse_config, external_linking)
-VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
-RETURNING id, slug, name, disable_client_upload, include_in_all, branding, created_at, updated_at, discoverable, default_dataset_id, default_format, available_formats, parse_config, external_linking
+INSERT INTO tenants (id, slug, name, disable_client_upload, include_in_all, branding, discoverable, default_format, available_formats, additional_flavor, parse_config, external_linking)
+VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, COALESCE($10::text[], '{}'::text[]), $11, $12)
+RETURNING id, slug, name, disable_client_upload, include_in_all, branding, created_at, updated_at, discoverable, default_dataset_id, default_format, available_formats, parse_config, external_linking, additional_flavor
 `
 
 type InsertTenantParams struct {
@@ -9614,6 +9617,7 @@ type InsertTenantParams struct {
 	Discoverable        bool          `db:"discoverable" json:"discoverable"`
 	DefaultFormat       NullLogFormat `db:"default_format" json:"default_format"`
 	AvailableFormats    []string      `db:"available_formats" json:"available_formats"`
+	AdditionalFlavor    []string      `db:"additional_flavor" json:"additional_flavor"`
 	ParseConfig         []byte        `db:"parse_config" json:"parse_config"`
 	ExternalLinking     []byte        `db:"external_linking" json:"external_linking"`
 }
@@ -9629,6 +9633,7 @@ func (q *sqlQuerier) InsertTenant(ctx context.Context, arg InsertTenantParams) (
 		arg.Discoverable,
 		arg.DefaultFormat,
 		arg.AvailableFormats,
+		arg.AdditionalFlavor,
 		arg.ParseConfig,
 		arg.ExternalLinking,
 	)
@@ -9648,12 +9653,13 @@ func (q *sqlQuerier) InsertTenant(ctx context.Context, arg InsertTenantParams) (
 		&i.AvailableFormats,
 		&i.ParseConfig,
 		&i.ExternalLinking,
+		&i.AdditionalFlavor,
 	)
 	return i, err
 }
 
 const listTenants = `-- name: ListTenants :many
-SELECT id, slug, name, disable_client_upload, include_in_all, branding, created_at, updated_at, discoverable, default_dataset_id, default_format, available_formats, parse_config, external_linking FROM tenants ORDER BY name
+SELECT id, slug, name, disable_client_upload, include_in_all, branding, created_at, updated_at, discoverable, default_dataset_id, default_format, available_formats, parse_config, external_linking, additional_flavor FROM tenants ORDER BY name
 `
 
 func (q *sqlQuerier) ListTenants(ctx context.Context) ([]Tenant, error) {
@@ -9680,6 +9686,7 @@ func (q *sqlQuerier) ListTenants(ctx context.Context) ([]Tenant, error) {
 			&i.AvailableFormats,
 			&i.ParseConfig,
 			&i.ExternalLinking,
+			&i.AdditionalFlavor,
 		); err != nil {
 			return nil, err
 		}
@@ -9776,11 +9783,12 @@ UPDATE tenants SET
     discoverable = COALESCE($6, discoverable),
     default_format = COALESCE($7, default_format),
     available_formats = COALESCE($8, available_formats),
-    parse_config = COALESCE($9, parse_config),
-    external_linking = COALESCE($10, external_linking),
+    additional_flavor = COALESCE($9, additional_flavor),
+    parse_config = COALESCE($10, parse_config),
+    external_linking = COALESCE($11, external_linking),
     updated_at = now()
-WHERE id = $11
-RETURNING id, slug, name, disable_client_upload, include_in_all, branding, created_at, updated_at, discoverable, default_dataset_id, default_format, available_formats, parse_config, external_linking
+WHERE id = $12
+RETURNING id, slug, name, disable_client_upload, include_in_all, branding, created_at, updated_at, discoverable, default_dataset_id, default_format, available_formats, parse_config, external_linking, additional_flavor
 `
 
 type UpdateTenantParams struct {
@@ -9792,6 +9800,7 @@ type UpdateTenantParams struct {
 	Discoverable        pgtype.Bool   `db:"discoverable" json:"discoverable"`
 	DefaultFormat       NullLogFormat `db:"default_format" json:"default_format"`
 	AvailableFormats    []string      `db:"available_formats" json:"available_formats"`
+	AdditionalFlavor    []string      `db:"additional_flavor" json:"additional_flavor"`
 	ParseConfig         []byte        `db:"parse_config" json:"parse_config"`
 	ExternalLinking     []byte        `db:"external_linking" json:"external_linking"`
 	ID                  uuid.UUID     `db:"id" json:"id"`
@@ -9808,6 +9817,7 @@ func (q *sqlQuerier) UpdateTenant(ctx context.Context, arg UpdateTenantParams) (
 		arg.Discoverable,
 		arg.DefaultFormat,
 		arg.AvailableFormats,
+		arg.AdditionalFlavor,
 		arg.ParseConfig,
 		arg.ExternalLinking,
 		arg.ID,
@@ -9828,6 +9838,7 @@ func (q *sqlQuerier) UpdateTenant(ctx context.Context, arg UpdateTenantParams) (
 		&i.AvailableFormats,
 		&i.ParseConfig,
 		&i.ExternalLinking,
+		&i.AdditionalFlavor,
 	)
 	return i, err
 }

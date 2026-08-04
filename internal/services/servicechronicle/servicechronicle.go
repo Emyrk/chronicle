@@ -91,8 +91,12 @@ func (s *Service) Start(ctx context.Context) error {
 		DefaultFlavor:    BuildTagFlavor(),
 		DefaultDatasetID: servicedataset.DefaultDatasetID,
 		ResolveDataset: func(ctx context.Context, realmID uuid.UUID) chronicle.ResolvedDataset {
-			dsID, flavor := datasetSvc.ResolveDatasetWithFlavorForRealm(ctx, realmID)
-			return chronicle.ResolvedDataset{DatasetID: dsID, Flavor: flavor}
+			dsID, flavor, additionalFlavor := datasetSvc.ResolveDatasetWithFlavorForRealm(ctx, realmID)
+			return chronicle.ResolvedDataset{
+				DatasetID:        dsID,
+				Flavor:           flavor,
+				AdditionalFlavor: additionalFlavor,
+			}
 		},
 	})
 	if err != nil {

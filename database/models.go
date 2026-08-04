@@ -1649,6 +1649,7 @@ type Tenant struct {
 	AvailableFormats    []string           `db:"available_formats" json:"available_formats"`
 	ParseConfig         []byte             `db:"parse_config" json:"parse_config"`
 	ExternalLinking     []byte             `db:"external_linking" json:"external_linking"`
+	AdditionalFlavor    []string           `db:"additional_flavor" json:"additional_flavor"`
 }
 
 type TimeParseBossKillMember struct {

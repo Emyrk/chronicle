@@ -143,6 +143,18 @@ func (f WoWFlavor) Has(tags ...FlavorTag) bool {
 	return false
 }
 
+// Merge returns a deduplicated flavor containing f followed by tags from
+// additional that are not already present. Neither input slice is modified.
+func (f WoWFlavor) Merge(additional WoWFlavor) WoWFlavor {
+	merged := make(WoWFlavor, 0, len(f)+len(additional))
+	for _, tag := range append(append(WoWFlavor(nil), f...), additional...) {
+		if !merged.Has(tag) {
+			merged = append(merged, tag)
+		}
+	}
+	return merged
+}
+
 // CanonicalKey returns a stable string key for a flavor set by sorting and
 // deduplicating tags. Two flavors with the same tags in any order produce the
 // same key. Used as a map key for caching per-flavor resources.

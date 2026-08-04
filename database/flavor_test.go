@@ -1,6 +1,7 @@
 package database_test
 
 import (
+	"slices"
 	"testing"
 
 	"github.com/Emyrk/chronicle/database"
@@ -135,6 +136,26 @@ func TestServerFlavorNoDuplicateBase(t *testing.T) {
 	got := database.ServerFlavor("vanilla", database.FlavorVanilla)
 	if len(got) != 1 || !got.Has(database.FlavorVanilla) {
 		t.Fatalf("ServerFlavor(vanilla, vanilla) = %v, want [vanilla]", got)
+	}
+}
+
+func TestWoWFlavorMerge(t *testing.T) {
+	t.Parallel()
+
+	base := database.WoWFlavor{database.FlavorWrath, database.FlavorAzerothcore}
+	additional := database.WoWFlavor{database.FlavorAzerothcore, database.FlavorAzerothcoreProgression}
+
+	got := base.Merge(additional)
+	want := database.WoWFlavor{
+		database.FlavorWrath,
+		database.FlavorAzerothcore,
+		database.FlavorAzerothcoreProgression,
+	}
+	if !slices.Equal(got, want) {
+		t.Fatalf("Merge() = %v, want %v", got, want)
+	}
+	if len(base) != 2 || len(additional) != 2 {
+		t.Fatal("Merge modified an input slice")
 	}
 }
 

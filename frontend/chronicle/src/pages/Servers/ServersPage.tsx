@@ -15,6 +15,7 @@ import {
   useDatasets,
   useSetServerDataset,
   useSetTenantDataset,
+  useFlavors,
 } from "@/api/queries";
 import { LOG_FORMAT_OPTIONS } from "@/config/serverCapabilities";
 import { Loader2, Trash2, Plus, ChevronDown, ChevronRight, ExternalLink, Building2, Pencil } from "lucide-react";
@@ -132,6 +133,8 @@ function TenantForm({ tenant, onDone }: { tenant?: Tenant; onDone: () => void })
   // Parse-axis defaults
   const [defaultFormat, setDefaultFormat] = useState(tenant?.default_format ?? "");
   const [availableFormats, setAvailableFormats] = useState<string[]>([...(tenant?.available_formats ?? [])]);
+  const [additionalFlavor, setAdditionalFlavor] = useState<string[]>([...(tenant?.additional_flavor ?? [])]);
+  const { data: allFlavors = [] } = useFlavors();
 
   // External character linking visibility
   const [showExternalLinking, setShowExternalLinking] = useState(tenant?.external_linking?.show ?? false);
@@ -176,6 +179,7 @@ function TenantForm({ tenant, onDone }: { tenant?: Tenant; onDone: () => void })
         parse_config: { cohort_mode: parseMode || undefined },
         default_format: defaultFormat || null,
         available_formats: availableFormats,
+        additional_flavor: additionalFlavor,
         external_linking: {
           show: showExternalLinking,
           callout: externalLinkingCallout.trim() || undefined,
@@ -271,6 +275,35 @@ function TenantForm({ tenant, onDone }: { tenant?: Tenant; onDone: () => void })
           {availableFormats.length === 0 && (
             <p className="text-[10px] text-muted-foreground">None selected — all formats available.</p>
           )}
+        </div>
+        <div className="space-y-1.5">
+          <label className="block text-xs text-muted-foreground">Additional flavors</label>
+          <div className="flex flex-wrap gap-1.5">
+            {allFlavors.map((flavor) => {
+              const checked = additionalFlavor.includes(flavor);
+              return (
+                <label
+                  key={flavor}
+                  className={`inline-flex items-center gap-1 px-2 py-0.5 rounded border text-xs font-mono cursor-pointer select-none ${
+                    checked ? "bg-primary/10 border-primary text-primary" : "border-input text-muted-foreground hover:border-foreground/30"
+                  }`}
+                >
+                  <input
+                    type="checkbox"
+                    className="sr-only"
+                    checked={checked}
+                    onChange={() =>
+                      setAdditionalFlavor(checked ? additionalFlavor.filter((tag) => tag !== flavor) : [...additionalFlavor, flavor])
+                    }
+                  />
+                  {flavor}
+                </label>
+              );
+            })}
+          </div>
+          <p className="text-[10px] text-muted-foreground">
+            Added to the selected dataset&apos;s default flavor for new and reprocessed logs.
+          </p>
         </div>
       </div>
       <div className="pt-2 border-t space-y-2">

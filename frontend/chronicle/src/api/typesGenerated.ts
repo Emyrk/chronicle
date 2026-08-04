@@ -2603,6 +2603,10 @@ export interface Tenant {
      */
     readonly available_formats: readonly string[];
     /**
+     * AdditionalFlavor augments the resolved dataset's default flavor tags.
+     */
+    readonly additional_flavor: readonly string[];
+    /**
      * ExternalLinking is the tenant's external character linking visibility.
      */
     readonly external_linking?: ExternalLinking;
@@ -2831,6 +2835,7 @@ export interface UpsertTenantRequest {
     readonly parse_config: ParseConfig | null;
     readonly default_format: string | null;
     readonly available_formats: readonly string[];
+    readonly additional_flavor: readonly string[];
     /**
      * ExternalLinking updates the tenant's external character linking
      * visibility. Omit to keep the existing value.

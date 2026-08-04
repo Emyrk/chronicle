@@ -11,8 +11,8 @@ SELECT * FROM tenants WHERE id = $1;
 SELECT * FROM tenants ORDER BY name;
 
 -- name: InsertTenant :one
-INSERT INTO tenants (id, slug, name, disable_client_upload, include_in_all, branding, discoverable, default_format, available_formats, parse_config, external_linking)
-VALUES (@id, @slug, @name, @disable_client_upload, @include_in_all, @branding, @discoverable, @default_format, @available_formats, @parse_config, @external_linking)
+INSERT INTO tenants (id, slug, name, disable_client_upload, include_in_all, branding, discoverable, default_format, available_formats, additional_flavor, parse_config, external_linking)
+VALUES (@id, @slug, @name, @disable_client_upload, @include_in_all, @branding, @discoverable, @default_format, @available_formats, COALESCE(@additional_flavor::text[], '{}'::text[]), @parse_config, @external_linking)
 RETURNING *;
 
 -- name: UpdateTenant :one
@@ -26,6 +26,7 @@ UPDATE tenants SET
     discoverable = COALESCE(sqlc.narg('discoverable'), discoverable),
     default_format = COALESCE(sqlc.narg('default_format'), default_format),
     available_formats = COALESCE(sqlc.narg('available_formats'), available_formats),
+    additional_flavor = COALESCE(sqlc.narg('additional_flavor'), additional_flavor),
     parse_config = COALESCE(sqlc.narg('parse_config'), parse_config),
     external_linking = COALESCE(sqlc.narg('external_linking'), external_linking),
     updated_at = now()

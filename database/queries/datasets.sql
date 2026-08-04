@@ -57,10 +57,10 @@ LEFT JOIN tenants t ON t.id = s.tenant_id
 WHERE r.id = $1;
 
 -- name: ResolveDatasetWithFlavorByRealm :one
--- Resolves the dataset for a realm and returns the dataset's default_flavor.
--- Uses the same precedence as ResolveDatasetByRealm, then joins to the
--- datasets table to fetch the flavor tags.
-SELECT d.id AS dataset_id, d.default_flavor
+-- Resolves the dataset for a realm and returns its default flavor plus the
+-- tenant's additive flavor tags. Dataset selection uses the same precedence as
+-- ResolveDatasetByRealm; tenant tags augment rather than replace dataset tags.
+SELECT d.id AS dataset_id, d.default_flavor, COALESCE(t.additional_flavor, '{}')::text[] AS additional_flavor
 FROM wow_server_realms r
 JOIN wow_servers s ON s.id = r.server_id
 LEFT JOIN tenants t ON t.id = s.tenant_id

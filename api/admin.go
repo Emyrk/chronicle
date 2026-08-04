@@ -741,7 +741,8 @@ func (a *API) AdminGetSiteConfig(w http.ResponseWriter, r *http.Request) {
 	if t != nil && t.DefaultDatasetID.Valid {
 		ds, err := a.Opts.Dataset.GetDataset(ctx, t.DefaultDatasetID.UUID)
 		if err == nil {
-			resp.DatasetFlavor = ds.DefaultFlavor
+			resp.DatasetFlavor = database.FlavorFromStrings(ds.DefaultFlavor).
+				Merge(database.FlavorFromStrings(t.AdditionalFlavor)).Strings()
 		}
 	}
 

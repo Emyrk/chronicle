@@ -67,9 +67,9 @@ type Chronicle struct {
 	registryMu         sync.Mutex
 	registryByFlavor   map[string]*registry.Registry
 	primaryDomain      string
-	defaultFlavor    database.WoWFlavor
-	defaultDatasetID uuid.UUID
-	resolveDataset   func(ctx context.Context, realmID uuid.UUID) ResolvedDataset
+	defaultFlavor      database.WoWFlavor
+	defaultDatasetID   uuid.UUID
+	resolveDataset     func(ctx context.Context, realmID uuid.UUID) ResolvedDataset
 
 	mu                     sync.Mutex
 	insertParsedInstanceMu sync.Mutex
@@ -96,15 +96,14 @@ type Options struct {
 	// The resolver follows the server > tenant > default chain.
 	// If nil, the default dataset is always used.
 	ResolveDataset func(ctx context.Context, realmID uuid.UUID) ResolvedDataset
-
 }
 
 func New(ctx context.Context, logger *slog.Logger, opts Options) (*Chronicle, error) {
 	c := &Chronicle{
 		AppContext:         ctx,
 		primaryDomain:      opts.PrimaryDomain,
-		defaultFlavor:    opts.DefaultFlavor,
-		defaultDatasetID: opts.DefaultDatasetID,
+		defaultFlavor:      opts.DefaultFlavor,
+		defaultDatasetID:   opts.DefaultDatasetID,
 		Storage:            opts.Storage,
 		Zed:                opts.Zed,
 		ps:                 opts.Ps,
@@ -155,11 +154,12 @@ func (c *Chronicle) Registry() *registry.Registry {
 	return c.RegistryForFlavor(c.defaultFlavor)
 }
 
-// ResolvedDataset holds the result of dataset resolution: the dataset ID and
-// its default flavor tags (empty if no flavor is configured on the dataset).
+// ResolvedDataset holds the dataset ID, its default flavor, and additive
+// tenant flavor tags resolved for a realm.
 type ResolvedDataset struct {
-	DatasetID uuid.UUID
-	Flavor    database.WoWFlavor
+	DatasetID        uuid.UUID
+	Flavor           database.WoWFlavor
+	AdditionalFlavor database.WoWFlavor
 }
 
 // resolveForRealm resolves the dataset and flavor for a realm. When the

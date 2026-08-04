@@ -96,6 +96,15 @@ func (c *Chronicle) NewWorkerLogParse() river.Worker[ArgsLogParse] {
 	}
 }
 
+func resolveLogFlavor(current database.WoWFlavor, explicit bool, resolved ResolvedDataset) (database.WoWFlavor, bool) {
+	selected := current
+	if !explicit && len(resolved.Flavor) > 0 {
+		selected = resolved.Flavor
+	}
+	merged := selected.Merge(resolved.AdditionalFlavor)
+	return merged, !slices.Equal(current, merged)
+}
+
 func (w *WorkerLogParse) Work(ctx context.Context, job *river.Job[ArgsLogParse]) error {
 	jobStart := time.Now()
 	metrics := w.parent.metrics
@@ -212,11 +221,12 @@ func (w *WorkerLogParse) Work(ctx context.Context, job *river.Job[ArgsLogParse])
 	resolved := w.parent.resolveForRealm(ctx, preRealmID)
 	gameDB := w.parent.WoWDB.ForDataset(resolved.DatasetID)
 
-	// If the log group didn't have an explicit flavor (from the upload
-	// request), use the dataset's default_flavor instead and persist it
-	// so subsequent reparses use the correct value.
-	if !explicitFlavor && len(resolved.Flavor) > 0 {
-		flavor = resolved.Flavor
+	// If the log group didn't have an explicit flavor (from the upload request),
+	// use the dataset default. Tenant additional flavors always augment the
+	// selected flavor, including on reparses of logs with a persisted flavor.
+	var flavorChanged bool
+	flavor, flavorChanged = resolveLogFlavor(flavor, explicitFlavor, resolved)
+	if flavorChanged {
 		_ = db.UpdateWoWLogGroupFlavor(ctx, database.UpdateWoWLogGroupFlavorParams{
 			ID:     lg.ID,
 			Flavor: flavor.Strings(),

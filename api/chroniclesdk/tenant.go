@@ -27,6 +27,8 @@ type Tenant struct {
 	// AvailableFormats restricts which log formats are valid for this tenant.
 	// Empty means all formats are available.
 	AvailableFormats []string `json:"available_formats"`
+	// AdditionalFlavor augments the resolved dataset's default flavor tags.
+	AdditionalFlavor []string `json:"additional_flavor"`
 	// ExternalLinking is the tenant's external character linking visibility.
 	ExternalLinking *ExternalLinking `json:"external_linking,omitempty"`
 	CreatedAt       time.Time        `json:"created_at"`
@@ -70,6 +72,7 @@ func TenantFromDB(t database.Tenant) Tenant {
 		DisableClientUpload: t.DisableClientUpload,
 		IncludeInAll:        t.IncludeInAll,
 		Discoverable:        t.Discoverable,
+		AdditionalFlavor:    t.AdditionalFlavor,
 		CreatedAt:           t.CreatedAt.Time,
 		UpdatedAt:           t.UpdatedAt.Time,
 	}
@@ -191,6 +194,7 @@ type UpsertTenantRequest struct {
 	ParseConfig         *ParseConfig  `json:"parse_config"`
 	DefaultFormat       *string       `json:"default_format"`
 	AvailableFormats    []string      `json:"available_formats"`
+	AdditionalFlavor    []string      `json:"additional_flavor"`
 	// ExternalLinking updates the tenant's external character linking
 	// visibility. Omit to keep the existing value.
 	ExternalLinking *ExternalLinking `json:"external_linking,omitempty"`
@@ -269,6 +273,7 @@ func (r UpsertTenantRequest) ToInsertParams() database.InsertTenantParams {
 		ExternalLinking:     r.marshalExternalLinking(),
 		DefaultFormat:       defaultFormat,
 		AvailableFormats:    r.AvailableFormats,
+		AdditionalFlavor:    r.AdditionalFlavor,
 	}
 }
 
@@ -317,5 +322,6 @@ func (r UpsertTenantRequest) ToUpdateParams() database.UpdateTenantParams {
 		ExternalLinking:     r.marshalExternalLinking(),
 		DefaultFormat:       defaultFormat,
 		AvailableFormats:    r.AvailableFormats,
+		AdditionalFlavor:    r.AdditionalFlavor,
 	}
 }
