@@ -8,11 +8,12 @@ import { useState } from "react";
 import { cn } from "@/lib/utils";
 import type { Lesson, LessonState } from "./types";
 
-const STATE_PILL: Record<LessonState, { label: string; className: string }> = {
-  available: {
-    label: "IN YOUR DATA",
-    className: "border-class-hunter/45 text-class-hunter",
-  },
+/**
+ * Available lessons carry no badge — teachable-from-your-data is the normal
+ * case. Only the exception states are called out.
+ */
+const STATE_PILL: Record<LessonState, { label: string; className: string } | null> = {
+  available: null,
   limited: {
     label: "LIMITED",
     className: "border-class-rogue/45 text-class-rogue",
@@ -168,14 +169,16 @@ function LessonRow<TCaps>({
           >
             {lesson.title}
           </span>
-          <span
-            className={cn(
-              "rounded-full border px-1.5 py-px font-mono text-[9.5px]",
-              pill.className,
-            )}
-          >
-            {pill.label}
-          </span>
+          {pill && (
+            <span
+              className={cn(
+                "rounded-full border px-1.5 py-px font-mono text-[9.5px]",
+                pill.className,
+              )}
+            >
+              {pill.label}
+            </span>
+          )}
         </div>
         <p className="text-[11.5px] leading-snug text-muted-foreground">
           {lesson.description(caps)}
