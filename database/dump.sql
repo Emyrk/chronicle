@@ -178,11 +178,6 @@ CREATE FUNCTION river_job_state_in_bitmask(bitmask bit, state river_job_state) R
     END = 1;
 $$;
 
-CREATE AGGREGATE bit_xor(bigint) (
-    SFUNC = int8xor,
-    STYPE = bigint
-);
-
 CREATE TABLE application_modification_requests (
     id uuid DEFAULT gen_random_uuid() NOT NULL,
     application_id uuid NOT NULL,

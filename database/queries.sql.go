@@ -10290,7 +10290,7 @@ WITH clear_stats AS (
     SELECT
         COUNT(*)::bigint AS cnt,
         MAX(sr.start_time)::timestamptz AS wm,
-        COALESCE(bit_xor(hashtextextended(
+        COALESCE(SUM(hashtextextended(
             sr.instance_id::text || '|' ||
             COALESCE(li.duplicate_group_id, li.id)::text || '|' ||
             sr.qualified::text || '|' ||
@@ -10300,7 +10300,7 @@ WITH clear_stats AS (
             li.max_players::text || '|' ||
             sr.start_time::text,
             0
-        )), 0)::bigint AS fp
+        )::numeric) % 4294967291, 0)::bigint AS fp
     FROM instance_speedruns sr
     JOIN log_instances li ON li.id = sr.instance_id
     WHERE sr.qualified = true
@@ -10312,7 +10312,7 @@ boss_stats AS (
     SELECT
         COUNT(*)::bigint AS cnt,
         MAX(lie.end_time)::timestamptz AS wm,
-        COALESCE(bit_xor(hashtextextended(
+        COALESCE(SUM(hashtextextended(
             lie.instance_id::text || '|' ||
             COALESCE(li.duplicate_group_id, li.id)::text || '|' ||
             lie.name || '|' ||
@@ -10324,7 +10324,7 @@ boss_stats AS (
             li.difficulty_name || '|' ||
             li.max_players::text,
             1
-        )), 0)::bigint AS fp
+        )::numeric) % 4294967291, 0)::bigint AS fp
     FROM log_instance_encounters lie
     JOIN log_instances li ON li.id = lie.instance_id
     JOIN instance_speedruns sr ON sr.instance_id = lie.instance_id
@@ -10338,7 +10338,7 @@ boss_stats AS (
 SELECT
     (COALESCE(c.cnt, 0) + COALESCE(b.cnt, 0))::bigint AS row_count,
     GREATEST(c.wm, b.wm)::timestamptz AS watermark,
-    (c.fp # b.fp)::bigint AS fingerprint
+    ((c.fp + b.fp) % 4294967291)::bigint AS fingerprint
 FROM clear_stats c, boss_stats b
 `
 
@@ -10357,11 +10357,13 @@ type GetTimeParseSnapshotSourceStatsRow struct {
 // speedruns and boss-kill eligible encounters. Changes in either source
 // break the staleness guard so new boss encounters or reparses trigger
 // publication.
-// The fingerprint uses bit_xor(hashtextextended(...)) over all columns that
-// affect membership, cohort identity, duration, dedup, and qualification.
-// Empty populations produce fingerprint = 0 (COALESCE of NULL bit_xor).
-// Clear and boss fingerprints are combined with XOR using different seeds
-// so identical content in both populations does not cancel out.
+// The fingerprint hashes every membership-affecting column via
+// hashtextextended (seed 0 for clears, seed 1 for bosses), sums via
+// numeric to avoid bigint overflow, then reduces modulo a large prime.
+// The two sub-fingerprints are added modulo the same prime so identical
+// content in both populations does not cancel out.
+// Empty populations produce fingerprint = 0 (COALESCE of empty SUM).
+// Compatible with PostgreSQL 13+ (no bit_xor aggregate required).
 // IMPORTANT: keep WHERE clauses in sync with the corresponding BatchInsert queries.
 func (q *sqlQuerier) GetTimeParseSnapshotSourceStats(ctx context.Context, arg GetTimeParseSnapshotSourceStatsParams) (GetTimeParseSnapshotSourceStatsRow, error) {
 	row := q.db.QueryRow(ctx, getTimeParseSnapshotSourceStats, arg.Cutoff, arg.WindowStart)
