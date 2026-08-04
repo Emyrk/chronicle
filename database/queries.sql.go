@@ -8714,6 +8714,46 @@ func (q *sqlQuerier) SiteStats(ctx context.Context) (SiteStatsRow, error) {
 	return i, err
 }
 
+const getInstanceCleanEncounterKillTimes = `-- name: GetInstanceCleanEncounterKillTimes :many
+SELECT
+    lie.name AS encounter_name,
+    (EXTRACT(EPOCH FROM (lie.end_time - lie.start_time)) * 1000)::bigint AS duration_ms
+FROM log_instance_encounters lie
+WHERE lie.instance_id = $1
+  AND lie.boss = true
+  AND lie.kill_type = 'clean'
+  AND lie.end_time > lie.start_time
+ORDER BY lie.start_time
+`
+
+type GetInstanceCleanEncounterKillTimesRow struct {
+	EncounterName string `db:"encounter_name" json:"encounter_name"`
+	DurationMs    int64  `db:"duration_ms" json:"duration_ms"`
+}
+
+// Returns only clean boss kills for an instance, excluding partial kills.
+// Used by the time-parse handler so the primary instance is scored against
+// the clean-only snapshot cohort consistently.
+func (q *sqlQuerier) GetInstanceCleanEncounterKillTimes(ctx context.Context, instanceID uuid.UUID) ([]GetInstanceCleanEncounterKillTimesRow, error) {
+	rows, err := q.db.Query(ctx, getInstanceCleanEncounterKillTimes, instanceID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []GetInstanceCleanEncounterKillTimesRow
+	for rows.Next() {
+		var i GetInstanceCleanEncounterKillTimesRow
+		if err := rows.Scan(&i.EncounterName, &i.DurationMs); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const getInstanceEncounterKillTimes = `-- name: GetInstanceEncounterKillTimes :many
 SELECT
     lie.name AS encounter_name,

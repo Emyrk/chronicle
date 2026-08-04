@@ -1,4 +1,55 @@
-import type { SpeedrunCohortRun } from "@/api/typesGenerated";
+import type { InstanceTimeParsesResponse, SpeedrunCohortRun } from "@/api/typesGenerated";
+
+/** A snapshot-backed per-boss parse score ready for display. */
+export interface SnapshotBossParse {
+  displayScore: number;
+  sampleSize: number;
+  status: string;
+}
+
+/**
+ * Maps snapshot API boss_kill_times[] to a lookup by encounter name.
+ * Returns null when the snapshot is unavailable (loading, no_snapshot, disabled).
+ * Individual entries with status "sample_too_small" get a null displayScore
+ * so the badge renders "—" consistently with existing behavior.
+ */
+export function mapSnapshotBossParses(
+  timeParses: InstanceTimeParsesResponse | undefined,
+): ReadonlyMap<string, SnapshotBossParse | null> | null {
+  if (!timeParses?.available) return null;
+  const result = new Map<string, SnapshotBossParse | null>();
+  for (const boss of timeParses.boss_kill_times) {
+    if (boss.status === "sample_too_small") {
+      result.set(boss.encounter_name, null);
+    } else {
+      result.set(boss.encounter_name, {
+        displayScore: boss.display_score,
+        sampleSize: boss.sample_size,
+        status: boss.status,
+      });
+    }
+  }
+  return result;
+}
+
+/**
+ * Resolves the display parse score for a single encounter row.
+ * Returns a number when a valid snapshot score exists, or null when:
+ * - snapshot is not available (snapshotParses is null)
+ * - boss is missing from the snapshot
+ * - sample is too small (entry is null)
+ *
+ * Never falls back to client-side cohort percentiles.
+ */
+export function resolveEncounterParseScore(
+  snapshotParses: ReadonlyMap<string, SnapshotBossParse | null> | null,
+  encounterName: string,
+): number | null {
+  if (!snapshotParses) return null;
+  const entry = snapshotParses.get(encounterName);
+  if (entry === undefined || entry === null) return null;
+  return entry.displayScore;
+}
 
 export interface EncounterKillTimeSummary {
   count: number;

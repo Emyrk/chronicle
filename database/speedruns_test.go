@@ -86,3 +86,59 @@ func TestEncounterKillTimesIncludePartialKills(t *testing.T) {
 		cohortKillTimes[1].EncounterName,
 	})
 }
+
+func TestCleanEncounterKillTimesExcludePartialKills(t *testing.T) {
+	t.Parallel()
+
+	_, store, realmID := setupParsesTest(t)
+	ctx := testutil.Context(t, testutil.WaitShort)
+	startedAt := time.Date(2026, time.August, 1, 20, 0, 0, 0, time.UTC)
+
+	userID := uuid.New()
+	_, err := store.InsertUser(ctx, database.InsertUserParams{
+		ID: userID, Username: "u-" + userID.String()[:8],
+	})
+	require.NoError(t, err)
+
+	logGroupID := uuid.New()
+	_, err = store.InsertWoWLogGroup(ctx, database.InsertWoWLogGroupParams{
+		ID: logGroupID, Owner: userID, LogType: database.LogTypeV1,
+		CreatedAt: database.Timestamptz(startedAt), UpdatedAt: database.Timestamptz(startedAt),
+	})
+	require.NoError(t, err)
+	require.NoError(t, store.InsertParsedLogGroup(ctx, logGroupID))
+
+	instanceID := uuid.New()
+	_, err = store.InsertInstance(ctx, database.InsertInstanceParams{
+		ID: instanceID, RealmID: realmID, LogGroupID: logGroupID,
+		Name: "Molten Core", HashedSlug: pgtype.Text{String: "clean-only-raid", Valid: true},
+		StartTime: database.Timestamptz(startedAt), EndTime: database.Timestamptz(startedAt.Add(time.Hour)),
+		Capabilities: []string{}, DifficultyName: "Normal", MaxPlayers: 40,
+	})
+	require.NoError(t, err)
+
+	insertEncounter := func(name string, killType database.KillType, offset time.Duration) {
+		t.Helper()
+		end := startedAt.Add(offset)
+		_, err := store.InsertEncounter(ctx, database.InsertEncounterParams{
+			ID: uuid.New(), InstanceID: instanceID, Name: name,
+			KillType: killType, Remaining: guid.GUIDs{}, Boss: true,
+			StartTime: database.Timestamptz(end.Add(-time.Minute)), EndTime: database.Timestamptz(end),
+		})
+		require.NoError(t, err)
+	}
+	insertEncounter("Clean Boss", database.KillTypeClean, 10*time.Minute)
+	insertEncounter("Partial Boss", database.KillTypePartial, 20*time.Minute)
+	insertEncounter("Wiped Boss", database.KillTypeWipe, 30*time.Minute)
+
+	// The clean-only query should return only the clean kill.
+	cleanKillTimes, err := store.GetInstanceCleanEncounterKillTimes(ctx, instanceID)
+	require.NoError(t, err)
+	require.Len(t, cleanKillTimes, 1)
+	require.Equal(t, "Clean Boss", cleanKillTimes[0].EncounterName)
+
+	// The original query still returns both clean and partial.
+	allKillTimes, err := store.GetInstanceEncounterKillTimes(ctx, instanceID)
+	require.NoError(t, err)
+	require.Len(t, allKillTimes, 2)
+}

@@ -130,6 +130,10 @@ type sqlcQuerier interface {
 	GetGuildPageTab(ctx context.Context, id uuid.UUID) (GuildPageTab, error)
 	// Guild Settings
 	GetGuildSettings(ctx context.Context, guildID uuid.UUID) (GuildSetting, error)
+	// Returns only clean boss kills for an instance, excluding partial kills.
+	// Used by the time-parse handler so the primary instance is scored against
+	// the clean-only snapshot cohort consistently.
+	GetInstanceCleanEncounterKillTimes(ctx context.Context, instanceID uuid.UUID) ([]GetInstanceCleanEncounterKillTimesRow, error)
 	GetInstanceEncounterCharacterFights(ctx context.Context, instanceID uuid.UUID) ([]LogInstanceEncounterHostile, error)
 	GetInstanceEncounterKillTimes(ctx context.Context, instanceID uuid.UUID) ([]GetInstanceEncounterKillTimesRow, error)
 	GetInstanceLoot(ctx context.Context, arg GetInstanceLootParams) ([]GetInstanceLootRow, error)

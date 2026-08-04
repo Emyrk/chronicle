@@ -1,9 +1,11 @@
 import { describe, expect, it } from "vitest";
-import type { SpeedrunCohortRun } from "@/api/typesGenerated";
+import type { InstanceTimeParsesResponse, SpeedrunCohortRun } from "@/api/typesGenerated";
 import {
   averageKillTimePercentile,
   buildEncounterKillTimeComparisonRows,
   killTimePercentile,
+  mapSnapshotBossParses,
+  resolveEncounterParseScore,
   summarizeEncounterKillTimes,
 } from "./encounterKillTimePopulation";
 
@@ -90,5 +92,99 @@ describe("averageKillTimePercentile", () => {
 
   it("returns null without available encounter parses", () => {
     expect(averageKillTimePercentile([null, null])).toBeNull();
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Snapshot-backed parse mapping
+// ---------------------------------------------------------------------------
+
+function makeTimeParsesResponse(
+  overrides: Partial<InstanceTimeParsesResponse> = {},
+): InstanceTimeParsesResponse {
+  return {
+    available: true,
+    snapshot_id: "00000000-0000-0000-0000-000000000001",
+    cutoff: "2026-07-01T00:00:00Z",
+    lookback_days: 60,
+    policy_version: 1,
+    query_version: 1,
+    boss_kill_times: [],
+    ...overrides,
+  };
+}
+
+describe("mapSnapshotBossParses", () => {
+  it("returns null when snapshot is unavailable", () => {
+    expect(mapSnapshotBossParses(undefined)).toBeNull();
+    expect(mapSnapshotBossParses(makeTimeParsesResponse({ available: false }))).toBeNull();
+  });
+
+  it("maps scored bosses by encounter name", () => {
+    const resp = makeTimeParsesResponse({
+      boss_kill_times: [
+        { encounter_name: "Lucifron", duration_ms: 90_000, precise_score: 85.5, display_score: 86, rank: 5, sample_size: 50, status: "scored" },
+        { encounter_name: "Magmadar", duration_ms: 120_000, precise_score: 72.3, display_score: 72, rank: 10, sample_size: 50, status: "scored" },
+      ],
+    });
+
+    const result = mapSnapshotBossParses(resp);
+    expect(result).not.toBeNull();
+    expect(result!.get("Lucifron")).toEqual({ displayScore: 86, sampleSize: 50, status: "scored" });
+    expect(result!.get("Magmadar")).toEqual({ displayScore: 72, sampleSize: 50, status: "scored" });
+  });
+
+  it("maps sample_too_small bosses to null entry", () => {
+    const resp = makeTimeParsesResponse({
+      boss_kill_times: [
+        { encounter_name: "Lucifron", duration_ms: 90_000, precise_score: 0, display_score: 0, rank: 0, sample_size: 3, status: "sample_too_small" },
+      ],
+    });
+
+    const result = mapSnapshotBossParses(resp);
+    expect(result).not.toBeNull();
+    expect(result!.get("Lucifron")).toBeNull();
+  });
+});
+
+describe("resolveEncounterParseScore", () => {
+  it("returns display score when snapshot has a scored boss", () => {
+    const snapshotParses = new Map([
+      ["Lucifron", { displayScore: 86, sampleSize: 50, status: "scored" }],
+    ]);
+    expect(resolveEncounterParseScore(snapshotParses, "Lucifron")).toBe(86);
+  });
+
+  it("returns null when snapshot is null (unavailable)", () => {
+    expect(resolveEncounterParseScore(null, "Lucifron")).toBeNull();
+  });
+
+  it("returns null when boss is missing from snapshot", () => {
+    const snapshotParses = new Map([
+      ["Magmadar", { displayScore: 72, sampleSize: 50, status: "scored" }],
+    ]);
+    expect(resolveEncounterParseScore(snapshotParses, "Lucifron")).toBeNull();
+  });
+
+  it("returns null when boss entry is null (sample_too_small)", () => {
+    const snapshotParses = new Map<string, { displayScore: number; sampleSize: number; status: string } | null>([
+      ["Lucifron", null],
+    ]);
+    expect(resolveEncounterParseScore(snapshotParses, "Lucifron")).toBeNull();
+  });
+
+  it("uses snapshot scores instead of client-side cohort percentiles", () => {
+    // Simulate: client-side cohort would calculate percentile = 60,
+    // but snapshot says display_score = 92. The snapshot should win.
+    const snapshotParses = new Map([
+      ["Lucifron", { displayScore: 92, sampleSize: 100, status: "scored" }],
+    ]);
+
+    // Client-side calculation would give a different result
+    const clientSidePercentile = killTimePercentile(250_000, [100_000, 200_000, 300_000, 400_000, 500_000]);
+    expect(clientSidePercentile).toBe(60); // Client would say 60
+
+    // Snapshot wins — resolveEncounterParseScore returns the snapshot score
+    expect(resolveEncounterParseScore(snapshotParses, "Lucifron")).toBe(92);
   });
 });

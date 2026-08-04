@@ -22,6 +22,20 @@ WHERE lie.instance_id = $1
   AND lie.end_time > lie.start_time
 ORDER BY lie.start_time;
 
+-- name: GetInstanceCleanEncounterKillTimes :many
+-- Returns only clean boss kills for an instance, excluding partial kills.
+-- Used by the time-parse handler so the primary instance is scored against
+-- the clean-only snapshot cohort consistently.
+SELECT
+    lie.name AS encounter_name,
+    (EXTRACT(EPOCH FROM (lie.end_time - lie.start_time)) * 1000)::bigint AS duration_ms
+FROM log_instance_encounters lie
+WHERE lie.instance_id = $1
+  AND lie.boss = true
+  AND lie.kill_type = 'clean'
+  AND lie.end_time > lie.start_time
+ORDER BY lie.start_time;
+
 -- name: InstanceSpeedrunCohort :many
 -- Returns rankings-backed runs comparable to an anchor instance. Cohorts match
 -- instance name, difficulty, and declared maximum raid size, use a historical

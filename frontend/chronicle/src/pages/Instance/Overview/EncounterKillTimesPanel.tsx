@@ -15,6 +15,8 @@ import type { PopulationSelection } from "./populationSelectionState";
 import { useInstanceTimeParses, useSpeedrunPopulation } from "./overviewQueries";
 import {
   buildEncounterKillTimeComparisonRows,
+  mapSnapshotBossParses,
+  resolveEncounterParseScore,
   summarizeEncounterKillTimes,
   type EncounterKillTimeSummary,
 } from "./encounterKillTimePopulation";
@@ -188,12 +190,13 @@ export function EncounterKillTimesPanel({
   const primarySummaries = summarizeEncounterKillTimes(primaryQuery.data?.runs ?? []);
   const comparisonSummaries = summarizeEncounterKillTimes(comparisonQuery.data?.runs ?? []);
   const rows = buildEncounterKillTimeComparisonRows(primarySummaries, comparisonSummaries);
-  // Average boss parse comes exclusively from the snapshot API — no client-side fallback.
+  // All parse scores come exclusively from the snapshot API — no client-side fallback.
+  const snapshotParses = mapSnapshotBossParses(timeParsesQuery.data);
   const averageParse = timeParsesQuery.data?.available && timeParsesQuery.data.average_boss_kill_parse
     ? timeParsesQuery.data.average_boss_kill_parse.display_score
     : null;
   const killedBossCount = rows.filter((row) => row.primarySummary !== null).length;
-  const availableParseCount = rows.filter((row) => row.percentile !== null).length;
+  const availableParseCount = rows.filter((row) => resolveEncounterParseScore(snapshotParses, row.encounterName) !== null).length;
   const incompleteAverage = killedBossCount < rows.length;
   const specificRaidComparison = comparison?.kind === "instance";
   const loading = primaryQuery.isLoading || comparisonQuery.isLoading;
@@ -316,9 +319,11 @@ export function EncounterKillTimesPanel({
               <span className="text-right">{specificRaidComparison ? "Other" : "Median"}</span>
               <span className="text-right">Delta</span>
             </div>
-            {rows.map(({ encounterName, primarySummary, comparisonSummary, percentile }) => {
+            {rows.map(({ encounterName, primarySummary, comparisonSummary }) => {
               const primaryDurationMs = primarySummary?.median ?? null;
               const missing = primaryDurationMs === null;
+              // Per-boss parse score comes from the snapshot API, never client-side cohort.
+              const percentile = resolveEncounterParseScore(snapshotParses, encounterName);
               const delta = primaryDurationMs === null
                 ? null
                 : primaryDurationMs - comparisonSummary.median;

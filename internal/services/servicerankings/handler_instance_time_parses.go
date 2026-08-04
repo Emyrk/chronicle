@@ -26,7 +26,7 @@ type timeParsesQuerier interface {
 	GetLogInstanceStartTime(ctx context.Context, id uuid.UUID) (pgtype.Timestamptz, error)
 	GetLogInstanceForTimeParse(ctx context.Context, id uuid.UUID) (database.GetLogInstanceForTimeParseRow, error)
 	GetInstanceSpeedrun(ctx context.Context, instanceID uuid.UUID) (database.GetInstanceSpeedrunRow, error)
-	GetInstanceEncounterKillTimes(ctx context.Context, instanceID uuid.UUID) ([]database.GetInstanceEncounterKillTimesRow, error)
+	GetInstanceCleanEncounterKillTimes(ctx context.Context, instanceID uuid.UUID) ([]database.GetInstanceCleanEncounterKillTimesRow, error)
 	GetTimeParseSnapshotClearTimeCohort(ctx context.Context, arg database.GetTimeParseSnapshotClearTimeCohortParams) ([]int64, error)
 	GetTimeParseSnapshotBossKillCohort(ctx context.Context, arg database.GetTimeParseSnapshotBossKillCohortParams) ([]int64, error)
 	GetTenantByID(ctx context.Context, id uuid.UUID) (database.Tenant, error)
@@ -205,8 +205,9 @@ func handleInstanceTimeParsesWithStore(store timeParsesQuerier, logger *slog.Log
 		return
 	}
 
-	// Get the instance's encounter kill times.
-	encounterKills, eErr := store.GetInstanceEncounterKillTimes(ctx, instanceID)
+	// Get the instance's clean encounter kill times only — partial kills are
+	// excluded because the snapshot cohort contains only clean kills.
+	encounterKills, eErr := store.GetInstanceCleanEncounterKillTimes(ctx, instanceID)
 	if eErr != nil {
 		httpapi.HandleResponseError(ctx, w, eErr, httpapi.APIError{
 			Response: chroniclesdk.Response{
