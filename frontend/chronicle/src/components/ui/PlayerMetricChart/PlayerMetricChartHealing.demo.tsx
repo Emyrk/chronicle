@@ -67,18 +67,20 @@ const HEALERS: Healer[] = [
     playerName: 'Treesong',
     className: 'Druid',
     specialization: 'Restoration',
+    // Deliberately overflows the chart (112k + 70k exceeds the bar scale) so
+    // the striped end cap has a demo row to live on.
     effective: 112_000,
-    overheal: 41_000,
+    overheal: 70_000,
     abilities: [
-      { name: 'Rejuvenation', effective: 48_000, overheal: 21_000, casts: 110, crits: 0 },
-      { name: 'Healing Touch', effective: 40_000, overheal: 12_000, casts: 28, crits: 6 },
-      { name: 'Regrowth', effective: 24_000, overheal: 8_000, casts: 26, crits: 5 },
+      { name: 'Rejuvenation', effective: 48_000, overheal: 38_000, casts: 110, crits: 0 },
+      { name: 'Healing Touch', effective: 40_000, overheal: 19_000, casts: 28, crits: 6 },
+      { name: 'Regrowth', effective: 24_000, overheal: 13_000, casts: 26, crits: 5 },
     ],
     targets: [
-      { targetName: 'Brickwall', effective: 44_000, overheal: 17_000, count: 70 },
-      { targetName: 'Markshot', effective: 26_000, overheal: 9_000, count: 40 },
-      { targetName: 'Shadowmeld', effective: 22_000, overheal: 8_000, count: 34 },
-      { targetName: 'Lightmender', effective: 20_000, overheal: 7_000, count: 30 },
+      { targetName: 'Brickwall', effective: 44_000, overheal: 29_000, count: 70 },
+      { targetName: 'Markshot', effective: 26_000, overheal: 16_000, count: 40 },
+      { targetName: 'Shadowmeld', effective: 22_000, overheal: 13_000, count: 34 },
+      { targetName: 'Lightmender', effective: 20_000, overheal: 12_000, count: 30 },
     ],
   },
   {

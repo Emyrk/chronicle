@@ -91,7 +91,7 @@ export const RemotionRoot: React.FC = () => {
       />
     </Folder>
       <Folder name="HealingDoneLessons">
-        <Composition id="ReadHealingChart" component={ReadHealingChartVideo} durationInFrames={350} fps={30} width={1280} height={720} />
+        <Composition id="ReadHealingChart" component={ReadHealingChartVideo} durationInFrames={410} fps={30} width={1280} height={720} />
         <Composition id="HealingModes" component={HealingModesVideo} durationInFrames={440} fps={30} width={1280} height={720} />
         <Composition id="TotalVsHps" component={TotalVsHpsVideo} durationInFrames={320} fps={30} width={1280} height={720} />
         <Composition id="HealerBreakout" component={HealerBreakoutVideo} durationInFrames={470} fps={30} width={1280} height={720} />

@@ -1,7 +1,8 @@
 /**
  * Lesson video: read the healing chart — bars are effective healing, the pale
- * tail on each bar is overheal, and the value/percent columns.
- * 350 frames @ 30fps, 1280x720 (50-frame intro card + 300 frames of content).
+ * tail on each bar is overheal, a striped end cap means the overheal ran off
+ * the chart, and the value/percent columns.
+ * 410 frames @ 30fps, 1280x720 (50-frame intro card + 360 frames of content).
  */
 
 import type { ReactNode } from "react";
@@ -35,7 +36,7 @@ const STEPS: Array<{ from: number; caption: ReactNode; regions: Region[] }> = [
     regions: [{ left: 72, top: 206, width: 472, height: 170 }],
   },
   {
-    from: 115,
+    from: 105,
     caption: (
       <>
         The <span style={{ color: YELLOW }}>pale tail</span> on each bar is overheal — healing
@@ -45,7 +46,7 @@ const STEPS: Array<{ from: number; caption: ReactNode; regions: Region[] }> = [
     regions: [
       // Every overheal tail, measured from the rendered stacked segments.
       { left: 531, top: 210, width: 85, height: 36, color: YELLOW },
-      { left: 474, top: 242, width: 152, height: 36, color: YELLOW },
+      { left: 474, top: 242, width: 216, height: 36, color: YELLOW },
       { left: 445, top: 274, width: 71, height: 36, color: YELLOW },
       { left: 417, top: 306, width: 39, height: 36, color: YELLOW },
       { left: 338, top: 338, width: 114, height: 36, color: YELLOW },
@@ -53,7 +54,17 @@ const STEPS: Array<{ from: number; caption: ReactNode; regions: Region[] }> = [
     ],
   },
   {
-    from: 210,
+    from: 190,
+    caption: (
+      <>
+        A <span style={{ color: YELLOW }}>striped end</span> means the overheal ran off the
+        chart — there was more than the bar can show
+      </>
+    ),
+    regions: [{ left: 664, top: 242, width: 30, height: 36, color: YELLOW }],
+  },
+  {
+    from: 275,
     caption: (
       <>
         The number is <span style={{ color: BLUE }}>effective healing</span>; the percent is
@@ -78,6 +89,7 @@ export default function ReadHealingChartVideo() {
         bullets={[
           "Bars are effective healing by healer",
           "The pale tail on a bar is overheal",
+          "Stripes mean it ran off the chart",
           "Values and their share of the total",
         ]}
       />
@@ -102,7 +114,7 @@ function Content() {
       </main>
 
       {STEPS.map((step, i) => {
-        const until = STEPS[i + 1]?.from ?? 288;
+        const until = STEPS[i + 1]?.from ?? 348;
         return (
           <Sequence key={step.from} from={step.from} durationInFrames={until - step.from} premountFor={fps}>
             {step.regions.map((region, r) => (

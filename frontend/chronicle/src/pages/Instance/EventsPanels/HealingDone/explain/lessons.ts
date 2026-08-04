@@ -26,11 +26,12 @@ const readChart: L = {
   bullets: [
     "Each bar is one healer, colored by class — solid is effective healing",
     "The pale tail on a bar is overheal — healing that overflowed",
+    "A striped end cap means the overheal ran off the chart",
     "The number is effective healing; the percent is their share of the total",
   ],
   video: {
     load: () => import("./videos/ReadHealingChart.video"),
-    durationInFrames: 350,
+    durationInFrames: 410,
     fps: 30,
     width: 1280,
     height: 720,
