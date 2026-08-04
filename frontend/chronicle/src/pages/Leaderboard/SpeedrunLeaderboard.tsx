@@ -4,6 +4,7 @@ import { Loader2, SlidersHorizontal, Check, Users, Globe, X, ChevronDown, Info, 
 import { getInstanceConfig, getInstanceCategory, getInstanceBackground } from "../Logs/utils/instanceImages"
 import { useState, useEffect, useCallback, useRef } from "react"
 import type { SpeedrunInstanceBoard, SpeedrunLeaderboardEntry, SpeedrunRulesResponse } from "../../api/typesGenerated"
+import { formatSpeedrunRequirementBefore } from "@/lib/speedrun"
 import { Podium } from "./Podium"
 import { LeaderboardTable } from "./LeaderboardTable"
 
@@ -161,13 +162,19 @@ function RulesModal({ open, onClose, instanceName, rules }: {
                 <div>
                   <h3 className="text-sm font-semibold text-muted-foreground uppercase tracking-wide mb-2">Trash</h3>
                   <ul className="space-y-1">
-                    {trash.map((r) => (
-                      <li key={r.name} className="flex items-center gap-2 text-sm">
-                        <span className="h-1.5 w-1.5 rounded-full bg-muted-foreground shrink-0" />
-                        {r.name}
-                        {r.count > 1 && <span className="text-muted-foreground">×{r.count}</span>}
-                      </li>
-                    ))}
+                    {trash.map((r) => {
+                      const before = formatSpeedrunRequirementBefore(r)
+                      return (
+                        <li key={r.name} className="flex items-start gap-2 text-sm">
+                          <span className="h-1.5 w-1.5 mt-2 rounded-full bg-muted-foreground shrink-0" />
+                          <span>
+                            {r.name}
+                            {r.count > 1 && <span className="text-muted-foreground"> ×{r.count}</span>}
+                            {before && <span className="block text-xs text-muted-foreground">{before}</span>}
+                          </span>
+                        </li>
+                      )
+                    })}
                   </ul>
                 </div>
               )}

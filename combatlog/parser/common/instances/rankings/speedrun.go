@@ -9,6 +9,7 @@ import (
 
 	"github.com/Emyrk/chronicle/combatlog/parser/common/characters"
 	"github.com/Emyrk/chronicle/combatlog/parser/common/characters/period"
+	"github.com/Emyrk/chronicle/combatlog/parser/common/identifier"
 	"github.com/Emyrk/chronicle/combatlog/parser/common/instances/instancehook"
 	"github.com/Emyrk/chronicle/combatlog/parser/common/messages"
 	"github.com/Emyrk/chronicle/combatlog/parser/common/unitdb"
@@ -23,6 +24,11 @@ var (
 type requirementState struct {
 	kills     []KillRecord
 	satisfied bool
+	expired   bool
+}
+
+type killClassification struct {
+	boss bool
 }
 
 // SpeedrunTracker watches character activity changes and fight lifecycle events
@@ -32,11 +38,14 @@ type requirementState struct {
 type SpeedrunTracker struct {
 	instancehook.BaseHook
 
-	rules       SpeedrunRules
-	entryToRule map[uint32]int // entry ID → index into rules.Requirements
-	state       []requirementState
-	remaining   int // unsatisfied requirements remaining
-	seenGUIDs   map[guid.GUID]struct{}
+	rules          SpeedrunRules
+	entryToRule    map[uint32]int // entry ID → index into rules.Requirements
+	killClasses    map[uint32]killClassification
+	state          []requirementState
+	remaining      int // unsatisfied requirements remaining
+	seenGUIDs      map[guid.GUID]struct{}
+	totalKillCount int
+	bossKillCount  int
 
 	units      *unitdb.Units      // may be nil in tests
 	engagement *EngagementTracker // may be nil in tests
@@ -46,16 +55,27 @@ type SpeedrunTracker struct {
 	completed      bool
 }
 
-func NewSpeedrunTracker(rules SpeedrunRules, units *unitdb.Units, engagement *EngagementTracker) *SpeedrunTracker {
+func NewSpeedrunTracker(rules SpeedrunRules, units *unitdb.Units, engagement *EngagementTracker, idf *identifier.Identifier) *SpeedrunTracker {
 	entryToRule := make(map[uint32]int)
+	killClasses := make(map[uint32]killClassification)
 	for i, req := range rules.Requirements {
 		for _, eid := range req.EntryIDs {
 			entryToRule[eid] = i
+			killClasses[eid] = killClassification{boss: req.Category == SpeedrunCategoryBosses}
 		}
 	}
+	if idf != nil {
+		for entry, identity := range idf.HostileEntries() {
+			if identity.CanBattle() {
+				killClasses[entry] = killClassification{boss: identity.Boss}
+			}
+		}
+	}
+
 	return &SpeedrunTracker{
 		rules:       rules,
 		entryToRule: entryToRule,
+		killClasses: killClasses,
 		state:       make([]requirementState, len(rules.Requirements)),
 		remaining:   len(rules.Requirements),
 		seenGUIDs:   make(map[guid.GUID]struct{}),
@@ -67,8 +87,8 @@ func NewSpeedrunTracker(rules SpeedrunRules, units *unitdb.Units, engagement *En
 // --- characters.SetHook implementation ---
 
 // ActivityChange is called whenever characters' activity status changes. We look
-// for characters that just went inactive with EndStateSlain and check whether
-// their entry ID matches a tracked requirement.
+// for hostile characters that just went inactive with EndStateSlain, advance any
+// ordering deadlines, and record kills that match a tracked requirement.
 func (t *SpeedrunTracker) ActivityChange(m messages.Message, chars ...characters.Character) {
 	if t.completed {
 		return
@@ -89,19 +109,31 @@ func (t *SpeedrunTracker) ActivityChange(m messages.Message, chars ...characters
 			continue
 		}
 
-		ruleIdx, tracked := t.entryToRule[entry]
-		if !tracked {
+		classification, isMob := t.killClasses[entry]
+		if !isMob {
 			continue
 		}
 
-		// Deduplicate: same creature GUID only counted once.
+		// Deduplicate every hostile kill, including mobs that are not themselves
+		// requirements but still count toward ordering deadlines.
 		if _, seen := t.seenGUIDs[c.ID()]; seen {
 			continue
 		}
 		t.seenGUIDs[c.ID()] = struct{}{}
 
+		t.totalKillCount++
+		if classification.boss {
+			t.bossKillCount++
+		}
+		t.expireRequirements()
+
+		ruleIdx, tracked := t.entryToRule[entry]
+		if !tracked {
+			continue
+		}
+
 		rs := &t.state[ruleIdx]
-		if rs.satisfied {
+		if rs.satisfied || rs.expired {
 			continue
 		}
 
@@ -113,6 +145,23 @@ func (t *SpeedrunTracker) ActivityChange(m messages.Message, chars ...characters
 		if len(rs.kills) >= t.rules.Requirements[ruleIdx].Count {
 			rs.satisfied = true
 			t.remaining--
+		}
+	}
+}
+
+func (t *SpeedrunTracker) expireRequirements() {
+	for i, req := range t.rules.Requirements {
+		rs := &t.state[i]
+		if rs.satisfied || rs.expired || req.Before == nil {
+			continue
+		}
+
+		if req.Before.TotalKills > 0 && t.totalKillCount > req.Before.TotalKills {
+			rs.expired = true
+			continue
+		}
+		if req.Before.BossKills > 0 && t.bossKillCount >= req.Before.BossKills {
+			rs.expired = true
 		}
 	}
 }

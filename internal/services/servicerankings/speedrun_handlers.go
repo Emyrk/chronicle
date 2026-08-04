@@ -179,6 +179,12 @@ func (s *Service) handleSpeedrunRules(w http.ResponseWriter, r *http.Request) {
 			Count:    req.Count,
 			Category: string(req.Category),
 		}
+		if req.Before != nil {
+			sdkReqs[i].Before = &chroniclesdk.SpeedrunRequirementBefore{
+				TotalKills: req.Before.TotalKills,
+				BossKills:  req.Before.BossKills,
+			}
+		}
 	}
 
 	resp := chroniclesdk.SpeedrunRulesResponse{

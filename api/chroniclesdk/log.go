@@ -262,12 +262,19 @@ type WoWParsedInstance struct {
 	Players    map[GUIDString]InstancePlayer `json:"players"`
 }
 
+// SpeedrunRequirementBefore limits when a requirement may be completed.
+type SpeedrunRequirementBefore struct {
+	TotalKills int `json:"total_kills,omitempty"`
+	BossKills  int `json:"boss_kills,omitempty"`
+}
+
 // SpeedrunRequirement describes one rule for a valid speedrun.
 type SpeedrunRequirement struct {
-	Name     string   `json:"name"`
-	EntryIDs []uint32 `json:"entry_ids"`
-	Count    int      `json:"count"`
-	Category string   `json:"category"`
+	Name     string                     `json:"name"`
+	EntryIDs []uint32                   `json:"entry_ids"`
+	Count    int                        `json:"count"`
+	Category string                     `json:"category"`
+	Before   *SpeedrunRequirementBefore `json:"before,omitempty"`
 }
 
 // SpeedrunKillRecord captures a single kill contributing to a requirement.

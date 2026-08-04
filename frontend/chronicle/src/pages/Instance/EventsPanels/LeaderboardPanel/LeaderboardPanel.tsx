@@ -1,6 +1,7 @@
 import { useQuery } from "@tanstack/react-query";
 import { Trophy, CheckCircle2, XCircle, Clock, Loader2 } from "lucide-react";
 import type { SpeedrunResult } from "@/api/typesGenerated";
+import { formatSpeedrunRequirementBefore } from "@/lib/speedrun";
 import type { PanelDefinition, PanelRenderProps } from "../types";
 import { leaderboardProcessor, type LeaderboardPanelResult } from "./leaderboard.processor";
 
@@ -95,28 +96,32 @@ function LeaderboardContent(props: PanelRenderProps<LeaderboardPanelResult>) {
         <div key={category} className="mb-2">
           <div className="text-xs font-medium text-zinc-500 mb-1">{category}</div>
           <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-5 gap-1">
-            {proofs.map((proof) => (
-              <div
-                key={proof.requirement.name}
-                className="flex items-center gap-1.5 text-xs px-1.5 py-0.5 rounded"
-              >
-                {proof.satisfied ? (
-                  <CheckCircle2 className="h-3 w-3 text-emerald-500 shrink-0" />
-                ) : (
-                  <XCircle className="h-3 w-3 text-zinc-600 shrink-0" />
-                )}
-                <span
-                  className={
-                    proof.satisfied ? "text-zinc-300" : "text-zinc-600"
-                  }
+            {proofs.map((proof) => {
+              const before = formatSpeedrunRequirementBefore(proof.requirement);
+              return (
+                <div
+                  key={proof.requirement.name}
+                  className="flex items-start gap-1.5 text-xs px-1.5 py-0.5 rounded"
                 >
-                  {proof.requirement.name}
-                  {proof.requirement.count > 1 && (
-                    <span className="text-zinc-500"> ×{proof.requirement.count}</span>
+                  {proof.satisfied ? (
+                    <CheckCircle2 className="h-3 w-3 mt-0.5 text-emerald-500 shrink-0" />
+                  ) : (
+                    <XCircle className="h-3 w-3 mt-0.5 text-zinc-600 shrink-0" />
                   )}
-                </span>
-              </div>
-            ))}
+                  <span
+                    className={
+                      proof.satisfied ? "text-zinc-300" : "text-zinc-600"
+                    }
+                  >
+                    {proof.requirement.name}
+                    {proof.requirement.count > 1 && (
+                      <span className="text-zinc-500"> ×{proof.requirement.count}</span>
+                    )}
+                    {before && <span className="block text-zinc-500">{before}</span>}
+                  </span>
+                </div>
+              );
+            })}
           </div>
         </div>
       ))}

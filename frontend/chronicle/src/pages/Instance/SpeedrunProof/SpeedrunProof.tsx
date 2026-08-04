@@ -1,5 +1,6 @@
 import { CheckCircle2, XCircle, Clock, Trophy } from "lucide-react";
 import type { SpeedrunResult } from "@/api/typesGenerated";
+import { formatSpeedrunRequirementBefore } from "@/lib/speedrun";
 
 function formatDuration(ms: number): string {
   const totalSeconds = Math.floor(ms / 1000);
@@ -44,25 +45,32 @@ export function SpeedrunProof({ speedrun }: SpeedrunProofProps) {
       </div>
 
       <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-5 gap-1">
-        {speedrun.proof.map((proof) => (
-          <div
-            key={proof.requirement.name}
-            className="flex items-center gap-1.5 text-xs px-1.5 py-0.5 rounded"
-          >
-            {proof.satisfied ? (
-              <CheckCircle2 className="h-3 w-3 text-emerald-500 shrink-0" />
-            ) : (
-              <XCircle className="h-3 w-3 text-zinc-600 shrink-0" />
-            )}
-            <span
-              className={
-                proof.satisfied ? "text-zinc-300" : "text-zinc-600"
-              }
+        {speedrun.proof.map((proof) => {
+          const before = formatSpeedrunRequirementBefore(proof.requirement);
+          return (
+            <div
+              key={proof.requirement.name}
+              className="flex items-start gap-1.5 text-xs px-1.5 py-0.5 rounded"
             >
-              {proof.requirement.name}
-            </span>
-          </div>
-        ))}
+              {proof.satisfied ? (
+                <CheckCircle2 className="h-3 w-3 mt-0.5 text-emerald-500 shrink-0" />
+              ) : (
+                <XCircle className="h-3 w-3 mt-0.5 text-zinc-600 shrink-0" />
+              )}
+              <span
+                className={
+                  proof.satisfied ? "text-zinc-300" : "text-zinc-600"
+                }
+              >
+                {proof.requirement.name}
+                {proof.requirement.count > 1 && (
+                  <span className="text-zinc-500"> ×{proof.requirement.count}</span>
+                )}
+                {before && <span className="block text-zinc-500">{before}</span>}
+              </span>
+            </div>
+          );
+        })}
       </div>
 
       {speedrun.level_range && (
