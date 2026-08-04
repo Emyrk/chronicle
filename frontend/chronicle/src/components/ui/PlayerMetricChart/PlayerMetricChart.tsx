@@ -143,7 +143,10 @@ export function PlayerMetricChart({
       className={cn("h-full min-h-0 flex-1", className)}
       {...divProps}
     >
-      <div style={{ display: 'flex', flexDirection: 'column', gap: '2px', padding: '4px' }}>
+      <div
+        style={{ display: 'flex', flexDirection: 'column', gap: '2px', padding: '4px' }}
+        data-lesson-target="read-chart"
+      >
         {chartData.map((player, index) => {
           return <PlayerMetricRow 
             key={player.playerID}
@@ -472,6 +475,7 @@ export function PlayerMetricRow({
               lineHeight: '1.3',
             }}
             onClick={(e) => e.stopPropagation()}
+            data-lesson-target="parse-scores"
           >
             {parsePill.displayScore}
           </span>
@@ -493,6 +497,7 @@ export function PlayerMetricRow({
       ref={setRefs}
       onClick={handleClick}
       data-panel-row={isFirstRow ? true : undefined}
+      data-lesson-target={hasBreakout ? "pin-breakout" : undefined}
       style={{
         display: 'flex',
         alignItems: 'center',

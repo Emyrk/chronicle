@@ -6,7 +6,7 @@
  */
 
 import { ChevronDown, Play } from "lucide-react";
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { cn } from "@/lib/utils";
 import type { Lesson, LessonState, LessonVideo } from "./types";
 
@@ -47,12 +47,18 @@ export function LessonSidebar<TCaps>({
   caps,
   selectedLessonId,
   onSelect,
+  onHoverLesson,
+  highlightedLessonId,
 }: {
   panelLabel: string;
   lessons: Lesson<TCaps>[];
   caps: TCaps;
   selectedLessonId: string | null;
   onSelect: (selection: LessonSelection) => void;
+  /** Reports which lesson row the pointer is over (null on leave). */
+  onHoverLesson?: (lessonId: string | null) => void;
+  /** Lesson lit up because its panel region is hovered (reverse link). */
+  highlightedLessonId?: string | null;
 }) {
   const [moreExpanded, setMoreExpanded] = useState(false);
 
@@ -73,7 +79,9 @@ export function LessonSidebar<TCaps>({
       index={index}
       caps={caps}
       selected={lesson.id === selectedLessonId}
+      highlighted={lesson.id === highlightedLessonId}
       onSelect={onSelect}
+      onHover={onHoverLesson}
     />
   );
 
@@ -154,23 +162,34 @@ function LessonRow<TCaps>({
   index,
   caps,
   selected,
+  highlighted,
   onSelect,
+  onHover,
 }: {
   lesson: Lesson<TCaps>;
   index: number;
   caps: TCaps;
   selected: boolean;
+  highlighted: boolean;
   onSelect: (selection: LessonSelection) => void;
+  onHover?: (lessonId: string | null) => void;
 }) {
   const state = lesson.deriveState(caps);
   const pill = STATE_PILL[state];
   const exampleForced = lesson.exampleOnly || state === "example-required";
+  const rowRef = useRef<HTMLDivElement>(null);
+
+  // Reverse link: when a panel region lights this lesson up, bring it into view.
+  useEffect(() => {
+    if (highlighted) rowRef.current?.scrollIntoView({ block: "nearest", behavior: "smooth" });
+  }, [highlighted]);
 
   const open = () =>
     onSelect({ lessonId: lesson.id, mode: exampleForced ? "example" : "live" });
 
   return (
     <div
+      ref={rowRef}
       role="button"
       tabIndex={0}
       onClick={open}
@@ -180,11 +199,14 @@ function LessonRow<TCaps>({
           open();
         }
       }}
+      onMouseEnter={() => onHover?.(lesson.id)}
+      onMouseLeave={() => onHover?.(null)}
       className={cn(
         "group relative flex w-full cursor-pointer items-start gap-3 overflow-hidden rounded-lg border border-border/50 bg-muted/15 py-3 pl-3.5 pr-3 text-left transition-colors",
         "hover:border-border hover:bg-muted/35",
         "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
         selected && "border-primary/40 bg-primary/[0.07] hover:bg-primary/10",
+        highlighted && "border-primary/60 bg-primary/[0.09] ring-1 ring-primary/40",
       )}
     >
       {selected && <span className="absolute inset-y-0 left-0 w-[3px] bg-primary" />}
@@ -194,13 +216,18 @@ function LessonRow<TCaps>({
         className={cn(
           "mt-0.5 grid h-9 w-9 flex-shrink-0 place-items-center rounded-md border border-border/60 bg-background/60 font-mono text-[13px] text-muted-foreground transition-colors",
           "group-hover:border-primary/50 group-hover:text-primary",
-          selected && "border-primary/50 bg-primary/15 text-primary",
+          (selected || highlighted) && "border-primary/50 bg-primary/15 text-primary",
         )}
       >
         <Play
-          className={cn("hidden h-3.5 w-3.5 fill-current group-hover:block", selected && "block")}
+          className={cn(
+            "hidden h-3.5 w-3.5 fill-current group-hover:block",
+            (selected || highlighted) && "block",
+          )}
         />
-        <span className={cn("group-hover:hidden", selected && "hidden")}>{index}</span>
+        <span className={cn("group-hover:hidden", (selected || highlighted) && "hidden")}>
+          {index}
+        </span>
       </span>
 
       <span className="flex min-w-0 flex-1 flex-col gap-1">

@@ -313,6 +313,7 @@ export const DamageDoneContent = (props: DamageDoneContentProps) => {
                       ? "bg-[color:var(--tertiary)]/20 text-[color:var(--tertiary)] border border-[color:var(--tertiary)]/30"
                       : "bg-muted/50 text-muted-foreground hover:text-foreground"
                   )}
+                  data-lesson-target="spell-ranks"
                 >
                   <Layers className="h-3 w-3" />
                   Ranks

@@ -878,6 +878,7 @@ export function EventsPanel({
                       onClick={(e) => {
                         setFilterContextMenu({ x: e.clientX, y: e.clientY });
                       }}
+                      data-lesson-target="filters"
                     >
                       <Filter className="h-3.5 w-3.5" />
                     </span>
@@ -936,6 +937,7 @@ export function EventsPanel({
                   className="flex items-center gap-1.5 cursor-pointer text-xs text-muted-foreground hover:text-foreground pr-2"
                   data-per-second-toggle
                   data-help-per-second-toggle
+                  data-lesson-target={perSecondToggle ? "total-vs-dps" : undefined}
                 >
                   {checkboxLabel}
                   <Switch

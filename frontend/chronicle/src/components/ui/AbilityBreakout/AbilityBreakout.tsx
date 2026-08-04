@@ -1012,7 +1012,7 @@ export function AbilityBreakout({
   if (!hasTargets) {
     return (
       <div>
-        <div className="flex items-center border-b border-border">
+        <div className="flex items-center border-b border-border" data-lesson-target="breakout-tour">
           <span className={cn(tabClass, activeTabClass)}>By Ability</span>
           {totalDisplay}
         </div>
@@ -1034,7 +1034,7 @@ export function AbilityBreakout({
 
   return (
     <div>
-      <div className="flex items-center border-b border-border">
+      <div className="flex items-center border-b border-border" data-lesson-target="breakout-tour">
         <button
           className={cn(tabClass, activeTab === 'ability' ? activeTabClass : inactiveTabClass)}
           onClick={() => setActiveTab('ability')}

@@ -10,7 +10,7 @@
  */
 
 import { ArrowLeft, ArrowRight, BookOpen, FlaskConical, Lightbulb, X } from "lucide-react";
-import { useCallback, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Link, useSearchParams } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/Card/Card";
@@ -111,6 +111,23 @@ function LessonShell<TResult, TCaps>({
   const [searchParams, setSearchParams] = useSearchParams();
   const [mode, setMode] = useState<"live" | "example">(initialMode ?? "live");
 
+  // Two-way hover linking between lesson rows and tagged panel regions:
+  // hovering a lesson boxes its [data-lesson-target] elements in the panel,
+  // and hovering a tagged element lights up its lesson in the sidebar.
+  const liveAreaRef = useRef<HTMLDivElement>(null);
+  const [hoveredLessonId, setHoveredLessonId] = useState<string | null>(null);
+  const [panelLessonId, setPanelLessonId] = useState<string | null>(null);
+
+  const handlePanelMouseOver = useCallback(
+    (e: React.MouseEvent) => {
+      const target = (e.target as Element).closest?.("[data-lesson-target]");
+      const id = target?.getAttribute("data-lesson-target") ?? null;
+      setPanelLessonId(id && lessonSet.lessons.some((l) => l.id === id) ? id : null);
+    },
+    [lessonSet],
+  );
+  const handlePanelMouseLeave = useCallback(() => setPanelLessonId(null), []);
+
   // Live aggregation feeds both capabilities and the embedded panel.
   const aggregation = usePanelAggregation<TResult>({
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -190,6 +207,8 @@ function LessonShell<TResult, TCaps>({
           caps={caps}
           selectedLessonId={selectedLesson?.id ?? null}
           onSelect={selectLesson}
+          onHoverLesson={setHoveredLessonId}
+          highlightedLessonId={panelLessonId}
         />
         <div className="flex min-w-0 flex-1 flex-col gap-3.5 overflow-y-auto px-5 pb-6 pt-5">
           {effectiveMode === "example" && (
@@ -214,7 +233,12 @@ function LessonShell<TResult, TCaps>({
             <div className="h-px flex-1 bg-border" />
           </div>
 
-          <div className="h-[560px] flex-shrink-0">
+          <div
+            ref={liveAreaRef}
+            className="relative h-[560px] flex-shrink-0"
+            onMouseOver={handlePanelMouseOver}
+            onMouseLeave={handlePanelMouseLeave}
+          >
             {effectiveMode === "example" ? (
               lessonSet.renderExample()
             ) : (
@@ -229,9 +253,71 @@ function LessonShell<TResult, TCaps>({
                 />
               </div>
             )}
+            <LessonTargetOverlay containerRef={liveAreaRef} lessonId={hoveredLessonId} />
           </div>
         </div>
       </div>
+    </div>
+  );
+}
+
+/**
+ * Draws pulsing boxes over every [data-lesson-target="<lessonId>"] element in
+ * the live area while a lesson row is hovered. Rects are measured on hover
+ * entry (and window resize) relative to the container, so the overlay scrolls
+ * with the page for free.
+ */
+function LessonTargetOverlay({
+  containerRef,
+  lessonId,
+}: {
+  containerRef: React.RefObject<HTMLDivElement | null>;
+  lessonId: string | null;
+}) {
+  const [boxes, setBoxes] = useState<
+    Array<{ left: number; top: number; width: number; height: number }>
+  >([]);
+
+  useEffect(() => {
+    const container = containerRef.current;
+    if (!container || !lessonId) {
+      setBoxes([]);
+      return;
+    }
+    const measure = () => {
+      const cRect = container.getBoundingClientRect();
+      const els = container.querySelectorAll(`[data-lesson-target="${lessonId}"]`);
+      setBoxes(
+        [...els].map((el) => {
+          const r = el.getBoundingClientRect();
+          return {
+            left: r.left - cRect.left - 4,
+            top: r.top - cRect.top - 4,
+            width: r.width + 8,
+            height: r.height + 8,
+          };
+        }),
+      );
+    };
+    const raf = requestAnimationFrame(measure);
+    window.addEventListener("resize", measure);
+    return () => {
+      cancelAnimationFrame(raf);
+      window.removeEventListener("resize", measure);
+    };
+  }, [containerRef, lessonId]);
+
+  if (boxes.length === 0) return null;
+
+  return (
+    <div className="pointer-events-none absolute inset-0 z-40 overflow-hidden">
+      {boxes.map((box, i) => (
+        <div
+          key={i}
+          className="absolute animate-pulse rounded-md border-2 border-primary bg-primary/10 shadow-[0_0_14px_-2px_var(--primary)]"
+          style={box}
+        />
+      ))}
     </div>
   );
 }
