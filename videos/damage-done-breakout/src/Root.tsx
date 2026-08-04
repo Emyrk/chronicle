@@ -7,6 +7,7 @@ import TotalVsDpsVideo from "../../../frontend/chronicle/src/pages/Instance/Even
 import ParseScoresVideo from "../../../frontend/chronicle/src/pages/Instance/EventsPanels/DamageDone/explain/videos/ParseScores.video";
 import BreakoutTourVideo from "../../../frontend/chronicle/src/pages/Instance/EventsPanels/DamageDone/explain/videos/BreakoutTour.video";
 import SpellRanksVideo from "../../../frontend/chronicle/src/pages/Instance/EventsPanels/DamageDone/explain/videos/SpellRanks.video";
+import FiltersVideo from "../../../frontend/chronicle/src/pages/Instance/EventsPanels/DamageDone/explain/videos/Filters.video";
 
 /**
  * Studio registration for the in-app explainer lesson compositions.
@@ -62,6 +63,14 @@ export const RemotionRoot: React.FC = () => {
         id="SpellRanks"
         component={SpellRanksVideo}
         durationInFrames={380}
+        fps={30}
+        width={1280}
+        height={720}
+      />
+      <Composition
+        id="Filters"
+        component={FiltersVideo}
+        durationInFrames={440}
         fps={30}
         width={1280}
         height={720}

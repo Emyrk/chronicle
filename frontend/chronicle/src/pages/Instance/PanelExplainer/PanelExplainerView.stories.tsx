@@ -65,3 +65,8 @@ export const BreakoutTourLesson: Story = {
 export const SpellRanksLesson: Story = {
   parameters: { routerEntries: ["/?lesson=spell-ranks"] },
 };
+
+/** Deep-linked filters lesson — menu, editor, and the filtered chart. */
+export const FiltersLesson: Story = {
+  parameters: { routerEntries: ["/?lesson=filters"] },
+};

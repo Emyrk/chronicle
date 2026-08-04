@@ -169,6 +169,29 @@ const spellRanks: L = {
   },
 };
 
+const filters: L = {
+  id: "filters",
+  title: "Filter what a panel counts",
+  group: "essentials",
+  description: () =>
+    "Narrow any panel by ability, school, hit type, source, target, or time range.",
+  deriveState: () => "available",
+  instruction:
+    "Click the filter icon in the panel header, choose 'Edit filters', and add a filter — the chart updates live and the icon turns green while filters are active.",
+  bullets: [
+    "The filter icon in the panel header opens the filter menu",
+    "Filter by ability, school, hit type, source, target, or time range",
+    "Filters apply live — the icon turns green while they're active",
+  ],
+  video: {
+    load: () => import("./videos/Filters.video"),
+    durationInFrames: 440,
+    fps: 30,
+    width: 1280,
+    height: 720,
+  },
+};
+
 export const DAMAGE_DONE_LESSONS: L[] = [
   readChart,
   totalVsDps,
@@ -176,4 +199,5 @@ export const DAMAGE_DONE_LESSONS: L[] = [
   pinBreakout,
   breakoutTour,
   spellRanks,
+  filters,
 ];
