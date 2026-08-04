@@ -88,24 +88,3 @@ export interface PanelExplainer<TResult = unknown, TCaps = unknown> {
   lessonSet?: LessonSet<TResult, TCaps>;
 }
 
-/** Counts for the sidebar's readiness strip. */
-export interface LessonStateCounts {
-  available: number;
-  limited: number;
-  exampleRequired: number;
-}
-
-/** Reduce lesson states into the sidebar counts strip. */
-export function countLessonStates<TCaps>(
-  lessons: Lesson<TCaps>[],
-  caps: TCaps,
-): LessonStateCounts {
-  const counts: LessonStateCounts = { available: 0, limited: 0, exampleRequired: 0 };
-  for (const lesson of lessons) {
-    const state = lesson.deriveState(caps);
-    if (state === "available") counts.available++;
-    else if (state === "limited") counts.limited++;
-    else counts.exampleRequired++;
-  }
-  return counts;
-}

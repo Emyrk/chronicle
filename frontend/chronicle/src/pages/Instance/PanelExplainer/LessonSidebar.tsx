@@ -1,16 +1,12 @@
 /**
- * Lesson sidebar: readiness counts and the grouped, capability-aware lesson
- * list. Selecting a lesson (or its "See example" action) is reported upward.
+ * Lesson sidebar: the grouped, capability-aware lesson list. Selecting a
+ * lesson (or its "See example" action) is reported upward.
  */
 
 import { ChevronDown } from "lucide-react";
-import { useMemo, useState } from "react";
+import { useState } from "react";
 import { cn } from "@/lib/utils";
-import {
-  countLessonStates,
-  type Lesson,
-  type LessonState,
-} from "./types";
+import type { Lesson, LessonState } from "./types";
 
 const STATE_DOT: Record<LessonState, { glyph: string; className: string }> = {
   available: { glyph: "●", className: "text-class-hunter" },
@@ -53,7 +49,6 @@ export function LessonSidebar<TCaps>({
 }) {
   const [moreExpanded, setMoreExpanded] = useState(false);
 
-  const counts = useMemo(() => countLessonStates(lessons, caps), [lessons, caps]);
   const essentials = lessons.filter((l) => l.group === "essentials");
   const deeper = lessons.filter((l) => l.group === "deeper");
   const more = lessons.filter((l) => l.group === "more");
@@ -68,20 +63,6 @@ export function LessonSidebar<TCaps>({
           Each lesson is checked against the log you have open. Where your data can
           teach it, you practice on your own raid.
         </p>
-        <div className="mt-3 flex gap-3.5 font-mono text-[11px] text-muted-foreground">
-          <span className="flex items-center gap-1.5">
-            <span className="text-class-hunter">●</span>
-            {counts.available} ready
-          </span>
-          <span className="flex items-center gap-1.5">
-            <span className="text-class-rogue">◐</span>
-            {counts.limited} limited
-          </span>
-          <span className="flex items-center gap-1.5">
-            <span className="opacity-60">○</span>
-            {counts.exampleRequired} need{counts.exampleRequired === 1 ? "s" : ""} example
-          </span>
-        </div>
       </div>
 
       <div className="flex flex-col gap-1 px-2.5 pb-7 pt-3.5">
