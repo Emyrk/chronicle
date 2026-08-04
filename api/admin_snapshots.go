@@ -10,6 +10,7 @@ import (
 	"github.com/Emyrk/chronicle/database"
 	"github.com/Emyrk/chronicle/internal/parsepolicy"
 	"github.com/Emyrk/chronicle/internal/services/servicerankings"
+	"github.com/Emyrk/chronicle/internal/timeparsepolicy"
 	"github.com/go-chi/chi/v5"
 	"github.com/google/uuid"
 )
@@ -195,7 +196,7 @@ func (api *API) AdminTriggerTimeParseSnapshot(w http.ResponseWriter, r *http.Req
 			api.Queues,
 			day,
 			req.LookbackDays,
-			int16(parsepolicy.PolicyVersion),
+			int16(timeparsepolicy.PolicyVersion),
 		)
 		if err != nil {
 			httpapi.HandleResponseError(ctx, w, err, httpapi.APIError{
@@ -229,7 +230,7 @@ func (api *API) AdminTriggerTimeParseSnapshot(w http.ResponseWriter, r *http.Req
 		tenantID,
 		day,
 		req.LookbackDays,
-		int16(parsepolicy.PolicyVersion),
+		int16(timeparsepolicy.PolicyVersion),
 	)
 	if err != nil {
 		httpapi.HandleResponseError(ctx, w, err, httpapi.APIError{
