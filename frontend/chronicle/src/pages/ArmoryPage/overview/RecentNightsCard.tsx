@@ -83,8 +83,7 @@ export function RecentNightsCard({ instances, nightScores, lootByInstance, onOpe
               <div className="min-w-0 grow">
                 <div className="font-wow truncate text-sm text-foreground">{inst.name}</div>
                 <div className="truncate text-xs text-muted-foreground">
-                  {inst.boss_kills}/{inst.boss_count}{" "}
-                  {inst.boss_count === 1 ? "boss" : "bosses"}
+                  {inst.boss_kills} {inst.boss_kills === 1 ? "boss" : "bosses"}
                   {duration ? ` · ${duration}` : ""}
                 </div>
               </div>
