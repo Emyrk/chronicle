@@ -9,10 +9,11 @@ import {
 import { cn } from "@/lib/utils";
 import { formatClearDuration } from "@/pages/GuildPage/panels/clearTimeUtils";
 import { parseBgColor, parseBorderColor, parseColor } from "../parseColors";
-import { useInstanceTimeParses, useSpeedrunPopulation } from "./overviewQueries";
+import { useSpeedrunPopulation } from "./overviewQueries";
 import type { PopulationSelection } from "./populationSelectionState";
 import { summarizeComparisonRaids, summarizePrimaryRaid } from "./raidSummary";
 import {
+  clearTimeParse,
   summarizeClearTimes,
   type ClearTimeSummary,
 } from "./clearTimePopulation";
@@ -194,16 +195,15 @@ export function RaidSummaryStrip({
 }) {
   const primaryQuery = useSpeedrunPopulation(primary);
   const comparisonQuery = useSpeedrunPopulation(comparison);
-  const primaryInstanceId = primary.kind === "instance" ? primary.instanceId : undefined;
-  const timeParsesQuery = useInstanceTimeParses(primaryInstanceId);
   const primarySummary = summarizePrimaryRaid(primaryQuery.data?.runs[0]);
   const comparisonRuns = comparisonQuery.data?.runs ?? [];
   const comparisonSummary = comparison
     ? summarizeComparisonRaids(comparisonRuns)
     : null;
-  // Clear-time parse comes exclusively from the snapshot API — no client-side fallback.
-  const clearTimeParseScore = timeParsesQuery.data?.available && timeParsesQuery.data.clear_time?.status !== "sample_too_small"
-    ? timeParsesQuery.data.clear_time?.display_score ?? null
+  // Clear-time parse is computed against the selected comparison cohort so
+  // it updates with the population selector. No comparison → no parse.
+  const clearTimeParseScore = comparison
+    ? clearTimeParse(primaryQuery.data?.runs[0], comparisonRuns)
     : null;
   const clearTimeDistribution = comparison
     ? summarizeClearTimes(comparisonRuns)
