@@ -135,7 +135,7 @@ function RaidListRow({
           </p>
           <p className="mt-0.5 truncate text-[11.5px] text-muted-foreground tabular-nums">{meta}</p>
         </div>
-        {!expanded && encounters.length > 0 && (
+        {encounters.length > 0 && (
           <span className="hidden sm:flex h-7 items-end gap-[2px]" aria-hidden>
             {encounters.map((e) => {
               const s = Math.round(e.avg_parse);
