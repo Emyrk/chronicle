@@ -24,6 +24,7 @@ import (
 	"github.com/Emyrk/chronicle/internal/services/servicechronicle"
 	"github.com/Emyrk/chronicle/internal/services/servicedataset"
 	"github.com/Emyrk/chronicle/internal/services/servicedbstore"
+	"github.com/Emyrk/chronicle/internal/services/serviceexternalapi"
 	"github.com/Emyrk/chronicle/internal/services/servicegamedata"
 	"github.com/Emyrk/chronicle/internal/services/servicelogger"
 	"github.com/Emyrk/chronicle/internal/services/servicemail"
@@ -101,6 +102,7 @@ func (s *Service) DependsOn() []string {
 		servicetenant.OnTenant(),
 		serviceapplication.OnApplication(),
 		servicedataset.OnDataset(),
+		serviceexternalapi.OnExternalAPI(),
 	}
 }
 
@@ -172,6 +174,7 @@ func (s *Service) Start(ctx context.Context) error {
 	wowdb := wowDBSvc
 	assets := serviceassets.Assets(s.broker)
 	gamedata := servicegamedata.InternalGameData(s.broker)
+	externalAPI := serviceexternalapi.ExternalAPI(s.broker)
 	rankings := servicerankings.Rankings(s.broker)
 	mailer := servicemail.Mailer(s.broker)
 	handler, err := api.New(ctx, api.Options{
@@ -190,6 +193,7 @@ func (s *Service) Start(ctx context.Context) error {
 		GameDB:           wowDBSvc.GameDB(),
 		Assets:           assets,
 		InternalGameData: gamedata,
+		ExternalAPI:      externalAPI,
 		Rankings:         rankings,
 		Mailer:           mailer,
 

@@ -12,7 +12,6 @@ import (
 
 	"github.com/Emyrk/chronicle/api/chronauth"
 	"github.com/Emyrk/chronicle/api/chroniclesdk"
-	"github.com/Emyrk/chronicle/api/externalapi"
 	"github.com/Emyrk/chronicle/api/gamedataapi"
 	"github.com/Emyrk/chronicle/api/guildapi"
 	"github.com/Emyrk/chronicle/api/httpapi"
@@ -58,6 +57,7 @@ type Options struct {
 	GameDB           *gamedb.WoWDB // For cache invalidation on DBC import
 	Assets           http.Handler
 	InternalGameData http.Handler
+	ExternalAPI      http.Handler
 	Rankings         http.Handler
 	Mailer           *chroniclemail.Mailer
 
@@ -72,9 +72,9 @@ type Options struct {
 	// provider (e.g. zug-zug). Configured via environment variables; nil
 	// when disabled.
 	ExternalVerification *chroniclesdk.ExternalVerification
-	DevOAuth              bool
-	Discord               chronauth.DiscordOAuth
-	SecretPEM             []byte // Used for JWTs
+	DevOAuth             bool
+	Discord              chronauth.DiscordOAuth
+	SecretPEM            []byte // Used for JWTs
 
 	// Tenant is the multi-tenant service for subdomain → tenant resolution.
 	// If nil, tenant middleware is a no-op.
@@ -169,7 +169,9 @@ func (api *API) Routes() chi.Router {
 		api.tenantMiddleware,
 	)
 
-	r.Mount(ExternalAPIPath, externalapi.New().Routes())
+	if api.Opts.ExternalAPI != nil {
+		r.Mount(ExternalAPIPath, api.Opts.ExternalAPI)
+	}
 
 	r.Route("/api/v1", func(r chi.Router) {
 		r.Group(func(r chi.Router) {
