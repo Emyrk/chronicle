@@ -8,7 +8,7 @@ import type { GuildPanelDefinition, GuildPanelRenderProps } from "./types";
 import { formatLastSeen } from "./rosterUtils";
 
 interface RosterConfig {
-  seenWithinDays: "30" | "60" | "90" | "0";
+  seenWithinDays: "30" | "60" | "90";
   sortBy: "parse" | "level" | "lastSeen" | "name";
   limit: number;
   showClassChips: boolean;
@@ -105,7 +105,8 @@ function RosterContent({ config, position, guild }: GuildPanelRenderProps<Roster
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
-  const seenWithinDays = config.seenWithinDays ?? "60";
+  // Normalize unknown saved values (e.g. from an older config shape) to the default.
+  const seenWithinDays = ["30", "90"].includes(config.seenWithinDays) ? config.seenWithinDays : "60";
   const limit = config.limit || 20;
 
   useEffect(() => {
@@ -171,11 +172,7 @@ function RosterContent({ config, position, guild }: GuildPanelRenderProps<Roster
   if (members.length === 0) {
     return (
       <div className="flex items-center justify-center h-full min-h-[100px] text-muted-foreground">
-        <p className="text-sm">
-          {seenWithinDays !== "0"
-            ? `No members seen in the last ${seenWithinDays} days`
-            : "No members found in raid logs yet"}
-        </p>
+        <p className="text-sm">No members seen in the last {seenWithinDays} days</p>
       </div>
     );
   }
@@ -220,7 +217,6 @@ export const RosterPanel: GuildPanelDefinition<RosterConfig> = {
         { value: "30", label: "30 days" },
         { value: "60", label: "60 days" },
         { value: "90", label: "90 days" },
-        { value: "0", label: "Show everyone" },
       ],
       defaultValue: "60",
     },
