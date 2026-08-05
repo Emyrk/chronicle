@@ -15,13 +15,14 @@ export function JourneyStatsCard({ timeInRaid, itemsLooted }: JourneyStatsCardPr
   ];
 
   return (
-    <Card className="h-full gap-0 py-4">
+    // min-h matches ScoreCard so toggling modes doesn't shift the layout.
+    <Card className="h-full min-h-[172px] gap-0 py-4">
       <CardHeader className="pb-3">
         <CardTitle className="text-xs font-normal tracking-widest text-muted-foreground uppercase">
           Journey
         </CardTitle>
       </CardHeader>
-      <CardContent className="grid grid-cols-2 gap-x-6">
+      <CardContent className="grid grow grid-cols-2 content-center gap-x-6">
         {stats.map(([value, label]) => (
           <div key={label}>
             <div className="font-mono text-2xl leading-none font-bold text-foreground">{value}</div>

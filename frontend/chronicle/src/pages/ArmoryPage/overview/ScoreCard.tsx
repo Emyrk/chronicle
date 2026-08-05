@@ -19,7 +19,8 @@ interface ScoreCardProps {
  */
 export function ScoreCard({ score, top3, metric, onMetricChange, isLoading }: ScoreCardProps) {
   return (
-    <Card className="h-full gap-0 py-4">
+    // min-h matches JourneyStatsCard so toggling modes doesn't shift the layout.
+    <Card className="h-full min-h-[172px] gap-0 py-4">
       <CardHeader className="pb-3">
         <CardTitle className="text-xs font-normal tracking-widest text-muted-foreground uppercase">
           Player score · last 60 days
