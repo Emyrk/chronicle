@@ -287,6 +287,32 @@ export interface ApplicationAdminEntry {
 }
 
 // From chroniclesdk/armory.go
+/**
+ * ArmoryGearHistoryResponse lists a player's gear snapshots, newest first.
+ */
+export interface ArmoryGearHistoryResponse {
+    readonly snapshots: readonly ArmoryGearSnapshot[];
+}
+
+// From chroniclesdk/armory.go
+/**
+ * ArmoryGearSnapshot is the outfit a player wore as of the last combatant
+ * info seen in one log instance.
+ */
+export interface ArmoryGearSnapshot {
+    readonly instance_id: string;
+    readonly instance_name: string;
+    readonly instance_slug?: string;
+    readonly equipped_at: string;
+    /**
+     * AvgIlvl averages item_level across equipped slots (shirt and tabard
+     * excluded); nil when no equipped item had a known item level.
+     */
+    readonly avg_ilvl?: number;
+    readonly gear: PlayerOutfit;
+}
+
+// From chroniclesdk/armory.go
 export interface ArmoryPlayer {
     readonly id: string;
     readonly realm_name: string;
@@ -1698,6 +1724,11 @@ export interface PlayerGear {
     readonly item_quality?: number;
     readonly item_icon?: string;
     readonly transmog_id?: number;
+    /**
+     * ItemLevel is nil for gear snapshots stored before item levels were
+     * recorded, or when the item's template metadata was not found.
+     */
+    readonly item_level?: number;
 }
 
 // From chroniclesdk/armory.go

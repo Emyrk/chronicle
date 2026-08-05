@@ -52,6 +52,27 @@ type PlayerGear struct {
 	ItemQuality int32  `json:"item_quality,omitempty"`
 	ItemIcon    string `json:"item_icon,omitempty"`
 	TransmogID  *int32 `json:"transmog_id,omitempty"`
+	// ItemLevel is nil for gear snapshots stored before item levels were
+	// recorded, or when the item's template metadata was not found.
+	ItemLevel *int32 `json:"item_level,omitempty"`
+}
+
+// ArmoryGearHistoryResponse lists a player's gear snapshots, newest first.
+type ArmoryGearHistoryResponse struct {
+	Snapshots []ArmoryGearSnapshot `json:"snapshots"`
+}
+
+// ArmoryGearSnapshot is the outfit a player wore as of the last combatant
+// info seen in one log instance.
+type ArmoryGearSnapshot struct {
+	InstanceID   uuid.UUID `json:"instance_id"`
+	InstanceName string    `json:"instance_name"`
+	InstanceSlug string    `json:"instance_slug,omitempty"`
+	EquippedAt   time.Time `json:"equipped_at"`
+	// AvgIlvl averages item_level across equipped slots (shirt and tabard
+	// excluded); nil when no equipped item had a known item level.
+	AvgIlvl *float64     `json:"avg_ilvl,omitempty"`
+	Gear    PlayerOutfit `json:"gear"`
 }
 
 // ArmorySearchResult is a lightweight player result without gear data.

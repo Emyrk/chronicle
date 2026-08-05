@@ -15,6 +15,7 @@ import (
 	"github.com/Emyrk/chronicle/database/authz"
 	"github.com/Emyrk/chronicle/internal/ptr"
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5/pgtype"
 )
 
 var _ instancehook.Hook = (*Tracker)(nil)
@@ -118,6 +119,7 @@ func (g *Tracker) Insert(ctx context.Context, udb *unitdb.Units, instanceID uuid
 	}
 
 	inserts := make([]database.UpsertPlayersParams, 0, len(g.Players))
+	gearHistory := make([]database.UpsertPlayerGearHistoryParams, 0, len(g.Players))
 	for _, player := range g.Players {
 		guildID := uuid.Nil
 		if player.Guild != nil {
@@ -142,11 +144,13 @@ func (g *Tracker) Insert(ctx context.Context, udb *unitdb.Units, instanceID uuid
 				dbGear[i].ItemQuality = meta.Quality
 				dbGear[i].ItemIcon = meta.Icon
 				dbGear[i].ItemID = meta.Entry
+				dbGear[i].ItemLevel = ptr.Ref(meta.ItemLevel)
 			} else if meta, ok := itemMetaByName[item.Name]; ok && meta.Name != "" {
 				dbGear[i].ItemName = meta.Name
 				dbGear[i].ItemQuality = meta.Quality
 				dbGear[i].ItemIcon = meta.Icon
 				dbGear[i].ItemID = meta.Entry
+				dbGear[i].ItemLevel = ptr.Ref(meta.ItemLevel)
 			}
 		}
 
@@ -161,6 +165,17 @@ func (g *Tracker) Insert(ctx context.Context, udb *unitdb.Units, instanceID uuid
 		var gearPtr *database.PlayerOutfit
 		if hasGear {
 			gearPtr = &dbGear
+		}
+
+		if hasGear && instanceID != uuid.Nil {
+			gearHistory = append(gearHistory, database.UpsertPlayerGearHistoryParams{
+				PlayerID:   player.Guid,
+				RealmID:    realmID,
+				InstanceID: instanceID,
+				Gear:       dbGear,
+				AvgIlvl:    averageItemLevel(dbGear),
+				EquippedAt: database.Timestamptz(player.Seen),
+			})
 		}
 
 		if player.Talents != nil {
@@ -205,10 +220,45 @@ func (g *Tracker) Insert(ctx context.Context, udb *unitdb.Units, instanceID uuid
 		return nil, fmt.Errorf("closing upsert players batch: %w", err)
 	}
 
+	// Gear history rows FK into game_players, so they must be inserted after
+	// the players batch commits its upserts.
+	if len(gearHistory) > 0 {
+		hres := tx.UpsertPlayerGearHistory(ctx, gearHistory)
+		if err := hres.Close(); err != nil {
+			return nil, fmt.Errorf("closing upsert gear history batch: %w", err)
+		}
+	}
+
 	if mostGuildPlayers > len(g.Participant)/2 && guildWithMostPlayers != nil {
 		return guildWithMostPlayers, nil
 	}
 	return nil, nil
+}
+
+// Slot indices in a PlayerOutfit that never count toward average item level.
+const (
+	slotShirt  = 3
+	slotTabard = 18
+)
+
+// averageItemLevel averages item_level across equipped slots, skipping shirt
+// and tabard. Invalid (NULL) when no equipped item has a known item level.
+func averageItemLevel(outfit database.PlayerOutfit) pgtype.Float4 {
+	var sum, count int32
+	for i, item := range outfit {
+		if i == slotShirt || i == slotTabard {
+			continue
+		}
+		if item.ItemID == 0 || item.ItemLevel == nil {
+			continue
+		}
+		sum += *item.ItemLevel
+		count++
+	}
+	if count == 0 {
+		return pgtype.Float4{}
+	}
+	return pgtype.Float4{Float32: float32(sum) / float32(count), Valid: true}
 }
 
 func (g *Tracker) Finalize(ctx context.Context) error {

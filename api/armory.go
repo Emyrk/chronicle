@@ -25,12 +25,15 @@ func parseArmoryPlayerGUID(player string) guid.GUID {
 	return 0
 }
 
-func (api *API) GetArmoryPlayer(w http.ResponseWriter, r *http.Request) {
+// resolveArmoryPlayer resolves the {realm}/{player} URL params to a stored
+// player row. The realm may be a UUID or a case-insensitive realm name; the
+// player may be a canonical GUID, a decimal uint32 game ID, or a name. On
+// failure it writes the error response and returns ok=false.
+func (api *API) resolveArmoryPlayer(w http.ResponseWriter, r *http.Request) (database.GetGamePlayerByGUIDRow, uuid.UUID, bool) {
 	ctx := r.Context()
 	realmParam := chi.URLParam(r, "realm")
 	playerParam := chi.URLParam(r, "player")
 
-	// Resolve realm: try UUID first, then case-insensitive DB name lookup.
 	realmID, err := uuid.Parse(realmParam)
 	if err != nil {
 		realm, dbErr := api.Opts.Zed.GetWoWServerRealmByName(ctx, realmParam)
@@ -38,12 +41,11 @@ func (api *API) GetArmoryPlayer(w http.ResponseWriter, r *http.Request) {
 			httpapi.Write(ctx, w, http.StatusNotFound, chroniclesdk.Response{
 				Message: "Realm not found",
 			})
-			return
+			return database.GetGamePlayerByGUIDRow{}, uuid.Nil, false
 		}
 		realmID = realm.ID
 	}
 
-	// Resolve player by canonical GUID, decimal uint32 game ID, or name.
 	identifier := parseArmoryPlayerGUID(playerParam)
 
 	player, err := api.Opts.Zed.GetGamePlayerByGUID(ctx, database.GetGamePlayerByGUIDParams{
@@ -58,6 +60,17 @@ func (api *API) GetArmoryPlayer(w http.ResponseWriter, r *http.Request) {
 			},
 			Status: http.StatusNotFound,
 		})
+		return database.GetGamePlayerByGUIDRow{}, uuid.Nil, false
+	}
+
+	return player, realmID, true
+}
+
+func (api *API) GetArmoryPlayer(w http.ResponseWriter, r *http.Request) {
+	ctx := r.Context()
+
+	player, realmID, ok := api.resolveArmoryPlayer(w, r)
+	if !ok {
 		return
 	}
 
@@ -68,6 +81,43 @@ func (api *API) GetArmoryPlayer(w http.ResponseWriter, r *http.Request) {
 	}
 	w.Header().Set(httpapi.DatasetHeader, out.DatasetID.String())
 	httpapi.Write(ctx, w, http.StatusOK, out)
+}
+
+// GetArmoryPlayerGearHistory returns per-instance gear snapshots for a
+// player, newest first.
+func (api *API) GetArmoryPlayerGearHistory(w http.ResponseWriter, r *http.Request) {
+	ctx := r.Context()
+
+	player, realmID, ok := api.resolveArmoryPlayer(w, r)
+	if !ok {
+		return
+	}
+
+	limit := int32(100)
+	if l := r.URL.Query().Get("limit"); l != "" {
+		if parsed, err := strconv.Atoi(l); err == nil && parsed > 0 {
+			limit = min(int32(parsed), 200)
+		}
+	}
+
+	rows, err := api.Opts.Zed.GetPlayerGearHistory(ctx, database.GetPlayerGearHistoryParams{
+		RealmID:     realmID,
+		PlayerID:    player.ID,
+		ResultLimit: limit,
+	})
+	if err != nil {
+		httpapi.InternalServerError(w, err)
+		return
+	}
+
+	snapshots := make([]chroniclesdk.ArmoryGearSnapshot, 0, len(rows))
+	for _, row := range rows {
+		snapshots = append(snapshots, db2sdk.ArmoryGearSnapshot(row))
+	}
+
+	httpapi.Write(ctx, w, http.StatusOK, chroniclesdk.ArmoryGearHistoryResponse{
+		Snapshots: snapshots,
+	})
 }
 
 func (api *API) SearchArmoryPlayers(w http.ResponseWriter, r *http.Request) {

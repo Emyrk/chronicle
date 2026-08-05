@@ -45,6 +45,41 @@ WHERE
 ;
 
 
+-- name: UpsertPlayerGearHistory :batchexec
+INSERT INTO
+  game_player_gear_history (
+    player_id, realm_id, instance_id,
+    gear, avg_ilvl, equipped_at
+  )
+VALUES
+  ($1, $2, $3, $4, $5, $6)
+ON CONFLICT (player_id, realm_id, instance_id) DO UPDATE
+  SET gear = EXCLUDED.gear,
+      avg_ilvl = EXCLUDED.avg_ilvl,
+      equipped_at = EXCLUDED.equipped_at;
+;
+
+
+-- name: GetPlayerGearHistory :many
+SELECT
+  h.instance_id,
+  h.gear,
+  h.avg_ilvl,
+  h.equipped_at,
+  li.name as instance_name,
+  li.hashed_slug as instance_slug
+FROM
+  game_player_gear_history h
+JOIN log_instances li ON li.id = h.instance_id
+WHERE
+  h.realm_id = @realm_id
+  AND h.player_id = @player_id
+ORDER BY
+  h.equipped_at DESC
+LIMIT @result_limit
+;
+
+
 -- name: GetGamePlayerByGUID :one
 SELECT
   gp.*,

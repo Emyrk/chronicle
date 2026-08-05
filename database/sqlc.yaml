@@ -57,6 +57,9 @@ sql:
           - column: "game_players.gear"
             go_type:
               type: "*PlayerOutfit"
+          - column: "game_player_gear_history.gear"
+            go_type:
+              type: "PlayerOutfit"
           - column: "game_players.talents"
             go_type:
               type: "*PlayerTalents"

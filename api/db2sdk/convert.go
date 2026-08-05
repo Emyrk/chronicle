@@ -632,6 +632,7 @@ func ArmoryPlayer(row database.GetGamePlayerByGUIDRow) chroniclesdk.ArmoryPlayer
 				ItemQuality: g.ItemQuality,
 				ItemIcon:    g.ItemIcon,
 				TransmogID:  g.TransmogID,
+				ItemLevel:   g.ItemLevel,
 			}
 		}
 	}
@@ -663,6 +664,36 @@ func ArmoryPlayer(row database.GetGamePlayerByGUIDRow) chroniclesdk.ArmoryPlayer
 		Talents:             talents,
 		UpdatedAt:           row.UpdatedAt.Time,
 		UpdatedFromInstance: instanceID,
+	}
+}
+
+func ArmoryGearSnapshot(row database.GetPlayerGearHistoryRow) chroniclesdk.ArmoryGearSnapshot {
+	var gear chroniclesdk.PlayerOutfit
+	for i, g := range row.Gear {
+		gear[i] = chroniclesdk.PlayerGear{
+			ItemID:      g.ItemID,
+			EnchantID:   g.EnchantID,
+			ItemName:    g.ItemName,
+			ItemQuality: g.ItemQuality,
+			ItemIcon:    g.ItemIcon,
+			TransmogID:  g.TransmogID,
+			ItemLevel:   g.ItemLevel,
+		}
+	}
+
+	var avgIlvl *float64
+	if row.AvgIlvl.Valid {
+		v := float64(row.AvgIlvl.Float32)
+		avgIlvl = &v
+	}
+
+	return chroniclesdk.ArmoryGearSnapshot{
+		InstanceID:   row.InstanceID,
+		InstanceName: row.InstanceName,
+		InstanceSlug: row.InstanceSlug.String,
+		EquippedAt:   row.EquippedAt.Time,
+		AvgIlvl:      avgIlvl,
+		Gear:         gear,
 	}
 }
 

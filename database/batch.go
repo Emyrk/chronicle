@@ -448,6 +448,73 @@ func (b *InsertLogInstanceEventsBatchResults) Close() error {
 	return b.br.Close()
 }
 
+const upsertPlayerGearHistory = `-- name: UpsertPlayerGearHistory :batchexec
+INSERT INTO
+  game_player_gear_history (
+    player_id, realm_id, instance_id,
+    gear, avg_ilvl, equipped_at
+  )
+VALUES
+  ($1, $2, $3, $4, $5, $6)
+ON CONFLICT (player_id, realm_id, instance_id) DO UPDATE
+  SET gear = EXCLUDED.gear,
+      avg_ilvl = EXCLUDED.avg_ilvl,
+      equipped_at = EXCLUDED.equipped_at
+`
+
+type UpsertPlayerGearHistoryBatchResults struct {
+	br     pgx.BatchResults
+	tot    int
+	closed bool
+}
+
+type UpsertPlayerGearHistoryParams struct {
+	PlayerID   guid.GUID          `db:"player_id" json:"player_id"`
+	RealmID    uuid.UUID          `db:"realm_id" json:"realm_id"`
+	InstanceID uuid.UUID          `db:"instance_id" json:"instance_id"`
+	Gear       PlayerOutfit       `db:"gear" json:"gear"`
+	AvgIlvl    pgtype.Float4      `db:"avg_ilvl" json:"avg_ilvl"`
+	EquippedAt pgtype.Timestamptz `db:"equipped_at" json:"equipped_at"`
+}
+
+func (q *sqlQuerier) UpsertPlayerGearHistory(ctx context.Context, arg []UpsertPlayerGearHistoryParams) *UpsertPlayerGearHistoryBatchResults {
+	batch := &pgx.Batch{}
+	for _, a := range arg {
+		vals := []interface{}{
+			a.PlayerID,
+			a.RealmID,
+			a.InstanceID,
+			a.Gear,
+			a.AvgIlvl,
+			a.EquippedAt,
+		}
+		batch.Queue(upsertPlayerGearHistory, vals...)
+	}
+	br := q.db.SendBatch(ctx, batch)
+	return &UpsertPlayerGearHistoryBatchResults{br, len(arg), false}
+}
+
+func (b *UpsertPlayerGearHistoryBatchResults) Exec(f func(int, error)) {
+	defer b.br.Close()
+	for t := 0; t < b.tot; t++ {
+		if b.closed {
+			if f != nil {
+				f(t, ErrBatchAlreadyClosed)
+			}
+			continue
+		}
+		_, err := b.br.Exec()
+		if f != nil {
+			f(t, err)
+		}
+	}
+}
+
+func (b *UpsertPlayerGearHistoryBatchResults) Close() error {
+	b.closed = true
+	return b.br.Close()
+}
+
 const upsertPlayers = `-- name: UpsertPlayers :batchexec
 INSERT INTO
   game_players (

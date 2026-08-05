@@ -169,7 +169,9 @@ type PlayerGear struct {
 	ItemQuality int32  `json:"item_quality,omitempty"`
 	ItemIcon    string `json:"item_icon,omitzero"`
 	TransmogID  *int32 `json:"transmog_id,omitempty"`
-	// TODO: transmog
+	// ItemLevel is nil when the item's template metadata was not found at
+	// parse time (older rows predate this field entirely).
+	ItemLevel *int32 `json:"item_level,omitempty"`
 }
 
 func (g *PlayerOutfit) Scan(src interface{}) error {

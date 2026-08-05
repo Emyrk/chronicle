@@ -118,6 +118,67 @@ func (q *sqlQuerier) GetGamePlayerByGUID(ctx context.Context, arg GetGamePlayerB
 	return i, err
 }
 
+const getPlayerGearHistory = `-- name: GetPlayerGearHistory :many
+SELECT
+  h.instance_id,
+  h.gear,
+  h.avg_ilvl,
+  h.equipped_at,
+  li.name as instance_name,
+  li.hashed_slug as instance_slug
+FROM
+  game_player_gear_history h
+JOIN log_instances li ON li.id = h.instance_id
+WHERE
+  h.realm_id = $1
+  AND h.player_id = $2
+ORDER BY
+  h.equipped_at DESC
+LIMIT $3
+`
+
+type GetPlayerGearHistoryParams struct {
+	RealmID     uuid.UUID `db:"realm_id" json:"realm_id"`
+	PlayerID    guid.GUID `db:"player_id" json:"player_id"`
+	ResultLimit int32     `db:"result_limit" json:"result_limit"`
+}
+
+type GetPlayerGearHistoryRow struct {
+	InstanceID   uuid.UUID          `db:"instance_id" json:"instance_id"`
+	Gear         PlayerOutfit       `db:"gear" json:"gear"`
+	AvgIlvl      pgtype.Float4      `db:"avg_ilvl" json:"avg_ilvl"`
+	EquippedAt   pgtype.Timestamptz `db:"equipped_at" json:"equipped_at"`
+	InstanceName string             `db:"instance_name" json:"instance_name"`
+	InstanceSlug pgtype.Text        `db:"instance_slug" json:"instance_slug"`
+}
+
+func (q *sqlQuerier) GetPlayerGearHistory(ctx context.Context, arg GetPlayerGearHistoryParams) ([]GetPlayerGearHistoryRow, error) {
+	rows, err := q.db.Query(ctx, getPlayerGearHistory, arg.RealmID, arg.PlayerID, arg.ResultLimit)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []GetPlayerGearHistoryRow
+	for rows.Next() {
+		var i GetPlayerGearHistoryRow
+		if err := rows.Scan(
+			&i.InstanceID,
+			&i.Gear,
+			&i.AvgIlvl,
+			&i.EquippedAt,
+			&i.InstanceName,
+			&i.InstanceSlug,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const searchGamePlayers = `-- name: SearchGamePlayers :many
 SELECT
   gp.id,
@@ -13597,12 +13658,12 @@ func (q *sqlQuerier) GetItemTemplateByEntry(ctx context.Context, arg GetItemTemp
 
 const getItemTemplateMetadataBatch = `-- name: GetItemTemplateMetadataBatch :many
 WITH by_id AS (
-  SELECT wit.entry, wit.name, wit.quality, wit.display_id
+  SELECT wit.entry, wit.name, wit.quality, wit.display_id, wit.item_level
   FROM world_item_template wit
   WHERE wit.dataset_id = $1 AND wit.entry = ANY($2::int[])
 ),
 by_name AS (
-  SELECT wit.entry, wit.name, wit.quality, wit.display_id
+  SELECT wit.entry, wit.name, wit.quality, wit.display_id, wit.item_level
   FROM world_item_template wit
   WHERE wit.dataset_id = $1
     AND wit.name = ANY($3::text[])
@@ -13610,12 +13671,13 @@ by_name AS (
     AND (SELECT COUNT(*) FROM world_item_template t2 WHERE t2.dataset_id = $1 AND t2.name = wit.name) = 1
 ),
 combined AS (
-  SELECT entry, name, quality, display_id FROM by_id UNION ALL SELECT entry, name, quality, display_id FROM by_name
+  SELECT entry, name, quality, display_id, item_level FROM by_id UNION ALL SELECT entry, name, quality, display_id, item_level FROM by_name
 )
 SELECT
   c.entry,
   c.name,
   c.quality,
+  c.item_level,
   COALESCE(NULLIF(wdi.icon, ''), dbi.inventory_icon ->> 0, '') :: TEXT as icon
 FROM combined c
   LEFT JOIN world_display_info wdi ON wdi.dataset_id = $1 AND wdi.id = c.display_id
@@ -13629,10 +13691,11 @@ type GetItemTemplateMetadataBatchParams struct {
 }
 
 type GetItemTemplateMetadataBatchRow struct {
-	Entry   int32  `db:"entry" json:"entry"`
-	Name    string `db:"name" json:"name"`
-	Quality int32  `db:"quality" json:"quality"`
-	Icon    string `db:"icon" json:"icon"`
+	Entry     int32  `db:"entry" json:"entry"`
+	Name      string `db:"name" json:"name"`
+	Quality   int32  `db:"quality" json:"quality"`
+	ItemLevel int32  `db:"item_level" json:"item_level"`
+	Icon      string `db:"icon" json:"icon"`
 }
 
 // Looks up items by ID. For items not found by ID (e.g. transmog IDs),
@@ -13651,6 +13714,7 @@ func (q *sqlQuerier) GetItemTemplateMetadataBatch(ctx context.Context, arg GetIt
 			&i.Entry,
 			&i.Name,
 			&i.Quality,
+			&i.ItemLevel,
 			&i.Icon,
 		); err != nil {
 			return nil, err

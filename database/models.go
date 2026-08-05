@@ -1180,6 +1180,17 @@ type GamePlayer struct {
 	Talents             *PlayerTalents     `db:"talents" json:"talents"`
 }
 
+// One gear snapshot per (player, log instance): the outfit worn as of the last COMBATANT_INFO in that instance. Powers armory item-level trends and gear-over-time views.
+type GamePlayerGearHistory struct {
+	PlayerID   guid.GUID          `db:"player_id" json:"player_id"`
+	RealmID    uuid.UUID          `db:"realm_id" json:"realm_id"`
+	InstanceID uuid.UUID          `db:"instance_id" json:"instance_id"`
+	Gear       PlayerOutfit       `db:"gear" json:"gear"`
+	AvgIlvl    pgtype.Float4      `db:"avg_ilvl" json:"avg_ilvl"`
+	EquippedAt pgtype.Timestamptz `db:"equipped_at" json:"equipped_at"`
+	CreatedAt  pgtype.Timestamptz `db:"created_at" json:"created_at"`
+}
+
 type Guild struct {
 	ID        uuid.UUID          `db:"id" json:"id"`
 	RealmID   uuid.UUID          `db:"realm_id" json:"realm_id"`

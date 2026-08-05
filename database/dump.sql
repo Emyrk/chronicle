@@ -686,6 +686,18 @@ CREATE TABLE external_character_link_syncs (
     last_response jsonb
 );
 
+CREATE TABLE game_player_gear_history (
+    player_id wow_guid NOT NULL,
+    realm_id uuid NOT NULL,
+    instance_id uuid NOT NULL,
+    gear jsonb NOT NULL,
+    avg_ilvl real,
+    equipped_at timestamp with time zone NOT NULL,
+    created_at timestamp with time zone DEFAULT now() NOT NULL
+);
+
+COMMENT ON TABLE game_player_gear_history IS 'One gear snapshot per (player, log instance): the outfit worn as of the last COMBATANT_INFO in that instance. Powers armory item-level trends and gear-over-time views.';
+
 CREATE TABLE game_players (
     id wow_guid NOT NULL,
     realm_id uuid NOT NULL,
@@ -1785,6 +1797,9 @@ ALTER TABLE ONLY encounter_dps_rankings
 ALTER TABLE ONLY external_character_link_syncs
     ADD CONSTRAINT external_character_link_syncs_pkey PRIMARY KEY (user_id, source);
 
+ALTER TABLE ONLY game_player_gear_history
+    ADD CONSTRAINT game_player_gear_history_pkey PRIMARY KEY (player_id, realm_id, instance_id);
+
 ALTER TABLE ONLY game_players
     ADD CONSTRAINT game_players_pkey PRIMARY KEY (id, realm_id);
 
@@ -2049,6 +2064,8 @@ CREATE INDEX dbc_consumable_buffs_spell_idx ON dbc_consumable_buffs USING btree 
 
 CREATE UNIQUE INDEX files_unique_owner_hash ON log_file USING btree (owner, hash);
 
+CREATE INDEX game_player_gear_history_player_time ON game_player_gear_history USING btree (realm_id, player_id, equipped_at DESC);
+
 CREATE INDEX game_players_player_and_realm ON game_players USING btree (name, realm_id);
 
 CREATE INDEX idx_data_grants_user_id ON data_grants USING btree (user_id);
@@ -2309,6 +2326,12 @@ ALTER TABLE ONLY encounter_dps_rankings
 
 ALTER TABLE ONLY external_character_link_syncs
     ADD CONSTRAINT external_character_link_syncs_user_id_fkey FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE;
+
+ALTER TABLE ONLY game_player_gear_history
+    ADD CONSTRAINT game_player_gear_history_instance_id_fkey FOREIGN KEY (instance_id) REFERENCES log_instances(id) ON DELETE CASCADE;
+
+ALTER TABLE ONLY game_player_gear_history
+    ADD CONSTRAINT game_player_gear_history_player_id_realm_id_fkey FOREIGN KEY (player_id, realm_id) REFERENCES game_players(id, realm_id) ON DELETE CASCADE;
 
 ALTER TABLE ONLY game_players
     ADD CONSTRAINT game_players_guild_id_fkey FOREIGN KEY (guild_id) REFERENCES guilds(id) ON DELETE SET NULL;
