@@ -2328,7 +2328,7 @@ ALTER TABLE ONLY external_character_link_syncs
     ADD CONSTRAINT external_character_link_syncs_user_id_fkey FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE;
 
 ALTER TABLE ONLY game_player_gear_history
-    ADD CONSTRAINT game_player_gear_history_instance_id_fkey FOREIGN KEY (instance_id) REFERENCES log_instances(id) ON DELETE CASCADE;
+    ADD CONSTRAINT game_player_gear_history_instance_id_fkey FOREIGN KEY (instance_id) REFERENCES log_instances(id) ON DELETE CASCADE DEFERRABLE INITIALLY DEFERRED;
 
 ALTER TABLE ONLY game_player_gear_history
     ADD CONSTRAINT game_player_gear_history_player_id_realm_id_fkey FOREIGN KEY (player_id, realm_id) REFERENCES game_players(id, realm_id) ON DELETE CASCADE;
