@@ -1,7 +1,7 @@
 import { useMemo, useState } from "react";
 import { Link, useParams, useSearchParams } from "react-router-dom";
 import { ArrowLeft, Eye, EyeOff, Link2, Save } from "lucide-react";
-import { useSession } from "@/api/queries";
+import { useArmoryGearHistory, useSession } from "@/api/queries";
 import { useGearListRevision, useSharedGearList } from "@/api/gearBuilderQueries";
 import { Button } from "@/components/ui/button";
 import type { GearList, ItemSearchResult } from "@/api/typesGenerated";
@@ -37,6 +37,13 @@ import { SetSummaryBar } from "./SetSummaryBar";
 import { StagesBar } from "./StagesBar";
 import { ProgressionMatrix } from "./ProgressionMatrix";
 import { RevisionControls } from "./RevisionControls";
+import { buildCharacterMatch, stageCoverage } from "./characterMatch";
+import {
+  CharacterMatchPanel,
+  formatCharParam,
+  parseCharParam,
+  type MatchedCharacter,
+} from "./CharacterMatchPanel";
 
 const VISIBILITY_ICON = { public: Eye, unlisted: Link2, private: EyeOff } as const;
 
@@ -64,6 +71,35 @@ function useStageScores(
     totalScore += score;
   }
   return { scores, totalScore };
+}
+
+/** ?char= (Realm:Name) armory match state shared by both page views. */
+function useCharacterMatchState(stage: GearStage | undefined) {
+  const [searchParams, setSearchParams] = useSearchParams();
+  const matched = parseCharParam(searchParams.get("char"));
+  const setMatched = (char: MatchedCharacter | null) => {
+    const next = new URLSearchParams(searchParams);
+    if (char == null) {
+      next.delete("char");
+    } else {
+      next.set("char", formatCharParam(char));
+    }
+    setSearchParams(next, { replace: true });
+  };
+  const history = useArmoryGearHistory(matched?.realm, matched?.name);
+  const match = useMemo(
+    () => (history.data ? buildCharacterMatch(history.data) : undefined),
+    [history.data],
+  );
+  const coverage = stage && match ? stageCoverage(stage, match) : undefined;
+  return {
+    matched,
+    setMatched,
+    match,
+    coverage,
+    loading: !!matched && history.isLoading,
+    error: history.isError,
+  };
 }
 
 /** Every (item, enchant) pair the document references, for hydration. */
@@ -163,6 +199,7 @@ function ReadOnlyView({
   const items = useListItems(useMemo(() => collectItemRefs(payload), [payload]));
   const stage = payload.stages[Math.min(stageIndex, Math.max(payload.stages.length - 1, 0))];
   const { scores, totalScore } = useStageScores(stage, weightSel?.weights ?? null);
+  const charMatch = useCharacterMatchState(stage);
   const selectedEntry =
     selectedSlot != null && stage ? stage.slots[String(selectedSlot)] : undefined;
 
@@ -181,6 +218,13 @@ function ReadOnlyView({
       ) : (
         <div className="space-y-4">
           <StatWeightsPanel classId={list.class_id} selection={weightSel} onSelect={setWeightSel} />
+          <CharacterMatchPanel
+            matched={charMatch.matched}
+            onMatch={charMatch.setMatched}
+            coverage={charMatch.coverage}
+            historyLoading={charMatch.loading}
+            historyError={charMatch.error}
+          />
           <div className="flex flex-wrap items-center gap-3">
             <StagesBar payload={payload} stageIndex={stageIndex} onSelect={setStageIndex} />
             <div className="flex-1" />
@@ -204,6 +248,7 @@ function ReadOnlyView({
                     stage={stage}
                     items={items}
                     scores={scores}
+                    match={charMatch.match}
                     selectedSlot={selectedSlot ?? undefined}
                     onSelectSlot={(i) => setSelectedSlot((prev) => (prev === i ? null : i))}
                   />
@@ -245,6 +290,7 @@ function EditorView({
   const safeStageIndex = Math.min(stageIndex, Math.max(editor.payload.stages.length - 1, 0));
   const stage = editor.payload.stages[safeStageIndex];
   const { scores, totalScore } = useStageScores(stage, weightSel?.weights ?? null);
+  const charMatch = useCharacterMatchState(stage);
   const selectedEntry =
     selectedSlot != null && stage ? stage.slots[String(selectedSlot)] : undefined;
 
@@ -282,6 +328,13 @@ function EditorView({
       ) : (
         <div className="space-y-4">
           <StatWeightsPanel classId={list.class_id} selection={weightSel} onSelect={setWeightSel} />
+          <CharacterMatchPanel
+            matched={charMatch.matched}
+            onMatch={charMatch.setMatched}
+            coverage={charMatch.coverage}
+            historyLoading={charMatch.loading}
+            historyError={charMatch.error}
+          />
           <div className="flex flex-wrap items-center gap-3">
             <StagesBar
               payload={editor.payload}
@@ -316,6 +369,7 @@ function EditorView({
                   selectedSlot={selectedSlot ?? undefined}
                   onSelectSlot={(i) => setSelectedSlot((prev) => (prev === i ? null : i))}
                   scores={scores}
+                  match={charMatch.match}
                 />
                 <p className="text-2xs text-zinc-600">Click a slot to pick its item.</p>
               </div>

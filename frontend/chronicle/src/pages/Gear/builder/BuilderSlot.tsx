@@ -22,6 +22,8 @@ interface BuilderSlotProps {
   equippedItemIds?: ReadonlySet<number>;
   /** Weighted stat score for the equipped item, when weights are active. */
   score?: number;
+  /** Character-match state for this slot, when a character is matched. */
+  matchState?: "equipped" | "owned" | "missing";
 }
 
 /**
@@ -38,6 +40,7 @@ export function BuilderSlot({
   onSelect,
   equippedItemIds,
   score,
+  matchState,
 }: BuilderSlotProps) {
   const iconBaseUrl = useIconBaseUrl();
   const isMobile = useIsMobile();
@@ -92,29 +95,48 @@ export function BuilderSlot({
       onMouseEnter={() => setHovered(true)}
       onMouseLeave={() => setHovered(false)}
     >
-      <button
-        type="button"
-        onClick={() => onSelect?.(slotDef.outfitIndex)}
-        className={cn(
-          "w-11 h-11 rounded border-2 bg-zinc-900/80 flex items-center justify-center overflow-hidden transition-all shrink-0",
-          borderClass,
-          onSelect && "cursor-pointer hover:brightness-125",
-          selected && "ring-2 ring-blue-400 ring-offset-1 ring-offset-zinc-950",
-        )}
-      >
-        {!isEmpty && item?.icon ? (
-          <img
-            src={iconUrl(item.icon, iconBaseUrl)}
-            alt={displayName}
-            className="w-full h-full object-cover"
-            loading="lazy"
+      <div className="relative shrink-0">
+        <button
+          type="button"
+          onClick={() => onSelect?.(slotDef.outfitIndex)}
+          className={cn(
+            "w-11 h-11 rounded border-2 bg-zinc-900/80 flex items-center justify-center overflow-hidden transition-all",
+            borderClass,
+            onSelect && "cursor-pointer hover:brightness-125",
+            selected && "ring-2 ring-blue-400 ring-offset-1 ring-offset-zinc-950",
+          )}
+        >
+          {!isEmpty && item?.icon ? (
+            <img
+              src={iconUrl(item.icon, iconBaseUrl)}
+              alt={displayName}
+              className="w-full h-full object-cover"
+              loading="lazy"
+            />
+          ) : (
+            <span className="text-3xs text-zinc-600 text-center leading-tight select-none">
+              {slotDef.label}
+            </span>
+          )}
+        </button>
+        {!isEmpty && matchState && (
+          <span
+            title={
+              matchState === "equipped"
+                ? "Currently equipped by the matched character"
+                : matchState === "owned"
+                  ? "Seen in the matched character's gear history"
+                  : "Not seen in the matched character's gear history"
+            }
+            className={cn(
+              "absolute -top-1 -right-1 h-2.5 w-2.5 rounded-full border border-zinc-950",
+              matchState === "equipped" && "bg-blue-400",
+              matchState === "owned" && "bg-emerald-400",
+              matchState === "missing" && "bg-zinc-600",
+            )}
           />
-        ) : (
-          <span className="text-3xs text-zinc-600 text-center leading-tight select-none">
-            {slotDef.label}
-          </span>
         )}
-      </button>
+      </div>
 
       {!isMobile && nameLabel}
 

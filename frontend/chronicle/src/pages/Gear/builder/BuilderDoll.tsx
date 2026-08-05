@@ -1,4 +1,5 @@
 import { BOTTOM_SLOTS, LEFT_SLOTS, RIGHT_SLOTS } from "@/pages/ArmoryPage/types";
+import { slotOwned, type CharacterMatch } from "./characterMatch";
 import type { GearStage } from "./gearListModel";
 import { itemRefKey } from "./useListItems";
 import type { HydratedItem } from "./useListItems";
@@ -11,13 +12,15 @@ interface BuilderDollProps {
   onSelectSlot?: (outfitIndex: number) => void;
   /** Per-slot weighted scores (by outfit index), when weights are active. */
   scores?: Map<number, number>;
+  /** Armory character match; adds owned/equipped/missing markers. */
+  match?: CharacterMatch;
 }
 
 /**
  * The builder paperdoll: two slot columns plus the weapon row, mirroring
  * the armory layout. Read-only when onSelectSlot is absent.
  */
-export function BuilderDoll({ stage, items, selectedSlot, onSelectSlot, scores }: BuilderDollProps) {
+export function BuilderDoll({ stage, items, selectedSlot, onSelectSlot, scores, match }: BuilderDollProps) {
   const equippedItemIds = new Set(
     Object.values(stage.slots)
       .filter((e) => !!e)
@@ -27,7 +30,15 @@ export function BuilderDoll({ stage, items, selectedSlot, onSelectSlot, scores }
   const slotFor = (outfitIndex: number) => {
     const entry = stage.slots[String(outfitIndex)];
     const item = entry ? items.get(itemRefKey(entry.item_id, entry.enchant_id)) : undefined;
-    return { entry, item };
+    let matchState: "equipped" | "owned" | "missing" | undefined;
+    if (match && entry) {
+      matchState = match.equippedIds.has(entry.item_id)
+        ? "equipped"
+        : slotOwned(stage, outfitIndex, match)
+          ? "owned"
+          : "missing";
+    }
+    return { entry, item, matchState };
   };
 
   return (
@@ -35,7 +46,7 @@ export function BuilderDoll({ stage, items, selectedSlot, onSelectSlot, scores }
       <div className="flex justify-between gap-4">
         <div className="flex flex-col gap-1.5">
           {LEFT_SLOTS.map((def) => {
-            const { entry, item } = slotFor(def.outfitIndex);
+            const { entry, item, matchState } = slotFor(def.outfitIndex);
             return (
               <BuilderSlot
                 key={def.outfitIndex}
@@ -47,13 +58,14 @@ export function BuilderDoll({ stage, items, selectedSlot, onSelectSlot, scores }
                 onSelect={onSelectSlot}
                 equippedItemIds={equippedItemIds}
                 score={scores?.get(def.outfitIndex)}
+                matchState={matchState}
               />
             );
           })}
         </div>
         <div className="flex flex-col gap-1.5">
           {RIGHT_SLOTS.map((def) => {
-            const { entry, item } = slotFor(def.outfitIndex);
+            const { entry, item, matchState } = slotFor(def.outfitIndex);
             return (
               <BuilderSlot
                 key={def.outfitIndex}
@@ -65,6 +77,7 @@ export function BuilderDoll({ stage, items, selectedSlot, onSelectSlot, scores }
                 onSelect={onSelectSlot}
                 equippedItemIds={equippedItemIds}
                 score={scores?.get(def.outfitIndex)}
+                matchState={matchState}
               />
             );
           })}
@@ -72,7 +85,7 @@ export function BuilderDoll({ stage, items, selectedSlot, onSelectSlot, scores }
       </div>
       <div className="flex justify-center gap-6">
         {BOTTOM_SLOTS.map((def) => {
-          const { entry, item } = slotFor(def.outfitIndex);
+          const { entry, item, matchState } = slotFor(def.outfitIndex);
           return (
             <BuilderSlot
               key={def.outfitIndex}
@@ -84,6 +97,7 @@ export function BuilderDoll({ stage, items, selectedSlot, onSelectSlot, scores }
               onSelect={onSelectSlot}
               equippedItemIds={equippedItemIds}
               score={scores?.get(def.outfitIndex)}
+              matchState={matchState}
             />
           );
         })}
