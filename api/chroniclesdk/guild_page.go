@@ -241,13 +241,15 @@ type GuildEncounterKillsResponse struct {
 
 // GuildRunEncounterParse is the guild's average parse for one encounter of
 // one raid night (run). Encounters are returned in kill order; callers weight
-// by ParseCount for a whole-run average.
+// by ParseCount for a whole-run average. KillDurationMs is the fight length
+// of the kill (0 when unknown).
 type GuildRunEncounterParse struct {
-	RunID         uuid.UUID `json:"run_id"`
-	EncounterName string    `json:"encounter_name"`
-	AvgParse      float64   `json:"avg_parse"`
-	ParseCount    int64     `json:"parse_count"`
-	KilledAt      time.Time `json:"killed_at"`
+	RunID          uuid.UUID `json:"run_id"`
+	EncounterName  string    `json:"encounter_name"`
+	AvgParse       float64   `json:"avg_parse"`
+	ParseCount     int64     `json:"parse_count"`
+	KilledAt       time.Time `json:"killed_at"`
+	KillDurationMs int64     `json:"kill_duration_ms"`
 }
 
 type GuildRunParsesResponse struct {

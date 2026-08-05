@@ -297,6 +297,15 @@ func TestGuildRunParseAverages(t *testing.T) {
 	// Another guild's run is never aggregated, even when its id is requested.
 	f.insertParse(t, guildPanelParse{runID: otherRun, guildID: uuid.NullUUID{UUID: otherGuildID, Valid: true}, playerGUID: testGUID(9), playerName: "Zed", playerRole: "dps", metric: "dps", encounter: "Ragnaros", score: 100, killedAt: now})
 
+	// A logged Ragnaros kill supplies the fight duration; Golemagg has no
+	// encounter row so its duration is 0.
+	_, err := f.store.InsertEncounter(ctx, database.InsertEncounterParams{
+		ID: uuid.New(), InstanceID: f.instanceID, Name: "Ragnaros",
+		KillType: database.KillTypeClean, Remaining: guid.GUIDs{}, Boss: true,
+		StartTime: database.Timestamptz(now.Add(-time.Hour)), EndTime: database.Timestamptz(now.Add(-time.Hour).Add(5 * time.Minute)),
+	})
+	require.NoError(t, err)
+
 	rows, err := f.store.GuildRunParseAverages(ctx, database.GuildRunParseAveragesParams{
 		TenantID: uuid.Nil,
 		GuildID:  f.guildID,
@@ -324,6 +333,10 @@ func TestGuildRunParseAverages(t *testing.T) {
 	require.InDelta(t, 85, byEncounter[runEncounter{run1, "Ragnaros"}].AvgParse, 0.01)
 	require.EqualValues(t, 2, byEncounter[runEncounter{run1, "Ragnaros"}].ParseCount)
 	require.InDelta(t, 50, byEncounter[runEncounter{run2, "Onyxia"}].AvgParse, 0.01)
+
+	// Fight duration comes from the logged encounter; unmatched bosses get 0.
+	require.EqualValues(t, 5*time.Minute/time.Millisecond, byEncounter[runEncounter{run1, "Ragnaros"}].KillDurationMs)
+	require.EqualValues(t, 0, byEncounter[runEncounter{run1, "Golemagg"}].KillDurationMs)
 }
 
 func TestGuildEncounterKills(t *testing.T) {

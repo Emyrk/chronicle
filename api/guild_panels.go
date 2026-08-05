@@ -231,11 +231,12 @@ func (api *API) GuildRunParses(w http.ResponseWriter, r *http.Request) {
 	encounters := make([]chroniclesdk.GuildRunEncounterParse, len(rows))
 	for i, row := range rows {
 		encounters[i] = chroniclesdk.GuildRunEncounterParse{
-			RunID:         row.RunID,
-			EncounterName: row.EncounterName,
-			AvgParse:      row.AvgParse,
-			ParseCount:    row.ParseCount,
-			KilledAt:      row.KilledAt.Time,
+			RunID:          row.RunID,
+			EncounterName:  row.EncounterName,
+			AvgParse:       row.AvgParse,
+			ParseCount:     row.ParseCount,
+			KilledAt:       row.KilledAt.Time,
+			KillDurationMs: row.KillDurationMs,
 		}
 	}
 

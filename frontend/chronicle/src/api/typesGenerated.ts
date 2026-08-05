@@ -1109,7 +1109,8 @@ export interface GuildRosterMember {
 /**
  * GuildRunEncounterParse is the guild's average parse for one encounter of
  * one raid night (run). Encounters are returned in kill order; callers weight
- * by ParseCount for a whole-run average.
+ * by ParseCount for a whole-run average. KillDurationMs is the fight length
+ * of the kill (0 when unknown).
  */
 export interface GuildRunEncounterParse {
     readonly run_id: string;
@@ -1117,6 +1118,7 @@ export interface GuildRunEncounterParse {
     readonly avg_parse: number;
     readonly parse_count: number;
     readonly killed_at: string;
+    readonly kill_duration_ms: number;
 }
 
 // From chroniclesdk/guild_page.go

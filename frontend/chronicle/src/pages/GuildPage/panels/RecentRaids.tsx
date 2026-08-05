@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { Link } from "react-router-dom";
-import { Calendar, AlertCircle } from "lucide-react";
+import { Calendar, AlertCircle, ChevronDown, ExternalLink } from "lucide-react";
 import type {
   GuildRunEncounterParse,
   GuildRunParsesResponse,
@@ -14,6 +14,7 @@ import { groupDuplicateInstances } from "@/utils/groupDuplicates";
 import { DuplicateInstanceModal } from "@/components/DuplicateInstanceModal";
 import type { GuildPanelDefinition, GuildPanelRenderProps } from "./types";
 import { instanceAccentGradient } from "./instanceColors";
+import { formatClearDuration } from "./clearTimeUtils";
 
 type CategoryFilter = "all" | "raid" | "dungeon";
 
@@ -61,7 +62,36 @@ function weightedRunAverage(encounters: GuildRunEncounterParse[]): number | unde
   return count > 0 ? sum / count : undefined;
 }
 
-/** One raid night as a compact row: name, meta line, per-boss parse bars, guild avg parse. */
+/** One encounter inside an expanded raid row: name, parse, bar, kill time. */
+function EncounterCard({ encounter }: { encounter: GuildRunEncounterParse }) {
+  const score = Math.round(encounter.avg_parse);
+  return (
+    <div className="rounded-md border border-border/50 bg-muted/20 px-2.5 py-2">
+      <div className="flex items-baseline justify-between gap-2">
+        <p className="min-w-0 truncate text-xs text-foreground">{encounter.encounter_name}</p>
+        <span className={`text-sm font-bold tabular-nums ${parseColor(score)}`}>{score}</span>
+      </div>
+      <div className="mt-1.5 h-1 rounded-full bg-border/60">
+        <div
+          className="h-full rounded-full"
+          style={{
+            width: `${Math.max(2, Math.min(100, score))}%`,
+            background: parseHexColor(score),
+          }}
+        />
+      </div>
+      <p className="mt-1.5 text-[10px] text-muted-foreground tabular-nums">
+        {encounter.kill_duration_ms > 0
+          ? `Killed in ${formatClearDuration(encounter.kill_duration_ms)}`
+          : "Kill time unknown"}
+      </p>
+    </div>
+  );
+}
+
+/** One raid night as a compact row: name, meta line, per-boss parse bars, guild
+ * avg parse. Clicking the row expands per-encounter details; the log itself is
+ * reached via the explicit button. */
 function RaidListRow({
   instance,
   encounters,
@@ -69,6 +99,7 @@ function RaidListRow({
   instance: RecentInstance;
   encounters: GuildRunEncounterParse[];
 }) {
+  const [expanded, setExpanded] = useState(false);
   const meta = [
     instance.player_count,
     formatRaidDate(instance.first_encounter_time),
@@ -81,55 +112,86 @@ function RaidListRow({
   const avgParse = weightedRunAverage(encounters);
   const score = avgParse !== undefined ? Math.round(avgParse) : undefined;
   const instanceUrl = instance.slug ? `/instances/${instance.slug}` : `/instances/${instance.id}`;
+  const expandable = encounters.length > 0;
 
   return (
-    <Link
-      to={instanceUrl}
-      className="relative flex items-center gap-4 overflow-hidden rounded-lg border border-border/60 bg-card pl-4 pr-4 py-2.5 hover:border-border transition-colors"
-    >
+    <div className="relative overflow-hidden rounded-lg border border-border/60 bg-card hover:border-border transition-colors">
       <span
         className="absolute inset-y-0 left-0 w-[5px]"
         style={{ background: instanceAccentGradient(instance.name) }}
       />
-      <div className="min-w-0 flex-1">
-        <p className="truncate text-sm font-semibold text-foreground">
-          {instance.name}
-          {instance.difficulty_name && instance.difficulty_name !== "Normal" && (
-            <span className="ml-1.5 text-[11px] font-normal text-muted-foreground">
-              {instance.difficulty_name}
-            </span>
-          )}
-        </p>
-        <p className="mt-0.5 truncate text-[11.5px] text-muted-foreground tabular-nums">{meta}</p>
-      </div>
-      {encounters.length > 0 && (
-        <span className="hidden sm:flex h-7 items-end gap-[2px]" aria-hidden>
-          {encounters.map((e) => {
-            const s = Math.round(e.avg_parse);
-            return (
-              <span
-                key={e.encounter_name}
-                className="w-1 rounded-[1px]"
-                style={{
-                  height: `${Math.max(15, Math.min(100, s))}%`,
-                  background: parseHexColor(s),
-                  opacity: 0.75,
-                }}
-                title={`${e.encounter_name} · ${s}`}
-              />
-            );
-          })}
-        </span>
-      )}
-      {score !== undefined && (
-        <span
-          className={`min-w-9 text-right text-2xl font-bold tabular-nums ${parseColor(score)}`}
-          title="Average guild parse for this raid"
+      <div
+        className={`flex items-center gap-4 pl-4 pr-3 py-2.5 ${expandable ? "cursor-pointer" : ""}`}
+        onClick={() => expandable && setExpanded(!expanded)}
+      >
+        <div className="min-w-0 flex-1">
+          <p className="truncate text-sm font-semibold text-foreground">
+            {instance.name}
+            {instance.difficulty_name && instance.difficulty_name !== "Normal" && (
+              <span className="ml-1.5 text-[11px] font-normal text-muted-foreground">
+                {instance.difficulty_name}
+              </span>
+            )}
+          </p>
+          <p className="mt-0.5 truncate text-[11.5px] text-muted-foreground tabular-nums">{meta}</p>
+        </div>
+        {!expanded && encounters.length > 0 && (
+          <span className="hidden sm:flex h-7 items-end gap-[2px]" aria-hidden>
+            {encounters.map((e) => {
+              const s = Math.round(e.avg_parse);
+              return (
+                <span
+                  key={e.encounter_name}
+                  className="w-1 rounded-[1px]"
+                  style={{
+                    height: `${Math.max(15, Math.min(100, s))}%`,
+                    background: parseHexColor(s),
+                    opacity: 0.75,
+                  }}
+                  title={`${e.encounter_name} · ${s}`}
+                />
+              );
+            })}
+          </span>
+        )}
+        {score !== undefined && (
+          <span
+            className={`min-w-9 text-right text-2xl font-bold tabular-nums ${parseColor(score)}`}
+            title="Average guild parse for this raid"
+          >
+            {score}
+          </span>
+        )}
+        <Link
+          to={instanceUrl}
+          onClick={(e) => e.stopPropagation()}
+          className="flex shrink-0 items-center gap-1 rounded-md border border-border/60 px-2 py-1 text-[11px] font-medium text-muted-foreground hover:text-foreground hover:border-border transition-colors"
         >
-          {score}
-        </span>
+          Log
+          <ExternalLink className="h-3 w-3" />
+        </Link>
+        {expandable && (
+          <ChevronDown
+            className={`h-4 w-4 shrink-0 text-muted-foreground transition-transform ${expanded ? "rotate-180" : ""}`}
+          />
+        )}
+      </div>
+      {expanded && (
+        <div className="border-t border-border/50 px-4 py-3">
+          <p className="pb-2 text-[10px] font-medium uppercase tracking-widest text-muted-foreground">
+            Per boss · guild avg parse
+          </p>
+          <div
+            className="grid gap-2"
+            style={{ gridTemplateColumns: "repeat(auto-fill, minmax(150px, 1fr))" }}
+          >
+            {encounters.map((encounter) => (
+              <EncounterCard key={encounter.encounter_name} encounter={encounter} />
+            ))}
+          </div>
+        </div>
       )}
-    </Link>
+    </div>
   );
 }
 

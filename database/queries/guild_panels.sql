@@ -149,6 +149,7 @@ WITH deduped AS (
     SELECT DISTINCT ON (psr.run_id, psr.encounter_name, psr.player_guid)
         psr.run_id,
         psr.encounter_name,
+        psr.instance_id,
         psr.precise_score,
         psr.killed_at
     FROM parse_score_results psr
@@ -161,13 +162,33 @@ WITH deduped AS (
           OR (psr.player_role != 'heal' AND psr.metric = 'dps')
       )
     ORDER BY psr.run_id, psr.encounter_name, psr.player_guid, psr.created_at DESC, psr.precise_score DESC
+), grouped AS (
+    SELECT
+        run_id,
+        encounter_name,
+        (ARRAY_AGG(instance_id))[1] AS instance_id,
+        AVG(precise_score)::float8 AS avg_parse,
+        COUNT(*)::bigint AS parse_count,
+        MIN(killed_at)::timestamptz AS killed_at
+    FROM deduped
+    GROUP BY run_id, encounter_name
 )
 SELECT
-    run_id,
-    encounter_name,
-    AVG(precise_score)::float8 AS avg_parse,
-    COUNT(*)::bigint AS parse_count,
-    MIN(killed_at)::timestamptz AS killed_at
-FROM deduped
-GROUP BY run_id, encounter_name
-ORDER BY run_id, killed_at ASC NULLS LAST;
+    g.run_id,
+    g.encounter_name,
+    g.avg_parse,
+    g.parse_count,
+    g.killed_at,
+    COALESCE(kill.duration_ms, 0)::bigint AS kill_duration_ms
+FROM grouped g
+LEFT JOIN LATERAL (
+    SELECT (EXTRACT(EPOCH FROM (lie.end_time - lie.start_time)) * 1000)::bigint AS duration_ms
+    FROM log_instance_encounters lie
+    WHERE lie.instance_id = g.instance_id
+      AND lie.name = g.encounter_name
+      AND lie.boss = true
+      AND lie.kill_type IN ('clean', 'partial')
+    ORDER BY lie.end_time DESC
+    LIMIT 1
+) kill ON true
+ORDER BY g.run_id, g.killed_at ASC NULLS LAST;
