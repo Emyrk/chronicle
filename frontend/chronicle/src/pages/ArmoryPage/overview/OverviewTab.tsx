@@ -119,9 +119,24 @@ export function OverviewTab({ player, onOpenTab }: OverviewTabProps) {
 
   const timeInRaid = formatHours(activityStats.totalMs);
 
+  const modeSelector = (
+    <div className="flex items-center gap-2">
+      {MODES.map(([key, label]) => (
+        <Button
+          key={key}
+          variant={mode === key ? "secondary" : "ghost"}
+          size="sm"
+          onClick={() => setMode(key)}
+        >
+          {label}
+        </Button>
+      ))}
+    </div>
+  );
+
   return (
     <div>
-      <IdentityHeader player={player}>
+      <IdentityHeader player={player} actions={modeSelector}>
         <div className="lg:w-[480px]">
           {isPerformance ? (
             <ScoreCard
@@ -146,20 +161,7 @@ export function OverviewTab({ player, onOpenTab }: OverviewTabProps) {
         </div>
       </IdentityHeader>
 
-      <div className="mt-6 mb-4 flex items-center gap-2">
-        {MODES.map(([key, label]) => (
-          <Button
-            key={key}
-            variant={mode === key ? "secondary" : "ghost"}
-            size="sm"
-            onClick={() => setMode(key)}
-          >
-            {label}
-          </Button>
-        ))}
-      </div>
-
-      <div className="grid grid-cols-1 gap-4 lg:grid-cols-12">
+      <div className="mt-6 grid grid-cols-1 gap-4 lg:grid-cols-12">
         <div className="lg:col-span-12">
           <GearStripCard
             player={player}

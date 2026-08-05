@@ -60,7 +60,7 @@ func New(units *unitdb.Units) *Tracker {
 	}
 }
 
-func (g *Tracker) Insert(ctx context.Context, udb *unitdb.Units, instanceID uuid.UUID, realmID uuid.UUID, tx *authz.AuthzTX) (*database.Guild, error) {
+func (g *Tracker) Insert(ctx context.Context, udb *unitdb.Units, instanceID uuid.UUID, realmID uuid.UUID, datasetID uuid.UUID, tx *authz.AuthzTX) (*database.Guild, error) {
 	guildIDs := make(map[string]uuid.UUID)
 	mostGuildPlayers := 0
 	var guildWithMostPlayers *database.Guild
@@ -106,6 +106,7 @@ func (g *Tracker) Insert(ctx context.Context, udb *unitdb.Units, instanceID uuid
 	itemMetaByName := make(map[string]database.GetItemTemplateMetadataBatchRow)
 	if len(itemIDSet) > 0 {
 		rows, err := tx.GetItemTemplateMetadataBatch(ctx, database.GetItemTemplateMetadataBatchParams{
+			DatasetID: datasetID,
 			ItemIds:   itemIDList,
 			ItemNames: itemNameList,
 		})

@@ -343,7 +343,7 @@ func (w *WorkerLogParse) Work(ctx context.Context, job *river.Job[ArgsLogParse])
 				// Always unlock at the end of the tx
 				w.parent.insertParsedInstanceMu.Unlock()
 			}()
-			guild, err := finalized.Guilds.Insert(ctx, encountersState.Units, instanceID, realmID, tx)
+			guild, err := finalized.Guilds.Insert(ctx, encountersState.Units, instanceID, realmID, resolved.DatasetID, tx)
 			if err != nil {
 				return fmt.Errorf("insert guild: %w", err)
 			}

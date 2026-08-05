@@ -7,6 +7,8 @@ import { treeName } from "./util";
 
 interface IdentityHeaderProps {
   player: ArmoryPlayer;
+  /** Rendered below the identity meta line (e.g. the mode selector). */
+  actions?: React.ReactNode;
   /** The score / journey stats card rendered to the right of the identity. */
   children?: React.ReactNode;
 }
@@ -15,7 +17,7 @@ interface IdentityHeaderProps {
  * Design-style overview header: identity on the left, headline stats card
  * bottom-aligned on the right.
  */
-export function IdentityHeader({ player, children }: IdentityHeaderProps) {
+export function IdentityHeader({ player, actions, children }: IdentityHeaderProps) {
   const iconBaseUrl = useIconBaseUrl();
   const classColor = getClassColorVar(player.class);
 
@@ -77,6 +79,7 @@ export function IdentityHeader({ player, children }: IdentityHeaderProps) {
             {specLabel}
             {formatClassLabel(player.class)} · {player.realm_name}
           </div>
+          {actions && <div className="mt-3">{actions}</div>}
         </div>
       </div>
       {children}

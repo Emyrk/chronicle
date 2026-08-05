@@ -69,7 +69,9 @@ export function RaidCalendarCard({ instances, nightScores, start, stats, onOpenA
         </CardAction>
       </CardHeader>
       <CardContent>
-        <div className="flex gap-1 overflow-x-auto">
+        {/* No overflow container: the hover scale on edge cells would
+            otherwise spawn a scrollbar. The grid is ~240px and always fits. */}
+        <div className="flex gap-1">
           {weeks.map((week, w) => (
             <div key={w} className="flex flex-col gap-1">
               {Array.from({ length: 7 }, (_, d) => {
