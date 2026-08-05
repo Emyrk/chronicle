@@ -961,6 +961,30 @@ export interface Guild {
 }
 
 // From chroniclesdk/guild_page.go
+/**
+ * GuildBestRun is the guild's best full clear of one instance within the
+ * requested window — fastest, or highest average parse when ranked by parse.
+ * AvgParse is -1 when the run has no parses.
+ */
+export interface GuildBestRun {
+    readonly run_id: string;
+    readonly instance_id: string;
+    readonly instance_slug?: string;
+    readonly instance_name: string;
+    readonly difficulty_name: string;
+    readonly max_players: number;
+    readonly duration_ms: number;
+    readonly completed_at: string;
+    readonly avg_parse: number;
+    readonly parse_count: number;
+}
+
+// From chroniclesdk/guild_page.go
+export interface GuildBestRunsResponse {
+    readonly runs: readonly GuildBestRun[];
+}
+
+// From chroniclesdk/guild_page.go
 export interface GuildCharacterRosterResponse {
     readonly members: readonly GuildRosterCharacter[];
 }

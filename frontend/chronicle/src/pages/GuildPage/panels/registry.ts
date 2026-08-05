@@ -8,6 +8,7 @@ import { RosterPanel } from "./Roster";
 import { TopParsesPanel } from "./TopParses";
 import { RecruitmentPanel } from "./Recruitment";
 import { ProgressPanel } from "./Progress";
+import { BestPerformancePanel } from "./BestPerformance";
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 type AnyPanelDefinition = GuildPanelDefinition<any>;
@@ -19,6 +20,7 @@ export const PANEL_REGISTRY: Record<string, AnyPanelDefinition> = {
   top_parses: TopParsesPanel,
   recruitment: RecruitmentPanel,
   progress: ProgressPanel,
+  best_performance: BestPerformancePanel,
   // stats: StatsPanel,
   markdown: MarkdownPanel,
   // leaderboard: LeaderboardPanel,

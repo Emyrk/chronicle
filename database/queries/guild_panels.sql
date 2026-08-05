@@ -117,6 +117,73 @@ WHERE CASE WHEN @best_per_player::boolean THEN per_player_rank = 1 ELSE true END
 ORDER BY precise_score DESC, killed_at DESC NULLS LAST
 LIMIT @row_limit;
 
+-- name: GuildBestRuns :many
+-- Returns the guild's single best full clear of each instance within the
+-- window, for the guild page "Best Performance" panel. @by_parse picks the
+-- winner by highest guild average parse instead of fastest clear. Duplicate
+-- uploads collapse to one run (fastest duration per group). Includes
+-- unqualified runs: qualification only affects the public leaderboard.
+-- JOINs wow_server_realms so RLS tenant filtering cascades.
+WITH clears AS (
+    SELECT DISTINCT ON (COALESCE(li.duplicate_group_id, li.id))
+        COALESCE(li.duplicate_group_id, li.id) AS run_id,
+        li.id AS instance_id,
+        COALESCE(li.hashed_slug, '')::text AS instance_slug,
+        sr.instance_name,
+        li.difficulty_name,
+        li.max_players,
+        sr.duration_ms,
+        sr.completion_time
+    FROM instance_speedruns sr
+    JOIN log_instances li ON li.id = sr.instance_id
+    JOIN wow_server_realms wsr ON wsr.id = sr.realm_id
+    WHERE sr.guild_id = @guild_id::uuid
+      AND sr.duration_ms > 0
+      AND CASE
+          WHEN @since_days::bigint > 0 THEN sr.completion_time >= now() - make_interval(days => @since_days::int)
+          ELSE true
+      END
+    ORDER BY COALESCE(li.duplicate_group_id, li.id), sr.duration_ms ASC
+), scored AS (
+    SELECT
+        c.*,
+        COALESCE(p.avg_parse, -1)::float8 AS avg_parse,
+        COALESCE(p.parse_count, 0)::bigint AS parse_count
+    FROM clears c
+    LEFT JOIN LATERAL (
+        SELECT AVG(d.precise_score) AS avg_parse, COUNT(*) AS parse_count
+        FROM (
+            SELECT DISTINCT ON (psr.encounter_name, psr.player_guid)
+                psr.precise_score
+            FROM parse_score_results psr
+            WHERE psr.tenant_id = @tenant_id
+              AND psr.run_id = c.run_id
+              AND psr.guild_id = @guild_id::uuid
+              AND psr.status IN ('ok', 'low_confidence')
+              AND (
+                  (psr.player_role = 'heal' AND psr.metric = 'hps')
+                  OR (psr.player_role != 'heal' AND psr.metric = 'dps')
+              )
+            ORDER BY psr.encounter_name, psr.player_guid, psr.created_at DESC, psr.precise_score DESC
+        ) d
+    ) p ON true
+)
+SELECT DISTINCT ON (instance_name)
+    run_id,
+    instance_id,
+    instance_slug,
+    instance_name,
+    difficulty_name,
+    max_players,
+    duration_ms,
+    completion_time,
+    avg_parse,
+    parse_count
+FROM scored
+ORDER BY instance_name,
+    CASE WHEN @by_parse::boolean THEN -avg_parse ELSE duration_ms::float8 END ASC,
+    duration_ms ASC;
+
 -- name: GuildEncounterKills :many
 -- Per-encounter boss kill aggregates for a guild across all time, for the
 -- guild page "Progression" panel. Duplicate uploads of the same raid night

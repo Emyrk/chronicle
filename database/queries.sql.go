@@ -3739,6 +3739,130 @@ func (q *sqlQuerier) UpsertGuildPage(ctx context.Context, arg UpsertGuildPagePar
 	return i, err
 }
 
+const guildBestRuns = `-- name: GuildBestRuns :many
+WITH clears AS (
+    SELECT DISTINCT ON (COALESCE(li.duplicate_group_id, li.id))
+        COALESCE(li.duplicate_group_id, li.id) AS run_id,
+        li.id AS instance_id,
+        COALESCE(li.hashed_slug, '')::text AS instance_slug,
+        sr.instance_name,
+        li.difficulty_name,
+        li.max_players,
+        sr.duration_ms,
+        sr.completion_time
+    FROM instance_speedruns sr
+    JOIN log_instances li ON li.id = sr.instance_id
+    JOIN wow_server_realms wsr ON wsr.id = sr.realm_id
+    WHERE sr.guild_id = $2::uuid
+      AND sr.duration_ms > 0
+      AND CASE
+          WHEN $3::bigint > 0 THEN sr.completion_time >= now() - make_interval(days => $3::int)
+          ELSE true
+      END
+    ORDER BY COALESCE(li.duplicate_group_id, li.id), sr.duration_ms ASC
+), scored AS (
+    SELECT
+        c.run_id, c.instance_id, c.instance_slug, c.instance_name, c.difficulty_name, c.max_players, c.duration_ms, c.completion_time,
+        COALESCE(p.avg_parse, -1)::float8 AS avg_parse,
+        COALESCE(p.parse_count, 0)::bigint AS parse_count
+    FROM clears c
+    LEFT JOIN LATERAL (
+        SELECT AVG(d.precise_score) AS avg_parse, COUNT(*) AS parse_count
+        FROM (
+            SELECT DISTINCT ON (psr.encounter_name, psr.player_guid)
+                psr.precise_score
+            FROM parse_score_results psr
+            WHERE psr.tenant_id = $4
+              AND psr.run_id = c.run_id
+              AND psr.guild_id = $2::uuid
+              AND psr.status IN ('ok', 'low_confidence')
+              AND (
+                  (psr.player_role = 'heal' AND psr.metric = 'hps')
+                  OR (psr.player_role != 'heal' AND psr.metric = 'dps')
+              )
+            ORDER BY psr.encounter_name, psr.player_guid, psr.created_at DESC, psr.precise_score DESC
+        ) d
+    ) p ON true
+)
+SELECT DISTINCT ON (instance_name)
+    run_id,
+    instance_id,
+    instance_slug,
+    instance_name,
+    difficulty_name,
+    max_players,
+    duration_ms,
+    completion_time,
+    avg_parse,
+    parse_count
+FROM scored
+ORDER BY instance_name,
+    CASE WHEN $1::boolean THEN -avg_parse ELSE duration_ms::float8 END ASC,
+    duration_ms ASC
+`
+
+type GuildBestRunsParams struct {
+	ByParse   bool      `db:"by_parse" json:"by_parse"`
+	GuildID   uuid.UUID `db:"guild_id" json:"guild_id"`
+	SinceDays int64     `db:"since_days" json:"since_days"`
+	TenantID  uuid.UUID `db:"tenant_id" json:"tenant_id"`
+}
+
+type GuildBestRunsRow struct {
+	RunID          uuid.UUID          `db:"run_id" json:"run_id"`
+	InstanceID     uuid.UUID          `db:"instance_id" json:"instance_id"`
+	InstanceSlug   string             `db:"instance_slug" json:"instance_slug"`
+	InstanceName   string             `db:"instance_name" json:"instance_name"`
+	DifficultyName string             `db:"difficulty_name" json:"difficulty_name"`
+	MaxPlayers     int32              `db:"max_players" json:"max_players"`
+	DurationMs     int64              `db:"duration_ms" json:"duration_ms"`
+	CompletionTime pgtype.Timestamptz `db:"completion_time" json:"completion_time"`
+	AvgParse       float64            `db:"avg_parse" json:"avg_parse"`
+	ParseCount     int64              `db:"parse_count" json:"parse_count"`
+}
+
+// Returns the guild's single best full clear of each instance within the
+// window, for the guild page "Best Performance" panel. @by_parse picks the
+// winner by highest guild average parse instead of fastest clear. Duplicate
+// uploads collapse to one run (fastest duration per group). Includes
+// unqualified runs: qualification only affects the public leaderboard.
+// JOINs wow_server_realms so RLS tenant filtering cascades.
+func (q *sqlQuerier) GuildBestRuns(ctx context.Context, arg GuildBestRunsParams) ([]GuildBestRunsRow, error) {
+	rows, err := q.db.Query(ctx, guildBestRuns,
+		arg.ByParse,
+		arg.GuildID,
+		arg.SinceDays,
+		arg.TenantID,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []GuildBestRunsRow
+	for rows.Next() {
+		var i GuildBestRunsRow
+		if err := rows.Scan(
+			&i.RunID,
+			&i.InstanceID,
+			&i.InstanceSlug,
+			&i.InstanceName,
+			&i.DifficultyName,
+			&i.MaxPlayers,
+			&i.DurationMs,
+			&i.CompletionTime,
+			&i.AvgParse,
+			&i.ParseCount,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const guildCharacterRoster = `-- name: GuildCharacterRoster :many
 
 SELECT

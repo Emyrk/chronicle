@@ -404,3 +404,83 @@ func TestGuildEncounterKills(t *testing.T) {
 	require.Equal(t, "Molten Core", byEncounter["Ragnaros"].InstanceName)
 	require.WithinDuration(t, night2.Add(30*time.Minute), byEncounter["Ragnaros"].LastKilledAt.Time, time.Second)
 }
+
+func TestGuildBestRuns(t *testing.T) {
+	t.Parallel()
+
+	f := setupGuildPanelsTest(t)
+	ctx := testutil.Context(t, testutil.WaitShort)
+	now := time.Now()
+
+	insertClear := func(name string, completedAt time.Time, duration time.Duration, duplicateOf uuid.UUID) uuid.UUID {
+		id := uuid.New()
+		_, err := f.store.InsertInstance(ctx, database.InsertInstanceParams{
+			ID: id, RealmID: f.realmID, LogGroupID: f.logGroupID,
+			Name: name, HashedSlug: pgtype.Text{String: "best-" + id.String()[:8], Valid: true},
+			GuildID:   uuid.NullUUID{UUID: f.guildID, Valid: true},
+			StartTime: database.Timestamptz(completedAt.Add(-duration)), EndTime: database.Timestamptz(completedAt),
+			Capabilities: []string{}, DifficultyName: "Normal", MaxPlayers: 40,
+		})
+		require.NoError(t, err)
+		if duplicateOf != uuid.Nil {
+			_, err = f.pool.Exec(ctx, "UPDATE log_instances SET duplicate_group_id = $1 WHERE id IN ($1, $2)", duplicateOf, id)
+			require.NoError(t, err)
+		}
+		require.NoError(t, f.store.InsertInstanceSpeedrun(ctx, database.InsertInstanceSpeedrunParams{
+			InstanceID: id, InstanceName: name, RealmID: f.realmID,
+			GuildID:   uuid.NullUUID{UUID: f.guildID, Valid: true},
+			StartTime: database.Timestamptz(completedAt.Add(-duration)), CompletionTime: database.Timestamptz(completedAt),
+			DurationMs: int64(duration / time.Millisecond), Proof: []byte(`{"proof":[]}`),
+		}))
+		return id
+	}
+
+	// Molten Core: run A is slower but parses higher; run B is faster.
+	runA := insertClear("Molten Core", now.Add(-30*24*time.Hour), 70*time.Minute, uuid.Nil)
+	runB := insertClear("Molten Core", now.Add(-20*24*time.Hour), 50*time.Minute, uuid.Nil)
+	f.insertParse(t, guildPanelParse{runID: runA, playerGUID: testGUID(1), playerName: "Aleph", playerRole: "dps", metric: "dps", encounter: "Ragnaros", score: 95, killedAt: now.Add(-30 * 24 * time.Hour)})
+	f.insertParse(t, guildPanelParse{runID: runB, playerGUID: testGUID(1), playerName: "Aleph", playerRole: "dps", metric: "dps", encounter: "Ragnaros", score: 60, killedAt: now.Add(-20 * 24 * time.Hour)})
+	// A slower re-upload of run B collapses into the same run.
+	insertClear("Molten Core", now.Add(-20*24*time.Hour), 55*time.Minute, runB)
+	// Onyxia: single clear, no parses.
+	insertClear("Onyxia's Lair", now.Add(-10*24*time.Hour), 20*time.Minute, uuid.Nil)
+	// An ancient legendary clear outside the 90 day window.
+	old := insertClear("Molten Core", now.Add(-150*24*time.Hour), 10*time.Minute, uuid.Nil)
+	f.insertParse(t, guildPanelParse{runID: old, playerGUID: testGUID(1), playerName: "Aleph", playerRole: "dps", metric: "dps", encounter: "Ragnaros", score: 100, killedAt: now.Add(-150 * 24 * time.Hour)})
+
+	byInstance := func(rows []database.GuildBestRunsRow) map[string]database.GuildBestRunsRow {
+		m := map[string]database.GuildBestRunsRow{}
+		for _, row := range rows {
+			m[row.InstanceName] = row
+		}
+		return m
+	}
+
+	// Fastest within 90 days: run B wins Molten Core.
+	rows, err := f.store.GuildBestRuns(ctx, database.GuildBestRunsParams{
+		TenantID: uuid.Nil, GuildID: f.guildID, SinceDays: 90, ByParse: false,
+	})
+	require.NoError(t, err)
+	require.Len(t, rows, 2)
+	m := byInstance(rows)
+	require.Equal(t, runB, m["Molten Core"].RunID)
+	require.EqualValues(t, 50*time.Minute/time.Millisecond, m["Molten Core"].DurationMs)
+	require.InDelta(t, -1, m["Onyxia's Lair"].AvgParse, 0.01)
+
+	// Best parse within 90 days: run A wins Molten Core despite being slower.
+	rows, err = f.store.GuildBestRuns(ctx, database.GuildBestRunsParams{
+		TenantID: uuid.Nil, GuildID: f.guildID, SinceDays: 90, ByParse: true,
+	})
+	require.NoError(t, err)
+	m = byInstance(rows)
+	require.Equal(t, runA, m["Molten Core"].RunID)
+	require.InDelta(t, 95, m["Molten Core"].AvgParse, 0.01)
+
+	// No window includes the ancient clear.
+	rows, err = f.store.GuildBestRuns(ctx, database.GuildBestRunsParams{
+		TenantID: uuid.Nil, GuildID: f.guildID, SinceDays: 0, ByParse: false,
+	})
+	require.NoError(t, err)
+	m = byInstance(rows)
+	require.Equal(t, old, m["Molten Core"].RunID)
+}

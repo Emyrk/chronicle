@@ -145,6 +145,56 @@ func (api *API) GuildTopParses(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
+// GuildBestRuns returns the guild's best full clear of each instance within
+// the window. Used by the guild page "Best Performance" panel.
+//
+//	GET /api/v1/guilds/{guildID}/best-runs?since_days=60&by=parse
+func (api *API) GuildBestRuns(w http.ResponseWriter, r *http.Request) {
+	ctx := r.Context()
+	guild := httpmw.Guild(ctx)
+
+	var sinceDays int64
+	if v := r.URL.Query().Get("since_days"); v != "" {
+		sinceDays, _ = strconv.ParseInt(v, 10, 64)
+	}
+
+	rows, err := api.Opts.Zed.GuildBestRuns(ctx, database.GuildBestRunsParams{
+		TenantID:  servicetenant.TenantIDFromContext(ctx),
+		GuildID:   guild.ID,
+		SinceDays: sinceDays,
+		ByParse:   r.URL.Query().Get("by") == "parse",
+	})
+	if err != nil {
+		httpapi.HandleResponseError(ctx, w, err, httpapi.APIError{
+			Response: chroniclesdk.Response{
+				Message: "Failed to fetch guild best runs",
+				Detail:  err.Error(),
+			},
+		})
+		return
+	}
+
+	runs := make([]chroniclesdk.GuildBestRun, len(rows))
+	for i, row := range rows {
+		runs[i] = chroniclesdk.GuildBestRun{
+			RunID:          row.RunID,
+			InstanceID:     row.InstanceID,
+			InstanceSlug:   row.InstanceSlug,
+			InstanceName:   row.InstanceName,
+			DifficultyName: row.DifficultyName,
+			MaxPlayers:     row.MaxPlayers,
+			DurationMs:     row.DurationMs,
+			CompletedAt:    row.CompletionTime.Time,
+			AvgParse:       row.AvgParse,
+			ParseCount:     row.ParseCount,
+		}
+	}
+
+	httpapi.Write(ctx, w, http.StatusOK, chroniclesdk.GuildBestRunsResponse{
+		Runs: runs,
+	})
+}
+
 // GuildEncounterKills returns the guild's per-encounter boss kill counts.
 // Used by the guild page "Progression" panel.
 //
