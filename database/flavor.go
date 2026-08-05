@@ -47,6 +47,8 @@ const (
 	FlavorOctoWoW FlavorTag = "octowow"
 	// FlavorAscension is Ascension-specific behavior.
 	FlavorAscension FlavorTag = "ascension"
+	// FlavorLunatic is Lunatic-specific behavior.
+	FlavorLunatic FlavorTag = "lunatic"
 	// FlavorNightmareOfUrsol is the "Nightmare of Ursol" custom content shared
 	// by Turtle and OctoWoW.
 	FlavorNightmareOfUrsol FlavorTag = "nightmare-of-ursol"
@@ -67,6 +69,7 @@ func AllFlavorTagValues() []FlavorTag {
 		FlavorVanillaPlus,
 		FlavorOctoWoW,
 		FlavorAscension,
+		FlavorLunatic,
 		FlavorNightmareOfUrsol,
 	}
 }

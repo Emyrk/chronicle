@@ -34,6 +34,7 @@ func TestAllFlavorTagValuesIncludesKnownTags(t *testing.T) {
 	for _, tag := range []database.FlavorTag{
 		database.FlavorTBC,
 		database.FlavorAzerothcoreProgression,
+		database.FlavorLunatic,
 	} {
 		if !all.Has(tag) {
 			t.Errorf("AllFlavorTagValues() missing %q", tag)
