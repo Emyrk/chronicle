@@ -55,6 +55,11 @@ export function Footer() {
                 </Link>
               </li>
               <li>
+                <Link to="/developers/api" className="hover:text-foreground transition-colors">
+                  Developer API
+                </Link>
+              </li>
+              <li>
                 <Link to="/technical" className="hover:text-foreground transition-colors">
                   Technical Details
                 </Link>
