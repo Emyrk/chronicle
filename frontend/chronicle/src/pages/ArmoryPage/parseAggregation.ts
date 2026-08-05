@@ -18,6 +18,8 @@ export interface EncounterSummary {
   encounterName: string;
   /** Average of the best 3 parses, rounded like the server (half-up, 0-100). */
   score: number;
+  /** Precise scores averaged into score, best first. */
+  scoreInputs: number[];
   /** Single best parse. */
   best: number;
   /** Deduplicated kills with a parse in the window. */
@@ -53,6 +55,7 @@ function summarizeEncounter(name: string, parses: CharacterParse[]): EncounterSu
   return {
     encounterName: name,
     score: roundDisplay(avg),
+    scoreInputs: bestN.map((p) => p.precise_score),
     best: best.display_score,
     kills: parses.length,
     bestMetricValue: best.metric_value,

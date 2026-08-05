@@ -38,6 +38,7 @@ describe("summarizeRaids", () => {
     expect(raids).toHaveLength(1);
     expect(raids[0].encounters).toHaveLength(1);
     expect(raids[0].encounters[0].score).toBe(80);
+    expect(raids[0].encounters[0].scoreInputs).toEqual([90, 80, 70]);
     expect(raids[0].encounters[0].best).toBe(90);
     expect(raids[0].encounters[0].kills).toBe(4);
   });
@@ -49,6 +50,7 @@ describe("summarizeRaids", () => {
     ]);
     // (91.4 + 88.4) / 2 = 89.9 → rounds half-up to 90
     expect(raids[0].encounters[0].score).toBe(90);
+    expect(raids[0].encounters[0].scoreInputs).toEqual([91.4, 88.4]);
   });
 
   it("groups by raid and difficulty, sorted by kill count", () => {

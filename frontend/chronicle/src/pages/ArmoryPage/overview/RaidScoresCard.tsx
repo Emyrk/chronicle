@@ -102,8 +102,8 @@ export function RaidScoresCard({ raids, metric, bossCounts, isLoading }: RaidSco
                         <TableHead>Boss</TableHead>
                         <TableHead className="text-right">Best {metric.toUpperCase()}</TableHead>
                         <TableHead className="text-right">Kills</TableHead>
-                        <TableHead className="text-right">Best</TableHead>
                         <TableHead className="w-64">Score</TableHead>
+                        <TableHead className="text-right">Best</TableHead>
                       </TableRow>
                     </TableHeader>
                     <TableBody>
@@ -126,6 +126,10 @@ function raidKey(raid: RaidSummary): string {
   return `${raid.instanceName}|${raid.difficultyName}|${raid.maxPlayers}`;
 }
 
+function formatScoreInput(score: number): string {
+  return score.toFixed(1).replace(/\.0$/, "");
+}
+
 function EncounterRow({ encounter }: { encounter: EncounterSummary }) {
   return (
     <TableRow>
@@ -143,18 +147,23 @@ function EncounterRow({ encounter }: { encounter: EncounterSummary }) {
       <TableCell className="text-right font-mono text-muted-foreground">
         {encounter.kills}
       </TableCell>
-      <TableCell className={`text-right font-mono ${parseColor(encounter.best)}`}>
-        {encounter.best}
-      </TableCell>
       <TableCell>
         <div className="flex items-center gap-3">
-          <div className="relative grow">
-            <ScoreBar score={encounter.score} best={encounter.best} />
+          <div className="min-w-0 grow">
+            <div className="relative">
+              <ScoreBar score={encounter.score} best={encounter.best} />
+            </div>
+            <div className="mt-1 truncate font-mono text-[10px] text-muted-foreground">
+              Best {encounter.scoreInputs.length}: {encounter.scoreInputs.map(formatScoreInput).join(" · ")}
+            </div>
           </div>
           <div className={`w-7 text-right font-mono text-sm font-bold ${parseColor(encounter.score)}`}>
             {encounter.score}
           </div>
         </div>
+      </TableCell>
+      <TableCell className={`text-right font-mono ${parseColor(encounter.best)}`}>
+        {encounter.best}
       </TableCell>
     </TableRow>
   );
