@@ -10,13 +10,19 @@ import { cn } from "@/lib/utils";
 import { gearClassById } from "../classInfo";
 import { useSimItems } from "@/api/gamedata";
 import {
+  addAlternate,
   addStage,
   clearSlot,
   moveStage,
   parsePayload,
+  promoteAlternate,
+  removeAlternate,
   removeStage,
   renameStage,
+  setAlternateNote,
+  setSlotEnchant,
   setSlotItem,
+  setSlotNote,
   type GearPayload,
   type GearStage,
 } from "./gearListModel";
@@ -25,7 +31,8 @@ import { StatWeightsPanel, type WeightSelection } from "./StatWeightsPanel";
 import { useGearListEditor } from "./useGearListEditor";
 import { useListItems, type ItemRef } from "./useListItems";
 import { BuilderDoll } from "./BuilderDoll";
-import { SlotEditorPanel } from "./SlotEditorPanel";
+import { SlotEditorPanel, slotLabel } from "./SlotEditorPanel";
+import { AlternatesEditor } from "./AlternatesEditor";
 import { SetSummaryBar } from "./SetSummaryBar";
 import { StagesBar } from "./StagesBar";
 import { ProgressionMatrix } from "./ProgressionMatrix";
@@ -141,9 +148,12 @@ function ReadOnlyView({ list, isOwner }: { list: GearList; isOwner: boolean }) {
   const [stageIndex, setStageIndex] = useState(0);
   const [weightSel, setWeightSel] = useState<WeightSelection | null>(null);
   const [view, setView] = useState<"stage" | "matrix">("stage");
+  const [selectedSlot, setSelectedSlot] = useState<number | null>(null);
   const items = useListItems(useMemo(() => collectItemRefs(payload), [payload]));
   const stage = payload.stages[Math.min(stageIndex, Math.max(payload.stages.length - 1, 0))];
   const { scores, totalScore } = useStageScores(stage, weightSel?.weights ?? null);
+  const selectedEntry =
+    selectedSlot != null && stage ? stage.slots[String(selectedSlot)] : undefined;
 
   return (
     <div className="max-w-6xl mx-auto py-6 px-4 space-y-4">
@@ -170,9 +180,28 @@ function ReadOnlyView({ list, isOwner }: { list: GearList; isOwner: boolean }) {
             />
           ) : (
             stage && (
-              <div className="rounded-md border border-zinc-700/60 bg-zinc-900/40 p-4 max-w-xl space-y-3">
-                <SetSummaryBar stage={stage} items={items} totalScore={totalScore} />
-                <BuilderDoll stage={stage} items={items} scores={scores} />
+              <div className="grid gap-4 lg:grid-cols-[minmax(0,26rem)_minmax(0,1fr)] items-start">
+                <div className="rounded-md border border-zinc-700/60 bg-zinc-900/40 p-4 space-y-3">
+                  <SetSummaryBar stage={stage} items={items} totalScore={totalScore} />
+                  <BuilderDoll
+                    stage={stage}
+                    items={items}
+                    scores={scores}
+                    selectedSlot={selectedSlot ?? undefined}
+                    onSelectSlot={(i) => setSelectedSlot((prev) => (prev === i ? null : i))}
+                  />
+                  <p className="text-2xs text-zinc-600">Click a slot to see its notes and alternates.</p>
+                </div>
+                {selectedSlot != null && selectedEntry ? (
+                  <div className="rounded-md border border-zinc-700/60 bg-zinc-900/40 p-3 space-y-3">
+                    <h3 className="text-sm font-semibold text-zinc-200">{slotLabel(selectedSlot)}</h3>
+                    <AlternatesEditor entry={selectedEntry} items={items} readOnly />
+                  </div>
+                ) : (
+                  <div className="rounded-md border border-dashed border-zinc-800 p-6 text-sm text-zinc-600">
+                    Select a filled slot to see the author's notes and alternates.
+                  </div>
+                )}
               </div>
             )
           )}
@@ -267,10 +296,28 @@ function EditorView({ list }: { list: GearList }) {
                 entry={selectedEntry}
                 items={items}
                 onEquip={equip}
+                onAddAlternate={(item) =>
+                  editor.update((p) => addAlternate(p, safeStageIndex, selectedSlot, item.entry))
+                }
                 onClear={() =>
                   editor.update((p) => clearSlot(p, safeStageIndex, selectedSlot))
                 }
                 onClose={() => setSelectedSlot(null)}
+                onSlotNote={(note) =>
+                  editor.update((p) => setSlotNote(p, safeStageIndex, selectedSlot, note))
+                }
+                onAlternateNote={(itemId, note) =>
+                  editor.update((p) => setAlternateNote(p, safeStageIndex, selectedSlot, itemId, note))
+                }
+                onPromoteAlternate={(itemId) =>
+                  editor.update((p) => promoteAlternate(p, safeStageIndex, selectedSlot, itemId))
+                }
+                onRemoveAlternate={(itemId) =>
+                  editor.update((p) => removeAlternate(p, safeStageIndex, selectedSlot, itemId))
+                }
+                onSetEnchant={(enchantId) =>
+                  editor.update((p) => setSlotEnchant(p, safeStageIndex, selectedSlot, enchantId))
+                }
               />
             ) : (
               <div className="rounded-md border border-dashed border-zinc-800 p-6 text-sm text-zinc-600">
