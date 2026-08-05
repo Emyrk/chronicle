@@ -6,7 +6,8 @@
 --  • Every upload persists results (Option B); reads deduplicate by run_id.
 --  • No unique constraints on results — duplicate uploads are collapsed at read time.
 --  • Receipt existence means fully-committed success; no pending/failed rows.
---  • Snapshot deletion cascades results AND receipts, so repair rediscovers them.
+--  • Snapshot deletion preserves result history by nulling snapshot_id, while
+--    cascading receipts makes recent instances eligible for repair.
 --  • Score is derived from best 3 parse scores per (instance_name, encounter_name)
 --    group, averaged per group, then averaged across groups.
 
@@ -17,7 +18,7 @@ CREATE TABLE parse_score_results (
     tenant_id         UUID NOT NULL DEFAULT '00000000-0000-0000-0000-000000000000',
     instance_id       UUID NOT NULL REFERENCES log_instances(id) ON DELETE CASCADE,
     run_id            UUID NOT NULL,          -- COALESCE(duplicate_group_id, instance_id)
-    snapshot_id       UUID NOT NULL REFERENCES ranking_snapshots(id) ON DELETE CASCADE,
+    snapshot_id       UUID REFERENCES ranking_snapshots(id) ON DELETE SET NULL,
     log_group_id      UUID REFERENCES wow_log_groups(id) ON DELETE SET NULL,
     guild_id          UUID REFERENCES guilds(id) ON DELETE SET NULL,
     encounter_name    TEXT NOT NULL,
@@ -48,7 +49,8 @@ CREATE INDEX idx_psr_dedup ON parse_score_results
 CREATE INDEX idx_psr_player ON parse_score_results
     (tenant_id, player_guid, metric, killed_at DESC NULLS LAST);
 
--- Cascade path from snapshot deletion.
+-- Snapshot provenance lookup. Snapshot deletion sets this nullable reference
+-- to NULL so historical parse rows survive snapshot retention or rebuilds.
 CREATE INDEX idx_psr_snapshot ON parse_score_results (snapshot_id);
 
 -- Instance lookup (tenant-scoped for deletion during recompute).

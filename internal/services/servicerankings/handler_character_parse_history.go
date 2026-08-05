@@ -11,6 +11,7 @@ import (
 	"github.com/Emyrk/chronicle/internal/parsepolicy"
 	"github.com/Emyrk/chronicle/internal/services/servicetenant"
 	"github.com/go-chi/chi/v5"
+	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgtype"
 )
 
@@ -75,13 +76,18 @@ func (s *Service) handleCharacterParseHistory(w http.ResponseWriter, r *http.Req
 		if row.KilledAt.Valid {
 			killedAt = row.KilledAt.Time
 		}
+		var snapshotID *uuid.UUID
+		if row.SnapshotID.Valid {
+			id := row.SnapshotID.UUID
+			snapshotID = &id
+		}
 		parses = append(parses, chroniclesdk.CharacterParse{
 			EncounterName:  row.EncounterName,
 			InstanceName:   row.InstanceName,
 			DifficultyName: row.DifficultyName,
 			MaxPlayers:     row.MaxPlayers,
 			InstanceID:     row.InstanceID,
-			SnapshotID:     row.SnapshotID,
+			SnapshotID:     snapshotID,
 			RunID:          row.RunID,
 			Metric:         row.Metric,
 			MetricValue:    row.MetricValue,

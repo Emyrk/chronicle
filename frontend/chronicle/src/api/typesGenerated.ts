@@ -435,7 +435,7 @@ export interface CharacterParse {
     readonly difficulty_name: string;
     readonly max_players: number;
     readonly instance_id: string;
-    readonly snapshot_id: string;
+    readonly snapshot_id?: string;
     readonly run_id: string;
     readonly metric: string;
     readonly metric_value: number;

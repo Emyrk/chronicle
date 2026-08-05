@@ -1016,7 +1016,7 @@ CREATE TABLE parse_score_results (
     tenant_id uuid DEFAULT '00000000-0000-0000-0000-000000000000'::uuid NOT NULL,
     instance_id uuid NOT NULL,
     run_id uuid NOT NULL,
-    snapshot_id uuid NOT NULL,
+    snapshot_id uuid,
     log_group_id uuid,
     guild_id uuid,
     encounter_name text NOT NULL,
@@ -2410,7 +2410,7 @@ ALTER TABLE ONLY parse_score_results
     ADD CONSTRAINT parse_score_results_log_group_id_fkey FOREIGN KEY (log_group_id) REFERENCES wow_log_groups(id) ON DELETE SET NULL;
 
 ALTER TABLE ONLY parse_score_results
-    ADD CONSTRAINT parse_score_results_snapshot_id_fkey FOREIGN KEY (snapshot_id) REFERENCES ranking_snapshots(id) ON DELETE CASCADE;
+    ADD CONSTRAINT parse_score_results_snapshot_id_fkey FOREIGN KEY (snapshot_id) REFERENCES ranking_snapshots(id) ON DELETE SET NULL;
 
 ALTER TABLE ONLY parsed_log_group
     ADD CONSTRAINT parsed_log_group_id_fkey FOREIGN KEY (id) REFERENCES wow_log_groups(id) ON DELETE CASCADE;

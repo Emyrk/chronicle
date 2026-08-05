@@ -4948,7 +4948,7 @@ type GetCharacterParseHistoryRow struct {
 	ID             uuid.UUID          `db:"id" json:"id"`
 	InstanceID     uuid.UUID          `db:"instance_id" json:"instance_id"`
 	RunID          uuid.UUID          `db:"run_id" json:"run_id"`
-	SnapshotID     uuid.UUID          `db:"snapshot_id" json:"snapshot_id"`
+	SnapshotID     uuid.NullUUID      `db:"snapshot_id" json:"snapshot_id"`
 	EncounterName  string             `db:"encounter_name" json:"encounter_name"`
 	InstanceName   string             `db:"instance_name" json:"instance_name"`
 	DifficultyName string             `db:"difficulty_name" json:"difficulty_name"`
@@ -5364,7 +5364,7 @@ type InsertParseScoreResultParams struct {
 	TenantID       uuid.UUID          `db:"tenant_id" json:"tenant_id"`
 	InstanceID     uuid.UUID          `db:"instance_id" json:"instance_id"`
 	RunID          uuid.UUID          `db:"run_id" json:"run_id"`
-	SnapshotID     uuid.UUID          `db:"snapshot_id" json:"snapshot_id"`
+	SnapshotID     uuid.NullUUID      `db:"snapshot_id" json:"snapshot_id"`
 	LogGroupID     uuid.NullUUID      `db:"log_group_id" json:"log_group_id"`
 	GuildID        uuid.NullUUID      `db:"guild_id" json:"guild_id"`
 	EncounterName  string             `db:"encounter_name" json:"encounter_name"`
@@ -5528,7 +5528,8 @@ JOIN LATERAL (
     ORDER BY rs.cutoff DESC
     LIMIT 1
 ) snap ON true
-WHERE NOT EXISTS (
+WHERE li.start_time >= $5
+  AND NOT EXISTS (
     SELECT 1
     FROM parse_score_receipts receipt
     WHERE receipt.tenant_id = $1
@@ -5539,15 +5540,16 @@ WHERE NOT EXISTS (
       AND receipt.query_version = $4
 )
 ORDER BY li.start_time DESC NULLS LAST
-LIMIT $5
+LIMIT $6
 `
 
 type ListInstancesMissingParseReceiptWithSnapshotParams struct {
-	TenantID      uuid.UUID `db:"tenant_id" json:"tenant_id"`
-	LookbackDays  int32     `db:"lookback_days" json:"lookback_days"`
-	PolicyVersion int16     `db:"policy_version" json:"policy_version"`
-	QueryVersion  int16     `db:"query_version" json:"query_version"`
-	MaxRows       int32     `db:"max_rows" json:"max_rows"`
+	TenantID      uuid.UUID          `db:"tenant_id" json:"tenant_id"`
+	LookbackDays  int32              `db:"lookback_days" json:"lookback_days"`
+	PolicyVersion int16              `db:"policy_version" json:"policy_version"`
+	QueryVersion  int16              `db:"query_version" json:"query_version"`
+	RepairSince   pgtype.Timestamptz `db:"repair_since" json:"repair_since"`
+	MaxRows       int32              `db:"max_rows" json:"max_rows"`
 }
 
 type ListInstancesMissingParseReceiptWithSnapshotRow struct {
@@ -5566,14 +5568,16 @@ type ListInstancesMissingParseReceiptWithSnapshotRow struct {
 // then return instances that lack a successful receipt for that exact tenant,
 // snapshot, lookback, policy, and query contract. RLS on
 // encounter_dps_rankings scopes candidates to the worker's tenant context.
-// Instances without an eligible snapshot are excluded, so daily repair does
-// not restart exhausted missing-snapshot retry chains.
+// Instances without an eligible snapshot and instances older than the repair
+// window are excluded, so daily repair neither restarts exhausted retry chains
+// nor rewrites long-term parse history.
 func (q *sqlQuerier) ListInstancesMissingParseReceiptWithSnapshot(ctx context.Context, arg ListInstancesMissingParseReceiptWithSnapshotParams) ([]ListInstancesMissingParseReceiptWithSnapshotRow, error) {
 	rows, err := q.db.Query(ctx, listInstancesMissingParseReceiptWithSnapshot,
 		arg.TenantID,
 		arg.LookbackDays,
 		arg.PolicyVersion,
 		arg.QueryVersion,
+		arg.RepairSince,
 		arg.MaxRows,
 	)
 	if err != nil {

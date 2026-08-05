@@ -30,19 +30,19 @@ type CharacterScore struct {
 
 // CharacterParse is a single deduplicated parse result for a character.
 type CharacterParse struct {
-	EncounterName  string    `json:"encounter_name"`
-	InstanceName   string    `json:"instance_name"`
-	DifficultyName string    `json:"difficulty_name"`
-	MaxPlayers     int16     `json:"max_players"`
-	InstanceID     uuid.UUID `json:"instance_id"`
-	SnapshotID     uuid.UUID `json:"snapshot_id"`
-	RunID          uuid.UUID `json:"run_id"`
-	Metric         string    `json:"metric"`
-	MetricValue    float64   `json:"metric_value"`
-	PreciseScore   float64   `json:"precise_score"`
-	DisplayScore   int       `json:"display_score"`
-	Rank           int       `json:"rank"`
-	SampleSize     int       `json:"sample_size"`
-	Status         string    `json:"status"`
-	KilledAt       time.Time `json:"killed_at"`
+	EncounterName  string     `json:"encounter_name"`
+	InstanceName   string     `json:"instance_name"`
+	DifficultyName string     `json:"difficulty_name"`
+	MaxPlayers     int16      `json:"max_players"`
+	InstanceID     uuid.UUID  `json:"instance_id"`
+	SnapshotID     *uuid.UUID `json:"snapshot_id,omitempty"`
+	RunID          uuid.UUID  `json:"run_id"`
+	Metric         string     `json:"metric"`
+	MetricValue    float64    `json:"metric_value"`
+	PreciseScore   float64    `json:"precise_score"`
+	DisplayScore   int        `json:"display_score"`
+	Rank           int        `json:"rank"`
+	SampleSize     int        `json:"sample_size"`
+	Status         string     `json:"status"`
+	KilledAt       time.Time  `json:"killed_at"`
 }

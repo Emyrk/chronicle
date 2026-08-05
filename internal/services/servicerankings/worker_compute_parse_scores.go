@@ -32,6 +32,11 @@ var RetryDelays = []time.Duration{
 // MaxParseScoreAttempts is the number of scheduled attempts before we stop.
 const MaxParseScoreAttempts = 4
 
+// RepairLookbackDays bounds automatic repair to recent instances. Older parse
+// history is preserved as-is when snapshots are deleted, and missing old
+// projections are not backfilled automatically.
+const RepairLookbackDays = 30
+
 // QueryVersion is bumped when the SQL query semantics change (e.g. cohort
 // selection, snapshot membership filters). This is separate from PolicyVersion
 // which tracks scoring algorithm changes.
@@ -138,6 +143,8 @@ func (w *WorkerComputeParseScores) Work(ctx context.Context, job *river.Job[pars
 	logGroupID := uuid.NullUUID{UUID: inst.LogGroupID, Valid: inst.LogGroupID != uuid.Nil}
 	guildID := inst.GuildID
 
+	scoringSnapshotID := uuid.NullUUID{UUID: snapshot.ID, Valid: true}
+
 	// Atomic transaction: delete old results + insert new results + receipt.
 	// Delete is scoped to (tenant_id, instance_id) so one tenant cannot
 	// erase another's projections.
@@ -215,7 +222,7 @@ func (w *WorkerComputeParseScores) Work(ctx context.Context, job *river.Job[pars
 							TenantID:       tenantID,
 							InstanceID:     instanceID,
 							RunID:          inst.RunID,
-							SnapshotID:     snapshot.ID,
+							SnapshotID:     scoringSnapshotID,
 							LogGroupID:     logGroupID,
 							GuildID:        guildID,
 							EncounterName:  r.EncounterName,
@@ -247,7 +254,7 @@ func (w *WorkerComputeParseScores) Work(ctx context.Context, job *river.Job[pars
 					TenantID:       tenantID,
 					InstanceID:     instanceID,
 					RunID:          inst.RunID,
-					SnapshotID:     snapshot.ID,
+					SnapshotID:     scoringSnapshotID,
 					LogGroupID:     logGroupID,
 					GuildID:        guildID,
 					EncounterName:  r.EncounterName,
@@ -481,14 +488,15 @@ func (w *WorkerRepairParseScores) Work(ctx context.Context, job *river.Job[ArgsR
 		return nil
 	}
 
-	// Per-instance canonical repair: resolve each instance's historical
-	// snapshot via LATERAL join in SQL. Instances without an eligible
-	// snapshot are excluded (not re-enqueued), preserving bounded retry stop.
+	// Per-instance canonical repair resolves each recent instance's historical
+	// snapshot via a LATERAL join. Instances older than RepairLookbackDays or
+	// without an eligible snapshot are excluded.
 	missing, err := w.Store.ListInstancesMissingParseReceiptWithSnapshot(ctx, database.ListInstancesMissingParseReceiptWithSnapshotParams{
 		TenantID:      tenantID,
 		LookbackDays:  int32(parsepolicy.DefaultLookbackDays),
 		PolicyVersion: int16(parsepolicy.PolicyVersion),
 		QueryVersion:  int16(QueryVersion),
+		RepairSince:   pgtype.Timestamptz{Time: time.Now().AddDate(0, 0, -RepairLookbackDays), Valid: true},
 		MaxRows:       100,
 	})
 	if err != nil {

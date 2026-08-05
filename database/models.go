@@ -1443,7 +1443,7 @@ type ParseScoreResult struct {
 	TenantID       uuid.UUID          `db:"tenant_id" json:"tenant_id"`
 	InstanceID     uuid.UUID          `db:"instance_id" json:"instance_id"`
 	RunID          uuid.UUID          `db:"run_id" json:"run_id"`
-	SnapshotID     uuid.UUID          `db:"snapshot_id" json:"snapshot_id"`
+	SnapshotID     uuid.NullUUID      `db:"snapshot_id" json:"snapshot_id"`
 	LogGroupID     uuid.NullUUID      `db:"log_group_id" json:"log_group_id"`
 	GuildID        uuid.NullUUID      `db:"guild_id" json:"guild_id"`
 	EncounterName  string             `db:"encounter_name" json:"encounter_name"`

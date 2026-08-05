@@ -505,6 +505,7 @@ func TestListInstancesMissingParseReceiptWithSnapshot_PerInstanceResolution(t *t
 		LookbackDays:  int32(parsepolicy.DefaultLookbackDays),
 		PolicyVersion: int16(parsepolicy.PolicyVersion),
 		QueryVersion:  int16(servicerankings.QueryVersion),
+		RepairSince:   database.Timestamptz(now.AddDate(0, 0, -servicerankings.RepairLookbackDays)),
 		MaxRows:       100,
 	})
 	require.NoError(t, err)
@@ -538,10 +539,57 @@ func TestListInstancesMissingParseReceiptWithSnapshot_NoEligibleSnapshot(t *test
 		LookbackDays:  int32(parsepolicy.DefaultLookbackDays),
 		PolicyVersion: int16(parsepolicy.PolicyVersion),
 		QueryVersion:  int16(servicerankings.QueryVersion),
+		RepairSince:   database.Timestamptz(now.AddDate(0, 0, -servicerankings.RepairLookbackDays)),
 		MaxRows:       100,
 	})
 	require.NoError(t, err)
 	assert.Empty(t, missing, "no snapshot → instance must not be returned")
+}
+
+func TestListInstancesMissingParseReceiptWithSnapshot_IgnoresOldInstances(t *testing.T) {
+	t.Parallel()
+	ctx := testutil.Context(t, testutil.WaitMedium)
+
+	pool, _ := dbtestutil.NewPGXPool(t)
+	store := database.New(pool)
+	f := setupScoringFixture(t, pool, store)
+
+	conn, err := pool.Acquire(ctx)
+	require.NoError(t, err)
+	_, err = conn.Exec(ctx, "SET app.tenant_bypass = 'true'")
+	require.NoError(t, err)
+
+	now := time.Now()
+	oldStart := now.AddDate(0, 0, -(servicerankings.RepairLookbackDays + 1))
+	_, err = conn.Exec(ctx, "UPDATE log_instances SET start_time = $2 WHERE id = $1", f.instanceID, oldStart)
+	require.NoError(t, err)
+	conn.Release()
+
+	snapshot, err := store.InsertRankingSnapshot(ctx, database.InsertRankingSnapshotParams{
+		TenantID:      uuid.Nil,
+		Cutoff:        database.Timestamptz(oldStart.Add(-time.Hour)),
+		LookbackDays:  int32(parsepolicy.DefaultLookbackDays),
+		CohortMode:    string(parsepolicy.CohortModeSpec),
+		PolicyVersion: int16(parsepolicy.PolicyVersion),
+		QueryVersion:  int16(servicerankings.QueryVersion),
+	})
+	require.NoError(t, err)
+	_, err = store.PublishRankingSnapshot(ctx, snapshot.ID)
+	require.NoError(t, err)
+
+	insertRanking(t, ctx, store, f.instanceID, f.realmID, "Player-1234-0001", "TestPlayer",
+		1000.0, 0, oldStart.Add(time.Hour))
+
+	missing, err := store.ListInstancesMissingParseReceiptWithSnapshot(ctx, database.ListInstancesMissingParseReceiptWithSnapshotParams{
+		TenantID:      uuid.Nil,
+		LookbackDays:  int32(parsepolicy.DefaultLookbackDays),
+		PolicyVersion: int16(parsepolicy.PolicyVersion),
+		QueryVersion:  int16(servicerankings.QueryVersion),
+		RepairSince:   database.Timestamptz(now.AddDate(0, 0, -servicerankings.RepairLookbackDays)),
+		MaxRows:       100,
+	})
+	require.NoError(t, err)
+	assert.Empty(t, missing, "instances older than the 30-day repair window must be ignored")
 }
 
 func TestWorkerComputeParseScores_IncompatibleSnapshotFallback(t *testing.T) {
@@ -675,7 +723,7 @@ func TestWorkerComputeParseScores_TenantIsolation(t *testing.T) {
 		TenantID:      otherTenantID,
 		InstanceID:    f.instanceID,
 		RunID:         f.instanceID,
-		SnapshotID:    snapshot.ID,
+		SnapshotID:    uuid.NullUUID{UUID: snapshot.ID, Valid: true},
 		EncounterName: "Ragnaros",
 		PlayerGuid:    "Player-1234-9999",
 		Metric:        "dps",
@@ -717,7 +765,7 @@ func TestWorkerComputeParseScores_TenantIsolation(t *testing.T) {
 	assert.True(t, hasOtherTenant, "other tenant's results must not be deleted by tenant uuid.Nil recompute")
 }
 
-func TestSnapshotCascadeDeletesReceiptAndResults(t *testing.T) {
+func TestSnapshotDeletionPreservesResultsAndDeletesReceipt(t *testing.T) {
 	t.Parallel()
 	ctx := testutil.Context(t, testutil.WaitMedium)
 
@@ -739,7 +787,7 @@ func TestSnapshotCascadeDeletesReceiptAndResults(t *testing.T) {
 		TenantID:      uuid.Nil,
 		InstanceID:    f.instanceID,
 		RunID:         f.instanceID,
-		SnapshotID:    snapshot.ID,
+		SnapshotID:    uuid.NullUUID{UUID: snapshot.ID, Valid: true},
 		EncounterName: "Ragnaros",
 		PlayerGuid:    "Player-1234-0001",
 		Metric:        "dps",
@@ -765,19 +813,21 @@ func TestSnapshotCascadeDeletesReceiptAndResults(t *testing.T) {
 	})
 	require.NoError(t, err)
 
-	// Delete the snapshot — should cascade.
+	// Delete the snapshot. Results retain their historical score with a NULL
+	// snapshot reference, while the receipt is removed to make recent data repairable.
 	conn2, err := pool.Acquire(ctx)
 	require.NoError(t, err)
 	_, err = conn2.Exec(ctx, "DELETE FROM ranking_snapshots WHERE id = $1", snapshot.ID)
 	conn2.Release()
 	require.NoError(t, err)
 
-	// Results should be gone.
+	// Results should remain, but no longer reference the deleted snapshot.
 	results, err := store.GetParseScoreResultsForInstance(ctx, f.instanceID)
 	require.NoError(t, err)
-	assert.Empty(t, results)
+	require.Len(t, results, 1)
+	assert.False(t, results[0].SnapshotID.Valid)
 
-	// Receipts should be gone.
+	// Receipts should be gone so recent instances can be repaired.
 	receipts, err := store.GetParseScoreReceiptForInstance(ctx, f.instanceID)
 	require.NoError(t, err)
 	assert.Empty(t, receipts)

@@ -154,8 +154,9 @@ LIMIT 1;
 -- then return instances that lack a successful receipt for that exact tenant,
 -- snapshot, lookback, policy, and query contract. RLS on
 -- encounter_dps_rankings scopes candidates to the worker's tenant context.
--- Instances without an eligible snapshot are excluded, so daily repair does
--- not restart exhausted missing-snapshot retry chains.
+-- Instances without an eligible snapshot and instances older than the repair
+-- window are excluded, so daily repair neither restarts exhausted retry chains
+-- nor rewrites long-term parse history.
 SELECT
     candidates.instance_id,
     li.start_time,
@@ -185,7 +186,8 @@ JOIN LATERAL (
     ORDER BY rs.cutoff DESC
     LIMIT 1
 ) snap ON true
-WHERE NOT EXISTS (
+WHERE li.start_time >= @repair_since
+  AND NOT EXISTS (
     SELECT 1
     FROM parse_score_receipts receipt
     WHERE receipt.tenant_id = @tenant_id
