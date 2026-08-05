@@ -2084,6 +2084,8 @@ CREATE INDEX idx_edr_instance_name ON encounter_dps_rankings USING btree (instan
 
 CREATE INDEX idx_edr_killed_at ON encounter_dps_rankings USING btree (killed_at);
 
+CREATE INDEX idx_edr_player_guid ON encounter_dps_rankings USING btree (player_guid);
+
 CREATE INDEX idx_edr_realm ON encounter_dps_rankings USING btree (realm_id);
 
 CREATE UNIQUE INDEX idx_edr_trash_unique ON encounter_dps_rankings USING btree (instance_id, player_guid, player_spec) WHERE (encounter_id IS NULL);
@@ -2177,6 +2179,8 @@ CREATE INDEX idx_world_item_template_name ON world_item_template USING btree (da
 CREATE UNIQUE INDEX idx_wow_server_realms_name_unique ON wow_server_realms USING btree (lower(name));
 
 CREATE UNIQUE INDEX idx_wow_servers_name_unique ON wow_servers USING btree (lower(name));
+
+CREATE INDEX instance_loot_received ON instance_loot USING btree (realm_id, received_guid, received_ts DESC);
 
 CREATE INDEX instance_speedruns_cohort_lookup_idx ON instance_speedruns USING btree (instance_name, start_time);
 

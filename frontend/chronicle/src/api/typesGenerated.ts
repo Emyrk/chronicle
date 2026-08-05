@@ -313,6 +313,27 @@ export interface ArmoryGearSnapshot {
 }
 
 // From chroniclesdk/armory.go
+export interface ArmoryLootItem {
+    readonly item_id: number;
+    readonly item_name: string;
+    readonly quality: number;
+    readonly icon?: string;
+    readonly quantity: number;
+    readonly instance_id: string;
+    readonly instance_name: string;
+    readonly instance_slug?: string;
+    readonly received_at: string;
+}
+
+// From chroniclesdk/armory.go
+/**
+ * ArmoryLootResponse lists loot a character received, newest first.
+ */
+export interface ArmoryLootResponse {
+    readonly items: readonly ArmoryLootItem[];
+}
+
+// From chroniclesdk/armory.go
 export interface ArmoryPlayer {
     readonly id: string;
     readonly realm_name: string;
@@ -437,6 +458,31 @@ export interface CensusEntry {
     readonly class: string;
     readonly race: string;
     readonly count: number;
+}
+
+// From chroniclesdk/parse_scores.go
+/**
+ * CharacterEncounterStats aggregates one character's kills of one encounter.
+ * Duplicate uploads of the same raid night count once.
+ */
+export interface CharacterEncounterStats {
+    readonly instance_name: string;
+    readonly encounter_name: string;
+    readonly difficulty_name: string;
+    readonly max_players: number;
+    readonly kills: number;
+    readonly first_killed_at: string;
+    readonly last_killed_at: string;
+}
+
+// From chroniclesdk/parse_scores.go
+/**
+ * CharacterEncounterStatsResponse lists per-encounter kill aggregates for a
+ * character across all recorded logs (no lookback window).
+ */
+export interface CharacterEncounterStatsResponse {
+    readonly player_guid: string;
+    readonly encounters: readonly CharacterEncounterStats[];
 }
 
 // From chroniclesdk/characters.go

@@ -4,7 +4,7 @@ import type { RecentInstance } from "@/api/typesGenerated";
 import { Card, CardAction, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/Card/Card";
 import { formatDuration } from "@/pages/Logs/utils/calendarUtils";
 import { parseHexColor } from "@/pages/Instance/parseColors";
-import { ACTIVITY_WEEKS } from "./util";
+import { ACTIVITY_WEEKS, type ActivityStats } from "./util";
 
 interface RaidCalendarCardProps {
   instances?: readonly RecentInstance[];
@@ -12,6 +12,7 @@ interface RaidCalendarCardProps {
   nightScores: Map<string, number>;
   /** Start of the heatmap window (start of a week). */
   start: Date;
+  stats: ActivityStats;
   onOpenActivity: () => void;
 }
 
@@ -22,37 +23,22 @@ interface DayCell {
 }
 
 /** GitHub-style heatmap of the last 12 weeks of raid nights. */
-export function RaidCalendarCard({ instances, nightScores, start, onOpenActivity }: RaidCalendarCardProps) {
-  const { weeks, nights, totalMs, weekStreak } = useMemo(() => {
+export function RaidCalendarCard({ instances, nightScores, start, stats, onOpenActivity }: RaidCalendarCardProps) {
+  const weeks = useMemo(() => {
     const cells = new Map<string, DayCell>();
     const now = new Date();
     for (let d = new Date(start); !isAfter(d, now); d = addDays(d, 1)) {
       cells.set(format(d, "yyyy-MM-dd"), { date: new Date(d), raids: [] });
     }
 
-    let totalMs = 0;
-    const raidWeeks = new Set<number>();
     for (const inst of instances ?? []) {
       const date = new Date(inst.first_encounter_time);
       const cell = cells.get(format(date, "yyyy-MM-dd"));
       if (!cell) continue;
       cell.raids.push(inst);
-      totalMs += inst.duration_ms ?? 0;
-      raidWeeks.add(differenceInCalendarWeeks(date, start));
       const score = nightScores.get(inst.id);
       if (score !== undefined && score > (cell.bestScore ?? -1)) {
         cell.bestScore = score;
-      }
-    }
-
-    // Consecutive raiding weeks, counting back from the latest raiding week.
-    let weekStreak = 0;
-    for (let w = ACTIVITY_WEEKS - 1; w >= 0; w--) {
-      if (raidWeeks.has(w)) {
-        weekStreak++;
-      } else if (weekStreak > 0 || w < ACTIVITY_WEEKS - 1) {
-        // The current (possibly partial) week may be empty without breaking.
-        break;
       }
     }
 
@@ -63,9 +49,7 @@ export function RaidCalendarCard({ instances, nightScores, start, onOpenActivity
         weeks[w][getDay(cell.date)] = cell;
       }
     }
-
-    const nights = [...cells.values()].filter((c) => c.raids.length > 0).length;
-    return { weeks, nights, totalMs, weekStreak };
+    return weeks;
   }, [instances, nightScores, start]);
 
   return (
@@ -113,11 +97,11 @@ export function RaidCalendarCard({ instances, nightScores, start, onOpenActivity
           ))}
         </div>
         <div className="mt-4 flex gap-8 border-t border-border pt-4">
-          <CalendarStat value={String(nights)} label="raid nights" />
-          <CalendarStat value={formatDuration(totalMs) ?? "0m"} label="in raid" />
+          <CalendarStat value={String(stats.nights)} label="raid nights" />
+          <CalendarStat value={formatDuration(stats.totalMs) ?? "0m"} label="in raid" />
           <CalendarStat
-            value={String(weekStreak)}
-            label={weekStreak === 1 ? "week streak" : "weeks streak"}
+            value={String(stats.weekStreak)}
+            label={stats.weekStreak === 1 ? "week streak" : "weeks streak"}
           />
         </div>
       </CardContent>

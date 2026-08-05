@@ -467,6 +467,26 @@ UNION ALL
 SELECT id FROM talent_builds WHERE player_class = @player_class AND talent_layout = @talent_layout
 LIMIT 1;
 
+-- name: GetCharacterEncounterStats :many
+-- Per-encounter kill aggregates for one character across all time.
+-- Rankings rows exist only for clean/partial kills; trash rows
+-- (encounter_id IS NULL) are excluded. Duplicate uploads of the same raid
+-- night are collapsed via duplicate_group_id.
+SELECT
+  edr.instance_name,
+  edr.encounter_name,
+  edr.difficulty_name,
+  edr.max_players,
+  COUNT(DISTINCT COALESCE(li.duplicate_group_id, edr.instance_id))::INT AS kills,
+  MIN(edr.killed_at)::timestamptz AS first_killed_at,
+  MAX(edr.killed_at)::timestamptz AS last_killed_at
+FROM encounter_dps_rankings edr
+JOIN log_instances li ON li.id = edr.instance_id
+WHERE edr.player_guid = @player_guid
+  AND edr.encounter_id IS NOT NULL
+GROUP BY edr.instance_name, edr.encounter_name, edr.difficulty_name, edr.max_players
+ORDER BY edr.instance_name, edr.encounter_name;
+
 -- name: InsertEncounterDpsRanking :exec
 INSERT INTO encounter_dps_rankings (
     encounter_id, instance_id, encounter_name, instance_name,

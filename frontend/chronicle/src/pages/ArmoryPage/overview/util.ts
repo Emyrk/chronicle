@@ -1,3 +1,4 @@
+import { differenceInCalendarWeeks } from "date-fns";
 import type { ArmoryPlayer } from "@/api/typesGenerated";
 import { SPEC_BY_CLASS } from "@/pages/Rankings/classDisplay";
 
@@ -19,6 +20,42 @@ export function treeName(player: ArmoryPlayer, index: number): string {
     SPEC_BY_CLASS[player.class]?.[index] ||
     `Tree ${index + 1}`
   );
+}
+
+export interface ActivityStats {
+  /** Days with at least one raid in the window. */
+  nights: number;
+  /** Total raid time in the window, in milliseconds. */
+  totalMs: number;
+  /** Consecutive raiding weeks, counting back from the latest raiding week. */
+  weekStreak: number;
+}
+
+export function computeActivityStats(
+  instances: readonly { first_encounter_time: string; duration_ms: number | null }[],
+  start: Date,
+): ActivityStats {
+  const days = new Set<string>();
+  const raidWeeks = new Set<number>();
+  let totalMs = 0;
+  for (const inst of instances) {
+    const date = new Date(inst.first_encounter_time);
+    days.add(date.toDateString());
+    totalMs += inst.duration_ms ?? 0;
+    raidWeeks.add(differenceInCalendarWeeks(date, start));
+  }
+
+  let weekStreak = 0;
+  for (let w = ACTIVITY_WEEKS - 1; w >= 0; w--) {
+    if (raidWeeks.has(w)) {
+      weekStreak++;
+    } else if (weekStreak > 0 || w < ACTIVITY_WEEKS - 1) {
+      // The current (possibly partial) week may be empty without breaking.
+      break;
+    }
+  }
+
+  return { nights: days.size, totalMs, weekStreak };
 }
 
 export function defaultMetric(player: ArmoryPlayer): ParseMetric {

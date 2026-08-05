@@ -11,6 +11,7 @@ import type {
   SnapshotSummary,
   CohortDebugResponse,
   CharacterParseHistoryResponse,
+  CharacterEncounterStatsResponse,
 } from "./typesGenerated";
 
 const RANKINGS_STALE_TIME = 5 * 60 * 1000; // 5 minutes
@@ -36,6 +37,19 @@ export function useCharacterParses(playerGuid?: string, metric: "dps" | "hps" = 
       ),
     staleTime: RANKINGS_STALE_TIME,
     enabled: !!playerGuid,
+  });
+}
+
+/** Per-encounter kill aggregates for a character across all recorded logs. */
+export function useCharacterEncounters(playerGuid?: string, enabled = true) {
+  return useQuery({
+    queryKey: ["rankings", "character-encounters", playerGuid],
+    queryFn: () =>
+      fetchJSON<CharacterEncounterStatsResponse>(
+        `/api/v1/rankings/characters/${encodeURIComponent(playerGuid!)}/encounters`,
+      ),
+    staleTime: RANKINGS_STALE_TIME,
+    enabled: enabled && !!playerGuid,
   });
 }
 

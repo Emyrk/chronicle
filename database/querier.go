@@ -104,6 +104,14 @@ type sqlcQuerier interface {
 	// instance_id, instance_name, and realm_id.
 	FindMatchingServerUpload(ctx context.Context, arg FindMatchingServerUploadParams) (WoWLogGroup, error)
 	GetAppliedAuthzMigrations(ctx context.Context) ([]int32, error)
+	// Per-encounter kill aggregates for one character across all time.
+	// Rankings rows exist only for clean/partial kills; trash rows
+	// (encounter_id IS NULL) are excluded. Duplicate uploads of the same raid
+	// night are collapsed via duplicate_group_id.
+	GetCharacterEncounterStats(ctx context.Context, playerGuid string) ([]GetCharacterEncounterStatsRow, error)
+	// Loot received by one character, newest first. Duplicate uploads of the
+	// same raid night are collapsed by (run, item, loot timestamp).
+	GetCharacterLoot(ctx context.Context, arg GetCharacterLootParams) ([]GetCharacterLootRow, error)
 	// Character history: ALL deduplicated parses over the lookback window.
 	// Returns every (run_id, encounter) parse — not just one best per encounter.
 	// The caller groups by (instance_name, encounter_name), takes best 3 per group,

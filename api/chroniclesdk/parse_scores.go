@@ -46,3 +46,22 @@ type CharacterParse struct {
 	Status         string     `json:"status"`
 	KilledAt       time.Time  `json:"killed_at"`
 }
+
+// CharacterEncounterStatsResponse lists per-encounter kill aggregates for a
+// character across all recorded logs (no lookback window).
+type CharacterEncounterStatsResponse struct {
+	PlayerGUID string                    `json:"player_guid"`
+	Encounters []CharacterEncounterStats `json:"encounters"`
+}
+
+// CharacterEncounterStats aggregates one character's kills of one encounter.
+// Duplicate uploads of the same raid night count once.
+type CharacterEncounterStats struct {
+	InstanceName   string    `json:"instance_name"`
+	EncounterName  string    `json:"encounter_name"`
+	DifficultyName string    `json:"difficulty_name"`
+	MaxPlayers     int16     `json:"max_players"`
+	Kills          int       `json:"kills"`
+	FirstKilledAt  time.Time `json:"first_killed_at"`
+	LastKilledAt   time.Time `json:"last_killed_at"`
+}

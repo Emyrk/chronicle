@@ -75,6 +75,23 @@ type ArmoryGearSnapshot struct {
 	Gear    PlayerOutfit `json:"gear"`
 }
 
+// ArmoryLootResponse lists loot a character received, newest first.
+type ArmoryLootResponse struct {
+	Items []ArmoryLootItem `json:"items"`
+}
+
+type ArmoryLootItem struct {
+	ItemID       int32     `json:"item_id"`
+	ItemName     string    `json:"item_name"`
+	Quality      int32     `json:"quality"`
+	Icon         string    `json:"icon,omitempty"`
+	Quantity     int32     `json:"quantity"`
+	InstanceID   uuid.UUID `json:"instance_id"`
+	InstanceName string    `json:"instance_name"`
+	InstanceSlug string    `json:"instance_slug,omitempty"`
+	ReceivedAt   time.Time `json:"received_at"`
+}
+
 // ArmorySearchResult is a lightweight player result without gear data.
 type ArmorySearchResult struct {
 	ID        GUIDString `json:"id"`

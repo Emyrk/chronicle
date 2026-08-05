@@ -187,6 +187,7 @@ func (s *Service) setupRoutes() {
 
 	// Character parse history
 	s.router.Get("/characters/{playerGUID}/parses", s.handleCharacterParseHistory)
+	s.router.Get("/characters/{playerGUID}/encounters", s.handleCharacterEncounterStats)
 
 	// Cohort viewer (debugging/transparency)
 	s.router.Get("/snapshots", s.handleListSnapshots)

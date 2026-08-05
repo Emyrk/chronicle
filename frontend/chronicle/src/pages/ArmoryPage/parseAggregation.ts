@@ -1,4 +1,8 @@
-import type { CharacterParse, PlayerOutfit } from "@/api/typesGenerated";
+import type {
+  CharacterEncounterStats,
+  CharacterParse,
+  PlayerOutfit,
+} from "@/api/typesGenerated";
 
 /**
  * Client-side aggregation over the character parse history endpoint
@@ -130,6 +134,41 @@ export function bestScoreByInstance(parses: readonly CharacterParse[]): Map<stri
     }
   }
   return map;
+}
+
+export interface RaidProgress {
+  instanceName: string;
+  difficultyName: string;
+  maxPlayers: number;
+  /** Distinct bosses this character has killed in the raid. */
+  encountersDown: number;
+  /** Total kills across the raid's encounters. */
+  kills: number;
+}
+
+/**
+ * Groups all-time encounter kill aggregates into per-raid progression,
+ * ordered by total kills descending.
+ */
+export function summarizeProgress(stats: readonly CharacterEncounterStats[]): RaidProgress[] {
+  const byRaid = new Map<string, RaidProgress>();
+  for (const s of stats) {
+    const key = `${s.instance_name}|${s.difficulty_name}|${s.max_players}`;
+    const raid = byRaid.get(key);
+    if (raid) {
+      raid.encountersDown++;
+      raid.kills += s.kills;
+    } else {
+      byRaid.set(key, {
+        instanceName: s.instance_name,
+        difficultyName: s.difficulty_name,
+        maxPlayers: s.max_players,
+        encountersDown: 1,
+        kills: s.kills,
+      });
+    }
+  }
+  return [...byRaid.values()].sort((a, b) => b.kills - a.kills);
 }
 
 /** PlayerOutfit slots that never count toward average item level. */

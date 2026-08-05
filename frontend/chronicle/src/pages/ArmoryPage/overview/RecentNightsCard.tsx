@@ -1,23 +1,30 @@
 import { useMemo } from "react";
 import { Link } from "react-router-dom";
 import { format } from "date-fns";
-import type { RecentInstance } from "@/api/typesGenerated";
+import type { ArmoryLootItem, RecentInstance } from "@/api/typesGenerated";
 import { Card, CardAction, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/Card/Card";
 import { formatDuration } from "@/pages/Logs/utils/calendarUtils";
 import { groupDuplicateInstances } from "@/utils/groupDuplicates";
+import { iconUrl } from "@/config/iconUrl";
+import { useIconBaseUrl } from "@/hooks/useDatasetId";
 import { parseColor } from "@/pages/Instance/parseColors";
+import { getQualityBorderClass } from "../types";
 
 const MAX_NIGHTS = 6;
+const MAX_LOOT_ICONS = 4;
 
 interface RecentNightsCardProps {
   instances?: readonly RecentInstance[];
   /** Best parse display score per instance_id. */
   nightScores: Map<string, number>;
+  /** Loot received per instance_id, for per-night loot icons. */
+  lootByInstance?: Map<string, ArmoryLootItem[]>;
   onOpenActivity: () => void;
 }
 
 /** The last few raid nights, newest first, with the night's best parse. */
-export function RecentNightsCard({ instances, nightScores, onOpenActivity }: RecentNightsCardProps) {
+export function RecentNightsCard({ instances, nightScores, lootByInstance, onOpenActivity }: RecentNightsCardProps) {
+  const iconBaseUrl = useIconBaseUrl();
   const nights = useMemo(() => {
     const groups = groupDuplicateInstances([...(instances ?? [])]);
     groups.sort(
@@ -57,6 +64,9 @@ export function RecentNightsCard({ instances, nightScores, onOpenActivity }: Rec
             return s !== undefined && s > (acc ?? -1) ? s : acc;
           }, undefined);
           const url = inst.slug ? `/instances/${inst.slug}` : `/instances/${inst.id}`;
+          const loot = group
+            .flatMap((g) => lootByInstance?.get(g.id) ?? [])
+            .slice(0, MAX_LOOT_ICONS);
 
           return (
             <Link
@@ -76,6 +86,22 @@ export function RecentNightsCard({ instances, nightScores, onOpenActivity }: Rec
                   {duration ? ` · ${duration}` : ""}
                 </div>
               </div>
+              {loot.length > 0 && (
+                <div className="flex shrink-0 gap-1.5">
+                  {loot.map((l, i) => (
+                    <div
+                      key={`${l.item_id}-${i}`}
+                      title={l.item_name}
+                      className={`size-[26px] shrink-0 rounded border bg-popover bg-cover bg-center ${getQualityBorderClass(l.quality)}`}
+                      style={
+                        l.icon
+                          ? { backgroundImage: `url(${iconUrl(l.icon, iconBaseUrl)})` }
+                          : undefined
+                      }
+                    />
+                  ))}
+                </div>
+              )}
               {best !== undefined && (
                 <div className="shrink-0 text-right">
                   <div className={`font-mono text-sm font-bold ${parseColor(best)}`}>{best}</div>

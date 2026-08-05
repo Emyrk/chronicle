@@ -45,6 +45,7 @@ import type {
   ArmorySearchResponse as ArmorySearchResponseGenerated,
   ArmoryPlayer as ArmoryPlayerGenerated,
   ArmoryGearHistoryResponse as ArmoryGearHistoryResponseGenerated,
+  ArmoryLootResponse as ArmoryLootResponseGenerated,
   ListGuildsResponse as ListGuildsResponseGenerated,
   GuildPageConfig as GuildPageConfigGenerated,
   GuildPageTheme as GuildPageThemeGenerated,
@@ -114,6 +115,7 @@ export type SharedViewResponse = SharedViewResponseGenerated;
 export type ArmorySearchResponse = ArmorySearchResponseGenerated;
 export type ArmoryPlayer = ArmoryPlayerGenerated;
 export type ArmoryGearHistoryResponse = ArmoryGearHistoryResponseGenerated;
+export type ArmoryLootResponse = ArmoryLootResponseGenerated;
 export type ListGuildsResponse = ListGuildsResponseGenerated;
 export type GuildPageConfig = GuildPageConfigGenerated;
 export type GuildPageTab = GuildPageTabGenerated;
@@ -1528,6 +1530,28 @@ export function useArmoryGearHistory(realmName?: string, playerIdentifier?: stri
       return response.json() as Promise<ArmoryGearHistoryResponse>;
     },
     enabled: !!realmName && !!playerIdentifier,
+    staleTime: 5 * 60 * 1000,
+    retry: false,
+  });
+}
+
+export function useArmoryLoot(
+  realmName?: string,
+  playerIdentifier?: string,
+  enabled = true,
+) {
+  return useQuery({
+    queryKey: ["armory-loot", realmName, playerIdentifier],
+    queryFn: async () => {
+      const response = await fetch(
+        `/api/v1/armory/${encodeURIComponent(realmName!)}/${encodeURIComponent(playerIdentifier!)}/loot?limit=200`,
+      );
+      if (!response.ok) {
+        throw new Error(`Failed to fetch loot: ${response.status}`);
+      }
+      return response.json() as Promise<ArmoryLootResponse>;
+    },
+    enabled: enabled && !!realmName && !!playerIdentifier,
     staleTime: 5 * 60 * 1000,
     retry: false,
   });

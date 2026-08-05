@@ -120,6 +120,53 @@ func (api *API) GetArmoryPlayerGearHistory(w http.ResponseWriter, r *http.Reques
 	})
 }
 
+// GetArmoryPlayerLoot returns loot the character received, newest first.
+// Duplicate uploads of the same raid night are collapsed.
+func (api *API) GetArmoryPlayerLoot(w http.ResponseWriter, r *http.Request) {
+	ctx := r.Context()
+
+	player, realmID, ok := api.resolveArmoryPlayer(w, r)
+	if !ok {
+		return
+	}
+
+	limit := int32(50)
+	if l := r.URL.Query().Get("limit"); l != "" {
+		if parsed, err := strconv.Atoi(l); err == nil && parsed > 0 {
+			limit = min(int32(parsed), 200)
+		}
+	}
+
+	datasetID := api.Opts.Dataset.ResolveDatasetForRealm(ctx, realmID)
+	rows, err := api.Opts.Zed.GetCharacterLoot(ctx, database.GetCharacterLootParams{
+		RealmID:      realmID,
+		ReceivedGuid: int64(player.ID),
+		DatasetID:    datasetID,
+		ResultLimit:  limit,
+	})
+	if err != nil {
+		httpapi.InternalServerError(w, err)
+		return
+	}
+
+	items := make([]chroniclesdk.ArmoryLootItem, 0, len(rows))
+	for _, row := range rows {
+		items = append(items, chroniclesdk.ArmoryLootItem{
+			ItemID:       row.ItemID,
+			ItemName:     row.ItemName,
+			Quality:      row.Quality,
+			Icon:         row.Icon,
+			Quantity:     row.Quantity,
+			InstanceID:   row.InstanceID,
+			InstanceName: row.InstanceName,
+			InstanceSlug: row.InstanceSlug.String,
+			ReceivedAt:   row.ReceivedTs.Time,
+		})
+	}
+
+	httpapi.Write(ctx, w, http.StatusOK, chroniclesdk.ArmoryLootResponse{Items: items})
+}
+
 func (api *API) SearchArmoryPlayers(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 	query := r.URL.Query()
