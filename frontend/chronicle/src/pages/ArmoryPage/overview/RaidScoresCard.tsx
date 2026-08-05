@@ -9,6 +9,23 @@ import { parseColor, parseHexColor } from "@/pages/Instance/parseColors";
 import type { EncounterSummary, RaidSummary } from "../parseAggregation";
 import type { ParseMetric } from "./util";
 
+const INSTANCE_ACCENTS: Record<string, string> = {
+  "Molten Core": "#f97316",
+  "Blackwing Lair": "#ef4444",
+  "Temple of Ahn'Qiraj": "#d9aa42",
+  "Ruins of Ahn'Qiraj": "#c8a050",
+  Naxxramas: "#82c8b4",
+  "Emerald Sanctum": "#34d399",
+  "Zul'Gurub": "#ea580c",
+  "Onyxia's Lair": "#22c55e",
+  "Tower of Karazhan": "#8b5cf6",
+  "Lower Tower of Karazhan": "#8b5cf6",
+  "Upper Tower of Karazhan": "#8b5cf6",
+  "Karazhan Crypts": "#7c3aed",
+};
+
+const DEFAULT_INSTANCE_ACCENT = "#64748b";
+
 interface RaidScoresCardProps {
   raids: RaidSummary[];
   metric: ParseMetric;
@@ -28,14 +45,16 @@ export function RaidScoresCard({ raids, metric, bossCounts, isLoading }: RaidSco
   }
 
   return (
-    <Card className="gap-0 overflow-hidden pt-4 pb-0">
-      <CardHeader className="border-b border-border pb-4">
-        <CardTitle>Raid scores</CardTitle>
+    <Card className="gap-0 border-0 bg-transparent p-0 shadow-none">
+      <CardHeader className="px-0 pb-4">
+        <CardTitle className="text-xs font-normal tracking-[0.2em] text-muted-foreground uppercase">
+          Raid scores
+        </CardTitle>
         <CardDescription>
           Best-3 average per boss, last 60 days · expand a raid for its bosses
         </CardDescription>
       </CardHeader>
-      <CardContent className="px-0 pt-0">
+      <CardContent className="space-y-3 px-0">
         {raids.length === 0 && (
           <div className="px-6 py-6 text-sm text-muted-foreground">
             {isLoading
@@ -48,16 +67,24 @@ export function RaidScoresCard({ raids, metric, bossCounts, isLoading }: RaidSco
           const bossesLogged = raid.encounters.length;
           const bossTotal = Math.max(bossCounts?.get(raid.instanceName) ?? 0, bossesLogged);
           const incomplete = bossesLogged < bossTotal;
+          const accent = INSTANCE_ACCENTS[raid.instanceName] ?? DEFAULT_INSTANCE_ACCENT;
           return (
             <Collapsible
               key={key}
               open={open === key}
               onOpenChange={(o) => setOpen(o ? key : null)}
+              className="overflow-hidden rounded-xl border border-border bg-card shadow-sm"
             >
-              <CollapsibleTrigger className="w-full cursor-pointer border-b border-border px-6 py-4 text-left transition-colors hover:bg-muted/40">
-                <div className="grid grid-cols-[minmax(0,1fr)_auto] items-center gap-x-6 gap-y-2 sm:grid-cols-[minmax(0,1fr)_280px_64px_14px]">
+              <CollapsibleTrigger
+                className={`w-full cursor-pointer px-6 py-5 text-left transition-colors hover:bg-muted/30 ${open === key ? "border-b border-border" : ""}`}
+                style={{
+                  backgroundImage: `linear-gradient(90deg, ${accent}14 0%, transparent 42%)`,
+                  boxShadow: `inset 4px 0 0 ${accent}`,
+                }}
+              >
+                <div className="grid grid-cols-[minmax(0,1fr)_auto] items-center gap-x-6 gap-y-2 sm:grid-cols-[minmax(0,1fr)_80px_280px_14px]">
                   <div className="min-w-0">
-                    <div className="font-wow truncate text-base text-foreground">
+                    <div className="font-wow truncate text-lg text-foreground">
                       {raid.instanceName}
                     </div>
                     <div className="mt-1 flex items-center gap-1.5 text-xs text-muted-foreground">
@@ -78,13 +105,13 @@ export function RaidScoresCard({ raids, metric, bossCounts, isLoading }: RaidSco
                       </span>
                     </div>
                   </div>
-                  <RaidScoreBars encounters={raid.encounters} />
-                  <div className="text-right">
+                  <div className="flex items-baseline justify-end gap-1.5 text-right">
                     <div className={`font-mono text-3xl font-bold ${parseColor(raid.score)}`}>
                       {raid.score}
                     </div>
                     <div className="text-xs text-muted-foreground">score</div>
                   </div>
+                  <RaidScoreBars encounters={raid.encounters} />
                   <div
                     className="hidden text-xs text-muted-foreground transition-transform sm:block"
                     style={{ transform: open === key ? "rotate(0deg)" : "rotate(-90deg)" }}
@@ -94,7 +121,7 @@ export function RaidScoresCard({ raids, metric, bossCounts, isLoading }: RaidSco
                 </div>
               </CollapsibleTrigger>
               <CollapsibleContent>
-                <div className="border-b border-border bg-popover px-6 py-4">
+                <div className="bg-popover px-6 py-4">
                   <Table>
                     <TableHeader>
                       <TableRow>
