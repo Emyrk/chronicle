@@ -74,13 +74,21 @@ export function RaidCalendarCard({ instances, nightScores, start, stats, onOpenA
             <div key={w} className="flex flex-col gap-1">
               {Array.from({ length: 7 }, (_, d) => {
                 const cell = week[d];
-                if (!cell || cell.raids.length === 0) {
+                if (!cell) {
+                  // Outside the window (before its start or in the future).
+                  return <div key={d} className="size-4 rounded-xs bg-border opacity-30" />;
+                }
+                if (cell.raids.length === 0) {
                   return (
-                    <div
-                      key={d}
-                      className="size-4 rounded-xs bg-border"
-                      style={{ opacity: cell ? 1 : 0.3 }}
-                    />
+                    <Tooltip key={d}>
+                      <TooltipTrigger asChild>
+                        <div className="size-4 rounded-xs bg-border transition-transform hover:scale-125 hover:ring-1 hover:ring-foreground/40" />
+                      </TooltipTrigger>
+                      <TooltipContent className="pointer-events-none" sideOffset={4}>
+                        <div className="font-semibold">{format(cell.date, "EEE, MMM d")}</div>
+                        <div className="opacity-70">No raids logged</div>
+                      </TooltipContent>
+                    </Tooltip>
                   );
                 }
                 return (
