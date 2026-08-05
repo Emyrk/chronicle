@@ -43,6 +43,30 @@ SELECT * FROM parse_score_receipts
 WHERE instance_id = @instance_id
 ORDER BY computed_at DESC;
 
+-- name: GetParseScoreReceiptForContract :one
+-- Verify that the exact persisted projection contract completed successfully.
+SELECT *
+FROM parse_score_receipts
+WHERE tenant_id = @tenant_id
+  AND instance_id = @instance_id
+  AND snapshot_id = @snapshot_id
+  AND lookback_days = @lookback_days
+  AND policy_version = @policy_version
+  AND query_version = @query_version;
+
+-- name: ListParseScoreResultsForContract :many
+-- Read one persisted result per player and encounter for an exact completed
+-- snapshot contract. Results whose snapshot was deleted are intentionally not
+-- eligible because their receipt is deleted with the snapshot.
+SELECT DISTINCT ON (psr.encounter_name, psr.player_guid)
+    psr.*
+FROM parse_score_results psr
+WHERE psr.tenant_id = @tenant_id
+  AND psr.instance_id = @instance_id
+  AND psr.snapshot_id = @snapshot_id
+  AND psr.metric = @metric
+ORDER BY psr.encounter_name, psr.player_guid, psr.precise_score DESC, psr.created_at DESC;
+
 -- name: ListInstancesMissingParseReceipt :many
 -- Repair query: find instances that have ranking data (boss kills) but lack
 -- a receipt for the given snapshot. This catches instances with no receipt at all,

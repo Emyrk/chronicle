@@ -29,9 +29,22 @@ type parsesQuerier interface {
 	GetTenantByID(ctx context.Context, id uuid.UUID) (database.Tenant, error)
 	GetLatestPublishedSnapshot(ctx context.Context, arg database.GetLatestPublishedSnapshotParams) (database.RankingSnapshot, error)
 	GetLatestPublishedSnapshotBefore(ctx context.Context, arg database.GetLatestPublishedSnapshotBeforeParams) (database.RankingSnapshot, error)
+	GetScoringSnapshotBefore(ctx context.Context, arg database.GetScoringSnapshotBeforeParams) (database.RankingSnapshot, error)
+	GetScoringSnapshotLatest(ctx context.Context, arg database.GetScoringSnapshotLatestParams) (database.RankingSnapshot, error)
 	GetLogInstanceStartTime(ctx context.Context, id uuid.UUID) (pgtype.Timestamptz, error)
 	ListRankingsForInstance(ctx context.Context, instanceID uuid.UUID) ([]database.ListRankingsForInstanceRow, error)
+	GetParseScoreReceiptForContract(ctx context.Context, arg database.GetParseScoreReceiptForContractParams) (database.ParseScoreReceipt, error)
+	ListParseScoreResultsForContract(ctx context.Context, arg database.ListParseScoreResultsForContractParams) ([]database.ParseScoreResult, error)
 	GetSnapshotCohortValues(ctx context.Context, arg database.GetSnapshotCohortValuesParams) ([]database.GetSnapshotCohortValuesRow, error)
+}
+
+type instanceParsePlayerInfo struct {
+	name  string
+	class string
+	spec  string
+	role  string
+	// encounter -> ranking row (the instance's own metric values)
+	bosses map[string]database.ListRankingsForInstanceRow
 }
 
 // handleInstanceParses returns parse scores for players in a specific instance (log run).
@@ -167,18 +180,40 @@ func handleInstanceParsesWithStore(store parsesQuerier, logger *slog.Logger, w h
 			// the epoch), and comparing an old raid against current data
 			// would be misleading. pgx.ErrNoRows falls through to the
 			// no_snapshot response below.
-			snapshot, err = store.GetLatestPublishedSnapshotBefore(ctx, database.GetLatestPublishedSnapshotBeforeParams{
-				TenantID:     tid,
-				LookbackDays: int32(lookbackDays),
-				Before:       startTime,
-			})
+			if lookbackDays == parsepolicy.DefaultLookbackDays {
+				// Resolve the same versioned canonical contract as the
+				// persistence worker so an incompatible newer snapshot cannot
+				// hide a complete persisted projection.
+				snapshot, err = store.GetScoringSnapshotBefore(ctx, database.GetScoringSnapshotBeforeParams{
+					TenantID:      tid,
+					LookbackDays:  int32(lookbackDays),
+					Before:        startTime,
+					PolicyVersion: int16(parsepolicy.PolicyVersion),
+					QueryVersion:  int16(QueryVersion),
+				})
+			} else {
+				snapshot, err = store.GetLatestPublishedSnapshotBefore(ctx, database.GetLatestPublishedSnapshotBeforeParams{
+					TenantID:     tid,
+					LookbackDays: int32(lookbackDays),
+					Before:       startTime,
+				})
+			}
 		} else {
 			// No recorded start time: we cannot resolve a day-of-raid
 			// snapshot, so use the latest published one.
-			snapshot, err = store.GetLatestPublishedSnapshot(ctx, database.GetLatestPublishedSnapshotParams{
-				TenantID:     tid,
-				LookbackDays: int32(lookbackDays),
-			})
+			if lookbackDays == parsepolicy.DefaultLookbackDays {
+				snapshot, err = store.GetScoringSnapshotLatest(ctx, database.GetScoringSnapshotLatestParams{
+					TenantID:      tid,
+					LookbackDays:  int32(lookbackDays),
+					PolicyVersion: int16(parsepolicy.PolicyVersion),
+					QueryVersion:  int16(QueryVersion),
+				})
+			} else {
+				snapshot, err = store.GetLatestPublishedSnapshot(ctx, database.GetLatestPublishedSnapshotParams{
+					TenantID:     tid,
+					LookbackDays: int32(lookbackDays),
+				})
+			}
 		}
 	}
 	if err != nil {
@@ -238,16 +273,39 @@ func handleInstanceParsesWithStore(store parsesQuerier, logger *slog.Logger, w h
 		}
 	}
 
-	// Group ranking rows by player GUID.
-	type playerInfo struct {
-		name  string
-		class string
-		spec  string
-		role  string
-		// encounter -> ranking row (the instance's own metric values)
-		bosses map[string]database.ListRankingsForInstanceRow
+	// A complete receipt makes the persisted projection authoritative for the
+	// worker's canonical historical contract. Requests for other lookbacks or
+	// the latest/current snapshot continue through the on-demand path below.
+	if timeframe == "historical" && lookbackDays == parsepolicy.DefaultLookbackDays {
+		persistedPlayers, complete, persistedErr := loadPersistedInstanceParses(
+			ctx, store, tid, instanceID, snapshot, rankings, encounterNames, metric,
+		)
+		if persistedErr != nil {
+			httpapi.HandleResponseError(ctx, w, persistedErr, httpapi.APIError{
+				Response: chroniclesdk.Response{
+					Message: "Failed to fetch persisted instance parses",
+					Detail:  persistedErr.Error(),
+				},
+			})
+			return
+		}
+		if complete {
+			httpapi.Write(ctx, w, http.StatusOK, chroniclesdk.InstanceParsesResponse{
+				Available:          true,
+				SnapshotID:         snapshot.ID,
+				Cutoff:             snapshot.Cutoff.Time,
+				LookbackDays:       snapshot.LookbackDays,
+				CohortMode:         snapshot.CohortMode,
+				SelectedEncounters: encounterNames,
+				Metric:             string(metric),
+				Players:            persistedPlayers,
+			})
+			return
+		}
 	}
-	players := make(map[string]*playerInfo)
+
+	// Group ranking rows by player GUID for on-demand fallback.
+	players := make(map[string]*instanceParsePlayerInfo)
 	// Track player insertion order for stable output.
 	var playerOrder []string
 
@@ -257,7 +315,7 @@ func handleInstanceParsesWithStore(store parsesQuerier, logger *slog.Logger, w h
 		}
 		p, exists := players[m.PlayerGuid]
 		if !exists {
-			p = &playerInfo{
+			p = &instanceParsePlayerInfo{
 				name:   m.PlayerName,
 				class:  m.PlayerClass,
 				spec:   m.PlayerSpec,
@@ -416,6 +474,171 @@ func handleInstanceParsesWithStore(store parsesQuerier, logger *slog.Logger, w h
 		Metric:             string(metric),
 		Players:            result,
 	})
+}
+
+func loadPersistedInstanceParses(
+	ctx context.Context,
+	store parsesQuerier,
+	tenantID, instanceID uuid.UUID,
+	snapshot database.RankingSnapshot,
+	rankings []database.ListRankingsForInstanceRow,
+	encounterNames []string,
+	metric parsepolicy.Metric,
+) ([]chroniclesdk.InstanceParsePlayer, bool, error) {
+	_, err := store.GetParseScoreReceiptForContract(ctx, database.GetParseScoreReceiptForContractParams{
+		TenantID:      tenantID,
+		InstanceID:    instanceID,
+		SnapshotID:    snapshot.ID,
+		LookbackDays:  int16(parsepolicy.DefaultLookbackDays),
+		PolicyVersion: int16(parsepolicy.PolicyVersion),
+		QueryVersion:  int16(QueryVersion),
+	})
+	if errors.Is(err, pgx.ErrNoRows) {
+		return nil, false, nil
+	}
+	if err != nil {
+		return nil, false, fmt.Errorf("get parse score receipt: %w", err)
+	}
+
+	persisted, err := store.ListParseScoreResultsForContract(ctx, database.ListParseScoreResultsForContractParams{
+		TenantID:   tenantID,
+		InstanceID: instanceID,
+		SnapshotID: uuid.NullUUID{UUID: snapshot.ID, Valid: true},
+		Metric:     string(metric),
+	})
+	if err != nil {
+		return nil, false, fmt.Errorf("list persisted parse scores: %w", err)
+	}
+
+	players, complete := buildPersistedInstanceParsePlayers(
+		rankings,
+		persisted,
+		encounterNames,
+		metric,
+		parsepolicy.CohortMode(snapshot.CohortMode),
+	)
+	return players, complete, nil
+}
+
+func buildPersistedInstanceParsePlayers(
+	rankings []database.ListRankingsForInstanceRow,
+	persisted []database.ParseScoreResult,
+	encounterNames []string,
+	metric parsepolicy.Metric,
+	cohortMode parsepolicy.CohortMode,
+) ([]chroniclesdk.InstanceParsePlayer, bool) {
+	encounterSet := make(map[string]struct{}, len(encounterNames))
+	for _, encounterName := range encounterNames {
+		encounterSet[encounterName] = struct{}{}
+	}
+
+	players := make(map[string]*instanceParsePlayerInfo)
+	playerOrder := make([]string, 0)
+	for _, ranking := range rankings {
+		if _, selected := encounterSet[ranking.EncounterName]; !selected {
+			continue
+		}
+		player, exists := players[ranking.PlayerGuid]
+		if !exists {
+			player = &instanceParsePlayerInfo{
+				name:   ranking.PlayerName,
+				class:  ranking.PlayerClass,
+				spec:   ranking.PlayerSpec,
+				role:   ranking.PlayerRole,
+				bosses: make(map[string]database.ListRankingsForInstanceRow),
+			}
+			players[ranking.PlayerGuid] = player
+			playerOrder = append(playerOrder, ranking.PlayerGuid)
+		}
+		if _, exists := player.bosses[ranking.EncounterName]; !exists {
+			player.bosses[ranking.EncounterName] = ranking
+		}
+	}
+
+	type resultKey struct {
+		playerGUID    string
+		encounterName string
+	}
+	results := make(map[resultKey]database.ParseScoreResult, len(persisted))
+	for _, result := range persisted {
+		results[resultKey{playerGUID: result.PlayerGuid, encounterName: result.EncounterName}] = result
+	}
+
+	response := make([]chroniclesdk.InstanceParsePlayer, 0, len(playerOrder))
+	for _, playerGUID := range playerOrder {
+		player := players[playerGUID]
+		sdkPlayer := chroniclesdk.InstanceParsePlayer{
+			PlayerGUID:  playerGUID,
+			PlayerName:  player.name,
+			PlayerClass: normalizeClassName(player.class),
+			PlayerSpec:  player.spec,
+			PlayerRole:  player.role,
+			Bosses:      make([]chroniclesdk.InstanceParseBoss, 0, len(player.bosses)),
+		}
+
+		unknownSpec := cohortMode == parsepolicy.CohortModeSpec && (player.spec == "" || strings.EqualFold(player.spec, "unknown"))
+		if unknownSpec {
+			sdkPlayer.Status = string(parsepolicy.ReasonUnknownSpec)
+			sdkPlayer.Reason = "Unknown spec; cannot score in spec mode"
+		}
+
+		preciseScores := make([]float64, 0, len(encounterNames))
+		for _, encounterName := range encounterNames {
+			ranking, killed := player.bosses[encounterName]
+			if !killed {
+				continue
+			}
+
+			metricValue := ranking.Dps
+			if metric == parsepolicy.MetricHPS {
+				metricValue = ranking.Hps
+			}
+			boss := chroniclesdk.InstanceParseBoss{
+				EncounterName: encounterName,
+				MetricValue:   metricValue,
+				Status:        string(parsepolicy.StatusSampleTooSmall),
+			}
+			if metricValue <= 0 {
+				boss.Status = "no_metric_value"
+				sdkPlayer.Bosses = append(sdkPlayer.Bosses, boss)
+				continue
+			}
+			if unknownSpec {
+				sdkPlayer.Bosses = append(sdkPlayer.Bosses, boss)
+				continue
+			}
+
+			persistedResult, exists := results[resultKey{playerGUID: playerGUID, encounterName: encounterName}]
+			if !exists {
+				// A successful receipt promises a complete projection. Fall back to
+				// on-demand scoring if the persisted rows violate that invariant.
+				return nil, false
+			}
+			boss.MetricValue = persistedResult.MetricValue
+			boss.PreciseScore = persistedResult.PreciseScore
+			boss.DisplayScore = int(persistedResult.DisplayScore)
+			boss.Rank = int(persistedResult.Rank)
+			boss.SampleSize = int(persistedResult.SampleSize)
+			boss.Status = persistedResult.Status
+			if persistedResult.Status == string(parsepolicy.StatusOK) ||
+				persistedResult.Status == string(parsepolicy.StatusLowConfidence) {
+				preciseScores = append(preciseScores, persistedResult.PreciseScore)
+			}
+			sdkPlayer.Bosses = append(sdkPlayer.Bosses, boss)
+		}
+
+		if avg, ok := parsepolicy.AverageParse(preciseScores, len(encounterNames)); ok {
+			sdkPlayer.AverageParse = &chroniclesdk.InstanceParseAverage{
+				PreciseScore: avg.PreciseScore,
+				DisplayScore: avg.DisplayScore,
+				Killed:       avg.Killed,
+				Selected:     avg.Selected,
+			}
+		}
+		response = append(response, sdkPlayer)
+	}
+
+	return response, true
 }
 
 // toFloat64 converts an interface{} (typically from a SQL aggregate) to float64.

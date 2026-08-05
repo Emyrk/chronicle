@@ -5089,6 +5089,53 @@ func (q *sqlQuerier) GetParseScoreReceipt(ctx context.Context, arg GetParseScore
 	return i, err
 }
 
+const getParseScoreReceiptForContract = `-- name: GetParseScoreReceiptForContract :one
+SELECT id, tenant_id, instance_id, snapshot_id, policy_version, query_version, lookback_days, source_count, result_count, computed_at, created_at
+FROM parse_score_receipts
+WHERE tenant_id = $1
+  AND instance_id = $2
+  AND snapshot_id = $3
+  AND lookback_days = $4
+  AND policy_version = $5
+  AND query_version = $6
+`
+
+type GetParseScoreReceiptForContractParams struct {
+	TenantID      uuid.UUID `db:"tenant_id" json:"tenant_id"`
+	InstanceID    uuid.UUID `db:"instance_id" json:"instance_id"`
+	SnapshotID    uuid.UUID `db:"snapshot_id" json:"snapshot_id"`
+	LookbackDays  int16     `db:"lookback_days" json:"lookback_days"`
+	PolicyVersion int16     `db:"policy_version" json:"policy_version"`
+	QueryVersion  int16     `db:"query_version" json:"query_version"`
+}
+
+// Verify that the exact persisted projection contract completed successfully.
+func (q *sqlQuerier) GetParseScoreReceiptForContract(ctx context.Context, arg GetParseScoreReceiptForContractParams) (ParseScoreReceipt, error) {
+	row := q.db.QueryRow(ctx, getParseScoreReceiptForContract,
+		arg.TenantID,
+		arg.InstanceID,
+		arg.SnapshotID,
+		arg.LookbackDays,
+		arg.PolicyVersion,
+		arg.QueryVersion,
+	)
+	var i ParseScoreReceipt
+	err := row.Scan(
+		&i.ID,
+		&i.TenantID,
+		&i.InstanceID,
+		&i.SnapshotID,
+		&i.PolicyVersion,
+		&i.QueryVersion,
+		&i.LookbackDays,
+		&i.SourceCount,
+		&i.ResultCount,
+		&i.ComputedAt,
+		&i.CreatedAt,
+	)
+	return i, err
+}
+
 const getParseScoreReceiptForInstance = `-- name: GetParseScoreReceiptForInstance :many
 SELECT id, tenant_id, instance_id, snapshot_id, policy_version, query_version, lookback_days, source_count, result_count, computed_at, created_at FROM parse_score_receipts
 WHERE instance_id = $1
@@ -5597,6 +5644,78 @@ func (q *sqlQuerier) ListInstancesMissingParseReceiptWithSnapshot(ctx context.Co
 			&i.LogGroupID,
 			&i.GuildID,
 			&i.SnapshotID,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listParseScoreResultsForContract = `-- name: ListParseScoreResultsForContract :many
+SELECT DISTINCT ON (psr.encounter_name, psr.player_guid)
+    psr.id, psr.tenant_id, psr.instance_id, psr.run_id, psr.snapshot_id, psr.log_group_id, psr.guild_id, psr.encounter_name, psr.player_guid, psr.player_name, psr.player_class, psr.player_spec, psr.player_role, psr.metric, psr.metric_value, psr.precise_score, psr.display_score, psr.rank, psr.sample_size, psr.status, psr.instance_name, psr.difficulty_name, psr.max_players, psr.killed_at, psr.created_at
+FROM parse_score_results psr
+WHERE psr.tenant_id = $1
+  AND psr.instance_id = $2
+  AND psr.snapshot_id = $3
+  AND psr.metric = $4
+ORDER BY psr.encounter_name, psr.player_guid, psr.precise_score DESC, psr.created_at DESC
+`
+
+type ListParseScoreResultsForContractParams struct {
+	TenantID   uuid.UUID     `db:"tenant_id" json:"tenant_id"`
+	InstanceID uuid.UUID     `db:"instance_id" json:"instance_id"`
+	SnapshotID uuid.NullUUID `db:"snapshot_id" json:"snapshot_id"`
+	Metric     string        `db:"metric" json:"metric"`
+}
+
+// Read one persisted result per player and encounter for an exact completed
+// snapshot contract. Results whose snapshot was deleted are intentionally not
+// eligible because their receipt is deleted with the snapshot.
+func (q *sqlQuerier) ListParseScoreResultsForContract(ctx context.Context, arg ListParseScoreResultsForContractParams) ([]ParseScoreResult, error) {
+	rows, err := q.db.Query(ctx, listParseScoreResultsForContract,
+		arg.TenantID,
+		arg.InstanceID,
+		arg.SnapshotID,
+		arg.Metric,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ParseScoreResult
+	for rows.Next() {
+		var i ParseScoreResult
+		if err := rows.Scan(
+			&i.ID,
+			&i.TenantID,
+			&i.InstanceID,
+			&i.RunID,
+			&i.SnapshotID,
+			&i.LogGroupID,
+			&i.GuildID,
+			&i.EncounterName,
+			&i.PlayerGuid,
+			&i.PlayerName,
+			&i.PlayerClass,
+			&i.PlayerSpec,
+			&i.PlayerRole,
+			&i.Metric,
+			&i.MetricValue,
+			&i.PreciseScore,
+			&i.DisplayScore,
+			&i.Rank,
+			&i.SampleSize,
+			&i.Status,
+			&i.InstanceName,
+			&i.DifficultyName,
+			&i.MaxPlayers,
+			&i.KilledAt,
+			&i.CreatedAt,
 		); err != nil {
 			return nil, err
 		}

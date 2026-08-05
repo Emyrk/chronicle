@@ -9,8 +9,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/Emyrk/chronicle/api/chroniclesdk"
 	"fmt"
+	"github.com/Emyrk/chronicle/api/chroniclesdk"
 
 	"github.com/Emyrk/chronicle/combatlog/parser/guid"
 	"github.com/Emyrk/chronicle/database"
@@ -162,10 +162,314 @@ func (f parsesTestFixture) publishSnapshot(t *testing.T) database.RankingSnapsho
 	return snap
 }
 
+func (f parsesTestFixture) insertSimpleRanking(
+	t *testing.T,
+	encounterName, playerGUID string,
+	dps, hps float64,
+) {
+	t.Helper()
+	f.insertTestRanking(t, struct {
+		encounterName  string
+		playerGUID     string
+		playerName     string
+		playerClass    string
+		playerSpec     string
+		dps            float64
+		hps            float64
+		difficultyName string
+		maxPlayers     int16
+		killedAt       time.Time
+	}{
+		encounterName:  encounterName,
+		playerGUID:     playerGUID,
+		playerName:     "PersistedPlayer",
+		playerClass:    "WARRIOR",
+		playerSpec:     "Arms",
+		dps:            dps,
+		hps:            hps,
+		difficultyName: "Normal",
+		maxPlayers:     40,
+		killedAt:       time.Now(),
+	})
+}
+
+func (f parsesTestFixture) insertPersistedParseResult(t *testing.T, params struct {
+	tenantID      uuid.UUID
+	snapshotID    uuid.NullUUID
+	encounterName string
+	playerGUID    string
+	playerName    string
+	metric        string
+	metricValue   float64
+	preciseScore  float64
+	displayScore  int16
+	rank          int32
+	sampleSize    int32
+	status        string
+}) {
+	t.Helper()
+	ctx := testutil.Context(t, testutil.WaitShort)
+	require.NoError(t, f.store.InsertParseScoreResult(ctx, database.InsertParseScoreResultParams{
+		TenantID:       params.tenantID,
+		InstanceID:     f.instanceID,
+		RunID:          f.instanceID,
+		SnapshotID:     params.snapshotID,
+		EncounterName:  params.encounterName,
+		PlayerGuid:     params.playerGUID,
+		PlayerName:     params.playerName,
+		PlayerClass:    "WARRIOR",
+		PlayerSpec:     "Arms",
+		PlayerRole:     "dps",
+		Metric:         params.metric,
+		MetricValue:    params.metricValue,
+		PreciseScore:   params.preciseScore,
+		DisplayScore:   params.displayScore,
+		Rank:           params.rank,
+		SampleSize:     params.sampleSize,
+		Status:         params.status,
+		InstanceName:   "Molten Core",
+		DifficultyName: "Normal",
+		MaxPlayers:     40,
+		KilledAt:       database.Timestamptz(time.Now()),
+	}))
+}
+
+func (f parsesTestFixture) insertPersistedParseReceipt(
+	t *testing.T,
+	tenantID uuid.UUID,
+	snapshotID uuid.UUID,
+	resultCount int32,
+) {
+	t.Helper()
+	ctx := testutil.Context(t, testutil.WaitShort)
+	_, err := f.store.InsertParseScoreReceipt(ctx, database.InsertParseScoreReceiptParams{
+		TenantID:      tenantID,
+		InstanceID:    f.instanceID,
+		SnapshotID:    snapshotID,
+		PolicyVersion: int16(parsepolicy.PolicyVersion),
+		QueryVersion:  int16(servicerankings.QueryVersion),
+		LookbackDays:  int16(parsepolicy.DefaultLookbackDays),
+		SourceCount:   resultCount,
+		ResultCount:   resultCount,
+	})
+	require.NoError(t, err)
+}
+
+func requestInstanceParses(
+	t *testing.T,
+	store database.Store,
+	instanceID uuid.UUID,
+	query string,
+) chroniclesdk.InstanceParsesResponse {
+	t.Helper()
+	svc := newTestService(t, store)
+	r := chi.NewRouter()
+	r.Get("/instances/{instanceID}/parses", svc.HandleInstanceParses)
+
+	req := httptest.NewRequest("GET", "/instances/"+instanceID.String()+"/parses"+query, nil)
+	w := httptest.NewRecorder()
+	r.ServeHTTP(w, req)
+	require.Equal(t, http.StatusOK, w.Code)
+
+	var response chroniclesdk.InstanceParsesResponse
+	require.NoError(t, json.NewDecoder(w.Body).Decode(&response))
+	return response
+}
+
 // newTestService creates a minimal Service that can handle instance parses requests.
 func newTestService(t *testing.T, store database.Store) *servicerankings.TestableService {
 	t.Helper()
 	return servicerankings.NewTestableService(store, slog.Default())
+}
+
+func TestHandleInstanceParses_PersistedProjection(t *testing.T) {
+	t.Parallel()
+
+	persistedResult := func(
+		f parsesTestFixture,
+		t *testing.T,
+		snapshotID uuid.NullUUID,
+		tenantID uuid.UUID,
+		encounterName, metric string,
+		score int16,
+	) {
+		f.insertPersistedParseResult(t, struct {
+			tenantID      uuid.UUID
+			snapshotID    uuid.NullUUID
+			encounterName string
+			playerGUID    string
+			playerName    string
+			metric        string
+			metricValue   float64
+			preciseScore  float64
+			displayScore  int16
+			rank          int32
+			sampleSize    int32
+			status        string
+		}{
+			tenantID:      tenantID,
+			snapshotID:    snapshotID,
+			encounterName: encounterName,
+			playerGUID:    "Player-persisted",
+			playerName:    "PersistedPlayer",
+			metric:        metric,
+			metricValue:   1234,
+			preciseScore:  float64(score),
+			displayScore:  score,
+			rank:          2,
+			sampleSize:    25,
+			status:        string(parsepolicy.StatusOK),
+		})
+	}
+
+	t.Run("PrefersDPSAndHPSResultsAndPreservesMultiEncounterAverage", func(t *testing.T) {
+		t.Parallel()
+		f := setupParsesTest(t)
+		f.insertSimpleRanking(t, "Ragnaros", "Player-persisted", 1000, 500)
+		f.insertSimpleRanking(t, "Golemagg", "Player-persisted", 900, 400)
+		snapshot := f.publishSnapshot(t)
+		snapshotID := uuid.NullUUID{UUID: snapshot.ID, Valid: true}
+
+		persistedResult(f, t, snapshotID, uuid.Nil, "Ragnaros", "dps", 90)
+		persistedResult(f, t, snapshotID, uuid.Nil, "Golemagg", "dps", 70)
+		persistedResult(f, t, snapshotID, uuid.Nil, "Ragnaros", "hps", 80)
+		persistedResult(f, t, snapshotID, uuid.Nil, "Golemagg", "hps", 60)
+		f.insertPersistedParseReceipt(t, uuid.Nil, snapshot.ID, 4)
+
+		// A newer incompatible snapshot must not hide the worker's canonical
+		// versioned snapshot and its complete persisted projection.
+		ctx := testutil.Context(t, testutil.WaitShort)
+		incompatible, err := f.store.InsertRankingSnapshot(ctx, database.InsertRankingSnapshotParams{
+			TenantID:      uuid.Nil,
+			Cutoff:        pgtype.Timestamptz{Time: time.Now().Add(2 * time.Hour), Valid: true},
+			LookbackDays:  int32(parsepolicy.DefaultLookbackDays),
+			CohortMode:    string(parsepolicy.CohortModeSpec),
+			PolicyVersion: int16(parsepolicy.PolicyVersion),
+			QueryVersion:  int16(servicerankings.QueryVersion + 1),
+		})
+		require.NoError(t, err)
+		_, err = f.store.PublishRankingSnapshot(ctx, incompatible.ID)
+		require.NoError(t, err)
+
+		for _, test := range []struct {
+			metric      string
+			period      string
+			wantScores  []int
+			wantAverage int
+		}{
+			{metric: "dps", wantScores: []int{90, 70}, wantAverage: 80},
+			{metric: "hps", period: "&period=60d", wantScores: []int{80, 60}, wantAverage: 70},
+		} {
+			response := requestInstanceParses(
+				t,
+				f.store,
+				f.instanceID,
+				"?encounter_names=Ragnaros,Golemagg&metric="+test.metric+test.period,
+			)
+			require.True(t, response.Available)
+			require.Len(t, response.Players, 1)
+			require.Len(t, response.Players[0].Bosses, 2)
+			assert.Equal(t, test.wantScores[0], response.Players[0].Bosses[0].DisplayScore)
+			assert.Equal(t, test.wantScores[1], response.Players[0].Bosses[1].DisplayScore)
+			require.NotNil(t, response.Players[0].AverageParse)
+			assert.Equal(t, test.wantAverage, response.Players[0].AverageParse.DisplayScore)
+		}
+	})
+
+	t.Run("MissingReceiptFallsBackToOnDemand", func(t *testing.T) {
+		t.Parallel()
+		f := setupParsesTest(t)
+		f.insertSimpleRanking(t, "Ragnaros", "Player-persisted", 1000, 0)
+		snapshot := f.publishSnapshot(t)
+		persistedResult(f, t, uuid.NullUUID{UUID: snapshot.ID, Valid: true}, uuid.Nil, "Ragnaros", "dps", 99)
+
+		response := requestInstanceParses(t, f.store, f.instanceID, "?encounter_names=Ragnaros&metric=dps")
+		require.Len(t, response.Players, 1)
+		require.Len(t, response.Players[0].Bosses, 1)
+		assert.Equal(t, 0, response.Players[0].Bosses[0].DisplayScore)
+		assert.Equal(t, string(parsepolicy.StatusSampleTooSmall), response.Players[0].Bosses[0].Status)
+	})
+
+	t.Run("IncompletePersistedRowsFallBackToOnDemand", func(t *testing.T) {
+		t.Parallel()
+		f := setupParsesTest(t)
+		f.insertSimpleRanking(t, "Ragnaros", "Player-persisted", 1000, 0)
+		snapshot := f.publishSnapshot(t)
+		f.insertPersistedParseReceipt(t, uuid.Nil, snapshot.ID, 1)
+
+		response := requestInstanceParses(t, f.store, f.instanceID, "?encounter_names=Ragnaros&metric=dps")
+		require.Len(t, response.Players, 1)
+		assert.Equal(t, string(parsepolicy.StatusSampleTooSmall), response.Players[0].Bosses[0].Status)
+	})
+
+	t.Run("CurrentTimeframeIgnoresPersistedProjection", func(t *testing.T) {
+		t.Parallel()
+		f := setupParsesTest(t)
+		f.insertSimpleRanking(t, "Ragnaros", "Player-persisted", 1000, 0)
+		snapshot := f.publishSnapshot(t)
+		persistedResult(f, t, uuid.NullUUID{UUID: snapshot.ID, Valid: true}, uuid.Nil, "Ragnaros", "dps", 99)
+		f.insertPersistedParseReceipt(t, uuid.Nil, snapshot.ID, 1)
+
+		response := requestInstanceParses(t, f.store, f.instanceID, "?encounter_names=Ragnaros&metric=dps&timeframe=current")
+		require.Len(t, response.Players, 1)
+		assert.Equal(t, string(parsepolicy.StatusSampleTooSmall), response.Players[0].Bosses[0].Status)
+	})
+
+	t.Run("NonDefaultPeriodIgnoresPersistedProjection", func(t *testing.T) {
+		t.Parallel()
+		f := setupParsesTest(t)
+		f.insertSimpleRanking(t, "Ragnaros", "Player-persisted", 1000, 0)
+		defaultSnapshot := f.publishSnapshot(t)
+		persistedResult(f, t, uuid.NullUUID{UUID: defaultSnapshot.ID, Valid: true}, uuid.Nil, "Ragnaros", "dps", 99)
+		f.insertPersistedParseReceipt(t, uuid.Nil, defaultSnapshot.ID, 1)
+
+		ctx := testutil.Context(t, testutil.WaitShort)
+		shortSnapshot, err := f.store.InsertRankingSnapshot(ctx, database.InsertRankingSnapshotParams{
+			TenantID:      uuid.Nil,
+			Cutoff:        pgtype.Timestamptz{Time: time.Now().Add(2 * time.Hour), Valid: true},
+			LookbackDays:  int32(parsepolicy.Lookback30Days),
+			CohortMode:    string(parsepolicy.CohortModeSpec),
+			PolicyVersion: int16(parsepolicy.PolicyVersion),
+			QueryVersion:  int16(servicerankings.QueryVersion),
+		})
+		require.NoError(t, err)
+		require.NoError(t, f.store.BatchInsertSnapshotMembersFromRankings(ctx, shortSnapshot.ID))
+		_, err = f.store.PublishRankingSnapshot(ctx, shortSnapshot.ID)
+		require.NoError(t, err)
+
+		response := requestInstanceParses(t, f.store, f.instanceID, "?encounter_names=Ragnaros&metric=dps&period=30d")
+		require.Len(t, response.Players, 1)
+		assert.Equal(t, string(parsepolicy.StatusSampleTooSmall), response.Players[0].Bosses[0].Status)
+	})
+
+	t.Run("OtherTenantAndNullSnapshotRowsAreNotEligible", func(t *testing.T) {
+		t.Parallel()
+		f := setupParsesTest(t)
+		f.insertSimpleRanking(t, "Ragnaros", "Player-persisted", 1000, 0)
+		snapshot := f.publishSnapshot(t)
+		otherTenantID := uuid.New()
+
+		persistedResult(f, t, uuid.NullUUID{UUID: snapshot.ID, Valid: true}, otherTenantID, "Ragnaros", "dps", 98)
+		f.insertPersistedParseReceipt(t, otherTenantID, snapshot.ID, 1)
+		persistedResult(f, t, uuid.NullUUID{}, uuid.Nil, "Ragnaros", "dps", 97)
+		persistedResult(f, t, uuid.NullUUID{UUID: snapshot.ID, Valid: true}, uuid.Nil, "Ragnaros", "dps", 96)
+		ctx := testutil.Context(t, testutil.WaitShort)
+		_, err := f.store.InsertParseScoreReceipt(ctx, database.InsertParseScoreReceiptParams{
+			TenantID:      uuid.Nil,
+			InstanceID:    f.instanceID,
+			SnapshotID:    snapshot.ID,
+			PolicyVersion: int16(parsepolicy.PolicyVersion),
+			QueryVersion:  int16(servicerankings.QueryVersion + 1),
+			LookbackDays:  int16(parsepolicy.DefaultLookbackDays),
+			SourceCount:   1,
+			ResultCount:   1,
+		})
+		require.NoError(t, err)
+
+		response := requestInstanceParses(t, f.store, f.instanceID, "?encounter_names=Ragnaros&metric=dps")
+		require.Len(t, response.Players, 1)
+		assert.Equal(t, string(parsepolicy.StatusSampleTooSmall), response.Players[0].Bosses[0].Status)
+	})
 }
 
 func TestHandleInstanceParses(t *testing.T) {

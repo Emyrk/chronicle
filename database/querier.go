@@ -201,6 +201,8 @@ type sqlcQuerier interface {
 	GetPanelLayoutByID(ctx context.Context, id uuid.UUID) (GetPanelLayoutByIDRow, error)
 	// Get receipt by instance + snapshot.
 	GetParseScoreReceipt(ctx context.Context, arg GetParseScoreReceiptParams) (ParseScoreReceipt, error)
+	// Verify that the exact persisted projection contract completed successfully.
+	GetParseScoreReceiptForContract(ctx context.Context, arg GetParseScoreReceiptForContractParams) (ParseScoreReceipt, error)
 	// Get all receipts for an instance (any snapshot).
 	GetParseScoreReceiptForInstance(ctx context.Context, instanceID uuid.UUID) ([]ParseScoreReceipt, error)
 	// Read deduplicated parse score results for an instance.
@@ -433,6 +435,10 @@ type sqlcQuerier interface {
 	ListInstancesMissingParseReceiptWithSnapshot(ctx context.Context, arg ListInstancesMissingParseReceiptWithSnapshotParams) ([]ListInstancesMissingParseReceiptWithSnapshotRow, error)
 	ListLeaderboardVersionRequirements(ctx context.Context) ([]LeaderboardVersionRequirement, error)
 	ListModificationRequestsByApplicationID(ctx context.Context, applicationID uuid.UUID) ([]ApplicationModificationRequest, error)
+	// Read one persisted result per player and encounter for an exact completed
+	// snapshot contract. Results whose snapshot was deleted are intentionally not
+	// eligible because their receipt is deleted with the snapshot.
+	ListParseScoreResultsForContract(ctx context.Context, arg ListParseScoreResultsForContractParams) ([]ParseScoreResult, error)
 	// Return published snapshots for a tenant, most recent first.
 	ListPublishedSnapshots(ctx context.Context, tenantID uuid.UUID) ([]ListPublishedSnapshotsRow, error)
 	// Load ranking rows for a specific instance directly from encounter_dps_rankings.
