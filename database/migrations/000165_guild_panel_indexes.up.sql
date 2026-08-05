@@ -10,4 +10,10 @@ CREATE INDEX idx_game_players_guild
 ON game_players (guild_id)
 WHERE guild_id IS NOT NULL;
 
+-- Guild page "Progression" panel and recent-instances guild filter: list a
+-- guild's raid instances.
+CREATE INDEX idx_log_instances_guild
+ON log_instances (guild_id)
+WHERE guild_id IS NOT NULL;
+
 COMMIT;

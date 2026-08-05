@@ -24,18 +24,21 @@ function formatMetricValue(parse: GuildTopParse): string {
   return `${rounded} ${parse.metric.toUpperCase()}`;
 }
 
-function ParseRow({ parse, rank, realmName }: { parse: GuildTopParse; rank: number; realmName: string }) {
+function ParseRow({ parse, rank }: { parse: GuildTopParse; rank: number }) {
   const color = CLASS_CSS_VAR[parse.player_class] ?? CLASS_CSS_VAR.UNKNOWN;
   const killedAt = new Date(parse.killed_at);
   const tooltip = `${formatMetricValue(parse)} · ${killedAt.toLocaleDateString(undefined, {
     year: "numeric",
     month: "short",
     day: "numeric",
-  })}`;
+  })} · view raid log`;
+  const instanceUrl = parse.instance_slug
+    ? `/instances/${parse.instance_slug}`
+    : `/instances/${parse.instance_id}`;
 
   return (
     <Link
-      to={`/armory/${encodeURIComponent(realmName)}/${encodeURIComponent(parse.player_guid)}`}
+      to={instanceUrl}
       className="grid grid-cols-[24px_1fr_auto] items-center gap-2.5 border-b border-border/40 py-1.5 last:border-b-0 hover:bg-muted/30 rounded-sm px-1 -mx-1"
       title={tooltip}
     >
@@ -130,18 +133,23 @@ function TopParsesContent({ config, position, guild }: GuildPanelRenderProps<Top
   const cols = position.w >= 8 ? 2 : 1;
 
   return (
-    <div
-      className="grid gap-x-6 content-start p-1"
-      style={{ gridTemplateColumns: `repeat(${cols}, minmax(0, 1fr))` }}
-    >
-      {parses.map((parse, i) => (
-        <ParseRow
-          key={`${parse.player_guid}-${parse.encounter_name}-${parse.killed_at}`}
-          parse={parse}
-          rank={i + 1}
-          realmName={guild.realm_name}
-        />
-      ))}
+    <div className="flex h-full flex-col p-1">
+      <div className="flex items-center justify-between pb-1 text-[11px] text-muted-foreground">
+        <span className="uppercase tracking-wider">{metric}</span>
+        <span>{sinceDays ? TIME_WINDOW_LABELS[sinceDays] : "All time"}</span>
+      </div>
+      <div
+        className="grid gap-x-6 content-start"
+        style={{ gridTemplateColumns: `repeat(${cols}, minmax(0, 1fr))` }}
+      >
+        {parses.map((parse, i) => (
+          <ParseRow
+            key={`${parse.player_guid}-${parse.encounter_name}-${parse.killed_at}`}
+            parse={parse}
+            rank={i + 1}
+          />
+        ))}
+      </div>
     </div>
   );
 }

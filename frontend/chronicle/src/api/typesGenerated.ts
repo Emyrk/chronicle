@@ -966,6 +966,26 @@ export interface GuildCharacterRosterResponse {
 }
 
 // From chroniclesdk/guild_page.go
+/**
+ * GuildEncounterKill aggregates a guild's kills of one encounter across all
+ * time. Duplicate uploads of the same raid night count once.
+ */
+export interface GuildEncounterKill {
+    readonly instance_name: string;
+    readonly encounter_name: string;
+    readonly difficulty_name: string;
+    readonly max_players: number;
+    readonly kills: number;
+    readonly first_killed_at: string;
+    readonly last_killed_at: string;
+}
+
+// From chroniclesdk/guild_page.go
+export interface GuildEncounterKillsResponse {
+    readonly encounters: readonly GuildEncounterKill[];
+}
+
+// From chroniclesdk/guild_page.go
 export interface GuildInfo {
     readonly id: string;
     readonly name: string;
@@ -1087,17 +1107,21 @@ export interface GuildRosterMember {
 
 // From chroniclesdk/guild_page.go
 /**
- * GuildRunParseAverage is the guild's average parse for one raid night (run).
+ * GuildRunEncounterParse is the guild's average parse for one encounter of
+ * one raid night (run). Encounters are returned in kill order; callers weight
+ * by ParseCount for a whole-run average.
  */
-export interface GuildRunParseAverage {
+export interface GuildRunEncounterParse {
     readonly run_id: string;
+    readonly encounter_name: string;
     readonly avg_parse: number;
     readonly parse_count: number;
+    readonly killed_at: string;
 }
 
 // From chroniclesdk/guild_page.go
 export interface GuildRunParsesResponse {
-    readonly runs: readonly GuildRunParseAverage[];
+    readonly encounters: readonly GuildRunEncounterParse[];
 }
 
 // From chroniclesdk/guild_page.go
@@ -1115,6 +1139,7 @@ export const GuildTags: GuildTag[] = ["Casual", "Chinese", "Dungeons", "English"
 // From chroniclesdk/guild_page.go
 /**
  * GuildTopParse is one ranked parse on a guild's top parses board.
+ * InstanceID/InstanceSlug identify the raid log the parse came from.
  */
 export interface GuildTopParse {
     readonly player_guid: string;
@@ -1123,6 +1148,8 @@ export interface GuildTopParse {
     readonly player_spec: string;
     readonly player_role: string;
     readonly encounter_name: string;
+    readonly instance_id: string;
+    readonly instance_slug?: string;
     readonly instance_name: string;
     readonly difficulty_name: string;
     readonly max_players: number;

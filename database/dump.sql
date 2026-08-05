@@ -2118,6 +2118,8 @@ CREATE INDEX idx_log_instance_players_unit_guid_instance ON log_instance_players
 
 CREATE INDEX idx_log_instances_duplicate_group ON log_instances USING btree (duplicate_group_id) WHERE (duplicate_group_id IS NOT NULL);
 
+CREATE INDEX idx_log_instances_guild ON log_instances USING btree (guild_id) WHERE (guild_id IS NOT NULL);
+
 CREATE INDEX idx_log_instances_log_group_id ON log_instances USING btree (log_group_id);
 
 CREATE INDEX idx_log_instances_realm_id ON log_instances USING btree (realm_id);

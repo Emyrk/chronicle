@@ -1,119 +1,188 @@
-import { Trophy, CheckCircle, XCircle } from "lucide-react";
+import { useEffect, useMemo, useState } from "react";
+import { Trophy, AlertCircle } from "lucide-react";
+import type { GuildEncounterKill, GuildEncounterKillsResponse } from "@/api/typesGenerated";
+import { useSupportedInstanceBossCounts } from "@/api/queries";
 import type { GuildPanelDefinition, GuildPanelRenderProps } from "./types";
 
 interface ProgressConfig {
-  instance: string;
+  showKillCounts: boolean;
 }
 
-// Stubbed fake data
-const FAKE_PROGRESS: Record<string, { name: string; bosses: { name: string; killed: boolean }[] }> = {
-  mc: {
-    name: "Molten Core",
-    bosses: [
-      { name: "Lucifron", killed: true },
-      { name: "Magmadar", killed: true },
-      { name: "Gehennas", killed: true },
-      { name: "Garr", killed: true },
-      { name: "Baron Geddon", killed: true },
-      { name: "Shazzrah", killed: true },
-      { name: "Sulfuron Harbinger", killed: true },
-      { name: "Golemagg", killed: true },
-      { name: "Majordomo Executus", killed: true },
-      { name: "Ragnaros", killed: true },
-    ],
-  },
-  bwl: {
-    name: "Blackwing Lair",
-    bosses: [
-      { name: "Razorgore", killed: true },
-      { name: "Vaelastrasz", killed: true },
-      { name: "Broodlord Lashlayer", killed: true },
-      { name: "Firemaw", killed: true },
-      { name: "Ebonroc", killed: true },
-      { name: "Flamegor", killed: true },
-      { name: "Chromaggus", killed: false },
-      { name: "Nefarian", killed: false },
-    ],
-  },
-  aq40: {
-    name: "Temple of Ahn'Qiraj",
-    bosses: [
-      { name: "The Prophet Skeram", killed: true },
-      { name: "Bug Trio", killed: true },
-      { name: "Battleguard Sartura", killed: true },
-      { name: "Fankriss the Unyielding", killed: false },
-      { name: "Viscidus", killed: false },
-      { name: "Princess Huhuran", killed: false },
-      { name: "Twin Emperors", killed: false },
-      { name: "Ouro", killed: false },
-      { name: "C'Thun", killed: false },
-    ],
-  },
-};
+interface RaidProgress {
+  instanceName: string;
+  difficultyName: string;
+  maxPlayers: number;
+  encountersDown: number;
+  kills: number;
+  lastKilledAt: string;
+}
 
-function ProgressContent({ config }: GuildPanelRenderProps<ProgressConfig>) {
-  const instance = FAKE_PROGRESS[config.instance || "mc"];
-  const killed = instance.bosses.filter((b) => b.killed).length;
-  const total = instance.bosses.length;
+/** Groups per-encounter kills into per-raid progression, most recent activity first. */
+function groupProgress(encounters: GuildEncounterKill[]): RaidProgress[] {
+  const byRaid = new Map<string, RaidProgress>();
+  for (const e of encounters) {
+    const key = `${e.instance_name}|${e.difficulty_name}|${e.max_players}`;
+    const raid = byRaid.get(key);
+    if (raid) {
+      raid.encountersDown += 1;
+      raid.kills += e.kills;
+      if (e.last_killed_at > raid.lastKilledAt) raid.lastKilledAt = e.last_killed_at;
+    } else {
+      byRaid.set(key, {
+        instanceName: e.instance_name,
+        difficultyName: e.difficulty_name,
+        maxPlayers: e.max_players,
+        encountersDown: 1,
+        kills: e.kills,
+        lastKilledAt: e.last_killed_at,
+      });
+    }
+  }
+  return [...byRaid.values()].sort((a, b) => b.lastKilledAt.localeCompare(a.lastKilledAt));
+}
 
+function RaidRow({
+  raid,
+  total,
+  showKillCounts,
+}: {
+  raid: RaidProgress;
+  total: number;
+  showKillCounts: boolean;
+}) {
+  const complete = raid.encountersDown === total;
   return (
-    <div className="space-y-3">
-      <div className="flex items-center justify-between">
-        <span className="font-semibold">{instance.name}</span>
-        <span className="text-sm text-muted-foreground">
-          {killed}/{total}
-        </span>
+    <div>
+      <div className="mb-1.5 flex items-baseline justify-between gap-3">
+        <p className="min-w-0 truncate text-sm text-foreground">{raid.instanceName}</p>
+        <p className="shrink-0 text-sm font-bold tabular-nums text-foreground">
+          {raid.encountersDown} / {total}
+        </p>
       </div>
-      <div className="h-2 bg-muted rounded-full overflow-hidden">
-        <div
-          className="h-full bg-green-500 transition-all"
-          style={{ width: `${(killed / total) * 100}%` }}
-        />
-      </div>
-      <div className="grid grid-cols-2 gap-1">
-        {instance.bosses.map((boss) => (
-          <div
-            key={boss.name}
-            className="flex items-center gap-2 text-xs py-1"
-          >
-            {boss.killed ? (
-              <CheckCircle className="h-3 w-3 text-green-500" />
-            ) : (
-              <XCircle className="h-3 w-3 text-muted-foreground" />
-            )}
-            <span className={boss.killed ? "text-foreground" : "text-muted-foreground"}>
-              {boss.name}
-            </span>
-          </div>
+      <div className="flex gap-1">
+        {Array.from({ length: total }, (_, i) => (
+          <span
+            key={i}
+            className="h-2 flex-1 rounded-xs"
+            style={{
+              background:
+                i < raid.encountersDown
+                  ? complete
+                    ? "var(--color-amber-500)"
+                    : "var(--color-green-400)"
+                  : "var(--border)",
+            }}
+          />
         ))}
       </div>
+      {showKillCounts && (
+        <p className="mt-1 text-[11px] text-muted-foreground">
+          {[
+            raid.maxPlayers > 0 ? `${raid.maxPlayers}-player` : "",
+            raid.difficultyName !== "Normal" ? raid.difficultyName : "",
+            `${raid.kills} boss ${raid.kills === 1 ? "kill" : "kills"} logged`,
+          ]
+            .filter(Boolean)
+            .join(" · ")}
+        </p>
+      )}
+    </div>
+  );
+}
+
+function ProgressContent({ config, position, guild }: GuildPanelRenderProps<ProgressConfig>) {
+  const [encounters, setEncounters] = useState<GuildEncounterKill[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+  const { data: bossCounts } = useSupportedInstanceBossCounts();
+
+  useEffect(() => {
+    let cancelled = false;
+    const fetchEncounters = async () => {
+      setLoading(true);
+      setError(null);
+      try {
+        const response = await fetch(`/api/v1/guilds/${guild.id}/encounters`);
+        if (!response.ok) throw new Error("Failed to fetch guild encounters");
+        const data = (await response.json()) as GuildEncounterKillsResponse;
+        if (!cancelled) setEncounters([...(data.encounters ?? [])]);
+      } catch (err) {
+        if (!cancelled) setError(err instanceof Error ? err.message : "Unknown error");
+      } finally {
+        if (!cancelled) setLoading(false);
+      }
+    };
+    fetchEncounters();
+    return () => {
+      cancelled = true;
+    };
+  }, [guild.id]);
+
+  const progress = useMemo(() => groupProgress(encounters), [encounters]);
+
+  if (loading) {
+    return (
+      <div className="flex items-center justify-center h-full min-h-[100px]">
+        <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-primary" />
+      </div>
+    );
+  }
+
+  if (error) {
+    return (
+      <div className="flex flex-col items-center justify-center h-full min-h-[100px] text-muted-foreground gap-2">
+        <AlertCircle className="h-5 w-5" />
+        <p className="text-xs">Failed to load progression</p>
+      </div>
+    );
+  }
+
+  if (progress.length === 0) {
+    return (
+      <div className="flex items-center justify-center h-full min-h-[100px] text-muted-foreground">
+        <p className="text-sm">No boss kills recorded yet</p>
+      </div>
+    );
+  }
+
+  // Two columns of raids when the panel is wide enough.
+  const cols = position.w >= 8 ? 2 : 1;
+
+  return (
+    <div
+      className="grid gap-x-6 gap-y-4 content-start p-1"
+      style={{ gridTemplateColumns: `repeat(${cols}, minmax(0, 1fr))` }}
+    >
+      {progress.map((raid) => (
+        <RaidRow
+          key={`${raid.instanceName}|${raid.difficultyName}|${raid.maxPlayers}`}
+          raid={raid}
+          total={Math.max(bossCounts?.get(raid.instanceName) ?? raid.encountersDown, raid.encountersDown)}
+          showKillCounts={config.showKillCounts !== false}
+        />
+      ))}
     </div>
   );
 }
 
 export const ProgressPanel: GuildPanelDefinition<ProgressConfig> = {
   type: "progress",
-  label: "Raid Progress",
+  label: "Progression",
   icon: <Trophy className="h-4 w-4" />,
-  description: "Shows boss kill progress for an instance",
-  defaultSize: { w: 12, h: 2 },
-  minSize: { w: 6, h: 2 },
-  maxSize: { w: 12, h: 4 },
+  description: "Bosses the guild has defeated in each raid",
+  defaultSize: { w: 4, h: 4 },
+  minSize: { w: 3, h: 2 },
+  maxSize: { w: 12, h: 10 },
   configSchema: [
     {
-      name: "instance",
-      label: "Instance",
-      type: "select",
-      options: [
-        { value: "mc", label: "Molten Core" },
-        { value: "bwl", label: "Blackwing Lair" },
-        { value: "aq40", label: "Temple of Ahn'Qiraj" },
-      ],
-      defaultValue: "mc",
+      name: "showKillCounts",
+      label: "Show kill counts",
+      type: "boolean",
+      defaultValue: true,
     },
   ],
   defaultConfig: {
-    instance: "mc",
+    showKillCounts: true,
   },
   render: (props) => <ProgressContent {...props} />,
 };

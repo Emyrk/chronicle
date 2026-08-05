@@ -2,17 +2,17 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { Link } from "react-router-dom";
 import { Calendar, AlertCircle } from "lucide-react";
 import type {
+  GuildRunEncounterParse,
   GuildRunParsesResponse,
   RecentInstance,
   RecentInstancesResponse,
 } from "@/api/typesGenerated";
 import { getInstanceCategory } from "@/pages/Logs/utils/instanceImages";
-import { parseColor } from "@/pages/Instance/parseColors";
+import { parseColor, parseHexColor } from "@/pages/Instance/parseColors";
 import { RaidCard } from "@/pages/Recent/RaidCard";
 import { groupDuplicateInstances } from "@/utils/groupDuplicates";
 import { DuplicateInstanceModal } from "@/components/DuplicateInstanceModal";
 import type { GuildPanelDefinition, GuildPanelRenderProps } from "./types";
-import { formatClearDuration } from "./clearTimeUtils";
 
 type CategoryFilter = "all" | "raid" | "dungeon";
 
@@ -31,27 +31,76 @@ function formatRaidDate(iso: string): string {
   return new Date(iso).toLocaleDateString(undefined, { month: "short", day: "numeric" });
 }
 
-/** One raid night as a compact row: name, meta with clear time, guild avg parse. */
-function RaidListRow({ instance, avgParse }: { instance: RecentInstance; avgParse?: number }) {
+/** "3h 12m" style clear time for the meta line. */
+function formatRaidDuration(ms: number): string {
+  const totalMinutes = Math.floor(ms / 60000);
+  const h = Math.floor(totalMinutes / 60);
+  const m = totalMinutes % 60;
+  return h > 0 ? `${h}h ${m}m` : `${m}m`;
+}
+
+/** "12 bosses" or "9 bosses killed + 6 attempts" when some pulls didn't end in a kill. */
+function formatBosses(instance: RecentInstance): string {
+  const kills = instance.boss_kills;
+  const attempts = Math.max(0, instance.boss_count - kills);
+  const bosses = `${kills} ${kills === 1 ? "boss" : "bosses"}`;
+  if (attempts === 0) return bosses;
+  return `${bosses} killed + ${attempts} ${attempts === 1 ? "attempt" : "attempts"}`;
+}
+
+/** Stable per-instance accent color for the row's left bar. */
+function instanceAccent(name: string): string {
+  let hash = 0;
+  for (let i = 0; i < name.length; i++) {
+    hash = (hash * 31 + name.charCodeAt(i)) | 0;
+  }
+  const hue = ((hash % 360) + 360) % 360;
+  return `linear-gradient(180deg, hsl(${hue} 70% 55%), hsl(${hue} 75% 28%))`;
+}
+
+/** Weighted average across encounters (weights are per-encounter parse counts). */
+function weightedRunAverage(encounters: GuildRunEncounterParse[]): number | undefined {
+  let sum = 0;
+  let count = 0;
+  for (const e of encounters) {
+    sum += e.avg_parse * e.parse_count;
+    count += e.parse_count;
+  }
+  return count > 0 ? sum / count : undefined;
+}
+
+/** One raid night as a compact row: name, meta line, per-boss parse bars, guild avg parse. */
+function RaidListRow({
+  instance,
+  encounters,
+}: {
+  instance: RecentInstance;
+  encounters: GuildRunEncounterParse[];
+}) {
   const meta = [
-    `${instance.player_count} players`,
+    instance.player_count,
     formatRaidDate(instance.first_encounter_time),
-    `${instance.boss_kills}/${instance.boss_count} bosses`,
-    instance.duration_ms ? formatClearDuration(instance.duration_ms) : null,
+    formatBosses(instance),
+    instance.duration_ms ? formatRaidDuration(instance.duration_ms) : null,
   ]
-    .filter(Boolean)
+    .filter((part) => part !== null && part !== "")
     .join(" · ");
 
+  const avgParse = weightedRunAverage(encounters);
   const score = avgParse !== undefined ? Math.round(avgParse) : undefined;
   const instanceUrl = instance.slug ? `/instances/${instance.slug}` : `/instances/${instance.id}`;
 
   return (
     <Link
       to={instanceUrl}
-      className="flex items-center gap-3 rounded-lg border border-border/50 bg-muted/20 px-3 py-2 hover:bg-muted/40 transition-colors"
+      className="relative flex items-center gap-4 overflow-hidden rounded-lg border border-border/60 bg-card pl-4 pr-4 py-2.5 hover:border-border transition-colors"
     >
+      <span
+        className="absolute inset-y-0 left-0 w-[5px]"
+        style={{ background: instanceAccent(instance.name) }}
+      />
       <div className="min-w-0 flex-1">
-        <p className="truncate text-sm font-semibold">
+        <p className="truncate text-sm font-semibold text-foreground">
           {instance.name}
           {instance.difficulty_name && instance.difficulty_name !== "Normal" && (
             <span className="ml-1.5 text-[11px] font-normal text-muted-foreground">
@@ -59,11 +108,30 @@ function RaidListRow({ instance, avgParse }: { instance: RecentInstance; avgPars
             </span>
           )}
         </p>
-        <p className="truncate text-[11px] text-muted-foreground tabular-nums">{meta}</p>
+        <p className="mt-0.5 truncate text-[11.5px] text-muted-foreground tabular-nums">{meta}</p>
       </div>
+      {encounters.length > 0 && (
+        <span className="hidden sm:flex h-7 items-end gap-[2px]" aria-hidden>
+          {encounters.map((e) => {
+            const s = Math.round(e.avg_parse);
+            return (
+              <span
+                key={e.encounter_name}
+                className="w-1 rounded-[1px]"
+                style={{
+                  height: `${Math.max(15, Math.min(100, s))}%`,
+                  background: parseHexColor(s),
+                  opacity: 0.75,
+                }}
+                title={`${e.encounter_name} · ${s}`}
+              />
+            );
+          })}
+        </span>
+      )}
       {score !== undefined && (
         <span
-          className={`text-xl font-bold tabular-nums ${parseColor(score)}`}
+          className={`min-w-9 text-right text-2xl font-bold tabular-nums ${parseColor(score)}`}
           title="Average guild parse for this raid"
         >
           {score}
@@ -77,7 +145,7 @@ function RecentRaidsContent({ config, position, guild }: GuildPanelRenderProps<R
   // Derive columns from panel grid width (1-12 columns)
   const cols = position.w >= 9 ? 3 : position.w >= 6 ? 2 : 1;
   const [instances, setInstances] = useState<RecentInstance[]>([]);
-  const [runParses, setRunParses] = useState<Record<string, number>>({});
+  const [runParses, setRunParses] = useState<Record<string, GuildRunEncounterParse[]>>({});
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
@@ -139,9 +207,9 @@ function RecentRaidsContent({ config, position, guild }: GuildPanelRenderProps<R
         if (!response.ok) return;
         const data = (await response.json()) as GuildRunParsesResponse;
         if (cancelled) return;
-        const byRun: Record<string, number> = {};
-        for (const run of data.runs ?? []) {
-          byRun[run.run_id] = run.avg_parse;
+        const byRun: Record<string, GuildRunEncounterParse[]> = {};
+        for (const encounter of data.encounters ?? []) {
+          (byRun[encounter.run_id] ??= []).push(encounter);
         }
         setRunParses(byRun);
       } catch {
@@ -186,7 +254,7 @@ function RecentRaidsContent({ config, position, guild }: GuildPanelRenderProps<R
           <RaidListRow
             key={group[0].id}
             instance={group[0]}
-            avgParse={runParses[runID(group[0])]}
+            encounters={runParses[runID(group[0])] ?? []}
           />
         ))}
       </div>

@@ -3856,11 +3856,74 @@ func (q *sqlQuerier) GuildCharacterRoster(ctx context.Context, arg GuildCharacte
 	return items, nil
 }
 
+const guildEncounterKills = `-- name: GuildEncounterKills :many
+SELECT
+    li.name AS instance_name,
+    lie.name AS encounter_name,
+    li.difficulty_name,
+    li.max_players,
+    COUNT(DISTINCT COALESCE(li.duplicate_group_id, li.id))::int AS kills,
+    MIN(lie.end_time)::timestamptz AS first_killed_at,
+    MAX(lie.end_time)::timestamptz AS last_killed_at
+FROM log_instance_encounters lie
+JOIN log_instances li ON li.id = lie.instance_id
+JOIN wow_server_realms wsr ON wsr.id = li.realm_id
+WHERE li.guild_id = $1::uuid
+  AND lie.boss = true
+  AND lie.kill_type IN ('clean', 'partial')
+GROUP BY li.name, lie.name, li.difficulty_name, li.max_players
+ORDER BY li.name, lie.name
+`
+
+type GuildEncounterKillsRow struct {
+	InstanceName   string             `db:"instance_name" json:"instance_name"`
+	EncounterName  string             `db:"encounter_name" json:"encounter_name"`
+	DifficultyName string             `db:"difficulty_name" json:"difficulty_name"`
+	MaxPlayers     int32              `db:"max_players" json:"max_players"`
+	Kills          int32              `db:"kills" json:"kills"`
+	FirstKilledAt  pgtype.Timestamptz `db:"first_killed_at" json:"first_killed_at"`
+	LastKilledAt   pgtype.Timestamptz `db:"last_killed_at" json:"last_killed_at"`
+}
+
+// Per-encounter boss kill aggregates for a guild across all time, for the
+// guild page "Progression" panel. Duplicate uploads of the same raid night
+// collapse via duplicate_group_id. JOINs wow_server_realms so RLS tenant
+// filtering cascades.
+func (q *sqlQuerier) GuildEncounterKills(ctx context.Context, guildID uuid.UUID) ([]GuildEncounterKillsRow, error) {
+	rows, err := q.db.Query(ctx, guildEncounterKills, guildID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []GuildEncounterKillsRow
+	for rows.Next() {
+		var i GuildEncounterKillsRow
+		if err := rows.Scan(
+			&i.InstanceName,
+			&i.EncounterName,
+			&i.DifficultyName,
+			&i.MaxPlayers,
+			&i.Kills,
+			&i.FirstKilledAt,
+			&i.LastKilledAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const guildRunParseAverages = `-- name: GuildRunParseAverages :many
 WITH deduped AS (
     SELECT DISTINCT ON (psr.run_id, psr.encounter_name, psr.player_guid)
         psr.run_id,
-        psr.precise_score
+        psr.encounter_name,
+        psr.precise_score,
+        psr.killed_at
     FROM parse_score_results psr
     WHERE psr.tenant_id = $1
       AND psr.guild_id = $2::uuid
@@ -3874,10 +3937,13 @@ WITH deduped AS (
 )
 SELECT
     run_id,
+    encounter_name,
     AVG(precise_score)::float8 AS avg_parse,
-    COUNT(*)::bigint AS parse_count
+    COUNT(*)::bigint AS parse_count,
+    MIN(killed_at)::timestamptz AS killed_at
 FROM deduped
-GROUP BY run_id
+GROUP BY run_id, encounter_name
+ORDER BY run_id, killed_at ASC NULLS LAST
 `
 
 type GuildRunParseAveragesParams struct {
@@ -3887,15 +3953,18 @@ type GuildRunParseAveragesParams struct {
 }
 
 type GuildRunParseAveragesRow struct {
-	RunID      uuid.UUID `db:"run_id" json:"run_id"`
-	AvgParse   float64   `db:"avg_parse" json:"avg_parse"`
-	ParseCount int64     `db:"parse_count" json:"parse_count"`
+	RunID         uuid.UUID          `db:"run_id" json:"run_id"`
+	EncounterName string             `db:"encounter_name" json:"encounter_name"`
+	AvgParse      float64            `db:"avg_parse" json:"avg_parse"`
+	ParseCount    int64              `db:"parse_count" json:"parse_count"`
+	KilledAt      pgtype.Timestamptz `db:"killed_at" json:"killed_at"`
 }
 
-// Returns the guild's average parse per raid night (run) for the guild page
-// "Recent" panel. Averages every raider's parses using hps for healers and
-// dps for everyone else. Duplicate uploads collapse to one row per
-// encounter+player before averaging.
+// Returns the guild's average parse per encounter for each raid night (run),
+// for the guild page "Recent" panel (per-boss bars; callers weight by
+// parse_count for a whole-run average). Averages every raider's parses using
+// hps for healers and dps for everyone else. Duplicate uploads collapse to
+// one row per encounter+player before averaging.
 func (q *sqlQuerier) GuildRunParseAverages(ctx context.Context, arg GuildRunParseAveragesParams) ([]GuildRunParseAveragesRow, error) {
 	rows, err := q.db.Query(ctx, guildRunParseAverages, arg.TenantID, arg.GuildID, arg.RunIds)
 	if err != nil {
@@ -3905,7 +3974,13 @@ func (q *sqlQuerier) GuildRunParseAverages(ctx context.Context, arg GuildRunPars
 	var items []GuildRunParseAveragesRow
 	for rows.Next() {
 		var i GuildRunParseAveragesRow
-		if err := rows.Scan(&i.RunID, &i.AvgParse, &i.ParseCount); err != nil {
+		if err := rows.Scan(
+			&i.RunID,
+			&i.EncounterName,
+			&i.AvgParse,
+			&i.ParseCount,
+			&i.KilledAt,
+		); err != nil {
 			return nil, err
 		}
 		items = append(items, i)
@@ -3925,6 +4000,8 @@ WITH deduped AS (
         psr.player_spec,
         psr.player_role,
         psr.encounter_name,
+        psr.instance_id,
+        COALESCE(li.hashed_slug, '')::text AS instance_slug,
         psr.instance_name,
         psr.difficulty_name,
         psr.max_players,
@@ -3933,6 +4010,7 @@ WITH deduped AS (
         psr.display_score,
         psr.killed_at
     FROM parse_score_results psr
+    LEFT JOIN log_instances li ON li.id = psr.instance_id
     WHERE psr.tenant_id = $3
       AND psr.guild_id = $4::uuid
       AND psr.metric = $5
@@ -3943,7 +4021,7 @@ WITH deduped AS (
       END
     ORDER BY psr.run_id, psr.encounter_name, psr.player_guid, psr.created_at DESC, psr.precise_score DESC
 ), ranked AS (
-    SELECT player_guid, player_name, player_class, player_spec, player_role, encounter_name, instance_name, difficulty_name, max_players, metric_value, precise_score, display_score, killed_at,
+    SELECT player_guid, player_name, player_class, player_spec, player_role, encounter_name, instance_id, instance_slug, instance_name, difficulty_name, max_players, metric_value, precise_score, display_score, killed_at,
         ROW_NUMBER() OVER (
             PARTITION BY player_guid
             ORDER BY precise_score DESC, killed_at DESC NULLS LAST
@@ -3957,6 +4035,8 @@ SELECT
     player_spec,
     player_role,
     encounter_name,
+    instance_id,
+    instance_slug,
     instance_name,
     difficulty_name,
     max_players,
@@ -3986,6 +4066,8 @@ type GuildTopParsesRow struct {
 	PlayerSpec     string             `db:"player_spec" json:"player_spec"`
 	PlayerRole     string             `db:"player_role" json:"player_role"`
 	EncounterName  string             `db:"encounter_name" json:"encounter_name"`
+	InstanceID     uuid.UUID          `db:"instance_id" json:"instance_id"`
+	InstanceSlug   string             `db:"instance_slug" json:"instance_slug"`
 	InstanceName   string             `db:"instance_name" json:"instance_name"`
 	DifficultyName string             `db:"difficulty_name" json:"difficulty_name"`
 	MaxPlayers     int16              `db:"max_players" json:"max_players"`
@@ -4023,6 +4105,8 @@ func (q *sqlQuerier) GuildTopParses(ctx context.Context, arg GuildTopParsesParam
 			&i.PlayerSpec,
 			&i.PlayerRole,
 			&i.EncounterName,
+			&i.InstanceID,
+			&i.InstanceSlug,
 			&i.InstanceName,
 			&i.DifficultyName,
 			&i.MaxPlayers,

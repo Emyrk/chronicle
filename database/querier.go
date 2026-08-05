@@ -343,6 +343,11 @@ type sqlcQuerier interface {
 	// for healers and dps for everyone else (-1 when the character has no parses).
 	// JOINs wow_server_realms so RLS tenant filtering cascades.
 	GuildCharacterRoster(ctx context.Context, arg GuildCharacterRosterParams) ([]GuildCharacterRosterRow, error)
+	// Per-encounter boss kill aggregates for a guild across all time, for the
+	// guild page "Progression" panel. Duplicate uploads of the same raid night
+	// collapse via duplicate_group_id. JOINs wow_server_realms so RLS tenant
+	// filtering cascades.
+	GuildEncounterKills(ctx context.Context, guildID uuid.UUID) ([]GuildEncounterKillsRow, error)
 	// Returns per-instance clear counts and duration aggregates for a guild,
 	// used by the guild page "Raid Clears" panel.
 	// Deduplicates by duplicate_group so re-uploaded logs of the same raid count
@@ -352,10 +357,11 @@ type sqlcQuerier interface {
 	// completion_time and a negative sentinel duration (see chronicle/logparse.go).
 	// JOINs wow_server_realms so RLS tenant filtering cascades.
 	GuildRaidClears(ctx context.Context, arg GuildRaidClearsParams) ([]GuildRaidClearsRow, error)
-	// Returns the guild's average parse per raid night (run) for the guild page
-	// "Recent" panel. Averages every raider's parses using hps for healers and
-	// dps for everyone else. Duplicate uploads collapse to one row per
-	// encounter+player before averaging.
+	// Returns the guild's average parse per encounter for each raid night (run),
+	// for the guild page "Recent" panel (per-boss bars; callers weight by
+	// parse_count for a whole-run average). Averages every raider's parses using
+	// hps for healers and dps for everyone else. Duplicate uploads collapse to
+	// one row per encounter+player before averaging.
 	GuildRunParseAverages(ctx context.Context, arg GuildRunParseAveragesParams) ([]GuildRunParseAveragesRow, error)
 	// Returns a guild's best parses for the guild page "Top Parses" panel.
 	// Duplicate uploads of the same run collapse to one row per encounter+player

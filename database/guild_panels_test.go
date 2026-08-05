@@ -10,6 +10,7 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/stretchr/testify/require"
 
+	"github.com/Emyrk/chronicle/combatlog/parser/guid"
 	"github.com/Emyrk/chronicle/database"
 	"github.com/Emyrk/chronicle/internal/testutil"
 )
@@ -22,6 +23,7 @@ type guildPanelsFixture struct {
 	realmID    uuid.UUID
 	guildID    uuid.UUID
 	instanceID uuid.UUID
+	logGroupID uuid.UUID
 }
 
 func setupGuildPanelsTest(t *testing.T) guildPanelsFixture {
@@ -59,6 +61,7 @@ func setupGuildPanelsTest(t *testing.T) guildPanelsFixture {
 		store:      store,
 		realmID:    realmID,
 		instanceID: instanceID,
+		logGroupID: logGroupID,
 		guildID:    uuid.New(),
 	}
 	f.insertGuild(t, f.guildID, "Zug Zug")
@@ -90,8 +93,8 @@ func (f guildPanelsFixture) insertGamePlayer(t *testing.T, params struct {
 }
 
 type guildPanelParse struct {
-	runID     uuid.UUID
-	guildID   uuid.NullUUID
+	runID      uuid.UUID
+	guildID    uuid.NullUUID
 	playerGUID string
 	playerName string
 	playerRole string // "dps", "heal", "tank"
@@ -281,12 +284,14 @@ func TestGuildRunParseAverages(t *testing.T) {
 	f.insertGuild(t, otherGuildID, "Other Guild")
 	otherRun := uuid.New()
 
-	// run1: dps player at 80, healer's hps at 90 (healer's dps row and the
-	// dps player's hps row are both excluded) -> avg 85.
-	f.insertParse(t, guildPanelParse{runID: run1, playerGUID: testGUID(1), playerName: "Aleph", playerRole: "dps", metric: "dps", encounter: "Ragnaros", score: 80, killedAt: now})
-	f.insertParse(t, guildPanelParse{runID: run1, playerGUID: testGUID(1), playerName: "Aleph", playerRole: "dps", metric: "hps", encounter: "Ragnaros", score: 10, killedAt: now})
-	f.insertParse(t, guildPanelParse{runID: run1, playerGUID: testGUID(2), playerName: "Beth", playerRole: "heal", metric: "hps", encounter: "Ragnaros", score: 90, killedAt: now})
-	f.insertParse(t, guildPanelParse{runID: run1, playerGUID: testGUID(2), playerName: "Beth", playerRole: "heal", metric: "dps", encounter: "Ragnaros", score: 2, killedAt: now})
+	// run1, Golemagg killed first: single dps parse.
+	f.insertParse(t, guildPanelParse{runID: run1, playerGUID: testGUID(1), playerName: "Aleph", playerRole: "dps", metric: "dps", encounter: "Golemagg", score: 70, killedAt: now.Add(-2 * time.Hour)})
+	// run1, Ragnaros: dps player at 80, healer's hps at 90 (healer's dps row
+	// and the dps player's hps row are both excluded) -> avg 85.
+	f.insertParse(t, guildPanelParse{runID: run1, playerGUID: testGUID(1), playerName: "Aleph", playerRole: "dps", metric: "dps", encounter: "Ragnaros", score: 80, killedAt: now.Add(-time.Hour)})
+	f.insertParse(t, guildPanelParse{runID: run1, playerGUID: testGUID(1), playerName: "Aleph", playerRole: "dps", metric: "hps", encounter: "Ragnaros", score: 10, killedAt: now.Add(-time.Hour)})
+	f.insertParse(t, guildPanelParse{runID: run1, playerGUID: testGUID(2), playerName: "Beth", playerRole: "heal", metric: "hps", encounter: "Ragnaros", score: 90, killedAt: now.Add(-time.Hour)})
+	f.insertParse(t, guildPanelParse{runID: run1, playerGUID: testGUID(2), playerName: "Beth", playerRole: "heal", metric: "dps", encounter: "Ragnaros", score: 2, killedAt: now.Add(-time.Hour)})
 	// run2: single dps parse.
 	f.insertParse(t, guildPanelParse{runID: run2, playerGUID: testGUID(1), playerName: "Aleph", playerRole: "dps", metric: "dps", encounter: "Onyxia", score: 50, killedAt: now})
 	// Another guild's run is never aggregated, even when its id is requested.
@@ -298,14 +303,91 @@ func TestGuildRunParseAverages(t *testing.T) {
 		RunIds:   []uuid.UUID{run1, run2, otherRun},
 	})
 	require.NoError(t, err)
-	require.Len(t, rows, 2)
+	require.Len(t, rows, 3)
 
-	byRun := map[uuid.UUID]database.GuildRunParseAveragesRow{}
-	for _, row := range rows {
-		byRun[row.RunID] = row
+	type runEncounter struct {
+		runID     uuid.UUID
+		encounter string
 	}
-	require.InDelta(t, 85, byRun[run1].AvgParse, 0.01)
-	require.EqualValues(t, 2, byRun[run1].ParseCount)
-	require.InDelta(t, 50, byRun[run2].AvgParse, 0.01)
-	require.EqualValues(t, 1, byRun[run2].ParseCount)
+	byEncounter := map[runEncounter]database.GuildRunParseAveragesRow{}
+	run1Encounters := []string{}
+	for _, row := range rows {
+		byEncounter[runEncounter{row.RunID, row.EncounterName}] = row
+		if row.RunID == run1 {
+			run1Encounters = append(run1Encounters, row.EncounterName)
+		}
+	}
+	// Encounters come back in kill order within a run.
+	require.Equal(t, []string{"Golemagg", "Ragnaros"}, run1Encounters)
+	require.InDelta(t, 70, byEncounter[runEncounter{run1, "Golemagg"}].AvgParse, 0.01)
+	require.EqualValues(t, 1, byEncounter[runEncounter{run1, "Golemagg"}].ParseCount)
+	require.InDelta(t, 85, byEncounter[runEncounter{run1, "Ragnaros"}].AvgParse, 0.01)
+	require.EqualValues(t, 2, byEncounter[runEncounter{run1, "Ragnaros"}].ParseCount)
+	require.InDelta(t, 50, byEncounter[runEncounter{run2, "Onyxia"}].AvgParse, 0.01)
+}
+
+func TestGuildEncounterKills(t *testing.T) {
+	t.Parallel()
+
+	f := setupGuildPanelsTest(t)
+	ctx := testutil.Context(t, testutil.WaitShort)
+	night1 := time.Now().Add(-7 * 24 * time.Hour)
+	night2 := time.Now().Add(-24 * time.Hour)
+
+	otherGuildID := uuid.New()
+	f.insertGuild(t, otherGuildID, "Other Guild")
+
+	insertGuildInstance := func(guildID uuid.UUID, startedAt time.Time) uuid.UUID {
+		id := uuid.New()
+		_, err := f.store.InsertInstance(ctx, database.InsertInstanceParams{
+			ID: id, RealmID: f.realmID, LogGroupID: f.logGroupID,
+			Name: "Molten Core", HashedSlug: pgtype.Text{String: "gek-" + id.String()[:8], Valid: true},
+			GuildID:   uuid.NullUUID{UUID: guildID, Valid: true},
+			StartTime: database.Timestamptz(startedAt), EndTime: database.Timestamptz(startedAt.Add(time.Hour)),
+			Capabilities: []string{}, DifficultyName: "Normal", MaxPlayers: 40,
+		})
+		require.NoError(t, err)
+		return id
+	}
+	insertEncounter := func(instanceID uuid.UUID, name string, killType database.KillType, boss bool, endedAt time.Time) {
+		_, err := f.store.InsertEncounter(ctx, database.InsertEncounterParams{
+			ID: uuid.New(), InstanceID: instanceID, Name: name,
+			KillType: killType, Remaining: guid.GUIDs{}, Boss: boss,
+			StartTime: database.Timestamptz(endedAt.Add(-5 * time.Minute)), EndTime: database.Timestamptz(endedAt),
+		})
+		require.NoError(t, err)
+	}
+
+	// Night 1: Ragnaros + Golemagg down, a wipe on Lucifron, and trash.
+	nightA := insertGuildInstance(f.guildID, night1)
+	insertEncounter(nightA, "Ragnaros", database.KillTypeClean, true, night1.Add(30*time.Minute))
+	insertEncounter(nightA, "Golemagg", database.KillTypePartial, true, night1.Add(20*time.Minute))
+	insertEncounter(nightA, "Lucifron", database.KillTypeWipe, true, night1.Add(10*time.Minute))
+	insertEncounter(nightA, "Trashpack", database.KillTypeClean, false, night1.Add(5*time.Minute))
+	// A re-upload of night 1 must not double count.
+	dupe := insertGuildInstance(f.guildID, night1)
+	insertEncounter(dupe, "Ragnaros", database.KillTypeClean, true, night1.Add(30*time.Minute))
+	_, err := f.pool.Exec(ctx, "UPDATE log_instances SET duplicate_group_id = $1 WHERE id IN ($1, $2)", nightA, dupe)
+	require.NoError(t, err)
+
+	// Night 2: Ragnaros again.
+	nightB := insertGuildInstance(f.guildID, night2)
+	insertEncounter(nightB, "Ragnaros", database.KillTypeClean, true, night2.Add(30*time.Minute))
+
+	// Another guild's kills never leak in.
+	foreign := insertGuildInstance(otherGuildID, night2)
+	insertEncounter(foreign, "Onyxia", database.KillTypeClean, true, night2.Add(30*time.Minute))
+
+	rows, err := f.store.GuildEncounterKills(ctx, f.guildID)
+	require.NoError(t, err)
+	require.Len(t, rows, 2, "only clean/partial boss kills for this guild count")
+
+	byEncounter := map[string]database.GuildEncounterKillsRow{}
+	for _, row := range rows {
+		byEncounter[row.EncounterName] = row
+	}
+	require.EqualValues(t, 2, byEncounter["Ragnaros"].Kills)
+	require.EqualValues(t, 1, byEncounter["Golemagg"].Kills)
+	require.Equal(t, "Molten Core", byEncounter["Ragnaros"].InstanceName)
+	require.WithinDuration(t, night2.Add(30*time.Minute), byEncounter["Ragnaros"].LastKilledAt.Time, time.Second)
 }

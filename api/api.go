@@ -351,6 +351,7 @@ func (api *API) Routes() chi.Router {
 					r.Get("/settings", api.GetGuildSettings)
 					r.Get("/speedruns/clears", api.GuildRaidClears)
 					r.Get("/characters", api.GuildCharacterRoster)
+					r.Get("/encounters", api.GuildEncounterKills)
 					r.Get("/parses/top", api.GuildTopParses)
 					r.Get("/parses/runs", api.GuildRunParses)
 

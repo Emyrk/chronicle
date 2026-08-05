@@ -68,6 +68,8 @@ WITH deduped AS (
         psr.player_spec,
         psr.player_role,
         psr.encounter_name,
+        psr.instance_id,
+        COALESCE(li.hashed_slug, '')::text AS instance_slug,
         psr.instance_name,
         psr.difficulty_name,
         psr.max_players,
@@ -76,6 +78,7 @@ WITH deduped AS (
         psr.display_score,
         psr.killed_at
     FROM parse_score_results psr
+    LEFT JOIN log_instances li ON li.id = psr.instance_id
     WHERE psr.tenant_id = @tenant_id
       AND psr.guild_id = @guild_id::uuid
       AND psr.metric = @metric
@@ -100,6 +103,8 @@ SELECT
     player_spec,
     player_role,
     encounter_name,
+    instance_id,
+    instance_slug,
     instance_name,
     difficulty_name,
     max_players,
@@ -112,15 +117,40 @@ WHERE CASE WHEN @best_per_player::boolean THEN per_player_rank = 1 ELSE true END
 ORDER BY precise_score DESC, killed_at DESC NULLS LAST
 LIMIT @row_limit;
 
+-- name: GuildEncounterKills :many
+-- Per-encounter boss kill aggregates for a guild across all time, for the
+-- guild page "Progression" panel. Duplicate uploads of the same raid night
+-- collapse via duplicate_group_id. JOINs wow_server_realms so RLS tenant
+-- filtering cascades.
+SELECT
+    li.name AS instance_name,
+    lie.name AS encounter_name,
+    li.difficulty_name,
+    li.max_players,
+    COUNT(DISTINCT COALESCE(li.duplicate_group_id, li.id))::int AS kills,
+    MIN(lie.end_time)::timestamptz AS first_killed_at,
+    MAX(lie.end_time)::timestamptz AS last_killed_at
+FROM log_instance_encounters lie
+JOIN log_instances li ON li.id = lie.instance_id
+JOIN wow_server_realms wsr ON wsr.id = li.realm_id
+WHERE li.guild_id = @guild_id::uuid
+  AND lie.boss = true
+  AND lie.kill_type IN ('clean', 'partial')
+GROUP BY li.name, lie.name, li.difficulty_name, li.max_players
+ORDER BY li.name, lie.name;
+
 -- name: GuildRunParseAverages :many
--- Returns the guild's average parse per raid night (run) for the guild page
--- "Recent" panel. Averages every raider's parses using hps for healers and
--- dps for everyone else. Duplicate uploads collapse to one row per
--- encounter+player before averaging.
+-- Returns the guild's average parse per encounter for each raid night (run),
+-- for the guild page "Recent" panel (per-boss bars; callers weight by
+-- parse_count for a whole-run average). Averages every raider's parses using
+-- hps for healers and dps for everyone else. Duplicate uploads collapse to
+-- one row per encounter+player before averaging.
 WITH deduped AS (
     SELECT DISTINCT ON (psr.run_id, psr.encounter_name, psr.player_guid)
         psr.run_id,
-        psr.precise_score
+        psr.encounter_name,
+        psr.precise_score,
+        psr.killed_at
     FROM parse_score_results psr
     WHERE psr.tenant_id = @tenant_id
       AND psr.guild_id = @guild_id::uuid
@@ -134,7 +164,10 @@ WITH deduped AS (
 )
 SELECT
     run_id,
+    encounter_name,
     AVG(precise_score)::float8 AS avg_parse,
-    COUNT(*)::bigint AS parse_count
+    COUNT(*)::bigint AS parse_count,
+    MIN(killed_at)::timestamptz AS killed_at
 FROM deduped
-GROUP BY run_id;
+GROUP BY run_id, encounter_name
+ORDER BY run_id, killed_at ASC NULLS LAST;

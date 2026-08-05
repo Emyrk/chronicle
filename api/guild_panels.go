@@ -127,6 +127,8 @@ func (api *API) GuildTopParses(w http.ResponseWriter, r *http.Request) {
 			PlayerSpec:     row.PlayerSpec,
 			PlayerRole:     row.PlayerRole,
 			EncounterName:  row.EncounterName,
+			InstanceID:     row.InstanceID,
+			InstanceSlug:   row.InstanceSlug,
 			InstanceName:   row.InstanceName,
 			DifficultyName: row.DifficultyName,
 			MaxPlayers:     row.MaxPlayers,
@@ -140,6 +142,43 @@ func (api *API) GuildTopParses(w http.ResponseWriter, r *http.Request) {
 	httpapi.Write(ctx, w, http.StatusOK, chroniclesdk.GuildTopParsesResponse{
 		Metric: metric,
 		Parses: parses,
+	})
+}
+
+// GuildEncounterKills returns the guild's per-encounter boss kill counts.
+// Used by the guild page "Progression" panel.
+//
+//	GET /api/v1/guilds/{guildID}/encounters
+func (api *API) GuildEncounterKills(w http.ResponseWriter, r *http.Request) {
+	ctx := r.Context()
+	guild := httpmw.Guild(ctx)
+
+	rows, err := api.Opts.Zed.GuildEncounterKills(ctx, guild.ID)
+	if err != nil {
+		httpapi.HandleResponseError(ctx, w, err, httpapi.APIError{
+			Response: chroniclesdk.Response{
+				Message: "Failed to fetch guild encounter kills",
+				Detail:  err.Error(),
+			},
+		})
+		return
+	}
+
+	encounters := make([]chroniclesdk.GuildEncounterKill, len(rows))
+	for i, row := range rows {
+		encounters[i] = chroniclesdk.GuildEncounterKill{
+			InstanceName:   row.InstanceName,
+			EncounterName:  row.EncounterName,
+			DifficultyName: row.DifficultyName,
+			MaxPlayers:     row.MaxPlayers,
+			Kills:          row.Kills,
+			FirstKilledAt:  row.FirstKilledAt.Time,
+			LastKilledAt:   row.LastKilledAt.Time,
+		}
+	}
+
+	httpapi.Write(ctx, w, http.StatusOK, chroniclesdk.GuildEncounterKillsResponse{
+		Encounters: encounters,
 	})
 }
 
@@ -189,16 +228,18 @@ func (api *API) GuildRunParses(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	runs := make([]chroniclesdk.GuildRunParseAverage, len(rows))
+	encounters := make([]chroniclesdk.GuildRunEncounterParse, len(rows))
 	for i, row := range rows {
-		runs[i] = chroniclesdk.GuildRunParseAverage{
-			RunID:      row.RunID,
-			AvgParse:   row.AvgParse,
-			ParseCount: row.ParseCount,
+		encounters[i] = chroniclesdk.GuildRunEncounterParse{
+			RunID:         row.RunID,
+			EncounterName: row.EncounterName,
+			AvgParse:      row.AvgParse,
+			ParseCount:    row.ParseCount,
+			KilledAt:      row.KilledAt.Time,
 		}
 	}
 
 	httpapi.Write(ctx, w, http.StatusOK, chroniclesdk.GuildRunParsesResponse{
-		Runs: runs,
+		Encounters: encounters,
 	})
 }

@@ -12,6 +12,7 @@ interface RosterConfig {
   sortBy: "parse" | "level" | "lastSeen" | "name";
   limit: number;
   showClassChips: boolean;
+  showParseScores: boolean;
 }
 
 const ROLE_LABELS: Record<string, string> = {
@@ -56,7 +57,7 @@ function ClassChips({ members }: { members: GuildRosterCharacter[] }) {
   );
 }
 
-function MemberRow({ member }: { member: GuildRosterCharacter }) {
+function MemberRow({ member, showParse }: { member: GuildRosterCharacter; showParse: boolean }) {
   const color = CLASS_CSS_VAR[member.class] ?? CLASS_CSS_VAR.UNKNOWN;
   const hasParse = member.avg_parse >= 0;
   const score = Math.round(member.avg_parse);
@@ -64,7 +65,7 @@ function MemberRow({ member }: { member: GuildRosterCharacter }) {
   return (
     <Link
       to={`/armory/${encodeURIComponent(member.realm_name)}/${encodeURIComponent(member.name)}`}
-      className="grid grid-cols-[24px_1fr_48px_auto] items-center gap-2.5 border-b border-border/40 py-1.5 last:border-b-0 hover:bg-muted/30 rounded-sm px-1 -mx-1"
+      className={`grid ${showParse ? "grid-cols-[24px_1fr_48px_auto]" : "grid-cols-[24px_1fr_auto]"} items-center gap-2.5 border-b border-border/40 py-1.5 last:border-b-0 hover:bg-muted/30 rounded-sm px-1 -mx-1`}
     >
       <img
         src={`/c/icons/class_${member.class.toLowerCase()}.png`}
@@ -80,16 +81,17 @@ function MemberRow({ member }: { member: GuildRosterCharacter }) {
         </p>
         <p className="truncate text-[11px] text-muted-foreground">{memberSubtitle(member)}</p>
       </div>
-      {hasParse ? (
-        <span
-          className={`text-right text-base font-bold tabular-nums ${parseColor(score)}`}
-          title="Average parse over the recent scoring window"
-        >
-          {score}
-        </span>
-      ) : (
-        <span className="text-right text-sm text-muted-foreground/50">—</span>
-      )}
+      {showParse &&
+        (hasParse ? (
+          <span
+            className={`text-right text-base font-bold tabular-nums ${parseColor(score)}`}
+            title="Average parse over the recent scoring window"
+          >
+            {score}
+          </span>
+        ) : (
+          <span className="text-right text-sm text-muted-foreground/50">—</span>
+        ))}
       <span
         className="w-14 text-right text-[11px] text-muted-foreground tabular-nums"
         title={new Date(member.last_seen_at).toLocaleString()}
@@ -188,7 +190,7 @@ function RosterContent({ config, position, guild }: GuildPanelRenderProps<Roster
         style={{ gridTemplateColumns: `repeat(${cols}, minmax(0, 1fr))` }}
       >
         {sorted.map((member) => (
-          <MemberRow key={member.id} member={member} />
+          <MemberRow key={member.id} member={member} showParse={config.showParseScores !== false} />
         ))}
       </div>
       {members.length > sorted.length && (
@@ -244,12 +246,19 @@ export const RosterPanel: GuildPanelDefinition<RosterConfig> = {
       type: "boolean",
       defaultValue: true,
     },
+    {
+      name: "showParseScores",
+      label: "Show parse scores",
+      type: "boolean",
+      defaultValue: true,
+    },
   ],
   defaultConfig: {
     seenWithinDays: "60",
     sortBy: "parse",
     limit: 20,
     showClassChips: true,
+    showParseScores: true,
   },
   render: (props) => <RosterContent {...props} />,
 };

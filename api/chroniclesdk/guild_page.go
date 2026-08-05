@@ -195,6 +195,7 @@ type GuildCharacterRosterResponse struct {
 // Guild top parses (guild page "Top Parses" panel)
 
 // GuildTopParse is one ranked parse on a guild's top parses board.
+// InstanceID/InstanceSlug identify the raid log the parse came from.
 type GuildTopParse struct {
 	PlayerGUID     string    `json:"player_guid"`
 	PlayerName     string    `json:"player_name"`
@@ -202,6 +203,8 @@ type GuildTopParse struct {
 	PlayerSpec     string    `json:"player_spec"`
 	PlayerRole     string    `json:"player_role"`
 	EncounterName  string    `json:"encounter_name"`
+	InstanceID     uuid.UUID `json:"instance_id"`
+	InstanceSlug   string    `json:"instance_slug,omitempty"`
 	InstanceName   string    `json:"instance_name"`
 	DifficultyName string    `json:"difficulty_name"`
 	MaxPlayers     int16     `json:"max_players"`
@@ -216,15 +219,37 @@ type GuildTopParsesResponse struct {
 	Parses []GuildTopParse `json:"parses"`
 }
 
+// Guild encounter kills (guild page "Progression" panel)
+
+// GuildEncounterKill aggregates a guild's kills of one encounter across all
+// time. Duplicate uploads of the same raid night count once.
+type GuildEncounterKill struct {
+	InstanceName   string    `json:"instance_name"`
+	EncounterName  string    `json:"encounter_name"`
+	DifficultyName string    `json:"difficulty_name"`
+	MaxPlayers     int32     `json:"max_players"`
+	Kills          int32     `json:"kills"`
+	FirstKilledAt  time.Time `json:"first_killed_at"`
+	LastKilledAt   time.Time `json:"last_killed_at"`
+}
+
+type GuildEncounterKillsResponse struct {
+	Encounters []GuildEncounterKill `json:"encounters"`
+}
+
 // Guild per-run parse averages (guild page "Recent" panel)
 
-// GuildRunParseAverage is the guild's average parse for one raid night (run).
-type GuildRunParseAverage struct {
-	RunID      uuid.UUID `json:"run_id"`
-	AvgParse   float64   `json:"avg_parse"`
-	ParseCount int64     `json:"parse_count"`
+// GuildRunEncounterParse is the guild's average parse for one encounter of
+// one raid night (run). Encounters are returned in kill order; callers weight
+// by ParseCount for a whole-run average.
+type GuildRunEncounterParse struct {
+	RunID         uuid.UUID `json:"run_id"`
+	EncounterName string    `json:"encounter_name"`
+	AvgParse      float64   `json:"avg_parse"`
+	ParseCount    int64     `json:"parse_count"`
+	KilledAt      time.Time `json:"killed_at"`
 }
 
 type GuildRunParsesResponse struct {
-	Runs []GuildRunParseAverage `json:"runs"`
+	Encounters []GuildRunEncounterParse `json:"encounters"`
 }
