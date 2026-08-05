@@ -111,7 +111,7 @@ export function useDeleteGearList() {
 
 // ─── Stat Weights ────────────────────────────────────────────
 
-export function useMyStatWeights() {
+export function useMyStatWeights(enabled = true) {
   return useQuery({
     queryKey: ["gear-stat-weights"],
     queryFn: async (): Promise<GearStatWeight[]> => {
@@ -119,6 +119,7 @@ export function useMyStatWeights() {
       if (!res.ok) throw gearAPIError("Failed to fetch stat weights", await res.json().catch(() => null));
       return res.json();
     },
+    enabled,
   });
 }
 

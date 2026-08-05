@@ -7,6 +7,7 @@ import { useIconBaseUrl } from "@/hooks/useDatasetId";
 import { useIsMobile } from "@/hooks/useIsMobile";
 import { cn } from "@/lib/utils";
 import type { GearSlotEntry } from "./gearListModel";
+import { formatScore } from "./gearScoring";
 import type { HydratedItem } from "./useListItems";
 
 export type BuilderSlotSide = "left" | "right" | "bottom";
@@ -19,6 +20,8 @@ interface BuilderSlotProps {
   selected?: boolean;
   onSelect?: (outfitIndex: number) => void;
   equippedItemIds?: ReadonlySet<number>;
+  /** Weighted stat score for the equipped item, when weights are active. */
+  score?: number;
 }
 
 /**
@@ -34,6 +37,7 @@ export function BuilderSlot({
   selected = false,
   onSelect,
   equippedItemIds,
+  score,
 }: BuilderSlotProps) {
   const iconBaseUrl = useIconBaseUrl();
   const isMobile = useIsMobile();
@@ -65,13 +69,16 @@ export function BuilderSlot({
           {enchantText}
         </span>
       )}
-      {(altCount > 0 || entry?.note) && (
+      {(altCount > 0 || entry?.note || score !== undefined) && (
         <span
           className={cn(
             "flex items-center gap-1 text-3xs text-zinc-500",
             side === "left" && "flex-row-reverse",
           )}
         >
+          {score !== undefined && (
+            <span className="font-mono text-zinc-400">{formatScore(score)} pts</span>
+          )}
           {altCount > 0 && <span>+{altCount} alt{altCount === 1 ? "" : "s"}</span>}
           {entry?.note && <StickyNote className="h-2.5 w-2.5" />}
         </span>

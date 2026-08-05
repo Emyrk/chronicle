@@ -8,12 +8,16 @@ import type { GearList, ItemSearchResult } from "@/api/typesGenerated";
 import { getClassColorVar } from "@/pages/ArmoryPage/types";
 import { cn } from "@/lib/utils";
 import { gearClassById } from "../classInfo";
+import { useSimItems } from "@/api/gamedata";
 import {
   clearSlot,
   parsePayload,
   setSlotItem,
   type GearPayload,
+  type GearStage,
 } from "./gearListModel";
+import { scoreItem, type StatWeights } from "./gearScoring";
+import { StatWeightsPanel, type WeightSelection } from "./StatWeightsPanel";
 import { useGearListEditor } from "./useGearListEditor";
 import { useListItems, type ItemRef } from "./useListItems";
 import { BuilderDoll } from "./BuilderDoll";
@@ -21,6 +25,32 @@ import { SlotEditorPanel } from "./SlotEditorPanel";
 import { SetSummaryBar } from "./SetSummaryBar";
 
 const VISIBILITY_ICON = { public: Eye, unlisted: Link2, private: EyeOff } as const;
+
+/** Per-slot and total weighted scores for one stage's primary items. */
+function useStageScores(
+  stage: GearStage | undefined,
+  weights: StatWeights | null,
+): { scores?: Map<number, number>; totalScore?: number } {
+  const itemIds =
+    stage && weights
+      ? Object.values(stage.slots)
+          .filter((e) => !!e)
+          .map((e) => e!.item_id)
+      : [];
+  const simItems = useSimItems(itemIds);
+  if (!stage || !weights) return {};
+  const scores = new Map<number, number>();
+  let totalScore = 0;
+  for (const [key, entry] of Object.entries(stage.slots)) {
+    if (!entry) continue;
+    const sim = simItems.get(entry.item_id);
+    if (!sim) continue;
+    const score = scoreItem(sim, weights);
+    scores.set(Number(key), score);
+    totalScore += score;
+  }
+  return { scores, totalScore };
+}
 
 /** Every (item, enchant) pair the document references, for hydration. */
 function collectItemRefs(payload: GearPayload): ItemRef[] {
@@ -106,8 +136,10 @@ function StageTabs({
 function ReadOnlyView({ list, isOwner }: { list: GearList; isOwner: boolean }) {
   const payload = useMemo(() => parsePayload(list.payload), [list.payload]);
   const [stageIndex, setStageIndex] = useState(0);
+  const [weightSel, setWeightSel] = useState<WeightSelection | null>(null);
   const items = useListItems(useMemo(() => collectItemRefs(payload), [payload]));
   const stage = payload.stages[Math.min(stageIndex, Math.max(payload.stages.length - 1, 0))];
+  const { scores, totalScore } = useStageScores(stage, weightSel?.weights ?? null);
 
   return (
     <div className="max-w-6xl mx-auto py-6 px-4 space-y-4">
@@ -117,11 +149,12 @@ function ReadOnlyView({ list, isOwner }: { list: GearList; isOwner: boolean }) {
         <p className="text-sm text-zinc-500">This list has no stages yet.</p>
       ) : (
         <div className="space-y-4">
+          <StatWeightsPanel classId={list.class_id} selection={weightSel} onSelect={setWeightSel} />
           <StageTabs payload={payload} stageIndex={stageIndex} onSelect={setStageIndex} />
           {stage && (
             <div className="rounded-md border border-zinc-700/60 bg-zinc-900/40 p-4 max-w-xl space-y-3">
-              <SetSummaryBar stage={stage} items={items} />
-              <BuilderDoll stage={stage} items={items} />
+              <SetSummaryBar stage={stage} items={items} totalScore={totalScore} />
+              <BuilderDoll stage={stage} items={items} scores={scores} />
             </div>
           )}
         </div>
@@ -134,10 +167,12 @@ function EditorView({ list }: { list: GearList }) {
   const editor = useGearListEditor(list);
   const [stageIndex, setStageIndex] = useState(0);
   const [selectedSlot, setSelectedSlot] = useState<number | null>(null);
+  const [weightSel, setWeightSel] = useState<WeightSelection | null>(null);
 
   const items = useListItems(useMemo(() => collectItemRefs(editor.payload), [editor.payload]));
   const safeStageIndex = Math.min(stageIndex, Math.max(editor.payload.stages.length - 1, 0));
   const stage = editor.payload.stages[safeStageIndex];
+  const { scores, totalScore } = useStageScores(stage, weightSel?.weights ?? null);
   const selectedEntry =
     selectedSlot != null && stage ? stage.slots[String(selectedSlot)] : undefined;
 
@@ -167,16 +202,18 @@ function EditorView({ list }: { list: GearList }) {
         <p className="text-sm text-zinc-500">This list has no stages yet.</p>
       ) : (
         <div className="space-y-4">
+          <StatWeightsPanel classId={list.class_id} selection={weightSel} onSelect={setWeightSel} />
           <StageTabs payload={editor.payload} stageIndex={safeStageIndex} onSelect={setStageIndex} />
           <div className="grid gap-4 lg:grid-cols-[minmax(0,26rem)_minmax(0,1fr)] items-start">
             {stage && (
               <div className="rounded-md border border-zinc-700/60 bg-zinc-900/40 p-4 space-y-3">
-                <SetSummaryBar stage={stage} items={items} />
+                <SetSummaryBar stage={stage} items={items} totalScore={totalScore} />
                 <BuilderDoll
                   stage={stage}
                   items={items}
                   selectedSlot={selectedSlot ?? undefined}
                   onSelectSlot={(i) => setSelectedSlot((prev) => (prev === i ? null : i))}
+                  scores={scores}
                 />
                 <p className="text-2xs text-zinc-600">Click a slot to pick its item.</p>
               </div>

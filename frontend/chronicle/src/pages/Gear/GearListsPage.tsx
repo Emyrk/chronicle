@@ -15,7 +15,7 @@ import {
 import { GearListCard } from "./GearListCard";
 import { gearClassesForFlavor } from "./classInfo";
 
-const EMPTY_PAYLOAD = JSON.stringify({ version: 2, stages: [{ name: "Stage 1", slots: {} }] });
+const EMPTY_PAYLOAD = { version: 2, stages: [{ name: "Stage 1", slots: {} }] };
 
 function CreateListForm({ onDone }: { onDone: () => void }) {
   const navigate = useNavigate();
@@ -45,6 +45,8 @@ function CreateListForm({ onDone }: { onDone: () => void }) {
         class_id: classId,
         spec_name: specName,
         visibility,
+        // The generated type for json.RawMessage is awkward; the payload
+        // travels as a plain JSON object.
         payload: EMPTY_PAYLOAD as unknown as Record<string, string>,
       },
       {

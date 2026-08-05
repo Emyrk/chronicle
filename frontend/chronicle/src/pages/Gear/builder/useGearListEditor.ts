@@ -71,7 +71,9 @@ export function useGearListEditor(list: GearList): GearListEditor {
         description: meta.description,
         spec_name: meta.spec_name,
         visibility: meta.visibility,
-        payload: serializePayload(payload) as unknown as Record<string, string>,
+        // Send the document as a JSON object (json.RawMessage server-side);
+        // a pre-stringified payload would double-encode.
+        payload: payload as unknown as Record<string, string>,
       },
       {
         onSuccess: () => {

@@ -9,13 +9,15 @@ interface BuilderDollProps {
   items: Map<string, HydratedItem>;
   selectedSlot?: number;
   onSelectSlot?: (outfitIndex: number) => void;
+  /** Per-slot weighted scores (by outfit index), when weights are active. */
+  scores?: Map<number, number>;
 }
 
 /**
  * The builder paperdoll: two slot columns plus the weapon row, mirroring
  * the armory layout. Read-only when onSelectSlot is absent.
  */
-export function BuilderDoll({ stage, items, selectedSlot, onSelectSlot }: BuilderDollProps) {
+export function BuilderDoll({ stage, items, selectedSlot, onSelectSlot, scores }: BuilderDollProps) {
   const equippedItemIds = new Set(
     Object.values(stage.slots)
       .filter((e) => !!e)
@@ -44,6 +46,7 @@ export function BuilderDoll({ stage, items, selectedSlot, onSelectSlot }: Builde
                 selected={selectedSlot === def.outfitIndex}
                 onSelect={onSelectSlot}
                 equippedItemIds={equippedItemIds}
+                score={scores?.get(def.outfitIndex)}
               />
             );
           })}
@@ -61,6 +64,7 @@ export function BuilderDoll({ stage, items, selectedSlot, onSelectSlot }: Builde
                 selected={selectedSlot === def.outfitIndex}
                 onSelect={onSelectSlot}
                 equippedItemIds={equippedItemIds}
+                score={scores?.get(def.outfitIndex)}
               />
             );
           })}
@@ -79,6 +83,7 @@ export function BuilderDoll({ stage, items, selectedSlot, onSelectSlot }: Builde
               selected={selectedSlot === def.outfitIndex}
               onSelect={onSelectSlot}
               equippedItemIds={equippedItemIds}
+              score={scores?.get(def.outfitIndex)}
             />
           );
         })}
