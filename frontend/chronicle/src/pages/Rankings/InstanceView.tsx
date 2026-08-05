@@ -22,6 +22,7 @@ import { useIsMobile } from "@/hooks/useIsMobile"
 import { getInstanceBackground } from "@/pages/Logs/utils/instanceImages"
 import { cn } from "@/lib/utils"
 import type { RankingsKillTimeStats, RankingsSuccessRate } from "@/api/typesGenerated"
+import { useSiteConfig } from "@/api/queries"
 import {
   useRankingsEncounters,
   useRankingsInstances,
@@ -39,6 +40,13 @@ import { BoxPlotChart } from "./BoxPlotChart"
 import { RankingsTable } from "./RankingsTable"
 import { KillTimeTable } from "./KillTimeTable"
 import { ClassSpecFilter } from "./ClassSpecFilter"
+import {
+  groupByParamForValue,
+  parseGroupByClass,
+  parseHideUnknowns,
+  unknownsParamForValue,
+  type RankingsCohortMode,
+} from "./rankingsFilterState"
 
 // ── Types ─────────────────────────────────────────────────────────────────
 
@@ -62,6 +70,12 @@ export function InstanceView({ instanceName }: InstanceViewProps) {
 
   // ── API queries ───────────────────────────────────────────────────────
   const { data: encounterSummaries, isLoading: encountersLoading } = useRankingsEncounters(instanceName)
+  const { data: siteConfig } = useSiteConfig()
+  const configuredCohortMode = siteConfig?.tenant?.parse_config?.cohort_mode
+  const cohortMode: RankingsCohortMode =
+    configuredCohortMode === "class" || configuredCohortMode === "disabled"
+      ? configuredCohortMode
+      : "spec"
   const encounterNames = useMemo(
     () => (encounterSummaries ?? []).map((e) => e.encounter_name),
     [encounterSummaries],
@@ -105,31 +119,35 @@ export function InstanceView({ instanceName }: InstanceViewProps) {
     return raw && VALID_PERIODS.has(raw as TimePeriod) ? (raw as TimePeriod) : "all"
   }, [params])
 
-  // Hide unknowns — checked by default (no URL param = hide).
-  // Only ?unknowns=show makes them visible.
-  const hideUnknowns = params.get("unknowns") !== "show"
+  // Class-cohort tenants include unknown specs and merge specs by default.
+  // Explicit URL values preserve user overrides across tenant-default changes.
+  const hideUnknowns = parseHideUnknowns(params.get("unknowns"), cohortMode)
 
   const handleToggleUnknowns = useCallback(() => {
     setParams((prev) => {
       const next = new URLSearchParams(prev)
-      if (prev.get("unknowns") === "show") next.delete("unknowns")
-      else next.set("unknowns", "show")
+      const currentValue = parseHideUnknowns(prev.get("unknowns"), cohortMode)
+      const nextValue = unknownsParamForValue(!currentValue, cohortMode)
+      if (nextValue === null) next.delete("unknowns")
+      else next.set("unknowns", nextValue)
       next.delete("page")
       return next
     })
-  }, [setParams])
+  }, [cohortMode, setParams])
 
-  // Group box plot by class (merge specs)
-  const groupByClass = params.get("group_by") === "class"
+  // Group box plot by class (merge specs).
+  const groupByClass = parseGroupByClass(params.get("group_by"), cohortMode)
 
   const handleToggleGroupByClass = useCallback(() => {
     setParams((prev) => {
       const next = new URLSearchParams(prev)
-      if (prev.get("group_by") === "class") next.delete("group_by")
-      else next.set("group_by", "class")
+      const currentValue = parseGroupByClass(prev.get("group_by"), cohortMode)
+      const nextValue = groupByParamForValue(!currentValue, cohortMode)
+      if (nextValue === null) next.delete("group_by")
+      else next.set("group_by", nextValue)
       return next
     })
-  }, [setParams])
+  }, [cohortMode, setParams])
 
   // Difficulty filter — kept in URL state but not yet a backend param
   const selectedDifficulties: Set<string> = useMemo(() => {
