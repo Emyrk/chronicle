@@ -215,6 +215,29 @@ const compareAbilities: L = {
   },
 };
 
+const focusPlayer: L = {
+  id: "focus-player",
+  title: "Focus a single player",
+  group: "advanced",
+  description: () =>
+    "Ctrl+click a player to swap the panel to just their abilities.",
+  deriveState: () => "available",
+  instruction:
+    "Ctrl+click a player row (Cmd+click on Mac) and choose 'Focus' — the whole panel swaps to that player's per-ability breakdown. Click Back or press Esc to return to the roster.",
+  bullets: [
+    "Ctrl+click a player row (Cmd+click on Mac)",
+    "'Focus' swaps the panel to that player's abilities",
+    "Back or Esc returns to the roster",
+  ],
+  video: {
+    load: () => import("./videos/FocusPlayer.video"),
+    durationInFrames: 470,
+    fps: 30,
+    width: 1280,
+    height: 720,
+  },
+};
+
 export const DAMAGE_DONE_LESSONS: L[] = [
   // Essentials
   readChart,
@@ -224,6 +247,7 @@ export const DAMAGE_DONE_LESSONS: L[] = [
   breakoutTour,
   spellRanks,
   // Advanced
+  focusPlayer,
   compareAbilities,
   filters,
 ];

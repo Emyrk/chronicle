@@ -1,5 +1,5 @@
 import { useCallback } from 'react'
-import { ChevronDown, Filter, HelpCircle, Layers, MoreVertical, Swords, X } from 'lucide-react'
+import { ChevronDown, ChevronLeft, ExternalLink, Filter, Focus, HelpCircle, Layers, MoreVertical, Swords, X } from 'lucide-react'
 import {
   AbilityBreakout,
   BreakoutHoverProvider,
@@ -96,6 +96,21 @@ export interface DemoBreakoutHover {
  * panel's flip side), then the chart narrowed to Auto Attack damage only.
  */
 export type DemoFilterStage = 'idle' | 'menu' | 'editor' | 'filtered'
+
+/**
+ * Focus-lesson stage: Ctrl+click's row context menu, then the focused
+ * per-ability view with its Back header.
+ */
+export type DemoFocusStage = 'idle' | 'menu' | 'focused'
+
+/** Ragesmash's abilities as chart rows — what Focus swaps the panel to. */
+const FOCUSED_ABILITY_ROWS: PlayerMetricChartData[] = abilities['player-2'].map((a) => ({
+  playerID: `focus-${a.name}`,
+  playerName: a.name,
+  className: 'Warrior',
+  specialization: '',
+  value: a.totalDamage,
+}))
 
 /** What survives an "Ability Name: Auto Attack" filter — melee auto attacks. */
 const FILTERED_PLAYERS: PlayerMetricChartData[] = [
@@ -249,6 +264,8 @@ export function PlayerMetricChartAbilityBreakdownDemo({
   filterEditor,
   extraPlayers,
   breakoutHover,
+  focusStage = 'idle',
+  focusMenuAt,
 }: {
   /**
    * Controlled pinned breakouts: playerID → position (portal-container
@@ -279,6 +296,10 @@ export function PlayerMetricChartAbilityBreakdownDemo({
   extraPlayers?: DemoExtraPlayer[]
   /** Controlled cross-breakout hover/selection (drives the compare video). */
   breakoutHover?: DemoBreakoutHover
+  /** Drives the focus lesson video: Ctrl+click menu → focused ability view. */
+  focusStage?: DemoFocusStage
+  /** Demo-local position of the Ctrl+click context menu (menu stage only). */
+  focusMenuAt?: { x: number; y: number }
 }) {
   const pinnedKey = pinnedPlayers ? [...pinnedPlayers.keys()].sort().join(',') : 'unpinned'
   const roster = extraPlayers ? [...players, ...extraPlayers.map((e) => e.player)] : players
@@ -373,7 +394,30 @@ export function PlayerMetricChartAbilityBreakdownDemo({
               Ranks
             </div>
           </div>
-          {/* Shared across every pinned breakout, like the real EventsPanel. */}
+          {/* Focus header with back button (mirrors the focused view). */}
+          {focusStage === 'focused' && (
+            <div className="flex items-center gap-1.5 px-3 pb-1">
+              <span
+                className="flex items-center gap-1 text-xs text-muted-foreground"
+                data-demo-focus-back
+              >
+                <ChevronLeft className="h-3.5 w-3.5" />
+                Back
+              </span>
+              <span className="text-xs font-medium">Ragesmash</span>
+            </div>
+          )}
+          {focusStage === 'focused' ? (
+            <PlayerMetricChart
+              data={FOCUSED_ABILITY_ROWS}
+              type="damage"
+              duration_millis={durationMillis}
+              panelTitle="Ability Breakdown"
+              classIconBasePath={classIconBasePath}
+              perSecond={perSecond}
+              className="min-h-0 flex-1"
+            />
+          ) : (
           <BreakoutHoverProvider
             hover={
               breakoutHover ? { rowId: breakoutHover.rowId ?? null, columnId: null } : undefined
@@ -395,8 +439,27 @@ export function PlayerMetricChartAbilityBreakdownDemo({
               className="min-h-0 flex-1"
             />
           </BreakoutHoverProvider>
+          )}
         </>
       )}
+      {/* Ctrl+click's row context menu (Focus / View Armory). */}
+      {focusStage === 'menu' && focusMenuAt && (
+        <div
+          className="absolute z-20 min-w-[160px] rounded-md border border-border bg-popover p-1 shadow-md"
+          style={{ left: focusMenuAt.x, top: focusMenuAt.y }}
+          data-demo-focus-menu
+        >
+          <div className="flex items-center gap-2 rounded-sm bg-accent px-2 py-1.5 text-xs" data-demo-focus-item>
+            <Focus className="h-3.5 w-3.5" />
+            Focus Ragesmash
+          </div>
+          <div className="flex items-center gap-2 rounded-sm px-2 py-1.5 text-xs text-muted-foreground">
+            <ExternalLink className="h-3.5 w-3.5" />
+            View Armory
+          </div>
+        </div>
+      )}
+
       {/* The filter icon's context menu (Edit filters / Reset to default). */}
       {filterStage === 'menu' && (
         <div

@@ -118,6 +118,9 @@ function LessonShell<TResult, TCaps>({
   const panel = PANELS[panelType];
   const [searchParams, setSearchParams] = useSearchParams();
   const [mode, setMode] = useState<"live" | "example">(initialMode ?? "live");
+  // The embedded live panel owns its option state (focus, grouping, toggles) —
+  // seeded from the page the explainer was opened from, never written back.
+  const [livePanelOption, setLivePanelOption] = useState<string | null>(panelOption ?? null);
 
   // Two-way hover linking between lesson rows and tagged panel regions:
   // hovering a lesson boxes its [data-lesson-target] elements in the panel,
@@ -257,7 +260,8 @@ function LessonShell<TResult, TCaps>({
                   durationMs={durationMs}
                   context={context}
                   panelIndex={0}
-                  panelOption={panelOption}
+                  panelOption={livePanelOption}
+                  onPanelOptionChange={setLivePanelOption}
                 />
               </div>
             )}
@@ -457,6 +461,7 @@ function FallbackExplainer({
   onExit: () => void;
 }) {
   const panel = PANELS[panelType];
+  const [livePanelOption, setLivePanelOption] = useState<string | null>(panelOption ?? null);
 
   return (
     <div className="min-h-screen bg-background">
@@ -488,7 +493,8 @@ function FallbackExplainer({
             durationMs={durationMs}
             context={context}
             panelIndex={0}
-            panelOption={panelOption}
+            panelOption={livePanelOption}
+            onPanelOptionChange={setLivePanelOption}
           />
         </div>
 

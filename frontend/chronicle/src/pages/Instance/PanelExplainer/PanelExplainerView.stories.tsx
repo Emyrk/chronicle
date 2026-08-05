@@ -165,6 +165,15 @@ export const AllActivityFiltersLesson: Story = {
   parameters: { routerEntries: ["/?lesson=filters"] },
 };
 
+export const FocusPlayerLesson: Story = {
+  parameters: { routerEntries: ["/?lesson=focus-player"] },
+};
+
+export const HealingFocusPlayerLesson: Story = {
+  args: { panelType: "healing_done" },
+  parameters: { routerEntries: ["/?lesson=focus-player"] },
+};
+
 /** Deep-linked video lesson — exercises the lazy Remotion player. */
 export const PinBreakoutLesson: Story = {
   parameters: { routerEntries: ["/?lesson=pin-breakout"] },

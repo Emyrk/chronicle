@@ -193,6 +193,29 @@ const filters: L = {
   },
 };
 
+const focusPlayer: L = {
+  id: "focus-player",
+  title: "Focus a single healer",
+  group: "advanced",
+  description: () =>
+    "Ctrl+click a healer to swap the panel to just their spells.",
+  deriveState: () => "available",
+  instruction:
+    "Ctrl+click a healer row (Cmd+click on Mac) and choose 'Focus' — the whole panel swaps to that healer's per-spell breakdown, overheal tails included. Click Back or press Esc to return to the roster.",
+  bullets: [
+    "Ctrl+click a healer row (Cmd+click on Mac)",
+    "'Focus' swaps the panel to that healer's spells",
+    "Back or Esc returns to the roster",
+  ],
+  video: {
+    load: () => import("./videos/FocusPlayerHealing.video"),
+    durationInFrames: 470,
+    fps: 30,
+    width: 1280,
+    height: 720,
+  },
+};
+
 export const HEALING_DONE_LESSONS: L[] = [
   // Essentials
   readChart,
@@ -201,6 +224,7 @@ export const HEALING_DONE_LESSONS: L[] = [
   healerBreakout,
   spellRanks,
   // Advanced
+  focusPlayer,
   compareHealers,
   filters,
 ];

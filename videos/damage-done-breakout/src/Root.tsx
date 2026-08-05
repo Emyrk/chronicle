@@ -30,6 +30,8 @@ import AllActivityStreamsVideo from "../../../frontend/chronicle/src/pages/Insta
 import AllActivityQuickFiltersVideo from "../../../frontend/chronicle/src/pages/Instance/EventsPanels/AllActivity/explain/videos/QuickFilters.video";
 import AllActivityTimeFormatsVideo from "../../../frontend/chronicle/src/pages/Instance/EventsPanels/AllActivity/explain/videos/TimeFormats.video";
 import AllActivityAdvancedFiltersVideo from "../../../frontend/chronicle/src/pages/Instance/EventsPanels/AllActivity/explain/videos/AdvancedFilters.video";
+import FocusPlayerVideo from "../../../frontend/chronicle/src/pages/Instance/EventsPanels/DamageDone/explain/videos/FocusPlayer.video";
+import FocusPlayerHealingVideo from "../../../frontend/chronicle/src/pages/Instance/EventsPanels/HealingDone/explain/videos/FocusPlayerHealing.video";
 
 /**
  * Studio registration for the in-app explainer lesson compositions.
@@ -135,6 +137,10 @@ export const RemotionRoot: React.FC = () => {
         <Composition id="AllActivityQuickFilters" component={AllActivityQuickFiltersVideo} durationInFrames={530} fps={30} width={1280} height={720} />
         <Composition id="AllActivityTimeFormats" component={AllActivityTimeFormatsVideo} durationInFrames={470} fps={30} width={1280} height={720} />
         <Composition id="AllActivityAdvancedFilters" component={AllActivityAdvancedFiltersVideo} durationInFrames={500} fps={30} width={1280} height={720} />
+      </Folder>
+      <Folder name="FocusLessons">
+        <Composition id="FocusPlayer" component={FocusPlayerVideo} durationInFrames={470} fps={30} width={1280} height={720} />
+        <Composition id="FocusPlayerHealing" component={FocusPlayerHealingVideo} durationInFrames={470} fps={30} width={1280} height={720} />
       </Folder>
     </>
   );

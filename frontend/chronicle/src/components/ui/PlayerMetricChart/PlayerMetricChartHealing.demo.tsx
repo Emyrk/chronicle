@@ -1,5 +1,5 @@
 import { useCallback } from 'react'
-import { ChevronDown, Filter, Heart, HelpCircle, Layers, MoreVertical } from 'lucide-react'
+import { ChevronDown, ChevronLeft, ExternalLink, Filter, Focus, Heart, HelpCircle, Layers, MoreVertical } from 'lucide-react'
 import {
   AbilityBreakout,
   BreakoutHoverProvider,
@@ -12,6 +12,7 @@ import {
   type DemoBreakoutHover,
   type DemoFilterEditorState,
   type DemoFilterStage,
+  type DemoFocusStage,
 } from './PlayerMetricChart.demo'
 import { PlayerMetricChart, type PlayerMetricChartData } from './PlayerMetricChart'
 
@@ -162,6 +163,16 @@ const RANKED_HEALS: Record<string, HealAbility[]> = {
   ],
 }
 
+/** Lightmender's heals as chart rows — what Focus swaps the panel to. */
+const FOCUSED_HEAL_ROWS: PlayerMetricChartData[] = HEALERS[0].abilities.map((a) => ({
+  playerID: `focus-${a.name}`,
+  playerName: a.name,
+  className: 'Priest',
+  specialization: '',
+  value: a.effective,
+  stackedValue: a.effective + a.overheal,
+}))
+
 /** What survives an "Ability Name: Rejuvenation" filter — the two Druids. */
 const FILTERED_HEALERS: PlayerMetricChartData[] = [
   { playerID: 'healer-2', playerName: 'Treesong', className: 'Druid', specialization: 'Restoration', value: 48_000, stackedValue: 38_000 },
@@ -222,6 +233,8 @@ export function PlayerMetricChartHealingDemo({
   breakoutHover,
   filterStage = 'idle',
   filterEditor,
+  focusStage = 'idle',
+  focusMenuAt,
 }: {
   /** Controlled pinned breakouts: playerID → portal-container position. */
   pinnedPlayers?: ReadonlyMap<string, { x: number; y: number }>
@@ -240,6 +253,10 @@ export function PlayerMetricChartHealingDemo({
   filterStage?: DemoFilterStage
   /** Typing/chip state of the editor's ability-name input (editor stage only). */
   filterEditor?: DemoFilterEditorState
+  /** Drives the focus lesson video: Ctrl+click menu → focused ability view. */
+  focusStage?: DemoFocusStage
+  /** Demo-local position of the Ctrl+click context menu (menu stage only). */
+  focusMenuAt?: { x: number; y: number }
 }) {
   const pinnedKey = pinnedPlayers ? [...pinnedPlayers.keys()].sort().join(',') : 'unpinned'
 
@@ -355,7 +372,30 @@ export function PlayerMetricChartHealingDemo({
           </div>
         </div>
       </div>
-      {/* Shared across every pinned breakout, like the real EventsPanel. */}
+      {/* Focus header with back button (mirrors the focused view). */}
+      {focusStage === 'focused' && (
+        <div className="flex items-center gap-1.5 px-3 pb-1">
+          <span
+            className="flex items-center gap-1 text-xs text-muted-foreground"
+            data-demo-focus-back
+          >
+            <ChevronLeft className="h-3.5 w-3.5" />
+            Back
+          </span>
+          <span className="text-xs font-medium">Lightmender</span>
+        </div>
+      )}
+      {focusStage === 'focused' ? (
+        <PlayerMetricChart
+          data={FOCUSED_HEAL_ROWS}
+          type="healing"
+          duration_millis={durationMillis}
+          panelTitle="Ability Breakdown"
+          classIconBasePath={classIconBasePath}
+          perSecond={perSecond}
+          className="min-h-0 flex-1"
+        />
+      ) : (
       <BreakoutHoverProvider
         hover={
           breakoutHover ? { rowId: breakoutHover.rowId ?? null, columnId: null } : undefined
@@ -376,8 +416,27 @@ export function PlayerMetricChartHealingDemo({
           className="min-h-0 flex-1"
         />
       </BreakoutHoverProvider>
+      )}
         </>
       )}
+      {/* Ctrl+click's row context menu (Focus / View Armory). */}
+      {focusStage === 'menu' && focusMenuAt && (
+        <div
+          className="absolute z-20 min-w-[160px] rounded-md border border-border bg-popover p-1 shadow-md"
+          style={{ left: focusMenuAt.x, top: focusMenuAt.y }}
+          data-demo-focus-menu
+        >
+          <div className="flex items-center gap-2 rounded-sm bg-accent px-2 py-1.5 text-xs" data-demo-focus-item>
+            <Focus className="h-3.5 w-3.5" />
+            Focus Lightmender
+          </div>
+          <div className="flex items-center gap-2 rounded-sm px-2 py-1.5 text-xs text-muted-foreground">
+            <ExternalLink className="h-3.5 w-3.5" />
+            View Armory
+          </div>
+        </div>
+      )}
+
       {/* The filter icon's context menu (Edit filters / Reset to default). */}
       {filterStage === 'menu' && (
         <div
