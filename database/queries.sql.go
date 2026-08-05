@@ -1829,6 +1829,401 @@ func (q *sqlQuerier) InstanceEvent(ctx context.Context, arg InstanceEventParams)
 	return i, err
 }
 
+const getExternalAPICharacter = `-- name: GetExternalAPICharacter :one
+SELECT
+    gp.id,
+    gp.realm_id,
+    gp.name,
+    gp.class,
+    gp.race,
+    gp.gender,
+    gp.level,
+    gp.guild_id,
+    COALESCE(g.name, '') AS guild_name,
+    gp.updated_at,
+    gp.updated_from_instance,
+    COALESCE(latest.player_spec, '')::text AS player_spec,
+    COALESCE(latest.player_role, '')::text AS player_role,
+    COALESCE(latest.avg_ilvl, 0)::smallint AS avg_ilvl
+FROM game_players gp
+LEFT JOIN guilds g ON g.id = gp.guild_id
+LEFT JOIN LATERAL (
+    SELECT edr.player_spec, edr.player_role, edr.avg_ilvl
+    FROM encounter_dps_rankings edr
+    WHERE edr.realm_id = gp.realm_id
+      AND edr.player_guid = gp.id::text
+      AND edr.encounter_id IS NOT NULL
+    ORDER BY edr.killed_at DESC, edr.created_at DESC
+    LIMIT 1
+) latest ON true
+WHERE gp.realm_id = $1
+  AND (gp.id = $2::wow_guid OR lower(gp.name) = lower($3))
+LIMIT 1
+`
+
+type GetExternalAPICharacterParams struct {
+	RealmID    uuid.UUID `db:"realm_id" json:"realm_id"`
+	Identifier guid.GUID `db:"identifier" json:"identifier"`
+	Name       string    `db:"name" json:"name"`
+}
+
+type GetExternalAPICharacterRow struct {
+	ID                  guid.GUID          `db:"id" json:"id"`
+	RealmID             uuid.UUID          `db:"realm_id" json:"realm_id"`
+	Name                string             `db:"name" json:"name"`
+	Class               WowPlayableClass   `db:"class" json:"class"`
+	Race                WowPlayableRace    `db:"race" json:"race"`
+	Gender              WowPlayableGender  `db:"gender" json:"gender"`
+	Level               int16              `db:"level" json:"level"`
+	GuildID             uuid.NullUUID      `db:"guild_id" json:"guild_id"`
+	GuildName           string             `db:"guild_name" json:"guild_name"`
+	UpdatedAt           pgtype.Timestamptz `db:"updated_at" json:"updated_at"`
+	UpdatedFromInstance uuid.NullUUID      `db:"updated_from_instance" json:"updated_from_instance"`
+	PlayerSpec          string             `db:"player_spec" json:"player_spec"`
+	PlayerRole          string             `db:"player_role" json:"player_role"`
+	AvgIlvl             int16              `db:"avg_ilvl" json:"avg_ilvl"`
+}
+
+func (q *sqlQuerier) GetExternalAPICharacter(ctx context.Context, arg GetExternalAPICharacterParams) (GetExternalAPICharacterRow, error) {
+	row := q.db.QueryRow(ctx, getExternalAPICharacter, arg.RealmID, arg.Identifier, arg.Name)
+	var i GetExternalAPICharacterRow
+	err := row.Scan(
+		&i.ID,
+		&i.RealmID,
+		&i.Name,
+		&i.Class,
+		&i.Race,
+		&i.Gender,
+		&i.Level,
+		&i.GuildID,
+		&i.GuildName,
+		&i.UpdatedAt,
+		&i.UpdatedFromInstance,
+		&i.PlayerSpec,
+		&i.PlayerRole,
+		&i.AvgIlvl,
+	)
+	return i, err
+}
+
+const listExternalAPICharacterLogs = `-- name: ListExternalAPICharacterLogs :many
+WITH participation AS (
+    SELECT
+        li.id,
+        li.hashed_slug,
+        li.name,
+        li.realm_id,
+        li.guild_id,
+        li.difficulty_name,
+        li.max_players,
+        COALESCE(li.start_time, wlg.created_at) AS started_at,
+        COALESCE(li.end_time, li.start_time, wlg.created_at) AS ended_at,
+        wlg.created_at AS uploaded_at,
+        COALESCE(li.duplicate_group_id, li.id) AS run_id,
+        ROW_NUMBER() OVER (
+            PARTITION BY COALESCE(li.duplicate_group_id, li.id)
+            ORDER BY COALESCE(li.start_time, wlg.created_at) DESC, li.id DESC
+        ) AS duplicate_rank
+    FROM log_instance_players lip
+    JOIN log_instances li ON li.id = lip.instance_id
+    JOIN wow_log_groups wlg ON wlg.id = li.log_group_id
+    WHERE lip.unit_guid = $1::wow_guid
+      AND li.realm_id = $5
+), deduped AS (
+    SELECT id, hashed_slug, name, realm_id, guild_id, difficulty_name, max_players, started_at, ended_at, uploaded_at, run_id, duplicate_rank
+    FROM participation
+    WHERE duplicate_rank = 1
+)
+SELECT
+    d.id,
+    d.hashed_slug,
+    d.name,
+    d.realm_id,
+    d.guild_id,
+    COALESCE(g.name, '') AS guild_name,
+    d.difficulty_name,
+    d.max_players,
+    d.started_at,
+    d.ended_at,
+    d.uploaded_at,
+    COALESCE(metrics.boss_kills, 0)::int AS boss_kills,
+    COALESCE(metrics.best_dps, 0)::float8 AS best_dps,
+    COALESCE(metrics.best_hps, 0)::float8 AS best_hps,
+    COALESCE(metrics.avg_ilvl, 0)::smallint AS avg_ilvl,
+    COALESCE(metrics.player_spec, '')::text AS player_spec,
+    COALESCE(metrics.player_role, '')::text AS player_role,
+    COALESCE(parses.best_dps_parse, 0)::smallint AS best_dps_parse,
+    COALESCE(parses.best_hps_parse, 0)::smallint AS best_hps_parse
+FROM deduped d
+LEFT JOIN guilds g ON g.id = d.guild_id
+LEFT JOIN LATERAL (
+    SELECT
+        COUNT(DISTINCT edr.encounter_id) FILTER (WHERE edr.encounter_id IS NOT NULL) AS boss_kills,
+        MAX(edr.dps) FILTER (WHERE edr.encounter_id IS NOT NULL AND edr.dps > 0) AS best_dps,
+        MAX(edr.hps) FILTER (WHERE edr.encounter_id IS NOT NULL AND edr.hps > 0) AS best_hps,
+        MAX(edr.avg_ilvl) FILTER (WHERE edr.encounter_id IS NOT NULL) AS avg_ilvl,
+        (ARRAY_AGG(edr.player_spec ORDER BY edr.killed_at DESC) FILTER (WHERE edr.encounter_id IS NOT NULL))[1] AS player_spec,
+        (ARRAY_AGG(edr.player_role ORDER BY edr.killed_at DESC) FILTER (WHERE edr.encounter_id IS NOT NULL))[1] AS player_role
+    FROM encounter_dps_rankings edr
+    JOIN log_instances metrics_instance ON metrics_instance.id = edr.instance_id
+    WHERE COALESCE(metrics_instance.duplicate_group_id, metrics_instance.id) = d.run_id
+      AND edr.player_guid = ($1::wow_guid)::text
+) metrics ON true
+LEFT JOIN LATERAL (
+    SELECT
+        MAX(psr.display_score) FILTER (WHERE psr.metric = 'dps' AND psr.status IN ('ok', 'low_confidence')) AS best_dps_parse,
+        MAX(psr.display_score) FILTER (WHERE psr.metric = 'hps' AND psr.status IN ('ok', 'low_confidence')) AS best_hps_parse
+    FROM parse_score_results psr
+    WHERE psr.run_id = d.run_id
+      AND psr.player_guid = ($1::wow_guid)::text
+      AND psr.tenant_id = $2
+) parses ON true
+ORDER BY d.started_at DESC, d.id DESC
+LIMIT $4
+OFFSET $3
+`
+
+type ListExternalAPICharacterLogsParams struct {
+	PlayerGuid   guid.GUID `db:"player_guid" json:"player_guid"`
+	TenantID     uuid.UUID `db:"tenant_id" json:"tenant_id"`
+	ResultOffset int32     `db:"result_offset" json:"result_offset"`
+	ResultLimit  int32     `db:"result_limit" json:"result_limit"`
+	RealmID      uuid.UUID `db:"realm_id" json:"realm_id"`
+}
+
+type ListExternalAPICharacterLogsRow struct {
+	ID             uuid.UUID          `db:"id" json:"id"`
+	HashedSlug     pgtype.Text        `db:"hashed_slug" json:"hashed_slug"`
+	Name           string             `db:"name" json:"name"`
+	RealmID        uuid.UUID          `db:"realm_id" json:"realm_id"`
+	GuildID        uuid.NullUUID      `db:"guild_id" json:"guild_id"`
+	GuildName      string             `db:"guild_name" json:"guild_name"`
+	DifficultyName string             `db:"difficulty_name" json:"difficulty_name"`
+	MaxPlayers     int32              `db:"max_players" json:"max_players"`
+	StartedAt      pgtype.Timestamptz `db:"started_at" json:"started_at"`
+	EndedAt        pgtype.Timestamptz `db:"ended_at" json:"ended_at"`
+	UploadedAt     pgtype.Timestamptz `db:"uploaded_at" json:"uploaded_at"`
+	BossKills      int32              `db:"boss_kills" json:"boss_kills"`
+	BestDps        float64            `db:"best_dps" json:"best_dps"`
+	BestHps        float64            `db:"best_hps" json:"best_hps"`
+	AvgIlvl        int16              `db:"avg_ilvl" json:"avg_ilvl"`
+	PlayerSpec     string             `db:"player_spec" json:"player_spec"`
+	PlayerRole     string             `db:"player_role" json:"player_role"`
+	BestDpsParse   int16              `db:"best_dps_parse" json:"best_dps_parse"`
+	BestHpsParse   int16              `db:"best_hps_parse" json:"best_hps_parse"`
+}
+
+func (q *sqlQuerier) ListExternalAPICharacterLogs(ctx context.Context, arg ListExternalAPICharacterLogsParams) ([]ListExternalAPICharacterLogsRow, error) {
+	rows, err := q.db.Query(ctx, listExternalAPICharacterLogs,
+		arg.PlayerGuid,
+		arg.TenantID,
+		arg.ResultOffset,
+		arg.ResultLimit,
+		arg.RealmID,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListExternalAPICharacterLogsRow
+	for rows.Next() {
+		var i ListExternalAPICharacterLogsRow
+		if err := rows.Scan(
+			&i.ID,
+			&i.HashedSlug,
+			&i.Name,
+			&i.RealmID,
+			&i.GuildID,
+			&i.GuildName,
+			&i.DifficultyName,
+			&i.MaxPlayers,
+			&i.StartedAt,
+			&i.EndedAt,
+			&i.UploadedAt,
+			&i.BossKills,
+			&i.BestDps,
+			&i.BestHps,
+			&i.AvgIlvl,
+			&i.PlayerSpec,
+			&i.PlayerRole,
+			&i.BestDpsParse,
+			&i.BestHpsParse,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listExternalAPIRealms = `-- name: ListExternalAPIRealms :many
+SELECT
+    wsr.id,
+    wsr.server_id,
+    wsr.name,
+    wsr.description,
+    wsr.url
+FROM wow_server_realms wsr
+JOIN wow_servers ws ON ws.id = wsr.server_id
+WHERE ws.id::text = $1::text OR lower(ws.name) = lower($1::text)
+ORDER BY wsr.name
+`
+
+type ListExternalAPIRealmsRow struct {
+	ID          uuid.UUID   `db:"id" json:"id"`
+	ServerID    uuid.UUID   `db:"server_id" json:"server_id"`
+	Name        string      `db:"name" json:"name"`
+	Description string      `db:"description" json:"description"`
+	Url         pgtype.Text `db:"url" json:"url"`
+}
+
+func (q *sqlQuerier) ListExternalAPIRealms(ctx context.Context, server string) ([]ListExternalAPIRealmsRow, error) {
+	rows, err := q.db.Query(ctx, listExternalAPIRealms, server)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListExternalAPIRealmsRow
+	for rows.Next() {
+		var i ListExternalAPIRealmsRow
+		if err := rows.Scan(
+			&i.ID,
+			&i.ServerID,
+			&i.Name,
+			&i.Description,
+			&i.Url,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listExternalAPIServers = `-- name: ListExternalAPIServers :many
+SELECT id, name, description, url
+FROM wow_servers
+ORDER BY name
+`
+
+type ListExternalAPIServersRow struct {
+	ID          uuid.UUID   `db:"id" json:"id"`
+	Name        string      `db:"name" json:"name"`
+	Description string      `db:"description" json:"description"`
+	Url         pgtype.Text `db:"url" json:"url"`
+}
+
+func (q *sqlQuerier) ListExternalAPIServers(ctx context.Context) ([]ListExternalAPIServersRow, error) {
+	rows, err := q.db.Query(ctx, listExternalAPIServers)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListExternalAPIServersRow
+	for rows.Next() {
+		var i ListExternalAPIServersRow
+		if err := rows.Scan(
+			&i.ID,
+			&i.Name,
+			&i.Description,
+			&i.Url,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const resolveExternalAPIRealm = `-- name: ResolveExternalAPIRealm :one
+SELECT
+    wsr.id,
+    wsr.server_id,
+    wsr.name,
+    wsr.description,
+    wsr.url,
+    ws.name AS server_name,
+    ws.description AS server_description,
+    ws.url AS server_url,
+    ws.tenant_id
+FROM wow_server_realms wsr
+JOIN wow_servers ws ON ws.id = wsr.server_id
+WHERE (ws.id::text = $1::text OR lower(ws.name) = lower($1::text))
+  AND (wsr.id::text = $2::text OR lower(wsr.name) = lower($2::text))
+LIMIT 1
+`
+
+type ResolveExternalAPIRealmParams struct {
+	Server string `db:"server" json:"server"`
+	Realm  string `db:"realm" json:"realm"`
+}
+
+type ResolveExternalAPIRealmRow struct {
+	ID                uuid.UUID     `db:"id" json:"id"`
+	ServerID          uuid.UUID     `db:"server_id" json:"server_id"`
+	Name              string        `db:"name" json:"name"`
+	Description       string        `db:"description" json:"description"`
+	Url               pgtype.Text   `db:"url" json:"url"`
+	ServerName        string        `db:"server_name" json:"server_name"`
+	ServerDescription string        `db:"server_description" json:"server_description"`
+	ServerUrl         pgtype.Text   `db:"server_url" json:"server_url"`
+	TenantID          uuid.NullUUID `db:"tenant_id" json:"tenant_id"`
+}
+
+func (q *sqlQuerier) ResolveExternalAPIRealm(ctx context.Context, arg ResolveExternalAPIRealmParams) (ResolveExternalAPIRealmRow, error) {
+	row := q.db.QueryRow(ctx, resolveExternalAPIRealm, arg.Server, arg.Realm)
+	var i ResolveExternalAPIRealmRow
+	err := row.Scan(
+		&i.ID,
+		&i.ServerID,
+		&i.Name,
+		&i.Description,
+		&i.Url,
+		&i.ServerName,
+		&i.ServerDescription,
+		&i.ServerUrl,
+		&i.TenantID,
+	)
+	return i, err
+}
+
+const resolveExternalAPIServer = `-- name: ResolveExternalAPIServer :one
+SELECT id, name, description, url, tenant_id
+FROM wow_servers
+WHERE id::text = $1::text OR lower(name) = lower($1::text)
+LIMIT 1
+`
+
+type ResolveExternalAPIServerRow struct {
+	ID          uuid.UUID     `db:"id" json:"id"`
+	Name        string        `db:"name" json:"name"`
+	Description string        `db:"description" json:"description"`
+	Url         pgtype.Text   `db:"url" json:"url"`
+	TenantID    uuid.NullUUID `db:"tenant_id" json:"tenant_id"`
+}
+
+func (q *sqlQuerier) ResolveExternalAPIServer(ctx context.Context, server string) (ResolveExternalAPIServerRow, error) {
+	row := q.db.QueryRow(ctx, resolveExternalAPIServer, server)
+	var i ResolveExternalAPIServerRow
+	err := row.Scan(
+		&i.ID,
+		&i.Name,
+		&i.Description,
+		&i.Url,
+		&i.TenantID,
+	)
+	return i, err
+}
+
 const countAllWoWLogGroups = `-- name: CountAllWoWLogGroups :one
 SELECT COUNT(*)::int FROM wow_log_groups
 LEFT JOIN LATERAL (

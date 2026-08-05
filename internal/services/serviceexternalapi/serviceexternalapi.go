@@ -5,7 +5,9 @@ import (
 	"net/http"
 
 	"github.com/Emyrk/chronicle/api/httpapi"
+	"github.com/Emyrk/chronicle/database"
 	"github.com/Emyrk/chronicle/internal/services"
+	"github.com/Emyrk/chronicle/internal/services/servicedbstore"
 	"github.com/Emyrk/chronicle/internal/services/servicelogger"
 	"github.com/coder/serpent"
 	"github.com/go-chi/chi/v5"
@@ -25,8 +27,18 @@ func OnExternalAPI() string {
 }
 
 // Service owns Chronicle's public, unauthenticated API endpoints.
+type externalAPIStore interface {
+	ListExternalAPIServers(context.Context) ([]database.ListExternalAPIServersRow, error)
+	ResolveExternalAPIServer(context.Context, string) (database.ResolveExternalAPIServerRow, error)
+	ListExternalAPIRealms(context.Context, string) ([]database.ListExternalAPIRealmsRow, error)
+	ResolveExternalAPIRealm(context.Context, database.ResolveExternalAPIRealmParams) (database.ResolveExternalAPIRealmRow, error)
+	GetExternalAPICharacter(context.Context, database.GetExternalAPICharacterParams) (database.GetExternalAPICharacterRow, error)
+	ListExternalAPICharacterLogs(context.Context, database.ListExternalAPICharacterLogsParams) ([]database.ListExternalAPICharacterLogsRow, error)
+}
+
 type Service struct {
 	broker  *services.Services
+	db      externalAPIStore
 	router  chi.Router
 	openapi OpenAPIDocument
 }
@@ -38,10 +50,14 @@ func New(broker *services.Services) *Service {
 func (s *Service) Name() string         { return services.ServiceExternalAPI }
 func (s *Service) Configures() []string { return nil }
 func (s *Service) DependsOn() []string {
-	return []string{servicelogger.OnLogger()}
+	return []string{
+		servicelogger.OnLogger(),
+		servicedbstore.OnDatabaseStore(),
+	}
 }
 
 func (s *Service) Start(_ context.Context) error {
+	s.db = servicedbstore.DatabaseStore(s.broker)
 	s.setupRoutes()
 	servicelogger.Logger(s.broker).Info("external API service started")
 	return nil
@@ -50,22 +66,7 @@ func (s *Service) Start(_ context.Context) error {
 func (s *Service) setupRoutes() {
 	s.router = chi.NewRouter()
 	s.openapi = newOpenAPIDocument()
-
-	s.register(http.MethodGet, "/health", OpenAPIOperation{
-		Summary:     "Check API health",
-		Description: "Returns whether Chronicle's external API is available.",
-		Responses: map[string]OpenAPIResponse{
-			"200": {
-				Description: "The external API is available.",
-				Content: map[string]OpenAPIMediaType{
-					"application/json": {
-						Example: HealthResponse{Status: "ok"},
-					},
-				},
-			},
-		},
-	}, s.health)
-	s.router.Get("/openapi.json", s.openAPISpec)
+	s.registerRoutes()
 }
 
 func (s *Service) Close(_ context.Context) error { return nil }

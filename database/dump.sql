@@ -2090,6 +2090,8 @@ CREATE INDEX idx_edr_realm ON encounter_dps_rankings USING btree (realm_id);
 
 CREATE UNIQUE INDEX idx_edr_trash_unique ON encounter_dps_rankings USING btree (instance_id, player_guid, player_spec) WHERE (encounter_id IS NULL);
 
+CREATE INDEX idx_game_players_realm_lower_name ON game_players USING btree (realm_id, lower(name));
+
 CREATE INDEX idx_guild_join_requests_guild ON guild_join_requests USING btree (guild_id);
 
 CREATE INDEX idx_guild_page_panels_tab ON guild_page_panels USING btree (tab_id);
@@ -2109,6 +2111,8 @@ CREATE INDEX idx_instance_speedruns_realm ON instance_speedruns USING btree (rea
 CREATE INDEX idx_log_instance_encounters_instance_id ON log_instance_encounters USING btree (instance_id);
 
 CREATE INDEX idx_log_instance_players_instance_id ON log_instance_players USING btree (instance_id);
+
+CREATE INDEX idx_log_instance_players_unit_guid_instance ON log_instance_players USING btree (unit_guid, instance_id);
 
 CREATE INDEX idx_log_instances_duplicate_group ON log_instances USING btree (duplicate_group_id) WHERE (duplicate_group_id IS NOT NULL);
 
