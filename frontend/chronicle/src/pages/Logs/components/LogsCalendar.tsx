@@ -20,6 +20,11 @@ interface LogsCalendarProps {
   headerRight?: React.ReactNode;
   density?: "default" | "compact";
   fillHeight?: boolean;
+  /**
+   * "bordered" (default) renders one bordered grid with shared cell borders;
+   * "cells" renders detached rounded day cells with gaps between them.
+   */
+  variant?: "bordered" | "cells";
 }
 
 function useIsSmallScreen(): boolean {
@@ -42,9 +47,11 @@ export function LogsCalendar({
   headerRight,
   density = "default",
   fillHeight = false,
+  variant = "bordered",
 }: LogsCalendarProps) {
   const isSmall = useIsSmallScreen();
   const compact = density === "compact";
+  const cells = variant === "cells";
   const weeks = getCalendarWeeks(month);
 
   if (isSmall) {
@@ -90,13 +97,15 @@ export function LogsCalendar({
 
       {/* Calendar grid - horizontal scroll on mobile */}
       <div className={`overflow-x-auto -mx-4 px-4 sm:mx-0 sm:px-0 ${fillHeight ? "min-h-0 flex-1" : ""}`}>
-        <div className={`border border-border rounded-lg overflow-hidden min-w-[500px] sm:min-w-0 ${fillHeight ? "flex h-full min-h-0 flex-col" : ""}`}>
+        <div
+          className={`min-w-[500px] sm:min-w-0 ${cells ? "" : "border border-border rounded-lg overflow-hidden"} ${fillHeight ? "flex h-full min-h-0 flex-col" : ""} ${cells && fillHeight ? "gap-1.5" : ""}`}
+        >
           {/* Day names header */}
-          <div className="grid grid-cols-7 bg-muted/50">
+          <div className={`grid grid-cols-7 ${cells ? "gap-1.5" : "bg-muted/50"}`}>
             {DAY_NAMES.map((day) => (
               <div
                 key={day}
-                className={`${compact ? "py-1 text-[10px]" : "py-2 text-xs"} text-center font-medium text-muted-foreground border-b border-border`}
+                className={`${compact ? "py-1 text-[10px]" : "py-2 text-xs"} text-center font-medium text-muted-foreground ${cells ? "uppercase tracking-widest" : "border-b border-border"}`}
               >
                 {day}
               </div>
@@ -105,7 +114,10 @@ export function LogsCalendar({
 
           {/* Weeks */}
           {weeks.map((week, weekIndex) => (
-            <div key={weekIndex} className={`grid grid-cols-7 ${fillHeight ? "min-h-0 flex-1" : ""}`}>
+            <div
+              key={weekIndex}
+              className={`grid grid-cols-7 ${cells ? "gap-1.5" : ""} ${cells && !fillHeight ? "mb-1.5 last:mb-0" : ""} ${fillHeight ? "min-h-0 flex-1" : ""}`}
+            >
               {week.map((date, dayIndex) => {
                 const inCurrentMonth = isSameMonth(date, month);
                 const today = isToday(date);
@@ -114,10 +126,13 @@ export function LogsCalendar({
                   <div
                     key={dayIndex}
                     className={`
-                      ${compact ? "min-h-[48px] p-1" : "min-h-[80px] sm:min-h-[100px] p-1 sm:p-1.5"} border-b border-r border-border last:border-r-0
+                      ${compact ? "min-h-[48px] p-1" : "min-h-[80px] sm:min-h-[100px] p-1 sm:p-1.5"}
+                      ${
+                        cells
+                          ? `rounded-md border ${today ? "border-primary/50 bg-primary/5" : "border-border/50 bg-muted/20"} ${!inCurrentMonth ? "opacity-40" : ""}`
+                          : `border-b border-r border-border last:border-r-0 ${!inCurrentMonth ? "bg-muted/30" : ""} ${today ? "bg-primary/5" : ""}`
+                      }
                       ${fillHeight ? "flex min-h-0 flex-col overflow-hidden" : ""}
-                      ${!inCurrentMonth ? "bg-muted/30" : ""}
-                      ${today ? "bg-primary/5" : ""}
                     `}
                   >
                     {/* Date number */}

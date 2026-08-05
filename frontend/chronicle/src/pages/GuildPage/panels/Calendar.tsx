@@ -9,10 +9,12 @@ import { LogsCalendar } from "@/pages/Logs/components/LogsCalendar";
 import { groupDuplicateInstances } from "@/utils/groupDuplicates";
 import { DuplicateInstanceModal } from "@/components/DuplicateInstanceModal";
 import type { GuildPanelDefinition, GuildPanelRenderProps } from "./types";
+import { instancePillStyle } from "./instanceColors";
 
 type CategoryFilter = "all" | "raid" | "dungeon";
 
 interface CalendarConfig {
+  displayStyle: "cards" | "minimal";
   category: CategoryFilter;
   hasVideo: "all" | "with";
 }
@@ -35,9 +37,11 @@ function groupByDate(instances: RecentInstance[]): Record<string, RecentInstance
 function InstanceDayCard({
   group,
   compact,
+  minimal,
 }: {
   group: RecentInstance[];
   compact: boolean;
+  minimal: boolean;
 }) {
   const [imageError, setImageError] = useState(false);
   const [showModal, setShowModal] = useState(false);
@@ -49,7 +53,22 @@ function InstanceDayCard({
     ? `/instances/${instance.slug}`
     : `/instances/${instance.id}`;
 
-  const card = (
+  const card = minimal ? (
+    <div
+      className={`flex items-center rounded px-1.5 ${compact ? "py-0 text-[9px]" : "py-0.5 text-[10px]"} font-semibold transition-all hover:brightness-125`}
+      style={instancePillStyle(instance.name)}
+    >
+      <span className="truncate">
+        {compact ? abbrev : (
+          <>
+            <span className="sm:hidden">{abbrev}</span>
+            <span className="hidden sm:inline">{instance.name}</span>
+          </>
+        )}
+      </span>
+      {isDuplicate && <span className="ml-auto pl-1 opacity-80">×{group.length}</span>}
+    </div>
+  ) : (
     <div className={`relative overflow-hidden rounded group cursor-pointer transition-all hover:scale-[1.02] hover:shadow-md ${compact ? "h-6" : "h-8 sm:h-10"}`}>
       <div className="absolute inset-0 bg-gradient-to-br from-slate-700 to-slate-800" />
       {!imageError && (
@@ -105,9 +124,11 @@ function InstanceDayCard({
 function ExpandableDayCell({
   instances,
   compact,
+  minimal,
 }: {
   instances: RecentInstance[];
   compact: boolean;
+  minimal: boolean;
 }) {
   const [expanded, setExpanded] = useState(false);
   const maxShown = compact ? 1 : 3;
@@ -122,7 +143,7 @@ function ExpandableDayCell({
   return (
     <>
       {shown.map((group) => (
-        <InstanceDayCard key={group[0].id} group={group} compact={compact} />
+        <InstanceDayCard key={group[0].id} group={group} compact={compact} minimal={minimal} />
       ))}
       {groups.length > maxShown && (
         <button
@@ -154,6 +175,7 @@ function CalendarContent({ config, guild, position }: GuildPanelRenderProps<Cale
 
   const compact = position.h <= 5;
 
+  const minimal = config.displayStyle === "minimal";
   const category = config.category || "all";
   const hasVideo = config.hasVideo === "with";
 
@@ -195,9 +217,9 @@ function CalendarContent({ config, guild, position }: GuildPanelRenderProps<Cale
       const dayInstances = byDate[key];
       if (!dayInstances || dayInstances.length === 0) return null;
 
-      return <ExpandableDayCell instances={dayInstances} compact={compact} />;
+      return <ExpandableDayCell instances={dayInstances} compact={compact} minimal={minimal} />;
     },
-    [byDate, compact]
+    [byDate, compact, minimal]
   );
 
   if (loading) {
@@ -224,6 +246,7 @@ function CalendarContent({ config, guild, position }: GuildPanelRenderProps<Cale
         onMonthChange={setMonth}
         dayContent={dayContent}
         density={compact ? "compact" : "default"}
+        variant={minimal ? "cells" : "bordered"}
         fillHeight
       />
     </div>
@@ -239,6 +262,16 @@ export const CalendarPanel: GuildPanelDefinition<CalendarConfig> = {
   minSize: { w: 6, h: 4 },
   maxSize: { w: 12, h: 10 },
   configSchema: [
+    {
+      name: "displayStyle",
+      label: "Display",
+      type: "select",
+      options: [
+        { value: "cards", label: "Image cards" },
+        { value: "minimal", label: "Minimal colored pills" },
+      ],
+      defaultValue: "cards",
+    },
     {
       name: "category",
       label: "Category",
@@ -262,6 +295,7 @@ export const CalendarPanel: GuildPanelDefinition<CalendarConfig> = {
     },
   ],
   defaultConfig: {
+    displayStyle: "cards",
     category: "all",
     hasVideo: "all",
   },

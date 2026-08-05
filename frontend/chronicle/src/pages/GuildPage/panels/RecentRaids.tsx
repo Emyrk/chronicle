@@ -13,6 +13,7 @@ import { RaidCard } from "@/pages/Recent/RaidCard";
 import { groupDuplicateInstances } from "@/utils/groupDuplicates";
 import { DuplicateInstanceModal } from "@/components/DuplicateInstanceModal";
 import type { GuildPanelDefinition, GuildPanelRenderProps } from "./types";
+import { instanceAccentGradient } from "./instanceColors";
 
 type CategoryFilter = "all" | "raid" | "dungeon";
 
@@ -47,16 +48,6 @@ function formatBosses(instance: RecentInstance): string {
   const bosses = `${kills} ${kills === 1 ? "boss" : "bosses"}`;
   if (attempts === 0) return bosses;
   return `${bosses} killed + ${attempts} ${attempts === 1 ? "attempt" : "attempts"}`;
-}
-
-/** Stable per-instance accent color for the row's left bar. */
-function instanceAccent(name: string): string {
-  let hash = 0;
-  for (let i = 0; i < name.length; i++) {
-    hash = (hash * 31 + name.charCodeAt(i)) | 0;
-  }
-  const hue = ((hash % 360) + 360) % 360;
-  return `linear-gradient(180deg, hsl(${hue} 70% 55%), hsl(${hue} 75% 28%))`;
 }
 
 /** Weighted average across encounters (weights are per-encounter parse counts). */
@@ -98,7 +89,7 @@ function RaidListRow({
     >
       <span
         className="absolute inset-y-0 left-0 w-[5px]"
-        style={{ background: instanceAccent(instance.name) }}
+        style={{ background: instanceAccentGradient(instance.name) }}
       />
       <div className="min-w-0 flex-1">
         <p className="truncate text-sm font-semibold text-foreground">
