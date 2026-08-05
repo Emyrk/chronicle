@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"io"
 	"log/slog"
 	"os"
 	"sync/atomic"
@@ -225,8 +226,7 @@ Fail-pause behavior (--execute):
 			groups := resynccandidate.FilterAndGroup(allRows, targetVersion, int(limit))
 
 			if len(groups) == 0 {
-				fmt.Fprintln(i.Stdout, "No candidate log groups found.")
-				return nil
+				return writeOutput(i.Stdout, "No candidate log groups found.\n")
 			}
 
 			isTTY := isTerminal(i)
@@ -240,14 +240,22 @@ Fail-pause behavior (--execute):
 						return fmt.Errorf("TUI: %w", err)
 					}
 				} else {
-					fmt.Fprintf(i.Stdout, "Found %d candidate log group(s) (target >= %s):\n\n", len(groups), targetVersion)
+					if err := writeOutput(i.Stdout, "Found %d candidate log group(s) (target >= %s):\n\n", len(groups), targetVersion); err != nil {
+						return err
+					}
 					for idx, g := range groups {
-						fmt.Fprintf(i.Stdout, "  %d. %s  parser=%s  instances=%d\n", idx+1, g.ID, g.ParserVersion, len(g.Instances))
+						if err := writeOutput(i.Stdout, "  %d. %s  parser=%s  instances=%d\n", idx+1, g.ID, g.ParserVersion, len(g.Instances)); err != nil {
+							return err
+						}
 						for _, inst := range g.Instances {
-							fmt.Fprintf(i.Stdout, "       - %s\n", inst)
+							if err := writeOutput(i.Stdout, "       - %s\n", inst); err != nil {
+								return err
+							}
 						}
 					}
-					fmt.Fprintf(i.Stdout, "\nDry-run complete. Pass --execute to reparse these log groups.\n")
+					if err := writeOutput(i.Stdout, "\nDry-run complete. Pass --execute to reparse these log groups.\n"); err != nil {
+						return err
+					}
 				}
 				return nil
 			}
@@ -432,12 +440,21 @@ func runActiveTUI(ctx context.Context, client *river.Client[pgx.Tx], groups []re
 	return nil
 }
 
+func writeOutput(w io.Writer, format string, args ...any) error {
+	if _, err := fmt.Fprintf(w, format, args...); err != nil {
+		return fmt.Errorf("write command output: %w", err)
+	}
+	return nil
+}
+
 // runActivePlain prints plain-text progress for non-TTY environments.
 // On the first failure it pauses the queue, waits for already-running jobs
 // to reach terminal state, then exits nonzero with instructions to rerun
 // by starting the resync daemon again, which automatically resumes the queue.
 func runActivePlain(ctx context.Context, i *serpent.Invocation, client *river.Client[pgx.Tx], groups []resynccandidate.Group, jobIDs map[int64]uuid.UUID) error {
-	fmt.Fprintf(i.Stdout, "Executing resync for %d log group(s)...\n", len(groups))
+	if err := writeOutput(i.Stdout, "Executing resync for %d log group(s)...\n", len(groups)); err != nil {
+		return err
+	}
 
 	pending := make(map[int64]bool, len(jobIDs))
 	for id := range jobIDs {
@@ -470,7 +487,9 @@ func runActivePlain(ctx context.Context, i *serpent.Invocation, client *river.Cl
 			case rivertype.JobStateCompleted:
 				completed++
 				delete(pending, jobID)
-				fmt.Fprintf(i.Stdout, "  ✓ %s\n", lgID)
+				if err := writeOutput(i.Stdout, "  ✓ %s\n", lgID); err != nil {
+					return err
+				}
 			case rivertype.JobStateDiscarded, rivertype.JobStateCancelled:
 				failed++
 				delete(pending, jobID)
@@ -478,32 +497,48 @@ func runActivePlain(ctx context.Context, i *serpent.Invocation, client *river.Cl
 				if len(job.Errors) > 0 {
 					errMsg = job.Errors[len(job.Errors)-1].Error
 				}
-				fmt.Fprintf(i.Stderr, "  ✗ %s: %s\n", lgID, errMsg)
+				if err := writeOutput(i.Stderr, "  ✗ %s: %s\n", lgID, errMsg); err != nil {
+					return err
+				}
 
 				// Pause queue on first failure. Already-running parses
 				// finish safely; only new job fetches are blocked.
 				if !paused {
 					if pauseErr := client.QueuePause(ctx, riverconst.QueueResync, nil); pauseErr != nil {
-						fmt.Fprintf(i.Stderr, "warning: failed to pause queue: %v\n", pauseErr)
+						if err := writeOutput(i.Stderr, "warning: failed to pause queue: %v\n", pauseErr); err != nil {
+							return err
+						}
 					} else {
 						paused = true
-						fmt.Fprintf(i.Stderr, "\nQueue paused after failure. Waiting for running jobs to finish...\n")
+						if err := writeOutput(i.Stderr, "\nQueue paused after failure. Waiting for running jobs to finish...\n"); err != nil {
+							return err
+						}
 					}
 				}
 			}
 		}
 		if paused && running == 0 {
-			fmt.Fprintf(i.Stderr, "\nThe resync queue is PAUSED. Restart the resync daemon after investigating the failure; startup auto-resumes the queue:\n")
-			fmt.Fprintf(i.Stderr, "  chronicled resync --execute [...other flags]\n\n")
+			if err := writeOutput(i.Stderr, "\nThe resync queue is PAUSED. Restart the resync daemon after investigating the failure; startup auto-resumes the queue:\n"); err != nil {
+				return err
+			}
+			if err := writeOutput(i.Stderr, "  chronicled resync --execute [...other flags]\n\n"); err != nil {
+				return err
+			}
 			return fmt.Errorf("resync paused after %d failure(s); %d job(s) remain queued", failed, len(pending))
 		}
 	}
 
-	fmt.Fprintf(i.Stdout, "\nResync complete: %d succeeded, %d failed out of %d total.\n", completed, failed, len(jobIDs))
+	if err := writeOutput(i.Stdout, "\nResync complete: %d succeeded, %d failed out of %d total.\n", completed, failed, len(jobIDs)); err != nil {
+		return err
+	}
 	if failed > 0 {
 		if paused {
-			fmt.Fprintf(i.Stderr, "\nThe resync queue is now PAUSED. Restart the resync daemon after investigating the failure; startup auto-resumes the queue:\n")
-			fmt.Fprintf(i.Stderr, "  chronicled resync --execute [...other flags]\n\n")
+			if err := writeOutput(i.Stderr, "\nThe resync queue is now PAUSED. Restart the resync daemon after investigating the failure; startup auto-resumes the queue:\n"); err != nil {
+				return err
+			}
+			if err := writeOutput(i.Stderr, "  chronicled resync --execute [...other flags]\n\n"); err != nil {
+				return err
+			}
 		}
 		return fmt.Errorf("%d log group(s) failed to resync", failed)
 	}

@@ -4,6 +4,7 @@ package resynctui
 
 import (
 	"fmt"
+	"strconv"
 	"strings"
 
 	"github.com/Emyrk/chronicle/cmd/chronicled/cli/resynccandidate"
@@ -281,7 +282,9 @@ func (m ActiveModel) View() string {
 	var b strings.Builder
 	b.WriteString(titleStyle.Render("Resync progress"))
 	b.WriteString("\n")
-	b.WriteString(fmt.Sprintf("  Workers: %d  |  ", m.Workers))
+	b.WriteString("  Workers: ")
+	b.WriteString(strconv.Itoa(m.Workers))
+	b.WriteString("  |  ")
 	b.WriteString(okStyle.Render(fmt.Sprintf("✓ %d", completed)))
 	b.WriteString("  ")
 	b.WriteString(failStyle.Render(fmt.Sprintf("✗ %d", failed)))

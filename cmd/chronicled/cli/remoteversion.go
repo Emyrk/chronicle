@@ -34,7 +34,7 @@ func checkRemoteParserVersion(ctx context.Context, rawURL string) error {
 	if err != nil {
 		return fmt.Errorf("fetch remote parser version: %w", err)
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 
 	if resp.StatusCode != http.StatusOK {
 		return fmt.Errorf("remote parser version returned HTTP %d", resp.StatusCode)
