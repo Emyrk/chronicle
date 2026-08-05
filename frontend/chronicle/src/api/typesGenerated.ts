@@ -1196,6 +1196,11 @@ export interface InstanceParsesResponse {
      */
     readonly metric: string;
     /**
+     * ParseSource reports whether scores came from the persisted projection or
+     * were calculated on demand. It is only populated for ?debug=true requests.
+     */
+    readonly parse_source?: string;
+    /**
      * Players contains one entry per unique player GUID in the instance.
      */
     readonly players: readonly InstanceParsePlayer[];

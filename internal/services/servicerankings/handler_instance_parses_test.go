@@ -349,9 +349,10 @@ func TestHandleInstanceParses_PersistedProjection(t *testing.T) {
 				t,
 				f.store,
 				f.instanceID,
-				"?encounter_names=Ragnaros,Golemagg&metric="+test.metric+test.period,
+				"?encounter_names=Ragnaros,Golemagg&metric="+test.metric+test.period+"&debug=true",
 			)
 			require.True(t, response.Available)
+			assert.Equal(t, "persisted", response.ParseSource)
 			require.Len(t, response.Players, 1)
 			require.Len(t, response.Players[0].Bosses, 2)
 			assert.Equal(t, test.wantScores[0], response.Players[0].Bosses[0].DisplayScore)
@@ -361,6 +362,24 @@ func TestHandleInstanceParses_PersistedProjection(t *testing.T) {
 		}
 	})
 
+	t.Run("OmitsParseSourceWithoutDebug", func(t *testing.T) {
+		t.Parallel()
+		f := setupParsesTest(t)
+		f.insertSimpleRanking(t, "Ragnaros", "Player-persisted", 1000, 0)
+		snapshot := f.publishSnapshot(t)
+		persistedResult(f, t, uuid.NullUUID{UUID: snapshot.ID, Valid: true}, uuid.Nil, "Ragnaros", "dps", 90)
+		f.insertPersistedParseReceipt(t, uuid.Nil, snapshot.ID, 1)
+
+		svc := newTestService(t, f.store)
+		r := chi.NewRouter()
+		r.Get("/instances/{instanceID}/parses", svc.HandleInstanceParses)
+		req := httptest.NewRequest("GET", "/instances/"+f.instanceID.String()+"/parses?encounter_names=Ragnaros", nil)
+		w := httptest.NewRecorder()
+		r.ServeHTTP(w, req)
+		require.Equal(t, http.StatusOK, w.Code)
+		assert.NotContains(t, w.Body.String(), `"parse_source"`)
+	})
+
 	t.Run("MissingReceiptFallsBackToOnDemand", func(t *testing.T) {
 		t.Parallel()
 		f := setupParsesTest(t)
@@ -368,7 +387,8 @@ func TestHandleInstanceParses_PersistedProjection(t *testing.T) {
 		snapshot := f.publishSnapshot(t)
 		persistedResult(f, t, uuid.NullUUID{UUID: snapshot.ID, Valid: true}, uuid.Nil, "Ragnaros", "dps", 99)
 
-		response := requestInstanceParses(t, f.store, f.instanceID, "?encounter_names=Ragnaros&metric=dps")
+		response := requestInstanceParses(t, f.store, f.instanceID, "?encounter_names=Ragnaros&metric=dps&debug=true")
+		assert.Equal(t, "on_demand", response.ParseSource)
 		require.Len(t, response.Players, 1)
 		require.Len(t, response.Players[0].Bosses, 1)
 		assert.Equal(t, 0, response.Players[0].Bosses[0].DisplayScore)

@@ -67,6 +67,15 @@ func handleInstanceParsesWithStore(store parsesQuerier, logger *slog.Logger, w h
 		return
 	}
 
+	debug := q.Get("debug") == "true"
+
+	parseSource := func(source string) string {
+		if debug {
+			return source
+		}
+		return ""
+	}
+
 	// Parse metric (default: dps).
 	metric := parsepolicy.MetricDPS
 	if q.Get("metric") == "hps" {
@@ -275,6 +284,7 @@ func handleInstanceParsesWithStore(store parsesQuerier, logger *slog.Logger, w h
 				CohortMode:         snapshot.CohortMode,
 				SelectedEncounters: encounterNames,
 				Metric:             string(metric),
+				ParseSource:        parseSource("persisted"),
 				Players:            persistedPlayers,
 			})
 			return
@@ -449,6 +459,7 @@ func handleInstanceParsesWithStore(store parsesQuerier, logger *slog.Logger, w h
 		CohortMode:         snapshot.CohortMode,
 		SelectedEncounters: encounterNames,
 		Metric:             string(metric),
+		ParseSource:        parseSource("on_demand"),
 		Players:            result,
 	})
 }

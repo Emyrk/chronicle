@@ -160,6 +160,10 @@ type InstanceParsesResponse struct {
 	// Metric is "dps" or "hps".
 	Metric string `json:"metric"`
 
+	// ParseSource reports whether scores came from the persisted projection or
+	// were calculated on demand. It is only populated for ?debug=true requests.
+	ParseSource string `json:"parse_source,omitempty"`
+
 	// Players contains one entry per unique player GUID in the instance.
 	Players []InstanceParsePlayer `json:"players"`
 }
@@ -275,6 +279,7 @@ type AdminBulkDeleteSnapshotsRequest struct {
 type AdminBulkDeleteSnapshotsResponse struct {
 	Deleted int `json:"deleted"`
 }
+
 // AdminTimeParseSnapshotSummary is a time-parse snapshot listed in the admin tab.
 type AdminTimeParseSnapshotSummary struct {
 	ID                uuid.UUID  `json:"id"`
