@@ -29,8 +29,6 @@ type parsesQuerier interface {
 	GetTenantByID(ctx context.Context, id uuid.UUID) (database.Tenant, error)
 	GetLatestPublishedSnapshot(ctx context.Context, arg database.GetLatestPublishedSnapshotParams) (database.RankingSnapshot, error)
 	GetLatestPublishedSnapshotBefore(ctx context.Context, arg database.GetLatestPublishedSnapshotBeforeParams) (database.RankingSnapshot, error)
-	GetScoringSnapshotBefore(ctx context.Context, arg database.GetScoringSnapshotBeforeParams) (database.RankingSnapshot, error)
-	GetScoringSnapshotLatest(ctx context.Context, arg database.GetScoringSnapshotLatestParams) (database.RankingSnapshot, error)
 	GetLogInstanceStartTime(ctx context.Context, id uuid.UUID) (pgtype.Timestamptz, error)
 	ListRankingsForInstance(ctx context.Context, instanceID uuid.UUID) ([]database.ListRankingsForInstanceRow, error)
 	GetParseScoreReceiptForContract(ctx context.Context, arg database.GetParseScoreReceiptForContractParams) (database.ParseScoreReceipt, error)
@@ -180,40 +178,18 @@ func handleInstanceParsesWithStore(store parsesQuerier, logger *slog.Logger, w h
 			// the epoch), and comparing an old raid against current data
 			// would be misleading. pgx.ErrNoRows falls through to the
 			// no_snapshot response below.
-			if lookbackDays == parsepolicy.DefaultLookbackDays {
-				// Resolve the same versioned canonical contract as the
-				// persistence worker so an incompatible newer snapshot cannot
-				// hide a complete persisted projection.
-				snapshot, err = store.GetScoringSnapshotBefore(ctx, database.GetScoringSnapshotBeforeParams{
-					TenantID:      tid,
-					LookbackDays:  int32(lookbackDays),
-					Before:        startTime,
-					PolicyVersion: int16(parsepolicy.PolicyVersion),
-					QueryVersion:  int16(QueryVersion),
-				})
-			} else {
-				snapshot, err = store.GetLatestPublishedSnapshotBefore(ctx, database.GetLatestPublishedSnapshotBeforeParams{
-					TenantID:     tid,
-					LookbackDays: int32(lookbackDays),
-					Before:       startTime,
-				})
-			}
+			snapshot, err = store.GetLatestPublishedSnapshotBefore(ctx, database.GetLatestPublishedSnapshotBeforeParams{
+				TenantID:     tid,
+				LookbackDays: int32(lookbackDays),
+				Before:       startTime,
+			})
 		} else {
 			// No recorded start time: we cannot resolve a day-of-raid
 			// snapshot, so use the latest published one.
-			if lookbackDays == parsepolicy.DefaultLookbackDays {
-				snapshot, err = store.GetScoringSnapshotLatest(ctx, database.GetScoringSnapshotLatestParams{
-					TenantID:      tid,
-					LookbackDays:  int32(lookbackDays),
-					PolicyVersion: int16(parsepolicy.PolicyVersion),
-					QueryVersion:  int16(QueryVersion),
-				})
-			} else {
-				snapshot, err = store.GetLatestPublishedSnapshot(ctx, database.GetLatestPublishedSnapshotParams{
-					TenantID:     tid,
-					LookbackDays: int32(lookbackDays),
-				})
-			}
+			snapshot, err = store.GetLatestPublishedSnapshot(ctx, database.GetLatestPublishedSnapshotParams{
+				TenantID:     tid,
+				LookbackDays: int32(lookbackDays),
+			})
 		}
 	}
 	if err != nil {
@@ -274,8 +250,9 @@ func handleInstanceParsesWithStore(store parsesQuerier, logger *slog.Logger, w h
 	}
 
 	// A complete receipt makes the persisted projection authoritative for the
-	// worker's canonical historical contract. Requests for other lookbacks or
-	// the latest/current snapshot continue through the on-demand path below.
+	// worker's canonical historical contract (receipts are only written for the
+	// default lookback). Requests for other lookbacks or the current timeframe
+	// continue through the on-demand path below.
 	if timeframe == "historical" && lookbackDays == parsepolicy.DefaultLookbackDays {
 		persistedPlayers, complete, persistedErr := loadPersistedInstanceParses(
 			ctx, store, tid, instanceID, snapshot, rankings, encounterNames, metric,
@@ -486,12 +463,10 @@ func loadPersistedInstanceParses(
 	metric parsepolicy.Metric,
 ) ([]chroniclesdk.InstanceParsePlayer, bool, error) {
 	_, err := store.GetParseScoreReceiptForContract(ctx, database.GetParseScoreReceiptForContractParams{
-		TenantID:      tenantID,
-		InstanceID:    instanceID,
-		SnapshotID:    snapshot.ID,
-		LookbackDays:  int16(parsepolicy.DefaultLookbackDays),
-		PolicyVersion: int16(parsepolicy.PolicyVersion),
-		QueryVersion:  int16(QueryVersion),
+		TenantID:     tenantID,
+		InstanceID:   instanceID,
+		SnapshotID:   snapshot.ID,
+		LookbackDays: int16(parsepolicy.DefaultLookbackDays),
 	})
 	if errors.Is(err, pgx.ErrNoRows) {
 		return nil, false, nil

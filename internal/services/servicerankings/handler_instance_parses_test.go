@@ -336,21 +336,6 @@ func TestHandleInstanceParses_PersistedProjection(t *testing.T) {
 		persistedResult(f, t, snapshotID, uuid.Nil, "Golemagg", "hps", 60)
 		f.insertPersistedParseReceipt(t, uuid.Nil, snapshot.ID, 4)
 
-		// A newer incompatible snapshot must not hide the worker's canonical
-		// versioned snapshot and its complete persisted projection.
-		ctx := testutil.Context(t, testutil.WaitShort)
-		incompatible, err := f.store.InsertRankingSnapshot(ctx, database.InsertRankingSnapshotParams{
-			TenantID:      uuid.Nil,
-			Cutoff:        pgtype.Timestamptz{Time: time.Now().Add(2 * time.Hour), Valid: true},
-			LookbackDays:  int32(parsepolicy.DefaultLookbackDays),
-			CohortMode:    string(parsepolicy.CohortModeSpec),
-			PolicyVersion: int16(parsepolicy.PolicyVersion),
-			QueryVersion:  int16(servicerankings.QueryVersion + 1),
-		})
-		require.NoError(t, err)
-		_, err = f.store.PublishRankingSnapshot(ctx, incompatible.ID)
-		require.NoError(t, err)
-
 		for _, test := range []struct {
 			metric      string
 			period      string
@@ -453,22 +438,14 @@ func TestHandleInstanceParses_PersistedProjection(t *testing.T) {
 		f.insertPersistedParseReceipt(t, otherTenantID, snapshot.ID, 1)
 		persistedResult(f, t, uuid.NullUUID{}, uuid.Nil, "Ragnaros", "dps", 97)
 		persistedResult(f, t, uuid.NullUUID{UUID: snapshot.ID, Valid: true}, uuid.Nil, "Ragnaros", "dps", 96)
-		ctx := testutil.Context(t, testutil.WaitShort)
-		_, err := f.store.InsertParseScoreReceipt(ctx, database.InsertParseScoreReceiptParams{
-			TenantID:      uuid.Nil,
-			InstanceID:    f.instanceID,
-			SnapshotID:    snapshot.ID,
-			PolicyVersion: int16(parsepolicy.PolicyVersion),
-			QueryVersion:  int16(servicerankings.QueryVersion + 1),
-			LookbackDays:  int16(parsepolicy.DefaultLookbackDays),
-			SourceCount:   1,
-			ResultCount:   1,
-		})
-		require.NoError(t, err)
+		f.insertPersistedParseReceipt(t, uuid.Nil, snapshot.ID, 1)
 
+		// Only the same-tenant, snapshot-linked row (96) may be served — not
+		// the other tenant's 98 or the snapshotless 97.
 		response := requestInstanceParses(t, f.store, f.instanceID, "?encounter_names=Ragnaros&metric=dps")
 		require.Len(t, response.Players, 1)
-		assert.Equal(t, string(parsepolicy.StatusSampleTooSmall), response.Players[0].Bosses[0].Status)
+		assert.Equal(t, 96, response.Players[0].Bosses[0].DisplayScore)
+		assert.Equal(t, string(parsepolicy.StatusOK), response.Players[0].Bosses[0].Status)
 	})
 }
 

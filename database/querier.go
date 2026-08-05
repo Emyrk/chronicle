@@ -201,7 +201,9 @@ type sqlcQuerier interface {
 	GetPanelLayoutByID(ctx context.Context, id uuid.UUID) (GetPanelLayoutByIDRow, error)
 	// Get receipt by instance + snapshot.
 	GetParseScoreReceipt(ctx context.Context, arg GetParseScoreReceiptParams) (ParseScoreReceipt, error)
-	// Verify that the exact persisted projection contract completed successfully.
+	// Verify that a persisted projection completed successfully for this exact
+	// tenant, instance, snapshot, and lookback. Receipts only exist for
+	// successfully committed runs, so existence is the success signal.
 	GetParseScoreReceiptForContract(ctx context.Context, arg GetParseScoreReceiptForContractParams) (ParseScoreReceipt, error)
 	// Get all receipts for an instance (any snapshot).
 	GetParseScoreReceiptForInstance(ctx context.Context, instanceID uuid.UUID) ([]ParseScoreReceipt, error)

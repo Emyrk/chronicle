@@ -5096,28 +5096,26 @@ WHERE tenant_id = $1
   AND instance_id = $2
   AND snapshot_id = $3
   AND lookback_days = $4
-  AND policy_version = $5
-  AND query_version = $6
+ORDER BY computed_at DESC
+LIMIT 1
 `
 
 type GetParseScoreReceiptForContractParams struct {
-	TenantID      uuid.UUID `db:"tenant_id" json:"tenant_id"`
-	InstanceID    uuid.UUID `db:"instance_id" json:"instance_id"`
-	SnapshotID    uuid.UUID `db:"snapshot_id" json:"snapshot_id"`
-	LookbackDays  int16     `db:"lookback_days" json:"lookback_days"`
-	PolicyVersion int16     `db:"policy_version" json:"policy_version"`
-	QueryVersion  int16     `db:"query_version" json:"query_version"`
+	TenantID     uuid.UUID `db:"tenant_id" json:"tenant_id"`
+	InstanceID   uuid.UUID `db:"instance_id" json:"instance_id"`
+	SnapshotID   uuid.UUID `db:"snapshot_id" json:"snapshot_id"`
+	LookbackDays int16     `db:"lookback_days" json:"lookback_days"`
 }
 
-// Verify that the exact persisted projection contract completed successfully.
+// Verify that a persisted projection completed successfully for this exact
+// tenant, instance, snapshot, and lookback. Receipts only exist for
+// successfully committed runs, so existence is the success signal.
 func (q *sqlQuerier) GetParseScoreReceiptForContract(ctx context.Context, arg GetParseScoreReceiptForContractParams) (ParseScoreReceipt, error) {
 	row := q.db.QueryRow(ctx, getParseScoreReceiptForContract,
 		arg.TenantID,
 		arg.InstanceID,
 		arg.SnapshotID,
 		arg.LookbackDays,
-		arg.PolicyVersion,
-		arg.QueryVersion,
 	)
 	var i ParseScoreReceipt
 	err := row.Scan(

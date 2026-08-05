@@ -44,15 +44,17 @@ WHERE instance_id = @instance_id
 ORDER BY computed_at DESC;
 
 -- name: GetParseScoreReceiptForContract :one
--- Verify that the exact persisted projection contract completed successfully.
+-- Verify that a persisted projection completed successfully for this exact
+-- tenant, instance, snapshot, and lookback. Receipts only exist for
+-- successfully committed runs, so existence is the success signal.
 SELECT *
 FROM parse_score_receipts
 WHERE tenant_id = @tenant_id
   AND instance_id = @instance_id
   AND snapshot_id = @snapshot_id
   AND lookback_days = @lookback_days
-  AND policy_version = @policy_version
-  AND query_version = @query_version;
+ORDER BY computed_at DESC
+LIMIT 1;
 
 -- name: ListParseScoreResultsForContract :many
 -- Read one persisted result per player and encounter for an exact completed
