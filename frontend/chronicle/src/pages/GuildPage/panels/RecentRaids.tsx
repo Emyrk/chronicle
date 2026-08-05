@@ -21,6 +21,7 @@ interface RecentRaidsConfig {
   limit: number;
   category: CategoryFilter;
   hasVideo: "all" | "with";
+  showParses: boolean;
 }
 
 function runID(instance: RecentInstance): string {
@@ -153,6 +154,8 @@ function RecentRaidsContent({ config, position, guild }: GuildPanelRenderProps<R
   const limit = config.limit || 5;
   const category = config.category || "all";
   const hasVideo = config.hasVideo === "with";
+  // Panels saved before the toggle existed have no key; treat missing as enabled.
+  const showParses = config.showParses !== false;
 
   const fetchRecent = useCallback(async () => {
     setLoading(true);
@@ -190,11 +193,11 @@ function RecentRaidsContent({ config, position, guild }: GuildPanelRenderProps<R
 
   const groups = useMemo(() => groupDuplicateInstances(filtered).slice(0, limit), [filtered, limit]);
 
-  // List mode shows the guild's average parse per raid night.
+  // Both modes show the guild's average parse per raid night.
   const runIDs = useMemo(() => {
-    if (displayMode !== "list") return "";
+    if (!showParses) return "";
     return [...new Set(groups.map((group) => runID(group[0])))].join(",");
-  }, [displayMode, groups]);
+  }, [showParses, groups]);
 
   useEffect(() => {
     if (!runIDs) return;
@@ -254,7 +257,7 @@ function RecentRaidsContent({ config, position, guild }: GuildPanelRenderProps<R
           <RaidListRow
             key={group[0].id}
             instance={group[0]}
-            encounters={runParses[runID(group[0])] ?? []}
+            encounters={showParses ? (runParses[runID(group[0])] ?? []) : []}
           />
         ))}
       </div>
@@ -267,23 +270,33 @@ function RecentRaidsContent({ config, position, guild }: GuildPanelRenderProps<R
       style={{ gridTemplateColumns: `repeat(${cols}, minmax(0, 1fr))` }}
     >
       {groups.map((group) => (
-        <DuplicateAwareRaidCard key={group[0].id} group={group} />
+        <DuplicateAwareRaidCard
+          key={group[0].id}
+          group={group}
+          parseScore={showParses ? weightedRunAverage(runParses[runID(group[0])] ?? []) : undefined}
+        />
       ))}
     </div>
   );
 }
 
-function DuplicateAwareRaidCard({ group }: { group: RecentInstance[] }) {
+function DuplicateAwareRaidCard({
+  group,
+  parseScore,
+}: {
+  group: RecentInstance[];
+  parseScore?: number;
+}) {
   const [showModal, setShowModal] = useState(false);
 
   if (group.length === 1) {
-    return <RaidCard instance={group[0]} />;
+    return <RaidCard instance={group[0]} parseScore={parseScore} />;
   }
 
   return (
     <>
       <div className="relative cursor-pointer" onClick={(e) => { e.preventDefault(); setShowModal(true); }}>
-        <RaidCard instance={group[0]} />
+        <RaidCard instance={group[0]} parseScore={parseScore} />
         {/* Duplicate badge overlay */}
         <div className="absolute top-2 left-2 z-20 flex items-center gap-1 bg-black/70 backdrop-blur-sm text-white/80 px-1.5 py-0.5 rounded text-[10px] font-medium pointer-events-none">
           {group.length} logs
@@ -345,12 +358,19 @@ export const RecentRaidsPanel: GuildPanelDefinition<RecentRaidsConfig> = {
       ],
       defaultValue: "all",
     },
+    {
+      name: "showParses",
+      label: "Show parse scores",
+      type: "boolean",
+      defaultValue: true,
+    },
   ],
   defaultConfig: {
     displayMode: "cards",
     limit: 6,
     category: "all",
     hasVideo: "all",
+    showParses: true,
   },
   render: (props) => <RecentRaidsContent {...props} />,
 };

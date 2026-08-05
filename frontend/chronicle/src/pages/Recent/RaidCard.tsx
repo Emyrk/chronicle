@@ -5,6 +5,7 @@ import type { RecentInstance } from "@/api/typesGenerated";
 import { getInstanceBackground } from "@/pages/Logs/utils/instanceImages";
 import { HeroicBadge } from "@/components/HeroicBadge";
 import { isHeroic } from "@/lib/wowUtils";
+import { parseColor } from "@/pages/Instance/parseColors";
 
 function formatDuration(ms: number | null): string {
   if (ms === null || ms === 0) return "—";
@@ -34,9 +35,11 @@ function formatRelativeTime(date: Date): string {
 interface RaidCardProps {
   instance: RecentInstance;
   bossCount?: number;
+  /** Average guild parse for this raid; shown as a badge in the top-right corner. */
+  parseScore?: number;
 }
 
-export function RaidCard({ instance, bossCount }: RaidCardProps) {
+export function RaidCard({ instance, bossCount, parseScore }: RaidCardProps) {
   const [imageError, setImageError] = useState(false);
   const [isHovered, setIsHovered] = useState(false);
   const firstEncounterAt = new Date(instance.first_encounter_time);
@@ -83,21 +86,24 @@ export function RaidCard({ instance, bossCount }: RaidCardProps) {
         {/* Dark gradient overlay for text readability */}
         <div className="absolute inset-0 bg-gradient-to-t from-black/90 via-black/50 to-black/30" />
         
-        {/* YouTube badge - top right corner */}
-        {instance.has_youtube_video && (
-          <div className="absolute top-2 right-2 z-20 flex items-center gap-1.5 bg-red-600/75 backdrop-blur-sm text-white/85 px-2 py-1 rounded shadow-lg" title="Has YouTube video">
-            <Youtube className="h-4 w-4" />
-            <span className="text-xs font-semibold">Video</span>
-          </div>
-        )}
-
-        {/* Heroic badge - below YouTube badge on right */}
-        {isHeroic(instance) && (
-          <div
-            className="absolute z-20"
-            style={{ top: instance.has_youtube_video ? '2.75rem' : '0.5rem', right: '0.5rem' }}
-          >
-            <HeroicBadge />
+        {/* Badge stack - top right corner */}
+        {(parseScore !== undefined || instance.has_youtube_video || isHeroic(instance)) && (
+          <div className="absolute top-2 right-2 z-20 flex flex-col items-end gap-1.5">
+            {parseScore !== undefined && (
+              <div
+                className={`bg-black/60 backdrop-blur-sm px-2 py-0.5 rounded shadow-lg text-sm font-bold tabular-nums ${parseColor(Math.round(parseScore))}`}
+                title="Average guild parse for this raid"
+              >
+                {Math.round(parseScore)}
+              </div>
+            )}
+            {instance.has_youtube_video && (
+              <div className="flex items-center gap-1.5 bg-red-600/75 backdrop-blur-sm text-white/85 px-2 py-1 rounded shadow-lg" title="Has YouTube video">
+                <Youtube className="h-4 w-4" />
+                <span className="text-xs font-semibold">Video</span>
+              </div>
+            )}
+            {isHeroic(instance) && <HeroicBadge />}
           </div>
         )}
         

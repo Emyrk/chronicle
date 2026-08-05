@@ -119,6 +119,9 @@ function RosterContent({ config, position, guild }: GuildPanelRenderProps<Roster
       try {
         const params = new URLSearchParams();
         params.set("seen_within_days", seenWithinDays);
+        // Fetch the full roster (server cap) so the total count is accurate;
+        // the display limit is applied client-side.
+        params.set("limit", "500");
         const response = await fetch(`/api/v1/guilds/${guild.id}/characters?${params}`);
         if (!response.ok) throw new Error("Failed to fetch guild roster");
         const data = (await response.json()) as GuildCharacterRosterResponse;
@@ -184,6 +187,12 @@ function RosterContent({ config, position, guild }: GuildPanelRenderProps<Roster
 
   return (
     <div className="flex h-full flex-col p-1">
+      <div className="flex items-center justify-between pb-1 text-[11px] text-muted-foreground">
+        <span>
+          {members.length} {members.length === 1 ? "member" : "members"}
+        </span>
+        <span>Seen in last {seenWithinDays} days</span>
+      </div>
       {config.showClassChips !== false && <ClassChips members={members} />}
       <div
         className="grid gap-x-6 content-start"
