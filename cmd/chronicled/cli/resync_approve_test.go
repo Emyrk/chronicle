@@ -1,0 +1,62 @@
+package cli
+
+import (
+	"bufio"
+	"bytes"
+	"strings"
+	"testing"
+
+	"github.com/Emyrk/chronicle/chronicle"
+	"github.com/Emyrk/chronicle/chronicle/riverqueue/riverconst"
+	"github.com/Emyrk/chronicle/cmd/chronicled/cli/resynccandidate"
+	"github.com/google/uuid"
+	"github.com/stretchr/testify/require"
+)
+
+func TestPromptApproval(t *testing.T) {
+	t.Parallel()
+
+	group := resynccandidate.Group{
+		ID:            uuid.MustParse("00000000-0000-0000-0000-000000000001"),
+		ParserVersion: "v0.0.700+old",
+		Instances:     []string{"Molten Core", "Onyxia"},
+	}
+
+	for _, tt := range []struct {
+		name   string
+		input  string
+		want   approvalAction
+		output string
+	}{
+		{name: "approve", input: "yes\n", want: approvalRun, output: "Molten Core"},
+		{name: "skip", input: "n\n", want: approvalSkip, output: "Onyxia"},
+		{name: "empty skips", input: "\n", want: approvalSkip, output: "[y]es"},
+		{name: "quit", input: "q\n", want: approvalQuit, output: group.ID.String()},
+		{name: "EOF quits", input: "", want: approvalQuit, output: "Candidate 1/2"},
+		{name: "invalid retries", input: "maybe\ny\n", want: approvalRun, output: "Please enter y, n, or q."},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
+			var out bytes.Buffer
+			got, err := promptApproval(bufio.NewScanner(strings.NewReader(tt.input)), &out, group, 1, 2)
+			require.NoError(t, err)
+			require.Equal(t, tt.want, got)
+			require.Contains(t, out.String(), tt.output)
+		})
+	}
+}
+
+func TestApprovalInsertOpts_IsolateQueue(t *testing.T) {
+	t.Parallel()
+
+	args := chronicle.ArgsResync{LogGroupID: uuid.New()}
+	const approvalQueue = "resync-approve-test"
+	opts := approvalInsertOpts(args, approvalQueue)
+
+	require.Equal(t, approvalQueue, opts.Queue)
+	require.NotEqual(t, riverconst.QueueResync, opts.Queue)
+	require.True(t, opts.UniqueOpts.ByArgs)
+	require.True(t, opts.UniqueOpts.ByQueue, "approval jobs must not reuse a job from the persistent resync queue")
+	require.Equal(t, 1, opts.MaxAttempts)
+}

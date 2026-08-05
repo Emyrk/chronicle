@@ -1,12 +1,14 @@
 package cli
 
 import (
+	"bufio"
 	"context"
 	"errors"
 	"fmt"
 	"io"
 	"log/slog"
 	"os"
+	"strings"
 	"sync/atomic"
 	"time"
 
@@ -41,6 +43,7 @@ import (
 func ResyncCmd() *serpent.Command {
 	var (
 		execute       bool
+		approveEach   bool
 		workers       int64
 		limit         int64
 		targetVersion string
@@ -65,6 +68,13 @@ func ResyncCmd() *serpent.Command {
 			Flag:        "execute",
 			Default:     "false",
 			Value:       serpent.BoolOf(&execute),
+		},
+		{
+			Name:        "Approve Each",
+			Description: "Prompt before each log group, run exactly one isolated job, show its result, then prompt for the next.",
+			Flag:        "approve-each",
+			Default:     "false",
+			Value:       serpent.BoolOf(&approveEach),
 		},
 		{
 			Name:        "Workers",
@@ -169,7 +179,8 @@ func ResyncCmd() *serpent.Command {
 		Long: `Reparse log groups whose parser version is older than a target version.
 
 By default, runs in dry-run mode showing candidates. Pass --execute to enqueue
-resync jobs on a dedicated River queue and display progress.
+resync jobs on a dedicated River queue and display progress. Add --approve-each
+to approve and inspect one isolated log group at a time before continuing.
 
 Fail-pause behavior (--execute):
   On the first job failure (discarded/cancelled), the resync queue is paused in
@@ -192,6 +203,12 @@ Fail-pause behavior (--execute):
 			if workers < 1 {
 				return fmt.Errorf("workers must be at least 1")
 			}
+			if approveEach && !execute {
+				return fmt.Errorf("--approve-each requires --execute")
+			}
+			if approveEach && workers != 1 {
+				return fmt.Errorf("--approve-each requires --workers=1")
+			}
 			if limit < 0 {
 				return fmt.Errorf("limit cannot be negative")
 			}
@@ -202,6 +219,7 @@ Fail-pause behavior (--execute):
 			logger.Info("resync starting",
 				slog.String("target_version", targetVersion),
 				slog.Bool("execute", execute),
+				slog.Bool("approve_each", approveEach),
 				slog.Int64("limit", limit),
 				slog.Int64("workers", workers),
 				slog.String("parser_version", version.GitTag),
@@ -312,15 +330,21 @@ Fail-pause behavior (--execute):
 				return fmt.Errorf("create chronicle: %w", err)
 			}
 
-			// Set up a dedicated River client that only processes the
-			// "resync" queue. The main server never registers/consumes
-			// this queue, so jobs are fully isolated.
+			// Set up a dedicated River client. Normal execution uses the persistent
+			// resync queue. Approval mode uses a unique queue for this invocation so
+			// old or concurrently queued resync jobs cannot run between approvals.
+			queueName := riverconst.QueueResync
+			maxWorkers := int(workers)
+			if approveEach {
+				queueName = "resync-approve-" + uuid.NewString()
+				maxWorkers = 1
+			}
 			riverWorkers := river.NewWorkers()
 			river.AddWorker(riverWorkers, chron.NewWorkerResync())
 
 			riverClient, err := river.NewClient(riverpgxv5.New(pool), &river.Config{
 				Queues: map[string]river.QueueConfig{
-					riverconst.QueueResync: {MaxWorkers: int(workers)},
+					queueName: {MaxWorkers: maxWorkers},
 				},
 				Workers:                     riverWorkers,
 				Logger:                      leveledlog.New(logger.With(slog.String("service", "river-resync")), slog.LevelWarn),
@@ -329,6 +353,14 @@ Fail-pause behavior (--execute):
 			})
 			if err != nil {
 				return fmt.Errorf("create river client: %w", err)
+			}
+
+			if approveEach {
+				if err := riverClient.Start(ctx); err != nil {
+					return fmt.Errorf("start approval River client: %w", err)
+				}
+				defer stopRiverClient(riverClient)
+				return runApproveEach(ctx, i, riverClient, queueName, groups)
 			}
 
 			// Enqueue one resync job per candidate log group.
@@ -353,11 +385,7 @@ Fail-pause behavior (--execute):
 			if err := riverClient.Start(ctx); err != nil {
 				return fmt.Errorf("start river client: %w", err)
 			}
-			defer func() {
-				stopCtx, stopCancel := context.WithTimeout(context.Background(), 30*time.Second)
-				defer stopCancel()
-				_ = riverClient.StopAndCancel(stopCtx)
-			}()
+			defer stopRiverClient(riverClient)
 
 			if isTTY {
 				return runActiveTUI(ctx, riverClient, groups, jobIDs, int(workers))
@@ -367,6 +395,134 @@ Fail-pause behavior (--execute):
 	}
 
 	return cmd
+}
+
+type approvalAction int
+
+const (
+	approvalSkip approvalAction = iota
+	approvalRun
+	approvalQuit
+)
+
+func stopRiverClient(client *river.Client[pgx.Tx]) {
+	stopCtx, stopCancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer stopCancel()
+	_ = client.StopAndCancel(stopCtx)
+}
+
+func promptApproval(scanner *bufio.Scanner, out io.Writer, group resynccandidate.Group, index, total int) (approvalAction, error) {
+	if err := writeOutput(out, "\nCandidate %d/%d\n  Log group: %s\n  Parser:    %s\n  Instances:\n", index, total, group.ID, group.ParserVersion); err != nil {
+		return approvalQuit, err
+	}
+	for _, instance := range group.Instances {
+		if err := writeOutput(out, "    - %s\n", instance); err != nil {
+			return approvalQuit, err
+		}
+	}
+	for {
+		if err := writeOutput(out, "Reparse this log group? [y]es / [n]o, skip / [q]uit: "); err != nil {
+			return approvalQuit, err
+		}
+		if !scanner.Scan() {
+			if err := scanner.Err(); err != nil {
+				return approvalQuit, fmt.Errorf("read approval: %w", err)
+			}
+			return approvalQuit, nil
+		}
+		switch strings.ToLower(strings.TrimSpace(scanner.Text())) {
+		case "y", "yes":
+			return approvalRun, nil
+		case "", "n", "no", "skip":
+			return approvalSkip, nil
+		case "q", "quit":
+			return approvalQuit, nil
+		default:
+			if err := writeOutput(out, "Please enter y, n, or q.\n"); err != nil {
+				return approvalQuit, err
+			}
+		}
+	}
+}
+
+func waitForApprovedJob(ctx context.Context, client *river.Client[pgx.Tx], jobID int64) (*rivertype.JobRow, error) {
+	ticker := time.NewTicker(500 * time.Millisecond)
+	defer ticker.Stop()
+	for {
+		job, err := client.JobGet(ctx, jobID)
+		if err != nil {
+			return nil, fmt.Errorf("fetch approval job %d: %w", jobID, err)
+		}
+		switch job.State {
+		case rivertype.JobStateCompleted, rivertype.JobStateDiscarded, rivertype.JobStateCancelled:
+			return job, nil
+		case rivertype.JobStateAvailable, rivertype.JobStatePending, rivertype.JobStateRetryable,
+			rivertype.JobStateRunning, rivertype.JobStateScheduled:
+		default:
+			return nil, fmt.Errorf("approval job %d entered unexpected state %q", jobID, job.State)
+		}
+		select {
+		case <-ctx.Done():
+			return nil, ctx.Err()
+		case <-ticker.C:
+		}
+	}
+}
+
+func approvalInsertOpts(args chronicle.ArgsResync, queueName string) river.InsertOpts {
+	opts := args.InsertOpts()
+	opts.Queue = queueName
+	opts.UniqueOpts.ByQueue = true
+	return opts
+}
+
+func runApproveEach(ctx context.Context, i *serpent.Invocation, client *river.Client[pgx.Tx], queueName string, groups []resynccandidate.Group) error {
+	scanner := bufio.NewScanner(i.Stdin)
+	completed := 0
+	skipped := 0
+	for index, group := range groups {
+		action, err := promptApproval(scanner, i.Stdout, group, index+1, len(groups))
+		if err != nil {
+			return err
+		}
+		switch action {
+		case approvalQuit:
+			return writeOutput(i.Stdout, "\nStopped. %d completed, %d skipped, %d remaining.\n", completed, skipped, len(groups)-index)
+		case approvalSkip:
+			skipped++
+			if err := writeOutput(i.Stdout, "Skipped %s; existing parsed data was not changed.\n", group.ID); err != nil {
+				return err
+			}
+			continue
+		case approvalRun:
+		}
+
+		args := chronicle.ArgsResync{LogGroupID: group.ID}
+		insertOpts := approvalInsertOpts(args, queueName)
+		res, err := client.Insert(ctx, args, &insertOpts)
+		if err != nil {
+			return fmt.Errorf("enqueue approved resync job for %s: %w", group.ID, err)
+		}
+		if err := writeOutput(i.Stdout, "Running %s...\n", group.ID); err != nil {
+			return err
+		}
+		job, err := waitForApprovedJob(ctx, client, res.Job.ID)
+		if err != nil {
+			return err
+		}
+		if job.State != rivertype.JobStateCompleted {
+			errMsg := "unknown error"
+			if len(job.Errors) > 0 {
+				errMsg = job.Errors[len(job.Errors)-1].Error
+			}
+			return fmt.Errorf("resync %s %s: %s", group.ID, job.State, errMsg)
+		}
+		completed++
+		if err := writeOutput(i.Stdout, "Completed %s successfully. Inspect the result before approving the next candidate.\n", group.ID); err != nil {
+			return err
+		}
+	}
+	return writeOutput(i.Stdout, "\nApproval run complete: %d completed, %d skipped.\n", completed, skipped)
 }
 
 // buildStorage constructs the ObjectStorage backend from CLI flags.

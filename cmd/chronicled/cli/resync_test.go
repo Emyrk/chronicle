@@ -18,6 +18,7 @@ func TestResyncCmd_Help(t *testing.T) {
 	var (
 		foundTargetVersion bool
 		foundExecute       bool
+		foundApproveEach   bool
 		foundWorkers       bool
 		foundLimit         bool
 		foundPGURL         bool
@@ -34,6 +35,8 @@ func TestResyncCmd_Help(t *testing.T) {
 			require.NotEmpty(t, opt.Default, "--target-version should have a default")
 		case "execute":
 			foundExecute = true
+		case "approve-each":
+			foundApproveEach = true
 		case "workers":
 			foundWorkers = true
 		case "limit":
@@ -52,6 +55,7 @@ func TestResyncCmd_Help(t *testing.T) {
 	}
 	require.True(t, foundTargetVersion, "missing --target-version flag")
 	require.True(t, foundExecute, "missing --execute flag")
+	require.True(t, foundApproveEach, "missing --approve-each flag")
 	require.True(t, foundWorkers, "missing --workers flag")
 	require.True(t, foundLimit, "missing --limit flag")
 	require.True(t, foundPGURL, "missing --postgres-url flag")
