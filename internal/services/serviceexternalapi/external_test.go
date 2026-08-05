@@ -49,8 +49,10 @@ func TestListServers(t *testing.T) {
 	t.Parallel()
 
 	serverID := uuid.New()
+	realmID := uuid.New()
 	store := &fakeExternalAPIStore{servers: []database.ListExternalAPIServersRow{{
-		ID: serverID, Name: "Turtle WoW", Description: "Vanilla", Url: pgtype.Text{String: "https://example.com", Valid: true},
+		ID: serverID, Name: "Example Server", Description: "Vanilla", Url: pgtype.Text{String: "https://example.com", Valid: true},
+		RealmID: uuid.NullUUID{UUID: realmID, Valid: true}, RealmName: pgtype.Text{String: "Example Realm", Valid: true},
 	}}}
 	service := &Service{db: store}
 	service.setupRoutes()
@@ -62,7 +64,10 @@ func TestListServers(t *testing.T) {
 	require.Equal(t, http.StatusOK, rec.Code)
 	var response ServersResponse
 	require.NoError(t, json.NewDecoder(rec.Body).Decode(&response))
-	require.Equal(t, []Server{{ID: serverID, Name: "Turtle WoW", Description: "Vanilla", URL: "https://example.com"}}, response.Servers)
+	require.Equal(t, []Server{{
+		ID: serverID, Name: "Example Server", Description: "Vanilla", URL: "https://example.com",
+		Realms: []Realm{{ID: realmID, ServerID: serverID, Name: "Example Realm"}},
+	}}, response.Servers)
 }
 
 func TestListCharacterLogsPagination(t *testing.T) {
@@ -85,7 +90,7 @@ func TestListCharacterLogsPagination(t *testing.T) {
 	}
 	store := &fakeExternalAPIStore{
 		realm: database.ResolveExternalAPIRealmRow{
-			ID: realmID, ServerID: serverID, Name: "Nordanaar", ServerName: "Turtle WoW",
+			ID: realmID, ServerID: serverID, Name: "Example Realm", ServerName: "Example Server",
 			TenantID: uuid.NullUUID{UUID: tenantID, Valid: true},
 		},
 		character: database.GetExternalAPICharacterRow{
@@ -99,7 +104,7 @@ func TestListCharacterLogsPagination(t *testing.T) {
 	service := &Service{db: store}
 	service.setupRoutes()
 
-	req := httptest.NewRequest(http.MethodGet, "/characters/Turtle%20WoW/Nordanaar/Example/logs?page=2&page_size=20", nil)
+	req := httptest.NewRequest(http.MethodGet, "/characters/Example%20Server/Example%20Realm/Example/logs?page=2&page_size=20", nil)
 	rec := httptest.NewRecorder()
 	service.ServeHTTP(rec, req)
 

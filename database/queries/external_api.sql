@@ -1,7 +1,16 @@
 -- name: ListExternalAPIServers :many
-SELECT id, name, description, url
-FROM wow_servers
-ORDER BY name;
+SELECT
+    ws.id,
+    ws.name,
+    ws.description,
+    ws.url,
+    wsr.id AS realm_id,
+    wsr.name AS realm_name,
+    wsr.description AS realm_description,
+    wsr.url AS realm_url
+FROM wow_servers ws
+LEFT JOIN wow_server_realms wsr ON wsr.server_id = ws.id
+ORDER BY ws.name, wsr.name;
 
 -- name: ResolveExternalAPIServer :one
 SELECT id, name, description, url, tenant_id

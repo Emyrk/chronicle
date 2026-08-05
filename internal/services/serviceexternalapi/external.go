@@ -23,6 +23,7 @@ type Server struct {
 	Name        string    `json:"name"`
 	Description string    `json:"description,omitempty"`
 	URL         string    `json:"url,omitempty"`
+	Realms      []Realm   `json:"realms,omitempty"`
 }
 
 type ServersResponse struct {
@@ -108,10 +109,23 @@ func (s *Service) listServers(w http.ResponseWriter, r *http.Request) {
 	}
 
 	servers := make([]Server, 0, len(rows))
+	serverIndexes := make(map[uuid.UUID]int, len(rows))
 	for _, row := range rows {
-		servers = append(servers, Server{
-			ID: row.ID, Name: row.Name, Description: row.Description, URL: row.Url.String,
-		})
+		index, ok := serverIndexes[row.ID]
+		if !ok {
+			index = len(servers)
+			serverIndexes[row.ID] = index
+			servers = append(servers, Server{
+				ID: row.ID, Name: row.Name, Description: row.Description, URL: row.Url.String,
+				Realms: make([]Realm, 0),
+			})
+		}
+		if row.RealmID.Valid {
+			servers[index].Realms = append(servers[index].Realms, Realm{
+				ID: row.RealmID.UUID, ServerID: row.ID, Name: row.RealmName.String,
+				Description: row.RealmDescription.String, URL: row.RealmUrl.String,
+			})
+		}
 	}
 	httpapi.Write(r.Context(), w, http.StatusOK, ServersResponse{Servers: servers})
 }

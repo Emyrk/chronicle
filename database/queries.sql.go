@@ -2107,16 +2107,29 @@ func (q *sqlQuerier) ListExternalAPIRealms(ctx context.Context, server string) (
 }
 
 const listExternalAPIServers = `-- name: ListExternalAPIServers :many
-SELECT id, name, description, url
-FROM wow_servers
-ORDER BY name
+SELECT
+    ws.id,
+    ws.name,
+    ws.description,
+    ws.url,
+    wsr.id AS realm_id,
+    wsr.name AS realm_name,
+    wsr.description AS realm_description,
+    wsr.url AS realm_url
+FROM wow_servers ws
+LEFT JOIN wow_server_realms wsr ON wsr.server_id = ws.id
+ORDER BY ws.name, wsr.name
 `
 
 type ListExternalAPIServersRow struct {
-	ID          uuid.UUID   `db:"id" json:"id"`
-	Name        string      `db:"name" json:"name"`
-	Description string      `db:"description" json:"description"`
-	Url         pgtype.Text `db:"url" json:"url"`
+	ID               uuid.UUID     `db:"id" json:"id"`
+	Name             string        `db:"name" json:"name"`
+	Description      string        `db:"description" json:"description"`
+	Url              pgtype.Text   `db:"url" json:"url"`
+	RealmID          uuid.NullUUID `db:"realm_id" json:"realm_id"`
+	RealmName        pgtype.Text   `db:"realm_name" json:"realm_name"`
+	RealmDescription pgtype.Text   `db:"realm_description" json:"realm_description"`
+	RealmUrl         pgtype.Text   `db:"realm_url" json:"realm_url"`
 }
 
 func (q *sqlQuerier) ListExternalAPIServers(ctx context.Context) ([]ListExternalAPIServersRow, error) {
@@ -2133,6 +2146,10 @@ func (q *sqlQuerier) ListExternalAPIServers(ctx context.Context) ([]ListExternal
 			&i.Name,
 			&i.Description,
 			&i.Url,
+			&i.RealmID,
+			&i.RealmName,
+			&i.RealmDescription,
+			&i.RealmUrl,
 		); err != nil {
 			return nil, err
 		}

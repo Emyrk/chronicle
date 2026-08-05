@@ -11,9 +11,10 @@ func (s *Service) registerRoutes() {
 
 	s.register(http.MethodGet, "/explore/servers", OpenAPIOperation{
 		Summary:     "List supported servers",
-		Description: "Lists the servers visible to the current Chronicle community. Results are tenant-aware.",
+		Description: "Lists the servers and their realms visible to the current Chronicle community. Results are tenant-aware.",
 		Responses: okResponse(ServersResponse{Servers: []Server{{
-			Name: "Turtle WoW", Description: "A supported World of Warcraft server.",
+			Name: "Example Server", Description: "A supported World of Warcraft server.",
+			Realms: []Realm{{Name: "Example Realm"}},
 		}}}),
 	}, s.listServers)
 
@@ -21,17 +22,17 @@ func (s *Service) registerRoutes() {
 		Summary:     "List realms for a server",
 		Description: "Accepts a server UUID or case-insensitive server name and lists its visible realms.",
 		Parameters: []OpenAPIParameter{
-			pathParameter("server", "Server UUID or name", "Turtle WoW"),
+			pathParameter("server", "Server UUID or name", "Example Server"),
 		},
 		Responses: okResponse(RealmsResponse{
-			Server: Server{Name: "Turtle WoW"},
-			Realms: []Realm{{Name: "Nordanaar"}},
+			Server: Server{Name: "Example Server"},
+			Realms: []Realm{{Name: "Example Realm"}},
 		}),
 	}, s.listRealms)
 
 	characterParameters := []OpenAPIParameter{
-		pathParameter("server", "Server UUID or name", "Turtle WoW"),
-		pathParameter("realm", "Realm UUID or name", "Nordanaar"),
+		pathParameter("server", "Server UUID or name", "Example Server"),
+		pathParameter("realm", "Realm UUID or name", "Example Realm"),
 		pathParameter("character", "Character GUID, decimal game ID, or name", "Example"),
 	}
 	s.register(http.MethodGet, "/characters/{server}/{realm}/{character}", OpenAPIOperation{
@@ -41,7 +42,7 @@ func (s *Service) registerRoutes() {
 		Responses: okResponse(Character{
 			Name: "Example", Class: "Warrior", Race: "Human", Gender: "Male", Level: 60,
 			Spec: "Fury", Role: "dps",
-			Server: Server{Name: "Turtle WoW"}, Realm: Realm{Name: "Nordanaar"},
+			Server: Server{Name: "Example Server"}, Realm: Realm{Name: "Example Realm"},
 		}),
 	}, s.getCharacter)
 
@@ -53,7 +54,7 @@ func (s *Service) registerRoutes() {
 			queryParameter("page_size", "Results per page, from 1 to 20", false, "integer", 20),
 		),
 		Responses: okResponse(CharacterLogsResponse{
-			Character:  Character{Name: "Example", Server: Server{Name: "Turtle WoW"}, Realm: Realm{Name: "Nordanaar"}},
+			Character:  Character{Name: "Example", Server: Server{Name: "Example Server"}, Realm: Realm{Name: "Example Realm"}},
 			Logs:       []CharacterLog{{Name: "Molten Core", BossKills: 10}},
 			Pagination: Pagination{Page: 1, PageSize: 20},
 		}),
