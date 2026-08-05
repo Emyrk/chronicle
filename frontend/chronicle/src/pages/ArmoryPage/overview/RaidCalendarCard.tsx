@@ -5,6 +5,7 @@ import type { RecentInstance } from "@/api/typesGenerated";
 import { Card, CardAction, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/Card/Card";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/Tooltip/tooltip";
 import { formatDuration } from "@/pages/Logs/utils/calendarUtils";
+import { groupDuplicateInstances } from "@/utils/groupDuplicates";
 import { parseHexColor } from "@/pages/Instance/parseColors";
 import { ACTIVITY_WEEKS, type ActivityStats } from "./util";
 
@@ -131,7 +132,13 @@ function RaidedCell({
   nightScores: Map<string, number>;
   onOpenActivity: () => void;
 }) {
-  const single = cell.raids.length === 1 ? cell.raids[0] : undefined;
+  // Group duplicate uploads: a night with one raid uploaded twice still
+  // links straight to a log — preferring the upload the score came from.
+  const groups = groupDuplicateInstances([...cell.raids]);
+  const single =
+    groups.length === 1
+      ? (groups[0].find((g) => nightScores.has(g.id)) ?? groups[0][0])
+      : undefined;
   const cellClass =
     "block size-4 cursor-pointer rounded-xs transition-transform hover:scale-125 hover:ring-1 hover:ring-foreground/60";
   const cellStyle = {
@@ -144,7 +151,8 @@ function RaidedCell({
   const content = (
     <TooltipContent className="pointer-events-none" sideOffset={4}>
       <div className="mb-1 font-semibold">{format(cell.date, "EEE, MMM d")}</div>
-      {cell.raids.map((r) => {
+      {groups.map((g) => {
+        const r = g.find((x) => nightScores.has(x.id)) ?? g[0];
         const score = nightScores.get(r.id);
         const duration = formatDuration(r.duration_ms);
         return (
@@ -178,7 +186,7 @@ function RaidedCell({
             onClick={onOpenActivity}
             className={cellClass}
             style={cellStyle}
-            aria-label={`${cell.raids.length} raids on ${format(cell.date, "MMM d")}`}
+            aria-label={`${groups.length} raids on ${format(cell.date, "MMM d")}`}
           />
         )}
       </TooltipTrigger>

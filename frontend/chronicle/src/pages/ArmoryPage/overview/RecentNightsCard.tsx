@@ -58,15 +58,13 @@ export function RecentNightsCard({ instances, nightScores, lootByInstance, onOpe
       </CardHeader>
       <CardContent className="flex flex-col">
         {nights.map((group) => {
-          const inst = group[0];
+          // Among duplicate uploads of the night, prefer the one the parse
+          // scores came from, so the shown average and the linked log match.
+          const scored = group.find((g) => nightScores.has(g.id));
+          const inst = scored ?? group[0];
           const date = new Date(inst.first_encounter_time);
           const duration = formatDuration(inst.duration_ms);
-          // The night's average parse; duplicate uploads of the night carry
-          // (near-)identical parses, so any group member's average works.
-          const avg = group.reduce<number | undefined>(
-            (acc, g) => acc ?? nightScores.get(g.id),
-            undefined,
-          );
+          const avg = scored ? nightScores.get(scored.id) : undefined;
           const url = inst.slug ? `/instances/${inst.slug}` : `/instances/${inst.id}`;
           const loot = group
             .flatMap((g) => lootByInstance?.get(g.id) ?? [])
