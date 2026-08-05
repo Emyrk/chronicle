@@ -45,6 +45,35 @@ func TestProgressionOnyxiaHasSeparateSpeedrunRules(t *testing.T) {
 	require.Nil(t, wrath.LevelRange)
 }
 
+func TestLunaticDeadminesHostiles(t *testing.T) {
+	t.Parallel()
+
+	vanilla := RegistryForFlavor(nil, database.WoWFlavor{database.FlavorVanilla}).EntryByName("Deadmines")
+	require.NotNil(t, vanilla)
+	for _, entry := range []uint32{61962, 912408, 61963} {
+		require.NotContains(t, vanilla.HostileEntries, entry)
+	}
+
+	lunatic := RegistryForFlavor(nil, database.WoWFlavor{
+		database.FlavorVanilla,
+		database.FlavorLunatic,
+	}).EntryByName("Deadmines")
+	require.NotNil(t, lunatic)
+
+	manufacturedGolem := lunatic.HostileEntries[61962]
+	require.Equal(t, "Manufactured Golem", manufacturedGolem.Name)
+	require.False(t, manufacturedGolem.Boss)
+
+	burningBladeFlamekin := lunatic.HostileEntries[912408]
+	require.Equal(t, "Burning Blade Flamekin", burningBladeFlamekin.Name)
+	require.False(t, burningBladeFlamekin.Boss)
+
+	masterpieceHarvester := lunatic.HostileEntries[61963]
+	require.Equal(t, "Masterpiece Harvester", masterpieceHarvester.Name)
+	require.True(t, masterpieceHarvester.Boss)
+	require.Equal(t, "Masterpiece Harvester", masterpieceHarvester.EncounterName)
+}
+
 func TestInstanceDetailsBossCount(t *testing.T) {
 	t.Parallel()
 

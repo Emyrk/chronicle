@@ -19,7 +19,7 @@ var (
 	DeadminesFactory = &CommonFactory{
 		Name:      "Deadmines",
 		ZoneNames: []string{"the deadmines", "deadmines", "死亡矿井"},
-		Hostiles:  FromMap(DeadminesHostiles()),
+		Hostiles:  DeadminesHostiles,
 		FlavoredRankings: func(database.WoWFlavor) *rankings.Rankings {
 			return DeadminesSpeedrunRequirements()
 		},

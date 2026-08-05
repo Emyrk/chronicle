@@ -793,7 +793,7 @@ func WindhornCanyonHostiles() map[uint32]Identity {
 	return hostile
 }
 
-func DeadminesHostiles() map[uint32]Identity {
+func DeadminesHostiles(fl database.WoWFlavor) *identifier.Identifier {
 	hostile := make(map[uint32]Identity)
 	LoadAdds(hostile, map[uint32]string{
 		61959: "Defias Chemist",
@@ -825,11 +825,22 @@ func DeadminesHostiles() map[uint32]Identity {
 		647:   "Captain Greenskin",
 		644:   "Rhahk'Zor",
 		1763:  "Gilnid",
+		3586:  "Miner Johnson",
 	})
 
 	hostile[642] = Identity{Name: "Sneed's Shredder", Affiliation: types.AffiliationHostile, EncounterName: "Sneed", Boss: true}
 
-	return hostile
+	if fl.Has(database.FlavorLunatic) {
+		LoadAdds(hostile, map[uint32]string{
+			61962:  "Manufactured Golem",
+			912408: "Burning Blade Flamekin",
+		})
+		LoadBosses(hostile, map[uint32]string{
+			61963: "Masterpiece Harvester",
+		})
+	}
+
+	return identifier.NewIdentifier(hostile)
 }
 
 func ShadowfangKeepHostiles() map[uint32]Identity {
