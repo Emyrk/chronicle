@@ -10,8 +10,12 @@ import { cn } from "@/lib/utils";
 import { gearClassById } from "../classInfo";
 import { useSimItems } from "@/api/gamedata";
 import {
+  addStage,
   clearSlot,
+  moveStage,
   parsePayload,
+  removeStage,
+  renameStage,
   setSlotItem,
   type GearPayload,
   type GearStage,
@@ -23,6 +27,8 @@ import { useListItems, type ItemRef } from "./useListItems";
 import { BuilderDoll } from "./BuilderDoll";
 import { SlotEditorPanel } from "./SlotEditorPanel";
 import { SetSummaryBar } from "./SetSummaryBar";
+import { StagesBar } from "./StagesBar";
+import { ProgressionMatrix } from "./ProgressionMatrix";
 
 const VISIBILITY_ICON = { public: Eye, unlisted: Link2, private: EyeOff } as const;
 
@@ -102,31 +108,28 @@ function ListHeader({
   );
 }
 
-function StageTabs({
-  payload,
-  stageIndex,
-  onSelect,
+function ViewToggle({
+  view,
+  onChange,
 }: {
-  payload: GearPayload;
-  stageIndex: number;
-  onSelect: (i: number) => void;
+  view: "stage" | "matrix";
+  onChange: (v: "stage" | "matrix") => void;
 }) {
-  if (payload.stages.length <= 1) return null;
   return (
-    <div className="flex flex-wrap gap-1">
-      {payload.stages.map((s, i) => (
+    <div className="flex items-center gap-1 text-xs">
+      {(["stage", "matrix"] as const).map((v) => (
         <button
-          key={i}
+          key={v}
           type="button"
-          onClick={() => onSelect(i)}
+          onClick={() => onChange(v)}
           className={cn(
-            "px-3 py-1.5 rounded text-sm border transition-colors",
-            i === stageIndex
+            "px-2.5 py-1 rounded border capitalize transition-colors",
+            view === v
               ? "border-blue-500 bg-blue-500/10 text-white"
               : "border-zinc-700 text-zinc-400 hover:text-zinc-200",
           )}
         >
-          {s.name || `Stage ${i + 1}`}
+          {v === "stage" ? "Stage view" : "Matrix"}
         </button>
       ))}
     </div>
@@ -137,6 +140,7 @@ function ReadOnlyView({ list, isOwner }: { list: GearList; isOwner: boolean }) {
   const payload = useMemo(() => parsePayload(list.payload), [list.payload]);
   const [stageIndex, setStageIndex] = useState(0);
   const [weightSel, setWeightSel] = useState<WeightSelection | null>(null);
+  const [view, setView] = useState<"stage" | "matrix">("stage");
   const items = useListItems(useMemo(() => collectItemRefs(payload), [payload]));
   const stage = payload.stages[Math.min(stageIndex, Math.max(payload.stages.length - 1, 0))];
   const { scores, totalScore } = useStageScores(stage, weightSel?.weights ?? null);
@@ -150,12 +154,27 @@ function ReadOnlyView({ list, isOwner }: { list: GearList; isOwner: boolean }) {
       ) : (
         <div className="space-y-4">
           <StatWeightsPanel classId={list.class_id} selection={weightSel} onSelect={setWeightSel} />
-          <StageTabs payload={payload} stageIndex={stageIndex} onSelect={setStageIndex} />
-          {stage && (
-            <div className="rounded-md border border-zinc-700/60 bg-zinc-900/40 p-4 max-w-xl space-y-3">
-              <SetSummaryBar stage={stage} items={items} totalScore={totalScore} />
-              <BuilderDoll stage={stage} items={items} scores={scores} />
-            </div>
+          <div className="flex flex-wrap items-center gap-3">
+            <StagesBar payload={payload} stageIndex={stageIndex} onSelect={setStageIndex} />
+            <div className="flex-1" />
+            {payload.stages.length > 1 && <ViewToggle view={view} onChange={setView} />}
+          </div>
+          {view === "matrix" && payload.stages.length > 1 ? (
+            <ProgressionMatrix
+              payload={payload}
+              items={items}
+              onCellClick={(stageIdx) => {
+                setStageIndex(stageIdx);
+                setView("stage");
+              }}
+            />
+          ) : (
+            stage && (
+              <div className="rounded-md border border-zinc-700/60 bg-zinc-900/40 p-4 max-w-xl space-y-3">
+                <SetSummaryBar stage={stage} items={items} totalScore={totalScore} />
+                <BuilderDoll stage={stage} items={items} scores={scores} />
+              </div>
+            )
           )}
         </div>
       )}
@@ -168,6 +187,7 @@ function EditorView({ list }: { list: GearList }) {
   const [stageIndex, setStageIndex] = useState(0);
   const [selectedSlot, setSelectedSlot] = useState<number | null>(null);
   const [weightSel, setWeightSel] = useState<WeightSelection | null>(null);
+  const [view, setView] = useState<"stage" | "matrix">("stage");
 
   const items = useListItems(useMemo(() => collectItemRefs(editor.payload), [editor.payload]));
   const safeStageIndex = Math.min(stageIndex, Math.max(editor.payload.stages.length - 1, 0));
@@ -203,7 +223,30 @@ function EditorView({ list }: { list: GearList }) {
       ) : (
         <div className="space-y-4">
           <StatWeightsPanel classId={list.class_id} selection={weightSel} onSelect={setWeightSel} />
-          <StageTabs payload={editor.payload} stageIndex={safeStageIndex} onSelect={setStageIndex} />
+          <div className="flex flex-wrap items-center gap-3">
+            <StagesBar
+              payload={editor.payload}
+              stageIndex={safeStageIndex}
+              onSelect={setStageIndex}
+              onAdd={() => editor.update((p) => addStage(p))}
+              onRename={(i, name) => editor.update((p) => renameStage(p, i, name))}
+              onRemove={(i) => editor.update((p) => removeStage(p, i))}
+              onMove={(from, to) => editor.update((p) => moveStage(p, from, to))}
+            />
+            <div className="flex-1" />
+            {editor.payload.stages.length > 1 && <ViewToggle view={view} onChange={setView} />}
+          </div>
+          {view === "matrix" && editor.payload.stages.length > 1 ? (
+            <ProgressionMatrix
+              payload={editor.payload}
+              items={items}
+              onCellClick={(stageIdx, slotIdx) => {
+                setStageIndex(stageIdx);
+                setSelectedSlot(slotIdx);
+                setView("stage");
+              }}
+            />
+          ) : (
           <div className="grid gap-4 lg:grid-cols-[minmax(0,26rem)_minmax(0,1fr)] items-start">
             {stage && (
               <div className="rounded-md border border-zinc-700/60 bg-zinc-900/40 p-4 space-y-3">
@@ -235,6 +278,7 @@ function EditorView({ list }: { list: GearList }) {
               </div>
             )}
           </div>
+          )}
         </div>
       )}
     </div>
