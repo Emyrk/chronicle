@@ -1,29 +1,25 @@
 import { useParams, useSearchParams } from "react-router-dom";
-import { useQuery } from "@tanstack/react-query";
-import { Shield, Calendar, Sparkles } from "lucide-react";
-import type { ArmoryPlayer } from "@/api/typesGenerated";
+import { Shield, Calendar, Sparkles, LayoutDashboard } from "lucide-react";
+import { useArmoryPlayer } from "@/api/queries";
 import { DatasetProvider } from "@/hooks/useDatasetId";
 import { CharacterHeader } from "./CharacterHeader";
 import { AdminLinkControls } from "./AdminLinkControls";
 import { GearDisplay } from "./GearDisplay";
 import { TalentsTab } from "./TalentsTab";
 import { ActivityTab } from "./ActivityTab";
-
-async function fetchArmoryPlayer(realm: string, player: string): Promise<ArmoryPlayer> {
-  const response = await fetch(`/api/v1/armory/${encodeURIComponent(realm)}/${encodeURIComponent(player)}`);
-  if (!response.ok) {
-    throw new Error(`Failed to fetch player: ${response.status}`);
-  }
-  return response.json();
-}
+import { OverviewTab } from "./overview/OverviewTab";
 
 const TABS = [
+  { key: "overview", label: "Overview", icon: LayoutDashboard },
   { key: "gear", label: "Gear", icon: Shield },
   { key: "talents", label: "Talents", icon: Sparkles },
   { key: "activity", label: "Activity", icon: Calendar },
 ] as const;
 
 type TabKey = (typeof TABS)[number]["key"];
+
+/** Tabs that need a wide center column. */
+const WIDE_TABS: ReadonlySet<TabKey> = new Set(["overview", "talents"]);
 
 /**
  * WoW-style character armory page.
@@ -37,15 +33,19 @@ export function ArmoryPage() {
     playerIdentifier: string;
   }>();
   const [searchParams, setSearchParams] = useSearchParams();
-  const activeTab = (searchParams.get("tab") as TabKey) || "gear";
+  const activeTab = (searchParams.get("tab") as TabKey) || "overview";
 
-  const { data: player, isLoading, error } = useQuery({
-    queryKey: ["armory", realmName, playerIdentifier],
-    queryFn: () => fetchArmoryPlayer(realmName!, playerIdentifier!),
-    enabled: !!realmName && !!playerIdentifier,
-    staleTime: 5 * 60 * 1000,
-    retry: false,
-  });
+  const { data: player, isLoading, error } = useArmoryPlayer(realmName, playerIdentifier);
+
+  const openTab = (key: TabKey) => {
+    const next = new URLSearchParams(searchParams);
+    if (key === "overview") {
+      next.delete("tab");
+    } else {
+      next.set("tab", key);
+    }
+    setSearchParams(next, { replace: true });
+  };
 
   if (isLoading) {
     return (
@@ -67,7 +67,7 @@ export function ArmoryPage() {
 
   return (
     <DatasetProvider datasetId={player.dataset_id} iconBaseUrl={player.icon_base_url}>
-    <div className={`w-full py-8 px-4 grid gap-x-4 ${activeTab === "talents" ? "grid-cols-[1fr_minmax(0,72rem)_1fr]" : "grid-cols-[1fr_minmax(0,48rem)_1fr]"}`}>
+    <div className={`w-full py-8 px-4 grid gap-x-4 ${WIDE_TABS.has(activeTab) ? "grid-cols-[1fr_minmax(0,72rem)_1fr]" : "grid-cols-[1fr_minmax(0,48rem)_1fr]"}`}>
       {/* Left placeholder column */}
       <div />
 
@@ -81,15 +81,7 @@ export function ArmoryPage() {
           {TABS.map(({ key, label, icon: Icon }) => (
             <button
               key={key}
-              onClick={() => {
-                const next = new URLSearchParams(searchParams);
-                if (key === "gear") {
-                  next.delete("tab");
-                } else {
-                  next.set("tab", key);
-                }
-                setSearchParams(next, { replace: true });
-              }}
+              onClick={() => openTab(key)}
               className={`
                 flex items-center gap-1.5 px-4 py-2 text-sm font-medium transition-colors
                 border-b-2 -mb-px
@@ -105,7 +97,12 @@ export function ArmoryPage() {
           ))}
         </div>
 
-        {/* Tab content — gear and talents stay in center column */}
+        {/* Tab content — overview, gear, and talents stay in center column */}
+        {activeTab === "overview" && (
+          <div className="mt-6">
+            <OverviewTab player={player} onOpenTab={openTab} />
+          </div>
+        )}
         {activeTab === "gear" && (
           <div className="mt-6">
             <GearDisplay gear={player.gear} race={player.race} gender={player.gender} />

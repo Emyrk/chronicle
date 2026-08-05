@@ -43,6 +43,8 @@ import type {
   CreateShareResponse as CreateShareResponseGenerated,
   SharedViewResponse as SharedViewResponseGenerated,
   ArmorySearchResponse as ArmorySearchResponseGenerated,
+  ArmoryPlayer as ArmoryPlayerGenerated,
+  ArmoryGearHistoryResponse as ArmoryGearHistoryResponseGenerated,
   ListGuildsResponse as ListGuildsResponseGenerated,
   GuildPageConfig as GuildPageConfigGenerated,
   GuildPageTheme as GuildPageThemeGenerated,
@@ -110,6 +112,8 @@ export type CreateShareRequest = CreateShareRequestGenerated;
 export type CreateShareResponse = CreateShareResponseGenerated;
 export type SharedViewResponse = SharedViewResponseGenerated;
 export type ArmorySearchResponse = ArmorySearchResponseGenerated;
+export type ArmoryPlayer = ArmoryPlayerGenerated;
+export type ArmoryGearHistoryResponse = ArmoryGearHistoryResponseGenerated;
 export type ListGuildsResponse = ListGuildsResponseGenerated;
 export type GuildPageConfig = GuildPageConfigGenerated;
 export type GuildPageTab = GuildPageTabGenerated;
@@ -1490,6 +1494,42 @@ export function useArmorySearch(
     enabled: params.q.length >= 2,
     staleTime: 30_000,
     ...options,
+  });
+}
+
+export function useArmoryPlayer(realmName?: string, playerIdentifier?: string) {
+  return useQuery({
+    queryKey: ["armory", realmName, playerIdentifier],
+    queryFn: async () => {
+      const response = await fetch(
+        `/api/v1/armory/${encodeURIComponent(realmName!)}/${encodeURIComponent(playerIdentifier!)}`,
+      );
+      if (!response.ok) {
+        throw new Error(`Failed to fetch player: ${response.status}`);
+      }
+      return response.json() as Promise<ArmoryPlayer>;
+    },
+    enabled: !!realmName && !!playerIdentifier,
+    staleTime: 5 * 60 * 1000,
+    retry: false,
+  });
+}
+
+export function useArmoryGearHistory(realmName?: string, playerIdentifier?: string) {
+  return useQuery({
+    queryKey: ["armory-gear-history", realmName, playerIdentifier],
+    queryFn: async () => {
+      const response = await fetch(
+        `/api/v1/armory/${encodeURIComponent(realmName!)}/${encodeURIComponent(playerIdentifier!)}/gear-history`,
+      );
+      if (!response.ok) {
+        throw new Error(`Failed to fetch gear history: ${response.status}`);
+      }
+      return response.json() as Promise<ArmoryGearHistoryResponse>;
+    },
+    enabled: !!realmName && !!playerIdentifier,
+    staleTime: 5 * 60 * 1000,
+    retry: false,
   });
 }
 

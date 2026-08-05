@@ -10,6 +10,7 @@ import type {
   InstanceParsesResponse,
   SnapshotSummary,
   CohortDebugResponse,
+  CharacterParseHistoryResponse,
 } from "./typesGenerated";
 
 const RANKINGS_STALE_TIME = 5 * 60 * 1000; // 5 minutes
@@ -20,6 +21,22 @@ async function fetchJSON<T>(url: string): Promise<T> {
     throw new Error(`Rankings API error: ${response.status}`);
   }
   return response.json() as Promise<T>;
+}
+
+/**
+ * A character's deduped parse history (last 60 days) plus their overall
+ * score, for one metric.
+ */
+export function useCharacterParses(playerGuid?: string, metric: "dps" | "hps" = "dps") {
+  return useQuery({
+    queryKey: ["rankings", "character-parses", playerGuid, metric],
+    queryFn: () =>
+      fetchJSON<CharacterParseHistoryResponse>(
+        `/api/v1/rankings/characters/${encodeURIComponent(playerGuid!)}/parses?metric=${metric}`,
+      ),
+    staleTime: RANKINGS_STALE_TIME,
+    enabled: !!playerGuid,
+  });
 }
 
 export function useRankingsInstances(enabled = true) {
