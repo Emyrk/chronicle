@@ -5072,7 +5072,7 @@ func (q *sqlQuerier) DeleteParseScoreResultsForTenantInstance(ctx context.Contex
 }
 
 const getCharacterParseHistory = `-- name: GetCharacterParseHistory :many
-SELECT DISTINCT ON (psr.run_id, psr.encounter_name, psr.snapshot_id)
+SELECT DISTINCT ON (psr.run_id, psr.encounter_name)
     psr.id,
     psr.instance_id,
     psr.run_id,
@@ -5099,7 +5099,7 @@ WHERE psr.tenant_id = $1
   AND psr.metric = $3
   AND psr.status IN ('ok', 'low_confidence')
   AND psr.killed_at >= $4
-ORDER BY psr.run_id, psr.encounter_name, psr.snapshot_id, psr.precise_score DESC
+ORDER BY psr.run_id, psr.encounter_name, psr.created_at DESC, psr.precise_score DESC
 `
 
 type GetCharacterParseHistoryParams struct {
@@ -5134,6 +5134,9 @@ type GetCharacterParseHistoryRow struct {
 
 // Character history: ALL deduplicated parses over the lookback window.
 // Returns every (run_id, encounter) parse — not just one best per encounter.
+// Duplicate uploads of the same run collapse to one row per encounter even
+// when they were scored against different snapshots; the most recently
+// computed scoring wins so a night's rows stay internally consistent.
 // The caller groups by (instance_name, encounter_name), takes best 3 per group,
 // averages each group, then averages groups for the Score.
 func (q *sqlQuerier) GetCharacterParseHistory(ctx context.Context, arg GetCharacterParseHistoryParams) ([]GetCharacterParseHistoryRow, error) {

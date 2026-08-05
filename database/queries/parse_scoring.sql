@@ -116,9 +116,12 @@ WHERE tenant_id = @tenant_id AND instance_id = @instance_id;
 -- name: GetCharacterParseHistory :many
 -- Character history: ALL deduplicated parses over the lookback window.
 -- Returns every (run_id, encounter) parse — not just one best per encounter.
+-- Duplicate uploads of the same run collapse to one row per encounter even
+-- when they were scored against different snapshots; the most recently
+-- computed scoring wins so a night's rows stay internally consistent.
 -- The caller groups by (instance_name, encounter_name), takes best 3 per group,
 -- averages each group, then averages groups for the Score.
-SELECT DISTINCT ON (psr.run_id, psr.encounter_name, psr.snapshot_id)
+SELECT DISTINCT ON (psr.run_id, psr.encounter_name)
     psr.id,
     psr.instance_id,
     psr.run_id,
@@ -145,7 +148,7 @@ WHERE psr.tenant_id = @tenant_id
   AND psr.metric = @metric
   AND psr.status IN ('ok', 'low_confidence')
   AND psr.killed_at >= @since
-ORDER BY psr.run_id, psr.encounter_name, psr.snapshot_id, psr.precise_score DESC;
+ORDER BY psr.run_id, psr.encounter_name, psr.created_at DESC, psr.precise_score DESC;
 
 -- name: GetScoringSnapshotBefore :one
 -- Return the latest published snapshot whose cutoff <= the given timestamp,

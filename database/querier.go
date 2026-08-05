@@ -117,6 +117,9 @@ type sqlcQuerier interface {
 	GetCharacterLoot(ctx context.Context, arg GetCharacterLootParams) ([]GetCharacterLootRow, error)
 	// Character history: ALL deduplicated parses over the lookback window.
 	// Returns every (run_id, encounter) parse — not just one best per encounter.
+	// Duplicate uploads of the same run collapse to one row per encounter even
+	// when they were scored against different snapshots; the most recently
+	// computed scoring wins so a night's rows stay internally consistent.
 	// The caller groups by (instance_name, encounter_name), takes best 3 per group,
 	// averages each group, then averages groups for the Score.
 	GetCharacterParseHistory(ctx context.Context, arg GetCharacterParseHistoryParams) ([]GetCharacterParseHistoryRow, error)
