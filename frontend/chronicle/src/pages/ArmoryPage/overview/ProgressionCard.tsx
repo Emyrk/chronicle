@@ -58,7 +58,7 @@ export function ProgressionCard({ progress, bossCounts, isLoading }: Progression
                 {[
                   raid.maxPlayers > 0 ? `${raid.maxPlayers}-player` : "",
                   raid.difficultyName,
-                  `${raid.kills} ${raid.kills === 1 ? "kill" : "kills"} logged`,
+                  `${raid.kills} boss ${raid.kills === 1 ? "kill" : "kills"} logged`,
                 ]
                   .filter(Boolean)
                   .join(" · ")}

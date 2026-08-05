@@ -57,7 +57,7 @@ export function RaidScoresCard({ raids, metric, isLoading }: RaidScoresCardProps
                       {[
                         raid.maxPlayers > 0 ? `${raid.maxPlayers}-player` : "",
                         raid.difficultyName,
-                        `${raid.kills} ${raid.kills === 1 ? "kill" : "kills"} logged`,
+                        `${raid.kills} boss ${raid.kills === 1 ? "kill" : "kills"} logged`,
                       ]
                         .filter(Boolean)
                         .join(" · ")}

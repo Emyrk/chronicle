@@ -3569,16 +3569,27 @@ func (q *sqlQuerier) UpsertLeaderboardVersionRequirements(ctx context.Context, a
 }
 
 const getCharacterLoot = `-- name: GetCharacterLoot :many
-WITH deduped AS (
-  SELECT DISTINCT ON (COALESCE(li.duplicate_group_id, il.instance_id), il.item_id, il.received_ts)
+WITH ranked AS (
+  SELECT
     il.instance_id, il.received_ts, il.item_id, il.item_name, il.loot_suffix, il.quantity,
     li.name AS instance_name,
-    li.hashed_slug AS instance_slug
+    li.hashed_slug AS instance_slug,
+    COALESCE(li.duplicate_group_id, il.instance_id) AS run_key,
+    ROW_NUMBER() OVER (
+      PARTITION BY il.instance_id, il.item_id
+      ORDER BY il.received_ts
+    ) AS drop_idx
   FROM instance_loot il
   JOIN log_instances li ON li.id = il.instance_id
   WHERE il.realm_id = $3
     AND il.received_guid = $4
-  ORDER BY COALESCE(li.duplicate_group_id, il.instance_id), il.item_id, il.received_ts
+),
+deduped AS (
+  SELECT DISTINCT ON (run_key, item_id, drop_idx)
+    instance_id, received_ts, item_id, item_name, loot_suffix, quantity,
+    instance_name, instance_slug
+  FROM ranked
+  ORDER BY run_key, item_id, drop_idx, received_ts
 )
 SELECT
   d.instance_id, d.received_ts, d.item_id, d.item_name, d.loot_suffix, d.quantity, d.instance_name, d.instance_slug,
@@ -3613,7 +3624,10 @@ type GetCharacterLootRow struct {
 }
 
 // Loot received by one character, newest first. Duplicate uploads of the
-// same raid night are collapsed by (run, item, loot timestamp).
+// same raid night are collapsed by (run, item, nth drop): each uploader's
+// clock differs, so drops are matched by their order within the upload
+// rather than by timestamp. Two genuine drops of the same item in one
+// night survive as drop 1 and drop 2.
 func (q *sqlQuerier) GetCharacterLoot(ctx context.Context, arg GetCharacterLootParams) ([]GetCharacterLootRow, error) {
 	rows, err := q.db.Query(ctx, getCharacterLoot,
 		arg.DatasetID,

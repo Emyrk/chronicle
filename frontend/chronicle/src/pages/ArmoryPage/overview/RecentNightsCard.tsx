@@ -1,14 +1,17 @@
-import { useMemo } from "react";
+import { useMemo, useState } from "react";
 import { Link } from "react-router-dom";
 import { format } from "date-fns";
 import type { ArmoryLootItem, RecentInstance } from "@/api/typesGenerated";
 import { Card, CardAction, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/Card/Card";
+import { ItemTooltip } from "@/components/ui/ItemTooltip/ItemTooltip";
+import { useItemTooltip } from "@/api/gamedata";
 import { formatDuration } from "@/pages/Logs/utils/calendarUtils";
 import { groupDuplicateInstances } from "@/utils/groupDuplicates";
 import { iconUrl } from "@/config/iconUrl";
 import { useIconBaseUrl } from "@/hooks/useDatasetId";
 import { parseColor } from "@/pages/Instance/parseColors";
 import { getQualityBorderClass } from "../types";
+import { CursorTooltip, type CursorPos } from "./CursorTooltip";
 
 const MAX_NIGHTS = 6;
 const MAX_LOOT_ICONS = 4;
@@ -24,7 +27,7 @@ interface RecentNightsCardProps {
 
 /** The last few raid nights, newest first, with the night's best parse. */
 export function RecentNightsCard({ instances, nightScores, lootByInstance, onOpenActivity }: RecentNightsCardProps) {
-  const iconBaseUrl = useIconBaseUrl();
+
   const nights = useMemo(() => {
     const groups = groupDuplicateInstances([...(instances ?? [])]);
     groups.sort(
@@ -89,16 +92,7 @@ export function RecentNightsCard({ instances, nightScores, lootByInstance, onOpe
               {loot.length > 0 && (
                 <div className="flex shrink-0 gap-1.5">
                   {loot.map((l, i) => (
-                    <div
-                      key={`${l.item_id}-${i}`}
-                      title={l.item_name}
-                      className={`size-[26px] shrink-0 rounded border bg-popover bg-cover bg-center ${getQualityBorderClass(l.quality)}`}
-                      style={
-                        l.icon
-                          ? { backgroundImage: `url(${iconUrl(l.icon, iconBaseUrl)})` }
-                          : undefined
-                      }
-                    />
+                    <NightLootIcon key={`${l.item_id}-${i}`} item={l} />
                   ))}
                 </div>
               )}
@@ -113,5 +107,29 @@ export function RecentNightsCard({ instances, nightScores, lootByInstance, onOpe
         })}
       </CardContent>
     </Card>
+  );
+}
+
+/** A small loot icon with a cursor-anchored item tooltip on hover. */
+function NightLootIcon({ item }: { item: ArmoryLootItem }) {
+  const iconBaseUrl = useIconBaseUrl();
+  const [cursor, setCursor] = useState<CursorPos | null>(null);
+  // Only fetch tooltip data once the icon is actually hovered.
+  const tooltip = useItemTooltip(cursor && item.item_id > 0 ? { itemId: item.item_id } : null);
+
+  return (
+    <div
+      className={`size-[26px] shrink-0 rounded border bg-popover bg-cover bg-center transition-[filter] hover:brightness-125 ${getQualityBorderClass(item.quality)}`}
+      style={item.icon ? { backgroundImage: `url(${iconUrl(item.icon, iconBaseUrl)})` } : undefined}
+      aria-label={item.item_name}
+      onMouseMove={(e) => setCursor({ x: e.clientX, y: e.clientY })}
+      onMouseLeave={() => setCursor(null)}
+    >
+      {cursor && tooltip.data && (
+        <CursorTooltip pos={cursor}>
+          <ItemTooltip item={tooltip.data} />
+        </CursorTooltip>
+      )}
+    </div>
   );
 }
