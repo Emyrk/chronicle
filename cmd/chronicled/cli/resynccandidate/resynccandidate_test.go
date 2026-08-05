@@ -162,6 +162,36 @@ func TestFilterAndGroup_BuildMetadataStripped(t *testing.T) {
 	require.Equal(t, id, groups[0].ID)
 }
 
+func TestFilterAndGroup_ExcludesSuperWoW(t *testing.T) {
+	t.Parallel()
+
+	persistedFormatID := uuid.New()
+	legacyFormatID := uuid.New()
+	supportedID := uuid.New()
+	rows := []database.ResyncCandidateLogGroupsRow{
+		{
+			ID:            persistedFormatID,
+			ParserVersion: "v0.0.1",
+			InstanceName:  "SuperWoW persisted format",
+			Format: database.NullLogFormat{
+				LogFormat: database.LogFormat112aSuperwowAddon,
+				Valid:     true,
+			},
+		},
+		{
+			ID:            legacyFormatID,
+			ParserVersion: "v0.0.1",
+			InstanceName:  "SuperWoW legacy log type",
+			LogType:       database.LogTypeV1,
+		},
+		makeRow(supportedID, "v0.0.1", "Supported"),
+	}
+
+	groups := resynccandidate.FilterAndGroup(rows, "v0.0.100", 100)
+	require.Len(t, groups, 1)
+	require.Equal(t, supportedID, groups[0].ID)
+}
+
 func TestFilterAndGroup_EmptyInput(t *testing.T) {
 	t.Parallel()
 

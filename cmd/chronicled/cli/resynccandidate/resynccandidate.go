@@ -17,6 +17,13 @@ type Group struct {
 	RealmIDs      []uuid.UUID // Distinct realm IDs across instances.
 }
 
+func logFormat(row database.ResyncCandidateLogGroupsRow) database.LogFormat {
+	if row.Format.Valid {
+		return row.Format.LogFormat
+	}
+	return row.LogType.Format()
+}
+
 // FilterAndGroup takes raw candidate rows from the database, filters them
 // by semver-encoded target version comparison, deduplicates by log group ID,
 // and applies a limit on the number of distinct log groups returned.
@@ -34,7 +41,12 @@ func FilterAndGroup(rows []database.ResyncCandidateLogGroupsRow, targetVersion s
 	var ordered []uuid.UUID
 
 	// First select distinct groups where at least one instance is outdated.
+	// SuperWoW groups are intentionally excluded; the resync worker must never
+	// delete or reparse their existing instances.
 	for _, r := range rows {
+		if logFormat(r) == database.LogFormat112aSuperwowAddon {
+			continue
+		}
 		if semverenc.Encode(r.ParserVersion) >= targetEnc {
 			continue
 		}
@@ -53,6 +65,9 @@ func FilterAndGroup(rows []database.ResyncCandidateLogGroupsRow, targetVersion s
 	// cover datasets used by instances that were already on the target version too.
 	realmSeen := make(map[uuid.UUID]map[uuid.UUID]bool, len(seen))
 	for _, r := range rows {
+		if logFormat(r) == database.LogFormat112aSuperwowAddon {
+			continue
+		}
 		g, ok := seen[r.ID]
 		if !ok {
 			continue

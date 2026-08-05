@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"github.com/Emyrk/chronicle/chronicle/riverqueue/riverconst"
+	"github.com/Emyrk/chronicle/database"
 	"github.com/Emyrk/chronicle/internal/services/servicetenant"
 	"github.com/google/uuid"
 	"github.com/riverqueue/river"
@@ -51,11 +52,51 @@ func (c *Chronicle) NewWorkerResync() *WorkerResync {
 	return &WorkerResync{parent: c}
 }
 
+func validateResyncRawFiles(
+	ctx context.Context,
+	files []database.LogFile,
+	expectedFiles int,
+	load func(context.Context, database.LogFile) ([]byte, error),
+) error {
+	if len(files) != expectedFiles {
+		return fmt.Errorf("validate raw log files: expected %d files, found %d", expectedFiles, len(files))
+	}
+	for _, file := range files {
+		if _, err := load(ctx, file); err != nil {
+			return fmt.Errorf("validate raw log file %s: %w", file.ID, err)
+		}
+	}
+	return nil
+}
+
 func (w *WorkerResync) Work(ctx context.Context, job *river.Job[ArgsResync]) error {
 	logGroupID := job.Args.LogGroupID
 	ctx = servicetenant.AdminBypass(ctx)
 
-	// Delete previously parsed data so the parse worker can re-insert cleanly.
+	parseWorker := &WorkerLogParse{parent: w.parent}
+	logGroup, err := w.parent.Zed.GetWoWLogGroupByID(ctx, logGroupID)
+	if err != nil {
+		return fmt.Errorf("fetch log group for raw-file validation: %w", err)
+	}
+	logFormat := logGroup.WoWLogGroup.LogType.Format()
+	if logGroup.WoWLogGroup.Format.Valid {
+		logFormat = logGroup.WoWLogGroup.Format.LogFormat
+	}
+	if logFormat == database.LogFormat112aSuperwowAddon {
+		w.parent.logger.Info("skipping SuperWoW log group during resync", "log_group_id", logGroupID)
+		return nil
+	}
+	files, err := w.parent.Zed.GetWoWLogFilesByGroupID(ctx, logGroupID)
+	if err != nil {
+		return fmt.Errorf("fetch raw log files for validation: %w", err)
+	}
+	if err := validateResyncRawFiles(ctx, files, 1, parseWorker.loadFileBytes); err != nil {
+		return err
+	}
+
+	// Only delete parsed data after every raw file has been downloaded and
+	// decompressed successfully. The parse worker downloads them again, but this
+	// preflight ensures a missing or corrupt object cannot destroy the old parse.
 	if err := w.parent.Zed.DeleteAllParsedLogsByGroupID(ctx, logGroupID); err != nil {
 		return fmt.Errorf("delete parsed logs: %w", err)
 	}
@@ -64,7 +105,6 @@ func (w *WorkerResync) Work(ctx context.Context, job *river.Job[ArgsResync]) err
 	// river.Job[ArgsLogParse] wrapping the real job row so RecordOutput and
 	// other River context functions work correctly through the real River
 	// context carried in ctx.
-	parseWorker := &WorkerLogParse{parent: w.parent}
 	parseJob := &river.Job[ArgsLogParse]{
 		JobRow: job.JobRow,
 		Args:   ArgsLogParse{LogID: logGroupID},
