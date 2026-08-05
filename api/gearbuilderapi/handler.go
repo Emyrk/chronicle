@@ -58,11 +58,13 @@ func New(zed *authz.Authz, auth *chronauth.Service) *Handler {
 func (h *Handler) Routes() http.Handler {
 	r := chi.NewRouter()
 
-	// Public with optional auth: view shared gear lists (owners can also
-	// fetch their own private lists here).
+	// Public with optional auth: view shared gear lists and their
+	// published revisions (owners can also reach their private lists).
 	r.Group(func(r chi.Router) {
 		r.Use(h.auth.Authenticated(true))
 		r.Get("/lists/shared/{listID}", h.GetSharedGearList)
+		r.Get("/lists/{listID}/revisions", h.ListGearListRevisions)
+		r.Get("/lists/{listID}/revisions/{revNumber}", h.GetGearListRevision)
 	})
 
 	// Public: browse public gear lists.
@@ -80,6 +82,10 @@ func (h *Handler) Routes() http.Handler {
 		r.Post("/lists", h.CreateGearList)
 		r.Put("/lists/{listID}", h.UpdateGearList)
 		r.Delete("/lists/{listID}", h.DeleteGearList)
+
+		// Revisions and forks.
+		r.Post("/lists/{listID}/revisions", h.PublishGearListRevision)
+		r.Post("/lists/{listID}/fork", h.ForkGearList)
 
 		// Stat weights CRUD.
 		r.Get("/stat-weights", h.ListMyStatWeights)
@@ -734,6 +740,20 @@ func gearListToSDK(l database.GearList) chroniclesdk.GearList {
 		Payload:     l.Payload,
 		CreatedAt:   l.CreatedAt.Time,
 		UpdatedAt:   l.UpdatedAt.Time,
+		ForkedFromListID: func() *uuid.UUID {
+			if l.ForkedFromListID.Valid {
+				id := l.ForkedFromListID.UUID
+				return &id
+			}
+			return nil
+		}(),
+		ForkedFromRevNumber: func() *int32 {
+			if l.ForkedFromRevNumber.Valid {
+				n := l.ForkedFromRevNumber.Int32
+				return &n
+			}
+			return nil
+		}(),
 	}
 }
 

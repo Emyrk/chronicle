@@ -4,6 +4,8 @@ import type {
   CreateGearStatWeightPinRequest,
   CreateGearStatWeightRequest,
   GearList,
+  GearListRevision,
+  GearListRevisionSummary,
   GearStatWeight,
   GearStatWeightPin,
   UpdateGearListRequest,
@@ -104,6 +106,73 @@ export function useDeleteGearList() {
         credentials: "include",
       });
       if (!res.ok) throw gearAPIError("Failed to delete gear list", await res.json().catch(() => null));
+    },
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["gear-lists"] }),
+  });
+}
+
+// ─── Revisions & Forks ───────────────────────────────────────
+
+export function useGearListRevisions(listID: string | undefined) {
+  return useQuery({
+    queryKey: ["gear-list-revisions", listID],
+    queryFn: async (): Promise<GearListRevisionSummary[]> => {
+      const res = await fetch(`${BASE}/lists/${listID}/revisions`, { credentials: "include" });
+      if (!res.ok) throw gearAPIError("Failed to fetch revisions", await res.json().catch(() => null));
+      return res.json();
+    },
+    enabled: !!listID,
+  });
+}
+
+export function useGearListRevision(listID: string | undefined, revNumber: number | null) {
+  return useQuery({
+    queryKey: ["gear-list-revision", listID, revNumber],
+    queryFn: async (): Promise<GearListRevision> => {
+      const res = await fetch(`${BASE}/lists/${listID}/revisions/${revNumber}`, {
+        credentials: "include",
+      });
+      if (!res.ok) throw gearAPIError("Failed to fetch revision", await res.json().catch(() => null));
+      return res.json();
+    },
+    enabled: !!listID && revNumber != null && revNumber > 0,
+    staleTime: Infinity, // published revisions are immutable
+  });
+}
+
+export function usePublishGearList() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async (listID: string): Promise<GearListRevision> => {
+      const res = await fetch(`${BASE}/lists/${encodeURIComponent(listID)}/revisions`, {
+        method: "POST",
+        credentials: "include",
+      });
+      if (!res.ok) throw gearAPIError("Failed to publish revision", await res.json().catch(() => null));
+      return res.json();
+    },
+    onSuccess: (rev) => qc.invalidateQueries({ queryKey: ["gear-list-revisions", rev.list_id] }),
+  });
+}
+
+export function useForkGearList() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async ({
+      listID,
+      revNumber,
+    }: {
+      listID: string;
+      revNumber?: number;
+    }): Promise<GearList> => {
+      const res = await fetch(`${BASE}/lists/${encodeURIComponent(listID)}/fork`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(revNumber != null ? { rev_number: revNumber } : {}),
+        credentials: "include",
+      });
+      if (!res.ok) throw gearAPIError("Failed to fork gear list", await res.json().catch(() => null));
+      return res.json();
     },
     onSuccess: () => qc.invalidateQueries({ queryKey: ["gear-lists"] }),
   });

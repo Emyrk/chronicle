@@ -164,6 +164,7 @@ type sqlcQuerier interface {
 	GetFullGuildPage(ctx context.Context, guildID uuid.UUID) (GetFullGuildPageRow, error)
 	GetGamePlayerByGUID(ctx context.Context, arg GetGamePlayerByGUIDParams) (GetGamePlayerByGUIDRow, error)
 	GetGearListByID(ctx context.Context, id uuid.UUID) (GearList, error)
+	GetGearListRevision(ctx context.Context, arg GetGearListRevisionParams) (GearListRevision, error)
 	GetGearStatWeightByID(ctx context.Context, id uuid.UUID) (GearStatWeight, error)
 	GetGuildByID(ctx context.Context, id uuid.UUID) (GetGuildByIDRow, error)
 	GetGuildJoinRequestByUser(ctx context.Context, arg GetGuildJoinRequestByUserParams) (GuildJoinRequest, error)
@@ -487,6 +488,8 @@ type sqlcQuerier interface {
 	ListExternalAPICharacterLogs(ctx context.Context, arg ListExternalAPICharacterLogsParams) ([]ListExternalAPICharacterLogsRow, error)
 	ListExternalAPIRealms(ctx context.Context, server string) ([]ListExternalAPIRealmsRow, error)
 	ListExternalAPIServers(ctx context.Context) ([]ListExternalAPIServersRow, error)
+	// Summaries only; payloads are fetched per revision.
+	ListGearListRevisions(ctx context.Context, listID uuid.UUID) ([]ListGearListRevisionsRow, error)
 	ListGearListsByUser(ctx context.Context, arg ListGearListsByUserParams) ([]GearList, error)
 	ListGearStatWeightPins(ctx context.Context, arg ListGearStatWeightPinsParams) ([]ListGearStatWeightPinsRow, error)
 	ListGearStatWeightsByUser(ctx context.Context, arg ListGearStatWeightsByUserParams) ([]GearStatWeight, error)
@@ -556,6 +559,13 @@ type sqlcQuerier interface {
 	// Removes summary cards whose instance/difficulty/player-count combination no
 	// longer has any ranking rows visible to the current tenant context.
 	PruneStaleRankingsInstanceSummaries(ctx context.Context, tenantID uuid.UUID) (int64, error)
+	// ============================================================
+	// Gear List Revisions (immutable published snapshots)
+	// ============================================================
+	// Snapshots the current list state as the next revision number,
+	// atomically. Only the owner's tenant-scoped list qualifies; concurrent
+	// publishes collide on the (list_id, rev_number) unique constraint.
+	PublishGearListRevision(ctx context.Context, arg PublishGearListRevisionParams) (GearListRevision, error)
 	// Transition a pending snapshot to published. Idempotent on already-published.
 	PublishRankingSnapshot(ctx context.Context, id uuid.UUID) (RankingSnapshot, error)
 	// Transition a pending time-parse snapshot to published. Idempotent on already-published.

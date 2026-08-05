@@ -1,8 +1,8 @@
 import { useMemo, useState } from "react";
-import { Link, useParams } from "react-router-dom";
+import { Link, useParams, useSearchParams } from "react-router-dom";
 import { ArrowLeft, Eye, EyeOff, Link2, Save } from "lucide-react";
 import { useSession } from "@/api/queries";
-import { useSharedGearList } from "@/api/gearBuilderQueries";
+import { useGearListRevision, useSharedGearList } from "@/api/gearBuilderQueries";
 import { Button } from "@/components/ui/button";
 import type { GearList, ItemSearchResult } from "@/api/typesGenerated";
 import { getClassColorVar } from "@/pages/ArmoryPage/types";
@@ -36,6 +36,7 @@ import { AlternatesEditor } from "./AlternatesEditor";
 import { SetSummaryBar } from "./SetSummaryBar";
 import { StagesBar } from "./StagesBar";
 import { ProgressionMatrix } from "./ProgressionMatrix";
+import { RevisionControls } from "./RevisionControls";
 
 const VISIBILITY_ICON = { public: Eye, unlisted: Link2, private: EyeOff } as const;
 
@@ -143,7 +144,17 @@ function ViewToggle({
   );
 }
 
-function ReadOnlyView({ list, isOwner }: { list: GearList; isOwner: boolean }) {
+function ReadOnlyView({
+  list,
+  isOwner,
+  controls,
+  revisionNote,
+}: {
+  list: GearList;
+  isOwner: boolean;
+  controls?: React.ReactNode;
+  revisionNote?: string;
+}) {
   const payload = useMemo(() => parsePayload(list.payload), [list.payload]);
   const [stageIndex, setStageIndex] = useState(0);
   const [weightSel, setWeightSel] = useState<WeightSelection | null>(null);
@@ -158,6 +169,12 @@ function ReadOnlyView({ list, isOwner }: { list: GearList; isOwner: boolean }) {
   return (
     <div className="max-w-6xl mx-auto py-6 px-4 space-y-4">
       <ListHeader list={list} isOwner={isOwner} />
+      {controls}
+      {revisionNote && (
+        <p className="rounded border border-blue-500/30 bg-blue-500/5 px-3 py-2 text-xs text-blue-200">
+          {revisionNote}
+        </p>
+      )}
       {list.description && <p className="text-sm text-zinc-400">{list.description}</p>}
       {payload.stages.length === 0 ? (
         <p className="text-sm text-zinc-500">This list has no stages yet.</p>
@@ -211,7 +228,13 @@ function ReadOnlyView({ list, isOwner }: { list: GearList; isOwner: boolean }) {
   );
 }
 
-function EditorView({ list }: { list: GearList }) {
+function EditorView({
+  list,
+  onViewRev,
+}: {
+  list: GearList;
+  onViewRev: (rev: number | null) => void;
+}) {
   const editor = useGearListEditor(list);
   const [stageIndex, setStageIndex] = useState(0);
   const [selectedSlot, setSelectedSlot] = useState<number | null>(null);
@@ -244,6 +267,13 @@ function EditorView({ list }: { list: GearList }) {
             </Button>
           </div>
         }
+      />
+      <RevisionControls
+        list={list}
+        isOwner
+        viewedRev={null}
+        onViewRev={onViewRev}
+        dirty={editor.dirty}
       />
       {list.description && <p className="text-sm text-zinc-400">{list.description}</p>}
 
@@ -340,7 +370,21 @@ export function GearListPage() {
   const { data: session } = useSession();
   const list = useSharedGearList(listID);
 
-  if (list.isLoading) {
+  const [searchParams, setSearchParams] = useSearchParams();
+  const revParam = parseInt(searchParams.get("rev") ?? "", 10);
+  const viewedRev = Number.isInteger(revParam) && revParam > 0 ? revParam : null;
+  const revision = useGearListRevision(listID, viewedRev);
+  const setViewedRev = (rev: number | null) => {
+    const next = new URLSearchParams(searchParams);
+    if (rev == null) {
+      next.delete("rev");
+    } else {
+      next.set("rev", String(rev));
+    }
+    setSearchParams(next, { replace: true });
+  };
+
+  if (list.isLoading || (viewedRev != null && revision.isLoading)) {
     return <div className="p-8 text-center text-zinc-400">Loading gear list…</div>;
   }
   if (list.isError || !list.data) {
@@ -355,9 +399,46 @@ export function GearListPage() {
   }
 
   const isOwner = !!session && session.user_id === list.data.user_id;
+
+  if (viewedRev != null) {
+    // A published revision is immutable; everyone (owner included) gets
+    // the read-only view of its snapshotted content.
+    const effective: GearList = revision.data
+      ? {
+          ...list.data,
+          title: revision.data.title,
+          description: revision.data.description,
+          class_id: revision.data.class_id,
+          spec_name: revision.data.spec_name,
+          payload: revision.data.payload,
+        }
+      : list.data;
+    return (
+      <ReadOnlyView
+        key={`${list.data.id}-rev-${viewedRev}`}
+        list={effective}
+        isOwner={isOwner}
+        controls={
+          <RevisionControls list={list.data} isOwner={isOwner} viewedRev={viewedRev} onViewRev={setViewedRev} />
+        }
+        revisionNote={
+          revision.isError
+            ? `Revision ${viewedRev} was not found — showing the live list instead.`
+            : `Viewing published revision ${viewedRev} · ${revision.data ? new Date(revision.data.published_at).toLocaleDateString() : ""} · immutable`
+        }
+      />
+    );
+  }
+
   return isOwner ? (
-    <EditorView key={list.data.id} list={list.data} />
+    <EditorView key={list.data.id} list={list.data} onViewRev={setViewedRev} />
   ) : (
-    <ReadOnlyView list={list.data} isOwner={false} />
+    <ReadOnlyView
+      list={list.data}
+      isOwner={false}
+      controls={
+        <RevisionControls list={list.data} isOwner={false} viewedRev={null} onViewRev={setViewedRev} />
+      }
+    />
   );
 }

@@ -1003,6 +1003,18 @@ export interface ExternalVerificationPublic {
     readonly callout?: string;
 }
 
+// From chroniclesdk/gear_builder.go
+/**
+ * ForkGearListRequest is the request body for forking a gear list.
+ */
+export interface ForkGearListRequest {
+    /**
+     * RevNumber selects a published revision to fork; omitted forks the
+     * live draft state.
+     */
+    readonly rev_number?: number;
+}
+
 // From chroniclesdk/log.go
 export type GUIDString = string;
 
@@ -1022,6 +1034,12 @@ export interface GearList {
     readonly payload: Record<string, string>;
     readonly created_at: string;
     readonly updated_at: string;
+    /**
+     * Fork lineage; nil when the list was not forked. A nil revision
+     * number on a forked list means it was forked from the live draft.
+     */
+    readonly forked_from_list_id?: string;
+    readonly forked_from_rev_number?: number;
 }
 
 // From chroniclesdk/gear_builder.go
@@ -1041,6 +1059,36 @@ export interface GearListAlternate {
 export interface GearListPayload {
     readonly version: number;
     readonly stages: readonly GearListStage[];
+}
+
+// From chroniclesdk/gear_builder.go
+/**
+ * GearListRevision is an immutable published snapshot of a gear list.
+ */
+export interface GearListRevision {
+    readonly id: string;
+    readonly list_id: string;
+    readonly rev_number: number;
+    readonly title: string;
+    readonly description: string;
+    readonly class_id: number;
+    readonly spec_name: string;
+    readonly payload: Record<string, string>;
+    readonly published_by: string;
+    readonly published_at: string;
+}
+
+// From chroniclesdk/gear_builder.go
+/**
+ * GearListRevisionSummary is a revision without its payload, for pickers.
+ */
+export interface GearListRevisionSummary {
+    readonly id: string;
+    readonly list_id: string;
+    readonly rev_number: number;
+    readonly title: string;
+    readonly published_by: string;
+    readonly published_at: string;
 }
 
 // From chroniclesdk/gear_builder.go

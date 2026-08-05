@@ -1,10 +1,50 @@
 package gearbuilderapi
 
 import (
+	"context"
 	"encoding/json"
 	"strings"
 	"testing"
+
+	"github.com/google/uuid"
+
+	"github.com/Emyrk/chronicle/api/chronauth"
+	"github.com/Emyrk/chronicle/api/chronauth/claims"
+	"github.com/Emyrk/chronicle/database"
 )
+
+func TestCanViewList(t *testing.T) {
+	t.Parallel()
+
+	owner := uuid.New()
+	stranger := uuid.New()
+	withClaims := func(userID uuid.UUID) context.Context {
+		return chronauth.WithClaims(context.Background(), &claims.Claims{Subject: userID})
+	}
+
+	tests := []struct {
+		name       string
+		visibility string
+		ctx        context.Context
+		want       bool
+	}{
+		{"public anonymous", "public", context.Background(), true},
+		{"unlisted anonymous", "unlisted", context.Background(), true},
+		{"private anonymous", "private", context.Background(), false},
+		{"private owner", "private", withClaims(owner), true},
+		{"private stranger", "private", withClaims(stranger), false},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			list := database.GearList{UserID: owner, Visibility: tt.visibility}
+			if got := canViewList(list, tt.ctx); got != tt.want {
+				t.Errorf("canViewList(%s) = %v, want %v", tt.name, got, tt.want)
+			}
+		})
+	}
+}
 
 func TestValidateGearListTitle(t *testing.T) {
 	t.Parallel()
