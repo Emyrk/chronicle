@@ -54,8 +54,11 @@ func (s *Service) registerRoutes() {
 			queryParameter("page_size", "Results per page, from 1 to 20", false, "integer", 20),
 		),
 		Responses: okResponse(CharacterLogsResponse{
-			Character:  Character{Name: "Example", Server: Server{Name: "Example Server"}, Realm: Realm{Name: "Example Realm"}},
-			Logs:       []CharacterLog{{Name: "Molten Core", BossKills: 10}},
+			Character: Character{Name: "Example", Server: Server{Name: "Example Server"}, Realm: Realm{Name: "Example Realm"}},
+			Logs: []CharacterLog{{
+				Name: "Molten Core", Difficulty: "Normal", MaxPlayers: 40, BossKills: 10,
+				Performance: []CharacterEncounterPerformance{{EncounterName: "Ragnaros", DPSParse: int32Pointer(92)}},
+			}},
 			Pagination: Pagination{Page: 1, PageSize: 20},
 		}),
 	}, s.listCharacterLogs)
@@ -92,4 +95,8 @@ func queryParameter(name, description string, required bool, kind string, exampl
 		Name: name, In: "query", Description: description, Required: required,
 		Schema: OpenAPISchema{Type: kind}, Example: example,
 	}
+}
+
+func int32Pointer(value int32) *int32 {
+	return &value
 }

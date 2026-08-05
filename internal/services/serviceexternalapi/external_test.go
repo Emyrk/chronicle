@@ -82,10 +82,11 @@ func TestListCharacterLogsPagination(t *testing.T) {
 	for i := range rows {
 		rows[i] = database.ListExternalAPICharacterLogsRow{
 			ID: uuid.New(), Name: "Molten Core", RealmID: realmID,
-			StartedAt:  pgtype.Timestamptz{Time: now, Valid: true},
-			EndedAt:    pgtype.Timestamptz{Time: now, Valid: true},
-			UploadedAt: pgtype.Timestamptz{Time: now, Valid: true},
-			BestDps:    500, BestDpsParse: 95,
+			DifficultyName: "Normal", MaxPlayers: 40,
+			StartedAt:       pgtype.Timestamptz{Time: now, Valid: true},
+			EndedAt:         pgtype.Timestamptz{Time: now, Valid: true},
+			UploadedAt:      pgtype.Timestamptz{Time: now, Valid: true},
+			PerformanceJson: `[{"encounter_name":"Ragnaros","dps_parse":95,"hps_parse":42}]`,
 		}
 	}
 	store := &fakeExternalAPIStore{
@@ -119,8 +120,25 @@ func TestListCharacterLogsPagination(t *testing.T) {
 	require.Equal(t, int32(21), store.logsParams.ResultLimit)
 	require.Equal(t, tenantID, store.logsParams.TenantID)
 	require.Equal(t, playerGUID, store.logsParams.PlayerGuid)
-	require.NotNil(t, response.Logs[0].Performance)
-	require.Equal(t, int32(95), *response.Logs[0].Performance.BestDPSParse)
+	require.Equal(t, "Normal", response.Logs[0].Difficulty)
+	require.Equal(t, int32(40), response.Logs[0].MaxPlayers)
+	require.Equal(t, []CharacterEncounterPerformance{{
+		EncounterName: "Ragnaros", DPSParse: int32Pointer(95), HPSParse: int32Pointer(42),
+	}}, response.Logs[0].Performance)
+}
+
+func TestCharacterLogOmitsPerformanceWithoutParses(t *testing.T) {
+	t.Parallel()
+
+	log, err := characterLogFromRow(database.ListExternalAPICharacterLogsRow{
+		ID: uuid.New(), Name: "Blackwing Lair", PerformanceJson: "[]",
+	})
+	require.NoError(t, err)
+	require.Nil(t, log.Performance)
+
+	encoded, err := json.Marshal(log)
+	require.NoError(t, err)
+	require.NotContains(t, string(encoded), `"performance"`)
 }
 
 func TestCharacterLogsRejectsPageSizeAboveMaximum(t *testing.T) {

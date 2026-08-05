@@ -118,37 +118,37 @@ SELECT
     d.started_at,
     d.ended_at,
     d.uploaded_at,
-    COALESCE(metrics.boss_kills, 0)::int AS boss_kills,
-    COALESCE(metrics.best_dps, 0)::float8 AS best_dps,
-    COALESCE(metrics.best_hps, 0)::float8 AS best_hps,
-    COALESCE(metrics.avg_ilvl, 0)::smallint AS avg_ilvl,
-    COALESCE(metrics.player_spec, '')::text AS player_spec,
-    COALESCE(metrics.player_role, '')::text AS player_role,
-    COALESCE(parses.best_dps_parse, 0)::smallint AS best_dps_parse,
-    COALESCE(parses.best_hps_parse, 0)::smallint AS best_hps_parse
+    COALESCE((
+        SELECT COUNT(*)
+        FROM log_instance_encounters lie
+        WHERE lie.instance_id = d.id
+          AND lie.boss = true
+          AND lie.kill_type IN ('clean', 'partial')
+    ), 0)::int AS boss_kills,
+    COALESCE(parses.performance, '[]'::jsonb)::text AS performance_json
 FROM deduped d
 LEFT JOIN guilds g ON g.id = d.guild_id
 LEFT JOIN LATERAL (
-    SELECT
-        COUNT(DISTINCT edr.encounter_id) FILTER (WHERE edr.encounter_id IS NOT NULL) AS boss_kills,
-        MAX(edr.dps) FILTER (WHERE edr.encounter_id IS NOT NULL AND edr.dps > 0) AS best_dps,
-        MAX(edr.hps) FILTER (WHERE edr.encounter_id IS NOT NULL AND edr.hps > 0) AS best_hps,
-        MAX(edr.avg_ilvl) FILTER (WHERE edr.encounter_id IS NOT NULL) AS avg_ilvl,
-        (ARRAY_AGG(edr.player_spec ORDER BY edr.killed_at DESC) FILTER (WHERE edr.encounter_id IS NOT NULL))[1] AS player_spec,
-        (ARRAY_AGG(edr.player_role ORDER BY edr.killed_at DESC) FILTER (WHERE edr.encounter_id IS NOT NULL))[1] AS player_role
-    FROM encounter_dps_rankings edr
-    JOIN log_instances metrics_instance ON metrics_instance.id = edr.instance_id
-    WHERE COALESCE(metrics_instance.duplicate_group_id, metrics_instance.id) = d.run_id
-      AND edr.player_guid = (@player_guid::wow_guid)::text
-) metrics ON true
-LEFT JOIN LATERAL (
-    SELECT
-        MAX(psr.display_score) FILTER (WHERE psr.metric = 'dps' AND psr.status IN ('ok', 'low_confidence')) AS best_dps_parse,
-        MAX(psr.display_score) FILTER (WHERE psr.metric = 'hps' AND psr.status IN ('ok', 'low_confidence')) AS best_hps_parse
-    FROM parse_score_results psr
-    WHERE psr.run_id = d.run_id
-      AND psr.player_guid = (@player_guid::wow_guid)::text
-      AND psr.tenant_id = @tenant_id
+    SELECT jsonb_agg(
+        jsonb_build_object(
+            'encounter_name', encounter_scores.encounter_name,
+            'dps_parse', encounter_scores.dps_parse,
+            'hps_parse', encounter_scores.hps_parse
+        )
+        ORDER BY encounter_scores.encounter_name
+    ) AS performance
+    FROM (
+        SELECT
+            psr.encounter_name,
+            MAX(psr.display_score) FILTER (WHERE psr.metric = 'dps') AS dps_parse,
+            MAX(psr.display_score) FILTER (WHERE psr.metric = 'hps') AS hps_parse
+        FROM parse_score_results psr
+        WHERE psr.run_id = d.run_id
+          AND psr.player_guid = (@player_guid::wow_guid)::text
+          AND psr.tenant_id = @tenant_id
+          AND psr.status IN ('ok', 'low_confidence')
+        GROUP BY psr.encounter_name
+    ) encounter_scores
 ) parses ON true
 ORDER BY d.started_at DESC, d.id DESC
 LIMIT @result_limit

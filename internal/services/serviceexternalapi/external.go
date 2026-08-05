@@ -1,6 +1,7 @@
 package serviceexternalapi
 
 import (
+	"encoding/json"
 	"errors"
 	"net/http"
 	"strconv"
@@ -65,28 +66,24 @@ type Character struct {
 	UpdatedFromInstance *uuid.UUID              `json:"updated_from_instance,omitempty"`
 }
 
-type CharacterPerformance struct {
-	Spec             string   `json:"spec,omitempty"`
-	Role             string   `json:"role,omitempty"`
-	AverageItemLevel *int32   `json:"average_item_level,omitempty"`
-	BestDPS          *float64 `json:"best_dps,omitempty"`
-	BestHPS          *float64 `json:"best_hps,omitempty"`
-	BestDPSParse     *int32   `json:"best_dps_parse,omitempty"`
-	BestHPSParse     *int32   `json:"best_hps_parse,omitempty"`
+type CharacterEncounterPerformance struct {
+	EncounterName string `json:"encounter_name"`
+	DPSParse      *int32 `json:"dps_parse,omitempty"`
+	HPSParse      *int32 `json:"hps_parse,omitempty"`
 }
 
 type CharacterLog struct {
-	ID          uuid.UUID             `json:"id"`
-	Slug        string                `json:"slug,omitempty"`
-	Name        string                `json:"name"`
-	Guild       *Guild                `json:"guild,omitempty"`
-	Difficulty  string                `json:"difficulty,omitempty"`
-	MaxPlayers  int32                 `json:"max_players,omitempty"`
-	BossKills   int32                 `json:"boss_kills"`
-	StartedAt   time.Time             `json:"started_at"`
-	EndedAt     time.Time             `json:"ended_at"`
-	UploadedAt  time.Time             `json:"uploaded_at"`
-	Performance *CharacterPerformance `json:"performance,omitempty"`
+	ID          uuid.UUID                       `json:"id"`
+	Slug        string                          `json:"slug,omitempty"`
+	Name        string                          `json:"name"`
+	Guild       *Guild                          `json:"guild,omitempty"`
+	Difficulty  string                          `json:"difficulty,omitempty"`
+	MaxPlayers  int32                           `json:"max_players,omitempty"`
+	BossKills   int32                           `json:"boss_kills"`
+	StartedAt   time.Time                       `json:"started_at"`
+	EndedAt     time.Time                       `json:"ended_at"`
+	UploadedAt  time.Time                       `json:"uploaded_at"`
+	Performance []CharacterEncounterPerformance `json:"performance,omitempty"`
 }
 
 type Pagination struct {
@@ -205,7 +202,12 @@ func (s *Service) listCharacterLogs(w http.ResponseWriter, r *http.Request) {
 	}
 	logs := make([]CharacterLog, 0, len(rows))
 	for _, row := range rows {
-		logs = append(logs, characterLogFromRow(row))
+		log, err := characterLogFromRow(row)
+		if err != nil {
+			httpapi.InternalServerError(w, err)
+			return
+		}
+		logs = append(logs, log)
 	}
 	httpapi.Write(r.Context(), w, http.StatusOK, CharacterLogsResponse{
 		Character:  character,
@@ -276,42 +278,26 @@ func characterFromRows(realm database.ResolveExternalAPIRealmRow, player databas
 	}
 }
 
-func characterLogFromRow(row database.ListExternalAPICharacterLogsRow) CharacterLog {
+func characterLogFromRow(row database.ListExternalAPICharacterLogsRow) (CharacterLog, error) {
 	var guildInfo *Guild
 	if row.GuildID.Valid {
 		guildInfo = &Guild{ID: row.GuildID.UUID, Name: row.GuildName}
 	}
-	performance := CharacterPerformance{Spec: row.PlayerSpec, Role: row.PlayerRole}
-	if row.AvgIlvl > 0 {
-		value := int32(row.AvgIlvl)
-		performance.AverageItemLevel = &value
+
+	var performance []CharacterEncounterPerformance
+	if err := json.Unmarshal([]byte(row.PerformanceJson), &performance); err != nil {
+		return CharacterLog{}, err
 	}
-	if row.BestDps > 0 {
-		value := row.BestDps
-		performance.BestDPS = &value
+	if len(performance) == 0 {
+		performance = nil
 	}
-	if row.BestHps > 0 {
-		value := row.BestHps
-		performance.BestHPS = &value
-	}
-	if row.BestDpsParse > 0 {
-		value := int32(row.BestDpsParse)
-		performance.BestDPSParse = &value
-	}
-	if row.BestHpsParse > 0 {
-		value := int32(row.BestHpsParse)
-		performance.BestHPSParse = &value
-	}
-	var performanceInfo *CharacterPerformance
-	if performance.Spec != "" || performance.Role != "" || performance.AverageItemLevel != nil || performance.BestDPS != nil || performance.BestHPS != nil || performance.BestDPSParse != nil || performance.BestHPSParse != nil {
-		performanceInfo = &performance
-	}
+
 	return CharacterLog{
 		ID: row.ID, Slug: row.HashedSlug.String, Name: row.Name, Guild: guildInfo,
 		Difficulty: row.DifficultyName, MaxPlayers: row.MaxPlayers, BossKills: row.BossKills,
 		StartedAt: row.StartedAt.Time, EndedAt: row.EndedAt.Time, UploadedAt: row.UploadedAt.Time,
-		Performance: performanceInfo,
-	}
+		Performance: performance,
+	}, nil
 }
 
 func serverFromRow(row database.ResolveExternalAPIServerRow) Server {
