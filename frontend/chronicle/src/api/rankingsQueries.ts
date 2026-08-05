@@ -17,12 +17,12 @@ import type {
 const RANKINGS_STALE_TIME = 5 * 60 * 1000; // 5 minutes
 
 class RankingsAPIError extends Error {
-  constructor(
-    message: string,
-    readonly status: number,
-  ) {
+  readonly status: number;
+
+  constructor(message: string, status: number) {
     super(message);
     this.name = "RankingsAPIError";
+    this.status = status;
   }
 }
 
