@@ -26,6 +26,10 @@ import ReadDeathLogVideo from "../../../frontend/chronicle/src/pages/Instance/Ev
 import DeathRecapExpandVideo from "../../../frontend/chronicle/src/pages/Instance/EventsPanels/Deaths/explain/videos/DeathRecapExpand.video";
 import FloatingRecapVideo from "../../../frontend/chronicle/src/pages/Instance/EventsPanels/Deaths/explain/videos/FloatingRecap.video";
 import HealthBarAnatomyVideo from "../../../frontend/chronicle/src/pages/Instance/EventsPanels/Deaths/explain/videos/HealthBarAnatomy.video";
+import AllActivityStreamsVideo from "../../../frontend/chronicle/src/pages/Instance/EventsPanels/AllActivity/explain/videos/Streams.video";
+import AllActivityQuickFiltersVideo from "../../../frontend/chronicle/src/pages/Instance/EventsPanels/AllActivity/explain/videos/QuickFilters.video";
+import AllActivityTimeFormatsVideo from "../../../frontend/chronicle/src/pages/Instance/EventsPanels/AllActivity/explain/videos/TimeFormats.video";
+import AllActivityAdvancedFiltersVideo from "../../../frontend/chronicle/src/pages/Instance/EventsPanels/AllActivity/explain/videos/AdvancedFilters.video";
 
 /**
  * Studio registration for the in-app explainer lesson compositions.
@@ -125,6 +129,12 @@ export const RemotionRoot: React.FC = () => {
         <Composition id="DeathRecapExpand" component={DeathRecapExpandVideo} durationInFrames={470} fps={30} width={1280} height={720} />
         <Composition id="FloatingRecap" component={FloatingRecapVideo} durationInFrames={620} fps={30} width={1280} height={720} />
         <Composition id="HealthBarAnatomy" component={HealthBarAnatomyVideo} durationInFrames={530} fps={30} width={1280} height={720} />
+      </Folder>
+      <Folder name="AllActivityLessons">
+        <Composition id="AllActivityStreams" component={AllActivityStreamsVideo} durationInFrames={520} fps={30} width={1280} height={720} />
+        <Composition id="AllActivityQuickFilters" component={AllActivityQuickFiltersVideo} durationInFrames={530} fps={30} width={1280} height={720} />
+        <Composition id="AllActivityTimeFormats" component={AllActivityTimeFormatsVideo} durationInFrames={470} fps={30} width={1280} height={720} />
+        <Composition id="AllActivityAdvancedFilters" component={AllActivityAdvancedFiltersVideo} durationInFrames={500} fps={30} width={1280} height={720} />
       </Folder>
     </>
   );

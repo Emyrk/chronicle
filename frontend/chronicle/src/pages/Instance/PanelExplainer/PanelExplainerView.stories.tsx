@@ -145,6 +145,26 @@ export const DeathLogHealthBarLesson: Story = {
   parameters: { routerEntries: ["/?lesson=health-bar"] },
 };
 
+export const AllActivityStreamsLesson: Story = {
+  args: { panelType: "all_activity" },
+  parameters: { routerEntries: ["/?lesson=streams"] },
+};
+
+export const AllActivityQuickFiltersLesson: Story = {
+  args: { panelType: "all_activity" },
+  parameters: { routerEntries: ["/?lesson=quick-filters"] },
+};
+
+export const AllActivityTimeFormatsLesson: Story = {
+  args: { panelType: "all_activity" },
+  parameters: { routerEntries: ["/?lesson=time-formats"] },
+};
+
+export const AllActivityFiltersLesson: Story = {
+  args: { panelType: "all_activity" },
+  parameters: { routerEntries: ["/?lesson=filters"] },
+};
+
 /** Deep-linked video lesson — exercises the lazy Remotion player. */
 export const PinBreakoutLesson: Story = {
   parameters: { routerEntries: ["/?lesson=pin-breakout"] },

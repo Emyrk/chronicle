@@ -714,7 +714,7 @@ function AllActivityContent({
   return (
     <div className="h-full min-h-0 flex flex-col">
       {/* Stream toggles and ability filter */}
-      <div className="flex items-center gap-2 mb-2 flex-wrap">
+      <div className="flex items-center gap-2 mb-2 flex-wrap" data-lesson-target="streams">
         <span className="text-xs text-muted-foreground">Streams:</span>
         <TooltipProvider delayDuration={200} skipDelayDuration={100}>
           {ALL_ACTIVITY_STREAMS.map((stream) => (
@@ -729,7 +729,7 @@ function AllActivityContent({
         </TooltipProvider>
         
         {/* Source filter input */}
-        <div className="flex items-center gap-1 ml-2">
+        <div className="flex items-center gap-1 ml-2" data-lesson-target="quick-filters">
           <Search className="h-3.5 w-3.5 text-muted-foreground" />
           <div className="relative">
             <input
@@ -844,6 +844,7 @@ function AllActivityContent({
               type="button"
               onClick={() => onToggleLocalTime?.()}
               className="cursor-pointer px-1.5 text-left transition-colors hover:text-foreground"
+              data-lesson-target="time-formats"
               title={useLocalTime ? "Click to show UTC time" : "Click to show local time"}
             >
               Time {useRelativeTime ? "" : useLocalTime ? "(local)" : "(UTC)"}
