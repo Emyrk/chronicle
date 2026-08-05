@@ -216,6 +216,14 @@ inside scroll areas (chart rows) need no special handling.
 - `react-refresh/only-export-components`: constants live in `animation.ts`, never in
   component files under `videos/`.
 - `<Sequence premountFor={fps}>` must NOT combine with `layout="none"` (type error).
+- When the cursor accompanies time-driven UI state (a scrubbed playhead, an
+  auto-scrolling list), a two-endpoint linear glide WILL desync from it. Probe the
+  moving element's stage position at ~6 sample times during live playback (see
+  FloatingRecap.video.tsx: shared-cursor line) and key the cursor through those
+  measured points with LINEAR interpolation — per-segment easing makes it lag
+  mid-segment.
+- Radix `Tooltip` in real components needs `TooltipProvider`: provided at app root in
+  production, but wrap demo harnesses and the Storybook decorator explicitly.
 - Shell `cd` drifts between Bash calls — always `cd` absolute paths per command.
 - Run `git` from the repo root (relative pathspecs break after a `cd frontend/chronicle`).
 - Remotion free tier applies while the team is ≤3 people; revisit licensing if that changes.
