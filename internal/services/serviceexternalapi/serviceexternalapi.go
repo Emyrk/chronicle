@@ -26,8 +26,9 @@ func OnExternalAPI() string {
 
 // Service owns Chronicle's public, unauthenticated API endpoints.
 type Service struct {
-	broker *services.Services
-	router chi.Router
+	broker  *services.Services
+	router  chi.Router
+	openapi OpenAPIDocument
 }
 
 func New(broker *services.Services) *Service {
@@ -48,7 +49,23 @@ func (s *Service) Start(_ context.Context) error {
 
 func (s *Service) setupRoutes() {
 	s.router = chi.NewRouter()
-	s.router.Get("/health", s.health)
+	s.openapi = newOpenAPIDocument()
+
+	s.register(http.MethodGet, "/health", OpenAPIOperation{
+		Summary:     "Check API health",
+		Description: "Returns whether Chronicle's external API is available.",
+		Responses: map[string]OpenAPIResponse{
+			"200": {
+				Description: "The external API is available.",
+				Content: map[string]OpenAPIMediaType{
+					"application/json": {
+						Example: HealthResponse{Status: "ok"},
+					},
+				},
+			},
+		},
+	}, s.health)
+	s.router.Get("/openapi.json", s.openAPISpec)
 }
 
 func (s *Service) Close(_ context.Context) error { return nil }
