@@ -44,7 +44,9 @@ export function ArmoryPage() {
     } else {
       next.set("tab", key);
     }
-    setSearchParams(next, { replace: true });
+    // Push a history entry so the browser back button returns to the
+    // previous tab (e.g. gear → back → overview).
+    setSearchParams(next);
   };
 
   if (isLoading) {
