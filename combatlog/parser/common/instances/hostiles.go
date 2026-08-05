@@ -843,11 +843,32 @@ func DeadminesHostiles(fl database.WoWFlavor) *identifier.Identifier {
 	return identifier.NewIdentifier(hostile)
 }
 
-func ShadowfangKeepHostiles() map[uint32]Identity {
+func ShadowfangKeepHostiles(fl database.WoWFlavor) *identifier.Identifier {
 	hostile := make(map[uint32]Identity)
 	LoadAdds(hostile, map[uint32]string{
-		3872: "Deathsworn Captain",
+		3851:  "Shadowfang Whitescalp",
+		3853:  "Shadowfang Moonwalker",
+		3854:  "Shadowfang Wolfguard",
+		3855:  "Shadowfang Darksoul",
+		3857:  "Shadowfang Glutton",
+		3861:  "Bleak Worg",
+		3862:  "Slavering Worg",
+		3864:  "Fel Steed",
+		3865:  "Shadow Charger",
+		3866:  "Vile Bat",
+		3868:  "Blood Seeker",
+		3872:  "Deathsworn Captain",
+		3875:  "Haunted Servitor",
+		3877:  "Wailing Guardsman",
+		4958:  "Haunting Spirit",
+		14682: "Sever",
 	})
+
+	// Non-combat and friendly units are registered so they do not appear in the
+	// unknown-unit report or participate in encounter detection.
+	hostile[2110] = Identity{Name: "Black Rat", Affiliation: types.AffiliationUnknown}
+	hostile[3850] = Identity{Name: "Sorcerer Ashcrombe", Affiliation: types.AffiliationFriendly}
+	hostile[10000] = Identity{Name: "Arugal", Affiliation: types.AffiliationUnknown}
 
 	LoadBosses(hostile, map[uint32]string{
 		3886: "Razorclaw the Butcher",
@@ -860,7 +881,15 @@ func ShadowfangKeepHostiles() map[uint32]Identity {
 		4279: "Odo the Blindwatcher",
 	})
 
-	return hostile
+	if fl.Has(database.FlavorNightmareOfUrsol) {
+		LoadAdds(hostile, map[uint32]string{
+			61969:  "Prelate Ironmane",
+			61970:  "Spectral Cleric",
+			912408: "Burning Blade Flamekin",
+		})
+	}
+
+	return identifier.NewIdentifier(hostile)
 }
 
 func EmeraldSanctumHostiles() map[uint32]Identity {

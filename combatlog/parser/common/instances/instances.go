@@ -29,7 +29,7 @@ var (
 		Name:      "Shadowfang Keep",
 		ZoneNames: []string{"shadowfang keep", "影牙城堡"},
 		MapIDs:    []uint32{33},
-		Hostiles:  FromMap(ShadowfangKeepHostiles()),
+		Hostiles:  ShadowfangKeepHostiles,
 	}
 
 	WailingCavernsFactory = &CommonFactory{
