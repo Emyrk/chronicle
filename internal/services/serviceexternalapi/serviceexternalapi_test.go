@@ -43,7 +43,7 @@ func TestOpenAPISpec(t *testing.T) {
 	require.NoError(t, json.NewDecoder(rec.Body).Decode(&document))
 	require.Equal(t, "3.1.0", document.OpenAPI)
 	require.Equal(t, "/api/external/v1", document.Servers[0].URL)
-	characterLogs, ok := document.Paths["/characters/{server}/{realm}/{character}/logs"]["get"]
+	characterLogs, ok := document.Paths["/characters/{server}/{realm}/{character}/instances"]["get"]
 	require.True(t, ok)
 	require.Len(t, characterLogs.Parameters, 5)
 	require.Equal(t, "page_size", characterLogs.Parameters[4].Name)

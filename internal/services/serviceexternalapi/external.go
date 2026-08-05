@@ -17,7 +17,7 @@ import (
 	"github.com/jackc/pgx/v5"
 )
 
-const maxCharacterLogsPageSize = 20
+const maxCharacterLogsPageSize = 50
 
 type Server struct {
 	ID          uuid.UUID `json:"id"`
@@ -175,7 +175,7 @@ func (s *Service) listCharacterLogs(w http.ResponseWriter, r *http.Request) {
 	pageSize := queryInt(r, "page_size", maxCharacterLogsPageSize)
 	if page < 1 || pageSize < 1 || pageSize > maxCharacterLogsPageSize {
 		httpapi.Write(r.Context(), w, http.StatusBadRequest, chroniclesdk.Response{
-			Message: "page must be at least 1 and page_size must be between 1 and 20",
+			Message: "page must be at least 1 and page_size must be between 1 and 50",
 		})
 		return
 	}

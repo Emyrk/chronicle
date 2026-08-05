@@ -1,6 +1,6 @@
 import { useState } from "react"
 import { useQuery } from "@tanstack/react-query"
-import { Braces, Check, Clipboard, ExternalLink, LoaderCircle, Play, Terminal } from "lucide-react"
+import { Braces, Check, ChevronDown, Clipboard, ExternalLink, LoaderCircle, Play, Terminal } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import {
@@ -41,6 +41,7 @@ function EndpointCard({ endpoint, server }: { endpoint: APIEndpoint; server: str
   )
   const [response, setResponse] = useState<APIResponse | null>(null)
   const [requestURL, setRequestURL] = useState("")
+  const [isExpanded, setIsExpanded] = useState(false)
   const [isRunning, setIsRunning] = useState(false)
   const [copied, setCopied] = useState(false)
 
@@ -85,97 +86,107 @@ function EndpointCard({ endpoint, server }: { endpoint: APIEndpoint; server: str
   }
 
   return (
-    <article className="overflow-hidden rounded-xl border border-white/10 bg-slate-950/70 shadow-2xl shadow-black/10">
-      <div className="border-b border-white/10 px-5 py-5 sm:px-6">
-        <div className="flex flex-wrap items-center gap-3">
-          <span className={`rounded-md border px-2.5 py-1 font-mono text-xs font-bold uppercase tracking-wider ${methodStyles[endpoint.method]}`}>
-            {endpoint.method}
+    <article className="overflow-hidden rounded-lg border border-white/10 bg-slate-950/70 shadow-lg shadow-black/10">
+      <button
+        type="button"
+        onClick={() => setIsExpanded((current) => !current)}
+        aria-expanded={isExpanded}
+        className="flex w-full items-center gap-3 px-4 py-3 text-left transition-colors hover:bg-white/[0.03] sm:px-5"
+      >
+        <span className={`shrink-0 rounded border px-2 py-0.5 font-mono text-[11px] font-bold uppercase tracking-wider ${methodStyles[endpoint.method]}`}>
+          {endpoint.method}
+        </span>
+        <code className="min-w-0 flex-1 truncate font-mono text-sm text-slate-100">{endpoint.path}</code>
+        <span className="hidden max-w-[40%] truncate text-sm text-slate-400 md:block">{endpoint.operation.summary}</span>
+        {parameters.length > 0 && (
+          <span className="hidden shrink-0 font-mono text-[10px] uppercase tracking-wider text-slate-600 sm:block">
+            {parameters.length} param{parameters.length === 1 ? "" : "s"}
           </span>
-          <code className="break-all font-mono text-sm text-slate-100 sm:text-base">{endpoint.path}</code>
-        </div>
-        <h2 className="mt-4 text-lg font-semibold text-white">{endpoint.operation.summary}</h2>
-        {endpoint.operation.description && (
-          <p className="mt-1 max-w-3xl text-sm leading-6 text-slate-400">{endpoint.operation.description}</p>
         )}
-      </div>
+        <ChevronDown className={`h-4 w-4 shrink-0 text-slate-500 transition-transform ${isExpanded ? "rotate-180" : ""}`} />
+      </button>
 
-      <div className="grid lg:grid-cols-[minmax(0,0.9fr)_minmax(0,1.1fr)]">
-        <div className="border-b border-white/10 p-5 sm:p-6 lg:border-b-0 lg:border-r">
-          <div className="mb-5 flex items-center justify-between gap-4">
-            <div>
-              <p className="font-mono text-[11px] uppercase tracking-[0.22em] text-cyan-300">Request builder</p>
-              <p className="mt-1 text-sm text-slate-500">Fill parameters, then run against the live API.</p>
-            </div>
+      {isExpanded && (
+        <div className="border-t border-white/10">
+          <div className="px-4 py-3 sm:px-5">
+            <h2 className="text-base font-semibold text-white">{endpoint.operation.summary}</h2>
+            {endpoint.operation.description && (
+              <p className="mt-1 max-w-3xl text-sm leading-5 text-slate-400">{endpoint.operation.description}</p>
+            )}
           </div>
 
-          {parameters.length > 0 ? (
-            <div className="space-y-4">
-              {parameters.map((parameter) => {
-                const key = parameterKey(parameter)
-                return (
-                  <label key={key} className="block space-y-2">
-                    <span className="flex items-center gap-2 text-sm font-medium text-slate-200">
-                      {parameter.name}
-                      <span className="font-mono text-[10px] uppercase tracking-wider text-slate-500">{parameter.in}</span>
-                      {parameter.required && <span className="text-rose-400">required</span>}
+          <div className="grid border-t border-white/10 lg:grid-cols-[minmax(0,0.9fr)_minmax(0,1.1fr)]">
+            <div className="border-b border-white/10 p-4 sm:p-5 lg:border-b-0 lg:border-r">
+              <p className="mb-3 font-mono text-[10px] uppercase tracking-[0.2em] text-cyan-300">Request</p>
+
+              {parameters.length > 0 ? (
+                <div className="grid gap-3 sm:grid-cols-2">
+                  {parameters.map((parameter) => {
+                    const key = parameterKey(parameter)
+                    return (
+                      <label key={key} className="block space-y-1.5">
+                        <span className="flex items-center gap-2 text-xs font-medium text-slate-200">
+                          {parameter.name}
+                          <span className="font-mono text-[9px] uppercase tracking-wider text-slate-500">{parameter.in}</span>
+                          {parameter.required && <span className="text-rose-400">required</span>}
+                        </span>
+                        <Input
+                          value={values[key] ?? ""}
+                          onChange={(event) => setValues((current) => ({ ...current, [key]: event.target.value }))}
+                          placeholder={parameter.description ?? `${parameter.schema.type} value`}
+                          title={parameter.description}
+                          className="h-9 border-white/10 bg-black/20 font-mono text-sm text-slate-100"
+                        />
+                      </label>
+                    )
+                  })}
+                </div>
+              ) : (
+                <p className="text-sm text-slate-500">No parameters required.</p>
+              )}
+
+              <div className="mt-4 flex flex-wrap gap-2">
+                <Button size="sm" onClick={runRequest} disabled={isRunning || missingRequired} className="bg-cyan-400 text-slate-950 hover:bg-cyan-300">
+                  {isRunning ? <LoaderCircle className="animate-spin" /> : <Play />}
+                  {isRunning ? "Running" : "Try it"}
+                </Button>
+                <Button size="sm" variant="outline" onClick={copyCurl} disabled={missingRequired} className="border-white/10 bg-transparent text-slate-300 hover:bg-white/5 hover:text-white">
+                  {copied ? <Check /> : <Clipboard />}
+                  {copied ? "Copied" : "Copy cURL"}
+                </Button>
+              </div>
+            </div>
+
+            <div className="min-w-0 bg-black/20 p-4 sm:p-5">
+              <div className="mb-3 flex items-center justify-between gap-3">
+                <div className="flex items-center gap-2 text-xs font-medium text-slate-300">
+                  <Terminal className="h-3.5 w-3.5 text-cyan-300" />
+                  Response
+                </div>
+                {response && (
+                  <div className="flex items-center gap-3 font-mono text-xs">
+                    <span className={response.status >= 200 && response.status < 300 ? "text-emerald-300" : "text-rose-300"}>
+                      {response.status || "ERR"} {response.statusText}
                     </span>
-                    <Input
-                      value={values[key] ?? ""}
-                      onChange={(event) => setValues((current) => ({ ...current, [key]: event.target.value }))}
-                      placeholder={parameter.description ?? `${parameter.schema.type} value`}
-                      className="border-white/10 bg-black/20 font-mono text-slate-100"
-                    />
-                    {parameter.description && <span className="block text-xs text-slate-500">{parameter.description}</span>}
-                  </label>
-                )
-              })}
-            </div>
-          ) : (
-            <div className="rounded-lg border border-dashed border-white/10 bg-white/[0.02] px-4 py-5 text-sm text-slate-500">
-              This endpoint has no parameters.
-            </div>
-          )}
+                    <span className="text-slate-500">{response.duration}ms</span>
+                  </div>
+                )}
+              </div>
 
-          <div className="mt-5 flex flex-wrap gap-2">
-            <Button onClick={runRequest} disabled={isRunning || missingRequired} className="bg-cyan-400 text-slate-950 hover:bg-cyan-300">
-              {isRunning ? <LoaderCircle className="animate-spin" /> : <Play />}
-              {isRunning ? "Running" : "Try it"}
-            </Button>
-            <Button variant="outline" onClick={copyCurl} disabled={missingRequired} className="border-white/10 bg-transparent text-slate-300 hover:bg-white/5 hover:text-white">
-              {copied ? <Check /> : <Clipboard />}
-              {copied ? "Copied" : "Copy cURL"}
-            </Button>
+              <div className="styled-scrollbar max-h-72 min-h-28 overflow-auto rounded-md border border-white/10 bg-[#080d16] p-3">
+                {response ? (
+                  <pre className="text-xs leading-5 text-slate-300">{JSON.stringify(response.body, null, 2)}</pre>
+                ) : (
+                  <div className="flex min-h-20 items-center justify-center text-center text-xs text-slate-600">
+                    Run this endpoint to inspect its response.
+                  </div>
+                )}
+              </div>
+              {requestURL && <p className="mt-2 break-all font-mono text-[10px] text-slate-600">{endpoint.method.toUpperCase()} {requestURL}</p>}
+            </div>
           </div>
         </div>
-
-        <div className="min-w-0 bg-black/20 p-5 sm:p-6">
-          <div className="mb-4 flex items-center justify-between gap-3">
-            <div className="flex items-center gap-2 text-sm font-medium text-slate-300">
-              <Terminal className="h-4 w-4 text-cyan-300" />
-              Response
-            </div>
-            {response && (
-              <div className="flex items-center gap-3 font-mono text-xs">
-                <span className={response.status >= 200 && response.status < 300 ? "text-emerald-300" : "text-rose-300"}>
-                  {response.status || "ERR"} {response.statusText}
-                </span>
-                <span className="text-slate-500">{response.duration}ms</span>
-              </div>
-            )}
-          </div>
-
-          <div className="styled-scrollbar min-h-48 overflow-auto rounded-lg border border-white/10 bg-[#080d16] p-4">
-            {response ? (
-              <pre className="text-xs leading-6 text-slate-300">{JSON.stringify(response.body, null, 2)}</pre>
-            ) : (
-              <div className="flex min-h-40 items-center justify-center text-center text-sm text-slate-600">
-                Run this endpoint to inspect its live response payload.
-              </div>
-            )}
-          </div>
-          {requestURL && <p className="mt-3 break-all font-mono text-[11px] text-slate-600">{endpoint.method.toUpperCase()} {requestURL}</p>}
-        </div>
-      </div>
+      )}
     </article>
   )
 }

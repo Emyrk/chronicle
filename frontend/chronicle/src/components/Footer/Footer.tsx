@@ -45,23 +45,13 @@ export function Footer() {
             <h4 className="font-semibold mb-3">Navigation</h4>
             <ul className="space-y-2 text-sm text-muted-foreground">
               <li>
-                <Link to="/contact" className="hover:text-foreground transition-colors">
-                  About & Contact
-                </Link>
-              </li>
-              <li>
                 <Link to="/supported" className="hover:text-foreground transition-colors">
                   Supported Instances
                 </Link>
               </li>
               <li>
-                <Link to="/developers/api" className="hover:text-foreground transition-colors">
-                  Developer API
-                </Link>
-              </li>
-              <li>
-                <Link to="/technical" className="hover:text-foreground transition-colors">
-                  Technical Details
+                <Link to="/wowdb" className="hover:text-foreground transition-colors">
+                  WoW Database
                 </Link>
               </li>
               <li>
@@ -70,8 +60,13 @@ export function Footer() {
                 </Link>
               </li>
               <li>
-                <Link to="/wowdb" className="hover:text-foreground transition-colors">
-                  WoW Database
+                <Link to="/technical" className="hover:text-foreground transition-colors">
+                  Technical Details
+                </Link>
+              </li>
+              <li>
+                <Link to="/developers/api" className="hover:text-foreground transition-colors">
+                  Developer API
                 </Link>
               </li>
             </ul>
@@ -102,6 +97,11 @@ export function Footer() {
                   <DiscordIcon className="h-4 w-4" />
                   Chronicle Discord
                 </a>
+              </li>
+              <li>
+                <Link to="/contact" className="hover:text-foreground transition-colors">
+                  About & Contact
+                </Link>
               </li>
             </ul>
           </div>

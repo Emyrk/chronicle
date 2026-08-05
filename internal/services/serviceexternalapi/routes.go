@@ -46,12 +46,12 @@ func (s *Service) registerRoutes() {
 		}),
 	}, s.getCharacter)
 
-	s.register(http.MethodGet, "/characters/{server}/{realm}/{character}/logs", OpenAPIOperation{
-		Summary:     "List a character's logs",
-		Description: "Returns deduplicated logs the character participated in, newest first. Performance fields use already-computed ranking and parse data when available.",
+	s.register(http.MethodGet, "/characters/{server}/{realm}/{character}/instances", OpenAPIOperation{
+		Summary:     "List a character's instances",
+		Description: "Returns deduplicated raid instances the character participated in, newest first. Performance fields use already-computed ranking and parse data when available.",
 		Parameters: append(characterParameters,
 			queryParameter("page", "Page number, starting at 1", false, "integer", 1),
-			queryParameter("page_size", "Results per page, from 1 to 20", false, "integer", 20),
+			queryParameter("page_size", "Results per page, from 1 to 50", false, "integer", 50),
 		),
 		Responses: okResponse(CharacterLogsResponse{
 			Character: Character{Name: "Example", Server: Server{Name: "Example Server"}, Realm: Realm{Name: "Example Realm"}},
@@ -59,7 +59,7 @@ func (s *Service) registerRoutes() {
 				Name: "Molten Core", Difficulty: "Normal", MaxPlayers: 40, BossKills: 10,
 				Performance: []CharacterEncounterPerformance{{EncounterName: "Ragnaros", DPSParse: int32Pointer(92)}},
 			}},
-			Pagination: Pagination{Page: 1, PageSize: 20},
+			Pagination: Pagination{Page: 1, PageSize: 50},
 		}),
 	}, s.listCharacterLogs)
 

@@ -105,7 +105,7 @@ func TestListCharacterLogsPagination(t *testing.T) {
 	service := &Service{db: store}
 	service.setupRoutes()
 
-	req := httptest.NewRequest(http.MethodGet, "/characters/Example%20Server/Example%20Realm/Example/logs?page=2&page_size=20", nil)
+	req := httptest.NewRequest(http.MethodGet, "/characters/Example%20Server/Example%20Realm/Example/instances?page=2&page_size=20", nil)
 	rec := httptest.NewRecorder()
 	service.ServeHTTP(rec, req)
 
@@ -155,7 +155,7 @@ func TestCharacterLogsRejectsPageSizeAboveMaximum(t *testing.T) {
 	service := &Service{db: store}
 	service.setupRoutes()
 
-	req := httptest.NewRequest(http.MethodGet, "/characters/server/realm/name/logs?page_size=21", nil)
+	req := httptest.NewRequest(http.MethodGet, "/characters/server/realm/name/instances?page_size=51", nil)
 	rec := httptest.NewRecorder()
 	service.ServeHTTP(rec, req)
 
