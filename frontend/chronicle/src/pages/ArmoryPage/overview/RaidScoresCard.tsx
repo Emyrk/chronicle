@@ -28,7 +28,7 @@ export function RaidScoresCard({ raids, metric, bossCounts, isLoading }: RaidSco
   }
 
   return (
-    <Card className="gap-0 py-4">
+    <Card className="gap-0 overflow-hidden pt-4 pb-0">
       <CardHeader className="border-b border-border pb-4">
         <CardTitle>Raid scores</CardTitle>
         <CardDescription>
