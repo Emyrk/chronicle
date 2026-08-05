@@ -628,6 +628,39 @@ export interface CorePayload {
     readonly tags: readonly string[];
 }
 
+// From chroniclesdk/gear_builder.go
+/**
+ * CreateGearListRequest is the request body for creating a gear list.
+ */
+export interface CreateGearListRequest {
+    readonly title: string;
+    readonly description: string;
+    readonly class_id: number;
+    readonly spec_name: string;
+    readonly visibility: string;
+    readonly payload: Record<string, string>;
+}
+
+// From chroniclesdk/gear_builder.go
+/**
+ * CreateGearStatWeightPinRequest is the request body for pinning a stat weight.
+ */
+export interface CreateGearStatWeightPinRequest {
+    readonly dataset_id: string;
+    readonly stat_weight_id: string;
+}
+
+// From chroniclesdk/gear_builder.go
+/**
+ * CreateGearStatWeightRequest is the request body for creating a stat weight.
+ */
+export interface CreateGearStatWeightRequest {
+    readonly name: string;
+    readonly class_id: number;
+    readonly spec_name: string;
+    readonly weights: Record<string, string>;
+}
+
 // From chroniclesdk/guild_page.go
 export interface CreateJoinRequestBody {
     readonly message: string;
@@ -972,6 +1005,61 @@ export interface ExternalVerificationPublic {
 
 // From chroniclesdk/log.go
 export type GUIDString = string;
+
+// From chroniclesdk/gear_builder.go
+/**
+ * GearList is a user-owned gear progression list.
+ */
+export interface GearList {
+    readonly id: string;
+    readonly user_id: string;
+    readonly tenant_id: string;
+    readonly title: string;
+    readonly description: string;
+    readonly class_id: number;
+    readonly spec_name: string;
+    readonly visibility: string;
+    readonly payload: Record<string, string>;
+    readonly created_at: string;
+    readonly updated_at: string;
+}
+
+// From chroniclesdk/gear_builder.go
+/**
+ * GearStatWeight is a user-defined stat-weight set.
+ */
+export interface GearStatWeight {
+    readonly id: string;
+    readonly user_id: string;
+    readonly tenant_id: string;
+    readonly name: string;
+    readonly class_id: number;
+    readonly spec_name: string;
+    readonly weights: Record<string, string>;
+    readonly created_at: string;
+    readonly updated_at: string;
+}
+
+// From chroniclesdk/gear_builder.go
+/**
+ * GearStatWeightPin is an admin-pinned stat weight reference.
+ */
+export interface GearStatWeightPin {
+    readonly id: string;
+    readonly tenant_id: string;
+    readonly dataset_id: string;
+    readonly stat_weight_id: string;
+    readonly pinned_by: string;
+    readonly created_at: string;
+    /**
+     * Resolved stat weight fields (populated on list).
+     */
+    readonly stat_weight_name?: string;
+    readonly stat_weight_class_id?: number;
+    readonly stat_weight_spec_name?: string;
+    readonly stat_weight_weights?: Record<string, string>;
+    readonly stat_weight_user_id?: string;
+}
 
 // From chroniclesdk/log.go
 export interface Guild {
@@ -2990,6 +3078,30 @@ export interface UpdateActionBarSlotsRequest {
     readonly slot_8: string | null;
     readonly slot_9: string | null;
     readonly slot_0: string | null;
+}
+
+// From chroniclesdk/gear_builder.go
+/**
+ * UpdateGearListRequest is the request body for updating a gear list.
+ */
+export interface UpdateGearListRequest {
+    readonly title?: string;
+    readonly description?: string;
+    readonly class_id?: number;
+    readonly spec_name?: string;
+    readonly visibility?: string;
+    readonly payload?: (Record<string, string>);
+}
+
+// From chroniclesdk/gear_builder.go
+/**
+ * UpdateGearStatWeightRequest is the request body for updating a stat weight.
+ */
+export interface UpdateGearStatWeightRequest {
+    readonly name?: string;
+    readonly class_id?: number;
+    readonly spec_name?: string;
+    readonly weights?: (Record<string, string>);
 }
 
 // From chroniclesdk/guild_page.go

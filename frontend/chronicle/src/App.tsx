@@ -32,6 +32,8 @@ import { AdminOutdatedInstancesPage } from "./pages/Admin/AdminOutdatedInstances
 import { AdminApplicationsListPage } from "./pages/Admin/AdminApplicationsListPage"
 import { AdminCacheStatsPage } from "./pages/Admin/AdminCacheStatsPage"
 import { AdminParsingPage } from "./pages/Admin/AdminParsingPage"
+import AdminGearBuilderPage from "./pages/Admin/AdminGearBuilderPage"
+import GearBuilderPage from "./pages/GearBuilder/GearBuilderPage"
 import { ServersLayout, ServersPage, UploadKeysPage, RetentionPage } from "./pages/Servers"
 import { SpellPage } from "./pages/WoWDB/SpellPage"
 import { SpellByNamePage } from "./pages/WoWDB/SpellByNamePage"
@@ -121,6 +123,8 @@ function App() {
         <Route path="/guilds" element={<GuildSearchPage />} />
         <Route path="/armory" element={<ArmorySearchPage />} />
         <Route path="/armory/:realmName/:playerIdentifier" element={<ArmoryPage />} />
+        <Route path="/gear" element={<GearBuilderPage />} />
+        <Route path="/gear/:listID" element={<GearBuilderPage />} />
         <Route path="/sim" element={<SimPage />} />
         <Route path="/talents" element={<TalentCalculatorPage />} />
         <Route path="/talents/:classSlug" element={<TalentCalculatorPage />} />
@@ -145,6 +149,7 @@ function App() {
           <Route path="applications" element={<AdminApplicationsListPage />} />
           <Route path="cache-stats" element={<AdminCacheStatsPage />} />
           <Route path="parsing" element={<AdminParsingPage />} />
+          <Route path="gear-builder" element={<AdminGearBuilderPage />} />
         </Route>
         <Route path="/servers" element={<ServersLayout />}>
           <Route index element={<ServersPage />} />

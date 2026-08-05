@@ -7,6 +7,13 @@ type CheckConstraint string
 // CheckConstraint enums.
 const (
 	CheckDatasetsSlugFormat                               CheckConstraint = "datasets_slug_format"                                  // datasets
+	CheckGearListRevisionsPayloadSizeChk                  CheckConstraint = "gear_list_revisions_payload_size_chk"                  // gear_list_revisions
+	CheckGearListsDescriptionLengthChk                    CheckConstraint = "gear_lists_description_length_chk"                     // gear_lists
+	CheckGearListsPayloadSizeChk                          CheckConstraint = "gear_lists_payload_size_chk"                           // gear_lists
+	CheckGearListsTitleLengthChk                          CheckConstraint = "gear_lists_title_length_chk"                           // gear_lists
+	CheckGearListsVisibilityCheck                         CheckConstraint = "gear_lists_visibility_check"                           // gear_lists
+	CheckGearStatWeightsNameLengthChk                     CheckConstraint = "gear_stat_weights_name_length_chk"                     // gear_stat_weights
+	CheckGearStatWeightsWeightsSizeChk                    CheckConstraint = "gear_stat_weights_weights_size_chk"                    // gear_stat_weights
 	CheckInstanceOverviewMetricsBossDurationNonnegative   CheckConstraint = "instance_overview_metrics_boss_duration_nonnegative"   // instance_overview_metrics
 	CheckInstanceOverviewMetricsBossWithinCombat          CheckConstraint = "instance_overview_metrics_boss_within_combat"          // instance_overview_metrics
 	CheckInstanceOverviewMetricsCombatDurationNonnegative CheckConstraint = "instance_overview_metrics_combat_duration_nonnegative" // instance_overview_metrics
@@ -16,6 +23,7 @@ const (
 	CheckInstanceOverviewMetricsWipeCountNonnegative      CheckConstraint = "instance_overview_metrics_wipe_count_nonnegative"      // instance_overview_metrics
 	CheckTenantsSlugFormat                                CheckConstraint = "tenants_slug_format"                                   // tenants
 	CheckTenantsSlugReserved                              CheckConstraint = "tenants_slug_reserved"                                 // tenants
+	CheckParseScoreResultsMetricCheck                     CheckConstraint = "parse_score_results_metric_check"                      // parse_score_results
 	CheckRetentionPoliciesScope                           CheckConstraint = "retention_policies_scope"                              // retention_policies
 	CheckRetentionRulesActionCheck                        CheckConstraint = "retention_rules_action_check"                          // retention_rules
 	CheckFinalizedOrFinalizedAtNull                       CheckConstraint = "finalized_or_finalized_at_null"                        // river_job
@@ -27,6 +35,8 @@ const (
 	CheckVersionGte1                                      CheckConstraint = "version_gte_1"                                         // river_migration
 	CheckSharedViewsPayloadMax10Kb                        CheckConstraint = "shared_views_payload_max_10kb"                         // shared_views
 	CheckSiteConfigIDCheck                                CheckConstraint = "site_config_id_check"                                  // site_config
+	CheckTimeParseSnapshotsCheck                          CheckConstraint = "time_parse_snapshots_check"                            // time_parse_snapshots
+	CheckTimeParseSnapshotsStatusCheck                    CheckConstraint = "time_parse_snapshots_status_check"                     // time_parse_snapshots
 	CheckUserPanelLayoutsPayloadSizeChk                   CheckConstraint = "user_panel_layouts_payload_size_chk"                   // user_panel_layouts
 	CheckUserPanelLayoutsTitleFormatChk                   CheckConstraint = "user_panel_layouts_title_format_chk"                   // user_panel_layouts
 	CheckUserTalentBuildsBuildLengthChk                   CheckConstraint = "user_talent_builds_build_length_chk"                   // user_talent_builds
