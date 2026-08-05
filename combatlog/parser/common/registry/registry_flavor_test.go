@@ -45,7 +45,7 @@ func TestProgressionOnyxiaHasSeparateSpeedrunRules(t *testing.T) {
 	require.Nil(t, wrath.LevelRange)
 }
 
-func TestLunaticDeadminesHostiles(t *testing.T) {
+func TestFlavoredDeadminesHostiles(t *testing.T) {
 	t.Parallel()
 
 	vanilla := RegistryForFlavor(nil, database.WoWFlavor{database.FlavorVanilla}).EntryByName("Deadmines")
@@ -59,16 +59,22 @@ func TestLunaticDeadminesHostiles(t *testing.T) {
 		database.FlavorLunatic,
 	}).EntryByName("Deadmines")
 	require.NotNil(t, lunatic)
-
-	manufacturedGolem := lunatic.HostileEntries[61962]
-	require.Equal(t, "Manufactured Golem", manufacturedGolem.Name)
-	require.False(t, manufacturedGolem.Boss)
-
+	require.NotContains(t, lunatic.HostileEntries, uint32(61962))
+	require.NotContains(t, lunatic.HostileEntries, uint32(61963))
 	burningBladeFlamekin := lunatic.HostileEntries[912408]
 	require.Equal(t, "Burning Blade Flamekin", burningBladeFlamekin.Name)
 	require.False(t, burningBladeFlamekin.Boss)
 
-	masterpieceHarvester := lunatic.HostileEntries[61963]
+	nightmare := RegistryForFlavor(nil, database.WoWFlavor{
+		database.FlavorVanilla,
+		database.FlavorNightmareOfUrsol,
+	}).EntryByName("Deadmines")
+	require.NotNil(t, nightmare)
+	require.NotContains(t, nightmare.HostileEntries, uint32(912408))
+	manufacturedGolem := nightmare.HostileEntries[61962]
+	require.Equal(t, "Manufactured Golem", manufacturedGolem.Name)
+	require.False(t, manufacturedGolem.Boss)
+	masterpieceHarvester := nightmare.HostileEntries[61963]
 	require.Equal(t, "Masterpiece Harvester", masterpieceHarvester.Name)
 	require.True(t, masterpieceHarvester.Boss)
 	require.Equal(t, "Masterpiece Harvester", masterpieceHarvester.EncounterName)
