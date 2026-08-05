@@ -105,7 +105,73 @@ func TestSpeedrunCohortRunIncludesOverviewMetrics(t *testing.T) {
 	require.False(t, *run.Overview.RequirementsComplete)
 	require.Equal(t, int32(7), run.Overview.PlayerDeaths)
 	require.Equal(t, int32(2), run.Overview.WipeCount)
-	require.Len(t, run.Overview.TopIncomingDamageAbilities, 1)
+}
+
+func TestSpeedrunCohortOverviewMetrics(t *testing.T) {
+	t.Parallel()
+
+	spellID := int32(12345)
+	firstAbilities, err := json.Marshal([]chroniclesdk.OverviewIncomingDamageAbility{
+		{SpellID: &spellID, Name: "Shadow Bolt", Damage: 1_000, Hits: 4},
+		{Name: "Lava", EnvironmentType: "lava", Damage: 300, Hits: 2},
+	})
+	require.NoError(t, err)
+	secondAbilities, err := json.Marshal([]chroniclesdk.OverviewIncomingDamageAbility{
+		{SpellID: &spellID, Name: "Shadow Bolt", Damage: 500, Hits: 2},
+		{Name: "Melee", Damage: 900, Hits: 3},
+	})
+	require.NoError(t, err)
+	partialAbilities, err := json.Marshal([]chroniclesdk.OverviewIncomingDamageAbility{
+		{Name: "Ignored", Damage: 10_000, Hits: 1},
+	})
+	require.NoError(t, err)
+
+	rows := []database.InstanceSpeedrunCohortRow{
+		{TopIncomingDamageAbilities: firstAbilities},
+		{TopIncomingDamageAbilities: secondAbilities},
+		{TopIncomingDamageAbilities: partialAbilities},
+		{},
+	}
+	runs := []chroniclesdk.SpeedrunCohortRun{
+		{RequirementsComplete: true, Overview: &chroniclesdk.SpeedrunCohortRunOverviewMetrics{}},
+		{RequirementsComplete: true, Overview: &chroniclesdk.SpeedrunCohortRunOverviewMetrics{}},
+		{RequirementsComplete: false, Overview: &chroniclesdk.SpeedrunCohortRunOverviewMetrics{}},
+		{RequirementsComplete: true},
+	}
+
+	overview := SpeedrunCohortOverviewMetrics(rows, runs)
+	require.Equal(t, 2, overview.Runs)
+	require.Equal(t, []chroniclesdk.SpeedrunCohortIncomingDamageAbility{
+		{SpellID: &spellID, Name: "Shadow Bolt", Damage: 1_500, Hits: 6, Runs: 2},
+		{Name: "Melee", Damage: 900, Hits: 3, Runs: 1},
+		{Name: "Lava", Damage: 300, Hits: 2, Runs: 1, EnvironmentType: "lava"},
+	}, overview.TopIncomingDamageAbilities)
+}
+
+func TestSpeedrunCohortOverviewMetricsLimitsAbilities(t *testing.T) {
+	t.Parallel()
+
+	abilities := make([]chroniclesdk.OverviewIncomingDamageAbility, 0, 12)
+	for i := range 12 {
+		abilities = append(abilities, chroniclesdk.OverviewIncomingDamageAbility{
+			Name:   string(rune('A' + i)),
+			Damage: int64(12 - i),
+			Hits:   1,
+		})
+	}
+	payload, err := json.Marshal(abilities)
+	require.NoError(t, err)
+
+	overview := SpeedrunCohortOverviewMetrics(
+		[]database.InstanceSpeedrunCohortRow{{TopIncomingDamageAbilities: payload}},
+		[]chroniclesdk.SpeedrunCohortRun{{
+			RequirementsComplete: true,
+			Overview:             &chroniclesdk.SpeedrunCohortRunOverviewMetrics{},
+		}},
+	)
+	require.Len(t, overview.TopIncomingDamageAbilities, 10)
+	require.Equal(t, "A", overview.TopIncomingDamageAbilities[0].Name)
+	require.Equal(t, "J", overview.TopIncomingDamageAbilities[9].Name)
 }
 
 func TestSpeedrunCohortRunIncompleteLegacyProof(t *testing.T) {

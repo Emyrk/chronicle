@@ -2,6 +2,7 @@ import { FlaskConical, SlidersHorizontal } from "lucide-react";
 import { useSearchParams } from "react-router-dom";
 import type { Instance } from "../InstancePage";
 import { RaidSummaryStrip } from "./RaidSummaryStrip";
+import { DeadliestAbilitiesPanel } from "./DeadliestAbilitiesPanel";
 import { EncounterKillTimesPanel } from "./EncounterKillTimesPanel";
 import { TimeCompositionPanel } from "./TimeCompositionPanel";
 import { PopulationSelector } from "./PopulationSelector";
@@ -65,6 +66,7 @@ export function InstanceOverview({ instance }: { instance: Instance }) {
         <EncounterKillTimesPanel primary={primary} comparison={comparison} />
         <TimeCompositionPanel primary={primary} comparison={comparison} />
       </div>
+      <DeadliestAbilitiesPanel primary={primary} comparison={comparison} />
     </section>
   );
 }

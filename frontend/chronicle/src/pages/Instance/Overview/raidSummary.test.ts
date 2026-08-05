@@ -29,7 +29,6 @@ function run({
       requirements_complete: complete,
       player_deaths: deaths,
       wipe_count: wipes,
-      top_incoming_damage_abilities: [],
       encounter_span_duration_ms: durationMs ?? 0,
       total_combat_duration_ms: 0,
       total_boss_duration_ms: 0,

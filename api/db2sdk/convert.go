@@ -2,6 +2,7 @@ package db2sdk
 
 import (
 	"encoding/json"
+	"sort"
 	"strings"
 	"time"
 
@@ -330,24 +331,84 @@ func SpeedrunCohortRun(row database.InstanceSpeedrunCohortRow) chroniclesdk.Spee
 		run.CompletionTime = &completion
 	}
 	if row.MetricsVersion.Valid {
-		var abilities []chroniclesdk.OverviewIncomingDamageAbility
-		_ = json.Unmarshal(row.TopIncomingDamageAbilities, &abilities)
 		var requirementsComplete *bool
 		if row.RequirementsComplete.Valid {
 			requirementsComplete = &row.RequirementsComplete.Bool
 		}
-		run.Overview = &chroniclesdk.InstanceOverviewMetrics{
-			RequirementsComplete:       requirementsComplete,
-			PlayerDeaths:               row.PlayerDeaths.Int32,
-			WipeCount:                  row.WipeCount.Int32,
-			TopIncomingDamageAbilities: abilities,
-			EncounterSpanDurationMs:    row.EncounterSpanDurationMs.Int64,
-			TotalCombatDurationMs:      row.TotalCombatDurationMs.Int64,
-			TotalBossDurationMs:        row.TotalBossDurationMs.Int64,
-			MetricsVersion:             row.MetricsVersion.Int32,
+		run.Overview = &chroniclesdk.SpeedrunCohortRunOverviewMetrics{
+			RequirementsComplete:    requirementsComplete,
+			PlayerDeaths:            row.PlayerDeaths.Int32,
+			WipeCount:               row.WipeCount.Int32,
+			EncounterSpanDurationMs: row.EncounterSpanDurationMs.Int64,
+			TotalCombatDurationMs:   row.TotalCombatDurationMs.Int64,
+			TotalBossDurationMs:     row.TotalBossDurationMs.Int64,
+			MetricsVersion:          row.MetricsVersion.Int32,
 		}
 	}
 	return run
+}
+
+// SpeedrunCohortOverviewMetrics aggregates bounded per-run Overview data for a cohort response.
+func SpeedrunCohortOverviewMetrics(rows []database.InstanceSpeedrunCohortRow, runs []chroniclesdk.SpeedrunCohortRun) chroniclesdk.SpeedrunCohortOverviewMetrics {
+	type abilityKey struct {
+		spellID         int32
+		hasSpellID      bool
+		name            string
+		environmentType string
+	}
+
+	abilities := make(map[abilityKey]chroniclesdk.SpeedrunCohortIncomingDamageAbility)
+	completeRuns := 0
+	for i, row := range rows {
+		if i >= len(runs) || !runs[i].RequirementsComplete || runs[i].Overview == nil {
+			continue
+		}
+		completeRuns++
+
+		var runAbilities []chroniclesdk.OverviewIncomingDamageAbility
+		_ = json.Unmarshal(row.TopIncomingDamageAbilities, &runAbilities)
+		for _, ability := range runAbilities {
+			key := abilityKey{
+				name:            ability.Name,
+				environmentType: ability.EnvironmentType,
+			}
+			if ability.SpellID != nil {
+				key.spellID = *ability.SpellID
+				key.hasSpellID = true
+			}
+
+			aggregate := abilities[key]
+			aggregate.SpellID = ability.SpellID
+			aggregate.Name = ability.Name
+			aggregate.Damage += ability.Damage
+			aggregate.Hits += ability.Hits
+			aggregate.Runs++
+			aggregate.EnvironmentType = ability.EnvironmentType
+			abilities[key] = aggregate
+		}
+	}
+
+	topAbilities := make([]chroniclesdk.SpeedrunCohortIncomingDamageAbility, 0, len(abilities))
+	for _, ability := range abilities {
+		topAbilities = append(topAbilities, ability)
+	}
+	sort.Slice(topAbilities, func(i, j int) bool {
+		if topAbilities[i].Damage != topAbilities[j].Damage {
+			return topAbilities[i].Damage > topAbilities[j].Damage
+		}
+		if topAbilities[i].Hits != topAbilities[j].Hits {
+			return topAbilities[i].Hits > topAbilities[j].Hits
+		}
+		return topAbilities[i].Name < topAbilities[j].Name
+	})
+	if len(topAbilities) > 10 {
+		topAbilities = topAbilities[:10]
+	}
+
+	return chroniclesdk.SpeedrunCohortOverviewMetrics{
+		Runs:                       completeRuns,
+		TopIncomingDamageAbilities: topAbilities,
+	}
 }
 
 // SpeedrunLeaderboardEntry converts a database leaderboard row to an SDK entry.

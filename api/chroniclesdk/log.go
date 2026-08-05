@@ -349,6 +349,30 @@ type OverviewIncomingDamageAbility struct {
 	EnvironmentType string `json:"environment_type,omitempty"`
 }
 
+type SpeedrunCohortIncomingDamageAbility struct {
+	SpellID         *int32 `json:"spell_id,omitempty"`
+	Name            string `json:"name"`
+	Damage          int64  `json:"damage"`
+	Hits            int64  `json:"hits"`
+	Runs            int    `json:"runs"`
+	EnvironmentType string `json:"environment_type,omitempty"`
+}
+
+type SpeedrunCohortOverviewMetrics struct {
+	Runs                       int                                   `json:"runs"`
+	TopIncomingDamageAbilities []SpeedrunCohortIncomingDamageAbility `json:"top_incoming_damage_abilities"`
+}
+
+type SpeedrunCohortRunOverviewMetrics struct {
+	RequirementsComplete    *bool `json:"requirements_complete"`
+	PlayerDeaths            int32 `json:"player_deaths"`
+	WipeCount               int32 `json:"wipe_count"`
+	EncounterSpanDurationMs int64 `json:"encounter_span_duration_ms"`
+	TotalCombatDurationMs   int64 `json:"total_combat_duration_ms"`
+	TotalBossDurationMs     int64 `json:"total_boss_duration_ms"`
+	MetricsVersion          int32 `json:"metrics_version"`
+}
+
 type SpeedrunCohortScope string
 
 const (
@@ -360,8 +384,9 @@ const (
 // SpeedrunCohortResponse contains lightweight rankings-backed observations
 // comparable to one anchor instance. It never includes full instance data.
 type SpeedrunCohortResponse struct {
-	Cohort SpeedrunCohortDefinition `json:"cohort"`
-	Runs   []SpeedrunCohortRun      `json:"runs"`
+	Cohort   SpeedrunCohortDefinition      `json:"cohort"`
+	Overview SpeedrunCohortOverviewMetrics `json:"overview"`
+	Runs     []SpeedrunCohortRun           `json:"runs"`
 }
 
 type SpeedrunCohortDefinition struct {
@@ -380,19 +405,19 @@ type SpeedrunCohortDefinition struct {
 }
 
 type SpeedrunCohortRun struct {
-	InstanceID            uuid.UUID                `json:"instance_id"`
-	Slug                  string                   `json:"slug"`
-	StartTime             time.Time                `json:"start_time"`
-	CompletionTime        *time.Time               `json:"completion_time,omitempty"`
-	DurationMs            *int64                   `json:"duration_ms,omitempty"`
-	RequirementsComplete  bool                     `json:"requirements_complete"`
-	Qualified             bool                     `json:"qualified"`
-	RequirementsSatisfied int                      `json:"requirements_satisfied"`
-	RequirementsTotal     int                      `json:"requirements_total"`
-	GuildID               *uuid.UUID               `json:"guild_id,omitempty"`
-	GuildName             string                   `json:"guild_name,omitempty"`
-	Overview              *InstanceOverviewMetrics `json:"overview,omitempty"`
-	EncounterKillTimes    []EncounterKillTime      `json:"encounter_kill_times"`
+	InstanceID            uuid.UUID                         `json:"instance_id"`
+	Slug                  string                            `json:"slug"`
+	StartTime             time.Time                         `json:"start_time"`
+	CompletionTime        *time.Time                        `json:"completion_time,omitempty"`
+	DurationMs            *int64                            `json:"duration_ms,omitempty"`
+	RequirementsComplete  bool                              `json:"requirements_complete"`
+	Qualified             bool                              `json:"qualified"`
+	RequirementsSatisfied int                               `json:"requirements_satisfied"`
+	RequirementsTotal     int                               `json:"requirements_total"`
+	GuildID               *uuid.UUID                        `json:"guild_id,omitempty"`
+	GuildName             string                            `json:"guild_name,omitempty"`
+	Overview              *SpeedrunCohortRunOverviewMetrics `json:"overview,omitempty"`
+	EncounterKillTimes    []EncounterKillTime               `json:"encounter_kill_times"`
 }
 
 // DpsRankingsStatus reports whether DPS rankings were recorded for this instance.
@@ -476,31 +501,31 @@ type RecentInstancesResponse struct {
 
 // RecentInstance represents a recent raid or dungeon instance.
 type RecentInstance struct {
-	ID                 uuid.UUID         `json:"id"`
-	Slug               string            `json:"slug"`
-	Name               string            `json:"name"`
-	RealmID            uuid.UUID         `json:"realm_id"`
-	RealmName          string            `json:"realm_name"`
-	UploaderID         uuid.UUID         `json:"uploader_id"`
-	UploaderName       string            `json:"uploader_name"`
-	UploadedAt         time.Time         `json:"uploaded_at"`
-	FirstEncounterTime time.Time         `json:"first_encounter_time"`
-	PlayerCount        int64             `json:"player_count"`
-	BossCount          int64             `json:"boss_count"`
-	BossKills          int64             `json:"boss_kills"`
-	DurationMs         *float64          `json:"duration_ms"` // nullable if no encounters
+	ID                 uuid.UUID `json:"id"`
+	Slug               string    `json:"slug"`
+	Name               string    `json:"name"`
+	RealmID            uuid.UUID `json:"realm_id"`
+	RealmName          string    `json:"realm_name"`
+	UploaderID         uuid.UUID `json:"uploader_id"`
+	UploaderName       string    `json:"uploader_name"`
+	UploadedAt         time.Time `json:"uploaded_at"`
+	FirstEncounterTime time.Time `json:"first_encounter_time"`
+	PlayerCount        int64     `json:"player_count"`
+	BossCount          int64     `json:"boss_count"`
+	BossKills          int64     `json:"boss_kills"`
+	DurationMs         *float64  `json:"duration_ms"` // nullable if no encounters
 	// CombatDurationMs is the summed boss + trash combat time from the
 	// overview metrics; nil when metrics were not computed for the instance.
-	CombatDurationMs *int64     `json:"combat_duration_ms,omitempty"`
-	GuildID          *uuid.UUID `json:"guild_id,omitempty"`
-	GuildName          *string           `json:"guild_name,omitempty"`
-	Encounters         []RecentEncounter `json:"encounters,omitempty"`
-	HasYoutubeVideo    bool              `json:"has_youtube_video"`
-	DuplicateGroupID   *uuid.UUID        `json:"duplicate_group_id,omitempty"`
-	RecorderName       string            `json:"recorder_name"`
-	DifficultyName     string            `json:"difficulty_name"`
-	MaxPlayers         int               `json:"max_players"`
-	DynamicDifficulty  int               `json:"dynamic_difficulty"`
+	CombatDurationMs  *int64            `json:"combat_duration_ms,omitempty"`
+	GuildID           *uuid.UUID        `json:"guild_id,omitempty"`
+	GuildName         *string           `json:"guild_name,omitempty"`
+	Encounters        []RecentEncounter `json:"encounters,omitempty"`
+	HasYoutubeVideo   bool              `json:"has_youtube_video"`
+	DuplicateGroupID  *uuid.UUID        `json:"duplicate_group_id,omitempty"`
+	RecorderName      string            `json:"recorder_name"`
+	DifficultyName    string            `json:"difficulty_name"`
+	MaxPlayers        int               `json:"max_players"`
+	DynamicDifficulty int               `json:"dynamic_difficulty"`
 }
 
 // RecentEncounter is a simplified encounter summary for the recent raids list.

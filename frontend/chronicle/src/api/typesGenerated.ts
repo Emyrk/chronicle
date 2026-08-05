@@ -2478,12 +2478,29 @@ export interface SpeedrunCohortDefinition {
 }
 
 // From chroniclesdk/log.go
+export interface SpeedrunCohortIncomingDamageAbility {
+    readonly spell_id?: number;
+    readonly name: string;
+    readonly damage: number;
+    readonly hits: number;
+    readonly runs: number;
+    readonly environment_type?: string;
+}
+
+// From chroniclesdk/log.go
+export interface SpeedrunCohortOverviewMetrics {
+    readonly runs: number;
+    readonly top_incoming_damage_abilities: readonly SpeedrunCohortIncomingDamageAbility[];
+}
+
+// From chroniclesdk/log.go
 /**
  * SpeedrunCohortResponse contains lightweight rankings-backed observations
  * comparable to one anchor instance. It never includes full instance data.
  */
 export interface SpeedrunCohortResponse {
     readonly cohort: SpeedrunCohortDefinition;
+    readonly overview: SpeedrunCohortOverviewMetrics;
     readonly runs: readonly SpeedrunCohortRun[];
 }
 
@@ -2500,8 +2517,19 @@ export interface SpeedrunCohortRun {
     readonly requirements_total: number;
     readonly guild_id?: string;
     readonly guild_name?: string;
-    readonly overview?: InstanceOverviewMetrics;
+    readonly overview?: SpeedrunCohortRunOverviewMetrics;
     readonly encounter_kill_times: readonly EncounterKillTime[];
+}
+
+// From chroniclesdk/log.go
+export interface SpeedrunCohortRunOverviewMetrics {
+    readonly requirements_complete: boolean | null;
+    readonly player_deaths: number;
+    readonly wipe_count: number;
+    readonly encounter_span_duration_ms: number;
+    readonly total_combat_duration_ms: number;
+    readonly total_boss_duration_ms: number;
+    readonly metrics_version: number;
 }
 
 // From chroniclesdk/log.go

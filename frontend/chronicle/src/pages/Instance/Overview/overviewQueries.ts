@@ -2,6 +2,7 @@ import { useQuery } from "@tanstack/react-query";
 import type {
   InstanceOverviewMetrics,
   InstanceTimeParsesResponse,
+  SpeedrunCohortOverviewMetrics,
   SpeedrunCohortResponse,
   SpeedrunCohortRun,
   SpeedrunResult,
@@ -18,6 +19,7 @@ export interface ResolvedSpeedrunPopulation {
   label: string;
   selection: PopulationSelection;
   runs: readonly SpeedrunCohortRun[];
+  overview: SpeedrunCohortOverviewMetrics;
   windowStart?: string;
   overviewCoverage?: OverviewMetricsCoverage;
   windowEnd?: string;
@@ -76,6 +78,13 @@ export function useSpeedrunPopulation(selection: PopulationSelection | undefined
             overview,
             encounter_kill_times: speedrun?.encounter_kill_times ?? [],
           }],
+          overview: {
+            runs: overview ? 1 : 0,
+            top_incoming_damage_abilities: overview?.top_incoming_damage_abilities.map((ability) => ({
+              ...ability,
+              runs: 1,
+            })) ?? [],
+          },
         };
       }
 
@@ -92,6 +101,7 @@ export function useSpeedrunPopulation(selection: PopulationSelection | undefined
         label: `${cohort.cohort.label} · ${cohort.cohort.lookback_days} days`,
         selection,
         runs: cohort.runs,
+        overview: cohort.overview,
         windowStart: cohort.cohort.window_start,
         overviewCoverage: {
           eligibleRuns: cohort.cohort.eligible_runs,

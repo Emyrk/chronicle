@@ -281,6 +281,7 @@ func (api *API) InstanceSpeedrunCohort(w http.ResponseWriter, r *http.Request) {
 			runsWithOverviewMetrics++
 		}
 	}
+	cohortOverview := db2sdk.SpeedrunCohortOverviewMetrics(rows, runs)
 
 	label := inst.ServerName.String
 	var guildID *uuid.UUID
@@ -308,7 +309,8 @@ func (api *API) InstanceSpeedrunCohort(w http.ResponseWriter, r *http.Request) {
 			OverviewMetricsVersion:  overviewmetricsversion.CurrentVersion,
 			GuildID:                 guildID,
 		},
-		Runs: runs,
+		Overview: cohortOverview,
+		Runs:     runs,
 	})
 }
 
