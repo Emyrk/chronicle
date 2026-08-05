@@ -12,13 +12,6 @@ import (
 	"github.com/Gophercraft/core/vsn"
 )
 
-// SpellBuildOverride, when non-zero, overrides the build version used to
-// select the Spell.dbc layout. This allows private servers with non-standard
-// Spell layouts (e.g. AzerothCore) to register a custom layout under a
-// pseudo-build number without affecting other servers sharing the same
-// detected build version.
-var SpellBuildOverride vsn.Build
-
 type WoWClient struct {
 	content.Volume
 }
@@ -119,17 +112,20 @@ func fixLoadingScreensLayout() {
 	})
 }
 
+func spellBuild(data []byte, fallback vsn.Build) vsn.Build {
+	if len(data) >= 16 && binary.LittleEndian.Uint32(data[12:16]) == 956 {
+		return ExtendedSpellBuild
+	}
+	return fallback
+}
+
 func (w *WoWClient) Spells() (Table[dbdefs.Ent_Spell], error) {
 	data, err := w.ReadFile("DBFilesClient\\Spell.dbc")
 	if err != nil {
 		return nil, err
 	}
 
-	build := w.Build()
-	if SpellBuildOverride != 0 {
-		build = SpellBuildOverride
-	}
-	db := dbc.NewDB(build)
+	db := dbc.NewDB(spellBuild(data, w.Build()))
 	table, err := db.Open("Spell", bytes.NewReader(data))
 	if err != nil {
 		return nil, err
@@ -144,11 +140,7 @@ func (w *WoWClient) SpellDescriptionVariables() (Table[dbdefs.Ent_SpellDescripti
 		return nil, err
 	}
 
-	build := w.Build()
-	if SpellBuildOverride != 0 {
-		build = SpellBuildOverride
-	}
-	db := dbc.NewDB(build)
+	db := dbc.NewDB(w.Build())
 	table, err := db.Open("SpellDescriptionVariables", bytes.NewReader(data))
 	if err != nil {
 		return nil, err

@@ -90,14 +90,10 @@ jobs:
           echo "All Go checks passed! ✅"
 
   docker-push:
-    name: Build and Push Docker Image (${{ matrix.server }})
+    name: Build and Push Docker Image
     needs: [golangci-lint, test]
     runs-on: ubuntu-latest
     environment: actions
-    strategy:
-      fail-fast: false
-      matrix:
-        server: [azerothcore] # [azerothcore, tutle]
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -126,14 +122,13 @@ jobs:
           context: .
           file: services/chronicled/Dockerfile
           push: true
-          tags: emyrk/chronicled:${{ github.ref_type == 'tag' && matrix.server || format('{0}-unstable', matrix.server) }}
-          cache-from: type=gha,scope=${{ matrix.server }}
-          cache-to: type=gha,mode=max,scope=${{ matrix.server }}
+          tags: emyrk/chronicled:${{ github.ref_type == 'tag' && 'latest' || 'unstable' }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
           build-args: |
             GIT_TAG=${{ steps.version.outputs.GIT_TAG }}
             GIT_COMMIT=${{ steps.version.outputs.GIT_COMMIT }}
             BUILD_TIME=${{ steps.version.outputs.BUILD_TIME }}
-            SERVER=${{ matrix.server }}
 
   deploy-railway:
     name: Deploy to Railway (${{ matrix.server }})

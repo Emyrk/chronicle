@@ -18,9 +18,8 @@ const ExtendedSpellBuild vsn.Build = 12341
 
 func init() {
 	// Always register the extended layout so any binary can parse AzerothCore/
-	// Ascension Spell.dbc files (e.g. when importing into a non-AC dataset).
-	// Only server-specific init() functions set SpellBuildOverride to make it
-	// the default for parsing the compiled-in Spell.dbc.
+	// Ascension Spell.dbc files. WoWClient selects it from the Spell.dbc record
+	// size, while the bundled fallback explicitly uses ExtendedSpellBuild.
 	ensureExtendedSpellLayout()
 }
 

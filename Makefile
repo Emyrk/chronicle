@@ -14,43 +14,37 @@ database/querier.go: database/sqlc.yaml database/dump.sql $(wildcard database/qu
 
 .PHONY: test
 test:
-	gotestsum --format testname -- -tags $(SERVER) -race $$(go list -tags $(SERVER) ./...)
+	gotestsum --format testname -- -race $$(go list ./...)
 
 .PHONY: lint
 lint:
-	golangci-lint run --build-tags $(SERVER)
+	golangci-lint run
 
-frontend/chronicle/dist: $(wildcard frontend/**)
-	(cd frontend/chronicle; pnpm install; SERVER=$(SERVER) pnpm build)
-
-# SERVER controls which WoW server DBC data to compile in (turtle, epoch, etc.)
+# SERVER selects source data for generation tools only. Runtime builds always
+# use dataset-backed data with AzerothCore as the bundled fallback.
 SERVER ?= azerothcore
-DB_NAME := $(if $(filter turtle,$(SERVER)),chronicle,$(SERVER))
+DB_NAME := azerothcore
 
 .PHONY: develop
-develop: frontend/chronicle/dist create-db
-	go run --tags "static $(SERVER)" $(LD_BUILD_FLAGS) ./cmd/chronicled server --dev-auth --jwt-secret-pem="dev" --ocr-url="http://localhost:8730" --primary-domain=localhost
+develop: create-db
+	go run $(LD_BUILD_FLAGS) ./cmd/chronicled server --dev-auth --jwt-secret-pem="dev" --ocr-url="http://localhost:8730" --primary-domain=localhost
 
 develop-backend-fresh:
 	docker rm -f chronicle-db-fresh 2>/dev/null || true
 	docker run -d --name chronicle-db-fresh -e POSTGRES_USER=postgres -e POSTGRES_PASSWORD=postgres -e POSTGRES_DB=postgres -p 5533:5432 postgres:17
 	@echo "Waiting for postgres to be ready..."
 	@until docker exec chronicle-db-fresh pg_isready -U postgres >/dev/null 2>&1; do sleep 0.5; done
-	go run --tags "static $(SERVER)" $(LD_BUILD_FLAGS) ./cmd/chronicled server --dev-auth --jwt-secret-pem="dev" --log-parse-worker-count=4 --ocr-url="http://localhost:8730" --emit-parse-logs --postgres-url="postgres://postgres:postgres@127.0.0.1:5533/postgres?sslmode=disable" --primary-domain=localhost
+	go run $(LD_BUILD_FLAGS) ./cmd/chronicled server --dev-auth --jwt-secret-pem="dev" --log-parse-worker-count=4 --ocr-url="http://localhost:8730" --emit-parse-logs --postgres-url="postgres://postgres:postgres@127.0.0.1:5533/postgres?sslmode=disable" --primary-domain=localhost
 
 develop-backend: create-db
-	go run --tags "$(SERVER)" $(LD_BUILD_FLAGS) ./cmd/chronicled server --dev-auth --jwt-secret-pem="dev" --log-parse-worker-count=4 --ocr-url="http://localhost:8730" --emit-parse-logs --primary-domain=localhost
+	go run $(LD_BUILD_FLAGS) ./cmd/chronicled server --dev-auth --jwt-secret-pem="dev" --log-parse-worker-count=4 --ocr-url="http://localhost:8730" --emit-parse-logs --primary-domain=localhost
 
 .PHONY: build
-build: build-backend-static
+build: build-backend
 
 .PHONY: build-backend
 build-backend:
-	go build --tags "$(SERVER)" $(LD_BUILD_FLAGS) -o bin/chronicled ./cmd/chronicled
-
-.PHONY: build-backend-static
-build-backend-static: frontend/chronicle/dist
-	go build --tags "static $(SERVER)" $(LD_BUILD_FLAGS) -o bin/chronicled ./cmd/chronicled
+	go build $(LD_BUILD_FLAGS) -o bin/chronicled ./cmd/chronicled
 
 # Docker Compose targets for local development services
 COMPOSE_FILE := scripts/development/docker-compose.yml
