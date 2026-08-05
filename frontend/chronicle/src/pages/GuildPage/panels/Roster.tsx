@@ -39,18 +39,21 @@ function ClassChips({ members }: { members: GuildRosterCharacter[] }) {
   }, [members]);
 
   return (
-    <div className="flex flex-wrap gap-1.5 pb-2">
+    <div
+      className="grid gap-1.5 pb-2"
+      style={{ gridTemplateColumns: "repeat(auto-fill, minmax(105px, 1fr))" }}
+    >
       {counts.map(([cls, count]) => (
         <span
           key={cls}
-          className="inline-flex items-center gap-1.5 rounded-full border border-border/50 bg-muted/30 px-2 py-0.5 text-[11px] text-muted-foreground"
+          className="flex min-w-0 items-center gap-1.5 rounded-full border border-border/50 bg-muted/30 px-2.5 py-0.5 text-[11px] text-muted-foreground"
         >
           <span
-            className="h-1.5 w-1.5 rounded-full"
+            className="h-1.5 w-1.5 shrink-0 rounded-full"
             style={{ backgroundColor: CLASS_CSS_VAR[cls] ?? CLASS_CSS_VAR.UNKNOWN }}
           />
-          {CLASS_DISPLAY[cls] ?? cls}
-          <span className="tabular-nums opacity-70">{count}</span>
+          <span className="truncate">{CLASS_DISPLAY[cls] ?? cls}</span>
+          <span className="ml-auto tabular-nums opacity-70">{count}</span>
         </span>
       ))}
     </div>

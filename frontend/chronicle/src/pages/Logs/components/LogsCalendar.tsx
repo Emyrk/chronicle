@@ -115,6 +115,7 @@ export function LogsCalendar({
                     key={dayIndex}
                     className={`
                       ${compact ? "min-h-[48px] p-1" : "min-h-[80px] sm:min-h-[100px] p-1 sm:p-1.5"} border-b border-r border-border last:border-r-0
+                      ${fillHeight ? "flex min-h-0 flex-col overflow-hidden" : ""}
                       ${!inCurrentMonth ? "bg-muted/30" : ""}
                       ${today ? "bg-primary/5" : ""}
                     `}
@@ -137,8 +138,13 @@ export function LogsCalendar({
                       )}
                     </div>
 
-                    {/* Day content (instances, upload badges, etc.) */}
-                    <div className="space-y-1">{dayContent(date)}</div>
+                    {/* Day content (instances, upload badges, etc.). In
+                        fillHeight mode the row height is fixed by the panel,
+                        so overflowing content scrolls inside the cell instead
+                        of spilling into the next week. */}
+                    <div className={fillHeight ? "min-h-0 flex-1 space-y-1 overflow-y-auto" : "space-y-1"}>
+                      {dayContent(date)}
+                    </div>
                   </div>
                 );
               })}
