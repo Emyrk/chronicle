@@ -47,6 +47,7 @@ FROM deduped d
   LEFT JOIN world_item_template wit ON wit.dataset_id = @dataset_id AND wit.entry = d.item_id
   LEFT JOIN world_display_info wdi ON wdi.dataset_id = @dataset_id AND wdi.id = wit.display_id
   LEFT JOIN dbc_item_display_info dbi ON dbi.dataset_id = @dataset_id AND dbi.id = wit.display_id
+WHERE COALESCE(wit.quality, 0) > 2 -- Show rare or better armory loot.
 ORDER BY d.received_ts DESC
 LIMIT @result_limit;
 
