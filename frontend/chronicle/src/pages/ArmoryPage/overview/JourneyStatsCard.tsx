@@ -3,19 +3,14 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/Card/C
 interface JourneyStatsCardProps {
   /** Formatted time in raid over the heatmap window (e.g. "29h 22m"). */
   timeInRaid: string;
-  weekStreak: number;
-  /** All-time boss kills, or null while loading. */
-  bossesDefeated: number | null;
   /** Items looted (e.g. "37" or "200+"), or null while loading. */
   itemsLooted: string | null;
 }
 
 /** Participation-focused headline stats for Journey mode. */
-export function JourneyStatsCard({ timeInRaid, weekStreak, bossesDefeated, itemsLooted }: JourneyStatsCardProps) {
+export function JourneyStatsCard({ timeInRaid, itemsLooted }: JourneyStatsCardProps) {
   const stats: Array<[string, string]> = [
     [timeInRaid, "time in raid · 12 weeks"],
-    [String(weekStreak), weekStreak === 1 ? "week streak" : "weeks streak"],
-    [bossesDefeated != null ? String(bossesDefeated) : "—", "bosses defeated"],
     [itemsLooted ?? "—", "items looted"],
   ];
 
@@ -26,7 +21,7 @@ export function JourneyStatsCard({ timeInRaid, weekStreak, bossesDefeated, items
           Journey
         </CardTitle>
       </CardHeader>
-      <CardContent className="grid grid-cols-2 gap-x-6 gap-y-4">
+      <CardContent className="grid grid-cols-2 gap-x-6">
         {stats.map(([value, label]) => (
           <div key={label}>
             <div className="font-mono text-2xl leading-none font-bold text-foreground">{value}</div>

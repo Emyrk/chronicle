@@ -104,13 +104,6 @@ export function OverviewTab({ player, onOpenTab }: OverviewTabProps) {
     () => summarizeProgress(encountersQuery.data?.encounters ?? []),
     [encountersQuery.data],
   );
-  const bossesDefeated = useMemo(
-    () =>
-      encountersQuery.data
-        ? encountersQuery.data.encounters.reduce((sum, e) => sum + e.kills, 0)
-        : null,
-    [encountersQuery.data],
-  );
   const lootByInstance = useMemo(() => {
     const map = new Map<string, ArmoryLootItem[]>();
     for (const item of lootQuery.data?.items ?? []) {
@@ -141,8 +134,6 @@ export function OverviewTab({ player, onOpenTab }: OverviewTabProps) {
           ) : (
             <JourneyStatsCard
               timeInRaid={timeInRaid}
-              weekStreak={activityStats.weekStreak}
-              bossesDefeated={bossesDefeated}
               itemsLooted={
                 lootQuery.data
                   ? lootQuery.data.items.length >= 200
