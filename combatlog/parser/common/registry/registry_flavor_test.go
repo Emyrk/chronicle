@@ -59,21 +59,21 @@ func TestFlavoredDeadminesHostiles(t *testing.T) {
 		database.FlavorLunatic,
 	}).EntryByName("Deadmines")
 	require.NotNil(t, lunatic)
-	require.NotContains(t, lunatic.HostileEntries, uint32(61962))
-	require.NotContains(t, lunatic.HostileEntries, uint32(61963))
-	burningBladeFlamekin := lunatic.HostileEntries[912408]
-	require.Equal(t, "Burning Blade Flamekin", burningBladeFlamekin.Name)
-	require.False(t, burningBladeFlamekin.Boss)
+	for _, entry := range []uint32{61962, 912408, 61963} {
+		require.NotContains(t, lunatic.HostileEntries, entry)
+	}
 
 	nightmare := RegistryForFlavor(nil, database.WoWFlavor{
 		database.FlavorVanilla,
 		database.FlavorNightmareOfUrsol,
 	}).EntryByName("Deadmines")
 	require.NotNil(t, nightmare)
-	require.NotContains(t, nightmare.HostileEntries, uint32(912408))
 	manufacturedGolem := nightmare.HostileEntries[61962]
 	require.Equal(t, "Manufactured Golem", manufacturedGolem.Name)
 	require.False(t, manufacturedGolem.Boss)
+	burningBladeFlamekin := nightmare.HostileEntries[912408]
+	require.Equal(t, "Burning Blade Flamekin", burningBladeFlamekin.Name)
+	require.False(t, burningBladeFlamekin.Boss)
 	masterpieceHarvester := nightmare.HostileEntries[61963]
 	require.Equal(t, "Masterpiece Harvester", masterpieceHarvester.Name)
 	require.True(t, masterpieceHarvester.Boss)

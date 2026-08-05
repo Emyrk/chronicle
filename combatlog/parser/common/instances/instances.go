@@ -20,8 +20,8 @@ var (
 		Name:      "Deadmines",
 		ZoneNames: []string{"the deadmines", "deadmines", "死亡矿井"},
 		Hostiles:  DeadminesHostiles,
-		FlavoredRankings: func(database.WoWFlavor) *rankings.Rankings {
-			return DeadminesSpeedrunRequirements()
+		FlavoredRankings: func(fl database.WoWFlavor) *rankings.Rankings {
+			return DeadminesSpeedrunRequirements(fl)
 		},
 	}
 

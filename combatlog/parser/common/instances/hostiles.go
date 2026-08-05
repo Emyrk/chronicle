@@ -832,16 +832,11 @@ func DeadminesHostiles(fl database.WoWFlavor) *identifier.Identifier {
 
 	if fl.Has(database.FlavorNightmareOfUrsol) {
 		LoadAdds(hostile, map[uint32]string{
-			61962: "Manufactured Golem",
+			61962:  "Manufactured Golem",
+			912408: "Burning Blade Flamekin",
 		})
 		LoadBosses(hostile, map[uint32]string{
 			61963: "Masterpiece Harvester",
-		})
-	}
-
-	if fl.Has(database.FlavorLunatic) {
-		LoadAdds(hostile, map[uint32]string{
-			912408: "Burning Blade Flamekin",
 		})
 	}
 

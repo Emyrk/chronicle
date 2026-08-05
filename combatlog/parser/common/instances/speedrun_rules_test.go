@@ -36,6 +36,27 @@ func TestLevel60Cap(t *testing.T) {
 	}
 }
 
+func TestDeadminesNightmareSpeedrunRequirements(t *testing.T) {
+	t.Parallel()
+
+	vanilla := DeadminesFactory.FlavoredRankings(database.WoWFlavor{database.FlavorVanilla})
+	require.NotNil(t, vanilla)
+	require.NotNil(t, vanilla.Speedrun)
+	require.NotContains(t, vanilla.Speedrun.Requirements, rankings.SpeedrunRequirement{
+		Name: "Masterpiece Harvester", EntryIDs: []uint32{61963}, Count: 1, Category: rankings.SpeedrunCategoryBosses,
+	})
+
+	nightmare := DeadminesFactory.FlavoredRankings(database.WoWFlavor{
+		database.FlavorVanilla,
+		database.FlavorNightmareOfUrsol,
+	})
+	require.NotNil(t, nightmare)
+	require.NotNil(t, nightmare.Speedrun)
+	require.Contains(t, nightmare.Speedrun.Requirements, rankings.SpeedrunRequirement{
+		Name: "Masterpiece Harvester", EntryIDs: []uint32{61963}, Count: 1, Category: rankings.SpeedrunCategoryBosses,
+	})
+}
+
 func TestVanillaPlusScarletMonasterySpeedrunRequirements(t *testing.T) {
 	t.Parallel()
 

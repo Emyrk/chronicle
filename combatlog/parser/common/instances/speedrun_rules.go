@@ -44,19 +44,26 @@ func RagefireChasmSpeedrunRequirements() *rankings.Rankings {
 	}
 }
 
-func DeadminesSpeedrunRequirements() *rankings.Rankings {
+func DeadminesSpeedrunRequirements(fl database.WoWFlavor) *rankings.Rankings {
+	requirements := []rankings.SpeedrunRequirement{
+		{Name: "Cookie", EntryIDs: []uint32{645}, Count: 1, Category: rankings.SpeedrunCategoryBosses},
+		{Name: "Rhahk'Zor", EntryIDs: []uint32{644}, Count: 1, Category: rankings.SpeedrunCategoryBosses},
+		{Name: "Sneed's Shredder", EntryIDs: []uint32{642}, Count: 1, Category: rankings.SpeedrunCategoryBosses},
+		{Name: "Sneed", EntryIDs: []uint32{643}, Count: 1, Category: rankings.SpeedrunCategoryBosses},
+		{Name: "Gilnid", EntryIDs: []uint32{1763}, Count: 1, Category: rankings.SpeedrunCategoryBosses},
+		{Name: "Mr. Smite", EntryIDs: []uint32{646}, Count: 1, Category: rankings.SpeedrunCategoryBosses},
+		{Name: "Captain Greenskin", EntryIDs: []uint32{647}, Count: 1, Category: rankings.SpeedrunCategoryBosses},
+		{Name: "Edwin VanCleef", EntryIDs: []uint32{639}, Count: 1, Category: rankings.SpeedrunCategoryBosses},
+	}
+	if fl.Has(database.FlavorNightmareOfUrsol) {
+		requirements = append(requirements, rankings.SpeedrunRequirement{
+			Name: "Masterpiece Harvester", EntryIDs: []uint32{61963}, Count: 1, Category: rankings.SpeedrunCategoryBosses,
+		})
+	}
+
 	return &rankings.Rankings{
 		Speedrun: &rankings.SpeedrunRules{
-			Requirements: []rankings.SpeedrunRequirement{
-				{Name: "Cookie", EntryIDs: []uint32{645}, Count: 1, Category: rankings.SpeedrunCategoryBosses},
-				{Name: "Rhahk'Zor", EntryIDs: []uint32{644}, Count: 1, Category: rankings.SpeedrunCategoryBosses},
-				{Name: "Sneed's Shredder", EntryIDs: []uint32{642}, Count: 1, Category: rankings.SpeedrunCategoryBosses},
-				{Name: "Sneed", EntryIDs: []uint32{643}, Count: 1, Category: rankings.SpeedrunCategoryBosses},
-				{Name: "Gilnid", EntryIDs: []uint32{1763}, Count: 1, Category: rankings.SpeedrunCategoryBosses},
-				{Name: "Mr. Smite", EntryIDs: []uint32{646}, Count: 1, Category: rankings.SpeedrunCategoryBosses},
-				{Name: "Captain Greenskin", EntryIDs: []uint32{647}, Count: 1, Category: rankings.SpeedrunCategoryBosses},
-				{Name: "Edwin VanCleef", EntryIDs: []uint32{639}, Count: 1, Category: rankings.SpeedrunCategoryBosses},
-			},
+			Requirements: requirements,
 			LevelRange: &rankings.LevelRangeRequirement{
 				MinLevel: 0,
 				MaxLevel: 26,
