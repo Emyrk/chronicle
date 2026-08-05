@@ -88,7 +88,10 @@ export function useUpdateGearList() {
       if (!res.ok) throw gearAPIError("Failed to update gear list", await res.json().catch(() => null));
       return res.json();
     },
-    onSuccess: () => qc.invalidateQueries({ queryKey: ["gear-lists"] }),
+    onSuccess: (list) => {
+      qc.invalidateQueries({ queryKey: ["gear-lists"] });
+      qc.setQueryData(["gear-list-shared", list.id], list);
+    },
   });
 }
 
