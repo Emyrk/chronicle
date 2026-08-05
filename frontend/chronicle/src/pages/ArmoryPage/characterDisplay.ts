@@ -11,6 +11,10 @@ export function formatRaceLabel(race: string): string {
   return race;
 }
 
+export function getClassIconUrl(cls: string): string {
+  return `/c/icons/class_${cls.toLowerCase()}.png`;
+}
+
 export function getRaceIconUrl(race: string, gender: string, iconBaseUrl?: string): string {
   const name = race === "Scourge" ? "forsaken" : race.toLowerCase().replace(" ", "");
   if (gender == "Female") {

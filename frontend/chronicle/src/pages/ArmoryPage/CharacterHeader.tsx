@@ -1,15 +1,11 @@
 import { Link } from "react-router-dom";
 import type { ArmoryPlayer } from "@/api/typesGenerated";
 import { useIconBaseUrl } from "@/hooks/useDatasetId";
-import { formatClassLabel, formatRaceLabel, getRaceIconUrl } from "./characterDisplay";
+import { formatClassLabel, formatRaceLabel, getClassIconUrl, getRaceIconUrl } from "./characterDisplay";
 import { getClassColorVar } from "./types";
 
 interface CharacterHeaderProps {
   player: ArmoryPlayer;
-}
-
-function getClassIconUrl(cls: string): string {
-  return `/c/icons/class_${cls.toLowerCase()}.png`;
 }
 
 export function CharacterHeader({ player }: CharacterHeaderProps) {

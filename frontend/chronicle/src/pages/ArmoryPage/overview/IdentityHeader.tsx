@@ -1,7 +1,7 @@
 import { Link } from "react-router-dom";
 import type { ArmoryPlayer } from "@/api/typesGenerated";
 import { useIconBaseUrl } from "@/hooks/useDatasetId";
-import { formatClassLabel, formatRaceLabel, getRaceIconUrl } from "../characterDisplay";
+import { formatClassLabel, formatRaceLabel, getClassIconUrl, getRaceIconUrl } from "../characterDisplay";
 import { getClassColorVar } from "../types";
 import { treeName } from "./util";
 
@@ -29,16 +29,25 @@ export function IdentityHeader({ player, children }: IdentityHeaderProps) {
       : `${formatRaceLabel(player.race)} `;
 
   return (
-    <div className="flex flex-col gap-4 lg:grid lg:grid-cols-[minmax(0,1fr)_auto] lg:items-end lg:gap-8">
-      <div className="flex items-end gap-4">
-        <img
-          src={getRaceIconUrl(player.race, player.gender, iconBaseUrl)}
-          alt={formatRaceLabel(player.race)}
-          className="size-16 rounded border border-border bg-popover"
-          onError={(e) => {
-            e.currentTarget.style.display = "none";
-          }}
-        />
+    <div className="flex flex-col gap-4 lg:grid lg:grid-cols-[minmax(0,1fr)_auto] lg:items-center lg:gap-8">
+      <div className="flex items-center gap-4">
+        <div className="flex gap-1.5">
+          <img
+            src={getRaceIconUrl(player.race, player.gender, iconBaseUrl)}
+            alt={formatRaceLabel(player.race)}
+            title={formatRaceLabel(player.race)}
+            className="size-12 rounded border border-border bg-popover"
+            onError={(e) => {
+              e.currentTarget.style.display = "none";
+            }}
+          />
+          <img
+            src={getClassIconUrl(player.class)}
+            alt={formatClassLabel(player.class)}
+            title={formatClassLabel(player.class)}
+            className="size-12 rounded border border-border bg-popover"
+          />
+        </div>
         <div className="min-w-0">
           <div
             className="font-wow truncate text-4xl leading-none"
