@@ -13,6 +13,7 @@ import (
 	"github.com/Emyrk/chronicle/api/chronauth"
 	"github.com/Emyrk/chronicle/api/chroniclesdk"
 	"github.com/Emyrk/chronicle/api/gamedataapi"
+	"github.com/Emyrk/chronicle/api/gearbuilderapi"
 	"github.com/Emyrk/chronicle/api/guildapi"
 	"github.com/Emyrk/chronicle/api/httpapi"
 	"github.com/Emyrk/chronicle/api/httpmw"
@@ -198,6 +199,7 @@ func (api *API) Routes() chi.Router {
 				r.Post("/share", api.CreateShare)
 			})
 			r.Mount("/panel-layout", panellayoutapi.New(api.Opts.Zed, api.Auth).Routes())
+			r.Mount("/gear-builder", gearbuilderapi.New(api.Opts.Zed, api.Auth).Routes())
 			// Account↔character link management.
 			r.Mount("/linked", linkedapi.New(api.Opts.Zed, api.Auth, api.Opts.ExternalVerification).Routes())
 			gameDataHandler := gamedataapi.New(api.Opts.Zed, api.Auth, api.Opts.Pool, api.Opts.GameDB)

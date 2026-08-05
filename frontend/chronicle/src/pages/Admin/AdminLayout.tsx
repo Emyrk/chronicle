@@ -20,6 +20,7 @@ import {
   ClipboardList,
   Database,
   Camera,
+  Wrench,
 } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
 
@@ -41,6 +42,7 @@ const tabs: Tab[] = [
   { path: "/admin/applications", label: "Applications", icon: ClipboardList },
   { path: "/admin/cache-stats", label: "Cache Stats", icon: Database },
   { path: "/admin/parsing", label: "Parsing", icon: Camera },
+  { path: "/admin/gear-builder", label: "Gear Builder", icon: Wrench },
 ];
 
 export function AdminLayout() {

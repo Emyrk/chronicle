@@ -714,6 +714,47 @@ CREATE TABLE game_players (
     talents jsonb DEFAULT 'null'::jsonb NOT NULL
 );
 
+CREATE TABLE gear_lists (
+    id uuid DEFAULT gen_random_uuid() NOT NULL,
+    user_id uuid NOT NULL,
+    tenant_id uuid DEFAULT '00000000-0000-0000-0000-000000000000'::uuid NOT NULL,
+    title text NOT NULL,
+    description text DEFAULT ''::text NOT NULL,
+    class_id integer NOT NULL,
+    spec_name text DEFAULT ''::text NOT NULL,
+    visibility text DEFAULT 'private'::text NOT NULL,
+    payload jsonb DEFAULT '{"stages": []}'::jsonb NOT NULL,
+    created_at timestamp with time zone DEFAULT now() NOT NULL,
+    updated_at timestamp with time zone DEFAULT now() NOT NULL,
+    CONSTRAINT gear_lists_description_length_chk CHECK ((char_length(description) <= 2000)),
+    CONSTRAINT gear_lists_payload_size_chk CHECK ((octet_length((payload)::text) <= 65536)),
+    CONSTRAINT gear_lists_title_length_chk CHECK (((char_length(title) >= 1) AND (char_length(title) <= 128))),
+    CONSTRAINT gear_lists_visibility_check CHECK ((visibility = ANY (ARRAY['public'::text, 'unlisted'::text, 'private'::text])))
+);
+
+CREATE TABLE gear_stat_weight_pins (
+    id uuid DEFAULT gen_random_uuid() NOT NULL,
+    tenant_id uuid DEFAULT '00000000-0000-0000-0000-000000000000'::uuid NOT NULL,
+    dataset_id uuid NOT NULL,
+    stat_weight_id uuid NOT NULL,
+    pinned_by uuid NOT NULL,
+    created_at timestamp with time zone DEFAULT now() NOT NULL
+);
+
+CREATE TABLE gear_stat_weights (
+    id uuid DEFAULT gen_random_uuid() NOT NULL,
+    user_id uuid NOT NULL,
+    tenant_id uuid DEFAULT '00000000-0000-0000-0000-000000000000'::uuid NOT NULL,
+    name text NOT NULL,
+    class_id integer DEFAULT 0 NOT NULL,
+    spec_name text DEFAULT ''::text NOT NULL,
+    weights jsonb DEFAULT '{}'::jsonb NOT NULL,
+    created_at timestamp with time zone DEFAULT now() NOT NULL,
+    updated_at timestamp with time zone DEFAULT now() NOT NULL,
+    CONSTRAINT gear_stat_weights_name_length_chk CHECK (((char_length(name) >= 1) AND (char_length(name) <= 128))),
+    CONSTRAINT gear_stat_weights_weights_size_chk CHECK ((octet_length((weights)::text) <= 8192))
+);
+
 CREATE TABLE guild_join_requests (
     id uuid DEFAULT gen_random_uuid() NOT NULL,
     guild_id uuid NOT NULL,
@@ -1803,6 +1844,18 @@ ALTER TABLE ONLY game_player_gear_history
 ALTER TABLE ONLY game_players
     ADD CONSTRAINT game_players_pkey PRIMARY KEY (id, realm_id);
 
+ALTER TABLE ONLY gear_lists
+    ADD CONSTRAINT gear_lists_pkey PRIMARY KEY (id);
+
+ALTER TABLE ONLY gear_stat_weight_pins
+    ADD CONSTRAINT gear_stat_weight_pins_pkey PRIMARY KEY (id);
+
+ALTER TABLE ONLY gear_stat_weight_pins
+    ADD CONSTRAINT gear_stat_weight_pins_unique UNIQUE (tenant_id, dataset_id, stat_weight_id);
+
+ALTER TABLE ONLY gear_stat_weights
+    ADD CONSTRAINT gear_stat_weights_pkey PRIMARY KEY (id);
+
 ALTER TABLE ONLY guild_join_requests
     ADD CONSTRAINT guild_join_requests_guild_id_user_id_key UNIQUE (guild_id, user_id);
 
@@ -2067,6 +2120,14 @@ CREATE UNIQUE INDEX files_unique_owner_hash ON log_file USING btree (owner, hash
 CREATE INDEX game_player_gear_history_player_time ON game_player_gear_history USING btree (realm_id, player_id, equipped_at DESC);
 
 CREATE INDEX game_players_player_and_realm ON game_players USING btree (name, realm_id);
+
+CREATE INDEX gear_lists_user_tenant_idx ON gear_lists USING btree (user_id, tenant_id);
+
+CREATE INDEX gear_lists_visibility_idx ON gear_lists USING btree (visibility) WHERE (visibility = ANY (ARRAY['public'::text, 'unlisted'::text]));
+
+CREATE INDEX gear_stat_weight_pins_tenant_dataset_idx ON gear_stat_weight_pins USING btree (tenant_id, dataset_id);
+
+CREATE INDEX gear_stat_weights_user_tenant_idx ON gear_stat_weights USING btree (user_id, tenant_id);
 
 CREATE INDEX idx_data_grants_user_id ON data_grants USING btree (user_id);
 
@@ -2345,6 +2406,21 @@ ALTER TABLE ONLY game_players
 
 ALTER TABLE ONLY game_players
     ADD CONSTRAINT game_players_updated_from_instance_fkey FOREIGN KEY (updated_from_instance) REFERENCES log_instances(id) ON DELETE SET NULL DEFERRABLE INITIALLY DEFERRED;
+
+ALTER TABLE ONLY gear_lists
+    ADD CONSTRAINT gear_lists_user_id_fkey FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE;
+
+ALTER TABLE ONLY gear_stat_weight_pins
+    ADD CONSTRAINT gear_stat_weight_pins_dataset_id_fkey FOREIGN KEY (dataset_id) REFERENCES datasets(id) ON DELETE CASCADE;
+
+ALTER TABLE ONLY gear_stat_weight_pins
+    ADD CONSTRAINT gear_stat_weight_pins_pinned_by_fkey FOREIGN KEY (pinned_by) REFERENCES users(id) ON DELETE CASCADE;
+
+ALTER TABLE ONLY gear_stat_weight_pins
+    ADD CONSTRAINT gear_stat_weight_pins_stat_weight_id_fkey FOREIGN KEY (stat_weight_id) REFERENCES gear_stat_weights(id) ON DELETE CASCADE;
+
+ALTER TABLE ONLY gear_stat_weights
+    ADD CONSTRAINT gear_stat_weights_user_id_fkey FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE;
 
 ALTER TABLE ONLY guild_join_requests
     ADD CONSTRAINT guild_join_requests_guild_id_fkey FOREIGN KEY (guild_id) REFERENCES guilds(id) ON DELETE CASCADE;
