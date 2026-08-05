@@ -7,7 +7,7 @@ import { GenericPanel } from "../GenericPanel";
 import { useItemTooltip } from "@/api/gamedata";
 import { cn } from "@/lib/utils";
 import { getQualityBorderClass, getQualityTextClass, getClassColorVar } from "@/pages/ArmoryPage/types";
-import { formatRaceLabel } from "@/pages/ArmoryPage/CharacterHeader";
+import { formatRaceLabel } from "@/pages/ArmoryPage/characterDisplay";
 import { HelpCircle, ExternalLink } from "lucide-react";
 import { ItemTooltip } from "@/components/ui/ItemTooltip/ItemTooltip";
 import {

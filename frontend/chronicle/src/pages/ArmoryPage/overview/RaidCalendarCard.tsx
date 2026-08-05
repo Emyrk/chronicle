@@ -55,7 +55,7 @@ export function RaidCalendarCard({ instances, nightScores, start, stats, onOpenA
   return (
     <Card className="gap-0 py-4">
       <CardHeader className="pb-3">
-        <CardTitle>Raid nights</CardTitle>
+        <CardTitle>Raid calendar</CardTitle>
         <CardDescription>Last {ACTIVITY_WEEKS} weeks</CardDescription>
         <CardAction>
           <button
@@ -81,7 +81,7 @@ export function RaidCalendarCard({ instances, nightScores, start, stats, onOpenA
                         ? `${format(cell.date, "MMM d")} · ${cell.raids.map((r) => r.name).join(", ")}${cell.bestScore !== undefined ? ` · best ${cell.bestScore}` : ""}`
                         : undefined
                     }
-                    className="size-[13px] rounded-xs"
+                    className="size-4 rounded-xs"
                     style={{
                       background: raided
                         ? cell.bestScore !== undefined
@@ -98,7 +98,7 @@ export function RaidCalendarCard({ instances, nightScores, start, stats, onOpenA
         </div>
         <div className="mt-4 flex gap-8 border-t border-border pt-4">
           <CalendarStat value={String(stats.nights)} label="raid nights" />
-          <CalendarStat value={formatDuration(stats.totalMs) ?? "0m"} label="in raid" />
+          <CalendarStat value={formatDuration(stats.totalMs) || "0m"} label="in raid" />
           <CalendarStat
             value={String(stats.weekStreak)}
             label={stats.weekStreak === 1 ? "week streak" : "weeks streak"}

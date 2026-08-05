@@ -73,7 +73,8 @@ export function ArmoryPage() {
 
       {/* Center column */}
       <div>
-        <CharacterHeader player={player} />
+        {/* The overview tab renders its own design-style identity header. */}
+        {activeTab !== "overview" && <CharacterHeader player={player} />}
         <AdminLinkControls player={player} />
 
         {/* Tab navigation */}
@@ -99,7 +100,7 @@ export function ArmoryPage() {
 
         {/* Tab content — overview, gear, and talents stay in center column */}
         {activeTab === "overview" && (
-          <div className="mt-6">
+          <div className="mt-8">
             <OverviewTab player={player} onOpenTab={openTab} />
           </div>
         )}

@@ -1,31 +1,11 @@
 import { Link } from "react-router-dom";
 import type { ArmoryPlayer } from "@/api/typesGenerated";
-import { iconUrl } from "@/config/iconUrl";
 import { useIconBaseUrl } from "@/hooks/useDatasetId";
+import { formatClassLabel, formatRaceLabel, getRaceIconUrl } from "./characterDisplay";
 import { getClassColorVar } from "./types";
-
-export function formatClassLabel(cls: string): string {
-  return cls.charAt(0) + cls.slice(1).toLowerCase();
-}
-
-export function formatRaceLabel(race: string): string {
-  if (race === "NightElf") return "Night Elf";
-  if (race === "BloodElf") return "Blood Elf";
-  if (race === "Scourge") return "Undead";
-  return race;
-}
 
 interface CharacterHeaderProps {
   player: ArmoryPlayer;
-}
-
-function getRaceIconUrl(race: string, gender: string, iconBaseUrl?: string): string {
-  const name = race === "Scourge" ? "forsaken" : race.toLowerCase().replace(" ", "");
-  if (gender == "Female") {
-    return iconUrl(`inv_misc_head_${name}_02`, iconBaseUrl);
-  }
-
-  return iconUrl(`race_${name}`, iconBaseUrl);
 }
 
 function getClassIconUrl(cls: string): string {

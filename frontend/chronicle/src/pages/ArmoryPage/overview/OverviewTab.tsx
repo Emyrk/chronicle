@@ -8,6 +8,7 @@ import { useCharacterEncounters, useCharacterParses } from "@/api/rankingsQuerie
 import { Button } from "@/components/ui/button";
 import { bestScoreByInstance, summarizeProgress, summarizeRaids, topEncounters } from "../parseAggregation";
 import { ACTIVITY_WEEKS, computeActivityStats, defaultMetric, type ParseMetric } from "./util";
+import { IdentityHeader } from "./IdentityHeader";
 import { ScoreCard } from "./ScoreCard";
 import { TalentsCard } from "./TalentsCard";
 import { GearStripCard } from "./GearStripCard";
@@ -127,21 +128,8 @@ export function OverviewTab({ player, onOpenTab }: OverviewTabProps) {
 
   return (
     <div>
-      <div className="mb-4 flex items-center gap-2">
-        {MODES.map(([key, label]) => (
-          <Button
-            key={key}
-            variant={mode === key ? "secondary" : "ghost"}
-            size="sm"
-            onClick={() => setMode(key)}
-          >
-            {label}
-          </Button>
-        ))}
-      </div>
-
-      <div className="grid grid-cols-1 gap-4 lg:grid-cols-12">
-        <div className="lg:col-span-7">
+      <IdentityHeader player={player}>
+        <div className="lg:w-[480px]">
           {isPerformance ? (
             <ScoreCard
               score={parsesQuery.data?.score}
@@ -165,10 +153,22 @@ export function OverviewTab({ player, onOpenTab }: OverviewTabProps) {
             />
           )}
         </div>
-        <div className="lg:col-span-5">
-          <TalentsCard player={player} onOpenTalents={() => onOpenTab("talents")} />
-        </div>
+      </IdentityHeader>
 
+      <div className="mt-6 mb-4 flex items-center gap-2">
+        {MODES.map(([key, label]) => (
+          <Button
+            key={key}
+            variant={mode === key ? "secondary" : "ghost"}
+            size="sm"
+            onClick={() => setMode(key)}
+          >
+            {label}
+          </Button>
+        ))}
+      </div>
+
+      <div className="grid grid-cols-1 gap-4 lg:grid-cols-12">
         <div className="lg:col-span-12">
           <GearStripCard
             player={player}
@@ -177,7 +177,10 @@ export function OverviewTab({ player, onOpenTab }: OverviewTabProps) {
           />
         </div>
 
-        <div className="lg:col-span-12">
+        <div className="lg:col-span-5">
+          <TalentsCard player={player} onOpenTalents={() => onOpenTab("talents")} />
+        </div>
+        <div className="lg:col-span-7">
           <RaidCalendarCard
             instances={activityQuery.data?.instances}
             nightScores={nightScores}

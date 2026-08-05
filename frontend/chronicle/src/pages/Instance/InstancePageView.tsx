@@ -55,7 +55,7 @@ import { HeroicBadge } from "@/components/HeroicBadge";
 import { isHeroic } from "@/lib/wowUtils";
 import { DuplicatesBadge } from "./DuplicatesBadge";
 import { getInstanceBackground } from "@/pages/Logs/utils/instanceImages";
-import { formatClassLabel, formatRaceLabel } from "../ArmoryPage/CharacterHeader";
+import { formatClassLabel, formatRaceLabel } from "../ArmoryPage/characterDisplay";
 import { LAYOUT_ACTION_BAR_KEYS, type LayoutActionBarSlots } from "@/features/layoutBook/layoutBookStore";
 import { parsePanelLayout } from "@/features/layoutBook/parseLayout";
 import {
