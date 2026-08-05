@@ -25,24 +25,39 @@ export function treeName(player: ArmoryPlayer, index: number): string {
 export interface ActivityStats {
   /** Days with at least one raid in the window. */
   nights: number;
-  /** Total raid time in the window, in milliseconds. */
-  totalMs: number;
+  /**
+   * Total time in combat (boss + trash) in the window, in milliseconds.
+   * Falls back to the full raid duration for instances without overview
+   * metrics. Duplicate uploads of the same raid count once.
+   */
+  combatMs: number;
   /** Consecutive raiding weeks, counting back from the latest raiding week. */
   weekStreak: number;
 }
 
 export function computeActivityStats(
-  instances: readonly { first_encounter_time: string; duration_ms: number | null }[],
+  instances: readonly {
+    first_encounter_time: string;
+    duration_ms: number | null;
+    combat_duration_ms?: number;
+    duplicate_group_id?: string;
+  }[],
   start: Date,
 ): ActivityStats {
   const days = new Set<string>();
   const raidWeeks = new Set<number>();
-  let totalMs = 0;
+  const seenGroups = new Set<string>();
+  let combatMs = 0;
   for (const inst of instances) {
     const date = new Date(inst.first_encounter_time);
     days.add(date.toDateString());
-    totalMs += inst.duration_ms ?? 0;
     raidWeeks.add(differenceInCalendarWeeks(date, start));
+    // Count each duplicate-upload group's time once.
+    if (inst.duplicate_group_id) {
+      if (seenGroups.has(inst.duplicate_group_id)) continue;
+      seenGroups.add(inst.duplicate_group_id);
+    }
+    combatMs += inst.combat_duration_ms ?? inst.duration_ms ?? 0;
   }
 
   let weekStreak = 0;
@@ -55,7 +70,7 @@ export function computeActivityStats(
     }
   }
 
-  return { nights: days.size, totalMs, weekStreak };
+  return { nights: days.size, combatMs, weekStreak };
 }
 
 export function defaultMetric(player: ArmoryPlayer): ParseMetric {

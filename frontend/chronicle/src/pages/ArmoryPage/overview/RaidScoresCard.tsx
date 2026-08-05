@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { Link } from "react-router-dom";
+import { AlertTriangle } from "lucide-react";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/Card/Card";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/Collapsible/Collapsible";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/Table/Table";
@@ -10,11 +11,13 @@ import type { ParseMetric } from "./util";
 interface RaidScoresCardProps {
   raids: RaidSummary[];
   metric: ParseMetric;
+  /** Total boss count per instance name, from the supported-instances API. */
+  bossCounts?: Map<string, number>;
   isLoading: boolean;
 }
 
 /** Per-raid score ledger; expand a raid for its per-boss breakdown. */
-export function RaidScoresCard({ raids, metric, isLoading }: RaidScoresCardProps) {
+export function RaidScoresCard({ raids, metric, bossCounts, isLoading }: RaidScoresCardProps) {
   const [open, setOpen] = useState<string | null>(raids[0] ? raidKey(raids[0]) : null);
   // Open the biggest raid once data arrives (state initializes before load).
   const [autoOpened, setAutoOpened] = useState(false);
@@ -41,6 +44,9 @@ export function RaidScoresCard({ raids, metric, isLoading }: RaidScoresCardProps
         )}
         {raids.map((raid) => {
           const key = raidKey(raid);
+          const bossesLogged = raid.encounters.length;
+          const bossTotal = Math.max(bossCounts?.get(raid.instanceName) ?? 0, bossesLogged);
+          const incomplete = bossesLogged < bossTotal;
           return (
             <Collapsible
               key={key}
@@ -48,29 +54,31 @@ export function RaidScoresCard({ raids, metric, isLoading }: RaidScoresCardProps
               onOpenChange={(o) => setOpen(o ? key : null)}
             >
               <CollapsibleTrigger className="w-full cursor-pointer border-b border-border px-6 py-4 text-left transition-colors hover:bg-muted/40">
-                <div className="grid grid-cols-[minmax(0,1fr)_auto] items-center gap-x-6 gap-y-2 sm:grid-cols-[minmax(0,1fr)_260px_56px_64px_14px]">
+                <div className="grid grid-cols-[minmax(0,1fr)_auto] items-center gap-x-6 gap-y-2 sm:grid-cols-[minmax(0,1fr)_280px_64px_14px]">
                   <div className="min-w-0">
                     <div className="font-wow truncate text-base text-foreground">
                       {raid.instanceName}
                     </div>
-                    <div className="mt-1 text-xs text-muted-foreground">
-                      {[
-                        raid.maxPlayers > 0 ? `${raid.maxPlayers}-player` : "",
-                        raid.difficultyName,
-                        `${raid.kills} boss ${raid.kills === 1 ? "kill" : "kills"} logged`,
-                      ]
-                        .filter(Boolean)
-                        .join(" · ")}
+                    <div className="mt-1 flex items-center gap-1.5 text-xs text-muted-foreground">
+                      {incomplete && (
+                        <AlertTriangle
+                          className="size-3.5 shrink-0 text-amber-500"
+                          aria-label="Not all bosses have logged kills"
+                        />
+                      )}
+                      <span>
+                        {[
+                          raid.maxPlayers > 0 ? `${raid.maxPlayers}-player` : "",
+                          raid.difficultyName,
+                          `${bossesLogged}/${bossTotal} boss kills logged`,
+                        ]
+                          .filter(Boolean)
+                          .join(" · ")}
+                      </span>
                     </div>
                   </div>
                   <div className="relative hidden sm:block">
-                    <ScoreBar score={raid.score} best={raid.best} />
-                  </div>
-                  <div className="hidden text-right sm:block">
-                    <div className={`font-mono text-lg font-bold ${parseColor(raid.best)}`}>
-                      {raid.best}
-                    </div>
-                    <div className="text-xs text-muted-foreground">best</div>
+                    <ScoreBar score={raid.score} />
                   </div>
                   <div className="text-right">
                     <div className={`font-mono text-3xl font-bold ${parseColor(raid.score)}`}>
@@ -129,6 +137,7 @@ function EncounterRow({ encounter }: { encounter: EncounterSummary }) {
           title="Open the log of the best parse"
         >
           {Math.round(encounter.bestMetricValue).toLocaleString()}
+          <span className="opacity-50">/s</span>
         </Link>
       </TableCell>
       <TableCell className="text-right font-mono text-muted-foreground">
@@ -151,8 +160,8 @@ function EncounterRow({ encounter }: { encounter: EncounterSummary }) {
   );
 }
 
-/** Filled score bar with a tick marking the all-window best. */
-function ScoreBar({ score, best }: { score: number; best: number }) {
+/** Filled score bar, with an optional tick marking the all-window best. */
+function ScoreBar({ score, best }: { score: number; best?: number }) {
   return (
     <>
       <div className="h-1.5 overflow-hidden rounded-full bg-border">
@@ -161,10 +170,12 @@ function ScoreBar({ score, best }: { score: number; best: number }) {
           style={{ width: `${score}%`, background: parseHexColor(score) }}
         />
       </div>
-      <div
-        className="absolute -top-0.5 h-2.5 w-0.5 rounded-[1px]"
-        style={{ left: `calc(${best}% - 1px)`, background: parseHexColor(best) }}
-      />
+      {best !== undefined && (
+        <div
+          className="absolute -top-0.5 h-2.5 w-0.5 rounded-[1px]"
+          style={{ left: `calc(${best}% - 1px)`, background: parseHexColor(best) }}
+        />
+      )}
     </>
   );
 }

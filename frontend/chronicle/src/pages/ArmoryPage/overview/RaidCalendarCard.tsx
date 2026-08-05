@@ -107,7 +107,7 @@ export function RaidCalendarCard({ instances, nightScores, start, stats, onOpenA
         </div>
         <div className="mt-4 flex gap-8 border-t border-border pt-4">
           <CalendarStat value={String(stats.nights)} label="raid nights" />
-          <CalendarStat value={formatDuration(stats.totalMs) || "0m"} label="in raid" />
+          <CalendarStat value={formatDuration(stats.combatMs) || "0m"} label="in combat" />
           <CalendarStat
             value={String(stats.weekStreak)}
             label={stats.weekStreak === 1 ? "week streak" : "weeks streak"}

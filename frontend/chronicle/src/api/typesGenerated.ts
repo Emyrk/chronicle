@@ -1991,6 +1991,11 @@ export interface RecentInstance {
     readonly boss_count: number;
     readonly boss_kills: number;
     readonly duration_ms: number | null; // nullable if no encounters
+    /**
+     * CombatDurationMs is the summed boss + trash combat time from the
+     * overview metrics; nil when metrics were not computed for the instance.
+     */
+    readonly combat_duration_ms?: number;
     readonly guild_id?: string;
     readonly guild_name?: string;
     readonly encounters?: readonly RecentEncounter[];

@@ -136,6 +136,28 @@ export function bestScoreByInstance(parses: readonly CharacterParse[]): Map<stri
   return map;
 }
 
+/**
+ * Average parse score per instance (raid night), rounded like the server.
+ * Keyed by instance_id.
+ */
+export function averageScoreByInstance(parses: readonly CharacterParse[]): Map<string, number> {
+  const sums = new Map<string, { sum: number; count: number }>();
+  for (const p of parses) {
+    const acc = sums.get(p.instance_id);
+    if (acc) {
+      acc.sum += p.precise_score;
+      acc.count++;
+    } else {
+      sums.set(p.instance_id, { sum: p.precise_score, count: 1 });
+    }
+  }
+  const map = new Map<string, number>();
+  for (const [id, { sum, count }] of sums) {
+    map.set(id, roundDisplay(sum / count));
+  }
+  return map;
+}
+
 export interface RaidProgress {
   instanceName: string;
   difficultyName: string;

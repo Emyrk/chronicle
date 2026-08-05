@@ -18,7 +18,7 @@ const MAX_LOOT_ICONS = 4;
 
 interface RecentNightsCardProps {
   instances?: readonly RecentInstance[];
-  /** Best parse display score per instance_id. */
+  /** Average parse display score per instance_id. */
   nightScores: Map<string, number>;
   /** Loot received per instance_id, for per-night loot icons. */
   lootByInstance?: Map<string, ArmoryLootItem[]>;
@@ -61,11 +61,12 @@ export function RecentNightsCard({ instances, nightScores, lootByInstance, onOpe
           const inst = group[0];
           const date = new Date(inst.first_encounter_time);
           const duration = formatDuration(inst.duration_ms);
-          // The group's best parse across duplicate uploads of the night.
-          const best = group.reduce<number | undefined>((acc, g) => {
-            const s = nightScores.get(g.id);
-            return s !== undefined && s > (acc ?? -1) ? s : acc;
-          }, undefined);
+          // The night's average parse; duplicate uploads of the night carry
+          // (near-)identical parses, so any group member's average works.
+          const avg = group.reduce<number | undefined>(
+            (acc, g) => acc ?? nightScores.get(g.id),
+            undefined,
+          );
           const url = inst.slug ? `/instances/${inst.slug}` : `/instances/${inst.id}`;
           const loot = group
             .flatMap((g) => lootByInstance?.get(g.id) ?? [])
@@ -96,10 +97,10 @@ export function RecentNightsCard({ instances, nightScores, lootByInstance, onOpe
                   ))}
                 </div>
               )}
-              {best !== undefined && (
+              {avg !== undefined && (
                 <div className="shrink-0 text-right">
-                  <div className={`font-mono text-sm font-bold ${parseColor(best)}`}>{best}</div>
-                  <div className="text-xs text-muted-foreground">best</div>
+                  <div className={`font-mono text-sm font-bold ${parseColor(avg)}`}>{avg}</div>
+                  <div className="text-xs text-muted-foreground">avg</div>
                 </div>
               )}
             </Link>

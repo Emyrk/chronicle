@@ -165,6 +165,7 @@ SELECT
     (SELECT COUNT(*) FROM log_instance_encounters lie WHERE lie.instance_id = li.id AND lie.boss = true AND lie.kill_type IN ('clean', 'partial')) as boss_kills,
     COALESCE((SELECT EXTRACT(EPOCH FROM (MAX(lie.end_time) - MIN(lie.start_time))) * 1000 
      FROM log_instance_encounters lie WHERE lie.instance_id = li.id), 0)::float8 as duration_ms,
+    iom.total_combat_duration_ms as combat_duration_ms,
     g.id as guild_id,
     g.name as guild_name,
     EXISTS (SELECT 1 FROM log_instance_youtube_timestamped yt WHERE yt.log_instance_id = li.id OR yt.instance_slug = li.hashed_slug) as has_youtube_video,
@@ -176,6 +177,7 @@ SELECT
 FROM log_instances li
 JOIN parsed_log_group plg ON plg.id = li.log_group_id
 JOIN wow_log_groups wlg ON wlg.id = plg.id
+LEFT JOIN instance_overview_metrics iom ON iom.instance_id = li.id
 LEFT JOIN server_upload_meta sm ON sm.log_group_id = li.log_group_id
 JOIN users u ON u.id = wlg.owner
 JOIN wow_server_realms wsr ON wsr.id = li.realm_id
@@ -236,6 +238,7 @@ SELECT
     (SELECT COUNT(*) FROM log_instance_encounters lie WHERE lie.instance_id = li.id AND lie.boss = true AND lie.kill_type IN ('clean', 'partial')) as boss_kills,
     COALESCE((SELECT EXTRACT(EPOCH FROM (MAX(lie.end_time) - MIN(lie.start_time))) * 1000 
      FROM log_instance_encounters lie WHERE lie.instance_id = li.id), 0)::float8 as duration_ms,
+    iom.total_combat_duration_ms as combat_duration_ms,
     g.id as guild_id,
     g.name as guild_name,
     EXISTS (SELECT 1 FROM log_instance_youtube_timestamped yt WHERE yt.log_instance_id = li.id OR yt.instance_slug = li.hashed_slug) as has_youtube_video,
@@ -247,6 +250,7 @@ SELECT
 FROM log_instances li
 JOIN parsed_log_group plg ON plg.id = li.log_group_id
 JOIN wow_log_groups wlg ON wlg.id = plg.id
+LEFT JOIN instance_overview_metrics iom ON iom.instance_id = li.id
 LEFT JOIN server_upload_meta sm ON sm.log_group_id = li.log_group_id
 JOIN users u ON u.id = wlg.owner
 JOIN wow_server_realms wsr ON wsr.id = li.realm_id

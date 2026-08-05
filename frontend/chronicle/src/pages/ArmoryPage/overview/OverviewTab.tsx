@@ -6,7 +6,7 @@ import type { ArmoryLootItem, ArmoryPlayer, RecentInstancesResponse } from "@/ap
 import { useArmoryGearHistory, useArmoryLoot, useSupportedInstanceBossCounts } from "@/api/queries";
 import { useCharacterEncounters, useCharacterParses } from "@/api/rankingsQueries";
 import { Button } from "@/components/ui/button";
-import { bestScoreByInstance, summarizeProgress, summarizeRaids, topEncounters } from "../parseAggregation";
+import { averageScoreByInstance, bestScoreByInstance, summarizeProgress, summarizeRaids, topEncounters } from "../parseAggregation";
 import { ACTIVITY_WEEKS, computeActivityStats, defaultMetric, type ParseMetric } from "./util";
 import { IdentityHeader } from "./IdentityHeader";
 import { ScoreCard } from "./ScoreCard";
@@ -95,6 +95,13 @@ export function OverviewTab({ player, onOpenTab }: OverviewTabProps) {
         : new Map<string, number>(),
     [parsesQuery.data, isPerformance],
   );
+  const nightAverages = useMemo(
+    () =>
+      isPerformance
+        ? averageScoreByInstance(parsesQuery.data?.parses ?? [])
+        : new Map<string, number>(),
+    [parsesQuery.data, isPerformance],
+  );
 
   // Journey mode: participation, progression, and loot.
   const encountersQuery = useCharacterEncounters(player.id, !isPerformance);
@@ -117,14 +124,14 @@ export function OverviewTab({ player, onOpenTab }: OverviewTabProps) {
     return map;
   }, [lootQuery.data]);
 
-  const timeInRaid = formatHours(activityStats.totalMs);
+  const timeInCombat = formatHours(activityStats.combatMs);
 
   const modeSelector = (
     <div className="flex items-center gap-2">
       {MODES.map(([key, label]) => (
         <Button
           key={key}
-          variant={mode === key ? "secondary" : "ghost"}
+          variant={mode === key ? "secondary" : "outline"}
           size="sm"
           onClick={() => setMode(key)}
         >
@@ -148,7 +155,7 @@ export function OverviewTab({ player, onOpenTab }: OverviewTabProps) {
             />
           ) : (
             <JourneyStatsCard
-              timeInRaid={timeInRaid}
+              timeInRaid={timeInCombat}
               itemsLooted={
                 lootQuery.data
                   ? lootQuery.data.items.length >= 200
@@ -186,12 +193,17 @@ export function OverviewTab({ player, onOpenTab }: OverviewTabProps) {
         {isPerformance ? (
           <>
             <div className="lg:col-span-12">
-              <RaidScoresCard raids={raids} metric={metric} isLoading={parsesQuery.isLoading} />
+              <RaidScoresCard
+                raids={raids}
+                metric={metric}
+                bossCounts={bossCounts}
+                isLoading={parsesQuery.isLoading}
+              />
             </div>
             <div className="lg:col-span-12">
               <RecentNightsCard
                 instances={activityQuery.data?.instances}
-                nightScores={nightScores}
+                nightScores={nightAverages}
                 onOpenActivity={() => onOpenTab("activity")}
               />
             </div>

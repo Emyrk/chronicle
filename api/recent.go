@@ -190,6 +190,10 @@ func (api *API) InstancesByTimeRange(w http.ResponseWriter, r *http.Request) {
 			d := row.DurationMs
 			inst.DurationMs = &d
 		}
+		if row.CombatDurationMs.Valid {
+			c := row.CombatDurationMs.Int64
+			inst.CombatDurationMs = &c
+		}
 		if row.GuildID.Valid {
 			inst.GuildID = &row.GuildID.UUID
 		}

@@ -489,7 +489,10 @@ type RecentInstance struct {
 	BossCount          int64             `json:"boss_count"`
 	BossKills          int64             `json:"boss_kills"`
 	DurationMs         *float64          `json:"duration_ms"` // nullable if no encounters
-	GuildID            *uuid.UUID        `json:"guild_id,omitempty"`
+	// CombatDurationMs is the summed boss + trash combat time from the
+	// overview metrics; nil when metrics were not computed for the instance.
+	CombatDurationMs *int64     `json:"combat_duration_ms,omitempty"`
+	GuildID          *uuid.UUID `json:"guild_id,omitempty"`
 	GuildName          *string           `json:"guild_name,omitempty"`
 	Encounters         []RecentEncounter `json:"encounters,omitempty"`
 	HasYoutubeVideo    bool              `json:"has_youtube_video"`
