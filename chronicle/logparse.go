@@ -896,15 +896,18 @@ func buildIdentityReport(cs *creatures.Creatures) *chroniclesdk.IdentityReport {
 	return rpt
 }
 
-func (c *Chronicle) EnqueueParseLog(ctx context.Context, log database.WoWLogGroup, verbose bool, identityMode bool, realmID uuid.UUID) (*rivertype.JobInsertResult, error) {
-	t := servicetenant.TenantIDFromContext(ctx)
-	res, err := c.queue.Insert(ctx, ArgsLogParse{
-		LogID:        log.ID,
+func newArgsLogParse(ctx context.Context, logID uuid.UUID, verbose bool, identityMode bool, realmID uuid.UUID) ArgsLogParse {
+	return ArgsLogParse{
+		LogID:        logID,
 		RealmID:      realmID,
-		TenantID:     t,
+		TenantID:     servicetenant.TenantIDFromContext(ctx),
 		Verbose:      verbose,
 		IdentityMode: identityMode,
-	}, &river.InsertOpts{
+	}
+}
+
+func (c *Chronicle) EnqueueParseLog(ctx context.Context, log database.WoWLogGroup, verbose bool, identityMode bool, realmID uuid.UUID) (*rivertype.JobInsertResult, error) {
+	res, err := c.queue.Insert(ctx, newArgsLogParse(ctx, log.ID, verbose, identityMode, realmID), &river.InsertOpts{
 		Tags: []string{
 			fmt.Sprintf("owner_%s", log.Owner.String()),
 		},

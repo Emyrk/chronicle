@@ -69,43 +69,54 @@ func validateResyncRawFiles(
 	return nil
 }
 
-func resyncRealmID(instances []database.LogInstancesGuild) (uuid.UUID, error) {
+func resyncTenantID(tenantIDs []uuid.NullUUID) (uuid.UUID, error) {
+	if len(tenantIDs) == 0 {
+		return uuid.Nil, fmt.Errorf("resync log group has no tenant scopes")
+	}
+	resolved := tenantIDs[0]
+	for _, tenantID := range tenantIDs[1:] {
+		if resolved.Valid != tenantID.Valid ||
+			(resolved.Valid && resolved.UUID != tenantID.UUID) {
+			return uuid.Nil, fmt.Errorf("resync log group spans multiple tenant scopes")
+		}
+	}
+	if resolved.Valid {
+		return resolved.UUID, nil
+	}
+	return uuid.Nil, nil
+}
+
+func (w *WorkerResync) resolveTenantID(ctx context.Context, logGroupID uuid.UUID) (uuid.UUID, error) {
+	instances, err := w.parent.Zed.GetInstancesByLogGroupID(ctx, logGroupID)
+	if err != nil {
+		return uuid.Nil, fmt.Errorf("fetch existing instances for tenant scope: %w", err)
+	}
 	if len(instances) == 0 {
 		return uuid.Nil, fmt.Errorf("resync log group has no existing instances")
 	}
-	realmID := instances[0].RealmID
-	if realmID == uuid.Nil {
-		return uuid.Nil, fmt.Errorf("resync log group has an instance without a realm")
-	}
-	for _, instance := range instances[1:] {
-		if instance.RealmID != realmID {
-			return uuid.Nil, fmt.Errorf("resync log group spans multiple realms (%s and %s)", realmID, instance.RealmID)
-		}
-	}
-	return realmID, nil
-}
 
-func (w *WorkerResync) resolveScope(ctx context.Context, logGroupID uuid.UUID) (uuid.UUID, uuid.UUID, error) {
-	instances, err := w.parent.Zed.GetInstancesByLogGroupID(ctx, logGroupID)
-	if err != nil {
-		return uuid.Nil, uuid.Nil, fmt.Errorf("fetch existing instances for tenant scope: %w", err)
+	tenantIDs := make([]uuid.NullUUID, 0, len(instances))
+	seenRealms := make(map[uuid.UUID]struct{}, len(instances))
+	for _, instance := range instances {
+		if instance.RealmID == uuid.Nil {
+			return uuid.Nil, fmt.Errorf("resync log group has an instance without a realm")
+		}
+		if _, ok := seenRealms[instance.RealmID]; ok {
+			continue
+		}
+		seenRealms[instance.RealmID] = struct{}{}
+
+		realm, err := w.parent.Zed.GetWoWServerRealm(ctx, instance.RealmID)
+		if err != nil {
+			return uuid.Nil, fmt.Errorf("fetch realm %s for tenant scope: %w", instance.RealmID, err)
+		}
+		server, err := w.parent.Zed.GetWoWServer(ctx, realm.ServerID)
+		if err != nil {
+			return uuid.Nil, fmt.Errorf("fetch server %s for tenant scope: %w", realm.ServerID, err)
+		}
+		tenantIDs = append(tenantIDs, server.TenantID)
 	}
-	realmID, err := resyncRealmID(instances)
-	if err != nil {
-		return uuid.Nil, uuid.Nil, err
-	}
-	realm, err := w.parent.Zed.GetWoWServerRealm(ctx, realmID)
-	if err != nil {
-		return uuid.Nil, uuid.Nil, fmt.Errorf("fetch realm %s for tenant scope: %w", realmID, err)
-	}
-	server, err := w.parent.Zed.GetWoWServer(ctx, realm.ServerID)
-	if err != nil {
-		return uuid.Nil, uuid.Nil, fmt.Errorf("fetch server %s for tenant scope: %w", realm.ServerID, err)
-	}
-	if server.TenantID.Valid {
-		return realmID, server.TenantID.UUID, nil
-	}
-	return realmID, uuid.Nil, nil
+	return resyncTenantID(tenantIDs)
 }
 
 func (w *WorkerResync) Work(ctx context.Context, job *river.Job[ArgsResync]) error {
@@ -125,9 +136,13 @@ func (w *WorkerResync) Work(ctx context.Context, job *river.Job[ArgsResync]) err
 		w.parent.logger.Info("skipping SuperWoW log group during resync", "log_group_id", logGroupID)
 		return nil
 	}
-	realmID, tenantID, err := w.resolveScope(adminCtx, logGroupID)
+	tenantID, err := w.resolveTenantID(adminCtx, logGroupID)
 	if err != nil {
 		return fmt.Errorf("resolve resync tenant scope: %w", err)
+	}
+	var parseRealmID uuid.UUID
+	if meta, metaErr := w.parent.Zed.GetServerUploadMetaRealmID(adminCtx, logGroupID); metaErr == nil && meta.Valid {
+		parseRealmID = meta.UUID
 	}
 	files, err := w.parent.Zed.GetWoWLogFilesByGroupID(adminCtx, logGroupID)
 	if err != nil {
@@ -148,17 +163,13 @@ func (w *WorkerResync) Work(ctx context.Context, job *river.Job[ArgsResync]) err
 	// river.Job[ArgsLogParse] wrapping the real job row so RecordOutput and
 	// other River context functions work correctly through the real River
 	// context carried in ctx.
-	parseJob := &river.Job[ArgsLogParse]{
-		JobRow: job.JobRow,
-		Args: ArgsLogParse{
-			LogID:    logGroupID,
-			RealmID:  realmID,
-			TenantID: tenantID,
-		},
-	}
 	parseCtx := ctx
 	if tenantID != uuid.Nil {
 		parseCtx = servicetenant.WithTenantID(parseCtx, tenantID)
+	}
+	parseJob := &river.Job[ArgsLogParse]{
+		JobRow: job.JobRow,
+		Args:   newArgsLogParse(parseCtx, logGroupID, false, false, parseRealmID),
 	}
 
 	if err := parseWorker.Work(parseCtx, parseJob); err != nil {

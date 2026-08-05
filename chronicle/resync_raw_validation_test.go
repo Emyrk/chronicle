@@ -6,49 +6,52 @@ import (
 	"testing"
 
 	"github.com/Emyrk/chronicle/database"
+	"github.com/Emyrk/chronicle/internal/services/servicetenant"
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/require"
 )
 
-func TestResyncRealmID(t *testing.T) {
+func TestNewArgsLogParseMatchesTenantReparse(t *testing.T) {
 	t.Parallel()
 
-	firstRealm := uuid.New()
-	secondRealm := uuid.New()
+	logID := uuid.New()
+	realmID := uuid.New()
+	tenantID := uuid.New()
+	ctx := servicetenant.WithTenantID(t.Context(), tenantID)
+
+	got := newArgsLogParse(ctx, logID, true, true, realmID)
+	require.Equal(t, ArgsLogParse{
+		LogID:        logID,
+		RealmID:      realmID,
+		TenantID:     tenantID,
+		Verbose:      true,
+		IdentityMode: true,
+	}, got)
+}
+
+func TestResyncTenantID(t *testing.T) {
+	t.Parallel()
+
+	tenantID := uuid.New()
+	tenant := uuid.NullUUID{UUID: tenantID, Valid: true}
+	otherTenant := uuid.NullUUID{UUID: uuid.New(), Valid: true}
 
 	for _, tt := range []struct {
 		name      string
-		instances []database.LogInstancesGuild
+		tenants   []uuid.NullUUID
 		want      uuid.UUID
 		wantError string
 	}{
-		{
-			name:      "one realm",
-			instances: []database.LogInstancesGuild{{RealmID: firstRealm}, {RealmID: firstRealm}},
-			want:      firstRealm,
-		},
-		{
-			name:      "no instances",
-			wantError: "no existing instances",
-		},
-		{
-			name:      "missing realm",
-			instances: []database.LogInstancesGuild{{RealmID: uuid.Nil}},
-			wantError: "without a realm",
-		},
-		{
-			name: "multiple realms",
-			instances: []database.LogInstancesGuild{
-				{RealmID: firstRealm},
-				{RealmID: secondRealm},
-			},
-			wantError: "spans multiple realms",
-		},
+		{name: "one tenant across multiple realms", tenants: []uuid.NullUUID{tenant, tenant}, want: tenantID},
+		{name: "root scope across multiple realms", tenants: []uuid.NullUUID{{}, {}}, want: uuid.Nil},
+		{name: "no scopes", wantError: "no tenant scopes"},
+		{name: "multiple tenants", tenants: []uuid.NullUUID{tenant, otherTenant}, wantError: "multiple tenant scopes"},
+		{name: "tenant and root", tenants: []uuid.NullUUID{tenant, {}}, wantError: "multiple tenant scopes"},
 	} {
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
 
-			got, err := resyncRealmID(tt.instances)
+			got, err := resyncTenantID(tt.tenants)
 			if tt.wantError != "" {
 				require.ErrorContains(t, err, tt.wantError)
 				require.Equal(t, uuid.Nil, got)
