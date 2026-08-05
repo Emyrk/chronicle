@@ -110,6 +110,9 @@ func resolveLogFlavor(current database.WoWFlavor, explicit bool, resolved Resolv
 }
 
 func (w *WorkerLogParse) Work(ctx context.Context, job *river.Job[ArgsLogParse]) error {
+	if job.Args.TenantID != uuid.Nil {
+		ctx = servicetenant.WithTenantID(ctx, job.Args.TenantID)
+	}
 	jobStart := time.Now()
 	metrics := w.parent.metrics
 	report := &chroniclesdk.LogParseReport{
@@ -210,8 +213,7 @@ func (w *WorkerLogParse) Work(ctx context.Context, job *river.Job[ArgsLogParse])
 			}
 			return river.JobCancel(fmt.Errorf("%s", msg))
 		}
-		bypassCtx := servicetenant.AdminBypass(ctx)
-		if r, lookupErr := db.GetWoWServerRealmByName(bypassCtx, realmName); lookupErr == nil {
+		if r, lookupErr := db.GetWoWServerRealmByName(ctx, realmName); lookupErr == nil {
 			preRealmID = r.ID
 		} else {
 			// Realm not yet in DB — use the well-known "Unknown" realm so

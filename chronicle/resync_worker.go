@@ -69,12 +69,51 @@ func validateResyncRawFiles(
 	return nil
 }
 
+func resyncRealmID(instances []database.LogInstancesGuild) (uuid.UUID, error) {
+	if len(instances) == 0 {
+		return uuid.Nil, fmt.Errorf("resync log group has no existing instances")
+	}
+	realmID := instances[0].RealmID
+	if realmID == uuid.Nil {
+		return uuid.Nil, fmt.Errorf("resync log group has an instance without a realm")
+	}
+	for _, instance := range instances[1:] {
+		if instance.RealmID != realmID {
+			return uuid.Nil, fmt.Errorf("resync log group spans multiple realms (%s and %s)", realmID, instance.RealmID)
+		}
+	}
+	return realmID, nil
+}
+
+func (w *WorkerResync) resolveScope(ctx context.Context, logGroupID uuid.UUID) (uuid.UUID, uuid.UUID, error) {
+	instances, err := w.parent.Zed.GetInstancesByLogGroupID(ctx, logGroupID)
+	if err != nil {
+		return uuid.Nil, uuid.Nil, fmt.Errorf("fetch existing instances for tenant scope: %w", err)
+	}
+	realmID, err := resyncRealmID(instances)
+	if err != nil {
+		return uuid.Nil, uuid.Nil, err
+	}
+	realm, err := w.parent.Zed.GetWoWServerRealm(ctx, realmID)
+	if err != nil {
+		return uuid.Nil, uuid.Nil, fmt.Errorf("fetch realm %s for tenant scope: %w", realmID, err)
+	}
+	server, err := w.parent.Zed.GetWoWServer(ctx, realm.ServerID)
+	if err != nil {
+		return uuid.Nil, uuid.Nil, fmt.Errorf("fetch server %s for tenant scope: %w", realm.ServerID, err)
+	}
+	if server.TenantID.Valid {
+		return realmID, server.TenantID.UUID, nil
+	}
+	return realmID, uuid.Nil, nil
+}
+
 func (w *WorkerResync) Work(ctx context.Context, job *river.Job[ArgsResync]) error {
 	logGroupID := job.Args.LogGroupID
-	ctx = servicetenant.AdminBypass(ctx)
+	adminCtx := servicetenant.AdminBypass(ctx)
 
 	parseWorker := &WorkerLogParse{parent: w.parent}
-	logGroup, err := w.parent.Zed.GetWoWLogGroupByID(ctx, logGroupID)
+	logGroup, err := w.parent.Zed.GetWoWLogGroupByID(adminCtx, logGroupID)
 	if err != nil {
 		return fmt.Errorf("fetch log group for raw-file validation: %w", err)
 	}
@@ -86,18 +125,22 @@ func (w *WorkerResync) Work(ctx context.Context, job *river.Job[ArgsResync]) err
 		w.parent.logger.Info("skipping SuperWoW log group during resync", "log_group_id", logGroupID)
 		return nil
 	}
-	files, err := w.parent.Zed.GetWoWLogFilesByGroupID(ctx, logGroupID)
+	realmID, tenantID, err := w.resolveScope(adminCtx, logGroupID)
+	if err != nil {
+		return fmt.Errorf("resolve resync tenant scope: %w", err)
+	}
+	files, err := w.parent.Zed.GetWoWLogFilesByGroupID(adminCtx, logGroupID)
 	if err != nil {
 		return fmt.Errorf("fetch raw log files for validation: %w", err)
 	}
-	if err := validateResyncRawFiles(ctx, files, 1, parseWorker.loadFileBytes); err != nil {
+	if err := validateResyncRawFiles(adminCtx, files, 1, parseWorker.loadFileBytes); err != nil {
 		return err
 	}
 
 	// Only delete parsed data after every raw file has been downloaded and
 	// decompressed successfully. The parse worker downloads them again, but this
 	// preflight ensures a missing or corrupt object cannot destroy the old parse.
-	if err := w.parent.Zed.DeleteAllParsedLogsByGroupID(ctx, logGroupID); err != nil {
+	if err := w.parent.Zed.DeleteAllParsedLogsByGroupID(adminCtx, logGroupID); err != nil {
 		return fmt.Errorf("delete parsed logs: %w", err)
 	}
 
@@ -107,10 +150,18 @@ func (w *WorkerResync) Work(ctx context.Context, job *river.Job[ArgsResync]) err
 	// context carried in ctx.
 	parseJob := &river.Job[ArgsLogParse]{
 		JobRow: job.JobRow,
-		Args:   ArgsLogParse{LogID: logGroupID},
+		Args: ArgsLogParse{
+			LogID:    logGroupID,
+			RealmID:  realmID,
+			TenantID: tenantID,
+		},
+	}
+	parseCtx := ctx
+	if tenantID != uuid.Nil {
+		parseCtx = servicetenant.WithTenantID(parseCtx, tenantID)
 	}
 
-	if err := parseWorker.Work(ctx, parseJob); err != nil {
+	if err := parseWorker.Work(parseCtx, parseJob); err != nil {
 		return fmt.Errorf("parse: %w", err)
 	}
 

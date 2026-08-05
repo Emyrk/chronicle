@@ -10,6 +10,56 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
+func TestResyncRealmID(t *testing.T) {
+	t.Parallel()
+
+	firstRealm := uuid.New()
+	secondRealm := uuid.New()
+
+	for _, tt := range []struct {
+		name      string
+		instances []database.LogInstancesGuild
+		want      uuid.UUID
+		wantError string
+	}{
+		{
+			name:      "one realm",
+			instances: []database.LogInstancesGuild{{RealmID: firstRealm}, {RealmID: firstRealm}},
+			want:      firstRealm,
+		},
+		{
+			name:      "no instances",
+			wantError: "no existing instances",
+		},
+		{
+			name:      "missing realm",
+			instances: []database.LogInstancesGuild{{RealmID: uuid.Nil}},
+			wantError: "without a realm",
+		},
+		{
+			name: "multiple realms",
+			instances: []database.LogInstancesGuild{
+				{RealmID: firstRealm},
+				{RealmID: secondRealm},
+			},
+			wantError: "spans multiple realms",
+		},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
+			got, err := resyncRealmID(tt.instances)
+			if tt.wantError != "" {
+				require.ErrorContains(t, err, tt.wantError)
+				require.Equal(t, uuid.Nil, got)
+				return
+			}
+			require.NoError(t, err)
+			require.Equal(t, tt.want, got)
+		})
+	}
+}
+
 func TestValidateResyncRawFiles(t *testing.T) {
 	t.Parallel()
 
