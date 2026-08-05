@@ -8,25 +8,26 @@ export interface InstanceConfig {
   bossCount?: number;
   abbrev?: string;  // Short name for mobile display
   category?: Exclude<InstanceCategory, "unknown">;
+  accentColor?: string;
 }
 
 export const INSTANCE_CONFIG: Record<string, InstanceConfig> = {
   // 40-man Raids
-  "Molten Core": { background: "/c/images/loadingscreens/LoadScreenMoltenCore.webp", bossCount: 12, abbrev: "MC", category: "raid" },
-  "Blackwing Lair": { background: "/c/images/loadingscreens/LoadScreenBlackWingLair.webp", bossCount: 8, abbrev: "BWL", category: "raid" },
-  "Temple of Ahn'Qiraj": { background: "/c/images/loadingscreens/LoadScreenAhnQiraj40man.webp", bossCount: 9, abbrev: "AQ40", category: "raid" },
-  "Naxxramas": { background: "/c/images/loadingscreens/LoadScreenNaxxramas.webp", bossCount: 15, abbrev: "Naxx", category: "raid" },
-  "Emerald Sanctum": { background: "/c/images/loadingscreens/LoadScreenEmeraldSanctum.webp", bossCount: 2, abbrev: "ES", category: "raid" },
+  "Molten Core": { background: "/c/images/loadingscreens/LoadScreenMoltenCore.webp", bossCount: 12, abbrev: "MC", category: "raid", accentColor: "#f97316" },
+  "Blackwing Lair": { background: "/c/images/loadingscreens/LoadScreenBlackWingLair.webp", bossCount: 8, abbrev: "BWL", category: "raid", accentColor: "#ef4444" },
+  "Temple of Ahn'Qiraj": { background: "/c/images/loadingscreens/LoadScreenAhnQiraj40man.webp", bossCount: 9, abbrev: "AQ40", category: "raid", accentColor: "#d9aa42" },
+  "Naxxramas": { background: "/c/images/loadingscreens/LoadScreenNaxxramas.webp", bossCount: 15, abbrev: "Naxx", category: "raid", accentColor: "#82c8b4" },
+  "Emerald Sanctum": { background: "/c/images/loadingscreens/LoadScreenEmeraldSanctum.webp", bossCount: 2, abbrev: "ES", category: "raid", accentColor: "#34d399" },
   // 20-man Raids
-  "Zul'Gurub": { background: "/c/images/loadingscreens/LoadScreenZulGurub.webp", bossCount: 10, abbrev: "ZG", category: "raid" },
-  "Ruins of Ahn'Qiraj": { background: "/c/images/loadingscreens/LoadScreenAhnQiraj20man.webp", bossCount: 6, abbrev: "AQ20", category: "raid" },
+  "Zul'Gurub": { background: "/c/images/loadingscreens/LoadScreenZulGurub.webp", bossCount: 10, abbrev: "ZG", category: "raid", accentColor: "#ea580c" },
+  "Ruins of Ahn'Qiraj": { background: "/c/images/loadingscreens/LoadScreenAhnQiraj20man.webp", bossCount: 6, abbrev: "AQ20", category: "raid", accentColor: "#c8a050" },
   // Single Boss
-  "Onyxia's Lair": { background: "/c/images/loadingscreens/LoadScreenRaid.webp", bossCount: 1, abbrev: "Ony", category: "raid" },
+  "Onyxia's Lair": { background: "/c/images/loadingscreens/LoadScreenRaid.webp", bossCount: 1, abbrev: "Ony", category: "raid", accentColor: "#22c55e" },
   // Turtle WoW Custom
-  "Tower of Karazhan": { background: "/c/images/loadingscreens/LoadScreenKarazhan.webp", bossCount: 5, abbrev: "Kara", category: "raid" },
-  "Lower Tower of Karazhan": { background: "/c/images/loadingscreens/LoadScreenKarazhan.webp", bossCount: 5, abbrev: "Lower Kara", category: "raid" },
-  "Upper Tower of Karazhan": { background: "/c/images/loadingscreens/LoadScreenKarazhan.webp", bossCount: 9, abbrev: "Upper Kara", category: "raid" },
-  "Karazhan Crypts": { background: "/c/images/loadingscreens/LoadscreenKarazhanCrypt.webp", bossCount: 3, abbrev: "Crypt", },
+  "Tower of Karazhan": { background: "/c/images/loadingscreens/LoadScreenKarazhan.webp", bossCount: 5, abbrev: "Kara", category: "raid", accentColor: "#8b5cf6" },
+  "Lower Tower of Karazhan": { background: "/c/images/loadingscreens/LoadScreenKarazhan.webp", bossCount: 5, abbrev: "Lower Kara", category: "raid", accentColor: "#8b5cf6" },
+  "Upper Tower of Karazhan": { background: "/c/images/loadingscreens/LoadScreenKarazhan.webp", bossCount: 9, abbrev: "Upper Kara", category: "raid", accentColor: "#8b5cf6" },
+  "Karazhan Crypts": { background: "/c/images/loadingscreens/LoadscreenKarazhanCrypt.webp", bossCount: 3, abbrev: "Crypt", accentColor: "#7c3aed" },
   "Hateforge Quarry": { background: "/c/images/loadingscreens/LoadScreenHateforge.webp", bossCount: 4, abbrev: "HQ", },
   "Gilneas City": { background: "/c/images/loadingscreens/LoadScreenGilneasCity.webp", bossCount: 3, abbrev: "Gilneas", },
   "Icecrown Citadel": { background: "/c/images/loadingscreens/loadscreenicecrowncitadel.webp", bossCount: 12, abbrev: "ICC", category: "raid" },
@@ -113,6 +114,7 @@ export const INSTANCE_CONFIG: Record<string, InstanceConfig> = {
 };
 
 export const DEFAULT_BACKGROUND = "/c/images/loadingscreens/LoadScreenDungeon.webp";
+export const DEFAULT_INSTANCE_ACCENT = "#64748b";
 
 // Pre-computed lowercase → canonical name map for case-insensitive lookup
 const INSTANCE_NAME_LOOKUP = new Map<string, string>(
@@ -146,6 +148,10 @@ export function getInstanceCategory(
 export function getInstanceBackground(name: string): string {
   const canonical = resolveInstanceName(name);
   return canonical ? INSTANCE_CONFIG[canonical].background : DEFAULT_BACKGROUND;
+}
+
+export function getInstanceAccentColor(name: string): string {
+  return getInstanceConfig(name)?.accentColor ?? DEFAULT_INSTANCE_ACCENT;
 }
 
 export function getInstanceAbbrev(name: string): string {

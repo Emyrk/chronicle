@@ -5,26 +5,10 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/Collapsible/Collapsible";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/Table/Table";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/Tooltip/tooltip";
+import { getInstanceAccentColor } from "@/pages/Logs/utils/instanceImages";
 import { parseColor, parseHexColor } from "@/pages/Instance/parseColors";
 import type { EncounterSummary, RaidSummary } from "../parseAggregation";
 import type { ParseMetric } from "./util";
-
-const INSTANCE_ACCENTS: Record<string, string> = {
-  "Molten Core": "#f97316",
-  "Blackwing Lair": "#ef4444",
-  "Temple of Ahn'Qiraj": "#d9aa42",
-  "Ruins of Ahn'Qiraj": "#c8a050",
-  Naxxramas: "#82c8b4",
-  "Emerald Sanctum": "#34d399",
-  "Zul'Gurub": "#ea580c",
-  "Onyxia's Lair": "#22c55e",
-  "Tower of Karazhan": "#8b5cf6",
-  "Lower Tower of Karazhan": "#8b5cf6",
-  "Upper Tower of Karazhan": "#8b5cf6",
-  "Karazhan Crypts": "#7c3aed",
-};
-
-const DEFAULT_INSTANCE_ACCENT = "#64748b";
 
 interface RaidScoresCardProps {
   raids: RaidSummary[];
@@ -45,7 +29,7 @@ export function RaidScoresCard({ raids, metric, bossCounts, isLoading }: RaidSco
   }
 
   return (
-    <Card className="gap-0 border-0 bg-transparent p-0 shadow-none">
+    <Card className="gap-0 border-0 bg-transparent px-0 pt-4 pb-0 shadow-none">
       <CardHeader className="px-0 pb-4">
         <CardTitle className="text-xs font-normal tracking-[0.2em] text-muted-foreground uppercase">
           Raid scores
@@ -67,7 +51,7 @@ export function RaidScoresCard({ raids, metric, bossCounts, isLoading }: RaidSco
           const bossesLogged = raid.encounters.length;
           const bossTotal = Math.max(bossCounts?.get(raid.instanceName) ?? 0, bossesLogged);
           const incomplete = bossesLogged < bossTotal;
-          const accent = INSTANCE_ACCENTS[raid.instanceName] ?? DEFAULT_INSTANCE_ACCENT;
+          const accent = getInstanceAccentColor(raid.instanceName);
           return (
             <Collapsible
               key={key}
