@@ -55,8 +55,13 @@ export function ProgressionCard({ progress, bossCounts, isLoading }: Progression
                 ))}
               </div>
               <div className="mt-1.5 text-xs text-muted-foreground">
-                {raid.maxPlayers}-player · {raid.difficultyName} · {raid.kills}{" "}
-                {raid.kills === 1 ? "kill" : "kills"} logged
+                {[
+                  raid.maxPlayers > 0 ? `${raid.maxPlayers}-player` : "",
+                  raid.difficultyName,
+                  `${raid.kills} ${raid.kills === 1 ? "kill" : "kills"} logged`,
+                ]
+                  .filter(Boolean)
+                  .join(" · ")}
               </div>
             </div>
           );

@@ -54,8 +54,13 @@ export function RaidScoresCard({ raids, metric, isLoading }: RaidScoresCardProps
                       {raid.instanceName}
                     </div>
                     <div className="mt-1 text-xs text-muted-foreground">
-                      {raid.maxPlayers}-player · {raid.difficultyName} · {raid.kills}{" "}
-                      {raid.kills === 1 ? "kill" : "kills"} logged
+                      {[
+                        raid.maxPlayers > 0 ? `${raid.maxPlayers}-player` : "",
+                        raid.difficultyName,
+                        `${raid.kills} ${raid.kills === 1 ? "kill" : "kills"} logged`,
+                      ]
+                        .filter(Boolean)
+                        .join(" · ")}
                     </div>
                   </div>
                   <div className="relative hidden sm:block">
