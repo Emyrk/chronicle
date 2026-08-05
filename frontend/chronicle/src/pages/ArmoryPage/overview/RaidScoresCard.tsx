@@ -1,9 +1,10 @@
-import { useState } from "react";
+import { useState, type ReactNode } from "react";
 import { Link } from "react-router-dom";
 import { AlertTriangle } from "lucide-react";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/Card/Card";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/Collapsible/Collapsible";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/Table/Table";
+import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/Tooltip/tooltip";
 import { parseColor, parseHexColor } from "@/pages/Instance/parseColors";
 import type { EncounterSummary, RaidSummary } from "../parseAggregation";
 import type { ParseMetric } from "./util";
@@ -149,6 +150,23 @@ function formatScoreInput(score: number): string {
   return score.toFixed(1).replace(/\.0$/, "");
 }
 
+function ScoreInputsTooltip({
+  encounter,
+  children,
+}: {
+  encounter: EncounterSummary;
+  children: ReactNode;
+}) {
+  return (
+    <Tooltip>
+      <TooltipTrigger asChild>{children}</TooltipTrigger>
+      <TooltipContent side="top" sideOffset={6} className="font-mono">
+        Best {encounter.scoreInputs.length}: {encounter.scoreInputs.map(formatScoreInput).join(" · ")}
+      </TooltipContent>
+    </Tooltip>
+  );
+}
+
 function EncounterRow({ encounter }: { encounter: EncounterSummary }) {
   return (
     <TableRow>
@@ -167,20 +185,23 @@ function EncounterRow({ encounter }: { encounter: EncounterSummary }) {
         {encounter.kills}
       </TableCell>
       <TableCell>
-        <div className="flex items-center gap-3">
-          <div className="relative min-w-16 grow">
-            <ScoreBar score={encounter.score} best={encounter.best} />
+        <ScoreInputsTooltip encounter={encounter}>
+          <div className="flex cursor-help items-center gap-3">
+            <div className="relative min-w-16 grow">
+              <ScoreBar score={encounter.score} best={encounter.best} />
+            </div>
+            <div className={`w-7 shrink-0 text-right font-mono text-sm font-bold ${parseColor(encounter.score)}`}>
+              {encounter.score}
+            </div>
           </div>
-          <div className="shrink-0 font-mono text-[10px] text-muted-foreground">
-            Best {encounter.scoreInputs.length}: {encounter.scoreInputs.map(formatScoreInput).join(" · ")}
-          </div>
-          <div className={`w-7 shrink-0 text-right font-mono text-sm font-bold ${parseColor(encounter.score)}`}>
-            {encounter.score}
-          </div>
-        </div>
+        </ScoreInputsTooltip>
       </TableCell>
-      <TableCell className={`text-right font-mono ${parseColor(encounter.best)}`}>
-        {encounter.best}
+      <TableCell className="text-right font-mono">
+        <ScoreInputsTooltip encounter={encounter}>
+          <span className={`cursor-help ${parseColor(encounter.best)}`}>
+            {encounter.best}
+          </span>
+        </ScoreInputsTooltip>
       </TableCell>
     </TableRow>
   );
