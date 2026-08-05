@@ -5,6 +5,7 @@ import type { ArmoryLootItem } from "@/api/typesGenerated";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/Card/Card";
 import { ItemTooltip } from "@/components/ui/ItemTooltip/ItemTooltip";
 import { useItemTooltip } from "@/api/gamedata";
+import { CursorTooltip, type CursorPos } from "./CursorTooltip";
 import { iconUrl } from "@/config/iconUrl";
 import { useIconBaseUrl } from "@/hooks/useDatasetId";
 import { getQualityBorderClass, getQualityTextClass } from "../types";
@@ -44,15 +45,15 @@ export function LootCard({ items, isLoading }: LootCardProps) {
 
 function LootRow({ item }: { item: ArmoryLootItem }) {
   const iconBaseUrl = useIconBaseUrl();
-  const [hovered, setHovered] = useState(false);
+  const [cursor, setCursor] = useState<CursorPos | null>(null);
   const tooltip = useItemTooltip(item.item_id > 0 ? { itemId: item.item_id } : null);
 
   return (
     <Link
       to={`/instances/${item.instance_slug || item.instance_id}`}
       className="flex items-center gap-3 rounded transition-colors hover:bg-muted/40"
-      onMouseEnter={() => setHovered(true)}
-      onMouseLeave={() => setHovered(false)}
+      onMouseMove={(e) => setCursor({ x: e.clientX, y: e.clientY })}
+      onMouseLeave={() => setCursor(null)}
     >
       <div
         className={`size-[30px] shrink-0 rounded border bg-popover bg-cover bg-center ${getQualityBorderClass(item.quality)}`}
@@ -69,10 +70,10 @@ function LootRow({ item }: { item: ArmoryLootItem }) {
         {format(new Date(item.received_at), "MMM d")}
       </div>
 
-      {hovered && tooltip.data && (
-        <div className="pointer-events-none fixed inset-0 z-50 flex -translate-y-[15%] items-center justify-center">
+      {cursor && tooltip.data && (
+        <CursorTooltip pos={cursor}>
           <ItemTooltip item={tooltip.data} />
-        </div>
+        </CursorTooltip>
       )}
     </Link>
   );

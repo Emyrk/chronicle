@@ -7,6 +7,7 @@ import { fetchItemTooltip } from "@/api/gamedata";
 import { iconUrl } from "@/config/iconUrl";
 import { useIconBaseUrl } from "@/hooks/useDatasetId";
 import { getQualityBorderClass } from "../types";
+import { CursorTooltip, type CursorPos } from "./CursorTooltip";
 
 /** Paperdoll display order for the compact strip (shirt/tabard excluded). */
 const STRIP_ORDER = [0, 1, 2, 14, 4, 8, 9, 5, 6, 7, 10, 11, 12, 13, 15, 16, 17];
@@ -22,6 +23,7 @@ interface GearStripCardProps {
 export function GearStripCard({ player, latestSnapshot, onOpenGear }: GearStripCardProps) {
   const iconBaseUrl = useIconBaseUrl();
   const [hoveredIdx, setHoveredIdx] = useState<number | null>(null);
+  const [cursor, setCursor] = useState<CursorPos | null>(null);
 
   const items = STRIP_ORDER.map((i) => player.gear[i]).filter((item) => item.item_id > 0);
   const equippedItemIds = useMemo(
@@ -88,7 +90,10 @@ export function GearStripCard({ player, latestSnapshot, onOpenGear }: GearStripC
                   : undefined
               }
               aria-label={item.name}
-              onMouseEnter={() => setHoveredIdx(i)}
+              onMouseMove={(e) => {
+                setHoveredIdx(i);
+                setCursor({ x: e.clientX, y: e.clientY });
+              }}
               onMouseLeave={() => setHoveredIdx(null)}
             />
           ))}
@@ -96,10 +101,10 @@ export function GearStripCard({ player, latestSnapshot, onOpenGear }: GearStripC
         <div className="shrink-0 text-xs text-link">View paperdoll →</div>
       </CardContent>
 
-      {hoveredTooltip && (
-        <div className="pointer-events-none fixed inset-0 z-50 flex -translate-y-[15%] items-center justify-center">
+      {hoveredTooltip && cursor && (
+        <CursorTooltip pos={cursor}>
           <ItemTooltip item={hoveredTooltip} equippedItemIds={equippedItemIds} />
-        </div>
+        </CursorTooltip>
       )}
     </Card>
   );
