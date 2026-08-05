@@ -24,8 +24,11 @@ interface FirstKillNight {
 export function FirstKillsCard({ encounters, isLoading }: FirstKillsCardProps) {
   const nights = useMemo(() => {
     const byNight = new Map<string, FirstKillNight>();
+    // Newest kill first within a night, so a full clear reads
+    // "Ragnaros, Majordomo Executus +10 more" — the end-of-raid bosses are
+    // the interesting ones.
     const sorted = [...(encounters ?? [])].sort(
-      (a, b) => new Date(a.first_killed_at).getTime() - new Date(b.first_killed_at).getTime(),
+      (a, b) => new Date(b.first_killed_at).getTime() - new Date(a.first_killed_at).getTime(),
     );
     for (const e of sorted) {
       const date = new Date(e.first_killed_at);
