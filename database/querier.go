@@ -334,6 +334,15 @@ type sqlcQuerier interface {
 	GetWorld(ctx context.Context, id uuid.UUID) (World, error)
 	GetWorldByName(ctx context.Context, name string) (World, error)
 	GetWorldsByServer(ctx context.Context, serverID uuid.UUID) ([]World, error)
+	// Queries backing guild page panels (roster, top parses, recent raid scores).
+	// Returns the guild's characters from raid logs for the guild page "Roster"
+	// panel. updated_at is the character's de-facto "last seen"; @seen_within_days
+	// hides characters that have gone idle (0 = no filter).
+	// Spec/role come from the character's most recent parse; avg_parse averages
+	// the best parse per encounter over the last @parse_window_days, using hps
+	// for healers and dps for everyone else (-1 when the character has no parses).
+	// JOINs wow_server_realms so RLS tenant filtering cascades.
+	GuildCharacterRoster(ctx context.Context, arg GuildCharacterRosterParams) ([]GuildCharacterRosterRow, error)
 	// Returns per-instance clear counts and duration aggregates for a guild,
 	// used by the guild page "Raid Clears" panel.
 	// Deduplicates by duplicate_group so re-uploaded logs of the same raid count
@@ -343,6 +352,17 @@ type sqlcQuerier interface {
 	// completion_time and a negative sentinel duration (see chronicle/logparse.go).
 	// JOINs wow_server_realms so RLS tenant filtering cascades.
 	GuildRaidClears(ctx context.Context, arg GuildRaidClearsParams) ([]GuildRaidClearsRow, error)
+	// Returns the guild's average parse per raid night (run) for the guild page
+	// "Recent" panel. Averages every raider's parses using hps for healers and
+	// dps for everyone else. Duplicate uploads collapse to one row per
+	// encounter+player before averaging.
+	GuildRunParseAverages(ctx context.Context, arg GuildRunParseAveragesParams) ([]GuildRunParseAveragesRow, error)
+	// Returns a guild's best parses for the guild page "Top Parses" panel.
+	// Duplicate uploads of the same run collapse to one row per encounter+player
+	// (most recently computed scoring wins, matching GetCharacterParseHistory).
+	// @best_per_player keeps only each player's single best parse so one player
+	// cannot fill the whole board.
+	GuildTopParses(ctx context.Context, arg GuildTopParsesParams) ([]GuildTopParsesRow, error)
 	HasInstanceDpsRankings(ctx context.Context, instanceID uuid.UUID) (bool, error)
 	InsertAffectedAuraDurationModifiers(ctx context.Context, arg []InsertAffectedAuraDurationModifiersParams) *InsertAffectedAuraDurationModifiersBatchResults
 	InsertAffectedAuraDurations(ctx context.Context, arg []InsertAffectedAuraDurationsParams) *InsertAffectedAuraDurationsBatchResults

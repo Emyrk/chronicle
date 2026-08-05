@@ -2090,6 +2090,8 @@ CREATE INDEX idx_edr_realm ON encounter_dps_rankings USING btree (realm_id);
 
 CREATE UNIQUE INDEX idx_edr_trash_unique ON encounter_dps_rankings USING btree (instance_id, player_guid, player_spec) WHERE (encounter_id IS NULL);
 
+CREATE INDEX idx_game_players_guild ON game_players USING btree (guild_id) WHERE (guild_id IS NOT NULL);
+
 CREATE INDEX idx_game_players_realm_lower_name ON game_players USING btree (realm_id, lower(name));
 
 CREATE INDEX idx_guild_join_requests_guild ON guild_join_requests USING btree (guild_id);
@@ -2123,6 +2125,8 @@ CREATE INDEX idx_log_instances_realm_id ON log_instances USING btree (realm_id);
 CREATE UNIQUE INDEX idx_mod_requests_pending ON application_modification_requests USING btree (application_id, type, COALESCE(parent_id, '00000000-0000-0000-0000-000000000000'::uuid)) WHERE ((status = 'pending'::text) AND (type <> ALL (ARRAY['server'::text, 'realm'::text])));
 
 CREATE INDEX idx_psr_dedup ON parse_score_results USING btree (run_id, encounter_name, player_guid, snapshot_id, metric);
+
+CREATE INDEX idx_psr_guild ON parse_score_results USING btree (tenant_id, guild_id, metric, killed_at DESC NULLS LAST) WHERE (guild_id IS NOT NULL);
 
 CREATE INDEX idx_psr_player ON parse_score_results USING btree (tenant_id, player_guid, metric, killed_at DESC NULLS LAST);
 

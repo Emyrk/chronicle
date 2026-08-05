@@ -961,6 +961,11 @@ export interface Guild {
 }
 
 // From chroniclesdk/guild_page.go
+export interface GuildCharacterRosterResponse {
+    readonly members: readonly GuildRosterCharacter[];
+}
+
+// From chroniclesdk/guild_page.go
 export interface GuildInfo {
     readonly id: string;
     readonly name: string;
@@ -1055,10 +1060,44 @@ export interface GuildRaidClearsResponse {
 }
 
 // From chroniclesdk/guild_page.go
+/**
+ * GuildRosterCharacter is a guild character seen in raid logs. LastSeenAt is
+ * the last time a log updated the character. AvgParse is -1 when the
+ * character has no parses in the scoring window.
+ */
+export interface GuildRosterCharacter {
+    readonly id: string;
+    readonly name: string;
+    readonly class: string;
+    readonly race: string;
+    readonly level: number;
+    readonly spec?: string;
+    readonly role?: string; // "tank", "heal", or "dps"
+    readonly avg_parse: number;
+    readonly last_seen_at: string;
+    readonly realm_name: string;
+}
+
+// From chroniclesdk/guild_page.go
 export interface GuildRosterMember {
     readonly user_id: string;
     readonly username: string;
     readonly roles: readonly string[]; // "member", "leader", etc.
+}
+
+// From chroniclesdk/guild_page.go
+/**
+ * GuildRunParseAverage is the guild's average parse for one raid night (run).
+ */
+export interface GuildRunParseAverage {
+    readonly run_id: string;
+    readonly avg_parse: number;
+    readonly parse_count: number;
+}
+
+// From chroniclesdk/guild_page.go
+export interface GuildRunParsesResponse {
+    readonly runs: readonly GuildRunParseAverage[];
 }
 
 // From chroniclesdk/guild_page.go
@@ -1072,6 +1111,32 @@ export interface GuildSettings {
 export type GuildTag = "Casual" | "Chinese" | "Dungeons" | "English" | "French" | "German" | "Hardcore" | "Korean" | "Leveling" | "Portuguese" | "PvP" | "Questing" | "RP" | "Raiding" | "Russian" | "Social" | "Spanish" | "Taiwanese";
 
 export const GuildTags: GuildTag[] = ["Casual", "Chinese", "Dungeons", "English", "French", "German", "Hardcore", "Korean", "Leveling", "Portuguese", "PvP", "Questing", "RP", "Raiding", "Russian", "Social", "Spanish", "Taiwanese"];
+
+// From chroniclesdk/guild_page.go
+/**
+ * GuildTopParse is one ranked parse on a guild's top parses board.
+ */
+export interface GuildTopParse {
+    readonly player_guid: string;
+    readonly player_name: string;
+    readonly player_class: string;
+    readonly player_spec: string;
+    readonly player_role: string;
+    readonly encounter_name: string;
+    readonly instance_name: string;
+    readonly difficulty_name: string;
+    readonly max_players: number;
+    readonly metric: string;
+    readonly metric_value: number;
+    readonly display_score: number;
+    readonly killed_at: string;
+}
+
+// From chroniclesdk/guild_page.go
+export interface GuildTopParsesResponse {
+    readonly metric: string;
+    readonly parses: readonly GuildTopParse[];
+}
 
 // From chroniclesdk/log.go
 /**

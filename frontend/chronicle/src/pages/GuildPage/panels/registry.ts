@@ -4,6 +4,9 @@ import { MarkdownPanel } from "./Markdown";
 import { CalendarPanel } from "./Calendar";
 import { CompactCalendarPanel } from "./CompactCalendar";
 import { RaidClearsPanel } from "./RaidClears";
+import { RosterPanel } from "./Roster";
+import { TopParsesPanel } from "./TopParses";
+import { RecruitmentPanel } from "./Recruitment";
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 type AnyPanelDefinition = GuildPanelDefinition<any>;
@@ -11,7 +14,9 @@ type AnyPanelDefinition = GuildPanelDefinition<any>;
 // Panel registry - all available panel types
 export const PANEL_REGISTRY: Record<string, AnyPanelDefinition> = {
   recent_raids: RecentRaidsPanel,
-  // roster: RosterPanel,
+  roster: RosterPanel,
+  top_parses: TopParsesPanel,
+  recruitment: RecruitmentPanel,
   // progress: ProgressPanel,
   // stats: StatsPanel,
   markdown: MarkdownPanel,

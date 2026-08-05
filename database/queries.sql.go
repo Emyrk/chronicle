@@ -3739,6 +3739,308 @@ func (q *sqlQuerier) UpsertGuildPage(ctx context.Context, arg UpsertGuildPagePar
 	return i, err
 }
 
+const guildCharacterRoster = `-- name: GuildCharacterRoster :many
+
+SELECT
+    gp.id,
+    gp.realm_id,
+    gp.name,
+    gp.class,
+    gp.race,
+    gp.level,
+    gp.updated_at,
+    COALESCE(wsr.name, '') AS realm_name,
+    COALESCE(latest.player_spec, '')::text AS player_spec,
+    COALESCE(latest.player_role, '')::text AS player_role,
+    COALESCE(scores.avg_parse, -1)::float8 AS avg_parse
+FROM game_players gp
+JOIN wow_server_realms wsr ON wsr.id = gp.realm_id
+LEFT JOIN LATERAL (
+    SELECT psr.player_spec, psr.player_role
+    FROM parse_score_results psr
+    WHERE psr.tenant_id = $1
+      AND psr.player_guid = gp.id::text
+      AND psr.metric = 'dps'
+      AND psr.status IN ('ok', 'low_confidence')
+    ORDER BY psr.killed_at DESC NULLS LAST
+    LIMIT 1
+) latest ON true
+LEFT JOIN LATERAL (
+    SELECT AVG(best.precise_score)::float8 AS avg_parse
+    FROM (
+        SELECT DISTINCT ON (psr.instance_name, psr.encounter_name)
+            psr.precise_score
+        FROM parse_score_results psr
+        WHERE psr.tenant_id = $1
+          AND psr.player_guid = gp.id::text
+          AND psr.metric = CASE WHEN latest.player_role = 'heal' THEN 'hps' ELSE 'dps' END
+          AND psr.status IN ('ok', 'low_confidence')
+          AND psr.killed_at >= now() - make_interval(days => $2::int)
+        ORDER BY psr.instance_name, psr.encounter_name, psr.precise_score DESC
+    ) best
+) scores ON true
+WHERE gp.guild_id = $3::uuid
+  AND CASE
+      WHEN $4::bigint > 0 THEN gp.updated_at >= now() - make_interval(days => $4::int)
+      ELSE true
+  END
+ORDER BY scores.avg_parse DESC NULLS LAST, gp.level DESC, gp.updated_at DESC
+LIMIT $5
+`
+
+type GuildCharacterRosterParams struct {
+	TenantID        uuid.UUID `db:"tenant_id" json:"tenant_id"`
+	ParseWindowDays int32     `db:"parse_window_days" json:"parse_window_days"`
+	GuildID         uuid.UUID `db:"guild_id" json:"guild_id"`
+	SeenWithinDays  int64     `db:"seen_within_days" json:"seen_within_days"`
+	RowLimit        int32     `db:"row_limit" json:"row_limit"`
+}
+
+type GuildCharacterRosterRow struct {
+	ID         guid.GUID          `db:"id" json:"id"`
+	RealmID    uuid.UUID          `db:"realm_id" json:"realm_id"`
+	Name       string             `db:"name" json:"name"`
+	Class      WowPlayableClass   `db:"class" json:"class"`
+	Race       WowPlayableRace    `db:"race" json:"race"`
+	Level      int16              `db:"level" json:"level"`
+	UpdatedAt  pgtype.Timestamptz `db:"updated_at" json:"updated_at"`
+	RealmName  string             `db:"realm_name" json:"realm_name"`
+	PlayerSpec string             `db:"player_spec" json:"player_spec"`
+	PlayerRole string             `db:"player_role" json:"player_role"`
+	AvgParse   float64            `db:"avg_parse" json:"avg_parse"`
+}
+
+// Queries backing guild page panels (roster, top parses, recent raid scores).
+// Returns the guild's characters from raid logs for the guild page "Roster"
+// panel. updated_at is the character's de-facto "last seen"; @seen_within_days
+// hides characters that have gone idle (0 = no filter).
+// Spec/role come from the character's most recent parse; avg_parse averages
+// the best parse per encounter over the last @parse_window_days, using hps
+// for healers and dps for everyone else (-1 when the character has no parses).
+// JOINs wow_server_realms so RLS tenant filtering cascades.
+func (q *sqlQuerier) GuildCharacterRoster(ctx context.Context, arg GuildCharacterRosterParams) ([]GuildCharacterRosterRow, error) {
+	rows, err := q.db.Query(ctx, guildCharacterRoster,
+		arg.TenantID,
+		arg.ParseWindowDays,
+		arg.GuildID,
+		arg.SeenWithinDays,
+		arg.RowLimit,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []GuildCharacterRosterRow
+	for rows.Next() {
+		var i GuildCharacterRosterRow
+		if err := rows.Scan(
+			&i.ID,
+			&i.RealmID,
+			&i.Name,
+			&i.Class,
+			&i.Race,
+			&i.Level,
+			&i.UpdatedAt,
+			&i.RealmName,
+			&i.PlayerSpec,
+			&i.PlayerRole,
+			&i.AvgParse,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const guildRunParseAverages = `-- name: GuildRunParseAverages :many
+WITH deduped AS (
+    SELECT DISTINCT ON (psr.run_id, psr.encounter_name, psr.player_guid)
+        psr.run_id,
+        psr.precise_score
+    FROM parse_score_results psr
+    WHERE psr.tenant_id = $1
+      AND psr.guild_id = $2::uuid
+      AND psr.run_id = ANY($3::uuid[])
+      AND psr.status IN ('ok', 'low_confidence')
+      AND (
+          (psr.player_role = 'heal' AND psr.metric = 'hps')
+          OR (psr.player_role != 'heal' AND psr.metric = 'dps')
+      )
+    ORDER BY psr.run_id, psr.encounter_name, psr.player_guid, psr.created_at DESC, psr.precise_score DESC
+)
+SELECT
+    run_id,
+    AVG(precise_score)::float8 AS avg_parse,
+    COUNT(*)::bigint AS parse_count
+FROM deduped
+GROUP BY run_id
+`
+
+type GuildRunParseAveragesParams struct {
+	TenantID uuid.UUID   `db:"tenant_id" json:"tenant_id"`
+	GuildID  uuid.UUID   `db:"guild_id" json:"guild_id"`
+	RunIds   []uuid.UUID `db:"run_ids" json:"run_ids"`
+}
+
+type GuildRunParseAveragesRow struct {
+	RunID      uuid.UUID `db:"run_id" json:"run_id"`
+	AvgParse   float64   `db:"avg_parse" json:"avg_parse"`
+	ParseCount int64     `db:"parse_count" json:"parse_count"`
+}
+
+// Returns the guild's average parse per raid night (run) for the guild page
+// "Recent" panel. Averages every raider's parses using hps for healers and
+// dps for everyone else. Duplicate uploads collapse to one row per
+// encounter+player before averaging.
+func (q *sqlQuerier) GuildRunParseAverages(ctx context.Context, arg GuildRunParseAveragesParams) ([]GuildRunParseAveragesRow, error) {
+	rows, err := q.db.Query(ctx, guildRunParseAverages, arg.TenantID, arg.GuildID, arg.RunIds)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []GuildRunParseAveragesRow
+	for rows.Next() {
+		var i GuildRunParseAveragesRow
+		if err := rows.Scan(&i.RunID, &i.AvgParse, &i.ParseCount); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const guildTopParses = `-- name: GuildTopParses :many
+WITH deduped AS (
+    SELECT DISTINCT ON (psr.run_id, psr.encounter_name, psr.player_guid)
+        psr.player_guid,
+        psr.player_name,
+        psr.player_class,
+        psr.player_spec,
+        psr.player_role,
+        psr.encounter_name,
+        psr.instance_name,
+        psr.difficulty_name,
+        psr.max_players,
+        psr.metric_value,
+        psr.precise_score,
+        psr.display_score,
+        psr.killed_at
+    FROM parse_score_results psr
+    WHERE psr.tenant_id = $3
+      AND psr.guild_id = $4::uuid
+      AND psr.metric = $5
+      AND psr.status IN ('ok', 'low_confidence')
+      AND CASE
+          WHEN $6::bigint > 0 THEN psr.killed_at >= now() - make_interval(days => $6::int)
+          ELSE true
+      END
+    ORDER BY psr.run_id, psr.encounter_name, psr.player_guid, psr.created_at DESC, psr.precise_score DESC
+), ranked AS (
+    SELECT player_guid, player_name, player_class, player_spec, player_role, encounter_name, instance_name, difficulty_name, max_players, metric_value, precise_score, display_score, killed_at,
+        ROW_NUMBER() OVER (
+            PARTITION BY player_guid
+            ORDER BY precise_score DESC, killed_at DESC NULLS LAST
+        ) AS per_player_rank
+    FROM deduped
+)
+SELECT
+    player_guid,
+    player_name,
+    player_class,
+    player_spec,
+    player_role,
+    encounter_name,
+    instance_name,
+    difficulty_name,
+    max_players,
+    metric_value,
+    precise_score,
+    display_score,
+    killed_at
+FROM ranked
+WHERE CASE WHEN $1::boolean THEN per_player_rank = 1 ELSE true END
+ORDER BY precise_score DESC, killed_at DESC NULLS LAST
+LIMIT $2
+`
+
+type GuildTopParsesParams struct {
+	BestPerPlayer bool      `db:"best_per_player" json:"best_per_player"`
+	RowLimit      int32     `db:"row_limit" json:"row_limit"`
+	TenantID      uuid.UUID `db:"tenant_id" json:"tenant_id"`
+	GuildID       uuid.UUID `db:"guild_id" json:"guild_id"`
+	Metric        string    `db:"metric" json:"metric"`
+	SinceDays     int64     `db:"since_days" json:"since_days"`
+}
+
+type GuildTopParsesRow struct {
+	PlayerGuid     string             `db:"player_guid" json:"player_guid"`
+	PlayerName     string             `db:"player_name" json:"player_name"`
+	PlayerClass    string             `db:"player_class" json:"player_class"`
+	PlayerSpec     string             `db:"player_spec" json:"player_spec"`
+	PlayerRole     string             `db:"player_role" json:"player_role"`
+	EncounterName  string             `db:"encounter_name" json:"encounter_name"`
+	InstanceName   string             `db:"instance_name" json:"instance_name"`
+	DifficultyName string             `db:"difficulty_name" json:"difficulty_name"`
+	MaxPlayers     int16              `db:"max_players" json:"max_players"`
+	MetricValue    float64            `db:"metric_value" json:"metric_value"`
+	PreciseScore   float64            `db:"precise_score" json:"precise_score"`
+	DisplayScore   int16              `db:"display_score" json:"display_score"`
+	KilledAt       pgtype.Timestamptz `db:"killed_at" json:"killed_at"`
+}
+
+// Returns a guild's best parses for the guild page "Top Parses" panel.
+// Duplicate uploads of the same run collapse to one row per encounter+player
+// (most recently computed scoring wins, matching GetCharacterParseHistory).
+// @best_per_player keeps only each player's single best parse so one player
+// cannot fill the whole board.
+func (q *sqlQuerier) GuildTopParses(ctx context.Context, arg GuildTopParsesParams) ([]GuildTopParsesRow, error) {
+	rows, err := q.db.Query(ctx, guildTopParses,
+		arg.BestPerPlayer,
+		arg.RowLimit,
+		arg.TenantID,
+		arg.GuildID,
+		arg.Metric,
+		arg.SinceDays,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []GuildTopParsesRow
+	for rows.Next() {
+		var i GuildTopParsesRow
+		if err := rows.Scan(
+			&i.PlayerGuid,
+			&i.PlayerName,
+			&i.PlayerClass,
+			&i.PlayerSpec,
+			&i.PlayerRole,
+			&i.EncounterName,
+			&i.InstanceName,
+			&i.DifficultyName,
+			&i.MaxPlayers,
+			&i.MetricValue,
+			&i.PreciseScore,
+			&i.DisplayScore,
+			&i.KilledAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const createGuildJoinRequest = `-- name: CreateGuildJoinRequest :one
 
 INSERT INTO guild_join_requests (guild_id, user_id, message)

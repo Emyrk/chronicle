@@ -169,3 +169,62 @@ type GuildRaidClear struct {
 type GuildRaidClearsResponse struct {
 	Clears []GuildRaidClear `json:"clears"`
 }
+
+// Guild character roster (guild page "Roster" panel)
+
+// GuildRosterCharacter is a guild character seen in raid logs. LastSeenAt is
+// the last time a log updated the character. AvgParse is -1 when the
+// character has no parses in the scoring window.
+type GuildRosterCharacter struct {
+	ID         GUIDString `json:"id"`
+	Name       string     `json:"name"`
+	Class      string     `json:"class"`
+	Race       string     `json:"race"`
+	Level      int32      `json:"level"`
+	Spec       string     `json:"spec,omitempty"`
+	Role       string     `json:"role,omitempty"` // "tank", "heal", or "dps"
+	AvgParse   float64    `json:"avg_parse"`
+	LastSeenAt time.Time  `json:"last_seen_at"`
+	RealmName  string     `json:"realm_name"`
+}
+
+type GuildCharacterRosterResponse struct {
+	Members []GuildRosterCharacter `json:"members"`
+}
+
+// Guild top parses (guild page "Top Parses" panel)
+
+// GuildTopParse is one ranked parse on a guild's top parses board.
+type GuildTopParse struct {
+	PlayerGUID     string    `json:"player_guid"`
+	PlayerName     string    `json:"player_name"`
+	PlayerClass    string    `json:"player_class"`
+	PlayerSpec     string    `json:"player_spec"`
+	PlayerRole     string    `json:"player_role"`
+	EncounterName  string    `json:"encounter_name"`
+	InstanceName   string    `json:"instance_name"`
+	DifficultyName string    `json:"difficulty_name"`
+	MaxPlayers     int16     `json:"max_players"`
+	Metric         string    `json:"metric"`
+	MetricValue    float64   `json:"metric_value"`
+	DisplayScore   int       `json:"display_score"`
+	KilledAt       time.Time `json:"killed_at"`
+}
+
+type GuildTopParsesResponse struct {
+	Metric string          `json:"metric"`
+	Parses []GuildTopParse `json:"parses"`
+}
+
+// Guild per-run parse averages (guild page "Recent" panel)
+
+// GuildRunParseAverage is the guild's average parse for one raid night (run).
+type GuildRunParseAverage struct {
+	RunID      uuid.UUID `json:"run_id"`
+	AvgParse   float64   `json:"avg_parse"`
+	ParseCount int64     `json:"parse_count"`
+}
+
+type GuildRunParsesResponse struct {
+	Runs []GuildRunParseAverage `json:"runs"`
+}
