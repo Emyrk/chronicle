@@ -84,12 +84,13 @@ function SegmentTooltip({
 }: {
   component: (typeof COMPONENTS)[number];
   primaryValue?: number | null;
-  summary: TimeCompositionSummary;
+  /** Comparison stats; omit when no comparison population is selected. */
+  summary?: TimeCompositionSummary;
   comparisonLabel: string;
   children: React.ReactNode;
 }) {
   const showPrimaryComparison = primaryValue !== undefined;
-  const delta = typeof primaryValue === "number" ? primaryValue - summary.median : null;
+  const delta = summary && typeof primaryValue === "number" ? primaryValue - summary.median : null;
 
   return (
     <Tooltip>
@@ -105,23 +106,29 @@ function SegmentTooltip({
             <p className={cn("text-xs font-semibold", component.textClass)}>{component.label} time</p>
             <p className="mt-0.5 text-[10px] leading-snug text-muted-foreground">{component.description}</p>
           </div>
-          <span className="shrink-0 text-[10px] text-muted-foreground">
-            {summary.count.toLocaleString()} raids
-          </span>
+          {summary && (
+            <span className="shrink-0 text-[10px] text-muted-foreground">
+              {summary.count.toLocaleString()} raids
+            </span>
+          )}
         </div>
         <div className="space-y-1 text-xs">
           {showPrimaryComparison && (
             <>
               <StatLine label="Your time" value={primaryValue === null ? "Missing" : formatClearDuration(primaryValue)} />
               {delta !== null && <StatLine label={`${comparisonLabel} delta`} value={formatDelta(delta)} />}
-              <div className="my-1 border-t border-white/5" />
+              {summary && <div className="my-1 border-t border-white/5" />}
             </>
           )}
-          <StatLine label="Fastest" value={formatClearDuration(summary.min)} />
-          <StatLine label="Top 25%" value={formatClearDuration(summary.q1)} />
-          <StatLine label={comparisonLabel} value={formatClearDuration(summary.median)} />
-          <StatLine label="Bottom 25%" value={formatClearDuration(summary.q3)} />
-          <StatLine label="Slowest" value={formatClearDuration(summary.max)} />
+          {summary && (
+            <>
+              <StatLine label="Fastest" value={formatClearDuration(summary.min)} />
+              <StatLine label="Top 25%" value={formatClearDuration(summary.q1)} />
+              <StatLine label={comparisonLabel} value={formatClearDuration(summary.median)} />
+              <StatLine label="Bottom 25%" value={formatClearDuration(summary.q3)} />
+              <StatLine label="Slowest" value={formatClearDuration(summary.max)} />
+            </>
+          )}
         </div>
       </TooltipContent>
     </Tooltip>
@@ -137,7 +144,8 @@ function StackedBar({
   showPrimaryComparison = primary,
 }: {
   composition: TimeComposition;
-  summaries: TimeCompositionSummaries;
+  /** Comparison stats; omit when no comparison population is selected. */
+  summaries?: TimeCompositionSummaries;
   scaleMax: number;
   comparisonLabel: string;
   primary: boolean;
@@ -156,7 +164,7 @@ function StackedBar({
             key={component.key}
             component={component}
             primaryValue={primary && showPrimaryComparison ? value : undefined}
-            summary={summaries[component.key]}
+            summary={summaries?.[component.key]}
             comparisonLabel={comparisonLabel}
           >
             <div
@@ -189,12 +197,13 @@ function ComponentCard({
 }: {
   component: (typeof COMPONENTS)[number];
   primaryValue: number | null;
-  summary: TimeCompositionSummary;
+  /** Comparison stats; omit when no comparison population is selected. */
+  summary?: TimeCompositionSummary;
   comparisonLabel: string;
   requirementsComplete: boolean;
 }) {
-  const delta = primaryValue === null ? null : primaryValue - summary.median;
-  const deltaPercent = delta !== null && summary.median > 0
+  const delta = summary && primaryValue !== null ? primaryValue - summary.median : null;
+  const deltaPercent = summary && delta !== null && summary.median > 0
     ? Math.round((Math.abs(delta) / summary.median) * 100)
     : null;
 
@@ -211,7 +220,7 @@ function ComponentCard({
             <span className={cn("size-2.5 rounded-sm", component.barClass)} />
             {component.label}
           </span>
-          {requirementsComplete && (
+          {requirementsComplete && summary && (
             <span
               className={cn(
                 "flex flex-col items-end font-mono font-semibold leading-none",
@@ -241,9 +250,11 @@ function ComponentCard({
           )}>
             {primaryValue === null ? "Missing" : formatClearDuration(primaryValue)}
           </span>
-          <span className="text-[10px] text-muted-foreground">
-            {comparisonLabel.toLowerCase()} <span className="font-mono">{formatClearDuration(summary.median)}</span>
-          </span>
+          {summary && (
+            <span className="text-[10px] text-muted-foreground">
+              {comparisonLabel.toLowerCase()} <span className="font-mono">{formatClearDuration(summary.median)}</span>
+            </span>
+          )}
         </div>
         <p className="mt-2 text-[10px] leading-relaxed text-muted-foreground/75">{component.description}</p>
       </div>
@@ -263,7 +274,9 @@ export function TimeCompositionPanel({
   const primaryRun = primaryQuery.data?.runs[0];
   const primaryComposition = timeComposition(primaryRun);
   const requirementsComplete = primaryRun?.requirements_complete ?? false;
-  const comparisonSummaries = summarizeTimeCompositions(comparisonQuery.data?.runs ?? []);
+  const comparisonSummaries = comparison
+    ? summarizeTimeCompositions(comparisonQuery.data?.runs ?? [])
+    : null;
   const comparisonValues = comparisonSummaries ? comparisonComposition(comparisonSummaries) : null;
   const specificRaidComparison = comparison?.kind === "instance";
   const comparisonLabel = specificRaidComparison ? "Other raid" : "Median";
@@ -296,11 +309,7 @@ export function TimeCompositionPanel({
         </div>
       </div>
 
-      {!comparison ? (
-        <div className="flex h-36 items-center justify-center px-5 text-sm text-muted-foreground">
-          Choose a comparison population to compare raid time.
-        </div>
-      ) : loading ? (
+      {loading ? (
         <div className="flex h-36 items-center justify-center gap-2 text-sm text-muted-foreground">
           <Loader2 className="h-4 w-4 animate-spin" />
           Loading raid time
@@ -309,7 +318,7 @@ export function TimeCompositionPanel({
         <div className="flex h-36 items-center justify-center px-5 text-sm text-destructive">
           {error instanceof Error ? error.message : "Unable to load raid time"}
         </div>
-      ) : !comparisonSummaries || !comparisonValues ? (
+      ) : comparison && (!comparisonSummaries || !comparisonValues) ? (
         <div className="flex h-36 items-center justify-center px-5 text-center text-sm text-muted-foreground">
           No complete comparison raids with Overview timing data were found.
         </div>
@@ -354,7 +363,7 @@ export function TimeCompositionPanel({
               {primaryComposition ? (
                 <StackedBar
                   composition={primaryComposition}
-                  summaries={comparisonSummaries}
+                  summaries={comparisonSummaries ?? undefined}
                   scaleMax={scaleMax}
                   comparisonLabel={comparisonLabel}
                   primary
@@ -367,26 +376,28 @@ export function TimeCompositionPanel({
               )}
             </div>
 
-            <div>
-              <div className="mb-2 flex items-end justify-between gap-4">
-                <div className="flex items-baseline gap-2">
-                  <span className="text-xs font-semibold text-muted-foreground">{comparisonLabel} composition</span>
-                  <span className="text-[10px] text-muted-foreground/70">
-                    n={comparisonSummaries.boss.count.toLocaleString()}
+            {comparisonSummaries && comparisonValues && (
+              <div>
+                <div className="mb-2 flex items-end justify-between gap-4">
+                  <div className="flex items-baseline gap-2">
+                    <span className="text-xs font-semibold text-muted-foreground">{comparisonLabel} composition</span>
+                    <span className="text-[10px] text-muted-foreground/70">
+                      n={comparisonSummaries.boss.count.toLocaleString()}
+                    </span>
+                  </div>
+                  <span className="font-mono text-lg font-bold text-foreground">
+                    {formatClearDuration(comparisonValues.total)}
                   </span>
                 </div>
-                <span className="font-mono text-lg font-bold text-foreground">
-                  {formatClearDuration(comparisonValues.total)}
-                </span>
+                <StackedBar
+                  composition={comparisonValues}
+                  summaries={comparisonSummaries}
+                  scaleMax={scaleMax}
+                  comparisonLabel={comparisonLabel}
+                  primary={false}
+                />
               </div>
-              <StackedBar
-                composition={comparisonValues}
-                summaries={comparisonSummaries}
-                scaleMax={scaleMax}
-                comparisonLabel={comparisonLabel}
-                primary={false}
-              />
-            </div>
+            )}
 
             <div className="grid gap-3 md:grid-cols-3">
               {COMPONENTS.map((component) => (
@@ -394,7 +405,7 @@ export function TimeCompositionPanel({
                   key={component.key}
                   component={component}
                   primaryValue={primaryComposition?.[component.key] ?? null}
-                  summary={comparisonSummaries[component.key]}
+                  summary={comparisonSummaries?.[component.key]}
                   comparisonLabel={comparisonLabel}
                   requirementsComplete={requirementsComplete}
                 />

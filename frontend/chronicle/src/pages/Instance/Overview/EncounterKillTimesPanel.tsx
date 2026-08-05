@@ -107,14 +107,19 @@ function parseBadgeClasses(percentile: number | null): string {
   );
 }
 
+const COMPARISON_GRID = "grid-cols-[2.5rem_minmax(6rem,9rem)_minmax(7rem,1fr)_2.75rem_2.75rem_3rem]";
+const PRIMARY_ONLY_GRID = "grid-cols-[2.5rem_minmax(6rem,1fr)_4rem]";
+
 function EncounterRowTooltip({
   children,
   content,
   missing = false,
+  gridClass = COMPARISON_GRID,
 }: {
   children: ReactNode;
   content: ReactNode;
   missing?: boolean;
+  gridClass?: string;
 }) {
   const [cursor, setCursor] = useState({ x: 0, y: 0 });
 
@@ -123,7 +128,8 @@ function EncounterRowTooltip({
       <TooltipTrigger asChild>
         <div
           className={cn(
-            "grid cursor-default grid-cols-[2.5rem_minmax(6rem,9rem)_minmax(7rem,1fr)_2.75rem_2.75rem_3rem] items-center gap-2 border-b border-border/30 px-1 py-2 last:border-b-0 hover:bg-muted/20",
+            "grid cursor-default items-center gap-2 border-b border-border/30 px-1 py-2 last:border-b-0 hover:bg-muted/20",
+            gridClass,
             missing && "bg-muted/5 text-muted-foreground hover:bg-muted/15",
           )}
           onMouseMove={(event) => {
@@ -209,7 +215,11 @@ export function EncounterKillTimesPanel({
           <div className="min-w-0">
             <h2 className="truncate text-sm font-semibold">Encounter breakdown</h2>
             <p className="mt-0.5 text-[11px] leading-none text-muted-foreground">
-              {specificRaidComparison ? "Kill time vs comparison raid" : "Kill time vs comparison median"}
+              {!comparison
+                ? "Kill time per boss"
+                : specificRaidComparison
+                  ? "Kill time vs comparison raid"
+                  : "Kill time vs comparison median"}
             </p>
           </div>
           {(averageParse !== null || incompleteAverage) && (
@@ -262,26 +272,91 @@ export function EncounterKillTimesPanel({
             </HintTooltip>
           )}
         </div>
-        <div className="flex flex-wrap items-center gap-3 text-[10px] text-muted-foreground">
-          <span className="flex items-center gap-1.5 text-foreground/90">
-            <span className="size-2 rotate-45 border border-primary-foreground/70 bg-primary shadow-[0_0_4px_color-mix(in_oklab,var(--primary)_55%,transparent)]" />
-            Your time
-          </span>
-          <span className="flex items-center gap-1.5">
-            <span className="h-2 w-5 rounded-sm bg-muted-foreground/45" />
-            {specificRaidComparison ? "Comparison time" : "Comparison spread"}
-          </span>
-          <span className="flex items-center gap-1.5">
-            <span className="font-mono font-bold tracking-[-0.2em] text-primary">›››</span>
-            Beyond axis
-          </span>
-        </div>
+        {comparison && (
+          <div className="flex flex-wrap items-center gap-3 text-[10px] text-muted-foreground">
+            <span className="flex items-center gap-1.5 text-foreground/90">
+              <span className="size-2 rotate-45 border border-primary-foreground/70 bg-primary shadow-[0_0_4px_color-mix(in_oklab,var(--primary)_55%,transparent)]" />
+              Your time
+            </span>
+            <span className="flex items-center gap-1.5">
+              <span className="h-2 w-5 rounded-sm bg-muted-foreground/45" />
+              {specificRaidComparison ? "Comparison time" : "Comparison spread"}
+            </span>
+            <span className="flex items-center gap-1.5">
+              <span className="font-mono font-bold tracking-[-0.2em] text-primary">›››</span>
+              Beyond axis
+            </span>
+          </div>
+        )}
       </div>
 
       {!comparison ? (
-        <div className="flex h-28 items-center justify-center px-5 text-sm text-muted-foreground">
-          Choose a comparison population to compare encounter kill times.
-        </div>
+        primaryQuery.isLoading ? (
+          <div className="flex h-28 items-center justify-center gap-2 text-sm text-muted-foreground">
+            <Loader2 className="h-4 w-4 animate-spin" />
+            Loading encounter kill times
+          </div>
+        ) : primarySummaries.size === 0 ? (
+          <div className="flex h-28 items-center justify-center px-5 text-sm text-muted-foreground">
+            No clean boss kills were found in this raid.
+          </div>
+        ) : (
+          <TooltipProvider>
+            <div className="px-5 pb-3 pt-1.5">
+              <div className={cn("grid items-end gap-2 border-b border-border/40 px-1 pb-1.5 text-[9px] uppercase tracking-[0.14em] text-muted-foreground/60", PRIMARY_ONLY_GRID)}>
+                <span>Parse</span>
+                <span>Boss</span>
+                <span className="text-right">Yours</span>
+              </div>
+              {[...primarySummaries].map(([encounterName, summary]) => {
+                const percentile = resolveEncounterParseScore(snapshotParses, encounterName);
+                return (
+                  <EncounterRowTooltip
+                    key={encounterName}
+                    gridClass={PRIMARY_ONLY_GRID}
+                    content={(
+                      <>
+                        <div className="mb-2.5 flex items-center justify-between gap-3">
+                          <span className="truncate text-xs font-semibold">{encounterName}</span>
+                        </div>
+                        {percentile !== null ? (
+                          <p className="mb-2 flex items-center gap-1.5 text-[11px] text-muted-foreground">
+                            <span className={parseBadgeClasses(percentile)}>{percentile}</span>
+                            <span>means faster than or equal to {percentile}% of comparable kills.</span>
+                          </p>
+                        ) : (
+                          <p className="mb-2 text-[11px] text-muted-foreground">
+                            Parse unavailable: fewer than 5 comparable kills.
+                          </p>
+                        )}
+                        <div className="space-y-1 text-xs">
+                          <TimeStatLine
+                            label="Your time"
+                            value={formatClearDuration(summary.median)}
+                            highlight
+                          />
+                        </div>
+                        <p className="mt-2 text-[10px] leading-snug text-muted-foreground/70">
+                          Choose a comparison population to see how this stacks up.
+                        </p>
+                      </>
+                    )}
+                  >
+                    <span className={parseBadgeClasses(percentile)}>
+                      {percentile === null ? "—" : percentile}
+                    </span>
+                    <span className="truncate text-xs font-medium text-foreground">
+                      {encounterName}
+                    </span>
+                    <span className="text-right font-mono text-xs font-semibold text-white">
+                      {formatClearDuration(summary.median)}
+                    </span>
+                  </EncounterRowTooltip>
+                );
+              })}
+            </div>
+          </TooltipProvider>
+        )
       ) : loading ? (
         <div className="flex h-28 items-center justify-center gap-2 text-sm text-muted-foreground">
           <Loader2 className="h-4 w-4 animate-spin" />
