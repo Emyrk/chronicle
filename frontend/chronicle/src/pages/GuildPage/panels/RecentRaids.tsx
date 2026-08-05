@@ -170,11 +170,10 @@ function RaidListRow({
           Log
           <ExternalLink className="h-3 w-3" />
         </Link>
-        {expandable && (
-          <ChevronDown
-            className={`h-4 w-4 shrink-0 text-muted-foreground transition-transform ${expanded ? "rotate-180" : ""}`}
-          />
-        )}
+        {/* Always rendered so the Log button stays aligned across rows. */}
+        <ChevronDown
+          className={`h-4 w-4 shrink-0 text-muted-foreground transition-transform ${expanded ? "rotate-180" : ""} ${expandable ? "" : "invisible"}`}
+        />
       </div>
       {expanded && (
         <div className="border-t border-border/50 px-4 py-3">
