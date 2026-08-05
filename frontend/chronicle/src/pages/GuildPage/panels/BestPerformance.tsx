@@ -1,7 +1,11 @@
 import { useEffect, useMemo, useState } from "react";
 import { Link } from "react-router-dom";
 import { Award, AlertCircle } from "lucide-react";
-import type { GuildBestRun, GuildBestRunsResponse } from "@/api/typesGenerated";
+import type {
+  GuildBestRun,
+  GuildBestRunsResponse,
+  InstanceTimeParsesResponse,
+} from "@/api/typesGenerated";
 import { parseColor } from "@/pages/Instance/parseColors";
 import type { GuildPanelDefinition, GuildPanelRenderProps } from "./types";
 import { instanceAccentGradient } from "./instanceColors";
@@ -16,9 +20,15 @@ function formatRunDate(iso: string): string {
   return new Date(iso).toLocaleDateString(undefined, { month: "short", day: "numeric" });
 }
 
-function BestRunRow({ run, rankBy }: { run: GuildBestRun; rankBy: "parse" | "time" }) {
-  const hasParse = run.avg_parse >= 0;
-  const score = Math.round(run.avg_parse);
+function BestRunRow({
+  run,
+  rankBy,
+  clearParse,
+}: {
+  run: GuildBestRun;
+  rankBy: "parse" | "time";
+  clearParse?: number;
+}) {
   const duration = formatClearDuration(run.duration_ms);
   const instanceUrl = run.instance_slug
     ? `/instances/${run.instance_slug}`
@@ -31,6 +41,20 @@ function BestRunRow({ run, rankBy }: { run: GuildBestRun; rankBy: "parse" | "tim
   ]
     .filter(Boolean)
     .join(" · ");
+
+  const parseBadge =
+    clearParse !== undefined ? (
+      <span
+        className={`font-bold tabular-nums ${parseColor(clearParse)} ${rankBy === "parse" ? "min-w-9 text-right text-2xl" : "text-lg"}`}
+        title="Clear time parse for this run"
+      >
+        {clearParse}
+      </span>
+    ) : (
+      <span className={`text-sm text-muted-foreground/50 ${rankBy === "parse" ? "min-w-9 text-right" : ""}`}>
+        —
+      </span>
+    );
 
   return (
     <Link
@@ -50,27 +74,11 @@ function BestRunRow({ run, rankBy }: { run: GuildBestRun; rankBy: "parse" | "tim
           <span className="text-xs text-muted-foreground tabular-nums" title="Clear time">
             {duration}
           </span>
-          {hasParse ? (
-            <span
-              className={`min-w-9 text-right text-2xl font-bold tabular-nums ${parseColor(score)}`}
-              title="Average guild parse for this run"
-            >
-              {score}
-            </span>
-          ) : (
-            <span className="min-w-9 text-right text-sm text-muted-foreground/50">—</span>
-          )}
+          {parseBadge}
         </>
       ) : (
         <>
-          {hasParse && (
-            <span
-              className={`text-xs font-semibold tabular-nums ${parseColor(score)}`}
-              title="Average guild parse for this run"
-            >
-              {score}
-            </span>
-          )}
+          {parseBadge}
           <span
             className="min-w-16 text-right text-xl font-bold tabular-nums text-foreground"
             title="Clear time"
@@ -85,6 +93,7 @@ function BestRunRow({ run, rankBy }: { run: GuildBestRun; rankBy: "parse" | "tim
 
 function BestPerformanceContent({ config, guild }: GuildPanelRenderProps<BestPerformanceConfig>) {
   const [runs, setRuns] = useState<GuildBestRun[]>([]);
+  const [clearParses, setClearParses] = useState<Record<string, number>>({});
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
@@ -115,6 +124,36 @@ function BestPerformanceContent({ config, guild }: GuildPanelRenderProps<BestPer
       cancelled = true;
     };
   }, [guild.id, timeWindow, rankBy]);
+
+  // The parse shown is the run's clear-time parse (the whole clear scored
+  // against the population), fetched per winning run.
+  useEffect(() => {
+    if (runs.length === 0) return;
+    let cancelled = false;
+    const fetchParses = async () => {
+      const entries = await Promise.all(
+        runs.map(async (run) => {
+          try {
+            const response = await fetch(
+              `/api/v1/rankings/instances/${run.instance_id}/time-parses?period=${timeWindow}d`,
+            );
+            if (!response.ok) return null;
+            const data = (await response.json()) as InstanceTimeParsesResponse;
+            if (!data.available || !data.clear_time) return null;
+            return [run.run_id, data.clear_time.display_score] as const;
+          } catch {
+            return null;
+          }
+        }),
+      );
+      if (cancelled) return;
+      setClearParses(Object.fromEntries(entries.filter((e): e is [string, number] => e !== null)));
+    };
+    fetchParses();
+    return () => {
+      cancelled = true;
+    };
+  }, [runs, timeWindow]);
 
   const sorted = useMemo(() => {
     const list = [...runs];
@@ -161,7 +200,7 @@ function BestPerformanceContent({ config, guild }: GuildPanelRenderProps<BestPer
       </div>
       <div className="flex flex-col gap-2">
         {sorted.map((run) => (
-          <BestRunRow key={run.run_id} run={run} rankBy={rankBy} />
+          <BestRunRow key={run.run_id} run={run} rankBy={rankBy} clearParse={clearParses[run.run_id]} />
         ))}
       </div>
     </div>

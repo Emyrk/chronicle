@@ -52,6 +52,8 @@ export function LogsCalendar({
   const isSmall = useIsSmallScreen();
   const compact = density === "compact";
   const cells = variant === "cells";
+  // The cells variant is themed compact throughout so the panel works small.
+  const tightHeader = compact || cells;
   const weeks = getCalendarWeeks(month);
 
   if (isSmall) {
@@ -68,16 +70,16 @@ export function LogsCalendar({
   return (
     <div className={fillHeight ? "flex h-full w-full min-h-0 flex-col" : "w-full"}>
       {/* Header */}
-      <div className={`flex flex-col sm:flex-row sm:items-center sm:justify-between ${compact ? "mb-1 gap-1" : "mb-4 gap-3"}`}>
+      <div className={`flex flex-col sm:flex-row sm:items-center sm:justify-between ${tightHeader ? "mb-1 gap-1" : "mb-4 gap-3"}`}>
         <div className="flex items-center gap-2">
-          <h2 className={compact ? "text-sm font-semibold" : "text-lg font-semibold"}>
+          <h2 className={tightHeader ? "text-sm font-semibold" : "text-lg font-semibold"}>
             {format(month, "MMMM yyyy")}
           </h2>
           <div className="flex items-center">
             <Button
               variant="ghost"
               size="icon"
-              className={compact ? "h-6 w-6" : "h-8 w-8"}
+              className={tightHeader ? "h-6 w-6" : "h-8 w-8"}
               onClick={() => onMonthChange(subMonths(month, 1))}
             >
               <ChevronLeft className="h-4 w-4" />
@@ -85,7 +87,7 @@ export function LogsCalendar({
             <Button
               variant="ghost"
               size="icon"
-              className={compact ? "h-6 w-6" : "h-8 w-8"}
+              className={tightHeader ? "h-6 w-6" : "h-8 w-8"}
               onClick={() => onMonthChange(addMonths(month, 1))}
             >
               <ChevronRight className="h-4 w-4" />
@@ -105,7 +107,7 @@ export function LogsCalendar({
             {DAY_NAMES.map((day) => (
               <div
                 key={day}
-                className={`${compact ? "py-1 text-[10px]" : "py-2 text-xs"} text-center font-medium text-muted-foreground ${cells ? "uppercase tracking-widest" : "border-b border-border"}`}
+                className={`${cells ? "py-0.5 text-[10px] uppercase tracking-widest" : compact ? "py-1 text-[10px] border-b border-border" : "py-2 text-xs border-b border-border"} text-center font-medium text-muted-foreground`}
               >
                 {day}
               </div>
@@ -126,7 +128,15 @@ export function LogsCalendar({
                   <div
                     key={dayIndex}
                     className={`
-                      ${compact ? "min-h-[48px] p-1" : "min-h-[80px] sm:min-h-[100px] p-1 sm:p-1.5"}
+                      ${
+                        cells
+                          ? compact
+                            ? "min-h-[36px] p-0.5"
+                            : "min-h-[56px] p-1"
+                          : compact
+                            ? "min-h-[48px] p-1"
+                            : "min-h-[80px] sm:min-h-[100px] p-1 sm:p-1.5"
+                      }
                       ${
                         cells
                           ? `rounded-md border ${today ? "border-primary/50 bg-primary/5" : "border-border/50 bg-muted/20"} ${!inCurrentMonth ? "opacity-40" : ""}`
