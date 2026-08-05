@@ -16,12 +16,34 @@ import type {
 
 const RANKINGS_STALE_TIME = 5 * 60 * 1000; // 5 minutes
 
+class RankingsAPIError extends Error {
+  constructor(
+    message: string,
+    readonly status: number,
+  ) {
+    super(message);
+    this.name = "RankingsAPIError";
+  }
+}
+
 async function fetchJSON<T>(url: string): Promise<T> {
   const response = await fetch(url);
   if (!response.ok) {
-    throw new Error(`Rankings API error: ${response.status}`);
+    throw new RankingsAPIError(`Rankings API error: ${response.status}`, response.status);
   }
   return response.json() as Promise<T>;
+}
+
+/**
+ * Retry policy for rankings queries: client errors (4xx — missing endpoint,
+ * bad GUID) are fatal and never retried; anything else gets the default
+ * three attempts.
+ */
+function retryUnlessClientError(failureCount: number, error: unknown): boolean {
+  if (error instanceof RankingsAPIError && error.status >= 400 && error.status < 500) {
+    return false;
+  }
+  return failureCount < 3;
 }
 
 /**
@@ -37,6 +59,7 @@ export function useCharacterParses(playerGuid?: string, metric: "dps" | "hps" = 
       ),
     staleTime: RANKINGS_STALE_TIME,
     enabled: !!playerGuid,
+    retry: retryUnlessClientError,
   });
 }
 
@@ -50,6 +73,7 @@ export function useCharacterEncounters(playerGuid?: string, enabled = true) {
       ),
     staleTime: RANKINGS_STALE_TIME,
     enabled: enabled && !!playerGuid,
+    retry: retryUnlessClientError,
   });
 }
 
