@@ -1026,6 +1026,47 @@ export interface GearList {
 
 // From chroniclesdk/gear_builder.go
 /**
+ * GearListAlternate is a ranked alternate item for a slot; array order
+ * is the rank.
+ */
+export interface GearListAlternate {
+    readonly item_id: number;
+    readonly note?: string;
+}
+
+// From chroniclesdk/gear_builder.go
+/**
+ * GearListPayload is the versioned document stored in GearList.Payload.
+ */
+export interface GearListPayload {
+    readonly version: number;
+    readonly stages: readonly GearListStage[];
+}
+
+// From chroniclesdk/gear_builder.go
+/**
+ * GearListSlot is the primary pick for one equipment slot plus its
+ * ranked alternates and an optional author note.
+ */
+export interface GearListSlot {
+    readonly item_id: number;
+    readonly enchant_id?: number;
+    readonly note?: string;
+    readonly alternates?: readonly GearListAlternate[];
+}
+
+// From chroniclesdk/gear_builder.go
+/**
+ * GearListStage is one stage of a gear progression. Slot keys are the
+ * 19 PlayerOutfit indexes ("0".."18"); slots without an item are absent.
+ */
+export interface GearListStage {
+    readonly name: string;
+    readonly slots: Record<string, GearListSlot>;
+}
+
+// From chroniclesdk/gear_builder.go
+/**
  * GearStatWeight is a user-defined stat-weight set.
  */
 export interface GearStatWeight {

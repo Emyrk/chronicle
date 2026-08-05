@@ -27,6 +27,7 @@ export * from "./src/components/ui/Card/Card";
 export * from "./src/components/ui/Checkbox/Checkbox";
 export * from "./src/components/ui/Collapsible/Collapsible";
 export * from "./src/components/ui/DropdownMenu/DropdownMenu";
+export * from "./src/components/ui/ItemIcon/ItemIcon";
 export * from "./src/components/ui/NavigationMenu/navigation-menu";
 export * from "./src/components/ui/PlayerMetricChart/PlayerMetricChart";
 export * from "./src/components/ui/ScrollArea/ScrollArea";

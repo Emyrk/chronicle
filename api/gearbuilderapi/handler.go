@@ -1,9 +1,11 @@
 package gearbuilderapi
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"net/http"
 	"strconv"
 	"strings"
@@ -31,6 +33,14 @@ const (
 	maxPayloadBytes       = 262144
 	maxWeightsPayloadSize = 8192
 	maxDescriptionLen     = 2000
+
+	// Payload document limits.
+	gearPayloadVersion   = 2
+	maxStagesPerList     = 16
+	maxStageNameLen      = 64
+	maxSlotIndex         = 18 // PlayerOutfit has 19 slots, 0-18
+	maxSlotNoteLen       = 500
+	maxAlternatesPerSlot = 8
 )
 
 // Handler owns all gear builder routes.
@@ -640,8 +650,47 @@ func validatePayload(payload json.RawMessage) error {
 	if len(payload) == 0 {
 		return nil
 	}
-	if !json.Valid(payload) {
-		return errors.New("payload is not valid JSON")
+
+	dec := json.NewDecoder(bytes.NewReader(payload))
+	dec.DisallowUnknownFields()
+	var doc chroniclesdk.GearListPayload
+	if err := dec.Decode(&doc); err != nil {
+		return fmt.Errorf("payload is not a valid gear list document: %w", err)
+	}
+
+	if doc.Version != gearPayloadVersion {
+		return fmt.Errorf("unsupported payload version %d, expected %d", doc.Version, gearPayloadVersion)
+	}
+	if len(doc.Stages) > maxStagesPerList {
+		return fmt.Errorf("too many stages, maximum is %d", maxStagesPerList)
+	}
+	for i, stage := range doc.Stages {
+		if len(stage.Name) > maxStageNameLen {
+			return fmt.Errorf("stage %d name too long, maximum is %d characters", i+1, maxStageNameLen)
+		}
+		for key, slot := range stage.Slots {
+			idx, err := strconv.Atoi(key)
+			if err != nil || idx < 0 || idx > maxSlotIndex {
+				return fmt.Errorf("stage %d has invalid slot key %q, expected \"0\"..\"%d\"", i+1, key, maxSlotIndex)
+			}
+			if slot.ItemID <= 0 {
+				return fmt.Errorf("stage %d slot %s has an invalid item ID", i+1, key)
+			}
+			if len(slot.Note) > maxSlotNoteLen {
+				return fmt.Errorf("stage %d slot %s note too long, maximum is %d characters", i+1, key, maxSlotNoteLen)
+			}
+			if len(slot.Alternates) > maxAlternatesPerSlot {
+				return fmt.Errorf("stage %d slot %s has too many alternates, maximum is %d", i+1, key, maxAlternatesPerSlot)
+			}
+			for _, alt := range slot.Alternates {
+				if alt.ItemID <= 0 {
+					return fmt.Errorf("stage %d slot %s has an alternate with an invalid item ID", i+1, key)
+				}
+				if len(alt.Note) > maxSlotNoteLen {
+					return fmt.Errorf("stage %d slot %s has an alternate note that is too long, maximum is %d characters", i+1, key, maxSlotNoteLen)
+				}
+			}
+		}
 	}
 	return nil
 }

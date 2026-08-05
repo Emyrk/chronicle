@@ -22,6 +22,35 @@ type GearList struct {
 	UpdatedAt   time.Time       `json:"updated_at"`
 }
 
+// GearListPayload is the versioned document stored in GearList.Payload.
+type GearListPayload struct {
+	Version int32           `json:"version"`
+	Stages  []GearListStage `json:"stages"`
+}
+
+// GearListStage is one stage of a gear progression. Slot keys are the
+// 19 PlayerOutfit indexes ("0".."18"); slots without an item are absent.
+type GearListStage struct {
+	Name  string                  `json:"name"`
+	Slots map[string]GearListSlot `json:"slots"`
+}
+
+// GearListSlot is the primary pick for one equipment slot plus its
+// ranked alternates and an optional author note.
+type GearListSlot struct {
+	ItemID     int32               `json:"item_id"`
+	EnchantID  *int32              `json:"enchant_id,omitempty"`
+	Note       string              `json:"note,omitempty"`
+	Alternates []GearListAlternate `json:"alternates,omitempty"`
+}
+
+// GearListAlternate is a ranked alternate item for a slot; array order
+// is the rank.
+type GearListAlternate struct {
+	ItemID int32  `json:"item_id"`
+	Note   string `json:"note,omitempty"`
+}
+
 // CreateGearListRequest is the request body for creating a gear list.
 type CreateGearListRequest struct {
 	Title       string          `json:"title"`

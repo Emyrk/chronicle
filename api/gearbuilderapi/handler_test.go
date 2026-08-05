@@ -61,15 +61,35 @@ func TestValidateVisibility(t *testing.T) {
 func TestValidatePayload(t *testing.T) {
 	t.Parallel()
 
+	longNote := strings.Repeat("n", maxSlotNoteLen+1)
+	manyAlts := `[` + strings.Repeat(`{"item_id":1},`, maxAlternatesPerSlot) + `{"item_id":1}]`
+
 	tests := []struct {
 		name    string
 		payload json.RawMessage
 		wantErr bool
 	}{
-		{"valid JSON", json.RawMessage(`{"stages":[]}`), false},
 		{"empty", nil, false},
+		{"empty stages", json.RawMessage(`{"version":2,"stages":[]}`), false},
+		{"valid document", json.RawMessage(`{"version":2,"stages":[{"name":"Pre-Raid","slots":{
+			"0":{"item_id":16921,"enchant_id":2543,"note":"crafted","alternates":[{"item_id":22718,"note":"cheaper"}]},
+			"18":{"item_id":45}
+		}}]}`), false},
 		{"invalid JSON", json.RawMessage(`{invalid`), true},
 		{"too large", json.RawMessage(strings.Repeat("x", maxPayloadBytes+1)), true},
+		{"missing version", json.RawMessage(`{"stages":[]}`), true},
+		{"wrong version", json.RawMessage(`{"version":1,"stages":[]}`), true},
+		{"legacy v1 slot shape", json.RawMessage(`{"version":2,"stages":[{"name":"a","slots":{"0":16921}}]}`), true},
+		{"unknown field", json.RawMessage(`{"version":2,"stages":[],"extra":true}`), true},
+		{"slot key out of range", json.RawMessage(`{"version":2,"stages":[{"name":"a","slots":{"19":{"item_id":1}}}]}`), true},
+		{"slot key not a number", json.RawMessage(`{"version":2,"stages":[{"name":"a","slots":{"head":{"item_id":1}}}]}`), true},
+		{"item id zero", json.RawMessage(`{"version":2,"stages":[{"name":"a","slots":{"0":{"item_id":0}}}]}`), true},
+		{"negative alternate item id", json.RawMessage(`{"version":2,"stages":[{"name":"a","slots":{"0":{"item_id":1,"alternates":[{"item_id":-5}]}}}]}`), true},
+		{"too many stages", json.RawMessage(`{"version":2,"stages":[` + strings.Repeat(`{"name":"s","slots":{}},`, maxStagesPerList) + `{"name":"s","slots":{}}]}`), true},
+		{"stage name too long", json.RawMessage(`{"version":2,"stages":[{"name":"` + strings.Repeat("a", maxStageNameLen+1) + `","slots":{}}]}`), true},
+		{"note too long", json.RawMessage(`{"version":2,"stages":[{"name":"a","slots":{"0":{"item_id":1,"note":"` + longNote + `"}}}]}`), true},
+		{"alternate note too long", json.RawMessage(`{"version":2,"stages":[{"name":"a","slots":{"0":{"item_id":1,"alternates":[{"item_id":2,"note":"` + longNote + `"}]}}}]}`), true},
+		{"too many alternates", json.RawMessage(`{"version":2,"stages":[{"name":"a","slots":{"0":{"item_id":1,"alternates":` + manyAlts + `}}}]}`), true},
 	}
 
 	for _, tt := range tests {
