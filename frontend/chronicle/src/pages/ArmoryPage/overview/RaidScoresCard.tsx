@@ -127,7 +127,7 @@ function raidKey(raid: RaidSummary): string {
 function RaidScoreBars({ encounters }: { encounters: EncounterSummary[] }) {
   return (
     <div
-      className="hidden h-10 items-end gap-1 sm:flex"
+      className="hidden h-10 items-end justify-end gap-1 sm:flex"
       aria-label="Boss score summary"
     >
       {encounters.map((encounter) => (
