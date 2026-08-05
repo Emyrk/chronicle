@@ -12,6 +12,7 @@ import (
 
 	"github.com/Emyrk/chronicle/api/chronauth"
 	"github.com/Emyrk/chronicle/api/chroniclesdk"
+	"github.com/Emyrk/chronicle/api/externalapi"
 	"github.com/Emyrk/chronicle/api/gamedataapi"
 	"github.com/Emyrk/chronicle/api/guildapi"
 	"github.com/Emyrk/chronicle/api/httpapi"
@@ -155,7 +156,7 @@ func (api *API) Routes() chi.Router {
 		httpmw.Recover(api.Opts.Logger),
 		httpmw.Log500(api.Opts.Logger),
 		context2.ClearHandler,
-		Cors(api.Opts.Tenant),
+		RouteCors(api.Opts.Tenant),
 		httpmw.SecurityHeaders(),
 		httpmw.ContentSecurityPolicy(),
 		httpmw.NoWWW(),
@@ -167,6 +168,8 @@ func (api *API) Routes() chi.Router {
 		api.shortLinkRedirectMiddleware,
 		api.tenantMiddleware,
 	)
+
+	r.Mount(ExternalAPIPath, externalapi.New().Routes())
 
 	r.Route("/api/v1", func(r chi.Router) {
 		r.Group(func(r chi.Router) {

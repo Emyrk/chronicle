@@ -57,3 +57,61 @@ func TestCors(t *testing.T) {
 		})
 	}
 }
+
+func TestRouteCors(t *testing.T) {
+	t.Parallel()
+
+	prodURL, err := url.Parse("https://chronicleclassic.com")
+	assert.NoError(t, err)
+	tenant := servicetenant.NewTest(*prodURL)
+	ok := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusOK)
+	})
+	handler := api.RouteCors(tenant)(ok)
+
+	tests := []struct {
+		name              string
+		path              string
+		origin            string
+		method            string
+		wantAllowedOrigin string
+		wantCredentials   string
+	}{
+		{
+			name:              "external API allows arbitrary origins and methods",
+			path:              api.ExternalAPIPath + "/health",
+			origin:            "https://example.com",
+			method:            http.MethodPost,
+			wantAllowedOrigin: "*",
+		},
+		{
+			name:   "Chronicle API keeps rejecting arbitrary origins",
+			path:   "/api/v1/whoami",
+			origin: "https://example.com",
+			method: http.MethodGet,
+		},
+		{
+			name:              "Chronicle API keeps allowing configured origins with credentials",
+			path:              "/api/v1/whoami",
+			origin:            "https://chronicleclassic.com",
+			method:            http.MethodGet,
+			wantAllowedOrigin: "https://chronicleclassic.com",
+			wantCredentials:   "true",
+		},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+
+			req := httptest.NewRequest(http.MethodOptions, tc.path, nil)
+			req.Header.Set("Origin", tc.origin)
+			req.Header.Set("Access-Control-Request-Method", tc.method)
+			rec := httptest.NewRecorder()
+			handler.ServeHTTP(rec, req)
+
+			assert.Equal(t, tc.wantAllowedOrigin, rec.Header().Get("Access-Control-Allow-Origin"))
+			assert.Equal(t, tc.wantCredentials, rec.Header().Get("Access-Control-Allow-Credentials"))
+		})
+	}
+}
