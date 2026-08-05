@@ -123,7 +123,7 @@ export const RemotionRoot: React.FC = () => {
       <Folder name="DeathLogLessons">
         <Composition id="ReadDeathLog" component={ReadDeathLogVideo} durationInFrames={410} fps={30} width={1280} height={720} />
         <Composition id="DeathRecapExpand" component={DeathRecapExpandVideo} durationInFrames={470} fps={30} width={1280} height={720} />
-        <Composition id="FloatingRecap" component={FloatingRecapVideo} durationInFrames={530} fps={30} width={1280} height={720} />
+        <Composition id="FloatingRecap" component={FloatingRecapVideo} durationInFrames={620} fps={30} width={1280} height={720} />
         <Composition id="HealthBarAnatomy" component={HealthBarAnatomyVideo} durationInFrames={530} fps={30} width={1280} height={720} />
       </Folder>
     </>

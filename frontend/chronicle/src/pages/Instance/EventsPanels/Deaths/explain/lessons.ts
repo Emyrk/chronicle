@@ -71,11 +71,12 @@ const floatingRecap: L = {
   bullets: [
     "The \u2197 button opens a floating, draggable recap window",
     "Open several to compare deaths side by side",
+    "The rail on the right previews the whole timeline",
     "Scrubbing the list replays the health bar through the death",
   ],
   video: {
     load: () => import("./videos/FloatingRecap.video"),
-    durationInFrames: 530,
+    durationInFrames: 620,
     fps: 30,
     width: 1280,
     height: 720,
