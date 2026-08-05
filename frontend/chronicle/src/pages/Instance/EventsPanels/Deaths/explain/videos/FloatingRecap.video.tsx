@@ -76,21 +76,32 @@ function Content() {
       )
     : null;
 
-  // Cursor: ↗ button → drag the floating header → glide down the event list.
+  // Cursor: ↗ button → drag the floating header → ride the shared fight
+  // cursor through the event list.
   const stageFloatX = 72 + floatX;
   const stageFloatY = 132 + floatY;
   const cursorX = interpolate(
     frame,
-    [26, 90, DRAG_START, DRAG_END, SCRUB_START, SCRUB_END],
-    [1140, FLOAT_BTN.x, stageFloatX + 200, stageFloatX + 200, stageFloatX + 200, stageFloatX + 200],
+    [26, 90, DRAG_START, DRAG_END],
+    [1140, FLOAT_BTN.x, stageFloatX + 200, stageFloatX + 200],
     { ...clamp, easing: entranceEasing },
   );
-  const cursorY = interpolate(
+  // Scrub path: measured stage positions of the breakout's shared-cursor line
+  // as it climbs the list and the list auto-scrolls under it (valid for
+  // FLOAT_TO and these fixtures — re-probe if either changes).
+  const preScrubY = interpolate(
     frame,
-    [26, 90, DRAG_START, DRAG_END, SCRUB_START, SCRUB_END],
-    [600, FLOAT_BTN.y, stageFloatY + 14, stageFloatY + 14, stageFloatY + 330, stageFloatY + 240],
+    [26, 90, DRAG_START, DRAG_END, SCRUB_START - 10],
+    [600, FLOAT_BTN.y, stageFloatY + 14, stageFloatY + 14, 561],
     { ...clamp, easing: entranceEasing },
   );
+  const scrubY = interpolate(
+    frame,
+    [SCRUB_START - 10, 310, 340, 370, 385, 400, SCRUB_END],
+    [561, 532, 494, 451, 417, 393, 390],
+    clamp,
+  );
+  const cursorY = frame < SCRUB_START - 10 ? preScrubY : scrubY;
   const clickOpen = interpolate(frame, [OPEN_FRAME - 4, OPEN_FRAME, OPEN_FRAME + 10], [0, 1, 0], clamp);
   const grab = interpolate(frame, [DRAG_START - 6, DRAG_START, DRAG_END, DRAG_END + 10], [0, 1, 1, 0], clamp);
   const clickPulse = Math.max(clickOpen, grab * 0.6);
