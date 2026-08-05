@@ -2,7 +2,7 @@ import { useMemo, useState } from "react";
 import { Link, useParams, useSearchParams } from "react-router-dom";
 import { ArrowLeft, Eye, EyeOff, Link2, Save } from "lucide-react";
 import { useArmoryGearHistory, useSession } from "@/api/queries";
-import { useGearListRevision, useSharedGearList } from "@/api/gearBuilderQueries";
+import { useGearListRevision, useGearTrends, useSharedGearList } from "@/api/gearBuilderQueries";
 import { Button } from "@/components/ui/button";
 import type { GearList, ItemSearchResult } from "@/api/typesGenerated";
 import { getClassColorVar } from "@/pages/ArmoryPage/types";
@@ -294,6 +294,17 @@ function EditorView({
   const selectedEntry =
     selectedSlot != null && stage ? stage.slots[String(selectedSlot)] : undefined;
 
+  // Observed cohort data feeds the picker's popularity bars, the
+  // empty-search browse list, and the enchant quick-picks.
+  const cls = gearClassById(list.class_id);
+  const trends = useGearTrends(
+    cls && list.spec_name ? { class: cls.enumName, spec: list.spec_name } : null,
+  );
+  const trendsBySlot = useMemo(
+    () => new Map((trends.data?.slots ?? []).map((s) => [s.slot, s])),
+    [trends.data],
+  );
+
   const equip = (item: ItemSearchResult) => {
     if (selectedSlot == null) return;
     editor.update((p) => setSlotItem(p, safeStageIndex, selectedSlot, item.entry));
@@ -402,6 +413,7 @@ function EditorView({
                 onSetEnchant={(enchantId) =>
                   editor.update((p) => setSlotEnchant(p, safeStageIndex, selectedSlot, enchantId))
                 }
+                trendsSlot={trendsBySlot.get(selectedSlot)}
               />
             ) : (
               <div className="rounded-md border border-dashed border-zinc-800 p-6 text-sm text-zinc-600">

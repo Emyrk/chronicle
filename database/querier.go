@@ -120,6 +120,21 @@ type sqlcQuerier interface {
 	// instance_token (unique per instance, immune to AzerothCore ID reuse),
 	// instance_id, instance_name, and realm_id.
 	FindMatchingServerUpload(ctx context.Context, arg FindMatchingServerUploadParams) (WoWLogGroup, error)
+	GearTrendsSlotEnchants(ctx context.Context, arg GearTrendsSlotEnchantsParams) ([]GearTrendsSlotEnchantsRow, error)
+	// Observed gear trends: what logged players of a class/spec actually wore,
+	// aggregated per equipment slot from armory gear-history snapshots.
+	//
+	// Cohort rules (shared by both queries):
+	//   * ranked parses only (encounter_dps_rankings), deduped to one
+	//     representative instance per run (duplicate uploads collapse via
+	//     COALESCE(duplicate_group_id, id) — the house convention);
+	//   * one observation per unique player: the latest qualifying snapshot
+	//     in the window;
+	//   * tenant scoping comes from RLS on encounter_dps_rankings plus the
+	//     wow_server_realms join for gear history (which has no RLS).
+	// Item name/quality/icon/level are read from the snapshot jsonb itself,
+	// so results are self-contained.
+	GearTrendsSlotItems(ctx context.Context, arg GearTrendsSlotItemsParams) ([]GearTrendsSlotItemsRow, error)
 	GetAppliedAuthzMigrations(ctx context.Context) ([]int32, error)
 	// Per-encounter kill aggregates for one character across all time.
 	// Rankings rows exist only for clean/partial kills; trash rows

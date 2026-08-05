@@ -22,6 +22,8 @@ import (
 	"github.com/Emyrk/chronicle/database"
 	"github.com/Emyrk/chronicle/database/authz"
 	"github.com/Emyrk/chronicle/database/authz/policy"
+	"github.com/Emyrk/chronicle/internal/lrucache"
+	"github.com/Emyrk/chronicle/internal/services/servicecache"
 	"github.com/Emyrk/chronicle/internal/services/servicetenant"
 )
 
@@ -47,11 +49,23 @@ const (
 type Handler struct {
 	zed  *authz.Authz
 	auth *chronauth.Service
+
+	trendsCache *lrucache.Cache[string, chroniclesdk.GearTrendsResponse]
 }
 
-// New creates a new gear builder handler.
-func New(zed *authz.Authz, auth *chronauth.Service) *Handler {
-	return &Handler{zed: zed, auth: auth}
+// New creates a new gear builder handler. cacheSvc may be nil (tests);
+// the trends cache then runs unregistered and unmetered.
+func New(zed *authz.Authz, auth *chronauth.Service, cacheSvc *servicecache.Service) *Handler {
+	trendsCache, err := servicecache.NewCache(cacheSvc, lrucache.Opts[string, chroniclesdk.GearTrendsResponse]{
+		Name:     "gear_trends",
+		Capacity: 256,
+		TTL:      trendsCacheTTL,
+	})
+	if err != nil {
+		// Opts are static; construction only fails on programmer error.
+		panic(err)
+	}
+	return &Handler{zed: zed, auth: auth, trendsCache: trendsCache}
 }
 
 // Routes returns the gear builder router.
@@ -69,6 +83,9 @@ func (h *Handler) Routes() http.Handler {
 
 	// Public: browse public gear lists.
 	r.Get("/lists/public", h.ListPublicGearLists)
+
+	// Public: observed gear trends for a class/spec cohort.
+	r.Get("/trends", h.GearTrends)
 
 	// Public: list pinned stat weights (default presets).
 	r.Get("/stat-weight-pins", h.ListStatWeightPins)

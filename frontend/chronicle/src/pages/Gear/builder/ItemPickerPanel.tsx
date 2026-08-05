@@ -7,7 +7,8 @@ import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import { useDebouncedValue } from "@/hooks/useDebouncedValue";
 import { SLOT_INVENTORY_TYPES } from "./gearListModel";
-import type { ItemSearchResult } from "@/api/typesGenerated";
+import type { GearTrendsSlot, ItemSearchResult } from "@/api/typesGenerated";
+import { formatEquipRate } from "../trends/trendsModel";
 
 const QUALITY_CHIPS = [
   { value: "", label: "All" },
@@ -29,6 +30,8 @@ interface ItemPickerPanelProps {
   onEquip: (item: ItemSearchResult) => void;
   /** When provided, rows also offer "Add alt". */
   onAddAlternate?: (item: ItemSearchResult) => void;
+  /** Observed cohort data for this slot: popularity bars + browse list. */
+  trendsSlot?: GearTrendsSlot;
 }
 
 /**
@@ -36,7 +39,7 @@ interface ItemPickerPanelProps {
  * to the slot's inventory types, quality chips, and a sort select. The
  * backend caps results at 25.
  */
-export function ItemPickerPanel({ slotIndex, usedItemIds, onEquip, onAddAlternate }: ItemPickerPanelProps) {
+export function ItemPickerPanel({ slotIndex, usedItemIds, onEquip, onAddAlternate, trendsSlot }: ItemPickerPanelProps) {
   const [query, setQuery] = useState("");
   const [quality, setQuality] = useState("");
   const [sort, setSort] = useState<string>("item_level");
@@ -54,6 +57,19 @@ export function ItemPickerPanel({ slotIndex, usedItemIds, onEquip, onAddAlternat
   );
 
   const results = search.data ?? [];
+  const observedPct = new Map((trendsSlot?.items ?? []).map((i) => [i.item_id, i.percent]));
+
+  // With no search query, browse the slot's observed-popular items instead.
+  const browseItems = (trendsSlot?.items ?? []).map(
+    (i) =>
+      ({
+        entry: i.item_id,
+        name: i.item_name,
+        quality: i.item_quality,
+        icon: i.item_icon,
+        item_level: i.item_level ?? 0,
+      }) as unknown as ItemSearchResult,
+  );
 
   return (
     <div className="space-y-2">
@@ -95,50 +111,106 @@ export function ItemPickerPanel({ slotIndex, usedItemIds, onEquip, onAddAlternat
 
       <div className="max-h-80 overflow-y-auto rounded border border-zinc-800 divide-y divide-zinc-800/70">
         {debouncedQuery.length < 2 ? (
-          <p className="p-4 text-xs text-zinc-500">
-            Type at least two characters to search items for this slot.
-          </p>
+          browseItems.length > 0 ? (
+            <>
+              <p className="px-2.5 pt-2 pb-1 text-3xs uppercase tracking-wide text-zinc-600">
+                Observed on logged players
+              </p>
+              {browseItems.map((item) => (
+                <PickerRow
+                  key={item.entry}
+                  item={item}
+                  usedItemIds={usedItemIds}
+                  observedPct={observedPct.get(item.entry)}
+                  onEquip={onEquip}
+                  onAddAlternate={onAddAlternate}
+                />
+              ))}
+            </>
+          ) : (
+            <p className="p-4 text-xs text-zinc-500">
+              Type at least two characters to search items for this slot.
+            </p>
+          )
         ) : search.isLoading ? (
           <p className="p-4 text-xs text-zinc-500">Searching…</p>
         ) : results.length === 0 ? (
           <p className="p-4 text-xs text-zinc-500">No matching items for this slot.</p>
         ) : (
           results.map((item) => (
-            <div key={item.entry} className="flex items-center gap-2.5 px-2.5 py-1.5 hover:bg-zinc-800/40">
-              <ItemIcon icon={item.icon} quality={item.quality} size={30} />
-              <div className="min-w-0 flex-1">
-                <div className="flex items-center gap-2">
-                  <span className={cn("text-sm truncate", getQualityTextClass(item.quality))}>
-                    {item.name}
-                  </span>
-                  {usedItemIds?.has(item.entry) && (
-                    <span className="text-3xs uppercase tracking-wide text-blue-400 border border-blue-400/40 rounded px-1">
-                      in slot
-                    </span>
-                  )}
-                </div>
-                <div className="text-2xs text-zinc-500 font-mono">ilvl {item.item_level}</div>
-              </div>
-              {onAddAlternate && (
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  className="h-7 px-2 text-xs text-zinc-400"
-                  onClick={() => onAddAlternate(item)}
-                >
-                  Add alt
-                </Button>
-              )}
-              <Button variant="outline" size="sm" className="h-7 px-2.5 text-xs" onClick={() => onEquip(item)}>
-                Equip
-              </Button>
-            </div>
+            <PickerRow
+              key={item.entry}
+              item={item}
+              usedItemIds={usedItemIds}
+              observedPct={observedPct.get(item.entry)}
+              onEquip={onEquip}
+              onAddAlternate={onAddAlternate}
+            />
           ))
         )}
       </div>
       {results.length >= 25 && (
         <p className="text-2xs text-zinc-600">Showing the top 25 matches — refine the search to narrow down.</p>
       )}
+    </div>
+  );
+}
+
+function PickerRow({
+  item,
+  usedItemIds,
+  observedPct,
+  onEquip,
+  onAddAlternate,
+}: {
+  item: ItemSearchResult;
+  usedItemIds?: ReadonlySet<number>;
+  observedPct?: number;
+  onEquip: (item: ItemSearchResult) => void;
+  onAddAlternate?: (item: ItemSearchResult) => void;
+}) {
+  return (
+    <div className="flex items-center gap-2.5 px-2.5 py-1.5 hover:bg-zinc-800/40">
+      <ItemIcon icon={item.icon} quality={item.quality} size={30} />
+      <div className="min-w-0 flex-1">
+        <div className="flex items-center gap-2">
+          <span className={cn("text-sm truncate", getQualityTextClass(item.quality))}>
+            {item.name}
+          </span>
+          {usedItemIds?.has(item.entry) && (
+            <span className="text-3xs uppercase tracking-wide text-blue-400 border border-blue-400/40 rounded px-1">
+              in slot
+            </span>
+          )}
+        </div>
+        <div className="flex items-center gap-2 text-2xs text-zinc-500 font-mono">
+          {item.item_level > 0 && <span>ilvl {item.item_level}</span>}
+          {observedPct !== undefined && (
+            <span className="inline-flex items-center gap-1">
+              <span className="inline-block h-1 w-10 rounded bg-zinc-800 overflow-hidden align-middle">
+                <span
+                  className="block h-1 bg-blue-500/70"
+                  style={{ width: `${Math.min(100, observedPct)}%` }}
+                />
+              </span>
+              {formatEquipRate(observedPct)} observed
+            </span>
+          )}
+        </div>
+      </div>
+      {onAddAlternate && (
+        <Button
+          variant="ghost"
+          size="sm"
+          className="h-7 px-2 text-xs text-zinc-400"
+          onClick={() => onAddAlternate(item)}
+        >
+          Add alt
+        </Button>
+      )}
+      <Button variant="outline" size="sm" className="h-7 px-2.5 text-xs" onClick={() => onEquip(item)}>
+        Equip
+      </Button>
     </div>
   );
 }

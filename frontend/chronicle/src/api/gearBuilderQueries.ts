@@ -8,6 +8,7 @@ import type {
   GearListRevisionSummary,
   GearStatWeight,
   GearStatWeightPin,
+  GearTrendsResponse,
   UpdateGearListRequest,
   UpdateGearStatWeightRequest,
 } from "./typesGenerated";
@@ -175,6 +176,32 @@ export function useForkGearList() {
       return res.json();
     },
     onSuccess: () => qc.invalidateQueries({ queryKey: ["gear-lists"] }),
+  });
+}
+
+// ─── Observed Gear Trends ────────────────────────────────────
+
+export interface GearTrendsParams {
+  /** Hero-class enum name, e.g. "WARRIOR". */
+  class: string;
+  /** Spec display name, e.g. "Fury". */
+  spec: string;
+  days?: 30 | 60 | 90;
+}
+
+export function useGearTrends(params: GearTrendsParams | null) {
+  return useQuery({
+    queryKey: ["gear-trends", params?.class, params?.spec, params?.days ?? 60],
+    queryFn: async (): Promise<GearTrendsResponse> => {
+      const qs = new URLSearchParams({ class: params!.class, spec: params!.spec });
+      if (params!.days) qs.set("days", String(params!.days));
+      const res = await fetch(`${BASE}/trends?${qs.toString()}`);
+      if (!res.ok) throw gearAPIError("Failed to fetch gear trends", await res.json().catch(() => null));
+      return res.json();
+    },
+    enabled: !!params && !!params.class && !!params.spec,
+    staleTime: 5 * 60 * 1000,
+    retry: false,
   });
 }
 

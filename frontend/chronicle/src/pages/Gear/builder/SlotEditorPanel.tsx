@@ -4,7 +4,7 @@ import { Button } from "@/components/ui/button";
 import { getQualityTextClass, LEFT_SLOTS, RIGHT_SLOTS, BOTTOM_SLOTS } from "@/pages/ArmoryPage/types";
 import { ItemIcon } from "@/components/ui/ItemIcon/ItemIcon";
 import { cn } from "@/lib/utils";
-import type { ItemSearchResult } from "@/api/typesGenerated";
+import type { GearTrendsSlot, ItemSearchResult } from "@/api/typesGenerated";
 import type { GearSlotEntry } from "./gearListModel";
 import { itemRefKey, type HydratedItem } from "./useListItems";
 import { ItemPickerPanel } from "./ItemPickerPanel";
@@ -38,6 +38,8 @@ interface SlotEditorPanelProps {
   onPromoteAlternate: (itemId: number) => void;
   onRemoveAlternate: (itemId: number) => void;
   onSetEnchant: (enchantId: number | undefined) => void;
+  /** Observed cohort data for this slot (popularity + enchants). */
+  trendsSlot?: GearTrendsSlot;
 }
 
 /**
@@ -57,6 +59,7 @@ export function SlotEditorPanel({
   onPromoteAlternate,
   onRemoveAlternate,
   onSetEnchant,
+  trendsSlot,
 }: SlotEditorPanelProps) {
   const [tab, setTab] = useState<EditorTab>("pick");
   const current = entry ? items.get(itemRefKey(entry.item_id, entry.enchant_id)) : undefined;
@@ -130,6 +133,7 @@ export function SlotEditorPanel({
           usedItemIds={usedItemIds}
           onEquip={onEquip}
           onAddAlternate={entry ? onAddAlternate : undefined}
+          trendsSlot={trendsSlot}
         />
       )}
       {tab === "alternates" && entry && (
@@ -142,7 +146,9 @@ export function SlotEditorPanel({
           onRemove={onRemoveAlternate}
         />
       )}
-      {tab === "enchant" && entry && <EnchantPicker entry={entry} onSetEnchant={onSetEnchant} />}
+      {tab === "enchant" && entry && (
+        <EnchantPicker entry={entry} onSetEnchant={onSetEnchant} observedEnchants={trendsSlot?.enchants} />
+      )}
     </div>
   );
 }

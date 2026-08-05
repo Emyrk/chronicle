@@ -2,11 +2,15 @@ import { useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { useItemTooltip } from "@/api/gamedata";
+import type { GearTrendsEnchant } from "@/api/typesGenerated";
+import { formatEquipRate } from "../trends/trendsModel";
 import type { GearSlotEntry } from "./gearListModel";
 
 interface EnchantPickerProps {
   entry: GearSlotEntry;
   onSetEnchant: (enchantId: number | undefined) => void;
+  /** Enchants observed on logged players for this slot. */
+  observedEnchants?: readonly GearTrendsEnchant[];
 }
 
 /**
@@ -15,7 +19,7 @@ interface EnchantPickerProps {
  * affect scores. The chosen ID is validated by resolving the item tooltip
  * with the enchant applied.
  */
-export function EnchantPicker({ entry, onSetEnchant }: EnchantPickerProps) {
+export function EnchantPicker({ entry, onSetEnchant, observedEnchants }: EnchantPickerProps) {
   const [draft, setDraft] = useState("");
   const draftId = parseInt(draft, 10);
   const validDraft = Number.isInteger(draftId) && draftId > 0;
@@ -51,6 +55,26 @@ export function EnchantPicker({ entry, onSetEnchant }: EnchantPickerProps) {
           <p className="text-xs text-zinc-600">No enchant on this slot.</p>
         )}
       </div>
+
+      {observedEnchants && observedEnchants.length > 0 && (
+        <div className="space-y-1">
+          <div className="text-2xs uppercase tracking-wide text-zinc-500">
+            Observed on logged players
+          </div>
+          <div className="flex flex-wrap gap-1.5">
+            {observedEnchants.map((e) => (
+              <button
+                key={e.enchant_id}
+                type="button"
+                onClick={() => onSetEnchant(e.enchant_id)}
+                className="px-2 py-0.5 rounded-full text-2xs border border-zinc-700 text-quality-uncommon hover:border-zinc-500 transition-colors"
+              >
+                {e.name} <span className="text-zinc-500 font-mono">{formatEquipRate(e.percent)}</span>
+              </button>
+            ))}
+          </div>
+        </div>
+      )}
 
       <form
         className="space-y-1.5"

@@ -1150,6 +1150,67 @@ export interface GearStatWeightPin {
     readonly stat_weight_user_id?: string;
 }
 
+// From chroniclesdk/gear_trends.go
+/**
+ * GearTrendsEnchant is one observed permanent enchant with its rate.
+ */
+export interface GearTrendsEnchant {
+    readonly enchant_id: number;
+    readonly name: string;
+    readonly wearer_count: number;
+    readonly percent: number;
+}
+
+// From chroniclesdk/gear_trends.go
+/**
+ * GearTrendsItem is one observed item with its equip rate.
+ */
+export interface GearTrendsItem {
+    readonly item_id: number;
+    readonly item_name: string;
+    readonly item_quality: number;
+    readonly item_icon: string;
+    readonly item_level?: number;
+    readonly wearer_count: number;
+    readonly percent: number;
+}
+
+// From chroniclesdk/gear_trends.go
+/**
+ * GearTrendsResponse is the observed-gear-trends aggregate for one
+ * class/spec cohort: per-slot equip rates from recent ranked parses.
+ * This is observed equipment, not a recommendation.
+ */
+export interface GearTrendsResponse {
+    readonly class: string;
+    readonly spec: string;
+    readonly lookback_days: number;
+    /**
+     * CohortSize is the number of unique qualifying players (one
+     * observation each: the latest gear snapshot in the window).
+     */
+    readonly cohort_size: number;
+    readonly min_sample_size: number;
+    /**
+     * InsufficientSample is true when the cohort is below the minimum
+     * sample size; Slots is empty in that case.
+     */
+    readonly insufficient_sample: boolean;
+    readonly generated_at: string;
+    readonly slots: readonly GearTrendsSlot[];
+}
+
+// From chroniclesdk/gear_trends.go
+/**
+ * GearTrendsSlot is one equipment slot's observed items and enchants.
+ * Slot is the PlayerOutfit index (0-18).
+ */
+export interface GearTrendsSlot {
+    readonly slot: number;
+    readonly items: readonly GearTrendsItem[];
+    readonly enchants?: readonly GearTrendsEnchant[];
+}
+
 // From chroniclesdk/log.go
 export interface Guild {
     readonly id: string;

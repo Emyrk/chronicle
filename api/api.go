@@ -205,7 +205,7 @@ func (api *API) Routes() chi.Router {
 				r.Post("/share", api.CreateShare)
 			})
 			r.Mount("/panel-layout", panellayoutapi.New(api.Opts.Zed, api.Auth).Routes())
-			r.Mount("/gear-builder", gearbuilderapi.New(api.Opts.Zed, api.Auth).Routes())
+			r.Mount("/gear-builder", gearbuilderapi.New(api.Opts.Zed, api.Auth, api.Opts.CacheSvc).Routes())
 			// Account↔character link management.
 			r.Mount("/linked", linkedapi.New(api.Opts.Zed, api.Auth, api.Opts.ExternalVerification).Routes())
 			gameDataHandler := gamedataapi.New(api.Opts.Zed, api.Auth, api.Opts.Pool, api.Opts.GameDB)
