@@ -2,6 +2,7 @@ package servicerankings_test
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"log/slog"
 	"testing"
@@ -16,12 +17,25 @@ import (
 	"github.com/Emyrk/chronicle/internal/services/servicerankings"
 	"github.com/Emyrk/chronicle/internal/testutil"
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/riverqueue/river"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
+
+type cohortErrorStore struct {
+	database.Store
+	err error
+}
+
+func (s cohortErrorStore) GetSnapshotCohortValues(
+	context.Context,
+	database.GetSnapshotCohortValuesParams,
+) ([]database.GetSnapshotCohortValuesRow, error) {
+	return nil, s.err
+}
 
 func TestWorkerComputeParseScores_NoSnapshot(t *testing.T) {
 	t.Parallel()
@@ -223,6 +237,80 @@ func TestWorkerComputeParseScores_Atomicity(t *testing.T) {
 	})
 	require.NoError(t, err)
 	assert.Equal(t, int32(len(results)), receipt.ResultCount)
+}
+
+func TestWorkerComputeParseScores_CohortErrorRollsBack(t *testing.T) {
+	t.Parallel()
+	ctx := testutil.Context(t, testutil.WaitMedium)
+
+	pool, _ := dbtestutil.NewPGXPool(t)
+	store := database.New(pool)
+	f := setupScoringFixture(t, pool, store)
+
+	conn, err := pool.Acquire(ctx)
+	require.NoError(t, err)
+	_, err = conn.Exec(ctx, "SET app.tenant_bypass = 'true'")
+	require.NoError(t, err)
+	conn.Release()
+
+	snapshot := createPublishedSnapshot(t, ctx, store)
+	now := time.Now()
+	insertRanking(t, ctx, store, f.instanceID, f.realmID, "Player-1234-0001", "TestPlayer",
+		1000.0, 0, now.Add(-time.Hour))
+
+	for i := range 10 {
+		otherInstID := uuid.New()
+		_, err = pool.Exec(ctx,
+			`INSERT INTO log_instances (id, realm_id, log_group_id, name, capabilities, start_time)
+			 SELECT $1, $2, (SELECT id FROM wow_log_groups LIMIT 1), $3, '{}', $4`,
+			otherInstID, f.realmID, "Molten Core", now.Add(-5*time.Hour))
+		require.NoError(t, err)
+		insertRanking(t, ctx, store, otherInstID, f.realmID,
+			fmt.Sprintf("Player-1234-%04d", i+10),
+			fmt.Sprintf("CohortPlayer%d", i),
+			float64(500+i*100), 0, now.Add(-4*time.Hour))
+	}
+	require.NoError(t, store.BatchInsertSnapshotMembersFromRankings(ctx, snapshot.ID))
+
+	job := &river.Job[parseargs.ArgsComputeParseScores]{
+		Args: parseargs.ArgsComputeParseScores{
+			InstanceID: f.instanceID,
+			TenantID:   uuid.Nil,
+		},
+	}
+	worker := &servicerankings.WorkerComputeParseScores{Store: store, Logger: slog.Default()}
+	require.NoError(t, worker.Work(ctx, job))
+
+	before, err := store.GetParseScoreResultsForInstance(ctx, f.instanceID)
+	require.NoError(t, err)
+	require.NotEmpty(t, before)
+
+	// Simulate a missing receipt while retaining the last complete projection.
+	_, err = pool.Exec(ctx, `DELETE FROM parse_score_receipts WHERE instance_id = $1`, f.instanceID)
+	require.NoError(t, err)
+	_, err = store.GetParseScoreReceipt(ctx, database.GetParseScoreReceiptParams{
+		InstanceID: f.instanceID,
+		SnapshotID: snapshot.ID,
+	})
+	require.ErrorIs(t, err, pgx.ErrNoRows)
+
+	cohortErr := errors.New("cohort query failed")
+	failingWorker := &servicerankings.WorkerComputeParseScores{
+		Store:  cohortErrorStore{Store: store, err: cohortErr},
+		Logger: slog.Default(),
+	}
+	err = failingWorker.Work(ctx, job)
+	require.ErrorIs(t, err, cohortErr)
+
+	after, err := store.GetParseScoreResultsForInstance(ctx, f.instanceID)
+	require.NoError(t, err)
+	assert.Equal(t, before, after, "failed recompute must preserve the previous complete results")
+
+	_, err = store.GetParseScoreReceipt(ctx, database.GetParseScoreReceiptParams{
+		InstanceID: f.instanceID,
+		SnapshotID: snapshot.ID,
+	})
+	require.ErrorIs(t, err, pgx.ErrNoRows, "failed recompute must not create a success receipt")
 }
 
 func TestWorkerComputeParseScores_Idempotency(t *testing.T) {

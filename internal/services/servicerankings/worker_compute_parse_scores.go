@@ -197,12 +197,7 @@ func (w *WorkerComputeParseScores) Work(ctx context.Context, job *river.Job[pars
 						PlayerSpec:     playerSpec,
 					})
 					if cErr != nil {
-						logger.Error("failed to load cohort",
-							"encounter", r.EncounterName,
-							"metric", m.metric,
-							"error", cErr,
-						)
-						continue
+						return fmt.Errorf("load %s cohort for encounter %q: %w", m.metric, r.EncounterName, cErr)
 					}
 					cohort = make([]float64, 0, len(cohortRows))
 					for _, cr := range cohortRows {
