@@ -119,18 +119,21 @@ function NightLootIcon({ item }: { item: ArmoryLootItem }) {
   const tooltip = useItemTooltip(cursor && item.item_id > 0 ? { itemId: item.item_id } : null);
 
   return (
-    <div
-      className={`size-[26px] shrink-0 rounded border bg-popover bg-cover bg-center transition-[filter] hover:brightness-125 ${getQualityBorderClass(item.quality)}`}
-      style={item.icon ? { backgroundImage: `url(${iconUrl(item.icon, iconBaseUrl)})` } : undefined}
-      aria-label={item.item_name}
-      onMouseMove={(e) => setCursor({ x: e.clientX, y: e.clientY })}
-      onMouseLeave={() => setCursor(null)}
-    >
+    <>
+      <div
+        className={`size-[26px] shrink-0 rounded border bg-popover bg-cover bg-center transition-[filter] hover:brightness-125 ${getQualityBorderClass(item.quality)}`}
+        style={item.icon ? { backgroundImage: `url(${iconUrl(item.icon, iconBaseUrl)})` } : undefined}
+        aria-label={item.item_name}
+        onMouseMove={(e) => setCursor({ x: e.clientX, y: e.clientY })}
+        onMouseLeave={() => setCursor(null)}
+      />
+      {/* Rendered outside the icon: its hover filter would otherwise turn
+          it into the containing block for this fixed-position tooltip. */}
       {cursor && tooltip.data && (
         <CursorTooltip pos={cursor}>
           <ItemTooltip item={tooltip.data} />
         </CursorTooltip>
       )}
-    </div>
+    </>
   );
 }
