@@ -77,9 +77,7 @@ export function RaidScoresCard({ raids, metric, bossCounts, isLoading }: RaidSco
                       </span>
                     </div>
                   </div>
-                  <div className="relative hidden sm:block">
-                    <ScoreBar score={raid.score} />
-                  </div>
+                  <RaidScoreBars encounters={raid.encounters} />
                   <div className="text-right">
                     <div className={`font-mono text-3xl font-bold ${parseColor(raid.score)}`}>
                       {raid.score}
@@ -126,6 +124,27 @@ function raidKey(raid: RaidSummary): string {
   return `${raid.instanceName}|${raid.difficultyName}|${raid.maxPlayers}`;
 }
 
+function RaidScoreBars({ encounters }: { encounters: EncounterSummary[] }) {
+  return (
+    <div
+      className="hidden h-10 items-end gap-1 sm:flex"
+      aria-label="Boss score summary"
+    >
+      {encounters.map((encounter) => (
+        <div
+          key={encounter.encounterName}
+          className="w-1.5 min-h-0.5 rounded-sm"
+          style={{
+            height: `${encounter.score}%`,
+            background: parseHexColor(encounter.score),
+          }}
+          title={`${encounter.encounterName}: ${encounter.score}`}
+        />
+      ))}
+    </div>
+  );
+}
+
 function formatScoreInput(score: number): string {
   return score.toFixed(1).replace(/\.0$/, "");
 }
@@ -149,15 +168,13 @@ function EncounterRow({ encounter }: { encounter: EncounterSummary }) {
       </TableCell>
       <TableCell>
         <div className="flex items-center gap-3">
-          <div className="min-w-0 grow">
-            <div className="relative">
-              <ScoreBar score={encounter.score} best={encounter.best} />
-            </div>
-            <div className="mt-1 truncate font-mono text-[10px] text-muted-foreground">
-              Best {encounter.scoreInputs.length}: {encounter.scoreInputs.map(formatScoreInput).join(" · ")}
-            </div>
+          <div className="relative min-w-16 grow">
+            <ScoreBar score={encounter.score} best={encounter.best} />
           </div>
-          <div className={`w-7 text-right font-mono text-sm font-bold ${parseColor(encounter.score)}`}>
+          <div className="shrink-0 font-mono text-[10px] text-muted-foreground">
+            Best {encounter.scoreInputs.length}: {encounter.scoreInputs.map(formatScoreInput).join(" · ")}
+          </div>
+          <div className={`w-7 shrink-0 text-right font-mono text-sm font-bold ${parseColor(encounter.score)}`}>
             {encounter.score}
           </div>
         </div>
