@@ -30,6 +30,15 @@ RETURNING *;
 -- name: DeleteGearList :execrows
 DELETE FROM gear_lists WHERE id = $1 AND user_id = $2 AND tenant_id = $3;
 
+-- name: ListPublicGearLists :many
+-- Public lists for the browse/landing page, optionally filtered by class.
+SELECT * FROM gear_lists
+WHERE tenant_id = @tenant_id
+  AND visibility = 'public'
+  AND (sqlc.narg(class_id)::int IS NULL OR class_id = sqlc.narg(class_id))
+ORDER BY updated_at DESC
+LIMIT 50;
+
 -- name: CountUserGearLists :one
 SELECT COUNT(*) FROM gear_lists WHERE user_id = $1 AND tenant_id = $2;
 

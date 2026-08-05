@@ -3845,6 +3845,55 @@ func (q *sqlQuerier) ListGearStatWeightsByUser(ctx context.Context, arg ListGear
 	return items, nil
 }
 
+const listPublicGearLists = `-- name: ListPublicGearLists :many
+SELECT id, user_id, tenant_id, title, description, class_id, spec_name, visibility, payload, forked_from_list_id, forked_from_rev_number, created_at, updated_at FROM gear_lists
+WHERE tenant_id = $1
+  AND visibility = 'public'
+  AND ($2::int IS NULL OR class_id = $2)
+ORDER BY updated_at DESC
+LIMIT 50
+`
+
+type ListPublicGearListsParams struct {
+	TenantID uuid.UUID   `db:"tenant_id" json:"tenant_id"`
+	ClassID  pgtype.Int4 `db:"class_id" json:"class_id"`
+}
+
+// Public lists for the browse/landing page, optionally filtered by class.
+func (q *sqlQuerier) ListPublicGearLists(ctx context.Context, arg ListPublicGearListsParams) ([]GearList, error) {
+	rows, err := q.db.Query(ctx, listPublicGearLists, arg.TenantID, arg.ClassID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []GearList
+	for rows.Next() {
+		var i GearList
+		if err := rows.Scan(
+			&i.ID,
+			&i.UserID,
+			&i.TenantID,
+			&i.Title,
+			&i.Description,
+			&i.ClassID,
+			&i.SpecName,
+			&i.Visibility,
+			&i.Payload,
+			&i.ForkedFromListID,
+			&i.ForkedFromRevNumber,
+			&i.CreatedAt,
+			&i.UpdatedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const updateGearList = `-- name: UpdateGearList :one
 UPDATE gear_lists SET
   title = COALESCE($1, title),

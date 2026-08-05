@@ -1,9 +1,11 @@
 package gearbuilderapi
 
 import (
+	"context"
 	"encoding/json"
 	"errors"
 	"net/http"
+	"strconv"
 	"strings"
 
 	"github.com/go-chi/chi/v5"
@@ -46,8 +48,15 @@ func New(zed *authz.Authz, auth *chronauth.Service) *Handler {
 func (h *Handler) Routes() http.Handler {
 	r := chi.NewRouter()
 
-	// Public: view shared gear lists.
-	r.Get("/lists/shared/{listID}", h.GetSharedGearList)
+	// Public with optional auth: view shared gear lists (owners can also
+	// fetch their own private lists here).
+	r.Group(func(r chi.Router) {
+		r.Use(h.auth.Authenticated(true))
+		r.Get("/lists/shared/{listID}", h.GetSharedGearList)
+	})
+
+	// Public: browse public gear lists.
+	r.Get("/lists/public", h.ListPublicGearLists)
 
 	// Public: list pinned stat weights (default presets).
 	r.Get("/stat-weight-pins", h.ListStatWeightPins)
@@ -141,6 +150,36 @@ func (h *Handler) CreateGearList(w http.ResponseWriter, r *http.Request) {
 	httpapi.Write(ctx, w, http.StatusCreated, gearListToSDK(list))
 }
 
+func (h *Handler) ListPublicGearLists(w http.ResponseWriter, r *http.Request) {
+	ctx := r.Context()
+
+	classID := pgtype.Int4{}
+	if raw := r.URL.Query().Get("class_id"); raw != "" {
+		id, err := strconv.ParseInt(raw, 10, 32)
+		if err != nil {
+			httpapi.Write(ctx, w, http.StatusBadRequest, map[string]string{"error": "invalid class_id"})
+			return
+		}
+		classID = pgtype.Int4{Int32: int32(id), Valid: true}
+	}
+
+	lists, err := h.zed.ListPublicGearLists(ctx, database.ListPublicGearListsParams{
+		TenantID: servicetenant.TenantIDFromContext(ctx),
+		ClassID:  classID,
+	})
+	if err != nil {
+		httpapi.InternalServerError(w, err)
+		return
+	}
+
+	result := make([]chroniclesdk.GearList, 0, len(lists))
+	for _, l := range lists {
+		result = append(result, gearListToSDK(l))
+	}
+
+	httpapi.Write(ctx, w, http.StatusOK, result)
+}
+
 func (h *Handler) ListMyGearLists(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 	claims := chronauth.MustAuthenticatedClaims(ctx)
@@ -181,13 +220,23 @@ func (h *Handler) GetSharedGearList(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Only public and unlisted lists are viewable by non-owners.
-	if list.Visibility == "private" {
+	if !canViewList(list, ctx) {
 		httpapi.Write(ctx, w, http.StatusNotFound, map[string]string{"error": "gear list not found"})
 		return
 	}
 
 	httpapi.Write(ctx, w, http.StatusOK, gearListToSDK(list))
+}
+
+// canViewList reports whether the request context may view the list:
+// public and unlisted lists are visible to everyone, private lists only
+// to their owner.
+func canViewList(list database.GearList, ctx context.Context) bool {
+	if list.Visibility != "private" {
+		return true
+	}
+	claims, ok := chronauth.AuthenticatedClaims(ctx)
+	return ok && claims.Subject == list.UserID
 }
 
 func (h *Handler) UpdateGearList(w http.ResponseWriter, r *http.Request) {

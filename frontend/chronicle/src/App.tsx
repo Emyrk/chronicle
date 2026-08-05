@@ -33,7 +33,10 @@ import { AdminApplicationsListPage } from "./pages/Admin/AdminApplicationsListPa
 import { AdminCacheStatsPage } from "./pages/Admin/AdminCacheStatsPage"
 import { AdminParsingPage } from "./pages/Admin/AdminParsingPage"
 import AdminGearBuilderPage from "./pages/Admin/AdminGearBuilderPage"
-import GearBuilderPage from "./pages/GearBuilder/GearBuilderPage"
+import { GearLayout } from "./pages/Gear/GearLayout"
+import { GearListsPage } from "./pages/Gear/GearListsPage"
+import { GearListPage } from "./pages/Gear/builder/GearListPage"
+import { GearTrendsPage } from "./pages/Gear/trends/GearTrendsPage"
 import { ServersLayout, ServersPage, UploadKeysPage, RetentionPage } from "./pages/Servers"
 import { SpellPage } from "./pages/WoWDB/SpellPage"
 import { SpellByNamePage } from "./pages/WoWDB/SpellByNamePage"
@@ -123,8 +126,6 @@ function App() {
         <Route path="/guilds" element={<GuildSearchPage />} />
         <Route path="/armory" element={<ArmorySearchPage />} />
         <Route path="/armory/:realmName/:playerIdentifier" element={<ArmoryPage />} />
-        <Route path="/gear" element={<GearBuilderPage />} />
-        <Route path="/gear/:listID" element={<GearBuilderPage />} />
         <Route path="/sim" element={<SimPage />} />
         <Route path="/talents" element={<TalentCalculatorPage />} />
         <Route path="/talents/:classSlug" element={<TalentCalculatorPage />} />
@@ -170,6 +171,11 @@ function App() {
           <Route path="/wowdb/spell/:spellId" element={<SpellPage />} />
           <Route path="/wowdb/spell-by-name" element={<SpellByNamePage />} />
           <Route path="/wowdb/spell-by-name/:name" element={<SpellByNamePage />} />
+          <Route path="/gear" element={<GearLayout />}>
+            <Route index element={<GearListsPage />} />
+            <Route path="trends" element={<GearTrendsPage />} />
+          </Route>
+          <Route path="/gear/lists/:listID" element={<GearListPage />} />
         </Route>
         <Route path="/technical" element={<TenantDatasetLayout />}>
           <Route index element={<TechnicalDetailsPage />} />

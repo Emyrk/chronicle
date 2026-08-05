@@ -21,7 +21,7 @@ function gearAPIError(defaultMessage: string, body: unknown): Error {
 
 // ─── Gear Lists ──────────────────────────────────────────────
 
-export function useMyGearLists() {
+export function useMyGearLists(enabled = true) {
   return useQuery({
     queryKey: ["gear-lists"],
     queryFn: async (): Promise<GearList[]> => {
@@ -29,6 +29,20 @@ export function useMyGearLists() {
       if (!res.ok) throw gearAPIError("Failed to fetch gear lists", await res.json().catch(() => null));
       return res.json();
     },
+    enabled,
+  });
+}
+
+export function usePublicGearLists(classID?: number) {
+  return useQuery({
+    queryKey: ["gear-lists-public", classID ?? null],
+    queryFn: async (): Promise<GearList[]> => {
+      const params = classID ? `?class_id=${classID}` : "";
+      const res = await fetch(`${BASE}/lists/public${params}`);
+      if (!res.ok) throw gearAPIError("Failed to fetch public gear lists", await res.json().catch(() => null));
+      return res.json();
+    },
+    staleTime: 60 * 1000,
   });
 }
 
