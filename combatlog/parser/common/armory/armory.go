@@ -3,6 +3,7 @@ package armory
 import (
 	"context"
 	"fmt"
+	"slices"
 	"time"
 
 	"github.com/Emyrk/chronicle/api/db2sdk"
@@ -64,7 +65,15 @@ func (g *Tracker) Insert(ctx context.Context, udb *unitdb.Units, instanceID uuid
 	guildIDs := make(map[string]uuid.UUID)
 	mostGuildPlayers := 0
 	var guildWithMostPlayers *database.Guild
-	for name, players := range g.Guilds {
+
+	// Acquire row locks in a stable order across parser workers and processes.
+	// Random map iteration can otherwise deadlock two transactions that share
+	// multiple guilds or players but upsert them in opposite orders.
+	guildNames := sortedGuildNames(g.Guilds)
+	playerGUIDs := sortedPlayerGUIDs(g.Players)
+
+	for _, name := range guildNames {
+		players := g.Guilds[name]
 		insertedGuild, err := tx.UpsertGuild(ctx, database.UpsertGuildParams{
 			RealmID:   realmID,
 			Name:      name,
@@ -90,7 +99,8 @@ func (g *Tracker) Insert(ctx context.Context, udb *unitdb.Units, instanceID uuid
 	itemIDSet := make(map[int32]struct{})
 	itemIDList := make([]int32, 0)
 	itemNameList := make([]string, 0)
-	for _, player := range g.Players {
+	for _, playerGUID := range playerGUIDs {
+		player := g.Players[playerGUID]
 		for _, item := range player.GearSetups {
 			if item.ItemID > 0 {
 				if _, exists := itemIDSet[int32(item.ItemID)]; !exists {
@@ -121,7 +131,8 @@ func (g *Tracker) Insert(ctx context.Context, udb *unitdb.Units, instanceID uuid
 
 	inserts := make([]database.UpsertPlayersParams, 0, len(g.Players))
 	gearHistory := make([]database.UpsertPlayerGearHistoryParams, 0, len(g.Players))
-	for _, player := range g.Players {
+	for _, playerGUID := range playerGUIDs {
+		player := g.Players[playerGUID]
 		guildID := uuid.Nil
 		if player.Guild != nil {
 			guildID = guildIDs[player.Guild.Name]
@@ -234,6 +245,24 @@ func (g *Tracker) Insert(ctx context.Context, udb *unitdb.Units, instanceID uuid
 		return guildWithMostPlayers, nil
 	}
 	return nil, nil
+}
+
+func sortedGuildNames(guilds map[string]map[guid.GUID]struct{}) []string {
+	names := make([]string, 0, len(guilds))
+	for name := range guilds {
+		names = append(names, name)
+	}
+	slices.Sort(names)
+	return names
+}
+
+func sortedPlayerGUIDs(players map[guid.GUID]combatant.Combatant) []guid.GUID {
+	guids := make([]guid.GUID, 0, len(players))
+	for playerGUID := range players {
+		guids = append(guids, playerGUID)
+	}
+	slices.Sort(guids)
+	return guids
 }
 
 // Slot indices in a PlayerOutfit that never count toward average item level.

@@ -14,6 +14,24 @@ import (
 	"github.com/Emyrk/chronicle/database/gamedb/chrondbc"
 )
 
+func TestArmoryWriteOrderIsDeterministic(t *testing.T) {
+	t.Parallel()
+
+	guilds := map[string]map[guid.GUID]struct{}{
+		"Zulu":  nil,
+		"Alpha": nil,
+		"Bravo": nil,
+	}
+	assert.Equal(t, []string{"Alpha", "Bravo", "Zulu"}, sortedGuildNames(guilds))
+
+	players := map[guid.GUID]combatant.Combatant{
+		guid.GUID(30): {},
+		guid.GUID(10): {},
+		guid.GUID(20): {},
+	}
+	assert.Equal(t, []guid.GUID{10, 20, 30}, sortedPlayerGUIDs(players))
+}
+
 func TestRespecInvalidatesRankingTalentsUntilFreshUpdate(t *testing.T) {
 	t.Parallel()
 
