@@ -1,7 +1,9 @@
 import { useMemo } from "react";
+import { Link } from "react-router-dom";
 import { addDays, differenceInCalendarWeeks, format, getDay, isAfter } from "date-fns";
 import type { RecentInstance } from "@/api/typesGenerated";
 import { Card, CardAction, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/Card/Card";
+import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/Tooltip/tooltip";
 import { formatDuration } from "@/pages/Logs/utils/calendarUtils";
 import { parseHexColor } from "@/pages/Instance/parseColors";
 import { ACTIVITY_WEEKS, type ActivityStats } from "./util";
@@ -72,24 +74,21 @@ export function RaidCalendarCard({ instances, nightScores, start, stats, onOpenA
             <div key={w} className="flex flex-col gap-1">
               {Array.from({ length: 7 }, (_, d) => {
                 const cell = week[d];
-                const raided = cell && cell.raids.length > 0;
+                if (!cell || cell.raids.length === 0) {
+                  return (
+                    <div
+                      key={d}
+                      className="size-4 rounded-xs bg-border"
+                      style={{ opacity: cell ? 1 : 0.3 }}
+                    />
+                  );
+                }
                 return (
-                  <div
+                  <RaidedCell
                     key={d}
-                    title={
-                      raided
-                        ? `${format(cell.date, "MMM d")} · ${cell.raids.map((r) => r.name).join(", ")}${cell.bestScore !== undefined ? ` · best ${cell.bestScore}` : ""}`
-                        : undefined
-                    }
-                    className="size-4 rounded-xs"
-                    style={{
-                      background: raided
-                        ? cell.bestScore !== undefined
-                          ? parseHexColor(cell.bestScore)
-                          : "var(--color-green-400)"
-                        : "var(--border)",
-                      opacity: cell ? 1 : 0.3,
-                    }}
+                    cell={cell}
+                    nightScores={nightScores}
+                    onOpenActivity={onOpenActivity}
                   />
                 );
               })}
@@ -106,6 +105,75 @@ export function RaidCalendarCard({ instances, nightScores, start, stats, onOpenA
         </div>
       </CardContent>
     </Card>
+  );
+}
+
+/**
+ * A raid-night cell: hover shows the night's raids and best parse; click
+ * opens the log (single raid) or the full calendar (multiple raids).
+ */
+function RaidedCell({
+  cell,
+  nightScores,
+  onOpenActivity,
+}: {
+  cell: DayCell;
+  nightScores: Map<string, number>;
+  onOpenActivity: () => void;
+}) {
+  const single = cell.raids.length === 1 ? cell.raids[0] : undefined;
+  const cellClass =
+    "block size-4 cursor-pointer rounded-xs transition-transform hover:scale-125 hover:ring-1 hover:ring-foreground/60";
+  const cellStyle = {
+    background:
+      cell.bestScore !== undefined
+        ? parseHexColor(cell.bestScore)
+        : "var(--color-green-400)",
+  };
+
+  const content = (
+    <TooltipContent className="pointer-events-none" sideOffset={4}>
+      <div className="mb-1 font-semibold">{format(cell.date, "EEE, MMM d")}</div>
+      {cell.raids.map((r) => {
+        const score = nightScores.get(r.id);
+        const duration = formatDuration(r.duration_ms);
+        return (
+          <div key={r.id} className="flex items-baseline justify-between gap-4">
+            <span>
+              {r.name} · {r.boss_kills}/{r.boss_count}
+              {duration ? ` · ${duration}` : ""}
+            </span>
+            {score !== undefined && <span className="font-mono font-bold">{score}</span>}
+          </div>
+        );
+      })}
+      <div className="mt-1 opacity-70">
+        {single ? "Click to open the log" : "Click for the full calendar"}
+      </div>
+    </TooltipContent>
+  );
+
+  return (
+    <Tooltip>
+      <TooltipTrigger asChild>
+        {single ? (
+          <Link
+            to={single.slug ? `/instances/${single.slug}` : `/instances/${single.id}`}
+            className={cellClass}
+            style={cellStyle}
+            aria-label={`${single.name} on ${format(cell.date, "MMM d")}`}
+          />
+        ) : (
+          <button
+            onClick={onOpenActivity}
+            className={cellClass}
+            style={cellStyle}
+            aria-label={`${cell.raids.length} raids on ${format(cell.date, "MMM d")}`}
+          />
+        )}
+      </TooltipTrigger>
+      {content}
+    </Tooltip>
   );
 }
 
