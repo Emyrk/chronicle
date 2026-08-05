@@ -1,16 +1,12 @@
 import { useMemo, useState } from "react";
-import { useQueries } from "@tanstack/react-query";
 import type { ArmoryGearSnapshot, ArmoryPlayer } from "@/api/typesGenerated";
 import { Card, CardContent } from "@/components/ui/Card/Card";
 import { ItemTooltip } from "@/components/ui/ItemTooltip/ItemTooltip";
-import { fetchItemTooltip } from "@/api/gamedata";
 import { iconUrl } from "@/config/iconUrl";
 import { useIconBaseUrl } from "@/hooks/useDatasetId";
 import { getQualityBorderClass } from "../types";
 import { CursorTooltip, type CursorPos } from "./CursorTooltip";
-
-/** Paperdoll display order for the compact strip (shirt/tabard excluded). */
-const STRIP_ORDER = [0, 1, 2, 14, 4, 8, 9, 5, 6, 7, 10, 11, 12, 13, 15, 16, 17];
+import { useOutfitItems } from "./useOutfitItems";
 
 interface GearStripCardProps {
   player: ArmoryPlayer;
@@ -25,41 +21,14 @@ export function GearStripCard({ player, latestSnapshot, onOpenGear }: GearStripC
   const [hoveredIdx, setHoveredIdx] = useState<number | null>(null);
   const [cursor, setCursor] = useState<CursorPos | null>(null);
 
-  const items = STRIP_ORDER.map((i) => player.gear[i]).filter((item) => item.item_id > 0);
+  const { items, avgIlvl } = useOutfitItems(player, latestSnapshot);
   const equippedItemIds = useMemo(
-    () => new Set(items.map((item) => item.item_id)),
+    () => new Set(items.map((item) => item.itemId)),
     // eslint-disable-next-line react-hooks/exhaustive-deps
     [player.gear],
   );
 
-  // Some outfits store only item IDs; the tooltip endpoint fills in icon,
-  // quality, and item level, and resolves the enchant display name for the
-  // hover tooltip. Query keys match useItemTooltip so the cache is shared
-  // with the paperdoll tab.
-  const tooltips = useQueries({
-    queries: items.map((item) => ({
-      queryKey: ["item-tooltip", item.item_id, undefined, item.enchant_id],
-      queryFn: () => fetchItemTooltip({ itemId: item.item_id, enchant: item.enchant_id }),
-      staleTime: 5 * 60 * 1000,
-      retry: false,
-    })),
-  });
-
-  const merged = items.map((item, i) => ({
-    name: item.item_name || tooltips[i].data?.name || "",
-    icon: item.item_icon || tooltips[i].data?.icon || "",
-    quality: item.item_quality ?? tooltips[i].data?.quality ?? 1,
-    itemLevel: item.item_level ?? tooltips[i].data?.item_level ?? null,
-    tooltip: tooltips[i].data,
-  }));
-
-  const knownLevels = merged.filter((m) => m.itemLevel != null);
-  const avgIlvl =
-    knownLevels.length > 0
-      ? knownLevels.reduce((sum, m) => sum + m.itemLevel!, 0) / knownLevels.length
-      : (latestSnapshot?.avg_ilvl ?? null);
-
-  const hoveredTooltip = hoveredIdx !== null ? merged[hoveredIdx]?.tooltip : undefined;
+  const hoveredTooltip = hoveredIdx !== null ? items[hoveredIdx]?.tooltip : undefined;
 
   return (
     <Card
@@ -80,9 +49,9 @@ export function GearStripCard({ player, latestSnapshot, onOpenGear }: GearStripC
           {items.length === 0 && (
             <div className="py-2 text-sm text-muted-foreground">No gear recorded yet.</div>
           )}
-          {merged.map((item, i) => (
+          {items.map((item, i) => (
             <div
-              key={`${items[i].item_id}-${i}`}
+              key={`${item.itemId}-${i}`}
               className={`size-[34px] shrink-0 rounded border bg-popover bg-cover bg-center transition-[filter] hover:brightness-125 ${getQualityBorderClass(item.quality)}`}
               style={
                 item.icon

@@ -1,13 +1,17 @@
-import { useParams, useSearchParams } from "react-router-dom";
-import { Shield, Calendar, Sparkles, LayoutDashboard } from "lucide-react";
+import { Link, useParams, useSearchParams } from "react-router-dom";
+import { Shield, Calendar, Sparkles, LayoutDashboard, Hammer } from "lucide-react";
+import type { ArmoryPlayer } from "@/api/typesGenerated";
 import { useArmoryPlayer } from "@/api/queries";
+import { Button } from "@/components/ui/button";
+import { Card, CardContent } from "@/components/ui/Card/Card";
 import { DatasetProvider } from "@/hooks/useDatasetId";
-import { CharacterHeader } from "./CharacterHeader";
 import { AdminLinkControls } from "./AdminLinkControls";
 import { GearDisplay } from "./GearDisplay";
 import { TalentsTab } from "./TalentsTab";
 import { ActivityTab } from "./ActivityTab";
 import { OverviewTab } from "./overview/OverviewTab";
+import { IdentityHeader } from "./overview/IdentityHeader";
+import { ActivityHeaderCard, GearHeaderCard, TalentsHeaderCard } from "./TabHeaderCards";
 
 const TABS = [
   { key: "overview", label: "Overview", icon: LayoutDashboard },
@@ -18,8 +22,20 @@ const TABS = [
 
 type TabKey = (typeof TABS)[number]["key"];
 
-/** Tabs that need a wide center column. */
-const WIDE_TABS: ReadonlySet<TabKey> = new Set(["overview", "talents"]);
+/**
+ * Link into the talent calculator with this character's build preloaded.
+ * The build param is per-tab rank digits (trailing zeros trimmed) joined
+ * by "-", matching encodeTalentBuild.
+ */
+function talentBuilderUrl(player: ArmoryPlayer): string | null {
+  const trees = player.talents?.trees;
+  if (!trees) return null;
+  const sections = trees.map((t) => t.ranks.replace(/0+$/, ""));
+  while (sections.length > 0 && sections[sections.length - 1] === "") sections.pop();
+  const build = sections.join("-");
+  const slug = player.class.toLowerCase().replace(/[^a-z]/g, "");
+  return `/talents/${slug}${build ? `?build=${build}` : ""}`;
+}
 
 /**
  * WoW-style character armory page.
@@ -69,18 +85,16 @@ export function ArmoryPage() {
 
   return (
     <DatasetProvider datasetId={player.dataset_id} iconBaseUrl={player.icon_base_url}>
-    <div className={`w-full py-8 px-4 grid gap-x-4 ${WIDE_TABS.has(activeTab) ? "grid-cols-[1fr_minmax(0,72rem)_1fr]" : "grid-cols-[1fr_minmax(0,48rem)_1fr]"}`}>
+    <div className="w-full py-8 px-4 grid gap-x-4 grid-cols-[1fr_minmax(0,72rem)_1fr]">
       {/* Left placeholder column */}
       <div />
 
       {/* Center column */}
       <div>
-        {/* The overview tab renders its own design-style identity header. */}
-        {activeTab !== "overview" && <CharacterHeader player={player} />}
         <AdminLinkControls player={player} />
 
         {/* Tab navigation */}
-        <div className="mt-6 flex gap-1 border-b border-border">
+        <div className="flex gap-1 border-b border-border">
           {TABS.map(({ key, label, icon: Icon }) => (
             <button
               key={key}
@@ -100,6 +114,21 @@ export function ArmoryPage() {
           ))}
         </div>
 
+        {/* Identity header — the overview renders its own (with the mode
+            selector and score/journey card); other tabs get a per-tab
+            stats card so the layout stays identical across tabs. */}
+        {activeTab !== "overview" && (
+          <div className="mt-8">
+            <IdentityHeader player={player}>
+              <div className="lg:w-[480px]">
+                {activeTab === "gear" && <GearHeaderCard player={player} />}
+                {activeTab === "talents" && <TalentsHeaderCard player={player} />}
+                {activeTab === "activity" && <ActivityHeaderCard player={player} />}
+              </div>
+            </IdentityHeader>
+          </div>
+        )}
+
         {/* Tab content — overview, gear, and talents stay in center column */}
         {activeTab === "overview" && (
           <div className="mt-8">
@@ -107,12 +136,24 @@ export function ArmoryPage() {
           </div>
         )}
         {activeTab === "gear" && (
-          <div className="mt-6">
-            <GearDisplay gear={player.gear} race={player.race} gender={player.gender} />
-          </div>
+          <Card className="mt-4 py-8">
+            <CardContent>
+              <GearDisplay gear={player.gear} race={player.race} gender={player.gender} />
+            </CardContent>
+          </Card>
         )}
         {activeTab === "talents" && (
-          <div className="mt-6">
+          <div className="mt-4">
+            {talentBuilderUrl(player) && (
+              <div className="mb-3 flex justify-end">
+                <Button variant="outline" size="sm" asChild>
+                  <Link to={talentBuilderUrl(player)!}>
+                    <Hammer className="h-4 w-4" />
+                    Open in Talent Builder
+                  </Link>
+                </Button>
+              </div>
+            )}
             <TalentsTab player={player} />
           </div>
         )}

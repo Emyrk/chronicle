@@ -1,13 +1,12 @@
 import { useMemo, useState } from "react";
-import { useQuery } from "@tanstack/react-query";
 import { useSearchParams } from "react-router-dom";
-import { subWeeks, startOfWeek } from "date-fns";
-import type { ArmoryLootItem, ArmoryPlayer, RecentInstancesResponse } from "@/api/typesGenerated";
+import type { ArmoryLootItem, ArmoryPlayer } from "@/api/typesGenerated";
 import { useArmoryGearHistory, useArmoryLoot, useSupportedInstanceBossCounts } from "@/api/queries";
 import { useCharacterEncounters, useCharacterParses } from "@/api/rankingsQueries";
 import { Button } from "@/components/ui/button";
 import { averageScoreByInstance, bestScoreByInstance, summarizeProgress, summarizeRaids, topEncounters } from "../parseAggregation";
-import { ACTIVITY_WEEKS, computeActivityStats, defaultMetric, type ParseMetric } from "./util";
+import { defaultMetric, type ParseMetric } from "./util";
+import { useRecentActivity } from "./useRecentActivity";
 import { IdentityHeader } from "./IdentityHeader";
 import { ScoreCard } from "./ScoreCard";
 import { TalentsCard } from "./TalentsCard";
@@ -27,20 +26,6 @@ const MODES: Array<[OverviewMode, string]> = [
   ["journey", "Journey"],
   ["performance", "Performance"],
 ];
-
-function fetchRecentActivity(player: ArmoryPlayer, start: Date): Promise<RecentInstancesResponse> {
-  const params = new URLSearchParams({
-    start: start.toISOString(),
-    end: new Date().toISOString(),
-    player_guid: player.id,
-    realm_id: player.realm_id,
-    limit: "200",
-  });
-  return fetch(`/api/v1/raidlogs/range?${params}`).then((r) => {
-    if (!r.ok) throw new Error(`Failed to fetch activity: ${r.status}`);
-    return r.json();
-  });
-}
 
 interface OverviewTabProps {
   player: ArmoryPlayer;
@@ -67,19 +52,11 @@ export function OverviewTab({ player, onOpenTab }: OverviewTabProps) {
 
   // Shared data.
   const gearHistory = useArmoryGearHistory(player.realm_name, player.id);
-  const activityStart = useMemo(
-    () => subWeeks(startOfWeek(new Date()), ACTIVITY_WEEKS - 1),
-    [],
-  );
-  const activityQuery = useQuery({
-    queryKey: ["armory-recent-activity", player.realm_id, player.id],
-    queryFn: () => fetchRecentActivity(player, activityStart),
-    staleTime: 60_000,
-  });
-  const activityStats = useMemo(
-    () => computeActivityStats(activityQuery.data?.instances ?? [], activityStart),
-    [activityQuery.data, activityStart],
-  );
+  const {
+    start: activityStart,
+    query: activityQuery,
+    stats: activityStats,
+  } = useRecentActivity(player);
 
   // Performance mode: parse scores.
   const parsesQuery = useCharacterParses(player.id, metric);
