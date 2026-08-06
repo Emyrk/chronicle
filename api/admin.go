@@ -11,7 +11,9 @@ import (
 	"github.com/Emyrk/chronicle/database"
 	"github.com/Emyrk/chronicle/database/authz"
 	"github.com/Emyrk/chronicle/database/authz/policy"
+	"github.com/Emyrk/chronicle/internal/services"
 	"github.com/Emyrk/chronicle/internal/services/servicetenant"
+	"github.com/Gophercraft/core/vsn"
 	"github.com/go-chi/chi/v5"
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgtype"
@@ -737,13 +739,24 @@ func (a *API) AdminGetSiteConfig(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Resolve the tenant's default dataset flavor so the frontend can
-	// derive per-flavor settings (e.g. talent calculator max level).
+	// derive per-flavor settings (e.g. talent calculator max level,
+	// gear-weight presets).
 	if t != nil && t.DefaultDatasetID.Valid {
 		ds, err := a.Opts.Dataset.GetDataset(ctx, t.DefaultDatasetID.UUID)
 		if err == nil {
 			resp.DatasetFlavor = database.FlavorFromStrings(ds.DefaultFlavor).
 				Merge(database.FlavorFromStrings(t.AdditionalFlavor)).Strings()
 		}
+	}
+	if len(resp.DatasetFlavor) == 0 {
+		// No tenant default dataset (or an unflavored dataset row):
+		// fall back to the compiled-in server identity so per-flavor UI
+		// never mistakes a wrath deployment for vanilla.
+		base := database.FlavorVanilla
+		if services.ServerBuild == vsn.V3_3_5a {
+			base = database.FlavorWrath
+		}
+		resp.DatasetFlavor = database.ServerFlavor(services.ServerName, base).Strings()
 	}
 
 	w.Header().Set("Cache-Control", "private, max-age=300") // 5 min; varies per tenant
