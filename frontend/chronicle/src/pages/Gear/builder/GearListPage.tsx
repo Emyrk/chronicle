@@ -1,6 +1,6 @@
 import { useMemo, useState } from "react";
 import { Link, useParams, useSearchParams } from "react-router-dom";
-import { ArrowLeft, Eye, EyeOff, Link2, Save } from "lucide-react";
+import { ArrowLeft, Eye, EyeOff, Link2, Pencil, Save } from "lucide-react";
 import { useArmoryGearHistory, useArmoryPlayer, useSession } from "@/api/queries";
 import { useGearListRevision, useGearTrends, useSharedGearList } from "@/api/gearBuilderQueries";
 import { Button } from "@/components/ui/button";
@@ -39,7 +39,7 @@ import { SetSummaryBar } from "./SetSummaryBar";
 import { StagesBar } from "./StagesBar";
 import { ProgressionMatrix } from "./ProgressionMatrix";
 import { RevisionControls } from "./RevisionControls";
-import { buildCharacterMatch, stageCoverage } from "./characterMatch";
+import { buildCharacterMatch, stageCoverage, type CharacterMatch } from "./characterMatch";
 import {
   CharacterMatchPanel,
   formatCharParam,
@@ -49,30 +49,47 @@ import {
 
 const VISIBILITY_ICON = { public: Eye, unlisted: Link2, private: EyeOff } as const;
 
-/** Per-slot and total weighted scores for one stage's primary items. */
+/**
+ * Per-slot and total weighted scores for one stage's primary items,
+ * plus — when a character is matched — each slot's score difference
+ * against the item the character is actually wearing there.
+ */
 function useStageScores(
   stage: GearStage | undefined,
   weights: StatWeights | null,
-): { scores?: Map<number, number>; totalScore?: number } {
-  const itemIds =
+  match?: CharacterMatch,
+): { scores?: Map<number, number>; totalScore?: number; wornDeltas?: Map<number, number> } {
+  const pickIds =
     stage && weights
       ? Object.values(stage.slots)
           .filter((e) => !!e)
           .map((e) => e!.item_id)
       : [];
-  const simItems = useSimItems(itemIds);
+  const wornIds =
+    stage && weights && match
+      ? match.equippedSlots.filter((w): w is NonNullable<typeof w> => !!w).map((w) => w.item_id)
+      : [];
+  const simItems = useSimItems([...pickIds, ...wornIds]);
   if (!stage || !weights) return {};
   const scores = new Map<number, number>();
+  const wornDeltas = new Map<number, number>();
   let totalScore = 0;
   for (const [key, entry] of Object.entries(stage.slots)) {
     if (!entry) continue;
     const sim = simItems.get(entry.item_id);
     if (!sim) continue;
     const score = scoreItem(sim, weights);
-    scores.set(Number(key), score);
+    const slotIndex = Number(key);
+    scores.set(slotIndex, score);
     totalScore += score;
+
+    const worn = match?.equippedSlots[slotIndex];
+    if (worn && worn.item_id !== entry.item_id) {
+      const wornSim = simItems.get(worn.item_id);
+      if (wornSim) wornDeltas.set(slotIndex, score - scoreItem(wornSim, weights));
+    }
   }
-  return { scores, totalScore };
+  return { scores, totalScore, wornDeltas: match ? wornDeltas : undefined };
 }
 
 /** ?char= (Realm:Name) armory match state shared by both page views. */
@@ -190,11 +207,13 @@ function ReadOnlyView({
   isOwner,
   controls,
   revisionNote,
+  headerRight,
 }: {
   list: GearList;
   isOwner: boolean;
   controls?: React.ReactNode;
   revisionNote?: string;
+  headerRight?: React.ReactNode;
 }) {
   const payload = useMemo(() => parsePayload(list.payload), [list.payload]);
   const [stageIndex, setStageIndex] = useState(0);
@@ -203,14 +222,18 @@ function ReadOnlyView({
   const [selectedSlot, setSelectedSlot] = useState<number | null>(null);
   const items = useListItems(useMemo(() => collectItemRefs(payload), [payload]));
   const stage = payload.stages[Math.min(stageIndex, Math.max(payload.stages.length - 1, 0))];
-  const { scores, totalScore } = useStageScores(stage, weightSel?.weights ?? null);
   const charMatch = useCharacterMatchState(stage);
+  const { scores, totalScore, wornDeltas } = useStageScores(
+    stage,
+    weightSel?.weights ?? null,
+    charMatch.match,
+  );
   const selectedEntry =
     selectedSlot != null && stage ? stage.slots[String(selectedSlot)] : undefined;
 
   return (
     <div className="max-w-6xl mx-auto py-6 px-4 space-y-4">
-      <ListHeader list={list} isOwner={isOwner} />
+      <ListHeader list={list} isOwner={isOwner} right={headerRight} />
       {controls}
       {revisionNote && (
         <p className="rounded border border-blue-500/30 bg-blue-500/5 px-3 py-2 text-xs text-blue-200">
@@ -255,6 +278,7 @@ function ReadOnlyView({
                     stage={stage}
                     items={items}
                     scores={scores}
+                    wornDeltas={wornDeltas}
                     match={charMatch.match}
                     matchName={charMatch.matched?.name}
                     selectedSlot={selectedSlot ?? undefined}
@@ -284,9 +308,11 @@ function ReadOnlyView({
 function EditorView({
   list,
   onViewRev,
+  onLock,
 }: {
   list: GearList;
   onViewRev: (rev: number | null) => void;
+  onLock: () => void;
 }) {
   const editor = useGearListEditor(list);
   const [stageIndex, setStageIndex] = useState(0);
@@ -297,8 +323,12 @@ function EditorView({
   const items = useListItems(useMemo(() => collectItemRefs(editor.payload), [editor.payload]));
   const safeStageIndex = Math.min(stageIndex, Math.max(editor.payload.stages.length - 1, 0));
   const stage = editor.payload.stages[safeStageIndex];
-  const { scores, totalScore } = useStageScores(stage, weightSel?.weights ?? null);
   const charMatch = useCharacterMatchState(stage);
+  const { scores, totalScore, wornDeltas } = useStageScores(
+    stage,
+    weightSel?.weights ?? null,
+    charMatch.match,
+  );
   const selectedEntry =
     selectedSlot != null && stage ? stage.slots[String(selectedSlot)] : undefined;
 
@@ -326,6 +356,16 @@ function EditorView({
         right={
           <div className="flex items-center gap-2">
             {editor.dirty && <span className="text-xs text-amber-400">unsaved changes</span>}
+            <Button
+              variant="outline"
+              size="sm"
+              disabled={editor.dirty}
+              title={editor.dirty ? "Save your changes first" : "Locked, presentation-friendly view"}
+              onClick={onLock}
+            >
+              <Eye className="h-4 w-4 mr-1" />
+              View
+            </Button>
             <Button size="sm" onClick={editor.save} disabled={!editor.dirty || editor.saving}>
               <Save className="h-4 w-4 mr-1" />
               {editor.saving ? "Saving…" : "Save"}
@@ -416,6 +456,7 @@ function EditorView({
                   selectedSlot={selectedSlot ?? undefined}
                   onSelectSlot={(i) => setSelectedSlot((prev) => (prev === i ? null : i))}
                   scores={scores}
+                  wornDeltas={wornDeltas}
                   match={charMatch.match}
                   matchName={charMatch.matched?.name}
                 />
@@ -489,6 +530,19 @@ export function GearListPage() {
     setSearchParams(next, { replace: true });
   };
 
+  // ?lock — the owner's read-only presentation mode (same idea as the
+  // talent builder's lock param).
+  const locked = searchParams.get("lock") != null;
+  const setLocked = (on: boolean) => {
+    const next = new URLSearchParams(searchParams);
+    if (on) {
+      next.set("lock", "1");
+    } else {
+      next.delete("lock");
+    }
+    setSearchParams(next, { replace: true });
+  };
+
   if (list.isLoading || (viewedRev != null && revision.isLoading)) {
     return <div className="p-8 text-center text-zinc-400">Loading gear list…</div>;
   }
@@ -535,8 +589,33 @@ export function GearListPage() {
     );
   }
 
+  if (isOwner && locked) {
+    return (
+      <ReadOnlyView
+        key={`${list.data.id}-locked`}
+        list={list.data}
+        isOwner
+        headerRight={
+          <Button variant="outline" size="sm" onClick={() => setLocked(false)}>
+            <Pencil className="h-4 w-4 mr-1" />
+            Edit
+          </Button>
+        }
+        controls={
+          // isOwner=false: locked mode is fully read-only, so no publish.
+          <RevisionControls list={list.data} isOwner={false} viewedRev={null} onViewRev={setViewedRev} />
+        }
+      />
+    );
+  }
+
   return isOwner ? (
-    <EditorView key={list.data.id} list={list.data} onViewRev={setViewedRev} />
+    <EditorView
+      key={list.data.id}
+      list={list.data}
+      onViewRev={setViewedRev}
+      onLock={() => setLocked(true)}
+    />
   ) : (
     <ReadOnlyView
       list={list.data}

@@ -23,6 +23,8 @@ interface BuilderSlotProps {
   equippedItemIds?: ReadonlySet<number>;
   /** Weighted stat score for the equipped item, when weights are active. */
   score?: number;
+  /** Score difference vs the matched character's worn item (pick − worn). */
+  wornDelta?: number;
   /** Character-match state for this slot, when a character is matched. */
   matchState?: "equipped" | "missing";
 }
@@ -41,6 +43,7 @@ export function BuilderSlot({
   onSelect,
   equippedItemIds,
   score,
+  wornDelta,
   matchState,
 }: BuilderSlotProps) {
   const iconBaseUrl = useIconBaseUrl();
@@ -90,6 +93,18 @@ export function BuilderSlot({
         >
           {score !== undefined && (
             <span className="font-mono text-zinc-400">{formatScore(score)} pts</span>
+          )}
+          {wornDelta !== undefined && Math.abs(wornDelta) >= 0.05 && (
+            <span
+              title={
+                wornDelta > 0
+                  ? "This pick scores higher than the item they are wearing"
+                  : "The item they are wearing scores higher than this pick"
+              }
+              className={cn("font-mono", wornDelta > 0 ? "text-emerald-400" : "text-red-400")}
+            >
+              {wornDelta > 0 ? "+" : "−"}{formatScore(Math.abs(wornDelta))} vs worn
+            </span>
           )}
           {altCount > 0 && <span>+{altCount} alt{altCount === 1 ? "" : "s"}</span>}
           {entry?.note && <StickyNote className="h-2.5 w-2.5" />}

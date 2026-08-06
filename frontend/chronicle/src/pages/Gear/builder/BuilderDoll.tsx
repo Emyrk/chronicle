@@ -14,6 +14,8 @@ interface BuilderDollProps {
   onSelectSlot?: (outfitIndex: number) => void;
   /** Per-slot weighted scores (by outfit index), when weights are active. */
   scores?: Map<number, number>;
+  /** Per-slot score difference vs the matched character's worn item. */
+  wornDeltas?: Map<number, number>;
   /** Armory character match; adds owned/equipped/missing markers. */
   match?: CharacterMatch;
   /** Matched character's name, for the marker legend. */
@@ -24,7 +26,16 @@ interface BuilderDollProps {
  * The builder paperdoll: two slot columns plus the weapon row, mirroring
  * the armory layout. Read-only when onSelectSlot is absent.
  */
-export function BuilderDoll({ stage, items, selectedSlot, onSelectSlot, scores, match, matchName }: BuilderDollProps) {
+export function BuilderDoll({
+  stage,
+  items,
+  selectedSlot,
+  onSelectSlot,
+  scores,
+  wornDeltas,
+  match,
+  matchName,
+}: BuilderDollProps) {
   const equippedItemIds = new Set(
     Object.values(stage.slots)
       .filter((e) => !!e)
@@ -58,6 +69,7 @@ export function BuilderDoll({ stage, items, selectedSlot, onSelectSlot, scores, 
                 onSelect={onSelectSlot}
                 equippedItemIds={equippedItemIds}
                 score={scores?.get(def.outfitIndex)}
+                wornDelta={wornDeltas?.get(def.outfitIndex)}
                 matchState={matchState}
               />
             );
@@ -77,6 +89,7 @@ export function BuilderDoll({ stage, items, selectedSlot, onSelectSlot, scores, 
                 onSelect={onSelectSlot}
                 equippedItemIds={equippedItemIds}
                 score={scores?.get(def.outfitIndex)}
+                wornDelta={wornDeltas?.get(def.outfitIndex)}
                 matchState={matchState}
               />
             );
@@ -97,6 +110,7 @@ export function BuilderDoll({ stage, items, selectedSlot, onSelectSlot, scores, 
               onSelect={onSelectSlot}
               equippedItemIds={equippedItemIds}
               score={scores?.get(def.outfitIndex)}
+              wornDelta={wornDeltas?.get(def.outfitIndex)}
               matchState={matchState}
             />
           );
