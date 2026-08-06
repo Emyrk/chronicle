@@ -3,14 +3,22 @@ package chroniclesdk
 import "time"
 
 // GearTrendsResponse is the observed-gear-trends aggregate for one
-// class/spec cohort: per-slot equip rates from recent ranked parses.
-// This is observed equipment, not a recommendation.
+// class/spec cohort: the gear worn during the top leaderboard
+// performances. This is observed equipment, not a recommendation.
 type GearTrendsResponse struct {
 	Class        string `json:"class"`
 	Spec         string `json:"spec"`
 	LookbackDays int32  `json:"lookback_days"`
-	// CohortSize is the number of unique qualifying players (one
-	// observation each: the latest gear snapshot in the window).
+	// InstanceName is the raid filter, empty when all raids qualify.
+	InstanceName string `json:"instance_name,omitempty"`
+	// RealmID is the realm filter, empty when all realms qualify.
+	RealmID string `json:"realm_id,omitempty"`
+	// TopPerformances is the cohort target: the N best-parsing unique
+	// players considered (each observed in the gear worn during that
+	// parse).
+	TopPerformances int32 `json:"top_performances"`
+	// CohortSize is how many qualifying players were actually found
+	// (at most TopPerformances).
 	CohortSize    int32 `json:"cohort_size"`
 	MinSampleSize int32 `json:"min_sample_size"`
 	// InsufficientSample is true when the cohort is below the minimum

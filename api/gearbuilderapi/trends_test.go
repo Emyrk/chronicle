@@ -4,6 +4,8 @@ import (
 	"testing"
 	"time"
 
+	"github.com/google/uuid"
+
 	"github.com/Emyrk/chronicle/database"
 )
 
@@ -12,28 +14,44 @@ func TestAssembleTrends(t *testing.T) {
 
 	now := time.Date(2026, 8, 5, 12, 0, 0, 0, time.UTC)
 
+	fury := trendsFilters{Class: "WARRIOR", Spec: "Fury", Days: 60}
+
 	t.Run("insufficient sample", func(t *testing.T) {
 		t.Parallel()
 		items := []database.GearTrendsSlotItemsRow{
-			{Slot: 0, ItemID: 100, WearerCount: 10, CohortSize: 12, ItemName: "Helm"},
+			{Slot: 0, ItemID: 100, WearerCount: 3, CohortSize: 3, ItemName: "Helm"},
 		}
-		resp := assembleTrends(items, nil, "WARRIOR", "Fury", 60, now)
+		resp := assembleTrends(items, nil, fury, now)
 		if !resp.InsufficientSample {
-			t.Fatal("expected insufficient_sample for cohort of 12")
+			t.Fatal("expected insufficient_sample for cohort of 3")
 		}
 		if len(resp.Slots) != 0 {
 			t.Fatalf("expected no slots, got %d", len(resp.Slots))
 		}
-		if resp.CohortSize != 12 {
-			t.Fatalf("cohort_size = %d, want 12", resp.CohortSize)
+		if resp.CohortSize != 3 {
+			t.Fatalf("cohort_size = %d, want 3", resp.CohortSize)
 		}
 	})
 
 	t.Run("empty cohort", func(t *testing.T) {
 		t.Parallel()
-		resp := assembleTrends(nil, nil, "MAGE", "Frost", 30, now)
+		resp := assembleTrends(nil, nil, trendsFilters{Class: "MAGE", Spec: "Frost", Days: 30}, now)
 		if !resp.InsufficientSample || resp.CohortSize != 0 {
 			t.Fatalf("expected empty insufficient response, got %+v", resp)
+		}
+	})
+
+	t.Run("filters echoed", func(t *testing.T) {
+		t.Parallel()
+		realm := uuid.New()
+		resp := assembleTrends(nil, nil, trendsFilters{
+			Class: "ROGUE", Spec: "Combat", Days: 90, InstanceName: "Molten Core", RealmID: realm,
+		}, now)
+		if resp.InstanceName != "Molten Core" || resp.RealmID != realm.String() {
+			t.Fatalf("filters not echoed: %+v", resp)
+		}
+		if resp.TopPerformances != trendsTopPerformances {
+			t.Fatalf("top_performances = %d", resp.TopPerformances)
 		}
 	})
 
@@ -43,23 +61,24 @@ func TestAssembleTrends(t *testing.T) {
 		// Slot 0: 20 distinct items to exercise the per-slot cap.
 		for i := 0; i < 20; i++ {
 			items = append(items, database.GearTrendsSlotItemsRow{
-				Slot: 0, ItemID: int32(100 + i), WearerCount: int32(40 - i), CohortSize: 40,
+				Slot: 0, ItemID: int32(100 + i), WearerCount: int32(20 - i%15), CohortSize: 20,
 				ItemName: "Item", ItemQuality: 4, ItemLevel: 63,
 			})
 		}
+		items[0].WearerCount = 20 // top item worn by the whole cohort
 		// Slot 15: one item worn by half the cohort.
 		items = append(items, database.GearTrendsSlotItemsRow{
-			Slot: 15, ItemID: 500, WearerCount: 20, CohortSize: 40, ItemName: "Sword",
+			Slot: 15, ItemID: 500, WearerCount: 10, CohortSize: 20, ItemName: "Sword",
 		})
 		enchants := []database.GearTrendsSlotEnchantsRow{
-			{Slot: 15, EnchantID: 1900, WearerCount: 10, CohortSize: 40, EnchantName: "Crusader"},
-			{Slot: 15, EnchantID: 7, WearerCount: 2, CohortSize: 40, EnchantName: ""},
-			{Slot: 7, EnchantID: 911, WearerCount: 3, CohortSize: 40, EnchantName: "Minor Speed"},
+			{Slot: 15, EnchantID: 1900, WearerCount: 5, CohortSize: 20, EnchantName: "Crusader"},
+			{Slot: 15, EnchantID: 7, WearerCount: 2, CohortSize: 20, EnchantName: ""},
+			{Slot: 7, EnchantID: 911, WearerCount: 3, CohortSize: 20, EnchantName: "Minor Speed"},
 		}
 
-		resp := assembleTrends(items, enchants, "WARRIOR", "Fury", 90, now)
+		resp := assembleTrends(items, enchants, fury, now)
 		if resp.InsufficientSample {
-			t.Fatal("cohort of 40 should be sufficient")
+			t.Fatal("cohort of 20 should be sufficient")
 		}
 		if len(resp.Slots) != 2 {
 			t.Fatalf("expected 2 slots, got %d", len(resp.Slots))

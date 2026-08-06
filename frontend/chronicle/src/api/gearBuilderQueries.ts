@@ -187,14 +187,27 @@ export interface GearTrendsParams {
   /** Spec display name, e.g. "Fury". */
   spec: string;
   days?: 30 | 60 | 90;
+  /** Raid instance name filter, e.g. "Molten Core"; omit for all raids. */
+  raid?: string;
+  /** Realm UUID filter; omit for all realms. */
+  realmId?: string;
 }
 
 export function useGearTrends(params: GearTrendsParams | null) {
   return useQuery({
-    queryKey: ["gear-trends", params?.class, params?.spec, params?.days ?? 60],
+    queryKey: [
+      "gear-trends",
+      params?.class,
+      params?.spec,
+      params?.days ?? 60,
+      params?.raid ?? "",
+      params?.realmId ?? "",
+    ],
     queryFn: async (): Promise<GearTrendsResponse> => {
       const qs = new URLSearchParams({ class: params!.class, spec: params!.spec });
       if (params!.days) qs.set("days", String(params!.days));
+      if (params!.raid) qs.set("raid", params!.raid);
+      if (params!.realmId) qs.set("realm_id", params!.realmId);
       const res = await fetch(`${BASE}/trends?${qs.toString()}`);
       if (!res.ok) throw gearAPIError("Failed to fetch gear trends", await res.json().catch(() => null));
       return res.json();

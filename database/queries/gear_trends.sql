@@ -1,12 +1,16 @@
--- Observed gear trends: what logged players of a class/spec actually wore,
--- aggregated per equipment slot from armory gear-history snapshots.
+-- Observed gear trends: the gear worn by the top leaderboard performances
+-- of a class/spec, aggregated per equipment slot.
 --
 -- Cohort rules (shared by both queries):
 --   * ranked parses only (encounter_dps_rankings), deduped to one
 --     representative instance per run (duplicate uploads collapse via
 --     COALESCE(duplicate_group_id, id) — the house convention);
---   * one observation per unique player: the latest qualifying snapshot
---     in the window;
+--   * best parse (highest DPS) per unique player, optionally filtered by
+--     raid (instance_name) and realm, then the top @top_n players by that
+--     parse's DPS;
+--   * each player's observation is the gear snapshot from THAT parse's
+--     log instance — what they wore during the performance, not their
+--     latest outfit;
 --   * tenant scoping comes from RLS on encounter_dps_rankings plus the
 --     wow_server_realms join for gear history (which has no RLS).
 -- Item name/quality/icon/level are read from the snapshot jsonb itself,
@@ -22,24 +26,33 @@ WITH representative_instances AS (
         li.start_time ASC,
         li.id ASC
 ),
-qualifying AS (
-    SELECT DISTINCT edr.realm_id, edr.player_guid, edr.instance_id
+best_parse AS (
+    SELECT DISTINCT ON (edr.realm_id, edr.player_guid)
+        edr.realm_id, edr.player_guid, edr.instance_id, edr.dps
     FROM encounter_dps_rankings edr
     JOIN representative_instances ri ON ri.id = edr.instance_id
     WHERE edr.player_class = @player_class
       AND edr.player_spec = @player_spec
       AND edr.encounter_id IS NOT NULL
       AND edr.killed_at >= @since::timestamptz
+      AND (sqlc.narg(instance_name)::text IS NULL OR edr.instance_name = sqlc.narg(instance_name))
+      AND (sqlc.narg(realm_id)::uuid IS NULL OR edr.realm_id = sqlc.narg(realm_id))
+    ORDER BY edr.realm_id, edr.player_guid, edr.dps DESC
+),
+top_players AS (
+    SELECT bp.realm_id, bp.player_guid, bp.instance_id
+    FROM best_parse bp
+    ORDER BY bp.dps DESC
+    LIMIT @top_n
 ),
 cohort AS (
-    SELECT DISTINCT ON (h.realm_id, h.player_id) h.gear
+    SELECT h.gear
     FROM game_player_gear_history h
     JOIN wow_server_realms wsr ON wsr.id = h.realm_id
-    JOIN qualifying q
-      ON h.player_id = q.player_guid
-     AND h.realm_id = q.realm_id
-     AND h.instance_id = q.instance_id
-    ORDER BY h.realm_id, h.player_id, h.equipped_at DESC
+    JOIN top_players tp
+      ON h.player_id = tp.player_guid
+     AND h.realm_id = tp.realm_id
+     AND h.instance_id = tp.instance_id
 ),
 slot_items AS (
     SELECT (elem.ordinality - 1)::int AS slot,
@@ -75,24 +88,33 @@ WITH representative_instances AS (
         li.start_time ASC,
         li.id ASC
 ),
-qualifying AS (
-    SELECT DISTINCT edr.realm_id, edr.player_guid, edr.instance_id
+best_parse AS (
+    SELECT DISTINCT ON (edr.realm_id, edr.player_guid)
+        edr.realm_id, edr.player_guid, edr.instance_id, edr.dps
     FROM encounter_dps_rankings edr
     JOIN representative_instances ri ON ri.id = edr.instance_id
     WHERE edr.player_class = @player_class
       AND edr.player_spec = @player_spec
       AND edr.encounter_id IS NOT NULL
       AND edr.killed_at >= @since::timestamptz
+      AND (sqlc.narg(instance_name)::text IS NULL OR edr.instance_name = sqlc.narg(instance_name))
+      AND (sqlc.narg(realm_id)::uuid IS NULL OR edr.realm_id = sqlc.narg(realm_id))
+    ORDER BY edr.realm_id, edr.player_guid, edr.dps DESC
+),
+top_players AS (
+    SELECT bp.realm_id, bp.player_guid, bp.instance_id
+    FROM best_parse bp
+    ORDER BY bp.dps DESC
+    LIMIT @top_n
 ),
 cohort AS (
-    SELECT DISTINCT ON (h.realm_id, h.player_id) h.gear
+    SELECT h.gear
     FROM game_player_gear_history h
     JOIN wow_server_realms wsr ON wsr.id = h.realm_id
-    JOIN qualifying q
-      ON h.player_id = q.player_guid
-     AND h.realm_id = q.realm_id
-     AND h.instance_id = q.instance_id
-    ORDER BY h.realm_id, h.player_id, h.equipped_at DESC
+    JOIN top_players tp
+      ON h.player_id = tp.player_guid
+     AND h.realm_id = tp.realm_id
+     AND h.instance_id = tp.instance_id
 ),
 slot_enchants AS (
     SELECT (elem.ordinality - 1)::int AS slot,
