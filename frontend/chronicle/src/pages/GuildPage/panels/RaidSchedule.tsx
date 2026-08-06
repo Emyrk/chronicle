@@ -1,27 +1,37 @@
-import { CalendarClock } from "lucide-react";
+import { CalendarClock, Plus, X } from "lucide-react";
 import type { GuildPanelDefinition, GuildPanelRenderProps } from "./types";
 
-interface RaidScheduleConfig {
-  schedule: string;
-  note: string;
-}
+type ScheduleKind = "raid" | "optional" | "off";
 
-interface ScheduleRow {
+interface ScheduleEntry {
   day: string;
   raid: string;
   time: string;
   invite: string;
-  /** Highlighted raid night. Off days ("-") and "~optional" rows are not. */
-  highlighted: boolean;
-  offDay: boolean;
+  /** "raid" nights are highlighted, "optional" runs are muted, "off" days show as no raid. */
+  kind: ScheduleKind;
 }
 
-/**
- * One day per line: "Day | Raid | Time | Invite". A raid of "-" (or nothing)
- * marks an off day; prefix the raid with "~" for an optional, unhighlighted
- * run (e.g. "~Optional alt run").
- */
-function parseSchedule(raw: string): ScheduleRow[] {
+interface RaidScheduleConfig {
+  /** Structured entries; older saves may hold a pipe-separated string. */
+  schedule: ScheduleEntry[] | string;
+  note: string;
+}
+
+/** Accepts the structured array, or the legacy "Day | Raid | Time | Invite" lines. */
+function normalizeSchedule(raw: ScheduleEntry[] | string | undefined): ScheduleEntry[] {
+  if (Array.isArray(raw)) {
+    return raw
+      .map((entry) => ({
+        day: entry?.day ?? "",
+        raid: entry?.raid ?? "",
+        time: entry?.time ?? "",
+        invite: entry?.invite ?? "",
+        kind: (["raid", "optional", "off"].includes(entry?.kind) ? entry.kind : "raid") as ScheduleKind,
+      }))
+      .filter((entry) => entry.day.length > 0);
+  }
+  if (typeof raw !== "string") return [];
   return raw
     .split("\n")
     .map((line) => line.trim())
@@ -30,30 +40,111 @@ function parseSchedule(raw: string): ScheduleRow[] {
       const [day = "", rawRaid = "", time = "", invite = ""] = line.split("|").map((p) => p.trim());
       const offDay = rawRaid === "" || rawRaid === "-" || rawRaid === "—";
       const optional = rawRaid.startsWith("~");
-      const raid = optional ? rawRaid.slice(1).trim() : rawRaid;
       return {
         day,
-        raid: offDay ? "—" : raid,
-        time: offDay ? "no raid" : time,
+        raid: offDay ? "" : optional ? rawRaid.slice(1).trim() : rawRaid,
+        time: offDay ? "" : time,
         invite: offDay ? "" : invite,
-        highlighted: !offDay && !optional,
-        offDay,
+        kind: (offDay ? "off" : optional ? "optional" : "raid") as ScheduleKind,
       };
     })
-    .filter((row) => row.day.length > 0);
+    .filter((entry) => entry.day.length > 0);
+}
+
+/** Structured editor rendered inside the panel config modal. */
+function ScheduleEditor({ value, onChange }: { value: unknown; onChange: (value: unknown) => void }) {
+  // Keep empty rows while editing; they are dropped at render time.
+  const entries = Array.isArray(value)
+    ? (value as ScheduleEntry[])
+    : normalizeSchedule(value as string | undefined);
+
+  const update = (index: number, patch: Partial<ScheduleEntry>) => {
+    onChange(entries.map((entry, i) => (i === index ? { ...entry, ...patch } : entry)));
+  };
+
+  return (
+    <div className="space-y-2.5">
+      {entries.length === 0 && (
+        <p className="text-xs text-muted-foreground">No raid days yet — add your first one.</p>
+      )}
+      {entries.map((entry, i) => (
+        <div key={i} className="space-y-1.5 rounded-md border border-border/60 bg-muted/20 p-2.5">
+          <div className="flex items-center gap-1.5">
+            <input
+              type="text"
+              value={entry.day}
+              onChange={(e) => update(i, { day: e.target.value })}
+              placeholder="Tue"
+              className="w-14 rounded-md border border-input bg-background px-2 py-1 text-xs"
+            />
+            <input
+              type="text"
+              value={entry.raid}
+              onChange={(e) => update(i, { raid: e.target.value })}
+              placeholder="Molten Core"
+              disabled={entry.kind === "off"}
+              className="min-w-0 flex-1 rounded-md border border-input bg-background px-2 py-1 text-xs disabled:opacity-40"
+            />
+            <select
+              value={entry.kind}
+              onChange={(e) => update(i, { kind: e.target.value as ScheduleKind })}
+              className="rounded-md border border-input bg-background px-2 py-1 text-xs"
+              title="Kind of day"
+            >
+              <option value="raid">Raid night</option>
+              <option value="optional">Optional</option>
+              <option value="off">Off day</option>
+            </select>
+            <button
+              type="button"
+              onClick={() => onChange(entries.filter((_, j) => j !== i))}
+              className="rounded p-1 text-muted-foreground hover:bg-destructive/10 hover:text-destructive"
+              title="Remove day"
+            >
+              <X className="h-4 w-4" />
+            </button>
+          </div>
+          {entry.kind !== "off" && (
+            <div className="grid grid-cols-2 gap-1.5">
+              <input
+                type="text"
+                value={entry.time}
+                onChange={(e) => update(i, { time: e.target.value })}
+                placeholder="Time (8:00–11:00)"
+                className="rounded-md border border-input bg-background px-2 py-1 text-xs"
+              />
+              <input
+                type="text"
+                value={entry.invite}
+                onChange={(e) => update(i, { invite: e.target.value })}
+                placeholder="Invites (inv 7:40)"
+                className="rounded-md border border-input bg-background px-2 py-1 text-xs"
+              />
+            </div>
+          )}
+        </div>
+      ))}
+      <button
+        type="button"
+        onClick={() => onChange([...entries, { day: "", raid: "", time: "", invite: "", kind: "raid" }])}
+        className="flex w-full items-center justify-center gap-1.5 rounded-md border border-dashed border-border px-3 py-2 text-sm text-muted-foreground hover:bg-muted/50 hover:text-foreground transition-colors"
+      >
+        <Plus className="h-4 w-4" />
+        Add day
+      </button>
+    </div>
+  );
 }
 
 function RaidScheduleContent({ config, isEditing }: GuildPanelRenderProps<RaidScheduleConfig>) {
-  const rows = parseSchedule(config.schedule || "");
+  const rows = normalizeSchedule(config.schedule);
   const note = config.note || "";
 
   if (rows.length === 0 && !note) {
     return (
       <div className="flex items-center justify-center h-full min-h-[100px] text-muted-foreground">
         <p className="text-sm text-center px-4">
-          {isEditing
-            ? "Open this panel's settings to add raid days (one per line: “Tue | Molten Core | 8:00–11:00 | inv 7:40”)."
-            : "No raid schedule yet"}
+          {isEditing ? "Open this panel's settings to add raid days." : "No raid schedule yet"}
         </p>
       </div>
     );
@@ -62,47 +153,49 @@ function RaidScheduleContent({ config, isEditing }: GuildPanelRenderProps<RaidSc
   return (
     <div className="flex h-full flex-col p-1">
       <div className="flex flex-col gap-1.5">
-        {rows.map((row, i) => (
-          <div
-            key={`${row.day}-${i}`}
-            className={`grid grid-cols-[40px_minmax(0,1fr)_auto] items-baseline gap-2.5 rounded-md border px-3 py-2 ${
-              row.highlighted
-                ? "border-primary/30 bg-primary/5"
-                : "border-border/50 bg-muted/20"
-            }`}
-          >
-            <span
-              className={`text-sm font-bold uppercase tracking-wide ${
-                row.highlighted ? "text-primary" : "text-muted-foreground/60"
+        {rows.map((row, i) => {
+          const highlighted = row.kind === "raid";
+          const offDay = row.kind === "off";
+          return (
+            <div
+              key={`${row.day}-${i}`}
+              className={`grid grid-cols-[40px_minmax(0,1fr)_auto] items-baseline gap-2.5 rounded-md border px-3 py-2 ${
+                highlighted ? "border-primary/30 bg-primary/5" : "border-border/50 bg-muted/20"
               }`}
             >
-              {row.day}
-            </span>
-            <span
-              className={`truncate text-sm ${
-                row.offDay
-                  ? "text-muted-foreground/40"
-                  : row.highlighted
-                    ? "text-foreground"
-                    : "text-muted-foreground"
-              }`}
-            >
-              {row.raid}
-            </span>
-            <span className="text-right">
               <span
-                className={`block text-xs tabular-nums ${
-                  row.offDay ? "text-muted-foreground/40" : "text-muted-foreground"
+                className={`text-sm font-bold uppercase tracking-wide ${
+                  highlighted ? "text-primary" : "text-muted-foreground/60"
                 }`}
               >
-                {row.time}
+                {row.day}
               </span>
-              {row.invite && (
-                <span className="block text-[10.5px] text-muted-foreground/60">{row.invite}</span>
-              )}
-            </span>
-          </div>
-        ))}
+              <span
+                className={`truncate text-sm ${
+                  offDay
+                    ? "text-muted-foreground/40"
+                    : highlighted
+                      ? "text-foreground"
+                      : "text-muted-foreground"
+                }`}
+              >
+                {offDay ? "—" : row.raid}
+              </span>
+              <span className="text-right">
+                <span
+                  className={`block text-xs tabular-nums ${
+                    offDay ? "text-muted-foreground/40" : "text-muted-foreground"
+                  }`}
+                >
+                  {offDay ? "no raid" : row.time}
+                </span>
+                {!offDay && row.invite && (
+                  <span className="block text-[10.5px] text-muted-foreground/60">{row.invite}</span>
+                )}
+              </span>
+            </div>
+          );
+        })}
       </div>
       {note && (
         <p
@@ -128,10 +221,9 @@ export const RaidSchedulePanel: GuildPanelDefinition<RaidScheduleConfig> = {
   configSchema: [
     {
       name: "schedule",
-      label: "Days (one per line: “Day | Raid | Time | Invite” — “-” for off days, “~” prefix for optional runs)",
-      type: "textarea",
-      placeholder:
-        "Tue | Molten Core | 8:00–11:00 | inv 7:40\nWed | -\nThu | Blackwing Lair | 8:00–11:00 | inv 7:40\nSat | ~Optional alt run | 8:45–10:30 | inv 8:30",
+      label: "Days",
+      type: "custom",
+      render: (value, onChange) => <ScheduleEditor value={value} onChange={onChange} />,
     },
     {
       name: "note",
@@ -141,7 +233,7 @@ export const RaidSchedulePanel: GuildPanelDefinition<RaidScheduleConfig> = {
     },
   ],
   defaultConfig: {
-    schedule: "",
+    schedule: [],
     note: "",
   },
   render: (props) => <RaidScheduleContent {...props} />,
