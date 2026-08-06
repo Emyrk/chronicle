@@ -1,10 +1,15 @@
+/* eslint-disable react-refresh/only-export-components -- Panel registry files export a definition alongside their render components. */
 import { useEffect, useMemo, useState } from "react";
 import { Trophy, AlertCircle } from "lucide-react";
 import type { GuildEncounterKill, GuildEncounterKillsResponse } from "@/api/typesGenerated";
 import { useSupportedInstanceBossCounts } from "@/api/queries";
+import { getInstanceCategory } from "@/pages/Logs/utils/instanceImages";
 import type { GuildPanelDefinition, GuildPanelRenderProps } from "./types";
 
+type CategoryFilter = "all" | "raid" | "dungeon";
+
 interface ProgressConfig {
+  category: CategoryFilter;
   showKillCounts: boolean;
 }
 
@@ -118,7 +123,15 @@ function ProgressContent({ config, position, guild }: GuildPanelRenderProps<Prog
     };
   }, [guild.id]);
 
-  const progress = useMemo(() => groupProgress(encounters), [encounters]);
+  const progress = useMemo(() => {
+    const grouped = groupProgress(encounters);
+    const category = config.category ?? "all";
+    if (category === "all") return grouped;
+    return grouped.filter((instance) => {
+      const instanceCategory = getInstanceCategory(instance.instanceName);
+      return category === "dungeon" ? instanceCategory !== "raid" : instanceCategory === "raid";
+    });
+  }, [config.category, encounters]);
 
   if (loading) {
     return (
@@ -169,11 +182,22 @@ export const ProgressPanel: GuildPanelDefinition<ProgressConfig> = {
   type: "progress",
   label: "Progression",
   icon: <Trophy className="h-4 w-4" />,
-  description: "Bosses the guild has defeated in each raid",
+  description: "Bosses the guild has defeated in raids and dungeons",
   defaultSize: { w: 4, h: 4 },
   minSize: { w: 3, h: 2 },
   maxSize: { w: 12, h: 10 },
   configSchema: [
+    {
+      name: "category",
+      label: "Category",
+      type: "select",
+      options: [
+        { value: "all", label: "All" },
+        { value: "raid", label: "Raids" },
+        { value: "dungeon", label: "Dungeons" },
+      ],
+      defaultValue: "all",
+    },
     {
       name: "showKillCounts",
       label: "Show kill counts",
@@ -182,6 +206,7 @@ export const ProgressPanel: GuildPanelDefinition<ProgressConfig> = {
     },
   ],
   defaultConfig: {
+    category: "all",
     showKillCounts: true,
   },
   render: (props) => <ProgressContent {...props} />,
