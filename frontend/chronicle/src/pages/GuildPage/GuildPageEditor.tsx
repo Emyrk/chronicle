@@ -1,5 +1,6 @@
 import { useState, useCallback } from "react";
 import { useParams, Link } from "react-router-dom";
+import { toast } from "sonner";
 import type { GuildPagePanel, GuildPageTab, GuildPageTheme, DeviceVisibility } from "@/api/typesGenerated";
 import { useGuildPage, useSaveGuildPage } from "@/api/queries";
 import { GuildPageCanvas, TabBar, AddPanelDrawer, PanelConfigModal, HeaderEditor } from "./components";
@@ -206,6 +207,10 @@ export function GuildPageEditor() {
       setHasChanges(false);
     } catch (err) {
       console.error("Failed to save guild page:", err);
+      const requestError = err as { message?: string; detail?: string } | null;
+      toast.error(requestError?.message || "Failed to save guild page", {
+        description: requestError?.detail,
+      });
     }
   };
 

@@ -173,7 +173,7 @@ export function GuildPageCanvas({
   }
 
   return (
-    <div ref={containerRef}>
+    <div ref={containerRef} className="pb-10">
       <GridLayout
         className="layout"
         layout={layout}
@@ -235,7 +235,13 @@ export function GuildPageCanvas({
         return (
           <div
             key={panel.id}
-            className={`group/resize-panel ${bgClass} relative overflow-hidden rounded-lg shadow-sm ${isEditing && style.background === "transparent" ? "border border-dashed border-muted-foreground/30" : "border border-border"}`}
+            className={`group/resize-panel ${bgClass} relative overflow-hidden rounded-lg ${
+              style.background === "transparent"
+                ? isEditing
+                  ? "border border-dashed border-muted-foreground/30"
+                  : ""
+                : "border border-border shadow-sm"
+            }`}
             style={bgStyle}
           >
             {showHeader && (

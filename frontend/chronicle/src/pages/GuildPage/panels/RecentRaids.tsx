@@ -7,9 +7,10 @@ import type {
   RecentInstance,
   RecentInstancesResponse,
 } from "@/api/typesGenerated";
-import { getInstanceCategory } from "@/pages/Logs/utils/instanceImages";
+import { getInstanceCategory, getInstanceAccentColor } from "@/pages/Logs/utils/instanceImages";
 import { parseColor, parseHexColor } from "@/pages/Instance/parseColors";
 import { RaidCard } from "@/pages/Recent/RaidCard";
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/Table/Table";
 import { groupDuplicateInstances } from "@/utils/groupDuplicates";
 import { DuplicateInstanceModal } from "@/components/DuplicateInstanceModal";
 import type { GuildPanelDefinition, GuildPanelRenderProps } from "./types";
@@ -19,7 +20,7 @@ import { formatClearDuration } from "./clearTimeUtils";
 type CategoryFilter = "all" | "raid" | "dungeon";
 
 interface RecentRaidsConfig {
-  displayMode: "cards" | "list";
+  displayMode: "cards" | "list" | "floating";
   limit: number;
   category: CategoryFilter;
   hasVideo: "all" | "with";
@@ -194,6 +195,138 @@ function RaidListRow({
   );
 }
 
+/** One raid night styled like the armory performance tab: a floating card with
+ * an accent-tinted header; expands into a per-boss table. */
+function FloatingRaidRow({
+  instance,
+  encounters,
+}: {
+  instance: RecentInstance;
+  encounters: GuildRunEncounterParse[];
+}) {
+  const [expanded, setExpanded] = useState(false);
+  const accent = getInstanceAccentColor(instance.name);
+  const avgParse = weightedRunAverage(encounters);
+  const score = avgParse !== undefined ? Math.round(avgParse) : undefined;
+  const instanceUrl = instance.slug ? `/instances/${instance.slug}` : `/instances/${instance.id}`;
+  const expandable = encounters.length > 0;
+
+  const meta = [
+    instance.player_count,
+    formatRaidDate(instance.first_encounter_time),
+    formatBosses(instance),
+    instance.duration_ms ? formatRaidDuration(instance.duration_ms) : null,
+  ]
+    .filter((part) => part !== null && part !== "")
+    .join(" · ");
+
+  return (
+    <div className="overflow-hidden rounded-xl border border-border bg-card shadow-sm">
+      <div
+        className={`flex w-full items-center gap-4 px-5 py-4 text-left transition-colors hover:bg-muted/30 ${expandable ? "cursor-pointer" : ""} ${expanded ? "border-b border-border" : ""}`}
+        style={{
+          backgroundImage: `linear-gradient(90deg, ${accent}14 0%, transparent 42%)`,
+          boxShadow: `inset 4px 0 0 ${accent}`,
+        }}
+        onClick={() => expandable && setExpanded(!expanded)}
+      >
+        <div className="min-w-0 flex-1">
+          <p className="font-wow truncate text-lg text-foreground">
+            {instance.name}
+            {instance.difficulty_name && instance.difficulty_name !== "Normal" && (
+              <span className="ml-1.5 text-xs font-normal text-muted-foreground">
+                {instance.difficulty_name}
+              </span>
+            )}
+          </p>
+          <p className="mt-0.5 truncate text-xs text-muted-foreground tabular-nums">{meta}</p>
+        </div>
+        {encounters.length > 0 && (
+          <span className="hidden h-10 items-end justify-end gap-1 sm:flex" aria-hidden>
+            {encounters.map((e) => {
+              const s = Math.round(e.avg_parse);
+              return (
+                <span
+                  key={e.encounter_name}
+                  className="w-1.5 min-h-0.5 rounded-sm"
+                  style={{ height: `${Math.max(4, Math.min(100, s))}%`, background: parseHexColor(s) }}
+                  title={`${e.encounter_name} · ${s}`}
+                />
+              );
+            })}
+          </span>
+        )}
+        {score !== undefined && (
+          <div className="flex items-baseline gap-1.5 text-right">
+            <span
+              className={`font-mono text-3xl font-bold ${parseColor(score)}`}
+              title="Average guild parse for this raid"
+            >
+              {score}
+            </span>
+            <span className="text-xs text-muted-foreground">avg</span>
+          </div>
+        )}
+        <Link
+          to={instanceUrl}
+          onClick={(e) => e.stopPropagation()}
+          className="flex shrink-0 items-center gap-1 rounded-md border border-border/60 px-2 py-1 text-[11px] font-medium text-muted-foreground hover:text-foreground hover:border-border transition-colors"
+        >
+          Log
+          <ExternalLink className="h-3 w-3" />
+        </Link>
+        <span
+          className={`hidden text-xs text-muted-foreground transition-transform sm:block ${expandable ? "" : "invisible"}`}
+          style={{ transform: expanded ? "rotate(0deg)" : "rotate(-90deg)" }}
+        >
+          ▾
+        </span>
+      </div>
+      {expanded && (
+        <div className="bg-popover px-5 py-3">
+          <Table>
+            <TableHeader>
+              <TableRow>
+                <TableHead>Boss</TableHead>
+                <TableHead className="text-right">Parse</TableHead>
+                <TableHead className="w-48">Score</TableHead>
+                <TableHead className="text-right">Kill time</TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {encounters.map((e) => {
+                const s = Math.round(e.avg_parse);
+                return (
+                  <TableRow key={e.encounter_name}>
+                    <TableCell className="text-foreground">{e.encounter_name}</TableCell>
+                    <TableCell className={`text-right font-mono font-bold ${parseColor(s)}`}>
+                      {s}
+                    </TableCell>
+                    <TableCell>
+                      <div className="h-1.5 rounded-full bg-border/60">
+                        <div
+                          className="h-full rounded-full"
+                          style={{
+                            width: `${Math.max(2, Math.min(100, s))}%`,
+                            background: parseHexColor(s),
+                          }}
+                        />
+                      </div>
+                    </TableCell>
+                    <TableCell className="text-right text-muted-foreground tabular-nums">
+                      {e.kill_duration_ms > 0 ? formatClearDuration(e.kill_duration_ms) : "—"}
+                    </TableCell>
+                  </TableRow>
+                );
+              })}
+            </TableBody>
+          </Table>
+        </div>
+      )}
+    </div>
+  );
+}
+
 function RecentRaidsContent({ config, position, guild }: GuildPanelRenderProps<RecentRaidsConfig>) {
   // Derive columns from panel grid width (1-12 columns)
   const cols = position.w >= 9 ? 3 : position.w >= 6 ? 2 : 1;
@@ -202,7 +335,9 @@ function RecentRaidsContent({ config, position, guild }: GuildPanelRenderProps<R
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
-  const displayMode = config.displayMode === "list" ? "list" : "cards";
+  const displayMode = ["list", "floating"].includes(config.displayMode)
+    ? config.displayMode
+    : "cards";
   const limit = config.limit || 5;
   const category = config.category || "all";
   const hasVideo = config.hasVideo === "with";
@@ -316,6 +451,20 @@ function RecentRaidsContent({ config, position, guild }: GuildPanelRenderProps<R
     );
   }
 
+  if (displayMode === "floating") {
+    return (
+      <div className="flex flex-col gap-3 p-1">
+        {groups.map((group) => (
+          <FloatingRaidRow
+            key={group[0].id}
+            instance={group[0]}
+            encounters={showParses ? (runParses[runID(group[0])] ?? []) : []}
+          />
+        ))}
+      </div>
+    );
+  }
+
   return (
     <div
       className="grid gap-3 p-1"
@@ -378,8 +527,9 @@ export const RecentRaidsPanel: GuildPanelDefinition<RecentRaidsConfig> = {
       label: "Display",
       type: "select",
       options: [
-        { value: "cards", label: "Show as cards" },
-        { value: "list", label: "Compact list with clear times and parses" },
+        { value: "cards", label: "Cards" },
+        { value: "list", label: "Table" },
+        { value: "floating", label: "Floating" },
       ],
       defaultValue: "cards",
     },
