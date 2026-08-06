@@ -20,9 +20,14 @@ Config.overrideWebpackConfig((currentConfiguration) => {
     ...configuration,
     resolve: {
       ...configuration.resolve,
+      extensionAlias: {
+        ".js": [".ts", ".js"],
+        ".jsx": [".tsx", ".jsx"],
+      },
       alias: {
         ...configuration.resolve?.alias,
         "@": path.resolve(projectRoot, "../../frontend/chronicle/src"),
+        "@emyrk/wow-tooltip-renderer": path.resolve(projectRoot, "../../frontend/wow-tooltip-renderer/src/index.ts"),
         "/c": path.resolve(projectRoot, "../../frontend/chronicle/public/c"),
         react: path.resolve(projectRoot, "node_modules/react"),
         "react-dom": path.resolve(projectRoot, "node_modules/react-dom"),

@@ -184,6 +184,11 @@ export const EquipmentCompareLesson: Story = {
   parameters: { routerEntries: ["/?lesson=compare-players"] },
 };
 
+export const VulnerabilityEstimateLesson: Story = {
+  args: { panelType: "vulnerability_effect" },
+  parameters: { routerEntries: ["/?lesson=estimate"] },
+};
+
 export const FocusPlayerLesson: Story = {
   parameters: { routerEntries: ["/?lesson=focus-player"] },
 };

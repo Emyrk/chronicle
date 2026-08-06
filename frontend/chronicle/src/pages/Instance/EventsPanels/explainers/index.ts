@@ -21,6 +21,7 @@ import { rolesExplainer } from "../Roles/Roles.explainer";
 import { pullsAndCleanupExplainer } from "../PullsAndCleanup/PullsAndCleanup.explainer";
 import { equipmentExplainer } from "../Equipment/explain";
 import { leaderboardExplainer } from "../LeaderboardPanel/explain";
+import { vulnerabilityEffectExplainer } from "../VulnerabilityEffect/explain";
 
 /**
  * Map of panel types to their explainer configurations.
@@ -43,6 +44,7 @@ export const PANEL_EXPLAINERS: Partial<Record<EventsPanelType, PanelExplainer<an
   pulls_and_cleanup: pullsAndCleanupExplainer,
   equipment: equipmentExplainer,
   leaderboard: leaderboardExplainer,
+  vulnerability_effect: vulnerabilityEffectExplainer,
 };
 
 /**

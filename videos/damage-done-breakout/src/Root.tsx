@@ -38,6 +38,7 @@ import ComparePlayersVideo from "../../../frontend/chronicle/src/pages/Instance/
 import LeaderboardReadProofVideo from "../../../frontend/chronicle/src/pages/Instance/EventsPanels/LeaderboardPanel/explain/videos/ReadProof.video";
 import LeaderboardEligibilityChecksVideo from "../../../frontend/chronicle/src/pages/Instance/EventsPanels/LeaderboardPanel/explain/videos/EligibilityChecks.video";
 import LeaderboardFindBlockersVideo from "../../../frontend/chronicle/src/pages/Instance/EventsPanels/LeaderboardPanel/explain/videos/FindBlockers.video";
+import VulnerabilityEstimateVideo from "../../../frontend/chronicle/src/pages/Instance/EventsPanels/VulnerabilityEffect/explain/videos/Estimate.video";
 
 /**
  * Studio registration for the in-app explainer lesson compositions.
@@ -157,6 +158,9 @@ export const RemotionRoot: React.FC = () => {
       <Folder name="FocusLessons">
         <Composition id="FocusPlayer" component={FocusPlayerVideo} durationInFrames={470} fps={30} width={1280} height={720} />
         <Composition id="FocusPlayerHealing" component={FocusPlayerHealingVideo} durationInFrames={470} fps={30} width={1280} height={720} />
+      </Folder>
+      <Folder name="VulnerabilityEffectLessons">
+        <Composition id="VulnerabilityEstimate" component={VulnerabilityEstimateVideo} durationInFrames={500} fps={30} width={1280} height={720} />
       </Folder>
     </>
   );
