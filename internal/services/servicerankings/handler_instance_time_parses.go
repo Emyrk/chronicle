@@ -234,8 +234,10 @@ func handleInstanceTimeParsesWithStore(store timeParsesQuerier, logger *slog.Log
 		BossKillTimes: make([]chroniclesdk.BossKillTimeParse, 0, len(encounterKills)),
 	}
 
-	// Score clear time.
-	if speedrun.Qualified && speedrun.DurationMs > 0 {
+	// Score every complete clear against the qualified clear-time cohort.
+	// Qualification controls cohort membership and public leaderboard eligibility,
+	// not whether a full clear can receive a parse score.
+	if speedrun.DurationMs > 0 {
 		cohort, cErr := store.GetTimeParseSnapshotClearTimeCohort(ctx, database.GetTimeParseSnapshotClearTimeCohortParams{
 			SnapshotID:     snapshot.ID,
 			InstanceName:   speedrun.InstanceName,
