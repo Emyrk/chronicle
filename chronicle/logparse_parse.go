@@ -2,7 +2,6 @@ package chronicle
 
 import (
 	"bytes"
-	"compress/gzip"
 	"context"
 	"errors"
 	"fmt"
@@ -319,23 +318,13 @@ func (w *WorkerLogParse) loadFile(ctx context.Context, file database.LogFile) (i
 		return nil, err
 	}
 
-	var reader io.Reader = bytes.NewReader(fd)
-	if file.ContentEncoding.Valid && file.ContentEncoding.String == "gzip" {
-		gzReader, err := gzip.NewReader(reader)
-		if err != nil {
-			return nil, fmt.Errorf("decompress log file %s: %w", file.ID, err)
-		}
-		defer func() { _ = gzReader.Close() }()
-
-		decompressed := &bytes.Buffer{}
-		if _, err := io.Copy(decompressed, gzReader); err != nil {
-			return nil, fmt.Errorf("read decompressed log file %s: %w", file.ID, err)
-		}
-		reader = decompressed
+	encoding := ""
+	if file.ContentEncoding.Valid {
+		encoding = file.ContentEncoding.String
 	}
-
-	//nolint:ineffassign
-	fd = nil
-
+	reader, err := decompressLog(fd, encoding)
+	if err != nil {
+		return nil, fmt.Errorf("decompress log file %s: %w", file.ID, err)
+	}
 	return reader, nil
 }
