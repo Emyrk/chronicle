@@ -165,6 +165,21 @@ export const AllActivityFiltersLesson: Story = {
   parameters: { routerEntries: ["/?lesson=filters"] },
 };
 
+export const EquipmentGearLesson: Story = {
+  args: { panelType: "equipment" },
+  parameters: { routerEntries: ["/?lesson=understand-gear"] },
+};
+
+export const EquipmentTalentsLesson: Story = {
+  args: { panelType: "equipment" },
+  parameters: { routerEntries: ["/?lesson=read-talents"] },
+};
+
+export const EquipmentCompareLesson: Story = {
+  args: { panelType: "equipment" },
+  parameters: { routerEntries: ["/?lesson=compare-players"] },
+};
+
 export const FocusPlayerLesson: Story = {
   parameters: { routerEntries: ["/?lesson=focus-player"] },
 };

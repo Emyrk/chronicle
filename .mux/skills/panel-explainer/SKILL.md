@@ -119,7 +119,8 @@ function Content() { /* all choreography, local frame 0 = global frame 50 */ }
   floating UI in a video must respect `usePortalContainer`.
 - **Choreography idiom**: named frame constants (`MENU_FRAME`, `EXPAND_FRAME`, …),
   cursor paths as one `interpolate` over waypoint arrays, click pulses
-  `[F-4, F, F+10] → [0,1,0]`, state flips via `frame >= F`. Captions: `StepCaption`
+  `[F-4, F, F+10] → [0,1,0]`, and controlled state flips after the click lands
+  (usually `frame >= F + 6`). Captions: `StepCaption`
   with step derived from the same constants; opacity `[8, 18, END-14, END]`.
 - **Determinism**: no `Date.now()`/`Math.random()`. All data hardcoded in the demo.
 
@@ -167,6 +168,21 @@ Cursor targets and highlight boxes use MEASURED stage coordinates. The loop:
    each beat at its computed time and actually look at every image.
 6. States that change layout need their own measurements (e.g. expanding "More detail"
    moves the controls row; removing the panel header shifts the editor up 40px).
+
+7. **Measure the exact state at the exact beat.** A target can move when a menu opens, a
+   tab changes, or filtered content replaces the old layout. Probe each controlled state
+   separately, then use the coordinates from the state visible immediately before its click.
+8. **Cursor coordinates are the arrow tip, not its center.** Set `Cursor x/y` to the intended
+   click point itself. Do not offset for the SVG's 24x30 bounding box.
+9. **Let the click land before changing state.** If the click pulse peaks at frame `F`, keep the
+   pre-click UI through that frame and flip controlled state around `F + 6`. Flipping at
+   `frame >= F` replaces or moves the target under the cursor, which makes a correctly
+   measured cursor look desynchronized.
+10. **Do not infer boxes from the 620x430 card bounds.** Internal padding, header height, tab
+    borders, grid gaps, and content height all shift the real target. Add `data-demo-*` to the
+    smallest meaningful DOM region and convert its live `getBoundingClientRect()` to stage
+    coordinates. Measure row groups, columns, and labels independently when the lesson calls
+    out those smaller regions.
 
 Write probes as `.mjs` files in the scratchpad (session-specific, no permission prompts).
 

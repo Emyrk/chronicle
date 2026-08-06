@@ -323,6 +323,7 @@ export function EquipmentContent(props: PanelRenderProps<EquipmentResult>) {
             <button
               onClick={() => setDropdownOpen((v) => !v)}
               className="bg-background border border-border rounded px-2 py-1 text-sm flex items-center gap-1 min-w-[120px]"
+              data-lesson-target="compare-players"
             >
               {selected ? (
                 <span style={{ color: getClassColorVar(selected.heroClass) }}>{selected.name}</span>
@@ -382,7 +383,7 @@ export function EquipmentContent(props: PanelRenderProps<EquipmentResult>) {
 
         {/* Gear list */}
         {selected && subTab === "gear" && (
-          <div key={selected.guid} className="grid grid-cols-2 gap-x-4 gap-y-0">
+          <div key={selected.guid} className="grid grid-cols-2 gap-x-4 gap-y-0" data-lesson-target="understand-gear">
             {SLOT_ORDER.map((slot, i) => {
               const g = selected!.gear[slot.index];
               return (
@@ -400,7 +401,9 @@ export function EquipmentContent(props: PanelRenderProps<EquipmentResult>) {
 
         {/* Talents view */}
         {selected && subTab === "talents" && (
-          <PlayerTalentsView player={selected} datasetId={context.instance.datasetId} />
+          <div data-lesson-target="read-talents">
+            <PlayerTalentsView player={selected} datasetId={context.instance.datasetId} />
+          </div>
         )}
       </div>
     </GenericPanel>
