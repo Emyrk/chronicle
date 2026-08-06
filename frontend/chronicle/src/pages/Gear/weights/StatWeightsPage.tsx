@@ -264,9 +264,10 @@ export function StatWeightsPage() {
   const createWeight = useCreateStatWeight();
   const [creating, setCreating] = useState(false);
 
+  // Wait for site-config so a wrath tenant never flashes vanilla presets.
   const builtInPresets = useMemo(
-    () => presetsForFlavor(siteConfig?.dataset_flavor ?? []),
-    [siteConfig?.dataset_flavor],
+    () => (siteConfig ? presetsForFlavor(siteConfig.dataset_flavor ?? []) : []),
+    [siteConfig],
   );
 
   const [searchParams, setSearchParams] = useSearchParams();

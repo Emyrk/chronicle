@@ -59,9 +59,12 @@ export function StatWeightsPanel({ classId, selection, onSelect }: StatWeightsPa
     const pinned = (pins.data ?? [])
       .filter((p) => !p.stat_weight_class_id || p.stat_weight_class_id === classId)
       .map(pinToSelection);
-    const presets = presetsForFlavor(siteConfig?.dataset_flavor ?? [])
-      .filter((p) => p.classId === classId)
-      .map(presetToSelection);
+    // Wait for site-config so a wrath tenant never flashes vanilla presets.
+    const presets = siteConfig
+      ? presetsForFlavor(siteConfig.dataset_flavor ?? [])
+          .filter((p) => p.classId === classId)
+          .map(presetToSelection)
+      : [];
     const mine = (myWeights.data ?? [])
       .filter((w) => !w.class_id || w.class_id === classId)
       .map(mineToSelection);
