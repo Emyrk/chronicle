@@ -1,6 +1,9 @@
 import { useMemo, useState } from "react";
 import { Input } from "@/components/ui/input";
-import { useSearchItems, useSimItems } from "@/api/gamedata";
+import { useItemTooltip, useSearchItems, useSimItems } from "@/api/gamedata";
+import { ItemTooltip } from "@/components/ui/ItemTooltip/ItemTooltip";
+import { CursorTooltip, type CursorPos } from "@/pages/ArmoryPage/overview/CursorTooltip";
+import { useIsMobile } from "@/hooks/useIsMobile";
 import { getQualityTextClass } from "@/pages/ArmoryPage/types";
 import { ItemIcon } from "@/components/ui/ItemIcon/ItemIcon";
 import { Button } from "@/components/ui/button";
@@ -21,6 +24,7 @@ const QUALITY_CHIPS = [
 const SORTS = [
   { value: "item_level_desc", label: "Item level" },
   { value: "quality_desc", label: "Quality" },
+  { value: "score", label: "Points" },
 ] as const;
 
 interface ItemPickerPanelProps {
@@ -63,16 +67,21 @@ export function ItemPickerPanel({
     [slotIndex],
   );
 
+  // "Points" is a client-side sort over the fetched page (the server
+  // doesn't know the weights); fetch the page by item level and reorder.
+  const scoreSort = sort === "score" && !!weights;
+  const serverSort = sort === "score" ? "item_level_desc" : sort;
+
   // An empty query returns the slot's top items by the chosen sort — the
   // default picker view. One-character queries stay disabled.
   const emptyBrowse = debouncedQuery.length === 0;
   const search = useSearchItems(
     emptyBrowse || debouncedQuery.length >= 2
-      ? { q: emptyBrowse ? "" : debouncedQuery, quality: quality || undefined, slot: slotFilter, sort, allowEmpty: true }
+      ? { q: emptyBrowse ? "" : debouncedQuery, quality: quality || undefined, slot: slotFilter, sort: serverSort, allowEmpty: true }
       : null,
   );
 
-  const results = emptyBrowse ? (search.data ?? []).slice(0, 20) : (search.data ?? []);
+  let results = emptyBrowse ? (search.data ?? []).slice(0, 20) : (search.data ?? []);
   const observedPct = new Map((trendsSlot?.items ?? []).map((i) => [i.item_id, i.percent]));
 
   // Score visible rows only when weights are active; sim payloads share
@@ -83,6 +92,9 @@ export function ItemPickerPanel({
     const sim = simItems.get(itemId);
     return sim ? scoreItem(sim, weights) : undefined;
   };
+  if (scoreSort) {
+    results = [...results].sort((a, b) => (scoreFor(b.entry) ?? -1) - (scoreFor(a.entry) ?? -1));
+  }
 
   return (
     <div className="space-y-2">
@@ -114,7 +126,7 @@ export function ItemPickerPanel({
           value={sort}
           onChange={(e) => setSort(e.target.value)}
         >
-          {SORTS.map((s) => (
+          {SORTS.filter((s) => s.value !== "score" || !!weights).map((s) => (
             <option key={s.value} value={s.value}>
               Sort: {s.label}
             </option>
@@ -135,7 +147,9 @@ export function ItemPickerPanel({
           <>
             {emptyBrowse && (
               <p className="px-2.5 pt-2 pb-1 text-3xs uppercase tracking-wide text-zinc-600">
-                Top items for this slot by {SORTS.find((s) => s.value === sort)?.label.toLowerCase()}
+                {scoreSort
+                  ? "Top items for this slot, sorted by points"
+                  : `Top items for this slot by ${SORTS.find((s) => s.value === sort)?.label.toLowerCase()}`}
               </p>
             )}
             {results.map((item) => (
@@ -178,8 +192,16 @@ function PickerRow({
   onAddAlternate?: (item: ItemSearchResult) => void;
 }) {
   const delta = score !== undefined && equippedScore !== undefined ? score - equippedScore : undefined;
+  const isMobile = useIsMobile();
+  const [cursor, setCursor] = useState<CursorPos | null>(null);
+  // Fetch the tooltip lazily, on first hover; cached afterwards.
+  const tooltip = useItemTooltip(cursor && !isMobile ? { itemId: item.entry } : null);
   return (
-    <div className="flex items-center gap-2.5 px-2.5 py-1.5 hover:bg-zinc-800/40">
+    <div
+      className="flex items-center gap-2.5 px-2.5 py-1.5 hover:bg-zinc-800/40"
+      onMouseMove={(e) => setCursor({ x: e.clientX, y: e.clientY })}
+      onMouseLeave={() => setCursor(null)}
+    >
       <ItemIcon icon={item.icon} quality={item.quality} size={30} />
       <div className="min-w-0 flex-1">
         <div className="flex items-center gap-2">
@@ -235,6 +257,11 @@ function PickerRow({
       <Button variant="outline" size="sm" className="h-7 px-2.5 text-xs" onClick={() => onEquip(item)}>
         Equip
       </Button>
+      {cursor && !isMobile && tooltip.data && (
+        <CursorTooltip pos={cursor}>
+          <ItemTooltip item={tooltip.data} />
+        </CursorTooltip>
+      )}
     </div>
   );
 }
