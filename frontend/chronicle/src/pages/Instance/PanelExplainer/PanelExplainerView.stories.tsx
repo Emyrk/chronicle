@@ -6,6 +6,10 @@ import {
   FIXTURE_DURATION_MS,
   getFixturePanelContext,
 } from "../EventsPanels/DamageDone/explain/fixture";
+import {
+  FIXTURE_DURATION_MS as LEADERBOARD_FIXTURE_DURATION_MS,
+  getFixturePanelContext as getLeaderboardFixturePanelContext,
+} from "../EventsPanels/LeaderboardPanel/explain/fixture";
 import { PanelExplainerView } from "./PanelExplainerView";
 
 const meta: Meta<typeof PanelExplainerView> = {
@@ -212,4 +216,43 @@ export const FiltersLesson: Story = {
 /** Deep-linked compare lesson — shared hover/selection across two breakouts. */
 export const CompareAbilitiesLesson: Story = {
   parameters: { routerEntries: ["/?lesson=compare-abilities"] },
+};
+
+export const LeaderboardExampleMode: Story = {
+  args: {
+    panelType: "leaderboard",
+    context: getLeaderboardFixturePanelContext(),
+    durationMs: LEADERBOARD_FIXTURE_DURATION_MS,
+    initialMode: "example",
+  },
+};
+
+export const LeaderboardReadProofLesson: Story = {
+  args: {
+    panelType: "leaderboard",
+    context: getLeaderboardFixturePanelContext(),
+    durationMs: LEADERBOARD_FIXTURE_DURATION_MS,
+    initialMode: "example",
+  },
+  parameters: { routerEntries: ["/?lesson=read-proof"] },
+};
+
+export const LeaderboardEligibilityChecksLesson: Story = {
+  args: {
+    panelType: "leaderboard",
+    context: getLeaderboardFixturePanelContext(),
+    durationMs: LEADERBOARD_FIXTURE_DURATION_MS,
+    initialMode: "example",
+  },
+  parameters: { routerEntries: ["/?lesson=eligibility-checks"] },
+};
+
+export const LeaderboardFindBlockersLesson: Story = {
+  args: {
+    panelType: "leaderboard",
+    context: getLeaderboardFixturePanelContext(),
+    durationMs: LEADERBOARD_FIXTURE_DURATION_MS,
+    initialMode: "example",
+  },
+  parameters: { routerEntries: ["/?lesson=find-blockers"] },
 };

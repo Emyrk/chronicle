@@ -35,6 +35,9 @@ import FocusPlayerHealingVideo from "../../../frontend/chronicle/src/pages/Insta
 import UnderstandGearVideo from "../../../frontend/chronicle/src/pages/Instance/EventsPanels/Equipment/explain/videos/UnderstandGear.video";
 import ReadTalentsVideo from "../../../frontend/chronicle/src/pages/Instance/EventsPanels/Equipment/explain/videos/ReadTalents.video";
 import ComparePlayersVideo from "../../../frontend/chronicle/src/pages/Instance/EventsPanels/Equipment/explain/videos/ComparePlayers.video";
+import LeaderboardReadProofVideo from "../../../frontend/chronicle/src/pages/Instance/EventsPanels/LeaderboardPanel/explain/videos/ReadProof.video";
+import LeaderboardEligibilityChecksVideo from "../../../frontend/chronicle/src/pages/Instance/EventsPanels/LeaderboardPanel/explain/videos/EligibilityChecks.video";
+import LeaderboardFindBlockersVideo from "../../../frontend/chronicle/src/pages/Instance/EventsPanels/LeaderboardPanel/explain/videos/FindBlockers.video";
 
 /**
  * Studio registration for the in-app explainer lesson compositions.
@@ -145,6 +148,11 @@ export const RemotionRoot: React.FC = () => {
         <Composition id="EquipmentUnderstandGear" component={UnderstandGearVideo} durationInFrames={380} fps={30} width={1280} height={720} />
         <Composition id="EquipmentReadTalents" component={ReadTalentsVideo} durationInFrames={410} fps={30} width={1280} height={720} />
         <Composition id="EquipmentComparePlayers" component={ComparePlayersVideo} durationInFrames={440} fps={30} width={1280} height={720} />
+      </Folder>
+      <Folder name="LeaderboardLessons">
+        <Composition id="LeaderboardReadProof" component={LeaderboardReadProofVideo} durationInFrames={350} fps={30} width={1280} height={720} />
+        <Composition id="LeaderboardEligibilityChecks" component={LeaderboardEligibilityChecksVideo} durationInFrames={350} fps={30} width={1280} height={720} />
+        <Composition id="LeaderboardFindBlockers" component={LeaderboardFindBlockersVideo} durationInFrames={350} fps={30} width={1280} height={720} />
       </Folder>
       <Folder name="FocusLessons">
         <Composition id="FocusPlayer" component={FocusPlayerVideo} durationInFrames={470} fps={30} width={1280} height={720} />
