@@ -2,7 +2,7 @@
  * Pure matching of a gear list against a character's armory gear history.
  * No React imports.
  */
-import type { ArmoryGearHistoryResponse } from "@/api/typesGenerated";
+import type { ArmoryGearHistoryResponse, PlayerOutfit } from "@/api/typesGenerated";
 import { COSMETIC_SLOTS, type GearPayload, type GearStage } from "./gearListModel";
 
 export interface EquippedSlot {
@@ -34,26 +34,42 @@ export interface StageCoverage {
 }
 
 /**
- * Snapshots arrive newest-first from the armory endpoint; equipped =
- * the newest snapshot's items, owned = the union across snapshots.
+ * Equipped = the character's current outfit (falling back to the newest
+ * history snapshot when the armory player is unavailable — history rows
+ * are newer infrastructure and can be missing entirely). Owned = the
+ * union of the current outfit and every snapshot.
  */
-export function buildCharacterMatch(history: ArmoryGearHistoryResponse): CharacterMatch {
+export function buildCharacterMatch(
+  history: ArmoryGearHistoryResponse,
+  currentGear?: PlayerOutfit,
+): CharacterMatch {
   const equippedIds = new Set<number>();
   const ownedIds = new Set<number>();
   const equippedSlots: (EquippedSlot | undefined)[] = [];
-  history.snapshots.forEach((snapshot, i) => {
-    snapshot.gear.forEach((item, slotIndex) => {
+
+  const recordEquipped = (gear: PlayerOutfit) => {
+    gear.forEach((item, slotIndex) => {
       if (!item || item.item_id <= 0) return;
       ownedIds.add(item.item_id);
-      if (i === 0) {
-        equippedIds.add(item.item_id);
-        equippedSlots[slotIndex] = {
-          item_id: item.item_id,
-          ...(item.enchant_id && item.enchant_id > 0 ? { enchant_id: item.enchant_id } : {}),
-        };
-      }
+      equippedIds.add(item.item_id);
+      equippedSlots[slotIndex] = {
+        item_id: item.item_id,
+        ...(item.enchant_id && item.enchant_id > 0 ? { enchant_id: item.enchant_id } : {}),
+      };
     });
-  });
+  };
+
+  if (currentGear) {
+    recordEquipped(currentGear);
+  } else if (history.snapshots.length > 0) {
+    recordEquipped(history.snapshots[0].gear);
+  }
+
+  for (const snapshot of history.snapshots) {
+    for (const item of snapshot.gear) {
+      if (item && item.item_id > 0) ownedIds.add(item.item_id);
+    }
+  }
   return { equippedIds, ownedIds, equippedSlots };
 }
 

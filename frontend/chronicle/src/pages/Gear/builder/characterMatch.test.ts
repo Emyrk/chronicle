@@ -34,6 +34,28 @@ describe("buildCharacterMatch", () => {
     const match = buildCharacterMatch({ snapshots: [] } as unknown as ArmoryGearHistoryResponse);
     expect(match.equippedIds.size).toBe(0);
     expect(match.ownedIds.size).toBe(0);
+    expect(match.equippedSlots.some(Boolean)).toBe(false);
+  });
+
+  it("prefers the current outfit over snapshots for equipped", () => {
+    const match = buildCharacterMatch(
+      history(outfit({ 0: 100 })),
+      outfit({ 0: 111, 4: 222 }),
+    );
+    expect([...match.equippedIds].sort()).toEqual([111, 222]);
+    expect(match.equippedSlots[0]).toEqual({ item_id: 111 });
+    expect(match.equippedSlots[4]).toEqual({ item_id: 222 });
+    // Snapshot items still count as owned.
+    expect(match.ownedIds.has(100)).toBe(true);
+  });
+
+  it("builds equipped from the current outfit even with no history", () => {
+    const match = buildCharacterMatch(
+      { snapshots: [] } as unknown as ArmoryGearHistoryResponse,
+      outfit({ 15: 300 }),
+    );
+    expect(match.equippedSlots[15]).toEqual({ item_id: 300 });
+    expect(match.ownedIds.has(300)).toBe(true);
   });
 });
 

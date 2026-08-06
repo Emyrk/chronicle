@@ -1,7 +1,7 @@
 import { useMemo, useState } from "react";
 import { Link, useParams, useSearchParams } from "react-router-dom";
 import { ArrowLeft, Eye, EyeOff, Link2, Save } from "lucide-react";
-import { useArmoryGearHistory, useSession } from "@/api/queries";
+import { useArmoryGearHistory, useArmoryPlayer, useSession } from "@/api/queries";
 import { useGearListRevision, useGearTrends, useSharedGearList } from "@/api/gearBuilderQueries";
 import { Button } from "@/components/ui/button";
 import type { GearList, ItemSearchResult } from "@/api/typesGenerated";
@@ -89,18 +89,21 @@ function useCharacterMatchState(stage: GearStage | undefined) {
     setSearchParams(next, { replace: true });
   };
   const history = useArmoryGearHistory(matched?.realm, matched?.name);
-  const match = useMemo(
-    () => (history.data ? buildCharacterMatch(history.data) : undefined),
-    [history.data],
-  );
+  const player = useArmoryPlayer(matched?.realm, matched?.name);
+  const match = useMemo(() => {
+    // Either source alone is enough: history rows are newer infrastructure
+    // and can be missing for characters the armory otherwise knows.
+    if (!history.data && !player.data) return undefined;
+    return buildCharacterMatch(history.data ?? { snapshots: [] }, player.data?.gear);
+  }, [history.data, player.data?.gear]);
   const coverage = stage && match ? stageCoverage(stage, match) : undefined;
   return {
     matched,
     setMatched,
     match,
     coverage,
-    loading: !!matched && history.isLoading,
-    error: history.isError,
+    loading: !!matched && (history.isLoading || player.isLoading),
+    error: history.isError && player.isError,
   };
 }
 
@@ -353,10 +356,26 @@ function EditorView({
               onFillFrom={
                 charMatch.match
                   ? () => {
+                      const equipped = charMatch.match!.equippedSlots;
+                      if (!equipped.some(Boolean)) {
+                        toast.error(
+                          `No equipped gear found for ${charMatch.matched?.name} — the armory has no logged outfit yet`,
+                        );
+                        return;
+                      }
+                      const fillable = equipped.filter(
+                        (worn, i) => worn && !stage?.slots[String(i)],
+                      ).length;
+                      if (fillable === 0) {
+                        toast.info("Every slot with logged gear is already filled");
+                        return;
+                      }
                       editor.update((p) =>
-                        fillStageFromOutfit(p, safeStageIndex, charMatch.match!.equippedSlots),
+                        fillStageFromOutfit(p, safeStageIndex, equipped),
                       );
-                      toast.success(`Filled empty slots from ${charMatch.matched?.name}'s equipped gear`);
+                      toast.success(
+                        `Filled ${fillable} ${fillable === 1 ? "slot" : "slots"} from ${charMatch.matched?.name}'s equipped gear`,
+                      );
                     }
                   : undefined
               }
