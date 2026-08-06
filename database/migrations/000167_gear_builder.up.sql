@@ -44,6 +44,7 @@ CREATE TABLE gear_stat_weights (
   tenant_id UUID NOT NULL DEFAULT '00000000-0000-0000-0000-000000000000',
 
   name TEXT NOT NULL,
+  description TEXT NOT NULL DEFAULT '',
   class_id INT NOT NULL DEFAULT 0,
   spec_name TEXT NOT NULL DEFAULT '',
 
@@ -54,6 +55,7 @@ CREATE TABLE gear_stat_weights (
   updated_at TIMESTAMPTZ NOT NULL DEFAULT now(),
 
   CONSTRAINT gear_stat_weights_name_length_chk CHECK (char_length(name) BETWEEN 1 AND 128),
+  CONSTRAINT gear_stat_weights_description_length_chk CHECK (char_length(description) <= 2000),
   CONSTRAINT gear_stat_weights_weights_size_chk CHECK (octet_length(weights::text) <= 8192)
 );
 

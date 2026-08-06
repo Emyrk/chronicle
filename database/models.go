@@ -1231,15 +1231,16 @@ type GearListRevision struct {
 }
 
 type GearStatWeight struct {
-	ID        uuid.UUID          `db:"id" json:"id"`
-	UserID    uuid.UUID          `db:"user_id" json:"user_id"`
-	TenantID  uuid.UUID          `db:"tenant_id" json:"tenant_id"`
-	Name      string             `db:"name" json:"name"`
-	ClassID   int32              `db:"class_id" json:"class_id"`
-	SpecName  string             `db:"spec_name" json:"spec_name"`
-	Weights   []byte             `db:"weights" json:"weights"`
-	CreatedAt pgtype.Timestamptz `db:"created_at" json:"created_at"`
-	UpdatedAt pgtype.Timestamptz `db:"updated_at" json:"updated_at"`
+	ID          uuid.UUID          `db:"id" json:"id"`
+	UserID      uuid.UUID          `db:"user_id" json:"user_id"`
+	TenantID    uuid.UUID          `db:"tenant_id" json:"tenant_id"`
+	Name        string             `db:"name" json:"name"`
+	Description string             `db:"description" json:"description"`
+	ClassID     int32              `db:"class_id" json:"class_id"`
+	SpecName    string             `db:"spec_name" json:"spec_name"`
+	Weights     []byte             `db:"weights" json:"weights"`
+	CreatedAt   pgtype.Timestamptz `db:"created_at" json:"created_at"`
+	UpdatedAt   pgtype.Timestamptz `db:"updated_at" json:"updated_at"`
 }
 
 type GearStatWeightPin struct {

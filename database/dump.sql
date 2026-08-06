@@ -774,11 +774,13 @@ CREATE TABLE gear_stat_weights (
     user_id uuid NOT NULL,
     tenant_id uuid DEFAULT '00000000-0000-0000-0000-000000000000'::uuid NOT NULL,
     name text NOT NULL,
+    description text DEFAULT ''::text NOT NULL,
     class_id integer DEFAULT 0 NOT NULL,
     spec_name text DEFAULT ''::text NOT NULL,
     weights jsonb DEFAULT '{}'::jsonb NOT NULL,
     created_at timestamp with time zone DEFAULT now() NOT NULL,
     updated_at timestamp with time zone DEFAULT now() NOT NULL,
+    CONSTRAINT gear_stat_weights_description_length_chk CHECK ((char_length(description) <= 2000)),
     CONSTRAINT gear_stat_weights_name_length_chk CHECK (((char_length(name) >= 1) AND (char_length(name) <= 128))),
     CONSTRAINT gear_stat_weights_weights_size_chk CHECK ((octet_length((weights)::text) <= 8192))
 );

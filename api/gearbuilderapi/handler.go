@@ -389,6 +389,10 @@ func (h *Handler) CreateStatWeight(w http.ResponseWriter, r *http.Request) {
 		httpapi.Write(ctx, w, http.StatusBadRequest, map[string]string{"error": err.Error()})
 		return
 	}
+	if len(req.Description) > maxDescriptionLen {
+		httpapi.Write(ctx, w, http.StatusBadRequest, map[string]string{"error": "description too long"})
+		return
+	}
 	if err := validateWeightsPayload(req.Weights); err != nil {
 		httpapi.Write(ctx, w, http.StatusBadRequest, map[string]string{"error": err.Error()})
 		return
@@ -411,13 +415,14 @@ func (h *Handler) CreateStatWeight(w http.ResponseWriter, r *http.Request) {
 	}
 
 	sw, err := h.zed.CreateGearStatWeight(ctx, database.CreateGearStatWeightParams{
-		ID:       uuid.New(),
-		UserID:   claims.Subject,
-		TenantID: tenantID,
-		Name:     req.Name,
-		ClassID:  req.ClassID,
-		SpecName: req.SpecName,
-		Weights:  req.Weights,
+		ID:          uuid.New(),
+		UserID:      claims.Subject,
+		TenantID:    tenantID,
+		Name:        req.Name,
+		Description: req.Description,
+		ClassID:     req.ClassID,
+		SpecName:    req.SpecName,
+		Weights:     req.Weights,
 	})
 	if err != nil {
 		httpapi.InternalServerError(w, err)
@@ -470,6 +475,10 @@ func (h *Handler) UpdateStatWeight(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 	}
+	if req.Description != nil && len(*req.Description) > maxDescriptionLen {
+		httpapi.Write(ctx, w, http.StatusBadRequest, map[string]string{"error": "description too long"})
+		return
+	}
 	if req.Weights != nil {
 		if err := validateWeightsPayload(*req.Weights); err != nil {
 			httpapi.Write(ctx, w, http.StatusBadRequest, map[string]string{"error": err.Error()})
@@ -484,6 +493,9 @@ func (h *Handler) UpdateStatWeight(w http.ResponseWriter, r *http.Request) {
 	}
 	if req.Name != nil {
 		params.Name = pgtype.Text{String: *req.Name, Valid: true}
+	}
+	if req.Description != nil {
+		params.Description = pgtype.Text{String: *req.Description, Valid: true}
 	}
 	if req.ClassID != nil {
 		params.ClassID = pgtype.Int4{Int32: *req.ClassID, Valid: true}
@@ -776,15 +788,16 @@ func gearListToSDK(l database.GearList) chroniclesdk.GearList {
 
 func statWeightToSDK(sw database.GearStatWeight) chroniclesdk.GearStatWeight {
 	return chroniclesdk.GearStatWeight{
-		ID:        sw.ID,
-		UserID:    sw.UserID,
-		TenantID:  sw.TenantID,
-		Name:      sw.Name,
-		ClassID:   sw.ClassID,
-		SpecName:  sw.SpecName,
-		Weights:   sw.Weights,
-		CreatedAt: sw.CreatedAt.Time,
-		UpdatedAt: sw.UpdatedAt.Time,
+		ID:          sw.ID,
+		UserID:      sw.UserID,
+		TenantID:    sw.TenantID,
+		Name:        sw.Name,
+		Description: sw.Description,
+		ClassID:     sw.ClassID,
+		SpecName:    sw.SpecName,
+		Weights:     sw.Weights,
+		CreatedAt:   sw.CreatedAt.Time,
+		UpdatedAt:   sw.UpdatedAt.Time,
 	}
 }
 
@@ -801,16 +814,17 @@ func pinToSDK(p database.GearStatWeightPin) chroniclesdk.GearStatWeightPin {
 
 func pinRowToSDK(p database.ListGearStatWeightPinsRow) chroniclesdk.GearStatWeightPin {
 	return chroniclesdk.GearStatWeightPin{
-		ID:                 p.ID,
-		TenantID:           p.TenantID,
-		DatasetID:          p.DatasetID,
-		StatWeightID:       p.StatWeightID,
-		PinnedBy:           p.PinnedBy,
-		CreatedAt:          p.CreatedAt.Time,
-		StatWeightName:     p.StatWeightName,
-		StatWeightClassID:  p.StatWeightClassID,
-		StatWeightSpecName: p.StatWeightSpecName,
-		StatWeightWeights:  p.StatWeightWeights,
-		StatWeightUserID:   p.StatWeightUserID,
+		ID:                    p.ID,
+		TenantID:              p.TenantID,
+		DatasetID:             p.DatasetID,
+		StatWeightID:          p.StatWeightID,
+		PinnedBy:              p.PinnedBy,
+		CreatedAt:             p.CreatedAt.Time,
+		StatWeightName:        p.StatWeightName,
+		StatWeightDescription: p.StatWeightDescription,
+		StatWeightClassID:     p.StatWeightClassID,
+		StatWeightSpecName:    p.StatWeightSpecName,
+		StatWeightWeights:     p.StatWeightWeights,
+		StatWeightUserID:      p.StatWeightUserID,
 	}
 }

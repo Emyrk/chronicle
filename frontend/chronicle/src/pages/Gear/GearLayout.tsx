@@ -3,6 +3,7 @@ import { cn } from "@/lib/utils";
 
 const TABS = [
   { to: "/gear", label: "Gear Lists", end: true },
+  { to: "/gear/weights", label: "Stat Weights", end: false },
   { to: "/gear/trends", label: "Trends", end: false },
 ];
 

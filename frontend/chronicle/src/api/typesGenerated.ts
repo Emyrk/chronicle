@@ -656,6 +656,7 @@ export interface CreateGearStatWeightPinRequest {
  */
 export interface CreateGearStatWeightRequest {
     readonly name: string;
+    readonly description: string;
     readonly class_id: number;
     readonly spec_name: string;
     readonly weights: Record<string, string>;
@@ -1133,6 +1134,7 @@ export interface GearStatWeight {
     readonly user_id: string;
     readonly tenant_id: string;
     readonly name: string;
+    readonly description: string;
     readonly class_id: number;
     readonly spec_name: string;
     readonly weights: Record<string, string>;
@@ -1155,6 +1157,7 @@ export interface GearStatWeightPin {
      * Resolved stat weight fields (populated on list).
      */
     readonly stat_weight_name?: string;
+    readonly stat_weight_description?: string;
     readonly stat_weight_class_id?: number;
     readonly stat_weight_spec_name?: string;
     readonly stat_weight_weights?: Record<string, string>;
@@ -3271,6 +3274,7 @@ export interface UpdateGearListRequest {
  */
 export interface UpdateGearStatWeightRequest {
     readonly name?: string;
+    readonly description?: string;
     readonly class_id?: number;
     readonly spec_name?: string;
     readonly weights?: (Record<string, string>);

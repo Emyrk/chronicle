@@ -3519,19 +3519,20 @@ func (q *sqlQuerier) CreateGearList(ctx context.Context, arg CreateGearListParam
 
 const createGearStatWeight = `-- name: CreateGearStatWeight :one
 
-INSERT INTO gear_stat_weights (id, user_id, tenant_id, name, class_id, spec_name, weights)
-VALUES ($1, $2, $3, $4, $5, $6, $7)
-RETURNING id, user_id, tenant_id, name, class_id, spec_name, weights, created_at, updated_at
+INSERT INTO gear_stat_weights (id, user_id, tenant_id, name, description, class_id, spec_name, weights)
+VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+RETURNING id, user_id, tenant_id, name, description, class_id, spec_name, weights, created_at, updated_at
 `
 
 type CreateGearStatWeightParams struct {
-	ID       uuid.UUID `db:"id" json:"id"`
-	UserID   uuid.UUID `db:"user_id" json:"user_id"`
-	TenantID uuid.UUID `db:"tenant_id" json:"tenant_id"`
-	Name     string    `db:"name" json:"name"`
-	ClassID  int32     `db:"class_id" json:"class_id"`
-	SpecName string    `db:"spec_name" json:"spec_name"`
-	Weights  []byte    `db:"weights" json:"weights"`
+	ID          uuid.UUID `db:"id" json:"id"`
+	UserID      uuid.UUID `db:"user_id" json:"user_id"`
+	TenantID    uuid.UUID `db:"tenant_id" json:"tenant_id"`
+	Name        string    `db:"name" json:"name"`
+	Description string    `db:"description" json:"description"`
+	ClassID     int32     `db:"class_id" json:"class_id"`
+	SpecName    string    `db:"spec_name" json:"spec_name"`
+	Weights     []byte    `db:"weights" json:"weights"`
 }
 
 // ============================================================
@@ -3543,6 +3544,7 @@ func (q *sqlQuerier) CreateGearStatWeight(ctx context.Context, arg CreateGearSta
 		arg.UserID,
 		arg.TenantID,
 		arg.Name,
+		arg.Description,
 		arg.ClassID,
 		arg.SpecName,
 		arg.Weights,
@@ -3553,6 +3555,7 @@ func (q *sqlQuerier) CreateGearStatWeight(ctx context.Context, arg CreateGearSta
 		&i.UserID,
 		&i.TenantID,
 		&i.Name,
+		&i.Description,
 		&i.ClassID,
 		&i.SpecName,
 		&i.Weights,
@@ -3706,7 +3709,7 @@ func (q *sqlQuerier) GetGearListRevision(ctx context.Context, arg GetGearListRev
 }
 
 const getGearStatWeightByID = `-- name: GetGearStatWeightByID :one
-SELECT id, user_id, tenant_id, name, class_id, spec_name, weights, created_at, updated_at FROM gear_stat_weights WHERE id = $1
+SELECT id, user_id, tenant_id, name, description, class_id, spec_name, weights, created_at, updated_at FROM gear_stat_weights WHERE id = $1
 `
 
 func (q *sqlQuerier) GetGearStatWeightByID(ctx context.Context, id uuid.UUID) (GearStatWeight, error) {
@@ -3717,6 +3720,7 @@ func (q *sqlQuerier) GetGearStatWeightByID(ctx context.Context, id uuid.UUID) (G
 		&i.UserID,
 		&i.TenantID,
 		&i.Name,
+		&i.Description,
 		&i.ClassID,
 		&i.SpecName,
 		&i.Weights,
@@ -3819,6 +3823,7 @@ const listGearStatWeightPins = `-- name: ListGearStatWeightPins :many
 SELECT
   p.id, p.tenant_id, p.dataset_id, p.stat_weight_id, p.pinned_by, p.created_at,
   sw.name AS stat_weight_name,
+  sw.description AS stat_weight_description,
   sw.class_id AS stat_weight_class_id,
   sw.spec_name AS stat_weight_spec_name,
   sw.weights AS stat_weight_weights,
@@ -3835,17 +3840,18 @@ type ListGearStatWeightPinsParams struct {
 }
 
 type ListGearStatWeightPinsRow struct {
-	ID                 uuid.UUID          `db:"id" json:"id"`
-	TenantID           uuid.UUID          `db:"tenant_id" json:"tenant_id"`
-	DatasetID          uuid.UUID          `db:"dataset_id" json:"dataset_id"`
-	StatWeightID       uuid.UUID          `db:"stat_weight_id" json:"stat_weight_id"`
-	PinnedBy           uuid.UUID          `db:"pinned_by" json:"pinned_by"`
-	CreatedAt          pgtype.Timestamptz `db:"created_at" json:"created_at"`
-	StatWeightName     string             `db:"stat_weight_name" json:"stat_weight_name"`
-	StatWeightClassID  int32              `db:"stat_weight_class_id" json:"stat_weight_class_id"`
-	StatWeightSpecName string             `db:"stat_weight_spec_name" json:"stat_weight_spec_name"`
-	StatWeightWeights  []byte             `db:"stat_weight_weights" json:"stat_weight_weights"`
-	StatWeightUserID   uuid.UUID          `db:"stat_weight_user_id" json:"stat_weight_user_id"`
+	ID                    uuid.UUID          `db:"id" json:"id"`
+	TenantID              uuid.UUID          `db:"tenant_id" json:"tenant_id"`
+	DatasetID             uuid.UUID          `db:"dataset_id" json:"dataset_id"`
+	StatWeightID          uuid.UUID          `db:"stat_weight_id" json:"stat_weight_id"`
+	PinnedBy              uuid.UUID          `db:"pinned_by" json:"pinned_by"`
+	CreatedAt             pgtype.Timestamptz `db:"created_at" json:"created_at"`
+	StatWeightName        string             `db:"stat_weight_name" json:"stat_weight_name"`
+	StatWeightDescription string             `db:"stat_weight_description" json:"stat_weight_description"`
+	StatWeightClassID     int32              `db:"stat_weight_class_id" json:"stat_weight_class_id"`
+	StatWeightSpecName    string             `db:"stat_weight_spec_name" json:"stat_weight_spec_name"`
+	StatWeightWeights     []byte             `db:"stat_weight_weights" json:"stat_weight_weights"`
+	StatWeightUserID      uuid.UUID          `db:"stat_weight_user_id" json:"stat_weight_user_id"`
 }
 
 func (q *sqlQuerier) ListGearStatWeightPins(ctx context.Context, arg ListGearStatWeightPinsParams) ([]ListGearStatWeightPinsRow, error) {
@@ -3865,6 +3871,7 @@ func (q *sqlQuerier) ListGearStatWeightPins(ctx context.Context, arg ListGearSta
 			&i.PinnedBy,
 			&i.CreatedAt,
 			&i.StatWeightName,
+			&i.StatWeightDescription,
 			&i.StatWeightClassID,
 			&i.StatWeightSpecName,
 			&i.StatWeightWeights,
@@ -3881,7 +3888,7 @@ func (q *sqlQuerier) ListGearStatWeightPins(ctx context.Context, arg ListGearSta
 }
 
 const listGearStatWeightsByUser = `-- name: ListGearStatWeightsByUser :many
-SELECT id, user_id, tenant_id, name, class_id, spec_name, weights, created_at, updated_at FROM gear_stat_weights
+SELECT id, user_id, tenant_id, name, description, class_id, spec_name, weights, created_at, updated_at FROM gear_stat_weights
 WHERE user_id = $1 AND tenant_id = $2
 ORDER BY updated_at DESC
 `
@@ -3905,6 +3912,7 @@ func (q *sqlQuerier) ListGearStatWeightsByUser(ctx context.Context, arg ListGear
 			&i.UserID,
 			&i.TenantID,
 			&i.Name,
+			&i.Description,
 			&i.ClassID,
 			&i.SpecName,
 			&i.Weights,
@@ -4078,27 +4086,30 @@ func (q *sqlQuerier) UpdateGearList(ctx context.Context, arg UpdateGearListParam
 const updateGearStatWeight = `-- name: UpdateGearStatWeight :one
 UPDATE gear_stat_weights SET
   name = COALESCE($1, name),
-  class_id = COALESCE($2, class_id),
-  spec_name = COALESCE($3, spec_name),
-  weights = COALESCE($4, weights),
+  description = COALESCE($2, description),
+  class_id = COALESCE($3, class_id),
+  spec_name = COALESCE($4, spec_name),
+  weights = COALESCE($5, weights),
   updated_at = now()
-WHERE id = $5 AND user_id = $6 AND tenant_id = $7
-RETURNING id, user_id, tenant_id, name, class_id, spec_name, weights, created_at, updated_at
+WHERE id = $6 AND user_id = $7 AND tenant_id = $8
+RETURNING id, user_id, tenant_id, name, description, class_id, spec_name, weights, created_at, updated_at
 `
 
 type UpdateGearStatWeightParams struct {
-	Name     pgtype.Text `db:"name" json:"name"`
-	ClassID  pgtype.Int4 `db:"class_id" json:"class_id"`
-	SpecName pgtype.Text `db:"spec_name" json:"spec_name"`
-	Weights  []byte      `db:"weights" json:"weights"`
-	ID       uuid.UUID   `db:"id" json:"id"`
-	UserID   uuid.UUID   `db:"user_id" json:"user_id"`
-	TenantID uuid.UUID   `db:"tenant_id" json:"tenant_id"`
+	Name        pgtype.Text `db:"name" json:"name"`
+	Description pgtype.Text `db:"description" json:"description"`
+	ClassID     pgtype.Int4 `db:"class_id" json:"class_id"`
+	SpecName    pgtype.Text `db:"spec_name" json:"spec_name"`
+	Weights     []byte      `db:"weights" json:"weights"`
+	ID          uuid.UUID   `db:"id" json:"id"`
+	UserID      uuid.UUID   `db:"user_id" json:"user_id"`
+	TenantID    uuid.UUID   `db:"tenant_id" json:"tenant_id"`
 }
 
 func (q *sqlQuerier) UpdateGearStatWeight(ctx context.Context, arg UpdateGearStatWeightParams) (GearStatWeight, error) {
 	row := q.db.QueryRow(ctx, updateGearStatWeight,
 		arg.Name,
+		arg.Description,
 		arg.ClassID,
 		arg.SpecName,
 		arg.Weights,
@@ -4112,6 +4123,7 @@ func (q *sqlQuerier) UpdateGearStatWeight(ctx context.Context, arg UpdateGearSta
 		&i.UserID,
 		&i.TenantID,
 		&i.Name,
+		&i.Description,
 		&i.ClassID,
 		&i.SpecName,
 		&i.Weights,

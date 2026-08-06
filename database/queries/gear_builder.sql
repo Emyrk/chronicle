@@ -74,8 +74,8 @@ SELECT * FROM gear_list_revisions WHERE list_id = $1 AND rev_number = $2;
 -- ============================================================
 
 -- name: CreateGearStatWeight :one
-INSERT INTO gear_stat_weights (id, user_id, tenant_id, name, class_id, spec_name, weights)
-VALUES ($1, $2, $3, $4, $5, $6, $7)
+INSERT INTO gear_stat_weights (id, user_id, tenant_id, name, description, class_id, spec_name, weights)
+VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
 RETURNING *;
 
 -- name: GetGearStatWeightByID :one
@@ -89,6 +89,7 @@ ORDER BY updated_at DESC;
 -- name: UpdateGearStatWeight :one
 UPDATE gear_stat_weights SET
   name = COALESCE(sqlc.narg(name), name),
+  description = COALESCE(sqlc.narg(description), description),
   class_id = COALESCE(sqlc.narg(class_id), class_id),
   spec_name = COALESCE(sqlc.narg(spec_name), spec_name),
   weights = COALESCE(sqlc.narg(weights), weights),
@@ -112,6 +113,7 @@ RETURNING *;
 SELECT
   p.*,
   sw.name AS stat_weight_name,
+  sw.description AS stat_weight_description,
   sw.class_id AS stat_weight_class_id,
   sw.spec_name AS stat_weight_spec_name,
   sw.weights AS stat_weight_weights,

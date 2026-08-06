@@ -37,6 +37,7 @@ import { GearLayout } from "./pages/Gear/GearLayout"
 import { GearListsPage } from "./pages/Gear/GearListsPage"
 import { GearListPage } from "./pages/Gear/builder/GearListPage"
 import { GearTrendsPage } from "./pages/Gear/trends/GearTrendsPage"
+import { StatWeightsPage } from "./pages/Gear/weights/StatWeightsPage"
 import { ServersLayout, ServersPage, UploadKeysPage, RetentionPage } from "./pages/Servers"
 import { SpellPage } from "./pages/WoWDB/SpellPage"
 import { SpellByNamePage } from "./pages/WoWDB/SpellByNamePage"
@@ -173,6 +174,7 @@ function App() {
           <Route path="/wowdb/spell-by-name/:name" element={<SpellByNamePage />} />
           <Route path="/gear" element={<GearLayout />}>
             <Route index element={<GearListsPage />} />
+            <Route path="weights" element={<StatWeightsPage />} />
             <Route path="trends" element={<GearTrendsPage />} />
           </Route>
           <Route path="/gear/lists/:listID" element={<GearListPage />} />
