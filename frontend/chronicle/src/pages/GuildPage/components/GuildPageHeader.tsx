@@ -48,6 +48,75 @@ export function GuildPageHeader({ guild, theme, leading }: GuildPageHeaderProps)
   const socials = theme.socials ?? {};
   const hasSocials = Object.values(socials).some((url) => url);
 
+  if (theme.header_layout === "left") {
+    return (
+      <div className="mb-6 pt-6">
+        <div className="flex items-start gap-4">
+          {leading}
+          {theme.logo_url ? (
+            <img
+              src={theme.logo_url}
+              alt={`${guild.name} logo`}
+              className="size-16 shrink-0 rounded border border-border bg-popover object-cover"
+            />
+          ) : (
+            <div className="flex size-16 shrink-0 items-center justify-center rounded border border-border bg-popover">
+              <span className="text-2xl font-bold text-muted-foreground">
+                {guild.name.charAt(0).toUpperCase()}
+              </span>
+            </div>
+          )}
+          <div className="min-w-0 flex-1">
+            <div className="flex flex-wrap items-center gap-x-4 gap-y-2">
+              <h1
+                className="font-wow truncate text-4xl leading-none"
+                style={{ color: "var(--color-amber-500)" }}
+              >
+                {guild.name}
+              </h1>
+              {hasSocials && (
+                <div className="flex items-center gap-1.5">
+                  {(Object.entries(socials) as [SocialPlatform, string][]).map(([platform, url]) => {
+                    if (!url) return null;
+                    const meta = SOCIAL_PLATFORM_META[platform];
+                    if (!meta) return null;
+                    return (
+                      <a
+                        key={platform}
+                        href={url as string}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="p-1.5 rounded-md border border-border hover:bg-muted/50 text-muted-foreground hover:text-foreground transition-colors"
+                        title={meta.label}
+                      >
+                        {meta.icon}
+                      </a>
+                    );
+                  })}
+                </div>
+              )}
+            </div>
+            <div className="mt-2 flex flex-wrap items-center gap-x-2 gap-y-1.5 text-sm text-muted-foreground">
+              <span>{guild.realm_name}</span>
+              {guild.player_count > 0 && <span>· {guild.player_count} members</span>}
+              {tags.map((tag) => (
+                <span
+                  key={tag}
+                  className="px-2 py-0.5 rounded-md border border-border bg-muted/50 text-xs font-medium text-foreground"
+                >
+                  {tag}
+                </span>
+              ))}
+            </div>
+            {theme.description && (
+              <p className="mt-3 max-w-2xl text-sm text-muted-foreground">{theme.description}</p>
+            )}
+          </div>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="mb-6 pt-6">
       {/* Desktop: row with tags+socials | logo+name. Mobile: stacked centered */}

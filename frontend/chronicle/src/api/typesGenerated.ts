@@ -1074,6 +1074,11 @@ export interface GuildPageTheme {
     readonly background_url?: string;
     readonly logo_url?: string;
     readonly description?: string;
+    /**
+     * HeaderLayout selects the header arrangement: "" or "centered" for the
+     * classic centered header, "left" for the armory-style left-aligned one.
+     */
+    readonly header_layout?: string;
     readonly tags?: readonly GuildTag[];
     readonly socials?: Record<SocialPlatform, string>; // platform key -> URL
 }

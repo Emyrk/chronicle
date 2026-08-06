@@ -32,8 +32,11 @@ type GuildPageTheme struct {
 	BackgroundURL string            `json:"background_url,omitempty"`
 	LogoURL       string            `json:"logo_url,omitempty"`
 	Description   string            `json:"description,omitempty"`
-	Tags          []GuildTag               `json:"tags,omitempty"`
-	Socials       map[SocialPlatform]string `json:"socials,omitempty"` // platform key -> URL
+	// HeaderLayout selects the header arrangement: "" or "centered" for the
+	// classic centered header, "left" for the armory-style left-aligned one.
+	HeaderLayout string                    `json:"header_layout,omitempty"`
+	Tags         []GuildTag                `json:"tags,omitempty"`
+	Socials      map[SocialPlatform]string `json:"socials,omitempty"` // platform key -> URL
 }
 
 const MaxDescriptionLength = 500

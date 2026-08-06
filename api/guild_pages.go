@@ -66,6 +66,12 @@ func validateTheme(theme chroniclesdk.GuildPageTheme) error {
 		return fmt.Errorf("logo URL must use HTTPS")
 	}
 
+	switch theme.HeaderLayout {
+	case "", "centered", "left":
+	default:
+		return fmt.Errorf("invalid header layout: %q", theme.HeaderLayout)
+	}
+
 	return nil
 }
 

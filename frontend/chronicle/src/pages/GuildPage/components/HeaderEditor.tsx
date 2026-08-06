@@ -67,6 +67,19 @@ export function HeaderEditor({ theme, onChange }: HeaderEditorProps) {
 
       {expanded && (
         <div className="px-4 pb-4 space-y-5 border-t border-border pt-4">
+          {/* Layout */}
+          <div className="space-y-1.5">
+            <label className="text-sm font-medium">Layout</label>
+            <select
+              value={theme.header_layout === "left" ? "left" : "centered"}
+              onChange={(e) => onChange({ ...theme, header_layout: e.target.value })}
+              className="w-full px-3 py-2 rounded-md border border-input bg-background text-sm"
+            >
+              <option value="centered">Centered</option>
+              <option value="left">Left-aligned</option>
+            </select>
+          </div>
+
           {/* Logo URL */}
           <div className="space-y-1.5">
             <label className="text-sm font-medium">Logo URL</label>
