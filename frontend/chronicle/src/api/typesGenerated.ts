@@ -3021,6 +3021,7 @@ export interface UpdateSiteConfigRequest {
 // From chroniclesdk/guild_page.go
 export interface UpdateTabRequest {
     readonly label: string;
+    readonly visibility?: DeviceVisibility; // "all", "desktop", or "mobile"
     readonly panels: readonly GuildPagePanel[];
 }
 

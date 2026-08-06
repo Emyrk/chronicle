@@ -729,7 +729,8 @@ CREATE TABLE guild_page_panels (
     config jsonb DEFAULT '{}'::jsonb NOT NULL,
     "position" jsonb DEFAULT '{"h": 2, "w": 6, "x": 0, "y": 0}'::jsonb NOT NULL,
     created_at timestamp with time zone DEFAULT now() NOT NULL,
-    updated_at timestamp with time zone DEFAULT now() NOT NULL
+    updated_at timestamp with time zone DEFAULT now() NOT NULL,
+    visibility text DEFAULT 'all'::text NOT NULL
 );
 
 CREATE TABLE guild_page_tabs (
@@ -738,7 +739,8 @@ CREATE TABLE guild_page_tabs (
     label text NOT NULL,
     slug text NOT NULL,
     sort_order integer DEFAULT 0 NOT NULL,
-    created_at timestamp with time zone DEFAULT now() NOT NULL
+    created_at timestamp with time zone DEFAULT now() NOT NULL,
+    visibility text DEFAULT 'all'::text NOT NULL
 );
 
 CREATE TABLE guild_pages (

@@ -21,6 +21,16 @@ import (
 )
 
 // validateTheme validates all theme fields server-side.
+// normalizeVisibility coerces a device visibility to a valid stored value.
+func normalizeVisibility(v chroniclesdk.DeviceVisibility) string {
+	switch v {
+	case chroniclesdk.VisibilityDesktop, chroniclesdk.VisibilityMobile:
+		return string(v)
+	default:
+		return string(chroniclesdk.VisibilityAll)
+	}
+}
+
 func validateTheme(theme chroniclesdk.GuildPageTheme) error {
 	// Description length
 	if len(theme.Description) > chroniclesdk.MaxDescriptionLength {
@@ -280,19 +290,21 @@ func (api *API) GetGuildPage(w http.ResponseWriter, r *http.Request) {
 				position = chroniclesdk.GuildPanelPosition{X: 0, Y: 0, W: 6, H: 2}
 			}
 			sdkPanels = append(sdkPanels, chroniclesdk.GuildPagePanel{
-				ID:        p.ID,
-				PanelType: p.PanelType,
-				Config:    config,
-				Position:  position,
+				ID:         p.ID,
+				PanelType:  p.PanelType,
+				Config:     config,
+				Position:   position,
+				Visibility: chroniclesdk.DeviceVisibility(p.Visibility),
 			})
 		}
 
 		sdkTabs = append(sdkTabs, chroniclesdk.GuildPageTab{
-			ID:        t.ID,
-			Label:     t.Label,
-			Slug:      t.Slug,
-			SortOrder: int(t.SortOrder),
-			Panels:    sdkPanels,
+			ID:         t.ID,
+			Label:      t.Label,
+			Slug:       t.Slug,
+			SortOrder:  int(t.SortOrder),
+			Visibility: chroniclesdk.DeviceVisibility(t.Visibility),
+			Panels:     sdkPanels,
 		})
 	}
 
@@ -387,10 +399,11 @@ func (api *API) CreateGuildPageTab(w http.ResponseWriter, r *http.Request) {
 	sortOrder := len(tabs)
 
 	tab, err := api.Opts.Zed.InsertGuildPageTab(ctx, database.InsertGuildPageTabParams{
-		PageID:    page.ID,
-		Label:     req.Label,
-		Slug:      req.Slug,
-		SortOrder: int32(sortOrder),
+		PageID:     page.ID,
+		Label:      req.Label,
+		Slug:       req.Slug,
+		SortOrder:  int32(sortOrder),
+		Visibility: string(chroniclesdk.VisibilityAll),
 	})
 	if err != nil {
 		httpapi.InternalServerError(w, err)
@@ -437,10 +450,11 @@ func (api *API) UpdateGuildPageTab(w http.ResponseWriter, r *http.Request) {
 
 	// Update the tab
 	updatedTab, err := api.Opts.Zed.UpdateGuildPageTab(ctx, database.UpdateGuildPageTabParams{
-		ID:        tabID,
-		Label:     req.Label,
-		Slug:      tab.Slug, // Keep original slug
-		SortOrder: tab.SortOrder,
+		ID:         tabID,
+		Label:      req.Label,
+		Slug:       tab.Slug, // Keep original slug
+		SortOrder:  tab.SortOrder,
+		Visibility: normalizeVisibility(req.Visibility),
 	})
 	if err != nil {
 		httpapi.InternalServerError(w, err)
@@ -465,10 +479,11 @@ func (api *API) UpdateGuildPageTab(w http.ResponseWriter, r *http.Request) {
 		}
 
 		panel, err := api.Opts.Zed.InsertGuildPagePanel(ctx, database.InsertGuildPagePanelParams{
-			TabID:     tabID,
-			PanelType: p.PanelType,
-			Config:    configJSON,
-			Position:  positionJSON,
+			TabID:      tabID,
+			PanelType:  p.PanelType,
+			Config:     configJSON,
+			Position:   positionJSON,
+			Visibility: normalizeVisibility(p.Visibility),
 		})
 		if err != nil {
 			httpapi.InternalServerError(w, err)
@@ -476,19 +491,21 @@ func (api *API) UpdateGuildPageTab(w http.ResponseWriter, r *http.Request) {
 		}
 
 		sdkPanels = append(sdkPanels, chroniclesdk.GuildPagePanel{
-			ID:        panel.ID,
-			PanelType: panel.PanelType,
-			Config:    p.Config,
-			Position:  p.Position,
+			ID:         panel.ID,
+			PanelType:  panel.PanelType,
+			Config:     p.Config,
+			Position:   p.Position,
+			Visibility: chroniclesdk.DeviceVisibility(panel.Visibility),
 		})
 	}
 
 	httpapi.Write(ctx, w, http.StatusOK, chroniclesdk.GuildPageTab{
-		ID:        updatedTab.ID,
-		Label:     updatedTab.Label,
-		Slug:      updatedTab.Slug,
-		SortOrder: int(updatedTab.SortOrder),
-		Panels:    sdkPanels,
+		ID:         updatedTab.ID,
+		Label:      updatedTab.Label,
+		Slug:       updatedTab.Slug,
+		SortOrder:  int(updatedTab.SortOrder),
+		Visibility: chroniclesdk.DeviceVisibility(updatedTab.Visibility),
+		Panels:     sdkPanels,
 	})
 }
 
@@ -529,10 +546,11 @@ func (api *API) ReorderGuildPageTabs(w http.ResponseWriter, r *http.Request) {
 			continue
 		}
 		_, err = api.Opts.Zed.UpdateGuildPageTab(ctx, database.UpdateGuildPageTabParams{
-			ID:        tabID,
-			Label:     tab.Label,
-			Slug:      tab.Slug,
-			SortOrder: int32(i),
+			ID:         tabID,
+			Label:      tab.Label,
+			Slug:       tab.Slug,
+			SortOrder:  int32(i),
+			Visibility: tab.Visibility, // reordering must not clobber visibility
 		})
 		if err != nil {
 			httpapi.InternalServerError(w, err)

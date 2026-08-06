@@ -3410,7 +3410,7 @@ func (q *sqlQuerier) GetGuildPageByID(ctx context.Context, id uuid.UUID) (GuildP
 }
 
 const getGuildPagePanel = `-- name: GetGuildPagePanel :one
-SELECT id, tab_id, panel_type, config, position, created_at, updated_at FROM guild_page_panels WHERE id = $1
+SELECT id, tab_id, panel_type, config, position, created_at, updated_at, visibility FROM guild_page_panels WHERE id = $1
 `
 
 func (q *sqlQuerier) GetGuildPagePanel(ctx context.Context, id uuid.UUID) (GuildPagePanel, error) {
@@ -3424,12 +3424,13 @@ func (q *sqlQuerier) GetGuildPagePanel(ctx context.Context, id uuid.UUID) (Guild
 		&i.Position,
 		&i.CreatedAt,
 		&i.UpdatedAt,
+		&i.Visibility,
 	)
 	return i, err
 }
 
 const getGuildPageTab = `-- name: GetGuildPageTab :one
-SELECT id, page_id, label, slug, sort_order, created_at FROM guild_page_tabs WHERE id = $1
+SELECT id, page_id, label, slug, sort_order, created_at, visibility FROM guild_page_tabs WHERE id = $1
 `
 
 func (q *sqlQuerier) GetGuildPageTab(ctx context.Context, id uuid.UUID) (GuildPageTab, error) {
@@ -3442,21 +3443,23 @@ func (q *sqlQuerier) GetGuildPageTab(ctx context.Context, id uuid.UUID) (GuildPa
 		&i.Slug,
 		&i.SortOrder,
 		&i.CreatedAt,
+		&i.Visibility,
 	)
 	return i, err
 }
 
 const insertGuildPagePanel = `-- name: InsertGuildPagePanel :one
-INSERT INTO guild_page_panels (tab_id, panel_type, config, position)
-VALUES ($1, $2, $3, $4)
-RETURNING id, tab_id, panel_type, config, position, created_at, updated_at
+INSERT INTO guild_page_panels (tab_id, panel_type, config, position, visibility)
+VALUES ($1, $2, $3, $4, $5)
+RETURNING id, tab_id, panel_type, config, position, created_at, updated_at, visibility
 `
 
 type InsertGuildPagePanelParams struct {
-	TabID     uuid.UUID `db:"tab_id" json:"tab_id"`
-	PanelType string    `db:"panel_type" json:"panel_type"`
-	Config    []byte    `db:"config" json:"config"`
-	Position  []byte    `db:"position" json:"position"`
+	TabID      uuid.UUID `db:"tab_id" json:"tab_id"`
+	PanelType  string    `db:"panel_type" json:"panel_type"`
+	Config     []byte    `db:"config" json:"config"`
+	Position   []byte    `db:"position" json:"position"`
+	Visibility string    `db:"visibility" json:"visibility"`
 }
 
 func (q *sqlQuerier) InsertGuildPagePanel(ctx context.Context, arg InsertGuildPagePanelParams) (GuildPagePanel, error) {
@@ -3465,6 +3468,7 @@ func (q *sqlQuerier) InsertGuildPagePanel(ctx context.Context, arg InsertGuildPa
 		arg.PanelType,
 		arg.Config,
 		arg.Position,
+		arg.Visibility,
 	)
 	var i GuildPagePanel
 	err := row.Scan(
@@ -3475,21 +3479,23 @@ func (q *sqlQuerier) InsertGuildPagePanel(ctx context.Context, arg InsertGuildPa
 		&i.Position,
 		&i.CreatedAt,
 		&i.UpdatedAt,
+		&i.Visibility,
 	)
 	return i, err
 }
 
 const insertGuildPageTab = `-- name: InsertGuildPageTab :one
-INSERT INTO guild_page_tabs (page_id, label, slug, sort_order)
-VALUES ($1, $2, $3, $4)
-RETURNING id, page_id, label, slug, sort_order, created_at
+INSERT INTO guild_page_tabs (page_id, label, slug, sort_order, visibility)
+VALUES ($1, $2, $3, $4, $5)
+RETURNING id, page_id, label, slug, sort_order, created_at, visibility
 `
 
 type InsertGuildPageTabParams struct {
-	PageID    uuid.UUID `db:"page_id" json:"page_id"`
-	Label     string    `db:"label" json:"label"`
-	Slug      string    `db:"slug" json:"slug"`
-	SortOrder int32     `db:"sort_order" json:"sort_order"`
+	PageID     uuid.UUID `db:"page_id" json:"page_id"`
+	Label      string    `db:"label" json:"label"`
+	Slug       string    `db:"slug" json:"slug"`
+	SortOrder  int32     `db:"sort_order" json:"sort_order"`
+	Visibility string    `db:"visibility" json:"visibility"`
 }
 
 func (q *sqlQuerier) InsertGuildPageTab(ctx context.Context, arg InsertGuildPageTabParams) (GuildPageTab, error) {
@@ -3498,6 +3504,7 @@ func (q *sqlQuerier) InsertGuildPageTab(ctx context.Context, arg InsertGuildPage
 		arg.Label,
 		arg.Slug,
 		arg.SortOrder,
+		arg.Visibility,
 	)
 	var i GuildPageTab
 	err := row.Scan(
@@ -3507,13 +3514,14 @@ func (q *sqlQuerier) InsertGuildPageTab(ctx context.Context, arg InsertGuildPage
 		&i.Slug,
 		&i.SortOrder,
 		&i.CreatedAt,
+		&i.Visibility,
 	)
 	return i, err
 }
 
 const listGuildPagePanels = `-- name: ListGuildPagePanels :many
 
-SELECT id, tab_id, panel_type, config, position, created_at, updated_at FROM guild_page_panels
+SELECT id, tab_id, panel_type, config, position, created_at, updated_at, visibility FROM guild_page_panels
 WHERE tab_id = $1
 ORDER BY (position->>'y')::int, (position->>'x')::int
 `
@@ -3536,6 +3544,7 @@ func (q *sqlQuerier) ListGuildPagePanels(ctx context.Context, tabID uuid.UUID) (
 			&i.Position,
 			&i.CreatedAt,
 			&i.UpdatedAt,
+			&i.Visibility,
 		); err != nil {
 			return nil, err
 		}
@@ -3549,7 +3558,7 @@ func (q *sqlQuerier) ListGuildPagePanels(ctx context.Context, tabID uuid.UUID) (
 
 const listGuildPageTabs = `-- name: ListGuildPageTabs :many
 
-SELECT id, page_id, label, slug, sort_order, created_at FROM guild_page_tabs
+SELECT id, page_id, label, slug, sort_order, created_at, visibility FROM guild_page_tabs
 WHERE page_id = $1
 ORDER BY sort_order, created_at
 `
@@ -3571,6 +3580,7 @@ func (q *sqlQuerier) ListGuildPageTabs(ctx context.Context, pageID uuid.UUID) ([
 			&i.Slug,
 			&i.SortOrder,
 			&i.CreatedAt,
+			&i.Visibility,
 		); err != nil {
 			return nil, err
 		}
@@ -3649,7 +3659,7 @@ const updateGuildPagePanel = `-- name: UpdateGuildPagePanel :one
 UPDATE guild_page_panels
 SET panel_type = $2, config = $3, position = $4, updated_at = NOW()
 WHERE id = $1
-RETURNING id, tab_id, panel_type, config, position, created_at, updated_at
+RETURNING id, tab_id, panel_type, config, position, created_at, updated_at, visibility
 `
 
 type UpdateGuildPagePanelParams struct {
@@ -3675,22 +3685,24 @@ func (q *sqlQuerier) UpdateGuildPagePanel(ctx context.Context, arg UpdateGuildPa
 		&i.Position,
 		&i.CreatedAt,
 		&i.UpdatedAt,
+		&i.Visibility,
 	)
 	return i, err
 }
 
 const updateGuildPageTab = `-- name: UpdateGuildPageTab :one
 UPDATE guild_page_tabs
-SET label = $2, slug = $3, sort_order = $4
+SET label = $2, slug = $3, sort_order = $4, visibility = $5
 WHERE id = $1
-RETURNING id, page_id, label, slug, sort_order, created_at
+RETURNING id, page_id, label, slug, sort_order, created_at, visibility
 `
 
 type UpdateGuildPageTabParams struct {
-	ID        uuid.UUID `db:"id" json:"id"`
-	Label     string    `db:"label" json:"label"`
-	Slug      string    `db:"slug" json:"slug"`
-	SortOrder int32     `db:"sort_order" json:"sort_order"`
+	ID         uuid.UUID `db:"id" json:"id"`
+	Label      string    `db:"label" json:"label"`
+	Slug       string    `db:"slug" json:"slug"`
+	SortOrder  int32     `db:"sort_order" json:"sort_order"`
+	Visibility string    `db:"visibility" json:"visibility"`
 }
 
 func (q *sqlQuerier) UpdateGuildPageTab(ctx context.Context, arg UpdateGuildPageTabParams) (GuildPageTab, error) {
@@ -3699,6 +3711,7 @@ func (q *sqlQuerier) UpdateGuildPageTab(ctx context.Context, arg UpdateGuildPage
 		arg.Label,
 		arg.Slug,
 		arg.SortOrder,
+		arg.Visibility,
 	)
 	var i GuildPageTab
 	err := row.Scan(
@@ -3708,6 +3721,7 @@ func (q *sqlQuerier) UpdateGuildPageTab(ctx context.Context, arg UpdateGuildPage
 		&i.Slug,
 		&i.SortOrder,
 		&i.CreatedAt,
+		&i.Visibility,
 	)
 	return i, err
 }

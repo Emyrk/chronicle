@@ -99,8 +99,9 @@ type CreateTabRequest struct {
 }
 
 type UpdateTabRequest struct {
-	Label  string           `json:"label"`
-	Panels []GuildPagePanel `json:"panels"`
+	Label      string           `json:"label"`
+	Visibility DeviceVisibility `json:"visibility,omitempty"` // "all", "desktop", or "mobile"
+	Panels     []GuildPagePanel `json:"panels"`
 }
 
 type ReorderTabsRequest struct {

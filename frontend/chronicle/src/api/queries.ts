@@ -1869,7 +1869,11 @@ export function useSaveGuildPage(guildId: string | undefined) {
           const updateResp = await fetch(`/api/v1/guilds/${guildId}/page/tabs/${tabId}`, {
             method: "PUT",
             headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ label: tab.label, panels: cleanPanels }),
+            body: JSON.stringify({
+              label: tab.label,
+              visibility: tab.visibility ?? "all",
+              panels: cleanPanels,
+            }),
             credentials: "include",
           });
           if (!updateResp.ok) {
