@@ -46,6 +46,13 @@ type CreatureSearchResult struct {
 }
 
 // ItemSetSearchResult is a summary for item set search results.
+// EnchantmentSearchResult is one enchantment matched by name. The same
+// display name can exist at several IDs (ranks), so both are returned.
+type EnchantmentSearchResult struct {
+	ID   int32  `json:"id"`
+	Name string `json:"name"`
+}
+
 type ItemSetSearchResult struct {
 	ID                int32  `json:"id"`
 	Name              string `json:"name"`

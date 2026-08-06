@@ -917,6 +917,17 @@ export interface DuplicateInstance {
 // From chroniclesdk/log.go
 export type Duration = number;
 
+// From chroniclesdk/gamedata.go
+/**
+ * ItemSetSearchResult is a summary for item set search results.
+ * EnchantmentSearchResult is one enchantment matched by name. The same
+ * display name can exist at several IDs (ranks), so both are returned.
+ */
+export interface EnchantmentSearchResult {
+    readonly id: number;
+    readonly name: string;
+}
+
 // From chroniclesdk/log.go
 export interface EncounterKillTime {
     readonly encounter_name: string;
@@ -1178,16 +1189,30 @@ export interface GearTrendsItem {
 // From chroniclesdk/gear_trends.go
 /**
  * GearTrendsResponse is the observed-gear-trends aggregate for one
- * class/spec cohort: per-slot equip rates from recent ranked parses.
- * This is observed equipment, not a recommendation.
+ * class/spec cohort: the gear worn during the top leaderboard
+ * performances. This is observed equipment, not a recommendation.
  */
 export interface GearTrendsResponse {
     readonly class: string;
     readonly spec: string;
     readonly lookback_days: number;
     /**
-     * CohortSize is the number of unique qualifying players (one
-     * observation each: the latest gear snapshot in the window).
+     * InstanceName is the raid filter, empty when all raids qualify.
+     */
+    readonly instance_name?: string;
+    /**
+     * RealmID is the realm filter, empty when all realms qualify.
+     */
+    readonly realm_id?: string;
+    /**
+     * TopPerformances is the cohort target: the N best-parsing unique
+     * players considered (each observed in the gear worn during that
+     * parse).
+     */
+    readonly top_performances: number;
+    /**
+     * CohortSize is how many qualifying players were actually found
+     * (at most TopPerformances).
      */
     readonly cohort_size: number;
     readonly min_sample_size: number;
@@ -1813,9 +1838,6 @@ export interface ItemSetPieceInfo {
 }
 
 // From chroniclesdk/gamedata.go
-/**
- * ItemSetSearchResult is a summary for item set search results.
- */
 export interface ItemSetSearchResult {
     readonly id: number;
     readonly name: string;

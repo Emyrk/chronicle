@@ -1,7 +1,9 @@
 import { useState } from "react";
+import { Search } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { useItemTooltip } from "@/api/gamedata";
+import { useItemTooltip, useSearchEnchantments } from "@/api/gamedata";
+import { useDebouncedValue } from "@/hooks/useDebouncedValue";
 import type { GearTrendsEnchant } from "@/api/typesGenerated";
 import { formatEquipRate } from "../trends/trendsModel";
 import type { GearSlotEntry } from "./gearListModel";
@@ -14,24 +16,24 @@ interface EnchantPickerProps {
 }
 
 /**
- * Per-slot enchant selection by enchant ID. Only names exist in the game
- * data (no stat decomposition), so enchants are display-only and never
- * affect scores. The chosen ID is validated by resolving the item tooltip
- * with the enchant applied.
+ * Per-slot enchant selection: search by name, or take an observed
+ * quick-pick. Only names exist in the game data (no stat decomposition),
+ * so enchants are display-only and never affect scores.
  */
 export function EnchantPicker({ entry, onSetEnchant, observedEnchants }: EnchantPickerProps) {
-  const [draft, setDraft] = useState("");
-  const draftId = parseInt(draft, 10);
-  const validDraft = Number.isInteger(draftId) && draftId > 0;
+  const [query, setQuery] = useState("");
+  const debouncedQuery = useDebouncedValue(query.trim(), 250);
+  const search = useSearchEnchantments(debouncedQuery.length >= 2 ? debouncedQuery : null);
 
   // Resolve the current enchant's display name through the tooltip endpoint.
   const current = useItemTooltip(
     entry.enchant_id ? { itemId: entry.item_id, enchant: entry.enchant_id } : null,
   );
-  // Preview the drafted enchant before applying.
-  const preview = useItemTooltip(
-    validDraft ? { itemId: entry.item_id, enchant: draftId } : null,
-  );
+
+  const apply = (enchantId: number) => {
+    onSetEnchant(enchantId);
+    setQuery("");
+  };
 
   return (
     <div className="space-y-3">
@@ -66,7 +68,7 @@ export function EnchantPicker({ entry, onSetEnchant, observedEnchants }: Enchant
               <button
                 key={e.enchant_id}
                 type="button"
-                onClick={() => onSetEnchant(e.enchant_id)}
+                onClick={() => apply(e.enchant_id)}
                 className="px-2 py-0.5 rounded-full text-2xs border border-zinc-700 text-quality-uncommon hover:border-zinc-500 transition-colors"
               >
                 {e.name} <span className="text-zinc-500 font-mono">{formatEquipRate(e.percent)}</span>
@@ -76,43 +78,42 @@ export function EnchantPicker({ entry, onSetEnchant, observedEnchants }: Enchant
         </div>
       )}
 
-      <form
-        className="space-y-1.5"
-        onSubmit={(e) => {
-          e.preventDefault();
-          if (!validDraft) return;
-          onSetEnchant(draftId);
-          setDraft("");
-        }}
-      >
-        <div className="text-2xs uppercase tracking-wide text-zinc-500">Set enchant by ID</div>
-        <div className="flex items-center gap-2">
+      <div className="space-y-1.5">
+        <div className="text-2xs uppercase tracking-wide text-zinc-500">Search enchants</div>
+        <div className="relative">
+          <Search className="absolute left-2 top-1/2 -translate-y-1/2 h-3 w-3 text-zinc-500" />
           <Input
-            type="number"
-            min={1}
-            placeholder="Enchant ID"
-            value={draft}
-            onChange={(e) => setDraft(e.target.value)}
-            className="h-7 w-32 text-xs font-mono"
+            className="h-7 pl-6 text-xs"
+            placeholder="Search enchants by name…"
+            value={query}
+            onChange={(e) => setQuery(e.target.value)}
           />
-          <Button type="submit" size="sm" className="h-7 text-xs" disabled={!validDraft}>
-            Apply
-          </Button>
         </div>
-        {validDraft && (
-          <p className="text-2xs text-zinc-500">
-            {preview.isLoading
-              ? "Resolving…"
-              : preview.data?.enchantment
-                ? `Resolves to: ${preview.data.enchantment}`
-                : "Unknown enchant ID for this dataset."}
-          </p>
+        {debouncedQuery.length >= 2 && (
+          <div className="max-h-48 overflow-y-auto rounded border border-zinc-800 divide-y divide-zinc-800/70">
+            {search.isLoading ? (
+              <p className="p-2.5 text-xs text-zinc-500">Searching…</p>
+            ) : (search.data ?? []).length === 0 ? (
+              <p className="p-2.5 text-xs text-zinc-500">No enchants match.</p>
+            ) : (
+              (search.data ?? []).map((enchant) => (
+                <button
+                  key={enchant.id}
+                  type="button"
+                  className="flex w-full items-baseline gap-2 px-2.5 py-1.5 text-left hover:bg-zinc-800/60"
+                  onClick={() => apply(enchant.id)}
+                >
+                  <span className="text-xs text-quality-uncommon">{enchant.name}</span>
+                  <span className="text-3xs text-zinc-600 font-mono">#{enchant.id}</span>
+                </button>
+              ))
+            )}
+          </div>
         )}
         <p className="text-2xs text-zinc-600">
-          Enchants are shown by name only and do not affect scores. Observed
-          per-slot enchant suggestions arrive with gear trends.
+          Enchants are shown by name only and do not affect scores.
         </p>
-      </form>
+      </div>
     </div>
   );
 }

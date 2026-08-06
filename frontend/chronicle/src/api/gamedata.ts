@@ -1,5 +1,5 @@
 import { useQueries, useQuery } from "@tanstack/react-query";
-import type { ItemTooltip, ItemSearchResult, CreatureSearchResult, ItemSetSearchResult, ItemSetDetail, SimItem } from "./typesGenerated";
+import type { ItemTooltip, ItemSearchResult, CreatureSearchResult, EnchantmentSearchResult, ItemSetSearchResult, ItemSetDetail, SimItem } from "./typesGenerated";
 
 export interface FetchItemTooltipParams {
   itemId: number;
@@ -67,6 +67,11 @@ export interface SearchItemsParams {
   slot?: string;    // comma-separated
   class?: string;   // comma-separated
   sort?: string;
+  /**
+   * Allow an empty query (server requires a slot filter then) — returns
+   * the top items for the slot by the chosen sort.
+   */
+  allowEmpty?: boolean;
 }
 
 async function fetchSearchItems(params: SearchItemsParams): Promise<ItemSearchResult[]> {
@@ -87,7 +92,25 @@ export function useSearchItems(params: SearchItemsParams | null) {
   return useQuery({
     queryKey: ["gamedata", "search-items", params],
     queryFn: () => fetchSearchItems(params!),
-    enabled: params != null && params.q.length >= 2,
+    enabled:
+      params != null &&
+      (params.q.length >= 2 || (!!params.allowEmpty && params.q.length === 0 && !!params.slot)),
+    staleTime: 5 * 60 * 1000,
+    retry: false,
+  });
+}
+
+export function useSearchEnchantments(q: string | null) {
+  return useQuery({
+    queryKey: ["gamedata", "search-enchantments", q],
+    queryFn: async () => {
+      const response = await fetch(
+        `/api/v1/internal/gamedata/search/enchantments?q=${encodeURIComponent(q!)}`,
+      );
+      if (!response.ok) throw new Error(`Failed to search enchantments: ${response.status}`);
+      return response.json() as Promise<EnchantmentSearchResult[]>;
+    },
+    enabled: q != null && q.length >= 2,
     staleTime: 5 * 60 * 1000,
     retry: false,
   });

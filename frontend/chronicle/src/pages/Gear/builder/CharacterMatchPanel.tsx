@@ -1,9 +1,11 @@
 import { useState } from "react";
-import { UserRound, X } from "lucide-react";
+import { Search, UserRound, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { useAuth } from "@/hooks/useAuth";
-import { useMyCharacters } from "@/api/queries";
+import { useArmorySearch, useMyCharacters } from "@/api/queries";
+import { useDebouncedValue } from "@/hooks/useDebouncedValue";
+import { getClassColorVar } from "@/pages/ArmoryPage/types";
 import { cn } from "@/lib/utils";
 import type { StageCoverage } from "./characterMatch";
 import { slotLabel } from "./SlotEditorPanel";
@@ -38,6 +40,69 @@ interface CharacterMatchPanelProps {
  * character's logged raid nights count as owned; the newest snapshot
  * counts as equipped. Shows per-stage coverage and what's still missing.
  */
+/**
+ * Armory-search typeahead: type a character name, pick from the realm's
+ * indexed players.
+ */
+function CharacterSearch({ onPick }: { onPick: (char: MatchedCharacter) => void }) {
+  const [query, setQuery] = useState("");
+  const [open, setOpen] = useState(false);
+  const debouncedQuery = useDebouncedValue(query.trim(), 250);
+  const search = useArmorySearch({ q: debouncedQuery });
+  const results = (search.data?.players ?? []).slice(0, 8);
+
+  return (
+    <div className="relative">
+      <div className="relative">
+        <Search className="absolute left-2 top-1/2 -translate-y-1/2 h-3 w-3 text-zinc-500" />
+        <Input
+          className="h-6 w-52 pl-6 text-xs"
+          placeholder="Search armory characters…"
+          value={query}
+          onChange={(e) => {
+            setQuery(e.target.value);
+            setOpen(true);
+          }}
+          onFocus={() => setOpen(true)}
+          onBlur={() => setTimeout(() => setOpen(false), 150)}
+        />
+      </div>
+      {open && debouncedQuery.length >= 2 && (
+        <div className="absolute z-30 mt-1 w-72 max-h-64 overflow-y-auto rounded-md border border-zinc-700 bg-zinc-900 shadow-lg divide-y divide-zinc-800/70">
+          {search.isLoading ? (
+            <p className="p-2.5 text-xs text-zinc-500">Searching…</p>
+          ) : results.length === 0 ? (
+            <p className="p-2.5 text-xs text-zinc-500">No armory characters match.</p>
+          ) : (
+            results.map((player) => (
+              <button
+                key={player.id}
+                type="button"
+                className="flex w-full items-baseline gap-2 px-2.5 py-1.5 text-left hover:bg-zinc-800/60"
+                onMouseDown={(e) => e.preventDefault()}
+                onClick={() => {
+                  onPick({ realm: player.realm_name, name: player.name });
+                  setQuery("");
+                  setOpen(false);
+                }}
+              >
+                <span className="text-xs" style={{ color: getClassColorVar(player.class) }}>
+                  {player.name}
+                </span>
+                <span className="text-2xs text-zinc-500">
+                  {player.level > 0 && `${player.level} · `}
+                  {player.realm_name}
+                  {player.guild_name && ` · <${player.guild_name}>`}
+                </span>
+              </button>
+            ))
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
 export function CharacterMatchPanel({
   matched,
   onMatch,
@@ -47,8 +112,6 @@ export function CharacterMatchPanel({
 }: CharacterMatchPanelProps) {
   const { isAuthenticated } = useAuth();
   const myCharacters = useMyCharacters({ enabled: isAuthenticated });
-  const [realm, setRealm] = useState("");
-  const [name, setName] = useState("");
 
   return (
     <div className="rounded-md border border-zinc-700/60 bg-zinc-900/40 p-3 space-y-2">
@@ -75,30 +138,7 @@ export function CharacterMatchPanel({
             </button>
           );
         })}
-        <form
-          className="flex items-center gap-1"
-          onSubmit={(e) => {
-            e.preventDefault();
-            if (!realm.trim() || !name.trim()) return;
-            onMatch({ realm: realm.trim(), name: name.trim() });
-          }}
-        >
-          <Input
-            className="h-6 w-28 text-xs"
-            placeholder="Realm"
-            value={realm}
-            onChange={(e) => setRealm(e.target.value)}
-          />
-          <Input
-            className="h-6 w-28 text-xs"
-            placeholder="Character"
-            value={name}
-            onChange={(e) => setName(e.target.value)}
-          />
-          <Button type="submit" variant="outline" size="sm" className="h-6 px-2 text-xs">
-            Match
-          </Button>
-        </form>
+        <CharacterSearch onPick={(char) => onMatch(char)} />
         {matched && (
           <Button
             variant="ghost"

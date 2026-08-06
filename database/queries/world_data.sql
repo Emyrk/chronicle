@@ -12,6 +12,16 @@ SELECT * FROM dbc_item_random_properties WHERE dataset_id = @dataset_id AND id =
 -- name: GetSpellItemEnchantmentByID :one
 SELECT * FROM dbc_spell_item_enchantment WHERE dataset_id = @dataset_id AND id = @id;
 
+-- name: SearchSpellItemEnchantments :many
+-- Name search for the gear builder's enchant picker. Same names appear at
+-- multiple ranks/IDs, so the ID is part of the result identity.
+SELECT id, name_lang
+FROM dbc_spell_item_enchantment
+WHERE dataset_id = @dataset_id
+  AND name_lang ILIKE '%' || @search_term::text || '%'
+ORDER BY name_lang, id
+LIMIT 25;
+
 -- name: GetItemSetByID :one
 SELECT * FROM dbc_item_set WHERE dataset_id = @dataset_id AND id = @id;
 

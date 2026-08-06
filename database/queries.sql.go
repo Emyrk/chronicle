@@ -4131,24 +4131,33 @@ WITH representative_instances AS (
         li.start_time ASC,
         li.id ASC
 ),
-qualifying AS (
-    SELECT DISTINCT edr.realm_id, edr.player_guid, edr.instance_id
+best_parse AS (
+    SELECT DISTINCT ON (edr.realm_id, edr.player_guid)
+        edr.realm_id, edr.player_guid, edr.instance_id, edr.dps
     FROM encounter_dps_rankings edr
     JOIN representative_instances ri ON ri.id = edr.instance_id
     WHERE edr.player_class = $2
       AND edr.player_spec = $3
       AND edr.encounter_id IS NOT NULL
       AND edr.killed_at >= $4::timestamptz
+      AND ($5::text IS NULL OR edr.instance_name = $5)
+      AND ($6::uuid IS NULL OR edr.realm_id = $6)
+    ORDER BY edr.realm_id, edr.player_guid, edr.dps DESC
+),
+top_players AS (
+    SELECT bp.realm_id, bp.player_guid, bp.instance_id
+    FROM best_parse bp
+    ORDER BY bp.dps DESC
+    LIMIT $7
 ),
 cohort AS (
-    SELECT DISTINCT ON (h.realm_id, h.player_id) h.gear
+    SELECT h.gear
     FROM game_player_gear_history h
     JOIN wow_server_realms wsr ON wsr.id = h.realm_id
-    JOIN qualifying q
-      ON h.player_id = q.player_guid
-     AND h.realm_id = q.realm_id
-     AND h.instance_id = q.instance_id
-    ORDER BY h.realm_id, h.player_id, h.equipped_at DESC
+    JOIN top_players tp
+      ON h.player_id = tp.player_guid
+     AND h.realm_id = tp.realm_id
+     AND h.instance_id = tp.instance_id
 ),
 slot_enchants AS (
     SELECT (elem.ordinality - 1)::int AS slot,
@@ -4172,10 +4181,13 @@ ORDER BY se.slot, wearer_count DESC, se.enchant_id
 `
 
 type GearTrendsSlotEnchantsParams struct {
-	DatasetID   uuid.UUID          `db:"dataset_id" json:"dataset_id"`
-	PlayerClass string             `db:"player_class" json:"player_class"`
-	PlayerSpec  string             `db:"player_spec" json:"player_spec"`
-	Since       pgtype.Timestamptz `db:"since" json:"since"`
+	DatasetID    uuid.UUID          `db:"dataset_id" json:"dataset_id"`
+	PlayerClass  string             `db:"player_class" json:"player_class"`
+	PlayerSpec   string             `db:"player_spec" json:"player_spec"`
+	Since        pgtype.Timestamptz `db:"since" json:"since"`
+	InstanceName pgtype.Text        `db:"instance_name" json:"instance_name"`
+	RealmID      uuid.NullUUID      `db:"realm_id" json:"realm_id"`
+	TopN         int32              `db:"top_n" json:"top_n"`
 }
 
 type GearTrendsSlotEnchantsRow struct {
@@ -4192,6 +4204,9 @@ func (q *sqlQuerier) GearTrendsSlotEnchants(ctx context.Context, arg GearTrendsS
 		arg.PlayerClass,
 		arg.PlayerSpec,
 		arg.Since,
+		arg.InstanceName,
+		arg.RealmID,
+		arg.TopN,
 	)
 	if err != nil {
 		return nil, err
@@ -4228,24 +4243,33 @@ WITH representative_instances AS (
         li.start_time ASC,
         li.id ASC
 ),
-qualifying AS (
-    SELECT DISTINCT edr.realm_id, edr.player_guid, edr.instance_id
+best_parse AS (
+    SELECT DISTINCT ON (edr.realm_id, edr.player_guid)
+        edr.realm_id, edr.player_guid, edr.instance_id, edr.dps
     FROM encounter_dps_rankings edr
     JOIN representative_instances ri ON ri.id = edr.instance_id
     WHERE edr.player_class = $1
       AND edr.player_spec = $2
       AND edr.encounter_id IS NOT NULL
       AND edr.killed_at >= $3::timestamptz
+      AND ($4::text IS NULL OR edr.instance_name = $4)
+      AND ($5::uuid IS NULL OR edr.realm_id = $5)
+    ORDER BY edr.realm_id, edr.player_guid, edr.dps DESC
+),
+top_players AS (
+    SELECT bp.realm_id, bp.player_guid, bp.instance_id
+    FROM best_parse bp
+    ORDER BY bp.dps DESC
+    LIMIT $6
 ),
 cohort AS (
-    SELECT DISTINCT ON (h.realm_id, h.player_id) h.gear
+    SELECT h.gear
     FROM game_player_gear_history h
     JOIN wow_server_realms wsr ON wsr.id = h.realm_id
-    JOIN qualifying q
-      ON h.player_id = q.player_guid
-     AND h.realm_id = q.realm_id
-     AND h.instance_id = q.instance_id
-    ORDER BY h.realm_id, h.player_id, h.equipped_at DESC
+    JOIN top_players tp
+      ON h.player_id = tp.player_guid
+     AND h.realm_id = tp.realm_id
+     AND h.instance_id = tp.instance_id
 ),
 slot_items AS (
     SELECT (elem.ordinality - 1)::int AS slot,
@@ -4273,9 +4297,12 @@ ORDER BY si.slot, wearer_count DESC, si.item_id
 `
 
 type GearTrendsSlotItemsParams struct {
-	PlayerClass string             `db:"player_class" json:"player_class"`
-	PlayerSpec  string             `db:"player_spec" json:"player_spec"`
-	Since       pgtype.Timestamptz `db:"since" json:"since"`
+	PlayerClass  string             `db:"player_class" json:"player_class"`
+	PlayerSpec   string             `db:"player_spec" json:"player_spec"`
+	Since        pgtype.Timestamptz `db:"since" json:"since"`
+	InstanceName pgtype.Text        `db:"instance_name" json:"instance_name"`
+	RealmID      uuid.NullUUID      `db:"realm_id" json:"realm_id"`
+	TopN         int32              `db:"top_n" json:"top_n"`
 }
 
 type GearTrendsSlotItemsRow struct {
@@ -4289,22 +4316,33 @@ type GearTrendsSlotItemsRow struct {
 	ItemLevel   int32  `db:"item_level" json:"item_level"`
 }
 
-// Observed gear trends: what logged players of a class/spec actually wore,
-// aggregated per equipment slot from armory gear-history snapshots.
+// Observed gear trends: the gear worn by the top leaderboard performances
+// of a class/spec, aggregated per equipment slot.
 //
 // Cohort rules (shared by both queries):
 //   - ranked parses only (encounter_dps_rankings), deduped to one
 //     representative instance per run (duplicate uploads collapse via
 //     COALESCE(duplicate_group_id, id) — the house convention);
-//   - one observation per unique player: the latest qualifying snapshot
-//     in the window;
+//   - best parse (highest DPS) per unique player, optionally filtered by
+//     raid (instance_name) and realm, then the top @top_n players by that
+//     parse's DPS;
+//   - each player's observation is the gear snapshot from THAT parse's
+//     log instance — what they wore during the performance, not their
+//     latest outfit;
 //   - tenant scoping comes from RLS on encounter_dps_rankings plus the
 //     wow_server_realms join for gear history (which has no RLS).
 //
 // Item name/quality/icon/level are read from the snapshot jsonb itself,
 // so results are self-contained.
 func (q *sqlQuerier) GearTrendsSlotItems(ctx context.Context, arg GearTrendsSlotItemsParams) ([]GearTrendsSlotItemsRow, error) {
-	rows, err := q.db.Query(ctx, gearTrendsSlotItems, arg.PlayerClass, arg.PlayerSpec, arg.Since)
+	rows, err := q.db.Query(ctx, gearTrendsSlotItems,
+		arg.PlayerClass,
+		arg.PlayerSpec,
+		arg.Since,
+		arg.InstanceName,
+		arg.RealmID,
+		arg.TopN,
+	)
 	if err != nil {
 		return nil, err
 	}
@@ -16629,6 +16667,47 @@ func (q *sqlQuerier) SearchItemTemplates(ctx context.Context, arg SearchItemTemp
 			&i.Armor,
 			&i.Icon,
 		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const searchSpellItemEnchantments = `-- name: SearchSpellItemEnchantments :many
+SELECT id, name_lang
+FROM dbc_spell_item_enchantment
+WHERE dataset_id = $1
+  AND name_lang ILIKE '%' || $2::text || '%'
+ORDER BY name_lang, id
+LIMIT 25
+`
+
+type SearchSpellItemEnchantmentsParams struct {
+	DatasetID  uuid.UUID `db:"dataset_id" json:"dataset_id"`
+	SearchTerm string    `db:"search_term" json:"search_term"`
+}
+
+type SearchSpellItemEnchantmentsRow struct {
+	ID       int32  `db:"id" json:"id"`
+	NameLang string `db:"name_lang" json:"name_lang"`
+}
+
+// Name search for the gear builder's enchant picker. Same names appear at
+// multiple ranks/IDs, so the ID is part of the result identity.
+func (q *sqlQuerier) SearchSpellItemEnchantments(ctx context.Context, arg SearchSpellItemEnchantmentsParams) ([]SearchSpellItemEnchantmentsRow, error) {
+	rows, err := q.db.Query(ctx, searchSpellItemEnchantments, arg.DatasetID, arg.SearchTerm)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []SearchSpellItemEnchantmentsRow
+	for rows.Next() {
+		var i SearchSpellItemEnchantmentsRow
+		if err := rows.Scan(&i.ID, &i.NameLang); err != nil {
 			return nil, err
 		}
 		items = append(items, i)

@@ -18,8 +18,8 @@ const QUALITY_CHIPS = [
 ] as const;
 
 const SORTS = [
-  { value: "item_level", label: "Item level" },
-  { value: "quality", label: "Quality" },
+  { value: "item_level_desc", label: "Item level" },
+  { value: "quality_desc", label: "Quality" },
 ] as const;
 
 interface ItemPickerPanelProps {
@@ -42,7 +42,7 @@ interface ItemPickerPanelProps {
 export function ItemPickerPanel({ slotIndex, usedItemIds, onEquip, onAddAlternate, trendsSlot }: ItemPickerPanelProps) {
   const [query, setQuery] = useState("");
   const [quality, setQuality] = useState("");
-  const [sort, setSort] = useState<string>("item_level");
+  const [sort, setSort] = useState<string>("item_level_desc");
   const debouncedQuery = useDebouncedValue(query.trim(), 250);
 
   const slotFilter = useMemo(
@@ -50,26 +50,17 @@ export function ItemPickerPanel({ slotIndex, usedItemIds, onEquip, onAddAlternat
     [slotIndex],
   );
 
+  // An empty query returns the slot's top items by the chosen sort — the
+  // default picker view. One-character queries stay disabled.
+  const emptyBrowse = debouncedQuery.length === 0;
   const search = useSearchItems(
-    debouncedQuery.length >= 2
-      ? { q: debouncedQuery, quality: quality || undefined, slot: slotFilter, sort }
+    emptyBrowse || debouncedQuery.length >= 2
+      ? { q: emptyBrowse ? "" : debouncedQuery, quality: quality || undefined, slot: slotFilter, sort, allowEmpty: true }
       : null,
   );
 
-  const results = search.data ?? [];
+  const results = emptyBrowse ? (search.data ?? []).slice(0, 20) : (search.data ?? []);
   const observedPct = new Map((trendsSlot?.items ?? []).map((i) => [i.item_id, i.percent]));
-
-  // With no search query, browse the slot's observed-popular items instead.
-  const browseItems = (trendsSlot?.items ?? []).map(
-    (i) =>
-      ({
-        entry: i.item_id,
-        name: i.item_name,
-        quality: i.item_quality,
-        icon: i.item_icon,
-        item_level: i.item_level ?? 0,
-      }) as unknown as ItemSearchResult,
-  );
 
   return (
     <div className="space-y-2">
@@ -110,46 +101,35 @@ export function ItemPickerPanel({ slotIndex, usedItemIds, onEquip, onAddAlternat
       </div>
 
       <div className="max-h-80 overflow-y-auto rounded border border-zinc-800 divide-y divide-zinc-800/70">
-        {debouncedQuery.length < 2 ? (
-          browseItems.length > 0 ? (
-            <>
-              <p className="px-2.5 pt-2 pb-1 text-3xs uppercase tracking-wide text-zinc-600">
-                Observed on logged players
-              </p>
-              {browseItems.map((item) => (
-                <PickerRow
-                  key={item.entry}
-                  item={item}
-                  usedItemIds={usedItemIds}
-                  observedPct={observedPct.get(item.entry)}
-                  onEquip={onEquip}
-                  onAddAlternate={onAddAlternate}
-                />
-              ))}
-            </>
-          ) : (
-            <p className="p-4 text-xs text-zinc-500">
-              Type at least two characters to search items for this slot.
-            </p>
-          )
+        {debouncedQuery.length === 1 ? (
+          <p className="p-4 text-xs text-zinc-500">
+            Type at least two characters to search items for this slot.
+          </p>
         ) : search.isLoading ? (
           <p className="p-4 text-xs text-zinc-500">Searching…</p>
         ) : results.length === 0 ? (
           <p className="p-4 text-xs text-zinc-500">No matching items for this slot.</p>
         ) : (
-          results.map((item) => (
-            <PickerRow
-              key={item.entry}
-              item={item}
-              usedItemIds={usedItemIds}
-              observedPct={observedPct.get(item.entry)}
-              onEquip={onEquip}
-              onAddAlternate={onAddAlternate}
-            />
-          ))
+          <>
+            {emptyBrowse && (
+              <p className="px-2.5 pt-2 pb-1 text-3xs uppercase tracking-wide text-zinc-600">
+                Top items for this slot by {SORTS.find((s) => s.value === sort)?.label.toLowerCase()}
+              </p>
+            )}
+            {results.map((item) => (
+              <PickerRow
+                key={item.entry}
+                item={item}
+                usedItemIds={usedItemIds}
+                observedPct={observedPct.get(item.entry)}
+                onEquip={onEquip}
+                onAddAlternate={onAddAlternate}
+              />
+            ))}
+          </>
         )}
       </div>
-      {results.length >= 25 && (
+      {!emptyBrowse && results.length >= 25 && (
         <p className="text-2xs text-zinc-600">Showing the top 25 matches — refine the search to narrow down.</p>
       )}
     </div>

@@ -42,15 +42,18 @@ func (s *Service) handleSearchItems(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 	db := servicedbstore.DatabaseStore(s.broker)
 
-	q := r.URL.Query().Get("q")
-	if len(q) < 2 {
-		badRequest(ctx, w, "Query parameter 'q' must be at least 2 characters.")
-		return
-	}
-
 	qualities := parseIntList(r.URL.Query().Get("quality"))
 	slots := parseIntList(r.URL.Query().Get("slot"))
 	classes := parseIntList(r.URL.Query().Get("class"))
+
+	// An empty query is allowed when an inventory-slot filter narrows the
+	// scan — it returns the top items for that slot by the chosen sort
+	// (the gear builder's default picker view).
+	q := r.URL.Query().Get("q")
+	if len(q) < 2 && !(len(q) == 0 && len(slots) > 0) {
+		badRequest(ctx, w, "Query parameter 'q' must be at least 2 characters.")
+		return
+	}
 
 	// sort param: "quality_desc" (default), "item_level_desc", "item_level_asc",
 	// "required_level_desc", "required_level_asc"

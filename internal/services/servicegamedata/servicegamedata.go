@@ -83,6 +83,7 @@ func (s *Service) setupRoutes(_ *authz.Authz) {
 	s.router.With(searchLimiter.middleware).Get("/search/items", s.handleSearchItems)
 	s.router.With(searchLimiter.middleware).Get("/search/creatures", s.handleSearchCreatures)
 	s.router.With(searchLimiter.middleware).Get("/search/item-sets", s.handleSearchItemSets)
+	s.router.With(searchLimiter.middleware).Get("/search/enchantments", s.handleSearchEnchantments)
 	s.router.Get("/item-set", s.handleGetItemSetDetail)
 }
 

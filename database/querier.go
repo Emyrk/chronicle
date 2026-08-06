@@ -121,15 +121,19 @@ type sqlcQuerier interface {
 	// instance_id, instance_name, and realm_id.
 	FindMatchingServerUpload(ctx context.Context, arg FindMatchingServerUploadParams) (WoWLogGroup, error)
 	GearTrendsSlotEnchants(ctx context.Context, arg GearTrendsSlotEnchantsParams) ([]GearTrendsSlotEnchantsRow, error)
-	// Observed gear trends: what logged players of a class/spec actually wore,
-	// aggregated per equipment slot from armory gear-history snapshots.
+	// Observed gear trends: the gear worn by the top leaderboard performances
+	// of a class/spec, aggregated per equipment slot.
 	//
 	// Cohort rules (shared by both queries):
 	//   * ranked parses only (encounter_dps_rankings), deduped to one
 	//     representative instance per run (duplicate uploads collapse via
 	//     COALESCE(duplicate_group_id, id) — the house convention);
-	//   * one observation per unique player: the latest qualifying snapshot
-	//     in the window;
+	//   * best parse (highest DPS) per unique player, optionally filtered by
+	//     raid (instance_name) and realm, then the top @top_n players by that
+	//     parse's DPS;
+	//   * each player's observation is the gear snapshot from THAT parse's
+	//     log instance — what they wore during the performance, not their
+	//     latest outfit;
 	//   * tenant scoping comes from RLS on encounter_dps_rankings plus the
 	//     wow_server_realms join for gear history (which has no RLS).
 	// Item name/quality/icon/level are read from the snapshot jsonb itself,
@@ -659,6 +663,9 @@ type sqlcQuerier interface {
 	SearchGamePlayers(ctx context.Context, arg SearchGamePlayersParams) ([]SearchGamePlayersRow, error)
 	SearchItemSets(ctx context.Context, arg SearchItemSetsParams) ([]SearchItemSetsRow, error)
 	SearchItemTemplates(ctx context.Context, arg SearchItemTemplatesParams) ([]SearchItemTemplatesRow, error)
+	// Name search for the gear builder's enchant picker. Same names appear at
+	// multiple ranks/IDs, so the ID is part of the result identity.
+	SearchSpellItemEnchantments(ctx context.Context, arg SearchSpellItemEnchantmentsParams) ([]SearchSpellItemEnchantmentsRow, error)
 	SetDuplicateGroupIDs(ctx context.Context, arg SetDuplicateGroupIDsParams) error
 	SetPanelLayoutCode(ctx context.Context, arg SetPanelLayoutCodeParams) (int64, error)
 	SetPrimaryUserCharacter(ctx context.Context, arg SetPrimaryUserCharacterParams) (UserCharacterLink, error)
