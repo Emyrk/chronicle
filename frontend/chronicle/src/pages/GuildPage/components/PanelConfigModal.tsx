@@ -135,6 +135,8 @@ function PanelConfigModalInner({ panel, definition, onSave, onClose }: InnerProp
             className="w-full px-3 py-2 rounded-md border border-input bg-background text-sm resize-none"
           />
         );
+      case "custom":
+        return field.render?.(value, (v) => handleChange(field.name, v)) ?? null;
       default:
         return null;
     }

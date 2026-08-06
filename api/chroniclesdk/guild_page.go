@@ -33,7 +33,9 @@ type GuildPageTheme struct {
 	LogoURL       string            `json:"logo_url,omitempty"`
 	Description   string            `json:"description,omitempty"`
 	// HeaderLayout selects the header arrangement: "" or "centered" for the
-	// classic centered header, "left" for the armory-style left-aligned one.
+	// classic centered header; "left" for the armory-style identity with the
+	// description beside it, centered as a pair; "left_joined" for the
+	// identity with the description underneath it, left-aligned.
 	HeaderLayout string                    `json:"header_layout,omitempty"`
 	Tags         []GuildTag                `json:"tags,omitempty"`
 	Socials      map[SocialPlatform]string `json:"socials,omitempty"` // platform key -> URL

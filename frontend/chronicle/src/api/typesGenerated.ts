@@ -1076,7 +1076,9 @@ export interface GuildPageTheme {
     readonly description?: string;
     /**
      * HeaderLayout selects the header arrangement: "" or "centered" for the
-     * classic centered header, "left" for the armory-style left-aligned one.
+     * classic centered header; "left" for the armory-style identity with the
+     * description beside it, centered as a pair; "left_joined" for the
+     * identity with the description underneath it, left-aligned.
      */
     readonly header_layout?: string;
     readonly tags?: readonly GuildTag[];

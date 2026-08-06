@@ -1,9 +1,5 @@
-import { Quote } from "lucide-react";
+import { Quote, Plus, X } from "lucide-react";
 import type { GuildPanelDefinition, GuildPanelRenderProps } from "./types";
-
-interface QuoteBoardConfig {
-  quotes: string;
-}
 
 interface GuildQuote {
   text: string;
@@ -12,11 +8,24 @@ interface GuildQuote {
   when: string;
 }
 
-/**
- * One quote per line: "Quote | Author | context | date" — everything after
- * the quote is optional.
- */
-function parseQuotes(raw: string): GuildQuote[] {
+interface QuoteBoardConfig {
+  /** Structured quotes; older saves may hold a pipe-separated string. */
+  quotes: GuildQuote[] | string;
+}
+
+/** Accepts the structured array, or the legacy "Quote | Author | context | date" lines. */
+function normalizeQuotes(raw: GuildQuote[] | string | undefined): GuildQuote[] {
+  if (Array.isArray(raw)) {
+    return raw
+      .map((q) => ({
+        text: q?.text ?? "",
+        who: q?.who ?? "",
+        context: q?.context ?? "",
+        when: q?.when ?? "",
+      }))
+      .filter((q) => q.text.length > 0);
+  }
+  if (typeof raw !== "string") return [];
   return raw
     .split("\n")
     .map((line) => line.trim())
@@ -28,16 +37,86 @@ function parseQuotes(raw: string): GuildQuote[] {
     .filter((quote) => quote.text.length > 0);
 }
 
+/** Structured editor rendered inside the panel config modal. */
+function QuotesEditor({ value, onChange }: { value: unknown; onChange: (value: unknown) => void }) {
+  // Keep empty rows while editing; they are dropped at render time.
+  const quotes = Array.isArray(value)
+    ? (value as GuildQuote[])
+    : normalizeQuotes(value as string | undefined);
+
+  const update = (index: number, patch: Partial<GuildQuote>) => {
+    onChange(quotes.map((q, i) => (i === index ? { ...q, ...patch } : q)));
+  };
+
+  return (
+    <div className="space-y-2.5">
+      {quotes.length === 0 && (
+        <p className="text-xs text-muted-foreground">No quotes yet — add your first one.</p>
+      )}
+      {quotes.map((quote, i) => (
+        <div key={i} className="space-y-1.5 rounded-md border border-border/60 bg-muted/20 p-2.5">
+          <div className="flex items-start gap-1.5">
+            <textarea
+              value={quote.text}
+              onChange={(e) => update(i, { text: e.target.value })}
+              placeholder="What did they say?"
+              rows={2}
+              className="flex-1 resize-none rounded-md border border-input bg-background px-2.5 py-1.5 text-sm"
+            />
+            <button
+              type="button"
+              onClick={() => onChange(quotes.filter((_, j) => j !== i))}
+              className="rounded p-1 text-muted-foreground hover:bg-destructive/10 hover:text-destructive"
+              title="Remove quote"
+            >
+              <X className="h-4 w-4" />
+            </button>
+          </div>
+          <div className="grid grid-cols-[1fr_1.4fr_72px] gap-1.5">
+            <input
+              type="text"
+              value={quote.who}
+              onChange={(e) => update(i, { who: e.target.value })}
+              placeholder="Who"
+              className="rounded-md border border-input bg-background px-2 py-1 text-xs"
+            />
+            <input
+              type="text"
+              value={quote.context}
+              onChange={(e) => update(i, { context: e.target.value })}
+              placeholder="Context (optional)"
+              className="rounded-md border border-input bg-background px-2 py-1 text-xs"
+            />
+            <input
+              type="text"
+              value={quote.when}
+              onChange={(e) => update(i, { when: e.target.value })}
+              placeholder="Date"
+              className="rounded-md border border-input bg-background px-2 py-1 text-xs"
+            />
+          </div>
+        </div>
+      ))}
+      <button
+        type="button"
+        onClick={() => onChange([...quotes, { text: "", who: "", context: "", when: "" }])}
+        className="flex w-full items-center justify-center gap-1.5 rounded-md border border-dashed border-border px-3 py-2 text-sm text-muted-foreground hover:bg-muted/50 hover:text-foreground transition-colors"
+      >
+        <Plus className="h-4 w-4" />
+        Add quote
+      </button>
+    </div>
+  );
+}
+
 function QuoteBoardContent({ config, position, isEditing }: GuildPanelRenderProps<QuoteBoardConfig>) {
-  const quotes = parseQuotes(config.quotes || "");
+  const quotes = normalizeQuotes(config.quotes);
 
   if (quotes.length === 0) {
     return (
       <div className="flex items-center justify-center h-full min-h-[100px] text-muted-foreground">
         <p className="text-sm text-center px-4">
-          {isEditing
-            ? "Open this panel's settings to add quotes (one per line: “Quote | Author | context | date”)."
-            : "No quotes yet"}
+          {isEditing ? "Open this panel's settings to add quotes." : "No quotes yet"}
         </p>
       </div>
     );
@@ -83,14 +162,13 @@ export const QuoteBoardPanel: GuildPanelDefinition<QuoteBoardConfig> = {
   configSchema: [
     {
       name: "quotes",
-      label: "Quotes (one per line: “Quote | Author | context | date”)",
-      type: "textarea",
-      placeholder:
-        "I have never stood in fire in my life | Thumbly | after the third Living Bomb | Jul 24\nJust pull it, I have a flask running | Grubnak | 12 seconds before the wipe | Jul 24",
+      label: "Quotes",
+      type: "custom",
+      render: (value, onChange) => <QuotesEditor value={value} onChange={onChange} />,
     },
   ],
   defaultConfig: {
-    quotes: "",
+    quotes: [],
   },
   render: (props) => <QuoteBoardContent {...props} />,
 };

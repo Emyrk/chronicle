@@ -28,10 +28,12 @@ export interface GuildPanelRenderProps<TConfig> {
 export interface ConfigField {
   name: string;
   label: string;
-  type: "text" | "number" | "select" | "boolean" | "textarea";
+  type: "text" | "number" | "select" | "boolean" | "textarea" | "custom";
   options?: { value: string; label: string }[];
   placeholder?: string;
   defaultValue?: unknown;
+  /** Renders the editor for a "custom" field inside the config modal. */
+  render?: (value: unknown, onChange: (value: unknown) => void) => React.ReactNode;
 }
 
 // Panel instance as stored/rendered

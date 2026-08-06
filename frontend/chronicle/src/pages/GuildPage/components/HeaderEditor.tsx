@@ -71,12 +71,17 @@ export function HeaderEditor({ theme, onChange }: HeaderEditorProps) {
           <div className="space-y-1.5">
             <label className="text-sm font-medium">Layout</label>
             <select
-              value={theme.header_layout === "left" ? "left" : "centered"}
+              value={
+                theme.header_layout === "left" || theme.header_layout === "left_joined"
+                  ? theme.header_layout
+                  : "centered"
+              }
               onChange={(e) => onChange({ ...theme, header_layout: e.target.value })}
               className="w-full px-3 py-2 rounded-md border border-input bg-background text-sm"
             >
               <option value="centered">Centered</option>
-              <option value="left">Left-aligned</option>
+              <option value="left">Left aligned</option>
+              <option value="left_joined">Left aligned — joined</option>
             </select>
           </div>
 

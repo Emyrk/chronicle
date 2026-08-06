@@ -67,7 +67,7 @@ func validateTheme(theme chroniclesdk.GuildPageTheme) error {
 	}
 
 	switch theme.HeaderLayout {
-	case "", "centered", "left":
+	case "", "centered", "left", "left_joined":
 	default:
 		return fmt.Errorf("invalid header layout: %q", theme.HeaderLayout)
 	}
