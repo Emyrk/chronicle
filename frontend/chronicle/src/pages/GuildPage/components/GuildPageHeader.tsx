@@ -53,7 +53,7 @@ export function GuildPageHeader({ guild, theme, leading }: GuildPageHeaderProps)
       <div className="mb-6 pt-6">
         {/* Identity on the left; description fills the open right column. */}
         <div className="flex flex-col gap-4 lg:grid lg:grid-cols-[auto_minmax(0,1fr)] lg:items-center lg:gap-12">
-        <div className="flex items-start gap-4">
+        <div className="flex items-center gap-4">
           {leading}
           {theme.logo_url ? (
             <img
@@ -113,7 +113,7 @@ export function GuildPageHeader({ guild, theme, leading }: GuildPageHeaderProps)
           </div>
         </div>
         {theme.description && (
-          <p className="max-w-3xl text-sm leading-relaxed text-muted-foreground">
+          <p className="max-w-3xl text-sm leading-relaxed text-muted-foreground lg:justify-self-center lg:text-center">
             {theme.description}
           </p>
         )}
@@ -182,7 +182,9 @@ export function GuildPageHeader({ guild, theme, leading }: GuildPageHeaderProps)
             </div>
           )}
           <div className="text-left">
-            <h1 className="text-3xl font-bold">{guild.name}</h1>
+            <h1 className="text-3xl font-bold" style={{ color: "var(--color-amber-500)" }}>
+              {guild.name}
+            </h1>
             <p className="text-sm text-muted-foreground">{guild.realm_name}</p>
           </div>
         </div>
