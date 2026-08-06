@@ -144,7 +144,7 @@ function PanelConfigModalInner({ panel, definition, onSave, onClose }: InnerProp
 
   return (
     <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
-      <div className="bg-card border border-border rounded-lg w-full max-w-md mx-4 shadow-xl">
+      <div className="bg-card border border-border rounded-lg w-full max-w-lg mx-4 shadow-xl">
         <div className="flex items-center justify-between px-4 py-3 border-b border-border">
           <h2 className="text-lg font-semibold">Configure {definition.label}</h2>
           <button
@@ -184,7 +184,7 @@ function PanelConfigModalInner({ panel, definition, onSave, onClose }: InnerProp
         </div>
 
         <form onSubmit={handleSubmit}>
-          <div className="p-4 space-y-4">
+          <div className="p-4 space-y-4 max-h-[65vh] overflow-y-auto styled-scrollbar">
             {activeTab === "settings" && (
               <>
                 {/* Config fields */}

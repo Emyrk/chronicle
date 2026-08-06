@@ -1,11 +1,24 @@
 import { Quote, Plus, X } from "lucide-react";
+import { CLASS_CSS_VAR, CLASS_DISPLAY } from "@/pages/Rankings/classDisplay";
 import type { GuildPanelDefinition, GuildPanelRenderProps } from "./types";
 
 interface GuildQuote {
   text: string;
   who: string;
+  /** A class key ("WARRIOR", ...) or a custom hex color for the author name. */
+  whoColor?: string;
   context: string;
   when: string;
+}
+
+const CLASS_COLOR_OPTIONS = Object.keys(CLASS_DISPLAY).filter((cls) => cls !== "UNKNOWN");
+
+/** Resolves a stored whoColor to a CSS color; undefined = default styling. */
+function resolveWhoColor(whoColor?: string): string | undefined {
+  if (!whoColor) return undefined;
+  if (CLASS_CSS_VAR[whoColor]) return CLASS_CSS_VAR[whoColor];
+  if (whoColor.startsWith("#")) return whoColor;
+  return undefined;
 }
 
 interface QuoteBoardConfig {
@@ -20,6 +33,7 @@ function normalizeQuotes(raw: GuildQuote[] | string | undefined): GuildQuote[] {
       .map((q) => ({
         text: q?.text ?? "",
         who: q?.who ?? "",
+        whoColor: q?.whoColor,
         context: q?.context ?? "",
         when: q?.when ?? "",
       }))
@@ -72,14 +86,54 @@ function QuotesEditor({ value, onChange }: { value: unknown; onChange: (value: u
               <X className="h-4 w-4" />
             </button>
           </div>
-          <div className="grid grid-cols-[1fr_1.4fr_72px] gap-1.5">
+          <div className="grid grid-cols-2 gap-1.5">
             <input
               type="text"
               value={quote.who}
               onChange={(e) => update(i, { who: e.target.value })}
               placeholder="Who"
               className="rounded-md border border-input bg-background px-2 py-1 text-xs"
+              style={{ color: resolveWhoColor(quote.whoColor) }}
             />
+            <div className="flex items-center gap-1.5">
+              <select
+                value={
+                  quote.whoColor
+                    ? CLASS_CSS_VAR[quote.whoColor]
+                      ? quote.whoColor
+                      : "custom"
+                    : ""
+                }
+                onChange={(e) => {
+                  const v = e.target.value;
+                  update(i, { whoColor: v === "custom" ? "#e8a33d" : v || undefined });
+                }}
+                className="min-w-0 flex-1 rounded-md border border-input bg-background px-2 py-1 text-xs"
+                title="Name color"
+              >
+                <option value="">Default color</option>
+                {CLASS_COLOR_OPTIONS.map((cls) => (
+                  <option key={cls} value={cls}>
+                    {CLASS_DISPLAY[cls]}
+                  </option>
+                ))}
+                <option value="custom">Custom…</option>
+              </select>
+              {quote.whoColor?.startsWith("#") && (
+                <label className="relative shrink-0">
+                  <span
+                    className="block h-6 w-6 cursor-pointer rounded-md border border-input"
+                    style={{ backgroundColor: quote.whoColor }}
+                  />
+                  <input
+                    type="color"
+                    value={quote.whoColor}
+                    onChange={(e) => update(i, { whoColor: e.target.value })}
+                    className="absolute inset-0 h-full w-full cursor-pointer opacity-0"
+                  />
+                </label>
+              )}
+            </div>
             <input
               type="text"
               value={quote.context}
@@ -140,7 +194,14 @@ function QuoteBoardContent({ config, position, isEditing }: GuildPanelRenderProp
           </blockquote>
           {(quote.who || quote.context || quote.when) && (
             <figcaption className="mt-2 flex items-baseline gap-2 text-[11.5px] text-muted-foreground/80">
-              {quote.who && <span className="font-semibold text-muted-foreground">{quote.who}</span>}
+              {quote.who && (
+                <span
+                  className="font-semibold text-muted-foreground"
+                  style={{ color: resolveWhoColor(quote.whoColor) }}
+                >
+                  {quote.who}
+                </span>
+              )}
               <span className="min-w-0 flex-1 truncate">{quote.context}</span>
               {quote.when && <span className="shrink-0">{quote.when}</span>}
             </figcaption>
