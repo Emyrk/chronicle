@@ -14,7 +14,14 @@ import type { ComparisonResult } from "./comparison.processor";
 import { useChartDataEntries, type ChartDataEntry } from "../ChartDataRegistry";
 import { ComparisonChart, type ComparisonSource } from "./ComparisonChart";
 
-type ComparisonContentProps = PanelRenderProps<ComparisonResult>;
+export interface ComparisonContentProps extends PanelRenderProps<ComparisonResult> {
+  /** Deterministic chart sources for Storybook and Remotion demos. */
+  entriesOverride?: Map<string, ChartDataEntry>;
+  /** Controlled picker state for frame-driven Remotion choreography. */
+  pickerOpenOverride?: boolean;
+  /** Disable CSS transitions while Remotion controls every visual frame. */
+  disableChartTransitionsOverride?: boolean;
+}
 
 /** Parse panelOption "panel-1,panel-2,mo" → panel IDs only */
 function parseSelectedIds(option: string | null | undefined): string[] {
@@ -39,15 +46,26 @@ function serializeOption(ids: string[], matchedOnly: boolean): string | null {
 }
 
 export function ComparisonContent(props: ComparisonContentProps) {
-  const { panelOption, setPanelOption, panelId } = props;
-  const entries = useChartDataEntries();
+  const {
+    panelOption,
+    setPanelOption,
+    panelId,
+    entriesOverride,
+    pickerOpenOverride,
+    disableChartTransitionsOverride,
+  } = props;
+  const registryEntries = useChartDataEntries();
+  const entries = entriesOverride ?? registryEntries;
 
   const selectedIds = useMemo(
     () => parseSelectedIds(panelOption),
     [panelOption],
   );
 
-  const matchedOnly = useMemo(() => hasMatchedOnlyToken(panelOption), [panelOption]);
+  const matchedOnly = useMemo(
+    () => hasMatchedOnlyToken(panelOption),
+    [panelOption],
+  );
 
   // Build sources from registry entries
   const sources: ComparisonSource[] = useMemo(() => {
@@ -65,21 +83,32 @@ export function ComparisonContent(props: ComparisonContentProps) {
     return result;
   }, [selectedIds, entries]);
 
-  const togglePanel = useCallback((id: string) => {
-    if (!setPanelOption) return;
-    const current = new Set(selectedIds);
-    if (current.has(id)) {
-      current.delete(id);
-    } else {
-      current.add(id);
-    }
-    setPanelOption(serializeOption([...current], matchedOnly));
-  }, [setPanelOption, selectedIds, matchedOnly]);
+  const togglePanel = useCallback(
+    (id: string) => {
+      if (!setPanelOption) return;
+      const current = new Set(selectedIds);
+      if (current.has(id)) {
+        current.delete(id);
+      } else {
+        current.add(id);
+      }
+      setPanelOption(serializeOption([...current], matchedOnly));
+    },
+    [setPanelOption, selectedIds, matchedOnly],
+  );
 
-  const removePanel = useCallback((id: string) => {
-    if (!setPanelOption) return;
-    setPanelOption(serializeOption(selectedIds.filter((i) => i !== id), matchedOnly));
-  }, [setPanelOption, selectedIds, matchedOnly]);
+  const removePanel = useCallback(
+    (id: string) => {
+      if (!setPanelOption) return;
+      setPanelOption(
+        serializeOption(
+          selectedIds.filter((i) => i !== id),
+          matchedOnly,
+        ),
+      );
+    },
+    [setPanelOption, selectedIds, matchedOnly],
+  );
 
   const toggleMatchedOnly = useCallback(() => {
     if (!setPanelOption) return;
@@ -104,6 +133,7 @@ export function ComparisonContent(props: ComparisonContentProps) {
           availablePanels={availablePanels}
           selectedIds={selectedIds}
           onToggle={togglePanel}
+          openOverride={pickerOpenOverride}
         />
         <div className="flex-1 flex flex-col items-center justify-center text-center text-sm text-muted-foreground gap-2 px-4">
           <BarChart3 className="h-8 w-8 opacity-30" />
@@ -147,18 +177,33 @@ export function ComparisonContent(props: ComparisonContentProps) {
           selectedIds={selectedIds}
           onToggle={togglePanel}
           compact
+          openOverride={pickerOpenOverride}
         />
         {/* Spacer pushes the toggle to the right */}
         <span className="flex-1" />
-        <label className="flex items-center gap-1.5 text-xs text-muted-foreground hover:text-foreground cursor-pointer shrink-0">
+        <label
+          className="flex items-center gap-1.5 text-xs text-muted-foreground hover:text-foreground cursor-pointer shrink-0"
+          data-lesson-target="compare-panels"
+          data-demo-matched-only
+        >
           Matched only
-          <Switch size="sm" checked={matchedOnly} onCheckedChange={toggleMatchedOnly} />
+          <Switch
+            size="sm"
+            checked={matchedOnly}
+            onCheckedChange={toggleMatchedOnly}
+          />
         </label>
       </div>
 
       {/* Chart */}
       <div className="flex-1 min-h-0">
-        <ComparisonChart sources={sources} matchedOnly={matchedOnly} perSecond={props.perSecond} durationMs={props.durationMs} />
+        <ComparisonChart
+          sources={sources}
+          matchedOnly={matchedOnly}
+          perSecond={props.perSecond}
+          durationMs={props.durationMs}
+          disableTransitions={disableChartTransitionsOverride}
+        />
       </div>
     </div>
   );
@@ -173,33 +218,46 @@ function PanelPicker({
   selectedIds,
   onToggle,
   compact,
+  openOverride,
 }: {
   availablePanels: ChartDataEntry[];
   selectedIds: string[];
   onToggle: (id: string) => void;
   compact?: boolean;
+  openOverride?: boolean;
 }) {
-  const [isOpen, setIsOpen] = useState(false);
+  const [internalOpen, setInternalOpen] = useState(false);
+  const isOpen = openOverride ?? internalOpen;
   const containerRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
-    if (!isOpen) return;
+    if (!isOpen || openOverride !== undefined) return;
     function handleClickOutside(e: MouseEvent) {
-      if (containerRef.current && !containerRef.current.contains(e.target as Node)) {
-        setIsOpen(false);
+      if (
+        containerRef.current &&
+        !containerRef.current.contains(e.target as Node)
+      ) {
+        setInternalOpen(false);
       }
     }
     document.addEventListener("mousedown", handleClickOutside);
     return () => document.removeEventListener("mousedown", handleClickOutside);
-  }, [isOpen]);
+  }, [isOpen, openOverride]);
 
   const selectedSet = useMemo(() => new Set(selectedIds), [selectedIds]);
 
   return (
-    <div ref={containerRef} className="relative">
+    <div
+      ref={containerRef}
+      className="relative"
+      data-lesson-target="compare-panels"
+      data-demo-panel-picker
+    >
       <button
         type="button"
-        onClick={() => setIsOpen(!isOpen)}
+        onClick={() => {
+          if (openOverride === undefined) setInternalOpen(!isOpen);
+        }}
         className={cn(
           "flex items-center gap-1 text-xs cursor-pointer rounded transition-colors",
           compact
@@ -212,7 +270,13 @@ function PanelPicker({
       </button>
 
       {isOpen && (
-        <div className="absolute left-0 top-full mt-1 z-50 w-[220px] bg-popover text-popover-foreground border rounded-md shadow-lg overflow-hidden animate-in fade-in-0 zoom-in-95">
+        <div
+          className={cn(
+            "absolute left-0 top-full mt-1 z-50 w-[220px] bg-popover text-popover-foreground border rounded-md shadow-lg overflow-hidden",
+            openOverride === undefined && "animate-in fade-in-0 zoom-in-95",
+          )}
+          data-demo-panel-picker-menu
+        >
           <div className="p-1 max-h-[200px] overflow-y-auto">
             {availablePanels.length === 0 ? (
               <div className="px-2 py-3 text-xs text-muted-foreground text-center">
@@ -237,7 +301,9 @@ function PanelPicker({
                       style={{ background: entry.borderColor || "transparent" }}
                     />
                     <span className="flex-1 truncate">{entry.label}</span>
-                    <span className="text-xs text-muted-foreground">#{entry.panelIndex + 1}</span>
+                    <span className="text-xs text-muted-foreground">
+                      #{entry.panelIndex + 1}
+                    </span>
                   </button>
                 );
               })

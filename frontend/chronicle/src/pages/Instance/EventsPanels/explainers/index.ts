@@ -1,6 +1,6 @@
 /**
  * Registry of panel explainers.
- * 
+ *
  * Only panels with explainers defined here will show the ? help button.
  * Import explainers from their co-located files in each panel directory.
  */
@@ -22,15 +22,18 @@ import { pullsAndCleanupExplainer } from "../PullsAndCleanup/PullsAndCleanup.exp
 import { equipmentExplainer } from "../Equipment/explain";
 import { leaderboardExplainer } from "../LeaderboardPanel/explain";
 import { vulnerabilityEffectExplainer } from "../VulnerabilityEffect/explain";
+import { comparisonExplainer } from "../ComparisonPanel/explain";
 
 /**
  * Map of panel types to their explainer configurations.
- * 
+ *
  * Partial because not all panels have explainers yet.
  * The ? button only appears for panels in this registry.
  */
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
-export const PANEL_EXPLAINERS: Partial<Record<EventsPanelType, PanelExplainer<any, any>>> = {
+export const PANEL_EXPLAINERS: Partial<
+  Record<EventsPanelType, PanelExplainer<any, any>>
+> = {
   damage_done: damageDoneExplainer,
   enemy_damage_done: damageDoneExplainer, // Same explainer, different context
   healing_done: healingDoneExplainer,
@@ -45,6 +48,7 @@ export const PANEL_EXPLAINERS: Partial<Record<EventsPanelType, PanelExplainer<an
   equipment: equipmentExplainer,
   leaderboard: leaderboardExplainer,
   vulnerability_effect: vulnerabilityEffectExplainer,
+  comparison: comparisonExplainer,
 };
 
 /**
@@ -57,6 +61,8 @@ export function hasExplainer(panelType: EventsPanelType): boolean {
 /**
  * Get the explainer for a panel type, if available.
  */
-export function getExplainer(panelType: EventsPanelType): PanelExplainer | undefined {
+export function getExplainer(
+  panelType: EventsPanelType,
+): PanelExplainer | undefined {
   return PANEL_EXPLAINERS[panelType];
 }

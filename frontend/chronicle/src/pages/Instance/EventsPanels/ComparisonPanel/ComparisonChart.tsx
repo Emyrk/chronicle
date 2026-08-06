@@ -8,7 +8,14 @@
  * Visual styling matches PlayerMetricChart (gradient, radius, font, icons).
  */
 
-import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties } from "react";
+import {
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  type CSSProperties,
+} from "react";
 import { createPortal } from "react-dom";
 import { usePortalContainer } from "@/components/ui/PortalContainerContext";
 import { GripHorizontal, X } from "lucide-react";
@@ -49,6 +56,7 @@ export interface ComparisonChartProps {
   matchedOnly?: boolean;
   perSecond?: boolean;
   durationMs?: number;
+  disableTransitions?: boolean;
 }
 
 interface PlayerRow {
@@ -61,7 +69,13 @@ interface PlayerRow {
   total: number;
 }
 
-export function ComparisonChart({ sources, matchedOnly, perSecond, durationMs }: ComparisonChartProps) {
+export function ComparisonChart({
+  sources,
+  matchedOnly,
+  perSecond,
+  durationMs,
+  disableTransitions,
+}: ComparisonChartProps) {
   const [pinnedIds, setPinnedIds] = useState<Set<string>>(new Set());
   const handleTogglePin = useCallback((id: string) => {
     setPinnedIds((prev) => {
@@ -80,7 +94,12 @@ export function ComparisonChart({ sources, matchedOnly, perSecond, durationMs }:
     // Build per-player map
     const playerMap = new Map<
       string,
-      { playerName: string; className: string; specialization: string; values: number[] }
+      {
+        playerName: string;
+        className: string;
+        specialization: string;
+        values: number[];
+      }
     >();
 
     for (let si = 0; si < sources.length; si++) {
@@ -104,7 +123,14 @@ export function ComparisonChart({ sources, matchedOnly, perSecond, durationMs }:
       const total = entry.values.reduce((a, b) => a + b, 0);
       if (total === 0) continue;
       if (matchedOnly && entry.values.some((v) => v === 0)) continue;
-      built.push({ playerID, playerName: entry.playerName, className: entry.className, specialization: entry.specialization, values: entry.values, total });
+      built.push({
+        playerID,
+        playerName: entry.playerName,
+        className: entry.className,
+        specialization: entry.specialization,
+        values: entry.values,
+        total,
+      });
     }
     built.sort((a, b) => b.total - a.total);
 
@@ -124,7 +150,12 @@ export function ComparisonChart({ sources, matchedOnly, perSecond, durationMs }:
     );
     const gTotal = sTotals.reduce((a, b) => a + b, 0);
 
-    return { rows: built, sourceTotals: sTotals, grandTotal: gTotal, sourceColors: colors };
+    return {
+      rows: built,
+      sourceTotals: sTotals,
+      grandTotal: gTotal,
+      sourceColors: colors,
+    };
   }, [sources, matchedOnly, perSecond, durationMs]);
 
   if (rows.length === 0) {
@@ -136,12 +167,39 @@ export function ComparisonChart({ sources, matchedOnly, perSecond, durationMs }:
   }
 
   return (
-    <ScrollArea className="h-full min-h-0 flex-1">
-      <div style={{ display: "flex", flexDirection: "column", gap: "2px", padding: "4px 10px 4px 4px" }}>
+    <ScrollArea
+      className="h-full min-h-0 flex-1"
+      data-lesson-target="compare-panels"
+      data-demo-comparison-chart
+    >
+      <div
+        style={{
+          display: "flex",
+          flexDirection: "column",
+          gap: "2px",
+          padding: "4px 10px 4px 4px",
+        }}
+      >
         {/* Legend */}
-        <div style={{ display: "flex", flexWrap: "wrap", gap: "12px", padding: "0 12px 4px" }}>
+        <div
+          style={{
+            display: "flex",
+            flexWrap: "wrap",
+            gap: "12px",
+            padding: "0 12px 4px",
+          }}
+        >
           {sources.map((s, i) => (
-            <div key={i} style={{ display: "flex", alignItems: "center", gap: "6px", fontSize: "12px", color: "var(--color-class-muted-foreground)" }}>
+            <div
+              key={i}
+              style={{
+                display: "flex",
+                alignItems: "center",
+                gap: "6px",
+                fontSize: "12px",
+                color: "var(--color-class-muted-foreground)",
+              }}
+            >
               <span
                 style={{
                   display: "inline-block",
@@ -166,10 +224,16 @@ export function ComparisonChart({ sources, matchedOnly, perSecond, durationMs }:
           isPinned={pinnedIds.has("__total__")}
           onTogglePin={() => handleTogglePin("__total__")}
           showMidLine={sources.length === 2}
+          disableTransitions={disableTransitions}
         />
 
         {/* Divider */}
-        <div style={{ borderBottom: "1px solid oklch(0.5 0 0 / 0.15)", margin: "2px 0" }} />
+        <div
+          style={{
+            borderBottom: "1px solid oklch(0.5 0 0 / 0.15)",
+            margin: "2px 0",
+          }}
+        />
 
         {/* Player rows */}
         {rows.map((row) => (
@@ -182,6 +246,7 @@ export function ComparisonChart({ sources, matchedOnly, perSecond, durationMs }:
             isPinned={pinnedIds.has(row.playerID)}
             onTogglePin={() => handleTogglePin(row.playerID)}
             showMidLine={sources.length === 2}
+            disableTransitions={disableTransitions}
           />
         ))}
       </div>
@@ -201,7 +266,10 @@ interface SegmentLayout {
   sharePct: number;
 }
 
-function computeSegmentLayouts(values: number[], total: number): SegmentLayout[] {
+function computeSegmentLayouts(
+  values: number[],
+  total: number,
+): SegmentLayout[] {
   if (total === 0) return [];
   const segments: SegmentLayout[] = [];
   let offset = 0;
@@ -226,10 +294,12 @@ function StackedBarSegments({
   values,
   total,
   sourceColors,
+  disableTransitions,
 }: {
   values: number[];
   total: number;
   sourceColors: string[];
+  disableTransitions?: boolean;
 }) {
   const segments = useMemo(
     () => computeSegmentLayouts(values, total),
@@ -249,7 +319,9 @@ function StackedBarSegments({
             width: `${seg.widthPct}%`,
             background: `linear-gradient(to right, oklch(0 0 0 / 0.3), oklch(0 0 0 / 0.15)), ${sourceColors[seg.index]}`,
             opacity: 0.85,
-            transition: "width 0.3s ease, left 0.3s ease",
+            transition: disableTransitions
+              ? "none"
+              : "width 0.3s ease, left 0.3s ease",
           }}
         />
       ))}
@@ -302,27 +374,49 @@ function BreakoutTable({
 
   // Fixed-width column styles to prevent layout shift on hover-rebase.
   // Sized for: value up to -999.9M, share up to 100.0%, abs diff up to -999.9M, rel diff up to -9999.9%
-  const COL_VALUE: CSSProperties = { textAlign: "right", fontFamily: "var(--font-mono)", paddingRight: 8, minWidth: 58 };
-  const COL_SHARE: CSSProperties = { textAlign: "right", fontFamily: "var(--font-mono)", color: "var(--color-class-muted-foreground)", minWidth: 52 };
+  const COL_VALUE: CSSProperties = {
+    textAlign: "right",
+    fontFamily: "var(--font-mono)",
+    paddingRight: 8,
+    minWidth: 58,
+  };
+  const COL_SHARE: CSSProperties = {
+    textAlign: "right",
+    fontFamily: "var(--font-mono)",
+    color: "var(--color-class-muted-foreground)",
+    minWidth: 52,
+  };
   const diffCol = (diff: number): CSSProperties => ({
     textAlign: "right",
     fontFamily: "var(--font-mono)",
     fontSize: "11px",
     paddingLeft: 8,
     minWidth: 62,
-    color: diff > 0 ? "oklch(0.65 0.15 145)" : diff < 0 ? "oklch(0.65 0.15 25)" : "var(--color-class-muted-foreground)",
+    color:
+      diff > 0
+        ? "oklch(0.65 0.15 145)"
+        : diff < 0
+          ? "oklch(0.65 0.15 25)"
+          : "var(--color-class-muted-foreground)",
   });
 
   return (
     <div style={{ padding: "8px 12px", minWidth: 220 }}>
-      <table style={{ borderCollapse: "collapse", fontSize: "12px", tableLayout: "auto" }}>
+      <table
+        style={{
+          borderCollapse: "collapse",
+          fontSize: "12px",
+          tableLayout: "auto",
+        }}
+      >
         <tbody>
           {values.map((val, i) => {
             if (val === 0) return null;
             const pct = total > 0 ? (val / total) * 100 : 0;
             const isBaseline = i === baselineIdx;
             const absDiff = val - baselineVal;
-            const relDiff = baselineVal > 0 ? ((val - baselineVal) / baselineVal) * 100 : 0;
+            const relDiff =
+              baselineVal > 0 ? ((val - baselineVal) / baselineVal) * 100 : 0;
             return (
               <tr
                 key={i}
@@ -330,11 +424,16 @@ function BreakoutTable({
                 onMouseLeave={() => setHoveredIdx(null)}
                 style={{
                   cursor: showDiff ? "default" : undefined,
-                  background: isBaseline && showDiff ? "oklch(0.5 0 0 / 0.06)" : undefined,
+                  background:
+                    isBaseline && showDiff
+                      ? "oklch(0.5 0 0 / 0.06)"
+                      : undefined,
                   borderRadius: 2,
                 }}
               >
-                <td style={{ paddingRight: 8, paddingTop: 3, paddingBottom: 3 }}>
+                <td
+                  style={{ paddingRight: 8, paddingTop: 3, paddingBottom: 3 }}
+                >
                   <span
                     style={{
                       display: "inline-block",
@@ -348,20 +447,20 @@ function BreakoutTable({
                   />
                   {sources[i].label}
                 </td>
-                <td style={COL_VALUE}>
-                  {formatNumber(val)}
-                </td>
-                <td style={COL_SHARE}>
-                  {pct.toFixed(1)}%
-                </td>
+                <td style={COL_VALUE}>{formatNumber(val)}</td>
+                <td style={COL_SHARE}>{pct.toFixed(1)}%</td>
                 {showDiff && (
                   <td style={diffCol(isBaseline ? 0 : absDiff)}>
-                    {isBaseline ? "—" : `${absDiff >= 0 ? "+" : ""}${formatNumber(absDiff)}`}
+                    {isBaseline
+                      ? "—"
+                      : `${absDiff >= 0 ? "+" : ""}${formatNumber(absDiff)}`}
                   </td>
                 )}
                 {showDiff && (
                   <td style={diffCol(isBaseline ? 0 : relDiff)}>
-                    {isBaseline ? "—" : `${relDiff >= 0 ? "+" : ""}${relDiff.toFixed(1)}%`}
+                    {isBaseline
+                      ? "—"
+                      : `${relDiff >= 0 ? "+" : ""}${relDiff.toFixed(1)}%`}
                   </td>
                 )}
               </tr>
@@ -400,7 +499,9 @@ function PlayerBreakoutContent({
   return (
     <>
       {/* Header */}
-      <div style={{ padding: "8px 12px", borderBottom: "1px solid var(--border)" }}>
+      <div
+        style={{ padding: "8px 12px", borderBottom: "1px solid var(--border)" }}
+      >
         <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
           <img
             src={`/c/icons/spec_${row.className.toLowerCase()}_${row.specialization.toLowerCase().replace(/\s+/g, "")}.png`}
@@ -411,8 +512,16 @@ function PlayerBreakoutContent({
               target.src = `/c/icons/class_${row.className.toLowerCase()}.png`;
             }}
           />
-          <span style={{ fontWeight: 500, fontSize: "13px" }}>{row.playerName}</span>
-          <span style={{ marginLeft: "auto", fontSize: "12px", color: "var(--muted-foreground)" }}>
+          <span style={{ fontWeight: 500, fontSize: "13px" }}>
+            {row.playerName}
+          </span>
+          <span
+            style={{
+              marginLeft: "auto",
+              fontSize: "12px",
+              color: "var(--muted-foreground)",
+            }}
+          >
             {row.className}
           </span>
         </div>
@@ -451,11 +560,19 @@ function DraggableComparisonBreakout({
   const portalDocument = portalContainer?.ownerDocument;
   const [position, setPosition] = useState(initialPosition);
   const [isDragging, setIsDragging] = useState(false);
-  const dragStartRef = useRef<{ x: number; y: number; posX: number; posY: number } | null>(null);
+  const dragStartRef = useRef<{
+    x: number;
+    y: number;
+    posX: number;
+    posY: number;
+  } | null>(null);
 
   const handleMouseDown = useCallback(
     (e: React.MouseEvent) => {
-      if (!isMobile && (e.target as HTMLElement).closest("[data-drag-handle]")) {
+      if (
+        !isMobile &&
+        (e.target as HTMLElement).closest("[data-drag-handle]")
+      ) {
         e.preventDefault();
         setIsDragging(true);
         dragStartRef.current = {
@@ -573,6 +690,7 @@ function TotalRow({
   isPinned,
   onTogglePin,
   showMidLine,
+  disableTransitions,
 }: {
   sourceColors: string[];
   sourceTotals: number[];
@@ -581,9 +699,13 @@ function TotalRow({
   isPinned: boolean;
   onTogglePin: () => void;
   showMidLine: boolean;
+  disableTransitions?: boolean;
 }) {
   const rowRef = useRef<HTMLDivElement>(null);
-  const [pinnedPosition, setPinnedPosition] = useState<{ x: number; y: number } | null>(null);
+  const [pinnedPosition, setPinnedPosition] = useState<{
+    x: number;
+    y: number;
+  } | null>(null);
   const [tooltipOpen, setTooltipOpen] = useState(false);
 
   const handleClick = useCallback(
@@ -615,7 +737,12 @@ function TotalRow({
         cursor: "pointer",
       }}
     >
-      <StackedBarSegments values={sourceTotals} total={grandTotal} sourceColors={sourceColors} />
+      <StackedBarSegments
+        values={sourceTotals}
+        total={grandTotal}
+        sourceColors={sourceColors}
+        disableTransitions={disableTransitions}
+      />
       {showMidLine && <MidLine />}
 
       <div
@@ -653,9 +780,7 @@ function TotalRow({
           open={isPinned ? false : tooltipOpen}
           onOpenChange={setTooltipOpen}
         >
-          <TooltipTrigger asChild>
-            {rowContent}
-          </TooltipTrigger>
+          <TooltipTrigger asChild>{rowContent}</TooltipTrigger>
           <TooltipContent
             align="start"
             hideArrow
@@ -703,6 +828,7 @@ function ComparisonRow({
   isPinned,
   onTogglePin,
   showMidLine,
+  disableTransitions,
 }: {
   row: PlayerRow;
   grandTotal: number;
@@ -711,9 +837,13 @@ function ComparisonRow({
   isPinned: boolean;
   onTogglePin: () => void;
   showMidLine: boolean;
+  disableTransitions?: boolean;
 }) {
   const rowRef = useRef<HTMLDivElement>(null);
-  const [pinnedPosition, setPinnedPosition] = useState<{ x: number; y: number } | null>(null);
+  const [pinnedPosition, setPinnedPosition] = useState<{
+    x: number;
+    y: number;
+  } | null>(null);
   const [tooltipOpen, setTooltipOpen] = useState(false);
 
   const handleClick = useCallback(
@@ -744,7 +874,12 @@ function ComparisonRow({
       }}
     >
       {/* Full-width stacked segments (proportional to player's own total) */}
-      <StackedBarSegments values={row.values} total={row.total} sourceColors={sourceColors} />
+      <StackedBarSegments
+        values={row.values}
+        total={row.total}
+        sourceColors={sourceColors}
+        disableTransitions={disableTransitions}
+      />
       {showMidLine && <MidLine />}
 
       {/* Content overlay */}
@@ -833,15 +968,17 @@ function ComparisonRow({
           open={isPinned ? false : tooltipOpen}
           onOpenChange={setTooltipOpen}
         >
-          <TooltipTrigger asChild>
-            {rowContent}
-          </TooltipTrigger>
+          <TooltipTrigger asChild>{rowContent}</TooltipTrigger>
           <TooltipContent
             align="start"
             hideArrow
             className="p-0 bg-popover text-foreground border"
           >
-            <PlayerBreakoutContent row={row} sourceColors={sourceColors} sources={sources} />
+            <PlayerBreakoutContent
+              row={row}
+              sourceColors={sourceColors}
+              sources={sources}
+            />
           </TooltipContent>
         </Tooltip>
       </TooltipProvider>
@@ -854,7 +991,11 @@ function ComparisonRow({
           sources={sources}
           title={row.playerName}
         >
-          <PlayerBreakoutContent row={row} sourceColors={sourceColors} sources={sources} />
+          <PlayerBreakoutContent
+            row={row}
+            sourceColors={sourceColors}
+            sources={sources}
+          />
         </DraggableComparisonBreakout>
       )}
     </>

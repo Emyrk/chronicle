@@ -18,7 +18,9 @@ const meta: Meta<typeof PanelExplainerView> = {
   parameters: { layout: "fullscreen" },
   decorators: [
     (Story, context) => (
-      <MemoryRouter initialEntries={(context.parameters.routerEntries as string[]) ?? ["/"]}>
+      <MemoryRouter
+        initialEntries={(context.parameters.routerEntries as string[]) ?? ["/"]}
+      >
         <TooltipProvider>
           <MockInstanceEventsProvider>
             <Story />
@@ -187,6 +189,16 @@ export const EquipmentCompareLesson: Story = {
 export const VulnerabilityEstimateLesson: Story = {
   args: { panelType: "vulnerability_effect" },
   parameters: { routerEntries: ["/?lesson=estimate"] },
+};
+
+export const ComparisonPanelsLesson: Story = {
+  args: { panelType: "comparison", initialMode: "example" },
+  parameters: { routerEntries: ["/?lesson=compare-panels"] },
+};
+
+export const ComparisonHuntersLesson: Story = {
+  args: { panelType: "comparison", initialMode: "example" },
+  parameters: { routerEntries: ["/?lesson=compare-hunters"] },
 };
 
 export const FocusPlayerLesson: Story = {

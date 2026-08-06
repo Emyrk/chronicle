@@ -39,6 +39,8 @@ import LeaderboardReadProofVideo from "../../../frontend/chronicle/src/pages/Ins
 import LeaderboardEligibilityChecksVideo from "../../../frontend/chronicle/src/pages/Instance/EventsPanels/LeaderboardPanel/explain/videos/EligibilityChecks.video";
 import LeaderboardFindBlockersVideo from "../../../frontend/chronicle/src/pages/Instance/EventsPanels/LeaderboardPanel/explain/videos/FindBlockers.video";
 import VulnerabilityEstimateVideo from "../../../frontend/chronicle/src/pages/Instance/EventsPanels/VulnerabilityEffect/explain/videos/Estimate.video";
+import ComparePanelsVideo from "../../../frontend/chronicle/src/pages/Instance/EventsPanels/ComparisonPanel/explain/videos/ComparePanels.video";
+import CompareHuntersVideo from "../../../frontend/chronicle/src/pages/Instance/EventsPanels/ComparisonPanel/explain/videos/CompareHunters.video";
 
 /**
  * Studio registration for the in-app explainer lesson compositions.
@@ -154,6 +156,10 @@ export const RemotionRoot: React.FC = () => {
         <Composition id="LeaderboardReadProof" component={LeaderboardReadProofVideo} durationInFrames={350} fps={30} width={1280} height={720} />
         <Composition id="LeaderboardEligibilityChecks" component={LeaderboardEligibilityChecksVideo} durationInFrames={350} fps={30} width={1280} height={720} />
         <Composition id="LeaderboardFindBlockers" component={LeaderboardFindBlockersVideo} durationInFrames={350} fps={30} width={1280} height={720} />
+      </Folder>
+      <Folder name="ComparisonLessons">
+        <Composition id="ComparePanels" component={ComparePanelsVideo} durationInFrames={500} fps={30} width={1280} height={720} />
+        <Composition id="CompareHunters" component={CompareHuntersVideo} durationInFrames={470} fps={30} width={1280} height={720} />
       </Folder>
       <Folder name="FocusLessons">
         <Composition id="FocusPlayer" component={FocusPlayerVideo} durationInFrames={470} fps={30} width={1280} height={720} />
