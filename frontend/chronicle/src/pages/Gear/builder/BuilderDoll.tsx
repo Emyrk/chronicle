@@ -1,4 +1,6 @@
+import { Check, X } from "lucide-react";
 import { BOTTOM_SLOTS, LEFT_SLOTS, RIGHT_SLOTS } from "@/pages/ArmoryPage/types";
+import { cn } from "@/lib/utils";
 import { slotOwned, type CharacterMatch } from "./characterMatch";
 import type { GearStage } from "./gearListModel";
 import { itemRefKey } from "./useListItems";
@@ -14,13 +16,15 @@ interface BuilderDollProps {
   scores?: Map<number, number>;
   /** Armory character match; adds owned/equipped/missing markers. */
   match?: CharacterMatch;
+  /** Matched character's name, for the marker legend. */
+  matchName?: string;
 }
 
 /**
  * The builder paperdoll: two slot columns plus the weapon row, mirroring
  * the armory layout. Read-only when onSelectSlot is absent.
  */
-export function BuilderDoll({ stage, items, selectedSlot, onSelectSlot, scores, match }: BuilderDollProps) {
+export function BuilderDoll({ stage, items, selectedSlot, onSelectSlot, scores, match, matchName }: BuilderDollProps) {
   const equippedItemIds = new Set(
     Object.values(stage.slots)
       .filter((e) => !!e)
@@ -102,6 +106,39 @@ export function BuilderDoll({ stage, items, selectedSlot, onSelectSlot, scores, 
           );
         })}
       </div>
+      {match && (
+        <div className="flex flex-wrap items-center gap-x-3 gap-y-1 border-t border-zinc-800 pt-2 text-2xs text-zinc-400">
+          <span className="text-zinc-500">{matchName ?? "Matched character"}:</span>
+          <span className="inline-flex items-center gap-1">
+            <MarkerDot state="equipped" /> wearing now
+          </span>
+          <span className="inline-flex items-center gap-1">
+            <MarkerDot state="owned" /> owns
+          </span>
+          <span className="inline-flex items-center gap-1">
+            <MarkerDot state="missing" /> never logged with it
+          </span>
+        </div>
+      )}
     </div>
+  );
+}
+
+function MarkerDot({ state }: { state: "equipped" | "owned" | "missing" }) {
+  return (
+    <span
+      className={cn(
+        "flex h-3.5 w-3.5 items-center justify-center rounded-full",
+        state === "equipped" && "bg-blue-500 text-white",
+        state === "owned" && "bg-emerald-500 text-zinc-950",
+        state === "missing" && "bg-amber-400 text-zinc-950",
+      )}
+    >
+      {state === "missing" ? (
+        <X className="h-2.5 w-2.5" strokeWidth={3.5} />
+      ) : (
+        <Check className="h-2.5 w-2.5" strokeWidth={3.5} />
+      )}
+    </span>
   );
 }

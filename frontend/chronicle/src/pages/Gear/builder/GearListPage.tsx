@@ -256,6 +256,7 @@ function ReadOnlyView({
                     items={items}
                     scores={scores}
                     match={charMatch.match}
+                    matchName={charMatch.matched?.name}
                     selectedSlot={selectedSlot ?? undefined}
                     onSelectSlot={(i) => setSelectedSlot((prev) => (prev === i ? null : i))}
                   />
@@ -416,6 +417,7 @@ function EditorView({
                   onSelectSlot={(i) => setSelectedSlot((prev) => (prev === i ? null : i))}
                   scores={scores}
                   match={charMatch.match}
+                  matchName={charMatch.matched?.name}
                 />
                 <p className="text-2xs text-zinc-500">Click a slot to pick its item.</p>
               </div>

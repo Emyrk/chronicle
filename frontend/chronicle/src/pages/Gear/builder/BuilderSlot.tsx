@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { Plus, StickyNote } from "lucide-react";
+import { Check, Plus, StickyNote, X } from "lucide-react";
 import { ItemTooltip } from "@/components/ui/ItemTooltip/ItemTooltip";
 import { CursorTooltip, type CursorPos } from "@/pages/ArmoryPage/overview/CursorTooltip";
 import { getQualityBorderClass, getQualityTextClass, type GearSlotDef } from "@/pages/ArmoryPage/types";
@@ -139,18 +139,24 @@ export function BuilderSlot({
           <span
             title={
               matchState === "equipped"
-                ? "Currently equipped by the matched character"
+                ? "The matched character is wearing this right now"
                 : matchState === "owned"
-                  ? "Seen in the matched character's gear history"
-                  : "Not seen in the matched character's gear history"
+                  ? "The matched character owns this (seen in their logs)"
+                  : "The matched character has never been logged with this"
             }
             className={cn(
-              "absolute -top-1 -right-1 h-2.5 w-2.5 rounded-full border border-zinc-950",
-              matchState === "equipped" && "bg-blue-400",
-              matchState === "owned" && "bg-emerald-400",
-              matchState === "missing" && "bg-amber-400/90",
+              "absolute -top-1.5 -right-1.5 flex h-3.5 w-3.5 items-center justify-center rounded-full border border-zinc-950",
+              matchState === "equipped" && "bg-blue-500 text-white",
+              matchState === "owned" && "bg-emerald-500 text-zinc-950",
+              matchState === "missing" && "bg-amber-400 text-zinc-950",
             )}
-          />
+          >
+            {matchState === "missing" ? (
+              <X className="h-2.5 w-2.5" strokeWidth={3.5} />
+            ) : (
+              <Check className="h-2.5 w-2.5" strokeWidth={3.5} />
+            )}
+          </span>
         )}
       </div>
 
