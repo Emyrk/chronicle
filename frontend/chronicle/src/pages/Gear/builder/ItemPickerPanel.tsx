@@ -1,6 +1,6 @@
 import { useMemo, useState } from "react";
 import { Input } from "@/components/ui/input";
-import { useSearchItems } from "@/api/gamedata";
+import { useSearchItems, useSimItems } from "@/api/gamedata";
 import { getQualityTextClass } from "@/pages/ArmoryPage/types";
 import { ItemIcon } from "@/components/ui/ItemIcon/ItemIcon";
 import { Button } from "@/components/ui/button";
@@ -9,6 +9,7 @@ import { useDebouncedValue } from "@/hooks/useDebouncedValue";
 import { SLOT_INVENTORY_TYPES } from "./gearListModel";
 import type { GearTrendsSlot, ItemSearchResult } from "@/api/typesGenerated";
 import { formatEquipRate } from "../trends/trendsModel";
+import { formatScore, scoreItem, type StatWeights } from "./gearScoring";
 
 const QUALITY_CHIPS = [
   { value: "", label: "All" },
@@ -32,6 +33,10 @@ interface ItemPickerPanelProps {
   onAddAlternate?: (item: ItemSearchResult) => void;
   /** Observed cohort data for this slot: popularity bars + browse list. */
   trendsSlot?: GearTrendsSlot;
+  /** Active stat weights; enables per-row scores. */
+  weights?: StatWeights | null;
+  /** The equipped item's score, for the ± delta on each row. */
+  equippedScore?: number;
 }
 
 /**
@@ -39,7 +44,15 @@ interface ItemPickerPanelProps {
  * to the slot's inventory types, quality chips, and a sort select. The
  * backend caps results at 25.
  */
-export function ItemPickerPanel({ slotIndex, usedItemIds, onEquip, onAddAlternate, trendsSlot }: ItemPickerPanelProps) {
+export function ItemPickerPanel({
+  slotIndex,
+  usedItemIds,
+  onEquip,
+  onAddAlternate,
+  trendsSlot,
+  weights,
+  equippedScore,
+}: ItemPickerPanelProps) {
   const [query, setQuery] = useState("");
   const [quality, setQuality] = useState("");
   const [sort, setSort] = useState<string>("item_level_desc");
@@ -61,6 +74,15 @@ export function ItemPickerPanel({ slotIndex, usedItemIds, onEquip, onAddAlternat
 
   const results = emptyBrowse ? (search.data ?? []).slice(0, 20) : (search.data ?? []);
   const observedPct = new Map((trendsSlot?.items ?? []).map((i) => [i.item_id, i.percent]));
+
+  // Score visible rows only when weights are active; sim payloads share
+  // the ["sim-item", id] cache with the doll's scoring.
+  const simItems = useSimItems(weights ? results.map((r) => r.entry) : []);
+  const scoreFor = (itemId: number): number | undefined => {
+    if (!weights) return undefined;
+    const sim = simItems.get(itemId);
+    return sim ? scoreItem(sim, weights) : undefined;
+  };
 
   return (
     <div className="space-y-2">
@@ -140,15 +162,20 @@ function PickerRow({
   item,
   usedItemIds,
   observedPct,
+  score,
+  equippedScore,
   onEquip,
   onAddAlternate,
 }: {
   item: ItemSearchResult;
   usedItemIds?: ReadonlySet<number>;
   observedPct?: number;
+  score?: number;
+  equippedScore?: number;
   onEquip: (item: ItemSearchResult) => void;
   onAddAlternate?: (item: ItemSearchResult) => void;
 }) {
+  const delta = score !== undefined && equippedScore !== undefined ? score - equippedScore : undefined;
   return (
     <div className="flex items-center gap-2.5 px-2.5 py-1.5 hover:bg-zinc-800/40">
       <ItemIcon icon={item.icon} quality={item.quality} size={30} />
@@ -178,6 +205,21 @@ function PickerRow({
           )}
         </div>
       </div>
+      {score !== undefined && (
+        <div className="text-right shrink-0 w-16">
+          <div className="font-mono text-sm text-zinc-200">{formatScore(score)}</div>
+          {delta !== undefined && Math.abs(delta) >= 0.05 && (
+            <div
+              className={cn(
+                "font-mono text-2xs",
+                delta > 0 ? "text-emerald-400" : "text-red-400",
+              )}
+            >
+              {delta > 0 ? "+" : "−"}{formatScore(Math.abs(delta))}
+            </div>
+          )}
+        </div>
+      )}
       {onAddAlternate && (
         <Button
           variant="ghost"

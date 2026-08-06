@@ -6,6 +6,7 @@ import { ItemIcon } from "@/components/ui/ItemIcon/ItemIcon";
 import { cn } from "@/lib/utils";
 import type { GearTrendsSlot, ItemSearchResult } from "@/api/typesGenerated";
 import type { GearSlotEntry } from "./gearListModel";
+import type { StatWeights } from "./gearScoring";
 import { itemRefKey, type HydratedItem } from "./useListItems";
 import { ItemPickerPanel } from "./ItemPickerPanel";
 import { AlternatesEditor } from "./AlternatesEditor";
@@ -52,6 +53,10 @@ interface SlotEditorPanelProps {
   onSetEnchant: (enchantId: number | undefined) => void;
   /** Observed cohort data for this slot (popularity + enchants). */
   trendsSlot?: GearTrendsSlot;
+  /** Active stat weights; enables picker row scores. */
+  weights?: StatWeights | null;
+  /** The equipped item's score, for the picker's ± deltas. */
+  equippedScore?: number;
 }
 
 /**
@@ -72,6 +77,8 @@ export function SlotEditorPanel({
   onRemoveAlternate,
   onSetEnchant,
   trendsSlot,
+  weights,
+  equippedScore,
 }: SlotEditorPanelProps) {
   const [tab, setTab] = useState<EditorTab>("pick");
   const current = entry ? items.get(itemRefKey(entry.item_id, entry.enchant_id)) : undefined;
@@ -146,6 +153,8 @@ export function SlotEditorPanel({
           onEquip={onEquip}
           onAddAlternate={entry ? onAddAlternate : undefined}
           trendsSlot={trendsSlot}
+          weights={weights}
+          equippedScore={equippedScore}
         />
       )}
       {tab === "alternates" && entry && (

@@ -451,6 +451,8 @@ function EditorView({
                   editor.update((p) => setSlotEnchant(p, safeStageIndex, selectedSlot, enchantId))
                 }
                 trendsSlot={trendsBySlot.get(selectedSlot)}
+                weights={weightSel?.weights ?? null}
+                equippedScore={scores?.get(selectedSlot)}
               />
             ) : (
               <div className="flex min-h-64 items-center justify-center self-stretch rounded-md border border-dashed border-zinc-800 p-6 text-sm text-zinc-500">
