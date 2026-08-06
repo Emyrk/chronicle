@@ -96,7 +96,7 @@ function Content() {
       MATCHED_ONLY,
       CONTENT_END,
     ],
-    [130, 142, 170, 170, 370, 500, 315, 180, 520, 665, 665],
+    [130, 142, 190, 190, 370, 500, 315, 190, 520, 665, 665],
     clamp,
   );
   const cursorY = interpolate(
@@ -114,7 +114,7 @@ function Content() {
       MATCHED_ONLY,
       CONTENT_END,
     ],
-    [210, 190, 232, 264, 292, 380, 190, 296, 370, 190, 190],
+    [210, 190, 220, 252, 292, 380, 190, 284, 370, 190, 190],
     clamp,
   );
   const clicking = Math.max(

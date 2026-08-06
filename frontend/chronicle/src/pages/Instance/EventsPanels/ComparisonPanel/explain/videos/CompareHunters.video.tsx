@@ -169,7 +169,7 @@ function Content() {
           left={82}
           top={240}
           width={600}
-          height={260}
+          height={220}
           color="#facc15"
         />
       </div>
