@@ -1,23 +1,7 @@
 import { CalendarClock, Plus, X } from "lucide-react";
+import { normalizeSchedule, validHexColor } from "./RaidSchedule.utils";
+import type { ScheduleEntry, ScheduleKind } from "./RaidSchedule.utils";
 import type { GuildPanelDefinition, GuildPanelRenderProps } from "./types";
-
-type ScheduleKind = "raid" | "optional" | "off";
-
-interface ScheduleEntry {
-  day: string;
-  raid: string;
-  /** "raid" nights are highlighted, "optional" runs are muted, "off" days show as no raid. */
-  kind: ScheduleKind;
-  /** Times as "HH:MM" in UTC; rendered in the viewer's local time. */
-  startUtc?: string;
-  endUtc?: string;
-  inviteUtc?: string;
-  /** Optional note shown under the time/invite lines. */
-  note?: string;
-  /** Legacy freeform strings from older saves. */
-  time?: string;
-  invite?: string;
-}
 
 interface RaidScheduleConfig {
   /** Structured entries; older saves may hold a pipe-separated string. */
@@ -69,43 +53,6 @@ function localInputToUtc(hhmm: string): string | undefined {
   return `${String(date.getUTCHours()).padStart(2, "0")}:${String(date.getUTCMinutes()).padStart(2, "0")}`;
 }
 
-/** Accepts the structured array, or the legacy "Day | Raid | Time | Invite" lines. */
-function normalizeSchedule(raw: ScheduleEntry[] | string | undefined): ScheduleEntry[] {
-  if (Array.isArray(raw)) {
-    return raw
-      .map((entry) => ({
-        day: entry?.day ?? "",
-        raid: entry?.raid ?? "",
-        kind: (["raid", "optional", "off"].includes(entry?.kind) ? entry.kind : "raid") as ScheduleKind,
-        startUtc: entry?.startUtc,
-        endUtc: entry?.endUtc,
-        inviteUtc: entry?.inviteUtc,
-        note: entry?.note,
-        time: entry?.time,
-        invite: entry?.invite,
-      }))
-      .filter((entry) => entry.day.length > 0);
-  }
-  if (typeof raw !== "string") return [];
-  return raw
-    .split("\n")
-    .map((line) => line.trim())
-    .filter(Boolean)
-    .map((line) => {
-      const [day = "", rawRaid = "", time = "", invite = ""] = line.split("|").map((p) => p.trim());
-      const offDay = rawRaid === "" || rawRaid === "-" || rawRaid === "—";
-      const optional = rawRaid.startsWith("~");
-      return {
-        day,
-        raid: offDay ? "" : optional ? rawRaid.slice(1).trim() : rawRaid,
-        time: offDay ? "" : time,
-        invite: offDay ? "" : invite,
-        kind: (offDay ? "off" : optional ? "optional" : "raid") as ScheduleKind,
-      };
-    })
-    .filter((entry) => entry.day.length > 0);
-}
-
 /** The row's displayed time and invite strings (local time, or legacy text). */
 function entryTimes(entry: ScheduleEntry): { time: string; invite: string } {
   const start = formatLocalTime(entry.startUtc);
@@ -123,7 +70,7 @@ function entryTimes(entry: ScheduleEntry): { time: string; invite: string } {
 }
 
 /** Structured editor rendered inside the panel config modal. */
-function ScheduleEditor({ value, onChange }: { value: unknown; onChange: (value: unknown) => void }) {
+function scheduleEditor({ value, onChange }: { value: unknown; onChange: (value: unknown) => void }) {
   // Keep empty rows while editing; they are dropped at render time.
   const entries = Array.isArray(value)
     ? (value as ScheduleEntry[])
@@ -136,99 +83,149 @@ function ScheduleEditor({ value, onChange }: { value: unknown; onChange: (value:
   return (
     <div className="space-y-2.5">
       {entries.length === 0 && (
-        <p className="text-xs text-muted-foreground">No raid days yet — add your first one.</p>
+        <p className="text-xs text-muted-foreground">No raid days yet. Add a day or section.</p>
       )}
-      {entries.map((entry, i) => (
-        <div key={i} className="space-y-1.5 rounded-md border border-border/60 bg-muted/20 p-2.5">
-          <div className="flex items-center gap-1.5">
-            <input
-              type="text"
-              value={entry.day}
-              onChange={(e) => update(i, { day: e.target.value })}
-              placeholder="Tue"
-              className="w-14 rounded-md border border-input bg-background px-2 py-1 text-xs"
-            />
-            <input
-              type="text"
-              value={entry.raid}
-              onChange={(e) => update(i, { raid: e.target.value })}
-              placeholder="Molten Core"
-              disabled={entry.kind === "off"}
-              className="min-w-0 flex-1 rounded-md border border-input bg-background px-2 py-1 text-xs disabled:opacity-40"
-            />
-            <select
-              value={entry.kind}
-              onChange={(e) => update(i, { kind: e.target.value as ScheduleKind })}
-              className="rounded-md border border-input bg-background px-2 py-1 text-xs"
-              title="Kind of day"
-            >
-              <option value="raid">Raid night</option>
-              <option value="optional">Optional</option>
-              <option value="off">Off day</option>
-            </select>
-            <button
-              type="button"
-              onClick={() => onChange(entries.filter((_, j) => j !== i))}
-              className="rounded p-1 text-muted-foreground hover:bg-destructive/10 hover:text-destructive"
-              title="Remove day"
-            >
-              <X className="h-4 w-4" />
-            </button>
-          </div>
-          {entry.kind !== "off" && (
-            <div className="grid grid-cols-3 gap-1.5">
-              <label className="space-y-0.5">
-                <span className="block text-[10px] text-muted-foreground">Start</span>
+      {entries.map((entry, i) => {
+        const isSection = entry.kind === "section";
+        const color = validHexColor(entry.color);
+
+        return (
+          <div key={i} className="space-y-1.5 rounded-md border border-border/60 bg-muted/20 p-2.5">
+            <div className="flex items-center gap-1.5">
+              {!isSection && (
                 <input
-                  type="time"
-                  value={utcToLocalInput(entry.startUtc)}
-                  onChange={(e) =>
-                    update(i, { startUtc: localInputToUtc(e.target.value), time: undefined })
-                  }
-                  className="w-full rounded-md border border-input bg-background px-2 py-1 text-xs"
+                  type="text"
+                  value={entry.day}
+                  onChange={(e) => update(i, { day: e.target.value })}
+                  placeholder="Tue"
+                  className="w-14 rounded-md border border-input bg-background px-2 py-1 text-xs"
                 />
-              </label>
-              <label className="space-y-0.5">
-                <span className="block text-[10px] text-muted-foreground">End</span>
-                <input
-                  type="time"
-                  value={utcToLocalInput(entry.endUtc)}
-                  onChange={(e) =>
-                    update(i, { endUtc: localInputToUtc(e.target.value), time: undefined })
-                  }
-                  className="w-full rounded-md border border-input bg-background px-2 py-1 text-xs"
-                />
-              </label>
-              <label className="space-y-0.5">
-                <span className="block text-[10px] text-muted-foreground">Invites</span>
-                <input
-                  type="time"
-                  value={utcToLocalInput(entry.inviteUtc)}
-                  onChange={(e) =>
-                    update(i, { inviteUtc: localInputToUtc(e.target.value), invite: undefined })
-                  }
-                  className="w-full rounded-md border border-input bg-background px-2 py-1 text-xs"
-                />
-              </label>
+              )}
+              <input
+                type="text"
+                value={entry.raid}
+                onChange={(e) => update(i, { raid: e.target.value })}
+                placeholder={isSection ? "NA teams" : "Molten Core"}
+                disabled={entry.kind === "off"}
+                className="min-w-0 flex-1 rounded-md border border-input bg-background px-2 py-1 text-xs disabled:opacity-40"
+              />
+              <select
+                value={entry.kind}
+                onChange={(e) => update(i, { kind: e.target.value as ScheduleKind })}
+                className="rounded-md border border-input bg-background px-2 py-1 text-xs"
+                title="Schedule item type"
+              >
+                <option value="raid">Raid night</option>
+                <option value="optional">Optional</option>
+                <option value="off">Off day</option>
+                <option value="section">Section</option>
+              </select>
+              <button
+                type="button"
+                onClick={() => onChange(entries.filter((_, j) => j !== i))}
+                className="rounded p-1 text-muted-foreground hover:bg-destructive/10 hover:text-destructive"
+                title={isSection ? "Remove section" : "Remove day"}
+              >
+                <X className="h-4 w-4" />
+              </button>
             </div>
-          )}
-          <input
-            type="text"
-            value={entry.note ?? ""}
-            onChange={(e) => update(i, { note: e.target.value })}
-            placeholder="Note (optional)"
-            className="w-full rounded-md border border-input bg-background px-2 py-1 text-xs"
-          />
-        </div>
-      ))}
-      <button
-        type="button"
-        onClick={() => onChange([...entries, { day: "", raid: "", kind: "raid" }])}
-        className="flex w-full items-center justify-center gap-1.5 rounded-md border border-dashed border-border px-3 py-2 text-sm text-muted-foreground hover:bg-muted/50 hover:text-foreground transition-colors"
-      >
-        <Plus className="h-4 w-4" />
-        Add day
-      </button>
+            {!isSection && entry.kind !== "off" && (
+              <div className="grid grid-cols-3 gap-1.5">
+                <label className="space-y-0.5">
+                  <span className="block text-[10px] text-muted-foreground">Start</span>
+                  <input
+                    type="time"
+                    value={utcToLocalInput(entry.startUtc)}
+                    onChange={(e) =>
+                      update(i, { startUtc: localInputToUtc(e.target.value), time: undefined })
+                    }
+                    className="w-full rounded-md border border-input bg-background px-2 py-1 text-xs"
+                  />
+                </label>
+                <label className="space-y-0.5">
+                  <span className="block text-[10px] text-muted-foreground">End</span>
+                  <input
+                    type="time"
+                    value={utcToLocalInput(entry.endUtc)}
+                    onChange={(e) =>
+                      update(i, { endUtc: localInputToUtc(e.target.value), time: undefined })
+                    }
+                    className="w-full rounded-md border border-input bg-background px-2 py-1 text-xs"
+                  />
+                </label>
+                <label className="space-y-0.5">
+                  <span className="block text-[10px] text-muted-foreground">Invites</span>
+                  <input
+                    type="time"
+                    value={utcToLocalInput(entry.inviteUtc)}
+                    onChange={(e) =>
+                      update(i, { inviteUtc: localInputToUtc(e.target.value), invite: undefined })
+                    }
+                    className="w-full rounded-md border border-input bg-background px-2 py-1 text-xs"
+                  />
+                </label>
+              </div>
+            )}
+            {!isSection && (
+              <input
+                type="text"
+                value={entry.note ?? ""}
+                onChange={(e) => update(i, { note: e.target.value })}
+                placeholder="Note (optional)"
+                className="w-full rounded-md border border-input bg-background px-2 py-1 text-xs"
+              />
+            )}
+            <div className="flex items-center gap-2 pt-0.5">
+              <span className="text-[10px] text-muted-foreground">
+                {isSection ? "Section color" : "Row color"}
+              </span>
+              <label className="relative h-6 w-6 shrink-0">
+                <span
+                  className={`block h-6 w-6 cursor-pointer rounded border border-input ${color ? "" : "bg-primary"}`}
+                  style={color ? { backgroundColor: color } : undefined}
+                />
+                <input
+                  type="color"
+                  value={color || "#e8a33d"}
+                  onChange={(e) => update(i, { color: e.target.value })}
+                  className="absolute inset-0 h-full w-full cursor-pointer opacity-0"
+                  aria-label={isSection ? "Section color" : "Row color"}
+                />
+              </label>
+              <span className="flex-1 text-[10px] text-muted-foreground/70">
+                {color ?? "Panel default"}
+              </span>
+              {color && (
+                <button
+                  type="button"
+                  onClick={() => update(i, { color: undefined })}
+                  className="text-[10px] text-muted-foreground hover:text-foreground"
+                >
+                  Reset
+                </button>
+              )}
+            </div>
+          </div>
+        );
+      })}
+      <div className="grid grid-cols-2 gap-2">
+        <button
+          type="button"
+          onClick={() => onChange([...entries, { day: "", raid: "", kind: "raid" }])}
+          className="flex items-center justify-center gap-1.5 rounded-md border border-dashed border-border px-3 py-2 text-sm text-muted-foreground transition-colors hover:bg-muted/50 hover:text-foreground"
+        >
+          <Plus className="h-4 w-4" />
+          Add day
+        </button>
+        <button
+          type="button"
+          onClick={() => onChange([...entries, { day: "", raid: "", kind: "section" }])}
+          className="flex items-center justify-center gap-1.5 rounded-md border border-dashed border-border px-3 py-2 text-sm text-muted-foreground transition-colors hover:bg-muted/50 hover:text-foreground"
+        >
+          <Plus className="h-4 w-4" />
+          Add section
+        </button>
+      </div>
       <p className="text-[10px] text-muted-foreground">
         Times are entered in your local time ({localTimeZoneLabel()}), stored in UTC, and shown to
         each visitor in their own timezone.
@@ -238,8 +235,8 @@ function ScheduleEditor({ value, onChange }: { value: unknown; onChange: (value:
 }
 
 /** Accent color editor: theme default or a custom hex. */
-function AccentColorEditor({ value, onChange }: { value: unknown; onChange: (value: unknown) => void }) {
-  const color = typeof value === "string" && /^#[0-9a-fA-F]{6}$/.test(value) ? value : "";
+function accentColorEditor({ value, onChange }: { value: unknown; onChange: (value: unknown) => void }) {
+  const color = validHexColor(value) ?? "";
   return (
     <div className="flex items-center gap-2">
       <label className="relative shrink-0">
@@ -270,13 +267,10 @@ function AccentColorEditor({ value, onChange }: { value: unknown; onChange: (val
   );
 }
 
-function RaidScheduleContent({ config, isEditing }: GuildPanelRenderProps<RaidScheduleConfig>) {
+function raidScheduleContent({ config, isEditing }: GuildPanelRenderProps<RaidScheduleConfig>) {
   const rows = normalizeSchedule(config.schedule);
   const note = config.note || "";
-  const accent =
-    typeof config.accentColor === "string" && /^#[0-9a-fA-F]{6}$/.test(config.accentColor)
-      ? config.accentColor
-      : undefined;
+  const accent = validHexColor(config.accentColor);
 
   if (rows.length === 0 && !note) {
     return (
@@ -294,26 +288,54 @@ function RaidScheduleContent({ config, isEditing }: GuildPanelRenderProps<RaidSc
         {rows.map((row, i) => {
           const highlighted = row.kind === "raid";
           const offDay = row.kind === "off";
+          const rowAccent = validHexColor(row.color) ?? (highlighted ? accent : undefined);
+
+          if (row.kind === "section") {
+            return (
+              <div
+                key={`section-${row.raid}-${i}`}
+                className="mt-2 flex items-center gap-2 first:mt-0"
+                style={rowAccent ? { color: rowAccent } : undefined}
+              >
+                <span
+                  className={`h-px flex-1 ${rowAccent ? "" : "bg-border/60"}`}
+                  style={rowAccent ? { backgroundColor: `${rowAccent}80` } : undefined}
+                />
+                <span className={`text-xs font-semibold uppercase tracking-[0.16em] ${rowAccent ? "" : "text-muted-foreground"}`}>
+                  {row.raid}
+                </span>
+                <span
+                  className={`h-px flex-1 ${rowAccent ? "" : "bg-border/60"}`}
+                  style={rowAccent ? { backgroundColor: `${rowAccent}80` } : undefined}
+                />
+              </div>
+            );
+          }
+
           const times = entryTimes(row);
           return (
             <div
               key={`${row.day}-${i}`}
               className={`grid grid-cols-[40px_minmax(0,1fr)_auto] items-baseline gap-2.5 rounded-md border px-3 py-2 ${
-                highlighted && !accent
+                highlighted && !rowAccent
                   ? "border-primary/30 bg-primary/5"
                   : "border-border/50 bg-muted/20"
               }`}
               style={
-                highlighted && accent
-                  ? { borderColor: `${accent}4d`, backgroundColor: `${accent}0d` }
+                rowAccent
+                  ? { borderColor: `${rowAccent}4d`, backgroundColor: `${rowAccent}0d` }
                   : undefined
               }
             >
               <span
                 className={`text-sm font-bold uppercase tracking-wide ${
-                  highlighted ? (accent ? "" : "text-primary") : "text-muted-foreground/60"
+                  rowAccent
+                    ? ""
+                    : highlighted
+                      ? "text-primary"
+                      : "text-muted-foreground/60"
                 }`}
-                style={highlighted && accent ? { color: accent } : undefined}
+                style={rowAccent ? { color: rowAccent } : undefined}
               >
                 {row.day}
               </span>
@@ -373,13 +395,13 @@ export const RaidSchedulePanel: GuildPanelDefinition<RaidScheduleConfig> = {
       name: "schedule",
       label: "Days",
       type: "custom",
-      render: (value, onChange) => <ScheduleEditor value={value} onChange={onChange} />,
+      render: (value, onChange) => scheduleEditor({ value, onChange }),
     },
     {
       name: "accentColor",
       label: "Raid night color",
       type: "custom",
-      render: (value, onChange) => <AccentColorEditor value={value} onChange={onChange} />,
+      render: (value, onChange) => accentColorEditor({ value, onChange }),
     },
     {
       name: "note",
@@ -393,5 +415,5 @@ export const RaidSchedulePanel: GuildPanelDefinition<RaidScheduleConfig> = {
     note: "",
     accentColor: "",
   },
-  render: (props) => <RaidScheduleContent {...props} />,
+  render: (props) => raidScheduleContent(props),
 };
