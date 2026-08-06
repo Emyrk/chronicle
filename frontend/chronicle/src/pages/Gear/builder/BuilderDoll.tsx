@@ -1,7 +1,7 @@
 import { Check, X } from "lucide-react";
 import { BOTTOM_SLOTS, LEFT_SLOTS, RIGHT_SLOTS } from "@/pages/ArmoryPage/types";
 import { cn } from "@/lib/utils";
-import { slotOwned, type CharacterMatch } from "./characterMatch";
+import { slotEquipped, type CharacterMatch } from "./characterMatch";
 import type { GearStage } from "./gearListModel";
 import { itemRefKey } from "./useListItems";
 import type { HydratedItem } from "./useListItems";
@@ -34,13 +34,9 @@ export function BuilderDoll({ stage, items, selectedSlot, onSelectSlot, scores, 
   const slotFor = (outfitIndex: number) => {
     const entry = stage.slots[String(outfitIndex)];
     const item = entry ? items.get(itemRefKey(entry.item_id, entry.enchant_id)) : undefined;
-    let matchState: "equipped" | "owned" | "missing" | undefined;
+    let matchState: "equipped" | "missing" | undefined;
     if (match && entry) {
-      matchState = match.equippedIds.has(entry.item_id)
-        ? "equipped"
-        : slotOwned(stage, outfitIndex, match)
-          ? "owned"
-          : "missing";
+      matchState = slotEquipped(stage, outfitIndex, match) ? "equipped" : "missing";
     }
     return { entry, item, matchState };
   };
@@ -113,10 +109,7 @@ export function BuilderDoll({ stage, items, selectedSlot, onSelectSlot, scores, 
             <MarkerDot state="equipped" /> wearing now
           </span>
           <span className="inline-flex items-center gap-1">
-            <MarkerDot state="owned" /> owns
-          </span>
-          <span className="inline-flex items-center gap-1">
-            <MarkerDot state="missing" /> never logged with it
+            <MarkerDot state="missing" /> not wearing
           </span>
         </div>
       )}
@@ -124,13 +117,12 @@ export function BuilderDoll({ stage, items, selectedSlot, onSelectSlot, scores, 
   );
 }
 
-function MarkerDot({ state }: { state: "equipped" | "owned" | "missing" }) {
+function MarkerDot({ state }: { state: "equipped" | "missing" }) {
   return (
     <span
       className={cn(
         "flex h-3.5 w-3.5 items-center justify-center rounded-full",
         state === "equipped" && "bg-blue-500 text-white",
-        state === "owned" && "bg-emerald-500 text-zinc-950",
         state === "missing" && "bg-amber-400 text-zinc-950",
       )}
     >

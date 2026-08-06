@@ -24,7 +24,7 @@ interface BuilderSlotProps {
   /** Weighted stat score for the equipped item, when weights are active. */
   score?: number;
   /** Character-match state for this slot, when a character is matched. */
-  matchState?: "equipped" | "owned" | "missing";
+  matchState?: "equipped" | "missing";
 }
 
 /**
@@ -139,15 +139,12 @@ export function BuilderSlot({
           <span
             title={
               matchState === "equipped"
-                ? "The matched character is wearing this right now"
-                : matchState === "owned"
-                  ? "The matched character owns this (seen in their logs)"
-                  : "The matched character has never been logged with this"
+                ? "The matched character is wearing this (or a listed alternate)"
+                : "The matched character is not wearing this"
             }
             className={cn(
               "absolute -top-1.5 -right-1.5 flex h-3.5 w-3.5 items-center justify-center rounded-full border border-zinc-950",
               matchState === "equipped" && "bg-blue-500 text-white",
-              matchState === "owned" && "bg-emerald-500 text-zinc-950",
               matchState === "missing" && "bg-amber-400 text-zinc-950",
             )}
           >

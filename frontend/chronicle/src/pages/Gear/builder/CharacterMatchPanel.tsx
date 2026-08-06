@@ -101,9 +101,9 @@ function CharacterSearch({ onPick }: { onPick: (char: MatchedCharacter) => void 
 }
 
 /**
- * Match the list against an armory character: items seen in the
- * character's logged raid nights count as owned; the newest snapshot
- * counts as equipped. Shows per-stage coverage and what's still missing.
+ * Match the list against an armory character's current outfit: each
+ * filled slot is either being worn (primary or a listed alternate) or
+ * not. Shows per-stage coverage and what's not worn yet.
  */
 export function CharacterMatchPanel({
   matched,
@@ -171,14 +171,8 @@ export function CharacterMatchPanel({
             <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
               {coverage.filled > 0 ? (
                 <p className="text-xs text-zinc-300">
-                  Owns <span className="font-mono">{coverage.owned}</span> of{" "}
+                  Wearing <span className="font-mono">{coverage.equipped}</span> of{" "}
                   <span className="font-mono">{coverage.filled}</span> items in this stage
-                  {coverage.equipped > 0 && (
-                    <span className="text-zinc-500">
-                      {" "}
-                      · {coverage.equipped} currently equipped
-                    </span>
-                  )}
                 </p>
               ) : (
                 <p className="text-xs text-zinc-400">This stage has no items yet.</p>
@@ -197,11 +191,11 @@ export function CharacterMatchPanel({
             </div>
             {coverage.missing.length > 0 && (
               <p className="text-2xs text-zinc-500">
-                Still missing: {coverage.missing.map((i) => slotLabel(i)).join(", ")}
+                Not wearing: {coverage.missing.map((i) => slotLabel(i)).join(", ")}
               </p>
             )}
             <p className="text-2xs text-zinc-600">
-              Ownership comes from logged raid nights — items never seen in a log won't count.
+              Based on {matched.name}'s latest logged outfit.
             </p>
           </div>
         ) : null)}
