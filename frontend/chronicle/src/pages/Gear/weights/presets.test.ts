@@ -34,6 +34,24 @@ describe("WEIGHT_PRESETS", () => {
     }
   });
 
+  it("has no cross-flavor placeholder duplicates", () => {
+    // The wowsims Classic sim is forked from the WotLK codebase and ships
+    // verbatim WotLK EP numbers for some specs; those must never appear as
+    // vanilla presets (per-rating weights masquerading as per-percent).
+    for (const a of WEIGHT_PRESETS) {
+      for (const b of WEIGHT_PRESETS) {
+        if (a.id >= b.id || a.flavor === b.flavor || a.classId !== b.classId) continue;
+        const entriesA = Object.entries(a.weights);
+        const shared = entriesA.filter(([k, v]) => b.weights[k] === v).length;
+        const overlap = shared / Math.min(entriesA.length, Object.keys(b.weights).length);
+        expect(
+          overlap < 0.8,
+          `${a.id} and ${b.id} share ${shared} identical weights — likely a placeholder copy`,
+        ).toBe(true);
+      }
+    }
+  });
+
   it("covers every class in every flavor", () => {
     for (const flavor of ["vanilla", "tbc", "wrath"] as const) {
       const classIds = new Set(

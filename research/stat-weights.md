@@ -170,5 +170,10 @@ hunter row).
   Frost/Blood DK, Combat Rogue, Arcane Mage, Demo/Destro Warlock outside the
   Pawn/Wowhead scales. Warcraft Tavern blocks fetches (403); Fight Club
   vanilla spreadsheets and sixtyupgrades presets aren't published as pages.
-- wowsims healer presets are duplicated in a few places (resto druid ==
-  holy paladin in classic) — treat those as placeholders.
+- **wowsims Classic placeholder warning (confirmed)**: the Classic sim is
+  forked from the WotLK codebase, and its default EP presets for
+  Protection Warrior, Feral bear, Retribution Paladin, Healing Priest,
+  Restoration Shaman, and Restoration Druid are verbatim WotLK numbers —
+  per-rating weights that make no sense as vanilla per-percent weights.
+  Do not use those six for vanilla; the app's built-in presets replace
+  them with heuristics derived from vanilla stat conversions.

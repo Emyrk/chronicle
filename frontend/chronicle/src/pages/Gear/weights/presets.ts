@@ -35,6 +35,11 @@ export function presetsForFlavor(tags: readonly string[]): WeightPreset[] {
 }
 
 const WOWSIMS_CLASSIC = "wowsims Classic default EP preset (raid-buffed, level 63 boss)";
+// Several wowsims Classic presets are verbatim WotLK placeholders (the sim
+// is forked from the WotLK codebase); those specs get heuristic vanilla
+// weights instead. See research/stat-weights.md.
+const HEURISTIC =
+  "Heuristic starting point derived from vanilla stat conversions — the wowsims Classic preset for this spec is a WotLK placeholder. Tune to taste.";
 const WOWSIMS_TBC = "wowsims TBC default EP preset (raid-buffed)";
 const WOWSIMS_WOTLK = "wowsims WotLK default EP preset (ICC-era, raid-buffed)";
 const PAWN_TBC = "Pawn 2.4.3 scale (Elitist Jerks-derived), primary stat = 1";
@@ -51,8 +56,8 @@ export const WEIGHT_PRESETS: WeightPreset[] = [
   },
   {
     id: "vanilla-warrior-prot", name: "Protection Warrior", classId: 1, specName: "Protection", flavor: "vanilla",
-    description: `Mitigation and threat blended. ${WOWSIMS_CLASSIC}.`,
-    weights: { stamina: 2.34, strength: 1.56, agility: 2.77, attack_power: 0.32, dodge: 2.61, parry: 2.65, defense: 3.31, block: 1.32, block_value: 1.37, hit: 1.43, crit: 0.93, armor: 0.17 },
+    description: `Mitigation-first. ${HEURISTIC} Ratios: 1 Defense ≈ 0.16% combined avoidance/block, 20 Agi ≈ 1% dodge, 1 Sta = 10 HP.`,
+    weights: { stamina: 1, agility: 0.7, strength: 0.4, armor: 0.07, defense: 1.5, dodge: 10, parry: 8, block: 3, block_value: 0.3, hit: 4, crit: 2 },
   },
   {
     id: "vanilla-rogue-combat", name: "Combat Rogue", classId: 4, specName: "Combat", flavor: "vanilla",
@@ -81,8 +86,8 @@ export const WEIGHT_PRESETS: WeightPreset[] = [
   },
   {
     id: "vanilla-priest-heal", name: "Healing Priest", classId: 5, specName: "Holy", flavor: "vanilla",
-    description: `Mana-weighted healer set. ${WOWSIMS_CLASSIC}.`,
-    weights: { healing: 1, intellect: 2.73, mp5: 2.05, spirit: 1.63, crit: 0.75, haste: 0.28 },
+    description: `Mana-weighted healer set. ${HEURISTIC} Longevity first: mp5 and spirit over raw +healing.`,
+    weights: { healing: 1, mp5: 2, intellect: 0.5, spirit: 0.5, crit: 2 },
   },
   {
     id: "vanilla-shaman-ele", name: "Elemental Shaman", classId: 7, specName: "Elemental", flavor: "vanilla",
@@ -96,8 +101,8 @@ export const WEIGHT_PRESETS: WeightPreset[] = [
   },
   {
     id: "vanilla-shaman-resto", name: "Restoration Shaman", classId: 7, specName: "Restoration", flavor: "vanilla",
-    description: WOWSIMS_CLASSIC + ".",
-    weights: { healing: 1, intellect: 0.22, spirit: 0.05, crit: 0.67, haste: 1.29, mp5: 0.08 },
+    description: `${HEURISTIC} Longevity first: mp5 over raw +healing; shamans lean on mp5 more than spirit.`,
+    weights: { healing: 1, mp5: 2.2, intellect: 0.5, spirit: 0.25, crit: 2 },
   },
   {
     id: "vanilla-druid-balance", name: "Balance Druid", classId: 11, specName: "Balance", flavor: "vanilla",
@@ -111,18 +116,18 @@ export const WEIGHT_PRESETS: WeightPreset[] = [
   },
   {
     id: "vanilla-druid-bear", name: "Feral Druid (bear)", classId: 11, specName: "Feral", flavor: "vanilla",
-    description: `Tank set. ${WOWSIMS_CLASSIC}.`,
-    weights: { stamina: 7.3, agility: 4.5, armor: 3.57, strength: 2.38, attack_power: 1, dodge: 2.02, defense: 1.82, hit: 2.93, crit: 1.51, health: 0.45 },
+    description: `Tank set. ${HEURISTIC} Armor weighs high because Dire Bear Form multiplies item armor.`,
+    weights: { stamina: 1, agility: 0.8, strength: 0.5, armor: 0.12, dodge: 10, defense: 1.3, hit: 4, crit: 2.5 },
   },
   {
     id: "vanilla-druid-resto", name: "Restoration Druid", classId: 11, specName: "Restoration", flavor: "vanilla",
-    description: WOWSIMS_CLASSIC + ".",
-    weights: { healing: 1, intellect: 0.38, spirit: 0.34, crit: 0.69, haste: 0.77 },
+    description: `${HEURISTIC} Longevity first; crit matters little for HoT-centric healing.`,
+    weights: { healing: 1, mp5: 2, intellect: 0.5, spirit: 0.45, crit: 0.5 },
   },
   {
     id: "vanilla-paladin-ret", name: "Retribution Paladin", classId: 2, specName: "Retribution", flavor: "vanilla",
-    description: WOWSIMS_CLASSIC + ".",
-    weights: { strength: 2.53, agility: 1.13, attack_power: 1, spell_power: 0.32, hit: 1.96, crit: 1.16, weapon_dps: 7.33 },
+    description: `${HEURISTIC} Ratios: 1 Str = 2 AP, ~25 Agi = 1% crit, slow-weapon Seal damage favors weapon DPS.`,
+    weights: { strength: 2, agility: 1.5, attack_power: 1, spell_power: 0.4, hit: 15, crit: 12, weapon_dps: 8 },
   },
 
   // ── TBC (weights per rating point) ────────────────────────────
