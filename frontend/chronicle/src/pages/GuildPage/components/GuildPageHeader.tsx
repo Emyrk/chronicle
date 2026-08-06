@@ -51,6 +51,8 @@ export function GuildPageHeader({ guild, theme, leading }: GuildPageHeaderProps)
   if (theme.header_layout === "left") {
     return (
       <div className="mb-6 pt-6">
+        {/* Identity on the left; description fills the open right column. */}
+        <div className="flex flex-col gap-4 lg:grid lg:grid-cols-[auto_minmax(0,1fr)] lg:items-center lg:gap-12">
         <div className="flex items-start gap-4">
           {leading}
           {theme.logo_url ? (
@@ -108,10 +110,13 @@ export function GuildPageHeader({ guild, theme, leading }: GuildPageHeaderProps)
                 </span>
               ))}
             </div>
-            {theme.description && (
-              <p className="mt-3 max-w-2xl text-sm text-muted-foreground">{theme.description}</p>
-            )}
           </div>
+        </div>
+        {theme.description && (
+          <p className="max-w-3xl text-sm leading-relaxed text-muted-foreground">
+            {theme.description}
+          </p>
+        )}
         </div>
       </div>
     );
