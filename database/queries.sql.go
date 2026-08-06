@@ -3560,7 +3560,7 @@ const listGuildPageTabs = `-- name: ListGuildPageTabs :many
 
 SELECT id, page_id, label, slug, sort_order, created_at, visibility FROM guild_page_tabs
 WHERE page_id = $1
-ORDER BY sort_order, created_at
+ORDER BY sort_order, created_at, id
 `
 
 // Guild Page Tabs

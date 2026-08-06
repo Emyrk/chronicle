@@ -1861,8 +1861,8 @@ export function useSaveGuildPage(guildId: string | undefined) {
         );
       }
 
-      // Save each tab
-      await Promise.all(
+      // Save each tab and retain the persisted IDs in the editor's order.
+      const tabIds = await Promise.all(
         tabs.map(async (tab) => {
           let tabId = tab.id;
 
@@ -1904,8 +1904,22 @@ export function useSaveGuildPage(guildId: string | undefined) {
             const error = await updateResp.json().catch(() => null);
             throw buildAPIError("Failed to update tab", error);
           }
+
+          return tabId;
         })
       );
+
+      const reorderResp = await fetch(`/api/v1/guilds/${guildId}/page/tabs/reorder`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ tab_ids: tabIds }),
+        credentials: "include",
+      });
+      if (!reorderResp.ok) {
+        const error = await reorderResp.json().catch(() => null);
+        throw buildAPIError("Failed to reorder tabs", error);
+      }
+      return tabIds;
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["guild-page", guildId] });

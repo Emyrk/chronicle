@@ -22,7 +22,7 @@ DELETE FROM guild_pages WHERE guild_id = $1;
 -- name: ListGuildPageTabs :many
 SELECT * FROM guild_page_tabs
 WHERE page_id = $1
-ORDER BY sort_order, created_at;
+ORDER BY sort_order, created_at, id;
 
 -- name: GetGuildPageTab :one
 SELECT * FROM guild_page_tabs WHERE id = $1;

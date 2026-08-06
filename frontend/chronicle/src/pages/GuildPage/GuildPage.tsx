@@ -1,5 +1,5 @@
-import { useState, useMemo } from "react";
-import { useParams, Link } from "react-router-dom";
+import { useState } from "react";
+import { useLocation, useNavigate, useParams, Link } from "react-router-dom";
 import type { DeviceVisibility } from "@/api/typesGenerated";
 import { useGuildPage, useGuildSettings, useMyJoinRequest, useCreateJoinRequest } from "@/api/queries";
 import { useAuth } from "@/hooks/useAuth";
@@ -7,6 +7,7 @@ import { GuildPageCanvas, TabBar, GuildPageHeader, GuildActionsMenu } from "./co
 import { Shield, PanelLeft, UserPlus, Clock } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { useIsMobile } from "@/hooks/useIsMobile";
+import { orderGuildPageTabs } from "./guildPageTabs";
 
 // Helper to check if an item should be visible on current device
 function isVisibleOnDevice(visibility: DeviceVisibility | undefined, isMobile: boolean): boolean {
@@ -18,7 +19,9 @@ function isVisibleOnDevice(visibility: DeviceVisibility | undefined, isMobile: b
 
 export function GuildPage() {
   const { guildId, tabSlug } = useParams<{ guildId: string; tabSlug?: string }>();
-  const [activeTab, setActiveTab] = useState<string>(tabSlug || "overview");
+  const location = useLocation();
+  const navigate = useNavigate();
+  const requestedTab = new URLSearchParams(location.search).get("tab") || tabSlug;
   const isMobile = useIsMobile();
   const [sidebarOpen, setSidebarOpen] = useState(!isMobile);
   const [joinMessage, setJoinMessage] = useState("");
@@ -30,16 +33,13 @@ export function GuildPage() {
   const { data: myRequest } = useMyJoinRequest(guildId, isAuthenticated);
   const createJoinRequest = useCreateJoinRequest(guildId);
 
-  // Filter tabs and panels based on device visibility
-  const visibleTabs = useMemo(() => {
-    if (!pageConfig?.tabs) return [];
-    return pageConfig.tabs
-      .filter((tab) => isVisibleOnDevice(tab.visibility, isMobile))
-      .map((tab) => ({
-        ...tab,
-        panels: tab.panels.filter((panel) => isVisibleOnDevice(panel.visibility, isMobile)),
-      }));
-  }, [pageConfig?.tabs, isMobile]);
+  // Filter tabs and panels based on device visibility.
+  const visibleTabs = orderGuildPageTabs(pageConfig?.tabs || [])
+    .filter((tab) => isVisibleOnDevice(tab.visibility, isMobile))
+    .map((tab) => ({
+      ...tab,
+      panels: tab.panels.filter((panel) => isVisibleOnDevice(panel.visibility, isMobile)),
+    }));
 
   if (isLoading) {
     return (
@@ -64,8 +64,24 @@ export function GuildPage() {
     );
   }
 
-  const currentTab = visibleTabs.find((t) => t.slug === activeTab) || visibleTabs[0];
+  const currentTab = visibleTabs.find((tab) => tab.slug === requestedTab) || visibleTabs[0];
+  const activeTab = currentTab?.slug ?? "";
   const showSidebar = visibleTabs.length > 1;
+
+  const handleTabChange = (slug: string) => {
+    const searchParams = new URLSearchParams(location.search);
+    if (slug === visibleTabs[0]?.slug) {
+      searchParams.delete("tab");
+    } else {
+      searchParams.set("tab", slug);
+    }
+
+    const search = searchParams.toString();
+    navigate({
+      pathname: `/g/${guildId}`,
+      search: search ? `?${search}` : "",
+    });
+  };
   const joinButtonVisible = !!(
     settings?.allow_join_requests_until &&
     new Date(settings.allow_join_requests_until) > new Date() &&
@@ -146,7 +162,7 @@ export function GuildPage() {
               isMobile={isMobile}
               sidebarOpen={sidebarOpen}
               onSidebarToggle={() => setSidebarOpen(!sidebarOpen)}
-              onTabChange={setActiveTab}
+              onTabChange={handleTabChange}
             />
 
             {/* Desktop: inline toggle when sidebar closed */}

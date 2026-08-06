@@ -9,6 +9,7 @@ import { ArrowLeft, Eye, Save, Monitor, PanelLeft } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import type { LayoutItem } from "react-grid-layout";
 import { useIsMobile } from "@/hooks/useIsMobile";
+import { moveGuildPageTab, orderGuildPageTabs, type TabMoveDirection } from "./guildPageTabs";
 
 export function GuildPageEditor() {
   const { guildId } = useParams<{ guildId: string }>();
@@ -16,7 +17,7 @@ export function GuildPageEditor() {
   // const navigate = useNavigate(); // Will be used when API is connected
   
   const [tabs, setTabs] = useState<GuildPageTab[]>([]);
-  const [activeTab, setActiveTab] = useState<string>("overview");
+  const [activeTab, setActiveTab] = useState<string>("");
   const [configPanel, setConfigPanel] = useState<GuildPagePanel | null>(null);
   const [hasChanges, setHasChanges] = useState(false);
   const [sidebarOpen, setSidebarOpen] = useState(!isMobile);
@@ -25,21 +26,14 @@ export function GuildPageEditor() {
   const { data: pageConfig, isLoading } = useGuildPage(guildId);
   const saveGuildPage = useSaveGuildPage(guildId);
 
-  // Initialize tabs from fetched data
-  useState(() => {
-    if (pageConfig?.tabs) {
-      setTabs([...pageConfig.tabs]);
-    }
-  });
-
-  // Use pageConfig tabs if local state is empty
-  const displayTabs = tabs.length > 0 ? tabs : (pageConfig?.tabs || []);
-  const currentTab = displayTabs.find((t) => t.slug === activeTab) || displayTabs[0];
+  const displayTabs = tabs.length > 0 ? orderGuildPageTabs(tabs) : orderGuildPageTabs(pageConfig?.tabs || []);
+  const currentTab = displayTabs.find((tab) => tab.slug === activeTab) || displayTabs[0];
+  const currentTabSlug = currentTab?.slug ?? "";
 
   const handleLayoutChange = useCallback((layout: LayoutItem[]) => {
     setTabs((prevTabs) => {
       const newTabs = prevTabs.length > 0 ? [...prevTabs] : [...(pageConfig?.tabs || [])];
-      const tabIndex = newTabs.findIndex((t) => t.slug === activeTab);
+      const tabIndex = newTabs.findIndex((t) => t.slug === currentTabSlug);
       if (tabIndex === -1) return prevTabs;
 
       newTabs[tabIndex] = {
@@ -63,7 +57,7 @@ export function GuildPageEditor() {
       return newTabs;
     });
     setHasChanges(true);
-  }, [activeTab, pageConfig?.tabs]);
+  }, [currentTabSlug, pageConfig?.tabs]);
 
   const handleAddPanel = useCallback((panelType: string) => {
     const definition = getPanelDefinition(panelType);
@@ -84,7 +78,7 @@ export function GuildPageEditor() {
 
     setTabs((prevTabs) => {
       const newTabs = prevTabs.length > 0 ? [...prevTabs] : [...(pageConfig?.tabs || [])];
-      const tabIndex = newTabs.findIndex((t) => t.slug === activeTab);
+      const tabIndex = newTabs.findIndex((t) => t.slug === currentTabSlug);
       if (tabIndex === -1) return prevTabs;
 
       newTabs[tabIndex] = {
@@ -94,12 +88,12 @@ export function GuildPageEditor() {
       return newTabs;
     });
     setHasChanges(true);
-  }, [activeTab, pageConfig?.tabs]);
+  }, [currentTabSlug, pageConfig?.tabs]);
 
   const handlePanelDelete = useCallback((panelId: string) => {
     setTabs((prevTabs) => {
       const newTabs = prevTabs.length > 0 ? [...prevTabs] : [...(pageConfig?.tabs || [])];
-      const tabIndex = newTabs.findIndex((t) => t.slug === activeTab);
+      const tabIndex = newTabs.findIndex((t) => t.slug === currentTabSlug);
       if (tabIndex === -1) return prevTabs;
 
       newTabs[tabIndex] = {
@@ -109,12 +103,12 @@ export function GuildPageEditor() {
       return newTabs;
     });
     setHasChanges(true);
-  }, [activeTab, pageConfig?.tabs]);
+  }, [currentTabSlug, pageConfig?.tabs]);
 
   const handlePanelConfigChange = useCallback((panelId: string, config: Record<string, unknown>) => {
     setTabs((prevTabs) => {
       const newTabs = prevTabs.length > 0 ? [...prevTabs] : [...(pageConfig?.tabs || [])];
-      const tabIndex = newTabs.findIndex((t) => t.slug === activeTab);
+      const tabIndex = newTabs.findIndex((t) => t.slug === currentTabSlug);
       if (tabIndex === -1) return prevTabs;
 
       newTabs[tabIndex] = {
@@ -126,7 +120,7 @@ export function GuildPageEditor() {
       return newTabs;
     });
     setHasChanges(true);
-  }, [activeTab, pageConfig?.tabs]);
+  }, [currentTabSlug, pageConfig?.tabs]);
 
   const handlePanelConfig = useCallback((panelId: string) => {
     const panel = currentTab?.panels.find((p) => p.id === panelId);
@@ -140,7 +134,7 @@ export function GuildPageEditor() {
 
     setTabs((prevTabs) => {
       const newTabs = prevTabs.length > 0 ? [...prevTabs] : [...(pageConfig?.tabs || [])];
-      const tabIndex = newTabs.findIndex((t) => t.slug === activeTab);
+      const tabIndex = newTabs.findIndex((t) => t.slug === currentTabSlug);
       if (tabIndex === -1) return prevTabs;
 
       newTabs[tabIndex] = {
@@ -153,7 +147,7 @@ export function GuildPageEditor() {
     });
     setHasChanges(true);
     setConfigPanel(null);
-  }, [configPanel, activeTab, pageConfig?.tabs]);
+  }, [configPanel, currentTabSlug, pageConfig?.tabs]);
 
   const handleAddTab = useCallback(() => {
     const tabCount = displayTabs.length;
@@ -190,15 +184,28 @@ export function GuildPageEditor() {
     setHasChanges(true);
   }, [pageConfig?.tabs]);
 
-  const handleDeleteTab = useCallback((tabId: string) => {
-    setTabs((prevTabs) => {
-      const newTabs = prevTabs.length > 0 ? [...prevTabs] : [...(pageConfig?.tabs || [])];
-      const filtered = newTabs.filter((t) => t.id !== tabId);
-      if (filtered.length === 0) return prevTabs;
-      return filtered;
-    });
+  const handleTabMove = useCallback((tabId: string, direction: TabMoveDirection) => {
+    setTabs((prevTabs) => moveGuildPageTab(
+      prevTabs.length > 0 ? prevTabs : (pageConfig?.tabs || []),
+      tabId,
+      direction,
+    ));
     setHasChanges(true);
   }, [pageConfig?.tabs]);
+
+  const handleDeleteTab = useCallback((tabId: string) => {
+    const deletedIndex = displayTabs.findIndex((tab) => tab.id === tabId);
+    const remainingTabs = displayTabs
+      .filter((tab) => tab.id !== tabId)
+      .map((tab, index) => ({ ...tab, sort_order: index }));
+    if (remainingTabs.length === 0) return;
+
+    setTabs(remainingTabs);
+    if (currentTab?.id === tabId) {
+      setActiveTab(remainingTabs[Math.min(deletedIndex, remainingTabs.length - 1)].slug);
+    }
+    setHasChanges(true);
+  }, [currentTab?.id, displayTabs]);
 
   const handleThemeChange = useCallback((theme: GuildPageTheme) => {
     setThemeOverride(theme);
@@ -209,8 +216,10 @@ export function GuildPageEditor() {
 
   const handleSave = async () => {
     try {
-      const tabsToSave = tabs.length > 0 ? tabs : (pageConfig?.tabs ?? []);
-      await saveGuildPage.mutateAsync({ tabs: tabsToSave, theme: themeOverride ?? undefined });
+      const tabsToSave = orderGuildPageTabs(tabs.length > 0 ? tabs : (pageConfig?.tabs ?? []))
+        .map((tab, index) => ({ ...tab, sort_order: index }));
+      const savedTabIds = await saveGuildPage.mutateAsync({ tabs: tabsToSave, theme: themeOverride ?? undefined });
+      setTabs(tabsToSave.map((tab, index) => ({ ...tab, id: savedTabIds[index] })));
       setThemeOverride(null);
       setHasChanges(false);
     } catch (err) {
@@ -264,7 +273,9 @@ export function GuildPageEditor() {
           </div>
           <div className="flex items-center gap-2">
             <Link
-              to={`/g/${guildId}`}
+              to={currentTabSlug && currentTabSlug !== displayTabs[0]?.slug
+                ? `/g/${guildId}?tab=${encodeURIComponent(currentTabSlug)}`
+                : `/g/${guildId}`}
               className="flex items-center gap-2 px-4 py-2 rounded-lg hover:bg-muted transition-colors"
             >
               <Eye className="h-4 w-4" />
@@ -294,8 +305,8 @@ export function GuildPageEditor() {
         {/* Sidebar + Content */}
         <div className="flex gap-6 relative">
           <TabBar
-            tabs={[...displayTabs]}
-            activeTab={activeTab}
+            tabs={displayTabs}
+            activeTab={currentTabSlug}
             isEditing={true}
             isMobile={isMobile}
             sidebarOpen={sidebarOpen}
@@ -305,6 +316,7 @@ export function GuildPageEditor() {
             onTabDelete={handleDeleteTab}
             onTabRename={handleTabRename}
             onTabVisibilityChange={handleTabVisibilityChange}
+            onTabMove={handleTabMove}
           />
 
           {/* Desktop: inline toggle when sidebar closed */}
