@@ -160,7 +160,7 @@ export const RemotionRoot: React.FC = () => {
         <Composition id="FocusPlayerHealing" component={FocusPlayerHealingVideo} durationInFrames={470} fps={30} width={1280} height={720} />
       </Folder>
       <Folder name="VulnerabilityEffectLessons">
-        <Composition id="VulnerabilityEstimate" component={VulnerabilityEstimateVideo} durationInFrames={500} fps={30} width={1280} height={720} />
+        <Composition id="VulnerabilityEstimate" component={VulnerabilityEstimateVideo} durationInFrames={650} fps={30} width={1280} height={720} />
       </Folder>
     </>
   );
