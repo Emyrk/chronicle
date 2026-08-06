@@ -3,6 +3,7 @@ import { ItemIcon } from "@/components/ui/ItemIcon/ItemIcon";
 import { BOTTOM_SLOTS, LEFT_SLOTS, RIGHT_SLOTS, getQualityTextClass } from "@/pages/ArmoryPage/types";
 import { cn } from "@/lib/utils";
 import type { GearPayload } from "./gearListModel";
+import { slotLabel } from "./SlotEditorPanel";
 import { itemRefKey, type HydratedItem } from "./useListItems";
 
 /** Matrix row order: armory paperdoll order, weapons last. */
@@ -45,7 +46,7 @@ export function ProgressionMatrix({ payload, items, onCellClick }: ProgressionMa
             return (
               <tr key={`${def.outfitIndex}-${rowIdx}`} className="border-t border-zinc-800/70">
                 <td className="sticky left-0 bg-zinc-950/95 px-3 py-1.5 text-2xs uppercase tracking-wide text-zinc-500 whitespace-nowrap">
-                  {def.label}
+                  {slotLabel(def.outfitIndex)}
                 </td>
                 {payload.stages.map((stage, stageIdx) => {
                   const entry = stage.slots[key];

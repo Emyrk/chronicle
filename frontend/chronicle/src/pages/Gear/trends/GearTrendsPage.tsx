@@ -211,7 +211,7 @@ export function GearTrendsPage() {
               ))}
             </div>
             {shownSlot && <TrendsTable slot={shownSlot} cohortSize={trends.data.cohort_size} />}
-            <p className="text-2xs text-zinc-600">
+            <p className="text-2xs text-zinc-500">
               Methodology: the cohort is the top {trends.data.top_performances} unique players
               by their best ranked parse (one parse per player); each observation is the gear
               snapshot from that parse's raid night. Duplicate log uploads are collapsed;

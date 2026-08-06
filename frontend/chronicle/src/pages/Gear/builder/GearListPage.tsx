@@ -217,14 +217,16 @@ function ReadOnlyView({
         <p className="text-sm text-zinc-500">This list has no stages yet.</p>
       ) : (
         <div className="space-y-4">
-          <StatWeightsPanel classId={list.class_id} selection={weightSel} onSelect={setWeightSel} />
-          <CharacterMatchPanel
-            matched={charMatch.matched}
-            onMatch={charMatch.setMatched}
-            coverage={charMatch.coverage}
-            historyLoading={charMatch.loading}
-            historyError={charMatch.error}
-          />
+          <div className="grid gap-3 xl:grid-cols-2 items-start">
+            <StatWeightsPanel classId={list.class_id} selection={weightSel} onSelect={setWeightSel} />
+            <CharacterMatchPanel
+              matched={charMatch.matched}
+              onMatch={charMatch.setMatched}
+              coverage={charMatch.coverage}
+              historyLoading={charMatch.loading}
+              historyError={charMatch.error}
+            />
+          </div>
           <div className="flex flex-wrap items-center gap-3">
             <StagesBar payload={payload} stageIndex={stageIndex} onSelect={setStageIndex} />
             <div className="flex-1" />
@@ -252,7 +254,7 @@ function ReadOnlyView({
                     selectedSlot={selectedSlot ?? undefined}
                     onSelectSlot={(i) => setSelectedSlot((prev) => (prev === i ? null : i))}
                   />
-                  <p className="text-2xs text-zinc-600">Click a slot to see its notes and alternates.</p>
+                  <p className="text-2xs text-zinc-500">Click a slot to see its notes and alternates.</p>
                 </div>
                 {selectedSlot != null && selectedEntry ? (
                   <div className="rounded-md border border-zinc-700/60 bg-zinc-900/40 p-3 space-y-3">
@@ -260,7 +262,7 @@ function ReadOnlyView({
                     <AlternatesEditor entry={selectedEntry} items={items} readOnly />
                   </div>
                 ) : (
-                  <div className="rounded-md border border-dashed border-zinc-800 p-6 text-sm text-zinc-600">
+                  <div className="flex min-h-64 items-center justify-center self-stretch rounded-md border border-dashed border-zinc-800 p-6 text-sm text-zinc-500">
                     Select a filled slot to see the author's notes and alternates.
                   </div>
                 )}
@@ -338,14 +340,16 @@ function EditorView({
         <p className="text-sm text-zinc-500">This list has no stages yet.</p>
       ) : (
         <div className="space-y-4">
-          <StatWeightsPanel classId={list.class_id} selection={weightSel} onSelect={setWeightSel} />
-          <CharacterMatchPanel
-            matched={charMatch.matched}
-            onMatch={charMatch.setMatched}
-            coverage={charMatch.coverage}
-            historyLoading={charMatch.loading}
-            historyError={charMatch.error}
-          />
+          <div className="grid gap-3 xl:grid-cols-2 items-start">
+            <StatWeightsPanel classId={list.class_id} selection={weightSel} onSelect={setWeightSel} />
+            <CharacterMatchPanel
+              matched={charMatch.matched}
+              onMatch={charMatch.setMatched}
+              coverage={charMatch.coverage}
+              historyLoading={charMatch.loading}
+              historyError={charMatch.error}
+            />
+          </div>
           <div className="flex flex-wrap items-center gap-3">
             <StagesBar
               payload={editor.payload}
@@ -382,7 +386,7 @@ function EditorView({
                   scores={scores}
                   match={charMatch.match}
                 />
-                <p className="text-2xs text-zinc-600">Click a slot to pick its item.</p>
+                <p className="text-2xs text-zinc-500">Click a slot to pick its item.</p>
               </div>
             )}
             {selectedSlot != null ? (
@@ -416,8 +420,8 @@ function EditorView({
                 trendsSlot={trendsBySlot.get(selectedSlot)}
               />
             ) : (
-              <div className="rounded-md border border-dashed border-zinc-800 p-6 text-sm text-zinc-600">
-                Select a slot on the left to search and equip items.
+              <div className="flex min-h-64 items-center justify-center self-stretch rounded-md border border-dashed border-zinc-800 p-6 text-sm text-zinc-500">
+                Select a slot on the paperdoll to search and equip items.
               </div>
             )}
           </div>

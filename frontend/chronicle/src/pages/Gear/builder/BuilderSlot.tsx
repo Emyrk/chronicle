@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { StickyNote } from "lucide-react";
 import { ItemTooltip } from "@/components/ui/ItemTooltip/ItemTooltip";
+import { CursorTooltip, type CursorPos } from "@/pages/ArmoryPage/overview/CursorTooltip";
 import { getQualityBorderClass, getQualityTextClass, type GearSlotDef } from "@/pages/ArmoryPage/types";
 import { iconUrl } from "@/config/iconUrl";
 import { useIconBaseUrl } from "@/hooks/useDatasetId";
@@ -44,7 +45,7 @@ export function BuilderSlot({
 }: BuilderSlotProps) {
   const iconBaseUrl = useIconBaseUrl();
   const isMobile = useIsMobile();
-  const [hovered, setHovered] = useState(false);
+  const [cursor, setCursor] = useState<CursorPos | null>(null);
 
   const isEmpty = !entry;
   const quality = item?.quality ?? 1;
@@ -55,17 +56,25 @@ export function BuilderSlot({
     : item?.name || `Item #${entry.item_id}`;
   const altCount = entry?.alternates?.length ?? 0;
   const enchantText = item?.tooltip?.enchantment;
-  const showTooltip = hovered && !isMobile && !isEmpty && item?.tooltip;
+  const showTooltip = cursor != null && !isMobile && !isEmpty && item?.tooltip;
 
   const nameLabel = (
     <div className={cn("flex flex-col min-w-0", side === "left" && "items-end")}>
-      <span className={cn("text-2xs leading-tight truncate max-w-28", nameClass, isEmpty && "italic")}>
+      <span
+        className={cn(
+          "text-2xs leading-tight truncate",
+          side === "bottom" ? "max-w-24" : "max-w-36",
+          nameClass,
+          isEmpty && "italic",
+        )}
+      >
         {displayName}
       </span>
       {enchantText && (
         <span
           className={cn(
-            "text-2xs leading-tight max-w-28 text-quality-uncommon line-clamp-2",
+            "text-2xs leading-tight text-quality-uncommon line-clamp-2",
+            side === "bottom" ? "max-w-24" : "max-w-36",
             side === "left" && "text-right",
           )}
         >
@@ -92,8 +101,8 @@ export function BuilderSlot({
   return (
     <div
       className={cn("relative flex items-center gap-2", side === "left" && "flex-row-reverse")}
-      onMouseEnter={() => setHovered(true)}
-      onMouseLeave={() => setHovered(false)}
+      onMouseMove={(e) => setCursor({ x: e.clientX, y: e.clientY })}
+      onMouseLeave={() => setCursor(null)}
     >
       <div className="relative shrink-0">
         <button
@@ -132,7 +141,7 @@ export function BuilderSlot({
               "absolute -top-1 -right-1 h-2.5 w-2.5 rounded-full border border-zinc-950",
               matchState === "equipped" && "bg-blue-400",
               matchState === "owned" && "bg-emerald-400",
-              matchState === "missing" && "bg-zinc-600",
+              matchState === "missing" && "bg-amber-400/90",
             )}
           />
         )}
@@ -141,9 +150,9 @@ export function BuilderSlot({
       {!isMobile && nameLabel}
 
       {showTooltip && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center -translate-y-[15%] pointer-events-none">
+        <CursorTooltip pos={cursor!}>
           <ItemTooltip item={item.tooltip!} equippedItemIds={equippedItemIds} />
-        </div>
+        </CursorTooltip>
       )}
     </div>
   );

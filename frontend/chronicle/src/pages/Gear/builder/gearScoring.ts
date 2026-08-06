@@ -144,5 +144,9 @@ export function unknownWeightKeys(weights: StatWeights): string[] {
 }
 
 export function formatScore(score: number): string {
-  return score >= 100 ? String(Math.round(score)) : score.toFixed(1);
+  // Whole numbers stay clean ("23", "0"); small fractional scores keep
+  // one decimal ("4.5"); large scores round.
+  if (score >= 100) return String(Math.round(score));
+  const rounded = Math.round(score * 10) / 10;
+  return String(rounded);
 }

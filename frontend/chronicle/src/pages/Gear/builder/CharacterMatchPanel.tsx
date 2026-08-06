@@ -36,11 +36,6 @@ interface CharacterMatchPanelProps {
 }
 
 /**
- * Match the list against an armory character: items seen in the
- * character's logged raid nights count as owned; the newest snapshot
- * counts as equipped. Shows per-stage coverage and what's still missing.
- */
-/**
  * Armory-search typeahead: type a character name, pick from the realm's
  * indexed players.
  */
@@ -103,6 +98,11 @@ function CharacterSearch({ onPick }: { onPick: (char: MatchedCharacter) => void 
   );
 }
 
+/**
+ * Match the list against an armory character: items seen in the
+ * character's logged raid nights count as owned; the newest snapshot
+ * counts as equipped. Shows per-stage coverage and what's still missing.
+ */
 export function CharacterMatchPanel({
   matched,
   onMatch,
@@ -112,6 +112,10 @@ export function CharacterMatchPanel({
 }: CharacterMatchPanelProps) {
   const { isAuthenticated } = useAuth();
   const myCharacters = useMyCharacters({ enabled: isAuthenticated });
+  // Quick-pick chips already show and clear an active match.
+  const isQuickPick = (myCharacters.data ?? []).some(
+    (c) => matched?.realm === c.realm_name && matched?.name === c.name,
+  );
 
   return (
     <div className="rounded-md border border-zinc-700/60 bg-zinc-900/40 p-3 space-y-2">
@@ -139,7 +143,7 @@ export function CharacterMatchPanel({
           );
         })}
         <CharacterSearch onPick={(char) => onMatch(char)} />
-        {matched && (
+        {matched && !isQuickPick && (
           <Button
             variant="ghost"
             size="sm"

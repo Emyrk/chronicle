@@ -118,6 +118,10 @@ export function GearListsPage() {
   const publicLists = usePublicGearLists();
   const deleteList = useDeleteGearList();
 
+  // Your own public lists already show under "My lists".
+  const myIds = new Set((myLists.data ?? []).map((l) => l.id));
+  const otherPublicLists = (publicLists.data ?? []).filter((l) => !myIds.has(l.id));
+
   return (
     <div className="space-y-8">
       <section className="space-y-3">
@@ -181,11 +185,11 @@ export function GearListsPage() {
         </h2>
         {publicLists.isLoading ? (
           <p className="text-sm text-zinc-500">Loading…</p>
-        ) : (publicLists.data ?? []).length === 0 ? (
+        ) : otherPublicLists.length === 0 ? (
           <p className="text-sm text-zinc-500">No public gear lists on this server yet.</p>
         ) : (
           <div className="space-y-2">
-            {(publicLists.data ?? []).map((list) => (
+            {otherPublicLists.map((list) => (
               <GearListCard key={list.id} list={list} />
             ))}
           </div>

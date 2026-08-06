@@ -13,8 +13,20 @@ import { EnchantPicker } from "./EnchantPicker";
 
 const ALL_SLOTS = [...LEFT_SLOTS, ...RIGHT_SLOTS, ...BOTTOM_SLOTS];
 
+/** Paired slots get numbers so lists and tabs stay unambiguous. */
+const NUMBERED_LABELS: Record<number, string> = {
+  10: "Finger 1",
+  11: "Finger 2",
+  12: "Trinket 1",
+  13: "Trinket 2",
+};
+
 export function slotLabel(outfitIndex: number): string {
-  return ALL_SLOTS.find((s) => s.outfitIndex === outfitIndex)?.label ?? `Slot ${outfitIndex}`;
+  return (
+    NUMBERED_LABELS[outfitIndex] ??
+    ALL_SLOTS.find((s) => s.outfitIndex === outfitIndex)?.label ??
+    `Slot ${outfitIndex}`
+  );
 }
 
 type EditorTab = "pick" | "alternates" | "enchant";

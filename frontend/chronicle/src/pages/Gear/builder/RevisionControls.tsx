@@ -113,7 +113,7 @@ export function RevisionControls({ list, isOwner, viewedRev, onViewRev, dirty }:
         <GitFork className="h-3.5 w-3.5 mr-1" />
         Fork
       </Button>
-      {isOwner && (
+      {isOwner && viewedRev == null && (
         <Button
           size="sm"
           className="h-7 text-xs"
