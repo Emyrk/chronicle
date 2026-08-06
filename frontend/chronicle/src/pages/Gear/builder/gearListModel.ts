@@ -170,6 +170,47 @@ export function collectItemIds(payload: GearPayload): number[] {
 // ─── Immutable document operations ───────────────────────────
 // Each returns a new payload; the input is never mutated.
 
+/**
+ * Fill a stage's slots from a character's equipped outfit (item +
+ * permanent enchant per slot). Only empty slots are filled unless
+ * `overwrite` is set; existing notes and alternates are never touched.
+ */
+export function fillStageFromOutfit(
+  payload: GearPayload,
+  stageIndex: number,
+  equipped: ReadonlyArray<{ item_id: number; enchant_id?: number } | undefined>,
+  overwrite = false,
+): GearPayload {
+  return updateStageSlots(payload, stageIndex, (slots) => {
+    const next = { ...slots };
+    equipped.forEach((worn, slotIndex) => {
+      if (!worn || slotIndex >= SLOT_COUNT) return;
+      const key = String(slotIndex);
+      const existing = next[key];
+      if (existing && !overwrite) return;
+      next[key] = {
+        ...(existing ?? {}),
+        item_id: worn.item_id,
+        ...(worn.enchant_id ? { enchant_id: worn.enchant_id } : {}),
+      };
+      if (!worn.enchant_id) delete next[key]!.enchant_id;
+    });
+    return next;
+  });
+}
+
+function updateStageSlots(
+  payload: GearPayload,
+  stageIndex: number,
+  fn: (slots: GearStage["slots"]) => GearStage["slots"],
+): GearPayload {
+  if (stageIndex < 0 || stageIndex >= payload.stages.length) return payload;
+  const stages = payload.stages.map((s, i) =>
+    i === stageIndex ? { ...s, slots: fn(s.slots) } : s,
+  );
+  return { ...payload, stages };
+}
+
 export function addStage(payload: GearPayload, name?: string): GearPayload {
   if (payload.stages.length >= MAX_STAGES) return payload;
   const prev = payload.stages[payload.stages.length - 1];

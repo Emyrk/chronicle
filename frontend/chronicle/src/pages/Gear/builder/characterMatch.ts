@@ -5,11 +5,21 @@
 import type { ArmoryGearHistoryResponse } from "@/api/typesGenerated";
 import { COSMETIC_SLOTS, type GearPayload, type GearStage } from "./gearListModel";
 
+export interface EquippedSlot {
+  item_id: number;
+  enchant_id?: number;
+}
+
 export interface CharacterMatch {
   /** Items in the newest snapshot (currently worn). */
   equippedIds: ReadonlySet<number>;
   /** Items seen in any snapshot (owned at some point). */
   ownedIds: ReadonlySet<number>;
+  /**
+   * The newest snapshot's outfit by slot index (0-18); undefined for
+   * empty slots. Used to fill a stage from the character's gear.
+   */
+  equippedSlots: ReadonlyArray<EquippedSlot | undefined>;
 }
 
 export interface StageCoverage {
@@ -30,14 +40,21 @@ export interface StageCoverage {
 export function buildCharacterMatch(history: ArmoryGearHistoryResponse): CharacterMatch {
   const equippedIds = new Set<number>();
   const ownedIds = new Set<number>();
+  const equippedSlots: (EquippedSlot | undefined)[] = [];
   history.snapshots.forEach((snapshot, i) => {
-    for (const item of snapshot.gear) {
-      if (!item || item.item_id <= 0) continue;
+    snapshot.gear.forEach((item, slotIndex) => {
+      if (!item || item.item_id <= 0) return;
       ownedIds.add(item.item_id);
-      if (i === 0) equippedIds.add(item.item_id);
-    }
+      if (i === 0) {
+        equippedIds.add(item.item_id);
+        equippedSlots[slotIndex] = {
+          item_id: item.item_id,
+          ...(item.enchant_id && item.enchant_id > 0 ? { enchant_id: item.enchant_id } : {}),
+        };
+      }
+    });
   });
-  return { equippedIds, ownedIds };
+  return { equippedIds, ownedIds, equippedSlots };
 }
 
 /** True when the character owns the slot's primary pick or any alternate. */

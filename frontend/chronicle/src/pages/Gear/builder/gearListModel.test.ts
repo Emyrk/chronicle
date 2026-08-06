@@ -4,6 +4,7 @@ import {
   addStage,
   clearSlot,
   collectItemIds,
+  fillStageFromOutfit,
   GEAR_PAYLOAD_VERSION,
   MAX_ALTERNATES,
   MAX_STAGES,
@@ -106,6 +107,46 @@ describe("collectItemIds", () => {
       { name: "b", slots: { "0": { item_id: 1 }, "4": { item_id: 3 } } },
     ]);
     expect(collectItemIds(payload).sort()).toEqual([1, 2, 3]);
+  });
+});
+
+describe("fillStageFromOutfit", () => {
+  const equipped: ({ item_id: number; enchant_id?: number } | undefined)[] = [];
+  equipped[SLOT.head] = { item_id: 100, enchant_id: 55 };
+  equipped[SLOT.chest] = { item_id: 200 };
+  equipped[SLOT.mainHand] = { item_id: 300 };
+
+  it("fills empty slots with item and enchant, keeping existing picks", () => {
+    const payload = doc([
+      { name: "a", slots: { [String(SLOT.chest)]: { item_id: 999, note: "keep" } } },
+    ]);
+    const next = fillStageFromOutfit(payload, 0, equipped);
+    expect(next.stages[0].slots[String(SLOT.head)]).toEqual({ item_id: 100, enchant_id: 55 });
+    expect(next.stages[0].slots[String(SLOT.mainHand)]).toEqual({ item_id: 300 });
+    // Existing pick untouched without overwrite.
+    expect(next.stages[0].slots[String(SLOT.chest)]).toEqual({ item_id: 999, note: "keep" });
+  });
+
+  it("overwrite replaces items but preserves notes and alternates", () => {
+    const payload = doc([
+      {
+        name: "a",
+        slots: {
+          [String(SLOT.chest)]: { item_id: 999, enchant_id: 7, note: "keep", alternates: [{ item_id: 5 }] },
+        },
+      },
+    ]);
+    const next = fillStageFromOutfit(payload, 0, equipped, true);
+    expect(next.stages[0].slots[String(SLOT.chest)]).toEqual({
+      item_id: 200,
+      note: "keep",
+      alternates: [{ item_id: 5 }],
+    });
+  });
+
+  it("ignores out-of-range stage index", () => {
+    const payload = doc([{ name: "a", slots: {} }]);
+    expect(fillStageFromOutfit(payload, 5, equipped)).toBe(payload);
   });
 });
 

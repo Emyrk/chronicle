@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { StickyNote } from "lucide-react";
+import { Plus, StickyNote } from "lucide-react";
 import { ItemTooltip } from "@/components/ui/ItemTooltip/ItemTooltip";
 import { CursorTooltip, type CursorPos } from "@/pages/ArmoryPage/overview/CursorTooltip";
 import { getQualityBorderClass, getQualityTextClass, type GearSlotDef } from "@/pages/ArmoryPage/types";
@@ -63,7 +63,7 @@ export function BuilderSlot({
       <span
         className={cn(
           "text-2xs leading-tight truncate",
-          side === "bottom" ? "max-w-24" : "max-w-36",
+          side === "bottom" ? "max-w-full" : "max-w-36",
           nameClass,
           isEmpty && "italic",
         )}
@@ -74,7 +74,7 @@ export function BuilderSlot({
         <span
           className={cn(
             "text-2xs leading-tight text-quality-uncommon line-clamp-2",
-            side === "bottom" ? "max-w-24" : "max-w-36",
+            side === "bottom" ? "max-w-full" : "max-w-36",
             side === "left" && "text-right",
           )}
         >
@@ -100,7 +100,11 @@ export function BuilderSlot({
 
   return (
     <div
-      className={cn("relative flex items-center gap-2", side === "left" && "flex-row-reverse")}
+      className={cn(
+        "relative flex items-center gap-2",
+        side === "left" && "flex-row-reverse",
+        side === "bottom" && "min-w-0",
+      )}
       onMouseMove={(e) => setCursor({ x: e.clientX, y: e.clientY })}
       onMouseLeave={() => setCursor(null)}
     >
@@ -122,11 +126,14 @@ export function BuilderSlot({
               className="w-full h-full object-cover"
               loading="lazy"
             />
-          ) : (
+          ) : isMobile ? (
+            // Side labels are hidden on mobile; name the slot in the box.
             <span className="text-3xs text-zinc-600 text-center leading-tight select-none">
               {slotDef.label}
             </span>
-          )}
+          ) : onSelect ? (
+            <Plus className="h-4 w-4 text-zinc-700" />
+          ) : null}
         </button>
         {!isEmpty && matchState && (
           <span

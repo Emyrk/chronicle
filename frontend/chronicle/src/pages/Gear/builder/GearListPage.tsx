@@ -9,10 +9,12 @@ import { getClassColorVar } from "@/pages/ArmoryPage/types";
 import { cn } from "@/lib/utils";
 import { gearClassById } from "../classInfo";
 import { useSimItems } from "@/api/gamedata";
+import { toast } from "sonner";
 import {
   addAlternate,
   addStage,
   clearSlot,
+  fillStageFromOutfit,
   moveStage,
   parsePayload,
   promoteAlternate,
@@ -348,6 +350,16 @@ function EditorView({
               coverage={charMatch.coverage}
               historyLoading={charMatch.loading}
               historyError={charMatch.error}
+              onFillFrom={
+                charMatch.match
+                  ? () => {
+                      editor.update((p) =>
+                        fillStageFromOutfit(p, safeStageIndex, charMatch.match!.equippedSlots),
+                      );
+                      toast.success(`Filled empty slots from ${charMatch.matched?.name}'s equipped gear`);
+                    }
+                  : undefined
+              }
             />
           </div>
           <div className="flex flex-wrap items-center gap-3">

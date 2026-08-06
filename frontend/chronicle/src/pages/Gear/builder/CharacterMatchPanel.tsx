@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { Search, UserRound, X } from "lucide-react";
+import { Download, Search, UserRound, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { useAuth } from "@/hooks/useAuth";
@@ -33,6 +33,8 @@ interface CharacterMatchPanelProps {
   coverage?: StageCoverage;
   historyLoading?: boolean;
   historyError?: boolean;
+  /** Edit mode: fill the stage's empty slots from the matched character. */
+  onFillFrom?: () => void;
 }
 
 /**
@@ -109,6 +111,7 @@ export function CharacterMatchPanel({
   coverage,
   historyLoading,
   historyError,
+  onFillFrom,
 }: CharacterMatchPanelProps) {
   const { isAuthenticated } = useAuth();
   const myCharacters = useMyCharacters({ enabled: isAuthenticated });
@@ -165,16 +168,33 @@ export function CharacterMatchPanel({
           </p>
         ) : coverage ? (
           <div className="space-y-1">
-            <p className="text-xs text-zinc-300">
-              Owns <span className="font-mono">{coverage.owned}</span> of{" "}
-              <span className="font-mono">{coverage.filled}</span> items in this stage
-              {coverage.equipped > 0 && (
-                <span className="text-zinc-500">
-                  {" "}
-                  · {coverage.equipped} currently equipped
-                </span>
+            <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
+              {coverage.filled > 0 ? (
+                <p className="text-xs text-zinc-300">
+                  Owns <span className="font-mono">{coverage.owned}</span> of{" "}
+                  <span className="font-mono">{coverage.filled}</span> items in this stage
+                  {coverage.equipped > 0 && (
+                    <span className="text-zinc-500">
+                      {" "}
+                      · {coverage.equipped} currently equipped
+                    </span>
+                  )}
+                </p>
+              ) : (
+                <p className="text-xs text-zinc-400">This stage has no items yet.</p>
               )}
-            </p>
+              {onFillFrom && (
+                <Button
+                  variant="outline"
+                  size="sm"
+                  className="h-6 px-2 text-2xs"
+                  onClick={onFillFrom}
+                >
+                  <Download className="h-3 w-3 mr-1" />
+                  Fill empty slots from {matched?.name}
+                </Button>
+              )}
+            </div>
             {coverage.missing.length > 0 && (
               <p className="text-2xs text-zinc-500">
                 Still missing: {coverage.missing.map((i) => slotLabel(i)).join(", ")}

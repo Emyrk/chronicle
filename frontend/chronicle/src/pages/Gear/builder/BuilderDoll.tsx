@@ -83,7 +83,7 @@ export function BuilderDoll({ stage, items, selectedSlot, onSelectSlot, scores, 
           })}
         </div>
       </div>
-      <div className="flex justify-center gap-6">
+      <div className="grid grid-cols-3 gap-2">
         {BOTTOM_SLOTS.map((def) => {
           const { entry, item, matchState } = slotFor(def.outfitIndex);
           return (
