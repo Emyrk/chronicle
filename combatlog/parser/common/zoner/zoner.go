@@ -1,8 +1,8 @@
 package zoner
 
 import (
-	"github.com/Emyrk/chronicle/combatlog/parser/types/zone"
 	"github.com/Emyrk/chronicle/combatlog/parser/common/messages"
+	"github.com/Emyrk/chronicle/combatlog/parser/types/zone"
 	"github.com/Emyrk/chronicle/internal/ptr"
 )
 
@@ -43,7 +43,7 @@ func (l *Location) Process(z messages.Zone) zone.ZoneChangeResult {
 
 	// Same zone (name + instanceID match). Check for difficulty changes.
 	if z.HasDifficulty() {
-		if l.HasDifficulty() && !l.DifficultyEquals(z.Zone) {
+		if l.DifficultyDiffers(z.Zone) {
 			// Difficulty was already set and now differs → new instance needed.
 			l.Zone = z.Zone
 			return zone.DifficultyChanged

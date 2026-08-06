@@ -95,6 +95,12 @@ func (z Zone) HasDifficulty() bool {
 	return z.MaxPlayers > 0 || z.DifficultyName != ""
 }
 
+// DifficultyDiffers returns true when both zones have difficulty metadata and
+// their difficulty settings differ.
+func (z Zone) DifficultyDiffers(b Zone) bool {
+	return z.HasDifficulty() && b.HasDifficulty() && !z.DifficultyEquals(b)
+}
+
 // DifficultyEquals returns true if z and b have identical difficulty settings.
 func (z Zone) DifficultyEquals(b Zone) bool {
 	return z.DifficultyIndex == b.DifficultyIndex &&

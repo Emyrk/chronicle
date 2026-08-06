@@ -195,26 +195,29 @@ func (s *State) Zone(z messages.Zone) {
 		// Difficulty changed within the same zone: match only an existing
 		// instance that has the same difficulty, otherwise create a new one.
 		// This lets 10N → 25H → 10N reuse the original 10N hookable.
-		s.matchOrCreateInstance(z, true)
+		s.matchOrCreateInstance(z)
 		return
 	case zone.ZoneChanged:
-		// Different zone entirely: match by name/mapID only.
+		// Different zone entirely: match by name/mapID and known difficulty.
 	}
 
-	s.matchOrCreateInstance(z, false)
+	s.matchOrCreateInstance(z)
 }
 
-// matchOrCreateInstance looks for an existing hookable that matches z. When
-// requireDifficultyMatch is true the candidate must also have the same
-// difficulty settings (used for DifficultyChanged). If no match is found a
-// new hookable is created via the instance resolver.
-func (s *State) matchOrCreateInstance(z messages.Zone, requireDifficultyMatch bool) {
+// matchOrCreateInstance looks for an existing hookable that matches z. Known
+// difficulty metadata must match even when an intervening zone caused
+// Location.Process to report ZoneChanged instead of DifficultyChanged. If no
+// match is found, a new hookable is created via the instance resolver.
+func (s *State) matchOrCreateInstance(z messages.Zone) {
 	matched := false
 	for _, inst := range s.Instances {
 		if !inst.MatchesZone(z.Zone) {
 			continue
 		}
-		if requireDifficultyMatch && !inst.CurrentZone.DifficultyEquals(z.Zone) {
+		if inst.CurrentZone.DifficultyDiffers(z.Zone) {
+			// Re-entering after an intervening zone is reported as ZoneChanged, not
+			// DifficultyChanged. Known changes such as 10-player to 25-player must
+			// still start a separate parsed instance.
 			continue
 		}
 		if inst.ShouldStartNewRun(z.Seen) {
