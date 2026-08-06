@@ -1,30 +1,11 @@
-// Shared per-instance accent colors for guild page panels.
+// Shared per-instance accent colors for guild page panels, sourced from the
+// instance config's accentColor. Instances without a config entry get a
+// stable hue derived from their name.
 
 import type { CSSProperties } from "react";
+import { getInstanceConfig } from "@/pages/Logs/utils/instanceImages";
 
-/**
- * Curated hues for well-known instances so the common raids read at a
- * glance (Molten Core orange, Onyxia green, ...). Anything unlisted gets a
- * stable hue derived from its name.
- */
-const INSTANCE_HUES: Record<string, number> = {
-  "Molten Core": 20,
-  "Onyxia's Lair": 130,
-  "Blackwing Lair": 0,
-  "Temple of Ahn'Qiraj": 45,
-  "Ruins of Ahn'Qiraj": 40,
-  Naxxramas: 195,
-  "Zul'Gurub": 160,
-  "Emerald Sanctum": 145,
-  "Tower of Karazhan": 255,
-  "Lower Tower of Karazhan": 255,
-  "Upper Tower of Karazhan": 265,
-  "Karazhan Crypts": 245,
-};
-
-export function instanceHue(name: string): number {
-  const known = INSTANCE_HUES[name];
-  if (known !== undefined) return known;
+function hashHue(name: string): number {
   let hash = 0;
   for (let i = 0; i < name.length; i++) {
     hash = (hash * 31 + name.charCodeAt(i)) | 0;
@@ -32,15 +13,40 @@ export function instanceHue(name: string): number {
   return ((hash % 360) + 360) % 360;
 }
 
+function hexToRgb(hex: string): [number, number, number] | null {
+  const match = /^#?([0-9a-f]{6})$/i.exec(hex.trim());
+  if (!match) return null;
+  const n = parseInt(match[1], 16);
+  return [(n >> 16) & 255, (n >> 8) & 255, n & 255];
+}
+
 /** Vertical gradient for accent bars (Recent panel list rows). */
 export function instanceAccentGradient(name: string): string {
-  const hue = instanceHue(name);
+  const accent = getInstanceConfig(name)?.accentColor;
+  const rgb = accent ? hexToRgb(accent) : null;
+  if (rgb) {
+    const [r, g, b] = rgb;
+    const dark = `rgb(${Math.round(r * 0.45)} ${Math.round(g * 0.45)} ${Math.round(b * 0.45)})`;
+    return `linear-gradient(180deg, ${accent}, ${dark})`;
+  }
+  const hue = hashHue(name);
   return `linear-gradient(180deg, hsl(${hue} 70% 55%), hsl(${hue} 75% 28%))`;
 }
 
 /** Flat tinted-chip style for calendar event pills. */
 export function instancePillStyle(name: string): CSSProperties {
-  const hue = instanceHue(name);
+  const accent = getInstanceConfig(name)?.accentColor;
+  const rgb = accent ? hexToRgb(accent) : null;
+  if (rgb) {
+    const [r, g, b] = rgb;
+    // Lighten the accent slightly for text so darker accents stay readable.
+    const text = `rgb(${Math.round(r + (255 - r) * 0.25)} ${Math.round(g + (255 - g) * 0.25)} ${Math.round(b + (255 - b) * 0.25)})`;
+    return {
+      background: `rgb(${r} ${g} ${b} / 0.18)`,
+      color: text,
+    };
+  }
+  const hue = hashHue(name);
   return {
     background: `hsl(${hue} 55% 20% / 0.9)`,
     color: `hsl(${hue} 70% 66%)`,
