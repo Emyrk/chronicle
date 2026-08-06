@@ -2158,6 +2158,8 @@ CREATE INDEX idx_psreceipt_snapshot ON parse_score_receipts USING btree (snapsho
 
 CREATE INDEX idx_psreceipt_tenant ON parse_score_receipts USING btree (tenant_id);
 
+CREATE INDEX idx_ranking_snapshot_members_ranking_id ON ranking_snapshot_members USING btree (ranking_id);
+
 CREATE INDEX idx_regression_snapshots_fixture ON regression_snapshots USING btree (fixture_id, created_at DESC);
 
 CREATE INDEX idx_rs_tenant_lookback ON ranking_snapshots USING btree (tenant_id, lookback_days, published_at DESC NULLS LAST);
