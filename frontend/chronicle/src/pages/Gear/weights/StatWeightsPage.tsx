@@ -1,6 +1,6 @@
 import { useMemo, useState } from "react";
 import { useSearchParams } from "react-router-dom";
-import { Pin, Plus, Scale, Trash2 } from "lucide-react";
+import { Copy, Pin, Plus, Scale, Sparkles, Trash2 } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -19,6 +19,7 @@ import { getClassColorVar } from "@/pages/ArmoryPage/types";
 import { gearClassById, gearClassesForFlavor } from "../classInfo";
 import { parseWeights, STAT_KEYS, type StatWeights } from "../builder/gearScoring";
 import { draftFromWeights, WeightSetForm, weightsFromDraft } from "./WeightSetForm";
+import { presetsForFlavor } from "./presets";
 
 const STAT_LABEL = new Map(STAT_KEYS.map((s) => [s.key, s.label]));
 
@@ -257,9 +258,16 @@ function CreateWeightSetForm({ onCreated }: { onCreated: (id: string) => void })
 export function StatWeightsPage() {
   const { isAuthenticated } = useAuth();
   const { datasetId } = useTenantDatasetScope();
+  const { data: siteConfig } = useSiteConfig();
   const pins = useStatWeightPins(datasetId ?? undefined);
   const myWeights = useMyStatWeights(isAuthenticated);
+  const createWeight = useCreateStatWeight();
   const [creating, setCreating] = useState(false);
+
+  const builtInPresets = useMemo(
+    () => presetsForFlavor(siteConfig?.dataset_flavor ?? []),
+    [siteConfig?.dataset_flavor],
+  );
 
   const [searchParams, setSearchParams] = useSearchParams();
   const editingId = searchParams.get("id");
@@ -273,6 +281,31 @@ export function StatWeightsPage() {
     setSearchParams(next, { replace: true });
   };
   const editing = (myWeights.data ?? []).find((w) => w.id === editingId);
+
+  const copyPreset = (preset: (typeof builtInPresets)[number]) => {
+    if (!isAuthenticated) {
+      toast.error("You must be logged in to save stat weights");
+      return;
+    }
+    createWeight.mutate(
+      {
+        name: preset.name,
+        description: preset.description,
+        class_id: preset.classId,
+        spec_name: preset.specName,
+        weights: preset.weights as unknown as Record<string, string>,
+      },
+      {
+        onSuccess: (sw) => {
+          toast.success(`Copied "${preset.name}" to your sets`);
+          setCreating(false);
+          setEditingId(sw.id);
+          window.scrollTo({ top: 0, behavior: "smooth" });
+        },
+        onError: (err) => toast.error(err.message),
+      },
+    );
+  };
 
   return (
     <div className="space-y-8">
@@ -352,6 +385,46 @@ export function StatWeightsPage() {
               ))}
           </div>
         )}
+      </section>
+
+      <section className="space-y-3">
+        <h2 className="text-sm font-semibold uppercase tracking-wide text-zinc-400">
+          Built-in presets
+        </h2>
+        <p className="text-xs text-zinc-500">
+          A decent starting point per spec, derived from published community weights (wowsims
+          defaults, Elitist Jerks-era Pawn scales). Copy one to your sets to tune it.
+        </p>
+        <div className="space-y-2">
+          {builtInPresets.map((preset) => (
+            <div
+              key={preset.id}
+              className="rounded-md border border-zinc-700/60 bg-zinc-900/40 px-4 py-3"
+            >
+              <div className="flex flex-wrap items-baseline gap-x-3 gap-y-0.5">
+                <span className="inline-flex items-center gap-1.5 font-medium text-zinc-100">
+                  <Sparkles className="h-3.5 w-3.5 text-zinc-500" />
+                  {preset.name}
+                </span>
+                <ClassSpecLine classId={preset.classId} specName={preset.specName} />
+                <div className="flex-1" />
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  className="h-6 px-2 text-2xs text-zinc-400"
+                  onClick={() => copyPreset(preset)}
+                >
+                  <Copy className="h-3 w-3 mr-1" />
+                  Copy to my sets
+                </Button>
+              </div>
+              <p className="mt-1 text-xs text-zinc-400 line-clamp-2">{preset.description}</p>
+              <div className="mt-1.5">
+                <WeightSummary weights={preset.weights} />
+              </div>
+            </div>
+          ))}
+        </div>
       </section>
 
       <section className="space-y-3">

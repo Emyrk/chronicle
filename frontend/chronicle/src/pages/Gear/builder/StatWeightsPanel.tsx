@@ -1,9 +1,11 @@
 import { useMemo } from "react";
 import { Link } from "react-router-dom";
-import { Pin, SlidersHorizontal } from "lucide-react";
+import { Pin, Sparkles, SlidersHorizontal } from "lucide-react";
 import { useAuth } from "@/hooks/useAuth";
 import { useTenantDatasetScope } from "@/hooks/useDatasetId";
+import { useSiteConfig } from "@/api/queries";
 import { useMyStatWeights, useStatWeightPins } from "@/api/gearBuilderQueries";
+import { presetsForFlavor, type WeightPreset } from "../weights/presets";
 import type { GearStatWeight, GearStatWeightPin } from "@/api/typesGenerated";
 import { cn } from "@/lib/utils";
 import { parseWeights, unknownWeightKeys, type StatWeights } from "./gearScoring";
@@ -14,6 +16,8 @@ export interface WeightSelection {
   weights: StatWeights;
   /** True when the set belongs to the current user (editable). */
   mine: boolean;
+  /** True for baked-in presets (shown with a sparkle). */
+  preset?: boolean;
 }
 
 interface StatWeightsPanelProps {
@@ -35,6 +39,10 @@ function mineToSelection(sw: GearStatWeight): WeightSelection {
   return { id: sw.id, name: sw.name, weights: parseWeights(sw.weights), mine: true };
 }
 
+function presetToSelection(preset: WeightPreset): WeightSelection {
+  return { id: preset.id, name: preset.name, weights: preset.weights, mine: false, preset: true };
+}
+
 /**
  * Stat-weight set picker for the builder. Admin-pinned sets come first,
  * then the user's own sets; editing and creation live on the Stat
@@ -43,6 +51,7 @@ function mineToSelection(sw: GearStatWeight): WeightSelection {
 export function StatWeightsPanel({ classId, selection, onSelect }: StatWeightsPanelProps) {
   const { isAuthenticated } = useAuth();
   const { datasetId } = useTenantDatasetScope();
+  const { data: siteConfig } = useSiteConfig();
   const pins = useStatWeightPins(datasetId ?? undefined);
   const myWeights = useMyStatWeights(isAuthenticated);
 
@@ -50,13 +59,16 @@ export function StatWeightsPanel({ classId, selection, onSelect }: StatWeightsPa
     const pinned = (pins.data ?? [])
       .filter((p) => !p.stat_weight_class_id || p.stat_weight_class_id === classId)
       .map(pinToSelection);
+    const presets = presetsForFlavor(siteConfig?.dataset_flavor ?? [])
+      .filter((p) => p.classId === classId)
+      .map(presetToSelection);
     const mine = (myWeights.data ?? [])
       .filter((w) => !w.class_id || w.class_id === classId)
       .map(mineToSelection);
     // A pinned set the user owns shows once, as their own.
     const mineIds = new Set(mine.map((m) => m.id));
-    return [...pinned.filter((p) => !mineIds.has(p.id)), ...mine];
-  }, [pins.data, myWeights.data, classId]);
+    return [...pinned.filter((p) => !mineIds.has(p.id)), ...presets, ...mine];
+  }, [pins.data, myWeights.data, classId, siteConfig?.dataset_flavor]);
 
   const unknown = selection ? unknownWeightKeys(selection.weights) : [];
 
@@ -88,7 +100,7 @@ export function StatWeightsPanel({ classId, selection, onSelect }: StatWeightsPa
                 : "border-zinc-700 text-zinc-400 hover:text-zinc-200",
             )}
           >
-            {!opt.mine && <Pin className="h-3 w-3" />}
+            {opt.preset ? <Sparkles className="h-3 w-3" /> : !opt.mine ? <Pin className="h-3 w-3" /> : null}
             {opt.name}
           </button>
         ))}
