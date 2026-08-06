@@ -12,6 +12,8 @@ interface ScheduleEntry {
   startUtc?: string;
   endUtc?: string;
   inviteUtc?: string;
+  /** Optional note shown under the time/invite lines. */
+  note?: string;
   /** Legacy freeform strings from older saves. */
   time?: string;
   invite?: string;
@@ -78,6 +80,7 @@ function normalizeSchedule(raw: ScheduleEntry[] | string | undefined): ScheduleE
         startUtc: entry?.startUtc,
         endUtc: entry?.endUtc,
         inviteUtc: entry?.inviteUtc,
+        note: entry?.note,
         time: entry?.time,
         invite: entry?.invite,
       }))
@@ -209,6 +212,13 @@ function ScheduleEditor({ value, onChange }: { value: unknown; onChange: (value:
               </label>
             </div>
           )}
+          <input
+            type="text"
+            value={entry.note ?? ""}
+            onChange={(e) => update(i, { note: e.target.value })}
+            placeholder="Note (optional)"
+            className="w-full rounded-md border border-input bg-background px-2 py-1 text-xs"
+          />
         </div>
       ))}
       <button
@@ -328,6 +338,9 @@ function RaidScheduleContent({ config, isEditing }: GuildPanelRenderProps<RaidSc
                 </span>
                 {!offDay && times.invite && (
                   <span className="block text-[10.5px] text-muted-foreground/60">{times.invite}</span>
+                )}
+                {row.note && (
+                  <span className="block text-[10.5px] text-muted-foreground/60">{row.note}</span>
                 )}
               </span>
             </div>
