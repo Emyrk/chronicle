@@ -109,11 +109,12 @@ function QuotesEditor({ value, onChange }: { value: unknown; onChange: (value: u
                   update(i, { whoColor: v === "custom" ? "#e8a33d" : v || undefined });
                 }}
                 className="min-w-0 flex-1 rounded-md border border-input bg-background px-2 py-1 text-xs"
+                style={{ color: resolveWhoColor(quote.whoColor) }}
                 title="Name color"
               >
                 <option value="">Default color</option>
                 {CLASS_COLOR_OPTIONS.map((cls) => (
-                  <option key={cls} value={cls}>
+                  <option key={cls} value={cls} style={{ color: CLASS_CSS_VAR[cls] }}>
                     {CLASS_DISPLAY[cls]}
                   </option>
                 ))}
