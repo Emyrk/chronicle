@@ -48,7 +48,7 @@ import (
 )
 
 const (
-	KindLogParse                = "log-parse"
+	KindLogParse                 = "log-parse"
 	MinimumCombatTimeForRankings = 3
 )
 
@@ -338,11 +338,15 @@ func (w *WorkerLogParse) Work(ctx context.Context, job *river.Job[ArgsLogParse])
 		// multi-worker, but for now it is a simple way for duplicate detection to not
 		// have race conditions.
 		w.parent.insertParsedInstanceMu.Lock()
-		err = db.InTx(ctx, func(tx *authz.AuthzTX) error {
-			defer func() {
-				// Always unlock at the end of the tx
+		insertLockHeld := true
+		defer func() {
+			if insertLockHeld {
 				w.parent.insertParsedInstanceMu.Unlock()
-			}()
+			}
+		}()
+		var dbinstance database.LogInstance
+		var instanceStart, instanceEnd pgtype.Timestamptz
+		err = db.InTx(ctx, func(tx *authz.AuthzTX) error {
 			guild, err := finalized.Guilds.Insert(ctx, encountersState.Units, instanceID, realmID, resolved.DatasetID, tx)
 			if err != nil {
 				return fmt.Errorf("insert guild: %w", err)
@@ -357,7 +361,6 @@ func (w *WorkerLogParse) Work(ctx context.Context, job *river.Job[ArgsLogParse])
 			}
 
 			// Compute instance time range from encounters
-			var instanceStart, instanceEnd pgtype.Timestamptz
 			for _, enc := range finalized.Encounters {
 				encStart := database.Timestamptz(enc.Combat.Start)
 				encEnd := database.Timestamptz(enc.Combat.End)
@@ -409,7 +412,7 @@ func (w *WorkerLogParse) Work(ctx context.Context, job *river.Job[ArgsLogParse])
 				insertInstanceParams.HashedSlug = pgtype.Text{Valid: false}
 			}
 
-			dbinstance, err := tx.InsertInstance(ctx, insertInstanceParams)
+			dbinstance, err = tx.InsertInstance(ctx, insertInstanceParams)
 			if err != nil {
 				return fmt.Errorf("insert instance: %w", err)
 			}
@@ -514,14 +517,6 @@ func (w *WorkerLogParse) Work(ctx context.Context, job *river.Job[ArgsLogParse])
 				return err
 			}
 
-			// Duplicate instance detection: find other instances in the same
-			// realm+zone with overlapping time, then check player overlap.
-			if instanceStart.Valid {
-				if dupErr := detectAndLinkDuplicate(ctx, tx, dbinstance.ID, dbinstance.RealmID, dbinstance.Name, dbinstance.MaxPlayers, dbinstance.DynamicDifficulty, instanceStart, builder.participants); dupErr != nil {
-					slog.WarnContext(ctx, "duplicate detection failed", slog.String("err", dupErr.Error()))
-				}
-			}
-
 			// Persist speedrun result if available.
 			// Skip speedrun submission entirely for trash-only instances
 			// (zero boss kills). Partial boss kills still get recorded so
@@ -577,11 +572,6 @@ func (w *WorkerLogParse) Work(ctx context.Context, job *river.Job[ArgsLogParse])
 				}
 			}
 
-			// Persist DPS rankings for clean kills (only for instances with ranking rules).
-			if finalized.Rankings != nil && finalized.Rankings.DPS != nil && finalized.RankingRules != nil {
-				insertDPSRankings(ctx, tx, finalized, dbinstance, inst.Name(), realmName)
-			}
-
 			inst := db2sdk.WoWInstanceWithGuild(dbinstance, guild)
 			inst.RealmName = realmName
 			jobOut.Instances = append(jobOut.Instances, chroniclesdk.WoWSimpleParsedInstance{
@@ -599,8 +589,38 @@ func (w *WorkerLogParse) Work(ctx context.Context, job *river.Job[ArgsLogParse])
 		report.Instances = append(report.Instances, instReport)
 
 		if err != nil {
+			w.parent.insertParsedInstanceMu.Unlock()
+			insertLockHeld = false
 			jobResult = "cancelled"
 			return river.JobCancel(fmt.Errorf("insert finalized encounters: %w", err))
+		}
+
+		// Duplicate detection is best-effort, but it must use its own transaction.
+		// A failed statement aborts a PostgreSQL transaction even when the Go error
+		// is logged, which would otherwise roll back the successfully parsed instance.
+		if instanceStart.Valid {
+			dupErr := db.InTx(ctx, func(tx *authz.AuthzTX) error {
+				return detectAndLinkDuplicate(ctx, tx, dbinstance.ID, dbinstance.RealmID, dbinstance.Name, dbinstance.MaxPlayers, dbinstance.DynamicDifficulty, instanceStart, builder.participants)
+			}, nil)
+			if dupErr != nil {
+				slog.WarnContext(ctx, "duplicate detection failed", slog.String("err", dupErr.Error()))
+			}
+		}
+		w.parent.insertParsedInstanceMu.Unlock()
+		insertLockHeld = false
+
+		// Rankings are supplementary. Persist them atomically in a separate
+		// transaction so a ranking error cannot roll back the parsed instance.
+		if finalized.Rankings != nil && finalized.Rankings.DPS != nil && finalized.RankingRules != nil {
+			rankErr := db.InTx(ctx, func(tx *authz.AuthzTX) error {
+				return insertDPSRankings(ctx, tx, finalized, dbinstance, inst.Name(), realmName)
+			}, nil)
+			if rankErr != nil {
+				slog.WarnContext(ctx, "insert dps rankings failed",
+					slog.String("instance_id", dbinstance.ID.String()),
+					slog.String("err", rankErr.Error()),
+				)
+			}
 		}
 
 		metrics.encountersParsed.Add(float64(len(finalized.Encounters)))
@@ -1010,7 +1030,7 @@ func insertDPSRankings(
 	dbinstance database.LogInstance,
 	instanceName string,
 	realmName string,
-) {
+) error {
 	// Build a set of player GUIDs that violate the level range, reusing the
 	// speedrun proof which has already checked every engaged player.
 	var levelViolators map[guid.GUID]struct{}
@@ -1113,12 +1133,11 @@ func insertDPSRankings(
 				})
 				if err != nil {
 					if database.IsRLSViolation(err) {
-						err = fmt.Errorf("server realm %q is not included in the root domain tenant — talent build cannot be saved", realmName)
+						return fmt.Errorf("server realm %q is not included in the root domain tenant: upsert talent build: %w", realmName, err)
 					}
-					slog.WarnContext(ctx, "upsert talent build", slog.String("err", err.Error()))
-				} else {
-					talentBuildID = uuid.NullUUID{UUID: tbID, Valid: true}
+					return fmt.Errorf("upsert talent build for %s: %w", player.Name, err)
 				}
+				talentBuildID = uuid.NullUUID{UUID: tbID, Valid: true}
 			}
 
 			var playerLevel int16
@@ -1165,19 +1184,18 @@ func insertDPSRankings(
 			})
 			if err != nil {
 				if database.IsRLSViolation(err) {
-					err = fmt.Errorf("server realm %q is not included in the root domain tenant — rankings cannot be inserted (configure the server's tenant to set include_in_all = true, or upload from the correct subdomain)", realmName)
+					return fmt.Errorf("server realm %q is not included in the root domain tenant: insert dps ranking for %s on %s: %w", realmName, player.Name, enc.Name, err)
 				}
-				slog.WarnContext(ctx, "insert dps ranking",
-					slog.String("encounter", enc.Name),
-					slog.String("player", player.Name),
-					slog.String("err", err.Error()),
-				)
+				return fmt.Errorf("insert dps ranking for %s on %s: %w", player.Name, enc.Name, err)
 			}
 		}
 	}
 
 	// Aggregate trash (non-boss) encounters into per-(player, spec) ranking rows.
-	insertTrashRankings(ctx, tx, finalized, dbinstance, instanceName, realmName, levelViolators)
+	if err := insertTrashRankings(ctx, tx, finalized, dbinstance, instanceName, realmName, levelViolators); err != nil {
+		return err
+	}
+	return nil
 }
 
 // trashPlayerKey groups trash damage by player GUID + spec.
@@ -1208,7 +1226,7 @@ func insertTrashRankings(
 	instanceName string,
 	realmName string,
 	levelViolators map[guid.GUID]struct{},
-) {
+) error {
 	accum := make(map[trashPlayerKey]*trashPlayerAccum)
 
 	for _, enc := range finalized.Encounters {
@@ -1282,7 +1300,7 @@ func insertTrashRankings(
 	}
 
 	if len(accum) == 0 {
-		return
+		return nil
 	}
 
 	// Compute roles from the aggregated metrics.
@@ -1323,12 +1341,11 @@ func insertTrashRankings(
 			})
 			if err != nil {
 				if database.IsRLSViolation(err) {
-					err = fmt.Errorf("server realm %q is not included in the root domain tenant — talent build cannot be saved", realmName)
+					return fmt.Errorf("server realm %q is not included in the root domain tenant: upsert trash talent build: %w", realmName, err)
 				}
-				slog.WarnContext(ctx, "upsert talent build (trash)", slog.String("err", err.Error()))
-			} else {
-				talentBuildID = uuid.NullUUID{UUID: tbID, Valid: true}
+				return fmt.Errorf("upsert trash talent build for %s: %w", player.Name, err)
 			}
+			talentBuildID = uuid.NullUUID{UUID: tbID, Valid: true}
 		}
 
 		var playerLevel int16
@@ -1369,15 +1386,12 @@ func insertTrashRankings(
 		})
 		if err != nil {
 			if database.IsRLSViolation(err) {
-				err = fmt.Errorf("server realm %q is not included in the root domain tenant — rankings cannot be inserted (configure the server's tenant to set include_in_all = true, or upload from the correct subdomain)", realmName)
+				return fmt.Errorf("server realm %q is not included in the root domain tenant: insert trash ranking for %s: %w", realmName, player.Name, err)
 			}
-			slog.WarnContext(ctx, "insert trash ranking",
-				slog.String("player", player.Name),
-				slog.String("spec", key.Spec),
-				slog.String("err", err.Error()),
-			)
+			return fmt.Errorf("insert trash ranking for %s (%s): %w", player.Name, key.Spec, err)
 		}
 	}
+	return nil
 }
 
 // extractTalentInfoFromSnapshot returns the inferred spec, talent layout string,
