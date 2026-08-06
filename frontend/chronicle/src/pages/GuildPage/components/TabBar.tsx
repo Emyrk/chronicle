@@ -14,6 +14,7 @@ interface TabBarProps {
   onTabChange: (slug: string) => void;
   onTabAdd?: () => void;
   onTabDelete?: (tabId: string) => void;
+  onTabRename?: (tabId: string, label: string) => void;
   onTabVisibilityChange?: (tabId: string, visibility: DeviceVisibility) => void;
 }
 
@@ -70,6 +71,7 @@ function TabSidebar({
   onTabChange,
   onTabAdd,
   onTabDelete,
+  onTabRename,
   onTabVisibilityChange,
 }: Omit<TabBarProps, "sidebarOpen" | "onSidebarToggle"> & { onCollapse: () => void }) {
   return (
@@ -124,7 +126,19 @@ function TabSidebar({
                 <VisibilityIcon visibility={tab.visibility} />
               )}
 
-              <span className="truncate flex-1 font-medium">{tab.label}</span>
+              {isEditing ? (
+                <input
+                  type="text"
+                  value={tab.label}
+                  onChange={(e) => onTabRename?.(tab.id, e.target.value)}
+                  onClick={(e) => e.stopPropagation()}
+                  placeholder="Tab name"
+                  title="Rename tab"
+                  className="min-w-0 flex-1 truncate bg-transparent text-sm font-medium border-b border-transparent hover:border-border focus:border-primary focus:outline-none"
+                />
+              ) : (
+                <span className="truncate flex-1 font-medium">{tab.label}</span>
+              )}
 
               {isEditing && tabs.length > 1 && (
                 <button
@@ -165,6 +179,7 @@ export function TabBar({
   onTabChange,
   onTabAdd,
   onTabDelete,
+  onTabRename,
   onTabVisibilityChange,
 }: TabBarProps) {
   return (
@@ -188,6 +203,7 @@ export function TabBar({
           onTabChange={onTabChange}
           onTabAdd={onTabAdd}
           onTabDelete={onTabDelete}
+          onTabRename={onTabRename}
           onTabVisibilityChange={onTabVisibilityChange}
         />
       )}

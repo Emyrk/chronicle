@@ -174,6 +174,14 @@ export function GuildPageEditor() {
     setHasChanges(true);
   }, [displayTabs.length, pageConfig?.tabs]);
 
+  const handleTabRename = useCallback((tabId: string, label: string) => {
+    setTabs((prevTabs) => {
+      const newTabs = prevTabs.length > 0 ? [...prevTabs] : [...(pageConfig?.tabs || [])];
+      return newTabs.map((t) => (t.id === tabId ? { ...t, label } : t));
+    });
+    setHasChanges(true);
+  }, [pageConfig?.tabs]);
+
   const handleTabVisibilityChange = useCallback((tabId: string, visibility: DeviceVisibility) => {
     setTabs((prevTabs) => {
       const newTabs = prevTabs.length > 0 ? [...prevTabs] : [...(pageConfig?.tabs || [])];
@@ -295,6 +303,7 @@ export function GuildPageEditor() {
             onTabChange={setActiveTab}
             onTabAdd={handleAddTab}
             onTabDelete={handleDeleteTab}
+            onTabRename={handleTabRename}
             onTabVisibilityChange={handleTabVisibilityChange}
           />
 
