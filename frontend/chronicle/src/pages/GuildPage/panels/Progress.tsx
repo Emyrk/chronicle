@@ -3,13 +3,15 @@ import { useEffect, useMemo, useState } from "react";
 import { Trophy, AlertCircle } from "lucide-react";
 import type { GuildEncounterKill, GuildEncounterKillsResponse } from "@/api/typesGenerated";
 import { useSupportedInstanceBossCounts } from "@/api/queries";
-import { getInstanceCategory } from "@/pages/Logs/utils/instanceImages";
+import { getInstanceCategory, getInstanceContentLevel } from "@/pages/Logs/utils/instanceImages";
 import type { GuildPanelDefinition, GuildPanelRenderProps } from "./types";
 
 type CategoryFilter = "all" | "raid" | "dungeon";
+type ContentLevelFilter = "all" | "60" | "70" | "80";
 
 interface ProgressConfig {
   category: CategoryFilter;
+  contentLevel: ContentLevelFilter;
   showKillCounts: boolean;
 }
 
@@ -124,14 +126,19 @@ function ProgressContent({ config, position, guild }: GuildPanelRenderProps<Prog
   }, [guild.id]);
 
   const progress = useMemo(() => {
-    const grouped = groupProgress(encounters);
     const category = config.category ?? "all";
-    if (category === "all") return grouped;
-    return grouped.filter((instance) => {
+    const contentLevel = config.contentLevel ?? "all";
+    return groupProgress(encounters).filter((instance) => {
       const instanceCategory = getInstanceCategory(instance.instanceName);
-      return category === "dungeon" ? instanceCategory !== "raid" : instanceCategory === "raid";
+      const matchesCategory =
+        category === "all" ||
+        (category === "dungeon" ? instanceCategory !== "raid" : instanceCategory === "raid");
+      const matchesContentLevel =
+        contentLevel === "all" ||
+        getInstanceContentLevel(instance.instanceName, instance.maxPlayers) === Number(contentLevel);
+      return matchesCategory && matchesContentLevel;
     });
-  }, [config.category, encounters]);
+  }, [config.category, config.contentLevel, encounters]);
 
   if (loading) {
     return (
@@ -199,6 +206,18 @@ export const ProgressPanel: GuildPanelDefinition<ProgressConfig> = {
       defaultValue: "all",
     },
     {
+      name: "contentLevel",
+      label: "Content level",
+      type: "select",
+      options: [
+        { value: "all", label: "All" },
+        { value: "60", label: "Level 60" },
+        { value: "70", label: "Level 70" },
+        { value: "80", label: "Level 80" },
+      ],
+      defaultValue: "all",
+    },
+    {
       name: "showKillCounts",
       label: "Show kill counts",
       type: "boolean",
@@ -207,6 +226,7 @@ export const ProgressPanel: GuildPanelDefinition<ProgressConfig> = {
   ],
   defaultConfig: {
     category: "all",
+    contentLevel: "all",
     showKillCounts: true,
   },
   render: (props) => <ProgressContent {...props} />,
