@@ -144,6 +144,8 @@ export function ItemPickerPanel({
                 item={item}
                 usedItemIds={usedItemIds}
                 observedPct={observedPct.get(item.entry)}
+                score={scoreFor(item.entry)}
+                equippedScore={equippedScore}
                 onEquip={onEquip}
                 onAddAlternate={onAddAlternate}
               />
