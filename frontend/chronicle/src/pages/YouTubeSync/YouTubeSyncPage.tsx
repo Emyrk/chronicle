@@ -1054,9 +1054,9 @@ export function YouTubeSyncPage({
         )}
       >
         {controlsOnly && (
-          <div className="mb-3 flex items-center justify-between gap-3 text-xs">
+          <div className="flex items-center justify-between gap-3 text-xs">
             <span className="font-semibold uppercase tracking-wider text-muted-foreground">
-              Step 1 · Load the YouTube video
+              YouTube Sync V2 control desk
             </span>
             <span className={cn("rounded-full px-2 py-1", remoteConnected
               ? "bg-green-500/15 text-green-300"
@@ -1067,7 +1067,7 @@ export function YouTubeSyncPage({
           </div>
         )}
 
-        {(!videoLoaded || controlsOnly) && (
+        {!controlsOnly && !videoLoaded && (
           <div className="flex gap-3 items-center">
             <Input
               type="text"
@@ -1077,9 +1077,7 @@ export function YouTubeSyncPage({
               placeholder="Paste YouTube URL and press Enter..."
               className="min-w-0 flex-1"
             />
-            <Button onClick={loadVideo} disabled={Boolean(remoteControlChannel && !remoteConnected)}>
-              {videoLoaded ? "Load another" : "Load"}
-            </Button>
+            <Button onClick={loadVideo}>Load</Button>
           </div>
         )}
 
@@ -1185,16 +1183,48 @@ export function YouTubeSyncPage({
             <CardHeader>
               <StepCardTitle
                 step={1}
-                title="Add raid context"
-                optional
-                complete={Boolean(raidBounds)}
+                title="Load the video"
+                complete={videoLoaded && duration > 0}
               />
             </CardHeader>
-            <CardContent className="space-y-4">
-              <p className="text-sm text-muted-foreground">
-                Load the instance now to compare its absolute raid time with the video as soon as a timestamp is detected.
-              </p>
-              <div className="grid gap-3 sm:grid-cols-[minmax(0,1fr)_auto] sm:items-end">
+            <CardContent className="space-y-5">
+              <div className="space-y-2">
+                <Label htmlFor="workflow-video-url">YouTube URL</Label>
+                <div className="flex gap-3">
+                  <Input
+                    id="workflow-video-url"
+                    type="text"
+                    value={videoUrl}
+                    onChange={(event) => setVideoUrl(event.target.value)}
+                    onKeyDown={(event) => event.key === "Enter" && loadVideo()}
+                    placeholder="https://youtu.be/…"
+                    className="min-w-0 flex-1"
+                  />
+                  <Button
+                    onClick={loadVideo}
+                    disabled={!remoteConnected}
+                  >
+                    {videoLoaded ? "Load another" : "Load video"}
+                  </Button>
+                </div>
+                {!remoteConnected && (
+                  <p className="text-xs text-amber-300">Waiting for the main player window to connect.</p>
+                )}
+              </div>
+
+              <div className="border-t border-border pt-5">
+                <div className="mb-4 flex items-start justify-between gap-3">
+                  <div>
+                    <p className="text-sm font-medium">Raid context</p>
+                    <p className="mt-1 text-xs text-muted-foreground">
+                      Optional. Load an instance to compare the raid and video on the same timeline.
+                    </p>
+                  </div>
+                  <span className="rounded-full bg-muted px-2 py-1 text-[10px] uppercase tracking-wider text-muted-foreground">
+                    Optional
+                  </span>
+                </div>
+                <div className="grid gap-3 sm:grid-cols-[minmax(0,1fr)_auto] sm:items-end">
                 <div>
                   <Label htmlFor="early-instance-id">Instance ID</Label>
                   <Input
@@ -1237,11 +1267,12 @@ export function YouTubeSyncPage({
                   Could not load that instance. Check the ID and your access.
                 </p>
               )}
-              {instanceQuery.data && !raidBounds && (
-                <p className="rounded-md bg-amber-500/10 p-3 text-sm text-amber-200">
-                  The instance loaded, but it does not contain usable start and end timestamps.
-                </p>
-              )}
+                {instanceQuery.data && !raidBounds && (
+                  <p className="mt-4 rounded-md bg-amber-500/10 p-3 text-sm text-amber-200">
+                    The instance loaded, but it does not contain usable start and end timestamps.
+                  </p>
+                )}
+              </div>
             </CardContent>
           </Card>
         )}
