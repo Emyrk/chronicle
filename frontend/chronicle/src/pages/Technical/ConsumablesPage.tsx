@@ -11,6 +11,7 @@ import { useDatasetId, useIconBaseUrl } from "@/hooks/useDatasetId";
 import { useAuth } from "@/hooks/useAuth";
 import {
   useAuthorizationCheck,
+  useConsumableDisambiguations,
   useConsumableEffectPolicies,
   useDeleteConsumableDisambiguation,
   useIgnoreConsumableEffect,
@@ -254,6 +255,7 @@ export function ConsumablesPage() {
   const [showAmbiguous, setShowAmbiguous] = useState(false);
   const [showIgnored, setShowIgnored] = useState(false);
   const [effectMenu, setEffectMenu] = useState<EffectMenuState | null>(null);
+  const [bulkIgnorePending, setBulkIgnorePending] = useState(false);
   const iconBaseUrl = useIconBaseUrl();
   const datasetId = useDatasetId();
   const { isAuthenticated } = useAuth();
@@ -263,11 +265,23 @@ export function ConsumablesPage() {
   const { data: worldDataAuthorization } = useAuthorizationCheck(worldDataAuthzCheck, { enabled: isAuthenticated });
   const canManageConsumables = (consumablesAuthorization?.manageConsumables ?? false)
     || (worldDataAuthorization?.adminWorldData ?? false);
+  const { data: disambiguations } = useConsumableDisambiguations(datasetId);
   const { data: policies } = useConsumableEffectPolicies(datasetId, canManageConsumables);
-  const policyMap = useMemo(
-    () => new Map((policies ?? []).map((policy) => [effectKey(policy.effect_kind, policy.spell_id), policy])),
-    [policies],
-  );
+  const policyMap = useMemo(() => {
+    const entries = new Map<string, ConsumableEffectPolicy>();
+    for (const disambiguation of disambiguations ?? []) {
+      entries.set(effectKey(disambiguation.effect_kind, disambiguation.spell_id), {
+        effect_kind: disambiguation.effect_kind,
+        spell_id: disambiguation.spell_id,
+        item_id: disambiguation.item_id,
+        ignored: false,
+      });
+    }
+    for (const policy of policies ?? []) {
+      entries.set(effectKey(policy.effect_kind, policy.spell_id), policy);
+    }
+    return entries;
+  }, [disambiguations, policies]);
   const saveCanonical = useSetConsumableDisambiguation();
   const resetCanonical = useDeleteConsumableDisambiguation();
   const ignoreEffect = useIgnoreConsumableEffect();
@@ -330,6 +344,16 @@ export function ConsumablesPage() {
       || spellcast.items.some((item) => matchesItem(item, query));
   });
 
+  const bulkIgnoreTargets = view === "buff"
+    ? filteredBuffs
+      .filter((buff) => buff.items.length > 1 && !policyMap.has(effectKey("buff", buff.id)))
+      .map((buff) => ({ effectKind: "buff" as const, spellId: buff.id }))
+    : view === "spellcast"
+      ? filteredSpellcasts
+        .filter((spellcast) => spellcast.items.length > 1 && !policyMap.has(effectKey("direct", spellcast.spellId)))
+        .map((spellcast) => ({ effectKind: "direct" as const, spellId: spellcast.spellId }))
+      : [];
+
   const openEffectMenu = (
     event: MouseEvent<HTMLElement>,
     effectKind: ConsumableEffectKind,
@@ -373,6 +397,25 @@ export function ConsumablesPage() {
         onError: (mutationError) => toast.error(mutationError.message),
       },
     );
+  };
+
+  const handleBulkIgnore = async () => {
+    if (!datasetId || bulkIgnoreTargets.length === 0 || bulkIgnorePending) return;
+    const confirmed = window.confirm(
+      `Ignore ${bulkIgnoreTargets.length} visible ambiguous consumable effect${bulkIgnoreTargets.length === 1 ? "" : "s"}?`,
+    );
+    if (!confirmed) return;
+
+    setBulkIgnorePending(true);
+    const results = await Promise.allSettled(
+      bulkIgnoreTargets.map((target) => ignoreEffect.mutateAsync({ datasetId, ...target })),
+    );
+    setBulkIgnorePending(false);
+
+    const failed = results.filter((result) => result.status === "rejected").length;
+    const ignored = results.length - failed;
+    if (ignored > 0) toast.success(`Ignored ${ignored} consumable effect${ignored === 1 ? "" : "s"}`);
+    if (failed > 0) toast.error(`Failed to ignore ${failed} consumable effect${failed === 1 ? "" : "s"}`);
   };
 
   const visibleCount =
@@ -429,6 +472,17 @@ export function ConsumablesPage() {
               />
               Show only ambiguous
             </label>
+            {view !== "item" && (
+              <button
+                type="button"
+                disabled={bulkIgnorePending || bulkIgnoreTargets.length === 0}
+                onClick={handleBulkIgnore}
+                className="flex items-center gap-1.5 rounded-md border border-zinc-500/30 bg-zinc-500/10 px-2.5 py-1.5 text-xs text-zinc-300 hover:bg-zinc-500/20 disabled:cursor-not-allowed disabled:opacity-40"
+              >
+                <EyeOff className="h-3.5 w-3.5" />
+                {bulkIgnorePending ? "Ignoring..." : `Ignore visible ambiguous (${bulkIgnoreTargets.length})`}
+              </button>
+            )}
             <label className="flex cursor-pointer items-center gap-2 rounded-md border border-border/70 bg-background/60 px-2.5 py-1.5 text-xs">
               <input
                 type="checkbox"
@@ -521,7 +575,7 @@ export function ConsumablesPage() {
                     <div className="flex flex-wrap items-center gap-1.5">
                       <Sparkles className="h-3.5 w-3.5 text-primary" />
                       <SpellReference spellId={buff.id} name={buff.name} />
-                      {canManageConsumables && <EffectStatus policy={policy} ambiguous={buff.items.length > 1} />}
+                      <EffectStatus policy={policy} ambiguous={canManageConsumables && buff.items.length > 1} />
                     </div>
                     <div className="flex flex-wrap gap-1.5">
                       {buff.items.map((item) => (
@@ -568,7 +622,7 @@ export function ConsumablesPage() {
                     </span>
                     <div className="flex flex-wrap items-center gap-1.5">
                       <SpellReference spellId={spellcast.spellId} />
-                      {canManageConsumables && <EffectStatus policy={policy} ambiguous={spellcast.items.length > 1} />}
+                      <EffectStatus policy={policy} ambiguous={canManageConsumables && spellcast.items.length > 1} />
                     </div>
                     <div className="flex flex-wrap gap-1.5 pr-3">
                       {spellcast.items.map((item) => (
