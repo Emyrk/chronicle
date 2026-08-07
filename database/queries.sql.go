@@ -1173,6 +1173,18 @@ WHERE wit.dataset_id = $1
           )
           AND (
               wit.stackable > 1
+              OR (
+                  -- Weapon oils are trade goods with multiple expendable charges,
+                  -- rather than stackable items or direct aura spells.
+                  wit.class = 7
+                  AND (
+                      (wit.spellid_1 <> 0 AND wit.spelltrigger_1 = 0 AND wit.spellcharges_1 < 0) OR
+                      (wit.spellid_2 <> 0 AND wit.spelltrigger_2 = 0 AND wit.spellcharges_2 < 0) OR
+                      (wit.spellid_3 <> 0 AND wit.spelltrigger_3 = 0 AND wit.spellcharges_3 < 0) OR
+                      (wit.spellid_4 <> 0 AND wit.spelltrigger_4 = 0 AND wit.spellcharges_4 < 0) OR
+                      (wit.spellid_5 <> 0 AND wit.spelltrigger_5 = 0 AND wit.spellcharges_5 < 0)
+                  )
+              )
               OR EXISTS (
                   SELECT 1
                   FROM dbc_spells spell
