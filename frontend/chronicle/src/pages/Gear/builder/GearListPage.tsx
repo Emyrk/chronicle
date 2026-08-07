@@ -154,10 +154,15 @@ function ListHeader({
         <ArrowLeft className="h-4 w-4" />
       </Link>
       <div className="min-w-0">
-        <h1 className="text-lg font-bold text-white truncate">{list.title}</h1>
+        <h1
+          className="font-wow text-xl truncate"
+          style={cls ? { color: getClassColorVar(cls.enumName) } : undefined}
+        >
+          {list.title}
+        </h1>
         <div className="flex flex-wrap items-center gap-x-3 gap-y-0.5 text-xs text-zinc-500">
           {cls && (
-            <span style={{ color: getClassColorVar(cls.enumName) }}>
+            <span className="text-zinc-400">
               {list.spec_name ? `${list.spec_name} ${cls.name}` : cls.name}
             </span>
           )}
@@ -271,7 +276,7 @@ function ReadOnlyView({
             />
           ) : (
             stage && (
-              <div className="grid gap-4 lg:grid-cols-[minmax(0,26rem)_minmax(0,1fr)] items-start">
+              <div className="grid gap-4 lg:grid-cols-[minmax(0,30rem)_minmax(0,1fr)] items-start">
                 <div className="rounded-md border border-zinc-700/60 bg-zinc-900/40 p-4 space-y-3">
                   <SetSummaryBar stage={stage} items={items} totalScore={totalScore} />
                   <BuilderDoll
@@ -446,7 +451,7 @@ function EditorView({
               }}
             />
           ) : (
-          <div className="grid gap-4 lg:grid-cols-[minmax(0,26rem)_minmax(0,1fr)] items-start">
+          <div className="grid gap-4 lg:grid-cols-[minmax(0,30rem)_minmax(0,1fr)] items-start">
             {stage && (
               <div className="rounded-md border border-zinc-700/60 bg-zinc-900/40 p-4 space-y-3">
                 <SetSummaryBar stage={stage} items={items} totalScore={totalScore} />

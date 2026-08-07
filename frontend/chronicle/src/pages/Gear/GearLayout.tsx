@@ -11,7 +11,7 @@ export function GearLayout() {
   return (
     <div className="max-w-5xl mx-auto py-6 px-4 space-y-4">
       <div className="flex items-center gap-6 border-b border-gray-700/50 pb-3">
-        <h1 className="text-lg font-bold text-white mr-2">Gear</h1>
+        <h1 className="font-wow text-lg text-amber-100/90 mr-2">Gear</h1>
         {TABS.map((tab) => (
           <NavLink
             key={tab.to}

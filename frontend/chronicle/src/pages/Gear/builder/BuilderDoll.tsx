@@ -1,5 +1,5 @@
 import { Check, X } from "lucide-react";
-import { BOTTOM_SLOTS, LEFT_SLOTS, RIGHT_SLOTS } from "@/pages/ArmoryPage/types";
+import { BOTTOM_SLOTS, LEFT_SLOTS, RIGHT_SLOTS, type GearSlotDef } from "@/pages/ArmoryPage/types";
 import { cn } from "@/lib/utils";
 import { slotEquipped, type CharacterMatch } from "./characterMatch";
 import type { GearStage } from "./gearListModel";
@@ -22,9 +22,21 @@ interface BuilderDollProps {
   matchName?: string;
 }
 
+/** Divider-style section label ("——— WEAPONS ———"). */
+function SectionDivider({ label }: { label: string }) {
+  return (
+    <div className="flex items-center gap-3">
+      <span className="h-px flex-1 bg-zinc-800" />
+      <span className="text-3xs uppercase tracking-[0.2em] text-zinc-600">{label}</span>
+      <span className="h-px flex-1 bg-zinc-800" />
+    </div>
+  );
+}
+
 /**
- * The builder paperdoll: two slot columns plus the weapon row, mirroring
- * the armory layout. Read-only when onSelectSlot is absent.
+ * The builder paperdoll as a card grid: armor and accessory slots in two
+ * columns, weapons in their own labeled section. Read-only when
+ * onSelectSlot is absent.
  */
 export function BuilderDoll({
   stage,
@@ -42,79 +54,45 @@ export function BuilderDoll({
       .map((e) => e!.item_id),
   );
 
-  const slotFor = (outfitIndex: number) => {
-    const entry = stage.slots[String(outfitIndex)];
+  const renderSlot = (def: GearSlotDef) => {
+    const entry = stage.slots[String(def.outfitIndex)];
     const item = entry ? items.get(itemRefKey(entry.item_id, entry.enchant_id)) : undefined;
     let matchState: "equipped" | "missing" | undefined;
     if (match && entry) {
-      matchState = slotEquipped(stage, outfitIndex, match) ? "equipped" : "missing";
+      matchState = slotEquipped(stage, def.outfitIndex, match) ? "equipped" : "missing";
     }
-    return { entry, item, matchState };
+    return (
+      <BuilderSlot
+        key={def.outfitIndex}
+        slotDef={def}
+        entry={entry}
+        item={item}
+        selected={selectedSlot === def.outfitIndex}
+        onSelect={onSelectSlot}
+        equippedItemIds={equippedItemIds}
+        score={scores?.get(def.outfitIndex)}
+        wornDelta={wornDeltas?.get(def.outfitIndex)}
+        matchState={matchState}
+      />
+    );
   };
 
+  // Interleave the armory's left/right columns row by row so the grid
+  // preserves the familiar paperdoll ordering.
+  const armorRows: GearSlotDef[] = [];
+  for (let i = 0; i < Math.max(LEFT_SLOTS.length, RIGHT_SLOTS.length); i++) {
+    if (LEFT_SLOTS[i]) armorRows.push(LEFT_SLOTS[i]);
+    if (RIGHT_SLOTS[i]) armorRows.push(RIGHT_SLOTS[i]);
+  }
+
   return (
-    <div className="flex flex-col gap-4">
-      <div className="flex justify-between gap-4">
-        <div className="flex flex-col gap-1.5">
-          {LEFT_SLOTS.map((def) => {
-            const { entry, item, matchState } = slotFor(def.outfitIndex);
-            return (
-              <BuilderSlot
-                key={def.outfitIndex}
-                slotDef={def}
-                entry={entry}
-                item={item}
-                side="left"
-                selected={selectedSlot === def.outfitIndex}
-                onSelect={onSelectSlot}
-                equippedItemIds={equippedItemIds}
-                score={scores?.get(def.outfitIndex)}
-                wornDelta={wornDeltas?.get(def.outfitIndex)}
-                matchState={matchState}
-              />
-            );
-          })}
-        </div>
-        <div className="flex flex-col gap-1.5">
-          {RIGHT_SLOTS.map((def) => {
-            const { entry, item, matchState } = slotFor(def.outfitIndex);
-            return (
-              <BuilderSlot
-                key={def.outfitIndex}
-                slotDef={def}
-                entry={entry}
-                item={item}
-                side="right"
-                selected={selectedSlot === def.outfitIndex}
-                onSelect={onSelectSlot}
-                equippedItemIds={equippedItemIds}
-                score={scores?.get(def.outfitIndex)}
-                wornDelta={wornDeltas?.get(def.outfitIndex)}
-                matchState={matchState}
-              />
-            );
-          })}
-        </div>
+    <div className="flex flex-col gap-3">
+      <div className="grid grid-cols-1 gap-1.5 sm:grid-cols-2">
+        {armorRows.map(renderSlot)}
       </div>
-      <div className="grid grid-cols-3 gap-2">
-        {BOTTOM_SLOTS.map((def) => {
-          const { entry, item, matchState } = slotFor(def.outfitIndex);
-          return (
-            <BuilderSlot
-              key={def.outfitIndex}
-              slotDef={def}
-              entry={entry}
-              item={item}
-              side="bottom"
-              selected={selectedSlot === def.outfitIndex}
-              onSelect={onSelectSlot}
-              equippedItemIds={equippedItemIds}
-              score={scores?.get(def.outfitIndex)}
-              wornDelta={wornDeltas?.get(def.outfitIndex)}
-              matchState={matchState}
-            />
-          );
-        })}
+      <SectionDivider label="Weapons" />
+      <div className="grid grid-cols-1 gap-1.5 sm:grid-cols-2">
+        {BOTTOM_SLOTS.map(renderSlot)}
       </div>
       {match && (
         <div className="flex flex-wrap items-center gap-x-3 gap-y-1 border-t border-zinc-800 pt-2 text-2xs text-zinc-400">

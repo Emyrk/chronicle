@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { Check, Plus, StickyNote, X } from "lucide-react";
+import { Check, StickyNote, X } from "lucide-react";
 import { ItemTooltip } from "@/components/ui/ItemTooltip/ItemTooltip";
 import { CursorTooltip, type CursorPos } from "@/pages/ArmoryPage/overview/CursorTooltip";
 import { getQualityBorderClass, getQualityTextClass, type GearSlotDef } from "@/pages/ArmoryPage/types";
@@ -11,13 +11,10 @@ import type { GearSlotEntry } from "./gearListModel";
 import { formatScore } from "./gearScoring";
 import type { HydratedItem } from "./useListItems";
 
-export type BuilderSlotSide = "left" | "right" | "bottom";
-
 interface BuilderSlotProps {
   slotDef: GearSlotDef;
   entry?: GearSlotEntry;
   item?: HydratedItem;
-  side?: BuilderSlotSide;
   selected?: boolean;
   onSelect?: (outfitIndex: number) => void;
   equippedItemIds?: ReadonlySet<number>;
@@ -30,15 +27,15 @@ interface BuilderSlotProps {
 }
 
 /**
- * One slot of the builder paperdoll: quality-bordered icon, name label,
- * enchant line, alternate/note badges, hover tooltip. Clicking selects the
- * slot for editing (when onSelect is provided).
+ * One slot of the builder paperdoll, as a card: quality-bordered icon,
+ * uppercase slot label, item name (or empty state), and score/alternate
+ * annotations. Clicking selects the slot for editing when onSelect is
+ * provided.
  */
 export function BuilderSlot({
   slotDef,
   entry,
   item,
-  side = "right",
   selected = false,
   onSelect,
   equippedItemIds,
@@ -52,104 +49,40 @@ export function BuilderSlot({
 
   const isEmpty = !entry;
   const quality = item?.quality ?? 1;
-  const borderClass = isEmpty ? "border-zinc-700" : getQualityBorderClass(quality);
-  const nameClass = isEmpty ? "text-zinc-600" : getQualityTextClass(quality);
-  const displayName = isEmpty
-    ? slotDef.label
-    : item?.name || `Item #${entry.item_id}`;
+  const displayName = isEmpty ? "Empty" : item?.name || `Item #${entry.item_id}`;
   const altCount = entry?.alternates?.length ?? 0;
   const enchantText = item?.tooltip?.enchantment;
   const showTooltip = cursor != null && !isMobile && !isEmpty && item?.tooltip;
 
-  const nameLabel = (
-    <div className={cn("flex flex-col min-w-0", side === "left" && "items-end")}>
-      <span
-        className={cn(
-          "text-2xs leading-tight truncate",
-          side === "bottom" ? "max-w-full" : "max-w-36",
-          nameClass,
-          isEmpty && "italic",
-        )}
-      >
-        {displayName}
-      </span>
-      {enchantText && (
-        <span
-          className={cn(
-            "text-2xs leading-tight text-quality-uncommon line-clamp-2",
-            side === "bottom" ? "max-w-full" : "max-w-36",
-            side === "left" && "text-right",
-          )}
-        >
-          {enchantText}
-        </span>
-      )}
-      {(altCount > 0 || entry?.note || score !== undefined) && (
-        <span
-          className={cn(
-            "flex items-center gap-1 text-3xs text-zinc-500",
-            side === "left" && "flex-row-reverse",
-          )}
-        >
-          {score !== undefined && (
-            <span className="font-mono text-zinc-400">{formatScore(score)} pts</span>
-          )}
-          {wornDelta !== undefined && Math.abs(wornDelta) >= 0.05 && (
-            <span
-              title={
-                wornDelta > 0
-                  ? "This pick scores higher than the item they are wearing"
-                  : "The item they are wearing scores higher than this pick"
-              }
-              className={cn("font-mono", wornDelta > 0 ? "text-emerald-400" : "text-red-400")}
-            >
-              {wornDelta > 0 ? "+" : "−"}{formatScore(Math.abs(wornDelta))} vs worn
-            </span>
-          )}
-          {altCount > 0 && <span>+{altCount} alt{altCount === 1 ? "" : "s"}</span>}
-          {entry?.note && <StickyNote className="h-2.5 w-2.5" />}
-        </span>
-      )}
-    </div>
-  );
+  const Wrapper = onSelect ? "button" : "div";
 
   return (
-    <div
+    <Wrapper
+      {...(onSelect ? { type: "button" as const, onClick: () => onSelect(slotDef.outfitIndex) } : {})}
       className={cn(
-        "relative flex items-center gap-2",
-        side === "left" && "flex-row-reverse",
-        side === "bottom" && "min-w-0",
+        "flex w-full min-w-0 items-center gap-2.5 rounded-lg border px-2.5 py-2 text-left transition-colors",
+        selected ? "border-blue-500 bg-blue-500/10" : "border-zinc-800 bg-zinc-900/70",
+        onSelect && !selected && "hover:border-zinc-600 cursor-pointer",
       )}
-      onMouseMove={(e) => setCursor({ x: e.clientX, y: e.clientY })}
+      onMouseMove={(e: React.MouseEvent) => setCursor({ x: e.clientX, y: e.clientY })}
       onMouseLeave={() => setCursor(null)}
     >
       <div className="relative shrink-0">
-        <button
-          type="button"
-          onClick={() => onSelect?.(slotDef.outfitIndex)}
+        <div
           className={cn(
-            "w-11 h-11 rounded border-2 bg-zinc-900/80 flex items-center justify-center overflow-hidden transition-all",
-            borderClass,
-            onSelect && "cursor-pointer hover:brightness-125",
-            selected && "ring-2 ring-blue-400 ring-offset-1 ring-offset-zinc-950",
+            "flex h-10 w-10 items-center justify-center overflow-hidden rounded border-2 bg-zinc-950/80",
+            isEmpty ? "border-zinc-800" : getQualityBorderClass(quality),
           )}
         >
-          {!isEmpty && item?.icon ? (
+          {!isEmpty && item?.icon && (
             <img
               src={iconUrl(item.icon, iconBaseUrl)}
               alt={displayName}
-              className="w-full h-full object-cover"
+              className="h-full w-full object-cover"
               loading="lazy"
             />
-          ) : isMobile ? (
-            // Side labels are hidden on mobile; name the slot in the box.
-            <span className="text-3xs text-zinc-600 text-center leading-tight select-none">
-              {slotDef.label}
-            </span>
-          ) : onSelect ? (
-            <Plus className="h-4 w-4 text-zinc-700" />
-          ) : null}
-        </button>
+          )}
+        </div>
         {!isEmpty && matchState && (
           <span
             title={
@@ -172,13 +105,47 @@ export function BuilderSlot({
         )}
       </div>
 
-      {!isMobile && nameLabel}
+      <div className="min-w-0 flex-1">
+        <div className="text-3xs uppercase tracking-wider text-zinc-500">{slotDef.label}</div>
+        <div
+          className={cn(
+            "truncate text-xs leading-tight",
+            isEmpty ? "italic text-zinc-600" : getQualityTextClass(quality),
+          )}
+        >
+          {displayName}
+        </div>
+        {(enchantText || altCount > 0 || entry?.note || score !== undefined || wornDelta !== undefined) && (
+          <div className="flex flex-wrap items-center gap-x-1.5 text-3xs leading-tight text-zinc-500">
+            {enchantText && (
+              <span className="truncate text-quality-uncommon max-w-32">{enchantText}</span>
+            )}
+            {score !== undefined && (
+              <span className="font-mono text-zinc-400">{formatScore(score)} pts</span>
+            )}
+            {wornDelta !== undefined && Math.abs(wornDelta) >= 0.05 && (
+              <span
+                title={
+                  wornDelta > 0
+                    ? "This pick scores higher than the item they are wearing"
+                    : "The item they are wearing scores higher than this pick"
+                }
+                className={cn("font-mono", wornDelta > 0 ? "text-emerald-400" : "text-red-400")}
+              >
+                {wornDelta > 0 ? "+" : "−"}{formatScore(Math.abs(wornDelta))} vs worn
+              </span>
+            )}
+            {altCount > 0 && <span>+{altCount} alt{altCount === 1 ? "" : "s"}</span>}
+            {entry?.note && <StickyNote className="h-2.5 w-2.5 shrink-0" />}
+          </div>
+        )}
+      </div>
 
       {showTooltip && (
         <CursorTooltip pos={cursor!}>
           <ItemTooltip item={item.tooltip!} equippedItemIds={equippedItemIds} />
         </CursorTooltip>
       )}
-    </div>
+    </Wrapper>
   );
 }
