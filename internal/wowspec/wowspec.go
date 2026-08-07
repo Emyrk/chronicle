@@ -88,25 +88,6 @@ type PlayerMetrics struct {
 	// directed at this player (including zero-damage misses, dodges, parries).
 	// Used by roleinfer for source-aware tank inference.
 	IncomingAutoAttacks map[string]int
-	// Class and Spec are optional. When set, spec-based role overrides
-	// are applied (e.g., Shadow Priest is always DPS despite high healing).
-	Class string
-	Spec  string
-}
-
-// dpsOnlySpecs lists class+spec combinations that are always DPS regardless
-// of statistical detection. These specs produce high healing as a byproduct
-// of their damage (e.g., Vampiric Embrace) which confuses the healer detector.
-var dpsOnlySpecs = map[string]map[string]bool{
-	"PRIEST": {"Shadow": true},
-}
-
-// isDPSOnlySpec returns true if the class+spec combo should always be DPS.
-func isDPSOnlySpec(class, spec string) bool {
-	if specs, ok := dpsOnlySpecs[class]; ok {
-		return specs[spec]
-	}
-	return false
 }
 
 // InferRoles classifies each player's role using source-aware tank inference
@@ -122,10 +103,7 @@ func isDPSOnlySpec(class, spec string) bool {
 // Priority: Tank > Healer > DPS.
 func InferRoles[K comparable](players map[K]PlayerMetrics) map[K]string {
 	roles := make(map[K]string, len(players))
-	if len(players) < 2 {
-		for k := range players {
-			roles[k] = RoleDPS
-		}
+	if len(players) == 0 {
 		return roles
 	}
 
@@ -160,10 +138,6 @@ func InferRoles[K comparable](players map[K]PlayerMetrics) map[K]string {
 			isTank = tr.IsTank
 		}
 
-		// The spec override only prevents false healer classification. Observed
-		// tank behavior always takes priority over class or spec metadata.
-		isDPSOnly := isDPSOnlySpec(m.Class, m.Spec)
-
 		hdZ := zScore(float64(m.HealingDone), hdMean, hdStd)
 
 		// Healer detection:
@@ -176,7 +150,7 @@ func InferRoles[K comparable](players map[K]PlayerMetrics) map[K]string {
 			hasHealing := hdZ >= HealerZThreshold
 			hasLowDPS := float64(m.DamageDone) <= lowDPSCutoff
 			hasHighHealing := hdZ >= HealerHighZThreshold
-			isHealer = !isDPSOnly && hasHealing && (hasLowDPS || hasHighHealing)
+			isHealer = hasHealing && (hasLowDPS || hasHighHealing)
 		}
 
 		if isTank {

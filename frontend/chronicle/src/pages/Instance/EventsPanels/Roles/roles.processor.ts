@@ -233,7 +233,9 @@ export function inferRoles(
     const hasHealingAboveThreshold = hdZScore >= HEALER_Z_THRESHOLD && hd > 0;
     const hasLowDps = dd <= lowDpsCutoff;
     const hasVeryHighHealing = hdZScore >= HEALER_HIGH_Z_THRESHOLD;
-    const isHealer = hasHealingAboveThreshold && (hasLowDps || hasVeryHighHealing);
+    // Healing must exceed damage done to avoid classifying damage dealers whose
+    // healing is a byproduct of their damage. This matches the Go implementation.
+    const isHealer = hd > dd && hasHealingAboveThreshold && (hasLowDps || hasVeryHighHealing);
     
     // Prioritize tank detection over healer
     if (isTank) {

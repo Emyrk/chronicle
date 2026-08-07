@@ -1091,19 +1091,10 @@ func insertDPSRankings(
 			if !stats.IsPlayer {
 				continue
 			}
-			var class, spec string
-			if player, ok := finalized.Guilds.Players[unitGUID]; ok {
-				class = string(db2sdk.HeroClassToDB(player.HeroClass))
-			}
-			if stats.Talents != nil && class != "" {
-				spec = wowspec.InferSpec(class, stats.Talents.Summary)
-			}
 			playerMetrics[unitGUID] = wowspec.PlayerMetrics{
 				DamageDone:          stats.DamageDone + ownerDamage[unitGUID],
 				HealingDone:         stats.HealingDone + ownerHealing[unitGUID] + stats.HealingAbsorbed + ownerAbsorb[unitGUID],
 				IncomingAutoAttacks: guidMapToString(stats.IncomingAutoAttacks),
-				Class:               class,
-				Spec:                spec,
 			}
 		}
 		roles := wowspec.InferRoles(playerMetrics)
@@ -1312,16 +1303,10 @@ func insertTrashRankings(
 	// Compute roles from the aggregated metrics.
 	playerMetrics := make(map[trashPlayerKey]wowspec.PlayerMetrics, len(accum))
 	for key, a := range accum {
-		var class string
-		if player, ok := finalized.Guilds.Players[key.GUID]; ok {
-			class = string(db2sdk.HeroClassToDB(player.HeroClass))
-		}
 		playerMetrics[key] = wowspec.PlayerMetrics{
 			DamageDone:          a.DamageDone,
 			HealingDone:         a.HealingDone,
 			IncomingAutoAttacks: guidMapToString(a.IncomingAutoAttacks),
-			Class:               class,
-			Spec:                key.Spec,
 		}
 	}
 	roles := wowspec.InferRoles(playerMetrics)

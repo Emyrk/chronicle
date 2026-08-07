@@ -1,6 +1,8 @@
 package wowspec_test
 
 import (
+	"encoding/json"
+	"os"
 	"testing"
 
 	"github.com/Emyrk/chronicle/internal/wowspec"
@@ -75,6 +77,22 @@ func TestInferSpec(t *testing.T) {
 			require.Equal(t, tt.expected, got)
 		})
 	}
+}
+
+type sharedRoleFixture struct {
+	Cases []sharedRoleCase `json:"cases"`
+}
+
+type sharedRoleCase struct {
+	Name     string                         `json:"name"`
+	Players  map[string]sharedPlayerMetrics `json:"players"`
+	Expected map[string]string              `json:"expected"`
+}
+
+type sharedPlayerMetrics struct {
+	DamageDone          int64          `json:"damage_done"`
+	HealingDone         int64          `json:"healing_done"`
+	IncomingAutoAttacks map[string]int `json:"incoming_auto_attacks"`
 }
 
 func TestInferRoles(t *testing.T) {
@@ -182,6 +200,30 @@ func TestInferRoles(t *testing.T) {
 		require.Equal(t, "dps", roles["dps1"])
 		require.Equal(t, "dps", roles["dps2"])
 	})
+}
+
+func TestInferRoles_SharedFixtures(t *testing.T) {
+	t.Parallel()
+
+	data, err := os.ReadFile("../../testdata/roleinfer/roles.json")
+	require.NoError(t, err)
+
+	var fixture sharedRoleFixture
+	require.NoError(t, json.Unmarshal(data, &fixture))
+
+	for _, tc := range fixture.Cases {
+		t.Run(tc.Name, func(t *testing.T) {
+			players := make(map[string]wowspec.PlayerMetrics, len(tc.Players))
+			for player, metrics := range tc.Players {
+				players[player] = wowspec.PlayerMetrics{
+					DamageDone:          metrics.DamageDone,
+					HealingDone:         metrics.HealingDone,
+					IncomingAutoAttacks: metrics.IncomingAutoAttacks,
+				}
+			}
+			require.Equal(t, tc.Expected, wowspec.InferRoles(players))
+		})
+	}
 }
 
 func TestTreeNames(t *testing.T) {
