@@ -61,7 +61,7 @@ export function filterConsumablesTotal(
   });
 }
 
-function itemIdentity(use: ConsumableUse): { key: string; itemId: number | null; candidateItemIds: number[] } {
+export function itemIdentity(use: ConsumableUse): { key: string; itemId: number | null; candidateItemIds: number[] } {
   if (use.itemId !== null) {
     return { key: `item:${use.itemId}`, itemId: use.itemId, candidateItemIds: [] };
   }

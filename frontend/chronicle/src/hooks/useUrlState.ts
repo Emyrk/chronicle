@@ -620,6 +620,8 @@ const PANEL_CODES: Record<PanelType, string> = {
   extra_attacks: 'xa',
   consumables: 'cons',
   consumables_total: 'ct',
+  consumables_ledger: 'cl',
+  consumables_player: 'cp',
   deaths: 'd',
   death_log: 'dl',
   mitigation: 'mit',
