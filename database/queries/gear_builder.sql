@@ -3,9 +3,9 @@
 -- ============================================================
 
 -- name: CreateGearList :one
-INSERT INTO gear_lists (id, user_id, tenant_id, title, description, class_id, spec_name, visibility, payload,
+INSERT INTO gear_lists (id, user_id, tenant_id, title, description, class_id, spec_name, payload,
                         forked_from_list_id, forked_from_rev_number)
-VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, sqlc.narg(forked_from_list_id), sqlc.narg(forked_from_rev_number))
+VALUES ($1, $2, $3, $4, $5, $6, $7, $8, sqlc.narg(forked_from_list_id), sqlc.narg(forked_from_rev_number))
 RETURNING *;
 
 -- name: GetGearListByID :one
@@ -22,7 +22,6 @@ UPDATE gear_lists SET
   description = COALESCE(sqlc.narg(description), description),
   class_id = COALESCE(sqlc.narg(class_id), class_id),
   spec_name = COALESCE(sqlc.narg(spec_name), spec_name),
-  visibility = COALESCE(sqlc.narg(visibility), visibility),
   payload = COALESCE(sqlc.narg(payload), payload),
   updated_at = now()
 WHERE id = sqlc.arg(id) AND user_id = sqlc.arg(user_id) AND tenant_id = sqlc.arg(tenant_id)
@@ -30,15 +29,6 @@ RETURNING *;
 
 -- name: DeleteGearList :execrows
 DELETE FROM gear_lists WHERE id = $1 AND user_id = $2 AND tenant_id = $3;
-
--- name: ListPublicGearLists :many
--- Public lists for the browse/landing page, optionally filtered by class.
-SELECT * FROM gear_lists
-WHERE tenant_id = @tenant_id
-  AND visibility = 'public'
-  AND (sqlc.narg(class_id)::int IS NULL OR class_id = sqlc.narg(class_id))
-ORDER BY updated_at DESC
-LIMIT 50;
 
 -- name: CountUserGearLists :one
 SELECT COUNT(*) FROM gear_lists WHERE user_id = $1 AND tenant_id = $2;

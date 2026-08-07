@@ -1209,7 +1209,6 @@ type GearList struct {
 	Description         string             `db:"description" json:"description"`
 	ClassID             int32              `db:"class_id" json:"class_id"`
 	SpecName            string             `db:"spec_name" json:"spec_name"`
-	Visibility          string             `db:"visibility" json:"visibility"`
 	Payload             []byte             `db:"payload" json:"payload"`
 	ForkedFromListID    uuid.NullUUID      `db:"forked_from_list_id" json:"forked_from_list_id"`
 	ForkedFromRevNumber pgtype.Int4        `db:"forked_from_rev_number" json:"forked_from_rev_number"`

@@ -10,7 +10,6 @@ import {
   useCreateGearList,
   useDeleteGearList,
   useMyGearLists,
-  usePublicGearLists,
 } from "@/api/gearBuilderQueries";
 import { GearListCard } from "./GearListCard";
 import { LoginBanner } from "./LoginBanner";
@@ -29,7 +28,6 @@ function CreateListForm({ onDone }: { onDone: () => void }) {
   const [title, setTitle] = useState("");
   const [classId, setClassId] = useState(classes[0]?.id ?? 1);
   const [specName, setSpecName] = useState("");
-  const [visibility, setVisibility] = useState("private");
   const createList = useCreateGearList();
 
   const selectedClass = classes.find((c) => c.id === classId);
@@ -45,7 +43,6 @@ function CreateListForm({ onDone }: { onDone: () => void }) {
         description: "",
         class_id: classId,
         spec_name: specName,
-        visibility,
         // The generated type for json.RawMessage is awkward; the payload
         // travels as a plain JSON object.
         payload: EMPTY_PAYLOAD as unknown as Record<string, string>,
@@ -95,11 +92,6 @@ function CreateListForm({ onDone }: { onDone: () => void }) {
             </option>
           ))}
         </select>
-        <select className={selectClass} value={visibility} onChange={(e) => setVisibility(e.target.value)}>
-          <option value="private">Private</option>
-          <option value="unlisted">Unlisted</option>
-          <option value="public">Public</option>
-        </select>
         <div className="flex-1" />
         <Button variant="ghost" size="sm" onClick={onDone}>
           Cancel
@@ -116,12 +108,7 @@ export function GearListsPage() {
   const { isAuthenticated } = useAuth();
   const [creating, setCreating] = useState(false);
   const myLists = useMyGearLists(isAuthenticated);
-  const publicLists = usePublicGearLists();
   const deleteList = useDeleteGearList();
-
-  // Your own public lists already show under "My lists".
-  const myIds = new Set((myLists.data ?? []).map((l) => l.id));
-  const otherPublicLists = (publicLists.data ?? []).filter((l) => !myIds.has(l.id));
 
   return (
     <div className="space-y-8">
@@ -176,22 +163,6 @@ export function GearListsPage() {
         )}
       </section>
 
-      <section className="space-y-3">
-        <h2 className="text-sm font-semibold uppercase tracking-wide text-zinc-400">
-          Public lists
-        </h2>
-        {publicLists.isLoading ? (
-          <p className="text-sm text-zinc-500">Loading…</p>
-        ) : otherPublicLists.length === 0 ? (
-          <p className="text-sm text-zinc-500">No public gear lists on this server yet.</p>
-        ) : (
-          <div className="space-y-2">
-            {otherPublicLists.map((list) => (
-              <GearListCard key={list.id} list={list} />
-            ))}
-          </div>
-        )}
-      </section>
     </div>
   );
 }

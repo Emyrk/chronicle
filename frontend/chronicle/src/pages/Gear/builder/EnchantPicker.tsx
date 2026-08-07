@@ -6,9 +6,10 @@ import { useItemTooltip, useSearchEnchantments } from "@/api/gamedata";
 import { useDebouncedValue } from "@/hooks/useDebouncedValue";
 import type { GearTrendsEnchant } from "@/api/typesGenerated";
 import { formatEquipRate } from "../trends/trendsModel";
-import type { GearSlotEntry } from "./gearListModel";
+import { SLOT_INVENTORY_TYPES, type GearSlotEntry } from "./gearListModel";
 
 interface EnchantPickerProps {
+  slotIndex: number;
   entry: GearSlotEntry;
   onSetEnchant: (enchantId: number | undefined) => void;
   /** Enchants observed on logged players for this slot. */
@@ -16,14 +17,16 @@ interface EnchantPickerProps {
 }
 
 /**
- * Per-slot enchant selection: search by name, or take an observed
- * quick-pick. Only names exist in the game data (no stat decomposition),
- * so enchants are display-only and never affect scores.
+ * Per-slot enchant selection: valid enchants for the slot are listed
+ * up front (derived from the spells that apply them), narrowed by name
+ * search; observed quick-picks come first. Only names exist in the game
+ * data (no stat decomposition), so enchants never affect scores.
  */
-export function EnchantPicker({ entry, onSetEnchant, observedEnchants }: EnchantPickerProps) {
+export function EnchantPicker({ slotIndex, entry, onSetEnchant, observedEnchants }: EnchantPickerProps) {
   const [query, setQuery] = useState("");
   const debouncedQuery = useDebouncedValue(query.trim(), 250);
-  const search = useSearchEnchantments(debouncedQuery.length >= 2 ? debouncedQuery : null);
+  const invTypes = SLOT_INVENTORY_TYPES[slotIndex];
+  const search = useSearchEnchantments(debouncedQuery, invTypes);
 
   // Resolve the current enchant's display name through the tooltip endpoint.
   const current = useItemTooltip(
@@ -79,17 +82,19 @@ export function EnchantPicker({ entry, onSetEnchant, observedEnchants }: Enchant
       )}
 
       <div className="space-y-1.5">
-        <div className="text-2xs uppercase tracking-wide text-zinc-500">Search enchants</div>
+        <div className="text-2xs uppercase tracking-wide text-zinc-500">
+          {debouncedQuery ? "Search enchants" : "Valid for this slot"}
+        </div>
         <div className="relative">
           <Search className="absolute left-2 top-1/2 -translate-y-1/2 h-3 w-3 text-zinc-500" />
           <Input
             className="h-7 pl-6 text-xs"
-            placeholder="Search enchants by name…"
+            placeholder="Filter enchants by name…"
             value={query}
             onChange={(e) => setQuery(e.target.value)}
           />
         </div>
-        {debouncedQuery.length >= 2 && (
+        {(debouncedQuery.length >= 2 || !!invTypes?.length) && (
           <div className="max-h-48 overflow-y-auto rounded border border-zinc-800 divide-y divide-zinc-800/70">
             {search.isLoading ? (
               <p className="p-2.5 text-xs text-zinc-500">Searching…</p>

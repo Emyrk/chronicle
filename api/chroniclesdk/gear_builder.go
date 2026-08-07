@@ -16,7 +16,6 @@ type GearList struct {
 	Description string          `json:"description"`
 	ClassID     int32           `json:"class_id"`
 	SpecName    string          `json:"spec_name"`
-	Visibility  string          `json:"visibility"`
 	Payload     json.RawMessage `json:"payload"`
 	CreatedAt   time.Time       `json:"created_at"`
 	UpdatedAt   time.Time       `json:"updated_at"`
@@ -93,7 +92,6 @@ type CreateGearListRequest struct {
 	Description string          `json:"description"`
 	ClassID     int32           `json:"class_id"`
 	SpecName    string          `json:"spec_name"`
-	Visibility  string          `json:"visibility"`
 	Payload     json.RawMessage `json:"payload"`
 }
 
@@ -103,7 +101,6 @@ type UpdateGearListRequest struct {
 	Description *string          `json:"description,omitempty"`
 	ClassID     *int32           `json:"class_id,omitempty"`
 	SpecName    *string          `json:"spec_name,omitempty"`
-	Visibility  *string          `json:"visibility,omitempty"`
 	Payload     *json.RawMessage `json:"payload,omitempty"`
 }
 

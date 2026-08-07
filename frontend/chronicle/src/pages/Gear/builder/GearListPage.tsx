@@ -1,6 +1,6 @@
 import { useMemo, useState } from "react";
 import { Link, useParams, useSearchParams } from "react-router-dom";
-import { ArrowLeft, Eye, EyeOff, Link2, Pencil, Save } from "lucide-react";
+import { ArrowLeft, Eye, Pencil, Save } from "lucide-react";
 import { useArmoryGearHistory, useArmoryPlayer, useSession } from "@/api/queries";
 import { useGearListRevision, useGearTrends, useSharedGearList } from "@/api/gearBuilderQueries";
 import { Button } from "@/components/ui/button";
@@ -46,8 +46,6 @@ import {
   parseCharParam,
   type MatchedCharacter,
 } from "./CharacterMatchPanel";
-
-const VISIBILITY_ICON = { public: Eye, unlisted: Link2, private: EyeOff } as const;
 
 /**
  * Per-slot and total weighted scores for one stage's primary items,
@@ -147,7 +145,6 @@ function ListHeader({
   right?: React.ReactNode;
 }) {
   const cls = gearClassById(list.class_id);
-  const VisIcon = VISIBILITY_ICON[list.visibility as keyof typeof VISIBILITY_ICON] ?? EyeOff;
   return (
     <div className="flex items-start gap-3">
       <Link to="/gear" className="text-zinc-500 hover:text-zinc-300 mt-1.5">
@@ -166,10 +163,6 @@ function ListHeader({
               {list.spec_name ? `${list.spec_name} ${cls.name}` : cls.name}
             </span>
           )}
-          <span className="inline-flex items-center gap-1 capitalize">
-            <VisIcon className="h-3 w-3" />
-            {list.visibility}
-          </span>
           {isOwner && <span>you own this list</span>}
         </div>
       </div>

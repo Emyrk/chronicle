@@ -8,7 +8,6 @@ export interface GearListMeta {
   title: string;
   description: string;
   spec_name: string;
-  visibility: string;
 }
 
 export interface GearListEditor {
@@ -27,7 +26,6 @@ function metaOf(list: GearList): GearListMeta {
     title: list.title,
     description: list.description,
     spec_name: list.spec_name,
-    visibility: list.visibility,
   };
 }
 
@@ -70,7 +68,6 @@ export function useGearListEditor(list: GearList): GearListEditor {
         title: meta.title,
         description: meta.description,
         spec_name: meta.spec_name,
-        visibility: meta.visibility,
         // Send the document as a JSON object (json.RawMessage server-side);
         // a pre-stringified payload would double-encode.
         payload: payload as unknown as Record<string, string>,

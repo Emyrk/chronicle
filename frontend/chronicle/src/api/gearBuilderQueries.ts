@@ -36,19 +36,6 @@ export function useMyGearLists(enabled = true) {
   });
 }
 
-export function usePublicGearLists(classID?: number) {
-  return useQuery({
-    queryKey: ["gear-lists-public", classID ?? null],
-    queryFn: async (): Promise<GearList[]> => {
-      const params = classID ? `?class_id=${classID}` : "";
-      const res = await fetch(`${BASE}/lists/public${params}`);
-      if (!res.ok) throw gearAPIError("Failed to fetch public gear lists", await res.json().catch(() => null));
-      return res.json();
-    },
-    staleTime: 60 * 1000,
-  });
-}
-
 export function useSharedGearList(listID: string | undefined) {
   return useQuery({
     queryKey: ["gear-list-shared", listID],

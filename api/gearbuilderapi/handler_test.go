@@ -1,50 +1,11 @@
 package gearbuilderapi
 
 import (
-	"context"
 	"encoding/json"
 	"strings"
 	"testing"
 
-	"github.com/google/uuid"
-
-	"github.com/Emyrk/chronicle/api/chronauth"
-	"github.com/Emyrk/chronicle/api/chronauth/claims"
-	"github.com/Emyrk/chronicle/database"
 )
-
-func TestCanViewList(t *testing.T) {
-	t.Parallel()
-
-	owner := uuid.New()
-	stranger := uuid.New()
-	withClaims := func(userID uuid.UUID) context.Context {
-		return chronauth.WithClaims(context.Background(), &claims.Claims{Subject: userID})
-	}
-
-	tests := []struct {
-		name       string
-		visibility string
-		ctx        context.Context
-		want       bool
-	}{
-		{"public anonymous", "public", context.Background(), true},
-		{"unlisted anonymous", "unlisted", context.Background(), true},
-		{"private anonymous", "private", context.Background(), false},
-		{"private owner", "private", withClaims(owner), true},
-		{"private stranger", "private", withClaims(stranger), false},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			t.Parallel()
-			list := database.GearList{UserID: owner, Visibility: tt.visibility}
-			if got := canViewList(list, tt.ctx); got != tt.want {
-				t.Errorf("canViewList(%s) = %v, want %v", tt.name, got, tt.want)
-			}
-		})
-	}
-}
 
 func TestValidateGearListTitle(t *testing.T) {
 	t.Parallel()
@@ -67,32 +28,6 @@ func TestValidateGearListTitle(t *testing.T) {
 			err := validateGearListTitle(tt.title)
 			if (err != nil) != tt.wantErr {
 				t.Errorf("validateGearListTitle(%q) error = %v, wantErr %v", tt.title, err, tt.wantErr)
-			}
-		})
-	}
-}
-
-func TestValidateVisibility(t *testing.T) {
-	t.Parallel()
-
-	tests := []struct {
-		name    string
-		vis     string
-		wantErr bool
-	}{
-		{"public", "public", false},
-		{"unlisted", "unlisted", false},
-		{"private", "private", false},
-		{"invalid", "secret", true},
-		{"empty", "", true},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			t.Parallel()
-			err := validateVisibility(tt.vis)
-			if (err != nil) != tt.wantErr {
-				t.Errorf("validateVisibility(%q) error = %v, wantErr %v", tt.vis, err, tt.wantErr)
 			}
 		})
 	}

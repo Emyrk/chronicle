@@ -540,8 +540,6 @@ type sqlcQuerier interface {
 	// snapshot contract. Results whose snapshot was deleted are intentionally not
 	// eligible because their receipt is deleted with the snapshot.
 	ListParseScoreResultsForContract(ctx context.Context, arg ListParseScoreResultsForContractParams) ([]ParseScoreResult, error)
-	// Public lists for the browse/landing page, optionally filtered by class.
-	ListPublicGearLists(ctx context.Context, arg ListPublicGearListsParams) ([]GearList, error)
 	// Return published snapshots for a tenant, most recent first.
 	ListPublishedSnapshots(ctx context.Context, tenantID uuid.UUID) ([]ListPublishedSnapshotsRow, error)
 	// Load ranking rows for a specific instance directly from encounter_dps_rankings.
@@ -663,6 +661,13 @@ type sqlcQuerier interface {
 	SearchGamePlayers(ctx context.Context, arg SearchGamePlayersParams) ([]SearchGamePlayersRow, error)
 	SearchItemSets(ctx context.Context, arg SearchItemSetsParams) ([]SearchItemSetsRow, error)
 	SearchItemTemplates(ctx context.Context, arg SearchItemTemplatesParams) ([]SearchItemTemplatesRow, error)
+	// Slot-aware enchant search for the gear builder. Joining through the
+	// spells that apply each enchant (effect 53 = enchant item, permanent)
+	// keeps only actually-applyable enchants and derives slot validity from
+	// the spell's equipped-item restrictions. Armor enchant spells carry an
+	// inventory-type mask; weapon enchant spells restrict by weapon subclass
+	// instead and usually leave the inventory mask zero.
+	SearchSlotEnchantments(ctx context.Context, arg SearchSlotEnchantmentsParams) ([]SearchSlotEnchantmentsRow, error)
 	// Name search for the gear builder's enchant picker. Same names appear at
 	// multiple ranks/IDs, so the ID is part of the result identity.
 	SearchSpellItemEnchantments(ctx context.Context, arg SearchSpellItemEnchantmentsParams) ([]SearchSpellItemEnchantmentsRow, error)

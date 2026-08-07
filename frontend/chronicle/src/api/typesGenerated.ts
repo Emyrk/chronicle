@@ -637,7 +637,6 @@ export interface CreateGearListRequest {
     readonly description: string;
     readonly class_id: number;
     readonly spec_name: string;
-    readonly visibility: string;
     readonly payload: Record<string, string>;
 }
 
@@ -1042,7 +1041,6 @@ export interface GearList {
     readonly description: string;
     readonly class_id: number;
     readonly spec_name: string;
-    readonly visibility: string;
     readonly payload: Record<string, string>;
     readonly created_at: string;
     readonly updated_at: string;
@@ -3264,7 +3262,6 @@ export interface UpdateGearListRequest {
     readonly description?: string;
     readonly class_id?: number;
     readonly spec_name?: string;
-    readonly visibility?: string;
     readonly payload?: (Record<string, string>);
 }
 

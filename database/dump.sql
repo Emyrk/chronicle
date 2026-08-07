@@ -748,7 +748,6 @@ CREATE TABLE gear_lists (
     description text DEFAULT ''::text NOT NULL,
     class_id integer NOT NULL,
     spec_name text DEFAULT ''::text NOT NULL,
-    visibility text DEFAULT 'private'::text NOT NULL,
     payload jsonb DEFAULT '{"stages": [], "version": 2}'::jsonb NOT NULL,
     forked_from_list_id uuid,
     forked_from_rev_number integer,
@@ -756,8 +755,7 @@ CREATE TABLE gear_lists (
     updated_at timestamp with time zone DEFAULT now() NOT NULL,
     CONSTRAINT gear_lists_description_length_chk CHECK ((char_length(description) <= 2000)),
     CONSTRAINT gear_lists_payload_size_chk CHECK ((octet_length((payload)::text) <= 262144)),
-    CONSTRAINT gear_lists_title_length_chk CHECK (((char_length(title) >= 1) AND (char_length(title) <= 128))),
-    CONSTRAINT gear_lists_visibility_check CHECK ((visibility = ANY (ARRAY['public'::text, 'unlisted'::text, 'private'::text])))
+    CONSTRAINT gear_lists_title_length_chk CHECK (((char_length(title) >= 1) AND (char_length(title) <= 128)))
 );
 
 CREATE TABLE gear_stat_weight_pins (
@@ -2165,8 +2163,6 @@ CREATE INDEX game_players_player_and_realm ON game_players USING btree (name, re
 CREATE INDEX gear_list_revisions_list_idx ON gear_list_revisions USING btree (list_id, rev_number DESC);
 
 CREATE INDEX gear_lists_user_tenant_idx ON gear_lists USING btree (user_id, tenant_id);
-
-CREATE INDEX gear_lists_visibility_idx ON gear_lists USING btree (visibility) WHERE (visibility = ANY (ARRAY['public'::text, 'unlisted'::text]));
 
 CREATE INDEX gear_stat_weight_pins_tenant_dataset_idx ON gear_stat_weight_pins USING btree (tenant_id, dataset_id);
 

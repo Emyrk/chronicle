@@ -52,8 +52,7 @@ func (h *Handler) PublishGearListRevision(w http.ResponseWriter, r *http.Request
 	httpapi.Write(ctx, w, http.StatusCreated, revisionToSDK(rev))
 }
 
-// ListGearListRevisions returns revision summaries, subject to the list's
-// visibility (owners see revisions of their private lists).
+// ListGearListRevisions returns revision summaries.
 func (h *Handler) ListGearListRevisions(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 	list, ok := h.viewableList(w, r)
@@ -113,7 +112,7 @@ func (h *Handler) GetGearListRevision(w http.ResponseWriter, r *http.Request) {
 }
 
 // ForkGearList copies a list (live state, or a chosen published revision)
-// into a new private list owned by the caller, recording lineage.
+// into a new list owned by the caller, recording lineage.
 func (h *Handler) ForkGearList(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 	claims := chronauth.MustAuthenticatedClaims(ctx)
@@ -138,11 +137,6 @@ func (h *Handler) ForkGearList(w http.ResponseWriter, r *http.Request) {
 		httpapi.InternalServerError(w, err)
 		return
 	}
-	if !canViewList(source, ctx) {
-		httpapi.Write(ctx, w, http.StatusNotFound, map[string]string{"error": "gear list not found"})
-		return
-	}
-
 	// The copied content: the live draft, or a specific published revision.
 	title, description := source.Title, source.Description
 	classID, specName := source.ClassID, source.SpecName
@@ -189,7 +183,6 @@ func (h *Handler) ForkGearList(w http.ResponseWriter, r *http.Request) {
 		Description:         description,
 		ClassID:             classID,
 		SpecName:            specName,
-		Visibility:          "private",
 		Payload:             payload,
 		ForkedFromListID:    uuid.NullUUID{UUID: source.ID, Valid: true},
 		ForkedFromRevNumber: forkedRev,
@@ -202,8 +195,8 @@ func (h *Handler) ForkGearList(w http.ResponseWriter, r *http.Request) {
 	httpapi.Write(ctx, w, http.StatusCreated, gearListToSDK(fork))
 }
 
-// viewableList loads the {listID} route param's list and enforces the
-// visibility rule, writing the error response on failure.
+// viewableList loads the {listID} route param's list, writing the error
+// response on failure. All gear lists are public.
 func (h *Handler) viewableList(w http.ResponseWriter, r *http.Request) (database.GearList, bool) {
 	ctx := r.Context()
 	listID, err := uuid.Parse(chi.URLParam(r, "listID"))
@@ -219,10 +212,6 @@ func (h *Handler) viewableList(w http.ResponseWriter, r *http.Request) (database
 			return database.GearList{}, false
 		}
 		httpapi.InternalServerError(w, err)
-		return database.GearList{}, false
-	}
-	if !canViewList(list, ctx) {
-		httpapi.Write(ctx, w, http.StatusNotFound, map[string]string{"error": "gear list not found"})
 		return database.GearList{}, false
 	}
 	return list, true

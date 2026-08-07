@@ -4,7 +4,7 @@ import { getQualityTextClass, LEFT_SLOTS, RIGHT_SLOTS, BOTTOM_SLOTS } from "@/pa
 import { ItemIcon } from "@/components/ui/ItemIcon/ItemIcon";
 import { cn } from "@/lib/utils";
 import type { GearTrendsSlot, ItemSearchResult } from "@/api/typesGenerated";
-import type { GearSlotEntry } from "./gearListModel";
+import { ENCHANTABLE_SLOTS, type GearSlotEntry } from "./gearListModel";
 import type { StatWeights } from "./gearScoring";
 import { itemRefKey, type HydratedItem } from "./useListItems";
 import { ItemPickerPanel } from "./ItemPickerPanel";
@@ -128,7 +128,9 @@ export function SlotEditorPanel({
 
       <div className="flex items-center gap-1 border-b border-zinc-800">
         {TABS.map((t) => {
-          const disabled = t.id !== "pick" && !entry;
+          const disabled =
+            (t.id !== "pick" && !entry) ||
+            (t.id === "enchant" && !ENCHANTABLE_SLOTS.has(slotIndex));
           return (
             <button
               key={t.id}
@@ -171,7 +173,12 @@ export function SlotEditorPanel({
         />
       )}
       {tab === "enchant" && entry && (
-        <EnchantPicker entry={entry} onSetEnchant={onSetEnchant} observedEnchants={trendsSlot?.enchants} />
+        <EnchantPicker
+          slotIndex={slotIndex}
+          entry={entry}
+          onSetEnchant={onSetEnchant}
+          observedEnchants={trendsSlot?.enchants}
+        />
       )}
     </div>
   );

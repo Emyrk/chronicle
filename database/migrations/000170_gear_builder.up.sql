@@ -10,10 +10,6 @@ CREATE TABLE gear_lists (
   description TEXT NOT NULL DEFAULT '',
   class_id INT NOT NULL,
   spec_name TEXT NOT NULL DEFAULT '',
-  -- "public" = anyone can view, "unlisted" = viewable by direct link,
-  -- "private" = owner only.
-  visibility TEXT NOT NULL DEFAULT 'private'
-    CHECK (visibility IN ('public', 'unlisted', 'private')),
 
   -- JSON payload, version 2:
   -- { "version": 2, "stages": [ { "name": "...", "slots": {
@@ -35,7 +31,6 @@ CREATE TABLE gear_lists (
 );
 
 CREATE INDEX gear_lists_user_tenant_idx ON gear_lists (user_id, tenant_id);
-CREATE INDEX gear_lists_visibility_idx ON gear_lists (visibility) WHERE visibility IN ('public', 'unlisted');
 
 -- gear_stat_weights: user-defined stat-weight sets (live/mutable).
 CREATE TABLE gear_stat_weights (

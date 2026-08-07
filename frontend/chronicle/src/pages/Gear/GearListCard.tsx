@@ -1,5 +1,5 @@
 import { Link } from "react-router-dom";
-import { Eye, EyeOff, Layers, Link2 } from "lucide-react";
+import { Layers } from "lucide-react";
 import type { GearList } from "@/api/typesGenerated";
 import { getClassColorVar } from "@/pages/ArmoryPage/types";
 import { gearClassById } from "./classInfo";
@@ -14,16 +14,9 @@ function stageCount(payload: unknown): number {
   }
 }
 
-const VISIBILITY_ICON = {
-  public: Eye,
-  unlisted: Link2,
-  private: EyeOff,
-} as const;
-
 export function GearListCard({ list, actions }: { list: GearList; actions?: React.ReactNode }) {
   const cls = gearClassById(list.class_id);
   const stages = stageCount(list.payload);
-  const VisIcon = VISIBILITY_ICON[list.visibility as keyof typeof VISIBILITY_ICON] ?? EyeOff;
 
   return (
     <div className="flex items-center gap-3 rounded-md border border-zinc-700/60 bg-zinc-900/40 px-4 py-3 hover:border-zinc-600 transition-colors">
@@ -43,10 +36,6 @@ export function GearListCard({ list, actions }: { list: GearList; actions?: Reac
           <span className="inline-flex items-center gap-1">
             <Layers className="h-3 w-3" />
             {stages} {stages === 1 ? "stage" : "stages"}
-          </span>
-          <span className="inline-flex items-center gap-1 capitalize">
-            <VisIcon className="h-3 w-3" />
-            {list.visibility}
           </span>
           <span>updated {new Date(list.updated_at).toLocaleDateString()}</span>
         </div>

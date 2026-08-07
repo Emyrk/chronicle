@@ -3461,10 +3461,10 @@ func (q *sqlQuerier) CountUserGearLists(ctx context.Context, arg CountUserGearLi
 
 const createGearList = `-- name: CreateGearList :one
 
-INSERT INTO gear_lists (id, user_id, tenant_id, title, description, class_id, spec_name, visibility, payload,
+INSERT INTO gear_lists (id, user_id, tenant_id, title, description, class_id, spec_name, payload,
                         forked_from_list_id, forked_from_rev_number)
-VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
-RETURNING id, user_id, tenant_id, title, description, class_id, spec_name, visibility, payload, forked_from_list_id, forked_from_rev_number, created_at, updated_at
+VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
+RETURNING id, user_id, tenant_id, title, description, class_id, spec_name, payload, forked_from_list_id, forked_from_rev_number, created_at, updated_at
 `
 
 type CreateGearListParams struct {
@@ -3475,7 +3475,6 @@ type CreateGearListParams struct {
 	Description         string        `db:"description" json:"description"`
 	ClassID             int32         `db:"class_id" json:"class_id"`
 	SpecName            string        `db:"spec_name" json:"spec_name"`
-	Visibility          string        `db:"visibility" json:"visibility"`
 	Payload             []byte        `db:"payload" json:"payload"`
 	ForkedFromListID    uuid.NullUUID `db:"forked_from_list_id" json:"forked_from_list_id"`
 	ForkedFromRevNumber pgtype.Int4   `db:"forked_from_rev_number" json:"forked_from_rev_number"`
@@ -3493,7 +3492,6 @@ func (q *sqlQuerier) CreateGearList(ctx context.Context, arg CreateGearListParam
 		arg.Description,
 		arg.ClassID,
 		arg.SpecName,
-		arg.Visibility,
 		arg.Payload,
 		arg.ForkedFromListID,
 		arg.ForkedFromRevNumber,
@@ -3507,7 +3505,6 @@ func (q *sqlQuerier) CreateGearList(ctx context.Context, arg CreateGearListParam
 		&i.Description,
 		&i.ClassID,
 		&i.SpecName,
-		&i.Visibility,
 		&i.Payload,
 		&i.ForkedFromListID,
 		&i.ForkedFromRevNumber,
@@ -3657,7 +3654,7 @@ func (q *sqlQuerier) DeleteGearStatWeightPin(ctx context.Context, arg DeleteGear
 }
 
 const getGearListByID = `-- name: GetGearListByID :one
-SELECT id, user_id, tenant_id, title, description, class_id, spec_name, visibility, payload, forked_from_list_id, forked_from_rev_number, created_at, updated_at FROM gear_lists WHERE id = $1
+SELECT id, user_id, tenant_id, title, description, class_id, spec_name, payload, forked_from_list_id, forked_from_rev_number, created_at, updated_at FROM gear_lists WHERE id = $1
 `
 
 func (q *sqlQuerier) GetGearListByID(ctx context.Context, id uuid.UUID) (GearList, error) {
@@ -3671,7 +3668,6 @@ func (q *sqlQuerier) GetGearListByID(ctx context.Context, id uuid.UUID) (GearLis
 		&i.Description,
 		&i.ClassID,
 		&i.SpecName,
-		&i.Visibility,
 		&i.Payload,
 		&i.ForkedFromListID,
 		&i.ForkedFromRevNumber,
@@ -3775,7 +3771,7 @@ func (q *sqlQuerier) ListGearListRevisions(ctx context.Context, listID uuid.UUID
 }
 
 const listGearListsByUser = `-- name: ListGearListsByUser :many
-SELECT id, user_id, tenant_id, title, description, class_id, spec_name, visibility, payload, forked_from_list_id, forked_from_rev_number, created_at, updated_at FROM gear_lists
+SELECT id, user_id, tenant_id, title, description, class_id, spec_name, payload, forked_from_list_id, forked_from_rev_number, created_at, updated_at FROM gear_lists
 WHERE user_id = $1 AND tenant_id = $2
 ORDER BY updated_at DESC
 `
@@ -3802,7 +3798,6 @@ func (q *sqlQuerier) ListGearListsByUser(ctx context.Context, arg ListGearListsB
 			&i.Description,
 			&i.ClassID,
 			&i.SpecName,
-			&i.Visibility,
 			&i.Payload,
 			&i.ForkedFromListID,
 			&i.ForkedFromRevNumber,
@@ -3929,55 +3924,6 @@ func (q *sqlQuerier) ListGearStatWeightsByUser(ctx context.Context, arg ListGear
 	return items, nil
 }
 
-const listPublicGearLists = `-- name: ListPublicGearLists :many
-SELECT id, user_id, tenant_id, title, description, class_id, spec_name, visibility, payload, forked_from_list_id, forked_from_rev_number, created_at, updated_at FROM gear_lists
-WHERE tenant_id = $1
-  AND visibility = 'public'
-  AND ($2::int IS NULL OR class_id = $2)
-ORDER BY updated_at DESC
-LIMIT 50
-`
-
-type ListPublicGearListsParams struct {
-	TenantID uuid.UUID   `db:"tenant_id" json:"tenant_id"`
-	ClassID  pgtype.Int4 `db:"class_id" json:"class_id"`
-}
-
-// Public lists for the browse/landing page, optionally filtered by class.
-func (q *sqlQuerier) ListPublicGearLists(ctx context.Context, arg ListPublicGearListsParams) ([]GearList, error) {
-	rows, err := q.db.Query(ctx, listPublicGearLists, arg.TenantID, arg.ClassID)
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-	var items []GearList
-	for rows.Next() {
-		var i GearList
-		if err := rows.Scan(
-			&i.ID,
-			&i.UserID,
-			&i.TenantID,
-			&i.Title,
-			&i.Description,
-			&i.ClassID,
-			&i.SpecName,
-			&i.Visibility,
-			&i.Payload,
-			&i.ForkedFromListID,
-			&i.ForkedFromRevNumber,
-			&i.CreatedAt,
-			&i.UpdatedAt,
-		); err != nil {
-			return nil, err
-		}
-		items = append(items, i)
-	}
-	if err := rows.Err(); err != nil {
-		return nil, err
-	}
-	return items, nil
-}
-
 const publishGearListRevision = `-- name: PublishGearListRevision :one
 
 INSERT INTO gear_list_revisions (id, list_id, rev_number, title, description, class_id, spec_name, payload, published_by)
@@ -4033,11 +3979,10 @@ UPDATE gear_lists SET
   description = COALESCE($2, description),
   class_id = COALESCE($3, class_id),
   spec_name = COALESCE($4, spec_name),
-  visibility = COALESCE($5, visibility),
-  payload = COALESCE($6, payload),
+  payload = COALESCE($5, payload),
   updated_at = now()
-WHERE id = $7 AND user_id = $8 AND tenant_id = $9
-RETURNING id, user_id, tenant_id, title, description, class_id, spec_name, visibility, payload, forked_from_list_id, forked_from_rev_number, created_at, updated_at
+WHERE id = $6 AND user_id = $7 AND tenant_id = $8
+RETURNING id, user_id, tenant_id, title, description, class_id, spec_name, payload, forked_from_list_id, forked_from_rev_number, created_at, updated_at
 `
 
 type UpdateGearListParams struct {
@@ -4045,7 +3990,6 @@ type UpdateGearListParams struct {
 	Description pgtype.Text `db:"description" json:"description"`
 	ClassID     pgtype.Int4 `db:"class_id" json:"class_id"`
 	SpecName    pgtype.Text `db:"spec_name" json:"spec_name"`
-	Visibility  pgtype.Text `db:"visibility" json:"visibility"`
 	Payload     []byte      `db:"payload" json:"payload"`
 	ID          uuid.UUID   `db:"id" json:"id"`
 	UserID      uuid.UUID   `db:"user_id" json:"user_id"`
@@ -4058,7 +4002,6 @@ func (q *sqlQuerier) UpdateGearList(ctx context.Context, arg UpdateGearListParam
 		arg.Description,
 		arg.ClassID,
 		arg.SpecName,
-		arg.Visibility,
 		arg.Payload,
 		arg.ID,
 		arg.UserID,
@@ -4073,7 +4016,6 @@ func (q *sqlQuerier) UpdateGearList(ctx context.Context, arg UpdateGearListParam
 		&i.Description,
 		&i.ClassID,
 		&i.SpecName,
-		&i.Visibility,
 		&i.Payload,
 		&i.ForkedFromListID,
 		&i.ForkedFromRevNumber,
@@ -16679,6 +16621,68 @@ func (q *sqlQuerier) SearchItemTemplates(ctx context.Context, arg SearchItemTemp
 			&i.Armor,
 			&i.Icon,
 		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const searchSlotEnchantments = `-- name: SearchSlotEnchantments :many
+SELECT DISTINCT e.id, e.name_lang
+FROM dbc_spell_item_enchantment e
+JOIN dbc_spells s ON s.dataset_id = e.dataset_id
+    AND ((s.effect_0 = 53 AND s.effect_misc_value_0 = e.id)
+      OR (s.effect_1 = 53 AND s.effect_misc_value_1 = e.id)
+      OR (s.effect_2 = 53 AND s.effect_misc_value_2 = e.id))
+WHERE e.dataset_id = $1
+  AND ($2::text = '' OR e.name_lang ILIKE '%' || $2::text || '%')
+  AND (
+      (s.equipped_item_class = 4 AND (s.equipped_item_inv_types & $3::int) <> 0)
+   OR ($4::int <> 0 AND s.equipped_item_class = 2
+       AND (s.equipped_item_subclass = 0 OR (s.equipped_item_subclass & $4) <> 0)
+       AND (s.equipped_item_inv_types = 0 OR (s.equipped_item_inv_types & $3::int) <> 0))
+  )
+ORDER BY e.name_lang, e.id
+LIMIT 50
+`
+
+type SearchSlotEnchantmentsParams struct {
+	DatasetID          uuid.UUID `db:"dataset_id" json:"dataset_id"`
+	SearchTerm         string    `db:"search_term" json:"search_term"`
+	InvMask            int32     `db:"inv_mask" json:"inv_mask"`
+	WeaponSubclassMask int32     `db:"weapon_subclass_mask" json:"weapon_subclass_mask"`
+}
+
+type SearchSlotEnchantmentsRow struct {
+	ID       int32  `db:"id" json:"id"`
+	NameLang string `db:"name_lang" json:"name_lang"`
+}
+
+// Slot-aware enchant search for the gear builder. Joining through the
+// spells that apply each enchant (effect 53 = enchant item, permanent)
+// keeps only actually-applyable enchants and derives slot validity from
+// the spell's equipped-item restrictions. Armor enchant spells carry an
+// inventory-type mask; weapon enchant spells restrict by weapon subclass
+// instead and usually leave the inventory mask zero.
+func (q *sqlQuerier) SearchSlotEnchantments(ctx context.Context, arg SearchSlotEnchantmentsParams) ([]SearchSlotEnchantmentsRow, error) {
+	rows, err := q.db.Query(ctx, searchSlotEnchantments,
+		arg.DatasetID,
+		arg.SearchTerm,
+		arg.InvMask,
+		arg.WeaponSubclassMask,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []SearchSlotEnchantmentsRow
+	for rows.Next() {
+		var i SearchSlotEnchantmentsRow
+		if err := rows.Scan(&i.ID, &i.NameLang); err != nil {
 			return nil, err
 		}
 		items = append(items, i)

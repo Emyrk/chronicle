@@ -100,17 +100,19 @@ export function useSearchItems(params: SearchItemsParams | null) {
   });
 }
 
-export function useSearchEnchantments(q: string | null) {
+export function useSearchEnchantments(q: string | null, invTypes?: readonly number[]) {
+  const slot = invTypes?.length ? invTypes.join(",") : "";
   return useQuery({
-    queryKey: ["gamedata", "search-enchantments", q],
+    queryKey: ["gamedata", "search-enchantments", q, slot],
     queryFn: async () => {
-      const response = await fetch(
-        `/api/v1/internal/gamedata/search/enchantments?q=${encodeURIComponent(q!)}`,
-      );
+      const params = new URLSearchParams({ q: q ?? "" });
+      if (slot) params.set("slot", slot);
+      const response = await fetch(`/api/v1/internal/gamedata/search/enchantments?${params}`);
       if (!response.ok) throw new Error(`Failed to search enchantments: ${response.status}`);
       return response.json() as Promise<EnchantmentSearchResult[]>;
     },
-    enabled: q != null && q.length >= 2,
+    // A slot filter alone is a valid query (browse all valid enchants).
+    enabled: q != null && (q.length >= 2 || !!slot),
     staleTime: 5 * 60 * 1000,
     retry: false,
   });

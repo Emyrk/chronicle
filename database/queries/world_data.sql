@@ -22,6 +22,30 @@ WHERE dataset_id = @dataset_id
 ORDER BY name_lang, id
 LIMIT 25;
 
+-- name: SearchSlotEnchantments :many
+-- Slot-aware enchant search for the gear builder. Joining through the
+-- spells that apply each enchant (effect 53 = enchant item, permanent)
+-- keeps only actually-applyable enchants and derives slot validity from
+-- the spell's equipped-item restrictions. Armor enchant spells carry an
+-- inventory-type mask; weapon enchant spells restrict by weapon subclass
+-- instead and usually leave the inventory mask zero.
+SELECT DISTINCT e.id, e.name_lang
+FROM dbc_spell_item_enchantment e
+JOIN dbc_spells s ON s.dataset_id = e.dataset_id
+    AND ((s.effect_0 = 53 AND s.effect_misc_value_0 = e.id)
+      OR (s.effect_1 = 53 AND s.effect_misc_value_1 = e.id)
+      OR (s.effect_2 = 53 AND s.effect_misc_value_2 = e.id))
+WHERE e.dataset_id = @dataset_id
+  AND (@search_term::text = '' OR e.name_lang ILIKE '%' || @search_term::text || '%')
+  AND (
+      (s.equipped_item_class = 4 AND (s.equipped_item_inv_types & @inv_mask::int) <> 0)
+   OR (@weapon_subclass_mask::int <> 0 AND s.equipped_item_class = 2
+       AND (s.equipped_item_subclass = 0 OR (s.equipped_item_subclass & @weapon_subclass_mask) <> 0)
+       AND (s.equipped_item_inv_types = 0 OR (s.equipped_item_inv_types & @inv_mask::int) <> 0))
+  )
+ORDER BY e.name_lang, e.id
+LIMIT 50;
+
 -- name: GetItemSetByID :one
 SELECT * FROM dbc_item_set WHERE dataset_id = @dataset_id AND id = @id;
 

@@ -2,7 +2,6 @@ package gearbuilderapi
 
 import (
 	"bytes"
-	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -82,7 +81,6 @@ func (h *Handler) Routes() http.Handler {
 	})
 
 	// Public: browse public gear lists.
-	r.Get("/lists/public", h.ListPublicGearLists)
 
 	// Public: observed gear trends for a class/spec cohort.
 	r.Get("/trends", h.GearTrends)
@@ -136,10 +134,6 @@ func (h *Handler) CreateGearList(w http.ResponseWriter, r *http.Request) {
 		httpapi.Write(ctx, w, http.StatusBadRequest, map[string]string{"error": err.Error()})
 		return
 	}
-	if err := validateVisibility(req.Visibility); err != nil {
-		httpapi.Write(ctx, w, http.StatusBadRequest, map[string]string{"error": err.Error()})
-		return
-	}
 	if len(req.Description) > maxDescriptionLen {
 		httpapi.Write(ctx, w, http.StatusBadRequest, map[string]string{"error": "description too long"})
 		return
@@ -172,7 +166,6 @@ func (h *Handler) CreateGearList(w http.ResponseWriter, r *http.Request) {
 		Description: req.Description,
 		ClassID:     req.ClassID,
 		SpecName:    req.SpecName,
-		Visibility:  req.Visibility,
 		Payload:     req.Payload,
 	})
 	if err != nil {
@@ -181,36 +174,6 @@ func (h *Handler) CreateGearList(w http.ResponseWriter, r *http.Request) {
 	}
 
 	httpapi.Write(ctx, w, http.StatusCreated, gearListToSDK(list))
-}
-
-func (h *Handler) ListPublicGearLists(w http.ResponseWriter, r *http.Request) {
-	ctx := r.Context()
-
-	classID := pgtype.Int4{}
-	if raw := r.URL.Query().Get("class_id"); raw != "" {
-		id, err := strconv.ParseInt(raw, 10, 32)
-		if err != nil {
-			httpapi.Write(ctx, w, http.StatusBadRequest, map[string]string{"error": "invalid class_id"})
-			return
-		}
-		classID = pgtype.Int4{Int32: int32(id), Valid: true}
-	}
-
-	lists, err := h.zed.ListPublicGearLists(ctx, database.ListPublicGearListsParams{
-		TenantID: servicetenant.TenantIDFromContext(ctx),
-		ClassID:  classID,
-	})
-	if err != nil {
-		httpapi.InternalServerError(w, err)
-		return
-	}
-
-	result := make([]chroniclesdk.GearList, 0, len(lists))
-	for _, l := range lists {
-		result = append(result, gearListToSDK(l))
-	}
-
-	httpapi.Write(ctx, w, http.StatusOK, result)
 }
 
 func (h *Handler) ListMyGearLists(w http.ResponseWriter, r *http.Request) {
@@ -253,23 +216,7 @@ func (h *Handler) GetSharedGearList(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if !canViewList(list, ctx) {
-		httpapi.Write(ctx, w, http.StatusNotFound, map[string]string{"error": "gear list not found"})
-		return
-	}
-
 	httpapi.Write(ctx, w, http.StatusOK, gearListToSDK(list))
-}
-
-// canViewList reports whether the request context may view the list:
-// public and unlisted lists are visible to everyone, private lists only
-// to their owner.
-func canViewList(list database.GearList, ctx context.Context) bool {
-	if list.Visibility != "private" {
-		return true
-	}
-	claims, ok := chronauth.AuthenticatedClaims(ctx)
-	return ok && claims.Subject == list.UserID
 }
 
 func (h *Handler) UpdateGearList(w http.ResponseWriter, r *http.Request) {
@@ -289,12 +236,6 @@ func (h *Handler) UpdateGearList(w http.ResponseWriter, r *http.Request) {
 
 	if req.Title != nil {
 		if err := validateGearListTitle(*req.Title); err != nil {
-			httpapi.Write(ctx, w, http.StatusBadRequest, map[string]string{"error": err.Error()})
-			return
-		}
-	}
-	if req.Visibility != nil {
-		if err := validateVisibility(*req.Visibility); err != nil {
 			httpapi.Write(ctx, w, http.StatusBadRequest, map[string]string{"error": err.Error()})
 			return
 		}
@@ -326,9 +267,6 @@ func (h *Handler) UpdateGearList(w http.ResponseWriter, r *http.Request) {
 	}
 	if req.SpecName != nil {
 		params.SpecName = pgtype.Text{String: *req.SpecName, Valid: true}
-	}
-	if req.Visibility != nil {
-		params.Visibility = pgtype.Text{String: *req.Visibility, Valid: true}
 	}
 	if req.Payload != nil {
 		params.Payload = *req.Payload
@@ -669,15 +607,6 @@ func validateGearListTitle(title string) error {
 	return nil
 }
 
-func validateVisibility(v string) error {
-	switch v {
-	case "public", "unlisted", "private":
-		return nil
-	default:
-		return errors.New("visibility must be public, unlisted, or private")
-	}
-}
-
 func validatePayload(payload json.RawMessage) error {
 	if len(payload) > maxPayloadBytes {
 		return errors.New("payload too large")
@@ -765,7 +694,6 @@ func gearListToSDK(l database.GearList) chroniclesdk.GearList {
 		Description: l.Description,
 		ClassID:     l.ClassID,
 		SpecName:    l.SpecName,
-		Visibility:  l.Visibility,
 		Payload:     l.Payload,
 		CreatedAt:   l.CreatedAt.Time,
 		UpdatedAt:   l.UpdatedAt.Time,
