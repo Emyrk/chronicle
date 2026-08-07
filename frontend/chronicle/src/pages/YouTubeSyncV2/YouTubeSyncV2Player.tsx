@@ -24,9 +24,13 @@ function readControlWindowSize(): { width: number; height: number } {
 export function YouTubeSyncV2Player({
   channelName,
   sessionId,
+  controlsPath = "/youtube-sync-v2",
+  productName = "YouTube Sync V2",
 }: {
   channelName: string
   sessionId: string
+  controlsPath?: string
+  productName?: string
 }) {
   const playerRef = useRef<YTPlayer | null>(null)
   const playerReadyRef = useRef(false)
@@ -153,7 +157,7 @@ export function YouTubeSyncV2Player({
   const openControls = () => {
     const { width, height } = readControlWindowSize()
     const popup = window.open(
-      `/youtube-sync-v2?role=controls&session=${encodeURIComponent(sessionId)}`,
+      `${controlsPath}?role=controls&session=${encodeURIComponent(sessionId)}`,
       `chronicle-youtube-sync-v2-controls-${sessionId}`,
       `popup=yes,width=${width},height=${height},resizable=yes,scrollbars=yes`
     )
@@ -168,7 +172,7 @@ export function YouTubeSyncV2Player({
       {!videoLoaded && (
         <div className="relative z-10 mx-5 max-w-lg rounded-xl border border-white/15 bg-slate-950/90 p-8 text-center text-white shadow-2xl backdrop-blur">
           <MonitorPlay className="mx-auto size-10 text-cyan-300" />
-          <h1 className="mt-4 text-2xl font-bold">YouTube Sync V2</h1>
+          <h1 className="mt-4 text-2xl font-bold">{productName}</h1>
           <p className="mt-3 text-sm leading-6 text-slate-400">
             This window is only the YouTube player. Open the control desk, then paste the URL and manage the entire sync from there.
           </p>
