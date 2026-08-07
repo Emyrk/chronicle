@@ -174,6 +174,7 @@ export interface YouTubeSyncPageProps {
   initialIntervalSeconds?: number
   controlsOnly?: boolean
   remoteControlChannel?: string
+  capturedTimeIsUtc?: boolean
   settingsStorageKey?: string
 }
 
@@ -185,6 +186,7 @@ export function YouTubeSyncPage({
   controlsOnly = false,
   remoteControlChannel,
   settingsStorageKey,
+  capturedTimeIsUtc = false,
 }: YouTubeSyncPageProps = {}) {
   const persistedSettings = useRef(readPersistedSettings(settingsStorageKey)).current
   // State
@@ -243,6 +245,7 @@ export function YouTubeSyncPage({
     persistedSettings.timeOffsetHours ?? initialTimeOffsetHours ?? localOffsetHours
   )
 
+  const effectiveTimeOffsetHours = capturedTimeIsUtc ? 0 : timeOffsetHours
   const instanceQuery = useInstance(lookupInstanceId, {
     enabled: controlsOnly && lookupInstanceId.length > 0,
   })
@@ -262,9 +265,9 @@ export function YouTubeSyncPage({
         videoTimeSeconds: timelineAnchor.videoTime,
         serverTime: timelineAnchor.serverTime,
       },
-      timeOffsetHours
+      effectiveTimeOffsetHours
     )
-  }, [duration, raidBounds, timelineAnchor, timeOffsetHours])
+  }, [duration, effectiveTimeOffsetHours, raidBounds, timelineAnchor])
 
   // Refs
   const playerRef = useRef<YTPlayer | null>(null)
@@ -969,7 +972,9 @@ export function YouTubeSyncPage({
           video_time_seconds: Math.round(r.videoTime),
           raw_ocr: r.rawOCR,
           server_time: r.serverTime,
-          utc_time: r.serverTime ? applyTimeOffset(r.serverTime, timeOffsetHours) : undefined,
+          utc_time: r.serverTime
+            ? applyTimeOffset(r.serverTime, effectiveTimeOffsetHours)
+            : undefined,
           confidence: r.confidence,
         })),
       }
@@ -1246,22 +1251,6 @@ export function YouTubeSyncPage({
                   {instanceQuery.isFetching ? "Loading…" : "Load raid"}
                 </Button>
               </div>
-              <div className="grid gap-3 sm:grid-cols-[180px_1fr] sm:items-end">
-                <div>
-                  <Label htmlFor="early-time-offset">Server UTC offset</Label>
-                  <Input
-                    id="early-time-offset"
-                    type="number"
-                    step="0.5"
-                    value={timeOffsetHours}
-                    onChange={(event) => setTimeOffsetHours(Number(event.target.value))}
-                    className="mt-1"
-                  />
-                </div>
-                <p className="pb-2 text-xs text-muted-foreground">
-                  The timeline recalculates immediately when this changes, which makes a wrong offset easy to spot.
-                </p>
-              </div>
               {instanceQuery.isError && (
                 <p className="rounded-md bg-red-500/10 p-3 text-sm text-red-300">
                   Could not load that instance. Check the ID and your access.
@@ -1534,7 +1523,9 @@ export function YouTubeSyncPage({
                     <span className="font-mono text-lg">{lastResult.videoTimeFormatted}</span>
                   </div>
                   <div className="flex-1">
-                    <span className="text-xs text-muted-foreground block">Server Time</span>
+                    <span className="text-xs text-muted-foreground block">
+                      {capturedTimeIsUtc ? "UTC Time" : "Server Time"}
+                    </span>
                     <span className="font-mono text-lg">{lastResult.serverTime || "-"}</span>
                   </div>
                   <div className="flex-1">
@@ -1580,7 +1571,7 @@ export function YouTubeSyncPage({
                         Image
                       </th>
                       <th className="text-left py-2 px-3 text-muted-foreground font-medium">
-                        Server Time
+                        {capturedTimeIsUtc ? "UTC Time" : "Server Time"}
                       </th>
                       <th className="text-left py-2 px-3 text-muted-foreground font-medium">
                         Raw OCR
@@ -1639,7 +1630,10 @@ export function YouTubeSyncPage({
                 {/* Chronicle Export */}
                 <div className="mt-6 pt-4 border-t border-border">
                   <h4 className="text-sm font-medium mb-3">Export to Chronicle</h4>
-                  <div className="grid grid-cols-3 gap-4 mb-3">
+                  <div className={cn(
+                    "grid gap-4 mb-3",
+                    capturedTimeIsUtc ? "grid-cols-2" : "grid-cols-3"
+                  )}>
                     <div>
                       <Label htmlFor="chronicle-url" className="text-xs">
                         Chronicle URL
@@ -1664,23 +1658,25 @@ export function YouTubeSyncPage({
                         className="mt-1"
                       />
                     </div>
-                    <div>
-                      <Label htmlFor="export-time-offset" className="text-xs">
-                        Time Offset (hours)
-                      </Label>
-                      <Input
-                        id="export-time-offset"
-                        type="number"
-                        value={timeOffsetHours}
-                        onChange={(e) => setTimeOffsetHours(Number(e.target.value))}
-                        placeholder="0"
-                        className="mt-1"
-                      />
-                      <p className="text-xs text-muted-foreground mt-1">
-                        Server timezone offset from UTC (e.g., 1 for CET).
-                        Your local offset: UTC{localOffsetHours >= 0 ? "+" : ""}{localOffsetHours}
-                      </p>
-                    </div>
+                    {!capturedTimeIsUtc && (
+                      <div>
+                        <Label htmlFor="export-time-offset" className="text-xs">
+                          Time Offset (hours)
+                        </Label>
+                        <Input
+                          id="export-time-offset"
+                          type="number"
+                          value={timeOffsetHours}
+                          onChange={(e) => setTimeOffsetHours(Number(e.target.value))}
+                          placeholder="0"
+                          className="mt-1"
+                        />
+                        <p className="text-xs text-muted-foreground mt-1">
+                          Server timezone offset from UTC (e.g., 1 for CET).
+                          Your local offset: UTC{localOffsetHours >= 0 ? "+" : ""}{localOffsetHours}
+                        </p>
+                      </div>
+                    )}
                   </div>
                   <Button onClick={exportToChronicle} disabled={chronicleExporting}>
                     {chronicleExporting ? "Exporting..." : "Export to Chronicle"}
