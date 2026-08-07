@@ -4,6 +4,7 @@ import { Link } from "react-router-dom";
 import { AlertTriangle, ArrowLeft, Check, ExternalLink, FlaskConical, Layers3, RotateCcw, Search, ShieldCheck, Sparkles, EyeOff } from "lucide-react";
 import { Card } from "@/components/ui/Card/Card";
 import { SpellIdTooltip } from "@/components/ui/SpellIdTooltip/SpellIdTooltip";
+import { HintTooltip, TooltipContent, TooltipTrigger } from "@/components/ui/Tooltip/tooltip";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { iconUrl } from "@/config/iconUrl";
 import { useDatasetId, useIconBaseUrl } from "@/hooks/useDatasetId";
@@ -276,6 +277,75 @@ function isCommonEffectAmbiguous(effect: CommonConsumableEffect): boolean {
     || effect.datasets.some((dataset) => dataset.candidates.length > 1 && !dataset.policy);
 }
 
+function CandidateDifferencesTooltip({
+  effect,
+  datasetById,
+}: {
+  effect: CommonConsumableEffect;
+  datasetById: Map<string, Dataset>;
+}) {
+  const commonItemIds = new Set(effect.commonCandidates.map((item) => item.item_id));
+
+  return (
+    <HintTooltip delayDuration={150}>
+      <TooltipTrigger asChild>
+        <button
+          type="button"
+          onClick={(event) => event.stopPropagation()}
+          onContextMenu={(event) => event.stopPropagation()}
+          className="inline-flex items-center gap-1 rounded-full border border-amber-500/30 bg-amber-500/10 px-2 py-0.5 text-[10px] text-amber-300 hover:border-amber-400/50 hover:bg-amber-500/15"
+          aria-label="Show candidate list differences"
+        >
+          <AlertTriangle className="h-3 w-3" /> Lists differ
+        </button>
+      </TooltipTrigger>
+      <TooltipContent side="right" sideOffset={6} className="w-96 max-w-[calc(100vw-2rem)] p-3 text-left">
+        <div className="mb-2 font-semibold">Candidate differences</div>
+        {effect.commonCandidates.length > 0 && (
+          <div className="mb-2">
+            <div className="mb-1 text-[10px] font-semibold uppercase tracking-wide opacity-70">Common to all</div>
+            <div className="flex flex-wrap gap-1">
+              {effect.commonCandidates.map((item) => (
+                <span key={item.item_id} className="rounded bg-background/15 px-1.5 py-0.5">
+                  {item.item_name} #{item.item_id}
+                </span>
+              ))}
+            </div>
+          </div>
+        )}
+        <div className="space-y-2">
+          {effect.datasets.map((dataset) => {
+            const extras = dataset.candidates.filter((item) => !commonItemIds.has(item.item_id));
+            return (
+              <div key={dataset.datasetId}>
+                <div className="font-medium">{datasetById.get(dataset.datasetId)?.name ?? dataset.datasetId}</div>
+                {dataset.candidates.length === 0 ? (
+                  <div className="text-destructive-foreground/80">Effect is not present in this dataset.</div>
+                ) : extras.length === 0 ? (
+                  <div className="opacity-70">No dataset-specific candidates.</div>
+                ) : (
+                  <div className="mt-0.5 flex flex-wrap gap-1">
+                    {extras.map((item) => (
+                      <span key={item.item_id} className="rounded bg-amber-950/30 px-1.5 py-0.5 text-amber-100">
+                        {item.item_name} #{item.item_id}
+                      </span>
+                    ))}
+                  </div>
+                )}
+              </div>
+            );
+          })}
+        </div>
+        {effect.conflictingItemIds.length > 0 && (
+          <div className="mt-2 border-t border-background/20 pt-2 text-amber-200">
+            Same item ID has different names across datasets: {effect.conflictingItemIds.map((id) => `#${id}`).join(", ")}.
+          </div>
+        )}
+      </TooltipContent>
+    </HintTooltip>
+  );
+}
+
 function MultiDatasetConsumablesView({
   datasets,
   selectedDatasetIds,
@@ -434,11 +504,7 @@ function MultiDatasetConsumablesView({
                 {view === "buff" && <Sparkles className="h-3.5 w-3.5 text-primary" />}
                 <SpellReference spellId={effect.spellId} name={view === "buff" ? effect.spellName : undefined} />
                 <EffectStatus policy={consensus} ambiguous={isCommonEffectAmbiguous(effect)} />
-                {warning && (
-                  <span className="inline-flex items-center gap-1 rounded-full border border-amber-500/30 bg-amber-500/10 px-2 py-0.5 text-[10px] text-amber-300">
-                    <AlertTriangle className="h-3 w-3" /> Lists differ
-                  </span>
-                )}
+                {warning && <CandidateDifferencesTooltip effect={effect} datasetById={datasetById} />}
               </div>
               <div className="space-y-2">
                 <div className="flex flex-wrap gap-1.5">
