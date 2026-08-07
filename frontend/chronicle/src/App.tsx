@@ -19,6 +19,7 @@ import { RecentRaids } from "./pages/Recent/RecentRaids"
 import { ProtoDecode } from "./pages/Debug/ProtoDecode"
 import { YouTubeSyncPage } from "./pages/YouTubeSync/YouTubeSyncPage"
 import { YouTubeSyncV2Page } from "./pages/YouTubeSyncV2/YouTubeSyncV2Page"
+import { YouTubeSyncV3Page } from "./pages/YouTubeSyncV3/YouTubeSyncV3Page"
 import { AdminLayout } from "./pages/Admin/AdminLayout"
 import { AdminUsersOverview } from "./pages/Admin/AdminUsersOverview"
 import { AdminLogsPage } from "./pages/Admin/AdminLogsPage"
@@ -105,6 +106,7 @@ function App() {
       <Route path="/login" element={<Login />} />
       <Route path="/youtube-sync" element={<YouTubeSyncPage />} />
       <Route path="/youtube-sync-v2" element={<YouTubeSyncV2Page />} />
+      <Route path="/youtube-sync-v3" element={<YouTubeSyncV3Page />} />
       <Route element={<Layout />}>
         <Route path="/" element={<Home />} />
         <Route path="/recent" element={<RecentRaids />} />
