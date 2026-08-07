@@ -1056,7 +1056,7 @@ export function YouTubeSyncPage({
         {controlsOnly && (
           <div className="mb-3 flex items-center justify-between gap-3 text-xs">
             <span className="font-semibold uppercase tracking-wider text-muted-foreground">
-              YouTube Sync V2 controls
+              Step 1 · Load the YouTube video
             </span>
             <span className={cn("rounded-full px-2 py-1", remoteConnected
               ? "bg-green-500/15 text-green-300"
@@ -1147,19 +1147,21 @@ export function YouTubeSyncPage({
               </>
             )}
 
-            <div className="w-px h-6 bg-border" />
-            <div className="flex gap-2 items-center">
-              {!captureActive ? (
-                <Button onClick={startCapture}>
-                  {controlsOnly ? "Capture YouTube window" : "Start Capture"}
-                </Button>
-              ) : (
-                <>
-                  <Button variant="secondary" onClick={stopCapture}>Stop</Button>
-                  <Button variant="secondary" onClick={openRegionSelector}>Select Region</Button>
-                </>
-              )}
-            </div>
+            {!controlsOnly && (
+              <>
+                <div className="w-px h-6 bg-border" />
+                <div className="flex gap-2 items-center">
+                  {!captureActive ? (
+                    <Button onClick={startCapture}>Start Capture</Button>
+                  ) : (
+                    <>
+                      <Button variant="secondary" onClick={stopCapture}>Stop</Button>
+                      <Button variant="secondary" onClick={openRegionSelector}>Select Region</Button>
+                    </>
+                  )}
+                </div>
+              </>
+            )}
           </div>
         )}
       </div>
@@ -1170,9 +1172,23 @@ export function YouTubeSyncPage({
         controlsOnly ? "max-w-3xl pt-4" : "max-w-5xl pt-[540px]"
       )}>
         {controlsOnly && (
+          <WorkflowSteps
+            videoReady={videoLoaded && duration > 0}
+            captureReady={captureActive}
+            clockReady={syncMethod === "manual" || Boolean(capturePreview)}
+            syncReady={results.length > 0}
+          />
+        )}
+
+        {controlsOnly && (
           <Card>
             <CardHeader>
-              <CardTitle className="text-base">Raid log check <span className="font-normal text-muted-foreground">(optional)</span></CardTitle>
+              <StepCardTitle
+                step={1}
+                title="Add raid context"
+                optional
+                complete={Boolean(raidBounds)}
+              />
             </CardHeader>
             <CardContent className="space-y-4">
               <p className="text-sm text-muted-foreground">
@@ -1230,6 +1246,38 @@ export function YouTubeSyncPage({
           </Card>
         )}
 
+        {controlsOnly && (
+          <Card className={cn(!videoLoaded && "opacity-70")}>
+            <CardHeader>
+              <StepCardTitle
+                step={2}
+                title="Share the YouTube player window"
+                complete={captureActive}
+              />
+            </CardHeader>
+            <CardContent className="space-y-4">
+              <p className="text-sm text-muted-foreground">
+                Share the main window named “Chronicle YouTube Player”. The controls window is excluded from the picker where the browser supports it.
+              </p>
+              {!captureActive ? (
+                <Button onClick={startCapture} disabled={!videoLoaded}>
+                  Capture YouTube window
+                </Button>
+              ) : (
+                <div className="flex flex-wrap items-center gap-3">
+                  <span className="rounded-full bg-green-500/15 px-3 py-1 text-sm text-green-300">
+                    ✓ YouTube window shared
+                  </span>
+                  <Button variant="secondary" onClick={stopCapture}>Change window</Button>
+                </div>
+              )}
+              {!videoLoaded && (
+                <p className="text-xs text-amber-300">Complete step 1 by loading a video first.</p>
+              )}
+            </CardContent>
+          </Card>
+        )}
+
         {controlsOnly && raidBounds && (
           <YouTubeSyncOverlapTimeline
             raid={raidBounds}
@@ -1242,9 +1290,25 @@ export function YouTubeSyncPage({
         {captureActive && syncMethod === "ocr" && (
           <Card>
             <CardHeader>
-              <CardTitle>📷 Capture Region</CardTitle>
+              {controlsOnly ? (
+                <StepCardTitle
+                  step={3}
+                  title="Select and test the clock"
+                  complete={Boolean(capturePreview)}
+                />
+              ) : (
+                <CardTitle>📷 Capture Region</CardTitle>
+              )}
             </CardHeader>
-            <CardContent>
+            <CardContent className="space-y-4">
+              <div className="flex flex-wrap items-center justify-between gap-3 rounded-lg border border-border bg-muted/40 p-3">
+                <p className="text-sm text-muted-foreground">
+                  Draw a tight box around the in-game clock, then test that the preview is readable.
+                </p>
+                <Button variant="secondary" onClick={openRegionSelector} disabled={syncRunning}>
+                  Select clock region
+                </Button>
+              </div>
               <div className="flex gap-5">
                 <div className="flex-1 min-h-[100px] max-h-[200px] bg-muted rounded-lg flex items-center justify-center overflow-hidden">
                   {capturePreview ? (
@@ -1305,10 +1369,24 @@ export function YouTubeSyncPage({
           </Card>
         )}
 
+        {controlsOnly && syncMethod === "ocr" && !captureActive && (
+          <p className="rounded-lg border border-amber-500/20 bg-amber-500/10 p-4 text-sm text-amber-200">
+            Complete step 2 before configuring automatic OCR synchronization.
+          </p>
+        )}
+
         {/* Sync Settings */}
         <Card>
           <CardHeader>
-            <CardTitle>⚡ Sync Settings</CardTitle>
+            {controlsOnly ? (
+              <StepCardTitle
+                step={4}
+                title="Choose timing and run sync"
+                complete={results.length > 0}
+              />
+            ) : (
+              <CardTitle>⚡ Sync Settings</CardTitle>
+            )}
           </CardHeader>
           <CardContent className="space-y-4">
             <div className="flex gap-4 items-center mb-4">
@@ -1449,7 +1527,15 @@ export function YouTubeSyncPage({
         {/* Results */}
         <Card>
           <CardHeader>
-            <CardTitle>📊 Results</CardTitle>
+            {controlsOnly ? (
+              <StepCardTitle
+                step={5}
+                title="Review and export"
+                complete={results.length > 0}
+              />
+            ) : (
+              <CardTitle>📊 Results</CardTitle>
+            )}
           </CardHeader>
           <CardContent>
             {results.length === 0 ? (
@@ -1611,6 +1697,91 @@ export function YouTubeSyncPage({
       />
       <video ref={captureVideoRef} className="hidden" autoPlay />
       <canvas ref={captureCanvasRef} className="hidden" />
+    </div>
+  )
+}
+
+function StepCardTitle({
+  step,
+  title,
+  complete,
+  optional = false,
+}: {
+  step: number
+  title: string
+  complete: boolean
+  optional?: boolean
+}) {
+  return (
+    <CardTitle className="flex items-center gap-3 text-base">
+      <span className={cn(
+        "flex size-8 shrink-0 items-center justify-center rounded-full border font-mono text-sm font-bold",
+        complete
+          ? "border-green-400/40 bg-green-400/15 text-green-300"
+          : "border-primary/40 bg-primary/10 text-primary"
+      )}>
+        {complete ? "✓" : step}
+      </span>
+      <span>{title}</span>
+      {optional && (
+        <span className="ml-auto text-xs font-normal text-muted-foreground">Optional</span>
+      )}
+    </CardTitle>
+  )
+}
+
+function WorkflowSteps({
+  videoReady,
+  captureReady,
+  clockReady,
+  syncReady,
+}: {
+  videoReady: boolean
+  captureReady: boolean
+  clockReady: boolean
+  syncReady: boolean
+}) {
+  const steps = [
+    { label: "Load video", complete: videoReady },
+    { label: "Share window", complete: captureReady },
+    { label: "Select clock", complete: clockReady },
+    { label: "Run sync", complete: syncReady },
+    { label: "Export", complete: false },
+  ]
+
+  return (
+    <div className="grid grid-cols-5 overflow-hidden rounded-lg border border-border bg-card">
+      {steps.map((step, index) => {
+        const previousComplete = index === 0 || steps[index - 1].complete
+        const active = !step.complete && previousComplete
+        return (
+          <div
+            key={step.label}
+            className={cn(
+              "relative min-w-0 border-r border-border px-2 py-3 text-center last:border-r-0",
+              step.complete && "bg-green-500/5",
+              active && "bg-primary/10"
+            )}
+          >
+            <div className={cn(
+              "mx-auto flex size-6 items-center justify-center rounded-full border font-mono text-[11px] font-bold",
+              step.complete
+                ? "border-green-400/40 bg-green-400/15 text-green-300"
+                : active
+                  ? "border-primary bg-primary text-primary-foreground"
+                  : "border-border text-muted-foreground"
+            )}>
+              {step.complete ? "✓" : index + 1}
+            </div>
+            <p className={cn(
+              "mt-1 truncate text-[10px] sm:text-xs",
+              active ? "font-semibold text-foreground" : "text-muted-foreground"
+            )}>
+              {step.label}
+            </p>
+          </div>
+        )
+      })}
     </div>
   )
 }
