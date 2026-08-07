@@ -1309,14 +1309,6 @@ export function YouTubeSyncPage({
           </Card>
         )}
 
-        {controlsOnly && raidBounds && (
-          <YouTubeSyncOverlapTimeline
-            raid={raidBounds}
-            video={inferredVideoRange}
-            instanceName={instanceQuery.data?.name}
-          />
-        )}
-
         {/* Capture Section */}
         {captureActive && syncMethod === "ocr" && (
           <Card>
@@ -1698,6 +1690,14 @@ export function YouTubeSyncPage({
             )}
           </CardContent>
         </Card>
+
+        {controlsOnly && raidBounds && (
+          <YouTubeSyncOverlapTimeline
+            raid={raidBounds}
+            video={inferredVideoRange}
+            instanceName={instanceQuery.data?.name}
+          />
+        )}
       </div>
 
       {/* Region selector overlay */}
