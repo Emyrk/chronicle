@@ -17,6 +17,7 @@ import {
 import type { GearStatWeight } from "@/api/typesGenerated";
 import { getClassColorVar } from "@/pages/ArmoryPage/types";
 import { gearClassById, gearClassesForFlavor } from "../classInfo";
+import { LoginBanner } from "../LoginBanner";
 import { parseWeights, STAT_KEYS, type StatWeights } from "../builder/gearScoring";
 import { draftFromWeights, WeightSetForm, weightsFromDraft } from "./WeightSetForm";
 import { presetsForFlavor } from "./presets";
@@ -315,20 +316,18 @@ export function StatWeightsPage() {
           <h2 className="text-sm font-semibold uppercase tracking-wide text-zinc-400">
             My weight sets
           </h2>
-          <Button
-            size="sm"
-            onClick={() => {
-              if (!isAuthenticated) {
-                toast.error("You must be logged in to create stat weights");
-                return;
-              }
-              setCreating(true);
-              setEditingId(null);
-            }}
-          >
-            <Plus className="h-4 w-4 mr-1" />
-            New weight set
-          </Button>
+          {isAuthenticated && (
+            <Button
+              size="sm"
+              onClick={() => {
+                setCreating(true);
+                setEditingId(null);
+              }}
+            >
+              <Plus className="h-4 w-4 mr-1" />
+              New weight set
+            </Button>
+          )}
         </div>
 
         {creating && (
@@ -342,7 +341,10 @@ export function StatWeightsPage() {
         {editing && <WeightSetEditor key={editing.id} weightSet={editing} onDone={() => setEditingId(null)} />}
 
         {!isAuthenticated ? (
-          <p className="text-sm text-zinc-500">Log in to create and manage your own stat weights.</p>
+          <LoginBanner
+            title="Log in to create stat weight sets"
+            subtitle="Weights turn the gear builder's items into scores so sets can be compared at a glance."
+          />
         ) : myWeights.isLoading ? (
           <p className="text-sm text-zinc-500">Loading…</p>
         ) : (myWeights.data ?? []).length === 0 ? (

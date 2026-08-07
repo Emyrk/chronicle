@@ -13,6 +13,7 @@ import {
   usePublicGearLists,
 } from "@/api/gearBuilderQueries";
 import { GearListCard } from "./GearListCard";
+import { LoginBanner } from "./LoginBanner";
 import { gearClassesForFlavor } from "./classInfo";
 
 const EMPTY_PAYLOAD = { version: 2, stages: [{ name: "Stage 1", slots: {} }] };
@@ -127,23 +128,19 @@ export function GearListsPage() {
       <section className="space-y-3">
         <div className="flex items-center justify-between">
           <h2 className="text-sm font-semibold uppercase tracking-wide text-zinc-400">My lists</h2>
-          <Button
-            size="sm"
-            onClick={() => {
-              if (!isAuthenticated) {
-                toast.error("You must be logged in to create gear lists");
-                return;
-              }
-              setCreating(true);
-            }}
-          >
-            <Plus className="h-4 w-4 mr-1" />
-            New list
-          </Button>
+          {isAuthenticated && (
+            <Button size="sm" onClick={() => setCreating(true)}>
+              <Plus className="h-4 w-4 mr-1" />
+              New list
+            </Button>
+          )}
         </div>
         {creating && <CreateListForm onDone={() => setCreating(false)} />}
         {!isAuthenticated ? (
-          <p className="text-sm text-zinc-500">Log in to create and manage your own gear lists.</p>
+          <LoginBanner
+            title="Log in to build gear lists"
+            subtitle="Plan sets and progressions, score items with stat weights, and match lists against your characters."
+          />
         ) : myLists.isLoading ? (
           <p className="text-sm text-zinc-500">Loading…</p>
         ) : (myLists.data ?? []).length === 0 ? (
