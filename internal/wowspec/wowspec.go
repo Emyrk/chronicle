@@ -4,6 +4,8 @@ package wowspec
 import (
 	"math"
 	"sort"
+
+	"github.com/Emyrk/chronicle/internal/roleinfer"
 )
 
 // specMap maps class name → [3]talent tree spec names (tree0, tree1, tree2).
@@ -73,17 +75,19 @@ const (
 // Role detection thresholds.
 // Must match frontend Roles/roles.processor.ts thresholds exactly.
 const (
-	TankZThreshold       = 1.7   // damage taken ≥ 1.7σ above mean
 	HealerZThreshold     = 0.3   // healing done ≥ 0.3σ above mean (~62nd percentile)
 	LowDPSPercentile     = 0.185 // damage done in the bottom 18.5%
 	HealerHighZThreshold = 1.5   // healing done ≥ 1.5σ bypasses damage check (~93rd percentile)
 )
 
-// PlayerMetrics holds the three metrics needed for role inference.
+// PlayerMetrics holds the metrics needed for role inference.
 type PlayerMetrics struct {
 	DamageDone  int64
-	DamageTaken int64
 	HealingDone int64 // should include absorbs (e.g. Power Word: Shield) for accurate healer detection
+	// IncomingAutoAttacks maps hostile source → number of Auto Attack attempts
+	// directed at this player (including zero-damage misses, dodges, parries).
+	// Used by roleinfer for source-aware tank inference.
+	IncomingAutoAttacks map[any]int
 	// Class and Spec are optional. When set, spec-based role overrides
 	// are applied (e.g., Shadow Priest is always DPS despite high healing).
 	Class string
@@ -105,14 +109,15 @@ func isDPSOnlySpec(class, spec string) bool {
 	return false
 }
 
-// InferRoles classifies each player's role using statistical outlier detection.
+// InferRoles classifies each player's role using source-aware tank inference
+// (via roleinfer) and statistical healer detection.
 // Returns a map of player ID → role string ("dps", "heal", "tank").
 //
-// Algorithm: compute z-scores for damage taken and healing, plus the observed
-// low-damage percentile across the raid, then:
-//   - Tank = damage taken z-score ≥ 1.7σ
-//   - Healer = healing (incl. absorbs) z-score ≥ 0.3σ AND (damage in bottom 18.5% OR very high healing ≥ 1.5σ)
-//   - DPS = everyone else
+// Tank detection uses the roleinfer algorithm: for each hostile source that
+// auto-attacked players, score = playerAttempts / (maxAttempts + 5). A player's
+// TankScore is the max sourceScore across all sources. Tank when ≥ 0.5.
+//
+// Healer detection uses z-score outlier analysis on healing done.
 //
 // Priority: Tank > Healer > DPS.
 func InferRoles[K comparable](players map[K]PlayerMetrics) map[K]string {
@@ -124,17 +129,28 @@ func InferRoles[K comparable](players map[K]PlayerMetrics) map[K]string {
 		return roles
 	}
 
-	// Collect values for stats.
-	dtValues := make([]float64, 0, len(players))
+	// Build roleinfer input: source → player → attempt count.
+	attacks := make(roleinfer.IncomingAutoAttacks[any, K])
+	for k, m := range players {
+		for src, count := range m.IncomingAutoAttacks {
+			targets := attacks[src]
+			if targets == nil {
+				targets = make(map[K]int)
+				attacks[src] = targets
+			}
+			targets[k] = count
+		}
+	}
+	tankResults := roleinfer.InferTanks(attacks)
+
+	// Collect values for healer stats.
 	hdValues := make([]float64, 0, len(players))
 	ddValues := make([]float64, 0, len(players))
 	for _, m := range players {
-		dtValues = append(dtValues, float64(m.DamageTaken))
 		hdValues = append(hdValues, float64(m.HealingDone))
 		ddValues = append(ddValues, float64(m.DamageDone))
 	}
 
-	dtMean, dtStd := meanStdDev(dtValues)
 	hdMean, hdStd := meanStdDev(hdValues)
 	lowDPSCutoff := percentile(ddValues, LowDPSPercentile)
 
@@ -145,10 +161,12 @@ func InferRoles[K comparable](players map[K]PlayerMetrics) map[K]string {
 			continue
 		}
 
-		dtZ := zScore(float64(m.DamageTaken), dtMean, dtStd)
-		hdZ := zScore(float64(m.HealingDone), hdMean, hdStd)
+		isTank := false
+		if tr, ok := tankResults[k]; ok {
+			isTank = tr.IsTank
+		}
 
-		isTank := dtZ >= TankZThreshold && m.DamageTaken > 0
+		hdZ := zScore(float64(m.HealingDone), hdMean, hdStd)
 
 		// Healer detection:
 		// 1. Must have done meaningful healing (> 0)

@@ -1099,11 +1099,11 @@ func insertDPSRankings(
 				spec = wowspec.InferSpec(class, stats.Talents.Summary)
 			}
 			playerMetrics[unitGUID] = wowspec.PlayerMetrics{
-				DamageDone:  stats.DamageDone + ownerDamage[unitGUID],
-				DamageTaken: stats.DamageTaken,
-				HealingDone: stats.HealingDone + ownerHealing[unitGUID] + stats.HealingAbsorbed + ownerAbsorb[unitGUID],
-				Class:       class,
-				Spec:        spec,
+				DamageDone:          stats.DamageDone + ownerDamage[unitGUID],
+				HealingDone:         stats.HealingDone + ownerHealing[unitGUID] + stats.HealingAbsorbed + ownerAbsorb[unitGUID],
+				IncomingAutoAttacks: guidMapToAny(stats.IncomingAutoAttacks),
+				Class:               class,
+				Spec:                spec,
 			}
 		}
 		roles := wowspec.InferRoles(playerMetrics)
@@ -1207,15 +1207,15 @@ type trashPlayerKey struct {
 
 // trashPlayerAccum accumulates trash stats for one (player, spec) pair.
 type trashPlayerAccum struct {
-	DamageDone    int64
-	DamageTaken   int64
-	HealingDone   int64
-	AbsorbedDone  int64
-	DurationSecs  float64
-	Talents       *combatant.Talents
-	TalentLayout  string
-	TalentSummary []int16
-	LastKilledAt  time.Time
+	DamageDone          int64
+	HealingDone         int64
+	AbsorbedDone        int64
+	DurationSecs        float64
+	Talents             *combatant.Talents
+	TalentLayout        string
+	TalentSummary       []int16
+	LastKilledAt        time.Time
+	IncomingAutoAttacks map[guid.GUID]int // source → count, merged across encounters
 }
 
 func insertTrashRankings(
@@ -1289,9 +1289,15 @@ func insertTrashRankings(
 				accum[key] = a
 			}
 			a.DamageDone += stats.DamageDone + ownerDamage[unitGUID]
-			a.DamageTaken += stats.DamageTaken
 			a.HealingDone += stats.HealingDone + ownerHealing[unitGUID]
 			a.AbsorbedDone += stats.HealingAbsorbed + ownerAbsorb[unitGUID]
+			// Merge per-source incoming auto-attack counts across encounters.
+			for src, count := range stats.IncomingAutoAttacks {
+				if a.IncomingAutoAttacks == nil {
+					a.IncomingAutoAttacks = make(map[guid.GUID]int)
+				}
+				a.IncomingAutoAttacks[src] += count
+			}
 			a.DurationSecs += durationSecs
 			if enc.Combat.End.After(a.LastKilledAt) {
 				a.LastKilledAt = enc.Combat.End
@@ -1311,11 +1317,11 @@ func insertTrashRankings(
 			class = string(db2sdk.HeroClassToDB(player.HeroClass))
 		}
 		playerMetrics[key] = wowspec.PlayerMetrics{
-			DamageDone:  a.DamageDone,
-			DamageTaken: a.DamageTaken,
-			HealingDone: a.HealingDone,
-			Class:       class,
-			Spec:        key.Spec,
+			DamageDone:          a.DamageDone,
+			HealingDone:         a.HealingDone,
+			IncomingAutoAttacks: guidMapToAny(a.IncomingAutoAttacks),
+			Class:               class,
+			Spec:                key.Spec,
 		}
 	}
 	roles := wowspec.InferRoles(playerMetrics)
@@ -1415,6 +1421,19 @@ func extractTalentInfoFromSnapshot(className string, talents *combatant.Talents)
 		}
 	}
 	return spec, layout, summary
+}
+
+// guidMapToAny converts a map[guid.GUID]int to map[any]int for use with
+// wowspec.PlayerMetrics.IncomingAutoAttacks.
+func guidMapToAny(m map[guid.GUID]int) map[any]int {
+	if len(m) == 0 {
+		return nil
+	}
+	out := make(map[any]int, len(m))
+	for k, v := range m {
+		out[k] = v
+	}
+	return out
 }
 
 // findPlayerGuild returns the guild name for a player, or "" if not in a guild.

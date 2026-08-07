@@ -13,6 +13,8 @@ import (
 	"github.com/Emyrk/chronicle/combatlog/parser/types"
 	"github.com/Emyrk/chronicle/combatlog/parser/types/combatant"
 	"github.com/Emyrk/chronicle/combatlog/parser/types/unitinfo"
+	"github.com/Emyrk/chronicle/database/gamedb/chrondbc"
+	"github.com/Emyrk/chronicle/internal/ptr"
 )
 
 func setupDPSTracker() (*DPSTracker, *unitdb.Units) {
@@ -438,6 +440,120 @@ func TestDPSTracker_InactiveMessagesIgnored(t *testing.T) {
 	r := tracker.Result()
 	// No damage recorded since message was inactive.
 	assert.Empty(t, r[encID].Units)
+}
+
+func TestDPSTracker_IncomingAutoAttacks(t *testing.T) {
+	t.Parallel()
+	tracker, units := setupDPSTracker()
+
+	tank := makePlayerGUID(1)
+	dps := makePlayerGUID(2)
+	boss := makeCreatureGUID(100, 1)
+	encID := uuid.New()
+
+	units.Info[tank] = unitinfo.Info{Guid: tank, Name: "Tank", IsPlayer: true, CanCooperate: true}
+	units.Info[dps] = unitinfo.Info{Guid: dps, Name: "DPS", IsPlayer: true, CanCooperate: true}
+	units.Info[boss] = unitinfo.Info{Guid: boss, Name: "Boss", CanCooperate: false}
+
+	autoSpell := &chrondbc.Spell{ID: chrondbc.SpellIDAutoAttack}
+
+	tracker.FightStarted(encID, nil)
+
+	bossGUID := boss
+	// Boss auto-attacks tank 5 times (including one zero-damage dodge).
+	for i := 0; i < 4; i++ {
+		_ = tracker.ProcessMessage(true, encID, &messages.Damage{
+			Caster:    &bossGUID,
+			Target:    tank,
+			Amount:    500,
+			SpellData: autoSpell,
+			SpellName: ptr.Ref("Auto Attack"),
+			HitType:   types.HitTypeHit,
+		})
+	}
+	// Zero-damage dodge — should still count.
+	_ = tracker.ProcessMessage(true, encID, &messages.Damage{
+		Caster:    &bossGUID,
+		Target:    tank,
+		Amount:    0,
+		SpellData: autoSpell,
+		SpellName: ptr.Ref("Auto Attack"),
+		HitType:   types.HitTypeDodge,
+	})
+	// Boss auto-attacks dps once.
+	_ = tracker.ProcessMessage(true, encID, &messages.Damage{
+		Caster:    &bossGUID,
+		Target:    dps,
+		Amount:    500,
+		SpellData: autoSpell,
+		SpellName: ptr.Ref("Auto Attack"),
+		HitType:   types.HitTypeHit,
+	})
+	// Non-auto-attack spell damage to tank — should NOT be counted.
+	spellID := chrondbc.SpellID(12345)
+	_ = tracker.ProcessMessage(true, encID, &messages.Damage{
+		Caster:    &bossGUID,
+		Target:    tank,
+		Amount:    1000,
+		SpellData: &chrondbc.Spell{ID: spellID},
+		SpellName: ptr.Ref("Shadow Bolt"),
+		HitType:   types.HitTypeHit,
+	})
+
+	tracker.FightEnded(encID, nil)
+
+	r := results(tracker, encID)
+	require.Contains(t, r, tank)
+	require.Contains(t, r, dps)
+
+	// Tank should have 5 auto-attack attempts from boss.
+	assert.Equal(t, map[guid.GUID]int{boss: 5}, r[tank].IncomingAutoAttacks)
+	// DPS should have 1 auto-attack attempt from boss.
+	assert.Equal(t, map[guid.GUID]int{boss: 1}, r[dps].IncomingAutoAttacks)
+}
+
+func TestDPSTracker_IncomingAutoAttacks_AoENotTank(t *testing.T) {
+	t.Parallel()
+	tracker, units := setupDPSTracker()
+
+	p1 := makePlayerGUID(1)
+	p2 := makePlayerGUID(2)
+	p3 := makePlayerGUID(3)
+	boss := makeCreatureGUID(100, 1)
+	encID := uuid.New()
+
+	units.Info[p1] = unitinfo.Info{Guid: p1, Name: "P1", IsPlayer: true, CanCooperate: true}
+	units.Info[p2] = unitinfo.Info{Guid: p2, Name: "P2", IsPlayer: true, CanCooperate: true}
+	units.Info[p3] = unitinfo.Info{Guid: p3, Name: "P3", IsPlayer: true, CanCooperate: true}
+	units.Info[boss] = unitinfo.Info{Guid: boss, Name: "CleaveBot", CanCooperate: false}
+
+	autoSpell := &chrondbc.Spell{ID: chrondbc.SpellIDAutoAttack}
+	bossGUID := boss
+
+	tracker.FightStarted(encID, nil)
+
+	// Boss auto-attacks each player 3 times (AoE/cleave).
+	for _, p := range []guid.GUID{p1, p2, p3} {
+		for i := 0; i < 3; i++ {
+			_ = tracker.ProcessMessage(true, encID, &messages.Damage{
+				Caster:    &bossGUID,
+				Target:    p,
+				Amount:    200,
+				SpellData: autoSpell,
+				SpellName: ptr.Ref("Auto Attack"),
+				HitType:   types.HitTypeHit,
+			})
+		}
+	}
+
+	tracker.FightEnded(encID, nil)
+
+	r := results(tracker, encID)
+	// All players should have exactly 3 auto-attack attempts from boss.
+	for _, p := range []guid.GUID{p1, p2, p3} {
+		require.Contains(t, r, p)
+		assert.Equal(t, map[guid.GUID]int{boss: 3}, r[p].IncomingAutoAttacks)
+	}
 }
 
 // results is a test helper to get the units map for an encounter.
