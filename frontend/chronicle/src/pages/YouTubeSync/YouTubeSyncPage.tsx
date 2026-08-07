@@ -144,9 +144,48 @@ function applyTimeOffset(serverTime: string, offsetHours: number): string {
   return `${hour.toString().padStart(2, "0")}:${minute}:${second}`
 }
 
-export function YouTubeSyncPage() {
+interface PersistedSyncSettings {
+  videoUrl?: string
+  cropRegion?: CropRegion
+  ocrUrl?: string
+  interval?: number
+  syncMethod?: "ocr" | "manual"
+  chronicleUrl?: string
+  instanceId?: string
+  timeOffsetHours?: number
+}
+
+function readPersistedSettings(key?: string): PersistedSyncSettings {
+  if (!key) return {}
+  try {
+    return JSON.parse(localStorage.getItem(key) || "{}") as PersistedSyncSettings
+  } catch {
+    return {}
+  }
+}
+
+export interface YouTubeSyncPageProps {
+  initialVideoUrl?: string
+  initialInstanceId?: string
+  initialTimeOffsetHours?: number
+  initialIntervalSeconds?: number
+  controlsOnly?: boolean
+  remoteControlChannel?: string
+  settingsStorageKey?: string
+}
+
+export function YouTubeSyncPage({
+  initialVideoUrl = "",
+  initialInstanceId = "",
+  initialTimeOffsetHours,
+  initialIntervalSeconds = 60,
+  controlsOnly = false,
+  remoteControlChannel,
+  settingsStorageKey,
+}: YouTubeSyncPageProps = {}) {
+  const persistedSettings = useRef(readPersistedSettings(settingsStorageKey)).current
   // State
-  const [videoUrl, setVideoUrl] = useState("")
+  const [videoUrl, setVideoUrl] = useState(persistedSettings.videoUrl ?? initialVideoUrl)
   const [videoLoaded, setVideoLoaded] = useState(false)
   const [currentTime, setCurrentTime] = useState(0)
   const [duration, setDuration] = useState(0)
@@ -158,33 +197,45 @@ export function YouTubeSyncPage() {
   const [videoPosition, setVideoPosition] = useState({ x: 0, y: 0 })
 
   const [captureActive, setCaptureActive] = useState(false)
-  const [cropRegion, setCropRegion] = useState<CropRegion>({ x: 0, y: 0, width: 200, height: 50 })
+  const [cropRegion, setCropRegion] = useState<CropRegion>(
+    persistedSettings.cropRegion ?? { x: 0, y: 0, width: 200, height: 50 }
+  )
   const [capturePreview, setCapturePreview] = useState<string | null>(null)
 
   const [selectingRegion, setSelectingRegion] = useState(false)
   const [selectionStart, setSelectionStart] = useState<{ x: number; y: number } | null>(null)
 
-  const [ocrUrl, setOcrUrl] = useState("/ocr")
-  const [interval, setIntervalSec] = useState(60)
+  const [ocrUrl, setOcrUrl] = useState(persistedSettings.ocrUrl ?? "/ocr")
+  const [interval, setIntervalSec] = useState(
+    persistedSettings.interval ?? initialIntervalSeconds
+  )
   const [startTime, setStartTime] = useState(0)
   const [endTime, setEndTime] = useState(0)
 
-  const [syncMethod, setSyncMethod] = useState<"ocr" | "manual">("ocr")
+  const [syncMethod, setSyncMethod] = useState<"ocr" | "manual">(
+    persistedSettings.syncMethod ?? "ocr"
+  )
   const [syncRunning, setSyncRunning] = useState(false)
   const [syncProgress, setSyncProgress] = useState(0)
   const [statusText, setStatusText] = useState("")
   const [results, setResults] = useState<SyncResult[]>([])
   const [lastResult, setLastResult] = useState<SyncResult | null>(null)
 
-  const [chronicleUrl, setChronicleUrl] = useState(window.location.origin)
-  const [instanceId, setInstanceId] = useState("")
+  const [chronicleUrl, setChronicleUrl] = useState(
+    persistedSettings.chronicleUrl ?? window.location.origin
+  )
+  const [instanceId, setInstanceId] = useState(
+    persistedSettings.instanceId ?? initialInstanceId
+  )
   const [chronicleExporting, setChronicleExporting] = useState(false)
   const localOffsetHours = (() => {
     const offset = -new Date().getTimezoneOffset() / 60
     return Number.isFinite(offset) ? offset : 0
   })()
   // Time offset in hours to convert server_time to UTC (e.g., 1 means server is UTC+1)
-  const [timeOffsetHours, setTimeOffsetHours] = useState(localOffsetHours)
+  const [timeOffsetHours, setTimeOffsetHours] = useState(
+    persistedSettings.timeOffsetHours ?? initialTimeOffsetHours ?? localOffsetHours
+  )
 
   // Refs
   const playerRef = useRef<YTPlayer | null>(null)
@@ -198,20 +249,109 @@ export function YouTubeSyncPage() {
   const syncAbortedRef = useRef(false)
   const dragStartRef = useRef<{ x: number; y: number } | null>(null)
 
+  const remoteChannelRef = useRef<BroadcastChannel | null>(null)
+  const lastRemoteMessageRef = useRef(0)
+  const remoteStateRef = useRef({ currentTime: 0, duration: 0, isPlaying: false })
+  const [remoteConnected, setRemoteConnected] = useState(false)
+
   // Manual sync state
   const [manualPrompt, setManualPrompt] = useState<{ videoTime: number; videoTimeFormatted: string } | null>(null)
   const [manualTimeInput, setManualTimeInput] = useState("")
   const manualResolveRef = useRef<((value: string | null) => void) | null>(null)
 
+  useEffect(() => {
+    if (!remoteControlChannel) return
+
+    const channel = new BroadcastChannel(remoteControlChannel)
+    remoteChannelRef.current = channel
+    playerRef.current = {
+      playVideo: () => channel.postMessage({ type: "play" }),
+      pauseVideo: () => channel.postMessage({ type: "pause" }),
+      seekTo: (seconds) => channel.postMessage({ type: "seek", time: seconds }),
+      getCurrentTime: () => remoteStateRef.current.currentTime,
+      getDuration: () => remoteStateRef.current.duration,
+      getPlayerState: () => remoteStateRef.current.isPlaying ? 1 : 2,
+      loadVideoById: (videoId) => channel.postMessage({ type: "load-video", videoId }),
+      destroy: () => undefined,
+    }
+    playerReadyRef.current = true
+
+    channel.onmessage = (event: MessageEvent<{
+      type: string
+      currentTime?: number
+      duration?: number
+      isPlaying?: boolean
+      ready?: boolean
+    }>) => {
+      const message = event.data
+      lastRemoteMessageRef.current = Date.now()
+      if (message.type === "player-hello") {
+        setRemoteConnected(true)
+        return
+      }
+      if (message.type !== "player-state") return
+      remoteStateRef.current = {
+        currentTime: message.currentTime ?? 0,
+        duration: message.duration ?? 0,
+        isPlaying: message.isPlaying ?? false,
+      }
+      setCurrentTime(remoteStateRef.current.currentTime)
+      setDuration(remoteStateRef.current.duration)
+      setIsPlaying(remoteStateRef.current.isPlaying)
+      setRemoteConnected(true)
+    }
+
+    const announce = () => channel.postMessage({ type: "controller-hello" })
+    announce()
+    const announceTimer = window.setInterval(announce, 1000)
+    const connectionTimer = window.setInterval(() => {
+      if (Date.now() - lastRemoteMessageRef.current > 1500) setRemoteConnected(false)
+    }, 500)
+    return () => {
+      window.clearInterval(announceTimer)
+      window.clearInterval(connectionTimer)
+      channel.close()
+      remoteChannelRef.current = null
+      playerRef.current = null
+      playerReadyRef.current = false
+    }
+  }, [remoteControlChannel])
+
+  useEffect(() => {
+    if (!settingsStorageKey) return
+    const settings: PersistedSyncSettings = {
+      videoUrl,
+      cropRegion,
+      ocrUrl,
+      interval,
+      syncMethod,
+      chronicleUrl,
+      instanceId,
+      timeOffsetHours,
+    }
+    localStorage.setItem(settingsStorageKey, JSON.stringify(settings))
+  }, [
+    settingsStorageKey,
+    videoUrl,
+    cropRegion,
+    ocrUrl,
+    interval,
+    syncMethod,
+    chronicleUrl,
+    instanceId,
+    timeOffsetHours,
+  ])
+
   // Load YouTube IFrame API
   useEffect(() => {
+    if (remoteControlChannel) return
     if (document.getElementById("youtube-iframe-api")) return
 
     const tag = document.createElement("script")
     tag.id = "youtube-iframe-api"
     tag.src = "https://www.youtube.com/iframe_api"
     document.head.appendChild(tag)
-  }, [])
+  }, [remoteControlChannel])
 
   // Time update interval
   useEffect(() => {
@@ -235,6 +375,7 @@ export function YouTubeSyncPage() {
     // If player exists and is ready, load new video
     if (playerRef.current && playerReadyRef.current) {
       playerRef.current.loadVideoById(videoId)
+      if (remoteControlChannel) setVideoLoaded(true)
       return
     }
 
@@ -275,7 +416,7 @@ export function YouTubeSyncPage() {
     } else {
       window.onYouTubeIframeAPIReady = initPlayer
     }
-  }, [videoUrl])
+  }, [remoteControlChannel, videoUrl])
 
   // Playback controls
   const seekRelative = (delta: number) => {
@@ -333,16 +474,35 @@ export function YouTubeSyncPage() {
 
   // Screen capture
   const startCapture = async () => {
+    remoteChannelRef.current?.postMessage({ type: "capture-picker", active: true })
     try {
       if (!navigator.mediaDevices?.getDisplayMedia) {
         throw new Error("Screen capture not available. Use HTTPS or localhost.")
       }
 
-      const stream = await navigator.mediaDevices.getDisplayMedia({
-        video: { cursor: "never" } as MediaTrackConstraints,
-        audio: false,
-        preferCurrentTab: true,
-      } as DisplayMediaStreamOptions)
+      const captureOptions = controlsOnly
+        ? ({
+            video: {
+              cursor: "never",
+              displaySurface: "browser",
+            } as MediaTrackConstraints,
+            audio: false,
+            preferCurrentTab: false,
+            selfBrowserSurface: "exclude",
+            surfaceSwitching: "include",
+          } as DisplayMediaStreamOptions)
+        : ({
+            video: { cursor: "never" } as MediaTrackConstraints,
+            audio: false,
+            preferCurrentTab: true,
+          } as DisplayMediaStreamOptions)
+
+      const stream = await navigator.mediaDevices.getDisplayMedia(captureOptions)
+      const captureTrack = stream.getVideoTracks()[0]
+      if (controlsOnly && captureTrack.label.toLowerCase().includes("youtube sync controls")) {
+        stream.getTracks().forEach((track) => track.stop())
+        throw new Error('Select the window named "Chronicle YouTube Player", not the controls window.')
+      }
 
       captureStreamRef.current = stream
       if (captureVideoRef.current) {
@@ -356,6 +516,8 @@ export function YouTubeSyncPage() {
       setCaptureActive(true)
     } catch (err) {
       alert("Failed to start screen capture: " + (err as Error).message)
+    } finally {
+      remoteChannelRef.current?.postMessage({ type: "capture-picker", active: false })
     }
   }
 
@@ -855,10 +1017,28 @@ export function YouTubeSyncPage() {
 
   return (
     <div className="min-h-screen bg-background text-foreground dark">
-      {/* Fixed Video Area */}
-      <div className="fixed top-0 left-0 right-0 bg-card border-b border-border z-50 p-4">
-        {/* URL Input */}
-        {!videoLoaded && (
+      {/* Video or remote control header */}
+      <div
+        className={cn(
+          "left-0 right-0 z-50 border-b border-border bg-card p-4",
+          controlsOnly ? "sticky top-0" : "fixed top-0"
+        )}
+      >
+        {controlsOnly && (
+          <div className="mb-3 flex items-center justify-between gap-3 text-xs">
+            <span className="font-semibold uppercase tracking-wider text-muted-foreground">
+              YouTube Sync V2 controls
+            </span>
+            <span className={cn("rounded-full px-2 py-1", remoteConnected
+              ? "bg-green-500/15 text-green-300"
+              : "bg-amber-500/15 text-amber-300")}
+            >
+              {remoteConnected ? "Player connected" : "Waiting for main window"}
+            </span>
+          </div>
+        )}
+
+        {(!videoLoaded || controlsOnly) && (
           <div className="flex gap-3 items-center">
             <Input
               type="text"
@@ -866,105 +1046,100 @@ export function YouTubeSyncPage() {
               onChange={(e) => setVideoUrl(e.target.value)}
               onKeyDown={(e) => e.key === "Enter" && loadVideo()}
               placeholder="Paste YouTube URL and press Enter..."
-              className="max-w-lg"
+              className="min-w-0 flex-1"
             />
-            <Button onClick={loadVideo}>Load</Button>
+            <Button onClick={loadVideo} disabled={Boolean(remoteControlChannel && !remoteConnected)}>
+              {videoLoaded ? "Load another" : "Load"}
+            </Button>
           </div>
         )}
 
-        {/* Video viewport */}
+        {videoLoaded && !controlsOnly && (
+          <div className="w-[800px] h-[450px] bg-black rounded-md overflow-hidden border border-border relative">
+            <div
+              className={cn(
+                "absolute",
+                panMode && "cursor-grab active:cursor-grabbing [&_iframe]:pointer-events-none"
+              )}
+              style={{
+                width: videoWidth,
+                height: videoHeight,
+                left: videoPosition.x,
+                top: videoPosition.y,
+              }}
+              onMouseDown={handleVideoDragStart}
+            >
+              <div id="yt-player" className="w-full h-full" />
+            </div>
+          </div>
+        )}
+
         {videoLoaded && (
-          <>
-            <div className="w-[800px] h-[450px] bg-black rounded-md overflow-hidden border border-border relative">
-              <div
-                className={cn(
-                  "absolute",
-                  panMode && "cursor-grab active:cursor-grabbing [&_iframe]:pointer-events-none"
-                )}
-                style={{
-                  width: videoWidth,
-                  height: videoHeight,
-                  left: videoPosition.x,
-                  top: videoPosition.y,
-                }}
-                onMouseDown={handleVideoDragStart}
-              >
-                <div id="yt-player" className="w-full h-full" />
-              </div>
+          <div className="flex gap-3 items-center mt-3 flex-wrap">
+            <div className="flex gap-2 items-center">
+              <Button variant="secondary" size="sm" onClick={() => seekRelative(-60)}>-60s</Button>
+              <Button variant="secondary" size="sm" onClick={() => seekRelative(-10)}>-10s</Button>
+              <Button variant="secondary" size="sm" onClick={togglePlayPause}>
+                {isPlaying ? "Pause" : "Play"}
+              </Button>
+              <Button variant="secondary" size="sm" onClick={() => seekRelative(10)}>+10s</Button>
+              <Button variant="secondary" size="sm" onClick={() => seekRelative(60)}>+60s</Button>
+              <span className="font-mono bg-muted px-3 py-1.5 rounded text-sm">
+                {formatTime(currentTime)} / {formatTime(duration)}
+              </span>
             </div>
 
-            {/* Controls bar */}
-            <div className="flex gap-4 items-center mt-3 flex-wrap">
-              <div className="flex gap-2 items-center">
-                <Button variant="secondary" size="sm" onClick={() => seekRelative(-60)}>
-                  -60s
-                </Button>
-                <Button variant="secondary" size="sm" onClick={() => seekRelative(-10)}>
-                  -10s
-                </Button>
-                <Button variant="secondary" size="sm" onClick={togglePlayPause}>
-                  {isPlaying ? "Pause" : "Play"}
-                </Button>
-                <Button variant="secondary" size="sm" onClick={() => seekRelative(10)}>
-                  +10s
-                </Button>
-                <Button variant="secondary" size="sm" onClick={() => seekRelative(60)}>
-                  +60s
-                </Button>
-                <span className="font-mono bg-muted px-3 py-1.5 rounded text-sm">
-                  {formatTime(currentTime)} / {formatTime(duration)}
-                </span>
-              </div>
+            {!controlsOnly && (
+              <>
+                <div className="w-px h-6 bg-border" />
+                <div className="flex gap-2 items-center">
+                  <Input
+                    type="number"
+                    value={videoWidth}
+                    onChange={(e) => setVideoWidth(Number(e.target.value))}
+                    className="w-[70px]"
+                  />
+                  <span className="text-muted-foreground">×</span>
+                  <Input
+                    type="number"
+                    value={videoHeight}
+                    onChange={(e) => setVideoHeight(Number(e.target.value))}
+                    className="w-[70px]"
+                  />
+                  <Button
+                    variant={panMode ? "default" : "secondary"}
+                    size="sm"
+                    onClick={() => setPanMode(!panMode)}
+                    title="Toggle pan mode"
+                  >
+                    🖐
+                  </Button>
+                </div>
+              </>
+            )}
 
-              <div className="w-px h-6 bg-border" />
-
-              <div className="flex gap-2 items-center">
-                <Input
-                  type="number"
-                  value={videoWidth}
-                  onChange={(e) => setVideoWidth(Number(e.target.value))}
-                  className="w-[70px]"
-                />
-                <span className="text-muted-foreground">×</span>
-                <Input
-                  type="number"
-                  value={videoHeight}
-                  onChange={(e) => setVideoHeight(Number(e.target.value))}
-                  className="w-[70px]"
-                />
-                <Button
-                  variant={panMode ? "default" : "secondary"}
-                  size="sm"
-                  onClick={() => setPanMode(!panMode)}
-                  title="Toggle pan mode"
-                >
-                  🖐
+            <div className="w-px h-6 bg-border" />
+            <div className="flex gap-2 items-center">
+              {!captureActive ? (
+                <Button onClick={startCapture}>
+                  {controlsOnly ? "Capture YouTube window" : "Start Capture"}
                 </Button>
-              </div>
-
-              <div className="w-px h-6 bg-border" />
-
-              <div className="flex gap-2 items-center">
-                {!captureActive ? (
-                  <Button onClick={startCapture}>Start Capture</Button>
-                ) : (
-                  <>
-                    <Button variant="secondary" onClick={stopCapture}>
-                      Stop
-                    </Button>
-                    <Button variant="secondary" onClick={openRegionSelector}>
-                      Select Region
-                    </Button>
-                  </>
-                )}
-              </div>
+              ) : (
+                <>
+                  <Button variant="secondary" onClick={stopCapture}>Stop</Button>
+                  <Button variant="secondary" onClick={openRegionSelector}>Select Region</Button>
+                </>
+              )}
             </div>
-          </>
+          </div>
         )}
       </div>
 
       {/* Scrollable Content */}
-      <div className="pt-[540px] px-5 pb-5 max-w-5xl mx-auto space-y-5">
+      <div className={cn(
+        "px-3 pb-5 mx-auto space-y-5",
+        controlsOnly ? "max-w-3xl pt-4" : "max-w-5xl pt-[540px]"
+      )}>
         {/* Capture Section */}
         {captureActive && syncMethod === "ocr" && (
           <Card>

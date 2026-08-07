@@ -18,6 +18,7 @@ import { SharedViewRedirect } from "./pages/SharedViewRedirect"
 import { RecentRaids } from "./pages/Recent/RecentRaids"
 import { ProtoDecode } from "./pages/Debug/ProtoDecode"
 import { YouTubeSyncPage } from "./pages/YouTubeSync/YouTubeSyncPage"
+import { YouTubeSyncV2Page } from "./pages/YouTubeSyncV2/YouTubeSyncV2Page"
 import { AdminLayout } from "./pages/Admin/AdminLayout"
 import { AdminUsersOverview } from "./pages/Admin/AdminUsersOverview"
 import { AdminLogsPage } from "./pages/Admin/AdminLogsPage"
@@ -103,6 +104,7 @@ function App() {
     <Routes>
       <Route path="/login" element={<Login />} />
       <Route path="/youtube-sync" element={<YouTubeSyncPage />} />
+      <Route path="/youtube-sync-v2" element={<YouTubeSyncV2Page />} />
       <Route element={<Layout />}>
         <Route path="/" element={<Home />} />
         <Route path="/recent" element={<RecentRaids />} />
