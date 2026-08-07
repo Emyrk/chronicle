@@ -13,6 +13,7 @@ import (
 	"time"
 
 	"github.com/Emyrk/chronicle/chronicle"
+	"github.com/Emyrk/chronicle/chronicle/riverqueue"
 	"github.com/Emyrk/chronicle/chronicle/riverqueue/riverconst"
 	"github.com/Emyrk/chronicle/cmd/chronicled/cli/resynccandidate"
 	"github.com/Emyrk/chronicle/cmd/chronicled/cli/resynctui"
@@ -339,14 +340,18 @@ Fail-pause behavior (--execute):
 				queueName = "resync-approve-" + uuid.NewString()
 				maxWorkers = 1
 			}
+			parseQueueName := queueName + "-log-parse"
 			riverWorkers := river.NewWorkers()
-			river.AddWorker(riverWorkers, chron.NewWorkerResync())
+			river.AddWorker(riverWorkers, chron.NewWorkerResync(parseQueueName))
+			river.AddWorker(riverWorkers, chron.NewWorkerLogParse())
 
 			riverClient, err := river.NewClient(riverpgxv5.New(pool), &river.Config{
 				Queues: map[string]river.QueueConfig{
-					queueName: {MaxWorkers: maxWorkers},
+					queueName:      {MaxWorkers: maxWorkers},
+					parseQueueName: {MaxWorkers: maxWorkers},
 				},
 				Workers:                     riverWorkers,
+				Middleware:                  riverqueue.WorkerMiddleware(logger),
 				Logger:                      leveledlog.New(logger.With(slog.String("service", "river-resync")), slog.LevelWarn),
 				CompletedJobRetentionPeriod: 24 * time.Hour,
 				JobTimeout:                  30 * time.Minute,
@@ -354,6 +359,11 @@ Fail-pause behavior (--execute):
 			if err != nil {
 				return fmt.Errorf("create river client: %w", err)
 			}
+
+			// WorkerLogParse uses Chronicle's queue for normal downstream work (for
+			// example parse-score jobs) and for River job inspection. The wrapper uses
+			// the same client but does not add any production queues to this worker.
+			chron.SetQueue(&riverqueue.Queues{Client: riverClient})
 
 			if approveEach {
 				if err := riverClient.Start(ctx); err != nil {

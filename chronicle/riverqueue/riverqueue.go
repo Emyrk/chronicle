@@ -74,6 +74,14 @@ func (q *Queues) AddPeriodicJob(job *river.PeriodicJob) *Queues {
 	return q
 }
 
+// WorkerMiddleware returns the middleware shared by every Chronicle River
+// worker client, including isolated CLI clients.
+func WorkerMiddleware(logger *slog.Logger) []rivertype.Middleware {
+	return []rivertype.Middleware{
+		NewWorkerPanicMW(logger),
+	}
+}
+
 func (q *Queues) Start(ctx context.Context) error {
 	driver := riverpgxv5.New(q.opts.Pool)
 	queues := q.queues
@@ -82,12 +90,10 @@ func (q *Queues) Start(ctx context.Context) error {
 	}
 
 	riverClient, err := river.NewClient(driver, &river.Config{
-		Queues:  queues,
-		Workers: q.workers,
-		Logger:  leveledlog.New(q.opts.Logger.With(slog.String("service", "riverqueue")), slog.LevelWarn),
-		Middleware: []rivertype.Middleware{
-			NewWorkerPanicMW(q.opts.Logger),
-		},
+		Queues:       queues,
+		Workers:      q.workers,
+		Logger:       leveledlog.New(q.opts.Logger.With(slog.String("service", "riverqueue")), slog.LevelWarn),
+		Middleware:   WorkerMiddleware(q.opts.Logger),
 		PeriodicJobs: q.periodicJobs,
 		// Retain all jobs
 		// TODO: Create our own reaper to clean up old jobs after a certain period

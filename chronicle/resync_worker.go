@@ -41,15 +41,23 @@ func (ArgsResync) InsertOpts() river.InsertOpts {
 	}
 }
 
-// WorkerResync processes a resync job: deletes previously parsed data for the
-// log group, then re-parses it by delegating to WorkerLogParse.Work.
+// WorkerResync validates and deletes previously parsed data, then enqueues a
+// real ArgsLogParse job on an isolated queue and waits for it to finish.
 type WorkerResync struct {
-	parent *Chronicle
+	parent     *Chronicle
+	parseQueue string
 	river.WorkerDefaults[ArgsResync]
 }
 
-func (c *Chronicle) NewWorkerResync() *WorkerResync {
-	return &WorkerResync{parent: c}
+// Timeout is unlimited because the wrapper waits for a real log-parse job,
+// including that worker's own timeout and retry policy. The child job remains
+// the source of truth for parse execution limits.
+func (w *WorkerResync) Timeout(*river.Job[ArgsResync]) time.Duration {
+	return -1
+}
+
+func (c *Chronicle) NewWorkerResync(parseQueue string) *WorkerResync {
+	return &WorkerResync{parent: c, parseQueue: parseQueue}
 }
 
 func validateResyncRawFiles(
@@ -119,6 +127,40 @@ func (w *WorkerResync) resolveTenantID(ctx context.Context, logGroupID uuid.UUID
 	return resyncTenantID(tenantIDs)
 }
 
+func resyncParseInsertOpts(args ArgsLogParse, parseQueue string) river.InsertOpts {
+	opts := args.InsertOpts()
+	opts.Queue = parseQueue
+	opts.Pending = true
+	// The isolated parse must not reuse an active job from the production
+	// log-parsing queue merely because its args are identical.
+	opts.UniqueOpts.ByQueue = true
+	return opts
+}
+
+func (w *WorkerResync) waitForParse(ctx context.Context, jobID int64) (*rivertype.JobRow, error) {
+	ticker := time.NewTicker(500 * time.Millisecond)
+	defer ticker.Stop()
+	for {
+		job, err := w.parent.queue.JobGet(ctx, jobID)
+		if err != nil {
+			return nil, fmt.Errorf("fetch isolated log-parse job %d: %w", jobID, err)
+		}
+		switch job.State {
+		case rivertype.JobStateCompleted, rivertype.JobStateDiscarded, rivertype.JobStateCancelled:
+			return job, nil
+		case rivertype.JobStateAvailable, rivertype.JobStatePending, rivertype.JobStateRetryable,
+			rivertype.JobStateRunning, rivertype.JobStateScheduled:
+		default:
+			return nil, fmt.Errorf("isolated log-parse job %d entered unexpected state %q", jobID, job.State)
+		}
+		select {
+		case <-ctx.Done():
+			return nil, ctx.Err()
+		case <-ticker.C:
+		}
+	}
+}
+
 func (w *WorkerResync) Work(ctx context.Context, job *river.Job[ArgsResync]) error {
 	logGroupID := job.Args.LogGroupID
 	adminCtx := servicetenant.AdminBypass(ctx)
@@ -152,30 +194,47 @@ func (w *WorkerResync) Work(ctx context.Context, job *river.Job[ArgsResync]) err
 		return err
 	}
 
-	// Only delete parsed data after every raw file has been downloaded and
-	// decompressed successfully. The parse worker downloads them again, but this
-	// preflight ensures a missing or corrupt object cannot destroy the old parse.
-	if err := w.parent.Zed.DeleteAllParsedLogsByGroupID(adminCtx, logGroupID); err != nil {
-		return fmt.Errorf("delete parsed logs: %w", err)
+	if w.parent.queue == nil {
+		return fmt.Errorf("isolated log-parse queue is not configured")
 	}
-
-	// Delegate to the existing log-parse worker. We construct a synthetic
-	// river.Job[ArgsLogParse] wrapping the real job row so RecordOutput and
-	// other River context functions work correctly through the real River
-	// context carried in ctx.
 	parseCtx := ctx
 	if tenantID != uuid.Nil {
 		parseCtx = servicetenant.WithTenantID(parseCtx, tenantID)
 	}
-	parseJob := &river.Job[ArgsLogParse]{
-		JobRow: job.JobRow,
-		Args:   newArgsLogParse(parseCtx, logGroupID, false, false, parseRealmID),
+	parseArgs := newArgsLogParse(parseCtx, logGroupID, false, false, parseRealmID)
+	insertOpts := resyncParseInsertOpts(parseArgs, w.parseQueue)
+	parseInsert, err := w.parent.queue.Insert(parseCtx, parseArgs, &insertOpts)
+	if err != nil {
+		return fmt.Errorf("stage isolated log-parse job: %w", err)
 	}
 
-	if err := parseWorker.Work(parseCtx, parseJob); err != nil {
-		return fmt.Errorf("parse: %w", err)
+	if parseInsert.UniqueSkippedAsDuplicate {
+		return fmt.Errorf("active isolated log-parse job %d already exists for log group %s", parseInsert.Job.ID, logGroupID)
 	}
 
+	// Only delete parsed data after every raw file has been downloaded and a
+	// real River log-parse job has been staged successfully. The pending job
+	// cannot run until it is explicitly released below.
+	if err := w.parent.Zed.DeleteAllParsedLogsByGroupID(adminCtx, logGroupID); err != nil {
+		_, _ = w.parent.queue.JobDelete(adminCtx, parseInsert.Job.ID)
+		return fmt.Errorf("delete parsed logs: %w", err)
+	}
+	if _, err := w.parent.queue.JobRetry(parseCtx, parseInsert.Job.ID); err != nil {
+		return fmt.Errorf("release isolated log-parse job %d: %w", parseInsert.Job.ID, err)
+	}
+
+	parseJob, err := w.waitForParse(parseCtx, parseInsert.Job.ID)
+	if err != nil {
+		return err
+	}
+	_ = river.RecordOutput(ctx, map[string]any{"log_parse_job_id": parseInsert.Job.ID})
+	if parseJob.State != rivertype.JobStateCompleted {
+		errMsg := "unknown error"
+		if len(parseJob.Errors) > 0 {
+			errMsg = parseJob.Errors[len(parseJob.Errors)-1].Error
+		}
+		return fmt.Errorf("isolated log-parse job %d %s: %s", parseJob.ID, parseJob.State, errMsg)
+	}
 	return nil
 }
 

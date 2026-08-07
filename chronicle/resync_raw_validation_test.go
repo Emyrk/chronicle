@@ -4,12 +4,34 @@ import (
 	"context"
 	"errors"
 	"testing"
+	"time"
 
 	"github.com/Emyrk/chronicle/database"
 	"github.com/Emyrk/chronicle/internal/services/servicetenant"
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/require"
 )
+
+func TestWorkerResyncTimeout(t *testing.T) {
+	t.Parallel()
+
+	worker := &WorkerResync{}
+	require.Equal(t, time.Duration(-1), worker.Timeout(nil), "wrapper timeout must not preempt the child parse retry policy")
+}
+
+func TestResyncParseInsertOpts(t *testing.T) {
+	t.Parallel()
+
+	args := ArgsLogParse{LogID: uuid.New(), TenantID: uuid.New()}
+	const queueName = "resync-test-log-parse"
+	opts := resyncParseInsertOpts(args, queueName)
+
+	require.Equal(t, queueName, opts.Queue)
+	require.True(t, opts.Pending, "parse job must be staged before parsed data is deleted")
+	require.True(t, opts.UniqueOpts.ByArgs)
+	require.True(t, opts.UniqueOpts.ByQueue, "isolated parse must not reuse a production queue job")
+	require.Equal(t, 2, opts.MaxAttempts, "isolated parse must retain normal log-parse retry semantics")
+}
 
 func TestNewArgsLogParseMatchesTenantReparse(t *testing.T) {
 	t.Parallel()
