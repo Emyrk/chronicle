@@ -1672,8 +1672,7 @@ export function YouTubeSyncPage({
                           className="mt-1"
                         />
                         <p className="text-xs text-muted-foreground mt-1">
-                          Server timezone offset from UTC (e.g., 1 for CET).
-                          Your local offset: UTC{localOffsetHours >= 0 ? "+" : ""}{localOffsetHours}
+                          Applied only to the captured video clock when converting it to UTC. Raid timestamps are already UTC.
                         </p>
                       </div>
                     )}

@@ -4,7 +4,7 @@ import { YouTubeSyncV2Player } from "./YouTubeSyncV2Player"
 import { getYouTubeSyncV2Channel } from "./channel"
 
 const WINDOW_STORAGE_KEY = "chronicle-youtube-sync-v2-window"
-const SETTINGS_STORAGE_KEY = "chronicle-youtube-sync-v2-settings-v3"
+const SETTINGS_STORAGE_KEY = "chronicle-youtube-sync-v2-settings-v4"
 const SESSION_STORAGE_KEY = "chronicle-youtube-sync-v2-session"
 const ACTIVE_SESSION_STORAGE_KEY = "chronicle-youtube-sync-v2-active-session"
 
@@ -33,10 +33,10 @@ function YouTubeSyncV2Controls({ channelName }: { channelName: string }) {
 
   return (
     <YouTubeSyncPage
-      capturedTimeIsUtc
       controlsOnly
       remoteControlChannel={channelName}
       settingsStorageKey={SETTINGS_STORAGE_KEY}
+      initialTimeOffsetHours={0}
       initialIntervalSeconds={600}
     />
   )

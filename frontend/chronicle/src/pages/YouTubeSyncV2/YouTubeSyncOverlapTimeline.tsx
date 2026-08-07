@@ -15,6 +15,17 @@ function formatUtc(timestamp: number): string {
   }).format(timestamp)
 }
 
+function formatLocal(timestamp: number): string {
+  return new Intl.DateTimeFormat(undefined, {
+    month: "short",
+    day: "numeric",
+    hour: "numeric",
+    minute: "2-digit",
+    second: "2-digit",
+    timeZoneName: "short",
+  }).format(timestamp)
+}
+
 function formatDistance(milliseconds: number): string {
   const totalMinutes = Math.round(milliseconds / 60_000)
   const days = Math.floor(totalMinutes / 1440)
@@ -81,8 +92,8 @@ export function YouTubeSyncOverlapTimeline({
 
         {model && (
           <div className="flex justify-between gap-3 font-mono text-[11px] text-muted-foreground">
-            <span>{formatUtc(model.rangeStart)}</span>
-            <span>{formatUtc(model.rangeEnd)}</span>
+            <TimelineTime timestamp={model.rangeStart} />
+            <TimelineTime timestamp={model.rangeEnd} align="right" />
           </div>
         )}
 
@@ -98,12 +109,29 @@ export function YouTubeSyncOverlapTimeline({
           <div>
             <p>{diagnostic}</p>
             {model && model.overlapMilliseconds === 0 && (
-              <p className="mt-1 text-xs opacity-80">Check the server UTC offset or confirm that this is the correct instance.</p>
+              <p className="mt-1 text-xs opacity-80">Check the video time offset or confirm that this is the correct instance.</p>
             )}
           </div>
         </div>
       </CardContent>
     </Card>
+  )
+}
+
+function TimelineTime({
+  timestamp,
+  align = "left",
+}: {
+  timestamp: number
+  align?: "left" | "right"
+}) {
+  return (
+    <div className={align === "right" ? "text-right" : "text-left"}>
+      <div>{formatUtc(timestamp)}</div>
+      <div className="mt-0.5 text-[10px] text-foreground/70">
+        {formatLocal(timestamp)} local
+      </div>
+    </div>
   )
 }
 
