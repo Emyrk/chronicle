@@ -202,6 +202,39 @@ func TestInferRoles(t *testing.T) {
 	})
 }
 
+func TestInferRoles_MultiEncounterTankPersistence(t *testing.T) {
+	t.Parallel()
+
+	players := map[string]wowspec.PlayerMetrics{
+		"main-tank": {
+			DamageDone: 100,
+			IncomingAutoAttacksByEncounter: map[string]map[string]int{
+				"encounter-1": {"boss-1": 20},
+				"encounter-2": {"boss-2": 20},
+				"encounter-3": {"boss-3": 20},
+			},
+		},
+		"off-tank": {
+			DamageDone: 100,
+			IncomingAutoAttacksByEncounter: map[string]map[string]int{
+				"encounter-1": {"boss-1": 15},
+				"encounter-2": {"boss-2": 15},
+			},
+		},
+		"one-off": {
+			DamageDone: 100,
+			IncomingAutoAttacksByEncounter: map[string]map[string]int{
+				"encounter-1": {"boss-1": 10},
+			},
+		},
+	}
+
+	roles := wowspec.InferRoles(players)
+	require.Equal(t, wowspec.RoleTank, roles["main-tank"])
+	require.Equal(t, wowspec.RoleTank, roles["off-tank"])
+	require.Equal(t, wowspec.RoleDPS, roles["one-off"])
+}
+
 func TestInferRoles_SharedFixtures(t *testing.T) {
 	t.Parallel()
 

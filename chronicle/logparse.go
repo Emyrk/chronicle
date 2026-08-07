@@ -1198,15 +1198,15 @@ type trashPlayerKey struct {
 
 // trashPlayerAccum accumulates trash stats for one (player, spec) pair.
 type trashPlayerAccum struct {
-	DamageDone          int64
-	HealingDone         int64
-	AbsorbedDone        int64
-	DurationSecs        float64
-	Talents             *combatant.Talents
-	TalentLayout        string
-	TalentSummary       []int16
-	LastKilledAt        time.Time
-	IncomingAutoAttacks map[guid.GUID]int // source → count, merged across encounters
+	DamageDone                     int64
+	HealingDone                    int64
+	AbsorbedDone                   int64
+	DurationSecs                   float64
+	Talents                        *combatant.Talents
+	TalentLayout                   string
+	TalentSummary                  []int16
+	LastKilledAt                   time.Time
+	IncomingAutoAttacksByEncounter map[string]map[guid.GUID]int // encounter → source → count
 }
 
 func insertTrashRankings(
@@ -1282,12 +1282,14 @@ func insertTrashRankings(
 			a.DamageDone += stats.DamageDone + ownerDamage[unitGUID]
 			a.HealingDone += stats.HealingDone + ownerHealing[unitGUID]
 			a.AbsorbedDone += stats.HealingAbsorbed + ownerAbsorb[unitGUID]
-			// Merge per-source incoming auto-attack counts across encounters.
-			for src, count := range stats.IncomingAutoAttacks {
-				if a.IncomingAutoAttacks == nil {
-					a.IncomingAutoAttacks = make(map[guid.GUID]int)
+			// Preserve encounter boundaries so isolated trash pulls do not define
+			// the player's role across the full trash ranking.
+			if len(stats.IncomingAutoAttacks) > 0 {
+				if a.IncomingAutoAttacksByEncounter == nil {
+					a.IncomingAutoAttacksByEncounter = make(map[string]map[guid.GUID]int)
 				}
-				a.IncomingAutoAttacks[src] += count
+				encounterID := enc.Combat.EncounterID.String()
+				a.IncomingAutoAttacksByEncounter[encounterID] = stats.IncomingAutoAttacks
 			}
 			a.DurationSecs += durationSecs
 			if enc.Combat.End.After(a.LastKilledAt) {
@@ -1304,9 +1306,9 @@ func insertTrashRankings(
 	playerMetrics := make(map[trashPlayerKey]wowspec.PlayerMetrics, len(accum))
 	for key, a := range accum {
 		playerMetrics[key] = wowspec.PlayerMetrics{
-			DamageDone:          a.DamageDone,
-			HealingDone:         a.HealingDone,
-			IncomingAutoAttacks: guidMapToString(a.IncomingAutoAttacks),
+			DamageDone:                     a.DamageDone,
+			HealingDone:                    a.HealingDone,
+			IncomingAutoAttacksByEncounter: guidMapsToString(a.IncomingAutoAttacksByEncounter),
 		}
 	}
 	roles := wowspec.InferRoles(playerMetrics)
@@ -1417,6 +1419,19 @@ func guidMapToString(m map[guid.GUID]int) map[string]int {
 	out := make(map[string]int, len(m))
 	for k, v := range m {
 		out[k.String()] = v
+	}
+	return out
+}
+
+// guidMapsToString converts encounter/source GUID maps to the language-neutral
+// representation used by role inference and its cross-language fixtures.
+func guidMapsToString(m map[string]map[guid.GUID]int) map[string]map[string]int {
+	if len(m) == 0 {
+		return nil
+	}
+	out := make(map[string]map[string]int, len(m))
+	for encounterID, sources := range m {
+		out[encounterID] = guidMapToString(sources)
 	}
 	return out
 }

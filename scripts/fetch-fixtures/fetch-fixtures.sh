@@ -94,9 +94,19 @@ validate_stream() {
 fetch_url() {
   local url="$1" dest="$2" label="$3"
   local tmp="${dest}.tmp.$$"
-  local http_code
+  local http_code origin="$base_url"
 
-  http_code=$(curl -sS -w '%{http_code}' -o "$tmp" "$url") || {
+  # Production shard hosts enforce the same Origin/Referer policy as browser
+  # requests. Their public frontend lives on the apex host.
+  if [[ "$base_url" =~ ^https://octo\.chronicleclassic\.com$ ]]; then
+    origin="https://chronicleclassic.com"
+  fi
+
+  http_code=$(curl -sS -w '%{http_code}' -o "$tmp" \
+    -A 'Mozilla/5.0 (Chronicle fixture fetcher)' \
+    -H "Origin: $origin" \
+    -H "Referer: $origin/" \
+    "$url") || {
     rm -f "$tmp"
     echo "  ✗ $label: curl failed" >&2
     return 1
@@ -157,7 +167,7 @@ ok=0
 fail=0
 
 for raw_slug in "${slugs[@]}"; do
-  slug=$(normalize_slug "$raw_slug") || { ((fail++)); continue; }
+  slug=$(normalize_slug "$raw_slug") || { ((fail += 1)); continue; }
 
   echo "→ $slug"
 
@@ -190,10 +200,10 @@ for raw_slug in "${slugs[@]}"; do
 EOF
 
   if $instance_ok; then
-    ((ok++))
+    ((ok += 1))
     echo "  ✓ manifest.json"
   else
-    ((fail++))
+    ((fail += 1))
     echo "  ⚠ manifest written but some fetches failed"
   fi
 done

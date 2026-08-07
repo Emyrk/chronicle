@@ -26,8 +26,8 @@ form, or total damage taken.
 Both packages expose these versioned constants:
 
 ```text
-AlgorithmVersion = 1
-TankThreshold = 0.5
+AlgorithmVersion = 2
+TankThreshold = 0.4
 EvidenceAttempts = 5
 ```
 
@@ -49,15 +49,25 @@ For each encounter and hostile source:
 sourceScore = playerAttempts / (maxAttempts + EvidenceAttempts)
 ```
 
-A player's tank score is their maximum source score. The player is a tank when:
+Within each encounter, each player keeps only their strongest source score. This
+prevents encounters with many adds from receiving more weight than a single-boss
+encounter. Across selected encounters:
 
 ```text
-tankScore >= TankThreshold
+cumulativeScore = sum(best sourceScore in each encounter)
+persistenceScore = cumulativeScore / highest player cumulativeScore
+tankScore = min(strongestSourceScore, persistenceScore)
+isTank = tankScore >= TankThreshold
 ```
 
-The Roles panel evaluates each selected encounter independently and retains the
-best evidence. Boss leaderboard rows are already encounter-specific. Trash
-ranking rows merge their source counts across included trash encounters.
+The strength term requires credible Auto Attack evidence; the persistence term
+requires the behavior to recur across the selected range. For a single selected
+encounter, the strongest player has a persistence score of `1`, so the result is
+driven by the source score as before.
+
+Boss leaderboard rows are encounter-specific. Trash ranking rows preserve
+encounter boundaries and apply the same persistence calculation across included
+trash encounters.
 
 ### Example
 
@@ -68,13 +78,13 @@ tank = 20 / (20 + 5) = 0.80  -> tank
 dps  =  2 / (20 + 5) = 0.08  -> not tank
 ```
 
-Five attempts from the primary target sit exactly on the global threshold:
+Four attempts from the primary target clear the global threshold:
 
 ```text
-5 / (5 + 5) = 0.50 -> tank
+4 / (4 + 5) = 0.44 -> tank
 ```
 
-Fewer than five attempts cannot cross the threshold in algorithm version 1.
+Fewer than four attempts cannot cross the threshold in algorithm version 2.
 
 ## Data flow
 
@@ -86,10 +96,11 @@ flowchart TD
     D -->|No| C
     D -->|Yes| E["Count encounter / source / player attempt"]
     E --> F["Compute max attempts per source"]
-    F --> G["Score each attacked player"]
-    G --> H{"Score >= 0.5?"}
-    H -->|Yes| I["Tank"]
-    H -->|No| J["Continue healer or DPS inference"]
+    F --> G["Keep best source score per player / encounter"]
+    G --> H["Combine strength with cross-encounter persistence"]
+    H --> K{"Score >= 0.4?"}
+    K -->|Yes| I["Tank"]
+    K -->|No| J["Continue healer or DPS inference"]
 ```
 
 ```mermaid
@@ -122,13 +133,15 @@ Open the Roles panel and expand **Detection thresholds**, then **Tank evidence**
 The table is sorted by score and shows:
 
 - Player
-- Tank score
+- Final tank score
+- Strongest-source score
+- Cross-encounter persistence score
 - Strongest hostile source
 - Player attempts versus that source's maximum
 - Final tank classification
 
-For several selected encounters, the table shows each player's strongest
-source/encounter result.
+For several selected encounters, the table shows both the strongest isolated
+evidence and whether that evidence persists across the selected range.
 
 ## Fetching real instances
 
@@ -168,12 +181,10 @@ must:
 ## Known limitations
 
 - Caster enemies that never perform Auto Attacks may provide no tank evidence.
-- Five isolated attacks can cross the current threshold if no other player took
-  more attacks from that source. Real-data validation will determine whether a
-  timing feature is needed in a later algorithm version.
-- The generic scorer treats every hostile source independently. This is useful
-  for add tanks, but weak trash mobs can create evidence if they attack one
-  player often enough.
-- The threshold is an initial global value. It is now visible and testable, but
-  should be calibrated with labeled real instances before broad historical
-  reparsing.
+- An isolated pull can still classify a player when that encounter alone is
+  selected; persistence only applies when several encounters are selected.
+- Relative persistence identifies recurring tanks but can suppress a legitimate
+  tank who participates in fewer than roughly 40% as much evidence as the most
+  active tank in the selected range.
+- The threshold is global and visible, but should continue to be validated with
+  labeled real instances before broad historical reparsing.

@@ -85,18 +85,21 @@ type PlayerMetrics struct {
 	DamageDone  int64
 	HealingDone int64 // should include absorbs (e.g. Power Word: Shield) for accurate healer detection
 	// IncomingAutoAttacks maps hostile source → number of Auto Attack attempts
-	// directed at this player (including zero-damage misses, dodges, parries).
-	// Used by roleinfer for source-aware tank inference.
+	// directed at this player in a single encounter. It remains the convenient
+	// input for encounter-specific rankings and tests.
 	IncomingAutoAttacks map[string]int
+	// IncomingAutoAttacksByEncounter preserves encounter boundaries for
+	// multi-encounter role inference such as aggregated trash rankings.
+	IncomingAutoAttacksByEncounter map[string]map[string]int
 }
 
 // InferRoles classifies each player's role using source-aware tank inference
 // (via roleinfer) and statistical healer detection.
 // Returns a map of player ID → role string ("dps", "heal", "tank").
 //
-// Tank detection uses the roleinfer algorithm: for each hostile source that
-// auto-attacked players, score = playerAttempts / (maxAttempts + 5). A player's
-// TankScore is the max sourceScore across all sources. Tank when ≥ 0.5.
+// Tank detection uses roleinfer's source-aware strength and cross-encounter
+// persistence scores. Single-encounter rankings keep the same source scoring;
+// aggregated rankings preserve encounter boundaries before classification.
 //
 // Healer detection uses z-score outlier analysis on healing done.
 //
@@ -107,19 +110,35 @@ func InferRoles[K comparable](players map[K]PlayerMetrics) map[K]string {
 		return roles
 	}
 
-	// Build roleinfer input: source → player → attempt count.
-	attacks := make(roleinfer.IncomingAutoAttacks[string, K])
-	for k, m := range players {
-		for src, count := range m.IncomingAutoAttacks {
-			targets := attacks[src]
-			if targets == nil {
-				targets = make(map[K]int)
-				attacks[src] = targets
+	// Build roleinfer input while preserving encounter boundaries. Callers with
+	// single-encounter data use the empty encounter key.
+	attacksByEncounter := make(map[string]roleinfer.IncomingAutoAttacks[string, K])
+	for player, metrics := range players {
+		byEncounter := metrics.IncomingAutoAttacksByEncounter
+		if len(byEncounter) == 0 && len(metrics.IncomingAutoAttacks) > 0 {
+			byEncounter = map[string]map[string]int{"": metrics.IncomingAutoAttacks}
+		}
+		for encounterID, sourceCounts := range byEncounter {
+			attacks := attacksByEncounter[encounterID]
+			if attacks == nil {
+				attacks = make(roleinfer.IncomingAutoAttacks[string, K])
+				attacksByEncounter[encounterID] = attacks
 			}
-			targets[k] = count
+			for source, count := range sourceCounts {
+				targets := attacks[source]
+				if targets == nil {
+					targets = make(map[K]int)
+					attacks[source] = targets
+				}
+				targets[player] = count
+			}
 		}
 	}
-	tankResults := roleinfer.InferTanks(attacks)
+	encounters := make([]roleinfer.IncomingAutoAttacks[string, K], 0, len(attacksByEncounter))
+	for _, attacks := range attacksByEncounter {
+		encounters = append(encounters, attacks)
+	}
+	tankResults := roleinfer.InferTanksAcrossEncounters(encounters)
 
 	// Collect values for healer stats.
 	hdValues := make([]float64, 0, len(players))

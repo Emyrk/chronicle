@@ -253,6 +253,8 @@ function TankEvidenceDebug({ tankEvidence, players }: {
             <tr className="text-left text-muted-foreground/70 border-b border-border/30">
               <th className="pr-2 pb-1">Player</th>
               <th className="pr-2 pb-1">Score</th>
+              <th className="pr-2 pb-1">Strength</th>
+              <th className="pr-2 pb-1">Persist</th>
               <th className="pr-2 pb-1">Source</th>
               <th className="pr-2 pb-1">Att/Max</th>
               <th className="pb-1">Tank</th>
@@ -263,6 +265,8 @@ function TankEvidenceDebug({ tankEvidence, players }: {
               <tr key={e.guid} className={e.isTank ? "text-amber-400" : "text-foreground"}>
                 <td className="pr-2 py-0.5">{e.name}</td>
                 <td className="pr-2 py-0.5">{e.tankScore.toFixed(3)}</td>
+                <td className="pr-2 py-0.5">{e.strongestSourceScore.toFixed(3)}</td>
+                <td className="pr-2 py-0.5">{e.persistenceScore.toFixed(3)}</td>
                 <td className="pr-2 py-0.5 max-w-[120px] truncate" title={e.strongestSource?.sourceName}>
                   {e.strongestSource?.sourceName ?? "—"}
                 </td>

@@ -139,14 +139,14 @@ func TestInferTanks_Empty(t *testing.T) {
 	require.Empty(t, results)
 }
 
-func TestInferTanks_ThresholdBoundary(t *testing.T) {
+func TestInferTanks_Threshold(t *testing.T) {
 	t.Parallel()
 
-	// Exactly at threshold: 5 / (5+5) = 0.5 → tank (≥)
+	// With four maximum attempts, 4/(4+5) is above 0.4 while 3/9 is below it.
 	attacks := roleinfer.IncomingAutoAttacks[string, string]{
 		"boss": {
-			"tank":    5,
-			"offtank": 4, // 4/10 = 0.4 → not tank
+			"tank":    4,
+			"offtank": 3,
 		},
 	}
 	results := roleinfer.InferTanks(attacks)
@@ -168,18 +168,14 @@ func TestInferTanks_SharedFixtures(t *testing.T) {
 
 	for _, tc := range fixture.Cases {
 		t.Run(tc.Name, func(t *testing.T) {
-			best := make(map[string]*roleinfer.TankResult[string])
+			encounters := make([]roleinfer.IncomingAutoAttacks[string, string], 0, len(tc.SelectedEncounters))
 			for _, encounterID := range tc.SelectedEncounters {
-				results := roleinfer.InferTanks(roleinfer.IncomingAutoAttacks[string, string](tc.Counts[encounterID]))
-				for player, result := range results {
-					if current := best[player]; current == nil || result.TankScore > current.TankScore {
-						best[player] = result
-					}
-				}
+				encounters = append(encounters, tc.Counts[encounterID])
 			}
+			results := roleinfer.InferTanksAcrossEncounters(encounters)
 
 			for player, expected := range tc.Expected {
-				actual := best[player]
+				actual := results[player]
 				require.NotNil(t, actual, player)
 				assert.Equal(t, expected.IsTank, actual.IsTank, player)
 				assert.InDelta(t, expected.Score, actual.TankScore, 1e-12, player)
@@ -194,7 +190,7 @@ func TestInferTanks_SharedFixtures(t *testing.T) {
 func TestInferTanks_Constants(t *testing.T) {
 	t.Parallel()
 
-	assert.Equal(t, 1, roleinfer.AlgorithmVersion)
-	assert.Equal(t, 0.5, roleinfer.TankThreshold)
+	assert.Equal(t, 2, roleinfer.AlgorithmVersion)
+	assert.Equal(t, 0.4, roleinfer.TankThreshold)
 	assert.Equal(t, 5, roleinfer.EvidenceAttempts)
 }

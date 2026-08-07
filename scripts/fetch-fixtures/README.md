@@ -19,7 +19,8 @@ the output directory is gitignored.
 # Read slugs from a file
 ./scripts/fetch-fixtures/fetch-fixtures.sh -f my-slugs.txt
 
-# Use a different base URL (staging, local dev)
+# Use a different base URL (production shard, staging, or local dev)
+./scripts/fetch-fixtures/fetch-fixtures.sh -b https://octo.chronicleclassic.com 28zCDqh8kTgtFGpM
 ./scripts/fetch-fixtures/fetch-fixtures.sh -b http://localhost:4000 OKry7FkxJjc2Yzgf
 ```
 
@@ -111,5 +112,8 @@ Tests cover slug normalization and validation without any network calls.
 - **Re-fetch is idempotent.** Running the tool again overwrites existing
   files for the same slug (atomic write via temp file + mv).
 - **No local cache expiry.** Delete a slug directory to force a fresh fetch.
+- **Browser request headers.** The fetcher supplies `Origin`, `Referer`, and a
+  user agent. For `octo.chronicleclassic.com`, it uses the public
+  `chronicleclassic.com` frontend origin required by that shard.
 - **Rate limiting.** The tool makes one HTTP request per file. Be mindful
   when fetching many instances at once.

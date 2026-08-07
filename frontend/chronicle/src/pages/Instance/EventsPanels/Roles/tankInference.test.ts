@@ -54,8 +54,8 @@ function setAttempts(
 
 describe("tankInference", () => {
   it("exports correct algorithm constants", () => {
-    expect(AlgorithmVersion).toBe(1);
-    expect(TankThreshold).toBe(0.5);
+    expect(AlgorithmVersion).toBe(2);
+    expect(TankThreshold).toBe(0.4);
     expect(EvidenceAttempts).toBe(5);
   });
 
@@ -124,7 +124,7 @@ describe("tankInference", () => {
 
     const result = inferTanks(state, ["enc1"]);
 
-    // All equal — score = 10 / (10+5) = 0.667 which is ≥ 0.5
+    // All equal — score = 10 / (10+5) = 0.667, above the global threshold.
     // But that's fine — they'd all be tanks, which the caller handles.
     // The important thing is no crash.
     for (const ev of result.evidence.values()) {
@@ -158,19 +158,19 @@ describe("tankInference", () => {
     expect(result.evidence.get("tank")!.tankScore).toBeCloseTo(1 / 6, 5);
   });
 
-  it("multi-encounter max — takes best score across encounters", () => {
+  it("requires tank evidence to persist across selected encounters", () => {
     const state = createTankAttemptCounts();
     // Encounter 1: tank gets most swings
     setAttempts(state, "enc1", "boss1", "tank", 50);
     setAttempts(state, "enc1", "boss1", "dps", 5);
-    // Encounter 2: tank gets fewer swings (different boss)
+    // Encounter 2: tank remains the primary target.
     setAttempts(state, "enc2", "boss2", "tank", 20);
-    setAttempts(state, "enc2", "boss2", "dps", 18);
+    setAttempts(state, "enc2", "boss2", "dps", 8);
 
     const result = inferTanks(state, ["enc1", "enc2"]);
 
     const tankEv = result.evidence.get("tank")!;
-    // Best score should be from enc1: 50 / (50+5) = 0.909
+    // Strongest source remains enc1, while persistence also remains high.
     expect(tankEv.isTank).toBe(true);
     expect(tankEv.tankScore).toBeCloseTo(50 / 55, 5);
     expect(tankEv.strongestSource!.sourceGuid).toBe("boss1");
