@@ -7,7 +7,8 @@
 
 import { Shield, Heart, Swords, Loader2 } from "lucide-react";
 import type { PanelContext } from "../types";
-import { type PlayerRoleData } from "../processors";
+import { type PlayerRoleData, AlgorithmVersion, TankThreshold } from "../processors";
+import type { TankInferenceResult } from "./tankInference";
 import { formatNumber } from "@/lib/format";
 import { ScrollArea } from "@/components/ui/ScrollArea/ScrollArea";
 import { useInferredRoles } from "./useInferredRoles";
@@ -223,12 +224,67 @@ function DpsGroup({ players, selectedPlayerIds, onTogglePlayers, onTogglePlayer 
   );
 }
 
+/**
+ * Debug component: per-player tank evidence table.
+ */
+function TankEvidenceDebug({ tankEvidence, players }: {
+  tankEvidence: TankInferenceResult;
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  players: Record<string, any>;
+}) {
+  const entries = [...tankEvidence.evidence.entries()]
+    .map(([guid, ev]) => ({
+      guid,
+      name: players[guid]?.name ?? guid,
+      ...ev,
+    }))
+    .sort((a, b) => b.tankScore - a.tankScore);
+
+  if (entries.length === 0) return null;
+
+  return (
+    <details className="mt-2">
+      <summary className="cursor-pointer hover:text-foreground" data-roles-tank-evidence-toggle>
+        Tank evidence ({entries.filter(e => e.isTank).length} classified)
+      </summary>
+      <div className="mt-2 overflow-x-auto styled-scrollbar">
+        <table className="w-full text-[11px] font-mono" data-roles-tank-evidence>
+          <thead>
+            <tr className="text-left text-muted-foreground/70 border-b border-border/30">
+              <th className="pr-2 pb-1">Player</th>
+              <th className="pr-2 pb-1">Score</th>
+              <th className="pr-2 pb-1">Source</th>
+              <th className="pr-2 pb-1">Att/Max</th>
+              <th className="pb-1">Tank</th>
+            </tr>
+          </thead>
+          <tbody>
+            {entries.map(e => (
+              <tr key={e.guid} className={e.isTank ? "text-amber-400" : "text-foreground"}>
+                <td className="pr-2 py-0.5">{e.name}</td>
+                <td className="pr-2 py-0.5">{e.tankScore.toFixed(3)}</td>
+                <td className="pr-2 py-0.5 max-w-[120px] truncate" title={e.strongestSource?.sourceName}>
+                  {e.strongestSource?.sourceName ?? "—"}
+                </td>
+                <td className="pr-2 py-0.5">
+                  {e.strongestSource ? `${e.strongestSource.attempts}/${e.strongestSource.maxAttempts}` : "—"}
+                </td>
+                <td className="py-0.5">{e.isTank ? "✓" : ""}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+    </details>
+  );
+}
+
 export interface RolesContentProps {
   context: PanelContext;
 }
 
 export const RolesContent = ({ context }: RolesContentProps) => {
-  const { summary: roleSummary, debug, loading, processing, error } = useInferredRoles(context);
+  const { summary: roleSummary, debug, tankEvidence, loading, processing, error } = useInferredRoles(context);
 
   // Compute totals for summary
   const totalPlayers = roleSummary.tanks.length + roleSummary.healers.length + roleSummary.dps.length;
@@ -300,10 +356,10 @@ export const RolesContent = ({ context }: RolesContentProps) => {
           </summary>
           <div className="mt-2 space-y-1 font-mono text-[11px] bg-muted/30 p-2 rounded">
             <div className="grid grid-cols-2 gap-x-4">
-              <div>
-                <span className="text-amber-500">Tank cutoff:</span>{" "}
-                <span className="text-foreground">{formatNumber(debug.tankCutoff, 0)}</span>
-                <span className="text-muted-foreground/70"> dmg taken ≥{debug.tankZThreshold.toFixed(1)}σ</span>
+              <div className="col-span-2 mb-1">
+                <span className="text-muted-foreground">Algorithm:</span>{" "}
+                <span className="text-foreground">Auto Attack attempts v{AlgorithmVersion}</span>
+                <span className="text-muted-foreground/70"> · threshold={TankThreshold}</span>
               </div>
               <div>
                 <span className="text-emerald-500">Healer cutoff:</span>{" "}
@@ -323,15 +379,6 @@ export const RolesContent = ({ context }: RolesContentProps) => {
               <div className="col-span-2">
                 <span className="text-muted-foreground italic">Healer = healing above mean + (low DPS OR high healing)</span>
               </div>
-              <div>
-                <span className="text-muted-foreground">Mean dmg taken:</span>{" "}
-                <span className="text-foreground">{formatNumber(debug.meanDamageTaken, 0)}</span>
-              </div>
-              <div>
-                <span className="text-muted-foreground">Std dev dmg taken:</span>{" "}
-                <span className="text-foreground">{formatNumber(debug.stdDevDamageTaken, 0)}</span>
-              </div>
-
               <div>
                 <span className="text-muted-foreground">Mean healing:</span>{" "}
                 <span className="text-foreground">{formatNumber(debug.meanHealingDone, 0)}</span>
@@ -353,6 +400,7 @@ export const RolesContent = ({ context }: RolesContentProps) => {
             </div>
           </div>
         </details>
+        <TankEvidenceDebug tankEvidence={tankEvidence} players={context.instance.players ?? {}} />
       </div>
       </ScrollArea>
     </div>

@@ -39,6 +39,7 @@ import { guildsProcessor } from "../Guilds/guilds.processor";
 import { companionStatsProcessor } from "../CompanionStats/companionStats.processor";
 import { playerLifeStateProcessor } from "./playerLifeState.processor";
 import { pullsAndCleanupProcessor } from "../PullsAndCleanup/pullsAndCleanup.processor";
+import { tankAttemptsProcessor } from "../Roles/tankAttempts.processor";
 
 // Export individual processors
 export { damageDoneProcessor, vulnerabilityEffectProcessor, enemyDamageDoneProcessor, petDamageDoneProcessor, friendlyFireProcessor } from "../DamageDone/damageDone.processor";
@@ -109,6 +110,9 @@ export type { PullsAndCleanupResult } from "../PullsAndCleanup/pullsAndCleanup.p
 // Note: ResourceType is exported from allActivityDebug.processor above
 export type { PlayerRoleData, InferredRole, RoleSummary, RoleDetectionDebug, InferRolesResult } from "../Roles/roles.processor";
 export { inferRoles, getRoleSummary } from "../Roles/roles.processor";
+export { tankAttemptsProcessor } from "../Roles/tankAttempts.processor";
+export type { TankAttemptCounts, TankInferenceResult, PlayerTankEvidence, SourceEvidence } from "../Roles/tankInference";
+export { inferTanks, AlgorithmVersion, TankThreshold, EvidenceAttempts, createTankAttemptCounts } from "../Roles/tankInference";
 
 // Export shared utilities
 export { accumulateAbilityBreakout, createEmptyAbilityBreakout, updateAbilityBreakout, type DamageAbilityBreakout } from "./abilityBreakout";
@@ -152,6 +156,8 @@ export const processorRegistry: Record<string, PanelProcessor<any, any>> = {
   logging_metadata: loggingMetadataProcessor,
 
   resource_regen: resourceRegenProcessor,
+  // Tank attempts processor for role inference
+  tank_attempts: tankAttemptsProcessor,
   // Note: roles panel doesn't have its own processor - it reuses damage_taken and healing_done
   // Class: Druid
   innervate: innervateProcessor,

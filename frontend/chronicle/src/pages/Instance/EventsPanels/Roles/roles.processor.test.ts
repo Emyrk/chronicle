@@ -1,5 +1,8 @@
 import { describe, expect, it } from "vitest";
 import { inferRoles } from "./roles.processor";
+import type { TankInferenceResult } from "./tankInference";
+
+const EMPTY_TANK: TankInferenceResult = { evidence: new Map() };
 
 const players = {
   healer: { name: "Healer", class: "PRIEST" },
@@ -12,7 +15,7 @@ const players = {
 describe("inferRoles", () => {
   it("uses an observed percentile when a z-score low-DPS cutoff would be negative", () => {
     const result = inferRoles(
-      new Map(),
+      EMPTY_TANK,
       new Map([
         ["healer", 300],
         ["hybrid", 280],

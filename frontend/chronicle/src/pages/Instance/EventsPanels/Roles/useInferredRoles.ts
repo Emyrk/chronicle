@@ -2,15 +2,17 @@ import { useMemo } from "react";
 import type { PanelContext } from "../types";
 import {
   type DamageDoneState,
-  type DamageTakenState,
   type InferRolesResult,
   type RoleDetectionDebug,
+  type TankAttemptCounts,
+  type TankInferenceResult,
   type UnifiedHealingResult,
   getRoleSummary,
   inferRoles,
+  inferTanks,
+  tankAttemptsProcessor,
 } from "../processors";
 import { createDamageDonePanel } from "../DamageDone/DamageDone";
-import { createDamageTakenPanel } from "../DamageTaken/DamageTaken";
 import { createHealingDonePanel } from "../HealingDone/HealingDone";
 import { usePanelAggregation } from "../usePanelAggregation";
 
@@ -49,8 +51,15 @@ export function useInferredRoles(context: PanelContext) {
 
   // Role inference must remain stable while Replay moves. These source panels
   // always aggregate the full selected encounter rather than the Replay cursor.
-  const damageTakenPanel = useMemo(
-    () => ({ ...createDamageTakenPanel("players"), syncDataMode: "full" as const }),
+  const tankAttemptsPanel = useMemo(
+    () => ({
+      ...tankAttemptsProcessor,
+      syncDataMode: "full" as const,
+      // Satisfy PanelDefinition interface — this panel is internal, never rendered.
+      label: "Tank Attempts",
+      icon: null,
+      render: () => null,
+    }),
     [],
   );
   const healingDonePanel = useMemo(
@@ -62,8 +71,8 @@ export function useInferredRoles(context: PanelContext) {
     [],
   );
 
-  const damageTakenAgg = usePanelAggregation<DamageTakenState>({
-    panel: damageTakenPanel,
+  const tankAttemptsAgg = usePanelAggregation<TankAttemptCounts>({
+    panel: tankAttemptsPanel,
     context: stableContext,
   });
   const healingDoneAgg = usePanelAggregation<UnifiedHealingResult>({
@@ -75,19 +84,10 @@ export function useInferredRoles(context: PanelContext) {
     context: stableContext,
   });
 
-  const damageTaken = useMemo(() => {
-    const totals = new Map<string, number>();
-    for (const encounterId of context.selectedEncounterIds) {
-      const encounterData = damageTakenAgg.result.EncounterDamage.get(encounterId);
-      if (!encounterData) continue;
-      for (const [playerId, data] of encounterData) {
-        let total = 0;
-        for (const amount of data.source.values()) total += amount;
-        totals.set(playerId, (totals.get(playerId) ?? 0) + total);
-      }
-    }
-    return totals;
-  }, [damageTakenAgg.result, context.selectedEncounterIds]);
+  // Tank inference from Auto Attack attempt counts.
+  const tankResult = useMemo<TankInferenceResult>(() => {
+    return inferTanks(tankAttemptsAgg.result, context.selectedEncounterIds);
+  }, [tankAttemptsAgg.result, context.selectedEncounterIds]);
 
   const healingDone = useMemo(() => {
     const totals = new Map<string, number>();
@@ -120,23 +120,36 @@ export function useInferredRoles(context: PanelContext) {
     return totals;
   }, [damageDoneAgg.result, context.selectedEncounterIds]);
 
+  // Resolve source names from the units context for the debug UI.
+  const tankResultWithNames = useMemo<TankInferenceResult>(() => {
+    const units = context.instance.units;
+    if (!units) return tankResult;
+    for (const ev of tankResult.evidence.values()) {
+      if (ev.strongestSource && units[ev.strongestSource.sourceGuid]) {
+        ev.strongestSource.sourceName = units[ev.strongestSource.sourceGuid].name;
+      }
+    }
+    return tankResult;
+  }, [tankResult, context.instance.units]);
+
   const inferred = useMemo<InferRolesResult>(() => {
-    if (damageTaken.size === 0 && healingDone.size === 0 && damageDone.size === 0) {
+    if (tankResultWithNames.evidence.size === 0 && healingDone.size === 0 && damageDone.size === 0) {
       return { roles: new Map(), debug: EMPTY_DEBUG };
     }
     const players: Record<string, { name: string; class: string }> = {};
     for (const [guid, player] of Object.entries(context.instance.players ?? {})) {
       players[guid] = { name: player.name, class: player.class };
     }
-    return inferRoles(damageTaken, healingDone, damageDone, players);
-  }, [context.instance.players, damageDone, damageTaken, healingDone]);
+    return inferRoles(tankResultWithNames, healingDone, damageDone, players);
+  }, [context.instance.players, damageDone, tankResultWithNames, healingDone]);
 
   return {
     roles: inferred.roles,
     summary: getRoleSummary(inferred.roles),
     debug: inferred.debug,
-    loading: damageTakenAgg.loading || healingDoneAgg.loading || damageDoneAgg.loading,
-    processing: damageTakenAgg.processing || healingDoneAgg.processing || damageDoneAgg.processing,
-    error: damageTakenAgg.error || healingDoneAgg.error || damageDoneAgg.error,
+    tankEvidence: tankResultWithNames,
+    loading: tankAttemptsAgg.loading || healingDoneAgg.loading || damageDoneAgg.loading,
+    processing: tankAttemptsAgg.processing || healingDoneAgg.processing || damageDoneAgg.processing,
+    error: tankAttemptsAgg.error || healingDoneAgg.error || damageDoneAgg.error,
   };
 }
