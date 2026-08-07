@@ -192,16 +192,24 @@ func (w *WorkerLogParse) parseCombatLog(
 	case database.LogFormat335aCcAddon:
 		logCapabilities = append(logCapabilities, "interrupt")
 		loadStart := time.Now()
-		rdr, err := loadFirstFile()
-		if err != nil {
-			return nil, fmt.Errorf("load log file: %w", err)
+		data := preloadedFirst
+		if data == nil {
+			rdr, err := w.loadFile(ctx, files[0])
+			if err != nil {
+				return nil, fmt.Errorf("load log file: %w", err)
+			}
+			data, err = io.ReadAll(rdr)
+			if err != nil {
+				return nil, fmt.Errorf("read wotlk log file: %w", err)
+			}
 		}
 		loadFileDuration = time.Since(loadStart)
 
-		p, err := wotlk.New(ctx, logLogger, rdr, gameDB, gameDB, reg)
+		p, err := wotlk.New(ctx, logLogger, bytes.NewReader(data), gameDB, gameDB, reg)
 		if err != nil {
 			return nil, fmt.Errorf("create wotlk parser: %w", err)
 		}
+		p.SetRealmClockInfo(scanCompanionHeaderClock(data))
 		c.Advancer = p
 		consumeErr = c.ConsumeAll(ctx, p)
 		if consumeErr != nil && !errors.Is(consumeErr, io.EOF) {

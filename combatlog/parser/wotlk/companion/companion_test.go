@@ -243,6 +243,30 @@ func TestParseHeader(t *testing.T) {
 	assert.Equal(t, "3.3.5a", v.Versions["wow"])
 }
 
+func TestParseHeaderClockInfo(t *testing.T) {
+	t.Parallel()
+	p := newTestParser()
+
+	msgs, err := p.Feed(testTS, `[0H:0.1,Icecrown,enUS,3.3.5a,12340,a8f3,1716508800,-420]`)
+	require.NoError(t, err)
+	require.Len(t, msgs, 2)
+
+	clock := p.RealmClockInfo()
+	require.NotNil(t, clock)
+	assert.Equal(t, time.Date(2024, 5, 23, 17, 0, 0, 0, time.UTC), clock.LocalTime)
+	assert.Equal(t, time.Date(2024, 5, 24, 0, 0, 0, 0, time.UTC), clock.UTCTime)
+	assert.Equal(t, 7*time.Hour, clock.Offset)
+}
+
+func TestParseLegacyHeaderHasNoClockInfo(t *testing.T) {
+	t.Parallel()
+	p := newTestParser()
+
+	_, err := p.Feed(testTS, `[0H:0.1,Icecrown,enUS,3.3.5a,12340,a8f3]`)
+	require.NoError(t, err)
+	assert.Nil(t, p.RealmClockInfo())
+}
+
 // --- Loot tests ---
 
 func TestParseLoot_Drop(t *testing.T) {

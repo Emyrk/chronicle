@@ -11,6 +11,7 @@ import (
 	"github.com/Emyrk/chronicle/combatlog/parser/common/instances"
 	"github.com/Emyrk/chronicle/combatlog/parser/types/realm"
 	"github.com/Emyrk/chronicle/combatlog/parser/types/realmclock"
+	"github.com/Emyrk/chronicle/combatlog/parser/wotlk/companion"
 	"github.com/Emyrk/chronicle/database"
 	"github.com/Emyrk/chronicle/database/authz"
 	"github.com/Emyrk/chronicle/database/dbstatic"
@@ -166,24 +167,48 @@ func scanRealmName(logFormat database.LogFormat, data []byte) string {
 // The H: frame is always short and appears early, before any line wrapping.
 // Returns "" if no H: frame is found.
 func scanCompanionHeaderRealm(line string) string {
+	payload, ok := scanCompanionHeaderPayload(line)
+	if !ok {
+		return ""
+	}
+	parts := strings.SplitN(payload, ",", 3) // only need first 2 fields
+	if len(parts) < 2 {
+		return ""
+	}
+	return strings.TrimSpace(parts[1])
+}
+
+func scanCompanionHeaderPayload(line string) (string, bool) {
 	// Look for [<digit>H: pattern.
 	for i := 0; i < len(line)-3; i++ {
-		if line[i] == '[' && line[i+1] >= '0' && line[i+1] <= '9' && line[i+2] == 'H' && line[i+3] == ':' {
-			// Found the start of the H: frame. Extract payload until ].
-			payload := line[i+4:] // skip "[NH:"
-			end := strings.Index(payload, "]")
-			if end < 0 {
-				// Frame not closed on this line — unlikely for H: but be safe.
-				return ""
-			}
-			// payload is: <addonVersion>,<realmName>,<locale>,<wowVersion>,<build>,<sessionId>
-			parts := strings.SplitN(payload[:end], ",", 3) // only need first 2 fields
-			if len(parts) >= 2 {
-				return strings.TrimSpace(parts[1])
-			}
+		if line[i] != '[' || line[i+1] < '0' || line[i+1] > '9' || line[i+2] != 'H' || line[i+3] != ':' {
+			continue
+		}
+		payload := line[i+4:] // skip "[NH:"
+		end := strings.Index(payload, "]")
+		if end < 0 {
+			return "", false
+		}
+		return payload[:end], true
+	}
+	return "", false
+}
+
+// scanCompanionHeaderClock finds the first extended eight-field companion
+// header with valid epoch and UTC-offset data.
+func scanCompanionHeaderClock(data []byte) *realmclock.Info {
+	scanner := bufio.NewScanner(bytes.NewReader(data))
+	for scanner.Scan() {
+		payload, ok := scanCompanionHeaderPayload(scanner.Text())
+		if !ok {
+			continue
+		}
+		clock, err := companion.ParseHeaderClock(payload)
+		if err == nil && clock != nil {
+			return clock
 		}
 	}
-	return ""
+	return nil
 }
 
 // validateRealmTenant checks whether a realm belongs to the uploading tenant.

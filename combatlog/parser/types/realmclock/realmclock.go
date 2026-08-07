@@ -22,6 +22,20 @@ type Info struct {
 	Offset    time.Duration
 }
 
+// FromUnixOffset builds realm clock information from a Unix timestamp and a
+// signed local offset in minutes east of UTC. Combat-log timestamps are local
+// wall-clock values represented in time.UTC, so Offset is the duration needed
+// to convert those values to UTC.
+func FromUnixOffset(unixSeconds int64, utcOffsetMinutes int) Info {
+	utcTime := time.Unix(unixSeconds, 0).UTC()
+	localOffset := time.Duration(utcOffsetMinutes) * time.Minute
+	return Info{
+		LocalTime: utcTime.Add(localOffset),
+		UTCTime:   utcTime,
+		Offset:    -localOffset,
+	}
+}
+
 func ParseClockInfo(content string) (Info, error) {
 	trimmed, ok := IsClockInfo(content)
 	if !ok {

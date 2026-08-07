@@ -8,10 +8,11 @@ import (
 	"log/slog"
 	"time"
 
-	parservanilla "github.com/Emyrk/chronicle/combatlog/parser/vanilla"
 	"github.com/Emyrk/chronicle/combatlog/parser/common/messages"
 	"github.com/Emyrk/chronicle/combatlog/parser/common/parseerrors"
 	"github.com/Emyrk/chronicle/combatlog/parser/common/registry"
+	"github.com/Emyrk/chronicle/combatlog/parser/types/realmclock"
+	parservanilla "github.com/Emyrk/chronicle/combatlog/parser/vanilla"
 	"github.com/Emyrk/chronicle/combatlog/parser/wotlk/companion"
 	"github.com/Emyrk/chronicle/combatlog/parser/wotlk/synthetic"
 	"github.com/Emyrk/chronicle/database/gamedb"
@@ -30,6 +31,7 @@ type Parser struct {
 	}
 	itemFetcher   gamedb.GearResolver
 	baseYear      int
+	realmClock    *realmclock.Info
 	useUnixMillis bool // true for AzerothCore logs (unix millis timestamps)
 
 	lineParseDur  time.Duration
@@ -81,6 +83,26 @@ func (p *Parser) SetSynthetics(s interface {
 // SetBaseYear overrides the year used for timestamps (WotLK logs omit the year).
 func (p *Parser) SetBaseYear(year int) {
 	p.baseYear = year
+}
+
+// SetRealmClockInfo configures conversion of client-local combat-log timestamps
+// to UTC. The embedded local timestamp also supplies the log year, which WotLK
+// row timestamps omit.
+func (p *Parser) SetRealmClockInfo(info *realmclock.Info) {
+	if info == nil {
+		return
+	}
+	clock := *info
+	p.realmClock = &clock
+	p.baseYear = info.LocalTime.Year()
+}
+
+func (p *Parser) normalizeTimestamp(ts time.Time) time.Time {
+	ts = ts.AddDate(p.baseYear, 0, 0)
+	if p.realmClock != nil {
+		ts = p.realmClock.Adjust(ts)
+	}
+	return ts
 }
 
 // SetUnixMillisMode configures the parser to expect unix millisecond timestamps
@@ -160,8 +182,8 @@ func (p *Parser) advance(_ context.Context) (_ []messages.Message, final error) 
 	}()
 
 	if !p.useUnixMillis {
-		// Apply base year — WotLK timestamps have no year.
-		ts = ts.AddDate(p.baseYear, 0, 0)
+		// WotLK timestamps omit the year and use the client's local wall clock.
+		ts = p.normalizeTimestamp(ts)
 	}
 
 	if !p.lastDate.IsZero() && ts.Before(p.lastDate.Add(-time.Second)) {

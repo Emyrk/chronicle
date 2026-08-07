@@ -2,10 +2,31 @@ package chronicle
 
 import (
 	"testing"
+	"time"
 
 	"github.com/Emyrk/chronicle/database"
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
+
+func TestScanCompanionHeaderClock(t *testing.T) {
+	t.Parallel()
+
+	data := []byte(`5/23 17:00:00.250  SPELL_CAST_FAILED,0x000000000008DCCC,"Rhyd",0x10511,0x0000000000000000,nil,0x80000000,26992,"Thorns",0x8,"[2H:0.1,Icecrown,enUS,3.3.5a,12340,0d31,1716508800,-420]"`)
+	clock := scanCompanionHeaderClock(data)
+	require.NotNil(t, clock)
+	assert.Equal(t, time.Date(2024, 5, 23, 17, 0, 0, 0, time.UTC), clock.LocalTime)
+	assert.Equal(t, time.Date(2024, 5, 24, 0, 0, 0, 0, time.UTC), clock.UTCTime)
+	assert.Equal(t, 7*time.Hour, clock.Offset)
+}
+
+func TestScanCompanionHeaderClockSkipsLegacyAndMalformedHeaders(t *testing.T) {
+	t.Parallel()
+
+	data := []byte("5/23 17:00:00.000  EVENT,\"[1H:0.1,Icecrown,enUS,3.3.5a,12340,old1]\"\n" +
+		"5/23 17:00:01.000  EVENT,\"[2H:0.1,Icecrown,enUS,3.3.5a,12340,bad1,not-an-epoch,-420]\"")
+	assert.Nil(t, scanCompanionHeaderClock(data))
+}
 
 func TestScanRealmName(t *testing.T) {
 	t.Parallel()

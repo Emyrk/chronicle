@@ -8,6 +8,16 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
+func TestFromUnixOffset(t *testing.T) {
+	t.Parallel()
+
+	got := realmclock.FromUnixOffset(1716508800, -420)
+	require.Equal(t, time.Date(2024, 5, 23, 17, 0, 0, 0, time.UTC), got.LocalTime)
+	require.Equal(t, time.Date(2024, 5, 24, 0, 0, 0, 0, time.UTC), got.UTCTime)
+	require.Equal(t, 7*time.Hour, got.Offset)
+	require.Equal(t, time.Date(2024, 5, 24, 1, 30, 0, 0, time.UTC), got.Adjust(time.Date(2024, 5, 23, 18, 30, 0, 0, time.UTC)))
+}
+
 func TestClockInfo(t *testing.T) {
 	t.Parallel()
 

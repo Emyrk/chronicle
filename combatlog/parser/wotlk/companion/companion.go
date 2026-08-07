@@ -5,8 +5,9 @@ import (
 	"strings"
 	"time"
 
-	"github.com/Emyrk/chronicle/combatlog/parser/guid"
 	"github.com/Emyrk/chronicle/combatlog/parser/common/messages"
+	"github.com/Emyrk/chronicle/combatlog/parser/guid"
+	"github.com/Emyrk/chronicle/combatlog/parser/types/realmclock"
 )
 
 // Parser reassembles and decodes ChronicleCompanionWoTLK addon messages
@@ -27,6 +28,8 @@ type Parser struct {
 	// Player data accumulation — segments arrive independently,
 	// so we build up per-player state over time.
 	players map[guid.GUID]*PlayerData
+
+	realmClock *realmclock.Info
 }
 
 type assemblyState int
@@ -42,6 +45,12 @@ func New(logger *slog.Logger) *Parser {
 		logger:  logger,
 		players: make(map[guid.GUID]*PlayerData),
 	}
+}
+
+// RealmClockInfo returns the most recently parsed clock data from an extended
+// companion header. Legacy six-field headers leave it nil.
+func (p *Parser) RealmClockInfo() *realmclock.Info {
+	return p.realmClock
 }
 
 // IsCompanionMessage returns true if the failedType string looks like a

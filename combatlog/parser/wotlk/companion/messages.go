@@ -6,9 +6,10 @@ import (
 	"strings"
 	"time"
 
-	"github.com/Emyrk/chronicle/combatlog/parser/types/realm"
-	"github.com/Emyrk/chronicle/combatlog/parser/types/zone"
 	"github.com/Emyrk/chronicle/combatlog/parser/common/messages"
+	"github.com/Emyrk/chronicle/combatlog/parser/types/realm"
+	"github.com/Emyrk/chronicle/combatlog/parser/types/realmclock"
+	"github.com/Emyrk/chronicle/combatlog/parser/types/zone"
 )
 
 // dispatch routes a fully-assembled companion payload to the appropriate parser.
@@ -83,6 +84,27 @@ func (p *Parser) parseZone(ts time.Time, data string) ([]messages.Message, error
 	}, nil
 }
 
+// ParseHeaderClock parses the optional clock fields from a companion header
+// payload without the leading "H:". Legacy six-field headers return nil.
+func ParseHeaderClock(data string) (*realmclock.Info, error) {
+	parts := strings.Split(data, ",")
+	if len(parts) < 8 {
+		return nil, nil
+	}
+
+	localEpoch, err := strconv.ParseInt(parts[6], 10, 64)
+	if err != nil {
+		return nil, fmt.Errorf("header: invalid localEpoch %q: %w", parts[6], err)
+	}
+	utcOffsetMinutes, err := strconv.Atoi(parts[7])
+	if err != nil {
+		return nil, fmt.Errorf("header: invalid utcOffsetMin %q: %w", parts[7], err)
+	}
+
+	info := realmclock.FromUnixOffset(localEpoch, utcOffsetMinutes)
+	return &info, nil
+}
+
 // parseHeader parses: H:<addonVersion>,<realm>,<locale>,<wowVersion>,<wowBuild>,<sessionId>
 func (p *Parser) parseHeader(ts time.Time, data string) ([]messages.Message, error) {
 	if len(data) == 0 || data[0] != ':' {
@@ -93,6 +115,14 @@ func (p *Parser) parseHeader(ts time.Time, data string) ([]messages.Message, err
 	parts := strings.Split(data, ",")
 	if len(parts) < 6 {
 		return nil, fmt.Errorf("header: expected 6 fields, got %d", len(parts))
+	}
+
+	clock, err := ParseHeaderClock(data)
+	if err != nil {
+		return nil, err
+	}
+	if clock != nil {
+		p.realmClock = clock
 	}
 
 	addonVersion := parts[0]

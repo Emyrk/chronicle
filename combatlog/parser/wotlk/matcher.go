@@ -689,7 +689,11 @@ func (p *Parser) suffixCastFailed(ts time.Time, base baseParams, spell *spellInf
 		if p.companion == nil {
 			p.companion = companion.New(p.logger)
 		}
-		return p.companion.Feed(ts, failedType)
+		msgs, err := p.companion.Feed(ts, failedType)
+		if err == nil {
+			p.SetRealmClockInfo(p.companion.RealmClockInfo())
+		}
+		return msgs, err
 	}
 
 	var spellData *chrondbc.Spell
