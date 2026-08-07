@@ -119,3 +119,7 @@ research/nampower-original.dll
 .design-sync/node_modules
 .ds-sync/
 ds-bundle/
+
+# Fetched live instance fixture data (scripts/fetch-fixtures)
+scripts/fetch-fixtures/data/
+
