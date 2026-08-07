@@ -33,7 +33,7 @@ import { interruptProcessor } from "../Interrupt/interrupt.processor";
 import { equipmentProcessor } from "../Equipment/equipment.processor";
 import { lootProcessor } from "../LootPanel/loot.processor";
 import { absorbedDamageProcessor } from "../AbsorbedDamage/absorbedDamage.processor";
-import { consumablesProcessor, consumablesTotalProcessor, consumablesLedgerProcessor, consumablesPlayerProcessor } from "../Consumables/consumables.processor";
+import { consumablesProcessor, consumablesTotalProcessor, consumablesLedgerProcessor } from "../Consumables/consumables.processor";
 import { resistsProcessor } from "../ResistsPanel/resists.processor";
 import { guildsProcessor } from "../Guilds/guilds.processor";
 import { companionStatsProcessor } from "../CompanionStats/companionStats.processor";
@@ -69,7 +69,7 @@ export { unitLookupProcessor } from "../UnitLookup/unitLookup.processor";
 export { dispelProcessor } from "../Dispel/dispel.processor";
 export { interruptProcessor } from "../Interrupt/interrupt.processor";
 export { equipmentProcessor } from "../Equipment/equipment.processor";
-export { consumablesProcessor, consumablesTotalProcessor, consumablesLedgerProcessor, consumablesPlayerProcessor } from "../Consumables/consumables.processor";
+export { consumablesProcessor, consumablesTotalProcessor, consumablesLedgerProcessor } from "../Consumables/consumables.processor";
 export type { ConsumablesResult, ConsumableUse } from "../Consumables/consumables.processor";
 export { lootProcessor } from "../LootPanel/loot.processor";
 export { absorbedDamageProcessor } from "../AbsorbedDamage/absorbedDamage.processor";
@@ -143,7 +143,6 @@ export const processorRegistry: Record<string, PanelProcessor<any, any>> = {
   consumables: consumablesProcessor,
   consumables_total: consumablesTotalProcessor,
   consumables_ledger: consumablesLedgerProcessor,
-  consumables_player: consumablesPlayerProcessor,
   deaths: deathsProcessor,
   death_log: deathsProcessor, // Same processor, different view
   all_activity: allActivityProcessor,

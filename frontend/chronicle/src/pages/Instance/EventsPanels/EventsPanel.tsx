@@ -42,7 +42,6 @@ import { createExtraAttacksPanel } from "./ExtraAttacks/ExtraAttacks";
 import { createConsumablesPanel } from "./Consumables/Consumables";
 import { createConsumablesTotalPanel } from "./Consumables/ConsumablesTotal";
 import { createConsumablesLedgerPanel } from "./Consumables/ConsumablesLedger";
-import { createConsumablesPlayerPanel } from "./Consumables/ConsumablesPlayer";
 import { createHealingTakenPanel } from "./HealingTaken/HealingTaken";
 import { createDeathsPanel } from "./Deaths/Deaths";
 import { createDeathLogPanel } from "./Deaths/DeathLog";
@@ -99,7 +98,6 @@ export const PANELS: Record<string, PanelDefinition<any, any>> = {
   consumables: createConsumablesPanel(),
   consumables_total: createConsumablesTotalPanel(),
   consumables_ledger: createConsumablesLedgerPanel(),
-  consumables_player: createConsumablesPlayerPanel(),
   deaths: createDeathsPanel(),
   death_log: createDeathLogPanel(),
   mitigation: createMitigationPanel(),

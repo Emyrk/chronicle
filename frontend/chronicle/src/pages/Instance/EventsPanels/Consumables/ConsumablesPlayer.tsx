@@ -1,5 +1,10 @@
+/**
+ * Player-scope view of the consumables ledger. Rendered by the Consumes Used
+ * panel when its "Raid Wide" toggle is off — this file defines no panel of
+ * its own.
+ */
+
 import { useMemo } from "react";
-import { FlaskConical } from "lucide-react";
 import { ScrollArea } from "@/components/ui/ScrollArea/ScrollArea";
 import { useCachedValue } from "@/hooks/useCachedValue";
 import { useDatasetId } from "@/hooks/useDatasetId";
@@ -8,8 +13,8 @@ import type { ConsumableDisambiguation } from "@/api/typesGenerated";
 import { cn } from "@/lib/utils";
 import { buildConsumableDisambiguationMap, resolveConsumableUse } from "./consumableDisambiguation";
 import { GenericPanel } from "../GenericPanel";
-import type { PanelDefinition, PanelRenderProps } from "../types";
-import { consumablesPlayerProcessor, type ConsumablesResult } from "./consumables.processor";
+import type { PanelRenderProps } from "../types";
+import type { ConsumablesResult } from "./consumables.processor";
 import {
   aggregateConsumablesLedger,
   formatGold,
@@ -78,14 +83,20 @@ export function ConsumablesPlayerContent(props: ConsumablesPlayerContentProps) {
     return players;
   }, [context.instance.players]);
 
+  // panelOption is a comma-separated token list shared with the panel-level
+  // "Raid Wide" checkbox ("cb"); only the pl: token belongs to this view.
+  const optionTokens = useMemo(
+    () =>
+      (panelOption ?? "")
+        .split(",")
+        .map((part) => part.trim())
+        .filter((part) => part.length > 0),
+    [panelOption],
+  );
   const optionGuid = useMemo(() => {
-    if (!panelOption) return null;
-    const token = panelOption
-      .split(";")
-      .map((part) => part.trim())
-      .find((part) => part.startsWith(PLAYER_TOKEN));
+    const token = optionTokens.find((part) => part.startsWith(PLAYER_TOKEN));
     return token ? token.slice(PLAYER_TOKEN.length) : null;
-  }, [panelOption]);
+  }, [optionTokens]);
 
   const selectedIndex = useMemo(() => {
     const byOption = roster.findIndex((player) => player.guid === optionGuid);
@@ -97,7 +108,9 @@ export function ConsumablesPlayerContent(props: ConsumablesPlayerContentProps) {
   const selected = roster[selectedIndex];
 
   const selectPlayer = (guid: string) => {
-    setPanelOption?.(`${PLAYER_TOKEN}${guid}`);
+    const tokens = optionTokens.filter((part) => !part.startsWith(PLAYER_TOKEN));
+    tokens.push(`${PLAYER_TOKEN}${guid}`);
+    setPanelOption?.(tokens.join(","));
   };
   const step = (delta: number) => {
     if (roster.length === 0) return;
@@ -234,19 +247,4 @@ export function ConsumablesPlayerContent(props: ConsumablesPlayerContentProps) {
       )}
     </GenericPanel>
   );
-}
-
-// eslint-disable-next-line @typescript-eslint/no-explicit-any, react-refresh/only-export-components
-export function createConsumablesPlayerPanel(): PanelDefinition<ConsumablesResult, any> {
-  return {
-    ...consumablesPlayerProcessor,
-    label: "Player Consumes",
-    icon: <FlaskConical className="h-4 w-4" />,
-    underConstruction: true,
-    supportsFiltering: true,
-    defaultFilters: [
-      { type: "source_type" as const, value: ["player"], applyTo: ["consume"] },
-    ],
-    render: (props) => <ConsumablesPlayerContent {...props} />,
-  };
 }

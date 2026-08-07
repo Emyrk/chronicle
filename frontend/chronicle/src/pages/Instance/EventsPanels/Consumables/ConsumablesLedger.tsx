@@ -9,6 +9,7 @@ import { buildConsumableDisambiguationMap, resolveConsumableUse } from "./consum
 import { GenericPanel } from "../GenericPanel";
 import type { PanelDefinition, PanelRenderProps } from "../types";
 import { consumablesLedgerProcessor, type ConsumablesResult } from "./consumables.processor";
+import { ConsumablesPlayerContent } from "./ConsumablesPlayer";
 import {
   aggregateConsumablesLedger,
   formatGold,
@@ -19,6 +20,7 @@ import { AmbiguousSection, CoverageLine, LedgerRow } from "./LedgerShared";
 
 type ConsumablesLedgerContentProps = PanelRenderProps<ConsumablesResult>;
 
+/** Raid-wide ledger, shown while the "Raid Wide" toggle is on. */
 export function ConsumablesLedgerContent(props: ConsumablesLedgerContentProps) {
   const { result, loading } = props;
   const { cachedValue: cachedResult, hasCache: hasData } = useCachedValue(
@@ -108,9 +110,13 @@ export function createConsumablesLedgerPanel(): PanelDefinition<ConsumablesResul
     icon: <Coins className="h-4 w-4" />,
     underConstruction: true,
     supportsFiltering: true,
+    // One panel, two scopes: the checkbox flips between the per-player view
+    // (off, default) and the raid-wide ledger (on).
+    checkboxLabel: "Raid Wide",
     defaultFilters: [
       { type: "source_type" as const, value: ["player"], applyTo: ["consume"] },
     ],
-    render: (props) => <ConsumablesLedgerContent {...props} />,
+    render: (props) =>
+      props.checkboxChecked ? <ConsumablesLedgerContent {...props} /> : <ConsumablesPlayerContent {...props} />,
   };
 }

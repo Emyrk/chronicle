@@ -230,10 +230,3 @@ export const consumablesLedgerProcessor: PanelProcessor<ConsumablesResult, Consu
   id: "consumables_ledger",
   createState: createConsumablesState,
 };
-
-/** Same consume aggregation, exposed under the player panel's worker ID. */
-export const consumablesPlayerProcessor: PanelProcessor<ConsumablesResult, ConsumeProcessorEvent> = {
-  ...consumablesProcessor,
-  id: "consumables_player",
-  createState: createConsumablesState,
-};
