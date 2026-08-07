@@ -7,8 +7,33 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/Emyrk/chronicle/database"
 	"github.com/klauspost/compress/zstd"
 )
+
+func TestRawLogCompression(t *testing.T) {
+	t.Parallel()
+
+	for _, test := range []struct {
+		name         string
+		logType      database.LogType
+		wantEncoding string
+	}{
+		{name: "immutable client log", logType: database.LogTypeV2, wantEncoding: "zstd"},
+		{name: "appendable server log", logType: database.LogTypeAzerothcore, wantEncoding: "gzip"},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			t.Parallel()
+			encoding, compress := rawLogCompression(test.logType)
+			if encoding != test.wantEncoding {
+				t.Fatalf("rawLogCompression() encoding = %q, want %q", encoding, test.wantEncoding)
+			}
+			if compress == nil {
+				t.Fatal("rawLogCompression() returned a nil compressor")
+			}
+		})
+	}
+}
 
 func TestCompressRawLog(t *testing.T) {
 	t.Parallel()
@@ -37,6 +62,43 @@ func TestCompressRawLog(t *testing.T) {
 	}
 	if !bytes.Equal(got, input) {
 		t.Fatal("Zstandard round trip changed the raw log")
+	}
+}
+
+func TestGzipLogData(t *testing.T) {
+	t.Parallel()
+
+	first := []byte("first log chunk\n")
+	second := []byte("second log chunk\n")
+
+	firstGzip, err := gzipLogData(bytes.NewReader(first), false)
+	if err != nil {
+		t.Fatal(err)
+	}
+	secondGzip, err := gzipLogData(bytes.NewReader(second), false)
+	if err != nil {
+		t.Fatal(err)
+	}
+	preserved, err := gzipLogData(bytes.NewReader(secondGzip), true)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !bytes.Equal(preserved, secondGzip) {
+		t.Fatal("gzipLogData() changed an existing gzip stream")
+	}
+
+	combined := append(append([]byte(nil), firstGzip...), preserved...)
+	reader, err := decompressLog(combined, "gzip")
+	if err != nil {
+		t.Fatal(err)
+	}
+	got, err := io.ReadAll(reader)
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := append(append([]byte(nil), first...), second...)
+	if !bytes.Equal(got, want) {
+		t.Fatalf("decompressed appended log = %q, want %q", got, want)
 	}
 }
 

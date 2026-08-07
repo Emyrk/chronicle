@@ -6,8 +6,18 @@ import (
 	"fmt"
 	"io"
 
+	"github.com/Emyrk/chronicle/database"
 	"github.com/klauspost/compress/zstd"
 )
+
+type logCompressor func(io.Writer, io.Reader) (int64, error)
+
+func rawLogCompression(logType database.LogType) (string, logCompressor) {
+	if logType == database.LogTypeAzerothcore {
+		return "gzip", compressGzipLog
+	}
+	return "zstd", compressRawLog
+}
 
 func compressGzipLog(dst io.Writer, src io.Reader) (int64, error) {
 	encoder := gzip.NewWriter(dst)
@@ -22,12 +32,9 @@ func compressGzipLog(dst io.Writer, src io.Reader) (int64, error) {
 	return written, nil
 }
 
-// rawLogZstdLevel selects the encoder preset closest to Zstandard level 10.
-const rawLogZstdLevel = 10
-
 func compressRawLog(dst io.Writer, src io.Reader) (int64, error) {
 	encoder, err := zstd.NewWriter(dst,
-		zstd.WithEncoderLevel(zstd.EncoderLevelFromZstd(rawLogZstdLevel)),
+		zstd.WithEncoderLevel(zstd.SpeedBetterCompression),
 	)
 	if err != nil {
 		return 0, fmt.Errorf("create zstd writer: %w", err)
@@ -42,6 +49,18 @@ func compressRawLog(dst io.Writer, src io.Reader) (int64, error) {
 		return 0, fmt.Errorf("close zstd writer: %w", closeErr)
 	}
 	return written, nil
+}
+
+func gzipLogData(src io.Reader, isGzipped bool) ([]byte, error) {
+	if isGzipped {
+		return io.ReadAll(src)
+	}
+
+	compressed := bytes.NewBuffer(nil)
+	if _, err := compressGzipLog(compressed, src); err != nil {
+		return nil, err
+	}
+	return compressed.Bytes(), nil
 }
 
 func decompressLog(data []byte, encoding string) (io.Reader, error) {

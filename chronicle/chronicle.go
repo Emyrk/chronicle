@@ -279,14 +279,9 @@ func (c *Chronicle) UploadLogs(ctx context.Context, inputs []UploadInput, logTyp
 			source = gzReader
 		}
 
-		contentEncoding := "zstd"
-		compress := compressRawLog
-		if logType == database.LogTypeAzerothcore {
-			// Server-side logs remain gzip so AppendServerLog can concatenate
-			// incoming gzip streams without recompressing the complete log.
-			contentEncoding = "gzip"
-			compress = compressGzipLog
-		}
+		// Server-side logs remain gzip so AppendServerLog can concatenate
+		// incoming gzip streams without recompressing the complete log.
+		contentEncoding, compress := rawLogCompression(logType)
 		originalSize, err := compress(f, io.TeeReader(source, h))
 		if err != nil {
 			return nil, nil, fmt.Errorf("compress uploaded log: %w", err)
@@ -429,11 +424,11 @@ func (c *Chronicle) UploadLogs(ctx context.Context, inputs []UploadInput, logTyp
 	return &group, dbFiles, nil
 }
 
-// AppendServerLog appends new (gzip-compressed) data to an existing log group's
-// file. Both the existing stored blob and newData are gzip streams; concatenating
-// them produces valid multistream gzip that Go's gzip.Reader reads transparently.
-// After appending, the file record is updated and a reparse is enqueued.
-func (c *Chronicle) AppendServerLog(ctx context.Context, group database.WoWLogGroup, newData io.Reader, realmID uuid.UUID) error {
+// AppendServerLog appends new data to an existing server log group's file.
+// Stored server logs use multistream gzip so new chunks can be concatenated
+// without recompressing the complete log. After appending, the file record is
+// updated and a reparse is enqueued.
+func (c *Chronicle) AppendServerLog(ctx context.Context, group database.WoWLogGroup, newData io.Reader, newDataIsGzipped bool, realmID uuid.UUID) error {
 	files, err := c.Zed.GetWoWLogFilesByGroupID(ctx, group.ID)
 	if err != nil {
 		return fmt.Errorf("fetch log files for group %s: %w", group.ID, err)
@@ -449,28 +444,27 @@ func (c *Chronicle) AppendServerLog(ctx context.Context, group database.WoWLogGr
 		return fmt.Errorf("download existing log file %s: %w", file.ID, err)
 	}
 
-	// If existing file is plaintext (uploaded before gzip was enabled),
-	// compress it so we can do multistream gzip concatenation.
-	isExistingGzip := file.ContentEncoding.Valid && file.ContentEncoding.String == "gzip"
-	if !isExistingGzip {
-		var buf bytes.Buffer
-		gzw := gzip.NewWriter(&buf)
-		if _, err := gzw.Write(existing); err != nil {
-			return fmt.Errorf("compress existing plaintext log: %w", err)
+	existingEncoding := ""
+	if file.ContentEncoding.Valid {
+		existingEncoding = file.ContentEncoding.String
+	}
+	if existingEncoding != "gzip" {
+		reader, err := decompressLog(existing, existingEncoding)
+		if err != nil {
+			return fmt.Errorf("decompress existing log for append: %w", err)
 		}
-		if err := gzw.Close(); err != nil {
-			return fmt.Errorf("finalize gzip of existing log: %w", err)
+		existing, err = gzipLogData(reader, false)
+		if err != nil {
+			return fmt.Errorf("compress existing log for append: %w", err)
 		}
-		existing = buf.Bytes()
 	}
 
-	// Read new gzip upload into memory
-	newBytes, err := io.ReadAll(newData)
+	newBytes, err := gzipLogData(newData, newDataIsGzipped)
 	if err != nil {
-		return fmt.Errorf("read new log data: %w", err)
+		return fmt.Errorf("prepare appended log data: %w", err)
 	}
 
-	// Concatenate compressed blobs (valid multistream gzip)
+	// Concatenated gzip streams are decoded transparently as one stream.
 	combined := append(existing, newBytes...)
 
 	// Hash the compressed blob (that's what we store & deduplicate)
