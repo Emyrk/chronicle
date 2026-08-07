@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState, type MouseEvent } from "react";
-import { useQuery } from "@tanstack/react-query";
+import { useQueries, useQuery } from "@tanstack/react-query";
 import { Link } from "react-router-dom";
-import { ArrowLeft, Check, ExternalLink, FlaskConical, RotateCcw, Search, ShieldCheck, Sparkles, EyeOff } from "lucide-react";
+import { AlertTriangle, ArrowLeft, Check, ExternalLink, FlaskConical, Layers3, RotateCcw, Search, ShieldCheck, Sparkles, EyeOff } from "lucide-react";
 import { Card } from "@/components/ui/Card/Card";
 import { SpellIdTooltip } from "@/components/ui/SpellIdTooltip/SpellIdTooltip";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
@@ -10,29 +10,24 @@ import { useDatasetId, useIconBaseUrl } from "@/hooks/useDatasetId";
 
 import { useAuth } from "@/hooks/useAuth";
 import {
+  DEFAULT_DATASET_ID,
   useAuthorizationCheck,
   useConsumableDisambiguations,
   useConsumableEffectPolicies,
+  useDatasets,
   useDeleteConsumableDisambiguation,
   useIgnoreConsumableEffect,
   useSetConsumableDisambiguation,
+  useSiteConfig,
 } from "@/api/queries";
-import type { ConsumableEffectKind, ConsumableEffectPolicy } from "@/api/typesGenerated";
+import type { ConsumableEffectKind, ConsumableEffectPolicy, Dataset } from "@/api/typesGenerated";
 import { toast } from "sonner";
-
-interface ConsumableBuff {
-  id: number;
-  name: string;
-}
-
-interface ConsumableEntry {
-  item_id: number;
-  item_name: string;
-  item_quality: number;
-  item_icon: string;
-  item_spell_ids: number[];
-  buffs: ConsumableBuff[];
-}
+import {
+  buildCommonConsumableEffects,
+  type CommonConsumableEffect,
+  type ConsumableBuff,
+  type ConsumableEntry,
+} from "./commonConsumables";
 
 const QUALITY_COLORS: Record<number, string> = {
   0: "text-quality-poor",
@@ -249,6 +244,244 @@ function SpellReference({ spellId, name }: { spellId: number; name?: string }) {
   );
 }
 
+function CommonPolicyLabel({ effect, datasetId }: { effect: CommonConsumableEffect; datasetId: string }) {
+  const dataset = effect.datasets.find((entry) => entry.datasetId === datasetId);
+  const policy = dataset?.policy;
+  if (policy?.ignored) return <span className="text-zinc-400">Ignored</span>;
+  if (policy?.item_id !== undefined) {
+    const item = dataset?.candidates.find((candidate) => candidate.item_id === policy.item_id);
+    return <span className="text-emerald-300">{item?.item_name ?? `Item #${policy.item_id}`}</span>;
+  }
+  return <span className="text-amber-300">Unresolved</span>;
+}
+
+function commonPolicy(effect: CommonConsumableEffect): ConsumableEffectPolicy | undefined {
+  const policies = effect.datasets.map((dataset) => dataset.policy);
+  const first = policies[0];
+  if (!first || policies.some((policy) =>
+    !policy || policy.ignored !== first.ignored || policy.item_id !== first.item_id,
+  )) return undefined;
+  return first;
+}
+
+function isCommonEffectAmbiguous(effect: CommonConsumableEffect): boolean {
+  const policyStates = new Set(effect.datasets.map((dataset) => {
+    if (dataset.policy?.ignored) return "ignored";
+    if (dataset.policy?.item_id !== undefined) return `item:${dataset.policy.item_id}`;
+    return "unresolved";
+  }));
+  return !effect.candidateSetsIdentical
+    || effect.commonCandidates.length === 0
+    || policyStates.size > 1
+    || effect.datasets.some((dataset) => dataset.candidates.length > 1 && !dataset.policy);
+}
+
+function MultiDatasetConsumablesView({
+  datasets,
+  selectedDatasetIds,
+  view,
+  search,
+  showAmbiguous,
+  showIgnored,
+}: {
+  datasets: Dataset[];
+  selectedDatasetIds: string[];
+  view: Exclude<ViewMode, "item">;
+  search: string;
+  showAmbiguous: boolean;
+  showIgnored: boolean;
+}) {
+  const [effectMenu, setEffectMenu] = useState<EffectMenuState | null>(null);
+  const selectedDatasets = useMemo(
+    () => datasets.filter((dataset) => selectedDatasetIds.includes(dataset.id)),
+    [datasets, selectedDatasetIds],
+  );
+  const consumableQueries = useQueries({
+    queries: selectedDatasets.map((dataset) => ({
+      queryKey: ["wowdb", "consumables", dataset.id],
+      queryFn: async () => {
+        const response = await fetch(`/api/v1/wowdb/consumables?dataset_id=${encodeURIComponent(dataset.id)}`);
+        if (!response.ok) throw new Error(`Failed to fetch consumables for ${dataset.name}`);
+        return response.json() as Promise<ConsumableEntry[]>;
+      },
+      staleTime: 5 * 60 * 1000,
+    })),
+  });
+  const policyQueries = useQueries({
+    queries: selectedDatasets.map((dataset) => ({
+      queryKey: ["consumable-disambiguations", dataset.id, "admin"],
+      queryFn: async () => {
+        const response = await fetch(`/api/v1/game-data/datasets/${dataset.id}/consumable-disambiguations`);
+        if (!response.ok) throw new Error(`Failed to fetch consumable policies for ${dataset.name}`);
+        return response.json() as Promise<ConsumableEffectPolicy[]>;
+      },
+    })),
+  });
+  const saveCanonical = useSetConsumableDisambiguation();
+  const resetCanonical = useDeleteConsumableDisambiguation();
+  const ignoreEffect = useIgnoreConsumableEffect();
+  const pending = saveCanonical.isPending || resetCanonical.isPending || ignoreEffect.isPending;
+
+  const isLoading = consumableQueries.some((queryResult) => queryResult.isLoading)
+    || policyQueries.some((queryResult) => queryResult.isLoading);
+  const queryError = consumableQueries.find((queryResult) => queryResult.error)?.error
+    ?? policyQueries.find((queryResult) => queryResult.error)?.error;
+  const effects = useMemo(() => {
+    if (isLoading || queryError) return [];
+    return buildCommonConsumableEffects(selectedDatasets.map((dataset, index) => ({
+      datasetId: dataset.id,
+      consumables: consumableQueries[index].data ?? [],
+      policies: policyQueries[index].data ?? [],
+    })));
+  }, [consumableQueries, isLoading, policyQueries, queryError, selectedDatasets]);
+  const datasetById = useMemo(() => new Map(datasets.map((dataset) => [dataset.id, dataset])), [datasets]);
+  const query = search.trim().toLowerCase();
+  const effectKind: ConsumableEffectKind = view === "buff" ? "buff" : "direct";
+  const visibleEffects = effects.filter((effect) => {
+    if (effect.effectKind !== effectKind) return false;
+    if (!showIgnored && effect.datasets.every((dataset) => dataset.policy?.ignored)) return false;
+    if (showAmbiguous && !isCommonEffectAmbiguous(effect)) return false;
+    return !query
+      || effect.spellName.toLowerCase().includes(query)
+      || effect.spellId.toString().includes(query)
+      || effect.datasets.some((dataset) => dataset.candidates.some((candidate) => matchesItem(candidate, query)));
+  });
+  const selectedEffect = effectMenu
+    ? effects.find((effect) => effect.effectKind === effectMenu.effectKind && effect.spellId === effectMenu.spellId)
+    : undefined;
+
+  const runForSelectedDatasets = async (
+    effect: CommonConsumableEffect,
+    operation: (datasetId: string) => Promise<unknown>,
+    successMessage: string,
+  ) => {
+    const results = await Promise.allSettled(effect.datasets.map((dataset) => operation(dataset.datasetId)));
+    const failed = results.filter((result) => result.status === "rejected").length;
+    const succeeded = results.length - failed;
+    if (succeeded > 0) toast.success(`${successMessage} for ${succeeded} dataset${succeeded === 1 ? "" : "s"}`);
+    if (failed > 0) toast.error(`Failed for ${failed} dataset${failed === 1 ? "" : "s"}`);
+    setEffectMenu(null);
+  };
+
+  const handleCanonical = async (itemId: number) => {
+    if (!selectedEffect) return;
+    const replacements = selectedEffect.datasets.filter((dataset) =>
+      dataset.policy?.ignored || (dataset.policy?.item_id !== undefined && dataset.policy.item_id !== itemId),
+    ).length;
+    if (replacements > 0 && !window.confirm(
+      `Apply item #${itemId} to ${selectedEffect.datasets.length} datasets? This replaces ${replacements} existing decision${replacements === 1 ? "" : "s"}.`,
+    )) return;
+    await runForSelectedDatasets(
+      selectedEffect,
+      (datasetId) => saveCanonical.mutateAsync({ datasetId, effectKind: selectedEffect.effectKind, spellId: selectedEffect.spellId, itemId }),
+      "Canonical consumable updated",
+    );
+  };
+
+  const handleReset = async () => {
+    if (!selectedEffect) return;
+    await runForSelectedDatasets(
+      selectedEffect,
+      (datasetId) => resetCanonical.mutateAsync({ datasetId, effectKind: selectedEffect.effectKind, spellId: selectedEffect.spellId }),
+      "Canonical consumable reset",
+    );
+  };
+
+  const handleIgnore = async () => {
+    if (!selectedEffect) return;
+    await runForSelectedDatasets(
+      selectedEffect,
+      (datasetId) => ignoreEffect.mutateAsync({ datasetId, effectKind: selectedEffect.effectKind, spellId: selectedEffect.spellId }),
+      "Consumable effect ignored",
+    );
+  };
+
+  if (queryError) return <Card className="p-8 text-center text-sm text-destructive">{queryError.message}</Card>;
+  if (isLoading) return <Card className="p-8 text-center text-sm text-muted-foreground">Loading {selectedDatasets.length} datasets…</Card>;
+
+  return (
+    <>
+      <Card className="max-h-[75vh] divide-y divide-border/30 overflow-auto styled-scrollbar">
+        <div className="sticky top-0 z-10 grid grid-cols-[80px_minmax(240px,0.8fr)_minmax(0,1.8fr)] bg-muted/70 px-3 py-2 text-[11px] uppercase tracking-wide text-muted-foreground backdrop-blur">
+          <span>{view === "buff" ? "Buff ID" : "Spell ID"}</span>
+          <span>{view === "buff" ? "Applied buff" : "Item spell"}</span>
+          <span>Consumable items across {selectedDatasets.length} datasets</span>
+        </div>
+        {visibleEffects.length === 0 ? (
+          <div className="p-8 text-center text-sm text-muted-foreground">No matching shared {view === "buff" ? "buffs" : "spellcasts"} found.</div>
+        ) : visibleEffects.map((effect) => {
+          const consensus = commonPolicy(effect);
+          const warning = !effect.candidateSetsIdentical || effect.missingDatasetIds.length > 0 || effect.conflictingItemIds.length > 0;
+          return (
+            <div
+              key={effectKey(effect.effectKind, effect.spellId)}
+              onContextMenu={(event) => {
+                event.preventDefault();
+                setEffectMenu({
+                  x: event.clientX,
+                  y: event.clientY,
+                  effectKind: effect.effectKind,
+                  spellId: effect.spellId,
+                  spellName: effect.spellName,
+                  items: effect.commonCandidates,
+                });
+              }}
+              title="Right-click to manage the canonical item across selected datasets"
+              className={`grid grid-cols-[80px_minmax(240px,0.8fr)_minmax(0,1.8fr)] items-start px-3 py-2.5 hover:bg-muted/35 ${effect.datasets.every((dataset) => dataset.policy?.ignored) ? "opacity-55" : ""}`}
+            >
+              <span className="pt-1 font-mono text-xs text-muted-foreground">{effect.spellId}</span>
+              <div className="flex flex-wrap items-center gap-1.5">
+                {view === "buff" && <Sparkles className="h-3.5 w-3.5 text-primary" />}
+                <SpellReference spellId={effect.spellId} name={view === "buff" ? effect.spellName : undefined} />
+                <EffectStatus policy={consensus} ambiguous={isCommonEffectAmbiguous(effect)} />
+                {warning && (
+                  <span className="inline-flex items-center gap-1 rounded-full border border-amber-500/30 bg-amber-500/10 px-2 py-0.5 text-[10px] text-amber-300">
+                    <AlertTriangle className="h-3 w-3" /> Lists differ
+                  </span>
+                )}
+              </div>
+              <div className="space-y-2">
+                <div className="flex flex-wrap gap-1.5">
+                  {effect.commonCandidates.length === 0 ? (
+                    <span className="text-xs text-destructive">No candidate is present in every selected dataset</span>
+                  ) : effect.commonCandidates.map((item) => (
+                    <div key={item.item_id} className={consensus?.item_id === item.item_id ? "rounded-md ring-1 ring-emerald-400/60" : ""}>
+                      <ItemReference consumable={item} iconBaseUrl={selectedDatasets[0]?.icon_base_url} compact />
+                    </div>
+                  ))}
+                </div>
+                <div className="flex flex-wrap gap-x-3 gap-y-1 text-[10px] text-muted-foreground">
+                  {effect.datasets.map((dataset) => (
+                    <span key={dataset.datasetId}>
+                      <strong className="text-foreground/80">{datasetById.get(dataset.datasetId)?.name ?? dataset.datasetId}:</strong>{" "}
+                      <CommonPolicyLabel effect={effect} datasetId={dataset.datasetId} />
+                      {!effect.candidateSetsIdentical && ` · ${dataset.candidates.length} candidates`}
+                    </span>
+                  ))}
+                </div>
+                {effect.conflictingItemIds.length > 0 && (
+                  <div className="text-[10px] text-amber-300">Conflicting item names: {effect.conflictingItemIds.map((id) => `#${id}`).join(", ")}</div>
+                )}
+              </div>
+            </div>
+          );
+        })}
+      </Card>
+      {effectMenu && selectedEffect && (
+        <ConsumableEffectMenu
+          menu={effectMenu}
+          policy={commonPolicy(selectedEffect)}
+          pending={pending}
+          onCanonical={handleCanonical}
+          onReset={handleReset}
+          onIgnore={handleIgnore}
+          onClose={() => setEffectMenu(null)}
+        />
+      )}
+    </>
+  );
+}
+
 export function ConsumablesPage() {
   const [search, setSearch] = useState("");
   const [view, setView] = useState<ViewMode>("item");
@@ -256,8 +489,11 @@ export function ConsumablesPage() {
   const [showIgnored, setShowIgnored] = useState(false);
   const [effectMenu, setEffectMenu] = useState<EffectMenuState | null>(null);
   const [bulkIgnorePending, setBulkIgnorePending] = useState(false);
+  const [selectedDatasetIds, setSelectedDatasetIds] = useState<string[]>([DEFAULT_DATASET_ID]);
   const iconBaseUrl = useIconBaseUrl();
   const datasetId = useDatasetId();
+  const { data: siteConfig } = useSiteConfig();
+  const { data: datasets } = useDatasets();
   const { isAuthenticated } = useAuth();
   const consumablesAuthzCheck = useMemo(() => ({ manageConsumables: "chronicle:chronicle#admin_consumables" }), []);
   const worldDataAuthzCheck = useMemo(() => ({ adminWorldData: "chronicle:chronicle#admin_world_data" }), []);
@@ -265,6 +501,8 @@ export function ConsumablesPage() {
   const { data: worldDataAuthorization } = useAuthorizationCheck(worldDataAuthzCheck, { enabled: isAuthenticated });
   const canManageConsumables = (consumablesAuthorization?.manageConsumables ?? false)
     || (worldDataAuthorization?.adminWorldData ?? false);
+  const canCompareDatasets = siteConfig?.tenant === null && canManageConsumables && (datasets?.length ?? 0) > 1;
+  const multiDatasetMode = canCompareDatasets && selectedDatasetIds.length > 1;
   const { data: disambiguations } = useConsumableDisambiguations(datasetId);
   const { data: policies } = useConsumableEffectPolicies(datasetId, canManageConsumables);
   const policyMap = useMemo(() => {
@@ -418,6 +656,15 @@ export function ConsumablesPage() {
     if (failed > 0) toast.error(`Failed to ignore ${failed} consumable effect${failed === 1 ? "" : "s"}`);
   };
 
+  const toggleDatasetScope = (targetDatasetId: string) => {
+    const next = selectedDatasetIds.includes(targetDatasetId)
+      ? selectedDatasetIds.filter((id) => id !== targetDatasetId)
+      : [...selectedDatasetIds, targetDatasetId];
+    if (next.length < 2 && selectedDatasetIds.length > 1) return;
+    setSelectedDatasetIds(next.length === 0 ? [DEFAULT_DATASET_ID] : next);
+    if (next.length > 1 && view === "item") setView("buff");
+  };
+
   const visibleCount =
     view === "item"
       ? filteredItems.length
@@ -450,17 +697,71 @@ export function ConsumablesPage() {
       </div>
 
       <p className="mb-4 text-xs text-muted-foreground">
-        Generated from the current tenant&apos;s item and spell dataset. Item spells are the root
-        spells attached to an item and are candidates for cast evidence; their trigger chains are
-        followed to find applied buffs. A combat-log item ID remains stronger evidence than the
-        spell alone.
+        {multiDatasetMode
+          ? "Comparing overlapping consumable effects across selected datasets. Combined choices are restricted to candidates shared by every selected dataset."
+          : "Generated from the current tenant's item and spell dataset. Item spells are the root spells attached to an item and are candidates for cast evidence; their trigger chains are followed to find applied buffs. A combat-log item ID remains stronger evidence than the spell alone."}
       </p>
+
+      {canCompareDatasets && (
+        <Card className="mb-4 border-sky-500/20 bg-sky-500/[0.04] p-3">
+          <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
+            <div className="flex items-center gap-2 text-sm font-semibold">
+              <Layers3 className="h-4 w-4 text-sky-400" />
+              Dataset scope
+              <span className="text-xs font-normal text-muted-foreground">
+                {multiDatasetMode ? `${selectedDatasetIds.length} datasets selected` : "Current dataset only"}
+              </span>
+            </div>
+            <div className="flex gap-1.5 text-xs">
+              <button
+                type="button"
+                onClick={() => setSelectedDatasetIds([DEFAULT_DATASET_ID])}
+                className="rounded border border-border px-2 py-1 hover:bg-muted"
+              >
+                Current only
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  setSelectedDatasetIds((datasets ?? []).map((dataset) => dataset.id));
+                  if (view === "item") setView("buff");
+                }}
+                className="rounded border border-border px-2 py-1 hover:bg-muted"
+              >
+                Select all
+              </button>
+            </div>
+          </div>
+          <div className="flex flex-wrap gap-2">
+            {(datasets ?? []).map((dataset) => (
+              <label key={dataset.id} className="flex cursor-pointer items-center gap-2 rounded-md border border-border/70 bg-background/70 px-2.5 py-1.5 text-xs">
+                <input
+                  type="checkbox"
+                  checked={selectedDatasetIds.includes(dataset.id)}
+                  disabled={multiDatasetMode && selectedDatasetIds.length === 2 && selectedDatasetIds.includes(dataset.id)}
+                  onChange={() => toggleDatasetScope(dataset.id)}
+                  className="accent-sky-500"
+                />
+                <span className="font-medium">{dataset.name}</span>
+                <span className="text-[10px] text-muted-foreground">{dataset.wow_version}</span>
+              </label>
+            ))}
+          </div>
+          {multiDatasetMode && (
+            <p className="mt-2 text-[11px] text-muted-foreground">
+              The existing Buff and Spellcast tabs now operate across this selection. Right-click a row to apply a common decision.
+            </p>
+          )}
+        </Card>
+      )}
 
       {canManageConsumables && (
         <div className="mb-4 flex flex-wrap items-center justify-between gap-3 rounded-lg border border-sky-500/20 bg-sky-500/[0.06] px-3 py-2.5">
           <div className="flex items-center gap-2 text-xs text-sky-100">
             <ShieldCheck className="h-4 w-4 text-sky-400" />
-            <span><strong>Consumable manager:</strong> right-click a buff or spellcast row to set its canonical item.</span>
+            <span>
+              <strong>Consumable manager:</strong> right-click a buff or spellcast row to set its canonical item{multiDatasetMode ? " across the selected datasets" : ""}.
+            </span>
           </div>
           <div className="flex items-center gap-2">
             <label className="flex cursor-pointer items-center gap-2 rounded-md border border-border/70 bg-background/60 px-2.5 py-1.5 text-xs">
@@ -472,7 +773,7 @@ export function ConsumablesPage() {
               />
               Show only ambiguous
             </label>
-            {view !== "item" && (
+            {view !== "item" && !multiDatasetMode && (
               <button
                 type="button"
                 disabled={bulkIgnorePending || bulkIgnoreTargets.length === 0}
@@ -499,7 +800,7 @@ export function ConsumablesPage() {
       <Tabs value={view} onValueChange={(value) => setView(value as ViewMode)}>
         <div className="mb-3 flex flex-wrap items-center gap-3">
           <TabsList>
-            <TabsTrigger value="item">By Item</TabsTrigger>
+            <TabsTrigger value="item" disabled={multiDatasetMode}>By Item</TabsTrigger>
             <TabsTrigger value="buff">By Buff</TabsTrigger>
             <TabsTrigger value="spellcast">By Spellcast</TabsTrigger>
           </TabsList>
@@ -513,12 +814,12 @@ export function ConsumablesPage() {
               className="w-full rounded-md border bg-background py-1.5 pl-8 pr-3 text-sm focus:outline-none focus:ring-1 focus:ring-ring"
             />
           </div>
-          {search && (
+          {search && !multiDatasetMode && (
             <span className="text-xs text-muted-foreground">{visibleCount} results</span>
           )}
         </div>
 
-        {view === "item" && (
+        {view === "item" && !multiDatasetMode && (
           <Card className="max-h-[75vh] divide-y divide-border/30 overflow-auto styled-scrollbar">
             <div className="sticky top-0 z-10 grid grid-cols-[72px_minmax(220px,1fr)_minmax(180px,0.8fr)_minmax(260px,1.2fr)] bg-muted/70 px-3 py-2 text-[11px] uppercase tracking-wide text-muted-foreground backdrop-blur">
               <span>Item ID</span>
@@ -554,7 +855,7 @@ export function ConsumablesPage() {
           </Card>
         )}
 
-        {view === "buff" && (
+        {view === "buff" && !multiDatasetMode && (
           <Card className="max-h-[75vh] divide-y divide-border/30 overflow-auto styled-scrollbar">
             <div className="sticky top-0 z-10 grid grid-cols-[80px_minmax(240px,0.8fr)_minmax(0,1.8fr)] bg-muted/70 px-3 py-2 text-[11px] uppercase tracking-wide text-muted-foreground backdrop-blur">
               <span>Buff ID</span>
@@ -594,7 +895,7 @@ export function ConsumablesPage() {
           </Card>
         )}
 
-        {view === "spellcast" && (
+        {view === "spellcast" && !multiDatasetMode && (
           <Card className="max-h-[75vh] divide-y divide-border/30 overflow-auto styled-scrollbar">
             <div className="sticky top-0 z-10 grid grid-cols-[80px_minmax(220px,0.8fr)_minmax(0,1.3fr)_minmax(240px,1fr)] bg-muted/70 px-3 py-2 text-[11px] uppercase tracking-wide text-muted-foreground backdrop-blur">
               <span>Spell ID</span>
@@ -648,6 +949,17 @@ export function ConsumablesPage() {
               }),
             )}
           </Card>
+        )}
+
+        {multiDatasetMode && view !== "item" && (
+          <MultiDatasetConsumablesView
+            datasets={datasets ?? []}
+            selectedDatasetIds={selectedDatasetIds}
+            view={view}
+            search={search}
+            showAmbiguous={showAmbiguous}
+            showIgnored={showIgnored}
+          />
         )}
       </Tabs>
       {effectMenu && (
