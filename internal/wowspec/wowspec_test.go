@@ -83,16 +83,16 @@ func TestInferRoles(t *testing.T) {
 	t.Run("typical_raid", func(t *testing.T) {
 		t.Parallel()
 		// Boss melees tank1 heavily. Other players get occasional cleave.
-		bossAA := map[any]int{"boss": 40}
+		bossAA := map[string]int{"boss": 40}
 		players := map[string]wowspec.PlayerMetrics{
 			// Tank: receives most auto attacks from "boss"
 			"tank1": {DamageDone: 50000, HealingDone: 0, IncomingAutoAttacks: bossAA},
 			// Healers: high healing, low DPS
-			"healer1": {DamageDone: 5000, HealingDone: 150000, IncomingAutoAttacks: map[any]int{"boss": 2}},
-			"healer2": {DamageDone: 3000, HealingDone: 120000, IncomingAutoAttacks: map[any]int{"boss": 1}},
+			"healer1": {DamageDone: 5000, HealingDone: 150000, IncomingAutoAttacks: map[string]int{"boss": 2}},
+			"healer2": {DamageDone: 3000, HealingDone: 120000, IncomingAutoAttacks: map[string]int{"boss": 1}},
 			// DPS: high damage, low healing
-			"dps1": {DamageDone: 180000, HealingDone: 0, IncomingAutoAttacks: map[any]int{"boss": 3}},
-			"dps2": {DamageDone: 160000, HealingDone: 0, IncomingAutoAttacks: map[any]int{"boss": 1}},
+			"dps1": {DamageDone: 180000, HealingDone: 0, IncomingAutoAttacks: map[string]int{"boss": 3}},
+			"dps2": {DamageDone: 160000, HealingDone: 0, IncomingAutoAttacks: map[string]int{"boss": 1}},
 			"dps3": {DamageDone: 150000, HealingDone: 0},
 			"dps4": {DamageDone: 140000, HealingDone: 500},
 			"dps5": {DamageDone: 130000, HealingDone: 0},
@@ -157,9 +157,9 @@ func TestInferRoles(t *testing.T) {
 		// All players receive equal auto-attacks from the boss (AoE/cleave).
 		// With EvidenceAttempts=5, score = 3/(3+5) = 0.375 < 0.5 → no tank.
 		players := map[string]wowspec.PlayerMetrics{
-			"p1": {DamageDone: 100000, IncomingAutoAttacks: map[any]int{"boss": 3}},
-			"p2": {DamageDone: 90000, IncomingAutoAttacks: map[any]int{"boss": 3}},
-			"p3": {DamageDone: 80000, IncomingAutoAttacks: map[any]int{"boss": 3}},
+			"p1": {DamageDone: 100000, IncomingAutoAttacks: map[string]int{"boss": 3}},
+			"p2": {DamageDone: 90000, IncomingAutoAttacks: map[string]int{"boss": 3}},
+			"p3": {DamageDone: 80000, IncomingAutoAttacks: map[string]int{"boss": 3}},
 		}
 		roles := wowspec.InferRoles(players)
 		for k, r := range roles {
@@ -173,8 +173,8 @@ func TestInferRoles(t *testing.T) {
 		// DPS received 1 each.
 		// Tank score = 20/(20+5) = 0.8 → tank.
 		players := map[string]wowspec.PlayerMetrics{
-			"tank": {DamageDone: 30000, IncomingAutoAttacks: map[any]int{"boss": 20}},
-			"dps1": {DamageDone: 100000, IncomingAutoAttacks: map[any]int{"boss": 1}},
+			"tank": {DamageDone: 30000, IncomingAutoAttacks: map[string]int{"boss": 20}},
+			"dps1": {DamageDone: 100000, IncomingAutoAttacks: map[string]int{"boss": 1}},
 			"dps2": {DamageDone: 90000},
 		}
 		roles := wowspec.InferRoles(players)

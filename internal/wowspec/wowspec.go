@@ -87,7 +87,7 @@ type PlayerMetrics struct {
 	// IncomingAutoAttacks maps hostile source → number of Auto Attack attempts
 	// directed at this player (including zero-damage misses, dodges, parries).
 	// Used by roleinfer for source-aware tank inference.
-	IncomingAutoAttacks map[any]int
+	IncomingAutoAttacks map[string]int
 	// Class and Spec are optional. When set, spec-based role overrides
 	// are applied (e.g., Shadow Priest is always DPS despite high healing).
 	Class string
@@ -130,7 +130,7 @@ func InferRoles[K comparable](players map[K]PlayerMetrics) map[K]string {
 	}
 
 	// Build roleinfer input: source → player → attempt count.
-	attacks := make(roleinfer.IncomingAutoAttacks[any, K])
+	attacks := make(roleinfer.IncomingAutoAttacks[string, K])
 	for k, m := range players {
 		for src, count := range m.IncomingAutoAttacks {
 			targets := attacks[src]
@@ -155,16 +155,14 @@ func InferRoles[K comparable](players map[K]PlayerMetrics) map[K]string {
 	lowDPSCutoff := percentile(ddValues, LowDPSPercentile)
 
 	for k, m := range players {
-		// Spec-based override: some specs are always DPS regardless of stats.
-		if isDPSOnlySpec(m.Class, m.Spec) {
-			roles[k] = RoleDPS
-			continue
-		}
-
 		isTank := false
 		if tr, ok := tankResults[k]; ok {
 			isTank = tr.IsTank
 		}
+
+		// The spec override only prevents false healer classification. Observed
+		// tank behavior always takes priority over class or spec metadata.
+		isDPSOnly := isDPSOnlySpec(m.Class, m.Spec)
 
 		hdZ := zScore(float64(m.HealingDone), hdMean, hdStd)
 
@@ -178,7 +176,7 @@ func InferRoles[K comparable](players map[K]PlayerMetrics) map[K]string {
 			hasHealing := hdZ >= HealerZThreshold
 			hasLowDPS := float64(m.DamageDone) <= lowDPSCutoff
 			hasHighHealing := hdZ >= HealerHighZThreshold
-			isHealer = hasHealing && (hasLowDPS || hasHighHealing)
+			isHealer = !isDPSOnly && hasHealing && (hasLowDPS || hasHighHealing)
 		}
 
 		if isTank {

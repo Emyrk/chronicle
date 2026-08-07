@@ -1101,7 +1101,7 @@ func insertDPSRankings(
 			playerMetrics[unitGUID] = wowspec.PlayerMetrics{
 				DamageDone:          stats.DamageDone + ownerDamage[unitGUID],
 				HealingDone:         stats.HealingDone + ownerHealing[unitGUID] + stats.HealingAbsorbed + ownerAbsorb[unitGUID],
-				IncomingAutoAttacks: guidMapToAny(stats.IncomingAutoAttacks),
+				IncomingAutoAttacks: guidMapToString(stats.IncomingAutoAttacks),
 				Class:               class,
 				Spec:                spec,
 			}
@@ -1319,7 +1319,7 @@ func insertTrashRankings(
 		playerMetrics[key] = wowspec.PlayerMetrics{
 			DamageDone:          a.DamageDone,
 			HealingDone:         a.HealingDone,
-			IncomingAutoAttacks: guidMapToAny(a.IncomingAutoAttacks),
+			IncomingAutoAttacks: guidMapToString(a.IncomingAutoAttacks),
 			Class:               class,
 			Spec:                key.Spec,
 		}
@@ -1423,15 +1423,15 @@ func extractTalentInfoFromSnapshot(className string, talents *combatant.Talents)
 	return spec, layout, summary
 }
 
-// guidMapToAny converts a map[guid.GUID]int to map[any]int for use with
-// wowspec.PlayerMetrics.IncomingAutoAttacks.
-func guidMapToAny(m map[guid.GUID]int) map[any]int {
+// guidMapToString converts source GUID keys to the language-neutral string
+// representation used by role inference and its cross-language fixtures.
+func guidMapToString(m map[guid.GUID]int) map[string]int {
 	if len(m) == 0 {
 		return nil
 	}
-	out := make(map[any]int, len(m))
+	out := make(map[string]int, len(m))
 	for k, v := range m {
-		out[k] = v
+		out[k.String()] = v
 	}
 	return out
 }

@@ -2,9 +2,9 @@
  * Tank attempts processor — counts incoming Auto Attack attempts per
  * encounter / source / player.  Consumes the "damage" stream.
  *
- * An Auto Attack is identified by an empty sourceName (the parser leaves it
- * blank for white-damage swing events).  All hit outcomes count, including
- * amount === 0 and avoided outcomes (miss, dodge, parry, etc.).
+ * An Auto Attack is identified by spell ID 6603 or the normalized
+ * sourceName "Auto Attack". All hit outcomes count, including amount === 0
+ * and avoided outcomes (miss, dodge, parry, etc.).
  *
  * Only events where:
  *   - target is a player (isPlayerGuidFast)
@@ -25,6 +25,8 @@ import {
   createTankAttemptCounts,
 } from "./tankInference";
 
+const AutoAttackSpellId = 6603;
+
 export const tankAttemptsProcessor: PanelProcessor<
   TankAttemptCounts,
   DamageProcessorEvent
@@ -38,15 +40,19 @@ export const tankAttemptsProcessor: PanelProcessor<
     state: TankAttemptCounts,
     event: DamageProcessorEvent,
     encounterID: string,
+    _firstTimestamp,
+    _streamType,
+    context,
   ): void {
-    // Only Auto Attacks: sourceName is empty / blank for white-damage swings.
-    if (event.sourceName !== "" && event.sourceName != null) return;
+    // Auto Attack is serialized with the normalized source name and, when
+    // SpellData is available, spell ID 6603.
+    if (event.spellId !== AutoAttackSpellId && event.sourceName !== "Auto Attack") return;
 
     // Target must be a player.
     if (!isPlayerGuidFast(event.target)) return;
 
-    // Source must NOT be a player or pet (hostile NPC only).
-    if (isPlayerOrPetGuidFast(event.caster)) return;
+    // Source must not be a player or player-owned unit.
+    if (isPlayerOrPetGuidFast(event.caster) || context.units?.[event.caster]?.owner) return;
 
     // Accumulate.
     let sources = state.counts.get(encounterID);

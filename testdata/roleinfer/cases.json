@@ -1,0 +1,63 @@
+{
+  "algorithm_version": 1,
+  "tank_threshold": 0.5,
+  "evidence_attempts": 5,
+  "cases": [
+    {
+      "name": "main tank",
+      "selected_encounters": ["encounter-1"],
+      "counts": {
+        "encounter-1": {
+          "boss": { "tank": 20, "dps": 2 }
+        }
+      },
+      "expected": {
+        "tank": { "is_tank": true, "score": 0.8, "source": "boss", "attempts": 20, "max_attempts": 20 },
+        "dps": { "is_tank": false, "score": 0.08, "source": "boss", "attempts": 2, "max_attempts": 20 }
+      }
+    },
+    {
+      "name": "main and add tanks",
+      "selected_encounters": ["encounter-1"],
+      "counts": {
+        "encounter-1": {
+          "boss": { "main-tank": 30, "add-tank": 3 },
+          "add": { "main-tank": 2, "add-tank": 15 }
+        }
+      },
+      "expected": {
+        "main-tank": { "is_tank": true, "score": 0.8571428571428571, "source": "boss", "attempts": 30, "max_attempts": 30 },
+        "add-tank": { "is_tank": true, "score": 0.75, "source": "add", "attempts": 15, "max_attempts": 15 }
+      }
+    },
+    {
+      "name": "brief pull",
+      "selected_encounters": ["encounter-1"],
+      "counts": {
+        "encounter-1": {
+          "boss": { "tank": 3, "dps": 3 }
+        }
+      },
+      "expected": {
+        "tank": { "is_tank": false, "score": 0.375, "source": "boss", "attempts": 3, "max_attempts": 3 },
+        "dps": { "is_tank": false, "score": 0.375, "source": "boss", "attempts": 3, "max_attempts": 3 }
+      }
+    },
+    {
+      "name": "selected encounter maximum",
+      "selected_encounters": ["encounter-1", "encounter-2"],
+      "counts": {
+        "encounter-1": {
+          "boss-1": { "tank": 20, "dps": 2 }
+        },
+        "encounter-2": {
+          "boss-2": { "tank": 5, "dps": 4 }
+        }
+      },
+      "expected": {
+        "tank": { "is_tank": true, "score": 0.8, "source": "boss-1", "attempts": 20, "max_attempts": 20 },
+        "dps": { "is_tank": false, "score": 0.4, "source": "boss-2", "attempts": 4, "max_attempts": 5 }
+      }
+    }
+  ]
+}

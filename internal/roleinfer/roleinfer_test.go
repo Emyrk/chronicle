@@ -1,12 +1,36 @@
 package roleinfer_test
 
 import (
+	"encoding/json"
+	"os"
 	"testing"
 
 	"github.com/Emyrk/chronicle/internal/roleinfer"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
+
+type sharedFixture struct {
+	AlgorithmVersion int                 `json:"algorithm_version"`
+	TankThreshold    float64             `json:"tank_threshold"`
+	EvidenceAttempts int                 `json:"evidence_attempts"`
+	Cases            []sharedFixtureCase `json:"cases"`
+}
+
+type sharedFixtureCase struct {
+	Name               string                               `json:"name"`
+	SelectedEncounters []string                             `json:"selected_encounters"`
+	Counts             map[string]map[string]map[string]int `json:"counts"`
+	Expected           map[string]sharedFixtureExpected     `json:"expected"`
+}
+
+type sharedFixtureExpected struct {
+	IsTank      bool    `json:"is_tank"`
+	Score       float64 `json:"score"`
+	Source      string  `json:"source"`
+	Attempts    int     `json:"attempts"`
+	MaxAttempts int     `json:"max_attempts"`
+}
 
 func TestInferTanks_SingleSourceClearTank(t *testing.T) {
 	t.Parallel()
@@ -128,6 +152,43 @@ func TestInferTanks_ThresholdBoundary(t *testing.T) {
 	results := roleinfer.InferTanks(attacks)
 	assert.True(t, results["tank"].IsTank)
 	assert.False(t, results["offtank"].IsTank)
+}
+
+func TestInferTanks_SharedFixtures(t *testing.T) {
+	t.Parallel()
+
+	data, err := os.ReadFile("../../testdata/roleinfer/cases.json")
+	require.NoError(t, err)
+
+	var fixture sharedFixture
+	require.NoError(t, json.Unmarshal(data, &fixture))
+	require.Equal(t, roleinfer.AlgorithmVersion, fixture.AlgorithmVersion)
+	require.InDelta(t, roleinfer.TankThreshold, fixture.TankThreshold, 0)
+	require.Equal(t, roleinfer.EvidenceAttempts, fixture.EvidenceAttempts)
+
+	for _, tc := range fixture.Cases {
+		t.Run(tc.Name, func(t *testing.T) {
+			best := make(map[string]*roleinfer.TankResult[string])
+			for _, encounterID := range tc.SelectedEncounters {
+				results := roleinfer.InferTanks(roleinfer.IncomingAutoAttacks[string, string](tc.Counts[encounterID]))
+				for player, result := range results {
+					if current := best[player]; current == nil || result.TankScore > current.TankScore {
+						best[player] = result
+					}
+				}
+			}
+
+			for player, expected := range tc.Expected {
+				actual := best[player]
+				require.NotNil(t, actual, player)
+				assert.Equal(t, expected.IsTank, actual.IsTank, player)
+				assert.InDelta(t, expected.Score, actual.TankScore, 1e-12, player)
+				assert.Equal(t, expected.Source, actual.StrongestSource, player)
+				assert.Equal(t, expected.Attempts, actual.PlayerAttempts, player)
+				assert.Equal(t, expected.MaxAttempts, actual.MaxAttempts, player)
+			}
+		})
+	}
 }
 
 func TestInferTanks_Constants(t *testing.T) {

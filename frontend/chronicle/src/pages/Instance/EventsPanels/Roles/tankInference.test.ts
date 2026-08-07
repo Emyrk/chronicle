@@ -1,3 +1,4 @@
+import sharedFixture from "../../../../../../../testdata/roleinfer/cases.json";
 import { describe, expect, it } from "vitest";
 import {
   AlgorithmVersion,
@@ -7,6 +8,28 @@ import {
   inferTanks,
   type TankAttemptCounts,
 } from "./tankInference";
+
+interface SharedFixtureExpected {
+  is_tank: boolean;
+  score: number;
+  source: string;
+  attempts: number;
+  max_attempts: number;
+}
+
+interface SharedFixtureCase {
+  name: string;
+  selected_encounters: string[];
+  counts: Record<string, Record<string, Record<string, number>>>;
+  expected: Record<string, SharedFixtureExpected>;
+}
+
+const typedSharedFixture = sharedFixture as unknown as {
+  algorithm_version: number;
+  tank_threshold: number;
+  evidence_attempts: number;
+  cases: SharedFixtureCase[];
+};
 
 // Helper: set attempts in the nested map structure.
 function setAttempts(
@@ -151,6 +174,34 @@ describe("tankInference", () => {
     expect(tankEv.isTank).toBe(true);
     expect(tankEv.tankScore).toBeCloseTo(50 / 55, 5);
     expect(tankEv.strongestSource!.sourceGuid).toBe("boss1");
+  });
+
+  it("matches the shared Go and TypeScript fixture corpus", () => {
+    expect(typedSharedFixture.algorithm_version).toBe(AlgorithmVersion);
+    expect(typedSharedFixture.tank_threshold).toBe(TankThreshold);
+    expect(typedSharedFixture.evidence_attempts).toBe(EvidenceAttempts);
+
+    for (const fixtureCase of typedSharedFixture.cases) {
+      const state = createTankAttemptCounts();
+      for (const [encounterId, sources] of Object.entries(fixtureCase.counts)) {
+        for (const [sourceGuid, players] of Object.entries(sources)) {
+          for (const [playerGuid, attempts] of Object.entries(players)) {
+            setAttempts(state, encounterId, sourceGuid, playerGuid, attempts);
+          }
+        }
+      }
+
+      const result = inferTanks(state, fixtureCase.selected_encounters);
+      for (const [playerGuid, expected] of Object.entries(fixtureCase.expected)) {
+        const actual = result.evidence.get(playerGuid);
+        expect(actual, `${fixtureCase.name}: ${playerGuid}`).toBeDefined();
+        expect(actual!.isTank).toBe(expected.is_tank);
+        expect(actual!.tankScore).toBeCloseTo(expected.score, 12);
+        expect(actual!.strongestSource?.sourceGuid).toBe(expected.source);
+        expect(actual!.strongestSource?.attempts).toBe(expected.attempts);
+        expect(actual!.strongestSource?.maxAttempts).toBe(expected.max_attempts);
+      }
+    }
   });
 
   it("returns empty evidence when no data", () => {
