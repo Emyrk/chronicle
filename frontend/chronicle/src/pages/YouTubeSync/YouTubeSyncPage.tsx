@@ -5,6 +5,7 @@ import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/Card/Card"
 import { cn } from "@/lib/utils"
+import { canContinueWizard, nextCompletedWizardStep } from "../YouTubeSyncV3/wizard"
 import { YouTubeSyncOverlapTimeline } from "../YouTubeSyncV2/YouTubeSyncOverlapTimeline"
 import { getRaidBounds, inferVideoRange } from "../YouTubeSyncV2/timeline"
 import type { YTPlayer } from "@/types/youtube"
@@ -176,6 +177,7 @@ export interface YouTubeSyncPageProps {
   remoteControlChannel?: string
   capturedTimeIsUtc?: boolean
   settingsStorageKey?: string
+  wizardMode?: boolean
 }
 
 export function YouTubeSyncPage({
@@ -187,9 +189,11 @@ export function YouTubeSyncPage({
   remoteControlChannel,
   settingsStorageKey,
   capturedTimeIsUtc = false,
+  wizardMode = false,
 }: YouTubeSyncPageProps = {}) {
   const persistedSettings = useRef(readPersistedSettings(settingsStorageKey)).current
   // State
+  const [wizardStep, setWizardStep] = useState(1)
   const [videoUrl, setVideoUrl] = useState(persistedSettings.videoUrl ?? initialVideoUrl)
   const [videoLoaded, setVideoLoaded] = useState(false)
   const [currentTime, setCurrentTime] = useState(0)
@@ -268,6 +272,26 @@ export function YouTubeSyncPage({
       effectiveTimeOffsetHours
     )
   }, [duration, effectiveTimeOffsetHours, raidBounds, timelineAnchor])
+
+  const wizardState = useMemo(() => ({
+    videoReady: videoLoaded && duration > 0,
+    captureReady: captureActive,
+    clockReady: syncMethod === "manual" || Boolean(capturePreview),
+    syncReady: results.length > 0 && !syncRunning,
+  }), [captureActive, capturePreview, duration, results.length, syncMethod, syncRunning, videoLoaded])
+  const wizardAutoAdvancePausedAtRef = useRef<number | null>(null)
+  const wizardCanContinue = canContinueWizard(wizardStep, wizardState)
+
+  useEffect(() => {
+    if (!wizardMode) return
+    setWizardStep((step) => {
+      if (wizardAutoAdvancePausedAtRef.current === step) {
+        if (canContinueWizard(step, wizardState)) return step
+        wizardAutoAdvancePausedAtRef.current = null
+      }
+      return nextCompletedWizardStep(step, wizardState)
+    })
+  }, [wizardMode, wizardState])
 
   // Refs
   const playerRef = useRef<YTPlayer | null>(null)
@@ -1206,7 +1230,26 @@ export function YouTubeSyncPage({
         "px-3 pb-5 mx-auto space-y-5",
         controlsOnly ? "max-w-3xl pt-4" : "max-w-5xl pt-[540px]"
       )}>
-        {controlsOnly && (
+        {controlsOnly && wizardMode && (
+          <div className="rounded-xl border border-cyan-400/25 bg-card p-5 shadow-lg">
+            <div className="flex items-center justify-between gap-4">
+              <div>
+                <p className="font-mono text-xs uppercase tracking-[0.2em] text-cyan-400">
+                  Step {wizardStep} of 5
+                </p>
+                <h1 className="mt-1 text-xl font-bold">
+                  {["Load the video", "Share the player window", "Select the clock", "Run synchronization", "Review and export"][wizardStep - 1]}
+                </h1>
+              </div>
+              <div className="font-mono text-sm text-muted-foreground">{Math.round((wizardStep / 5) * 100)}%</div>
+            </div>
+            <div className="mt-4 h-1.5 overflow-hidden rounded-full bg-muted">
+              <div className="h-full bg-cyan-400 transition-all" style={{ width: `${(wizardStep / 5) * 100}%` }} />
+            </div>
+          </div>
+        )}
+
+        {controlsOnly && !wizardMode && (
           <WorkflowSteps
             videoReady={videoLoaded && duration > 0}
             captureReady={captureActive}
@@ -1215,7 +1258,7 @@ export function YouTubeSyncPage({
           />
         )}
 
-        {controlsOnly && (
+        {controlsOnly && (!wizardMode || wizardStep === 1) && (
           <Card>
             <CardHeader>
               <StepCardTitle
@@ -1298,7 +1341,7 @@ export function YouTubeSyncPage({
           </Card>
         )}
 
-        {controlsOnly && (
+        {controlsOnly && (!wizardMode || wizardStep === 2) && (
           <Card className={cn(!videoLoaded && "opacity-70")}>
             <CardHeader>
               <StepCardTitle
@@ -1331,7 +1374,7 @@ export function YouTubeSyncPage({
         )}
 
         {/* Capture Section */}
-        {captureActive && syncMethod === "ocr" && (
+        {captureActive && syncMethod === "ocr" && (!wizardMode || wizardStep === 3) && (
           <Card>
             <CardHeader>
               {controlsOnly ? (
@@ -1413,14 +1456,14 @@ export function YouTubeSyncPage({
           </Card>
         )}
 
-        {controlsOnly && syncMethod === "ocr" && !captureActive && (
+        {controlsOnly && !wizardMode && syncMethod === "ocr" && !captureActive && (
           <p className="rounded-lg border border-amber-500/20 bg-amber-500/10 p-4 text-sm text-amber-200">
             Complete step 2 before configuring automatic OCR synchronization.
           </p>
         )}
 
         {/* Sync Settings */}
-        <Card>
+        {(!wizardMode || wizardStep === 4) && <Card>
           <CardHeader>
             {controlsOnly ? (
               <StepCardTitle
@@ -1568,10 +1611,10 @@ export function YouTubeSyncPage({
               </div>
             )}
           </CardContent>
-        </Card>
+        </Card>}
 
         {/* Results */}
-        <Card>
+        {(!wizardMode || wizardStep === 5) && <Card>
           <CardHeader>
             {controlsOnly ? (
               <StepCardTitle
@@ -1716,14 +1759,41 @@ export function YouTubeSyncPage({
               </>
             )}
           </CardContent>
-        </Card>
+        </Card>}
 
-        {controlsOnly && raidBounds && (
+        {controlsOnly && (!wizardMode || wizardStep === 5) && raidBounds && (
           <YouTubeSyncOverlapTimeline
             raid={raidBounds}
             video={inferredVideoRange}
             instanceName={instanceQuery.data?.name}
           />
+        )}
+        {controlsOnly && wizardMode && (
+          <div className="sticky bottom-3 z-40 flex items-center justify-between rounded-xl border border-border bg-card/95 p-3 shadow-2xl backdrop-blur">
+            <Button
+              variant="ghost"
+              onClick={() => setWizardStep((step) => {
+                const previousStep = Math.max(1, step - 1)
+                wizardAutoAdvancePausedAtRef.current = previousStep
+                return previousStep
+              })}
+              disabled={wizardStep === 1 || syncRunning}
+            >
+              Back
+            </Button>
+            <span className="text-xs text-muted-foreground">
+              {wizardCanContinue ? "Ready to continue" : "Complete this step to continue"}
+            </span>
+            <Button
+              onClick={() => {
+                wizardAutoAdvancePausedAtRef.current = null
+                setWizardStep((step) => Math.min(5, step + 1))
+              }}
+              disabled={wizardStep === 5 || !wizardCanContinue || syncRunning}
+            >
+              Continue
+            </Button>
+          </div>
         )}
       </div>
 
