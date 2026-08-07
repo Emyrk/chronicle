@@ -318,7 +318,7 @@ export function YouTubeSyncPage({
         setRemoteConnected(true)
         return
       }
-      if (message.type !== "player-state") return
+      if (message.type !== "player-state" || message.ready !== true) return
       remoteStateRef.current = {
         currentTime: message.currentTime ?? 0,
         duration: message.duration ?? 0,

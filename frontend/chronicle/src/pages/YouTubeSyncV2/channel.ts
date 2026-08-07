@@ -1,4 +1,8 @@
-export const YOUTUBE_SYNC_V2_CHANNEL = "chronicle-youtube-sync-v2"
+const YOUTUBE_SYNC_V2_CHANNEL_PREFIX = "chronicle-youtube-sync-v2"
+
+export function getYouTubeSyncV2Channel(sessionId: string): string {
+  return `${YOUTUBE_SYNC_V2_CHANNEL_PREFIX}:${sessionId}`
+}
 
 export type PlayerCommand =
   | { type: "controller-hello" }

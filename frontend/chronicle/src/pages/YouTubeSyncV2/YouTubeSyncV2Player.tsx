@@ -3,7 +3,6 @@ import { ExternalLink, MonitorPlay } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import type { YTPlayer } from "@/types/youtube"
 import {
-  YOUTUBE_SYNC_V2_CHANNEL,
   type PlayerCommand,
   type PlayerEvent,
 } from "./channel"
@@ -22,7 +21,13 @@ function readControlWindowSize(): { width: number; height: number } {
   return { width: 560, height: 900 }
 }
 
-export function YouTubeSyncV2Player() {
+export function YouTubeSyncV2Player({
+  channelName,
+  sessionId,
+}: {
+  channelName: string
+  sessionId: string
+}) {
   const playerRef = useRef<YTPlayer | null>(null)
   const playerReadyRef = useRef(false)
   const channelRef = useRef<BroadcastChannel | null>(null)
@@ -88,7 +93,7 @@ export function YouTubeSyncV2Player() {
   }, [createPlayer])
 
   useEffect(() => {
-    const channel = new BroadcastChannel(YOUTUBE_SYNC_V2_CHANNEL)
+    const channel = new BroadcastChannel(channelName)
     channelRef.current = channel
     channel.onmessage = (event: MessageEvent<PlayerCommand>) => {
       const message = event.data
@@ -124,7 +129,7 @@ export function YouTubeSyncV2Player() {
       channel.close()
       channelRef.current = null
     }
-  }, [loadVideo, postState])
+  }, [channelName, loadVideo, postState])
 
   useEffect(() => {
     if (document.getElementById("youtube-iframe-api")) {
@@ -148,8 +153,8 @@ export function YouTubeSyncV2Player() {
   const openControls = () => {
     const { width, height } = readControlWindowSize()
     const popup = window.open(
-      "/youtube-sync-v2?role=controls",
-      "chronicle-youtube-sync-v2-controls",
+      `/youtube-sync-v2?role=controls&session=${encodeURIComponent(sessionId)}`,
+      `chronicle-youtube-sync-v2-controls-${sessionId}`,
       `popup=yes,width=${width},height=${height},resizable=yes,scrollbars=yes`
     )
     setPopupBlocked(!popup)
