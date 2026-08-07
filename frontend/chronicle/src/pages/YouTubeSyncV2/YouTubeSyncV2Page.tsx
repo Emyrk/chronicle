@@ -4,7 +4,7 @@ import { YouTubeSyncV2Player } from "./YouTubeSyncV2Player"
 import { YOUTUBE_SYNC_V2_CHANNEL } from "./channel"
 
 const WINDOW_STORAGE_KEY = "chronicle-youtube-sync-v2-window"
-const SETTINGS_STORAGE_KEY = "chronicle-youtube-sync-v2-settings"
+const SETTINGS_STORAGE_KEY = "chronicle-youtube-sync-v2-settings-v2"
 
 function YouTubeSyncV2Controls() {
   useEffect(() => {
@@ -30,7 +30,7 @@ function YouTubeSyncV2Controls() {
       controlsOnly
       remoteControlChannel={YOUTUBE_SYNC_V2_CHANNEL}
       settingsStorageKey={SETTINGS_STORAGE_KEY}
-      initialIntervalSeconds={300}
+      initialIntervalSeconds={600}
     />
   )
 }

@@ -1,9 +1,12 @@
-import { useState, useRef, useEffect, useCallback } from "react"
+import { useState, useRef, useEffect, useCallback, useMemo } from "react"
+import { useInstance } from "@/api/queries"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/Card/Card"
 import { cn } from "@/lib/utils"
+import { YouTubeSyncOverlapTimeline } from "../YouTubeSyncV2/YouTubeSyncOverlapTimeline"
+import { getRaidBounds, inferVideoRange } from "../YouTubeSyncV2/timeline"
 import type { YTPlayer } from "@/types/youtube"
 
 // Types
@@ -227,6 +230,9 @@ export function YouTubeSyncPage({
   const [instanceId, setInstanceId] = useState(
     persistedSettings.instanceId ?? initialInstanceId
   )
+  const [lookupInstanceId, setLookupInstanceId] = useState(
+    persistedSettings.instanceId ?? initialInstanceId
+  )
   const [chronicleExporting, setChronicleExporting] = useState(false)
   const localOffsetHours = (() => {
     const offset = -new Date().getTimezoneOffset() / 60
@@ -236,6 +242,29 @@ export function YouTubeSyncPage({
   const [timeOffsetHours, setTimeOffsetHours] = useState(
     persistedSettings.timeOffsetHours ?? initialTimeOffsetHours ?? localOffsetHours
   )
+
+  const instanceQuery = useInstance(lookupInstanceId, {
+    enabled: controlsOnly && lookupInstanceId.length > 0,
+  })
+  const raidBounds = useMemo(() => getRaidBounds(instanceQuery.data), [instanceQuery.data])
+  const timelineAnchor = useMemo(
+    () => [...results]
+      .sort((left, right) => left.videoTime - right.videoTime)
+      .find((result) => result.status === "success" && result.serverTime),
+    [results]
+  )
+  const inferredVideoRange = useMemo(() => {
+    if (!raidBounds || !timelineAnchor?.serverTime) return null
+    return inferVideoRange(
+      raidBounds,
+      duration,
+      {
+        videoTimeSeconds: timelineAnchor.videoTime,
+        serverTime: timelineAnchor.serverTime,
+      },
+      timeOffsetHours
+    )
+  }, [duration, raidBounds, timelineAnchor, timeOffsetHours])
 
   // Refs
   const playerRef = useRef<YTPlayer | null>(null)
@@ -1140,6 +1169,75 @@ export function YouTubeSyncPage({
         "px-3 pb-5 mx-auto space-y-5",
         controlsOnly ? "max-w-3xl pt-4" : "max-w-5xl pt-[540px]"
       )}>
+        {controlsOnly && (
+          <Card>
+            <CardHeader>
+              <CardTitle className="text-base">Raid log check <span className="font-normal text-muted-foreground">(optional)</span></CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              <p className="text-sm text-muted-foreground">
+                Load the instance now to compare its absolute raid time with the video as soon as a timestamp is detected.
+              </p>
+              <div className="grid gap-3 sm:grid-cols-[minmax(0,1fr)_auto] sm:items-end">
+                <div>
+                  <Label htmlFor="early-instance-id">Instance ID</Label>
+                  <Input
+                    id="early-instance-id"
+                    value={instanceId}
+                    onChange={(event) => setInstanceId(event.target.value)}
+                    onKeyDown={(event) => {
+                      if (event.key === "Enter") setLookupInstanceId(instanceId.trim())
+                    }}
+                    placeholder="Optional instance ID"
+                    className="mt-1 font-mono"
+                  />
+                </div>
+                <Button
+                  variant="secondary"
+                  onClick={() => setLookupInstanceId(instanceId.trim())}
+                  disabled={!instanceId.trim() || instanceQuery.isFetching}
+                >
+                  {instanceQuery.isFetching ? "Loading…" : "Load raid"}
+                </Button>
+              </div>
+              <div className="grid gap-3 sm:grid-cols-[180px_1fr] sm:items-end">
+                <div>
+                  <Label htmlFor="early-time-offset">Server UTC offset</Label>
+                  <Input
+                    id="early-time-offset"
+                    type="number"
+                    step="0.5"
+                    value={timeOffsetHours}
+                    onChange={(event) => setTimeOffsetHours(Number(event.target.value))}
+                    className="mt-1"
+                  />
+                </div>
+                <p className="pb-2 text-xs text-muted-foreground">
+                  The timeline recalculates immediately when this changes, which makes a wrong offset easy to spot.
+                </p>
+              </div>
+              {instanceQuery.isError && (
+                <p className="rounded-md bg-red-500/10 p-3 text-sm text-red-300">
+                  Could not load that instance. Check the ID and your access.
+                </p>
+              )}
+              {instanceQuery.data && !raidBounds && (
+                <p className="rounded-md bg-amber-500/10 p-3 text-sm text-amber-200">
+                  The instance loaded, but it does not contain usable start and end timestamps.
+                </p>
+              )}
+            </CardContent>
+          </Card>
+        )}
+
+        {controlsOnly && raidBounds && (
+          <YouTubeSyncOverlapTimeline
+            raid={raidBounds}
+            video={inferredVideoRange}
+            instanceName={instanceQuery.data?.name}
+          />
+        )}
+
         {/* Capture Section */}
         {captureActive && syncMethod === "ocr" && (
           <Card>
@@ -1446,11 +1544,11 @@ export function YouTubeSyncPage({
                       />
                     </div>
                     <div>
-                      <Label htmlFor="instance-id" className="text-xs">
+                      <Label htmlFor="export-instance-id" className="text-xs">
                         Instance ID
                       </Label>
                       <Input
-                        id="instance-id"
+                        id="export-instance-id"
                         value={instanceId}
                         onChange={(e) => setInstanceId(e.target.value)}
                         placeholder="abc123..."
@@ -1458,11 +1556,11 @@ export function YouTubeSyncPage({
                       />
                     </div>
                     <div>
-                      <Label htmlFor="time-offset" className="text-xs">
+                      <Label htmlFor="export-time-offset" className="text-xs">
                         Time Offset (hours)
                       </Label>
                       <Input
-                        id="time-offset"
+                        id="export-time-offset"
                         type="number"
                         value={timeOffsetHours}
                         onChange={(e) => setTimeOffsetHours(Number(e.target.value))}
