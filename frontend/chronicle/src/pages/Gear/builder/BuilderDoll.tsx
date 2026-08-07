@@ -12,6 +12,8 @@ interface BuilderDollProps {
   items: Map<string, HydratedItem>;
   selectedSlot?: number;
   onSelectSlot?: (outfitIndex: number) => void;
+  /** Open the enchant editor for a slot directly (edit mode only). */
+  onEnchantSlot?: (outfitIndex: number) => void;
   /** Per-slot weighted scores (by outfit index), when weights are active. */
   scores?: Map<number, number>;
   /** Per-slot score difference vs the matched character's worn item. */
@@ -43,6 +45,7 @@ export function BuilderDoll({
   items,
   selectedSlot,
   onSelectSlot,
+  onEnchantSlot,
   scores,
   wornDeltas,
   match,
@@ -69,6 +72,7 @@ export function BuilderDoll({
         item={item}
         selected={selectedSlot === def.outfitIndex}
         onSelect={onSelectSlot}
+        onEnchant={onEnchantSlot}
         equippedItemIds={equippedItemIds}
         score={scores?.get(def.outfitIndex)}
         wornDelta={wornDeltas?.get(def.outfitIndex)}

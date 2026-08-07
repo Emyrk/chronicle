@@ -44,6 +44,12 @@ export const SLOT = {
 /** Slots excluded from average item level (cosmetic). */
 export const COSMETIC_SLOTS: ReadonlySet<number> = new Set([SLOT.shirt, SLOT.tabard]);
 
+/** Slots that can carry a permanent enchant (incl. head/leg librams and scopes). */
+export const ENCHANTABLE_SLOTS: ReadonlySet<number> = new Set([
+  SLOT.head, SLOT.shoulder, SLOT.chest, SLOT.legs, SLOT.feet, SLOT.wrist,
+  SLOT.hands, SLOT.back, SLOT.mainHand, SLOT.offHand, SLOT.ranged,
+]);
+
 /**
  * Which item `inventory_type` values may go in each outfit slot. Used to
  * pre-filter the item picker search. Sourced from the WoWDB inventory-type

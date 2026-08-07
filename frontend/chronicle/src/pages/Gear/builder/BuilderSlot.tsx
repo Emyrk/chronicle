@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { Check, StickyNote, X } from "lucide-react";
+import { Check, Sparkles, StickyNote, X } from "lucide-react";
 import { ItemTooltip } from "@/components/ui/ItemTooltip/ItemTooltip";
 import { CursorTooltip, type CursorPos } from "@/pages/ArmoryPage/overview/CursorTooltip";
 import { getQualityBorderClass, getQualityTextClass, type GearSlotDef } from "@/pages/ArmoryPage/types";
@@ -7,7 +7,7 @@ import { iconUrl } from "@/config/iconUrl";
 import { useIconBaseUrl } from "@/hooks/useDatasetId";
 import { useIsMobile } from "@/hooks/useIsMobile";
 import { cn } from "@/lib/utils";
-import type { GearSlotEntry } from "./gearListModel";
+import { ENCHANTABLE_SLOTS, type GearSlotEntry } from "./gearListModel";
 import { formatScore } from "./gearScoring";
 import type { HydratedItem } from "./useListItems";
 
@@ -17,6 +17,8 @@ interface BuilderSlotProps {
   item?: HydratedItem;
   selected?: boolean;
   onSelect?: (outfitIndex: number) => void;
+  /** Jump straight to the enchant editor for this slot (edit mode only). */
+  onEnchant?: (outfitIndex: number) => void;
   equippedItemIds?: ReadonlySet<number>;
   /** Weighted stat score for the equipped item, when weights are active. */
   score?: number;
@@ -38,6 +40,7 @@ export function BuilderSlot({
   item,
   selected = false,
   onSelect,
+  onEnchant,
   equippedItemIds,
   score,
   wornDelta,
@@ -52,7 +55,17 @@ export function BuilderSlot({
   const displayName = isEmpty ? "Empty" : item?.name || `Item #${entry.item_id}`;
   const altCount = entry?.alternates?.length ?? 0;
   const enchantText = item?.tooltip?.enchantment;
+  const canEnchant = !!onEnchant && !isEmpty && ENCHANTABLE_SLOTS.has(slotDef.outfitIndex);
   const showTooltip = cursor != null && !isMobile && !isEmpty && item?.tooltip;
+
+  // The card itself is a <button> in edit mode, so the enchant shortcut
+  // must be a non-button interactive element to stay valid HTML.
+  const enchantClick = canEnchant
+    ? (e: React.MouseEvent) => {
+        e.stopPropagation();
+        onEnchant!(slotDef.outfitIndex);
+      }
+    : undefined;
 
   const Wrapper = onSelect ? "button" : "div";
 
@@ -115,10 +128,32 @@ export function BuilderSlot({
         >
           {displayName}
         </div>
-        {(enchantText || altCount > 0 || entry?.note || score !== undefined || wornDelta !== undefined) && (
+        {(enchantText || canEnchant || altCount > 0 || entry?.note || score !== undefined || wornDelta !== undefined) && (
           <div className="flex flex-wrap items-center gap-x-1.5 text-3xs leading-tight text-zinc-500">
-            {enchantText && (
-              <span className="truncate text-quality-uncommon max-w-32">{enchantText}</span>
+            {enchantText ? (
+              <span
+                role={enchantClick ? "button" : undefined}
+                title={enchantClick ? "Change enchant" : undefined}
+                onClick={enchantClick}
+                className={cn(
+                  "truncate text-quality-uncommon max-w-32",
+                  enchantClick && "cursor-pointer hover:underline",
+                )}
+              >
+                {enchantText}
+              </span>
+            ) : (
+              canEnchant && (
+                <span
+                  role="button"
+                  title="Add an enchant"
+                  onClick={enchantClick}
+                  className="inline-flex cursor-pointer items-center gap-0.5 text-zinc-600 hover:text-quality-uncommon"
+                >
+                  <Sparkles className="h-2.5 w-2.5" />
+                  Enchant
+                </span>
+              )
             )}
             {score !== undefined && (
               <span className="font-mono text-zinc-400">{formatScore(score)} pts</span>

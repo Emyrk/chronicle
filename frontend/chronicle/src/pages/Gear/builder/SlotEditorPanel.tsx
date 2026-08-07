@@ -1,4 +1,3 @@
-import { useState } from "react";
 import { X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { getQualityTextClass, LEFT_SLOTS, RIGHT_SLOTS, BOTTOM_SLOTS } from "@/pages/ArmoryPage/types";
@@ -30,7 +29,7 @@ export function slotLabel(outfitIndex: number): string {
   );
 }
 
-type EditorTab = "pick" | "alternates" | "enchant";
+export type EditorTab = "pick" | "alternates" | "enchant";
 
 const TABS: { id: EditorTab; label: string }[] = [
   { id: "pick", label: "Pick item" },
@@ -40,6 +39,9 @@ const TABS: { id: EditorTab; label: string }[] = [
 
 interface SlotEditorPanelProps {
   slotIndex: number;
+  /** Active tab, owned by the page so doll shortcuts can open a specific tab. */
+  tab: EditorTab;
+  onTabChange: (tab: EditorTab) => void;
   entry?: GearSlotEntry;
   items: Map<string, HydratedItem>;
   onEquip: (item: ItemSearchResult) => void;
@@ -65,6 +67,8 @@ interface SlotEditorPanelProps {
  */
 export function SlotEditorPanel({
   slotIndex,
+  tab,
+  onTabChange,
   entry,
   items,
   onEquip,
@@ -80,7 +84,6 @@ export function SlotEditorPanel({
   weights,
   equippedScore,
 }: SlotEditorPanelProps) {
-  const [tab, setTab] = useState<EditorTab>("pick");
   const current = entry ? items.get(itemRefKey(entry.item_id, entry.enchant_id)) : undefined;
   const usedItemIds = new Set<number>(
     entry ? [entry.item_id, ...(entry.alternates ?? []).map((a) => a.item_id)] : [],
@@ -131,7 +134,7 @@ export function SlotEditorPanel({
               key={t.id}
               type="button"
               disabled={disabled}
-              onClick={() => setTab(t.id)}
+              onClick={() => onTabChange(t.id)}
               className={cn(
                 "px-2.5 py-1.5 text-xs border-b-2 -mb-px transition-colors",
                 tab === t.id

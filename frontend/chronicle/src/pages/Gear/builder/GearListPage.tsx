@@ -33,7 +33,7 @@ import { StatWeightsPanel, type WeightSelection } from "./StatWeightsPanel";
 import { useGearListEditor } from "./useGearListEditor";
 import { useListItems, type ItemRef } from "./useListItems";
 import { BuilderDoll } from "./BuilderDoll";
-import { SlotEditorPanel, slotLabel } from "./SlotEditorPanel";
+import { SlotEditorPanel, slotLabel, type EditorTab } from "./SlotEditorPanel";
 import { AlternatesEditor } from "./AlternatesEditor";
 import { SetSummaryBar } from "./SetSummaryBar";
 import { StagesBar } from "./StagesBar";
@@ -322,6 +322,7 @@ function EditorView({
   const editor = useGearListEditor(list);
   const [stageIndex, setStageIndex] = useState(0);
   const [selectedSlot, setSelectedSlot] = useState<number | null>(null);
+  const [editorTab, setEditorTab] = useState<EditorTab>("pick");
   const [weightSel, setWeightSel] = useState<WeightSelection | null>(null);
   const [view, setView] = useState<"stage" | "matrix">("stage");
 
@@ -447,6 +448,7 @@ function EditorView({
               onCellClick={(stageIdx, slotIdx) => {
                 setStageIndex(stageIdx);
                 setSelectedSlot(slotIdx);
+                setEditorTab("pick");
                 setView("stage");
               }}
             />
@@ -459,7 +461,14 @@ function EditorView({
                   stage={stage}
                   items={items}
                   selectedSlot={selectedSlot ?? undefined}
-                  onSelectSlot={(i) => setSelectedSlot((prev) => (prev === i ? null : i))}
+                  onSelectSlot={(i) => {
+                    setSelectedSlot((prev) => (prev === i ? null : i));
+                    setEditorTab("pick");
+                  }}
+                  onEnchantSlot={(i) => {
+                    setSelectedSlot(i);
+                    setEditorTab("enchant");
+                  }}
                   scores={scores}
                   wornDeltas={wornDeltas}
                   match={charMatch.match}
@@ -471,6 +480,8 @@ function EditorView({
             {selectedSlot != null ? (
               <SlotEditorPanel
                 slotIndex={selectedSlot}
+                tab={editorTab}
+                onTabChange={setEditorTab}
                 entry={selectedEntry}
                 items={items}
                 onEquip={equip}
