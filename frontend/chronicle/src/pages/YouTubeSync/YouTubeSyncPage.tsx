@@ -755,17 +755,31 @@ export function YouTubeSyncPage({
 
     const totalSteps = Math.ceil((effectiveEnd - startTime) / interval)
     let step = 0
+    let stopReason: string | null = null
 
     for (let time = startTime; time < effectiveEnd && !syncAbortedRef.current; time += interval) {
       step++
       setSyncProgress(step / totalSteps)
       setStatusText(`Processing ${formatTime(time)} (${step}/${totalSteps})...`)
 
-      playerRef.current.seekTo(time, true)
+      const player = playerRef.current
+      if (!player) {
+        syncAbortedRef.current = true
+        stopReason = "Player window disconnected. Sync stopped."
+        break
+      }
+      player.seekTo(time, true)
       await sleep(1500)
 
+      const activePlayer = playerRef.current
+      if (!activePlayer) {
+        syncAbortedRef.current = true
+        stopReason = "Player window disconnected. Sync stopped."
+        break
+      }
+
       // Get actual video time from player (has sub-second precision)
-      const actualTime = playerRef.current.getCurrentTime()
+      const actualTime = activePlayer.getCurrentTime()
 
       const result: SyncResult = {
         videoTime: actualTime,
@@ -805,7 +819,9 @@ export function YouTubeSyncPage({
     }
 
     setSyncRunning(false)
-    setStatusText(syncAbortedRef.current ? "Sync aborted" : `Done! ${step} frames processed.`)
+    setStatusText(
+      stopReason ?? (syncAbortedRef.current ? "Sync aborted" : `Done! ${step} frames processed.`)
+    )
   }
 
   const stopSync = () => {
@@ -849,15 +865,29 @@ export function YouTubeSyncPage({
 
     const totalSteps = Math.ceil((effectiveEnd - startTime) / interval)
     let step = 0
+    let stopReason: string | null = null
 
     for (let time = startTime; time < effectiveEnd && !syncAbortedRef.current; time += interval) {
       step++
       setSyncProgress(step / totalSteps)
       setStatusText(`Step ${step}/${totalSteps} — waiting for input...`)
 
-      playerRef.current.seekTo(time, true)
+      const player = playerRef.current
+      if (!player) {
+        syncAbortedRef.current = true
+        stopReason = "Player window disconnected. Sync stopped."
+        break
+      }
+      player.seekTo(time, true)
       await sleep(1000)
-      const actualTime = playerRef.current.getCurrentTime()
+
+      const activePlayer = playerRef.current
+      if (!activePlayer) {
+        syncAbortedRef.current = true
+        stopReason = "Player window disconnected. Sync stopped."
+        break
+      }
+      const actualTime = activePlayer.getCurrentTime()
 
       setManualPrompt({ videoTime: actualTime, videoTimeFormatted: formatTime(actualTime) })
       const userInput = await waitForManualInput()
@@ -896,7 +926,9 @@ export function YouTubeSyncPage({
     }
 
     setSyncRunning(false)
-    setStatusText(syncAbortedRef.current ? "Sync aborted" : `Done! ${step} frames processed.`)
+    setStatusText(
+      stopReason ?? (syncAbortedRef.current ? "Sync aborted" : `Done! ${step} frames processed.`)
+    )
   }
 
   // Export

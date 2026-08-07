@@ -92,8 +92,18 @@ export function YouTubeSyncOverlapTimeline({
 
         {model && (
           <div className="flex justify-between gap-3 font-mono text-[11px] text-muted-foreground">
-            <TimelineTime timestamp={model.rangeStart} />
-            <TimelineTime timestamp={model.rangeEnd} align="right" />
+            <div className="text-left">
+              <div>{formatUtc(model.rangeStart)}</div>
+              <div className="mt-0.5 text-[10px] text-foreground/70">
+                {formatLocal(model.rangeStart)} local
+              </div>
+            </div>
+            <div className="text-right">
+              <div>{formatUtc(model.rangeEnd)}</div>
+              <div className="mt-0.5 text-[10px] text-foreground/70">
+                {formatLocal(model.rangeEnd)} local
+              </div>
+            </div>
           </div>
         )}
 
@@ -115,23 +125,6 @@ export function YouTubeSyncOverlapTimeline({
         </div>
       </CardContent>
     </Card>
-  )
-}
-
-function TimelineTime({
-  timestamp,
-  align = "left",
-}: {
-  timestamp: number
-  align?: "left" | "right"
-}) {
-  return (
-    <div className={align === "right" ? "text-right" : "text-left"}>
-      <div>{formatUtc(timestamp)}</div>
-      <div className="mt-0.5 text-[10px] text-foreground/70">
-        {formatLocal(timestamp)} local
-      </div>
-    </div>
   )
 }
 
