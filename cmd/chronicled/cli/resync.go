@@ -64,6 +64,8 @@ func ResyncCmd() *serpent.Command {
 		s3SecretKey     string
 		s3PathStyle     bool
 		s3Bucket        string
+		spiceDBGRPCURL  string
+		spiceDBPSK      string
 	)
 
 	defaultTarget := resynccandidate.DefaultTargetVersion(version.GitTag, version.GitCommit)
@@ -183,6 +185,22 @@ func ResyncCmd() *serpent.Command {
 			Env:     "CHRONICLE_S3_BUCKET",
 			Default: "",
 			Value:   serpent.StringOf(&s3Bucket),
+		},
+		{
+			Name:        "SpiceDB GRPC URL",
+			Description: "SpiceDB GRPC URL, e.g. localhost:50051. Required for parser authorization writes in --execute mode.",
+			Flag:        "spicedb-grpc-url",
+			Env:         "CHRONICLE_SPICEDB_GRPC_URL",
+			Default:     "localhost:50051",
+			Value:       serpent.StringOf(&spiceDBGRPCURL),
+		},
+		{
+			Name:        "SpiceDB Preshared Key",
+			Description: "Shared key for authenticating with SpiceDB in --execute mode.",
+			Flag:        "spicedb-preshared-key",
+			Env:         "CHRONICLE_SPICEDB_PRESHARED_KEY",
+			Default:     "chronicle-dev-key",
+			Value:       serpent.StringOf(&spiceDBPSK),
 		},
 	}
 
@@ -323,14 +341,30 @@ Fail-pause behavior (--execute):
 			}
 			logger.Info("remote parser version verified", "remote_url", remoteURL)
 
-			// Construct a minimal Chronicle instance. Only Postgres,
-			// storage, and DB-backed game data are required.
+			// Construct the same database + SpiceDB authorization wrapper used by
+			// the production server. Parser-side database writes also maintain
+			// authorization relationships, so execute mode must connect to SpiceDB
+			// before any destructive resync work is enqueued.
+			zed, err := authz.New(ctx, authz.Options{
+				GRPCURL:      spiceDBGRPCURL,
+				PreSharedKey: spiceDBPSK,
+				Logger:       logger,
+				DB:           dbStore,
+			})
+			if err != nil {
+				return fmt.Errorf("init authz: %w", err)
+			}
+			defer func() {
+				if err := zed.Close(); err != nil {
+					logger.Error("close authz", "error", err)
+				}
+			}()
+
 			// Resync uses DatabaseSpellsOnly mode: no Spell.dbc file needed;
 			// all spell data comes from the realm-resolved dataset in PostgreSQL.
-			noopZed := authz.NewDatabaseOnly(logger, dbStore)
 			wowDB, err := gamedb.New(ctx, gamedb.Options{
 				DatabaseSpellsOnly: true,
-				DB:                 noopZed,
+				DB:                 zed,
 				Pool:               pool,
 				DatasetID:          servicedataset.DefaultDatasetID,
 				CacheSvc:           nil, // Nil is fine — caches work without metrics.
@@ -347,7 +381,7 @@ Fail-pause behavior (--execute):
 
 			chron, err := chronicle.New(ctx, logger, chronicle.Options{
 				Storage:          st,
-				Zed:              noopZed,
+				Zed:              zed,
 				WoWDB:            wowDB,
 				DefaultFlavor:    servicechronicle.BuildTagFlavor(),
 				DefaultDatasetID: servicedataset.DefaultDatasetID,

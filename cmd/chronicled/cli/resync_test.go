@@ -26,6 +26,8 @@ func TestResyncCmd_Help(t *testing.T) {
 		foundRemoteURL      bool
 		foundStorageType    bool
 		foundStoragePath    bool
+		foundSpiceDBURL     bool
+		foundSpiceDBPSK     bool
 	)
 	for _, opt := range cmd.Options {
 		switch opt.Flag {
@@ -55,6 +57,14 @@ func TestResyncCmd_Help(t *testing.T) {
 			foundStorageType = true
 		case "storage-path":
 			foundStoragePath = true
+		case "spicedb-grpc-url":
+			foundSpiceDBURL = true
+			require.Equal(t, "CHRONICLE_SPICEDB_GRPC_URL", opt.Env)
+			require.Equal(t, "localhost:50051", opt.Default)
+		case "spicedb-preshared-key":
+			foundSpiceDBPSK = true
+			require.Equal(t, "CHRONICLE_SPICEDB_PRESHARED_KEY", opt.Env)
+			require.Equal(t, "chronicle-dev-key", opt.Default)
 		}
 	}
 	require.True(t, foundTargetVersion, "missing --target-version flag")
@@ -67,6 +77,8 @@ func TestResyncCmd_Help(t *testing.T) {
 	require.True(t, foundRemoteURL, "missing --remote-url flag")
 	require.True(t, foundStorageType, "missing --storage-type flag")
 	require.True(t, foundStoragePath, "missing --storage-path flag")
+	require.True(t, foundSpiceDBURL, "missing --spicedb-grpc-url flag")
+	require.True(t, foundSpiceDBPSK, "missing --spicedb-preshared-key flag")
 }
 
 func TestResyncCmd_AutoResumeDocumented(t *testing.T) {

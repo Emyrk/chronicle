@@ -3,7 +3,9 @@ package authz_test
 import (
 	"context"
 	"testing"
+	"time"
 
+	"github.com/Emyrk/chronicle/database"
 	"github.com/Emyrk/chronicle/database/authz/policy"
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/assert"
@@ -11,6 +13,7 @@ import (
 
 	"github.com/Emyrk/chronicle/database/authz"
 	"github.com/Emyrk/chronicle/internal/services/serviceauthz"
+	"github.com/Emyrk/chronicle/internal/services/servicedbstore"
 	"github.com/Emyrk/chronicle/internal/services/servicelogger"
 	"github.com/Emyrk/chronicle/internal/services/testservices"
 	"github.com/Emyrk/chronicle/internal/testutil"
@@ -25,6 +28,44 @@ func TestAuthz(t *testing.T) {
 
 	var _, _, _ = logger, authz, ctx
 
+}
+
+func TestInTx_UpsertGuildWritesSpiceDBRelationship(t *testing.T) {
+	t.Parallel()
+
+	broker := testservices.Authz(t)
+	ctx := testutil.Context(t, testutil.WaitLong)
+	zed := serviceauthz.Authz(broker)
+	db := servicedbstore.DatabaseStore(broker)
+
+	serverID := uuid.New()
+	realmID := uuid.New()
+	_, err := db.InsertWoWServer(ctx, database.InsertWoWServerParams{
+		ID:          serverID,
+		Name:        "authz transaction test server " + serverID.String(),
+		Description: "authz transaction test",
+	})
+	require.NoError(t, err)
+	_, err = db.InsertWoWServerRealm(ctx, database.InsertWoWServerRealmParams{
+		ID:          realmID,
+		ServerID:    serverID,
+		Name:        "authz transaction test realm " + realmID.String(),
+		Description: "authz transaction test",
+	})
+	require.NoError(t, err)
+
+	var guild database.Guild
+	err = zed.InTx(ctx, func(tx *authz.AuthzTX) error {
+		var upsertErr error
+		guild, upsertErr = tx.UpsertGuild(ctx, database.UpsertGuildParams{
+			RealmID:   realmID,
+			Name:      "Parser Guild",
+			CreatedAt: database.Timestamptz(time.Now()),
+		})
+		return upsertErr
+	}, nil)
+	require.NoError(t, err)
+	require.NotEqual(t, uuid.Nil, guild.ID)
 }
 
 func TestManageConsumablesRole(t *testing.T) {
