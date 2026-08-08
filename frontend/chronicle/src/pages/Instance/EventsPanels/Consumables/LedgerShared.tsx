@@ -24,6 +24,31 @@ import {
 } from "./consumablesLedger";
 import { fuzzyConsumableMatch, itemIdentity } from "./consumablesTotal";
 
+/** Flag token: show every player at once (the merged Consumes Total view). */
+export const VIEW_ALL_TOKEN = "va";
+
+/** panelOption is a comma-separated token list shared by the panel-level
+ * checkbox ("cb"), the player selection ("pl:<guid>"), and view flags. */
+// eslint-disable-next-line react-refresh/only-export-components
+export function panelOptionTokens(option: string | null | undefined): string[] {
+  return (option ?? "")
+    .split(",")
+    .map((part) => part.trim())
+    .filter((part) => part.length > 0);
+}
+
+/** Add or remove a flag token, preserving every other token. */
+// eslint-disable-next-line react-refresh/only-export-components
+export function togglePanelOptionFlag(
+  option: string | null | undefined,
+  flag: string,
+  on: boolean,
+): string | null {
+  const tokens = panelOptionTokens(option).filter((token) => token !== flag);
+  if (on) tokens.push(flag);
+  return tokens.length > 0 ? tokens.join(",") : null;
+}
+
 /**
  * Fuzzy-filter resolved uses by item name (or id). Filtering happens at the
  * use level, BEFORE aggregation, so everything derived from it — rows, header

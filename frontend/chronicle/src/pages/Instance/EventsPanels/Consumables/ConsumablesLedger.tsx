@@ -1,5 +1,5 @@
 import { useMemo, useState } from "react";
-import { Coins } from "lucide-react";
+import { Coins, User } from "lucide-react";
 import { ScrollArea } from "@/components/ui/ScrollArea/ScrollArea";
 import { useCachedValue } from "@/hooks/useCachedValue";
 import { useDatasetId } from "@/hooks/useDatasetId";
@@ -26,8 +26,32 @@ import {
   CoverageLine,
   LedgerFilterInput,
   LedgerRow,
+  panelOptionTokens,
+  togglePanelOptionFlag,
   useFilteredUses,
+  VIEW_ALL_TOKEN,
 } from "./LedgerShared";
+import { ConsumablesTotalContent } from "./ConsumablesTotal";
+
+/** All-players view with a way back to the single-player view. */
+function ConsumablesAllContent(props: ConsumablesLedgerContentProps) {
+  return (
+    <ConsumablesTotalContent
+      {...props}
+      headerExtra={
+        <button
+          type="button"
+          onClick={() => props.setPanelOption?.(togglePanelOptionFlag(props.panelOption, VIEW_ALL_TOKEN, false))}
+          title="Show one player at a time"
+          className="flex h-8 shrink-0 cursor-pointer items-center gap-1.5 rounded border border-border px-2 text-xs text-muted-foreground transition-colors hover:border-ring hover:text-foreground"
+        >
+          <User className="h-3.5 w-3.5" />
+          Single Player
+        </button>
+      }
+    />
+  );
+}
 
 type ConsumablesLedgerContentProps = PanelRenderProps<ConsumablesResult>;
 
@@ -230,13 +254,19 @@ export function createConsumablesLedgerPanel(): PanelDefinition<ConsumablesResul
     // One panel, two scopes: the checkbox flips between the per-player view
     // (off, default) and the raid-wide ledger (on).
     checkboxLabel: "Raid Wide",
-    // Scope toggle, player selection, and card chrome never change what the
-    // worker computes — switching players must not re-process the stream.
-    renderOnlyOptionTokens: ["cb", "pl:", "bc:", "t:"],
+    // Scope toggle, player selection, view flags, and card chrome never
+    // change what the worker computes — switching views must not re-process
+    // the stream.
+    renderOnlyOptionTokens: ["cb", "pl:", "va", "bc:", "t:"],
     defaultFilters: [
       { type: "source_type" as const, value: ["player"], applyTo: ["consume"] },
     ],
-    render: (props) =>
-      props.checkboxChecked ? <ConsumablesLedgerContent {...props} /> : <ConsumablesPlayerContent {...props} />,
+    render: (props) => {
+      if (props.checkboxChecked) return <ConsumablesLedgerContent {...props} />;
+      if (panelOptionTokens(props.panelOption).includes(VIEW_ALL_TOKEN)) {
+        return <ConsumablesAllContent {...props} />;
+      }
+      return <ConsumablesPlayerContent {...props} />;
+    },
   };
 }

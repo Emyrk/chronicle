@@ -40,7 +40,6 @@ import { createDamageTakenPanel } from "./DamageTaken/DamageTaken";
 import { createHealingDonePanel } from "./HealingDone/HealingDone";
 import { createExtraAttacksPanel } from "./ExtraAttacks/ExtraAttacks";
 import { createConsumablesPanel } from "./Consumables/Consumables";
-import { createConsumablesTotalPanel } from "./Consumables/ConsumablesTotal";
 import { createConsumablesLedgerPanel } from "./Consumables/ConsumablesLedger";
 import { createHealingTakenPanel } from "./HealingTaken/HealingTaken";
 import { createDeathsPanel } from "./Deaths/Deaths";
@@ -96,7 +95,6 @@ export const PANELS: Record<string, PanelDefinition<any, any>> = {
   healing_taken: createHealingTakenPanel("players"),
   extra_attacks: createExtraAttacksPanel(),
   consumables: createConsumablesPanel(),
-  consumables_total: createConsumablesTotalPanel(),
   consumables_ledger: createConsumablesLedgerPanel(),
   deaths: createDeathsPanel(),
   death_log: createDeathLogPanel(),
@@ -413,7 +411,9 @@ export function EventsPanel({
 }: EventsPanelProps) {
   const isMobile = useIsMobile();
   const inheritedPortalContainer = usePortalContainer();
-  const rawPanel = PANELS[panelType];
+  // Fall back to the empty panel for types that no longer exist (e.g. a
+  // saved layout or share link referencing a removed panel).
+  const rawPanel = PANELS[panelType] ?? PANELS.empty;
 
   // Inject a default time_range controller filter for all panels that support filtering,
   // unless the panel already defines its own time_range default.

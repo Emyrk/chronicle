@@ -619,7 +619,6 @@ const PANEL_CODES: Record<PanelType, string> = {
   healing_taken: 'ht',
   extra_attacks: 'xa',
   consumables: 'cons',
-  consumables_total: 'ct',
   consumables_ledger: 'cl',
   deaths: 'd',
   death_log: 'dl',
@@ -690,6 +689,8 @@ const CODE_TO_LAYOUT: Record<string, LayoutType> = Object.fromEntries(
 const CODE_TO_PANEL: Record<string, PanelType> = Object.fromEntries(
   Object.entries(PANEL_CODES).map(([k, v]) => [v, k as PanelType])
 );
+// Legacy: Consumes Total merged into the Consumes Used panel's "View All".
+CODE_TO_PANEL['ct'] = 'consumables_ledger';
 
 /**
  * Parse a panel code with optional brackets: "au[Slice and Dice]" -> { code: "au", option: "Slice and Dice" }
