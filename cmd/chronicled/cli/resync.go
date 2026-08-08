@@ -94,7 +94,7 @@ func ResyncCmd() *serpent.Command {
 			Name:        "Limit",
 			Description: "Maximum number of distinct log groups to process.",
 			Flag:        "limit",
-			Default:     "50",
+			Default:     "15",
 			Value:       serpent.Int64Of(&limit),
 		},
 		{

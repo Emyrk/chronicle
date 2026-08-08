@@ -44,6 +44,7 @@ func TestResyncCmd_Help(t *testing.T) {
 			foundWorkers = true
 		case "limit":
 			foundLimit = true
+			require.Equal(t, "15", opt.Default)
 		case "postgres-url":
 			foundPGURL = true
 			require.Equal(t, "CHRONICLE_POSTGRES_URL", opt.Env)
