@@ -37,6 +37,8 @@ export interface LedgerItemBreakoutData {
   showGold: boolean;
   raidSize: number;
   rows: BreakoutPlayerRow[];
+  /** Raid members with zero uses of the item, sorted by class then name. */
+  nonUsers: BreakoutPlayerRow[];
   classes: BreakoutClassStat[];
 }
 
@@ -210,6 +212,25 @@ export function LedgerItemBreakout({ data, onClose }: { data: LedgerItemBreakout
             )}
           </div>
         ))}
+
+        {data.nonUsers.length > 0 && (
+          <div className="mt-1 border-t border-border/60 px-3 pb-0.5 pt-2">
+            <div className="mb-1 font-mono text-2xs uppercase tracking-wider text-muted-foreground/60">
+              Did not use · {data.nonUsers.length}
+            </div>
+            <div className="flex flex-wrap gap-x-2 gap-y-0.5">
+              {data.nonUsers.map((row) => (
+                <span
+                  key={row.guid}
+                  className="text-2xs opacity-75"
+                  style={{ color: classColor(row.cls) }}
+                >
+                  {row.name}
+                </span>
+              ))}
+            </div>
+          </div>
+        )}
       </div>
     </div>
   );

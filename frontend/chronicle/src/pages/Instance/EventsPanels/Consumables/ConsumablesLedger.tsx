@@ -96,6 +96,18 @@ export function ConsumablesLedgerContent(props: ConsumablesLedgerContentProps) {
       // Most uses first, ties by name now that names are known.
       rows.sort((a, b) => b.uses - a.uses || a.name.localeCompare(b.name));
 
+      // The rest of the raid: everyone who never used the item.
+      const userGuids = new Set(rows.map((row) => row.guid));
+      const nonUsers = Object.entries(players)
+        .filter(([guid]) => !userGuids.has(guid))
+        .map(([guid, player]) => ({ guid, name: player.name ?? guid, cls: player.class, uses: 0 }))
+        .sort(
+          (a, b) =>
+            classRank(a.cls) - classRank(b.cls) ||
+            CLASS_ORDER.indexOf(a.cls ?? "") - CLASS_ORDER.indexOf(b.cls ?? "") ||
+            a.name.localeCompare(b.name),
+        );
+
       const usedByClass = new Map<string, number>();
       for (const row of rows) {
         if (!row.cls) continue;
@@ -111,6 +123,7 @@ export function ConsumablesLedgerContent(props: ConsumablesLedgerContentProps) {
         showGold: coverage.showGold,
         raidSize: Object.keys(players).length,
         rows,
+        nonUsers,
         classes,
       }];
     });
