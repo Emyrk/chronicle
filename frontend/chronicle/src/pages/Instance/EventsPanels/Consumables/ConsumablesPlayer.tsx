@@ -365,7 +365,7 @@ export function ConsumablesPlayerContent(props: ConsumablesPlayerContentProps) {
             </div>
           </div>
 
-          <div className="flex h-9 shrink-0 items-end gap-0.5 border-y border-border/60 px-2 pb-1 pt-1.5">
+          <div className="flex h-9 shrink-0 items-end gap-1 border-y border-border/60 px-2 pb-1 pt-1.5">
             {roster.map((player, index) => {
               const uses = usesByPlayer.get(player.guid) ?? 0;
               const gold = rosterBars.goldByPlayer.get(player.guid) ?? 0;
@@ -380,7 +380,7 @@ export function ConsumablesPlayerContent(props: ConsumablesPlayerContentProps) {
                   }${gold > 0 ? ` · ${formatGold(gold)}` : ""}`}
                   onClick={() => selectPlayer(player.guid)}
                   className={cn(
-                    "group/bar flex h-full min-w-0 flex-1 items-end overflow-hidden rounded-sm bg-muted/40",
+                    "group/bar flex h-full min-w-0 flex-1 items-end overflow-hidden rounded-sm bg-background/80",
                     index === selectedIndex && "ring-1 ring-inset ring-foreground/70",
                   )}
                 >
