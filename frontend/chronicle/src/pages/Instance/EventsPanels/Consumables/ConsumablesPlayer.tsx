@@ -442,17 +442,25 @@ export function ConsumablesPlayerContent(props: ConsumablesPlayerContentProps) {
                     index === selectedIndex && "ring-1 ring-inset ring-foreground/70",
                   )}
                 >
-                  <span
-                    className={cn(
-                      "w-full rounded-sm transition-opacity",
-                      index === selectedIndex
-                        ? "opacity-100"
-                        : uses > 0
-                          ? "opacity-70 group-hover/bar:opacity-100"
-                          : "opacity-30 group-hover/bar:opacity-60",
-                    )}
-                    style={{ background: classColor(player.cls), height: `${heightPct}%` }}
-                  />
+                  {uses === 0 ? (
+                    // No matching consumes at all: an explicitly empty slot — a
+                    // dashed box with a class-colored dash — so it can't be
+                    // mistaken for a very small bar.
+                    <span className="flex h-full w-full items-center justify-center rounded-sm border border-dashed border-foreground/20">
+                      <span
+                        className="h-0.5 w-1/2 rounded-full opacity-60 transition-opacity group-hover/bar:opacity-100"
+                        style={{ background: classColor(player.cls) }}
+                      />
+                    </span>
+                  ) : (
+                    <span
+                      className={cn(
+                        "w-full rounded-sm transition-opacity",
+                        index === selectedIndex ? "opacity-100" : "opacity-70 group-hover/bar:opacity-100",
+                      )}
+                      style={{ background: classColor(player.cls), height: `${heightPct}%` }}
+                    />
+                  )}
                 </button>
               );
             })}
