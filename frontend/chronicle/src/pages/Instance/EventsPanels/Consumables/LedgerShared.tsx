@@ -70,7 +70,7 @@ export function LedgerRow({
       <div className="flex min-w-0 flex-1 flex-col gap-1">
         <div className="flex min-w-0 items-center gap-1.5">
           <div className="min-w-0 flex-1 text-xs">
-            <ItemCell itemId={row.itemId} link />
+            <ItemCell itemId={row.itemId} link newTab />
           </div>
           <span className="shrink-0 font-mono text-xs text-foreground">{row.uses}×</span>
         </div>
@@ -127,7 +127,7 @@ export function AmbiguousSection({
                 <>
                   <span>could be</span>
                   {row.candidateItemIds.map((itemId) => (
-                    <ItemCell key={itemId} itemId={itemId} link compact />
+                    <ItemCell key={itemId} itemId={itemId} link compact newTab />
                   ))}
                 </>
               ) : (
