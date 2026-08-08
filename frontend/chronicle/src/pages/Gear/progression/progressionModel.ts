@@ -1,0 +1,459 @@
+/**
+ * Pure gear-progression model: the versioned payload, immutable document
+ * operations, and the leveling derivation. No React imports — safe for
+ * tests and workers.
+ *
+ * The payload is the document stored in gear_progressions.payload:
+ * { version: 1,
+ *   pool: [{ item_id, enchant_id?, note? }],
+ *   stages: [{ name, slots: { "0".."18": GearSlotEntry } }] }
+ *
+ * `pool` is the player's hand-picked candidate set. The leveling half of
+ * the progression is *derived* from it at every level; only the max-level
+ * half (`stages`) stores explicit picks, because at cap "best" is a
+ * judgement call rather than a sort order.
+ */
+import {
+  COSMETIC_SLOTS,
+  GEAR_PAYLOAD_VERSION,
+  SLOT,
+  addStage,
+  fillStageFromOutfit,
+  moveStage,
+  parsePayload,
+  removeStage,
+  renameStage,
+  setSlotItem,
+  clearSlot,
+  type GearPayload,
+  type GearStage,
+} from "../builder/gearListModel";
+
+export const PROGRESSION_PAYLOAD_VERSION = 1;
+export const MAX_POOL_ITEMS = 400;
+
+export interface ProgressionPoolItem {
+  item_id: number;
+  enchant_id?: number;
+  note?: string;
+}
+
+export interface ProgressionPayload {
+  version: number;
+  pool: ProgressionPoolItem[];
+  stages: GearStage[];
+}
+
+// ─── Level caps ──────────────────────────────────────────────
+
+/**
+ * Level cap for the deployment's dataset flavor. Same precedent as the
+ * talent calculator and `gearClassesForFlavor`: the tenant's dataset tags
+ * decide which expansion we are in.
+ */
+export function levelCapForFlavor(tags: readonly string[]): number {
+  if (tags.includes("wrath")) return 80;
+  if (tags.includes("tbc")) return 70;
+  return 60;
+}
+
+// ─── Parsing / serializing ───────────────────────────────────
+
+function emptyPayload(): ProgressionPayload {
+  return { version: PROGRESSION_PAYLOAD_VERSION, pool: [], stages: [] };
+}
+
+/**
+ * Parse a payload from the API (string or object). Never throws;
+ * malformed input degrades to an empty document. Stage parsing is
+ * intentionally shared with the gear-list model so the two documents
+ * cannot drift.
+ */
+export function parseProgressionPayload(raw: unknown): ProgressionPayload {
+  let value: unknown = raw;
+  if (typeof value === "string") {
+    try {
+      value = JSON.parse(value);
+    } catch {
+      return emptyPayload();
+    }
+  }
+  if (!value || typeof value !== "object") return emptyPayload();
+
+  const poolRaw = (value as { pool?: unknown }).pool;
+  const pool: ProgressionPoolItem[] = [];
+  const seen = new Set<number>();
+  if (Array.isArray(poolRaw)) {
+    for (const entryRaw of poolRaw.slice(0, MAX_POOL_ITEMS)) {
+      const entry = parsePoolItem(entryRaw);
+      // A pool is a set: duplicate item IDs would double-count in the
+      // derivation's per-slot ranking.
+      if (entry && !seen.has(entry.item_id)) {
+        seen.add(entry.item_id);
+        pool.push(entry);
+      }
+    }
+  }
+
+  // The gear-list parser only reads `stages`, so the progression document
+  // can be handed to it directly — one stage parser, no drift.
+  const { stages } = parsePayload(value);
+  return { version: PROGRESSION_PAYLOAD_VERSION, pool, stages };
+}
+
+function parsePoolItem(raw: unknown): ProgressionPoolItem | null {
+  if (typeof raw === "number") {
+    return Number.isInteger(raw) && raw > 0 ? { item_id: raw } : null;
+  }
+  if (!raw || typeof raw !== "object") return null;
+  const obj = raw as Record<string, unknown>;
+  if (typeof obj.item_id !== "number" || !Number.isInteger(obj.item_id) || obj.item_id <= 0) {
+    return null;
+  }
+  const entry: ProgressionPoolItem = { item_id: obj.item_id };
+  if (typeof obj.enchant_id === "number" && Number.isInteger(obj.enchant_id) && obj.enchant_id > 0) {
+    entry.enchant_id = obj.enchant_id;
+  }
+  if (typeof obj.note === "string" && obj.note) entry.note = obj.note;
+  return entry;
+}
+
+export function serializeProgressionPayload(payload: ProgressionPayload): string {
+  return JSON.stringify(payload);
+}
+
+// ─── Pool operations ─────────────────────────────────────────
+// Each returns a new payload; the input is never mutated.
+
+export function addPoolItem(
+  payload: ProgressionPayload,
+  itemId: number,
+): ProgressionPayload {
+  if (itemId <= 0) return payload;
+  if (payload.pool.length >= MAX_POOL_ITEMS) return payload;
+  if (payload.pool.some((p) => p.item_id === itemId)) return payload;
+  return { ...payload, pool: [...payload.pool, { item_id: itemId }] };
+}
+
+export function removePoolItem(
+  payload: ProgressionPayload,
+  itemId: number,
+): ProgressionPayload {
+  const pool = payload.pool.filter((p) => p.item_id !== itemId);
+  if (pool.length === payload.pool.length) return payload;
+  return { ...payload, pool };
+}
+
+export function setPoolItemNote(
+  payload: ProgressionPayload,
+  itemId: number,
+  note: string,
+): ProgressionPayload {
+  return {
+    ...payload,
+    pool: payload.pool.map((p) => {
+      if (p.item_id !== itemId) return p;
+      const next = { ...p };
+      if (note) {
+        next.note = note;
+      } else {
+        delete next.note;
+      }
+      return next;
+    }),
+  };
+}
+
+export function setPoolItemEnchant(
+  payload: ProgressionPayload,
+  itemId: number,
+  enchantId: number | undefined,
+): ProgressionPayload {
+  return {
+    ...payload,
+    pool: payload.pool.map((p) => {
+      if (p.item_id !== itemId) return p;
+      const next = { ...p };
+      if (enchantId && enchantId > 0) {
+        next.enchant_id = enchantId;
+      } else {
+        delete next.enchant_id;
+      }
+      return next;
+    }),
+  };
+}
+
+// ─── Stage operations ────────────────────────────────────────
+// The max-level half reuses the shipped gear-list stage model verbatim;
+// these adapters keep the pool alongside it.
+
+function withStages(
+  payload: ProgressionPayload,
+  fn: (doc: GearPayload) => GearPayload,
+): ProgressionPayload {
+  const next = fn({ version: GEAR_PAYLOAD_VERSION, stages: payload.stages });
+  if (next.stages === payload.stages) return payload;
+  return { ...payload, stages: next.stages };
+}
+
+export function addProgressionStage(payload: ProgressionPayload, name?: string): ProgressionPayload {
+  return withStages(payload, (doc) => addStage(doc, name));
+}
+
+export function removeProgressionStage(payload: ProgressionPayload, index: number): ProgressionPayload {
+  return withStages(payload, (doc) => removeStage(doc, index));
+}
+
+export function renameProgressionStage(
+  payload: ProgressionPayload,
+  index: number,
+  name: string,
+): ProgressionPayload {
+  return withStages(payload, (doc) => renameStage(doc, index, name));
+}
+
+export function moveProgressionStage(
+  payload: ProgressionPayload,
+  from: number,
+  to: number,
+): ProgressionPayload {
+  return withStages(payload, (doc) => moveStage(doc, from, to));
+}
+
+export function setProgressionSlotItem(
+  payload: ProgressionPayload,
+  stageIndex: number,
+  slotIndex: number,
+  itemId: number,
+): ProgressionPayload {
+  return withStages(payload, (doc) => setSlotItem(doc, stageIndex, slotIndex, itemId));
+}
+
+export function clearProgressionSlot(
+  payload: ProgressionPayload,
+  stageIndex: number,
+  slotIndex: number,
+): ProgressionPayload {
+  return withStages(payload, (doc) => clearSlot(doc, stageIndex, slotIndex));
+}
+
+/**
+ * The bridge between the two halves: seed a stage from the leveling
+ * derivation evaluated at the level cap. Existing picks are replaced so
+ * the snapshot is a faithful copy of what the pool implies at cap.
+ */
+export function snapshotStageFromDerived(
+  payload: ProgressionPayload,
+  stageIndex: number,
+  derived: DerivedEquipped,
+): ProgressionPayload {
+  const enchantOf = new Map(payload.pool.map((p) => [p.item_id, p.enchant_id]));
+  const equipped: ({ item_id: number; enchant_id?: number } | undefined)[] = [];
+  for (let slot = 0; slot < 19; slot++) {
+    const itemId = derived[slot];
+    if (itemId == null) continue;
+    const enchantId = enchantOf.get(itemId);
+    equipped[slot] = { item_id: itemId, ...(enchantId ? { enchant_id: enchantId } : {}) };
+  }
+  return withStages(payload, (doc) => fillStageFromOutfit(doc, stageIndex, equipped, true));
+}
+
+// ─── Leveling derivation ─────────────────────────────────────
+
+/** Everything the derivation needs to know about a pool item. */
+export interface PoolItemStats {
+  item_id: number;
+  /** WoWDB inventory type (1 = Head … 28 = Relic). */
+  inventory_type: number;
+  required_level: number;
+  item_level: number;
+}
+
+/** Outfit slot index → item ID. Absent slots have no eligible item. */
+export type DerivedEquipped = Partial<Record<number, number>>;
+
+/**
+ * Slot groups the derivation ranks within. Two-slot groups (fingers,
+ * trinkets) take the top two candidates; weapons are assigned by
+ * `assignWeapons` because a two-hander also consumes the off hand.
+ */
+const GROUP_SLOTS: Record<string, readonly number[]> = {
+  head: [SLOT.head],
+  neck: [SLOT.neck],
+  shoulder: [SLOT.shoulder],
+  shirt: [SLOT.shirt],
+  chest: [SLOT.chest],
+  waist: [SLOT.waist],
+  legs: [SLOT.legs],
+  feet: [SLOT.feet],
+  wrist: [SLOT.wrist],
+  hands: [SLOT.hands],
+  finger: [SLOT.finger1, SLOT.finger2],
+  trinket: [SLOT.trinket1, SLOT.trinket2],
+  back: [SLOT.back],
+  weapon: [SLOT.mainHand, SLOT.offHand],
+  ranged: [SLOT.ranged],
+  tabard: [SLOT.tabard],
+};
+
+/** Inventory type → slot group. Types not listed here are not equippable. */
+const GROUP_BY_INVENTORY_TYPE: Record<number, string> = {
+  1: "head",
+  2: "neck",
+  3: "shoulder",
+  4: "shirt",
+  5: "chest",
+  20: "chest", // robe
+  6: "waist",
+  7: "legs",
+  8: "feet",
+  9: "wrist",
+  10: "hands",
+  11: "finger",
+  12: "trinket",
+  16: "back",
+  19: "tabard",
+  13: "weapon", // one-hand
+  14: "weapon", // shield
+  17: "weapon", // two-hand
+  21: "weapon", // main hand
+  22: "weapon", // off hand
+  23: "weapon", // holdable
+  15: "ranged",
+  25: "ranged", // thrown
+  26: "ranged", // wand / gun
+  28: "ranged", // relic
+};
+
+const TWO_HAND_TYPES: ReadonlySet<number> = new Set([17]);
+const OFF_HAND_TYPES: ReadonlySet<number> = new Set([13, 14, 22, 23]);
+
+/**
+ * Rank order within a slot group: the *latest-unlocked* item wins, then
+ * the higher item level, then the lower item ID so ties are stable.
+ *
+ * Required level beats item level on purpose — while leveling, an item
+ * you just unlocked is almost always the upgrade you actually put on,
+ * and it keeps the scrubber's timeline monotonic and legible.
+ */
+function compareCandidates(a: PoolItemStats, b: PoolItemStats): number {
+  if (a.required_level !== b.required_level) return b.required_level - a.required_level;
+  if (a.item_level !== b.item_level) return b.item_level - a.item_level;
+  return a.item_id - b.item_id;
+}
+
+/**
+ * Best-per-slot from the pool at a given character level. Items whose
+ * required level is above `level` are ignored; the rest are ranked per
+ * slot group and the top pick (top two for fingers and trinkets) is
+ * equipped. Slots with no eligible item stay empty.
+ */
+export function computeEquippedAtLevel(
+  pool: readonly PoolItemStats[],
+  level: number,
+): DerivedEquipped {
+  const byGroup = new Map<string, PoolItemStats[]>();
+  for (const item of pool) {
+    if ((item.required_level ?? 0) > level) continue;
+    const group = GROUP_BY_INVENTORY_TYPE[item.inventory_type];
+    if (!group) continue;
+    const bucket = byGroup.get(group);
+    if (bucket) {
+      bucket.push(item);
+    } else {
+      byGroup.set(group, [item]);
+    }
+  }
+
+  const equipped: DerivedEquipped = {};
+  for (const [group, candidates] of byGroup) {
+    candidates.sort(compareCandidates);
+    if (group === "weapon") {
+      assignWeapons(candidates, equipped);
+      continue;
+    }
+    GROUP_SLOTS[group].forEach((slot, i) => {
+      const pick = candidates[i];
+      if (pick) equipped[slot] = pick.item_id;
+    });
+  }
+  return equipped;
+}
+
+/**
+ * Weapons need their own rule: the best candidate takes the main hand,
+ * and the off hand goes to the best remaining off-hand-capable item —
+ * unless the main hand is a two-hander, which occupies both.
+ */
+function assignWeapons(candidates: PoolItemStats[], equipped: DerivedEquipped): void {
+  const main = candidates[0];
+  if (!main) return;
+  equipped[SLOT.mainHand] = main.item_id;
+  if (TWO_HAND_TYPES.has(main.inventory_type)) return;
+  const off = candidates.slice(1).find((c) => OFF_HAND_TYPES.has(c.inventory_type));
+  if (off) equipped[SLOT.offHand] = off.item_id;
+}
+
+/**
+ * Levels at which the derived set changes. Used to mark the scrubber's
+ * rail so a player can see where their pool actually delivers upgrades.
+ */
+export function upgradeLevels(pool: readonly PoolItemStats[], maxLevel: number): number[] {
+  const levels = new Set<number>();
+  for (const item of pool) {
+    if (!GROUP_BY_INVENTORY_TYPE[item.inventory_type]) continue;
+    const required = Math.max(1, item.required_level ?? 0);
+    if (required <= maxLevel) levels.add(required);
+  }
+  return [...levels].sort((a, b) => a - b);
+}
+
+/**
+ * Average item level over the non-cosmetic equipped slots, or null when
+ * nothing with a known item level is equipped. Shared by the leveling
+ * readout and the max-level stage labels so the two agree.
+ */
+export function averageEquippedItemLevel(
+  slots: Iterable<readonly [number, number]>,
+  itemLevelOf: (itemId: number) => number | null | undefined,
+): number | null {
+  let total = 0;
+  let count = 0;
+  for (const [slot, itemId] of slots) {
+    if (COSMETIC_SLOTS.has(slot)) continue;
+    const level = itemLevelOf(itemId);
+    if (level == null) continue;
+    total += level;
+    count++;
+  }
+  return count > 0 ? total / count : null;
+}
+
+/** `averageEquippedItemLevel` over a derived leveling set. */
+export function derivedAverageItemLevel(
+  derived: DerivedEquipped,
+  itemLevelOf: (itemId: number) => number | null | undefined,
+): number | null {
+  const entries: [number, number][] = [];
+  for (const [key, itemId] of Object.entries(derived)) {
+    if (itemId != null) entries.push([Number(key), itemId]);
+  }
+  return averageEquippedItemLevel(entries, itemLevelOf);
+}
+
+/** `averageEquippedItemLevel` over one max-level stage. */
+export function stageAverageItemLevel(
+  stage: GearStage,
+  itemLevelOf: (itemId: number) => number | null | undefined,
+): number | null {
+  const entries: [number, number][] = [];
+  for (const [key, entry] of Object.entries(stage.slots)) {
+    if (entry) entries.push([Number(key), entry.item_id]);
+  }
+  return averageEquippedItemLevel(entries, itemLevelOf);
+}
+
+// Re-exported so the progression views import slot names from one module.
+export { SLOT };
+export type { GearStage };

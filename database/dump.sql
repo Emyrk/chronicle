@@ -743,6 +743,22 @@ CREATE TABLE gear_lists (
     CONSTRAINT gear_lists_title_length_chk CHECK (((char_length(title) >= 1) AND (char_length(title) <= 128)))
 );
 
+CREATE TABLE gear_progressions (
+    id uuid DEFAULT gen_random_uuid() NOT NULL,
+    user_id uuid NOT NULL,
+    tenant_id uuid DEFAULT '00000000-0000-0000-0000-000000000000'::uuid NOT NULL,
+    title text NOT NULL,
+    description text DEFAULT ''::text NOT NULL,
+    class_id integer NOT NULL,
+    spec_name text DEFAULT ''::text NOT NULL,
+    payload jsonb DEFAULT '{"pool": [], "stages": [], "version": 1}'::jsonb NOT NULL,
+    created_at timestamp with time zone DEFAULT now() NOT NULL,
+    updated_at timestamp with time zone DEFAULT now() NOT NULL,
+    CONSTRAINT gear_progressions_description_length_chk CHECK ((char_length(description) <= 2000)),
+    CONSTRAINT gear_progressions_payload_size_chk CHECK ((octet_length((payload)::text) <= 262144)),
+    CONSTRAINT gear_progressions_title_length_chk CHECK (((char_length(title) >= 1) AND (char_length(title) <= 128)))
+);
+
 CREATE TABLE gear_stat_weights (
     id uuid DEFAULT gen_random_uuid() NOT NULL,
     user_id uuid NOT NULL,
@@ -1856,6 +1872,9 @@ ALTER TABLE ONLY game_players
 ALTER TABLE ONLY gear_lists
     ADD CONSTRAINT gear_lists_pkey PRIMARY KEY (id);
 
+ALTER TABLE ONLY gear_progressions
+    ADD CONSTRAINT gear_progressions_pkey PRIMARY KEY (id);
+
 ALTER TABLE ONLY gear_stat_weights
     ADD CONSTRAINT gear_stat_weights_pkey PRIMARY KEY (id);
 
@@ -2125,6 +2144,8 @@ CREATE INDEX game_player_gear_history_player_time ON game_player_gear_history US
 CREATE INDEX game_players_player_and_realm ON game_players USING btree (name, realm_id);
 
 CREATE INDEX gear_lists_user_tenant_idx ON gear_lists USING btree (user_id, tenant_id);
+
+CREATE INDEX gear_progressions_user_tenant_idx ON gear_progressions USING btree (user_id, tenant_id);
 
 CREATE INDEX gear_stat_weights_user_tenant_idx ON gear_stat_weights USING btree (user_id, tenant_id);
 
@@ -2443,6 +2464,9 @@ ALTER TABLE ONLY gear_lists
 ALTER TABLE ONLY gear_lists
     ADD CONSTRAINT gear_lists_user_id_fkey FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE;
 
+ALTER TABLE ONLY gear_progressions
+    ADD CONSTRAINT gear_progressions_user_id_fkey FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE;
+
 ALTER TABLE ONLY gear_stat_weights
     ADD CONSTRAINT gear_stat_weights_user_id_fkey FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE;
 
@@ -2723,5 +2747,4 @@ CREATE POLICY tenant_realm_isolation ON wow_server_realms USING ((server_id IN (
 ALTER TABLE wow_server_realms ENABLE ROW LEVEL SECURITY;
 
 ALTER TABLE wow_servers ENABLE ROW LEVEL SECURITY;
-
 

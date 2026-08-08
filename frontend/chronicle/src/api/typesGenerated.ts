@@ -640,6 +640,18 @@ export interface CreateGearListRequest {
     readonly payload: Record<string, string>;
 }
 
+// From chroniclesdk/gear_progression.go
+/**
+ * CreateGearProgressionRequest is the request body for creating a progression.
+ */
+export interface CreateGearProgressionRequest {
+    readonly title: string;
+    readonly description: string;
+    readonly class_id: number;
+    readonly spec_name: string;
+    readonly payload: Record<string, string>;
+}
+
 // From chroniclesdk/gear_builder.go
 /**
  * CreateGearStatWeightRequest is the request body for creating a stat weight.
@@ -1068,6 +1080,50 @@ export interface GearListSlot {
 export interface GearListStage {
     readonly name: string;
     readonly slots: Record<string, GearListSlot>;
+}
+
+// From chroniclesdk/gear_progression.go
+/**
+ * GearProgression is a user-owned gear progression: one player-picked
+ * pool of items that drives a leveling scrubber, plus explicit stage
+ * snapshots for the max-level half of the journey.
+ */
+export interface GearProgression {
+    readonly id: string;
+    readonly user_id: string;
+    readonly tenant_id: string;
+    readonly title: string;
+    readonly description: string;
+    readonly class_id: number;
+    readonly spec_name: string;
+    readonly payload: Record<string, string>;
+    readonly created_at: string;
+    readonly updated_at: string;
+}
+
+// From chroniclesdk/gear_progression.go
+/**
+ * GearProgressionPayload is the versioned document stored in
+ * GearProgression.Payload. Best-per-slot for the leveling axis is derived
+ * from Pool at render time and never stored.
+ */
+export interface GearProgressionPayload {
+    readonly version: number;
+    readonly pool: readonly GearProgressionPoolItem[];
+    /**
+     * Stages reuses the gear-list stage shape for the max-level axis.
+     */
+    readonly stages: readonly GearListStage[];
+}
+
+// From chroniclesdk/gear_progression.go
+/**
+ * GearProgressionPoolItem is one hand-picked item in the pool.
+ */
+export interface GearProgressionPoolItem {
+    readonly item_id: number;
+    readonly enchant_id?: number;
+    readonly note?: string;
 }
 
 // From chroniclesdk/gear_builder.go
@@ -2083,6 +2139,14 @@ export interface ParseConfig {
      * SnapshotCadence is the publication interval description (e.g. "6h", "daily").
      */
     readonly snapshot_cadence?: string;
+}
+
+// From chroniclesdk/parser_version.go
+/**
+ * ParserVersionResponse is returned by GET /api/v1/parser-version.
+ */
+export interface ParserVersionResponse {
+    readonly version: string;
 }
 
 // From chroniclesdk/log.go
@@ -3183,6 +3247,18 @@ export interface UpdateActionBarSlotsRequest {
  * UpdateGearListRequest is the request body for updating a gear list.
  */
 export interface UpdateGearListRequest {
+    readonly title?: string;
+    readonly description?: string;
+    readonly class_id?: number;
+    readonly spec_name?: string;
+    readonly payload?: (Record<string, string>);
+}
+
+// From chroniclesdk/gear_progression.go
+/**
+ * UpdateGearProgressionRequest is the request body for updating a progression.
+ */
+export interface UpdateGearProgressionRequest {
     readonly title?: string;
     readonly description?: string;
     readonly class_id?: number;

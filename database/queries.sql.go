@@ -3826,6 +3826,202 @@ func (q *sqlQuerier) UpdateGearStatWeight(ctx context.Context, arg UpdateGearSta
 	return i, err
 }
 
+const countUserGearProgressions = `-- name: CountUserGearProgressions :one
+SELECT COUNT(*) FROM gear_progressions WHERE user_id = $1 AND tenant_id = $2
+`
+
+type CountUserGearProgressionsParams struct {
+	UserID   uuid.UUID `db:"user_id" json:"user_id"`
+	TenantID uuid.UUID `db:"tenant_id" json:"tenant_id"`
+}
+
+func (q *sqlQuerier) CountUserGearProgressions(ctx context.Context, arg CountUserGearProgressionsParams) (int64, error) {
+	row := q.db.QueryRow(ctx, countUserGearProgressions, arg.UserID, arg.TenantID)
+	var count int64
+	err := row.Scan(&count)
+	return count, err
+}
+
+const createGearProgression = `-- name: CreateGearProgression :one
+
+INSERT INTO gear_progressions (id, user_id, tenant_id, title, description, class_id, spec_name, payload)
+VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+RETURNING id, user_id, tenant_id, title, description, class_id, spec_name, payload, created_at, updated_at
+`
+
+type CreateGearProgressionParams struct {
+	ID          uuid.UUID `db:"id" json:"id"`
+	UserID      uuid.UUID `db:"user_id" json:"user_id"`
+	TenantID    uuid.UUID `db:"tenant_id" json:"tenant_id"`
+	Title       string    `db:"title" json:"title"`
+	Description string    `db:"description" json:"description"`
+	ClassID     int32     `db:"class_id" json:"class_id"`
+	SpecName    string    `db:"spec_name" json:"spec_name"`
+	Payload     []byte    `db:"payload" json:"payload"`
+}
+
+// ============================================================
+// Gear Progressions
+// ============================================================
+func (q *sqlQuerier) CreateGearProgression(ctx context.Context, arg CreateGearProgressionParams) (GearProgression, error) {
+	row := q.db.QueryRow(ctx, createGearProgression,
+		arg.ID,
+		arg.UserID,
+		arg.TenantID,
+		arg.Title,
+		arg.Description,
+		arg.ClassID,
+		arg.SpecName,
+		arg.Payload,
+	)
+	var i GearProgression
+	err := row.Scan(
+		&i.ID,
+		&i.UserID,
+		&i.TenantID,
+		&i.Title,
+		&i.Description,
+		&i.ClassID,
+		&i.SpecName,
+		&i.Payload,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+	)
+	return i, err
+}
+
+const deleteGearProgression = `-- name: DeleteGearProgression :execrows
+DELETE FROM gear_progressions WHERE id = $1 AND user_id = $2 AND tenant_id = $3
+`
+
+type DeleteGearProgressionParams struct {
+	ID       uuid.UUID `db:"id" json:"id"`
+	UserID   uuid.UUID `db:"user_id" json:"user_id"`
+	TenantID uuid.UUID `db:"tenant_id" json:"tenant_id"`
+}
+
+func (q *sqlQuerier) DeleteGearProgression(ctx context.Context, arg DeleteGearProgressionParams) (int64, error) {
+	result, err := q.db.Exec(ctx, deleteGearProgression, arg.ID, arg.UserID, arg.TenantID)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
+}
+
+const getGearProgressionByID = `-- name: GetGearProgressionByID :one
+SELECT id, user_id, tenant_id, title, description, class_id, spec_name, payload, created_at, updated_at FROM gear_progressions WHERE id = $1
+`
+
+func (q *sqlQuerier) GetGearProgressionByID(ctx context.Context, id uuid.UUID) (GearProgression, error) {
+	row := q.db.QueryRow(ctx, getGearProgressionByID, id)
+	var i GearProgression
+	err := row.Scan(
+		&i.ID,
+		&i.UserID,
+		&i.TenantID,
+		&i.Title,
+		&i.Description,
+		&i.ClassID,
+		&i.SpecName,
+		&i.Payload,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+	)
+	return i, err
+}
+
+const listGearProgressionsByUser = `-- name: ListGearProgressionsByUser :many
+SELECT id, user_id, tenant_id, title, description, class_id, spec_name, payload, created_at, updated_at FROM gear_progressions
+WHERE user_id = $1 AND tenant_id = $2
+ORDER BY updated_at DESC
+`
+
+type ListGearProgressionsByUserParams struct {
+	UserID   uuid.UUID `db:"user_id" json:"user_id"`
+	TenantID uuid.UUID `db:"tenant_id" json:"tenant_id"`
+}
+
+func (q *sqlQuerier) ListGearProgressionsByUser(ctx context.Context, arg ListGearProgressionsByUserParams) ([]GearProgression, error) {
+	rows, err := q.db.Query(ctx, listGearProgressionsByUser, arg.UserID, arg.TenantID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []GearProgression
+	for rows.Next() {
+		var i GearProgression
+		if err := rows.Scan(
+			&i.ID,
+			&i.UserID,
+			&i.TenantID,
+			&i.Title,
+			&i.Description,
+			&i.ClassID,
+			&i.SpecName,
+			&i.Payload,
+			&i.CreatedAt,
+			&i.UpdatedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const updateGearProgression = `-- name: UpdateGearProgression :one
+UPDATE gear_progressions SET
+  title = COALESCE($1, title),
+  description = COALESCE($2, description),
+  class_id = COALESCE($3, class_id),
+  spec_name = COALESCE($4, spec_name),
+  payload = COALESCE($5, payload),
+  updated_at = now()
+WHERE id = $6 AND user_id = $7 AND tenant_id = $8
+RETURNING id, user_id, tenant_id, title, description, class_id, spec_name, payload, created_at, updated_at
+`
+
+type UpdateGearProgressionParams struct {
+	Title       pgtype.Text `db:"title" json:"title"`
+	Description pgtype.Text `db:"description" json:"description"`
+	ClassID     pgtype.Int4 `db:"class_id" json:"class_id"`
+	SpecName    pgtype.Text `db:"spec_name" json:"spec_name"`
+	Payload     []byte      `db:"payload" json:"payload"`
+	ID          uuid.UUID   `db:"id" json:"id"`
+	UserID      uuid.UUID   `db:"user_id" json:"user_id"`
+	TenantID    uuid.UUID   `db:"tenant_id" json:"tenant_id"`
+}
+
+func (q *sqlQuerier) UpdateGearProgression(ctx context.Context, arg UpdateGearProgressionParams) (GearProgression, error) {
+	row := q.db.QueryRow(ctx, updateGearProgression,
+		arg.Title,
+		arg.Description,
+		arg.ClassID,
+		arg.SpecName,
+		arg.Payload,
+		arg.ID,
+		arg.UserID,
+		arg.TenantID,
+	)
+	var i GearProgression
+	err := row.Scan(
+		&i.ID,
+		&i.UserID,
+		&i.TenantID,
+		&i.Title,
+		&i.Description,
+		&i.ClassID,
+		&i.SpecName,
+		&i.Payload,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+	)
+	return i, err
+}
+
 const gearTrendsSlotEnchants = `-- name: GearTrendsSlotEnchants :many
 WITH representative_instances AS (
     SELECT DISTINCT ON (COALESCE(li.duplicate_group_id, li.id))

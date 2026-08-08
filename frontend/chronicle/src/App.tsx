@@ -36,6 +36,8 @@ import { GearLayout } from "./pages/Gear/GearLayout"
 import { GearListsPage } from "./pages/Gear/GearListsPage"
 import { GearListPage } from "./pages/Gear/builder/GearListPage"
 import { GearTrendsPage } from "./pages/Gear/trends/GearTrendsPage"
+import { GearProgressionsPage } from "./pages/Gear/progression/GearProgressionsPage"
+import { GearProgressionPage } from "./pages/Gear/progression/builder/GearProgressionPage"
 import { StatWeightsPage } from "./pages/Gear/weights/StatWeightsPage"
 import { ServersLayout, ServersPage, UploadKeysPage, RetentionPage } from "./pages/Servers"
 import { SpellPage } from "./pages/WoWDB/SpellPage"
@@ -174,8 +176,10 @@ function App() {
             <Route index element={<GearListsPage />} />
             <Route path="weights" element={<StatWeightsPage />} />
             <Route path="trends" element={<GearTrendsPage />} />
+            <Route path="progression" element={<GearProgressionsPage />} />
           </Route>
           <Route path="/gear/lists/:listID" element={<GearListPage />} />
+          <Route path="/gear/progression/:progressionID" element={<GearProgressionPage />} />
         </Route>
         <Route path="/technical" element={<TenantDatasetLayout />}>
           <Route index element={<TechnicalDetailsPage />} />

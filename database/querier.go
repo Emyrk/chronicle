@@ -45,12 +45,17 @@ type sqlcQuerier interface {
 	CountTimeParseSnapshotClearTimeMembers(ctx context.Context, snapshotID uuid.UUID) (int64, error)
 	CountUserAuthLinks(ctx context.Context) (int64, error)
 	CountUserGearLists(ctx context.Context, arg CountUserGearListsParams) (int64, error)
+	CountUserGearProgressions(ctx context.Context, arg CountUserGearProgressionsParams) (int64, error)
 	CountUserPanelLayoutsTotal(ctx context.Context, userID uuid.NullUUID) (int32, error)
 	CountUserTalentBuilds(ctx context.Context, arg CountUserTalentBuildsParams) (int64, error)
 	// ============================================================
 	// Gear Lists
 	// ============================================================
 	CreateGearList(ctx context.Context, arg CreateGearListParams) (GearList, error)
+	// ============================================================
+	// Gear Progressions
+	// ============================================================
+	CreateGearProgression(ctx context.Context, arg CreateGearProgressionParams) (GearProgression, error)
 	// ============================================================
 	// Stat Weights
 	// ============================================================
@@ -68,6 +73,7 @@ type sqlcQuerier interface {
 	DeleteDataset(ctx context.Context, id uuid.UUID) error
 	DeleteDatasetTalentTrees(ctx context.Context, datasetID uuid.UUID) error
 	DeleteGearList(ctx context.Context, arg DeleteGearListParams) (int64, error)
+	DeleteGearProgression(ctx context.Context, arg DeleteGearProgressionParams) (int64, error)
 	DeleteGearStatWeight(ctx context.Context, arg DeleteGearStatWeightParams) (int64, error)
 	DeleteGuildJoinRequest(ctx context.Context, arg DeleteGuildJoinRequestParams) error
 	DeleteGuildPage(ctx context.Context, guildID uuid.UUID) error
@@ -178,6 +184,7 @@ type sqlcQuerier interface {
 	GetFullGuildPage(ctx context.Context, guildID uuid.UUID) (GetFullGuildPageRow, error)
 	GetGamePlayerByGUID(ctx context.Context, arg GetGamePlayerByGUIDParams) (GetGamePlayerByGUIDRow, error)
 	GetGearListByID(ctx context.Context, id uuid.UUID) (GearList, error)
+	GetGearProgressionByID(ctx context.Context, id uuid.UUID) (GearProgression, error)
 	GetGearStatWeightByID(ctx context.Context, id uuid.UUID) (GearStatWeight, error)
 	GetGuildByID(ctx context.Context, id uuid.UUID) (GetGuildByIDRow, error)
 	GetGuildJoinRequestByUser(ctx context.Context, arg GetGuildJoinRequestByUserParams) (GuildJoinRequest, error)
@@ -502,6 +509,7 @@ type sqlcQuerier interface {
 	ListExternalAPIRealms(ctx context.Context, server string) ([]ListExternalAPIRealmsRow, error)
 	ListExternalAPIServers(ctx context.Context) ([]ListExternalAPIServersRow, error)
 	ListGearListsByUser(ctx context.Context, arg ListGearListsByUserParams) ([]GearList, error)
+	ListGearProgressionsByUser(ctx context.Context, arg ListGearProgressionsByUserParams) ([]GearProgression, error)
 	ListGearStatWeightsByUser(ctx context.Context, arg ListGearStatWeightsByUserParams) ([]GearStatWeight, error)
 	ListGuildJoinRequests(ctx context.Context, guildID uuid.UUID) ([]ListGuildJoinRequestsRow, error)
 	// Guild Page Panels
@@ -713,6 +721,7 @@ type sqlcQuerier interface {
 	UpdateDataset(ctx context.Context, arg UpdateDatasetParams) (Dataset, error)
 	UpdateExternalCharacterLinkSyncResponse(ctx context.Context, arg UpdateExternalCharacterLinkSyncResponseParams) error
 	UpdateGearList(ctx context.Context, arg UpdateGearListParams) (GearList, error)
+	UpdateGearProgression(ctx context.Context, arg UpdateGearProgressionParams) (GearProgression, error)
 	UpdateGearStatWeight(ctx context.Context, arg UpdateGearStatWeightParams) (GearStatWeight, error)
 	UpdateGuildPagePanel(ctx context.Context, arg UpdateGuildPagePanelParams) (GuildPagePanel, error)
 	UpdateGuildPageTab(ctx context.Context, arg UpdateGuildPageTabParams) (GuildPageTab, error)

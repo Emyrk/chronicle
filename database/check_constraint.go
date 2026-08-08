@@ -6,12 +6,16 @@ type CheckConstraint string
 
 // CheckConstraint enums.
 const (
+	CheckDatasetConsumableDisambiguationsCheck            CheckConstraint = "dataset_consumable_disambiguations_check"              // dataset_consumable_disambiguations
+	CheckDatasetConsumableDisambiguationsEffectKindCheck  CheckConstraint = "dataset_consumable_disambiguations_effect_kind_check"  // dataset_consumable_disambiguations
 	CheckDatasetsSlugFormat                               CheckConstraint = "datasets_slug_format"                                  // datasets
-	CheckGearListRevisionsPayloadSizeChk                  CheckConstraint = "gear_list_revisions_payload_size_chk"                  // gear_list_revisions
 	CheckGearListsDescriptionLengthChk                    CheckConstraint = "gear_lists_description_length_chk"                     // gear_lists
 	CheckGearListsPayloadSizeChk                          CheckConstraint = "gear_lists_payload_size_chk"                           // gear_lists
 	CheckGearListsTitleLengthChk                          CheckConstraint = "gear_lists_title_length_chk"                           // gear_lists
-	CheckGearListsVisibilityCheck                         CheckConstraint = "gear_lists_visibility_check"                           // gear_lists
+	CheckGearProgressionsDescriptionLengthChk             CheckConstraint = "gear_progressions_description_length_chk"              // gear_progressions
+	CheckGearProgressionsPayloadSizeChk                   CheckConstraint = "gear_progressions_payload_size_chk"                    // gear_progressions
+	CheckGearProgressionsTitleLengthChk                   CheckConstraint = "gear_progressions_title_length_chk"                    // gear_progressions
+	CheckGearStatWeightsDescriptionLengthChk              CheckConstraint = "gear_stat_weights_description_length_chk"              // gear_stat_weights
 	CheckGearStatWeightsNameLengthChk                     CheckConstraint = "gear_stat_weights_name_length_chk"                     // gear_stat_weights
 	CheckGearStatWeightsWeightsSizeChk                    CheckConstraint = "gear_stat_weights_weights_size_chk"                    // gear_stat_weights
 	CheckInstanceOverviewMetricsBossDurationNonnegative   CheckConstraint = "instance_overview_metrics_boss_duration_nonnegative"   // instance_overview_metrics

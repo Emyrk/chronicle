@@ -32,7 +32,11 @@ interface ItemPickerPanelProps {
   slotIndex: number;
   /** Item IDs already used in this slot (primary + alternates) for badges. */
   usedItemIds?: ReadonlySet<number>;
+  /** Badge text on rows in usedItemIds; "in slot" unless overridden. */
+  usedLabel?: string;
   onEquip: (item: ItemSearchResult) => void;
+  /** Label for the primary row action; "Equip" unless overridden. */
+  equipLabel?: string;
   /** When provided, rows also offer "Add alt". */
   onAddAlternate?: (item: ItemSearchResult) => void;
   /** Observed cohort data for this slot: popularity bars + browse list. */
@@ -51,7 +55,9 @@ interface ItemPickerPanelProps {
 export function ItemPickerPanel({
   slotIndex,
   usedItemIds,
+  usedLabel,
   onEquip,
+  equipLabel,
   onAddAlternate,
   trendsSlot,
   weights,
@@ -157,10 +163,12 @@ export function ItemPickerPanel({
                 key={item.entry}
                 item={item}
                 usedItemIds={usedItemIds}
+                usedLabel={usedLabel}
                 observedPct={observedPct.get(item.entry)}
                 score={scoreFor(item.entry)}
                 equippedScore={equippedScore}
                 onEquip={onEquip}
+                equipLabel={equipLabel}
                 onAddAlternate={onAddAlternate}
               />
             ))}
@@ -177,18 +185,22 @@ export function ItemPickerPanel({
 function PickerRow({
   item,
   usedItemIds,
+  usedLabel,
   observedPct,
   score,
   equippedScore,
   onEquip,
+  equipLabel,
   onAddAlternate,
 }: {
   item: ItemSearchResult;
   usedItemIds?: ReadonlySet<number>;
+  usedLabel?: string;
   observedPct?: number;
   score?: number;
   equippedScore?: number;
   onEquip: (item: ItemSearchResult) => void;
+  equipLabel?: string;
   onAddAlternate?: (item: ItemSearchResult) => void;
 }) {
   const delta = score !== undefined && equippedScore !== undefined ? score - equippedScore : undefined;
@@ -210,7 +222,7 @@ function PickerRow({
           </span>
           {usedItemIds?.has(item.entry) && (
             <span className="text-3xs uppercase tracking-wide text-blue-400 border border-blue-400/40 rounded px-1">
-              in slot
+              {usedLabel ?? "in slot"}
             </span>
           )}
         </div>
@@ -255,7 +267,7 @@ function PickerRow({
         </Button>
       )}
       <Button variant="outline" size="sm" className="h-7 px-2.5 text-xs" onClick={() => onEquip(item)}>
-        Equip
+        {equipLabel ?? "Equip"}
       </Button>
       {cursor && !isMobile && tooltip.data && (
         <CursorTooltip pos={cursor}>
