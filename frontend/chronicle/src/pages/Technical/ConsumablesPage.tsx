@@ -25,6 +25,7 @@ import type { ConsumableEffectKind, ConsumableEffectPolicy, Dataset } from "@/ap
 import { toast } from "sonner";
 import {
   buildCommonConsumableEffects,
+  groupDatasetsByCandidates,
   type CommonConsumableEffect,
   type ConsumableBuff,
   type ConsumableEntry,
@@ -285,6 +286,7 @@ function CandidateDifferencesTooltip({
   datasetById: Map<string, Dataset>;
 }) {
   const commonItemIds = new Set(effect.commonCandidates.map((item) => item.item_id));
+  const candidateGroups = groupDatasetsByCandidates(effect.datasets);
 
   return (
     <HintTooltip delayDuration={150}>
@@ -299,14 +301,19 @@ function CandidateDifferencesTooltip({
           <AlertTriangle className="h-3 w-3" /> Lists differ
         </button>
       </TooltipTrigger>
-      <TooltipContent side="right" sideOffset={6} className="w-96 max-w-[calc(100vw-2rem)] p-3 text-left">
+      <TooltipContent
+        side="right"
+        sideOffset={6}
+        hideArrow
+        className="w-96 max-w-[calc(100vw-2rem)] border border-zinc-700 bg-zinc-950 p-3 text-left text-zinc-100 shadow-2xl"
+      >
         <div className="mb-2 font-semibold">Candidate differences</div>
         {effect.commonCandidates.length > 0 && (
           <div className="mb-2">
-            <div className="mb-1 text-[10px] font-semibold uppercase tracking-wide opacity-70">Common to all</div>
+            <div className="mb-1 text-[10px] font-semibold uppercase tracking-wide text-zinc-400">Common to all</div>
             <div className="flex flex-wrap gap-1">
               {effect.commonCandidates.map((item) => (
-                <span key={item.item_id} className="rounded bg-background/15 px-1.5 py-0.5">
+                <span key={item.item_id} className="rounded bg-zinc-800 px-1.5 py-0.5">
                   {item.item_name} #{item.item_id}
                 </span>
               ))}
@@ -314,19 +321,20 @@ function CandidateDifferencesTooltip({
           </div>
         )}
         <div className="space-y-2">
-          {effect.datasets.map((dataset) => {
-            const extras = dataset.candidates.filter((item) => !commonItemIds.has(item.item_id));
+          {candidateGroups.map((group) => {
+            const extras = group.candidates.filter((item) => !commonItemIds.has(item.item_id));
+            const datasetNames = group.datasetIds.map((datasetId) => datasetById.get(datasetId)?.name ?? datasetId);
             return (
-              <div key={dataset.datasetId}>
-                <div className="font-medium">{datasetById.get(dataset.datasetId)?.name ?? dataset.datasetId}</div>
-                {dataset.candidates.length === 0 ? (
-                  <div className="text-destructive-foreground/80">Effect is not present in this dataset.</div>
+              <div key={group.datasetIds.join(",")}>
+                <div className="font-medium text-zinc-100">{datasetNames.join(", ")}</div>
+                {group.candidates.length === 0 ? (
+                  <div className="text-red-300">Effect is not present in these datasets.</div>
                 ) : extras.length === 0 ? (
-                  <div className="opacity-70">No dataset-specific candidates.</div>
+                  <div className="text-zinc-400">No dataset-specific candidates.</div>
                 ) : (
                   <div className="mt-0.5 flex flex-wrap gap-1">
                     {extras.map((item) => (
-                      <span key={item.item_id} className="rounded bg-amber-950/30 px-1.5 py-0.5 text-amber-100">
+                      <span key={item.item_id} className="rounded bg-amber-950/60 px-1.5 py-0.5 text-amber-100">
                         {item.item_name} #{item.item_id}
                       </span>
                     ))}
@@ -337,7 +345,7 @@ function CandidateDifferencesTooltip({
           })}
         </div>
         {effect.conflictingItemIds.length > 0 && (
-          <div className="mt-2 border-t border-background/20 pt-2 text-amber-200">
+          <div className="mt-2 border-t border-zinc-700 pt-2 text-amber-200">
             Same item ID has different names across datasets: {effect.conflictingItemIds.map((id) => `#${id}`).join(", ")}.
           </div>
         )}

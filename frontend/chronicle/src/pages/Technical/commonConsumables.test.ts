@@ -1,5 +1,10 @@
 import { describe, expect, it } from "vitest";
-import { buildCommonConsumableEffects, type ConsumableDatasetSnapshot, type ConsumableEntry } from "./commonConsumables";
+import {
+  buildCommonConsumableEffects,
+  groupDatasetsByCandidates,
+  type ConsumableDatasetSnapshot,
+  type ConsumableEntry,
+} from "./commonConsumables";
 
 function item(itemId: number, name: string, buffIds: number[]): ConsumableEntry {
   return {
@@ -15,6 +20,31 @@ function item(itemId: number, name: string, buffIds: number[]): ConsumableEntry 
 function snapshot(datasetId: string, consumables: ConsumableEntry[]): ConsumableDatasetSnapshot {
   return { datasetId, consumables, policies: [] };
 }
+
+describe("groupDatasetsByCandidates", () => {
+  it("merges datasets with identical candidate lists", () => {
+    const shared = [item(10, "Shared", [100]), item(20, "Other", [100])];
+    const groups = groupDatasetsByCandidates([
+      { datasetId: "one", candidates: shared, policy: undefined },
+      { datasetId: "two", candidates: [...shared].reverse(), policy: undefined },
+      { datasetId: "three", candidates: [item(10, "Shared", [100])], policy: undefined },
+    ]);
+
+    expect(groups).toHaveLength(2);
+    expect(groups[0].datasetIds).toEqual(["one", "two"]);
+    expect(groups[0].candidates.map((candidate) => candidate.item_id)).toEqual([10, 20]);
+    expect(groups[1].datasetIds).toEqual(["three"]);
+  });
+
+  it("keeps reused item IDs with different names in separate groups", () => {
+    const groups = groupDatasetsByCandidates([
+      { datasetId: "one", candidates: [item(10, "First", [100])], policy: undefined },
+      { datasetId: "two", candidates: [item(10, "Second", [100])], policy: undefined },
+    ]);
+
+    expect(groups).toHaveLength(2);
+  });
+});
 
 describe("buildCommonConsumableEffects", () => {
   it("offers only candidates present in every selected dataset", () => {

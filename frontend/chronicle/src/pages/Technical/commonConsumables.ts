@@ -49,6 +49,33 @@ function sameIds(left: number[], right: number[]): boolean {
   return left.length === right.length && left.every((value, index) => value === right[index]);
 }
 
+export interface CandidateDatasetGroup {
+  datasetIds: string[];
+  candidates: ConsumableEntry[];
+}
+
+/** Groups datasets that expose the same candidate item IDs and names. */
+export function groupDatasetsByCandidates(
+  datasets: CommonConsumableDatasetState[],
+): CandidateDatasetGroup[] {
+  const groups = new Map<string, CandidateDatasetGroup>();
+
+  for (const dataset of datasets) {
+    const candidates = [...dataset.candidates].sort((a, b) => a.item_id - b.item_id);
+    const signature = candidates
+      .map((item) => `${item.item_id}:${item.item_name.trim().toLocaleLowerCase()}`)
+      .join("|");
+    const group = groups.get(signature);
+    if (group) group.datasetIds.push(dataset.datasetId);
+    else groups.set(signature, { datasetIds: [dataset.datasetId], candidates });
+  }
+
+  return [...groups.values()].sort((a, b) =>
+    b.datasetIds.length - a.datasetIds.length
+    || a.datasetIds[0].localeCompare(b.datasetIds[0]),
+  );
+}
+
 export function buildCommonConsumableEffects(
   snapshots: ConsumableDatasetSnapshot[],
 ): CommonConsumableEffect[] {
