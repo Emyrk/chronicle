@@ -60,51 +60,61 @@ export function ConsumablesLedgerContent(props: ConsumablesLedgerContentProps) {
 
   const coverage = ledgerCoverage(ledger);
 
-  const [breakout, setBreakout] = useState<BreakoutState | null>(null);
+  // Several breakouts can be open at once — one per item, toggled per row.
+  const [breakouts, setBreakouts] = useState<BreakoutState[]>([]);
 
-  const openBreakout = (itemId: number, target: HTMLElement) => {
+  const toggleBreakout = (itemId: number, target: HTMLElement) => {
     const rect = target.getBoundingClientRect();
     const view = target.ownerDocument.defaultView;
     const x = Math.max(8, Math.min(rect.right + 8, (view?.innerWidth ?? 640) - 340));
     const y = Math.max(8, Math.min(rect.top, (view?.innerHeight ?? 480) - 200));
-    setBreakout((previous) => (previous?.itemId === itemId ? null : { itemId, initialPosition: { x, y } }));
+    setBreakouts((previous) =>
+      previous.some((b) => b.itemId === itemId)
+        ? previous.filter((b) => b.itemId !== itemId)
+        : [...previous, { itemId, initialPosition: { x, y } }],
+    );
+  };
+  const closeBreakout = (itemId: number) => {
+    setBreakouts((previous) => previous.filter((b) => b.itemId !== itemId));
   };
 
-  const breakoutData = useMemo<LedgerItemBreakoutData | null>(() => {
-    if (!breakout) return null;
-    const ledgerRow = ledger.rows.find((row) => row.itemId === breakout.itemId);
-    if (!ledgerRow) return null;
-
+  const breakoutDatas = useMemo<LedgerItemBreakoutData[]>(() => {
     const players = context.instance.players ?? {};
-    const rows = aggregateItemBreakout(resolvedUses, breakout.itemId).map((count) => {
-      const player = players[count.player];
-      return { guid: count.player, name: player?.name ?? count.player, cls: player?.class, uses: count.uses };
-    });
-    // Most uses first, ties by name now that names are known.
-    rows.sort((a, b) => b.uses - a.uses || a.name.localeCompare(b.name));
-
     const classSizes = new Map<string, number>();
     for (const player of Object.values(players)) {
       classSizes.set(player.class, (classSizes.get(player.class) ?? 0) + 1);
     }
-    const usedByClass = new Map<string, number>();
-    for (const row of rows) {
-      if (!row.cls) continue;
-      usedByClass.set(row.cls, (usedByClass.get(row.cls) ?? 0) + 1);
-    }
-    const classes = [...usedByClass.entries()]
-      .map(([cls, used]) => ({ cls, used, of: classSizes.get(cls) ?? used }))
-      .sort((a, b) => classRank(a.cls) - classRank(b.cls) || CLASS_ORDER.indexOf(a.cls) - CLASS_ORDER.indexOf(b.cls));
 
-    return {
-      itemId: breakout.itemId,
-      unitCopper: ledgerRow.unitCopper,
-      showGold: coverage.showGold,
-      raidSize: Object.keys(players).length,
-      rows,
-      classes,
-    };
-  }, [breakout, ledger.rows, resolvedUses, context.instance.players, coverage.showGold]);
+    return breakouts.flatMap((breakout) => {
+      const ledgerRow = ledger.rows.find((row) => row.itemId === breakout.itemId);
+      if (!ledgerRow) return [];
+
+      const rows = aggregateItemBreakout(resolvedUses, breakout.itemId).map((count) => {
+        const player = players[count.player];
+        return { guid: count.player, name: player?.name ?? count.player, cls: player?.class, uses: count.uses };
+      });
+      // Most uses first, ties by name now that names are known.
+      rows.sort((a, b) => b.uses - a.uses || a.name.localeCompare(b.name));
+
+      const usedByClass = new Map<string, number>();
+      for (const row of rows) {
+        if (!row.cls) continue;
+        usedByClass.set(row.cls, (usedByClass.get(row.cls) ?? 0) + 1);
+      }
+      const classes = [...usedByClass.entries()]
+        .map(([cls, used]) => ({ cls, used, of: classSizes.get(cls) ?? used }))
+        .sort((a, b) => classRank(a.cls) - classRank(b.cls) || CLASS_ORDER.indexOf(a.cls) - CLASS_ORDER.indexOf(b.cls));
+
+      return [{
+        itemId: breakout.itemId,
+        unitCopper: ledgerRow.unitCopper,
+        showGold: coverage.showGold,
+        raidSize: Object.keys(players).length,
+        rows,
+        classes,
+      }];
+    });
+  }, [breakouts, ledger.rows, resolvedUses, context.instance.players, coverage.showGold]);
 
   const effectiveProps = {
     ...props,
@@ -147,8 +157,8 @@ export function ConsumablesLedgerContent(props: ConsumablesLedgerContentProps) {
                     maxUses={ledger.maxUses}
                     subtitle={`${row.users} player${row.users === 1 ? "" : "s"}`}
                     showGold={coverage.showGold}
-                    onClick={(event) => openBreakout(row.itemId, event.currentTarget)}
-                    selected={breakout?.itemId === row.itemId}
+                    onClick={(event) => toggleBreakout(row.itemId, event.currentTarget)}
+                    selected={breakouts.some((b) => b.itemId === row.itemId)}
                   />
                 ))}
               </div>
@@ -161,15 +171,19 @@ export function ConsumablesLedgerContent(props: ConsumablesLedgerContentProps) {
           </div>
         )}
       </GenericPanel>
-      {breakout && breakoutData && (
-        <FloatingIncomingEventsBreakout
-          key={breakout.itemId}
-          initialPosition={breakout.initialPosition}
-          onClose={() => setBreakout(null)}
-        >
-          <LedgerItemBreakout data={breakoutData} onClose={() => setBreakout(null)} />
-        </FloatingIncomingEventsBreakout>
-      )}
+      {breakouts.map((breakout) => {
+        const data = breakoutDatas.find((d) => d.itemId === breakout.itemId);
+        if (!data) return null;
+        return (
+          <FloatingIncomingEventsBreakout
+            key={breakout.itemId}
+            initialPosition={breakout.initialPosition}
+            onClose={() => closeBreakout(breakout.itemId)}
+          >
+            <LedgerItemBreakout data={data} onClose={() => closeBreakout(breakout.itemId)} />
+          </FloatingIncomingEventsBreakout>
+        );
+      })}
     </>
   );
 }
