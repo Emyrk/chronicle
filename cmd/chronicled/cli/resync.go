@@ -261,14 +261,10 @@ Fail-pause behavior (--execute):
 			// The candidate limit is applied afterward so excluded groups do not
 			// consume slots that could be used by eligible groups.
 			groups := resynccandidate.FilterAndGroup(allRows, targetVersion, 0)
-			groups, excludedCount := excludeGroupsByDataset(ctx, dbStore, groups, excludedDatasetIDs)
+			groups, excludedCount := excludeGroupsByDataset(ctx, dbStore, groups, excludedDatasetIDs, int(limit))
 			if excludedCount > 0 {
 				logger.Info("excluded resync candidates by dataset", "groups", excludedCount, "dataset_ids", excludeDatasets)
 			}
-			if limit > 0 && len(groups) > int(limit) {
-				groups = groups[:int(limit)]
-			}
-
 			if len(groups) == 0 {
 				return writeOutput(i.Stdout, "No candidate log groups found.\n")
 			}
@@ -283,7 +279,11 @@ Fail-pause behavior (--execute):
 			if logBaseURL == "" {
 				logBaseURL = defaultResyncLogBaseURL
 			}
-			enrichResyncGroups(ctx, dbStore, st, logBaseURL, groups)
+			// Approval mode enriches one candidate immediately before presenting
+			// it, avoiding downloads for every candidate before the first prompt.
+			if !approveEach {
+				enrichResyncGroups(ctx, dbStore, st, logBaseURL, groups)
+			}
 
 			isTTY := isTerminal(i)
 
@@ -398,7 +398,11 @@ Fail-pause behavior (--execute):
 					return fmt.Errorf("start approval River client: %w", err)
 				}
 				defer stopRiverClient(riverClient)
-				return runApproveEach(ctx, i, riverClient, queueName, groups)
+				return runApproveEach(ctx, i, riverClient, queueName, groups, func(group resynccandidate.Group) resynccandidate.Group {
+					candidate := []resynccandidate.Group{group}
+					enrichResyncGroups(ctx, dbStore, st, logBaseURL, candidate)
+					return candidate[0]
+				})
 			}
 
 			// Enqueue one resync job per candidate log group.
@@ -627,11 +631,21 @@ func approvalInsertOpts(args chronicle.ArgsResync, queueName string) river.Inser
 	return opts
 }
 
-func runApproveEach(ctx context.Context, i *serpent.Invocation, client *river.Client[pgx.Tx], queueName string, groups []resynccandidate.Group) error {
+func runApproveEach(
+	ctx context.Context,
+	i *serpent.Invocation,
+	client *river.Client[pgx.Tx],
+	queueName string,
+	groups []resynccandidate.Group,
+	enrich func(resynccandidate.Group) resynccandidate.Group,
+) error {
 	scanner := bufio.NewScanner(i.Stdin)
 	completed := 0
 	skipped := 0
 	for index, group := range groups {
+		if enrich != nil {
+			group = enrich(group)
+		}
 		action, err := promptApproval(scanner, i.Stdout, group, index+1, len(groups))
 		if err != nil {
 			return err
@@ -961,29 +975,55 @@ func groupUsesExcludedDataset(
 	return false
 }
 
+func filterGroupsByExcludedDataset(
+	groups []resynccandidate.Group,
+	excluded map[uuid.UUID]struct{},
+	limit int,
+	resolve func(uuid.UUID) uuid.UUID,
+) ([]resynccandidate.Group, int) {
+	includedCapacity := len(groups)
+	if limit > 0 && limit < includedCapacity {
+		includedCapacity = limit
+	}
+	included := make([]resynccandidate.Group, 0, includedCapacity)
+	datasetByRealm := make(map[uuid.UUID]uuid.UUID)
+	resolveCached := func(realmID uuid.UUID) uuid.UUID {
+		if datasetID, ok := datasetByRealm[realmID]; ok {
+			return datasetID
+		}
+		datasetID := resolve(realmID)
+		datasetByRealm[realmID] = datasetID
+		return datasetID
+	}
+	excludedCount := 0
+	for _, group := range groups {
+		if groupUsesExcludedDataset(group, excluded, resolveCached) {
+			excludedCount++
+			continue
+		}
+		included = append(included, group)
+		if limit > 0 && len(included) >= limit {
+			break
+		}
+	}
+	return included, excludedCount
+}
+
 func excludeGroupsByDataset(
 	ctx context.Context,
 	db database.Store,
 	groups []resynccandidate.Group,
 	excluded map[uuid.UUID]struct{},
+	limit int,
 ) ([]resynccandidate.Group, int) {
 	if len(excluded) == 0 {
-		return groups, 0
+		return filterGroupsByExcludedDataset(groups, excluded, limit, nil)
 	}
 
 	adminCtx := servicetenant.AdminBypass(ctx)
-	included := make([]resynccandidate.Group, 0, len(groups))
-	excludedCount := 0
-	for _, group := range groups {
-		if groupUsesExcludedDataset(group, excluded, func(realmID uuid.UUID) uuid.UUID {
-			return resolveDatasetForRealm(adminCtx, db, realmID).DatasetID
-		}) {
-			excludedCount++
-			continue
-		}
-		included = append(included, group)
-	}
-	return included, excludedCount
+	return filterGroupsByExcludedDataset(groups, excluded, limit, func(realmID uuid.UUID) uuid.UUID {
+		return resolveDatasetForRealm(adminCtx, db, realmID).DatasetID
+	})
 }
 
 // resolveDatasetForRealm mirrors the server's dataset resolution used during

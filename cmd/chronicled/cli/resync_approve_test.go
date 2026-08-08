@@ -100,6 +100,52 @@ func TestGroupUsesExcludedDataset_NoRealmsUsesDefaultDataset(t *testing.T) {
 	}))
 }
 
+func TestFilterGroupsByExcludedDataset_CachesRealmsAndStopsAtLimit(t *testing.T) {
+	t.Parallel()
+
+	excludedDataset := uuid.MustParse("00000000-0000-0000-0000-000000000002")
+	includedDataset := uuid.MustParse("00000000-0000-0000-0000-000000000003")
+	excludedRealm := uuid.MustParse("10000000-0000-0000-0000-000000000001")
+	includedRealm := uuid.MustParse("10000000-0000-0000-0000-000000000002")
+	unvisitedRealm := uuid.MustParse("10000000-0000-0000-0000-000000000003")
+	groups := []resynccandidate.Group{
+		{ID: uuid.New(), RealmIDs: []uuid.UUID{excludedRealm}},
+		{ID: uuid.New(), RealmIDs: []uuid.UUID{excludedRealm}},
+		{ID: uuid.New(), RealmIDs: []uuid.UUID{includedRealm}},
+		{ID: uuid.New(), RealmIDs: []uuid.UUID{unvisitedRealm}},
+	}
+
+	calls := make(map[uuid.UUID]int)
+	got, excludedCount := filterGroupsByExcludedDataset(
+		groups,
+		map[uuid.UUID]struct{}{excludedDataset: {}},
+		1,
+		func(realmID uuid.UUID) uuid.UUID {
+			calls[realmID]++
+			if realmID == excludedRealm {
+				return excludedDataset
+			}
+			return includedDataset
+		},
+	)
+
+	require.Len(t, got, 1)
+	require.Equal(t, groups[2].ID, got[0].ID)
+	require.Equal(t, 2, excludedCount)
+	require.Equal(t, 1, calls[excludedRealm], "repeated realms should resolve only once")
+	require.Equal(t, 1, calls[includedRealm])
+	require.Zero(t, calls[unvisitedRealm], "filtering should stop once the post-exclusion limit is filled")
+}
+
+func TestFilterGroupsByExcludedDataset_NoExclusionsStillAppliesLimit(t *testing.T) {
+	t.Parallel()
+
+	groups := []resynccandidate.Group{{ID: uuid.New()}, {ID: uuid.New()}}
+	got, excludedCount := filterGroupsByExcludedDataset(groups, nil, 1, nil)
+	require.Equal(t, groups[:1], got)
+	require.Zero(t, excludedCount)
+}
+
 func TestResyncLogURL(t *testing.T) {
 	t.Parallel()
 
