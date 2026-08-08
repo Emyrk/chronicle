@@ -86,7 +86,7 @@ function PlayerCombobox({
       <PopoverPrimitive.Trigger asChild>
         <button
           type="button"
-          className="group flex min-w-0 items-center gap-1 rounded px-0.5 transition-colors hover:bg-muted/40"
+          className="group flex min-w-0 cursor-pointer items-center gap-1 rounded px-0.5 transition-colors hover:bg-muted/40"
           title="Change player"
         >
           <span className="truncate text-sm font-medium" style={{ color: classColor(selected.cls) }}>
@@ -132,7 +132,7 @@ function PlayerCombobox({
                     setSearch("");
                   }}
                   className={cn(
-                    "flex w-full items-center gap-2 rounded-sm px-2 py-1 text-left text-xs hover:bg-accent",
+                    "flex w-full cursor-pointer items-center gap-2 rounded-sm px-2 py-1 text-left text-xs hover:bg-accent",
                     player.guid === selected.guid && "bg-muted/50",
                   )}
                 >
@@ -341,7 +341,7 @@ export function ConsumablesPlayerContent(props: ConsumablesPlayerContentProps) {
                   type="button"
                   onClick={() => step(-1)}
                   aria-label="Previous player"
-                  className="flex h-5 w-5 items-center justify-center rounded border border-border/60 text-muted-foreground transition-colors hover:border-border hover:text-foreground"
+                  className="flex h-5 w-5 cursor-pointer items-center justify-center rounded border border-border/60 text-muted-foreground transition-colors hover:border-border hover:text-foreground"
                 >
                   ‹
                 </button>
@@ -349,7 +349,7 @@ export function ConsumablesPlayerContent(props: ConsumablesPlayerContentProps) {
                   type="button"
                   onClick={() => step(1)}
                   aria-label="Next player"
-                  className="flex h-5 w-5 items-center justify-center rounded border border-border/60 text-muted-foreground transition-colors hover:border-border hover:text-foreground"
+                  className="flex h-5 w-5 cursor-pointer items-center justify-center rounded border border-border/60 text-muted-foreground transition-colors hover:border-border hover:text-foreground"
                 >
                   ›
                 </button>
@@ -380,7 +380,7 @@ export function ConsumablesPlayerContent(props: ConsumablesPlayerContentProps) {
                   }${gold > 0 ? ` · ${formatGold(gold)}` : ""}`}
                   onClick={() => selectPlayer(player.guid)}
                   className={cn(
-                    "group/bar flex h-full min-w-0 flex-1 items-end overflow-hidden rounded-sm bg-background/80",
+                    "group/bar flex h-full min-w-0 flex-1 cursor-pointer items-end overflow-hidden rounded-sm bg-background/80",
                     index === selectedIndex && "ring-1 ring-inset ring-foreground/70",
                   )}
                 >
