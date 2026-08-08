@@ -21,7 +21,13 @@ import {
   NO_PRICES,
 } from "./consumablesLedger";
 import { LedgerItemBreakout, type LedgerItemBreakoutData } from "./LedgerItemBreakout";
-import { AmbiguousSection, CoverageLine, LedgerRow } from "./LedgerShared";
+import {
+  AmbiguousSection,
+  CoverageLine,
+  LedgerFilterInput,
+  LedgerRow,
+  useFilteredLedger,
+} from "./LedgerShared";
 
 type ConsumablesLedgerContentProps = PanelRenderProps<ConsumablesResult>;
 
@@ -59,6 +65,9 @@ export function ConsumablesLedgerContent(props: ConsumablesLedgerContentProps) {
   );
 
   const coverage = ledgerCoverage(ledger);
+
+  const [filter, setFilter] = useState("");
+  const filteredLedger = useFilteredLedger(ledger, filter);
 
   // Several breakouts can be open at once — one per item, toggled per row.
   const [breakouts, setBreakouts] = useState<BreakoutState[]>([]);
@@ -143,7 +152,8 @@ export function ConsumablesLedgerContent(props: ConsumablesLedgerContentProps) {
             {loading ? "Loading..." : "No consumable uses recorded"}
           </div>
         ) : (
-          <div className="flex h-full min-h-0 flex-col">
+          <div className="flex h-full min-h-0 flex-col gap-2">
+            <LedgerFilterInput value={filter} onChange={setFilter} />
             <div className="flex shrink-0 items-center justify-between gap-2 border-b border-border/60 px-2 pb-2">
               <CoverageLine label={coverage.label} tone={coverage.tone} />
               <div className="flex flex-col items-end gap-0.5">
@@ -159,24 +169,32 @@ export function ConsumablesLedgerContent(props: ConsumablesLedgerContentProps) {
             <ScrollArea className="min-h-0 flex-1">
               {/* Right gutter so rows don't sit under the overlay scrollbar. */}
               <div className="pr-2.5">
-              <div className="flex flex-col py-1">
-                {ledger.rows.map((row) => (
-                  <LedgerRow
-                    key={row.key}
-                    row={row}
-                    maxUses={ledger.maxUses}
-                    subtitle={`${row.users} player${row.users === 1 ? "" : "s"}`}
+              {filteredLedger.rows.length === 0 && filteredLedger.ambiguous.length === 0 ? (
+                <div className="py-4 text-center text-xs text-muted-foreground">
+                  No consumes match “{filter}”
+                </div>
+              ) : (
+                <>
+                  <div className="flex flex-col py-1">
+                    {filteredLedger.rows.map((row) => (
+                      <LedgerRow
+                        key={row.key}
+                        row={row}
+                        maxUses={ledger.maxUses}
+                        subtitle={`${row.users} player${row.users === 1 ? "" : "s"}`}
+                        showGold={coverage.showGold}
+                        onClick={(event) => toggleBreakout(row.itemId, event.currentTarget)}
+                        selected={breakouts.some((b) => b.itemId === row.itemId)}
+                      />
+                    ))}
+                  </div>
+                  <AmbiguousSection
+                    rows={filteredLedger.ambiguous}
+                    totalAmbiguousUses={filteredLedger.ambiguous.reduce((sum, row) => sum + row.uses, 0)}
                     showGold={coverage.showGold}
-                    onClick={(event) => toggleBreakout(row.itemId, event.currentTarget)}
-                    selected={breakouts.some((b) => b.itemId === row.itemId)}
                   />
-                ))}
-              </div>
-              <AmbiguousSection
-                rows={ledger.ambiguous}
-                totalAmbiguousUses={ledger.ambiguousUses}
-                showGold={coverage.showGold}
-              />
+                </>
+              )}
               </div>
             </ScrollArea>
           </div>

@@ -143,7 +143,8 @@ function AnchoredHoverTooltip({ anchor, children }: { anchor: DOMRect; children:
   return (
     <div
       ref={ref}
-      className="pointer-events-none fixed z-50"
+      // Above the floating breakouts (z-[200]).
+      className="pointer-events-none fixed z-[210]"
       style={{ left: anchor.right + 10, top: anchor.top, visibility: "hidden" }}
     >
       {children}

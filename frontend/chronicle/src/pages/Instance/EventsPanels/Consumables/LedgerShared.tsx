@@ -8,13 +8,91 @@
  *  - ambiguous is a bucket below a rule, hatched icon, never a normal row.
  */
 
+import { useQueries } from "@tanstack/react-query";
+import { Search, X } from "lucide-react";
+import { fetchItemTooltip } from "@/api/gamedata";
 import { cn } from "@/lib/utils";
 import { ItemCell } from "./ConsumablesContent";
 import {
   formatGold,
+  type ConsumablesLedger,
   type LedgerAmbiguousRow,
   type LedgerItemRow,
 } from "./consumablesLedger";
+import { fuzzyConsumableMatch } from "./consumablesTotal";
+
+/**
+ * Fuzzy-filter a ledger's rows by item name (or id). Item names come from
+ * lazily fetched tooltips, so they load on the first keystroke. An ambiguous
+ * bucket stays whole when its effect name or any candidate item matches.
+ */
+// eslint-disable-next-line react-refresh/only-export-components
+export function useFilteredLedger(ledger: ConsumablesLedger, filter: string): ConsumablesLedger {
+  const itemIds = [
+    ...new Set([
+      ...ledger.rows.map((row) => row.itemId),
+      ...ledger.ambiguous.flatMap((row) => row.candidateItemIds),
+    ]),
+  ];
+  const itemQueries = useQueries({
+    queries: itemIds.map((itemId) => ({
+      queryKey: ["item-tooltip", itemId, undefined, undefined],
+      queryFn: () => fetchItemTooltip({ itemId }),
+      enabled: filter.trim().length > 0,
+      staleTime: 5 * 60 * 1000,
+      retry: false,
+    })),
+  });
+
+  const query = filter.trim();
+  if (!query) return ledger;
+
+  const itemNames = new Map<number, string>();
+  itemIds.forEach((itemId, index) => {
+    const name = itemQueries[index]?.data?.name;
+    if (name) itemNames.set(itemId, name);
+  });
+
+  return {
+    ...ledger,
+    rows: ledger.rows.filter((row) =>
+      fuzzyConsumableMatch(query, [itemNames.get(row.itemId) ?? "", row.itemId.toString()]),
+    ),
+    ambiguous: ledger.ambiguous.filter((row) =>
+      fuzzyConsumableMatch(query, [
+        row.spellName,
+        row.spellId?.toString() ?? "",
+        ...row.candidateItemIds.flatMap((itemId) => [itemNames.get(itemId) ?? "", itemId.toString()]),
+      ]),
+    ),
+  };
+}
+
+export function LedgerFilterInput({ value, onChange }: { value: string; onChange: (value: string) => void }) {
+  return (
+    <label className="relative block shrink-0">
+      <Search className="pointer-events-none absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-muted-foreground" />
+      <input
+        type="search"
+        value={value}
+        onChange={(event) => onChange(event.target.value)}
+        placeholder="Filter consumes..."
+        aria-label="Filter consumables by name"
+        className="h-7 w-full rounded border border-border bg-background/70 pl-8 pr-8 text-xs outline-none transition-colors placeholder:text-muted-foreground focus:border-ring"
+      />
+      {value && (
+        <button
+          type="button"
+          onClick={() => onChange("")}
+          className="absolute right-1.5 top-1/2 -translate-y-1/2 cursor-pointer rounded p-1 text-muted-foreground hover:bg-muted hover:text-foreground"
+          aria-label="Clear consumables filter"
+        >
+          <X className="h-3 w-3" />
+        </button>
+      )}
+    </label>
+  );
+}
 
 // "muted" (no price data) renders amber too, matching the player view's
 // gap line so both scopes read the same.
