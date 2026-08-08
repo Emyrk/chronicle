@@ -1208,11 +1208,11 @@ SELECT
     wit.quality,
     COALESCE(NULLIF(wdi.icon, ''), dbi.inventory_icon ->> 0, '')::text,
     ARRAY_REMOVE(ARRAY[
-        CASE WHEN wit.class = 0 OR wit.spelltrigger_1 = 0 THEN wit.spellid_1 ELSE 0 END,
-        CASE WHEN wit.class = 0 OR wit.spelltrigger_2 = 0 THEN wit.spellid_2 ELSE 0 END,
-        CASE WHEN wit.class = 0 OR wit.spelltrigger_3 = 0 THEN wit.spellid_3 ELSE 0 END,
-        CASE WHEN wit.class = 0 OR wit.spelltrigger_4 = 0 THEN wit.spellid_4 ELSE 0 END,
-        CASE WHEN wit.class = 0 OR wit.spelltrigger_5 = 0 THEN wit.spellid_5 ELSE 0 END
+        CASE WHEN wit.spelltrigger_1 = 0 THEN wit.spellid_1 ELSE 0 END,
+        CASE WHEN wit.spelltrigger_2 = 0 THEN wit.spellid_2 ELSE 0 END,
+        CASE WHEN wit.spelltrigger_3 = 0 THEN wit.spellid_3 ELSE 0 END,
+        CASE WHEN wit.spelltrigger_4 = 0 THEN wit.spellid_4 ELSE 0 END,
+        CASE WHEN wit.spelltrigger_5 = 0 THEN wit.spellid_5 ELSE 0 END
     ], 0)::int[]
 FROM world_item_template wit
 LEFT JOIN world_display_info wdi
@@ -1266,11 +1266,13 @@ WHERE wit.dataset_id = $1
       )
   )
   AND (
-      wit.spellid_1 <> 0 OR
-      wit.spellid_2 <> 0 OR
-      wit.spellid_3 <> 0 OR
-      wit.spellid_4 <> 0 OR
-      wit.spellid_5 <> 0
+      -- Trigger 0 is an actual on-use spell. Other triggers describe equip,
+      -- proc, or learning behavior and must not create consume events.
+      (wit.spellid_1 <> 0 AND wit.spelltrigger_1 = 0) OR
+      (wit.spellid_2 <> 0 AND wit.spelltrigger_2 = 0) OR
+      (wit.spellid_3 <> 0 AND wit.spelltrigger_3 = 0) OR
+      (wit.spellid_4 <> 0 AND wit.spelltrigger_4 = 0) OR
+      (wit.spellid_5 <> 0 AND wit.spelltrigger_5 = 0)
   )
 `
 

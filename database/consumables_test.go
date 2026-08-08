@@ -78,7 +78,8 @@ func TestDerivedConsumablesAreDatasetScopedAndLinkBuffs(t *testing.T) {
 	// items. Include stackable, non-equippable on-use items, charged trade goods
 	// such as weapon oils, and non-stackable items whose use spell directly
 	// applies an aura. Exclude reusable equipment, non-stackable quest activators
-	// that only trigger another spell, and non-use spell triggers.
+	// that only trigger another spell, and non-use spell triggers such as class
+	// spell codices whose trigger 6 teaches a spell.
 	_, err = pool.Exec(ctx, `
 		INSERT INTO world_item_template (
 			dataset_id, entry, class, name, inventory_type, stackable,
@@ -90,8 +91,9 @@ func TestDerivedConsumablesAreDatasetScopedAndLinkBuffs(t *testing.T) {
 			($1, 1005, $2, 'Triggered Quest Item', 0, 20, 100, 1, 0, 0, 0),
 			($1, 1006, $2, 'Non-stackable Consumable', 0, 1, 200, 0, 0, 0, 0),
 			($1, 1007, $4, 'Wizard Oil', 0, 1, 500, 0, -5, 0, 0),
-			($1, 1008, $4, 'Dense Sharpening Stone', 0, 20, 501, 0, -1, 0, 0)
-	`, defaultID, int32(chrondbc.ItemClassQuest), int32(chrondbc.ItemClassArmor), int32(chrondbc.ItemClassTradeGoods))
+			($1, 1008, $4, 'Dense Sharpening Stone', 0, 20, 501, 0, -1, 0, 0),
+			($1, 1009, $5, 'Class Spell Codex', 0, 1, 600, 6, 0, 0, 0)
+	`, defaultID, int32(chrondbc.ItemClassQuest), int32(chrondbc.ItemClassArmor), int32(chrondbc.ItemClassTradeGoods), int32(chrondbc.ItemClassConsumable))
 	require.NoError(t, err)
 
 	refresh := func(datasetID string) {
