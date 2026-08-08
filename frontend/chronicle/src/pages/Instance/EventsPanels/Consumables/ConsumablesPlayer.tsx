@@ -379,16 +379,19 @@ export function ConsumablesPlayerContent(props: ConsumablesPlayerContentProps) {
                     uses > 0 ? ` · ${uses} uses` : " · no uses"
                   }${gold > 0 ? ` · ${formatGold(gold)}` : ""}`}
                   onClick={() => selectPlayer(player.guid)}
-                  className="flex h-full min-w-0 flex-1 items-end"
+                  className={cn(
+                    "group/bar flex h-full min-w-0 flex-1 items-end overflow-hidden rounded-sm bg-muted/40",
+                    index === selectedIndex && "ring-1 ring-inset ring-foreground/70",
+                  )}
                 >
                   <span
                     className={cn(
                       "w-full rounded-sm transition-opacity",
                       index === selectedIndex
-                        ? "opacity-100 ring-1 ring-foreground/70"
+                        ? "opacity-100"
                         : uses > 0
-                          ? "opacity-70 hover:opacity-100"
-                          : "opacity-30 hover:opacity-60",
+                          ? "opacity-70 group-hover/bar:opacity-100"
+                          : "opacity-30 group-hover/bar:opacity-60",
                     )}
                     style={{ background: classColor(player.cls), height: `${heightPct}%` }}
                   />
