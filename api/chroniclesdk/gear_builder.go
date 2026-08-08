@@ -20,41 +20,8 @@ type GearList struct {
 	CreatedAt   time.Time       `json:"created_at"`
 	UpdatedAt   time.Time       `json:"updated_at"`
 
-	// Fork lineage; nil when the list was not forked. A nil revision
-	// number on a forked list means it was forked from the live draft.
-	ForkedFromListID    *uuid.UUID `json:"forked_from_list_id,omitempty"`
-	ForkedFromRevNumber *int32     `json:"forked_from_rev_number,omitempty"`
-}
-
-// GearListRevision is an immutable published snapshot of a gear list.
-type GearListRevision struct {
-	ID          uuid.UUID       `json:"id"`
-	ListID      uuid.UUID       `json:"list_id"`
-	RevNumber   int32           `json:"rev_number"`
-	Title       string          `json:"title"`
-	Description string          `json:"description"`
-	ClassID     int32           `json:"class_id"`
-	SpecName    string          `json:"spec_name"`
-	Payload     json.RawMessage `json:"payload"`
-	PublishedBy uuid.UUID       `json:"published_by"`
-	PublishedAt time.Time       `json:"published_at"`
-}
-
-// GearListRevisionSummary is a revision without its payload, for pickers.
-type GearListRevisionSummary struct {
-	ID          uuid.UUID `json:"id"`
-	ListID      uuid.UUID `json:"list_id"`
-	RevNumber   int32     `json:"rev_number"`
-	Title       string    `json:"title"`
-	PublishedBy uuid.UUID `json:"published_by"`
-	PublishedAt time.Time `json:"published_at"`
-}
-
-// ForkGearListRequest is the request body for forking a gear list.
-type ForkGearListRequest struct {
-	// RevNumber selects a published revision to fork; omitted forks the
-	// live draft state.
-	RevNumber *int32 `json:"rev_number,omitempty"`
+	// Fork lineage; nil when the list was not forked.
+	ForkedFromListID *uuid.UUID `json:"forked_from_list_id,omitempty"`
 }
 
 // GearListPayload is the versioned document stored in GearList.Payload.

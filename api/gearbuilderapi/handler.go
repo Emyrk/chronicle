@@ -71,16 +71,8 @@ func New(zed *authz.Authz, auth *chronauth.Service, cacheSvc *servicecache.Servi
 func (h *Handler) Routes() http.Handler {
 	r := chi.NewRouter()
 
-	// Public with optional auth: view shared gear lists and their
-	// published revisions (owners can also reach their private lists).
-	r.Group(func(r chi.Router) {
-		r.Use(h.auth.Authenticated(true))
-		r.Get("/lists/shared/{listID}", h.GetSharedGearList)
-		r.Get("/lists/{listID}/revisions", h.ListGearListRevisions)
-		r.Get("/lists/{listID}/revisions/{revNumber}", h.GetGearListRevision)
-	})
-
-	// Public: browse public gear lists.
+	// Public: view shared gear lists.
+	r.Get("/lists/shared/{listID}", h.GetSharedGearList)
 
 	// Public: observed gear trends for a class/spec cohort.
 	r.Get("/trends", h.GearTrends)
@@ -98,8 +90,7 @@ func (h *Handler) Routes() http.Handler {
 		r.Put("/lists/{listID}", h.UpdateGearList)
 		r.Delete("/lists/{listID}", h.DeleteGearList)
 
-		// Revisions and forks.
-		r.Post("/lists/{listID}/revisions", h.PublishGearListRevision)
+		// Forks.
 		r.Post("/lists/{listID}/fork", h.ForkGearList)
 
 		// Stat weights CRUD.
@@ -701,13 +692,6 @@ func gearListToSDK(l database.GearList) chroniclesdk.GearList {
 			if l.ForkedFromListID.Valid {
 				id := l.ForkedFromListID.UUID
 				return &id
-			}
-			return nil
-		}(),
-		ForkedFromRevNumber: func() *int32 {
-			if l.ForkedFromRevNumber.Valid {
-				n := l.ForkedFromRevNumber.Int32
-				return &n
 			}
 			return nil
 		}(),

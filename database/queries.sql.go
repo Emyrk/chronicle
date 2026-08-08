@@ -3462,22 +3462,21 @@ func (q *sqlQuerier) CountUserGearLists(ctx context.Context, arg CountUserGearLi
 const createGearList = `-- name: CreateGearList :one
 
 INSERT INTO gear_lists (id, user_id, tenant_id, title, description, class_id, spec_name, payload,
-                        forked_from_list_id, forked_from_rev_number)
-VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
-RETURNING id, user_id, tenant_id, title, description, class_id, spec_name, payload, forked_from_list_id, forked_from_rev_number, created_at, updated_at
+                        forked_from_list_id)
+VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
+RETURNING id, user_id, tenant_id, title, description, class_id, spec_name, payload, forked_from_list_id, created_at, updated_at
 `
 
 type CreateGearListParams struct {
-	ID                  uuid.UUID     `db:"id" json:"id"`
-	UserID              uuid.UUID     `db:"user_id" json:"user_id"`
-	TenantID            uuid.UUID     `db:"tenant_id" json:"tenant_id"`
-	Title               string        `db:"title" json:"title"`
-	Description         string        `db:"description" json:"description"`
-	ClassID             int32         `db:"class_id" json:"class_id"`
-	SpecName            string        `db:"spec_name" json:"spec_name"`
-	Payload             []byte        `db:"payload" json:"payload"`
-	ForkedFromListID    uuid.NullUUID `db:"forked_from_list_id" json:"forked_from_list_id"`
-	ForkedFromRevNumber pgtype.Int4   `db:"forked_from_rev_number" json:"forked_from_rev_number"`
+	ID               uuid.UUID     `db:"id" json:"id"`
+	UserID           uuid.UUID     `db:"user_id" json:"user_id"`
+	TenantID         uuid.UUID     `db:"tenant_id" json:"tenant_id"`
+	Title            string        `db:"title" json:"title"`
+	Description      string        `db:"description" json:"description"`
+	ClassID          int32         `db:"class_id" json:"class_id"`
+	SpecName         string        `db:"spec_name" json:"spec_name"`
+	Payload          []byte        `db:"payload" json:"payload"`
+	ForkedFromListID uuid.NullUUID `db:"forked_from_list_id" json:"forked_from_list_id"`
 }
 
 // ============================================================
@@ -3494,7 +3493,6 @@ func (q *sqlQuerier) CreateGearList(ctx context.Context, arg CreateGearListParam
 		arg.SpecName,
 		arg.Payload,
 		arg.ForkedFromListID,
-		arg.ForkedFromRevNumber,
 	)
 	var i GearList
 	err := row.Scan(
@@ -3507,7 +3505,6 @@ func (q *sqlQuerier) CreateGearList(ctx context.Context, arg CreateGearListParam
 		&i.SpecName,
 		&i.Payload,
 		&i.ForkedFromListID,
-		&i.ForkedFromRevNumber,
 		&i.CreatedAt,
 		&i.UpdatedAt,
 	)
@@ -3654,7 +3651,7 @@ func (q *sqlQuerier) DeleteGearStatWeightPin(ctx context.Context, arg DeleteGear
 }
 
 const getGearListByID = `-- name: GetGearListByID :one
-SELECT id, user_id, tenant_id, title, description, class_id, spec_name, payload, forked_from_list_id, forked_from_rev_number, created_at, updated_at FROM gear_lists WHERE id = $1
+SELECT id, user_id, tenant_id, title, description, class_id, spec_name, payload, forked_from_list_id, created_at, updated_at FROM gear_lists WHERE id = $1
 `
 
 func (q *sqlQuerier) GetGearListByID(ctx context.Context, id uuid.UUID) (GearList, error) {
@@ -3670,36 +3667,8 @@ func (q *sqlQuerier) GetGearListByID(ctx context.Context, id uuid.UUID) (GearLis
 		&i.SpecName,
 		&i.Payload,
 		&i.ForkedFromListID,
-		&i.ForkedFromRevNumber,
 		&i.CreatedAt,
 		&i.UpdatedAt,
-	)
-	return i, err
-}
-
-const getGearListRevision = `-- name: GetGearListRevision :one
-SELECT id, list_id, rev_number, title, description, class_id, spec_name, payload, published_by, published_at FROM gear_list_revisions WHERE list_id = $1 AND rev_number = $2
-`
-
-type GetGearListRevisionParams struct {
-	ListID    uuid.UUID `db:"list_id" json:"list_id"`
-	RevNumber int32     `db:"rev_number" json:"rev_number"`
-}
-
-func (q *sqlQuerier) GetGearListRevision(ctx context.Context, arg GetGearListRevisionParams) (GearListRevision, error) {
-	row := q.db.QueryRow(ctx, getGearListRevision, arg.ListID, arg.RevNumber)
-	var i GearListRevision
-	err := row.Scan(
-		&i.ID,
-		&i.ListID,
-		&i.RevNumber,
-		&i.Title,
-		&i.Description,
-		&i.ClassID,
-		&i.SpecName,
-		&i.Payload,
-		&i.PublishedBy,
-		&i.PublishedAt,
 	)
 	return i, err
 }
@@ -3726,52 +3695,8 @@ func (q *sqlQuerier) GetGearStatWeightByID(ctx context.Context, id uuid.UUID) (G
 	return i, err
 }
 
-const listGearListRevisions = `-- name: ListGearListRevisions :many
-SELECT id, list_id, rev_number, title, published_by, published_at
-FROM gear_list_revisions
-WHERE list_id = $1
-ORDER BY rev_number DESC
-`
-
-type ListGearListRevisionsRow struct {
-	ID          uuid.UUID          `db:"id" json:"id"`
-	ListID      uuid.UUID          `db:"list_id" json:"list_id"`
-	RevNumber   int32              `db:"rev_number" json:"rev_number"`
-	Title       string             `db:"title" json:"title"`
-	PublishedBy uuid.UUID          `db:"published_by" json:"published_by"`
-	PublishedAt pgtype.Timestamptz `db:"published_at" json:"published_at"`
-}
-
-// Summaries only; payloads are fetched per revision.
-func (q *sqlQuerier) ListGearListRevisions(ctx context.Context, listID uuid.UUID) ([]ListGearListRevisionsRow, error) {
-	rows, err := q.db.Query(ctx, listGearListRevisions, listID)
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-	var items []ListGearListRevisionsRow
-	for rows.Next() {
-		var i ListGearListRevisionsRow
-		if err := rows.Scan(
-			&i.ID,
-			&i.ListID,
-			&i.RevNumber,
-			&i.Title,
-			&i.PublishedBy,
-			&i.PublishedAt,
-		); err != nil {
-			return nil, err
-		}
-		items = append(items, i)
-	}
-	if err := rows.Err(); err != nil {
-		return nil, err
-	}
-	return items, nil
-}
-
 const listGearListsByUser = `-- name: ListGearListsByUser :many
-SELECT id, user_id, tenant_id, title, description, class_id, spec_name, payload, forked_from_list_id, forked_from_rev_number, created_at, updated_at FROM gear_lists
+SELECT id, user_id, tenant_id, title, description, class_id, spec_name, payload, forked_from_list_id, created_at, updated_at FROM gear_lists
 WHERE user_id = $1 AND tenant_id = $2
 ORDER BY updated_at DESC
 `
@@ -3800,7 +3725,6 @@ func (q *sqlQuerier) ListGearListsByUser(ctx context.Context, arg ListGearListsB
 			&i.SpecName,
 			&i.Payload,
 			&i.ForkedFromListID,
-			&i.ForkedFromRevNumber,
 			&i.CreatedAt,
 			&i.UpdatedAt,
 		); err != nil {
@@ -3924,55 +3848,6 @@ func (q *sqlQuerier) ListGearStatWeightsByUser(ctx context.Context, arg ListGear
 	return items, nil
 }
 
-const publishGearListRevision = `-- name: PublishGearListRevision :one
-
-INSERT INTO gear_list_revisions (id, list_id, rev_number, title, description, class_id, spec_name, payload, published_by)
-SELECT $1, gl.id,
-       COALESCE((SELECT MAX(r.rev_number) FROM gear_list_revisions r WHERE r.list_id = gl.id), 0) + 1,
-       gl.title, gl.description, gl.class_id, gl.spec_name, gl.payload, $2
-FROM gear_lists gl
-WHERE gl.id = $3 AND gl.user_id = $4 AND gl.tenant_id = $5
-RETURNING id, list_id, rev_number, title, description, class_id, spec_name, payload, published_by, published_at
-`
-
-type PublishGearListRevisionParams struct {
-	ID          uuid.UUID `db:"id" json:"id"`
-	PublishedBy uuid.UUID `db:"published_by" json:"published_by"`
-	ListID      uuid.UUID `db:"list_id" json:"list_id"`
-	UserID      uuid.UUID `db:"user_id" json:"user_id"`
-	TenantID    uuid.UUID `db:"tenant_id" json:"tenant_id"`
-}
-
-// ============================================================
-// Gear List Revisions (immutable published snapshots)
-// ============================================================
-// Snapshots the current list state as the next revision number,
-// atomically. Only the owner's tenant-scoped list qualifies; concurrent
-// publishes collide on the (list_id, rev_number) unique constraint.
-func (q *sqlQuerier) PublishGearListRevision(ctx context.Context, arg PublishGearListRevisionParams) (GearListRevision, error) {
-	row := q.db.QueryRow(ctx, publishGearListRevision,
-		arg.ID,
-		arg.PublishedBy,
-		arg.ListID,
-		arg.UserID,
-		arg.TenantID,
-	)
-	var i GearListRevision
-	err := row.Scan(
-		&i.ID,
-		&i.ListID,
-		&i.RevNumber,
-		&i.Title,
-		&i.Description,
-		&i.ClassID,
-		&i.SpecName,
-		&i.Payload,
-		&i.PublishedBy,
-		&i.PublishedAt,
-	)
-	return i, err
-}
-
 const updateGearList = `-- name: UpdateGearList :one
 UPDATE gear_lists SET
   title = COALESCE($1, title),
@@ -3982,7 +3857,7 @@ UPDATE gear_lists SET
   payload = COALESCE($5, payload),
   updated_at = now()
 WHERE id = $6 AND user_id = $7 AND tenant_id = $8
-RETURNING id, user_id, tenant_id, title, description, class_id, spec_name, payload, forked_from_list_id, forked_from_rev_number, created_at, updated_at
+RETURNING id, user_id, tenant_id, title, description, class_id, spec_name, payload, forked_from_list_id, created_at, updated_at
 `
 
 type UpdateGearListParams struct {
@@ -4018,7 +3893,6 @@ func (q *sqlQuerier) UpdateGearList(ctx context.Context, arg UpdateGearListParam
 		&i.SpecName,
 		&i.Payload,
 		&i.ForkedFromListID,
-		&i.ForkedFromRevNumber,
 		&i.CreatedAt,
 		&i.UpdatedAt,
 	)

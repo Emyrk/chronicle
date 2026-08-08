@@ -2,7 +2,7 @@ import { useMemo, useState } from "react";
 import { Link, useParams, useSearchParams } from "react-router-dom";
 import { ArrowLeft, Eye, Pencil, Save } from "lucide-react";
 import { useArmoryGearHistory, useArmoryPlayer, useSession } from "@/api/queries";
-import { useGearListRevision, useGearTrends, useSharedGearList } from "@/api/gearBuilderQueries";
+import { useGearTrends, useSharedGearList } from "@/api/gearBuilderQueries";
 import { Button } from "@/components/ui/button";
 import type { GearList, ItemSearchResult } from "@/api/typesGenerated";
 import { getClassColorVar } from "@/pages/ArmoryPage/types";
@@ -38,7 +38,7 @@ import { AlternatesEditor } from "./AlternatesEditor";
 import { SetSummaryBar } from "./SetSummaryBar";
 import { StagesBar } from "./StagesBar";
 import { ProgressionMatrix } from "./ProgressionMatrix";
-import { RevisionControls } from "./RevisionControls";
+import { ListActions } from "./ListActions";
 import { buildCharacterMatch, stageCoverage, type CharacterMatch } from "./characterMatch";
 import {
   CharacterMatchPanel,
@@ -204,13 +204,11 @@ function ReadOnlyView({
   list,
   isOwner,
   controls,
-  revisionNote,
   headerRight,
 }: {
   list: GearList;
   isOwner: boolean;
   controls?: React.ReactNode;
-  revisionNote?: string;
   headerRight?: React.ReactNode;
 }) {
   const payload = useMemo(() => parsePayload(list.payload), [list.payload]);
@@ -233,11 +231,6 @@ function ReadOnlyView({
     <div className="max-w-6xl mx-auto py-6 px-4 space-y-4">
       <ListHeader list={list} isOwner={isOwner} right={headerRight} />
       {controls}
-      {revisionNote && (
-        <p className="rounded border border-blue-500/30 bg-blue-500/5 px-3 py-2 text-xs text-blue-200">
-          {revisionNote}
-        </p>
-      )}
       {list.description && <p className="text-sm text-zinc-400">{list.description}</p>}
       {payload.stages.length === 0 ? (
         <p className="text-sm text-zinc-500">This list has no stages yet.</p>
@@ -305,11 +298,9 @@ function ReadOnlyView({
 
 function EditorView({
   list,
-  onViewRev,
   onLock,
 }: {
   list: GearList;
-  onViewRev: (rev: number | null) => void;
   onLock: () => void;
 }) {
   const editor = useGearListEditor(list);
@@ -372,13 +363,7 @@ function EditorView({
           </div>
         }
       />
-      <RevisionControls
-        list={list}
-        isOwner
-        viewedRev={null}
-        onViewRev={onViewRev}
-        dirty={editor.dirty}
-      />
+      <ListActions list={list} />
       {list.description && <p className="text-sm text-zinc-400">{list.description}</p>}
 
       {editor.payload.stages.length === 0 ? (
@@ -526,18 +511,6 @@ export function GearListPage() {
   const list = useSharedGearList(listID);
 
   const [searchParams, setSearchParams] = useSearchParams();
-  const revParam = parseInt(searchParams.get("rev") ?? "", 10);
-  const viewedRev = Number.isInteger(revParam) && revParam > 0 ? revParam : null;
-  const revision = useGearListRevision(listID, viewedRev);
-  const setViewedRev = (rev: number | null) => {
-    const next = new URLSearchParams(searchParams);
-    if (rev == null) {
-      next.delete("rev");
-    } else {
-      next.set("rev", String(rev));
-    }
-    setSearchParams(next, { replace: true });
-  };
 
   // ?lock — the owner's read-only presentation mode (same idea as the
   // talent builder's lock param).
@@ -552,13 +525,13 @@ export function GearListPage() {
     setSearchParams(next, { replace: true });
   };
 
-  if (list.isLoading || (viewedRev != null && revision.isLoading)) {
+  if (list.isLoading) {
     return <div className="p-8 text-center text-zinc-400">Loading gear list…</div>;
   }
   if (list.isError || !list.data) {
     return (
       <div className="p-8 text-center text-zinc-400">
-        <p className="text-red-400 mb-2">Gear list not found or is private.</p>
+        <p className="text-red-400 mb-2">Gear list not found.</p>
         <Link to="/gear" className="text-sm text-blue-400 hover:underline">
           Back to gear lists
         </Link>
@@ -567,36 +540,6 @@ export function GearListPage() {
   }
 
   const isOwner = !!session && session.user_id === list.data.user_id;
-
-  if (viewedRev != null) {
-    // A published revision is immutable; everyone (owner included) gets
-    // the read-only view of its snapshotted content.
-    const effective: GearList = revision.data
-      ? {
-          ...list.data,
-          title: revision.data.title,
-          description: revision.data.description,
-          class_id: revision.data.class_id,
-          spec_name: revision.data.spec_name,
-          payload: revision.data.payload,
-        }
-      : list.data;
-    return (
-      <ReadOnlyView
-        key={`${list.data.id}-rev-${viewedRev}`}
-        list={effective}
-        isOwner={isOwner}
-        controls={
-          <RevisionControls list={list.data} isOwner={isOwner} viewedRev={viewedRev} onViewRev={setViewedRev} />
-        }
-        revisionNote={
-          revision.isError
-            ? `Revision ${viewedRev} was not found — showing the live list instead.`
-            : `Viewing published revision ${viewedRev} · ${revision.data ? new Date(revision.data.published_at).toLocaleDateString() : ""} · immutable`
-        }
-      />
-    );
-  }
 
   if (isOwner && locked) {
     return (
@@ -610,28 +553,18 @@ export function GearListPage() {
             Edit
           </Button>
         }
-        controls={
-          // isOwner=false: locked mode is fully read-only, so no publish.
-          <RevisionControls list={list.data} isOwner={false} viewedRev={null} onViewRev={setViewedRev} />
-        }
+        controls={<ListActions list={list.data} />}
       />
     );
   }
 
   return isOwner ? (
-    <EditorView
-      key={list.data.id}
-      list={list.data}
-      onViewRev={setViewedRev}
-      onLock={() => setLocked(true)}
-    />
+    <EditorView key={list.data.id} list={list.data} onLock={() => setLocked(true)} />
   ) : (
     <ReadOnlyView
       list={list.data}
       isOwner={false}
-      controls={
-        <RevisionControls list={list.data} isOwner={false} viewedRev={null} onViewRev={setViewedRev} />
-      }
+      controls={<ListActions list={list.data} />}
     />
   );
 }

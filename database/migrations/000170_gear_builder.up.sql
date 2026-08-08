@@ -18,9 +18,8 @@ CREATE TABLE gear_lists (
   -- Slot keys are the 19 PlayerOutfit indexes (0-18).
   payload JSONB NOT NULL DEFAULT '{"version":2,"stages":[]}',
 
-  -- Fork lineage. rev_number NULL = forked from the live/draft state.
+  -- Fork lineage; NULL when the list was not forked.
   forked_from_list_id UUID REFERENCES gear_lists(id) ON DELETE SET NULL,
-  forked_from_rev_number INT,
 
   created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
   updated_at TIMESTAMPTZ NOT NULL DEFAULT now(),
@@ -71,28 +70,5 @@ CREATE TABLE gear_stat_weight_pins (
 );
 
 CREATE INDEX gear_stat_weight_pins_tenant_dataset_idx ON gear_stat_weight_pins (tenant_id, dataset_id);
-
--- gear_list_revisions: immutable published snapshots of a gear list.
--- Rows are only ever inserted (no UPDATE/DELETE queries exist); they die
--- with the list via the cascade.
-CREATE TABLE gear_list_revisions (
-  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-  list_id UUID NOT NULL REFERENCES gear_lists(id) ON DELETE CASCADE,
-  rev_number INT NOT NULL,
-
-  title TEXT NOT NULL,
-  description TEXT NOT NULL DEFAULT '',
-  class_id INT NOT NULL,
-  spec_name TEXT NOT NULL DEFAULT '',
-  payload JSONB NOT NULL,
-
-  published_by UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
-  published_at TIMESTAMPTZ NOT NULL DEFAULT now(),
-
-  CONSTRAINT gear_list_revisions_unique UNIQUE (list_id, rev_number),
-  CONSTRAINT gear_list_revisions_payload_size_chk CHECK (octet_length(payload::text) <= 262144)
-);
-
-CREATE INDEX gear_list_revisions_list_idx ON gear_list_revisions (list_id, rev_number DESC);
 
 COMMIT;

@@ -4,8 +4,8 @@
 
 -- name: CreateGearList :one
 INSERT INTO gear_lists (id, user_id, tenant_id, title, description, class_id, spec_name, payload,
-                        forked_from_list_id, forked_from_rev_number)
-VALUES ($1, $2, $3, $4, $5, $6, $7, $8, sqlc.narg(forked_from_list_id), sqlc.narg(forked_from_rev_number))
+                        forked_from_list_id)
+VALUES ($1, $2, $3, $4, $5, $6, $7, $8, sqlc.narg(forked_from_list_id))
 RETURNING *;
 
 -- name: GetGearListByID :one
@@ -32,32 +32,6 @@ DELETE FROM gear_lists WHERE id = $1 AND user_id = $2 AND tenant_id = $3;
 
 -- name: CountUserGearLists :one
 SELECT COUNT(*) FROM gear_lists WHERE user_id = $1 AND tenant_id = $2;
-
--- ============================================================
--- Gear List Revisions (immutable published snapshots)
--- ============================================================
-
--- name: PublishGearListRevision :one
--- Snapshots the current list state as the next revision number,
--- atomically. Only the owner's tenant-scoped list qualifies; concurrent
--- publishes collide on the (list_id, rev_number) unique constraint.
-INSERT INTO gear_list_revisions (id, list_id, rev_number, title, description, class_id, spec_name, payload, published_by)
-SELECT @id, gl.id,
-       COALESCE((SELECT MAX(r.rev_number) FROM gear_list_revisions r WHERE r.list_id = gl.id), 0) + 1,
-       gl.title, gl.description, gl.class_id, gl.spec_name, gl.payload, @published_by
-FROM gear_lists gl
-WHERE gl.id = @list_id AND gl.user_id = @user_id AND gl.tenant_id = @tenant_id
-RETURNING *;
-
--- name: ListGearListRevisions :many
--- Summaries only; payloads are fetched per revision.
-SELECT id, list_id, rev_number, title, published_by, published_at
-FROM gear_list_revisions
-WHERE list_id = $1
-ORDER BY rev_number DESC;
-
--- name: GetGearListRevision :one
-SELECT * FROM gear_list_revisions WHERE list_id = $1 AND rev_number = $2;
 
 -- ============================================================
 -- Stat Weights

@@ -726,20 +726,6 @@ CREATE TABLE game_players (
     talents jsonb DEFAULT 'null'::jsonb NOT NULL
 );
 
-CREATE TABLE gear_list_revisions (
-    id uuid DEFAULT gen_random_uuid() NOT NULL,
-    list_id uuid NOT NULL,
-    rev_number integer NOT NULL,
-    title text NOT NULL,
-    description text DEFAULT ''::text NOT NULL,
-    class_id integer NOT NULL,
-    spec_name text DEFAULT ''::text NOT NULL,
-    payload jsonb NOT NULL,
-    published_by uuid NOT NULL,
-    published_at timestamp with time zone DEFAULT now() NOT NULL,
-    CONSTRAINT gear_list_revisions_payload_size_chk CHECK ((octet_length((payload)::text) <= 262144))
-);
-
 CREATE TABLE gear_lists (
     id uuid DEFAULT gen_random_uuid() NOT NULL,
     user_id uuid NOT NULL,
@@ -750,7 +736,6 @@ CREATE TABLE gear_lists (
     spec_name text DEFAULT ''::text NOT NULL,
     payload jsonb DEFAULT '{"stages": [], "version": 2}'::jsonb NOT NULL,
     forked_from_list_id uuid,
-    forked_from_rev_number integer,
     created_at timestamp with time zone DEFAULT now() NOT NULL,
     updated_at timestamp with time zone DEFAULT now() NOT NULL,
     CONSTRAINT gear_lists_description_length_chk CHECK ((char_length(description) <= 2000)),
@@ -1877,12 +1862,6 @@ ALTER TABLE ONLY game_player_gear_history
 ALTER TABLE ONLY game_players
     ADD CONSTRAINT game_players_pkey PRIMARY KEY (id, realm_id);
 
-ALTER TABLE ONLY gear_list_revisions
-    ADD CONSTRAINT gear_list_revisions_pkey PRIMARY KEY (id);
-
-ALTER TABLE ONLY gear_list_revisions
-    ADD CONSTRAINT gear_list_revisions_unique UNIQUE (list_id, rev_number);
-
 ALTER TABLE ONLY gear_lists
     ADD CONSTRAINT gear_lists_pkey PRIMARY KEY (id);
 
@@ -2159,8 +2138,6 @@ CREATE UNIQUE INDEX files_unique_owner_hash ON log_file USING btree (owner, hash
 CREATE INDEX game_player_gear_history_player_time ON game_player_gear_history USING btree (realm_id, player_id, equipped_at DESC);
 
 CREATE INDEX game_players_player_and_realm ON game_players USING btree (name, realm_id);
-
-CREATE INDEX gear_list_revisions_list_idx ON gear_list_revisions USING btree (list_id, rev_number DESC);
 
 CREATE INDEX gear_lists_user_tenant_idx ON gear_lists USING btree (user_id, tenant_id);
 
@@ -2476,12 +2453,6 @@ ALTER TABLE ONLY game_players
 
 ALTER TABLE ONLY game_players
     ADD CONSTRAINT game_players_updated_from_instance_fkey FOREIGN KEY (updated_from_instance) REFERENCES log_instances(id) ON DELETE SET NULL DEFERRABLE INITIALLY DEFERRED;
-
-ALTER TABLE ONLY gear_list_revisions
-    ADD CONSTRAINT gear_list_revisions_list_id_fkey FOREIGN KEY (list_id) REFERENCES gear_lists(id) ON DELETE CASCADE;
-
-ALTER TABLE ONLY gear_list_revisions
-    ADD CONSTRAINT gear_list_revisions_published_by_fkey FOREIGN KEY (published_by) REFERENCES users(id) ON DELETE CASCADE;
 
 ALTER TABLE ONLY gear_lists
     ADD CONSTRAINT gear_lists_forked_from_list_id_fkey FOREIGN KEY (forked_from_list_id) REFERENCES gear_lists(id) ON DELETE SET NULL;

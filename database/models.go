@@ -1202,31 +1202,17 @@ type GamePlayerGearHistory struct {
 }
 
 type GearList struct {
-	ID                  uuid.UUID          `db:"id" json:"id"`
-	UserID              uuid.UUID          `db:"user_id" json:"user_id"`
-	TenantID            uuid.UUID          `db:"tenant_id" json:"tenant_id"`
-	Title               string             `db:"title" json:"title"`
-	Description         string             `db:"description" json:"description"`
-	ClassID             int32              `db:"class_id" json:"class_id"`
-	SpecName            string             `db:"spec_name" json:"spec_name"`
-	Payload             []byte             `db:"payload" json:"payload"`
-	ForkedFromListID    uuid.NullUUID      `db:"forked_from_list_id" json:"forked_from_list_id"`
-	ForkedFromRevNumber pgtype.Int4        `db:"forked_from_rev_number" json:"forked_from_rev_number"`
-	CreatedAt           pgtype.Timestamptz `db:"created_at" json:"created_at"`
-	UpdatedAt           pgtype.Timestamptz `db:"updated_at" json:"updated_at"`
-}
-
-type GearListRevision struct {
-	ID          uuid.UUID          `db:"id" json:"id"`
-	ListID      uuid.UUID          `db:"list_id" json:"list_id"`
-	RevNumber   int32              `db:"rev_number" json:"rev_number"`
-	Title       string             `db:"title" json:"title"`
-	Description string             `db:"description" json:"description"`
-	ClassID     int32              `db:"class_id" json:"class_id"`
-	SpecName    string             `db:"spec_name" json:"spec_name"`
-	Payload     []byte             `db:"payload" json:"payload"`
-	PublishedBy uuid.UUID          `db:"published_by" json:"published_by"`
-	PublishedAt pgtype.Timestamptz `db:"published_at" json:"published_at"`
+	ID               uuid.UUID          `db:"id" json:"id"`
+	UserID           uuid.UUID          `db:"user_id" json:"user_id"`
+	TenantID         uuid.UUID          `db:"tenant_id" json:"tenant_id"`
+	Title            string             `db:"title" json:"title"`
+	Description      string             `db:"description" json:"description"`
+	ClassID          int32              `db:"class_id" json:"class_id"`
+	SpecName         string             `db:"spec_name" json:"spec_name"`
+	Payload          []byte             `db:"payload" json:"payload"`
+	ForkedFromListID uuid.NullUUID      `db:"forked_from_list_id" json:"forked_from_list_id"`
+	CreatedAt        pgtype.Timestamptz `db:"created_at" json:"created_at"`
+	UpdatedAt        pgtype.Timestamptz `db:"updated_at" json:"updated_at"`
 }
 
 type GearStatWeight struct {
