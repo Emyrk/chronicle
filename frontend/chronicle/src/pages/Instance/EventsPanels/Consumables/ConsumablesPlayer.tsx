@@ -84,12 +84,14 @@ function PlayerCombobox({
       }}
     >
       <PopoverPrimitive.Trigger asChild>
+        {/* Fixed width so the class label and step arrows after it don't
+            shift as names of different lengths cycle through. */}
         <button
           type="button"
-          className="group flex min-w-0 cursor-pointer items-center gap-1 rounded px-0.5 transition-colors hover:bg-muted/40"
+          className="group flex w-28 shrink-0 cursor-pointer items-center gap-1 rounded px-0.5 transition-colors hover:bg-muted/40"
           title="Change player"
         >
-          <span className="truncate text-sm font-medium" style={{ color: classColor(selected.cls) }}>
+          <span className="min-w-0 flex-1 truncate text-left text-sm font-medium" style={{ color: classColor(selected.cls) }}>
             {selected.name}
           </span>
           <ChevronsUpDown className="h-3 w-3 shrink-0 text-muted-foreground/50 group-hover:text-muted-foreground" />
@@ -333,7 +335,7 @@ export function ConsumablesPlayerContent(props: ConsumablesPlayerContentProps) {
                 selected={selected}
                 onSelect={selectPlayer}
               />
-              <span className="shrink-0 font-mono text-2xs capitalize text-muted-foreground/70">
+              <span className="w-18 shrink-0 truncate font-mono text-2xs capitalize text-muted-foreground/70">
                 {selected.cls?.toLowerCase() ?? "unknown"}
               </span>
               <div className="flex shrink-0 items-center gap-0.5">
