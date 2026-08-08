@@ -7,7 +7,13 @@
 import { X } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { ItemCell } from "./ConsumablesContent";
-import { classAbbreviation, classColor, formatGold } from "./consumablesLedger";
+import {
+  classAbbreviation,
+  classColor,
+  formatEncounterOffset,
+  formatGold,
+  type PlayerItemUse,
+} from "./consumablesLedger";
 
 export interface BreakoutPlayerRow {
   guid: string;
@@ -32,6 +38,73 @@ export interface LedgerItemBreakoutData {
   raidSize: number;
   rows: BreakoutPlayerRow[];
   classes: BreakoutClassStat[];
+}
+
+export interface PlayerItemBreakoutData {
+  itemId: number;
+  playerName: string;
+  cls: string | undefined;
+  rows: {
+    encounterID: string;
+    name: string;
+    boss: boolean;
+    uses: PlayerItemUse[];
+  }[];
+}
+
+/** Player-view breakout: which fights one player used the item in, and when. */
+export function PlayerItemBreakout({ data, onClose }: { data: PlayerItemBreakoutData; onClose: () => void }) {
+  const totalUses = data.rows.reduce((sum, row) => sum + row.uses.length, 0);
+  return (
+    <div className="w-80 overflow-hidden rounded-lg border border-amber-500/25 bg-card shadow-2xl">
+      <div className="flex cursor-grab items-center gap-2 border-b border-border bg-muted/30 px-3 py-2" data-drag-handle>
+        <div className="min-w-0 flex-1">
+          <div className="text-xs">
+            <ItemCell itemId={data.itemId} link newTab />
+          </div>
+          <div className="mt-0.5 font-mono text-2xs text-muted-foreground/70">
+            <span style={{ color: classColor(data.cls) }}>{data.playerName}</span>
+            {" · "}
+            {totalUses} use{totalUses === 1 ? "" : "s"} in {data.rows.length} fight{data.rows.length === 1 ? "" : "s"}
+          </div>
+        </div>
+        <button
+          type="button"
+          onClick={onClose}
+          className="cursor-pointer rounded p-1 text-muted-foreground hover:bg-muted hover:text-foreground"
+          aria-label="Close item breakout"
+        >
+          <X className="h-4 w-4" />
+        </button>
+      </div>
+
+      <div className="max-h-[var(--incoming-events-body-height)] overflow-y-auto py-1.5 styled-scrollbar">
+        {data.rows.map((row) => (
+          <div key={row.encounterID} className="flex items-baseline gap-2 px-3 py-1">
+            <span
+              className={cn(
+                "min-w-0 flex-1 truncate text-xs",
+                row.boss ? "text-foreground/80" : "text-muted-foreground",
+              )}
+            >
+              {row.name}
+            </span>
+            <span className="shrink-0 font-mono text-2xs text-muted-foreground/60">
+              {row.uses.map(formatEncounterOffset).join(" · ")}
+            </span>
+            <span
+              className={cn(
+                "w-6 shrink-0 text-right font-mono text-xs",
+                row.uses.length > 1 ? "text-foreground" : "text-muted-foreground/60",
+              )}
+            >
+              {row.uses.length}×
+            </span>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
 }
 
 export function LedgerItemBreakout({ data, onClose }: { data: LedgerItemBreakoutData; onClose: () => void }) {

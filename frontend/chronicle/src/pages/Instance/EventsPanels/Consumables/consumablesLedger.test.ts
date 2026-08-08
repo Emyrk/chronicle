@@ -4,6 +4,8 @@ import { buildConsumableDisambiguationMap, resolveConsumableUse } from "./consum
 import {
   aggregateConsumablesLedger,
   aggregateItemBreakout,
+  aggregatePlayerItemEncounters,
+  formatEncounterOffset,
   formatGold,
   ledgerCoverage,
   NO_PRICES,
@@ -190,6 +192,44 @@ describe("aggregateItemBreakout", () => {
       { player: "p1", uses: 1 },
       { player: "p4", uses: 1 },
     ]);
+  });
+});
+
+describe("aggregatePlayerItemEncounters", () => {
+  it("groups one player's item uses by encounter with sorted offsets", () => {
+    const rows = aggregatePlayerItemEncounters(
+      [
+        makeUse({ itemId: 13446, player: "p1", encounterID: "enc1", offsetMilli: 65_000 }),
+        makeUse({ itemId: 13446, player: "p1", encounterID: "enc1", offsetMilli: 5_000 }),
+        makeUse({ itemId: 13446, player: "p1", encounterID: "enc2", offsetMilli: -2_000 }),
+        makeUse({ itemId: 13446, player: "p1", encounterID: "enc3", offsetMilli: 1_000, activeAtPullOnly: true }),
+        // Other players and other items are excluded.
+        makeUse({ itemId: 13446, player: "p2", encounterID: "enc1" }),
+        makeUse({ itemId: 9999, player: "p1", encounterID: "enc1" }),
+      ],
+      "p1",
+      13446,
+    );
+
+    expect(rows).toEqual([
+      {
+        encounterID: "enc1",
+        uses: [
+          { offsetMilli: 5_000, prePull: false },
+          { offsetMilli: 65_000, prePull: false },
+        ],
+      },
+      { encounterID: "enc2", uses: [{ offsetMilli: -2_000, prePull: true }] },
+      { encounterID: "enc3", uses: [{ offsetMilli: 1_000, prePull: true }] },
+    ]);
+  });
+});
+
+describe("formatEncounterOffset", () => {
+  it("formats in-fight offsets and pre-pull uses", () => {
+    expect(formatEncounterOffset({ offsetMilli: 5_000, prePull: false })).toBe("0:05");
+    expect(formatEncounterOffset({ offsetMilli: 65_000, prePull: false })).toBe("1:05");
+    expect(formatEncounterOffset({ offsetMilli: 1_000, prePull: true })).toBe("pre-pull");
   });
 });
 

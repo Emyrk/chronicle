@@ -20,12 +20,15 @@ import type { PanelRenderProps } from "../types";
 import type { ConsumablesResult } from "./consumables.processor";
 import {
   aggregateConsumablesLedger,
+  aggregatePlayerItemEncounters,
   classColor,
   classRank,
   formatGold,
   ledgerCoverage,
   NO_PRICES,
 } from "./consumablesLedger";
+import { FloatingIncomingEventsBreakout } from "../IncomingEvents/FloatingIncomingEventsBreakout";
+import { PlayerItemBreakout, type PlayerItemBreakoutData } from "./LedgerItemBreakout";
 import { AmbiguousSection, LedgerRow } from "./LedgerShared";
 
 const PLAYER_TOKEN = "pl:";
@@ -297,6 +300,61 @@ export function ConsumablesPlayerContent(props: ConsumablesPlayerContentProps) {
     gapParts.push(`${ledger.ambiguous.length} unresolved`);
   }
 
+  // Per-item breakouts (which fights the item was used in). Several can be
+  // open at once, each pinned to the player it was opened for so switching
+  // players keeps them comparable.
+  const [breakouts, setBreakouts] = useState<
+    { key: string; guid: string; itemId: number; initialPosition: { x: number; y: number } }[]
+  >([]);
+
+  const toggleBreakout = (itemId: number, target: HTMLElement) => {
+    if (!selected) return;
+    const key = `${selected.guid}:${itemId}`;
+    const rect = target.getBoundingClientRect();
+    const view = target.ownerDocument.defaultView;
+    const x = Math.max(8, Math.min(rect.right + 8, (view?.innerWidth ?? 640) - 340));
+    const y = Math.max(8, Math.min(rect.top, (view?.innerHeight ?? 480) - 200));
+    setBreakouts((previous) =>
+      previous.some((b) => b.key === key)
+        ? previous.filter((b) => b.key !== key)
+        : [...previous, { key, guid: selected.guid, itemId, initialPosition: { x, y } }],
+    );
+  };
+  const closeBreakout = (key: string) => {
+    setBreakouts((previous) => previous.filter((b) => b.key !== key));
+  };
+
+  const breakoutDatas = useMemo<Map<string, PlayerItemBreakoutData>>(() => {
+    const encounterOrder = new Map(
+      (context.instance.encounters ?? []).map((encounter, index) => [encounter.id, { encounter, index }]),
+    );
+    const players = context.instance.players ?? {};
+    const datas = new Map<string, PlayerItemBreakoutData>();
+    for (const breakout of breakouts) {
+      const rows = aggregatePlayerItemEncounters(resolvedUses, breakout.guid, breakout.itemId)
+        .map((row) => {
+          const known = encounterOrder.get(row.encounterID);
+          return {
+            encounterID: row.encounterID,
+            name: known?.encounter.name ?? row.encounterID,
+            boss: known?.encounter.boss ?? false,
+            order: known?.index ?? Number.MAX_SAFE_INTEGER,
+            uses: row.uses,
+          };
+        })
+        .sort((a, b) => a.order - b.order);
+      if (rows.length === 0) continue;
+      const player = players[breakout.guid];
+      datas.set(breakout.key, {
+        itemId: breakout.itemId,
+        playerName: player?.name ?? breakout.guid,
+        cls: player?.class,
+        rows,
+      });
+    }
+    return datas;
+  }, [breakouts, resolvedUses, context.instance.encounters, context.instance.players]);
+
   const effectiveProps = {
     ...props,
     loading: hasData ? false : props.loading,
@@ -304,7 +362,8 @@ export function ConsumablesPlayerContent(props: ConsumablesPlayerContentProps) {
   };
 
   return (
-    <GenericPanel {...effectiveProps}>
+    <>
+      <GenericPanel {...effectiveProps}>
       {roster.length === 0 || !selected ? (
         <div className="py-4 text-center text-xs text-muted-foreground">
           {loading ? "Loading..." : "No players found"}
@@ -413,6 +472,8 @@ export function ConsumablesPlayerContent(props: ConsumablesPlayerContentProps) {
                     maxUses={ledger.maxUses}
                     subtitle={`${row.encounters} fight${row.encounters === 1 ? "" : "s"}`}
                     showGold={coverage.showGold}
+                    onClick={(event) => toggleBreakout(row.itemId, event.currentTarget)}
+                    selected={breakouts.some((b) => b.key === `${selected.guid}:${row.itemId}`)}
                   />
                 ))}
               </div>
@@ -425,6 +486,20 @@ export function ConsumablesPlayerContent(props: ConsumablesPlayerContentProps) {
           )}
         </div>
       )}
-    </GenericPanel>
+      </GenericPanel>
+      {breakouts.map((breakout) => {
+        const data = breakoutDatas.get(breakout.key);
+        if (!data) return null;
+        return (
+          <FloatingIncomingEventsBreakout
+            key={breakout.key}
+            initialPosition={breakout.initialPosition}
+            onClose={() => closeBreakout(breakout.key)}
+          >
+            <PlayerItemBreakout data={data} onClose={() => closeBreakout(breakout.key)} />
+          </FloatingIncomingEventsBreakout>
+        );
+      })}
+    </>
   );
 }

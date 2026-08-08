@@ -208,6 +208,55 @@ export function aggregateItemBreakout(
     .sort((a, b) => b.uses - a.uses || a.player.localeCompare(b.player));
 }
 
+export interface PlayerItemUse {
+  offsetMilli: number;
+  /** Only ever seen as an already-active pre-pull buff (or before the pull). */
+  prePull: boolean;
+}
+
+export interface PlayerItemEncounterRow {
+  encounterID: string;
+  uses: PlayerItemUse[];
+}
+
+/**
+ * One player's uses of one identified item, grouped by encounter in
+ * first-use order. Uses must already be resolved through
+ * `resolveConsumableUse`.
+ */
+export function aggregatePlayerItemEncounters(
+  uses: Iterable<ConsumableUse>,
+  player: string,
+  itemId: number,
+): PlayerItemEncounterRow[] {
+  const rows = new Map<string, PlayerItemEncounterRow>();
+  for (const use of uses) {
+    if (use.player !== player || itemIdentity(use).itemId !== itemId) continue;
+    let row = rows.get(use.encounterID);
+    if (!row) {
+      row = { encounterID: use.encounterID, uses: [] };
+      rows.set(use.encounterID, row);
+    }
+    row.uses.push({
+      offsetMilli: use.offsetMilli,
+      prePull: use.activeAtPullOnly || use.offsetMilli < 0,
+    });
+  }
+  for (const row of rows.values()) {
+    row.uses.sort((a, b) => a.offsetMilli - b.offsetMilli);
+  }
+  return [...rows.values()];
+}
+
+/** In-fight timestamp for a use: "m:ss" into the encounter, or "pre-pull". */
+export function formatEncounterOffset(use: PlayerItemUse): string {
+  if (use.prePull) return "pre-pull";
+  const totalSeconds = Math.floor(use.offsetMilli / 1000);
+  const minutes = Math.floor(totalSeconds / 60);
+  const seconds = totalSeconds % 60;
+  return `${minutes}:${seconds.toString().padStart(2, "0")}`;
+}
+
 /** Compact WoW money format: gold-led, sub-gold amounts fall back to s/c. */
 export function formatGold(copper: number): string {
   const gold = copper / 10_000;
