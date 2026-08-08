@@ -3,11 +3,13 @@
  * evidence details, styled after DispelLogContent.
  */
 
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 import { Link } from "react-router-dom";
 import { ChevronDown, ChevronRight, HelpCircle, Hourglass } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { iconUrl } from "@/config/iconUrl";
+import { usePortalContainer } from "@/components/ui/PortalContainerContext";
 import { useDatasetId, useIconBaseUrl } from "@/hooks/useDatasetId";
 import { useConsumableDisambiguations } from "@/api/queries";
 import type { ConsumableDisambiguation } from "@/api/typesGenerated";
@@ -119,6 +121,36 @@ function useInView<T extends Element>(): [React.RefObject<T | null>, boolean] {
   return [ref, inView];
 }
 
+/** Hover tooltip anchored beside its trigger. Portals to the portal container
+ * so a transformed ancestor (e.g. a draggable breakout) can't re-anchor
+ * position:fixed, and clamps to the viewport after measuring itself. */
+function AnchoredHoverTooltip({ anchor, children }: { anchor: DOMRect; children: React.ReactNode }) {
+  const ref = useRef<HTMLDivElement>(null);
+
+  useLayoutEffect(() => {
+    const element = ref.current;
+    const view = element?.ownerDocument.defaultView;
+    if (!element || !view) return;
+    const { width, height } = element.getBoundingClientRect();
+    let left = anchor.right + 10;
+    if (left + width > view.innerWidth - 8) left = Math.max(8, anchor.left - width - 10);
+    const top = Math.max(8, Math.min(anchor.top - 8, view.innerHeight - height - 8));
+    element.style.left = `${left}px`;
+    element.style.top = `${top}px`;
+    element.style.visibility = "visible";
+  }, [anchor]);
+
+  return (
+    <div
+      ref={ref}
+      className="pointer-events-none fixed z-50"
+      style={{ left: anchor.right + 10, top: anchor.top, visibility: "hidden" }}
+    >
+      {children}
+    </div>
+  );
+}
+
 /** Item icon + name with a full item tooltip on hover. Optionally links to the
  * item's wowdb page. Item data loads only when scrolled into view. */
 export function ItemCell({
@@ -134,7 +166,9 @@ export function ItemCell({
   newTab?: boolean;
 }) {
   const iconBaseUrl = useIconBaseUrl();
-  const [hovered, setHovered] = useState(false);
+  const portalContainer = usePortalContainer();
+  // The hovered element's rect; the tooltip anchors to it and follows the item.
+  const [anchor, setAnchor] = useState<DOMRect | null>(null);
   const [inViewRef, inView] = useInView<HTMLSpanElement>();
   const tooltip = useItemTooltip(inView && itemId > 0 ? { itemId } : null);
 
@@ -159,15 +193,19 @@ export function ItemCell({
       <span className={cn("truncate", getQualityTextClass(quality), link && "hover:underline")}>
         {name}
       </span>
-      {hovered && tooltip.data && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center -translate-y-[15%] pointer-events-none">
+      {anchor && tooltip.data && createPortal(
+        <AnchoredHoverTooltip anchor={anchor}>
           <ItemTooltip item={tooltip.data} />
-        </div>
+        </AnchoredHoverTooltip>,
+        portalContainer ?? document.body,
       )}
     </>
   );
 
   const className = cn("relative inline-flex items-center", compact ? "gap-1 text-xs" : "gap-1.5");
+  const onMouseEnter = (event: React.MouseEvent<HTMLElement>) =>
+    setAnchor(event.currentTarget.getBoundingClientRect());
+  const onMouseLeave = () => setAnchor(null);
   if (link) {
     return (
       <Link
@@ -176,15 +214,15 @@ export function ItemCell({
         rel={newTab ? "noopener noreferrer" : undefined}
         className={className}
         onClick={(e) => e.stopPropagation()}
-        onMouseEnter={() => setHovered(true)}
-        onMouseLeave={() => setHovered(false)}
+        onMouseEnter={onMouseEnter}
+        onMouseLeave={onMouseLeave}
       >
         {body}
       </Link>
     );
   }
   return (
-    <span className={className} onMouseEnter={() => setHovered(true)} onMouseLeave={() => setHovered(false)}>
+    <span className={className} onMouseEnter={onMouseEnter} onMouseLeave={onMouseLeave}>
       {body}
     </span>
   );
