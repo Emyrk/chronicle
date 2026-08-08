@@ -27,6 +27,7 @@ import (
 	"github.com/Emyrk/chronicle/internal/semverenc"
 	"github.com/Emyrk/chronicle/internal/services/servicechronicle"
 	"github.com/Emyrk/chronicle/internal/services/servicedataset"
+	"github.com/Emyrk/chronicle/internal/services/servicerankings"
 	"github.com/Emyrk/chronicle/internal/services/servicetenant"
 	"github.com/Emyrk/chronicle/internal/version"
 	tea "github.com/charmbracelet/bubbletea"
@@ -352,7 +353,7 @@ Fail-pause behavior (--execute):
 				DB:           dbStore,
 			})
 			if err != nil {
-				return fmt.Errorf("init authz: %w", err)
+				return resyncAuthzInitError(err)
 			}
 			defer func() {
 				if err := zed.Close(); err != nil {
@@ -406,6 +407,7 @@ Fail-pause behavior (--execute):
 			riverWorkers := river.NewWorkers()
 			river.AddWorker(riverWorkers, chron.NewWorkerResync(parseQueueName))
 			river.AddWorker(riverWorkers, chron.NewWorkerLogParse())
+			scoreWorker := registerResyncScoreWorker(riverWorkers, dbStore, logger)
 
 			riverClient, err := river.NewClient(riverpgxv5.New(pool), &river.Config{
 				Queues: map[string]river.QueueConfig{
@@ -423,9 +425,12 @@ Fail-pause behavior (--execute):
 			}
 
 			// WorkerLogParse uses Chronicle's queue for normal downstream work (for
-			// example parse-score jobs) and for River job inspection. The wrapper uses
-			// the same client but does not add any production queues to this worker.
-			chron.SetQueue(&riverqueue.Queues{Client: riverClient})
+			// example parse-score jobs) and for River job inspection. Registering the
+			// score worker lets River validate those inserts, but QueueRankings is not
+			// served here, so the production server remains responsible for execution.
+			queue := &riverqueue.Queues{Client: riverClient}
+			scoreWorker.Queue = queue
+			chron.SetQueue(queue)
 
 			if approveEach {
 				if err := riverClient.Start(ctx); err != nil {
@@ -471,6 +476,32 @@ Fail-pause behavior (--execute):
 	}
 
 	return cmd
+}
+
+func registerResyncScoreWorker(workers *river.Workers, store database.Store, logger *slog.Logger) *servicerankings.WorkerComputeParseScores {
+	worker := &servicerankings.WorkerComputeParseScores{
+		Store:  store,
+		Logger: logger,
+	}
+	river.AddWorker(workers, worker)
+	return worker
+}
+
+func resyncAuthzInitError(err error) error {
+	return fmt.Errorf(`init authz: %w
+
+If SpiceDB is a Railway service, keep this port forward running in another terminal
+(replace "spicedb" if the Railway service has a different name):
+
+  railway ssh --service spicedb -- -N -o ExitOnForwardFailure=yes -L 127.0.0.1:50052:127.0.0.1:50051
+
+Then configure resync to use the forwarded port and the production preshared key:
+
+  export CHRONICLE_SPICEDB_GRPC_URL=127.0.0.1:50052
+  export CHRONICLE_SPICEDB_PRESHARED_KEY=<production-preshared-key>
+
+The local port is 50052 to avoid conflicts with a local SpiceDB on 50051. The -N
+option prevents Railway from trying to open a shell in the SpiceDB container`, err)
 }
 
 func enrichResyncGroups(
