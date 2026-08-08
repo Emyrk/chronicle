@@ -89,6 +89,7 @@ const APPLY_TO_OPTIONS = [
   { label: "Slain", value: "slain" },
   { label: "Resource", value: "resource_change" },
   { label: "Extra Attack", value: "extra_attack" },
+  { label: "Consume", value: "consume" },
 ] as const;
 
 /** Filter types that show the "applies to" event type selector */

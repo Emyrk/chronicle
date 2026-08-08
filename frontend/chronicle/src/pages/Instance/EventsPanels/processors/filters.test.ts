@@ -161,6 +161,14 @@ describe("evaluateFilters", () => {
     expect(evaluateFilters([{ type: "ability_id", value: "17538" }], event, createContext())).toBe(false);
   });
 
+  it("scopes ability filters to consume events", () => {
+    const filters: PanelFilter[] = [{ type: "ability_id", value: "13461", applyTo: ["consume"] }];
+
+    expect(evaluateFilters(filters, createConsumeEvent({ itemId: 13461 }), createContext())).toBe(true);
+    expect(evaluateFilters(filters, createConsumeEvent({ itemId: 13442 }), createContext())).toBe(false);
+    expect(evaluateFilters(filters, createDamageEvent({ spellId: 133 }), createContext())).toBe(true);
+  });
+
   it("does not fall back to consume spell IDs when the item ID is unknown", () => {
     const event = createConsumeEvent({
       itemId: null,
