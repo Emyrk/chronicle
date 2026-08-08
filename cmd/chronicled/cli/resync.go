@@ -7,6 +7,8 @@ import (
 	"fmt"
 	"io"
 	"log/slog"
+	"net"
+	"net/url"
 	"os"
 	"strings"
 	"sync/atomic"
@@ -25,6 +27,7 @@ import (
 	"github.com/Emyrk/chronicle/internal/semverenc"
 	"github.com/Emyrk/chronicle/internal/services/servicechronicle"
 	"github.com/Emyrk/chronicle/internal/services/servicedataset"
+	"github.com/Emyrk/chronicle/internal/services/servicetenant"
 	"github.com/Emyrk/chronicle/internal/version"
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/google/uuid"
@@ -36,6 +39,8 @@ import (
 
 	"github.com/coder/serpent"
 )
+
+const defaultResyncLogBaseURL = "https://legacy.chronicleclassic.com"
 
 // ResyncCmd returns the CLI command for resyncing (reparsing) log groups whose
 // parser version is older than a target version. By default it runs in dry-run
@@ -248,10 +253,22 @@ Fail-pause behavior (--execute):
 				return writeOutput(i.Stdout, "No candidate log groups found.\n")
 			}
 
+			// Dry-run performs the same non-destructive raw-object preflight as
+			// execute mode, so storage configuration is required in both modes.
+			st, err := buildStorage(ctx, storageType, storagePath, s3Region, s3Endpoint, s3AccessKey, s3SecretKey, s3PathStyle, s3Bucket)
+			if err != nil {
+				return fmt.Errorf("init storage: %w", err)
+			}
+			logBaseURL := remoteURL
+			if logBaseURL == "" {
+				logBaseURL = defaultResyncLogBaseURL
+			}
+			enrichResyncGroups(ctx, dbStore, st, logBaseURL, groups)
+
 			isTTY := isTerminal(i)
 
 			if !execute {
-				// ── Dry-run mode: query-only, no storage/Chronicle init ──
+				// ── Dry-run mode: database + non-destructive storage preflight ──
 				if isTTY {
 					m := resynctui.NewDryRunModel(groups, targetVersion)
 					p := tea.NewProgram(m, tea.WithAltScreen())
@@ -263,11 +280,8 @@ Fail-pause behavior (--execute):
 						return err
 					}
 					for idx, g := range groups {
-						if err := writeOutput(i.Stdout, "  %d. %s  parser=%s  instances=%d\n", idx+1, g.ID, g.ParserVersion, len(g.Instances)); err != nil {
-							return err
-						}
-						for _, inst := range g.Instances {
-							if err := writeOutput(i.Stdout, "       - %s\n", inst); err != nil {
+						for _, line := range g.DisplayLines(idx + 1) {
+							if err := writeOutput(i.Stdout, "%s\n", line); err != nil {
 								return err
 							}
 						}
@@ -288,12 +302,6 @@ Fail-pause behavior (--execute):
 				return fmt.Errorf("remote version check: %w", err)
 			}
 			logger.Info("remote parser version verified", "remote_url", remoteURL)
-
-			// Build storage backend (needed for file download during parsing).
-			st, err := buildStorage(ctx, storageType, storagePath, s3Region, s3Endpoint, s3AccessKey, s3SecretKey, s3PathStyle, s3Bucket)
-			if err != nil {
-				return fmt.Errorf("init storage: %w", err)
-			}
 
 			// Construct a minimal Chronicle instance. Only Postgres,
 			// storage, and DB-backed game data are required.
@@ -407,6 +415,119 @@ Fail-pause behavior (--execute):
 	return cmd
 }
 
+func enrichResyncGroups(
+	ctx context.Context,
+	db database.Store,
+	objectStorage storage.ObjectStorage,
+	remoteURL string,
+	groups []resynccandidate.Group,
+) {
+	adminCtx := servicetenant.AdminBypass(ctx)
+	for idx := range groups {
+		group := &groups[idx]
+		group.ExpectedFiles = chronicle.ExpectedRawLogFiles(group.LogFormat)
+
+		files, err := db.GetWoWLogFilesByGroupID(adminCtx, group.ID)
+		if err != nil {
+			group.StorageError = fmt.Sprintf("fetch raw file records: %v", err)
+		} else {
+			available := chronicle.AvailableRawLogFiles(files)
+			group.RawFileCount = len(available)
+			if err := chronicle.ValidateResyncRawFiles(adminCtx, objectStorage, available, group.LogFormat); err != nil {
+				group.StorageError = err.Error()
+			} else {
+				group.StorageValid = true
+			}
+		}
+
+		tenantIDs := make(map[uuid.UUID]struct{})
+		rootScoped := false
+		for _, realmID := range group.RealmIDs {
+			realm, err := db.GetWoWServerRealm(adminCtx, realmID)
+			if err != nil {
+				group.StorageValid = false
+				group.StorageError = appendPreflightError(group.StorageError, fmt.Sprintf("resolve realm %s: %v", realmID, err))
+				continue
+			}
+			server, err := db.GetWoWServer(adminCtx, realm.ServerID)
+			if err != nil {
+				group.StorageValid = false
+				group.StorageError = appendPreflightError(group.StorageError, fmt.Sprintf("resolve server %s: %v", realm.ServerID, err))
+				continue
+			}
+			if server.TenantID.Valid {
+				tenantIDs[server.TenantID.UUID] = struct{}{}
+			} else {
+				rootScoped = true
+			}
+		}
+
+		switch {
+		case rootScoped && len(tenantIDs) > 0, len(tenantIDs) > 1:
+			group.TenantName = "mixed/invalid"
+			group.StorageValid = false
+			group.StorageError = appendPreflightError(group.StorageError, "log group spans multiple tenant scopes")
+		case len(tenantIDs) == 1:
+			for tenantID := range tenantIDs {
+				tenant, err := db.GetTenantByID(adminCtx, tenantID)
+				if err != nil {
+					group.TenantName = tenantID.String()
+					group.StorageValid = false
+					group.StorageError = appendPreflightError(group.StorageError, fmt.Sprintf("resolve tenant %s: %v", tenantID, err))
+					break
+				}
+				group.TenantName = tenant.Name
+				group.TenantIncludeAll = tenant.IncludeInAll
+				if tenant.Slug.Valid {
+					group.TenantSlug = tenant.Slug.String
+				}
+			}
+		default:
+			group.TenantName = "root/legacy"
+			group.TenantIncludeAll = true
+		}
+		group.LogURL = resyncLogURL(remoteURL, group.TenantSlug, group.ID)
+	}
+}
+
+func appendPreflightError(existing, next string) string {
+	if existing == "" {
+		return next
+	}
+	return existing + "; " + next
+}
+
+func resyncLogURL(remoteURL, tenantSlug string, logGroupID uuid.UUID) string {
+	if remoteURL == "" {
+		return ""
+	}
+	parsed, err := url.Parse(remoteURL)
+	if err != nil || parsed.Scheme == "" || parsed.Host == "" {
+		return ""
+	}
+
+	if tenantSlug != "" {
+		hostname := parsed.Hostname()
+		labels := strings.Split(hostname, ".")
+		if len(labels) >= 3 {
+			hostname = tenantSlug + "." + strings.Join(labels[1:], ".")
+		} else if len(labels) == 2 {
+			hostname = tenantSlug + "." + hostname
+		}
+		if port := parsed.Port(); port != "" {
+			parsed.Host = net.JoinHostPort(hostname, port)
+		} else {
+			parsed.Host = hostname
+		}
+	}
+
+	parsed.Path = "/logs/" + logGroupID.String()
+	parsed.RawPath = ""
+	parsed.RawQuery = ""
+	parsed.Fragment = ""
+	return parsed.String()
+}
+
 type approvalAction int
 
 const (
@@ -422,11 +543,11 @@ func stopRiverClient(client *river.Client[pgx.Tx]) {
 }
 
 func promptApproval(scanner *bufio.Scanner, out io.Writer, group resynccandidate.Group, index, total int) (approvalAction, error) {
-	if err := writeOutput(out, "\nCandidate %d/%d\n  Log group: %s\n  Parser:    %s\n  Instances:\n", index, total, group.ID, group.ParserVersion); err != nil {
+	if err := writeOutput(out, "\nCandidate %d/%d\n", index, total); err != nil {
 		return approvalQuit, err
 	}
-	for _, instance := range group.Instances {
-		if err := writeOutput(out, "    - %s\n", instance); err != nil {
+	for _, line := range group.DisplayLines(index) {
+		if err := writeOutput(out, "%s\n", line); err != nil {
 			return approvalQuit, err
 		}
 	}

@@ -15,9 +15,17 @@ import (
 func testGroups() []resynccandidate.Group {
 	return []resynccandidate.Group{
 		{
-			ID:            uuid.MustParse("00000000-0000-0000-0000-000000000001"),
-			ParserVersion: "v0.0.100",
-			Instances:     []string{"MC", "Onyxia"},
+			ID:               uuid.MustParse("00000000-0000-0000-0000-000000000001"),
+			Owner:            uuid.MustParse("10000000-0000-0000-0000-000000000001"),
+			ParserVersion:    "v0.0.100",
+			Instances:        []string{"MC", "Onyxia"},
+			TenantName:       "Turtle WoW",
+			TenantSlug:       "turtle",
+			TenantIncludeAll: true,
+			LogURL:           "https://turtle.chronicleclassic.com/logs/00000000-0000-0000-0000-000000000001",
+			RawFileCount:     1,
+			ExpectedFiles:    1,
+			StorageValid:     true,
 		},
 		{
 			ID:            uuid.MustParse("00000000-0000-0000-0000-000000000002"),
@@ -48,6 +56,10 @@ func TestDryRunModel_ViewContainsCandidates(t *testing.T) {
 	require.Contains(t, view, "2 candidate log group(s)")
 	require.Contains(t, view, "00000000-0000-0000-0000-000000000001")
 	require.Contains(t, view, "v0.0.100")
+	require.Contains(t, view, "owner:  10000000-0000-0000-0000-000000000001")
+	require.Contains(t, view, "Turtle WoW (slug=turtle, include_in_all=true)")
+	require.Contains(t, view, "1/1 file(s), storage preflight=ok")
+	require.Contains(t, view, "https://turtle.chronicleclassic.com/logs/00000000-0000-0000-0000-000000000001")
 	require.Contains(t, view, "MC")
 }
 

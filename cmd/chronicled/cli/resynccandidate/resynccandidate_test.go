@@ -1,6 +1,7 @@
 package resynccandidate_test
 
 import (
+	"strings"
 	"testing"
 
 	"github.com/Emyrk/chronicle/cmd/chronicled/cli/resynccandidate"
@@ -32,6 +33,25 @@ func TestFilterAndGroup_PatchComparison(t *testing.T) {
 	groups := resynccandidate.FilterAndGroup(rows, "v0.0.425", 100)
 	require.Len(t, groups, 1)
 	require.Equal(t, id1, groups[0].ID)
+}
+
+func TestFilterAndGroup_PreservesOwnerAndFormat(t *testing.T) {
+	t.Parallel()
+
+	id := uuid.New()
+	owner := uuid.New()
+	rows := []database.ResyncCandidateLogGroupsRow{{
+		ID:            id,
+		Owner:         owner,
+		ParserVersion: "v0.0.100",
+		InstanceName:  "Molten Core",
+		LogType:       database.LogTypeV2,
+	}}
+
+	groups := resynccandidate.FilterAndGroup(rows, "v0.0.200", 1)
+	require.Len(t, groups, 1)
+	require.Equal(t, owner, groups[0].Owner)
+	require.Equal(t, database.LogFormat112aCcAddon, groups[0].LogFormat)
 }
 
 func TestFilterAndGroup_MajorMinorComparison(t *testing.T) {
@@ -197,6 +217,28 @@ func TestFilterAndGroup_EmptyInput(t *testing.T) {
 
 	groups := resynccandidate.FilterAndGroup(nil, "v0.0.100", 50)
 	require.Len(t, groups, 0)
+}
+
+func TestGroupDisplayLines_StorageFailure(t *testing.T) {
+	t.Parallel()
+
+	group := resynccandidate.Group{
+		ID:            uuid.MustParse("00000000-0000-0000-0000-000000000001"),
+		Owner:         uuid.MustParse("10000000-0000-0000-0000-000000000001"),
+		ParserVersion: "v0.0.100",
+		Instances:     []string{"Stratholme"},
+		TenantName:    "Epoch",
+		TenantSlug:    "epoch",
+		RawFileCount:  0,
+		ExpectedFiles: 1,
+		StorageError:  "object not found",
+	}
+
+	output := strings.Join(group.DisplayLines(1), "\n")
+	require.Contains(t, output, "owner:  10000000-0000-0000-0000-000000000001")
+	require.Contains(t, output, "tenant: Epoch (slug=epoch, include_in_all=false)")
+	require.Contains(t, output, "raw:    0/1 file(s), storage preflight=FAILED")
+	require.Contains(t, output, "error:  object not found")
 }
 
 func TestDefaultTargetVersion(t *testing.T) {

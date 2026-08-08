@@ -1,12 +1,18 @@
 package chronicle
 
 import (
+	"bytes"
+	"compress/gzip"
 	"context"
+	"errors"
 	"fmt"
+	"io"
+	"path/filepath"
 	"time"
 
 	"github.com/Emyrk/chronicle/chronicle/riverqueue/riverconst"
 	"github.com/Emyrk/chronicle/database"
+	"github.com/Emyrk/chronicle/database/storage"
 	"github.com/Emyrk/chronicle/internal/services/servicetenant"
 	"github.com/google/uuid"
 	"github.com/riverqueue/river"
@@ -58,6 +64,75 @@ func (w *WorkerResync) Timeout(*river.Job[ArgsResync]) time.Duration {
 
 func (c *Chronicle) NewWorkerResync(parseQueue string) *WorkerResync {
 	return &WorkerResync{parent: c, parseQueue: parseQueue}
+}
+
+// ExpectedRawLogFiles returns the number of objects required to parse a log
+// group in the given format.
+func ExpectedRawLogFiles(logFormat database.LogFormat) int {
+	if logFormat == database.LogFormat112aSuperwowAddon {
+		return 2
+	}
+	return 1
+}
+
+func loadRawLogFile(ctx context.Context, objectStorage storage.ObjectStorage, file database.LogFile) (io.Reader, error) {
+	fileData, err := objectStorage.DownloadFile(ctx, BucketRaidLogs, filepath.Join("logs", file.ID.String()))
+	if err != nil {
+		err = fmt.Errorf("download log file %s: %w", file.ID, err)
+		if errors.Is(err, io.ErrUnexpectedEOF) {
+			err = fmt.Errorf("download log file %s (unexpected EOF — file may be truncated): %w", file.ID, err)
+		}
+		return nil, err
+	}
+
+	var reader io.Reader = bytes.NewReader(fileData)
+	if file.ContentEncoding.Valid && file.ContentEncoding.String == "gzip" {
+		gzReader, err := gzip.NewReader(reader)
+		if err != nil {
+			return nil, fmt.Errorf("decompress log file %s: %w", file.ID, err)
+		}
+		defer func() { _ = gzReader.Close() }()
+
+		decompressed := &bytes.Buffer{}
+		if _, err := io.Copy(decompressed, gzReader); err != nil {
+			return nil, fmt.Errorf("read decompressed log file %s: %w", file.ID, err)
+		}
+		reader = decompressed
+	}
+
+	return reader, nil
+}
+
+func loadRawLogFileBytes(ctx context.Context, objectStorage storage.ObjectStorage, file database.LogFile) ([]byte, error) {
+	reader, err := loadRawLogFile(ctx, objectStorage, file)
+	if err != nil {
+		return nil, err
+	}
+	buf := &bytes.Buffer{}
+	if _, err := io.Copy(buf, reader); err != nil {
+		return nil, err
+	}
+	return buf.Bytes(), nil
+}
+
+// AvailableRawLogFiles filters out database records whose storage objects are
+// already marked deleted.
+func AvailableRawLogFiles(files []database.LogFile) []database.LogFile {
+	available := make([]database.LogFile, 0, len(files))
+	for _, file := range files {
+		if !file.StorageDeletedAt.Valid {
+			available = append(available, file)
+		}
+	}
+	return available
+}
+
+// ValidateResyncRawFiles downloads and decompresses every raw log object and
+// verifies that the group has the number of files required by its format.
+func ValidateResyncRawFiles(ctx context.Context, objectStorage storage.ObjectStorage, files []database.LogFile, logFormat database.LogFormat) error {
+	return validateResyncRawFiles(ctx, files, ExpectedRawLogFiles(logFormat), func(ctx context.Context, file database.LogFile) ([]byte, error) {
+		return loadRawLogFileBytes(ctx, objectStorage, file)
+	})
 }
 
 func validateResyncRawFiles(
@@ -165,7 +240,6 @@ func (w *WorkerResync) Work(ctx context.Context, job *river.Job[ArgsResync]) err
 	logGroupID := job.Args.LogGroupID
 	adminCtx := servicetenant.AdminBypass(ctx)
 
-	parseWorker := &WorkerLogParse{parent: w.parent}
 	logGroup, err := w.parent.Zed.GetWoWLogGroupByID(adminCtx, logGroupID)
 	if err != nil {
 		return fmt.Errorf("fetch log group for raw-file validation: %w", err)
@@ -190,7 +264,7 @@ func (w *WorkerResync) Work(ctx context.Context, job *river.Job[ArgsResync]) err
 	if err != nil {
 		return fmt.Errorf("fetch raw log files for validation: %w", err)
 	}
-	if err := validateResyncRawFiles(adminCtx, files, 1, parseWorker.loadFileBytes); err != nil {
+	if err := ValidateResyncRawFiles(adminCtx, w.parent.Storage, AvailableRawLogFiles(files), logFormat); err != nil {
 		return err
 	}
 

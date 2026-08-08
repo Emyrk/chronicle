@@ -85,11 +85,7 @@ func (m DryRunModel) View() string {
 
 	var lines []string
 	for idx, g := range m.Groups {
-		lines = append(lines, fmt.Sprintf("  %d. %s  parser=%s  instances=%d",
-			idx+1, g.ID, g.ParserVersion, len(g.Instances)))
-		for _, inst := range g.Instances {
-			lines = append(lines, fmt.Sprintf("       - %s", inst))
-		}
+		lines = append(lines, g.DisplayLines(idx+1)...)
 	}
 
 	vp := m.viewportLines()
@@ -125,8 +121,8 @@ func (m DryRunModel) viewportLines() int {
 
 func (m DryRunModel) maxOffset() int {
 	total := 0
-	for _, g := range m.Groups {
-		total += 1 + len(g.Instances)
+	for idx, g := range m.Groups {
+		total += len(g.DisplayLines(idx + 1))
 	}
 	max := total - m.viewportLines()
 	if max < 0 {

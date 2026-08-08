@@ -2,7 +2,6 @@ package chronicle
 
 import (
 	"bytes"
-	"compress/gzip"
 	"context"
 	"errors"
 	"fmt"
@@ -316,34 +315,5 @@ func (w *WorkerLogParse) sortReader(ctx context.Context, rdr io.Reader, fileID u
 
 // loadFile downloads and decompresses a single log file from object storage.
 func (w *WorkerLogParse) loadFile(ctx context.Context, file database.LogFile) (io.Reader, error) {
-	storage := w.parent.Storage
-
-	fd, err := storage.DownloadFile(ctx, BucketRaidLogs, w.parent.logPath(file.ID))
-	if err != nil {
-		err = fmt.Errorf("download log file %s: %w", file.ID, err)
-		if errors.Is(err, io.ErrUnexpectedEOF) {
-			err = fmt.Errorf("download log file %s (unexpected EOF — file may be truncated): %w", file.ID, err)
-		}
-		return nil, err
-	}
-
-	var reader io.Reader = bytes.NewReader(fd)
-	if file.ContentEncoding.Valid && file.ContentEncoding.String == "gzip" {
-		gzReader, err := gzip.NewReader(reader)
-		if err != nil {
-			return nil, fmt.Errorf("decompress log file %s: %w", file.ID, err)
-		}
-		defer func() { _ = gzReader.Close() }()
-
-		decompressed := &bytes.Buffer{}
-		if _, err := io.Copy(decompressed, gzReader); err != nil {
-			return nil, fmt.Errorf("read decompressed log file %s: %w", file.ID, err)
-		}
-		reader = decompressed
-	}
-
-	//nolint:ineffassign
-	fd = nil
-
-	return reader, nil
+	return loadRawLogFile(ctx, w.parent.Storage, file)
 }

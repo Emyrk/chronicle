@@ -9,6 +9,7 @@ import (
 	"github.com/Emyrk/chronicle/database"
 	"github.com/Emyrk/chronicle/internal/services/servicetenant"
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/stretchr/testify/require"
 )
 
@@ -83,6 +84,27 @@ func TestResyncTenantID(t *testing.T) {
 			require.Equal(t, tt.want, got)
 		})
 	}
+}
+
+func TestAvailableRawLogFiles(t *testing.T) {
+	t.Parallel()
+
+	availableID := uuid.New()
+	deletedID := uuid.New()
+	got := AvailableRawLogFiles([]database.LogFile{
+		{ID: availableID},
+		{ID: deletedID, StorageDeletedAt: pgtype.Timestamptz{Time: time.Now(), Valid: true}},
+	})
+
+	require.Equal(t, []database.LogFile{{ID: availableID}}, got)
+}
+
+func TestExpectedRawLogFiles(t *testing.T) {
+	t.Parallel()
+
+	require.Equal(t, 2, ExpectedRawLogFiles(database.LogFormat112aSuperwowAddon))
+	require.Equal(t, 1, ExpectedRawLogFiles(database.LogFormat112aCcAddon))
+	require.Equal(t, 1, ExpectedRawLogFiles(database.LogFormat335aCcAddon))
 }
 
 func TestValidateResyncRawFiles(t *testing.T) {

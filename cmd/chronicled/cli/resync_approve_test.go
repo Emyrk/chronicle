@@ -18,8 +18,15 @@ func TestPromptApproval(t *testing.T) {
 
 	group := resynccandidate.Group{
 		ID:            uuid.MustParse("00000000-0000-0000-0000-000000000001"),
+		Owner:         uuid.MustParse("10000000-0000-0000-0000-000000000001"),
 		ParserVersion: "v0.0.700+old",
 		Instances:     []string{"Molten Core", "Onyxia"},
+		TenantName:    "Turtle WoW",
+		TenantSlug:    "turtle",
+		LogURL:        "https://turtle.chronicleclassic.com/logs/00000000-0000-0000-0000-000000000001",
+		RawFileCount:  1,
+		ExpectedFiles: 1,
+		StorageValid:  true,
 	}
 
 	for _, tt := range []struct {
@@ -45,6 +52,26 @@ func TestPromptApproval(t *testing.T) {
 			require.Contains(t, out.String(), tt.output)
 		})
 	}
+}
+
+func TestResyncLogURL(t *testing.T) {
+	t.Parallel()
+
+	logID := uuid.MustParse("00000000-0000-0000-0000-000000000001")
+
+	require.Equal(t,
+		"https://legacy.chronicleclassic.com/logs/00000000-0000-0000-0000-000000000001",
+		resyncLogURL("https://legacy.chronicleclassic.com", "", logID),
+	)
+	require.Equal(t,
+		"https://turtle.chronicleclassic.com/logs/00000000-0000-0000-0000-000000000001",
+		resyncLogURL("https://legacy.chronicleclassic.com/parser-version?ignored=true", "turtle", logID),
+	)
+	require.Equal(t,
+		"http://localhost:4000/logs/00000000-0000-0000-0000-000000000001",
+		resyncLogURL("http://localhost:4000", "turtle", logID),
+	)
+	require.Empty(t, resyncLogURL("not a URL", "turtle", logID))
 }
 
 func TestApprovalInsertOpts_IsolateQueue(t *testing.T) {

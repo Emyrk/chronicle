@@ -4,6 +4,8 @@
 package resynccandidate
 
 import (
+	"fmt"
+
 	"github.com/Emyrk/chronicle/database"
 	"github.com/Emyrk/chronicle/internal/semverenc"
 	"github.com/google/uuid"
@@ -11,10 +13,57 @@ import (
 
 // Group represents a deduplicated log group with its instances.
 type Group struct {
-	ID            uuid.UUID
-	ParserVersion string
-	Instances     []string
-	RealmIDs      []uuid.UUID // Distinct realm IDs across instances.
+	ID               uuid.UUID
+	Owner            uuid.UUID
+	LogFormat        database.LogFormat
+	ParserVersion    string
+	Instances        []string
+	RealmIDs         []uuid.UUID // Distinct realm IDs across instances.
+	TenantName       string
+	TenantSlug       string
+	TenantIncludeAll bool
+	LogURL           string
+	RawFileCount     int
+	ExpectedFiles    int
+	StorageValid     bool
+	StorageError     string
+}
+
+// DisplayLines returns the detailed, plain-text representation shared by the
+// dry-run TUI and non-interactive output.
+func (g Group) DisplayLines(index int) []string {
+	lines := []string{
+		fmt.Sprintf("  %d. %s  parser=%s  instances=%d", index, g.ID, g.ParserVersion, len(g.Instances)),
+		fmt.Sprintf("       owner:  %s", g.Owner),
+	}
+
+	tenant := g.TenantName
+	if tenant == "" {
+		tenant = "unknown"
+	}
+	if g.TenantSlug != "" {
+		tenant += fmt.Sprintf(" (slug=%s, include_in_all=%t)", g.TenantSlug, g.TenantIncludeAll)
+	}
+	lines = append(lines, "       tenant: "+tenant)
+
+	storageStatus := "FAILED"
+	if g.StorageValid {
+		storageStatus = "ok"
+	}
+	lines = append(lines, fmt.Sprintf(
+		"       raw:    %d/%d file(s), storage preflight=%s",
+		g.RawFileCount, g.ExpectedFiles, storageStatus,
+	))
+	if g.StorageError != "" {
+		lines = append(lines, "       error:  "+g.StorageError)
+	}
+	if g.LogURL != "" {
+		lines = append(lines, "       url:    "+g.LogURL)
+	}
+	for _, instance := range g.Instances {
+		lines = append(lines, fmt.Sprintf("       - %s", instance))
+	}
+	return lines
 }
 
 func logFormat(row database.ResyncCandidateLogGroupsRow) database.LogFormat {
@@ -56,7 +105,12 @@ func FilterAndGroup(rows []database.ResyncCandidateLogGroupsRow, targetVersion s
 		if limit > 0 && len(ordered) >= limit {
 			continue
 		}
-		seen[r.ID] = &Group{ID: r.ID, ParserVersion: r.ParserVersion}
+		seen[r.ID] = &Group{
+			ID:            r.ID,
+			Owner:         r.Owner,
+			LogFormat:     logFormat(r),
+			ParserVersion: r.ParserVersion,
+		}
 		ordered = append(ordered, r.ID)
 	}
 
