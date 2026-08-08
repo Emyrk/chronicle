@@ -248,6 +248,46 @@ export function aggregatePlayerItemEncounters(
   return [...rows.values()];
 }
 
+export interface PlayerItemNamedEncounterRow extends PlayerItemEncounterRow {
+  name: string;
+  boss: boolean;
+}
+
+export interface PlayerItemFightDisplayRow {
+  key: string;
+  label: string;
+  uses: PlayerItemUse[];
+}
+
+/**
+ * Keep named boss encounters as individual rows, then collapse every unnamed
+ * trash encounter into one summary row. Trash offsets are intentionally hidden
+ * because they belong to different encounter timelines.
+ */
+export function summarizePlayerItemFights(
+  rows: readonly PlayerItemNamedEncounterRow[],
+): PlayerItemFightDisplayRow[] {
+  const bossRows = rows
+    .filter((row) => row.boss)
+    .map((row) => ({
+      key: row.encounterID,
+      label: row.name,
+      uses: row.uses,
+    }));
+  const trashRows = rows.filter((row) => !row.boss);
+
+  if (trashRows.length === 0) return bossRows;
+
+  return [
+    ...bossRows,
+    {
+      key: "trash-fights",
+      label: `And ${trashRows.length} trash fight${trashRows.length === 1 ? "" : "s"}`,
+      uses: trashRows.flatMap((row) => row.uses),
+    },
+  ];
+}
+
 /** In-fight timestamp for a use: "m:ss" into the encounter, or "pre-pull". */
 export function formatEncounterOffset(use: PlayerItemUse): string {
   if (use.prePull) return "pre-pull";

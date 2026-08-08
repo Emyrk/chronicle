@@ -41,6 +41,11 @@ import LeaderboardFindBlockersVideo from "../../../frontend/chronicle/src/pages/
 import VulnerabilityEstimateVideo from "../../../frontend/chronicle/src/pages/Instance/EventsPanels/VulnerabilityEffect/explain/videos/Estimate.video";
 import ComparePanelsVideo from "../../../frontend/chronicle/src/pages/Instance/EventsPanels/ComparisonPanel/explain/videos/ComparePanels.video";
 import CompareHuntersVideo from "../../../frontend/chronicle/src/pages/Instance/EventsPanels/ComparisonPanel/explain/videos/CompareHunters.video";
+import ConsumablesReadPlayerVideo from "../../../frontend/chronicle/src/pages/Instance/EventsPanels/Consumables/explain/videos/ReadPlayer.video";
+import ConsumablesViewAllVideo from "../../../frontend/chronicle/src/pages/Instance/EventsPanels/Consumables/explain/videos/ViewAll.video";
+import ConsumablesRaidWideVideo from "../../../frontend/chronicle/src/pages/Instance/EventsPanels/Consumables/explain/videos/RaidWide.video";
+import ConsumablesInspectItemVideo from "../../../frontend/chronicle/src/pages/Instance/EventsPanels/Consumables/explain/videos/InspectItem.video";
+import ConsumablesUnresolvedVideo from "../../../frontend/chronicle/src/pages/Instance/EventsPanels/Consumables/explain/videos/Unresolved.video";
 
 /**
  * Studio registration for the in-app explainer lesson compositions.
@@ -160,6 +165,13 @@ export const RemotionRoot: React.FC = () => {
       <Folder name="ComparisonLessons">
         <Composition id="ComparePanels" component={ComparePanelsVideo} durationInFrames={500} fps={30} width={1280} height={720} />
         <Composition id="CompareHunters" component={CompareHuntersVideo} durationInFrames={470} fps={30} width={1280} height={720} />
+      </Folder>
+      <Folder name="ConsumablesLessons">
+        <Composition id="ConsumablesReadPlayer" component={ConsumablesReadPlayerVideo} durationInFrames={380} fps={30} width={1280} height={720} />
+        <Composition id="ConsumablesViewAll" component={ConsumablesViewAllVideo} durationInFrames={410} fps={30} width={1280} height={720} />
+        <Composition id="ConsumablesRaidWide" component={ConsumablesRaidWideVideo} durationInFrames={410} fps={30} width={1280} height={720} />
+        <Composition id="ConsumablesInspectItem" component={ConsumablesInspectItemVideo} durationInFrames={440} fps={30} width={1280} height={720} />
+        <Composition id="ConsumablesUnresolved" component={ConsumablesUnresolvedVideo} durationInFrames={350} fps={30} width={1280} height={720} />
       </Folder>
       <Folder name="FocusLessons">
         <Composition id="FocusPlayer" component={FocusPlayerVideo} durationInFrames={470} fps={30} width={1280} height={720} />

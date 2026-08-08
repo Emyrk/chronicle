@@ -10,6 +10,10 @@ import {
   FIXTURE_DURATION_MS as LEADERBOARD_FIXTURE_DURATION_MS,
   getFixturePanelContext as getLeaderboardFixturePanelContext,
 } from "../EventsPanels/LeaderboardPanel/explain/fixture";
+import {
+  FIXTURE_DURATION_MS as CONSUMABLES_FIXTURE_DURATION_MS,
+  getFixturePanelContext as getConsumablesFixturePanelContext,
+} from "../EventsPanels/Consumables/explain/fixture";
 import { PanelExplainerView } from "./PanelExplainerView";
 
 const meta: Meta<typeof PanelExplainerView> = {
@@ -272,4 +276,40 @@ export const LeaderboardFindBlockersLesson: Story = {
     initialMode: "example",
   },
   parameters: { routerEntries: ["/?lesson=find-blockers"] },
+};
+
+const consumablesArgs = {
+  panelType: "consumables_ledger" as const,
+  context: getConsumablesFixturePanelContext(),
+  durationMs: CONSUMABLES_FIXTURE_DURATION_MS,
+  initialMode: "example" as const,
+};
+
+export const ConsumablesExampleMode: Story = {
+  args: consumablesArgs,
+};
+
+export const ConsumablesReadPlayerLesson: Story = {
+  args: consumablesArgs,
+  parameters: { routerEntries: ["/?lesson=read-consumables"] },
+};
+
+export const ConsumablesViewAllLesson: Story = {
+  args: consumablesArgs,
+  parameters: { routerEntries: ["/?lesson=view-all-consumables"] },
+};
+
+export const ConsumablesRaidWideLesson: Story = {
+  args: consumablesArgs,
+  parameters: { routerEntries: ["/?lesson=raid-wide-consumables"] },
+};
+
+export const ConsumablesInspectItemLesson: Story = {
+  args: consumablesArgs,
+  parameters: { routerEntries: ["/?lesson=inspect-consumable"] },
+};
+
+export const ConsumablesUnresolvedLesson: Story = {
+  args: consumablesArgs,
+  parameters: { routerEntries: ["/?lesson=unresolved-consumables"] },
 };

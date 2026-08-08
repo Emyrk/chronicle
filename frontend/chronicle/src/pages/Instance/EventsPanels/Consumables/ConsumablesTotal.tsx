@@ -39,7 +39,10 @@ function ConsumeCount({
 }) {
   if (consume.itemId !== null) {
     return (
-      <span className="inline-flex min-h-7 items-center gap-1.5 rounded border border-border/60 bg-muted/30 px-2 py-1 leading-none">
+      <span
+        className="inline-flex min-h-7 items-center gap-1.5 rounded border border-border/60 bg-muted/30 px-2 py-1 leading-none"
+        data-demo-consumables-consume-chip
+      >
         <ItemCell itemId={consume.itemId} link />
         <span className="inline-flex self-stretch items-center font-semibold leading-none text-foreground">x{consume.count}</span>
         <span className="inline-flex self-stretch items-center font-mono text-2xs leading-none text-muted-foreground">
@@ -56,6 +59,7 @@ function ConsumeCount({
         onClick={(event) => onOpenPossible(consume, event.currentTarget)}
         className="inline-flex min-h-7 items-center gap-1.5 rounded border border-amber-500/25 bg-amber-500/10 px-2 py-1 leading-none text-amber-200 transition-colors hover:border-amber-400/50 hover:bg-amber-500/15"
         title="Show possible items and why Chronicle could not identify one item"
+        data-demo-consumables-consume-chip
       >
         <HelpCircle className="h-3.5 w-3.5" />
         <span>Possible</span>
@@ -65,7 +69,10 @@ function ConsumeCount({
   }
 
   return (
-    <span className="inline-flex min-h-7 items-center gap-1.5 rounded border border-border/60 bg-muted/30 px-2 py-1 leading-none">
+    <span
+      className="inline-flex min-h-7 items-center gap-1.5 rounded border border-border/60 bg-muted/30 px-2 py-1 leading-none"
+      data-demo-consumables-consume-chip
+    >
       <span className="text-muted-foreground">Unknown item</span>
       <span className="inline-flex self-stretch items-center font-semibold leading-none text-foreground">x{consume.count}</span>
     </span>
@@ -210,7 +217,11 @@ export function ConsumablesTotalContent({ headerExtra, ...props }: ConsumablesTo
   return (
     <>
       <GenericPanel {...effectiveProps}>
-        <div className="flex h-full min-h-0 flex-col gap-2">
+        <div
+          className="flex h-full min-h-0 flex-col gap-2"
+          data-lesson-target="view-all-consumables"
+          data-demo-consumables-all-view
+        >
           <div className="flex shrink-0 items-center gap-2">
           <label className="relative block min-w-0 flex-1">
             <Search className="pointer-events-none absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-muted-foreground" />
@@ -260,6 +271,7 @@ export function ConsumablesTotalContent({ headerExtra, ...props }: ConsumablesTo
                     return (
                       <tr
                         key={row.playerId}
+                        data-demo-consumables-all-row
                         className={rowIndex % 2 === 0
                           ? "border-b border-border/20 align-top bg-muted/10 hover:bg-muted/30"
                           : "border-b border-border/20 align-top bg-muted/25 hover:bg-muted/40"}

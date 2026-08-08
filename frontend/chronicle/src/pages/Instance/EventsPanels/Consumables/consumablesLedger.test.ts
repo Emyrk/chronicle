@@ -9,6 +9,7 @@ import {
   formatGold,
   ledgerCoverage,
   NO_PRICES,
+  summarizePlayerItemFights,
   type ConsumablePrices,
 } from "./consumablesLedger";
 
@@ -39,6 +40,66 @@ function makeUse(overrides: Partial<ConsumableUse>): ConsumableUse {
 }
 
 const GOLD = 10_000; // copper per gold
+
+describe("summarizePlayerItemFights", () => {
+  it("keeps boss names and combines trash encounters into one unnamed summary", () => {
+    const rows = summarizePlayerItemFights([
+      {
+        encounterID: "trash-1",
+        name: "Molten Destroyer",
+        boss: false,
+        uses: [{ offsetMilli: 12_000, prePull: false }],
+      },
+      {
+        encounterID: "boss-1",
+        name: "Lucifron",
+        boss: true,
+        uses: [{ offsetMilli: 20_000, prePull: false }],
+      },
+      {
+        encounterID: "trash-2",
+        name: "Flamewaker Protector",
+        boss: false,
+        uses: [
+          { offsetMilli: -2_000, prePull: true },
+          { offsetMilli: 8_000, prePull: false },
+        ],
+      },
+      {
+        encounterID: "boss-2",
+        name: "Magmadar",
+        boss: true,
+        uses: [{ offsetMilli: 45_000, prePull: false }],
+      },
+    ]);
+
+    expect(rows.map((row) => row.label)).toEqual([
+      "Lucifron",
+      "Magmadar",
+      "And 2 trash fights",
+    ]);
+    expect(rows[2].uses).toHaveLength(3);
+  });
+
+  it("uses the singular trash-fight label", () => {
+    const rows = summarizePlayerItemFights([
+      {
+        encounterID: "trash-1",
+        name: "Core Hound Pack",
+        boss: false,
+        uses: [{ offsetMilli: 1_000, prePull: false }],
+      },
+    ]);
+
+    expect(rows).toEqual([
+      {
+        key: "trash-fights",
+        label: "And 1 trash fight",
+        uses: [{ offsetMilli: 1_000, prePull: false }],
+      },
+    ]);
+  });
+});
 
 describe("aggregateConsumablesLedger", () => {
   it("groups identified uses by item and counts uses, users, and encounters", () => {

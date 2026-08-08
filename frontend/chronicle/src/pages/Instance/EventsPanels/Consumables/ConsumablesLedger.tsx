@@ -178,9 +178,15 @@ export function ConsumablesLedgerContent(props: ConsumablesLedgerContentProps) {
             {loading ? "Loading..." : "No consumable uses recorded"}
           </div>
         ) : (
-          <div className="flex h-full min-h-0 flex-col gap-2">
+          <div
+            className="flex h-full min-h-0 flex-col gap-2"
+            data-lesson-target="raid-wide-consumables"
+          >
             <LedgerFilterInput value={filter} onChange={setFilter} />
-            <div className="flex shrink-0 items-center justify-between gap-2 border-b border-border/60 px-2 pb-2">
+            <div
+              className="flex shrink-0 items-center justify-between gap-2 border-b border-border/60 px-2 pb-2"
+              data-demo-consumables-raid-summary
+            >
               <CoverageLine label={coverage.label} tone={coverage.tone} />
               <div className="flex flex-col items-end gap-0.5">
                 <span className="font-mono text-sm font-semibold text-foreground">

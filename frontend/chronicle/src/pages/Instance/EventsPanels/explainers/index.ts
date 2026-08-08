@@ -23,6 +23,7 @@ import { equipmentExplainer } from "../Equipment/explain";
 import { leaderboardExplainer } from "../LeaderboardPanel/explain";
 import { vulnerabilityEffectExplainer } from "../VulnerabilityEffect/explain";
 import { comparisonExplainer } from "../ComparisonPanel/explain";
+import { consumablesLedgerExplainer } from "../Consumables/explain";
 
 /**
  * Map of panel types to their explainer configurations.
@@ -30,8 +31,8 @@ import { comparisonExplainer } from "../ComparisonPanel/explain";
  * Partial because not all panels have explainers yet.
  * The ? button only appears for panels in this registry.
  */
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
 export const PANEL_EXPLAINERS: Partial<
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   Record<EventsPanelType, PanelExplainer<any, any>>
 > = {
   damage_done: damageDoneExplainer,
@@ -49,6 +50,7 @@ export const PANEL_EXPLAINERS: Partial<
   leaderboard: leaderboardExplainer,
   vulnerability_effect: vulnerabilityEffectExplainer,
   comparison: comparisonExplainer,
+  consumables_ledger: consumablesLedgerExplainer,
 };
 
 /**

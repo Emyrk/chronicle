@@ -401,8 +401,12 @@ export function ConsumablesPlayerContent(props: ConsumablesPlayerContentProps) {
           <div className="shrink-0 pb-2">
             <LedgerFilterInput value={filter} onChange={setFilter} />
           </div>
-          <div className="flex shrink-0 items-center justify-between gap-2 px-2 pb-2">
-            <div className="flex min-w-0 items-center gap-2">
+          <div
+            className="flex shrink-0 items-center justify-between gap-2 px-2 pb-2"
+            data-lesson-target="read-consumables"
+            data-demo-consumables-player-header
+          >
+            <div className="flex min-w-0 items-center gap-2" data-demo-consumables-player-identity>
               <span
                 className="h-4 w-1 shrink-0 rounded-full"
                 style={{ background: classColor(selected.cls) }}
@@ -438,13 +442,15 @@ export function ConsumablesPlayerContent(props: ConsumablesPlayerContentProps) {
                 type="button"
                 onClick={enterViewAll}
                 title="View all players at once"
+                data-demo-consumables-view-all
+                data-lesson-target="view-all-consumables"
                 className="flex h-5 shrink-0 cursor-pointer items-center gap-1 rounded border border-border/60 px-1.5 text-2xs text-muted-foreground transition-colors hover:border-border hover:text-foreground"
               >
                 <Users className="h-3 w-3" />
                 View All
               </button>
             </div>
-            <div className="flex shrink-0 flex-col items-end gap-0.5">
+            <div className="flex shrink-0 flex-col items-end gap-0.5" data-demo-consumables-player-total>
               <span className="font-mono text-sm font-semibold text-foreground">
                 {ledger.totalUses} <span className="text-2xs font-normal text-muted-foreground">uses</span>
               </span>
@@ -454,7 +460,11 @@ export function ConsumablesPlayerContent(props: ConsumablesPlayerContentProps) {
             </div>
           </div>
 
-          <div className="flex h-9 shrink-0 items-end gap-1 border-y border-border/60 px-2 pb-1 pt-1.5">
+          <div
+            className="flex h-9 shrink-0 items-end gap-1 border-y border-border/60 px-2 pb-1 pt-1.5"
+            data-lesson-target="read-consumables"
+            data-demo-consumables-roster
+          >
             {roster.map((player, index) => {
               const uses = usesByPlayer.get(player.guid) ?? 0;
               const gold = rosterBars.goldByPlayer.get(player.guid) ?? 0;

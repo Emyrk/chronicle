@@ -101,7 +101,7 @@ export function useFilteredUses(uses: ConsumableUse[], filter: string): Consumab
 
 export function LedgerFilterInput({ value, onChange }: { value: string; onChange: (value: string) => void }) {
   return (
-    <label className="relative block shrink-0">
+    <label className="relative block shrink-0" data-demo-consumables-search>
       <Search className="pointer-events-none absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-muted-foreground" />
       <input
         type="search"
@@ -185,6 +185,8 @@ export function LedgerRow({
   return (
     <div
       onClick={onClick}
+      data-lesson-target="inspect-consumable"
+      data-demo-consumables-ledger-row
       className={cn(
         "flex items-center gap-2.5 px-2 py-1",
         onClick && "cursor-pointer transition-colors hover:bg-muted/30",
@@ -249,7 +251,11 @@ export function AmbiguousSection({
 }) {
   if (rows.length === 0) return null;
   return (
-    <div className="flex flex-col gap-2 border-t border-border/60 bg-muted/10 px-2 pb-2 pt-1.5">
+    <div
+      className="flex flex-col gap-2 border-t border-border/60 bg-muted/10 px-2 pb-2 pt-1.5"
+      data-lesson-target="unresolved-consumables"
+      data-demo-consumables-ambiguous
+    >
       <div className="flex items-baseline justify-between gap-2">
         <span className="text-2xs font-medium uppercase tracking-wider text-muted-foreground">Ambiguous</span>
         <span className="font-mono text-2xs text-muted-foreground/70">
@@ -266,7 +272,10 @@ export function AmbiguousSection({
               </span>
               <span className="shrink-0 font-mono text-xs">{row.uses}×</span>
             </div>
-            <div className="flex flex-wrap items-center gap-x-2 gap-y-0.5 pl-6 text-2xs text-muted-foreground/70">
+            <div
+              className="flex flex-wrap items-center gap-x-2 gap-y-0.5 pl-6 text-2xs text-muted-foreground/70"
+              data-demo-consumables-candidates
+            >
               {row.candidateItemIds.length > 0 ? (
                 <>
                   <span>could be</span>
