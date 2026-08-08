@@ -32,6 +32,19 @@ var RetryDelays = []time.Duration{
 // MaxParseScoreAttempts is the number of scheduled attempts before we stop.
 const MaxParseScoreAttempts = 4
 
+// MissingSnapshotRetryWindow bounds retries for historical instances. Once an
+// instance is older than the full retry schedule, a future snapshot cannot
+// become its canonical historical snapshot without an explicit backfill.
+const MissingSnapshotRetryWindow = 10 * 24 * time.Hour
+
+const (
+	RetryReasonNoPublishedSnapshot      = "no_published_snapshot"
+	RetryReasonNoCompatibleSnapshot     = "no_compatible_snapshot"
+	RetryReasonNoSnapshotBeforeInstance = "no_snapshot_before_instance"
+	RetryReasonNoEligibleSnapshot       = "no_eligible_snapshot"
+	RetryReasonInstanceTooOld           = "instance_older_than_retry_window"
+)
+
 // RepairLookbackDays bounds automatic repair to recent instances. Older parse
 // history is preserved as-is when snapshots are deleted, and missing old
 // projections are not backfilled automatically.
@@ -63,6 +76,7 @@ func (w *WorkerComputeParseScores) Work(ctx context.Context, job *river.Job[pars
 		slog.String("instance_id", instanceID.String()),
 		slog.String("tenant_id", tenantID.String()),
 		slog.Int("attempt", attempt),
+		slog.String("retry_reason", job.Args.RetryReason),
 	)
 
 	// Fetch instance metadata.
@@ -98,7 +112,8 @@ func (w *WorkerComputeParseScores) Work(ctx context.Context, job *river.Job[pars
 	}
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
-			return w.handleNoSnapshot(ctx, logger, instanceID, tenantID, attempt)
+			reason := w.diagnoseMissingSnapshot(ctx, logger, tenantID, inst.StartTime)
+			return w.handleNoSnapshot(ctx, logger, instanceID, tenantID, inst.StartTime, attempt, reason)
 		}
 		return fmt.Errorf("resolve snapshot: %w", err)
 	}
@@ -306,37 +321,107 @@ func (w *WorkerComputeParseScores) Work(ctx context.Context, job *river.Job[pars
 	return nil
 }
 
-// handleNoSnapshot handles the case when no published snapshot exists yet.
-// It schedules a retry job if within the bounded retry limit.
-// No receipt is created — only successful completions produce receipts.
+// diagnoseMissingSnapshot distinguishes the common reasons the canonical
+// scoring lookup returned no rows. Diagnostics are best-effort and must not
+// turn a missing snapshot into a failed River job.
+func (w *WorkerComputeParseScores) diagnoseMissingSnapshot(
+	ctx context.Context,
+	logger *slog.Logger,
+	tenantID uuid.UUID,
+	instanceStart pgtype.Timestamptz,
+) string {
+	if instanceStart.Valid {
+		_, err := w.Store.GetScoringSnapshotLatest(ctx, database.GetScoringSnapshotLatestParams{
+			TenantID:      tenantID,
+			LookbackDays:  int32(parsepolicy.DefaultLookbackDays),
+			PolicyVersion: int16(parsepolicy.PolicyVersion),
+			QueryVersion:  int16(QueryVersion),
+		})
+		if err == nil {
+			return RetryReasonNoSnapshotBeforeInstance
+		}
+		if !errors.Is(err, pgx.ErrNoRows) {
+			logger.Warn("failed to diagnose compatible parse snapshot", slog.Any("error", err))
+			return RetryReasonNoEligibleSnapshot
+		}
+	}
+
+	latest, err := w.Store.GetLatestPublishedSnapshot(ctx, database.GetLatestPublishedSnapshotParams{
+		TenantID:     tenantID,
+		LookbackDays: int32(parsepolicy.DefaultLookbackDays),
+	})
+	if errors.Is(err, pgx.ErrNoRows) {
+		return RetryReasonNoPublishedSnapshot
+	}
+	if err != nil {
+		logger.Warn("failed to diagnose latest parse snapshot", slog.Any("error", err))
+		return RetryReasonNoEligibleSnapshot
+	}
+
+	logger.Info("latest parse snapshot is incompatible with scoring worker",
+		slog.Int("snapshot_policy_version", int(latest.PolicyVersion)),
+		slog.Int("snapshot_query_version", int(latest.QueryVersion)),
+		slog.Int("required_policy_version", int(parsepolicy.PolicyVersion)),
+		slog.Int("required_query_version", QueryVersion),
+	)
+	return RetryReasonNoCompatibleSnapshot
+}
+
+// handleNoSnapshot handles the case when no eligible published snapshot exists.
+// It schedules a retry job if the instance and attempt are within the bounded
+// retry limit. No receipt is created; only successful completions produce one.
 func (w *WorkerComputeParseScores) handleNoSnapshot(
 	ctx context.Context,
 	logger *slog.Logger,
 	instanceID, tenantID uuid.UUID,
+	instanceStart pgtype.Timestamptz,
 	attempt int,
+	reason string,
 ) error {
+	now := time.Now()
+	if instanceStart.Valid && instanceStart.Time.Before(now.Add(-MissingSnapshotRetryWindow)) {
+		reason = RetryReasonInstanceTooOld
+		logger.Info("instance predates parse snapshot retry window, stopping retry chain",
+			slog.String("reason", reason),
+			slog.Time("instance_start", instanceStart.Time),
+			slog.Duration("retry_window", MissingSnapshotRetryWindow),
+		)
+		_ = river.RecordOutput(ctx, map[string]any{
+			"reason":         reason,
+			"instance_start": instanceStart.Time,
+			"retry_stopped":  true,
+		})
+		return nil
+	}
+
 	nextAttempt := attempt + 1
 	if nextAttempt >= MaxParseScoreAttempts {
 		logger.Warn("exhausted retry attempts for missing snapshot, stopping retry chain",
 			slog.Int("total_attempts", nextAttempt),
+			slog.String("reason", reason),
 		)
+		_ = river.RecordOutput(ctx, map[string]any{
+			"reason":        reason,
+			"retry_stopped": true,
+		})
 		// No receipt created. Daily repair will re-enqueue only when
 		// an eligible snapshot becomes available.
 		return nil
 	}
 
 	delay := RetryDelays[nextAttempt]
-	nextTime := time.Now().Add(delay)
+	nextTime := now.Add(delay)
 
 	// Enqueue a follow-up job scheduled at the delay time.
 	if w.Queue == nil {
-		logger.Warn("no queue available, cannot schedule retry")
+		logger.Warn("no queue available, cannot schedule retry", slog.String("reason", reason))
 		return nil
 	}
 	_, err := w.Queue.Insert(ctx, parseargs.ArgsComputeParseScores{
-		InstanceID: instanceID,
-		TenantID:   tenantID,
-		Attempt:    nextAttempt,
+		InstanceID:  instanceID,
+		TenantID:    tenantID,
+		Attempt:     nextAttempt,
+		RetryReason: reason,
 	}, &river.InsertOpts{
 		ScheduledAt: nextTime,
 	})
@@ -344,15 +429,23 @@ func (w *WorkerComputeParseScores) handleNoSnapshot(
 		logger.Error("failed to enqueue retry job",
 			"error", err,
 			"next_attempt", nextAttempt,
+			"reason", reason,
 		)
-		// Don't fail the job — daily repair will catch it.
+		// Don't fail the job; daily repair will catch it.
 		return nil
 	}
 
 	logger.Info("no snapshot available, scheduled retry",
 		slog.Int("next_attempt", nextAttempt),
 		slog.Time("scheduled_at", nextTime),
+		slog.String("reason", reason),
 	)
+	_ = river.RecordOutput(ctx, map[string]any{
+		"reason":          reason,
+		"next_attempt":    nextAttempt,
+		"scheduled_at":    nextTime,
+		"retry_scheduled": true,
+	})
 
 	return nil
 }
