@@ -199,6 +199,26 @@ export function ConsumablesPlayerContent(props: ConsumablesPlayerContentProps) {
     return players;
   }, [context.instance.players]);
 
+  // Roster bar heights: gold spent per player when we have it, but when gold
+  // is missing for more than half of the players that used anything, fall
+  // back to use counts so the strip stays comparable.
+  const rosterBars = useMemo(() => {
+    const goldByPlayer = new Map<string, number>();
+    for (const use of resolvedUses) {
+      if (use.itemId === null) continue;
+      const unitCopper = NO_PRICES.get(use.itemId);
+      if (unitCopper === undefined) continue;
+      goldByPlayer.set(use.player, (goldByPlayer.get(use.player) ?? 0) + unitCopper);
+    }
+    const activeGuids = [...usesByPlayer.entries()].filter(([, uses]) => uses > 0).map(([guid]) => guid);
+    const missingGold = activeGuids.filter((guid) => (goldByPlayer.get(guid) ?? 0) === 0).length;
+    const byGold = activeGuids.length > 0 && missingGold * 2 <= activeGuids.length;
+    const valueOf = (guid: string) =>
+      byGold ? (goldByPlayer.get(guid) ?? 0) : (usesByPlayer.get(guid) ?? 0);
+    const max = Math.max(1, ...roster.map((player) => valueOf(player.guid)));
+    return { byGold, goldByPlayer, valueOf, max };
+  }, [resolvedUses, usesByPlayer, roster]);
+
   // panelOption is a comma-separated token list shared with the panel-level
   // "Raid Wide" checkbox ("cb"); only the pl: token belongs to this view.
   const optionTokens = useMemo(
@@ -345,24 +365,36 @@ export function ConsumablesPlayerContent(props: ConsumablesPlayerContentProps) {
             </div>
           </div>
 
-          <div className="flex shrink-0 items-center gap-0.5 border-y border-border/60 px-2 py-1.5">
-            {roster.map((player, index) => (
-              <button
-                key={player.guid}
-                type="button"
-                title={`${player.name} · ${player.cls?.toLowerCase() ?? "unknown"}${
-                  usesByPlayer.get(player.guid) ? ` · ${usesByPlayer.get(player.guid)} uses` : " · no uses"
-                }`}
-                onClick={() => selectPlayer(player.guid)}
-                className={cn(
-                  "h-4 min-w-0 flex-1 rounded-sm transition-opacity",
-                  index === selectedIndex
-                    ? "opacity-100 ring-1 ring-inset ring-foreground/60"
-                    : "opacity-30 hover:opacity-70",
-                )}
-                style={{ background: classColor(player.cls) }}
-              />
-            ))}
+          <div className="flex h-9 shrink-0 items-end gap-0.5 border-y border-border/60 px-2 pb-1 pt-1.5">
+            {roster.map((player, index) => {
+              const uses = usesByPlayer.get(player.guid) ?? 0;
+              const gold = rosterBars.goldByPlayer.get(player.guid) ?? 0;
+              const value = rosterBars.valueOf(player.guid);
+              const heightPct = Math.max(16, (value / rosterBars.max) * 100);
+              return (
+                <button
+                  key={player.guid}
+                  type="button"
+                  title={`${player.name} · ${player.cls?.toLowerCase() ?? "unknown"}${
+                    uses > 0 ? ` · ${uses} uses` : " · no uses"
+                  }${gold > 0 ? ` · ${formatGold(gold)}` : ""}`}
+                  onClick={() => selectPlayer(player.guid)}
+                  className="flex h-full min-w-0 flex-1 items-end"
+                >
+                  <span
+                    className={cn(
+                      "w-full rounded-sm transition-opacity",
+                      index === selectedIndex
+                        ? "opacity-100 ring-1 ring-foreground/70"
+                        : uses > 0
+                          ? "opacity-70 hover:opacity-100"
+                          : "opacity-30 hover:opacity-60",
+                    )}
+                    style={{ background: classColor(player.cls), height: `${heightPct}%` }}
+                  />
+                </button>
+              );
+            })}
           </div>
 
           <div className="flex shrink-0 items-center justify-between gap-2 border-b border-border/60 px-2 py-1">
