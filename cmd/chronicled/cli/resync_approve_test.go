@@ -3,6 +3,8 @@ package cli
 import (
 	"bufio"
 	"bytes"
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 
@@ -164,6 +166,37 @@ func TestResyncLogURL(t *testing.T) {
 		resyncLogURL("http://localhost:4000", "turtle", logID),
 	)
 	require.Empty(t, resyncLogURL("not a URL", "turtle", logID))
+}
+
+func TestAppendCompletedResync(t *testing.T) {
+	t.Parallel()
+
+	path := filepath.Join(t.TempDir(), "completed.log")
+	first := resynccandidate.Group{
+		ID:     uuid.New(),
+		LogURL: "https://turtle.chronicleclassic.com/logs/first",
+	}
+	second := resynccandidate.Group{
+		ID:     uuid.New(),
+		LogURL: "https://legacy.chronicleclassic.com/logs/second",
+	}
+
+	require.NoError(t, appendCompletedResync(path, first))
+	require.NoError(t, appendCompletedResync(path, second))
+
+	contents, err := os.ReadFile(path)
+	require.NoError(t, err)
+	require.Equal(t, first.LogURL+"\n"+second.LogURL+"\n", string(contents))
+}
+
+func TestAppendCompletedResyncRequiresURL(t *testing.T) {
+	t.Parallel()
+
+	path := filepath.Join(t.TempDir(), "completed.log")
+	err := appendCompletedResync(path, resynccandidate.Group{ID: uuid.New()})
+	require.ErrorContains(t, err, "log URL is empty")
+	_, statErr := os.Stat(path)
+	require.ErrorIs(t, statErr, os.ErrNotExist)
 }
 
 func TestApprovalInsertOpts_IsolateQueue(t *testing.T) {

@@ -41,7 +41,10 @@ import (
 	"github.com/coder/serpent"
 )
 
-const defaultResyncLogBaseURL = "https://legacy.chronicleclassic.com"
+const (
+	defaultResyncLogBaseURL = "https://legacy.chronicleclassic.com"
+	resyncCompletedLogPath  = ".resync-completed.log"
+)
 
 // ResyncCmd returns the CLI command for resyncing (reparsing) log groups whose
 // parser version is older than a target version. By default it runs in dry-run
@@ -224,7 +227,9 @@ Fail-pause behavior (--execute):
 
   Non-TTY:   The queue is paused, running jobs drain to completion, then the
              process exits nonzero. Starting the resync daemon again automatically
-             resumes the persistent queue after preflight validation.`,
+             resumes the persistent queue after preflight validation.
+
+Successful resync URLs are appended to .resync-completed.log for later spot checks.`,
 		Options: options,
 		Handler: func(i *serpent.Invocation) error {
 			ctx, cancel := context.WithCancel(i.Context())
@@ -441,7 +446,7 @@ Fail-pause behavior (--execute):
 					candidate := []resynccandidate.Group{group}
 					enrichResyncGroups(ctx, dbStore, st, logBaseURL, candidate)
 					return candidate[0]
-				})
+				}, recordCompletedResync)
 			}
 
 			// Enqueue one resync job per candidate log group.
@@ -469,9 +474,9 @@ Fail-pause behavior (--execute):
 			defer stopRiverClient(riverClient)
 
 			if isTTY {
-				return runActiveTUI(ctx, riverClient, groups, jobIDs, int(workers))
+				return runActiveTUI(ctx, riverClient, groups, jobIDs, int(workers), recordCompletedResync)
 			}
-			return runActivePlain(ctx, i, riverClient, groups, jobIDs)
+			return runActivePlain(ctx, i, riverClient, groups, jobIDs, recordCompletedResync)
 		},
 	}
 
@@ -696,6 +701,25 @@ func approvalInsertOpts(args chronicle.ArgsResync, queueName string) river.Inser
 	return opts
 }
 
+func recordCompletedResync(group resynccandidate.Group) error {
+	return appendCompletedResync(resyncCompletedLogPath, group)
+}
+
+func appendCompletedResync(path string, group resynccandidate.Group) error {
+	if group.LogURL == "" {
+		return fmt.Errorf("record completed resync %s: log URL is empty", group.ID)
+	}
+	file, err := os.OpenFile(path, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0o600)
+	if err != nil {
+		return fmt.Errorf("open completed resync log %q: %w", path, err)
+	}
+	defer func() { _ = file.Close() }()
+	if _, err := fmt.Fprintln(file, group.LogURL); err != nil {
+		return fmt.Errorf("append completed resync log %q: %w", path, err)
+	}
+	return nil
+}
+
 func runApproveEach(
 	ctx context.Context,
 	i *serpent.Invocation,
@@ -703,6 +727,7 @@ func runApproveEach(
 	queueName string,
 	groups []resynccandidate.Group,
 	enrich func(resynccandidate.Group) resynccandidate.Group,
+	record func(resynccandidate.Group) error,
 ) error {
 	scanner := bufio.NewScanner(i.Stdin)
 	completed := 0
@@ -747,8 +772,11 @@ func runApproveEach(
 			}
 			return fmt.Errorf("resync %s %s: %s", group.ID, job.State, errMsg)
 		}
+		if err := record(group); err != nil {
+			return err
+		}
 		completed++
-		if err := writeOutput(i.Stdout, "Completed %s successfully. Inspect the result before approving the next candidate.\n", group.ID); err != nil {
+		if err := writeOutput(i.Stdout, "Completed %s successfully. URL appended to %s; inspect the result before approving the next candidate.\n", group.ID, resyncCompletedLogPath); err != nil {
 			return err
 		}
 	}
@@ -795,7 +823,14 @@ func isTerminal(i *serpent.Invocation) bool {
 // queue is paused and the TUI enters a PAUSED state. The operator can
 // press 'r' to resume (calls QueueResume); a second failure pauses again.
 // Already-running parses finish safely — only new job fetches are blocked.
-func runActiveTUI(ctx context.Context, client *river.Client[pgx.Tx], groups []resynccandidate.Group, jobIDs map[int64]uuid.UUID, workers int) error {
+func runActiveTUI(
+	ctx context.Context,
+	client *river.Client[pgx.Tx],
+	groups []resynccandidate.Group,
+	jobIDs map[int64]uuid.UUID,
+	workers int,
+	record func(resynccandidate.Group) error,
+) error {
 	var queuePaused atomic.Bool
 	m := resynctui.NewActiveModel(groups, workers)
 	m.ResumeFunc = func() error {
@@ -820,6 +855,13 @@ func runActiveTUI(ctx context.Context, client *river.Client[pgx.Tx], groups []re
 	if !fm.Done {
 		return fmt.Errorf("resync interrupted with jobs still pending")
 	}
+	for _, group := range groups {
+		if status := fm.Jobs[group.ID]; status != nil && status.State == resynctui.JobCompleted {
+			if err := record(group); err != nil {
+				return err
+			}
+		}
+	}
 	if failed := fm.FailedCount(); failed > 0 {
 		return fmt.Errorf("%d log group(s) failed to resync", failed)
 	}
@@ -833,11 +875,27 @@ func writeOutput(w io.Writer, format string, args ...any) error {
 	return nil
 }
 
+func findResyncGroup(groups []resynccandidate.Group, id uuid.UUID) (resynccandidate.Group, bool) {
+	for _, group := range groups {
+		if group.ID == id {
+			return group, true
+		}
+	}
+	return resynccandidate.Group{}, false
+}
+
 // runActivePlain prints plain-text progress for non-TTY environments.
 // On the first failure it pauses the queue, waits for already-running jobs
 // to reach terminal state, then exits nonzero with instructions to rerun
 // by starting the resync daemon again, which automatically resumes the queue.
-func runActivePlain(ctx context.Context, i *serpent.Invocation, client *river.Client[pgx.Tx], groups []resynccandidate.Group, jobIDs map[int64]uuid.UUID) error {
+func runActivePlain(
+	ctx context.Context,
+	i *serpent.Invocation,
+	client *river.Client[pgx.Tx],
+	groups []resynccandidate.Group,
+	jobIDs map[int64]uuid.UUID,
+	record func(resynccandidate.Group) error,
+) error {
 	if err := writeOutput(i.Stdout, "Executing resync for %d log group(s)...\n", len(groups)); err != nil {
 		return err
 	}
@@ -873,6 +931,13 @@ func runActivePlain(ctx context.Context, i *serpent.Invocation, client *river.Cl
 			case rivertype.JobStateCompleted:
 				completed++
 				delete(pending, jobID)
+				group, ok := findResyncGroup(groups, lgID)
+				if !ok {
+					return fmt.Errorf("record completed resync %s: candidate not found", lgID)
+				}
+				if err := record(group); err != nil {
+					return err
+				}
 				if err := writeOutput(i.Stdout, "  ✓ %s\n", lgID); err != nil {
 					return err
 				}

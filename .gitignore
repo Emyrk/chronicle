@@ -104,6 +104,7 @@ PLAN.md
 ignoredlogs
 ignoredlogsv2
 importdata
+.resync-completed.log
 *.pprof
 
 research/.other
