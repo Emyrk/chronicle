@@ -55,9 +55,8 @@ type WorkerResync struct {
 	river.WorkerDefaults[ArgsResync]
 }
 
-// Timeout is unlimited because the wrapper waits for a real log-parse job,
-// including that worker's own timeout and retry policy. The child job remains
-// the source of truth for parse execution limits.
+// Timeout is unlimited because the wrapper waits for a real log-parse job.
+// The child job remains the source of truth for parse execution limits.
 func (w *WorkerResync) Timeout(*river.Job[ArgsResync]) time.Duration {
 	return -1
 }
@@ -206,6 +205,10 @@ func resyncParseInsertOpts(args ArgsLogParse, parseQueue string) river.InsertOpt
 	opts := args.InsertOpts()
 	opts.Queue = parseQueue
 	opts.Pending = true
+	// Parsing writes several independently committed records. If an attempt
+	// fails after a partial write, retrying the same job can hit duplicate keys.
+	// Let the parent resync fail so a fresh invocation performs cleanup first.
+	opts.MaxAttempts = 1
 	// The isolated parse must not reuse an active job from the production
 	// log-parsing queue merely because its args are identical.
 	opts.UniqueOpts.ByQueue = true

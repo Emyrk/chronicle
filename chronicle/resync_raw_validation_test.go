@@ -17,7 +17,7 @@ func TestWorkerResyncTimeout(t *testing.T) {
 	t.Parallel()
 
 	worker := &WorkerResync{}
-	require.Equal(t, time.Duration(-1), worker.Timeout(nil), "wrapper timeout must not preempt the child parse retry policy")
+	require.Equal(t, time.Duration(-1), worker.Timeout(nil), "wrapper timeout must not preempt the child parse")
 }
 
 func TestResyncParseInsertOpts(t *testing.T) {
@@ -31,7 +31,7 @@ func TestResyncParseInsertOpts(t *testing.T) {
 	require.True(t, opts.Pending, "parse job must be staged before parsed data is deleted")
 	require.True(t, opts.UniqueOpts.ByArgs)
 	require.True(t, opts.UniqueOpts.ByQueue, "isolated parse must not reuse a production queue job")
-	require.Equal(t, 2, opts.MaxAttempts, "isolated parse must retain normal log-parse retry semantics")
+	require.Equal(t, 1, opts.MaxAttempts, "isolated parse must fail after a partial write instead of retrying into duplicate keys")
 }
 
 func TestNewArgsLogParseMatchesTenantReparse(t *testing.T) {
