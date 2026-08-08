@@ -11,6 +11,9 @@
 import { useQueries } from "@tanstack/react-query";
 import { Search, X } from "lucide-react";
 import { fetchItemTooltip } from "@/api/gamedata";
+import { useSpell } from "@/api/queries";
+import { SpellIconWithTooltip } from "@/components/ui/SpellIconWithTooltip";
+import { useDatasetId } from "@/hooks/useDatasetId";
 import { cn } from "@/lib/utils";
 import type { ConsumableUse } from "./consumables.processor";
 import { ItemCell } from "./ConsumablesContent";
@@ -190,6 +193,26 @@ function AmbiguousIcon() {
   );
 }
 
+/** The unresolved effect's real spell icon (with its tooltip on hover),
+ * hatched over so it still reads as ambiguous. Falls back to the plain
+ * hatched square while loading or when no spell is known. */
+function AmbiguousSpellIcon({ spellId }: { spellId: number | null }) {
+  const datasetId = useDatasetId();
+  const { data: spell } = useSpell(spellId?.toString() ?? "", datasetId, { enabled: spellId != null });
+  if (spellId == null || !spell) return <AmbiguousIcon />;
+  return (
+    <span className="relative shrink-0">
+      <SpellIconWithTooltip spell={spell} size={18} />
+      <span
+        className="pointer-events-none absolute inset-0 rounded"
+        style={{
+          background: "repeating-linear-gradient(45deg, rgba(0,0,0,.55) 0 3px, transparent 3px 6px)",
+        }}
+      />
+    </span>
+  );
+}
+
 export function AmbiguousSection({
   rows,
   totalAmbiguousUses,
@@ -212,7 +235,7 @@ export function AmbiguousSection({
         <div key={row.key} className="flex items-start gap-2.5">
           <div className="flex min-w-0 flex-1 flex-col gap-1">
             <div className="flex min-w-0 items-center gap-1.5 text-muted-foreground">
-              <AmbiguousIcon />
+              <AmbiguousSpellIcon spellId={row.spellId} />
               <span className="min-w-0 flex-1 truncate text-xs">
                 {row.spellName || "Unknown consumable"}
               </span>
