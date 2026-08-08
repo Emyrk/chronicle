@@ -49,10 +49,12 @@ RESYNC_GOAL_ARGS := $(filter-out $(RESYNC_TARGETS),$(MAKECMDGOALS))
 RESYNC_ASSIGN_ARGS := $(foreach v,$(filter --%,$(.VARIABLES)),$(if $(filter command line,$(origin $(v))),$(v)=$($(v))))
 RESYNC_FORWARD_ARGS := $(strip $(RESYNC_GOAL_ARGS) $(RESYNC_ASSIGN_ARGS))
 
+ifneq ($(filter $(RESYNC_TARGETS),$(MAKECMDGOALS)),)
 ifneq ($(strip $(RESYNC_GOAL_ARGS)),)
 .PHONY: $(RESYNC_GOAL_ARGS)
 $(RESYNC_GOAL_ARGS):
 	@:
+endif
 endif
 
 # Run the resync CLI with the same embedded version metadata as production
