@@ -92,6 +92,8 @@ func TestInstanceDetailsBossCount(t *testing.T) {
 		{name: "epoch onyxia", flavor: database.WoWFlavor{database.FlavorEpoch}, instance: "Onyxia's Lair", bossCount: intPtr(3)},
 		{name: "naxxramas groups multi-unit encounters", flavor: database.WoWFlavor{database.FlavorVanilla}, instance: "Naxxramas", bossCount: intPtr(15)},
 		{name: "gruul groups council members", flavor: database.WoWFlavor{database.FlavorTBC}, instance: "Gruul's Lair", bossCount: intPtr(2)},
+		{name: "vanilla plus scarlet monastery", flavor: database.WoWFlavor{database.FlavorVanilla, database.FlavorVanillaPlus}, instance: "Scarlet Monastery", bossCount: intPtr(8)},
+		{name: "vanilla plus blackwing lair", flavor: database.WoWFlavor{database.FlavorVanilla, database.FlavorVanillaPlus}, instance: "Blackwing Lair", bossCount: intPtr(8)},
 		{name: "instance without speedrun rules", flavor: database.WoWFlavor{database.FlavorVanilla}, instance: "Shadowfang Keep"},
 	} {
 		t.Run(tc.name, func(t *testing.T) {

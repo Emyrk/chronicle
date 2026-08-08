@@ -56,7 +56,9 @@ type CommonFactory struct {
 	// DerivedRankings maps derived instance names to their ranking configuration.
 	// When set alongside DerivedName, each sub-instance gets its own independent
 	// speedrun tracker. Keys must match the names used in DerivedName.
-	DerivedRankings  map[string]func(database.WoWFlavor) *rankings.Rankings
+	DerivedRankings map[string]func(database.WoWFlavor) *rankings.Rankings
+	// BossCount overrides the encounter count inferred from speedrun requirements.
+	BossCount        func(flavor database.WoWFlavor) *int
 	ZoneNames        []string
 	MapIDs           []uint32
 	Hostiles         func(flavor database.WoWFlavor) *identifier.Identifier

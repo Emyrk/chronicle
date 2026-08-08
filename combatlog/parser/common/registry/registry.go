@@ -39,6 +39,8 @@ type Entry struct {
 	HostileEntries map[uint32]instances.Identity
 	// SpeedrunRules holds the speedrun rules captured at registration time.
 	SpeedrunRules *rankings.SpeedrunRules
+	// BossCount overrides the encounter count inferred from SpeedrunRules.
+	BossCount *int
 	// DerivedSpeedrunRules holds per-sub-instance speedrun rules when
 	// the factory uses DerivedRankings (e.g. Lower/Upper Tower of Karazhan).
 	DerivedSpeedrunRules map[string]*rankings.SpeedrunRules
@@ -64,6 +66,11 @@ func FromFlavoredFactory(flavor database.WoWFlavor, f *instances.CommonFactory) 
 		}
 	}
 
+	var bossCount *int
+	if f.BossCount != nil {
+		bossCount = f.BossCount(flavor)
+	}
+
 	entry := Entry{
 		commonFactory:  f,
 		Name:           f.Name,
@@ -72,6 +79,7 @@ func FromFlavoredFactory(flavor database.WoWFlavor, f *instances.CommonFactory) 
 		ZoneNames:      f.ZoneNames,
 		HostileEntries: hostiles,
 		SpeedrunRules:  speedrun,
+		BossCount:      bossCount,
 	}
 
 	// When DerivedRankings are present, collect per-sub-instance speedrun rules
@@ -284,6 +292,9 @@ type InstanceDetail struct {
 // the speedrun rules. Hostile encounter names collapse multi-unit encounters,
 // while the requirement name covers dynamically named encounters.
 func speedrunBossCount(entry *Entry) *int {
+	if entry.BossCount != nil {
+		return entry.BossCount
+	}
 	if entry.SpeedrunRules == nil {
 		return nil
 	}

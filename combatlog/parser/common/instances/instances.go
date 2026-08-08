@@ -72,6 +72,10 @@ var (
 		Name:      "Scarlet Monastery",
 		ZoneNames: []string{"scarlet monastery"},
 		Hostiles:  FromMap(VanillaPlusSMRaidHostiles()),
+		BossCount: func(database.WoWFlavor) *int {
+			count := 8
+			return &count
+		},
 		FlavoredRankings: func(database.WoWFlavor) *rankings.Rankings {
 			return VanillaPlusScarletMonasterySpeedrunRequirements()
 		},
@@ -254,6 +258,13 @@ var (
 		ZoneNames: []string{"blackwing lair", "黑翼之巢"},
 		MapIDs:    []uint32{469},
 		Hostiles:  BlackwingLairHostiles,
+		BossCount: func(fl database.WoWFlavor) *int {
+			if !fl.Has(database.FlavorVanillaPlus) {
+				return nil
+			}
+			count := 8
+			return &count
+		},
 		FlavoredRankings: func(fl database.WoWFlavor) *rankings.Rankings {
 			return &rankings.Rankings{
 				Speedrun: &rankings.SpeedrunRules{
