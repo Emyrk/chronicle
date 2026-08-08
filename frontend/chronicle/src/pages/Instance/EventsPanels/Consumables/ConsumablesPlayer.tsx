@@ -492,7 +492,11 @@ export function ConsumablesPlayerContent(props: ConsumablesPlayerContentProps) {
                   )}
                 </button>
                   </TooltipTrigger>
-                  <TooltipContent side="bottom" className="flex flex-col gap-0.5">
+                  <TooltipContent
+                    side="bottom"
+                    hideArrow
+                    className="flex flex-col gap-0.5 border border-border bg-popover text-popover-foreground shadow-md"
+                  >
                     <div className="flex items-baseline gap-1.5">
                       <span className="text-xs font-medium" style={{ color: classColor(player.cls) }}>
                         {player.name}
