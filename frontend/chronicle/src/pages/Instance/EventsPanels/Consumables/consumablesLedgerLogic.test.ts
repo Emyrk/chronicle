@@ -11,7 +11,7 @@ import {
   NO_PRICES,
   summarizePlayerItemFights,
   type ConsumablePrices,
-} from "./consumablesLedger";
+} from "./consumablesLedgerLogic";
 
 let nextUse = 0;
 function makeUse(overrides: Partial<ConsumableUse>): ConsumableUse {

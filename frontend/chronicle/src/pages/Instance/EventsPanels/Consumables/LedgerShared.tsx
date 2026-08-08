@@ -21,8 +21,8 @@ import {
   formatGold,
   type LedgerAmbiguousRow,
   type LedgerItemRow,
-} from "./consumablesLedger";
-import { fuzzyConsumableMatch, itemIdentity } from "./consumablesTotal";
+} from "./consumablesLedgerLogic";
+import { fuzzyConsumableMatch, itemIdentity } from "./consumablesTotalLogic";
 
 /** Flag token: show every player at once (the merged Consumes Total view). */
 export const VIEW_ALL_TOKEN = "va";

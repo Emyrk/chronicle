@@ -13,7 +13,7 @@ import {
   formatGold,
   summarizePlayerItemFights,
   type PlayerItemNamedEncounterRow,
-} from "./consumablesLedger";
+} from "./consumablesLedgerLogic";
 
 export interface BreakoutPlayerRow {
   guid: string;

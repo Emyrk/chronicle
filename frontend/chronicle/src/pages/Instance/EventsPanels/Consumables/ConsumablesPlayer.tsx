@@ -27,7 +27,7 @@ import {
   formatGold,
   ledgerCoverage,
   NO_PRICES,
-} from "./consumablesLedger";
+} from "./consumablesLedgerLogic";
 import { FloatingIncomingEventsBreakout } from "../IncomingEvents/FloatingIncomingEventsBreakout";
 import { PlayerItemBreakout, type PlayerItemBreakoutData } from "./LedgerItemBreakout";
 import {

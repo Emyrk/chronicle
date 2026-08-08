@@ -5,7 +5,7 @@ import { usePortalContainer } from "@/components/ui/PortalContainerContext";
 import {
   clampBreakoutBodyHeight,
   DEFAULT_BREAKOUT_BODY_HEIGHT,
-} from "./floatingIncomingEventsBreakout.ts";
+} from "./floatingIncomingEventsBreakoutLogic.ts";
 
 interface FloatingIncomingEventsBreakoutProps {
   initialPosition: { x: number; y: number };

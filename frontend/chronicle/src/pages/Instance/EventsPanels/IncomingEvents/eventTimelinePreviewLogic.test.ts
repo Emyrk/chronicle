@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { timelinePreviewPercent, timelinePreviewTimeAtY } from "./eventTimelinePreview";
+import { timelinePreviewPercent, timelinePreviewTimeAtY } from "./eventTimelinePreviewLogic";
 
 describe("event timeline preview mapping", () => {
   it("maps death to the top and the window start to the bottom", () => {

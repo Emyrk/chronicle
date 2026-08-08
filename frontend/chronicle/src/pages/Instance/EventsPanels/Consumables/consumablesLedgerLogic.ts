@@ -16,7 +16,7 @@
  */
 
 import type { ConsumableUse } from "./consumables.processor";
-import { itemIdentity } from "./consumablesTotal";
+import { itemIdentity } from "./consumablesTotalLogic";
 
 /** Unit prices in copper, keyed by item ID. Empty until price data exists. */
 export type ConsumablePrices = ReadonlyMap<number, number>;

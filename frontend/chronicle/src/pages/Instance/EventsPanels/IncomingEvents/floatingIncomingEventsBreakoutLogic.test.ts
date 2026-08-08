@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   clampBreakoutBodyHeight,
   MIN_BREAKOUT_BODY_HEIGHT,
-} from "./floatingIncomingEventsBreakout";
+} from "./floatingIncomingEventsBreakoutLogic";
 
 describe("clampBreakoutBodyHeight", () => {
   it("allows the event body to grow within the viewport", () => {

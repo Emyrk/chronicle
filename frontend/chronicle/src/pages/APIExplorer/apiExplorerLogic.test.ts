@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest"
-import { buildRequestURL, endpointsFromDocument, type OpenAPIDocument } from "./apiExplorer"
+import { buildRequestURL, endpointsFromDocument, type OpenAPIDocument } from "./apiExplorerLogic"
 
 describe("API explorer helpers", () => {
   it("extracts documented operations", () => {

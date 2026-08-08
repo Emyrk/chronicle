@@ -9,7 +9,7 @@ import {
   parameterKey,
   type APIEndpoint,
   type OpenAPIDocument,
-} from "./apiExplorer"
+} from "./apiExplorerLogic"
 
 const SPEC_URL = "/api/external/v1/openapi.json"
 

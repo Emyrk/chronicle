@@ -19,7 +19,7 @@ import {
   formatGold,
   ledgerCoverage,
   NO_PRICES,
-} from "./consumablesLedger";
+} from "./consumablesLedgerLogic";
 import { LedgerItemBreakout, type LedgerItemBreakoutData } from "./LedgerItemBreakout";
 import {
   AmbiguousSection,

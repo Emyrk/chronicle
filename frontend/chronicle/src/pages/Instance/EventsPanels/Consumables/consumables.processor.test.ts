@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import type { ConsumeProcessorEvent, ProcessorContext } from "../processorTypes";
 import { consumableDisplayName, consumablesProcessor, consumablesTotalProcessor } from "./consumables.processor";
-import { aggregateConsumablesTotal, filterConsumablesTotal, fuzzyConsumableMatch } from "./consumablesTotal";
+import { aggregateConsumablesTotal, filterConsumablesTotal, fuzzyConsumableMatch } from "./consumablesTotalLogic";
 
 function createContext(overrides?: Partial<ProcessorContext>): ProcessorContext {
   return {

@@ -22,7 +22,7 @@ import {
   aggregateConsumablesTotal,
   filterConsumablesTotal,
   type ConsumableCount,
-} from "./consumablesTotal.ts";
+} from "./consumablesTotalLogic.ts";
 
 interface PossibleBreakoutState {
   key: string;
