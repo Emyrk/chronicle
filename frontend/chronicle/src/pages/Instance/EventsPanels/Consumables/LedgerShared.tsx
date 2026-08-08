@@ -29,9 +29,10 @@ export function CoverageLine({ label, tone }: { label: string; tone: keyof typeo
 export function UsesBar({ fraction, subtitle }: { fraction: number; subtitle: string }) {
   return (
     <div className="flex items-center gap-2 pl-6">
-      <div className="h-1 flex-1 overflow-hidden rounded-full bg-muted/40">
+      {/* The dark track stays full-width so the omitted share reads as empty space. */}
+      <div className="h-1.5 flex-1 overflow-hidden rounded-sm bg-background/70">
         <div
-          className="h-full rounded-full bg-foreground/30"
+          className="h-full rounded-sm bg-foreground/30"
           style={{ width: `${Math.max(0, Math.min(1, fraction)) * 100}%` }}
         />
       </div>
