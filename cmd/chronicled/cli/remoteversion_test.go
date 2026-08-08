@@ -46,14 +46,33 @@ func TestResolveParserVersionURL(t *testing.T) {
 	}
 }
 
-func TestCheckRemoteParserVersion_Match(t *testing.T) {
+func TestParserReleaseVersion(t *testing.T) {
+	t.Parallel()
+
+	for _, tt := range []struct {
+		name  string
+		build string
+		want  string
+	}{
+		{name: "production build", build: "v0.0.775+v0.0.496-537-ga385662b", want: "v0.0.775"},
+		{name: "short commit", build: "v0.0.775+a385662bc", want: "v0.0.775"},
+		{name: "release only", build: "v0.0.775", want: "v0.0.775"},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			require.Equal(t, tt.want, parserReleaseVersion(tt.build))
+		})
+	}
+}
+
+func TestCheckRemoteParserVersion_MatchReleaseWithDifferentCommit(t *testing.T) {
 	t.Parallel()
 
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		require.Equal(t, "/api/v1/parser-version", r.URL.Path)
 		w.Header().Set("Content-Type", "application/json")
 		_ = json.NewEncoder(w).Encode(chroniclesdk.ParserVersionResponse{
-			Version: version.ExactParserVersion(),
+			Version: version.GitTag + "+different-commit",
 		})
 	}))
 	defer srv.Close()
@@ -68,7 +87,7 @@ func TestCheckRemoteParserVersion_Mismatch(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
 		_ = json.NewEncoder(w).Encode(chroniclesdk.ParserVersionResponse{
-			Version: "v0.0.0+different",
+			Version: "v999.0.0+different",
 		})
 	}))
 	defer srv.Close()

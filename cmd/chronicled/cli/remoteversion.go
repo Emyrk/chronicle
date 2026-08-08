@@ -16,8 +16,9 @@ import (
 const remoteVersionTimeout = 10 * time.Second
 
 // checkRemoteParserVersion fetches GET <baseURL>/api/v1/parser-version from
-// the remote Chronicle server and returns an error if the remote version does
-// not exactly match the local ExactParserVersion().
+// the remote Chronicle server and returns an error if its release version does
+// not match the local GitTag. Commit metadata may differ between builds of the
+// same release and is intentionally ignored for this resync safety check.
 func checkRemoteParserVersion(ctx context.Context, rawURL string) error {
 	endpoint, err := resolveParserVersionURL(rawURL)
 	if err != nil {
@@ -45,11 +46,21 @@ func checkRemoteParserVersion(ctx context.Context, rawURL string) error {
 		return fmt.Errorf("decode remote parser version: %w", err)
 	}
 
-	local := version.ExactParserVersion()
-	if body.Version != local {
-		return fmt.Errorf("parser version mismatch: local=%q remote=%q", local, body.Version)
+	localBuild := version.ExactParserVersion()
+	localRelease := version.GitTag
+	remoteRelease := parserReleaseVersion(body.Version)
+	if remoteRelease != localRelease {
+		return fmt.Errorf(
+			"parser version mismatch: local=%q remote=%q (builds: local=%q remote=%q)",
+			localRelease, remoteRelease, localBuild, body.Version,
+		)
 	}
 	return nil
+}
+
+func parserReleaseVersion(buildVersion string) string {
+	release, _, _ := strings.Cut(buildVersion, "+")
+	return release
 }
 
 // resolveParserVersionURL normalises a base URL and appends the

@@ -129,7 +129,7 @@ func ResyncCmd() *serpent.Command {
 		},
 		{
 			Name:        "Remote URL",
-			Description: "Base URL of the remote Chronicle server. Required in --execute mode to verify parser version match before destructive operations.",
+			Description: "Base URL of the remote Chronicle server. Required in --execute mode to verify the parser release version before destructive operations.",
 			Flag:        "remote-url",
 			Env:         "CHRONICLE_REMOTE_URL",
 			Default:     "",
