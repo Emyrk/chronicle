@@ -9,16 +9,21 @@ import (
 func TestConsumableCatalog(t *testing.T) {
 	t.Parallel()
 
-	catalog := NewConsumableCatalog(
+	catalog := NewConsumableCatalogWithItemNames(
 		[]int32{13442, 13461},
+		map[int32]string{13442: "Mighty Rage Potion"},
 		map[SpellID][]int32{
 			17528: {13442},
 			17538: {13461, 99999},
 		},
+		nil,
 	)
 
 	require.True(t, catalog.IsConsumableItem(13442))
 	require.False(t, catalog.IsConsumableItem(12345))
+	name, ok := catalog.ConsumableItemName(13442)
+	require.True(t, ok)
+	require.Equal(t, "Mighty Rage Potion", name)
 
 	items, ok := catalog.IsConsumableBuff(17538)
 	require.True(t, ok)

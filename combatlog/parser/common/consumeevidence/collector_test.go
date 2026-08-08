@@ -25,6 +25,15 @@ func (c *testCatalog) IsConsumableItem(itemID int32) bool {
 	return c.items[itemID]
 }
 
+func (c *testCatalog) ConsumableItemName(itemID int32) (string, bool) {
+	names := map[int32]string{
+		13461: "Greater Stoneshield Potion",
+		13813: "Blessed Sunfruit Juice",
+	}
+	name, ok := names[itemID]
+	return name, ok
+}
+
 func (c *testCatalog) IsConsumableBuff(spellID chrondbc.SpellID) ([]int32, bool) {
 	ids, ok := c.buffs[spellID]
 	return ids, ok
@@ -126,6 +135,8 @@ func TestDirectItemEvidence(t *testing.T) {
 	assert.Equal(t, player, ev.Player)
 	require.NotNil(t, ev.ItemID)
 	assert.Equal(t, itemID, *ev.ItemID)
+	require.NotNil(t, ev.ItemName)
+	assert.Equal(t, "Greater Stoneshield Potion", *ev.ItemName)
 	require.NotNil(t, ev.ConsumedAtUnixMs)
 	assert.Equal(t, ts.UnixMilli(), *ev.ConsumedAtUnixMs)
 	assert.Equal(t, ts.UnixMilli(), ev.ObservedAtUnixMs)

@@ -5693,6 +5693,7 @@ export interface ReusableConsume {
   evidenceId: string;
   player: string;
   itemId: number | null;
+  itemName: string | null;
   candidateItemIds: number[];
   candidateItemIdsCount: number;
   spell: ReusableConsumeSpell;
@@ -5726,6 +5727,7 @@ export interface ReusableConsume {
  *   12: amount (optional int32)
  *   13: resourceType (optional string)
  *   14: isProjection (bool)
+ *   15: itemName (optional string)
  */
 function readInt64Number(data: Uint8Array, offset: number): { value: number; bytesRead: number } {
   const decoded = readVarint64(data, offset);
@@ -5751,6 +5753,7 @@ export class ConsumeDecoder {
     evidenceId: "",
     player: "",
     itemId: null,
+    itemName: null,
     candidateItemIds: [],
     candidateItemIdsCount: 0,
     spell: this.reusableSpell,
@@ -5778,6 +5781,7 @@ export class ConsumeDecoder {
     msg.evidenceId = "";
     msg.player = "";
     msg.itemId = null;
+    msg.itemName = null;
     msg.candidateItemIdsCount = 0;
     spell.id = 0;
     spell.name = "";
@@ -5894,6 +5898,10 @@ export class ConsumeDecoder {
         } else if (fieldNumber === 13) {
           // resourceType (optional string)
           msg.resourceType = this.textDecoder.decode(data.subarray(offset, offset + len));
+          offset += len;
+        } else if (fieldNumber === 15) {
+          // itemName (optional string)
+          msg.itemName = this.textDecoder.decode(data.subarray(offset, offset + len));
           offset += len;
         } else {
           offset += len;

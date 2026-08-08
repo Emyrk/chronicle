@@ -360,6 +360,7 @@ describe("allActivityProcessor", () => {
       evidenceId: "evidence-456",
       player: "player",
       itemId: 13444,
+      itemName: "Major Mana Potion",
       candidateItemIds: [13444, 20002],
       candidateItemIdsCount: 2,
       spell: { id: 24361, name: "Major Mana Potion" },

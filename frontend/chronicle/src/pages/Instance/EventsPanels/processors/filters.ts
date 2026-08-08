@@ -48,6 +48,7 @@ function toValues(value: string | string[]): string[] {
 }
 
 function getEventAbilityName(event: ProcessorEvent): string | null {
+  if (event.type === "consume") return event.itemName;
   if ("spellName" in event && typeof event.spellName === "string") return event.spellName;
   if ("sourceName" in event && typeof event.sourceName === "string") return event.sourceName;
   if ("spell" in event && event.spell && typeof event.spell.name === "string") return event.spell.name;
@@ -55,6 +56,7 @@ function getEventAbilityName(event: ProcessorEvent): string | null {
 }
 
 function getEventAbilityId(event: ProcessorEvent): number | null {
+  if (event.type === "consume") return event.itemId;
   if ("spellId" in event && typeof event.spellId === "number") return event.spellId;
   if ("spell" in event && event.spell && typeof event.spell.id === "number") return event.spell.id;
   return null;

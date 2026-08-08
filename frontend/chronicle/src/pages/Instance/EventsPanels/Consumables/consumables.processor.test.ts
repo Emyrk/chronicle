@@ -28,6 +28,7 @@ function consumeEvent(overrides: Partial<ConsumeProcessorEvent>): ConsumeProcess
     evidenceId: "ev-1",
     player: "p1",
     itemId: null,
+    itemName: null,
     candidateItemIds: [],
     candidateItemIdsCount: 0,
     spell: { id: 0, name: "" },

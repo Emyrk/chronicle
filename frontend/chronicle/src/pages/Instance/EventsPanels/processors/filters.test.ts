@@ -79,6 +79,7 @@ function createConsumeEvent(overrides: Partial<ConsumeProcessorEvent> = {}): Con
     evidenceId: "ev-1",
     player: "0x0000000000000001",
     itemId: null,
+    itemName: null,
     candidateItemIds: [],
     candidateItemIdsCount: 0,
     spell: { id: 0, name: "" },
@@ -128,6 +129,45 @@ describe("evaluateFilters", () => {
       { type: "ability_id", value: "133", negate: true },
     ];
     expect(evaluateFilters(filters, createDamageEvent(), createContext())).toBe(false);
+  });
+
+  it("matches consume item names instead of consume spell names", () => {
+    const event = createConsumeEvent({
+      itemName: "Potion of Speed",
+      spell: { id: 17538, name: "Haste" },
+    });
+
+    expect(evaluateFilters([{ type: "ability_name", value: "Potion of Speed" }], event, createContext())).toBe(true);
+    expect(evaluateFilters([{ type: "ability_name", value: "Haste" }], event, createContext())).toBe(false);
+  });
+
+  it("does not fall back to consume spell names when the item name is unknown", () => {
+    const event = createConsumeEvent({
+      itemName: null,
+      spell: { id: 17538, name: "Haste" },
+    });
+
+    expect(evaluateFilters([{ type: "ability_name", value: "haste" }], event, createContext())).toBe(false);
+  });
+
+  it("matches consume item IDs instead of consume spell IDs", () => {
+    const event = createConsumeEvent({
+      itemId: 13461,
+      itemName: "Greater Stoneshield Potion",
+      spell: { id: 17538, name: "Greater Stoneshield" },
+    });
+
+    expect(evaluateFilters([{ type: "ability_id", value: "13461" }], event, createContext())).toBe(true);
+    expect(evaluateFilters([{ type: "ability_id", value: "17538" }], event, createContext())).toBe(false);
+  });
+
+  it("does not fall back to consume spell IDs when the item ID is unknown", () => {
+    const event = createConsumeEvent({
+      itemId: null,
+      spell: { id: 17538, name: "Haste" },
+    });
+
+    expect(evaluateFilters([{ type: "ability_id", value: "17538" }], event, createContext())).toBe(false);
   });
 
   it("supports OR combinator between filters", () => {

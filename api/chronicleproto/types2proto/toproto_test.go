@@ -43,12 +43,14 @@ func TestConsume(t *testing.T) {
 	amount := int32(45)
 	resourceType := "Rage"
 	itemID := int32(13442)
+	itemName := "Mighty Rage Potion"
 	got := Consume(ts, 7, &messages.Consume{
 		MessageBase:      messages.Base(ts, messages.WithSynthetic()),
 		ConsumeID:        "consume-a",
 		EvidenceID:       "evidence-aura",
 		Player:           guid.GUID(1),
 		ItemID:           &itemID,
+		ItemName:         &itemName,
 		CandidateItemIDs: []int32{13442, 13443},
 		SpellData:        &chrondbc.Spell{ID: 17528},
 		Kind:             messages.EvidenceKindResource,
@@ -62,6 +64,7 @@ func TestConsume(t *testing.T) {
 
 	require.Equal(t, "consume-a", got.ConsumeId)
 	require.Equal(t, "evidence-aura", got.EvidenceId)
+	require.Equal(t, &itemName, got.ItemName)
 	require.Equal(t, &resourceType, got.ResourceType)
 	require.Equal(t, &consumedAt, got.ConsumedAtUnixMilli)
 	require.Equal(t, []int32{13442, 13443}, got.CandidateItemIds)

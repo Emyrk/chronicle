@@ -2337,6 +2337,7 @@ type Consume struct {
 	Amount              *int32                 `protobuf:"varint,12,opt,name=amount,proto3,oneof" json:"amount,omitempty"`                           // heal/resource/damage amount
 	ResourceType        *string                `protobuf:"bytes,13,opt,name=resourceType,proto3,oneof" json:"resourceType,omitempty"`                // resource type string (matches ResourceChange.resourceType)
 	IsProjection        bool                   `protobuf:"varint,14,opt,name=isProjection,proto3" json:"isProjection,omitempty"`                     // true when projected from prior encounter
+	ItemName            *string                `protobuf:"bytes,15,opt,name=itemName,proto3,oneof" json:"itemName,omitempty"`                        // item name when itemId is known
 	unknownFields       protoimpl.UnknownFields
 	sizeCache           protoimpl.SizeCache
 }
@@ -2467,6 +2468,13 @@ func (x *Consume) GetIsProjection() bool {
 		return x.IsProjection
 	}
 	return false
+}
+
+func (x *Consume) GetItemName() string {
+	if x != nil && x.ItemName != nil {
+		return *x.ItemName
+	}
+	return ""
 }
 
 type CombatantGearSlot struct {
@@ -2867,7 +2875,7 @@ const file_chronicle_proto_rawDesc = "" +
 	"\x06amount\x18\b \x01(\x05R\x06amount\x12\x1c\n" +
 	"\testimated\x18\t \x01(\bR\testimatedB\x12\n" +
 	"\x10_damageSpellDataB\x12\n" +
-	"\x10_absorbSpellData\"\xab\x05\n" +
+	"\x10_absorbSpellData\"\xd9\x05\n" +
 	"\aConsume\x12-\n" +
 	"\x04meta\x18\x01 \x01(\v2\x19.chronicleproto.EventMetaR\x04meta\x12\x1c\n" +
 	"\tconsumeId\x18\x02 \x01(\tR\tconsumeId\x12\x1e\n" +
@@ -2887,13 +2895,15 @@ const file_chronicle_proto_rawDesc = "" +
 	"\x13observedAtUnixMilli\x18\v \x01(\x03R\x13observedAtUnixMilli\x12\x1b\n" +
 	"\x06amount\x18\f \x01(\x05H\x03R\x06amount\x88\x01\x01\x12'\n" +
 	"\fresourceType\x18\r \x01(\tH\x04R\fresourceType\x88\x01\x01\x12\"\n" +
-	"\fisProjection\x18\x0e \x01(\bR\fisProjectionB\t\n" +
+	"\fisProjection\x18\x0e \x01(\bR\fisProjection\x12\x1f\n" +
+	"\bitemName\x18\x0f \x01(\tH\x05R\bitemName\x88\x01\x01B\t\n" +
 	"\a_itemIdB\f\n" +
 	"\n" +
 	"_spellDataB\x16\n" +
 	"\x14_consumedAtUnixMilliB\t\n" +
 	"\a_amountB\x0f\n" +
-	"\r_resourceType\"\xa8\x01\n" +
+	"\r_resourceTypeB\v\n" +
+	"\t_itemName\"\xa8\x01\n" +
 	"\x11CombatantGearSlot\x12\x16\n" +
 	"\x06itemId\x18\x01 \x01(\x05R\x06itemId\x12!\n" +
 	"\tenchantId\x18\x02 \x01(\x05H\x00R\tenchantId\x88\x01\x01\x123\n" +

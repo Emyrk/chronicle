@@ -639,6 +639,7 @@ type Consume struct {
 	EvidenceID       string             // unique observation identifier
 	Player           guid.GUID          // player GUID
 	ItemID           *int32             // item ID when known
+	ItemName         *string            // item name when ItemID is known
 	CandidateItemIDs []int32            // possible items when ambiguous
 	SpellData        *chrondbc.Spell    // spell data if available
 	Kind             EvidenceKind       // how this evidence was observed

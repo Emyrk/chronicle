@@ -465,6 +465,7 @@ func Consume(from time.Time, idx int32, ev *messages.Consume) *chronicleproto.Co
 		EvidenceId:          ev.EvidenceID,
 		Player:              ev.Player.String(),
 		ItemId:              ev.ItemID,
+		ItemName:            ev.ItemName,
 		CandidateItemIds:    ev.CandidateItemIDs,
 		SpellData:           SpellData(ev.SpellData),
 		Kind:                chronicleproto.EvidenceKind(ev.Kind),

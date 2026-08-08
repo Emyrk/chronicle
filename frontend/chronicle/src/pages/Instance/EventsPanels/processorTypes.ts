@@ -382,6 +382,7 @@ export interface ConsumeProcessorEvent extends EventMeta {
   evidenceId: string;
   player: string;
   itemId: number | null;
+  itemName: string | null;
   candidateItemIds: number[];
   candidateItemIdsCount: number;
   spell: { id: number; name: string };

@@ -297,6 +297,7 @@ message Consume {
   optional int32 amount = 12;              // heal/resource/damage amount
   optional string resourceType = 13;       // resource type string (matches ResourceChange.resourceType)
   bool isProjection = 14;                  // true when projected from prior encounter
+  optional string itemName = 15;           // item name when itemId is known
 }
 
 message CombatantGearSlot {

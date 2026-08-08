@@ -42,6 +42,8 @@ var _ instancehook.Hook = (*Collector)(nil)
 type ConsumableCatalog interface {
 	// IsConsumableItem returns true if itemID is a known consumable.
 	IsConsumableItem(itemID int32) bool
+	// ConsumableItemName returns the item name when known.
+	ConsumableItemName(itemID int32) (string, bool)
 	// IsConsumableBuff returns true if spellID is a known consumable buff.
 	// When true, candidateItemIDs contains the item IDs that can produce it.
 	IsConsumableBuff(spellID chrondbc.SpellID) (candidateItemIDs []int32, ok bool)
@@ -98,6 +100,17 @@ func NewCollector(auraTracker *auras.Tracking, shared *Tracker) *Collector {
 // fight's event stream.
 func (c *Collector) SetEmit(fn func(*messages.Consume)) {
 	c.emit = fn
+}
+
+func (c *Collector) emitConsume(ev *messages.Consume) {
+	if ev.ItemID != nil && ev.ItemName == nil {
+		if catalog := c.shared.Catalog(); catalog != nil {
+			if itemName, ok := catalog.ConsumableItemName(*ev.ItemID); ok {
+				ev.ItemName = &itemName
+			}
+		}
+	}
+	c.emit(ev)
 }
 
 // ProcessMessage emits evidence into the active encounter for messages that
@@ -180,7 +193,7 @@ func (c *Collector) emitHealEvidence(healMsg *messages.Heal) {
 
 	amount := healMsg.Amount + healMsg.Overheal
 	resourceType := "Health"
-	c.emit(&messages.Consume{
+	c.emitConsume(&messages.Consume{
 		MessageBase:      messages.Base(ts),
 		ConsumeID:        consumeID,
 		EvidenceID:       evidenceID,
@@ -208,7 +221,7 @@ func (c *Collector) emitDirectEvidence(sg *messages.SpellGo) {
 		return
 	}
 
-	c.emit(&messages.Consume{
+	c.emitConsume(&messages.Consume{
 		MessageBase:      messages.Base(ts),
 		ConsumeID:        consumeID,
 		EvidenceID:       evidenceID,
@@ -266,7 +279,7 @@ func (c *Collector) emitAuraEvidence(auraMsg *messages.Aura) {
 		return
 	}
 
-	c.emit(&messages.Consume{
+	c.emitConsume(&messages.Consume{
 		MessageBase:      messages.Base(ts),
 		ConsumeID:        consumeID,
 		EvidenceID:       evidenceID,
@@ -380,7 +393,7 @@ func (c *Collector) emitProjection(ts time.Time) {
 				if !c.isDuplicateEvidence(directEvidenceID) {
 					consumedAt := direct.ts.UnixMilli()
 					projectedItemID := direct.itemID
-					c.emit(&messages.Consume{
+					c.emitConsume(&messages.Consume{
 						MessageBase:      messages.Base(ts, messages.WithSynthetic()),
 						ConsumeID:        consumeID,
 						EvidenceID:       directEvidenceID,
@@ -404,7 +417,7 @@ func (c *Collector) emitProjection(ts time.Time) {
 			if len(candidateItems) > 1 {
 				confidence = messages.ConfidenceAmbiguous
 			}
-			c.emit(&messages.Consume{
+			c.emitConsume(&messages.Consume{
 				MessageBase:      messages.Base(ts, messages.WithSynthetic()),
 				ConsumeID:        consumeID,
 				EvidenceID:       evidenceID,
