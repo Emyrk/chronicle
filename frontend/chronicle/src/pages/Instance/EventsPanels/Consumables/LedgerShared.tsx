@@ -12,27 +12,32 @@ import { useQueries } from "@tanstack/react-query";
 import { Search, X } from "lucide-react";
 import { fetchItemTooltip } from "@/api/gamedata";
 import { cn } from "@/lib/utils";
+import type { ConsumableUse } from "./consumables.processor";
 import { ItemCell } from "./ConsumablesContent";
 import {
   formatGold,
-  type ConsumablesLedger,
   type LedgerAmbiguousRow,
   type LedgerItemRow,
 } from "./consumablesLedger";
-import { fuzzyConsumableMatch } from "./consumablesTotal";
+import { fuzzyConsumableMatch, itemIdentity } from "./consumablesTotal";
 
 /**
- * Fuzzy-filter a ledger's rows by item name (or id). Item names come from
- * lazily fetched tooltips, so they load on the first keystroke. An ambiguous
- * bucket stays whole when its effect name or any candidate item matches.
+ * Fuzzy-filter resolved uses by item name (or id). Filtering happens at the
+ * use level, BEFORE aggregation, so everything derived from it — rows, header
+ * totals, roster bar heights, coverage — reacts to the filter. Item names
+ * come from lazily fetched tooltips, so they load on the first keystroke. An
+ * ambiguous use matches (and its bucket stays whole) when its effect name or
+ * any candidate item matches.
  */
 // eslint-disable-next-line react-refresh/only-export-components
-export function useFilteredLedger(ledger: ConsumablesLedger, filter: string): ConsumablesLedger {
+export function useFilteredUses(uses: ConsumableUse[], filter: string): ConsumableUse[] {
   const itemIds = [
-    ...new Set([
-      ...ledger.rows.map((row) => row.itemId),
-      ...ledger.ambiguous.flatMap((row) => row.candidateItemIds),
-    ]),
+    ...new Set(
+      uses.flatMap((use) => {
+        const identified = itemIdentity(use).itemId;
+        return identified !== null ? [identified] : use.candidateItemIds;
+      }),
+    ),
   ];
   const itemQueries = useQueries({
     queries: itemIds.map((itemId) => ({
@@ -45,7 +50,7 @@ export function useFilteredLedger(ledger: ConsumablesLedger, filter: string): Co
   });
 
   const query = filter.trim();
-  if (!query) return ledger;
+  if (!query) return uses;
 
   const itemNames = new Map<number, string>();
   itemIds.forEach((itemId, index) => {
@@ -53,19 +58,17 @@ export function useFilteredLedger(ledger: ConsumablesLedger, filter: string): Co
     if (name) itemNames.set(itemId, name);
   });
 
-  return {
-    ...ledger,
-    rows: ledger.rows.filter((row) =>
-      fuzzyConsumableMatch(query, [itemNames.get(row.itemId) ?? "", row.itemId.toString()]),
-    ),
-    ambiguous: ledger.ambiguous.filter((row) =>
-      fuzzyConsumableMatch(query, [
-        row.spellName,
-        row.spellId?.toString() ?? "",
-        ...row.candidateItemIds.flatMap((itemId) => [itemNames.get(itemId) ?? "", itemId.toString()]),
-      ]),
-    ),
-  };
+  return uses.filter((use) => {
+    const identified = itemIdentity(use).itemId;
+    if (identified !== null) {
+      return fuzzyConsumableMatch(query, [itemNames.get(identified) ?? "", identified.toString()]);
+    }
+    return fuzzyConsumableMatch(query, [
+      use.spellName,
+      use.spellId?.toString() ?? "",
+      ...use.candidateItemIds.flatMap((itemId) => [itemNames.get(itemId) ?? "", itemId.toString()]),
+    ]);
+  });
 }
 
 export function LedgerFilterInput({ value, onChange }: { value: string; onChange: (value: string) => void }) {

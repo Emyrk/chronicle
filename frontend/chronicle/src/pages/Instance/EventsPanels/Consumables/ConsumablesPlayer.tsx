@@ -29,7 +29,7 @@ import {
 } from "./consumablesLedger";
 import { FloatingIncomingEventsBreakout } from "../IncomingEvents/FloatingIncomingEventsBreakout";
 import { PlayerItemBreakout, type PlayerItemBreakoutData } from "./LedgerItemBreakout";
-import { AmbiguousSection, LedgerFilterInput, LedgerRow, useFilteredLedger } from "./LedgerShared";
+import { AmbiguousSection, LedgerFilterInput, LedgerRow, useFilteredUses } from "./LedgerShared";
 
 const PLAYER_TOKEN = "pl:";
 
@@ -172,13 +172,18 @@ export function ConsumablesPlayerContent(props: ConsumablesPlayerContentProps) {
     [cachedResult, disambiguationMap],
   );
 
+  // Filtering happens before any aggregation so the roster bars, header
+  // totals, and combobox counts all react to the filter, not just the rows.
+  const [filter, setFilter] = useState("");
+  const filteredUses = useFilteredUses(resolvedUses, filter);
+
   const usesByPlayer = useMemo(() => {
     const counts = new Map<string, number>();
-    for (const use of resolvedUses) {
+    for (const use of filteredUses) {
       counts.set(use.player, (counts.get(use.player) ?? 0) + 1);
     }
     return counts;
-  }, [resolvedUses]);
+  }, [filteredUses]);
 
   const roster = useMemo(() => {
     const players = Object.entries(context.instance.players ?? {}).map(([guid, player]) => ({
@@ -197,7 +202,7 @@ export function ConsumablesPlayerContent(props: ConsumablesPlayerContentProps) {
   // back to use counts so the strip stays comparable.
   const rosterBars = useMemo(() => {
     const goldByPlayer = new Map<string, number>();
-    for (const use of resolvedUses) {
+    for (const use of filteredUses) {
       if (use.itemId === null) continue;
       const unitCopper = NO_PRICES.get(use.itemId);
       if (unitCopper === undefined) continue;
@@ -210,7 +215,7 @@ export function ConsumablesPlayerContent(props: ConsumablesPlayerContentProps) {
       byGold ? (goldByPlayer.get(guid) ?? 0) : (usesByPlayer.get(guid) ?? 0);
     const max = Math.max(1, ...roster.map((player) => valueOf(player.guid)));
     return { byGold, goldByPlayer, valueOf, max };
-  }, [resolvedUses, usesByPlayer, roster]);
+  }, [filteredUses, usesByPlayer, roster]);
 
   // panelOption is a comma-separated token list shared with the panel-level
   // "Raid Wide" checkbox ("cb"); only the pl: token belongs to this view.
@@ -286,16 +291,13 @@ export function ConsumablesPlayerContent(props: ConsumablesPlayerContentProps) {
   const ledger = useMemo(
     () =>
       aggregateConsumablesLedger(
-        resolvedUses.filter((use) => use.player === selected?.guid),
+        filteredUses.filter((use) => use.player === selected?.guid),
         NO_PRICES,
       ),
-    [resolvedUses, selected?.guid],
+    [filteredUses, selected?.guid],
   );
 
   const coverage = ledgerCoverage(ledger);
-
-  const [filter, setFilter] = useState("");
-  const filteredLedger = useFilteredLedger(ledger, filter);
 
   const gapParts: string[] = [];
   if (coverage.showGold && ledger.unpricedRows > 0) gapParts.push(`${ledger.unpricedRows} unpriced`);
@@ -467,38 +469,34 @@ export function ConsumablesPlayerContent(props: ConsumablesPlayerContentProps) {
 
           {ledger.totalUses === 0 ? (
             <div className="py-4 text-center text-xs text-muted-foreground">
-              {loading ? "Loading..." : "No consumable uses recorded for this player"}
+              {loading
+                ? "Loading..."
+                : filter.trim()
+                  ? <>No consumes match “{filter}”</>
+                  : "No consumable uses recorded for this player"}
             </div>
           ) : (
             <ScrollArea className="min-h-0 flex-1">
               {/* Right gutter so rows don't sit under the overlay scrollbar. */}
               <div className="pr-2.5">
-              {filteredLedger.rows.length === 0 && filteredLedger.ambiguous.length === 0 ? (
-                <div className="py-4 text-center text-xs text-muted-foreground">
-                  No consumes match “{filter}”
-                </div>
-              ) : (
-                <>
-                  <div className="flex flex-col py-1">
-                    {filteredLedger.rows.map((row) => (
-                      <LedgerRow
-                        key={row.key}
-                        row={row}
-                        maxUses={ledger.maxUses}
-                        subtitle={`${row.encounters} fight${row.encounters === 1 ? "" : "s"}`}
-                        showGold={coverage.showGold}
-                        onClick={(event) => toggleBreakout(row.itemId, event.currentTarget)}
-                        selected={breakouts.some((b) => b.key === `${selected.guid}:${row.itemId}`)}
-                      />
-                    ))}
-                  </div>
-                  <AmbiguousSection
-                    rows={filteredLedger.ambiguous}
-                    totalAmbiguousUses={filteredLedger.ambiguous.reduce((sum, row) => sum + row.uses, 0)}
+              <div className="flex flex-col py-1">
+                {ledger.rows.map((row) => (
+                  <LedgerRow
+                    key={row.key}
+                    row={row}
+                    maxUses={ledger.maxUses}
+                    subtitle={`${row.encounters} fight${row.encounters === 1 ? "" : "s"}`}
                     showGold={coverage.showGold}
+                    onClick={(event) => toggleBreakout(row.itemId, event.currentTarget)}
+                    selected={breakouts.some((b) => b.key === `${selected.guid}:${row.itemId}`)}
                   />
-                </>
-              )}
+                ))}
+              </div>
+              <AmbiguousSection
+                rows={ledger.ambiguous}
+                totalAmbiguousUses={ledger.ambiguousUses}
+                showGold={coverage.showGold}
+              />
               </div>
             </ScrollArea>
           )}

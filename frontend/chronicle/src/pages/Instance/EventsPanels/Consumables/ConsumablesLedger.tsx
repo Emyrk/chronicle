@@ -26,7 +26,7 @@ import {
   CoverageLine,
   LedgerFilterInput,
   LedgerRow,
-  useFilteredLedger,
+  useFilteredUses,
 } from "./LedgerShared";
 
 type ConsumablesLedgerContentProps = PanelRenderProps<ConsumablesResult>;
@@ -59,15 +59,17 @@ export function ConsumablesLedgerContent(props: ConsumablesLedgerContentProps) {
     [cachedResult, disambiguationMap],
   );
 
+  // Filtering happens before aggregation so the header totals, coverage
+  // line, and bar scale all react to the filter, not just the row list.
+  const [filter, setFilter] = useState("");
+  const filteredUses = useFilteredUses(resolvedUses, filter);
+
   const ledger = useMemo(
-    () => aggregateConsumablesLedger(resolvedUses, NO_PRICES),
-    [resolvedUses],
+    () => aggregateConsumablesLedger(filteredUses, NO_PRICES),
+    [filteredUses],
   );
 
   const coverage = ledgerCoverage(ledger);
-
-  const [filter, setFilter] = useState("");
-  const filteredLedger = useFilteredLedger(ledger, filter);
 
   // Several breakouts can be open at once — one per item, toggled per row.
   const [breakouts, setBreakouts] = useState<BreakoutState[]>([]);
@@ -147,7 +149,7 @@ export function ConsumablesLedgerContent(props: ConsumablesLedgerContentProps) {
   return (
     <>
       <GenericPanel {...effectiveProps}>
-        {ledger.totalUses === 0 ? (
+        {resolvedUses.length === 0 ? (
           <div className="py-4 text-center text-xs text-muted-foreground">
             {loading ? "Loading..." : "No consumable uses recorded"}
           </div>
@@ -169,14 +171,14 @@ export function ConsumablesLedgerContent(props: ConsumablesLedgerContentProps) {
             <ScrollArea className="min-h-0 flex-1">
               {/* Right gutter so rows don't sit under the overlay scrollbar. */}
               <div className="pr-2.5">
-              {filteredLedger.rows.length === 0 && filteredLedger.ambiguous.length === 0 ? (
+              {ledger.rows.length === 0 && ledger.ambiguous.length === 0 ? (
                 <div className="py-4 text-center text-xs text-muted-foreground">
                   No consumes match “{filter}”
                 </div>
               ) : (
                 <>
                   <div className="flex flex-col py-1">
-                    {filteredLedger.rows.map((row) => (
+                    {ledger.rows.map((row) => (
                       <LedgerRow
                         key={row.key}
                         row={row}
@@ -189,8 +191,8 @@ export function ConsumablesLedgerContent(props: ConsumablesLedgerContentProps) {
                     ))}
                   </div>
                   <AmbiguousSection
-                    rows={filteredLedger.ambiguous}
-                    totalAmbiguousUses={filteredLedger.ambiguous.reduce((sum, row) => sum + row.uses, 0)}
+                    rows={ledger.ambiguous}
+                    totalAmbiguousUses={ledger.ambiguousUses}
                     showGold={coverage.showGold}
                   />
                 </>
