@@ -4,7 +4,7 @@
  * its own.
  */
 
-import { useMemo } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { ScrollArea } from "@/components/ui/ScrollArea/ScrollArea";
 import { useCachedValue } from "@/hooks/useCachedValue";
 import { useDatasetId } from "@/hooks/useDatasetId";
@@ -98,19 +98,55 @@ export function ConsumablesPlayerContent(props: ConsumablesPlayerContentProps) {
     return token ? token.slice(PLAYER_TOKEN.length) : null;
   }, [optionTokens]);
 
+  // Selection renders from local state so switching is instant. Writing the
+  // pl: token into panelOption goes through the router (URL update) and
+  // re-keys the worker aggregation, so it re-renders the whole instance page
+  // — debounce it to once per settle instead of once per click. Until the
+  // first click, the persisted URL token drives the selection.
+  const [clickedGuid, setClickedGuid] = useState<string | null>(null);
+  const selectedGuid = clickedGuid ?? optionGuid;
+
+  const optionTokensRef = useRef(optionTokens);
+  const setPanelOptionRef = useRef(setPanelOption);
+  useEffect(() => {
+    optionTokensRef.current = optionTokens;
+    setPanelOptionRef.current = setPanelOption;
+  }, [optionTokens, setPanelOption]);
+  const pendingGuidRef = useRef<string | null>(null);
+  const flushTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  const flushSelection = useCallback(() => {
+    const guid = pendingGuidRef.current;
+    if (guid === null) return;
+    pendingGuidRef.current = null;
+    const tokens = optionTokensRef.current.filter((part) => !part.startsWith(PLAYER_TOKEN));
+    tokens.push(`${PLAYER_TOKEN}${guid}`);
+    setPanelOptionRef.current?.(tokens.join(","));
+  }, []);
+
+  useEffect(
+    () => () => {
+      // Persist the last selection when the panel unmounts mid-debounce.
+      if (flushTimerRef.current) clearTimeout(flushTimerRef.current);
+      flushSelection();
+    },
+    [flushSelection],
+  );
+
   const selectedIndex = useMemo(() => {
-    const byOption = roster.findIndex((player) => player.guid === optionGuid);
-    if (byOption !== -1) return byOption;
+    const bySelection = roster.findIndex((player) => player.guid === selectedGuid);
+    if (bySelection !== -1) return bySelection;
     const firstWithUses = roster.findIndex((player) => (usesByPlayer.get(player.guid) ?? 0) > 0);
     return firstWithUses !== -1 ? firstWithUses : 0;
-  }, [roster, optionGuid, usesByPlayer]);
+  }, [roster, selectedGuid, usesByPlayer]);
 
   const selected = roster[selectedIndex];
 
   const selectPlayer = (guid: string) => {
-    const tokens = optionTokens.filter((part) => !part.startsWith(PLAYER_TOKEN));
-    tokens.push(`${PLAYER_TOKEN}${guid}`);
-    setPanelOption?.(tokens.join(","));
+    setClickedGuid(guid);
+    pendingGuidRef.current = guid;
+    if (flushTimerRef.current) clearTimeout(flushTimerRef.current);
+    flushTimerRef.current = setTimeout(flushSelection, 400);
   };
   const step = (delta: number) => {
     if (roster.length === 0) return;
