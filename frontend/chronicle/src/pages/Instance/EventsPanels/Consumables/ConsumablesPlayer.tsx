@@ -9,6 +9,7 @@ import { Popover as PopoverPrimitive } from "radix-ui";
 import { ChevronsUpDown, Search, Users } from "lucide-react";
 import { usePortalContainer } from "@/components/ui/PortalContainerContext";
 import { ScrollArea } from "@/components/ui/ScrollArea/ScrollArea";
+import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/Tooltip/tooltip";
 import { useCachedValue } from "@/hooks/useCachedValue";
 import { useDatasetId } from "@/hooks/useDatasetId";
 import { useConsumableDisambiguations } from "@/api/queries";
@@ -460,12 +461,10 @@ export function ConsumablesPlayerContent(props: ConsumablesPlayerContentProps) {
               const value = rosterBars.valueOf(player.guid);
               const heightPct = Math.max(16, (value / rosterBars.max) * 100);
               return (
+                <Tooltip key={player.guid}>
+                  <TooltipTrigger asChild>
                 <button
-                  key={player.guid}
                   type="button"
-                  title={`${player.name} · ${player.cls?.toLowerCase() ?? "unknown"}${
-                    uses > 0 ? ` · ${uses} uses` : " · no uses"
-                  }${gold > 0 ? ` · ${formatGold(gold)}` : ""}`}
                   onClick={() => selectPlayer(player.guid)}
                   className={cn(
                     "group/bar flex h-full min-w-0 flex-1 cursor-pointer items-end overflow-hidden rounded-sm bg-background/80",
@@ -492,6 +491,24 @@ export function ConsumablesPlayerContent(props: ConsumablesPlayerContentProps) {
                     />
                   )}
                 </button>
+                  </TooltipTrigger>
+                  <TooltipContent side="bottom" className="flex flex-col gap-0.5">
+                    <div className="flex items-baseline gap-1.5">
+                      <span className="text-xs font-medium" style={{ color: classColor(player.cls) }}>
+                        {player.name}
+                      </span>
+                      <span className="text-2xs capitalize text-muted-foreground">
+                        {player.cls?.toLowerCase() ?? "unknown"}
+                      </span>
+                    </div>
+                    <div className="font-mono text-2xs text-foreground/80">
+                      {uses} consume{uses === 1 ? "" : "s"} used
+                    </div>
+                    <div className={cn("font-mono text-2xs", gold > 0 ? "text-amber-300/90" : "text-muted-foreground")}>
+                      {gold > 0 ? formatGold(gold) : "no price data"}
+                    </div>
+                  </TooltipContent>
+                </Tooltip>
               );
             })}
           </div>
