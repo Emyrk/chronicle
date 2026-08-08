@@ -145,12 +145,7 @@ export function ConsumablesLedgerContent(props: ConsumablesLedgerContentProps) {
         ) : (
           <div className="flex h-full min-h-0 flex-col">
             <div className="flex shrink-0 items-center justify-between gap-2 border-b border-border/60 px-2 pb-2">
-              <div className="flex flex-col gap-0.5">
-                <span className="text-2xs font-medium uppercase tracking-wider text-muted-foreground">
-                  Consumes used
-                </span>
-                <CoverageLine label={coverage.label} tone={coverage.tone} />
-              </div>
+              <CoverageLine label={coverage.label} tone={coverage.tone} />
               <div className="flex flex-col items-end gap-0.5">
                 <span className="font-mono text-sm font-semibold text-foreground">
                   {ledger.totalUses} <span className="text-2xs font-normal text-muted-foreground">uses</span>

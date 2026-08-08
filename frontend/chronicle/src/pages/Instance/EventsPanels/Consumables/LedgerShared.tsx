@@ -16,8 +16,10 @@ import {
   type LedgerItemRow,
 } from "./consumablesLedger";
 
+// "muted" (no price data) renders amber too, matching the player view's
+// gap line so both scopes read the same.
 const COVERAGE_TONE_CLASS = {
-  muted: "text-muted-foreground/70",
+  muted: "text-amber-400",
   warn: "text-amber-400",
   ok: "text-emerald-400/80",
 } as const;
