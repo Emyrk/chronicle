@@ -44,6 +44,7 @@ type User struct {
 	ID                     uuid.UUID `json:"id"`
 	Username               string    `json:"username"`
 	Email                  string    `json:"email"`
+	DiscordID              string    `json:"discord_id,omitempty"`
 	Roles                  []string  `json:"roles"`
 	CreatedAt              time.Time `json:"created_at"`
 	UpdatedAt              time.Time `json:"updated_at"`

@@ -215,6 +215,11 @@ function AddMemberPanel({
                 <div className="min-w-0">
                   <p className="font-medium truncate">{user.username}</p>
                   <p className="text-xs text-muted-foreground truncate">{user.email || user.id}</p>
+                  {user.discord_id && (
+                    <p className="text-xs text-muted-foreground truncate">
+                      Discord ID: {user.discord_id}
+                    </p>
+                  )}
                 </div>
                 <Button
                   size="sm"

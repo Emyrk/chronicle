@@ -68,9 +68,17 @@ WHERE
 
 -- name: ListAllUsers :many
 SELECT
-  *
+  sqlc.embed(chronicle_users),
+  COALESCE(discord_auth.linked_id, '')::text AS discord_id
 FROM
   chronicle_users
+LEFT JOIN LATERAL (
+  SELECT linked_id
+  FROM user_auth_links
+  WHERE user_id = chronicle_users.id
+    AND provider = 'discord'
+  LIMIT 1
+) AS discord_auth ON true
 ORDER BY
   created_at DESC
 ;

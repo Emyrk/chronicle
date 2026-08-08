@@ -3369,6 +3369,7 @@ export interface User {
     readonly id: string;
     readonly username: string;
     readonly email: string;
+    readonly discord_id?: string;
     readonly roles: readonly string[];
     readonly created_at: string;
     readonly updated_at: string;

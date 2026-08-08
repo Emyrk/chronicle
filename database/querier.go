@@ -484,7 +484,7 @@ type sqlcQuerier interface {
 	// LEFT JOINs tenants to surface the tenant name (NULL for root scope).
 	// Includes separate clear-time and boss-kill member counts.
 	ListAllTimeParseSnapshots(ctx context.Context) ([]ListAllTimeParseSnapshotsRow, error)
-	ListAllUsers(ctx context.Context) ([]ChronicleUser, error)
+	ListAllUsers(ctx context.Context) ([]ListAllUsersRow, error)
 	ListAllWoWLogGroupsWithOwner(ctx context.Context) ([]ListAllWoWLogGroupsWithOwnerRow, error)
 	ListAllWoWLogGroupsWithOwnerPaginated(ctx context.Context, arg ListAllWoWLogGroupsWithOwnerPaginatedParams) ([]ListAllWoWLogGroupsWithOwnerPaginatedRow, error)
 	ListAllWoWServerRealms(ctx context.Context) ([]WowServerRealm, error)

@@ -37,7 +37,7 @@ func (a *API) AdminListUsers(w http.ResponseWriter, r *http.Request) {
 		Users: make([]chroniclesdk.User, len(users)),
 	}
 	for i, u := range users {
-		roles, err := a.Opts.Zed.UserChronicleRoles(r.Context(), u.ID)
+		roles, err := a.Opts.Zed.UserChronicleRoles(r.Context(), u.ChronicleUser.ID)
 		if err != nil {
 			httpapi.InternalServerError(w, err)
 			return

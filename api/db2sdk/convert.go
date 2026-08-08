@@ -38,7 +38,17 @@ func WoWServerRealm(r database.WowServerRealm) chroniclesdk.WoWServerRealm {
 	}
 }
 
-func User(user database.ChronicleUser, roles []string) chroniclesdk.User {
+func User[T database.ChronicleUser | database.ListAllUsersRow](row T, roles []string) chroniclesdk.User {
+	var user database.ChronicleUser
+	var discordID string
+	switch row := any(row).(type) {
+	case database.ChronicleUser:
+		user = row
+	case database.ListAllUsersRow:
+		user = row.ChronicleUser
+		discordID = row.DiscordID
+	}
+
 	var dataLimitUpdated time.Time
 	if t, ok := user.DataLimitUpdatedAt.(time.Time); ok {
 		dataLimitUpdated = t
@@ -47,6 +57,7 @@ func User(user database.ChronicleUser, roles []string) chroniclesdk.User {
 		ID:                     user.ID,
 		Username:               user.Username,
 		Email:                  user.Email,
+		DiscordID:              discordID,
 		Roles:                  roles,
 		CreatedAt:              user.CreatedAt.Time,
 		UpdatedAt:              user.UpdatedAt.Time,

@@ -14965,34 +14965,48 @@ func (q *sqlQuerier) InsertUserAuthSession(ctx context.Context, arg InsertUserAu
 
 const listAllUsers = `-- name: ListAllUsers :many
 SELECT
-  id, username, email, created_at, updated_at, default_desktop_layout_id, default_mobile_layout_id, raw_log_retention_hours, max_storage_bytes, data_limit_updated_at, consumed_storage_bytes
+  chronicle_users.id, chronicle_users.username, chronicle_users.email, chronicle_users.created_at, chronicle_users.updated_at, chronicle_users.default_desktop_layout_id, chronicle_users.default_mobile_layout_id, chronicle_users.raw_log_retention_hours, chronicle_users.max_storage_bytes, chronicle_users.data_limit_updated_at, chronicle_users.consumed_storage_bytes,
+  COALESCE(discord_auth.linked_id, '')::text AS discord_id
 FROM
   chronicle_users
+LEFT JOIN LATERAL (
+  SELECT linked_id
+  FROM user_auth_links
+  WHERE user_id = chronicle_users.id
+    AND provider = 'discord'
+  LIMIT 1
+) AS discord_auth ON true
 ORDER BY
   created_at DESC
 `
 
-func (q *sqlQuerier) ListAllUsers(ctx context.Context) ([]ChronicleUser, error) {
+type ListAllUsersRow struct {
+	ChronicleUser ChronicleUser `db:"chronicle_user" json:"chronicle_user"`
+	DiscordID     string        `db:"discord_id" json:"discord_id"`
+}
+
+func (q *sqlQuerier) ListAllUsers(ctx context.Context) ([]ListAllUsersRow, error) {
 	rows, err := q.db.Query(ctx, listAllUsers)
 	if err != nil {
 		return nil, err
 	}
 	defer rows.Close()
-	var items []ChronicleUser
+	var items []ListAllUsersRow
 	for rows.Next() {
-		var i ChronicleUser
+		var i ListAllUsersRow
 		if err := rows.Scan(
-			&i.ID,
-			&i.Username,
-			&i.Email,
-			&i.CreatedAt,
-			&i.UpdatedAt,
-			&i.DefaultDesktopLayoutID,
-			&i.DefaultMobileLayoutID,
-			&i.RawLogRetentionHours,
-			&i.MaxStorageBytes,
-			&i.DataLimitUpdatedAt,
-			&i.ConsumedStorageBytes,
+			&i.ChronicleUser.ID,
+			&i.ChronicleUser.Username,
+			&i.ChronicleUser.Email,
+			&i.ChronicleUser.CreatedAt,
+			&i.ChronicleUser.UpdatedAt,
+			&i.ChronicleUser.DefaultDesktopLayoutID,
+			&i.ChronicleUser.DefaultMobileLayoutID,
+			&i.ChronicleUser.RawLogRetentionHours,
+			&i.ChronicleUser.MaxStorageBytes,
+			&i.ChronicleUser.DataLimitUpdatedAt,
+			&i.ChronicleUser.ConsumedStorageBytes,
+			&i.DiscordID,
 		); err != nil {
 			return nil, err
 		}
