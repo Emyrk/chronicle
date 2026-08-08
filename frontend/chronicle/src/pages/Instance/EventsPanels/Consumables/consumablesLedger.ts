@@ -160,6 +160,54 @@ export function aggregateConsumablesLedger(
   };
 }
 
+/** Roster display order: melee/physical classes first, mirroring raid-frame convention. */
+export const CLASS_ORDER = [
+  "WARRIOR", "ROGUE", "HUNTER", "DRUID", "PALADIN", "SHAMAN", "PRIEST", "MAGE", "WARLOCK", "DEATHKNIGHT",
+];
+
+export function classRank(cls: string | undefined): number {
+  const index = CLASS_ORDER.indexOf(cls ?? "");
+  return index === -1 ? CLASS_ORDER.length : index;
+}
+
+export function classColor(cls: string | undefined): string {
+  return `var(--color-class-${(cls ?? "unknown").toLowerCase()})`;
+}
+
+const CLASS_ABBREVIATIONS: Record<string, string> = {
+  WARRIOR: "WAR", ROGUE: "ROG", HUNTER: "HUN", DRUID: "DRU", PALADIN: "PAL",
+  SHAMAN: "SHM", PRIEST: "PRI", MAGE: "MAG", WARLOCK: "LOCK", DEATHKNIGHT: "DK",
+};
+
+export function classAbbreviation(cls: string | undefined): string {
+  if (!cls) return "?";
+  return CLASS_ABBREVIATIONS[cls] ?? cls.slice(0, 3).toUpperCase();
+}
+
+export interface ItemBreakoutCount {
+  player: string;
+  uses: number;
+}
+
+/**
+ * Per-player use counts for one identified item, most uses first. Uses must
+ * already be resolved through `resolveConsumableUse`; single-candidate uses
+ * count toward their item like everywhere else in the ledger.
+ */
+export function aggregateItemBreakout(
+  uses: Iterable<ConsumableUse>,
+  itemId: number,
+): ItemBreakoutCount[] {
+  const counts = new Map<string, number>();
+  for (const use of uses) {
+    if (itemIdentity(use).itemId !== itemId) continue;
+    counts.set(use.player, (counts.get(use.player) ?? 0) + 1);
+  }
+  return [...counts.entries()]
+    .map(([player, count]) => ({ player, uses: count }))
+    .sort((a, b) => b.uses - a.uses || a.player.localeCompare(b.player));
+}
+
 /** Compact WoW money format: gold-led, sub-gold amounts fall back to s/c. */
 export function formatGold(copper: number): string {
   const gold = copper / 10_000;

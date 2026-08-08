@@ -3,6 +3,7 @@ import type { ConsumableUse } from "./consumables.processor";
 import { buildConsumableDisambiguationMap, resolveConsumableUse } from "./consumableDisambiguation";
 import {
   aggregateConsumablesLedger,
+  aggregateItemBreakout,
   formatGold,
   ledgerCoverage,
   NO_PRICES,
@@ -165,6 +166,30 @@ describe("aggregateConsumablesLedger", () => {
     expect(ledger.ambiguous).toHaveLength(0);
     expect(ledger.rows).toHaveLength(1);
     expect(ledger.rows[0].itemId).toBe(13452);
+  });
+});
+
+describe("aggregateItemBreakout", () => {
+  it("counts uses per player for one item, most uses first", () => {
+    const rows = aggregateItemBreakout(
+      [
+        makeUse({ itemId: 13454, player: "p1" }),
+        makeUse({ itemId: 13454, player: "p2" }),
+        makeUse({ itemId: 13454, player: "p2" }),
+        makeUse({ itemId: 9999, player: "p3" }),
+        // Single candidate resolves to its item, so it counts too.
+        makeUse({ candidateItemIds: [13454], player: "p4" }),
+        // Multi-candidate stays ambiguous and is excluded.
+        makeUse({ candidateItemIds: [13454, 9187], player: "p5" }),
+      ],
+      13454,
+    );
+
+    expect(rows).toEqual([
+      { player: "p2", uses: 2 },
+      { player: "p1", uses: 1 },
+      { player: "p4", uses: 1 },
+    ]);
   });
 });
 

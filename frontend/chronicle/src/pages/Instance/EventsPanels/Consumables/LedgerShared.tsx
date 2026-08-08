@@ -59,15 +59,27 @@ export function LedgerRow({
   maxUses,
   subtitle,
   showGold,
+  onClick,
+  selected = false,
 }: {
   row: LedgerItemRow;
   maxUses: number;
   /** Under-bar fact: "N players" at raid scope, "N fights" at player scope. */
   subtitle: string;
   showGold: boolean;
+  /** When set, the row is clickable (opens the item breakout). */
+  onClick?: (event: React.MouseEvent<HTMLDivElement>) => void;
+  selected?: boolean;
 }) {
   return (
-    <div className="flex items-center gap-2.5 px-2 py-1">
+    <div
+      onClick={onClick}
+      className={cn(
+        "flex items-center gap-2.5 px-2 py-1",
+        onClick && "cursor-pointer transition-colors hover:bg-muted/30",
+        selected && "bg-amber-400/10 ring-1 ring-inset ring-amber-400/40",
+      )}
+    >
       <div className="flex min-w-0 flex-1 flex-col gap-1">
         <div className="flex min-w-0 items-center gap-1.5">
           <div className="min-w-0 flex-1 text-xs">

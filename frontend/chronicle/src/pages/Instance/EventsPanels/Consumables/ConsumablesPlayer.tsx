@@ -20,6 +20,8 @@ import type { PanelRenderProps } from "../types";
 import type { ConsumablesResult } from "./consumables.processor";
 import {
   aggregateConsumablesLedger,
+  classColor,
+  classRank,
   formatGold,
   ledgerCoverage,
   NO_PRICES,
@@ -27,20 +29,6 @@ import {
 import { AmbiguousSection, LedgerRow } from "./LedgerShared";
 
 const PLAYER_TOKEN = "pl:";
-
-/** Roster display order: melee/physical classes first, mirroring raid-frame convention. */
-const CLASS_ORDER = [
-  "WARRIOR", "ROGUE", "HUNTER", "DRUID", "PALADIN", "SHAMAN", "PRIEST", "MAGE", "WARLOCK", "DEATHKNIGHT",
-];
-
-function classRank(cls: string | undefined): number {
-  const index = CLASS_ORDER.indexOf(cls ?? "");
-  return index === -1 ? CLASS_ORDER.length : index;
-}
-
-function classColor(cls: string | undefined): string {
-  return `var(--color-class-${(cls ?? "unknown").toLowerCase()})`;
-}
 
 interface RosterEntry {
   guid: string;
