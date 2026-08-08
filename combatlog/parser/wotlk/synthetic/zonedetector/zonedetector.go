@@ -97,6 +97,14 @@ func (zd *ZoneDetector) ProcessMessages(msgs []messages.Message) []messages.Mess
 		}
 
 		for _, g := range msg.Affects() {
+			// Pet creature entries can overlap unrelated instance hostiles. For
+			// example, the Felguard entry 11319 is also registered in Ragefire
+			// Chasm. A pet acting inside Karazhan must not move the parser to the
+			// unrelated zone.
+			if g.IsPet() {
+				continue
+			}
+
 			entry, ok := g.GetEntry()
 			if !ok {
 				continue

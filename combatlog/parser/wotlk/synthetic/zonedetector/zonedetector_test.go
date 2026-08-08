@@ -81,6 +81,33 @@ func TestZoneDetector_IgnoresPlayerGUID(t *testing.T) {
 	assert.Len(t, result, 1, "player GUID should not trigger zone detection")
 	assert.Empty(t, zd.LastZone())
 }
+
+func TestZoneDetector_PetDamageDoesNotChangeZone(t *testing.T) {
+	t.Parallel()
+
+	reg := registry.RegistryForFlavor(slog.Default(), database.WoWFlavor{database.FlavorTBC})
+	zd := zonedetector.New(testutil.Logger(t), reg)
+
+	ts := time.Date(2025, 1, 1, 12, 0, 0, 0, time.UTC)
+	zd.ProcessMessages([]messages.Message{&messages.Zone{
+		MessageBase: messages.Base(ts),
+		Zone:        zone.Zone{Seen: ts, Name: "karazhan", IsInstance: true},
+	}})
+
+	// Felguard pet entry 11319 overlaps an NPC registered in Ragefire Chasm.
+	// The target is Nightbane, so this damage must remain in Karazhan.
+	pet := guid.GUID(0xF140002C37000009)
+	nightbane := creatureGUID(17225)
+	result := zd.ProcessMessages([]messages.Message{&messages.Damage{
+		MessageBase: messages.Base(ts.Add(time.Second)),
+		Caster:      &pet,
+		Target:      nightbane,
+	}})
+
+	assert.Len(t, result, 1, "pet damage should not emit a synthetic zone change")
+	assert.Equal(t, "karazhan", zd.LastZone())
+}
+
 func TestZoneDetector_ContinuesAfterRealZone(t *testing.T) {
 	t.Parallel()
 
