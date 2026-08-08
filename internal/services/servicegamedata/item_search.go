@@ -50,7 +50,8 @@ func (s *Service) handleSearchItems(w http.ResponseWriter, r *http.Request) {
 	// scan — it returns the top items for that slot by the chosen sort
 	// (the gear builder's default picker view).
 	q := r.URL.Query().Get("q")
-	if len(q) < 2 && !(len(q) == 0 && len(slots) > 0) {
+	slotBrowse := len(q) == 0 && len(slots) > 0
+	if len(q) < 2 && !slotBrowse {
 		badRequest(ctx, w, "Query parameter 'q' must be at least 2 characters.")
 		return
 	}
