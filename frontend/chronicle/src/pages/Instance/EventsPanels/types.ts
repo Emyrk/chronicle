@@ -132,6 +132,15 @@ export interface PanelDefinition<TResult, TEvent extends ProcessorEvent = Proces
   /** Available pet handling options. Shown on the card back.
    *  The first option is the default. Stored as a `p:<value>` token in panelOption. */
   petOptions?: GroupingOption[];
+
+  /**
+   * panelOption tokens that only affect rendering, never processing.
+   * Entries ending in ":" match as prefixes (e.g. "pl:"), others match
+   * exactly (e.g. "cb"). Matching tokens are stripped from the panelOption
+   * passed to aggregation, so changing them reuses the cached worker result
+   * instead of re-processing the event streams.
+   */
+  renderOnlyOptionTokens?: string[];
   
   /**
    * Create the initial state for aggregation

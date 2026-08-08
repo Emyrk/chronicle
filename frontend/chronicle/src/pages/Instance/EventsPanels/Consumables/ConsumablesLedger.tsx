@@ -113,6 +113,9 @@ export function createConsumablesLedgerPanel(): PanelDefinition<ConsumablesResul
     // One panel, two scopes: the checkbox flips between the per-player view
     // (off, default) and the raid-wide ledger (on).
     checkboxLabel: "Raid Wide",
+    // Scope toggle, player selection, and card chrome never change what the
+    // worker computes — switching players must not re-process the stream.
+    renderOnlyOptionTokens: ["cb", "pl:", "bc:", "t:"],
     defaultFilters: [
       { type: "source_type" as const, value: ["player"], applyTo: ["consume"] },
     ],
