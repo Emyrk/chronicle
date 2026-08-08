@@ -41,6 +41,33 @@ develop-backend-fresh:
 develop-backend: create-db
 	go run --tags "$(SERVER)" $(LD_BUILD_FLAGS) ./cmd/chronicled server --dev-auth --jwt-secret-pem="dev" --log-parse-worker-count=4 --ocr-url="http://localhost:8730" --emit-parse-logs --primary-domain=localhost
 
+# Forward arguments after `--` to the resync CLI. GNU Make parses --flag=value
+# as a command-line variable and space-separated flags as additional goals, so
+# collect both forms. Do not combine a resync target with other Make targets.
+RESYNC_TARGETS := resync resync-approve
+RESYNC_GOAL_ARGS := $(filter-out $(RESYNC_TARGETS),$(MAKECMDGOALS))
+RESYNC_ASSIGN_ARGS := $(foreach v,$(filter --%,$(.VARIABLES)),$(if $(filter command line,$(origin $(v))),$(v)=$($(v))))
+RESYNC_FORWARD_ARGS := $(strip $(RESYNC_GOAL_ARGS) $(RESYNC_ASSIGN_ARGS))
+
+ifneq ($(strip $(RESYNC_GOAL_ARGS)),)
+.PHONY: $(RESYNC_GOAL_ARGS)
+$(RESYNC_GOAL_ARGS):
+	@:
+endif
+
+# Run the resync CLI with the same embedded version metadata as production
+# builds. Example: make resync -- --limit=10
+.PHONY: resync
+resync:
+	go run --tags "$(SERVER)" $(LD_BUILD_FLAGS) ./cmd/chronicled resync $(RESYNC_FORWARD_ARGS)
+
+# Interactive, one-log-at-a-time execution mode. Chronicle configuration is
+# inherited from exported CHRONICLE_* environment variables.
+# Example: make resync-approve -- --limit=10
+.PHONY: resync-approve
+resync-approve:
+	go run --tags "$(SERVER)" $(LD_BUILD_FLAGS) ./cmd/chronicled resync --execute --approve-each --workers=1 $(RESYNC_FORWARD_ARGS)
+
 .PHONY: build
 build: build-backend-static
 
