@@ -181,7 +181,7 @@ func (c *Chronicle) logPath(fileID uuid.UUID) string {
 }
 
 func (c *Chronicle) initStorage(ctx context.Context) error {
-	raidLogMimes := []string{"text/plain", "text/plain;charset=UTF-8"}
+	raidLogMimes := []string{"text/plain", "text/plain;charset=UTF-8", "application/gzip", "application/zstd"}
 	_, err := c.Storage.CreateBucket(ctx, BucketRaidLogs, storage.BucketOptions{
 		Public:           false,
 		AllowedMimeTypes: raidLogMimes,
@@ -269,74 +269,40 @@ func (c *Chronicle) UploadLogs(ctx context.Context, inputs []UploadInput, logTyp
 		tmpFiles = append(tmpFiles, f)
 
 		var h = sha256.New()
-		var meta fileMeta
-
+		source := input.Reader
 		if input.IsGzipped {
-			// For gzipped input: store compressed data but compute hash of
-			// decompressed content for deduplication.
-
-			// Write compressed data to temp file
-			written, err := io.Copy(f, input.Reader)
+			gzReader, err := gzip.NewReader(source)
 			if err != nil {
-				return nil, nil, fmt.Errorf("write compressed temp file: %w", err)
+				return nil, nil, fmt.Errorf("create gzip reader for upload: %w", err)
 			}
+			defer func() { _ = gzReader.Close() }()
+			source = gzReader
+		}
 
-			// Sync and seek back
-			if err := f.Sync(); err != nil {
-				return nil, nil, fmt.Errorf("flush temp file: %w", err)
-			}
-			if _, err := f.Seek(0, io.SeekStart); err != nil {
-				return nil, nil, fmt.Errorf("seek temp file: %w", err)
-			}
+		// Server-side logs remain gzip so AppendServerLog can concatenate
+		// incoming gzip streams without recompressing the complete log.
+		contentEncoding, compress := rawLogCompression(logType)
+		originalSize, err := compress(f, io.TeeReader(source, h))
+		if err != nil {
+			return nil, nil, fmt.Errorf("compress uploaded log: %w", err)
+		}
+		if err := f.Sync(); err != nil {
+			return nil, nil, fmt.Errorf("flush temp file: %w", err)
+		}
 
-			// Decompress from temp file to compute hash of original content
-			gzReader, err := gzip.NewReader(f)
-			if err != nil {
-				return nil, nil, fmt.Errorf("create gzip reader for hashing: %w", err)
-			}
+		info, err := f.Stat()
+		if err != nil {
+			return nil, nil, fmt.Errorf("stat compressed temp file: %w", err)
+		}
+		if _, err := f.Seek(0, io.SeekStart); err != nil {
+			return nil, nil, fmt.Errorf("seek compressed temp file: %w", err)
+		}
 
-			// Count original bytes while hashing
-			originalCounter := &countingWriter{w: io.Discard}
-			hashWriter := io.MultiWriter(h, originalCounter)
-			if _, err := io.Copy(hashWriter, gzReader); err != nil {
-				_ = gzReader.Close()
-				return nil, nil, fmt.Errorf("hash decompressed content: %w", err)
-			}
-			_ = gzReader.Close()
-
-			// Seek back for storage upload
-			if _, err := f.Seek(0, io.SeekStart); err != nil {
-				return nil, nil, fmt.Errorf("seek temp file for upload: %w", err)
-			}
-
-			meta.originalSize = originalCounter.count
-			meta.compressedSize = ptr.Ref(written)
-			meta.contentEnc = ptr.Ref("gzip")
-		} else {
-			// Uncompressed: write to file and hash simultaneously
-			writer := io.MultiWriter(f, h)
-			if _, err := io.Copy(writer, input.Reader); err != nil {
-				return nil, nil, fmt.Errorf("write temp file: %w", err)
-			}
-
-			if err := f.Sync(); err != nil {
-				return nil, nil, fmt.Errorf("flush temp file: %w", err)
-			}
-
-			// Get file size
-			info, err := f.Stat()
-			if err != nil {
-				return nil, nil, fmt.Errorf("stat temp file: %w", err)
-			}
-
-			// Reset so it can be read back
-			if _, err := f.Seek(0, io.SeekStart); err != nil {
-				return nil, nil, fmt.Errorf("seek temp file: %w", err)
-			}
-
-			meta.originalSize = info.Size()
-			meta.compressedSize = nil
-			meta.contentEnc = nil
+		compressedSize := info.Size()
+		meta := fileMeta{
+			originalSize:   originalSize,
+			compressedSize: &compressedSize,
+			contentEnc:     ptr.Ref(contentEncoding),
 		}
 
 		hashes = append(hashes, hex.EncodeToString(h.Sum(nil)))
@@ -432,13 +398,10 @@ func (c *Chronicle) UploadLogs(ctx context.Context, inputs []UploadInput, logTyp
 
 	// Now store the logs in object storage
 	for i := range tmpIDs {
-		meta := fileMetas[i]
-		contentType := "text/plain;charset=UTF-8"
-		if meta.contentEnc != nil {
-			// Store as gzip with appropriate content type
+		contentType := "application/zstd"
+		if fileMetas[i].contentEnc != nil && *fileMetas[i].contentEnc == "gzip" {
 			contentType = "application/gzip"
 		}
-
 		storageObject, err := c.Storage.UploadFile(ctx, BucketRaidLogs, c.logPath(tmpIDs[i]), tmpFiles[i], storage.FileOptions{
 			ContentType: ptr.Ref(contentType),
 		})
@@ -461,11 +424,11 @@ func (c *Chronicle) UploadLogs(ctx context.Context, inputs []UploadInput, logTyp
 	return &group, dbFiles, nil
 }
 
-// AppendServerLog appends new (gzip-compressed) data to an existing log group's
-// file. Both the existing stored blob and newData are gzip streams; concatenating
-// them produces valid multistream gzip that Go's gzip.Reader reads transparently.
-// After appending, the file record is updated and a reparse is enqueued.
-func (c *Chronicle) AppendServerLog(ctx context.Context, group database.WoWLogGroup, newData io.Reader, realmID uuid.UUID) error {
+// AppendServerLog appends new data to an existing server log group's file.
+// Stored server logs use multistream gzip so new chunks can be concatenated
+// without recompressing the complete log. After appending, the file record is
+// updated and a reparse is enqueued.
+func (c *Chronicle) AppendServerLog(ctx context.Context, group database.WoWLogGroup, newData io.Reader, newDataIsGzipped bool, realmID uuid.UUID) error {
 	files, err := c.Zed.GetWoWLogFilesByGroupID(ctx, group.ID)
 	if err != nil {
 		return fmt.Errorf("fetch log files for group %s: %w", group.ID, err)
@@ -481,28 +444,27 @@ func (c *Chronicle) AppendServerLog(ctx context.Context, group database.WoWLogGr
 		return fmt.Errorf("download existing log file %s: %w", file.ID, err)
 	}
 
-	// If existing file is plaintext (uploaded before gzip was enabled),
-	// compress it so we can do multistream gzip concatenation.
-	isExistingGzip := file.ContentEncoding.Valid && file.ContentEncoding.String == "gzip"
-	if !isExistingGzip {
-		var buf bytes.Buffer
-		gzw := gzip.NewWriter(&buf)
-		if _, err := gzw.Write(existing); err != nil {
-			return fmt.Errorf("compress existing plaintext log: %w", err)
+	existingEncoding := ""
+	if file.ContentEncoding.Valid {
+		existingEncoding = file.ContentEncoding.String
+	}
+	if existingEncoding != "gzip" {
+		reader, err := decompressLog(existing, existingEncoding)
+		if err != nil {
+			return fmt.Errorf("decompress existing log for append: %w", err)
 		}
-		if err := gzw.Close(); err != nil {
-			return fmt.Errorf("finalize gzip of existing log: %w", err)
+		existing, err = gzipLogData(reader, false)
+		if err != nil {
+			return fmt.Errorf("compress existing log for append: %w", err)
 		}
-		existing = buf.Bytes()
 	}
 
-	// Read new gzip upload into memory
-	newBytes, err := io.ReadAll(newData)
+	newBytes, err := gzipLogData(newData, newDataIsGzipped)
 	if err != nil {
-		return fmt.Errorf("read new log data: %w", err)
+		return fmt.Errorf("prepare appended log data: %w", err)
 	}
 
-	// Concatenate compressed blobs (valid multistream gzip)
+	// Concatenated gzip streams are decoded transparently as one stream.
 	combined := append(existing, newBytes...)
 
 	// Hash the compressed blob (that's what we store & deduplicate)
@@ -549,19 +511,6 @@ func (c *Chronicle) AppendServerLog(ctx context.Context, group database.WoWLogGr
 	}
 
 	return nil
-}
-
-// countingWriter wraps a writer and counts bytes written
-
-type countingWriter struct {
-	w     io.Writer
-	count int64
-}
-
-func (c *countingWriter) Write(p []byte) (n int, err error) {
-	n, err = c.w.Write(p)
-	c.count += int64(n)
-	return
 }
 
 func (c *Chronicle) WoWLogGroup(ctx context.Context, groupID uuid.UUID) (*chroniclesdk.WoWLogGroupState, error) {

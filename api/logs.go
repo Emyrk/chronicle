@@ -240,11 +240,16 @@ func (api *API) WoWLogFileDownload(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Set headers for file download - serve as-is (compressed if stored compressed)
-	if file.ContentEncoding.Valid && file.ContentEncoding.String == "gzip" {
+	switch {
+	case file.ContentEncoding.Valid && file.ContentEncoding.String == "gzip":
 		w.Header().Set("Content-Type", "application/gzip")
 		w.Header().Set("Content-Disposition",
 			fmt.Sprintf("attachment; filename=\"combatlog-%s.txt.gz\"", file.ID.String()))
-	} else {
+	case file.ContentEncoding.Valid && file.ContentEncoding.String == "zstd":
+		w.Header().Set("Content-Type", "application/zstd")
+		w.Header().Set("Content-Disposition",
+			fmt.Sprintf("attachment; filename=\"combatlog-%s.txt.zst\"", file.ID.String()))
+	default:
 		w.Header().Set("Content-Type", "text/plain; charset=utf-8")
 		w.Header().Set("Content-Disposition",
 			fmt.Sprintf("attachment; filename=\"combatlog-%s.txt\"", file.ID.String()))
