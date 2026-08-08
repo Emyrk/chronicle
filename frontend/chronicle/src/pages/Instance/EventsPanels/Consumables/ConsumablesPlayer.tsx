@@ -9,7 +9,7 @@ import { Popover as PopoverPrimitive } from "radix-ui";
 import { ChevronsUpDown, Search, Users } from "lucide-react";
 import { usePortalContainer } from "@/components/ui/PortalContainerContext";
 import { ScrollArea } from "@/components/ui/ScrollArea/ScrollArea";
-import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/Tooltip/tooltip";
+import { HintTooltip, TooltipContent, TooltipTrigger } from "@/components/ui/Tooltip/tooltip";
 import { useCachedValue } from "@/hooks/useCachedValue";
 import { useDatasetId } from "@/hooks/useDatasetId";
 import { useConsumableDisambiguations } from "@/api/queries";
@@ -461,7 +461,9 @@ export function ConsumablesPlayerContent(props: ConsumablesPlayerContentProps) {
               const value = rosterBars.valueOf(player.guid);
               const heightPct = Math.max(16, (value / rosterBars.max) * 100);
               return (
-                <Tooltip key={player.guid}>
+                // HintTooltip: delayed, hoverable variant — the instant
+                // Tooltip flickers when the content opens under the cursor.
+                <HintTooltip key={player.guid} delayDuration={150}>
                   <TooltipTrigger asChild>
                 <button
                   type="button"
@@ -494,6 +496,7 @@ export function ConsumablesPlayerContent(props: ConsumablesPlayerContentProps) {
                   </TooltipTrigger>
                   <TooltipContent
                     side="bottom"
+                    sideOffset={6}
                     hideArrow
                     className="flex flex-col gap-0.5 border border-border bg-popover text-popover-foreground shadow-md"
                   >
@@ -512,7 +515,7 @@ export function ConsumablesPlayerContent(props: ConsumablesPlayerContentProps) {
                       {gold > 0 ? formatGold(gold) : "no price data"}
                     </div>
                   </TooltipContent>
-                </Tooltip>
+                </HintTooltip>
               );
             })}
           </div>
