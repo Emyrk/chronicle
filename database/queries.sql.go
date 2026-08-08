@@ -1209,17 +1209,24 @@ WITH eligible_item_spells AS (
         (4, wit.spellid_4, wit.spelltrigger_4),
         (5, wit.spellid_5, wit.spelltrigger_5)
     ) AS slot(slot, spell_id, trigger)
-    LEFT JOIN dbc_spells spell
-      ON spell.dataset_id = wit.dataset_id
-     AND spell.spell_id = slot.spell_id
     WHERE wit.dataset_id = $1
       AND slot.spell_id <> 0
       AND slot.trigger = 0
-      -- Codices use a normal on-use item trigger, but the root spell teaches
-      -- another spell instead of producing a consumable effect.
-      AND (
-          spell.spell_id IS NULL
-          OR 36 NOT IN (spell.effect_0, spell.effect_1, spell.effect_2)
+      -- Codices can list both a learn-spell wrapper and the taught class spell
+      -- as on-use slots. Reject the whole item when any on-use slot teaches a
+      -- spell, otherwise the taught aura remains as a false consumable effect.
+      AND NOT EXISTS (
+          SELECT 1
+          FROM dbc_spells learn_spell
+          WHERE learn_spell.dataset_id = wit.dataset_id
+            AND learn_spell.spell_id = ANY(ARRAY[
+                CASE WHEN wit.spelltrigger_1 = 0 THEN wit.spellid_1 ELSE 0 END,
+                CASE WHEN wit.spelltrigger_2 = 0 THEN wit.spellid_2 ELSE 0 END,
+                CASE WHEN wit.spelltrigger_3 = 0 THEN wit.spellid_3 ELSE 0 END,
+                CASE WHEN wit.spelltrigger_4 = 0 THEN wit.spellid_4 ELSE 0 END,
+                CASE WHEN wit.spelltrigger_5 = 0 THEN wit.spellid_5 ELSE 0 END
+            ])
+            AND 36 IN (learn_spell.effect_0, learn_spell.effect_1, learn_spell.effect_2)
       )
     GROUP BY wit.dataset_id, wit.entry
 )
