@@ -66,6 +66,28 @@ func TestDerivedConsumablesAreDatasetScopedAndLinkBuffs(t *testing.T) {
 		require.NoError(t, spelldb.UpsertBatch(ctx, pool, rows))
 	}
 
+	insertLearnSpell := func(datasetID string, rootID, taughtID int32, taughtName string) {
+		t.Helper()
+		root := chrondbc.Spell{
+			ID:        chrondbc.SpellID(rootID),
+			Name_lang: i18n.Text{i18n.English: "Teach " + taughtName},
+		}
+		root.Effect[0] = chrondbc.EffectLearnSpell
+		root.EffectTriggerSpell[0] = chrondbc.SpellID(taughtID)
+
+		taught := chrondbc.Spell{
+			ID:        chrondbc.SpellID(taughtID),
+			Name_lang: i18n.Text{i18n.English: taughtName},
+		}
+		taught.Effect[0] = chrondbc.EffectApplyAura
+
+		rows := []spelldb.SpellRow{
+			spelldb.FromSpell(uuid.MustParse(datasetID), &root),
+			spelldb.FromSpell(uuid.MustParse(datasetID), &taught),
+		}
+		require.NoError(t, spelldb.UpsertBatch(ctx, pool, rows))
+	}
+
 	defaultID := servicedataset.DefaultDatasetID.String()
 	otherID := otherDataset.ID.String()
 	insertItem(defaultID, 1000, int32(chrondbc.ItemClassConsumable), 100, "Default Elixir")
@@ -73,13 +95,14 @@ func TestDerivedConsumablesAreDatasetScopedAndLinkBuffs(t *testing.T) {
 	insertItem(otherID, 1000, int32(chrondbc.ItemClassConsumable), 300, "Other Elixir")
 	insertSpells(defaultID, 100, 200, "Default Buff")
 	insertSpells(otherID, 300, 400, "Other Buff")
+	insertLearnSpell(defaultID, 600, 601, "Prayer of Shadow Protection")
 
 	// Some physical consumables, such as Jujus, are classified as quest
 	// items. Include stackable, non-equippable on-use items, charged trade goods
 	// such as weapon oils, and non-stackable items whose use spell directly
-	// applies an aura. Exclude reusable equipment, non-stackable quest activators
-	// that only trigger another spell, and non-use spell triggers such as class
-	// spell codices whose trigger 6 teaches a spell.
+	// applies an aura. Exclude reusable equipment, non-stackable quest activators,
+	// non-use item triggers, and on-use codices whose root spell teaches a class
+	// spell instead of applying a consumable effect.
 	_, err = pool.Exec(ctx, `
 		INSERT INTO world_item_template (
 			dataset_id, entry, class, name, inventory_type, stackable,
@@ -92,7 +115,8 @@ func TestDerivedConsumablesAreDatasetScopedAndLinkBuffs(t *testing.T) {
 			($1, 1006, $2, 'Non-stackable Consumable', 0, 1, 200, 0, 0, 0, 0),
 			($1, 1007, $4, 'Wizard Oil', 0, 1, 500, 0, -5, 0, 0),
 			($1, 1008, $4, 'Dense Sharpening Stone', 0, 20, 501, 0, -1, 0, 0),
-			($1, 1009, $5, 'Class Spell Codex', 0, 1, 600, 6, 0, 0, 0)
+			($1, 1009, $5, 'Class Spell Codex', 0, 1, 600, 0, 0, 0, 0),
+			($1, 1010, $5, 'ZZ Mixed Consumable', 0, 1, 100, 0, 0, 600, 0)
 	`, defaultID, int32(chrondbc.ItemClassQuest), int32(chrondbc.ItemClassArmor), int32(chrondbc.ItemClassTradeGoods), int32(chrondbc.ItemClassConsumable))
 	require.NoError(t, err)
 
@@ -115,7 +139,7 @@ func TestDerivedConsumablesAreDatasetScopedAndLinkBuffs(t *testing.T) {
 
 	defaultRows, err := store.ListConsumablesByDataset(ctx, servicedataset.DefaultDatasetID)
 	require.NoError(t, err)
-	require.Len(t, defaultRows, 5)
+	require.Len(t, defaultRows, 6)
 	assert.Equal(t, int32(1000), defaultRows[0].ItemID)
 	assert.Equal(t, "Default Elixir", defaultRows[0].ItemName)
 	assert.Equal(t, []int32{100}, defaultRows[0].ItemSpellIds)
@@ -138,10 +162,14 @@ func TestDerivedConsumablesAreDatasetScopedAndLinkBuffs(t *testing.T) {
 	assert.Equal(t, "Wizard Oil", defaultRows[4].ItemName)
 	assert.Equal(t, []int32{500}, defaultRows[4].ItemSpellIds)
 	assert.False(t, defaultRows[4].BuffSpellID.Valid)
+	assert.Equal(t, int32(1010), defaultRows[5].ItemID)
+	assert.Equal(t, "ZZ Mixed Consumable", defaultRows[5].ItemName)
+	assert.Equal(t, []int32{100}, defaultRows[5].ItemSpellIds)
+	assert.Equal(t, int32(200), defaultRows[5].BuffSpellID.Int32)
 
 	defaultSummary, err := store.GetDatasetImportSummary(ctx, servicedataset.DefaultDatasetID)
 	require.NoError(t, err)
-	assert.Equal(t, int32(5), defaultSummary.ConsumablesCount)
+	assert.Equal(t, int32(6), defaultSummary.ConsumablesCount)
 
 	otherRows, err := store.ListConsumablesByDataset(ctx, otherDataset.ID)
 	require.NoError(t, err)
