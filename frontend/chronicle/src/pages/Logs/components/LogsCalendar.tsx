@@ -129,13 +129,19 @@ export function LogsCalendar({
                     key={dayIndex}
                     className={`
                       ${
-                        cells
-                          ? compact
-                            ? "min-h-[36px] p-0.5"
-                            : "min-h-[56px] p-1"
-                          : compact
-                            ? "min-h-[48px] p-1"
-                            : "min-h-[80px] sm:min-h-[100px] p-1 sm:p-1.5"
+                        fillHeight
+                          ? cells
+                            ? "p-0.5"
+                            : compact
+                              ? "p-1"
+                              : "p-1 sm:p-1.5"
+                          : cells
+                            ? compact
+                              ? "min-h-[36px] p-0.5"
+                              : "min-h-[56px] p-1"
+                            : compact
+                              ? "min-h-[48px] p-1"
+                              : "min-h-[80px] sm:min-h-[100px] p-1 sm:p-1.5"
                       }
                       ${
                         cells
@@ -146,7 +152,7 @@ export function LogsCalendar({
                     `}
                   >
                     {/* Date number */}
-                    <div className="flex items-center justify-between mb-1">
+                    <div className="mb-1 flex shrink-0 items-center justify-between">
                       <span
                         className={`
                           ${compact ? "text-[10px]" : "text-xs sm:text-sm"} font-medium
