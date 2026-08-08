@@ -149,6 +149,8 @@ export function ConsumablesLedgerContent(props: ConsumablesLedgerContentProps) {
             </div>
 
             <ScrollArea className="min-h-0 flex-1">
+              {/* Right gutter so rows don't sit under the overlay scrollbar. */}
+              <div className="pr-2.5">
               <div className="flex flex-col py-1">
                 {ledger.rows.map((row) => (
                   <LedgerRow
@@ -167,6 +169,7 @@ export function ConsumablesLedgerContent(props: ConsumablesLedgerContentProps) {
                 totalAmbiguousUses={ledger.ambiguousUses}
                 showGold={coverage.showGold}
               />
+              </div>
             </ScrollArea>
           </div>
         )}
