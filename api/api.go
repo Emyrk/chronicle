@@ -2,13 +2,10 @@ package api
 
 import (
 	"context"
-	"fmt"
 	"log/slog"
 	"net/http"
 	"net/http/httputil"
 	"net/url"
-	"regexp"
-	"strings"
 
 	"github.com/Emyrk/chronicle/api/chronauth"
 	"github.com/Emyrk/chronicle/api/chroniclesdk"
@@ -29,7 +26,6 @@ import (
 	"github.com/Emyrk/chronicle/database/gamedb"
 	"github.com/Emyrk/chronicle/database/pubsub"
 	"github.com/Emyrk/chronicle/database/storage"
-	"github.com/Emyrk/chronicle/frontend"
 	"github.com/Emyrk/chronicle/internal/services/serviceapplication"
 	"github.com/Emyrk/chronicle/internal/services/servicecache"
 	"github.com/Emyrk/chronicle/internal/services/servicedataset"
@@ -559,133 +555,7 @@ func (api *API) Routes() chi.Router {
 		}
 	})
 
-	r.NotFound(frontend.Handler(frontend.FS(), api.OGRoutes(), api.brandingResolver).ServeHTTP)
-
 	return r
-}
-
-// brandingResolver returns per-request branding for the HTML template
-// (title, favicon, theme CSS) based on tenant context or site-level branding.
-func (api *API) brandingResolver(r *http.Request) *frontend.HTMLBranding {
-	// Tenant branding takes priority.
-	if t := servicetenant.TenantFromContext(r.Context()); t != nil {
-		branding := chroniclesdk.TenantFromDB(*t).Branding
-		if branding != nil && branding.DisplayName != "" {
-			b := &frontend.HTMLBranding{
-				Title:    branding.DisplayName + " by Chronicle",
-				ThemeCSS: buildThemeCSS(branding),
-			}
-			if branding.Favicon != "" {
-				b.Favicon = branding.Favicon
-			}
-			return b
-		}
-	}
-
-	// Fall back to site-level branding.
-	config, err := api.Opts.Zed.GetSiteConfig(r.Context())
-	if err != nil {
-		return nil
-	}
-	branding := unmarshalBranding(config.Branding)
-	if branding != nil && branding.DisplayName != "" {
-		b := &frontend.HTMLBranding{
-			Title:    branding.DisplayName + " by Chronicle",
-			ThemeCSS: buildThemeCSS(branding),
-		}
-		if branding.Favicon != "" {
-			b.Favicon = branding.Favicon
-		}
-		return b
-	}
-
-	return nil
-}
-
-var hexColorRe = regexp.MustCompile(`^#[0-9a-fA-F]{6}$`)
-
-// themeKnob maps a branding theme key to the CSS variables it controls.
-type themeKnob struct {
-	// direct are CSS variable names set to the hex value as-is.
-	direct []string
-	// derived are CSS variable names set via color-mix from the hex value.
-	derived []struct {
-		name string
-		mix  string // e.g. "color-mix(in oklch, %s 60%%, black)"
-	}
-}
-
-// themeKnobs defines every configurable color knob and the CSS variables it
-// drives. Keep in sync with the frontend ThemeEditor KNOBS array.
-//
-//nolint:gochecknoglobals // package-level lookup table
-var themeKnobs = map[string]themeKnob{
-	"primary": {
-		direct: []string{"--primary", "--tertiary"},
-		derived: []struct {
-			name string
-			mix  string
-		}{
-			{"--primary-darker", "color-mix(in oklch, %s 60%%, black)"},
-			{"--sidebar-primary", "color-mix(in oklch, %s 60%%, black)"},
-			{"--ring", "color-mix(in oklch, %s 75%%, black)"},
-			{"--sidebar-ring", "color-mix(in oklch, %s 75%%, black)"},
-		},
-	},
-	"accent": {
-		direct: []string{"--secondary", "--accent", "--sidebar-accent"},
-	},
-	"background": {
-		direct: []string{"--background"},
-	},
-	"card": {
-		direct: []string{"--card", "--muted", "--sidebar", "--popover"},
-	},
-	"border": {
-		direct: []string{"--border", "--input", "--sidebar-border"},
-	},
-	"foreground": {
-		direct: []string{
-			"--foreground", "--card-foreground", "--popover-foreground",
-			"--secondary-foreground", "--accent-foreground",
-			"--sidebar-foreground", "--sidebar-accent-foreground",
-		},
-	},
-	"muted_text": {
-		direct: []string{"--muted-foreground"},
-	},
-	"link": {
-		direct: []string{"--link"},
-	},
-	"destructive": {
-		direct: []string{"--destructive"},
-	},
-}
-
-// buildThemeCSS produces CSS variable overrides from branding theme colors.
-// Only validated hex values are emitted; invalid values are silently skipped.
-func buildThemeCSS(branding *chroniclesdk.Branding) string {
-	if branding == nil || len(branding.Theme) == 0 {
-		return ""
-	}
-
-	var b strings.Builder
-	for key, hex := range branding.Theme {
-		if !hexColorRe.MatchString(hex) {
-			continue
-		}
-		knob, ok := themeKnobs[key]
-		if !ok {
-			continue
-		}
-		for _, v := range knob.direct {
-			fmt.Fprintf(&b, "%s: %s; ", v, hex)
-		}
-		for _, d := range knob.derived {
-			fmt.Fprintf(&b, "%s: "+d.mix+"; ", d.name, hex)
-		}
-	}
-	return b.String()
 }
 
 // redirectToRankings returns a handler that redirects to a /rankings/* path,

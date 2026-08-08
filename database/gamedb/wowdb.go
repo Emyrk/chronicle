@@ -13,7 +13,6 @@ import (
 	"github.com/Emyrk/chronicle/database/gamedb/spells"
 	"github.com/Emyrk/chronicle/database/gamedb/talents"
 	"github.com/Emyrk/chronicle/internal/lrucache"
-	"github.com/Emyrk/chronicle/internal/services"
 	"github.com/Emyrk/chronicle/internal/services/servicecache"
 	"github.com/Gophercraft/core/format/dbc"
 	"github.com/google/uuid"
@@ -99,11 +98,7 @@ type WoWDB struct {
 // New creates a WoWDB. The spell DBC file is opened and held for the lifetime
 // of the returned value; call [WoWDB.Close] to release it.
 func New(ctx context.Context, opts Options) (*WoWDB, error) {
-	build := services.ServerBuild
-	if dbcdb.SpellBuildOverride != 0 {
-		build = dbcdb.SpellBuildOverride
-	}
-	dbInst := dbc.NewDB(build)
+	dbInst := dbc.NewDB(dbcdb.ExtendedSpellBuild)
 	sf, err := os.Open(opts.SpellsDBCPath)
 	if err != nil {
 		return nil, err

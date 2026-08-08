@@ -127,9 +127,8 @@ func (s *Service) Options() serpent.OptionSet {
 }
 
 // ensureDefaultDataset upserts the wow_version, build_version, and
-// default_flavor on the default dataset row (inserted by migration 000121).
-// These fields depend on build tags (services.ServerName / services.ServerBuild)
-// so they can't be set correctly in SQL.
+// default_flavor on the default dataset row (inserted by migration 000121)
+// using the bundled AzerothCore fallback identity.
 func (s *Service) ensureDefaultDataset(ctx context.Context) error {
 	ctx = servicetenant.AdminBypass(ctx)
 	logger := servicelogger.Logger(s.broker)
