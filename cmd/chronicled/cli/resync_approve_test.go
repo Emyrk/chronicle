@@ -9,6 +9,7 @@ import (
 	"github.com/Emyrk/chronicle/chronicle"
 	"github.com/Emyrk/chronicle/chronicle/riverqueue/riverconst"
 	"github.com/Emyrk/chronicle/cmd/chronicled/cli/resynccandidate"
+	"github.com/Emyrk/chronicle/internal/services/servicedataset"
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/require"
 )
@@ -52,6 +53,51 @@ func TestPromptApproval(t *testing.T) {
 			require.Contains(t, out.String(), tt.output)
 		})
 	}
+}
+
+func TestParseExcludedDatasetIDs(t *testing.T) {
+	t.Parallel()
+
+	first := uuid.MustParse("00000000-0000-0000-0000-000000000001")
+	second := uuid.MustParse("00000000-0000-0000-0000-000000000002")
+
+	got, err := parseExcludedDatasetIDs([]string{first.String(), " " + second.String() + " ", first.String()})
+	require.NoError(t, err)
+	require.Equal(t, map[uuid.UUID]struct{}{first: {}, second: {}}, got)
+
+	_, err = parseExcludedDatasetIDs([]string{"not-a-uuid"})
+	require.ErrorContains(t, err, "invalid --exclude-dataset")
+}
+
+func TestGroupUsesExcludedDataset(t *testing.T) {
+	t.Parallel()
+
+	excludedDataset := uuid.MustParse("00000000-0000-0000-0000-000000000002")
+	includedDataset := uuid.MustParse("00000000-0000-0000-0000-000000000003")
+	excluded := map[uuid.UUID]struct{}{excludedDataset: {}}
+	firstRealm := uuid.MustParse("10000000-0000-0000-0000-000000000001")
+	secondRealm := uuid.MustParse("10000000-0000-0000-0000-000000000002")
+
+	resolve := func(realmID uuid.UUID) uuid.UUID {
+		if realmID == secondRealm {
+			return excludedDataset
+		}
+		return includedDataset
+	}
+
+	require.False(t, groupUsesExcludedDataset(resynccandidate.Group{RealmIDs: []uuid.UUID{firstRealm}}, excluded, resolve))
+	require.True(t, groupUsesExcludedDataset(resynccandidate.Group{RealmIDs: []uuid.UUID{firstRealm, secondRealm}}, excluded, resolve))
+	require.False(t, groupUsesExcludedDataset(resynccandidate.Group{RealmIDs: []uuid.UUID{secondRealm}}, nil, resolve))
+}
+
+func TestGroupUsesExcludedDataset_NoRealmsUsesDefaultDataset(t *testing.T) {
+	t.Parallel()
+
+	excluded := map[uuid.UUID]struct{}{servicedataset.DefaultDatasetID: {}}
+	require.True(t, groupUsesExcludedDataset(resynccandidate.Group{}, excluded, func(uuid.UUID) uuid.UUID {
+		t.Fatal("resolver should not be called for a group without realms")
+		return uuid.Nil
+	}))
 }
 
 func TestResyncLogURL(t *testing.T) {

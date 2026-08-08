@@ -48,21 +48,22 @@ const defaultResyncLogBaseURL = "https://legacy.chronicleclassic.com"
 // resync jobs on a dedicated River queue and display progress.
 func ResyncCmd() *serpent.Command {
 	var (
-		execute       bool
-		approveEach   bool
-		workers       int64
-		limit         int64
-		targetVersion string
-		pgURL         string
-		remoteURL     string
-		storageType   string
-		storagePath   string
-		s3Region      string
-		s3Endpoint    string
-		s3AccessKey   string
-		s3SecretKey   string
-		s3PathStyle   bool
-		s3Bucket      string
+		execute         bool
+		approveEach     bool
+		workers         int64
+		limit           int64
+		targetVersion   string
+		excludeDatasets []string
+		pgURL           string
+		remoteURL       string
+		storageType     string
+		storagePath     string
+		s3Region        string
+		s3Endpoint      string
+		s3AccessKey     string
+		s3SecretKey     string
+		s3PathStyle     bool
+		s3Bucket        string
 	)
 
 	defaultTarget := resynccandidate.DefaultTargetVersion(version.GitTag, version.GitCommit)
@@ -102,6 +103,12 @@ func ResyncCmd() *serpent.Command {
 			Flag:        "target-version",
 			Default:     defaultTarget,
 			Value:       serpent.StringOf(&targetVersion),
+		},
+		{
+			Name:        "Exclude Dataset",
+			Description: "Dataset UUID to skip entirely. Log groups using an excluded dataset are omitted before --limit is applied. May be specified multiple times.",
+			Flag:        "exclude-dataset",
+			Value:       serpent.StringArrayOf(&excludeDatasets),
 		},
 		{
 			Name:        "Postgres URL",
@@ -221,6 +228,10 @@ Fail-pause behavior (--execute):
 			if enc := semverenc.Encode(targetVersion); enc == 0 {
 				return fmt.Errorf("invalid target version: %q (cannot encode with semverenc)", targetVersion)
 			}
+			excludedDatasetIDs, err := parseExcludedDatasetIDs(excludeDatasets)
+			if err != nil {
+				return err
+			}
 
 			logger.Info("resync starting",
 				slog.String("target_version", targetVersion),
@@ -246,8 +257,17 @@ Fail-pause behavior (--execute):
 				return fmt.Errorf("query candidates: %w", err)
 			}
 
-			// Filter by semver, dedup by log group, apply limit — all in Go.
-			groups := resynccandidate.FilterAndGroup(allRows, targetVersion, int(limit))
+			// Filter by semver and deduplicate before applying dataset exclusions.
+			// The candidate limit is applied afterward so excluded groups do not
+			// consume slots that could be used by eligible groups.
+			groups := resynccandidate.FilterAndGroup(allRows, targetVersion, 0)
+			groups, excludedCount := excludeGroupsByDataset(ctx, dbStore, groups, excludedDatasetIDs)
+			if excludedCount > 0 {
+				logger.Info("excluded resync candidates by dataset", "groups", excludedCount, "dataset_ids", excludeDatasets)
+			}
+			if limit > 0 && len(groups) > int(limit) {
+				groups = groups[:int(limit)]
+			}
 
 			if len(groups) == 0 {
 				return writeOutput(i.Stdout, "No candidate log groups found.\n")
@@ -907,6 +927,63 @@ func pollJobStates(ctx context.Context, p *tea.Program, client *river.Client[pgx
 			}
 		}
 	}
+}
+
+func parseExcludedDatasetIDs(values []string) (map[uuid.UUID]struct{}, error) {
+	excluded := make(map[uuid.UUID]struct{}, len(values))
+	for _, value := range values {
+		datasetID, err := uuid.Parse(strings.TrimSpace(value))
+		if err != nil {
+			return nil, fmt.Errorf("invalid --exclude-dataset %q: %w", value, err)
+		}
+		excluded[datasetID] = struct{}{}
+	}
+	return excluded, nil
+}
+
+func groupUsesExcludedDataset(
+	group resynccandidate.Group,
+	excluded map[uuid.UUID]struct{},
+	resolve func(uuid.UUID) uuid.UUID,
+) bool {
+	if len(excluded) == 0 {
+		return false
+	}
+	if len(group.RealmIDs) == 0 {
+		_, ok := excluded[servicedataset.DefaultDatasetID]
+		return ok
+	}
+	for _, realmID := range group.RealmIDs {
+		if _, ok := excluded[resolve(realmID)]; ok {
+			return true
+		}
+	}
+	return false
+}
+
+func excludeGroupsByDataset(
+	ctx context.Context,
+	db database.Store,
+	groups []resynccandidate.Group,
+	excluded map[uuid.UUID]struct{},
+) ([]resynccandidate.Group, int) {
+	if len(excluded) == 0 {
+		return groups, 0
+	}
+
+	adminCtx := servicetenant.AdminBypass(ctx)
+	included := make([]resynccandidate.Group, 0, len(groups))
+	excludedCount := 0
+	for _, group := range groups {
+		if groupUsesExcludedDataset(group, excluded, func(realmID uuid.UUID) uuid.UUID {
+			return resolveDatasetForRealm(adminCtx, db, realmID).DatasetID
+		}) {
+			excludedCount++
+			continue
+		}
+		included = append(included, group)
+	}
+	return included, excludedCount
 }
 
 // resolveDatasetForRealm mirrors the server's dataset resolution used during
