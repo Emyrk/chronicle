@@ -5,6 +5,9 @@
  */
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { Popover as PopoverPrimitive } from "radix-ui";
+import { ChevronsUpDown, Search } from "lucide-react";
+import { usePortalContainer } from "@/components/ui/PortalContainerContext";
 import { ScrollArea } from "@/components/ui/ScrollArea/ScrollArea";
 import { useCachedValue } from "@/hooks/useCachedValue";
 import { useDatasetId } from "@/hooks/useDatasetId";
@@ -37,6 +40,119 @@ function classRank(cls: string | undefined): number {
 
 function classColor(cls: string | undefined): string {
   return `var(--color-class-${(cls ?? "unknown").toLowerCase()})`;
+}
+
+interface RosterEntry {
+  guid: string;
+  name: string;
+  cls: string | undefined;
+}
+
+/** Searchable player picker: the player name is the trigger. */
+function PlayerCombobox({
+  roster,
+  usesByPlayer,
+  selected,
+  onSelect,
+}: {
+  roster: RosterEntry[];
+  usesByPlayer: ReadonlyMap<string, number>;
+  selected: RosterEntry;
+  onSelect: (guid: string) => void;
+}) {
+  const [open, setOpen] = useState(false);
+  const [search, setSearch] = useState("");
+  const inputRef = useRef<HTMLInputElement>(null);
+  const portalContainer = usePortalContainer();
+
+  const filtered = useMemo(() => {
+    const query = search.trim().toLowerCase();
+    if (!query) return roster;
+    return roster.filter(
+      (player) =>
+        player.name.toLowerCase().includes(query) ||
+        (player.cls ?? "").toLowerCase().includes(query),
+    );
+  }, [roster, search]);
+
+  return (
+    <PopoverPrimitive.Root
+      open={open}
+      onOpenChange={(next) => {
+        setOpen(next);
+        if (!next) setSearch("");
+      }}
+    >
+      <PopoverPrimitive.Trigger asChild>
+        <button
+          type="button"
+          className="group flex min-w-0 items-center gap-1 rounded px-0.5 transition-colors hover:bg-muted/40"
+          title="Change player"
+        >
+          <span className="truncate text-sm font-medium" style={{ color: classColor(selected.cls) }}>
+            {selected.name}
+          </span>
+          <ChevronsUpDown className="h-3 w-3 shrink-0 text-muted-foreground/50 group-hover:text-muted-foreground" />
+        </button>
+      </PopoverPrimitive.Trigger>
+      <PopoverPrimitive.Portal container={portalContainer}>
+        <PopoverPrimitive.Content
+          align="start"
+          sideOffset={4}
+          className="z-50 w-56 rounded-md border border-border bg-popover text-popover-foreground shadow-md outline-none animate-in fade-in-0 zoom-in-95"
+          onOpenAutoFocus={(event) => {
+            event.preventDefault();
+            inputRef.current?.focus();
+          }}
+        >
+          <div className="flex items-center gap-2 border-b border-border px-2.5 py-1.5">
+            <Search className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
+            <input
+              ref={inputRef}
+              value={search}
+              onChange={(event) => setSearch(event.target.value)}
+              placeholder="Search players..."
+              aria-label="Search players"
+              className="min-w-0 flex-1 bg-transparent text-xs outline-none placeholder:text-muted-foreground"
+            />
+          </div>
+          <div className="max-h-64 overflow-y-auto p-1 styled-scrollbar">
+            {filtered.length === 0 && (
+              <p className="px-2 py-3 text-center text-xs text-muted-foreground">No players found</p>
+            )}
+            {filtered.map((player) => {
+              const uses = usesByPlayer.get(player.guid) ?? 0;
+              return (
+                <button
+                  key={player.guid}
+                  type="button"
+                  onClick={() => {
+                    onSelect(player.guid);
+                    setOpen(false);
+                    setSearch("");
+                  }}
+                  className={cn(
+                    "flex w-full items-center gap-2 rounded-sm px-2 py-1 text-left text-xs hover:bg-accent",
+                    player.guid === selected.guid && "bg-muted/50",
+                  )}
+                >
+                  <span
+                    className="min-w-0 flex-1 truncate font-medium"
+                    style={{ color: classColor(player.cls) }}
+                  >
+                    {player.name}
+                  </span>
+                  <span className="shrink-0 font-mono text-2xs text-muted-foreground/70">
+                    {uses > 0 ? `${uses}×` : "—"}
+                  </span>
+                </button>
+              );
+            })}
+          </div>
+        </PopoverPrimitive.Content>
+      </PopoverPrimitive.Portal>
+    </PopoverPrimitive.Root>
+  );
 }
 
 type ConsumablesPlayerContentProps = PanelRenderProps<ConsumablesResult>;
@@ -191,9 +307,12 @@ export function ConsumablesPlayerContent(props: ConsumablesPlayerContentProps) {
                 className="h-4 w-1 shrink-0 rounded-full"
                 style={{ background: classColor(selected.cls) }}
               />
-              <span className="truncate text-sm font-medium" style={{ color: classColor(selected.cls) }}>
-                {selected.name}
-              </span>
+              <PlayerCombobox
+                roster={roster}
+                usesByPlayer={usesByPlayer}
+                selected={selected}
+                onSelect={selectPlayer}
+              />
               <span className="shrink-0 font-mono text-2xs capitalize text-muted-foreground/70">
                 {selected.cls?.toLowerCase() ?? "unknown"}
               </span>
