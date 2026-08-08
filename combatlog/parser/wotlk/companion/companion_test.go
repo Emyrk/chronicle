@@ -123,6 +123,22 @@ func TestFeed_OrphanContinuation(t *testing.T) {
 	assert.Empty(t, msgs)
 }
 
+func TestFeed_RecoversBinPackedMessageAfterOrphanContinuation(t *testing.T) {
+	t.Parallel()
+	p := newTestParser()
+
+	field := `~orphaned player data][9Z:Vault of Archavon,raid,2,25 Player,25,0,0,0,0,Wintergrasp Fortress][0P0x000000000009A654;T1,2,2305000`
+	msgs, err := p.Feed(testTS, field)
+	require.NoError(t, err)
+	require.Len(t, msgs, 1)
+
+	z, ok := msgs[0].(*messages.Zone)
+	require.True(t, ok)
+	assert.Equal(t, "vault of archavon", z.Name)
+	assert.Equal(t, "25 Player", z.DifficultyName)
+	assert.Equal(t, 25, z.MaxPlayers)
+}
+
 func TestIsCompanionMessage(t *testing.T) {
 	t.Parallel()
 

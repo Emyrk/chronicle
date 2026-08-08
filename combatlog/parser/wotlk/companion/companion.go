@@ -93,9 +93,11 @@ func (p *Parser) Feed(ts time.Time, failedType string) ([]messages.Message, erro
 		case ch == '~':
 			// Continuation of current message.
 			if p.state != stateAccumulating {
-				// Orphan continuation — ignore.
+				// Ignore the orphaned payload, but keep scanning this field. A later
+				// bin-packed message can still be complete and independently useful.
 				p.logger.Debug("companion: ignoring orphan continuation")
-				return result, nil
+				pos++
+				continue
 			}
 			pos++ // skip '~'
 
