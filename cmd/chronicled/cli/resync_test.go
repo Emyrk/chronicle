@@ -16,15 +16,16 @@ func TestResyncCmd_Help(t *testing.T) {
 
 	// The command should expose the required flags.
 	var (
-		foundTargetVersion bool
-		foundExecute       bool
-		foundApproveEach   bool
-		foundWorkers       bool
-		foundLimit         bool
-		foundPGURL         bool
-		foundRemoteURL     bool
-		foundStorageType   bool
-		foundStoragePath   bool
+		foundTargetVersion  bool
+		foundExcludeDataset bool
+		foundExecute        bool
+		foundApproveEach    bool
+		foundWorkers        bool
+		foundLimit          bool
+		foundPGURL          bool
+		foundRemoteURL      bool
+		foundStorageType    bool
+		foundStoragePath    bool
 	)
 	for _, opt := range cmd.Options {
 		switch opt.Flag {
@@ -33,6 +34,8 @@ func TestResyncCmd_Help(t *testing.T) {
 			// Must NOT be Required — defaults to running version.
 			require.False(t, opt.Required, "--target-version should not be required")
 			require.NotEmpty(t, opt.Default, "--target-version should have a default")
+		case "exclude-dataset":
+			foundExcludeDataset = true
 		case "execute":
 			foundExecute = true
 		case "approve-each":
@@ -54,6 +57,7 @@ func TestResyncCmd_Help(t *testing.T) {
 		}
 	}
 	require.True(t, foundTargetVersion, "missing --target-version flag")
+	require.True(t, foundExcludeDataset, "missing --exclude-dataset flag")
 	require.True(t, foundExecute, "missing --execute flag")
 	require.True(t, foundApproveEach, "missing --approve-each flag")
 	require.True(t, foundWorkers, "missing --workers flag")
