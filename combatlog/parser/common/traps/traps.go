@@ -8,7 +8,7 @@ type Trap struct {
 }
 
 func IsTrap(id guid.GUID) (*Trap, bool) {
-	if id.IsPlayer() {
+	if !id.IsObject() {
 		return nil, false
 	}
 	entry, ok := id.GetEntry()

@@ -6,9 +6,9 @@ import (
 	"github.com/Emyrk/chronicle/combatlog/parser/common/characters"
 
 	"github.com/Emyrk/chronicle/combatlog/parser/common/characters/period"
-	"github.com/Emyrk/chronicle/combatlog/parser/guid"
-	"github.com/Emyrk/chronicle/combatlog/parser/common/traps"
 	"github.com/Emyrk/chronicle/combatlog/parser/common/messages"
+	"github.com/Emyrk/chronicle/combatlog/parser/common/traps"
+	"github.com/Emyrk/chronicle/combatlog/parser/guid"
 )
 
 type ObjectMeta struct {
@@ -53,6 +53,10 @@ type Object struct {
 }
 
 func NewObject(id guid.GUID, all *characters.Characters) (characters.Character, bool) {
+	if !id.IsObject() {
+		return nil, false
+	}
+
 	entry, ok := id.GetEntry()
 	if !ok {
 		return nil, false

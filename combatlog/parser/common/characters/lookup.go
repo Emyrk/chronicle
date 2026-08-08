@@ -7,14 +7,30 @@ import (
 	"github.com/Emyrk/chronicle/combatlog/parser/common/characters/characterset"
 	"github.com/Emyrk/chronicle/combatlog/parser/common/characters/period"
 	"github.com/Emyrk/chronicle/combatlog/parser/common/identifier"
+	"github.com/Emyrk/chronicle/combatlog/parser/common/messages"
+	"github.com/Emyrk/chronicle/combatlog/parser/common/unitdb"
 	"github.com/Emyrk/chronicle/combatlog/parser/guid"
 	"github.com/Emyrk/chronicle/combatlog/parser/types"
 	"github.com/Emyrk/chronicle/combatlog/parser/types/unitinfo"
-	"github.com/Emyrk/chronicle/combatlog/parser/common/messages"
-	"github.com/Emyrk/chronicle/combatlog/parser/common/unitdb"
 )
 
 type CharacterFactory func(id guid.GUID, chars *Characters) (Character, bool)
+
+// CreatureFactories restricts encounter-specific factories to creature GUIDs.
+// Entry IDs are also encoded in pet, vehicle, and object GUIDs, so factories
+// that match only on GetEntry can otherwise misclassify an unrelated unit.
+func CreatureFactories(factories ...CharacterFactory) []CharacterFactory {
+	wrapped := make([]CharacterFactory, 0, len(factories))
+	for _, factory := range factories {
+		wrapped = append(wrapped, func(id guid.GUID, chars *Characters) (Character, bool) {
+			if !id.IsCreature() {
+				return nil, false
+			}
+			return factory(id, chars)
+		})
+	}
+	return wrapped
+}
 
 type SetHook interface {
 	// ActivityChange is invoked every time a character's activity status changes.
@@ -39,7 +55,6 @@ type Characters struct {
 	// TODO: unroll hooks?
 	hooks           []SetHook
 	activityChanged map[Character]struct{}
-
 }
 
 func NewCharacters(db *unitdb.Units, factories []CharacterFactory, id *identifier.Identifier) *Characters {
@@ -105,7 +120,8 @@ func (c *Characters) Add(id guid.GUID, now time.Time) (_ Character, newChar bool
 			char = cc
 		}
 
-		if entry, ok := id.GetEntry(); ok {
+		if id.IsCreature() {
+			entry, _ := id.GetEntry()
 			c.ByEntry[entry] = append(c.ByEntry[entry], char)
 		}
 

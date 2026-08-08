@@ -15,7 +15,9 @@ func VanillaCharacterFactories(flavor database.WoWFlavor) []characters.Character
 		NewTotemCharacter,
 		NewCritterCharacter,
 		NewObject,
+	}
 
+	cres = append(cres, characters.CreatureFactories(
 		// ── Stock vanilla content ──────────────────────────────────────
 		// Sunken Temple
 		NewAtalalDeathwalkerSpirit,
@@ -76,11 +78,11 @@ func VanillaCharacterFactories(flavor database.WoWFlavor) []characters.Character
 		NewEyeStalk,
 		// L/UBRS
 		NewMotherSmolderweb,
-	}
+	)...)
 
 	// ── VanillaPlus content ────────────────────────────────────────
 	if flavor.Has(database.FlavorVanillaPlus) {
-		cres = append(cres,
+		cres = append(cres, characters.CreatureFactories(
 			// SM (V+)
 			NewVanillaPlusMograineCharacter,
 			NewVanillaPlusSMSoul,
@@ -90,12 +92,12 @@ func VanillaCharacterFactories(flavor database.WoWFlavor) []characters.Character
 			NewVanillaPlusScarletCharger,
 			NewVanillaPlusScarletSharpshooter,
 			NewVanillaPlusScarletSorcerer,
-		)
+		)...)
 	}
 
 	// ── Nightmare of Ursol content (Turtle, OctoWoW) ───────────────
 	if flavor.Has(database.FlavorNightmareOfUrsol) {
-		cres = append(cres,
+		cres = append(cres, characters.CreatureFactories(
 			// Timbermaw Hold
 			NewKarrsh,
 			NewChieftainPartath,
@@ -106,12 +108,12 @@ func VanillaCharacterFactories(flavor database.WoWFlavor) []characters.Character
 			NewSelenaxxFoulheart,
 			NewLoktanagTheVile,
 			NewPerotharn,
-		)
+		)...)
 	}
 
 	// ── Turtle WoW custom content ──────────────────────────────────
 	if flavor.Has(database.FlavorTurtle) || flavor.Has(database.FlavorOctoWoW) || flavor.Has(database.FlavorNightmareOfUrsol) {
-		cres = append(cres,
+		cres = append(cres, characters.CreatureFactories(
 			// Kara 40
 			NewNetherInfernal,
 			NewKruul,
@@ -130,7 +132,7 @@ func VanillaCharacterFactories(flavor database.WoWFlavor) []characters.Character
 			NewIncantagos,
 			// Emerald Sanctum
 			NewSolnius,
-		)
+		)...)
 	}
 
 	return cres

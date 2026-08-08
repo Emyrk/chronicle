@@ -24,7 +24,7 @@ func AzerothServersideCoreCharacterFactories() []characters.CharacterFactory {
 func NewCharacterFactories(flavor database.WoWFlavor) []characters.CharacterFactory {
 	cres := creatures.VanillaCharacterFactories(flavor)
 	if flavor.Has(database.FlavorWrath) {
-		cres = append([]characters.CharacterFactory{
+		cres = append(characters.CreatureFactories(
 			// The Nexus
 			NewAzureEnforcer,
 			NewCrazedManaWraith,
@@ -46,7 +46,7 @@ func NewCharacterFactories(flavor database.WoWFlavor) []characters.CharacterFact
 			// Eye of Eternity
 			NewMalygos,
 			NewPowerSpark,
-		}, cres...)
+		), cres...)
 	}
 
 	return cres

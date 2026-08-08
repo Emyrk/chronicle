@@ -23,7 +23,7 @@ func (tot Totem) MaxDuration() time.Duration {
 }
 
 func IsTotem(id guid.GUID) (Totem, bool) {
-	if id.IsPlayer() {
+	if !id.IsCreature() {
 		return Totem{}, false
 	}
 	entry, ok := id.GetEntry()
