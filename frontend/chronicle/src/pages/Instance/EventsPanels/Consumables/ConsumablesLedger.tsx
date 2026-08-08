@@ -249,7 +249,6 @@ export function createConsumablesLedgerPanel(): PanelDefinition<ConsumablesResul
     ...consumablesLedgerProcessor,
     label: "Consumes Used",
     icon: <Coins className="h-4 w-4" />,
-    underConstruction: true,
     supportsFiltering: true,
     // One panel, two scopes: the checkbox flips between the per-player view
     // (off, default) and the raid-wide ledger (on).
