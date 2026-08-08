@@ -1228,15 +1228,6 @@ type GearStatWeight struct {
 	UpdatedAt   pgtype.Timestamptz `db:"updated_at" json:"updated_at"`
 }
 
-type GearStatWeightPin struct {
-	ID           uuid.UUID          `db:"id" json:"id"`
-	TenantID     uuid.UUID          `db:"tenant_id" json:"tenant_id"`
-	DatasetID    uuid.UUID          `db:"dataset_id" json:"dataset_id"`
-	StatWeightID uuid.UUID          `db:"stat_weight_id" json:"stat_weight_id"`
-	PinnedBy     uuid.UUID          `db:"pinned_by" json:"pinned_by"`
-	CreatedAt    pgtype.Timestamptz `db:"created_at" json:"created_at"`
-}
-
 type Guild struct {
 	ID        uuid.UUID          `db:"id" json:"id"`
 	RealmID   uuid.UUID          `db:"realm_id" json:"realm_id"`

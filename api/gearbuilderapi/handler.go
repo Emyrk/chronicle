@@ -17,10 +17,8 @@ import (
 	"github.com/Emyrk/chronicle/api/chronauth"
 	"github.com/Emyrk/chronicle/api/chroniclesdk"
 	"github.com/Emyrk/chronicle/api/httpapi"
-	"github.com/Emyrk/chronicle/api/httpmw"
 	"github.com/Emyrk/chronicle/database"
 	"github.com/Emyrk/chronicle/database/authz"
-	"github.com/Emyrk/chronicle/database/authz/policy"
 	"github.com/Emyrk/chronicle/internal/lrucache"
 	"github.com/Emyrk/chronicle/internal/services/servicecache"
 	"github.com/Emyrk/chronicle/internal/services/servicetenant"
@@ -77,9 +75,6 @@ func (h *Handler) Routes() http.Handler {
 	// Public: observed gear trends for a class/spec cohort.
 	r.Get("/trends", h.GearTrends)
 
-	// Public: list pinned stat weights (default presets).
-	r.Get("/stat-weight-pins", h.ListStatWeightPins)
-
 	// Authenticated routes.
 	r.Group(func(r chi.Router) {
 		r.Use(h.auth.Authenticated(false))
@@ -99,12 +94,6 @@ func (h *Handler) Routes() http.Handler {
 		r.Put("/stat-weights/{weightID}", h.UpdateStatWeight)
 		r.Delete("/stat-weights/{weightID}", h.DeleteStatWeight)
 
-		// Admin: pin/unpin stat weights.
-		r.Route("/admin/stat-weight-pins", func(r chi.Router) {
-			r.Use(httpmw.Can(h.zed, policy.New().GlobalChronicle().CanAdmin_tenants_User))
-			r.Post("/", h.CreateStatWeightPin)
-			r.Delete("/{pinID}", h.DeleteStatWeightPin)
-		})
 	})
 
 	return r
@@ -476,115 +465,6 @@ func (h *Handler) DeleteStatWeight(w http.ResponseWriter, r *http.Request) {
 	w.WriteHeader(http.StatusNoContent)
 }
 
-// ─── Stat Weight Pins (Admin) ────────────────────────────────
-
-func (h *Handler) ListStatWeightPins(w http.ResponseWriter, r *http.Request) {
-	ctx := r.Context()
-	tenantID := servicetenant.TenantIDFromContext(ctx)
-
-	datasetIDStr := r.URL.Query().Get("dataset_id")
-	if datasetIDStr == "" {
-		httpapi.Write(ctx, w, http.StatusBadRequest, map[string]string{"error": "dataset_id query parameter required"})
-		return
-	}
-	datasetID, err := uuid.Parse(datasetIDStr)
-	if err != nil {
-		httpapi.Write(ctx, w, http.StatusBadRequest, map[string]string{"error": "invalid dataset_id"})
-		return
-	}
-
-	pins, err := h.zed.ListGearStatWeightPins(ctx, database.ListGearStatWeightPinsParams{
-		TenantID:  tenantID,
-		DatasetID: datasetID,
-	})
-	if err != nil {
-		httpapi.InternalServerError(w, err)
-		return
-	}
-
-	result := make([]chroniclesdk.GearStatWeightPin, 0, len(pins))
-	for _, p := range pins {
-		result = append(result, pinRowToSDK(p))
-	}
-
-	httpapi.Write(ctx, w, http.StatusOK, result)
-}
-
-func (h *Handler) CreateStatWeightPin(w http.ResponseWriter, r *http.Request) {
-	ctx := r.Context()
-	claims := chronauth.MustAuthenticatedClaims(ctx)
-	tenantID := servicetenant.TenantIDFromContext(ctx)
-
-	var req chroniclesdk.CreateGearStatWeightPinRequest
-	if !httpapi.Read(ctx, w, r, &req) {
-		return
-	}
-
-	if req.DatasetID == uuid.Nil {
-		httpapi.Write(ctx, w, http.StatusBadRequest, map[string]string{"error": "dataset_id required"})
-		return
-	}
-	if req.StatWeightID == uuid.Nil {
-		httpapi.Write(ctx, w, http.StatusBadRequest, map[string]string{"error": "stat_weight_id required"})
-		return
-	}
-
-	// Verify the stat weight exists in the current tenant.
-	statWeight, err := h.zed.GetGearStatWeightByID(ctx, req.StatWeightID)
-	if err != nil {
-		if errors.Is(err, pgx.ErrNoRows) {
-			httpapi.Write(ctx, w, http.StatusBadRequest, map[string]string{"error": "stat weight not found"})
-			return
-		}
-		httpapi.InternalServerError(w, err)
-		return
-	}
-	if statWeight.TenantID != tenantID {
-		httpapi.Write(ctx, w, http.StatusBadRequest, map[string]string{"error": "stat weight belongs to another tenant"})
-		return
-	}
-
-	pin, err := h.zed.CreateGearStatWeightPin(ctx, database.CreateGearStatWeightPinParams{
-		ID:           uuid.New(),
-		TenantID:     tenantID,
-		DatasetID:    req.DatasetID,
-		StatWeightID: req.StatWeightID,
-		PinnedBy:     claims.Subject,
-	})
-	if err != nil {
-		httpapi.InternalServerError(w, err)
-		return
-	}
-
-	httpapi.Write(ctx, w, http.StatusCreated, pinToSDK(pin))
-}
-
-func (h *Handler) DeleteStatWeightPin(w http.ResponseWriter, r *http.Request) {
-	ctx := r.Context()
-	tenantID := servicetenant.TenantIDFromContext(ctx)
-
-	pinID, err := uuid.Parse(chi.URLParam(r, "pinID"))
-	if err != nil {
-		httpapi.Write(ctx, w, http.StatusBadRequest, map[string]string{"error": "invalid pin ID"})
-		return
-	}
-
-	rows, err := h.zed.DeleteGearStatWeightPin(ctx, database.DeleteGearStatWeightPinParams{
-		ID:       pinID,
-		TenantID: tenantID,
-	})
-	if err != nil {
-		httpapi.InternalServerError(w, err)
-		return
-	}
-	if rows == 0 {
-		httpapi.Write(ctx, w, http.StatusNotFound, map[string]string{"error": "pin not found"})
-		return
-	}
-
-	w.WriteHeader(http.StatusNoContent)
-}
-
 // ─── Validation ──────────────────────────────────────────────
 
 func validateGearListTitle(title string) error {
@@ -710,33 +590,5 @@ func statWeightToSDK(sw database.GearStatWeight) chroniclesdk.GearStatWeight {
 		Weights:     sw.Weights,
 		CreatedAt:   sw.CreatedAt.Time,
 		UpdatedAt:   sw.UpdatedAt.Time,
-	}
-}
-
-func pinToSDK(p database.GearStatWeightPin) chroniclesdk.GearStatWeightPin {
-	return chroniclesdk.GearStatWeightPin{
-		ID:           p.ID,
-		TenantID:     p.TenantID,
-		DatasetID:    p.DatasetID,
-		StatWeightID: p.StatWeightID,
-		PinnedBy:     p.PinnedBy,
-		CreatedAt:    p.CreatedAt.Time,
-	}
-}
-
-func pinRowToSDK(p database.ListGearStatWeightPinsRow) chroniclesdk.GearStatWeightPin {
-	return chroniclesdk.GearStatWeightPin{
-		ID:                    p.ID,
-		TenantID:              p.TenantID,
-		DatasetID:             p.DatasetID,
-		StatWeightID:          p.StatWeightID,
-		PinnedBy:              p.PinnedBy,
-		CreatedAt:             p.CreatedAt.Time,
-		StatWeightName:        p.StatWeightName,
-		StatWeightDescription: p.StatWeightDescription,
-		StatWeightClassID:     p.StatWeightClassID,
-		StatWeightSpecName:    p.StatWeightSpecName,
-		StatWeightWeights:     p.StatWeightWeights,
-		StatWeightUserID:      p.StatWeightUserID,
 	}
 }

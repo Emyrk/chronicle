@@ -102,27 +102,3 @@ type UpdateGearStatWeightRequest struct {
 	SpecName    *string          `json:"spec_name,omitempty"`
 	Weights     *json.RawMessage `json:"weights,omitempty"`
 }
-
-// GearStatWeightPin is an admin-pinned stat weight reference.
-type GearStatWeightPin struct {
-	ID           uuid.UUID `json:"id"`
-	TenantID     uuid.UUID `json:"tenant_id"`
-	DatasetID    uuid.UUID `json:"dataset_id"`
-	StatWeightID uuid.UUID `json:"stat_weight_id"`
-	PinnedBy     uuid.UUID `json:"pinned_by"`
-	CreatedAt    time.Time `json:"created_at"`
-
-	// Resolved stat weight fields (populated on list).
-	StatWeightName        string          `json:"stat_weight_name,omitempty"`
-	StatWeightDescription string          `json:"stat_weight_description,omitempty"`
-	StatWeightClassID     int32           `json:"stat_weight_class_id,omitempty"`
-	StatWeightSpecName    string          `json:"stat_weight_spec_name,omitempty"`
-	StatWeightWeights     json.RawMessage `json:"stat_weight_weights,omitempty"`
-	StatWeightUserID      uuid.UUID       `json:"stat_weight_user_id,omitempty"`
-}
-
-// CreateGearStatWeightPinRequest is the request body for pinning a stat weight.
-type CreateGearStatWeightPinRequest struct {
-	DatasetID    uuid.UUID `json:"dataset_id"`
-	StatWeightID uuid.UUID `json:"stat_weight_id"`
-}

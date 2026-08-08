@@ -32,7 +32,6 @@ import { AdminOutdatedInstancesPage } from "./pages/Admin/AdminOutdatedInstances
 import { AdminApplicationsListPage } from "./pages/Admin/AdminApplicationsListPage"
 import { AdminCacheStatsPage } from "./pages/Admin/AdminCacheStatsPage"
 import { AdminParsingPage } from "./pages/Admin/AdminParsingPage"
-import AdminGearBuilderPage from "./pages/Admin/AdminGearBuilderPage"
 import { GearLayout } from "./pages/Gear/GearLayout"
 import { GearListsPage } from "./pages/Gear/GearListsPage"
 import { GearListPage } from "./pages/Gear/builder/GearListPage"
@@ -151,7 +150,6 @@ function App() {
           <Route path="applications" element={<AdminApplicationsListPage />} />
           <Route path="cache-stats" element={<AdminCacheStatsPage />} />
           <Route path="parsing" element={<AdminParsingPage />} />
-          <Route path="gear-builder" element={<AdminGearBuilderPage />} />
         </Route>
         <Route path="/servers" element={<ServersLayout />}>
           <Route index element={<ServersPage />} />

@@ -743,15 +743,6 @@ CREATE TABLE gear_lists (
     CONSTRAINT gear_lists_title_length_chk CHECK (((char_length(title) >= 1) AND (char_length(title) <= 128)))
 );
 
-CREATE TABLE gear_stat_weight_pins (
-    id uuid DEFAULT gen_random_uuid() NOT NULL,
-    tenant_id uuid DEFAULT '00000000-0000-0000-0000-000000000000'::uuid NOT NULL,
-    dataset_id uuid NOT NULL,
-    stat_weight_id uuid NOT NULL,
-    pinned_by uuid NOT NULL,
-    created_at timestamp with time zone DEFAULT now() NOT NULL
-);
-
 CREATE TABLE gear_stat_weights (
     id uuid DEFAULT gen_random_uuid() NOT NULL,
     user_id uuid NOT NULL,
@@ -1865,12 +1856,6 @@ ALTER TABLE ONLY game_players
 ALTER TABLE ONLY gear_lists
     ADD CONSTRAINT gear_lists_pkey PRIMARY KEY (id);
 
-ALTER TABLE ONLY gear_stat_weight_pins
-    ADD CONSTRAINT gear_stat_weight_pins_pkey PRIMARY KEY (id);
-
-ALTER TABLE ONLY gear_stat_weight_pins
-    ADD CONSTRAINT gear_stat_weight_pins_unique UNIQUE (tenant_id, dataset_id, stat_weight_id);
-
 ALTER TABLE ONLY gear_stat_weights
     ADD CONSTRAINT gear_stat_weights_pkey PRIMARY KEY (id);
 
@@ -2140,8 +2125,6 @@ CREATE INDEX game_player_gear_history_player_time ON game_player_gear_history US
 CREATE INDEX game_players_player_and_realm ON game_players USING btree (name, realm_id);
 
 CREATE INDEX gear_lists_user_tenant_idx ON gear_lists USING btree (user_id, tenant_id);
-
-CREATE INDEX gear_stat_weight_pins_tenant_dataset_idx ON gear_stat_weight_pins USING btree (tenant_id, dataset_id);
 
 CREATE INDEX gear_stat_weights_user_tenant_idx ON gear_stat_weights USING btree (user_id, tenant_id);
 
@@ -2459,15 +2442,6 @@ ALTER TABLE ONLY gear_lists
 
 ALTER TABLE ONLY gear_lists
     ADD CONSTRAINT gear_lists_user_id_fkey FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE;
-
-ALTER TABLE ONLY gear_stat_weight_pins
-    ADD CONSTRAINT gear_stat_weight_pins_dataset_id_fkey FOREIGN KEY (dataset_id) REFERENCES datasets(id) ON DELETE CASCADE;
-
-ALTER TABLE ONLY gear_stat_weight_pins
-    ADD CONSTRAINT gear_stat_weight_pins_pinned_by_fkey FOREIGN KEY (pinned_by) REFERENCES users(id) ON DELETE CASCADE;
-
-ALTER TABLE ONLY gear_stat_weight_pins
-    ADD CONSTRAINT gear_stat_weight_pins_stat_weight_id_fkey FOREIGN KEY (stat_weight_id) REFERENCES gear_stat_weights(id) ON DELETE CASCADE;
 
 ALTER TABLE ONLY gear_stat_weights
     ADD CONSTRAINT gear_stat_weights_user_id_fkey FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE;

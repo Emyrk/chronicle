@@ -642,15 +642,6 @@ export interface CreateGearListRequest {
 
 // From chroniclesdk/gear_builder.go
 /**
- * CreateGearStatWeightPinRequest is the request body for pinning a stat weight.
- */
-export interface CreateGearStatWeightPinRequest {
-    readonly dataset_id: string;
-    readonly stat_weight_id: string;
-}
-
-// From chroniclesdk/gear_builder.go
-/**
  * CreateGearStatWeightRequest is the request body for creating a stat weight.
  */
 export interface CreateGearStatWeightRequest {
@@ -1094,28 +1085,6 @@ export interface GearStatWeight {
     readonly weights: Record<string, string>;
     readonly created_at: string;
     readonly updated_at: string;
-}
-
-// From chroniclesdk/gear_builder.go
-/**
- * GearStatWeightPin is an admin-pinned stat weight reference.
- */
-export interface GearStatWeightPin {
-    readonly id: string;
-    readonly tenant_id: string;
-    readonly dataset_id: string;
-    readonly stat_weight_id: string;
-    readonly pinned_by: string;
-    readonly created_at: string;
-    /**
-     * Resolved stat weight fields (populated on list).
-     */
-    readonly stat_weight_name?: string;
-    readonly stat_weight_description?: string;
-    readonly stat_weight_class_id?: number;
-    readonly stat_weight_spec_name?: string;
-    readonly stat_weight_weights?: Record<string, string>;
-    readonly stat_weight_user_id?: string;
 }
 
 // From chroniclesdk/gear_trends.go

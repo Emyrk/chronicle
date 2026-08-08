@@ -1,17 +1,15 @@
 import { useMemo, useState } from "react";
 import { useSearchParams } from "react-router-dom";
-import { Copy, Pin, Plus, Scale, Sparkles, Trash2 } from "lucide-react";
+import { Copy, Plus, Scale, Sparkles, Trash2 } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { useAuth } from "@/hooks/useAuth";
 import { useSiteConfig } from "@/api/queries";
-import { useTenantDatasetScope } from "@/hooks/useDatasetId";
 import {
   useCreateStatWeight,
   useDeleteStatWeight,
   useMyStatWeights,
-  useStatWeightPins,
   useUpdateStatWeight,
 } from "@/api/gearBuilderQueries";
 import type { GearStatWeight } from "@/api/typesGenerated";
@@ -253,14 +251,12 @@ function CreateWeightSetForm({ onCreated }: { onCreated: (id: string) => void })
 }
 
 /**
- * Stat weight sets: admin-pinned presets plus the user's own sets, each
+ * Stat weight sets: built-in presets plus the user's own sets, each
  * with a class/spec, title, and description, and a full per-stat editor.
  */
 export function StatWeightsPage() {
   const { isAuthenticated } = useAuth();
-  const { datasetId } = useTenantDatasetScope();
   const { data: siteConfig } = useSiteConfig();
-  const pins = useStatWeightPins(datasetId ?? undefined);
   const myWeights = useMyStatWeights(isAuthenticated);
   const createWeight = useCreateStatWeight();
   const [creating, setCreating] = useState(false);
@@ -430,45 +426,6 @@ export function StatWeightsPage() {
         </div>
       </section>
 
-      <section className="space-y-3">
-        <h2 className="text-sm font-semibold uppercase tracking-wide text-zinc-400">
-          Pinned presets
-        </h2>
-        <p className="text-xs text-zinc-500">
-          Curated by the server admins; available to everyone in the gear builder.
-        </p>
-        {(pins.data ?? []).length === 0 ? (
-          <p className="text-sm text-zinc-500">No pinned weight sets on this server yet.</p>
-        ) : (
-          <div className="space-y-2">
-            {(pins.data ?? []).map((pin) => (
-              <div
-                key={pin.id}
-                className="rounded-md border border-zinc-700/60 bg-zinc-900/40 px-4 py-3"
-              >
-                <div className="flex flex-wrap items-baseline gap-x-3 gap-y-0.5">
-                  <span className="inline-flex items-center gap-1.5 font-medium text-zinc-100">
-                    <Pin className="h-3.5 w-3.5 text-zinc-500" />
-                    {pin.stat_weight_name || "Pinned weights"}
-                  </span>
-                  <ClassSpecLine
-                    classId={pin.stat_weight_class_id ?? 0}
-                    specName={pin.stat_weight_spec_name ?? ""}
-                  />
-                </div>
-                {pin.stat_weight_description && (
-                  <p className="mt-1 text-xs text-zinc-400 line-clamp-2">
-                    {pin.stat_weight_description}
-                  </p>
-                )}
-                <div className="mt-1.5">
-                  <WeightSummary weights={parseWeights(pin.stat_weight_weights)} />
-                </div>
-              </div>
-            ))}
-          </div>
-        )}
-      </section>
     </div>
   );
 }

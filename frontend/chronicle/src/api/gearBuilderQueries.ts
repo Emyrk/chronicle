@@ -1,11 +1,9 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import type {
   CreateGearListRequest,
-  CreateGearStatWeightPinRequest,
   CreateGearStatWeightRequest,
   GearList,
   GearStatWeight,
-  GearStatWeightPin,
   GearTrendsResponse,
   UpdateGearListRequest,
   UpdateGearStatWeightRequest,
@@ -212,50 +210,5 @@ export function useDeleteStatWeight() {
       if (!res.ok) throw gearAPIError("Failed to delete stat weight", await res.json().catch(() => null));
     },
     onSuccess: () => qc.invalidateQueries({ queryKey: ["gear-stat-weights"] }),
-  });
-}
-
-// ─── Stat Weight Pins ────────────────────────────────────────
-
-export function useStatWeightPins(datasetID: string | undefined) {
-  return useQuery({
-    queryKey: ["gear-stat-weight-pins", datasetID],
-    queryFn: async (): Promise<GearStatWeightPin[]> => {
-      const res = await fetch(`${BASE}/stat-weight-pins?dataset_id=${datasetID}`, { credentials: "include" });
-      if (!res.ok) throw gearAPIError("Failed to fetch stat weight pins", await res.json().catch(() => null));
-      return res.json();
-    },
-    enabled: !!datasetID,
-  });
-}
-
-export function useCreateStatWeightPin() {
-  const qc = useQueryClient();
-  return useMutation({
-    mutationFn: async (req: CreateGearStatWeightPinRequest): Promise<GearStatWeightPin> => {
-      const res = await fetch(`${BASE}/admin/stat-weight-pins/`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(req),
-        credentials: "include",
-      });
-      if (!res.ok) throw gearAPIError("Failed to pin stat weight", await res.json().catch(() => null));
-      return res.json();
-    },
-    onSuccess: () => qc.invalidateQueries({ queryKey: ["gear-stat-weight-pins"] }),
-  });
-}
-
-export function useDeleteStatWeightPin() {
-  const qc = useQueryClient();
-  return useMutation({
-    mutationFn: async (id: string) => {
-      const res = await fetch(`${BASE}/admin/stat-weight-pins/${encodeURIComponent(id)}`, {
-        method: "DELETE",
-        credentials: "include",
-      });
-      if (!res.ok) throw gearAPIError("Failed to unpin stat weight", await res.json().catch(() => null));
-    },
-    onSuccess: () => qc.invalidateQueries({ queryKey: ["gear-stat-weight-pins"] }),
   });
 }

@@ -55,10 +55,6 @@ type sqlcQuerier interface {
 	// Stat Weights
 	// ============================================================
 	CreateGearStatWeight(ctx context.Context, arg CreateGearStatWeightParams) (GearStatWeight, error)
-	// ============================================================
-	// Stat Weight Pins (admin-managed)
-	// ============================================================
-	CreateGearStatWeightPin(ctx context.Context, arg CreateGearStatWeightPinParams) (GearStatWeightPin, error)
 	// Guild Join Requests
 	CreateGuildJoinRequest(ctx context.Context, arg CreateGuildJoinRequestParams) (GuildJoinRequest, error)
 	CreateSharedView(ctx context.Context, arg CreateSharedViewParams) (SharedView, error)
@@ -73,7 +69,6 @@ type sqlcQuerier interface {
 	DeleteDatasetTalentTrees(ctx context.Context, datasetID uuid.UUID) error
 	DeleteGearList(ctx context.Context, arg DeleteGearListParams) (int64, error)
 	DeleteGearStatWeight(ctx context.Context, arg DeleteGearStatWeightParams) (int64, error)
-	DeleteGearStatWeightPin(ctx context.Context, arg DeleteGearStatWeightPinParams) (int64, error)
 	DeleteGuildJoinRequest(ctx context.Context, arg DeleteGuildJoinRequestParams) error
 	DeleteGuildPage(ctx context.Context, guildID uuid.UUID) error
 	DeleteGuildPagePanel(ctx context.Context, id uuid.UUID) error
@@ -507,7 +502,6 @@ type sqlcQuerier interface {
 	ListExternalAPIRealms(ctx context.Context, server string) ([]ListExternalAPIRealmsRow, error)
 	ListExternalAPIServers(ctx context.Context) ([]ListExternalAPIServersRow, error)
 	ListGearListsByUser(ctx context.Context, arg ListGearListsByUserParams) ([]GearList, error)
-	ListGearStatWeightPins(ctx context.Context, arg ListGearStatWeightPinsParams) ([]ListGearStatWeightPinsRow, error)
 	ListGearStatWeightsByUser(ctx context.Context, arg ListGearStatWeightsByUserParams) ([]GearStatWeight, error)
 	ListGuildJoinRequests(ctx context.Context, guildID uuid.UUID) ([]ListGuildJoinRequestsRow, error)
 	// Guild Page Panels

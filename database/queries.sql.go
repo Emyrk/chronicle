@@ -3559,44 +3559,6 @@ func (q *sqlQuerier) CreateGearStatWeight(ctx context.Context, arg CreateGearSta
 	return i, err
 }
 
-const createGearStatWeightPin = `-- name: CreateGearStatWeightPin :one
-
-INSERT INTO gear_stat_weight_pins (id, tenant_id, dataset_id, stat_weight_id, pinned_by)
-VALUES ($1, $2, $3, $4, $5)
-RETURNING id, tenant_id, dataset_id, stat_weight_id, pinned_by, created_at
-`
-
-type CreateGearStatWeightPinParams struct {
-	ID           uuid.UUID `db:"id" json:"id"`
-	TenantID     uuid.UUID `db:"tenant_id" json:"tenant_id"`
-	DatasetID    uuid.UUID `db:"dataset_id" json:"dataset_id"`
-	StatWeightID uuid.UUID `db:"stat_weight_id" json:"stat_weight_id"`
-	PinnedBy     uuid.UUID `db:"pinned_by" json:"pinned_by"`
-}
-
-// ============================================================
-// Stat Weight Pins (admin-managed)
-// ============================================================
-func (q *sqlQuerier) CreateGearStatWeightPin(ctx context.Context, arg CreateGearStatWeightPinParams) (GearStatWeightPin, error) {
-	row := q.db.QueryRow(ctx, createGearStatWeightPin,
-		arg.ID,
-		arg.TenantID,
-		arg.DatasetID,
-		arg.StatWeightID,
-		arg.PinnedBy,
-	)
-	var i GearStatWeightPin
-	err := row.Scan(
-		&i.ID,
-		&i.TenantID,
-		&i.DatasetID,
-		&i.StatWeightID,
-		&i.PinnedBy,
-		&i.CreatedAt,
-	)
-	return i, err
-}
-
 const deleteGearList = `-- name: DeleteGearList :execrows
 DELETE FROM gear_lists WHERE id = $1 AND user_id = $2 AND tenant_id = $3
 `
@@ -3627,23 +3589,6 @@ type DeleteGearStatWeightParams struct {
 
 func (q *sqlQuerier) DeleteGearStatWeight(ctx context.Context, arg DeleteGearStatWeightParams) (int64, error) {
 	result, err := q.db.Exec(ctx, deleteGearStatWeight, arg.ID, arg.UserID, arg.TenantID)
-	if err != nil {
-		return 0, err
-	}
-	return result.RowsAffected(), nil
-}
-
-const deleteGearStatWeightPin = `-- name: DeleteGearStatWeightPin :execrows
-DELETE FROM gear_stat_weight_pins WHERE id = $1 AND tenant_id = $2
-`
-
-type DeleteGearStatWeightPinParams struct {
-	ID       uuid.UUID `db:"id" json:"id"`
-	TenantID uuid.UUID `db:"tenant_id" json:"tenant_id"`
-}
-
-func (q *sqlQuerier) DeleteGearStatWeightPin(ctx context.Context, arg DeleteGearStatWeightPinParams) (int64, error) {
-	result, err := q.db.Exec(ctx, deleteGearStatWeightPin, arg.ID, arg.TenantID)
 	if err != nil {
 		return 0, err
 	}
@@ -3727,74 +3672,6 @@ func (q *sqlQuerier) ListGearListsByUser(ctx context.Context, arg ListGearListsB
 			&i.ForkedFromListID,
 			&i.CreatedAt,
 			&i.UpdatedAt,
-		); err != nil {
-			return nil, err
-		}
-		items = append(items, i)
-	}
-	if err := rows.Err(); err != nil {
-		return nil, err
-	}
-	return items, nil
-}
-
-const listGearStatWeightPins = `-- name: ListGearStatWeightPins :many
-SELECT
-  p.id, p.tenant_id, p.dataset_id, p.stat_weight_id, p.pinned_by, p.created_at,
-  sw.name AS stat_weight_name,
-  sw.description AS stat_weight_description,
-  sw.class_id AS stat_weight_class_id,
-  sw.spec_name AS stat_weight_spec_name,
-  sw.weights AS stat_weight_weights,
-  sw.user_id AS stat_weight_user_id
-FROM gear_stat_weight_pins p
-JOIN gear_stat_weights sw ON sw.id = p.stat_weight_id
-WHERE p.tenant_id = $1 AND p.dataset_id = $2
-ORDER BY p.created_at DESC
-`
-
-type ListGearStatWeightPinsParams struct {
-	TenantID  uuid.UUID `db:"tenant_id" json:"tenant_id"`
-	DatasetID uuid.UUID `db:"dataset_id" json:"dataset_id"`
-}
-
-type ListGearStatWeightPinsRow struct {
-	ID                    uuid.UUID          `db:"id" json:"id"`
-	TenantID              uuid.UUID          `db:"tenant_id" json:"tenant_id"`
-	DatasetID             uuid.UUID          `db:"dataset_id" json:"dataset_id"`
-	StatWeightID          uuid.UUID          `db:"stat_weight_id" json:"stat_weight_id"`
-	PinnedBy              uuid.UUID          `db:"pinned_by" json:"pinned_by"`
-	CreatedAt             pgtype.Timestamptz `db:"created_at" json:"created_at"`
-	StatWeightName        string             `db:"stat_weight_name" json:"stat_weight_name"`
-	StatWeightDescription string             `db:"stat_weight_description" json:"stat_weight_description"`
-	StatWeightClassID     int32              `db:"stat_weight_class_id" json:"stat_weight_class_id"`
-	StatWeightSpecName    string             `db:"stat_weight_spec_name" json:"stat_weight_spec_name"`
-	StatWeightWeights     []byte             `db:"stat_weight_weights" json:"stat_weight_weights"`
-	StatWeightUserID      uuid.UUID          `db:"stat_weight_user_id" json:"stat_weight_user_id"`
-}
-
-func (q *sqlQuerier) ListGearStatWeightPins(ctx context.Context, arg ListGearStatWeightPinsParams) ([]ListGearStatWeightPinsRow, error) {
-	rows, err := q.db.Query(ctx, listGearStatWeightPins, arg.TenantID, arg.DatasetID)
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-	var items []ListGearStatWeightPinsRow
-	for rows.Next() {
-		var i ListGearStatWeightPinsRow
-		if err := rows.Scan(
-			&i.ID,
-			&i.TenantID,
-			&i.DatasetID,
-			&i.StatWeightID,
-			&i.PinnedBy,
-			&i.CreatedAt,
-			&i.StatWeightName,
-			&i.StatWeightDescription,
-			&i.StatWeightClassID,
-			&i.StatWeightSpecName,
-			&i.StatWeightWeights,
-			&i.StatWeightUserID,
 		); err != nil {
 			return nil, err
 		}

@@ -63,29 +63,3 @@ RETURNING *;
 
 -- name: DeleteGearStatWeight :execrows
 DELETE FROM gear_stat_weights WHERE id = $1 AND user_id = $2 AND tenant_id = $3;
-
--- ============================================================
--- Stat Weight Pins (admin-managed)
--- ============================================================
-
--- name: CreateGearStatWeightPin :one
-INSERT INTO gear_stat_weight_pins (id, tenant_id, dataset_id, stat_weight_id, pinned_by)
-VALUES ($1, $2, $3, $4, $5)
-RETURNING *;
-
--- name: ListGearStatWeightPins :many
-SELECT
-  p.*,
-  sw.name AS stat_weight_name,
-  sw.description AS stat_weight_description,
-  sw.class_id AS stat_weight_class_id,
-  sw.spec_name AS stat_weight_spec_name,
-  sw.weights AS stat_weight_weights,
-  sw.user_id AS stat_weight_user_id
-FROM gear_stat_weight_pins p
-JOIN gear_stat_weights sw ON sw.id = p.stat_weight_id
-WHERE p.tenant_id = $1 AND p.dataset_id = $2
-ORDER BY p.created_at DESC;
-
--- name: DeleteGearStatWeightPin :execrows
-DELETE FROM gear_stat_weight_pins WHERE id = $1 AND tenant_id = $2;

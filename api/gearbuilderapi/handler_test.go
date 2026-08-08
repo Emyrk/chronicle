@@ -4,7 +4,6 @@ import (
 	"encoding/json"
 	"strings"
 	"testing"
-
 )
 
 func TestValidateGearListTitle(t *testing.T) {

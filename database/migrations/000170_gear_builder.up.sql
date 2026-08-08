@@ -55,20 +55,4 @@ CREATE TABLE gear_stat_weights (
 
 CREATE INDEX gear_stat_weights_user_tenant_idx ON gear_stat_weights (user_id, tenant_id);
 
--- gear_stat_weight_pins: admin-managed references to user stat weights,
--- scoped by tenant + dataset. Pins reference the live stat weight (not a copy).
-CREATE TABLE gear_stat_weight_pins (
-  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-  tenant_id UUID NOT NULL DEFAULT '00000000-0000-0000-0000-000000000000',
-  dataset_id UUID NOT NULL REFERENCES datasets(id) ON DELETE CASCADE,
-  stat_weight_id UUID NOT NULL REFERENCES gear_stat_weights(id) ON DELETE CASCADE,
-  pinned_by UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
-
-  created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
-
-  CONSTRAINT gear_stat_weight_pins_unique UNIQUE (tenant_id, dataset_id, stat_weight_id)
-);
-
-CREATE INDEX gear_stat_weight_pins_tenant_dataset_idx ON gear_stat_weight_pins (tenant_id, dataset_id);
-
 COMMIT;
