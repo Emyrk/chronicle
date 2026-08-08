@@ -47,7 +47,7 @@ describe("groupDatasetsByCandidates", () => {
 });
 
 describe("buildCommonConsumableEffects", () => {
-  it("offers only candidates present in every selected dataset", () => {
+  it("tracks support for common and partial candidates", () => {
     const effects = buildCommonConsumableEffects([
       snapshot("one", [item(10, "Shared", [100]), item(20, "Only one", [100])]),
       snapshot("two", [item(10, "Shared", [100]), item(30, "Only two", [100])]),
@@ -56,10 +56,19 @@ describe("buildCommonConsumableEffects", () => {
 
     expect(effects).toHaveLength(1);
     expect(effects[0].commonCandidates.map((candidate) => candidate.item_id)).toEqual([10]);
+    expect(effects[0].candidateSupport.map((candidate) => ({
+      itemId: candidate.item.item_id,
+      datasetIds: candidate.datasetIds,
+    }))).toEqual([
+      { itemId: 10, datasetIds: ["one", "two", "three"] },
+      { itemId: 20, datasetIds: ["one"] },
+      { itemId: 30, datasetIds: ["two"] },
+      { itemId: 40, datasetIds: ["three"] },
+    ]);
     expect(effects[0].candidateSetsIdentical).toBe(false);
   });
 
-  it("prevents a combined choice when one selected dataset lacks the effect", () => {
+  it("keeps candidates selectable in the datasets where the effect exists", () => {
     const effects = buildCommonConsumableEffects([
       snapshot("one", [item(10, "Shared", [100]), item(20, "Other", [100])]),
       snapshot("two", [item(10, "Shared", [100]), item(20, "Other", [100])]),
@@ -68,6 +77,13 @@ describe("buildCommonConsumableEffects", () => {
 
     expect(effects).toHaveLength(1);
     expect(effects[0].commonCandidates).toEqual([]);
+    expect(effects[0].candidateSupport.map((candidate) => ({
+      itemId: candidate.item.item_id,
+      support: candidate.datasetIds.length,
+    }))).toEqual([
+      { itemId: 10, support: 2 },
+      { itemId: 20, support: 2 },
+    ]);
     expect(effects[0].missingDatasetIds).toEqual(["three"]);
   });
 
@@ -78,6 +94,7 @@ describe("buildCommonConsumableEffects", () => {
     ]);
 
     expect(effects[0].commonCandidates.map((candidate) => candidate.item_id)).toEqual([20]);
+    expect(effects[0].candidateSupport.map((candidate) => candidate.item.item_id)).toEqual([20]);
     expect(effects[0].conflictingItemIds).toEqual([10]);
   });
 

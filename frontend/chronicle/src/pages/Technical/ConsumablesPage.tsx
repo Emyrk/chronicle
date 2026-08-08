@@ -73,6 +73,8 @@ interface EffectMenuState {
   spellId: number;
   spellName: string;
   items: ConsumableEntry[];
+  itemSupport?: Map<number, number>;
+  totalDatasets?: number;
 }
 
 function effectKey(effectKind: ConsumableEffectKind, spellId: number): string {
@@ -136,21 +138,35 @@ function ConsumableEffectMenu({
           Mark canonical
         </div>
         <div className="max-h-48 overflow-y-auto styled-scrollbar">
-          {menu.items.map((item) => (
-            <button
-              key={item.item_id}
-              type="button"
-              disabled={pending}
-              onClick={() => onCanonical(item.item_id)}
-              className="flex w-full items-center justify-between gap-3 rounded-md px-2 py-2 text-left text-xs hover:bg-accent disabled:opacity-50"
-            >
-              <span className="truncate">{item.item_name}</span>
-              <span className="flex shrink-0 items-center gap-1 font-mono text-[10px] text-muted-foreground">
-                {policy?.item_id === item.item_id && <Check className="h-3 w-3 text-emerald-400" />}
-                #{item.item_id}
-              </span>
-            </button>
-          ))}
+          {menu.items.map((item) => {
+            const support = menu.itemSupport?.get(item.item_id);
+            const hasSupport = support !== undefined;
+            const isPartial = hasSupport && support < (menu.totalDatasets ?? support);
+            return (
+              <button
+                key={item.item_id}
+                type="button"
+                disabled={pending}
+                onClick={() => onCanonical(item.item_id)}
+                className={`flex w-full items-center justify-between gap-3 rounded-md px-2 py-2 text-left text-xs disabled:opacity-50 ${!hasSupport
+                  ? "hover:bg-accent"
+                  : isPartial
+                    ? "my-1 border border-dashed border-amber-500/40 bg-amber-500/10 text-amber-100 hover:bg-amber-500/20"
+                    : "my-1 border border-emerald-500/30 bg-emerald-500/10 text-emerald-100 hover:bg-emerald-500/20"}`}
+              >
+                <span className="truncate">{item.item_name}</span>
+                <span className="flex shrink-0 items-center gap-1.5 font-mono text-[10px]">
+                  {policy?.item_id === item.item_id && <Check className="h-3 w-3 text-emerald-400" />}
+                  {support !== undefined && (
+                    <span className={`rounded px-1.5 py-0.5 font-semibold ${isPartial ? "bg-amber-950/70 text-amber-200" : "bg-emerald-950/70 text-emerald-200"}`}>
+                      {isPartial ? `Partial · ${support}/${menu.totalDatasets}` : `Common · ${support}/${menu.totalDatasets}`}
+                    </span>
+                  )}
+                  <span className="text-muted-foreground">#{item.item_id}</span>
+                </span>
+              </button>
+            );
+          })}
         </div>
         <div className="my-1.5 border-t border-border" />
         <button
@@ -428,12 +444,12 @@ function MultiDatasetConsumablesView({
     ? effects.find((effect) => effect.effectKind === effectMenu.effectKind && effect.spellId === effectMenu.spellId)
     : undefined;
 
-  const runForSelectedDatasets = async (
-    effect: CommonConsumableEffect,
+  const runForDatasetIds = async (
+    datasetIds: string[],
     operation: (datasetId: string) => Promise<unknown>,
     successMessage: string,
   ) => {
-    const results = await Promise.allSettled(effect.datasets.map((dataset) => operation(dataset.datasetId)));
+    const results = await Promise.allSettled(datasetIds.map(operation));
     const failed = results.filter((result) => result.status === "rejected").length;
     const succeeded = results.length - failed;
     if (succeeded > 0) toast.success(`${successMessage} for ${succeeded} dataset${succeeded === 1 ? "" : "s"}`);
@@ -441,25 +457,29 @@ function MultiDatasetConsumablesView({
     setEffectMenu(null);
   };
 
-  const handleCanonical = async (itemId: number) => {
-    if (!selectedEffect) return;
-    const replacements = selectedEffect.datasets.filter((dataset) =>
+  const handleCanonical = async (itemId: number, effect = selectedEffect) => {
+    if (!effect) return;
+    const candidate = effect.candidateSupport.find((entry) => entry.item.item_id === itemId);
+    if (!candidate) return;
+    const supportedDatasetIds = new Set(candidate.datasetIds);
+    const targets = effect.datasets.filter((dataset) => supportedDatasetIds.has(dataset.datasetId));
+    const replacements = targets.filter((dataset) =>
       dataset.policy?.ignored || (dataset.policy?.item_id !== undefined && dataset.policy.item_id !== itemId),
     ).length;
     if (replacements > 0 && !window.confirm(
-      `Apply item #${itemId} to ${selectedEffect.datasets.length} datasets? This replaces ${replacements} existing decision${replacements === 1 ? "" : "s"}.`,
+      `Apply item #${itemId} to ${targets.length} of ${effect.datasets.length} datasets? This replaces ${replacements} existing decision${replacements === 1 ? "" : "s"}.`,
     )) return;
-    await runForSelectedDatasets(
-      selectedEffect,
-      (datasetId) => saveCanonical.mutateAsync({ datasetId, effectKind: selectedEffect.effectKind, spellId: selectedEffect.spellId, itemId }),
+    await runForDatasetIds(
+      candidate.datasetIds,
+      (datasetId) => saveCanonical.mutateAsync({ datasetId, effectKind: effect.effectKind, spellId: effect.spellId, itemId }),
       "Canonical consumable updated",
     );
   };
 
   const handleReset = async () => {
     if (!selectedEffect) return;
-    await runForSelectedDatasets(
-      selectedEffect,
+    await runForDatasetIds(
+      selectedEffect.datasets.map((dataset) => dataset.datasetId),
       (datasetId) => resetCanonical.mutateAsync({ datasetId, effectKind: selectedEffect.effectKind, spellId: selectedEffect.spellId }),
       "Canonical consumable reset",
     );
@@ -467,8 +487,8 @@ function MultiDatasetConsumablesView({
 
   const handleIgnore = async () => {
     if (!selectedEffect) return;
-    await runForSelectedDatasets(
-      selectedEffect,
+    await runForDatasetIds(
+      selectedEffect.datasets.map((dataset) => dataset.datasetId),
       (datasetId) => ignoreEffect.mutateAsync({ datasetId, effectKind: selectedEffect.effectKind, spellId: selectedEffect.spellId }),
       "Consumable effect ignored",
     );
@@ -501,7 +521,9 @@ function MultiDatasetConsumablesView({
                   effectKind: effect.effectKind,
                   spellId: effect.spellId,
                   spellName: effect.spellName,
-                  items: effect.commonCandidates,
+                  items: effect.candidateSupport.map((candidate) => candidate.item),
+                  itemSupport: new Map(effect.candidateSupport.map((candidate) => [candidate.item.item_id, candidate.datasetIds.length])),
+                  totalDatasets: effect.datasets.length,
                 });
               }}
               title="Right-click to manage the canonical item across selected datasets"
@@ -516,13 +538,38 @@ function MultiDatasetConsumablesView({
               </div>
               <div className="space-y-2">
                 <div className="flex flex-wrap gap-1.5">
-                  {effect.commonCandidates.length === 0 ? (
-                    <span className="text-xs text-destructive">No candidate is present in every selected dataset</span>
-                  ) : effect.commonCandidates.map((item) => (
-                    <div key={item.item_id} className={consensus?.item_id === item.item_id ? "rounded-md ring-1 ring-emerald-400/60" : ""}>
-                      <ItemReference consumable={item} iconBaseUrl={selectedDatasets[0]?.icon_base_url} compact />
-                    </div>
-                  ))}
+                  {effect.candidateSupport.map((candidate) => {
+                    const support = candidate.datasetIds.length;
+                    const commonToAll = support === effect.datasets.length;
+                    const selected = consensus?.item_id === candidate.item.item_id;
+                    return (
+                      <button
+                        key={candidate.item.item_id}
+                        type="button"
+                        disabled={pending}
+                        onClick={(event) => {
+                          event.stopPropagation();
+                          void handleCanonical(candidate.item.item_id, effect);
+                        }}
+                        onContextMenu={(event) => event.stopPropagation()}
+                        className={`inline-flex min-h-8 items-center gap-2 rounded-md border px-2 py-1 text-left text-xs transition-colors disabled:opacity-50 ${commonToAll
+                          ? "border-emerald-500/40 bg-emerald-500/10 text-emerald-100 hover:bg-emerald-500/20"
+                          : "border-dashed border-amber-500/50 bg-amber-500/10 text-amber-100 hover:bg-amber-500/20"} ${selected ? "ring-1 ring-emerald-300" : ""}`}
+                        title={commonToAll
+                          ? `Available in all ${support} selected datasets`
+                          : `Available in ${support} of ${effect.datasets.length} selected datasets; only those datasets will be updated`}
+                      >
+                        <span className="font-medium">{candidate.item.item_name}</span>
+                        <span className="font-mono text-[10px] opacity-65">#{candidate.item.item_id}</span>
+                        <span className={`rounded px-1.5 py-0.5 font-mono text-[10px] font-bold ${commonToAll
+                          ? "bg-emerald-950/70 text-emerald-200"
+                          : "bg-amber-950/70 text-amber-200"}`}
+                        >
+                          {commonToAll ? `Common · ${support}/${effect.datasets.length}` : `Partial · ${support}/${effect.datasets.length}`}
+                        </span>
+                      </button>
+                    );
+                  })}
                 </div>
                 <div className="flex flex-wrap gap-x-3 gap-y-1 text-[10px] text-muted-foreground">
                   {effect.datasets.map((dataset) => (

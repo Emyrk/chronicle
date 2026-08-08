@@ -26,12 +26,18 @@ export interface CommonConsumableDatasetState {
   policy?: ConsumableEffectPolicy;
 }
 
+export interface CandidateSupport {
+  item: ConsumableEntry;
+  datasetIds: string[];
+}
+
 export interface CommonConsumableEffect {
   effectKind: ConsumableEffectKind;
   spellId: number;
   spellName: string;
   datasets: CommonConsumableDatasetState[];
   commonCandidates: ConsumableEntry[];
+  candidateSupport: CandidateSupport[];
   candidateSetsIdentical: boolean;
   missingDatasetIds: string[];
   conflictingItemIds: number[];
@@ -135,18 +141,23 @@ export function buildCommonConsumableEffects(
     }
 
     const conflictingItemIds: number[] = [];
-    const commonCandidates: ConsumableEntry[] = [];
+    const candidateSupport: CandidateSupport[] = [];
     for (const [itemId, occurrences] of itemsByDataset) {
-      if (occurrences.size !== snapshots.length) continue;
       const items = [...occurrences.values()];
       const names = new Set(items.map((item) => item.item_name.trim().toLowerCase()));
       if (names.size > 1) {
         conflictingItemIds.push(itemId);
         continue;
       }
-      commonCandidates.push(items[0]);
+      candidateSupport.push({ item: items[0], datasetIds: [...occurrences.keys()] });
     }
-    commonCandidates.sort((a, b) => a.item_name.localeCompare(b.item_name) || a.item_id - b.item_id);
+    candidateSupport.sort((a, b) =>
+      b.datasetIds.length - a.datasetIds.length
+      || a.item.item_id - b.item.item_id,
+    );
+    const commonCandidates = candidateSupport
+      .filter((candidate) => candidate.datasetIds.length === snapshots.length)
+      .map((candidate) => candidate.item);
 
     const unionCandidateCount = itemsByDataset.size;
     const hasPolicy = datasets.some((dataset) => dataset.policy !== undefined);
@@ -158,6 +169,7 @@ export function buildCommonConsumableEffects(
       spellName: firstEffect.spellName,
       datasets,
       commonCandidates,
+      candidateSupport,
       candidateSetsIdentical,
       missingDatasetIds,
       conflictingItemIds: conflictingItemIds.sort((a, b) => a - b),
