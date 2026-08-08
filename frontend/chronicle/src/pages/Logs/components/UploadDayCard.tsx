@@ -1,14 +1,7 @@
 import { Link } from "react-router-dom";
 import { Upload } from "lucide-react";
 import type { UploadMeta } from "../utils/calendarUtils";
-
-function formatBytes(bytes: number): string {
-  if (bytes === 0) return "0 B";
-  const k = 1024;
-  const sizes = ["B", "KB", "MB", "GB"];
-  const i = Math.floor(Math.log(bytes) / Math.log(k));
-  return `${parseFloat((bytes / Math.pow(k, i)).toFixed(2))} ${sizes[i]}`;
-}
+import { formatStorageBytes } from "@/utils/storage";
 
 interface UploadDayCardProps {
   upload: UploadMeta;
@@ -27,7 +20,7 @@ export function UploadDayCard({ upload }: UploadDayCardProps) {
             </span>
           </div>
           <span className="text-[10px] text-amber-300/80 flex-shrink-0">
-            {formatBytes(upload.sizeBytes)}
+            {formatStorageBytes(upload.sizeBytes)}
           </span>
         </div>
       </div>

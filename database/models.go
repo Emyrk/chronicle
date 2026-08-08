@@ -1136,6 +1136,21 @@ type DeploymentInfo struct {
 	LastTelemetryHeartbeat pgtype.Timestamptz `db:"last_telemetry_heartbeat" json:"last_telemetry_heartbeat"`
 }
 
+type DiscordMembershipGrantCheck struct {
+	UserID              uuid.UUID          `db:"user_id" json:"user_id"`
+	NextCheckAt         pgtype.Timestamptz `db:"next_check_at" json:"next_check_at"`
+	LastAttemptAt       pgtype.Timestamptz `db:"last_attempt_at" json:"last_attempt_at"`
+	LastSuccessAt       pgtype.Timestamptz `db:"last_success_at" json:"last_success_at"`
+	IsMember            pgtype.Bool        `db:"is_member" json:"is_member"`
+	LastOutcome         pgtype.Text        `db:"last_outcome" json:"last_outcome"`
+	LastError           pgtype.Text        `db:"last_error" json:"last_error"`
+	SuspendedUntilLogin bool               `db:"suspended_until_login" json:"suspended_until_login"`
+	ClaimToken          uuid.NullUUID      `db:"claim_token" json:"claim_token"`
+	ClaimExpiresAt      pgtype.Timestamptz `db:"claim_expires_at" json:"claim_expires_at"`
+	CreatedAt           pgtype.Timestamptz `db:"created_at" json:"created_at"`
+	UpdatedAt           pgtype.Timestamptz `db:"updated_at" json:"updated_at"`
+}
+
 type EncounterDpsRanking struct {
 	ID             uuid.UUID          `db:"id" json:"id"`
 	EncounterID    uuid.NullUUID      `db:"encounter_id" json:"encounter_id"`

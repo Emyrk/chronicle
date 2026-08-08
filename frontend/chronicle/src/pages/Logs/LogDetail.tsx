@@ -61,6 +61,7 @@ import {
   type Video,
 } from "@/api/queries";
 import type { WoWSimpleParsedInstance, LogParseReport, IdentityReport, Duration } from "@/api/typesGenerated";
+import { formatStorageBytes } from "@/utils/storage";
 
 function formatDate(timestamp: unknown): string {
   if (!timestamp) return "Unknown";
@@ -73,14 +74,6 @@ function formatDate(timestamp: unknown): string {
     return new Date(ts.Time).toLocaleString();
   }
   return "Unknown";
-}
-
-function formatBytes(bytes: number): string {
-  if (bytes === 0) return "0 B";
-  const k = 1024;
-  const sizes = ["B", "KB", "MB", "GB"];
-  const i = Math.floor(Math.log(bytes) / Math.log(k));
-  return `${parseFloat((bytes / Math.pow(k, i)).toFixed(2))} ${sizes[i]}`;
 }
 
 // River job states - these match rivertype.JobState values
@@ -1393,14 +1386,14 @@ export function LogDetailView({
                         {file.compressed_size_bytes != null ? (
                           <>
                             <p className="text-xs">
-                              <span className="text-muted-foreground/70">Original:</span> {formatBytes(file.size_bytes)}
+                              <span className="text-muted-foreground/70">Original:</span> {formatStorageBytes(file.size_bytes)}
                             </p>
                             <p>
-                              <span className="text-muted-foreground/70">Stored:</span> {formatBytes(file.compressed_size_bytes)}
+                              <span className="text-muted-foreground/70">Stored:</span> {formatStorageBytes(file.compressed_size_bytes)}
                             </p>
                           </>
                         ) : (
-                          <p>{formatBytes(file.size_bytes)}</p>
+                          <p>{formatStorageBytes(file.size_bytes)}</p>
                         )}
                         <p className="text-xs">{formatDate(file.created_at)}</p>
                         {file.storage_deleted_at && (
@@ -1467,14 +1460,14 @@ export function LogDetailView({
                       if (hasCompressed && totalStored !== totalOriginal) {
                         return (
                           <span>
-                            {formatBytes(totalStored)}{" "}
+                            {formatStorageBytes(totalStored)}{" "}
                             <span className="text-muted-foreground/70 text-xs">
-                              ({formatBytes(totalOriginal)} uncompressed)
+                              ({formatStorageBytes(totalOriginal)} uncompressed)
                             </span>
                           </span>
                         );
                       }
-                      return formatBytes(totalOriginal);
+                      return formatStorageBytes(totalOriginal);
                     })()
                   ) : (
                     "0 B"

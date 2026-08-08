@@ -4,14 +4,7 @@ import { Button } from "@/components/ui/button";
 import type { WoWLogGroup } from "@/api/queries";
 import type { WoWSimpleParsedInstance } from "@/api/typesGenerated";
 import { parseParsedOutput, format } from "../utils/calendarUtils";
-
-function formatBytes(bytes: number): string {
-  if (bytes === 0) return "0 B";
-  const k = 1024;
-  const sizes = ["B", "KB", "MB", "GB"];
-  const i = Math.floor(Math.log(bytes) / Math.log(k));
-  return `${parseFloat((bytes / Math.pow(k, i)).toFixed(2))} ${sizes[i]}`;
-}
+import { formatStorageBytes } from "@/utils/storage";
 
 interface FileSizes {
   stored: number;
@@ -150,11 +143,11 @@ export function UploadsTable({
                   {filesDeleted ? (
                     <span className="italic">removed</span>
                   ) : sizes.hasCompression ? (
-                    <span title={`${formatBytes(sizes.original)} uncompressed`}>
-                      {formatBytes(sizes.stored)}
+                    <span title={`${formatStorageBytes(sizes.original)} uncompressed`}>
+                      {formatStorageBytes(sizes.stored)}
                     </span>
                   ) : (
-                    formatBytes(sizes.original)
+                    formatStorageBytes(sizes.original)
                   )}
                 </span>
                 <Link
@@ -255,11 +248,11 @@ export function UploadsTable({
                     {filesDeleted ? (
                       <span className="italic text-xs">removed</span>
                     ) : sizes.hasCompression ? (
-                      <span title={`${formatBytes(sizes.original)} uncompressed`}>
-                        {formatBytes(sizes.stored)}
+                      <span title={`${formatStorageBytes(sizes.original)} uncompressed`}>
+                        {formatStorageBytes(sizes.stored)}
                       </span>
                     ) : (
-                      formatBytes(sizes.original)
+                      formatStorageBytes(sizes.original)
                     )}
                   </td>
                   <td className="px-4 py-3 text-right">

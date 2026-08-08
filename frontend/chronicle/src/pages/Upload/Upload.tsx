@@ -18,6 +18,7 @@ import { InstructionsSuperwow } from "./InstructionsSuperwow";
 import { InstructionsWotlk } from "./InstructionsWotlk";
 import { InstructionsChronicleCompanion } from "./InstructionsChronicleCompanion";
 import { MultiUpload } from "./MultiUpload";
+import { formatStorageBytes } from "@/utils/storage";
 
 /** Reusable file drop zone — supports click-to-browse and drag-and-drop. */
 function FileDropZone({
@@ -25,22 +26,15 @@ function FileDropZone({
   accept,
   onFile,
   label,
-  sizeUnit = "MB",
 }: {
   file: File | null;
   accept: string;
   onFile: (file: File) => void;
   label: string;
-  sizeUnit?: "MB" | "KB";
 }) {
   const [dragging, setDragging] = useState(false);
   const inputRef = useRef<HTMLInputElement>(null);
   const dragCounter = useRef(0);
-
-  const formatSize = (bytes: number) =>
-    sizeUnit === "KB"
-      ? `${(bytes / 1024).toFixed(2)} KB`
-      : `${(bytes / 1024 / 1024).toFixed(2)} MB`;
 
   const handleDragEnter = (e: React.DragEvent) => {
     e.preventDefault();
@@ -97,7 +91,7 @@ function FileDropZone({
         <div className="space-y-1">
           <FileText className="h-8 w-8 mx-auto text-primary" />
           <p className="text-sm font-medium">{file.name}</p>
-          <p className="text-xs text-muted-foreground">{formatSize(file.size)}</p>
+          <p className="text-xs text-muted-foreground">{formatStorageBytes(file.size)}</p>
         </div>
       ) : (
         <div className="space-y-1">
@@ -429,8 +423,7 @@ export function UploadView({
                     accept=".txt,.csv,.txt.gz,.gz"
                     onFile={(f) => onFileDrop(f, "raw")}
                     label="Click or drag file here"
-                    sizeUnit="KB"
-                  />
+                            />
                 </div>
               </Card>
             </div>

@@ -62,6 +62,7 @@ import { parseLayoutLab, parsePanelLayout, serializeLayoutLab } from "@/features
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/Tooltip/tooltip";
 import { getSpellIconUrl } from "@/api/wowdb";
 import { getClassColorVar } from "@/pages/ArmoryPage/types";
+import { formatStorageBytes } from "@/utils/storage";
 import { SpellTooltip } from "@/pages/WoWDB/SpellTooltip";
 
 const LAYOUT_LAB_INSTANCE_REFERENCE_STORAGE_KEY = "layout-lab.instance-reference";
@@ -141,14 +142,6 @@ function showRequestErrorToast(fallbackMessage: string, error: unknown) {
       </span>
     ) : undefined,
   });
-}
-
-function formatBytes(bytes: number): string {
-  if (bytes === 0) return "0 B";
-  const k = 1024;
-  const sizes = ["B", "KB", "MB", "GB", "TB"];
-  const i = Math.floor(Math.log(bytes) / Math.log(k));
-  return `${parseFloat((bytes / Math.pow(k, i)).toFixed(2))} ${sizes[i]}`;
 }
 
 function formatExpirationDate(dateStr: string): string {
@@ -2060,6 +2053,7 @@ const SOURCE_LABELS: Record<string, string> = {
   "alpha-tester": "Alpha Tester Reward",
   "beta-tester": "Beta Tester Reward",
   promotion: "Promotional Bonus",
+  "discord-member": "Discord Server Member",
 };
 
 function formatSource(source: string): string {
@@ -2109,7 +2103,7 @@ export function StorageSettings() {
         <div className="flex justify-between items-center">
           <span className="text-sm font-medium">Storage Used</span>
           <span className="text-sm text-muted-foreground">
-            {formatBytes(storage.consumed_storage_bytes)} of {formatBytes(storage.max_storage_bytes)}
+            {formatStorageBytes(storage.consumed_storage_bytes)} of {formatStorageBytes(storage.max_storage_bytes)}
           </span>
         </div>
         <div className="h-2 w-full rounded-full bg-muted overflow-hidden">
@@ -2167,7 +2161,7 @@ export function StorageSettings() {
                     )}
                   </div>
                   <div className="text-right">
-                    <div className="font-medium">{formatBytes(grant.storage_bytes)}</div>
+                    <div className="font-medium">{formatStorageBytes(grant.storage_bytes)}</div>
                     <div className="text-xs text-muted-foreground">
                       {new Date(grant.created_at).toLocaleDateString()}
                     </div>

@@ -5,12 +5,15 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"time"
 
+	"github.com/Emyrk/chronicle/database"
 	"github.com/Emyrk/chronicle/database/authz"
 	"github.com/Emyrk/chronicle/database/authz/policy"
 	"github.com/Emyrk/chronicle/internal/storagegrants"
 	"github.com/authzed/gochugaru/rel"
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5/pgtype"
 )
 
 var ErrMustJoinDiscordServer = errors.New("must be in the discord server to use chronicle")
@@ -23,9 +26,22 @@ func (bot *Bot) SyncDiscordUser(ctx context.Context, zed authz.DatabaseAuthorize
 		return nil
 	}
 
+	checkedAt := time.Now().UTC()
 	member, err := bot.GetGuildMember(bot.ChronicleGuildID(), discordID)
 	if err != nil {
-		return fmt.Errorf("get guild member: %w", err)
+		safeError := sanitizeMembershipError(err)
+		if _, dbErr := bot.config.DB.UpsertDiscordMembershipGrantCheckError(ctx, database.UpsertDiscordMembershipGrantCheckErrorParams{
+			UserID:    userID,
+			CheckedAt: database.Timestamptz(checkedAt),
+			LastError: pgtype.Text{String: safeError, Valid: true},
+		}); dbErr != nil {
+			return fmt.Errorf("record guild member fetch error: %w", dbErr)
+		}
+		bot.logger.Warn("discord membership sync suspended until next login",
+			slog.String("user_id", userID.String()),
+			slog.String("error", safeError),
+		)
+		return nil
 	}
 
 	// --- chronicle_guild_member ---
@@ -68,7 +84,24 @@ func (bot *Bot) SyncDiscordUser(ctx context.Context, zed authz.DatabaseAuthorize
 				break
 			}
 		}
+
+		if _, err := zed.UpsertDataGrant(ctx, storagegrants.DiscordMemberStorageGrant(userID, checkedAt)); err != nil {
+			return fmt.Errorf("upsert discord member storage grant: %w", err)
+		}
+		if _, err := zed.UpsertDiscordMembershipGrantCheckMember(ctx, database.UpsertDiscordMembershipGrantCheckMemberParams{
+			UserID:    userID,
+			CheckedAt: database.Timestamptz(checkedAt),
+		}); err != nil {
+			return fmt.Errorf("record discord member check: %w", err)
+		}
+		return nil
 	}
 
+	if _, err := zed.UpsertDiscordMembershipGrantCheckNonMember(ctx, database.UpsertDiscordMembershipGrantCheckNonMemberParams{
+		UserID:    userID,
+		CheckedAt: database.Timestamptz(checkedAt),
+	}); err != nil {
+		return fmt.Errorf("record discord non-member check: %w", err)
+	}
 	return nil
 }

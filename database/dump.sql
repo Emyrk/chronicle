@@ -140,7 +140,7 @@ CREATE FUNCTION insert_default_data_grant() RETURNS trigger
     AS $$
 BEGIN
   INSERT INTO data_grants (user_id, source, storage_bytes, description)
-  VALUES (NEW.id, 'base', 150000000, 'Default storage allocation');
+  VALUES (NEW.id, 'base', 100000000, 'Default storage allocation');
   RETURN NEW;
 END;
 $$;
@@ -656,6 +656,23 @@ CREATE TABLE deployment_info (
     id uuid DEFAULT gen_random_uuid() NOT NULL,
     created_at timestamp with time zone DEFAULT now() NOT NULL,
     last_telemetry_heartbeat timestamp with time zone
+);
+
+CREATE TABLE discord_membership_grant_checks (
+    user_id uuid NOT NULL,
+    next_check_at timestamp with time zone NOT NULL,
+    last_attempt_at timestamp with time zone,
+    last_success_at timestamp with time zone,
+    is_member boolean,
+    last_outcome text,
+    last_error text,
+    suspended_until_login boolean DEFAULT false NOT NULL,
+    claim_token uuid,
+    claim_expires_at timestamp with time zone,
+    created_at timestamp with time zone DEFAULT now() NOT NULL,
+    updated_at timestamp with time zone DEFAULT now() NOT NULL,
+    CONSTRAINT discord_membership_grant_checks_check CHECK ((((claim_token IS NULL) AND (claim_expires_at IS NULL)) OR ((claim_token IS NOT NULL) AND (claim_expires_at IS NOT NULL)))),
+    CONSTRAINT discord_membership_grant_checks_last_outcome_check CHECK (((last_outcome IS NULL) OR (last_outcome = ANY (ARRAY['member'::text, 'non_member'::text, 'error'::text]))))
 );
 
 CREATE TABLE encounter_dps_rankings (
@@ -1805,6 +1822,9 @@ ALTER TABLE ONLY dbc_spells
 ALTER TABLE ONLY deployment_info
     ADD CONSTRAINT deployment_info_pkey PRIMARY KEY (id);
 
+ALTER TABLE ONLY discord_membership_grant_checks
+    ADD CONSTRAINT discord_membership_grant_checks_pkey PRIMARY KEY (user_id);
+
 ALTER TABLE ONLY encounter_dps_rankings
     ADD CONSTRAINT encounter_dps_rankings_encounter_id_player_guid_key UNIQUE (encounter_id, player_guid);
 
@@ -2078,6 +2098,8 @@ ALTER TABLE ONLY wow_servers
 CREATE INDEX dbc_affected_aura_duration_modifiers_modifier_idx ON dbc_affected_aura_duration_modifiers USING btree (dataset_id, modifier_spell_id);
 
 CREATE INDEX dbc_consumable_buffs_spell_idx ON dbc_consumable_buffs USING btree (dataset_id, spell_id);
+
+CREATE INDEX discord_membership_grant_checks_due_idx ON discord_membership_grant_checks USING btree (next_check_at, user_id) WHERE (suspended_until_login = false);
 
 CREATE UNIQUE INDEX files_unique_owner_hash ON log_file USING btree (owner, hash);
 
@@ -2360,6 +2382,9 @@ ALTER TABLE ONLY dbc_spell_ranges
 
 ALTER TABLE ONLY dbc_spells
     ADD CONSTRAINT dbc_spells_dataset_id_fkey FOREIGN KEY (dataset_id) REFERENCES datasets(id) ON DELETE CASCADE;
+
+ALTER TABLE ONLY discord_membership_grant_checks
+    ADD CONSTRAINT discord_membership_grant_checks_user_id_fkey FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE;
 
 ALTER TABLE ONLY encounter_dps_rankings
     ADD CONSTRAINT encounter_dps_rankings_encounter_id_fkey FOREIGN KEY (encounter_id) REFERENCES log_instance_encounters(id) ON DELETE CASCADE;
