@@ -804,7 +804,7 @@ export function PlayerMetricRow({
               />
               <span className="font-medium">{player.playerName}</span>
               <span className="text-muted-foreground text-xs ml-auto">
-                {player.className}
+                {player.specialization ? `${player.specialization} ${player.className}` : player.className}
               </span>
             </div>
           </div>
