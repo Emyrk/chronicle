@@ -2,9 +2,11 @@ import { useEffect, useMemo, useState, type MouseEvent } from "react";
 import { useQueries, useQuery } from "@tanstack/react-query";
 import { Link } from "react-router-dom";
 import { AlertTriangle, ArrowLeft, Check, ExternalLink, FlaskConical, Layers3, RotateCcw, Search, ShieldCheck, Sparkles, EyeOff } from "lucide-react";
+import { useItemTooltip } from "@/api/gamedata";
 import { Card } from "@/components/ui/Card/Card";
+import { ItemTooltip } from "@/components/ui/ItemTooltip";
 import { SpellIdTooltip } from "@/components/ui/SpellIdTooltip/SpellIdTooltip";
-import { HintTooltip, TooltipContent, TooltipTrigger } from "@/components/ui/Tooltip/tooltip";
+import { HintTooltip, Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/Tooltip/tooltip";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { iconUrl } from "@/config/iconUrl";
 import { useDatasetId, useIconBaseUrl } from "@/hooks/useDatasetId";
@@ -213,37 +215,59 @@ function ItemReference({
   iconBaseUrl?: string;
   compact?: boolean;
 }) {
+  const [tooltipOpen, setTooltipOpen] = useState(false);
+  const tooltip = useItemTooltip(tooltipOpen ? { itemId: consumable.item_id } : null);
+
   return (
-    <Link
-      to={`/wowdb/item?id=${consumable.item_id}`}
-      className={`group flex min-w-0 items-center gap-2 ${compact ? "rounded-md border border-border/60 bg-muted/30 px-2 py-1" : ""}`}
-    >
-      {consumable.item_icon ? (
-        <img
-          src={iconUrl(consumable.item_icon, iconBaseUrl)}
-          alt=""
-          className={`${compact ? "h-6 w-6" : "h-8 w-8"} rounded border border-border/70 bg-black/30`}
-          loading="lazy"
-        />
-      ) : (
-        <div
-          className={`flex ${compact ? "h-6 w-6" : "h-8 w-8"} items-center justify-center rounded border border-border/70 bg-muted`}
+    <Tooltip open={tooltipOpen} onOpenChange={setTooltipOpen}>
+      <TooltipTrigger asChild>
+        <Link
+          to={`/wowdb/item?id=${consumable.item_id}`}
+          className={`group flex min-w-0 items-center gap-2 ${compact ? "rounded-md border border-border/60 bg-muted/30 px-2 py-1" : ""}`}
         >
-          <FlaskConical className="h-3.5 w-3.5 text-muted-foreground" />
-        </div>
-      )}
-      <div className="min-w-0">
-        <div
-          className={`truncate font-medium ${compact ? "text-xs" : "text-sm"} ${QUALITY_COLORS[consumable.item_quality] ?? ""}`}
-        >
-          {consumable.item_name}
-        </div>
-        <div className="flex items-center gap-1 font-mono text-[10px] text-muted-foreground">
-          {consumable.item_id}
-          <ExternalLink className="h-2.5 w-2.5 opacity-0 transition-opacity group-hover:opacity-100" />
-        </div>
-      </div>
-    </Link>
+          {consumable.item_icon ? (
+            <img
+              src={iconUrl(consumable.item_icon, iconBaseUrl)}
+              alt=""
+              className={`${compact ? "h-6 w-6" : "h-8 w-8"} rounded border border-border/70 bg-black/30`}
+              loading="lazy"
+            />
+          ) : (
+            <div
+              className={`flex ${compact ? "h-6 w-6" : "h-8 w-8"} items-center justify-center rounded border border-border/70 bg-muted`}
+            >
+              <FlaskConical className="h-3.5 w-3.5 text-muted-foreground" />
+            </div>
+          )}
+          <div className="min-w-0">
+            <div
+              className={`truncate font-medium ${compact ? "text-xs" : "text-sm"} ${QUALITY_COLORS[consumable.item_quality] ?? ""}`}
+            >
+              {consumable.item_name}
+            </div>
+            <div className="flex items-center gap-1 font-mono text-[10px] text-muted-foreground">
+              {consumable.item_id}
+              <ExternalLink className="h-2.5 w-2.5 opacity-0 transition-opacity group-hover:opacity-100" />
+            </div>
+          </div>
+        </Link>
+      </TooltipTrigger>
+      <TooltipContent
+        side="bottom"
+        align="start"
+        sideOffset={4}
+        hideArrow
+        className="max-w-none border-0 bg-transparent p-0 shadow-none"
+      >
+        {tooltip.data ? (
+          <ItemTooltip item={tooltip.data} />
+        ) : (
+          <div className="rounded border border-gray-700 bg-gray-900 px-3 py-2 text-sm text-gray-400">
+            Loading…
+          </div>
+        )}
+      </TooltipContent>
+    </Tooltip>
   );
 }
 
