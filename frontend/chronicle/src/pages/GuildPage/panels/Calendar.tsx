@@ -38,11 +38,13 @@ function InstanceDayCard({
   group,
   compact,
   dense,
+  fill,
   minimal,
 }: {
   group: RecentInstance[];
   compact: boolean;
   dense: boolean;
+  fill: boolean;
   minimal: boolean;
 }) {
   const [imageError, setImageError] = useState(false);
@@ -71,7 +73,7 @@ function InstanceDayCard({
       {isDuplicate && <span className="ml-auto pl-1 opacity-80">×{group.length}</span>}
     </div>
   ) : (
-    <div className={`relative overflow-hidden rounded group cursor-pointer transition-all hover:scale-[1.02] hover:shadow-md ${compact ? "h-6" : dense ? "h-5" : "h-8 sm:h-10"}`}>
+    <div className={`relative overflow-hidden rounded group cursor-pointer transition-[filter,box-shadow] hover:brightness-110 hover:shadow-md ${fill ? "h-full" : compact ? "h-6" : dense ? "h-5" : "h-8 sm:h-10"}`}>
       <div className="absolute inset-0 bg-gradient-to-br from-slate-700 to-slate-800" />
       {!imageError && (
         <img
@@ -107,7 +109,7 @@ function InstanceDayCard({
   if (isDuplicate) {
     return (
       <>
-        <button className="block w-full text-left" onClick={() => setShowModal(true)}>
+        <button className={`block w-full text-left ${fill ? "h-full" : ""}`} onClick={() => setShowModal(true)}>
           {card}
         </button>
         {showModal && (
@@ -120,7 +122,7 @@ function InstanceDayCard({
     );
   }
 
-  return <Link to={instanceUrl} className="block">{card}</Link>;
+  return <Link to={instanceUrl} className={`block ${fill ? "h-full" : ""}`}>{card}</Link>;
 }
 
 function ExpandableDayCell({
@@ -143,15 +145,17 @@ function ExpandableDayCell({
 
   const shown = expanded ? groups : groups.slice(0, maxShown);
   const remaining = groups.length - maxShown;
+  const fillSingleCard = groups.length === 1 && !minimal;
 
   return (
-    <div className={dense ? "space-y-0.5" : "space-y-1"}>
+    <div className={fillSingleCard ? "h-full" : dense ? "space-y-0.5" : "space-y-1"}>
       {shown.map((group) => (
         <InstanceDayCard
           key={group[0].id}
           group={group}
           compact={compact}
           dense={dense}
+          fill={fillSingleCard}
           minimal={minimal}
         />
       ))}
