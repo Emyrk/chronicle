@@ -15,8 +15,6 @@ import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/Checkbox/Checkbox";
 import { toast } from "sonner";
 
-const WITHOUT_INSTANCE_FILTER = "__without_instance__";
-
 function formatBytes(bytes: number): string {
   if (bytes === 0) return "0 B";
   const k = 1024;
@@ -170,6 +168,7 @@ export function AdminLogsPage() {
   const [page, setPage] = useState(0);
   const [filterUserId, setFilterUserId] = useState<string>("");
   const [filterInstanceName, setFilterInstanceName] = useState<string>("");
+  const [filterWithoutInstance, setFilterWithoutInstance] = useState(false);
   const [selectedLogIds, setSelectedLogIds] = useState<Set<string>>(new Set());
   const pageSize = 50;
 
@@ -181,10 +180,8 @@ export function AdminLogsPage() {
     sortBy,
     sortOrder,
     userId: filterUserId || undefined,
-    instanceName: filterInstanceName && filterInstanceName !== WITHOUT_INSTANCE_FILTER
-      ? filterInstanceName
-      : undefined,
-    withoutInstance: filterInstanceName === WITHOUT_INSTANCE_FILTER,
+    instanceName: filterInstanceName || undefined,
+    withoutInstance: filterWithoutInstance,
   });
 
   const toggleSort = (field: AdminLogsSortField) => {
@@ -204,7 +201,17 @@ export function AdminLogsPage() {
       setFilterUserId(value);
     } else {
       setFilterInstanceName(value);
+      if (value) {
+        setFilterWithoutInstance(false);
+      }
     }
+    setPage(0);
+  };
+
+  const toggleWithoutInstance = () => {
+    setSelectedLogIds(new Set());
+    setFilterWithoutInstance((current) => !current);
+    setFilterInstanceName("");
     setPage(0);
   };
 
@@ -212,10 +219,11 @@ export function AdminLogsPage() {
     setSelectedLogIds(new Set());
     setFilterUserId("");
     setFilterInstanceName("");
+    setFilterWithoutInstance(false);
     setPage(0);
   };
 
-  const hasActiveFilters = filterUserId || filterInstanceName;
+  const hasActiveFilters = filterUserId || filterInstanceName || filterWithoutInstance;
   const totalPages = data ? Math.ceil(data.total_count / pageSize) : 0;
   const visibleLogIds = data?.logs.map((log) => log.id) ?? [];
   const selectedVisibleCount = visibleLogIds.filter((logId) => selectedLogIds.has(logId)).length;
@@ -341,13 +349,22 @@ export function AdminLogsPage() {
           className="h-8 px-2 rounded-md border border-input bg-background text-sm focus:outline-none focus:ring-2 focus:ring-ring"
         >
           <option value="">All instances</option>
-          <option value={WITHOUT_INSTANCE_FILTER}>Without an instance</option>
           {instanceNames?.map((name) => (
             <option key={name} value={name}>
               {name}
             </option>
           ))}
         </select>
+
+        <Button
+          variant={filterWithoutInstance ? "secondary" : "outline"}
+          size="sm"
+          onClick={toggleWithoutInstance}
+          aria-pressed={filterWithoutInstance}
+          className="h-8"
+        >
+          Without an instance
+        </Button>
 
         {hasActiveFilters && (
           <Button variant="ghost" size="sm" onClick={clearFilters} className="h-8 gap-1">
