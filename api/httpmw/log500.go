@@ -3,9 +3,12 @@ package httpmw
 import (
 	"bytes"
 	"compress/gzip"
+	"fmt"
 	"io"
 	"log/slog"
 	"net/http"
+	"strings"
+	"time"
 )
 
 const maxBodyCapture = 512
@@ -51,6 +54,7 @@ func (w *statusWriter) Unwrap() http.ResponseWriter {
 func Log500(logger *slog.Logger) func(http.Handler) http.Handler {
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(rw http.ResponseWriter, r *http.Request) {
+			startedAt := time.Now()
 			sw := &statusWriter{ResponseWriter: rw}
 			next.ServeHTTP(sw, r)
 			if sw.status == http.StatusInternalServerError {
@@ -64,10 +68,16 @@ func Log500(logger *slog.Logger) func(http.Handler) http.Handler {
 						_ = gr.Close()
 					}
 				}
-				logger.ErrorContext(r.Context(), "returned 500",
+				bodyText := strings.TrimSpace(string(body))
+				duration := time.Since(startedAt)
+				logger.ErrorContext(r.Context(), fmt.Sprintf(
+					"returned 500: %s %s after %s: %s",
+					r.Method, r.URL.Path, duration.Round(time.Millisecond), bodyText,
+				),
 					slog.String("method", r.Method),
 					slog.String("path", r.URL.Path),
-					slog.String("body", string(body)),
+					slog.Duration("duration", duration),
+					slog.String("body", bodyText),
 				)
 			}
 		})

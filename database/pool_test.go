@@ -8,6 +8,18 @@ import (
 
 const testDBURL = "postgresql://postgres:postgres@localhost:5433/chronicle?sslmode=disable"
 
+func TestPoolConfigBoundsPingTimeout(t *testing.T) {
+	t.Parallel()
+
+	cfg, _, err := database.PoolConfig(nil, testDBURL)
+	if err != nil {
+		t.Fatalf("pool config: %v", err)
+	}
+	if cfg.PingTimeout <= 0 {
+		t.Fatalf("PingTimeout = %s, want a positive timeout", cfg.PingTimeout)
+	}
+}
+
 // TestWithMaxConns pins the pool bound. Without it the pgx default
 // (max(4, numCPU)) is shared by the API and every background worker, so a few
 // slow queries can starve the whole process.

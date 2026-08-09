@@ -112,6 +112,13 @@ func PoolConfig(logger *slog.Logger, dbURL string, opts ...PoolOption) (*pgxpool
 		opt(cfg)
 	}
 
+	// Bound liveness checks so stale connections are discarded promptly after
+	// transient network failures instead of leaving acquisitions blocked on an
+	// unbounded ping.
+	if cfg.PingTimeout == 0 {
+		cfg.PingTimeout = 5 * time.Second
+	}
+
 	r := &registerTypes{}
 	cfg.AfterConnect = r.RegisterTypes
 

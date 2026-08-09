@@ -36,10 +36,11 @@ func OnPGXPool() string {
 type Service struct {
 	broker *services.Services
 
-	pgURL    string
-	maxConns int64
-	pool     *pgxpool.Pool
-	ps       pubsub.Pubsub
+	pgURL         string
+	maxConns      int64
+	pool          *pgxpool.Pool
+	ps            pubsub.Pubsub
+	monitorCancel context.CancelFunc
 }
 
 func New(broker *services.Services) *Service {
@@ -79,6 +80,10 @@ func (s *Service) Start(ctx context.Context) error {
 	}
 	s.ps = ps
 
+	monitorCtx, monitorCancel := context.WithCancel(ctx)
+	s.monitorCancel = monitorCancel
+	go monitorPoolHealth(monitorCtx, logger, s.pool)
+
 	return nil
 }
 
@@ -87,6 +92,9 @@ func (s *Service) Service() *pgxpool.Pool {
 }
 
 func (s *Service) Close(_ context.Context) error {
+	if s.monitorCancel != nil {
+		s.monitorCancel()
+	}
 	if s.pool != nil {
 		s.pool.Close()
 	}
