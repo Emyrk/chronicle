@@ -88,6 +88,19 @@ func TestDerivedConsumablesAreDatasetScopedAndLinkBuffs(t *testing.T) {
 		require.NoError(t, spelldb.UpsertBatch(ctx, pool, rows))
 	}
 
+	insertMountSpell := func(datasetID string, spellID int32, name string) {
+		t.Helper()
+		mount := chrondbc.Spell{
+			ID:        chrondbc.SpellID(spellID),
+			Name_lang: i18n.Text{i18n.English: name},
+		}
+		mount.Effect[0] = chrondbc.EffectApplyAura
+		mount.EffectAura[0] = chrondbc.AuraEffectMounted
+		require.NoError(t, spelldb.UpsertBatch(ctx, pool, []spelldb.SpellRow{
+			spelldb.FromSpell(uuid.MustParse(datasetID), &mount),
+		}))
+	}
+
 	defaultID := servicedataset.DefaultDatasetID.String()
 	otherID := otherDataset.ID.String()
 	insertItem(defaultID, 1000, int32(chrondbc.ItemClassConsumable), 100, "Default Elixir")
@@ -96,6 +109,8 @@ func TestDerivedConsumablesAreDatasetScopedAndLinkBuffs(t *testing.T) {
 	insertSpells(defaultID, 100, 200, "Default Buff")
 	insertSpells(otherID, 300, 400, "Other Buff")
 	insertLearnSpell(defaultID, 600, 601, "Prayer of Shadow Protection")
+
+	insertMountSpell(defaultID, 700, "Brown Horse")
 
 	// Some physical consumables, such as Jujus, are classified as quest
 	// items. Include stackable, non-equippable on-use items, charged trade goods
@@ -116,7 +131,8 @@ func TestDerivedConsumablesAreDatasetScopedAndLinkBuffs(t *testing.T) {
 			($1, 1007, $4, 'Wizard Oil', 0, 1, 500, 0, -5, 0, 0),
 			($1, 1008, $4, 'Dense Sharpening Stone', 0, 20, 501, 0, -1, 0, 0),
 			-- Real codices list both the learn wrapper and the taught spell as on-use slots.
-			($1, 1009, $5, 'Class Spell Codex', 0, 1, 600, 0, 0, 601, 0)
+			($1, 1009, $5, 'Class Spell Codex', 0, 1, 600, 0, 0, 601, 0),
+			($1, 1010, $2, 'Reusable Mount', 0, 1, 700, 0, 0, 0, 0)
 	`, defaultID, int32(chrondbc.ItemClassQuest), int32(chrondbc.ItemClassArmor), int32(chrondbc.ItemClassTradeGoods), int32(chrondbc.ItemClassRecipe))
 	require.NoError(t, err)
 

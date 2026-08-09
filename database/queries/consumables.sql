@@ -98,6 +98,20 @@ WHERE wit.dataset_id = @dataset_id
               )
           )
       )
+  )
+  -- Mount items are reusable utility items, not consumables. Their use spell
+  -- applies a mounted aura directly, which otherwise matches the generic aura
+  -- fallback for non-stackable consumables.
+  AND NOT EXISTS (
+      SELECT 1
+      FROM dbc_spells mount_spell
+      WHERE mount_spell.dataset_id = wit.dataset_id
+        AND mount_spell.spell_id = ANY(eligible.item_spell_ids)
+        AND 78 IN (
+            mount_spell.effect_aura_0,
+            mount_spell.effect_aura_1,
+            mount_spell.effect_aura_2
+        )
   );
 
 -- name: InsertDerivedConsumableBuffs :execrows
