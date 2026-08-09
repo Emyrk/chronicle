@@ -38,6 +38,28 @@ func TestWotLKEncounterFactoriesRejectPetEntries(t *testing.T) {
 	require.True(t, matches(wotlkEntryGUID(0xF130000000000000, malygosEntry)))
 }
 
+func TestWotLKEncounterFactoriesUseNeverActiveVortex(t *testing.T) {
+	t.Parallel()
+
+	chars := characters.NewCharacters(
+		unitdb.New(),
+		nil,
+		identifier.NewIdentifier(map[uint32]identifier.Identity{}),
+	)
+	vortex := wotlkEntryGUID(0xF150000000000000, 30090)
+
+	var matched characters.Character
+	for _, factory := range NewCharacterFactories(database.WoWFlavor{database.FlavorVanilla, database.FlavorWrath}) {
+		if char, ok := factory(vortex, chars); ok {
+			matched = char
+			break
+		}
+	}
+
+	require.IsType(t, characters.NeverActive{}, matched)
+	require.Equal(t, vortex, matched.ID())
+}
+
 func TestAzerothServersideFactoryStillAcceptsPets(t *testing.T) {
 	t.Parallel()
 

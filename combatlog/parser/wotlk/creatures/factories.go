@@ -24,7 +24,7 @@ func AzerothServersideCoreCharacterFactories() []characters.CharacterFactory {
 func NewCharacterFactories(flavor database.WoWFlavor) []characters.CharacterFactory {
 	cres := creatures.VanillaCharacterFactories(flavor)
 	if flavor.Has(database.FlavorWrath) {
-		cres = append(characters.CreatureFactories(
+		wrath := characters.CreatureFactories(
 			// The Nexus
 			NewAzureEnforcer,
 			NewCrazedManaWraith,
@@ -46,7 +46,10 @@ func NewCharacterFactories(flavor database.WoWFlavor) []characters.CharacterFact
 			// Eye of Eternity
 			NewMalygos,
 			NewPowerSpark,
-		), cres...)
+		)
+		// Vortex uses a vehicle GUID, so it must not be wrapped by CreatureFactories.
+		wrath = append(wrath, NewVortex)
+		cres = append(wrath, cres...)
 	}
 
 	return cres

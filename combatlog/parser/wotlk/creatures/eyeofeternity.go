@@ -26,3 +26,14 @@ func NewPowerSpark(id guid.GUID, _ *characters.Characters) (characters.Character
 	// These sparks commit suicided to place a debuff on casters.
 	return characters.NewNeverActive(id), true
 }
+
+func NewVortex(id guid.GUID, _ *characters.Characters) (characters.Character, bool) {
+	if entry, ok := id.GetEntry(); !ok || entry != 30090 || !id.IsVehicle() {
+		return nil, false
+	}
+
+	// Vortex is an encounter vehicle used during Malygos phase one. It cannot be
+	// killed, so treating its combat-log activity as a hostile leaves completed
+	// encounters marked partial with the Vortex remaining.
+	return characters.NewNeverActive(id), true
+}
