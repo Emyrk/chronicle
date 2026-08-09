@@ -55,6 +55,20 @@ function sameIds(left: number[], right: number[]): boolean {
   return left.length === right.length && left.every((value, index) => value === right[index]);
 }
 
+export function matchesConsumableEffectFilters(
+  policy: ConsumableEffectPolicy | undefined,
+  candidateCount: number,
+  showAmbiguous: boolean,
+  showIgnored: boolean,
+): boolean {
+  if (policy?.ignored && !showIgnored) return false;
+
+  const unresolvedAmbiguity = candidateCount > 1
+    && !policy?.ignored
+    && policy?.item_id === undefined;
+  return !showAmbiguous || unresolvedAmbiguity;
+}
+
 export interface CandidateDatasetGroup {
   datasetIds: string[];
   candidates: ConsumableEntry[];

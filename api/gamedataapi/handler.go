@@ -108,9 +108,10 @@ func (h *Handler) Routes() http.Handler {
 		r.Delete("/worlds/{worldID}/servers/{serverID}", h.UnassignWorldFromServer)
 	})
 
+	r.Get("/datasets/{datasetID}/consumable-disambiguations", h.ListConsumableEffectPolicies)
+
 	r.Group(func(r chi.Router) {
 		r.Use(h.canManageConsumables)
-		r.Get("/datasets/{datasetID}/consumable-disambiguations", h.ListConsumableEffectPolicies)
 		r.Put("/datasets/{datasetID}/consumable-disambiguations/{effectKind}/{spellID}", h.SetConsumableDisambiguation)
 		r.Put("/datasets/{datasetID}/consumable-disambiguations/{effectKind}/{spellID}/ignore", h.IgnoreConsumableEffect)
 		r.Delete("/datasets/{datasetID}/consumable-disambiguations/{effectKind}/{spellID}", h.DeleteConsumableDisambiguation)

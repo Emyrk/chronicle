@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   buildCommonConsumableEffects,
   groupDatasetsByCandidates,
+  matchesConsumableEffectFilters,
   type ConsumableDatasetSnapshot,
   type ConsumableEntry,
 } from "./commonConsumables";
@@ -43,6 +44,23 @@ describe("groupDatasetsByCandidates", () => {
     ]);
 
     expect(groups).toHaveLength(2);
+  });
+});
+
+describe("matchesConsumableEffectFilters", () => {
+  it("hides ignored effects by default and reveals them when requested", () => {
+    const ignored = { effect_kind: "buff" as const, spell_id: 100, ignored: true };
+
+    expect(matchesConsumableEffectFilters(ignored, 2, false, false)).toBe(false);
+    expect(matchesConsumableEffectFilters(ignored, 2, false, true)).toBe(true);
+  });
+
+  it("shows only unresolved multi-candidate effects in ambiguous mode", () => {
+    const canonical = { effect_kind: "buff" as const, spell_id: 100, item_id: 10, ignored: false };
+
+    expect(matchesConsumableEffectFilters(undefined, 2, true, false)).toBe(true);
+    expect(matchesConsumableEffectFilters(undefined, 1, true, false)).toBe(false);
+    expect(matchesConsumableEffectFilters(canonical, 2, true, false)).toBe(false);
   });
 });
 

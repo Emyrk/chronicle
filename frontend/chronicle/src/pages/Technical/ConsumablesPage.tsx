@@ -26,6 +26,7 @@ import { toast } from "sonner";
 import {
   buildCommonConsumableEffects,
   groupDatasetsByCandidates,
+  matchesConsumableEffectFilters,
   type CommonConsumableEffect,
   type ConsumableBuff,
   type ConsumableEntry,
@@ -625,7 +626,7 @@ export function ConsumablesPage() {
   const canCompareDatasets = siteConfig?.tenant === null && canManageConsumables && (datasets?.length ?? 0) > 1;
   const multiDatasetMode = canCompareDatasets && selectedDatasetIds.length > 1;
   const { data: disambiguations } = useConsumableDisambiguations(datasetId);
-  const { data: policies } = useConsumableEffectPolicies(datasetId, canManageConsumables);
+  const { data: policies } = useConsumableEffectPolicies(datasetId);
   const policyMap = useMemo(() => {
     const entries = new Map<string, ConsumableEffectPolicy>();
     for (const disambiguation of disambiguations ?? []) {
@@ -685,9 +686,7 @@ export function ConsumablesPage() {
   );
   const filteredBuffs = buffGroups.filter((buff) => {
     const policy = policyMap.get(effectKey("buff", buff.id));
-    if (canManageConsumables && policy?.ignored && !showIgnored) return false;
-    const unresolvedAmbiguity = buff.items.length > 1 && !policy?.ignored && policy?.item_id === undefined;
-    if (canManageConsumables && showAmbiguous && !unresolvedAmbiguity) return false;
+    if (!matchesConsumableEffectFilters(policy, buff.items.length, showAmbiguous, showIgnored)) return false;
     return !query
       || buff.name.toLowerCase().includes(query)
       || buff.id.toString().includes(query)
@@ -695,9 +694,7 @@ export function ConsumablesPage() {
   });
   const filteredSpellcasts = spellcastGroups.filter((spellcast) => {
     const policy = policyMap.get(effectKey("direct", spellcast.spellId));
-    if (canManageConsumables && policy?.ignored && !showIgnored) return false;
-    const unresolvedAmbiguity = spellcast.items.length > 1 && !policy?.ignored && policy?.item_id === undefined;
-    if (canManageConsumables && showAmbiguous && !unresolvedAmbiguity) return false;
+    if (!matchesConsumableEffectFilters(policy, spellcast.items.length, showAmbiguous, showIgnored)) return false;
     return !query
       || spellcast.spellId.toString().includes(query)
       || spellcast.items.some((item) => matchesItem(item, query));
@@ -884,37 +881,17 @@ export function ConsumablesPage() {
               <strong>Consumable manager:</strong> right-click a buff or spellcast row to set its canonical item{multiDatasetMode ? " across the selected datasets" : ""}.
             </span>
           </div>
-          <div className="flex items-center gap-2">
-            <label className="flex cursor-pointer items-center gap-2 rounded-md border border-border/70 bg-background/60 px-2.5 py-1.5 text-xs">
-              <input
-                type="checkbox"
-                checked={showAmbiguous}
-                onChange={(event) => setShowAmbiguous(event.target.checked)}
-                className="accent-amber-500"
-              />
-              Show only ambiguous
-            </label>
-            {view !== "item" && !multiDatasetMode && (
-              <button
-                type="button"
-                disabled={bulkIgnorePending || bulkIgnoreTargets.length === 0}
-                onClick={handleBulkIgnore}
-                className="flex items-center gap-1.5 rounded-md border border-zinc-500/30 bg-zinc-500/10 px-2.5 py-1.5 text-xs text-zinc-300 hover:bg-zinc-500/20 disabled:cursor-not-allowed disabled:opacity-40"
-              >
-                <EyeOff className="h-3.5 w-3.5" />
-                {bulkIgnorePending ? "Ignoring..." : `Ignore visible ambiguous (${bulkIgnoreTargets.length})`}
-              </button>
-            )}
-            <label className="flex cursor-pointer items-center gap-2 rounded-md border border-border/70 bg-background/60 px-2.5 py-1.5 text-xs">
-              <input
-                type="checkbox"
-                checked={showIgnored}
-                onChange={(event) => setShowIgnored(event.target.checked)}
-                className="accent-zinc-500"
-              />
-              Show ignored
-            </label>
-          </div>
+          {view !== "item" && !multiDatasetMode && (
+            <button
+              type="button"
+              disabled={bulkIgnorePending || bulkIgnoreTargets.length === 0}
+              onClick={handleBulkIgnore}
+              className="flex items-center gap-1.5 rounded-md border border-zinc-500/30 bg-zinc-500/10 px-2.5 py-1.5 text-xs text-zinc-300 hover:bg-zinc-500/20 disabled:cursor-not-allowed disabled:opacity-40"
+            >
+              <EyeOff className="h-3.5 w-3.5" />
+              {bulkIgnorePending ? "Ignoring..." : `Ignore visible ambiguous (${bulkIgnoreTargets.length})`}
+            </button>
+          )}
         </div>
       )}
 
@@ -935,6 +912,24 @@ export function ConsumablesPage() {
               className="w-full rounded-md border bg-background py-1.5 pl-8 pr-3 text-sm focus:outline-none focus:ring-1 focus:ring-ring"
             />
           </div>
+          <label className="flex cursor-pointer items-center gap-2 rounded-md border border-border/70 bg-background/60 px-2.5 py-1.5 text-xs">
+            <input
+              type="checkbox"
+              checked={showAmbiguous}
+              onChange={(event) => setShowAmbiguous(event.target.checked)}
+              className="accent-amber-500"
+            />
+            Show only ambiguous
+          </label>
+          <label className="flex cursor-pointer items-center gap-2 rounded-md border border-border/70 bg-background/60 px-2.5 py-1.5 text-xs">
+            <input
+              type="checkbox"
+              checked={showIgnored}
+              onChange={(event) => setShowIgnored(event.target.checked)}
+              className="accent-zinc-500"
+            />
+            Show ignored
+          </label>
           {search && !multiDatasetMode && (
             <span className="text-xs text-muted-foreground">{visibleCount} results</span>
           )}
@@ -997,7 +992,7 @@ export function ConsumablesPage() {
                     <div className="flex flex-wrap items-center gap-1.5">
                       <Sparkles className="h-3.5 w-3.5 text-primary" />
                       <SpellReference spellId={buff.id} name={buff.name} />
-                      <EffectStatus policy={policy} ambiguous={canManageConsumables && buff.items.length > 1} />
+                      <EffectStatus policy={policy} ambiguous={buff.items.length > 1} />
                     </div>
                     <div className="flex flex-wrap gap-1.5">
                       {buff.items.map((item) => (
@@ -1044,7 +1039,7 @@ export function ConsumablesPage() {
                     </span>
                     <div className="flex flex-wrap items-center gap-1.5">
                       <SpellReference spellId={spellcast.spellId} />
-                      <EffectStatus policy={policy} ambiguous={canManageConsumables && spellcast.items.length > 1} />
+                      <EffectStatus policy={policy} ambiguous={spellcast.items.length > 1} />
                     </div>
                     <div className="flex flex-wrap gap-1.5 pr-3">
                       {spellcast.items.map((item) => (
