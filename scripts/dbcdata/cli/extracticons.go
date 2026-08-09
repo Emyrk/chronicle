@@ -116,62 +116,104 @@ func extractIcons(wc *dbcdb.WoWClient, clientPath, outDir string, stdout io.Writ
 
 	_, _ = fmt.Fprintf(stdout, "Phase 1 (ListFiles): extracted %d, skipped %d\n", extracted, skipped)
 
-	// Phase 2: Use SpellIcon.dbc to find icons that were missed by
-	// ListFiles(). This covers spell/talent/ability icons in MPQs without
-	// listfiles. Not exhaustive for all icon types, but catches the most
-	// commonly referenced ones.
-	icons, err := wc.SpellIcons()
-	if err != nil {
-		_, _ = fmt.Fprintf(stdout, "  Warning: SpellIcon.dbc unavailable: %v\n", err)
-		_, _ = fmt.Fprintf(stdout, "Extracted %d icons (%d skipped) to %s\n", extracted, skipped, outDir)
-		return nil
-	}
-
-	var dbcExtracted, dbcSkipped int
-	err = icons.Range(func(cursor *dbdefs.Ent_SpellIcon) bool {
-		if cursor.TextureFilename == "" {
-			return true
+	// extractTexture finds a known icon path through the MPQ fallback and writes
+	// it unless an earlier discovery phase already extracted it.
+	extractTexture := func(texture string) (bool, error) {
+		outName, blpPath, ok := iconFileNames(texture)
+		if !ok || written[outName] {
+			return false, nil
 		}
 
-		// TextureFilename may be a bare name ("Ability_Warrior_Warbringer")
-		// or include the prefix ("Interface\Icons\Ability_Warrior_Warbringer").
-		// Some entries reference paths outside Interface\Icons\ (e.g.
-		// "Interface\Spellbook\...") — skip those.
-		texName := cutIconPrefix(cursor.TextureFilename)
-		if texName != cursor.TextureFilename {
-			// Had the Interface\Icons\ prefix — stripped successfully.
-		} else if strings.ContainsRune(texName, '\\') {
-			// Path outside Interface\Icons\ — not an icon we extract.
-			return true
-		}
-
-		outName := strings.ToLower(texName) + ".blp"
-		if written[outName] {
-			return true // Already extracted in phase 1.
-		}
-
-		blpPath := prefix + texName + ".blp"
 		data, err := readFile(blpPath)
 		if err != nil {
 			_, _ = fmt.Fprintf(stdout, "  SKIP %s: %v\n", blpPath, err)
-			dbcSkipped++
-			return true
+			return false, nil
 		}
-
 		if err := os.WriteFile(filepath.Join(outDir, outName), data, 0o644); err != nil {
-			_, _ = fmt.Fprintf(stdout, "  ERROR %s: %v\n", outName, err)
-			return false
+			return false, fmt.Errorf("write %s: %w", outName, err)
 		}
 		written[outName] = true
-		dbcExtracted++
-		return true
-	})
-	if err != nil {
-		return fmt.Errorf("iterate SpellIcon.dbc: %w", err)
+		return true, nil
 	}
 
-	_, _ = fmt.Fprintf(stdout, "Phase 2 (SpellIcon.dbc): extracted %d new, skipped %d (%d in DBC)\n",
-		dbcExtracted, dbcSkipped, icons.Len())
-	_, _ = fmt.Fprintf(stdout, "Total: %d icons extracted to %s\n", extracted+dbcExtracted, outDir)
+	// Phase 2: Use SpellIcon.dbc to find spell/talent/ability icons that were
+	// missed by ListFiles().
+	var spellExtracted int
+	icons, err := wc.SpellIcons()
+	if err != nil {
+		_, _ = fmt.Fprintf(stdout, "  Warning: SpellIcon.dbc unavailable: %v\n", err)
+	} else {
+		var extractErr error
+		err = icons.Range(func(cursor *dbdefs.Ent_SpellIcon) bool {
+			var wasWritten bool
+			wasWritten, extractErr = extractTexture(cursor.TextureFilename)
+			if extractErr != nil {
+				return false
+			}
+			if wasWritten {
+				spellExtracted++
+			}
+			return true
+		})
+		if err != nil {
+			return fmt.Errorf("iterate SpellIcon.dbc: %w", err)
+		}
+		if extractErr != nil {
+			return extractErr
+		}
+		_, _ = fmt.Fprintf(stdout, "Phase 2 (SpellIcon.dbc): extracted %d new (%d in DBC)\n",
+			spellExtracted, icons.Len())
+	}
+
+	// Phase 3: Item inventory icons live in ItemDisplayInfo.dbc rather than
+	// SpellIcon.dbc. This is required for listfile-less MPQs, where item icons
+	// cannot otherwise be discovered even though direct hash lookup can read them.
+	var itemExtracted int
+	displayInfo, err := wc.ItemDisplayInfo()
+	if err != nil {
+		_, _ = fmt.Fprintf(stdout, "  Warning: ItemDisplayInfo.dbc unavailable: %v\n", err)
+	} else {
+		var extractErr error
+		err = displayInfo.Range(func(cursor *dbdefs.Ent_ItemDisplayInfo) bool {
+			for _, texture := range cursor.InventoryIcon {
+				var wasWritten bool
+				wasWritten, extractErr = extractTexture(texture)
+				if extractErr != nil {
+					return false
+				}
+				if wasWritten {
+					itemExtracted++
+				}
+			}
+			return true
+		})
+		if err != nil {
+			return fmt.Errorf("iterate ItemDisplayInfo.dbc: %w", err)
+		}
+		if extractErr != nil {
+			return extractErr
+		}
+		_, _ = fmt.Fprintf(stdout, "Phase 3 (ItemDisplayInfo.dbc): extracted %d new (%d in DBC)\n",
+			itemExtracted, displayInfo.Len())
+	}
+
+	_, _ = fmt.Fprintf(stdout, "Total: %d icons extracted to %s\n", extracted+spellExtracted+itemExtracted, outDir)
 	return nil
+}
+
+func iconFileNames(texture string) (outName, blpPath string, ok bool) {
+	if texture == "" {
+		return "", "", false
+	}
+
+	// Texture names may be bare ("Ability_Warrior_Warbringer") or include the
+	// Interface\Icons\ prefix. Paths outside Interface\Icons\ are not icons
+	// handled by this extractor.
+	texName := cutIconPrefix(texture)
+	if texName == texture && strings.ContainsRune(texName, '\\') {
+		return "", "", false
+	}
+
+	const prefix = `Interface\Icons\`
+	return strings.ToLower(texName) + ".blp", prefix + texName + ".blp", true
 }
