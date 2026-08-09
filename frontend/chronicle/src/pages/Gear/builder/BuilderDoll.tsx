@@ -22,6 +22,8 @@ interface BuilderDollProps {
   match?: CharacterMatch;
   /** Matched character's name, for the marker legend. */
   matchName?: string;
+  /** Progression only: per-slot "next upgrade at level N" annotations. */
+  nextUpgrades?: Map<number, { level: number; name: string }>;
 }
 
 /** Divider-style section label ("——— WEAPONS ———"). */
@@ -50,6 +52,7 @@ export function BuilderDoll({
   wornDeltas,
   match,
   matchName,
+  nextUpgrades,
 }: BuilderDollProps) {
   const equippedItemIds = new Set(
     Object.values(stage.slots)
@@ -77,6 +80,7 @@ export function BuilderDoll({
         score={scores?.get(def.outfitIndex)}
         wornDelta={wornDeltas?.get(def.outfitIndex)}
         matchState={matchState}
+        nextUpgrade={nextUpgrades?.get(def.outfitIndex)}
       />
     );
   };

@@ -45,6 +45,13 @@ interface ItemPickerPanelProps {
   weights?: StatWeights | null;
   /** The equipped item's score, for the ± delta on each row. */
   equippedScore?: number;
+  /**
+   * Character level the results should be wearable at. Adds a level
+   * filter (on by default) that the user can switch off — without it,
+   * high-level quest and raid gear drowns out everything a levelling
+   * character can actually equip.
+   */
+  characterLevel?: number;
 }
 
 /**
@@ -62,11 +69,17 @@ export function ItemPickerPanel({
   trendsSlot,
   weights,
   equippedScore,
+  characterLevel,
 }: ItemPickerPanelProps) {
   const [query, setQuery] = useState("");
   const [quality, setQuality] = useState("");
   const [sort, setSort] = useState<string>("item_level_desc");
+  const [ignoreLevel, setIgnoreLevel] = useState(false);
   const debouncedQuery = useDebouncedValue(query.trim(), 250);
+
+  // Filtering happens in SQL, before the result cap — a client-side pass
+  // over an already-capped page would leave the list nearly empty.
+  const levelCeiling = characterLevel && !ignoreLevel ? characterLevel : undefined;
 
   const slotFilter = useMemo(
     () => (SLOT_INVENTORY_TYPES[slotIndex] ?? []).join(","),
@@ -83,7 +96,14 @@ export function ItemPickerPanel({
   const emptyBrowse = debouncedQuery.length === 0;
   const search = useSearchItems(
     emptyBrowse || debouncedQuery.length >= 2
-      ? { q: emptyBrowse ? "" : debouncedQuery, quality: quality || undefined, slot: slotFilter, sort: serverSort, allowEmpty: true }
+      ? {
+          q: emptyBrowse ? "" : debouncedQuery,
+          quality: quality || undefined,
+          slot: slotFilter,
+          sort: serverSort,
+          maxRequiredLevel: levelCeiling,
+          allowEmpty: true,
+        }
       : null,
   );
 
@@ -126,6 +146,25 @@ export function ItemPickerPanel({
             {chip.label}
           </button>
         ))}
+        {characterLevel != null && (
+          <button
+            type="button"
+            onClick={() => setIgnoreLevel((prev) => !prev)}
+            title={
+              ignoreLevel
+                ? "Only show items wearable at this level"
+                : "Show items above this level too"
+            }
+            className={cn(
+              "rounded-full border px-2.5 py-0.5 text-xs transition-colors",
+              ignoreLevel
+                ? "border-zinc-700 text-zinc-400 hover:text-zinc-200"
+                : "border-blue-500 bg-blue-500/10 text-white",
+            )}
+          >
+            {ignoreLevel ? "Any level" : `Usable at ${characterLevel}`}
+          </button>
+        )}
         <div className="flex-1" />
         <select
           className="h-7 rounded border border-zinc-700 bg-zinc-900 px-1.5 text-xs text-zinc-300"
@@ -228,6 +267,9 @@ function PickerRow({
         </div>
         <div className="flex items-center gap-2 text-2xs text-zinc-500 font-mono">
           {item.item_level > 0 && <span>ilvl {item.item_level}</span>}
+          <span title="Required character level">
+            req {item.required_level > 0 ? item.required_level : "—"}
+          </span>
           {observedPct !== undefined && (
             <span className="inline-flex items-center gap-1">
               <span className="inline-block h-1 w-10 rounded bg-zinc-800 overflow-hidden align-middle">

@@ -46,8 +46,8 @@ export * from "./src/pages/Leaderboard/Podium";
 export * from "./src/pages/Upload/Upload";
 export * from "./src/pages/WoWDB/SpellTooltip";
 export * from "./src/pages/Gear/progression/builder/LevelingScrubber";
-export * from "./src/pages/Gear/progression/builder/StageScrubber";
-export * from "./src/pages/Gear/progression/builder/DerivedSlotGrid";
+export * from "./src/pages/Gear/progression/builder/ProgressionSwimlanes";
+export * from "./src/pages/Gear/progression/builder/SlotPoolList";
 export * from "./src/pages/Instance/TenantGate";
 export * from "./src/pages/Instance/EventsPanels/EventsPanel";
 // EventsPanel reads this context; exporting it lets preview fixtures (and

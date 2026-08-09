@@ -17,6 +17,7 @@ import {
   COSMETIC_SLOTS,
   GEAR_PAYLOAD_VERSION,
   SLOT,
+  SLOT_COUNT,
   addStage,
   fillStageFromOutfit,
   moveStage,
@@ -330,6 +331,20 @@ const TWO_HAND_TYPES: ReadonlySet<number> = new Set([17]);
 const OFF_HAND_TYPES: ReadonlySet<number> = new Set([13, 14, 22, 23]);
 
 /**
+ * Outfit slots an item of this inventory type can occupy. Empty when the
+ * item is not equippable (bags, reagents, …).
+ */
+export function slotsForInventoryType(inventoryType: number): readonly number[] {
+  const group = GROUP_BY_INVENTORY_TYPE[inventoryType];
+  return group ? GROUP_SLOTS[group] : [];
+}
+
+/** Whether a pool item is a candidate for a given outfit slot. */
+export function itemFitsSlot(inventoryType: number, slotIndex: number): boolean {
+  return slotsForInventoryType(inventoryType).includes(slotIndex);
+}
+
+/**
  * Rank order within a slot group: the *latest-unlocked* item wins, then
  * the higher item level, then the lower item ID so ties are stable.
  *
@@ -452,6 +467,99 @@ export function stageAverageItemLevel(
     if (entry) entries.push([Number(key), entry.item_id]);
   }
   return averageEquippedItemLevel(entries, itemLevelOf);
+}
+
+/** What a slot becomes, and when. */
+export interface NextUpgrade {
+  level: number;
+  itemId: number;
+}
+
+/**
+ * For each slot, the next level above `level` at which the derived set
+ * changes, and what it changes to. Slots that never change again are
+ * absent.
+ *
+ * The derivation is a step function of the character level — it can only
+ * change at a level where some pool item becomes eligible — so it is
+ * enough to evaluate the candidate levels rather than every integer.
+ */
+export function nextUpgradesAfter(
+  pool: readonly PoolItemStats[],
+  level: number,
+  maxLevel: number,
+): Map<number, NextUpgrade> {
+  const current = computeEquippedAtLevel(pool, level);
+  const pending = new Map<number, NextUpgrade>();
+  for (const candidate of upgradeLevels(pool, maxLevel)) {
+    if (candidate <= level) continue;
+    const at = computeEquippedAtLevel(pool, candidate);
+    for (let slot = 0; slot < SLOT_COUNT; slot++) {
+      if (pending.has(slot)) continue;
+      const next = at[slot];
+      if (next != null && next !== current[slot]) {
+        pending.set(slot, { level: candidate, itemId: next });
+      }
+    }
+  }
+  return pending;
+}
+
+/** One column of the swimlane view: a level and the set derived there. */
+export interface ProgressionColumn {
+  level: number;
+  equipped: DerivedEquipped;
+}
+
+/**
+ * The levels worth showing as swimlane columns: level 1, every level at
+ * which the pool delivers something, and the cap. Columns whose derived
+ * set is identical to the previous one are dropped — they would be a
+ * fully-carried column with nothing to say.
+ */
+export function progressionColumns(
+  pool: readonly PoolItemStats[],
+  maxLevel: number,
+): ProgressionColumn[] {
+  const levels = new Set<number>([1, maxLevel]);
+  for (const level of upgradeLevels(pool, maxLevel)) levels.add(level);
+
+  const columns: ProgressionColumn[] = [];
+  for (const level of [...levels].sort((a, b) => a - b)) {
+    const equipped = computeEquippedAtLevel(pool, level);
+    const previous = columns[columns.length - 1];
+    if (previous && sameEquipped(previous.equipped, equipped)) continue;
+    columns.push({ level, equipped });
+  }
+  return columns;
+}
+
+function sameEquipped(a: DerivedEquipped, b: DerivedEquipped): boolean {
+  for (let slot = 0; slot < SLOT_COUNT; slot++) {
+    if (a[slot] !== b[slot]) return false;
+  }
+  return true;
+}
+
+/**
+ * The derived set as a GearStage, so the levelling half can feed the very
+ * same paperdoll and summary components the gear-list builder uses.
+ * Enchants come from the pool entries that produced the picks.
+ */
+export function derivedStage(
+  name: string,
+  equipped: DerivedEquipped,
+  pool: readonly ProgressionPoolItem[],
+): GearStage {
+  const enchantOf = new Map(pool.map((p) => [p.item_id, p.enchant_id]));
+  const slots: GearStage["slots"] = {};
+  for (let slot = 0; slot < SLOT_COUNT; slot++) {
+    const itemId = equipped[slot];
+    if (itemId == null) continue;
+    const enchantId = enchantOf.get(itemId);
+    slots[String(slot)] = { item_id: itemId, ...(enchantId ? { enchant_id: enchantId } : {}) };
+  }
+  return { name, slots };
 }
 
 // Re-exported so the progression views import slot names from one module.

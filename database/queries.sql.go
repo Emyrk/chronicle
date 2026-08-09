@@ -16488,12 +16488,15 @@ WHERE wit.dataset_id = $1
   AND (array_length($3::int[], 1) IS NULL OR wit.quality = ANY($3))
   AND (array_length($4::int[], 1) IS NULL OR wit.inventory_type = ANY($4))
   AND (array_length($5::int[], 1) IS NULL OR wit.class = ANY($5))
+  -- 0 disables the filter; a character is never below level 1, so no
+  -- meaningful cap collides with the sentinel.
+  AND ($6::int = 0 OR wit.required_level <= $6)
 ORDER BY
-  CASE WHEN $6::bool THEN wit.quality END DESC,
-  CASE WHEN $7::bool THEN wit.item_level END DESC,
-  CASE WHEN $8::bool THEN wit.item_level END ASC,
-  CASE WHEN $9::bool THEN wit.required_level END DESC,
-  CASE WHEN $10::bool THEN wit.required_level END ASC,
+  CASE WHEN $7::bool THEN wit.quality END DESC,
+  CASE WHEN $8::bool THEN wit.item_level END DESC,
+  CASE WHEN $9::bool THEN wit.item_level END ASC,
+  CASE WHEN $10::bool THEN wit.required_level END DESC,
+  CASE WHEN $11::bool THEN wit.required_level END ASC,
   wit.name ASC
 LIMIT 25
 `
@@ -16504,6 +16507,7 @@ type SearchItemTemplatesParams struct {
 	Qualities         []int32   `db:"qualities" json:"qualities"`
 	InventoryTypes    []int32   `db:"inventory_types" json:"inventory_types"`
 	ItemClasses       []int32   `db:"item_classes" json:"item_classes"`
+	MaxRequiredLevel  int32     `db:"max_required_level" json:"max_required_level"`
 	QualityDesc       bool      `db:"quality_desc" json:"quality_desc"`
 	ItemLevelDesc     bool      `db:"item_level_desc" json:"item_level_desc"`
 	ItemLevelAsc      bool      `db:"item_level_asc" json:"item_level_asc"`
@@ -16537,6 +16541,7 @@ func (q *sqlQuerier) SearchItemTemplates(ctx context.Context, arg SearchItemTemp
 		arg.Qualities,
 		arg.InventoryTypes,
 		arg.ItemClasses,
+		arg.MaxRequiredLevel,
 		arg.QualityDesc,
 		arg.ItemLevelDesc,
 		arg.ItemLevelAsc,

@@ -56,15 +56,24 @@ func (s *Service) handleSearchItems(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// Optional character-level ceiling. Applied in SQL so it narrows the
+	// scan before the LIMIT — filtering client-side would starve the list.
+	// Anything unparseable or non-positive means "no ceiling".
+	maxRequiredLevel, err := strconv.Atoi(r.URL.Query().Get("max_required_level"))
+	if err != nil || maxRequiredLevel < 0 {
+		maxRequiredLevel = 0
+	}
+
 	// sort param: "quality_desc" (default), "item_level_desc", "item_level_asc",
 	// "required_level_desc", "required_level_asc"
 	sortParam := r.URL.Query().Get("sort")
 	params := database.SearchItemTemplatesParams{
-		DatasetID:      datasetIDFromContext(ctx),
-		SearchTerm:     q,
-		Qualities:      qualities,
-		InventoryTypes: slots,
-		ItemClasses:    classes,
+		DatasetID:        datasetIDFromContext(ctx),
+		SearchTerm:       q,
+		Qualities:        qualities,
+		InventoryTypes:   slots,
+		ItemClasses:      classes,
+		MaxRequiredLevel: int32(maxRequiredLevel),
 	}
 	switch sortParam {
 	case "item_level_desc":

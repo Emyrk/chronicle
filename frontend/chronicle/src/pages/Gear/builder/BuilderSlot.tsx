@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { Check, Sparkles, StickyNote, X } from "lucide-react";
+import { ArrowUp, Check, Sparkles, StickyNote, X } from "lucide-react";
 import { ItemTooltip } from "@/components/ui/ItemTooltip/ItemTooltip";
 import { CursorTooltip, type CursorPos } from "@/pages/ArmoryPage/overview/CursorTooltip";
 import { getQualityBorderClass, getQualityTextClass, type GearSlotDef } from "@/pages/ArmoryPage/types";
@@ -26,6 +26,12 @@ interface BuilderSlotProps {
   wornDelta?: number;
   /** Character-match state for this slot, when a character is matched. */
   matchState?: "equipped" | "missing";
+  /**
+   * Progression only: the next level at which this slot changes, and what
+   * it changes to. Rendered even on empty slots — "nothing yet, but a
+   * helm arrives at 24" is the useful part while levelling.
+   */
+  nextUpgrade?: { level: number; name: string };
 }
 
 /**
@@ -45,6 +51,7 @@ export function BuilderSlot({
   score,
   wornDelta,
   matchState,
+  nextUpgrade,
 }: BuilderSlotProps) {
   const iconBaseUrl = useIconBaseUrl();
   const isMobile = useIsMobile();
@@ -128,7 +135,7 @@ export function BuilderSlot({
         >
           {displayName}
         </div>
-        {(enchantText || canEnchant || altCount > 0 || entry?.note || score !== undefined || wornDelta !== undefined) && (
+        {(enchantText || canEnchant || altCount > 0 || entry?.note || score !== undefined || wornDelta !== undefined || nextUpgrade) && (
           <div className="flex flex-wrap items-center gap-x-1.5 text-3xs leading-tight text-zinc-500">
             {enchantText ? (
               <span
@@ -172,6 +179,16 @@ export function BuilderSlot({
             )}
             {altCount > 0 && <span>+{altCount} alt{altCount === 1 ? "" : "s"}</span>}
             {entry?.note && <StickyNote className="h-2.5 w-2.5 shrink-0" />}
+            {nextUpgrade && (
+              <span
+                title={`At level ${nextUpgrade.level} this slot becomes ${nextUpgrade.name}`}
+                className="inline-flex min-w-0 items-center gap-0.5 text-amber-500/80"
+              >
+                <ArrowUp className="h-2.5 w-2.5 shrink-0" />
+                <span className="font-mono">{nextUpgrade.level}</span>
+                <span className="truncate max-w-28">{nextUpgrade.name}</span>
+              </span>
+            )}
           </div>
         )}
       </div>

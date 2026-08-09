@@ -59,6 +59,22 @@ interface SlotEditorPanelProps {
   weights?: StatWeights | null;
   /** The equipped item's score, for the picker's ± deltas. */
   equippedScore?: number;
+  /**
+   * Restrict the tab set. Defaults to all three; the progression view's
+   * levelling half has no per-slot alternates or enchants to edit
+   * (its picks are derived, not stored).
+   */
+  tabs?: readonly EditorTab[];
+  /**
+   * Rendered above the search in the "pick" tab. The progression view
+   * puts this slot's item pool here, so clicking a slot on the doll goes
+   * straight to that slot's candidates.
+   */
+  beforePicker?: React.ReactNode;
+  /** Passed through to the picker's level filter. */
+  characterLevel?: number;
+  /** Label for the picker's primary action; "Equip" unless overridden. */
+  equipLabel?: string;
 }
 
 /**
@@ -83,6 +99,10 @@ export function SlotEditorPanel({
   trendsSlot,
   weights,
   equippedScore,
+  tabs,
+  beforePicker,
+  characterLevel,
+  equipLabel,
 }: SlotEditorPanelProps) {
   const current = entry ? items.get(itemRefKey(entry.item_id, entry.enchant_id)) : undefined;
   const usedItemIds = new Set<number>(
@@ -127,7 +147,7 @@ export function SlotEditorPanel({
       )}
 
       <div className="flex items-center gap-1 border-b border-zinc-800">
-        {TABS.map((t) => {
+        {TABS.filter((t) => !tabs || tabs.includes(t.id)).map((t) => {
           const disabled =
             (t.id !== "pick" && !entry) ||
             (t.id === "enchant" && !ENCHANTABLE_SLOTS.has(slotIndex));
@@ -152,15 +172,20 @@ export function SlotEditorPanel({
       </div>
 
       {tab === "pick" && (
-        <ItemPickerPanel
-          slotIndex={slotIndex}
-          usedItemIds={usedItemIds}
-          onEquip={onEquip}
-          onAddAlternate={entry ? onAddAlternate : undefined}
-          trendsSlot={trendsSlot}
-          weights={weights}
-          equippedScore={equippedScore}
-        />
+        <div className="space-y-3">
+          {beforePicker}
+          <ItemPickerPanel
+            slotIndex={slotIndex}
+            usedItemIds={usedItemIds}
+            onEquip={onEquip}
+            equipLabel={equipLabel}
+            onAddAlternate={entry ? onAddAlternate : undefined}
+            trendsSlot={trendsSlot}
+            weights={weights}
+            equippedScore={equippedScore}
+            characterLevel={characterLevel}
+          />
+        </div>
       )}
       {tab === "alternates" && entry && (
         <AlternatesEditor

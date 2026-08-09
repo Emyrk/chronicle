@@ -68,6 +68,11 @@ export interface SearchItemsParams {
   class?: string;   // comma-separated
   sort?: string;
   /**
+   * Character-level ceiling: hides items that require a higher level.
+   * Applied server-side, before the result cap.
+   */
+  maxRequiredLevel?: number;
+  /**
    * Allow an empty query (server requires a slot filter then) — returns
    * the top items for the slot by the chosen sort.
    */
@@ -81,6 +86,7 @@ async function fetchSearchItems(params: SearchItemsParams): Promise<ItemSearchRe
   if (params.slot) qs.set("slot", params.slot);
   if (params.class) qs.set("class", params.class);
   if (params.sort) qs.set("sort", params.sort);
+  if (params.maxRequiredLevel) qs.set("max_required_level", String(params.maxRequiredLevel));
   const response = await fetch(`/api/v1/internal/gamedata/search/items?${qs.toString()}`);
   if (!response.ok) {
     throw new Error(`Failed to search items: ${response.status}`);

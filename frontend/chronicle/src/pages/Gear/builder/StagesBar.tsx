@@ -8,6 +8,11 @@ interface StagesBarProps {
   payload: GearPayload;
   stageIndex: number;
   onSelect: (i: number) => void;
+  /**
+   * Optional second line per tab, indexed by stage (e.g. the stage's
+   * average equipped item level in the progression view).
+   */
+  subLabels?: readonly (string | undefined)[];
   /** Present in edit mode: enables add/rename/remove/reorder. */
   onAdd?: () => void;
   onRename?: (i: number, name: string) => void;
@@ -20,7 +25,16 @@ interface StagesBarProps {
  * remove controls, plus an add-stage button (which copies the previous
  * stage so progression lists stay explicit per stage).
  */
-export function StagesBar({ payload, stageIndex, onSelect, onAdd, onRename, onRemove, onMove }: StagesBarProps) {
+export function StagesBar({
+  payload,
+  stageIndex,
+  onSelect,
+  subLabels,
+  onAdd,
+  onRename,
+  onRemove,
+  onMove,
+}: StagesBarProps) {
   const [renaming, setRenaming] = useState<number | null>(null);
   const [draftName, setDraftName] = useState("");
   const editable = !!onAdd;
@@ -71,8 +85,13 @@ export function StagesBar({ payload, stageIndex, onSelect, onAdd, onRename, onRe
                 : "border-zinc-700 text-zinc-400 hover:text-zinc-200",
             )}
           >
-            <button type="button" onClick={() => onSelect(i)} className="px-3 py-1.5 text-sm">
-              {s.name || `Stage ${i + 1}`}
+            <button type="button" onClick={() => onSelect(i)} className="px-3 py-1.5 text-left text-sm">
+              <span className="block leading-tight">{s.name || `Stage ${i + 1}`}</span>
+              {subLabels?.[i] && (
+                <span className="block font-mono text-2xs leading-tight text-zinc-500">
+                  {subLabels[i]}
+                </span>
+              )}
             </button>
             {editable && active && (
               <div className="flex items-center gap-0.5 pr-1.5 text-zinc-500">

@@ -8,12 +8,17 @@ import {
   averageEquippedItemLevel,
   computeEquippedAtLevel,
   derivedAverageItemLevel,
+  derivedStage,
+  itemFitsSlot,
   levelCapForFlavor,
+  nextUpgradesAfter,
+  progressionColumns,
   parseProgressionPayload,
   removePoolItem,
   renameProgressionStage,
   setPoolItemEnchant,
   setPoolItemNote,
+  slotsForInventoryType,
   snapshotStageFromDerived,
   stageAverageItemLevel,
   upgradeLevels,
@@ -300,5 +305,90 @@ describe("snapshotStageFromDerived", () => {
 
   it("is a no-op for a stage index that does not exist", () => {
     expect(snapshotStageFromDerived(payload, 3, { [SLOT.head]: 1 })).toBe(payload);
+  });
+});
+
+describe("slot membership", () => {
+  it("maps inventory types onto the outfit slots they can fill", () => {
+    expect(slotsForInventoryType(INV.head)).toEqual([SLOT.head]);
+    expect(slotsForInventoryType(INV.finger)).toEqual([SLOT.finger1, SLOT.finger2]);
+    expect(slotsForInventoryType(INV.robe)).toEqual([SLOT.chest]);
+    expect(slotsForInventoryType(INV.bag)).toEqual([]);
+  });
+
+  it("answers whether a pool item is a candidate for a slot", () => {
+    expect(itemFitsSlot(INV.trinket, SLOT.trinket2)).toBe(true);
+    expect(itemFitsSlot(INV.trinket, SLOT.neck)).toBe(false);
+    // Weapons share one group, so a shield is a candidate for either hand;
+    // assignWeapons is what actually keeps it out of the main hand.
+    expect(itemFitsSlot(INV.shield, SLOT.offHand)).toBe(true);
+    expect(itemFitsSlot(INV.bag, SLOT.head)).toBe(false);
+  });
+});
+
+describe("nextUpgradesAfter", () => {
+  const pool = [
+    item(1, INV.head, 10, 20),
+    item(2, INV.head, 30, 40),
+    item(3, INV.chest, 45, 55),
+  ];
+
+  it("reports the next level each slot changes at, and to what", () => {
+    const next = nextUpgradesAfter(pool, 15, 60);
+    expect(next.get(SLOT.head)).toEqual({ level: 30, itemId: 2 });
+    expect(next.get(SLOT.chest)).toEqual({ level: 45, itemId: 3 });
+  });
+
+  it("reports the first arrival for a slot that is still empty", () => {
+    expect(nextUpgradesAfter(pool, 1, 60).get(SLOT.head)).toEqual({ level: 10, itemId: 1 });
+  });
+
+  it("omits slots that never change again", () => {
+    const next = nextUpgradesAfter(pool, 50, 60);
+    expect(next.has(SLOT.head)).toBe(false);
+    expect(next.has(SLOT.chest)).toBe(false);
+  });
+
+  it("ignores upgrades beyond the cap", () => {
+    expect(nextUpgradesAfter([item(1, INV.head, 70, 90)], 10, 60).size).toBe(0);
+  });
+});
+
+describe("progressionColumns", () => {
+  it("emits a column per level where the derived set changes", () => {
+    const pool = [item(1, INV.head, 10, 20), item(2, INV.chest, 30, 40)];
+    expect(progressionColumns(pool, 60).map((c) => c.level)).toEqual([1, 10, 30]);
+  });
+
+  it("collapses levels that would repeat the previous column", () => {
+    // Both unlock at 10, so 10 is a single column; nothing changes after.
+    const pool = [item(1, INV.head, 10, 20), item(2, INV.chest, 10, 40)];
+    expect(progressionColumns(pool, 60).map((c) => c.level)).toEqual([1, 10]);
+  });
+
+  it("always starts at level 1 and carries the equipped set", () => {
+    const columns = progressionColumns([item(1, INV.head, 10, 20)], 60);
+    expect(columns[0]).toEqual({ level: 1, equipped: {} });
+    expect(columns[1].equipped[SLOT.head]).toBe(1);
+  });
+
+  it("returns a single column for an empty pool", () => {
+    expect(progressionColumns([], 60).map((c) => c.level)).toEqual([1]);
+  });
+});
+
+describe("derivedStage", () => {
+  it("renders the derived set as a stage, carrying pool enchants", () => {
+    const stage = derivedStage("Level 60", { [SLOT.head]: 1, [SLOT.chest]: 2 }, [
+      { item_id: 1, enchant_id: 42 },
+      { item_id: 2 },
+    ]);
+    expect(stage.name).toBe("Level 60");
+    expect(stage.slots["0"]).toEqual({ item_id: 1, enchant_id: 42 });
+    expect(stage.slots["4"]).toEqual({ item_id: 2 });
+  });
+
+  it("omits empty slots", () => {
+    expect(Object.keys(derivedStage("x", {}, []).slots)).toEqual([]);
   });
 });
