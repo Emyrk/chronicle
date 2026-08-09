@@ -144,29 +144,35 @@ function KillPips({ variant, total }: { variant: VariantProgress; total: number 
   );
 }
 
-function KillCount({ kills, deaths }: { kills: number; deaths?: number }) {
+function BossKills({ kills }: { kills: number }) {
+  return (
+    <HintTooltip delayDuration={150}>
+      <TooltipTrigger asChild>
+        <span className="flex shrink-0 items-center gap-0.5 text-[11px] tabular-nums text-muted-foreground">
+          <Skull className="h-3 w-3" />
+          {kills}
+        </span>
+      </TooltipTrigger>
+      <TooltipContent>Bosses killed</TooltipContent>
+    </HintTooltip>
+  );
+}
+
+/** Renders after the boss fraction, e.g. "15 / 15 | 320 💀". */
+function DeathCount({ deaths }: { deaths?: number }) {
+  if (deaths === undefined) return null;
   return (
     <span className="flex shrink-0 items-center gap-1 text-[11px] tabular-nums text-muted-foreground">
+      <span className="text-border">|</span>
       <HintTooltip delayDuration={150}>
         <TooltipTrigger asChild>
           <span className="flex items-center gap-0.5">
+            {deaths}
             <Skull className="h-3 w-3" />
-            {kills}
           </span>
         </TooltipTrigger>
-        <TooltipContent>Bosses killed</TooltipContent>
+        <TooltipContent>Player deaths</TooltipContent>
       </HintTooltip>
-      {deaths !== undefined && (
-        <>
-          <span className="text-border">|</span>
-          <HintTooltip delayDuration={150}>
-            <TooltipTrigger asChild>
-              <span>{deaths}</span>
-            </TooltipTrigger>
-            <TooltipContent>Player deaths</TooltipContent>
-          </HintTooltip>
-        </>
-      )}
     </span>
   );
 }
@@ -185,7 +191,7 @@ function VariantRow({
     <div className="flex items-center gap-x-2.5">
       <VariantChip variant={variant} complete={complete} />
       <KillPips variant={variant} total={total} />
-      {showKillCounts && <KillCount kills={variant.kills} deaths={variant.deaths} />}
+      {showKillCounts && <BossKills kills={variant.kills} />}
       <p
         className={cn(
           "text-sm font-bold tabular-nums whitespace-nowrap",
@@ -194,6 +200,7 @@ function VariantRow({
       >
         {variant.encountersDown} / {total}
       </p>
+      {showKillCounts && <DeathCount deaths={variant.deaths} />}
     </div>
   );
 }
@@ -219,13 +226,16 @@ function DetailRaid({
             <p className="min-w-0 truncate text-sm text-foreground">{raid.instanceName}</p>
             <VariantChip variant={variant} complete={complete} />
           </div>
-          <p className="shrink-0 text-sm font-bold tabular-nums text-foreground">
-            {variant.encountersDown} / {total}
-          </p>
+          <div className="flex shrink-0 items-center gap-1.5">
+            <p className="text-sm font-bold tabular-nums text-foreground">
+              {variant.encountersDown} / {total}
+            </p>
+            {showKillCounts && <DeathCount deaths={variant.deaths} />}
+          </div>
         </div>
         <div className="flex items-center gap-x-2.5">
           <KillPips variant={variant} total={total} />
-          {showKillCounts && <KillCount kills={variant.kills} deaths={variant.deaths} />}
+          {showKillCounts && <BossKills kills={variant.kills} />}
         </div>
       </div>
     );
