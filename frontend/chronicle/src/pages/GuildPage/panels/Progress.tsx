@@ -1,9 +1,8 @@
 /* eslint-disable react-refresh/only-export-components -- Panel registry files export a definition alongside their render components. */
 import { useEffect, useMemo, useState } from "react";
-import { Trophy, AlertCircle, Skull } from "lucide-react";
+import { Trophy, AlertCircle } from "lucide-react";
 import type { GuildEncounterKill, GuildEncounterKillsResponse } from "@/api/typesGenerated";
 import { useSupportedInstanceBossCounts } from "@/api/queries";
-import { HintTooltip, TooltipContent, TooltipTrigger } from "@/components/ui/Tooltip/tooltip";
 import { cn } from "@/lib/utils";
 import { getInstanceCategory, getInstanceContentLevel } from "@/pages/Logs/utils/instanceImages";
 import type { GuildPanelDefinition, GuildPanelRenderProps } from "./types";
@@ -16,7 +15,6 @@ interface ProgressConfig {
   mode: ProgressMode;
   category: CategoryFilter;
   contentLevel: ContentLevelFilter;
-  showKillCounts: boolean;
 }
 
 /** One size/difficulty lockout of a raid, e.g. "25-player Heroic". */
@@ -25,9 +23,6 @@ interface VariantProgress {
   maxPlayers: number;
   heroic: boolean;
   encountersDown: number;
-  kills: number;
-  /** Player deaths across all runs of this variant; undefined when no run metrics exist. */
-  deaths?: number;
   lastKilledAt: string;
 }
 
@@ -43,17 +38,13 @@ interface RaidProgress {
  * first. Every size/difficulty combination is a lockout of the same raid, so
  * it nests as a variant under that raid rather than repeating the name.
  */
-function groupProgress(
-  encounters: GuildEncounterKill[],
-  deathsByVariant: Map<string, number>,
-): RaidProgress[] {
+function groupProgress(encounters: GuildEncounterKill[]): RaidProgress[] {
   const byVariant = new Map<string, VariantProgress & { instanceName: string }>();
   for (const e of encounters) {
     const key = `${e.instance_name}|${e.difficulty_name}|${e.max_players}`;
     const variant = byVariant.get(key);
     if (variant) {
       variant.encountersDown += 1;
-      variant.kills += e.kills;
       if (e.last_killed_at > variant.lastKilledAt) variant.lastKilledAt = e.last_killed_at;
     } else {
       byVariant.set(key, {
@@ -62,8 +53,6 @@ function groupProgress(
         maxPlayers: e.max_players,
         heroic: e.difficulty_name.includes("Heroic"),
         encountersDown: 1,
-        kills: e.kills,
-        deaths: deathsByVariant.get(key),
         lastKilledAt: e.last_killed_at,
       });
     }
@@ -144,54 +133,12 @@ function KillPips({ variant, total }: { variant: VariantProgress; total: number 
   );
 }
 
-/** The skull is reserved for DeathCount — kills use a "×" so the two never read alike. */
-function BossKills({ kills }: { kills: number }) {
-  return (
-    <HintTooltip delayDuration={150}>
-      <TooltipTrigger asChild>
-        <span className="shrink-0 text-[11px] tabular-nums text-muted-foreground">
-          &times;{kills}
-        </span>
-      </TooltipTrigger>
-      <TooltipContent>Bosses killed</TooltipContent>
-    </HintTooltip>
-  );
-}
-
-/** Renders after the boss fraction, e.g. "15 / 15 | 320 💀". */
-function DeathCount({ deaths }: { deaths?: number }) {
-  if (deaths === undefined) return null;
-  return (
-    <span className="flex shrink-0 items-center gap-1 text-[11px] tabular-nums text-muted-foreground">
-      <span className="text-border">|</span>
-      <HintTooltip delayDuration={150}>
-        <TooltipTrigger asChild>
-          <span className="flex items-center gap-0.5">
-            {deaths}
-            <Skull className="h-3 w-3" />
-          </span>
-        </TooltipTrigger>
-        <TooltipContent>Player deaths</TooltipContent>
-      </HintTooltip>
-    </span>
-  );
-}
-
-function VariantRow({
-  variant,
-  total,
-  showKillCounts,
-}: {
-  variant: VariantProgress;
-  total: number;
-  showKillCounts: boolean;
-}) {
+function VariantRow({ variant, total }: { variant: VariantProgress; total: number }) {
   const complete = variant.encountersDown === total;
   return (
     <div className="flex items-center gap-x-2.5">
       <VariantChip variant={variant} complete={complete} />
       <KillPips variant={variant} total={total} />
-      {showKillCounts && <BossKills kills={variant.kills} />}
       <p
         className={cn(
           "text-sm font-bold tabular-nums whitespace-nowrap",
@@ -200,20 +147,11 @@ function VariantRow({
       >
         {variant.encountersDown} / {total}
       </p>
-      {showKillCounts && <DeathCount deaths={variant.deaths} />}
     </div>
   );
 }
 
-function DetailRaid({
-  raid,
-  total,
-  showKillCounts,
-}: {
-  raid: RaidProgress;
-  total: number;
-  showKillCounts: boolean;
-}) {
+function DetailRaid({ raid, total }: { raid: RaidProgress; total: number }) {
   // A raid with a single lockout type needs no section header — the raid name
   // and the variant collapse into one row.
   if (raid.variants.length === 1) {
@@ -226,17 +164,11 @@ function DetailRaid({
             <p className="min-w-0 truncate text-sm text-foreground">{raid.instanceName}</p>
             <VariantChip variant={variant} complete={complete} />
           </div>
-          <div className="flex shrink-0 items-center gap-1.5">
-            <p className="text-sm font-bold tabular-nums text-foreground">
-              {variant.encountersDown} / {total}
-            </p>
-            {showKillCounts && <DeathCount deaths={variant.deaths} />}
-          </div>
+          <p className="shrink-0 text-sm font-bold tabular-nums text-foreground">
+            {variant.encountersDown} / {total}
+          </p>
         </div>
-        <div className="flex items-center gap-x-2.5">
-          <KillPips variant={variant} total={total} />
-          {showKillCounts && <BossKills kills={variant.kills} />}
-        </div>
+        <KillPips variant={variant} total={total} />
       </div>
     );
   }
@@ -252,7 +184,6 @@ function DetailRaid({
             key={`${variant.difficultyName}|${variant.maxPlayers}`}
             variant={variant}
             total={total}
-            showKillCounts={showKillCounts}
           />
         ))}
       </div>
@@ -260,7 +191,7 @@ function DetailRaid({
   );
 }
 
-/** Compact: no pips, no notes — the whole raid collapses to one line of variant pills. */
+/** Compact: no pips — the whole raid collapses to one line of variant pills. */
 function CompactRaid({ raid, total }: { raid: RaidProgress; total: number }) {
   return (
     <div className="flex flex-wrap items-center justify-between gap-x-3 gap-y-1 border-b border-border/50 py-1.5">
@@ -305,7 +236,6 @@ function CompactRaid({ raid, total }: { raid: RaidProgress; total: number }) {
 
 function ProgressContent({ config, position, guild }: GuildPanelRenderProps<ProgressConfig>) {
   const [encounters, setEncounters] = useState<GuildEncounterKill[]>([]);
-  const [deathsByVariant, setDeathsByVariant] = useState<Map<string, number>>(new Map());
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const { data: bossCounts } = useSupportedInstanceBossCounts();
@@ -319,17 +249,7 @@ function ProgressContent({ config, position, guild }: GuildPanelRenderProps<Prog
         const response = await fetch(`/api/v1/guilds/${guild.id}/encounters`);
         if (!response.ok) throw new Error("Failed to fetch guild encounters");
         const data = (await response.json()) as GuildEncounterKillsResponse;
-        if (!cancelled) {
-          setEncounters([...(data.encounters ?? [])]);
-          setDeathsByVariant(
-            new Map(
-              (data.instance_deaths ?? []).map((d) => [
-                `${d.instance_name}|${d.difficulty_name}|${d.max_players}`,
-                d.deaths,
-              ]),
-            ),
-          );
-        }
+        if (!cancelled) setEncounters([...(data.encounters ?? [])]);
       } catch (err) {
         if (!cancelled) setError(err instanceof Error ? err.message : "Unknown error");
       } finally {
@@ -355,8 +275,8 @@ function ProgressContent({ config, position, guild }: GuildPanelRenderProps<Prog
         getInstanceContentLevel(e.instance_name, e.max_players) === Number(contentLevel);
       return matchesCategory && matchesContentLevel;
     });
-    return groupProgress(filtered, deathsByVariant);
-  }, [config.category, config.contentLevel, encounters, deathsByVariant]);
+    return groupProgress(filtered);
+  }, [config.category, config.contentLevel, encounters]);
 
   if (loading) {
     return (
@@ -405,12 +325,7 @@ function ProgressContent({ config, position, guild }: GuildPanelRenderProps<Prog
       style={{ gridTemplateColumns: `repeat(${cols}, minmax(0, 1fr))` }}
     >
       {progress.map((raid) => (
-        <DetailRaid
-          key={raid.instanceName}
-          raid={raid}
-          total={totalFor(bossCounts, raid)}
-          showKillCounts={config.showKillCounts !== false}
-        />
+        <DetailRaid key={raid.instanceName} raid={raid} total={totalFor(bossCounts, raid)} />
       ))}
     </div>
   );
@@ -458,18 +373,11 @@ export const ProgressPanel: GuildPanelDefinition<ProgressConfig> = {
       ],
       defaultValue: "all",
     },
-    {
-      name: "showKillCounts",
-      label: "Show kill counts",
-      type: "boolean",
-      defaultValue: true,
-    },
   ],
   defaultConfig: {
     mode: "detail",
     category: "all",
     contentLevel: "all",
-    showKillCounts: true,
   },
   render: (props) => <ProgressContent {...props} />,
 };

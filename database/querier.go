@@ -388,12 +388,6 @@ type sqlcQuerier interface {
 	// collapse via duplicate_group_id. JOINs wow_server_realms so RLS tenant
 	// filtering cascades.
 	GuildEncounterKills(ctx context.Context, guildID uuid.UUID) ([]GuildEncounterKillsRow, error)
-	// Total player deaths per (instance, difficulty, size) lockout variant across
-	// all of a guild's runs, for the guild page "Progression" panel. Duplicate
-	// uploads of the same raid night collapse via duplicate_group_id, keeping the
-	// highest death count within each group. JOINs wow_server_realms so RLS
-	// tenant filtering cascades.
-	GuildInstanceDeaths(ctx context.Context, guildID uuid.UUID) ([]GuildInstanceDeathsRow, error)
 	// Returns per-instance clear counts and duration aggregates for a guild,
 	// used by the guild page "Raid Clears" panel.
 	// Deduplicates by duplicate_group so re-uploaded logs of the same raid count

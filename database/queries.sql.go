@@ -4904,65 +4904,6 @@ func (q *sqlQuerier) GuildEncounterKills(ctx context.Context, guildID uuid.UUID)
 	return items, nil
 }
 
-const guildInstanceDeaths = `-- name: GuildInstanceDeaths :many
-SELECT
-    runs.name AS instance_name,
-    runs.difficulty_name,
-    runs.max_players,
-    SUM(runs.player_deaths)::int AS deaths
-FROM (
-    SELECT DISTINCT ON (COALESCE(li.duplicate_group_id, li.id))
-        li.name,
-        li.difficulty_name,
-        li.max_players,
-        iom.player_deaths
-    FROM log_instances li
-    JOIN instance_overview_metrics iom ON iom.instance_id = li.id
-    JOIN wow_server_realms wsr ON wsr.id = li.realm_id
-    WHERE li.guild_id = $1::uuid
-    ORDER BY COALESCE(li.duplicate_group_id, li.id), iom.player_deaths DESC
-) AS runs
-GROUP BY runs.name, runs.difficulty_name, runs.max_players
-ORDER BY runs.name
-`
-
-type GuildInstanceDeathsRow struct {
-	InstanceName   string `db:"instance_name" json:"instance_name"`
-	DifficultyName string `db:"difficulty_name" json:"difficulty_name"`
-	MaxPlayers     int32  `db:"max_players" json:"max_players"`
-	Deaths         int32  `db:"deaths" json:"deaths"`
-}
-
-// Total player deaths per (instance, difficulty, size) lockout variant across
-// all of a guild's runs, for the guild page "Progression" panel. Duplicate
-// uploads of the same raid night collapse via duplicate_group_id, keeping the
-// highest death count within each group. JOINs wow_server_realms so RLS
-// tenant filtering cascades.
-func (q *sqlQuerier) GuildInstanceDeaths(ctx context.Context, guildID uuid.UUID) ([]GuildInstanceDeathsRow, error) {
-	rows, err := q.db.Query(ctx, guildInstanceDeaths, guildID)
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-	var items []GuildInstanceDeathsRow
-	for rows.Next() {
-		var i GuildInstanceDeathsRow
-		if err := rows.Scan(
-			&i.InstanceName,
-			&i.DifficultyName,
-			&i.MaxPlayers,
-			&i.Deaths,
-		); err != nil {
-			return nil, err
-		}
-		items = append(items, i)
-	}
-	if err := rows.Err(); err != nil {
-		return nil, err
-	}
-	return items, nil
-}
-
 const guildRunParseAverages = `-- name: GuildRunParseAverages :many
 WITH deduped AS (
     SELECT DISTINCT ON (psr.run_id, psr.encounter_name, psr.player_guid)

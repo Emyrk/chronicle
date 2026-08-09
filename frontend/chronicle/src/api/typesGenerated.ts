@@ -1216,11 +1216,6 @@ export interface GuildEncounterKill {
 // From chroniclesdk/guild_page.go
 export interface GuildEncounterKillsResponse {
     readonly encounters: readonly GuildEncounterKill[];
-    /**
-     * InstanceDeaths is variant-level (not per-encounter) because player
-     * deaths are recorded per run, not per boss fight.
-     */
-    readonly instance_deaths: readonly GuildInstanceDeaths[];
 }
 
 // From chroniclesdk/guild_page.go
@@ -1234,19 +1229,6 @@ export interface GuildInfo {
     readonly logo_url: string;
     readonly can_edit: boolean;
     readonly can_view_roster: boolean;
-}
-
-// From chroniclesdk/guild_page.go
-/**
- * GuildInstanceDeaths is the guild's total player deaths across all runs of
- * one instance size/difficulty variant. Duplicate uploads of the same raid
- * night count once.
- */
-export interface GuildInstanceDeaths {
-    readonly instance_name: string;
-    readonly difficulty_name: string;
-    readonly max_players: number;
-    readonly deaths: number;
 }
 
 // From chroniclesdk/guild_page.go
