@@ -2,7 +2,7 @@ import type { GuildPageTheme, GuildTag, SocialPlatform } from "@/api/typesGenera
 import { GuildTags, SocialPlatforms } from "@/api/typesGenerated";
 import { ICON_BASE_URL } from "@/config/iconUrl";
 import { SOCIAL_PLATFORM_META } from "./GuildPageHeader";
-import { ChevronDown, ChevronUp } from "lucide-react";
+import { ChevronDown, Settings2 } from "lucide-react";
 import { useMemo, useState } from "react";
 
 const ALLOWED_IMAGE_HOSTS = [
@@ -51,22 +51,37 @@ export function HeaderEditor({ theme, onChange }: HeaderEditorProps) {
   };
 
   return (
-    <div className="border border-border rounded-lg bg-card">
+    <div
+      className={`overflow-hidden rounded-lg border bg-card transition-colors ${
+        expanded ? "border-primary/50" : "border-border hover:border-primary/40"
+      }`}
+    >
       <button
         type="button"
         onClick={() => setExpanded(!expanded)}
-        className="w-full flex items-center justify-between px-4 py-3 text-sm font-medium hover:bg-muted/50 transition-colors"
+        aria-expanded={expanded}
+        aria-controls="page-header-settings"
+        className="group flex w-full cursor-pointer items-center gap-3 px-4 py-4 text-left transition-colors hover:bg-primary/5 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-inset"
       >
-        <span>Page Header Settings</span>
-        {expanded ? (
-          <ChevronUp className="h-4 w-4 text-muted-foreground" />
-        ) : (
-          <ChevronDown className="h-4 w-4 text-muted-foreground" />
-        )}
+        <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-primary/10 text-primary transition-colors group-hover:bg-primary/15">
+          <Settings2 className="h-5 w-5" />
+        </span>
+        <span className="min-w-0 flex-1">
+          <span className="block text-sm font-semibold">Page Header Settings</span>
+          <span className="mt-0.5 block text-xs font-normal text-muted-foreground">
+            Customize your logo, layout, description, tags, and social links
+          </span>
+        </span>
+        <span className="flex shrink-0 items-center gap-2 text-xs font-medium text-primary">
+          {expanded ? "Close" : "Customize"}
+          <ChevronDown
+            className={`h-4 w-4 transition-transform duration-200 ${expanded ? "rotate-180" : ""}`}
+          />
+        </span>
       </button>
 
       {expanded && (
-        <div className="px-4 pb-4 space-y-5 border-t border-border pt-4">
+        <div id="page-header-settings" className="px-4 pb-4 space-y-5 border-t border-border pt-4">
           {/* Layout */}
           <div className="space-y-1.5">
             <label className="text-sm font-medium">Layout</label>
