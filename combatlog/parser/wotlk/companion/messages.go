@@ -129,6 +129,7 @@ func (p *Parser) parseHeader(ts time.Time, data string) ([]messages.Message, err
 	}
 
 	addonVersion := parts[0]
+	p.addonVersion = addonVersion
 	realmName := parts[1]
 	// locale := parts[2] // Available but not stored yet
 	wowVersion := parts[3]

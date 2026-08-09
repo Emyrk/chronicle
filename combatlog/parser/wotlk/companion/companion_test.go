@@ -597,6 +597,64 @@ func TestParsePlayer_Pet(t *testing.T) {
 	assert.Equal(t, "Spot", c.PetName)
 }
 
+func TestParsePlayer_VehicleOwnershipDependsOnAddonVersion(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name             string
+		addonVersion     string
+		petGUID          string
+		wantOwnerMessage bool
+	}{
+		{
+			name:             "legacy addon vehicle",
+			addonVersion:     "0.5",
+			petGUID:          "0xF150006C6B0000BB",
+			wantOwnerMessage: true,
+		},
+		{
+			name:             "vehicle tracking addon vehicle",
+			addonVersion:     "0.6",
+			petGUID:          "0xF150006C6B0000BB",
+			wantOwnerMessage: false,
+		},
+		{
+			name:             "vehicle tracking addon non-vehicle",
+			addonVersion:     "0.6",
+			petGUID:          "0xF130006C6B0000BB",
+			wantOwnerMessage: true,
+		},
+		{
+			name:             "newer addon pet",
+			addonVersion:     "0.7",
+			petGUID:          "0xF140006C6B0000BB",
+			wantOwnerMessage: true,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			p := newTestParser()
+
+			_, err := p.Feed(testTS, `[1H:`+tt.addonVersion+`,Icecrown,enUS,3.3.5a,12340,session]`)
+			require.NoError(t, err)
+			msgs, err := p.Feed(testTS, `[2P0x060000000008DCCC;ECompanion,`+tt.petGUID+`]`)
+			require.NoError(t, err)
+
+			if tt.wantOwnerMessage {
+				require.Len(t, msgs, 2)
+				_, ok := msgs[0].(*messages.NewOwner)
+				require.True(t, ok)
+			} else {
+				require.Len(t, msgs, 1)
+			}
+			_, ok := msgs[len(msgs)-1].(*messages.Combatant)
+			require.True(t, ok)
+		})
+	}
+}
+
 // --- Player data accumulation tests ---
 
 func TestPlayerDataAccumulation(t *testing.T) {

@@ -6,10 +6,10 @@ import (
 	"strings"
 	"time"
 
+	"github.com/Emyrk/chronicle/combatlog/parser/common/messages"
 	"github.com/Emyrk/chronicle/combatlog/parser/guid"
 	"github.com/Emyrk/chronicle/combatlog/parser/types"
 	"github.com/Emyrk/chronicle/combatlog/parser/types/combatant"
-	"github.com/Emyrk/chronicle/combatlog/parser/common/messages"
 	"github.com/Emyrk/chronicle/internal/ptr"
 )
 
@@ -305,14 +305,15 @@ func (p *Parser) parsePet(ts time.Time, pd *PlayerData, data string) ([]messages
 		return nil, fmt.Errorf("pet: invalid GUID %q: %w", parts[1], err)
 	}
 	pd.PetGUID = &petGUID
-	return []messages.Message{
-		&messages.NewOwner{
+	result := make([]messages.Message, 0, 2)
+	if !petGUID.IsVehicle() || !p.supportsVehicleTracking() {
+		result = append(result, &messages.NewOwner{
 			MessageBase: messages.Base(ts),
 			Target:      petGUID,
 			NewOwner:    pd.GUID,
-		},
-		pd.toCombatantMessage(ts),
-	}, nil
+		})
+	}
+	return append(result, pd.toCombatantMessage(ts)), nil
 }
 
 // mapGender converts addon gender values (1=unknown, 2=male, 3=female) to HeroGender.

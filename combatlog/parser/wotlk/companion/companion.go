@@ -8,7 +8,10 @@ import (
 	"github.com/Emyrk/chronicle/combatlog/parser/common/messages"
 	"github.com/Emyrk/chronicle/combatlog/parser/guid"
 	"github.com/Emyrk/chronicle/combatlog/parser/types/realmclock"
+	"github.com/Emyrk/chronicle/internal/semverenc"
 )
+
+const vehicleTrackingAddonVersion = "0.6"
 
 // Parser reassembles and decodes ChronicleCompanionWoTLK addon messages
 // that are smuggled inside the failedType field of SPELL_CAST_FAILED events.
@@ -30,7 +33,8 @@ type Parser struct {
 	// so we build up per-player state over time.
 	players map[guid.GUID]*PlayerData
 
-	realmClock *realmclock.Info
+	addonVersion string
+	realmClock   *realmclock.Info
 }
 
 type assemblyState int
@@ -46,6 +50,10 @@ func New(logger *slog.Logger) *Parser {
 		logger:  logger,
 		players: make(map[guid.GUID]*PlayerData),
 	}
+}
+
+func (p *Parser) supportsVehicleTracking() bool {
+	return semverenc.Encode(p.addonVersion) >= semverenc.Encode(vehicleTrackingAddonVersion)
 }
 
 // RealmClockInfo returns the most recently parsed clock data from an extended
