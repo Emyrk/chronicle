@@ -37,10 +37,12 @@ function groupByDate(instances: RecentInstance[]): Record<string, RecentInstance
 function InstanceDayCard({
   group,
   compact,
+  dense,
   minimal,
 }: {
   group: RecentInstance[];
   compact: boolean;
+  dense: boolean;
   minimal: boolean;
 }) {
   const [imageError, setImageError] = useState(false);
@@ -69,7 +71,7 @@ function InstanceDayCard({
       {isDuplicate && <span className="ml-auto pl-1 opacity-80">×{group.length}</span>}
     </div>
   ) : (
-    <div className={`relative overflow-hidden rounded group cursor-pointer transition-all hover:scale-[1.02] hover:shadow-md ${compact ? "h-6" : "h-8 sm:h-10"}`}>
+    <div className={`relative overflow-hidden rounded group cursor-pointer transition-all hover:scale-[1.02] hover:shadow-md ${compact ? "h-6" : dense ? "h-5" : "h-8 sm:h-10"}`}>
       <div className="absolute inset-0 bg-gradient-to-br from-slate-700 to-slate-800" />
       {!imageError && (
         <img
@@ -124,10 +126,12 @@ function InstanceDayCard({
 function ExpandableDayCell({
   instances,
   compact,
+  dense,
   minimal,
 }: {
   instances: RecentInstance[];
   compact: boolean;
+  dense: boolean;
   minimal: boolean;
 }) {
   const [expanded, setExpanded] = useState(false);
@@ -141,9 +145,15 @@ function ExpandableDayCell({
   const remaining = groups.length - maxShown;
 
   return (
-    <>
+    <div className={dense ? "space-y-0.5" : "space-y-1"}>
       {shown.map((group) => (
-        <InstanceDayCard key={group[0].id} group={group} compact={compact} minimal={minimal} />
+        <InstanceDayCard
+          key={group[0].id}
+          group={group}
+          compact={compact}
+          dense={dense}
+          minimal={minimal}
+        />
       ))}
       {groups.length > maxShown && (
         <button
@@ -163,7 +173,7 @@ function ExpandableDayCell({
           )}
         </button>
       )}
-    </>
+    </div>
   );
 }
 
@@ -174,6 +184,9 @@ function CalendarContent({ config, guild, position }: GuildPanelRenderProps<Cale
   const [error, setError] = useState<string | null>(null);
 
   const compact = position.h <= 5;
+  // The default six-row panel gives each day about 90px in six-week months.
+  // Use shorter cards there so three raids remain visible without a cell scrollbar.
+  const dense = position.h <= 6;
 
   const minimal = config.displayStyle === "minimal";
   const category = config.category || "all";
@@ -217,9 +230,16 @@ function CalendarContent({ config, guild, position }: GuildPanelRenderProps<Cale
       const dayInstances = byDate[key];
       if (!dayInstances || dayInstances.length === 0) return null;
 
-      return <ExpandableDayCell instances={dayInstances} compact={compact} minimal={minimal} />;
+      return (
+        <ExpandableDayCell
+          instances={dayInstances}
+          compact={compact}
+          dense={dense}
+          minimal={minimal}
+        />
+      );
     },
-    [byDate, compact, minimal]
+    [byDate, compact, dense, minimal]
   );
 
   if (loading) {
