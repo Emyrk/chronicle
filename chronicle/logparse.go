@@ -109,6 +109,17 @@ func resolveLogFlavor(current database.WoWFlavor, explicit bool, resolved Resolv
 	return merged, !slices.Equal(current, merged)
 }
 
+func slugCollisionFromLookup(err error) (bool, error) {
+	switch {
+	case err == nil:
+		return true, nil
+	case errors.Is(err, pgx.ErrNoRows):
+		return false, nil
+	default:
+		return false, fmt.Errorf("check colliding slug: %w", err)
+	}
+}
+
 func (w *WorkerLogParse) Work(ctx context.Context, job *river.Job[ArgsLogParse]) error {
 	if job.Args.TenantID != uuid.Nil {
 		ctx = servicetenant.WithTenantID(ctx, job.Args.TenantID)
@@ -428,9 +439,15 @@ func (w *WorkerLogParse) Work(ctx context.Context, job *river.Job[ArgsLogParse])
 				VehicleControlIntervals: finalized.VehicleMetadata,
 			}
 
-			// Handling colliding slugs
+			// Handling colliding slugs. Only a missing row is safe to ignore. A
+			// PostgreSQL error aborts the transaction and must be returned before
+			// another statement masks it with SQLSTATE 25P02.
 			_, err = tx.InstanceBySlug(ctx, insertInstanceParams.HashedSlug)
-			if err == nil {
+			slugCollision, err := slugCollisionFromLookup(err)
+			if err != nil {
+				return err
+			}
+			if slugCollision {
 				insertInstanceParams.HashedSlug = pgtype.Text{Valid: false}
 			}
 

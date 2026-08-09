@@ -1,11 +1,41 @@
 package chronicle
 
 import (
+	"errors"
 	"slices"
 	"testing"
 
 	"github.com/Emyrk/chronicle/database"
+	"github.com/jackc/pgx/v5"
+	"github.com/stretchr/testify/require"
 )
+
+func TestSlugCollisionFromLookup(t *testing.T) {
+	t.Parallel()
+
+	t.Run("existing slug collides", func(t *testing.T) {
+		t.Parallel()
+		collides, err := slugCollisionFromLookup(nil)
+		require.NoError(t, err)
+		require.True(t, collides)
+	})
+
+	t.Run("missing slug does not collide", func(t *testing.T) {
+		t.Parallel()
+		collides, err := slugCollisionFromLookup(pgx.ErrNoRows)
+		require.NoError(t, err)
+		require.False(t, collides)
+	})
+
+	t.Run("database errors are not swallowed", func(t *testing.T) {
+		t.Parallel()
+		lookupErr := errors.New("lookup failed")
+		collides, err := slugCollisionFromLookup(lookupErr)
+		require.False(t, collides)
+		require.ErrorIs(t, err, lookupErr)
+		require.ErrorContains(t, err, "check colliding slug")
+	})
+}
 
 func TestResolveLogFlavor(t *testing.T) {
 	t.Parallel()
