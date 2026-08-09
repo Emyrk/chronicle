@@ -28,13 +28,16 @@ const (
 )
 
 type ControlInterval struct {
-	SessionID       string        `json:"session_id,omitempty"`
-	VehicleGUID     guid.GUID     `json:"vehicle_guid"`
-	ControllerGUID  guid.GUID     `json:"controller_guid"`
-	VehicleName     string        `json:"vehicle_name,omitempty"`
-	ControllerName  string        `json:"controller_name,omitempty"`
-	AssignedAtMs    int64         `json:"assigned_at_ms"`
-	ReleasedAtMs    *int64        `json:"released_at_ms,omitempty"`
+	SessionID      string    `json:"session_id,omitempty"`
+	VehicleGUID    guid.GUID `json:"vehicle_guid"`
+	ControllerGUID guid.GUID `json:"controller_guid"`
+	VehicleName    string    `json:"vehicle_name,omitempty"`
+	ControllerName string    `json:"controller_name,omitempty"`
+	AssignedAtMs   int64     `json:"assigned_at_ms"`
+	ReleasedAtMs   *int64    `json:"released_at_ms,omitempty"`
+	// AssignedOrdinal is the decoded companion-message sequence number for the
+	// assignment. It deterministically breaks ties between changes with the same
+	// embedded timestamp; it is not an event index or timestamp.
 	AssignedOrdinal uint64        `json:"assigned_ordinal"`
 	ReleaseReason   ReleaseReason `json:"release_reason,omitempty"`
 	InferredRelease bool          `json:"inferred_release,omitempty"`
