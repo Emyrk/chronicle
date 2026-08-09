@@ -215,15 +215,17 @@ function ItemReference({
   iconBaseUrl?: string;
   compact?: boolean;
 }) {
-  const [tooltipOpen, setTooltipOpen] = useState(false);
-  const tooltip = useItemTooltip(tooltipOpen ? { itemId: consumable.item_id } : null);
+  const [hovered, setHovered] = useState(false);
+  const tooltip = useItemTooltip(hovered ? { itemId: consumable.item_id } : null);
 
   return (
-    <Tooltip open={tooltipOpen} onOpenChange={setTooltipOpen}>
+    <Tooltip open={hovered}>
       <TooltipTrigger asChild>
         <Link
           to={`/wowdb/item?id=${consumable.item_id}`}
           className={`group flex min-w-0 items-center gap-2 ${compact ? "rounded-md border border-border/60 bg-muted/30 px-2 py-1" : ""}`}
+          onMouseEnter={() => setHovered(true)}
+          onMouseLeave={() => setHovered(false)}
         >
           {consumable.item_icon ? (
             <img
