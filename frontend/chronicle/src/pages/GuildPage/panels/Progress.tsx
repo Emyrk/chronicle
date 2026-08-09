@@ -144,13 +144,13 @@ function KillPips({ variant, total }: { variant: VariantProgress; total: number 
   );
 }
 
+/** The skull is reserved for DeathCount — kills use a "×" so the two never read alike. */
 function BossKills({ kills }: { kills: number }) {
   return (
     <HintTooltip delayDuration={150}>
       <TooltipTrigger asChild>
-        <span className="flex shrink-0 items-center gap-0.5 text-[11px] tabular-nums text-muted-foreground">
-          <Skull className="h-3 w-3" />
-          {kills}
+        <span className="shrink-0 text-[11px] tabular-nums text-muted-foreground">
+          &times;{kills}
         </span>
       </TooltipTrigger>
       <TooltipContent>Bosses killed</TooltipContent>
