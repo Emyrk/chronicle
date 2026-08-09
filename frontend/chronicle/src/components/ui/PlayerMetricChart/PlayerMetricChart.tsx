@@ -380,6 +380,8 @@ function DraggablePinnedTooltip({ player, initialPosition, positionOverride, onC
   )
 }
 
+const PLAYER_ICON_GUTTER_WIDTH = 40;
+
 export function PlayerMetricRow({
   player,
   rowHeight,
@@ -462,7 +464,8 @@ export function PlayerMetricRow({
     if (!row || !name) return
     const compute = () => {
       const rowWidth = row.clientWidth
-      const barEnd = rowWidth * (player.value / maximumValue)
+      const metricWidth = Math.max(0, rowWidth - PLAYER_ICON_GUTTER_WIDTH)
+      const barEnd = PLAYER_ICON_GUTTER_WIDTH + metricWidth * (player.value / maximumValue)
       // Name text end (offsetLeft covers rank/icon/padding; scrollWidth is
       // the full text width even when the flex box is wider).
       const nameEnd = name.offsetLeft + Math.min(name.scrollWidth, name.clientWidth)
@@ -537,14 +540,14 @@ export function PlayerMetricRow({
       }}
       className={cn(isPinned && "ring-2 ring-primary ring-inset")}
     >
-      {/* Colored bar background */}
+      {/* Colored bar background, offset to leave the icon composite in a dark gutter. */}
       <div
         style={{
           position: 'absolute',
-          left: 0,
+          left: PLAYER_ICON_GUTTER_WIDTH,
           top: 0,
           bottom: 0,
-          width: `${(player.value / maximumValue) * 100}%`,
+          width: `calc(${(player.value / maximumValue) * 100}% - ${PLAYER_ICON_GUTTER_WIDTH * (player.value / maximumValue)}px)`,
           background: `linear-gradient(to right, oklch(0 0 0 / 0.3), oklch(0 0 0 / 0.15)), ${player.color}`,
           opacity: 0.85,
           transition: animateValues ? 'width 0.3s ease' : 'none',
@@ -567,10 +570,10 @@ export function PlayerMetricRow({
             <div
               style={{
                 position: 'absolute',
-                left: `${mainBarEnd}%`,
+                left: `calc(${PLAYER_ICON_GUTTER_WIDTH}px + ${mainBarEnd}% - ${PLAYER_ICON_GUTTER_WIDTH * (mainBarEnd / 100)}px)`,
                 top: 0,
                 bottom: 0,
-                width: `${displayWidth}%`,
+                width: `calc(${displayWidth}% - ${PLAYER_ICON_GUTTER_WIDTH * (displayWidth / 100)}px)`,
                 background: player.color,
                 opacity: 0.35,
                 transition: animateValues ? 'left 0.3s ease, width 0.3s ease' : 'none',
@@ -614,7 +617,7 @@ export function PlayerMetricRow({
             height: '100%',
             display: 'flex',
             alignItems: 'center',
-            right: `max(calc(100% - ${(player.value / maximumValue) * 100}% + 6px), ${valuesWidth + 16}px)`,
+            right: `max(calc(${(1 - player.value / maximumValue) * 100}% - ${PLAYER_ICON_GUTTER_WIDTH * (1 - player.value / maximumValue)}px + 6px), ${valuesWidth + 16}px)`,
             zIndex: 2,
           }}
         >
@@ -629,7 +632,7 @@ export function PlayerMetricRow({
           display: 'flex',
           alignItems: 'center',
           width: '100%',
-          padding: '0 12px',
+          padding: `0 12px 0 ${PLAYER_ICON_GUTTER_WIDTH + 12}px`,
           zIndex: 1,
         }}
       >
@@ -649,10 +652,12 @@ export function PlayerMetricRow({
         {/* Class icon with an optional specialization badge */}
         <span
           style={{
-            position: 'relative',
+            position: 'absolute',
+            left: '4px',
+            top: '50%',
             width: '24px',
             height: '24px',
-            marginRight: '8px',
+            transform: 'translateY(-50%)',
             flexShrink: 0,
           }}
         >
