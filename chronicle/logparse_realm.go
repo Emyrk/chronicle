@@ -281,7 +281,11 @@ func (w *WorkerLogParse) realmRejectionMessage(ctx context.Context, db *authz.Au
 		}
 	}
 
-	if format == database.LogFormat243CcAddon || format == database.LogFormat335aCcAddon || format == database.LogFormatAzerothcoreMod {
+	if format == database.LogFormat243CcAddon {
+		r.AddonURL = "https://github.com/Emyrk/ChronicleCompanionTBC"
+	}
+
+	if format == database.LogFormat335aCcAddon || format == database.LogFormatAzerothcoreMod {
 		r.AddonURL = "https://github.com/Emyrk/ChronicleCompanionWoTLK"
 	}
 

@@ -1,13 +1,19 @@
 /** Upload instructions for 2.4.3/3.3.5a ChronicleCompanion and AzerothCore formats. */
-export function InstructionsWotlk() {
+export function InstructionsWotlk({ tbc = false }: { tbc?: boolean }) {
+  const addonName = tbc ? "ChronicleCompanionTBC" : "ChronicleCompanionWoTLK";
+  const addonUrl = tbc
+    ? "https://github.com/Emyrk/ChronicleCompanionTBC"
+    : "https://github.com/Emyrk/ChronicleCompanionWoTLK";
+  const clientVersion = tbc ? "2.4.3" : "3.3.5a";
+
   return (
     <>
       <div>
         <h3 className="font-medium mb-2">Requirements</h3>
         <ul className="list-disc list-inside space-y-1 text-muted-foreground">
           <li>
-            <a href="https://github.com/Emyrk/ChronicleCompanionWoTLK" target="_blank" rel="noopener noreferrer" className="text-link hover:underline">
-              ChronicleCompanionWoTLK Addon
+            <a href={addonUrl} target="_blank" rel="noopener noreferrer" className="text-link hover:underline">
+              {addonName} Addon
             </a>
           </li>
         </ul>
@@ -40,9 +46,9 @@ export function InstructionsWotlk() {
         <h3 className="font-medium mb-3">FAQ</h3>
         <div className="space-y-4">
           <div>
-            <p className="font-medium text-foreground">What is the ChronicleCompanionWoTLK addon?</p>
+            <p className="font-medium text-foreground">What is the {addonName} addon?</p>
             <p className="text-muted-foreground mt-1">
-              A companion addon for WoW 2.4.3 and 3.3.5a that enriches combat logs with additional metadata
+              A companion addon for WoW {clientVersion} that enriches combat logs with additional metadata
               (gear, talents, glyphs, raid roster) for more detailed analysis in Chronicle.
             </p>
           </div>

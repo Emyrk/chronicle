@@ -474,7 +474,7 @@ export function UploadView({
             {effectiveFormat === "1.12a-superwow-addon" ? (
               <InstructionsSuperwow />
             ) : effectiveFormat === "2.4.3-cc-addon" || effectiveFormat === "3.3.5a-cc-addon" || effectiveFormat === "azerothcore-mod" ? (
-              <InstructionsWotlk />
+              <InstructionsWotlk tbc={effectiveFormat === "2.4.3-cc-addon"} />
             ) : (
               <InstructionsChronicleCompanion />
             )}
