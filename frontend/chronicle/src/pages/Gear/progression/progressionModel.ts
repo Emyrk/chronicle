@@ -32,6 +32,7 @@ import {
   setSlotEnchant,
   setSlotItem,
   setSlotNote,
+  setStageLevel,
   type GearPayload,
   type GearStage,
 } from "../builder/gearListModel";
@@ -226,6 +227,18 @@ export function moveProgressionStage(
   to: number,
 ): ProgressionPayload {
   return withStages(payload, (doc) => moveStage(doc, from, to));
+}
+
+/**
+ * Set or clear the level a stage assumes. Cleared (undefined) means the
+ * stage's level slider is disabled and the level cap is assumed.
+ */
+export function setProgressionStageLevel(
+  payload: ProgressionPayload,
+  index: number,
+  level: number | undefined,
+): ProgressionPayload {
+  return withStages(payload, (doc) => setStageLevel(doc, index, level));
 }
 
 export function setProgressionSlotItem(

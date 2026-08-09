@@ -24,6 +24,7 @@ import {
   upgradeLevels,
   type PoolItemStats,
   type ProgressionPayload,
+  setProgressionStageLevel,
 } from "./progressionModel";
 
 /** Terse pool-item builder: inventory type, required level, item level. */
@@ -284,6 +285,29 @@ describe("stage operations", () => {
     const renamed = renameProgressionStage(added, 0, "Pre-Raid");
     expect(renamed.stages[0].name).toBe("Pre-Raid");
     expect(renamed.pool).toEqual(withPool.pool);
+  });
+
+  it("sets and clears a stage's assumed level, keeping the pool", () => {
+    const base: ProgressionPayload = {
+      version: 1,
+      pool: [{ item_id: 1 }],
+      stages: [{ name: "Fresh 60", slots: {} }],
+    };
+    const pinned = setProgressionStageLevel(base, 0, 40);
+    expect(pinned.stages[0].level).toBe(40);
+    expect(pinned.pool).toEqual(base.pool);
+
+    const cleared = setProgressionStageLevel(pinned, 0, undefined);
+    expect(cleared.stages[0].level).toBeUndefined();
+  });
+
+  it("stage level survives a parse round-trip", () => {
+    const doc = parseProgressionPayload({
+      version: 1,
+      pool: [],
+      stages: [{ name: "Twink 39", slots: {}, level: 39 }],
+    });
+    expect(doc.stages[0].level).toBe(39);
   });
 });
 

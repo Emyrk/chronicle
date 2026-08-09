@@ -27,6 +27,12 @@ export interface GearSlotEntry {
 export interface GearStage {
   name: string;
   slots: Partial<Record<string, GearSlotEntry>>;
+  /**
+   * Character level the stage assumes; its item picker filters to it.
+   * Absent means the level slider is disabled for the stage and the
+   * level cap is assumed.
+   */
+  level?: number;
 }
 
 export interface GearPayload {
@@ -120,7 +126,12 @@ export function parsePayload(raw: unknown): GearPayload {
         if (entry) slots[key] = entry;
       }
     }
-    stages.push({ name, slots });
+    const stage: GearStage = { name, slots };
+    const levelRaw = (stageRaw as { level?: unknown }).level;
+    if (typeof levelRaw === "number" && Number.isInteger(levelRaw) && levelRaw >= 1 && levelRaw <= 100) {
+      stage.level = levelRaw;
+    }
+    stages.push(stage);
   }
   return { version: GEAR_PAYLOAD_VERSION, stages };
 }
@@ -232,6 +243,27 @@ export function addStage(payload: GearPayload, name?: string): GearPayload {
 export function removeStage(payload: GearPayload, index: number): GearPayload {
   if (index < 0 || index >= payload.stages.length) return payload;
   return { ...payload, stages: payload.stages.filter((_, i) => i !== index) };
+}
+
+/** Set or clear (undefined) the level a stage assumes. */
+export function setStageLevel(
+  payload: GearPayload,
+  index: number,
+  level: number | undefined,
+): GearPayload {
+  return {
+    ...payload,
+    stages: payload.stages.map((s, i) => {
+      if (i !== index) return s;
+      const next = { ...s };
+      if (level != null) {
+        next.level = level;
+      } else {
+        delete next.level;
+      }
+      return next;
+    }),
+  };
 }
 
 export function renameStage(payload: GearPayload, index: number, name: string): GearPayload {

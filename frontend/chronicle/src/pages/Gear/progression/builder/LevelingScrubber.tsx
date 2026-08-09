@@ -9,6 +9,8 @@ interface LevelingScrubberProps {
   onChange: (level: number) => void;
   /** Levels where the pool unlocks something; drawn as ticks on the rail. */
   upgradeLevels?: readonly number[];
+  /** Greys the whole control; the level shown is assumed, not scrubbed. */
+  disabled?: boolean;
 }
 
 /**
@@ -23,6 +25,7 @@ export function LevelingScrubber({
   maxLevel,
   onChange,
   upgradeLevels = [],
+  disabled = false,
 }: LevelingScrubberProps) {
   const span = Math.max(1, maxLevel - minLevel);
   const percentOf = (l: number) => ((l - minLevel) / span) * 100;
@@ -31,7 +34,7 @@ export function LevelingScrubber({
   const nextUpgrade = upgradeLevels.find((l) => l > level);
 
   return (
-    <div className="flex flex-wrap items-center gap-x-3 gap-y-2">
+    <div className={cn("flex flex-wrap items-center gap-x-3 gap-y-2", disabled && "opacity-50")}>
       <div className="flex items-baseline gap-2">
         <span className="text-3xs uppercase tracking-[0.2em] text-zinc-500">Level</span>
         <span className="font-wow text-2xl tabular-nums text-amber-100/90">{level}</span>
@@ -39,7 +42,7 @@ export function LevelingScrubber({
 
       <ScrubStep
         label="Previous upgrade"
-        disabled={level <= minLevel}
+        disabled={disabled || level <= minLevel}
         onClick={() => onChange(prevUpgrade ?? Math.max(minLevel, level - 1))}
       >
         <ChevronLeft className="h-4 w-4" />
@@ -65,15 +68,26 @@ export function LevelingScrubber({
           max={maxLevel}
           step={1}
           value={level}
+          disabled={disabled}
           onChange={(e) => onChange(Number(e.target.value))}
-          className="relative w-full cursor-pointer accent-blue-500"
+          className="relative w-full cursor-pointer accent-blue-500 disabled:cursor-not-allowed"
           aria-label="Character level"
         />
         <div className="flex justify-between font-mono text-3xs text-zinc-600">
-          <button type="button" className="hover:text-zinc-400" onClick={() => onChange(minLevel)}>
+          <button
+            type="button"
+            disabled={disabled}
+            className="hover:text-zinc-400 disabled:hover:text-zinc-600"
+            onClick={() => onChange(minLevel)}
+          >
             {minLevel}
           </button>
-          <button type="button" className="hover:text-zinc-400" onClick={() => onChange(maxLevel)}>
+          <button
+            type="button"
+            disabled={disabled}
+            className="hover:text-zinc-400 disabled:hover:text-zinc-600"
+            onClick={() => onChange(maxLevel)}
+          >
             {maxLevel}
           </button>
         </div>
@@ -81,7 +95,7 @@ export function LevelingScrubber({
 
       <ScrubStep
         label="Next upgrade"
-        disabled={level >= maxLevel}
+        disabled={disabled || level >= maxLevel}
         onClick={() => onChange(nextUpgrade ?? Math.min(maxLevel, level + 1))}
       >
         <ChevronRight className="h-4 w-4" />
@@ -92,11 +106,12 @@ export function LevelingScrubber({
         min={minLevel}
         max={maxLevel}
         value={level}
+        disabled={disabled}
         onChange={(e) => {
           const next = Number(e.target.value);
           if (Number.isFinite(next)) onChange(Math.min(maxLevel, Math.max(minLevel, next)));
         }}
-        className="h-8 w-16 rounded border border-zinc-700 bg-zinc-900 px-2 font-mono text-sm text-zinc-200"
+        className="h-8 w-16 rounded border border-zinc-700 bg-zinc-900 px-2 font-mono text-sm text-zinc-200 disabled:cursor-not-allowed"
         aria-label="Character level (exact)"
       />
     </div>

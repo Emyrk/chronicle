@@ -22,6 +22,7 @@ import {
   SLOT_COUNT,
   SLOT_INVENTORY_TYPES,
   type GearPayload,
+  setStageLevel,
 } from "./gearListModel";
 
 const doc = (stages: GearPayload["stages"]): GearPayload => ({
@@ -94,6 +95,25 @@ describe("parsePayload", () => {
     expect(Object.keys(parsed.stages[0].slots)).toEqual(["2"]);
   });
 
+  it("parses a valid stage level and drops invalid ones", () => {
+    const doc = parsePayload({
+      version: 2,
+      stages: [
+        { name: "A", slots: {}, level: 39 },
+        { name: "B", slots: {}, level: 0 },
+        { name: "C", slots: {}, level: 42.5 },
+        { name: "D", slots: {}, level: 101 },
+        { name: "E", slots: {} },
+      ],
+    });
+    expect(doc.stages.map((s) => s.level)).toEqual([39, undefined, undefined, undefined, undefined]);
+  });
+
+  it("round-trips a stage level through serializePayload", () => {
+    const doc = parsePayload({ version: 2, stages: [{ name: "A", slots: {}, level: 55 }] });
+    expect(parsePayload(serializePayload(doc))).toEqual(doc);
+  });
+
   it("round-trips through serializePayload", () => {
     const payload = doc([{ name: "a", slots: { "0": { item_id: 1 } } }]);
     expect(parsePayload(serializePayload(payload))).toEqual(payload);
@@ -159,6 +179,18 @@ describe("stage operations", () => {
     expect(next.stages[1].slots).toEqual(payload.stages[0].slots);
     // Deep copy, not shared references.
     expect(next.stages[1].slots["0"]).not.toBe(payload.stages[0].slots["0"]);
+  });
+
+  it("setStageLevel sets, replaces, and clears a stage's level", () => {
+    const doc = parsePayload({ version: 2, stages: [{ name: "A", slots: {} }] });
+    const set = setStageLevel(doc, 0, 40);
+    expect(set.stages[0].level).toBe(40);
+    const replaced = setStageLevel(set, 0, 55);
+    expect(replaced.stages[0].level).toBe(55);
+    const cleared = setStageLevel(replaced, 0, undefined);
+    expect("level" in cleared.stages[0]).toBe(false);
+    // Other stages and the input are untouched.
+    expect(doc.stages[0].level).toBeUndefined();
   });
 
   it("addStage on an empty document starts blank", () => {

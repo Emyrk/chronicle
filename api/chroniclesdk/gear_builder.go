@@ -35,6 +35,10 @@ type GearListPayload struct {
 type GearListStage struct {
 	Name  string                  `json:"name"`
 	Slots map[string]GearListSlot `json:"slots"`
+	// Level is the character level this stage assumes (its item picker
+	// filters to it). Nil means the level slider is disabled for the
+	// stage and the level cap is assumed.
+	Level *int32 `json:"level,omitempty"`
 }
 
 // GearListSlot is the primary pick for one equipment slot plus its

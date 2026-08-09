@@ -503,6 +503,9 @@ func validatePayload(payload json.RawMessage) error {
 		if len(stage.Name) > maxStageNameLen {
 			return fmt.Errorf("stage %d name too long, maximum is %d characters", i+1, maxStageNameLen)
 		}
+		if stage.Level != nil && (*stage.Level < 1 || *stage.Level > 100) {
+			return fmt.Errorf("stage %d has an invalid level, expected 1-100", i+1)
+		}
 		for key, slot := range stage.Slots {
 			idx, err := strconv.Atoi(key)
 			if err != nil || idx < 0 || idx > maxSlotIndex {

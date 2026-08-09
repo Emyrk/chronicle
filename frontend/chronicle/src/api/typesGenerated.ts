@@ -1080,6 +1080,12 @@ export interface GearListSlot {
 export interface GearListStage {
     readonly name: string;
     readonly slots: Record<string, GearListSlot>;
+    /**
+     * Level is the character level this stage assumes (its item picker
+     * filters to it). Nil means the level slider is disabled for the
+     * stage and the level cap is assumed.
+     */
+    readonly level?: number;
 }
 
 // From chroniclesdk/gear_progression.go

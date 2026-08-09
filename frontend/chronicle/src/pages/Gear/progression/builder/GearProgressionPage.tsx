@@ -36,6 +36,7 @@ import {
   setProgressionSlotEnchant,
   setProgressionSlotItem,
   setProgressionSlotNote,
+  setProgressionStageLevel,
   snapshotStageFromDerived,
   stageAverageItemLevel,
   upgradeLevels,
@@ -58,7 +59,7 @@ function collectItemRefs(payload: ProgressionPayload): ItemRef[] {
   const refs: ItemRef[] = payload.pool.map((entry) => ({ itemId: entry.item_id }));
   for (const stage of payload.stages) {
     for (const entry of Object.values(stage.slots)) {
-      if (entry) refs.push({ itemId: entry.item_id });
+      if (entry) refs.push({ itemId: entry.item_id, enchantId: entry.enchant_id });
     }
   }
   return refs;
@@ -214,9 +215,18 @@ function ProgressionView({
 
   const selectedEntry = selectedSlot != null ? activeStage.slots[String(selectedSlot)] : undefined;
 
+  // A stage may pin its own character level; unset means the slider is
+  // disabled for the stage and the level cap is assumed.
+  const stageLevel = axis.kind === "stage" ? payload.stages[stageIndex]?.level : undefined;
+  const effectiveLevel = axis.kind === "stage" ? (stageLevel ?? levelCap) : clampedLevel;
+
   const stageSubLabels = payload.stages.map((s) => {
     const avg = stageAverageItemLevel(s, itemLevelOf);
-    return avg != null ? `ilvl ${avg.toFixed(1)}` : undefined;
+    const parts = [
+      s.level != null ? `Lv ${s.level}` : undefined,
+      avg != null ? `ilvl ${avg.toFixed(1)}` : undefined,
+    ].filter(Boolean);
+    return parts.length > 0 ? parts.join(" · ") : undefined;
   });
 
   const selectStage = (index: number) => {
@@ -301,24 +311,51 @@ function ProgressionView({
         <p className="text-sm text-zinc-400">{progression.description}</p>
       )}
 
-      {/* The levelling axis. The scrubber stays visible on both axes so
-          the "next upgrade" annotations always have a reference level. */}
+      {/* The level slider follows the active axis: on the levelling axis
+          it scrubs the derived set; on a stage it shows (and, when the
+          stage's level is enabled, edits) the level that stage assumes. */}
       <div
         className={cn(
-          "rounded-md border p-3 transition-colors",
+          "space-y-2 rounded-md border p-3 transition-colors",
           onLevelAxis ? "border-blue-500/40 bg-blue-500/5" : "border-zinc-700/60 bg-zinc-900/40",
         )}
       >
         <LevelingScrubber
-          level={clampedLevel}
+          level={effectiveLevel}
           minLevel={1}
           maxLevel={levelCap}
+          disabled={!onLevelAxis && (stageLevel == null || !isOwner)}
           onChange={(next) => {
-            setLevel(next);
-            setAxis({ kind: "level" });
+            if (onLevelAxis) {
+              setLevel(next);
+              return;
+            }
+            if (isOwner && stageLevel != null) {
+              editor.update((p) => setProgressionStageLevel(p, stageIndex, next));
+            }
           }}
           upgradeLevels={ticks}
         />
+        {!onLevelAxis && (
+          <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-zinc-500">
+            {isOwner && (
+              <label className="flex cursor-pointer select-none items-center gap-1.5 text-zinc-400">
+                <input
+                  type="checkbox"
+                  className="accent-blue-500"
+                  checked={stageLevel != null}
+                  onChange={(e) =>
+                    editor.update((p) =>
+                      setProgressionStageLevel(p, stageIndex, e.target.checked ? levelCap : undefined),
+                    )
+                  }
+                />
+                Set a level for this stage
+              </label>
+            )}
+            {stageLevel == null && <span>Assumes max level ({levelCap}).</span>}
+          </div>
+        )}
       </div>
 
       {/* Stages are a peer of the level axis, not a separate section:
@@ -419,7 +456,7 @@ function ProgressionView({
               items={items}
               onEquip={equip}
               equipLabel={onLevelAxis ? "Add to pool" : "Set"}
-              characterLevel={onLevelAxis ? clampedLevel : levelCap}
+              characterLevel={effectiveLevel}
               // The levelling half has no stored per-slot metadata to edit.
               tabs={onLevelAxis ? ["pick"] : undefined}
               beforePicker={
