@@ -718,35 +718,34 @@ func (p *Parser) suffixSummon(ts time.Time, spell *spellInfo, base baseParams, m
 		return []messages.Message{}, nil
 	}
 
-	ty := types.UnitTypeUnknown
-	if base.destGUID.IsPlayer() {
-		ty = types.UnitTypePlayer
-	} else if base.destGUID.IsObject() {
-		ty = types.UnitTypeObject
-	} else if base.destGUID.IsAnyCreature() {
-		ty = types.UnitTypeCreature
-	}
+	unitType := types.UnitTypeFromGUID(base.destGUID)
 
 	var spellData *chrondbc.Spell
 	if spell != nil {
 		spellData = p.lookupSpell(chrondbc.SpellID(spell.spellID), spell.spellName)
 	}
 
+	classification := &messages.UnitClassificationEvent{
+		MessageBase: messages.Base(ts),
+		Target:      base.destGUID,
+		UnitType:    unitType,
+		Affiliation: types.AffiliationUnknown,
+		Controller:  nil,
+		Spell:       spellData,
+	}
+	if base.destGUID.IsVehicle() {
+		return set(classification)
+	}
+
+	classification.Owner = ptr.Ref(base.sourceGUID)
 	return set(
 		&messages.NewOwner{
 			MessageBase: messages.Base(ts),
 			Target:      base.destGUID,
 			NewOwner:    base.sourceGUID,
 		},
-		&messages.UnitClassificationEvent{
-			MessageBase: messages.Base(ts),
-			Target:      base.destGUID,
-			UnitType:    ty,
-			Affiliation: types.AffiliationUnknown,
-			Owner:       ptr.Ref(base.sourceGUID),
-			Controller:  nil,
-			Spell:       spellData,
-		})
+		classification,
+	)
 }
 
 // suffixInstakill handles _INSTAKILL.
