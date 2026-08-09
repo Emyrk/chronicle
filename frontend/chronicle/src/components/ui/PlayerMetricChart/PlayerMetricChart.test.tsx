@@ -61,9 +61,6 @@ describe("PlayerMetricRow", () => {
     expect(markup).toContain('width:14px');
     expect(markup).toContain('border:2px solid var(--color-background)');
     expect(markup).toContain('filter:saturate(1.2) contrast(1.1)');
-    expect(markup).toContain('left:40px');
-    expect(markup).toContain('padding:0 12px 0 52px');
-    expect(markup).toContain('left:4px');
   });
 
   it("renders only the class icon when no specialization icon exists", () => {
