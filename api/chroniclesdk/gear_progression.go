@@ -31,6 +31,9 @@ type GearProgressionPayload struct {
 	Pool    []GearProgressionPoolItem `json:"pool"`
 	// Stages reuses the gear-list stage shape for the max-level axis.
 	Stages []GearListStage `json:"stages"`
+	// LevelingDisabled turns the progressive-gear (levelling) half off
+	// for the whole document; everything assumes the level cap.
+	LevelingDisabled bool `json:"leveling_disabled,omitempty"`
 }
 
 // GearProgressionPoolItem is one hand-picked item in the pool.

@@ -50,6 +50,11 @@ export interface ProgressionPayload {
   version: number;
   pool: ProgressionPoolItem[];
   stages: GearStage[];
+  /**
+   * Turns the progressive-gear (levelling) half off for the whole
+   * document; everything assumes the level cap. Absent means enabled.
+   */
+  leveling_disabled?: boolean;
 }
 
 // ─── Level caps ──────────────────────────────────────────────
@@ -106,7 +111,11 @@ export function parseProgressionPayload(raw: unknown): ProgressionPayload {
   // The gear-list parser only reads `stages`, so the progression document
   // can be handed to it directly — one stage parser, no drift.
   const { stages } = parsePayload(value);
-  return { version: PROGRESSION_PAYLOAD_VERSION, pool, stages };
+  const doc: ProgressionPayload = { version: PROGRESSION_PAYLOAD_VERSION, pool, stages };
+  if ((value as { leveling_disabled?: unknown }).leveling_disabled === true) {
+    doc.leveling_disabled = true;
+  }
+  return doc;
 }
 
 function parsePoolItem(raw: unknown): ProgressionPoolItem | null {
@@ -227,6 +236,21 @@ export function moveProgressionStage(
   to: number,
 ): ProgressionPayload {
   return withStages(payload, (doc) => moveStage(doc, from, to));
+}
+
+/** Turn the document's progressive-gear (levelling) half on or off. */
+export function setProgressionLevelingDisabled(
+  payload: ProgressionPayload,
+  disabled: boolean,
+): ProgressionPayload {
+  if (disabled === (payload.leveling_disabled ?? false)) return payload;
+  const next = { ...payload };
+  if (disabled) {
+    next.leveling_disabled = true;
+  } else {
+    delete next.leveling_disabled;
+  }
+  return next;
 }
 
 /**

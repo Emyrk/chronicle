@@ -24,6 +24,7 @@ import {
   upgradeLevels,
   type PoolItemStats,
   type ProgressionPayload,
+  setProgressionLevelingDisabled,
   setProgressionStageLevel,
 } from "./progressionModel";
 
@@ -299,6 +300,24 @@ describe("stage operations", () => {
 
     const cleared = setProgressionStageLevel(pinned, 0, undefined);
     expect(cleared.stages[0].level).toBeUndefined();
+  });
+
+  it("toggles the document's levelling half, dropping the flag when re-enabled", () => {
+    const base: ProgressionPayload = { version: 1, pool: [], stages: [] };
+    const off = setProgressionLevelingDisabled(base, true);
+    expect(off.leveling_disabled).toBe(true);
+    // No-op toggles return the same object so editors stay clean.
+    expect(setProgressionLevelingDisabled(off, true)).toBe(off);
+    expect(setProgressionLevelingDisabled(base, false)).toBe(base);
+    const on = setProgressionLevelingDisabled(off, false);
+    expect("leveling_disabled" in on).toBe(false);
+  });
+
+  it("leveling_disabled survives a parse round-trip and ignores junk", () => {
+    const doc = parseProgressionPayload({ version: 1, pool: [], stages: [], leveling_disabled: true });
+    expect(doc.leveling_disabled).toBe(true);
+    const junk = parseProgressionPayload({ version: 1, pool: [], stages: [], leveling_disabled: "yes" });
+    expect(junk.leveling_disabled).toBeUndefined();
   });
 
   it("stage level survives a parse round-trip", () => {

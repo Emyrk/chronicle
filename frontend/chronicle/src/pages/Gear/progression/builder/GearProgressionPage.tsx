@@ -36,6 +36,7 @@ import {
   setProgressionSlotEnchant,
   setProgressionSlotItem,
   setProgressionSlotNote,
+  setProgressionLevelingDisabled,
   setProgressionStageLevel,
   snapshotStageFromDerived,
   stageAverageItemLevel,
@@ -169,7 +170,11 @@ function ProgressionView({
   const payload = isOwner ? editor.payload : serverPayload;
 
   const [level, setLevel] = useState(levelCap);
-  const [axis, setAxis] = useState<Axis>({ kind: "level" });
+  const [axis, setAxis] = useState<Axis>(() =>
+    serverPayload.leveling_disabled && serverPayload.stages.length > 0
+      ? { kind: "stage", index: 0 }
+      : { kind: "level" },
+  );
   const [selectedSlot, setSelectedSlot] = useState<number | null>(null);
   const [editorTab, setEditorTab] = useState<EditorTab>("pick");
   const [view, setView] = useState<"doll" | "swimlanes">("doll");
@@ -216,9 +221,13 @@ function ProgressionView({
   const selectedEntry = selectedSlot != null ? activeStage.slots[String(selectedSlot)] : undefined;
 
   // A stage may pin its own character level; unset means the slider is
-  // disabled for the stage and the level cap is assumed.
+  // disabled for the stage and the level cap is assumed. The document can
+  // also turn its whole levelling half off, which locks the level axis to
+  // the cap.
+  const levelingDisabled = payload.leveling_disabled ?? false;
   const stageLevel = axis.kind === "stage" ? payload.stages[stageIndex]?.level : undefined;
-  const effectiveLevel = axis.kind === "stage" ? (stageLevel ?? levelCap) : clampedLevel;
+  const effectiveLevel =
+    axis.kind === "stage" ? (stageLevel ?? levelCap) : levelingDisabled ? levelCap : clampedLevel;
 
   const stageSubLabels = payload.stages.map((s) => {
     const avg = stageAverageItemLevel(s, itemLevelOf);
@@ -313,69 +322,88 @@ function ProgressionView({
 
       {/* The level slider follows the active axis: on the levelling axis
           it scrubs the derived set; on a stage it shows (and, when the
-          stage's level is enabled, edits) the level that stage assumes. */}
-      <div
-        className={cn(
-          "space-y-2 rounded-md border p-3 transition-colors",
-          onLevelAxis ? "border-blue-500/40 bg-blue-500/5" : "border-zinc-700/60 bg-zinc-900/40",
-        )}
-      >
-        <LevelingScrubber
-          level={effectiveLevel}
-          minLevel={1}
-          maxLevel={levelCap}
-          disabled={!onLevelAxis && (stageLevel == null || !isOwner)}
-          onChange={(next) => {
-            if (onLevelAxis) {
-              setLevel(next);
-              return;
+          stage's level is enabled, edits) the level that stage assumes.
+          One toggle governs both: on the Levelling tab it turns the
+          document's progressive-gear half on/off, on a stage it pins or
+          releases that stage's level. Viewers of a leveling-disabled
+          document see no panel at all. */}
+      {(isOwner || !levelingDisabled) && (
+        <div
+          className={cn(
+            "space-y-2 rounded-md border p-3 transition-colors",
+            onLevelAxis && !levelingDisabled
+              ? "border-blue-500/40 bg-blue-500/5"
+              : "border-zinc-700/60 bg-zinc-900/40",
+          )}
+        >
+          <LevelingScrubber
+            level={effectiveLevel}
+            minLevel={1}
+            maxLevel={levelCap}
+            disabled={
+              onLevelAxis ? levelingDisabled : stageLevel == null || !isOwner
             }
-            if (isOwner && stageLevel != null) {
-              editor.update((p) => setProgressionStageLevel(p, stageIndex, next));
-            }
-          }}
-          upgradeLevels={ticks}
-        />
-        {!onLevelAxis && (
+            onChange={(next) => {
+              if (onLevelAxis) {
+                setLevel(next);
+                return;
+              }
+              if (isOwner && stageLevel != null) {
+                editor.update((p) => setProgressionStageLevel(p, stageIndex, next));
+              }
+            }}
+            upgradeLevels={levelingDisabled ? [] : ticks}
+          />
           <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-zinc-500">
             {isOwner && (
               <label className="flex cursor-pointer select-none items-center gap-1.5 text-zinc-400">
                 <input
                   type="checkbox"
                   className="accent-blue-500"
-                  checked={stageLevel != null}
+                  checked={onLevelAxis ? !levelingDisabled : stageLevel != null}
                   onChange={(e) =>
                     editor.update((p) =>
-                      setProgressionStageLevel(p, stageIndex, e.target.checked ? levelCap : undefined),
+                      onLevelAxis
+                        ? setProgressionLevelingDisabled(p, !e.target.checked)
+                        : setProgressionStageLevel(
+                            p,
+                            stageIndex,
+                            e.target.checked ? levelCap : undefined,
+                          ),
                     )
                   }
                 />
-                Set a level for this stage
+                Enable progressive gear
               </label>
             )}
-            {stageLevel == null && <span>Assumes max level ({levelCap}).</span>}
+            {(onLevelAxis ? levelingDisabled : stageLevel == null) && (
+              <span>Assumes max level ({levelCap}).</span>
+            )}
           </div>
-        )}
-      </div>
+        </div>
+      )}
 
       {/* Stages are a peer of the level axis, not a separate section:
           the same tab strip the gear-list builder uses. */}
       <div className="flex flex-wrap items-center gap-3">
-        <button
-          type="button"
-          onClick={() => setAxis({ kind: "level" })}
-          className={cn(
-            "rounded border px-3 py-1.5 text-left text-sm transition-colors",
-            onLevelAxis
-              ? "border-blue-500 bg-blue-500/10 text-white"
-              : "border-zinc-700 text-zinc-400 hover:text-zinc-200",
-          )}
-        >
-          <span className="block leading-tight">Levelling</span>
-          <span className="block font-mono text-2xs leading-tight text-zinc-500">
-            Lv {clampedLevel}
-          </span>
-        </button>
+        {(isOwner || !levelingDisabled) && (
+          <button
+            type="button"
+            onClick={() => setAxis({ kind: "level" })}
+            className={cn(
+              "rounded border px-3 py-1.5 text-left text-sm transition-colors",
+              onLevelAxis
+                ? "border-blue-500 bg-blue-500/10 text-white"
+                : "border-zinc-700 text-zinc-400 hover:text-zinc-200",
+              levelingDisabled && "opacity-60",
+            )}
+          >
+            <span className="block leading-tight">Levelling</span>
+            <span className="block font-mono text-2xs leading-tight text-zinc-500">
+              {levelingDisabled ? "off" : `Lv ${clampedLevel}`}
+            </span>
+          </button>
+        )}
         <StagesBar
           payload={{ version: GEAR_PAYLOAD_VERSION, stages: payload.stages }}
           stageIndex={stageIndex}
@@ -407,10 +435,10 @@ function ProgressionView({
             Snapshot at cap
           </Button>
         )}
-        <ViewToggle view={view} onChange={setView} />
+        {!levelingDisabled && <ViewToggle view={view} onChange={setView} />}
       </div>
 
-      {view === "swimlanes" ? (
+      {view === "swimlanes" && !levelingDisabled ? (
         <ProgressionSwimlanes
           columns={columns}
           items={items}
@@ -439,7 +467,15 @@ function ProgressionView({
                     }
                   : undefined
               }
-              nextUpgrades={onLevelAxis ? nextUpgrades : undefined}
+              onEnchantSlot={
+                isOwner && axis.kind === "stage"
+                  ? (i) => {
+                      setSelectedSlot(i);
+                      setEditorTab("enchant");
+                    }
+                  : undefined
+              }
+              nextUpgrades={onLevelAxis && !levelingDisabled ? nextUpgrades : undefined}
             />
             <p className="text-2xs text-zinc-500">
               {onLevelAxis

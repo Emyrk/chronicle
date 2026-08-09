@@ -1120,6 +1120,11 @@ export interface GearProgressionPayload {
      * Stages reuses the gear-list stage shape for the max-level axis.
      */
     readonly stages: readonly GearListStage[];
+    /**
+     * LevelingDisabled turns the progressive-gear (levelling) half off
+     * for the whole document; everything assumes the level cap.
+     */
+    readonly leveling_disabled?: boolean;
 }
 
 // From chroniclesdk/gear_progression.go
