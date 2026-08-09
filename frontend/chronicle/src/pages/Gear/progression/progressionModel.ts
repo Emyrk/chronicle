@@ -18,14 +18,20 @@ import {
   GEAR_PAYLOAD_VERSION,
   SLOT,
   SLOT_COUNT,
+  addAlternate,
   addStage,
+  clearSlot,
   fillStageFromOutfit,
   moveStage,
   parsePayload,
+  promoteAlternate,
+  removeAlternate,
   removeStage,
   renameStage,
+  setAlternateNote,
+  setSlotEnchant,
   setSlotItem,
-  clearSlot,
+  setSlotNote,
   type GearPayload,
   type GearStage,
 } from "../builder/gearListModel";
@@ -237,6 +243,66 @@ export function clearProgressionSlot(
   slotIndex: number,
 ): ProgressionPayload {
   return withStages(payload, (doc) => clearSlot(doc, stageIndex, slotIndex));
+}
+
+// Stage slots are gear-list slots, so they get the gear-list builder's
+// full per-slot editing: notes, ranked alternates, and enchants.
+
+export function setProgressionSlotNote(
+  payload: ProgressionPayload,
+  stageIndex: number,
+  slotIndex: number,
+  note: string,
+): ProgressionPayload {
+  return withStages(payload, (doc) => setSlotNote(doc, stageIndex, slotIndex, note));
+}
+
+export function setProgressionSlotEnchant(
+  payload: ProgressionPayload,
+  stageIndex: number,
+  slotIndex: number,
+  enchantId: number | undefined,
+): ProgressionPayload {
+  return withStages(payload, (doc) => setSlotEnchant(doc, stageIndex, slotIndex, enchantId));
+}
+
+export function addProgressionAlternate(
+  payload: ProgressionPayload,
+  stageIndex: number,
+  slotIndex: number,
+  itemId: number,
+): ProgressionPayload {
+  return withStages(payload, (doc) => addAlternate(doc, stageIndex, slotIndex, itemId));
+}
+
+export function removeProgressionAlternate(
+  payload: ProgressionPayload,
+  stageIndex: number,
+  slotIndex: number,
+  itemId: number,
+): ProgressionPayload {
+  return withStages(payload, (doc) => removeAlternate(doc, stageIndex, slotIndex, itemId));
+}
+
+export function setProgressionAlternateNote(
+  payload: ProgressionPayload,
+  stageIndex: number,
+  slotIndex: number,
+  itemId: number,
+  note: string,
+): ProgressionPayload {
+  return withStages(payload, (doc) =>
+    setAlternateNote(doc, stageIndex, slotIndex, itemId, note),
+  );
+}
+
+export function promoteProgressionAlternate(
+  payload: ProgressionPayload,
+  stageIndex: number,
+  slotIndex: number,
+  itemId: number,
+): ProgressionPayload {
+  return withStages(payload, (doc) => promoteAlternate(doc, stageIndex, slotIndex, itemId));
 }
 
 /**

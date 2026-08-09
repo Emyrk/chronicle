@@ -17,6 +17,7 @@ import { itemRefKey, useListItems, type ItemRef } from "@/pages/Gear/builder/use
 import { gearClassById } from "../../classInfo";
 import {
   addPoolItem,
+  addProgressionAlternate,
   addProgressionStage,
   clearProgressionSlot,
   computeEquippedAtLevel,
@@ -26,10 +27,15 @@ import {
   nextUpgradesAfter,
   parseProgressionPayload,
   progressionColumns,
+  promoteProgressionAlternate,
   removePoolItem,
+  removeProgressionAlternate,
   removeProgressionStage,
   renameProgressionStage,
+  setProgressionAlternateNote,
+  setProgressionSlotEnchant,
   setProgressionSlotItem,
+  setProgressionSlotNote,
   snapshotStageFromDerived,
   stageAverageItemLevel,
   upgradeLevels,
@@ -232,6 +238,19 @@ function ProgressionView({
     editor.update((p) => addPoolItem(p, item.entry));
   };
 
+  /**
+   * Apply one of the stage-slot operations to the selected stage slot.
+   * Only reachable on the stage axis — the levelling half has no stored
+   * entry to annotate, and hides those tabs.
+   */
+  const editStageSlot = <A extends unknown[]>(
+    op: (p: ProgressionPayload, stage: number, slot: number, ...rest: A) => ProgressionPayload,
+    ...args: A
+  ) => {
+    if (axis.kind !== "stage" || selectedSlot == null) return;
+    editor.update((p) => op(p, stageIndex, selectedSlot, ...args));
+  };
+
   const clearSelected = () => {
     if (selectedSlot == null) return;
     if (axis.kind === "stage") {
@@ -415,14 +434,16 @@ function ProgressionView({
                   />
                 ) : undefined
               }
-              onAddAlternate={() => undefined}
+              onAddAlternate={(item) => editStageSlot(addProgressionAlternate, item.entry)}
               onClear={clearSelected}
               onClose={() => setSelectedSlot(null)}
-              onSlotNote={() => undefined}
-              onAlternateNote={() => undefined}
-              onPromoteAlternate={() => undefined}
-              onRemoveAlternate={() => undefined}
-              onSetEnchant={() => undefined}
+              onSlotNote={(note) => editStageSlot(setProgressionSlotNote, note)}
+              onAlternateNote={(itemId, note) =>
+                editStageSlot(setProgressionAlternateNote, itemId, note)
+              }
+              onPromoteAlternate={(itemId) => editStageSlot(promoteProgressionAlternate, itemId)}
+              onRemoveAlternate={(itemId) => editStageSlot(removeProgressionAlternate, itemId)}
+              onSetEnchant={(enchantId) => editStageSlot(setProgressionSlotEnchant, enchantId)}
             />
           ) : (
             <div className="flex min-h-64 items-center justify-center self-stretch rounded-md border border-dashed border-zinc-800 p-6 text-sm text-zinc-500">
