@@ -1,7 +1,7 @@
 import { create, toBinary } from '@bufbuild/protobuf';
-import { ConsumeSchema, DamageSchema, EventMetaSchema, EvidenceConfidence, EvidenceKind, ExtraAttackSchema, ResourceChangeSchema, ResurrectionSchema, SlainSchema, SpellDataSchema } from '@/api/proto/chronicle_pb';
+import { CombatantGearSlotSchema, CombatantInfoSchema, ConsumeSchema, DamageSchema, EventMetaSchema, EvidenceConfidence, EvidenceKind, ExtraAttackSchema, ResourceChangeSchema, ResurrectionSchema, SlainSchema, SpellDataSchema } from '@/api/proto/chronicle_pb';
 import { describe, it, expect } from 'vitest';
-import { AuraDecoder, FastConsumeCursor, FastExtraAttackCursor, FastResourceChangeCursor, FastResurrectionCursor, FastSlainCursor, readVarint, readVarint64, parseAllHeaders } from './decode';
+import { AuraDecoder, FastCombatantInfoCursor, FastConsumeCursor, FastExtraAttackCursor, FastResourceChangeCursor, FastResurrectionCursor, FastSlainCursor, readVarint, readVarint64, parseAllHeaders } from './decode';
 
 describe('readVarint', () => {
   it('reads single-byte varints', () => {
@@ -71,6 +71,27 @@ describe('readVarint64', () => {
     // More than 10 bytes with continuation bits
     const data = new Uint8Array([0x80, 0x80, 0x80, 0x80, 0x80, 0x80, 0x80, 0x80, 0x80, 0x80, 0x80]);
     expect(() => readVarint64(data, 0)).toThrow('Varint too long');
+  });
+});
+
+describe('FastCombatantInfoCursor', () => {
+  it('preserves empty gem positions', () => {
+    const message = create(CombatantInfoSchema, {
+      meta: create(EventMetaSchema, { index: 8, offsetMilli: 2000n }),
+      guid: '0xPLAYER',
+      name: 'Player',
+      gear: [create(CombatantGearSlotSchema, {
+        itemId: 51396,
+        gemIds: [0, 0, 41398, 0],
+      })],
+    });
+    const encoded = toBinary(CombatantInfoSchema, message);
+    const messageData = new Uint8Array([...encodeVarint(encoded.length), ...encoded]);
+    const payload = buildPayload('encounter', 1706000000000n, 1, messageData.length, messageData);
+
+    const cursor = new FastCombatantInfoCursor(payload);
+
+    expect(cursor.next()?.gear[0].gemIds).toEqual([0, 0, 41398, 0]);
   });
 });
 

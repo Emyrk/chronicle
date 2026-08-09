@@ -310,7 +310,7 @@ export interface CombatantInfoProcessorEvent extends EventMeta {
   race: string;              // e.g. "Human", "Orc"
   gender: number;
   guildName: string | null;
-  gear: { itemId: number; enchantId: number | null; temporaryEnchantId: number | null }[];
+  gear: { itemId: number; enchantId: number | null; temporaryEnchantId: number | null; gemIds: number[] }[];
   gearCount: number;
   talents: { summary: number[]; trees: string[] } | null;
 }

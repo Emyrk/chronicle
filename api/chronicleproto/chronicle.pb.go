@@ -2482,6 +2482,7 @@ type CombatantGearSlot struct {
 	ItemId             int32                  `protobuf:"varint,1,opt,name=itemId,proto3" json:"itemId,omitempty"`
 	EnchantId          *int32                 `protobuf:"varint,2,opt,name=enchantId,proto3,oneof" json:"enchantId,omitempty"`
 	TemporaryEnchantId *int32                 `protobuf:"varint,3,opt,name=temporaryEnchantId,proto3,oneof" json:"temporaryEnchantId,omitempty"`
+	GemIds             []int32                `protobuf:"varint,4,rep,packed,name=gemIds,proto3" json:"gemIds,omitempty"` // socket positions; 0 means empty
 	unknownFields      protoimpl.UnknownFields
 	sizeCache          protoimpl.SizeCache
 }
@@ -2535,6 +2536,13 @@ func (x *CombatantGearSlot) GetTemporaryEnchantId() int32 {
 		return *x.TemporaryEnchantId
 	}
 	return 0
+}
+
+func (x *CombatantGearSlot) GetGemIds() []int32 {
+	if x != nil {
+		return x.GemIds
+	}
+	return nil
 }
 
 type CombatantTalents struct {
@@ -2903,11 +2911,12 @@ const file_chronicle_proto_rawDesc = "" +
 	"\x14_consumedAtUnixMilliB\t\n" +
 	"\a_amountB\x0f\n" +
 	"\r_resourceTypeB\v\n" +
-	"\t_itemName\"\xa8\x01\n" +
+	"\t_itemName\"\xc0\x01\n" +
 	"\x11CombatantGearSlot\x12\x16\n" +
 	"\x06itemId\x18\x01 \x01(\x05R\x06itemId\x12!\n" +
 	"\tenchantId\x18\x02 \x01(\x05H\x00R\tenchantId\x88\x01\x01\x123\n" +
-	"\x12temporaryEnchantId\x18\x03 \x01(\x05H\x01R\x12temporaryEnchantId\x88\x01\x01B\f\n" +
+	"\x12temporaryEnchantId\x18\x03 \x01(\x05H\x01R\x12temporaryEnchantId\x88\x01\x01\x12\x16\n" +
+	"\x06gemIds\x18\x04 \x03(\x05R\x06gemIdsB\f\n" +
 	"\n" +
 	"_enchantIdB\x15\n" +
 	"\x13_temporaryEnchantId\"B\n" +

@@ -304,6 +304,7 @@ message CombatantGearSlot {
   int32 itemId = 1;
   optional int32 enchantId = 2;
   optional int32 temporaryEnchantId = 3;
+  repeated int32 gemIds = 4; // socket positions; 0 means empty
 }
 
 message CombatantTalents {

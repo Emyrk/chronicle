@@ -51,7 +51,7 @@ function getItemIconUrl(icon: string): string {
 }
 
 /** Compact single-row item display with tooltip-fetched icon/name/quality. */
-function GearRow({ itemId, enchantId, slotLabel, equippedItemIds }: { itemId: number; enchantId: number | null; slotLabel: string; equippedItemIds?: ReadonlySet<number> }) {
+function GearRow({ itemId, enchantId, gemIds, slotLabel, equippedItemIds }: { itemId: number; enchantId: number | null; gemIds: readonly number[]; slotLabel: string; equippedItemIds?: ReadonlySet<number> }) {
   const isEmpty = itemId === 0;
   const tooltip = useItemTooltip(
     !isEmpty ? { itemId, enchant: enchantId ?? undefined } : null,
@@ -111,7 +111,7 @@ function GearRow({ itemId, enchantId, slotLabel, equippedItemIds }: { itemId: nu
           className="p-0 bg-transparent border-0 z-[10000]"
           hideArrow
         >
-          <ItemTooltip item={tooltip.data} equippedItemIds={equippedItemIds} />
+          <ItemTooltip item={tooltip.data} gemIds={gemIds} equippedItemIds={equippedItemIds} />
         </TooltipContent>
       </Tooltip>
     </TooltipProvider>
@@ -391,6 +391,7 @@ export function EquipmentContent(props: PanelRenderProps<EquipmentResult>) {
                   key={i}
                   itemId={g?.itemId ?? 0}
                   enchantId={g?.enchantId ?? null}
+                  gemIds={g?.gemIds ?? []}
                   slotLabel={slot.label}
                   equippedItemIds={equippedItemIds}
                 />

@@ -24,7 +24,7 @@ describe("Equipment deriveCapabilities", () => {
 
   it("detects gear, enchants, talents, and multiple players", () => {
     const result = equipmentProcessor.createState();
-    result.players.set("a", player({ guid: "a", gear: [{ itemId: 1, enchantId: 2, temporaryEnchantId: null }], gearCount: 1, talents: { summary: [31, 0, 20], trees: ["1", "", "1"] } }));
+    result.players.set("a", player({ guid: "a", gear: [{ itemId: 1, enchantId: 2, temporaryEnchantId: null, gemIds: [] }], gearCount: 1, talents: { summary: [31, 0, 20], trees: ["1", "", "1"] } }));
     result.players.set("b", player({ guid: "b" }));
     expect(deriveCapabilities(result)).toEqual({ hasPlayers: true, hasMultiplePlayers: true, hasGear: true, hasEnchants: true, hasTalents: true });
   });

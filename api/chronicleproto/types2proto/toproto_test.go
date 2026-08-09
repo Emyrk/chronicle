@@ -8,6 +8,7 @@ import (
 	"github.com/Emyrk/chronicle/combatlog/parser/common/messages"
 	"github.com/Emyrk/chronicle/combatlog/parser/guid"
 	"github.com/Emyrk/chronicle/combatlog/parser/types"
+	"github.com/Emyrk/chronicle/combatlog/parser/types/combatant"
 	"github.com/Emyrk/chronicle/database/gamedb/chrondbc"
 	"github.com/stretchr/testify/require"
 )
@@ -15,6 +16,19 @@ import (
 // arcaneSpell is a minimal DBC spell whose magic school is Arcane.
 func arcaneSpell() *chrondbc.Spell {
 	return &chrondbc.Spell{School: chrondbc.SchoolArcane}
+}
+
+func TestGearSlotPreservesGemPositions(t *testing.T) {
+	t.Parallel()
+
+	got := GearSlot(combatant.GearItem{
+		ItemID: 51396,
+		Gems:   [4]int{0, 0, 41398, 0},
+	})
+
+	require.Equal(t, int32(51396), got.ItemId)
+	require.Equal(t, []int32{0, 0, 41398, 0}, got.GemIds)
+	require.Nil(t, GearSlot(combatant.GearItem{ItemID: 50633}).GemIds)
 }
 
 func TestResurrection(t *testing.T) {
