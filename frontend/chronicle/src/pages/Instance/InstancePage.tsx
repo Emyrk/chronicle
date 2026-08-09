@@ -5,6 +5,7 @@ import { useInstance, useInstanceYoutube, useAuthorizationCheck } from "@/api/qu
 import { useAuth } from "@/hooks/useAuth";
 import { InstanceEventsProvider } from "@/hooks/instanceEvents";
 import { DatasetProvider } from "@/hooks/useDatasetId";
+import { PlayerSpecializationProvider } from "@/components/ui/PlayerMetricChart/PlayerSpecializationContext";
 import type { ActivityPeriod, InstancePlayer, InstanceUnit, WoWEncounterWithHostiles, KillType, VehicleControlMetadata } from "@/api/typesGenerated";
 import { Card } from "@/components/ui/Card/Card";
 import { Button } from "@/components/ui/button";
@@ -438,23 +439,28 @@ export function InstancePage() {
     <SyncModeProvider>
       <TimeRangeProvider totalDurationMs={totalEncounterDurationMs}>
         <InstanceEventsProvider instanceId={instance.id}>
-          {tenantGate.banner && (
-            <div className="w-full px-4 pt-4">
-              {tenantGate.banner}
-            </div>
-          )}
-          <AddonMissingBanner instance={instance} />
-          <InstancePageInner
-            instance={instance}
+          <PlayerSpecializationProvider
+            datasetId={instance.datasetId}
             selectedEncounterIds={selectedEncounterIds}
-            onSelectEncounters={setUserSelectedEncounterIds}
-            youtubeData={youtubeData}
-            selectedEncounterTimes={selectedEncounterTimes}
-            logDetailUrl={logDetailUrl}
-            rawEncounters={apiInstance?.encounters}
-            canAdminLogs={canAdminLogs}
-            duplicateGroupId={apiInstance?.duplicate_group_id}
-          />
+          >
+            {tenantGate.banner && (
+              <div className="w-full px-4 pt-4">
+                {tenantGate.banner}
+              </div>
+            )}
+            <AddonMissingBanner instance={instance} />
+            <InstancePageInner
+              instance={instance}
+              selectedEncounterIds={selectedEncounterIds}
+              onSelectEncounters={setUserSelectedEncounterIds}
+              youtubeData={youtubeData}
+              selectedEncounterTimes={selectedEncounterTimes}
+              logDetailUrl={logDetailUrl}
+              rawEncounters={apiInstance?.encounters}
+              canAdminLogs={canAdminLogs}
+              duplicateGroupId={apiInstance?.duplicate_group_id}
+            />
+          </PlayerSpecializationProvider>
         </InstanceEventsProvider>
       </TimeRangeProvider>
     </SyncModeProvider>

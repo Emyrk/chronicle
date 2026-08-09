@@ -16,10 +16,13 @@ const player: PlayerMetricChartRow = {
   color: "red",
 };
 
-function renderRow(animateValues: boolean): string {
+function renderRow(
+  animateValues: boolean,
+  rowPlayer: PlayerMetricChartRow = player,
+): string {
   return renderToStaticMarkup(
     <PlayerMetricRow
-      player={player}
+      player={rowPlayer}
       rowHeight={30}
       maximumValue={2_000}
       summedValue={1_000}
@@ -42,6 +45,28 @@ describe("PlayerMetricRow", () => {
 
     expect(markup).toContain("transition:width 0.3s ease");
     expect(markup).toContain("transition:left 0.3s ease, width 0.3s ease");
+  });
+
+  it("renders a specialization icon when one is resolved", () => {
+    const markup = renderRow(false, {
+      ...player,
+      specializationIconUrl: "https://icons.example/fury.webp",
+    });
+
+    expect(markup).toContain('src="https://icons.example/fury.webp"');
+    expect(markup).toContain('data-icon-fallback="spec"');
+    expect(markup).toContain('alt="Fire"');
+  });
+
+  it("keeps the class icon fallback when no specialization icon exists", () => {
+    const markup = renderRow(false, {
+      ...player,
+      specialization: "",
+    });
+
+    expect(markup).toContain('src="/c/icons/class_mage.png"');
+    expect(markup).toContain('data-icon-fallback="class"');
+    expect(markup).toContain('alt="Mage"');
   });
 
   it("sizes the metric badge to its value without a fixed minimum width", () => {
