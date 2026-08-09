@@ -278,7 +278,7 @@ export function ItemTooltip({ item, className, includeReferenceLinks = false, sh
           const gem = gemQueries[i]?.data;
           if (gem) {
             return (
-              <div key={i} className={cn("flex items-center gap-1.5", QUALITY_COLORS[gem.quality] ?? "text-white")}>
+              <div key={i} className="flex items-center gap-1.5 text-white">
                 <img src={buildIconUrl(gem.icon, iconBaseUrl)} alt="" width={12} height={12} className="inline-block rounded-sm" />
                 {gem.enchantment ?? gem.name}
               </div>
