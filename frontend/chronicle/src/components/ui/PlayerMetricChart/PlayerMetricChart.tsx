@@ -299,7 +299,12 @@ function DraggablePinnedTooltip({ player, initialPosition, positionOverride, onC
         >
           {/* Header */}
           <div className="flex shrink-0 items-center gap-2 border-b border-border bg-background/45 px-2.5 py-1.5">
-            <BreakoutIdentity color={player.color} name={player.playerName} className={player.className} />
+            <BreakoutIdentity
+              color={player.color}
+              name={player.playerName}
+              className={player.className}
+              specialization={player.specialization}
+            />
             {panelTitle && (
               <span className="ml-auto border-l border-border pl-2 text-2xs text-muted-foreground">
                 {panelTitle}
@@ -346,7 +351,12 @@ function DraggablePinnedTooltip({ player, initialPosition, positionOverride, onC
         style={{ cursor: isDragging ? 'grabbing' : 'grab' }}
       >
         <GripHorizontal className="h-3 w-3 shrink-0 text-muted-foreground" />
-        <BreakoutIdentity color={player.color} name={player.playerName} className={player.className} />
+        <BreakoutIdentity
+          color={player.color}
+          name={player.playerName}
+          className={player.className}
+          specialization={player.specialization}
+        />
         {panelTitle && (
           <span className="ml-auto border-l border-border pl-2 text-2xs text-muted-foreground">
             {panelTitle}

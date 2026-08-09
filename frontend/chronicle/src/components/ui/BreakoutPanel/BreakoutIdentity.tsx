@@ -4,6 +4,7 @@ interface BreakoutIdentityProps {
   color: string;
   name: string;
   className: string;
+  specialization?: string;
   compact?: boolean;
 }
 
@@ -11,6 +12,7 @@ export function BreakoutIdentity({
   color,
   name,
   className,
+  specialization,
   compact = true,
 }: BreakoutIdentityProps) {
   return (
@@ -37,7 +39,7 @@ export function BreakoutIdentity({
         )}
         data-breakout-identity-class
       >
-        {className}
+        {specialization ? `${specialization} ${className}` : className}
       </span>
     </div>
   );
