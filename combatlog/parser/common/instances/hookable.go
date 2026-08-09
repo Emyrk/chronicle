@@ -194,9 +194,9 @@ func NewHookable(ctx context.Context, logger *slog.Logger, db *unitdb.Units, z z
 		overviewTracker,
 	}...)
 	switch format {
-	case database.LogFormat112aCcAddon, database.LogFormat112aSuperwowAddon:
-		// 1.12 does not record overheals in the logs, so this hook derives
-		// msg.Overheal from tracked health deficits. It MUST run before any
+	case database.LogFormat112aCcAddon, database.LogFormat112aSuperwowAddon, database.LogFormat243CcAddon:
+		// 1.12 and 2.4.3 do not record overheals in the logs, so this hook
+		// derives msg.Overheal from tracked health deficits. It MUST run before any
 		// hook that reads Overheal (e.g. the DPS tracker's effective-healing
 		// accumulation): hooks execute in slice order, and mutating hooks
 		// registered after a reader leave the reader seeing Overheal == 0,

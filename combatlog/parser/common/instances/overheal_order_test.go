@@ -15,17 +15,19 @@ import (
 )
 
 // TestOverhealingHookRunsBeforeTrackers pins the hook registration order for
-// 1.12 formats: the Overhealing hook derives msg.Overheal from health
-// deficits, and the DPS tracker subtracts Overheal to accumulate effective
-// healing. Hooks execute in slice order, so Overhealing must come first —
-// otherwise the tracker silently records total healing (regression: healing
-// parses were computed from total healing instead of effective + absorbs).
+// formats without recorded overhealing: the Overhealing hook derives
+// msg.Overheal from health deficits, and the DPS tracker subtracts Overheal to
+// accumulate effective healing. Hooks execute in slice order, so Overhealing
+// must come first. Otherwise the tracker silently records total healing,
+// causing healing parses to use total healing instead of effective healing plus
+// absorbs.
 func TestOverhealingHookRunsBeforeTrackers(t *testing.T) {
 	t.Parallel()
 
 	for _, format := range []database.LogFormat{
 		database.LogFormat112aCcAddon,
 		database.LogFormat112aSuperwowAddon,
+		database.LogFormat243CcAddon,
 	} {
 		t.Run(string(format), func(t *testing.T) {
 			t.Parallel()
@@ -46,7 +48,7 @@ func TestOverhealingHookRunsBeforeTrackers(t *testing.T) {
 					trackerIdx = i
 				}
 			}
-			require.NotEqual(t, -1, overhealIdx, "Overhealing hook must be registered for 1.12 formats")
+			require.NotEqual(t, -1, overhealIdx, "Overhealing hook must be registered for formats without recorded overhealing")
 			require.NotEqual(t, -1, trackerIdx, "DPS tracker must be registered when Rankings are set")
 			require.Less(t, overhealIdx, trackerIdx,
 				"Overhealing must run before the DPS tracker so effective healing sees msg.Overheal")
