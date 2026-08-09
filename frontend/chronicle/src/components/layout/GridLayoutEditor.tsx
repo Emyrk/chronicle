@@ -169,7 +169,8 @@ export function GridLayoutEditor({
           <div
             key={item.id}
             className={cn(
-              "group/resize-panel relative overflow-hidden rounded-lg border border-border bg-card shadow-sm",
+              "group/resize-panel relative rounded-lg border border-border bg-card shadow-sm",
+              item.kind === "strip" ? "overflow-visible focus-within:z-50" : "overflow-hidden",
               pulseFirstResizeHandle && index === 0 && "grid-layout-editor-pulse-resize",
             )}
           >
@@ -196,7 +197,11 @@ export function GridLayoutEditor({
                 </div>
               )
             )}
-            <div className={cn("overflow-auto styled-scrollbar", showItemHeader ? "h-[calc(100%-41px)] p-3" : "h-full p-0")}>
+            <div className={cn(
+              "styled-scrollbar",
+              item.kind === "strip" ? "overflow-visible" : "overflow-auto",
+              showItemHeader ? "h-[calc(100%-41px)] p-3" : "h-full p-0",
+            )}>
               {renderItem(item)}
             </div>
           </div>
