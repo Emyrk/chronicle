@@ -219,8 +219,11 @@ func (w *WorkerLogParse) Work(ctx context.Context, job *river.Job[ArgsLogParse])
 		if realmName == "" {
 			jobResult = "cancelled"
 			msg := fmt.Sprintf("no realm info found in log (format %s)", logFormat)
-			if logFormat == database.LogFormat243CcAddon || logFormat == database.LogFormat335aCcAddon {
-				msg += "; the ChronicleCompanion addon is required for client-side CLEU logs"
+			switch logFormat {
+			case database.LogFormat243CcAddon:
+				msg += "; the ChronicleCompanionTBC addon is required for 2.4.3 client-side logs (https://github.com/Emyrk/ChronicleCompanionTBC)"
+			case database.LogFormat335aCcAddon:
+				msg += "; the ChronicleCompanionWoTLK addon is required for 3.3.5a client-side logs (https://github.com/Emyrk/ChronicleCompanionWoTLK)"
 			}
 			return river.JobCancel(fmt.Errorf("%s", msg))
 		}
