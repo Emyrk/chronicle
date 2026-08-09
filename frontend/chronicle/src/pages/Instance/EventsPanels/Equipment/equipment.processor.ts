@@ -7,7 +7,7 @@ export interface PlayerSnapshot {
   race: string;
   gender: number;
   guildName: string | null;
-  gear: { itemId: number; enchantId: number | null; temporaryEnchantId: number | null; gemIds: number[] }[];
+  gear: { itemId: number; enchantId: number | null; temporaryEnchantId: number | null; gemEnchantIds: number[] }[];
   gearCount: number;
   talents: { summary: number[]; trees: string[] } | null;
 }
@@ -34,7 +34,7 @@ export const equipmentProcessor: PanelProcessor<EquipmentResult, CombatantInfoPr
         itemId: g.itemId,
         enchantId: g.enchantId,
         temporaryEnchantId: g.temporaryEnchantId,
-        gemIds: g.gemIds.slice(),
+        gemEnchantIds: g.gemEnchantIds.slice(),
       })),
       gearCount: event.gearCount,
       talents: event.talents,

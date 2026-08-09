@@ -179,6 +179,7 @@ type sqlcQuerier interface {
 	GetGamePlayerByGUID(ctx context.Context, arg GetGamePlayerByGUIDParams) (GetGamePlayerByGUIDRow, error)
 	GetGearListByID(ctx context.Context, id uuid.UUID) (GearList, error)
 	GetGearStatWeightByID(ctx context.Context, id uuid.UUID) (GearStatWeight, error)
+	GetGemItemIDByEnchantID(ctx context.Context, arg GetGemItemIDByEnchantIDParams) (int32, error)
 	GetGuildByID(ctx context.Context, id uuid.UUID) (GetGuildByIDRow, error)
 	GetGuildJoinRequestByUser(ctx context.Context, arg GetGuildJoinRequestByUserParams) (GuildJoinRequest, error)
 	// Guild Pages

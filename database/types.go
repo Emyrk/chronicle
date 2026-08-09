@@ -163,13 +163,14 @@ func (t Video) Value() (driver.Value, error) {
 type PlayerOutfit [19]PlayerGear
 
 type PlayerGear struct {
-	ItemID      int32   `json:"item_id"`
-	EnchantID   *int32  `json:"enchant_id,omitempty"`
-	GemIDs      []int32 `json:"gem_ids,omitempty"`
-	ItemName    string  `json:"item_name,omitempty"`
-	ItemQuality int32   `json:"item_quality,omitempty"`
-	ItemIcon    string  `json:"item_icon,omitzero"`
-	TransmogID  *int32  `json:"transmog_id,omitempty"`
+	ItemID    int32  `json:"item_id"`
+	EnchantID *int32 `json:"enchant_id,omitempty"`
+	// GemEnchantIDs stores SpellItemEnchantment IDs under the legacy JSON key.
+	GemEnchantIDs []int32 `json:"gem_ids,omitempty"`
+	ItemName      string  `json:"item_name,omitempty"`
+	ItemQuality   int32   `json:"item_quality,omitempty"`
+	ItemIcon      string  `json:"item_icon,omitzero"`
+	TransmogID    *int32  `json:"transmog_id,omitempty"`
 	// ItemLevel is nil when the item's template metadata was not found at
 	// parse time (older rows predate this field entirely).
 	ItemLevel *int32 `json:"item_level,omitempty"`

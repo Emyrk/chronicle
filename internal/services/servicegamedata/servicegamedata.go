@@ -75,6 +75,7 @@ func datasetIDFromContext(ctx context.Context) uuid.UUID {
 
 func (s *Service) setupRoutes(_ *authz.Authz) {
 	s.router.Get("/tooltip/item/{item_id}", s.handleItemTooltip)
+	s.router.Get("/tooltip/gem/{enchant_id}", s.handleGemTooltip)
 	s.router.Get("/display/item/{item_id}", s.handleItemDisplay)
 	s.router.Get("/sim/item/{item_id}", s.handleItemSim)
 

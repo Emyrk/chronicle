@@ -150,13 +150,13 @@ export function GearSlot({ slotDef, item, side = "right", equippedItemIds, model
                 >
                   ✕
                 </button>
-                <ItemTooltip item={tooltipData.data!} gemIds={item.gem_ids} equippedItemIds={equippedItemIds} transmogName={transmogTooltipData.data?.name} />
+                <ItemTooltip item={tooltipData.data!} gemEnchantIds={item.gem_enchant_ids} equippedItemIds={equippedItemIds} transmogName={transmogTooltipData.data?.name} />
               </div>
             </div>
           ) : (
             /* Desktop: centered fixed tooltip */
             <div className="fixed inset-0 z-50 flex items-center justify-center -translate-y-[15%] pointer-events-none">
-              <ItemTooltip item={tooltipData.data!} gemIds={item.gem_ids} equippedItemIds={equippedItemIds} transmogName={transmogTooltipData.data?.name} />
+              <ItemTooltip item={tooltipData.data!} gemEnchantIds={item.gem_enchant_ids} equippedItemIds={equippedItemIds} transmogName={transmogTooltipData.data?.name} />
             </div>
           )}
         </>

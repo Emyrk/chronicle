@@ -8,7 +8,7 @@ export const STRIP_ORDER = [0, 1, 2, 14, 4, 8, 9, 5, 6, 7, 10, 11, 12, 13, 15, 1
 export interface OutfitItem {
   itemId: number;
   enchantId?: number;
-  gemIds?: readonly number[];
+  gemEnchantIds?: readonly number[];
   name: string;
   icon: string;
   quality: number;
@@ -40,7 +40,7 @@ export function useOutfitItems(
   const items = gear.map((item, i) => ({
     itemId: item.item_id,
     enchantId: item.enchant_id,
-    gemIds: item.gem_ids,
+    gemEnchantIds: item.gem_enchant_ids,
     name: item.item_name || tooltips[i].data?.name || "",
     icon: item.item_icon || tooltips[i].data?.icon || "",
     quality: item.item_quality ?? tooltips[i].data?.quality ?? 1,

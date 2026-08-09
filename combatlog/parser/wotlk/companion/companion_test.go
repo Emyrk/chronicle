@@ -42,7 +42,7 @@ func TestFeed_MultiSlotMessage(t *testing.T) {
 	p := newTestParser()
 
 	// First slot: starts the message, no closing ']'.
-	msgs, err := p.Feed(testTS, `[4P0x060000000008DCCC;G1.51396.3820.41398.40014.0.0.0.264:2.50633.0.0.0.0.0.0`)
+	msgs, err := p.Feed(testTS, `[4P0x060000000008DCCC;G1.51396.3820.3637.3454.0.0.0.264:2.50633.0.0.0.0.0.0`)
 	require.NoError(t, err)
 	assert.Empty(t, msgs, "should not produce messages yet")
 
@@ -351,7 +351,7 @@ func TestParsePlayer_Gear(t *testing.T) {
 	t.Parallel()
 	p := newTestParser()
 
-	msgs, err := p.Feed(testTS, `[5P0x060000000008DCCC;G1.51396.3820.41398.40014.0.0.0.264:2.50633.0.0.0.0.0.0.245]`)
+	msgs, err := p.Feed(testTS, `[5P0x060000000008DCCC;G1.51396.3820.3637.3454.0.0.0.264:2.50633.0.0.0.0.0.0.245]`)
 	require.NoError(t, err)
 	require.Len(t, msgs, 1)
 
@@ -363,7 +363,7 @@ func TestParsePlayer_Gear(t *testing.T) {
 	assert.Equal(t, 51396, g0.ItemID)
 	require.NotNil(t, g0.EnchantID)
 	assert.Equal(t, 3820, *g0.EnchantID)
-	assert.Equal(t, [4]int{41398, 40014, 0, 0}, g0.Gems)
+	assert.Equal(t, [4]int{3637, 3454, 0, 0}, g0.GemEnchantIDs)
 	assert.Equal(t, 264, g0.ItemLevel)
 
 	// Slot 2 = Neck (index 1)
@@ -583,13 +583,13 @@ func TestGearItem_NewFields(t *testing.T) {
 	t.Parallel()
 
 	item := combatant.GearItem{
-		ItemID:    51396,
-		SuffixID:  0,
-		Gems:      [4]int{41398, 40014, 0, 0},
-		ItemLevel: 264,
+		ItemID:        51396,
+		SuffixID:      0,
+		GemEnchantIDs: [4]int{3637, 3454, 0, 0},
+		ItemLevel:     264,
 	}
 	assert.Equal(t, 51396, item.ItemID)
-	assert.Equal(t, [4]int{41398, 40014, 0, 0}, item.Gems)
+	assert.Equal(t, [4]int{3637, 3454, 0, 0}, item.GemEnchantIDs)
 	assert.Equal(t, 264, item.ItemLevel)
 }
 

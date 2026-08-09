@@ -143,8 +143,8 @@ func (g *Tracker) Insert(ctx context.Context, udb *unitdb.Units, instanceID uuid
 		for i, item := range player.GearSetups {
 			hasGear = hasGear || item.ItemID != 0
 			dbGear[i] = database.PlayerGear{
-				ItemID: int32(item.ItemID),
-				GemIDs: nonZeroGemIDs(item.Gems),
+				ItemID:        int32(item.ItemID),
+				GemEnchantIDs: optionalGemEnchantIDs(item.GemEnchantIDs),
 			}
 			if item.EnchantID != nil {
 				dbGear[i].EnchantID = ptr.Ref(int32(*item.EnchantID))
@@ -266,7 +266,7 @@ func sortedPlayerGUIDs(players map[guid.GUID]combatant.Combatant) []guid.GUID {
 	return guids
 }
 
-func nonZeroGemIDs(gems [4]int) []int32 {
+func optionalGemEnchantIDs(gems [4]int) []int32 {
 	if gems == [4]int{} {
 		return nil
 	}

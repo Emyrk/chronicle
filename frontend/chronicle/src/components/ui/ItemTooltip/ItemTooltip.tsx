@@ -4,7 +4,7 @@ import { iconUrl as buildIconUrl } from "@/config/iconUrl";
 import { useIconBaseUrl } from "@/hooks/useDatasetId";
 import { useQueries } from "@tanstack/react-query";
 import type { ItemTooltip as ItemTooltipData, ItemSpell } from "@/api/typesGenerated";
-import { fetchItemTooltip } from "@/api/gamedata";
+import { fetchGemTooltip } from "@/api/gamedata";
 import { useSpell } from "@/api/queries";
 import {
   type WoWSpell,
@@ -138,8 +138,8 @@ interface ItemTooltipProps {
   /** When true, spell names link to /wowdb/spell/{id} */
   includeReferenceLinks?: boolean;
   showItemLevel?: boolean;
-  /** Gem item IDs by socket position. Zero means the socket is empty. */
-  gemIds?: readonly number[];
+  /** Gem enchantment IDs from the item link, by socket position. Zero means empty. */
+  gemEnchantIds?: readonly number[];
   /** Set of item entry IDs the player has equipped (for set piece highlighting). */
   equippedItemIds?: ReadonlySet<number>;
   /** If the item is transmogrified, the name of the transmog appearance. */
@@ -151,13 +151,13 @@ interface ItemTooltipProps {
  * Renders a full item tooltip with stats, damage, set bonuses, etc.
  * Designed to match the in-game tooltip appearance.
  */
-export function ItemTooltip({ item, className, includeReferenceLinks = false, showItemLevel = false, gemIds = [], equippedItemIds, transmogName }: ItemTooltipProps) {
+export function ItemTooltip({ item, className, includeReferenceLinks = false, showItemLevel = false, gemEnchantIds = [], equippedItemIds, transmogName }: ItemTooltipProps) {
   const iconBaseUrl = useIconBaseUrl();
   const gemQueries = useQueries({
-    queries: gemIds.map((gemId) => ({
-      queryKey: ["item-tooltip", gemId, undefined, undefined],
-      queryFn: () => fetchItemTooltip({ itemId: gemId }),
-      enabled: gemId > 0,
+    queries: gemEnchantIds.map((enchantId) => ({
+      queryKey: ["gem-tooltip", enchantId],
+      queryFn: () => fetchGemTooltip(enchantId),
+      enabled: enchantId > 0,
       staleTime: 5 * 60 * 1000,
       retry: false,
     })),
@@ -266,7 +266,7 @@ export function ItemTooltip({ item, className, includeReferenceLinks = false, sh
         ))}
 
         {/* Gem Sockets */}
-        {Array.from({ length: Math.max(item.sockets?.length ?? 0, gemIds.length) }, (_, i) => {
+        {Array.from({ length: Math.max(item.sockets?.length ?? 0, gemEnchantIds.length) }, (_, i) => {
           const socket = item.sockets?.[i];
           const info = socket ? SOCKET_INFO[socket.color] : undefined;
           const gem = gemQueries[i]?.data;
@@ -274,7 +274,7 @@ export function ItemTooltip({ item, className, includeReferenceLinks = false, sh
             return (
               <div key={i} className={cn("flex items-center gap-1.5", QUALITY_COLORS[gem.quality] ?? "text-white")}>
                 <img src={buildIconUrl(gem.icon, iconBaseUrl)} alt="" width={12} height={12} className="inline-block rounded-sm" />
-                {gem.name}
+                {gem.enchantment ?? gem.name}
               </div>
             );
           }

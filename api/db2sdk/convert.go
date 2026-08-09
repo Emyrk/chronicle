@@ -698,14 +698,14 @@ func ArmoryPlayer(row database.GetGamePlayerByGUIDRow) chroniclesdk.ArmoryPlayer
 	if row.Gear != nil {
 		for i, g := range row.Gear {
 			gear[i] = chroniclesdk.PlayerGear{
-				ItemID:      g.ItemID,
-				EnchantID:   g.EnchantID,
-				GemIDs:      g.GemIDs,
-				ItemName:    g.ItemName,
-				ItemQuality: g.ItemQuality,
-				ItemIcon:    g.ItemIcon,
-				TransmogID:  g.TransmogID,
-				ItemLevel:   g.ItemLevel,
+				ItemID:        g.ItemID,
+				EnchantID:     g.EnchantID,
+				GemEnchantIDs: g.GemEnchantIDs,
+				ItemName:      g.ItemName,
+				ItemQuality:   g.ItemQuality,
+				ItemIcon:      g.ItemIcon,
+				TransmogID:    g.TransmogID,
+				ItemLevel:     g.ItemLevel,
 			}
 		}
 	}
@@ -744,14 +744,14 @@ func ArmoryGearSnapshot(row database.GetPlayerGearHistoryRow) chroniclesdk.Armor
 	var gear chroniclesdk.PlayerOutfit
 	for i, g := range row.Gear {
 		gear[i] = chroniclesdk.PlayerGear{
-			ItemID:      g.ItemID,
-			EnchantID:   g.EnchantID,
-			GemIDs:      g.GemIDs,
-			ItemName:    g.ItemName,
-			ItemQuality: g.ItemQuality,
-			ItemIcon:    g.ItemIcon,
-			TransmogID:  g.TransmogID,
-			ItemLevel:   g.ItemLevel,
+			ItemID:        g.ItemID,
+			EnchantID:     g.EnchantID,
+			GemEnchantIDs: g.GemEnchantIDs,
+			ItemName:      g.ItemName,
+			ItemQuality:   g.ItemQuality,
+			ItemIcon:      g.ItemIcon,
+			TransmogID:    g.TransmogID,
+			ItemLevel:     g.ItemLevel,
 		}
 	}
 
