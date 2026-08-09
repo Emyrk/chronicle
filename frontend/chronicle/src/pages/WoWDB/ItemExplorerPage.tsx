@@ -3,9 +3,9 @@ import { useSearchParams, Link } from "react-router-dom";
 import { Search, Loader2, Package, X, ArrowUpDown, ArrowDown, ArrowUp, ChevronDown, Check } from "lucide-react";
 import { useSearchItems } from "@/api/gamedata";
 import { useItemTooltip } from "@/api/gamedata";
+import { ItemIcon } from "@/components/ui/ItemIcon/ItemIcon";
 import { ItemTooltip } from "@/components/ui/ItemTooltip";
 import { Tooltip, TooltipTrigger, TooltipContent } from "@/components/ui/Tooltip/tooltip";
-import { iconUrl } from "@/config/iconUrl";
 import { cn } from "@/lib/utils";
 import type { ItemSearchResult } from "@/api/typesGenerated";
 
@@ -19,16 +19,6 @@ const QUALITY_COLORS: Record<number, string> = {
   4: "text-quality-epic",
   5: "text-quality-legendary",
   6: "text-quality-artifact",
-};
-
-const QUALITY_BORDER: Record<number, string> = {
-  0: "border-gray-600/60",
-  1: "border-gray-500/60",
-  2: "border-green-500/60",
-  3: "border-blue-400/60",
-  4: "border-purple-500/60",
-  5: "border-orange-400/60",
-  6: "border-yellow-400/60",
 };
 
 const QUALITY_LABELS: Record<number, string> = {
@@ -171,32 +161,6 @@ function getDetailsLabel(item: ItemSearchResult): string {
 }
 
 // --- Components ---
-
-function ItemIcon({ icon, quality, size = 32 }: { icon: string; quality: number; size?: number }) {
-  const url = iconUrl(icon);
-  const border = QUALITY_BORDER[quality] ?? QUALITY_BORDER[0];
-
-  if (!url) {
-    return (
-      <div
-        className={cn("rounded border bg-gray-800 flex items-center justify-center shrink-0", border)}
-        style={{ width: size, height: size }}
-      >
-        <Package className="h-4 w-4 text-gray-500" />
-      </div>
-    );
-  }
-
-  return (
-    <img
-      src={url}
-      alt=""
-      className={cn("rounded border shrink-0", border)}
-      style={{ width: size, height: size }}
-      loading="lazy"
-    />
-  );
-}
 
 function HoverTooltip({ itemId, children }: { itemId: number; children: React.ReactNode }) {
   const { data: item } = useItemTooltip({ itemId });
