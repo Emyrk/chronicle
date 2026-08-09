@@ -241,8 +241,9 @@ func (*Realm) isMessage()            {}
 
 type Versions struct {
 	MessageBase
-	Player   *guid.GUID
-	Versions map[string]string
+	Player    *guid.GUID
+	Versions  map[string]string
+	SessionID string // companion addon load/reload session; empty for formats without one
 }
 
 func (v Versions) Affects() []guid.GUID { return []guid.GUID{} }
@@ -666,6 +667,32 @@ func TimedOut(ts time.Time) Message {
 
 func (t Timeout) Affects() []guid.GUID { return []guid.GUID{} }
 func (*Timeout) isMessage()            {}
+
+type VehicleControlAction string
+
+const (
+	VehicleControlAssign  VehicleControlAction = "assign"
+	VehicleControlRelease VehicleControlAction = "release"
+)
+
+// VehicleControl records a timestamped vehicle-to-controller relationship
+// observed by the companion addon. MessageBase.Timestamp is the embedded
+// effective timestamp, not the later combat-log carrier timestamp.
+type VehicleControl struct {
+	MessageBase
+	Action         VehicleControlAction
+	VehicleGUID    guid.GUID
+	ControllerGUID guid.GUID
+	VehicleName    string
+	ControllerName string
+	ObservedAt     time.Time
+	Ordinal        uint64
+}
+
+func (v VehicleControl) Affects() []guid.GUID {
+	return []guid.GUID{v.VehicleGUID, v.ControllerGUID}
+}
+func (*VehicleControl) isMessage() {}
 
 // NewOwner can be used to change the owner of a given unit.
 // Useful for enslave demon

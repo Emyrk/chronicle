@@ -14,6 +14,7 @@ import (
 	"github.com/Emyrk/chronicle/combatlog/parser/common/instances/instancehook"
 	"github.com/Emyrk/chronicle/combatlog/parser/common/messages"
 	"github.com/Emyrk/chronicle/combatlog/parser/common/unitdb"
+	"github.com/Emyrk/chronicle/combatlog/parser/common/vehicles"
 	"github.com/Emyrk/chronicle/combatlog/parser/guid"
 	"github.com/Emyrk/chronicle/combatlog/parser/types"
 	"github.com/Emyrk/chronicle/combatlog/parser/types/zone"
@@ -492,6 +493,48 @@ func TestHookableFinalize_LogsNonfatalDrainExhaustion(t *testing.T) {
 	require.Contains(t, logs.String(), "fight remained active after finalization ticks")
 	require.Contains(t, logs.String(), "instance=\"Test Instance\"")
 	require.Equal(t, base.Add(finalizeTickHorizon), h.lastProcessedAt)
+}
+
+func TestHookableFinalize_IncludesOverlappingVehicleMetadata(t *testing.T) {
+	t.Parallel()
+
+	base := time.Date(2026, time.January, 1, 0, 0, 0, 0, time.UTC)
+	vehicle := guid.GUID(0xF15000812400008F)
+	controller := guid.GUID(0x000000000000000B)
+	tracker := vehicles.New()
+	tracker.Process(&messages.Versions{
+		MessageBase: messages.Base(base.Add(-10 * time.Second)),
+		SessionID:   "vehicle-session",
+	})
+	tracker.Process(&messages.VehicleControl{
+		MessageBase:    messages.Base(base.Add(-5 * time.Second)),
+		Action:         messages.VehicleControlAssign,
+		VehicleGUID:    vehicle,
+		ControllerGUID: controller,
+		Ordinal:        0,
+	})
+	tracker.Process(&messages.VehicleControl{
+		MessageBase:    messages.Base(base.Add(10 * time.Second)),
+		Action:         messages.VehicleControlRelease,
+		VehicleGUID:    vehicle,
+		ControllerGUID: controller,
+		Ordinal:        1,
+	})
+
+	h := newFinalizeTestHookable(t)
+	h.AttachVehicleTracker(tracker)
+	startFinalizeTestFight(t, h, base)
+
+	result, err := h.Finalize(context.Background())
+	require.NoError(t, err)
+	require.Len(t, result.VehicleMetadata.Intervals, 1)
+	interval := result.VehicleMetadata.Intervals[0]
+	require.Equal(t, "vehicle-session", interval.SessionID)
+	require.Equal(t, vehicle, interval.VehicleGUID)
+	require.Equal(t, controller, interval.ControllerGUID)
+	require.Equal(t, base.Add(-5*time.Second).UnixMilli(), interval.AssignedAtMs)
+	require.NotNil(t, interval.ReleasedAtMs)
+	require.Equal(t, base.Add(10*time.Second).UnixMilli(), *interval.ReleasedAtMs)
 }
 
 type timeoutIgnoringCharacter struct {

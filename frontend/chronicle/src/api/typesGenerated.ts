@@ -3434,6 +3434,39 @@ export interface UserTalentBuild {
     readonly updated_at: string;
 }
 
+// From chroniclesdk/log.go
+export interface VehicleControlDiagnostic {
+    readonly kind: string;
+    readonly session_id?: string;
+    readonly timestamp_ms: number;
+    readonly ordinal: number;
+    readonly vehicle_guid: string;
+    readonly controller_guid: string;
+    readonly vehicle_name?: string;
+    readonly controller_name?: string;
+    readonly active_controller_guid?: string;
+}
+
+// From chroniclesdk/log.go
+export interface VehicleControlInterval {
+    readonly session_id?: string;
+    readonly vehicle_guid: string;
+    readonly controller_guid: string;
+    readonly vehicle_name?: string;
+    readonly controller_name?: string;
+    readonly assigned_at_ms: number;
+    readonly released_at_ms?: number;
+    readonly assigned_ordinal: number;
+    readonly release_reason?: string;
+    readonly inferred_release?: boolean;
+}
+
+// From chroniclesdk/log.go
+export interface VehicleControlMetadata {
+    readonly intervals?: readonly VehicleControlInterval[];
+    readonly diagnostics?: readonly VehicleControlDiagnostic[];
+}
+
 // From chroniclesdk/youtube.go
 export interface Video {
     readonly url: string;
@@ -3628,6 +3661,7 @@ export interface WoWInstance {
     readonly difficulty_name: string;
     readonly max_players: number;
     readonly dynamic_difficulty: number;
+    readonly vehicle_control_intervals?: VehicleControlMetadata;
 }
 
 // From chroniclesdk/log.go

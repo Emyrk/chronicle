@@ -68,6 +68,36 @@ type Guild struct {
 	CreatedAt time.Time `json:"created_at"`
 }
 
+type VehicleControlMetadata struct {
+	Intervals   []VehicleControlInterval   `json:"intervals,omitempty"`
+	Diagnostics []VehicleControlDiagnostic `json:"diagnostics,omitempty"`
+}
+
+type VehicleControlInterval struct {
+	SessionID       string     `json:"session_id,omitempty"`
+	VehicleGUID     GUIDString `json:"vehicle_guid"`
+	ControllerGUID  GUIDString `json:"controller_guid"`
+	VehicleName     string     `json:"vehicle_name,omitempty"`
+	ControllerName  string     `json:"controller_name,omitempty"`
+	AssignedAtMs    int64      `json:"assigned_at_ms"`
+	ReleasedAtMs    *int64     `json:"released_at_ms,omitempty"`
+	AssignedOrdinal uint64     `json:"assigned_ordinal"`
+	ReleaseReason   string     `json:"release_reason,omitempty"`
+	InferredRelease bool       `json:"inferred_release,omitempty"`
+}
+
+type VehicleControlDiagnostic struct {
+	Kind                 string      `json:"kind"`
+	SessionID            string      `json:"session_id,omitempty"`
+	TimestampMs          int64       `json:"timestamp_ms"`
+	Ordinal              uint64      `json:"ordinal"`
+	VehicleGUID          GUIDString  `json:"vehicle_guid"`
+	ControllerGUID       GUIDString  `json:"controller_guid"`
+	VehicleName          string      `json:"vehicle_name,omitempty"`
+	ControllerName       string      `json:"controller_name,omitempty"`
+	ActiveControllerGUID *GUIDString `json:"active_controller_guid,omitempty"`
+}
+
 type WoWInstance struct {
 	ID      uuid.UUID `json:"id"`
 	RealmID uuid.UUID `json:"realm_id"`
@@ -79,27 +109,28 @@ type WoWInstance struct {
 	// Format is the log group's parse format (e.g. "1.12a-cc-addon").
 	// Flavor is the server-mechanics tag set. Both come from the log group and
 	// are only populated on the detail endpoint.
-	Format            string            `json:"format,omitempty"`
-	Flavor            []string          `json:"flavor,omitempty"`
-	RealmName         string            `json:"realm_name,omitempty"`
-	ServerName        string            `json:"server_name,omitempty"`
-	TenantName        string            `json:"tenant_name,omitempty"`
-	TenantSlug        string            `json:"tenant_slug,omitempty"`
-	TenantIncludeAll  bool              `json:"tenant_include_in_all,omitempty"`
-	LogGroupID        uuid.UUID         `json:"log_group_id"`
-	Name              string            `json:"name"`
-	Slug              string            `json:"slug"`
-	StartTime         *time.Time        `json:"start_time,omitempty"`
-	EndTime           *time.Time        `json:"end_time,omitempty"`
-	Guild             *Guild            `json:"guild,omitempty"`
-	Capabilities      []string          `json:"capabilities"`
-	Versions          map[string]string `json:"versions"`
-	RecorderName      string            `json:"recorder_name"`
-	RecorderGUID      string            `json:"recorder_guid"`
-	DuplicateGroupID  *uuid.UUID        `json:"duplicate_group_id,omitempty"`
-	DifficultyName    string            `json:"difficulty_name"`
-	MaxPlayers        int               `json:"max_players"`
-	DynamicDifficulty int               `json:"dynamic_difficulty"`
+	Format                  string                  `json:"format,omitempty"`
+	Flavor                  []string                `json:"flavor,omitempty"`
+	RealmName               string                  `json:"realm_name,omitempty"`
+	ServerName              string                  `json:"server_name,omitempty"`
+	TenantName              string                  `json:"tenant_name,omitempty"`
+	TenantSlug              string                  `json:"tenant_slug,omitempty"`
+	TenantIncludeAll        bool                    `json:"tenant_include_in_all,omitempty"`
+	LogGroupID              uuid.UUID               `json:"log_group_id"`
+	Name                    string                  `json:"name"`
+	Slug                    string                  `json:"slug"`
+	StartTime               *time.Time              `json:"start_time,omitempty"`
+	EndTime                 *time.Time              `json:"end_time,omitempty"`
+	Guild                   *Guild                  `json:"guild,omitempty"`
+	Capabilities            []string                `json:"capabilities"`
+	Versions                map[string]string       `json:"versions"`
+	RecorderName            string                  `json:"recorder_name"`
+	RecorderGUID            string                  `json:"recorder_guid"`
+	DuplicateGroupID        *uuid.UUID              `json:"duplicate_group_id,omitempty"`
+	DifficultyName          string                  `json:"difficulty_name"`
+	MaxPlayers              int                     `json:"max_players"`
+	DynamicDifficulty       int                     `json:"dynamic_difficulty"`
+	VehicleControlIntervals *VehicleControlMetadata `json:"vehicle_control_intervals,omitempty"`
 }
 
 // KillType represents the outcome of an encounter.

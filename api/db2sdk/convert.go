@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/Emyrk/chronicle/api/chroniclesdk"
+	"github.com/Emyrk/chronicle/combatlog/parser/common/vehicles"
 	"github.com/Emyrk/chronicle/combatlog/parser/guid"
 	"github.com/Emyrk/chronicle/combatlog/parser/types"
 	"github.com/Emyrk/chronicle/database"
@@ -129,6 +130,44 @@ func WoWLogFile(file database.LogFile) chroniclesdk.WoWLogFile {
 	}
 }
 
+func VehicleControlMetadata(metadata vehicles.Metadata) *chroniclesdk.VehicleControlMetadata {
+	if len(metadata.Intervals) == 0 && len(metadata.Diagnostics) == 0 {
+		return nil
+	}
+	result := &chroniclesdk.VehicleControlMetadata{
+		Intervals:   make([]chroniclesdk.VehicleControlInterval, 0, len(metadata.Intervals)),
+		Diagnostics: make([]chroniclesdk.VehicleControlDiagnostic, 0, len(metadata.Diagnostics)),
+	}
+	for _, interval := range metadata.Intervals {
+		result.Intervals = append(result.Intervals, chroniclesdk.VehicleControlInterval{
+			SessionID:       interval.SessionID,
+			VehicleGUID:     interval.VehicleGUID,
+			ControllerGUID:  interval.ControllerGUID,
+			VehicleName:     interval.VehicleName,
+			ControllerName:  interval.ControllerName,
+			AssignedAtMs:    interval.AssignedAtMs,
+			ReleasedAtMs:    interval.ReleasedAtMs,
+			AssignedOrdinal: interval.AssignedOrdinal,
+			ReleaseReason:   string(interval.ReleaseReason),
+			InferredRelease: interval.InferredRelease,
+		})
+	}
+	for _, diagnostic := range metadata.Diagnostics {
+		result.Diagnostics = append(result.Diagnostics, chroniclesdk.VehicleControlDiagnostic{
+			Kind:                 string(diagnostic.Kind),
+			SessionID:            diagnostic.SessionID,
+			TimestampMs:          diagnostic.TimestampMs,
+			Ordinal:              diagnostic.Ordinal,
+			VehicleGUID:          diagnostic.VehicleGUID,
+			ControllerGUID:       diagnostic.ControllerGUID,
+			VehicleName:          diagnostic.VehicleName,
+			ControllerName:       diagnostic.ControllerName,
+			ActiveControllerGUID: diagnostic.ActiveControllerGUID,
+		})
+	}
+	return result
+}
+
 func WoWInstanceWithGuild(instance database.LogInstance, dbG *database.Guild) chroniclesdk.WoWInstance {
 	var g *chroniclesdk.Guild
 	if dbG != nil {
@@ -139,19 +178,20 @@ func WoWInstanceWithGuild(instance database.LogInstance, dbG *database.Guild) ch
 		}
 	}
 	ret := chroniclesdk.WoWInstance{
-		ID:                instance.ID,
-		RealmID:           instance.RealmID,
-		LogGroupID:        instance.LogGroupID,
-		Name:              instance.Name,
-		Slug:              instance.HashedSlug.String,
-		Guild:             g,
-		Capabilities:      instance.Capabilities,
-		Versions:          map[string]string(instance.Versions),
-		RecorderName:      instance.RecorderName,
-		RecorderGUID:      instance.RecorderGuid,
-		DifficultyName:    instance.DifficultyName,
-		MaxPlayers:        int(instance.MaxPlayers),
-		DynamicDifficulty: int(instance.DynamicDifficulty),
+		ID:                      instance.ID,
+		RealmID:                 instance.RealmID,
+		LogGroupID:              instance.LogGroupID,
+		Name:                    instance.Name,
+		Slug:                    instance.HashedSlug.String,
+		Guild:                   g,
+		Capabilities:            instance.Capabilities,
+		Versions:                map[string]string(instance.Versions),
+		RecorderName:            instance.RecorderName,
+		RecorderGUID:            instance.RecorderGuid,
+		DifficultyName:          instance.DifficultyName,
+		MaxPlayers:              int(instance.MaxPlayers),
+		DynamicDifficulty:       int(instance.DynamicDifficulty),
+		VehicleControlIntervals: VehicleControlMetadata(instance.VehicleControlIntervals),
 	}
 	if instance.StartTime.Valid {
 		ret.StartTime = &instance.StartTime.Time
@@ -175,19 +215,20 @@ func WoWInstance(instance database.LogInstancesGuild) chroniclesdk.WoWInstance {
 		}
 	}
 	ret := chroniclesdk.WoWInstance{
-		ID:                instance.ID,
-		RealmID:           instance.RealmID,
-		LogGroupID:        instance.LogGroupID,
-		Name:              instance.Name,
-		Slug:              instance.HashedSlug.String,
-		Guild:             g,
-		Capabilities:      instance.Capabilities,
-		Versions:          map[string]string(instance.Versions),
-		RecorderName:      instance.RecorderName,
-		RecorderGUID:      instance.RecorderGuid,
-		DifficultyName:    instance.DifficultyName,
-		MaxPlayers:        int(instance.MaxPlayers),
-		DynamicDifficulty: int(instance.DynamicDifficulty),
+		ID:                      instance.ID,
+		RealmID:                 instance.RealmID,
+		LogGroupID:              instance.LogGroupID,
+		Name:                    instance.Name,
+		Slug:                    instance.HashedSlug.String,
+		Guild:                   g,
+		Capabilities:            instance.Capabilities,
+		Versions:                map[string]string(instance.Versions),
+		RecorderName:            instance.RecorderName,
+		RecorderGUID:            instance.RecorderGuid,
+		DifficultyName:          instance.DifficultyName,
+		MaxPlayers:              int(instance.MaxPlayers),
+		DynamicDifficulty:       int(instance.DynamicDifficulty),
+		VehicleControlIntervals: VehicleControlMetadata(instance.VehicleControlIntervals),
 	}
 	if instance.DuplicateGroupID.Valid {
 		ret.DuplicateGroupID = &instance.DuplicateGroupID.UUID

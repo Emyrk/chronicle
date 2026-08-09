@@ -14,6 +14,7 @@ import (
 	"github.com/Emyrk/chronicle/combatlog/parser/common/messages"
 	"github.com/Emyrk/chronicle/combatlog/parser/common/registry"
 	"github.com/Emyrk/chronicle/combatlog/parser/common/unitdb"
+	"github.com/Emyrk/chronicle/combatlog/parser/common/vehicles"
 	"github.com/Emyrk/chronicle/combatlog/parser/common/zoner"
 	"github.com/Emyrk/chronicle/combatlog/parser/types/realm"
 	"github.com/Emyrk/chronicle/combatlog/parser/types/zone"
@@ -57,6 +58,9 @@ type State struct {
 	// Friendly/Foe/Relationships, etc.
 	Units *unitdb.Units
 
+	// Vehicles tracks delayed companion vehicle-control records across the full log.
+	Vehicles *vehicles.Tracker
+
 	// Auras is the parse-wide aura tracker. It processes every aura message
 	// once and persists across zone/instance switches.
 	Auras *auras.Tracking
@@ -75,6 +79,7 @@ func NewWithInstanceResolver(ctx context.Context, logger *slog.Logger, res Insta
 	s := &State{
 		logger:           logger,
 		Units:            unitdb.New(),
+		Vehicles:         vehicles.New(),
 		CurrentZone:      zoner.NewLocation(),
 		instanceResolver: res,
 		Instances:        make([]*instances.Hookable, 0),
@@ -109,7 +114,9 @@ func (s *State) Process(m messages.Message) error {
 	if err != nil {
 		return fmt.Errorf("units process: %w", err)
 	}
+	s.Vehicles.Process(m)
 
+	forwardToInstance := true
 	switch typed := m.(type) {
 	case *messages.Realm:
 		s.CurrentRealm = &typed.Info
@@ -127,12 +134,17 @@ func (s *State) Process(m messages.Message) error {
 		//s.CastV2(typed)
 	case *messages.Slain:
 		//s.Slain(typed)
+	case *messages.VehicleControl:
+		// Vehicle records use an embedded effective timestamp and are collected
+		// parse-wide. Do not send the delayed metadata message through encounter
+		// processing as if it occurred at its carrier position.
+		forwardToInstance = false
 	}
 
 	// Process instance hooks BEFORE updating canonical aura state so that
 	// projection sees the pre-message tracker snapshot. This ensures the
 	// pull-starting message's aura is not duplicated by projection.
-	if s.CurrentInstance != nil {
+	if s.CurrentInstance != nil && forwardToInstance {
 		instanceStart := time.Now()
 		err := s.CurrentInstance.Process(m)
 		s.timings.Add("encounter_state.instance_process", time.Since(instanceStart))
@@ -238,6 +250,9 @@ func (s *State) matchOrCreateInstance(z messages.Zone) {
 			if s.CurrentVersions != nil {
 				s.CurrentInstance.SetVersions(s.CurrentVersions.Versions, s.CurrentVersions.Player)
 			}
+			// Vehicle control messages can arrive after the events they describe,
+			// so instances resolve metadata from the parse-wide tracker at finalization.
+			s.CurrentInstance.AttachVehicleTracker(s.Vehicles)
 			// Attach a projection adapter so the instance can project
 			// parse-wide aura state into encounter event streams.
 			s.CurrentInstance.AttachAuraProjection(s.Auras)

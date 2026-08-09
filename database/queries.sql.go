@@ -7,6 +7,7 @@ package database
 import (
 	"context"
 
+	"github.com/Emyrk/chronicle/combatlog/parser/common/vehicles"
 	"github.com/Emyrk/chronicle/combatlog/parser/guid"
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgtype"
@@ -5884,7 +5885,7 @@ func (q *sqlQuerier) GetInstanceEncounterCharacterFights(ctx context.Context, in
 
 const getInstancesByLogGroupID = `-- name: GetInstancesByLogGroupID :many
 SELECT
-  id, realm_id, log_group_id, name, hashed_slug, guild_id, capabilities, versions, recorder_name, recorder_guid, duplicate_group_id, start_time, end_time, difficulty_name, max_players, dynamic_difficulty, realm_name, guild_name, guild_realm_id, guild_created_at, server_name, tenant_name, tenant_slug, tenant_include_in_all, format, flavor
+  id, realm_id, log_group_id, name, hashed_slug, guild_id, capabilities, versions, recorder_name, recorder_guid, duplicate_group_id, start_time, end_time, difficulty_name, max_players, dynamic_difficulty, vehicle_control_intervals, realm_name, guild_name, guild_realm_id, guild_created_at, server_name, tenant_name, tenant_slug, tenant_include_in_all, format, flavor
 FROM
   log_instances_guild
 WHERE
@@ -5917,6 +5918,7 @@ func (q *sqlQuerier) GetInstancesByLogGroupID(ctx context.Context, logGroupID uu
 			&i.DifficultyName,
 			&i.MaxPlayers,
 			&i.DynamicDifficulty,
+			&i.VehicleControlIntervals,
 			&i.RealmName,
 			&i.GuildName,
 			&i.GuildRealmID,
@@ -5984,29 +5986,30 @@ func (q *sqlQuerier) InsertEncounter(ctx context.Context, arg InsertEncounterPar
 
 const insertInstance = `-- name: InsertInstance :one
 INSERT INTO
-  log_instances (id, realm_id, log_group_id, name, hashed_slug, guild_id, start_time, end_time, capabilities, versions, recorder_name, recorder_guid, parser_version, difficulty_name, max_players, dynamic_difficulty)
+  log_instances (id, realm_id, log_group_id, name, hashed_slug, guild_id, start_time, end_time, capabilities, versions, recorder_name, recorder_guid, parser_version, difficulty_name, max_players, dynamic_difficulty, vehicle_control_intervals)
 VALUES
-  ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16)
-RETURNING id, realm_id, log_group_id, name, hashed_slug, guild_id, start_time, end_time, capabilities, versions, recorder_name, recorder_guid, parser_version, duplicate_group_id, difficulty_name, max_players, dynamic_difficulty
+  ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17)
+RETURNING id, realm_id, log_group_id, name, hashed_slug, guild_id, start_time, end_time, capabilities, versions, recorder_name, recorder_guid, parser_version, duplicate_group_id, difficulty_name, max_players, dynamic_difficulty, vehicle_control_intervals
 `
 
 type InsertInstanceParams struct {
-	ID                uuid.UUID          `db:"id" json:"id"`
-	RealmID           uuid.UUID          `db:"realm_id" json:"realm_id"`
-	LogGroupID        uuid.UUID          `db:"log_group_id" json:"log_group_id"`
-	Name              string             `db:"name" json:"name"`
-	HashedSlug        pgtype.Text        `db:"hashed_slug" json:"hashed_slug"`
-	GuildID           uuid.NullUUID      `db:"guild_id" json:"guild_id"`
-	StartTime         pgtype.Timestamptz `db:"start_time" json:"start_time"`
-	EndTime           pgtype.Timestamptz `db:"end_time" json:"end_time"`
-	Capabilities      []string           `db:"capabilities" json:"capabilities"`
-	Versions          VersionsMap        `db:"versions" json:"versions"`
-	RecorderName      string             `db:"recorder_name" json:"recorder_name"`
-	RecorderGuid      string             `db:"recorder_guid" json:"recorder_guid"`
-	ParserVersion     string             `db:"parser_version" json:"parser_version"`
-	DifficultyName    string             `db:"difficulty_name" json:"difficulty_name"`
-	MaxPlayers        int32              `db:"max_players" json:"max_players"`
-	DynamicDifficulty int32              `db:"dynamic_difficulty" json:"dynamic_difficulty"`
+	ID                      uuid.UUID          `db:"id" json:"id"`
+	RealmID                 uuid.UUID          `db:"realm_id" json:"realm_id"`
+	LogGroupID              uuid.UUID          `db:"log_group_id" json:"log_group_id"`
+	Name                    string             `db:"name" json:"name"`
+	HashedSlug              pgtype.Text        `db:"hashed_slug" json:"hashed_slug"`
+	GuildID                 uuid.NullUUID      `db:"guild_id" json:"guild_id"`
+	StartTime               pgtype.Timestamptz `db:"start_time" json:"start_time"`
+	EndTime                 pgtype.Timestamptz `db:"end_time" json:"end_time"`
+	Capabilities            []string           `db:"capabilities" json:"capabilities"`
+	Versions                VersionsMap        `db:"versions" json:"versions"`
+	RecorderName            string             `db:"recorder_name" json:"recorder_name"`
+	RecorderGuid            string             `db:"recorder_guid" json:"recorder_guid"`
+	ParserVersion           string             `db:"parser_version" json:"parser_version"`
+	DifficultyName          string             `db:"difficulty_name" json:"difficulty_name"`
+	MaxPlayers              int32              `db:"max_players" json:"max_players"`
+	DynamicDifficulty       int32              `db:"dynamic_difficulty" json:"dynamic_difficulty"`
+	VehicleControlIntervals vehicles.Metadata  `db:"vehicle_control_intervals" json:"vehicle_control_intervals"`
 }
 
 func (q *sqlQuerier) InsertInstance(ctx context.Context, arg InsertInstanceParams) (LogInstance, error) {
@@ -6027,6 +6030,7 @@ func (q *sqlQuerier) InsertInstance(ctx context.Context, arg InsertInstanceParam
 		arg.DifficultyName,
 		arg.MaxPlayers,
 		arg.DynamicDifficulty,
+		arg.VehicleControlIntervals,
 	)
 	var i LogInstance
 	err := row.Scan(
@@ -6047,6 +6051,7 @@ func (q *sqlQuerier) InsertInstance(ctx context.Context, arg InsertInstanceParam
 		&i.DifficultyName,
 		&i.MaxPlayers,
 		&i.DynamicDifficulty,
+		&i.VehicleControlIntervals,
 	)
 	return i, err
 }
@@ -6065,7 +6070,7 @@ func (q *sqlQuerier) InsertParsedLogGroup(ctx context.Context, id uuid.UUID) err
 
 const instance = `-- name: Instance :one
 SELECT
-  id, realm_id, log_group_id, name, hashed_slug, guild_id, capabilities, versions, recorder_name, recorder_guid, duplicate_group_id, start_time, end_time, difficulty_name, max_players, dynamic_difficulty, realm_name, guild_name, guild_realm_id, guild_created_at, server_name, tenant_name, tenant_slug, tenant_include_in_all, format, flavor
+  id, realm_id, log_group_id, name, hashed_slug, guild_id, capabilities, versions, recorder_name, recorder_guid, duplicate_group_id, start_time, end_time, difficulty_name, max_players, dynamic_difficulty, vehicle_control_intervals, realm_name, guild_name, guild_realm_id, guild_created_at, server_name, tenant_name, tenant_slug, tenant_include_in_all, format, flavor
 FROM
   log_instances_guild
 WHERE
@@ -6092,6 +6097,7 @@ func (q *sqlQuerier) Instance(ctx context.Context, id uuid.UUID) (LogInstancesGu
 		&i.DifficultyName,
 		&i.MaxPlayers,
 		&i.DynamicDifficulty,
+		&i.VehicleControlIntervals,
 		&i.RealmName,
 		&i.GuildName,
 		&i.GuildRealmID,
@@ -6108,7 +6114,7 @@ func (q *sqlQuerier) Instance(ctx context.Context, id uuid.UUID) (LogInstancesGu
 
 const instanceBySlug = `-- name: InstanceBySlug :one
 SELECT
-  id, realm_id, log_group_id, name, hashed_slug, guild_id, capabilities, versions, recorder_name, recorder_guid, duplicate_group_id, start_time, end_time, difficulty_name, max_players, dynamic_difficulty, realm_name, guild_name, guild_realm_id, guild_created_at, server_name, tenant_name, tenant_slug, tenant_include_in_all, format, flavor
+  id, realm_id, log_group_id, name, hashed_slug, guild_id, capabilities, versions, recorder_name, recorder_guid, duplicate_group_id, start_time, end_time, difficulty_name, max_players, dynamic_difficulty, vehicle_control_intervals, realm_name, guild_name, guild_realm_id, guild_created_at, server_name, tenant_name, tenant_slug, tenant_include_in_all, format, flavor
 FROM
   log_instances_guild
 WHERE
@@ -6135,6 +6141,7 @@ func (q *sqlQuerier) InstanceBySlug(ctx context.Context, hashedSlug pgtype.Text)
 		&i.DifficultyName,
 		&i.MaxPlayers,
 		&i.DynamicDifficulty,
+		&i.VehicleControlIntervals,
 		&i.RealmName,
 		&i.GuildName,
 		&i.GuildRealmID,

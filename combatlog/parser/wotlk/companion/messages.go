@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/Emyrk/chronicle/combatlog/parser/common/messages"
+	"github.com/Emyrk/chronicle/combatlog/parser/guid"
 	"github.com/Emyrk/chronicle/combatlog/parser/types/realm"
 	"github.com/Emyrk/chronicle/combatlog/parser/types/realmclock"
 	"github.com/Emyrk/chronicle/combatlog/parser/types/zone"
@@ -14,7 +15,7 @@ import (
 
 // dispatch routes a fully-assembled companion payload to the appropriate parser.
 // The first character of the payload determines the message type.
-func (p *Parser) dispatch(ts time.Time, payload string) ([]messages.Message, error) {
+func (p *Parser) dispatch(ts time.Time, payload string, ordinal uint64) ([]messages.Message, error) {
 	if len(payload) == 0 {
 		return nil, fmt.Errorf("empty payload")
 	}
@@ -30,6 +31,8 @@ func (p *Parser) dispatch(ts time.Time, payload string) ([]messages.Message, err
 		return p.parseLoot(ts, payload[1:])
 	case 'M':
 		return p.parseMeta(ts, payload[1:])
+	case 'V':
+		return p.parseVehicle(ts, payload[1:], ordinal)
 	default:
 		return nil, fmt.Errorf("unknown companion message type %q", string(payload[0]))
 	}
@@ -130,7 +133,7 @@ func (p *Parser) parseHeader(ts time.Time, data string) ([]messages.Message, err
 	// locale := parts[2] // Available but not stored yet
 	wowVersion := parts[3]
 	wowBuild, _ := strconv.Atoi(parts[4])
-	// sessionId := parts[5] // Available but not stored yet
+	sessionID := parts[5]
 
 	result := []messages.Message{
 		&messages.Realm{
@@ -144,6 +147,7 @@ func (p *Parser) parseHeader(ts time.Time, data string) ([]messages.Message, err
 		},
 		&messages.Versions{
 			MessageBase: messages.Base(ts),
+			SessionID:   sessionID,
 			Versions: map[string]string{
 				"addon":                     addonVersion,
 				"chronicle_companion_wotlk": addonVersion,
@@ -153,6 +157,55 @@ func (p *Parser) parseHeader(ts time.Time, data string) ([]messages.Message, err
 	}
 
 	return result, nil
+}
+
+// parseVehicle parses: V<timestampMs>,<action>,<vehicleGuid>,<controllerGuid>,<vehicleName>,<controllerName>
+func (p *Parser) parseVehicle(observedAt time.Time, data string, ordinal uint64) ([]messages.Message, error) {
+	parts := strings.SplitN(data, ",", 6)
+	if len(parts) != 6 {
+		return nil, fmt.Errorf("vehicle: expected 6 fields, got %d", len(parts))
+	}
+
+	timestampMs, err := strconv.ParseInt(parts[0], 10, 64)
+	if err != nil {
+		return nil, fmt.Errorf("vehicle: invalid timestamp %q: %w", parts[0], err)
+	}
+
+	var action messages.VehicleControlAction
+	switch parts[1] {
+	case "A":
+		action = messages.VehicleControlAssign
+	case "R":
+		action = messages.VehicleControlRelease
+	default:
+		return nil, fmt.Errorf("vehicle: invalid action %q", parts[1])
+	}
+
+	if parts[2] == "" || parts[3] == "" {
+		return nil, fmt.Errorf("vehicle: vehicle and controller GUIDs are required")
+	}
+	vehicleGUID, err := guid.FromString(parts[2])
+	if err != nil {
+		return nil, fmt.Errorf("vehicle: invalid vehicle GUID %q: %w", parts[2], err)
+	}
+	controllerGUID, err := guid.FromString(parts[3])
+	if err != nil {
+		return nil, fmt.Errorf("vehicle: invalid controller GUID %q: %w", parts[3], err)
+	}
+
+	effectiveAt := time.UnixMilli(timestampMs)
+	return []messages.Message{
+		&messages.VehicleControl{
+			MessageBase:    messages.Base(effectiveAt),
+			Action:         action,
+			VehicleGUID:    vehicleGUID,
+			ControllerGUID: controllerGUID,
+			VehicleName:    parts[4],
+			ControllerName: parts[5],
+			ObservedAt:     observedAt,
+			Ordinal:        ordinal,
+		},
+	}, nil
 }
 
 // parseLoot parses: L<kind>,<quality>,<itemId>,<count>,<player>

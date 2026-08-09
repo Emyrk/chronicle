@@ -21,9 +21,10 @@ type Parser struct {
 	logger *slog.Logger
 
 	// Framing reassembly state
-	state   assemblyState
-	buffer  strings.Builder
-	counter byte // last seen message counter digit (0-9)
+	state          assemblyState
+	buffer         strings.Builder
+	counter        byte // last seen message counter digit (0-9)
+	decodedOrdinal uint64
 
 	// Player data accumulation — segments arrive independently,
 	// so we build up per-player state over time.
@@ -129,7 +130,9 @@ func (p *Parser) consumePayload(ts time.Time, data string) ([]messages.Message, 
 			p.buffer.Reset()
 			p.state = stateIdle
 
-			msgs, err := p.dispatch(ts, payload)
+			ordinal := p.decodedOrdinal
+			p.decodedOrdinal++
+			msgs, err := p.dispatch(ts, payload, ordinal)
 			if err != nil {
 				p.logger.Warn("companion: failed to parse message",
 					slog.String("payload", payload),

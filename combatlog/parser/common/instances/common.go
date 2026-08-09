@@ -13,6 +13,7 @@ import (
 	"github.com/Emyrk/chronicle/combatlog/parser/common/loot"
 	"github.com/Emyrk/chronicle/combatlog/parser/common/participants"
 	"github.com/Emyrk/chronicle/combatlog/parser/common/unitdb"
+	"github.com/Emyrk/chronicle/combatlog/parser/common/vehicles"
 	"github.com/Emyrk/chronicle/combatlog/parser/guid"
 	"github.com/Emyrk/chronicle/combatlog/parser/types/realm"
 	"github.com/Emyrk/chronicle/combatlog/parser/types/zone"
@@ -39,7 +40,8 @@ type FinalizedInstance struct {
 	// Nil if this instance has no ranking configuration.
 	RankingRules *rankings.Rankings
 	// UnknownUnits maps creature entry IDs not in the hostiles map to their name and hit count.
-	UnknownUnits map[uint32]UnknownUnit
+	UnknownUnits    map[uint32]UnknownUnit
+	VehicleMetadata vehicles.Metadata
 }
 
 type CommonFactory struct {

@@ -964,7 +964,8 @@ CREATE TABLE log_instances (
     duplicate_group_id uuid,
     difficulty_name text DEFAULT ''::text NOT NULL,
     max_players integer DEFAULT 0 NOT NULL,
-    dynamic_difficulty integer DEFAULT 0 NOT NULL
+    dynamic_difficulty integer DEFAULT 0 NOT NULL,
+    vehicle_control_intervals jsonb DEFAULT '{}'::jsonb NOT NULL
 );
 
 COMMENT ON COLUMN log_instances.guild_id IS 'If set, that means it was a guild run.';
@@ -1039,6 +1040,7 @@ CREATE VIEW log_instances_guild AS
     li.difficulty_name,
     li.max_players,
     li.dynamic_difficulty,
+    li.vehicle_control_intervals,
     COALESCE(wsr.name, 'Unknown'::text) AS realm_name,
     g.name AS guild_name,
     g.realm_id AS guild_realm_id,

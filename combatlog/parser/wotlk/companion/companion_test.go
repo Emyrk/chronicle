@@ -9,6 +9,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/Emyrk/chronicle/combatlog/parser/common/messages"
+	"github.com/Emyrk/chronicle/combatlog/parser/guid"
 	"github.com/Emyrk/chronicle/combatlog/parser/types/combatant"
 	"github.com/Emyrk/chronicle/combatlog/parser/types/zone"
 )
@@ -257,6 +258,7 @@ func TestParseHeader(t *testing.T) {
 	require.True(t, ok)
 	assert.Equal(t, "0.1", v.Versions["chronicle_companion_wotlk"])
 	assert.Equal(t, "3.3.5a", v.Versions["wow"])
+	assert.Equal(t, "a8f3", v.SessionID)
 }
 
 func TestParseHeaderClockInfo(t *testing.T) {
@@ -281,6 +283,64 @@ func TestParseLegacyHeaderHasNoClockInfo(t *testing.T) {
 	_, err := p.Feed(testTS, `[0H:0.1,Icecrown,enUS,3.3.5a,12340,a8f3]`)
 	require.NoError(t, err)
 	assert.Nil(t, p.RealmClockInfo())
+}
+
+// --- Vehicle tests ---
+
+func TestParseVehicleControl(t *testing.T) {
+	t.Parallel()
+	p := newTestParser()
+	observedAt := time.Date(2026, 8, 9, 2, 41, 8, 452000000, time.UTC)
+
+	msgs, err := p.Feed(observedAt, `[8V1786243259341,A,0xF15000812400008F,0x000000000000000B,Salvaged Siege Engine,Chroniclee]`)
+	require.NoError(t, err)
+	require.Len(t, msgs, 1)
+
+	change, ok := msgs[0].(*messages.VehicleControl)
+	require.True(t, ok)
+	assert.Equal(t, messages.VehicleControlAssign, change.Action)
+	assert.Equal(t, time.UnixMilli(1786243259341), change.Date())
+	assert.Equal(t, observedAt, change.ObservedAt)
+	assert.Equal(t, uint64(0), change.Ordinal)
+	assert.Equal(t, guid.GUID(0xF15000812400008F), change.VehicleGUID)
+	assert.Equal(t, guid.GUID(0x000000000000000B), change.ControllerGUID)
+	assert.Equal(t, "Salvaged Siege Engine", change.VehicleName)
+	assert.Equal(t, "Chroniclee", change.ControllerName)
+}
+
+func TestParseVehicleControlPreservesDecodedOrder(t *testing.T) {
+	t.Parallel()
+	p := newTestParser()
+	field := `[4V1786243310992,R,0xF15000812B000090,0x000000000000000B,Salvaged Siege Turret,Chroniclee]` +
+		`[5V1786243310992,A,0xF15000812B000090,0x000000000000000C,Salvaged Siege Turret,Chroniclea]`
+
+	msgs, err := p.Feed(testTS, field)
+	require.NoError(t, err)
+	require.Len(t, msgs, 2)
+
+	release := msgs[0].(*messages.VehicleControl)
+	assignment := msgs[1].(*messages.VehicleControl)
+	assert.Equal(t, messages.VehicleControlRelease, release.Action)
+	assert.Equal(t, uint64(0), release.Ordinal)
+	assert.Equal(t, messages.VehicleControlAssign, assignment.Action)
+	assert.Equal(t, uint64(1), assignment.Ordinal)
+}
+
+func TestParseVehicleControlRejectsMalformedPayloads(t *testing.T) {
+	t.Parallel()
+	p := newTestParser()
+
+	tests := []string{
+		"not-a-timestamp,A,0xF15000812400008F,0x000000000000000B,Engine,Player",
+		"1786243259341,X,0xF15000812400008F,0x000000000000000B,Engine,Player",
+		"1786243259341,A,,0x000000000000000B,Engine,Player",
+		"1786243259341,A,not-a-guid,0x000000000000000B,Engine,Player",
+		"1786243259341,A,0xF15000812400008F,0x000000000000000B,Engine",
+	}
+	for _, payload := range tests {
+		_, err := p.parseVehicle(testTS, payload, 0)
+		require.Error(t, err, payload)
+	}
 }
 
 // --- Loot tests ---

@@ -25,6 +25,7 @@ import (
 	"github.com/Emyrk/chronicle/combatlog/parser/common/parseerrors"
 	"github.com/Emyrk/chronicle/combatlog/parser/common/participants"
 	"github.com/Emyrk/chronicle/combatlog/parser/common/unitdb"
+	"github.com/Emyrk/chronicle/combatlog/parser/common/vehicles"
 	"github.com/Emyrk/chronicle/combatlog/parser/guid"
 	"github.com/Emyrk/chronicle/combatlog/parser/types"
 	"github.com/Emyrk/chronicle/combatlog/parser/types/realm"
@@ -86,9 +87,10 @@ type Hookable struct {
 	finalized       bool
 
 	// finalized references
-	g            *armory.Tracker
-	p            *participants.Tracker
-	lootTracking *loot.LootTracker
+	g              *armory.Tracker
+	p              *participants.Tracker
+	lootTracking   *loot.LootTracker
+	vehicleTracker *vehicles.Tracker
 }
 
 type InstanceParams struct {
@@ -249,6 +251,10 @@ func NewHookable(ctx context.Context, logger *slog.Logger, db *unitdb.Units, z z
 
 func (h *Hookable) AddHook(hook instancehook.Hook) {
 	h.hooks = append(h.hooks, hook)
+}
+
+func (h *Hookable) AttachVehicleTracker(tracker *vehicles.Tracker) {
+	h.vehicleTracker = tracker
 }
 
 // AttachAuraProjection creates and registers an aura projection adapter that
@@ -791,19 +797,35 @@ func (h *Hookable) Finalize(ctx context.Context) (*FinalizedInstance, error) {
 	}
 	overview := overviewmetrics.Summarize(encounters, deadliestAbilities, speedrunResult)
 
+	var vehicleMetadata vehicles.Metadata
+	if h.vehicleTracker != nil && len(encounters) > 0 {
+		instanceStart := encounters[0].Combat.Start
+		instanceEnd := encounters[0].Combat.End
+		for _, enc := range encounters[1:] {
+			if enc.Combat.Start.Before(instanceStart) {
+				instanceStart = enc.Combat.Start
+			}
+			if enc.Combat.End.After(instanceEnd) {
+				instanceEnd = enc.Combat.End
+			}
+		}
+		vehicleMetadata = h.vehicleTracker.MetadataForRange(instanceStart, instanceEnd)
+	}
+
 	return &FinalizedInstance{
 		Realm:        h.realm,
 		Versions:     h.versions,
 		RecorderGUID: h.recorderGUID,
 		Encounters:   encounters,
 		// TODO: Break off guild and spellbook
-		Guilds:       h.g,
-		Loot:         h.lootTracking,
-		Participants: h.p,
-		Rankings:     rankingsResult,
-		Overview:     overview,
-		RankingRules: activeRankingRules,
-		UnknownUnits: h.resolveUnknownUnits(),
+		Guilds:          h.g,
+		Loot:            h.lootTracking,
+		Participants:    h.p,
+		Rankings:        rankingsResult,
+		Overview:        overview,
+		RankingRules:    activeRankingRules,
+		UnknownUnits:    h.resolveUnknownUnits(),
+		VehicleMetadata: vehicleMetadata,
 
 		//SpellBook:  c.SpellBook,
 	}, nil
