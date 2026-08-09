@@ -650,8 +650,8 @@ export function PlayerMetricRow({
         <span
           style={{
             position: 'relative',
-            width: `${rowHeight}px`,
-            height: `${rowHeight}px`,
+            width: '24px',
+            height: '24px',
             marginRight: '8px',
             flexShrink: 0,
           }}
@@ -661,8 +661,9 @@ export function PlayerMetricRow({
             alt={player.className}
             data-player-class-icon
             style={{
-              width: '100%',
-              height: '100%',
+              width: '24px',
+              height: '24px',
+              borderRadius: '3px',
             }}
             onError={(e) => {
               const target = e.currentTarget;
@@ -682,13 +683,14 @@ export function PlayerMetricRow({
               data-player-specialization-icon
               style={{
                 position: 'absolute',
-                right: 0,
-                bottom: 0,
+                right: '-3px',
+                bottom: '-3px',
                 width: '14px',
                 height: '14px',
-                border: '1px solid var(--color-background)',
+                borderRadius: '3px',
+                border: '2px solid var(--color-background)',
                 background: 'var(--color-background)',
-                boxShadow: '-1px -1px 0 rgb(0 0 0 / 0.7)',
+                boxShadow: '0 0 0 1px color-mix(in oklch, var(--color-foreground) 45%, transparent), 0 2px 5px rgb(0 0 0 / 0.9)',
                 filter: 'saturate(1.2) contrast(1.1)',
               }}
               onError={(e) => {
