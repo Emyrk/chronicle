@@ -26,6 +26,8 @@ interface VariantProgress {
   heroic: boolean;
   encountersDown: number;
   kills: number;
+  /** Player deaths across all runs of this variant; undefined when no run metrics exist. */
+  deaths?: number;
   lastKilledAt: string;
 }
 
@@ -41,7 +43,10 @@ interface RaidProgress {
  * first. Every size/difficulty combination is a lockout of the same raid, so
  * it nests as a variant under that raid rather than repeating the name.
  */
-function groupProgress(encounters: GuildEncounterKill[]): RaidProgress[] {
+function groupProgress(
+  encounters: GuildEncounterKill[],
+  deathsByVariant: Map<string, number>,
+): RaidProgress[] {
   const byVariant = new Map<string, VariantProgress & { instanceName: string }>();
   for (const e of encounters) {
     const key = `${e.instance_name}|${e.difficulty_name}|${e.max_players}`;
@@ -58,6 +63,7 @@ function groupProgress(encounters: GuildEncounterKill[]): RaidProgress[] {
         heroic: e.difficulty_name.includes("Heroic"),
         encountersDown: 1,
         kills: e.kills,
+        deaths: deathsByVariant.get(key),
         lastKilledAt: e.last_killed_at,
       });
     }
@@ -138,17 +144,30 @@ function KillPips({ variant, total }: { variant: VariantProgress; total: number 
   );
 }
 
-function KillCount({ kills }: { kills: number }) {
+function KillCount({ kills, deaths }: { kills: number; deaths?: number }) {
   return (
-    <HintTooltip delayDuration={150}>
-      <TooltipTrigger asChild>
-        <span className="flex shrink-0 items-center gap-0.5 text-[11px] tabular-nums text-muted-foreground">
-          <Skull className="h-3 w-3" />
-          {kills}
-        </span>
-      </TooltipTrigger>
-      <TooltipContent>Bosses killed</TooltipContent>
-    </HintTooltip>
+    <span className="flex shrink-0 items-center gap-1 text-[11px] tabular-nums text-muted-foreground">
+      <HintTooltip delayDuration={150}>
+        <TooltipTrigger asChild>
+          <span className="flex items-center gap-0.5">
+            <Skull className="h-3 w-3" />
+            {kills}
+          </span>
+        </TooltipTrigger>
+        <TooltipContent>Bosses killed</TooltipContent>
+      </HintTooltip>
+      {deaths !== undefined && (
+        <>
+          <span className="text-border">|</span>
+          <HintTooltip delayDuration={150}>
+            <TooltipTrigger asChild>
+              <span>{deaths}</span>
+            </TooltipTrigger>
+            <TooltipContent>Player deaths</TooltipContent>
+          </HintTooltip>
+        </>
+      )}
+    </span>
   );
 }
 
@@ -166,7 +185,7 @@ function VariantRow({
     <div className="flex items-center gap-x-2.5">
       <VariantChip variant={variant} complete={complete} />
       <KillPips variant={variant} total={total} />
-      {showKillCounts && <KillCount kills={variant.kills} />}
+      {showKillCounts && <KillCount kills={variant.kills} deaths={variant.deaths} />}
       <p
         className={cn(
           "text-sm font-bold tabular-nums whitespace-nowrap",
@@ -206,7 +225,7 @@ function DetailRaid({
         </div>
         <div className="flex items-center gap-x-2.5">
           <KillPips variant={variant} total={total} />
-          {showKillCounts && <KillCount kills={variant.kills} />}
+          {showKillCounts && <KillCount kills={variant.kills} deaths={variant.deaths} />}
         </div>
       </div>
     );
@@ -276,6 +295,7 @@ function CompactRaid({ raid, total }: { raid: RaidProgress; total: number }) {
 
 function ProgressContent({ config, position, guild }: GuildPanelRenderProps<ProgressConfig>) {
   const [encounters, setEncounters] = useState<GuildEncounterKill[]>([]);
+  const [deathsByVariant, setDeathsByVariant] = useState<Map<string, number>>(new Map());
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const { data: bossCounts } = useSupportedInstanceBossCounts();
@@ -289,7 +309,17 @@ function ProgressContent({ config, position, guild }: GuildPanelRenderProps<Prog
         const response = await fetch(`/api/v1/guilds/${guild.id}/encounters`);
         if (!response.ok) throw new Error("Failed to fetch guild encounters");
         const data = (await response.json()) as GuildEncounterKillsResponse;
-        if (!cancelled) setEncounters([...(data.encounters ?? [])]);
+        if (!cancelled) {
+          setEncounters([...(data.encounters ?? [])]);
+          setDeathsByVariant(
+            new Map(
+              (data.instance_deaths ?? []).map((d) => [
+                `${d.instance_name}|${d.difficulty_name}|${d.max_players}`,
+                d.deaths,
+              ]),
+            ),
+          );
+        }
       } catch (err) {
         if (!cancelled) setError(err instanceof Error ? err.message : "Unknown error");
       } finally {
@@ -315,8 +345,8 @@ function ProgressContent({ config, position, guild }: GuildPanelRenderProps<Prog
         getInstanceContentLevel(e.instance_name, e.max_players) === Number(contentLevel);
       return matchesCategory && matchesContentLevel;
     });
-    return groupProgress(filtered);
-  }, [config.category, config.contentLevel, encounters]);
+    return groupProgress(filtered, deathsByVariant);
+  }, [config.category, config.contentLevel, encounters, deathsByVariant]);
 
   if (loading) {
     return (

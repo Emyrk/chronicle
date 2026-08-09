@@ -261,8 +261,21 @@ type GuildEncounterKill struct {
 	LastKilledAt   time.Time `json:"last_killed_at"`
 }
 
+// GuildInstanceDeaths is the guild's total player deaths across all runs of
+// one instance size/difficulty variant. Duplicate uploads of the same raid
+// night count once.
+type GuildInstanceDeaths struct {
+	InstanceName   string `json:"instance_name"`
+	DifficultyName string `json:"difficulty_name"`
+	MaxPlayers     int32  `json:"max_players"`
+	Deaths         int32  `json:"deaths"`
+}
+
 type GuildEncounterKillsResponse struct {
 	Encounters []GuildEncounterKill `json:"encounters"`
+	// InstanceDeaths is variant-level (not per-encounter) because player
+	// deaths are recorded per run, not per boss fight.
+	InstanceDeaths []GuildInstanceDeaths `json:"instance_deaths"`
 }
 
 // Guild per-run parse averages (guild page "Recent" panel)

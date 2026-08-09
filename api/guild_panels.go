@@ -214,6 +214,17 @@ func (api *API) GuildEncounterKills(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	deathRows, err := api.Opts.Zed.GuildInstanceDeaths(ctx, guild.ID)
+	if err != nil {
+		httpapi.HandleResponseError(ctx, w, err, httpapi.APIError{
+			Response: chroniclesdk.Response{
+				Message: "Failed to fetch guild instance deaths",
+				Detail:  err.Error(),
+			},
+		})
+		return
+	}
+
 	encounters := make([]chroniclesdk.GuildEncounterKill, len(rows))
 	for i, row := range rows {
 		encounters[i] = chroniclesdk.GuildEncounterKill{
@@ -227,8 +238,19 @@ func (api *API) GuildEncounterKills(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
+	deaths := make([]chroniclesdk.GuildInstanceDeaths, len(deathRows))
+	for i, row := range deathRows {
+		deaths[i] = chroniclesdk.GuildInstanceDeaths{
+			InstanceName:   row.InstanceName,
+			DifficultyName: row.DifficultyName,
+			MaxPlayers:     row.MaxPlayers,
+			Deaths:         row.Deaths,
+		}
+	}
+
 	httpapi.Write(ctx, w, http.StatusOK, chroniclesdk.GuildEncounterKillsResponse{
-		Encounters: encounters,
+		Encounters:     encounters,
+		InstanceDeaths: deaths,
 	})
 }
 

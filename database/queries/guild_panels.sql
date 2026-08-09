@@ -206,6 +206,32 @@ WHERE li.guild_id = @guild_id::uuid
 GROUP BY li.name, lie.name, li.difficulty_name, li.max_players
 ORDER BY li.name, lie.name;
 
+-- name: GuildInstanceDeaths :many
+-- Total player deaths per (instance, difficulty, size) lockout variant across
+-- all of a guild's runs, for the guild page "Progression" panel. Duplicate
+-- uploads of the same raid night collapse via duplicate_group_id, keeping the
+-- highest death count within each group. JOINs wow_server_realms so RLS
+-- tenant filtering cascades.
+SELECT
+    runs.name AS instance_name,
+    runs.difficulty_name,
+    runs.max_players,
+    SUM(runs.player_deaths)::int AS deaths
+FROM (
+    SELECT DISTINCT ON (COALESCE(li.duplicate_group_id, li.id))
+        li.name,
+        li.difficulty_name,
+        li.max_players,
+        iom.player_deaths
+    FROM log_instances li
+    JOIN instance_overview_metrics iom ON iom.instance_id = li.id
+    JOIN wow_server_realms wsr ON wsr.id = li.realm_id
+    WHERE li.guild_id = @guild_id::uuid
+    ORDER BY COALESCE(li.duplicate_group_id, li.id), iom.player_deaths DESC
+) AS runs
+GROUP BY runs.name, runs.difficulty_name, runs.max_players
+ORDER BY runs.name;
+
 -- name: GuildRunParseAverages :many
 -- Returns the guild's average parse per encounter for each raid night (run),
 -- for the guild page "Recent" panel (per-boss bars; callers weight by

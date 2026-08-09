@@ -405,6 +405,71 @@ func TestGuildEncounterKills(t *testing.T) {
 	require.WithinDuration(t, night2.Add(30*time.Minute), byEncounter["Ragnaros"].LastKilledAt.Time, time.Second)
 }
 
+func TestGuildInstanceDeaths(t *testing.T) {
+	t.Parallel()
+
+	f := setupGuildPanelsTest(t)
+	ctx := testutil.Context(t, testutil.WaitShort)
+	night := time.Now().Add(-24 * time.Hour)
+
+	otherGuildID := uuid.New()
+	f.insertGuild(t, otherGuildID, "Other Guild")
+
+	insertInstance := func(guildID uuid.UUID, difficulty string, maxPlayers int32) uuid.UUID {
+		id := uuid.New()
+		_, err := f.store.InsertInstance(ctx, database.InsertInstanceParams{
+			ID: id, RealmID: f.realmID, LogGroupID: f.logGroupID,
+			Name: "Molten Core", HashedSlug: pgtype.Text{String: "gid-" + id.String()[:8], Valid: true},
+			GuildID:   uuid.NullUUID{UUID: guildID, Valid: true},
+			StartTime: database.Timestamptz(night), EndTime: database.Timestamptz(night.Add(time.Hour)),
+			Capabilities: []string{}, DifficultyName: difficulty, MaxPlayers: maxPlayers,
+		})
+		require.NoError(t, err)
+		return id
+	}
+	insertDeaths := func(instanceID uuid.UUID, deaths int32) {
+		require.NoError(t, f.store.UpsertInstanceOverviewMetrics(ctx, database.UpsertInstanceOverviewMetricsParams{
+			InstanceID: instanceID, PlayerDeaths: deaths,
+			TopIncomingDamageAbilities: []database.OverviewIncomingDamageAbility{},
+			MetricsVersion:             1,
+		}))
+	}
+
+	// Two 40-player normal runs: 5 + 3 deaths.
+	runA := insertInstance(f.guildID, "Normal", 40)
+	insertDeaths(runA, 5)
+	runB := insertInstance(f.guildID, "Normal", 40)
+	insertDeaths(runB, 3)
+	// A re-upload of run A must not double count; the higher count wins.
+	dupe := insertInstance(f.guildID, "Normal", 40)
+	insertDeaths(dupe, 4)
+	_, err := f.pool.Exec(ctx, "UPDATE log_instances SET duplicate_group_id = $1 WHERE id IN ($1, $2)", runA, dupe)
+	require.NoError(t, err)
+
+	// A heroic lockout is a separate variant.
+	heroic := insertInstance(f.guildID, "Heroic", 10)
+	insertDeaths(heroic, 7)
+
+	// A run with no metrics contributes nothing.
+	insertInstance(f.guildID, "Normal", 25)
+
+	// Another guild's deaths never leak in.
+	foreign := insertInstance(otherGuildID, "Normal", 40)
+	insertDeaths(foreign, 99)
+
+	rows, err := f.store.GuildInstanceDeaths(ctx, f.guildID)
+	require.NoError(t, err)
+	require.Len(t, rows, 2, "only variants with metrics for this guild appear")
+
+	byVariant := map[string]database.GuildInstanceDeathsRow{}
+	for _, row := range rows {
+		byVariant[fmt.Sprintf("%s|%d", row.DifficultyName, row.MaxPlayers)] = row
+	}
+	require.EqualValues(t, 8, byVariant["Normal|40"].Deaths)
+	require.EqualValues(t, 7, byVariant["Heroic|10"].Deaths)
+	require.Equal(t, "Molten Core", byVariant["Normal|40"].InstanceName)
+}
+
 func TestGuildBestRuns(t *testing.T) {
 	t.Parallel()
 
