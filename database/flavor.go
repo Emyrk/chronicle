@@ -38,6 +38,8 @@ const (
 	// FlavorAzerothcore is AzerothCore-specific behavior (server-side or
 	// client-side; distinguish the two via LogFormat, not this tag).
 	FlavorAzerothcore FlavorTag = "azerothcore"
+	// FlavorChromieCraft is ChromieCraft-specific behavior.
+	FlavorChromieCraft FlavorTag = "chromiecraft"
 	// FlavorAzerothcoreProgression enables progression-server behavior where
 	// multiple expansion versions of the same instance can coexist.
 	FlavorAzerothcoreProgression FlavorTag = "azerothcore-progression"
@@ -65,6 +67,7 @@ func AllFlavorTagValues() []FlavorTag {
 		FlavorKronos,
 		FlavorEpoch,
 		FlavorAzerothcore,
+		FlavorChromieCraft,
 		FlavorAzerothcoreProgression,
 		FlavorVanillaPlus,
 		FlavorOctoWoW,

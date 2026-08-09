@@ -22,6 +22,18 @@ func TestWrathRegistryReplacesClassicOnyxia(t *testing.T) {
 	require.Equal(t, []uint32{10184}, wrath.SpeedrunRules.Requirements[0].EntryIDs)
 }
 
+func TestChromieCraftOnyxiaHasNoSpeedrunRules(t *testing.T) {
+	t.Parallel()
+
+	flavor := database.WoWFlavor{database.FlavorWrath, database.FlavorChromieCraft}
+	registry := RegistryForFlavor(nil, flavor)
+
+	onyxia := registry.EntryByName("Onyxia's Lair")
+	require.NotNil(t, onyxia)
+	require.Nil(t, onyxia.SpeedrunRules)
+	require.NotContains(t, registry.SpeedrunRules(), "Onyxia's Lair")
+}
+
 func TestProgressionOnyxiaHasSeparateSpeedrunRules(t *testing.T) {
 	t.Parallel()
 

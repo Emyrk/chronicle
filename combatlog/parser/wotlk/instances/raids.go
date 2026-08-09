@@ -101,6 +101,10 @@ func onyxiaZoneName(ctx context.Context, z zone.Zone, fl database.WoWFlavor) str
 }
 
 func onyxiaRankings(fl database.WoWFlavor, classic bool) *rankings.Rankings {
+	if fl.Has(database.FlavorChromieCraft) {
+		return &rankings.Rankings{}
+	}
+
 	onyxiaEntry := uint32(10184)
 	warderEntry := uint32(12129)
 	if classic {

@@ -171,6 +171,9 @@ var (
 		MapIDs:    []uint32{249},
 		Hostiles:  OnyxiaHostiles,
 		FlavoredRankings: func(fl database.WoWFlavor) *rankings.Rankings {
+			if fl.Has(database.FlavorChromieCraft) {
+				return &rankings.Rankings{}
+			}
 			return &rankings.Rankings{
 				Speedrun: &rankings.SpeedrunRules{
 					Requirements: OnyxiasLairSpeedrunRequirements(fl),
