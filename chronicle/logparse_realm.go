@@ -42,8 +42,8 @@ func resolveRealm(
 }
 
 // resolveRealmByName resolves a realm using the three-tier precedence:
-//  1. Realm name (from pre-scan or parsed log)
-//  2. Realm ID from job args (e.g. AzerothCore uploads where REALM_INFO is absent)
+//  1. Realm ID from job args (e.g. the realm bound to an AzerothCore upload key)
+//  2. Realm name from a client-side log
 //  3. Well-known "Unknown" realm (created on demand)
 func resolveRealmByName(
 	ctx context.Context,
@@ -53,21 +53,21 @@ func resolveRealmByName(
 ) resolvedRealm {
 	var realmID uuid.UUID
 
-	// Tier 1: realm name lookup within the restored tenant context.
-	if realmName != "" {
-		realm, err := db.GetWoWServerRealmByName(ctx, realmName)
-		if err == nil {
-			realmID = realm.ID
+	// Tier 1: a caller-supplied realm ID is authoritative. Server-side logs may
+	// report the AzerothCore realm name in CHRONICLE_HEADER, but routing is
+	// controlled by the realm-specific upload key.
+	if jobRealmID != uuid.Nil {
+		realmID = jobRealmID
+		if r, err := db.GetWoWServerRealm(ctx, realmID); err == nil {
+			realmName = r.Name
 		}
 	}
 
-	// Tier 2: realm ID from job args.
-	if realmID == uuid.Nil && jobRealmID != uuid.Nil {
-		realmID = jobRealmID
-		if realmName == "" {
-			if r, err := db.GetWoWServerRealm(ctx, realmID); err == nil {
-				realmName = r.Name
-			}
+	// Tier 2: realm name lookup within the restored tenant context.
+	if realmID == uuid.Nil && realmName != "" {
+		realm, err := db.GetWoWServerRealmByName(ctx, realmName)
+		if err == nil {
+			realmID = realm.ID
 		}
 	}
 

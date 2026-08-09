@@ -330,9 +330,21 @@ func (w *WorkerLogParse) Work(ctx context.Context, job *river.Job[ArgsLogParse])
 			}
 		}
 
+		reportedRealmName := ""
+		if finalized.Realm != nil {
+			reportedRealmName = finalized.Realm.RealmName
+		}
 		realm := resolveRealm(ctx, db, finalized, job.Args.RealmID)
 		realmID := realm.ID
 		realmName := realm.Name
+		if job.Args.RealmID != uuid.Nil && reportedRealmName != "" && reportedRealmName != realmName {
+			w.parent.logger.WarnContext(ctx, "server-side log realm differs from upload-key realm",
+				"log_group_id", job.Args.LogID,
+				"realm_id", realmID,
+				"configured_realm", realmName,
+				"reported_realm", reportedRealmName,
+			)
+		}
 
 		keep, failureMsg := w.validateRealmTenant(ctx, db, realm, job.Args.TenantID, lg.Format.LogFormat, job.Args.LogID)
 		if !keep {
