@@ -7,4 +7,6 @@ import "go.uber.org/goleak"
 var GoleakOptions []goleak.Option = []goleak.Option{
 	// The pq library appears to leave around a goroutine after Close().
 	goleak.IgnoreTopFunction("github.com/lib/pq.NewDialListener"),
+	// Gophercraft's global logger starts a console output goroutine during package initialization.
+	goleak.IgnoreTopFunction("github.com/Gophercraft/log.(*ConsoleOutput).begin"),
 }
