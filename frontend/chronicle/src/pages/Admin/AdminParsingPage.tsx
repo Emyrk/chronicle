@@ -1,6 +1,7 @@
 import { useState, useMemo, useCallback } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import type {
+  AdminRankingsRefreshStatusResponse,
   AdminRefreshRankingsResponse,
   AdminSnapshotSummary,
   AdminTimeParseSnapshotSummary,
@@ -220,6 +221,23 @@ function DpsHpsTab() {
     retry: false,
   });
 
+  const {
+    data: rankingsStatus,
+    isLoading: rankingsStatusLoading,
+    isError: rankingsStatusError,
+    isFetching: rankingsStatusFetching,
+    refetch: refetchRankingsStatus,
+  } = useQuery({
+    queryKey: ["admin", "parses", "rankings", "status"],
+    queryFn: async () => {
+      const res = await fetch("/api/v1/admin/parses/rankings/status");
+      if (!res.ok) throw new Error("Failed to fetch rankings status");
+      return res.json() as Promise<AdminRankingsRefreshStatusResponse>;
+    },
+    retry: false,
+    refetchInterval: 15_000,
+  });
+
   const deleteMutation = useMutation({
     mutationFn: async (snapshotId: string) => {
       const res = await fetch(`/api/v1/admin/parses/snapshots/${snapshotId}`, {
@@ -270,6 +288,11 @@ function DpsHpsTab() {
       }
       return res.json() as Promise<AdminRefreshRankingsResponse>;
     },
+    onSuccess: () => {
+      void queryClient.invalidateQueries({
+        queryKey: ["admin", "parses", "rankings", "status"],
+      });
+    },
   });
 
   const allSelected = useMemo(
@@ -310,18 +333,33 @@ function DpsHpsTab() {
               removes summaries that no longer have eligible ranking rows.
             </p>
           </div>
-          <Button
-            size="sm"
-            onClick={() => refreshRankingsMutation.mutate()}
-            disabled={refreshRankingsMutation.isPending}
-          >
-            {refreshRankingsMutation.isPending ? (
-              <Loader2 className="h-4 w-4 animate-spin mr-1" />
-            ) : (
-              <RefreshCw className="h-4 w-4 mr-1" />
-            )}
-            Force Refresh Rankings
-          </Button>
+          <div className="flex items-center gap-2">
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={() => refetchRankingsStatus()}
+              disabled={rankingsStatusFetching}
+            >
+              {rankingsStatusFetching ? (
+                <Loader2 className="h-4 w-4 animate-spin mr-1" />
+              ) : (
+                <RefreshCw className="h-4 w-4 mr-1" />
+              )}
+              Refresh Status
+            </Button>
+            <Button
+              size="sm"
+              onClick={() => refreshRankingsMutation.mutate()}
+              disabled={refreshRankingsMutation.isPending}
+            >
+              {refreshRankingsMutation.isPending ? (
+                <Loader2 className="h-4 w-4 animate-spin mr-1" />
+              ) : (
+                <RefreshCw className="h-4 w-4 mr-1" />
+              )}
+              Force Refresh Rankings
+            </Button>
+          </div>
         </div>
         {refreshRankingsMutation.isSuccess && (
           <p className="mt-3 text-sm text-green-500">
@@ -335,6 +373,81 @@ function DpsHpsTab() {
               : "Failed to refresh rankings"}
           </p>
         )}
+
+        <div className="mt-4 border-t border-zinc-800 pt-4">
+          <p className="mb-3 text-xs text-muted-foreground">
+            Automatically checked hourly. Current rows are compared with the counts stored on all
+            summary cards; this status refreshes every 15 seconds.
+          </p>
+          {rankingsStatusLoading ? (
+            <div className="flex justify-center py-4">
+              <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
+            </div>
+          ) : rankingsStatusError ? (
+            <p className="text-sm text-red-500">Failed to load rankings refresh status.</p>
+          ) : rankingsStatus && rankingsStatus.tenants.length > 0 ? (
+            <div className="styled-scrollbar overflow-x-auto">
+              <table className="w-full text-sm">
+                <thead>
+                  <tr className="border-b border-zinc-800 text-left text-muted-foreground">
+                    <th className="py-2 pr-4">Tenant</th>
+                    <th className="py-2 pr-4">Latest summary rebuild</th>
+                    <th className="py-2 pr-4">Rows (current / rebuilt)</th>
+                    <th className="py-2 pr-4">Summaries</th>
+                    <th className="py-2 pr-4">Query version</th>
+                    <th className="py-2">Status</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {rankingsStatus.tenants.map((tenant) => {
+                    const hasData = tenant.current_row_count > 0 || tenant.summary_count > 0;
+                    const rebuiltRows =
+                      tenant.min_last_row_count === tenant.max_last_row_count
+                        ? tenant.max_last_row_count.toLocaleString()
+                        : `${tenant.min_last_row_count.toLocaleString()}–${tenant.max_last_row_count.toLocaleString()}`;
+                    return (
+                      <tr key={tenant.tenant_id} className="border-b border-zinc-800/50">
+                        <td className="py-2 pr-4">
+                          <div className="text-xs font-medium">{tenant.tenant_name}</div>
+                          <div className="font-mono text-[10px] text-muted-foreground">
+                            {tenant.tenant_id}
+                          </div>
+                        </td>
+                        <td className="py-2 pr-4 whitespace-nowrap font-mono text-xs">
+                          {tenant.last_rebuilt_at ? formatDate(tenant.last_rebuilt_at) : "Never"}
+                        </td>
+                        <td className="py-2 pr-4 whitespace-nowrap font-mono text-xs">
+                          {tenant.current_row_count.toLocaleString()} / {rebuiltRows}
+                        </td>
+                        <td className="py-2 pr-4 font-mono text-xs">
+                          {tenant.summary_count.toLocaleString()}
+                        </td>
+                        <td className="py-2 pr-4 whitespace-nowrap font-mono text-xs">
+                          {tenant.stored_query_version} / {tenant.current_query_version}
+                        </td>
+                        <td className="py-2">
+                          <span
+                            className={`inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium ${
+                              tenant.refresh_needed
+                                ? "bg-yellow-500/10 text-yellow-400"
+                                : hasData
+                                  ? "bg-green-500/10 text-green-400"
+                                  : "bg-zinc-500/10 text-zinc-400"
+                            }`}
+                          >
+                            {tenant.refresh_needed ? "Refresh needed" : hasData ? "Current" : "No data"}
+                          </span>
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+          ) : (
+            <p className="text-sm text-muted-foreground">No tenant status is available.</p>
+          )}
+        </div>
       </Card>
 
       <SnapshotCreateControls

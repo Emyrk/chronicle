@@ -631,6 +631,8 @@ type sqlcQuerier interface {
 	// Most recent updated_at among summaries for a given tenant.
 	// Used by the dispatch worker to skip if refreshed recently.
 	RankingsSummaryMaxUpdatedAt(ctx context.Context, tenantID uuid.UUID) (pgtype.Timestamptz, error)
+	// Returns aggregate refresh metadata for one tenant's precomputed summaries.
+	RankingsSummaryStatus(ctx context.Context, tenantID uuid.UUID) (RankingsSummaryStatusRow, error)
 	RecordAuthzMigration(ctx context.Context, version int32) error
 	// Resolves the dataset for a realm. Precedence:
 	//   server.default_dataset_id > tenant.default_dataset_id.

@@ -238,6 +238,25 @@ type AdminTriggerSnapshotResponse struct {
 	Jobs []AdminTriggerSnapshotJobResult `json:"jobs"`
 }
 
+// AdminRankingsRefreshTenantStatus describes rankings summary freshness for one tenant.
+type AdminRankingsRefreshTenantStatus struct {
+	TenantID            uuid.UUID  `json:"tenant_id"`
+	TenantName          string     `json:"tenant_name"`
+	LastRebuiltAt       *time.Time `json:"last_rebuilt_at,omitempty"`
+	CurrentRowCount     int64      `json:"current_row_count"`
+	MinLastRowCount     int64      `json:"min_last_row_count"`
+	MaxLastRowCount     int64      `json:"max_last_row_count"`
+	SummaryCount        int64      `json:"summary_count"`
+	StoredQueryVersion  int16      `json:"stored_query_version"`
+	CurrentQueryVersion int16      `json:"current_query_version"`
+	RefreshNeeded       bool       `json:"refresh_needed"`
+}
+
+// AdminRankingsRefreshStatusResponse lists rankings summary freshness by tenant.
+type AdminRankingsRefreshStatusResponse struct {
+	Tenants []AdminRankingsRefreshTenantStatus `json:"tenants"`
+}
+
 // AdminRefreshRankingsJob describes one tenant summary refresh job.
 type AdminRefreshRankingsJob struct {
 	TenantID string `json:"tenant_id"`

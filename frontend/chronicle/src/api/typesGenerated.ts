@@ -150,6 +150,31 @@ export interface AdminOutdatedInstancesResponse {
 
 // From chroniclesdk/rankings.go
 /**
+ * AdminRankingsRefreshStatusResponse lists rankings summary freshness by tenant.
+ */
+export interface AdminRankingsRefreshStatusResponse {
+    readonly tenants: readonly AdminRankingsRefreshTenantStatus[];
+}
+
+// From chroniclesdk/rankings.go
+/**
+ * AdminRankingsRefreshTenantStatus describes rankings summary freshness for one tenant.
+ */
+export interface AdminRankingsRefreshTenantStatus {
+    readonly tenant_id: string;
+    readonly tenant_name: string;
+    readonly last_rebuilt_at?: string;
+    readonly current_row_count: number;
+    readonly min_last_row_count: number;
+    readonly max_last_row_count: number;
+    readonly summary_count: number;
+    readonly stored_query_version: number;
+    readonly current_query_version: number;
+    readonly refresh_needed: boolean;
+}
+
+// From chroniclesdk/rankings.go
+/**
  * AdminRefreshRankingsJob describes one tenant summary refresh job.
  */
 export interface AdminRefreshRankingsJob {

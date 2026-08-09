@@ -20,6 +20,11 @@ import (
 // have not changed.
 const rankingsQueryVersion int16 = 2
 
+// RankingsSummaryQueryVersion returns the current summary aggregation version.
+func RankingsSummaryQueryVersion() int16 {
+	return rankingsQueryVersion
+}
+
 // ---------------------------------------------------------------------------
 // ArgsRefreshRankingsSummaries — dispatch job (periodic, hourly).
 // Fans out one ArgsRefreshRankingsSummaryTenant per tenant.

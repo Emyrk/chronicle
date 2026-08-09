@@ -63,5 +63,13 @@ func TestWorkerRefreshRankingsSummaryTenant_PrunesStaleSummaryWhenRowCountUnchan
 	after, err := store.RankingsInstanceSummaries(ctx, uuid.Nil)
 	require.NoError(t, err)
 	require.Len(t, after, 1)
+	status, err := store.RankingsSummaryStatus(ctx, uuid.Nil)
+	require.NoError(t, err)
+	require.Equal(t, int64(1), status.SummaryCount)
+	require.Equal(t, int64(1), status.MinLastRowCount)
+	require.Equal(t, int64(1), status.MaxLastRowCount)
+	require.Equal(t, int16(2), status.QueryVersion)
+	require.True(t, status.LastRebuiltAt.Valid)
+
 	require.Equal(t, "Gruul's Lair", after[0].InstanceName)
 }

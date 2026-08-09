@@ -133,6 +133,17 @@ SELECT
 FROM rankings_instance_summaries
 WHERE tenant_id = @tenant_id;
 
+-- name: RankingsSummaryStatus :one
+-- Returns aggregate refresh metadata for one tenant's precomputed summaries.
+SELECT
+    COUNT(*)::bigint AS summary_count,
+    COALESCE(MIN(last_row_count), 0)::bigint AS min_last_row_count,
+    COALESCE(MAX(last_row_count), 0)::bigint AS max_last_row_count,
+    COALESCE(MIN(query_version), 0)::smallint AS query_version,
+    MAX(updated_at)::timestamptz AS last_rebuilt_at
+FROM rankings_instance_summaries
+WHERE tenant_id = @tenant_id;
+
 -- name: RankingsSummaryMaxUpdatedAt :one
 -- Most recent updated_at among summaries for a given tenant.
 -- Used by the dispatch worker to skip if refreshed recently.

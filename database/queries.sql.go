@@ -10193,6 +10193,39 @@ func (q *sqlQuerier) RankingsSummaryMaxUpdatedAt(ctx context.Context, tenantID u
 	return max_updated_at, err
 }
 
+const rankingsSummaryStatus = `-- name: RankingsSummaryStatus :one
+SELECT
+    COUNT(*)::bigint AS summary_count,
+    COALESCE(MIN(last_row_count), 0)::bigint AS min_last_row_count,
+    COALESCE(MAX(last_row_count), 0)::bigint AS max_last_row_count,
+    COALESCE(MIN(query_version), 0)::smallint AS query_version,
+    MAX(updated_at)::timestamptz AS last_rebuilt_at
+FROM rankings_instance_summaries
+WHERE tenant_id = $1
+`
+
+type RankingsSummaryStatusRow struct {
+	SummaryCount    int64              `db:"summary_count" json:"summary_count"`
+	MinLastRowCount int64              `db:"min_last_row_count" json:"min_last_row_count"`
+	MaxLastRowCount int64              `db:"max_last_row_count" json:"max_last_row_count"`
+	QueryVersion    int16              `db:"query_version" json:"query_version"`
+	LastRebuiltAt   pgtype.Timestamptz `db:"last_rebuilt_at" json:"last_rebuilt_at"`
+}
+
+// Returns aggregate refresh metadata for one tenant's precomputed summaries.
+func (q *sqlQuerier) RankingsSummaryStatus(ctx context.Context, tenantID uuid.UUID) (RankingsSummaryStatusRow, error) {
+	row := q.db.QueryRow(ctx, rankingsSummaryStatus, tenantID)
+	var i RankingsSummaryStatusRow
+	err := row.Scan(
+		&i.SummaryCount,
+		&i.MinLastRowCount,
+		&i.MaxLastRowCount,
+		&i.QueryVersion,
+		&i.LastRebuiltAt,
+	)
+	return i, err
+}
+
 const upsertRankingsInstanceSummary = `-- name: UpsertRankingsInstanceSummary :exec
 WITH representative_instances AS (
     SELECT DISTINCT ON (COALESCE(li.duplicate_group_id, li.id))
