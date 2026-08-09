@@ -47,26 +47,28 @@ describe("PlayerMetricRow", () => {
     expect(markup).toContain("transition:left 0.3s ease, width 0.3s ease");
   });
 
-  it("renders a specialization icon when one is resolved", () => {
+  it("renders the class icon with a smaller specialization badge", () => {
     const markup = renderRow(false, {
       ...player,
-      specializationIconUrl: "https://icons.example/fury.webp",
+      specializationIconUrl: "https://icons.example/fire.webp",
     });
 
-    expect(markup).toContain('src="https://icons.example/fury.webp"');
-    expect(markup).toContain('data-icon-fallback="spec"');
-    expect(markup).toContain('alt="Fire"');
+    expect(markup).toContain('src="/c/icons/class_mage.png"');
+    expect(markup).toContain('data-player-class-icon="true"');
+    expect(markup).toContain('src="https://icons.example/fire.webp"');
+    expect(markup).toContain('data-player-specialization-icon="true"');
+    expect(markup).toContain('width:11px');
   });
 
-  it("keeps the class icon fallback when no specialization icon exists", () => {
+  it("renders only the class icon when no specialization icon exists", () => {
     const markup = renderRow(false, {
       ...player,
       specialization: "",
     });
 
     expect(markup).toContain('src="/c/icons/class_mage.png"');
-    expect(markup).toContain('data-icon-fallback="class"');
-    expect(markup).toContain('alt="Mage"');
+    expect(markup).toContain('data-player-class-icon="true"');
+    expect(markup).not.toContain('data-player-specialization-icon');
   });
 
   it("sizes the metric badge to its value without a fixed minimum width", () => {

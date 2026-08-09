@@ -636,33 +636,57 @@ export function PlayerMetricRow({
         </span>
         )}
 
-        {/* Icon */}
-        <img
-          src={player.specializationIconUrl ?? `${classIconBasePath}/class_${player.className.toLowerCase()}.png`}
-          alt={player.specialization || player.className}
-          data-icon-fallback={player.specializationIconUrl ? "spec" : "class"}
+        {/* Class icon with an optional specialization badge */}
+        <span
           style={{
+            position: 'relative',
             width: '20px',
             height: '20px',
             marginRight: '8px',
-            borderRadius: '2px',
+            flexShrink: 0,
           }}
-          onError={(e) => {
-            const target = e.currentTarget;
-            const classIcon = `${classIconBasePath}/class_${player.className.toLowerCase()}.png`;
-            const unknownIcon = `${classIconBasePath}/class_unknown.png`;
-            const fallback = target.dataset.iconFallback;
-            if (fallback === "spec") {
-              target.dataset.iconFallback = "class";
-              target.src = classIcon;
-            } else if (fallback === "class") {
-              target.dataset.iconFallback = "unknown";
-              target.src = unknownIcon;
-            } else {
-              target.style.display = 'none';
-            }
-          }}
-        />
+        >
+          <img
+            src={`${classIconBasePath}/class_${player.className.toLowerCase()}.png`}
+            alt={player.className}
+            data-player-class-icon
+            style={{
+              width: '20px',
+              height: '20px',
+              borderRadius: '2px',
+            }}
+            onError={(e) => {
+              const target = e.currentTarget;
+              const unknownIcon = `${classIconBasePath}/class_unknown.png`;
+              if (target.dataset.iconFallback === "unknown") {
+                target.style.display = 'none';
+              } else {
+                target.dataset.iconFallback = "unknown";
+                target.src = unknownIcon;
+              }
+            }}
+          />
+          {player.specializationIconUrl && (
+            <img
+              src={player.specializationIconUrl}
+              alt={player.specialization}
+              data-player-specialization-icon
+              style={{
+                position: 'absolute',
+                right: '-2px',
+                bottom: '-2px',
+                width: '11px',
+                height: '11px',
+                borderRadius: '2px',
+                border: '1px solid var(--color-background)',
+                background: 'var(--color-background)',
+              }}
+              onError={(e) => {
+                e.currentTarget.style.display = 'none';
+              }}
+            />
+          )}
+        </span>
 
         {/* Spec name */}
         <span
