@@ -131,8 +131,10 @@ func NewHookable(ctx context.Context, logger *slog.Logger, db *unitdb.Units, z z
 	// Select character factories based on flavor + format.
 	var cres []characters.CharacterFactory
 	switch {
-	case flavor.Has(database.FlavorAzerothcore) && format == database.LogFormatAzerothcoreMod:
-		// Server-side mod: minimal factories, emit all players.
+	case format == database.LogFormatAzerothcoreMod:
+		// Server-side mod: minimal factories, emit all players. The transport
+		// format, not the realm flavor, determines whether CHRONICLE_UNIT_INFO
+		// supplies authoritative unit metadata.
 		cres = wotlkcreatures.AzerothServersideCoreCharacterFactories()
 		combatantStrategy = EmitAllPlayers
 	default:

@@ -74,11 +74,13 @@ func (w *WorkerLogParse) parseCombatLog(
 
 	logCapabilities := []string{"overheal", "absorb"}
 
-	// encounters — use azerothcore-specific state for server-side logs,
-	// otherwise use the general registry.
+	// Server-side logs still use the flavor registry for known instances so
+	// rankings and speedrun rules are attached. The AzerothCore resolver adds
+	// server-reported unit metadata and falls back to a generic instance for
+	// zones Chronicle does not know yet.
 	var encountersState *encounters.State
 	if logFormat == database.LogFormatAzerothcoreMod {
-		encountersState = azencounters.New(ctx, logLogger)
+		encountersState = azencounters.New(ctx, logLogger, reg)
 	} else {
 		encountersState = encounters.New(ctx, logLogger, reg)
 	}
