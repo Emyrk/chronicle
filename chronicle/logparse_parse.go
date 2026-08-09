@@ -190,7 +190,7 @@ func (w *WorkerLogParse) parseCombatLog(
 			return nil, fmt.Errorf("consume v2 log: %w", consumeErr)
 		}
 
-	case database.LogFormat335aCcAddon:
+	case database.LogFormat243CcAddon, database.LogFormat335aCcAddon:
 		logCapabilities = append(logCapabilities, "interrupt")
 		loadStart := time.Now()
 		data := preloadedFirst
@@ -201,20 +201,26 @@ func (w *WorkerLogParse) parseCombatLog(
 			}
 			data, err = io.ReadAll(rdr)
 			if err != nil {
-				return nil, fmt.Errorf("read wotlk log file: %w", err)
+				return nil, fmt.Errorf("read CLEU log file: %w", err)
 			}
 		}
 		loadFileDuration = time.Since(loadStart)
 
-		p, err := wotlk.New(ctx, logLogger, bytes.NewReader(data), gameDB, gameDB, reg)
+		var p *wotlk.Parser
+		var err error
+		if logFormat == database.LogFormat243CcAddon {
+			p, err = wotlk.NewTBC(ctx, logLogger, bytes.NewReader(data), gameDB, gameDB, reg)
+		} else {
+			p, err = wotlk.New(ctx, logLogger, bytes.NewReader(data), gameDB, gameDB, reg)
+		}
 		if err != nil {
-			return nil, fmt.Errorf("create wotlk parser: %w", err)
+			return nil, fmt.Errorf("create CLEU parser: %w", err)
 		}
 		p.SetRealmClockInfo(scanCompanionHeaderClock(data))
 		c.Advancer = p
 		consumeErr = c.ConsumeAll(ctx, p)
 		if consumeErr != nil && !errors.Is(consumeErr, io.EOF) {
-			return nil, fmt.Errorf("consume wotlk log: %w", consumeErr)
+			return nil, fmt.Errorf("consume CLEU log: %w", consumeErr)
 		}
 		totalLines = p.Metrics().TotalLinesParsed
 

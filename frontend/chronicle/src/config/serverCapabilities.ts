@@ -12,6 +12,7 @@ export type DefaultLogType =
 export type LogFormat =
   | "1.12a-superwow-addon"
   | "1.12a-cc-addon"
+  | "2.4.3-cc-addon"
   | "3.3.5a-cc-addon"
   | "azerothcore-mod";
 
@@ -19,6 +20,7 @@ export type LogFormat =
 export const LOG_FORMAT_OPTIONS: readonly { value: LogFormat; label: string }[] = [
   { value: "1.12a-superwow-addon", label: "1.12a · SuperWoW" },
   { value: "1.12a-cc-addon", label: "1.12a · ChronicleCompanion" },
+  { value: "2.4.3-cc-addon", label: "2.4.3 · ChronicleCompanion" },
   { value: "3.3.5a-cc-addon", label: "3.3.5a · ChronicleCompanion" },
   { value: "azerothcore-mod", label: "AzerothCore Mod" },
 ];

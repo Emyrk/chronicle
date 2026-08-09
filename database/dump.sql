@@ -21,7 +21,8 @@ CREATE TYPE log_format AS ENUM (
     '1.12a-superwow-addon',
     '1.12a-cc-addon',
     '3.3.5a-cc-addon',
-    'azerothcore-mod'
+    'azerothcore-mod',
+    '2.4.3-cc-addon'
 );
 
 CREATE TYPE log_instance_event_type AS ENUM (

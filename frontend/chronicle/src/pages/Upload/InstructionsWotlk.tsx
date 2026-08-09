@@ -1,4 +1,4 @@
-/** Upload instructions for 3.3.5a ChronicleCompanionWoTLK / AzerothCore formats. */
+/** Upload instructions for 2.4.3/3.3.5a ChronicleCompanion and AzerothCore formats. */
 export function InstructionsWotlk() {
   return (
     <>
@@ -42,7 +42,7 @@ export function InstructionsWotlk() {
           <div>
             <p className="font-medium text-foreground">What is the ChronicleCompanionWoTLK addon?</p>
             <p className="text-muted-foreground mt-1">
-              A companion addon for WoW 3.3.5a that enriches combat logs with additional metadata
+              A companion addon for WoW 2.4.3 and 3.3.5a that enriches combat logs with additional metadata
               (gear, talents, glyphs, raid roster) for more detailed analysis in Chronicle.
             </p>
           </div>

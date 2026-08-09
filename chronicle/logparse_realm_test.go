@@ -126,6 +126,14 @@ func TestScanRealmName(t *testing.T) {
 			expected:  "",
 		},
 
+		// ── TBC companion ────────────────────────────────────────────
+		{
+			name:      "tbc/companion_header",
+			logFormat: database.LogFormat243CcAddon,
+			input:     `5/20 15:52:10.073  SPELL_CAST_FAILED,0x000000000008DCCC,"Rhyd",0x10511,0x0000000000000000,nil,0x80000000,26992,"Thorns",0x8,"[1Z:Karazhan,raid,1,10 Player,10,0,0,0,0,Deadwind Pass][2H:0.1,Netherwing,enUS,2.4.3,8606,0d31]"`,
+			expected:  "Netherwing",
+		},
+
 		// ── WoTLK companion ──────────────────────────────────────────
 		{
 			name:      "wotlk/companion_header",

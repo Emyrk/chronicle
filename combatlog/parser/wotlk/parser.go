@@ -19,10 +19,18 @@ import (
 	"github.com/Emyrk/chronicle/database/gamedb/chrondbc"
 )
 
+type clientFormat uint8
+
+const (
+	clientFormatWotLK clientFormat = iota
+	clientFormatTBC
+)
+
 type Parser struct {
-	logger  *slog.Logger
-	wowDB   gamedb.SpellFetcher
-	scanner *bufio.Scanner
+	logger       *slog.Logger
+	wowDB        gamedb.SpellFetcher
+	scanner      *bufio.Scanner
+	clientFormat clientFormat
 
 	lastDate   time.Time
 	guidNames  *GUIDNames
@@ -49,19 +57,31 @@ type Parser struct {
 }
 
 func New(ctx context.Context, logger *slog.Logger, r io.Reader, wowDB gamedb.GameDB, gear gamedb.GearResolver, reg *registry.Registry) (*Parser, error) {
+	return newParser(ctx, logger, r, wowDB, gear, reg, clientFormatWotLK)
+}
+
+// NewTBC creates a parser for native 2.4.3 COMBAT_LOG_EVENT_UNFILTERED
+// records. TBC and WotLK share the event-prefix and base-field layout, but
+// their damage and healing suffixes differ.
+func NewTBC(ctx context.Context, logger *slog.Logger, r io.Reader, wowDB gamedb.GameDB, gear gamedb.GearResolver, reg *registry.Registry) (*Parser, error) {
+	return newParser(ctx, logger, r, wowDB, gear, reg, clientFormatTBC)
+}
+
+func newParser(ctx context.Context, logger *slog.Logger, r io.Reader, wowDB gamedb.GameDB, gear gamedb.GearResolver, reg *registry.Registry, format clientFormat) (*Parser, error) {
 	if wowDB == nil {
 		return nil, fmt.Errorf("wowDB cannot be nil")
 	}
 	gn := NewGUIDNames()
 	return &Parser{
-		eventHook:   map[string]func(ts time.Time, m *Matched, raw string) ([]messages.Message, error){},
-		logger:      logger,
-		wowDB:       wowDB,
-		scanner:     bufio.NewScanner(r),
-		guidNames:   gn,
-		synthetics:  synthetic.New(ctx, logger, wowDB, reg, gn),
-		itemFetcher: gear,
-		baseYear:    time.Now().Year(),
+		eventHook:    map[string]func(ts time.Time, m *Matched, raw string) ([]messages.Message, error){},
+		logger:       logger,
+		wowDB:        wowDB,
+		scanner:      bufio.NewScanner(r),
+		clientFormat: format,
+		guidNames:    gn,
+		synthetics:   synthetic.New(ctx, logger, wowDB, reg, gn),
+		itemFetcher:  gear,
+		baseYear:     time.Now().Year(),
 		metrics: parservanilla.Metrics{
 			MatchingTime:   make(map[string]time.Duration),
 			UnmatchingTime: make(map[string]time.Duration),
