@@ -39,7 +39,7 @@ export function BreakoutIdentity({
         )}
         data-breakout-identity-class
       >
-        {specialization ? `${specialization} ${className}` : className}
+        {specialization ? `${specialization.toUpperCase()} ${className}` : className}
       </span>
     </div>
   );

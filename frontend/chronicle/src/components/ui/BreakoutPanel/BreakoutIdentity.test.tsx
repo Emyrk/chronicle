@@ -9,7 +9,7 @@ describe("BreakoutIdentity", () => {
         color="#69ccf0"
         name="Mageplayer"
         className="MAGE"
-        specialization="FIRE"
+        specialization="Fire"
       />,
     );
 
