@@ -144,6 +144,7 @@ func (g *Tracker) Insert(ctx context.Context, udb *unitdb.Units, instanceID uuid
 			hasGear = hasGear || item.ItemID != 0
 			dbGear[i] = database.PlayerGear{
 				ItemID: int32(item.ItemID),
+				GemIDs: nonZeroGemIDs(item.Gems),
 			}
 			if item.EnchantID != nil {
 				dbGear[i].EnchantID = ptr.Ref(int32(*item.EnchantID))
@@ -263,6 +264,18 @@ func sortedPlayerGUIDs(players map[guid.GUID]combatant.Combatant) []guid.GUID {
 	}
 	slices.Sort(guids)
 	return guids
+}
+
+func nonZeroGemIDs(gems [4]int) []int32 {
+	if gems == [4]int{} {
+		return nil
+	}
+
+	ids := make([]int32, len(gems))
+	for i, gemID := range gems {
+		ids[i] = int32(gemID)
+	}
+	return ids
 }
 
 // Slot indices in a PlayerOutfit that never count toward average item level.

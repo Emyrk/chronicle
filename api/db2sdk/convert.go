@@ -700,6 +700,7 @@ func ArmoryPlayer(row database.GetGamePlayerByGUIDRow) chroniclesdk.ArmoryPlayer
 			gear[i] = chroniclesdk.PlayerGear{
 				ItemID:      g.ItemID,
 				EnchantID:   g.EnchantID,
+				GemIDs:      g.GemIDs,
 				ItemName:    g.ItemName,
 				ItemQuality: g.ItemQuality,
 				ItemIcon:    g.ItemIcon,
@@ -745,6 +746,7 @@ func ArmoryGearSnapshot(row database.GetPlayerGearHistoryRow) chroniclesdk.Armor
 		gear[i] = chroniclesdk.PlayerGear{
 			ItemID:      g.ItemID,
 			EnchantID:   g.EnchantID,
+			GemIDs:      g.GemIDs,
 			ItemName:    g.ItemName,
 			ItemQuality: g.ItemQuality,
 			ItemIcon:    g.ItemIcon,

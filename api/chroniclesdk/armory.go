@@ -7,20 +7,20 @@ import (
 )
 
 type ArmoryPlayer struct {
-	ID                  GUIDString      `json:"id"`
-	RealmName           string          `json:"realm_name"`
-	RealmID             uuid.UUID       `json:"realm_id"`
-	Name                string          `json:"name"`
-	Class               string          `json:"class"`
-	Race                string          `json:"race"`
-	Gender              string          `json:"gender"`
-	Level               int32           `json:"level"`
-	GuildID             *uuid.UUID      `json:"guild_id,omitempty"`
-	GuildName           string          `json:"guild_name,omitempty"`
-	Gear                PlayerOutfit    `json:"gear"`
-	Talents             *PlayerTalents  `json:"talents,omitempty"`
-	UpdatedAt           time.Time       `json:"updated_at"`
-	UpdatedFromInstance *uuid.UUID      `json:"updated_from_instance,omitempty"`
+	ID                  GUIDString     `json:"id"`
+	RealmName           string         `json:"realm_name"`
+	RealmID             uuid.UUID      `json:"realm_id"`
+	Name                string         `json:"name"`
+	Class               string         `json:"class"`
+	Race                string         `json:"race"`
+	Gender              string         `json:"gender"`
+	Level               int32          `json:"level"`
+	GuildID             *uuid.UUID     `json:"guild_id,omitempty"`
+	GuildName           string         `json:"guild_name,omitempty"`
+	Gear                PlayerOutfit   `json:"gear"`
+	Talents             *PlayerTalents `json:"talents,omitempty"`
+	UpdatedAt           time.Time      `json:"updated_at"`
+	UpdatedFromInstance *uuid.UUID     `json:"updated_from_instance,omitempty"`
 	// DatasetID is the resolved game-data dataset for this player's realm.
 	// Frontends use it to fetch matching talent/spell data regardless of the
 	// tenant domain serving the request.
@@ -46,12 +46,13 @@ type PlayerTalentTab struct {
 type PlayerOutfit [19]PlayerGear
 
 type PlayerGear struct {
-	ItemID      int32  `json:"item_id"`
-	EnchantID   *int32 `json:"enchant_id,omitempty"`
-	ItemName    string `json:"item_name,omitempty"`
-	ItemQuality int32  `json:"item_quality,omitempty"`
-	ItemIcon    string `json:"item_icon,omitempty"`
-	TransmogID  *int32 `json:"transmog_id,omitempty"`
+	ItemID      int32   `json:"item_id"`
+	EnchantID   *int32  `json:"enchant_id,omitempty"`
+	GemIDs      []int32 `json:"gem_ids,omitempty"`
+	ItemName    string  `json:"item_name,omitempty"`
+	ItemQuality int32   `json:"item_quality,omitempty"`
+	ItemIcon    string  `json:"item_icon,omitempty"`
+	TransmogID  *int32  `json:"transmog_id,omitempty"`
 	// ItemLevel is nil for gear snapshots stored before item levels were
 	// recorded, or when the item's template metadata was not found.
 	ItemLevel *int32 `json:"item_level,omitempty"`

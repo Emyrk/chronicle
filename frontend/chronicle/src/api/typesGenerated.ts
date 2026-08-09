@@ -2105,6 +2105,7 @@ export interface PeriodMoment {
 export interface PlayerGear {
     readonly item_id: number;
     readonly enchant_id?: number;
+    readonly gem_ids?: readonly number[];
     readonly item_name?: string;
     readonly item_quality?: number;
     readonly item_icon?: string;

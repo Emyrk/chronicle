@@ -28,7 +28,8 @@ export function GearStripCard({ player, latestSnapshot, onOpenGear }: GearStripC
     [player.gear],
   );
 
-  const hoveredTooltip = hoveredIdx !== null ? items[hoveredIdx]?.tooltip : undefined;
+  const hoveredItem = hoveredIdx !== null ? items[hoveredIdx] : undefined;
+  const hoveredTooltip = hoveredItem?.tooltip;
 
   return (
     <Card
@@ -72,7 +73,7 @@ export function GearStripCard({ player, latestSnapshot, onOpenGear }: GearStripC
 
       {hoveredTooltip && cursor && (
         <CursorTooltip pos={cursor}>
-          <ItemTooltip item={hoveredTooltip} equippedItemIds={equippedItemIds} />
+          <ItemTooltip item={hoveredTooltip} gemIds={hoveredItem?.gemIds} equippedItemIds={equippedItemIds} />
         </CursorTooltip>
       )}
     </Card>

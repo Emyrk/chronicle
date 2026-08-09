@@ -4,6 +4,7 @@ import { iconUrl as buildIconUrl } from "@/config/iconUrl";
 import { useIconBaseUrl } from "@/hooks/useDatasetId";
 import { useQueries } from "@tanstack/react-query";
 import type { ItemTooltip as ItemTooltipData, ItemSpell } from "@/api/typesGenerated";
+import { fetchItemTooltip } from "@/api/gamedata";
 import { useSpell } from "@/api/queries";
 import {
   type WoWSpell,
@@ -137,6 +138,8 @@ interface ItemTooltipProps {
   /** When true, spell names link to /wowdb/spell/{id} */
   includeReferenceLinks?: boolean;
   showItemLevel?: boolean;
+  /** Gem item IDs by socket position. Zero means the socket is empty. */
+  gemIds?: readonly number[];
   /** Set of item entry IDs the player has equipped (for set piece highlighting). */
   equippedItemIds?: ReadonlySet<number>;
   /** If the item is transmogrified, the name of the transmog appearance. */
@@ -148,8 +151,17 @@ interface ItemTooltipProps {
  * Renders a full item tooltip with stats, damage, set bonuses, etc.
  * Designed to match the in-game tooltip appearance.
  */
-export function ItemTooltip({ item, className, includeReferenceLinks = false, showItemLevel = false, equippedItemIds, transmogName }: ItemTooltipProps) {
+export function ItemTooltip({ item, className, includeReferenceLinks = false, showItemLevel = false, gemIds = [], equippedItemIds, transmogName }: ItemTooltipProps) {
   const iconBaseUrl = useIconBaseUrl();
+  const gemQueries = useQueries({
+    queries: gemIds.map((gemId) => ({
+      queryKey: ["item-tooltip", gemId, undefined, undefined],
+      queryFn: () => fetchItemTooltip({ itemId: gemId }),
+      enabled: gemId > 0,
+      staleTime: 5 * 60 * 1000,
+      retry: false,
+    })),
+  });
   const qualityColor = QUALITY_COLORS[item.quality] ?? "text-white";
   const iconUrl = buildIconUrl(item.icon, iconBaseUrl);
   const slotText = INVENTORY_TYPE_TEXT[item.inventory_type] ?? "";
@@ -254,8 +266,18 @@ export function ItemTooltip({ item, className, includeReferenceLinks = false, sh
         ))}
 
         {/* Gem Sockets */}
-        {item.sockets?.map((socket, i) => {
-          const info = SOCKET_INFO[socket.color];
+        {Array.from({ length: Math.max(item.sockets?.length ?? 0, gemIds.length) }, (_, i) => {
+          const socket = item.sockets?.[i];
+          const info = socket ? SOCKET_INFO[socket.color] : undefined;
+          const gem = gemQueries[i]?.data;
+          if (gem) {
+            return (
+              <div key={i} className={cn("flex items-center gap-1.5", QUALITY_COLORS[gem.quality] ?? "text-white")}>
+                <img src={buildIconUrl(gem.icon, iconBaseUrl)} alt="" width={12} height={12} className="inline-block rounded-sm" />
+                {gem.name}
+              </div>
+            );
+          }
           return info ? (
             <div key={i} className="flex items-center gap-1.5 text-gray-400">
               <img src={info.image} alt="" width={12} height={12} className="inline-block" />
