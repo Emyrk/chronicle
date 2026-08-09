@@ -57,7 +57,8 @@ describe("PlayerMetricRow", () => {
     expect(markup).toContain('data-player-class-icon="true"');
     expect(markup).toContain('src="https://icons.example/fire.webp"');
     expect(markup).toContain('data-player-specialization-icon="true"');
-    expect(markup).toContain('width:11px');
+    expect(markup).toContain('width:24px');
+    expect(markup).toContain('width:14px');
   });
 
   it("renders only the class icon when no specialization icon exists", () => {
