@@ -86,5 +86,6 @@ type ItemSocket struct {
 }
 
 type SocketBonus struct {
-	SpellID int32 `json:"spell_id"`
+	EnchantmentID int32  `json:"enchantment_id"`
+	Name          string `json:"name"`
 }

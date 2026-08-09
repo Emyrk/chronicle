@@ -2803,7 +2803,8 @@ export const SocialPlatforms: SocialPlatform[] = ["discord", "twitch", "twitter"
 
 // From chroniclesdk/tooltip.go
 export interface SocketBonus {
-    readonly spell_id: number;
+    readonly enchantment_id: number;
+    readonly name: string;
 }
 
 // From chroniclesdk/log.go

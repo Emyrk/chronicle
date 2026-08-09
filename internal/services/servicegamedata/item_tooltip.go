@@ -179,7 +179,7 @@ func buildBaseTooltip(ctx context.Context, db database.Store, item database.Worl
 		}
 	}
 	if item.SocketBonus != 0 {
-		tooltip.SocketBonus = &chroniclesdk.SocketBonus{SpellID: item.SocketBonus}
+		applySocketBonus(ctx, db, &tooltip, item.SocketBonus, dsID)
 	}
 
 	return tooltip
@@ -275,6 +275,18 @@ func applyItemSet(ctx context.Context, db database.Store, tooltip *chroniclesdk.
 	}
 
 	tooltip.Set = info
+}
+
+// applySocketBonus resolves Item.socket_bonus as a SpellItemEnchantment ID.
+func applySocketBonus(ctx context.Context, db database.Store, tooltip *chroniclesdk.ItemTooltip, enchID int32, dsID uuid.UUID) {
+	ench, err := db.GetSpellItemEnchantmentByID(ctx, database.GetSpellItemEnchantmentByIDParams{DatasetID: dsID, ID: enchID})
+	if err != nil || ench.NameLang == "" {
+		return
+	}
+	tooltip.SocketBonus = &chroniclesdk.SocketBonus{
+		EnchantmentID: enchID,
+		Name:          ench.NameLang,
+	}
 }
 
 // applyEnchantment resolves a player-applied enchantment and adds its display name to the tooltip.

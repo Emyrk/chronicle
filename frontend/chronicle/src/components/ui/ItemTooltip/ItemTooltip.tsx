@@ -286,7 +286,7 @@ export function ItemTooltip({ item, className, includeReferenceLinks = false, sh
           ) : null;
         })}
         {item.socket_bonus && (
-          <SocketBonusLine spellId={item.socket_bonus.spell_id} />
+          <div className="text-gray-500">Socket Bonus: {item.socket_bonus.name}</div>
         )}
 
         {/* Enchantment (green text) */}
@@ -476,13 +476,6 @@ function SetBonusLine({ threshold, spellId, includeReferenceLinks, active = fals
         text
       )}
     </div>
-  );
-}
-
-function SocketBonusLine({ spellId }: { spellId: number }) {
-  const text = useResolvedSpellText(spellId);
-  return (
-    <div className="text-gray-500">Socket Bonus: {text}</div>
   );
 }
 
