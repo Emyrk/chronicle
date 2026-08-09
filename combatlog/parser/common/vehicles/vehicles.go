@@ -102,6 +102,9 @@ func (t *Tracker) Process(message messages.Message) {
 			t.startSession(msg.SessionID, msg.Date())
 		}
 	case *messages.VehicleControl:
+		if !msg.VehicleGUID.IsVehicle() {
+			return
+		}
 		if t.current == nil {
 			t.current = &session{}
 			t.sessions = append(t.sessions, t.current)

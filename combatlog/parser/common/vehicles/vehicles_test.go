@@ -40,6 +40,20 @@ func TestTrackerBuildsDelayedVehicleTimeline(t *testing.T) {
 	assert.Nil(t, second.ReleasedAtMs)
 }
 
+func TestTrackerIgnoresNonVehicleGUIDs(t *testing.T) {
+	t.Parallel()
+	tracker := New()
+	pet := guid.GUID(0xF14000812400008F)
+	controller := guid.GUID(0x000000000000000B)
+
+	tracker.Process(versionMessage("pet-session", time.UnixMilli(1000)))
+	tracker.Process(vehicleMessage(messages.VehicleControlAssign, pet, controller, 2000, 0))
+
+	metadata := tracker.MetadataForRange(time.UnixMilli(1500), time.UnixMilli(3000))
+	assert.Empty(t, metadata.Intervals)
+	assert.Empty(t, metadata.Diagnostics)
+}
+
 func TestTrackerUsesTimestampThenOrdinal(t *testing.T) {
 	t.Parallel()
 	tracker := New()
