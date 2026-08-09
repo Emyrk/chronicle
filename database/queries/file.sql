@@ -314,8 +314,10 @@ WHERE
        THEN wow_log_groups.owner = @filter_user_id 
        ELSE true END
   AND
-  -- Filter by instance name (skip if empty string)
-  CASE WHEN @filter_instance_name::text != '' 
+  -- Filter to logs without an instance, or by instance name when provided
+  CASE WHEN @filter_without_instance::boolean
+       THEN cardinality(instances_agg.instance_names) = 0
+       WHEN @filter_instance_name::text != ''
        THEN @filter_instance_name = ANY(instances_agg.instance_names)
        ELSE true END
 ORDER BY
@@ -360,7 +362,9 @@ WHERE
        THEN wow_log_groups.owner = @filter_user_id 
        ELSE true END
   AND
-  CASE WHEN @filter_instance_name::text != '' 
+  CASE WHEN @filter_without_instance::boolean
+       THEN cardinality(instances_agg.instance_names) = 0
+       WHEN @filter_instance_name::text != ''
        THEN @filter_instance_name = ANY(instances_agg.instance_names)
        ELSE true END;
 

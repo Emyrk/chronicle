@@ -1042,16 +1042,25 @@ export interface AdminLogsParams {
   sortOrder?: "asc" | "desc";
   userId?: string;
   instanceName?: string;
+  withoutInstance?: boolean;
 }
 
 export function useAdminLogs(
   params: AdminLogsParams = {},
   options?: Omit<UseQueryOptions<AdminLogsResponse>, "queryKey" | "queryFn">
 ) {
-  const { limit = 50, offset = 0, sortBy = "date", sortOrder = "desc", userId, instanceName } = params;
+  const {
+    limit = 50,
+    offset = 0,
+    sortBy = "date",
+    sortOrder = "desc",
+    userId,
+    instanceName,
+    withoutInstance = false,
+  } = params;
 
   return useQuery({
-    queryKey: ["admin", "logs", { limit, offset, sortBy, sortOrder, userId, instanceName }],
+    queryKey: ["admin", "logs", { limit, offset, sortBy, sortOrder, userId, instanceName, withoutInstance }],
     queryFn: async () => {
       const searchParams = new URLSearchParams({
         limit: String(limit),
@@ -1061,6 +1070,7 @@ export function useAdminLogs(
       });
       if (userId) searchParams.set("user_id", userId);
       if (instanceName) searchParams.set("instance_name", instanceName);
+      if (withoutInstance) searchParams.set("without_instance", "true");
       const response = await fetch(`/api/v1/admin/logs?${searchParams}`);
       if (!response.ok) throw new Error("Failed to fetch logs");
       return response.json() as Promise<AdminLogsResponse>;

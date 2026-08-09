@@ -15,6 +15,8 @@ import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/Checkbox/Checkbox";
 import { toast } from "sonner";
 
+const WITHOUT_INSTANCE_FILTER = "__without_instance__";
+
 function formatBytes(bytes: number): string {
   if (bytes === 0) return "0 B";
   const k = 1024;
@@ -179,7 +181,10 @@ export function AdminLogsPage() {
     sortBy,
     sortOrder,
     userId: filterUserId || undefined,
-    instanceName: filterInstanceName || undefined,
+    instanceName: filterInstanceName && filterInstanceName !== WITHOUT_INSTANCE_FILTER
+      ? filterInstanceName
+      : undefined,
+    withoutInstance: filterInstanceName === WITHOUT_INSTANCE_FILTER,
   });
 
   const toggleSort = (field: AdminLogsSortField) => {
@@ -336,6 +341,7 @@ export function AdminLogsPage() {
           className="h-8 px-2 rounded-md border border-input bg-background text-sm focus:outline-none focus:ring-2 focus:ring-ring"
         >
           <option value="">All instances</option>
+          <option value={WITHOUT_INSTANCE_FILTER}>Without an instance</option>
           {instanceNames?.map((name) => (
             <option key={name} value={name}>
               {name}

@@ -2490,18 +2490,21 @@ WHERE
        THEN wow_log_groups.owner = $1 
        ELSE true END
   AND
-  CASE WHEN $2::text != '' 
-       THEN $2 = ANY(instances_agg.instance_names)
+  CASE WHEN $2::boolean
+       THEN cardinality(instances_agg.instance_names) = 0
+       WHEN $3::text != ''
+       THEN $3 = ANY(instances_agg.instance_names)
        ELSE true END
 `
 
 type CountAllWoWLogGroupsParams struct {
-	FilterUserID       uuid.UUID `db:"filter_user_id" json:"filter_user_id"`
-	FilterInstanceName string    `db:"filter_instance_name" json:"filter_instance_name"`
+	FilterUserID          uuid.UUID `db:"filter_user_id" json:"filter_user_id"`
+	FilterWithoutInstance bool      `db:"filter_without_instance" json:"filter_without_instance"`
+	FilterInstanceName    string    `db:"filter_instance_name" json:"filter_instance_name"`
 }
 
 func (q *sqlQuerier) CountAllWoWLogGroups(ctx context.Context, arg CountAllWoWLogGroupsParams) (int32, error) {
-	row := q.db.QueryRow(ctx, countAllWoWLogGroups, arg.FilterUserID, arg.FilterInstanceName)
+	row := q.db.QueryRow(ctx, countAllWoWLogGroups, arg.FilterUserID, arg.FilterWithoutInstance, arg.FilterInstanceName)
 	var column_1 int32
 	err := row.Scan(&column_1)
 	return column_1, err
@@ -3245,31 +3248,34 @@ WHERE
        THEN wow_log_groups.owner = $1 
        ELSE true END
   AND
-  -- Filter by instance name (skip if empty string)
-  CASE WHEN $2::text != '' 
-       THEN $2 = ANY(instances_agg.instance_names)
+  -- Filter to logs without an instance, or by instance name when provided
+  CASE WHEN $2::boolean
+       THEN cardinality(instances_agg.instance_names) = 0
+       WHEN $3::text != ''
+       THEN $3 = ANY(instances_agg.instance_names)
        ELSE true END
 ORDER BY
-  CASE WHEN $3::text = 'date' AND $4::text = 'desc' THEN wow_log_groups.created_at END DESC,
-  CASE WHEN $3::text = 'date' AND $4::text = 'asc' THEN wow_log_groups.created_at END ASC,
-  CASE WHEN $3::text = 'user' AND $4::text = 'desc' THEN u.username END DESC NULLS LAST,
-  CASE WHEN $3::text = 'user' AND $4::text = 'asc' THEN u.username END ASC NULLS LAST,
-  CASE WHEN $3::text = 'size' AND $4::text = 'desc' THEN files_agg.total_size_bytes END DESC,
-  CASE WHEN $3::text = 'size' AND $4::text = 'asc' THEN files_agg.total_size_bytes END ASC,
-  CASE WHEN $3::text = 'instance' AND $4::text = 'desc' THEN instances_agg.first_instance_name END DESC NULLS LAST,
-  CASE WHEN $3::text = 'instance' AND $4::text = 'asc' THEN instances_agg.first_instance_name END ASC NULLS LAST,
+  CASE WHEN $4::text = 'date' AND $5::text = 'desc' THEN wow_log_groups.created_at END DESC,
+  CASE WHEN $4::text = 'date' AND $5::text = 'asc' THEN wow_log_groups.created_at END ASC,
+  CASE WHEN $4::text = 'user' AND $5::text = 'desc' THEN u.username END DESC NULLS LAST,
+  CASE WHEN $4::text = 'user' AND $5::text = 'asc' THEN u.username END ASC NULLS LAST,
+  CASE WHEN $4::text = 'size' AND $5::text = 'desc' THEN files_agg.total_size_bytes END DESC,
+  CASE WHEN $4::text = 'size' AND $5::text = 'asc' THEN files_agg.total_size_bytes END ASC,
+  CASE WHEN $4::text = 'instance' AND $5::text = 'desc' THEN instances_agg.first_instance_name END DESC NULLS LAST,
+  CASE WHEN $4::text = 'instance' AND $5::text = 'asc' THEN instances_agg.first_instance_name END ASC NULLS LAST,
   wow_log_groups.id
-LIMIT $6
-OFFSET $5
+LIMIT $7
+OFFSET $6
 `
 
 type ListAllWoWLogGroupsWithOwnerPaginatedParams struct {
-	FilterUserID       uuid.UUID `db:"filter_user_id" json:"filter_user_id"`
-	FilterInstanceName string    `db:"filter_instance_name" json:"filter_instance_name"`
-	SortBy             string    `db:"sort_by" json:"sort_by"`
-	SortOrder          string    `db:"sort_order" json:"sort_order"`
-	OffsetCount        int32     `db:"offset_count" json:"offset_count"`
-	LimitCount         int32     `db:"limit_count" json:"limit_count"`
+	FilterUserID          uuid.UUID `db:"filter_user_id" json:"filter_user_id"`
+	FilterWithoutInstance bool      `db:"filter_without_instance" json:"filter_without_instance"`
+	FilterInstanceName    string    `db:"filter_instance_name" json:"filter_instance_name"`
+	SortBy                string    `db:"sort_by" json:"sort_by"`
+	SortOrder             string    `db:"sort_order" json:"sort_order"`
+	OffsetCount           int32     `db:"offset_count" json:"offset_count"`
+	LimitCount            int32     `db:"limit_count" json:"limit_count"`
 }
 
 type ListAllWoWLogGroupsWithOwnerPaginatedRow struct {
@@ -3285,6 +3291,7 @@ type ListAllWoWLogGroupsWithOwnerPaginatedRow struct {
 func (q *sqlQuerier) ListAllWoWLogGroupsWithOwnerPaginated(ctx context.Context, arg ListAllWoWLogGroupsWithOwnerPaginatedParams) ([]ListAllWoWLogGroupsWithOwnerPaginatedRow, error) {
 	rows, err := q.db.Query(ctx, listAllWoWLogGroupsWithOwnerPaginated,
 		arg.FilterUserID,
+		arg.FilterWithoutInstance,
 		arg.FilterInstanceName,
 		arg.SortBy,
 		arg.SortOrder,
