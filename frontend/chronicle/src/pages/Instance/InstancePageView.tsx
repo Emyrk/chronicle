@@ -47,6 +47,7 @@ import { InstanceActionBar } from "@/components/InstanceActionBar/InstanceAction
 import { InstanceHelpSheet } from "@/components/HelpSheet";
 import { ENCOUNTER_TIPS, ENTITY_TIPS, CLASS_TOGGLE_TIPS } from "@/constants/tips";
 import { InstanceMenu } from "./InstanceMenu";
+import { validateSharedViewPayload } from "./sharedViewImport";
 import { InstanceViewModeSwitch } from "./InstanceViewMode";
 import { isInstanceOverviewEnabled, parseInstanceViewMode, withInstanceViewMode, type InstanceViewMode } from "./instanceViewModeState";
 import { InstanceOverview } from "./Overview/InstanceOverview";
@@ -2566,11 +2567,6 @@ export function InstancePageView({
   }, [activeLayoutItems, setPanelOption]);
 
   const applySharedViewPayload = useCallback((payload: SharedViewPayload) => {
-    const payloadInstanceID = payload.instanceId ?? payload.instance_id;
-    if (payloadInstanceID !== instance.id) {
-      throw new Error("Shared view belongs to a different instance");
-    }
-
     const layoutItems = payload.layout?.items ?? payload.items ?? [];
     const panelTypesById = payload.layout?.panelTypesById ?? payload.panelTypesById ?? {};
 
@@ -2660,7 +2656,7 @@ export function InstancePageView({
     } else {
       timeRange?.reset();
     }
-  }, [allMergedEnemies, instance.encounters, instance.id, instance.players, onSelectEncounters, setViewState, timeRange]);
+  }, [allMergedEnemies, instance.encounters, instance.players, onSelectEncounters, setViewState, timeRange]);
 
   const handleExportLayout = useCallback(() => {
     const payload = {
@@ -2746,7 +2742,6 @@ export function InstancePageView({
 
   const buildSharedViewPayload = useCallback((): SharedViewPayload => ({
       version: 2,
-      instanceId: instance.id,
       layoutId: activeLayoutId ?? undefined,
       layout: {
         items: activeLayoutItems,
@@ -2774,7 +2769,7 @@ export function InstancePageView({
           ? { timeRange: { startMs: timeRange.startOffsetMs, endMs: timeRange.endOffsetMs } }
           : {}),
       },
-    }), [activeLayoutId, activeLayoutItems, allMergedEnemies, instance.encounters, instance.id, instance.players, panelFiltersByID, panelOptionsByID, panelTypesByID, timeRange?.enabled, timeRange?.startOffsetMs, timeRange?.endOffsetMs, viewState.encounters, viewState.enemies, viewState.includeWipes, viewState.players]);
+    }), [activeLayoutId, activeLayoutItems, allMergedEnemies, instance.encounters, instance.players, panelFiltersByID, panelOptionsByID, panelTypesByID, timeRange?.enabled, timeRange?.startOffsetMs, timeRange?.endOffsetMs, viewState.encounters, viewState.enemies, viewState.includeWipes, viewState.players]);
 
   const copyStateToClipboard = useCallback(async () => {
     try {
@@ -2946,7 +2941,11 @@ export function InstancePageView({
       try {
         const shared = await fetchSharedView(importCode);
         if (cancelled) return;
-        const payload = shared.payload as unknown as SharedViewPayload;
+        const payload = validateSharedViewPayload(
+          shared.payload,
+          shared.instance_id,
+          instance.id,
+        ) as unknown as SharedViewPayload;
         setSearchParams((prev) => {
           const next = new URLSearchParams(prev);
           next.delete("import");
