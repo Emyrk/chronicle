@@ -88,6 +88,9 @@ func ProcessCommonActivity(c CharacterBase, m messages.Message) error {
 		if reason, ok := m.MarkHas(messages.MarkTypeBump, c.ID()); ok {
 			c.Bump(reason, m)
 		}
+		if _, ok := m.MarkHas(messages.MarkTypeIgnoreActivity, c.ID()); ok {
+			return nil
+		}
 		// Let the regular logic apply.
 	}
 

@@ -5,6 +5,7 @@ import (
 
 	"github.com/Emyrk/chronicle/combatlog/parser/common/identifier"
 	"github.com/Emyrk/chronicle/combatlog/parser/common/instances"
+	"github.com/Emyrk/chronicle/combatlog/parser/common/instances/instancehook"
 	"github.com/Emyrk/chronicle/combatlog/parser/common/instances/rankings"
 	"github.com/Emyrk/chronicle/combatlog/parser/common/parsectx"
 	"github.com/Emyrk/chronicle/combatlog/parser/types"
@@ -231,6 +232,9 @@ var EyeOfEternityFactory = &instances.CommonFactory{
 	ZoneNames: []string{"the eye of eternity", "eye of eternity"},
 	MapIDs:    []uint32{616},
 	Hostiles:  instances.FromMap(EyeOfEternityHostiles()),
+	Preprocessors: func() []instancehook.Preprocessor {
+		return []instancehook.Preprocessor{&malygosDamageCredit{}}
+	},
 }
 
 // RubySanctumHostiles returns creature entry IDs for The Ruby Sanctum (map 724).

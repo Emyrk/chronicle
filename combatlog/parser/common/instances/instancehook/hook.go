@@ -7,6 +7,12 @@ import (
 	"github.com/google/uuid"
 )
 
+// Preprocessor mutates or enriches a message before any instance consumer,
+// including the unit database, characters, hooks, and encounter serializer.
+type Preprocessor interface {
+	ProcessMessage(messages.Message) error
+}
+
 type Hook interface {
 	ProcessMessage(active bool, encounterID uuid.UUID, m messages.Message) error
 

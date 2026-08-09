@@ -8,6 +8,7 @@ import (
 	"github.com/Emyrk/chronicle/combatlog/parser/common/armory"
 	"github.com/Emyrk/chronicle/combatlog/parser/common/encounter"
 	"github.com/Emyrk/chronicle/combatlog/parser/common/identifier"
+	"github.com/Emyrk/chronicle/combatlog/parser/common/instances/instancehook"
 	"github.com/Emyrk/chronicle/combatlog/parser/common/instances/overviewmetrics"
 	"github.com/Emyrk/chronicle/combatlog/parser/common/instances/rankings"
 	"github.com/Emyrk/chronicle/combatlog/parser/common/loot"
@@ -65,6 +66,8 @@ type CommonFactory struct {
 	MapIDs           []uint32
 	Hostiles         func(flavor database.WoWFlavor) *identifier.Identifier
 	FlavoredRankings func(flavor database.WoWFlavor) *rankings.Rankings
+	// Preprocessors creates fresh message preprocessors for each parsed instance.
+	Preprocessors func() []instancehook.Preprocessor
 }
 
 // MatchZone returns true if z matches any of the factory's zone names

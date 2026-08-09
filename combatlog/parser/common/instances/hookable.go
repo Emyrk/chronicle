@@ -37,6 +37,7 @@ import (
 )
 
 const (
+	timingsPreprocessors              = "preprocessors"
 	timingsProcessCharacters          = "process_characters"
 	timingsProcessFightDetection      = "process_fight_detection"
 	timingsProcessOngoingFightProcess = "ongoing_fight_process_events"
@@ -59,9 +60,10 @@ type Hookable struct {
 	CurrentZone  zone.Zone
 	*identifier.Identifier
 	verbose           bool
-	realm             *realm.Info         // mostly static
-	versions          map[string]string   // addon/dependency versions from HEADER
-	recorderGUID      *guid.GUID          // recording player GUID from HEADER
+	realm             *realm.Info       // mostly static
+	versions          map[string]string // addon/dependency versions from HEADER
+	recorderGUID      *guid.GUID        // recording player GUID from HEADER
+	preprocessors     []instancehook.Preprocessor
 	hooks             []instancehook.Hook // TODO: unroll?
 	engagementTracker *rankings.EngagementTracker
 	overviewTracker   *overviewmetrics.Tracker
@@ -94,11 +96,12 @@ type Hookable struct {
 }
 
 type InstanceParams struct {
-	Name        string
-	MatchesZone func(z zone.Zone) bool
-	Idf         *identifier.Identifier
-	Rankings    *rankings.Rankings
-	ExtraHooks  []instancehook.Hook
+	Name          string
+	MatchesZone   func(z zone.Zone) bool
+	Idf           *identifier.Identifier
+	Rankings      *rankings.Rankings
+	Preprocessors []instancehook.Preprocessor
+	ExtraHooks    []instancehook.Hook
 }
 
 func (f *CommonFactory) NewHookable(ctx context.Context, logger *slog.Logger, db *unitdb.Units, z zone.Zone, flavor database.WoWFlavor) *Hookable {
@@ -110,11 +113,16 @@ func (f *CommonFactory) NewHookable(ctx context.Context, logger *slog.Logger, db
 	if f.NameFromZone != nil {
 		name = f.NameFromZone(ctx, z, flavor)
 	}
+	var preprocessors []instancehook.Preprocessor
+	if f.Preprocessors != nil {
+		preprocessors = f.Preprocessors()
+	}
 	return NewHookable(ctx, logger, db, z, InstanceParams{
-		Name:        name,
-		MatchesZone: f.MatchZone,
-		Idf:         f.Hostiles(flavor),
-		Rankings:    r,
+		Name:          name,
+		MatchesZone:   f.MatchZone,
+		Idf:           f.Hostiles(flavor),
+		Rankings:      r,
+		Preprocessors: preprocessors,
 	})
 }
 
@@ -209,6 +217,7 @@ func NewHookable(ctx context.Context, logger *slog.Logger, db *unitdb.Units, z z
 		name:              ip.Name,
 		logger:            logger,
 		units:             db,
+		preprocessors:     ip.Preprocessors,
 		CurrentZone:       z,
 		MatchesZoneF:      ip.MatchesZone,
 		Characters:        chrs,
@@ -403,6 +412,20 @@ func (h *Hookable) Process(m messages.Message) error {
 }
 
 func (h *Hookable) process(m messages.Message) (finalError error) {
+	if len(h.preprocessors) > 0 {
+		err := timings.Do1(h.timings, timingsPreprocessors, func() error {
+			for _, preprocessor := range h.preprocessors {
+				if err := preprocessor.ProcessMessage(m); err != nil {
+					return fmt.Errorf("preprocessor: %w", err)
+				}
+			}
+			return nil
+		})
+		if err != nil {
+			return err
+		}
+	}
+
 	err := h.units.ProcessMessage(m)
 	if err != nil {
 		return fmt.Errorf("processing unit message: %w", err)

@@ -3,8 +3,9 @@ package messages
 import "github.com/Emyrk/chronicle/combatlog/parser/guid"
 
 const (
-	MarkTypeBump  MarkType = "bump"
-	MarkTypeStart MarkType = "start"
+	MarkTypeBump           MarkType = "bump"
+	MarkTypeStart          MarkType = "start"
+	MarkTypeIgnoreActivity MarkType = "ignore_activity"
 )
 
 type MarkType string
@@ -26,6 +27,13 @@ func (m *marks) MarkActivityStart(reason string, target guid.GUID) {
 func (m *marks) MarkActivityBump(reason string, target guid.GUID) {
 	m.MarkAdd(Mark{
 		Type:    MarkTypeBump,
+		Targets: map[guid.GUID]string{target: reason},
+	})
+}
+
+func (m *marks) MarkActivityIgnore(reason string, target guid.GUID) {
+	m.MarkAdd(Mark{
+		Type:    MarkTypeIgnoreActivity,
 		Targets: map[guid.GUID]string{target: reason},
 	})
 }
