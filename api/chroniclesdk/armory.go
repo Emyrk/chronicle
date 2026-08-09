@@ -46,13 +46,13 @@ type PlayerTalentTab struct {
 type PlayerOutfit [19]PlayerGear
 
 type PlayerGear struct {
-	ItemID      int32   `json:"item_id"`
-	EnchantID   *int32  `json:"enchant_id,omitempty"`
-	GemIDs      []int32 `json:"gem_ids,omitempty"`
-	ItemName    string  `json:"item_name,omitempty"`
-	ItemQuality int32   `json:"item_quality,omitempty"`
-	ItemIcon    string  `json:"item_icon,omitempty"`
-	TransmogID  *int32  `json:"transmog_id,omitempty"`
+	ItemID        int32   `json:"item_id"`
+	EnchantID     *int32  `json:"enchant_id,omitempty"`
+	GemEnchantIDs []int32 `json:"gem_enchant_ids,omitempty"`
+	ItemName      string  `json:"item_name,omitempty"`
+	ItemQuality   int32   `json:"item_quality,omitempty"`
+	ItemIcon      string  `json:"item_icon,omitempty"`
+	TransmogID    *int32  `json:"transmog_id,omitempty"`
 	// ItemLevel is nil for gear snapshots stored before item levels were
 	// recorded, or when the item's template metadata was not found.
 	ItemLevel *int32 `json:"item_level,omitempty"`

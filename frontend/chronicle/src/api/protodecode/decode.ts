@@ -4967,7 +4967,7 @@ export interface ReusableCombatantGearSlot {
   itemId: number;
   enchantId: number | null;
   temporaryEnchantId: number | null;
-  gemIds: number[];
+  gemEnchantIds: number[];
 }
 
 export interface ReusableCombatantTalents {
@@ -5117,13 +5117,13 @@ export class CombatantInfoDecoder {
         } else if (fieldNumber === 8) {
           // CombatantGearSlot (repeated)
           if (msg.gearCount >= msg.gear.length) {
-            msg.gear.push({ itemId: 0, enchantId: null, temporaryEnchantId: null, gemIds: [] });
+            msg.gear.push({ itemId: 0, enchantId: null, temporaryEnchantId: null, gemEnchantIds: [] });
           }
           const slot = msg.gear[msg.gearCount];
           slot.itemId = 0;
           slot.enchantId = null;
           slot.temporaryEnchantId = null;
-          slot.gemIds.length = 0;
+          slot.gemEnchantIds.length = 0;
 
           const slotEnd = offset + len;
           while (offset < slotEnd) {
@@ -5137,7 +5137,7 @@ export class CombatantInfoDecoder {
               if (slotField === 1) slot.itemId = value;
               else if (slotField === 2) slot.enchantId = value;
               else if (slotField === 3) slot.temporaryEnchantId = value;
-              else if (slotField === 4) slot.gemIds.push(value);
+              else if (slotField === 4) slot.gemEnchantIds.push(value);
             } else if (slotWire === 2 && slotField === 4) {
               const { value: packedLen, bytesRead: packedLenBytes } = readVarintFast(data, offset);
               offset += packedLenBytes;
@@ -5145,7 +5145,7 @@ export class CombatantInfoDecoder {
               while (offset < packedEnd) {
                 const { value, bytesRead } = readVarintFast(data, offset);
                 offset += bytesRead;
-                slot.gemIds.push(value);
+                slot.gemEnchantIds.push(value);
               }
             }
           }

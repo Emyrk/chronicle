@@ -82,7 +82,7 @@ describe('FastCombatantInfoCursor', () => {
       name: 'Player',
       gear: [create(CombatantGearSlotSchema, {
         itemId: 51396,
-        gemIds: [0, 0, 41398, 0],
+        gemEnchantIds: [0, 0, 3637, 0],
       })],
     });
     const encoded = toBinary(CombatantInfoSchema, message);
@@ -91,7 +91,7 @@ describe('FastCombatantInfoCursor', () => {
 
     const cursor = new FastCombatantInfoCursor(payload);
 
-    expect(cursor.next()?.gear[0].gemIds).toEqual([0, 0, 41398, 0]);
+    expect(cursor.next()?.gear[0].gemEnchantIds).toEqual([0, 0, 3637, 0]);
   });
 });
 

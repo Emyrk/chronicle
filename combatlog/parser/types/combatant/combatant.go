@@ -204,7 +204,7 @@ type GearItem struct {
 	TempEnchantID *int
 	SuffixID      int
 	TransmogID    *int
-	Gems          [4]int // Gem item IDs (0 = empty socket)
+	GemEnchantIDs [4]int // Gem enchantment IDs from the item link (0 = empty socket)
 	ItemLevel     int    // Item level from the item link
 }
 

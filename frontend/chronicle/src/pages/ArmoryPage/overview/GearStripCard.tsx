@@ -73,7 +73,7 @@ export function GearStripCard({ player, latestSnapshot, onOpenGear }: GearStripC
 
       {hoveredTooltip && cursor && (
         <CursorTooltip pos={cursor}>
-          <ItemTooltip item={hoveredTooltip} gemIds={hoveredItem?.gemIds} equippedItemIds={equippedItemIds} />
+          <ItemTooltip item={hoveredTooltip} gemEnchantIds={hoveredItem?.gemEnchantIds} equippedItemIds={equippedItemIds} />
         </CursorTooltip>
       )}
     </Card>

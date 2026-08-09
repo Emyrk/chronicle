@@ -28,7 +28,7 @@ function combatantInfo(): CombatantInfoProcessorEvent {
       itemId: 51396,
       enchantId: null,
       temporaryEnchantId: null,
-      gemIds: [0, 0, 41398, 0],
+      gemEnchantIds: [0, 0, 3637, 0],
     }],
     gearCount: 1,
     talents: null,
@@ -41,8 +41,8 @@ describe("equipmentProcessor", () => {
     const event = combatantInfo();
 
     equipmentProcessor.processEvent(state, event, "encounter", new Date(0), "combatant_info", context());
-    event.gear[0].gemIds[2] = 0;
+    event.gear[0].gemEnchantIds[2] = 0;
 
-    expect(state.players.get("player")?.gear[0].gemIds).toEqual([0, 0, 41398, 0]);
+    expect(state.players.get("player")?.gear[0].gemEnchantIds).toEqual([0, 0, 3637, 0]);
   });
 });

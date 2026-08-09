@@ -32,11 +32,11 @@ func TestArmoryWriteOrderIsDeterministic(t *testing.T) {
 	assert.Equal(t, []guid.GUID{10, 20, 30}, sortedPlayerGUIDs(players))
 }
 
-func TestNonZeroGemIDs(t *testing.T) {
+func TestOptionalGemEnchantIDs(t *testing.T) {
 	t.Parallel()
 
-	assert.Nil(t, nonZeroGemIDs([4]int{}))
-	assert.Equal(t, []int32{41398, 40014, 0, 0}, nonZeroGemIDs([4]int{41398, 40014, 0, 0}))
+	assert.Nil(t, optionalGemEnchantIDs([4]int{}))
+	assert.Equal(t, []int32{3637, 3454, 0, 0}, optionalGemEnchantIDs([4]int{3637, 3454, 0, 0}))
 }
 
 func TestRespecInvalidatesRankingTalentsUntilFreshUpdate(t *testing.T) {

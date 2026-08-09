@@ -22,13 +22,13 @@ func TestGearSlotPreservesGemPositions(t *testing.T) {
 	t.Parallel()
 
 	got := GearSlot(combatant.GearItem{
-		ItemID: 51396,
-		Gems:   [4]int{0, 0, 41398, 0},
+		ItemID:        51396,
+		GemEnchantIDs: [4]int{0, 0, 3637, 0},
 	})
 
 	require.Equal(t, int32(51396), got.ItemId)
-	require.Equal(t, []int32{0, 0, 41398, 0}, got.GemIds)
-	require.Nil(t, GearSlot(combatant.GearItem{ItemID: 50633}).GemIds)
+	require.Equal(t, []int32{0, 0, 3637, 0}, got.GemEnchantIds)
+	require.Nil(t, GearSlot(combatant.GearItem{ItemID: 50633}).GemEnchantIds)
 }
 
 func TestResurrection(t *testing.T) {

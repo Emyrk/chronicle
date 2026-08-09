@@ -20,6 +20,14 @@ export async function fetchItemTooltip({ itemId, randomProperty, enchant }: Fetc
   return response.json();
 }
 
+export async function fetchGemTooltip(enchantId: number): Promise<ItemTooltip> {
+  const response = await fetch(`/api/v1/internal/gamedata/tooltip/gem/${enchantId}`);
+  if (!response.ok) {
+    throw new Error(`Failed to fetch gem tooltip: ${response.status}`);
+  }
+  return response.json();
+}
+
 export function useItemTooltip(params: FetchItemTooltipParams | null) {
   return useQuery({
     queryKey: ["item-tooltip", params?.itemId, params?.randomProperty, params?.enchant],

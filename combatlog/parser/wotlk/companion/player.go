@@ -147,7 +147,8 @@ func (p *Parser) parseIdentity(ts time.Time, pd *PlayerData, data string) ([]mes
 	return []messages.Message{pd.toCombatantMessage(ts)}, nil
 }
 
-// parseGear parses: G<slot>.<itemId>.<enchant>.<gem1>.<gem2>.<gem3>.<gem4>.<suffix>.<itemLevel>:<next slot>:...
+// parseGear parses: G<slot>.<itemId>.<enchant>.<gemEnchant1>.<gemEnchant2>.<gemEnchant3>.<gemEnchant4>.<suffix>.<itemLevel>:<next slot>:...
+// WoW 3.3.5 item links encode socketed gems as SpellItemEnchantment IDs, not item IDs.
 // The slot index (fields[0]) is 1-based (1=Head, 2=Neck, ... 19=Tabard) and maps to a
 // fixed 19-element array so items land in the correct equipment slot positions.
 func (p *Parser) parseGear(ts time.Time, pd *PlayerData, data string) ([]messages.Message, error) {
@@ -167,7 +168,7 @@ func (p *Parser) parseGear(ts time.Time, pd *PlayerData, data string) ([]message
 			return nil, fmt.Errorf("gear: expected 9 fields per slot, got %d in %q", len(fields), slot)
 		}
 
-		// Fields: slot, itemId, enchant, gem1, gem2, gem3, gem4, suffix, itemLevel
+		// Fields: slot, itemId, enchant, gem enchant IDs 1-4, suffix, itemLevel
 		slotIndex, err := strconv.Atoi(fields[0])
 		if err != nil || slotIndex < 1 || slotIndex > 19 {
 			return nil, fmt.Errorf("gear: invalid slot index %q", fields[0])
@@ -186,10 +187,10 @@ func (p *Parser) parseGear(ts time.Time, pd *PlayerData, data string) ([]message
 		itemLevel, _ := strconv.Atoi(fields[8])
 
 		item := combatant.GearItem{
-			ItemID:    itemID,
-			SuffixID:  suffixID,
-			Gems:      [4]int{gem1, gem2, gem3, gem4},
-			ItemLevel: itemLevel,
+			ItemID:        itemID,
+			SuffixID:      suffixID,
+			GemEnchantIDs: [4]int{gem1, gem2, gem3, gem4},
+			ItemLevel:     itemLevel,
 		}
 		if enchantID != 0 {
 			item.EnchantID = &enchantID

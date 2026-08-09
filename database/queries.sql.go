@@ -15738,6 +15738,26 @@ func (q *sqlQuerier) GetDisplayInfoByID(ctx context.Context, arg GetDisplayInfoB
 	return i, err
 }
 
+const getGemItemIDByEnchantID = `-- name: GetGemItemIDByEnchantID :one
+SELECT src_item_id
+FROM dbc_spell_item_enchantment
+WHERE dataset_id = $1
+  AND id = $2
+  AND src_item_id != 0
+`
+
+type GetGemItemIDByEnchantIDParams struct {
+	DatasetID uuid.UUID `db:"dataset_id" json:"dataset_id"`
+	EnchantID int32     `db:"enchant_id" json:"enchant_id"`
+}
+
+func (q *sqlQuerier) GetGemItemIDByEnchantID(ctx context.Context, arg GetGemItemIDByEnchantIDParams) (int32, error) {
+	row := q.db.QueryRow(ctx, getGemItemIDByEnchantID, arg.DatasetID, arg.EnchantID)
+	var src_item_id int32
+	err := row.Scan(&src_item_id)
+	return src_item_id, err
+}
+
 const getItemRandomPropertiesByID = `-- name: GetItemRandomPropertiesByID :one
 SELECT id, name, name_lang, enchantment_1, enchantment_2, enchantment_3, enchantment_4, enchantment_5, dataset_id FROM dbc_item_random_properties WHERE dataset_id = $1 AND id = $2
 `
