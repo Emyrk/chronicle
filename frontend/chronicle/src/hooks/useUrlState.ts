@@ -648,6 +648,7 @@ const PANEL_CODES: Record<PanelType, string> = {
   status: 'st',
   healer_casts: 'hc',
   possession: 'pos',
+  vehicle: 'veh',
   unit_lookup: 'ul',
   equipment: 'eq',
   // Dispels

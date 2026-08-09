@@ -5,7 +5,7 @@ import { useInstance, useInstanceYoutube, useAuthorizationCheck } from "@/api/qu
 import { useAuth } from "@/hooks/useAuth";
 import { InstanceEventsProvider } from "@/hooks/instanceEvents";
 import { DatasetProvider } from "@/hooks/useDatasetId";
-import type { ActivityPeriod, InstancePlayer, InstanceUnit, WoWEncounterWithHostiles, KillType } from "@/api/typesGenerated";
+import type { ActivityPeriod, InstancePlayer, InstanceUnit, WoWEncounterWithHostiles, KillType, VehicleControlMetadata } from "@/api/typesGenerated";
 import { Card } from "@/components/ui/Card/Card";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
@@ -71,6 +71,8 @@ export interface Instance {
   difficultyName?: string;
   maxPlayers?: number;
   dynamicDifficulty?: number;
+  // Timestamped vehicle-to-controller intervals and transport diagnostics
+  vehicleControlIntervals?: VehicleControlMetadata;
   // Tenant info for cross-tenant gating
   serverName?: string;
   tenantName?: string;
@@ -120,6 +122,7 @@ function transformToInstance(
     difficulty_name?: string;
     max_players?: number;
     dynamic_difficulty?: number;
+    vehicle_control_intervals?: VehicleControlMetadata;
     server_name?: string;
     tenant_name?: string;
     tenant_slug?: string;
@@ -188,6 +191,7 @@ function transformToInstance(
     difficultyName: apiInstance.difficulty_name,
     maxPlayers: apiInstance.max_players,
     dynamicDifficulty: apiInstance.dynamic_difficulty,
+    vehicleControlIntervals: apiInstance.vehicle_control_intervals,
     serverName: apiInstance.server_name,
     tenantName: apiInstance.tenant_name,
     tenantSlug: apiInstance.tenant_slug,

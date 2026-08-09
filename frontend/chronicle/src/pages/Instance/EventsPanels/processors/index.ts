@@ -27,6 +27,7 @@ import { rotationsProcessor } from "../Rotations/rotations.processor";
 import { statusProcessor } from "../Status/status.processor";
 import { healerCastsProcessor } from "../HealerCasts/healerCasts.processor";
 import { possessionProcessor } from "../PossessionPanel/possession.processor";
+import { vehicleProcessor } from "../VehiclePanel/vehicle.processor";
 import { unitLookupProcessor } from "../UnitLookup/unitLookup.processor";
 import { dispelProcessor } from "../Dispel/dispel.processor";
 import { interruptProcessor } from "../Interrupt/interrupt.processor";
@@ -65,6 +66,7 @@ export { rotationsProcessor } from "../Rotations/rotations.processor";
 export { statusProcessor } from "../Status/status.processor";
 export { healerCastsProcessor } from "../HealerCasts/healerCasts.processor";
 export { possessionProcessor } from "../PossessionPanel/possession.processor";
+export { vehicleProcessor } from "../VehiclePanel/vehicle.processor";
 export { unitLookupProcessor } from "../UnitLookup/unitLookup.processor";
 export { dispelProcessor } from "../Dispel/dispel.processor";
 export { interruptProcessor } from "../Interrupt/interrupt.processor";
@@ -175,8 +177,9 @@ export const processorRegistry: Record<string, PanelProcessor<any, any>> = {
   raid_durability_strip: { ...statusProcessor, id: "raid_durability_strip" },
   // Rotations
   rotations: rotationsProcessor,
-  // Possession timeline
+  // Control timelines
   possession: possessionProcessor,
+  vehicle: vehicleProcessor,
   // Unit lookup
   unit_lookup: unitLookupProcessor,
   // Dispels

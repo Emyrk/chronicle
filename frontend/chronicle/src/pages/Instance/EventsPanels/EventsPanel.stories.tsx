@@ -78,14 +78,14 @@ type Story = StoryObj<typeof EventsPanel>;
  * Create a story for a specific panel type.
  * Includes a play function that waits for processing to complete.
  */
-function createPanelStory(panelType: EventsPanelType): Story {
+function createPanelStory(panelType: EventsPanelType, context: PanelContext = mockContext): Story {
   const panel = PANELS[panelType];
   
   return {
     args: {
       panelType,
       durationMs,
-      context: mockContext,
+      context,
       panelIndex: 0,
       onPanelTypeChange: () => {},
     },
@@ -107,6 +107,52 @@ function createPanelStory(panelType: EventsPanelType): Story {
     },
   };
 }
+
+const vehicleControllerGuids = Object.keys(fixtureInstance.players ?? {});
+const vehicleRangeStart = bossEncounter ? new Date(bossEncounter.start_time).getTime() : Date.now();
+const vehicleStoryContext: PanelContext = {
+  ...mockContext,
+  instance: {
+    ...fixtureInstance,
+    vehicleControlIntervals: {
+      intervals: [
+        {
+          session_id: "rfc-vehicle-demo",
+          vehicle_guid: "0xF15000812400008F",
+          controller_guid: vehicleControllerGuids[0] ?? "0x000000000000000B",
+          vehicle_name: "Salvaged Siege Engine",
+          controller_name: fixtureInstance.players?.[vehicleControllerGuids[0]]?.name ?? "Chroniclee",
+          assigned_at_ms: vehicleRangeStart - 3_000,
+          released_at_ms: vehicleRangeStart + 24_000,
+          assigned_ordinal: 8,
+          release_reason: "explicit",
+        },
+        {
+          session_id: "rfc-vehicle-demo",
+          vehicle_guid: "0xF15000812B000090",
+          controller_guid: vehicleControllerGuids[1] ?? vehicleControllerGuids[0] ?? "0x000000000000000C",
+          vehicle_name: "Salvaged Siege Turret",
+          controller_name: fixtureInstance.players?.[vehicleControllerGuids[1]]?.name ?? "Chroniclea",
+          assigned_at_ms: vehicleRangeStart + 11_000,
+          assigned_ordinal: 12,
+        },
+      ],
+      diagnostics: [
+        {
+          kind: "stale_release",
+          session_id: "rfc-vehicle-demo",
+          timestamp_ms: vehicleRangeStart + 18_000,
+          ordinal: 14,
+          vehicle_guid: "0xF15000812B000090",
+          controller_guid: vehicleControllerGuids[0] ?? "0x000000000000000B",
+          vehicle_name: "Salvaged Siege Turret",
+          controller_name: fixtureInstance.players?.[vehicleControllerGuids[0]]?.name ?? "Chroniclee",
+          active_controller_guid: vehicleControllerGuids[1] ?? vehicleControllerGuids[0],
+        },
+      ],
+    },
+  },
+};
 
 // ============================================================================
 // Damage Panels
@@ -141,6 +187,7 @@ export const Mitigation: Story = createPanelStory("mitigation");
 export const ExtraAttacks: Story = createPanelStory("extra_attacks");
 export const ResourceRegen: Story = createPanelStory("resource_regen");
 export const Roles: Story = createPanelStory("roles");
+export const Vehicles: Story = createPanelStory("vehicle", vehicleStoryContext);
 
 // ============================================================================
 // Class-specific Panels

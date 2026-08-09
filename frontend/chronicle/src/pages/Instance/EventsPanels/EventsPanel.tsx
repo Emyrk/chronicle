@@ -57,6 +57,7 @@ import { createAuraUptimePanel } from "./AuraUptime/AuraUptime";
 import { createMetricsPanel } from "./Metrics/Metrics";
 import { PeriodsPanel } from "./PeriodsPanel/PeriodsPanel";
 import { createPossessionPanel } from "./PossessionPanel/PossessionPanel";
+import { createVehiclePanel } from "./VehiclePanel/VehiclePanel";
 import { createComparisonPanel } from "./ComparisonPanel/ComparisonPanel";
 import { createTimelinePanel } from "./Timeline/Timeline";
 import { createRotationsPanel } from "./Rotations/Rotations";
@@ -126,8 +127,9 @@ export const PANELS: Record<string, PanelDefinition<any, any>> = {
   healer_casts: createHealerCastsPanel(),
   // Rotations
   rotations: createRotationsPanel(),
-  // Possession timeline
+  // Control timelines
   possession: createPossessionPanel(),
+  vehicle: createVehiclePanel(),
   // Unit lookup
   unit_lookup: createUnitLookupPanel(),
   equipment: createEquipmentPanel(),
