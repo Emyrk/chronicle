@@ -19,10 +19,12 @@ import {
 import type { PanelDefinition, PanelRenderProps } from "../types";
 import { vehicleProcessor, type VehicleResult } from "./vehicle.processor";
 import {
+  buildTimelineTicks,
   clipIntervalToRange,
   formatVehicleDuration,
   intervalOverlapsRange,
   selectedEncounterRange,
+  type TimelineTick,
 } from "./vehiclePanelLogic";
 
 interface VehicleRow {
@@ -105,6 +107,8 @@ function VehiclePanelContent({ context }: PanelRenderProps<VehicleResult>) {
     () => new Set(visibleIntervals.map((interval) => interval.controller_guid)).size,
     [visibleIntervals],
   );
+  const durationMs = range ? Math.max(range.endMs - range.startMs, 1) : 1;
+  const timelineTicks = useMemo(() => buildTimelineTicks(durationMs), [durationMs]);
 
   if (!metadata || (intervals.length === 0 && diagnostics.length === 0)) {
     return (
@@ -126,8 +130,6 @@ function VehiclePanelContent({ context }: PanelRenderProps<VehicleResult>) {
     );
   }
 
-  const durationMs = Math.max(range.endMs - range.startMs, 1);
-
   return (
     <ScrollArea className="h-full">
       <div className="min-w-max space-y-3 p-2">
@@ -145,9 +147,9 @@ function VehiclePanelContent({ context }: PanelRenderProps<VehicleResult>) {
 
         {rows.length > 0 ? (
           <div>
-            <div className="mb-1 flex items-center gap-2 text-[10px] font-medium text-muted-foreground">
-              <span className="w-40 shrink-0">Vehicle</span>
-              <span className="min-w-[340px] flex-1">Pilot timeline</span>
+            <div className="mb-1 flex items-end gap-2 text-[10px] font-medium text-muted-foreground">
+              <span className="w-40 shrink-0 pb-4">Vehicle</span>
+              <TimelineAxis ticks={timelineTicks} />
             </div>
             {rows.map((row) => (
               <VehicleTimelineRow
@@ -155,6 +157,7 @@ function VehiclePanelContent({ context }: PanelRenderProps<VehicleResult>) {
                 row={row}
                 rangeStartMs={range.startMs}
                 rangeEndMs={range.endMs}
+                ticks={timelineTicks}
                 context={context}
               />
             ))}
@@ -196,15 +199,54 @@ function SummaryPill({
   );
 }
 
+function TimelineAxis({ ticks }: { ticks: TimelineTick[] }) {
+  return (
+    <div className="min-w-[340px] flex-1">
+      <div className="mb-1 text-[10px] font-medium text-muted-foreground">Elapsed time</div>
+      <div className="relative h-7 border-t border-border/70">
+        {ticks.map((tick, index) => {
+          const isFirst = index === 0;
+          const isLast = index === ticks.length - 1;
+          return (
+            <div
+              key={tick.elapsedMs}
+              className="absolute top-0"
+              style={{
+                left: `${tick.positionPercent}%`,
+                transform: isFirst ? undefined : isLast ? "translateX(-100%)" : "translateX(-50%)",
+              }}
+            >
+              <div
+                className={
+                  isFirst
+                    ? "h-1.5 border-l border-muted-foreground/60"
+                    : isLast
+                      ? "ml-auto h-1.5 border-r border-muted-foreground/60"
+                      : "mx-auto h-1.5 border-l border-muted-foreground/50"
+                }
+              />
+              <span className="mt-0.5 block whitespace-nowrap font-mono text-[9px] text-muted-foreground">
+                {tick.label}
+              </span>
+            </div>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
 function VehicleTimelineRow({
   row,
   rangeStartMs,
   rangeEndMs,
+  ticks,
   context,
 }: {
   row: VehicleRow;
   rangeStartMs: number;
   rangeEndMs: number;
+  ticks: TimelineTick[];
   context: PanelRenderProps<VehicleResult>["context"];
 }) {
   const durationMs = Math.max(rangeEndMs - rangeStartMs, 1);
@@ -219,22 +261,13 @@ function VehicleTimelineRow({
         </div>
       </div>
       <div className="relative h-7 min-w-[340px] flex-1 overflow-hidden rounded bg-muted/30">
-        {context.instance.encounters
-          .filter((encounter) => context.selectedEncounterIds.includes(encounter.id))
-          .map((encounter) => {
-            const startMs = new Date(encounter.start_time).getTime();
-            const endMs = new Date(encounter.end_time).getTime();
-            return (
-              <div
-                key={encounter.id}
-                className="absolute inset-y-0 border-x border-muted-foreground/20"
-                style={{
-                  left: `${((startMs - rangeStartMs) / durationMs) * 100}%`,
-                  width: `${((endMs - startMs) / durationMs) * 100}%`,
-                }}
-              />
-            );
-          })}
+        {ticks.slice(1, -1).map((tick) => (
+          <div
+            key={tick.elapsedMs}
+            className="absolute inset-y-0 w-px bg-border/35"
+            style={{ left: `${tick.positionPercent}%` }}
+          />
+        ))}
         {row.intervals.map((interval) => {
           const clipped = clipIntervalToRange(interval, {
             startMs: rangeStartMs,

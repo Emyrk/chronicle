@@ -2,7 +2,9 @@ import { describe, expect, it } from "vitest";
 import type { VehicleControlInterval } from "@/api/typesGenerated";
 import type { Encounter } from "../../InstancePage";
 import {
+  buildTimelineTicks,
   clipIntervalToRange,
+  formatTimelineElapsed,
   formatVehicleDuration,
   intervalOverlapsRange,
   selectedEncounterRange,
@@ -72,5 +74,27 @@ describe("vehiclePanelLogic", () => {
     expect(formatVehicleDuration(341)).toBe("341ms");
     expect(formatVehicleDuration(12_900)).toBe("12s");
     expect(formatVehicleDuration(72_000)).toBe("1m 12s");
+  });
+
+  it("builds readable elapsed-time ticks including the exact selected duration", () => {
+    const ticks = buildTimelineTicks(45_000);
+    expect(ticks.map(({ elapsedMs, label }) => ({ elapsedMs, label }))).toEqual([
+      { elapsedMs: 0, label: "0s" },
+      { elapsedMs: 10_000, label: "10s" },
+      { elapsedMs: 20_000, label: "20s" },
+      { elapsedMs: 30_000, label: "30s" },
+      { elapsedMs: 40_000, label: "40s" },
+      { elapsedMs: 45_000, label: "45s" },
+    ]);
+    expect(ticks[3].positionPercent).toBeCloseTo(66.6667, 3);
+    expect(ticks.at(-1)?.positionPercent).toBe(100);
+  });
+
+  it("formats subsecond and multi-minute axis labels", () => {
+    expect(formatTimelineElapsed(0)).toBe("0s");
+    expect(formatTimelineElapsed(500)).toBe("500ms");
+    expect(formatTimelineElapsed(1_500)).toBe("1.5s");
+    expect(formatTimelineElapsed(120_000)).toBe("2m");
+    expect(formatTimelineElapsed(132_000)).toBe("2m 12s");
   });
 });
