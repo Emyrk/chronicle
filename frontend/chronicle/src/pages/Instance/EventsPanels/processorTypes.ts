@@ -432,6 +432,14 @@ export interface ProcessorUnit {
   entry: number;
 }
 
+/** Timestamped vehicle controller interval from instance metadata. */
+export interface ProcessorVehicleControlInterval {
+  vehicleGuid: string;
+  controllerGuid: string;
+  assignedAtMs: number;
+  releasedAtMs: number | null;
+}
+
 /**
  * Pagination options for processors that support paging through events.
  */
@@ -460,6 +468,9 @@ export interface SerializableProcessorContext {
   /** Units map: guid -> unit info */
   units?: Record<string, ProcessorUnit>;
   
+  /** Timestamped vehicle controller intervals from instance metadata. */
+  vehicleControlIntervals?: ProcessorVehicleControlInterval[];
+
   /** Currently selected encounter IDs */
   selectedEncounterIds: string[];
   
@@ -492,6 +503,9 @@ export interface ProcessorContext {
   /** Units map: guid -> unit info */
   units?: Record<string, ProcessorUnit>;
   
+  /** Timestamped vehicle controller intervals from instance metadata. */
+  vehicleControlIntervals?: ProcessorVehicleControlInterval[];
+
   /** Currently selected encounter IDs */
   selectedEncounterIds: Set<string>;
   

@@ -19,6 +19,7 @@ function deserializeContext(ctx: SerializableProcessorContext): ProcessorContext
   return {
     players: ctx.players,
     units: ctx.units,
+    vehicleControlIntervals: ctx.vehicleControlIntervals,
     selectedEncounterIds: new Set(ctx.selectedEncounterIds),
     entitySelection: {
       enemyIds: new Set(ctx.entitySelection.enemyIds),
@@ -147,7 +148,10 @@ function processStreams<TResult>(
   // Create UnitState from static unit data and attach to context.
   // It will be fed unit_classification events during the loop so that
   // resolveEntity / filters see temporal ownership at each point in time.
-  const unitState = new UnitState(context.units ?? {});
+  const unitState = new UnitState(
+    context.units ?? {},
+    context.vehicleControlIntervals ?? [],
+  );
   context.unitState = unitState;
 
   // Compile filters once before the event loop (hot-path optimization).
@@ -218,6 +222,10 @@ function processStreams<TResult>(
       // Stamp globalOffsetMilli before filtering so time_range filter works across encounters
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       (minPeeked.event as any).globalOffsetMilli = encounterBaseOffset + minPeeked.event.offsetMilli;
+
+      unitState.setCurrentTimestamp(
+        minPeeked.firstTimestamp.getTime() + minPeeked.event.offsetMilli,
+      );
 
       // Feed unit_classification events into UnitState so temporal ownership
       // is up-to-date before any processor or filter sees subsequent events.

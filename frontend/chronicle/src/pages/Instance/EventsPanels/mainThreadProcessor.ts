@@ -150,6 +150,7 @@ function deserializeContext(ctx: SerializableProcessorContext): ProcessorContext
   return {
     players: ctx.players,
     units: ctx.units,
+    vehicleControlIntervals: ctx.vehicleControlIntervals,
     selectedEncounterIds: new Set(ctx.selectedEncounterIds),
     entitySelection: {
       enemyIds: new Set(ctx.entitySelection.enemyIds),
@@ -342,7 +343,10 @@ export async function processIncrementally<TResult>(
   const mustRestart = timestampMovedBackward(stopAtTimestamp, previousState);
   const unitState = (!mustRestart && previousState?.unitState)
     ? previousState.unitState
-    : new UnitState(context.units ?? {});
+    : new UnitState(
+      context.units ?? {},
+      context.vehicleControlIntervals ?? [],
+    );
   context.unitState = unitState;
 
   let filterPredicate: FilterPredicate;
@@ -577,6 +581,8 @@ export async function processIncrementally<TResult>(
         }
       }
       
+      unitState.setCurrentTimestamp(eventTime);
+
       // Feed unit_classification events into UnitState for temporal ownership tracking
       if (minCursor.streamType === "unit_classification") {
         unitState.processClassification(minPeeked.event as unknown as UnitClassificationProcessorEvent);

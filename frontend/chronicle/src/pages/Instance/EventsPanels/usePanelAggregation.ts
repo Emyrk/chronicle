@@ -75,9 +75,17 @@ function toSerializableContext(
     }
   }
   
+  const vehicleControlIntervals = ctx.instance.vehicleControlIntervals?.intervals?.map((interval) => ({
+    vehicleGuid: interval.vehicle_guid,
+    controllerGuid: interval.controller_guid,
+    assignedAtMs: interval.assigned_at_ms,
+    releasedAtMs: interval.released_at_ms ?? null,
+  }));
+
   return {
     players,
     units,
+    vehicleControlIntervals,
     selectedEncounterIds: ctx.selectedEncounterIds,
     entitySelection: {
       enemyIds: Array.from(ctx.entitySelection.enemyIds),
