@@ -1,54 +1,185 @@
 /* eslint-disable react-refresh/only-export-components -- Panel registry files export a definition alongside their render components. */
 import { useEffect, useMemo, useState } from "react";
-import { Trophy, AlertCircle } from "lucide-react";
+import { Trophy, AlertCircle, Skull } from "lucide-react";
 import type { GuildEncounterKill, GuildEncounterKillsResponse } from "@/api/typesGenerated";
 import { useSupportedInstanceBossCounts } from "@/api/queries";
+import { HintTooltip, TooltipContent, TooltipTrigger } from "@/components/ui/Tooltip/tooltip";
+import { cn } from "@/lib/utils";
 import { getInstanceCategory, getInstanceContentLevel } from "@/pages/Logs/utils/instanceImages";
 import type { GuildPanelDefinition, GuildPanelRenderProps } from "./types";
 
 type CategoryFilter = "all" | "raid" | "dungeon";
 type ContentLevelFilter = "all" | "60" | "70" | "80";
+type ProgressMode = "detail" | "compact";
 
 interface ProgressConfig {
+  mode: ProgressMode;
   category: CategoryFilter;
   contentLevel: ContentLevelFilter;
   showKillCounts: boolean;
 }
 
-interface RaidProgress {
-  instanceName: string;
+/** One size/difficulty lockout of a raid, e.g. "25-player Heroic". */
+interface VariantProgress {
   difficultyName: string;
   maxPlayers: number;
+  heroic: boolean;
   encountersDown: number;
   kills: number;
   lastKilledAt: string;
 }
 
-/** Groups per-encounter kills into per-raid progression, most recent activity first. */
+/** A raid with every size/difficulty variant nested under it. */
+interface RaidProgress {
+  instanceName: string;
+  variants: VariantProgress[];
+  lastKilledAt: string;
+}
+
+/**
+ * Groups per-encounter kills into per-raid progression, most recent activity
+ * first. Every size/difficulty combination is a lockout of the same raid, so
+ * it nests as a variant under that raid rather than repeating the name.
+ */
 function groupProgress(encounters: GuildEncounterKill[]): RaidProgress[] {
-  const byRaid = new Map<string, RaidProgress>();
+  const byVariant = new Map<string, VariantProgress & { instanceName: string }>();
   for (const e of encounters) {
     const key = `${e.instance_name}|${e.difficulty_name}|${e.max_players}`;
-    const raid = byRaid.get(key);
-    if (raid) {
-      raid.encountersDown += 1;
-      raid.kills += e.kills;
-      if (e.last_killed_at > raid.lastKilledAt) raid.lastKilledAt = e.last_killed_at;
+    const variant = byVariant.get(key);
+    if (variant) {
+      variant.encountersDown += 1;
+      variant.kills += e.kills;
+      if (e.last_killed_at > variant.lastKilledAt) variant.lastKilledAt = e.last_killed_at;
     } else {
-      byRaid.set(key, {
+      byVariant.set(key, {
         instanceName: e.instance_name,
         difficultyName: e.difficulty_name,
         maxPlayers: e.max_players,
+        heroic: e.difficulty_name.includes("Heroic"),
         encountersDown: 1,
         kills: e.kills,
         lastKilledAt: e.last_killed_at,
       });
     }
   }
+
+  const byRaid = new Map<string, RaidProgress>();
+  for (const { instanceName, ...variant } of byVariant.values()) {
+    const raid = byRaid.get(instanceName);
+    if (raid) {
+      raid.variants.push(variant);
+      if (variant.lastKilledAt > raid.lastKilledAt) raid.lastKilledAt = variant.lastKilledAt;
+    } else {
+      byRaid.set(instanceName, {
+        instanceName,
+        variants: [variant],
+        lastKilledAt: variant.lastKilledAt,
+      });
+    }
+  }
+
+  for (const raid of byRaid.values()) {
+    raid.variants.sort(
+      (a, b) => b.maxPlayers - a.maxPlayers || Number(b.heroic) - Number(a.heroic),
+    );
+  }
   return [...byRaid.values()].sort((a, b) => b.lastKilledAt.localeCompare(a.lastKilledAt));
 }
 
-function RaidRow({
+/** Short lockout label, e.g. "40", "10 HC". Empty when there is no size and no heroic mode. */
+function variantLabel(variant: VariantProgress): string {
+  const parts = [];
+  if (variant.maxPlayers > 0) parts.push(String(variant.maxPlayers));
+  if (variant.heroic) parts.push("HC");
+  return parts.join(" ");
+}
+
+function totalFor(bossCounts: Map<string, number> | undefined, raid: RaidProgress) {
+  const known = bossCounts?.get(raid.instanceName) ?? 0;
+  return Math.max(known, ...raid.variants.map((v) => v.encountersDown));
+}
+
+function VariantChip({ variant, complete }: { variant: VariantProgress; complete: boolean }) {
+  const label = variantLabel(variant);
+  if (!label) return null;
+  return (
+    <span
+      className={cn(
+        "min-w-11 rounded border px-1.5 py-px text-center font-mono text-[10px] whitespace-nowrap",
+        variant.heroic
+          ? "border-purple-500/40 text-purple-400"
+          : complete
+            ? "border-amber-500/40 text-amber-500"
+            : "border-border text-muted-foreground",
+      )}
+    >
+      {label}
+    </span>
+  );
+}
+
+function KillPips({ variant, total }: { variant: VariantProgress; total: number }) {
+  const complete = variant.encountersDown === total;
+  const killColor = variant.heroic
+    ? "var(--color-purple-500)"
+    : complete
+      ? "var(--color-amber-500)"
+      : "var(--color-green-400)";
+  return (
+    <div className="flex min-w-0 flex-1 gap-1">
+      {Array.from({ length: total }, (_, i) => (
+        <span
+          key={i}
+          className="h-2 flex-1 rounded-xs"
+          style={{ background: i < variant.encountersDown ? killColor : "var(--border)" }}
+        />
+      ))}
+    </div>
+  );
+}
+
+function KillCount({ kills }: { kills: number }) {
+  return (
+    <HintTooltip delayDuration={150}>
+      <TooltipTrigger asChild>
+        <span className="flex shrink-0 items-center gap-0.5 text-[11px] tabular-nums text-muted-foreground">
+          <Skull className="h-3 w-3" />
+          {kills}
+        </span>
+      </TooltipTrigger>
+      <TooltipContent>Bosses killed</TooltipContent>
+    </HintTooltip>
+  );
+}
+
+function VariantRow({
+  variant,
+  total,
+  showKillCounts,
+}: {
+  variant: VariantProgress;
+  total: number;
+  showKillCounts: boolean;
+}) {
+  const complete = variant.encountersDown === total;
+  return (
+    <div className="flex items-center gap-x-2.5">
+      <VariantChip variant={variant} complete={complete} />
+      <KillPips variant={variant} total={total} />
+      {showKillCounts && <KillCount kills={variant.kills} />}
+      <p
+        className={cn(
+          "text-sm font-bold tabular-nums whitespace-nowrap",
+          complete ? "text-foreground" : "text-muted-foreground",
+        )}
+      >
+        {variant.encountersDown} / {total}
+      </p>
+    </div>
+  );
+}
+
+function DetailRaid({
   raid,
   total,
   showKillCounts,
@@ -57,42 +188,88 @@ function RaidRow({
   total: number;
   showKillCounts: boolean;
 }) {
-  const complete = raid.encountersDown === total;
+  // A raid with a single lockout type needs no section header — the raid name
+  // and the variant collapse into one row.
+  if (raid.variants.length === 1) {
+    const variant = raid.variants[0];
+    const complete = variant.encountersDown === total;
+    return (
+      <div>
+        <div className="mb-1.5 flex items-baseline justify-between gap-3">
+          <div className="flex min-w-0 items-baseline gap-2">
+            <p className="min-w-0 truncate text-sm text-foreground">{raid.instanceName}</p>
+            <VariantChip variant={variant} complete={complete} />
+          </div>
+          <p className="shrink-0 text-sm font-bold tabular-nums text-foreground">
+            {variant.encountersDown} / {total}
+          </p>
+        </div>
+        <div className="flex items-center gap-x-2.5">
+          <KillPips variant={variant} total={total} />
+          {showKillCounts && <KillCount kills={variant.kills} />}
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div>
-      <div className="mb-1.5 flex items-baseline justify-between gap-3">
+      <div className="mb-2 border-b border-border/50 pb-1.5">
         <p className="min-w-0 truncate text-sm text-foreground">{raid.instanceName}</p>
-        <p className="shrink-0 text-sm font-bold tabular-nums text-foreground">
-          {raid.encountersDown} / {total}
-        </p>
       </div>
-      <div className="flex gap-1">
-        {Array.from({ length: total }, (_, i) => (
-          <span
-            key={i}
-            className="h-2 flex-1 rounded-xs"
-            style={{
-              background:
-                i < raid.encountersDown
-                  ? complete
-                    ? "var(--color-amber-500)"
-                    : "var(--color-green-400)"
-                  : "var(--border)",
-            }}
+      <div className="flex flex-col gap-2">
+        {raid.variants.map((variant) => (
+          <VariantRow
+            key={`${variant.difficultyName}|${variant.maxPlayers}`}
+            variant={variant}
+            total={total}
+            showKillCounts={showKillCounts}
           />
         ))}
       </div>
-      {showKillCounts && (
-        <p className="mt-1 text-[11px] text-muted-foreground">
-          {[
-            raid.maxPlayers > 0 ? `${raid.maxPlayers}-player` : "",
-            raid.difficultyName !== "Normal" ? raid.difficultyName : "",
-            `${raid.kills} boss ${raid.kills === 1 ? "kill" : "kills"} logged`,
-          ]
-            .filter(Boolean)
-            .join(" · ")}
-        </p>
-      )}
+    </div>
+  );
+}
+
+/** Compact: no pips, no notes — the whole raid collapses to one line of variant pills. */
+function CompactRaid({ raid, total }: { raid: RaidProgress; total: number }) {
+  return (
+    <div className="flex flex-wrap items-center justify-between gap-x-3 gap-y-1 border-b border-border/50 py-1.5">
+      <p className="min-w-0 flex-1 truncate text-sm text-foreground">{raid.instanceName}</p>
+      <div className="flex flex-wrap justify-end gap-1">
+        {raid.variants.map((variant) => {
+          const complete = variant.encountersDown === total;
+          const label = variantLabel(variant);
+          return (
+            <span
+              key={`${variant.difficultyName}|${variant.maxPlayers}`}
+              className={cn(
+                "flex items-baseline gap-1.5 rounded border px-1.5 py-0.5 whitespace-nowrap",
+                complete ? "border-amber-500/40 bg-amber-500/10" : "border-border",
+              )}
+            >
+              {label && (
+                <span
+                  className={cn(
+                    "font-mono text-[9px]",
+                    variant.heroic ? "text-purple-400" : "text-muted-foreground",
+                  )}
+                >
+                  {label}
+                </span>
+              )}
+              <span
+                className={cn(
+                  "text-xs font-bold tabular-nums",
+                  complete ? "text-amber-500" : "text-foreground",
+                )}
+              >
+                {variant.encountersDown}/{total}
+              </span>
+            </span>
+          );
+        })}
+      </div>
     </div>
   );
 }
@@ -128,16 +305,17 @@ function ProgressContent({ config, position, guild }: GuildPanelRenderProps<Prog
   const progress = useMemo(() => {
     const category = config.category ?? "all";
     const contentLevel = config.contentLevel ?? "all";
-    return groupProgress(encounters).filter((instance) => {
-      const instanceCategory = getInstanceCategory(instance.instanceName);
+    const filtered = encounters.filter((e) => {
+      const instanceCategory = getInstanceCategory(e.instance_name);
       const matchesCategory =
         category === "all" ||
         (category === "dungeon" ? instanceCategory !== "raid" : instanceCategory === "raid");
       const matchesContentLevel =
         contentLevel === "all" ||
-        getInstanceContentLevel(instance.instanceName, instance.maxPlayers) === Number(contentLevel);
+        getInstanceContentLevel(e.instance_name, e.max_players) === Number(contentLevel);
       return matchesCategory && matchesContentLevel;
     });
+    return groupProgress(filtered);
   }, [config.category, config.contentLevel, encounters]);
 
   if (loading) {
@@ -168,16 +346,29 @@ function ProgressContent({ config, position, guild }: GuildPanelRenderProps<Prog
   // Two columns of raids when the panel is wide enough.
   const cols = position.w >= 8 ? 2 : 1;
 
+  if ((config.mode ?? "detail") === "compact") {
+    return (
+      <div
+        className="grid gap-x-6 content-start p-1"
+        style={{ gridTemplateColumns: `repeat(${cols}, minmax(0, 1fr))` }}
+      >
+        {progress.map((raid) => (
+          <CompactRaid key={raid.instanceName} raid={raid} total={totalFor(bossCounts, raid)} />
+        ))}
+      </div>
+    );
+  }
+
   return (
     <div
       className="grid gap-x-6 gap-y-4 content-start p-1"
       style={{ gridTemplateColumns: `repeat(${cols}, minmax(0, 1fr))` }}
     >
       {progress.map((raid) => (
-        <RaidRow
-          key={`${raid.instanceName}|${raid.difficultyName}|${raid.maxPlayers}`}
+        <DetailRaid
+          key={raid.instanceName}
           raid={raid}
-          total={Math.max(bossCounts?.get(raid.instanceName) ?? raid.encountersDown, raid.encountersDown)}
+          total={totalFor(bossCounts, raid)}
           showKillCounts={config.showKillCounts !== false}
         />
       ))}
@@ -194,6 +385,16 @@ export const ProgressPanel: GuildPanelDefinition<ProgressConfig> = {
   minSize: { w: 3, h: 2 },
   maxSize: { w: 12, h: 10 },
   configSchema: [
+    {
+      name: "mode",
+      label: "Display mode",
+      type: "select",
+      options: [
+        { value: "detail", label: "Detail" },
+        { value: "compact", label: "Compact" },
+      ],
+      defaultValue: "detail",
+    },
     {
       name: "category",
       label: "Category",
@@ -225,6 +426,7 @@ export const ProgressPanel: GuildPanelDefinition<ProgressConfig> = {
     },
   ],
   defaultConfig: {
+    mode: "detail",
     category: "all",
     contentLevel: "all",
     showKillCounts: true,
