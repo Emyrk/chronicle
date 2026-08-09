@@ -10,14 +10,16 @@ import type {
   VehicleControlInterval,
 } from "@/api/typesGenerated";
 import { getClassColorVar } from "@/pages/ArmoryPage/types";
-import { ScrollArea, ScrollBar } from "@/components/ui/ScrollArea/ScrollArea";
-import { cn } from "@/lib/utils";
-import {
-  HintTooltip,
-  TooltipContent,
-  TooltipTrigger,
-} from "@/components/ui/Tooltip/tooltip";
 import type { PanelDefinition, PanelRenderProps } from "../types";
+import {
+  TemporalTimeline,
+  TemporalTimelineHeader,
+  TemporalTimelineInterval,
+  TemporalTimelineLegend,
+  TemporalTimelineLegendItem,
+  TemporalTimelineRow,
+  TemporalTimelineTrack,
+} from "../TemporalTimeline";
 import { vehicleProcessor, type VehicleResult } from "./vehicle.processor";
 import {
   clipIntervalToRange,
@@ -131,58 +133,52 @@ function VehiclePanelContent({ context }: PanelRenderProps<VehicleResult>) {
   }
 
   return (
-    <ScrollArea className="h-full">
-      <div className="min-w-max p-2">
-        <div className="mb-2 flex items-center gap-2 border-b pb-1 text-[10px] font-medium text-muted-foreground">
-          <span className="w-32 shrink-0">Vehicle</span>
-          <span className="min-w-[300px] flex-1">
-            Vehicle Timeline
-            <span className="ml-2 text-muted-foreground/50">
-              ({formatVehicleDuration(durationMs)} total)
-            </span>
-          </span>
+    <TemporalTimeline>
+      <TemporalTimelineHeader
+        label="Vehicle"
+        title="Vehicle Timeline"
+        duration={formatVehicleDuration(durationMs)}
+      />
+
+      {rows.length > 0 ? (
+        rows.map((row) => (
+          <VehicleTimelineRow
+            key={row.guid}
+            row={row}
+            rangeStartMs={range.startMs}
+            rangeEndMs={range.endMs}
+            selectedEncounters={selectedEncounters}
+            context={context}
+          />
+        ))
+      ) : (
+        <div className="py-5 text-center text-xs text-muted-foreground">
+          No vehicle assignments overlap the selected encounters.
         </div>
+      )}
 
-        {rows.length > 0 ? (
-          rows.map((row) => (
-            <VehicleTimelineRow
-              key={row.guid}
-              row={row}
-              rangeStartMs={range.startMs}
-              rangeEndMs={range.endMs}
-              selectedEncounters={selectedEncounters}
-              context={context}
-            />
-          ))
-        ) : (
-          <div className="py-5 text-center text-xs text-muted-foreground">
-            No vehicle assignments overlap the selected encounters.
-          </div>
-        )}
+      {rows.length > 0 && (
+        <TemporalTimelineLegend>
+          <TemporalTimelineLegendItem marker={<div className="h-3 w-3 rounded bg-sky-500/60" />}>
+            Pilot class color
+          </TemporalTimelineLegendItem>
+          <TemporalTimelineLegendItem
+            marker={<div className="h-3 w-3 rounded border-r-2 border-dashed border-white/40 bg-sky-500/60" />}
+          >
+            Ongoing
+          </TemporalTimelineLegendItem>
+          <TemporalTimelineLegendItem
+            marker={<div className="h-3 w-3 rounded border-r-2 border-amber-400 bg-sky-500/60" />}
+          >
+            Inferred release
+          </TemporalTimelineLegendItem>
+        </TemporalTimelineLegend>
+      )}
 
-        {rows.length > 0 && (
-          <div className="mt-3 flex items-center gap-4 border-t pt-2 text-[10px] text-muted-foreground">
-            <div className="flex items-center gap-1">
-              <div className="h-3 w-3 rounded bg-sky-500/60" />
-              <span>Pilot class color</span>
-            </div>
-            <div className="flex items-center gap-1">
-              <div className="h-3 w-3 rounded border-r-2 border-dashed border-white/40 bg-sky-500/60" />
-              <span>Ongoing</span>
-            </div>
-            <div className="flex items-center gap-1">
-              <div className="h-3 w-3 rounded border-r-2 border-amber-400 bg-sky-500/60" />
-              <span>Inferred release</span>
-            </div>
-          </div>
-        )}
-
-        {visibleDiagnostics.length > 0 && (
-          <VehicleDiagnostics diagnostics={visibleDiagnostics} context={context} />
-        )}
-      </div>
-      <ScrollBar orientation="horizontal" />
-    </ScrollArea>
+      {visibleDiagnostics.length > 0 && (
+        <VehicleDiagnostics diagnostics={visibleDiagnostics} context={context} />
+      )}
+    </TemporalTimeline>
   );
 }
 
@@ -199,38 +195,27 @@ function VehicleTimelineRow({
   selectedEncounters: PanelRenderProps<VehicleResult>["context"]["instance"]["encounters"];
   context: PanelRenderProps<VehicleResult>["context"];
 }) {
-  const durationMs = Math.max(rangeEndMs - rangeStartMs, 1);
   return (
-    <div className="flex items-center gap-2 border-b border-border/30 py-1 hover:bg-muted/20">
-      <span
-        className="w-32 shrink-0 truncate text-xs font-medium text-sky-300"
-        title={`${row.name} (${row.guid})`}
+    <TemporalTimelineRow
+      label={(
+        <span
+          className="block truncate text-xs font-medium text-sky-300"
+          title={`${row.name} (${row.guid})`}
+        >
+          {row.name}
+        </span>
+      )}
+    >
+      <TemporalTimelineTrack
+        rangeStartMs={rangeStartMs}
+        rangeEndMs={rangeEndMs}
+        encounters={selectedEncounters}
       >
-        {row.name}
-      </span>
-
-      <div className="relative h-5 min-w-[300px] flex-1 overflow-hidden rounded bg-muted/30">
-        {selectedEncounters.map((encounter) => {
-          const encounterStartMs = new Date(encounter.start_time).getTime();
-          const encounterEndMs = new Date(encounter.end_time).getTime();
-          const left = ((encounterStartMs - rangeStartMs) / durationMs) * 100;
-          const width = ((encounterEndMs - encounterStartMs) / durationMs) * 100;
-          return (
-            <div
-              key={encounter.id}
-              className="absolute h-full border-l border-r border-muted-foreground/30"
-              style={{ left: `${left}%`, width: `${width}%` }}
-            />
-          );
-        })}
-
         {row.intervals.map((interval) => {
           const clipped = clipIntervalToRange(interval, {
             startMs: rangeStartMs,
             endMs: rangeEndMs,
           });
-          const left = ((clipped.startMs - rangeStartMs) / durationMs) * 100;
-          const width = ((clipped.endMs - clipped.startMs) / durationMs) * 100;
           const player = context.instance.players?.[interval.controller_guid];
           const controllerName =
             interval.controller_name ||
@@ -241,26 +226,21 @@ function VehicleTimelineRow({
           const actualEndMs = interval.released_at_ms ?? rangeEndMs;
 
           return (
-            <HintTooltip
+            <TemporalTimelineInterval
               key={`${interval.session_id ?? "unknown"}-${interval.vehicle_guid}-${interval.assigned_at_ms}-${interval.assigned_ordinal}`}
-            >
-              <TooltipTrigger asChild>
-                <div
-                  className={cn(
-                    "absolute h-full cursor-help rounded transition-opacity hover:opacity-100",
-                    interval.released_at_ms == null &&
-                      "border-r-2 border-dashed border-white/40",
-                    interval.inferred_release && "border-r-2 border-amber-400",
-                  )}
-                  style={{
-                    left: `${left}%`,
-                    width: `${Math.max(width, 0.5)}%`,
-                    backgroundColor: color,
-                    opacity: 0.7,
-                  }}
-                />
-              </TooltipTrigger>
-              <TooltipContent side="top" hideArrow className="max-w-xs bg-popover text-popover-foreground">
+              startMs={clipped.startMs}
+              endMs={clipped.endMs}
+              rangeStartMs={rangeStartMs}
+              rangeEndMs={rangeEndMs}
+              className={
+                interval.inferred_release
+                  ? "border-r-2 border-amber-400"
+                  : interval.released_at_ms == null
+                    ? "border-r-2 border-dashed border-white/40"
+                    : undefined
+              }
+              style={{ backgroundColor: color, opacity: 0.7 }}
+              tooltip={(
                 <div className="space-y-1.5 text-xs">
                   <div className="font-medium text-sky-300">{row.name}</div>
                   <div className="break-all font-mono text-[10px] text-muted-foreground">
@@ -288,12 +268,12 @@ function VehicleTimelineRow({
                     </div>
                   )}
                 </div>
-              </TooltipContent>
-            </HintTooltip>
+              )}
+            />
           );
         })}
-      </div>
-    </div>
+      </TemporalTimelineTrack>
+    </TemporalTimelineRow>
   );
 }
 

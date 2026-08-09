@@ -8,10 +8,17 @@
 
 import { useMemo } from "react";
 import { Clock } from "lucide-react";
-import { ScrollArea, ScrollBar } from "@/components/ui/ScrollArea/ScrollArea";
-import { HintTooltip, TooltipTrigger, TooltipContent } from "@/components/ui/Tooltip/tooltip";
 import { cn } from "@/lib/utils";
 import type { PanelDefinition, PanelRenderProps, PanelContext } from "../types";
+import {
+  TemporalTimeline,
+  TemporalTimelineHeader,
+  TemporalTimelineInterval,
+  TemporalTimelineLegend,
+  TemporalTimelineLegendItem,
+  TemporalTimelineRow,
+  TemporalTimelineTrack,
+} from "../TemporalTimeline";
 import type { ActivityPeriod } from "@/api/typesGenerated";
 import { PeriodMomentDisplay } from "@/components/PeriodMomentDisplay";
 
@@ -129,163 +136,126 @@ function PeriodsTimeline({ context }: { context: PanelContext }) {
   }
 
   return (
-    <ScrollArea className="h-full">
-      <div className="p-2 min-w-max">
-        {/* Header */}
-        <div className="flex items-center gap-2 text-[10px] font-medium text-muted-foreground mb-2 border-b pb-1">
-          <span className="w-32 shrink-0">Unit</span>
-          <span className="w-20 shrink-0 text-center">Enc.</span>
-          <span className="flex-1 min-w-[300px]">
-            Activity Timeline
-            <span className="ml-2 text-muted-foreground/50">
-              ({formatDuration(totalDuration)} total)
-            </span>
-          </span>
-        </div>
-        
-        {timelineData.map((entry) => (
-          <div 
-            key={entry.guid} 
-            className="flex items-center gap-2 py-1 border-b border-border/30 hover:bg-muted/20"
-          >
-            {/* Unit name */}
-            <span 
+    <TemporalTimeline>
+      <TemporalTimelineHeader
+        label="Unit"
+        title="Activity Timeline"
+        duration={formatDuration(totalDuration)}
+        secondaryColumn={<span className="w-20 shrink-0 text-center">Enc.</span>}
+      />
+
+      {timelineData.map((entry) => (
+        <TemporalTimelineRow
+          key={entry.guid}
+          label={(
+            <span
               className={cn(
-                "w-32 text-xs truncate shrink-0",
-                entry.boss ? "text-yellow-400 font-medium" : "text-muted-foreground"
+                "block truncate text-xs",
+                entry.boss ? "font-medium text-yellow-400" : "text-muted-foreground",
               )}
               title={`${entry.name} (${entry.guid})`}
             >
               {entry.name}
             </span>
-            
-            {/* Encounter count indicator */}
-            <span 
-              className="w-20 text-[10px] text-muted-foreground shrink-0 text-center" 
-              title={entry.encounters.map(e => e.encounterName).join(", ")}
+          )}
+          secondaryColumn={(
+            <span
+              className="w-20 shrink-0 text-center text-[10px] text-muted-foreground"
+              title={entry.encounters.map((encounter) => encounter.encounterName).join(", ")}
             >
-              {entry.encounters.length === 1 
-                ? entry.encounters[0].encounterName.slice(0, 8) + "..."
+              {entry.encounters.length === 1
+                ? `${entry.encounters[0].encounterName.slice(0, 8)}...`
                 : `${entry.encounters.length} enc.`}
             </span>
-            
-            {/* Timeline bar container */}
-            <div className="flex-1 h-5 bg-muted/30 rounded relative min-w-[300px]">
-              {/* Encounter boundary markers for each encounter */}
-              {entry.encounters.map((enc) => {
-                const encLeft = ((enc.encounterStart - minTime) / totalDuration) * 100;
-                const encWidth = ((enc.encounterEnd - enc.encounterStart) / totalDuration) * 100;
+          )}
+        >
+          <TemporalTimelineTrack
+            rangeStartMs={minTime}
+            rangeEndMs={maxTime}
+            encounters={context.instance.encounters.filter((encounter) =>
+              entry.encounters.some((entryEncounter) => entryEncounter.encounterID === encounter.id),
+            )}
+          >
+            {entry.encounters.flatMap((encounter) =>
+              encounter.periods.map((period, periodIdx) => {
+                const start = period.start
+                  ? new Date(period.start.timestamp).getTime()
+                  : encounter.encounterStart;
+                const end = period.end
+                  ? new Date(period.end.timestamp).getTime()
+                  : encounter.encounterEnd;
+
                 return (
-                  <div
-                    key={enc.encounterID}
-                    className="absolute h-full border-l border-r border-muted-foreground/30"
-                    style={{ left: `${encLeft}%`, width: `${encWidth}%` }}
+                  <TemporalTimelineInterval
+                    key={`${encounter.encounterID}-${periodIdx}`}
+                    startMs={start}
+                    endMs={end}
+                    rangeStartMs={minTime}
+                    rangeEndMs={maxTime}
+                    className={cn(
+                      entry.boss ? "bg-yellow-500/70" : "bg-blue-500/50",
+                      period.end_state === "slain" && "border-r-2 border-red-500",
+                      period.end_state === "reset" && "border-r-2 border-orange-500",
+                      period.end_state === "timeout" && "border-r-2 border-gray-500",
+                    )}
+                    tooltip={(
+                      <div className="space-y-1.5 text-xs">
+                        <div className="font-medium">{entry.name}</div>
+                        <div className="break-all font-mono text-[10px] text-muted-foreground">
+                          {entry.guid}
+                        </div>
+                        <div className="mb-1 border-b border-border pb-1 text-[10px] text-muted-foreground">
+                          Encounter: {encounter.encounterName}
+                        </div>
+                        <PeriodMomentDisplay
+                          moment={period.start}
+                          label="Start"
+                          fallback="encounter start"
+                        />
+                        <PeriodMomentDisplay moment={period.end} label="End" fallback="ongoing" />
+                        {period.last_active && (
+                          <PeriodMomentDisplay moment={period.last_active} label="Last Active" />
+                        )}
+                        <div className="pt-1 font-medium">
+                          Duration: {formatDuration(end - start)}
+                        </div>
+                        {period.end_state === "slain" && (
+                          <div className="pt-1 text-red-400">💀 Slain</div>
+                        )}
+                        {period.end_state === "reset" && (
+                          <div className="pt-1 text-orange-400">🔄 Reset</div>
+                        )}
+                        {period.end_state === "timeout" && (
+                          <div className="pt-1 text-gray-400">⏱️ Timeout</div>
+                        )}
+                      </div>
+                    )}
                   />
                 );
-              })}
-              
-              {/* Period bars from all encounters */}
-              {entry.encounters.flatMap((enc) =>
-                enc.periods.map((period, periodIdx) => {
-                  const start = period.start 
-                    ? new Date(period.start.timestamp).getTime() 
-                    : enc.encounterStart;
-                  const end = period.end 
-                    ? new Date(period.end.timestamp).getTime() 
-                    : enc.encounterEnd;
-                  const left = ((start - minTime) / totalDuration) * 100;
-                  const width = ((end - start) / totalDuration) * 100;
-                  
-                  const tooltipContent = (
-                    <div className="text-xs space-y-1.5">
-                      <div className="font-medium">{entry.name}</div>
-                      <div className="text-[10px] text-muted-foreground font-mono break-all">{entry.guid}</div>
-                      <div className="text-[10px] text-muted-foreground border-b border-border pb-1 mb-1">
-                        Encounter: {enc.encounterName}
-                      </div>
-                      <PeriodMomentDisplay 
-                        moment={period.start} 
-                        label="Start" 
-                        fallback="encounter start"
-                      />
-                      <PeriodMomentDisplay 
-                        moment={period.end} 
-                        label="End" 
-                        fallback="ongoing"
-                      />
-                      {period.last_active && (
-                        <PeriodMomentDisplay moment={period.last_active} label="Last Active" />
-                      )}
-                      <div className="pt-1 font-medium">
-                        Duration: {formatDuration(end - start)}
-                      </div>
-                      {period.end_state === "slain" && (
-                        <div className="text-red-400 pt-1">💀 Slain</div>
-                      )}
-                      {period.end_state === "reset" && (
-                        <div className="text-orange-400 pt-1">🔄 Reset</div>
-                      )}
-                      {period.end_state === "timeout" && (
-                        <div className="text-gray-400 pt-1">⏱️ Timeout</div>
-                      )}
-                    </div>
-                  );
-                  
-                  return (
-                    <HintTooltip key={`${enc.encounterID}-${periodIdx}`}>
-                      <TooltipTrigger asChild>
-                        <div
-                          className={cn(
-                            "absolute h-full rounded cursor-help transition-opacity hover:opacity-100",
-                            entry.boss ? "bg-yellow-500/70" : "bg-blue-500/50",
-                            period.end_state === "slain" && "border-r-2 border-red-500",
-                            period.end_state === "reset" && "border-r-2 border-orange-500",
-                            period.end_state === "timeout" && "border-r-2 border-gray-500"
-                          )}
-                          style={{ 
-                            left: `${left}%`, 
-                            width: `${Math.max(width, 0.5)}%`,
-                            opacity: 0.8,
-                          }}
-                        />
-                      </TooltipTrigger>
-                      <TooltipContent side="top" hideArrow className="max-w-xs bg-popover text-popover-foreground">
-                        {tooltipContent}
-                      </TooltipContent>
-                    </HintTooltip>
-                  );
-                })
-              )}
-            </div>
-          </div>
-        ))}
-        
-        {/* Legend */}
-        <div className="flex items-center gap-4 mt-3 pt-2 border-t text-[10px] text-muted-foreground">
-          <div className="flex items-center gap-1">
-            <div className="w-3 h-3 bg-yellow-500/70 rounded" />
-            <span>Boss</span>
-          </div>
-          <div className="flex items-center gap-1">
-            <div className="w-3 h-3 bg-blue-500/50 rounded" />
-            <span>Trash/Add</span>
-          </div>
-          <div className="flex items-center gap-1">
-            <div className="w-3 h-3 bg-blue-500/50 rounded border-r-2 border-red-500" />
-            <span>💀 Slain</span>
-          </div>
-          <div className="flex items-center gap-1">
-            <div className="w-3 h-3 bg-blue-500/50 rounded border-r-2 border-orange-500" />
-            <span>🔄 Reset</span>
-          </div>
-          <div className="flex items-center gap-1">
-            <div className="w-3 h-3 bg-blue-500/50 rounded border-r-2 border-gray-500" />
-            <span>⏱️ Timeout</span>
-          </div>
-        </div>
-      </div>
-      <ScrollBar orientation="horizontal" />
-    </ScrollArea>
+              }),
+            )}
+          </TemporalTimelineTrack>
+        </TemporalTimelineRow>
+      ))}
+
+      <TemporalTimelineLegend>
+        <TemporalTimelineLegendItem marker={<div className="h-3 w-3 rounded bg-yellow-500/70" />}>
+          Boss
+        </TemporalTimelineLegendItem>
+        <TemporalTimelineLegendItem marker={<div className="h-3 w-3 rounded bg-blue-500/50" />}>
+          Trash/Add
+        </TemporalTimelineLegendItem>
+        <TemporalTimelineLegendItem marker={<div className="h-3 w-3 rounded border-r-2 border-red-500 bg-blue-500/50" />}>
+          💀 Slain
+        </TemporalTimelineLegendItem>
+        <TemporalTimelineLegendItem marker={<div className="h-3 w-3 rounded border-r-2 border-orange-500 bg-blue-500/50" />}>
+          🔄 Reset
+        </TemporalTimelineLegendItem>
+        <TemporalTimelineLegendItem marker={<div className="h-3 w-3 rounded border-r-2 border-gray-500 bg-blue-500/50" />}>
+          ⏱️ Timeout
+        </TemporalTimelineLegendItem>
+      </TemporalTimelineLegend>
+    </TemporalTimeline>
   );
 }
 
