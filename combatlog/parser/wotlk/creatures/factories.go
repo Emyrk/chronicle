@@ -45,6 +45,8 @@ func NewCharacterFactories(flavor database.WoWFlavor) []characters.CharacterFact
 
 			// Eye of Eternity
 			NewMalygos,
+			NewNexusLord,
+			NewScionOfEternity,
 			NewPowerSpark,
 		)
 		// Vortex uses a vehicle GUID, so it must not be wrapped by CreatureFactories.
