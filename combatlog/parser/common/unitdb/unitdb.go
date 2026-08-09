@@ -36,10 +36,15 @@ func (us *Units) Classify(g guid.GUID) UnitClassification {
 
 	if info, ok := us.Info[g]; ok {
 		c.Relation.Owner = info.Owner
-		if info.CanCooperate {
-			c.Affiliation = AffiliationFriendly
-		} else {
-			c.Affiliation = AffiliationHostile
+		// Vehicle control is reconstructed after parsing from delayed addon
+		// messages. Until that timeline is available, CanCooperate cannot
+		// reliably describe whether the vehicle belongs to the raid.
+		if c.Type != UnitTypeVehicle {
+			if info.CanCooperate {
+				c.Affiliation = AffiliationFriendly
+			} else {
+				c.Affiliation = AffiliationHostile
+			}
 		}
 	}
 

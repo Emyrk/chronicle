@@ -4,10 +4,10 @@ import (
 	"testing"
 	"time"
 
-	"github.com/Emyrk/chronicle/combatlog/parser/guid"
-	"github.com/Emyrk/chronicle/combatlog/parser/types/unitinfo"
 	"github.com/Emyrk/chronicle/combatlog/parser/common/messages"
 	"github.com/Emyrk/chronicle/combatlog/parser/common/unitdb"
+	"github.com/Emyrk/chronicle/combatlog/parser/guid"
+	"github.com/Emyrk/chronicle/combatlog/parser/types/unitinfo"
 	"github.com/Emyrk/chronicle/database/gamedb/chrondbc"
 	"github.com/Gophercraft/core/i18n"
 	"github.com/stretchr/testify/assert"
@@ -62,6 +62,7 @@ func TestClassify_Basic(t *testing.T) {
 
 	playerGUID := mustGUID("0x0000000000000001")
 	creatureGUID := mustGUID("0x0030000000000002")
+	vehicleGUID := mustGUID("0x0050000000000003")
 
 	units := unitdb.New()
 	units.Update(unitinfo.Info{
@@ -73,6 +74,11 @@ func TestClassify_Basic(t *testing.T) {
 	units.Update(unitinfo.Info{
 		Guid:         creatureGUID,
 		Name:         "TestMob",
+		CanCooperate: false,
+	})
+	units.Update(unitinfo.Info{
+		Guid:         vehicleGUID,
+		Name:         "TestVehicle",
 		CanCooperate: false,
 	})
 
@@ -91,6 +97,13 @@ func TestClassify_Basic(t *testing.T) {
 		assert.Equal(t, unitdb.UnitTypeCreature, c.Type)
 		assert.Equal(t, unitdb.AffiliationHostile, c.Affiliation)
 		assert.Nil(t, c.Possession)
+	})
+
+	t.Run("vehicle affiliation awaits post-processing", func(t *testing.T) {
+		t.Parallel()
+		c := units.Classify(vehicleGUID)
+		assert.Equal(t, unitdb.UnitTypeVehicle, c.Type)
+		assert.Equal(t, unitdb.AffiliationUnknown, c.Affiliation)
 	})
 
 	t.Run("unknown GUID returns unknown type", func(t *testing.T) {
