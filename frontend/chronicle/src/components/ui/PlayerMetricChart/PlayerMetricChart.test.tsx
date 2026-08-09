@@ -59,6 +59,8 @@ describe("PlayerMetricRow", () => {
     expect(markup).toContain('data-player-specialization-icon="true"');
     expect(markup).toContain('width:24px');
     expect(markup).toContain('width:14px');
+    expect(markup).toContain('border:2px solid var(--color-background)');
+    expect(markup).toContain('filter:saturate(1.2) contrast(1.1)');
   });
 
   it("renders only the class icon when no specialization icon exists", () => {

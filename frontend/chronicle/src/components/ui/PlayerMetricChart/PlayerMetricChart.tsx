@@ -683,13 +683,15 @@ export function PlayerMetricRow({
               data-player-specialization-icon
               style={{
                 position: 'absolute',
-                right: '-2px',
-                bottom: '-2px',
+                right: '-3px',
+                bottom: '-3px',
                 width: '14px',
                 height: '14px',
                 borderRadius: '3px',
-                border: '1px solid var(--color-background)',
+                border: '2px solid var(--color-background)',
                 background: 'var(--color-background)',
+                boxShadow: '0 0 0 1px color-mix(in oklch, var(--color-foreground) 45%, transparent), 0 2px 5px rgb(0 0 0 / 0.9)',
+                filter: 'saturate(1.2) contrast(1.1)',
               }}
               onError={(e) => {
                 e.currentTarget.style.display = 'none';
