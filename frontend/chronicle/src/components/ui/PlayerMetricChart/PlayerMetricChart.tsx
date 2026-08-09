@@ -646,59 +646,34 @@ export function PlayerMetricRow({
         </span>
         )}
 
-        {/* Class icon with an optional specialization badge */}
-        <span
+        {/* Specialization icon, falling back to class when talents are unavailable. */}
+        <img
+          src={player.specializationIconUrl ?? `${classIconBasePath}/class_${player.className.toLowerCase()}.png`}
+          alt={player.specialization || player.className}
+          data-player-icon={player.specializationIconUrl ? "specialization" : "class"}
           style={{
-            position: 'relative',
             width: '24px',
             height: '24px',
             marginRight: '8px',
             flexShrink: 0,
+            borderRadius: '3px',
           }}
-        >
-          <img
-            src={`${classIconBasePath}/class_${player.className.toLowerCase()}.png`}
-            alt={player.className}
-            data-player-class-icon
-            style={{
-              width: '24px',
-              height: '24px',
-              borderRadius: '3px',
-            }}
-            onError={(e) => {
-              const target = e.currentTarget;
-              const unknownIcon = `${classIconBasePath}/class_unknown.png`;
-              if (target.dataset.iconFallback === "unknown") {
-                target.style.display = 'none';
-              } else {
-                target.dataset.iconFallback = "unknown";
-                target.src = unknownIcon;
-              }
-            }}
-          />
-          {player.specializationIconUrl && (
-            <img
-              src={player.specializationIconUrl}
-              alt={player.specialization}
-              data-player-specialization-icon
-              style={{
-                position: 'absolute',
-                right: '-3px',
-                bottom: '-3px',
-                width: '14px',
-                height: '14px',
-                borderRadius: '3px',
-                border: '2px solid var(--color-background)',
-                background: 'var(--color-background)',
-                boxShadow: '0 0 0 1px color-mix(in oklch, var(--color-foreground) 45%, transparent), 0 2px 5px rgb(0 0 0 / 0.9)',
-                filter: 'saturate(1.2) contrast(1.1)',
-              }}
-              onError={(e) => {
-                e.currentTarget.style.display = 'none';
-              }}
-            />
-          )}
-        </span>
+          onError={(e) => {
+            const target = e.currentTarget;
+            const classIcon = `${classIconBasePath}/class_${player.className.toLowerCase()}.png`;
+            const unknownIcon = `${classIconBasePath}/class_unknown.png`;
+            const iconType = target.dataset.playerIcon;
+            if (iconType === "specialization") {
+              target.dataset.playerIcon = "class";
+              target.src = classIcon;
+            } else if (iconType === "class") {
+              target.dataset.playerIcon = "unknown";
+              target.src = unknownIcon;
+            } else {
+              target.style.display = 'none';
+            }
+          }}
+        />
 
         {/* Spec name */}
         <span
