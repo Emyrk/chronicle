@@ -57,10 +57,13 @@ describe("PlayerMetricRow", () => {
     expect(markup).toContain('data-player-class-icon="true"');
     expect(markup).toContain('src="https://icons.example/fire.webp"');
     expect(markup).toContain('data-player-specialization-icon="true"');
-    expect(markup).toContain('width:24px');
+    expect(markup).toContain('width:30px');
+    expect(markup).toContain('height:30px');
+    expect(markup).toContain('width:100%');
     expect(markup).toContain('width:14px');
-    expect(markup).toContain('border:2px solid var(--color-background)');
-    expect(markup).toContain('filter:saturate(1.2) contrast(1.1)');
+    expect(markup).toContain('right:0');
+    expect(markup).toContain('bottom:0');
+    expect(markup).not.toContain('border-radius:3px');
   });
 
   it("renders only the class icon when no specialization icon exists", () => {
