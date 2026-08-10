@@ -100,6 +100,8 @@ export interface AllActivityDebugState {
   eventsSkipped: number;
   /** Events captured in current page */
   eventsCaptured: number;
+  /** Pagination offset used to produce this result */
+  pageOffset: number;
 }
 
 // This processor handles every stream exposed by the debug panel.
@@ -163,6 +165,7 @@ export const allActivityProcessor: PanelProcessor<AllActivityDebugState, AllActi
     totalProcessed: 0,
     eventsSkipped: 0,
     eventsCaptured: 0,
+    pageOffset: 0,
   }),
   
   processEvent: (
@@ -309,6 +312,7 @@ export const allActivityProcessor: PanelProcessor<AllActivityDebugState, AllActi
     // Get pagination settings
     const offset = context.pagination?.offset ?? 0;
     const limit = context.pagination?.limit ?? DEFAULT_PAGE_SIZE;
+    state.pageOffset = offset;
     
     // Skip events before our page offset
     if (state.totalProcessed <= offset) {

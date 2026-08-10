@@ -4,7 +4,7 @@
 
 import { useState, useMemo, useCallback, useRef, useEffect } from "react";
 import { Link } from "react-router-dom";
-import { Skull, Swords, Heart, Zap, Wand2, Sparkles, ChevronLeft, ChevronRight, ChevronsLeft, ChevronsRight, Search, X, Crosshair, Play, CircleX, Bubbles, WandSparkles, CircleFadingPlus, UserCheck, Ban, Shield, HeartPulse, FlaskConical } from "lucide-react";
+import { Skull, Swords, Heart, Zap, Wand2, Sparkles, ChevronLeft, ChevronRight, ChevronsLeft, ChevronsRight, Search, X, Crosshair, Play, CircleX, Bubbles, WandSparkles, CircleFadingPlus, UserCheck, Ban, Shield, HeartPulse, FlaskConical, Download, LoaderCircle } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { formatNumber } from "@/lib/format";
 import { ScrollArea, ScrollBar } from "@/components/ui/ScrollArea/ScrollArea";
@@ -14,6 +14,7 @@ import { Tooltip, TooltipTrigger, TooltipContent, TooltipProvider } from "@/comp
 import type { PanelDefinition, PanelRenderProps, PanelContext } from "./types";
 import { allActivityProcessor, type AllActivityState, type RawDebugEvent, type EncounterMeta, type ResourceType } from "./processors";
 import { ALL_ACTIVITY_STREAMS, STREAM_TYPE_CODES, collectAllActivityEvents, eventDetail, eventValue } from "./allActivityEvents";
+import { appendAllActivityCsvPage, createAllActivityCsv, downloadAllActivityCsv, sortAllActivityEvents, type AllActivityCsvExportState, type AllActivityCsvOptions } from "./allActivityCsv";
 import type { StreamType } from "@/hooks/instanceEvents";
 import { usePanelAggregation } from "./usePanelAggregation";
 
@@ -653,6 +654,9 @@ interface AllActivityContentProps {
   useRelativeTime?: boolean;
   useLocalTime?: boolean;
   onToggleLocalTime?: () => void;
+  onExportCsv: () => void;
+  exportPage: number | null;
+  exportTotalPages: number;
 }
 
 function AllActivityContent({
@@ -675,6 +679,9 @@ function AllActivityContent({
   useRelativeTime = false,
   useLocalTime = false,
   onToggleLocalTime,
+  onExportCsv,
+  exportPage,
+  exportTotalPages,
 }: AllActivityContentProps) {
   
   // Default state during loading
@@ -688,6 +695,7 @@ function AllActivityContent({
     totalProcessed: 0,
     eventsSkipped: 0,
     eventsCaptured: 0,
+    pageOffset: 0,
   };
   
   // Get encounters map (handle both Map and deserialized object)
@@ -700,12 +708,7 @@ function AllActivityContent({
   const allCapturedEvents = collectAllActivityEvents(rawEventsByStream);
   
   // Sort by encounter first, then by index within encounter to reconstruct true event order
-  const sortedEvents = allCapturedEvents.sort((a, b) => {
-    if (a.encounterID !== b.encounterID) {
-      return a.encounterID.localeCompare(b.encounterID);
-    }
-    return a.index - b.index;
-  });
+  const sortedEvents = sortAllActivityEvents(allCapturedEvents);
   
   // Calculate pagination info from the result
   const totalProcessed = safeResult.totalProcessed;
@@ -817,13 +820,34 @@ function AllActivityContent({
           )}
         </div>
         
-        <PaginationControls
-          currentPage={currentPage}
-          totalPages={totalPages}
-          totalEvents={totalProcessed}
-          onPageChange={onPageChange}
-          loading={loading || processing}
-        />
+        <div className="flex items-center gap-2">
+          <button
+            type="button"
+            onClick={onExportCsv}
+            disabled={totalProcessed === 0 || loading || processing || exportPage !== null}
+            className={cn(
+              "flex items-center gap-1 rounded border border-border px-2 py-1 text-xs font-medium text-foreground transition-colors hover:bg-muted",
+              (totalProcessed === 0 || loading || processing || exportPage !== null) && "cursor-not-allowed opacity-50",
+            )}
+            title="Export all filtered activity pages to CSV"
+          >
+            {exportPage !== null ? (
+              <LoaderCircle className="h-3.5 w-3.5 animate-spin" />
+            ) : (
+              <Download className="h-3.5 w-3.5" />
+            )}
+            {exportPage !== null
+              ? `Exporting ${exportPage} / ${exportTotalPages}`
+              : "Export CSV"}
+          </button>
+          <PaginationControls
+            currentPage={currentPage}
+            totalPages={totalPages}
+            totalEvents={totalProcessed}
+            onPageChange={onPageChange}
+            loading={loading || processing}
+          />
+        </div>
       </div>
 
       {error && (
@@ -911,6 +935,17 @@ function AllActivityContent({
  * Wrapper component that manages its own pagination state and aggregation.
  * This is necessary because pagination changes need to trigger re-processing in the worker.
  */
+interface AllActivityCsvExportConfig extends AllActivityCsvOptions {
+  enabledStreams: StreamType[];
+  abilityFilter?: string;
+  sourceFilter?: string;
+  targetFilter?: string;
+}
+
+interface ActiveAllActivityCsvExport extends AllActivityCsvExportState {
+  config: AllActivityCsvExportConfig;
+}
+
 interface AllActivityWrapperProps {
   context: PanelContext;
   panelIndex?: number;
@@ -931,6 +966,9 @@ function AllActivityWrapper({ context, panelIndex, useRelativeTime = false, pane
   const [sourceFilter, setSourceFilter] = useState(initial.sourceFilter);
   const [targetFilter, setTargetFilter] = useState(initial.targetFilter);
   const [useLocalTime, setUseLocalTime] = useState(initial.useLocalTime);
+
+  const [csvExport, setCsvExport] = useState<ActiveAllActivityCsvExport | null>(null);
+  const [csvExportError, setCsvExportError] = useState<Error | null>(null);
 
   // Sync state changes back to panelOption for persistence in shared layouts/links.
   // Uses a ref for panelOption to avoid feedback loops (state change → setPanelOption →
@@ -988,6 +1026,79 @@ function AllActivityWrapper({ context, panelIndex, useRelativeTime = false, pane
     panelContext: panelContextData,
   });
   
+  const csvExportConfig = csvExport?.config;
+  const csvExportContext = useMemo((): PanelContext => ({
+    ...context,
+    pagination: {
+      offset: ((csvExport?.page ?? 1) - 1) * PAGE_SIZE,
+      limit: PAGE_SIZE,
+      enabledStreams: csvExportConfig?.enabledStreams ?? [],
+      abilityFilter: csvExportConfig?.abilityFilter,
+      sourceFilter: csvExportConfig?.sourceFilter,
+      targetFilter: csvExportConfig?.targetFilter,
+    },
+  }), [context, csvExport?.page, csvExportConfig]);
+
+  const csvAggregation = usePanelAggregation({
+    panel: allActivityProcessor as PanelDefinition<AllActivityState>,
+    context: csvExportContext,
+    panelContext: panelContextData,
+    panelContextKey: csvExport ? `csv-export-${csvExport.page}` : "csv-export-idle",
+    enabled: csvExport !== null,
+  });
+
+  const handleExportCsv = useCallback(() => {
+    const totalPages = Math.ceil(result.totalProcessed / PAGE_SIZE);
+    if (totalPages === 0) return;
+
+    setCsvExportError(null);
+    setCsvExport({
+      page: 1,
+      totalPages,
+      events: [],
+      config: {
+        enabledStreams: Array.from(enabledStreams),
+        abilityFilter: abilityFilter.trim() || undefined,
+        sourceFilter: sourceFilter.trim() || undefined,
+        targetFilter: targetFilter.trim() || undefined,
+        useRelativeTime,
+        useLocalTime,
+      },
+    });
+  }, [result.totalProcessed, enabledStreams, abilityFilter, sourceFilter, targetFilter, useRelativeTime, useLocalTime]);
+
+  useEffect(() => {
+    if (!csvExport) return;
+    if (csvAggregation.error) {
+      setCsvExportError(csvAggregation.error);
+      setCsvExport(null);
+      return;
+    }
+
+    const expectedOffset = (csvExport.page - 1) * PAGE_SIZE;
+    if (
+      csvAggregation.loading
+      || csvAggregation.processing
+      || csvAggregation.processingTimeMs === null
+      || csvAggregation.result.pageOffset !== expectedOffset
+    ) {
+      return;
+    }
+
+    const pageEvents = collectAllActivityEvents(csvAggregation.result.rawEventsByStream);
+    const nextExport = appendAllActivityCsvPage(csvExport, pageEvents);
+    if (csvExport.page >= csvExport.totalPages) {
+      downloadAllActivityCsv(
+        createAllActivityCsv(nextExport.events, csvExport.config),
+        context.instance.id,
+      );
+      setCsvExport(null);
+      return;
+    }
+
+    setCsvExport(nextExport);
+  }, [csvExport, csvAggregation.loading, csvAggregation.processing, csvAggregation.processingTimeMs, csvAggregation.error, csvAggregation.result, context.instance.id]);
+
   const handlePageChange = useCallback((page: number) => {
     setCurrentPage(page);
   }, []);
@@ -1031,7 +1142,7 @@ function AllActivityWrapper({ context, panelIndex, useRelativeTime = false, pane
       processingTimeMs={processingTimeMs}
       loading={loading}
       processing={processing}
-      error={error}
+      error={error ?? csvExportError}
       currentPage={currentPage}
       onPageChange={handlePageChange}
       enabledStreams={enabledStreams}
@@ -1045,6 +1156,9 @@ function AllActivityWrapper({ context, panelIndex, useRelativeTime = false, pane
       useRelativeTime={useRelativeTime}
       useLocalTime={useLocalTime}
       onToggleLocalTime={() => setUseLocalTime((prev) => !prev)}
+      onExportCsv={handleExportCsv}
+      exportPage={csvExport?.page ?? null}
+      exportTotalPages={csvExport?.totalPages ?? 0}
     />
   );
 }
