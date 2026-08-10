@@ -62,6 +62,48 @@ export function buildCharacterMatch(
   return { equippedIds, equippedSlots };
 }
 
+/** Convert a matched Armory outfit into the builder's read-only stage shape. */
+export function characterMatchStage(match: CharacterMatch): GearStage {
+  const slots: GearStage["slots"] = {};
+  match.equippedSlots.forEach((equipped, slotIndex) => {
+    if (!equipped) return;
+    slots[String(slotIndex)] = {
+      item_id: equipped.item_id,
+      ...(equipped.enchant_id ? { enchant_id: equipped.enchant_id } : {}),
+    };
+  });
+  return { name: "Current Armory gear", slots };
+}
+
+/**
+ * Attribute each equipped Armory item to the first progression stage that
+ * accepts it in the same slot, either as the primary pick or an alternate.
+ */
+export function equippedItemStageMatches(
+  stages: readonly GearStage[],
+  match: CharacterMatch,
+): Map<number, string> {
+  const matches = new Map<number, string>();
+
+  match.equippedSlots.forEach((equipped, slotIndex) => {
+    if (!equipped) return;
+    for (let stageIndex = 0; stageIndex < stages.length; stageIndex++) {
+      const stage = stages[stageIndex];
+      const entry = stage?.slots[String(slotIndex)];
+      if (!entry) continue;
+      const accepted =
+        entry.item_id === equipped.item_id ||
+        (entry.alternates ?? []).some(
+          (alternate) => alternate.item_id === equipped.item_id,
+        );
+      if (!accepted) continue;
+      matches.set(slotIndex, stage.name || `Stage ${stageIndex + 1}`);
+      break;
+    }
+  });
+
+  return matches;
+}
 /** True when the character is wearing the slot's primary pick or any alternate. */
 export function slotEquipped(
   stage: GearStage,

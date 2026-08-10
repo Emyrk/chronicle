@@ -36,6 +36,7 @@ import {
   stageCoverage,
   type CharacterMatch,
 } from "@/pages/Gear/builder/characterMatch";
+import { ArmoryDoll } from "@/pages/Gear/builder/ArmoryDoll";
 import { BuilderDoll } from "@/pages/Gear/builder/BuilderDoll";
 import { SetSummaryBar } from "@/pages/Gear/builder/SetSummaryBar";
 import { GearAnalysisSheet } from "@/pages/Gear/builder/GearAnalysisSheet";
@@ -632,14 +633,6 @@ function ProgressionView({
         <p className="text-sm text-zinc-400">{progression.description}</p>
       )}
 
-      <CharacterMatchPanel
-        matched={characterMatch.matched}
-        onMatch={characterMatch.setMatched}
-        coverage={characterMatch.coverage}
-        historyLoading={characterMatch.loading}
-        historyError={characterMatch.error}
-      />
-
       <div className="flex flex-wrap items-center gap-3">
         {view === "doll" && (
           <StagesBar
@@ -746,62 +739,90 @@ function ProgressionView({
               Click a slot to pick its item for this stage.
             </p>
           </div>
-          {selectedSlot != null && isOwner && payload.stages.length > 0 ? (
-            <SlotEditorPanel
-              slotIndex={selectedSlot}
-              tab={editorTab}
-              onTabChange={setEditorTab}
-              entry={selectedEntry}
-              items={items}
-              tabs={selectedInheritedFrom ? ["pick"] : undefined}
-              beforePicker={
-                selectedInheritedFrom ? (
-                  <div className="rounded border border-dashed border-zinc-700 bg-zinc-950/50 px-3 py-2 text-xs text-zinc-400">
-                    This slot is inherited from{" "}
-                    <strong className="font-medium text-zinc-300">
-                      {selectedInheritedFrom}
-                    </strong>{" "}
-                    and is read-only here. Pick a replacement to override it for
-                    this stage.
-                  </div>
-                ) : undefined
-              }
-              onEquip={equip}
-              equipLabel="Set"
-              characterLevel={levelCap}
-              weights={analysis.selection?.weights ?? null}
-              equippedScore={analysis.scores?.get(selectedSlot)}
-              equippedItemId={activeStage.slots[String(selectedSlot)]?.item_id}
-              stageStats={analysis.statTotals}
-              targets={analysis.selection?.targets}
-              onAddAlternate={(item) =>
-                editStageSlot(addProgressionAlternate, item.entry)
-              }
-              onClear={clearSelected}
-              onClose={() => setSelectedSlot(null)}
-              onSlotNote={(note) => editStageSlot(setProgressionSlotNote, note)}
-              onAlternateNote={(itemId, note) =>
-                editStageSlot(setProgressionAlternateNote, itemId, note)
-              }
-              onPromoteAlternate={(itemId) =>
-                editStageSlot(promoteProgressionAlternate, itemId)
-              }
-              onRemoveAlternate={(itemId) =>
-                editStageSlot(removeProgressionAlternate, itemId)
-              }
-              onSetEnchant={(enchantId) =>
-                editStageSlot(setProgressionSlotEnchant, enchantId)
-              }
-            />
-          ) : (
-            <div className="flex min-h-64 items-center justify-center self-stretch rounded-md border border-dashed border-zinc-800 p-6 text-sm text-zinc-500">
-              {isOwner
-                ? payload.stages.length > 0
-                  ? "Select a slot on the paperdoll to search and add items."
-                  : "Add Stage 1 to begin building this progression."
-                : "Read-only view."}
-            </div>
-          )}
+          <div className={cn(characterMatch.match && "relative")}>
+            {characterMatch.match && characterMatch.matched && (
+              <ArmoryDoll
+                match={characterMatch.match}
+                characterName={characterMatch.matched.name}
+                progressionStages={effectiveStages}
+                onClear={() => characterMatch.setMatched(null)}
+              />
+            )}
+
+            {selectedSlot != null && isOwner && payload.stages.length > 0 && (
+              <div
+                className={cn(
+                  characterMatch.match &&
+                    "absolute inset-x-2 top-2 z-20 rounded-md bg-zinc-900 shadow-[0_18px_60px_rgba(0,0,0,0.72)] ring-1 ring-zinc-600/80",
+                )}
+              >
+                <SlotEditorPanel
+                  slotIndex={selectedSlot}
+                  tab={editorTab}
+                  onTabChange={setEditorTab}
+                  entry={selectedEntry}
+                  items={items}
+                  tabs={selectedInheritedFrom ? ["pick"] : undefined}
+                  beforePicker={
+                    selectedInheritedFrom ? (
+                      <div className="rounded border border-dashed border-zinc-700 bg-zinc-950/50 px-3 py-2 text-xs text-zinc-400">
+                        This slot is inherited from{" "}
+                        <strong className="font-medium text-zinc-300">
+                          {selectedInheritedFrom}
+                        </strong>{" "}
+                        and is read-only here. Pick a replacement to override it
+                        for this stage.
+                      </div>
+                    ) : undefined
+                  }
+                  onEquip={equip}
+                  equipLabel="Set"
+                  characterLevel={levelCap}
+                  weights={analysis.selection?.weights ?? null}
+                  equippedScore={analysis.scores?.get(selectedSlot)}
+                  equippedItemId={
+                    activeStage.slots[String(selectedSlot)]?.item_id
+                  }
+                  stageStats={analysis.statTotals}
+                  targets={analysis.selection?.targets}
+                  onAddAlternate={(item) =>
+                    editStageSlot(addProgressionAlternate, item.entry)
+                  }
+                  onClear={clearSelected}
+                  onClose={() => setSelectedSlot(null)}
+                  onSlotNote={(note) =>
+                    editStageSlot(setProgressionSlotNote, note)
+                  }
+                  onAlternateNote={(itemId, note) =>
+                    editStageSlot(setProgressionAlternateNote, itemId, note)
+                  }
+                  onPromoteAlternate={(itemId) =>
+                    editStageSlot(promoteProgressionAlternate, itemId)
+                  }
+                  onRemoveAlternate={(itemId) =>
+                    editStageSlot(removeProgressionAlternate, itemId)
+                  }
+                  onSetEnchant={(enchantId) =>
+                    editStageSlot(setProgressionSlotEnchant, enchantId)
+                  }
+                />
+              </div>
+            )}
+
+            {!characterMatch.match &&
+              !(
+                selectedSlot != null &&
+                isOwner &&
+                payload.stages.length > 0
+              ) && (
+                <CharacterMatchPanel
+                  matched={characterMatch.matched}
+                  onMatch={characterMatch.setMatched}
+                  historyLoading={characterMatch.loading}
+                  historyError={characterMatch.error}
+                />
+              )}
+          </div>
         </div>
       )}
     </div>

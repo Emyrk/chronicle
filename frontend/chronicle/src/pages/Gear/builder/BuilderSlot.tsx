@@ -1,5 +1,12 @@
 import { useState } from "react";
-import { ArrowUp, Check, LockKeyhole, Sparkles, StickyNote, X } from "lucide-react";
+import {
+  ArrowUp,
+  Check,
+  LockKeyhole,
+  Sparkles,
+  StickyNote,
+  X,
+} from "lucide-react";
 import { ItemTooltip } from "@/components/ui/ItemTooltip/ItemTooltip";
 import {
   CursorTooltip,
@@ -45,6 +52,8 @@ interface BuilderSlotProps {
   score?: number;
   /** Score difference vs the matched character's worn item (pick − worn). */
   wornDelta?: number;
+  /** Read-only Armory view: first progression stage accepting this item. */
+  acceptedFromStage?: string;
   /** Character-match state for this slot, when a character is matched. */
   matchState?: "equipped" | "missing";
   /**
@@ -76,6 +85,7 @@ export function BuilderSlot({
   equippedItemIds,
   score,
   wornDelta,
+  acceptedFromStage,
   matchState,
   nextUpgrade,
   size = "default",
@@ -99,11 +109,7 @@ export function BuilderSlot({
   const canEnchant =
     !!onEnchant && !isEmpty && ENCHANTABLE_SLOTS.has(slotDef.outfitIndex);
   const showTooltip =
-    cursor != null &&
-    !hasDetails &&
-    !isMobile &&
-    !isEmpty &&
-    item?.tooltip;
+    cursor != null && !hasDetails && !isMobile && !isEmpty && item?.tooltip;
 
   // The card itself is a <button> in edit mode, so the enchant shortcut
   // must be a non-button interactive element to stay valid HTML.
@@ -131,7 +137,7 @@ export function BuilderSlot({
           ? matchState === "equipped"
             ? "border-emerald-400 bg-blue-500/10 shadow-[inset_0_0_0_1px_rgba(52,211,153,0.18)]"
             : "border-blue-500 bg-blue-500/10"
-          : matchState === "equipped"
+          : matchState === "equipped" || acceptedFromStage
             ? "border-emerald-400 bg-emerald-500/[0.07] shadow-[inset_0_0_0_1px_rgba(52,211,153,0.18)]"
             : inheritedFromStage
               ? "border-dashed border-zinc-700/70 bg-zinc-950/35"
@@ -139,7 +145,8 @@ export function BuilderSlot({
         inheritedFromStage && "text-zinc-500",
         onSelect && !selected && "hover:border-zinc-600 cursor-pointer",
       )}
-      onMouseEnter={() => {
+      onMouseEnter={(e: React.MouseEvent) => {
+        setCursor({ x: e.clientX, y: e.clientY });
         if (hasDetails) setDetailsOpen(true);
       }}
       onMouseMove={(e: React.MouseEvent) =>
@@ -226,6 +233,7 @@ export function BuilderSlot({
           {displayName}
         </div>
         {(inheritedFromStage ||
+          acceptedFromStage ||
           enchantText ||
           canEnchant ||
           altCount > 0 ||
@@ -246,6 +254,15 @@ export function BuilderSlot({
               >
                 <LockKeyhole className="h-2.5 w-2.5 shrink-0" />
                 <span className="truncate">From {inheritedFromStage}</span>
+              </span>
+            )}
+            {acceptedFromStage && (
+              <span
+                title={`This equipped item is accepted by ${acceptedFromStage}`}
+                className="inline-flex min-w-0 items-center gap-1 rounded border border-emerald-500/30 bg-emerald-500/10 px-1.5 py-0.5 font-medium text-emerald-400"
+              >
+                <Check className="h-2.5 w-2.5 shrink-0" />
+                <span className="truncate">From {acceptedFromStage}</span>
               </span>
             )}
             {canEnchant && !enchantText && (
@@ -465,7 +482,9 @@ export function SlotDetailsPopover({
           <span className="block text-3xs uppercase tracking-[0.18em] text-zinc-600">
             {slotLabel}
           </span>
-          <span className="mt-1 block text-sm text-zinc-200">{primaryName}</span>
+          <span className="mt-1 block text-sm text-zinc-200">
+            {primaryName}
+          </span>
           {primaryNote && (
             <span className="mt-1 block text-xs leading-relaxed text-zinc-500">
               {primaryNote}

@@ -29,6 +29,8 @@ interface BuilderDollProps {
   scores?: Map<number, number>;
   /** Per-slot score difference vs the matched character's worn item. */
   wornDeltas?: Map<number, number>;
+  /** Read-only Armory view: outfit slot → first progression stage accepting it. */
+  acceptedFromStages?: ReadonlyMap<number, string>;
   /** Armory character match; adds owned/equipped/missing markers. */
   match?: CharacterMatch;
   /** Matched character's name, for the marker legend. */
@@ -68,6 +70,7 @@ export function BuilderDoll({
   onPromoteAlternate,
   scores,
   wornDeltas,
+  acceptedFromStages,
   match,
   matchName,
   nextUpgrades,
@@ -116,6 +119,7 @@ export function BuilderDoll({
         equippedItemIds={equippedItemIds}
         score={scores?.get(def.outfitIndex)}
         wornDelta={wornDeltas?.get(def.outfitIndex)}
+        acceptedFromStage={acceptedFromStages?.get(def.outfitIndex)}
         matchState={matchState}
         nextUpgrade={nextUpgrades?.get(def.outfitIndex)}
         size={size}

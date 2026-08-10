@@ -5,6 +5,8 @@ import type {
 } from "@/api/typesGenerated";
 import {
   buildCharacterMatch,
+  characterMatchStage,
+  equippedItemStageMatches,
   progressionStageCoverage,
   slotEquipped,
   stageCoverage,
@@ -35,6 +37,22 @@ describe("buildCharacterMatch", () => {
       history(outfit({ 0: 100, 4: 200 }), outfit({ 0: 101, 4: 200, 15: 300 })),
     );
     expect([...match.equippedIds].sort()).toEqual([100, 200]);
+  });
+
+  it("converts the current outfit into a read-only builder stage", () => {
+    const match = buildCharacterMatch(history(outfit({ 0: 100 })), [
+      { item_id: 111, enchant_id: 222 },
+      { item_id: 0 },
+      { item_id: 333 },
+    ] as unknown as PlayerOutfit);
+
+    expect(characterMatchStage(match)).toEqual({
+      name: "Current Armory gear",
+      slots: {
+        "0": { item_id: 111, enchant_id: 222 },
+        "2": { item_id: 333 },
+      },
+    });
   });
 
   it("handles empty history", () => {
@@ -89,6 +107,46 @@ describe("slotEquipped / stageCoverage", () => {
     expect(wornIds.every((itemId) => match.equippedIds.has(itemId))).toBe(true);
     expect(slotEquipped(stage, SLOT.head, match)).toBe(true);
     expect(slotEquipped(stage, SLOT.chest, match)).toBe(true);
+  });
+
+  it("attributes equipped primary and alternate items to their first stage", () => {
+    const stages: GearStage[] = [
+      {
+        name: "Pre-Raid",
+        slots: {
+          [String(SLOT.head)]: { item_id: 100 },
+          [String(SLOT.chest)]: {
+            item_id: 200,
+            alternates: [{ item_id: 201 }],
+          },
+        },
+      },
+      {
+        name: "BWL",
+        slots: {
+          [String(SLOT.head)]: { item_id: 100 },
+          [String(SLOT.hands)]: { item_id: 300 },
+        },
+      },
+    ];
+    const stageMatch = buildCharacterMatch(
+      history(
+        outfit({
+          [SLOT.head]: 100,
+          [SLOT.chest]: 201,
+          [SLOT.hands]: 300,
+          [SLOT.waist]: 999,
+        }),
+      ),
+    );
+
+    expect(equippedItemStageMatches(stages, stageMatch)).toEqual(
+      new Map([
+        [SLOT.head, "Pre-Raid"],
+        [SLOT.chest, "Pre-Raid"],
+        [SLOT.hands, "BWL"],
+      ]),
+    );
   });
 
   it("computes coverage excluding cosmetic slots", () => {
