@@ -5,6 +5,57 @@ const vehicle = "0xF150006C6B000107";
 const firstController = "0x000000000008CC7B";
 const secondController = "0x000000000009EC32";
 
+describe("UnitState ownership chains", () => {
+  const player = "0x000000000008CC7B";
+  const totem = "0xF130003C4F0003D3";
+  const elemental = "0xF130003C4E0003D4";
+
+  it("returns a direct owner without walking a chain", () => {
+    const state = new UnitState({
+      [elemental]: { name: "Greater Fire Elemental", owner: player, entry: 15438 },
+    });
+
+    expect(state.getOwner(elemental)).toBe(player);
+  });
+
+  it("flattens a summon owned through another summon", () => {
+    const state = new UnitState({
+      [elemental]: { name: "Greater Fire Elemental", owner: totem, entry: 15438 },
+      [totem]: { name: "Fire Elemental Totem", owner: player, entry: 15439 },
+    });
+
+    expect(state.getOwner(elemental)).toBe(player);
+    expect(state.isPlayerPet(elemental)).toBe(true);
+  });
+
+  it("rejects cyclic ownership", () => {
+    const state = new UnitState({
+      [elemental]: { name: "Greater Fire Elemental", owner: totem, entry: 15438 },
+      [totem]: { name: "Fire Elemental Totem", owner: elemental, entry: 15439 },
+    });
+
+    expect(state.getOwner(elemental)).toBeNull();
+    expect(state.isPlayerPet(elemental)).toBe(false);
+  });
+
+  it("bounds ownership resolution to five hops", () => {
+    const owners = ["owner-1", "owner-2", "owner-3", "owner-4", "owner-5", "owner-6"];
+    const units: Record<string, { name: string; owner: string | null; entry: number }> = {
+      summon: { name: "Summon", owner: owners[0], entry: 1 },
+    };
+    for (let i = 0; i < owners.length; i++) {
+      units[owners[i]] = {
+        name: owners[i],
+        owner: owners[i + 1] ?? player,
+        entry: i + 2,
+      };
+    }
+
+    const state = new UnitState(units);
+    expect(state.getOwner("summon")).toBe(owners[4]);
+  });
+});
+
 describe("UnitState vehicle ownership", () => {
   it("treats active vehicle control as temporal pet ownership", () => {
     const state = new UnitState(

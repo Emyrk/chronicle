@@ -23,6 +23,8 @@ import type {
   UnitClassificationProcessorEvent,
 } from "../processorTypes";
 
+const MAX_OWNER_DEPTH = 5;
+
 export class UnitState {
   private guidCache: GuidCache;
   /** Static unit data from server */
@@ -79,10 +81,36 @@ export class UnitState {
   }
 
   /**
-   * Get the effective owner for a GUID.
+   * Get the effective root owner for a GUID.
    * Inline possession takes priority, followed by active vehicle control, then static ownership.
    */
   getOwner(guid: string): string | null {
+    const firstOwner = this.getDirectOwner(guid);
+    if (firstOwner === null || firstOwner === guid) return null;
+
+    // The normal case is a unit directly owned by a player. Keep it allocation
+    // and loop free: one extra lookup proves the first owner is already root.
+    const secondOwner = this.getDirectOwner(firstOwner);
+    if (secondOwner === null) return firstOwner;
+    if (secondOwner === guid || secondOwner === firstOwner) return null;
+
+    // Chained summons are rare. Resolve at most five ownership edges and stop
+    // immediately if corrupt data repeats a GUID.
+    let owner = secondOwner;
+    const seen = new Set([guid, firstOwner]);
+    for (let depth = 2; depth < MAX_OWNER_DEPTH; depth++) {
+      if (seen.has(owner)) return null;
+      seen.add(owner);
+
+      const nextOwner = this.getDirectOwner(owner);
+      if (nextOwner === null) return owner;
+      owner = nextOwner;
+    }
+
+    return seen.has(owner) ? null : owner;
+  }
+
+  private getDirectOwner(guid: string): string | null {
     const temporal = this.controllers.get(guid);
     if (temporal) return temporal.controller;
 
