@@ -46,7 +46,7 @@ export const unitLookupProcessor: PanelProcessor<UnitLookupResult, UnitClassific
       guid: event.target,
       name: staticUnit?.name ?? event.target,
       entry: staticUnit?.entry ?? 0,
-      owner: staticUnit?.owner ?? null,
+      owner: context.unitState?.getOwner(event.target) ?? event.owner ?? staticUnit?.owner ?? null,
       controller: event.controller,
       controllerSpellId: event.spellId,
       unitType: event.unitType,

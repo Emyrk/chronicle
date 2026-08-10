@@ -28,6 +28,37 @@ describe("UnitState ownership chains", () => {
     expect(state.isPlayerPet(elemental)).toBe(true);
   });
 
+  it("flattens owners learned only from classification events", () => {
+    const state = new UnitState({});
+    const classification = (
+      index: number,
+      target: string,
+      owner: string,
+    ) => ({
+      type: "unit_classification" as const,
+      index,
+      offsetMilli: 0,
+      target,
+      unitType: 2,
+      affiliation: 0,
+      owner,
+      controller: null,
+      spellId: 0,
+      activity: [],
+      activityCount: 0,
+      isSynthetic: false,
+    });
+
+    // The log reports the totem summoning the elemental before the player
+    // summoning the totem. Neither unit needs to exist in static instance data.
+    state.processClassification(classification(0, elemental, totem));
+    state.processClassification(classification(1, totem, player));
+
+    expect(state.getOwner(totem)).toBe(player);
+    expect(state.getOwner(elemental)).toBe(player);
+    expect(state.isPlayerPet(elemental)).toBe(true);
+  });
+
   it("rejects cyclic ownership", () => {
     const state = new UnitState({
       [elemental]: { name: "Greater Fire Elemental", owner: totem, entry: 15438 },

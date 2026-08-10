@@ -29,6 +29,8 @@ export class UnitState {
   private guidCache: GuidCache;
   /** Static unit data from server */
   private units: Record<string, ProcessorUnit>;
+  /** Permanent owners observed from inline classification events. */
+  private classificationOwners: Map<string, string>;
   /** Temporal controller overrides from inline possession events. */
   private controllers: Map<string, { controller: string; spellId: number }>;
   /** Vehicle controller intervals grouped by vehicle GUID. */
@@ -46,6 +48,7 @@ export class UnitState {
   ) {
     this.guidCache = createGuidCache();
     this.units = units;
+    this.classificationOwners = new Map();
     this.controllers = new Map();
     this.vehicleIntervals = new Map();
     for (const interval of vehicleIntervals) {
@@ -61,8 +64,14 @@ export class UnitState {
     this.playerCache = new Map();
   }
 
-  /** Feed a unit_classification event to update temporal state. */
+  /** Feed a unit_classification event to update ownership and temporal state. */
   processClassification(event: UnitClassificationProcessorEvent): void {
+    if (event.owner) {
+      this.classificationOwners.set(event.target, event.owner);
+    } else {
+      this.classificationOwners.delete(event.target);
+    }
+
     if (event.controller) {
       this.controllers.set(event.target, {
         controller: event.controller,
@@ -118,7 +127,7 @@ export class UnitState {
       return this.getVehicleOwner(guid);
     }
 
-    return this.units[guid]?.owner ?? null;
+    return this.classificationOwners.get(guid) ?? this.units[guid]?.owner ?? null;
   }
 
   private getVehicleOwner(guid: string): string | null {
