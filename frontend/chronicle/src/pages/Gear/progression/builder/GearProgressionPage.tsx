@@ -744,7 +744,7 @@ function ProgressionView({
               <ArmoryDoll
                 match={characterMatch.match}
                 characterName={characterMatch.matched.name}
-                progressionStages={effectiveStages}
+                progressionStages={effectiveStages.slice(0, activeIndex + 1)}
                 onClear={() => characterMatch.setMatched(null)}
               />
             )}

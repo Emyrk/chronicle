@@ -58,7 +58,7 @@ export function ArmoryDoll({
         )}
       </div>
       <div
-        className="select-none"
+        className="relative select-none"
         aria-label={`${characterName}'s read-only Armory paperdoll`}
         aria-readonly="true"
       >
@@ -66,6 +66,10 @@ export function ArmoryDoll({
           stage={stage}
           items={items}
           acceptedFromStages={acceptedFromStages}
+        />
+        <div
+          className="pointer-events-none absolute inset-0 z-10 rounded bg-black/35"
+          aria-hidden
         />
       </div>
     </section>
