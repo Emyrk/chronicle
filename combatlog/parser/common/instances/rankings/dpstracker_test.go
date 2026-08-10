@@ -164,6 +164,43 @@ func TestDPSTracker_PetDamage(t *testing.T) {
 	assert.Equal(t, int64(600), results[encID].Units[player].DamageDone)
 }
 
+func TestDPSTracker_ChainedSummonDamageUsesRootOwner(t *testing.T) {
+	t.Parallel()
+	tracker, units := setupDPSTracker()
+
+	player := makePlayerGUID(1)
+	totem := makeCreatureGUID(200, 1)
+	elemental := makeCreatureGUID(201, 1)
+	boss := makeCreatureGUID(100, 1)
+	encID := uuid.New()
+
+	units.Update(unitinfo.Info{Guid: player, Name: "Shaman", IsPlayer: true, CanCooperate: true})
+	units.Update(unitinfo.Info{Guid: totem, Name: "Fire Elemental Totem", CanCooperate: true})
+	units.Update(unitinfo.Info{Guid: elemental, Name: "Greater Fire Elemental", CanCooperate: true})
+	units.Update(unitinfo.Info{Guid: boss, Name: "Boss", CanCooperate: false})
+
+	// Match the combat-log order: the totem summons the elemental before the
+	// player-to-totem ownership event is observed.
+	units.UpdateOwner(elemental, totem)
+	units.UpdateOwner(totem, player)
+
+	tracker.FightStarted(encID, nil)
+	elementalGUID := elemental
+	require.NoError(t, tracker.ProcessMessage(true, encID, &messages.Damage{
+		Caster:  &elementalGUID,
+		Target:  boss,
+		Amount:  400,
+		HitType: types.HitTypeHit,
+	}))
+	tracker.FightEnded(encID, nil)
+
+	stats := tracker.Result()[encID].Units[elemental]
+	require.NotNil(t, stats)
+	assert.Equal(t, int64(400), stats.DamageDone)
+	require.NotNil(t, stats.OwnerGUID)
+	assert.Equal(t, player, *stats.OwnerGUID)
+}
+
 func TestDPSTracker_EffectiveHealing(t *testing.T) {
 	t.Parallel()
 	tracker, units := setupDPSTracker()
