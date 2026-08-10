@@ -16,6 +16,10 @@ type Units struct {
 	Players      map[guid.GUID]combatant.Combatant
 	PlayerByName map[string]guid.GUID
 	Possessed    map[guid.GUID]PossessionState
+
+	// directOwners preserves the observed ownership graph while Info stores the
+	// flattened root owner used by downstream attribution.
+	directOwners map[guid.GUID]guid.GUID
 }
 
 func New() *Units {
@@ -24,6 +28,7 @@ func New() *Units {
 		Players:      make(map[guid.GUID]combatant.Combatant),
 		PlayerByName: make(map[string]guid.GUID),
 		Possessed:    make(map[guid.GUID]PossessionState),
+		directOwners: make(map[guid.GUID]guid.GUID),
 	}
 }
 
@@ -129,7 +134,67 @@ func (us *Units) ClearPossessed(target guid.GUID) {
 }
 
 func (us *Units) UpdateOwner(target guid.GUID, owner guid.GUID) {
-	if info, ok := us.Info[target]; ok {
+	if _, ok := us.Info[target]; !ok {
+		return
+	}
+	us.ensureDirectOwners()
+
+	if _, ok := us.resolveOwner(owner, target); !ok {
+		return
+	}
+	us.directOwners[target] = owner
+	us.flattenOwners()
+}
+
+func (us *Units) ensureDirectOwners() {
+	if us.directOwners != nil {
+		return
+	}
+	us.directOwners = make(map[guid.GUID]guid.GUID)
+	for target, info := range us.Info {
+		if info.Owner != nil {
+			us.directOwners[target] = *info.Owner
+		}
+	}
+}
+
+// resolveOwner iteratively follows the observed ownership chain to its root.
+// stop is the unit receiving the owner update; reaching it means the update
+// would form a cycle, so resolution stops immediately and rejects the update.
+func (us *Units) resolveOwner(owner, stop guid.GUID) (guid.GUID, bool) {
+	seen := make(map[guid.GUID]struct{})
+	for {
+		if owner == stop {
+			return 0, false
+		}
+		if _, ok := seen[owner]; ok {
+			return 0, false
+		}
+		seen[owner] = struct{}{}
+
+		next, ok := us.directOwners[owner]
+		if !ok {
+			return owner, true
+		}
+		owner = next
+	}
+}
+
+// flattenOwners updates every known ownership relationship to point directly
+// at its root owner. The direct graph is retained so later ownership changes
+// can be propagated through already-flattened descendants.
+func (us *Units) flattenOwners() {
+	for target, info := range us.Info {
+		directOwner, ok := us.directOwners[target]
+		if !ok {
+			info.Owner = nil
+			us.Info[target] = info
+			continue
+		}
+		owner, ok := us.resolveOwner(directOwner, target)
+		if !ok {
+			continue
+		}
 		info.Owner = &owner
 		us.Info[target] = info
 	}
@@ -154,10 +219,21 @@ func (us *Units) GetPlayerByName(name string) (combatant.Combatant, bool) {
 }
 
 func (us *Units) Update(u unitinfo.Info) {
+	us.ensureDirectOwners()
 	existing, exists := us.Info[u.Guid]
 	if u.Name == "" && exists {
 		// Do no overwrite an existing entry if this one is missing a name.
 		return
+	}
+
+	directOwner, hadDirectOwner := us.directOwners[u.Guid]
+	preserveOwner := func() {
+		if hadDirectOwner {
+			owner := directOwner
+			u.Owner = &owner
+		} else {
+			u.Owner = nil
+		}
 	}
 
 	if u.Guid.IsPet() && u.Owner == nil && existing.Owner != nil {
@@ -166,7 +242,7 @@ func (us *Units) Update(u unitinfo.Info) {
 		//
 		// In the hunter case, we can at least be sure the pet doesn't go ownerless if we seen it have
 		// an owner at any point.
-		u.Owner = existing.Owner
+		preserveOwner()
 	}
 
 	if u.Owner != nil {
@@ -176,7 +252,10 @@ func (us *Units) Update(u unitinfo.Info) {
 			// temporary, so do not persist it as permanent ownership. Otherwise
 			// the possessed unit would "die" with its controller (owner_slain),
 			// e.g. ending the Razorgore encounter when the MC'ing player dies.
-			u.Owner = existing.Owner
+			preserveOwner()
+		} else if _, ok := us.resolveOwner(*u.Owner, u.Guid); !ok {
+			// Reject self-ownership and ownership chains that would form a cycle.
+			preserveOwner()
 		}
 	}
 
@@ -184,7 +263,13 @@ func (us *Units) Update(u unitinfo.Info) {
 		us.PlayerByName[u.Name] = u.Guid
 	}
 
+	if u.Owner == nil {
+		delete(us.directOwners, u.Guid)
+	} else {
+		us.directOwners[u.Guid] = *u.Owner
+	}
 	us.Info[u.Guid] = u
+	us.flattenOwners()
 }
 
 func (us *Units) UpdateUnitName(gid guid.GUID, name string) {

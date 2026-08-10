@@ -297,6 +297,110 @@ func TestProcessMessage_NewOwner(t *testing.T) {
 	assert.Equal(t, playerGUID, *c.Relation.Owner)
 }
 
+func TestProcessMessage_NewOwnerFlattensOwnershipChains(t *testing.T) {
+	t.Parallel()
+
+	playerGUID := mustGUID("0x0000000000000001")
+	totemGUID := mustGUID("0x0030000000000002")
+	elementalGUID := mustGUID("0x0040000000000003")
+	now := time.Now()
+
+	tests := []struct {
+		name       string
+		ownerships [][2]guid.GUID
+	}{
+		{
+			name: "parent owner known first",
+			ownerships: [][2]guid.GUID{
+				{totemGUID, playerGUID},
+				{elementalGUID, totemGUID},
+			},
+		},
+		{
+			name: "child owner known first",
+			ownerships: [][2]guid.GUID{
+				{elementalGUID, totemGUID},
+				{totemGUID, playerGUID},
+			},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
+			units := unitdb.New()
+			units.Update(unitinfo.Info{Guid: totemGUID, Name: "Fire Elemental Totem"})
+			units.Update(unitinfo.Info{Guid: elementalGUID, Name: "Greater Fire Elemental"})
+
+			for _, ownership := range tt.ownerships {
+				require.NoError(t, units.ProcessMessage(&messages.NewOwner{
+					MessageBase: messages.Base(now),
+					Target:      ownership[0],
+					NewOwner:    ownership[1],
+				}))
+			}
+
+			assert.Equal(t, playerGUID, *units.Classify(totemGUID).Relation.Owner)
+			assert.Equal(t, playerGUID, *units.Classify(elementalGUID).Relation.Owner)
+		})
+	}
+}
+
+func TestProcessMessage_NewOwnerReflattensAfterOwnerChanges(t *testing.T) {
+	t.Parallel()
+
+	firstPlayerGUID := mustGUID("0x0000000000000001")
+	secondPlayerGUID := mustGUID("0x0000000000000002")
+	totemGUID := mustGUID("0x0030000000000003")
+	elementalGUID := mustGUID("0x0040000000000004")
+	units := unitdb.New()
+	units.Update(unitinfo.Info{Guid: totemGUID, Name: "Fire Elemental Totem"})
+	units.Update(unitinfo.Info{Guid: elementalGUID, Name: "Greater Fire Elemental"})
+
+	units.UpdateOwner(elementalGUID, totemGUID)
+	units.UpdateOwner(totemGUID, firstPlayerGUID)
+	assert.Equal(t, firstPlayerGUID, *units.Classify(elementalGUID).Relation.Owner)
+
+	units.UpdateOwner(totemGUID, secondPlayerGUID)
+	assert.Equal(t, secondPlayerGUID, *units.Classify(totemGUID).Relation.Owner)
+	assert.Equal(t, secondPlayerGUID, *units.Classify(elementalGUID).Relation.Owner)
+}
+
+func TestUpdate_FlattensOwnershipChains(t *testing.T) {
+	t.Parallel()
+
+	playerGUID := mustGUID("0x0000000000000001")
+	totemGUID := mustGUID("0x0030000000000002")
+	elementalGUID := mustGUID("0x0040000000000003")
+	units := unitdb.New()
+
+	units.Update(unitinfo.Info{Guid: elementalGUID, Name: "Greater Fire Elemental", Owner: &totemGUID})
+	units.Update(unitinfo.Info{Guid: totemGUID, Name: "Fire Elemental Totem", Owner: &playerGUID})
+
+	elemental := units.Classify(elementalGUID)
+	require.True(t, elemental.Relation.HasOwner())
+	assert.Equal(t, playerGUID, *elemental.Relation.Owner)
+}
+
+func TestProcessMessage_NewOwnerRejectsCycles(t *testing.T) {
+	t.Parallel()
+
+	firstGUID := mustGUID("0x0030000000000001")
+	secondGUID := mustGUID("0x0030000000000002")
+	units := unitdb.New()
+	units.Update(unitinfo.Info{Guid: firstGUID, Name: "First"})
+	units.Update(unitinfo.Info{Guid: secondGUID, Name: "Second"})
+
+	units.UpdateOwner(firstGUID, secondGUID)
+	units.UpdateOwner(secondGUID, firstGUID)
+
+	first := units.Classify(firstGUID)
+	require.True(t, first.Relation.HasOwner())
+	assert.Equal(t, secondGUID, *first.Relation.Owner)
+	assert.False(t, units.Classify(secondGUID).Relation.HasOwner(), "cycle-forming update should be rejected")
+}
+
 func TestProcessMessage_PossessionGainAndRelease(t *testing.T) {
 	t.Parallel()
 
