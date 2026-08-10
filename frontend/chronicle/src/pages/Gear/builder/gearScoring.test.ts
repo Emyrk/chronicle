@@ -1,8 +1,12 @@
 import { describe, expect, it } from "vitest";
 import type { SimItem } from "@/api/typesGenerated";
 import {
+  aggregateItemStats,
+  evaluateItemSwapTargets,
+  evaluateTargets,
   formatScore,
   itemStatValues,
+  parseTargets,
   parseWeights,
   scoreItem,
   scoreItems,
@@ -31,7 +35,9 @@ describe("STAT_KEYS", () => {
   it("has unique keys and unique itemMods", () => {
     const keys = STAT_KEYS.map((s) => s.key);
     expect(new Set(keys).size).toBe(keys.length);
-    const mods = STAT_KEYS.filter((s) => s.itemMod !== undefined).map((s) => s.itemMod);
+    const mods = STAT_KEYS.filter((s) => s.itemMod !== undefined).map(
+      (s) => s.itemMod,
+    );
     expect(new Set(mods).size).toBe(mods.length);
   });
 });
@@ -47,7 +53,11 @@ describe("weaponDps", () => {
 
   it("is zero without damage or delay", () => {
     expect(weaponDps(simItem({}))).toBe(0);
-    expect(weaponDps(simItem({ damage: [{ min: 10, max: 20, damage_type: 0 }], delay: 0 }))).toBe(0);
+    expect(
+      weaponDps(
+        simItem({ damage: [{ min: 10, max: 20, damage_type: 0 }], delay: 0 }),
+      ),
+    ).toBe(0);
   });
 });
 
@@ -74,15 +84,28 @@ describe("itemStatValues", () => {
   });
 
   it("sums duplicate stat types", () => {
-    const item = simItem({ stats: [{ type: 7, value: 5 }, { type: 7, value: 7 }] });
+    const item = simItem({
+      stats: [
+        { type: 7, value: 5 },
+        { type: 7, value: 7 },
+      ],
+    });
     expect(itemStatValues(item)).toEqual({ stamina: 12 });
   });
 });
 
 describe("scoring", () => {
   const weights = { strength: 2, agility: 1.5, weapon_dps: 6 };
-  const chest = simItem({ stats: [{ type: 4, value: 10 }, { type: 3, value: 10 }] });
-  const sword = simItem({ delay: 2000, damage: [{ min: 90, max: 110, damage_type: 0 }] });
+  const chest = simItem({
+    stats: [
+      { type: 4, value: 10 },
+      { type: 3, value: 10 },
+    ],
+  });
+  const sword = simItem({
+    delay: 2000,
+    damage: [{ min: 90, max: 110, damage_type: 0 }],
+  });
 
   it("scores single items with unknown keys ignored", () => {
     expect(scoreItem(chest, weights)).toBe(35); // 10*2 + 10*1.5
@@ -95,10 +118,89 @@ describe("scoring", () => {
   });
 });
 
+describe("stage analysis", () => {
+  it("aggregates item stats and evaluates minimum and maximum targets", () => {
+    const totals = aggregateItemStats([
+      simItem({
+        stats: [
+          { type: 31, value: 5 },
+          { type: 7, value: 10 },
+        ],
+      }),
+      simItem({
+        stats: [
+          { type: 31, value: 4 },
+          { type: 7, value: 8 },
+        ],
+      }),
+    ]);
+    expect(totals).toMatchObject({ hit: 9, stamina: 18 });
+    expect(
+      evaluateTargets(totals, [
+        { stat: "hit", type: "minimum", value: 9 },
+        { stat: "stamina", type: "maximum", value: 15 },
+      ]),
+    ).toEqual([
+      {
+        stat: "hit",
+        type: "minimum",
+        value: 9,
+        actual: 9,
+        difference: 0,
+        met: true,
+      },
+      {
+        stat: "stamina",
+        type: "maximum",
+        value: 15,
+        actual: 18,
+        difference: 3,
+        met: false,
+      },
+    ]);
+  });
+
+  it("evaluates a candidate by replacing the current item's stats", () => {
+    const current = simItem({ stats: [{ type: 31, value: 2 }] });
+    const candidate = simItem({ stats: [{ type: 31, value: 1 }] });
+    expect(
+      evaluateItemSwapTargets({ hit: 9 }, current, candidate, [
+        { stat: "hit", type: "minimum", value: 9 },
+      ]),
+    ).toEqual([
+      {
+        stat: "hit",
+        type: "minimum",
+        value: 9,
+        actual: 8,
+        difference: -1,
+        met: false,
+      },
+    ]);
+  });
+
+  it("parses only known, finite targets", () => {
+    expect(
+      parseTargets([
+        { stat: "hit", type: "minimum", value: 9 },
+        { stat: "made_up", type: "minimum", value: 2 },
+        { stat: "crit", type: "between", value: 4 },
+        { stat: "stamina", type: "maximum", value: "20" },
+      ]),
+    ).toEqual([{ stat: "hit", type: "minimum", value: 9 }]);
+    expect(parseTargets("not json")).toEqual([]);
+  });
+});
+
 describe("parseWeights", () => {
   it("parses strings and objects, dropping junk", () => {
-    expect(parseWeights('{"strength":2,"agility":1.5}')).toEqual({ strength: 2, agility: 1.5 });
-    expect(parseWeights({ strength: 2, zero: 0, bad: "x", nan: NaN })).toEqual({ strength: 2 });
+    expect(parseWeights('{"strength":2,"agility":1.5}')).toEqual({
+      strength: 2,
+      agility: 1.5,
+    });
+    expect(parseWeights({ strength: 2, zero: 0, bad: "x", nan: NaN })).toEqual({
+      strength: 2,
+    });
     expect(parseWeights("{nope")).toEqual({});
     expect(parseWeights(null)).toEqual({});
   });
@@ -106,7 +208,9 @@ describe("parseWeights", () => {
 
 describe("unknownWeightKeys", () => {
   it("flags keys outside the registry", () => {
-    expect(unknownWeightKeys({ strength: 1, sneakiness: 3 })).toEqual(["sneakiness"]);
+    expect(unknownWeightKeys({ strength: 1, sneakiness: 3 })).toEqual([
+      "sneakiness",
+    ]);
   });
 });
 

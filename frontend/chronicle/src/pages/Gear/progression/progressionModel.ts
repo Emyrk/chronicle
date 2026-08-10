@@ -8,18 +8,16 @@
  *   pool: [{ item_id, enchant_id?, note? }],
  *   stages: [{ name, slots: { "0".."18": GearSlotEntry } }] }
  *
- * `pool` is the player's hand-picked candidate set. The leveling half of
- * the progression is *derived* from it at every level; only the max-level
- * half (`stages`) stores explicit picks, because at cap "best" is a
- * judgement call rather than a sort order.
+ * Every stage is an explicit gear set with the same behavior. Item
+ * availability is evaluated at the deployment's level cap.
  */
 import {
   COSMETIC_SLOTS,
   GEAR_PAYLOAD_VERSION,
+  MAX_STAGES,
   SLOT,
   SLOT_COUNT,
   addAlternate,
-  addStage,
   clearSlot,
   fillStageFromOutfit,
   moveStage,
@@ -32,13 +30,14 @@ import {
   setSlotEnchant,
   setSlotItem,
   setSlotNote,
-  setStageLevel,
   type GearPayload,
   type GearStage,
 } from "../builder/gearListModel";
 
 export const PROGRESSION_PAYLOAD_VERSION = 1;
 export const MAX_POOL_ITEMS = 400;
+export const MAX_PROGRESSION_TAGS = 24;
+export const MAX_PROGRESSION_TAG_LENGTH = 48;
 
 export interface ProgressionPoolItem {
   item_id: number;
@@ -50,11 +49,10 @@ export interface ProgressionPayload {
   version: number;
   pool: ProgressionPoolItem[];
   stages: GearStage[];
-  /**
-   * Turns the progressive-gear (levelling) half off for the whole
-   * document; everything assumes the level cap. Absent means enabled.
-   */
-  leveling_disabled?: boolean;
+  /** Free-form labels shown under the progression title. */
+  tags?: string[];
+  /** Stat-weight/target profile selected for this progression. */
+  analysis_profile_id?: string;
 }
 
 // ─── Level caps ──────────────────────────────────────────────
@@ -110,10 +108,36 @@ export function parseProgressionPayload(raw: unknown): ProgressionPayload {
 
   // The gear-list parser only reads `stages`, so the progression document
   // can be handed to it directly — one stage parser, no drift.
-  const { stages } = parsePayload(value);
-  const doc: ProgressionPayload = { version: PROGRESSION_PAYLOAD_VERSION, pool, stages };
-  if ((value as { leveling_disabled?: unknown }).leveling_disabled === true) {
-    doc.leveling_disabled = true;
+  const parsed = parsePayload(value);
+  const stages = parsed.stages.map((stage) => {
+    const next = { ...stage };
+    delete next.level;
+    return next;
+  });
+  const doc: ProgressionPayload = {
+    version: PROGRESSION_PAYLOAD_VERSION,
+    pool,
+    stages,
+  };
+  const analysisProfileId = (
+    value as { analysis_profile_id?: unknown }
+  ).analysis_profile_id;
+  if (typeof analysisProfileId === "string" && analysisProfileId) {
+    doc.analysis_profile_id = analysisProfileId.slice(0, 128);
+  }
+  const tagsRaw = (value as { tags?: unknown }).tags;
+  if (Array.isArray(tagsRaw)) {
+    const tags: string[] = [];
+    const seenTags = new Set<string>();
+    for (const rawTag of tagsRaw.slice(0, MAX_PROGRESSION_TAGS)) {
+      if (typeof rawTag !== "string") continue;
+      const tag = rawTag.trim().slice(0, MAX_PROGRESSION_TAG_LENGTH);
+      const normalized = tag.toLocaleLowerCase();
+      if (!tag || seenTags.has(normalized)) continue;
+      seenTags.add(normalized);
+      tags.push(tag);
+    }
+    if (tags.length > 0) doc.tags = tags;
   }
   return doc;
 }
@@ -124,19 +148,71 @@ function parsePoolItem(raw: unknown): ProgressionPoolItem | null {
   }
   if (!raw || typeof raw !== "object") return null;
   const obj = raw as Record<string, unknown>;
-  if (typeof obj.item_id !== "number" || !Number.isInteger(obj.item_id) || obj.item_id <= 0) {
+  if (
+    typeof obj.item_id !== "number" ||
+    !Number.isInteger(obj.item_id) ||
+    obj.item_id <= 0
+  ) {
     return null;
   }
   const entry: ProgressionPoolItem = { item_id: obj.item_id };
-  if (typeof obj.enchant_id === "number" && Number.isInteger(obj.enchant_id) && obj.enchant_id > 0) {
+  if (
+    typeof obj.enchant_id === "number" &&
+    Number.isInteger(obj.enchant_id) &&
+    obj.enchant_id > 0
+  ) {
     entry.enchant_id = obj.enchant_id;
   }
   if (typeof obj.note === "string" && obj.note) entry.note = obj.note;
   return entry;
 }
 
-export function serializeProgressionPayload(payload: ProgressionPayload): string {
+export function serializeProgressionPayload(
+  payload: ProgressionPayload,
+): string {
   return JSON.stringify(payload);
+}
+
+export function setProgressionAnalysisProfile(
+  payload: ProgressionPayload,
+  profileId: string | null,
+): ProgressionPayload {
+  const next = { ...payload };
+  if (profileId) next.analysis_profile_id = profileId.slice(0, 128);
+  else delete next.analysis_profile_id;
+  return next;
+}
+
+// ─── Document tags ────────────────────────────────────────────
+
+export function addProgressionTag(
+  payload: ProgressionPayload,
+  rawTag: string,
+): ProgressionPayload {
+  const tag = rawTag.trim().slice(0, MAX_PROGRESSION_TAG_LENGTH);
+  if (!tag) return payload;
+  const tags = payload.tags ?? [];
+  if (tags.length >= MAX_PROGRESSION_TAGS) return payload;
+  if (
+    tags.some(
+      (existing) => existing.toLocaleLowerCase() === tag.toLocaleLowerCase(),
+    )
+  ) {
+    return payload;
+  }
+  return { ...payload, tags: [...tags, tag] };
+}
+
+export function removeProgressionTag(
+  payload: ProgressionPayload,
+  tag: string,
+): ProgressionPayload {
+  const tags = (payload.tags ?? []).filter((existing) => existing !== tag);
+  if (tags.length === (payload.tags ?? []).length) return payload;
+  const next = { ...payload };
+  if (tags.length > 0) next.tags = tags;
+  else delete next.tags;
+  return next;
 }
 
 // ─── Pool operations ─────────────────────────────────────────
@@ -214,11 +290,74 @@ function withStages(
   return { ...payload, stages: next.stages };
 }
 
-export function addProgressionStage(payload: ProgressionPayload, name?: string): ProgressionPayload {
-  return withStages(payload, (doc) => addStage(doc, name));
+export function addProgressionStage(
+  payload: ProgressionPayload,
+  name?: string,
+): ProgressionPayload {
+  if (payload.stages.length >= MAX_STAGES) return payload;
+  return {
+    ...payload,
+    stages: [
+      ...payload.stages,
+      {
+        name: name ?? `Stage ${payload.stages.length + 1}`,
+        slots: {},
+      },
+    ],
+  };
 }
 
-export function removeProgressionStage(payload: ProgressionPayload, index: number): ProgressionPayload {
+export interface ResolvedProgressionStage {
+  /** Effective gear after carrying empty slots forward from earlier stages. */
+  stage: GearStage;
+  /** Outfit slot index → the earlier stage index supplying that slot. */
+  inheritedFrom: Map<number, number>;
+}
+
+/**
+ * Resolve a progression stage for display and analysis. A stage stores only
+ * its changes; any absent slot carries forward the nearest explicit pick from
+ * an earlier stage.
+ */
+export function resolveProgressionStage(
+  payload: ProgressionPayload,
+  stageIndex: number,
+): ResolvedProgressionStage {
+  const target = payload.stages[stageIndex];
+  if (!target) {
+    return {
+      stage: { name: `Stage ${stageIndex + 1}`, slots: {} },
+      inheritedFrom: new Map(),
+    };
+  }
+
+  const slots: GearStage["slots"] = {};
+  const sourceBySlot = new Map<number, number>();
+  for (let index = 0; index <= stageIndex; index++) {
+    const stage = payload.stages[index];
+    if (!stage) continue;
+    for (const [slot, entry] of Object.entries(stage.slots)) {
+      if (!entry) continue;
+      slots[slot] = entry;
+      sourceBySlot.set(Number(slot), index);
+    }
+  }
+
+  const inheritedFrom = new Map<number, number>();
+  for (const [slot, sourceIndex] of sourceBySlot) {
+    if (sourceIndex < stageIndex) inheritedFrom.set(slot, sourceIndex);
+  }
+
+  return {
+    stage: { ...target, slots },
+    inheritedFrom,
+  };
+}
+
+export function removeProgressionStage(
+  payload: ProgressionPayload,
+  index: number,
+): ProgressionPayload {
   return withStages(payload, (doc) => removeStage(doc, index));
 }
 
@@ -238,40 +377,15 @@ export function moveProgressionStage(
   return withStages(payload, (doc) => moveStage(doc, from, to));
 }
 
-/** Turn the document's progressive-gear (levelling) half on or off. */
-export function setProgressionLevelingDisabled(
-  payload: ProgressionPayload,
-  disabled: boolean,
-): ProgressionPayload {
-  if (disabled === (payload.leveling_disabled ?? false)) return payload;
-  const next = { ...payload };
-  if (disabled) {
-    next.leveling_disabled = true;
-  } else {
-    delete next.leveling_disabled;
-  }
-  return next;
-}
-
-/**
- * Set or clear the level a stage assumes. Cleared (undefined) means the
- * stage's level slider is disabled and the level cap is assumed.
- */
-export function setProgressionStageLevel(
-  payload: ProgressionPayload,
-  index: number,
-  level: number | undefined,
-): ProgressionPayload {
-  return withStages(payload, (doc) => setStageLevel(doc, index, level));
-}
-
 export function setProgressionSlotItem(
   payload: ProgressionPayload,
   stageIndex: number,
   slotIndex: number,
   itemId: number,
 ): ProgressionPayload {
-  return withStages(payload, (doc) => setSlotItem(doc, stageIndex, slotIndex, itemId));
+  return withStages(payload, (doc) =>
+    setSlotItem(doc, stageIndex, slotIndex, itemId),
+  );
 }
 
 export function clearProgressionSlot(
@@ -291,7 +405,9 @@ export function setProgressionSlotNote(
   slotIndex: number,
   note: string,
 ): ProgressionPayload {
-  return withStages(payload, (doc) => setSlotNote(doc, stageIndex, slotIndex, note));
+  return withStages(payload, (doc) =>
+    setSlotNote(doc, stageIndex, slotIndex, note),
+  );
 }
 
 export function setProgressionSlotEnchant(
@@ -300,7 +416,9 @@ export function setProgressionSlotEnchant(
   slotIndex: number,
   enchantId: number | undefined,
 ): ProgressionPayload {
-  return withStages(payload, (doc) => setSlotEnchant(doc, stageIndex, slotIndex, enchantId));
+  return withStages(payload, (doc) =>
+    setSlotEnchant(doc, stageIndex, slotIndex, enchantId),
+  );
 }
 
 export function addProgressionAlternate(
@@ -309,7 +427,9 @@ export function addProgressionAlternate(
   slotIndex: number,
   itemId: number,
 ): ProgressionPayload {
-  return withStages(payload, (doc) => addAlternate(doc, stageIndex, slotIndex, itemId));
+  return withStages(payload, (doc) =>
+    addAlternate(doc, stageIndex, slotIndex, itemId),
+  );
 }
 
 export function removeProgressionAlternate(
@@ -318,7 +438,9 @@ export function removeProgressionAlternate(
   slotIndex: number,
   itemId: number,
 ): ProgressionPayload {
-  return withStages(payload, (doc) => removeAlternate(doc, stageIndex, slotIndex, itemId));
+  return withStages(payload, (doc) =>
+    removeAlternate(doc, stageIndex, slotIndex, itemId),
+  );
 }
 
 export function setProgressionAlternateNote(
@@ -339,7 +461,9 @@ export function promoteProgressionAlternate(
   slotIndex: number,
   itemId: number,
 ): ProgressionPayload {
-  return withStages(payload, (doc) => promoteAlternate(doc, stageIndex, slotIndex, itemId));
+  return withStages(payload, (doc) =>
+    promoteAlternate(doc, stageIndex, slotIndex, itemId),
+  );
 }
 
 /**
@@ -358,9 +482,14 @@ export function snapshotStageFromDerived(
     const itemId = derived[slot];
     if (itemId == null) continue;
     const enchantId = enchantOf.get(itemId);
-    equipped[slot] = { item_id: itemId, ...(enchantId ? { enchant_id: enchantId } : {}) };
+    equipped[slot] = {
+      item_id: itemId,
+      ...(enchantId ? { enchant_id: enchantId } : {}),
+    };
   }
-  return withStages(payload, (doc) => fillStageFromOutfit(doc, stageIndex, equipped, true));
+  return withStages(payload, (doc) =>
+    fillStageFromOutfit(doc, stageIndex, equipped, true),
+  );
 }
 
 // ─── Leveling derivation ─────────────────────────────────────
@@ -437,13 +566,18 @@ const OFF_HAND_TYPES: ReadonlySet<number> = new Set([13, 14, 22, 23]);
  * Outfit slots an item of this inventory type can occupy. Empty when the
  * item is not equippable (bags, reagents, …).
  */
-export function slotsForInventoryType(inventoryType: number): readonly number[] {
+export function slotsForInventoryType(
+  inventoryType: number,
+): readonly number[] {
   const group = GROUP_BY_INVENTORY_TYPE[inventoryType];
   return group ? GROUP_SLOTS[group] : [];
 }
 
 /** Whether a pool item is a candidate for a given outfit slot. */
-export function itemFitsSlot(inventoryType: number, slotIndex: number): boolean {
+export function itemFitsSlot(
+  inventoryType: number,
+  slotIndex: number,
+): boolean {
   return slotsForInventoryType(inventoryType).includes(slotIndex);
 }
 
@@ -456,7 +590,8 @@ export function itemFitsSlot(inventoryType: number, slotIndex: number): boolean 
  * and it keeps the scrubber's timeline monotonic and legible.
  */
 function compareCandidates(a: PoolItemStats, b: PoolItemStats): number {
-  if (a.required_level !== b.required_level) return b.required_level - a.required_level;
+  if (a.required_level !== b.required_level)
+    return b.required_level - a.required_level;
   if (a.item_level !== b.item_level) return b.item_level - a.item_level;
   return a.item_id - b.item_id;
 }
@@ -504,12 +639,17 @@ export function computeEquippedAtLevel(
  * and the off hand goes to the best remaining off-hand-capable item —
  * unless the main hand is a two-hander, which occupies both.
  */
-function assignWeapons(candidates: PoolItemStats[], equipped: DerivedEquipped): void {
+function assignWeapons(
+  candidates: PoolItemStats[],
+  equipped: DerivedEquipped,
+): void {
   const main = candidates[0];
   if (!main) return;
   equipped[SLOT.mainHand] = main.item_id;
   if (TWO_HAND_TYPES.has(main.inventory_type)) return;
-  const off = candidates.slice(1).find((c) => OFF_HAND_TYPES.has(c.inventory_type));
+  const off = candidates
+    .slice(1)
+    .find((c) => OFF_HAND_TYPES.has(c.inventory_type));
   if (off) equipped[SLOT.offHand] = off.item_id;
 }
 
@@ -517,7 +657,10 @@ function assignWeapons(candidates: PoolItemStats[], equipped: DerivedEquipped): 
  * Levels at which the derived set changes. Used to mark the scrubber's
  * rail so a player can see where their pool actually delivers upgrades.
  */
-export function upgradeLevels(pool: readonly PoolItemStats[], maxLevel: number): number[] {
+export function upgradeLevels(
+  pool: readonly PoolItemStats[],
+  maxLevel: number,
+): number[] {
   const levels = new Set<number>();
   for (const item of pool) {
     if (!GROUP_BY_INVENTORY_TYPE[item.inventory_type]) continue;
@@ -645,8 +788,7 @@ function sameEquipped(a: DerivedEquipped, b: DerivedEquipped): boolean {
 }
 
 /**
- * The derived set as a GearStage, so the levelling half can feed the very
- * same paperdoll and summary components the gear-list builder uses.
+ * Convert a pool derivation to a GearStage for previews and snapshots.
  * Enchants come from the pool entries that produced the picks.
  */
 export function derivedStage(
@@ -660,7 +802,10 @@ export function derivedStage(
     const itemId = equipped[slot];
     if (itemId == null) continue;
     const enchantId = enchantOf.get(itemId);
-    slots[String(slot)] = { item_id: itemId, ...(enchantId ? { enchant_id: enchantId } : {}) };
+    slots[String(slot)] = {
+      item_id: itemId,
+      ...(enchantId ? { enchant_id: enchantId } : {}),
+    };
   }
   return { name, slots };
 }

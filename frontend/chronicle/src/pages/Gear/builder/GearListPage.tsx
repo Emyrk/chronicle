@@ -447,6 +447,16 @@ function EditorView({
                     setSelectedSlot(i);
                     setEditorTab("enchant");
                   }}
+                  onPromoteAlternate={(slotIndex, itemId) =>
+                    editor.update((payload) =>
+                      promoteAlternate(
+                        payload,
+                        safeStageIndex,
+                        slotIndex,
+                        itemId,
+                      ),
+                    )
+                  }
                   scores={scores}
                   wornDeltas={wornDeltas}
                   match={charMatch.match}

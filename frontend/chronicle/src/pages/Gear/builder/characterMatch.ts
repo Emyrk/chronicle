@@ -2,8 +2,15 @@
  * Pure matching of a gear list against a character's armory gear history.
  * No React imports.
  */
-import type { ArmoryGearHistoryResponse, PlayerOutfit } from "@/api/typesGenerated";
-import { COSMETIC_SLOTS, type GearPayload, type GearStage } from "./gearListModel";
+import type {
+  ArmoryGearHistoryResponse,
+  PlayerOutfit,
+} from "@/api/typesGenerated";
+import {
+  COSMETIC_SLOTS,
+  type GearPayload,
+  type GearStage,
+} from "./gearListModel";
 
 export interface EquippedSlot {
   item_id: number;
@@ -47,7 +54,9 @@ export function buildCharacterMatch(
     equippedIds.add(item.item_id);
     equippedSlots[slotIndex] = {
       item_id: item.item_id,
-      ...(item.enchant_id && item.enchant_id > 0 ? { enchant_id: item.enchant_id } : {}),
+      ...(item.enchant_id && item.enchant_id > 0
+        ? { enchant_id: item.enchant_id }
+        : {}),
     };
   });
   return { equippedIds, equippedSlots };
@@ -65,7 +74,10 @@ export function slotEquipped(
   return (entry.alternates ?? []).some((a) => match.equippedIds.has(a.item_id));
 }
 
-export function stageCoverage(stage: GearStage, match: CharacterMatch): StageCoverage {
+export function stageCoverage(
+  stage: GearStage,
+  match: CharacterMatch,
+): StageCoverage {
   const coverage: StageCoverage = { filled: 0, equipped: 0, missing: [] };
   for (const [key, entry] of Object.entries(stage.slots)) {
     if (!entry) continue;
@@ -82,7 +94,80 @@ export function stageCoverage(stage: GearStage, match: CharacterMatch): StageCov
   return coverage;
 }
 
+export interface ProgressionStageCoverage {
+  /** Non-cosmetic target slots in this effective stage. */
+  total: number;
+  /** Target slots matched by this stage's own accepted item choices. */
+  fromStage: number;
+  /** Target slots already satisfied by an accepted item in a later stage. */
+  fromLaterStages: ReadonlyArray<{ stageIndex: number; count: number }>;
+  /** Total target slots satisfied by this or a later stage. */
+  covered: number;
+  /** Target slots not satisfied by this or a later stage. */
+  open: number;
+}
+
+/**
+ * Measure a character's forward progress through ordered effective stages.
+ * A later accepted upgrade also clears the same slot in every earlier stage,
+ * and is attributed to the first later stage that accepts it.
+ */
+export function progressionStageCoverage(
+  stages: readonly GearStage[],
+  match: CharacterMatch,
+): ProgressionStageCoverage[] {
+  return stages.map((stage, stageIndex) => {
+    let total = 0;
+    let fromStage = 0;
+    const laterCounts = new Map<number, number>();
+
+    for (const [key, entry] of Object.entries(stage.slots)) {
+      if (!entry) continue;
+      const slotIndex = Number(key);
+      if (COSMETIC_SLOTS.has(slotIndex)) continue;
+      total++;
+
+      if (slotEquipped(stage, slotIndex, match)) {
+        fromStage++;
+        continue;
+      }
+
+      for (
+        let laterIndex = stageIndex + 1;
+        laterIndex < stages.length;
+        laterIndex++
+      ) {
+        const laterStage = stages[laterIndex];
+        if (!laterStage || !slotEquipped(laterStage, slotIndex, match))
+          continue;
+        laterCounts.set(laterIndex, (laterCounts.get(laterIndex) ?? 0) + 1);
+        break;
+      }
+    }
+
+    const fromLaterStages = [...laterCounts].map(
+      ([laterStageIndex, count]) => ({
+        stageIndex: laterStageIndex,
+        count,
+      }),
+    );
+    const covered =
+      fromStage + fromLaterStages.reduce((sum, later) => sum + later.count, 0);
+
+    return {
+      total,
+      fromStage,
+      fromLaterStages,
+      covered,
+      open: total - covered,
+    };
+  });
+}
+
 /** Coverage for every stage of the document. */
-export function payloadCoverage(payload: GearPayload, match: CharacterMatch): StageCoverage[] {
+export function payloadCoverage(
+  payload: GearPayload,
+  match: CharacterMatch,
+): StageCoverage[] {
   return payload.stages.map((stage) => stageCoverage(stage, match));
 }

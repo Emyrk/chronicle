@@ -1,4 +1,4 @@
-import { useQueries, useQuery } from "@tanstack/react-query";
+import { keepPreviousData, useQueries, useQuery } from "@tanstack/react-query";
 import type { ItemTooltip, ItemSearchResult, CreatureSearchResult, EnchantmentSearchResult, ItemSetSearchResult, ItemSetDetail, SimItem } from "./typesGenerated";
 
 export interface FetchItemTooltipParams {
@@ -69,6 +69,16 @@ export function useSimItems(itemIds: number[]): Map<number, SimItem> {
   return out;
 }
 
+export class GameDataRequestError extends Error {
+  readonly status: number;
+
+  constructor(message: string, status: number) {
+    super(message);
+    this.name = "GameDataRequestError";
+    this.status = status;
+  }
+}
+
 export interface SearchItemsParams {
   q: string;
   quality?: string; // comma-separated, e.g. "3,4"
@@ -87,7 +97,10 @@ export interface SearchItemsParams {
   allowEmpty?: boolean;
 }
 
-async function fetchSearchItems(params: SearchItemsParams): Promise<ItemSearchResult[]> {
+async function fetchSearchItems(
+  params: SearchItemsParams,
+  signal?: AbortSignal,
+): Promise<ItemSearchResult[]> {
   const qs = new URLSearchParams();
   qs.set("q", params.q);
   if (params.quality) qs.set("quality", params.quality);
@@ -95,9 +108,12 @@ async function fetchSearchItems(params: SearchItemsParams): Promise<ItemSearchRe
   if (params.class) qs.set("class", params.class);
   if (params.sort) qs.set("sort", params.sort);
   if (params.maxRequiredLevel) qs.set("max_required_level", String(params.maxRequiredLevel));
-  const response = await fetch(`/api/v1/internal/gamedata/search/items?${qs.toString()}`);
+  const response = await fetch(
+    `/api/v1/internal/gamedata/search/items?${qs.toString()}`,
+    { signal },
+  );
   if (!response.ok) {
-    throw new Error(`Failed to search items: ${response.status}`);
+    throw new GameDataRequestError("Failed to search items", response.status);
   }
   return response.json();
 }
@@ -105,11 +121,12 @@ async function fetchSearchItems(params: SearchItemsParams): Promise<ItemSearchRe
 export function useSearchItems(params: SearchItemsParams | null) {
   return useQuery({
     queryKey: ["gamedata", "search-items", params],
-    queryFn: () => fetchSearchItems(params!),
+    queryFn: ({ signal }) => fetchSearchItems(params!, signal),
     enabled:
       params != null &&
       (params.q.length >= 2 || (!!params.allowEmpty && params.q.length === 0 && !!params.slot)),
     staleTime: 5 * 60 * 1000,
+    placeholderData: keepPreviousData,
     retry: false,
   });
 }

@@ -10,10 +10,16 @@ import {
 
 export interface ProgressionEditor {
   payload: ProgressionPayload;
+  title: string;
+  classId: number;
+  specName: string;
   dirty: boolean;
   saving: boolean;
   /** Apply a document operation (from progressionModel) to the draft. */
   update: (fn: (payload: ProgressionPayload) => ProgressionPayload) => void;
+  setTitle: (title: string) => void;
+  setClassAndSpec: (classId: number, specName: string) => void;
+  setSpecName: (specName: string) => void;
   save: () => void;
 }
 
@@ -26,36 +32,68 @@ export function useProgressionEditor(progression: GearProgression): ProgressionE
   const [payload, setPayload] = useState<ProgressionPayload>(() =>
     parseProgressionPayload(progression.payload),
   );
-  // Baseline is state, not a ref: `dirty` is derived during render.
-  const [baseline, setBaseline] = useState(() => serializeProgressionPayload(payload));
+  const [title, setTitle] = useState(progression.title);
+  const [classId, setClassId] = useState(progression.class_id);
+  const [specName, setSpecName] = useState(progression.spec_name);
   const updateProgression = useUpdateGearProgression();
+  const [baseline, setBaseline] = useState(() =>
+    JSON.stringify({
+      payload: serializeProgressionPayload(payload),
+      title: progression.title,
+      classId: progression.class_id,
+      specName: progression.spec_name,
+    }),
+  );
 
   // Navigating between progressions remounts this hook's owner (the page
   // keys the view on the progression ID), so there is no reset to do here.
   const progressionId = progression.id;
 
-  const snapshot = useMemo(() => serializeProgressionPayload(payload), [payload]);
+  const snapshot = useMemo(
+    () =>
+      JSON.stringify({
+        payload: serializeProgressionPayload(payload),
+        title,
+        classId,
+        specName,
+      }),
+    [classId, payload, specName, title],
+  );
   const dirty = snapshot !== baseline;
 
   const save = useCallback(() => {
     if (updateProgression.isPending) return;
-    const saved = snapshot;
+    const normalizedTitle = title.trim();
+    if (!normalizedTitle) {
+      toast.error("Progression name is required");
+      return;
+    }
+    const saved = JSON.stringify({
+      payload: serializeProgressionPayload(payload),
+      title: normalizedTitle,
+      classId,
+      specName,
+    });
     updateProgression.mutate(
       {
         id: progressionId,
+        title: normalizedTitle,
+        class_id: classId,
+        spec_name: specName,
         // Send the document as a JSON object (json.RawMessage server-side);
         // a pre-stringified payload would double-encode.
         payload: payload as unknown as Record<string, string>,
       },
       {
         onSuccess: () => {
+          setTitle(normalizedTitle);
           setBaseline(saved);
           toast.success("Progression saved");
         },
         onError: (err) => toast.error(err.message),
       },
     );
-  }, [payload, progressionId, snapshot, updateProgression]);
+  }, [classId, payload, progressionId, specName, title, updateProgression]);
 
   // Ctrl/Cmd-S saves while dirty.
   useEffect(() => {
@@ -81,9 +119,18 @@ export function useProgressionEditor(progression: GearProgression): ProgressionE
 
   return {
     payload,
+    title,
+    classId,
+    specName,
     dirty,
     saving: updateProgression.isPending,
     update: useCallback((fn) => setPayload((p) => fn(p)), []),
+    setTitle,
+    setClassAndSpec: useCallback((nextClassId, nextSpecName) => {
+      setClassId(nextClassId);
+      setSpecName(nextSpecName);
+    }, []),
+    setSpecName,
     save,
   };
 }

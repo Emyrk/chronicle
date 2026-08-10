@@ -1146,6 +1146,10 @@ export interface GearProgressionPayload {
      */
     readonly stages: readonly GearListStage[];
     /**
+     * AnalysisProfileID selects the stat-weight/target profile used by this set.
+     */
+    readonly analysis_profile_id?: string;
+    /**
      * LevelingDisabled turns the progressive-gear (levelling) half off
      * for the whole document; everything assumes the level cap.
      */

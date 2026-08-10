@@ -1,9 +1,18 @@
 import { Check, X } from "lucide-react";
-import { BOTTOM_SLOTS, LEFT_SLOTS, RIGHT_SLOTS, type GearSlotDef } from "@/pages/ArmoryPage/types";
+import {
+  BOTTOM_SLOTS,
+  LEFT_SLOTS,
+  RIGHT_SLOTS,
+  type GearSlotDef,
+} from "@/pages/ArmoryPage/types";
 import { cn } from "@/lib/utils";
 import { slotEquipped, type CharacterMatch } from "./characterMatch";
 import type { GearStage } from "./gearListModel";
-import { itemRefKey } from "./useListItems";
+import {
+  itemRefKey,
+  stageUsesTwoHandedWeapon,
+  stageWithValidWeaponSlots,
+} from "./useListItems";
 import type { HydratedItem } from "./useListItems";
 import { BuilderSlot } from "./BuilderSlot";
 
@@ -14,6 +23,8 @@ interface BuilderDollProps {
   onSelectSlot?: (outfitIndex: number) => void;
   /** Open the enchant editor for a slot directly (edit mode only). */
   onEnchantSlot?: (outfitIndex: number) => void;
+  /** Swap a listed alternate into the primary position. */
+  onPromoteAlternate?: (outfitIndex: number, itemId: number) => void;
   /** Per-slot weighted scores (by outfit index), when weights are active. */
   scores?: Map<number, number>;
   /** Per-slot score difference vs the matched character's worn item. */
@@ -24,6 +35,10 @@ interface BuilderDollProps {
   matchName?: string;
   /** Progression only: per-slot "next upgrade at level N" annotations. */
   nextUpgrades?: Map<number, { level: number; name: string }>;
+  /** Progression only: slots carried forward from an earlier named stage. */
+  inheritedSlots?: Map<number, string>;
+  /** Use larger item cards when the surrounding page has room. */
+  size?: "default" | "large";
 }
 
 /** Divider-style section label ("——— WEAPONS ———"). */
@@ -31,7 +46,9 @@ function SectionDivider({ label }: { label: string }) {
   return (
     <div className="flex items-center gap-3">
       <span className="h-px flex-1 bg-zinc-800" />
-      <span className="text-3xs uppercase tracking-[0.2em] text-zinc-600">{label}</span>
+      <span className="text-3xs uppercase tracking-[0.2em] text-zinc-600">
+        {label}
+      </span>
       <span className="h-px flex-1 bg-zinc-800" />
     </div>
   );
@@ -48,24 +65,34 @@ export function BuilderDoll({
   selectedSlot,
   onSelectSlot,
   onEnchantSlot,
+  onPromoteAlternate,
   scores,
   wornDeltas,
   match,
   matchName,
   nextUpgrades,
+  inheritedSlots,
+  size = "default",
 }: BuilderDollProps) {
+  const twoHandedMainHand = stageUsesTwoHandedWeapon(stage, items);
+  const displayedStage = stageWithValidWeaponSlots(stage, items);
   const equippedItemIds = new Set(
-    Object.values(stage.slots)
+    Object.values(displayedStage.slots)
       .filter((e) => !!e)
       .map((e) => e!.item_id),
   );
 
   const renderSlot = (def: GearSlotDef) => {
-    const entry = stage.slots[String(def.outfitIndex)];
-    const item = entry ? items.get(itemRefKey(entry.item_id, entry.enchant_id)) : undefined;
+    const entry = displayedStage.slots[String(def.outfitIndex)];
+    const item = entry
+      ? items.get(itemRefKey(entry.item_id, entry.enchant_id))
+      : undefined;
+    const inheritedFromStage = inheritedSlots?.get(def.outfitIndex);
     let matchState: "equipped" | "missing" | undefined;
     if (match && entry) {
-      matchState = slotEquipped(stage, def.outfitIndex, match) ? "equipped" : "missing";
+      matchState = slotEquipped(displayedStage, def.outfitIndex, match)
+        ? "equipped"
+        : "missing";
     }
     return (
       <BuilderSlot
@@ -73,14 +100,25 @@ export function BuilderDoll({
         slotDef={def}
         entry={entry}
         item={item}
+        alternateItems={(entry?.alternates ?? []).map((alternate) => ({
+          entry: alternate,
+          item: items.get(itemRefKey(alternate.item_id)),
+        }))}
         selected={selectedSlot === def.outfitIndex}
+        inheritedFromStage={inheritedFromStage}
         onSelect={onSelectSlot}
-        onEnchant={onEnchantSlot}
+        onEnchant={inheritedFromStage ? undefined : onEnchantSlot}
+        onPromoteAlternate={
+          !inheritedFromStage && onPromoteAlternate
+            ? (itemId) => onPromoteAlternate(def.outfitIndex, itemId)
+            : undefined
+        }
         equippedItemIds={equippedItemIds}
         score={scores?.get(def.outfitIndex)}
         wornDelta={wornDeltas?.get(def.outfitIndex)}
         matchState={matchState}
         nextUpgrade={nextUpgrades?.get(def.outfitIndex)}
+        size={size}
       />
     );
   };
@@ -94,17 +132,33 @@ export function BuilderDoll({
   }
 
   return (
-    <div className="flex flex-col gap-3">
-      <div className="grid grid-cols-1 gap-1.5 sm:grid-cols-2">
+    <div className={cn("flex flex-col", size === "large" ? "gap-4" : "gap-3")}>
+      <div
+        className={cn(
+          "grid grid-cols-1 sm:grid-cols-2",
+          size === "large" ? "gap-2.5" : "gap-1.5",
+        )}
+      >
         {armorRows.map(renderSlot)}
       </div>
       <SectionDivider label="Weapons" />
-      <div className="grid grid-cols-1 gap-1.5 sm:grid-cols-2">
-        {BOTTOM_SLOTS.map(renderSlot)}
+      <div
+        className={cn(
+          "grid grid-cols-1",
+          size === "large"
+            ? "gap-2.5 sm:grid-cols-3"
+            : "gap-1.5 sm:grid-cols-2",
+        )}
+      >
+        {BOTTOM_SLOTS.filter(
+          (slot) => !(twoHandedMainHand && slot.outfitIndex === 16),
+        ).map(renderSlot)}
       </div>
       {match && (
         <div className="flex flex-wrap items-center gap-x-3 gap-y-1 border-t border-zinc-800 pt-2 text-2xs text-zinc-400">
-          <span className="text-zinc-500">{matchName ?? "Matched character"}:</span>
+          <span className="text-zinc-500">
+            {matchName ?? "Matched character"}:
+          </span>
           <span className="inline-flex items-center gap-1">
             <MarkerDot state="equipped" /> wearing now
           </span>
@@ -122,7 +176,7 @@ function MarkerDot({ state }: { state: "equipped" | "missing" }) {
     <span
       className={cn(
         "flex h-3.5 w-3.5 items-center justify-center rounded-full",
-        state === "equipped" && "bg-blue-500 text-white",
+        state === "equipped" && "bg-emerald-500 text-zinc-950",
         state === "missing" && "bg-amber-400 text-zinc-950",
       )}
     >

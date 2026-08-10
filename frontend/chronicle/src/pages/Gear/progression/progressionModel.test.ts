@@ -5,6 +5,7 @@ import {
   SLOT,
   addPoolItem,
   addProgressionStage,
+  addProgressionTag,
   averageEquippedItemLevel,
   computeEquippedAtLevel,
   derivedAverageItemLevel,
@@ -15,17 +16,18 @@ import {
   progressionColumns,
   parseProgressionPayload,
   removePoolItem,
+  removeProgressionTag,
   renameProgressionStage,
+  resolveProgressionStage,
   setPoolItemEnchant,
   setPoolItemNote,
+  setProgressionAnalysisProfile,
   slotsForInventoryType,
   snapshotStageFromDerived,
   stageAverageItemLevel,
   upgradeLevels,
   type PoolItemStats,
   type ProgressionPayload,
-  setProgressionLevelingDisabled,
-  setProgressionStageLevel,
 } from "./progressionModel";
 
 /** Terse pool-item builder: inventory type, required level, item level. */
@@ -107,7 +109,9 @@ describe("computeEquippedAtLevel", () => {
   });
 
   it("treats robes as chest items", () => {
-    expect(computeEquippedAtLevel([item(1, INV.robe, 10, 20)], 20)[SLOT.chest]).toBe(1);
+    expect(
+      computeEquippedAtLevel([item(1, INV.robe, 10, 20)], 20)[SLOT.chest],
+    ).toBe(1);
   });
 
   it("leaves the off hand empty when the best weapon is a two-hander", () => {
@@ -159,7 +163,9 @@ describe("upgradeLevels", () => {
   });
 
   it("clamps level-0 items to level 1 and drops unequippable ones", () => {
-    expect(upgradeLevels([item(1, INV.head, 0, 5), item(2, INV.bag, 0, 5)], 60)).toEqual([1]);
+    expect(
+      upgradeLevels([item(1, INV.head, 0, 5), item(2, INV.bag, 0, 5)], 60),
+    ).toEqual([1]);
   });
 });
 
@@ -168,7 +174,15 @@ describe("averageEquippedItemLevel", () => {
   const levelOf = (id: number) => levels[id] ?? null;
 
   it("averages the slots with a known item level", () => {
-    expect(averageEquippedItemLevel([[SLOT.head, 1], [SLOT.chest, 2]], levelOf)).toBe(70);
+    expect(
+      averageEquippedItemLevel(
+        [
+          [SLOT.head, 1],
+          [SLOT.chest, 2],
+        ],
+        levelOf,
+      ),
+    ).toBe(70);
   });
 
   it("excludes cosmetic slots", () => {
@@ -190,7 +204,9 @@ describe("averageEquippedItemLevel", () => {
   });
 
   it("reads derived sets and stages the same way", () => {
-    expect(derivedAverageItemLevel({ [SLOT.head]: 1, [SLOT.chest]: 3 }, levelOf)).toBe(80);
+    expect(
+      derivedAverageItemLevel({ [SLOT.head]: 1, [SLOT.chest]: 3 }, levelOf),
+    ).toBe(80);
     expect(
       stageAverageItemLevel(
         { name: "Naxx", slots: { "0": { item_id: 1 }, "4": { item_id: 3 } } },
@@ -212,8 +228,20 @@ describe("parseProgressionPayload", () => {
     expect(parsed.version).toBe(PROGRESSION_PAYLOAD_VERSION);
   });
 
+  it("parses, trims, and deduplicates free-form tags", () => {
+    const parsed = parseProgressionPayload({
+      version: 1,
+      pool: [],
+      stages: [],
+      tags: [" Horde ", "Level 60", "horde", "", 42],
+    });
+    expect(parsed.tags).toEqual(["Horde", "Level 60"]);
+  });
+
   it("accepts a JSON string", () => {
-    const parsed = parseProgressionPayload('{"version":1,"pool":[{"item_id":7}],"stages":[]}');
+    const parsed = parseProgressionPayload(
+      '{"version":1,"pool":[{"item_id":7}],"stages":[]}',
+    );
     expect(parsed.pool).toEqual([{ item_id: 7 }]);
   });
 
@@ -242,15 +270,61 @@ describe("parseProgressionPayload", () => {
   });
 
   it("caps the pool", () => {
-    const pool = Array.from({ length: MAX_POOL_ITEMS + 10 }, (_, i) => ({ item_id: i + 1 }));
-    expect(parseProgressionPayload({ version: 1, pool, stages: [] }).pool).toHaveLength(
-      MAX_POOL_ITEMS,
+    const pool = Array.from({ length: MAX_POOL_ITEMS + 10 }, (_, i) => ({
+      item_id: i + 1,
+    }));
+    expect(
+      parseProgressionPayload({ version: 1, pool, stages: [] }).pool,
+    ).toHaveLength(MAX_POOL_ITEMS);
+  });
+});
+
+describe("analysis profile selection", () => {
+  it("parses and updates the saved analysis profile", () => {
+    const parsed = parseProgressionPayload({
+      version: 1,
+      pool: [],
+      stages: [],
+      analysis_profile_id: "preset:warrior-fury",
+    });
+    expect(parsed.analysis_profile_id).toBe("preset:warrior-fury");
+
+    const changed = setProgressionAnalysisProfile(parsed, "profile-2");
+    expect(changed.analysis_profile_id).toBe("profile-2");
+    expect(setProgressionAnalysisProfile(changed, null).analysis_profile_id).toBeUndefined();
+  });
+});
+
+describe("progression tags", () => {
+  const base: ProgressionPayload = { version: 1, pool: [], stages: [] };
+
+  it("adds arbitrary tags without duplicates", () => {
+    const tagged = addProgressionTag(base, " Horde ");
+    expect(tagged.tags).toEqual(["Horde"]);
+    expect(addProgressionTag(tagged, "horde")).toBe(tagged);
+    expect(addProgressionTag(tagged, "   ")).toBe(tagged);
+  });
+
+  it("removes tags and drops the empty field", () => {
+    const tagged = addProgressionTag(
+      addProgressionTag(base, "Horde"),
+      "Phase 1",
     );
+    expect(removeProgressionTag(tagged, "Horde").tags).toEqual(["Phase 1"]);
+    const empty = removeProgressionTag(
+      removeProgressionTag(tagged, "Horde"),
+      "Phase 1",
+    );
+    expect(empty.tags).toBeUndefined();
   });
 });
 
 describe("pool operations", () => {
-  const base: ProgressionPayload = { version: 1, pool: [{ item_id: 1 }], stages: [] };
+  const base: ProgressionPayload = {
+    version: 1,
+    pool: [{ item_id: 1 }],
+    stages: [],
+  };
 
   it("adds, rejects duplicates, and never mutates", () => {
     const next = addPoolItem(base, 2);
@@ -272,15 +346,21 @@ describe("pool operations", () => {
 
     const enchanted = setPoolItemEnchant(base, 1, 33);
     expect(enchanted.pool[0].enchant_id).toBe(33);
-    expect(setPoolItemEnchant(enchanted, 1, undefined).pool[0].enchant_id).toBeUndefined();
+    expect(
+      setPoolItemEnchant(enchanted, 1, undefined).pool[0].enchant_id,
+    ).toBeUndefined();
   });
 });
 
 describe("stage operations", () => {
   it("adds and renames stages while keeping the pool", () => {
-    const withPool: ProgressionPayload = { version: 1, pool: [{ item_id: 1 }], stages: [] };
-    const added = addProgressionStage(withPool, "Fresh 60");
-    expect(added.stages.map((s) => s.name)).toEqual(["Fresh 60"]);
+    const withPool: ProgressionPayload = {
+      version: 1,
+      pool: [{ item_id: 1 }],
+      stages: [],
+    };
+    const added = addProgressionStage(withPool);
+    expect(added.stages).toEqual([{ name: "Stage 1", slots: {} }]);
     expect(added.pool).toEqual(withPool.pool);
 
     const renamed = renameProgressionStage(added, 0, "Pre-Raid");
@@ -288,45 +368,64 @@ describe("stage operations", () => {
     expect(renamed.pool).toEqual(withPool.pool);
   });
 
-  it("sets and clears a stage's assumed level, keeping the pool", () => {
+  it("adds a new stage without copying previous gear", () => {
     const base: ProgressionPayload = {
       version: 1,
-      pool: [{ item_id: 1 }],
-      stages: [{ name: "Fresh 60", slots: {} }],
+      pool: [],
+      stages: [{ name: "Stage 1", slots: { "0": { item_id: 1 } } }],
     };
-    const pinned = setProgressionStageLevel(base, 0, 40);
-    expect(pinned.stages[0].level).toBe(40);
-    expect(pinned.pool).toEqual(base.pool);
-
-    const cleared = setProgressionStageLevel(pinned, 0, undefined);
-    expect(cleared.stages[0].level).toBeUndefined();
+    const added = addProgressionStage(base);
+    expect(added.stages[1]).toEqual({ name: "Stage 2", slots: {} });
   });
 
-  it("toggles the document's levelling half, dropping the flag when re-enabled", () => {
-    const base: ProgressionPayload = { version: 1, pool: [], stages: [] };
-    const off = setProgressionLevelingDisabled(base, true);
-    expect(off.leveling_disabled).toBe(true);
-    // No-op toggles return the same object so editors stay clean.
-    expect(setProgressionLevelingDisabled(off, true)).toBe(off);
-    expect(setProgressionLevelingDisabled(base, false)).toBe(base);
-    const on = setProgressionLevelingDisabled(off, false);
-    expect("leveling_disabled" in on).toBe(false);
+  it("resolves empty slots from the nearest earlier stage", () => {
+    const payload: ProgressionPayload = {
+      version: 1,
+      pool: [],
+      stages: [
+        {
+          name: "Pre-Raid",
+          slots: { "0": { item_id: 1 }, "4": { item_id: 2 } },
+        },
+        { name: "Molten Core", slots: { "0": { item_id: 3 } } },
+        { name: "Blackwing Lair", slots: {} },
+      ],
+    };
+
+    const resolved = resolveProgressionStage(payload, 2);
+    expect(resolved.stage.slots).toEqual({
+      "0": { item_id: 3 },
+      "4": { item_id: 2 },
+    });
+    expect(resolved.inheritedFrom).toEqual(
+      new Map([
+        [0, 1],
+        [4, 0],
+      ]),
+    );
   });
 
-  it("leveling_disabled survives a parse round-trip and ignores junk", () => {
-    const doc = parseProgressionPayload({ version: 1, pool: [], stages: [], leveling_disabled: true });
-    expect(doc.leveling_disabled).toBe(true);
-    const junk = parseProgressionPayload({ version: 1, pool: [], stages: [], leveling_disabled: "yes" });
-    expect(junk.leveling_disabled).toBeUndefined();
+  it("ignores the removed document-wide leveling flag", () => {
+    const parsed = parseProgressionPayload({
+      version: 1,
+      pool: [],
+      stages: [{ name: "Stage 1", level: 60, slots: {} }],
+      leveling_disabled: true,
+    });
+    expect(parsed).toEqual({
+      version: PROGRESSION_PAYLOAD_VERSION,
+      pool: [],
+      stages: [{ name: "Stage 1", slots: {} }],
+    });
   });
 
-  it("stage level survives a parse round-trip", () => {
+  it("drops legacy per-stage levels", () => {
     const doc = parseProgressionPayload({
       version: 1,
       pool: [],
-      stages: [{ name: "Twink 39", slots: {}, level: 39 }],
+      stages: [{ name: "Stage 1", slots: {}, level: 39 }],
     });
-    expect(doc.stages[0].level).toBe(39);
+    expect(doc.stages[0]).toEqual({ name: "Stage 1", slots: {} });
   });
 });
 
@@ -334,7 +433,9 @@ describe("snapshotStageFromDerived", () => {
   const payload: ProgressionPayload = {
     version: 1,
     pool: [{ item_id: 1, enchant_id: 42 }, { item_id: 2 }],
-    stages: [{ name: "Fresh 60", slots: { "0": { item_id: 99, note: "old" } } }],
+    stages: [
+      { name: "Fresh 60", slots: { "0": { item_id: 99, note: "old" } } },
+    ],
   };
 
   it("replaces the stage's picks with the derived set, carrying enchants", () => {
@@ -342,19 +443,28 @@ describe("snapshotStageFromDerived", () => {
       [SLOT.head]: 1,
       [SLOT.chest]: 2,
     });
-    expect(next.stages[0].slots["0"]).toEqual({ item_id: 1, enchant_id: 42, note: "old" });
+    expect(next.stages[0].slots["0"]).toEqual({
+      item_id: 1,
+      enchant_id: 42,
+      note: "old",
+    });
     expect(next.stages[0].slots["4"]).toEqual({ item_id: 2 });
   });
 
   it("is a no-op for a stage index that does not exist", () => {
-    expect(snapshotStageFromDerived(payload, 3, { [SLOT.head]: 1 })).toBe(payload);
+    expect(snapshotStageFromDerived(payload, 3, { [SLOT.head]: 1 })).toBe(
+      payload,
+    );
   });
 });
 
 describe("slot membership", () => {
   it("maps inventory types onto the outfit slots they can fill", () => {
     expect(slotsForInventoryType(INV.head)).toEqual([SLOT.head]);
-    expect(slotsForInventoryType(INV.finger)).toEqual([SLOT.finger1, SLOT.finger2]);
+    expect(slotsForInventoryType(INV.finger)).toEqual([
+      SLOT.finger1,
+      SLOT.finger2,
+    ]);
     expect(slotsForInventoryType(INV.robe)).toEqual([SLOT.chest]);
     expect(slotsForInventoryType(INV.bag)).toEqual([]);
   });
@@ -383,7 +493,10 @@ describe("nextUpgradesAfter", () => {
   });
 
   it("reports the first arrival for a slot that is still empty", () => {
-    expect(nextUpgradesAfter(pool, 1, 60).get(SLOT.head)).toEqual({ level: 10, itemId: 1 });
+    expect(nextUpgradesAfter(pool, 1, 60).get(SLOT.head)).toEqual({
+      level: 10,
+      itemId: 1,
+    });
   });
 
   it("omits slots that never change again", () => {
@@ -400,7 +513,9 @@ describe("nextUpgradesAfter", () => {
 describe("progressionColumns", () => {
   it("emits a column per level where the derived set changes", () => {
     const pool = [item(1, INV.head, 10, 20), item(2, INV.chest, 30, 40)];
-    expect(progressionColumns(pool, 60).map((c) => c.level)).toEqual([1, 10, 30]);
+    expect(progressionColumns(pool, 60).map((c) => c.level)).toEqual([
+      1, 10, 30,
+    ]);
   });
 
   it("collapses levels that would repeat the previous column", () => {
@@ -422,10 +537,11 @@ describe("progressionColumns", () => {
 
 describe("derivedStage", () => {
   it("renders the derived set as a stage, carrying pool enchants", () => {
-    const stage = derivedStage("Level 60", { [SLOT.head]: 1, [SLOT.chest]: 2 }, [
-      { item_id: 1, enchant_id: 42 },
-      { item_id: 2 },
-    ]);
+    const stage = derivedStage(
+      "Level 60",
+      { [SLOT.head]: 1, [SLOT.chest]: 2 },
+      [{ item_id: 1, enchant_id: 42 }, { item_id: 2 }],
+    );
     expect(stage.name).toBe("Level 60");
     expect(stage.slots["0"]).toEqual({ item_id: 1, enchant_id: 42 });
     expect(stage.slots["4"]).toEqual({ item_id: 2 });

@@ -19,6 +19,36 @@ export interface HydratedItem {
   isLoading: boolean;
 }
 
+const MAIN_HAND_SLOT = "15";
+const OFF_HAND_SLOT = "16";
+const TWO_HAND_INVENTORY_TYPE = 17;
+
+/** Whether the displayed main-hand item occupies both weapon slots. */
+export function stageUsesTwoHandedWeapon(
+  stage: import("./gearListModel").GearStage,
+  items: Map<string, HydratedItem>,
+): boolean {
+  const mainHand = stage.slots[MAIN_HAND_SLOT];
+  if (!mainHand) return false;
+  return (
+    items.get(itemRefKey(mainHand.item_id, mainHand.enchant_id))?.tooltip
+      ?.inventory_type === TWO_HAND_INVENTORY_TYPE
+  );
+}
+
+/** Remove an impossible off-hand from the effective display/analysis set. */
+export function stageWithValidWeaponSlots(
+  stage: import("./gearListModel").GearStage,
+  items: Map<string, HydratedItem>,
+): import("./gearListModel").GearStage {
+  if (!stage.slots[OFF_HAND_SLOT] || !stageUsesTwoHandedWeapon(stage, items)) {
+    return stage;
+  }
+  const slots = { ...stage.slots };
+  delete slots[OFF_HAND_SLOT];
+  return { ...stage, slots };
+}
+
 export function itemRefKey(itemId: number, enchantId?: number): string {
   return `${itemId}:${enchantId ?? 0}`;
 }

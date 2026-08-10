@@ -1,6 +1,14 @@
 import { describe, expect, it } from "vitest";
-import type { ArmoryGearHistoryResponse, PlayerOutfit } from "@/api/typesGenerated";
-import { buildCharacterMatch, slotEquipped, stageCoverage } from "./characterMatch";
+import type {
+  ArmoryGearHistoryResponse,
+  PlayerOutfit,
+} from "@/api/typesGenerated";
+import {
+  buildCharacterMatch,
+  progressionStageCoverage,
+  slotEquipped,
+  stageCoverage,
+} from "./characterMatch";
 import { GEAR_PAYLOAD_VERSION, SLOT, type GearStage } from "./gearListModel";
 
 function outfit(ids: Partial<Record<number, number>>): PlayerOutfit {
@@ -30,7 +38,9 @@ describe("buildCharacterMatch", () => {
   });
 
   it("handles empty history", () => {
-    const match = buildCharacterMatch({ snapshots: [] } as unknown as ArmoryGearHistoryResponse);
+    const match = buildCharacterMatch({
+      snapshots: [],
+    } as unknown as ArmoryGearHistoryResponse);
     expect(match.equippedIds.size).toBe(0);
     expect(match.equippedSlots.some(Boolean)).toBe(false);
   });
@@ -74,6 +84,13 @@ describe("slotEquipped / stageCoverage", () => {
     expect(slotEquipped(stage, SLOT.waist, match)).toBe(false); // empty slot
   });
 
+  it("recognizes every currently equipped item ID, including alternates", () => {
+    const wornIds = [100, 101];
+    expect(wornIds.every((itemId) => match.equippedIds.has(itemId))).toBe(true);
+    expect(slotEquipped(stage, SLOT.head, match)).toBe(true);
+    expect(slotEquipped(stage, SLOT.chest, match)).toBe(true);
+  });
+
   it("computes coverage excluding cosmetic slots", () => {
     const coverage = stageCoverage(stage, match);
     expect(coverage).toEqual({
@@ -81,6 +98,67 @@ describe("slotEquipped / stageCoverage", () => {
       equipped: 2,
       missing: [SLOT.mainHand],
     });
+  });
+
+  it("credits later-stage upgrades toward earlier stage targets", () => {
+    const stages: GearStage[] = [
+      {
+        name: "Pre-Raid",
+        slots: {
+          [String(SLOT.head)]: { item_id: 100 },
+          [String(SLOT.chest)]: { item_id: 200 },
+          [String(SLOT.hands)]: { item_id: 300 },
+        },
+      },
+      {
+        name: "Molten Core",
+        slots: {
+          [String(SLOT.head)]: { item_id: 110 },
+          [String(SLOT.chest)]: { item_id: 200 },
+          [String(SLOT.hands)]: { item_id: 310 },
+        },
+      },
+      {
+        name: "BWL",
+        slots: {
+          [String(SLOT.head)]: { item_id: 120 },
+          [String(SLOT.chest)]: { item_id: 220 },
+          [String(SLOT.hands)]: { item_id: 310 },
+        },
+      },
+    ];
+    const progressionMatch = buildCharacterMatch(
+      history(
+        outfit({
+          [SLOT.head]: 120,
+          [SLOT.chest]: 200,
+        }),
+      ),
+    );
+
+    expect(progressionStageCoverage(stages, progressionMatch)).toEqual([
+      {
+        total: 3,
+        fromStage: 1,
+        fromLaterStages: [{ stageIndex: 2, count: 1 }],
+        covered: 2,
+        open: 1,
+      },
+      {
+        total: 3,
+        fromStage: 1,
+        fromLaterStages: [{ stageIndex: 2, count: 1 }],
+        covered: 2,
+        open: 1,
+      },
+      {
+        total: 3,
+        fromStage: 1,
+        fromLaterStages: [],
+        covered: 1,
+        open: 2,
+      },
+    ]);
   });
 
   it("payload version constant sanity", () => {

@@ -23,8 +23,6 @@ function CreateProgressionForm({ onDone }: { onDone: () => void }) {
     () => gearClassesForFlavor(siteConfig?.dataset_flavor ?? []),
     [siteConfig?.dataset_flavor],
   );
-  const levelCap = levelCapForFlavor(siteConfig?.dataset_flavor ?? []);
-
   const [title, setTitle] = useState("");
   const [classId, setClassId] = useState(classes[0]?.id ?? 1);
   const [specName, setSpecName] = useState("");
@@ -48,7 +46,7 @@ function CreateProgressionForm({ onDone }: { onDone: () => void }) {
         payload: {
           version: PROGRESSION_PAYLOAD_VERSION,
           pool: [],
-          stages: [{ name: `Fresh ${levelCap}`, slots: {} }],
+          stages: [{ name: "Stage 1", slots: {} }],
         } as unknown as Record<string, string>,
       },
       {
@@ -67,7 +65,7 @@ function CreateProgressionForm({ onDone }: { onDone: () => void }) {
   return (
     <div className="space-y-3 rounded-md border border-zinc-700/60 bg-zinc-900/40 p-4">
       <Input
-        placeholder={`Progression title, e.g. Fury Warrior 1–${levelCap}`}
+        placeholder="Progression title, e.g. Pre-Raid BiS"
         value={title}
         onChange={(e) => setTitle(e.target.value)}
         maxLength={128}
@@ -112,11 +110,7 @@ function CreateProgressionForm({ onDone }: { onDone: () => void }) {
   );
 }
 
-/**
- * "My progressions" — the index for the Progression tab. A progression is
- * one pool of hand-picked items rendered as a leveling scrubber plus
- * max-level stage snapshots.
- */
+/** "My progressions" — the index for the Progression tab. */
 export function GearProgressionsPage() {
   const { isAuthenticated } = useAuth();
   const { data: siteConfig } = useSiteConfig();
@@ -140,22 +134,20 @@ export function GearProgressionsPage() {
           )}
         </div>
         <p className="text-xs text-zinc-500">
-          Pick a pool of items once; the leveling scrubber derives best-per-slot at every level
-          from 1 to {Math.max(1, levelCap - 1)}, and max level is expressed as explicit stage
-          snapshots.
+          Build a sequence of gear stages for level {levelCap} characters.
         </p>
         {creating && <CreateProgressionForm onDone={() => setCreating(false)} />}
         {!isAuthenticated ? (
           <LoginBanner
             title="Log in to build gear progressions"
-            subtitle="Plan a leveling path and a max-level ladder from one hand-picked pool of items."
+            subtitle={`Plan a sequence of gear stages for level ${levelCap} characters.`}
           />
         ) : mine.isLoading ? (
           <p className="text-sm text-zinc-500">Loading…</p>
         ) : (mine.data ?? []).length === 0 ? (
           !creating && (
             <p className="text-sm text-zinc-500">
-              No progressions yet. Create one to start planning a leveling path.
+              No progressions yet. Create one to start planning your gear stages.
             </p>
           )
         ) : (

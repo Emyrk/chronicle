@@ -16,9 +16,23 @@ import type { GearStatWeight } from "@/api/typesGenerated";
 import { getClassColorVar } from "@/pages/ArmoryPage/types";
 import { gearClassById, gearClassesForFlavor } from "../classInfo";
 import { LoginBanner } from "../LoginBanner";
-import { parseWeights, STAT_KEYS, type StatWeights } from "../builder/gearScoring";
-import { draftFromWeights, WeightSetForm, weightsFromDraft } from "./WeightSetForm";
+import {
+  parseWeights,
+  STAT_KEYS,
+  type StatTarget,
+  type StatWeights,
+} from "../builder/gearScoring";
+import {
+  draftFromWeights,
+  TargetSetForm,
+  WeightSetForm,
+  weightsFromDraft,
+} from "./WeightSetForm";
 import { presetsForFlavor } from "./presets";
+import {
+  readProfileTargets,
+  writeProfileTargets,
+} from "../builder/analysisProfileStorage";
 
 const STAT_LABEL = new Map(STAT_KEYS.map((s) => [s.key, s.label]));
 
@@ -34,18 +48,28 @@ function WeightSummary({ weights }: { weights: StatWeights }) {
           key={key}
           className="rounded bg-zinc-800/80 px-1.5 py-0.5 text-2xs text-zinc-300"
         >
-          {STAT_LABEL.get(key) ?? key} <span className="font-mono text-zinc-400">{value}</span>
+          {STAT_LABEL.get(key) ?? key}{" "}
+          <span className="font-mono text-zinc-400">{value}</span>
         </span>
       ))}
     </div>
   );
 }
 
-function ClassSpecLine({ classId, specName }: { classId: number; specName: string }) {
+function ClassSpecLine({
+  classId,
+  specName,
+}: {
+  classId: number;
+  specName: string;
+}) {
   const cls = gearClassById(classId);
   if (!cls) return <span className="text-2xs text-zinc-500">Any class</span>;
   return (
-    <span className="text-2xs" style={{ color: getClassColorVar(cls.enumName) }}>
+    <span
+      className="text-2xs"
+      style={{ color: getClassColorVar(cls.enumName) }}
+    >
       {specName ? `${specName} ${cls.name}` : cls.name}
     </span>
   );
@@ -86,7 +110,11 @@ function ClassSpecSelects({
           </option>
         ))}
       </select>
-      <select className={selectClass} value={specName} onChange={(e) => onSpecName(e.target.value)}>
+      <select
+        className={selectClass}
+        value={specName}
+        onChange={(e) => onSpecName(e.target.value)}
+      >
         <option value="">Any spec</option>
         {(selected?.specs ?? []).map((s) => (
           <option key={s} value={s}>
@@ -98,18 +126,29 @@ function ClassSpecSelects({
   );
 }
 
-function WeightSetEditor({ weightSet, onDone }: { weightSet: GearStatWeight; onDone: () => void }) {
+function WeightSetEditor({
+  weightSet,
+  onDone,
+}: {
+  weightSet: GearStatWeight;
+  onDone: () => void;
+}) {
   const [name, setName] = useState(weightSet.name);
   const [description, setDescription] = useState(weightSet.description);
   const [classId, setClassId] = useState(weightSet.class_id || 1);
   const [specName, setSpecName] = useState(weightSet.spec_name);
-  const [draft, setDraft] = useState(() => draftFromWeights(parseWeights(weightSet.weights)));
+  const [draft, setDraft] = useState(() =>
+    draftFromWeights(parseWeights(weightSet.weights)),
+  );
+  const [targets, setTargets] = useState<StatTarget[]>(() =>
+    readProfileTargets(weightSet.id),
+  );
   const updateWeight = useUpdateStatWeight();
   const deleteWeight = useDeleteStatWeight();
 
   const save = () => {
     if (!name.trim()) {
-      toast.error("Give the weight set a name");
+      toast.error("Give the analysis profile a name");
       return;
     }
     updateWeight.mutate(
@@ -123,7 +162,8 @@ function WeightSetEditor({ weightSet, onDone }: { weightSet: GearStatWeight; onD
       },
       {
         onSuccess: () => {
-          toast.success("Weight set saved");
+          writeProfileTargets(weightSet.id, targets);
+          toast.success("Analysis profile saved");
           onDone();
         },
         onError: (err) => toast.error(err.message),
@@ -139,7 +179,7 @@ function WeightSetEditor({ weightSet, onDone }: { weightSet: GearStatWeight; onD
           value={name}
           onChange={(e) => setName(e.target.value)}
           maxLength={128}
-          placeholder="Weight set name"
+          placeholder="Analysis profile name"
         />
         <ClassSpecSelects
           classId={classId}
@@ -153,19 +193,33 @@ function WeightSetEditor({ weightSet, onDone }: { weightSet: GearStatWeight; onD
           size="sm"
           className="h-8 px-2 text-xs text-zinc-500 hover:text-red-400"
           onClick={() => {
-            if (!window.confirm(`Delete weight set "${weightSet.name}"?`)) return;
+            if (!window.confirm(`Delete analysis profile "${weightSet.name}"?`))
+              return;
             deleteWeight.mutate(weightSet.id, {
-              onSuccess: onDone,
+              onSuccess: () => {
+                writeProfileTargets(weightSet.id, []);
+                onDone();
+              },
               onError: (err) => toast.error(err.message),
             });
           }}
         >
           <Trash2 className="h-3.5 w-3.5" />
         </Button>
-        <Button variant="ghost" size="sm" className="h-8 text-xs" onClick={onDone}>
+        <Button
+          variant="ghost"
+          size="sm"
+          className="h-8 text-xs"
+          onClick={onDone}
+        >
           Cancel
         </Button>
-        <Button size="sm" className="h-8 text-xs" onClick={save} disabled={updateWeight.isPending}>
+        <Button
+          size="sm"
+          className="h-8 text-xs"
+          onClick={save}
+          disabled={updateWeight.isPending}
+        >
           Save
         </Button>
       </div>
@@ -178,15 +232,23 @@ function WeightSetEditor({ weightSet, onDone }: { weightSet: GearStatWeight; onD
         className="w-full resize-y rounded border border-zinc-700 bg-zinc-950/60 px-2 py-1.5 text-xs text-zinc-200 placeholder:text-zinc-600 outline-none focus:border-zinc-500"
       />
       <WeightSetForm draft={draft} onChange={setDraft} />
+      <div className="border-t border-zinc-800 pt-3">
+        <TargetSetForm targets={targets} onChange={setTargets} />
+      </div>
       <p className="text-2xs text-zinc-600">
-        Scores multiply each item's stats by these weights. They are not a simulation — two
-        people with different weights will rank the same item differently, which is the point.
+        Scores multiply each item's stats by these weights. They are not a
+        simulation — two people with different weights will rank the same item
+        differently, which is the point.
       </p>
     </div>
   );
 }
 
-function CreateWeightSetForm({ onCreated }: { onCreated: (id: string) => void }) {
+function CreateWeightSetForm({
+  onCreated,
+}: {
+  onCreated: (id: string) => void;
+}) {
   const [name, setName] = useState("");
   const [description, setDescription] = useState("");
   const [classId, setClassId] = useState(1);
@@ -201,7 +263,7 @@ function CreateWeightSetForm({ onCreated }: { onCreated: (id: string) => void })
           value={name}
           onChange={(e) => setName(e.target.value)}
           maxLength={128}
-          placeholder="Weight set name, e.g. Fury — hit capped"
+          placeholder="Analysis profile name, e.g. Fury — hit capped"
           autoFocus
         />
         <ClassSpecSelects
@@ -217,7 +279,7 @@ function CreateWeightSetForm({ onCreated }: { onCreated: (id: string) => void })
           disabled={createWeight.isPending}
           onClick={() => {
             if (!name.trim()) {
-              toast.error("Give the weight set a name");
+              toast.error("Give the analysis profile a name");
               return;
             }
             createWeight.mutate(
@@ -235,7 +297,7 @@ function CreateWeightSetForm({ onCreated }: { onCreated: (id: string) => void })
             );
           }}
         >
-          Create & edit weights
+          Create profile
         </Button>
       </div>
       <textarea
@@ -310,7 +372,7 @@ export function StatWeightsPage() {
       <section className="space-y-3">
         <div className="flex items-center justify-between">
           <h2 className="text-sm font-semibold uppercase tracking-wide text-zinc-400">
-            My weight sets
+            My analysis profiles
           </h2>
           {isAuthenticated && (
             <Button
@@ -321,7 +383,7 @@ export function StatWeightsPage() {
               }}
             >
               <Plus className="h-4 w-4 mr-1" />
-              New weight set
+              New profile
             </Button>
           )}
         </div>
@@ -334,7 +396,13 @@ export function StatWeightsPage() {
             }}
           />
         )}
-        {editing && <WeightSetEditor key={editing.id} weightSet={editing} onDone={() => setEditingId(null)} />}
+        {editing && (
+          <WeightSetEditor
+            key={editing.id}
+            weightSet={editing}
+            onDone={() => setEditingId(null)}
+          />
+        )}
 
         {!isAuthenticated ? (
           <LoginBanner
@@ -346,8 +414,8 @@ export function StatWeightsPage() {
         ) : (myWeights.data ?? []).length === 0 ? (
           !creating && (
             <p className="text-sm text-zinc-500">
-              No weight sets yet. Weights turn the gear builder's items into scores so sets can
-              be compared at a glance.
+              No weight sets yet. Weights turn the gear builder's items into
+              scores so sets can be compared at a glance.
             </p>
           )
         ) : (
@@ -369,13 +437,18 @@ export function StatWeightsPage() {
                       <Scale className="h-3.5 w-3.5 text-zinc-500" />
                       {w.name}
                     </span>
-                    <ClassSpecLine classId={w.class_id} specName={w.spec_name} />
+                    <ClassSpecLine
+                      classId={w.class_id}
+                      specName={w.spec_name}
+                    />
                     <span className="text-2xs text-zinc-600">
                       updated {new Date(w.updated_at).toLocaleDateString()}
                     </span>
                   </div>
                   {w.description && (
-                    <p className="mt-1 text-xs text-zinc-400 line-clamp-2">{w.description}</p>
+                    <p className="mt-1 text-xs text-zinc-400 line-clamp-2">
+                      {w.description}
+                    </p>
                   )}
                   <div className="mt-1.5">
                     <WeightSummary weights={parseWeights(w.weights)} />
@@ -391,8 +464,9 @@ export function StatWeightsPage() {
           Built-in presets
         </h2>
         <p className="text-xs text-zinc-500">
-          A decent starting point per spec, derived from published community weights (wowsims
-          defaults, Elitist Jerks-era Pawn scales). Copy one to your sets to tune it.
+          A decent starting point per spec, derived from published community
+          weights (wowsims defaults, Elitist Jerks-era Pawn scales). Copy one to
+          your sets to tune it.
         </p>
         <div className="space-y-2">
           {builtInPresets.map((preset) => (
@@ -405,7 +479,10 @@ export function StatWeightsPage() {
                   <Sparkles className="h-3.5 w-3.5 text-zinc-500" />
                   {preset.name}
                 </span>
-                <ClassSpecLine classId={preset.classId} specName={preset.specName} />
+                <ClassSpecLine
+                  classId={preset.classId}
+                  specName={preset.specName}
+                />
                 <div className="flex-1" />
                 <Button
                   variant="ghost"
@@ -417,7 +494,9 @@ export function StatWeightsPage() {
                   Copy to my sets
                 </Button>
               </div>
-              <p className="mt-1 text-xs text-zinc-400 line-clamp-2">{preset.description}</p>
+              <p className="mt-1 text-xs text-zinc-400 line-clamp-2">
+                {preset.description}
+              </p>
               <div className="mt-1.5">
                 <WeightSummary weights={preset.weights} />
               </div>
@@ -425,7 +504,6 @@ export function StatWeightsPage() {
           ))}
         </div>
       </section>
-
     </div>
   );
 }

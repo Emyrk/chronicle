@@ -36,13 +36,14 @@ const (
 	maxPayloadBytes     = 262144
 
 	// Payload document limits.
-	payloadVersion   = 1
-	maxPoolItems     = 400
-	maxStages        = 16
-	maxStageNameLen  = 64
-	maxSlotIndex     = 18 // PlayerOutfit has 19 slots, 0-18
-	maxNoteLen       = 500
-	maxAlternatesLen = 8
+	payloadVersion          = 1
+	maxPoolItems            = 400
+	maxStages               = 16
+	maxStageNameLen         = 64
+	maxSlotIndex            = 18 // PlayerOutfit has 19 slots, 0-18
+	maxNoteLen              = 500
+	maxAlternatesLen        = 8
+	maxAnalysisProfileIDLen = 128
 )
 
 // Handler owns all gear progression routes.
@@ -302,6 +303,9 @@ func validatePayload(payload json.RawMessage) error {
 
 	if doc.Version != payloadVersion {
 		return fmt.Errorf("unsupported payload version %d, expected %d", doc.Version, payloadVersion)
+	}
+	if len(doc.AnalysisProfileID) > maxAnalysisProfileIDLen {
+		return fmt.Errorf("analysis profile ID too long, maximum is %d characters", maxAnalysisProfileIDLen)
 	}
 	if len(doc.Pool) > maxPoolItems {
 		return fmt.Errorf("too many pool items, maximum is %d", maxPoolItems)

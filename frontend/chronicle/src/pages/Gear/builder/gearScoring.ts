@@ -9,10 +9,31 @@ import type { SimItem } from "@/api/typesGenerated";
 
 export type StatWeights = Record<string, number>;
 
+export type StatTargetType = "minimum" | "maximum";
+
+/** A raw-stat constraint stored alongside a profile's weights. */
+export interface StatTarget {
+  stat: string;
+  type: StatTargetType;
+  value: number;
+}
+
+export interface TargetEvaluation extends StatTarget {
+  actual: number;
+  met: boolean;
+  difference: number;
+}
+
 export interface StatKeyDef {
   key: string;
   label: string;
-  group: "Attributes" | "Combat" | "Spell" | "Defense" | "Resistance" | "Weapon";
+  group:
+    | "Attributes"
+    | "Combat"
+    | "Spell"
+    | "Defense"
+    | "Resistance"
+    | "Weapon";
   /** item_template stat_type this key reads, if it is a plain stat. */
   itemMod?: number;
 }
@@ -31,18 +52,33 @@ export const STAT_KEYS: readonly StatKeyDef[] = [
   { key: "mana", label: "Mana", group: "Attributes", itemMod: 0 },
 
   { key: "attack_power", label: "Attack power", group: "Combat", itemMod: 38 },
-  { key: "ranged_attack_power", label: "Ranged attack power", group: "Combat", itemMod: 39 },
+  {
+    key: "ranged_attack_power",
+    label: "Ranged attack power",
+    group: "Combat",
+    itemMod: 39,
+  },
   { key: "hit", label: "Hit", group: "Combat", itemMod: 31 },
   { key: "crit", label: "Crit", group: "Combat", itemMod: 32 },
   { key: "haste", label: "Haste", group: "Combat", itemMod: 36 },
   { key: "expertise", label: "Expertise", group: "Combat", itemMod: 37 },
-  { key: "armor_penetration", label: "Armor penetration", group: "Combat", itemMod: 44 },
+  {
+    key: "armor_penetration",
+    label: "Armor penetration",
+    group: "Combat",
+    itemMod: 44,
+  },
 
   { key: "spell_power", label: "Spell power", group: "Spell", itemMod: 45 },
   { key: "spell_damage", label: "Spell damage", group: "Spell", itemMod: 42 },
   { key: "healing", label: "Healing power", group: "Spell", itemMod: 41 },
   { key: "mp5", label: "Mana per 5", group: "Spell", itemMod: 43 },
-  { key: "spell_penetration", label: "Spell penetration", group: "Spell", itemMod: 47 },
+  {
+    key: "spell_penetration",
+    label: "Spell penetration",
+    group: "Spell",
+    itemMod: 47,
+  },
 
   { key: "defense", label: "Defense", group: "Defense", itemMod: 12 },
   { key: "dodge", label: "Dodge", group: "Defense", itemMod: 13 },
@@ -61,10 +97,20 @@ export const STAT_KEYS: readonly StatKeyDef[] = [
   { key: "weapon_dps", label: "Weapon DPS", group: "Weapon" },
 ] as const;
 
-export const STAT_GROUPS = ["Attributes", "Combat", "Spell", "Defense", "Resistance", "Weapon"] as const;
+export const STAT_GROUPS = [
+  "Attributes",
+  "Combat",
+  "Spell",
+  "Defense",
+  "Resistance",
+  "Weapon",
+] as const;
 
 const MOD_TO_KEY = new Map<number, string>(
-  STAT_KEYS.filter((s) => s.itemMod !== undefined).map((s) => [s.itemMod!, s.key]),
+  STAT_KEYS.filter((s) => s.itemMod !== undefined).map((s) => [
+    s.itemMod!,
+    s.key,
+  ]),
 );
 
 /** Resistance array order on SimItem: [holy,fire,nature,frost,shadow,arcane]. */
@@ -117,6 +163,84 @@ export function scoreItem(item: SimItem, weights: StatWeights): number {
 /** Total score over a set of items (e.g. every filled slot of a stage). */
 export function scoreItems(items: SimItem[], weights: StatWeights): number {
   return items.reduce((sum, item) => sum + scoreItem(item, weights), 0);
+}
+
+/** Add raw stats across a set of items. */
+export function aggregateItemStats(items: SimItem[]): StatWeights {
+  const totals: StatWeights = {};
+  for (const item of items) {
+    for (const [key, value] of Object.entries(itemStatValues(item))) {
+      totals[key] = (totals[key] ?? 0) + value;
+    }
+  }
+  return totals;
+}
+
+/** Evaluate profile targets against raw stage totals. Targets do not affect score. */
+export function evaluateTargets(
+  totals: StatWeights,
+  targets: readonly StatTarget[],
+): TargetEvaluation[] {
+  return targets.map((target) => {
+    const actual = totals[target.stat] ?? 0;
+    const difference = actual - target.value;
+    return {
+      ...target,
+      actual,
+      difference,
+      met: target.type === "minimum" ? difference >= 0 : difference <= 0,
+    };
+  });
+}
+
+export function evaluateItemSwapTargets(
+  totals: StatWeights,
+  current: SimItem | undefined,
+  candidate: SimItem,
+  targets: readonly StatTarget[],
+): TargetEvaluation[] {
+  const next = { ...totals };
+  if (current) {
+    for (const [key, value] of Object.entries(itemStatValues(current)))
+      next[key] = (next[key] ?? 0) - value;
+  }
+  for (const [key, value] of Object.entries(itemStatValues(candidate)))
+    next[key] = (next[key] ?? 0) + value;
+  return evaluateTargets(next, targets);
+}
+
+/** Parse a targets jsonb payload; malformed and unknown-stat entries are dropped. */
+export function parseTargets(raw: unknown): StatTarget[] {
+  let value: unknown = raw;
+  if (typeof value === "string") {
+    try {
+      value = JSON.parse(value);
+    } catch {
+      return [];
+    }
+  }
+  if (!Array.isArray(value)) return [];
+  const known = new Set(STAT_KEYS.map((stat) => stat.key));
+  const targets: StatTarget[] = [];
+  for (const entry of value) {
+    if (!entry || typeof entry !== "object") continue;
+    const candidate = entry as Record<string, unknown>;
+    if (
+      typeof candidate.stat !== "string" ||
+      !known.has(candidate.stat) ||
+      (candidate.type !== "minimum" && candidate.type !== "maximum") ||
+      typeof candidate.value !== "number" ||
+      !Number.isFinite(candidate.value)
+    ) {
+      continue;
+    }
+    targets.push({
+      stat: candidate.stat,
+      type: candidate.type,
+      value: candidate.value,
+    });
+  }
+  return targets;
 }
 
 /** Parse a stat-weight jsonb payload; non-numeric entries are dropped. */

@@ -46,6 +46,8 @@ func TestValidatePayload(t *testing.T) {
 	}{
 		{"empty", nil, false},
 		{"empty document", json.RawMessage(`{"version":1,"pool":[],"stages":[]}`), false},
+		{"analysis profile", json.RawMessage(`{"version":1,"pool":[],"stages":[],"analysis_profile_id":"preset:warrior-fury"}`), false},
+		{"analysis profile too long", json.RawMessage(`{"version":1,"pool":[],"stages":[],"analysis_profile_id":"` + strings.Repeat("a", maxAnalysisProfileIDLen+1) + `"}`), true},
 		{"valid document", json.RawMessage(`{"version":1,"pool":[
 			{"item_id":16921,"enchant_id":2543,"note":"BoE"},{"item_id":22718}
 		],"stages":[{"name":"Fresh 60","slots":{
