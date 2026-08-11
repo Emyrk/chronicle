@@ -7,6 +7,8 @@ import type { HealingViewMode } from "./HealingDoneContent";
 import type { WoWSpell } from "@/api/wowdb";
 import { realSpellId } from "../processors/abilityBreakout";
 import { getBreakoutProgressLabel } from "../breakoutProgress";
+import { useIsMobile } from "@/hooks/useIsMobile";
+import { shouldPlaceEffectiveHealingBeforeOverheal } from "../healingBreakoutPresentation";
 
 /**
  * Resolve a unit name from context, formatting pets as "{Owner}'s Pet {PetName}".
@@ -332,6 +334,7 @@ export function useHealingDoneBreakout({
   viewMode = "effective",
   showRanks = false,
 }: UseHealingDoneBreakoutOptions) {
+  const isMobile = useIsMobile();
   // Track tab selection per player so it persists across reloads
   const [tabByPlayer, setTabByPlayer] = useState<Map<string, BreakoutTab>>(new Map());
   
@@ -476,11 +479,12 @@ export function useHealingDoneBreakout({
           targetTabLabel={viewMode === "overheal" ? "Overhealed" : "Healed"}
           showHits={false}
           showOverheal={viewMode === "effective"}
+          valueBeforeStacked={shouldPlaceEffectiveHealingBeforeOverheal(viewMode === "effective", pinned, isMobile)}
           showAbsorbed={viewMode !== "overheal"}
         />
       );
     },
-    [result, context, valueLabel, perSecond, durationMs, loading, processing, tabByPlayer, viewMode, showRanks, spellDataMap]
+    [result, context, valueLabel, perSecond, durationMs, loading, processing, tabByPlayer, viewMode, showRanks, spellDataMap, isMobile]
   );
 
   return breakout;

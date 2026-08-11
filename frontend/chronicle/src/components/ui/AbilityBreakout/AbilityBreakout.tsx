@@ -327,6 +327,8 @@ export interface AbilityTableProps {
   showOverheal?: boolean
   /** Label for the stacked secondary column */
   stackedLabel?: string
+  /** Move the primary value before the stacked column */
+  valueBeforeStacked?: boolean
   /** Whether to show the absorbed column */
   showAbsorbed?: boolean
   /** Whether absorbed damage is additive to value instead of a subset of it. */
@@ -347,6 +349,7 @@ export function AbilityTable({
   showHits = true,
   showOverheal = false,
   stackedLabel = 'Overheal',
+  valueBeforeStacked = false,
   showAbsorbed = false,
   absorbedIsAdditive = false,
   expanded: controlledExpanded,
@@ -472,13 +475,18 @@ export function AbilityTable({
           <thead className="sticky top-0 bg-popover z-10">
             <tr className="border-b border-border">
               <th className={cn("text-left py-1.5 px-2 font-medium", hover.columnId === COL.ABILITY && "bg-primary/20")}>Ability</th>
+              {valueBeforeStacked && (
+                <th className={cn("text-right py-1.5 px-2 font-medium", hover.columnId === COL.VALUE && "bg-primary/20")}>{valueLabel}</th>
+              )}
               {hasOverhealData && (
                 <th className={cn("text-right py-1.5 px-2 font-medium text-yellow-500/80", hover.columnId === COL.OVERHEAL && "bg-primary/20")}>{stackedLabel}</th>
               )}
               {hasAbsorbedData && (
                 <th className={cn("text-right py-1.5 px-2 font-medium text-sky-400/80", hover.columnId === COL.ABSORBED && "bg-primary/20")}>Absorbed</th>
               )}
-              <th className={cn("text-right py-1.5 px-2 font-medium", hover.columnId === COL.VALUE && "bg-primary/20")}>{valueLabel}</th>
+              {!valueBeforeStacked && (
+                <th className={cn("text-right py-1.5 px-2 font-medium", hover.columnId === COL.VALUE && "bg-primary/20")}>{valueLabel}</th>
+              )}
               <th className={cn("text-right py-1.5 px-2 font-medium", hover.columnId === COL.PERCENT && "bg-primary/20")}>%</th>
               <th className={cn("text-right py-1.5 px-2 font-medium", hover.columnId === COL.COUNT && "bg-primary/20")} title="Total count">#</th>
               {/* Collapsed view: simple Hits and Crit% columns */}
@@ -576,6 +584,18 @@ export function AbilityTable({
                     )}
                   </span>
                 </HoverCell>
+                {valueBeforeStacked && (
+                  <HoverCell
+                    rowId={rowId}
+                    columnId={COL.VALUE}
+                    hover={hover}
+                    setHover={setHover}
+                    clearHover={clearHover}
+                    className="text-right py-1 px-2 font-mono"
+                  >
+                    {ability.value.toLocaleString(undefined, { maximumFractionDigits: 1 })}
+                  </HoverCell>
+                )}
                 {hasOverhealData && (() => {
                   const overhealVal = ability.overheal ?? 0;
                   const totalForAbility = ability.value + overhealVal;
@@ -612,16 +632,18 @@ export function AbilityTable({
                     </HoverCell>
                   );
                 })()}
-                <HoverCell
-                  rowId={rowId}
-                  columnId={COL.VALUE}
-                  hover={hover}
-                  setHover={setHover}
-                  clearHover={clearHover}
-                  className="text-right py-1 px-2 font-mono"
-                >
-                  {ability.value.toLocaleString(undefined, { maximumFractionDigits: 1 })}
-                </HoverCell>
+                {!valueBeforeStacked && (
+                  <HoverCell
+                    rowId={rowId}
+                    columnId={COL.VALUE}
+                    hover={hover}
+                    setHover={setHover}
+                    clearHover={clearHover}
+                    className="text-right py-1 px-2 font-mono"
+                  >
+                    {ability.value.toLocaleString(undefined, { maximumFractionDigits: 1 })}
+                  </HoverCell>
+                )}
                 <HoverCell
                   rowId={rowId}
                   columnId={COL.PERCENT}
@@ -714,6 +736,11 @@ export function AbilityTable({
               <td className="py-1.5 px-2 text-muted-foreground">
                 {hasSelection ? `Total (${selectedAbilities.size})` : 'Total'}
               </td>
+              {valueBeforeStacked && (
+                <td className="text-right py-1.5 px-2 font-mono">
+                  {totalValueForSelection.toLocaleString(undefined, { maximumFractionDigits: 1 })}
+                </td>
+              )}
               {hasOverhealData && (
                 <td className="text-right py-1.5 px-2 font-mono text-yellow-500/70">
                   {totalOverhealForSelection.toLocaleString(undefined, { maximumFractionDigits: 1 })}
@@ -724,9 +751,11 @@ export function AbilityTable({
                   {totalAbsorbedForSelection.toLocaleString(undefined, { maximumFractionDigits: 1 })}
                 </td>
               )}
-              <td className="text-right py-1.5 px-2 font-mono">
-                {totalValueForSelection.toLocaleString(undefined, { maximumFractionDigits: 1 })}
-              </td>
+              {!valueBeforeStacked && (
+                <td className="text-right py-1.5 px-2 font-mono">
+                  {totalValueForSelection.toLocaleString(undefined, { maximumFractionDigits: 1 })}
+                </td>
+              )}
               <td className="text-right py-1.5 px-2 font-mono text-muted-foreground">
                 {totalValue > 0 ? ((totalEffectiveValueForSelection / totalValue) * 100).toFixed(1) : 0}%
               </td>
@@ -936,6 +965,8 @@ export interface AbilityBreakoutProps {
   showOverheal?: boolean
   /** Label for the stacked secondary column */
   stackedLabel?: string
+  /** Move the primary value before the stacked column */
+  valueBeforeStacked?: boolean
   /** Whether to show the absorbed column */
   showAbsorbed?: boolean
   /** Whether absorbed damage is additive to value instead of a subset of it. */
@@ -972,6 +1003,7 @@ export function AbilityBreakout({
   showHits = true,
   showOverheal = false,
   stackedLabel = 'Overheal',
+  valueBeforeStacked = false,
   showAbsorbed = false,
   absorbedIsAdditive = false,
   expanded,
@@ -1023,6 +1055,7 @@ export function AbilityBreakout({
           showHits={showHits}
           showOverheal={showOverheal}
           stackedLabel={stackedLabel}
+          valueBeforeStacked={valueBeforeStacked}
           showAbsorbed={showAbsorbed}
           absorbedIsAdditive={absorbedIsAdditive}
           expanded={expanded}
@@ -1072,6 +1105,7 @@ export function AbilityBreakout({
           showHits={showHits}
           showOverheal={showOverheal}
           stackedLabel={stackedLabel}
+          valueBeforeStacked={valueBeforeStacked}
           showAbsorbed={showAbsorbed}
           absorbedIsAdditive={absorbedIsAdditive}
           expanded={expanded}
