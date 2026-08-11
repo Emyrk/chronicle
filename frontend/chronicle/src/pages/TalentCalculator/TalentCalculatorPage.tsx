@@ -91,6 +91,7 @@ export function TalentCalculatorPage() {
   const selectedPet = classSlug === PET_INFO.slug;
   const selectedOption = selectedClass ?? (selectedPet ? PET_INFO : undefined);
   const selectedClassId = selectedClass?.id;
+  const pointsPerRow = selectedPet ? 3 : 5;
   const maxTalentPoints = selectedPet ? PET_MAX_TALENT_POINTS : tc.maxTalentPoints;
 
   // Top Builds relies on per-spec rankings. Hide it when this tenant's parse
@@ -181,10 +182,10 @@ export function TalentCalculatorPage() {
     if (!compareBuild || !classTreeData) return null;
     const tabs = classTreeData.tabs.map((tab) => tab.talents);
     return computeBuildDiff(
-      normalizeTalentRanks(tabs, decodeTalentBuild(currentBuild, tabs), maxTalentPoints),
-      normalizeTalentRanks(tabs, decodeTalentBuild(compareBuild, tabs), maxTalentPoints),
+      normalizeTalentRanks(tabs, decodeTalentBuild(currentBuild, tabs), maxTalentPoints, pointsPerRow),
+      normalizeTalentRanks(tabs, decodeTalentBuild(compareBuild, tabs), maxTalentPoints, pointsPerRow),
     );
-  }, [compareBuild, currentBuild, classTreeData, maxTalentPoints]);
+  }, [compareBuild, currentBuild, classTreeData, maxTalentPoints, pointsPerRow]);
 
   function stopComparing() {
     const next = new URLSearchParams(searchParams);
@@ -343,6 +344,7 @@ export function TalentCalculatorPage() {
           data={classTreeData}
           maxTalentPoints={maxTalentPoints}
           maxLevel={maxLevel}
+          pointsPerRow={pointsPerRow}
           exclusiveTabs={selectedPet}
           showRequiredLevel={!selectedPet}
           mobileHeader={isMobile ? mobileHeader : undefined}
