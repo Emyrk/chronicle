@@ -71,7 +71,7 @@ func NewRazorAdCharacter(flavor database.WoWFlavor) func(id guid.GUID, all *char
 		}
 
 		base := characters.NewCommonCharacter(id, all)
-		if entry == 50142 && flavor.Has(database.FlavorNightmareOfUrsol) {
+		if flavor.Has(database.FlavorNightmareOfUrsol) {
 			base.WithTimeoutAsDeath()
 		}
 		return &RazorAdCharacter{Common: base, all: all}, true

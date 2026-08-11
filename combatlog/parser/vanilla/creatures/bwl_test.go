@@ -137,6 +137,31 @@ func TestRazorgoreEggs_NightmareOfUrsol_KillsAddsAt20(t *testing.T) {
 	}
 }
 
+func TestRazorAdCharacter_NightmareOfUrsolTimeoutsAsDeath(t *testing.T) {
+	t.Parallel()
+
+	flavor := database.WoWFlavor{database.FlavorVanilla, database.FlavorNightmareOfUrsol}
+	chars := characters.NewCharacters(unitdb.New(),
+		creatures.VanillaCharacterFactories(flavor),
+		identifier.NewIdentifier(map[uint32]identifier.Identity{}))
+
+	player := guid.GUID(0x1)
+	scorcher := creatureGUID(52153, 0x1)
+	unrelated := creatureGUID(99999, 0x2)
+	base := time.Date(2026, time.January, 1, 0, 0, 0, 0, time.UTC)
+
+	_, err := chars.Process(damage(base, player, scorcher))
+	require.NoError(t, err)
+	_, err = chars.Process(damage(base.Add(61*time.Second), player, unrelated))
+	require.NoError(t, err)
+
+	add, ok := chars.Get(scorcher)
+	require.True(t, ok)
+	require.False(t, add.IsActive())
+	require.Len(t, add.Periods(), 1)
+	require.Equal(t, period.EndStateSlain, add.Periods()[0].EndState)
+}
+
 func TestRazorgorePhaseOneAddActivityKeepsBossActive(t *testing.T) {
 	t.Parallel()
 
