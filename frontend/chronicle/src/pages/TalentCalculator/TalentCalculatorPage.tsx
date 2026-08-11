@@ -39,6 +39,14 @@ const CLASS_INFO: { id: number; name: string; slug: string }[] = [
   { id: 11, name: "Druid", slug: "druid" },
 ];
 
+const PET_INFO: { id: number; name: string; slug: string }[] = [
+  { id: 1, name: "Ferocity Pet", slug: "pet-ferocity" },
+  { id: 2, name: "Tenacity Pet", slug: "pet-tenacity" },
+  { id: 4, name: "Cunning Pet", slug: "pet-cunning" },
+];
+
+const PET_MAX_TALENT_POINTS = 20;
+
 /**
  * Derive talent calculator settings from the dataset flavor tags.
  *   - wrath  → max level 80, 71 points, includes Death Knight
@@ -73,30 +81,40 @@ export function TalentCalculatorPage() {
     () => talentConfigFromFlavor(siteConfig?.dataset_flavor ?? []),
     [siteConfig?.dataset_flavor],
   );
-  const maxTalentPoints = tc.maxTalentPoints;
   const maxLevel = tc.maxLevel;
 
   const availableClasses = useMemo(() => {
     return CLASS_INFO.filter((c) => tc.classIds.includes(c.id));
   }, [tc]);
+  const availablePets = useMemo(() => {
+    return PET_INFO.filter((pet) => talentData?.pets?.[String(pet.id)]);
+  }, [talentData?.pets]);
 
   const selectedClass = availableClasses.find((c) => c.slug === classSlug);
+  const selectedPet = PET_INFO.find((pet) => pet.slug === classSlug);
+  const selectedOption = selectedClass ?? selectedPet;
   const selectedClassId = selectedClass?.id;
+  const maxTalentPoints = selectedPet ? PET_MAX_TALENT_POINTS : tc.maxTalentPoints;
 
   // Top Builds relies on per-spec rankings. Hide it when this tenant's parse
   // scoring is disabled or aggregates by class instead of spec.
   const cohortMode = siteConfig?.tenant?.parse_config?.cohort_mode ?? "spec";
-  const topBuildsAvailable = cohortMode === "spec";
+  const topBuildsAvailable = !selectedPet && cohortMode === "spec";
 
-  const classTreeData = talentData && selectedClassId
-    ? talentData.classes?.[String(selectedClassId)]
-    : undefined;
+  const classTreeData = selectedPet
+    ? talentData?.pets?.[String(selectedPet.id)]
+    : selectedClassId
+      ? talentData?.classes?.[String(selectedClassId)]
+      : undefined;
 
   const isMobile = useIsMobile();
 
   // Top Builds "Show all" overlay: store the ranking cohort in a compact URL
   // value, then reload its current top-10 builds when the page is opened.
-  const popularitySource = useMemo(() => talentPopularitySelection(searchParams), [searchParams]);
+  const popularitySource = useMemo(
+    () => selectedPet ? null : talentPopularitySelection(searchParams),
+    [searchParams, selectedPet],
+  );
   const apiClass = selectedClass ? toApiClass(selectedClass.name) : "";
   const popularitySpec = (SPEC_BY_CLASS[apiClass] ?? []).find(
     (spec) => talentPopularitySlug(spec) === popularitySource?.spec,
@@ -184,18 +202,18 @@ export function TalentCalculatorPage() {
     return <Navigate to={`/talents/${first.slug}`} replace />;
   }
 
-  // Mobile, no class selected: the class selector is the whole page.
-  if (isMobile && !selectedClass) {
+  // Mobile, no talent type selected: the selector is the whole page.
+  if (isMobile && !selectedOption) {
     return (
       <div className="container mx-auto px-4 py-4 max-w-7xl">
         <div className="mb-4">
           <h1 className="text-2xl font-bold tracking-tight">Talent Calculator</h1>
-          <p className="mt-1 text-sm text-zinc-400">Pick a class to start planning.</p>
+          <p className="mt-1 text-sm text-zinc-400">Pick a class or pet type to start planning.</p>
         </div>
         <div className="grid grid-cols-2 gap-3">
           {availableClasses.map((cls) => (
             <Link
-              key={cls.id}
+              key={`class-${cls.id}`}
               to={`/talents/${cls.slug}`}
               className="flex items-center gap-3 rounded-lg border border-zinc-700/60 bg-zinc-900/40 p-3 text-zinc-200 transition hover:border-zinc-500 hover:text-white"
             >
@@ -206,6 +224,16 @@ export function TalentCalculatorPage() {
                 onError={(e) => { (e.target as HTMLImageElement).src = "/c/icons/class_unknown.png"; }}
               />
               <span className="font-semibold">{cls.name}</span>
+            </Link>
+          ))}
+          {availablePets.map((pet) => (
+            <Link
+              key={`pet-${pet.id}`}
+              to={`/talents/${pet.slug}`}
+              className="flex items-center gap-3 rounded-lg border border-amber-400/30 bg-amber-400/5 p-3 text-amber-100 transition hover:border-amber-300/60 hover:text-white"
+            >
+              <img src="/c/icons/class_hunter.png" alt="" className="h-9 w-9 rounded" />
+              <span className="font-semibold">{pet.name}</span>
             </Link>
           ))}
         </div>
@@ -219,7 +247,7 @@ export function TalentCalculatorPage() {
     <div className="flex items-center justify-between gap-3">
       <div className="min-w-0">
         <h1 className="truncate text-lg font-bold tracking-tight">
-          {selectedClass ? `${selectedClass.name} Talents` : "Talent Calculator"}
+          {selectedOption ? `${selectedOption.name} Talents` : "Talent Calculator"}
         </h1>
       </div>
       <div className="flex shrink-0 items-center gap-2">
@@ -239,7 +267,7 @@ export function TalentCalculatorPage() {
           className="inline-flex items-center gap-1 rounded-md border border-amber-300/30 bg-zinc-950/60 px-2.5 py-1.5 text-sm text-amber-100/80 transition hover:border-amber-200/60 hover:text-white"
         >
           <ChevronLeft className="h-4 w-4" />
-          Classes
+          Talents
         </Link>
       </div>
     </div>
@@ -263,7 +291,7 @@ export function TalentCalculatorPage() {
               className="inline-flex items-center gap-1.5 rounded-lg border border-zinc-700/60 bg-zinc-900/40 px-3 py-2 text-sm text-zinc-300 transition hover:border-zinc-500 hover:text-white"
             >
               <ChevronLeft className="h-4 w-4" />
-              Back to class select
+              Back to talent select
             </Link>
           </div>
         )
@@ -289,6 +317,21 @@ export function TalentCalculatorPage() {
               <span>{cls.name}</span>
             </Link>
           ))}
+          {availablePets.map((pet) => (
+            <Link
+              key={`pet-${pet.id}`}
+              to={`/talents/${pet.slug}`}
+              className={cn(
+                "inline-flex items-center gap-2 rounded-lg border px-3 py-2 text-sm transition",
+                pet.id === selectedPet?.id
+                  ? "border-amber-300/70 bg-amber-400/15 text-white"
+                  : "border-amber-400/25 bg-amber-400/5 text-amber-100/70 hover:border-amber-300/60 hover:text-white",
+              )}
+            >
+              <img src="/c/icons/class_hunter.png" alt="" className="h-6 w-6 rounded" />
+              <span>{pet.name}</span>
+            </Link>
+          ))}
         </div>
       )}
 
@@ -305,11 +348,12 @@ export function TalentCalculatorPage() {
           data={classTreeData}
           maxTalentPoints={maxTalentPoints}
           maxLevel={maxLevel}
+          showRequiredLevel={!selectedPet}
           mobileHeader={isMobile ? mobileHeader : undefined}
           popularity={popularity}
           diff={diff}
           extraActions={
-            !isMobile ? (
+            !isMobile && !selectedPet ? (
               <>
                 {diff && (
                   <button
@@ -341,11 +385,11 @@ export function TalentCalculatorPage() {
         />
         </DatasetProvider>
       ) : (
-        <div className="text-zinc-500">Select a class above to get started.</div>
+        <div className="text-zinc-500">Select a class or pet type above to get started.</div>
       )}
 
       {/* Mobile: floating My Builds button (like the instance page encounter FAB) */}
-      {isMobile && classTreeData && (
+      {isMobile && classTreeData && !selectedPet && (
         <MyBuildsDrawer classes={availableClasses} selectedClassId={selectedClassId} floating />
       )}
     </div>

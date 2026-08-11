@@ -6,6 +6,7 @@ package talents
 // This matches the frontend's TalentTreeJSON type exactly.
 type TalentTreeData struct {
 	Classes map[int32]ClassTalentData `json:"classes"`
+	Pets    map[int32]ClassTalentData `json:"pets,omitempty"`
 }
 
 // ClassTalentData holds the talent tabs (specs) for a single class.

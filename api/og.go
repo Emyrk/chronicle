@@ -59,16 +59,25 @@ var talentClassSlugs = map[string]struct {
 	Display string
 	Spec    string // wowspec.InferSpec class key
 }{
-	"warrior":     {"Warrior", "WARRIOR"},
-	"paladin":     {"Paladin", "PALADIN"},
-	"hunter":      {"Hunter", "HUNTER"},
-	"rogue":       {"Rogue", "ROGUE"},
-	"priest":      {"Priest", "PRIEST"},
-	"shaman":      {"Shaman", "SHAMAN"},
-	"mage":        {"Mage", "MAGE"},
-	"warlock":     {"Warlock", "WARLOCK"},
-	"druid":       {"Druid", "DRUID"},
-	"deathknight": {"Death Knight", "DEATH_KNIGHT"},
+	"warrior":      {"Warrior", "WARRIOR"},
+	"paladin":      {"Paladin", "PALADIN"},
+	"hunter":       {"Hunter", "HUNTER"},
+	"rogue":        {"Rogue", "ROGUE"},
+	"priest":       {"Priest", "PRIEST"},
+	"shaman":       {"Shaman", "SHAMAN"},
+	"mage":         {"Mage", "MAGE"},
+	"warlock":      {"Warlock", "WARLOCK"},
+	"druid":        {"Druid", "DRUID"},
+	"deathknight":  {"Death Knight", "DEATH_KNIGHT"},
+	"pet-ferocity": {"Ferocity Hunter Pet", ""},
+	"pet-tenacity": {"Tenacity Hunter Pet", ""},
+	"pet-cunning":  {"Cunning Hunter Pet", ""},
+}
+
+var talentPetSlugs = map[string]struct{}{
+	"pet-ferocity": {},
+	"pet-tenacity": {},
+	"pet-cunning":  {},
 }
 
 // talentBuildSummary sums the digits of each dash-separated tab section of a
@@ -128,7 +137,7 @@ func talentCalculatorOG(host, classSlug, build string) *frontend.OGData {
 	if !ok {
 		return &frontend.OGData{
 			Title:       "Talent Calculator",
-			Description: "Plan, share, and compare class talent builds.",
+			Description: "Plan, share, and compare class and hunter pet talent builds.",
 			URL:         fmt.Sprintf("https://%s/talents", host),
 		}
 	}
@@ -144,6 +153,14 @@ func talentCalculatorOG(host, classSlug, build string) *frontend.OGData {
 	}
 
 	summary, total := talentBuildSummary(build)
+	if _, isPet := talentPetSlugs[strings.ToLower(classSlug)]; isPet {
+		return &frontend.OGData{
+			Title:       fmt.Sprintf("%s (%d points)", cls.Display, total),
+			Description: fmt.Sprintf("A %d-point %s talent build. Open it in the talent calculator.", total, cls.Display),
+			URL:         fmt.Sprintf("%s?build=%s", classURL, build),
+		}
+	}
+
 	spec := wowspec.InferSpec(cls.Spec, summary)
 	title := fmt.Sprintf("%s %s (%d/%d/%d)", spec, cls.Display, summary[0], summary[1], summary[2])
 	if spec == "Unknown" {

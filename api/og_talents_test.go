@@ -13,7 +13,7 @@ func TestTalentCalculatorOG(t *testing.T) {
 		t.Parallel()
 		og := talentCalculatorOG("capy.chronicleclassic.com", "", "")
 		require.Equal(t, "Talent Calculator", og.Title)
-		require.Equal(t, "Plan, share, and compare class talent builds.", og.Description)
+		require.Equal(t, "Plan, share, and compare class and hunter pet talent builds.", og.Description)
 	})
 
 	t.Run("ClassWithoutBuild", func(t *testing.T) {
@@ -35,6 +35,14 @@ func TestTalentCalculatorOG(t *testing.T) {
 		t.Parallel()
 		og := talentCalculatorOG("capy.chronicleclassic.com", "deathknight", "5-51")
 		require.Equal(t, "Frost Death Knight (5/6/0)", og.Title)
+	})
+
+	t.Run("PetBuild", func(t *testing.T) {
+		t.Parallel()
+		og := talentCalculatorOG("capy.chronicleclassic.com", "pet-ferocity", "5551")
+		require.Equal(t, "Ferocity Hunter Pet (16 points)", og.Title)
+		require.Equal(t, "A 16-point Ferocity Hunter Pet talent build. Open it in the talent calculator.", og.Description)
+		require.Equal(t, "https://capy.chronicleclassic.com/talents/pet-ferocity?build=5551", og.URL)
 	})
 
 	t.Run("EmptyBuildDigits", func(t *testing.T) {

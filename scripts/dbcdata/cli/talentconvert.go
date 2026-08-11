@@ -7,12 +7,17 @@ import (
 // convertToExportedTypes converts the internal script talent types to the
 // exported talents package types used by the fetcher/API.
 func convertToExportedTypes(data *talentTreeData) *talents.TalentTreeData {
-	result := &talents.TalentTreeData{
-		Classes: make(map[int32]talents.ClassTalentData, len(data.Classes)),
+	return &talents.TalentTreeData{
+		Classes: convertTalentDataMap(data.Classes),
+		Pets:    convertTalentDataMap(data.Pets),
 	}
-	for classID, cd := range data.Classes {
+}
+
+func convertTalentDataMap(data map[int32]classTalentData) map[int32]talents.ClassTalentData {
+	result := make(map[int32]talents.ClassTalentData, len(data))
+	for id, tree := range data {
 		var tabs []talents.TalentTabData
-		for _, tab := range cd.Tabs {
+		for _, tab := range tree.Tabs {
 			var entries []talents.TalentEntry
 			for _, e := range tab.Talents {
 				entries = append(entries, talents.TalentEntry{
@@ -38,7 +43,7 @@ func convertToExportedTypes(data *talentTreeData) *talents.TalentTreeData {
 				Talents:        entries,
 			})
 		}
-		result.Classes[classID] = talents.ClassTalentData{Tabs: tabs}
+		result[id] = talents.ClassTalentData{Tabs: tabs}
 	}
 	return result
 }

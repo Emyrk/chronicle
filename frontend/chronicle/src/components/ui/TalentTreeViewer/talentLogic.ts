@@ -38,6 +38,7 @@ export interface ClassTalentData {
 
 export interface TalentTreeJSON {
   classes: Record<string, ClassTalentData>;
+  pets?: Record<string, ClassTalentData>;
   /** Resolved dataset for this data (tenant-aware). */
   dataset_id?: string;
   /** Icon CDN base for the resolved dataset. */

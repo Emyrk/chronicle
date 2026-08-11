@@ -8,9 +8,10 @@ import (
 	"github.com/Gophercraft/core/format/dbc/dbdefs"
 )
 
-// talentTreeData is the top-level JSON structure keyed by class ID.
+// talentTreeData is the top-level JSON structure for class and pet talent trees.
 type talentTreeData struct {
 	Classes map[int32]classTalentData `json:"classes"`
+	Pets    map[int32]classTalentData `json:"pets,omitempty"`
 }
 
 type classTalentData struct {
@@ -18,13 +19,13 @@ type classTalentData struct {
 }
 
 type talentTabData struct {
-	ID              int32            `json:"id"`
-	Name            string           `json:"name"`
-	BackgroundFile  string           `json:"backgroundFile"`
-	OrderIndex      int32            `json:"orderIndex"`
-	SpellIconID     int32            `json:"spellIconID"`
-	IconTexture     string           `json:"iconTexture"`
-	Talents         []talentEntry    `json:"talents"`
+	ID             int32         `json:"id"`
+	Name           string        `json:"name"`
+	BackgroundFile string        `json:"backgroundFile"`
+	OrderIndex     int32         `json:"orderIndex"`
+	SpellIconID    int32         `json:"spellIconID"`
+	IconTexture    string        `json:"iconTexture"`
+	Talents        []talentEntry `json:"talents"`
 }
 
 type talentEntry struct {
@@ -33,7 +34,7 @@ type talentEntry struct {
 	TierID       int32   `json:"tierID"`
 	ColumnIndex  int32   `json:"columnIndex"`
 	MaxRank      int32   `json:"maxRank"`
-	TabIndex     int32   `json:"tabIndex"` // 0-based index within tab (sorted by tier, then column)
+	TabIndex     int32   `json:"tabIndex"`   // 0-based index within tab (sorted by tier, then column)
 	SpellRanks   []int32 `json:"spellRanks"` // spell ID per rank (rank 1 = index 0)
 	PrereqTalent []int32 `json:"prereqTalent,omitempty"`
 	PrereqRank   []int32 `json:"prereqRank,omitempty"`
@@ -46,6 +47,20 @@ func classMaskToIDs(mask int32) []int32 {
 	for i := int32(0); i < 12; i++ {
 		if mask&(1<<i) != 0 {
 			ids = append(ids, i+1)
+		}
+	}
+	return ids
+}
+
+// petTalentMaskToIDs returns each individual pet talent category bit set in
+// TalentTab.PetTalentMask. Keeping the DBC bit values as IDs avoids inventing
+// another mapping and supports tabs shared by multiple pet categories.
+func petTalentMaskToIDs(mask int32) []int32 {
+	var ids []int32
+	for bit := int32(0); bit < 32; bit++ {
+		id := int32(1) << bit
+		if mask&id != 0 {
+			ids = append(ids, id)
 		}
 	}
 	return ids
@@ -107,11 +122,13 @@ func collectTalentTrees(wc *dbcdb.WoWClient) (*talentTreeData, error) {
 	type tabInfo struct {
 		dbdefs.Ent_TalentTab
 		classIDs []int32
+		petIDs   []int32
 	}
 	tabs := make(map[int32]*tabInfo)
 	err = tabsDBC.Range(func(cursor *dbdefs.Ent_TalentTab) bool {
 		ti := &tabInfo{Ent_TalentTab: *cursor}
 		ti.classIDs = classMaskToIDs(cursor.ClassMask)
+		ti.petIDs = petTalentMaskToIDs(cursor.PetTalentMask)
 		tabs[cursor.ID] = ti
 		return true
 	})
@@ -146,12 +163,13 @@ func collectTalentTrees(wc *dbcdb.WoWClient) (*talentTreeData, error) {
 	// Build per-class data
 	result := &talentTreeData{
 		Classes: make(map[int32]classTalentData),
+		Pets:    make(map[int32]classTalentData),
 	}
 
 	for tabID, tab := range tabs {
 		talents := talentsByTab[tabID]
-		if len(tab.classIDs) == 0 {
-			continue // pet talents, skip
+		if len(tab.classIDs) == 0 && len(tab.petIDs) == 0 {
+			continue
 		}
 
 		var entries []talentEntry
@@ -217,15 +235,24 @@ func collectTalentTrees(wc *dbcdb.WoWClient) (*talentTreeData, error) {
 			cd.Tabs = append(cd.Tabs, tabData)
 			result.Classes[classID] = cd
 		}
+		for _, petID := range tab.petIDs {
+			pd := result.Pets[petID]
+			pd.Tabs = append(pd.Tabs, tabData)
+			result.Pets[petID] = pd
+		}
 	}
 
-	// Sort tabs by OrderIndex within each class
-	for classID, cd := range result.Classes {
-		sort.Slice(cd.Tabs, func(i, j int) bool {
-			return cd.Tabs[i].OrderIndex < cd.Tabs[j].OrderIndex
-		})
-		result.Classes[classID] = cd
-	}
+	sortTalentDataTabs(result.Classes)
+	sortTalentDataTabs(result.Pets)
 
 	return result, nil
+}
+
+func sortTalentDataTabs(data map[int32]classTalentData) {
+	for id, tree := range data {
+		sort.Slice(tree.Tabs, func(i, j int) bool {
+			return tree.Tabs[i].OrderIndex < tree.Tabs[j].OrderIndex
+		})
+		data[id] = tree
+	}
 }

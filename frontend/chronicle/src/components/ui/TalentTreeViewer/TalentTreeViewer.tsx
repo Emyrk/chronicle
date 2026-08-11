@@ -88,6 +88,8 @@ export interface TalentTreeViewerProps {
   maxTalentPoints?: number;
   /** Maximum player level (default: 60). */
   maxLevel?: number;
+  /** When false, hides the player-level summary for non-player talent trees. */
+  showRequiredLevel?: boolean;
   /** When true, hides interactive controls (default: false). */
   readOnly?: boolean;
   /** When true, renders a more compact layout suitable for panels with limited space. */
@@ -953,6 +955,7 @@ export function TalentTreeViewer({
   allocations,
   maxTalentPoints = 51,
   maxLevel = 60,
+  showRequiredLevel = true,
   readOnly = false,
   compact = false,
   extraActions,
@@ -1148,11 +1151,15 @@ export function TalentTreeViewer({
           <div className="relative">
             {mobileHeader && <div className="border-b border-white/10 p-4">{mobileHeader}</div>}
             <div className="flex items-center gap-4 px-4 py-3">
-              <div>
-                <p className="text-[10px] font-semibold uppercase tracking-[0.16em] text-amber-100/60">Level</p>
-                <p className="text-lg font-bold leading-tight text-white">{requiredLevel}</p>
-              </div>
-              <div className="h-8 w-px bg-amber-200/15" />
+              {showRequiredLevel && (
+                <>
+                  <div>
+                    <p className="text-[10px] font-semibold uppercase tracking-[0.16em] text-amber-100/60">Level</p>
+                    <p className="text-lg font-bold leading-tight text-white">{requiredLevel}</p>
+                  </div>
+                  <div className="h-8 w-px bg-amber-200/15" />
+                </>
+              )}
               {/* Points doubles as the lock toggle, like the desktop chip. */}
               <button type="button" aria-pressed={manuallyLocked} onClick={toggleLock} className="text-left">
                 <p className="flex items-center gap-1 text-[10px] font-semibold uppercase tracking-[0.16em] text-amber-100/60">
@@ -1229,9 +1236,11 @@ export function TalentTreeViewer({
       {!(readOnly && allocations) && (
         <div className="flex flex-wrap items-center justify-between gap-2">
           <div className="flex flex-wrap items-center gap-2">
-            <div className="rounded-md border border-amber-400/30 bg-amber-400/10 px-2.5 py-1 text-sm font-bold text-white">
-              Level {requiredLevel}
-            </div>
+            {showRequiredLevel && (
+              <div className="rounded-md border border-amber-400/30 bg-amber-400/10 px-2.5 py-1 text-sm font-bold text-white">
+                Level {requiredLevel}
+              </div>
+            )}
             {!readOnly && (
               <>
                 {isMobile ? (
