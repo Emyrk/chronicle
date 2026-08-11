@@ -23,6 +23,7 @@ import {
   rankDescriptionsForTooltip,
   rankingsLayoutToBuild,
   resetTalentTabRanks,
+  restrictTalentRanksToFirstPopulatedTab,
   rowPointRequirement,
   searchParamsWithTalentBuild,
   searchParamsWithTalentLock,
@@ -140,6 +141,25 @@ describe("TalentTreeViewer talent locking", () => {
     expect(updateTalentRank(second, 5, tabTalents, {})).toEqual({ 61: 5 });
     // Decreases are unaffected by the budget clamp.
     expect(updateTalentRank(first, 1, tabTalents, { 60: 5 }, { maxPoints: 5 })).toEqual({ 60: 1 });
+  });
+});
+
+describe("TalentTreeViewer exclusive trees", () => {
+  const firstTree = [talent({ id: 70, tierID: 0, columnIndex: 0, maxRank: 5 })];
+  const secondTree = [talent({ id: 80, tierID: 0, columnIndex: 0, maxRank: 5 })];
+  const thirdTree = [talent({ id: 90, tierID: 0, columnIndex: 0, maxRank: 5 })];
+  const tabs = [firstTree, secondTree, thirdTree];
+
+  it("keeps all ranks when only one tree is populated", () => {
+    expect(restrictTalentRanksToFirstPopulatedTab(tabs, { 80: 3 })).toEqual({ 80: 3 });
+  });
+
+  it("keeps the first populated tree when a URL contains points in multiple trees", () => {
+    expect(restrictTalentRanksToFirstPopulatedTab(tabs, { 70: 2, 80: 3, 90: 1 })).toEqual({ 70: 2 });
+  });
+
+  it("leaves an empty build unchanged", () => {
+    expect(restrictTalentRanksToFirstPopulatedTab(tabs, {})).toEqual({});
   });
 });
 

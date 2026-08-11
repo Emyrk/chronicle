@@ -68,16 +68,12 @@ var talentClassSlugs = map[string]struct {
 	"mage":         {"Mage", "MAGE"},
 	"warlock":      {"Warlock", "WARLOCK"},
 	"druid":        {"Druid", "DRUID"},
-	"deathknight":  {"Death Knight", "DEATH_KNIGHT"},
-	"pet-ferocity": {"Ferocity Hunter Pet", ""},
-	"pet-tenacity": {"Tenacity Hunter Pet", ""},
-	"pet-cunning":  {"Cunning Hunter Pet", ""},
+	"deathknight": {"Death Knight", "DEATH_KNIGHT"},
+	"pet":         {"Hunter Pet", ""},
 }
 
 var talentPetSlugs = map[string]struct{}{
-	"pet-ferocity": {},
-	"pet-tenacity": {},
-	"pet-cunning":  {},
+	"pet": {},
 }
 
 // talentBuildSummary sums the digits of each dash-separated tab section of a
@@ -155,7 +151,7 @@ func talentCalculatorOG(host, classSlug, build string) *frontend.OGData {
 	summary, total := talentBuildSummary(build)
 	if _, isPet := talentPetSlugs[strings.ToLower(classSlug)]; isPet {
 		return &frontend.OGData{
-			Title:       fmt.Sprintf("%s (%d points)", cls.Display, total),
+			Title:       fmt.Sprintf("%s (%d/%d/%d)", cls.Display, summary[0], summary[1], summary[2]),
 			Description: fmt.Sprintf("A %d-point %s talent build. Open it in the talent calculator.", total, cls.Display),
 			URL:         fmt.Sprintf("%s?build=%s", classURL, build),
 		}

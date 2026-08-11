@@ -149,6 +149,16 @@ export function populatedTalentTabs<T extends Pick<TalentTabData, "talents">>(ta
   return tabs.filter((tab) => talentTabPoints(tab, ranks) > 0);
 }
 
+export function restrictTalentRanksToFirstPopulatedTab(tabs: TalentEntry[][], ranks: TalentRanks) {
+  const activeTab = tabs.find((talents) => talents.some((talent) => (ranks[talent.id] ?? 0) > 0));
+  if (!activeTab) return ranks;
+
+  const activeTalentIds = new Set(activeTab.map((talent) => talent.id));
+  return Object.fromEntries(
+    Object.entries(ranks).filter(([talentId]) => activeTalentIds.has(Number(talentId))),
+  );
+}
+
 export function totalTalentPoints(ranks: TalentRanks) {
   return Object.values(ranks).reduce((sum, rank) => sum + rank, 0);
 }

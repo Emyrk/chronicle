@@ -53,6 +53,7 @@ import {
   populatedTalentTabs,
   rankDescriptionsForTooltip,
   resetTalentTabRanks,
+  restrictTalentRanksToFirstPopulatedTab,
   searchParamsWithTalentBuild,
   searchParamsWithTalentLock,
   talentBuildExportName,
@@ -84,6 +85,8 @@ export interface TalentTreeViewerProps {
   data: ClassTalentData;
   /** Pre-set talent allocations (from combat log). Converted to TalentRanks. */
   allocations?: TalentAllocation[];
+  /** When true, spending in one tab disables every other tab. */
+  exclusiveTabs?: boolean;
   /** Maximum talent points allowed (default: 51). */
   maxTalentPoints?: number;
   /** Maximum player level (default: 60). */
@@ -271,10 +274,12 @@ function TalentPrereqArrows({ arrows, ranks, height, talents, buttonSize }: { ar
 
 // ─── Talent button ────────────────────────────────────────────────
 
-function TalentButton({ talent, rank, locked, pointsExhausted, talents, ranks, onChange, readOnly, debug, mobile, quickActive, onActivate, popularity, diff }: {
+function TalentButton({ talent, rank, locked, lockedReason, pointsExhausted, talents, ranks, onChange, readOnly, debug, mobile, quickActive, onActivate, popularity, diff }: {
   talent: TalentEntry;
   rank: number;
   locked: boolean;
+  /** Optional explanation for a lock imposed by the containing tree. */
+  lockedReason?: string;
   /** True when no more points can be spent (max reached or build locked). */
   pointsExhausted?: boolean;
   talents: TalentEntry[];
@@ -396,7 +401,9 @@ function TalentButton({ talent, rank, locked, pointsExhausted, talents, ranks, o
   const loadingSpellDetails = Boolean(
     tooltipPosition && talent.spellRanks.length > 0 && (rankSpellQueries.some((q) => q.isPending) || refQueries.some((q) => q.isPending))
   );
-  const lockReasons = locked ? lockedTalentReasons(talent, talents, ranks, pointsExhausted) : [];
+  const lockReasons = locked
+    ? lockedReason ? [lockedReason] : lockedTalentReasons(talent, talents, ranks, pointsExhausted)
+    : [];
 
 
   const showTooltip = () => {
@@ -661,6 +668,7 @@ function TalentTab({
   compact,
   pointsExhausted,
   buildLocked,
+  disabledByExclusiveTab,
   mobile,
   quickActiveTalentId,
   onQuickActivate,
@@ -678,6 +686,8 @@ function TalentTab({
   pointsExhausted?: boolean;
   /** True when the build is manually locked — all changes (add/remove) are blocked. */
   buildLocked?: boolean;
+  /** True when another mutually exclusive tree already has points. */
+  disabledByExclusiveTab?: boolean;
   /** Touch layout: full-bleed card with an upscaled grid. */
   mobile?: boolean;
   /** Mobile: id of the last talent tapped anywhere in the viewer. */
@@ -731,7 +741,8 @@ function TalentTab({
     <section id={mobile ? `talent-tree-${tab.id}` : undefined} className={cn(
       "talent-tree-card relative max-w-full self-start overflow-hidden rounded-lg border border-amber-400/20 bg-[radial-gradient(circle_at_top_left,rgba(20,184,166,0.14),transparent_32%),linear-gradient(180deg,rgba(120,83,38,0.16),rgba(9,9,11,0.58))] shadow-2xl shadow-black/30",
       compact ? "p-2" : mobile ? "scroll-mt-12 rounded-none border-x-0 px-0 py-3" : "p-4",
-    )} aria-label={`${tab.name} talent tree`}>
+      disabledByExclusiveTab && "grayscale opacity-55",
+    )} aria-label={`${tab.name} talent tree`} aria-disabled={disabledByExclusiveTab || undefined}>
       {showBackground && backgroundUrl && (
         <img
           src={backgroundUrl}
@@ -836,7 +847,8 @@ function TalentTab({
                         <TalentButton
                           talent={t}
                           rank={ranks[t.id] ?? 0}
-                          locked={(ranks[t.id] ?? 0) === 0 && (Boolean(pointsExhausted) || !canUseTalent(t, tab.talents, ranks))}
+                          locked={(ranks[t.id] ?? 0) === 0 && (Boolean(disabledByExclusiveTab) || Boolean(pointsExhausted) || !canUseTalent(t, tab.talents, ranks))}
+                          lockedReason={disabledByExclusiveTab ? "Reset the selected pet tree before choosing another." : undefined}
                           pointsExhausted={pointsExhausted}
                           talents={tab.talents}
                           ranks={ranks}
@@ -923,6 +935,16 @@ function allocationsToRanks(tabs: TalentTabData[], allocations: TalentAllocation
   return ranks;
 }
 
+function normalizeViewerTalentRanks(
+  tabs: TalentEntry[][],
+  rawRanks: TalentRanks,
+  maxPoints: number,
+  exclusiveTabs: boolean,
+) {
+  const normalized = normalizeTalentRanks(tabs, rawRanks, maxPoints);
+  return exclusiveTabs ? restrictTalentRanksToFirstPopulatedTab(tabs, normalized) : normalized;
+}
+
 // ─── PNG export watermark ─────────────────────────────────────────
 
 const EXPORT_LOGO_URL = "/c/chronicle/ChronicleLogoCenter.svg";
@@ -953,6 +975,7 @@ async function drawExportWatermark(canvas: HTMLCanvasElement, pixelRatio: number
 export function TalentTreeViewer({
   data,
   allocations,
+  exclusiveTabs = false,
   maxTalentPoints = 51,
   maxLevel = 60,
   showRequiredLevel = true,
@@ -985,10 +1008,15 @@ export function TalentTreeViewer({
   // rendered with the vanilla default cap.
   const initialRanks = useMemo(() => {
     if (allocations && allocations.length > 0) {
-      return normalizeTalentRanks(tabTalentLists, allocationsToRanks(data.tabs, allocations));
+      return normalizeViewerTalentRanks(tabTalentLists, allocationsToRanks(data.tabs, allocations), Number.POSITIVE_INFINITY, exclusiveTabs);
     }
-    return normalizeTalentRanks(tabTalentLists, decodeTalentBuild(searchParams.get(TALENT_BUILD_PARAM), tabTalentLists), maxPoints);
-  }, [allocations, data.tabs, maxPoints, searchParams, tabTalentLists]);
+    return normalizeViewerTalentRanks(
+      tabTalentLists,
+      decodeTalentBuild(searchParams.get(TALENT_BUILD_PARAM), tabTalentLists),
+      maxPoints,
+      exclusiveTabs,
+    );
+  }, [allocations, data.tabs, exclusiveTabs, maxPoints, searchParams, tabTalentLists]);
 
   const [ranks, setRanks] = useState<TalentRanks>(initialRanks);
   // Mobile: last talent tapped anywhere; its -/+ quick buttons stay visible
@@ -1036,6 +1064,10 @@ export function TalentTreeViewer({
     return () => document.removeEventListener("pointerdown", clearOnOutsideTap);
   }, [quickActiveTalentId]);
   const total = useMemo(() => totalTalentPoints(ranks), [ranks]);
+  const exclusiveTabId = useMemo(() => {
+    if (!exclusiveTabs) return null;
+    return data.tabs.find((tab) => talentTabPoints(tab, ranks) > 0)?.id ?? null;
+  }, [data.tabs, exclusiveTabs, ranks]);
   const requiredLevel = useMemo(() => calculateRequiredPlayerLevel(total, flavor), [flavor, total]);
 
   // Manual lock (stored in the URL): blacks out unspent talents early, e.g.
@@ -1053,11 +1085,21 @@ export function TalentTreeViewer({
   useEffect(() => {
     if (allocations && allocations.length > 0) {
       // Backend-provided allocations are not capped at maxPoints (see initialRanks).
-      setRanks(normalizeTalentRanks(tabTalentLists, allocationsToRanks(data.tabs, allocations)));
+      setRanks(normalizeViewerTalentRanks(
+        tabTalentLists,
+        allocationsToRanks(data.tabs, allocations),
+        Number.POSITIVE_INFINITY,
+        exclusiveTabs,
+      ));
     } else {
-      setRanks(normalizeTalentRanks(tabTalentLists, decodeTalentBuild(searchParams.get(TALENT_BUILD_PARAM), tabTalentLists), maxPoints));
+      setRanks(normalizeViewerTalentRanks(
+        tabTalentLists,
+        decodeTalentBuild(searchParams.get(TALENT_BUILD_PARAM), tabTalentLists),
+        maxPoints,
+        exclusiveTabs,
+      ));
     }
-  }, [data.id, maxPoints, searchParams, tabTalentLists, allocations, data.tabs]);
+  }, [data.id, maxPoints, searchParams, tabTalentLists, allocations, data.tabs, exclusiveTabs]);
 
   function commitRanks(nextRanks: TalentRanks) {
     setRanks(nextRanks);
@@ -1204,6 +1246,7 @@ export function TalentTreeViewer({
               debug={searchParams.get("debug") === "true"}
               pointsExhausted={pointsExhausted}
               buildLocked={manuallyLocked}
+              disabledByExclusiveTab={exclusiveTabId !== null && exclusiveTabId !== tab.id}
               mobile={mobileLayout}
               quickActiveTalentId={quickActiveTalentId}
               onQuickActivate={setQuickActiveTalentId}
@@ -1341,6 +1384,7 @@ export function TalentTreeViewer({
             debug={searchParams.get("debug") === "true"}
             pointsExhausted={pointsExhausted}
             buildLocked={manuallyLocked}
+            disabledByExclusiveTab={exclusiveTabId !== null && exclusiveTabId !== tab.id}
             mobile={mobileLayout}
             quickActiveTalentId={quickActiveTalentId}
             onQuickActivate={setQuickActiveTalentId}

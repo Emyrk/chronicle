@@ -39,12 +39,8 @@ const CLASS_INFO: { id: number; name: string; slug: string }[] = [
   { id: 11, name: "Druid", slug: "druid" },
 ];
 
-const PET_INFO: { id: number; name: string; slug: string }[] = [
-  { id: 1, name: "Ferocity Pet", slug: "pet-ferocity" },
-  { id: 2, name: "Tenacity Pet", slug: "pet-tenacity" },
-  { id: 4, name: "Cunning Pet", slug: "pet-cunning" },
-];
-
+const PET_INFO = { id: 0, name: "Pet", slug: "pet" };
+const PET_TREE_IDS = [1, 2, 4];
 const PET_MAX_TALENT_POINTS = 20;
 
 /**
@@ -86,13 +82,14 @@ export function TalentCalculatorPage() {
   const availableClasses = useMemo(() => {
     return CLASS_INFO.filter((c) => tc.classIds.includes(c.id));
   }, [tc]);
-  const availablePets = useMemo(() => {
-    return PET_INFO.filter((pet) => talentData?.pets?.[String(pet.id)]);
+  const petTreeData = useMemo(() => {
+    const tabs = PET_TREE_IDS.flatMap((id) => talentData?.pets?.[String(id)]?.tabs ?? []);
+    return tabs.length > 0 ? { id: PET_INFO.id, name: "Hunter Pet", tabs } : undefined;
   }, [talentData?.pets]);
 
   const selectedClass = availableClasses.find((c) => c.slug === classSlug);
-  const selectedPet = PET_INFO.find((pet) => pet.slug === classSlug);
-  const selectedOption = selectedClass ?? selectedPet;
+  const selectedPet = classSlug === PET_INFO.slug;
+  const selectedOption = selectedClass ?? (selectedPet ? PET_INFO : undefined);
   const selectedClassId = selectedClass?.id;
   const maxTalentPoints = selectedPet ? PET_MAX_TALENT_POINTS : tc.maxTalentPoints;
 
@@ -102,7 +99,7 @@ export function TalentCalculatorPage() {
   const topBuildsAvailable = !selectedPet && cohortMode === "spec";
 
   const classTreeData = selectedPet
-    ? talentData?.pets?.[String(selectedPet.id)]
+    ? petTreeData
     : selectedClassId
       ? talentData?.classes?.[String(selectedClassId)]
       : undefined;
@@ -226,16 +223,15 @@ export function TalentCalculatorPage() {
               <span className="font-semibold">{cls.name}</span>
             </Link>
           ))}
-          {availablePets.map((pet) => (
+          {petTreeData && (
             <Link
-              key={`pet-${pet.id}`}
-              to={`/talents/${pet.slug}`}
+              to={`/talents/${PET_INFO.slug}`}
               className="flex items-center gap-3 rounded-lg border border-amber-400/30 bg-amber-400/5 p-3 text-amber-100 transition hover:border-amber-300/60 hover:text-white"
             >
               <img src="/c/icons/class_hunter.png" alt="" className="h-9 w-9 rounded" />
-              <span className="font-semibold">{pet.name}</span>
+              <span className="font-semibold">{PET_INFO.name}</span>
             </Link>
-          ))}
+          )}
         </div>
       </div>
     );
@@ -317,21 +313,20 @@ export function TalentCalculatorPage() {
               <span>{cls.name}</span>
             </Link>
           ))}
-          {availablePets.map((pet) => (
+          {petTreeData && (
             <Link
-              key={`pet-${pet.id}`}
-              to={`/talents/${pet.slug}`}
+              to={`/talents/${PET_INFO.slug}`}
               className={cn(
                 "inline-flex items-center gap-2 rounded-lg border px-3 py-2 text-sm transition",
-                pet.id === selectedPet?.id
+                selectedPet
                   ? "border-amber-300/70 bg-amber-400/15 text-white"
                   : "border-amber-400/25 bg-amber-400/5 text-amber-100/70 hover:border-amber-300/60 hover:text-white",
               )}
             >
               <img src="/c/icons/class_hunter.png" alt="" className="h-6 w-6 rounded" />
-              <span>{pet.name}</span>
+              <span>{PET_INFO.name}</span>
             </Link>
-          ))}
+          )}
         </div>
       )}
 
@@ -348,6 +343,7 @@ export function TalentCalculatorPage() {
           data={classTreeData}
           maxTalentPoints={maxTalentPoints}
           maxLevel={maxLevel}
+          exclusiveTabs={selectedPet}
           showRequiredLevel={!selectedPet}
           mobileHeader={isMobile ? mobileHeader : undefined}
           popularity={popularity}
