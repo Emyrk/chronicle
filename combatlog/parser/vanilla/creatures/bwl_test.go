@@ -137,6 +137,38 @@ func TestRazorgoreEggs_NightmareOfUrsol_KillsAddsAt20(t *testing.T) {
 	}
 }
 
+func TestRazorgorePhaseOneAddActivityKeepsBossActive(t *testing.T) {
+	t.Parallel()
+
+	flavor := database.WoWFlavor{database.FlavorVanilla, database.FlavorVanillaPlus}
+	chars := characters.NewCharacters(unitdb.New(),
+		creatures.VanillaCharacterFactories(flavor),
+		identifier.NewIdentifier(map[uint32]identifier.Identity{}))
+
+	player := guid.GUID(0x1)
+	razor := creatureGUID(razorgoreEntry, 0x1)
+	legionnaire := creatureGUID(blackwingLegionnaire, 0x2)
+	base := time.Date(2026, time.January, 1, 0, 0, 0, 0, time.UTC)
+
+	_, err := chars.Process(eggCast(base, razor, destroyEggSpellID))
+	require.NoError(t, err)
+
+	// Razorgore can disappear from the log for more than the default one-minute
+	// inactivity timeout while the raid is still fighting his phase-one adds.
+	_, err = chars.Process(damage(base.Add(61*time.Second), player, legionnaire))
+	require.NoError(t, err)
+
+	_, err = chars.Process(damage(base.Add(70*time.Second), player, razor))
+	require.NoError(t, err)
+	_, err = chars.Process(slain(base.Add(80*time.Second), player, razor))
+	require.NoError(t, err)
+
+	razorChar, ok := chars.Get(razor)
+	require.True(t, ok)
+	require.Len(t, razorChar.Periods(), 1, "phase-one add activity must not split the Razorgore encounter")
+	require.Equal(t, period.EndStateSlain, razorChar.Periods()[0].EndState)
+}
+
 // TestRazorgoreEggs_UnsupportedFlavor_NoKill verifies that without an egg
 // threshold the mechanic does not fire and the adds remain active while the boss
 // is active.

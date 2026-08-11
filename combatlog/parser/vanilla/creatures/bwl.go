@@ -100,6 +100,13 @@ type razorgore struct {
 func (c *razorgore) Process(m messages.Message) error {
 	wasActive := c.IsActive()
 
+	if wasActive && affectsRazorgorePhaseOneAdd(m) {
+		// Razorgore may go more than a minute without appearing in the log while
+		// the raid clears phase-one adds. Their activity is still part of his
+		// encounter, so keep the boss active until phase two begins.
+		c.Bump("razorgore phase-one add activity", m)
+	}
+
 	if ty, ok := m.(*messages.SpellGo); ok && ty.Caster == c.ID() && ty.SpellData != nil {
 		// Razorgore is MC'd and destroys eggs around the room. Count this as activity.
 		if ty.SpellData.ID == 19873 || ty.SpellData.ID == 22425 {
@@ -124,6 +131,25 @@ func (c *razorgore) Process(m messages.Message) error {
 		c.adsGone = false
 	}
 	return err
+}
+
+func affectsRazorgorePhaseOneAdd(m messages.Message) bool {
+	for _, id := range m.Affects() {
+		entry, ok := id.GetEntry()
+		if !ok {
+			continue
+		}
+		switch entry {
+		case 12416, // Blackwing Legionnaire
+			12420, // Blackwing Mage
+			12422, // Death Talon Dragonspawn
+			14456, // Blackwing Guardsman
+			50142, // Blackwing Marksman
+			52153: // Death Talon Scorcher
+			return true
+		}
+	}
+	return false
 }
 
 // killEggAds marks the phase-1 adds as killed. In the real fight they run away
