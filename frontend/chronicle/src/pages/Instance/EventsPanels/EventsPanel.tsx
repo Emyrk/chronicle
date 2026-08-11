@@ -26,6 +26,8 @@ import type { PanelFilter, PanelFilterType } from "./processors/filters";
 import { usePanelAggregation } from "./usePanelAggregation";
 import { usePanelTiming } from "./PanelTimingContext";
 import { useSyncModeContextOptional } from "../SyncModeContext";
+import { useTimeRangeContextOptional } from "../TimeRangeContext";
+import { getTimeRangeDurationMs } from "./panelDuration";
 import type { PanelDefinition, PanelContext } from "./types";
 import { PanelSelector } from "./PanelSelector";
 import { hasExplainer } from "./explainers";
@@ -474,11 +476,12 @@ export function EventsPanel({
 
   const customFilters = useMemo(() => (panelContext?.filters as PanelFilter[] | undefined) ?? null, [panelContext]);
   const syncMode = useSyncModeContextOptional();
+  const timeRange = useTimeRangeContextOptional();
   const isSyncActive = syncMode?.enabled === true;
   // Applied filters keep working during Sync (full-data panels still run them in
   // the worker); only editing is paused while playback drives the panels.
   const filteringSupported = panel.supportsFiltering === true && !isSyncActive;
-  const fixedFilters = panel.fixedFilters ?? [];
+  const fixedFilters = useMemo(() => panel.fixedFilters ?? [], [panel.fixedFilters]);
   const userFilters = useMemo(() => customFilters ?? [], [customFilters]);
 
   const hasCustomFilters = filteringSupported && customFilters !== null &&
@@ -823,6 +826,15 @@ export function EventsPanel({
   usePanelTiming(`panel-${panelIndex}`, isDone);
 
   const effectiveDurationMs = useMemo(() => {
+    const filteredDurationMs = getTimeRangeDurationMs(
+      [...fixedFilters, ...userFilters],
+      timeRange,
+      durationMs,
+    );
+    if (filteredDurationMs !== null) {
+      return filteredDurationMs;
+    }
+
     // Full-data panels aggregate the whole encounter even during Sync, so they
     // keep the full duration; elapsed time would skew their per-second values.
     if (
@@ -837,7 +849,16 @@ export function EventsPanel({
     }
 
     return durationMs;
-  }, [syncMode?.enabled, syncMode?.currentTimestamp, syncMode?.encounterBounds, durationMs, panel.syncDataMode]);
+  }, [
+    durationMs,
+    fixedFilters,
+    panel.syncDataMode,
+    syncMode?.enabled,
+    syncMode?.currentTimestamp,
+    syncMode?.encounterBounds,
+    timeRange,
+    userFilters,
+  ]);
 
   const renderedPanel = (
       <PanelCard
