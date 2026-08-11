@@ -44,9 +44,8 @@ scripts/dbcdata/
 ├── main.go             # CLI entry point
 └── cli/
     ├── static.go       # Generates 7 DBC-direct tables
-    ├── derivedstatics.go  # Orchestrates 4 derived generators + JSON/TS
+    ├── derivedstatics.go  # Orchestrates derived generators + JSON/TS
     ├── periodic.go     # PeriodicSpells
-    ├── vulnerability.go # VulnerabilitySpells
     ├── extraattacks.go # ExtraAttackSpells
     └── durationmodifiers.go # DurationModifiers + ByClassBit
 ```

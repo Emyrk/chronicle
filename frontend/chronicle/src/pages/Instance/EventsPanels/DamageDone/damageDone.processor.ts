@@ -95,7 +95,7 @@ function accumulateOwnerTargetValue(
 function normalizeDamageSchoolToBitmask(school: number): number {
   // Damage stream currently uses chronicleproto.School enum values:
   // Unknown=0, None=1, Physical=2, Holy=3, Fire=4, Nature=5, Frost=6, Shadow=7, Arcane=8.
-  // Convert to WoW school bitmask values used by VulnerabilitySpells.
+  // Convert to the WoW school bitmask used by vulnerability metadata.
   switch (school) {
     case 0: // Unknown
     case 1: // None

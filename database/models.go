@@ -1134,6 +1134,15 @@ type DbcSpellRange struct {
 	Name      string    `db:"name" json:"name"`
 }
 
+type DbcVulnerabilitySpell struct {
+	DatasetID     uuid.UUID   `db:"dataset_id" json:"dataset_id"`
+	SpellID       int32       `db:"spell_id" json:"spell_id"`
+	Name          string      `db:"name" json:"name"`
+	SchoolBitmask int32       `db:"school_bitmask" json:"school_bitmask"`
+	PercentAffect pgtype.Int4 `db:"percent_affect" json:"percent_affect"`
+	FlatAffect    pgtype.Int4 `db:"flat_affect" json:"flat_affect"`
+}
+
 type DeploymentInfo struct {
 	ID                     uuid.UUID          `db:"id" json:"id"`
 	CreatedAt              pgtype.Timestamptz `db:"created_at" json:"created_at"`
@@ -1633,25 +1642,6 @@ type RetentionRule struct {
 	CreatedAt   pgtype.Timestamptz `db:"created_at" json:"created_at"`
 }
 
-type RiverClient struct {
-	ID        string             `db:"id" json:"id"`
-	CreatedAt pgtype.Timestamptz `db:"created_at" json:"created_at"`
-	Metadata  []byte             `db:"metadata" json:"metadata"`
-	PausedAt  pgtype.Timestamptz `db:"paused_at" json:"paused_at"`
-	UpdatedAt pgtype.Timestamptz `db:"updated_at" json:"updated_at"`
-}
-
-type RiverClientQueue struct {
-	RiverClientID    string             `db:"river_client_id" json:"river_client_id"`
-	Name             string             `db:"name" json:"name"`
-	CreatedAt        pgtype.Timestamptz `db:"created_at" json:"created_at"`
-	MaxWorkers       int64              `db:"max_workers" json:"max_workers"`
-	Metadata         []byte             `db:"metadata" json:"metadata"`
-	NumJobsCompleted int64              `db:"num_jobs_completed" json:"num_jobs_completed"`
-	NumJobsRunning   int64              `db:"num_jobs_running" json:"num_jobs_running"`
-	UpdatedAt        pgtype.Timestamptz `db:"updated_at" json:"updated_at"`
-}
-
 type RiverJob struct {
 	ID           int64              `db:"id" json:"id"`
 	State        RiverJobState      `db:"state" json:"state"`
@@ -1684,6 +1674,13 @@ type RiverMigration struct {
 	Line      string             `db:"line" json:"line"`
 	Version   int64              `db:"version" json:"version"`
 	CreatedAt pgtype.Timestamptz `db:"created_at" json:"created_at"`
+}
+
+type RiverNotification struct {
+	ID        int64              `db:"id" json:"id"`
+	CreatedAt pgtype.Timestamptz `db:"created_at" json:"created_at"`
+	Payload   string             `db:"payload" json:"payload"`
+	Topic     string             `db:"topic" json:"topic"`
 }
 
 type RiverQueue struct {

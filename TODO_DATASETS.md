@@ -346,7 +346,7 @@ Consumers decoupled from `dbcmem` globals via WoWDB resolvers:
 
 - [ ] DurationModifiers page — migrate from compiled TS constants to API endpoint
 - [x] ExtraAttackSpells page — migrated to `GET /wowdb/extra-attack-spells`
-- [ ] VulnerabilitySpells page — migrate when `dbc_vulnerability_spells` table is added
+- [x] VulnerabilitySpells page — migrated to `GET /wowdb/vulnerability-spells`
 
 ### Future: Dataset Population Tooling
 

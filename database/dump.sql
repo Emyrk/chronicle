@@ -653,6 +653,15 @@ CREATE TABLE dbc_spells (
     mana_per_second_per_level integer DEFAULT 0 NOT NULL
 );
 
+CREATE TABLE dbc_vulnerability_spells (
+    dataset_id uuid NOT NULL,
+    spell_id integer NOT NULL,
+    name text NOT NULL,
+    school_bitmask integer NOT NULL,
+    percent_affect integer,
+    flat_affect integer
+);
+
 CREATE TABLE deployment_info (
     id uuid DEFAULT gen_random_uuid() NOT NULL,
     created_at timestamp with time zone DEFAULT now() NOT NULL,
@@ -1219,34 +1228,11 @@ CREATE TABLE retention_rules (
     CONSTRAINT retention_rules_action_check CHECK ((action = ANY (ARRAY['keep'::text, 'delete'::text])))
 );
 
-CREATE UNLOGGED TABLE river_client (
-    id text NOT NULL,
-    created_at timestamp with time zone DEFAULT now() NOT NULL,
-    metadata jsonb DEFAULT '{}'::jsonb NOT NULL,
-    paused_at timestamp with time zone,
-    updated_at timestamp with time zone NOT NULL,
-    CONSTRAINT name_length CHECK (((char_length(id) > 0) AND (char_length(id) < 128)))
-);
-
-CREATE UNLOGGED TABLE river_client_queue (
-    river_client_id text NOT NULL,
-    name text NOT NULL,
-    created_at timestamp with time zone DEFAULT now() NOT NULL,
-    max_workers bigint DEFAULT 0 NOT NULL,
-    metadata jsonb DEFAULT '{}'::jsonb NOT NULL,
-    num_jobs_completed bigint DEFAULT 0 NOT NULL,
-    num_jobs_running bigint DEFAULT 0 NOT NULL,
-    updated_at timestamp with time zone NOT NULL,
-    CONSTRAINT name_length CHECK (((char_length(name) > 0) AND (char_length(name) < 128))),
-    CONSTRAINT num_jobs_completed_zero_or_positive CHECK ((num_jobs_completed >= 0)),
-    CONSTRAINT num_jobs_running_zero_or_positive CHECK ((num_jobs_running >= 0))
-);
-
 CREATE TABLE river_job (
     id bigint NOT NULL,
     state river_job_state DEFAULT 'available'::river_job_state NOT NULL,
     attempt smallint DEFAULT 0 NOT NULL,
-    max_attempts smallint NOT NULL,
+    max_attempts smallint DEFAULT 25 NOT NULL,
     attempted_at timestamp with time zone,
     created_at timestamp with time zone DEFAULT now() NOT NULL,
     finalized_at timestamp with time zone,
@@ -1294,12 +1280,29 @@ CREATE TABLE river_migration (
     CONSTRAINT version_gte_1 CHECK ((version >= 1))
 );
 
+CREATE TABLE river_notification (
+    id bigint NOT NULL,
+    created_at timestamp with time zone DEFAULT now() NOT NULL,
+    payload text NOT NULL,
+    topic text NOT NULL,
+    CONSTRAINT topic_length CHECK (((length(topic) > 0) AND (length(topic) < 128)))
+);
+
+CREATE SEQUENCE river_notification_id_seq
+    START WITH 1
+    INCREMENT BY 1
+    NO MINVALUE
+    NO MAXVALUE
+    CACHE 1;
+
+ALTER SEQUENCE river_notification_id_seq OWNED BY river_notification.id;
+
 CREATE TABLE river_queue (
     name text NOT NULL,
     created_at timestamp with time zone DEFAULT now() NOT NULL,
     metadata jsonb DEFAULT '{}'::jsonb NOT NULL,
     paused_at timestamp with time zone,
-    updated_at timestamp with time zone NOT NULL
+    updated_at timestamp with time zone DEFAULT CURRENT_TIMESTAMP NOT NULL
 );
 
 CREATE TABLE server_applications (
@@ -1761,6 +1764,8 @@ CREATE TABLE wow_server_upload_keys (
 
 ALTER TABLE ONLY river_job ALTER COLUMN id SET DEFAULT nextval('river_job_id_seq'::regclass);
 
+ALTER TABLE ONLY river_notification ALTER COLUMN id SET DEFAULT nextval('river_notification_id_seq'::regclass);
+
 ALTER TABLE ONLY application_modification_requests
     ADD CONSTRAINT application_modification_requests_pkey PRIMARY KEY (id);
 
@@ -1853,6 +1858,9 @@ ALTER TABLE ONLY dbc_spell_ranges
 
 ALTER TABLE ONLY dbc_spells
     ADD CONSTRAINT dbc_spells_pkey PRIMARY KEY (dataset_id, spell_id);
+
+ALTER TABLE ONLY dbc_vulnerability_spells
+    ADD CONSTRAINT dbc_vulnerability_spells_pkey PRIMARY KEY (dataset_id, spell_id);
 
 ALTER TABLE ONLY deployment_info
     ADD CONSTRAINT deployment_info_pkey PRIMARY KEY (id);
@@ -1992,12 +2000,6 @@ ALTER TABLE ONLY retention_rules
 ALTER TABLE ONLY retention_rules
     ADD CONSTRAINT retention_rules_unique_priority UNIQUE (policy_id, priority);
 
-ALTER TABLE ONLY river_client
-    ADD CONSTRAINT river_client_pkey PRIMARY KEY (id);
-
-ALTER TABLE ONLY river_client_queue
-    ADD CONSTRAINT river_client_queue_pkey PRIMARY KEY (river_client_id, name);
-
 ALTER TABLE ONLY river_job
     ADD CONSTRAINT river_job_pkey PRIMARY KEY (id);
 
@@ -2006,6 +2008,9 @@ ALTER TABLE ONLY river_leader
 
 ALTER TABLE ONLY river_migration
     ADD CONSTRAINT river_migration_pkey1 PRIMARY KEY (line, version);
+
+ALTER TABLE ONLY river_notification
+    ADD CONSTRAINT river_notification_pkey PRIMARY KEY (id);
 
 ALTER TABLE ONLY river_queue
     ADD CONSTRAINT river_queue_pkey PRIMARY KEY (name);
@@ -2316,6 +2321,10 @@ CREATE INDEX river_job_state_and_finalized_at_index ON river_job USING btree (st
 
 CREATE UNIQUE INDEX river_job_unique_idx ON river_job USING btree (unique_key) WHERE ((unique_key IS NOT NULL) AND (unique_states IS NOT NULL) AND river_job_state_in_bitmask(unique_states, state));
 
+CREATE INDEX river_notification_created_at_idx ON river_notification USING btree (created_at);
+
+CREATE INDEX river_notification_topic_id_idx ON river_notification USING btree (topic, id);
+
 CREATE UNIQUE INDEX time_parse_snapshots_published_key_idx ON time_parse_snapshots USING btree (tenant_id, cutoff, lookback_days, policy_version, query_version) WHERE (status = 'published'::text);
 
 CREATE UNIQUE INDEX user_auths_unique_linked_id ON user_auth_links USING btree (lower(linked_id), provider);
@@ -2427,6 +2436,9 @@ ALTER TABLE ONLY dbc_spell_ranges
 
 ALTER TABLE ONLY dbc_spells
     ADD CONSTRAINT dbc_spells_dataset_id_fkey FOREIGN KEY (dataset_id) REFERENCES datasets(id) ON DELETE CASCADE;
+
+ALTER TABLE ONLY dbc_vulnerability_spells
+    ADD CONSTRAINT dbc_vulnerability_spells_dataset_id_fkey FOREIGN KEY (dataset_id) REFERENCES datasets(id) ON DELETE CASCADE;
 
 ALTER TABLE ONLY encounter_dps_rankings
     ADD CONSTRAINT encounter_dps_rankings_encounter_id_fkey FOREIGN KEY (encounter_id) REFERENCES log_instance_encounters(id) ON DELETE CASCADE;
@@ -2593,9 +2605,6 @@ ALTER TABLE ONLY retention_policies
 ALTER TABLE ONLY retention_rules
     ADD CONSTRAINT retention_rules_policy_id_fkey FOREIGN KEY (policy_id) REFERENCES retention_policies(id) ON DELETE CASCADE;
 
-ALTER TABLE ONLY river_client_queue
-    ADD CONSTRAINT river_client_queue_river_client_id_fkey FOREIGN KEY (river_client_id) REFERENCES river_client(id) ON DELETE CASCADE;
-
 ALTER TABLE ONLY server_applications
     ADD CONSTRAINT server_applications_initiated_by_fkey FOREIGN KEY (initiated_by) REFERENCES users(id);
 
@@ -2750,4 +2759,3 @@ CREATE POLICY tenant_realm_isolation ON wow_server_realms USING ((server_id IN (
 ALTER TABLE wow_server_realms ENABLE ROW LEVEL SECURITY;
 
 ALTER TABLE wow_servers ENABLE ROW LEVEL SECURITY;
-

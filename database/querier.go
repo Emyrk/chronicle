@@ -565,6 +565,7 @@ type sqlcQuerier interface {
 	ListUploadKeysByRealm(ctx context.Context, realmID uuid.UUID) ([]ListUploadKeysByRealmRow, error)
 	ListUserPanelLayouts(ctx context.Context, userID uuid.NullUUID) ([]ListUserPanelLayoutsRow, error)
 	ListUserTalentBuilds(ctx context.Context, arg ListUserTalentBuildsParams) ([]UserTalentBuild, error)
+	ListVulnerabilitySpellsByDataset(ctx context.Context, arg ListVulnerabilitySpellsByDatasetParams) ([]ListVulnerabilitySpellsByDatasetRow, error)
 	// Realms
 	ListWoWServerRealms(ctx context.Context, serverID uuid.UUID) ([]WowServerRealm, error)
 	// Servers

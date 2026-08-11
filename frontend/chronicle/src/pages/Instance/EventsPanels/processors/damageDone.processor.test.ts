@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import { createDamageDoneProcessor } from '../DamageDone/damageDone.processor';
 import { resolveSelectedVulnerability } from '../VulnerabilityEffect/vulnerabilityConfig';
-import type { VulnerabilitySpell } from '../VulnerabilityEffect/vulnerabilityDerive';
+import type { VulnerabilitySpell } from '../VulnerabilityEffect/useVulnerabilitySpells';
 import { AuraApplication, AuraState, type AuraProcessorEvent, type DamageProcessorEvent, type ProcessorContext, type SlainProcessorEvent } from '../processorTypes';
 import { HitTypeFullAbsorb, HitTypeHit, HitTypePartialAbsorb } from '@/lib/hittype/hittype';
 

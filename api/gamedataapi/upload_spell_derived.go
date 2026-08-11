@@ -35,6 +35,7 @@ func (h *Handler) deriveSpellMetadata(ctx context.Context, datasetID uuid.UUID, 
 	var extraAttacks []extraAttackRow
 	var durationMods []durationModRow
 	var periodics []periodicRow
+	var vulnerabilities []vulnerabilitySpellRow
 	var cooldowns []cooldownSpellRow
 
 	err := spellDBC.Range(func(spell *chrondbc.Spell) bool {
@@ -45,6 +46,12 @@ func (h *Handler) deriveSpellMetadata(ctx context.Context, datasetID uuid.UUID, 
 		// --- Major player cooldowns ---
 		if cooldown, ok := cooldownSpellFromSpell(spell); ok {
 			cooldowns = append(cooldowns, cooldown)
+		}
+
+		// --- Vulnerability spells ---
+		// Includes the WotLK Ebon Plague dummy-aura exception.
+		if vulnerability, ok := vulnerabilitySpellFromSpell(spell); ok {
+			vulnerabilities = append(vulnerabilities, vulnerability)
 		}
 
 		// --- Extra attacks ---
@@ -126,6 +133,7 @@ func (h *Handler) deriveSpellMetadata(ctx context.Context, datasetID uuid.UUID, 
 		"dbc_extra_attack_spells",
 		"dbc_duration_modifiers",
 		"dbc_periodic_spells",
+		"dbc_vulnerability_spells",
 		"dbc_cooldown_spells",
 	} {
 		if _, err := h.pool.Exec(ctx, fmt.Sprintf(`DELETE FROM %s WHERE dataset_id = $1`, table), datasetID); err != nil {
@@ -189,6 +197,25 @@ func (h *Handler) deriveSpellMetadata(ctx context.Context, datasetID uuid.UUID, 
 	if batch.Len() > 0 {
 		if err := flushBatch(ctx, h.pool, batch); err != nil {
 			return fmt.Errorf("insert periodic spells (final): %w", err)
+		}
+	}
+
+	// Insert vulnerability spells.
+	batch = &pgx.Batch{}
+	for _, r := range vulnerabilities {
+		batch.Queue(`INSERT INTO dbc_vulnerability_spells (dataset_id, spell_id, name, school_bitmask, percent_affect, flat_affect) VALUES ($1,$2,$3,$4,$5,$6)`,
+			datasetID, r.SpellID, r.Name, r.SchoolBitmask, r.PercentAffect, r.FlatAffect,
+		)
+		if batch.Len() >= batchSize {
+			if err := flushBatch(ctx, h.pool, batch); err != nil {
+				return fmt.Errorf("insert vulnerability spells: %w", err)
+			}
+			batch = &pgx.Batch{}
+		}
+	}
+	if batch.Len() > 0 {
+		if err := flushBatch(ctx, h.pool, batch); err != nil {
+			return fmt.Errorf("insert vulnerability spells (final): %w", err)
 		}
 	}
 

@@ -1714,6 +1714,7 @@ SELECT
     (SELECT COUNT(*) FROM dbc_extra_attack_spells WHERE dataset_id = $1)::INT AS extra_attacks_count,
     (SELECT COUNT(*) FROM dbc_duration_modifiers WHERE dataset_id = $1)::INT AS duration_modifiers_count,
     (SELECT COUNT(*) FROM dbc_periodic_spells WHERE dataset_id = $1)::INT AS periodic_spells_count,
+    (SELECT COUNT(*) FROM dbc_vulnerability_spells WHERE dataset_id = $1)::INT AS vulnerability_spells_count,
     (SELECT COUNT(*) FROM dbc_cooldown_spells WHERE dataset_id = $1)::INT AS cooldowns_count,
     (SELECT COUNT(*) FROM dbc_spell_description_variables WHERE dataset_id = $1)::INT AS desc_variables_count,
     (SELECT COUNT(*) FROM dbc_affected_aura_durations WHERE dataset_id = $1)::INT AS affected_aura_durations_count,
@@ -1739,6 +1740,7 @@ type GetDatasetImportSummaryRow struct {
 	ExtraAttacksCount          int32 `db:"extra_attacks_count" json:"extra_attacks_count"`
 	DurationModifiersCount     int32 `db:"duration_modifiers_count" json:"duration_modifiers_count"`
 	PeriodicSpellsCount        int32 `db:"periodic_spells_count" json:"periodic_spells_count"`
+	VulnerabilitySpellsCount   int32 `db:"vulnerability_spells_count" json:"vulnerability_spells_count"`
 	CooldownsCount             int32 `db:"cooldowns_count" json:"cooldowns_count"`
 	DescVariablesCount         int32 `db:"desc_variables_count" json:"desc_variables_count"`
 	AffectedAuraDurationsCount int32 `db:"affected_aura_durations_count" json:"affected_aura_durations_count"`
@@ -1769,6 +1771,7 @@ func (q *sqlQuerier) GetDatasetImportSummary(ctx context.Context, datasetID uuid
 		&i.ExtraAttacksCount,
 		&i.DurationModifiersCount,
 		&i.PeriodicSpellsCount,
+		&i.VulnerabilitySpellsCount,
 		&i.CooldownsCount,
 		&i.DescVariablesCount,
 		&i.AffectedAuraDurationsCount,
@@ -15618,6 +15621,58 @@ func (q *sqlQuerier) InsertStampedYoutubeVideo(ctx context.Context, arg InsertSt
 		arg.Payload,
 	)
 	return err
+}
+
+const listVulnerabilitySpellsByDataset = `-- name: ListVulnerabilitySpellsByDataset :many
+SELECT
+    spell_id,
+    name,
+    school_bitmask,
+    percent_affect,
+    flat_affect
+FROM dbc_vulnerability_spells
+WHERE dataset_id = $1
+  AND (cardinality($2::int[]) = 0 OR spell_id = ANY($2::int[]))
+ORDER BY name, spell_id
+`
+
+type ListVulnerabilitySpellsByDatasetParams struct {
+	DatasetID uuid.UUID `db:"dataset_id" json:"dataset_id"`
+	SpellIds  []int32   `db:"spell_ids" json:"spell_ids"`
+}
+
+type ListVulnerabilitySpellsByDatasetRow struct {
+	SpellID       int32       `db:"spell_id" json:"spell_id"`
+	Name          string      `db:"name" json:"name"`
+	SchoolBitmask int32       `db:"school_bitmask" json:"school_bitmask"`
+	PercentAffect pgtype.Int4 `db:"percent_affect" json:"percent_affect"`
+	FlatAffect    pgtype.Int4 `db:"flat_affect" json:"flat_affect"`
+}
+
+func (q *sqlQuerier) ListVulnerabilitySpellsByDataset(ctx context.Context, arg ListVulnerabilitySpellsByDatasetParams) ([]ListVulnerabilitySpellsByDatasetRow, error) {
+	rows, err := q.db.Query(ctx, listVulnerabilitySpellsByDataset, arg.DatasetID, arg.SpellIds)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListVulnerabilitySpellsByDatasetRow
+	for rows.Next() {
+		var i ListVulnerabilitySpellsByDatasetRow
+		if err := rows.Scan(
+			&i.SpellID,
+			&i.Name,
+			&i.SchoolBitmask,
+			&i.PercentAffect,
+			&i.FlatAffect,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
 }
 
 const getCreatureTemplatesByEntries = `-- name: GetCreatureTemplatesByEntries :many

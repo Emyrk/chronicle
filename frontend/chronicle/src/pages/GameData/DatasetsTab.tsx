@@ -58,6 +58,7 @@ const DATA_TYPES: { label: string; key: keyof DatasetImportSummary; isBool?: boo
   { label: "Extra Attacks", key: "extra_attacks_count" },
   { label: "Duration Mods", key: "duration_modifiers_count" },
   { label: "Periodic Spells", key: "periodic_spells_count" },
+  { label: "Vulnerabilities", key: "vulnerability_spells_count" },
   { label: "Cooldowns", key: "cooldowns_count" },
   { label: "Desc Variables", key: "desc_variables_count" },
 ];

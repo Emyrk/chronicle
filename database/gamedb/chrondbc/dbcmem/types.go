@@ -81,14 +81,6 @@ type PeriodicSpell struct {
 	HasDirect bool // true if the spell also has a direct damage/healing component
 }
 
-// VulnerabilitySpell stores spell metadata for damage-taken modifiers.
-type VulnerabilitySpell struct {
-	Name          string
-	SchoolBitmask int32
-	PercentAffect *int32
-	FlatAffect    *int32
-}
-
 // ExtraAttackSpell stores metadata about a spell that grants extra attacks.
 type ExtraAttackSpell struct {
 	Name            string
@@ -132,9 +124,6 @@ var SpellFocusObjects map[int32]SpellFocusObject
 
 // PeriodicSpells maps spell IDs to their metadata for all periodic spells.
 var PeriodicSpells map[int32]PeriodicSpell
-
-// VulnerabilitySpells maps spell IDs to vulnerability metadata.
-var VulnerabilitySpells map[int32]VulnerabilitySpell
 
 // ExtraAttackSpells maps spell IDs to metadata for all spells
 // with the EffectAddExtraAttacks effect.

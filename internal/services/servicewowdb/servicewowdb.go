@@ -4,10 +4,12 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"log/slog"
 	"net/http"
 	"net/url"
 	"strconv"
+	"strings"
 
 	"github.com/Emyrk/chronicle/api/chroniclesdk"
 	"github.com/Emyrk/chronicle/api/httpapi"
@@ -109,6 +111,7 @@ func (s *Service) setupRoutes() {
 	s.router.Get("/spell-by-name/{name}", s.handleGetSpellByName)
 	s.router.Get("/periodic-spells", s.handleGetPeriodicSpells)
 	s.router.Get("/extra-attack-spells", s.handleGetExtraAttackSpells)
+	s.router.Get("/vulnerability-spells", s.handleGetVulnerabilitySpells)
 	s.router.Get("/cooldown-spells", s.handleGetCooldownSpells)
 	s.router.Get("/aura-duration-modifiers", s.handleGetAffectedAuraDurations)
 	s.router.Get("/consumables", s.handleGetConsumables)
@@ -264,6 +267,87 @@ func (s *Service) handleGetExtraAttackSpells(w http.ResponseWriter, r *http.Requ
 	w.Header().Set("Cache-Control", "public, max-age=86400")
 	w.Header().Set("Content-Type", "application/json")
 	_ = json.NewEncoder(w).Encode(spells)
+}
+
+type VulnerabilitySpellEntry struct {
+	ID            int32  `json:"id"`
+	Name          string `json:"name"`
+	SchoolBitmask int32  `json:"schoolBitmask"`
+	PercentAffect *int32 `json:"percentAffect"`
+	FlatAffect    *int32 `json:"flatAffect"`
+}
+
+func parseVulnerabilitySpellIDs(raw string) ([]int32, error) {
+	if raw == "" {
+		return []int32{}, nil
+	}
+
+	parts := strings.Split(raw, ",")
+	spellIDs := make([]int32, 0, len(parts))
+	seen := make(map[int32]struct{}, len(parts))
+	for _, part := range parts {
+		value := strings.TrimSpace(part)
+		parsed, err := strconv.ParseInt(value, 10, 32)
+		if err != nil || parsed <= 0 {
+			return nil, fmt.Errorf("invalid spell ID %q", value)
+		}
+		spellID := int32(parsed)
+		if _, ok := seen[spellID]; ok {
+			continue
+		}
+		seen[spellID] = struct{}{}
+		spellIDs = append(spellIDs, spellID)
+	}
+	return spellIDs, nil
+}
+
+func (s *Service) handleGetVulnerabilitySpells(w http.ResponseWriter, r *http.Request) {
+	ctx := r.Context()
+	datasetID, err := resolveDatasetID(r)
+	if err != nil {
+		httpapi.Write(ctx, w, http.StatusBadRequest, chroniclesdk.Response{Message: "invalid dataset_id"})
+		return
+	}
+
+	spellIDs, err := parseVulnerabilitySpellIDs(r.URL.Query().Get("spell_ids"))
+	if err != nil {
+		httpapi.Write(ctx, w, http.StatusBadRequest, chroniclesdk.Response{Message: "invalid spell_ids", Detail: err.Error()})
+		return
+	}
+
+	rows, err := s.store.ListVulnerabilitySpellsByDataset(ctx, database.ListVulnerabilitySpellsByDatasetParams{
+		DatasetID: datasetID,
+		SpellIds:  spellIDs,
+	})
+	if err != nil {
+		httpapi.InternalServerError(w, err)
+		return
+	}
+
+	spells := make([]VulnerabilitySpellEntry, 0, len(rows))
+	for _, row := range rows {
+		var percentAffect *int32
+		if row.PercentAffect.Valid {
+			value := row.PercentAffect.Int32
+			percentAffect = &value
+		}
+		var flatAffect *int32
+		if row.FlatAffect.Valid {
+			value := row.FlatAffect.Int32
+			flatAffect = &value
+		}
+		spells = append(spells, VulnerabilitySpellEntry{
+			ID:            row.SpellID,
+			Name:          row.Name,
+			SchoolBitmask: row.SchoolBitmask,
+			PercentAffect: percentAffect,
+			FlatAffect:    flatAffect,
+		})
+	}
+
+	w.Header().Set(httpapi.DatasetHeader, datasetID.String())
+	w.Header().Set("Cache-Control", "public, max-age=86400")
+	httpapi.Write(ctx, w, http.StatusOK, spells)
 }
 
 func (s *Service) handleGetTalentTrees(w http.ResponseWriter, r *http.Request) {
