@@ -293,7 +293,7 @@ function TalentButton({ talent, rank, locked, pointsExhausted, talents, ranks, o
 }) {
   const iconBaseUrl = useIconBaseUrl();
   const maxed = rank >= talent.maxRank;
-  const visualState = talentVisualState(rank, talent.maxRank, locked);
+  const visualState = talentVisualState(rank, talent.maxRank, locked, readOnly);
   const tooltipId = `talent-tooltip-${talent.id}`;
   const buttonRef = useRef<HTMLButtonElement>(null);
   const wrapperRef = useRef<HTMLDivElement>(null);
@@ -529,8 +529,8 @@ function TalentButton({ talent, rank, locked, pointsExhausted, talents, ranks, o
         visualState === "maxed" && "talent-state-maxed border-amber-300 shadow-amber-400/25 ring-2 ring-amber-300/55 before:border before:border-amber-200/50 before:shadow-[0_0_14px_rgba(251,191,36,0.28)] hover:scale-105 hover:border-amber-200",
       )}
     >
-      <img src={iconUrl(talent.iconTexture, iconBaseUrl)} alt="" className={cn("h-full w-full rounded object-cover", locked && "talent-locked-icon-readable grayscale opacity-70 contrast-110")} />
-      {locked && <span className="talent-locked-icon-veil absolute inset-0 rounded bg-black/25" />}
+      <img src={iconUrl(talent.iconTexture, iconBaseUrl)} alt="" className={cn("h-full w-full rounded object-cover", visualState === "locked" && "talent-locked-icon-readable grayscale opacity-70 contrast-110")} />
+      {visualState === "locked" && <span className="talent-locked-icon-veil absolute inset-0 rounded bg-black/25" />}
       {maxed && <span className="pointer-events-none absolute inset-0 rounded bg-amber-300/10 shadow-[inset_0_0_12px_rgba(251,191,36,0.38)]" />}
       {visualState === "available" && <span className="pointer-events-none absolute inset-0 rounded bg-primary/10 shadow-[inset_0_0_10px_rgba(20,184,166,0.22)]" />}
       {visualState === "selected" && <span className="pointer-events-none absolute inset-0 rounded bg-emerald-300/10 shadow-[inset_0_0_10px_rgba(16,185,129,0.28)]" />}

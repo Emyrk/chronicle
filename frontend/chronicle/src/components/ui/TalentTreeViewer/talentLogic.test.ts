@@ -31,6 +31,7 @@ import {
   talentPopularitySelection,
   talentTabPoints,
   talentTooltipPosition,
+  talentVisualState,
   totalTalentPoints,
   updateTalentRank,
 } from "./talentLogic";
@@ -139,6 +140,18 @@ describe("TalentTreeViewer talent locking", () => {
     expect(updateTalentRank(second, 5, tabTalents, {})).toEqual({ 61: 5 });
     // Decreases are unaffected by the budget clamp.
     expect(updateTalentRank(first, 1, tabTalents, { 60: 5 }, { maxPoints: 5 })).toEqual({ 60: 1 });
+  });
+});
+
+describe("TalentTreeViewer visual state", () => {
+  it("does not highlight empty talents in read-only views", () => {
+    expect(talentVisualState(0, 5, false, true)).toBe("locked");
+    expect(talentVisualState(0, 5, false, false)).toBe("available");
+  });
+
+  it("keeps spent talents highlighted in read-only views", () => {
+    expect(talentVisualState(1, 5, false, true)).toBe("selected");
+    expect(talentVisualState(5, 5, false, true)).toBe("maxed");
   });
 });
 

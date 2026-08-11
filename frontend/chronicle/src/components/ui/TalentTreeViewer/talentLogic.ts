@@ -708,8 +708,8 @@ export function rankDescriptionsForTooltip(rankTexts: string[], rank: number, cu
 
 // ─── Visual state ─────────────────────────────────────────────────
 
-export function talentVisualState(rank: number, maxRank: number, locked: boolean): TalentVisualState {
-  if (locked) return "locked";
+export function talentVisualState(rank: number, maxRank: number, locked: boolean, readOnly = false): TalentVisualState {
+  if (locked || (readOnly && rank === 0)) return "locked";
   if (rank >= maxRank) return "maxed";
   if (rank > 0) return "selected";
   return "available";
