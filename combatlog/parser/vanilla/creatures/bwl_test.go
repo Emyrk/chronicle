@@ -155,16 +155,23 @@ func TestRazorgorePhaseOneAddActivityKeepsBossActive(t *testing.T) {
 
 	// Razorgore can disappear from the log for more than the default one-minute
 	// inactivity timeout while the raid is still fighting his phase-one adds.
-	_, err = chars.Process(damage(base.Add(61*time.Second), player, legionnaire))
+	_, err = chars.Process(damage(base.Add(55*time.Second), player, legionnaire))
 	require.NoError(t, err)
+
+	add, ok := chars.Get(legionnaire)
+	require.True(t, ok)
+	require.IsType(t, &creatures.RazorAdCharacter{}, add)
 
 	_, err = chars.Process(damage(base.Add(70*time.Second), player, razor))
 	require.NoError(t, err)
 	_, err = chars.Process(slain(base.Add(80*time.Second), player, razor))
 	require.NoError(t, err)
+	_, err = chars.Process(damage(base.Add(85*time.Second), player, legionnaire))
+	require.NoError(t, err)
 
 	razorChar, ok := chars.Get(razor)
 	require.True(t, ok)
+	require.False(t, razorChar.IsActive(), "add activity must not restart an inactive Razorgore")
 	require.Len(t, razorChar.Periods(), 1, "phase-one add activity must not split the Razorgore encounter")
 	require.Equal(t, period.EndStateSlain, razorChar.Periods()[0].EndState)
 }
