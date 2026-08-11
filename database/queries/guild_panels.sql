@@ -55,12 +55,18 @@ ORDER BY scores.avg_parse DESC NULLS LAST, gp.level DESC, gp.updated_at DESC
 LIMIT @row_limit;
 
 -- name: GuildTopParses :many
--- Returns a guild's best parses for the guild page "Top Parses" panel.
+-- Returns the current guild members' best parses for the guild page "Top
+-- Parses" panel. Membership comes from game_players, matching the roster
+-- panel, rather than the guild_id copied onto parse scores at scoring time.
 -- Duplicate uploads of the same run collapse to one row per encounter+player
 -- (most recently computed scoring wins, matching GetCharacterParseHistory).
 -- @best_per_player keeps only each player's single best parse so one player
 -- cannot fill the whole board.
-WITH deduped AS (
+WITH guild_members AS (
+    SELECT gp.id::text AS player_guid
+    FROM game_players gp
+    WHERE gp.guild_id = @guild_id::uuid
+), deduped AS (
     SELECT DISTINCT ON (psr.run_id, psr.encounter_name, psr.player_guid)
         psr.player_guid,
         psr.player_name,
@@ -78,9 +84,9 @@ WITH deduped AS (
         psr.display_score,
         psr.killed_at
     FROM parse_score_results psr
+    JOIN guild_members gm ON gm.player_guid = psr.player_guid
     LEFT JOIN log_instances li ON li.id = psr.instance_id
     WHERE psr.tenant_id = @tenant_id
-      AND psr.guild_id = @guild_id::uuid
       AND psr.metric = @metric
       AND psr.status IN ('ok', 'low_confidence')
       AND CASE

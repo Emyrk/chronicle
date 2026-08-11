@@ -411,7 +411,9 @@ type sqlcQuerier interface {
 	// hps for healers and dps for everyone else. Duplicate uploads collapse to
 	// one row per encounter+player before averaging.
 	GuildRunParseAverages(ctx context.Context, arg GuildRunParseAveragesParams) ([]GuildRunParseAveragesRow, error)
-	// Returns a guild's best parses for the guild page "Top Parses" panel.
+	// Returns the current guild members' best parses for the guild page "Top
+	// Parses" panel. Membership comes from game_players, matching the roster
+	// panel, rather than the guild_id copied onto parse scores at scoring time.
 	// Duplicate uploads of the same run collapse to one row per encounter+player
 	// (most recently computed scoring wins, matching GetCharacterParseHistory).
 	// @best_per_player keeps only each player's single best parse so one player

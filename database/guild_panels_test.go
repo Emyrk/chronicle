@@ -75,14 +75,16 @@ func (f guildPanelsFixture) insertGuild(t *testing.T, id uuid.UUID, name string)
 	require.NoError(t, err)
 }
 
-func (f guildPanelsFixture) insertGamePlayer(t *testing.T, params struct {
+type guildPanelPlayer struct {
 	guid      string
 	name      string
 	class     string
 	guildID   uuid.UUID
 	level     int16
 	updatedAt time.Time
-}) {
+}
+
+func (f guildPanelsFixture) insertGamePlayer(t *testing.T, params guildPanelPlayer) {
 	t.Helper()
 	ctx := testutil.Context(t, testutil.WaitShort)
 	_, err := f.pool.Exec(ctx, `
@@ -151,18 +153,10 @@ func TestGuildCharacterRoster(t *testing.T) {
 	otherGuildID := uuid.New()
 	f.insertGuild(t, otherGuildID, "Other Guild")
 
-	type playerParams = struct {
-		guid      string
-		name      string
-		class     string
-		guildID   uuid.UUID
-		level     int16
-		updatedAt time.Time
-	}
-	f.insertGamePlayer(t, playerParams{guid: testGUID(1), name: "Activeguy", class: "WARRIOR", guildID: f.guildID, level: 60, updatedAt: now.Add(-24 * time.Hour)})
-	f.insertGamePlayer(t, playerParams{guid: testGUID(2), name: "Healgirl", class: "PRIEST", guildID: f.guildID, level: 60, updatedAt: now.Add(-48 * time.Hour)})
-	f.insertGamePlayer(t, playerParams{guid: testGUID(3), name: "Idleguy", class: "MAGE", guildID: f.guildID, level: 60, updatedAt: now.Add(-100 * 24 * time.Hour)})
-	f.insertGamePlayer(t, playerParams{guid: testGUID(4), name: "Outsider", class: "ROGUE", guildID: otherGuildID, level: 60, updatedAt: now})
+	f.insertGamePlayer(t, guildPanelPlayer{guid: testGUID(1), name: "Activeguy", class: "WARRIOR", guildID: f.guildID, level: 60, updatedAt: now.Add(-24 * time.Hour)})
+	f.insertGamePlayer(t, guildPanelPlayer{guid: testGUID(2), name: "Healgirl", class: "PRIEST", guildID: f.guildID, level: 60, updatedAt: now.Add(-48 * time.Hour)})
+	f.insertGamePlayer(t, guildPanelPlayer{guid: testGUID(3), name: "Idleguy", class: "MAGE", guildID: f.guildID, level: 60, updatedAt: now.Add(-100 * 24 * time.Hour)})
+	f.insertGamePlayer(t, guildPanelPlayer{guid: testGUID(4), name: "Outsider", class: "ROGUE", guildID: otherGuildID, level: 60, updatedAt: now})
 
 	// Activeguy (dps): two encounters at 80 and 60 -> avg 70. The hps row must
 	// not contribute because his role is dps.
@@ -220,6 +214,14 @@ func TestGuildTopParses(t *testing.T) {
 	now := time.Now()
 	runID := uuid.New()
 
+	otherGuildID := uuid.New()
+	f.insertGuild(t, otherGuildID, "Other Guild")
+	f.insertGamePlayer(t, guildPanelPlayer{guid: testGUID(1), name: "Aleph", class: "WARRIOR", guildID: f.guildID, level: 60, updatedAt: now})
+	f.insertGamePlayer(t, guildPanelPlayer{guid: testGUID(2), name: "Beth", class: "WARRIOR", guildID: f.guildID, level: 60, updatedAt: now})
+	f.insertGamePlayer(t, guildPanelPlayer{guid: testGUID(3), name: "Gimel", class: "PRIEST", guildID: f.guildID, level: 60, updatedAt: now})
+	f.insertGamePlayer(t, guildPanelPlayer{guid: testGUID(4), name: "Daleth", class: "WARRIOR", guildID: f.guildID, level: 60, updatedAt: now})
+	f.insertGamePlayer(t, guildPanelPlayer{guid: testGUID(5), name: "Outsider", class: "WARRIOR", guildID: otherGuildID, level: 60, updatedAt: now})
+
 	// Player A: best 95 on Ragnaros, 90 on Golemagg. Player B: 85.
 	f.insertParse(t, guildPanelParse{runID: runID, playerGUID: testGUID(1), playerName: "Aleph", playerRole: "dps", metric: "dps", encounter: "Ragnaros", score: 95, killedAt: now.Add(-24 * time.Hour)})
 	f.insertParse(t, guildPanelParse{runID: runID, playerGUID: testGUID(1), playerName: "Aleph", playerRole: "dps", metric: "dps", encounter: "Golemagg", score: 90, killedAt: now.Add(-24 * time.Hour)})
@@ -228,8 +230,15 @@ func TestGuildTopParses(t *testing.T) {
 	f.insertParse(t, guildPanelParse{runID: runID, playerGUID: testGUID(3), playerName: "Gimel", playerRole: "heal", metric: "hps", encounter: "Ragnaros", score: 99, killedAt: now.Add(-24 * time.Hour)})
 	// Too old for a 60 day window.
 	f.insertParse(t, guildPanelParse{runID: uuid.New(), playerGUID: testGUID(4), playerName: "Daleth", playerRole: "dps", metric: "dps", encounter: "Ragnaros", score: 100, killedAt: now.Add(-100 * 24 * time.Hour)})
+	// A stale score guild ID must not include a player who now belongs elsewhere.
+	f.insertParse(t, guildPanelParse{runID: uuid.New(), playerGUID: testGUID(5), playerName: "Outsider", playerRole: "dps", metric: "dps", encounter: "Ragnaros", score: 100, killedAt: now.Add(-24 * time.Hour)})
 	// Duplicate upload of player A's Ragnaros parse in the same run collapses.
 	f.insertParse(t, guildPanelParse{runID: runID, playerGUID: testGUID(1), playerName: "Aleph", playerRole: "dps", metric: "dps", encounter: "Ragnaros", score: 95, killedAt: now.Add(-24 * time.Hour)})
+
+	// Simulate scores computed before guild membership was resolved. Current
+	// membership, not the denormalized score guild ID, controls this panel.
+	_, err := f.pool.Exec(ctx, `UPDATE parse_score_results SET guild_id = NULL WHERE player_guid = ANY($1)`, []string{testGUID(1), testGUID(2)})
+	require.NoError(t, err)
 
 	best, err := f.store.GuildTopParses(ctx, database.GuildTopParsesParams{
 		TenantID:      uuid.Nil,

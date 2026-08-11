@@ -5223,7 +5223,11 @@ func (q *sqlQuerier) GuildRunParseAverages(ctx context.Context, arg GuildRunPars
 }
 
 const guildTopParses = `-- name: GuildTopParses :many
-WITH deduped AS (
+WITH guild_members AS (
+    SELECT gp.id::text AS player_guid
+    FROM game_players gp
+    WHERE gp.guild_id = $3::uuid
+), deduped AS (
     SELECT DISTINCT ON (psr.run_id, psr.encounter_name, psr.player_guid)
         psr.player_guid,
         psr.player_name,
@@ -5241,9 +5245,9 @@ WITH deduped AS (
         psr.display_score,
         psr.killed_at
     FROM parse_score_results psr
+    JOIN guild_members gm ON gm.player_guid = psr.player_guid
     LEFT JOIN log_instances li ON li.id = psr.instance_id
-    WHERE psr.tenant_id = $3
-      AND psr.guild_id = $4::uuid
+    WHERE psr.tenant_id = $4
       AND psr.metric = $5
       AND psr.status IN ('ok', 'low_confidence')
       AND CASE
@@ -5284,8 +5288,8 @@ LIMIT $2
 type GuildTopParsesParams struct {
 	BestPerPlayer bool      `db:"best_per_player" json:"best_per_player"`
 	RowLimit      int32     `db:"row_limit" json:"row_limit"`
-	TenantID      uuid.UUID `db:"tenant_id" json:"tenant_id"`
 	GuildID       uuid.UUID `db:"guild_id" json:"guild_id"`
+	TenantID      uuid.UUID `db:"tenant_id" json:"tenant_id"`
 	Metric        string    `db:"metric" json:"metric"`
 	SinceDays     int64     `db:"since_days" json:"since_days"`
 }
@@ -5308,7 +5312,9 @@ type GuildTopParsesRow struct {
 	KilledAt       pgtype.Timestamptz `db:"killed_at" json:"killed_at"`
 }
 
-// Returns a guild's best parses for the guild page "Top Parses" panel.
+// Returns the current guild members' best parses for the guild page "Top
+// Parses" panel. Membership comes from game_players, matching the roster
+// panel, rather than the guild_id copied onto parse scores at scoring time.
 // Duplicate uploads of the same run collapse to one row per encounter+player
 // (most recently computed scoring wins, matching GetCharacterParseHistory).
 // @best_per_player keeps only each player's single best parse so one player
@@ -5317,8 +5323,8 @@ func (q *sqlQuerier) GuildTopParses(ctx context.Context, arg GuildTopParsesParam
 	rows, err := q.db.Query(ctx, guildTopParses,
 		arg.BestPerPlayer,
 		arg.RowLimit,
-		arg.TenantID,
 		arg.GuildID,
+		arg.TenantID,
 		arg.Metric,
 		arg.SinceDays,
 	)
