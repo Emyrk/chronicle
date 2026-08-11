@@ -608,13 +608,67 @@ func (w *WoWClient) Talent() (Table[dbdefs.Ent_Talent], error) {
 	return WrapTable[dbdefs.Ent_Talent](table), nil
 }
 
+var talentTabLayoutMu sync.Mutex
+
+// WoWDBDefs names TalentTab column 21 CategoryEnumID for Wrath builds, while
+// the Wrath client and server code use that column as the pet talent mask.
+// Rename the selected DBD column so Ent_TalentTab.PetTalentMask is populated.
+func fixWotLKTalentTabLayout(build vsn.Build) {
+	if build <= vsn.V2_4_3 || build > vsn.V3_3_5a {
+		return
+	}
+
+	talentTabLayoutMu.Lock()
+	defer talentTabLayoutMu.Unlock()
+
+	def, err := dbdefs.Lookup("TalentTab")
+	if err != nil {
+		return
+	}
+	if renameTalentTabPetMaskColumn(def, build) {
+		dbdefs.Register(def)
+	}
+}
+
+func renameTalentTabPetMaskColumn(def *dbd.Definition, build vsn.Build) bool {
+	for i := range def.Layouts {
+		layout := &def.Layouts[i]
+		matches := false
+		for _, exact := range layout.VerifiedBuilds {
+			if exact == build {
+				matches = true
+				break
+			}
+		}
+		if !matches {
+			for _, buildRange := range layout.BuildRanges {
+				if buildRange.Contains(build) {
+					matches = true
+					break
+				}
+			}
+		}
+		if !matches || layout.Column("PetTalentMask") != nil {
+			continue
+		}
+		if category := layout.Column("CategoryEnumID"); category != nil {
+			category.Name = "PetTalentMask"
+			return true
+		}
+		return false
+	}
+	return false
+}
+
 func (w *WoWClient) TalentTab() (Table[dbdefs.Ent_TalentTab], error) {
 	data, err := w.ReadFile("DBFilesClient\\TalentTab.dbc")
 	if err != nil {
 		return nil, err
 	}
 
-	db := dbc.NewDB(w.Build())
+	build := w.Build()
+	fixWotLKTalentTabLayout(build)
+	db := dbc.NewDB(build)
 	table, err := db.Open("TalentTab", bytes.NewReader(data))
 	if err != nil {
 		return nil, err
