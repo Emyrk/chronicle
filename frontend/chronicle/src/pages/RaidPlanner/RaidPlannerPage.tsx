@@ -263,16 +263,15 @@ export function RaidPlannerPage() {
               />
             </div>
           </div>
-          <div className="p-3 flex flex-col gap-2.5 min-w-0">
+          {/* Capped at four group-columns wide; the space to the right is
+              reserved for the coverage rail later. */}
+          <div className="p-3 flex flex-col gap-2.5 min-w-0 max-w-[1060px]">
             <p className="text-[11px] text-muted-foreground">
               {totalSlots} slots · <span className="text-foreground">{filledCount} filled</span> ·{" "}
               {totalSlots - filledCount} empty · bench {comp.bench.length}
               <span className="float-right">drag players or classes from the roster into a slot</span>
             </p>
-            <div
-              className="grid gap-2.5 flex-1 content-start"
-              style={{ gridTemplateColumns: "repeat(auto-fill, minmax(200px, 1fr))" }}
-            >
+            <div className="grid gap-2.5 flex-1 content-start grid-cols-2 md:grid-cols-3 xl:grid-cols-4">
               {comp.board.map((slots, gi) => (
                 <GroupCard
                   key={gi}
