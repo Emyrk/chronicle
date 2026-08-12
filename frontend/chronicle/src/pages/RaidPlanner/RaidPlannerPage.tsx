@@ -176,7 +176,7 @@ export function RaidPlannerPage() {
   const editingEntry = editing ? entryAt(editing) : null;
 
   return (
-    <div className="max-w-[1480px] mx-auto p-4 md:p-6 space-y-3.5">
+    <div className="w-full p-4 md:p-6 space-y-3.5">
       {/* Header bar */}
       <div className="flex flex-wrap items-center gap-3 px-4 py-3 border border-border rounded-lg bg-card">
         {phase === "set" && <GuildSelector guild={guild} onSelect={setGuild} />}
