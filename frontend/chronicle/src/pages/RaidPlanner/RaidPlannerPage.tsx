@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import { HelpCircle, Pencil } from "lucide-react";
+import { Keyboard, Pencil } from "lucide-react";
 import { useGuildCharacters } from "@/api/queries";
 import type { GuildInfo } from "@/api/typesGenerated";
 import { serverCapabilities } from "@/config/serverCapabilities";
@@ -551,17 +551,13 @@ export function RaidPlannerPage() {
                     Clear board
                   </button>
                 )}
-                <span className="hidden lg:inline">
-                  dbl-click places · hover + <kbd className="font-mono">B</kbd>/
-                  <kbd className="font-mono">Del</kbd>/<kbd className="font-mono">E</kbd>/
-                  <kbd className="font-mono">1–8</kbd>
-                </span>
                 <button
                   onClick={() => setKeybindsOpen(true)}
                   title="Keyboard shortcuts (?)"
-                  className="text-primary hover:opacity-80 transition-opacity"
+                  className="flex items-center gap-1.5 text-primary hover:opacity-80 transition-opacity"
                 >
-                  <HelpCircle className="h-3.5 w-3.5" />
+                  <Keyboard className="h-3.5 w-3.5" />
+                  Keybind Help
                 </button>
               </div>
             </div>
