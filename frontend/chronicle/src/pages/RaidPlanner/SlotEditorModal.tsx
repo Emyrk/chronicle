@@ -16,11 +16,18 @@ export function SlotEditorModal({ entry, onPatch, onRemove, onClose }: SlotEdito
   const clsName = CLASS_DISPLAY[entry.cls] ?? entry.cls;
   const specs = SPEC_BY_CLASS[entry.cls] ?? [];
 
-  const subtitle =
-    entry.kind === "placeholder"
-      ? "unfilled slot — pick the build you plan to recruit"
-      : `Level ${entry.level} ${clsName} · ${entry.realmName}` +
-        (entry.reportedSpec ? ` · reported ${entry.reportedSpec}` : "");
+  let subtitle: string;
+  if (entry.kind === "placeholder") {
+    subtitle = "unfilled slot — pick the build you plan to recruit";
+  } else {
+    subtitle = `Level ${entry.level} ${clsName} · ${entry.realmName}`;
+    if (entry.specRoles.length > 0) {
+      const combos = entry.specRoles
+        .map((sr) => `${sr.spec || "?"}${sr.role ? ` (${sr.role})` : ""}`)
+        .join(", ");
+      subtitle += ` · played ${combos}`;
+    }
+  }
 
   return (
     <div
@@ -37,7 +44,9 @@ export function SlotEditorModal({ entry, onPatch, onRemove, onClose }: SlotEdito
             <p className="text-sm font-semibold text-foreground truncate">
               {entry.kind === "placeholder" ? `Placeholder — ${clsName}` : entryName(entry)}
             </p>
-            <p className="text-[10px] text-muted-foreground truncate">{subtitle}</p>
+            <p className="text-[10px] text-muted-foreground truncate" title={subtitle}>
+              {subtitle}
+            </p>
           </div>
           <button
             onClick={onClose}

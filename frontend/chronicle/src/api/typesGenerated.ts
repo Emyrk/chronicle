@@ -572,6 +572,15 @@ export interface CharacterScore {
     readonly encounter_groups: number;
 }
 
+// From chroniclesdk/guild_page.go
+/**
+ * CharacterSpecRole is one spec+role combination observed in recent parses.
+ */
+export interface CharacterSpecRole {
+    readonly spec: string;
+    readonly role: string; // "tank", "heal", or "dps"
+}
+
 // From chroniclesdk/events.go
 export interface ChronicleEncounterEvents {
     readonly encounter_id: string;
@@ -1419,7 +1428,9 @@ export interface GuildRaidClearsResponse {
 /**
  * GuildRosterCharacter is a guild character seen in raid logs. LastSeenAt is
  * the last time a log updated the character. AvgParse is -1 when the
- * character has no parses in the scoring window.
+ * character has no parses in the scoring window. Spec/Role come from the
+ * most recent parse; SpecRoles lists every distinct spec+role combo observed
+ * across the character's 3 most recent parsed instances, most recent first.
  */
 export interface GuildRosterCharacter {
     readonly id: string;
@@ -1429,6 +1440,7 @@ export interface GuildRosterCharacter {
     readonly level: number;
     readonly spec?: string;
     readonly role?: string; // "tank", "heal", or "dps"
+    readonly spec_roles?: readonly CharacterSpecRole[];
     readonly avg_parse: number;
     readonly last_seen_at: string;
     readonly realm_name: string;

@@ -4960,18 +4960,41 @@ SELECT
     COALESCE(wsr.name, '') AS realm_name,
     COALESCE(latest.player_spec, '')::text AS player_spec,
     COALESCE(latest.player_role, '')::text AS player_role,
+    COALESCE(latest.spec_roles, '[]'::jsonb)::text AS spec_roles_json,
     COALESCE(scores.avg_parse, -1)::float8 AS avg_parse
 FROM game_players gp
 JOIN wow_server_realms wsr ON wsr.id = gp.realm_id
 LEFT JOIN LATERAL (
-    SELECT psr.player_spec, psr.player_role
-    FROM parse_score_results psr
-    WHERE psr.tenant_id = $1
-      AND psr.player_guid = gp.id::text
-      AND psr.metric = 'dps'
-      AND psr.status IN ('ok', 'low_confidence')
-    ORDER BY psr.killed_at DESC NULLS LAST
-    LIMIT 1
+    SELECT
+        (ARRAY_AGG(combos.player_spec ORDER BY combos.last_seen DESC))[1] AS player_spec,
+        (ARRAY_AGG(combos.player_role ORDER BY combos.last_seen DESC))[1] AS player_role,
+        JSONB_AGG(
+            JSONB_BUILD_OBJECT('spec', combos.player_spec, 'role', combos.player_role)
+            ORDER BY combos.last_seen DESC
+        ) AS spec_roles
+    FROM (
+        SELECT psr.player_spec, psr.player_role, MAX(psr.killed_at) AS last_seen
+        FROM parse_score_results psr
+        WHERE psr.tenant_id = $1
+          AND psr.player_guid = gp.id::text
+          AND psr.metric = 'dps'
+          AND psr.status IN ('ok', 'low_confidence')
+          AND psr.instance_id IN (
+              SELECT recent.instance_id
+              FROM (
+                  SELECT psr2.instance_id, MAX(psr2.killed_at) AS latest_kill
+                  FROM parse_score_results psr2
+                  WHERE psr2.tenant_id = $1
+                    AND psr2.player_guid = gp.id::text
+                    AND psr2.metric = 'dps'
+                    AND psr2.status IN ('ok', 'low_confidence')
+                  GROUP BY psr2.instance_id
+                  ORDER BY latest_kill DESC NULLS LAST
+                  LIMIT 3
+              ) recent
+          )
+        GROUP BY psr.player_spec, psr.player_role
+    ) combos
 ) latest ON true
 LEFT JOIN LATERAL (
     SELECT AVG(best.precise_score)::float8 AS avg_parse
@@ -5005,26 +5028,30 @@ type GuildCharacterRosterParams struct {
 }
 
 type GuildCharacterRosterRow struct {
-	ID         guid.GUID          `db:"id" json:"id"`
-	RealmID    uuid.UUID          `db:"realm_id" json:"realm_id"`
-	Name       string             `db:"name" json:"name"`
-	Class      WowPlayableClass   `db:"class" json:"class"`
-	Race       WowPlayableRace    `db:"race" json:"race"`
-	Level      int16              `db:"level" json:"level"`
-	UpdatedAt  pgtype.Timestamptz `db:"updated_at" json:"updated_at"`
-	RealmName  string             `db:"realm_name" json:"realm_name"`
-	PlayerSpec string             `db:"player_spec" json:"player_spec"`
-	PlayerRole string             `db:"player_role" json:"player_role"`
-	AvgParse   float64            `db:"avg_parse" json:"avg_parse"`
+	ID            guid.GUID          `db:"id" json:"id"`
+	RealmID       uuid.UUID          `db:"realm_id" json:"realm_id"`
+	Name          string             `db:"name" json:"name"`
+	Class         WowPlayableClass   `db:"class" json:"class"`
+	Race          WowPlayableRace    `db:"race" json:"race"`
+	Level         int16              `db:"level" json:"level"`
+	UpdatedAt     pgtype.Timestamptz `db:"updated_at" json:"updated_at"`
+	RealmName     string             `db:"realm_name" json:"realm_name"`
+	PlayerSpec    string             `db:"player_spec" json:"player_spec"`
+	PlayerRole    string             `db:"player_role" json:"player_role"`
+	SpecRolesJson string             `db:"spec_roles_json" json:"spec_roles_json"`
+	AvgParse      float64            `db:"avg_parse" json:"avg_parse"`
 }
 
 // Queries backing guild page panels (roster, top parses, recent raid scores).
 // Returns the guild's characters from raid logs for the guild page "Roster"
 // panel. updated_at is the character's de-facto "last seen"; @seen_within_days
 // hides characters that have gone idle (0 = no filter).
-// Spec/role come from the character's most recent parse; avg_parse averages
-// the best parse per encounter over the last @parse_window_days, using hps
-// for healers and dps for everyone else (-1 when the character has no parses).
+// player_spec/player_role come from the character's most recent parse;
+// spec_roles_json lists every distinct spec+role combo observed across the
+// character's 3 most recent parsed instances (players often swap specs raid
+// to raid), most recent first. avg_parse averages the best parse per
+// encounter over the last @parse_window_days, using hps for healers and dps
+// for everyone else (-1 when the character has no parses).
 // JOINs wow_server_realms so RLS tenant filtering cascades.
 func (q *sqlQuerier) GuildCharacterRoster(ctx context.Context, arg GuildCharacterRosterParams) ([]GuildCharacterRosterRow, error) {
 	rows, err := q.db.Query(ctx, guildCharacterRoster,
@@ -5052,6 +5079,7 @@ func (q *sqlQuerier) GuildCharacterRoster(ctx context.Context, arg GuildCharacte
 			&i.RealmName,
 			&i.PlayerSpec,
 			&i.PlayerRole,
+			&i.SpecRolesJson,
 			&i.AvgParse,
 		); err != nil {
 			return nil, err

@@ -386,9 +386,12 @@ type sqlcQuerier interface {
 	// Returns the guild's characters from raid logs for the guild page "Roster"
 	// panel. updated_at is the character's de-facto "last seen"; @seen_within_days
 	// hides characters that have gone idle (0 = no filter).
-	// Spec/role come from the character's most recent parse; avg_parse averages
-	// the best parse per encounter over the last @parse_window_days, using hps
-	// for healers and dps for everyone else (-1 when the character has no parses).
+	// player_spec/player_role come from the character's most recent parse;
+	// spec_roles_json lists every distinct spec+role combo observed across the
+	// character's 3 most recent parsed instances (players often swap specs raid
+	// to raid), most recent first. avg_parse averages the best parse per
+	// encounter over the last @parse_window_days, using hps for healers and dps
+	// for everyone else (-1 when the character has no parses).
 	// JOINs wow_server_realms so RLS tenant filtering cascades.
 	GuildCharacterRoster(ctx context.Context, arg GuildCharacterRosterParams) ([]GuildCharacterRosterRow, error)
 	// Per-encounter boss kill aggregates for a guild across all time, for the

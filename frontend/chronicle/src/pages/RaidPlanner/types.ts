@@ -4,6 +4,12 @@ import { CLASS_DISPLAY } from "@/pages/Rankings/classDisplay";
 export const GROUP_SIZE = 5;
 export const MAX_GROUPS = 8;
 
+/** One spec+role combination observed in the character's recent parses. */
+export interface SpecRole {
+  spec: string;
+  role: string;
+}
+
 /** A real character placed on the board, sourced from a guild roster. */
 export interface PlayerEntry {
   kind: "player";
@@ -15,6 +21,8 @@ export interface PlayerEntry {
   /** Spec reported from logs; "" when unknown. */
   reportedSpec: string;
   role: string;
+  /** Distinct spec+role combos over recent parsed instances, most recent first. */
+  specRoles: SpecRole[];
   level: number;
   realmName: string;
   note: string;
@@ -47,6 +55,10 @@ export const emptyBoard = (groups: number): Board =>
   Array.from({ length: groups }, () => Array<SlotEntry | null>(GROUP_SIZE).fill(null));
 
 export function playerEntry(member: GuildRosterCharacter): PlayerEntry {
+  const specRoles = (member.spec_roles ?? []).filter((sr) => sr.spec || sr.role);
+  if (specRoles.length === 0 && (member.spec || member.role)) {
+    specRoles.push({ spec: member.spec ?? "", role: member.role ?? "" });
+  }
   return {
     kind: "player",
     id: member.id,
@@ -55,6 +67,7 @@ export function playerEntry(member: GuildRosterCharacter): PlayerEntry {
     spec: member.spec ?? "",
     reportedSpec: member.spec ?? "",
     role: member.role ?? "",
+    specRoles,
     level: member.level,
     realmName: member.realm_name,
     note: "",

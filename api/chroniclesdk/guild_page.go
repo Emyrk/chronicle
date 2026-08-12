@@ -178,20 +178,29 @@ type GuildRaidClearsResponse struct {
 
 // Guild character roster (guild page "Roster" panel)
 
+// CharacterSpecRole is one spec+role combination observed in recent parses.
+type CharacterSpecRole struct {
+	Spec string `json:"spec"`
+	Role string `json:"role"` // "tank", "heal", or "dps"
+}
+
 // GuildRosterCharacter is a guild character seen in raid logs. LastSeenAt is
 // the last time a log updated the character. AvgParse is -1 when the
-// character has no parses in the scoring window.
+// character has no parses in the scoring window. Spec/Role come from the
+// most recent parse; SpecRoles lists every distinct spec+role combo observed
+// across the character's 3 most recent parsed instances, most recent first.
 type GuildRosterCharacter struct {
-	ID         GUIDString `json:"id"`
-	Name       string     `json:"name"`
-	Class      string     `json:"class"`
-	Race       string     `json:"race"`
-	Level      int32      `json:"level"`
-	Spec       string     `json:"spec,omitempty"`
-	Role       string     `json:"role,omitempty"` // "tank", "heal", or "dps"
-	AvgParse   float64    `json:"avg_parse"`
-	LastSeenAt time.Time  `json:"last_seen_at"`
-	RealmName  string     `json:"realm_name"`
+	ID         GUIDString          `json:"id"`
+	Name       string              `json:"name"`
+	Class      string              `json:"class"`
+	Race       string              `json:"race"`
+	Level      int32               `json:"level"`
+	Spec       string              `json:"spec,omitempty"`
+	Role       string              `json:"role,omitempty"` // "tank", "heal", or "dps"
+	SpecRoles  []CharacterSpecRole `json:"spec_roles,omitempty"`
+	AvgParse   float64             `json:"avg_parse"`
+	LastSeenAt time.Time           `json:"last_seen_at"`
+	RealmName  string              `json:"realm_name"`
 }
 
 type GuildCharacterRosterResponse struct {

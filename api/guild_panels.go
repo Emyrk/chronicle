@@ -1,6 +1,7 @@
 package api
 
 import (
+	"encoding/json"
 	"net/http"
 	"strconv"
 	"strings"
@@ -55,6 +56,10 @@ func (api *API) GuildCharacterRoster(w http.ResponseWriter, r *http.Request) {
 
 	members := make([]chroniclesdk.GuildRosterCharacter, len(rows))
 	for i, row := range rows {
+		var specRoles []chroniclesdk.CharacterSpecRole
+		if err := json.Unmarshal([]byte(row.SpecRolesJson), &specRoles); err != nil {
+			specRoles = nil
+		}
 		members[i] = chroniclesdk.GuildRosterCharacter{
 			ID:         row.ID,
 			Name:       row.Name,
@@ -63,6 +68,7 @@ func (api *API) GuildCharacterRoster(w http.ResponseWriter, r *http.Request) {
 			Level:      int32(row.Level),
 			Spec:       row.PlayerSpec,
 			Role:       row.PlayerRole,
+			SpecRoles:  specRoles,
 			AvgParse:   row.AvgParse,
 			LastSeenAt: row.UpdatedAt.Time,
 			RealmName:  row.RealmName,

@@ -5,6 +5,18 @@ import type { GearClassInfo } from "@/pages/Gear/classInfo";
 import type { DragPayload, PlayerEntry } from "./types";
 import { ClassIcon } from "./ClassIcon";
 
+/** Unique observed specs, most recent first: "Fury / Protection". */
+function rosterSpecLabel(p: PlayerEntry): string {
+  const specs = [...new Set(p.specRoles.map((sr) => sr.spec).filter(Boolean))];
+  if (specs.length === 0) return CLASS_DISPLAY[p.cls] ?? p.cls;
+  return specs.join(" / ");
+}
+
+/** Unique observed roles, most recent first. */
+function rosterRoles(p: PlayerEntry): string[] {
+  return [...new Set(p.specRoles.map((sr) => sr.role).filter(Boolean))];
+}
+
 const ROLE_FILTERS = [
   { value: "", label: "All" },
   { value: "tank", label: "Tank" },
@@ -60,12 +72,12 @@ export function RosterDrawer({
 
   const query = search.trim().toLowerCase();
   const filtered = available.filter((p) => {
-    if (roleFilter && p.role !== roleFilter) return false;
+    if (roleFilter && !p.specRoles.some((sr) => sr.role === roleFilter)) return false;
     if (!query) return true;
     const clsName = CLASS_DISPLAY[p.cls] ?? p.cls;
     return (
       p.name.toLowerCase().includes(query) ||
-      p.spec.toLowerCase().includes(query) ||
+      p.specRoles.some((sr) => sr.spec.toLowerCase().includes(query)) ||
       clsName.toLowerCase().includes(query)
     );
   });
@@ -173,13 +185,20 @@ export function RosterDrawer({
                     >
                       {p.name}
                     </p>
-                    <p className="text-[10px] text-muted-foreground leading-tight truncate">
-                      {p.spec || (CLASS_DISPLAY[p.cls] ?? p.cls)} · {p.level}
+                    <p
+                      className="text-[10px] text-muted-foreground leading-tight truncate"
+                      title={p.specRoles.map((sr) => `${sr.spec || "?"} (${sr.role || "?"})`).join(", ")}
+                    >
+                      {rosterSpecLabel(p)} · {p.level}
                     </p>
                   </div>
-                  {p.role && (
-                    <span className="ml-auto text-[9px] uppercase tracking-wide text-muted-foreground/70 shrink-0">
-                      {p.role}
+                  {rosterRoles(p).length > 0 && (
+                    <span className="ml-auto text-[9px] uppercase tracking-wide text-muted-foreground/70 shrink-0 text-right leading-tight">
+                      {rosterRoles(p).map((role) => (
+                        <span key={role} className="block">
+                          {role}
+                        </span>
+                      ))}
                     </span>
                   )}
                 </div>
