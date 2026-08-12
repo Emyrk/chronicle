@@ -79,6 +79,7 @@ import { GuildSearchPage } from "./pages/GuildSearch"
 import { ApplyPage } from "./pages/Apply/ApplyPage"
 import { ApplicationPage } from "./pages/Apply/ApplicationPage"
 import { SimPage } from "./pages/Sim"
+import { RaidPlannerPage } from "./pages/RaidPlanner"
 import { TalentCalculatorPage } from "./pages/TalentCalculator/TalentCalculatorPage"
 import { GameDataLayout } from "./pages/GameData/GameDataPage"
 import { WDBTab } from "./pages/GameData/WDBTab"
@@ -130,6 +131,8 @@ function App() {
         <Route path="/armory/:realmName/:playerIdentifier" element={<ArmoryPage />} />
         <Route path="/sim" element={<SimPage />} />
         <Route path="/talents" element={<TalentCalculatorPage />} />
+        {/* Unlinked while in development — reachable by URL only. */}
+        <Route path="/raidplanner" element={<RaidPlannerPage />} />
         <Route path="/talents/:classSlug" element={<TalentCalculatorPage />} />
         <Route path="/leaderboards" element={<LeaderboardsPage />} />
         <Route path="/leaderboard" element={<LeaderboardRedirect />} />

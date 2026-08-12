@@ -1,6 +1,6 @@
 import { useQuery, useMutation, useQueryClient, keepPreviousData, type UseQueryOptions } from "@tanstack/react-query";
 import type { WoWSpell } from "./wowdb";
-import type { WoWServer, WoWServerRealm, UploadKey, CreateWoWServerRequest, CreateWoWServerRealmRequest, CreateUploadKeyRequest, RetentionPolicy, RetentionPreviewResponse, RetentionPreviewRequest, SupportedInstance, CensusEntry, Tenant, UpsertTenantRequest, ServerApplication, CreateServerApplicationRequest, CreateModificationRequestPayload, ApplicationAdminEntry } from "./typesGenerated";
+import type { WoWServer, WoWServerRealm, UploadKey, CreateWoWServerRequest, CreateWoWServerRealmRequest, CreateUploadKeyRequest, RetentionPolicy, RetentionPreviewResponse, RetentionPreviewRequest, SupportedInstance, CensusEntry, Tenant, UpsertTenantRequest, ServerApplication, CreateServerApplicationRequest, CreateModificationRequestPayload, ApplicationAdminEntry, GuildCharacterRosterResponse } from "./typesGenerated";
 import type { 
   WoWLogGroup as WoWLogGroupGenerated, 
   WoWLogFile as WoWLogFileGenerated,
@@ -1621,6 +1621,29 @@ export function useGuildRoster(guildId: string | undefined) {
     },
     enabled: !!guildId,
     retry: false,
+  });
+}
+
+/** Characters seen in a guild's raid logs (the "guild roster" of playable characters). */
+export function useGuildCharacters(
+  guildId: string | undefined,
+  params?: { seenWithinDays?: number; limit?: number },
+) {
+  return useQuery({
+    queryKey: ["guild-characters", guildId, params],
+    queryFn: async () => {
+      const searchParams = new URLSearchParams();
+      searchParams.set("seen_within_days", String(params?.seenWithinDays ?? 60));
+      searchParams.set("limit", String(params?.limit ?? 500));
+      const response = await fetch(`/api/v1/guilds/${guildId}/characters?${searchParams}`);
+      if (!response.ok) {
+        const error = await response.json().catch(() => null);
+        throw buildAPIError("Failed to fetch guild characters", error);
+      }
+      return response.json() as Promise<GuildCharacterRosterResponse>;
+    },
+    enabled: !!guildId,
+    staleTime: 60_000,
   });
 }
 
