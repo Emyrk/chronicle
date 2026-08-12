@@ -71,10 +71,15 @@ export function SizePicker({ pending, onPendingChange, onConfirm, onCancel }: Si
           })}
         </div>
 
-        {/* Group preview */}
+        {/* Group preview — always 8 squares; excluded groups grey out. */}
         <div className="flex justify-center gap-1 mt-3.5">
-          {Array.from({ length: pending }, (_, i) => (
-            <span key={i} className="w-[26px] h-[34px] rounded bg-primary/20 border border-ring" />
+          {Array.from({ length: MAX_GROUPS }, (_, i) => (
+            <span
+              key={i}
+              className={`w-[26px] h-[34px] rounded border transition-colors ${
+                i < pending ? "bg-primary/20 border-ring" : "bg-muted/30 border-border opacity-50"
+              }`}
+            />
           ))}
         </div>
 
