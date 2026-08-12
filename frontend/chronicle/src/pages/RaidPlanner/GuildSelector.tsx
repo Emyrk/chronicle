@@ -80,7 +80,7 @@ function GuildSearchPanel({ onSelect }: { onSelect: (guild: GuildInfo) => void }
           className="w-full pl-7 pr-2 py-1.5 bg-card border border-border rounded-md text-xs placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring"
         />
       </div>
-      <div className="max-h-64 overflow-y-auto p-1">
+      <div className="styled-scrollbar max-h-64 overflow-y-auto p-1">
         {isLoading ? (
           <div className="flex items-center justify-center py-6 text-muted-foreground">
             <Loader2 className="h-4 w-4 animate-spin" />

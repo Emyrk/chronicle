@@ -247,7 +247,7 @@ export function RosterDrawer({
               />
             </div>
           </div>
-          <div className="flex-1 min-h-0 overflow-y-auto px-3 pb-1.5 space-y-1">
+          <div className="styled-scrollbar flex-1 min-h-0 overflow-y-auto px-3 pb-1.5 space-y-1">
             {rosterLoading ? (
               <div className="flex justify-center py-6">
                 <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" />
