@@ -1,5 +1,5 @@
 import { Users } from "lucide-react";
-import { GROUP_SIZE, MAX_GROUPS, SIZE_PRESETS } from "./types";
+import { GROUP_SIZE, MAX_GROUPS } from "./types";
 
 interface SizePickerProps {
   pending: number;
@@ -23,8 +23,8 @@ export function SizePicker({ pending, onPendingChange, onConfirm, onCancel }: Si
           </span>
           <h2 className="text-lg font-semibold text-foreground">How big is your raid?</h2>
           <p className="text-xs text-muted-foreground mt-1">
-            One group is {GROUP_SIZE} players. Pick a group count, or jump straight to a common
-            lockout — you can resize later without losing anyone.
+            One group is {GROUP_SIZE} players. Pick a group count — you can resize later without
+            losing anyone.
           </p>
         </div>
 
@@ -43,25 +43,6 @@ export function SizePicker({ pending, onPendingChange, onConfirm, onCancel }: Si
               >
                 <span className="font-mono text-base font-semibold">{n}</span>
                 <span className="text-[10px] opacity-80">{n * GROUP_SIZE} players</span>
-              </button>
-            );
-          })}
-        </div>
-
-        <div className="flex flex-wrap justify-center gap-2 mt-4">
-          {SIZE_PRESETS.map((preset) => {
-            const selected = preset.groups === pending;
-            return (
-              <button
-                key={preset.groups}
-                onClick={() => onPendingChange(preset.groups)}
-                className={`px-3.5 py-1.5 rounded-full text-xs whitespace-nowrap transition-colors ${
-                  selected
-                    ? "bg-primary text-primary-foreground"
-                    : "border border-border text-muted-foreground hover:border-ring hover:text-foreground"
-                }`}
-              >
-                {preset.label}
               </button>
             );
           })}

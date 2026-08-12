@@ -83,10 +83,3 @@ export function entryName(entry: SlotEntry): string {
   const clsName = CLASS_DISPLAY[entry.cls] ?? entry.cls;
   return entry.spec ? `${entry.spec} ${clsName}` : clsName;
 }
-
-export const SIZE_PRESETS = [
-  { groups: 1, label: "5 · dungeon" },
-  { groups: 2, label: "10 · UBRS" },
-  { groups: 4, label: "20 · ZG / AQ20" },
-  { groups: 8, label: "40 · MC / BWL / AQ40" },
-] as const;
