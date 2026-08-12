@@ -232,7 +232,13 @@ export function RaidPlannerPage() {
       {phase === "set" && (
         <div
           className="relative border border-border rounded-lg bg-card overflow-hidden grid"
-          style={{ gridTemplateColumns: drawerCollapsed ? "36px 1fr" : "236px 1fr" }}
+          style={{
+            gridTemplateColumns: drawerCollapsed ? "36px 1fr" : "236px 1fr",
+            // Grow into spare viewport height (nav + page header + padding
+            // ≈ 340px) so the roster gets the room; small screens fall back
+            // to content height.
+            minHeight: "max(480px, calc(100vh - 340px))",
+          }}
         >
           {editingEntry && editing && (
             <SlotEditorModal
@@ -264,7 +270,7 @@ export function RaidPlannerPage() {
               <span className="float-right">drag players or classes from the roster into a slot</span>
             </p>
             <div
-              className="grid gap-2.5"
+              className="grid gap-2.5 flex-1 content-start"
               style={{ gridTemplateColumns: "repeat(auto-fill, minmax(200px, 1fr))" }}
             >
               {comp.board.map((slots, gi) => (
