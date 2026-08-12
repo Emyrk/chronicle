@@ -1,4 +1,10 @@
+/* All @imports must precede every other statement (including @font-face) or
+   the CSS pipeline intermittently rejects the file mid-transform. */
 @import url("https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Roboto+Mono:wght@400;500;600;700&family=Libre+Baskerville:wght@400;700&display=swap");
+@import url("./custom.css");
+@import "tailwindcss";
+@import "tw-animate-css";
+@plugin "@tailwindcss/typography";
 
 @font-face {
   font-family: "Friz Quadrata";
@@ -17,10 +23,6 @@
   font-style: normal;
   font-display: swap;
 }
-@import url("./custom.css");
-@import "tailwindcss";
-@import "tw-animate-css";
-@plugin "@tailwindcss/typography";
 
 
 @keyframes shimmer {
