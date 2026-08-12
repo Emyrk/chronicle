@@ -6,7 +6,9 @@ import { serverCapabilities } from "@/config/serverCapabilities";
 import { gearClassesForFlavor } from "@/pages/Gear/classInfo";
 import { CLASS_CSS_VAR, CLASS_DISPLAY } from "@/pages/Rankings/classDisplay";
 import type { Board, DragPayload, HoverTarget, SlotEntry, SlotLocation } from "./types";
-import { GROUP_SIZE, emptyBoard, entryName, playerEntry } from "./types";
+import { GROUP_SIZE, MAX_GROUPS, emptyBoard, entryName, playerEntry } from "./types";
+import type { ParsedSignUp, RaidHelperEvent } from "./raidHelper";
+import { RaidHelperImportModal } from "./RaidHelperImportModal";
 import { GuildSelector } from "./GuildSelector";
 import { RosterDrawer } from "./RosterDrawer";
 import { GroupCard } from "./GroupCard";
@@ -60,6 +62,7 @@ export function RaidPlannerPage() {
   const [benchDropTarget, setBenchDropTarget] = useState(false);
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [keybindsOpen, setKeybindsOpen] = useState(false);
+  const [importSource, setImportSource] = useState<string | null>(null);
   /** Slots ("gi:si") a multi-selection drag would land in, previewed live. */
   const [multiPreview, setMultiPreview] = useState<Set<string>>(new Set());
   const dragRef = useRef<DragPayload | null>(null);
@@ -79,6 +82,12 @@ export function RaidPlannerPage() {
         .filter((m) => !placedPlayerIds.has(m.id))
         .map(playerEntry),
     [rosterData, placedPlayerIds],
+  );
+
+  /** Full roster (placed or not) for import name-matching. */
+  const allRosterEntries = useMemo(
+    () => (rosterData?.members ?? []).map(playerEntry),
+    [rosterData],
   );
 
   // ---------------------------------------------------------------------------
@@ -399,6 +408,34 @@ export function RaidPlannerPage() {
     setEditing(null);
   };
 
+  /**
+   * Apply raid-helper sign-ups: board-bound entries fill first-empty slots
+   * (building a fitting board when none exists yet), the rest join the bench.
+   */
+  const applyRaidHelperImport = (parsed: ParsedSignUp[], event: RaidHelperEvent) => {
+    updateComp((prev) => {
+      const boardBound = parsed.filter((p) => p.disposition === "board").length;
+      const board =
+        prev.board.length > 0
+          ? prev.board.map((g) => g.slice())
+          : emptyBoard(Math.min(MAX_GROUPS, Math.max(1, Math.ceil(boardBound / GROUP_SIZE))));
+      const bench = prev.bench.slice();
+      const already = placedIds(prev);
+      const fresh = parsed.filter((p) => p.entry.kind !== "player" || !already.has(p.entry.id));
+      const queue = fresh.filter((p) => p.disposition === "board").map((p) => p.entry);
+      outer: for (let g = 0; g < board.length; g++) {
+        for (let s = 0; s < board[g].length; s++) {
+          if (queue.length === 0) break outer;
+          if (board[g][s] === null) board[g][s] = queue.shift()!;
+        }
+      }
+      bench.push(...queue, ...fresh.filter((p) => p.disposition === "bench").map((p) => p.entry));
+      return { board, bench };
+    });
+    setPhase("set");
+    setTitle((t) => t || event.title || "");
+  };
+
   // ---------------------------------------------------------------------------
   // Slot editor
   // ---------------------------------------------------------------------------
@@ -470,6 +507,7 @@ export function RaidPlannerPage() {
 
       if (e.key === "Escape") {
         if (keybindsOpen) setKeybindsOpen(false);
+        else if (importSource) setImportSource(null);
         else if (editing) setEditing(null);
         else if (selectedIds.size > 0) setSelectedIds(new Set());
         return;
@@ -571,7 +609,7 @@ export function RaidPlannerPage() {
           </button>
         )}
         <div className="ml-auto flex gap-2">
-          <ImportMenu />
+          <ImportMenu onPick={(source) => setImportSource(source)} />
           <button
             disabled
             title="Not wired up yet"
@@ -792,6 +830,14 @@ export function RaidPlannerPage() {
       )}
 
       <KeybindsOverlay open={keybindsOpen} onClose={() => setKeybindsOpen(false)} />
+      <RaidHelperImportModal
+        key={importSource ?? "closed"}
+        open={importSource === "raid-helper"}
+        onClose={() => setImportSource(null)}
+        roster={allRosterEntries}
+        guildName={guild?.name}
+        onApply={applyRaidHelperImport}
+      />
     </div>
   );
 }
