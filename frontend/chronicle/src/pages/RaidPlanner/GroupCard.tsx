@@ -219,6 +219,15 @@ function SlotRow({
       onDragEnd={onDragEnd}
       {...dropProps}
       onClick={onClick}
+      onMouseDown={(e) => {
+        // Stop middle-click autoscroll.
+        if (e.button === 1) e.preventDefault();
+      }}
+      onAuxClick={(e) => {
+        if (e.button !== 1) return;
+        e.preventDefault();
+        onBench();
+      }}
       onMouseEnter={() => onHover(true)}
       onMouseLeave={() => onHover(false)}
       className={`group/slot flex items-center gap-2 min-h-[34px] px-1.5 py-1 rounded-md cursor-pointer transition-colors border ${

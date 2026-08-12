@@ -22,9 +22,14 @@ interface KeybindItem {
 
 const KEYBINDS: KeybindItem[] = [
   {
-    keys: ["Dbl", "Click"],
-    action: "Place roster player in the first empty slot",
+    keys: ["Mid", "Click"],
+    action: "Quick-move: roster → first empty slot, slot → bench, bench → board",
     icon: <MousePointerClick className="h-4 w-4" />,
+  },
+  {
+    keys: ["Shift", "Mid", "Click"],
+    action: "Send a roster player straight to the bench",
+    icon: <Armchair className="h-4 w-4" />,
   },
   {
     keys: ["Shift", "Click"],

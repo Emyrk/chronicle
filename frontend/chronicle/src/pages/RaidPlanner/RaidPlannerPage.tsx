@@ -172,6 +172,21 @@ export function RaidPlannerPage() {
     });
   };
 
+  /** Append entries to the bench (skipping anyone already placed). */
+  const benchEntries = (entries: SlotEntry[]) => {
+    updateComp((prev) => {
+      const already = placedIds(prev);
+      const queue = entries.filter((e) => e.kind !== "player" || !already.has(e.id));
+      return queue.length ? { board: prev.board, bench: [...prev.bench, ...queue] } : prev;
+    });
+    setSelectedIds((sel) => {
+      if (sel.size === 0) return sel;
+      const next = new Set(sel);
+      for (const e of entries) if (e.kind === "player") next.delete(e.id);
+      return next;
+    });
+  };
+
   const at = (c: Composition, loc: SlotLocation): SlotEntry | null =>
     loc.area === "board" ? (c.board[loc.gi]?.[loc.si] ?? null) : (c.bench[loc.index] ?? null);
 
@@ -200,6 +215,35 @@ export function RaidPlannerPage() {
       const board = prev.board.map((g) => g.slice());
       board[loc.gi][loc.si] = null;
       return { board, bench: [...prev.bench, entry] };
+    });
+    setEditing(null);
+  };
+
+  /** Move an already-placed entry to the board's first empty slot. */
+  const moveToFirstEmpty = (loc: SlotLocation) => {
+    updateComp((prev) => {
+      const entry = at(prev, loc);
+      if (!entry) return prev;
+      let target: [number, number] | null = null;
+      outer: for (let g = 0; g < prev.board.length; g++) {
+        for (let s = 0; s < prev.board[g].length; s++) {
+          if (prev.board[g][s] === null) {
+            target = [g, s];
+            break outer;
+          }
+        }
+      }
+      if (!target) return prev;
+      const board = prev.board.map((g) => g.slice());
+      let bench = prev.bench;
+      if (loc.area === "board") {
+        board[loc.gi][loc.si] = null;
+      } else {
+        bench = prev.bench.slice();
+        bench.splice(loc.index, 1);
+      }
+      board[target[0]][target[1]] = entry;
+      return { board, bench };
     });
     setEditing(null);
   };
@@ -449,13 +493,7 @@ export function RaidPlannerPage() {
         // placeEntries guards duplicates, but skip if already placed.
         if (placedPlayerIds.has(hover.entry.id)) return;
         if (e.key.toLowerCase() === "b") {
-          const batch = rosterBatch(hover.entry);
-          updateComp((prev) => ({ board: prev.board, bench: [...prev.bench, ...batch] }));
-          setSelectedIds((sel) => {
-            const next = new Set(sel);
-            for (const b of batch) if (b.kind === "player") next.delete(b.id);
-            return next;
-          });
+          benchEntries(rosterBatch(hover.entry));
         } else if (groupKey !== null) {
           placeInGroup(rosterBatch(hover.entry), groupKey);
         }
@@ -566,7 +604,9 @@ export function RaidPlannerPage() {
                 searchInputRef={searchInputRef}
                 selectedIds={selectedIds}
                 onSelectionChange={setSelectedIds}
-                onQuickPlace={(entries) => placeEntries(entries)}
+                onQuickPlace={(entries, toBench) =>
+                  toBench ? benchEntries(entries) : placeEntries(entries)
+                }
               />
             </div>
           </div>
@@ -658,6 +698,15 @@ export function RaidPlannerPage() {
                       dragRef.current = null;
                     }}
                     onClick={() => setEditing({ area: "bench", index })}
+                    onMouseDown={(e) => {
+                      // Stop middle-click autoscroll.
+                      if (e.button === 1) e.preventDefault();
+                    }}
+                    onAuxClick={(e) => {
+                      if (e.button !== 1) return;
+                      e.preventDefault();
+                      moveToFirstEmpty({ area: "bench", index });
+                    }}
                     onMouseEnter={() => {
                       hoverRef.current = { area: "bench", index };
                     }}
