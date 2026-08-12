@@ -4,7 +4,7 @@ import { useGuildCharacters } from "@/api/queries";
 import type { GuildInfo } from "@/api/typesGenerated";
 import { serverCapabilities } from "@/config/serverCapabilities";
 import { gearClassesForFlavor } from "@/pages/Gear/classInfo";
-import { CLASS_CSS_VAR } from "@/pages/Rankings/classDisplay";
+import { CLASS_CSS_VAR, CLASS_DISPLAY } from "@/pages/Rankings/classDisplay";
 import type { Board, DragPayload, HoverTarget, SlotEntry, SlotLocation } from "./types";
 import { GROUP_SIZE, emptyBoard, entryName, playerEntry } from "./types";
 import { GuildSelector } from "./GuildSelector";
@@ -528,6 +528,23 @@ export function RaidPlannerPage() {
   const totalSlots = groupCount * GROUP_SIZE;
   const editingEntry = editing ? at(comp, editing) : null;
 
+  // Bench chips clustered by class, keeping each chip's real bench index for
+  // editing and drag payloads.
+  const benchByClass = useMemo(() => {
+    const groups = new Map<string, { entry: SlotEntry; index: number }[]>();
+    comp.bench.forEach((entry, index) => {
+      const list = groups.get(entry.cls) ?? [];
+      list.push({ entry, index });
+      groups.set(entry.cls, list);
+    });
+    const order = classes.map((c) => c.enumName);
+    return [...groups.entries()].sort(
+      (a, b) =>
+        (order.indexOf(a[0]) + 1 || order.length + 1) -
+        (order.indexOf(b[0]) + 1 || order.length + 1),
+    );
+  }, [comp.bench, classes]);
+
   return (
     <div className="w-full p-4 md:p-6 space-y-3.5">
       {/* Header bar */}
@@ -689,70 +706,91 @@ export function RaidPlannerPage() {
                 setBenchDropTarget(false);
                 dropOnBench();
               }}
-              className={`border border-dashed rounded-lg px-2.5 py-2 transition-colors ${
+              className={`border border-dashed rounded-lg px-3 py-2.5 transition-colors ${
                 benchDropTarget ? "border-ring bg-primary/10" : "border-border bg-muted/20"
               }`}
             >
-              <div className="flex items-center gap-2 mb-1.5">
-                <span className="text-[11px] font-semibold text-foreground/90">Bench</span>
+              <div className="flex items-center gap-2 mb-2">
+                <span className="text-xs font-semibold text-foreground/90">Bench</span>
                 <span className="text-[10px] text-muted-foreground">
                   {comp.bench.length} · drop players or classes here
                 </span>
               </div>
-              <div className="flex flex-wrap gap-1.5">
-                {comp.bench.map((entry, index) => (
-                  <button
-                    key={entry.kind === "player" ? entry.id : `ph-${index}`}
-                    draggable
-                    onDragStart={() => {
-                      dragRef.current = { kind: "slot", from: { area: "bench", index } };
-                    }}
-                    onDragEnd={() => {
-                      dragRef.current = null;
-                    }}
-                    onClick={() => setEditing({ area: "bench", index })}
-                    onMouseDown={(e) => {
-                      // Stop middle-click autoscroll.
-                      if (e.button === 1) e.preventDefault();
-                    }}
-                    onAuxClick={(e) => {
-                      if (e.button !== 1) return;
-                      e.preventDefault();
-                      moveToFirstEmpty({ area: "bench", index });
-                    }}
-                    onMouseEnter={() => {
-                      hoverRef.current = { area: "bench", index };
-                    }}
-                    onMouseLeave={() => {
-                      if (hoverRef.current?.area === "bench" && hoverRef.current.index === index) {
-                        hoverRef.current = null;
-                      }
-                    }}
-                    className="flex items-center gap-1.5 px-2 py-1 rounded-md bg-card border border-border/60 cursor-pointer hover:border-ring transition-colors"
-                  >
-                    {entry.kind === "player" ? (
-                      <ClassIcon cls={entry.cls} className="h-4 w-4 rounded border border-border/60" />
-                    ) : (
-                      <span
-                        className="h-4 w-1 rounded-sm"
-                        style={{ backgroundColor: CLASS_CSS_VAR[entry.cls] ?? CLASS_CSS_VAR.UNKNOWN }}
-                      />
-                    )}
-                    <span
-                      className="text-[11px]"
-                      style={{ color: CLASS_CSS_VAR[entry.cls] ?? CLASS_CSS_VAR.UNKNOWN }}
+              {comp.bench.length === 0 ? (
+                <div className="flex items-center justify-center min-h-[72px] text-[11px] text-muted-foreground/50">
+                  Benched players wait here, grouped by class.
+                </div>
+              ) : (
+                <div className="flex flex-wrap items-start gap-2.5 min-h-[72px]">
+                  {benchByClass.map(([cls, items]) => (
+                    <div
+                      key={cls}
+                      className="flex flex-col gap-1 rounded-md border border-border/40 bg-card/60 p-1.5 min-w-[160px]"
                     >
-                      {entryName(entry)}
-                    </span>
-                    {(entry.spec || entry.note) && entry.kind === "player" && (
-                      <span className="text-[9px] text-muted-foreground">
-                        {entry.spec}
-                        {entry.note ? ` · ${entry.note}` : ""}
-                      </span>
-                    )}
-                  </button>
-                ))}
-              </div>
+                      <div className="flex items-center gap-1.5 text-[10px] text-muted-foreground">
+                        <span
+                          className="h-2 w-2 rounded-sm shrink-0"
+                          style={{ backgroundColor: CLASS_CSS_VAR[cls] ?? CLASS_CSS_VAR.UNKNOWN }}
+                        />
+                        {CLASS_DISPLAY[cls] ?? cls}
+                        <span className="opacity-70">{items.length}</span>
+                      </div>
+                      {items.map(({ entry, index }) => (
+                        <button
+                          key={entry.kind === "player" ? entry.id : `ph-${index}`}
+                          draggable
+                          onDragStart={() => {
+                            dragRef.current = { kind: "slot", from: { area: "bench", index } };
+                          }}
+                          onDragEnd={() => {
+                            dragRef.current = null;
+                          }}
+                          onClick={() => setEditing({ area: "bench", index })}
+                          onMouseDown={(e) => {
+                            // Stop middle-click autoscroll.
+                            if (e.button === 1) e.preventDefault();
+                          }}
+                          onAuxClick={(e) => {
+                            if (e.button !== 1) return;
+                            e.preventDefault();
+                            moveToFirstEmpty({ area: "bench", index });
+                          }}
+                          onMouseEnter={() => {
+                            hoverRef.current = { area: "bench", index };
+                          }}
+                          onMouseLeave={() => {
+                            if (hoverRef.current?.area === "bench" && hoverRef.current.index === index) {
+                              hoverRef.current = null;
+                            }
+                          }}
+                          className="flex items-center gap-1.5 px-2 py-1.5 rounded-md bg-card border border-border/60 cursor-pointer hover:border-ring transition-colors"
+                        >
+                          {entry.kind === "player" ? (
+                            <ClassIcon cls={entry.cls} className="h-4 w-4 rounded border border-border/60" />
+                          ) : (
+                            <span
+                              className="h-4 w-1 rounded-sm"
+                              style={{ backgroundColor: CLASS_CSS_VAR[entry.cls] ?? CLASS_CSS_VAR.UNKNOWN }}
+                            />
+                          )}
+                          <span
+                            className="text-[11px] truncate"
+                            style={{ color: CLASS_CSS_VAR[entry.cls] ?? CLASS_CSS_VAR.UNKNOWN }}
+                          >
+                            {entryName(entry)}
+                          </span>
+                          {(entry.spec || entry.note) && entry.kind === "player" && (
+                            <span className="ml-auto text-[9px] text-muted-foreground truncate">
+                              {entry.spec}
+                              {entry.note ? ` · ${entry.note}` : ""}
+                            </span>
+                          )}
+                        </button>
+                      ))}
+                    </div>
+                  ))}
+                </div>
+              )}
             </div>
           </div>
         </div>
