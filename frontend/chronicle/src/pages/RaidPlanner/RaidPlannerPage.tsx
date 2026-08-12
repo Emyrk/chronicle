@@ -279,6 +279,18 @@ export function RaidPlannerPage() {
     });
   };
 
+  /** Move every entry in group gi to the bench. */
+  const benchGroup = (gi: number) => {
+    updateComp((prev) => {
+      const entries = prev.board[gi]?.filter((e): e is SlotEntry => e !== null) ?? [];
+      if (entries.length === 0) return prev;
+      const board = prev.board.map((g) => g.slice());
+      board[gi] = board[gi].map(() => null);
+      return { board, bench: [...prev.bench, ...entries] };
+    });
+    setEditing(null);
+  };
+
   const clearBoard = () => {
     updateComp((prev) => {
       if (prev.board.flat().every((s) => s === null) && prev.bench.length === 0) return prev;
@@ -623,7 +635,7 @@ export function RaidPlannerPage() {
                   <button
                     onClick={clearBoard}
                     title="Empty every group and the bench (undo with Ctrl+Z)"
-                    className="hover:text-foreground transition-colors"
+                    className="text-destructive hover:text-destructive/80 transition-colors"
                   >
                     Clear board
                   </button>
@@ -653,6 +665,7 @@ export function RaidPlannerPage() {
                   onSlotBench={(si) => benchAt({ area: "board", gi, si })}
                   onSlotRemove={(si) => removeAt({ area: "board", gi, si })}
                   onClearGroup={() => clearGroup(gi)}
+                  onBenchGroup={() => benchGroup(gi)}
                   dragRef={dragRef}
                   hoverRef={hoverRef}
                 />

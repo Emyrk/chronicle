@@ -19,13 +19,14 @@ interface GroupCardProps {
   /** Slots ("gi:si") a hovered multi-drag would land in. */
   previewSlots: ReadonlySet<string>;
   onClearGroup: () => void;
+  onBenchGroup: () => void;
   dragRef: React.RefObject<DragPayload | null>;
   hoverRef: React.RefObject<HoverTarget | null>;
 }
 
 function slotSubtitle(entry: SlotEntry): string {
   if (entry.kind === "placeholder") {
-    return entry.note || "placeholder — click to set spec";
+    return entry.note;
   }
   const spec = entry.spec || (CLASS_DISPLAY[entry.cls] ?? entry.cls);
   const changed = entry.spec && entry.reportedSpec && entry.spec !== entry.reportedSpec;
@@ -45,6 +46,7 @@ export function GroupCard({
   onSlotMultiOver,
   previewSlots,
   onClearGroup,
+  onBenchGroup,
   dragRef,
   hoverRef,
 }: GroupCardProps) {
@@ -84,13 +86,22 @@ export function GroupCard({
               <Pencil className="h-2.5 w-2.5" />
             </button>
             {hasEntries && (
-              <button
-                onClick={onClearGroup}
-                title="Clear group"
-                className="ml-auto shrink-0 text-muted-foreground opacity-0 group-hover/head:opacity-60 hover:!opacity-100 transition-opacity"
-              >
-                <X className="h-3 w-3" />
-              </button>
+              <span className="ml-auto flex items-center gap-1 shrink-0">
+                <button
+                  onClick={onBenchGroup}
+                  title="Bench everyone in this group"
+                  className="text-muted-foreground/50 hover:text-foreground transition-colors"
+                >
+                  <Armchair className="h-3 w-3" />
+                </button>
+                <button
+                  onClick={onClearGroup}
+                  title="Clear this group (players return to the roster)"
+                  className="text-muted-foreground/50 hover:text-destructive transition-colors"
+                >
+                  <X className="h-3 w-3" />
+                </button>
+              </span>
             )}
           </>
         )}
@@ -250,7 +261,11 @@ function SlotRow({
         <p className="text-[11px] font-medium leading-tight truncate" style={{ color }}>
           {entryName(entry)}
         </p>
-        <p className="text-[9px] text-muted-foreground leading-tight truncate">{slotSubtitle(entry)}</p>
+        {slotSubtitle(entry) && (
+          <p className="text-[9px] text-muted-foreground leading-tight truncate">
+            {slotSubtitle(entry)}
+          </p>
+        )}
       </div>
       <div className="hidden group-hover/slot:flex items-center gap-0.5 shrink-0">
         <button
