@@ -1,5 +1,5 @@
 import { useMemo, useRef, useState } from "react";
-import { ChevronDown, Pencil } from "lucide-react";
+import { Pencil } from "lucide-react";
 import { useGuildCharacters } from "@/api/queries";
 import type { GuildInfo } from "@/api/typesGenerated";
 import { serverCapabilities } from "@/config/serverCapabilities";
@@ -14,7 +14,7 @@ import { SlotEditorModal } from "./SlotEditorModal";
 import { SizePicker } from "./SizePicker";
 import { ClassIcon } from "./ClassIcon";
 
-type Phase = "unset" | "picking" | "set";
+type Phase = "picking" | "set";
 
 interface Composition {
   board: Board;
@@ -35,7 +35,7 @@ function entryFromDrag(drag: DragPayload, comp: Composition): SlotEntry | null {
 }
 
 export function RaidPlannerPage() {
-  const [phase, setPhase] = useState<Phase>("unset");
+  const [phase, setPhase] = useState<Phase>("picking");
   const [pendingGroups, setPendingGroups] = useState(8);
   const [title, setTitle] = useState("");
   const [guild, setGuild] = useState<GuildInfo | null>(null);
@@ -186,19 +186,6 @@ export function RaidPlannerPage() {
           placeholder="Untitled composition"
           className="flex-none w-64 bg-transparent text-[15px] font-semibold text-foreground placeholder:text-muted-foreground/70 focus:outline-none focus:ring-2 focus:ring-ring rounded px-1 -mx-1"
         />
-        {phase === "unset" && (
-          <>
-            <button
-              onClick={() => setPhase("picking")}
-              className="flex items-center gap-1.5 px-3 py-1.5 border border-ring/60 rounded-md bg-primary/10 text-xs font-medium text-primary hover:bg-primary/20 transition-colors"
-            >
-              Set raid size <ChevronDown className="h-3 w-3" />
-            </button>
-            <span className="text-[11px] text-muted-foreground">
-              groups and the roster appear after size is set
-            </span>
-          </>
-        )}
         {phase === "set" && (
           <button
             onClick={() => {
