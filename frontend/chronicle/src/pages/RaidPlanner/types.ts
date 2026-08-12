@@ -23,6 +23,8 @@ export interface PlayerEntry {
   role: string;
   /** Distinct spec+role combos over recent parsed instances, most recent first. */
   specRoles: SpecRole[];
+  /** Average parse score; -1 when the character has no parses. */
+  avgParse: number;
   level: number;
   realmName: string;
   note: string;
@@ -68,6 +70,7 @@ export function playerEntry(member: GuildRosterCharacter): PlayerEntry {
     reportedSpec: member.spec ?? "",
     role: member.role ?? "",
     specRoles,
+    avgParse: member.avg_parse,
     level: member.level,
     realmName: member.realm_name,
     note: "",
