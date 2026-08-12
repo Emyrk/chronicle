@@ -1,14 +1,14 @@
 import { useCallback, useRef, useState } from "react";
 import {
-  ArrowUpRight,
   ChevronDown,
   ChevronRight,
   ChevronsLeft,
   ChevronsRight,
+  Cross,
   Loader2,
-  Plus,
   Search,
   Shield,
+  Swords,
   Users,
   X,
 } from "lucide-react";
@@ -26,8 +26,8 @@ function rosterSpecLabel(p: PlayerEntry): string {
 
 const ROLE_GLYPHS = [
   { value: "tank", label: "Tanks", Icon: Shield },
-  { value: "heal", label: "Healers", Icon: Plus },
-  { value: "dps", label: "DPS", Icon: ArrowUpRight },
+  { value: "heal", label: "Healers", Icon: Cross },
+  { value: "dps", label: "DPS", Icon: Swords },
 ] as const;
 
 function toggled(set: ReadonlySet<string>, value: string): Set<string> {
@@ -204,7 +204,7 @@ export function RosterDrawer({
               })}
             </div>
             {/* Role glyphs + clear */}
-            <div className="flex items-center gap-1">
+            <div className="flex items-center justify-between gap-1">
               {ROLE_GLYPHS.map(({ value, label, Icon }) => {
                 const active = roleFilter.has(value);
                 return (
@@ -212,13 +212,13 @@ export function RosterDrawer({
                     key={value}
                     onClick={() => setRoleFilter((f) => toggled(f, value))}
                     title={active ? `${label} — click to unfilter` : `Show only ${label.toLowerCase()}`}
-                    className={`flex-1 flex justify-center py-1.5 border rounded-md transition-colors ${
+                    className={`h-9 w-9 flex items-center justify-center border rounded-md transition-colors ${
                       active
                         ? "border-ring bg-primary/15 text-primary"
                         : "border-border text-muted-foreground hover:text-foreground hover:border-ring"
                     }`}
                   >
-                    <Icon className="h-3.5 w-3.5" />
+                    <Icon className="h-4 w-4" />
                   </button>
                 );
               })}
