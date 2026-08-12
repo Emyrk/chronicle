@@ -12,6 +12,7 @@ import {
   Users,
   X,
 } from "lucide-react";
+import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/Tooltip/tooltip";
 import { CLASS_CSS_VAR, CLASS_DISPLAY } from "@/pages/Rankings/classDisplay";
 import { parseColor } from "@/pages/Instance/parseColors";
 import type { GearClassInfo } from "@/pages/Gear/classInfo";
@@ -25,8 +26,8 @@ function rosterSpecLabel(p: PlayerEntry): string {
 }
 
 const ROLE_GLYPHS = [
-  { value: "tank", label: "Tanks", Icon: Shield },
-  { value: "heal", label: "Healers", Icon: Cross },
+  { value: "tank", label: "Tank", Icon: Shield },
+  { value: "heal", label: "Healer", Icon: Cross },
   { value: "dps", label: "DPS", Icon: Swords },
 ] as const;
 
@@ -204,36 +205,47 @@ export function RosterDrawer({
               })}
             </div>
             {/* Role glyphs + clear */}
-            <div className="flex items-center justify-between gap-1">
+            <div className="flex items-center gap-1">
               {ROLE_GLYPHS.map(({ value, label, Icon }) => {
                 const active = roleFilter.has(value);
                 return (
-                  <button
-                    key={value}
-                    onClick={() => setRoleFilter((f) => toggled(f, value))}
-                    title={active ? `${label} — click to unfilter` : `Show only ${label.toLowerCase()}`}
-                    className={`h-9 w-9 flex items-center justify-center border rounded-md transition-colors ${
-                      active
-                        ? "border-ring bg-primary/15 text-primary"
-                        : "border-border text-muted-foreground hover:text-foreground hover:border-ring"
-                    }`}
-                  >
-                    <Icon className="h-4 w-4" />
-                  </button>
+                  <div key={value} className="flex-1 flex justify-center">
+                    <Tooltip>
+                      <TooltipTrigger asChild>
+                        <button
+                          aria-label={label}
+                          onClick={() => setRoleFilter((f) => toggled(f, value))}
+                          className={`h-9 w-9 flex items-center justify-center border rounded-md transition-colors ${
+                            active
+                              ? "border-ring bg-primary/15 text-primary"
+                              : "border-border text-muted-foreground hover:text-foreground hover:border-ring"
+                          }`}
+                        >
+                          <Icon className="h-4 w-4" />
+                        </button>
+                      </TooltipTrigger>
+                      <TooltipContent>{label}</TooltipContent>
+                    </Tooltip>
+                  </div>
                 );
               })}
-              <button
-                onClick={() => {
-                  setClassFilter(new Set());
-                  setRoleFilter(new Set());
-                  setSearch("");
-                }}
-                title="Clear filters"
-                disabled={!hasFilters}
-                className="shrink-0 px-1 text-muted-foreground hover:text-foreground disabled:opacity-25 transition-colors"
-              >
-                <X className="h-3.5 w-3.5" />
-              </button>
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <button
+                    aria-label="Clear filters"
+                    onClick={() => {
+                      setClassFilter(new Set());
+                      setRoleFilter(new Set());
+                      setSearch("");
+                    }}
+                    disabled={!hasFilters}
+                    className="shrink-0 px-1 text-muted-foreground hover:text-foreground disabled:opacity-25 transition-colors"
+                  >
+                    <X className="h-3.5 w-3.5" />
+                  </button>
+                </TooltipTrigger>
+                <TooltipContent>Clear filters</TooltipContent>
+              </Tooltip>
             </div>
             {/* Search */}
             <div className="relative">
