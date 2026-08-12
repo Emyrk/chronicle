@@ -68,6 +68,7 @@ export function GroupCard({ gi, slots, note, onNoteChange, onSlotClick, onSlotDr
           <SlotRow
             key={si}
             entry={entry}
+            dragRef={dragRef}
             onClick={() => entry && onSlotClick(si)}
             onDrop={() => onSlotDrop(si)}
             onDragStart={
@@ -89,26 +90,53 @@ export function GroupCard({ gi, slots, note, onNoteChange, onSlotClick, onSlotDr
 
 function SlotRow({
   entry,
+  dragRef,
   onClick,
   onDrop,
   onDragStart,
   onDragEnd,
 }: {
   entry: SlotEntry | null;
+  dragRef: React.RefObject<DragPayload | null>;
   onClick: () => void;
   onDrop: () => void;
   onDragStart?: () => void;
   onDragEnd: () => void;
 }) {
+  const [dropTarget, setDropTarget] = useState(false);
+
+  // Fresh entries (roster player / class placeholder) only land on empty
+  // slots; drags of already-placed entries can land anywhere (swap).
+  const acceptsCurrentDrag = () => {
+    const drag = dragRef.current;
+    if (!drag) return false;
+    return !entry || drag.kind === "slot";
+  };
+
+  const dropProps = {
+    onDragOver: (e: React.DragEvent) => {
+      if (!acceptsCurrentDrag()) return;
+      e.preventDefault();
+      setDropTarget(true);
+    },
+    onDragLeave: (e: React.DragEvent) => {
+      if (e.currentTarget.contains(e.relatedTarget as Node)) return;
+      setDropTarget(false);
+    },
+    onDrop: (e: React.DragEvent) => {
+      e.preventDefault();
+      setDropTarget(false);
+      onDrop();
+    },
+  };
+
   if (!entry) {
     return (
       <div
-        onDragOver={(e) => e.preventDefault()}
-        onDrop={(e) => {
-          e.preventDefault();
-          onDrop();
-        }}
-        className="flex items-center gap-2 min-h-[34px] px-1.5 py-1 rounded-md border border-dashed border-border hover:border-ring transition-colors"
+        {...dropProps}
+        className={`flex items-center gap-2 min-h-[34px] px-1.5 py-1 rounded-md border border-dashed transition-colors ${
+          dropTarget ? "border-ring bg-primary/15" : "border-border hover:border-ring"
+        }`}
       >
         <span className="flex items-center justify-center h-[18px] w-[18px] rounded bg-muted/60 text-muted-foreground text-xs shrink-0">
           +
@@ -129,14 +157,12 @@ function SlotRow({
       draggable
       onDragStart={onDragStart}
       onDragEnd={onDragEnd}
-      onDragOver={(e) => e.preventDefault()}
-      onDrop={(e) => {
-        e.preventDefault();
-        onDrop();
-      }}
+      {...dropProps}
       onClick={onClick}
-      className={`flex items-center gap-2 min-h-[34px] px-1.5 py-1 rounded-md bg-background/60 cursor-pointer hover:border-ring transition-colors border ${
-        isPlaceholder ? "border-dashed border-border" : "border-border/60"
+      className={`flex items-center gap-2 min-h-[34px] px-1.5 py-1 rounded-md cursor-pointer transition-colors border ${
+        dropTarget
+          ? "border-ring bg-primary/15"
+          : `bg-background/60 hover:border-ring ${isPlaceholder ? "border-dashed border-border" : "border-border/60"}`
       }`}
     >
       {isPlaceholder ? (

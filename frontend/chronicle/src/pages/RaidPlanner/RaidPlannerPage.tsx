@@ -43,6 +43,7 @@ export function RaidPlannerPage() {
   const [groupNotes, setGroupNotes] = useState<Record<number, string>>({});
   const [editing, setEditing] = useState<SlotLocation | null>(null);
   const [drawerCollapsed, setDrawerCollapsed] = useState(false);
+  const [benchDropTarget, setBenchDropTarget] = useState(false);
   const dragRef = useRef<DragPayload | null>(null);
 
   const classes = useMemo(() => gearClassesForFlavor(serverCapabilities.defaultFlavor), []);
@@ -281,12 +282,25 @@ export function RaidPlannerPage() {
             </div>
             {/* Bench */}
             <div
-              onDragOver={(e) => e.preventDefault()}
+              onDragOver={(e) => {
+                const drag = dragRef.current;
+                // Everything can drop here except an entry already on the bench.
+                if (!drag || (drag.kind === "slot" && drag.from.area === "bench")) return;
+                e.preventDefault();
+                setBenchDropTarget(true);
+              }}
+              onDragLeave={(e) => {
+                if (e.currentTarget.contains(e.relatedTarget as Node)) return;
+                setBenchDropTarget(false);
+              }}
               onDrop={(e) => {
                 e.preventDefault();
+                setBenchDropTarget(false);
                 dropOnBench();
               }}
-              className="border border-dashed border-border rounded-lg bg-muted/20 px-2.5 py-2"
+              className={`border border-dashed rounded-lg px-2.5 py-2 transition-colors ${
+                benchDropTarget ? "border-ring bg-primary/10" : "border-border bg-muted/20"
+              }`}
             >
               <div className="flex items-center gap-2 mb-1.5">
                 <span className="text-[11px] font-semibold text-foreground/90">Bench</span>
