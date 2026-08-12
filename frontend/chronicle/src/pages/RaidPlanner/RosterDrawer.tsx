@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useCallback, useRef, useState } from "react";
 import {
   ArrowUpRight,
   ChevronDown,
@@ -37,6 +37,9 @@ function toggled(set: ReadonlySet<string>, value: string): Set<string> {
   return next;
 }
 
+/** Rows revealed per scroll batch; the list grows as the sentinel comes into view. */
+const SCROLL_BATCH = 50;
+
 interface RosterDrawerProps {
   collapsed: boolean;
   onToggleCollapsed: () => void;
@@ -65,13 +68,43 @@ export function RosterDrawer({
   const [search, setSearch] = useState("");
   const [classFilter, setClassFilter] = useState<Set<string>>(new Set());
   const [roleFilter, setRoleFilter] = useState<Set<string>>(new Set());
+  const [visibleCount, setVisibleCount] = useState(SCROLL_BATCH);
+  const observerRef = useRef<IntersectionObserver | null>(null);
+
+  // Observe the sentinel row whenever it mounts; reveal the next batch as it
+  // scrolls into view. A callback ref handles mount/unmount without effects.
+  // The sentinel's parent is the scrolling list, so it serves as the root.
+  const sentinelRef = useCallback((el: HTMLDivElement | null) => {
+    observerRef.current?.disconnect();
+    observerRef.current = null;
+    if (!el) return;
+    const observer = new IntersectionObserver(
+      (entries) => {
+        if (entries.some((entry) => entry.isIntersecting)) {
+          setVisibleCount((count) => count + SCROLL_BATCH);
+        }
+      },
+      { root: el.parentElement, rootMargin: "150px" },
+    );
+    observer.observe(el);
+    observerRef.current = observer;
+  }, []);
+
+  // Rewind the window when the filtered list changes shape (filters, search,
+  // roster updates) — state adjustment during render, not in an effect.
+  const filterKey = `${search}|${[...classFilter].sort().join()}|${[...roleFilter].sort().join()}|${available.length}`;
+  const [lastFilterKey, setLastFilterKey] = useState(filterKey);
+  if (filterKey !== lastFilterKey) {
+    setLastFilterKey(filterKey);
+    setVisibleCount(SCROLL_BATCH);
+  }
 
   if (collapsed) {
     return (
       <button
         onClick={onToggleCollapsed}
         title="Open roster"
-        className="flex flex-col items-center gap-2.5 py-3 border-r border-border bg-muted/20 hover:bg-muted/40 transition-colors"
+        className="h-full w-full flex flex-col items-center gap-2.5 py-3 border-r border-border bg-muted/20 hover:bg-muted/40 transition-colors"
       >
         <ChevronsRight className="h-3.5 w-3.5 text-primary" />
         <span
@@ -99,7 +132,7 @@ export function RosterDrawer({
   });
 
   return (
-    <div className="flex flex-col border-r border-border bg-muted/20 min-h-0">
+    <div className="h-full flex flex-col border-r border-border bg-muted/20 min-h-0">
       {/* Placeholders */}
       <div className="flex items-center gap-1.5 px-3 pt-2.5 pb-1.5">
         <button
@@ -220,7 +253,7 @@ export function RosterDrawer({
                 <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" />
               </div>
             ) : filtered.length > 0 ? (
-              filtered.map((p) => (
+              filtered.slice(0, visibleCount).map((p) => (
                 <div
                   key={p.id}
                   draggable
@@ -263,9 +296,15 @@ export function RosterDrawer({
                 {hasFilters ? "No unassigned members match." : "Everyone is placed."}
               </p>
             )}
+            {!rosterLoading && filtered.length > visibleCount && (
+              <div ref={sentinelRef} className="flex justify-center py-2">
+                <Loader2 className="h-3.5 w-3.5 animate-spin text-muted-foreground/60" />
+              </div>
+            )}
           </div>
           <div className="px-3 pb-2.5 pt-1 text-[10px] text-muted-foreground">
-            {available.length} unassigned · showing {filtered.length}
+            {filtered.length} of {available.length} unassigned · showing{" "}
+            {Math.min(visibleCount, filtered.length)}
           </div>
         </>
       ) : (

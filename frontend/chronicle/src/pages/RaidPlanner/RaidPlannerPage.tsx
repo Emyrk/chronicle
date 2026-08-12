@@ -241,15 +241,21 @@ export function RaidPlannerPage() {
               onClose={() => setEditing(null)}
             />
           )}
-          <RosterDrawer
-            collapsed={drawerCollapsed}
-            onToggleCollapsed={() => setDrawerCollapsed((c) => !c)}
-            classes={classes}
-            available={availableRoster}
-            rosterLoading={rosterLoading}
-            hasGuild={!!guild}
-            dragRef={dragRef}
-          />
+          {/* The absolute fill keeps the drawer from stretching the grid row:
+              the board dictates the height and the roster list scrolls inside. */}
+          <div className="relative min-h-[480px]">
+            <div className="absolute inset-0">
+              <RosterDrawer
+                collapsed={drawerCollapsed}
+                onToggleCollapsed={() => setDrawerCollapsed((c) => !c)}
+                classes={classes}
+                available={availableRoster}
+                rosterLoading={rosterLoading}
+                hasGuild={!!guild}
+                dragRef={dragRef}
+              />
+            </div>
+          </div>
           <div className="p-3 flex flex-col gap-2.5 min-w-0">
             <p className="text-[11px] text-muted-foreground">
               {totalSlots} slots · <span className="text-foreground">{filledCount} filled</span> ·{" "}
