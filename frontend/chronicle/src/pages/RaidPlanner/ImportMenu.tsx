@@ -75,9 +75,6 @@ export function ImportMenu({ onPick }: { onPick?: (source: string) => void }) {
               </span>
             </button>
           ))}
-          <p className="px-2.5 pt-1.5 pb-1 text-[10px] text-muted-foreground/70 border-t border-border/50 mt-1">
-            More sources coming
-          </p>
         </div>
       )}
     </div>
