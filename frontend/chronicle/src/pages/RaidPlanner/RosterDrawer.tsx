@@ -16,7 +16,7 @@ import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/Tooltip
 import { CLASS_CSS_VAR, CLASS_DISPLAY } from "@/pages/Rankings/classDisplay";
 import { parseColor } from "@/pages/Instance/parseColors";
 import type { GearClassInfo } from "@/pages/Gear/classInfo";
-import type { DragPayload, PlayerEntry } from "./types";
+import type { DragPayload, HoverTarget, PlayerEntry, SlotEntry } from "./types";
 
 /** Unique observed specs, most recent first: "Fury / Protection". */
 function rosterSpecLabel(p: PlayerEntry): string {
@@ -50,6 +50,13 @@ interface RosterDrawerProps {
   rosterLoading: boolean;
   hasGuild: boolean;
   dragRef: React.RefObject<DragPayload | null>;
+  hoverRef: React.RefObject<HoverTarget | null>;
+  searchInputRef: React.RefObject<HTMLInputElement | null>;
+  /** Multi-selected roster player ids (shift/ctrl click). */
+  selectedIds: ReadonlySet<string>;
+  onSelectionChange: (ids: Set<string>) => void;
+  /** Place entries into the first empty slots (double-click quick place). */
+  onQuickPlace: (entries: SlotEntry[]) => void;
 }
 
 /**
@@ -64,6 +71,11 @@ export function RosterDrawer({
   rosterLoading,
   hasGuild,
   dragRef,
+  hoverRef,
+  searchInputRef,
+  selectedIds,
+  onSelectionChange,
+  onQuickPlace,
 }: RosterDrawerProps) {
   const [placeholdersOpen, setPlaceholdersOpen] = useState(true);
   const [search, setSearch] = useState("");
@@ -71,6 +83,8 @@ export function RosterDrawer({
   const [roleFilter, setRoleFilter] = useState<Set<string>>(new Set());
   const [visibleCount, setVisibleCount] = useState(SCROLL_BATCH);
   const observerRef = useRef<IntersectionObserver | null>(null);
+  /** Anchor row for shift-click range selection, in filtered order. */
+  const selectionAnchorRef = useRef<string | null>(null);
 
   // Observe the sentinel row whenever it mounts; reveal the next batch as it
   // scrolls into view. A callback ref handles mount/unmount without effects.
@@ -163,8 +177,11 @@ export function RosterDrawer({
               onDragEnd={() => {
                 dragRef.current = null;
               }}
-              title={`Drag to reserve a slot for a ${cls.name}`}
-              className="flex items-center gap-1.5 px-1.5 py-1 rounded-md bg-card border border-dashed border-border cursor-grab hover:border-ring transition-colors"
+              onDoubleClick={() =>
+                onQuickPlace([{ kind: "placeholder", cls: cls.enumName, spec: "", note: "" }])
+              }
+              title={`Drag to reserve a slot for a ${cls.name} — double-click for first empty slot`}
+              className="flex items-center gap-1.5 px-1.5 py-1 rounded-md bg-card border border-dashed border-border cursor-grab hover:border-ring transition-colors select-none"
             >
               <span
                 className="h-2.5 w-2.5 rounded-sm shrink-0"
@@ -251,10 +268,17 @@ export function RosterDrawer({
             <div className="relative">
               <Search className="absolute left-2 top-1/2 -translate-y-1/2 h-3 w-3 text-muted-foreground" />
               <input
+                ref={searchInputRef}
                 type="text"
                 value={search}
                 onChange={(e) => setSearch(e.target.value)}
-                placeholder="Search roster…"
+                onKeyDown={(e) => {
+                  if (e.key === "Escape") {
+                    setSearch("");
+                    e.currentTarget.blur();
+                  }
+                }}
+                placeholder="Search roster…  ( / )"
                 className="w-full pl-6 pr-2 py-1.5 bg-card border border-border rounded-md text-xs placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring"
               />
             </div>
@@ -270,13 +294,69 @@ export function RosterDrawer({
                   key={p.id}
                   draggable
                   onDragStart={() => {
-                    dragRef.current = { kind: "roster", entry: p };
+                    // Dragging a row that is part of a multi-selection drags
+                    // the whole selection, in filtered order.
+                    const batch =
+                      selectedIds.has(p.id) && selectedIds.size > 1
+                        ? filtered.filter((f) => selectedIds.has(f.id))
+                        : null;
+                    dragRef.current = batch
+                      ? { kind: "roster-multi", entries: batch }
+                      : { kind: "roster", entry: p };
                   }}
                   onDragEnd={() => {
                     dragRef.current = null;
                   }}
+                  onClick={(e) => {
+                    // The clicks that make up a double-click must not mutate
+                    // the selection the double-click is about to act on.
+                    if (e.detail > 1) return;
+                    const next = new Set(selectedIds);
+                    if (e.shiftKey && selectionAnchorRef.current) {
+                      const anchorIdx = filtered.findIndex((f) => f.id === selectionAnchorRef.current);
+                      const idx = filtered.findIndex((f) => f.id === p.id);
+                      if (anchorIdx >= 0 && idx >= 0) {
+                        const [from, to] = anchorIdx < idx ? [anchorIdx, idx] : [idx, anchorIdx];
+                        for (let i = from; i <= to; i++) next.add(filtered[i].id);
+                      } else {
+                        next.add(p.id);
+                      }
+                    } else if (e.ctrlKey || e.metaKey) {
+                      if (next.has(p.id)) next.delete(p.id);
+                      else next.add(p.id);
+                      selectionAnchorRef.current = p.id;
+                    } else {
+                      // Clicking inside an existing multi-selection keeps it,
+                      // so it can be double-clicked or dragged as a batch.
+                      if (next.size > 1 && next.has(p.id)) return;
+                      const wasSoleSelection = next.size === 1 && next.has(p.id);
+                      next.clear();
+                      if (!wasSoleSelection) next.add(p.id);
+                      selectionAnchorRef.current = p.id;
+                    }
+                    onSelectionChange(next);
+                  }}
+                  onDoubleClick={() => {
+                    const batch =
+                      selectedIds.has(p.id) && selectedIds.size > 1
+                        ? filtered.filter((f) => selectedIds.has(f.id))
+                        : [p];
+                    onQuickPlace(batch);
+                  }}
+                  onMouseEnter={() => {
+                    hoverRef.current = { area: "roster", entry: p };
+                  }}
+                  onMouseLeave={() => {
+                    if (hoverRef.current?.area === "roster" && hoverRef.current.entry.id === p.id) {
+                      hoverRef.current = null;
+                    }
+                  }}
                   title={p.specRoles.map((sr) => `${sr.spec || "?"} (${sr.role || "?"})`).join(", ")}
-                  className="flex items-center gap-2 px-1.5 py-1 rounded-md bg-card border border-border/60 cursor-grab hover:border-ring transition-colors"
+                  className={`flex items-center gap-2 px-1.5 py-1 rounded-md bg-card cursor-grab transition-colors border select-none ${
+                    selectedIds.has(p.id)
+                      ? "border-ring bg-primary/10"
+                      : "border-border/60 hover:border-ring"
+                  }`}
                 >
                   <span
                     className="w-[3px] self-stretch rounded-full shrink-0"

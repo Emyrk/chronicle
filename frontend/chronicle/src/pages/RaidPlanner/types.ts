@@ -51,7 +51,11 @@ export type SlotLocation =
 export type DragPayload =
   | { kind: "class"; cls: string }
   | { kind: "roster"; entry: PlayerEntry }
+  | { kind: "roster-multi"; entries: PlayerEntry[] }
   | { kind: "slot"; from: SlotLocation };
+
+/** What the pointer is currently over, for mouseover keybinds (B/Del/E/1–8). */
+export type HoverTarget = SlotLocation | { area: "roster"; entry: PlayerEntry };
 
 export const emptyBoard = (groups: number): Board =>
   Array.from({ length: groups }, () => Array<SlotEntry | null>(GROUP_SIZE).fill(null));

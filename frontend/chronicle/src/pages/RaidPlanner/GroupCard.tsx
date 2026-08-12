@@ -1,7 +1,7 @@
 import { useState } from "react";
-import { Pencil } from "lucide-react";
+import { Armchair, Pencil, X } from "lucide-react";
 import { CLASS_CSS_VAR, CLASS_DISPLAY } from "@/pages/Rankings/classDisplay";
-import type { DragPayload, SlotEntry } from "./types";
+import type { DragPayload, HoverTarget, SlotEntry } from "./types";
 import { entryName } from "./types";
 import { ClassIcon } from "./ClassIcon";
 
@@ -12,7 +12,11 @@ interface GroupCardProps {
   onNoteChange: (note: string) => void;
   onSlotClick: (si: number) => void;
   onSlotDrop: (si: number) => void;
+  onSlotBench: (si: number) => void;
+  onSlotRemove: (si: number) => void;
+  onClearGroup: () => void;
   dragRef: React.RefObject<DragPayload | null>;
+  hoverRef: React.RefObject<HoverTarget | null>;
 }
 
 function slotSubtitle(entry: SlotEntry): string {
@@ -25,12 +29,25 @@ function slotSubtitle(entry: SlotEntry): string {
 }
 
 /** One raid group: header with an editable note, five drag-and-drop slots. */
-export function GroupCard({ gi, slots, note, onNoteChange, onSlotClick, onSlotDrop, dragRef }: GroupCardProps) {
+export function GroupCard({
+  gi,
+  slots,
+  note,
+  onNoteChange,
+  onSlotClick,
+  onSlotDrop,
+  onSlotBench,
+  onSlotRemove,
+  onClearGroup,
+  dragRef,
+  hoverRef,
+}: GroupCardProps) {
   const [editingNote, setEditingNote] = useState(false);
+  const hasEntries = slots.some(Boolean);
 
   return (
     <div className="border border-border rounded-lg bg-card overflow-hidden">
-      <div className="flex items-center gap-1.5 px-2 py-1 bg-muted/40 border-b border-border min-h-7">
+      <div className="group/head flex items-center gap-1.5 px-2 py-1 bg-muted/40 border-b border-border min-h-7">
         <span className="text-[11px] font-semibold text-foreground/90 whitespace-nowrap">
           Group {gi + 1}
         </span>
@@ -60,6 +77,15 @@ export function GroupCard({ gi, slots, note, onNoteChange, onSlotClick, onSlotDr
             >
               <Pencil className="h-2.5 w-2.5" />
             </button>
+            {hasEntries && (
+              <button
+                onClick={onClearGroup}
+                title="Clear group"
+                className="ml-auto shrink-0 text-muted-foreground opacity-0 group-hover/head:opacity-60 hover:!opacity-100 transition-opacity"
+              >
+                <X className="h-3 w-3" />
+              </button>
+            )}
           </>
         )}
       </div>
@@ -71,6 +97,18 @@ export function GroupCard({ gi, slots, note, onNoteChange, onSlotClick, onSlotDr
             dragRef={dragRef}
             onClick={() => entry && onSlotClick(si)}
             onDrop={() => onSlotDrop(si)}
+            onBench={() => onSlotBench(si)}
+            onRemove={() => onSlotRemove(si)}
+            onHover={(hovering) => {
+              if (hovering) hoverRef.current = { area: "board", gi, si };
+              else if (
+                hoverRef.current?.area === "board" &&
+                hoverRef.current.gi === gi &&
+                hoverRef.current.si === si
+              ) {
+                hoverRef.current = null;
+              }
+            }}
             onDragStart={
               entry
                 ? () => {
@@ -93,6 +131,9 @@ function SlotRow({
   dragRef,
   onClick,
   onDrop,
+  onBench,
+  onRemove,
+  onHover,
   onDragStart,
   onDragEnd,
 }: {
@@ -100,12 +141,15 @@ function SlotRow({
   dragRef: React.RefObject<DragPayload | null>;
   onClick: () => void;
   onDrop: () => void;
+  onBench: () => void;
+  onRemove: () => void;
+  onHover: (hovering: boolean) => void;
   onDragStart?: () => void;
   onDragEnd: () => void;
 }) {
   const [dropTarget, setDropTarget] = useState(false);
 
-  // Fresh entries (roster player / class placeholder) only land on empty
+  // Fresh entries (roster players / class placeholders) only land on empty
   // slots; drags of already-placed entries can land anywhere (swap).
   const acceptsCurrentDrag = () => {
     const drag = dragRef.current;
@@ -159,7 +203,9 @@ function SlotRow({
       onDragEnd={onDragEnd}
       {...dropProps}
       onClick={onClick}
-      className={`flex items-center gap-2 min-h-[34px] px-1.5 py-1 rounded-md cursor-pointer transition-colors border ${
+      onMouseEnter={() => onHover(true)}
+      onMouseLeave={() => onHover(false)}
+      className={`group/slot flex items-center gap-2 min-h-[34px] px-1.5 py-1 rounded-md cursor-pointer transition-colors border ${
         dropTarget
           ? "border-ring bg-primary/15"
           : `bg-background/60 hover:border-ring ${isPlaceholder ? "border-dashed border-border" : "border-border/60"}`
@@ -180,6 +226,28 @@ function SlotRow({
           {entryName(entry)}
         </p>
         <p className="text-[9px] text-muted-foreground leading-tight truncate">{slotSubtitle(entry)}</p>
+      </div>
+      <div className="hidden group-hover/slot:flex items-center gap-0.5 shrink-0">
+        <button
+          title="Send to bench (B)"
+          onClick={(e) => {
+            e.stopPropagation();
+            onBench();
+          }}
+          className="p-0.5 rounded text-muted-foreground hover:text-foreground hover:bg-muted/60 transition-colors"
+        >
+          <Armchair className="h-3 w-3" />
+        </button>
+        <button
+          title="Remove (Del)"
+          onClick={(e) => {
+            e.stopPropagation();
+            onRemove();
+          }}
+          className="p-0.5 rounded text-muted-foreground hover:text-destructive hover:bg-muted/60 transition-colors"
+        >
+          <X className="h-3 w-3" />
+        </button>
       </div>
     </div>
   );

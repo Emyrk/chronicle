@@ -1,11 +1,11 @@
-import { useMemo, useRef, useState } from "react";
-import { Pencil } from "lucide-react";
+import { useEffect, useMemo, useRef, useState } from "react";
+import { HelpCircle, Pencil } from "lucide-react";
 import { useGuildCharacters } from "@/api/queries";
 import type { GuildInfo } from "@/api/typesGenerated";
 import { serverCapabilities } from "@/config/serverCapabilities";
 import { gearClassesForFlavor } from "@/pages/Gear/classInfo";
 import { CLASS_CSS_VAR } from "@/pages/Rankings/classDisplay";
-import type { Board, DragPayload, SlotEntry, SlotLocation } from "./types";
+import type { Board, DragPayload, HoverTarget, SlotEntry, SlotLocation } from "./types";
 import { GROUP_SIZE, emptyBoard, entryName, playerEntry } from "./types";
 import { GuildSelector } from "./GuildSelector";
 import { RosterDrawer } from "./RosterDrawer";
@@ -13,6 +13,7 @@ import { GroupCard } from "./GroupCard";
 import { SlotEditorModal } from "./SlotEditorModal";
 import { SizePicker } from "./SizePicker";
 import { ClassIcon } from "./ClassIcon";
+import { KeybindsOverlay } from "./KeybindsOverlay";
 
 type Phase = "picking" | "set";
 
@@ -27,12 +28,24 @@ function entryFromDrag(drag: DragPayload, comp: Composition): SlotEntry | null {
       return { kind: "placeholder", cls: drag.cls, spec: "", note: "" };
     case "roster":
       return drag.entry;
+    case "roster-multi":
+      return null; // handled as a batch, never as a single entry
     case "slot":
       return drag.from.area === "board"
         ? (comp.board[drag.from.gi]?.[drag.from.si] ?? null)
         : (comp.bench[drag.from.index] ?? null);
   }
 }
+
+function placedIds(comp: Composition): Set<string> {
+  const ids = new Set<string>();
+  for (const entry of [...comp.board.flat(), ...comp.bench]) {
+    if (entry?.kind === "player") ids.add(entry.id);
+  }
+  return ids;
+}
+
+const HISTORY_LIMIT = 200;
 
 export function RaidPlannerPage() {
   const [phase, setPhase] = useState<Phase>("picking");
@@ -44,18 +57,18 @@ export function RaidPlannerPage() {
   const [editing, setEditing] = useState<SlotLocation | null>(null);
   const [drawerCollapsed, setDrawerCollapsed] = useState(false);
   const [benchDropTarget, setBenchDropTarget] = useState(false);
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
+  const [keybindsOpen, setKeybindsOpen] = useState(false);
   const dragRef = useRef<DragPayload | null>(null);
+  const hoverRef = useRef<HoverTarget | null>(null);
+  const searchInputRef = useRef<HTMLInputElement | null>(null);
+  const pastRef = useRef<Composition[]>([]);
+  const futureRef = useRef<Composition[]>([]);
 
   const classes = useMemo(() => gearClassesForFlavor(serverCapabilities.defaultFlavor), []);
   const { data: rosterData, isLoading: rosterLoading } = useGuildCharacters(guild?.id);
 
-  const placedPlayerIds = useMemo(() => {
-    const ids = new Set<string>();
-    for (const entry of [...comp.board.flat(), ...comp.bench]) {
-      if (entry?.kind === "player") ids.add(entry.id);
-    }
-    return ids;
-  }, [comp]);
+  const placedPlayerIds = useMemo(() => placedIds(comp), [comp]);
 
   const availableRoster = useMemo(
     () =>
@@ -65,16 +78,182 @@ export function RaidPlannerPage() {
     [rosterData, placedPlayerIds],
   );
 
+  // ---------------------------------------------------------------------------
+  // Composition updates flow through here so every change is undoable.
+  // ---------------------------------------------------------------------------
+
+  const updateComp = (updater: (prev: Composition) => Composition) => {
+    const next = updater(comp);
+    if (next === comp) return;
+    pastRef.current.push(comp);
+    if (pastRef.current.length > HISTORY_LIMIT) pastRef.current.shift();
+    futureRef.current = [];
+    setComp(next);
+  };
+
+  const undo = () => {
+    const prev = pastRef.current.pop();
+    if (!prev) return;
+    futureRef.current.push(comp);
+    setComp(prev);
+    setEditing(null);
+  };
+
+  const redo = () => {
+    const next = futureRef.current.pop();
+    if (!next) return;
+    pastRef.current.push(comp);
+    setComp(next);
+    setEditing(null);
+  };
+
   const takeDrag = (): DragPayload | null => {
     const drag = dragRef.current;
     dragRef.current = null;
     return drag;
   };
 
+  // ---------------------------------------------------------------------------
+  // Placement helpers
+  // ---------------------------------------------------------------------------
+
+  /**
+   * Place entries into empty slots in board order starting at (gi, si);
+   * whatever doesn't fit goes to the bench. Already-placed players are
+   * skipped so stale hover/drag references can't duplicate anyone.
+   */
+  const placeEntries = (entries: SlotEntry[], gi = 0, si = 0) => {
+    updateComp((prev) => {
+      const already = placedIds(prev);
+      const queue = entries.filter((e) => e.kind !== "player" || !already.has(e.id));
+      if (queue.length === 0) return prev;
+      const board = prev.board.map((g) => g.slice());
+      const bench = prev.bench.slice();
+      for (let g = gi; g < board.length && queue.length > 0; g++) {
+        for (let s = g === gi ? si : 0; s < board[g].length && queue.length > 0; s++) {
+          if (board[g][s] === null) board[g][s] = queue.shift()!;
+        }
+      }
+      bench.push(...queue);
+      return { board, bench };
+    });
+    setSelectedIds((sel) => {
+      if (sel.size === 0) return sel;
+      const next = new Set(sel);
+      for (const e of entries) if (e.kind === "player") next.delete(e.id);
+      return next;
+    });
+  };
+
+  /** Fill only group gi's empty slots; entries that don't fit stay put. */
+  const placeInGroup = (entries: SlotEntry[], gi: number) => {
+    updateComp((prev) => {
+      if (!prev.board[gi]) return prev;
+      const already = placedIds(prev);
+      const queue = entries.filter((e) => e.kind !== "player" || !already.has(e.id));
+      if (queue.length === 0) return prev;
+      const board = prev.board.map((g) => g.slice());
+      let changed = false;
+      for (let s = 0; s < board[gi].length && queue.length > 0; s++) {
+        if (board[gi][s] === null) {
+          board[gi][s] = queue.shift()!;
+          changed = true;
+        }
+      }
+      return changed ? { board, bench: prev.bench } : prev;
+    });
+    setSelectedIds((sel) => {
+      if (sel.size === 0) return sel;
+      const next = new Set(sel);
+      for (const e of entries) if (e.kind === "player") next.delete(e.id);
+      return next;
+    });
+  };
+
+  const at = (c: Composition, loc: SlotLocation): SlotEntry | null =>
+    loc.area === "board" ? (c.board[loc.gi]?.[loc.si] ?? null) : (c.bench[loc.index] ?? null);
+
+  /** Remove the entry at loc (players return to the roster automatically). */
+  const removeAt = (loc: SlotLocation) => {
+    updateComp((prev) => {
+      if (!at(prev, loc)) return prev;
+      if (loc.area === "board") {
+        const board = prev.board.map((g) => g.slice());
+        board[loc.gi][loc.si] = null;
+        return { board, bench: prev.bench };
+      }
+      const bench = prev.bench.slice();
+      bench.splice(loc.index, 1);
+      return { board: prev.board, bench };
+    });
+    setEditing(null);
+  };
+
+  /** Move a board entry to the bench. */
+  const benchAt = (loc: SlotLocation) => {
+    if (loc.area !== "board") return;
+    updateComp((prev) => {
+      const entry = prev.board[loc.gi]?.[loc.si];
+      if (!entry) return prev;
+      const board = prev.board.map((g) => g.slice());
+      board[loc.gi][loc.si] = null;
+      return { board, bench: [...prev.bench, entry] };
+    });
+    setEditing(null);
+  };
+
+  /** Move an already-placed entry into group gi's first empty slot. */
+  const moveToGroup = (loc: SlotLocation, gi: number) => {
+    updateComp((prev) => {
+      const entry = at(prev, loc);
+      if (!entry || !prev.board[gi]) return prev;
+      if (loc.area === "board" && loc.gi === gi) return prev;
+      const si = prev.board[gi].findIndex((s) => s === null);
+      if (si < 0) return prev;
+      const board = prev.board.map((g) => g.slice());
+      let bench = prev.bench;
+      if (loc.area === "board") {
+        board[loc.gi][loc.si] = null;
+      } else {
+        bench = prev.bench.slice();
+        bench.splice(loc.index, 1);
+      }
+      board[gi][si] = entry;
+      return { board, bench };
+    });
+    setEditing(null);
+  };
+
+  const clearGroup = (gi: number) => {
+    updateComp((prev) => {
+      if (!prev.board[gi]?.some(Boolean)) return prev;
+      const board = prev.board.map((g) => g.slice());
+      board[gi] = board[gi].map(() => null);
+      return { board, bench: prev.bench };
+    });
+  };
+
+  const clearBoard = () => {
+    updateComp((prev) => {
+      if (prev.board.flat().every((s) => s === null) && prev.bench.length === 0) return prev;
+      return { board: emptyBoard(prev.board.length), bench: [] };
+    });
+    setEditing(null);
+  };
+
+  // ---------------------------------------------------------------------------
+  // Drag and drop
+  // ---------------------------------------------------------------------------
+
   const dropOnSlot = (gi: number, si: number) => {
     const drag = takeDrag();
     if (!drag) return;
-    setComp((prev) => {
+    if (drag.kind === "roster-multi") {
+      placeEntries(drag.entries, gi, si);
+      setEditing(null);
+      return;
+    }
+    updateComp((prev) => {
       const entry = entryFromDrag(drag, prev);
       if (!entry) return prev;
       if (drag.kind === "slot" && drag.from.area === "board" && drag.from.gi === gi && drag.from.si === si) {
@@ -103,7 +282,16 @@ export function RaidPlannerPage() {
   const dropOnBench = () => {
     const drag = takeDrag();
     if (!drag) return;
-    setComp((prev) => {
+    if (drag.kind === "roster-multi") {
+      updateComp((prev) => {
+        const already = placedIds(prev);
+        const queue = drag.entries.filter((e) => !already.has(e.id));
+        return queue.length ? { board: prev.board, bench: [...prev.bench, ...queue] } : prev;
+      });
+      setEditing(null);
+      return;
+    }
+    updateComp((prev) => {
       const entry = entryFromDrag(drag, prev);
       if (!entry) return prev;
       if (drag.kind === "slot") {
@@ -117,9 +305,12 @@ export function RaidPlannerPage() {
     setEditing(null);
   };
 
-  const entryAt = (loc: SlotLocation): SlotEntry | null =>
-    loc.area === "board" ? (comp.board[loc.gi]?.[loc.si] ?? null) : (comp.bench[loc.index] ?? null);
+  // ---------------------------------------------------------------------------
+  // Slot editor
+  // ---------------------------------------------------------------------------
 
+  // Spec/note edits bypass the history: note typing would spam one entry per
+  // keystroke.
   const patchEditing = (patch: Partial<Pick<SlotEntry, "spec" | "note">>) => {
     if (!editing) return;
     setComp((prev) => {
@@ -138,23 +329,8 @@ export function RaidPlannerPage() {
     });
   };
 
-  const removeEditing = () => {
-    if (!editing) return;
-    setComp((prev) => {
-      if (editing.area === "board") {
-        const board = prev.board.map((g) => g.slice());
-        board[editing.gi][editing.si] = null;
-        return { board, bench: prev.bench };
-      }
-      const bench = prev.bench.slice();
-      bench.splice(editing.index, 1);
-      return { board: prev.board, bench };
-    });
-    setEditing(null);
-  };
-
   const confirmSize = () => {
-    setComp((prev) => {
+    updateComp((prev) => {
       if (prev.board.length === 0) return { board: emptyBoard(pendingGroups), bench: [] };
       if (pendingGroups === prev.board.length) return prev;
       if (pendingGroups > prev.board.length) {
@@ -171,10 +347,99 @@ export function RaidPlannerPage() {
     setPhase("set");
   };
 
+  // ---------------------------------------------------------------------------
+  // Keybinds: hover a player, press a key. Re-attached each render so the
+  // handler always sees fresh state.
+  // ---------------------------------------------------------------------------
+
+  useEffect(() => {
+    const onKeyDown = (e: KeyboardEvent) => {
+      const target = e.target as HTMLElement;
+      const typing =
+        target instanceof HTMLInputElement ||
+        target instanceof HTMLTextAreaElement ||
+        target.isContentEditable;
+      if (typing) return; // inputs handle their own Escape
+
+      // Undo/redo work in any phase.
+      if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === "z") {
+        e.preventDefault();
+        if (e.shiftKey) redo();
+        else undo();
+        return;
+      }
+      if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === "y") {
+        e.preventDefault();
+        redo();
+        return;
+      }
+
+      if (e.key === "Escape") {
+        if (keybindsOpen) setKeybindsOpen(false);
+        else if (editing) setEditing(null);
+        else if (selectedIds.size > 0) setSelectedIds(new Set());
+        return;
+      }
+      if (e.key === "?") {
+        e.preventDefault();
+        setKeybindsOpen((o) => !o);
+        return;
+      }
+
+      if (phase !== "set") return;
+
+      if (e.key === "/" || ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === "k")) {
+        e.preventDefault();
+        setDrawerCollapsed(false);
+        // The drawer may need a render to uncollapse before the input exists.
+        setTimeout(() => searchInputRef.current?.focus(), 0);
+        return;
+      }
+
+      // Hover-target actions. A live drag payload (kept for completeness —
+      // browsers rarely deliver keys mid-drag) takes precedence.
+      const hover = hoverRef.current;
+      const groupKey = /^[1-8]$/.test(e.key) ? Number(e.key) - 1 : null;
+
+      const rosterBatch = (entry: (typeof availableRoster)[number]): SlotEntry[] =>
+        selectedIds.has(entry.id) && selectedIds.size > 1
+          ? availableRoster.filter((p) => selectedIds.has(p.id))
+          : [entry];
+
+      if (!hover) return;
+      if (hover.area === "roster") {
+        // Stale hover (row placed while hovered) — availableRoster filter in
+        // placeEntries guards duplicates, but skip if already placed.
+        if (placedPlayerIds.has(hover.entry.id)) return;
+        if (e.key.toLowerCase() === "b") {
+          const batch = rosterBatch(hover.entry);
+          updateComp((prev) => ({ board: prev.board, bench: [...prev.bench, ...batch] }));
+          setSelectedIds((sel) => {
+            const next = new Set(sel);
+            for (const b of batch) if (b.kind === "player") next.delete(b.id);
+            return next;
+          });
+        } else if (groupKey !== null) {
+          placeInGroup(rosterBatch(hover.entry), groupKey);
+        }
+        return;
+      }
+
+      // Board/bench hover
+      if (e.key.toLowerCase() === "b") benchAt(hover);
+      else if (e.key === "Delete" || e.key === "Backspace") removeAt(hover);
+      else if (e.key.toLowerCase() === "e") setEditing(hover);
+      else if (groupKey !== null) moveToGroup(hover, groupKey);
+    };
+
+    document.addEventListener("keydown", onKeyDown);
+    return () => document.removeEventListener("keydown", onKeyDown);
+  });
+
   const groupCount = comp.board.length;
   const filledCount = comp.board.flat().filter(Boolean).length;
   const totalSlots = groupCount * GROUP_SIZE;
-  const editingEntry = editing ? entryAt(editing) : null;
+  const editingEntry = editing ? at(comp, editing) : null;
 
   return (
     <div className="w-full p-4 md:p-6 space-y-3.5">
@@ -244,7 +509,7 @@ export function RaidPlannerPage() {
             <SlotEditorModal
               entry={editingEntry}
               onPatch={patchEditing}
-              onRemove={removeEditing}
+              onRemove={() => removeAt(editing)}
               onClose={() => setEditing(null)}
             />
           )}
@@ -260,17 +525,46 @@ export function RaidPlannerPage() {
                 rosterLoading={rosterLoading}
                 hasGuild={!!guild}
                 dragRef={dragRef}
+                hoverRef={hoverRef}
+                searchInputRef={searchInputRef}
+                selectedIds={selectedIds}
+                onSelectionChange={setSelectedIds}
+                onQuickPlace={(entries) => placeEntries(entries)}
               />
             </div>
           </div>
           {/* Capped at four group-columns wide; the space to the right is
               reserved for the coverage rail later. */}
           <div className="p-3 flex flex-col gap-2.5 min-w-0 max-w-[1060px]">
-            <p className="text-[11px] text-muted-foreground">
-              {totalSlots} slots · <span className="text-foreground">{filledCount} filled</span> ·{" "}
-              {totalSlots - filledCount} empty · bench {comp.bench.length}
-              <span className="float-right">drag players or classes from the roster into a slot</span>
-            </p>
+            <div className="flex items-center gap-3 text-[11px] text-muted-foreground">
+              <span>
+                {totalSlots} slots · <span className="text-foreground">{filledCount} filled</span> ·{" "}
+                {totalSlots - filledCount} empty · bench {comp.bench.length}
+              </span>
+              <div className="ml-auto flex items-center gap-3">
+                {(filledCount > 0 || comp.bench.length > 0) && (
+                  <button
+                    onClick={clearBoard}
+                    title="Empty every group and the bench (undo with Ctrl+Z)"
+                    className="hover:text-foreground transition-colors"
+                  >
+                    Clear board
+                  </button>
+                )}
+                <span className="hidden lg:inline">
+                  dbl-click places · hover + <kbd className="font-mono">B</kbd>/
+                  <kbd className="font-mono">Del</kbd>/<kbd className="font-mono">E</kbd>/
+                  <kbd className="font-mono">1–8</kbd>
+                </span>
+                <button
+                  onClick={() => setKeybindsOpen(true)}
+                  title="Keyboard shortcuts (?)"
+                  className="text-primary hover:opacity-80 transition-opacity"
+                >
+                  <HelpCircle className="h-3.5 w-3.5" />
+                </button>
+              </div>
+            </div>
             <div className="grid gap-2.5 flex-1 content-start grid-cols-2 md:grid-cols-3 xl:grid-cols-4">
               {comp.board.map((slots, gi) => (
                 <GroupCard
@@ -281,7 +575,11 @@ export function RaidPlannerPage() {
                   onNoteChange={(note) => setGroupNotes((n) => ({ ...n, [gi]: note }))}
                   onSlotClick={(si) => setEditing({ area: "board", gi, si })}
                   onSlotDrop={(si) => dropOnSlot(gi, si)}
+                  onSlotBench={(si) => benchAt({ area: "board", gi, si })}
+                  onSlotRemove={(si) => removeAt({ area: "board", gi, si })}
+                  onClearGroup={() => clearGroup(gi)}
                   dragRef={dragRef}
+                  hoverRef={hoverRef}
                 />
               ))}
             </div>
@@ -325,6 +623,14 @@ export function RaidPlannerPage() {
                       dragRef.current = null;
                     }}
                     onClick={() => setEditing({ area: "bench", index })}
+                    onMouseEnter={() => {
+                      hoverRef.current = { area: "bench", index };
+                    }}
+                    onMouseLeave={() => {
+                      if (hoverRef.current?.area === "bench" && hoverRef.current.index === index) {
+                        hoverRef.current = null;
+                      }
+                    }}
                     className="flex items-center gap-1.5 px-2 py-1 rounded-md bg-card border border-border/60 cursor-pointer hover:border-ring transition-colors"
                   >
                     {entry.kind === "player" ? (
@@ -354,6 +660,8 @@ export function RaidPlannerPage() {
           </div>
         </div>
       )}
+
+      <KeybindsOverlay open={keybindsOpen} onClose={() => setKeybindsOpen(false)} />
     </div>
   );
 }
