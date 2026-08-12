@@ -20,7 +20,7 @@ export function SlotEditorModal({ entry, onPatch, onRemove, onClose }: SlotEdito
   if (entry.kind === "placeholder") {
     subtitle = "unfilled slot — pick the build you plan to recruit";
   } else {
-    subtitle = `Level ${entry.level} ${clsName} · ${entry.realmName}`;
+    subtitle = `${clsName} · ${entry.realmName}`;
     if (entry.specRoles.length > 0) {
       const combos = entry.specRoles
         .map((sr) => `${sr.spec || "?"}${sr.role ? ` (${sr.role})` : ""}`)

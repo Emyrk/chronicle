@@ -290,7 +290,7 @@ export function RosterDrawer({
                       {p.name}
                     </p>
                     <p className="text-[10px] text-muted-foreground leading-tight truncate">
-                      {rosterSpecLabel(p)} · {p.level}
+                      {rosterSpecLabel(p)}
                     </p>
                   </div>
                   {p.avgParse >= 0 && (
