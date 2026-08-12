@@ -14,6 +14,7 @@ import { SlotEditorModal } from "./SlotEditorModal";
 import { SizePicker } from "./SizePicker";
 import { ClassIcon } from "./ClassIcon";
 import { KeybindsOverlay } from "./KeybindsOverlay";
+import { ImportMenu } from "./ImportMenu";
 
 type Phase = "picking" | "set";
 
@@ -570,13 +571,7 @@ export function RaidPlannerPage() {
           </button>
         )}
         <div className="ml-auto flex gap-2">
-          <button
-            disabled
-            title="Not wired up yet"
-            className="px-3 py-1.5 border border-border rounded-md text-xs text-muted-foreground/50 cursor-not-allowed"
-          >
-            Import from raid
-          </button>
+          <ImportMenu />
           <button
             disabled
             title="Not wired up yet"
