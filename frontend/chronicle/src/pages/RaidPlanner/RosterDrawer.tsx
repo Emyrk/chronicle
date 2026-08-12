@@ -10,7 +10,6 @@ import {
   Shield,
   Swords,
   Users,
-  X,
 } from "lucide-react";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/Tooltip/tooltip";
 import { CLASS_CSS_VAR, CLASS_DISPLAY } from "@/pages/Rankings/classDisplay";
@@ -55,8 +54,8 @@ interface RosterDrawerProps {
   /** Multi-selected roster player ids (shift/ctrl click). */
   selectedIds: ReadonlySet<string>;
   onSelectionChange: (ids: Set<string>) => void;
-  /** Place entries into the first empty slots (double-click quick place). */
-  onQuickPlace: (entries: SlotEntry[]) => void;
+  /** Middle-click quick place: first empty slots, or the bench when toBench. */
+  onQuickPlace: (entries: SlotEntry[], toBench: boolean) => void;
 }
 
 /**
@@ -177,10 +176,15 @@ export function RosterDrawer({
               onDragEnd={() => {
                 dragRef.current = null;
               }}
-              onDoubleClick={() =>
-                onQuickPlace([{ kind: "placeholder", cls: cls.enumName, spec: "", note: "" }])
-              }
-              title={`Drag to reserve a slot for a ${cls.name} — double-click for first empty slot`}
+              onMouseDown={(e) => {
+                if (e.button === 1) e.preventDefault();
+              }}
+              onAuxClick={(e) => {
+                if (e.button !== 1) return;
+                e.preventDefault();
+                onQuickPlace([{ kind: "placeholder", cls: cls.enumName, spec: "", note: "" }], e.shiftKey);
+              }}
+              title={`Drag to reserve a slot for a ${cls.name} — middle-click for first empty slot`}
               className="flex items-center gap-1.5 px-1.5 py-1 rounded-md bg-card border border-dashed border-border cursor-grab hover:border-ring transition-colors select-none"
             >
               <span
@@ -209,7 +213,7 @@ export function RosterDrawer({
                     key={cls.enumName}
                     onClick={() => setClassFilter((f) => toggled(f, cls.enumName))}
                     title={active ? `${cls.name} — click to unfilter` : `Show only ${cls.name}s`}
-                    className={`h-6 flex-1 rounded-sm transition-all ${
+                    className={`h-[18px] flex-1 rounded transition-all ${
                       active
                         ? "ring-2 ring-ring ring-offset-1 ring-offset-background"
                         : classFilter.size > 0
@@ -221,66 +225,63 @@ export function RosterDrawer({
                 );
               })}
             </div>
-            {/* Role glyphs + clear */}
+            {/* Search with the role glyphs tucked beside it */}
             <div className="flex items-center gap-1">
+              <div className="relative flex-1 min-w-0">
+                <Search className="absolute left-2 top-1/2 -translate-y-1/2 h-3 w-3 text-muted-foreground" />
+                <input
+                  ref={searchInputRef}
+                  type="text"
+                  value={search}
+                  onChange={(e) => setSearch(e.target.value)}
+                  onKeyDown={(e) => {
+                    if (e.key === "Escape") {
+                      setSearch("");
+                      e.currentTarget.blur();
+                    }
+                  }}
+                  placeholder="Search…"
+                  className="w-full pl-6 pr-2 py-1.5 bg-card border border-border rounded-md text-xs placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring"
+                />
+              </div>
               {ROLE_GLYPHS.map(({ value, label, Icon }) => {
                 const active = roleFilter.has(value);
                 return (
-                  <div key={value} className="flex-1 flex justify-center">
-                    <Tooltip>
-                      <TooltipTrigger asChild>
-                        <button
-                          aria-label={label}
-                          onClick={() => setRoleFilter((f) => toggled(f, value))}
-                          className={`h-9 w-9 flex items-center justify-center border rounded-md transition-colors ${
-                            active
-                              ? "border-ring bg-primary/15 text-primary"
-                              : "border-border text-muted-foreground hover:text-foreground hover:border-ring"
-                          }`}
-                        >
-                          <Icon className="h-4 w-4" />
-                        </button>
-                      </TooltipTrigger>
-                      <TooltipContent>{label}</TooltipContent>
-                    </Tooltip>
-                  </div>
+                  <Tooltip key={value}>
+                    <TooltipTrigger asChild>
+                      <button
+                        aria-label={label}
+                        onClick={() => setRoleFilter((f) => toggled(f, value))}
+                        className={`shrink-0 w-[26px] h-[26px] flex items-center justify-center border rounded-md transition-colors ${
+                          active
+                            ? "border-ring bg-primary/15 text-primary"
+                            : "border-border text-muted-foreground hover:text-foreground hover:border-ring"
+                        }`}
+                      >
+                        <Icon className="h-3 w-3" />
+                      </button>
+                    </TooltipTrigger>
+                    <TooltipContent>{label}</TooltipContent>
+                  </Tooltip>
                 );
               })}
-              <Tooltip>
-                <TooltipTrigger asChild>
-                  <button
-                    aria-label="Clear filters"
-                    onClick={() => {
-                      setClassFilter(new Set());
-                      setRoleFilter(new Set());
-                      setSearch("");
-                    }}
-                    disabled={!hasFilters}
-                    className="shrink-0 px-1 text-muted-foreground hover:text-foreground disabled:opacity-25 transition-colors"
-                  >
-                    <X className="h-3.5 w-3.5" />
-                  </button>
-                </TooltipTrigger>
-                <TooltipContent>Clear filters</TooltipContent>
-              </Tooltip>
             </div>
-            {/* Search */}
-            <div className="relative">
-              <Search className="absolute left-2 top-1/2 -translate-y-1/2 h-3 w-3 text-muted-foreground" />
-              <input
-                ref={searchInputRef}
-                type="text"
-                value={search}
-                onChange={(e) => setSearch(e.target.value)}
-                onKeyDown={(e) => {
-                  if (e.key === "Escape") {
-                    setSearch("");
-                    e.currentTarget.blur();
-                  }
+            {/* Count + clear */}
+            <div className="flex items-center gap-1.5 text-[10px] text-muted-foreground">
+              <span>
+                {filtered.length} of {available.length}
+              </span>
+              <button
+                onClick={() => {
+                  setClassFilter(new Set());
+                  setRoleFilter(new Set());
+                  setSearch("");
                 }}
-                placeholder="Search roster…  ( / )"
-                className="w-full pl-6 pr-2 py-1.5 bg-card border border-border rounded-md text-xs placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring"
-              />
+                disabled={!hasFilters}
+                className="hover:text-foreground disabled:opacity-30 transition-colors"
+              >
+                clear
+              </button>
             </div>
           </div>
           <div className="styled-scrollbar flex-1 min-h-0 overflow-y-auto px-3 pb-1.5 space-y-1">
@@ -336,12 +337,18 @@ export function RosterDrawer({
                     }
                     onSelectionChange(next);
                   }}
-                  onDoubleClick={() => {
+                  onMouseDown={(e) => {
+                    // Stop middle-click autoscroll.
+                    if (e.button === 1) e.preventDefault();
+                  }}
+                  onAuxClick={(e) => {
+                    if (e.button !== 1) return;
+                    e.preventDefault();
                     const batch =
                       selectedIds.has(p.id) && selectedIds.size > 1
                         ? filtered.filter((f) => selectedIds.has(f.id))
                         : [p];
-                    onQuickPlace(batch);
+                    onQuickPlace(batch, e.shiftKey);
                   }}
                   onMouseEnter={() => {
                     hoverRef.current = { area: "roster", entry: p };
@@ -393,10 +400,6 @@ export function RosterDrawer({
                 <Loader2 className="h-3.5 w-3.5 animate-spin text-muted-foreground/60" />
               </div>
             )}
-          </div>
-          <div className="px-3 pb-2.5 pt-1 text-[10px] text-muted-foreground">
-            {filtered.length} of {available.length} unassigned · showing{" "}
-            {Math.min(visibleCount, filtered.length)}
           </div>
         </>
       ) : (
