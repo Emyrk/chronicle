@@ -59,6 +59,8 @@ export function RaidPlannerPage() {
   const [benchDropTarget, setBenchDropTarget] = useState(false);
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [keybindsOpen, setKeybindsOpen] = useState(false);
+  /** Slots ("gi:si") a multi-selection drag would land in, previewed live. */
+  const [multiPreview, setMultiPreview] = useState<Set<string>>(new Set());
   const dragRef = useRef<DragPayload | null>(null);
   const hoverRef = useRef<HoverTarget | null>(null);
   const searchInputRef = useRef<HTMLInputElement | null>(null);
@@ -245,7 +247,41 @@ export function RaidPlannerPage() {
   // Drag and drop
   // ---------------------------------------------------------------------------
 
+  /** Highlight every slot the hovered multi-drag would fill on release. */
+  const previewMultiAt = (gi: number, si: number) => {
+    const drag = dragRef.current;
+    if (drag?.kind !== "roster-multi") return;
+    const next = new Set<string>();
+    let remaining = drag.entries.length;
+    for (let g = gi; g < comp.board.length && remaining > 0; g++) {
+      for (let s = g === gi ? si : 0; s < comp.board[g].length && remaining > 0; s++) {
+        if (comp.board[g][s] === null) {
+          next.add(`${g}:${s}`);
+          remaining--;
+        }
+      }
+    }
+    setBenchDropTarget(remaining > 0); // overflow lands on the bench
+    setMultiPreview((prev) =>
+      prev.size === next.size && [...next].every((k) => prev.has(k)) ? prev : next,
+    );
+  };
+
+  const clearMultiPreview = () => {
+    setMultiPreview((prev) => (prev.size > 0 ? new Set<string>() : prev));
+    setBenchDropTarget(false);
+  };
+
+  // Native drags always finish with a dragend on the source — clear any
+  // lingering landing preview there.
+  useEffect(() => {
+    const onDragEnd = () => clearMultiPreview();
+    document.addEventListener("dragend", onDragEnd);
+    return () => document.removeEventListener("dragend", onDragEnd);
+  });
+
   const dropOnSlot = (gi: number, si: number) => {
+    clearMultiPreview();
     const drag = takeDrag();
     if (!drag) return;
     if (drag.kind === "roster-multi") {
@@ -280,6 +316,7 @@ export function RaidPlannerPage() {
   };
 
   const dropOnBench = () => {
+    clearMultiPreview();
     const drag = takeDrag();
     if (!drag) return;
     if (drag.kind === "roster-multi") {
@@ -571,6 +608,8 @@ export function RaidPlannerPage() {
                   onNoteChange={(note) => setGroupNotes((n) => ({ ...n, [gi]: note }))}
                   onSlotClick={(si) => setEditing({ area: "board", gi, si })}
                   onSlotDrop={(si) => dropOnSlot(gi, si)}
+                  onSlotMultiOver={(si) => previewMultiAt(gi, si)}
+                  previewSlots={multiPreview}
                   onSlotBench={(si) => benchAt({ area: "board", gi, si })}
                   onSlotRemove={(si) => removeAt({ area: "board", gi, si })}
                   onClearGroup={() => clearGroup(gi)}

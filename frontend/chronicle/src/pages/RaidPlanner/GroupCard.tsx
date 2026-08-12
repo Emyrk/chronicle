@@ -14,6 +14,10 @@ interface GroupCardProps {
   onSlotDrop: (si: number) => void;
   onSlotBench: (si: number) => void;
   onSlotRemove: (si: number) => void;
+  /** A multi-selection drag is hovering this slot — preview its landing slots. */
+  onSlotMultiOver: (si: number) => void;
+  /** Slots ("gi:si") a hovered multi-drag would land in. */
+  previewSlots: ReadonlySet<string>;
   onClearGroup: () => void;
   dragRef: React.RefObject<DragPayload | null>;
   hoverRef: React.RefObject<HoverTarget | null>;
@@ -38,6 +42,8 @@ export function GroupCard({
   onSlotDrop,
   onSlotBench,
   onSlotRemove,
+  onSlotMultiOver,
+  previewSlots,
   onClearGroup,
   dragRef,
   hoverRef,
@@ -95,8 +101,10 @@ export function GroupCard({
             key={si}
             entry={entry}
             dragRef={dragRef}
+            preview={previewSlots.has(`${gi}:${si}`)}
             onClick={() => entry && onSlotClick(si)}
             onDrop={() => onSlotDrop(si)}
+            onMultiOver={() => onSlotMultiOver(si)}
             onBench={() => onSlotBench(si)}
             onRemove={() => onSlotRemove(si)}
             onHover={(hovering) => {
@@ -129,8 +137,10 @@ export function GroupCard({
 function SlotRow({
   entry,
   dragRef,
+  preview,
   onClick,
   onDrop,
+  onMultiOver,
   onBench,
   onRemove,
   onHover,
@@ -139,15 +149,18 @@ function SlotRow({
 }: {
   entry: SlotEntry | null;
   dragRef: React.RefObject<DragPayload | null>;
+  preview: boolean;
   onClick: () => void;
   onDrop: () => void;
+  onMultiOver: () => void;
   onBench: () => void;
   onRemove: () => void;
   onHover: (hovering: boolean) => void;
   onDragStart?: () => void;
   onDragEnd: () => void;
 }) {
-  const [dropTarget, setDropTarget] = useState(false);
+  const [localDropTarget, setLocalDropTarget] = useState(false);
+  const dropTarget = localDropTarget || preview;
 
   // Fresh entries (roster players / class placeholders) only land on empty
   // slots; drags of already-placed entries can land anywhere (swap).
@@ -161,15 +174,18 @@ function SlotRow({
     onDragOver: (e: React.DragEvent) => {
       if (!acceptsCurrentDrag()) return;
       e.preventDefault();
-      setDropTarget(true);
+      // Multi-drags preview every landing slot via the page; single drags
+      // highlight just this slot.
+      if (dragRef.current?.kind === "roster-multi") onMultiOver();
+      else setLocalDropTarget(true);
     },
     onDragLeave: (e: React.DragEvent) => {
       if (e.currentTarget.contains(e.relatedTarget as Node)) return;
-      setDropTarget(false);
+      setLocalDropTarget(false);
     },
     onDrop: (e: React.DragEvent) => {
       e.preventDefault();
-      setDropTarget(false);
+      setLocalDropTarget(false);
       onDrop();
     },
   };
