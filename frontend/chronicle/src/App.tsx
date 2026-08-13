@@ -33,7 +33,6 @@ import { AdminApplicationsListPage } from "./pages/Admin/AdminApplicationsListPa
 import { AdminCacheStatsPage } from "./pages/Admin/AdminCacheStatsPage"
 import { AdminParsingPage } from "./pages/Admin/AdminParsingPage"
 import { GearLayout } from "./pages/Gear/GearLayout"
-import { GearListsPage } from "./pages/Gear/GearListsPage"
 import { GearListPage } from "./pages/Gear/builder/GearListPage"
 import { GearTrendsPage } from "./pages/Gear/trends/GearTrendsPage"
 import { GearProgressionsPage } from "./pages/Gear/progression/GearProgressionsPage"
@@ -176,7 +175,7 @@ function App() {
           <Route path="/wowdb/spell-by-name" element={<SpellByNamePage />} />
           <Route path="/wowdb/spell-by-name/:name" element={<SpellByNamePage />} />
           <Route path="/gear" element={<GearLayout />}>
-            <Route index element={<GearListsPage />} />
+            <Route index element={<Navigate to="progression" replace />} />
             <Route path="weights" element={<StatWeightsPage />} />
             <Route path="trends" element={<GearTrendsPage />} />
             <Route path="progression" element={<GearProgressionsPage />} />

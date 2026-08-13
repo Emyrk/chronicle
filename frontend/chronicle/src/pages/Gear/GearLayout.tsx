@@ -2,9 +2,8 @@ import { NavLink, Outlet } from "react-router-dom";
 import { cn } from "@/lib/utils";
 
 const TABS = [
-  { to: "/gear", label: "Gear Lists", end: true },
-  { to: "/gear/weights", label: "Analysis Profiles", end: false },
   { to: "/gear/progression", label: "Progression", end: false },
+  { to: "/gear/weights", label: "Analysis Profiles", end: false },
   { to: "/gear/trends", label: "Trends", end: false },
 ];
 
