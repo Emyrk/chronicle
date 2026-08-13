@@ -133,7 +133,7 @@ export function GearAnalysisSheet({
               aria-hidden
             />
             <span className="max-w-32 truncate">
-              {selection?.name ?? "Analysis profile"}
+              {selection?.name ?? "Stat weights"}
             </span>
             {warnings.length > 0 && (
               <span className="min-w-4 rounded-full bg-amber-500/15 px-1 text-center text-2xs text-amber-300">
@@ -179,7 +179,7 @@ export function GearAnalysisSheet({
         <div className="space-y-5 px-4 pb-6">
           <section className="space-y-2">
             <div className="text-2xs uppercase tracking-wide text-zinc-500">
-              Analysis profile
+              Stat weights
             </div>
             <select
               value={selection?.id ?? ""}

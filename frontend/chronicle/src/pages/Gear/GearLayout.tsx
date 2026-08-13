@@ -3,7 +3,7 @@ import { cn } from "@/lib/utils";
 
 const TABS = [
   { to: "/gear/progression", label: "Progression", end: false },
-  { to: "/gear/weights", label: "Analysis Profiles", end: false },
+  { to: "/gear/weights", label: "Stat Weights", end: false },
   { to: "/gear/trends", label: "Trends", end: false },
 ];
 

@@ -1,6 +1,6 @@
 import { useMemo, useState } from "react";
 import { useSearchParams } from "react-router-dom";
-import { Copy, Plus, Scale, Sparkles, Trash2 } from "lucide-react";
+import { Copy, Plus, Scale, Sparkles } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -75,54 +75,52 @@ function ClassSpecLine({
   );
 }
 
-function ClassSpecSelects({
+/** One “Warrior · Fury” pill backed by a native select with optgroups. */
+function ClassSpecPill({
   classId,
   specName,
-  onClassId,
-  onSpecName,
+  onChange,
 }: {
   classId: number;
   specName: string;
-  onClassId: (id: number) => void;
-  onSpecName: (name: string) => void;
+  onChange: (classId: number, specName: string) => void;
 }) {
   const { data: siteConfig } = useSiteConfig();
   const classes = useMemo(
     () => gearClassesForFlavor(siteConfig?.dataset_flavor ?? []),
     [siteConfig?.dataset_flavor],
   );
-  const selectClass =
-    "h-8 rounded-md border border-zinc-700 bg-zinc-900 px-2 text-xs text-zinc-200";
-  const selected = classes.find((c) => c.id === classId);
+  const cls = classes.find((c) => c.id === classId);
   return (
-    <>
-      <select
-        className={selectClass}
-        value={classId}
-        onChange={(e) => {
-          onClassId(Number(e.target.value));
-          onSpecName("");
-        }}
-      >
-        {classes.map((c) => (
-          <option key={c.id} value={c.id}>
-            {c.name}
+    <select
+      value={`${classId}|${specName}`}
+      onChange={(e) => {
+        const [id, spec] = e.target.value.split("|");
+        onChange(Number(id), spec ?? "");
+      }}
+      className="cursor-pointer appearance-none rounded-full border border-zinc-700 bg-transparent px-2.5 py-0.5 text-xs outline-none hover:border-zinc-500"
+      style={{
+        color: cls ? getClassColorVar(cls.enumName) : undefined,
+        width: `calc(${`${cls?.name ?? "?"} · ${specName || "any spec"}`.length + 1}ch + 1.25rem)`,
+      }}
+    >
+      {classes.map((c) => (
+        <optgroup key={c.id} label={c.name}>
+          <option value={`${c.id}|`} className="bg-zinc-900 text-zinc-200">
+            {c.name} · any spec
           </option>
-        ))}
-      </select>
-      <select
-        className={selectClass}
-        value={specName}
-        onChange={(e) => onSpecName(e.target.value)}
-      >
-        <option value="">Any spec</option>
-        {(selected?.specs ?? []).map((s) => (
-          <option key={s} value={s}>
-            {s}
-          </option>
-        ))}
-      </select>
-    </>
+          {c.specs.map((s) => (
+            <option
+              key={s}
+              value={`${c.id}|${s}`}
+              className="bg-zinc-900 text-zinc-200"
+            >
+              {c.name} · {s}
+            </option>
+          ))}
+        </optgroup>
+      ))}
+    </select>
   );
 }
 
@@ -148,7 +146,7 @@ function WeightSetEditor({
 
   const save = () => {
     if (!name.trim()) {
-      toast.error("Give the analysis profile a name");
+      toast.error("Give the stat weights a name");
       return;
     }
     updateWeight.mutate(
@@ -163,7 +161,7 @@ function WeightSetEditor({
       {
         onSuccess: () => {
           writeProfileTargets(weightSet.id, targets);
-          toast.success("Analysis profile saved");
+          toast.success("Stat weights saved");
           onDone();
         },
         onError: (err) => toast.error(err.message),
@@ -172,20 +170,22 @@ function WeightSetEditor({
   };
 
   return (
-    <div className="rounded-md border border-zinc-700/60 bg-zinc-900/40 p-4 space-y-3">
+    <div className="rounded-md border border-zinc-700/60 bg-zinc-900/40 px-4 py-4">
       <div className="flex flex-wrap items-center gap-2">
-        <Input
-          className="h-8 w-64 text-sm"
+        <input
+          className="-ml-2 w-64 rounded-md border border-transparent bg-transparent px-2 py-1 text-[15px] font-semibold text-zinc-100 outline-none placeholder:text-zinc-600 hover:border-zinc-700 focus:border-zinc-600"
           value={name}
           onChange={(e) => setName(e.target.value)}
           maxLength={128}
-          placeholder="Analysis profile name"
+          placeholder="Stat weights name"
         />
-        <ClassSpecSelects
+        <ClassSpecPill
           classId={classId}
           specName={specName}
-          onClassId={setClassId}
-          onSpecName={setSpecName}
+          onChange={(id, spec) => {
+            setClassId(id);
+            setSpecName(spec);
+          }}
         />
         <div className="flex-1" />
         <Button
@@ -193,7 +193,7 @@ function WeightSetEditor({
           size="sm"
           className="h-8 px-2 text-xs text-zinc-500 hover:text-red-400"
           onClick={() => {
-            if (!window.confirm(`Delete analysis profile "${weightSet.name}"?`))
+            if (!window.confirm(`Delete stat weights "${weightSet.name}"?`))
               return;
             deleteWeight.mutate(weightSet.id, {
               onSuccess: () => {
@@ -204,7 +204,7 @@ function WeightSetEditor({
             });
           }}
         >
-          <Trash2 className="h-3.5 w-3.5" />
+          Delete
         </Button>
         <Button
           variant="ghost"
@@ -229,13 +229,13 @@ function WeightSetEditor({
         rows={2}
         maxLength={2000}
         placeholder="What is this weight set for? e.g. assumes hit-capped, values survivability…"
-        className="w-full resize-y rounded border border-zinc-700 bg-zinc-950/60 px-2 py-1.5 text-xs text-zinc-200 placeholder:text-zinc-600 outline-none focus:border-zinc-500"
+        className="-mx-1 mb-2 mt-0.5 w-full resize-none rounded border border-transparent bg-transparent px-1 py-0.5 text-xs text-zinc-500 outline-none placeholder:text-zinc-700 hover:border-zinc-800 focus:border-zinc-700"
       />
       <WeightSetForm draft={draft} onChange={setDraft} />
-      <div className="border-t border-zinc-800 pt-3">
+      <div className="mt-3.5">
         <TargetSetForm targets={targets} onChange={setTargets} />
       </div>
-      <p className="text-2xs text-zinc-600">
+      <p className="mt-3 text-2xs text-zinc-600">
         Scores multiply each item's stats by these weights. They are not a
         simulation — two people with different weights will rank the same item
         differently, which is the point.
@@ -263,14 +263,16 @@ function CreateWeightSetForm({
           value={name}
           onChange={(e) => setName(e.target.value)}
           maxLength={128}
-          placeholder="Analysis profile name, e.g. Fury — hit capped"
+          placeholder="Stat weights name, e.g. Fury — hit capped"
           autoFocus
         />
-        <ClassSpecSelects
+        <ClassSpecPill
           classId={classId}
           specName={specName}
-          onClassId={setClassId}
-          onSpecName={setSpecName}
+          onChange={(id, spec) => {
+            setClassId(id);
+            setSpecName(spec);
+          }}
         />
         <div className="flex-1" />
         <Button
@@ -279,7 +281,7 @@ function CreateWeightSetForm({
           disabled={createWeight.isPending}
           onClick={() => {
             if (!name.trim()) {
-              toast.error("Give the analysis profile a name");
+              toast.error("Give the stat weights a name");
               return;
             }
             createWeight.mutate(
@@ -297,7 +299,7 @@ function CreateWeightSetForm({
             );
           }}
         >
-          Create profile
+          Create
         </Button>
       </div>
       <textarea
@@ -372,7 +374,7 @@ export function StatWeightsPage() {
       <section className="space-y-3">
         <div className="flex items-center justify-between">
           <h2 className="text-sm font-semibold uppercase tracking-wide text-zinc-400">
-            My analysis profiles
+            My stat weights
           </h2>
           {isAuthenticated && (
             <Button
