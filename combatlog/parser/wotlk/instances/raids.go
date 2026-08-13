@@ -202,12 +202,14 @@ func NaxxramasSpeedrunRequirements() []rankings.SpeedrunRequirement {
 }
 
 var NaxxramasFactory = &instances.CommonFactory{
-	Name:      "Naxxramas",
-	ZoneNames: []string{"naxxramas", "the upper necropolis"
-"上层大墓地", // Upper Necropolis
-},
-	MapIDs:    []uint32{533},
-	Hostiles:  NaxxramasHostiles,
+	Name: "Naxxramas",
+	ZoneNames: []string{
+		"naxxramas",
+		"the upper necropolis",
+		"上层大墓地", // Upper Necropolis
+	},
+	MapIDs:   []uint32{533},
+	Hostiles: NaxxramasHostiles,
 	FlavoredRankings: func(database.WoWFlavor) *rankings.Rankings {
 		return &rankings.Rankings{
 			Speedrun: &rankings.SpeedrunRules{
