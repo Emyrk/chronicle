@@ -43,6 +43,7 @@ export function GenericPanel<TResult>({
       <div
         className="text-2xs mt-1 font-mono text-muted-foreground flex items-center justify-between shrink-0 relative z-10 bg-card"
         data-chromatic="ignore"
+        data-panel-performance-footer
       >
         <span>
           {formatNumber(totalEvents)} events

@@ -140,8 +140,8 @@ interface WarriorsViewProps {
 
 function WarriorsView({ warriors }: WarriorsViewProps) {
   return (
-    <div className="space-y-2" data-sunder-warriors>
-      <ScrollArea className="max-h-panel">
+    <div className="flex h-full min-h-0 flex-col" data-sunder-warriors>
+      <ScrollArea className="min-h-0 flex-1">
         <table className="w-full text-xs">
           <thead className="sticky top-0 bg-card">
             <tr className="border-b border-border text-muted-foreground">
@@ -210,8 +210,8 @@ function TargetsView({ targets, selectedTargetGuid, onSelectTargetGuid }: Target
     : null;
   
   return (
-    <div className="space-y-2" data-sunder-targets>
-      <div className="text-xs text-muted-foreground">
+    <div className="flex h-full min-h-0 flex-col gap-2" data-sunder-targets>
+      <div className="shrink-0 text-xs text-muted-foreground">
         <span className="font-medium text-foreground">{targetsWithFive.length}</span> targets reached 5 stacks
         {selectedTarget && (
           <button 
@@ -227,8 +227,8 @@ function TargetsView({ targets, selectedTargetGuid, onSelectTargetGuid }: Target
       {selectedTarget ? (
         <DebugBreakout target={selectedTarget} onClose={() => onSelectTargetGuid(null)} />
       ) : (
-        <>
-          <ScrollArea className="max-h-panel">
+        <div className="flex min-h-0 flex-1 flex-col gap-2">
+          <ScrollArea className="min-h-0 flex-1">
             <table className="w-full text-xs">
               <thead className="sticky top-0 bg-card">
                 <tr className="border-b border-border text-muted-foreground">
@@ -290,7 +290,7 @@ function TargetsView({ targets, selectedTargetGuid, onSelectTargetGuid }: Target
               </div>
             </details>
           )}
-        </>
+        </div>
       )}
     </div>
   );
@@ -310,8 +310,8 @@ function DebugBreakout({ target, onClose }: DebugBreakoutProps) {
   );
   
   return (
-    <div className="space-y-2">
-      <div className="flex items-center justify-between">
+    <div className="flex min-h-0 flex-1 flex-col gap-2">
+      <div className="flex shrink-0 items-center justify-between">
         <span className="text-xs font-medium text-orange-400">{target.name}</span>
         <button 
           type="button"
@@ -322,7 +322,7 @@ function DebugBreakout({ target, onClose }: DebugBreakoutProps) {
         </button>
       </div>
       
-      <div className="text-2xs text-muted-foreground">
+      <div className="shrink-0 text-2xs text-muted-foreground">
         Time to 5: <span className="font-medium text-foreground">
           {target.timeToFiveStacksMs !== null ? formatTimeMs(target.timeToFiveStacksMs) : "never"}
         </span>
@@ -330,7 +330,7 @@ function DebugBreakout({ target, onClose }: DebugBreakoutProps) {
         Total events: <span className="font-medium text-foreground">{sortedEvents.length}</span>
       </div>
       
-      <ScrollArea className="max-h-panel">
+      <ScrollArea className="min-h-0 flex-1" data-sunder-debug-scroll>
         <table className="w-full text-2xs font-mono">
           <thead className="sticky top-0 bg-card">
             <tr className="border-b border-border text-muted-foreground">
@@ -343,6 +343,7 @@ function DebugBreakout({ target, onClose }: DebugBreakoutProps) {
             {sortedEvents.map((event: SunderDebugEvent, index: number) => (
               <tr
                 key={index}
+                data-sunder-debug-row
                 className={cn(
                   "border-b border-border/10",
                   event.type === "landed" && "bg-green-500/5",
