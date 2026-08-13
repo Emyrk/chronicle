@@ -1,5 +1,14 @@
 /* eslint-disable react-refresh/only-export-components -- draft converters are shared with profile management. */
 import { useState } from "react";
+import { Plus } from "lucide-react";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuGroup,
+  DropdownMenuItem,
+  DropdownMenuLabel,
+  DropdownMenuTrigger,
+} from "@/components/ui/DropdownMenu/DropdownMenu";
 import { Input } from "@/components/ui/input";
 import {
   STAT_GROUPS,
@@ -140,9 +149,10 @@ export function TargetSetForm({
           if (stat)
             onChange([...targets, { stat: stat.key, type: "minimum", value: 0 }]);
         }}
-        className="rounded-full border border-dashed border-zinc-700 px-2.5 py-0.5 text-xs text-zinc-400 hover:border-zinc-500 hover:text-zinc-200 disabled:opacity-40"
+        className="inline-flex items-center gap-1 rounded-full border border-dashed border-zinc-600 px-2.5 py-0.5 text-xs text-zinc-300 hover:border-zinc-400 hover:text-zinc-100 disabled:opacity-40"
       >
-        + Target
+        <Plus className="h-3 w-3" />
+        Target
       </button>
       <span className="ml-1 text-2xs text-zinc-600">
         warnings only — never change scores; stored in this browser
@@ -183,37 +193,42 @@ export function WeightSetForm({
           {order.length} {order.length === 1 ? "stat" : "stats"}
         </span>
         <span className="h-px flex-1 self-center bg-zinc-800" />
-        <select
-          value=""
-          onChange={(e) => {
-            const key = e.target.value;
-            if (!key) return;
-            setOrder((prev) => [...prev, key]);
-            onChange({ ...draft, [key]: "" });
-          }}
-          className="cursor-pointer appearance-none rounded-full border border-dashed border-zinc-700 bg-transparent px-3 py-0.5 text-xs text-zinc-400 outline-none hover:border-zinc-500 hover:text-zinc-200"
-        >
-          <option value="" className="bg-zinc-900 text-zinc-200">
-            + Add stat
-          </option>
-          {STAT_GROUPS.map((group) => {
-            const stats = available.filter((s) => s.group === group);
-            if (stats.length === 0) return null;
-            return (
-              <optgroup key={group} label={group}>
-                {stats.map((s) => (
-                  <option
-                    key={s.key}
-                    value={s.key}
-                    className="bg-zinc-900 text-zinc-200"
-                  >
-                    {s.label}
-                  </option>
-                ))}
-              </optgroup>
-            );
-          })}
-        </select>
+        <DropdownMenu>
+          <DropdownMenuTrigger asChild>
+            <button
+              type="button"
+              disabled={available.length === 0}
+              className="inline-flex items-center gap-1 rounded-full border border-dashed border-zinc-600 px-3 py-0.5 text-xs text-zinc-300 hover:border-zinc-400 hover:text-zinc-100 disabled:opacity-40"
+            >
+              <Plus className="h-3 w-3" />
+              Add stat
+            </button>
+          </DropdownMenuTrigger>
+          <DropdownMenuContent align="end" className="max-h-80 overflow-y-auto">
+            {STAT_GROUPS.map((group) => {
+              const stats = available.filter((s) => s.group === group);
+              if (stats.length === 0) return null;
+              return (
+                <DropdownMenuGroup key={group}>
+                  <DropdownMenuLabel className="text-2xs uppercase tracking-wide text-zinc-500">
+                    {group}
+                  </DropdownMenuLabel>
+                  {stats.map((s) => (
+                    <DropdownMenuItem
+                      key={s.key}
+                      onSelect={() => {
+                        setOrder((prev) => [...prev, s.key]);
+                        onChange({ ...draft, [s.key]: "" });
+                      }}
+                    >
+                      {s.label}
+                    </DropdownMenuItem>
+                  ))}
+                </DropdownMenuGroup>
+              );
+            })}
+          </DropdownMenuContent>
+        </DropdownMenu>
       </div>
       {order.length === 0 ? (
         <p className="rounded border border-dashed border-zinc-800 px-3 py-2 text-xs text-zinc-600">

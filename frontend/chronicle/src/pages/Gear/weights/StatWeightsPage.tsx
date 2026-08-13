@@ -105,7 +105,7 @@ function ClassSpecPill({
       }}
     >
       {classes.map((c) => (
-        <optgroup key={c.id} label={c.name}>
+        <optgroup key={c.id} label={c.name} className="bg-zinc-900 text-zinc-500">
           <option value={`${c.id}|`} className="bg-zinc-900 text-zinc-200">
             {c.name} · any spec
           </option>
