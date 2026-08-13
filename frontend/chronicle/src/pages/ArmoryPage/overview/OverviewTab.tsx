@@ -1,54 +1,30 @@
-import { useMemo, useState } from "react";
+import { useMemo } from "react";
 import { useSearchParams } from "react-router-dom";
 import type { ArmoryLootItem, ArmoryPlayer } from "@/api/typesGenerated";
 import { useArmoryGearHistory, useArmoryLoot, useSupportedInstanceBossCounts } from "@/api/queries";
 import { useCharacterEncounters, useCharacterParses } from "@/api/rankingsQueries";
-import { Button } from "@/components/ui/button";
-import { averageScoreByInstance, bestScoreByInstance, summarizeProgress, summarizeRaids, topEncounters } from "../parseAggregation";
-import { defaultMetric, type ParseMetric } from "./util";
+import { averageScoreByInstance, bestScoreByInstance, summarizeProgress, summarizeRaids } from "../parseAggregation";
+import type { ParseMetric } from "./util";
 import { useRecentActivity } from "./useRecentActivity";
-import { IdentityHeader } from "./IdentityHeader";
-import { ScoreCard } from "./ScoreCard";
 import { TalentsCard } from "./TalentsCard";
 import { GearStripCard } from "./GearStripCard";
 import { RaidCalendarCard } from "./RaidCalendarCard";
 import { RaidScoresCard } from "./RaidScoresCard";
 import { RecentNightsCard } from "./RecentNightsCard";
-import { JourneyStatsCard } from "./JourneyStatsCard";
 import { ProgressionCard } from "./ProgressionCard";
 import { FirstKillsCard } from "./FirstKillsCard";
 import { GearTrendCard } from "./GearTrendCard";
 import { LootCard } from "./LootCard";
 
-type OverviewMode = "journey" | "performance";
-
-const MODES: Array<[OverviewMode, string]> = [
-  ["journey", "Journey"],
-  ["performance", "Performance"],
-];
-
 interface OverviewTabProps {
   player: ArmoryPlayer;
   onOpenTab: (tab: "gear" | "talents" | "activity") => void;
+  metric: ParseMetric;
 }
 
-export function OverviewTab({ player, onOpenTab }: OverviewTabProps) {
-  const [searchParams, setSearchParams] = useSearchParams();
-  const mode: OverviewMode =
-    searchParams.get("mode") === "performance" ? "performance" : "journey";
-  const isPerformance = mode === "performance";
-
-  const setMode = (next: OverviewMode) => {
-    const params = new URLSearchParams(searchParams);
-    if (next === "journey") {
-      params.delete("mode");
-    } else {
-      params.set("mode", next);
-    }
-    setSearchParams(params, { replace: true });
-  };
-
-  const [metric, setMetric] = useState<ParseMetric>(() => defaultMetric(player));
+export function OverviewTab({ player, onOpenTab, metric }: OverviewTabProps) {
+  const [searchParams] = useSearchParams();
+  const isPerformance = searchParams.get("mode") === "performance";
 
   // Shared data.
   const gearHistory = useArmoryGearHistory(player.realm_name, player.id);
@@ -64,7 +40,6 @@ export function OverviewTab({ player, onOpenTab }: OverviewTabProps) {
     () => summarizeRaids(parsesQuery.data?.parses ?? []),
     [parsesQuery.data],
   );
-  const top3 = useMemo(() => topEncounters(raids, 3), [raids]);
   const nightScores = useMemo(
     () =>
       isPerformance
@@ -101,133 +76,81 @@ export function OverviewTab({ player, onOpenTab }: OverviewTabProps) {
     return map;
   }, [lootQuery.data]);
 
-  const timeInCombat = formatHours(activityStats.combatMs);
-
-  const modeSelector = (
-    <div className="flex items-center gap-2">
-      {MODES.map(([key, label]) => (
-        <Button
-          key={key}
-          variant={mode === key ? "secondary" : "outline"}
-          size="sm"
-          onClick={() => setMode(key)}
-        >
-          {label}
-        </Button>
-      ))}
-    </div>
-  );
-
   return (
-    <div>
-      <IdentityHeader player={player} actions={modeSelector}>
-        <div className="lg:w-[480px]">
-          {isPerformance ? (
-            <ScoreCard
-              score={parsesQuery.data?.score}
-              top3={top3}
-              metric={metric}
-              onMetricChange={setMetric}
-              isLoading={parsesQuery.isLoading}
-            />
-          ) : (
-            <JourneyStatsCard
-              timeInRaid={timeInCombat}
-              itemsLooted={
-                lootQuery.data
-                  ? lootQuery.data.items.length >= 200
-                    ? "200+"
-                    : String(lootQuery.data.items.length)
-                  : null
-              }
-            />
-          )}
-        </div>
-      </IdentityHeader>
+    <div className="grid grid-cols-1 gap-4 lg:grid-cols-12">
+      <div className="lg:col-span-12">
+        <GearStripCard
+          player={player}
+          latestSnapshot={gearHistory.data?.snapshots[0]}
+          onOpenGear={() => onOpenTab("gear")}
+        />
+      </div>
 
-      <div className="mt-6 grid grid-cols-1 gap-4 lg:grid-cols-12">
-        <div className="lg:col-span-12">
-          <GearStripCard
-            player={player}
-            latestSnapshot={gearHistory.data?.snapshots[0]}
-            onOpenGear={() => onOpenTab("gear")}
-          />
-        </div>
-
-        <div className="lg:col-span-5">
-          <TalentsCard player={player} onOpenTalents={() => onOpenTab("talents")} />
-        </div>
-        <div className="lg:col-span-7">
-          <RaidCalendarCard
-            instances={activityQuery.data?.instances}
-            nightScores={nightScores}
-            start={activityStart}
-            stats={activityStats}
-            onOpenActivity={() => onOpenTab("activity")}
-          />
-        </div>
+      <div className="lg:col-span-5">
+        <TalentsCard player={player} onOpenTalents={() => onOpenTab("talents")} />
+      </div>
+      <div className="lg:col-span-7">
+        <RaidCalendarCard
+          instances={activityQuery.data?.instances}
+          nightScores={nightScores}
+          start={activityStart}
+          stats={activityStats}
+          onOpenActivity={() => onOpenTab("activity")}
+        />
+      </div>
 
         {isPerformance ? (
-          <>
-            <div className="lg:col-span-12">
-              <RaidScoresCard
-                raids={raids}
-                metric={metric}
-                bossCounts={bossCounts}
-                isLoading={parsesQuery.isLoading}
-              />
-            </div>
-            <div className="lg:col-span-12">
-              <RecentNightsCard
-                instances={activityQuery.data?.instances}
-                nightScores={nightAverages}
-                onOpenActivity={() => onOpenTab("activity")}
-              />
-            </div>
-          </>
-        ) : (
-          <>
-            <div className="lg:col-span-4">
-              <ProgressionCard
-                progress={progress}
-                bossCounts={bossCounts}
-                isLoading={encountersQuery.isLoading}
-              />
-            </div>
-            <div className="lg:col-span-5">
-              <FirstKillsCard
-                encounters={encountersQuery.data?.encounters}
-                isLoading={encountersQuery.isLoading}
-              />
-            </div>
-            <div className="lg:col-span-3">
-              <GearTrendCard
-                snapshots={gearHistory.data?.snapshots}
-                isLoading={gearHistory.isLoading}
-              />
-            </div>
-            <div className="lg:col-span-7">
-              <RecentNightsCard
-                instances={activityQuery.data?.instances}
-                nightScores={nightScores}
-                lootByInstance={lootByInstance}
-                onOpenActivity={() => onOpenTab("activity")}
-              />
-            </div>
-            <div className="lg:col-span-5">
-              <LootCard items={lootQuery.data?.items} isLoading={lootQuery.isLoading} />
-            </div>
-          </>
-        )}
-      </div>
+        <>
+          <div className="lg:col-span-12">
+            <RaidScoresCard
+              raids={raids}
+              metric={metric}
+              bossCounts={bossCounts}
+              isLoading={parsesQuery.isLoading}
+            />
+          </div>
+          <div className="lg:col-span-12">
+            <RecentNightsCard
+              instances={activityQuery.data?.instances}
+              nightScores={nightAverages}
+              onOpenActivity={() => onOpenTab("activity")}
+            />
+          </div>
+        </>
+      ) : (
+        <>
+          <div className="lg:col-span-4">
+            <ProgressionCard
+              progress={progress}
+              bossCounts={bossCounts}
+              isLoading={encountersQuery.isLoading}
+            />
+          </div>
+          <div className="lg:col-span-5">
+            <FirstKillsCard
+              encounters={encountersQuery.data?.encounters}
+              isLoading={encountersQuery.isLoading}
+            />
+          </div>
+          <div className="lg:col-span-3">
+            <GearTrendCard
+              snapshots={gearHistory.data?.snapshots}
+              isLoading={gearHistory.isLoading}
+            />
+          </div>
+          <div className="lg:col-span-7">
+            <RecentNightsCard
+              instances={activityQuery.data?.instances}
+              nightScores={nightScores}
+              lootByInstance={lootByInstance}
+              onOpenActivity={() => onOpenTab("activity")}
+            />
+          </div>
+          <div className="lg:col-span-5">
+            <LootCard items={lootQuery.data?.items} isLoading={lootQuery.isLoading} />
+          </div>
+        </>
+      )}
     </div>
   );
-}
-
-function formatHours(ms: number): string {
-  const totalMinutes = Math.round(ms / 60_000);
-  const hours = Math.floor(totalMinutes / 60);
-  const minutes = totalMinutes % 60;
-  if (hours === 0) return `${minutes}m`;
-  return `${hours}h ${minutes.toString().padStart(2, "0")}m`;
 }

@@ -19,11 +19,12 @@ function fetchRecentActivity(player: ArmoryPlayer, start: Date): Promise<RecentI
 }
 
 /** The character's raid activity over the heatmap window, with stats. */
-export function useRecentActivity(player: ArmoryPlayer) {
+export function useRecentActivity(player: ArmoryPlayer, enabled = true) {
   const start = useMemo(() => subWeeks(startOfWeek(new Date()), ACTIVITY_WEEKS - 1), []);
   const query = useQuery({
     queryKey: ["armory-recent-activity", player.realm_id, player.id],
     queryFn: () => fetchRecentActivity(player, start),
+    enabled,
     staleTime: 60_000,
   });
   const stats = useMemo(
